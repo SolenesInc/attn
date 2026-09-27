@@ -3,6 +3,8 @@ package daemon
 import (
 	"errors"
 	"net"
+
+	"github.com/victorarias/attn/internal/ptybackend"
 )
 
 type WireDaemon struct {
@@ -11,7 +13,14 @@ type WireDaemon struct {
 }
 
 func StartWireDaemon(socketPath string, unix, ws net.Listener) (*WireDaemon, error) {
+	return StartWireDaemonWithTerminals(socketPath, unix, ws, nil)
+}
+
+func StartWireDaemonWithTerminals(socketPath string, unix, ws net.Listener, terminals ptybackend.Backend) (*WireDaemon, error) {
 	d := New(socketPath)
+	if terminals != nil {
+		d.ptyBackend = terminals
+	}
 	d.listener = unix
 	d.httpListener = ws
 	w := &WireDaemon{d: d, stopped: make(chan error, 1)}

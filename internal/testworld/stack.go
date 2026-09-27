@@ -25,9 +25,10 @@ import (
 
 type Stack struct {
 	*World
-	binary string
-	daemon *os.Process
-	exited chan error
+	binary        string
+	daemon        *os.Process
+	exited        chan error
+	allowFallback bool
 }
 
 type stackSetup struct {
@@ -151,7 +152,7 @@ func (s *Stack) start(vars ...string) {
 
 	probe := s.App()
 	for _, warning := range probe.Initial.Warnings {
-		if strings.HasPrefix(warning.Code, "pty_backend_") {
+		if strings.HasPrefix(warning.Code, "pty_backend_") && !s.allowFallback {
 			s.T.Fatalf("the daemon started on a fallback PTY backend: %s: %s", warning.Code, warning.Message)
 		}
 	}

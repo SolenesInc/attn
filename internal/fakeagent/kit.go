@@ -33,9 +33,12 @@ type Kit struct {
 	mu       sync.Mutex
 	launches map[string]chan *Run
 	nextBoot chan struct{}
+	bootAsk  chan struct{}
 	fakes    []*fake
 	failures []string
 	headless chan *HeadlessTask
+	nextExit *bootingResult
+	answerer func(*HeadlessTask)
 }
 
 type fake struct {
@@ -138,17 +141,19 @@ func (k *Kit) HoldNextBoot() (boot func()) {
 	k.mu.Lock()
 	defer k.mu.Unlock()
 	k.nextBoot = cue
+	k.bootAsk = make(chan struct{})
 	return sync.OnceFunc(func() { close(cue) })
 }
 
 func (k *Kit) awaitBoot(sessionID string) {
 	k.mu.Lock()
-	cue := k.nextBoot
+	cue, ask := k.nextBoot, k.bootAsk
 	k.nextBoot = nil
 	k.mu.Unlock()
 	if cue == nil {
 		return
 	}
+	close(ask)
 	select {
 	case <-cue:
 	case <-time.After(HangGuard):
@@ -178,6 +183,9 @@ func (k *Kit) accept() {
 			if method == methodHeadless {
 				return k.receiveHeadlessTask(f, params)
 			}
+			if method == methodBooting {
+				return k.boot(params)
+			}
 			return struct{}{}, k.handle(f, method, params)
 		})
 		f.peer.start()
@@ -186,12 +194,6 @@ func (k *Kit) accept() {
 
 func (k *Kit) handle(f *fake, method string, params json.RawMessage) error {
 	switch method {
-	case methodBooting:
-		var booting bootingParams
-		if err := json.Unmarshal(params, &booting); err != nil {
-			return err
-		}
-		k.awaitBoot(booting.AttnSessionID)
 	case methodLaunched:
 		if err := json.Unmarshal(params, &f.launch); err != nil {
 			return err
@@ -208,6 +210,7 @@ func (k *Kit) handle(f *fake, method string, params json.RawMessage) error {
 				SessionID:      f.AttnSessionID,
 				ConversationID: f.ConversationID,
 				Resumed:        f.Resumed,
+				ResumePicker:   f.ResumePicker,
 				Argv:           f.Argv,
 				Env:            f.Env,
 				AutoMode:       f.AutoMode,

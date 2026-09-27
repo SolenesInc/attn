@@ -28,7 +28,7 @@ const (
 var piComposer = composer{prompt: "> "}
 
 var piFlags = flagSpec{
-	values: map[string]bool{"--session-id": true, "--model": true, "--thinking": true, "-e": true},
+	values: map[string]bool{"--session-id": true, "--model": true, "--thinking": true, "-e": true, "--append-system-prompt": true},
 }
 
 type piTerminal struct {
@@ -125,7 +125,11 @@ type relayDenial struct {
 }
 
 func (p *piTerminal) deny(denial Denial) error {
-	return p.relay.call(context.Background(), "report_denial", relayDenial{Denial: denial, At: now()}, nil)
+	at := denial.At
+	if at == "" {
+		at = now()
+	}
+	return p.relay.call(context.Background(), "report_denial", relayDenial{Denial: denial, At: at}, nil)
 }
 
 type piPlugin struct {
@@ -223,14 +227,14 @@ func (p *piPlugin) connect() error {
 	}
 	var registered okResult
 	err = p.daemon.call(context.Background(), "driver.register", map[string]any{
-		"agent": "pi",
-		"capabilities": map[string]bool{
+		"agent": piAgentName(),
+		"capabilities": withPiCapabilityOverrides(map[string]bool{
 			"resume":           p.resume,
 			"initial_prompt":   true,
 			"state_reporting":  true,
 			"message_delivery": false,
 			"auto_mode":        true,
-		},
+		}),
 	}, &registered)
 	if err != nil || !registered.OK {
 		return fmt.Errorf("attn refused driver.register: %v", err)
@@ -259,6 +263,11 @@ func (p *piPlugin) handleDaemon(_ *rpcPeer, method string, params json.RawMessag
 			return nil, fmt.Errorf("unknown method %q", method)
 		}
 		return p.launchRun(params, true)
+	case "driver.models":
+		if catalog := os.Getenv(PiModelsEnv); catalog != "" {
+			return json.RawMessage(catalog), nil
+		}
+		return nil, fmt.Errorf("unknown method %q", method)
 	case "driver.session_closed":
 		var closed piRunParams
 		if err := json.Unmarshal(params, &closed); err != nil {
@@ -276,6 +285,9 @@ func (p *piPlugin) handleDaemon(_ *rpcPeer, method string, params json.RawMessag
 }
 
 func (p *piPlugin) launchRun(raw json.RawMessage, resume bool) (any, error) {
+	if reason := piLaunchRefusal(); reason != "" {
+		return nil, errors.New(reason)
+	}
 	var spawn piSpawn
 	if err := json.Unmarshal(raw, &spawn); err != nil {
 		return nil, err
@@ -288,7 +300,7 @@ func (p *piPlugin) launchRun(raw json.RawMessage, resume bool) (any, error) {
 		}
 		run.piSessionID = piSessionID
 	}
-	argv := []string{filepath.Join(p.cfg.Bin, string(Pi)), "--session-id", run.piSessionID}
+	argv := append([]string{filepath.Join(p.cfg.Bin, string(Pi)), "--session-id", run.piSessionID}, piLaunchFlags(raw)...)
 	if !resume && strings.TrimSpace(spawn.InitialPrompt) != "" {
 		argv = append(argv, spawn.InitialPrompt)
 	}

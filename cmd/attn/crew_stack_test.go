@@ -8,6 +8,8 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/google/uuid"
+
 	"github.com/victorarias/attn/internal/fakeagent"
 	"github.com/victorarias/attn/internal/protocol"
 	"github.com/victorarias/attn/internal/testworld"
@@ -104,6 +106,14 @@ func TestCrewMembersWakeSleepAndKeepTheirLaunchSettings(t *testing.T) {
 	if keel := crewRoster(t, s)["keel"]; keel.Agent != nil || keel.Model != nil || keel.Effort != nil || keel.ResolvedAgent != "claude" || len(keel.AwarenessDirs) != 0 {
 		t.Fatalf("keel after clearing its settings = %+v", keel)
 	}
+	requireStdout(t, s.Attn("crew", "set", "keel", "--model", "claude-fake-sonnet"), "Keel launches in - on claude, model claude-fake-sonnet, ")
+	if keel := crewRoster(t, s)["keel"]; protocol.Deref(keel.Model) != "claude-fake-sonnet" {
+		t.Fatalf("keel after crew set --model = %+v", keel)
+	}
+	requireStdout(t, s.Attn("crew", "set", "keel", "--model", ""), "Keel launches in - on claude")
+	if keel := crewRoster(t, s)["keel"]; keel.Model != nil {
+		t.Fatalf("keel after crew set --model \"\" still pins %q", protocol.Deref(keel.Model))
+	}
 
 	requireStdout(t, s.Attn("crew", "wake", "trellis"), "Trellis is awake in session ")
 	day := protocol.Deref(crewRoster(t, s)["trellis"].BindingSession)
@@ -181,5 +191,45 @@ func TestCrewMembersWakeSleepAndKeepTheirLaunchSettings(t *testing.T) {
 	receipt, _, _ := strings.Cut(unknown.Stderr, "\n")
 	if requestID, printed := strings.CutPrefix(receipt, "crew restart request: request_id="); unknown.Code != 1 || !printed || strings.TrimSpace(requestID) == "" {
 		t.Fatalf("a restart without --request-id exited %d with stderr %q, want a generated receipt first", unknown.Code, unknown.Stderr)
+	}
+}
+
+func TestAttnLaunchedAsAMemberWearsTheMembersNameUnlessGivenAnother(t *testing.T) {
+	t.Parallel()
+	s := testworld.NewStack(t, testworld.WithAgents(fakeagent.Claude))
+	writeCharter(t, s, "keel")
+	writeCharter(t, s, "alder")
+	s.Start()
+	work := s.Path("shop")
+	if err := os.MkdirAll(work, 0o755); err != nil {
+		t.Fatal(err)
+	}
+
+	for _, tc := range []struct {
+		member string
+		args   []string
+		label  string
+	}{
+		{member: "keel", args: []string{"--member", "keel"}, label: "Keel"},
+		{member: "alder", args: []string{"--member", "alder", "-s", "crew slice 1"}, label: "crew slice 1"},
+	} {
+		id := uuid.NewString()
+		launch := s.LaunchInTerminal(testworld.Invocation{Args: tc.args, Dir: work, Env: []string{"ATTN_INSIDE_APP=1", "ATTN_AGENT=claude", "ATTN_SESSION_ID=" + id}})
+		claude := s.Launched(id)
+		type row struct {
+			ID     string  `json:"id"`
+			Label  string  `json:"label"`
+			Member *string `json:"member"`
+		}
+		var sessions []row
+		s.Attn("agent", "list", "--json").JSON(t, &sessions)
+		i := slices.IndexFunc(sessions, func(x row) bool { return x.ID == id })
+		if i < 0 || sessions[i].Label != tc.label || protocol.Deref(sessions[i].Member) != tc.member {
+			t.Fatalf("attn %q registered %+v, want session %s labelled %q as member %s", tc.args, sessions, id, tc.label, tc.member)
+		}
+		claude.Exit(0)
+		if got := launch.Wait(); got.Code != 0 {
+			t.Fatalf("attn %q exited %d after claude quit:\n%s", tc.args, got.Code, got.Stdout)
+		}
 	}
 }

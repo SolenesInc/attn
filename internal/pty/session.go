@@ -42,8 +42,6 @@ var resizeAdmissionHook atomic.Pointer[func()]
 
 var readLoopAppliedHook func([]byte)
 
-var colorSchemeReplyHook func()
-
 type sessionSubscriber struct {
 	id           string
 	send         func(data []byte, seq uint32) bool
@@ -245,10 +243,6 @@ func (r ptyRead) acknowledgeAdmission() {
 	}
 }
 
-func nextCoalescedRead(reads <-chan ptyRead, maxBytes int, window time.Duration) ([]byte, error) {
-	return nextCoalescedReadAdmitted(reads, maxBytes, window, nil)
-}
-
 func nextCoalescedReadAdmitted(
 	reads <-chan ptyRead,
 	maxBytes int,
@@ -358,9 +352,6 @@ func (s *Session) readLoop(onExit func(exitCode int, signal string), logf func(s
 				}
 				if queries.colorScheme > 0 {
 					s.writeColorSchemeResponses(queries.colorScheme, logf)
-					if colorSchemeReplyHook != nil {
-						colorSchemeReplyHook()
-					}
 				}
 
 				seq := s.seqCounter.Add(1)

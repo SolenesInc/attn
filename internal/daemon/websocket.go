@@ -396,10 +396,6 @@ func previewBinaryForLog(data []byte) string {
 	return preview
 }
 
-func (h *wsHub) run() {
-	h.runUntil(nil)
-}
-
 func (h *wsHub) runUntil(done <-chan struct{}) {
 	for {
 		select {

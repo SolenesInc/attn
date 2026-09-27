@@ -8,8 +8,6 @@ import (
 	"testing"
 	"time"
 
-	"github.com/victorarias/attn/internal/config"
-	"github.com/victorarias/attn/internal/notebook"
 	"github.com/victorarias/attn/internal/protocol"
 )
 
@@ -29,25 +27,6 @@ func readNotebookWSEvent(t *testing.T, ch chan outboundMessage, target any) {
 		}
 	case <-time.After(time.Second):
 		t.Fatal("no websocket result event was sent")
-	}
-}
-
-func TestNotebookRootFollowsTheSettingAndFallsBackToTheDefault(t *testing.T) {
-	home, err := os.UserHomeDir()
-	if err != nil {
-		t.Fatal(err)
-	}
-	custom := t.TempDir()
-	for _, tc := range []struct{ setting, want string }{
-		{custom, custom},
-		{"~/notes", filepath.Join(home, "notes")},
-		{"", notebook.DefaultRoot(home, config.Instance())},
-	} {
-		d := NewForTesting(filepath.Join(t.TempDir(), "test.sock"))
-		d.store.SetSetting(SettingNotebookRoot, tc.setting)
-		if got, err := d.notebookRoot(); err != nil || got != tc.want {
-			t.Errorf("notebook.root %q resolves to %q (%v), want %q", tc.setting, got, err, tc.want)
-		}
 	}
 }
 

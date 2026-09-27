@@ -1,14 +1,12 @@
 package daemon
 
 import (
-	"fmt"
 	"os"
 	"path/filepath"
 	"slices"
 	"testing"
 	"time"
 
-	"github.com/victorarias/attn/internal/docstore"
 	"github.com/victorarias/attn/internal/garden"
 	"github.com/victorarias/attn/internal/protocol"
 	"github.com/victorarias/attn/internal/store"
@@ -48,34 +46,5 @@ func TestGardenReviewOffersResumeOnlyWithUsableContinuation(t *testing.T) {
 	item := capture.items[seed.ID]
 	if !slices.Equal(item.Actions, []string{"resume", "handover", "keep_growing", "park", "harvest", "wither"}) {
 		t.Fatalf("resumable actions = %v", item.Actions)
-	}
-}
-
-func TestGardenReviewCapturePagesPastTheGardenSnapshotLimit(t *testing.T) {
-	d := newGardenDaemon(t)
-	now := time.Date(2026, 8, 30, 12, 0, 0, 0, time.UTC)
-	d.gardenNow = func() time.Time { return now.Add(-garden.DefaultStaleWindow) }
-	schema, err := d.seedsCollection()
-	if err != nil {
-		t.Fatalf("seedsCollection: %v", err)
-	}
-	for i := 0; i < docstore.MaxLimit+1; i++ {
-		id := fmt.Sprintf("s-%06x", i)
-		seed := garden.Seed{
-			ID: id, Title: id, Status: garden.StatusGrowing, StepSlug: id,
-			StateChangedAt: formatGardenTime(d.gardenNow()), Edges: []garden.Edge{}, Vars: []garden.Var{},
-		}
-		body, _ := seed.Encode()
-		if _, err := d.store.PutDocument(*schema, id, body, d.gardenNow(), nil); err != nil {
-			t.Fatalf("put seed %s: %v", id, err)
-		}
-	}
-	d.gardenNow = func() time.Time { return now }
-	capture, err := d.captureGardenReview()
-	if err != nil {
-		t.Fatalf("captureGardenReview: %v", err)
-	}
-	if len(capture.candidates) != docstore.MaxLimit+1 {
-		t.Fatalf("candidates = %d, want %d", len(capture.candidates), docstore.MaxLimit+1)
 	}
 }

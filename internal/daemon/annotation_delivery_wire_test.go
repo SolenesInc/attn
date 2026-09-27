@@ -75,6 +75,92 @@ func TestSubmittedAnnotationsReachTheAgentAfterWhatTheUserTyped(t *testing.T) {
 	}
 }
 
+func TestADocumentsAnnotationsReachTheAgentOrderedByPlaceWithGeneralFeedbackLastAndLabelsCounted(t *testing.T) {
+	w := newWorld(t, fakeagent.Claude)
+	app := w.App()
+	session := w.Spawn(app, fakeagent.Claude, w.Path("shop"))
+	agent := w.Launched(session)
+	app.AwaitScreen(session, "? for shortcuts")
+	doc := fileAnnotatedDocument("/doc.md")
+	anchor := func(startLine, endLine, start int, exact string) *protocol.MarkdownAnnotationAnchor {
+		return &protocol.MarkdownAnnotationAnchor{BlockID: "b", StartLine: startLine, EndLine: endLine, Start: start, End: start + len(exact), Exact: exact}
+	}
+	looksGood := func(id string, line int, quote string) protocol.MarkdownAnnotation {
+		return protocol.MarkdownAnnotation{ID: id, Type: "comment", Anchor: anchor(line, line, 0, quote),
+			QuickLabelID: protocol.Ptr("looks-good"), QuickLabelText: protocol.Ptr("👍 Looks good"), QuickLabelTip: protocol.Ptr("nice"), CreatedAt: line}
+	}
+	const header = "# Markdown Annotations\n\nFile: /doc.md\n\n"
+	const closing = "---\nPlease address the annotation feedback above."
+
+	for i, tc := range []struct {
+		name  string
+		marks []protocol.MarkdownAnnotation
+		want  string
+	}{
+		{
+			name: "every kind, ordered by line with general feedback last",
+			marks: []protocol.MarkdownAnnotation{
+				{ID: "del", Type: "deletion", Anchor: anchor(30, 30, 0, "old paragraph"), CreatedAt: 1},
+				{ID: "glob", Type: "global", Text: protocol.Ptr("a global comment"), CreatedAt: 2},
+				{ID: "range", Type: "comment", Anchor: anchor(12, 18, 4, "the selected text"), Text: protocol.Ptr("the reviewer's comment"), CreatedAt: 3},
+				{ID: "ql", Type: "comment", Anchor: anchor(5, 5, 2, "selected text"),
+					QuickLabelID: protocol.Ptr("looks-good"), QuickLabelText: protocol.Ptr("👍 Looks good"), QuickLabelTip: protocol.Ptr("Keep more of this"), CreatedAt: 4},
+			},
+			want: header + "I've reviewed this document and have 4 pieces of feedback:\n\n" +
+				"## 1. (line 5) [👍 Looks good] Feedback on: \"selected text\"\n> Keep more of this\n\n" +
+				"## 2. (lines 12–18) Feedback on: \"the selected text\"\n> the reviewer's comment\n\n" +
+				"## 3. (line 30) Remove this\n```\nold paragraph\n```\n> I don't want this in the document.\n\n" +
+				"## 4. General feedback about the document\n> a global comment\n\n" +
+				"---\n## Label Summary\n\n- **👍 Looks good**: 1\n\nPlease address the annotation feedback above.",
+		},
+		{
+			name: "general feedback in the order it was written",
+			marks: []protocol.MarkdownAnnotation{
+				{ID: "later", Type: "global", Text: protocol.Ptr("second overall note"), CreatedAt: 20},
+				{ID: "earlier", Type: "global", Text: protocol.Ptr("first overall note"), CreatedAt: 10},
+			},
+			want: header + "I've reviewed this document and have 2 pieces of feedback:\n\n" +
+				"## 1. General feedback about the document\n> first overall note\n\n" +
+				"## 2. General feedback about the document\n> second overall note\n\n" + closing,
+		},
+		{
+			name:  "quick labels with their tips, counted in the order first seen",
+			marks: []protocol.MarkdownAnnotation{looksGood("a", 1, "one"), {ID: "b", Type: "comment", Anchor: anchor(2, 2, 0, "two"), QuickLabelID: protocol.Ptr("confusing"), CreatedAt: 2}, looksGood("c", 3, "three")},
+			want: header + "I've reviewed this document and have 3 pieces of feedback:\n\n" +
+				"## 1. (line 1) [👍 Looks good] Feedback on: \"one\"\n> nice\n\n" +
+				"## 2. (line 2) [confusing] Feedback on: \"two\"\n\n" +
+				"## 3. (line 3) [👍 Looks good] Feedback on: \"three\"\n> nice\n\n" +
+				"---\n## Label Summary\n\n- **👍 Looks good**: 2\n- **confusing**: 1\n\nPlease address the annotation feedback above.",
+		},
+		{
+			name: "two comments on one line, in the order of where they start",
+			marks: []protocol.MarkdownAnnotation{
+				{ID: "later", Type: "comment", Anchor: anchor(4, 4, 20, "tail"), Text: protocol.Ptr("second"), CreatedAt: 1},
+				{ID: "earlier", Type: "comment", Anchor: anchor(4, 4, 2, "head"), Text: protocol.Ptr("first"), CreatedAt: 2},
+			},
+			want: header + "I've reviewed this document and have 2 pieces of feedback:\n\n" +
+				"## 1. (line 4) Feedback on: \"head\"\n> first\n\n" +
+				"## 2. (line 4) Feedback on: \"tail\"\n> second\n\n" + closing,
+		},
+		{
+			name:  "a comment without an anchor",
+			marks: []protocol.MarkdownAnnotation{{ID: "x", Type: "comment", Text: protocol.Ptr("dangling"), CreatedAt: 1}},
+			want:  header + "I've reviewed this document and have 1 piece of feedback:\n\n## 1. Feedback on: \"\"\n> dangling\n\n" + closing,
+		},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			saveDocumentAnnotations(app, doc, i+1, tc.marks)
+			if got := submitDocumentAnnotations(app, doc, session, "", nil); got.status != "delivered" {
+				t.Fatalf("submit = %+v, want delivered", got)
+			}
+			if got := agent.Prompted(); got != tc.want {
+				t.Errorf("the agent was prompted with\n%s\nwant\n%s", got, tc.want)
+			}
+			agent.Reply("Noted. <!-- attn:state=idle -->")
+		})
+	}
+}
+
 func TestAnnotationsThatCannotBeDeliveredTypeNothingAndKeepTheDraft(t *testing.T) {
 	w := newWorld(t, fakeagent.Claude)
 	app, cli := w.App(), w.Client()

@@ -1,13 +1,10 @@
 package daemon
 
 import (
-	"bytes"
 	"fmt"
 	"os"
 	"path/filepath"
 	"testing"
-	"testing/synctest"
-	"time"
 
 	"github.com/victorarias/attn/internal/protocol"
 	"github.com/victorarias/attn/internal/sessioncost"
@@ -24,7 +21,7 @@ func addCostSession(t *testing.T, d *Daemon, id string, agent protocol.SessionAg
 }
 
 func TestSessionUsageTrackerKeepsTheUnreadUsageBehindALegacySingleCursor(t *testing.T) {
-	d := newTurnDaemon(t)
+	d := NewForTesting(filepath.Join(t.TempDir(), "test.sock"))
 	addCostSession(t, d, "resumed", protocol.SessionAgentClaude)
 	root := filepath.Join(t.TempDir(), "resume.jsonl")
 	childDir := filepath.Join(root[:len(root)-len(".jsonl")], "subagents")
@@ -63,96 +60,6 @@ func TestSessionUsageTrackerKeepsTheUnreadUsageBehindALegacySingleCursor(t *test
 	}
 }
 
-func TestCodexNewConversationKeepsCostAndPredecessorRollout(t *testing.T) {
-	d := newBubbleDaemon(t)
-	synctest.Test(t, func(t *testing.T) {
-		stopDaemonBackground(t, d)
-		const id = "codex-new"
-		addCostSession(t, d, id, protocol.SessionAgentCodex)
-		if err := d.store.InitializeSessionCostTracking(id); err != nil {
-			t.Fatal(err)
-		}
-		dir := t.TempDir()
-		oldPath := filepath.Join(dir, "rollout-old.jsonl")
-		oldBytes := []byte(joinUsageLines([]string{codexMeta("native-old", `"cli"`), codexUsageLine("gpt-5.5", 10, 4, 2)}))
-		if err := os.WriteFile(oldPath, oldBytes, 0o600); err != nil {
-			t.Fatal(err)
-		}
-		if changed, err := d.store.TransitionSessionConversation(id, "native-old", oldPath); err != nil || !changed {
-			t.Fatalf("bind old conversation: changed=%t err=%v", changed, err)
-		}
-		d.startTranscriptWatcherAtPath(id, protocol.SessionAgentCodex, dir, time.Now(), oldPath)
-		requireTranscriptDiscovery(t, d, id)
-		before, err := d.store.SessionCost(id)
-		if err != nil || len(before.Observations) != 1 {
-			t.Fatalf("old conversation cost = %+v, err=%v", before, err)
-		}
-		d.watchersMu.Lock()
-		oldWatcher := d.transcriptWatch[id]
-		d.watchersMu.Unlock()
-
-		newPath := filepath.Join(dir, "rollout-new.jsonl")
-		writeUsageLines(t, newPath, codexMeta("native-new", `"cli"`), codexUsageLine("gpt-5.5", 20, 5, 3))
-		d.observeAgentConversation(agentConversationObservation{
-			SessionID: id, NativeID: "native-new", TranscriptPath: newPath,
-		})
-		requireDone(t, oldWatcher.doneCh, "old watcher did not stop after /new")
-		d.watchersMu.Lock()
-		newWatcher := d.transcriptWatch[id]
-		d.watchersMu.Unlock()
-		if newWatcher == nil || newWatcher == oldWatcher {
-			t.Fatalf("watcher was not rebound after /new: old=%p new=%p", oldWatcher, newWatcher)
-		}
-		requireTranscriptDiscovery(t, d, id)
-
-		state, err := d.store.SessionCost(id)
-		if err != nil {
-			t.Fatal(err)
-		}
-		if got := state.Ledger[sessioncost.AgentKey("gpt-5.5")]; got.InputTokens != 21 || got.CacheReadInputTokens != 9 || got.OutputTokens != 5 {
-			t.Fatalf("usage across /new = %+v", got)
-		}
-		if len(state.Observations) != 2 {
-			t.Fatalf("observations across /new = %+v, want both conversations", state.Observations)
-		}
-		if got, err := os.ReadFile(oldPath); err != nil || !bytes.Equal(got, oldBytes) {
-			t.Fatalf("predecessor rollout after /new = %q, err=%v", got, err)
-		}
-	})
-}
-
-func TestSessionUsageTrackerFollowsCodexLineageRecursively(t *testing.T) {
-	d := newTurnDaemon(t)
-	addCostSession(t, d, "codex", protocol.SessionAgentCodex)
-	if err := d.store.InitializeSessionCostTracking("codex"); err != nil {
-		t.Fatal(err)
-	}
-	dir := filepath.Join(t.TempDir(), "sessions", "2026", "09", "05")
-	if err := os.MkdirAll(dir, 0o755); err != nil {
-		t.Fatal(err)
-	}
-	root := filepath.Join(dir, "root.jsonl")
-	child := filepath.Join(dir, "child.jsonl")
-	grandchild := filepath.Join(dir, "grandchild.jsonl")
-	guardian := filepath.Join(dir, "guardian.jsonl")
-	writeUsageLines(t, root, codexMeta("root", `"cli"`), codexUsageLine("gpt-5.5", 10, 4, 2))
-	writeUsageLines(t, child, codexMeta("child", codexSpawnSource("root")), codexUsageLine("gpt-5.5", 20, 5, 3))
-	writeUsageLines(t, grandchild, codexMeta("grandchild", codexSpawnSource("child")), codexUsageLine("gpt-5.5", 30, 6, 4))
-	writeUsageLines(t, guardian, codexMeta("guardian", `{"subagent":{"other":"guardian"}}`), codexUsageLine("gpt-5.5", 999, 0, 1))
-
-	w := &transcriptWatcher{sessionID: "codex", agent: protocol.SessionAgentCodex}
-	tracker := d.newSessionUsageTracker(w, root)
-	tracker.Reconcile()
-	state, _ := d.store.SessionCost("codex")
-	got := state.Ledger[sessioncost.AgentKey("gpt-5.5")]
-	if got.InputTokens != 45 || got.CacheReadInputTokens != 15 || got.OutputTokens != 9 {
-		t.Fatalf("recursive Codex usage = %+v", got)
-	}
-	if len(state.Observations) != 3 {
-		t.Fatalf("Codex observations include a guardian or miss a descendant: %+v", state.Observations)
-	}
-}
-
 func writeUsageLines(t *testing.T, path string, lines ...string) {
 	t.Helper()
 	if err := os.WriteFile(path, []byte(joinUsageLines(lines)), 0o600); err != nil {
@@ -183,19 +90,6 @@ func joinUsageLines(lines []string) string {
 
 func claudeUsageLine(id, model string, input, output int) string {
 	return `{"type":"assistant","message":{"id":"` + id + `","model":"` + model + `","usage":{"input_tokens":` + usageItoa(input) + `,"output_tokens":` + usageItoa(output) + `}}}`
-}
-
-func codexMeta(id, source string) string {
-	return `{"type":"session_meta","payload":{"id":"` + id + `","source":` + source + `}}`
-}
-
-func codexSpawnSource(parent string) string {
-	return `{"subagent":{"thread_spawn":{"parent_thread_id":"` + parent + `"}}}`
-}
-
-func codexUsageLine(model string, input, cached, output int) string {
-	return `{"type":"turn_context","payload":{"model":"` + model + `"}}` + "\n" +
-		`{"type":"event_msg","payload":{"type":"token_count","info":{"last_token_usage":{"input_tokens":` + usageItoa(input) + `,"cached_input_tokens":` + usageItoa(cached) + `,"output_tokens":` + usageItoa(output) + `}}}}`
 }
 
 func usageItoa(value int) string {

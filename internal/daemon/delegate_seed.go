@@ -1,7 +1,6 @@
 package daemon
 
 import (
-	"context"
 	"errors"
 	"fmt"
 	"strings"
@@ -147,17 +146,6 @@ func (d *Daemon) bindDelegationAssignmentProtected(_ foregroundCleanupProtection
 	announceGardenSeedEvents(d, eventSeqs)
 	d.rememberDispatchProjection(sessionID, dispatch, written[1].Rev)
 	return seed.ID, nil
-}
-
-func (d *Daemon) bindDelegationSeed(sessionID, plannerSessionID, brief, name, crown, cwd, agent string, fromChief bool) (string, error) {
-	observed := d.observeGardenDispatchExecution(sessionID, cwd, agent)
-	var seedID string
-	err := d.worktreeMaintenance.ProtectFromAutomaticCleanup(context.Background(), func(protection foregroundCleanupProtection) error {
-		var err error
-		seedID, err = d.bindDelegationSeedProtected(protection, sessionID, plannerSessionID, brief, name, crown, observed, fromChief)
-		return err
-	})
-	return seedID, err
 }
 
 func (d *Daemon) bindDelegationSeedProtected(protection foregroundCleanupProtection, sessionID, plannerSessionID, brief, name, crown string, observed garden.Dispatch, fromChief bool) (string, error) {

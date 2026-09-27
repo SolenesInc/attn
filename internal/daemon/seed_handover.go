@@ -1,7 +1,6 @@
 package daemon
 
 import (
-	"context"
 	"errors"
 	"fmt"
 	"strings"
@@ -97,21 +96,6 @@ func (d *Daemon) gardenDispatchDocument(sessionID string) (garden.Dispatch, docs
 	}
 	dispatch, err := garden.DecodeDispatch(doc.Body)
 	return dispatch, *doc, true, err
-}
-
-func (d *Daemon) bindSeedHandover(
-	msg *resolvedDelegationLaunch,
-	operationID, sessionID, directory, agent string,
-	fromChief bool,
-) (*protocol.SeedNote, error) {
-	observed := d.observeGardenDispatchExecution(sessionID, directory, agent)
-	var note *protocol.SeedNote
-	err := d.worktreeMaintenance.ProtectFromAutomaticCleanup(context.Background(), func(protection foregroundCleanupProtection) error {
-		var err error
-		note, err = d.bindSeedHandoverProtected(protection, msg, operationID, sessionID, directory, agent, observed, fromChief)
-		return err
-	})
-	return note, err
 }
 
 func (d *Daemon) bindSeedHandoverProtected(

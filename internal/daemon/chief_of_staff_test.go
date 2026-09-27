@@ -2,38 +2,14 @@ package daemon
 
 import (
 	"context"
-	"encoding/json"
 	"path/filepath"
 	"strings"
 	"sync"
 	"testing"
-	"testing/synctest"
 	"time"
 
 	"github.com/victorarias/attn/internal/protocol"
 )
-
-func readChiefOfStaffResult(t *testing.T, client *wsClient) protocol.ChiefOfStaffResultMessage {
-	t.Helper()
-	select {
-	case raw := <-client.send:
-		var result protocol.ChiefOfStaffResultMessage
-		if err := json.Unmarshal(raw.payload, &result); err != nil {
-			t.Fatalf("decode chief_of_staff_result: %v", err)
-		}
-		return result
-	case <-time.After(time.Second):
-		t.Fatal("timed out waiting for chief_of_staff_result")
-		return protocol.ChiefOfStaffResultMessage{}
-	}
-}
-
-func newChiefOfStaffTestDaemon(t *testing.T) (*Daemon, *wsClient) {
-	t.Helper()
-	d := NewForTesting(filepath.Join(t.TempDir(), "test.sock"))
-	t.Cleanup(func() { _ = d.store.Close() })
-	return d, newRenameTestClient()
-}
 
 func addChiefOfStaffTestSession(d *Daemon, id, label string) {
 	now := string(protocol.TimestampNow())
@@ -139,37 +115,4 @@ func TestTypeDoorbellDoesNotSubmitInputRacingTheGap(t *testing.T) {
 	if !typedAt.Before(writtenAt[1]) {
 		t.Fatalf("keystroke started at %v, after the Enter at %v — the race never happened", typedAt, writtenAt[1])
 	}
-}
-
-func chiefWasNudged(inputs []string, prompt string) bool {
-	for _, in := range inputs {
-		if strings.Contains(in, prompt) {
-			return true
-		}
-	}
-	return false
-}
-
-func TestNudgeChiefOfStaffHeldOffByTypingLandsAfterTheQuietWindow(t *testing.T) {
-	d := NewForTesting(filepath.Join(t.TempDir(), "test.sock"))
-	chiefID, _, inputs := delegateForNotify(t, d, "codex")
-	prompt := "the notebook inbox has a new entry"
-	quiesceTranscriptWatchers(t, d)
-	synctest.Test(t, func(t *testing.T) {
-		if err := d.writeSessionPTY(chiefID, []byte("half written"), "user"); err != nil {
-			t.Fatalf("user input: %v", err)
-		}
-		if d.nudgeChiefOfStaff("inbox-1", prompt) {
-			t.Fatal("the nudge claimed a composer the user had just used")
-		}
-		if chiefWasNudged(inputs(chiefID), agentMailboxDoorbellText) {
-			t.Fatalf("typed into a composer the user just used: %q", inputs(chiefID))
-		}
-
-		time.Sleep(sessionInputQuietWindow)
-		settleResend(t)
-		if !chiefWasNudged(inputs(chiefID), agentMailboxDoorbellText) {
-			t.Fatalf("nothing resent the chief nudge once the composer went quiet: %q", inputs(chiefID))
-		}
-	})
 }

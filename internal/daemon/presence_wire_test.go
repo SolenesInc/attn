@@ -153,6 +153,25 @@ func TestUsingATerminalStampsTheLastActivityAgentsSee(t *testing.T) {
 	}
 }
 
+func TestAnAppShowingASessionIsPresentWhileItsInputIsRecentAndAHiddenAppIsAway(t *testing.T) {
+	for _, tc := range []struct {
+		name   string
+		report protocol.SetClientPresenceMessage
+		tier   string
+	}{
+		{"a visible app with recent input and the dashboard closed", protocol.SetClientPresenceMessage{Visible: true, IdleSeconds: protocol.Ptr(10.0)}, "present"},
+		{"a hidden app with the dashboard mounted", protocol.SetClientPresenceMessage{DashboardVisible: true, IdleSeconds: protocol.Ptr(0.0)}, "away"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			inBubble(t, func(t *testing.T, w *world) {
+				cli := w.Client()
+				presenceReport(w.App(), tc.report)
+				presenceTierIs(t, cli, "with "+tc.name, tc.tier)
+			})
+		})
+	}
+}
+
 type presenceCheck struct {
 	at   time.Duration
 	tier string

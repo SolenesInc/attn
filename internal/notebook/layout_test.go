@@ -2,23 +2,6 @@ package notebook
 
 import "testing"
 
-func TestDefaultRoot(t *testing.T) {
-	tests := []struct {
-		home, instance, want string
-	}{
-		{"/Users/x", "", "/Users/x/attn-notebook"},
-		{"/Users/x", "default", "/Users/x/attn-notebook"},
-		{"/Users/x", "dev", "/Users/x/attn-notebook-dev"},
-		{"/Users/x", "Agent7", "/Users/x/attn-notebook-agent7"},
-		{"/Users/x", "  dev  ", "/Users/x/attn-notebook-dev"},
-	}
-	for _, tc := range tests {
-		if got := DefaultRoot(tc.home, tc.instance); got != tc.want {
-			t.Errorf("DefaultRoot(%q,%q) = %q, want %q", tc.home, tc.instance, got, tc.want)
-		}
-	}
-}
-
 func TestCleanPath(t *testing.T) {
 	tests := []struct {
 		in      string

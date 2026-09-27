@@ -53,43 +53,6 @@ func newWakeableDaemon(t *testing.T) (*Daemon, *fakeSpawnBackend, func() string)
 	}
 }
 
-func crewSet(t *testing.T, d *Daemon, msg protocol.CrewSetMessage) protocol.Response {
-	t.Helper()
-	msg.Cmd = protocol.CmdCrewSet
-	return gardenCall(t, func(c net.Conn) { d.handleCrewSet(c, &msg) })
-}
-
-func TestCrewWake_AMemberWakesOnItsConfiguredModel(t *testing.T) {
-	d, backend, _ := newWakeableDaemon(t)
-	d.store.SetSetting(SettingDefaultModelPrefix+"claude", "claude-sonnet-4-5")
-	const qualifiedModel = "anthropic/claude-haiku-4-5"
-	if resp := crewSet(t, d, protocol.CrewSetMessage{Member: "trellis", Model: protocol.Ptr(qualifiedModel)}); !resp.Ok {
-		t.Fatalf("crew set: %v", protocol.Deref(resp.Error))
-	}
-	if _, err := d.crewWake("trellis", ""); err != nil {
-		t.Fatalf("wake: %v", err)
-	}
-
-	backend.mu.Lock()
-	model := backend.spawnOpts[0].Model
-	backend.mu.Unlock()
-	if model != qualifiedModel {
-		t.Fatalf("member woke on model %q, want its configured model", model)
-	}
-	if got := protocol.Deref(memberByID(t, crewList(t, d), "trellis").Model); got != qualifiedModel {
-		t.Fatalf("roster model = %q, want the configured model", got)
-	}
-}
-
-func TestCrewWake_OneDayHarnessOverrideDoesNotTakeTheMembersUsualModel(t *testing.T) {
-	d, _, _ := newWakeableDaemon(t)
-	d.store.SetSetting(SettingDefaultModelPrefix+"codex", "gpt-5.6-sol")
-	member := crew.Member{Agent: "claude", Model: "claude-haiku-4-5"}
-	if got := protocol.Deref(d.crewWakeModel(member, "codex")); got != "gpt-5.6-sol" {
-		t.Fatalf("one-day Codex override resolved to %q, want its configured default", got)
-	}
-}
-
 type crewRuntimeBackend struct {
 	*fakeSpawnBackend
 	running map[string]bool
@@ -113,31 +76,6 @@ func (b *crewRuntimeBackend) SessionInfo(_ context.Context, sessionID string) (p
 		return ptybackend.SessionInfo{}, pty.ErrSessionNotFound
 	}
 	return ptybackend.SessionInfo{SessionID: sessionID, Running: running}, nil
-}
-
-func TestCrewSet_RecordsReadsAndClearsAMembersModel(t *testing.T) {
-	d, _, _ := newWakeableDaemon(t)
-	resp := crewSet(t, d, protocol.CrewSetMessage{Member: "keel", Model: protocol.Ptr("gpt-5.6-sol")})
-	if !resp.Ok {
-		t.Fatalf("crew set model: %v", protocol.Deref(resp.Error))
-	}
-	if got := protocol.Deref(resp.CrewSetResult.Member.Model); got != "gpt-5.6-sol" {
-		t.Fatalf("set result model = %q", got)
-	}
-	if got := protocol.Deref(memberByID(t, crewList(t, d), "keel").Model); got != "gpt-5.6-sol" {
-		t.Fatalf("roster model = %q", got)
-	}
-
-	resp = crewSet(t, d, protocol.CrewSetMessage{Member: "keel", Model: protocol.Ptr("")})
-	if !resp.Ok {
-		t.Fatalf("clear model: %v", protocol.Deref(resp.Error))
-	}
-	if resp.CrewSetResult.Member.Model != nil {
-		t.Fatalf("cleared model remains on set result: %q", *resp.CrewSetResult.Member.Model)
-	}
-	if got := memberByID(t, crewList(t, d), "keel").Model; got != nil {
-		t.Fatalf("cleared model remains on roster: %q", *got)
-	}
 }
 
 func TestCrewSet_ACwdInsideAnotherInstancesCrewIsRefused(t *testing.T) {
@@ -211,35 +149,6 @@ func TestCrewSet_ASymlinkedForeignInstanceRootIsRefused(t *testing.T) {
 	}
 }
 
-func TestCrewWake_AnOutpostHoldsNoneOfIt(t *testing.T) {
-	const home = "d-bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
-	d := newEnrolledDaemon(t, home)
-	t.Cleanup(d.stopEventBus)
-	writeCrewHomes(t, d.dataRoot)
-	d.ensureCrewCollections()
-	d.importCrewHomes()
-
-	_, err := d.crewWake("keel", "")
-	if err == nil {
-		t.Fatal("an outpost woke a crew member")
-	}
-	if !strings.Contains(err.Error(), home) {
-		t.Errorf("wake refusal %q does not name the home", err)
-	}
-
-	resp := crewSet(t, d, protocol.CrewSetMessage{Member: "keel", Cwd: protocol.Ptr(t.TempDir())})
-	if resp.Ok {
-		t.Fatal("an outpost recorded crew state")
-	}
-	if !strings.Contains(protocol.Deref(resp.Error), home) {
-		t.Errorf("set refusal %q does not name the home", protocol.Deref(resp.Error))
-	}
-
-	if _, _, bound, _ := d.crewPrimeForSession("sess-anything"); bound {
-		t.Fatal("an outpost primed a session as a crew member")
-	}
-}
-
 func TestCrewPrime_AClaimOlderThanAPageOfTheGardenStillWakesWithItsMember(t *testing.T) {
 	d, _, _ := newWakeableDaemon(t)
 	d.ensureGardenCollections()
@@ -289,4 +198,67 @@ func TestCrewPrime_AClaimOlderThanAPageOfTheGardenStillWakesWithItsMember(t *tes
 	if strings.Contains(block, "You hold no seeds in the garden") {
 		t.Error("a member holding an older claim was told it holds nothing")
 	}
+}
+
+func writeCrewHomes(t *testing.T, dataRoot string) {
+	t.Helper()
+	root := filepath.Join(dataRoot, crew.HomesDirName)
+	write := func(path, body string) {
+		t.Helper()
+		if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
+			t.Fatalf("mkdir: %v", err)
+		}
+		if err := os.WriteFile(path, []byte(body), 0o644); err != nil {
+			t.Fatalf("write %s: %v", path, err)
+		}
+	}
+	write(filepath.Join(root, "CREW.md"), "# The crew\n")
+	for _, member := range []struct{ id, handoff string }{
+		{"alder", "2026-08-10T19-20Z-alder.md"},
+		{"keel", "2026-08-13T22-10Z-keel.md"},
+		{"trellis", "2026-08-13T22-20Z-trellis.md"},
+	} {
+		home := filepath.Join(root, member.id)
+		write(filepath.Join(home, crew.CharterFileName), "# "+member.id+"\n\nWhat I care about.\n")
+		write(filepath.Join(home, "handoffs", member.handoff), "Where I left off.\n")
+	}
+}
+
+func newCrewDaemon(t *testing.T) *Daemon {
+	t.Helper()
+	d := newEnrolledDaemon(t, "")
+	t.Cleanup(d.stopEventBus)
+	writeCrewHomes(t, d.dataRoot)
+	d.ensureCrewCollections()
+	d.importCrewHomes()
+	return d
+}
+
+func crewList(t *testing.T, d *Daemon) []protocol.CrewMember {
+	t.Helper()
+	resp := gardenCall(t, func(c net.Conn) {
+		d.handleCrewList(c, &protocol.CrewListMessage{Cmd: protocol.CmdCrewList})
+	})
+	if !resp.Ok {
+		t.Fatalf("crew list: %v", protocol.Deref(resp.Error))
+	}
+	return resp.CrewListResult.Members
+}
+
+func memberByID(t *testing.T, members []protocol.CrewMember, id string) protocol.CrewMember {
+	t.Helper()
+	for _, m := range members {
+		if m.ID == id {
+			return m
+		}
+	}
+	t.Fatalf("no member %q in the roster", id)
+	return protocol.CrewMember{}
+}
+
+func spawnedSessions(t *testing.T, backend *fakeSpawnBackend) []ptybackend.SpawnOptions {
+	t.Helper()
+	backend.mu.Lock()
+	defer backend.mu.Unlock()
+	return append([]ptybackend.SpawnOptions(nil), backend.spawnOpts...)
 }

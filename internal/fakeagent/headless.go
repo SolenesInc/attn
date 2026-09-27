@@ -20,11 +20,19 @@ type headlessTask struct {
 	Model   string  `json:"model,omitempty"`
 	Effort  string  `json:"effort,omitempty"`
 	Refusal string  `json:"refusal,omitempty"`
+	launchedAs
+}
+
+type launchedAs struct {
+	Argv []string `json:"argv"`
+	Env  []string `json:"env"`
+	Dir  string   `json:"dir"`
 }
 
 type headlessAnswer struct {
-	Text    string `json:"text"`
-	Failure string `json:"failure,omitempty"`
+	Text    string          `json:"text"`
+	Failure string          `json:"failure,omitempty"`
+	Tool    json.RawMessage `json:"tool,omitempty"`
 }
 
 type HeadlessTask struct {
@@ -32,6 +40,9 @@ type HeadlessTask struct {
 	Prompt  string
 	Model   string
 	Effort  string
+	Argv    []string
+	Env     []string
+	Dir     string
 	answer  chan headlessAnswer
 }
 
@@ -63,7 +74,12 @@ func (k *Kit) receiveHeadlessTask(f *fake, params json.RawMessage) (headlessAnsw
 		k.fail(fmt.Sprintf("fake %s cannot script this headless task: %s", asked.Harness, asked.Refusal))
 		return headlessAnswer{Failure: asked.Refusal}, nil
 	}
-	task := &HeadlessTask{Harness: asked.Harness, Prompt: asked.Prompt, Model: asked.Model, Effort: asked.Effort, answer: make(chan headlessAnswer, 1)}
+	task := &HeadlessTask{Harness: asked.Harness, Prompt: asked.Prompt, Model: asked.Model, Effort: asked.Effort,
+		Argv: asked.Argv, Env: asked.Env, Dir: asked.Dir, answer: make(chan headlessAnswer, 1)}
+	if answerer := k.headlessAnswerer(); answerer != nil {
+		answerer(task)
+		return <-task.answer, nil
+	}
 	select {
 	case k.headless <- task:
 	case <-f.peer.done:
@@ -95,6 +111,7 @@ type headlessRun struct {
 	model   string
 	effort  string
 	refusal string
+	tools   map[string]*toolServer
 	answer  func(text string) error
 	fail    func(message string)
 }
@@ -107,10 +124,18 @@ func (run headlessRun) serve(cfg config) int {
 	}
 	defer control.close()
 	var answer headlessAnswer
-	asked := headlessTask{Harness: run.harness, Prompt: run.prompt, Model: run.model, Effort: run.effort, Refusal: run.refusal}
+	dir, _ := os.Getwd()
+	asked := headlessTask{Harness: run.harness, Prompt: run.prompt, Model: run.model, Effort: run.effort, Refusal: run.refusal,
+		launchedAs: launchedAs{Argv: os.Args, Env: os.Environ(), Dir: dir}}
 	if err := control.start().call(context.Background(), methodHeadless, asked, &answer); err != nil {
 		fmt.Fprintf(os.Stderr, "fake %s: %v\n", run.harness, err)
 		return 1
+	}
+	if answer.Tool != nil {
+		if err := callTool(run.tools, answer.Tool); err != nil {
+			fmt.Fprintf(os.Stderr, "fake %s: %v\n", run.harness, err)
+			return 1
+		}
 	}
 	if answer.Failure != "" {
 		run.fail(answer.Failure)

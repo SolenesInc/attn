@@ -11,8 +11,6 @@ import (
 	"github.com/victorarias/attn/internal/store"
 )
 
-const gardenRingUnblocked = "unblocked"
-
 func markAutomationRunDeliveredForTest(s *store.Store, runID, resolved string, now time.Time) error {
 	_, _, err := s.MarkAutomationRunDeliveredWithEvent(runID, resolved, store.BusEvent{
 		Name: seedEvents.NameWorkReady, Subject: "s-test", Payload: `{"automation_run_id":"` + runID + `"}`,

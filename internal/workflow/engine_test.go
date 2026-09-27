@@ -3,8 +3,6 @@ package workflow
 import (
 	"context"
 	"encoding/json"
-	"errors"
-	"strings"
 	"testing"
 	"time"
 )
@@ -44,48 +42,6 @@ func TestResumeR1PostAwaitPipelineIsFullCacheHit(t *testing.T) {
 		if !sameJSON(r1.Value, r2.Value) {
 			t.Fatalf("trial %d replayed value differs: %v vs %v", trial, r1.Value, r2.Value)
 		}
-	}
-}
-
-func TestAgentTerminalFailureResolvesNull(t *testing.T) {
-	failOnSecond := StubFunc(func(call AgentCall) (json.RawMessage, error) {
-		if strings.Contains(call.Prompt, "boom") {
-			return nil, errors.New("subagent crashed")
-		}
-		b, _ := json.Marshal("ok:" + call.Prompt)
-		return b, nil
-	})
-	script := `
-		const a = await agent("fine");
-		const b = await agent("boom");
-		return { a: a, bIsNull: b === null };
-	`
-	eng := New(Config{Stub: failOnSecond, WatchdogTimeout: 5 * time.Second})
-	res, err := eng.Run(context.Background(), script, nil)
-	if err != nil {
-		t.Fatalf("run errored unexpectedly: %v", err)
-	}
-	if res.Status != StatusCompleted {
-		t.Fatalf("status=%s err=%v, want completed (agent failure must not reject)", res.Status, res.Err)
-	}
-	obj, ok := res.Value.(map[string]interface{})
-	if !ok {
-		t.Fatalf("value not an object: %#v", res.Value)
-	}
-	if obj["bIsNull"] != true {
-		t.Errorf("failed agent should resolve null, got bIsNull=%v", obj["bIsNull"])
-	}
-	var erroredSeen bool
-	for _, e := range res.Journal.Entries() {
-		if e.Status == "errored" {
-			erroredSeen = true
-			if len(e.Result) != 0 {
-				t.Errorf("errored entry should have null result, got %s", string(e.Result))
-			}
-		}
-	}
-	if !erroredSeen {
-		t.Errorf("expected an errored journal entry")
 	}
 }
 

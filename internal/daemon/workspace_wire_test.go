@@ -135,6 +135,32 @@ func TestAWorkspaceTakesTheBusiestStateOfItsSessionsAndOnlyAnnouncesChanges(t *t
 	}
 }
 
+func TestAWorkspaceWaitingOnTheUserOutranksAnIdleSessionButNotAWorkingOne(t *testing.T) {
+	w := newWorld(t, fakeagent.Claude)
+	app := w.App()
+	cwd := w.Path("shop")
+	asking, resting := w.Spawn(app, fakeagent.Claude, cwd), w.Spawn(app, fakeagent.Claude, cwd)
+	askingAgent, restingAgent := w.Launched(asking), w.Launched(resting)
+	ws := workspaceIDFor(t, w, cwd)
+	awaitWorkspace := func(want protocol.WorkspaceStatus) {
+		testworld.Await(app, protocol.EventWorkspaceStateChanged, func(e protocol.WorkspaceStateChangedMessage) bool {
+			return e.Workspace.ID == ws && e.Workspace.Status == want
+		})
+	}
+	resting0 := testworld.AwaitSession(app, resting, func(s protocol.Session) bool { return s.State == protocol.SessionStateIdle })
+
+	app.TypeLine(asking, "rename the column")
+	askingAgent.Prompted()
+	awaitWorkspace(protocol.WorkspaceStatusWorking)
+	askingAgent.Reply("Rename it everywhere or only in the API? <!-- attn:state=waiting_input -->")
+	awaitWorkspace(protocol.WorkspaceStatusWaitingInput)
+
+	app.TypeLine(resting, "run the tests")
+	restingAgent.Prompted()
+	testworld.AwaitStateAfter(app, resting0, func(s protocol.Session) bool { return s.State == protocol.SessionStateWorking })
+	awaitWorkspace(protocol.WorkspaceStatusWorking)
+}
+
 func TestAWorkspaceLeavesWithItsLastSessionUnlessPinnedOrHoldingAFailedPane(t *testing.T) {
 	w := newWorld(t, fakeagent.Claude)
 	app, cli := w.App(), w.Client()

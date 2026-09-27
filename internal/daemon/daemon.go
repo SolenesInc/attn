@@ -182,11 +182,10 @@ type Daemon struct {
 	delegationMu                      sync.Mutex
 	delegationRunning                 map[string]bool
 	delegationCheckoutMu              sync.Mutex
-	delegationWorktreePrepareHook     func(path string)
-	delegationFinalizeHook            func() error
 	delegationWaitsForFirstTurn       bool
 	launchWatchMu                     sync.Mutex
 	launchWatches                     map[string]*launchWatch
+	recoveredLaunches                 map[string]*launchWatch
 	reloadingMu                       sync.Mutex
 	reloadingSessions                 map[string]bool
 	prepareSessionTeardownHook        func(string) error
@@ -337,7 +336,6 @@ type Daemon struct {
 	workflowEngineMu       sync.Mutex
 	workflowEngineConn     map[string]workflowEngineSink
 	appsBroadcastHook      func([]protocol.AppRegistryEntry)
-	gardenMintID           func() (string, error)
 	gardenMintNoteID       func() (string, error)
 	gardenNow              func() time.Time
 	gitHubPollingOffLogged bool
@@ -349,8 +347,6 @@ type Daemon struct {
 	dispatchFromChief      map[string]bool
 	dispatchProjectionRevs map[string]int64
 	dispatchSeedsLoaded    bool
-
-	gardenNotePageSize int
 
 	automationsBroadcastHook func(*protocol.AutomationsChangedMessage)
 
@@ -551,18 +547,6 @@ func (d *Daemon) signalStarted() {
 		}
 		close(d.startedCh)
 	})
-}
-
-func (d *Daemon) waitStarted(timeout time.Duration) bool {
-	if d.startedCh == nil {
-		return false
-	}
-	select {
-	case <-d.startedCh:
-		return true
-	case <-time.After(timeout):
-		return false
-	}
 }
 
 func (d *Daemon) Started() <-chan struct{} {
@@ -948,8 +932,10 @@ func (d *Daemon) Start() error {
 	}
 	d.startPermanentMaintenance()
 
+	d.watchRecoveredLaunches()
 	go func() {
 		d.performStartupPTYRecovery(previousRunSessions, recoveryStartedAt)
+		d.resolveDue(time.Now())
 		go d.runSessionResolver()
 		if _, routed := d.ptyBackend.(*ptybackend.MigratingBackend); routed {
 			go d.validateSharedPTYHostAfterRecovery()
@@ -2949,6 +2935,10 @@ func (d *Daemon) handleStop(conn net.Conn, msg *protocol.StopMessage) {
 	d.logf("handleStop: session=%s, transcript_path=%s", msg.ID, msg.TranscriptPath)
 
 	relaxBackgroundWork := d.isChiefOfStaffSession(msg.ID)
+	classifies := !d.consumeForcedStopClassification(msg.ID)
+	if classifies {
+		d.cancelAutoSettle(msg.ID, "stop judged")
+	}
 	d.recordStopFacts(
 		msg.ID,
 		!relaxBackgroundWork && hasActiveBackgroundTask(msg),
@@ -2966,7 +2956,7 @@ func (d *Daemon) handleStop(conn net.Conn, msg *protocol.StopMessage) {
 			"",
 		)
 		d.sendOK(conn)
-		if d.consumeForcedStopClassification(msg.ID) {
+		if !classifies {
 			d.logf("handleStop: skipping yield classification for daemon-terminated session=%s", msg.ID)
 			return
 		}
@@ -2977,7 +2967,6 @@ func (d *Daemon) handleStop(conn net.Conn, msg *protocol.StopMessage) {
 		return
 	}
 
-	classifies := !d.consumeForcedStopClassification(msg.ID)
 	d.recordTurnEndedEvidence(msg.ID, classifies)
 
 	if session := d.store.Get(msg.ID); session != nil {

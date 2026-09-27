@@ -1,7 +1,6 @@
 package daemon
 
 import (
-	"path/filepath"
 	"testing"
 	"testing/synctest"
 	"time"
@@ -140,27 +139,6 @@ func TestPluginDriverSilence_ARelaunchedRunOutranksTheOldAlarm(t *testing.T) {
 			t.Fatalf("state=%q, want the new run's working", got)
 		}
 	})
-}
-
-func TestPluginReportedState_OnlyIfUnknownRestatesNothingElse(t *testing.T) {
-	d := NewForTesting(filepath.Join(t.TempDir(), "test.sock"))
-	seedDriverRun(t, d, "restated", "snipe-plugin", "run-1", protocol.SessionStateUnknown)
-	seedDriverRun(t, d, "settled", "snipe-plugin", "run-2", protocol.SessionStateIdle)
-	settledBefore := d.store.Get("settled").StateSince
-
-	d.applyPluginReportedState(pluginReportStateParams{
-		SessionID: "restated", RunID: "run-1", Seq: 1, State: protocol.StateWorking, OnlyIfUnknown: true,
-	})
-	d.applyPluginReportedState(pluginReportStateParams{
-		SessionID: "settled", RunID: "run-2", Seq: 1, State: protocol.StateIdle, OnlyIfUnknown: true,
-	})
-
-	if got := d.store.Get("restated").State; got != protocol.SessionStateWorking {
-		t.Fatalf("state=%q for the session attn could not tell about, want working", got)
-	}
-	if got := d.store.Get("settled").StateSince; got != settledBefore {
-		t.Fatalf("state_since moved to %q on a session attn already knew about", got)
-	}
 }
 
 func TestPluginReportedState_OnlyIfUnknownStillDisarmsTheAlarm(t *testing.T) {

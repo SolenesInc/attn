@@ -8,45 +8,6 @@ import (
 	"github.com/victorarias/attn/internal/protocol"
 )
 
-func TestParseDirectLaunchArgs_ResumePickerWithFlagAfterResume(t *testing.T) {
-	parsed, err := parseDirectLaunchArgs([]string{"--resume", "--yolo"})
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
-	if !parsed.resumePicker {
-		t.Fatalf("expected resume picker to be enabled")
-	}
-	if parsed.resumeID != "" {
-		t.Fatalf("expected empty resume id, got %q", parsed.resumeID)
-	}
-	if !parsed.yoloMode {
-		t.Fatalf("expected yolo flag to be preserved")
-	}
-}
-
-func TestParseDirectLaunchArgs_MemberNamesTheSession(t *testing.T) {
-	parsed, err := parseDirectLaunchArgs([]string{"--member", "trellis"})
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
-	if parsed.member != "trellis" {
-		t.Fatalf("member = %q, want trellis", parsed.member)
-	}
-	if parsed.label != "Trellis" {
-		t.Fatalf("label = %q, want the member's name", parsed.label)
-	}
-}
-
-func TestParseDirectLaunchArgs_LabelOverridesTheMemberName(t *testing.T) {
-	parsed, err := parseDirectLaunchArgs([]string{"--member", "trellis", "-s", "crew slice 1"})
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
-	if parsed.member != "trellis" || parsed.label != "crew slice 1" {
-		t.Fatalf("member/label = %q/%q, want trellis/crew slice 1", parsed.member, parsed.label)
-	}
-}
-
 func TestStopFacts(t *testing.T) {
 	cases := []struct {
 		name         string

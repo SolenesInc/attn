@@ -1,12 +1,14 @@
 package main_test
 
 import (
+	"os"
 	"os/exec"
 	"path/filepath"
 	"regexp"
 	"strings"
 	"testing"
 
+	"github.com/victorarias/attn/internal/automode"
 	"github.com/victorarias/attn/internal/fakeagent"
 	"github.com/victorarias/attn/internal/protocol"
 	"github.com/victorarias/attn/internal/testworld"
@@ -137,4 +139,10 @@ func TestAutoModeRecordsRuleProposalsFromTheirTokensAndListsDenials(t *testing.T
 	if strings.Contains(spaced.Stdout, fetcher) || joined.Code != 0 || joined.Stdout != spaced.Stdout {
 		t.Errorf("--limit 1 printed:\n%s\n--limit=1 exited %d and printed:\n%s\nwant the newest denial alone from both", spaced.Stdout, joined.Code, joined.Stdout)
 	}
+
+	rotated := `{"type":"rotated","dropped":3}` + "\n"
+	if err := os.WriteFile(automode.DenialLedgerPath(s.Dir)+".1", []byte(rotated), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	requireStdout(t, s.Attn("automode", "denials"), pusher, fetcher, "note: 3 older denials were dropped when the local ledger rotated")
 }

@@ -370,9 +370,6 @@ func (d *Daemon) createDelegationWorktree(protection foregroundCleanupProtection
 			return "", false, fmt.Errorf("record delegated worktree preparation: %w", err)
 		}
 	}
-	if d.delegationWorktreePrepareHook != nil {
-		d.delegationWorktreePrepareHook(expectedPath)
-	}
 	startingFrom := request.StartingFrom
 	if protocol.Deref(request.ExistingBranch) && strings.TrimSpace(protocol.Deref(startingFrom)) != "" {
 		return "", false, fmt.Errorf("an existing branch does not accept a starting ref")
@@ -599,7 +596,9 @@ func (d *Daemon) delegateOperationProtected(protection foregroundCleanupProtecti
 				return nil, err
 			}
 		}
-		if !d.sessionHasLiveWorker(sessionID) {
+		if recovered := d.takeRecoveredLaunch(sessionID); recovered != nil && (recovered.settled() || d.sessionHasLiveWorker(sessionID)) {
+			watch = recovered
+		} else if !d.sessionHasLiveWorker(sessionID) {
 			if operationID != "" {
 				_ = d.store.UpdateDelegationOperation(operationID, protocol.DelegationOperationStatePreparing,
 					"recovering delegated runtime", existing.WorkspaceID, "", existing.Directory, nil, nil, time.Now())
@@ -839,11 +838,6 @@ func (d *Daemon) delegateOperationProtected(protection foregroundCleanupProtecti
 	rollback.onSessionSpawned(sessionID)
 	d.delegationCheckoutMu.Unlock()
 	checkoutLocked = false
-	if d.delegationFinalizeHook != nil {
-		if err := d.delegationFinalizeHook(); err != nil {
-			return nil, rollback.fail(protection, err)
-		}
-	}
 	if delegatedByChief {
 		if _, errMsg := d.setWorkspaceMuted(workspaceID, false); errMsg != "" {
 			return nil, rollback.fail(protection, fmt.Errorf("make delegated workspace visible: %s", errMsg))
@@ -889,6 +883,9 @@ func (d *Daemon) confirmDelegatedLaunch(operationID, sessionID, agent string, wa
 			fmt.Sprintf("waiting for %s's first turn", agent), "", "", "", nil, nil, time.Now())
 	}
 	outcome := d.awaitDelegatedLaunch(sessionID, watch)
+	if outcome.interrupted {
+		return errDelegationInterrupted
+	}
 	if outcome.exit != nil {
 		seedID, _ := d.gardenDispatchCrown(sessionID)
 		d.noteDelegatedExitOnSeed(seedID, agent, sessionID, outcome.exit)

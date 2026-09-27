@@ -2,12 +2,8 @@ package classifier
 
 import (
 	"encoding/json"
-	"fmt"
-	"os"
-	"path/filepath"
 	"strings"
 	"testing"
-	"time"
 )
 
 func TestParseResponse_Waiting(t *testing.T) {
@@ -45,19 +41,6 @@ func TestParseResponse_Parked(t *testing.T) {
 		if got != tt.want {
 			t.Errorf("ParseResponse(%q) = %q, want %q", tt.response, got, tt.want)
 		}
-	}
-}
-
-func TestComposeYieldInput_CarriesTheMarkerThePromptKeysOn(t *testing.T) {
-	input := ComposeYieldInput("The build is still running; I'll continue when it completes.", 2)
-	if !strings.Contains(input, "[harness facts]") {
-		t.Fatalf("yield input missing the [harness facts] marker: %q", input)
-	}
-	if !strings.Contains(BuildPrompt("x"), "[harness facts]") {
-		t.Fatal("prompt template no longer mentions the [harness facts] marker the yield input carries")
-	}
-	if !strings.Contains(input, "2 background process(es)") {
-		t.Fatalf("yield input missing the running-task count: %q", input)
 	}
 }
 
@@ -203,58 +186,6 @@ func TestParseResponse_EmptyAndWhitespace(t *testing.T) {
 	}
 }
 
-func TestBuildPrompt(t *testing.T) {
-	text := "Would you like me to continue?"
-	prompt := BuildPrompt(text)
-
-	if prompt == "" {
-		t.Error("BuildPrompt returned empty string")
-	}
-	if !strings.Contains(prompt, text) {
-		t.Error("BuildPrompt should include the input text")
-	}
-	if !strings.Contains(prompt, "WAITING") {
-		t.Error("BuildPrompt should mention WAITING")
-	}
-	if !strings.Contains(prompt, "DONE") {
-		t.Error("BuildPrompt should mention DONE")
-	}
-}
-
-func TestBuildPrompt_ContainsRequiredElements(t *testing.T) {
-	prompt := BuildPrompt("Test input text")
-
-	if !strings.Contains(prompt, "STRICT JSON") {
-		t.Error("BuildPrompt should request strict JSON response")
-	}
-	if !strings.Contains(prompt, `{"verdict":"WAITING"}`) || !strings.Contains(prompt, `{"verdict":"DONE"}`) {
-		t.Error("BuildPrompt should include exact JSON verdict formats")
-	}
-
-	if !strings.Contains(prompt, "question") {
-		t.Error("BuildPrompt should explain WAITING criteria (asks a question)")
-	}
-
-	if !strings.Contains(prompt, "DONE only") || !strings.Contains(prompt, "does not ask the user") {
-		t.Error("BuildPrompt should explain DONE criteria")
-	}
-
-	if !strings.Contains(prompt, "What can I help you with today?") {
-		t.Error("BuildPrompt should include greeting question example")
-	}
-}
-
-func TestBuildPrompt_EmptyInput(t *testing.T) {
-	prompt := BuildPrompt("")
-
-	if !strings.Contains(prompt, "WAITING") {
-		t.Error("BuildPrompt should still contain WAITING instruction for empty input")
-	}
-	if !strings.Contains(prompt, "DONE") {
-		t.Error("BuildPrompt should still contain DONE instruction for empty input")
-	}
-}
-
 func TestParseVerdict_FallsBackToFinalTextWithoutStructuredOutput(t *testing.T) {
 	result, ok := ParseVerdict(nil, "WAITING")
 	if !ok {
@@ -288,26 +219,6 @@ func TestParseVerdict_IgnoresVerdictlessStructuredOutput(t *testing.T) {
 func TestParseVerdict_NoVerdictAnywhere(t *testing.T) {
 	if result, ok := ParseVerdict(nil, "I'll keep going."); ok {
 		t.Fatalf("expected no verdict, got %q", result)
-	}
-}
-
-func TestClaudeVerdictSchema_IsValidJSON(t *testing.T) {
-	var schema map[string]any
-	if err := json.Unmarshal([]byte(ClaudeVerdictSchema), &schema); err != nil {
-		t.Fatalf("ClaudeVerdictSchema is not valid JSON: %v", err)
-	}
-	if _, ok := schema["properties"].(map[string]any)["verdict"]; !ok {
-		t.Fatal("ClaudeVerdictSchema is missing the verdict property")
-	}
-}
-
-func TestClaudeClassifierModel_EnvOverride(t *testing.T) {
-	if got := ClaudeClassifierModel(); got != DefaultClaudeClassifierModel {
-		t.Fatalf("ClaudeClassifierModel() = %q, want %q", got, DefaultClaudeClassifierModel)
-	}
-	t.Setenv("ATTN_CLAUDE_CLASSIFIER_MODEL", "claude-haiku-4-5-20251001")
-	if got := ClaudeClassifierModel(); got != "claude-haiku-4-5-20251001" {
-		t.Fatalf("ClaudeClassifierModel() = %q, want the env override", got)
 	}
 }
 
@@ -374,191 +285,4 @@ func TestParseVerdictFromCodexJSONL_LargeLine(t *testing.T) {
 	if got != "idle" {
 		t.Fatalf("parseVerdictFromCodexJSONL() = %q, want idle", got)
 	}
-}
-
-func TestClassifyWithCodex_SingleModelAndFlags(t *testing.T) {
-	tmp := t.TempDir()
-	logPath := filepath.Join(tmp, "invocations.log")
-	argsPath := filepath.Join(tmp, "args.log")
-	scriptPath := filepath.Join(tmp, "codex")
-	script := fmt.Sprintf(`#!/bin/sh
-set -eu
-printf '%%s\n' "$*" > %s
-model=""
-last=""
-while [ "$#" -gt 0 ]; do
-  case "$1" in
-    -m)
-      model="$2"
-      shift 2
-      ;;
-    --output-last-message)
-      last="$2"
-      shift 2
-      ;;
-    *)
-      shift
-      ;;
-  esac
-done
-echo "$model" >> %s
-echo '{"type":"thread.started","thread_id":"abc"}'
-echo '{"type":"turn.started"}'
-printf '{"verdict":"DONE"}\n' > "$last"
-echo '{"type":"item.completed","item":{"id":"item_0","type":"agent_message","text":"{\"verdict\":\"DONE\"}"}}'
-echo '{"type":"turn.completed"}'
-`, shellEscapeSingleQuotes(argsPath), shellEscapeSingleQuotes(logPath))
-
-	if err := os.WriteFile(scriptPath, []byte(script), 0o755); err != nil {
-		t.Fatalf("write script: %v", err)
-	}
-
-	t.Setenv("ATTN_CODEX_EXECUTABLE", scriptPath)
-	t.Setenv("ATTN_CODEX_CLASSIFIER_MODEL", "test-model")
-	t.Setenv("ATTN_CODEX_CLASSIFIER_REASONING_EFFORT", "low")
-
-	got, err := ClassifyWithCodex("done text", 10*time.Second)
-	if err != nil {
-		t.Fatalf("ClassifyWithCodex unexpected err: %v", err)
-	}
-	if got != "idle" {
-		t.Fatalf("ClassifyWithCodex() = %q, want idle", got)
-	}
-
-	invocationsRaw, err := os.ReadFile(logPath)
-	if err != nil {
-		t.Fatalf("read log file: %v", err)
-	}
-	invocations := strings.Split(strings.TrimSpace(string(invocationsRaw)), "\n")
-	if len(invocations) != 1 || invocations[0] != "test-model" {
-		t.Fatalf("model invocations = %q, want [test-model] (no fallback)", invocations)
-	}
-
-	argsRaw, err := os.ReadFile(argsPath)
-	if err != nil {
-		t.Fatalf("read args file: %v", err)
-	}
-	args := string(argsRaw)
-	for _, want := range []string{"--skip-git-repo-check", "--ignore-user-config", "features.shell_tool=false"} {
-		if !strings.Contains(args, want) {
-			t.Fatalf("codex args missing %q; got: %s", want, args)
-		}
-	}
-}
-
-func TestResolveCodexExecutable_Precedence(t *testing.T) {
-	t.Setenv("ATTN_CODEX_EXECUTABLE", "/env/codex")
-	if got := resolveCodexExecutable("/config/codex"); got != "/env/codex" {
-		t.Fatalf("resolveCodexExecutable(env, config) = %q, want /env/codex", got)
-	}
-
-	t.Setenv("ATTN_CODEX_EXECUTABLE", "")
-	if got := resolveCodexExecutable("/config/codex"); got != "/config/codex" {
-		t.Fatalf("resolveCodexExecutable(config) = %q, want /config/codex", got)
-	}
-
-	if got := resolveCodexExecutable(""); got != "codex" {
-		t.Fatalf("resolveCodexExecutable(default) = %q, want codex", got)
-	}
-}
-
-func TestClassifyWithCodexExecutable_UsesConfiguredPathWhenEnvUnset(t *testing.T) {
-	tmp := t.TempDir()
-	logPath := filepath.Join(tmp, "invocations.log")
-	scriptPath := filepath.Join(tmp, "custom-codex")
-	script := fmt.Sprintf(`#!/bin/sh
-set -eu
-last=""
-while [ "$#" -gt 0 ]; do
-  case "$1" in
-    --output-last-message)
-      last="$2"
-      shift 2
-      ;;
-    *)
-      shift
-      ;;
-  esac
-done
-echo called >> %s
-printf '{"verdict":"DONE"}\n' > "$last"
-echo '{"type":"item.completed","item":{"id":"item_0","type":"agent_message","text":"{\"verdict\":\"DONE\"}"}}'
-`, shellEscapeSingleQuotes(logPath))
-
-	if err := os.WriteFile(scriptPath, []byte(script), 0o755); err != nil {
-		t.Fatalf("write script: %v", err)
-	}
-
-	t.Setenv("ATTN_CODEX_EXECUTABLE", "")
-	t.Setenv("ATTN_CODEX_CLASSIFIER_MODEL", "base")
-	t.Setenv("ATTN_CODEX_CLASSIFIER_REASONING_EFFORT", "low")
-
-	got, err := ClassifyWithCodexExecutable("done text", scriptPath, 10*time.Second)
-	if err != nil {
-		t.Fatalf("ClassifyWithCodexExecutable unexpected err: %v", err)
-	}
-	if got != "idle" {
-		t.Fatalf("ClassifyWithCodexExecutable() = %q, want idle", got)
-	}
-
-	if _, err := os.Stat(logPath); err != nil {
-		t.Fatalf("expected configured codex executable to be invoked, stat err: %v", err)
-	}
-}
-
-func TestClassifyWithCodexExecutableInDir_UsesWorkDir(t *testing.T) {
-	tmp := t.TempDir()
-	workDir := filepath.Join(tmp, "repo")
-	if err := os.Mkdir(workDir, 0o755); err != nil {
-		t.Fatalf("mkdir workDir: %v", err)
-	}
-
-	pwdPath := filepath.Join(tmp, "pwd.log")
-	scriptPath := filepath.Join(tmp, "custom-codex")
-	script := fmt.Sprintf(`#!/bin/sh
-set -eu
-last=""
-while [ "$#" -gt 0 ]; do
-  case "$1" in
-    --output-last-message)
-      last="$2"
-      shift 2
-      ;;
-    *)
-      shift
-      ;;
-  esac
-done
-pwd > %s
-printf '{"verdict":"DONE"}\n' > "$last"
-echo '{"type":"item.completed","item":{"id":"item_0","type":"agent_message","text":"{\"verdict\":\"DONE\"}"}}'
-`, shellEscapeSingleQuotes(pwdPath))
-
-	if err := os.WriteFile(scriptPath, []byte(script), 0o755); err != nil {
-		t.Fatalf("write script: %v", err)
-	}
-
-	t.Setenv("ATTN_CODEX_EXECUTABLE", "")
-	t.Setenv("ATTN_CODEX_CLASSIFIER_MODEL", "base")
-	t.Setenv("ATTN_CODEX_CLASSIFIER_REASONING_EFFORT", "low")
-
-	got, err := ClassifyWithCodexExecutableInDir("done text", scriptPath, workDir, 10*time.Second)
-	if err != nil {
-		t.Fatalf("ClassifyWithCodexExecutableInDir unexpected err: %v", err)
-	}
-	if got != "idle" {
-		t.Fatalf("ClassifyWithCodexExecutableInDir() = %q, want idle", got)
-	}
-
-	pwdBytes, err := os.ReadFile(pwdPath)
-	if err != nil {
-		t.Fatalf("read pwd log: %v", err)
-	}
-	if got := strings.TrimSpace(string(pwdBytes)); got != workDir {
-		t.Fatalf("classifier work dir = %q, want %q", got, workDir)
-	}
-}
-
-func shellEscapeSingleQuotes(value string) string {
-	return "'" + strings.ReplaceAll(value, "'", "'\"'\"'") + "'"
 }

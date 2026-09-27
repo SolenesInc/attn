@@ -27,6 +27,7 @@ type terminal struct {
 	mu      sync.Mutex
 	line    []rune
 	pasting bool
+	modal   *modal
 }
 
 func openTerminal(style composer) (*terminal, error) {
@@ -87,8 +88,10 @@ func (t *terminal) readLines(submit func(string)) {
 	chunk := make([]byte, 4096)
 	for {
 		n, err := t.in.Read(chunk)
-		pending = append(pending, chunk[:n]...)
-		pending = t.consume(pending, submit)
+		if !t.capturedByModal(chunk[:n]) {
+			pending = append(pending, chunk[:n]...)
+			pending = t.consume(pending, submit)
+		}
 		if err != nil {
 			return
 		}

@@ -3,7 +3,6 @@ package agent
 import (
 	"os/exec"
 	"testing"
-	"time"
 
 	"github.com/victorarias/attn/internal/protocol"
 )
@@ -21,21 +20,6 @@ func (d testDriver) ResolveExecutable(configured string) string { return configu
 func (d testDriver) BuildCommand(opts SpawnOpts) *exec.Cmd      { return exec.Command("true") }
 func (d testDriver) BuildEnv(opts SpawnOpts) []string           { return nil }
 func (d testDriver) Capabilities() Capabilities                 { return d.caps }
-
-type executableClassifierDriver struct {
-	testDriver
-}
-
-func (d executableClassifierDriver) Classify(text string, timeout time.Duration) (string, error) {
-	return "idle", nil
-}
-
-func (d executableClassifierDriver) ClassifyWithExecutable(text, executable, workDir string, timeout time.Duration) (string, error) {
-	if executable == "custom-bin" && workDir == "/tmp/repo" {
-		return "waiting_input", nil
-	}
-	return "idle", nil
-}
 
 func TestRecoveredRunningSessionState(t *testing.T) {
 	plain := testDriver{name: "nopolicy", caps: Capabilities{HasTranscript: true}}
@@ -57,30 +41,5 @@ func TestRecoveredRunningSessionState(t *testing.T) {
 		if kept != tc.kept || (kept && got != tc.want) {
 			t.Errorf("%s recovering a PTY in %s = %s (kept=%v), want %s (kept=%v)", tc.driver.Name(), tc.ptyState, got, kept, tc.want, tc.kept)
 		}
-	}
-}
-
-func TestClassifyWithDriverDispatch(t *testing.T) {
-	cases := []struct {
-		name       string
-		driver     Driver
-		executable string
-		workDir    string
-		want       string
-		dispatched bool
-	}{
-		{"the configured executable runs in the session's directory", executableClassifierDriver{testDriver{name: "exec", caps: Capabilities{HasClassifier: true}}}, "custom-bin", "/tmp/repo", "waiting_input", true},
-		{"a driver without a classifier is not asked", testDriver{name: "none"}, "", "", "", false},
-	}
-	for _, tc := range cases {
-		t.Run(tc.name, func(t *testing.T) {
-			state, err, dispatched := ClassifyWithDriver(tc.driver, "test", tc.executable, tc.workDir, time.Second)
-			if dispatched != tc.dispatched {
-				t.Fatalf("dispatched = %v, want %v", dispatched, tc.dispatched)
-			}
-			if dispatched && (err != nil || state != tc.want) {
-				t.Fatalf("ClassifyWithDriver() = %q, %v; want %q", state, err, tc.want)
-			}
-		})
 	}
 }

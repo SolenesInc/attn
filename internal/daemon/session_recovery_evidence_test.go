@@ -36,29 +36,6 @@ func newRecoveryHome(t *testing.T) recoveryHome {
 	return h
 }
 
-func (h recoveryHome) resumableClaude(t *testing.T, resumeID string) {
-	t.Helper()
-	path := filepath.Join(h.claudeProjects, resumeID+".jsonl")
-	if err := os.WriteFile(path, []byte("{}\n"), 0o644); err != nil {
-		t.Fatalf("write claude transcript for %s: %v", resumeID, err)
-	}
-}
-
-func (h recoveryHome) resumableCodex(t *testing.T, resumeID string) {
-	t.Helper()
-	rollout := []byte(`{"type":"session_meta","payload":{"id":"` + resumeID + `","cwd":"/tmp"}}` + "\n")
-	path := filepath.Join(h.codexSessions, "rollout-"+resumeID+".jsonl")
-	if err := os.WriteFile(path, rollout, 0o644); err != nil {
-		t.Fatalf("write codex rollout for %s: %v", resumeID, err)
-	}
-}
-
-func giveRestorationEvidence(t *testing.T, d *Daemon, sessionID, resumeID string) {
-	t.Helper()
-	d.store.SetResumeSessionID(sessionID, resumeID)
-	giveLaunchIntent(t, d, sessionID)
-}
-
 func giveLaunchIntent(t *testing.T, d *Daemon, sessionID string) {
 	t.Helper()
 	d.store.SetLaunchIntent(sessionID, store.LaunchIntent{ApprovalRoute: launchcontract.ApprovalRouteUser})
@@ -82,22 +59,6 @@ func addStaleSession(t *testing.T, d *Daemon, id string, agent protocol.SessionA
 
 func deadWorkerBackend() *fakeWorkerReconcileBackend {
 	return &fakeWorkerReconcileBackend{liveIDs: nil, info: map[string]ptybackend.SessionInfo{}}
-}
-
-func TestRecoveryDoesNotResurrectAnIntentionalClose(t *testing.T) {
-	home := newRecoveryHome(t)
-	d := NewForTesting(filepath.Join(t.TempDir(), "test.sock"))
-	addStaleSession(t, d, "closed-on-purpose", protocol.SessionAgentCodex, protocol.SessionStateWorking)
-	home.resumableCodex(t, "native-closed-on-purpose")
-	giveRestorationEvidence(t, d, "closed-on-purpose", "native-closed-on-purpose")
-	d.store.MarkSessionIntentionalClose("closed-on-purpose", time.Now())
-	d.ptyBackend = deadWorkerBackend()
-
-	d.reconcileSessionsWithWorkerBackend(context.Background(), true, d.storedSessionIDs(), time.Time{})
-
-	if session := d.store.Get("closed-on-purpose"); session != nil {
-		t.Fatalf("session = %+v, want gone: the user already dismissed it", session)
-	}
 }
 
 func TestRecoveryJudgesPluginSessionsOnTheirPersistedHandle(t *testing.T) {

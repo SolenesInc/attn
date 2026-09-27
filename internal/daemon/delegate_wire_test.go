@@ -233,6 +233,8 @@ func TestADelegationNamesItsWorkspaceSessionAndPane(t *testing.T) {
 		{name: "an explicit name", directory: "svc", label: "Payments API", want: "Payments API"},
 		{name: "the directory's name", directory: "ledger", want: "ledger"},
 		{name: "a long directory name cut to fit", directory: longDirectory, want: strings.TrimSuffix(strings.Repeat("invoice-", 6), "-")},
+		{name: "a long directory name cut before trailing punctuation", directory: strings.Repeat("b", 44) + "   . more", want: strings.Repeat("b", 44)},
+		{name: "a long directory name cut by characters, not bytes", directory: strings.Repeat("é", 60), want: strings.Repeat("é", 48)},
 	} {
 		cwd := w.Path(row.directory)
 		if err := os.MkdirAll(cwd, 0o755); err != nil {
