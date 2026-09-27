@@ -76,8 +76,6 @@ func AppRuntimeLogPath(socketPath string) string {
 
 func appRuntimeAppTag(app string) string { return "[app " + app + "] " }
 
-const appRuntimeSelfTag = "[runtime] "
-
 func (d *Daemon) ensureAppRuntimeSupervisor() *supervise.Supervisor {
 	d.appRuntimeMu.Lock()
 	defer d.appRuntimeMu.Unlock()
