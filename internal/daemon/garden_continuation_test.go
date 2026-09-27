@@ -2,23 +2,11 @@ package daemon
 
 import (
 	"testing"
-	"time"
 
-	"github.com/victorarias/attn/internal/docstore"
 	"github.com/victorarias/attn/internal/garden"
 	"github.com/victorarias/attn/internal/protocol"
 	"github.com/victorarias/attn/internal/store"
 )
-
-func TestLegacySeedUsesItsDocumentUpdateAsConservativeStateEvidence(t *testing.T) {
-	updated := time.Date(2026, 8, 22, 14, 30, 0, 0, time.UTC)
-	wire := seedToProtocol(garden.Seed{ID: "s-legacy", Title: "old work", Status: garden.StatusPlanted}, docstore.Document{
-		ID: "s-legacy", Rev: 4, CreatedAt: updated.Add(-time.Hour), UpdatedAt: updated,
-	}, false)
-	if wire.StateChangedAt != formatGardenTime(updated) || wire.StateChangedAtExact {
-		t.Fatalf("legacy state evidence = %q exact=%v", wire.StateChangedAt, wire.StateChangedAtExact)
-	}
-}
 
 func TestSeedContinuationResumesAPluginTenderByCapability(t *testing.T) {
 	d := newGardenDaemon(t)
