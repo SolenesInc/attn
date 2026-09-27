@@ -497,3 +497,29 @@ func containsAutomationFlag(argv []string, flag, value string) bool {
 	}
 	return false
 }
+
+func TestTheAppsRunListingStopsAtAHundredAndSaysItTruncated(t *testing.T) {
+	const listCap = 100
+	inBubble(t, func(t *testing.T, w *world) {
+		app, cli := w.App(), w.Client()
+		automationUnreachableFolder(t, w, "gone", func() {
+			applyAutomation(t, cli, fmt.Sprintf(`api_version: attn.dev/automations/v1alpha1
+id: busy
+name: busy
+trigger: {type: manual}
+prompt: Check the folder.
+launch: {driver: claude}
+location: {type: directory, path: %q}
+`, w.Path("gone")))
+		})
+		for i := range listCap + 1 {
+			_, _ = cli.AutomationRun("busy", fmt.Sprint("request-", i), "")
+		}
+
+		listed := testworld.Request(app, protocol.AutomationRunsGetMessage{Cmd: protocol.CmdAutomationRunsGet, DefinitionID: "busy", RequestID: protocol.Ptr("runs")},
+			protocol.EventAutomationRunsResult, automationAnswer[protocol.AutomationRunsResultMessage]("runs"))
+		if !listed.Success || len(listed.Runs) != listCap || !protocol.Deref(listed.Truncated) {
+			t.Fatalf("automation_runs_get after %d runs = %d runs, truncated %v; want %d and a truncation", listCap+1, len(listed.Runs), protocol.Deref(listed.Truncated), listCap)
+		}
+	})
+}
