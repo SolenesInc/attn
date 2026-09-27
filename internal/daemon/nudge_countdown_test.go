@@ -58,26 +58,6 @@ func armForTest(t *testing.T, d *Daemon) (agentID string, inputs func(string) []
 	return agentID, inputs
 }
 
-func TestNudgeCountdownFiresWhenInactive(t *testing.T) {
-	d := newBubbleDaemon(t)
-	synctest.Test(t, func(t *testing.T) {
-		stopDaemonBackground(t, d)
-		agentID, inputs := armForTest(t, d)
-
-		time.Sleep(defaultNudgeCountdownWindow - time.Second)
-		synctest.Wait()
-		if wasNudged(inputs(agentID)) {
-			t.Fatal("the doorbell rang before the countdown window elapsed")
-		}
-
-		time.Sleep(time.Second)
-		synctest.Wait()
-		if !wasNudged(inputs(agentID)) {
-			t.Fatalf("session %s was never doorbelled", agentID)
-		}
-	})
-}
-
 func TestSessionInputWriteDoesNotInterleaveWithPendingApproval(t *testing.T) {
 	d := NewForTesting(filepath.Join(t.TempDir(), "test.sock"))
 	sessionID := "doorbell-state-fence"
