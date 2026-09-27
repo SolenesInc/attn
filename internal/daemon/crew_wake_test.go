@@ -245,15 +245,6 @@ func crewList(t *testing.T, d *Daemon) []protocol.CrewMember {
 	return resp.CrewListResult.Members
 }
 
-func addSession(t *testing.T, d *Daemon, id string) {
-	t.Helper()
-	now := string(protocol.TimestampNow())
-	d.store.Add(&protocol.Session{
-		ID: id, Label: id, State: "idle",
-		StateSince: now, StateUpdatedAt: now, LastSeen: now,
-	})
-}
-
 func memberByID(t *testing.T, members []protocol.CrewMember, id string) protocol.CrewMember {
 	t.Helper()
 	for _, m := range members {
