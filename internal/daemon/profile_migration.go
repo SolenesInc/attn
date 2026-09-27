@@ -40,7 +40,7 @@ func protocolMigrationDesktop(desktop profilemigration.Desktop, kept map[string]
 		out.DesktopID = protocol.Ptr(desktop.DesktopID)
 	}
 	if n := kept[desktop.DesktopID]; n > 0 {
-		out.KeptTiles = protocol.Ptr(n)
+		out.KeptLeaves = protocol.Ptr(n)
 	}
 	if desktop.ShortcutSlot != 0 {
 		out.ShortcutSlot = protocol.Ptr(desktop.ShortcutSlot)

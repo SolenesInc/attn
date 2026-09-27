@@ -6148,8 +6148,8 @@ type MigrationDraftDesktop struct {
 	// DesktopID corresponds to the JSON schema field "desktop_id".
 	DesktopID *string `json:"desktop_id,omitempty,omitzero"`
 
-	// KeptTiles corresponds to the JSON schema field "kept_tiles".
-	KeptTiles *int `json:"kept_tiles,omitempty,omitzero"`
+	// KeptLeaves corresponds to the JSON schema field "kept_leaves".
+	KeptLeaves *int `json:"kept_leaves,omitempty,omitzero"`
 
 	// Key corresponds to the JSON schema field "key".
 	Key string `json:"key"`

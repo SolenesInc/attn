@@ -225,8 +225,8 @@ export function summarize(view: GroupView): string {
 // Says what Finish leaves on a desktop with no group placed: a free slot gets no desktop at all.
 export function emptyLabel(desktop: DraftDesktopView): string {
   if (!desktop.desktop.desktop_id) return 'Free slot';
-  const kept = desktop.desktop.kept_tiles ?? 0;
-  return kept ? `Keeps ${plural(kept, 'tile')}` : 'Stays empty';
+  const kept = desktop.desktop.kept_leaves ?? 0;
+  return kept ? `Keeps ${plural(kept, 'item')}` : 'Stays empty';
 }
 
 export function allDraftDesktops(view: DraftView): DraftDesktopView[] {

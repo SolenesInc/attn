@@ -302,14 +302,14 @@ describe('MigrationPicker', () => {
       desktops: slotsWith(
         { 1: ['d1', { direction: 'vertical', ratio: 0.5, children: [{ group: 'g1' }, { group: 'g2' }] }], 2: ['d2', null], 4: ['d4', null] },
         [['d3', { group: 'g3' }]],
-      ).map((desktop) => (desktop.key === 'd4' ? { ...desktop, kept_tiles: 2 } : desktop)),
+      ).map((desktop) => (desktop.key === 'd4' ? { ...desktop, kept_leaves: 2 } : desktop)),
     });
     renderGate(fakeMigrationDaemon(initial));
     await startPlacing(user);
 
     expect(screen.getByRole('button', { name: 'Desktop 2, stays empty' })).toHaveTextContent('Stays empty');
     expect(screen.getByRole('button', { name: 'Desktop 3, free slot' })).toHaveTextContent('Free slot');
-    expect(screen.getByRole('button', { name: 'Desktop 4, keeps 2 tiles' })).toHaveTextContent('Keeps 2 tiles');
+    expect(screen.getByRole('button', { name: 'Desktop 4, keeps 2 items' })).toHaveTextContent('Keeps 2 items');
     expect(screen.getByText('A desktop you empty stays as an empty desktop; a free slot gets one only when something lands there.', { exact: false })).toBeInTheDocument();
   });
 

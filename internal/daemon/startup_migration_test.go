@@ -312,7 +312,7 @@ func TestADesktopWhoseAgentsClosedReportsTheTilesFinishKeeps(t *testing.T) {
 		if protocol.Deref(desktop.ShortcutSlot) != 2 {
 			continue
 		}
-		if desktop.TreeJson != "" || protocol.Deref(desktop.KeptTiles) != 1 {
+		if desktop.TreeJson != "" || protocol.Deref(desktop.KeptLeaves) != 1 {
 			t.Fatalf("slot 2 = %+v, want no group placed and the document tile kept", desktop)
 		}
 		return
