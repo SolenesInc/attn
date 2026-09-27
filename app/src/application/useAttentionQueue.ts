@@ -1,6 +1,7 @@
 import type { MouseEvent as ReactMouseEvent } from 'react';
 import { useCallback, useMemo, useState } from 'react';
 import { useDaemonApi } from '../contexts/DaemonApiContext';
+import { useAgentOnScreen } from '../hooks/useDesktopSelectionBridge';
 import { isAttentionSessionState, type UISessionState } from '../types/sessionState';
 import {
   buildQueueBands,
@@ -80,15 +81,16 @@ export function useAttentionQueue({
 
   const waitingLocalSessions = unmutedEnrichedSessions.filter(wantsAttention);
 
+  const agentOnScreenId = useAgentOnScreen();
+  const agentOnScreen = enrichedLocalSessions.find((session) => session.id === agentOnScreenId) ?? null;
+  const settleable = Boolean(
+    agentOnScreen &&
+      ((queueModeEnabled && sessionParticipatesInQueue(agentOnScreen, crewQueueEnabled)) ||
+        (agentOnScreen.automation && agentOnScreen.turnOwed)),
+  );
   const handleSettleActiveTurn = useMemo(
-    () =>
-      queueModeEnabled && activeSessionQueueEligible
-        ? () => {
-            if (!activeSessionId) return;
-            sendSettleTurn(activeSessionId);
-          }
-        : undefined,
-    [queueModeEnabled, activeSessionQueueEligible, activeSessionId, sendSettleTurn],
+    () => (settleable && agentOnScreenId ? () => sendSettleTurn(agentOnScreenId) : undefined),
+    [settleable, agentOnScreenId, sendSettleTurn],
   );
 
   const [snoozeMenu, setSnoozeMenu] = useState<{

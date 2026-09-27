@@ -52,6 +52,7 @@ export interface SidebarProps {
   workspaces: SidebarWorkspace[];
   visualIndexByWorkspaceId: Map<string, number>;
   selectedId: string | null;
+  selectionRequest?: { sessionId: string } | null;
   selectedWorkspaceId: string | null;
   selectedTile?: SelectedTile | null;
   tileContents?: Record<string, TileContentState>;
@@ -72,6 +73,7 @@ export interface SidebarProps {
   onManageCrew?: (event: ReactMouseEvent<HTMLButtonElement>) => void;
   onOpenCrewMemberDetails?: (member: string, returnFocus: HTMLElement) => void;
   onSettleTurn?: (id: string) => void;
+  onWalkRuns?: () => void;
   onOpenSnooze?: (session: { id: string; label: string }, event: ReactMouseEvent) => void;
   onWakeTurn?: (id: string) => void;
   /** The auto-settle countdown lives on the tile, so the sidebar draws it only

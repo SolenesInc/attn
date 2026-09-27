@@ -8,6 +8,7 @@ import { WHATS_NEW_ID, WHATS_NEW_STORAGE_KEY } from './hooks/useWhatsNew';
 import { ProfileCommandError } from './hooks/daemonProfileEvents';
 import { MigrationPhase, type CrewMember, type Desktop } from './types/generated';
 import { useKeyboardShortcuts } from './hooks/useKeyboardShortcuts';
+import { formatShortcut } from './shortcuts/formatShortcut';
 import type { TerminalLayoutNode } from './types/workspace';
 import { agentDesktop, arrangeDesktops, fakeDesktopCommands, TEST_PROFILE_ID } from './test/desktops';
 
@@ -159,10 +160,10 @@ vi.mock('./components/Dashboard', () => ({ Dashboard: () => null }));
 vi.mock('./components/AttentionDrawer', () => ({ AttentionDrawer: () => null }));
 vi.mock('./components/LocationPicker', () => ({ LocationPicker: () => null }));
 vi.mock('./components/UndoToast', () => ({ UndoToast: () => null }));
-const { mockShowError } = vi.hoisted(() => ({ mockShowError: vi.fn() }));
-vi.mock('./components/ErrorToast', () => ({
-  ErrorToast: () => null,
-  useErrorToast: () => ({ message: null, showError: mockShowError, clearError: vi.fn() }),
+const { mockShowError, mockShowNotice } = vi.hoisted(() => ({ mockShowError: vi.fn(), mockShowNotice: vi.fn() }));
+vi.mock('./components/Toast', () => ({
+  Toast: () => null,
+  useToast: () => ({ toast: null, showError: mockShowError, showNotice: mockShowNotice, clearToast: vi.fn() }),
 }));
 vi.mock('./hooks/useKeyboardShortcuts', () => ({ useKeyboardShortcuts: vi.fn() }));
 vi.mock('./hooks/useUIScale', () => ({
@@ -265,6 +266,7 @@ describe('desktop surface', () => {
       sendUnregisterSession: fn, sendRegisterWorkspace: fn,
       sendUnregisterWorkspace: vi.fn(async () => {}),
       sendSetSetting: fn,
+      sendSettleTurn: vi.fn(),
       sendSetClientPresence: fn,
       sendCreateWorktree: vi.fn(async () => ({ success: true, path: '/tmp/new' })),
       sendDeleteWorktree: vi.fn(async () => ({ success: true })),
@@ -365,6 +367,43 @@ describe('desktop surface', () => {
     const atHome = await commandTitles();
     expect(atHome.some((text) => text.includes('workflow runs'))).toBe(false);
     expect(atHome.some((text) => text.includes('Open in editor'))).toBe(false);
+  });
+
+  it('walks automation runs needing the user outside the queue, and settles the one being looked at', async () => {
+    const docs = { run_id: 'r', definition_id: 'docs', definition_name: 'nightly docs', trigger_type: 'schedule' };
+    const daemonSession = (id: string, extra: object) => ({
+      id, label: id, directory: '/tmp/repo', state: 'waiting_input', profile_id: TEST_PROFILE_ID, ...extra,
+    });
+    const withRuns = (owed: boolean) =>
+      mockUseDaemonStore.mockReturnValue({
+        ...mockUseDaemonStore(),
+        daemonSessions: [
+          daemonSession('s1', {}),
+          daemonSession('s2', { automation: docs, turn_owed: owed, turn_opened_at: '2026-09-26T09:00:00Z' }),
+          daemonSession('s3', { automation: docs, turn_owed: owed, turn_opened_at: '2026-09-26T10:00:00Z' }),
+        ],
+      });
+    withRuns(true);
+    const { rerender } = render(<App />);
+    const shortcuts = () => vi.mocked(useKeyboardShortcuts).mock.lastCall![0];
+
+    act(() => shortcuts().onNextRun());
+    await waitFor(() => expect(useSessionStore.getState().activeSessionId).toBe('s2'));
+    expect(mockShowNotice).toHaveBeenLastCalledWith(
+      `nightly docs · run 1 of 2 needing you · ${formatShortcut('session.settle')} settles, ${formatShortcut('session.nextRun')} moves on`,
+    );
+
+    act(() => shortcuts().onSettleTurn!());
+    expect(mockUseDaemonSocket().sendSettleTurn).toHaveBeenCalledWith('s2');
+
+    act(() => shortcuts().onNextRun());
+    await waitFor(() => expect(useSessionStore.getState().activeSessionId).toBe('s3'));
+    expect(mockShowNotice).toHaveBeenLastCalledWith(expect.stringContaining('run 2 of 2 needing you'));
+
+    withRuns(false);
+    rerender(<App />);
+    act(() => shortcuts().onNextRun());
+    expect(mockShowNotice).toHaveBeenLastCalledWith('No run needs you · 2 runs on file');
   });
 
   it('offers Open in editor exactly when the sidebar enables it', async () => {
@@ -814,6 +853,59 @@ describe('desktop surface', () => {
     expect(desktopCommands.sendDesktopSetActivePane).not.toHaveBeenCalled();
   });
 
+  it('acts on no run until the daemon shows the one the user picked, and on the shown one after a rejection', async () => {
+    const docs = { run_id: 'r', definition_id: 'docs', definition_name: 'nightly docs', trigger_type: 'schedule' };
+    const owedRun = (id: string, openedAt: string) => ({
+      id, label: id, directory: '/tmp/repo', state: 'waiting_input', profile_id: TEST_PROFILE_ID,
+      automation: docs, turn_owed: true, turn_opened_at: openedAt,
+    });
+    mockUseDaemonStore.mockReturnValue({
+      ...mockUseDaemonStore(),
+      daemonSessions: [owedRun('s1', '2026-09-26T09:00:00Z'), owedRun('s2', '2026-09-26T10:00:00Z')],
+    });
+    let rejectSelection: (error: Error) => void = () => {};
+    desktopCommands.sendDesktopSetActivePane.mockImplementation(
+      () => new Promise((_resolve, reject) => { rejectSelection = reject; }),
+    );
+    render(<App />);
+    const shortcuts = () => vi.mocked(useKeyboardShortcuts).mock.lastCall![0];
+    expect(shortcuts().onSettleTurn).toBeDefined();
+
+    act(() => shortcuts().onNextRun());
+    expect(desktopCommands.sendDesktopSetActivePane).toHaveBeenLastCalledWith('d1', 'pane-s2');
+    expect(useSessionStore.getState().activeSessionId).toBe('s2');
+    expect(shortcuts().onSettleTurn).toBeUndefined();
+
+    await act(async () => { rejectSelection(new Error('desktop moved')); });
+    await waitFor(() => expect(useSessionStore.getState().activeSessionId).toBe('s1'));
+    act(() => shortcuts().onSettleTurn!());
+    expect(mockUseDaemonSocket().sendSettleTurn).toHaveBeenCalledWith('s1');
+    expect(mockUseDaemonSocket().sendSettleTurn).not.toHaveBeenCalledWith('s2');
+  });
+
+  it('settles nothing and starts the run walk at the first run while the grid holds the surface', async () => {
+    const docs = { run_id: 'r', definition_id: 'docs', definition_name: 'nightly docs', trigger_type: 'schedule' };
+    const owedRun = (id: string, openedAt: string) => ({
+      id, label: id, directory: '/tmp/repo', state: 'waiting_input', profile_id: TEST_PROFILE_ID,
+      automation: docs, turn_owed: true, turn_opened_at: openedAt,
+    });
+    mockUseDaemonStore.mockReturnValue({
+      ...mockUseDaemonStore(),
+      daemonSessions: [owedRun('s1', '2026-09-26T09:00:00Z'), owedRun('s2', '2026-09-26T10:00:00Z')],
+    });
+    render(<App />);
+    const shortcuts = () => vi.mocked(useKeyboardShortcuts).mock.lastCall![0];
+    expect(shortcuts().onSettleTurn).toBeDefined();
+
+    act(() => shortcuts().onToggleGridMode!());
+    await waitFor(() => expect(useSessionStore.getState().view).toBe('grid'));
+    expect(useSessionStore.getState().activeSessionId).toBe('s1');
+
+    expect(shortcuts().onSettleTurn).toBeUndefined();
+    act(() => shortcuts().onNextRun());
+    expect(mockShowNotice).toHaveBeenLastCalledWith(expect.stringContaining('run 1 of 2 needing you'));
+  });
+
   describe('with a tile holding the daemon focus', () => {
     const selectedTileAttr = () => screen.getByTestId('sidebar').getAttribute('data-selected-tile');
 
@@ -830,6 +922,25 @@ describe('desktop surface', () => {
       render(<App />);
       await waitFor(() => expect(selectedTileAttr()).toBe('d1:tile-notes'));
     }
+
+    it('settles nothing and starts the run walk at the first run while the tile holds the surface', async () => {
+      const docs = { run_id: 'r', definition_id: 'docs', definition_name: 'nightly docs', trigger_type: 'schedule' };
+      const owedRun = (id: string, openedAt: string) => ({
+        id, label: id, directory: '/tmp/repo', state: 'waiting_input', profile_id: TEST_PROFILE_ID,
+        automation: docs, turn_owed: true, turn_opened_at: openedAt,
+      });
+      mockUseDaemonStore.mockReturnValue({
+        ...mockUseDaemonStore(),
+        daemonSessions: [owedRun('s1', '2026-09-26T09:00:00Z'), owedRun('s2', '2026-09-26T10:00:00Z')],
+      });
+      await renderOnTile();
+      expect(useSessionStore.getState().activeSessionId).toBe('s1');
+      const shortcuts = () => vi.mocked(useKeyboardShortcuts).mock.lastCall![0];
+
+      expect(shortcuts().onSettleTurn).toBeUndefined();
+      act(() => shortcuts().onNextRun());
+      expect(mockShowNotice).toHaveBeenLastCalledWith(expect.stringContaining('run 1 of 2 needing you'));
+    });
 
     it('moves focus to the tile\'s own context agent when the user selects it', async () => {
       await renderOnTile();

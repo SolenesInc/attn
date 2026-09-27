@@ -37,6 +37,7 @@ export function AppSidebar() {
     handleCloseTile,
     handleReloadTile,
     goToDashboard,
+    handleNextRun,
     view,
   } = useNavigationContext();
   const desktops = useProfilesStore((state) => state.desktops);
@@ -48,6 +49,7 @@ export function AppSidebar() {
     [desktops],
   );
   const activeSessionId = useSessionStore((state) => state.activeSessionId);
+  const focusRequest = useSessionStore((state) => state.focusRequest);
   const {
     desktopTileContents,
     sendRenameSession,
@@ -96,6 +98,7 @@ export function AppSidebar() {
       workspaces={desktopViews}
       visualIndexByWorkspaceId={slotIndexByDesktopId}
       selectedId={activeSessionId}
+      selectionRequest={focusRequest}
       selectedWorkspaceId={currentDesktopId}
       selectedTile={selectedTile ? { workspaceId: selectedTile.desktopId, tileId: selectedTile.tileId } : null}
       tileContents={desktopTileContents}
@@ -143,6 +146,7 @@ export function AppSidebar() {
       onSessionDragEnd={handleLeafDragEnd}
       queue={queueBands}
       onSettleTurn={sendSettleTurn}
+      onWalkRuns={handleNextRun}
       onOpenSnooze={openSnoozeMenu}
       onWakeTurn={sendWakeTurn}
       onScreenSessionIds={onScreenSessionIds}

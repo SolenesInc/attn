@@ -153,6 +153,7 @@ export function sessionAttentionFields(session: DaemonSessionSnapshot | undefine
     turnOwed: session?.turn_owed ?? false,
     turnOpenedAt: session?.turn_opened_at,
     turnSnoozedUntil: session?.turn_snoozed_until,
+    stateSince: session?.state_since,
     crewMember: session?.crew_member,
     parentSessionId: session?.parent_session_id,
   };
