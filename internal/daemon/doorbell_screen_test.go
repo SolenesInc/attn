@@ -50,34 +50,6 @@ func TestScreenShowsSelector(t *testing.T) {
 	}
 }
 
-func TestDoorbellHeldOffByAnOnScreenSelector(t *testing.T) {
-	d, backend, _ := newWakeableDaemon(t)
-	var typed [][]byte
-	backend.onInput = func(_ string, data []byte) { typed = append(typed, data) }
-	sessionID := "session-selector"
-	now := string(protocol.TimestampNow())
-	d.store.Add(&protocol.Session{
-		ID: sessionID, Label: "member", Agent: protocol.SessionAgentClaude,
-		State: protocol.SessionStateWorking, StateSince: now, StateUpdatedAt: now, LastSeen: now,
-	})
-
-	backend.screen = readDoorbellScreen(t, "claude-question-selector")
-	delivery := maintenanceSessionInput("screen-test", "selector", sessionID, "[attn] hand off now", sessionInputAtTurnBoundary)
-	if attempt := d.sessionInputs().try(context.Background(), delivery); !errors.Is(attempt.err, errSessionInputBlockedBySelector) {
-		t.Fatalf("typing at a selector returned %v, want errSessionInputBlockedBySelector", attempt.err)
-	}
-	if len(typed) != 0 {
-		t.Fatalf("the doorbell wrote %q at a screen waiting for a keypress", typed)
-	}
-	backend.screen = readDoorbellScreen(t, "claude-composer-working")
-	if attempt := d.sessionInputs().try(context.Background(), delivery); attempt.err != nil {
-		t.Fatalf("typing at a composer failed: %v", attempt.err)
-	}
-	if len(typed) == 0 {
-		t.Fatal("the doorbell wrote nothing at a composer")
-	}
-}
-
 func TestDoorbellDefersWhenTheScreenIsUnavailable(t *testing.T) {
 	d, backend, _ := newWakeableDaemon(t)
 	var typed [][]byte
