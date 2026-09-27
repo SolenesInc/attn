@@ -174,6 +174,25 @@ describe('useSessionLaunch on a remote endpoint', () => {
     expect(showError).toHaveBeenCalledWith(expect.stringContaining('remote endpoints are off'));
     expect(useSessionStore.getState().sessions.map((session) => session.id)).toEqual(['agent-a']);
   });
+
+  it('refuses a worktree launch before creating the worktree on the endpoint', async () => {
+    useProfilesStore.setState({
+      selectedProfileId: 'profile-1',
+      currentDesktopId: 'desktop-1',
+      desktops: [currentDesktop([], '')],
+    });
+    const sendCreateWorktree = vi.fn(async () => ({ success: true, path: '/remote/repo--feature' }));
+    const showError = vi.fn();
+    const { result } = renderLaunch(null, { sendCreateWorktree }, showError);
+
+    act(() => {
+      result.current.handleCreateWorktreeSession('/remote/repo', 'feature', 'main', 'outpost-1', 'codex', false);
+    });
+
+    expect(sendCreateWorktree).not.toHaveBeenCalled();
+    expect(showError).toHaveBeenCalledWith(expect.stringContaining('remote endpoints are off'));
+    expect(result.current.sessionCreationJob).toBeNull();
+  });
 });
 
 describe('useSessionLaunch from a remote agent', () => {

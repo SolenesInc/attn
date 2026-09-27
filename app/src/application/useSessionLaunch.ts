@@ -29,6 +29,17 @@ interface Options {
   selectCreatedSession: (id: string) => boolean;
   showError: ReturnType<typeof useToast>['showError'];
 }
+
+function localDesktopForLaunch(endpointId: string | undefined) {
+  if (endpointId) {
+    throw new Error('Agents on remote endpoints cannot be started or split in this release: remote endpoints are off.');
+  }
+  const desktop = currentDesktopIn(useProfilesStore.getState());
+  if (!desktop) {
+    throw new Error('No desktop is open yet; choose a profile before starting an agent.');
+  }
+  return desktop;
+}
 export function useSessionLaunch({
   settings,
   daemonEndpoints,
@@ -89,13 +100,7 @@ export function useSessionLaunch({
       anchorPaneId?: string;
       spawnedFrom?: string;
     }) => {
-      if (spawn.endpointId) {
-        throw new Error('Agents on remote endpoints cannot be started or split in this release: remote endpoints are off.');
-      }
-      const desktop = currentDesktopIn(useProfilesStore.getState());
-      if (!desktop) {
-        throw new Error('No desktop is open yet; choose a profile before starting an agent.');
-      }
+      const desktop = localDesktopForLaunch(spawn.endpointId);
       const target = launchTarget(desktop, spawn.direction, spawn.anchorPaneId);
       try {
         await createSession(
@@ -332,6 +337,12 @@ export function useSessionLaunch({
       autoMode?: boolean,
       chiefOfStaff = false,
     ) => {
+      try {
+        localDesktopForLaunch(endpointId);
+      } catch (error) {
+        showError(error instanceof Error ? error.message : 'Failed to start the agent');
+        return;
+      }
       const endpointKey = endpointId || 'local';
       if (worktreeSessionCreateEndpointsRef.current.has(endpointKey)) {
         showError('A worktree session is already being created for this target.');
