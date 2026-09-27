@@ -567,6 +567,21 @@ describe('App terminal runtime', () => {
     expect(resizesAfterAttach(daemon)).toEqual([{ cmd: 'pty_resize', id: 's1', cols: 100, rows: 4, xpixel: 800, ypixel: 84 }]);
   });
 
+  it('follows a narrow pane as it widens, while it is still too narrow to be usable', async () => {
+    const resize = resizableTerminals(120, 540);
+    const { daemon } = await renderSessions(daemonSession('s1', { state: 'idle' }));
+    daemon.on('attach_session', ({ id }) => ({ event: 'attach_result', id, success: true, cols: 15, rows: 25, running: true, last_seq: 0 }));
+    open('s1');
+    await daemon.idle();
+    daemon.emit({ event: 'pty_resized', id: 's1', cols: 15, rows: 25 });
+    await daemon.idle();
+
+    await resize(160, 540);
+    await daemon.idle();
+
+    expect(resizesAfterAttach(daemon)).toEqual([{ cmd: 'pty_resize', id: 's1', cols: 20, rows: 25, xpixel: 160, ypixel: 525 }]);
+  });
+
   it('restores a snapshot at its own grid, then fits the PTY to the shown pane', async () => {
     layOutTerminals(800, 600);
     const { daemon } = await renderSessions(daemonSession('s1', { state: 'idle' }));

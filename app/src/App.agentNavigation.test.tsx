@@ -249,6 +249,34 @@ describe('agent navigation', () => {
     expect(selectedAgent()).toBe('s2');
   });
 
+  it('forgets the agents ahead in history once the user opens another after going back', async () => {
+    await renderAgents({ s1: {}, s2: {}, s3: {} }, {});
+    open('s1');
+    open('s2');
+    open('s3');
+
+    keys.back();
+    open('s1');
+    keys.forward();
+    expect(selectedAgent()).toBe('s1');
+
+    keys.back();
+    expect(selectedAgent()).toBe('s2');
+  });
+
+  it('steps over a closed agent when going back through history', async () => {
+    const view = await renderAgents({ s1: {}, s2: {}, s3: {} }, {});
+    open('s1');
+    open('s2');
+    open('s3');
+
+    view.daemon.emit({ event: 'session_unregistered', session: queueSession('s2', 10) });
+    await view.daemon.idle();
+    keys.back();
+
+    expect(selectedAgent()).toBe('s1');
+  });
+
   const OWED = { turn_owed: true };
   const SETTLED = { turn_owed: false };
   const SNOOZED = { turn_owed: false, turn_snoozed_until: LATER };
