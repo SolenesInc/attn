@@ -315,7 +315,7 @@ func (a *agent) handle(_ *rpcPeer, method string, params json.RawMessage) (any, 
 		a.turn.Lock()
 		defer a.turn.Unlock()
 		return struct{}{}, guard.deny(denial)
-	case methodShowSelector, methodAskApproval, methodDismiss:
+	case methodShowSelector, methodAskApproval, methodDismiss, methodAnswered:
 		return a.handleModal(method)
 	case methodStopRead:
 		return struct{}{}, a.term.stopReading()

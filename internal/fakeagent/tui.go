@@ -28,6 +28,7 @@ type terminal struct {
 	line    []rune
 	pasting bool
 	modal   *modal
+	answers chan string
 }
 
 func openTerminal(style composer) (*terminal, error) {
@@ -40,7 +41,7 @@ func openTerminal(style composer) (*terminal, error) {
 	if err != nil {
 		return nil, fmt.Errorf("open /dev/tty: %w", err)
 	}
-	t := &terminal{style: style, in: os.NewFile(uintptr(fd), "/dev/tty")}
+	t := &terminal{style: style, in: os.NewFile(uintptr(fd), "/dev/tty"), answers: make(chan string, 4)}
 	t.mu.Lock()
 	defer t.mu.Unlock()
 	t.write(bracketedPasteOn + t.composer())

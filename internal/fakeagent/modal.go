@@ -10,6 +10,7 @@ const (
 	methodShowSelector = "show_selector"
 	methodAskApproval  = "ask_approval"
 	methodDismiss      = "dismiss"
+	methodAnswered     = "answered"
 )
 
 var selectorLines = []string{
@@ -20,9 +21,10 @@ var selectorLines = []string{
 }
 
 type modal struct {
-	lines   []string
-	resting func()
-	typed   []byte
+	lines     []string
+	resting   func()
+	typed     []byte
+	answering bool
 }
 
 type approvalAsker interface {
@@ -44,6 +46,13 @@ func (r *Run) AskApproval() {
 	r.call(methodAskApproval, struct{}{}, nil)
 }
 
+func (r *Run) Answered() (key string) {
+	r.t.Helper()
+	var result modalResult
+	r.call(methodAnswered, struct{}{}, &result)
+	return result.Typed
+}
+
 func (r *Run) Dismiss() (typed string) {
 	r.t.Helper()
 	var result modalResult
@@ -52,6 +61,9 @@ func (r *Run) Dismiss() (typed string) {
 }
 
 func (a *agent) handleModal(method string) (any, error) {
+	if method == methodAnswered {
+		return modalResult{Typed: <-a.term.answers}, nil
+	}
 	a.turn.Lock()
 	defer a.turn.Unlock()
 	switch method {
@@ -64,8 +76,9 @@ func (a *agent) handleModal(method string) (any, error) {
 		}
 		a.term.title(asker.approvalTitle())
 		return struct{}{}, a.term.openModal(&modal{
-			lines:   []string{"Allow the command to run?", "› 1. Yes, proceed", "  2. No, and tell Codex what to do differently"},
-			resting: asker.approvalAnswered,
+			lines:     []string{"Allow the command to run?", "› 1. Yes, proceed", "  2. No, and tell Codex what to do differently", "Press enter to confirm or esc to cancel"},
+			resting:   asker.approvalAnswered,
+			answering: true,
 		})
 	case methodDismiss:
 		typed, err := a.term.closeModal()
@@ -102,11 +115,21 @@ func (t *terminal) closeModal() (string, error) {
 
 func (t *terminal) capturedByModal(input []byte) bool {
 	t.mu.Lock()
-	defer t.mu.Unlock()
-	if t.modal == nil {
+	m := t.modal
+	if m == nil {
+		t.mu.Unlock()
 		return false
 	}
-	t.modal.typed = append(t.modal.typed, input...)
+	m.typed = append(m.typed, input...)
+	if !m.answering {
+		t.mu.Unlock()
+		return true
+	}
+	t.modal = nil
+	t.write("\x1b[" + strconv.Itoa(len(m.lines)-1) + "A\r\x1b[J" + t.composer())
+	t.mu.Unlock()
+	m.resting()
+	t.answers <- string(input)
 	return true
 }
 
