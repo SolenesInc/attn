@@ -38,6 +38,7 @@ function keepTileContext(state: Pick<ProfilesState, 'desktops' | 'currentDesktop
   const sessions = useSessionStore.getState();
   const shown = shownOf(state);
   if (sessions.view !== 'session' || !shown.tileId) return;
+  if (sessions.pendingSelection || sessions.focusRequest) return;
   const context = agentToShow(state, shown, sessions.activeSessionId);
   if (context !== sessions.activeSessionId) useSessionStore.setState({ activeSessionId: context });
 }

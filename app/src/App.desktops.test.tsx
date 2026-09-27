@@ -1041,6 +1041,33 @@ describe('desktop surface', () => {
     expect(desktopCommands.sendDesktopSetActivePane).not.toHaveBeenCalled();
   });
 
+  it('keeps an agent selection through a tile-only desktop update while its switch is in flight', async () => {
+    render(<App />);
+    await userEvent.click(await screen.findByTestId('select-d2'));
+    await waitFor(() => expect(screen.getByTestId('sidebar').getAttribute('data-selected-tile')).toBe('d2:tile-readme'));
+    expect(useSessionStore.getState().activeSessionId).toBeNull();
+
+    let showAgent = () => {};
+    desktopCommands.sendDesktopSetCurrent.mockImplementationOnce(
+      (_profileId: string, desktopId: string) =>
+        new Promise((resolve) => {
+          showAgent = () => {
+            arrangeDesktops(useProfilesStore.getState().desktops, desktopId);
+            resolve({ event: 'profile_action_result', request_id: 'test', action: 'desktop_set_current', success: true });
+          };
+        }),
+    );
+    act(() => useSessionStore.getState().selectAgent('s1'));
+    await waitFor(() => expect(desktopCommands.sendDesktopSetCurrent).toHaveBeenLastCalledWith(TEST_PROFILE_ID, 'd1'));
+
+    act(() => arrangeDesktops(useProfilesStore.getState().desktops, 'd2'));
+    expect(useSessionStore.getState().activeSessionId).toBe('s1');
+
+    await act(async () => showAgent());
+    expect(isActive('d1')).toBe(true);
+    expect(useSessionStore.getState().activeSessionId).toBe('s1');
+  });
+
   it('keeps a tile the user picks from Home while the daemon applies it', async () => {
     arrangeDesktops(useProfilesStore.getState().desktops.map((desktop) => (desktop.id === 'd1' ? withNotesTile(desktop) : desktop)), 'd1');
     let applyFocus = () => {};
