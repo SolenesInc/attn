@@ -1,0 +1,3 @@
+kind: fixed
+area: app
+change: The desktop migration screen tells apart workspaces that share a name by their first agent, and marks free slots, which get no desktop, apart from desktops you emptied, which stay.
