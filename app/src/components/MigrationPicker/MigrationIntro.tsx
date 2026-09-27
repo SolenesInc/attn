@@ -1,7 +1,8 @@
 import { useEffect, useRef } from 'react';
 import { slotShortcut } from '../../utils/desktops';
+import { WorkspaceExplainer } from './WorkspaceExplainer';
 
-export const INTRO_SENTENCE = 'Your workspaces are already desktops. Confirm where each one goes before you continue.';
+export const INTRO_SENTENCE = 'Each workspace you had is already its own desktop. Before you continue, confirm each one is where you want it.';
 
 export type Step = 'intro' | 'place';
 
@@ -35,33 +36,34 @@ export function Intro({ onStart }: { onStart: () => void }) {
   return (
     <section className="mp-welcome" aria-labelledby="mp-welcome-title">
       <div className="mp-eyebrow">A new home for your sessions</div>
-      <h1 id="mp-welcome-title">Workspaces are becoming desktops.</h1>
+      <h1 id="mp-welcome-title">Your workspaces are now desktops.</h1>
       <p className="mp-welcome-lead">{INTRO_SENTENCE}</p>
+      <WorkspaceExplainer />
       <div className="mp-change-list">
         <div>
           <span className="mp-change-icon" aria-hidden="true">▦</span>
           <div>
-            <h2>Each workspace is already a desktop</h2>
-            <p>The first nine sit on <kbd>{slotShortcut(1)}</kbd>–<kbd>{slotShortcut(9)}</kbd>.</p>
+            <h2>Nothing to set up</h2>
+            <p>Every workspace already has its desktop. The first nine open with <kbd>{slotShortcut(1)}</kbd>–<kbd>{slotShortcut(9)}</kbd>.</p>
           </div>
         </div>
         <div>
           <span className="mp-change-icon" aria-hidden="true">✓</span>
           <div>
             <h2>Confirm each one</h2>
-            <p>Keep it where it is, or merge it into another desktop. Nothing moves until you finish.</p>
+            <p>Keep it where it is, move it, or merge it into another desktop. Nothing changes until you finish.</p>
           </div>
         </div>
         <div>
           <span className="mp-change-icon" aria-hidden="true">⊞</span>
           <div>
             <h2>Your splits stay yours</h2>
-            <p>Sessions move together.</p>
+            <p>Sessions that were side by side stay side by side.</p>
           </div>
         </div>
       </div>
       <div className="mp-welcome-actions">
-        <button type="button" ref={startRef} className="mp-button primary" onClick={onStart}>Confirm desktops →</button>
+        <button type="button" ref={startRef} className="mp-button primary" onClick={onStart}>Continue →</button>
         <span>Your choices are saved as you go, in every attn window.</span>
       </div>
     </section>

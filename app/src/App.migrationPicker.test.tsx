@@ -20,9 +20,9 @@ describe('App migration picker', () => {
     });
     await daemon.idle();
     expect(daemon.sentOf('migration_get')).toEqual([expect.objectContaining({ cmd: 'migration_get' })]);
-    screen.getByText('Your workspaces are already desktops. Confirm where each one goes before you continue.');
+    screen.getByRole('heading', { name: 'Your workspaces are now desktops.' });
 
-    await gesture(daemon, () => fireEvent.click(screen.getByRole('button', { name: 'Confirm desktops →' })));
+    await gesture(daemon, () => fireEvent.click(screen.getByRole('button', { name: 'Continue →' })));
     const rows = screen.getByRole('listbox', { name: 'Workspaces' });
     expect(within(rows).getAllByRole('option').map((row) => row.querySelector('.mp-source-name')?.textContent))
       .toEqual(['exo · Chief', 'exo · Delete X tweet history', 'exo · Chief (2)']);

@@ -1,0 +1,3 @@
+kind: changed
+area: app
+change: The first screen of the desktop migration uses larger text, says plainly that your workspaces are already desktops, and has a "What is a workspace?" explainer that opens on hover or keyboard focus.
