@@ -8,11 +8,16 @@ import (
 	"strings"
 	"testing"
 	"time"
+
+	"github.com/victorarias/attn/internal/github/githubschema"
 )
 
 type readinessTransportFunc func(string, map[string]any) ([]byte, error)
 
 func (f readinessTransportFunc) GraphQL(_ context.Context, query string, variables map[string]any) ([]byte, error) {
+	if err := githubschema.Validate(query, variables); err != nil {
+		return nil, err
+	}
 	return f(query, variables)
 }
 

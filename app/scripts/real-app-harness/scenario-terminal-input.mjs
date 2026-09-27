@@ -526,7 +526,7 @@ async function main() {
         version: 1,
         overrides: {
           'terminal.toggleZoom': {
-            leader: { key: 'y', meta: true },
+            leader: { key: 'y', meta: true, shift: true },
             then: { key: 'z' },
           },
         },

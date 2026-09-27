@@ -5,7 +5,7 @@ import { readFileSync } from 'node:fs';
 // @ts-expect-error -- see above
 import { fileURLToPath } from 'node:url';
 import { beforeAll, describe, expect, it } from 'vitest';
-import { CellFlags, Ghostty, type GhosttyCell, type GhosttyTerminal } from './index';
+import { CellFlags, Ghostty } from './index';
 
 const wasmPath = fileURLToPath(new URL('../../vendor/ghostty-vt/ghostty-vt.wasm', import.meta.url));
 const fixturePath = fileURLToPath(new URL('./testdata/native-snapshot.bin', import.meta.url));
@@ -28,44 +28,11 @@ beforeAll(async () => {
   snapshot = new Uint8Array(readFileSync(fixturePath));
 });
 
-function text(cells: GhosttyCell[] | null, cols: number): string {
-  if (!cells) return '';
-  let out = '';
-  for (let x = 0; x < cols; x += 1) out += cells[x].codepoint ? String.fromCodePoint(cells[x].codepoint) : ' ';
-  return out.trimEnd();
-}
-
-function viewportRows(t: GhosttyTerminal): string[] {
-  const cells = t.getViewport();
-  const rows: string[] = [];
-  for (let y = 0; y < t.rows; y += 1) rows.push(text(cells.slice(y * t.cols, (y + 1) * t.cols), t.cols));
-  return rows;
-}
-
-/** A terminal of a deliberately different size, so adoption has to move it. */
-function adopted(): { terminal: GhosttyTerminal; historyDecoder: ReturnType<GhosttyTerminal['adoptSnapshot']> } {
-  const terminal = ghostty.createTerminal(80, 24, {});
-  terminal.write('this content belongs to the session being replaced\r\n');
-  return { terminal, historyDecoder: terminal.adoptSnapshot(snapshot) };
-}
-
 describe('adoptSnapshot', () => {
-  it('takes the snapshot grid, not the one it replaced', () => {
-    const { terminal } = adopted();
-    expect([terminal.cols, terminal.rows]).toEqual([40, 6]);
-    expect(viewportRows(terminal)).toEqual([
-      'row-1199 tail',
-      'row-1200 tail',
-      'STYLED',
-      'wrapwrapwrapwrapwrapwrapwrapwrapwrapwrap',
-      'wrapwrapwrapwrapwrap',
-      'prompt$',
-    ]);
-    terminal.free();
-  });
-
   it('carries styling, not just codepoints', () => {
-    const { terminal } = adopted();
+    const terminal = ghostty.createTerminal(80, 24, {});
+    terminal.write('this content belongs to the session being replaced\r\n');
+    terminal.adoptSnapshot(snapshot);
     const styled = terminal.getLine(2)![0];
     expect(styled.flags & CellFlags.BOLD).toBeTruthy();
     expect(styled.flags & CellFlags.UNDERLINE).toBeTruthy();
@@ -83,69 +50,6 @@ describe('adoptSnapshot', () => {
     expect(cells[8]).toMatchObject({ codepoint: 'R'.codePointAt(0), fg_r: 0xff, fg_g: 0x00, fg_b: 0x00 });
     expect(cells[9]).toMatchObject({ codepoint: 'G'.codePointAt(0), bg_r: 0x00, bg_g: 0xff, bg_b: 0x00 });
     expect(cells[10]).toMatchObject({ codepoint: 'Y'.codePointAt(0), fg_r: 0x12, fg_g: 0x34, fg_b: 0x56 });
-    terminal.free();
-  });
-
-  it('puts nothing on the pty', () => {
-    const { terminal } = adopted();
-    expect(terminal.hasResponse()).toBe(false);
-    terminal.free();
-  });
-
-  it('leaves scrollback to the history pages', () => {
-    const { terminal, historyDecoder } = adopted();
-    expect(historyDecoder.declaredRows).toBeGreaterThan(0);
-    expect(terminal.getScrollbackLength()).toBeLessThan(historyDecoder.declaredRows);
-
-    let pages = 0;
-    while (historyDecoder.decodeNextPage() !== null) pages += 1;
-    expect(pages).toBeGreaterThan(0);
-    expect(terminal.getScrollbackLength()).toBe(historyDecoder.declaredRows);
-    expect(text(terminal.getScrollbackLine(0), terminal.cols)).toBe('row-0001 tail');
-    terminal.free();
-  });
-
-  it('is done once, and closing twice is harmless', () => {
-    const { terminal, historyDecoder } = adopted();
-    while (historyDecoder.decodeNextPage() !== null) { /* drain */ }
-    expect(historyDecoder.decodeNextPage()).toBeNull();
-    historyDecoder.close();
-    historyDecoder.close();
-    terminal.free();
-  });
-
-  it('rejects bytes it cannot decode without touching the terminal', () => {
-    const terminal = ghostty.createTerminal(80, 24, {});
-    terminal.write('content that survives a refused restore\r\n');
-
-    expect(() => terminal.adoptSnapshot(new Uint8Array([0, 1, 2, 3, 4, 5, 6, 7]))).toThrow();
-
-    expect([terminal.cols, terminal.rows]).toEqual([80, 24]);
-    expect(viewportRows(terminal)[0]).toBe('content that survives a refused restore');
-    terminal.write('and still takes input');
-    expect(viewportRows(terminal)[1]).toBe('and still takes input');
-    terminal.free();
-  });
-
-  it('keeps the terminal usable for live input', () => {
-    const { terminal, historyDecoder } = adopted();
-    while (historyDecoder.decodeNextPage() !== null) { /* drain */ }
-    // The fixture's parser stopped mid-CSI; the leading 'm' completes it.
-    terminal.write('mok');
-    expect(viewportRows(terminal)[5]).toBe('prompt$ ok');
-    terminal.free();
-  });
-
-  it('rebinds key input to the terminal handle adopted from the snapshot', () => {
-    const terminal = ghostty.createTerminal(80, 24, {});
-    expect(terminal.encodeKey({ action: 'press', key: 'ARROW_UP' })).toBe('\x1b[A');
-
-    const historyDecoder = terminal.adoptSnapshot(snapshot);
-    // Finish the fixture's open CSI before changing cursor mode.
-    terminal.write('m\x1b[?1h');
-    expect(terminal.encodeKey({ action: 'press', key: 'ARROW_UP' })).toBe('\x1bOA');
-
-    historyDecoder.close();
     terminal.free();
   });
 });

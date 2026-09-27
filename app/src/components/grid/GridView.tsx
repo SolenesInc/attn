@@ -242,7 +242,7 @@ export function GridView({
         }
       } else if (p.event === 'local_resize') {
         if (grid.hasTile(p.id)) grid.resizeTile(p.id, p.cols, p.rows);
-      } else if (p.event === 'reset') {
+      } else if (p.event === 'reset' || p.event === 'restore_snapshot') {
         if (grid.hasTile(p.id)) grid.writeBytes(p.id, RESET_BYTES);
       }
     }).then((dispose) => {

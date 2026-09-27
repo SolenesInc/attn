@@ -6,11 +6,13 @@ import (
 	"os"
 	"path/filepath"
 	"slices"
+	"strconv"
 	"strings"
 	"testing"
 	"time"
 
 	"github.com/victorarias/attn/internal/fakeagent"
+	"github.com/victorarias/attn/internal/github/githubschema"
 	"github.com/victorarias/attn/internal/prompttest"
 	"github.com/victorarias/attn/internal/testworld"
 )
@@ -18,6 +20,7 @@ import (
 const fakeGHScript = `#!/bin/sh
 echo "$*" | tr '\n' ' ' >> %[1]q/calls
 echo >> %[1]q/calls
+mkdir -p %[1]q/requests && printf '%%s\0' "$@" > "$(mktemp %[1]q/requests/XXXXXX)"
 case "$*" in
 *PullRequestReadiness*) kind=readiness ;;
 *PullRequestFeedback*) kind=feedback ;;
@@ -45,7 +48,55 @@ func installFakeGitHub(t *testing.T) fakeGitHub {
 	if err := os.WriteFile(filepath.Join(dir, "bin", "gh"), []byte(fmt.Sprintf(fakeGHScript, dir)), 0o755); err != nil {
 		t.Fatal(err)
 	}
+	t.Cleanup(func() {
+		requests, _ := filepath.Glob(filepath.Join(dir, "requests", "*"))
+		rejected := map[string]bool{}
+		for _, request := range requests {
+			raw, _ := os.ReadFile(request)
+			query, variables := parseGHGraphQLArgs(strings.Split(strings.TrimSuffix(string(raw), "\x00"), "\x00"))
+			if err := githubschema.Validate(query, variables); err != nil && !rejected[err.Error()] {
+				rejected[err.Error()] = true
+				t.Errorf("GitHub would reject this request: %v\nvariables: %v\n%s", err, variables, query)
+			}
+		}
+	})
 	return fakeGitHub{t: t, dir: dir}
+}
+
+func parseGHGraphQLArgs(args []string) (string, map[string]any) {
+	query, variables := "", map[string]any{}
+	for i := 0; i+1 < len(args); i++ {
+		flag, field := args[i], args[i+1]
+		key, value, ok := strings.Cut(field, "=")
+		if !ok || (flag != "-f" && flag != "-F") {
+			continue
+		}
+		i++
+		switch {
+		case key == "query":
+			query = value
+		case flag == "-f":
+			variables[key] = value
+		default:
+			variables[key] = ghTypedField(value)
+		}
+	}
+	return query, variables
+}
+
+func ghTypedField(value string) any {
+	if number, err := strconv.Atoi(value); err == nil {
+		return number
+	}
+	switch value {
+	case "true":
+		return true
+	case "false":
+		return false
+	case "null":
+		return nil
+	}
+	return value
 }
 
 func (gh fakeGitHub) answer(file, body string) {
@@ -128,14 +179,16 @@ func TestPRWaitReadyReportsEachActionableUpdateOnceAcrossInvocations(t *testing.
 	}
 
 	for _, tc := range []struct {
-		args     []string
-		mode     string
-		hostname string
-		number   string
+		args        []string
+		mode        string
+		hostname    string
+		owner, name string
+		number      string
 	}{
-		{args: []string{"7", "--repo", "acme/widgets"}, mode: "green", number: "7"},
-		{args: []string{"https://ghe.example/acme/widgets/pull/8", "--mode", "codex"}, mode: "codex", hostname: "ghe.example", number: "8"},
-		{args: []string{"9", "--repo", "ghe.example/acme/widgets", "--mode", "formal-review", "--reviewer", "victor"}, mode: "formal-review", hostname: "ghe.example", number: "9"},
+		{args: []string{"7", "--repo", "acme/widgets"}, mode: "green", owner: "acme", name: "widgets", number: "7"},
+		{args: []string{"https://ghe.example/acme/widgets/pull/8", "--mode", "codex"}, mode: "codex", hostname: "ghe.example", owner: "acme", name: "widgets", number: "8"},
+		{args: []string{"9", "--repo", "ghe.example/acme/widgets", "--mode", "formal-review", "--reviewer", "victor"}, mode: "formal-review", hostname: "ghe.example", owner: "acme", name: "widgets", number: "9"},
+		{args: []string{"10", "--repo", "1337/2048"}, mode: "green", owner: "1337", name: "2048", number: "10"},
 	} {
 		gh.serves("CLOSED", "CLEAN")
 		closed := wait(append(tc.args, "--json")...)
@@ -145,8 +198,8 @@ func TestPRWaitReadyReportsEachActionableUpdateOnceAcrossInvocations(t *testing.
 			t.Errorf("pr wait-ready %q on a closed pull request exited %d with %+v, want outcome closed in %s mode", tc.args, closed.Code, out, tc.mode)
 		}
 		calls := gh.calls()
-		if !strings.Contains(calls, "owner=acme") || !strings.Contains(calls, "name=widgets") || !strings.Contains(calls, "number="+tc.number) {
-			t.Errorf("pr wait-ready %q asked gh:\n%s\nwant acme/widgets#%s", tc.args, calls, tc.number)
+		if !strings.Contains(calls, "owner="+tc.owner) || !strings.Contains(calls, "name="+tc.name) || !strings.Contains(calls, "number="+tc.number) {
+			t.Errorf("pr wait-ready %q asked gh:\n%s\nwant %s/%s#%s", tc.args, calls, tc.owner, tc.name, tc.number)
 		}
 		if asked := strings.Contains(calls, "--hostname"); asked != (tc.hostname != "") || (asked && !strings.Contains(calls, "--hostname "+tc.hostname)) {
 			t.Errorf("pr wait-ready %q asked gh:\n%s\nwant hostname %q", tc.args, calls, tc.hostname)

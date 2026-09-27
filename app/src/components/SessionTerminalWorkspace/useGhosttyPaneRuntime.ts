@@ -118,6 +118,12 @@ export function useGhosttyPaneRuntime(
       case 'restore_snapshot':
         void terminal.restoreSnapshot(decodePtyBytes(event.data));
         break;
+      case 'restore_fallback':
+        void terminal.write(decodePtyBytes(event.data), {
+          onlyIfRestoreRejected: true,
+          suppressResponses: event.suppressResponses,
+        });
+        break;
       case 'local_resize':
         void terminal.resizeLocal(
           event.cols,

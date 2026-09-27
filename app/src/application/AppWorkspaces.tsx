@@ -103,7 +103,7 @@ export function AppWorkspaces() {
           }
           const focusedSessionId =
             workspaceSelection.focusedSessionIdByWorkspace[workspace.id] ??
-            workspace.focusedSessionId;
+            workspace.firstSessionId;
           const focusedSession = focusedSessionId
             ? (workspace.sessions.find((session) => session.id === focusedSessionId) ?? null)
             : null;

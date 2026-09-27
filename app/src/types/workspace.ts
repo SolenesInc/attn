@@ -100,19 +100,6 @@ export function createDefaultWorkspaceState(): TerminalWorkspaceState {
   };
 }
 
-export function findTileByKind(node: TerminalLayoutNode | null, kind: TileKind): TileLeaf | null {
-  if (!node) {
-    return null;
-  }
-  if (node.type === 'tile') {
-    return node.tileKind === kind ? node : null;
-  }
-  if (node.type === 'split') {
-    return findTileByKind(node.children[0], kind) || findTileByKind(node.children[1], kind);
-  }
-  return null;
-}
-
 export function hasPane(node: TerminalLayoutNode, paneId: string): boolean {
   if (node.type === 'pane') {
     return node.paneId === paneId;
@@ -205,28 +192,6 @@ export interface SplitDivider {
   right: number;
   bottom: number;
   grabRatio?: number;
-}
-
-export function getSplitDividers(node: TerminalLayoutNode): SplitDivider[] {
-  const dividers: SplitDivider[] = [];
-  const walk = (current: TerminalLayoutNode, left: number, top: number, right: number, bottom: number): void => {
-    if (current.type !== 'split') {
-      return;
-    }
-    const ratio = current.ratio > 0 && current.ratio < 1 ? current.ratio : 0.5;
-    dividers.push({ splitId: current.splitId, direction: current.direction, ratio, left, top, right, bottom });
-    if (current.direction === 'vertical') {
-      const splitX = left + (right - left) * ratio;
-      walk(current.children[0], left, top, splitX, bottom);
-      walk(current.children[1], splitX, top, right, bottom);
-    } else {
-      const splitY = top + (bottom - top) * ratio;
-      walk(current.children[0], left, top, right, splitY);
-      walk(current.children[1], left, splitY, right, bottom);
-    }
-  };
-  walk(node, 0, 0, 1, 1);
-  return dividers;
 }
 
 export function applyRatioOverrides(node: TerminalLayoutNode, overrides: ReadonlyMap<string, number>): TerminalLayoutNode {

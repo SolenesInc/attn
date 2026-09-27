@@ -6,21 +6,12 @@ import { exists, readTextFile, writeTextFile } from '@tauri-apps/plugin-fs';
 import { revealItemInDir } from '@tauri-apps/plugin-opener';
 import { beforeEach, describe, expect, it, onTestFinished, vi } from 'vitest';
 import { openAttachedTerminals } from './test/appFixtures';
-import { agentPane, daemonSession, daemonWorkspace, type DaemonSession } from './test/daemonFixtures';
+import { daemonEndpoint, daemonSession, splitWorkspace, type DaemonSession } from './test/daemonFixtures';
 import { pressShortcut } from './test/renderApp';
 import type { ScriptedDaemon } from './test/scriptedDaemon';
 
 const FIRST_OUTPUT = 'first pane says hi';
 const SECOND_OUTPUT = 'second pane output';
-
-function splitWorkspace(id: string, sessionIds: string[]) {
-  return daemonWorkspace(id, {
-    root: sessionIds.length === 1
-      ? { type: 'pane', pane_id: `pane-${sessionIds[0]}` }
-      : { type: 'split', split_id: `split-${id}`, direction: 'vertical', ratio: 0.5, children: sessionIds.map((sid) => ({ type: 'pane', pane_id: `pane-${sid}` })) },
-    panes: sessionIds.map((sid) => agentPane(sid, id)),
-  }, { title: id });
-}
 
 function answerSnapshots(daemon: ScriptedDaemon) {
   daemon.on('support_snapshot', ({ endpoint_id }) => ({
@@ -44,7 +35,7 @@ async function openTerminals({
   workspaces = [splitWorkspace('ws', ['s1', 's2'])],
 } = {}) {
   const endpoints = [...new Set(sessions.flatMap((session) => session.endpoint_id ? [session.endpoint_id] : []))]
-    .map((id) => ({ id, name: id, ssh_target: `user@${id}`, status: 'connected', enabled: true }));
+    .map((id) => daemonEndpoint(id, { name: id }));
   return openAttachedTerminals({
     sessions,
     workspaces,
