@@ -194,6 +194,7 @@ type sessionInputLane struct {
 	userGeneration uint64
 	userSubmit     bool
 	heldEnter      bool
+	heldText       string
 	phase          protocol.SessionState
 	stopped        bool
 	running        sync.WaitGroup
@@ -453,6 +454,7 @@ func (m *sessionInputModule) holdEnterLocked(lane *sessionInputLane, sessionID s
 
 func (m *sessionInputModule) dropHeldEnterLocked(lane *sessionInputLane) {
 	lane.heldEnter = false
+	lane.heldText = ""
 	if entry := lane.retries[sessionInputHeldEnterKey]; entry != nil {
 		entry.timer.Stop()
 		delete(lane.retries, sessionInputHeldEnterKey)
@@ -467,7 +469,7 @@ func (m *sessionInputModule) pressHeldEnter(sessionID string) {
 		return
 	}
 	ctx := m.daemon.lifetime()
-	if _, blocked := m.promptInTheWayLocked(ctx, sessionID); blocked {
+	if _, blocked := m.promptInTheWayLocked(ctx, sessionID, lane.heldText); blocked {
 		m.holdEnterLocked(lane, sessionID, sessionInputComposerRetry)
 		return
 	}
@@ -477,14 +479,30 @@ func (m *sessionInputModule) pressHeldEnter(sessionID string) {
 	}
 }
 
-func (m *sessionInputModule) promptInTheWayLocked(ctx context.Context, sessionID string) (sessionInputReason, bool) {
-	if state := m.daemon.store.Get(sessionID); state != nil && state.State == protocol.SessionStatePendingApproval {
+func (m *sessionInputModule) promptInTheWayLocked(ctx context.Context, sessionID, pasted string) (sessionInputReason, bool) {
+	if m.pendingApproval(sessionID) {
 		return sessionInputReasonApproval, true
 	}
-	if _, known, selector := m.daemon.sessionInputScreen(ctx, sessionID); known && selector {
+	_, known, selector := m.daemon.sessionInputScreen(ctx, sessionID, pasted)
+	switch {
+	case !known:
+		return sessionInputReasonScreenUnavailable, true
+	case selector:
 		return sessionInputReasonSelector, true
 	}
 	return sessionInputReasonNone, false
+}
+
+func (m *sessionInputModule) promptShowingLocked(ctx context.Context, sessionID, pasted string) bool {
+	if _, known, selector := m.daemon.sessionInputScreen(ctx, sessionID, pasted); known {
+		return selector
+	}
+	return m.pendingApproval(sessionID)
+}
+
+func (m *sessionInputModule) pendingApproval(sessionID string) bool {
+	state := m.daemon.store.Get(sessionID)
+	return state != nil && state.State == protocol.SessionStatePendingApproval
 }
 
 func (m *sessionInputModule) fireRetry(sessionID, key string, self *sessionInputRetry) {
@@ -682,8 +700,9 @@ func (m *sessionInputModule) try(ctx context.Context, delivery sessionInputDeliv
 	}
 	pausepoint.At(pausepoint.SessionInputPasteGap)
 	time.Sleep(sessionInputSubmitDelay)
-	if reason, blocked := m.promptInTheWayLocked(ctx, delivery.sessionID); blocked {
+	if reason, blocked := m.promptInTheWayLocked(ctx, delivery.sessionID, delivery.text); blocked {
 		m.daemon.logf("session input holding Enter session=%s: a prompt appeared after the paste", delivery.sessionID)
+		lane.heldText = delivery.text
 		m.holdEnterLocked(lane, delivery.sessionID, sessionInputComposerRetry)
 		return sessionInputAttempt{id: delivery.id, stage: sessionInputPlaced, route: sessionInputRoutePTY, reason: reason, wait: attempt.wait}
 	}
@@ -749,7 +768,7 @@ func (m *sessionInputModule) ptySafetyLocked(ctx context.Context, sessionID stri
 			return sessionInputReasonUserComposerDirty, &sessionInputQuietError{retryAfter: remaining}
 		}
 	}
-	line, known, selector := m.daemon.sessionInputScreen(ctx, sessionID)
+	line, known, selector := m.daemon.sessionInputScreen(ctx, sessionID, "")
 	if !known {
 		return sessionInputReasonScreenUnavailable, errSessionInputScreenUnavailable
 	}
@@ -776,7 +795,7 @@ func (m *sessionInputModule) writePTY(ctx context.Context, sessionID string, dat
 		}
 	}
 	if m.daemon.noteUserInput(sessionID, source, data) {
-		if _, answering := m.promptInTheWayLocked(ctx, sessionID); lane.heldEnter && !answering {
+		if lane.heldEnter && !m.promptShowingLocked(ctx, sessionID, lane.heldText) {
 			m.dropHeldEnterLocked(lane)
 		}
 		lane.userGeneration++

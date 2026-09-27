@@ -25,6 +25,7 @@ func TestScreenShowsSelector(t *testing.T) {
 	for _, tc := range []struct {
 		name    string
 		screen  string
+		pasted  string
 		blocked bool
 	}{
 		{name: "claude question selector", screen: readDoorbellScreen(t, "claude-question-selector"), blocked: true},
@@ -37,8 +38,10 @@ func TestScreenShowsSelector(t *testing.T) {
 		{name: "prose about picking", screen: "  I will pick the branch to rebase onto and then open the PR."},
 		{name: "prose about choosing", screen: "  Waiting for you to choose which one to keep."},
 		{name: "an empty screen", screen: ""},
+		{name: "pasted text that mentions a footer", screen: "› Press esc to cancel the rollout\n", pasted: "Press esc to cancel the rollout"},
+		{name: "a footer under pasted text", screen: "› tell me\n" + selectorFooter, pasted: "tell me", blocked: true},
 	} {
-		line, blocked := screenShowsSelector(tc.screen)
+		line, blocked := screenShowsSelector(tc.screen, tc.pasted)
 		if blocked != tc.blocked {
 			t.Errorf("%s: blocked = %v on %q, want %v", tc.name, blocked, line, tc.blocked)
 			continue

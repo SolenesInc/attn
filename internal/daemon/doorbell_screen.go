@@ -5,6 +5,7 @@ import (
 	"regexp"
 	"strings"
 	"time"
+	"unicode"
 
 	"github.com/victorarias/attn/internal/ptybackend"
 )
@@ -17,7 +18,7 @@ const (
 
 var doorbellSelectorFooter = regexp.MustCompile(`(?i)\bto select\b|\besc to cancel\b`)
 
-func screenShowsSelector(text string) (string, bool) {
+func screenShowsSelector(text, pasted string) (string, bool) {
 	lines := make([]string, 0, doorbellScreenTailLines)
 	for _, line := range strings.Split(text, "\n") {
 		if trimmed := strings.TrimSpace(line); trimmed != "" {
@@ -28,14 +29,19 @@ func screenShowsSelector(text string) (string, bool) {
 		lines = lines[len(lines)-doorbellScreenTailLines:]
 	}
 	for _, line := range lines {
-		if doorbellSelectorFooter.MatchString(line) {
+		if doorbellSelectorFooter.MatchString(line) && !partOfPaste(line, pasted) {
 			return line, true
 		}
 	}
 	return "", false
 }
 
-func (d *Daemon) sessionInputScreen(parent context.Context, sessionID string) (line string, known, selector bool) {
+func partOfPaste(line, pasted string) bool {
+	text := strings.TrimLeftFunc(line, func(r rune) bool { return !unicode.IsLetter(r) && !unicode.IsDigit(r) })
+	return text != "" && strings.Contains(strings.Join(strings.Fields(pasted), " "), strings.Join(strings.Fields(text), " "))
+}
+
+func (d *Daemon) sessionInputScreen(parent context.Context, sessionID, pasted string) (line string, known, selector bool) {
 	if d.ptyBackend == nil {
 		return "", false, false
 	}
@@ -49,6 +55,6 @@ func (d *Daemon) sessionInputScreen(parent context.Context, sessionID string) (l
 	if err != nil || snapshot.Screen == nil || !snapshot.Screen.HasText {
 		return "", false, false
 	}
-	line, selector = screenShowsSelector(snapshot.Screen.Text)
+	line, selector = screenShowsSelector(snapshot.Screen.Text, pasted)
 	return line, true, selector
 }
