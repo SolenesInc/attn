@@ -182,7 +182,6 @@ type Daemon struct {
 	delegationMu                      sync.Mutex
 	delegationRunning                 map[string]bool
 	delegationCheckoutMu              sync.Mutex
-	delegationWorktreePrepareHook     func(path string)
 	delegationWaitsForFirstTurn       bool
 	launchWatchMu                     sync.Mutex
 	launchWatches                     map[string]*launchWatch

@@ -370,9 +370,6 @@ func (d *Daemon) createDelegationWorktree(protection foregroundCleanupProtection
 			return "", false, fmt.Errorf("record delegated worktree preparation: %w", err)
 		}
 	}
-	if d.delegationWorktreePrepareHook != nil {
-		d.delegationWorktreePrepareHook(expectedPath)
-	}
 	startingFrom := request.StartingFrom
 	if protocol.Deref(request.ExistingBranch) && strings.TrimSpace(protocol.Deref(startingFrom)) != "" {
 		return "", false, fmt.Errorf("an existing branch does not accept a starting ref")
