@@ -88,6 +88,9 @@ try {
   await page.locator("#review-prompt").click();
   await expect(page.locator("#source-diff .added .line-text")).toContainText(["Wake from my unsaved draft.", "Literal <script>text</script> and λ."]);
   await expect(page.locator("#source-diff .removed .line-text")).toContainText(["Wake from the common ancestor."]);
+  await expect(page.locator("#source-diff .removed .changed-text")).toHaveText("the common ancestor.");
+  await expect(page.locator("#source-diff .added .changed-text")).toHaveText("my unsaved draft.");
+  await expect(page.locator("#source-diff .added").filter({ hasText: "Literal <script>" }).locator(".changed-text")).toHaveCount(0);
   await expect(page.locator("#prompt-diff")).toContainText("Shared scenario note.");
   await expect(page.locator("#delivery")).toContainText("launch instructions → user message");
   await page.locator("#theme").selectOption("dark");
@@ -146,8 +149,11 @@ try {
   await expect(page.getByLabel("Markdown source")).toHaveValue("External edit.\n");
   const contextBefore = "# Purpose\n\nEvery seed is a prompt for a fresh agent.\n\n## Shared decisions\n\nKeep the common design in the parent plot.\nRead the named sections before starting.\nUse the child body to define this assignment.\nRecord evidence on the seed.\n\n## Child assignment\n\n";
   const contextAfter = "\n\n## Verification\n\nDescribe how the result will be checked.\nPreserve the agreed scope.\nName the artifact the next agent needs.\n\n## Handover\n\nThe final section must remain readable outside the changed hunk.\n";
-  const baseText = contextBefore + "Write an outcome." + contextAfter;
-  const currentText = contextBefore + "Write a complete work prompt with its outcome and required reading." + contextAfter;
+  const paragraph = "Build enough shared understanding to avoid costly misalignment. Keep discovery proportional to the task: investigate factual gaps through inspection, research, and bring choices and context only the user can supply back to them.";
+  const revisedParagraph = paragraph.replace("inspection, research, and bring", "inspection, research, or quick checks you run yourself; and bring");
+  const newParagraph = "A new preface gives this section context.";
+  const baseText = contextBefore + "Write an outcome.\n" + paragraph + contextAfter;
+  const currentText = contextBefore + "Write a complete work prompt with its outcome and required reading.\n" + newParagraph + "\n" + revisedParagraph + contextAfter;
   await fs.writeFile(wake, baseText);
   const contextBase = commit();
   await page.reload();
@@ -160,10 +166,14 @@ try {
   await expect(page.getByLabel("Full source text", { exact: true })).toHaveValue(currentText);
   await expect(page.locator("#source-diff")).not.toContainText("The final section must remain readable");
   await expect(page.locator("#source-diff")).toContainText("Write a complete work prompt");
+  const changedParagraph = page.locator("#source-diff .added .line-text").filter({ hasText: "Build enough shared understanding" });
+  await expect(changedParagraph).toHaveText(revisedParagraph);
+  await expect(changedParagraph.locator(".changed-text")).toContainText("or quick checks you run yourself;");
+  await expect(page.locator("#source-diff .added .line-text").filter({ hasText: newParagraph }).locator(".changed-text")).toHaveCount(0);
   const fullBounds = await page.locator(".full-text-pane").boundingBox();
   const diffBounds = await page.locator(".review-diff-pane").boundingBox();
   assert.ok(fullBounds.width > 500 && diffBounds.x >= fullBounds.x + fullBounds.width, "full text and diff need readable adjacent columns");
-  const diffEditedText = contextBefore + "Write a complete work prompt while reading its diff." + contextAfter;
+  const diffEditedText = contextBefore + "Write a complete work prompt while reading its diff.\n" + newParagraph + "\n" + revisedParagraph + contextAfter;
   await page.getByLabel("Full source text", { exact: true }).fill(diffEditedText);
   await expect(page.locator("#source")).toHaveValue(diffEditedText);
   await expect(page.locator("#source-diff")).toContainText("while reading its diff");
@@ -228,6 +238,15 @@ try {
   assert.deepEqual(consoleErrors, []);
   await page.setViewportSize({ width: 780, height: 900 });
   if (artifacts) await page.screenshot({ path: path.join(artifacts, "narrow-editor.png"), fullPage: true });
+  await fs.writeFile(wake, "Long paragraph has old wording.");
+  const noNewlineBase = commit();
+  await page.reload();
+  await page.getByLabel("Markdown source").fill("Long paragraph has new wording.");
+  await page.locator("#base-ref").fill(noNewlineBase);
+  await page.locator("#compare-base").click();
+  await page.locator("#source-compare").click();
+  await expect(page.locator("#source-diff .removed .changed-text")).toHaveText("old");
+  await expect(page.locator("#source-diff .added .changed-text")).toHaveText("new");
   console.log(JSON.stringify({ status: "passed", ancestor, head, tip, legacy, consoleErrors, idleRequests: requests - settled, idleBefore, idleAfter, artifacts }, null, 2));
 } finally {
   if (context) await context.close();

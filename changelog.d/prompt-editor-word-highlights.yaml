@@ -1,0 +1,3 @@
+kind: changed
+area: prompt editor
+change: Prompt diffs highlight the changed words within edited paragraphs.
