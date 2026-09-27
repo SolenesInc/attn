@@ -261,7 +261,7 @@ export function SidebarHeader() {
     <>
       <div className="sidebar-header">
         {instance && (
-          <div className="sidebar-instance-marker" data-testid="sidebar-instance-marker">
+          <div className="sidebar-instance-marker">
             instance <strong>{instance}</strong>
           </div>
         )}

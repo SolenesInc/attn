@@ -2,10 +2,8 @@ import '@testing-library/jest-dom/vitest';
 import { beforeEach, vi } from 'vitest';
 import type * as Zustand from 'zustand';
 import { invoke, isTauri } from '@tauri-apps/api/core';
-import { gardenScrollMemory } from '../store/gardenWalk';
-import { clearDelegationModelCatalogs } from '../hooks/useDelegationModelCatalog';
-import { _resetEscapeStackForTest } from '../hooks/useEscapeStack';
 import { WHATS_NEW_ID, WHATS_NEW_STORAGE_KEY } from '../hooks/useWhatsNew';
+import { forgetAppMemory } from './appMemory';
 
 vi.mock('@tauri-apps/api/core', () => ({
   invoke: vi.fn(),
@@ -60,10 +58,9 @@ vi.mock('@tauri-apps/plugin-fs', () => ({
   writeTextFile: vi.fn(async () => {}),
 }));
 
-const storeResets = vi.hoisted(() => new Set<() => void>());
-
 vi.mock('zustand', async (importOriginal) => {
   const actual = await importOriginal<typeof Zustand>();
+  const { storeResets } = await import('./storeResets');
   const create = ((initializer?: Zustand.StateCreator<unknown>) => {
     const track = (stateCreator: Zustand.StateCreator<unknown>) => {
       const store = actual.create(stateCreator);
@@ -140,10 +137,7 @@ beforeEach(() => {
     window.localStorage.clear();
     window.localStorage.setItem(WHATS_NEW_STORAGE_KEY, WHATS_NEW_ID);
   }
-  for (const reset of storeResets) reset();
-  gardenScrollMemory.clear();
-  clearDelegationModelCatalogs();
-  _resetEscapeStackForTest();
+  forgetAppMemory();
   vi.mocked(isTauri).mockReset();
   vi.mocked(invoke).mockReset();
 });

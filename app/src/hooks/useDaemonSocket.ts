@@ -2126,13 +2126,6 @@ export function useDaemonSocket({
                     source: 'attach_restore',
                   });
                 }
-                if (attachEffects.shouldReset && attachEffects.resetReason) {
-                  emitPtyEvent({
-                    event: 'reset',
-                    id: data.id,
-                    reason: attachEffects.resetReason,
-                  });
-                }
                 ptyTransportRef.current.setLastSeq(data.id, attachEffects.nextSeq);
                 const restoreWasEmitted = attachEffects.restoreAction.kind === 'ghostty_snapshot';
                 if (attachEffects.restoreAction.kind === 'ghostty_snapshot') {
@@ -2167,7 +2160,10 @@ export function useDaemonSocket({
                     placements: data.snapshot?.placements ?? [],
                   });
                 }
-                if (attachEffects.queuedOutputsToEmit.length > 0) {
+                for (const chunk of attachEffects.restoreFallbackOutputs) {
+                  emitPtyEvent({ event: 'restore_fallback', id: data.id, data: chunk.data });
+                }
+                if (attachEffects.queuedOutputsToEmit.length > 0 || attachEffects.restoreFallbackOutputs.length > 0) {
                   ptyTransportRef.current.clearQueuedAttachOutputs(data.id);
                   for (const chunk of attachEffects.queuedOutputsToEmit) {
                     emitPtyEvent({ event: 'data', id: data.id, data: chunk.data, seq: chunk.seq });

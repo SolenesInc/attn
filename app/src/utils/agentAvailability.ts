@@ -151,7 +151,7 @@ export function hasAnyAvailableAgents(availability: AgentAvailability): boolean 
   return Object.values(availability).some(Boolean);
 }
 
-export function firstAvailableAgent(
+function firstAvailableAgent(
   availability: AgentAvailability,
   fallback: SessionAgent = 'codex',
 ): SessionAgent {

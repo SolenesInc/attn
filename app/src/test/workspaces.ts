@@ -9,7 +9,7 @@ export function split(splitId: string, direction: 'vertical' | 'horizontal', chi
   return { type: 'split', split_id: splitId, direction, ratio, children };
 }
 
-export function splitWorkspace(root: unknown, sessionIds: string[]): DaemonWorkspace {
+export function laidOutWorkspace(root: unknown, sessionIds: string[]): DaemonWorkspace {
   return daemonWorkspace('ws', { root, panes: sessionIds.map((id) => agentPane(id, 'ws')) }, { title: 'ws' });
 }
 
@@ -20,7 +20,7 @@ export async function renderWorkspace(root: unknown, sessionIds: string[], other
         ...sessionIds.map((id) => daemonSession(id, { workspace_id: 'ws', state: 'idle' })),
         ...others.map((id) => daemonSession(id, { state: 'idle' })),
       ],
-      workspaces: [splitWorkspace(root, sessionIds), ...others.map(agentWorkspace)],
+      workspaces: [laidOutWorkspace(root, sessionIds), ...others.map(agentWorkspace)],
     },
   });
   view.daemon.on('attach_session', ({ id }) => ({ event: 'attach_result', id, success: true, cols: 80, rows: 24, running: true, last_seq: 0 }));

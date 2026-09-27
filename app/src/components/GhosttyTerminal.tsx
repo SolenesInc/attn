@@ -213,6 +213,7 @@ export interface GhosttyTerminalHandle {
     options?: {
       suppressResponses?: boolean;
       deferRender?: boolean;
+      onlyIfRestoreRejected?: boolean;
     },
   ) => Promise<void>;
   resizeLocal: (
@@ -603,6 +604,7 @@ export const GhosttyTerminal = forwardRef<GhosttyTerminalHandle, GhosttyTerminal
     const lastModelPrintableRef = useRef(0);
     const lastRenderAtRef = useRef(0);
     const lastWriteAtRef = useRef(0);
+    const restoreRejectedRef = useRef(false);
     const readyRef = useRef(false);
     const startupRef = useRef(emptyStartup());
     const onInputRef = useRef(onInput);
@@ -1494,16 +1496,27 @@ export const GhosttyTerminal = forwardRef<GhosttyTerminalHandle, GhosttyTerminal
       });
     }, []);
 
+    const scheduleFindRescan = useCallback(() => {
+      if (!findOpenRef.current || !findQueryRef.current) return;
+      if (findRescanTimerRef.current) clearTimeout(findRescanTimerRef.current);
+      findRescanTimerRef.current = setTimeout(() => {
+        findRescanTimerRef.current = null;
+        runFindScanRef.current?.();
+      }, 300);
+    }, []);
+
     const write = useCallback((
       data: string | Uint8Array,
       options?: {
         suppressResponses?: boolean;
         deferRender?: boolean;
+        onlyIfRestoreRejected?: boolean;
       },
     ) => {
       return enqueueOperation('write', async () => {
         const terminal = terminalRef.current;
         if (!terminal) return;
+        if (options?.onlyIfRestoreRejected && !restoreRejectedRef.current) return;
         const searchableOutput = typeof data === 'string' ? data : new TextDecoder().decode(data);
         if (searchableOutput) {
           const parsed = parseOsc52Writes(osc52StateRef.current, searchableOutput);
@@ -1562,13 +1575,7 @@ export const GhosttyTerminal = forwardRef<GhosttyTerminalHandle, GhosttyTerminal
         );
         hoverGenerationRef.current += 1;
         annotationsRef.current?.noteWrite();
-        if (findOpenRef.current && findQueryRef.current) {
-          if (findRescanTimerRef.current) clearTimeout(findRescanTimerRef.current);
-          findRescanTimerRef.current = setTimeout(() => {
-            findRescanTimerRef.current = null;
-            runFindScanRef.current?.();
-          }, 300);
-        }
+        scheduleFindRescan();
         if (viewportOffsetRef.current === 0) {
           wheelRemainderRowsRef.current = 0;
         }
@@ -1609,7 +1616,7 @@ export const GhosttyTerminal = forwardRef<GhosttyTerminalHandle, GhosttyTerminal
           scheduleSynchronizedOutputRenderFallback();
         }
       });
-    }, [enqueueOperation, flushSynchronizedOutputRender, lineAtVisibleRow, scheduleCoalescedRefit, scheduleSynchronizedOutputRenderFallback, selectionLineAtBufferRow]);
+    }, [enqueueOperation, flushSynchronizedOutputRender, lineAtVisibleRow, scheduleCoalescedRefit, scheduleFindRescan, scheduleSynchronizedOutputRenderFallback, selectionLineAtBufferRow]);
 
     const restoreSnapshot = useCallback((snapshot: Uint8Array) => {
       return enqueueOperation('restoreSnapshot', () => {
@@ -1619,7 +1626,9 @@ export const GhosttyTerminal = forwardRef<GhosttyTerminalHandle, GhosttyTerminal
         let historyDecoder: SnapshotHistoryDecoder;
         try {
           historyDecoder = terminal.adoptSnapshot(snapshot);
+          restoreRejectedRef.current = false;
         } catch (reason) {
+          restoreRejectedRef.current = true;
           // A payload fault, not a model fault: replacing the model would reattach and be
           // served the same bytes forever.
           recordUiDiag({
@@ -1632,6 +1641,12 @@ export const GhosttyTerminal = forwardRef<GhosttyTerminalHandle, GhosttyTerminal
           });
           return;
         }
+        blockStoreRef.current.clear();
+        placementStoreRef.current.clear();
+        annotationsRef.current?.reset();
+        selectedBlockIdRef.current = null;
+        writeCountRef.current += 1;
+        lastWriteAtRef.current = Date.now();
         // The decoded terminal carries the worker's modes, and the worker never asserted grapheme clustering.
         graphemeResetCarryRef.current = false;
         ensureGraphemeClustering(terminal);
@@ -1641,6 +1656,7 @@ export const GhosttyTerminal = forwardRef<GhosttyTerminalHandle, GhosttyTerminal
         wheelRemainderRowsRef.current = 0;
         hoverGenerationRef.current += 1;
         annotationsRef.current?.noteWrite();
+        scheduleFindRescan();
         flushSynchronizedOutputRender();
         requestAnimationFrame(() => {
           void enqueueOperation('restoreSnapshotHistory', () => {
@@ -1672,12 +1688,12 @@ export const GhosttyTerminal = forwardRef<GhosttyTerminalHandle, GhosttyTerminal
           });
         });
       });
-    }, [enqueueOperation, flushSynchronizedOutputRender]);
+    }, [enqueueOperation, flushSynchronizedOutputRender, scheduleFindRescan]);
 
     const seedBlocks = useCallback((blocks: SeededBlock[]) => {
       return enqueueOperation('seedBlocks', () => {
         const terminal = terminalRef.current;
-        if (!terminal) return;
+        if (!terminal || restoreRejectedRef.current) return;
         blockStoreRef.current.seed(
           blocks,
           (row) => selectionLineAtBufferRow(row, 0, terminal.cols),
@@ -1714,7 +1730,7 @@ export const GhosttyTerminal = forwardRef<GhosttyTerminalHandle, GhosttyTerminal
     const seedPlacements = useCallback((sessionId: string, placements: PlacementElement[]) => {
       return enqueueOperation('seedPlacements', () => {
         const terminal = terminalRef.current;
-        if (!terminal) return;
+        if (!terminal || restoreRejectedRef.current) return;
         placementSessionRef.current = sessionId;
         placementStoreRef.current.seed(placements, terminal.getScrollbackLength());
         requestPlacementBlobs();
