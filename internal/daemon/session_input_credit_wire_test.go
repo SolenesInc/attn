@@ -1,0 +1,68 @@
+package daemon_test
+
+import (
+	"testing"
+	"time"
+
+	"github.com/victorarias/attn/internal/protocol"
+)
+
+func TestAHeartbeatArmsNoAutoSettleButTheUsersAnswerInTheSameRunDoes(t *testing.T) {
+	inBubbleWithAgents(t, func(t *testing.T, w *world) {
+		app, day := crewDayInBubble(t, w, map[string]string{"auto_settle_enabled": "true"})
+		app.TypeLine(day.id, "pick a colour for the banner")
+		day.reply("Red or blue? <!-- attn:state=waiting_input -->")
+		if waiting := queriedSession(t, day.cli, day.id); !protocol.Deref(waiting.TurnOwed) {
+			t.Fatalf("a day asking the user is %+v, want the turn owed", waiting)
+		}
+
+		w.advance(55*time.Minute + time.Second)
+		if got := pastedContaining(day.term, crewHeartbeat); got != 1 {
+			t.Fatalf("want one heartbeat, got %q", day.term.Pasted())
+		}
+		w.advance(40 * time.Second)
+		if s := queriedSession(t, day.cli, day.id); s.State != protocol.SessionStateWorking || s.AutoSettleFiresAt != nil || !protocol.Deref(s.TurnOwed) {
+			t.Fatalf("a day warmed by a heartbeat is %s with countdown %q and owed %v, want working, no countdown, still owed",
+				s.State, protocol.Deref(s.AutoSettleFiresAt), protocol.Deref(s.TurnOwed))
+		}
+
+		app.TypeLine(day.id, "blue")
+		w.advance(30 * time.Second)
+		if s := queriedSession(t, day.cli, day.id); s.AutoSettleFiresAt == nil {
+			t.Fatalf("the user's own answer in the heartbeat's run armed no countdown: %s owed %v", s.State, protocol.Deref(s.TurnOwed))
+		}
+	})
+}
+
+func TestAnApprovalKeypressEarnsNoCreditAndDoesNotHoldAttnsDoorbell(t *testing.T) {
+	inBubbleWithAgents(t, func(t *testing.T, w *world) {
+		app, cli := w.App(), w.Client()
+		setSetting(t, app, "auto_settle_enabled", "true")
+		agent := w.bubbleClaude(t, app, "shop")
+		registerSessions(t, w, cli, "sender")
+		app.TypeLine(agent.id, "edit the config")
+		agent.reply("Which file? <!-- attn:state=waiting_input -->")
+		agent.term.OnSubmit(nil)
+		if err := cli.RecordNotification(agent.id, "permission_prompt", "Allow edit?"); err != nil {
+			t.Fatal(err)
+		}
+		w.advance(0)
+		if s := queriedSession(t, cli, agent.id); s.State != protocol.SessionStatePendingApproval {
+			t.Fatalf("the agent is %s, want pending_approval", s.State)
+		}
+
+		app.Send(protocol.PtyInputMessage{Cmd: protocol.CmdPtyInput, ID: agent.id, Data: "y"})
+		w.advance(0)
+		if err := cli.UpdateStateFromHookEvidence(agent.id, protocol.StateWorking, "", "", ""); err != nil {
+			t.Fatal(err)
+		}
+		w.advance(0)
+		agent.reply("Edited. <!-- attn:state=idle -->")
+		if s := queriedSession(t, cli, agent.id); s.AutoSettleFiresAt != nil {
+			t.Fatalf("an approval keypress armed a countdown to %s", protocol.Deref(s.AutoSettleFiresAt))
+		}
+		if sent := sendAgentMessage(t, cli, "sender", agent.id, "the build is green"); sent.Status != protocol.AgentMsgStatusNotified {
+			t.Fatalf("mail right after an approval keypress = %+v, want the doorbell to ring", sent)
+		}
+	})
+}
