@@ -44,29 +44,6 @@ func envValue(env []string, key string) string {
 	return ""
 }
 
-func writeTestPluginManifest(t *testing.T, pluginDir, name string) {
-	t.Helper()
-	root := filepath.Join(pluginDir, name)
-	entrypointDir := filepath.Join(root, "src")
-	if err := os.MkdirAll(entrypointDir, 0o755); err != nil {
-		t.Fatalf("mkdir plugin dir: %v", err)
-	}
-	if err := os.WriteFile(filepath.Join(entrypointDir, "index.ts"), []byte("// fake entrypoint\n"), 0o644); err != nil {
-		t.Fatalf("write fake entrypoint: %v", err)
-	}
-	manifest := []byte(`
-name = "` + name + `"
-version = "0.1.0"
-attn_api_version = 6
-
-[plugin]
-entrypoint = "src/index.ts"
-`)
-	if err := os.WriteFile(filepath.Join(root, pluginManifestName), manifest, 0o644); err != nil {
-		t.Fatalf("write plugin manifest: %v", err)
-	}
-}
-
 func TestReapStrandedPluginRuntimesKillsThemAndRetiresTheirRecords(t *testing.T) {
 	dataDir := t.TempDir()
 	registryDir := plugins.RuntimeRegistryDir(dataDir)
