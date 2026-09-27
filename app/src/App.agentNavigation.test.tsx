@@ -4,7 +4,6 @@ import { describe, expect, it, vi } from 'vitest';
 import { agentPane, defaultProfile, dockTiles, emptyDesktop, soloDesktop, daemonSession, daemonDesktop, type DaemonSession } from './test/daemonFixtures';
 import { gesture, pressShortcut, renderApp } from './test/renderApp';
 import type { ScriptedDaemon } from './test/scriptedDaemon';
-import { useSessionStore } from './store/sessions';
 
 const S1_TURN_OPENED = '2026-08-03T09:00:00Z';
 const S2_TURN_OPENED = '2026-08-03T10:00:00Z';
@@ -56,7 +55,7 @@ function open(label: string) {
 }
 
 function selectedAgent(): string | null {
-  const row = document.querySelector('.session-item.selected .session-label')?.textContent;
+  const row = document.querySelector('.session-item.selected[data-session-id] .session-label')?.textContent;
   if (row) return row;
   const pane = document.querySelector('[data-session-visible="1"]')?.getAttribute('data-active-pane-id');
   return pane ? pane.replace(/^pane-/, '') : null;
@@ -424,7 +423,7 @@ describe('agent navigation', () => {
     await daemon.idle();
 
     expect(document.querySelector('[data-pane-id="tile-notes"]')).not.toBeNull();
-    expect(useSessionStore.getState().activeSessionId).toBe('s1');
+    expect(selectedAgent()).toBe('s1');
   });
 
   it('updates tile context when a pending agent closes after the old context moves away', async () => {
@@ -437,7 +436,7 @@ describe('agent navigation', () => {
 
     pressShortcut('desktop.select1');
     await daemon.idle();
-    expect(useSessionStore.getState().activeSessionId).toBe('s1');
+    expect(selectedAgent()).toBe('s1');
 
     open('s4');
     await daemon.received('desktop_place_session', (command) => command.session_id === 's4');
@@ -446,12 +445,12 @@ describe('agent navigation', () => {
       soloDesktop('s1', { id: 'd2', revision: desktops[1].revision + 1 }),
     ]);
     await daemon.idle();
-    expect(useSessionStore.getState().activeSessionId).toBe('s1');
+    expect(selectedAgent()).toBe('s1');
     daemon.emit({ event: 'session_unregistered', session: daemonSession('s4') });
     await daemon.idle();
 
     expect(document.querySelector('[data-pane-id="tile-notes"]')).not.toBeNull();
-    expect(useSessionStore.getState().activeSessionId).toBe('s2');
+    expect(selectedAgent()).toBe('s2');
   });
 
   it.each([
