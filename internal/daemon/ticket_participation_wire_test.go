@@ -113,7 +113,7 @@ func TestACrewMembersTicketThreadsBelongToTheMemberAcrossItsDays(t *testing.T) {
 		writeCrewCharter(t, w, "trellis")
 		w.restart()
 		cli := w.Client()
-		if err := cli.RegisterAsMember("day-a", "day-a", w.Path("day-a"), "", "trellis"); err != nil {
+		if err := w.InjectCrewSession("day-a", "day-a", w.Path("day-a"), "trellis"); err != nil {
 			t.Fatal(err)
 		}
 		createTicket(t, cli, "planner", "Peer", "peer-ticket")
@@ -138,7 +138,7 @@ func TestACrewMembersTicketThreadsBelongToTheMemberAcrossItsDays(t *testing.T) {
 		if err := cli.Unregister("day-a"); err != nil {
 			t.Fatal(err)
 		}
-		if err := cli.RegisterAsMember("day-b", "day-b", w.Path("day-b"), "", "trellis"); err != nil {
+		if err := w.InjectCrewSession("day-b", "day-b", w.Path("day-b"), "trellis"); err != nil {
 			t.Fatal(err)
 		}
 		if replayed := inboxLines(t, cli, "day-b"); len(replayed) != 0 {
@@ -199,7 +199,7 @@ func TestTheSelectedCreatorOfATicketSeesItsUnreadCommentWithoutACountdown(t *tes
 		if err := cli.UpdateState("creator", protocol.StateWaitingInput); err != nil {
 			t.Fatal(err)
 		}
-		app.Send(protocol.SessionSelectedMessage{Cmd: protocol.CmdSessionSelected, ID: "creator"})
+		focusAgent(t, w, app, "creator")
 		createTicket(t, cli, "creator", "Standalone", "standalone")
 
 		commentOnTicket(t, cli, "commenter", "standalone", "please review")

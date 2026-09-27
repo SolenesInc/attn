@@ -110,7 +110,7 @@ func TestPromptsRenderShowsExactlyWhatAChiefACrewMemberAndAnOrdinarySessionRecei
 	if err != nil || !guide.SessionIsChief || guide.Root == "" {
 		t.Fatalf("notebook guide for the chief = %+v, %v", guide, err)
 	}
-	woken, err := s.Client().CrewWake("keel", string(fakeagent.Claude))
+	woken, err := s.Client().CrewWake("keel", string(fakeagent.Claude), "")
 	if err != nil {
 		t.Fatalf("crew wake keel: %v", err)
 	}

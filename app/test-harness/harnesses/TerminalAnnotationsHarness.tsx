@@ -1,9 +1,9 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { SessionTerminalWorkspace } from '../../src/components/SessionTerminalWorkspace';
-import { createPaneRuntimeEventRouterController } from '../../src/components/SessionTerminalWorkspace/paneRuntimeEventRouter';
+import { SessionTerminalDesktop } from '../../src/components/SessionTerminalDesktop';
+import { createPaneRuntimeEventRouterController } from '../../src/components/SessionTerminalDesktop/paneRuntimeEventRouter';
 import type { SessionAnnotationApi, SessionMessagesResult } from '../../src/components/TerminalAnnotations/AnnotatedTerminal';
 import type { TerminalAnnotation } from '../../src/utils/terminalAnnotations';
-import type { TerminalWorkspaceState } from '../../src/types/workspace';
+import type { TerminalDesktopState } from '../../src/types/desktop';
 import type { HarnessProps } from '../types';
 import { settleUi } from '../../src/hooks/uiAutomationSettle';
 import { listenPtyEvents } from '../../src/pty/bridge';
@@ -21,8 +21,8 @@ const messages: SessionMessagesResult = {
 const noop = () => {};
 
 interface AnnotationHarnessControl {
-  refreshWorkspace: () => Promise<void>;
-  switchWorkspace: () => Promise<void>;
+  refreshDesktop: () => Promise<void>;
+  switchDesktop: () => Promise<void>;
   requestMessages: () => void;
   deliverMessages: () => Promise<void>;
   armPointer: typeof armNativePointerWitness;
@@ -66,15 +66,15 @@ export function TerminalAnnotationsHarness({ onReady, setTriggerRerender }: Harn
   }), []);
 
   useEffect(() => {
-    const refreshWorkspace = async () => {
+    const refreshDesktop = async () => {
       setRevision(value => value + 1);
       await settleUi();
     };
     window.__ANNOTATIONS__ = {
       armPointer: armNativePointerWitness,
       waitPointer: waitForNativePointerWitness,
-      refreshWorkspace,
-      switchWorkspace: async () => {
+      refreshDesktop,
+      switchDesktop: async () => {
         setActive(value => value === 'first' ? 'second' : 'first');
         await settleUi();
       },
@@ -92,7 +92,7 @@ export function TerminalAnnotationsHarness({ onReady, setTriggerRerender }: Harn
         await settleUi();
       },
     };
-    setTriggerRerender(refreshWorkspace);
+    setTriggerRerender(refreshDesktop);
     onReady();
     return disarmNativePointerWitness;
   }, [onReady, setTriggerRerender]);
@@ -105,14 +105,14 @@ export function TerminalAnnotationsHarness({ onReady, setTriggerRerender }: Harn
   return <div style={{ position: 'fixed', inset: 0, background: '#181818', color: '#eee' }}>
     <style>{appStyles}</style>
     {['first', 'second'].map(id => {
-      const workspace: TerminalWorkspaceState = {
+      const desktop: TerminalDesktopState = {
         agents: [{ id, runtimeId: id, sessionId: id, title: `${id} ${revision}` }],
         layoutTree: { type: 'pane', paneId: id },
       };
-      return <div key={id} data-testid={`workspace-${id}`}
+      return <div key={id} data-testid={`desktop-${id}`}
         style={{ position: 'absolute', inset: 0, visibility: active === id ? 'visible' : 'hidden' }}>
-        <SessionTerminalWorkspace workspaceId={id} workspace={workspace} activePaneId={id}
-          workspaceSessions={[{ id, label: `${id} ${revision}`, agent: 'claude', cwd: '/tmp/annotations', state: 'idle' }]}
+        <SessionTerminalDesktop desktopId={id} terminalState={desktop} activePaneId={id}
+          desktopSessions={[{ id, label: `${id} ${revision}`, agent: 'claude', cwd: '/tmp/annotations', state: 'idle' }]}
           fontSize={14} enabled isActiveSession={active === id} isSessionViewVisible={active === id}
           eventRouter={router} annotationApi={api} focusRequestToken={revision}
           onSplitPane={noop} onClosePane={noop} onFocusPane={noop} onNavigateOutOfSession={noop} />

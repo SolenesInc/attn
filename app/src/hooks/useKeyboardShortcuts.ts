@@ -1,27 +1,32 @@
 import { useEffect } from 'react';
+import type { PaletteMode } from '../components/palette/paletteState';
 import { useShortcut } from '../shortcuts/useShortcut';
 import { isAccelKeyPressed, isMacLikePlatform } from '../shortcuts/platform';
 
 interface KeyboardShortcutsConfig {
   onNewSession: () => void;
   onNewSessionHorizontal?: () => void;
-  onNewWorkspace?: () => void;
   onCloseSession: () => void;
-  onToggleActionMenu: () => void;
+  onOpenPalette: (mode: PaletteMode) => void;
   onGoToDashboard: () => void;
   onToggleGridMode?: () => void;
   onJumpToWaiting: () => void;
+  onNextRun: () => void;
   /** Undefined while the queue arrangement is off; the keystroke is then unbound. */
   onSettleTurn?: () => void;
   onSnoozeTurn?: () => void;
   onCancelCountdown?: () => void;
-  onSelectWorkspaceByIndex: (index: number) => void;
+  onSwitchToDesktopSlot: (slot: number) => void;
+  onSendToDesktopSlot: (slot: number) => void;
+  onOpenDesktopOverview: () => void;
+  onSwitchProfile: () => void;
   onPrevSession: () => void;
   onNextSession: () => void;
   onHistoryBack: () => void;
   onHistoryForward: () => void;
   onSelectOrchestrator?: () => void;
   onToggleSidebar?: () => void;
+  onShowAgentList: () => void;
   onRefreshPRs?: () => void;
   onToggleAttentionPanel?: () => void;
   onOpenSettings?: () => void;
@@ -44,22 +49,26 @@ interface KeyboardShortcutsConfig {
 export function useKeyboardShortcuts({
   onNewSession,
   onNewSessionHorizontal,
-  onNewWorkspace,
   onCloseSession,
-  onToggleActionMenu,
+  onOpenPalette,
   onGoToDashboard,
   onToggleGridMode,
   onJumpToWaiting,
+  onNextRun,
   onSettleTurn,
   onSnoozeTurn,
   onCancelCountdown,
-  onSelectWorkspaceByIndex,
+  onSwitchToDesktopSlot,
+  onSendToDesktopSlot,
+  onOpenDesktopOverview,
+  onSwitchProfile,
   onPrevSession,
   onNextSession,
   onHistoryBack,
   onHistoryForward,
   onSelectOrchestrator,
   onToggleSidebar,
+  onShowAgentList,
   onRefreshPRs,
   onToggleAttentionPanel,
   onOpenSettings,
@@ -82,7 +91,6 @@ export function useKeyboardShortcuts({
 
   useShortcut('session.new', onNewSession, enabled);
   useShortcut('session.newHorizontal', onNewSessionHorizontal ?? (() => {}), enabled && !!onNewSessionHorizontal);
-  useShortcut('session.newWorkspace', onNewWorkspace ?? (() => {}), enabled && !!onNewWorkspace);
   useShortcut('session.close', onCloseSession, enabled);
   useShortcut('session.prev', onPrevSession, enabled);
   useShortcut('session.next', onNextSession, enabled);
@@ -90,8 +98,12 @@ export function useKeyboardShortcuts({
   useShortcut('session.historyForward', onHistoryForward, enabled);
   useShortcut('session.orchestrator', onSelectOrchestrator ?? (() => {}), enabled && !!onSelectOrchestrator);
   useShortcut('session.goToDashboard', onGoToDashboard, enabled);
+  useShortcut('desktop.overview', onOpenDesktopOverview, enabled);
+  useShortcut('profile.switch', onSwitchProfile, enabled);
   useShortcut('view.toggleGrid', onToggleGridMode ?? (() => {}), enabled && !!onToggleGridMode);
   useShortcut('session.jumpToWaiting', onJumpToWaiting, enabled);
+  useShortcut('session.nextRun', onNextRun, enabled);
+  useShortcut('sidebar.agentList', onShowAgentList, enabled);
   useShortcut('session.settle', onSettleTurn ?? (() => {}), enabled && !!onSettleTurn);
   useShortcut('session.snooze', onSnoozeTurn ?? (() => {}), enabled && !!onSnoozeTurn);
   // Delivered by a native menu item, not the page's keydown listener: AppKit eats
@@ -99,18 +111,28 @@ export function useKeyboardShortcuts({
   useShortcut('session.cancelCountdown', onCancelCountdown ?? (() => {}), enabled && !!onCancelCountdown);
   useShortcut('session.toggleSidebar', onToggleSidebar ?? (() => {}), enabled && !!onToggleSidebar);
   useShortcut('session.refreshPRs', onRefreshPRs ?? (() => {}), enabled && !!onRefreshPRs);
-  useShortcut('workspace.select1', () => onSelectWorkspaceByIndex(0), enabled);
-  useShortcut('workspace.select2', () => onSelectWorkspaceByIndex(1), enabled);
-  useShortcut('workspace.select3', () => onSelectWorkspaceByIndex(2), enabled);
-  useShortcut('workspace.select4', () => onSelectWorkspaceByIndex(3), enabled);
-  useShortcut('workspace.select5', () => onSelectWorkspaceByIndex(4), enabled);
-  useShortcut('workspace.select6', () => onSelectWorkspaceByIndex(5), enabled);
-  useShortcut('workspace.select7', () => onSelectWorkspaceByIndex(6), enabled);
-  useShortcut('workspace.select8', () => onSelectWorkspaceByIndex(7), enabled);
-  useShortcut('workspace.select9', () => onSelectWorkspaceByIndex(8), enabled);
+  useShortcut('desktop.select1', () => onSwitchToDesktopSlot(1), enabled);
+  useShortcut('desktop.send1', () => onSendToDesktopSlot(1), enabled);
+  useShortcut('desktop.select2', () => onSwitchToDesktopSlot(2), enabled);
+  useShortcut('desktop.send2', () => onSendToDesktopSlot(2), enabled);
+  useShortcut('desktop.select3', () => onSwitchToDesktopSlot(3), enabled);
+  useShortcut('desktop.send3', () => onSendToDesktopSlot(3), enabled);
+  useShortcut('desktop.select4', () => onSwitchToDesktopSlot(4), enabled);
+  useShortcut('desktop.send4', () => onSendToDesktopSlot(4), enabled);
+  useShortcut('desktop.select5', () => onSwitchToDesktopSlot(5), enabled);
+  useShortcut('desktop.send5', () => onSendToDesktopSlot(5), enabled);
+  useShortcut('desktop.select6', () => onSwitchToDesktopSlot(6), enabled);
+  useShortcut('desktop.send6', () => onSendToDesktopSlot(6), enabled);
+  useShortcut('desktop.select7', () => onSwitchToDesktopSlot(7), enabled);
+  useShortcut('desktop.send7', () => onSendToDesktopSlot(7), enabled);
+  useShortcut('desktop.select8', () => onSwitchToDesktopSlot(8), enabled);
+  useShortcut('desktop.send8', () => onSendToDesktopSlot(8), enabled);
+  useShortcut('desktop.select9', () => onSwitchToDesktopSlot(9), enabled);
+  useShortcut('desktop.send9', () => onSendToDesktopSlot(9), enabled);
   useShortcut('dock.attention', onToggleAttentionPanel ?? (() => {}), enabled && !!onToggleAttentionPanel);
 
-  useShortcut('ui.actionMenu', onToggleActionMenu, !blocked);
+  useShortcut('ui.actionMenu', () => onOpenPalette('agents'), !blocked);
+  useShortcut('ui.commandPalette', () => onOpenPalette('commands'), !blocked);
 
   useShortcut('ui.openSettings', onOpenSettings ?? (() => {}), !blocked && !!onOpenSettings);
 

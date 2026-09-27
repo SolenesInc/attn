@@ -3,8 +3,8 @@ import { createAnchor, domPointToOffset } from '../anchoring';
 import type { AnchorRecord, BlockText } from '../anchoring';
 
 /** Attn chrome a selection may not start or end in. */
-const ANNOTATION_EXCEPT_SELECTORS = [
-  '.workspace-dock-tile-header',
+export const ANNOTATION_EXCEPT_SELECTORS = [
+  '.desktop-dock-tile-header',
   '.md-annotations-sidebar',
   '.md-selection-toolbar',
   '.md-annotation-popover',

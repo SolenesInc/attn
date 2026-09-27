@@ -31,7 +31,7 @@ func (d *Daemon) armNudgeCountdownAt(sessionID string, deadline time.Time) {
 	if deadline.Before(time.Now()) {
 		deadline = time.Now()
 	}
-	active := d.currentlySelectedSession() == sessionID
+	active := d.currentAgentSession() == sessionID
 
 	if d.nudgeSuppressedFor(sessionID) {
 		if d.nudgeSuppressionStillStands(sessionID) {
@@ -268,7 +268,7 @@ func (d *Daemon) queueNudgeDelivery(sessionID string) (agentmailbox.Delivery, st
 	if d.store == nil {
 		return agentmailbox.Delivery{}, "noop"
 	}
-	if d.currentlySelectedSession() == sessionID {
+	if d.currentAgentSession() == sessionID {
 		return agentmailbox.Delivery{}, "active"
 	}
 	d.deliveryMu.Lock()

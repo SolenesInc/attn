@@ -148,8 +148,9 @@ func TestSessionLedgerCommandsReadClosedSessionsAndBringThemBack(t *testing.T) {
 		t.Errorf("session list --reopen printed:\n%s\nwant a REOPEN column naming what brings %s back", judged, worker.SessionID)
 	}
 
-	if got := listedRows(t, s, "--all", "--workspace", "workspace-blog"); !slices.Equal(got, []string{scratch}) {
-		t.Errorf("session list --workspace workspace-blog = %q, want only %s", got, scratch)
+	profile := s.App().SelectedProfile()
+	if got, all := listedRows(t, s, "--all", "--profile", profile), listedRows(t, s, "--all"); !slices.Equal(got, all) {
+		t.Errorf("session list --profile %s = %q, want every session of the one profile %q", profile, got, all)
 	}
 	canonicalRepo, err := filepath.EvalSymlinks(repo)
 	if err != nil {

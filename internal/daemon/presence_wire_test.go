@@ -94,9 +94,9 @@ func TestUserActionsStampTheLastActivityAgentsSee(t *testing.T) {
 			action any
 			stamps bool
 		}{
-			{"selecting a session", protocol.SessionSelectedMessage{Cmd: protocol.CmdSessionSelected, ID: "session-1"}, true},
+			{"focusing an agent", protocol.DesktopSetActivePaneMessage{Cmd: protocol.CmdDesktopSetActivePane, DesktopID: "desktop-1", PaneID: "pane-1", RequestID: "focus"}, true},
 			{"reading settings", protocol.GetSettingsMessage{Cmd: protocol.CmdGetSettings}, false},
-			{"selecting a workspace", protocol.WorkspaceSelectedMessage{Cmd: protocol.CmdWorkspaceSelected, WorkspaceID: "workspace-1"}, true},
+			{"switching desktops", protocol.DesktopSetCurrentMessage{Cmd: protocol.CmdDesktopSetCurrent, DesktopID: "desktop-1", RequestID: "switch"}, true},
 			{"visiting a PR", protocol.PRVisitedMessage{Cmd: protocol.CmdPRVisited, ID: protocol.FormatPRID("", "acme/shop", 7)}, true},
 		} {
 			w.advance(time.Minute)
@@ -133,7 +133,7 @@ func TestUsingATerminalStampsTheLastActivityAgentsSee(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			w := newWorld(t)
 			cli, app := w.Client(), w.App()
-			session := w.Spawn(app, workspaceShell, w.Path("shop"))
+			session := w.Spawn(app, shellHarness, w.Path("shop"))
 			testworld.Request(app, protocol.AttachSessionMessage{Cmd: protocol.CmdAttachSession, ID: session},
 				protocol.EventAttachResult, func(r protocol.AttachResultMessage) bool { return r.ID == session })
 			if inbox, err := cli.TicketInbox(session); err != nil {

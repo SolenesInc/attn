@@ -10,14 +10,14 @@ import {
   resolvePreferredAgent,
 } from '../utils/agentAvailability';
 import { AppContentProps, OpenPRLauncherJob } from './appSupport';
-import { useWorkspaceCreation } from './useWorkspaceCreation';
+import type { useSessionLaunch } from './useSessionLaunch';
 
 interface Options {
   settings: AppContentProps['settings'];
-  createWorkspaceSession: ReturnType<typeof useWorkspaceCreation>['createWorkspaceSession'];
+  launchAgent: ReturnType<typeof useSessionLaunch>['launchAgent'];
   selectCreatedSession: (id: string) => boolean;
 }
-export function usePRLauncher({ settings, createWorkspaceSession, selectCreatedSession }: Options) {
+export function usePRLauncher({ settings, launchAgent, selectCreatedSession }: Options) {
   const { sendRefreshPRs, sendFetchPRDetails, sendEnsureRepo, sendCreateWorktreeFromBranch } =
     useDaemonApi();
   const agentAvailability = useMemo(() => getAgentAvailability(settings), [settings]);
@@ -29,7 +29,7 @@ export function usePRLauncher({ settings, createWorkspaceSession, selectCreatedS
     sendFetchPRDetails,
     sendEnsureRepo,
     sendCreateWorktreeFromBranch,
-    createSession: createWorkspaceSession,
+    createSession: launchAgent,
   });
 
   const handleOpenPR = useCallback(

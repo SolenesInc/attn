@@ -38,7 +38,7 @@ func settle(app *testworld.Peer, id string) {
 	})
 }
 
-func TestAgentListShowsSessionsByWorkspaceThenLabelWithTheOwedTurn(t *testing.T) {
+func TestAgentListShowsSessionsByProfileThenLabelWithTheOwedTurn(t *testing.T) {
 	t.Parallel()
 	s := testworld.NewStack(t, testworld.WithAgents(fakeagent.Claude, fakeagent.Codex))
 	s.Start()
@@ -64,12 +64,12 @@ func TestAgentListShowsSessionsByWorkspaceThenLabelWithTheOwedTurn(t *testing.T)
 	})
 
 	var rows []struct {
-		ID        string  `json:"id"`
-		Label     string  `json:"label"`
-		Agent     string  `json:"agent"`
-		Workspace string  `json:"workspace"`
-		TurnOwed  bool    `json:"turn_owed"`
-		Member    *string `json:"member"`
+		ID       string  `json:"id"`
+		Label    string  `json:"label"`
+		Agent    string  `json:"agent"`
+		Profile  string  `json:"profile"`
+		TurnOwed bool    `json:"turn_owed"`
+		Member   *string `json:"member"`
 	}
 	s.Attn("agent", "list", "--json").JSON(t, &rows)
 	var got []string
@@ -77,9 +77,9 @@ func TestAgentListShowsSessionsByWorkspaceThenLabelWithTheOwedTurn(t *testing.T)
 		if r.Member == nil {
 			t.Fatalf("row %s has no member key", r.ID)
 		}
-		got = append(got, fmt.Sprintf("%s/%s/%s/%t", r.Workspace, r.Label, r.Agent, r.TurnOwed))
+		got = append(got, fmt.Sprintf("%s/%s/%s/%t", r.Profile, r.Label, r.Agent, r.TurnOwed))
 	}
-	want := []string{"blog/notes/claude/false", "shop/alpha/codex/false", "shop/zeta/claude/true"}
+	want := []string{"Default/alpha/codex/false", "Default/notes/claude/false", "Default/zeta/claude/true"}
 	if !slices.Equal(got, want) {
 		t.Fatalf("agent list --json = %q, want %q", got, want)
 	}

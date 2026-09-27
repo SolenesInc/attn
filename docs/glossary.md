@@ -14,7 +14,10 @@
 - Turn: attention owed to an agent. Viewing the agent does not settle it.
 - Auto-settle: closes a turn after the user's response and a period of uninterrupted agent work.
 - Standing dismissal: suppresses the next auto-settle during the agent's current stretch of work.
-- Queue: agents ordered by attention owed. Pinning an agent or workspace excludes it without settling its turns.
+- Queue: agents ordered by attention owed.
+- Queue sidebar: the sidebar in queue mode. Chief and crew on top, then the three oldest turns, the All agents list (Cmd+Shift+A), the automations and a strip of desktop chips.
+- Queue bar: the queue sidebar collapsed into a strip across the top of the window (Cmd+Shift+B). A waiting pill with the three oldest turns, a runs chip, and the desktop chips; hovering the pill or the chip peeks their lists.
+- Automation run: an agent an automation started. Runs stay out of the queue; the runs owing a turn form a batch the user walks with Cmd+Shift+J.
 - Snooze: settles an agent's turn and defers attention until a chosen wake time.
 - Wake: ends a snooze early; a stopped agent returns to the attention queue.
 - Satellite: a shell pane attached to an agent.
@@ -41,7 +44,14 @@
 - PR inbox: pull requests waiting on the user.
 - Provenance line: shows where a session came from and what it produced.
 
-- Focus mode: one workspace pane or tile occupies the shell until the user returns to the split.
+- Profile: the user's named grouping of agents, crew, automation definitions and the desktops that arrange them. It belongs to the daemon. Every agent belongs to one profile. Renaming keeps its identity.
+- Desktop: one arrangement of panes and tiles inside a profile. A profile always has at least one, and up to nine hold a shortcut slot.
+- Pane: an agent's place on a desktop. An agent has at most one pane.
+- Unplaced agent: an agent of a profile with no pane. Crew wakes, automation runs and reopened sessions start unplaced; the queue (or, for runs, the automations section) surfaces them and opening one places it.
+- Current desktop: the desktop a profile shows. Every client on that profile shares it.
+- Active pane: the pane or tile a desktop has selected. Every client shares it. With a tile selected, no agent is current; opens and placements land beside that tile.
+- Workspace migration: the one-time screen after the upgrade to profiles. Each old workspace arrives as an imported group already on a desktop; the user keeps it there, keeps it as an extra desktop, or merges it into another desktop before the app loads. The draft is daemon state shared by every client, and either client can finish it.
+- Focus mode: one pane or tile occupies the shell until the user returns to the split.
 
 ## Cost estimates
 
@@ -58,7 +68,7 @@ intended it for the next turn.
 
 ## Garden and crew
 
-- Garden: the home daemon's work tracker, shared across workspaces.
+- Garden: the home daemon's work tracker, shared across profiles.
 - Seed: a work item with an ID, title, body and state.
 - Slug: a readable name derived from a seed's title. Slugs need not be unique.
 - Plot: a seed with child seeds. Its body holds their shared plan.
@@ -99,7 +109,7 @@ intended it for the next turn.
 - Binding: a crew member's active session. Daemon-managed days use terminal liveness; bare CLI days remain live while registered, until their wrapper unregisters. The daemon tracks external registrations during its lifetime; recovered managed days never become external merely by registering again.
 - Launch settings: a member's optional harness, model and effort pins. Blanks resolve through daemon and harness defaults.
 - Charter token: the receipt for the exact charter bytes read. A replacement needs it and advances it, so a stale write cannot overwrite a newer one.
-- Chief of staff: the agent coordinating work across workspaces.
+- Chief of staff: the agent coordinating the work of one profile. Each profile has at most one; all chiefs share the Notebook.
 - Day: a crew member's current session.
 - Member home: the directory holding a crew member's charter and handoff.
 - Wake: starts a crew member's day.

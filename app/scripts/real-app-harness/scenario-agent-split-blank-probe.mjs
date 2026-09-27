@@ -17,9 +17,9 @@ import { UiAutomationClient } from './uiAutomationClient.mjs';
 import { DaemonObserver } from './daemonObserver.mjs';
 import {
   captureSessionArtifacts,
-  waitForFirstWorkspacePane,
+  waitForFirstDesktopPane,
   waitForPaneVisible,
-  waitForSessionWorkspace,
+  waitForSessionDesktop,
 } from './scenarioAssertions.mjs';
 import {
   ensureClaudeInitialPanePromptReady,
@@ -141,7 +141,7 @@ async function main() {
       await ensureCodexInitialPanePromptReady(client, sessionId, 45_000);
     }
 
-    const agentPane = await waitForFirstWorkspacePane(client, sessionId, `${options.agent} initial pane`, 20_000);
+    const agentPane = await waitForFirstDesktopPane(client, sessionId, `${options.agent} initial pane`, 20_000);
     const agentPaneId = agentPane.paneId;
     await waitForPaneVisible(client, sessionId, agentPaneId, 45_000);
     console.log(`[probe] agentPaneId=${agentPaneId}`);
@@ -153,8 +153,8 @@ async function main() {
     console.log(`[probe] BASELINE agent model: ${JSON.stringify(baselineVisible)}`);
     await captureSessionArtifacts(client, runDir, '01-baseline', sessionId);
 
-    const workspaceBefore = await client.request('get_workspace', { sessionId });
-    const existingPaneIds = new Set((workspaceBefore.panes || []).map((p) => p.paneId));
+    const desktopBefore = await client.request('get_desktop', { sessionId });
+    const existingPaneIds = new Set((desktopBefore.panes || []).map((p) => p.paneId));
     await client.request('focus_pane', { sessionId, paneId: agentPaneId }).catch(() => {});
     const splitAtMs = Date.now();
     console.log(`[probe] SPLIT_AT_MS=${splitAtMs}`);
@@ -163,7 +163,7 @@ async function main() {
     } else {
       await client.request('dispatch_shortcut', { shortcutId: 'terminal.splitVertical' });
     }
-    const wsAfter = await waitForSessionWorkspace(
+    const wsAfter = await waitForSessionDesktop(
       client,
       sessionId,
       (ws) => (ws.panes || []).some((p) => !existingPaneIds.has(p.paneId) && p.runtimeId),

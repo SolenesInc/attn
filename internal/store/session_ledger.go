@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"log"
 	"sort"
 	"strings"
 	"time"
@@ -34,14 +35,14 @@ const (
 )
 
 type SessionLedgerQuery struct {
-	Scope       SessionLedgerScope
-	Limit       int
-	Before      string
-	WorkspaceID string
-	Repository  string
-	Since       time.Time
-	Until       time.Time
-	Facets      bool
+	Scope      SessionLedgerScope
+	Limit      int
+	Before     string
+	ProfileID  string
+	Repository string
+	Since      time.Time
+	Until      time.Time
+	Facets     bool
 }
 
 type SessionLedgerPage struct {
@@ -119,6 +120,9 @@ func (s *Store) CloseSession(id string, closed SessionClose, now time.Time) (boo
 	if err := finalizeSessionCostTx(tx, id); err != nil {
 		return false, fmt.Errorf("close session %s: %w", id, err)
 	}
+	if err := unplaceClosingSession(tx, now.UTC().Format(sortableTimeFormat), id); err != nil {
+		return false, fmt.Errorf("close session %s: %w", id, err)
+	}
 	if err := tx.Commit(); err != nil {
 		return false, fmt.Errorf("close session %s: %w", id, err)
 	}
@@ -148,12 +152,13 @@ func finalizeSessionCostTx(tx *sql.Tx, id string) error {
 }
 
 type SessionCloseRecord struct {
-	At     string
-	By     string
-	Reason string
+	At        string
+	By        string
+	Reason    string
+	ProfileID string
 }
 
-func (s *Store) ReopenSession(id string) (SessionCloseRecord, bool, error) {
+func (s *Store) ReopenSession(id, profileID string) (SessionCloseRecord, bool, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
@@ -162,9 +167,13 @@ func (s *Store) ReopenSession(id string) (SessionCloseRecord, bool, error) {
 		if !closed {
 			return SessionCloseRecord{}, false, nil
 		}
+		lifted := SessionCloseRecord{At: mark.At, By: mark.By, Reason: mark.Reason, ProfileID: mark.session.ProfileID}
+		if profileID != "" {
+			mark.session.ProfileID = profileID
+		}
 		s.sessions[id] = mark.session
 		delete(s.sessionCloses, id)
-		return SessionCloseRecord{At: mark.At, By: mark.By, Reason: mark.Reason}, true, nil
+		return lifted, true, nil
 	}
 
 	tx, err := s.db.Begin()
@@ -174,16 +183,24 @@ func (s *Store) ReopenSession(id string) (SessionCloseRecord, bool, error) {
 	defer tx.Rollback()
 
 	var lifted SessionCloseRecord
-	err = tx.QueryRow("SELECT closed_at, closed_by, close_reason FROM sessions WHERE id = ? AND closed_at <> ''", id).
-		Scan(&lifted.At, &lifted.By, &lifted.Reason)
+	err = tx.QueryRow("SELECT closed_at, closed_by, close_reason, profile_id FROM sessions WHERE id = ? AND closed_at <> ''", id).
+		Scan(&lifted.At, &lifted.By, &lifted.Reason, &lifted.ProfileID)
 	if errors.Is(err, sql.ErrNoRows) {
 		return SessionCloseRecord{}, false, nil
 	}
 	if err != nil {
 		return SessionCloseRecord{}, false, fmt.Errorf("reopen session %s: %w", id, err)
 	}
-	if _, err := tx.Exec(`UPDATE sessions SET closed_at = '', closed_by = '', close_reason = ''
-		WHERE id = ?`, id); err != nil {
+	if profileID == "" {
+		profileID = lifted.ProfileID
+	}
+	if profileID != "" {
+		if _, err := loadLiveProfile(tx, profileID); err != nil {
+			return SessionCloseRecord{}, false, fmt.Errorf("reopen session %s: %w", id, err)
+		}
+	}
+	if _, err := tx.Exec(`UPDATE sessions SET closed_at = '', closed_by = '', close_reason = '', profile_id = ?
+		WHERE id = ?`, profileID, id); err != nil {
 		return SessionCloseRecord{}, false, fmt.Errorf("reopen session %s: %w", id, err)
 	}
 	if err := tx.Commit(); err != nil {
@@ -202,6 +219,9 @@ func (s *Store) RestoreSessionClose(id string, closed SessionCloseRecord) (bool,
 			return false, nil
 		}
 		delete(s.sessions, id)
+		if closed.ProfileID != "" {
+			session.ProfileID = closed.ProfileID
+		}
 		s.sessionCloses[id] = sessionCloseMark{At: closed.At, By: closed.By, Reason: closed.Reason, session: session}
 		return true, nil
 	}
@@ -211,8 +231,9 @@ func (s *Store) RestoreSessionClose(id string, closed SessionCloseRecord) (bool,
 		return false, fmt.Errorf("restore the close of session %s: %w", id, err)
 	}
 	defer tx.Rollback()
-	result, err := tx.Exec(`UPDATE sessions SET closed_at = ?, closed_by = ?, close_reason = ?
-		WHERE id = ? AND closed_at = ''`, closed.At, closed.By, closed.Reason, id)
+	result, err := tx.Exec(`UPDATE sessions SET closed_at = ?, closed_by = ?, close_reason = ?,
+		profile_id = CASE WHEN ? = '' THEN profile_id ELSE ? END
+		WHERE id = ? AND closed_at = ''`, closed.At, closed.By, closed.Reason, closed.ProfileID, closed.ProfileID, id)
 	if err != nil {
 		return false, fmt.Errorf("restore the close of session %s: %w", id, err)
 	}
@@ -288,8 +309,10 @@ func (s *Store) SessionLedger(query SessionLedgerQuery) (SessionLedgerPage, erro
 	return s.sessionLedgerDB(query, limit)
 }
 
-const ledgerSelect = `SELECT id, label, agent, directory, workspace_id, branch, is_worktree, main_repo,
-	repository, state, last_seen, closed_at, closed_by, close_reason`
+const ledgerSelect = `SELECT id, label, agent, directory, profile_id,
+	COALESCE((SELECT name FROM profiles WHERE profiles.id = sessions.profile_id), ''),
+	COALESCE((SELECT deleted_at FROM profiles WHERE profiles.id = sessions.profile_id), ''),
+	branch, is_worktree, main_repo, repository, state, last_seen, closed_at, closed_by, close_reason`
 
 const ledgerAt = `CASE WHEN closed_at <> '' THEN closed_at ELSE last_seen END`
 
@@ -316,9 +339,9 @@ func (q SessionLedgerQuery) scopeAndWindow() ([]string, []any) {
 
 func (q SessionLedgerQuery) selection() ([]string, []any) {
 	where, args := q.scopeAndWindow()
-	if workspace := strings.TrimSpace(q.WorkspaceID); workspace != "" {
-		where = append(where, "workspace_id = ?")
-		args = append(args, workspace)
+	if profileID := strings.TrimSpace(q.ProfileID); profileID != "" {
+		where = append(where, "profile_id = ?")
+		args = append(args, profileID)
 	}
 	if repository := strings.TrimSpace(q.Repository); repository != "" {
 		where = append(where, "repository = ?")
@@ -417,15 +440,40 @@ func (s *Store) ledgerFacetsDB(query SessionLedgerQuery) (*protocol.SessionLedge
 	if err != nil {
 		return nil, err
 	}
-	workspaces, err := count("workspace_id")
+	profileFacets, err := s.ledgerProfileFacetsDB(clause, args)
 	if err != nil {
 		return nil, err
 	}
-	return &protocol.SessionLedgerFacets{Repositories: repositories, Workspaces: workspaces}, nil
+	return &protocol.SessionLedgerFacets{Repositories: repositories, Profiles: profileFacets}, nil
+}
+
+func (s *Store) ledgerProfileFacetsDB(clause string, args []any) ([]protocol.SessionLedgerProfileFacet, error) {
+	rows, err := s.db.Query(`SELECT counted.profile_id, COALESCE(p.name, ''), COALESCE(p.deleted_at, ''), counted.total
+		FROM (SELECT profile_id, COUNT(*) AS total FROM sessions`+clause+` GROUP BY profile_id) counted
+		LEFT JOIN profiles p ON p.id = counted.profile_id
+		WHERE counted.profile_id <> ''
+		ORDER BY COALESCE(p.name, ''), counted.profile_id`, args...)
+	if err != nil {
+		return nil, fmt.Errorf("count ledger profiles: %w", err)
+	}
+	defer rows.Close()
+	facets := []protocol.SessionLedgerProfileFacet{}
+	for rows.Next() {
+		var facet protocol.SessionLedgerProfileFacet
+		var deletedAt string
+		if err := rows.Scan(&facet.ProfileID, &facet.Name, &deletedAt, &facet.Count); err != nil {
+			return nil, fmt.Errorf("count ledger profiles: %w", err)
+		}
+		if deletedAt != "" {
+			facet.Deleted = protocol.Ptr(true)
+		}
+		facets = append(facets, facet)
+	}
+	return facets, rows.Err()
 }
 
 func (q SessionLedgerQuery) matches(entry protocol.SessionLedgerEntry) bool {
-	if workspace := strings.TrimSpace(q.WorkspaceID); workspace != "" && entry.WorkspaceID != workspace {
+	if profileID := strings.TrimSpace(q.ProfileID); profileID != "" && entry.ProfileID != profileID {
 		return false
 	}
 	if repository := strings.TrimSpace(q.Repository); repository != "" && protocol.Deref(entry.Repository) != repository {
@@ -508,19 +556,20 @@ func (s *Store) sessionLedgerMemory(query SessionLedgerQuery, limit int) (Sessio
 
 func ledgerFacetsMemory(entries []protocol.SessionLedgerEntry) *protocol.SessionLedgerFacets {
 	repositories := map[string]int{}
-	workspaces := map[string]int{}
+	profileCounts := map[string]int{}
 	for _, entry := range entries {
 		if repository := protocol.Deref(entry.Repository); repository != "" {
 			repositories[repository]++
 		}
-		if entry.WorkspaceID != "" {
-			workspaces[entry.WorkspaceID]++
+		if entry.ProfileID != "" {
+			profileCounts[entry.ProfileID]++
 		}
 	}
-	return &protocol.SessionLedgerFacets{
-		Repositories: sortedFacets(repositories),
-		Workspaces:   sortedFacets(workspaces),
+	profileFacets := []protocol.SessionLedgerProfileFacet{}
+	for _, facet := range sortedFacets(profileCounts) {
+		profileFacets = append(profileFacets, protocol.SessionLedgerProfileFacet{ProfileID: facet.Value, Count: facet.Count})
 	}
+	return &protocol.SessionLedgerFacets{Repositories: sortedFacets(repositories), Profiles: profileFacets}
 }
 
 func sortedFacets(counts map[string]int) []protocol.SessionLedgerFacet {
@@ -574,17 +623,17 @@ type sessionCloseMark struct {
 
 func ledgerEntryFromSession(session *protocol.Session, mark sessionCloseMark) protocol.SessionLedgerEntry {
 	entry := protocol.SessionLedgerEntry{
-		ID:          session.ID,
-		Label:       session.Label,
-		Agent:       string(session.Agent),
-		Directory:   session.Directory,
-		WorkspaceID: session.WorkspaceID,
-		Branch:      session.Branch,
-		IsWorktree:  session.IsWorktree,
-		MainRepo:    session.MainRepo,
-		Repository:  session.Repository,
-		State:       session.State,
-		LastSeen:    session.LastSeen,
+		ID:         session.ID,
+		Label:      session.Label,
+		Agent:      string(session.Agent),
+		Directory:  session.Directory,
+		ProfileID:  session.ProfileID,
+		Branch:     session.Branch,
+		IsWorktree: session.IsWorktree,
+		MainRepo:   session.MainRepo,
+		Repository: session.Repository,
+		State:      session.State,
+		LastSeen:   session.LastSeen,
 	}
 	if mark.At != "" {
 		entry.ClosedAt = protocol.Ptr(mark.At)
@@ -603,15 +652,17 @@ type ledgerScanner interface {
 func scanLedgerEntry(row ledgerScanner) (protocol.SessionLedgerEntry, error) {
 	var entry protocol.SessionLedgerEntry
 	var isWorktree int
-	var branch, mainRepo, repository, workspaceID sql.NullString
-	var closedAt, closedBy, closeReason string
+	var branch, mainRepo, repository sql.NullString
+	var profileDeletedAt, closedAt, closedBy, closeReason string
 
 	err := row.Scan(
 		&entry.ID,
 		&entry.Label,
 		&entry.Agent,
 		&entry.Directory,
-		&workspaceID,
+		&entry.ProfileID,
+		&entry.ProfileName,
+		&profileDeletedAt,
 		&branch,
 		&isWorktree,
 		&mainRepo,
@@ -625,8 +676,8 @@ func scanLedgerEntry(row ledgerScanner) (protocol.SessionLedgerEntry, error) {
 	if err != nil {
 		return protocol.SessionLedgerEntry{}, err
 	}
-	if workspaceID.Valid {
-		entry.WorkspaceID = workspaceID.String
+	if profileDeletedAt != "" {
+		entry.ProfileDeleted = protocol.Ptr(true)
 	}
 	if branch.Valid && branch.String != "" {
 		entry.Branch = protocol.Ptr(branch.String)
@@ -648,4 +699,17 @@ func scanLedgerEntry(row ledgerScanner) (protocol.SessionLedgerEntry, error) {
 		}
 	}
 	return entry, nil
+}
+
+func unplaceClosingSession(tx *sql.Tx, now, id string) error {
+	if _, err := tx.Exec(`SAVEPOINT unplace_closing_session`); err != nil {
+		return err
+	}
+	if _, err := removeSessionPlacement(tx, now, id); err != nil {
+		log.Printf("[store] close session %s: its pane stays on the desktop because removing it failed: %v", id, err)
+		_, rollbackErr := tx.Exec(`ROLLBACK TO unplace_closing_session`)
+		return rollbackErr
+	}
+	_, err := tx.Exec(`RELEASE unplace_closing_session`)
+	return err
 }

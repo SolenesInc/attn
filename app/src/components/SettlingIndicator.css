@@ -1,5 +1,5 @@
 /* Auto-settle countdown, shared by the pane header (an inline chip in
-   .workspace-pane-header) and the sidebar row (a thin bar on .session-item, used
+   .desktop-pane-header) and the sidebar row (a thin bar on .session-item, used
    only for sessions with no rendered tile).
 
    Violet, and draining right-to-left, against the nudge indicator's sky-blue
@@ -25,7 +25,7 @@
   -webkit-user-select: none;
 }
 
-/* ---- Pane header chip: inline, right-aligned inside .workspace-pane-header ---- */
+/* ---- Pane header chip: inline, right-aligned inside .desktop-pane-header ---- */
 
 .settling-header {
   display: inline-flex;

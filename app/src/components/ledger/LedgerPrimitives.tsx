@@ -6,10 +6,21 @@ export type RowGlyph =
   | 'live' | 'working' | 'waiting' | 'closed' | 'refreshing'
   | 'pinned' | 'scheduled' | 'dirty' | 'clean' | 'removed' | 'error';
 
+export interface RowChoice {
+  id: string;
+  label: string;
+}
+
 export interface RowVerb {
   id: string;
   label: string;
   danger?: boolean;
+  choices?: { title: string; options: RowChoice[] };
+}
+
+export interface LedgerMenu {
+  key: string;
+  choosing?: string;
 }
 
 export interface RowNote {
@@ -39,16 +50,16 @@ interface LedgerListProps {
   items: ListItem[];
   selectedKey: string | null;
   onSelect: (key: string) => void;
-  onVerb: (key: string, verbId: string) => void;
+  onVerb: (key: string, verbId: string, choiceId?: string) => void;
   onEnter?: (key: string) => void;
-  menuKey: string | null;
-  onMenu: (key: string | null) => void;
+  menu: LedgerMenu | null;
+  onMenu: (menu: LedgerMenu | null) => void;
   onYank?: (text: string) => void;
   empty?: ReactNode;
 }
 
 export function LedgerList({
-  items, selectedKey, onSelect, onVerb, onEnter, menuKey, onMenu, onYank, empty,
+  items, selectedKey, onSelect, onVerb, onEnter, menu, onMenu, onYank, empty,
 }: LedgerListProps) {
   const listRef = useRef<HTMLDivElement>(null);
   const rows = items.filter((item): item is Extract<ListItem, { kind: 'row' }> => item.kind === 'row');
@@ -60,7 +71,7 @@ export function LedgerList({
   }, []);
 
   // An open menu is the top Escape layer; it closes before the surface does.
-  useEscapeStack(() => onMenu(null), menuKey !== null);
+  useEscapeStack(() => onMenu(null), menu !== null);
 
   // Rows arrive after the surface opens; land on one unless the user is already typing in the panel.
   const hadRows = useRef(false);
@@ -82,30 +93,44 @@ export function LedgerList({
     focusRow(rows[next].row.key);
   }, [rows, selectedKey, onSelect, onMenu, focusRow]);
 
+  const pick = useCallback((row: RowModel, verb: RowVerb) => {
+    if (verb.choices) onMenu({ key: row.key, choosing: verb.id });
+    else onVerb(row.key, verb.id);
+  }, [onMenu, onVerb]);
+
   const onKeyDown = useCallback((event: KeyboardEvent<HTMLDivElement>, row: RowModel) => {
     const busy = row.note?.kind === 'busy';
+    const menuOpen = menu?.key === row.key;
+    const choosing = menuOpen ? row.verbs.find((verb) => verb.id === menu.choosing) : undefined;
     if (event.key === 'ArrowDown' || event.key === 'j') { event.preventDefault(); move(1); return; }
     if (event.key === 'ArrowUp' || event.key === 'k') { event.preventDefault(); move(-1); return; }
     if (event.key === 'Home') { event.preventDefault(); move(-rows.length); return; }
     if (event.key === 'End') { event.preventDefault(); move(rows.length); return; }
     if (event.key === 'Enter') {
+      if (event.target !== event.currentTarget) return;
       event.preventDefault();
       if (onEnter) onEnter(row.key);
-      else if (!busy && row.verbs[0]) onVerb(row.key, row.verbs[0].id);
+      else if (!busy && row.verbs[0]) pick(row, row.verbs[0]);
       return;
     }
     if (event.key === '.' || (event.key === 'ArrowRight' && row.verbs.length > 1)) {
-      if (row.verbs.length > 1) { event.preventDefault(); onMenu(menuKey === row.key ? null : row.key); }
+      if (row.verbs.length > 1) { event.preventDefault(); onMenu(menuOpen ? null : { key: row.key }); }
       return;
     }
-    if (event.key === 'ArrowLeft' && menuKey === row.key) { event.preventDefault(); onMenu(null); return; }
+    if (event.key === 'ArrowLeft' && menuOpen) { event.preventDefault(); onMenu(null); return; }
     if (/^[1-9]$/.test(event.key)) {
-      const verb = row.verbs[Number(event.key) - 1];
-      if (verb && !busy) { event.preventDefault(); onVerb(row.key, verb.id); }
+      const index = Number(event.key) - 1;
+      if (choosing) {
+        const choice = choosing.choices?.options[index];
+        if (choice && !busy) { event.preventDefault(); onVerb(row.key, choosing.id, choice.id); }
+        return;
+      }
+      const verb = row.verbs[index];
+      if (verb && !busy) { event.preventDefault(); pick(row, verb); }
       return;
     }
     if (event.key === 'y' && row.yank && onYank) { event.preventDefault(); onYank(row.yank); }
-  }, [move, rows.length, onEnter, onVerb, onMenu, menuKey, onYank]);
+  }, [move, rows.length, onEnter, onVerb, onMenu, menu, onYank, pick]);
 
   return (
     <div className="ledger-list" ref={listRef} role="listbox" aria-label="Rows">
@@ -122,11 +147,12 @@ export function LedgerList({
             key={item.row.key}
             row={item.row}
             selected={item.row.key === selectedKey}
-            menuOpen={menuKey === item.row.key}
+            menu={menu?.key === item.row.key ? menu : null}
             onSelect={() => onSelect(item.row.key)}
             onKeyDown={(event) => onKeyDown(event, item.row)}
-            onVerb={(verbId) => onVerb(item.row.key, verbId)}
-            onToggleMenu={() => onMenu(menuKey === item.row.key ? null : item.row.key)}
+            onPick={(verb) => pick(item.row, verb)}
+            onChoose={(verbId, choiceId) => onVerb(item.row.key, verbId, choiceId)}
+            onToggleMenu={() => onMenu(menu?.key === item.row.key ? null : { key: item.row.key })}
           />
         ))}
     </div>
@@ -136,14 +162,15 @@ export function LedgerList({
 interface LedgerRowProps {
   row: RowModel;
   selected: boolean;
-  menuOpen: boolean;
+  menu: LedgerMenu | null;
   onSelect: () => void;
   onKeyDown: (event: KeyboardEvent<HTMLDivElement>) => void;
-  onVerb: (verbId: string) => void;
+  onPick: (verb: RowVerb) => void;
+  onChoose: (verbId: string, choiceId: string) => void;
   onToggleMenu: () => void;
 }
 
-function LedgerRow({ row, selected, menuOpen, onSelect, onKeyDown, onVerb, onToggleMenu }: LedgerRowProps) {
+function LedgerRow({ row, selected, menu, onSelect, onKeyDown, onPick, onChoose, onToggleMenu }: LedgerRowProps) {
   const busy = row.note?.kind === 'busy';
   const primary = row.verbs[0];
   const className = [
@@ -187,43 +214,85 @@ function LedgerRow({ row, selected, menuOpen, onSelect, onKeyDown, onVerb, onTog
             type="button"
             className={`ledger-verb${primary.danger ? ' is-danger' : ''}`}
             disabled={busy}
-            onClick={(event) => { event.stopPropagation(); onVerb(primary.id); }}
+            onClick={(event) => { event.stopPropagation(); onPick(primary); }}
           >
             {busy ? row.note?.text : primary.label}
           </button>
         )}
-        {row.verbs.length > 1 && (
-          <span className="ledger-menu-anchor">
-            <button
-              type="button"
-              className="ledger-more"
-              aria-label={`More for ${row.title}`}
-              aria-expanded={menuOpen}
-              disabled={busy}
-              onClick={(event) => { event.stopPropagation(); onToggleMenu(); }}
-            >
-              ···
-            </button>
-            {menuOpen && (
-              <ul className="ledger-menu" role="menu">
-                {row.verbs.map((verb, index) => (
-                  <li key={verb.id} role="none">
-                    <button
-                      type="button"
-                      role="menuitem"
-                      className={verb.danger ? 'is-danger' : undefined}
-                      onClick={(event) => { event.stopPropagation(); onVerb(verb.id); }}
-                    >
-                      <kbd>{index + 1}</kbd>{verb.label}
-                    </button>
-                  </li>
-                ))}
-              </ul>
-            )}
-          </span>
-        )}
+        <RowMenu row={row} menu={menu} busy={busy} onPick={onPick} onChoose={onChoose} onToggleMenu={onToggleMenu} />
       </div>
     </div>
+  );
+}
+
+function RowMenu({ row, menu, busy, onPick, onChoose, onToggleMenu }: {
+  row: RowModel;
+  menu: LedgerMenu | null;
+  busy: boolean;
+  onPick: (verb: RowVerb) => void;
+  onChoose: (verbId: string, choiceId: string) => void;
+  onToggleMenu: () => void;
+}) {
+  const choosing = row.verbs.find((verb) => verb.id === menu?.choosing);
+  const hasMore = row.verbs.length > 1;
+  if (!hasMore && !choosing) return null;
+  return (
+    <span className="ledger-menu-anchor">
+      {hasMore && (
+        <button
+          type="button"
+          className="ledger-more"
+          aria-label={`More for ${row.title}`}
+          aria-expanded={menu !== null}
+          disabled={busy}
+          onClick={(event) => { event.stopPropagation(); onToggleMenu(); }}
+        >
+          ···
+        </button>
+      )}
+      {menu && (choosing
+        ? <ChoiceMenu verb={choosing} onChoose={(choiceId) => onChoose(choosing.id, choiceId)} />
+        : <VerbMenu verbs={row.verbs} onPick={onPick} />)}
+    </span>
+  );
+}
+
+function VerbMenu({ verbs, onPick }: { verbs: RowVerb[]; onPick: (verb: RowVerb) => void }) {
+  return (
+    <ul className="ledger-menu" role="menu">
+      {verbs.map((verb, index) => (
+        <li key={verb.id} role="none">
+          <button
+            type="button"
+            role="menuitem"
+            className={verb.danger ? 'is-danger' : undefined}
+            onClick={(event) => { event.stopPropagation(); onPick(verb); }}
+          >
+            <kbd>{index + 1}</kbd>{verb.label}
+          </button>
+        </li>
+      ))}
+    </ul>
+  );
+}
+
+function ChoiceMenu({ verb, onChoose }: { verb: RowVerb; onChoose: (choiceId: string) => void }) {
+  const title = verb.choices?.title ?? verb.label;
+  return (
+    <ul className="ledger-menu" role="menu" aria-label={title}>
+      <li role="presentation" className="ledger-menu-title">{title}</li>
+      {verb.choices?.options.map((choice, index) => (
+        <li key={choice.id} role="none">
+          <button
+            type="button"
+            role="menuitem"
+            onClick={(event) => { event.stopPropagation(); onChoose(choice.id); }}
+          >
+            <kbd>{index + 1}</kbd>{choice.label}
+          </button>
+        </li>
+      ))}
+    </ul>
   );
 }
 

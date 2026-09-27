@@ -1,6 +1,7 @@
 import { test, expect } from './fixtures';
 
 test.describe('Settings', () => {
+
   test('muted repos appear in settings modal', async ({ page, mockGitHub, startDaemonWithPRs }) => {
     mockGitHub.addPR({
       repo: 'test/settings-repo',

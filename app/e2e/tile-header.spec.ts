@@ -17,14 +17,14 @@ for (const notes of [1, 12]) {
   test(`review notes stay readable and scroll within the tile with ${notes} notes`, async ({ page }) => {
     await page.setViewportSize({ width: 1900, height: 700 });
     await page.goto(`/test-harness/?component=TileHeader&notes=${notes}`);
-    const tile = page.locator('.workspace-dock-tile').first();
+    const tile = page.locator('.desktop-dock-tile').first();
     await tile.getByRole('button', { name: `Notes ${notes}` }).click();
     const dialog = tile.getByRole('dialog', { name: 'Review notes' });
     const cards = dialog.locator('.md-annotation-card');
     await expect(cards).toHaveCount(notes);
 
     for (const width of [1816, 960]) {
-      await page.getByTestId('three-leaf-workspace').evaluate((element, nextWidth) => {
+      await page.getByTestId('three-leaf-desktop').evaluate((element, nextWidth) => {
         element.style.width = `${nextWidth}px`;
       }, width);
       const list = dialog.locator('.md-sidebar-list');
@@ -53,14 +53,14 @@ test('three-leaf markdown headers switch modes before their controls collide', a
   await page.goto('/test-harness/?component=TileHeader');
   await page.waitForFunction(() => window.__HARNESS__?.ready === true);
 
-  const workspace = page.getByTestId('three-leaf-workspace');
-  const tiles = page.locator('.workspace-dock-tile');
+  const desktop = page.getByTestId('three-leaf-desktop');
+  const tiles = page.locator('.desktop-dock-tile');
   await expect(tiles).toHaveCount(2);
   await expect(tiles.first().getByRole('button', { name: 'Send 1 to Codex alpha' })).toBeVisible();
   await expect(tiles.nth(1).getByRole('button', { name: 'Send 1 to Claude beta' })).toBeVisible();
 
   const readHeader = async (index: number): Promise<HeaderReceipt> => (
-    tiles.nth(index).locator('.workspace-dock-tile-header').evaluate((header) => {
+    tiles.nth(index).locator('.desktop-dock-tile-header').evaluate((header) => {
       const element = header as HTMLElement;
       const visibleDirectChildren = Array.from(element.children)
         .map((child) => child as HTMLElement)
@@ -69,13 +69,13 @@ test('three-leaf markdown headers switch modes before their controls collide', a
       return {
         clientWidth: element.clientWidth,
         scrollWidth: element.scrollWidth,
-        titleWidth: element.querySelector<HTMLElement>('.workspace-dock-tile-title')!.getBoundingClientRect().width,
-        overallDisplay: getComputedStyle(element.querySelector('.workspace-dock-tile-review-button--overall')!).display,
-        notesLabelDisplay: getComputedStyle(element.querySelector('.workspace-dock-tile-review-label')!).display,
-        notesIconDisplay: getComputedStyle(element.querySelector('.workspace-dock-tile-review-icon')!).display,
-        focusLabelDisplay: getComputedStyle(element.querySelector('.workspace-dock-tile-focus-label')!).display,
-        focusIconDisplay: getComputedStyle(element.querySelector('.workspace-dock-tile-focus-icon')!).display,
-        targetWidth: element.querySelector<HTMLElement>('.workspace-dock-tile-send-target-name')!.getBoundingClientRect().width,
+        titleWidth: element.querySelector<HTMLElement>('.desktop-dock-tile-title')!.getBoundingClientRect().width,
+        overallDisplay: getComputedStyle(element.querySelector('.desktop-dock-tile-review-button--overall')!).display,
+        notesLabelDisplay: getComputedStyle(element.querySelector('.desktop-dock-tile-review-label')!).display,
+        notesIconDisplay: getComputedStyle(element.querySelector('.desktop-dock-tile-review-icon')!).display,
+        focusLabelDisplay: getComputedStyle(element.querySelector('.desktop-dock-tile-focus-label')!).display,
+        focusIconDisplay: getComputedStyle(element.querySelector('.desktop-dock-tile-focus-icon')!).display,
+        targetWidth: element.querySelector<HTMLElement>('.desktop-dock-tile-send-target-name')!.getBoundingClientRect().width,
         overlaps: visibleDirectChildren.some((rect, childIndex) => (
           childIndex > 0 && rect.left < visibleDirectChildren[childIndex - 1].right
         )),
@@ -97,7 +97,7 @@ test('three-leaf markdown headers switch modes before their controls collide', a
     expect(compact.overlaps).toBe(false);
   }
 
-  await workspace.evaluate((element) => { element.style.width = '1440px'; });
+  await desktop.evaluate((element) => { element.style.width = '1440px'; });
 
   for (let index = 0; index < 2; index += 1) {
     const tight = await readHeader(index);

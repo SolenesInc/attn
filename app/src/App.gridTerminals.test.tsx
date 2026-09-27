@@ -1,7 +1,7 @@
 import { act } from '@testing-library/react';
 import { describe, expect, it, vi } from 'vitest';
 import { getGridAutomationHandle } from './components/grid/gridAutomation';
-import { agentWorkspace, daemonSession } from './test/daemonFixtures';
+import { soloDesktop, daemonSession } from './test/daemonFixtures';
 import { gesture, pressShortcut, renderApp } from './test/renderApp';
 import type { ScriptedDaemon } from './test/scriptedDaemon';
 
@@ -11,7 +11,7 @@ async function openGrid(script: (daemon: ScriptedDaemon) => void = () => {}) {
   const view = await renderApp({
     initialState: {
       sessions: SESSIONS.map((id) => daemonSession(id, { state: 'idle' })),
-      workspaces: SESSIONS.map(agentWorkspace),
+      desktops: SESSIONS.map((id) => soloDesktop(id)),
     },
   });
   view.daemon.on('attach_session', ({ id }) => ({ event: 'attach_result', id, success: true, cols: 80, rows: 24, running: true }));

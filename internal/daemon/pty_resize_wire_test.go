@@ -10,7 +10,7 @@ import (
 
 func TestAPtyResizeIsEchoedOnceInStreamOrderKeepingTheCellSizeWhenPixelsAreUnusable(t *testing.T) {
 	w := newWorld(t)
-	session := w.Spawn(w.App(), workspaceShell, w.Path("shop"))
+	session := w.Spawn(w.App(), shellHarness, w.Path("shop"))
 	plain := transportPeer(w)
 
 	for i, tc := range []struct {
@@ -65,7 +65,7 @@ func TestAPtyResizeIsEchoedOnceInStreamOrderKeepingTheCellSizeWhenPixelsAreUnusa
 func TestAProgramReadsThePixelGeometryOfItsLastResize(t *testing.T) {
 	w := newWorld(t)
 	app := w.App()
-	session := w.Spawn(app, workspaceShell, w.Path("shop"))
+	session := w.Spawn(app, shellHarness, w.Path("shop"))
 	winsize := fakeagent.InstallWinsize(t, w.Dir)
 
 	app.Send(protocol.PtyResizeMessage{Cmd: protocol.CmdPtyResize, ID: session, Cols: 40, Rows: 12, Xpixel: protocol.Ptr(40 * 18), Ypixel: protocol.Ptr(12 * 45)})

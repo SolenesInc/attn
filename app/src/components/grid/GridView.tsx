@@ -2,7 +2,7 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { attachTerminalInput } from '../../ghostty';
 import { loadGhostty } from '../../ghostty/wasm';
 import { listenPtyEvents, ptyWrite } from '../../pty/bridge';
-import { createTerminalKeyInterceptor } from '../SessionTerminalWorkspace/terminalKeyHandler';
+import { createTerminalKeyInterceptor } from '../SessionTerminalDesktop/terminalKeyHandler';
 import type { ScreenSnapshotResult } from '../../hooks/useDaemonSocket';
 import type { UISessionState } from '../../types/sessionState';
 import { getTerminalTheme, getTerminalAnsiPalette } from '../../utils/terminalSizing';

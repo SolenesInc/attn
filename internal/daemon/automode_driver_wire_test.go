@@ -35,12 +35,12 @@ func spawnOnAutoModeDriver(t *testing.T, w *world, app *testworld.Peer, driver *
 	t.Helper()
 	cwd := w.Path(agent + "-work")
 	session := uuid.NewString()
-	workspace := registerWorkspace(t, app, cwd)
-	testworld.Request(app, protocol.WorkspaceLayoutAddSessionPaneMessage{
-		Cmd: protocol.CmdWorkspaceLayoutAddSessionPane, WorkspaceID: workspace, SessionID: session, PaneID: protocol.Ptr("pane-" + session),
-	}, protocol.EventWorkspaceLayoutActionResult, func(protocol.WorkspaceLayoutActionResultMessage) bool { return true })
+	if err := os.MkdirAll(cwd, 0o755); err != nil {
+		t.Fatal(err)
+	}
 	app.Send(protocol.SpawnSessionMessage{
-		Cmd: protocol.CmdSpawnSession, ID: session, Agent: agent, Cwd: cwd, WorkspaceID: workspace, Label: protocol.Ptr(label), Cols: 80, Rows: 24,
+		Cmd: protocol.CmdSpawnSession, ID: session, Agent: agent, Cwd: cwd, ProfileID: app.SelectedProfile(),
+		Placement: &protocol.SessionPlacement{}, Label: protocol.Ptr(label), Cols: 80, Rows: 24,
 	})
 	var spawn autoModeDriverSpawn
 	id := driver.expect("driver.spawn", &spawn)
@@ -49,17 +49,6 @@ func spawnOnAutoModeDriver(t *testing.T, w *world, app *testworld.Peer, driver *
 		t.Fatalf("spawning on driver %s: %s", agent, protocol.Deref(result.Error))
 	}
 	return spawn
-}
-
-func registerWorkspace(t *testing.T, app *testworld.Peer, dir string) string {
-	t.Helper()
-	if err := os.MkdirAll(dir, 0o755); err != nil {
-		t.Fatal(err)
-	}
-	id := "workspace-" + uuid.NewString()
-	testworld.Request(app, protocol.RegisterWorkspaceMessage{Cmd: protocol.CmdRegisterWorkspace, ID: id, Title: "work", Directory: dir},
-		protocol.EventWorkspaceRegistered, func(protocol.WebSocketEvent) bool { return true })
-	return id
 }
 
 func (p *pluginPeer) report(method string, params map[string]any) *pluginWireError {

@@ -23,29 +23,28 @@ export function useUIScale() {
     }
   }, [settings]);
 
-  const lastSavedScale = useRef<number | null>(null);
-  useEffect(() => {
-    if (lastSavedScale.current !== null && scale !== lastSavedScale.current) {
-      setSetting(SETTINGS_KEY, scale.toString());
-    }
-    lastSavedScale.current = scale;
-  }, [scale, setSetting]);
-
   useEffect(() => {
     document.documentElement.style.setProperty('--ui-scale', scale.toString());
   }, [scale]);
 
+  // Persistence happens in the actions, so a value read from settings is never echoed back.
+  const applyScale = useCallback((next: number) => {
+    if (next === scale) return;
+    setScale(next);
+    setSetting(SETTINGS_KEY, next.toString());
+  }, [scale, setSetting]);
+
   const increaseScale = useCallback(() => {
-    setScale(prev => Math.min(MAX_SCALE, Math.round((prev + SCALE_STEP) * 10) / 10));
-  }, []);
+    applyScale(Math.min(MAX_SCALE, Math.round((scale + SCALE_STEP) * 10) / 10));
+  }, [applyScale, scale]);
 
   const decreaseScale = useCallback(() => {
-    setScale(prev => Math.max(MIN_SCALE, Math.round((prev - SCALE_STEP) * 10) / 10));
-  }, []);
+    applyScale(Math.max(MIN_SCALE, Math.round((scale - SCALE_STEP) * 10) / 10));
+  }, [applyScale, scale]);
 
   const resetScale = useCallback(() => {
-    setScale(DEFAULT_SCALE);
-  }, []);
+    applyScale(DEFAULT_SCALE);
+  }, [applyScale]);
 
   return {
     scale,

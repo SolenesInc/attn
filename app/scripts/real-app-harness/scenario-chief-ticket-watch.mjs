@@ -18,7 +18,7 @@ import {
   ensureClaudePromptReadyViaPty,
   ensureCodexPromptReadyViaPty,
 } from './scenarioAgents.mjs';
-import { waitForFirstWorkspacePane } from './scenarioAssertions.mjs';
+import { waitForFirstDesktopPane } from './scenarioAssertions.mjs';
 
 const HARNESS_DIR = path.dirname(fileURLToPath(import.meta.url));
 
@@ -165,7 +165,7 @@ async function clearAnyChief(client) {
 }
 
 async function readChiefPane(client, chiefId) {
-  const pane = await waitForFirstWorkspacePane(client, chiefId, `chief pane ${chiefId}`, 20_000);
+  const pane = await waitForFirstDesktopPane(client, chiefId, `chief pane ${chiefId}`, 20_000);
   const res = await client.request('read_pane_text', { sessionId: chiefId, paneId: pane.paneId }, { timeoutMs: 20_000 }).catch(() => null);
   return { paneId: pane.paneId, text: res?.text || '' };
 }
@@ -200,7 +200,7 @@ async function main() {
   fs.writeFileSync(path.join(repoDir, 'CHANGELOG.md'),
     '# Changelog\n\n## [2026-06-28]\n- Refactored the FooManager to use the new BarAdapter interface.\n' +
     '- Fixed a bug.\n- Bumped internal protocol to v3 and migrated the store schema.\n\n' +
-    '## [2026-06-27]\n- Users can now pin workspaces so they stay in the sidebar when empty.\n' +
+    '## [2026-06-27]\n- Users can now pin desktops so they stay in the sidebar when empty.\n' +
     '- Various improvements.\n', 'utf8');
   fs.writeFileSync(path.join(repoDir, 'README.md'),
     '# demo\n\n## Quickstart\n\n```\nattn list\nattn delegate --brief "..."\nattn dispatch update\nattn ticket status ready_for_review\n```\n', 'utf8');
@@ -302,7 +302,7 @@ async function main() {
     const baselineWatchPids = new Set(watchProcessLines().map(pidOf));
 
     const prompt = (noWatch ? NO_WATCH_PROMPTS : PROMPTS)[agent];
-    const pane = await waitForFirstWorkspacePane(client, chiefId, `chief pane ${chiefId}`, 20_000);
+    const pane = await waitForFirstDesktopPane(client, chiefId, `chief pane ${chiefId}`, 20_000);
     // Claude's TUI reads a fast burst ending in CR as a bracketed paste, so the
     // Enter has to be a separate write a beat later.
     await client.request('write_pane', { sessionId: chiefId, paneId: pane.paneId, text: prompt, submit: false });

@@ -24,8 +24,8 @@ func TestADriverTakingLaunchInstructionsIsGivenTheAgentsOrTheChiefsGuidance(t *t
 			_, agent := spawnDriven(w, app, driver, w.Path("shop"))
 			_, chief := spawnDriven(w, app, driver, w.Path("chief"), func(m *protocol.SpawnSessionMessage) { m.ChiefOfStaff = protocol.Ptr(true) })
 
-			if got := agent.Instructions; got == nil || got.Kind != "agent" || got.WorkspaceID != "workspace-shop" {
-				t.Fatalf("the agent launch carried instructions %+v, want agent guidance for workspace-shop", got)
+			if got := agent.Instructions; got == nil || got.Kind != "agent" || got.ProfileID != app.SelectedProfile() {
+				t.Fatalf("the agent launch carried instructions %+v, want agent guidance for profile %s", got, app.SelectedProfile())
 			}
 			if got := chief.Instructions; got == nil || got.Kind != "chief" || got.NotebookRoot == "" {
 				t.Fatalf("the chief launch carried instructions %+v, want chief guidance with its notebook", got)

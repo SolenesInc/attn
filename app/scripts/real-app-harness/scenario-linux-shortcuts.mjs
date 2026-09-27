@@ -15,7 +15,7 @@ import {
   waitForPaneShellReady,
   waitForPaneText,
   waitForPaneVisible,
-  waitForSessionWorkspace,
+  waitForSessionDesktop,
 } from './scenarioAssertions.mjs';
 import { UiAutomationClient } from './uiAutomationClient.mjs';
 import { createScenarioRunner } from './scenarioRunner.mjs';
@@ -30,10 +30,10 @@ function parseArgs(argv) {
 }
 
 async function waitForActivePane(client, sessionId, paneId, description, timeoutMs = 10_000) {
-  return waitForSessionWorkspace(
+  return waitForSessionDesktop(
     client,
     sessionId,
-    (workspace) => workspace?.activePaneId === paneId,
+    (desktop) => desktop?.activePaneId === paneId,
     description,
     timeoutMs,
   );
@@ -95,8 +95,8 @@ async function main() {
   runner.registerCleanup('quit_app', () => client.quitApp());
   runner.registerCleanup('close_session_panes', async () => {
     if (!sessionId) return;
-    const workspace = await client.request('get_workspace', { sessionId }).catch(() => null);
-    for (const pane of workspace?.panes || []) {
+    const desktop = await client.request('get_desktop', { sessionId }).catch(() => null);
+    for (const pane of desktop?.panes || []) {
       await client.request('close_pane', { sessionId, paneId: pane.paneId }).catch(() => {});
     }
   });
@@ -116,9 +116,9 @@ async function main() {
         waitForInitialPaneVisible: false,
       });
       await client.request('select_session', { sessionId });
-      const workspace = await client.request('get_workspace', { sessionId });
-      primaryPane = workspace?.panes?.[0] ?? null;
-      runner.assert(Boolean(primaryPane?.paneId), `No initial shell pane: ${JSON.stringify(workspace)}`);
+      const desktop = await client.request('get_desktop', { sessionId });
+      primaryPane = desktop?.panes?.[0] ?? null;
+      runner.assert(Boolean(primaryPane?.paneId), `No initial shell pane: ${JSON.stringify(desktop)}`);
       await waitForPaneVisible(client, sessionId, primaryPane.paneId, 20_000);
       await waitForPaneAttached(client, sessionId, primaryPane.paneId, 20_000);
       await waitForPaneShellReady(client, sessionId, primaryPane.paneId, {
@@ -150,25 +150,29 @@ async function main() {
       await driver.pressKeyCode(53);
     });
 
-    await runner.step('ctrl_shift_k_opens_action_menu', async () => {
+    await runner.step('ctrl_shift_k_opens_agents_and_ctrl_alt_k_commands', async () => {
       await client.request('focus_pane', { sessionId, paneId: primaryPane.paneId });
       await driver.pressKey('k', { control: true, shift: true });
-      await waitForSelector(client, '.action-menu');
+      await waitForSelector(client, '.unified-palette[aria-label="Agents"]');
+      await driver.pressKeyCode(53);
+      await client.request('focus_pane', { sessionId, paneId: primaryPane.paneId });
+      await driver.pressKey('k', { control: true, alt: true });
+      await waitForSelector(client, '.unified-palette[aria-label="Commands"]');
       await driver.pressKeyCode(53);
     });
 
     await runner.step('ctrl_shift_d_splits_and_arrows_move_focus', async () => {
       await client.request('focus_pane', { sessionId, paneId: primaryPane.paneId });
       await driver.pressKey('d', { control: true, shift: true });
-      const workspace = await waitForSessionWorkspace(
+      const desktop = await waitForSessionDesktop(
         client,
         sessionId,
         (entry) => (entry?.panes || []).length === 2,
         'Ctrl+Shift+D utility split',
         20_000,
       );
-      utilityPane = workspace.panes.find((pane) => pane.paneId !== primaryPane.paneId);
-      runner.assert(Boolean(utilityPane?.paneId), `No utility pane after split: ${JSON.stringify(workspace)}`);
+      utilityPane = desktop.panes.find((pane) => pane.paneId !== primaryPane.paneId);
+      runner.assert(Boolean(utilityPane?.paneId), `No utility pane after split: ${JSON.stringify(desktop)}`);
       await waitForPaneVisible(client, sessionId, utilityPane.paneId, 20_000);
       await waitForPaneAttached(client, sessionId, utilityPane.paneId, 20_000);
       await waitForActivePane(client, sessionId, utilityPane.paneId, 'new utility pane to hold focus');
@@ -181,11 +185,11 @@ async function main() {
 
     await runner.step('ctrl_shift_w_closes_focused_pane', async () => {
       await driver.pressKey('w', { control: true, shift: true });
-      await waitForSessionWorkspace(
+      await waitForSessionDesktop(
         client,
         sessionId,
-        (workspace) => (workspace?.panes || []).length === 1
-          && workspace.panes[0]?.paneId === primaryPane.paneId,
+        (desktop) => (desktop?.panes || []).length === 1
+          && desktop.panes[0]?.paneId === primaryPane.paneId,
         'Ctrl+Shift+W to close the focused utility pane',
         20_000,
       );

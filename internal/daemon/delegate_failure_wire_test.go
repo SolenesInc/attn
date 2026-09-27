@@ -25,7 +25,7 @@ func TestADelegationWhoseAgentCannotStartRemovesItsPaneAndKeepsItsWorktree(t *te
 	for _, row := range []struct {
 		name, source, branch string
 	}{
-		{name: "into the caller's workspace", source: source},
+		{name: "into the caller's checkout", source: source},
 		{name: "into a new worktree beside the caller", source: source, branch: "feature/beside"},
 		{name: "into a new worktree of its own", branch: "feature/alone"},
 	} {
@@ -55,10 +55,10 @@ func TestADelegationWhoseAgentCannotStartRemovesItsPaneAndKeepsItsWorktree(t *te
 	if len(after.Sessions) != 1 || after.Sessions[0].ID != source {
 		t.Errorf("after the failed delegations the sessions are %+v, want only the caller %s", after.Sessions, source)
 	}
-	if !slices.EqualFunc(after.Workspaces, before.Workspaces, func(a, b protocol.Workspace) bool {
+	if !slices.EqualFunc(after.Desktops, before.Desktops, func(a, b protocol.Desktop) bool {
 		return a.ID == b.ID && slices.Equal(delegatePaneSessions(a), delegatePaneSessions(b))
 	}) {
-		t.Errorf("after the failed delegations the workspaces are %+v, want them as before: %+v", after.Workspaces, before.Workspaces)
+		t.Errorf("after the failed delegations the desktops are %+v, want them as before: %+v", after.Desktops, before.Desktops)
 	}
 }
 

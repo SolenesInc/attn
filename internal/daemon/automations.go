@@ -17,6 +17,9 @@ import (
 )
 
 func (d *Daemon) automationRun(ctx context.Context, definitionID, requestID, input string) (*store.AutomationRun, error) {
+	if err := d.requireHome(automation.Surface); err != nil {
+		return nil, err
+	}
 	if strings.TrimSpace(requestID) == "" {
 		return nil, fmt.Errorf("request_id is required")
 	}
@@ -64,7 +67,7 @@ func (d *Daemon) automationRun(ctx context.Context, definitionID, requestID, inp
 		subjectKey = pr.SubjectKey()
 	}
 	snapshotJSON, _ := json.Marshal(snapshot)
-	ids, err := d.newAutomationRunReservation()
+	ids, err := d.newAutomationRunReservation(def)
 	if err != nil {
 		return nil, err
 	}
@@ -87,13 +90,13 @@ func (d *Daemon) automationRun(ctx context.Context, definitionID, requestID, inp
 	}
 	return d.store.GetAutomationRun(run.ID)
 }
-func (d *Daemon) newAutomationRunReservation() (store.AutomationRunReservation, error) {
+func (d *Daemon) newAutomationRunReservation(definition *store.AutomationDefinition) (store.AutomationRunReservation, error) {
 	runID := uuid.NewString()
 	seedID, err := d.mintAutomationSeedID()
 	if err != nil {
 		return store.AutomationRunReservation{}, err
 	}
-	return store.AutomationRunReservation{RunID: runID, OccurrenceID: uuid.NewString(), SeedID: seedID, SessionID: uuid.NewString(), WorkspaceID: "workspace-" + uuid.NewString(), PaneID: "pane-" + uuid.NewString()}, nil
+	return store.AutomationRunReservation{RunID: runID, OccurrenceID: uuid.NewString(), SeedID: seedID, SessionID: uuid.NewString()}, nil
 }
 
 func (d *Daemon) mintAutomationSeedID() (string, error) {

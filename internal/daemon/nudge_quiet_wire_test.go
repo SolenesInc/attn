@@ -14,7 +14,7 @@ func TestATicketNudgeHeldByTheUsersTypingLandsOnceTheyAreQuiet(t *testing.T) {
 		worker := w.bubbleClaude(t, app, "worker")
 		registerSessions(t, w, cli, "author", "other")
 		createTicket(t, cli, worker.id, "fix the build", "fix-build")
-		app.Send(protocol.SessionSelectedMessage{Cmd: protocol.CmdSessionSelected, ID: "other"})
+		focusAgent(t, w, app, "other")
 		commentOnTicket(t, cli, "author", "fix-build", "take a look")
 
 		w.advance(20 * time.Second)

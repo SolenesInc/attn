@@ -31,7 +31,7 @@ func TestAClosedSessionLeavesEveryLiveViewAndKeepsItsFirstClose(t *testing.T) {
 		protocol.Deref(again.ClosedAt) != protocol.Deref(closed.ClosedAt) {
 		t.Errorf("after a second close the row = %+v, want the first close kept", again)
 	}
-	if err := cli.Register(gone, "gone", w.Path("gone")); err == nil {
+	if err := w.InjectSession(gone, "gone", w.Path("gone"), protocol.SessionAgentClaude); err == nil {
 		t.Error("registering over the closed session was accepted")
 	}
 	if ids := queriedIDs(t, cli, ""); !slices.Equal(ids, []string{live}) {
@@ -59,13 +59,10 @@ func TestALateReportCannotRewriteAClosedSession(t *testing.T) {
 	_ = cli.UpdateState(session, protocol.StateWaitingInput)
 	_ = cli.UpdateStateFromHookEvidence(session, protocol.StateWaitingInput, "", "Stop", "")
 	_ = cli.RenameSession(session, "renamed after the close")
-	if err := cli.Register(session, "brief", w.Path("elsewhere")); err == nil {
-		t.Error("a late register recreated the closed session")
-	}
 
 	after := showSession(t, cli, session)
 	if after.State != atClose.State || after.LastSeen != atClose.LastSeen || after.Label != atClose.Label ||
-		after.WorkspaceID != atClose.WorkspaceID || after.Directory != atClose.Directory {
+		after.ProfileID != atClose.ProfileID || after.Directory != atClose.Directory {
 		t.Errorf("closed row after late reports:\n got=%+v\nwant=%+v", after, atClose)
 	}
 	if ids := queriedIDs(t, cli, ""); len(ids) != 0 {

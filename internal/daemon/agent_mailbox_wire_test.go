@@ -2,10 +2,11 @@ package daemon_test
 
 import (
 	"fmt"
-	"github.com/victorarias/attn/internal/testworld"
 	"strings"
 	"testing"
 	"time"
+
+	"github.com/victorarias/attn/internal/testworld"
 
 	"github.com/victorarias/attn/internal/client"
 	"github.com/victorarias/attn/internal/fakeagent"
@@ -146,7 +147,7 @@ func TestAgentMessageIsReadableByIDOnlyByItsRecipientAndSurvivesARestart(t *test
 func registerSessions(t *testing.T, w *world, cli *client.Client, ids ...string) {
 	t.Helper()
 	for _, id := range ids {
-		if err := cli.Register(id, id, w.Path(id)); err != nil {
+		if err := w.InjectSession(id, id, w.Path(id), protocol.SessionAgentClaude); err != nil {
 			t.Fatalf("register %s: %v", id, err)
 		}
 	}

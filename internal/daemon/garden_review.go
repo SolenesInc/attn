@@ -66,7 +66,6 @@ func (d *Daemon) captureGardenReview() (gardenReviewCapture, error) {
 
 	observations := make([]garden.ReviewObservation, 0, len(read.seeds))
 	byID := make(map[string]garden.ReviewObservation, len(read.seeds))
-	chiefAvailable := d.chiefOfStaffSessionID() != ""
 	type pendingInspection struct {
 		seedIndex    int
 		conversation pluginResumeConversation
@@ -103,7 +102,6 @@ func (d *Daemon) captureGardenReview() (gardenReviewCapture, error) {
 			DirectoryState:    directoryState,
 			ResumeAvailable:   resumeAvailable,
 			HandoverAvailable: handoverAvailable,
-			ChiefAvailable:    chiefAvailable,
 			ReviewAgainAt:     reviewAgainAt[seed.ID],
 		}
 		observations = append(observations, observation)
@@ -270,9 +268,7 @@ func gardenReviewActions(candidate garden.ReviewCandidate) []string {
 	if candidate.HandoverAvailable {
 		actions = append(actions, "handover")
 	}
-	if candidate.ChiefAvailable {
-		actions = append(actions, "send_to_chief")
-	}
+	actions = append(actions, "send_to_chief")
 	return append(actions, "keep_growing", "park", "harvest", "wither")
 }
 

@@ -55,7 +55,7 @@
   z-index: 400;
   border-color: var(--color-border);
   border-radius: 8px;
-  /* The dock panel floats above the workspace, so it casts a shadow. The window
+  /* The dock panel floats above the desktop, so it casts a shadow. The window
      frame IS the window — there is nothing behind it to float above — so the
      shadow fades out as it arrives rather than being restyled. */
   box-shadow: 0 0 0 rgba(0, 0, 0, 0);
@@ -81,7 +81,7 @@
   min-height: 0;
 }
 
-/* The workspace recedes as the garden takes the window — the same opaque app
+/* The desktop recedes as the garden takes the window — the same opaque app
    background the fullscreen surface always painted, arriving with the frame
    instead of on top of it. */
 .garden-frame-backdrop {

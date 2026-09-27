@@ -126,11 +126,11 @@ async function selectorIsAbsent(client, selector) {
   }
 }
 
-function collectMarkdownTiles(layout) {
-  if (!layout?.layout_json) return [];
+function collectMarkdownTiles(desktop) {
+  if (!desktop?.tree_json) return [];
   let root;
   try {
-    root = JSON.parse(layout.layout_json);
+    root = JSON.parse(desktop.tree_json);
   } catch {
     return [];
   }
@@ -189,8 +189,8 @@ async function main() {
   runner.registerCleanup('quit_app', () => client.quitApp());
   runner.registerCleanup('close_session_panes', async () => {
     if (!sessionId) return;
-    const workspace = await client.request('get_workspace', { sessionId }).catch(() => null);
-    for (const pane of workspace?.panes || []) {
+    const desktop = await client.request('get_desktop', { sessionId }).catch(() => null);
+    for (const pane of desktop?.panes || []) {
       await client.request('close_pane', { sessionId, paneId: pane.paneId }).catch(() => {});
     }
   });
@@ -202,7 +202,7 @@ async function main() {
     });
 
     let pane;
-    let workspaceId;
+    let desktopId;
     await runner.step('create_session', async () => {
       sessionId = await createSessionAndWaitForInitialPane({
         client,
@@ -214,11 +214,11 @@ async function main() {
         sessionWaitMs: 30_000,
       });
       await client.request('select_session', { sessionId });
-      const workspace = await client.request('get_workspace', { sessionId });
-      pane = workspace?.panes?.[0];
-      runner.assert(Boolean(pane), `No pane in workspace: ${JSON.stringify(workspace)}`);
-      workspaceId = workspace.workspaceId;
-      runner.assert(Boolean(workspaceId), `No workspaceId on workspace: ${JSON.stringify(workspace)}`);
+      const desktop = await client.request('get_desktop', { sessionId });
+      pane = desktop?.panes?.[0];
+      runner.assert(Boolean(pane), `No pane in desktop: ${JSON.stringify(desktop)}`);
+      desktopId = desktop.desktopId;
+      runner.assert(Boolean(desktopId), `No desktopId on desktop: ${JSON.stringify(desktop)}`);
       await waitForPaneVisible(client, sessionId, pane.paneId, 20_000);
       await waitForPaneAttached(client, sessionId, pane.paneId, 20_000);
       await waitForPaneShellReady(client, sessionId, pane.paneId, {
@@ -323,14 +323,14 @@ async function main() {
     };
 
     const markdownTileIds = async () => {
-      const state = await client.request('get_workspace_ui_state', { workspaceId });
+      const state = await client.request('get_desktop_ui_state', { desktopId });
       return (state.tileIds || []).filter((id) => id.startsWith('tile-markdown'));
     };
 
-    const markdownTileNodes = () => collectMarkdownTiles(observer.workspacesBySessionId.get(sessionId));
+    const markdownTileNodes = () => collectMarkdownTiles(observer.desktopOf(sessionId));
 
     const tileFocused = async (tileId) => {
-      const view = (await client.request('get_session_ui_state', { sessionId }))?.workspace?.view;
+      const view = (await client.request('get_session_ui_state', { sessionId }))?.desktop?.view;
       return view?.activeLeafId === tileId;
     };
 
@@ -503,7 +503,7 @@ async function main() {
 
     const result = await runner.finishSuccess({
       sessionId,
-      workspaceId,
+      desktopId,
       paneId: pane.paneId,
       alphaTileId,
       betaTileId,
@@ -526,8 +526,8 @@ async function main() {
   } finally {
     await closeServer(server).catch(() => {});
     if (sessionId) {
-      const workspace = await client.request('get_workspace', { sessionId }).catch(() => null);
-      for (const pane of workspace?.panes || []) {
+      const desktopState = await client.request('get_desktop', { sessionId }).catch(() => null);
+      for (const pane of desktopState?.panes || []) {
         await client.request('close_pane', { sessionId, paneId: pane.paneId }).catch(() => {});
       }
     }

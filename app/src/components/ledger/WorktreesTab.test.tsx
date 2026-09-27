@@ -1,7 +1,7 @@
 import { fireEvent, screen, within } from '@testing-library/react';
 import { describe, expect, it, vi } from 'vitest';
 import type { Worktree, WorktreeListResult, WorktreeSweepEntry } from '../../types/generated';
-import { agentWorkspace, daemonSession, type DaemonSession } from '../../test/daemonFixtures';
+import { soloDesktop, daemonSession, type DaemonSession } from '../../test/daemonFixtures';
 import { gesture, renderApp } from '../../test/renderApp';
 import type { Reply, ScriptedDaemon } from '../../test/scriptedDaemon';
 import { NOW } from '../../test/sessionLedgerFixtures';
@@ -35,7 +35,7 @@ const swept = (over: Partial<WorktreeSweepEntry> = {}): WorktreeSweepEntry => ({
 });
 
 async function openWorktrees(list: Reply, sessions: DaemonSession[] = []) {
-  const view = await renderApp({ initialState: { sessions, workspaces: sessions.map((session) => agentWorkspace(session.id)) } });
+  const view = await renderApp({ initialState: { sessions, desktops: sessions.map((session) => soloDesktop(session.id)) } });
   vi.setSystemTime(NOW);
   view.daemon.on('worktree_list', () => list);
   view.daemon.on('worktree_sweep_log', () => ({ event: 'worktree_sweep_log_result', success: true, worktree_sweep_log_result: { entries: [], omitted: 0 } }));
@@ -92,9 +92,10 @@ describe('the worktrees list', () => {
 
     expect(within(row('attn--feat-one')).getByText('1 live session')).toBeInTheDocument();
     expect(inspector().getByText('one is running in it')).toBeInTheDocument();
+    expect(document.querySelector('[data-session-visible="1"]')).toBeNull();
     await click(daemon, inspector().getByRole('button', { name: 'one' }));
 
-    expect(daemon.sentOf('session_selected')).toEqual([{ cmd: 'session_selected', id: live }]);
+    expect(document.querySelector('[data-session-visible="1"]')?.getAttribute('data-active-pane-id')).toBe(`pane-${live}`);
   });
 
   it('narrows by repo: and words, and says how many the query hides', async () => {

@@ -63,8 +63,8 @@ func (d *Daemon) startDelegationForeground(msg *protocol.DelegateMessage) (*prot
 		resolvedJSON = string(raw)
 	}
 	chiefSessionID := ""
-	if currentChief := d.chiefOfStaffSessionID(); currentChief == strings.TrimSpace(protocol.Deref(msg.SourceSessionID)) {
-		chiefSessionID = currentChief
+	if d.isChiefOfStaffSession(protocol.Deref(msg.SourceSessionID)) {
+		chiefSessionID = strings.TrimSpace(protocol.Deref(msg.SourceSessionID))
 	}
 	seedID := ""
 	parentSeedID := ""
@@ -145,11 +145,11 @@ func (d *Daemon) runDelegationOperationProtected(protection foregroundCleanupPro
 	}
 	if len(shape.Assignment) == 0 || string(shape.Assignment) == "null" {
 		if existing := d.store.Get(record.Operation.SessionID); existing != nil && d.sessionHasLiveWorker(existing.ID) {
-			result := d.completedDelegationResult(existing, "", record.WorktreeOwned)
+			result := d.completedDelegationResult(existing, record.WorktreeOwned)
 			if seedID, ok := d.gardenDispatchCrown(existing.ID); ok {
 				result.SeedID = seedID
 			}
-			d.persistDelegationTerminal(id, protocol.DelegationOperationStateCompleted, "reconciled legacy delegated session", existing.WorkspaceID, protocol.Deref(record.Operation.WorktreePath), result, nil)
+			d.persistDelegationTerminal(id, protocol.DelegationOperationStateCompleted, "reconciled legacy delegated session", existing.ProfileID, protocol.Deref(record.Operation.WorktreePath), result, nil)
 			return
 		}
 		d.finishDelegationFailure(id, fmt.Errorf("%w; no live successor can prove the old implicit launch intent. Submit a new request with the known seed, cwd, and checkout", errLegacyDelegationRequest))
@@ -204,7 +204,7 @@ func (d *Daemon) runDelegationOperationProtected(protection foregroundCleanupPro
 		return
 	}
 	d.persistDelegationTerminal(id, protocol.DelegationOperationStateCompleted,
-		"delegation ready", protocol.Deref(result.WorkspaceID), "", result, nil)
+		"delegation ready", protocol.Deref(result.ProfileID), "", result, nil)
 }
 
 func (d *Daemon) finishDelegationFailure(id string, err error) {
@@ -217,10 +217,10 @@ func (d *Daemon) finishDelegationFailure(id string, err error) {
 		"delegation failed", "", "", nil, err)
 }
 
-func (d *Daemon) persistDelegationTerminal(id string, state protocol.DelegationOperationState, progress, workspaceID, worktreePath string, result *protocol.DelegateResult, operationErr error) {
+func (d *Daemon) persistDelegationTerminal(id string, state protocol.DelegationOperationState, progress, profileID, worktreePath string, result *protocol.DelegateResult, operationErr error) {
 	delay := 100 * time.Millisecond
 	for {
-		if err := d.store.UpdateDelegationOperation(id, state, progress, workspaceID, "", worktreePath, result, operationErr, time.Now()); err == nil {
+		if err := d.store.UpdateDelegationOperation(id, state, progress, profileID, "", worktreePath, result, operationErr, time.Now()); err == nil {
 			return
 		} else {
 			d.logf("persist terminal delegation operation %s: %v", id, err)

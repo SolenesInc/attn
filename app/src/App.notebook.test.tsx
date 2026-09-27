@@ -2,7 +2,7 @@ import { act, fireEvent, screen, within } from '@testing-library/react';
 import { EditorView } from '@codemirror/view';
 import { describe, expect, it, onTestFinished, vi } from 'vitest';
 import { stubTextLayout } from './test/appFixtures';
-import { agentWorkspace, daemonEndpoint, daemonSession, type DaemonSession, type DaemonWorkspace } from './test/daemonFixtures';
+import { soloDesktop, daemonEndpoint, daemonSession, type DaemonSession } from './test/daemonFixtures';
 import { stubNavigatorPlatform } from './test/platformStub';
 import { pressShortcut, renderApp } from './test/renderApp';
 import type { ScriptedDaemon } from './test/scriptedDaemon';
@@ -69,7 +69,7 @@ async function openVault({ vault = freshVault(), sessions = [] as DaemonSession[
     initialState: {
       settings: { 'notebook.root.effective': NOTEBOOK_ROOT },
       sessions,
-      workspaces: sessions.map((session) => agentWorkspace(session.id)),
+      desktops: sessions.map((session) => soloDesktop(session.id)),
     },
   });
   serveVault(view.daemon, vault);
@@ -626,20 +626,19 @@ describe('App notebook finder', () => {
 });
 
 describe('App notebook tile root', () => {
-  it.each<[string, Array<Partial<DaemonWorkspace>>, string | undefined, string?]>([
-    ['a workspace outside the notebook', [{ directory: '/tmp/project' }], '{"root":"/tmp/project"}'],
-    ['a workspace padded with spaces', [{ directory: '  /tmp/project  ' }], '{"root":"/tmp/project"}'],
-    ['the notebook itself', [{ directory: NOTEBOOK_ROOT }], undefined],
-    ['a workspace without a directory', [{ directory: '' }], undefined],
-    ['a remote workspace', [{ directory: '/srv/project', endpoint_id: 'ep-1' }], undefined, 'ep-1'],
-    ['a workspace id a remote twin shares', [{ directory: '/tmp/project' }, { directory: '/srv/project', endpoint_id: 'ep-1' }], undefined],
-  ])('roots a notebook tile opened in %s', async (_, records, tileParams, endpoint) => {
+  it.each<[string, Partial<DaemonSession>, string | undefined]>([
+    ['an agent outside the notebook', { directory: '/tmp/project' }, '{"root":"/tmp/project"}'],
+    ['an agent whose directory is padded with spaces', { directory: '  /tmp/project  ' }, '{"root":"/tmp/project"}'],
+    ['an agent in the notebook itself', { directory: NOTEBOOK_ROOT }, undefined],
+    ['an agent without a directory', { directory: '' }, undefined],
+    ['an agent on a remote endpoint', { directory: '/srv/project', endpoint_id: 'ep-1' }, undefined],
+  ])('roots a notebook tile opened beside %s', async (_, session, tileParams) => {
     const { daemon } = await renderApp({
       initialState: {
         settings: { 'notebook.root.effective': NOTEBOOK_ROOT },
         endpoints: [daemonEndpoint('ep-1')],
-        sessions: [daemonSession('s1', { state: 'idle', ...(endpoint ? { endpoint_id: endpoint } : {}) })],
-        workspaces: records.map((record) => ({ ...agentWorkspace('s1'), ...record })),
+        sessions: [daemonSession('s1', { state: 'idle', ...session })],
+        desktops: [soloDesktop('s1')],
       },
     });
     fireEvent.click(screen.getAllByRole('button', { name: 'Open s1' })[0]);
@@ -648,8 +647,9 @@ describe('App notebook tile root', () => {
     pressShortcut('notebook.openTile');
     await daemon.idle();
 
-    const [dock] = daemon.sentOf('workspace_layout_dock_tile');
-    expect(dock).toMatchObject({ workspace_id: 'workspace-s1', tile_kind: 'notebook' });
+    const [dock] = daemon.sentOf('desktop_dock_tile');
+    expect(dock).toMatchObject({ tile_kind: 'notebook' });
     expect(dock.tile_params).toBe(tileParams);
   });
 });
+

@@ -111,7 +111,7 @@ func TestAHandedOverSeedResumesTheSuccessorsConversation(t *testing.T) {
 		t.Fatal(err)
 	}
 	first := w.Launched(successor.SessionID)
-	closePane(app, seedResumePane(t, w, protocol.Deref(successor.WorkspaceID), successor.SessionID))
+	closePane(app, sessionPane{session: successor.SessionID})
 
 	if resumed := seedResumeRequest(app, predecessor.SeedID); !resumed.Success || protocol.Deref(resumed.SessionID) != successor.SessionID {
 		t.Fatalf("resuming the handed-over seed = %+v, want %s relaunched", resumed, successor.SessionID)
@@ -154,7 +154,7 @@ func TestAHandoverRecreatesTheSavedBranchAfterItsWorktreeWasDeleted(t *testing.T
 	}
 	w.Launched(predecessor.SessionID)
 	worktreeRoot := filepath.Dir(predecessor.Directory)
-	closePane(app, seedResumePane(t, w, protocol.Deref(predecessor.WorkspaceID), predecessor.SessionID))
+	closePane(app, sessionPane{session: predecessor.SessionID})
 
 	deleted := testworld.Request(app, protocol.DeleteWorktreeMessage{Cmd: protocol.CmdDeleteWorktree, Path: worktreeRoot, Force: protocol.Ptr(true)},
 		protocol.EventDeleteWorktreeResult, func(r protocol.DeleteWorktreeResultMessage) bool { return r.Path == worktreeRoot })

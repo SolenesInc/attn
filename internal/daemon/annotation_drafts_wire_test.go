@@ -19,7 +19,7 @@ func TestMarkdownAnnotationDraftsKeepEveryFieldAndRefuseADraftWithoutADocument(t
 
 	requestID := uuid.NewString()
 	if got := testworld.Request(app, protocol.MarkdownAnnotationsGetMessage{
-		Cmd: protocol.CmdMarkdownAnnotationsGet, RequestID: requestID, DocumentUri: nowhere.uri, SourceKind: "file", WorkspaceID: nowhere.workspaceID, Path: nowhere.path,
+		Cmd: protocol.CmdMarkdownAnnotationsGet, RequestID: requestID, DocumentUri: nowhere.uri, SourceKind: "file", Path: nowhere.path,
 	}, protocol.EventMarkdownAnnotationsGetResult, func(r protocol.MarkdownAnnotationsGetResultMessage) bool { return r.RequestID == requestID }); got.Success || got.Error == nil {
 		t.Errorf("get without a document = %+v, want an error result", got)
 	}
@@ -28,7 +28,7 @@ func TestMarkdownAnnotationDraftsKeepEveryFieldAndRefuseADraftWithoutADocument(t
 	}
 	requestID = uuid.NewString()
 	if got := testworld.Request(app, protocol.MarkdownAnnotationsClearMessage{
-		Cmd: protocol.CmdMarkdownAnnotationsClear, RequestID: requestID, DocumentUri: nowhere.uri, SourceKind: "file", WorkspaceID: nowhere.workspaceID, Path: nowhere.path, Generation: 1,
+		Cmd: protocol.CmdMarkdownAnnotationsClear, RequestID: requestID, DocumentUri: nowhere.uri, SourceKind: "file", Path: nowhere.path, Generation: 1,
 	}, protocol.EventMarkdownAnnotationsClearResult, func(r protocol.MarkdownAnnotationsClearResultMessage) bool { return r.RequestID == requestID }); got.Success || got.Error == nil {
 		t.Errorf("clear without a document = %+v, want an error result", got)
 	}

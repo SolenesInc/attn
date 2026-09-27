@@ -1,66 +1,63 @@
-import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { controlBrowserHost } from '../browser/host';
 import { useDaemonApi } from '../contexts/DaemonApiContext';
 import { useAgentNavigation } from '../hooks/useAgentNavigation';
-import { useWorkspaceSelectionController } from '../hooks/useWorkspaceSelectionController';
-import type { useSessionWorkspaceController } from '../hooks/useSessionWorkspaceController';
-import { useSessionStore, type TerminalWorkspaceState } from '../store/sessions';
-import { hasLeaf, workspaceSnapshotFromDaemonWorkspace } from '../types/workspace';
+import { withFreshDesktopRevisions } from '../hooks/desktopRevisions';
+import { useAgentOnScreen } from '../hooks/useDesktopSelectionBridge';
+import { useProfilesStore, useSelectedTile } from '../store/profiles';
+import { useSessionStore } from '../store/sessions';
 import { dispatcherOf } from '../utils/delegationLinks';
+import { orderedDesktops } from '../utils/desktops';
+import { automationRunGroups, nextRunNeedingYou, runCount } from '../utils/automationRuns';
 import { oldestWantedTurn } from '../utils/queueBands';
+import { formatShortcut } from '../shortcuts/formatShortcut';
 import { probeUiAfterSwitch } from '../utils/uiDiagnosticsLog';
 import {
-  persistWorkspaceSelectionStyle,
-  readWorkspaceSelectionStyle,
-  type WorkspaceSelectionStyle,
-} from '../utils/workspaceSelectionStyle';
-import {
-  AppContentProps,
-  persistShowSessionlessWorkspaces,
-  readShowSessionlessWorkspaces,
-} from './appSupport';
+  persistDesktopSelectionStyle,
+  readDesktopSelectionStyle,
+  type DesktopSelectionStyle,
+} from '../utils/desktopSelectionStyle';
+import { AppContentProps } from './appSupport';
 import { useAppSessions } from './useAppSessions';
 import type { useAttentionQueue } from './useAttentionQueue';
 
 interface Options {
   activeSessionId: string | null;
   daemonSessions: AppContentProps['daemonSessions'];
-  daemonWorkspaces: AppContentProps['daemonWorkspaces'];
-  workspaceViews: ReturnType<typeof useAppSessions>['workspaceViews'];
-  unmutedEnrichedSessions: ReturnType<typeof useAppSessions>['unmutedEnrichedSessions'];
+  desktopViews: ReturnType<typeof useAppSessions>['desktopViews'];
+  profileSessions: ReturnType<typeof useAppSessions>['profileSessions'];
   attentionQueue: ReturnType<typeof useAttentionQueue>;
-  focusWorkspaceLeaf: ReturnType<typeof useSessionWorkspaceController>['focusWorkspaceLeaf'];
+  showError: (message: string) => void;
+  showNotice: (message: string) => void;
 }
 export function useAppNavigation({
   activeSessionId,
   daemonSessions,
-  daemonWorkspaces,
-  workspaceViews,
-  unmutedEnrichedSessions,
+  desktopViews,
+  profileSessions,
   attentionQueue,
-  focusWorkspaceLeaf,
+  showError,
+  showNotice,
 }: Options) {
   const {
     view,
     setView,
     followNextTurn,
     setFollowNextTurn,
-    selectedSessionlessWorkspaceId,
-    selectSessionlessWorkspace,
-    selectedTile,
-    setSelectedTile,
     utilityFocusRequestToken,
     requestTerminalFocus,
     goToDashboard,
     goHomeAwaitingNextTurn,
   } = useSessionStore();
-  const {
-    sendSessionSelected,
-    sendWorkspaceSelected,
-    sendWorkspaceUndockTile,
-    sendSetWorkspaceRank,
-  } = useDaemonApi();
-  const activeWorkspaceIdRef = useRef<string | null>(null);
+  const { sendDesktopSetCurrent, sendDesktopSetActivePane, sendDesktopRemoveLeaf } = useDaemonApi();
+  const currentDesktopId = useProfilesStore((state) => state.currentDesktopId);
+  const desktops = useProfilesStore((state) => state.desktops);
+  const shownTile = useSelectedTile();
+  const selectedTile = view === 'dashboard' ? null : shownTile;
+  const currentDesktopIdRef = useRef<string | null>(currentDesktopId);
+  useEffect(() => {
+    currentDesktopIdRef.current = currentDesktopId;
+  }, [currentDesktopId]);
 
   const {
     selectAgent,
@@ -73,243 +70,131 @@ export function useAppNavigation({
   const handleSelectSession = selectAgent;
   const selectCreatedSession = selectAgent;
 
-  useEffect(() => {
-    if (view === 'session' && activeSessionId) {
-      sendSessionSelected(activeSessionId);
-    }
-  }, [activeSessionId, sendSessionSelected, view]);
-
   const { wantsAttention } = attentionQueue;
 
   const handleJumpToWaiting = useCallback(() => {
-    const waiting = oldestWantedTurn(unmutedEnrichedSessions, wantsAttention);
+    const waiting = oldestWantedTurn(profileSessions, wantsAttention);
     if (waiting) {
       handleSelectSession(waiting.id);
     }
-  }, [unmutedEnrichedSessions, handleSelectSession, wantsAttention]);
+  }, [profileSessions, handleSelectSession, wantsAttention]);
+
+  const agentOnScreenId = useAgentOnScreen();
+  const handleNextRun = useCallback(() => {
+    const groups = automationRunGroups(desktopViews, Date.now());
+    const step = nextRunNeedingYou(groups, agentOnScreenId);
+    if (!step) {
+      const total = runCount(groups);
+      const { profiles, selectedProfileId } = useProfilesStore.getState();
+      const profileName = profiles.find((profile) => profile.id === selectedProfileId)?.name ?? 'this profile';
+      showNotice(
+        total === 0
+          ? `No automation runs in ${profileName}`
+          : `No run needs you · ${total} ${total === 1 ? 'run' : 'runs'} on file`,
+      );
+      return;
+    }
+    handleSelectSession(step.run.id);
+    showNotice(
+      `${step.group.name} · run ${step.position} of ${step.total} needing you · ${formatShortcut('session.settle')} settles, ${formatShortcut('session.nextRun')} moves on`,
+    );
+  }, [desktopViews, agentOnScreenId, handleSelectSession, showNotice]);
 
   const toggleGridMode = useCallback(() => {
     setView((prev) => (prev === 'grid' ? (activeSessionId ? 'session' : 'dashboard') : 'grid'));
   }, [activeSessionId, setView]);
 
-  const [showSessionlessWorkspaces, setShowSessionlessWorkspaces] = useState<boolean>(
-    readShowSessionlessWorkspaces,
+  const [desktopSelectionStyle, setDesktopSelectionStyle] = useState<DesktopSelectionStyle>(
+    readDesktopSelectionStyle,
   );
-  const [workspaceSelectionStyle, setWorkspaceSelectionStyle] = useState<WorkspaceSelectionStyle>(
-    readWorkspaceSelectionStyle,
-  );
-  const handleWorkspaceSelectionStyleChange = useCallback((style: WorkspaceSelectionStyle) => {
-    persistWorkspaceSelectionStyle(style);
-    setWorkspaceSelectionStyle(style);
+  const handleDesktopSelectionStyleChange = useCallback((style: DesktopSelectionStyle) => {
+    persistDesktopSelectionStyle(style);
+    setDesktopSelectionStyle(style);
   }, []);
-  useEffect(() => {
-    persistShowSessionlessWorkspaces(showSessionlessWorkspaces);
-  }, [showSessionlessWorkspaces]);
-
-  const handleToggleShowSessionlessWorkspaces = useCallback(() => {
-    setShowSessionlessWorkspaces((prev) => {
-      const next = !prev;
-      return next;
-    });
-  }, []);
-  const sidebarWorkspaceViews = useMemo(
-    () =>
-      workspaceViews.filter(
-        (workspace) =>
-          !workspace.muted &&
-          (workspace.pinned ||
-            workspace.sessions.length > 0 ||
-            workspace.hasUnresolvedAgentPanes ||
-            showSessionlessWorkspaces),
-      ),
-    [workspaceViews, showSessionlessWorkspaces],
-  );
-  const workspaceSelection = useWorkspaceSelectionController(
-    workspaceViews,
-    activeSessionId,
-    selectedSessionlessWorkspaceId,
-  );
-  const activeWorkspaceId = workspaceSelection.activeWorkspaceId;
 
   useEffect(() => {
     probeUiAfterSwitch({
       sessionId: activeSessionId,
-      workspaceId: activeWorkspaceId,
+      desktopId: currentDesktopId,
       view,
     });
-  }, [activeSessionId, activeWorkspaceId, view]);
+  }, [activeSessionId, currentDesktopId, view]);
 
-  useEffect(() => {
-    activeWorkspaceIdRef.current = activeWorkspaceId;
-  }, [activeWorkspaceId]);
-
-  useEffect(() => {
-    if (view === 'session' && activeWorkspaceId) {
-      sendWorkspaceSelected(activeWorkspaceId);
-    }
-  }, [activeWorkspaceId, sendWorkspaceSelected, view]);
-
-  const daemonWorkspaceStateById = useMemo(() => {
-    const map = new Map<string, TerminalWorkspaceState>();
-    const unresolvedWorkspaceIds = new Set(
-      workspaceViews
-        .filter((workspace) => workspace.hasUnresolvedAgentPanes)
-        .map((workspace) => workspace.id),
-    );
-    for (const workspace of daemonWorkspaces) {
-      if (!workspace.layout) {
-        continue;
-      }
-      const { workspace: state } = workspaceSnapshotFromDaemonWorkspace(workspace.layout);
-      if (
-        state.layoutTree &&
-        (state.agents.length === 0 || unresolvedWorkspaceIds.has(workspace.id))
-      ) {
-        map.set(workspace.id, state);
-      }
-    }
-    return map;
-  }, [daemonWorkspaces, workspaceViews]);
-
-  const visualWorkspaces = sidebarWorkspaceViews;
-  const visualIndexByWorkspaceId = useMemo(() => {
-    return new Map(visualWorkspaces.map((workspace, index) => [workspace.id, index]));
-  }, [visualWorkspaces]);
-
-  const handleSelectWorkspace = useCallback(
-    (workspaceId: string) => {
-      const workspace =
-        sidebarWorkspaceViews.find((entry) => entry.id === workspaceId) ||
-        workspaceViews.find((entry) => entry.id === workspaceId);
-      if (!workspace) {
-        return;
-      }
-      const sessionId = workspace.firstSessionId;
-      if (sessionId) {
-        handleSelectSession(sessionId);
-        return;
-      }
-      selectSessionlessWorkspace(workspace.id);
+  const handleSelectDesktop = useCallback(
+    (desktopId: string) => {
+      const { selectedProfileId, desktops } = useProfilesStore.getState();
+      if (!selectedProfileId || !desktops.some((desktop) => desktop.id === desktopId)) return;
+      setView('session');
+      if (desktopId === currentDesktopIdRef.current) return;
+      void sendDesktopSetCurrent(selectedProfileId, desktopId).catch(() => {});
     },
-    [handleSelectSession, selectSessionlessWorkspace, sidebarWorkspaceViews, workspaceViews],
+    [sendDesktopSetCurrent, setView],
   );
 
-  const selectTile = useCallback(
-    (workspaceId: string, tileId: string) => {
-      handleSelectWorkspace(workspaceId);
-      setSelectedTile({ workspaceId, tileId });
-      window.requestAnimationFrame(() => focusWorkspaceLeaf(workspaceId, tileId));
-    },
-    [focusWorkspaceLeaf, handleSelectWorkspace, setSelectedTile],
-  );
-
-  const selectTileRef = useRef(selectTile);
-  useLayoutEffect(() => {
-    selectTileRef.current = selectTile;
-  }, [selectTile]);
-  const pendingTileSelectionRef = useRef<{ key: string; unsubscribe: () => void } | null>(null);
-  const [crewSeedTile, setCrewSeedTile] = useState<{ workspaceId: string; tileId: string } | null>(
+  const [crewSeedTile, setCrewSeedTile] = useState<{ desktopId: string; tileId: string } | null>(
     null,
   );
 
-  useEffect(
-    () => () => {
-      pendingTileSelectionRef.current?.unsubscribe();
-      pendingTileSelectionRef.current = null;
-    },
-    [],
-  );
-
   const handleSelectTile = useCallback(
-    (workspaceId: string, tileId: string) => {
-      const key = `${workspaceId}:${tileId}`;
-      pendingTileSelectionRef.current?.unsubscribe();
-      pendingTileSelectionRef.current = null;
-      const tileExists = () => {
-        const layout = useSessionStore.getState().daemonWorkspaceLayouts[workspaceId]?.workspace.layoutTree;
-        return layout ? hasLeaf(layout, tileId) : false;
-      };
-      if (tileExists()) {
-        selectTileRef.current(workspaceId, tileId);
-        return;
-      }
-      const unsubscribe = useSessionStore.subscribe(() => {
-        if (!tileExists()) return;
-        unsubscribe();
-        if (pendingTileSelectionRef.current?.key === key) pendingTileSelectionRef.current = null;
-        window.requestAnimationFrame(() => selectTileRef.current(workspaceId, tileId));
-      });
-      pendingTileSelectionRef.current = { key, unsubscribe };
+    (desktopId: string, tileId: string) => {
+      const { selectedProfileId, desktops } = useProfilesStore.getState();
+      if (!selectedProfileId || !desktops.some((desktop) => desktop.id === desktopId)) return;
+      setView('session');
+      void sendDesktopSetActivePane(desktopId, tileId)
+        .then(() => {
+          if (desktopId !== currentDesktopIdRef.current) return sendDesktopSetCurrent(selectedProfileId, desktopId);
+        })
+        .catch((error) => {
+          showError(`Could not focus that tile: ${error instanceof Error ? error.message : String(error)}`);
+        });
     },
-    [],
+    [sendDesktopSetActivePane, sendDesktopSetCurrent, setView, showError],
   );
 
   const handleCloseTile = useCallback(
-    (workspaceId: string, tileId: string) => {
-      const clearIfClosed = <T extends { workspaceId: string; tileId: string } | null>(current: T) =>
-        current?.workspaceId === workspaceId && current.tileId === tileId ? null : current;
-      const pendingKey = `${workspaceId}:${tileId}`;
-      if (pendingTileSelectionRef.current?.key === pendingKey) {
-        pendingTileSelectionRef.current.unsubscribe();
-        pendingTileSelectionRef.current = null;
-      }
-      setCrewSeedTile(clearIfClosed);
-      setSelectedTile(clearIfClosed);
-      void sendWorkspaceUndockTile(workspaceId, tileId).catch(() => {});
+    (desktopId: string, tileId: string) => {
+      setCrewSeedTile((current) =>
+        current?.desktopId === desktopId && current.tileId === tileId ? null : current,
+      );
+      void withFreshDesktopRevisions([desktopId], (revisionOf) =>
+        sendDesktopRemoveLeaf(desktopId, tileId, revisionOf(desktopId)),
+      ).catch((error) => {
+        showError(`Could not close that tile: ${error instanceof Error ? error.message : String(error)}`);
+      });
     },
-    [sendWorkspaceUndockTile, setSelectedTile],
+    [sendDesktopRemoveLeaf, showError],
   );
 
-  const handleReloadTile = useCallback((workspaceId: string, tileId: string) => {
-    void controlBrowserHost(workspaceId, tileId, 'reload').catch((error) => {
+  const handleReloadTile = useCallback((desktopId: string, tileId: string) => {
+    void controlBrowserHost(desktopId, tileId, 'reload').catch((error) => {
       console.warn('[App] Failed to reload browser tile:', error);
     });
   }, []);
 
-  const handleWorkspaceReorder = useCallback(
-    (args: { workspaceId: string; prevWorkspaceId?: string; nextWorkspaceId?: string }) => {
-      void sendSetWorkspaceRank(args.workspaceId, args.prevWorkspaceId, args.nextWorkspaceId).catch(
-        () => {},
-      );
+  const desktopOrder = useMemo(() => orderedDesktops(desktops), [desktops]);
+  const steppedToDesktopId = useRef<string | null>(null);
+  useEffect(() => {
+    steppedToDesktopId.current = null;
+  }, [currentDesktopId]);
+
+  const handleStepDesktop = useCallback(
+    (step: 1 | -1) => {
+      const from = steppedToDesktopId.current ?? currentDesktopId;
+      if (!from || desktopOrder.length === 0) return;
+      const index = desktopOrder.findIndex((desktop) => desktop.id === from);
+      if (index < 0) return;
+      const next = desktopOrder[(index + step + desktopOrder.length) % desktopOrder.length];
+      steppedToDesktopId.current = next.id;
+      handleSelectDesktop(next.id);
     },
-    [sendSetWorkspaceRank],
+    [currentDesktopId, desktopOrder, handleSelectDesktop],
   );
-
-  const handleSelectWorkspaceByIndex = useCallback(
-    (index: number) => {
-      const workspace = visualWorkspaces[index];
-      if (workspace) {
-        handleSelectWorkspace(workspace.id);
-      }
-    },
-    [visualWorkspaces, handleSelectWorkspace],
-  );
-
-  const handlePrevWorkspace = useCallback(() => {
-    if (!activeWorkspaceId || visualWorkspaces.length === 0) return;
-    const currentIndex = visualIndexByWorkspaceId.get(activeWorkspaceId);
-    if (currentIndex === undefined) return;
-    const prevIndex = currentIndex > 0 ? currentIndex - 1 : visualWorkspaces.length - 1;
-    handleSelectWorkspace(visualWorkspaces[prevIndex].id);
-  }, [activeWorkspaceId, visualWorkspaces, visualIndexByWorkspaceId, handleSelectWorkspace]);
-
-  const handleNextWorkspace = useCallback(() => {
-    if (!activeWorkspaceId || visualWorkspaces.length === 0) return;
-    const currentIndex = visualIndexByWorkspaceId.get(activeWorkspaceId);
-    if (currentIndex === undefined) return;
-    const nextIndex = currentIndex < visualWorkspaces.length - 1 ? currentIndex + 1 : 0;
-    handleSelectWorkspace(visualWorkspaces[nextIndex].id);
-  }, [activeWorkspaceId, visualWorkspaces, visualIndexByWorkspaceId, handleSelectWorkspace]);
 
   const handleNavigateOutOfSession = useCallback(
     (direction: 'left' | 'right' | 'up' | 'down') => {
-      if (direction === 'left' || direction === 'up') {
-        handlePrevWorkspace();
-        return;
-      }
-      handleNextWorkspace();
+      handleStepDesktop(direction === 'left' || direction === 'up' ? -1 : 1);
     },
-    [handleNextWorkspace, handlePrevWorkspace],
+    [handleStepDesktop],
   );
 
   const handleSelectOrchestrator = useCallback(() => {
@@ -321,7 +206,7 @@ export function useAppNavigation({
 
   return {
     handleJumpToWaiting,
-    workspaceSelection,
+    handleNextRun,
     view,
     setView,
     followNextTurn,
@@ -338,28 +223,18 @@ export function useAppNavigation({
     goToDashboard,
     goHomeAwaitingNextTurn,
     toggleGridMode,
-    workspaceViews,
-    showSessionlessWorkspaces,
-    handleToggleShowSessionlessWorkspaces,
-    workspaceSelectionStyle,
-    handleWorkspaceSelectionStyleChange,
-    sidebarWorkspaceViews,
-    activeWorkspaceId,
-    activeWorkspaceIdRef,
-    daemonWorkspaceStateById,
-    visualWorkspaces,
-    visualIndexByWorkspaceId,
-    handleSelectWorkspace,
+    desktopViews,
+    desktopSelectionStyle,
+    handleDesktopSelectionStyleChange,
+    currentDesktopId,
+    currentDesktopIdRef,
+    handleSelectDesktop,
     handleSelectTile,
     handleCloseTile,
     handleReloadTile,
     selectedTile,
     crewSeedTile,
     setCrewSeedTile,
-    handleWorkspaceReorder,
-    handleSelectWorkspaceByIndex,
-    handlePrevWorkspace,
-    handleNextWorkspace,
     handleNavigateOutOfSession,
     handleSelectOrchestrator,
   };

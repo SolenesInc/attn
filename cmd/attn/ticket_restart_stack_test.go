@@ -22,7 +22,7 @@ func TestADaemonRestartKeepsTicketNudgesCountingDown(t *testing.T) {
 
 	days := map[string]string{}
 	for _, member := range []string{"trellis", "alder"} {
-		woken, err := cli.CrewWake(member, "")
+		woken, err := cli.CrewWake(member, "", "")
 		if err != nil {
 			t.Fatalf("wake %s: %v", member, err)
 		}
