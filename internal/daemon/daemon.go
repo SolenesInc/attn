@@ -2932,6 +2932,10 @@ func (d *Daemon) handleStop(conn net.Conn, msg *protocol.StopMessage) {
 	d.logf("handleStop: session=%s, transcript_path=%s", msg.ID, msg.TranscriptPath)
 
 	relaxBackgroundWork := d.isChiefOfStaffSession(msg.ID)
+	classifies := !d.consumeForcedStopClassification(msg.ID)
+	if classifies {
+		d.cancelAutoSettle(msg.ID, "stop judged")
+	}
 	d.recordStopFacts(
 		msg.ID,
 		!relaxBackgroundWork && hasActiveBackgroundTask(msg),
@@ -2949,7 +2953,7 @@ func (d *Daemon) handleStop(conn net.Conn, msg *protocol.StopMessage) {
 			"",
 		)
 		d.sendOK(conn)
-		if d.consumeForcedStopClassification(msg.ID) {
+		if !classifies {
 			d.logf("handleStop: skipping yield classification for daemon-terminated session=%s", msg.ID)
 			return
 		}
@@ -2960,7 +2964,6 @@ func (d *Daemon) handleStop(conn net.Conn, msg *protocol.StopMessage) {
 		return
 	}
 
-	classifies := !d.consumeForcedStopClassification(msg.ID)
 	d.recordTurnEndedEvidence(msg.ID, classifies)
 
 	if session := d.store.Get(msg.ID); session != nil {
