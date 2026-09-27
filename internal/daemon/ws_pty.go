@@ -543,7 +543,7 @@ func (d *Daemon) forwardPTYStreamEvents(client *wsClient, sessionID string, stre
 				d.logf("pty_output marshal failed: id=%s seq=%d err=%v", sessionID, event.Seq, err)
 				continue
 			}
-			if !d.sendOutboundBlocking(client, outbound, ptyOutputSendWait) {
+			if !d.sendStream(client, outbound) {
 				d.logf("pty_output send failed, closing stream: id=%s seq=%d", sessionID, event.Seq)
 				_ = stream.Close()
 				return
@@ -557,7 +557,7 @@ func (d *Daemon) forwardPTYStreamEvents(client *wsClient, sessionID string, stre
 				d.logf("kitty_placements marshal failed: id=%s seq=%d err=%v", sessionID, event.Seq, err)
 				continue
 			}
-			if !d.sendOutboundBlocking(client, outbound, ptyOutputSendWait) {
+			if !d.sendStream(client, outbound) {
 				d.logf("kitty_placements send failed, closing stream: id=%s seq=%d", sessionID, event.Seq)
 				_ = stream.Close()
 				return
@@ -577,7 +577,7 @@ func (d *Daemon) forwardPTYStreamEvents(client *wsClient, sessionID string, stre
 			if err != nil {
 				continue
 			}
-			if !d.sendOutboundBlocking(client, outboundMessage{kind: messageKindText, payload: payload}, ptyOutputSendWait) {
+			if !d.sendStream(client, outboundMessage{kind: messageKindText, payload: payload}) {
 				_ = stream.Close()
 				return
 			}

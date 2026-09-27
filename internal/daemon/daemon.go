@@ -883,7 +883,6 @@ func (d *Daemon) Start() error {
 	d.registerAppConsumers()
 
 	d.wsHub.logf = d.logf
-	go d.wsHub.runUntil(d.done)
 
 	go d.startWorkflowBroadcastLoop(d.doneContext())
 

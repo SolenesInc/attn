@@ -95,7 +95,7 @@ func (d *Daemon) handleGetKittyImage(client *wsClient, msg *protocol.GetKittyIma
 			d.sendKittyImageFailure(client, msg.ID, msg.ImageID, err.Error())
 			return
 		}
-		if !d.sendOutboundBlocking(client, outboundMessage{kind: messageKindBinary, payload: frame}, ptyOutputSendWait) {
+		if !d.sendStream(client, outboundMessage{kind: messageKindBinary, payload: frame}) {
 			d.logf("kitty image send failed: id=%s image=%d bytes=%d", msg.ID, image.ID, len(frame))
 		}
 		return
