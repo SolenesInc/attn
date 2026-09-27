@@ -63,18 +63,22 @@ func (b *EmbeddedBackend) Attach(_ context.Context, sessionID, subscriberID stri
 		stream.Close()
 	}
 	onPlacements := pty.OnPlacements(func(update pty.PlacementUpdate) {
-		_ = stream.publish(OutputEvent{
+		if !stream.publish(OutputEvent{
 			Kind:       OutputEventKindPlacements,
 			Seq:        update.Seq,
 			Placements: update.Placements,
-		})
+		}) {
+			onDrop("buffer_overflow")
+		}
 	})
 	onResize := pty.OnResize(func(update pty.ResizeUpdate) {
-		_ = stream.publish(OutputEvent{
+		if !stream.publish(OutputEvent{
 			Kind: OutputEventKindResize,
 			Cols: update.Cols, Rows: update.Rows,
 			XPixel: update.XPixel, YPixel: update.YPixel,
-		})
+		}) {
+			onDrop("buffer_overflow")
+		}
 	})
 
 	omitReplay := len(opts) > 0 && opts[len(opts)-1].OmitReplay
