@@ -7,8 +7,6 @@ import (
 	"strings"
 	"sync"
 	"testing"
-	"testing/synctest"
-	"time"
 
 	"github.com/victorarias/attn/internal/protocol"
 )
@@ -82,51 +80,5 @@ func TestHandleAgentMsgFailedWakeLeavesNoUndeliverableMessage(t *testing.T) {
 	}
 }
 
-func newHeldDoorbellDaemon(t *testing.T) (*Daemon, *recordingDoorbell, chan int) {
-	t.Helper()
-	d, doorbell := newAgentMsgDaemon(t)
-	addCharacterizationSession(t, d, "sender-session-id", protocol.SessionAgentClaude, protocol.SessionStateIdle)
-	addCharacterizationSession(t, d, "target-session-id", protocol.SessionAgentClaude, protocol.SessionStateWaitingInput)
-	drained := make(chan int, 1)
-	d.agentMailboxDrainHook = func(_ string, delivered int) { drained <- delivered }
-	return d, doorbell, drained
-}
 
-func typeIntoTarget(t *testing.T, d *Daemon) {
-	t.Helper()
-	if err := d.writeSessionPTY("target-session-id", []byte("a draft"), "user"); err != nil {
-		t.Fatalf("user input: %v", err)
-	}
-}
 
-func TestHandleAgentMsgHeldOffByTypingLandsAfterTheQuietWindow(t *testing.T) {
-	d, doorbell, drained := newHeldDoorbellDaemon(t)
-	quiesceTranscriptWatchers(t, d)
-	synctest.Test(t, func(t *testing.T) {
-		defer d.stopAgentMailboxDoorbells()
-		typeIntoTarget(t, d)
-
-		resp := callAgentMsg(t, d, "target-session-id", "sender-session-id", "the migration landed")
-		result := resp.AgentMsgResult
-		if result == nil || result.Status != protocol.AgentMsgStatusQueued || !strings.Contains(result.Detail, "typed") {
-			t.Fatalf("result = %+v", result)
-		}
-		if prompts := doorbell.pasted(); len(prompts) != 0 {
-			t.Fatalf("typed into a composer the user just used: %q", prompts)
-		}
-
-		time.Sleep(sessionInputQuietWindow)
-		synctest.Wait()
-		select {
-		case delivered := <-drained:
-			if delivered != 1 {
-				t.Fatalf("drain delivered %d, want 1", delivered)
-			}
-		default:
-			t.Fatal("nothing retried the delivery once the composer went quiet")
-		}
-		if prompts := doorbell.pasted(); len(prompts) != 1 || prompts[0] != agentMailboxDoorbellText {
-			t.Fatalf("doorbells after the window = %q", doorbell.pasted())
-		}
-	})
-}

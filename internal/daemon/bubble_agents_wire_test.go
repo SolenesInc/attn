@@ -56,7 +56,10 @@ func (w *world) bootBubbleClaude(t *testing.T, app *testworld.Peer, id string) *
 		t.Fatalf("session start of %s: %v", id, err)
 	}
 	term.Heartbeat("not_busy", "Claude Code")
-	testworld.AwaitSession(app, id, func(s protocol.Session) bool { return s.State == protocol.SessionStateIdle })
+	synctest.Wait()
+	if booted := queriedSession(t, agent.cli, id); booted.State != protocol.SessionStateIdle {
+		t.Fatalf("%s booted %s, want idle", id, booted.State)
+	}
 	return agent
 }
 
