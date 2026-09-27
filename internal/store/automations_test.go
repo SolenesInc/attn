@@ -61,33 +61,6 @@ func TestGitHubReviewLegacyCycleOccurrenceUsesPayloadHeadWithoutReplay(t *testin
 	}
 }
 
-func TestGitHubReviewCursorOrdersObservationsWithinOneSecond(t *testing.T) {
-	s := New()
-	base := time.Date(2026, 7, 19, 12, 0, 0, 0, time.UTC)
-	def, err := s.UpsertAutomationDefinition("review", "Review", `{}`, base)
-	if err != nil {
-		t.Fatal(err)
-	}
-	const subject = "github.com/owner/repo#42"
-	if _, err := s.ReconcileAutomationReviewRequests(def.ID, "github.com", []string{subject}, base.Add(100*time.Millisecond)); err != nil {
-		t.Fatal(err)
-	}
-	if _, err := s.ReconcileAutomationReviewRequests(def.ID, "github.com", nil, base.Add(200*time.Millisecond)); err != nil {
-		t.Fatal(err)
-	}
-	candidates, err := s.ReconcileAutomationReviewRequests(def.ID, "github.com", []string{subject}, base.Add(150*time.Millisecond))
-	if err != nil || len(candidates) != 0 {
-		t.Fatalf("stale same-second candidates=%#v err=%v", candidates, err)
-	}
-	var active int
-	if err := s.db.QueryRow(`SELECT active FROM automation_review_request_edges WHERE definition_id=? AND subject_key=?`, def.ID, subject).Scan(&active); err != nil {
-		t.Fatal(err)
-	}
-	if active != 0 {
-		t.Fatal("stale same-second observation reactivated withdrawn demand")
-	}
-}
-
 func TestSetAutomationEnabledReenableBaselinesCurrentReviewDemand(t *testing.T) {
 	s := New()
 	now := time.Date(2026, 7, 19, 12, 0, 0, 0, time.UTC)

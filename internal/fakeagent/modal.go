@@ -21,6 +21,7 @@ var selectorLines = []string{
 }
 
 type modal struct {
+	title     string
 	lines     []string
 	resting   func()
 	typed     []byte
@@ -74,8 +75,8 @@ func (a *agent) handleModal(method string) (any, error) {
 		if !ok {
 			return nil, fmt.Errorf("%T does not script an approval prompt", a.conv)
 		}
-		a.term.title(asker.approvalTitle())
 		return struct{}{}, a.term.openModal(&modal{
+			title:     asker.approvalTitle(),
 			lines:     []string{"Allow the command to run?", "› 1. Yes, proceed", "  2. No, and tell Codex what to do differently", "Press enter to confirm or esc to cancel"},
 			resting:   asker.approvalAnswered,
 			answering: true,
@@ -95,7 +96,12 @@ func (t *terminal) openModal(m *modal) error {
 		return fmt.Errorf("a modal is already open")
 	}
 	t.modal = m
-	t.write("\r\x1b[J" + strings.Join(m.lines, "\r\n"))
+	title := ""
+	if m.title != "" {
+		title = "\x1b]0;" + m.title + "\x07"
+	}
+	// One write, so a test seeing the prompt on screen knows the worker read the title too.
+	t.write(title + "\r\x1b[J" + strings.Join(m.lines, "\r\n"))
 	return nil
 }
 
