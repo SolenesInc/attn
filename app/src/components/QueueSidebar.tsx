@@ -1,5 +1,6 @@
-import { useRef, type KeyboardEvent as ReactKeyboardEvent } from 'react';
+import { useLayoutEffect, useRef, type KeyboardEvent as ReactKeyboardEvent } from 'react';
 import { TURN_AGE_TICK_MS, useNow } from '../hooks/useNow';
+import { useSessionStore } from '../store/sessions';
 import { formatShortcut } from '../shortcuts/formatShortcut';
 import { crewRows, formatTurnAge, type QueueRow } from '../utils/queueBands';
 import { slotShortcut } from '../utils/desktops';
@@ -30,6 +31,12 @@ export function QueueSidebar() {
     onSelectSession,
   } = useSidebarContext();
   const rootRef = useRef<HTMLDivElement>(null);
+  useLayoutEffect(() => {
+    const root = rootRef.current!;
+    return () => {
+      if (root.contains(document.activeElement)) useSessionStore.getState().requestTerminalFocus();
+    };
+  }, []);
 
   const onKeyDown = (event: ReactKeyboardEvent<HTMLDivElement>) => {
     if (event.metaKey || event.ctrlKey || event.altKey) return;
