@@ -27,6 +27,7 @@ type codex struct {
 	cwd          string
 	conversation string
 	resumed      bool
+	picker       bool
 	transcript   string
 	model        string
 	prompt       string
@@ -103,11 +104,15 @@ func (c *codex) begin(term *terminal) error {
 	source := "startup"
 	if len(args.positionals) > 0 && args.positionals[0] == "resume" {
 		if len(args.positionals) < 2 {
-			return errors.New("codex resume without a session id opens the resume picker, which the fake does not script")
-		}
-		source, c.resumed, c.conversation = "resume", true, args.positionals[1]
-		if c.transcript = c.findRollout(); c.transcript == "" {
-			return fmt.Errorf("codex resume %s: no rollout under %s", c.conversation, c.sessionsDir())
+			c.picker = true
+			if err := c.startRollout(); err != nil {
+				return err
+			}
+		} else {
+			source, c.resumed, c.conversation = "resume", true, args.positionals[1]
+			if c.transcript = c.findRollout(); c.transcript == "" {
+				return fmt.Errorf("codex resume %s: no rollout under %s", c.conversation, c.sessionsDir())
+			}
 		}
 	} else if err := c.startRollout(); err != nil {
 		return err
@@ -164,6 +169,7 @@ func (c *codex) launch() launch {
 		Harness:        Codex,
 		ConversationID: c.conversation,
 		Resumed:        c.resumed,
+		ResumePicker:   c.picker,
 	}
 }
 
