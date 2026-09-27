@@ -226,7 +226,8 @@ export function summarize(view: GroupView): string {
 export function emptyLabel(desktop: DraftDesktopView): string {
   if (!desktop.desktop.desktop_id) return 'Free slot';
   const kept = desktop.desktop.kept_leaves ?? 0;
-  return kept ? `Keeps ${plural(kept, 'item')}` : 'Stays empty';
+  if (kept) return `Keeps ${plural(kept, 'item')}`;
+  return desktop.desktop.shortcut_slot ? 'Stays empty' : 'Removed';
 }
 
 export function allDraftDesktops(view: DraftView): DraftDesktopView[] {

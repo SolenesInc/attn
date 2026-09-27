@@ -246,7 +246,7 @@ export function DestinationPanel({ board, profileName, suggestionAvailable, onSu
       )}
       <div className="mp-dest-tip">
         <strong>Drop at an edge to choose a split.</strong> Drag groups between desktops. Splits inside each group stay together.
-        {' '}A desktop you empty stays as an empty desktop; a free slot gets one only when something lands there.
+        {' '}Emptied shortcut desktops stay; emptied extras are removed; a free slot gets a desktop only when something lands there.
       </div>
     </section>
   );

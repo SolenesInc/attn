@@ -310,7 +310,7 @@ describe('MigrationPicker', () => {
     expect(screen.getByRole('button', { name: 'Desktop 2, stays empty' })).toHaveTextContent('Stays empty');
     expect(screen.getByRole('button', { name: 'Desktop 3, free slot' })).toHaveTextContent('Free slot');
     expect(screen.getByRole('button', { name: 'Desktop 4, keeps 2 items' })).toHaveTextContent('Keeps 2 items');
-    expect(screen.getByText('A desktop you empty stays as an empty desktop; a free slot gets one only when something lands there.', { exact: false })).toBeInTheDocument();
+    expect(screen.getByText('Emptied shortcut desktops stay; emptied extras are removed; a free slot gets a desktop only when something lands there.', { exact: false })).toBeInTheDocument();
   });
 
   it('shows the importing group’s agents and their launch state', async () => {
