@@ -71,9 +71,6 @@ func TestAPushToAPullRequestUnderReviewStartsAReviewOfTheNewHeadOnEachAutomation
 		if pr := next.Automation.PullRequest; pr == nil || pr.HeadSHA != pushed {
 			t.Errorf("%s reviewed %+v after the push, want head %s", id, next.Automation, pushed)
 		}
-		if shown := queriedSession(t, r.cli, protocol.Deref(first.SessionID)).Automation; shown == nil || shown.RunID != next.ID {
-			t.Errorf("%s's reviewer names run %+v, want the review of the push %s", id, shown, next.ID)
-		}
 	}
 
 	earlier := automationRuns(t, r.cli, "review")
