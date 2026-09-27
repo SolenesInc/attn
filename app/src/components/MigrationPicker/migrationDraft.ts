@@ -144,19 +144,18 @@ function groupLeaves(group: MigrationGroup): GroupLeaf[] {
   });
 }
 
-// Two workspaces may share a title (same directory); the first agent's title tells them apart.
+// Two workspaces may share a title (same directory); the first agent's title tells them apart,
+// and every label then passes one uniqueness check, so no two rows ever read the same.
 export function groupNames(groups: MigrationGroup[]): Map<string, string> {
   const count = new Map<string, number>();
   for (const group of groups) count.set(group.title, (count.get(group.title) ?? 0) + 1);
   const names = new Map<string, string>();
   const used = new Set<string>();
   for (const group of groups) {
-    let name = group.title;
-    if ((count.get(group.title) ?? 0) > 1) {
-      const agent = groupLeaves(group).find((leaf) => !leaf.tile)?.label;
-      name = agent ? `${group.title} · ${agent}` : group.title;
-      for (let n = 2; used.has(name); n++) name = `${group.title} (${n})`;
-    }
+    const agent = (count.get(group.title) ?? 0) > 1 ? groupLeaves(group).find((leaf) => !leaf.tile)?.label : undefined;
+    const label = agent ? `${group.title} · ${agent}` : group.title;
+    let name = label;
+    for (let n = 2; used.has(name); n++) name = `${label} (${n})`;
     used.add(name);
     names.set(group.group_id, name);
   }
