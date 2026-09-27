@@ -291,6 +291,7 @@ async function main() {
 
     await runner.step('a_row_opens_from_the_keyboard', async () => {
       await client.request('select_session', { sessionId: beta.sessionId });
+      await waitForPaneInputFocus(client, beta.sessionId, beta.paneId, 15_000);
 
       const focused = await client.request('dom_focus', {
         selector: `[data-testid="queue-select-${alpha.sessionId}"]`,
