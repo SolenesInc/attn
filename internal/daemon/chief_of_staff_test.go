@@ -173,3 +173,34 @@ func TestNudgeChiefOfStaffHeldOffByTypingLandsAfterTheQuietWindow(t *testing.T) 
 		}
 	})
 }
+
+func spawnForChiefTest(t *testing.T, d *Daemon, client *wsClient, workspaceID, sessionID, agent string, chief bool) {
+	t.Helper()
+	cwd := t.TempDir()
+	d.handleRegisterWorkspace(client, &protocol.RegisterWorkspaceMessage{
+		Cmd:       protocol.CmdRegisterWorkspace,
+		ID:        workspaceID,
+		Title:     "Chief Test",
+		Directory: cwd,
+	})
+	paneID := "pane-" + sessionID
+	d.handleWorkspaceLayoutAddSessionPane(client, &protocol.WorkspaceLayoutAddSessionPaneMessage{
+		Cmd:         protocol.CmdWorkspaceLayoutAddSessionPane,
+		WorkspaceID: workspaceID,
+		PaneID:      protocol.Ptr(paneID),
+		SessionID:   sessionID,
+		Title:       protocol.Ptr(sessionID),
+	})
+	expectWorkspaceLayoutActionResult(t, client, protocol.CmdWorkspaceLayoutAddSessionPane, workspaceID, paneID, true)
+	d.handleSpawnSession(client, &protocol.SpawnSessionMessage{
+		Cmd:          protocol.CmdSpawnSession,
+		ID:           sessionID,
+		Label:        protocol.Ptr(sessionID),
+		Cwd:          cwd,
+		Agent:        agent,
+		WorkspaceID:  workspaceID,
+		Cols:         80,
+		Rows:         24,
+		ChiefOfStaff: protocol.Ptr(chief),
+	})
+}
