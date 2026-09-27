@@ -20,7 +20,9 @@ const (
 	PtyOutputSequenced = "pty-output-sequenced"
 	PtyOutputHeld      = "pty-output-held"
 
-	DaemonStartupRecovery = "daemon-startup-recovery"
+	DaemonStartupRecovery     = "daemon-startup-recovery"
+	SessionInputPasteGap      = "session-input-paste-gap"
+	SessionInputLaneContended = "session-input-lane-contended"
 )
 
 type armed struct {

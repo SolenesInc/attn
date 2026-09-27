@@ -9,6 +9,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/victorarias/attn/internal/pausepoint"
 	"github.com/victorarias/attn/internal/protocol"
 )
 
@@ -625,6 +626,7 @@ func (m *sessionInputModule) try(ctx context.Context, delivery sessionInputDeliv
 		attempt.stage = sessionInputIndeterminate
 		return sessionInputAttempt{id: delivery.id, stage: sessionInputIndeterminate, route: sessionInputRoutePTY, reason: sessionInputReasonTransport, wait: attempt.wait, err: err}
 	}
+	pausepoint.At(pausepoint.SessionInputPasteGap)
 	time.Sleep(sessionInputSubmitDelay)
 	if err := m.daemon.ptyBackend.Input(ctx, delivery.sessionID, []byte("\r")); err != nil {
 		attempt.stage = sessionInputIndeterminate
@@ -701,7 +703,10 @@ func (m *sessionInputModule) ptySafetyLocked(ctx context.Context, sessionID stri
 
 func (m *sessionInputModule) writePTY(ctx context.Context, sessionID string, data []byte, source string) error {
 	lane := m.lane(sessionID)
-	lane.mu.Lock()
+	if !lane.mu.TryLock() {
+		pausepoint.At(pausepoint.SessionInputLaneContended)
+		lane.mu.Lock()
+	}
 	defer lane.mu.Unlock()
 	if m.daemon.ptyBackend == nil {
 		return errors.New("session has no PTY backend")
