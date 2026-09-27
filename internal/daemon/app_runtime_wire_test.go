@@ -18,6 +18,7 @@ import (
 
 func TestAppsWithoutARuntimeBinaryRecordARuntimeErrorAndStayEnabled(t *testing.T) {
 	t.Setenv("ATTN_APP_RUNTIME_HOST", filepath.Join(t.TempDir(), "not-installed"))
+	t.Setenv("ATTN_APP_AUTO_DISABLE_STALL", "500ms")
 	w := newWorld(t)
 	cli := w.Client()
 	applySubscribedApp(t, cli, "greeter")
@@ -29,6 +30,9 @@ func TestAppsWithoutARuntimeBinaryRecordARuntimeErrorAndStayEnabled(t *testing.T
 	failed := awaitAppInvocation(t, invocations)
 	if failed.Status != "runtime_error" || !strings.Contains(protocol.Deref(failed.Error), "ATTN_APP_RUNTIME_HOST") {
 		t.Errorf("the delivery = %+v, want a runtime_error saying how to point attn at a runtime", failed)
+	}
+	if retried := awaitAppInvocation(t, invocations); retried.Status != "runtime_error" || protocol.Deref(retried.EventSeq) != protocol.Deref(failed.EventSeq) {
+		t.Errorf("the retry past the auto-disable window = %+v, want another runtime_error on the same fact", retried)
 	}
 	status := appStatus(t, cli, "greeter")
 	if status.Stall != nil || status.App.Consumer == nil || !status.App.Consumer.Enabled {
@@ -142,6 +146,9 @@ func TestAParkedRuntimeStaysParkedAcrossARestartUntilTheUserRestartsIt(t *testin
 		parked := appRuntimeStatus(t, cli).Runtime
 		if parked == nil || parked.Phase != "parked" || parked.ParkedAt == nil || parked.RestartAttempt == 0 || !strings.Contains(protocol.Deref(parked.LastExit), "3") {
 			t.Fatalf("the crash-looping runtime = %+v, want it parked with its attempts and exit 3", parked)
+		}
+		if onApp := appStatus(t, cli, "greeter").Runtime; onApp == nil || onApp.Phase != "parked" {
+			t.Errorf("greeter's status shows the runtime as %+v, want it parked", onApp)
 		}
 		launched := appRuntimeLaunches(t, launches)
 
