@@ -4,6 +4,8 @@ import (
 	"bytes"
 	"encoding/base64"
 	"encoding/json"
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 
@@ -185,6 +187,39 @@ func TestResizingASessionWithoutImagesDescribesNoPlacements(t *testing.T) {
 			t.Errorf("a session that never drew an image described placements at seq %d", protocol.Deref(e.Seq))
 		}
 	}
+}
+
+func TestClientsGetTheImageStreamRewrittenAndAResyncWhenItsLayoutCannotBeCarried(t *testing.T) {
+	onEachPtyBackend(t, func(t *testing.T, w *world) {
+		session := w.Spawn(w.App(), workspaceShell, w.Path("shop"))
+		describer := transportPeer(w, protocol.CapabilityKittyImages)
+		kittyAttach(describer, session)
+		tall := make([]byte, 16*128*3)
+		payload := filepath.Join(w.Dir, "images")
+		program := "\x1b[6;3Hhead\x1b_Ga=T,q=2,f=24,s=2,v=2,i=76;AQIDBAUGBwgJCgsM\x1b\\tail\r\n" +
+			"\x1b[?1049h alt0\r\nalt1\r\nalt2\r\nalt3\r\nalt4\r\n\x1b[6;1Halt5" +
+			"\x1b_Ga=T,q=2,f=24,s=16,v=128,i=78;" + base64.StdEncoding.EncodeToString(tall) + "\x1b\\"
+		if err := os.WriteFile(payload, []byte(program), 0o600); err != nil {
+			t.Fatal(err)
+		}
+
+		describer.Send(protocol.PtyResizeMessage{Cmd: protocol.CmdPtyResize, ID: session, Cols: 20, Rows: 6, Xpixel: protocol.Ptr(20 * 8), Ypixel: protocol.Ptr(6 * 16)})
+		describer.TypeLine(session, "cat "+payload)
+		var seen []byte
+		testworld.Await(describer, protocol.EventPtyOutput, func(e protocol.WebSocketEvent) bool {
+			if protocol.Deref(e.ID) == session {
+				seen = append(seen, transportDecodeOutput(t, e)...)
+			}
+			return bytes.Contains(seen, []byte("alt5"))
+		})
+		if bytes.Contains(seen, []byte("\x1b_G")) || !bytes.Contains(seen, []byte("head")) || !bytes.Contains(seen, []byte("tail")) {
+			t.Errorf("the client read %q, want the text around the image without the kitty APC", seen)
+		}
+		desync := testworld.Await(describer, protocol.EventPtyDesync, func(e protocol.WebSocketEvent) bool { return protocol.Deref(e.ID) == session })
+		if reason := protocol.Deref(desync.Reason); reason != "kitty_layout_anchor_clamped" {
+			t.Errorf("the client was told to resync because %q, want kitty_layout_anchor_clamped", reason)
+		}
+	})
 }
 
 func onEachPtyBackend(t *testing.T, script func(t *testing.T, w *world)) {
