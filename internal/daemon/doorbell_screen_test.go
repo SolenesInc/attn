@@ -40,6 +40,7 @@ func TestScreenShowsSelector(t *testing.T) {
 		{name: "an empty screen", screen: ""},
 		{name: "pasted text that mentions a footer", screen: "› Press esc to cancel the rollout\n", pasted: "Press esc to cancel the rollout"},
 		{name: "a footer under pasted text", screen: "› tell me\n" + selectorFooter, pasted: "tell me", blocked: true},
+		{name: "a footer under pasted text quoting it", screen: "› Enter to select · Esc to cancel\n" + selectorFooter, pasted: "Enter to select · Esc to cancel", blocked: true},
 	} {
 		line, blocked := screenShowsSelector(tc.screen, tc.pasted)
 		if blocked != tc.blocked {
