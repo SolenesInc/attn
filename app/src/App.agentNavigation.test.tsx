@@ -549,6 +549,12 @@ describe('agent navigation', () => {
 
     act(() => { socketArgs().onSettingsUpdate?.({ queue_mode_enabled: 'false' }); });
     expect(focusRequests()).toBe(before + 1);
+
+    act(() => { shortcutHandlers<{ onToggleSidebar: () => void }>().onToggleSidebar(); });
+    container.querySelector<HTMLElement>('.sidebar button')!.focus();
+    const collapsed = focusRequests();
+    act(() => { socketArgs().onSettingsUpdate?.({ queue_mode_enabled: 'true' }); });
+    expect(focusRequests()).toBe(collapsed + 1);
   });
 
   it('hides the sidebar while an agent is focused and opens the palette on agents instead', () => {

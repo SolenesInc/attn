@@ -98,7 +98,7 @@ const baseProps = {
   selectedId: null,
   selectedWorkspaceId: null,
   collapsed: false,
-  surface: 'tree' as const,
+  surface: 'tree-open' as const,
   headerActions: [],
   dockItems: undefined as DockItem[] | undefined,
   onSelectSession: () => {},

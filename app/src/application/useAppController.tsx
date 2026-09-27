@@ -389,7 +389,10 @@ export function useAppController({
   const agentFocused = (surface.kind === 'agent' || surface.kind === 'tile') && currentDesktopAgentFocused;
   const sidebarVisible = !sidebarCollapsed && surface.kind !== 'grid' && !agentFocused;
   const queueSidebarShown = queueModeEnabled && sidebarVisible;
-  const sidebarSurface: SidebarSurface = sidebarVisible ? (queueModeEnabled ? 'queue' : 'tree') : 'hidden';
+  const sidebarHidden = surface.kind === 'grid' || agentFocused;
+  const sidebarSurface: SidebarSurface = sidebarHidden
+    ? 'hidden'
+    : `${queueModeEnabled ? 'queue' : 'tree'}-${sidebarCollapsed ? 'collapsed' : 'open'}`;
   const previousSidebarSurface = useRef(sidebarSurface);
   useLayoutEffect(() => {
     const changed = previousSidebarSurface.current !== sidebarSurface;

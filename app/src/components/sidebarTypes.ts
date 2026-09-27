@@ -49,7 +49,7 @@ export interface SelectedTile {
   tileId: string;
 }
 
-export type SidebarSurface = 'queue' | 'tree' | 'hidden';
+export type SidebarSurface = 'queue-open' | 'queue-collapsed' | 'tree-open' | 'tree-collapsed' | 'hidden';
 
 export interface SidebarProps {
   workspaces: SidebarWorkspace[];

@@ -29,7 +29,7 @@ const baseProps = {
   selectedId: null,
   selectedWorkspaceId: null,
   collapsed: false,
-  surface: 'queue' as const,
+  surface: 'queue-open' as const,
   headerActions: [],
   onSelectSession: () => {},
   onSelectWorkspace: () => {},
@@ -320,7 +320,7 @@ describe('the queue sidebar', () => {
     expect(screen.getByTestId('reload-session-action')).toBeInTheDocument();
 
     view.rerender(<Sidebar {...baseProps} {...data} queue={queue} surface="hidden" />);
-    view.rerender(<Sidebar {...baseProps} {...data} queue={queue} surface="queue" />);
+    view.rerender(<Sidebar {...baseProps} {...data} queue={queue} surface="queue-open" />);
     expect(screen.queryByTestId('reload-session-action')).toBeNull();
   });
 

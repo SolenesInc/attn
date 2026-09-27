@@ -8,7 +8,7 @@ const baseProps = {
   selectedId: null,
   selectedWorkspaceId: null,
   collapsed: false,
-  surface: 'tree' as const,
+  surface: 'tree-open' as const,
   headerActions: [],
   onSelectSession: vi.fn(),
   onSelectWorkspace: vi.fn(),
