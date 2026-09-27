@@ -85,6 +85,11 @@ func (r *Run) Exit(code int) {
 	}
 }
 
+func (r *Run) StopReadingTerminal() {
+	r.t.Helper()
+	r.call(methodStopRead, struct{}{}, nil)
+}
+
 func (r *Run) call(method string, params, result any) {
 	r.t.Helper()
 	ctx, cancel := context.WithTimeout(context.Background(), HangGuard)

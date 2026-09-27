@@ -136,6 +136,27 @@ func TestAnnotationsThatCannotBeDeliveredTypeNothingAndKeepTheDraft(t *testing.T
 	}
 }
 
+func TestAnnotationsTheAgentsTerminalWillNotTakeKeepTheDraft(t *testing.T) {
+	w := newWorld(t, fakeagent.Claude)
+	app := w.App()
+	session := w.Spawn(app, fakeagent.Claude, w.Path("shop"))
+	agent := w.Launched(session)
+	app.AwaitScreen(session, "? for shortcuts")
+	plan := fileAnnotatedDocument("/notes/plan.md")
+	marks := []protocol.MarkdownAnnotation{{ID: "g1", Type: "global", Text: protocol.Ptr(strings.Repeat("tighten the intro ", 16<<10)), CreatedAt: 1}}
+	saveDocumentAnnotations(app, plan, 3, marks)
+	agent.StopReadingTerminal()
+
+	if got := submitDocumentAnnotations(app, plan, session, "", nil); got.success || got.status != "error" || got.err == "" {
+		t.Errorf("submit to an agent that stopped reading its terminal = %+v, want an error naming the failed delivery", got)
+	}
+	if draft := getDocumentAnnotations(app, plan); len(draft.Annotations) != 1 || draft.Generation != 3 {
+		t.Errorf("the undelivered draft = %+v, want it kept at generation 3", draft)
+	}
+	agent.Exit(0)
+	testworld.Await(app, protocol.EventSessionExited, func(e protocol.SessionExitedMessage) bool { return e.ID == session })
+}
+
 func TestSeedAnnotationsBecomeANoteOnThatSeedOnly(t *testing.T) {
 	w := newWorld(t)
 	app, cli := w.App(), w.Client()

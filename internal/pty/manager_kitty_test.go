@@ -4,6 +4,7 @@ package pty
 
 import (
 	"bytes"
+	"context"
 	"errors"
 	"fmt"
 	"os"
@@ -118,7 +119,7 @@ func (k *kittySpawn) waitForOutput(t *testing.T, marker string) uint32 {
 
 func (k *kittySpawn) release(t *testing.T) {
 	t.Helper()
-	if err := k.manager.Input(k.id, []byte("\n")); err != nil {
+	if err := k.manager.Input(context.Background(), k.id, []byte("\n")); err != nil {
 		t.Fatalf("Input() error: %v", err)
 	}
 	select {

@@ -153,7 +153,7 @@ func (s *Session) childProcessGroup() int {
 func (s *Session) foregroundProcessGroup() (int, bool) {
 	s.writeMu.Lock()
 	defer s.writeMu.Unlock()
-	if s.ptmxClosed || s.ptmx == nil {
+	if s.ptmxClosed.Load() || s.ptmx == nil {
 		return 0, false
 	}
 	var pgid int

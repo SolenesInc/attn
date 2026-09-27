@@ -121,8 +121,8 @@ func (b *EmbeddedBackend) ScreenSnapshot(_ context.Context, sessionID string) (p
 	return b.manager.ScreenSnapshot(sessionID)
 }
 
-func (b *EmbeddedBackend) Input(_ context.Context, sessionID string, data []byte) error {
-	return b.manager.Input(sessionID, data)
+func (b *EmbeddedBackend) Input(ctx context.Context, sessionID string, data []byte) error {
+	return b.manager.Input(ctx, sessionID, data)
 }
 
 func (b *EmbeddedBackend) Resize(_ context.Context, sessionID string, cols, rows, xpixel, ypixel uint16) (ResizeResult, error) {

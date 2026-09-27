@@ -3,6 +3,7 @@
 package pty
 
 import (
+	"context"
 	"fmt"
 	"strings"
 	"testing"
@@ -151,7 +152,7 @@ func TestResizeKeepsAPlacementsBufferRow(t *testing.T) {
 		wrappingPrompt+"\r\n"+kittyPlaceRGB(94, 16, 32, ",q=2")+placedMarker,
 		"read release; cat %s; read scroll; seq 1 20; echo "+scrolledMarker+"; read hold")
 
-	if err := spawn.manager.Input(spawn.id, []byte("\n")); err != nil {
+	if err := spawn.manager.Input(context.Background(), spawn.id, []byte("\n")); err != nil {
 		t.Fatalf("Input() error: %v", err)
 	}
 	spawn.waitForOutput(t, placedMarker)
@@ -176,7 +177,7 @@ func TestResizeKeepsAPlacementsBufferRow(t *testing.T) {
 			placed, got, got-placed)
 	}
 
-	if err := spawn.manager.Input(spawn.id, []byte("\n")); err != nil {
+	if err := spawn.manager.Input(context.Background(), spawn.id, []byte("\n")); err != nil {
 		t.Fatalf("Input() error: %v", err)
 	}
 	spawn.waitForOutput(t, scrolledMarker)

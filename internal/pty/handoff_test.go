@@ -2,6 +2,7 @@ package pty
 
 import (
 	"bytes"
+	"context"
 	"strings"
 	"sync"
 	"testing"
@@ -110,7 +111,7 @@ func TestHandoffAndAdoptKeepTheChildRunning(t *testing.T) {
 	} else if !changed {
 		t.Fatal("the measured geometry was not applied before handoff")
 	}
-	if err := before.Input(id, []byte("first\n")); err != nil {
+	if err := before.Input(context.Background(), id, []byte("first\n")); err != nil {
 		t.Fatalf("Input() error: %v", err)
 	}
 	beforeSub.waitFor(t, "got first")
@@ -159,7 +160,7 @@ func TestHandoffAndAdoptKeepTheChildRunning(t *testing.T) {
 	if _, err := after.Attach(id, "after", afterSub.send, nil); err != nil {
 		t.Fatalf("Attach() after adopt: %v", err)
 	}
-	if err := after.Input(id, []byte("second\n")); err != nil {
+	if err := after.Input(context.Background(), id, []byte("second\n")); err != nil {
 		t.Fatalf("Input() after adopt: %v", err)
 	}
 	afterSub.waitFor(t, "got second")
@@ -185,7 +186,7 @@ func TestAdoptedSessionStillReapsItsChild(t *testing.T) {
 		t.Fatalf("Adopt() error: %v", err)
 	}
 
-	if err := after.Input(id, []byte("\x04")); err != nil {
+	if err := after.Input(context.Background(), id, []byte("\x04")); err != nil {
 		t.Fatalf("Input() error: %v", err)
 	}
 	select {

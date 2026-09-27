@@ -3,6 +3,7 @@
 package pty
 
 import (
+	"context"
 	"sync/atomic"
 	"testing"
 	"time"
@@ -15,7 +16,7 @@ func newHeldKittySpawn(t *testing.T, id, payload string) *kittySpawn {
 
 func releaseAndPlace(t *testing.T, spawn *kittySpawn) PlacementUpdate {
 	t.Helper()
-	if err := spawn.manager.Input(spawn.id, []byte("\n")); err != nil {
+	if err := spawn.manager.Input(context.Background(), spawn.id, []byte("\n")); err != nil {
 		t.Fatalf("Input() error: %v", err)
 	}
 	select {
@@ -89,7 +90,7 @@ func TestResizeCostsNothingWithoutPlacements(t *testing.T) {
 			t.Cleanup(func() { placementReadHook = nil })
 
 			spawn := newHeldKittySpawn(t, "kitty-resize-"+tc.limit+"x", tc.payload)
-			if err := spawn.manager.Input(spawn.id, []byte("\n")); err != nil {
+			if err := spawn.manager.Input(context.Background(), spawn.id, []byte("\n")); err != nil {
 				t.Fatalf("Input() error: %v", err)
 			}
 			if _, err := spawn.manager.Resize(spawn.id, 40, 4, 0, 0); err != nil {
