@@ -83,6 +83,12 @@ function snapshotReply(id: string, snapshot = snapshotOf()) {
   return { event: 'attach_result' as const, id, success: true, cols: 40, rows: 6, last_seq: 10, running: true, snapshot };
 }
 
+const FAMILY = '\u{1F468}\u200D\u{1F469}\u200D\u{1F467}\u200D\u{1F466}';
+
+function utf8Base64(text: string) {
+  return btoa(Array.from(new TextEncoder().encode(text), (byte) => String.fromCharCode(byte)).join(''));
+}
+
 function visibleText(sessionId: string) {
   return window.__TEST_GET_SESSION_PANE_VISIBLE_TEXT?.(sessionId).trim();
 }
@@ -682,6 +688,23 @@ describe('App terminal runtime', () => {
     await daemon.idle();
 
     expect(visibleText('s1')).toBe('before\nqueued\nafter');
+  });
+
+  it.each([
+    ['inside one chunk', [`\x1bc0123456789\r${FAMILY}X`]],
+    ['split across chunks', ['\x1b', `c0123456789\r${FAMILY}X`]],
+  ])('keeps an emoji family in one cell after the program resets the terminal %s', async (_, chunks) => {
+    const { daemon } = await openAttachedTerminals({
+      sessions: [daemonSession('s1', { state: 'idle' })],
+      workspaces: [agentWorkspace('s1')],
+    });
+
+    for (const [index, chunk] of chunks.entries()) {
+      daemon.emit({ event: 'pty_output', id: 's1', seq: index + 1, data: utf8Base64(chunk) });
+      await daemon.idle();
+    }
+
+    expect(visibleText('s1')).toBe(`${FAMILY}X3456789`);
   });
 
   it('paints replayed output once', async () => {
