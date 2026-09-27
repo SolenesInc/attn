@@ -148,10 +148,10 @@ async function main() {
         endpoint_id: endpoint.id,
       });
       await observer.waitForSession({ id: result.sessionId, timeoutMs: 30_000 });
-      await observer.waitForWorkspace(
+      await observer.waitForDesktopOf(
         result.sessionId,
-        (workspace) => (workspace.panes || []).length >= 1,
-        `initial workspace for ${result.sessionId}`,
+        (desktop) => desktop.panes.length >= 1,
+        `initial desktop for ${result.sessionId}`,
         30_000,
       );
       return result.sessionId;

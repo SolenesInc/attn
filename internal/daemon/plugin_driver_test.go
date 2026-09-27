@@ -499,7 +499,6 @@ func TestHandleSpawnSession_PluginDriverWithoutResumeRelaunchesWithSpawn(t *test
 		respondPluginRequest(t, client, request, pluginDriverSpawnResult{Argv: []string{"spawn-only"}})
 	}()
 
-	addTestWorkspace(d, "workspace-spawn-only", t.TempDir())
 	ws := &wsClient{send: make(chan outboundMessage, 2), attachedStreams: make(map[string]ptybackend.Stream)}
 	d.handleSpawnSession(ws, &protocol.SpawnSessionMessage{
 		ID:        "spawn-only-session",
@@ -712,7 +711,6 @@ func TestHandleSpawnSession_PluginDriverQueuesReportsDuringPTYStartup(t *testing
 		respondPluginRequest(t, client, request, pluginDriverSpawnResult{Argv: []string{"snipe"}})
 	}()
 
-	addTestWorkspace(d, "workspace-early", t.TempDir())
 	ws := &wsClient{send: make(chan outboundMessage, 2), attachedStreams: make(map[string]ptybackend.Stream)}
 	d.handleSpawnSession(ws, &protocol.SpawnSessionMessage{
 		ID:        "early-report",
@@ -937,18 +935,8 @@ func TestPluginDriverSessionClosed_ClosePaneKeepsOwnerUntilAsyncTeardown(t *test
 	}()
 	registerTestPluginDriver(t, client, "snipe", map[string]bool{"state_reporting": true})
 
-	workspaceID := "plugin-close-workspace"
 	sessionID := "plugin-close-session"
-	paneID := "plugin-close-pane"
-	protocolClient := newWorkspaceProtocolTestClient()
-	d.handleRegisterWorkspace(protocolClient, &protocol.RegisterWorkspaceMessage{
-		Cmd: protocol.CmdRegisterWorkspace, ID: workspaceID, Title: "Plugin close", Directory: t.TempDir(),
-	})
-	d.handleWorkspaceLayoutAddSessionPane(protocolClient, &protocol.WorkspaceLayoutAddSessionPaneMessage{
-		Cmd: protocol.CmdWorkspaceLayoutAddSessionPane, WorkspaceID: workspaceID,
-		PaneID: protocol.Ptr(paneID), SessionID: sessionID,
-	})
-	expectWorkspaceLayoutActionResult(t, protocolClient, protocol.CmdWorkspaceLayoutAddSessionPane, workspaceID, paneID, true)
+	protocolClient := newProtocolTestClient()
 	now := protocol.TimestampNow().String()
 	d.store.Add(&protocol.Session{
 		ID: sessionID, Label: "snipe", Agent: "snipe", Directory: t.TempDir(),
@@ -975,13 +963,10 @@ func TestPluginDriverSessionClosed_ClosePaneKeepsOwnerUntilAsyncTeardown(t *test
 		closed <- params
 	}()
 
-	d.handleWorkspaceLayoutClosePane(protocolClient, &protocol.WorkspaceLayoutClosePaneMessage{
-		Cmd: protocol.CmdWorkspaceLayoutClosePane, WorkspaceID: workspaceID, PaneID: paneID,
-	})
-	expectWorkspaceLayoutActionResult(t, protocolClient, protocol.CmdWorkspaceLayoutClosePane, workspaceID, paneID, true)
+	d.handleUnregisterWS(protocolClient, &protocol.UnregisterMessage{Cmd: protocol.CmdUnregister, ID: sessionID})
 	<-killEntered
 	if d.store.Get(sessionID) != nil {
-		t.Fatal("session row survived the close-pane reply")
+		t.Fatal("session row survived the close reply")
 	}
 	if d.store.ApplyAgentDriverState(sessionID, "run-close-pane", 1, protocol.StateIdle, time.Time{}) {
 		t.Fatal("report from claimed driver run was accepted during teardown")
@@ -1359,7 +1344,6 @@ func TestHandleSpawnSession_PluginDriverWithoutResumeRelaunchesFreshDespiteStore
 		respondPluginRequest(t, client, request, pluginDriverSpawnResult{Argv: []string{"spawn-only"}})
 	}()
 
-	addTestWorkspace(d, "workspace-spawn-only", t.TempDir())
 	ws := &wsClient{send: make(chan outboundMessage, 2), attachedStreams: make(map[string]ptybackend.Stream)}
 	d.handleSpawnSession(ws, &protocol.SpawnSessionMessage{
 		ID: "spawn-only-stored", Cwd: t.TempDir(), ProfileID: defaultProfileID(t, d.store), Agent: "spawn-only", Cols: 80, Rows: 24,

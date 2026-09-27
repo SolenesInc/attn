@@ -42,13 +42,11 @@ func TestDaemon_HandleRenameSession_PersistsAndSurvivesRespawn(t *testing.T) {
 
 	dir := t.TempDir()
 	now := string(protocol.TimestampNow())
-	addTestWorkspace(d, "workspace-s1", dir)
 	d.store.Add(&protocol.Session{
 		ID: "s1", Label: "original", Agent: protocol.SessionAgentClaude,
-		Directory: dir, WorkspaceID: "workspace-s1", ProfileID: defaultProfileID(t, d.store),
+		Directory: dir, ProfileID: defaultProfileID(t, d.store),
 		State: protocol.SessionStateIdle, StateSince: now, StateUpdatedAt: now, LastSeen: now,
 	})
-	d.workspaces.associateSession("s1", "workspace-s1", "original")
 
 	client := newRenameTestClient()
 	d.handleRenameSession(client, &protocol.RenameSessionMessage{
@@ -74,65 +72,13 @@ func TestDaemon_HandleRenameSession_PersistsAndSurvivesRespawn(t *testing.T) {
 	}
 }
 
-func TestDaemon_HandleRenameWorkspace_PersistsTitle(t *testing.T) {
-	d := NewForTesting(filepath.Join(t.TempDir(), "test.sock"))
-	dir := t.TempDir()
-	addTestWorkspace(d, "workspace-1", dir)
-
-	client := newRenameTestClient()
-	d.handleRenameWorkspace(client, &protocol.RenameWorkspaceMessage{
-		Cmd: protocol.CmdRenameWorkspace, WorkspaceID: "workspace-1", Title: "Renamed",
-	})
-
-	if res := expectRenameResult(t, client); !res.Success {
-		t.Fatalf("rename_result success=false error=%q", protocol.Deref(res.Error))
-	}
-	if got := d.store.GetWorkspace("workspace-1"); got == nil || got.Title != "Renamed" {
-		t.Fatalf("stored title = %+v, want Renamed", got)
-	}
-	if snap, ok := d.workspaces.snapshot("workspace-1"); !ok || snap.Title != "Renamed" {
-		t.Fatalf("registry title = %q ok=%v, want Renamed", snap.Title, ok)
-	}
-}
-
-func TestDaemon_HandleRegisterWorkspace_PreservesRenamedTitleOnReRegister(t *testing.T) {
-	d := NewForTesting(filepath.Join(t.TempDir(), "test.sock"))
-	dir := t.TempDir()
-	client := newRenameTestClient()
-
-	d.handleRegisterWorkspace(client, &protocol.RegisterWorkspaceMessage{
-		Cmd: protocol.CmdRegisterWorkspace, ID: "workspace-1", Title: "derived-title", Directory: dir,
-	})
-	if got := d.store.GetWorkspace("workspace-1"); got == nil || got.Title != "derived-title" {
-		t.Fatalf("initial title = %+v, want derived-title", got)
-	}
-
-	d.handleRenameWorkspace(client, &protocol.RenameWorkspaceMessage{
-		Cmd: protocol.CmdRenameWorkspace, WorkspaceID: "workspace-1", Title: "User Renamed",
-	})
-	if res := expectRenameResult(t, client); !res.Success {
-		t.Fatalf("rename_result success=false error=%q", protocol.Deref(res.Error))
-	}
-
-	d.handleRegisterWorkspace(client, &protocol.RegisterWorkspaceMessage{
-		Cmd: protocol.CmdRegisterWorkspace, ID: "workspace-1", Title: "derived-title", Directory: dir,
-	})
-	if got := d.store.GetWorkspace("workspace-1"); got == nil || got.Title != "User Renamed" {
-		t.Fatalf("stored title after re-register = %+v, want User Renamed", got)
-	}
-	if snap, ok := d.workspaces.snapshot("workspace-1"); !ok || snap.Title != "User Renamed" {
-		t.Fatalf("registry title after re-register = %q ok=%v, want User Renamed", snap.Title, ok)
-	}
-}
-
 func TestDaemon_HandleRenameSession_RejectsEmptyName(t *testing.T) {
 	d := NewForTesting(filepath.Join(t.TempDir(), "test.sock"))
 	dir := t.TempDir()
 	now := string(protocol.TimestampNow())
-	addTestWorkspace(d, "workspace-s1", dir)
 	d.store.Add(&protocol.Session{
 		ID: "s1", Label: "original", Agent: protocol.SessionAgentClaude,
-		Directory: dir, WorkspaceID: "workspace-s1", ProfileID: defaultProfileID(t, d.store),
+		Directory: dir, ProfileID: defaultProfileID(t, d.store),
 		State: protocol.SessionStateIdle, StateSince: now, StateUpdatedAt: now, LastSeen: now,
 	})
 
@@ -152,8 +98,7 @@ func TestDaemon_HandleRenameSession_RejectsEmptyName(t *testing.T) {
 func TestRenameSessionOverTheUnixSocketAppliesTheNameCap(t *testing.T) {
 	d := NewForTesting(filepath.Join(t.TempDir(), "test.sock"))
 	dir := t.TempDir()
-	addTestWorkspace(d, "workspace-s1", dir)
-	d.store.Add(&protocol.Session{ID: "s1", Label: "original", Agent: protocol.SessionAgentClaude, Directory: dir, WorkspaceID: "workspace-s1", ProfileID: defaultProfileID(t, d.store)})
+	d.store.Add(&protocol.Session{ID: "s1", Label: "original", Agent: protocol.SessionAgentClaude, Directory: dir, ProfileID: defaultProfileID(t, d.store)})
 
 	server, client := net.Pipe()
 	t.Cleanup(func() { _ = server.Close(); _ = client.Close() })
@@ -189,8 +134,7 @@ func TestRenameSessionOverTheUnixSocketAppliesTheNameCap(t *testing.T) {
 func TestRenameSessionOverTheUnixSocketTravelsToTheSessionOwner(t *testing.T) {
 	d := NewForTesting(filepath.Join(t.TempDir(), "test.sock"))
 	dir := t.TempDir()
-	addTestWorkspace(d, "workspace-s1", dir)
-	d.store.Add(&protocol.Session{ID: "s1", Label: "local", Agent: protocol.SessionAgentClaude, Directory: dir, WorkspaceID: "workspace-s1", ProfileID: defaultProfileID(t, d.store)})
+	d.store.Add(&protocol.Session{ID: "s1", Label: "local", Agent: protocol.SessionAgentClaude, Directory: dir, ProfileID: defaultProfileID(t, d.store)})
 	endpoint, err := d.store.AddEndpoint("remote", "remote.example.test", "")
 	if err != nil {
 		t.Fatalf("add endpoint: %v", err)

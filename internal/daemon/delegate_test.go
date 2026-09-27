@@ -27,7 +27,7 @@ func setupDelegationSourceAt(t *testing.T, d *Daemon, backend *fakeSpawnBackend,
 	t.Helper()
 	setupDelegationGarden(t, d)
 	d.ptyBackend = backend
-	client := newWorkspaceProtocolTestClient()
+	client := newProtocolTestClient()
 	sessionID := "session-source"
 	d.handleSpawnSession(client, &protocol.SpawnSessionMessage{
 		Cmd:       protocol.CmdSpawnSession,
@@ -729,8 +729,8 @@ func TestDelegateWebSocketCommandReturnsResult(t *testing.T) {
 		backend := &fakeSpawnBackend{}
 		_, sourceSessionID, _ := setupDelegationSource(t, d, backend)
 		consumeDelegatedPrompt(t, backend)
-		client := newWorkspaceProtocolTestClient()
-		client.setIdentity("test", "protocol-"+protocol.ProtocolVersion, []string{protocol.CapabilityWorkspaceSessions})
+		client := newProtocolTestClient()
+		client.setIdentity("test", "protocol-"+protocol.ProtocolVersion, nil)
 
 		payload, err := json.Marshal(protocol.DelegateMessage{
 			Cmd: protocol.CmdDelegate, RequestID: "websocket-delegation",
@@ -1084,7 +1084,7 @@ func TestTruncateDelegationName(t *testing.T) {
 
 func TestValidateDelegationName(t *testing.T) {
 	d := NewForTesting(filepath.Join(t.TempDir(), "test.sock"))
-	addTurnSession(t, d, "sess-busy", protocol.SessionAgentCodex, "")
+	addTurnSession(t, d, "sess-busy", protocol.SessionAgentCodex)
 	busy := d.store.Get("sess-busy")
 	busy.Label = "Busy"
 	d.store.Add(busy)

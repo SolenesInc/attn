@@ -2,7 +2,7 @@ import type { ComponentType } from 'react';
 
 /** What a view is given. Mirrors ViewProps in sdk/attn-app/src/index.ts. */
 export interface AppViewProps {
-  workspaceId: string;
+  desktopId: string;
   sessionId: string | null;
   tileId: string;
   params: string;

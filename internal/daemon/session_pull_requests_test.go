@@ -205,7 +205,7 @@ func TestPullRequestMutationsTravelToTheSessionOwner(t *testing.T) {
 func TestForwardedPullRequestCommandsLandOnTheOwner(t *testing.T) {
 	d := newPRDaemonForTest(t, "s1")
 	client := &wsClient{send: make(chan outboundMessage, 16)}
-	client.setIdentity("daemon-test", "protocol-"+protocol.ProtocolVersion, []string{protocol.CapabilityWorkspaceSessions})
+	client.setIdentity("daemon-test", "protocol-"+protocol.ProtocolVersion, nil)
 
 	d.handleClientMessage(client, []byte(
 		`{"cmd":"pull_request_created","id":"s1","url":"https://github.com/victorarias/attn/pull/71"}`))

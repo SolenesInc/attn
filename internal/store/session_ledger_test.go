@@ -73,9 +73,6 @@ func TestAClosedSessionIsInvisibleToEveryLiveReader(t *testing.T) {
 	if s.HasSessionInDirectory("/tmp/gone") {
 		t.Error("HasSessionInDirectory(/tmp/gone) = true, want the closed session to free its directory")
 	}
-	if ids := s.SessionsInWorkspace(""); slices.Contains(ids, "gone") {
-		t.Errorf("SessionsInWorkspace = %v, want a closed session to leave its workspace", ids)
-	}
 }
 
 func TestClosingRefusesTwiceAndReopenBringsTheRowBack(t *testing.T) {

@@ -138,7 +138,6 @@ type Daemon struct {
 	branchInspections                 map[string]branchInspection
 	branchInspectionsRunning          map[string]chan struct{}
 	branchInspectionsMu               sync.Mutex
-	sessionPaneAddMu                  sync.Mutex
 	gitCoordMu                        sync.Mutex
 	gitCoord                          *gitCoordinator
 	worktreeMaintenance               worktreeMaintenanceCoordinator
@@ -318,17 +317,12 @@ type Daemon struct {
 	terminalThemeMu sync.Mutex
 	terminalTheme   pty.TerminalTheme
 
-	workspaces *workspaceRegistry
-
 	currentAgentMu        sync.RWMutex
 	currentAgentSessionID string
 
 	openTileMu sync.Mutex
 
 	lastUserActivityAtNano atomic.Int64
-
-	markdownSeenMu sync.Mutex
-	markdownSeen   map[string]tileContentSig
 
 	desktopTiles desktopTileDelivery
 
@@ -622,7 +616,6 @@ func New(socketPath string) *Daemon {
 		pluginDir:           pluginDirForSocket(socketPath),
 		bundledPluginDir:    bundledPluginDirForExecutable(),
 		appsDir:             config.AppsDir(),
-		workspaces:          newWorkspaceRegistry(),
 		spawnLocks:          make(map[string]*spawnLock),
 	}
 	d.delegationWaitsForFirstTurn = true
@@ -661,7 +654,6 @@ func NewForTesting(socketPath string) *Daemon {
 		pluginDir:           pluginDirForSocket(socketPath),
 		bundledPluginDir:    bundledPluginDirForExecutable(),
 		appsDir:             config.AppsDir(),
-		workspaces:          newWorkspaceRegistry(),
 		workflowDirty:       make(map[string]bool),
 		workflowEngineConn:  make(map[string]workflowEngineSink),
 		spawnLocks:          make(map[string]*spawnLock),
@@ -705,7 +697,6 @@ func NewWithGitHubClient(socketPath string, ghClient github.GitHubClient) *Daemo
 		pluginDir:           pluginDirForSocket(socketPath),
 		bundledPluginDir:    bundledPluginDirForExecutable(),
 		appsDir:             config.AppsDir(),
-		workspaces:          newWorkspaceRegistry(),
 		workflowDirty:       make(map[string]bool),
 		workflowEngineConn:  make(map[string]workflowEngineSink),
 		spawnLocks:          make(map[string]*spawnLock),
@@ -754,9 +745,6 @@ func (d *Daemon) Start() error {
 	if d.tailscale == nil {
 		d.tailscale = newTailscaleRuntime()
 	}
-	if d.workspaces == nil {
-		d.workspaces = newWorkspaceRegistry()
-	}
 	if d.plugins == nil {
 		d.plugins = newPluginRegistry()
 	}
@@ -790,7 +778,6 @@ func (d *Daemon) Start() error {
 	if err := d.startEventBus(); err != nil {
 		return fmt.Errorf("start event bus: %w", err)
 	}
-	d.loadWorkspacesFromStore()
 	if d.clientToken == "" {
 		token, err := config.EnsureClientToken(d.dataRoot)
 		if err != nil {
@@ -1158,8 +1145,7 @@ func (d *Daemon) performStartupPTYRecovery(recoveryStartedAt time.Time) {
 	if _, ok := d.ptyBackend.(ptybackend.RecoverableRuntime); ok {
 		d.reconcileStartupWorkerSessions(recoveryReport, recoverErr, recoveryStartedAt)
 		d.restoreTranscriptWatchers()
-		d.reconcileWorkspaceLayoutsWithPTYBackend(context.Background())
-		d.reseedWorkspaceStatuses()
+		d.pruneRuntimesWithoutSession(context.Background())
 		return
 	}
 
@@ -1171,9 +1157,22 @@ func (d *Daemon) performStartupPTYRecovery(recoveryStartedAt time.Time) {
 			fmt.Sprintf("Removed %d stale sessions from a previous daemon run because no live PTY was found.", removedSessions),
 		)
 	}
-	d.reconcileWorkspaceLayoutsWithPTYBackend(context.Background())
+	d.pruneRuntimesWithoutSession(context.Background())
 	d.restoreTranscriptWatchers()
-	d.reseedWorkspaceStatuses()
+}
+
+func (d *Daemon) pruneRuntimesWithoutSession(ctx context.Context) {
+	if d.store == nil {
+		return
+	}
+	for _, runtimeID := range d.liveRuntimeSessionIDs(ctx) {
+		if d.store.Get(runtimeID) != nil {
+			continue
+		}
+		if err := d.removePTYSession(runtimeID); err != nil {
+			d.logf("pruning runtime %s without a session failed: %v", runtimeID, err)
+		}
+	}
 }
 
 func (d *Daemon) rebuildTicketDeliverySchedules() {
@@ -3103,7 +3102,6 @@ func (d *Daemon) sessionForBroadcastWithChiefOfStaff(
 	d.decorateCrewMember(clone, crewBySession)
 	d.decorateSessionSeed(clone, seedBySession)
 	d.decorateSessionDispatcher(clone, dispatcherBySession)
-	d.decorateSessionWithWorkspace(clone)
 	d.decorateSessionWithCost(clone)
 	d.decorateSessionWithTerminalBuild(clone)
 	d.decorateSessionWithTurn(clone)
@@ -3172,7 +3170,6 @@ func (d *Daemon) remoteSessionsForBroadcast() []protocol.Session {
 
 func (d *Daemon) broadcastSessionStateChanged(sessionID string) {
 	d.publishFact(FactSessionStateChanged, sessionID, nil)
-	d.recomputeAndBroadcastWorkspaceForSession(sessionID)
 }
 
 func (d *Daemon) projectSessionStateChanged(sessionID string) {
@@ -3240,10 +3237,15 @@ func (d *Daemon) handleTodos(conn net.Conn, msg *protocol.TodosMessage) {
 
 func (d *Daemon) handleQuery(conn net.Conn, msg *protocol.QueryMessage) {
 	sessions := d.store.List(protocol.Deref(msg.Filter))
+	profiles, err := d.liveProtocolProfiles()
+	if err != nil {
+		d.sendError(conn, "query: "+err.Error())
+		return
+	}
 	resp := protocol.Response{
-		Ok:         true,
-		Sessions:   d.sessionsForBroadcast(sessions),
-		Workspaces: d.listLocalWorkspaces(),
+		Ok:       true,
+		Sessions: d.sessionsForBroadcast(sessions),
+		Profiles: profiles,
 	}
 	json.NewEncoder(conn).Encode(resp)
 }

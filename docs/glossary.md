@@ -46,11 +46,11 @@
 - Current desktop: the desktop a profile shows. Every client on that profile shares it.
 - Active pane: the pane or tile a desktop has selected. Every client shares it. With a tile selected, no agent is current; opens and placements land beside that tile.
 - Workspace migration: the one-time screen after the upgrade to profiles. Each old workspace arrives as an imported group already on a desktop; the user keeps it there, keeps it as an extra desktop, or merges it into another desktop before the app loads. The draft is daemon state shared by every client, and either client can finish it.
-- Focus mode: one workspace pane or tile occupies the shell until the user returns to the split.
+- Focus mode: one pane or tile occupies the shell until the user returns to the split.
 
 ## Garden and crew
 
-- Garden: the home daemon's work tracker, shared across workspaces.
+- Garden: the home daemon's work tracker, shared across profiles.
 - Seed: a work item with an ID, title, body and state.
 - Slug: a readable name derived from a seed's title. Slugs need not be unique.
 - Plot: a seed with child seeds. Its body holds their shared plan.

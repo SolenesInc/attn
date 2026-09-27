@@ -94,7 +94,6 @@ describe('useDaemonSocket garden', () => {
     const hook = renderHook(() =>
       useDaemonSocket({
         onSessionsUpdate: vi.fn(),
-        onWorkspacesUpdate: vi.fn(),
         onPRsUpdate: vi.fn(),
         onReposUpdate: vi.fn(),
         onAuthorsUpdate: vi.fn(),

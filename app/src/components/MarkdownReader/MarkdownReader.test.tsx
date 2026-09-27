@@ -32,7 +32,7 @@ const shikiMock = vi.hoisted(() => ({
 }));
 vi.mock('shiki', () => shikiMock);
 
-const FILE_SOURCE = fileMarkdownSource('workspace-1', '/tmp/project/README.md');
+const FILE_SOURCE = fileMarkdownSource('/tmp/project/README.md');
 
 function renderReader(content: string, allowLocalTargets = true) {
   return render(

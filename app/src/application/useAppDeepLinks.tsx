@@ -4,7 +4,7 @@ import { useSessionStore } from '../store/sessions';
 import { type SessionAgent } from '../types/sessionAgent';
 interface Options {
   selectAgent: (sessionId: string) => boolean;
-  createWorkspaceSession: (
+  launchAgent: (
     label: string,
     cwd: string,
     providedSessionId?: string,
@@ -17,7 +17,7 @@ interface Options {
 }
 export function useAppDeepLinks({
   selectAgent,
-  createWorkspaceSession,
+  launchAgent,
   selectCreatedSession,
 }: Options) {
   const processedDeepLinks = useRef(new Set<string>());
@@ -40,7 +40,7 @@ export function useAppDeepLinks({
             if (existingSession) {
               selectAgent(existingSession.id);
             } else {
-              void createWorkspaceSession(label, cwd).then(selectCreatedSession);
+              void launchAgent(label, cwd).then(selectCreatedSession);
             }
           }
         }
@@ -48,7 +48,7 @@ export function useAppDeepLinks({
         console.error('Failed to parse deep-link URL:', e);
       }
     },
-    [createWorkspaceSession, selectAgent, selectCreatedSession],
+    [launchAgent, selectAgent, selectCreatedSession],
   );
 
   useEffect(() => {

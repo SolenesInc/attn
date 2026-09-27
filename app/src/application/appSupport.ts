@@ -8,7 +8,6 @@ import {
   DaemonPluginIssue,
   DaemonPR,
   DaemonSession,
-  DaemonWorkspace,
   SessionExitInfo,
 } from '../hooks/useDaemonSocket';
 import { type OpenPRProgress } from '../hooks/useOpenPR';
@@ -179,7 +178,6 @@ export type SessionCreationJob = {
 
 export interface AppContentProps {
   daemonSessions: DaemonSession[];
-  daemonWorkspaces: DaemonWorkspace[];
   prs: DaemonPR[];
   daemonEndpoints: DaemonEndpoint[];
   daemonPlugins: DaemonPlugin[];

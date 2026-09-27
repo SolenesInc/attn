@@ -91,7 +91,6 @@ export interface Session {
     readonly turn_owed?: boolean;
     readonly turn_snoozed_until?: string;
     readonly usage?: SessionUsage;
-    readonly workspace_id: string;
 }
 export interface EndpointCapabilities {
     readonly agents_available: readonly string[];
@@ -116,32 +115,6 @@ export interface EndpointInfo {
     readonly ssh_target: string;
     readonly status: string;
     readonly status_message?: string;
-}
-export interface WorkspacePane {
-    readonly error?: string;
-    readonly kind: "agent";
-    readonly pane_id: string;
-    readonly runtime_id?: string;
-    readonly session_id?: string;
-    readonly status: "failed" | "ready" | "spawning";
-    readonly title: string;
-    readonly workspace_id: string;
-}
-export interface WorkspaceLayout {
-    readonly active_pane_id: string;
-    readonly layout_json: string;
-    readonly panes: readonly WorkspacePane[];
-    readonly updated_at?: string;
-    readonly workspace_id: string;
-}
-export interface Workspace {
-    readonly directory: string;
-    readonly endpoint_id?: string;
-    readonly id: string;
-    readonly layout?: WorkspaceLayout;
-    readonly rank: string;
-    readonly status: "idle" | "launching" | "pending_approval" | "scheduled" | "unknown" | "waiting_input" | "working";
-    readonly title: string;
 }
 export interface PR {
     readonly approved_by_me: boolean;
@@ -311,7 +284,6 @@ export interface CurrentStateSnapshot {
     readonly asOfSeq: number;
     readonly sessions: readonly Session[];
     readonly endpoints: readonly EndpointInfo[];
-    readonly workspaces: readonly Workspace[];
     readonly prs: readonly PR[];
     readonly repos: readonly RepoState[];
     readonly authors: readonly AuthorState[];

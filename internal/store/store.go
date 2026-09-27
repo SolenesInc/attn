@@ -17,7 +17,6 @@ import (
 	"github.com/victorarias/attn/internal/git"
 	"github.com/victorarias/attn/internal/launchcontract"
 	"github.com/victorarias/attn/internal/protocol"
-	"github.com/victorarias/attn/internal/workspacelayout"
 )
 
 type Store struct {
@@ -36,7 +35,6 @@ type Store struct {
 	teardownIntents        map[string]SessionTeardownIntent
 	sessionCloses          map[string]sessionCloseMark
 	agentMetadata          map[string]string
-	workspaces             map[string]workspacelayout.WorkspaceLayout
 	recentLocations        map[string]*protocol.RecentLocation
 }
 
@@ -89,7 +87,6 @@ func newMapBackedStore() *Store {
 		sessionCloses:   make(map[string]sessionCloseMark),
 		sessionCosts:    make(map[string]SessionCostState),
 		agentMetadata:   make(map[string]string),
-		workspaces:      make(map[string]workspacelayout.WorkspaceLayout),
 		recentLocations: make(map[string]*protocol.RecentLocation),
 	}
 }
@@ -258,14 +255,13 @@ func (s *Store) addCheckedLocked(session *protocol.Session, rejectTeardown bool)
 	}
 	_, err = s.db.Exec(`
 		INSERT INTO sessions
-		(id, label, agent, directory, endpoint_id, workspace_id, profile_id, branch, is_worktree, main_repo, repository, state, state_since, state_updated_at, last_model_request_at, parent_session_id, todos, last_seen)
-		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+		(id, label, agent, directory, endpoint_id, profile_id, branch, is_worktree, main_repo, repository, state, state_since, state_updated_at, last_model_request_at, parent_session_id, todos, last_seen)
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
 		ON CONFLICT(id) DO UPDATE SET
 			label = excluded.label,
 			agent = excluded.agent,
 			directory = excluded.directory,
 			endpoint_id = excluded.endpoint_id,
-			workspace_id = excluded.workspace_id,
 			profile_id = CASE WHEN sessions.profile_id = '' THEN excluded.profile_id ELSE sessions.profile_id END,
 			branch = excluded.branch,
 			is_worktree = excluded.is_worktree,
@@ -286,7 +282,6 @@ func (s *Store) addCheckedLocked(session *protocol.Session, rejectTeardown bool)
 		session.Agent,
 		session.Directory,
 		protocol.Deref(session.EndpointID),
-		session.WorkspaceID,
 		session.ProfileID,
 		protocol.Deref(session.Branch),
 		boolToInt(protocol.Deref(session.IsWorktree)),
@@ -335,17 +330,16 @@ func (s *Store) Get(id string) *protocol.Session {
 	var stateSince, stateUpdatedAt, lastSeen string
 	var isWorktree int
 	var contextWindowCap int
-	var endpointID, workspaceID, branch, mainRepo, repository, parentSessionID, activity, activityAt, lastModelRequestAt sql.NullString
+	var endpointID, branch, mainRepo, repository, parentSessionID, activity, activityAt, lastModelRequestAt sql.NullString
 
 	err := s.db.QueryRow(`
-		SELECT id, label, agent, directory, endpoint_id, workspace_id, profile_id, branch, is_worktree, main_repo, repository, state, state_since, state_updated_at, last_model_request_at, context_window_cap, parent_session_id, activity, activity_at, todos, last_seen
+		SELECT id, label, agent, directory, endpoint_id, profile_id, branch, is_worktree, main_repo, repository, state, state_since, state_updated_at, last_model_request_at, context_window_cap, parent_session_id, activity, activity_at, todos, last_seen
 		FROM sessions WHERE id = ? AND closed_at = ''`, id).Scan(
 		&session.ID,
 		&session.Label,
 		&session.Agent,
 		&session.Directory,
 		&endpointID,
-		&workspaceID,
 		&session.ProfileID,
 		&branch,
 		&isWorktree,
@@ -376,9 +370,6 @@ func (s *Store) Get(id string) *protocol.Session {
 
 	if endpointID.Valid && endpointID.String != "" {
 		session.EndpointID = protocol.Ptr(endpointID.String)
-	}
-	if workspaceID.Valid && workspaceID.String != "" {
-		session.WorkspaceID = workspaceID.String
 	}
 	if branch.Valid && branch.String != "" {
 		session.Branch = protocol.Ptr(branch.String)
@@ -450,17 +441,10 @@ func (s *Store) ClearSessions() {
 		s.agentDriverRuns = make(map[string]AgentDriverReportCursor)
 		s.agentMetadata = make(map[string]string)
 		s.sessionCosts = make(map[string]SessionCostState)
-		s.workspaces = make(map[string]workspacelayout.WorkspaceLayout)
 		return
 	}
 
 	s.unplaceSessionsLocked("ClearSessions", "1 = 1")
-	if _, err := s.db.Exec("DELETE FROM workspace_layout_panes"); err != nil {
-		log.Printf("[store] ClearSessions: failed to clear workspace layout panes: %v", err)
-	}
-	if _, err := s.db.Exec("DELETE FROM workspace_layouts"); err != nil {
-		log.Printf("[store] ClearSessions: failed to clear workspace layouts: %v", err)
-	}
 	for _, table := range sessionOwnedTables {
 		if _, err := s.db.Exec("DELETE FROM " + table); err != nil {
 			log.Printf("[store] ClearSessions: failed to clear %s: %v", table, err)
@@ -498,11 +482,11 @@ func (s *Store) List(stateFilter string) []*protocol.Session {
 
 	if stateFilter == "" {
 		rows, err = s.db.Query(`
-			SELECT id, label, agent, directory, endpoint_id, workspace_id, profile_id, branch, is_worktree, main_repo, repository, state, state_since, state_updated_at, last_model_request_at, context_window_cap, parent_session_id, activity, activity_at, todos, last_seen
+			SELECT id, label, agent, directory, endpoint_id, profile_id, branch, is_worktree, main_repo, repository, state, state_since, state_updated_at, last_model_request_at, context_window_cap, parent_session_id, activity, activity_at, todos, last_seen
 			FROM sessions WHERE closed_at = '' ORDER BY label, id`)
 	} else {
 		rows, err = s.db.Query(`
-			SELECT id, label, agent, directory, endpoint_id, workspace_id, profile_id, branch, is_worktree, main_repo, repository, state, state_since, state_updated_at, last_model_request_at, context_window_cap, parent_session_id, activity, activity_at, todos, last_seen
+			SELECT id, label, agent, directory, endpoint_id, profile_id, branch, is_worktree, main_repo, repository, state, state_since, state_updated_at, last_model_request_at, context_window_cap, parent_session_id, activity, activity_at, todos, last_seen
 			FROM sessions WHERE state = ? AND closed_at = '' ORDER BY label, id`, stateFilter)
 	}
 	if err != nil {
@@ -517,7 +501,7 @@ func (s *Store) List(stateFilter string) []*protocol.Session {
 		var stateSince, stateUpdatedAt, lastSeen string
 		var isWorktree int
 		var contextWindowCap int
-		var endpointID, workspaceID, branch, mainRepo, repository, parentSessionID, activity, activityAt, lastModelRequestAt sql.NullString
+		var endpointID, branch, mainRepo, repository, parentSessionID, activity, activityAt, lastModelRequestAt sql.NullString
 
 		err := rows.Scan(
 			&session.ID,
@@ -525,7 +509,6 @@ func (s *Store) List(stateFilter string) []*protocol.Session {
 			&session.Agent,
 			&session.Directory,
 			&endpointID,
-			&workspaceID,
 			&session.ProfileID,
 			&branch,
 			&isWorktree,
@@ -556,9 +539,6 @@ func (s *Store) List(stateFilter string) []*protocol.Session {
 
 		if endpointID.Valid && endpointID.String != "" {
 			session.EndpointID = protocol.Ptr(endpointID.String)
-		}
-		if workspaceID.Valid && workspaceID.String != "" {
-			session.WorkspaceID = workspaceID.String
 		}
 		if branch.Valid && branch.String != "" {
 			session.Branch = protocol.Ptr(branch.String)

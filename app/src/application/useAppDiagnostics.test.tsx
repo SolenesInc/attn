@@ -18,7 +18,6 @@ function session(id: string, desktopId: string): Session {
     label: id,
     state: 'idle',
     cwd: `/repo/${id}`,
-    workspaceId: `legacy-${id}`,
     profileId: TEST_PROFILE_ID,
     desktopId,
     agent: 'claude',

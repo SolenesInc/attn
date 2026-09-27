@@ -18,18 +18,17 @@ func newWorkflowTestDaemon(t *testing.T) *Daemon {
 
 func sampleWorkflowRun(runID string) *protocol.WorkflowRun {
 	return &protocol.WorkflowRun{
-		RunID:       runID,
-		ScriptPath:  "/repo/.attn/workflows/ship.ts",
-		ScriptHash:  "hash-script",
-		ArgsJson:    protocol.Ptr(`{"target":"main"}`),
-		SessionID:   protocol.Ptr("sess-1"),
-		WorkspaceID: protocol.Ptr("ws-1"),
-		Status:      protocol.WorkflowRunStatusRunning,
-		Phase:       protocol.Ptr("plan"),
-		Harness:     protocol.Ptr("claude"),
-		Resumable:   true,
-		CreatedAt:   "2026-06-14T10:00:00Z",
-		UpdatedAt:   "2026-06-14T10:00:00Z",
+		RunID:      runID,
+		ScriptPath: "/repo/.attn/workflows/ship.ts",
+		ScriptHash: "hash-script",
+		ArgsJson:   protocol.Ptr(`{"target":"main"}`),
+		SessionID:  protocol.Ptr("sess-1"),
+		Status:     protocol.WorkflowRunStatusRunning,
+		Phase:      protocol.Ptr("plan"),
+		Harness:    protocol.Ptr("claude"),
+		Resumable:  true,
+		CreatedAt:  "2026-06-14T10:00:00Z",
+		UpdatedAt:  "2026-06-14T10:00:00Z",
 	}
 }
 

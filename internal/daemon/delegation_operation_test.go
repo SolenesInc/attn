@@ -394,7 +394,6 @@ func TestDelegationOperationRestartResumesAcceptedRecord(t *testing.T) {
 	d2.ptyBackend = &fakeSpawnBackend{}
 	d2.ensureGardenCollections()
 	consumeDelegatedPrompt(t, d2.ptyBackend.(*fakeSpawnBackend))
-	d2.loadWorkspacesFromStore()
 	d2.resumePendingDelegations()
 	done := waitDelegationOperation(t, d2, record.Operation.OperationID)
 	if done.State != protocol.DelegationOperationStateCompleted || done.SessionID != "session-restart" {

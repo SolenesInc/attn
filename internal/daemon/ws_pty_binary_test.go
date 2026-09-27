@@ -18,7 +18,7 @@ func TestEncodePtyOutputMessagePicksFormatByCapability(t *testing.T) {
 	}
 
 	legacy := &wsClient{}
-	legacy.setIdentity("test", "v", []string{protocol.CapabilityWorkspaceSessions})
+	legacy.setIdentity("test", "v", nil)
 	msg, err := encodePtyOutputMessage(legacy, "sess-1", event)
 	if err != nil {
 		t.Fatalf("encode legacy: %v", err)
@@ -41,7 +41,6 @@ func TestEncodePtyOutputMessagePicksFormatByCapability(t *testing.T) {
 
 	binaryCapable := &wsClient{}
 	binaryCapable.setIdentity("test", "v", []string{
-		protocol.CapabilityWorkspaceSessions,
 		protocol.CapabilityBinaryPtyOutput,
 	})
 	msg, err = encodePtyOutputMessage(binaryCapable, "sess-1", event)

@@ -484,12 +484,12 @@ func TestAutomationContinuityBindingUniqueActiveIndexRejectsSecondActiveRow(t *t
 		t.Fatal(err)
 	}
 	nowRaw := formatTicketTime(now)
-	if _, err := s.db.Exec(`INSERT INTO automation_continuity_bindings(id,definition_id,continuity_key,ticket_id,session_id,workspace_id,pane_id,status,created_at,updated_at) VALUES(?,?,?,?,?,?,?,?,?,?)`,
-		"binding-1", def.ID, "singleton", "ticket-1", "session-1", "workspace-1", "pane-1", AutomationBindingStatusActive, nowRaw, nowRaw); err != nil {
+	if _, err := s.db.Exec(`INSERT INTO automation_continuity_bindings(id,definition_id,continuity_key,ticket_id,session_id,status,created_at,updated_at) VALUES(?,?,?,?,?,?,?,?)`,
+		"binding-1", def.ID, "singleton", "ticket-1", "session-1", AutomationBindingStatusActive, nowRaw, nowRaw); err != nil {
 		t.Fatal(err)
 	}
-	_, err = s.db.Exec(`INSERT INTO automation_continuity_bindings(id,definition_id,continuity_key,ticket_id,session_id,workspace_id,pane_id,status,created_at,updated_at) VALUES(?,?,?,?,?,?,?,?,?,?)`,
-		"binding-2", def.ID, "singleton", "ticket-2", "session-2", "workspace-2", "pane-2", AutomationBindingStatusActive, nowRaw, nowRaw)
+	_, err = s.db.Exec(`INSERT INTO automation_continuity_bindings(id,definition_id,continuity_key,ticket_id,session_id,status,created_at,updated_at) VALUES(?,?,?,?,?,?,?,?)`,
+		"binding-2", def.ID, "singleton", "ticket-2", "session-2", AutomationBindingStatusActive, nowRaw, nowRaw)
 	if err == nil {
 		t.Fatal("expected a second active binding row for the same (definition, continuity_key) to be rejected")
 	}

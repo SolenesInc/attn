@@ -20,23 +20,20 @@ func addCharacterizationSession(
 	id string,
 	agent protocol.SessionAgent,
 	state protocol.SessionState,
-) string {
+) {
 	t.Helper()
 	directory := t.TempDir()
-	workspaceID := "workspace-" + id
-	addTestWorkspace(d, workspaceID, directory)
 	d.store.Add(&protocol.Session{
 		ID:             id,
 		Label:          id,
 		Agent:          agent,
 		Directory:      directory,
+		ProfileID:      defaultProfileID(t, d.store),
 		State:          state,
 		StateSince:     characterizationOldTimestamp,
 		StateUpdatedAt: characterizationOldTimestamp,
 		LastSeen:       characterizationOldTimestamp,
 	})
-	d.associateSessionWithWorkspace(id, workspaceID)
-	return workspaceID
 }
 
 func characterizationEventCount(events []protocol.WebSocketEvent, eventName, sessionID string) int {
@@ -72,9 +69,6 @@ func assertCharacterizationLiveEffects(t *testing.T, d *Daemon, capture *broadca
 	events := capture.snapshot()
 	if got := characterizationEventCount(events, protocol.EventSessionStateChanged, sessionID); got != 1 {
 		t.Fatalf("session_state_changed events=%d, want 1; events=%+v", got, events)
-	}
-	if got := characterizationEventCount(events, protocol.EventWorkspaceStateChanged, ""); got != 1 {
-		t.Fatalf("workspace_state_changed events=%d, want 1; events=%+v", got, events)
 	}
 }
 
@@ -237,9 +231,6 @@ func TestSessionStateCharacterization_ProcessExitEffects(t *testing.T) {
 	events := capture.snapshot()
 	if got := characterizationEventCount(events, protocol.EventSessionStateChanged, sessionID); got != 1 {
 		t.Fatalf("session_state_changed events=%d, want 1; events=%+v", got, events)
-	}
-	if got := characterizationEventCount(events, protocol.EventWorkspaceStateChanged, ""); got != 1 {
-		t.Fatalf("workspace_state_changed events=%d, want 1; events=%+v", got, events)
 	}
 	if got := characterizationEventCount(events, protocol.EventSessionExited, ""); got != 1 {
 		t.Fatalf("session_exited events=%d, want 1; events=%+v", got, events)

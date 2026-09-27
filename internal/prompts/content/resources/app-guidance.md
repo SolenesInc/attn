@@ -2,7 +2,7 @@
 
 This directory is one attn app. An app is an automation attn runs for you: attn
 wakes it when something happens, it keeps its own documents, it can show a tile
-in a workspace, and it is versioned by the content of what it builds so you can
+on a desktop, and it is versioned by the content of what it builds so you can
 roll it back.
 
 You can write the whole thing from this file. Nothing else needs reading.
@@ -93,7 +93,7 @@ rebuild can never be updated. That is deliberate. There is no silent resume.
     }
 
 `ctx.current.snapshot()` is attn's current state — the same domain projection
-the app itself is handed when it connects: sessions, workspaces, tickets, PRs,
+the app itself is handed when it connects: sessions, tickets, PRs,
 repos, seeds, crew, endpoints, apps, and the `asOfSeq` they were read at. It is
 the whole reconcile-time surface besides your own collections. There is no
 replay: a rebuild reads what is true now, never old fact payloads.
@@ -132,14 +132,14 @@ interrupted, and the rebuild is simply still owed.
 
 ## Views
 
-A `[[views]]` block declares a component attn can mount as a tile in a
-workspace. The user docks it from the command menu; the tile stays where they put
+A `[[views]]` block declares a component attn can mount as a tile on a
+desktop. The user docks it from the command menu; the tile stays where they put
 it, across restarts, until they close it.
 
 A view is a function of where it sits. It is handed `ViewProps`:
 
-    workspaceId   the workspace this tile is in
-    sessionId     the session that workspace has selected, or null
+    desktopId     the desktop this tile is on
+    sessionId     the agent this tile is bound to, or null
     tileId        stable for the life of this docked tile
     params        the line the user typed when docking
 

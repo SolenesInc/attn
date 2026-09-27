@@ -83,7 +83,7 @@ func TestRealAgentHarness(t *testing.T) {
 		t.Fatalf("websocket dial: %v", err)
 	}
 	defer conn.Close(websocket.StatusNormalClosure, "")
-	sendWorkspaceClientHello(t, conn)
+	sendHello(t, conn)
 
 	c := client.New(sockPath)
 	sessionID := wrapper.GenerateSessionID()

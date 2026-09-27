@@ -9,6 +9,7 @@ import (
 	"testing/synctest"
 	"time"
 
+	"github.com/victorarias/attn/internal/hub"
 	"github.com/victorarias/attn/internal/layouttree"
 	"github.com/victorarias/attn/internal/protocol"
 	"os"
@@ -49,7 +50,7 @@ func TestTrustedTauriOrigin(t *testing.T) {
 
 func TestBrowserHostRequiresMatchingToken(t *testing.T) {
 	t.Setenv("ATTN_BROWSER_HOST_TOKEN", "expected-secret")
-	client := newWorkspaceProtocolTestClient()
+	client := newProtocolTestClient()
 	client.trustedTauriOrigin = true
 	d := newHelloTestDaemon(t, "client-token")
 
@@ -80,10 +81,10 @@ func TestBrowserHostRequiresMatchingToken(t *testing.T) {
 }
 
 func TestOrdinaryClientsKeepCommandSizedWebSocketLimit(t *testing.T) {
-	client := newWorkspaceProtocolTestClient()
+	client := newProtocolTestClient()
 	client.trustedTauriOrigin = true
 	client.browserHostAuthenticated = true
-	client.setIdentity("tauri-app", "test", []string{protocol.CapabilityWorkspaceSessions})
+	client.setIdentity("tauri-app", "test", nil)
 
 	if got := websocketReadLimit(client); got != defaultWebSocketReadBytes {
 		t.Fatalf("ordinary client read limit = %d, want %d", got, defaultWebSocketReadBytes)
@@ -149,12 +150,11 @@ func TestOpenBrowserRetargetsExistingTileAtSameURL(t *testing.T) {
 		}
 		_ = firstClient.Close()
 
-		host := newWorkspaceProtocolTestClient()
+		host := newProtocolTestClient()
 		host.trustedTauriOrigin = true
 		host.browserHostAuthenticated = true
 		host.connectedAt = time.Now()
 		host.setIdentity("tauri-app", "test", []string{
-			protocol.CapabilityWorkspaceSessions,
 			protocol.CapabilityBrowserHost,
 		})
 		d.wsHub.mu.Lock()
@@ -170,7 +170,7 @@ func TestOpenBrowserRetargetsExistingTileAtSameURL(t *testing.T) {
 
 		request := requireBrowserControlRequest(t, host)
 		if request.Event != protocol.EventBrowserControlRequest ||
-			protocol.Deref(request.DesktopID) != desktop.ID ||
+			request.DesktopID != desktop.ID ||
 			request.Action != "navigate" ||
 			protocol.Deref(request.Text) != "http://localhost:3000" {
 			t.Fatalf("request = %+v", request)
@@ -250,41 +250,8 @@ func TestOpenBrowserDocksBesideTheTileOfAPanelessDesktop(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if !browserTileInWorkspace(updated.Tree) || !layouttree.HasTile(updated.Tree, markdownTileIDForPath(notes)) {
+	if !browserTileOn(updated.Tree) || !layouttree.HasTile(updated.Tree, markdownTileIDForPath(notes)) {
 		t.Fatalf("desktop tree = %+v, want the browser beside the notes tile", updated.Tree)
-	}
-}
-
-func TestBrowserTargetFromRemoteWorkspace(t *testing.T) {
-	target, err := browserTargetFromRemoteWorkspace(&protocol.Workspace{
-		ID: "remote-workspace",
-		Layout: &protocol.WorkspaceLayout{
-			WorkspaceID:  "remote-workspace",
-			ActivePaneID: "",
-			LayoutJson:   `{"type":"tile","tile_id":"tile-browser","tile_kind":"browser","tile_params":"https://example.com"}`,
-		},
-	}, "endpoint-1")
-	if err != nil {
-		t.Fatalf("browserTargetFromRemoteWorkspace() error = %v", err)
-	}
-	if target.workspaceID != "remote-workspace" || target.remoteEndpointID != "endpoint-1" {
-		t.Fatalf("target = %+v", target)
-	}
-	if target.anchorLeafID != browserTileID || !browserTileInWorkspace(target.layout) {
-		t.Fatalf("remote target did not preserve the browser tile: %+v", target)
-	}
-}
-
-func TestBrowserControlTargetUsesExplicitWorkspace(t *testing.T) {
-	d, _, workspaceID := setupMarkdownWorkspace(t)
-	target, err := d.browserControlTarget(&protocol.BrowserControlMessage{
-		WorkspaceID: protocol.Ptr(workspaceID),
-	})
-	if err != nil {
-		t.Fatalf("browserControlTarget() error = %v", err)
-	}
-	if target.workspaceID != workspaceID {
-		t.Fatalf("browserControlTarget() workspace = %q, want %q", target.workspaceID, workspaceID)
 	}
 }
 
@@ -306,12 +273,11 @@ func TestBrowserControlBrokersToCapableClient(t *testing.T) {
 		}
 		_ = openClient.Close()
 
-		host := newWorkspaceProtocolTestClient()
+		host := newProtocolTestClient()
 		host.trustedTauriOrigin = true
 		host.browserHostAuthenticated = true
 		host.connectedAt = time.Now()
 		host.setIdentity("tauri-app", "test", []string{
-			protocol.CapabilityWorkspaceSessions,
 			protocol.CapabilityBrowserHost,
 		})
 		d.wsHub.mu.Lock()
@@ -355,30 +321,28 @@ func TestBrowserControlBrokersToCapableClient(t *testing.T) {
 func TestRemoteBrowserControlReturnsResultToHubClient(t *testing.T) {
 	base := NewForTesting(filepath.Join(t.TempDir(), "test.sock"))
 	synctest.Test(t, func(t *testing.T) {
-		d, _, workspaceID := setupMarkdownWorkspaceOn(t, base)
+		d, _ := setupAgentDesktopOn(t, base)
 		stopDaemonBackground(t, d)
-		if err := d.dockTile(workspaceID, "pane-1", browserTileID, string(layouttree.TileKindBrowser), "http://localhost:3000", "", protocol.LayoutDockEdgeRight, nil); err != nil {
-			t.Fatal(err)
+		if resp := openBrowserFor(t, d, "", "http://localhost:3000"); !resp.Ok {
+			t.Fatalf("open_browser: %v", protocol.Deref(resp.Error))
 		}
 
-		host := newWorkspaceProtocolTestClient()
+		host := newProtocolTestClient()
 		host.trustedTauriOrigin = true
 		host.browserHostAuthenticated = true
 		host.connectedAt = time.Now()
 		host.setIdentity("tauri-app", "test", []string{
-			protocol.CapabilityWorkspaceSessions,
 			protocol.CapabilityBrowserHost,
 		})
 		d.wsHub.mu.Lock()
 		d.wsHub.clients[host] = true
 		d.wsHub.mu.Unlock()
 
-		hubClient := newWorkspaceProtocolTestClient()
+		hubClient := newProtocolTestClient()
 		go d.handleRemoteBrowserControl(hubClient, &protocol.BrowserControlMessage{
-			Cmd:         protocol.CmdBrowserControl,
-			Action:      "get_title",
-			RequestID:   protocol.Ptr("remote-request-1"),
-			WorkspaceID: protocol.Ptr(workspaceID),
+			Cmd:       protocol.CmdBrowserControl,
+			Action:    "get_title",
+			RequestID: protocol.Ptr("remote-request-1"),
 		})
 
 		request := requireBrowserControlRequest(t, host)
@@ -416,19 +380,17 @@ func TestBrowserControlIgnoresResultFromDifferentHost(t *testing.T) {
 	}
 	_ = openClient.Close()
 
-	host := newWorkspaceProtocolTestClient()
+	host := newProtocolTestClient()
 	host.trustedTauriOrigin = true
 	host.browserHostAuthenticated = true
 	host.connectedAt = time.Now()
 	host.setIdentity("tauri-app", "test", []string{
-		protocol.CapabilityWorkspaceSessions,
 		protocol.CapabilityBrowserHost,
 	})
-	spoof := newWorkspaceProtocolTestClient()
+	spoof := newProtocolTestClient()
 	spoof.trustedTauriOrigin = true
 	spoof.browserHostAuthenticated = true
 	spoof.setIdentity("tauri-app", "test", []string{
-		protocol.CapabilityWorkspaceSessions,
 		protocol.CapabilityBrowserHost,
 	})
 	d.wsHub.mu.Lock()
@@ -467,5 +429,26 @@ func TestBrowserControlIgnoresResultFromDifferentHost(t *testing.T) {
 	}
 	if got := protocol.Deref(resp.Data); got != "real" {
 		t.Fatalf("response data = %q, want real", got)
+	}
+}
+
+func TestBrowserForAnOutpostAgentRefusesByNamingTheFence(t *testing.T) {
+	d := NewForTesting(filepath.Join(t.TempDir(), "test.sock"))
+	endpoint, err := d.store.AddEndpoint("gpu-box", "gpu", "")
+	if err != nil {
+		t.Fatalf("AddEndpoint: %v", err)
+	}
+	d.hubManager = hub.NewManager(d.store, nil, nil, nil, nil, nil)
+	if !d.hubManager.ReplaceRemoteSessions(endpoint.ID, []protocol.Session{{ID: "remote-agent", Label: "remote"}}) {
+		t.Fatal("the endpoint mirrored nothing")
+	}
+
+	resp := openBrowserFor(t, d, "remote-agent", "https://example.com")
+	if resp.Ok || !strings.Contains(protocol.Deref(resp.Error), hub.ErrOutpostsOff.Error()) {
+		t.Fatalf("open_browser for an outpost agent = %+v, want a refusal naming %q", resp, hub.ErrOutpostsOff)
+	}
+	result := d.runBrowserControl(&protocol.BrowserControlMessage{Cmd: protocol.CmdBrowserControl, Action: "get_title", SessionID: protocol.Ptr("remote-agent")})
+	if !strings.Contains(result.err, hub.ErrOutpostsOff.Error()) {
+		t.Fatalf("browser_control for an outpost agent = %+v, want a refusal naming %q", result, hub.ErrOutpostsOff)
 	}
 }

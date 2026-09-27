@@ -839,7 +839,7 @@ func TestDismissingALegacyPatternIsRoutedFromTheApp(t *testing.T) {
 	d := NewForTesting(filepath.Join(t.TempDir(), "daemon.sock"))
 	client := busTestClient()
 	client.setIdentity("daemon-test", protocol.ProtocolVersion,
-		[]string{protocol.CapabilityWorkspaceSessions})
+		nil)
 	d.handleClientMessage(client, []byte(
 		`{"cmd":"automode_legacy_dismiss","pattern":"*curl*","request_id":"r1"}`))
 

@@ -368,7 +368,7 @@ async function main() {
       20_000,
       new Set([targetPaneId]),
     );
-    if (!utilityPane?.runtime_id) {
+    if (!utilityPane?.session_id) {
       throw new Error('Utility pane not found');
     }
 
@@ -424,7 +424,7 @@ async function main() {
       runId,
       sessionId,
       paneId: utilityPane.pane_id,
-      runtimeId: utilityPane.runtime_id,
+      runtimeId: utilityPane.session_id,
       chunkBytes: options.chunkBytes,
       chunkCount: options.chunkCount,
       chunkDelayMs: options.chunkDelayMs,

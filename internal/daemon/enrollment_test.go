@@ -50,7 +50,7 @@ func healthPayload(t *testing.T, d *Daemon) map[string]any {
 func initialStateEvent(t *testing.T, d *Daemon) protocol.InitialStateMessage {
 	t.Helper()
 	client := &wsClient{send: make(chan outboundMessage, 4)}
-	client.setIdentity("daemon-test", "protocol-"+protocol.ProtocolVersion, []string{protocol.CapabilityWorkspaceSessions})
+	client.setIdentity("daemon-test", "protocol-"+protocol.ProtocolVersion, nil)
 	d.sendInitialState(client)
 	message := <-client.send
 	var event protocol.InitialStateMessage

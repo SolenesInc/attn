@@ -64,7 +64,7 @@ async function main() {
     });
 
     const utilityPane = await observer.waitForUtilityPane(sessionId, 20_000, existingPaneIds);
-    if (!utilityPane?.runtime_id) {
+    if (!utilityPane?.session_id) {
       throw new Error('Utility pane runtime not found');
     }
 

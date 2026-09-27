@@ -360,8 +360,6 @@ export async function paneIdForSession(client, sessionId) {
   return ws.activePaneId || ws.panes?.[0]?.paneId || null;
 }
 
-// The observer's WS `unregister` is rejected without the workspace_sessions
-// capability, so close_session is the supported cleanup path.
 export async function closeSessions(client, ids) {
   await Promise.allSettled([...new Set(ids)].map((sessionId) => (
     client.request('close_session', { sessionId }, { timeoutMs: 15_000 })

@@ -122,14 +122,13 @@ test('agent pane stays painted after opening a shell split', async ({ page, daem
 
 async function setupAgent(
   page: import('@playwright/test').Page,
-  daemon: { injectSession: (s: { id: string; label: string; state: string; directory?: string; workspace_id?: string }) => Promise<void> },
+  daemon: { injectSession: (s: { id: string; label: string; state: string; directory?: string }) => Promise<void> },
   agentId: string,
 ) {
-  const workspaceId = `workspace-${agentId}`;
-  await page.evaluate(({ sessionId, workspaceId }) => {
-    window.__TEST_INJECT_SESSION?.({ id: sessionId, label: 'Agent Split', state: 'working', cwd: '/tmp/test/agent-split', workspaceId });
-  }, { sessionId: agentId, workspaceId });
-  await daemon.injectSession({ id: agentId, label: 'Agent Split', state: 'working', directory: '/tmp/test/agent-split', workspace_id: workspaceId });
+  await page.evaluate(({ sessionId }) => {
+    window.__TEST_INJECT_SESSION?.({ id: sessionId, label: 'Agent Split', state: 'working', cwd: '/tmp/test/agent-split' });
+  }, { sessionId: agentId });
+  await daemon.injectSession({ id: agentId, label: 'Agent Split', state: 'working', directory: '/tmp/test/agent-split' });
   await page.locator(`[data-testid="session-${agentId}"]`).click();
   const terminal = page.locator(`[data-pane-session-id="${agentId}"][data-pane-kind="agent"] .terminal-container`);
   await expect(terminal).toBeVisible();
@@ -144,7 +143,7 @@ async function splitWithPeer(
 ) {
   const peerId = `${agentId}-peer`;
   await page.evaluate((id) => {
-    window.__TEST_INJECT_SESSION?.({ id, label: 'Split Peer', state: 'working', cwd: '/tmp/test/agent-split', workspaceId: '' });
+    window.__TEST_INJECT_SESSION?.({ id, label: 'Split Peer', state: 'working', cwd: '/tmp/test/agent-split' });
   }, peerId);
   await daemon.injectSession({ id: peerId, label: 'Split Peer', state: 'working', directory: '/tmp/test/agent-split' });
   await page.locator(`[data-testid="sidebar-session-${peerId}"]`).getByRole('button', { name: 'Open Split Peer' }).click();

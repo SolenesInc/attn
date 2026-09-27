@@ -1313,6 +1313,12 @@ CREATE TABLE IF NOT EXISTS app_reconcile_progress (
 		);
 		DROP TABLE IF EXISTS instance_roles;
 	`},
+	{156, "drop the retired workspace tables and columns", `
+		DROP INDEX IF EXISTS idx_sessions_workspace_id;
+		DROP TABLE IF EXISTS workspace_layout_panes;
+		DROP TABLE IF EXISTS workspace_layouts;
+		DROP TABLE IF EXISTS workspaces;
+	`},
 }
 
 const migration99SQL = `
@@ -1411,6 +1417,18 @@ func openSQLite(dbPath string) (*sql.DB, error) {
 	} else {
 		db.SetMaxOpenConns(sqliteFileConnectionPoolSize)
 		db.SetMaxIdleConns(sqliteFileConnectionPoolSize)
+	}
+	return db, nil
+}
+
+func OpenDBAtSchemaVersion(dbPath string, version int) (*sql.DB, error) {
+	db, err := openSQLite(dbPath)
+	if err != nil {
+		return nil, err
+	}
+	if err := applyPendingMigrations(db, 0, 0, version); err != nil {
+		db.Close()
+		return nil, err
 	}
 	return db, nil
 }
@@ -1569,13 +1587,13 @@ func upgradeSchema(db *sql.DB, dbPath string) (SchemaUpgrade, error) {
 		log.Printf("[store] pre-migration backup written to %s (schema v%d -> v%d)", path, currentVersion, upgrade.To)
 	}
 
-	if err := applyPendingMigrations(db, recorded, currentVersion); err != nil {
+	if err := applyPendingMigrations(db, recorded, currentVersion, upgrade.To); err != nil {
 		return upgrade, err
 	}
 	return upgrade, nil
 }
 
-func applyPendingMigrations(db *sql.DB, recorded, currentVersion int) error {
+func applyPendingMigrations(db *sql.DB, recorded, currentVersion, through int) error {
 	tx, err := db.Begin()
 	if err != nil {
 		return fmt.Errorf("starting the schema upgrade transaction: %w", err)
@@ -1591,6 +1609,9 @@ func applyPendingMigrations(db *sql.DB, recorded, currentVersion int) error {
 	for _, m := range migrations {
 		if m.version <= currentVersion {
 			continue
+		}
+		if m.version > through {
+			break
 		}
 
 		if m.version == 141 {
@@ -1964,6 +1985,11 @@ func applyPendingMigrations(db *sql.DB, recorded, currentVersion int) error {
 			}
 		} else if m.version == 150 {
 			if err := applyMigration150(tx); err != nil {
+				tx.Rollback()
+				return fmt.Errorf("migration %d (%s): %w", m.version, m.desc, err)
+			}
+		} else if m.version == 156 {
+			if err := applyMigration156(tx, m.sql); err != nil {
 				tx.Rollback()
 				return fmt.Errorf("migration %d (%s): %w", m.version, m.desc, err)
 			}
@@ -2468,6 +2494,37 @@ func applyMigration155(tx *sql.Tx, migrationSQL string) error {
 	}
 	_, err = tx.Exec(migrationSQL)
 	return err
+}
+
+var retiredWorkspaceColumns = []struct{ table, column string }{
+	{"sessions", "workspace_id"},
+	{"sessions", "pinned_at"},
+	{"chief_of_staff_dispatches", "workspace_id"},
+	{"workflow_runs", "workspace_id"},
+	{"delegation_operations", "workspace_id"},
+	{"automation_runs", "workspace_id"},
+	{"automation_runs", "pane_id"},
+	{"automation_continuity_bindings", "workspace_id"},
+	{"automation_continuity_bindings", "pane_id"},
+}
+
+func applyMigration156(tx *sql.Tx, migrationSQL string) error {
+	if _, err := tx.Exec(migrationSQL); err != nil {
+		return err
+	}
+	for _, retired := range retiredWorkspaceColumns {
+		present, err := columnExists(tx, retired.table, retired.column)
+		if err != nil {
+			return err
+		}
+		if !present {
+			continue
+		}
+		if _, err := tx.Exec(fmt.Sprintf("ALTER TABLE %s DROP COLUMN %s", retired.table, retired.column)); err != nil {
+			return fmt.Errorf("dropping %s.%s: %w", retired.table, retired.column, err)
+		}
+	}
+	return nil
 }
 
 func applyMigration152(tx *sql.Tx, migrationSQL string) error {

@@ -34,7 +34,7 @@ func TestWireTraceFlowGolden(t *testing.T) {
 	if err := os.MkdirAll(workDir, 0o755); err != nil {
 		t.Fatalf("create work dir: %v", err)
 	}
-	client := newWorkspaceProtocolTestClient()
+	client := newProtocolTestClient()
 
 	d.handleSpawnSession(client, &protocol.SpawnSessionMessage{
 		Cmd: protocol.CmdSpawnSession, ID: "sess-1", Cwd: workDir, Agent: protocol.AgentShellValue,

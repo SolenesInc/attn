@@ -19,7 +19,6 @@ async function injectSessions(
         state: 'working',
         cwd: session.cwd,
         agent: 'shell',
-        workspaceId: '',
       });
     }
   }, sessions);

@@ -108,7 +108,6 @@ describe('useDaemonSocket PTY kill sequencing', () => {
     const { unmount } = renderHook(() =>
       useDaemonSocket({
         onSessionsUpdate: vi.fn(),
-        onWorkspacesUpdate: vi.fn(),
         onPRsUpdate: vi.fn(),
         onReposUpdate: vi.fn(),
         onAuthorsUpdate: vi.fn(),
@@ -149,7 +148,6 @@ describe('useDaemonSocket PTY kill sequencing', () => {
     const { unmount } = renderHook(() =>
       useDaemonSocket({
         onSessionsUpdate: vi.fn(),
-        onWorkspacesUpdate: vi.fn(),
         onPRsUpdate: vi.fn(),
         onReposUpdate: vi.fn(),
         onAuthorsUpdate: vi.fn(),
@@ -184,7 +182,6 @@ describe('useDaemonSocket PTY kill sequencing', () => {
     const { unmount } = renderHook(() =>
       useDaemonSocket({
         onSessionsUpdate: vi.fn(),
-        onWorkspacesUpdate: vi.fn(),
         onPRsUpdate: vi.fn(),
         onReposUpdate: vi.fn(),
         onAuthorsUpdate: vi.fn(),
@@ -209,7 +206,6 @@ describe('useDaemonSocket PTY kill sequencing', () => {
     const { unmount } = renderHook(() =>
       useDaemonSocket({
         onSessionsUpdate: vi.fn(),
-        onWorkspacesUpdate: vi.fn(),
         onPRsUpdate: vi.fn(),
         onReposUpdate: vi.fn(),
         onAuthorsUpdate: vi.fn(),
@@ -236,7 +232,6 @@ describe('useDaemonSocket PTY kill sequencing', () => {
     const { rerender, unmount } = renderHook(
       ({ onSessionsUpdate }) => useDaemonSocket({
         onSessionsUpdate,
-        onWorkspacesUpdate: vi.fn(),
         onPRsUpdate: vi.fn(),
         onReposUpdate: vi.fn(),
         onAuthorsUpdate: vi.fn(),
@@ -265,7 +260,6 @@ describe('useDaemonSocket PTY kill sequencing', () => {
     const { unmount } = renderHook(() =>
       useDaemonSocket({
         onSessionsUpdate: vi.fn(),
-        onWorkspacesUpdate: vi.fn(),
         onPRsUpdate: vi.fn(),
         onReposUpdate: vi.fn(),
         onAuthorsUpdate: vi.fn(),
@@ -284,7 +278,7 @@ describe('useDaemonSocket PTY kill sequencing', () => {
       ws.emit({
         event: 'browser_control_request',
         request_id: 'browser-request-1',
-        workspace_id: 'workspace-1',
+        desktop_id: 'desktop-1',
         tile_id: 'tile-browser',
         action: 'type',
         selector: '#query',
@@ -294,7 +288,7 @@ describe('useDaemonSocket PTY kill sequencing', () => {
 
     await waitFor(() => {
       expect(vi.mocked(invoke)).toHaveBeenCalledWith('browser_host_control', {
-        label: 'browser-workspace-1-tile-browser',
+        label: 'browser-desktop-1-tile-browser',
         action: 'type',
         selector: '#query',
         text: 'browser text',
@@ -315,7 +309,6 @@ describe('useDaemonSocket PTY kill sequencing', () => {
     const { result, unmount } = renderHook(() =>
       useDaemonSocket({
         onSessionsUpdate: vi.fn(),
-        onWorkspacesUpdate: vi.fn(),
         onPRsUpdate: vi.fn(),
         onReposUpdate: vi.fn(),
         onAuthorsUpdate: vi.fn(),
@@ -375,7 +368,6 @@ describe('useDaemonSocket PTY kill sequencing', () => {
     const { result, unmount } = renderHook(() =>
       useDaemonSocket({
         onSessionsUpdate: vi.fn(),
-        onWorkspacesUpdate: vi.fn(),
         onPRsUpdate: vi.fn(),
         onReposUpdate: vi.fn(),
         onAuthorsUpdate: vi.fn(),
@@ -412,7 +404,6 @@ describe('useDaemonSocket PTY kill sequencing', () => {
     const { result, unmount } = renderHook(() =>
       useDaemonSocket({
         onSessionsUpdate: vi.fn(),
-        onWorkspacesUpdate: vi.fn(),
         onPRsUpdate: vi.fn(),
         onReposUpdate: vi.fn(),
         onAuthorsUpdate: vi.fn(),
@@ -454,7 +445,6 @@ describe('useDaemonSocket PTY kill sequencing', () => {
     const { result, unmount } = renderHook(() =>
       useDaemonSocket({
         onSessionsUpdate: vi.fn(),
-        onWorkspacesUpdate: vi.fn(),
         onPRsUpdate: vi.fn(),
         onReposUpdate: vi.fn(),
         onAuthorsUpdate: vi.fn(),
@@ -469,7 +459,6 @@ describe('useDaemonSocket PTY kill sequencing', () => {
         event: 'initial_state',
         protocol_version: '41',
         sessions: [],
-        workspaces: [],
         prs: [],
         repos: [],
         authors: [],
@@ -500,7 +489,6 @@ describe('useDaemonSocket PTY kill sequencing', () => {
     const { result, unmount } = renderHook(() =>
       useDaemonSocket({
         onSessionsUpdate: vi.fn(),
-        onWorkspacesUpdate: vi.fn(),
         onPRsUpdate: vi.fn(),
         onReposUpdate: vi.fn(),
         onAuthorsUpdate: vi.fn(),
@@ -541,7 +529,6 @@ describe('useDaemonSocket PTY kill sequencing', () => {
     const { result, unmount } = renderHook(() =>
       useDaemonSocket({
         onSessionsUpdate: vi.fn(),
-        onWorkspacesUpdate: vi.fn(),
         onPRsUpdate: vi.fn(),
         onReposUpdate: vi.fn(),
         onAuthorsUpdate: vi.fn(),
@@ -581,7 +568,6 @@ describe('useDaemonSocket PTY kill sequencing', () => {
     const { result, unmount } = renderHook(() =>
       useDaemonSocket({
         onSessionsUpdate: vi.fn(),
-        onWorkspacesUpdate: vi.fn(),
         onPRsUpdate: vi.fn(),
         onReposUpdate: vi.fn(),
         onAuthorsUpdate: vi.fn(),
@@ -606,7 +592,6 @@ describe('useDaemonSocket PTY kill sequencing', () => {
     const { result, unmount } = renderHook(() =>
       useDaemonSocket({
         onSessionsUpdate: vi.fn(),
-        onWorkspacesUpdate: vi.fn(),
         onPRsUpdate: vi.fn(),
         onEndpointsUpdate: vi.fn(),
         onReposUpdate: vi.fn(),
@@ -640,7 +625,6 @@ describe('useDaemonSocket PTY kill sequencing', () => {
     const { result, unmount } = renderHook(() =>
       useDaemonSocket({
         onSessionsUpdate: vi.fn(),
-        onWorkspacesUpdate: vi.fn(),
         onPRsUpdate: vi.fn(),
         onPluginsUpdate,
         onReposUpdate: vi.fn(),
@@ -743,7 +727,6 @@ describe('useDaemonSocket PTY kill sequencing', () => {
     const { unmount } = renderHook(() =>
       useDaemonSocket({
         onSessionsUpdate: vi.fn(),
-        onWorkspacesUpdate: vi.fn(),
         onPRsUpdate: vi.fn(),
         onReposUpdate: vi.fn(),
         onAuthorsUpdate: vi.fn(),
@@ -757,7 +740,6 @@ describe('useDaemonSocket PTY kill sequencing', () => {
       ws.emit({
         event: 'initial_state',
         sessions: [],
-        workspaces: [],
         prs: [],
         repos: [],
         authors: [],
@@ -780,7 +762,6 @@ describe('useDaemonSocket PTY kill sequencing', () => {
     const { result, unmount } = renderHook(() =>
       useDaemonSocket({
         onSessionsUpdate: vi.fn(),
-        onWorkspacesUpdate: vi.fn(),
         onPRsUpdate: vi.fn(),
         onReposUpdate: vi.fn(),
         onAuthorsUpdate: vi.fn(),
@@ -836,7 +817,6 @@ describe('useDaemonSocket PTY kill sequencing', () => {
     const { result, unmount } = renderHook(() =>
       useDaemonSocket({
         onSessionsUpdate: vi.fn(),
-        onWorkspacesUpdate: vi.fn(),
         onPRsUpdate: vi.fn(),
         onReposUpdate: vi.fn(),
         onAuthorsUpdate: vi.fn(),
@@ -868,7 +848,6 @@ describe('useDaemonSocket PTY kill sequencing', () => {
     const { result, unmount } = renderHook(() =>
       useDaemonSocket({
         onSessionsUpdate: vi.fn(),
-        onWorkspacesUpdate: vi.fn(),
         onPRsUpdate: vi.fn(),
         onReposUpdate: vi.fn(),
         onAuthorsUpdate: vi.fn(),
@@ -909,7 +888,6 @@ describe('useDaemonSocket PTY kill sequencing', () => {
     const { result, unmount } = renderHook(() =>
       useDaemonSocket({
         onSessionsUpdate: vi.fn(),
-        onWorkspacesUpdate: vi.fn(),
         onPRsUpdate: vi.fn(),
         onReposUpdate: vi.fn(),
         onAuthorsUpdate: vi.fn(),
@@ -938,7 +916,6 @@ describe('useDaemonSocket PTY kill sequencing', () => {
     const { unmount } = renderHook(() =>
       useDaemonSocket({
         onSessionsUpdate: vi.fn(),
-        onWorkspacesUpdate: vi.fn(),
         onPRsUpdate: vi.fn(),
         onReposUpdate: vi.fn(),
         onAuthorsUpdate: vi.fn(),
@@ -962,7 +939,6 @@ describe('useDaemonSocket PTY kill sequencing', () => {
     const { unmount } = renderHook(() =>
       useDaemonSocket({
         onSessionsUpdate,
-        onWorkspacesUpdate: vi.fn(),
         onPRsUpdate: vi.fn(),
         onReposUpdate: vi.fn(),
         onAuthorsUpdate: vi.fn(),
@@ -981,7 +957,6 @@ describe('useDaemonSocket PTY kill sequencing', () => {
             label: 'Agent',
             agent: 'codex',
             directory: '/tmp/repo',
-            workspace_id: 'workspace-1',
             state: 'working',
           },
           {
@@ -989,11 +964,9 @@ describe('useDaemonSocket PTY kill sequencing', () => {
             label: 'Shell',
             agent: 'shell',
             directory: '/tmp/repo',
-            workspace_id: 'workspace-1',
             state: 'working',
           },
         ],
-        workspaces: [],
         prs: [],
         repos: [],
         authors: [],
@@ -1014,7 +987,6 @@ describe('useDaemonSocket PTY kill sequencing', () => {
           label: 'Shell 2',
           agent: 'shell',
           directory: '/tmp/repo',
-          workspace_id: 'workspace-1',
           state: 'working',
         },
       });
@@ -1024,78 +996,6 @@ describe('useDaemonSocket PTY kill sequencing', () => {
       expect.objectContaining({ id: 'agent-1', agent: 'codex' }),
       expect.objectContaining({ id: 'shell-1', agent: 'shell' }),
       expect.objectContaining({ id: 'shell-2', agent: 'shell' }),
-    ]);
-
-    unmount();
-  });
-
-  it('preserves workspace layout when a state update omits layout payload', async () => {
-    const onWorkspacesUpdate = vi.fn();
-    const { unmount } = renderHook(() =>
-      useDaemonSocket({
-        onSessionsUpdate: vi.fn(),
-        onWorkspacesUpdate,
-        onPRsUpdate: vi.fn(),
-        onReposUpdate: vi.fn(),
-        onAuthorsUpdate: vi.fn(),
-        wsUrl: 'ws://localhost:9999/ws',
-      }),
-    );
-
-    const ws = await waitForOpenSocket();
-    const layout = {
-      workspace_id: 'workspace-1',
-      active_pane_id: 'pane-1',
-      layout_json: '{"type":"pane","pane_id":"pane-1"}',
-      panes: [{
-        workspace_id: 'workspace-1',
-        pane_id: 'pane-1',
-        kind: 'agent',
-        runtime_id: 'session-1',
-        session_id: 'session-1',
-        title: 'Session 1',
-      }],
-    };
-
-    act(() => {
-      ws.emit({
-        event: 'initial_state',
-        protocol_version: PROTOCOL_VERSION,
-        sessions: [],
-        workspaces: [{
-          id: 'workspace-1',
-          title: 'Workspace',
-          directory: '/tmp/repo',
-          status: 'idle',
-          muted: false,
-          layout,
-        }],
-        prs: [],
-        repos: [],
-        authors: [],
-        settings: {},
-      });
-    });
-
-    act(() => {
-      ws.emit({
-        event: 'workspace_state_changed',
-        workspace: {
-          id: 'workspace-1',
-          title: 'Workspace',
-          directory: '/tmp/repo',
-          status: 'working',
-          muted: false,
-        },
-      });
-    });
-
-    expect(onWorkspacesUpdate).toHaveBeenLastCalledWith([
-      expect.objectContaining({
-        id: 'workspace-1',
-        status: 'working',
-        layout,
-      }),
     ]);
 
     unmount();
@@ -1123,7 +1023,6 @@ describe('useDaemonSocket PTY kill sequencing', () => {
 
   it('leaves attachment to the mounted pane after spawning a daemon-known runtime', async () => {
     const onSessionsUpdate = vi.fn();
-    const onWorkspacesUpdate = vi.fn();
     const onPRsUpdate = vi.fn();
     const onReposUpdate = vi.fn();
     const onAuthorsUpdate = vi.fn();
@@ -1131,7 +1030,6 @@ describe('useDaemonSocket PTY kill sequencing', () => {
     const { unmount } = renderHook(() =>
       useDaemonSocket({
         onSessionsUpdate,
-        onWorkspacesUpdate,
         onPRsUpdate,
         onReposUpdate,
         onAuthorsUpdate,
@@ -1146,25 +1044,6 @@ describe('useDaemonSocket PTY kill sequencing', () => {
         event: 'initial_state',
         protocol_version: PROTOCOL_VERSION,
         sessions: [],
-        workspaces: [{
-          id: 'workspace-sess-remote',
-          title: 'Remote',
-          directory: '/tmp/repo',
-          status: 'idle',
-          muted: false,
-          layout: {
-            workspace_id: 'workspace-sess-remote',
-            active_pane_id: 'pane-session',
-            layout_json: '',
-            panes: [{
-              workspace_id: 'workspace-sess-remote',
-              pane_id: 'pane-shell-1',
-              kind: 'agent',
-              runtime_id: 'runtime-shell-1',
-              title: 'Shell 1',
-            }],
-          },
-        }],
         prs: [],
         repos: [],
         authors: [],
@@ -1176,7 +1055,6 @@ describe('useDaemonSocket PTY kill sequencing', () => {
       args: {
         id: 'runtime-shell-1',
         cwd: '/tmp/repo',
-        workspace_id: 'workspace-sess-remote',
         endpoint_id: 'ep-remote',
         cols: 80,
         rows: 24,
@@ -1207,7 +1085,6 @@ describe('useDaemonSocket PTY kill sequencing', () => {
     const { unmount } = renderHook(() =>
       useDaemonSocket({
         onSessionsUpdate: vi.fn(),
-        onWorkspacesUpdate: vi.fn(),
         onPRsUpdate: vi.fn(),
         onReposUpdate: vi.fn(),
         onAuthorsUpdate: vi.fn(),
@@ -1225,7 +1102,6 @@ describe('useDaemonSocket PTY kill sequencing', () => {
         directory: '/tmp/repo',
         state: 'working',
       }],
-      workspaces: [],
       prs: [],
       repos: [],
       authors: [],
@@ -1279,7 +1155,6 @@ describe('useDaemonSocket PTY kill sequencing', () => {
     const { unmount } = renderHook(() =>
       useDaemonSocket({
         onSessionsUpdate: vi.fn(),
-        onWorkspacesUpdate: vi.fn(),
         onPRsUpdate: vi.fn(),
         onReposUpdate: vi.fn(),
         onAuthorsUpdate: vi.fn(),
@@ -1298,7 +1173,6 @@ describe('useDaemonSocket PTY kill sequencing', () => {
           directory: '/tmp/repo',
           state: 'recoverable',
         }],
-        workspaces: [],
         prs: [],
         repos: [],
         authors: [],
@@ -1339,11 +1213,10 @@ describe('useDaemonSocket PTY kill sequencing', () => {
     unmount();
   });
 
-  it('includes the owning workspace when spawning a new agent session', async () => {
+  it('sends the requested cwd and agent when spawning a new agent session', async () => {
     const { unmount } = renderHook(() =>
       useDaemonSocket({
         onSessionsUpdate: vi.fn(),
-        onWorkspacesUpdate: vi.fn(),
         onPRsUpdate: vi.fn(),
         onReposUpdate: vi.fn(),
         onAuthorsUpdate: vi.fn(),
@@ -1356,7 +1229,6 @@ describe('useDaemonSocket PTY kill sequencing', () => {
       args: {
         id: 'sess-new',
         cwd: '/tmp/repo',
-        workspace_id: 'workspace-sess-new',
         agent: 'claude',
         cols: 80,
         rows: 24,
@@ -1386,74 +1258,10 @@ describe('useDaemonSocket PTY kill sequencing', () => {
     unmount();
   });
 
-  it('ignores workspace action results without workspace ownership', async () => {
-    const { result, unmount } = renderHook(() =>
-      useDaemonSocket({
-        onSessionsUpdate: vi.fn(),
-        onWorkspacesUpdate: vi.fn(),
-        onPRsUpdate: vi.fn(),
-        onReposUpdate: vi.fn(),
-        onAuthorsUpdate: vi.fn(),
-        wsUrl: 'ws://localhost:9999/ws',
-      }),
-    );
-
-    const ws = await waitForOpenSocket();
-    const closePromise = result.current.sendWorkspaceClosePane('workspace-1', 'pane-1');
-    act(() => {
-      ws.emit({
-        event: 'initial_state',
-        protocol_version: PROTOCOL_VERSION,
-        sessions: [],
-        workspaces: [],
-        prs: [],
-        repos: [],
-        authors: [],
-        settings: {},
-      });
-    });
-    await waitFor(() => {
-      const sent = ws.sent.map((entry) => JSON.parse(entry));
-      expect(sent).toContainEqual({
-        cmd: 'workspace_layout_close_pane',
-        workspace_id: 'workspace-1',
-        pane_id: 'pane-1',
-      });
-    });
-
-    act(() => {
-      ws.emit({
-        event: 'workspace_layout_action_result',
-        action: 'workspace_layout_close_pane',
-        pane_id: 'pane-1',
-        success: true,
-      });
-    });
-
-    const resultMarker = vi.fn();
-    closePromise.then(resultMarker, resultMarker);
-    await Promise.resolve();
-    expect(resultMarker).not.toHaveBeenCalled();
-
-    act(() => {
-      ws.emit({
-        event: 'workspace_layout_action_result',
-        action: 'workspace_layout_close_pane',
-        workspace_id: 'workspace-1',
-        pane_id: 'pane-1',
-        success: true,
-      });
-    });
-
-    await expect(closePromise).resolves.toEqual({ success: true });
-    unmount();
-  });
-
   it('drops terminal pointer activity until the daemon is ready', async () => {
     const { result, unmount } = renderHook(() =>
       useDaemonSocket({
         onSessionsUpdate: vi.fn(),
-        onWorkspacesUpdate: vi.fn(),
         onPRsUpdate: vi.fn(),
         onReposUpdate: vi.fn(),
         onAuthorsUpdate: vi.fn(),
@@ -1473,7 +1281,6 @@ describe('useDaemonSocket PTY kill sequencing', () => {
         event: 'initial_state',
         protocol_version: PROTOCOL_VERSION,
         sessions: [],
-        workspaces: [],
         prs: [],
         repos: [],
         authors: [],
@@ -1498,14 +1305,12 @@ describe('useDaemonSocket PTY kill sequencing', () => {
 
   it('hydrates a remounted runtime by resizing before re-attaching', async () => {
     const onSessionsUpdate = vi.fn();
-    const onWorkspacesUpdate = vi.fn();
     const onPRsUpdate = vi.fn();
     const onReposUpdate = vi.fn();
     const onAuthorsUpdate = vi.fn();
     const { unmount } = renderHook(() =>
       useDaemonSocket({
         onSessionsUpdate,
-        onWorkspacesUpdate,
         onPRsUpdate,
         onReposUpdate,
         onAuthorsUpdate,
@@ -1524,13 +1329,11 @@ describe('useDaemonSocket PTY kill sequencing', () => {
           label: 'attn',
           agent: 'codex',
           directory: '/tmp/repo',
-          workspace_id: 'workspace-sess-existing',
           state: 'idle',
           state_since: '2026-04-08T00:00:00Z',
           state_updated_at: '2026-04-08T00:00:00Z',
           last_seen: '2026-04-08T00:00:00Z',
         }],
-        workspaces: [],
         prs: [],
         repos: [],
         authors: [],
@@ -1596,7 +1399,6 @@ describe('useDaemonSocket PTY kill sequencing', () => {
     const { unmount } = renderHook(() =>
       useDaemonSocket({
         onSessionsUpdate: vi.fn(),
-        onWorkspacesUpdate: vi.fn(),
         onPRsUpdate: vi.fn(),
         onReposUpdate: vi.fn(),
         onAuthorsUpdate: vi.fn(),
@@ -1614,13 +1416,11 @@ describe('useDaemonSocket PTY kill sequencing', () => {
           label: 'thunk',
           agent: 'codex',
           directory: '/tmp/repo',
-          workspace_id: 'workspace-sess-existing',
           state: 'idle',
           state_since: '2026-04-08T00:00:00Z',
           state_updated_at: '2026-04-08T00:00:00Z',
           last_seen: '2026-04-08T00:00:00Z',
         }],
-        workspaces: [],
         prs: [],
         repos: [],
         authors: [],
@@ -1716,201 +1516,11 @@ describe('useDaemonSocket PTY kill sequencing', () => {
     unmount();
   });
 
-  it('retains workspaces when one agent session disappears', async () => {
-    const onSessionsUpdate = vi.fn();
-    const onWorkspacesUpdate = vi.fn();
-    const { unmount } = renderHook(() =>
-      useDaemonSocket({
-        onSessionsUpdate,
-        onWorkspacesUpdate,
-        onPRsUpdate: vi.fn(),
-        onReposUpdate: vi.fn(),
-        onAuthorsUpdate: vi.fn(),
-        wsUrl: 'ws://localhost:9999/ws',
-      }),
-    );
-
-    const ws = await waitForOpenSocket();
-
-    act(() => {
-      ws.emit({
-        event: 'initial_state',
-        protocol_version: PROTOCOL_VERSION,
-        sessions: [{
-          id: 'sess-stale',
-          label: 'stale',
-          directory: '/tmp/repo',
-          workspace_id: 'workspace-sess-stale',
-          state: 'working',
-          last_seen: '2026-04-09T00:00:00Z',
-        }],
-        workspaces: [{
-          id: 'workspace-sess-stale',
-          title: 'stale',
-          directory: '/tmp/repo',
-          status: 'working',
-          muted: false,
-          layout: {
-            workspace_id: 'workspace-sess-stale',
-            active_pane_id: 'pane-session',
-            layout_json: '',
-            panes: [{
-              workspace_id: 'workspace-sess-stale',
-              pane_id: 'pane-session',
-              kind: 'agent',
-              title: 'Agent',
-              session_id: 'sess-stale',
-            }],
-          },
-        }],
-        prs: [],
-        repos: [],
-        authors: [],
-        settings: {},
-      });
-    });
-
-    act(() => {
-      ws.emit({
-        event: 'sessions_updated',
-        sessions: [],
-      });
-    });
-
-    await waitFor(() => {
-      expect(onWorkspacesUpdate).toHaveBeenLastCalledWith([
-        expect.objectContaining({ id: 'workspace-sess-stale' }),
-      ]);
-    });
-
-    unmount();
-  });
-
-  it('invalidates a closed session layout but retains the workspace until workspace_unregistered', async () => {
-    const onSessionsUpdate = vi.fn();
-    const onWorkspacesUpdate = vi.fn();
-    const { unmount } = renderHook(() =>
-      useDaemonSocket({
-        onSessionsUpdate,
-        onWorkspacesUpdate,
-        onPRsUpdate: vi.fn(),
-        onReposUpdate: vi.fn(),
-        onAuthorsUpdate: vi.fn(),
-        wsUrl: 'ws://localhost:9999/ws',
-      }),
-    );
-
-    const ws = await waitForOpenSocket();
-
-    act(() => {
-      ws.emit({
-        event: 'initial_state',
-        protocol_version: PROTOCOL_VERSION,
-        sessions: [{
-          id: 'sess-removed',
-          label: 'removed',
-          directory: '/tmp/repo',
-          workspace_id: 'workspace-sess-removed',
-          state: 'working',
-          last_seen: '2026-04-09T00:00:00Z',
-        }],
-        workspaces: [{
-          id: 'workspace-sess-removed',
-          title: 'removed',
-          directory: '/tmp/repo',
-          status: 'working',
-          muted: false,
-          layout: {
-            workspace_id: 'workspace-sess-removed',
-            active_pane_id: 'pane-session',
-            layout_json: '',
-            panes: [{
-              workspace_id: 'workspace-sess-removed',
-              pane_id: 'pane-session',
-              kind: 'agent',
-              runtime_id: 'sess-removed',
-              title: 'Agent',
-              session_id: 'sess-removed',
-              status: 'spawning',
-            }],
-          },
-        }],
-        prs: [],
-        repos: [],
-        authors: [],
-        settings: {},
-      });
-    });
-
-    act(() => {
-      ws.emit({
-        event: 'session_unregistered',
-        session: {
-          id: 'sess-removed',
-          label: 'removed',
-          directory: '/tmp/repo',
-          state: 'working',
-        },
-      });
-    });
-
-    await waitFor(() => {
-      expect(onWorkspacesUpdate).toHaveBeenLastCalledWith([
-        expect.objectContaining({
-          id: 'workspace-sess-removed',
-          layout: undefined,
-        }),
-      ]);
-    });
-
-    act(() => {
-      ws.emit({
-        event: 'workspace_state_changed',
-        workspace: {
-          id: 'workspace-sess-removed',
-          title: 'removed',
-          directory: '/tmp/repo',
-          status: 'idle',
-          muted: false,
-        },
-      });
-    });
-
-    await waitFor(() => {
-      expect(onWorkspacesUpdate).toHaveBeenLastCalledWith([
-        expect.objectContaining({
-          id: 'workspace-sess-removed',
-          layout: undefined,
-        }),
-      ]);
-    });
-
-    act(() => {
-      ws.emit({
-        event: 'workspace_unregistered',
-        workspace: {
-          id: 'workspace-sess-removed',
-          title: 'removed',
-          directory: '/tmp/repo',
-          status: 'idle',
-          muted: false,
-        },
-      });
-    });
-
-    await waitFor(() => {
-      expect(onWorkspacesUpdate).toHaveBeenLastCalledWith([]);
-    });
-
-    unmount();
-  });
-
   it('updates a renamed session in place without duplicating the sidebar row', async () => {
     const onSessionsUpdate = vi.fn();
     const { unmount } = renderHook(() =>
       useDaemonSocket({
         onSessionsUpdate,
-        onWorkspacesUpdate: vi.fn(),
         onPRsUpdate: vi.fn(),
         onReposUpdate: vi.fn(),
         onAuthorsUpdate: vi.fn(),
@@ -1924,7 +1534,6 @@ describe('useDaemonSocket PTY kill sequencing', () => {
       label: 'original',
       agent: 'shell',
       directory: '/tmp',
-      workspace_id: 'workspace-sess-1',
       state: 'idle',
     };
 
@@ -1945,14 +1554,12 @@ describe('useDaemonSocket PTY kill sequencing', () => {
 
   it('resolves a chief-of-staff update from its result event', async () => {
     const onSessionsUpdate = vi.fn();
-    const onWorkspacesUpdate = vi.fn();
     const onPRsUpdate = vi.fn();
     const onReposUpdate = vi.fn();
     const onAuthorsUpdate = vi.fn();
     const { result, unmount } = renderHook(() =>
       useDaemonSocket({
         onSessionsUpdate,
-        onWorkspacesUpdate,
         onPRsUpdate,
         onReposUpdate,
         onAuthorsUpdate,
@@ -1966,7 +1573,6 @@ describe('useDaemonSocket PTY kill sequencing', () => {
         event: 'initial_state',
         protocol_version: PROTOCOL_VERSION,
         sessions: [],
-        workspaces: [],
         prs: [],
         repos: [],
         authors: [],
@@ -2011,7 +1617,6 @@ describe('useDaemonSocket PTY kill sequencing', () => {
     const { result, unmount } = renderHook(() =>
       useDaemonSocket({
         onSessionsUpdate: vi.fn(),
-        onWorkspacesUpdate: vi.fn(),
         onPRsUpdate: vi.fn(),
         onReposUpdate: vi.fn(),
         onAuthorsUpdate: vi.fn(),
@@ -2035,7 +1640,6 @@ describe('useDaemonSocket PTY kill sequencing', () => {
       ws.emit({
         event: 'initial_state',
         sessions: [],
-        workspaces: [],
         prs: [],
         repos: [],
         authors: [],
@@ -2060,7 +1664,6 @@ describe('useDaemonSocket PTY kill sequencing', () => {
     const { result, unmount } = renderHook(() =>
       useDaemonSocket({
         onSessionsUpdate: vi.fn(),
-        onWorkspacesUpdate: vi.fn(),
         onPRsUpdate: vi.fn(),
         onReposUpdate: vi.fn(),
         onAuthorsUpdate: vi.fn(),
@@ -2073,7 +1676,6 @@ describe('useDaemonSocket PTY kill sequencing', () => {
       ws.emit({
         event: 'initial_state',
         sessions: [],
-        workspaces: [],
         prs: [],
         repos: [],
         authors: [],
@@ -2112,7 +1714,6 @@ describe('useDaemonSocket PTY kill sequencing', () => {
       reconnected.emit({
         event: 'initial_state',
         sessions: [],
-        workspaces: [],
         prs: [],
         repos: [],
         authors: [],
@@ -2153,7 +1754,6 @@ describe('useDaemonSocket settings refresh', () => {
     const { result, unmount } = renderHook(() =>
       useDaemonSocket({
         onSessionsUpdate: vi.fn(),
-        onWorkspacesUpdate: vi.fn(),
         onPRsUpdate: vi.fn(),
         onReposUpdate: vi.fn(),
         onAuthorsUpdate: vi.fn(),
@@ -2191,7 +1791,6 @@ describe('useDaemonSocket workflow runs', () => {
     return renderHook(() =>
       useDaemonSocket({
         onSessionsUpdate: vi.fn(),
-        onWorkspacesUpdate: vi.fn(),
         onPRsUpdate: vi.fn(),
         onReposUpdate: vi.fn(),
         onAuthorsUpdate: vi.fn(),
@@ -2295,7 +1894,6 @@ describe('useDaemonSocket fs surface', () => {
     return renderHook(() =>
       useDaemonSocket({
         onSessionsUpdate: vi.fn(),
-        onWorkspacesUpdate: vi.fn(),
         onPRsUpdate: vi.fn(),
         onReposUpdate: vi.fn(),
         onAuthorsUpdate: vi.fn(),
@@ -2464,7 +2062,6 @@ describe('useDaemonSocket seed resume request/result', () => {
     return renderHook(() =>
       useDaemonSocket({
         onSessionsUpdate: vi.fn(),
-        onWorkspacesUpdate: vi.fn(),
         onPRsUpdate: vi.fn(),
         onReposUpdate: vi.fn(),
         onAuthorsUpdate: vi.fn(),
@@ -2530,9 +2127,7 @@ describe('useDaemonSocket seed resume request/result', () => {
       success: true,
       result: {
         session_id: 'sess-new',
-        workspace_id: 'workspace-new',
         directory: '/tmp/placed',
-        placement: 'new_workspace',
       },
     });
     await expect(promise).resolves.toMatchObject({ session_id: 'sess-new' });
@@ -2609,7 +2204,6 @@ describe('useDaemonSocket notebook and annotation events', () => {
     return renderHook(() =>
       useDaemonSocket({
         onSessionsUpdate: vi.fn(),
-        onWorkspacesUpdate: vi.fn(),
         onPRsUpdate: vi.fn(),
         onReposUpdate: vi.fn(),
         onAuthorsUpdate: vi.fn(),
@@ -3020,7 +2614,7 @@ describe('useDaemonSocket notebook and annotation events', () => {
   it('resolves markdown annotation get with annotations and generation', async () => {
     const { result, unmount, ws } = await renderAndOpen();
 
-    const source = fileMarkdownSource('ws-1', '/tmp/doc.md');
+    const source = fileMarkdownSource('/tmp/doc.md');
     const promise = result.current.getMarkdownAnnotations(source);
     await Promise.resolve();
     const sent = lastSent(ws);
@@ -3029,7 +2623,6 @@ describe('useDaemonSocket notebook and annotation events', () => {
       document_uri: source.uri,
       source_kind: 'file',
       path: '/tmp/doc.md',
-      workspace_id: 'ws-1',
     });
 
     ws.emit({
@@ -3047,7 +2640,7 @@ describe('useDaemonSocket notebook and annotation events', () => {
   it('serializes exactly one typed markdown annotation destination', async () => {
     const { result, unmount, ws } = await renderAndOpen();
 
-    const fileSource = fileMarkdownSource('ws-1', '/tmp/doc.md');
+    const fileSource = fileMarkdownSource('/tmp/doc.md');
     const delivered = result.current.submitMarkdownAnnotations(
       fileSource,
       { kind: 'session', sessionId: 'sess-a' },
@@ -3125,7 +2718,7 @@ describe('useDaemonSocket notebook and annotation events', () => {
   it('drops an annotation result whose request was superseded', async () => {
     const { result, unmount, ws } = await renderAndOpen();
 
-    const source = fileMarkdownSource('ws-1', '/tmp/doc.md');
+    const source = fileMarkdownSource('/tmp/doc.md');
     const first = result.current.saveMarkdownAnnotations(source, [], 1);
     await Promise.resolve();
     const firstSent = lastSent(ws);
@@ -3155,7 +2748,7 @@ describe('useDaemonSocket notebook and annotation events', () => {
   it('shares one in-flight round-trip when the same document is hydrated twice', async () => {
     const { result, unmount, ws } = await renderAndOpen();
 
-    const source = fileMarkdownSource('ws-1', '/tmp/doc.md');
+    const source = fileMarkdownSource('/tmp/doc.md');
     const first = result.current.getMarkdownAnnotations(source);
     await Promise.resolve();
     const sent = lastSent(ws);
@@ -3305,7 +2898,6 @@ describe('useDaemonSocket app commands', () => {
     return renderHook(() =>
       useDaemonSocket({
         onSessionsUpdate: vi.fn(),
-        onWorkspacesUpdate: vi.fn(),
         onPRsUpdate: vi.fn(),
         onReposUpdate: vi.fn(),
         onAuthorsUpdate: vi.fn(),

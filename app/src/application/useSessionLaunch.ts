@@ -20,7 +20,6 @@ import {
   SplitSessionOptions,
   TERMINAL_AGENT,
 } from './appSupport';
-import { useWorkspaceCreation } from './useWorkspaceCreation';
 
 interface Options {
   settings: AppContentProps['settings'];
@@ -40,13 +39,7 @@ export function useSessionLaunch({
   selectCreatedSession,
   showError,
 }: Options) {
-  const {
-    sendWorkspaceClosePane,
-    sendUnregisterWorkspace,
-    sendRegisterWorkspace,
-    sendWorkspaceAddSessionPane,
-    sendCreateWorktree,
-  } = useDaemonApi();
+  const { sendCreateWorktree } = useDaemonApi();
   const { closeSession, createSession, takeSessionSpawnArgs } = useSessionStore();
   const activeLocalSession = sessions.find((session) => session.id === activeSessionId) ?? null;
   const currentDesktop = useProfilesStore(
@@ -57,20 +50,6 @@ export function useSessionLaunch({
   const [sessionCreationJob, setSessionCreationJob] = useState<SessionCreationJob | null>(null);
   const sessionCreationJobIdRef = useRef(0);
   const worktreeSessionCreateEndpointsRef = useRef<Set<string>>(new Set());
-  const { createWorkspaceSession, createSessionForUiAutomation } =
-    useWorkspaceCreation({
-      sendWorkspaceClosePane,
-      closeSession,
-      sendUnregisterWorkspace,
-      sendRegisterWorkspace,
-      createSession,
-      takeSessionSpawnArgs,
-      sendWorkspaceAddSessionPane,
-      selectCreatedSession,
-      sessionCreationJob,
-      daemonSessions,
-      setSessionCreationJob,
-    });
 
   const [locationPickerOpen, setLocationPickerOpen] = useState(false);
   const [locationPickerPurpose, setLocationPickerPurpose] =
@@ -98,6 +77,88 @@ export function useSessionLaunch({
     setLocationPickerOpen(true);
   }, []);
 
+  const spawnOnCurrentDesktop = useCallback(
+    async (spawn: {
+      sessionId: string;
+      label: string;
+      cwd: string;
+      agent: SessionAgent;
+      endpointId?: string;
+      yoloMode?: boolean;
+      autoMode?: boolean;
+      chiefOfStaff?: boolean;
+      direction: TerminalSplitDirection;
+      anchorPaneId?: string;
+      spawnedFrom?: string;
+    }) => {
+      if (!currentDesktop) {
+        throw new Error('No desktop is open yet; choose a profile before starting an agent.');
+      }
+      const target = launchTarget(currentDesktop, spawn.direction, spawn.anchorPaneId);
+      try {
+        await createSession(
+          spawn.label,
+          spawn.cwd,
+          spawn.sessionId,
+          spawn.agent,
+          spawn.endpointId,
+          spawn.agent === 'shell' ? false : spawn.yoloMode,
+          spawn.chiefOfStaff,
+          spawn.agent === 'shell' ? undefined : spawn.autoMode,
+        );
+        const spawnArgs = takeSessionSpawnArgs(spawn.sessionId, 80, 24);
+        if (!spawnArgs) {
+          throw new Error('Session spawn arguments were not prepared.');
+        }
+        await ptySpawn({
+          args: {
+            ...spawnArgs,
+            ...(spawn.endpointId ? {} : { placement: target.placement }),
+            ...(spawn.spawnedFrom ? { spawned_from: spawn.spawnedFrom } : {}),
+          },
+        });
+      } catch (error) {
+        closeSession(spawn.sessionId);
+        throw error;
+      }
+      return spawn.sessionId;
+    },
+    [closeSession, createSession, currentDesktop, takeSessionSpawnArgs],
+  );
+
+  const launchAgent = useCallback(
+    (
+      label: string,
+      cwd: string,
+      providedSessionId?: string,
+      agent: SessionAgent = 'claude',
+      endpointId?: string,
+      yoloMode = false,
+      options?: { chiefOfStaff?: boolean; autoMode?: boolean },
+    ) =>
+      spawnOnCurrentDesktop({
+        sessionId: providedSessionId || crypto.randomUUID(),
+        label,
+        cwd,
+        agent,
+        endpointId,
+        yoloMode,
+        autoMode: options?.autoMode,
+        chiefOfStaff: options?.chiefOfStaff,
+        direction: 'vertical',
+      }),
+    [spawnOnCurrentDesktop],
+  );
+
+  const createSessionForUiAutomation = useCallback(
+    async (...args: Parameters<typeof launchAgent>) => {
+      const sessionId = await launchAgent(...args);
+      selectCreatedSession(sessionId);
+      return sessionId;
+    },
+    [launchAgent, selectCreatedSession],
+  );
+
   const createSplitSession = useCallback(
     async (
       agent: SessionAgent,
@@ -109,58 +170,41 @@ export function useSessionLaunch({
         showError('No desktop is open yet; choose a profile before starting an agent.');
         return;
       }
-      const target = launchTarget(currentDesktop, direction, targetPaneId);
-      const baseId = options.baseSessionId ?? activeLocalSession?.id ?? target.focusedSessionId;
+      const focusedSessionId = launchTarget(currentDesktop, direction, targetPaneId).focusedSessionId;
+      const baseId = options.baseSessionId ?? activeLocalSession?.id ?? focusedSessionId;
       const base = sessions.find((session) => session.id === baseId) ?? null;
       const cwd = options.cwd || base?.cwd;
       if (!cwd) {
         handleNewSession(direction);
         return;
       }
-      const sessionId = crypto.randomUUID();
-      const label = options.label || nextSplitSessionLabel(agent);
-      const endpointId =
-        options.endpointId === null ? undefined : (options.endpointId ?? base?.endpointId);
       try {
-        await createSession(
-          label,
+        const sessionId = await spawnOnCurrentDesktop({
+          sessionId: crypto.randomUUID(),
+          label: options.label || nextSplitSessionLabel(agent),
           cwd,
-          sessionId,
           agent,
-          endpointId,
-          agent === 'shell' ? false : (options.yoloMode ?? base?.yoloMode),
-          undefined,
-          undefined,
-          agent === 'shell' ? undefined : options.autoMode,
-        );
-        const spawnArgs = takeSessionSpawnArgs(sessionId, 80, 24);
-        if (!spawnArgs) {
-          throw new Error('Session spawn arguments were not prepared.');
-        }
-        await ptySpawn({
-          args: {
-            ...spawnArgs,
-            ...(endpointId ? {} : { placement: target.placement }),
-            ...(base ? { spawned_from: base.id } : {}),
-          },
+          endpointId: options.endpointId === null ? undefined : (options.endpointId ?? base?.endpointId),
+          yoloMode: options.yoloMode ?? base?.yoloMode,
+          autoMode: options.autoMode,
+          direction,
+          anchorPaneId: targetPaneId,
+          spawnedFrom: base?.id,
         });
         selectCreatedSession(sessionId);
       } catch (error) {
-        closeSession(sessionId);
         showError(error instanceof Error ? error.message : 'Failed to start the agent');
       }
     },
     [
       activeLocalSession,
-      closeSession,
-      createSession,
       currentDesktop,
       handleNewSession,
       nextSplitSessionLabel,
       sessions,
       selectCreatedSession,
       showError,
-      takeSessionSpawnArgs,
+      spawnOnCurrentDesktop,
     ],
   );
 
@@ -184,7 +228,7 @@ export function useSessionLaunch({
         });
         return null;
       }
-      const sessionId = await createWorkspaceSession(
+      const sessionId = await launchAgent(
         pick.label,
         pick.cwd,
         undefined,
@@ -196,7 +240,7 @@ export function useSessionLaunch({
       selectCreatedSession(sessionId);
       return sessionId;
     },
-    [createSplitSession, createWorkspaceSession, selectCreatedSession],
+    [createSplitSession, launchAgent, selectCreatedSession],
   );
 
   const handleLocationSelect = useCallback(
@@ -268,7 +312,6 @@ export function useSessionLaunch({
       }
     },
     [
-      activeLocalSession?.workspaceId,
       agentAvailability,
       daemonEndpoints,
       hasAvailableAgents,
@@ -377,10 +420,29 @@ export function useSessionLaunch({
     [],
   );
 
+  useEffect(() => {
+    if (!sessionCreationJob?.sessionId || sessionCreationJob.error) {
+      return;
+    }
+    if (daemonSessions.some((session) => session.id === sessionCreationJob.sessionId)) {
+      selectCreatedSession(sessionCreationJob.sessionId);
+      setSessionCreationJob((current) => (current?.id === sessionCreationJob.id ? null : current));
+      return;
+    }
+    const timeoutId = window.setTimeout(() => {
+      setSessionCreationJob((current) =>
+        current?.id === sessionCreationJob.id
+          ? { ...current, error: 'Session startup timed out.' }
+          : current,
+      );
+    }, 35_000);
+    return () => window.clearTimeout(timeoutId);
+  }, [daemonSessions, selectCreatedSession, sessionCreationJob]);
+
   return {
     sessionCreationJob,
     setSessionCreationJob,
-    createWorkspaceSession,
+    launchAgent,
     createSessionForUiAutomation,
     locationPickerOpen,
     locationPickerPurpose,

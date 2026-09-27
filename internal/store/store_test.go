@@ -439,8 +439,8 @@ func TestStore_UpdateSessionLabel(t *testing.T) {
 	now := string(protocol.TimestampNow())
 	s.Add(&protocol.Session{
 		ID: "abc123", Label: "original", Agent: protocol.SessionAgentCodex,
-		Directory: "/tmp/project", WorkspaceID: "workspace-1",
-		State: protocol.SessionStateIdle, StateSince: now,
+		Directory: "/tmp/project",
+		State:     protocol.SessionStateIdle, StateSince: now,
 		StateUpdatedAt: now, LastSeen: now,
 	})
 

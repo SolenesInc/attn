@@ -119,47 +119,6 @@ var wireFixtures = map[string]wireFixture{
 	FactWorktreeSessionsRemoved: {events: []string{protocol.EventSessionsUpdated}},
 	FactEndpointSessionsChanged: {events: []string{protocol.EventSessionsUpdated}},
 
-	FactWorkspaceRegistered: {
-		events:  []string{protocol.EventWorkspaceRegistered},
-		subject: (*wireWorld).workspace,
-	},
-	FactWorkspaceReregistered: {
-		events:  []string{protocol.EventWorkspaceStateChanged},
-		subject: (*wireWorld).workspace,
-	},
-	FactWorkspaceRenamed: {
-		events:  []string{protocol.EventWorkspaceStateChanged},
-		subject: (*wireWorld).workspace,
-	},
-	FactWorkspaceStatusChanged: {
-		events:  []string{protocol.EventWorkspaceStateChanged},
-		subject: (*wireWorld).workspace,
-	},
-	FactWorkspaceRankChanged: {
-		events:  []string{protocol.EventWorkspaceStateChanged},
-		subject: (*wireWorld).workspace,
-	},
-	FactWorkspaceSessionAssociated: {
-		events:  []string{protocol.EventWorkspaceStateChanged},
-		subject: (*wireWorld).workspace,
-	},
-	FactWorkspaceSessionDissociated: {
-		events:  []string{protocol.EventWorkspaceStateChanged},
-		subject: (*wireWorld).workspace,
-	},
-	FactWorkspaceUnregistered: {
-		events:  []string{protocol.EventWorkspaceUnregistered},
-		subject: (*wireWorld).workspace,
-		payload: func(w *wireWorld) any {
-			snapshot, _ := w.d.workspaces.snapshot(w.workspaceID)
-			return snapshot
-		},
-	},
-	FactWorkspaceLayoutChanged: {
-		events:  []string{protocol.EventWorkspaceLayoutUpdated},
-		subject: (*wireWorld).workspace,
-		payload: func(w *wireWorld) any { return w.layout() },
-	},
 	FactProfileCreated: {
 		events:  []string{protocol.EventProfilesChanged},
 		subject: (*wireWorld).profile,
@@ -179,10 +138,6 @@ var wireFixtures = map[string]wireFixture{
 	FactProfileMigrationChanged: {
 		events:  []string{protocol.EventMigrationChanged},
 		subject: (*wireWorld).profile,
-	},
-	FactWorkspaceLayoutRepublished: {
-		events:  []string{protocol.EventWorkspaceLayout},
-		subject: (*wireWorld).workspace,
 	},
 
 	seedEvents.NamePlanted:                  {events: []string{protocol.EventGardenSeedsUpdated}},
@@ -415,7 +370,6 @@ type wireWorld struct {
 	d              *Daemon
 	trace          *WireTrace
 	sessionID      string
-	workspaceID    string
 	presentationID string
 	worktreePath   string
 }
@@ -437,24 +391,6 @@ func newWireWorld(t *testing.T) *wireWorld {
 		Agent:     protocol.SessionAgentClaude,
 	})
 
-	w.workspaceID = "wire-workspace"
-	client := newWorkspaceProtocolTestClient()
-	d.handleRegisterWorkspace(client, &protocol.RegisterWorkspaceMessage{
-		Cmd:       protocol.CmdRegisterWorkspace,
-		ID:        w.workspaceID,
-		Title:     "wire",
-		Directory: dir,
-	})
-	d.handleWorkspaceLayoutAddSessionPane(client, &protocol.WorkspaceLayoutAddSessionPaneMessage{
-		Cmd:         protocol.CmdWorkspaceLayoutAddSessionPane,
-		WorkspaceID: w.workspaceID,
-		PaneID:      protocol.Ptr("wire-pane"),
-		SessionID:   w.sessionID,
-	})
-	if _, err := d.ensureWorkspaceLayout(w.workspaceID); err != nil {
-		t.Fatalf("seed workspace layout: %v", err)
-	}
-
 	w.worktreePath = filepath.Join(dir, "worktree")
 
 	pres, err := d.store.CreatePresentation(w.sessionID, nil, "wire", "diff", dir, time.Now())
@@ -467,7 +403,6 @@ func newWireWorld(t *testing.T) *wireWorld {
 }
 
 func (w *wireWorld) session() string      { return w.sessionID }
-func (w *wireWorld) workspace() string    { return w.workspaceID }
 func (w *wireWorld) presentation() string { return w.presentationID }
 func (w *wireWorld) worktree() string     { return w.worktreePath }
 
@@ -496,14 +431,6 @@ func (w *wireWorld) gardenReview() string {
 		w.t.Fatalf("seed Garden review: %v", err)
 	}
 	return run.ID
-}
-
-func (w *wireWorld) layout() *protocol.WorkspaceLayout {
-	layout, err := w.d.protocolWorkspaceLayout(w.workspaceID)
-	if err != nil {
-		w.t.Fatalf("read seeded layout: %v", err)
-	}
-	return layout
 }
 
 func gitOperationFixture(id string) protocol.GitOperation {

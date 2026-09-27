@@ -122,7 +122,7 @@ events = ["session.state.changed"]
 name = "seen"
 fields = ["state"]
 
-# A view is a React component attn mounts as a tile in a workspace. The title is
+# A view is a React component attn mounts as a tile on a desktop. The title is
 # what the dock picker and the tile header show. The optional params table makes
 # the dock ask for one line of text before placing the tile, and that string is
 # what makes two tiles of one view show different things — it is opaque to attn.
@@ -218,7 +218,7 @@ func scaffoldView() string {
 } from %q
 
 // A view is a React component attn mounts as a tile. It is a function of where
-// it sits: workspaceId, sessionId and tileId are ambient, and params is the line
+// it sits: desktopId, sessionId and tileId are ambient, and params is the line
 // the user typed when docking this tile.
 //
 // There is no react to import and no styling to write. The SDK re-exports the

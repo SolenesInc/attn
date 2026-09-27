@@ -34,7 +34,6 @@ export interface Session {
   label: string;
   state: UISessionState;
   cwd: string;
-  workspaceId: string;
   profileId: string;
   desktopId: string;
   agent: SessionAgent;
@@ -63,7 +62,6 @@ export interface DaemonSessionSnapshot {
   label: string;
   agent?: string;
   directory: string;
-  workspace_id: string;
   profile_id?: string;
   endpoint_id?: string;
   state: string;
@@ -98,7 +96,6 @@ export interface SessionStore extends SessionNavigationState, SessionNavigationA
     agent: SessionAgent | undefined,
     endpointId: string | undefined,
     yoloMode: boolean | undefined,
-    workspaceId: string | undefined,
     chiefOfStaff?: boolean,
     autoMode?: boolean,
   ) => Promise<string>;
@@ -120,7 +117,6 @@ interface TestSession {
   state: UISessionState;
   cwd: string;
   agent?: SessionAgent;
-  workspaceId: string;
   branch?: string;
   isWorktree?: boolean;
 }
@@ -201,19 +197,16 @@ export const useSessionStore = create<SessionStore>((set, get) => ({
     agent: SessionAgent | undefined,
     endpointId: string | undefined,
     yoloMode: boolean | undefined,
-    providedWorkspaceId: string | undefined,
     chiefOfStaff?: boolean,
     autoMode?: boolean,
   ) => {
     const id = providedId || crypto.randomUUID();
-    const workspaceId = providedWorkspaceId ?? '';
     const resolvedAgent: SessionAgent = agent ?? 'claude';
     const session: Session = {
       id,
       label,
       state: 'launching',
       cwd,
-      workspaceId,
       profileId: '',
       desktopId: '',
       agent: resolvedAgent,
@@ -270,7 +263,6 @@ export const useSessionStore = create<SessionStore>((set, get) => ({
     return {
       id,
       cwd: session.cwd,
-      workspace_id: session.workspaceId,
       ...(session.endpointId ? { endpoint_id: session.endpointId } : {}),
       intent: 'create',
       label: session.label,
@@ -331,7 +323,6 @@ export const useSessionStore = create<SessionStore>((set, get) => ({
         const normalizedState = normalizeSessionState(daemonSession.state);
         const nextAgent: SessionAgent = normalizeSessionAgent(daemonSession.agent, existing?.agent ?? 'codex');
         const nextEndpointId = daemonSession.endpoint_id ?? existing?.endpointId;
-        const nextWorkspaceId = daemonSession.workspace_id;
         const nextBranch = daemonSession.branch ?? existing?.branch;
         const nextIsWorktree = daemonSession.is_worktree ?? existing?.isWorktree;
 
@@ -341,7 +332,6 @@ export const useSessionStore = create<SessionStore>((set, get) => ({
           existing.label === daemonSession.label &&
           existing.agent === nextAgent &&
           existing.cwd === daemonSession.directory &&
-          existing.workspaceId === nextWorkspaceId &&
           existing.profileId === nextProfileId &&
           existing.desktopId === nextDesktopId &&
           existing.endpointId === nextEndpointId &&
@@ -359,7 +349,6 @@ export const useSessionStore = create<SessionStore>((set, get) => ({
           label: daemonSession.label,
           state: normalizedState,
           cwd: daemonSession.directory,
-          workspaceId: nextWorkspaceId,
           profileId: nextProfileId,
           desktopId: nextDesktopId,
           agent: nextAgent,
@@ -433,13 +422,11 @@ declare global {
 
 if (import.meta.env.DEV) {
   window.__TEST_INJECT_SESSION = (session: TestSession) => {
-    const workspaceId = session.workspaceId ?? '';
     useSessionStore.setState((state) => ({
       sessions: [
         ...state.sessions,
         {
           ...session,
-          workspaceId,
           profileId: '',
           desktopId: '',
           agent: session.agent ?? 'codex',

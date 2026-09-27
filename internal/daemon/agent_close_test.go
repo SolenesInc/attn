@@ -39,7 +39,7 @@ func addAgentCloseSession(t *testing.T, d *Daemon, id, label string) {
 	now := string(protocol.TimestampNow())
 	d.store.Add(&protocol.Session{
 		ID: id, Label: label, Agent: protocol.SessionAgentClaude,
-		Directory: "/tmp/" + id, WorkspaceID: "ws-" + id, ProfileID: defaultProfileID(t, d.store),
+		Directory: "/tmp/" + id, ProfileID: defaultProfileID(t, d.store),
 		State: protocol.SessionStateIdle, StateSince: now, StateUpdatedAt: now, LastSeen: now,
 	})
 }

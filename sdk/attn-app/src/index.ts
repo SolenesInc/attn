@@ -122,9 +122,6 @@ export type {
   SessionUsage,
   SessionUsageModel,
   TicketRow,
-  Workspace,
-  WorkspaceLayout,
-  WorkspacePane,
 } from "./currentState"
 
 /** The durable requests coalesced into one reconcile invocation. */
@@ -153,9 +150,9 @@ export type ReconcileHandler<Collections> = (
 
 /** What a view is given. `params` is what the user typed when docking, which is what makes two tiles of one view differ. */
 export interface ViewProps {
-  /** The workspace this tile is in. */
-  readonly workspaceId: string
-  /** The session that workspace has selected, if any. */
+  /** The desktop this tile is on. */
+  readonly desktopId: string
+  /** The agent this tile is bound to, if any. */
   readonly sessionId: string | null
   /** Stable for the life of this docked tile. */
   readonly tileId: string

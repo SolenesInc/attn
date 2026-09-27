@@ -40,14 +40,12 @@ func newAttachReviveTestDaemonForAgent(t *testing.T, agent protocol.SessionAgent
 	backend := &attachReviveBackend{}
 	d.ptyBackend = backend
 	cwd := t.TempDir()
-	addTestWorkspace(d, "workspace", cwd)
 	now := string(protocol.TimestampNow())
 	d.store.Add(&protocol.Session{
 		ID:             "recoverable",
 		Label:          "recoverable",
 		Agent:          agent,
 		Directory:      cwd,
-		WorkspaceID:    "workspace",
 		ProfileID:      defaultProfileID(t, d.store),
 		State:          state,
 		StateSince:     now,
@@ -255,14 +253,12 @@ func TestAttachReviveMissingWorkingDirectoryDoesNotBlockFollowingBrowse(t *testi
 	if err := os.MkdirAll(filepath.Join(browseRoot, "child"), 0o755); err != nil {
 		t.Fatal(err)
 	}
-	addTestWorkspace(d, "workspace", root)
 	now := string(protocol.TimestampNow())
 	d.store.Add(&protocol.Session{
 		ID:             "recoverable",
 		Label:          "recoverable",
 		Agent:          protocol.SessionAgentCodex,
 		Directory:      missing,
-		WorkspaceID:    "workspace",
 		ProfileID:      defaultProfileID(t, d.store),
 		State:          protocol.SessionStateRecoverable,
 		StateSince:     now,
@@ -278,7 +274,7 @@ func TestAttachReviveMissingWorkingDirectoryDoesNotBlockFollowingBrowse(t *testi
 
 	client := spawnTestClient()
 	client.recv = make(chan []byte, 2)
-	client.setIdentity("daemon-test", "protocol-"+protocol.ProtocolVersion, []string{protocol.CapabilityWorkspaceSessions})
+	client.setIdentity("daemon-test", "protocol-"+protocol.ProtocolVersion, nil)
 	pumpDone := make(chan struct{})
 	go func() {
 		d.wsMsgPump(client)

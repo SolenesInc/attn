@@ -51,7 +51,7 @@ func TestAppCurrentStateSnapshotCapturesTheBusHeadBeforeBuildingInitialState(t *
 		t.Fatal(err)
 	}
 	wantFields := []string{
-		"asOfSeq", "sessions", "endpoints", "workspaces", "prs", "repos",
+		"asOfSeq", "sessions", "endpoints", "prs", "repos",
 		"authors", "githubHosts", "tickets", "seeds", "crew", "apps",
 	}
 	if len(fields) != len(wantFields) {

@@ -16,13 +16,13 @@ func TestResolveSpawnParent(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	addTurnSession(t, d, "agent", protocol.SessionAgentCodex, "")
-	addTurnSession(t, d, "shell1", protocol.SessionAgentShell, "")
+	addTurnSession(t, d, "agent", protocol.SessionAgentCodex)
+	addTurnSession(t, d, "shell1", protocol.SessionAgentShell)
 	shell := d.store.Get("shell1")
 	shell.ParentSessionID = protocol.Ptr("agent")
 	d.store.Add(shell)
-	addTurnSession(t, d, "orphan-shell", protocol.SessionAgentShell, "")
-	addTurnSession(t, d, "unplaced", protocol.SessionAgentCodex, "")
+	addTurnSession(t, d, "orphan-shell", protocol.SessionAgentShell)
+	addTurnSession(t, d, "unplaced", protocol.SessionAgentCodex)
 	placeTestSession(t, d, "agent", profile.CurrentDesktopID)
 
 	here := &launchPlacement{desktopID: profile.CurrentDesktopID}
@@ -59,8 +59,8 @@ func TestResolveSpawnParent(t *testing.T) {
 
 func TestASatelliteNeverOwesATurn(t *testing.T) {
 	d := newTurnDaemon(t)
-	addTurnSession(t, d, "agent", protocol.SessionAgentCodex, "ws1")
-	addTurnSession(t, d, "shell1", protocol.SessionAgentShell, "ws1")
+	addTurnSession(t, d, "agent", protocol.SessionAgentCodex)
+	addTurnSession(t, d, "shell1", protocol.SessionAgentShell)
 	shell := d.store.Get("shell1")
 	shell.ParentSessionID = protocol.Ptr("agent")
 	d.store.Add(shell)

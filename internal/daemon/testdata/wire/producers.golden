@@ -3,7 +3,7 @@
   "event": "session_state_changed",
   "session": {
     "agent": "claude",
-    "directory": "<tmp>/workspace",
+    "directory": "<tmp>/project",
     "id": "sess-1",
     "label": "one",
     "last_model_request_at": "<timestamp>",
@@ -11,8 +11,7 @@
     "profile_id": "profile-<uuid>",
     "state": "idle",
     "state_since": "<timestamp>",
-    "state_updated_at": "<timestamp>",
-    "workspace_id": "workspace-1"
+    "state_updated_at": "<timestamp>"
   }
 }
 --- 02 sessions_updated
@@ -21,7 +20,7 @@
   "sessions": [
     {
       "agent": "claude",
-      "directory": "<tmp>/workspace",
+      "directory": "<tmp>/project",
       "id": "sess-1",
       "label": "one",
       "last_model_request_at": "<timestamp>",
@@ -29,8 +28,7 @@
       "profile_id": "profile-<uuid>",
       "state": "idle",
       "state_since": "<timestamp>",
-      "state_updated_at": "<timestamp>",
-      "workspace_id": "workspace-1"
+      "state_updated_at": "<timestamp>"
     }
   ]
 }
@@ -40,49 +38,7 @@
   "rate_limit_reset_at": "<timestamp>",
   "rate_limit_resource": "github"
 }
---- 04 workspace_layout
-{
-  "event": "workspace_layout",
-  "workspace_layout": {
-    "active_pane_id": "pane-1",
-    "layout_json": "{\"type\":\"pane\",\"pane_id\":\"pane-1\"}",
-    "panes": [
-      {
-        "kind": "agent",
-        "pane_id": "pane-1",
-        "runtime_id": "sess-1",
-        "session_id": "sess-1",
-        "status": "spawning",
-        "title": "one",
-        "workspace_id": ""
-      }
-    ],
-    "updated_at": "<timestamp>",
-    "workspace_id": "workspace-1"
-  }
-}
---- 05 workspace_layout_updated
-{
-  "event": "workspace_layout_updated",
-  "workspace_layout": {
-    "active_pane_id": "pane-1",
-    "layout_json": "{\"type\":\"pane\",\"pane_id\":\"pane-1\"}",
-    "panes": [
-      {
-        "kind": "agent",
-        "pane_id": "pane-1",
-        "runtime_id": "sess-1",
-        "session_id": "sess-1",
-        "status": "spawning",
-        "title": "one",
-        "workspace_id": ""
-      }
-    ],
-    "updated_at": "<timestamp>",
-    "workspace_id": "workspace-1"
-  }
-}
---- 06 workflow_run_updated
+--- 04 workflow_run_updated
 {
   "event": "workflow_run_updated",
   "run": {
@@ -90,41 +46,41 @@
     "resumable": false,
     "run_id": "run-1",
     "script_hash": "hash-1",
-    "script_path": "<tmp>/workspace/flow.js",
+    "script_path": "<tmp>/project/flow.js",
     "status": "running",
     "updated_at": "<timestamp>"
   }
 }
---- 07 prs_updated
+--- 05 prs_updated
 {
   "event": "prs_updated"
 }
---- 08 repos_updated
+--- 06 repos_updated
 {
   "event": "repos_updated"
 }
---- 09 authors_updated
+--- 07 authors_updated
 {
   "event": "authors_updated"
 }
---- 10 github_hosts_updated
+--- 08 github_hosts_updated
 {
   "event": "github_hosts_updated",
   "github_hosts": null
 }
---- 11 automations_changed
+--- 09 automations_changed
 {
   "definition_ids": [
     "definition-1"
   ],
   "event": "automations_changed"
 }
---- 12 plugins_updated
+--- 10 plugins_updated
 {
   "event": "plugins_updated",
   "plugins": []
 }
---- 13 settings_updated
+--- 11 settings_updated
 {
   "changed_key": "claude_executable",
   "event": "settings_updated",
@@ -194,30 +150,30 @@
     "workflows_enabled": "false"
   }
 }
---- 14 tasks_changed
+--- 12 tasks_changed
 {
   "event": "tasks_changed"
 }
---- 15 notifications_updated
+--- 13 notifications_updated
 {
   "event": "notifications_updated",
   "unread_count": 0,
   "unread_critical_count": 0
 }
---- 16 notebook_changed
+--- 14 notebook_changed
 {
   "event": "notebook_changed",
   "origin": "agent",
   "paths": [
-    "<tmp>/workspace/journal.md"
+    "<tmp>/project/journal.md"
   ]
 }
---- 17 endpoints_updated
+--- 15 endpoints_updated
 {
   "endpoints": [],
   "event": "endpoints_updated"
 }
---- 18 endpoint_status_changed
+--- 16 endpoint_status_changed
 {
   "endpoint": {
     "id": "endpoint-1",
@@ -227,18 +183,18 @@
   },
   "event": "endpoint_status_changed"
 }
---- 19 git_operation_started
+--- 17 git_operation_started
 {
   "event": "git_operation_started",
   "operation": {
     "id": "<uuid>",
     "kind": "delete_worktree",
-    "path": "<tmp>/workspace",
+    "path": "<tmp>/project",
     "started_at": "<timestamp>",
     "status": "running"
   }
 }
---- 20 git_operation_finished
+--- 18 git_operation_finished
 {
   "event": "git_operation_finished",
   "operation": {
@@ -246,24 +202,24 @@
     "finished_at": "<timestamp>",
     "id": "<uuid>",
     "kind": "delete_worktree",
-    "path": "<tmp>/workspace",
+    "path": "<tmp>/project",
     "started_at": "<timestamp>",
     "status": "succeeded"
   }
 }
---- 21 worktree_created
+--- 19 worktree_created
 {
   "event": "worktree_created",
   "worktrees": [
     {
       "branch": "feature",
       "created_at": "<timestamp>",
-      "main_repo": "<tmp>/workspace",
+      "main_repo": "<tmp>/project",
       "path": "<tmp>/worktree"
     }
   ]
 }
---- 22 worktree_deleted
+--- 20 worktree_deleted
 {
   "event": "worktree_deleted",
   "worktrees": [
@@ -274,26 +230,26 @@
     }
   ]
 }
---- 23 worktrees_updated
+--- 21 worktrees_updated
 {
   "event": "worktrees_updated",
   "worktrees": [
     {
       "branch": "feature",
       "created_at": "<timestamp>",
-      "main_repo": "<tmp>/workspace",
+      "main_repo": "<tmp>/project",
       "path": "<tmp>/worktree"
     }
   ]
 }
---- 24 session_exited
+--- 22 session_exited
 {
   "event": "session_exited",
   "exit_code": 3,
   "id": "sess-1",
   "signal": "SIGTERM"
 }
---- 25 endpoint_status_changed
+--- 23 endpoint_status_changed
 {
   "endpoint": {
     "id": "endpoint-1",
@@ -303,7 +259,7 @@
   },
   "event": "endpoint_status_changed"
 }
---- 26 notebook_changed
+--- 24 notebook_changed
 {
   "event": "notebook_changed",
   "origin": "agent",
@@ -311,7 +267,7 @@
     "journal/2026-08-01.md"
   ]
 }
---- 27 notebook_changed
+--- 25 notebook_changed
 {
   "event": "notebook_changed",
   "origin": "ui",

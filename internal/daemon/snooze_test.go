@@ -61,7 +61,7 @@ func snoozedUntil(t *testing.T, d *Daemon, id string) string {
 
 func TestSnoozeSuppressesTurnsUntilItsDeadline(t *testing.T) {
 	d := newSnoozeDaemon(t)
-	addTurnSession(t, d, "s1", protocol.SessionAgentCodex, "ws1")
+	addTurnSession(t, d, "s1", protocol.SessionAgentCodex)
 
 	moveTo(d, "s1", protocol.StateWaitingInput)
 	if !owed(t, d, "s1") {
@@ -91,7 +91,7 @@ func TestSnoozeSuppressesTurnsUntilItsDeadline(t *testing.T) {
 
 func TestWakeOpensTheTurnAtTheWakeInstant(t *testing.T) {
 	d := newSnoozeDaemon(t)
-	addTurnSession(t, d, "s1", protocol.SessionAgentCodex, "ws1")
+	addTurnSession(t, d, "s1", protocol.SessionAgentCodex)
 
 	moveTo(d, "s1", protocol.StateWaitingInput)
 	original := protocol.Deref(d.sessionForBroadcast(d.store.Get("s1")).TurnOpenedAt)
@@ -123,7 +123,7 @@ func TestWakeOpensTheTurnAtTheWakeInstant(t *testing.T) {
 
 func TestWakeOpensNoTurnWhileTheAgentIsWorking(t *testing.T) {
 	d := newSnoozeDaemon(t)
-	addTurnSession(t, d, "s1", protocol.SessionAgentCodex, "ws1")
+	addTurnSession(t, d, "s1", protocol.SessionAgentCodex)
 
 	moveTo(d, "s1", protocol.StateWorking)
 	snoozeUntil(d, "s1", time.Now().Add(time.Hour))
@@ -154,7 +154,7 @@ func TestBreakThroughStatesEndTheSnooze(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			d := newSnoozeDaemon(t)
-			addTurnSession(t, d, "s1", protocol.SessionAgentCodex, "ws1")
+			addTurnSession(t, d, "s1", protocol.SessionAgentCodex)
 
 			moveTo(d, "s1", protocol.StateWorking)
 			snoozeUntil(d, "s1", time.Now().Add(time.Hour))
@@ -179,7 +179,7 @@ func TestBreakThroughStatesEndTheSnooze(t *testing.T) {
 
 func TestSnoozingAWorkingAgentSuppressesTheTurnItWouldOpen(t *testing.T) {
 	d := newSnoozeDaemon(t)
-	addTurnSession(t, d, "s1", protocol.SessionAgentCodex, "ws1")
+	addTurnSession(t, d, "s1", protocol.SessionAgentCodex)
 
 	moveTo(d, "s1", protocol.StateWorking)
 	if owed(t, d, "s1") {
@@ -195,7 +195,7 @@ func TestSnoozingAWorkingAgentSuppressesTheTurnItWouldOpen(t *testing.T) {
 
 func TestSnoozeWakeJobIsReconciledAfterRestart(t *testing.T) {
 	d := newSnoozeDaemon(t)
-	addTurnSession(t, d, "s1", protocol.SessionAgentCodex, "ws1")
+	addTurnSession(t, d, "s1", protocol.SessionAgentCodex)
 	moveTo(d, "s1", protocol.StateIdle)
 
 	now := time.Now()
@@ -217,7 +217,7 @@ func TestSnoozeWakeJobIsReconciledAfterRestart(t *testing.T) {
 func TestSnoozeWakeReconciliationFailsOpenWhenSchedulingFails(t *testing.T) {
 	d := newTurnDaemon(t)
 	d.setJobQueue(jobs.New(jobs.Options{Store: d.newSQLJobStore()}))
-	addTurnSession(t, d, "s1", protocol.SessionAgentCodex, "ws1")
+	addTurnSession(t, d, "s1", protocol.SessionAgentCodex)
 	moveTo(d, "s1", protocol.StateIdle)
 
 	now := time.Now()
@@ -262,7 +262,7 @@ func TestSnoozeFailsOpenWhileJobQueueStartFails(t *testing.T) {
 		t.Fatal("the starting job queue was published before it acquired its lock")
 	}
 
-	addTurnSession(t, d, "s1", protocol.SessionAgentCodex, "ws1")
+	addTurnSession(t, d, "s1", protocol.SessionAgentCodex)
 	moveTo(d, "s1", protocol.StateIdle)
 	snoozeUntil(d, "s1", time.Now().Add(time.Hour))
 	close(store.release)
@@ -280,7 +280,7 @@ func TestSnoozeFailsOpenWhileJobQueueStartFails(t *testing.T) {
 
 func TestSnoozeWakeJobOpensAnAttentionTurn(t *testing.T) {
 	d := newSnoozeDaemon(t)
-	addTurnSession(t, d, "s1", protocol.SessionAgentCodex, "ws1")
+	addTurnSession(t, d, "s1", protocol.SessionAgentCodex)
 	moveTo(d, "s1", protocol.StateWaitingInput)
 
 	snoozeUntil(d, "s1", time.Now().Add(-time.Minute))
@@ -296,7 +296,7 @@ func TestSnoozeWakeJobOpensAnAttentionTurn(t *testing.T) {
 
 func TestResnoozingReplacesTheQueuedWake(t *testing.T) {
 	d := newSnoozeDaemon(t)
-	addTurnSession(t, d, "s1", protocol.SessionAgentCodex, "ws1")
+	addTurnSession(t, d, "s1", protocol.SessionAgentCodex)
 	moveTo(d, "s1", protocol.StateWaitingInput)
 
 	first := time.Now().Add(time.Minute)
@@ -327,7 +327,7 @@ func TestSnoozeCancelsAPendingAutoSettle(t *testing.T) {
 	d := newSnoozeDaemon(t)
 	d.store.SetSetting(SettingAutoSettleEnabled, "true")
 	d.store.SetSetting(SettingAutoSettleArmSeconds, "5")
-	addTurnSession(t, d, "s1", protocol.SessionAgentCodex, "ws1")
+	addTurnSession(t, d, "s1", protocol.SessionAgentCodex)
 
 	moveTo(d, "s1", protocol.StateWaitingInput)
 	creditUserInputForNextWorking(t, d, "s1")
@@ -354,7 +354,7 @@ func TestALapsedDeadlineCannotSuppressANewTurnBeforeTheJobRuns(t *testing.T) {
 	d := newSnoozeDaemon(t)
 	synctest.Test(t, func(t *testing.T) {
 		stopDaemonBackground(t, d)
-		addTurnSession(t, d, "s1", protocol.SessionAgentCodex, "ws1")
+		addTurnSession(t, d, "s1", protocol.SessionAgentCodex)
 		moveTo(d, "s1", protocol.StateWorking)
 
 		snoozeUntil(d, "s1", time.Now().Add(time.Minute))
@@ -379,7 +379,7 @@ func TestALapsedDeadlineCannotSuppressANewTurnBeforeTheJobRuns(t *testing.T) {
 
 func TestSnoozeRejectsAnUnparseableDeadline(t *testing.T) {
 	d := newTurnDaemon(t)
-	addTurnSession(t, d, "s1", protocol.SessionAgentCodex, "ws1")
+	addTurnSession(t, d, "s1", protocol.SessionAgentCodex)
 	moveTo(d, "s1", protocol.StateWaitingInput)
 
 	d.handleSnoozeTurn(&protocol.SnoozeTurnMessage{SessionID: "s1", Until: "next tuesday"})

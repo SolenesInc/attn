@@ -31,10 +31,6 @@ func main() {
 
 	var err error
 	switch cmd {
-	case "add-workspace":
-		err = addWorkspace(args)
-	case "rm-workspace":
-		err = rmWorkspace(args)
 	case "add-session":
 		err = addSession(args)
 	case "rm-session":
@@ -69,8 +65,6 @@ func usage() {
 URL: %s (ATTN_WS_URL > ATTN_INSTANCE-derived port > dev; prod needs an explicit ATTN_WS_URL)
 
 Commands:
-  add-workspace --title T --dir D [--id I]
-  rm-workspace --id I
   add-session --cwd D [--profile P] [--place] [--agent claude] [--label L] [--initial-prompt-file P] [--yolo] [--id I] [--cols 80] [--rows 24]
   rm-session --id I
   kill-session --id I [--reload]
@@ -94,55 +88,6 @@ func resolveWSURL(explicitURL, instance string) string {
 		return "ws://localhost:" + config.WSPortForInstance(p) + "/ws"
 	}
 	return defaultWSURL
-}
-
-func addWorkspace(args []string) error {
-	fs := flag.NewFlagSet("add-workspace", flag.ExitOnError)
-	title := fs.String("title", "", "workspace title (required)")
-	dir := fs.String("dir", "", "workspace directory (required)")
-	id := fs.String("id", "", "workspace id (defaults to a generated one)")
-	fs.Parse(args)
-
-	if *title == "" || *dir == "" {
-		return errors.New("--title and --dir are required")
-	}
-	wsID := *id
-	if wsID == "" {
-		wsID = newID("ws")
-	}
-	abs, err := filepath.Abs(*dir)
-	if err != nil {
-		return err
-	}
-	msg := map[string]any{
-		"cmd":       "register_workspace",
-		"id":        wsID,
-		"title":     *title,
-		"directory": abs,
-	}
-	if err := send(msg); err != nil {
-		return err
-	}
-	fmt.Printf("workspace registered: id=%s title=%q dir=%s\n", wsID, *title, abs)
-	return nil
-}
-
-func rmWorkspace(args []string) error {
-	fs := flag.NewFlagSet("rm-workspace", flag.ExitOnError)
-	id := fs.String("id", "", "workspace id (required)")
-	fs.Parse(args)
-	if *id == "" {
-		return errors.New("--id is required")
-	}
-	msg := map[string]any{
-		"cmd": "unregister_workspace",
-		"id":  *id,
-	}
-	if err := send(msg); err != nil {
-		return err
-	}
-	fmt.Printf("workspace unregistered: id=%s\n", *id)
-	return nil
 }
 
 func addSession(args []string) error {
@@ -331,8 +276,8 @@ func list(_ []string) error {
 		return fmt.Errorf("expected initial_state, got %q", ev)
 	}
 	pretty, _ := json.MarshalIndent(map[string]any{
-		"workspaces": event["workspaces"],
-		"sessions":   event["sessions"],
+		"sessions": event["sessions"],
+		"desktops": event["desktops"],
 	}, "", "  ")
 	fmt.Println(string(pretty))
 	return nil
@@ -461,7 +406,7 @@ func sendClientHello(ctx context.Context, conn *websocket.Conn) error {
 		"cmd":          "client_hello",
 		"client_kind":  "wsctl",
 		"version":      "protocol-" + protocol.ProtocolVersion,
-		"capabilities": []string{protocol.CapabilityWorkspaceSessions},
+		"capabilities": []string{},
 		"client_token": config.ClientToken(),
 	})
 	if err != nil {

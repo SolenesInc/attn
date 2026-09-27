@@ -59,11 +59,11 @@ func (w *profilesTestDaemon) restart() {
 
 func (w *profilesTestDaemon) connect(rememberedProfileID string) (*wsClient, protocol.InitialStateMessage) {
 	w.t.Helper()
-	client := newWorkspaceProtocolTestClient()
+	client := newProtocolTestClient()
 	hello := &protocol.ClientHelloMessage{
 		ClientKind:   "tauri-app",
 		Version:      "test",
-		Capabilities: []string{protocol.CapabilityWorkspaceSessions},
+		Capabilities: nil,
 		ClientToken:  protocol.Ptr("the-token"),
 	}
 	if rememberedProfileID != "" {

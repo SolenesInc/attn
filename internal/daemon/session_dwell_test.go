@@ -71,7 +71,6 @@ func TestSpawnFilesWhoAnswersApprovals(t *testing.T) {
 			t.Cleanup(func() { _ = d.store.Close() })
 			d.ptyBackend = &fakeSpawnBackend{}
 			cwd := t.TempDir()
-			addTestWorkspace(d, "workspace", cwd)
 			d.store.SetSetting(SettingAutoApproveEnabled, strconv.FormatBool(tc.autoApprove))
 
 			msg := &protocol.SpawnSessionMessage{

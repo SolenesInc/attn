@@ -487,53 +487,6 @@ func TestDaemon_RecoverySettledSignalFollowsEachRecoveryCycle(t *testing.T) {
 	<-second
 }
 
-func TestDaemon_ReseedWorkspaceStatusesAfterRecovery(t *testing.T) {
-	d := NewForTesting(filepath.Join(t.TempDir(), "reseed.sock"))
-	d.ptyBackend = nil
-	d.workspaces = newWorkspaceRegistry()
-
-	workspaceID := "ws-reseed"
-	sessionID := "sess-reseed"
-	cwd := t.TempDir()
-
-	d.store.AddWorkspace(&protocol.Workspace{ID: workspaceID, Title: "Reseed", Directory: cwd})
-	d.workspaces.register(workspaceID, "Reseed", cwd, "a0")
-	nowStr := string(protocol.TimestampNow())
-	d.store.Add(&protocol.Session{
-		ID:             sessionID,
-		Label:          "claude",
-		Agent:          protocol.SessionAgentClaude,
-		Directory:      cwd,
-		State:          protocol.SessionStateWorking,
-		StateSince:     nowStr,
-		StateUpdatedAt: nowStr,
-		LastSeen:       nowStr,
-		WorkspaceID:    workspaceID,
-		ProfileID:      defaultProfileID(t, d.store),
-	})
-	newRecoveryHome(t).resumableClaude(t, sessionID)
-	giveRestorationEvidence(t, d, sessionID, sessionID)
-	d.workspaces.associateSession(sessionID, workspaceID, "claude")
-
-	d.recomputeWorkspaceStatus(workspaceID)
-	if ws, _ := d.workspaces.snapshot(workspaceID); ws.Status != protocol.WorkspaceStatusWorking {
-		t.Fatalf("precondition: seeded rollup = %q, want working", ws.Status)
-	}
-
-	d.pruneSessionsWithoutPTY(time.Time{})
-	if got := d.store.Get(sessionID); got == nil || got.State != protocol.SessionStateRecoverable {
-		t.Fatalf("prune should keep session and mark it recoverable, got %+v", got)
-	}
-	if ws, _ := d.workspaces.snapshot(workspaceID); ws.Status != protocol.WorkspaceStatusWorking {
-		t.Fatalf("rollup should still be stale-working before reseed, got %q", ws.Status)
-	}
-
-	d.reseedWorkspaceStatuses()
-	if ws, _ := d.workspaces.snapshot(workspaceID); ws.Status != protocol.WorkspaceStatusIdle {
-		t.Fatalf("rollup after reseed = %q, want idle", ws.Status)
-	}
-}
-
 func TestDaemon_Start_SelectsWorkerBackendWhenRequested(t *testing.T) {
 	t.Setenv("ATTN_PTY_BACKEND", "worker")
 	t.Setenv("ATTN_PTY_SKIP_STARTUP_PROBE", "1")
@@ -2015,12 +1968,6 @@ func (b *fakeSpawnBackend) RemovedIDs() []string {
 	return append([]string(nil), b.removed...)
 }
 
-func addTestWorkspace(d *Daemon, id, directory string) {
-	rank := d.resolveWorkspaceRank(d.store.GetWorkspace(id))
-	d.store.AddWorkspace(&protocol.Workspace{ID: id, Title: id, Directory: directory, Status: protocol.WorkspaceStatusLaunching, Rank: rank})
-	d.workspaces.register(id, id, directory, rank)
-}
-
 func TestDaemon_HandleSpawnSession_UsesStoredResumeSessionIDForRecoverableClaudeSession(t *testing.T) {
 	d := NewForTesting(filepath.Join(t.TempDir(), "test.sock"))
 	backend := &fakeSpawnBackend{}
@@ -2038,7 +1985,6 @@ func TestDaemon_HandleSpawnSession_UsesStoredResumeSessionIDForRecoverableClaude
 		LastSeen:       now,
 	})
 	d.store.SetResumeSessionID("attn-session", "claude-session")
-	addTestWorkspace(d, "workspace-attn-session", t.TempDir())
 
 	client := &wsClient{
 		send:            make(chan outboundMessage, 2),
@@ -2096,7 +2042,6 @@ func TestDaemon_HandleSpawnSession_UsesStoredResumeSessionIDEvenWhenNotRecoverab
 		LastSeen:       now,
 	})
 	d.store.SetResumeSessionID("attn-session", "claude-session")
-	addTestWorkspace(d, "workspace-attn-session", t.TempDir())
 
 	client := &wsClient{
 		send:            make(chan outboundMessage, 2),
@@ -2141,7 +2086,6 @@ func TestDaemon_HandleSpawnSession_UsesStoredResumeSessionIDForCodexSession(t *t
 		LastSeen:       now,
 	})
 	d.store.SetResumeSessionID("attn-session", "codex-session")
-	addTestWorkspace(d, "workspace-attn-session", t.TempDir())
 
 	client := &wsClient{
 		send:            make(chan outboundMessage, 2),
@@ -2661,74 +2605,6 @@ func TestDaemon_BroadcastRawWSMessage_RoutesPendingRemotePTYOutputBeforeAttachRe
 	}
 }
 
-func TestDaemon_BroadcastRawWSMessage_RoutesRemoteTileContentToSubscribedClients(t *testing.T) {
-	d := NewForTesting(filepath.Join(t.TempDir(), "test.sock"))
-	clientSubscribed := &wsClient{
-		send:            make(chan outboundMessage, 8),
-		attachedStreams: make(map[string]ptybackend.Stream),
-	}
-	clientOther := &wsClient{
-		send:            make(chan outboundMessage, 8),
-		attachedStreams: make(map[string]ptybackend.Stream),
-	}
-	d.wsHub.clients[clientSubscribed] = true
-	d.wsHub.clients[clientOther] = true
-	clientSubscribed.notePendingTileContent("remote-workspace", "tile-markdown")
-
-	payload, err := json.Marshal(protocol.WorkspaceTileContentMessage{
-		Event:       protocol.EventWorkspaceTileContent,
-		WorkspaceID: "remote-workspace",
-		TileID:      "tile-markdown",
-		TileKind:    string(layouttree.TileKindMarkdown),
-		Path:        "/srv/repo/README.md",
-		Content:     "# Private",
-	})
-	if err != nil {
-		t.Fatalf("marshal workspace_tile_content: %v", err)
-	}
-	d.broadcastRawWSMessage(payload)
-
-	event := readOutboundEvent(t, clientSubscribed)
-	if asString(event["event"]) != protocol.EventWorkspaceTileContent || asString(event["content"]) != "# Private" {
-		t.Fatalf("unexpected tile content event: %+v", event)
-	}
-	assertNoOutboundEvent(t, clientOther)
-	if !clientSubscribed.wantsTileContent("remote-workspace", "tile-markdown") {
-		t.Fatal("successful relayed tile response should promote the pending request to a subscription")
-	}
-}
-
-func TestDaemon_BroadcastRawWSMessage_PrunesRemoteTileSubscriptionsAfterLayoutUpdate(t *testing.T) {
-	d := NewForTesting(filepath.Join(t.TempDir(), "test.sock"))
-	client := &wsClient{
-		send:            make(chan outboundMessage, 8),
-		attachedStreams: make(map[string]ptybackend.Stream),
-	}
-	d.wsHub.clients[client] = true
-	client.subscribeTileContent("remote-workspace", "tile-markdown")
-
-	layoutJSON, err := layouttree.EncodeLayout(layouttree.DefaultLayout("pane-1"))
-	if err != nil {
-		t.Fatalf("encode layout: %v", err)
-	}
-	payload, err := json.Marshal(protocol.WorkspaceLayoutUpdatedMessage{
-		Event: protocol.EventWorkspaceLayoutUpdated,
-		WorkspaceLayout: protocol.WorkspaceLayout{
-			WorkspaceID:  "remote-workspace",
-			ActivePaneID: "pane-1",
-			LayoutJson:   layoutJSON,
-		},
-	})
-	if err != nil {
-		t.Fatalf("marshal workspace_layout_updated: %v", err)
-	}
-	d.broadcastRawWSMessage(payload)
-
-	if client.wantsTileContent("remote-workspace", "tile-markdown") {
-		t.Fatal("removed remote tile subscription survived layout update")
-	}
-}
-
 func TestDaemon_BroadcastRawWSMessage_RemoteSessionExitedClearsRemoteAttachState(t *testing.T) {
 	d := NewForTesting(filepath.Join(t.TempDir(), "test.sock"))
 	client := &wsClient{
@@ -2887,7 +2763,7 @@ func TestDaemon_HandleClientMessage_ClearWarnings(t *testing.T) {
 	}
 
 	client := &wsClient{}
-	client.setIdentity("daemon-test", "protocol-"+protocol.ProtocolVersion, []string{protocol.CapabilityWorkspaceSessions})
+	client.setIdentity("daemon-test", "protocol-"+protocol.ProtocolVersion, nil)
 	d.handleClientMessage(client, []byte(`{"cmd":"clear_warnings"}`))
 
 	if got := len(d.getWarnings()); got != 0 {
@@ -2914,7 +2790,7 @@ func TestDaemon_ClearWarningsNotReplayedInInitialState(t *testing.T) {
 	client := &wsClient{
 		send: make(chan outboundMessage, 4),
 	}
-	client.setIdentity("daemon-test", "protocol-"+protocol.ProtocolVersion, []string{protocol.CapabilityWorkspaceSessions})
+	client.setIdentity("daemon-test", "protocol-"+protocol.ProtocolVersion, nil)
 
 	d.sendInitialState(client)
 	first := <-client.send
@@ -2953,7 +2829,7 @@ func TestDaemon_InitialState_IncludesDaemonInstanceID(t *testing.T) {
 		send:            make(chan outboundMessage, 2),
 		attachedStreams: make(map[string]ptybackend.Stream),
 	}
-	client.setIdentity("daemon-test", "protocol-"+protocol.ProtocolVersion, []string{protocol.CapabilityWorkspaceSessions})
+	client.setIdentity("daemon-test", "protocol-"+protocol.ProtocolVersion, nil)
 
 	d.sendInitialState(client)
 	msg := <-client.send
@@ -2976,7 +2852,7 @@ func TestDaemon_GitHubHostsMessages_UseRegisteredHosts(t *testing.T) {
 		send:            make(chan outboundMessage, 2),
 		attachedStreams: make(map[string]ptybackend.Stream),
 	}
-	client.setIdentity("daemon-test", "protocol-"+protocol.ProtocolVersion, []string{protocol.CapabilityWorkspaceSessions})
+	client.setIdentity("daemon-test", "protocol-"+protocol.ProtocolVersion, nil)
 
 	d.sendInitialState(client)
 	msg := <-client.send
@@ -3006,7 +2882,7 @@ func TestDaemon_RecoveryBarrier_BlocksPTYCommands(t *testing.T) {
 		send:            make(chan outboundMessage, 2),
 		attachedStreams: make(map[string]ptybackend.Stream),
 	}
-	client.setIdentity("daemon-test", "protocol-"+protocol.ProtocolVersion, []string{protocol.CapabilityWorkspaceSessions})
+	client.setIdentity("daemon-test", "protocol-"+protocol.ProtocolVersion, nil)
 
 	d.handleClientMessage(client, []byte(`{"cmd":"attach_session","id":"sess-1"}`))
 
@@ -3046,7 +2922,7 @@ func TestDaemon_RecoveryBarrier_BlocksClearSessions(t *testing.T) {
 		send:            make(chan outboundMessage, 2),
 		attachedStreams: make(map[string]ptybackend.Stream),
 	}
-	client.setIdentity("daemon-test", "protocol-"+protocol.ProtocolVersion, []string{protocol.CapabilityWorkspaceSessions})
+	client.setIdentity("daemon-test", "protocol-"+protocol.ProtocolVersion, nil)
 
 	d.handleClientMessage(client, []byte(`{"cmd":"clear_sessions"}`))
 
@@ -3365,7 +3241,7 @@ func TestDaemon_AttachFlowOverWebSocket(t *testing.T) {
 	}
 	defer conn.Close(websocket.StatusNormalClosure, "")
 
-	sendWorkspaceClientHello(t, conn)
+	sendHello(t, conn)
 	initial := waitForDaemonWebSocketEvent(t, conn, 10*time.Second, func(evt map[string]interface{}) bool {
 		return asString(evt["event"]) == protocol.EventInitialState
 	})
@@ -3492,14 +3368,14 @@ func waitForProtocolWebSocketEvent(t *testing.T, conn *websocket.Conn, want stri
 	return protocol.WebSocketEvent{}
 }
 
-func sendWorkspaceClientHello(t *testing.T, conn *websocket.Conn) {
+func sendHello(t *testing.T, conn *websocket.Conn) {
 	t.Helper()
 	conn.SetReadLimit(-1)
 	if err := writeWS(conn, map[string]interface{}{
 		"cmd":          protocol.CmdClientHello,
 		"client_kind":  "daemon-test",
 		"version":      "protocol-" + protocol.ProtocolVersion,
-		"capabilities": []string{protocol.CapabilityWorkspaceSessions},
+		"capabilities": nil,
 		"client_token": config.ClientToken(),
 	}); err != nil {
 		t.Fatalf("send client hello: %v", err)
@@ -4172,7 +4048,7 @@ func TestDaemon_ApprovePR_ViaWebSocket(t *testing.T) {
 	}
 	defer conn.Close(websocket.StatusNormalClosure, "")
 
-	sendWorkspaceClientHello(t, conn)
+	sendHello(t, conn)
 	_, initialData, err := conn.Read(ctx)
 	if err != nil {
 		t.Fatalf("Read initial state error: %v", err)
@@ -4372,7 +4248,7 @@ func TestDaemon_MutePR_ViaWebSocket(t *testing.T) {
 	}
 	defer wsConn.Close(websocket.StatusNormalClosure, "")
 
-	sendWorkspaceClientHello(t, wsConn)
+	sendHello(t, wsConn)
 	initialState := waitForProtocolWebSocketEvent(t, wsConn, protocol.EventInitialState)
 	if len(initialState.Prs) != 1 {
 		t.Fatalf("Expected 1 PR in initial state, got %d", len(initialState.Prs))
@@ -4380,7 +4256,7 @@ func TestDaemon_MutePR_ViaWebSocket(t *testing.T) {
 	if initialState.Prs[0].Muted {
 		t.Error("Expected PR to not be muted initially")
 	}
-	sendWorkspaceClientHello(t, wsConn)
+	sendHello(t, wsConn)
 
 	muteCmd := map[string]interface{}{
 		"cmd": "mute_pr",
@@ -4448,7 +4324,7 @@ func TestDaemon_MuteRepo_ViaWebSocket(t *testing.T) {
 	}
 	defer wsConn.Close(websocket.StatusNormalClosure, "")
 
-	sendWorkspaceClientHello(t, wsConn)
+	sendHello(t, wsConn)
 	waitForProtocolWebSocketEvent(t, wsConn, protocol.EventInitialState)
 
 	muteCmd := map[string]interface{}{
@@ -4518,7 +4394,7 @@ func TestDaemon_InitialState_IncludesRepoStates(t *testing.T) {
 	}
 	defer wsConn.Close(websocket.StatusNormalClosure, "")
 
-	sendWorkspaceClientHello(t, wsConn)
+	sendHello(t, wsConn)
 	initialState := waitForProtocolWebSocketEvent(t, wsConn, protocol.EventInitialState)
 
 	if initialState.Repos == nil {
@@ -4577,7 +4453,7 @@ func TestDaemon_StateChange_BroadcastsToWebSocket(t *testing.T) {
 	}
 	defer wsConn.Close(websocket.StatusNormalClosure, "")
 
-	sendWorkspaceClientHello(t, wsConn)
+	sendHello(t, wsConn)
 	waitForProtocolWebSocketEvent(t, wsConn, protocol.EventInitialState)
 
 	err = c.UpdateState("test-session", protocol.StateWaitingInput)
@@ -4637,7 +4513,7 @@ func TestDaemon_HookReportedStatesReachClients(t *testing.T) {
 	}
 	defer wsConn.Close(websocket.StatusNormalClosure, "")
 
-	sendWorkspaceClientHello(t, wsConn)
+	sendHello(t, wsConn)
 	waitForProtocolWebSocketEvent(t, wsConn, protocol.EventInitialState)
 	d.store.UpdateTodos("test-session", []string{strings.Repeat("x", 32<<10)})
 
@@ -4707,7 +4583,7 @@ func TestDaemon_InjectTestSession_BroadcastsToWebSocket(t *testing.T) {
 	}
 	defer wsConn.Close(websocket.StatusNormalClosure, "")
 
-	sendWorkspaceClientHello(t, wsConn)
+	sendHello(t, wsConn)
 	_, _, err := wsConn.Read(ctx)
 	if err != nil {
 		t.Fatalf("Read initial state error: %v", err)

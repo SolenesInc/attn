@@ -118,7 +118,7 @@ async function main() {
     fs.writeFileSync(path.join(runDir, 'utility-scrollback.txt'), utilityPaneText?.text || '', 'utf8');
     await captureScreenshot(driver, path.join(runDir, '04-utility-output.png'));
 
-    const workspace = observer.getWorkspace(sessionId);
+    const desktop = observer.desktopOf(sessionId);
     const summary = {
       ok: true,
       runId,
@@ -128,10 +128,10 @@ async function main() {
         directory: session.directory,
         agent: session.agent,
       },
-      workspace: workspace
+      desktop: desktop
         ? {
-            activePaneId: workspace.active_pane_id,
-            panes: workspace.panes,
+            activePaneId: desktop.active_pane_id,
+            panes: desktop.panes,
           }
         : null,
       utilityToken,

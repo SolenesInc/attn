@@ -773,7 +773,7 @@ describe('WorkspaceDockTile markdown send flow', () => {
     fireEvent.click(sendButton());
     await waitFor(() => {
       expect(submitSpy).toHaveBeenCalledWith(
-        fileMarkdownSource('workspace-1', SEND_PATH),
+        fileMarkdownSource(SEND_PATH),
         { kind: 'session', sessionId: 'sess-b' },
         [],
       );
@@ -868,7 +868,7 @@ describe('WorkspaceDockTile markdown send flow', () => {
     expect(sendButton()).toHaveTextContent('Sending…');
     await waitFor(() => {
       expect(submitSpy).toHaveBeenCalledWith(
-        fileMarkdownSource('workspace-1', SEND_PATH),
+        fileMarkdownSource(SEND_PATH),
         { kind: 'session', sessionId: 'sess-a' },
         [],
       );
@@ -977,7 +977,7 @@ describe('WorkspaceDockTile markdown send flow', () => {
     expect(event.defaultPrevented).toBe(true);
     await waitFor(() => {
       expect(submitSpy).toHaveBeenCalledWith(
-        fileMarkdownSource('workspace-1', SEND_PATH),
+        fileMarkdownSource(SEND_PATH),
         { kind: 'session', sessionId: 'sess-a' },
         [],
       );

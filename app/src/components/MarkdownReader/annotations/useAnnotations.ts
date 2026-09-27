@@ -102,7 +102,6 @@ export function useAnnotations({
   const sourceRef = useRef(source);
   const sourceUri = source.uri;
   const sourceKind = source.kind;
-  const sourceWorkspaceId = source.kind === 'file' ? source.workspaceId : '';
   const sourcePath = source.kind === 'file' ? source.path : '';
   const sourceSeedId = source.kind === 'seed' ? source.seedId : '';
   const generationRef = useRef(0);
@@ -422,7 +421,6 @@ export function useAnnotations({
       ? {
         kind: 'file',
         uri: sourceUri,
-        workspaceId: sourceWorkspaceId,
         path: sourcePath,
       }
       : {
@@ -452,7 +450,6 @@ export function useAnnotations({
   }, [
     sourceUri,
     sourceKind,
-    sourceWorkspaceId,
     sourcePath,
     sourceSeedId,
     enabled,

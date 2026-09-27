@@ -23,7 +23,7 @@ func TestEachProfileKeepsItsOwnChief(t *testing.T) {
 	d := NewForTesting(filepath.Join(t.TempDir(), "test.sock"))
 	t.Cleanup(func() { _ = d.store.Close() })
 	d.ptyBackend = &fakeSpawnBackend{}
-	client := newWorkspaceProtocolTestClient()
+	client := newProtocolTestClient()
 	home := defaultProfileID(t, d.store)
 	work := createTestProfile(t, d.store, "Work")
 
@@ -62,7 +62,7 @@ func TestChiefLookupsFollowTheirCaller(t *testing.T) {
 	d := NewForTesting(filepath.Join(t.TempDir(), "test.sock"))
 	t.Cleanup(func() { _ = d.store.Close() })
 	d.ptyBackend = &fakeSpawnBackend{}
-	client := newWorkspaceProtocolTestClient()
+	client := newProtocolTestClient()
 	home := defaultProfileID(t, d.store)
 	work := createTestProfile(t, d.store, "Work")
 	spawnChiefCandidate(t, d, client, "home-chief", home)
@@ -89,7 +89,7 @@ func TestAChiefsTicketIdentityCarriesItsProfile(t *testing.T) {
 	d := NewForTesting(filepath.Join(t.TempDir(), "test.sock"))
 	t.Cleanup(func() { _ = d.store.Close() })
 	d.ptyBackend = &fakeSpawnBackend{}
-	client := newWorkspaceProtocolTestClient()
+	client := newProtocolTestClient()
 	home := defaultProfileID(t, d.store)
 	work := createTestProfile(t, d.store, "Work")
 	spawnChiefCandidate(t, d, client, "home-chief", home)
@@ -116,7 +116,7 @@ func TestAChiefsTicketIdentityCarriesItsProfile(t *testing.T) {
 func TestDeletingAProfileDemotesItsChiefAndKeepsTheDestinations(t *testing.T) {
 	d := newEnrolledDaemon(t, "")
 	d.ptyBackend = &fakeSpawnBackend{}
-	client := newWorkspaceProtocolTestClient()
+	client := newProtocolTestClient()
 	home := defaultProfileID(t, d.store)
 	work := createTestProfile(t, d.store, "Work")
 	spawnChiefCandidate(t, d, client, "home-chief", home)
@@ -148,7 +148,7 @@ func TestAChiefClosesOnlyAgentsOfItsProfile(t *testing.T) {
 	d := NewForTesting(filepath.Join(t.TempDir(), "test.sock"))
 	t.Cleanup(func() { _ = d.store.Close() })
 	d.ptyBackend = &fakeSpawnBackend{}
-	client := newWorkspaceProtocolTestClient()
+	client := newProtocolTestClient()
 	home := defaultProfileID(t, d.store)
 	work := createTestProfile(t, d.store, "Work")
 	spawnChiefCandidate(t, d, client, "home-chief", home)
@@ -169,7 +169,7 @@ func TestAChiefClosesOnlyAgentsOfItsProfile(t *testing.T) {
 func TestMovingAProfilesChiefOutDemotesItAndKeepsTheDestinationsChief(t *testing.T) {
 	d := newEnrolledDaemon(t, "")
 	d.ptyBackend = &fakeSpawnBackend{}
-	client := newWorkspaceProtocolTestClient()
+	client := newProtocolTestClient()
 	home := defaultProfileID(t, d.store)
 	work := createTestProfile(t, d.store, "Work")
 	spawnChiefCandidate(t, d, client, "home-chief", home)

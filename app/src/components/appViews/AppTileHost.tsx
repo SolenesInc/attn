@@ -13,7 +13,7 @@ import './appSdkComponents.css';
 interface AppTileHostProps {
   app: string;
   view: string;
-  workspaceId: string;
+  desktopId: string;
   sessionId: string | null;
   tileId: string;
   params: string;
@@ -25,7 +25,7 @@ interface Mounted {
   versionId: number;
 }
 
-export function AppTileHost({ app, view, workspaceId, sessionId, tileId, params }: AppTileHostProps) {
+export function AppTileHost({ app, view, desktopId, sessionId, tileId, params }: AppTileHostProps) {
   const { sendAppCommand, sendAppViewCrash, subscribeDocuments } = useDaemonApi();
   const entry = useDaemonStore((state) => state.apps.find((a) => a.name === app));
 
@@ -99,8 +99,8 @@ export function AppTileHost({ app, view, workspaceId, sessionId, tileId, params 
   }, []);
 
   const viewProps = useMemo(
-    () => ({ workspaceId, sessionId, tileId, params }),
-    [workspaceId, sessionId, tileId, params],
+    () => ({ desktopId, sessionId, tileId, params }),
+    [desktopId, sessionId, tileId, params],
   );
 
   // Composed from the mount's identity, never taken from the view: an app is

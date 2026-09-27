@@ -151,14 +151,14 @@ func (s *Store) SessionDelegationRoles() (map[string]*protocol.SessionDelegation
 
 func getDelegationOperation(db *sql.DB, id string) (*DelegationOperationRecord, error) {
 	var rec DelegationOperationRecord
-	var state, workspaceID, ticketID, directory, branch, baseCommit, handoffNoteID, worktreePath, worktreeToken, chiefSessionID, resultJSON, errorText, failureCode string
+	var state, ticketID, directory, branch, baseCommit, handoffNoteID, worktreePath, worktreeToken, chiefSessionID, resultJSON, errorText, failureCode string
 	var worktreeOwned int
 	err := db.QueryRow(`SELECT request_id, operation_id, request_json, state, progress,
-		session_id, workspace_id, ticket_id, directory, branch, base_commit, parent_seed_id, handoff_note_id, worktree_path, worktree_owned, worktree_token, chief_session_id,
+		session_id, ticket_id, directory, branch, base_commit, parent_seed_id, handoff_note_id, worktree_path, worktree_owned, worktree_token, chief_session_id,
 		handover_seed_rev, handover_tender_session, handover_tender_member, result_json, error, failure_code, resolved_preferences, created_at, updated_at
 		FROM delegation_operations WHERE request_id = ? OR operation_id = ?`, id, id).Scan(
 		&rec.Operation.RequestID, &rec.Operation.OperationID, &rec.RequestJSON, &state,
-		&rec.Operation.Progress, &rec.Operation.SessionID, &workspaceID, &ticketID,
+		&rec.Operation.Progress, &rec.Operation.SessionID, &ticketID,
 		&directory, &branch, &baseCommit, &rec.ParentSeedID, &handoffNoteID, &worktreePath, &worktreeOwned, &worktreeToken, &chiefSessionID,
 		&rec.HandoverSeedRev, &rec.HandoverTenderSession, &rec.HandoverTenderMember,
 		&resultJSON, &errorText, &failureCode, &rec.ResolvedPreferences, &rec.Operation.CreatedAt, &rec.Operation.UpdatedAt)
@@ -171,9 +171,6 @@ func getDelegationOperation(db *sql.DB, id string) (*DelegationOperationRecord, 
 	rec.ChiefSessionID = chiefSessionID
 	rec.BaseCommit = baseCommit
 	rec.HandoffNoteID = handoffNoteID
-	if workspaceID != "" {
-		rec.Operation.WorkspaceID = protocol.Ptr(workspaceID)
-	}
 	if ticketID != "" {
 		if delegationRequestUsesSeed(rec.RequestJSON) {
 			rec.Operation.SeedID = protocol.Ptr(ticketID)

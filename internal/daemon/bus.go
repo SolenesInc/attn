@@ -39,17 +39,6 @@ const (
 
 	FactEndpointSessionsChanged = "endpoint.sessions.changed"
 
-	FactWorkspaceRegistered         = "workspace.registered"
-	FactWorkspaceReregistered       = "workspace.reregistered"
-	FactWorkspaceRenamed            = "workspace.renamed"
-	FactWorkspaceStatusChanged      = "workspace.status.changed"
-	FactWorkspaceRankChanged        = "workspace.rank.changed"
-	FactWorkspaceSessionAssociated  = "workspace.session.associated"
-	FactWorkspaceSessionDissociated = "workspace.session.dissociated"
-	FactWorkspaceUnregistered       = "workspace.unregistered"
-	FactWorkspaceLayoutChanged      = "workspace.layout.changed"
-	FactWorkspaceLayoutRepublished  = "workspace.layout.republished"
-
 	FactProfileCreated            = "profile.created"
 	FactProfileRenamed            = "profile.renamed"
 	FactProfileDeleted            = "profile.deleted"
@@ -247,37 +236,6 @@ func buildWireProjections() []projection {
 				FactEndpointSessionsChanged,
 			},
 			apply: func(d *Daemon, _ bus.Event) { d.projectSessionsUpdated() },
-		},
-		{
-			filter: bus.Filter{FactWorkspaceRegistered},
-			apply: func(d *Daemon, ev bus.Event) {
-				d.projectWorkspaceEvent(protocol.EventWorkspaceRegistered, ev.Subject)
-			},
-		},
-		{
-			filter: bus.Filter{
-				FactWorkspaceReregistered,
-				FactWorkspaceRenamed,
-				FactWorkspaceStatusChanged,
-				FactWorkspaceRankChanged,
-				FactWorkspaceSessionAssociated,
-				FactWorkspaceSessionDissociated,
-			},
-			apply: func(d *Daemon, ev bus.Event) {
-				d.projectWorkspaceEvent(protocol.EventWorkspaceStateChanged, ev.Subject)
-			},
-		},
-		{
-			filter: bus.Filter{FactWorkspaceUnregistered},
-			apply:  func(d *Daemon, ev bus.Event) { d.projectWorkspaceUnregistered(ev) },
-		},
-		{
-			filter: bus.Filter{FactWorkspaceLayoutChanged},
-			apply:  func(d *Daemon, ev bus.Event) { d.projectWorkspaceLayoutChanged(ev) },
-		},
-		{
-			filter: bus.Filter{FactWorkspaceLayoutRepublished},
-			apply:  func(d *Daemon, ev bus.Event) { d.projectWorkspaceLayoutRepublished(ev.Subject) },
 		},
 		{
 			filter: bus.Filter{FactProfileCreated, FactProfileRenamed, FactProfileDeleted, FactProfileArrangementChanged},

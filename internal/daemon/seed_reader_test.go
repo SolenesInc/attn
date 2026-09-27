@@ -34,7 +34,7 @@ func TestSeedDocumentGetReturnsBodyImmediateChildrenAndLog(t *testing.T) {
 	plant(t, d, protocol.SeedPlantMessage{SourceSessionID: protocol.Ptr("sess-a"), Title: "Grandchild", PartOf: &child.ID})
 	note(t, d, "sess-a", crown.ID, "reader log entry", "trellis")
 
-	client := newWorkspaceProtocolTestClient()
+	client := newProtocolTestClient()
 	d.handleSeedDocumentGet(client, &protocol.SeedDocumentGetMessage{
 		Cmd: protocol.CmdSeedDocumentGet, SeedID: crown.ID, RequestID: "seed-doc-1",
 	})
@@ -55,7 +55,7 @@ func TestSeedDocumentGetReturnsBodyImmediateChildrenAndLog(t *testing.T) {
 
 func TestSeedDocumentGetNamesUnknownID(t *testing.T) {
 	d := newGardenDaemon(t)
-	client := newWorkspaceProtocolTestClient()
+	client := newProtocolTestClient()
 	d.handleSeedDocumentGet(client, &protocol.SeedDocumentGetMessage{
 		Cmd: protocol.CmdSeedDocumentGet, SeedID: "s-ffffff", RequestID: "missing",
 	})
@@ -71,7 +71,7 @@ func TestSeedDocumentGetReportsWhetherTheStoredTenderStillHolds(t *testing.T) {
 	move(t, d, "sess-a", seed.ID, garden.VerbTend, "", "")
 
 	read := func(requestID string) protocol.SeedDocumentGetResultMessage {
-		client := newWorkspaceProtocolTestClient()
+		client := newProtocolTestClient()
 		d.handleSeedDocumentGet(client, &protocol.SeedDocumentGetMessage{
 			Cmd: protocol.CmdSeedDocumentGet, SeedID: seed.ID, RequestID: requestID,
 		})
@@ -267,7 +267,7 @@ func TestConcurrentMarkdownAndSeedOpenPreservesBothTiles(t *testing.T) {
 func TestSeedAnnotationDraftUsesCanonicalSeedKey(t *testing.T) {
 	d := newGardenDaemon(t)
 	seed := plant(t, d, protocol.SeedPlantMessage{SourceSessionID: protocol.Ptr("sess-a"), Title: "Annotated seed"})
-	client := newWorkspaceProtocolTestClient()
+	client := newProtocolTestClient()
 	d.handleMarkdownAnnotationsSave(client, &protocol.MarkdownAnnotationsSaveMessage{
 		Cmd: protocol.CmdMarkdownAnnotationsSave, RequestID: "save-seed", Generation: 1,
 		DocumentUri: seedDocumentURI(seed.ID), SourceKind: annotationSourceSeed, SeedID: &seed.ID,
@@ -286,16 +286,16 @@ func TestSeedAnnotationDraftUsesCanonicalSeedKey(t *testing.T) {
 func TestAnnotationSourceRejectsMismatchedDocumentURI(t *testing.T) {
 	d := newMarkdownAnnotationsDaemon(t)
 	_, err := d.resolveAnnotationDocumentSource("attn://seed/s-wrong", annotationSourceFile,
-		protocol.Ptr("workspace a"), protocol.Ptr("/tmp/a b.md"), nil)
+		protocol.Ptr("/tmp/a b.md"), nil)
 	if err == nil || !strings.Contains(err.Error(), "does not match typed file source") {
 		t.Fatalf("error = %v, want URI mismatch", err)
 	}
-	want := "attn://file/workspace%20a/%2Ftmp%2Fa%20b.md"
-	if got := fileDocumentURI("workspace a", "/tmp/a b.md"); got != want {
+	want := "attn://file/%2Ftmp%2Fa%20b.md"
+	if got := fileDocumentURI("/tmp/a b.md"); got != want {
 		t.Fatalf("fileDocumentURI = %q, want %q", got, want)
 	}
-	want = "attn://file/work%2F%C3%A9/%2Ftmp%2Fcaf%C3%A9%20!(x).md"
-	if got := fileDocumentURI("work/é", "/tmp/café !(x).md"); got != want {
+	want = "attn://file/%2Ftmp%2Fcaf%C3%A9%20!(x).md"
+	if got := fileDocumentURI("/tmp/café !(x).md"); got != want {
 		t.Fatalf("unicode fileDocumentURI = %q, want %q", got, want)
 	}
 }

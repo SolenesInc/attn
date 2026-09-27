@@ -55,7 +55,7 @@ func TestHandleClientMessageStampsUserPresence(t *testing.T) {
 	d := NewForTesting(filepath.Join(t.TempDir(), "test.sock"))
 
 	client := &wsClient{}
-	client.setIdentity("daemon-test", "protocol-"+protocol.ProtocolVersion, []string{protocol.CapabilityWorkspaceSessions})
+	client.setIdentity("daemon-test", "protocol-"+protocol.ProtocolVersion, nil)
 
 	before := time.Now()
 	d.handleClientMessage(client, []byte(`{"cmd":"desktop_set_active_pane","request_id":"focus-1","desktop_id":"desktop-1","pane_id":"pane-1"}`))

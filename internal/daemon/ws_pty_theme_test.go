@@ -45,8 +45,8 @@ func TestHandleSetTerminalTheme_StoresAndFansOutToLiveSessions(t *testing.T) {
 		}
 	}
 
-	client := newWorkspaceProtocolTestClient()
-	spawnForChiefTest(t, d, client, "ws-theme", "sess-c", string(protocol.SessionAgentClaude), false)
+	client := newProtocolTestClient()
+	spawnForChiefTest(t, d, client, "sess-c", string(protocol.SessionAgentClaude), false)
 	expectSpawnResult(t, client, "sess-c", true)
 
 	opts, ok := backend.LastSpawn()

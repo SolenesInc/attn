@@ -5,7 +5,6 @@ import (
 	"database/sql"
 	"fmt"
 	"path/filepath"
-	"reflect"
 	"strings"
 	"testing"
 	"time"
@@ -483,7 +482,7 @@ func TestMigration76ClearsAutomationStateAndDropsSpecYAML(t *testing.T) {
 		t.Fatalf("seed automation_occurrences: %v", err)
 	}
 	if _, err := db.Exec(
-		`INSERT INTO automation_runs (id, definition_id, occurrence_id, definition_revision, snapshot_json, state, ticket_id, session_id, workspace_id, pane_id, created_at, updated_at) VALUES (?, ?, ?, 1, '{}', 'delivered', ?, 'session-1', 'workspace-1', 'pane-1', ?, ?)`,
+		`INSERT INTO automation_runs (id, definition_id, occurrence_id, definition_revision, snapshot_json, state, ticket_id, session_id, created_at, updated_at) VALUES (?, ?, ?, 1, '{}', 'delivered', ?, 'session-1', ?, ?)`,
 		"run-1", "legacy-def", "occ-1", "legacy-ticket", now, now,
 	); err != nil {
 		db.Close()
@@ -497,7 +496,7 @@ func TestMigration76ClearsAutomationStateAndDropsSpecYAML(t *testing.T) {
 		t.Fatalf("seed automation_ticket_occurrence_events: %v", err)
 	}
 	if _, err := db.Exec(
-		`INSERT INTO automation_continuity_bindings (definition_id, continuity_key, ticket_id, session_id, workspace_id, pane_id, created_at, updated_at) VALUES (?, 'fresh', ?, 'session-1', 'workspace-1', 'pane-1', ?, ?)`,
+		`INSERT INTO automation_continuity_bindings (definition_id, continuity_key, ticket_id, session_id, created_at, updated_at) VALUES (?, 'fresh', ?, 'session-1', ?, ?)`,
 		"legacy-def", "legacy-ticket", now, now,
 	); err != nil {
 		db.Close()
@@ -772,13 +771,13 @@ func TestMigration77ClearsRunsBindingsAndEdges(t *testing.T) {
 	}
 
 	if _, err := migrated.Exec(
-		`INSERT INTO automation_continuity_bindings (id, definition_id, continuity_key, ticket_id, session_id, workspace_id, pane_id, status, created_at, updated_at) VALUES ('b1', 'legacy-def', 'fresh', 't1', 's1', 'w1', 'p1', 'active', ?, ?)`,
+		`INSERT INTO automation_continuity_bindings (id, definition_id, continuity_key, ticket_id, session_id, status, created_at, updated_at) VALUES ('b1', 'legacy-def', 'fresh', 't1', 's1', 'active', ?, ?)`,
 		now, now,
 	); err != nil {
 		t.Fatalf("seed first active binding: %v", err)
 	}
 	if _, err := migrated.Exec(
-		`INSERT INTO automation_continuity_bindings (id, definition_id, continuity_key, ticket_id, session_id, workspace_id, pane_id, status, created_at, updated_at) VALUES ('b2', 'legacy-def', 'fresh', 't2', 's2', 'w2', 'p2', 'active', ?, ?)`,
+		`INSERT INTO automation_continuity_bindings (id, definition_id, continuity_key, ticket_id, session_id, status, created_at, updated_at) VALUES ('b2', 'legacy-def', 'fresh', 't2', 's2', 'active', ?, ?)`,
 		now, now,
 	); err == nil {
 		t.Fatal("expected unique-active index to reject a second active binding for the same definition+continuity_key")
@@ -1240,351 +1239,6 @@ func TestMigration79_ConvertsRecoverableFlagToState(t *testing.T) {
 	}
 	if err := migrated.Close(); err != nil {
 		t.Fatalf("close reopened database: %v", err)
-	}
-}
-
-func TestMigration37_ConvertsSessionLayoutToWorkspaceLayout(t *testing.T) {
-	dbPath := filepath.Join(t.TempDir(), "migration-37.db")
-	db, err := OpenDB(dbPath)
-	if err != nil {
-		t.Fatalf("OpenDB() setup error = %v", err)
-	}
-
-	if _, err := db.Exec(`
-		DROP TABLE workspace_layout_panes;
-		DROP TABLE workspace_layouts;
-		CREATE TABLE session_workspaces (
-			session_id TEXT PRIMARY KEY,
-			active_pane_id TEXT NOT NULL,
-			layout_json TEXT NOT NULL,
-			updated_at TEXT NOT NULL
-		);
-		CREATE TABLE workspace_panes (
-			session_id TEXT NOT NULL,
-			pane_id TEXT NOT NULL,
-			runtime_id TEXT NOT NULL DEFAULT '',
-			kind TEXT NOT NULL,
-			title TEXT NOT NULL,
-			created_at TEXT NOT NULL,
-			updated_at TEXT NOT NULL,
-			PRIMARY KEY (session_id, pane_id)
-		);
-		INSERT INTO sessions (
-			id, label, directory, state, state_since, state_updated_at, last_seen, workspace_id
-		) VALUES (
-			'sess-legacy', 'Legacy', '/tmp/legacy', 'idle', '2026-05-01T00:00:00Z',
-			'2026-05-01T00:00:00Z', '2026-05-01T00:00:00Z', NULL
-		);
-		INSERT INTO session_workspaces (session_id, active_pane_id, layout_json, updated_at)
-		VALUES ('sess-legacy', 'pane-shell', '{"type":"split"}', '2026-05-01T00:00:00Z');
-		INSERT INTO workspace_panes (session_id, pane_id, runtime_id, kind, title, created_at, updated_at)
-		VALUES
-			('sess-legacy', 'main', 'sess-legacy', 'main', 'Session', '2026-05-01T00:00:00Z', '2026-05-01T00:00:00Z'),
-			('sess-legacy', 'pane-shell', 'runtime-shell', 'shell', 'Shell 1', '2026-05-01T00:00:00Z', '2026-05-01T00:00:00Z');
-		DELETE FROM schema_migrations WHERE version >= 37;
-	`); err != nil {
-		db.Close()
-		t.Fatalf("seed legacy layout error = %v", err)
-	}
-	db.Close()
-
-	migrated, err := OpenDB(dbPath)
-	if err != nil {
-		t.Fatalf("OpenDB() migrate error = %v", err)
-	}
-	defer migrated.Close()
-
-	var workspaceID string
-	if err := migrated.QueryRow("SELECT workspace_id FROM sessions WHERE id = 'sess-legacy'").Scan(&workspaceID); err != nil {
-		t.Fatalf("select migrated session workspace id error = %v", err)
-	}
-	if workspaceID != "workspace-sess-legacy" {
-		t.Fatalf("workspace_id = %q, want workspace-sess-legacy", workspaceID)
-	}
-
-	var activePaneID, layoutJSON string
-	if err := migrated.QueryRow(
-		"SELECT active_pane_id, layout_json FROM workspace_layouts WHERE workspace_id = ?",
-		workspaceID,
-	).Scan(&activePaneID, &layoutJSON); err != nil {
-		t.Fatalf("select migrated layout error = %v", err)
-	}
-	if activePaneID != "pane-sess-legacy" || layoutJSON != `{"type":"pane","pane_id":"pane-sess-legacy"}` {
-		t.Fatalf("migrated layout = (%q, %q), want session-backed pane layout", activePaneID, layoutJSON)
-	}
-
-	rows, err := migrated.Query("SELECT pane_id, kind, session_id FROM workspace_layout_panes WHERE workspace_id = ? ORDER BY pane_id", workspaceID)
-	if err != nil {
-		t.Fatalf("select migrated panes error = %v", err)
-	}
-	defer rows.Close()
-	type migratedPane struct {
-		paneID    string
-		kind      string
-		sessionID *string
-	}
-	var panes []migratedPane
-	for rows.Next() {
-		var pane migratedPane
-		var sessionID *string
-		if err := rows.Scan(&pane.paneID, &pane.kind, &sessionID); err != nil {
-			t.Fatalf("scan migrated pane error = %v", err)
-		}
-		pane.sessionID = sessionID
-		panes = append(panes, pane)
-	}
-	if len(panes) != 1 || panes[0].paneID != "pane-sess-legacy" || panes[0].kind != "agent" || panes[0].sessionID == nil || *panes[0].sessionID != "sess-legacy" {
-		t.Fatalf("migrated panes = %+v, want one session-owned agent pane", panes)
-	}
-
-	for _, legacyTable := range []string{"session_workspaces", "workspace_panes"} {
-		var count int
-		if err := migrated.QueryRow("SELECT COUNT(*) FROM sqlite_master WHERE type = 'table' AND name = ?", legacyTable).Scan(&count); err != nil {
-			t.Fatalf("check removed table %s error = %v", legacyTable, err)
-		}
-		if count != 0 {
-			t.Fatalf("legacy table %s still exists", legacyTable)
-		}
-	}
-}
-
-func TestMigration41_PreservesMutedSessionsAsMutedWorkspaces(t *testing.T) {
-	dbPath := filepath.Join(t.TempDir(), "migration-41.db")
-	rawDB, err := sql.Open("sqlite3", dbPath)
-	if err != nil {
-		t.Fatalf("open raw sqlite db: %v", err)
-	}
-	if _, err := rawDB.Exec(`
-		CREATE TABLE sessions (
-			id TEXT PRIMARY KEY,
-			label TEXT NOT NULL,
-			directory TEXT NOT NULL,
-			state TEXT NOT NULL DEFAULT 'idle',
-			state_since TEXT NOT NULL,
-			state_updated_at TEXT NOT NULL,
-			todos TEXT,
-			last_seen TEXT NOT NULL,
-			workspace_id TEXT,
-			muted INTEGER NOT NULL DEFAULT 0
-		);
-		CREATE TABLE workspaces (
-			id TEXT PRIMARY KEY,
-			title TEXT NOT NULL,
-			directory TEXT NOT NULL,
-			created_at TEXT NOT NULL
-		);
-		CREATE TABLE schema_migrations (
-			version INTEGER PRIMARY KEY,
-			applied_at TEXT NOT NULL
-		);
-		INSERT INTO workspaces (id, title, directory, created_at) VALUES
-			('ws-muted', 'Muted workspace', '/repo/muted', '2026-05-31T00:00:00Z'),
-			('ws-active', 'Active workspace', '/repo/active', '2026-05-31T00:00:00Z');
-		INSERT INTO sessions (
-			id, label, directory, state, state_since, state_updated_at, last_seen, workspace_id, muted
-		) VALUES
-			('s-muted', 'Muted session', '/repo/muted', 'idle', '2026-05-31T00:00:00Z', '2026-05-31T00:00:00Z', '2026-05-31T00:00:00Z', 'ws-muted', 1),
-			('s-active', 'Active session', '/repo/active', 'idle', '2026-05-31T00:00:00Z', '2026-05-31T00:00:00Z', '2026-05-31T00:00:00Z', 'ws-active', 0);
-	`); err != nil {
-		rawDB.Close()
-		t.Fatalf("seed migration 41 legacy db: %v", err)
-	}
-	for version := 1; version <= 40; version++ {
-		if _, err := rawDB.Exec(
-			"INSERT INTO schema_migrations (version, applied_at) VALUES (?, datetime('now'))",
-			version,
-		); err != nil {
-			rawDB.Close()
-			t.Fatalf("seed migration version %d: %v", version, err)
-		}
-	}
-	rawDB.Close()
-
-	db, err := OpenDB(dbPath)
-	if err != nil {
-		t.Fatalf("OpenDB() migrating version 41 error = %v", err)
-	}
-	defer db.Close()
-
-	for _, tc := range []struct {
-		workspaceID string
-		wantMuted   int
-	}{
-		{"ws-muted", 1},
-		{"ws-active", 0},
-	} {
-		var got int
-		if err := db.QueryRow("SELECT muted FROM workspaces WHERE id = ?", tc.workspaceID).Scan(&got); err != nil {
-			t.Fatalf("query workspace %s muted: %v", tc.workspaceID, err)
-		}
-		if got != tc.wantMuted {
-			t.Fatalf("workspace %s muted = %d, want %d", tc.workspaceID, got, tc.wantMuted)
-		}
-	}
-
-	var sessionMutedColumns int
-	if err := db.QueryRow("SELECT COUNT(*) FROM pragma_table_info('sessions') WHERE name = 'muted'").Scan(&sessionMutedColumns); err != nil {
-		t.Fatalf("query sessions.muted column: %v", err)
-	}
-	if sessionMutedColumns != 0 {
-		t.Fatalf("sessions.muted column still exists after migration")
-	}
-}
-
-func TestMigration49_BackfillsRankInCreatedAtOrder(t *testing.T) {
-	dbPath := filepath.Join(t.TempDir(), "migration-49.db")
-	rawDB, err := sql.Open("sqlite3", dbPath)
-	if err != nil {
-		t.Fatalf("open raw sqlite db: %v", err)
-	}
-	if _, err := rawDB.Exec(`
-		CREATE TABLE workspaces (
-			id TEXT PRIMARY KEY,
-			title TEXT NOT NULL,
-			directory TEXT NOT NULL,
-			muted INTEGER NOT NULL DEFAULT 0,
-			created_at TEXT NOT NULL
-		);
-		CREATE TABLE schema_migrations (
-			version INTEGER PRIMARY KEY,
-			applied_at TEXT NOT NULL
-		);
-		INSERT INTO workspaces (id, title, directory, created_at) VALUES
-			('ws-second', 'Second', '/repo/second', '2026-05-31T00:00:02Z'),
-			('ws-third', 'Third', '/repo/third', '2026-05-31T00:00:03Z'),
-			('ws-first', 'First', '/repo/first', '2026-05-31T00:00:01Z');
-	`); err != nil {
-		rawDB.Close()
-		t.Fatalf("seed migration 49 legacy db: %v", err)
-	}
-	for version := 1; version <= 48; version++ {
-		if _, err := rawDB.Exec(
-			"INSERT INTO schema_migrations (version, applied_at) VALUES (?, datetime('now'))",
-			version,
-		); err != nil {
-			rawDB.Close()
-			t.Fatalf("seed migration version %d: %v", version, err)
-		}
-	}
-	rawDB.Close()
-
-	db, err := OpenDB(dbPath)
-	if err != nil {
-		t.Fatalf("OpenDB() migrating version 49 error = %v", err)
-	}
-	defer db.Close()
-
-	ranks := map[string]string{}
-	rows, err := db.Query("SELECT id, rank FROM workspaces")
-	if err != nil {
-		t.Fatalf("query backfilled ranks: %v", err)
-	}
-	for rows.Next() {
-		var id, rank string
-		if err := rows.Scan(&id, &rank); err != nil {
-			rows.Close()
-			t.Fatalf("scan rank: %v", err)
-		}
-		if rank == "" {
-			t.Fatalf("workspace %s has empty rank after backfill", id)
-		}
-		ranks[id] = rank
-	}
-	if err := rows.Err(); err != nil {
-		t.Fatalf("rows err: %v", err)
-	}
-	rows.Close()
-
-	if !(ranks["ws-first"] < ranks["ws-second"] && ranks["ws-second"] < ranks["ws-third"]) {
-		t.Fatalf("ranks not strictly increasing in created_at order: %#v", ranks)
-	}
-
-	db.Close()
-	reopened, err := OpenDB(dbPath)
-	if err != nil {
-		t.Fatalf("OpenDB() reopen error = %v", err)
-	}
-	defer reopened.Close()
-
-	for id, want := range ranks {
-		var got string
-		if err := reopened.QueryRow("SELECT rank FROM workspaces WHERE id = ?", id).Scan(&got); err != nil {
-			t.Fatalf("query rank after reopen for %s: %v", id, err)
-		}
-		if got != want {
-			t.Fatalf("rank for %s changed on reopen = %q, want %q", id, got, want)
-		}
-	}
-}
-
-func TestMigration50RepairsRankWhenVersion49WasAlreadyRecorded(t *testing.T) {
-	dbPath := filepath.Join(t.TempDir(), "workspace-rank-repair.db")
-	rawDB, err := sql.Open("sqlite3", dbPath)
-	if err != nil {
-		t.Fatalf("open raw sqlite db: %v", err)
-	}
-	if _, err := rawDB.Exec(`
-		CREATE TABLE workspaces (
-			id TEXT PRIMARY KEY,
-			title TEXT NOT NULL,
-			directory TEXT NOT NULL,
-			muted INTEGER NOT NULL DEFAULT 0,
-			created_at TEXT NOT NULL
-		);
-		CREATE TABLE schema_migrations (
-			version INTEGER PRIMARY KEY,
-			applied_at TEXT NOT NULL
-		);
-		INSERT INTO workspaces (id, title, directory, created_at) VALUES
-			('ws-second', 'Second', '/repo/second', '2026-05-31T00:00:02Z'),
-			('ws-first', 'First', '/repo/first', '2026-05-31T00:00:01Z');
-		INSERT INTO schema_migrations (version, applied_at) VALUES (49, datetime('now'));
-	`); err != nil {
-		rawDB.Close()
-		t.Fatalf("seed workspace rank repair db: %v", err)
-	}
-	rawDB.Close()
-
-	db, err := OpenDB(dbPath)
-	if err != nil {
-		t.Fatalf("OpenDB() repairing version 49 collision: %v", err)
-	}
-	defer db.Close()
-
-	var count int
-	if err := db.QueryRow(`
-		SELECT COUNT(*) FROM pragma_table_info('workspaces') WHERE name = 'rank'
-	`).Scan(&count); err != nil {
-		t.Fatalf("query rank column: %v", err)
-	}
-	if count != 1 {
-		t.Fatalf("workspaces.rank columns = %d, want 1", count)
-	}
-
-	rows, err := db.Query("SELECT id, rank FROM workspaces ORDER BY rank")
-	if err != nil {
-		t.Fatalf("query repaired ranks: %v", err)
-	}
-	var ids []string
-	for rows.Next() {
-		var id, rank string
-		if err := rows.Scan(&id, &rank); err != nil {
-			rows.Close()
-			t.Fatalf("scan repaired rank: %v", err)
-		}
-		if rank == "" {
-			rows.Close()
-			t.Fatalf("workspace %s has empty repaired rank", id)
-		}
-		ids = append(ids, id)
-	}
-	if err := rows.Err(); err != nil {
-		rows.Close()
-		t.Fatalf("repaired rank rows: %v", err)
-	}
-	rows.Close()
-	if want := []string{"ws-first", "ws-second"}; !reflect.DeepEqual(ids, want) {
-		t.Fatalf("workspace order = %v, want %v", ids, want)
 	}
 }
 

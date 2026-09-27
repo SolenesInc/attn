@@ -197,8 +197,8 @@ func TestFsWriteWSResultSaveAndConflict(t *testing.T) {
 
 func TestFsDispatchThroughClientMessage(t *testing.T) {
 	d := newFsDaemon(t)
-	client := newWorkspaceProtocolTestClient()
-	client.setIdentity("test", "protocol-"+protocol.ProtocolVersion, []string{protocol.CapabilityWorkspaceSessions})
+	client := newProtocolTestClient()
+	client.setIdentity("test", "protocol-"+protocol.ProtocolVersion, nil)
 
 	d.handleClientMessage(client, []byte(`{"cmd":"fs_write","request_id":"w1","path":"docs/readme.md","content":"# hi\n"}`))
 	var write protocol.FsWriteResultMessage

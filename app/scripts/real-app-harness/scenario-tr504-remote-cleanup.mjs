@@ -234,10 +234,10 @@ async function main() {
         endpointId: endpoint.id,
         waitForInitialPaneVisible: false,
       });
-      await observer.waitForWorkspace(
+      await observer.waitForDesktopOf(
         resultSessionId,
-        (workspace) => (workspace.panes || []).length >= 1,
-        `initial workspace for ${resultSessionId}`,
+        (desktop) => desktop.panes.length >= 1,
+        `initial desktop for ${resultSessionId}`,
         30_000,
       );
       return resultSessionId;
@@ -300,7 +300,7 @@ async function main() {
       postCloseProcessSnapshot = await listRemoteProcessesByHarnessRoot(options.sshTarget, remotePaths.remoteHarnessRoot, 30_000);
       runner.writeJson('03-post-close-processes.json', postCloseProcessSnapshot);
       await observer.waitFor(
-        () => !observer.getSession(sessionId) && !observer.getWorkspace(sessionId),
+        () => !observer.getSession(sessionId) && !observer.desktopOf(sessionId),
         `session ${sessionId} to disappear after close`,
         30_000,
       );

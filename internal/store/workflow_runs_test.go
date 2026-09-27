@@ -23,7 +23,6 @@ func TestWorkflowRunCRUD(t *testing.T) {
 		ScriptHash:  "abc123",
 		ArgsJSON:    strptr(`{"tag":"v1"}`),
 		SessionID:   strptr("sess-A"),
-		WorkspaceID: strptr("ws-1"),
 		Status:      "running",
 		Phase:       strptr("plan"),
 		Harness:     strptr("claude"),

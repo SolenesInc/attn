@@ -1,7 +1,7 @@
 {
   "version": 1,
-  "id": "workspace",
-  "description": "Ordinary workspace session with workflow guidance.",
+  "id": "guided-session",
+  "description": "Ordinary session with Garden and workflow guidance.",
   "recipient": "session",
   "event": "launch",
   "values": {

@@ -15,7 +15,7 @@ func newTurnDaemon(t *testing.T) *Daemon {
 	return NewForTesting(filepath.Join(t.TempDir(), "test.sock"))
 }
 
-func addTurnSession(t *testing.T, d *Daemon, id string, agent protocol.SessionAgent, workspaceID string) {
+func addTurnSession(t *testing.T, d *Daemon, id string, agent protocol.SessionAgent) {
 	t.Helper()
 	now := string(protocol.TimestampNow())
 	d.store.Add(&protocol.Session{
@@ -23,7 +23,6 @@ func addTurnSession(t *testing.T, d *Daemon, id string, agent protocol.SessionAg
 		Agent:          agent,
 		Label:          id,
 		Directory:      "/tmp/" + id,
-		WorkspaceID:    workspaceID,
 		ProfileID:      defaultProfileID(t, d.store),
 		State:          protocol.StateLaunching,
 		StateSince:     now,
@@ -47,7 +46,7 @@ func owed(t *testing.T, d *Daemon, id string) bool {
 
 func TestTurnSurvivesTheAgentGoingBackToWork(t *testing.T) {
 	d := newTurnDaemon(t)
-	addTurnSession(t, d, "s1", protocol.SessionAgentCodex, "ws1")
+	addTurnSession(t, d, "s1", protocol.SessionAgentCodex)
 
 	if owed(t, d, "s1") {
 		t.Fatal("a launching session owes a turn")
@@ -72,7 +71,7 @@ func TestTurnSurvivesTheAgentGoingBackToWork(t *testing.T) {
 
 func TestAFinishedRunOwesATurn(t *testing.T) {
 	d := newTurnDaemon(t)
-	addTurnSession(t, d, "s1", protocol.SessionAgentCodex, "ws1")
+	addTurnSession(t, d, "s1", protocol.SessionAgentCodex)
 
 	moveTo(d, "s1", protocol.StateWorking)
 	if owed(t, d, "s1") {
@@ -87,7 +86,7 @@ func TestAFinishedRunOwesATurn(t *testing.T) {
 
 func TestASessionAtItsPromptOwesATurn(t *testing.T) {
 	d := newTurnDaemon(t)
-	addTurnSession(t, d, "s1", protocol.SessionAgentCodex, "ws1")
+	addTurnSession(t, d, "s1", protocol.SessionAgentCodex)
 
 	d.applyState(sessionStateChange{
 		sessionID: "s1",
@@ -102,7 +101,7 @@ func TestASessionAtItsPromptOwesATurn(t *testing.T) {
 
 func TestSettleIsTheOnlyExit(t *testing.T) {
 	d := newTurnDaemon(t)
-	addTurnSession(t, d, "s1", protocol.SessionAgentCodex, "ws1")
+	addTurnSession(t, d, "s1", protocol.SessionAgentCodex)
 
 	moveTo(d, "s1", protocol.StateWaitingInput)
 	if !owed(t, d, "s1") {
@@ -126,7 +125,7 @@ func TestSettleIsTheOnlyExit(t *testing.T) {
 
 func TestSettleWhileWorking(t *testing.T) {
 	d := newTurnDaemon(t)
-	addTurnSession(t, d, "s1", protocol.SessionAgentCodex, "ws1")
+	addTurnSession(t, d, "s1", protocol.SessionAgentCodex)
 
 	moveTo(d, "s1", protocol.StateWaitingInput)
 	moveTo(d, "s1", protocol.StateWorking)
@@ -139,7 +138,7 @@ func TestSettleWhileWorking(t *testing.T) {
 
 func TestSettleBroadcastsTheSession(t *testing.T) {
 	d := newTurnDaemon(t)
-	addTurnSession(t, d, "s1", protocol.SessionAgentCodex, "ws1")
+	addTurnSession(t, d, "s1", protocol.SessionAgentCodex)
 	moveTo(d, "s1", protocol.StateWaitingInput)
 
 	capture := captureBroadcasts(d)
@@ -157,7 +156,7 @@ func TestSettleBroadcastsTheSession(t *testing.T) {
 
 func TestShellSessionsNeverOweATurn(t *testing.T) {
 	d := newTurnDaemon(t)
-	addTurnSession(t, d, "shell1", protocol.SessionAgentShell, "ws1")
+	addTurnSession(t, d, "shell1", protocol.SessionAgentShell)
 
 	moveTo(d, "shell1", protocol.StateWaitingInput)
 	if owed(t, d, "shell1") {
@@ -170,7 +169,7 @@ func TestShellSessionsNeverOweATurn(t *testing.T) {
 
 func TestChiefOfStaffNeverOwesATurn(t *testing.T) {
 	d := newTurnDaemon(t)
-	addTurnSession(t, d, "chief", protocol.SessionAgentClaude, "ws1")
+	addTurnSession(t, d, "chief", protocol.SessionAgentClaude)
 	if err := setTestChief(d, "chief"); err != nil {
 		t.Fatalf("set chief: %v", err)
 	}
@@ -189,7 +188,7 @@ func TestChiefOfStaffNeverOwesATurn(t *testing.T) {
 
 func TestASettleSurvivesAnAgentRepaintingSlowerThanTheHeartbeatTTL(t *testing.T) {
 	d := newTurnDaemon(t)
-	addTurnSession(t, d, "s1", protocol.SessionAgentClaude, "ws1")
+	addTurnSession(t, d, "s1", protocol.SessionAgentClaude)
 
 	d.recordBracketEvidence("s1", protocol.StateWorking)
 	d.recordBracketEvidence("s1", protocol.StateIdle)

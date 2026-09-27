@@ -82,59 +82,58 @@ func TestSessionAnnotationDraftAdapterPreservesResultBytes(t *testing.T) {
 
 func TestMarkdownAnnotationDraftAdapterPreservesResultBytes(t *testing.T) {
 	d := newMarkdownAnnotationsDaemon(t)
-	const workspaceID = "workspace-1"
 
 	t.Run("save", func(t *testing.T) {
 		assertAnnotationDraftResultBytes(t,
-			`{"document_uri":"attn://file/workspace-1/%2Ftmp%2Fplan.md","event":"markdown_annotations_save_result","generation":1,"path":"/tmp/plan.md","request_id":"markdown-save","source_kind":"file","success":true,"workspace_id":"workspace-1"}`,
+			`{"document_uri":"attn://file/%2Ftmp%2Fplan.md","event":"markdown_annotations_save_result","generation":1,"path":"/tmp/plan.md","request_id":"markdown-save","source_kind":"file","success":true}`,
 			func(client *wsClient) {
 				d.handleMarkdownAnnotationsSave(client, &protocol.MarkdownAnnotationsSaveMessage{
-					DocumentUri: fileDocumentURI(workspaceID, "/tmp/plan.md"), SourceKind: annotationSourceFile,
-					Path: protocol.Ptr("  /tmp/plan.md  "), RequestID: "markdown-save", WorkspaceID: protocol.Ptr(workspaceID), Generation: 1,
+					DocumentUri: fileDocumentURI("/tmp/plan.md"), SourceKind: annotationSourceFile,
+					Path: protocol.Ptr("  /tmp/plan.md  "), RequestID: "markdown-save", Generation: 1,
 				})
 			})
 	})
 
 	t.Run("stale save", func(t *testing.T) {
 		assertAnnotationDraftResultBytes(t,
-			`{"document_uri":"attn://file/workspace-1/%2Ftmp%2Fplan.md","event":"markdown_annotations_save_result","generation":1,"path":"/tmp/plan.md","request_id":"markdown-stale","source_kind":"file","stale":true,"success":false,"workspace_id":"workspace-1"}`,
+			`{"document_uri":"attn://file/%2Ftmp%2Fplan.md","event":"markdown_annotations_save_result","generation":1,"path":"/tmp/plan.md","request_id":"markdown-stale","source_kind":"file","stale":true,"success":false}`,
 			func(client *wsClient) {
 				d.handleMarkdownAnnotationsSave(client, &protocol.MarkdownAnnotationsSaveMessage{
-					DocumentUri: fileDocumentURI(workspaceID, "/tmp/plan.md"), SourceKind: annotationSourceFile,
-					Path: protocol.Ptr("/tmp/plan.md"), RequestID: "markdown-stale", WorkspaceID: protocol.Ptr(workspaceID), Generation: 1,
+					DocumentUri: fileDocumentURI("/tmp/plan.md"), SourceKind: annotationSourceFile,
+					Path: protocol.Ptr("/tmp/plan.md"), RequestID: "markdown-stale", Generation: 1,
 				})
 			})
 	})
 
 	t.Run("get", func(t *testing.T) {
 		assertAnnotationDraftResultBytes(t,
-			`{"annotations":[],"document_uri":"attn://file/workspace-1/%2Ftmp%2Fplan.md","event":"markdown_annotations_get_result","generation":1,"path":"/tmp/plan.md","request_id":"markdown-get","source_kind":"file","success":true,"workspace_id":"workspace-1"}`,
+			`{"annotations":[],"document_uri":"attn://file/%2Ftmp%2Fplan.md","event":"markdown_annotations_get_result","generation":1,"path":"/tmp/plan.md","request_id":"markdown-get","source_kind":"file","success":true}`,
 			func(client *wsClient) {
 				d.handleMarkdownAnnotationsGet(client, &protocol.MarkdownAnnotationsGetMessage{
-					DocumentUri: fileDocumentURI(workspaceID, "/tmp/plan.md"), SourceKind: annotationSourceFile,
-					Path: protocol.Ptr("/tmp/plan.md"), RequestID: "markdown-get", WorkspaceID: protocol.Ptr(workspaceID),
+					DocumentUri: fileDocumentURI("/tmp/plan.md"), SourceKind: annotationSourceFile,
+					Path: protocol.Ptr("/tmp/plan.md"), RequestID: "markdown-get",
 				})
 			})
 	})
 
 	t.Run("clear", func(t *testing.T) {
 		assertAnnotationDraftResultBytes(t,
-			`{"document_uri":"attn://file/workspace-1/%2Ftmp%2Fplan.md","event":"markdown_annotations_clear_result","generation":2,"path":"/tmp/plan.md","request_id":"markdown-clear","source_kind":"file","success":true,"workspace_id":"workspace-1"}`,
+			`{"document_uri":"attn://file/%2Ftmp%2Fplan.md","event":"markdown_annotations_clear_result","generation":2,"path":"/tmp/plan.md","request_id":"markdown-clear","source_kind":"file","success":true}`,
 			func(client *wsClient) {
 				d.handleMarkdownAnnotationsClear(client, &protocol.MarkdownAnnotationsClearMessage{
-					DocumentUri: fileDocumentURI(workspaceID, "/tmp/plan.md"), SourceKind: annotationSourceFile,
-					Path: protocol.Ptr("/tmp/plan.md"), RequestID: "markdown-clear", WorkspaceID: protocol.Ptr(workspaceID), Generation: 2,
+					DocumentUri: fileDocumentURI("/tmp/plan.md"), SourceKind: annotationSourceFile,
+					Path: protocol.Ptr("/tmp/plan.md"), RequestID: "markdown-clear", Generation: 2,
 				})
 			})
 	})
 
 	t.Run("empty key", func(t *testing.T) {
 		assertAnnotationDraftResultBytes(t,
-			`{"annotations":[],"document_uri":"attn://file/workspace-1","error":"markdown_annotations_get: path is required for file source","event":"markdown_annotations_get_result","generation":0,"request_id":"markdown-empty","source_kind":"file","success":false,"workspace_id":"workspace-1"}`,
+			`{"annotations":[],"document_uri":"attn://file/","error":"markdown_annotations_get: path is required for file source","event":"markdown_annotations_get_result","generation":0,"request_id":"markdown-empty","source_kind":"file","success":false}`,
 			func(client *wsClient) {
 				d.handleMarkdownAnnotationsGet(client, &protocol.MarkdownAnnotationsGetMessage{
-					DocumentUri: "attn://file/workspace-1", SourceKind: annotationSourceFile,
-					Path: protocol.Ptr("   "), RequestID: "markdown-empty", WorkspaceID: protocol.Ptr(workspaceID),
+					DocumentUri: "attn://file/", SourceKind: annotationSourceFile,
+					Path: protocol.Ptr("   "), RequestID: "markdown-empty",
 				})
 			})
 	})

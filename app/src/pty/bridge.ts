@@ -7,7 +7,6 @@ import type { PlacementElement } from '../types/generated';
 export interface PtySpawnArgs {
   id: string;
   cwd: string;
-  workspace_id: string;
   endpoint_id?: string;
   intent?: 'create';
   cols: number;

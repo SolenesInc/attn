@@ -332,7 +332,7 @@ func (d *Daemon) applyDefaultDelegationWorktree(msg *resolvedDelegationLaunch, f
 		root, err := git.GetRepoRoot(directory)
 		if err != nil {
 			if configuredWorktree {
-				return fmt.Errorf("workspace directory is not in a git repository; pass --repo")
+				return fmt.Errorf("working folder %s is not in a git repository; pass --repo", directory)
 			}
 			if fromSource {
 				return fmt.Errorf("source directory %s is not a git repository; pass the intended working folder with --cwd, and omit checkout flags outside Git", directory)
@@ -365,7 +365,7 @@ func (d *Daemon) createDelegationWorktree(baseDirectory, inferredRepo string, re
 		}
 		repoRoot, err := git.GetRepoRoot(baseDirectory)
 		if err != nil {
-			return "", false, fmt.Errorf("workspace directory is not in a git repository; pass --repo")
+			return "", false, fmt.Errorf("working folder %s is not in a git repository; pass --repo", baseDirectory)
 		}
 		repo = git.ResolveMainRepoPath(repoRoot)
 	}

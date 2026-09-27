@@ -99,7 +99,6 @@ describe('chief and crew sessions are protected from close', () => {
         label: 'orchestrator',
         state: 'working',
         cwd: '/tmp/repo',
-        workspaceId: '',
         profileId: TEST_PROFILE_ID,
         desktopId: 'desktop-s1',
         agent: 'claude',

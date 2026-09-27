@@ -20,7 +20,6 @@ test.describe('Binary PTY output transport', () => {
         label: 'Binary PTY',
         state: 'working',
         cwd: '/tmp',
-        workspaceId: `workspace-${id}`,
       });
     }, sessionId);
     await daemon.injectSession({
@@ -79,7 +78,7 @@ test.describe('Binary PTY output transport', () => {
               cmd: 'client_hello',
               client_kind: 'e2e-test',
               version: 'e2e',
-              capabilities: ['workspace_sessions'],
+              capabilities: [],
               client_token: clientToken,
             }));
           };
