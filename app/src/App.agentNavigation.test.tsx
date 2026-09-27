@@ -235,6 +235,8 @@ describe('agent navigation', () => {
       clearWarnings: fn,
       sendSetTerminalTheme: fn,
       sendSettleTurn: mockSendSettleTurn,
+      sendRecentFiles: vi.fn(async () => []),
+      sendFsIndex: vi.fn(async () => ({ entries: [] })),
     });
   });
 
@@ -594,6 +596,17 @@ describe('agent navigation', () => {
 
     act(() => { sidebar().onOpenAgents(); });
     expect(screen.getByTestId('palette-agent-s1')).toBeInTheDocument();
+  });
+
+  it('silences the bar peeks while the Markdown opener covers the window', () => {
+    render(<App />);
+    broadcast();
+    const sidebar = () => mockSidebarProps.mock.lastCall![0] as { peeksSilenced: boolean };
+    act(() => { shortcutHandlers<{ onToggleSidebar: () => void }>().onToggleSidebar(); });
+    expect(sidebar().peeksSilenced).toBe(false);
+
+    act(() => { shortcutHandlers<{ onOpenFile: () => void }>().onOpenFile(); });
+    expect(sidebar().peeksSilenced).toBe(true);
   });
 
   it('opens the palette on agents in grid view, where the grid covers the queue sidebar', () => {

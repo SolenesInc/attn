@@ -323,7 +323,7 @@ export function useAppController({
 
   const [desktopOverviewOpen, setDesktopOverviewOpen] = useState(false);
   const [profileSwitcherOpen, setProfileSwitcherOpen] = useState(false);
-  const { blockingOverlayOpen, paletteBlocked, appShortcutsEnabled } = appOverlayPolicy({
+  const { blockingOverlayOpen, windowCovered, paletteBlocked, appShortcutsEnabled } = appOverlayPolicy({
     desktopOverviewOpen,
     profileSwitcherOpen,
     locationPickerOpen,
@@ -709,6 +709,7 @@ export function useAppController({
         annotationApi,
         handleOpenPresentationWindow,
         blockingOverlayOpen,
+        windowCovered,
         zoomModeBySessionId,
         setZoomModeBySessionId,
         agentFocused,
