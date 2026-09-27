@@ -32,4 +32,4 @@ if [ -z "${ATTN_E2E_BIN:-}" ]; then
     -o "$test_root/attn-current" ./cmd/attn
   export ATTN_E2E_BIN="$test_root/attn-current"
 fi
-go test ./internal/daemon -run '^TestPTYUpgradeAcrossDaemonBinaries$' -count=1 -timeout=180s -v "$@"
+go test ./cmd/attn -run '^TestSessionsSurviveDaemonUpgradesAndSharedHostGenerations$' -count=1 -timeout=180s -v "$@"
