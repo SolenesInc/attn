@@ -4,6 +4,7 @@ import (
 	"os"
 	"path/filepath"
 	"testing"
+	"time"
 
 	"github.com/google/uuid"
 )
@@ -39,6 +40,7 @@ func (tr *ClaudeTranscript) Prompt(text string) {
 	if err := tr.writer.record("user", map[string]any{"role": "user", "content": text}, map[string]any{"permissionMode": tr.writer.permission}); err != nil {
 		tr.t.Fatal(err)
 	}
+	tr.stamp()
 }
 
 func (tr *ClaudeTranscript) Answer(text string) {
@@ -47,6 +49,7 @@ func (tr *ClaudeTranscript) Answer(text string) {
 	if err := appendLines(tr.writer.transcript, line); err != nil {
 		tr.t.Fatal(err)
 	}
+	tr.stamp()
 }
 
 func (tr *ClaudeTranscript) Halt() {
@@ -55,6 +58,14 @@ func (tr *ClaudeTranscript) Halt() {
 		"role":    "user",
 		"content": []map[string]any{{"type": "text", "text": "[Request interrupted by user]"}},
 	}, map[string]any{"interruptedMessageId": claudeMessageID()}); err != nil {
+		tr.t.Fatal(err)
+	}
+	tr.stamp()
+}
+
+func (tr *ClaudeTranscript) stamp() {
+	now := time.Now()
+	if err := os.Chtimes(tr.Path, now, now); err != nil {
 		tr.t.Fatal(err)
 	}
 }

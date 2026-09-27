@@ -36,6 +36,7 @@ type Kit struct {
 	fakes    []*fake
 	failures []string
 	headless chan *HeadlessTask
+	answerer func(*HeadlessTask)
 }
 
 type fake struct {
