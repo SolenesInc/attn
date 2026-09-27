@@ -7,7 +7,7 @@ description: Use when an assigned role refers to this skill, the user asks for t
 
 Read the reference for the process the task needs. Load further references as the work requires.
 
-For the Pathfinder approach, use [Discuss](references/discuss.md) to investigate or develop the idea with the user, drawing on [Align](references/align.md) to test shared understanding. When the outcome is a plan, use [Planning](references/planning.md) to capture it. Work in the current conversation; delegate only when authorized.
+For the Pathfinder approach, use [Discuss](references/discuss.md) to investigate or develop the idea with the user, and [Planning](references/planning.md) when the outcome is a plan. Before a consequential step, such as dispatching a Builder or Orchestrator, use [Align](references/align.md) to check that you and the user understand the work the same way. Work in the current conversation unless the user asks you to delegate.
 
 | Task | Reference |
 |---|---|

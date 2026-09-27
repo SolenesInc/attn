@@ -93,8 +93,8 @@ Adapt the assignment and its completion check to the work:
                Name what it must explain and which existing text it replaces.
     refactor   The named code issue is gone and behavior is preserved.
                Identify the issue and the checks that establish preservation.
-    prototype  The result answers a design question or lets the user judge the
-               experience. State what to demonstrate; tests may be optional.
+    spike      The result answers a design question or lets the user judge the
+               experience. State what it should teach; its code is disposable.
 
 Harvest when the outcome and required verification in the body are complete.
 When the only thing left is a pull request merging, say so once and let attn

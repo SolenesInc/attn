@@ -17,11 +17,11 @@ Proceed in short rounds:
 - For decision questions, include your recommended/default answer and a brief reason. When the answer requires missing evidence or personal context, don't guess it; recommend how to resolve the gap instead.
 - Wait for the user's response before continuing.
 
-Follow the consequences of decisions. When a choice changes the approach, consider what it settles, what new questions it opens, and which earlier assumptions need revisiting. Avoid designing downstream details around an unsettled choice. Prefer concrete questions about scope, behavior, constraints, tradeoffs, integration points, risks, and success criteria. Challenge the framing when another approach would better serve the goal, and explain the tradeoff.
+Follow the consequences of decisions. When a choice or new evidence changes the approach, consider what it settles, what new questions it opens, and which earlier assumptions need revisiting. Avoid designing downstream details around an unsettled choice. Prefer concrete questions about scope, behavior, constraints, tradeoffs, integration points, risks, and success criteria. Challenge the framing when another approach would better serve the goal, and explain the tradeoff.
 
 Build enough shared understanding to avoid costly misalignment. Keep discovery proportional to the task: investigate factual gaps through inspection or research, and bring choices and context only the user can supply back to them.
 
-Suggest spikes when experiments would help explore code design, integration with the existing system, the impact of a change, missed behavior, feasibility, or the experience of using the feature. Use judgment about their scope and number; sometimes implementing an understood change is the better investment. Know what you want to learn and use the findings to choose the next step. Involve the user where their preferences, judgment, or firsthand experience matter. Run isolated spikes within the task's authorization and workspace constraints.
+Suggest a spike when an experiment would settle a question better than discussion can: code design, integration with the existing system, the impact of a change, missed behavior, feasibility, or the experience of using the feature. Sometimes implementing an understood change is the better investment. Say what the spike should teach and roughly what it takes; the user decides whether to run it. Run agreed spikes in isolation within the task's workspace constraints, involve the user where their preferences, judgment, or firsthand experience matter, and use the findings to choose the next step.
 
 Treat spike code as disposable by default. Carry forward the learning; keeping any code needs a reason beyond the demonstration working. If retaining code is justified, review and verify it as production code.
 
@@ -37,4 +37,4 @@ Continue until the approach is clear enough to implement, with consequential unc
 
 When the outcome is a plan, continue with [Planning](planning.md). The plan lives in the seed with the design detail that reference requires; this summary is for the conversation and is not the plan.
 
-Discussion and spikes do not authorize implementation of the proposed change.
+The discussion produces understanding or a plan; the user chooses when implementation starts.

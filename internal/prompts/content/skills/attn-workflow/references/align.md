@@ -26,6 +26,6 @@ For example:
 
 When the questions have resolved the important differences or made the remaining uncertainty explicit, reflect the shared understanding and unresolved points briefly in chat. Do not manufacture further questions once they stop adding understanding.
 
-Record shared understanding, decisions, and open questions as the conversation develops. Keep tentative ideas distinguishable from agreed decisions. Writing a plan does not authorize implementation.
+Record shared understanding, decisions, and open questions as the conversation develops. Keep tentative ideas distinguishable from agreed decisions.
 
-Stop after the discussion. Implementation requires a separate next step from the user.
+The goal is shared understanding before anyone acts on it. Let the user choose the next step.
