@@ -104,6 +104,14 @@ func TestCrewMembersWakeSleepAndKeepTheirLaunchSettings(t *testing.T) {
 	if keel := crewRoster(t, s)["keel"]; keel.Agent != nil || keel.Model != nil || keel.Effort != nil || keel.ResolvedAgent != "claude" || len(keel.AwarenessDirs) != 0 {
 		t.Fatalf("keel after clearing its settings = %+v", keel)
 	}
+	requireStdout(t, s.Attn("crew", "set", "keel", "--model", "claude-fake-sonnet"), "Keel launches in - on claude, model claude-fake-sonnet, ")
+	if keel := crewRoster(t, s)["keel"]; protocol.Deref(keel.Model) != "claude-fake-sonnet" {
+		t.Fatalf("keel after crew set --model = %+v", keel)
+	}
+	requireStdout(t, s.Attn("crew", "set", "keel", "--model", ""), "Keel launches in - on claude")
+	if keel := crewRoster(t, s)["keel"]; keel.Model != nil {
+		t.Fatalf("keel after crew set --model \"\" still pins %q", protocol.Deref(keel.Model))
+	}
 
 	requireStdout(t, s.Attn("crew", "wake", "trellis"), "Trellis is awake in session ")
 	day := protocol.Deref(crewRoster(t, s)["trellis"].BindingSession)
