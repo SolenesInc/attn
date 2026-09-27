@@ -26,8 +26,8 @@ func TestKittyPlacementsReachOnlyClientsThatAskedForThem(t *testing.T) {
 }
 
 func testKittyPlacementsReachOnlyClientsThatAskedForThem(t *testing.T, w *world) {
-	framesOnly := w.App()
-	session := w.Spawn(framesOnly, workspaceShell, w.Path("shop"))
+	session := w.Spawn(w.App(), workspaceShell, w.Path("shop"))
+	framesOnly := transportPeer(w, protocol.CapabilityBinaryPtyOutput)
 	peers := map[string]*testworld.Peer{
 		"describes and decodes frames":   transportPeer(w, protocol.CapabilityKittyImages, protocol.CapabilityBinaryPtyOutput),
 		"describes without frames":       transportPeer(w, protocol.CapabilityKittyImages),
