@@ -2,6 +2,7 @@ package main_test
 
 import (
 	"encoding/json"
+	"regexp"
 	"strings"
 	"testing"
 
@@ -122,4 +123,27 @@ func TestSessionTranscriptAndInstructionsReadTheTargetConversation(t *testing.T)
 			t.Errorf("instructions --json for %s exited %d with %+v, want code %s", tc.target, asJSON.Code, failure.Error, tc.code)
 		}
 	}
+}
+
+func TestSessionInstructionsPrintsTheAnswerWithItsExcerptsAndTranscript(t *testing.T) {
+	t.Parallel()
+	s := testworld.NewStack(t, testworld.WithAgents(fakeagent.Codex))
+	s.Vars = append(s.Vars, "ATTN_HEADLESS_TASKS=on")
+	const question = "Was the refund authorized?"
+	quoted := regexp.MustCompile(`\[(\S+) user\] who approved the refund\?`)
+	s.AnswerHeadlessTasks(func(task *fakeagent.HeadlessTask) {
+		turn := quoted.FindStringSubmatch(task.Prompt)
+		if !strings.Contains(task.Prompt, question) || turn == nil {
+			task.Fail("not the question under test")
+			return
+		}
+		task.Answer(`{"answer":"no","evidence":[{"turn_id":"` + turn[1] + `","quote":"who approved the refund?"}]}`)
+	})
+	s.Start()
+	app := s.App()
+	id := s.Spawn(app, fakeagent.Codex, s.Path("shop"))
+	converse(app, s.Launched(id), id, "who approved the refund?", "Nobody yet.")
+
+	asked := s.Attn("session", "instructions", id, "--question", question)
+	requireStdout(t, asked, "No.\n\nuser — ", "\n  \"who approved the refund?\"\n\nTranscript: /")
 }
