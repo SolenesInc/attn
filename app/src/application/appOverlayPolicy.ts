@@ -50,8 +50,10 @@ export function appOverlayPolicy(overlays: Overlays) {
     libraryOpen,
     overlays.gardenHoldsWindow,
   ].some(Boolean);
+  const blockingOverlayOpen = navigationCaptured || paletteBlocked;
   return {
-    blockingOverlayOpen: navigationCaptured || paletteBlocked,
+    blockingOverlayOpen,
+    windowCovered: blockingOverlayOpen || overlays.markdownOpenerOpen,
     paletteBlocked,
     appShortcutsEnabled: !navigationCaptured && !overlays.markdownOpenerOpen,
   };

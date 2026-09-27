@@ -147,12 +147,12 @@ export function useAppController({
     daemonSessions,
     connect,
   });
-  const { enrichedLocalSessions, desktopViews, unmutedEnrichedSessions } = appSessions;
+  const { enrichedLocalSessions, desktopViews, profileSessions } = appSessions;
 
   const attentionQueue = useAttentionQueue({
     settings,
     desktopViews,
-    unmutedEnrichedSessions,
+    profileSessions,
     enrichedLocalSessions,
     activeSessionId,
   });
@@ -168,7 +168,7 @@ export function useAppController({
     activeSessionId,
     daemonSessions,
     desktopViews,
-    unmutedEnrichedSessions,
+    profileSessions,
     attentionQueue,
     showError,
     showNotice,
@@ -323,7 +323,7 @@ export function useAppController({
 
   const [desktopOverviewOpen, setDesktopOverviewOpen] = useState(false);
   const [profileSwitcherOpen, setProfileSwitcherOpen] = useState(false);
-  const { blockingOverlayOpen, paletteBlocked, appShortcutsEnabled } = appOverlayPolicy({
+  const { blockingOverlayOpen, windowCovered, paletteBlocked, appShortcutsEnabled } = appOverlayPolicy({
     desktopOverviewOpen,
     profileSwitcherOpen,
     locationPickerOpen,
@@ -495,7 +495,7 @@ export function useAppController({
   const attentionCount = waitingLocalSessions.length + prsNeedingAttention.length;
 
   const appGrid = useAppGrid({
-    unmutedEnrichedSessions,
+    profileSessions,
     wantsAttention,
     cancelPendingSelection,
     setView,
@@ -709,6 +709,7 @@ export function useAppController({
         annotationApi,
         handleOpenPresentationWindow,
         blockingOverlayOpen,
+        windowCovered,
         zoomModeBySessionId,
         setZoomModeBySessionId,
         agentFocused,

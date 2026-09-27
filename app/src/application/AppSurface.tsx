@@ -20,7 +20,6 @@ import {
   useAppShell,
   useNavigationContext,
   usePRLauncherContext,
-  useDesktopTilesContext,
 } from './AppContexts';
 import { AppDashboard } from './AppDashboard';
 import { AppDock } from './AppDock';
@@ -52,13 +51,12 @@ export function AppSurface() {
     onDismissLatestRelease,
   } = useAppInputs();
   const { notebookSurfaceContextValue } = useAppNotebookSurfaceContext();
-  const { blockingOverlayOpen, appShellRef, agentFocused } = useAppShell();
+  const { windowCovered, appShellRef, agentFocused } = useAppShell();
   const { toast, clearToast } = useAppErrorsContext();
   const { delegationChainRef } = useAppPanelsContext();
   const { requestTerminalFocus, handleSelectSession, view } = useNavigationContext();
   const { delegationSessions } = useAppSessionsContext();
   const activeSessionId = useSessionStore((state) => state.activeSessionId);
-  const { markdownOpenerOpen } = useDesktopTilesContext();
   const { openPRLauncherJob } = usePRLauncherContext();
   const {
     diagnosticReportSaved,
@@ -82,10 +80,10 @@ export function AppSurface() {
             sessions={delegationSessions}
             onSelectSession={handleSelectSession}
             navigationKey={`${view}:${activeSessionId ?? ''}`}
-            blocked={blockingOverlayOpen || markdownOpenerOpen}
+            blocked={windowCovered}
           >
             <div
-              className={`app${agentFocused ? ' is-agent-focused' : ''}`}
+              className={`app${agentFocused ? ' is-agent-focused' : ''}${view === 'grid' ? ' is-grid' : ''}`}
               ref={appShellRef}
               tabIndex={-1}
               style={{ outline: 'none' }}

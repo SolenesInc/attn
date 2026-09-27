@@ -10,9 +10,9 @@ import { CrewRowView, QueueRowView, type QueueBandSessionView, type RowWhere } f
 import './QueueSidebar.css';
 import { SidebarCrewManage, SidebarPopovers } from './SidebarChrome';
 import { useSidebarContext } from './SidebarContext';
+import { useDesktopChipDrop } from './useDesktopChipDrop';
 import { CollapseIcon, HomeIcon, PlusIcon } from './SidebarIcons';
 import { SidebarAutomationGroups } from './SidebarWorkspaces';
-import type { SidebarWorkspace } from './sidebarTypes';
 
 const LEAD_TURNS = 3;
 const WALK_ROW_SELECTOR = '.queue-row-select, .sidebar-row-select';
@@ -423,13 +423,8 @@ function DesktopStrip() {
     visualIndexOfWorkspace,
     onSelectWorkspace,
     onOpenOverview,
-    leafDrag,
-    dragHoverWorkspaceId,
-    canAcceptLeafDrag,
-    onWorkspaceDragEnter,
-    onWorkspaceDragLeave,
-    onWorkspaceDragDrop,
   } = useSidebarContext();
+  const chipDrop = useDesktopChipDrop();
   const desktops = workspaces.filter((workspace) => workspace.id !== UNPLACED_GROUP_ID);
   const slotted = desktops
     .filter((workspace) => visualIndexOfWorkspace(workspace.id) >= 0)
@@ -439,37 +434,24 @@ function DesktopStrip() {
   const current = desktops.find((workspace) => workspace.id === selectedWorkspaceId);
   const currentIsExtra = Boolean(current && visualIndexOfWorkspace(current.id) < 0);
 
-  const dropClass = (workspace: SidebarWorkspace) => {
-    if (!leafDrag) return '';
-    if (!canAcceptLeafDrag(workspace)) return ' is-drop-disabled';
-    return dragHoverWorkspaceId === workspace.id ? ' is-drop-entering' : ' is-drop-target';
-  };
-
   return (
     <div className="queue-desktop-strip" data-testid="queue-desktop-strip">
       <div className="queue-desktop-chips">
         {slotted.map((workspace) => {
           const slot = visualIndexOfWorkspace(workspace.id) + 1;
           const waiting = waitingOn.has(workspace.id);
+          const { dropClass, dropHandlers } = chipDrop(workspace);
           return (
             <button
               key={workspace.id}
               type="button"
-              className={`queue-desktop-chip${workspace.sessions.length || workspace.children.length ? ' has-panes' : ''}${workspace.id === selectedWorkspaceId ? ' is-current' : ''}${dropClass(workspace)}`}
+              className={`queue-desktop-chip${workspace.sessions.length || workspace.children.length ? ' has-panes' : ''}${workspace.id === selectedWorkspaceId ? ' is-current' : ''}${dropClass}`}
               data-testid={`queue-desktop-chip-${slot}`}
               data-desktop-id={workspace.id}
               data-waiting={waiting || undefined}
               title={`${workspace.title} (${slotShortcut(slot)})`}
               onClick={() => onSelectWorkspace(workspace.id)}
-              onPointerEnter={() => {
-                if (canAcceptLeafDrag(workspace)) onWorkspaceDragEnter?.(workspace);
-              }}
-              onPointerLeave={() => {
-                if (canAcceptLeafDrag(workspace)) onWorkspaceDragLeave?.(workspace);
-              }}
-              onPointerUp={() => {
-                if (canAcceptLeafDrag(workspace)) onWorkspaceDragDrop?.(workspace);
-              }}
+              {...dropHandlers}
             >
               {slot}
               {waiting && <span className="queue-desktop-chip-waiting" aria-label="has turns waiting" />}

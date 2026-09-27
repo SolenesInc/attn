@@ -15,7 +15,7 @@ import type { AppView, StateUpdate } from '../navigation/sessionNavigation';
 import type { Session } from '../store/sessions';
 import { type UISessionState } from '../types/sessionState';
 interface Options {
-  unmutedEnrichedSessions: (Session & { turnOwed?: boolean; crewMember?: string })[];
+  profileSessions: (Session & { turnOwed?: boolean; crewMember?: string })[];
   wantsAttention: (session: {
     state: UISessionState;
     turnOwed?: boolean;
@@ -26,14 +26,14 @@ interface Options {
   setView: (view: StateUpdate<AppView>) => void;
 }
 export function useAppGrid({
-  unmutedEnrichedSessions,
+  profileSessions,
   wantsAttention,
   cancelPendingSelection,
   setView,
 }: Options) {
   const gridSessionTiles = useMemo<GridSessionTile[]>(() => {
     const result: GridSessionTile[] = [];
-    for (const s of unmutedEnrichedSessions) {
+    for (const s of profileSessions) {
       const pane = s.desktop.agents.find((agent) => agent.sessionId === s.id);
       if (!pane) continue;
       const state = s.state;
@@ -46,7 +46,7 @@ export function useAppGrid({
       });
     }
     return result;
-  }, [unmutedEnrichedSessions, wantsAttention]);
+  }, [profileSessions, wantsAttention]);
 
   const [gridLayout, setGridLayout] = useState<GridLayout>(readGridLayout);
   const handleSelectGridLayout = useCallback(

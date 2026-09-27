@@ -338,23 +338,16 @@ describe('the queue sidebar', () => {
     expect(screen.queryByTestId('queue-settle-chief')).toBeNull();
   });
 
-  it('follows turn_owed rather than state for the collapsed rail badge', () => {
+  it('badges the collapsed rail by state outside queue mode', () => {
     const owedOnly: TestSession[] = [
       { id: 'settled', label: 'settled', state: 'waiting_input', workspaceId: 'ws-a' },
       { id: 'owed', label: 'owed', state: 'working', workspaceId: 'ws-b', turnOwed: true, turnOpenedAt: '2026-07-26T09:00:00Z' },
     ];
 
-    const off = renderSidebar(owedOnly, false, { collapsed: true });
-    expect(off.container.querySelectorAll('.mini-badge')).toHaveLength(1);
-    expect(off.container.querySelector('.session-icon .mini-badge')).toBeTruthy();
-    off.unmount();
-
-    const on = renderSidebar(owedOnly, true, { collapsed: true });
-    const badgedTitles = Array.from(on.container.querySelectorAll('.session-icon'))
-      .filter((icon) => icon.querySelector('.mini-badge'))
-      .map((icon) => icon.getAttribute('title'));
-    expect(badgedTitles).toHaveLength(1);
-    expect(badgedTitles[0]).toContain('beta');
+    const { container } = renderSidebar(owedOnly, false, { collapsed: true });
+    expect(container.querySelectorAll('.mini-badge')).toHaveLength(1);
+    expect(container.querySelector('.session-icon .mini-badge')).toBeTruthy();
+    expect(screen.queryByTestId('queue-bar')).toBeNull();
   });
 });
 

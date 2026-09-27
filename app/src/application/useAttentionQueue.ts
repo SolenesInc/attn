@@ -22,14 +22,14 @@ type EnrichedSession = ReturnType<typeof useAppSessions>['enrichedLocalSessions'
 interface Options {
   settings: AppContentProps['settings'];
   desktopViews: WorkspaceWithSessions<EnrichedSession>[];
-  unmutedEnrichedSessions: EnrichedSession[];
+  profileSessions: EnrichedSession[];
   enrichedLocalSessions: EnrichedSession[];
   activeSessionId: string | null;
 }
 export function useAttentionQueue({
   settings,
   desktopViews,
-  unmutedEnrichedSessions,
+  profileSessions,
   enrichedLocalSessions,
   activeSessionId,
 }: Options) {
@@ -77,7 +77,7 @@ export function useAttentionQueue({
     [queueModeEnabled, crewQueueEnabled],
   );
 
-  const waitingLocalSessions = unmutedEnrichedSessions.filter(wantsAttention);
+  const waitingLocalSessions = profileSessions.filter(wantsAttention);
 
   const [snoozeMenu, setSnoozeMenu] = useState<{
     session: { id: string; label: string };
