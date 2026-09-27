@@ -64,9 +64,14 @@ describe('App action menu', () => {
     expect(terminal).toHaveFocus();
   });
 
-  it('holds app shortcuts while open, and opens the attention drawer from its entry', async () => {
-    const { daemon } = await renderApp();
-    const drawer = screen.getByText('Needs Attention').closest('aside');
+  it('holds app shortcuts while open, and opens the attention drawer on the sessions waiting for the user', async () => {
+    const { daemon } = await renderApp({
+      initialState: {
+        sessions: [daemonSession('s1', { state: 'working' }), daemonSession('s2', { state: 'waiting_input' }), daemonSession('s3', { state: 'idle' })],
+        workspaces: ['s1', 's2', 's3'].map(agentWorkspace),
+      },
+    });
+    const drawer = screen.getByText('Needs Attention').closest('aside')!;
     await openActionMenu(daemon);
     expect(drawer).toHaveAttribute('aria-hidden', 'true');
 
@@ -79,5 +84,6 @@ describe('App action menu', () => {
 
     expect(screen.queryByRole('dialog', { name: 'Action menu' })).toBeNull();
     expect(drawer).toHaveAttribute('aria-hidden', 'false');
+    expect([...drawer.querySelectorAll('[data-testid^="attention-session-"]')].map((item) => item.getAttribute('data-testid'))).toEqual(['attention-session-s2']);
   });
 });
