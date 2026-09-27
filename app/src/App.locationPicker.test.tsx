@@ -192,6 +192,14 @@ describe('App location picker', () => {
       expect(pickerOpen()).toBe(false);
       expect(browsed(daemon)).toEqual([{ input_path: '~/projects/' }]);
     });
+    it('says when nothing matches a typed path', async () => {
+      const { daemon } = await openPicker({ directories: { [`${HOME}/projects`]: ['attn'] } });
+
+      await typePath(daemon, '~/projects/zzz');
+
+      expect(suggestions()).toEqual([]);
+      expect(screen.getByTestId('location-picker-empty')).toHaveTextContent('No matches. Press Enter to use path directly.');
+    });
   });
 
   describe('recent locations', () => {
@@ -286,6 +294,18 @@ describe('App location picker', () => {
 
       expect(radio(/terminal/i)).toBeEnabled();
       expect(radio(/codex/i)).toBeEnabled();
+    });
+
+    it('remembers the agent the user picks for the next time the picker opens', async () => {
+      const { daemon } = await openPicker({}, { settings: { codex_available: 'true' } });
+
+      await gesture(daemon, () => fireEvent.click(radio(/codex/i)));
+      await press(daemon, 'Escape');
+      expect(pickerOpen()).toBe(false);
+      await gesture(daemon, () => pressShortcut('session.newWorkspace'));
+
+      expect(daemon.sentOf('set_setting').filter(({ key }) => key === 'new_session_agent')).toEqual([{ cmd: 'set_setting', key: 'new_session_agent', value: 'codex' }]);
+      expect(agentChosen(/codex/i)).toBe(true);
     });
 
     it('switches agents with ⌥ and a digit, and neither advertises nor applies one for an unavailable agent', async () => {
