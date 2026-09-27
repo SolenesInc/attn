@@ -387,16 +387,17 @@ export function useAppController({
   const agentFocused = (surface.kind === 'agent' || surface.kind === 'tile') && currentDesktopAgentFocused;
   const sidebarVisible = !sidebarCollapsed && surface.kind !== 'grid' && !agentFocused;
   const queueSidebarShown = queueModeEnabled && sidebarVisible;
-  const sidebarWasVisible = useRef(sidebarVisible);
+  const sidebarShape = sidebarVisible ? (queueModeEnabled ? 'queue' : 'tree') : 'hidden';
+  const previousSidebarShape = useRef(sidebarShape);
   useLayoutEffect(() => {
-    const hidden = sidebarWasVisible.current && !sidebarVisible;
-    sidebarWasVisible.current = sidebarVisible;
-    if (!hidden) return;
+    const changed = previousSidebarShape.current !== sidebarShape;
+    previousSidebarShape.current = sidebarShape;
+    if (!changed) return;
     const focused = document.activeElement;
     if (!focused || focused === document.body || focused.closest('.sidebar')) {
       useSessionStore.getState().requestTerminalFocus();
     }
-  }, [sidebarVisible]);
+  }, [sidebarShape]);
 
   const handleOpenPalette = useCallback((mode: PaletteMode) => {
     if (palette !== null) {

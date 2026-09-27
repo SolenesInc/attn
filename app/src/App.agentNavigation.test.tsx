@@ -535,6 +535,18 @@ describe('agent navigation', () => {
     expect(focusRequests()).toBe(before + 1);
   });
 
+  it('hands focus to the terminal when the queue switch swaps the sidebar under focus', () => {
+    const { container } = render(<App />);
+    broadcast();
+    act(() => { mockSetActiveSession('s1'); });
+    const focusRequests = () => useSessionStore.getState().utilityFocusRequestToken;
+    container.querySelector<HTMLElement>('.sidebar button')!.focus();
+    const before = focusRequests();
+
+    act(() => { socketArgs().onSettingsUpdate?.({ queue_mode_enabled: 'false' }); });
+    expect(focusRequests()).toBe(before + 1);
+  });
+
   it('hides the sidebar while an agent is focused and opens the palette on agents instead', () => {
     const { container } = render(<App />);
     broadcast();
