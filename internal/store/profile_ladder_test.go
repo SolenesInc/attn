@@ -4,31 +4,24 @@ import (
 	"database/sql"
 	"path/filepath"
 	"reflect"
+	"strings"
 	"testing"
 )
 
-func TestADatabaseFromTheDesktopsBranchGetsNextsMigrationsWithoutConvertingAgain(t *testing.T) {
+func TestADatabaseFromAnEarlyDesktopsBuildIsRefusedWithItsCauseAndLeftAsItWas(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "attn.db")
 	db, err := OpenDBAtSchemaVersion(path, 159)
 	if err != nil {
 		t.Fatalf("OpenDBAtSchemaVersion: %v", err)
 	}
-	var profileID string
-	if err := db.QueryRow(`SELECT id FROM profiles`).Scan(&profileID); err != nil {
-		t.Fatal(err)
-	}
 	for _, statement := range []string{
-		`INSERT INTO sessions (id, label, directory, state, state_since, state_updated_at, last_seen, profile_id)
-			VALUES ('agent', 'agent', '/fixture', 'launching', '2026-09-01T00:00:00Z', '2026-09-01T00:00:00Z', '2026-09-01T02:00:00+02:00', '` + profileID + `')`,
 		`ALTER TABLE sessions DROP COLUMN launched_at`,
 		`DROP TABLE delegation_preference_revisions`,
-		`CREATE TABLE delegation_preferences (id INTEGER PRIMARY KEY, config TEXT NOT NULL)`,
-		`INSERT INTO delegation_preferences (id, config) VALUES (1, '{"revision": 3}')`,
 		`DELETE FROM schema_migrations WHERE version >= 152`,
 		`INSERT INTO schema_migrations (version, applied_at) VALUES (152, ''), (153, ''), (154, ''), (155, '')`,
 	} {
 		if _, err := db.Exec(statement); err != nil {
-			t.Fatalf("shaping the desktops-branch database: %v\n%s", err, statement)
+			t.Fatalf("shaping the early desktops database: %v\n%s", err, statement)
 		}
 	}
 	before := desktopRows(t, db)
@@ -36,46 +29,25 @@ func TestADatabaseFromTheDesktopsBranchGetsNextsMigrationsWithoutConvertingAgain
 		t.Fatal(err)
 	}
 
-	s, upgrade, err := Open(path)
-	if err != nil {
-		t.Fatalf("opening the desktops-branch database: %v", err)
+	if s, _, err := Open(path); err == nil {
+		s.Close()
+		t.Fatal("an early desktops database opened, want it refused")
+	} else if !strings.Contains(err.Error(), "development build of the desktops branch") || !strings.Contains(err.Error(), "moving "+path+" aside") {
+		t.Fatalf("refusal = %v, want the cause and the reset", err)
 	}
-	t.Cleanup(func() { s.Close() })
 
-	if upgrade.From != 155 || upgrade.To != LatestSchemaVersion() {
-		t.Fatalf("upgrade = %+v, want 155 to %d", upgrade, LatestSchemaVersion())
-	}
-	var versions []int
-	rows, err := s.db.Query(`SELECT version FROM schema_migrations WHERE version >= 152 ORDER BY version`)
+	reopened, err := openSQLite(path)
 	if err != nil {
 		t.Fatal(err)
 	}
-	for rows.Next() {
-		var v int
-		if err := rows.Scan(&v); err != nil {
-			t.Fatal(err)
-		}
-		versions = append(versions, v)
+	t.Cleanup(func() { reopened.Close() })
+	var version int
+	if err := reopened.QueryRow(`SELECT MAX(version) FROM schema_migrations`).Scan(&version); err != nil || version != 155 {
+		t.Fatalf("schema version after the refusal = %d (%v), want 155 untouched", version, err)
 	}
-	rows.Close()
-	if !reflect.DeepEqual(versions, []int{152, 153, 154, 155, 156, 157, 158, 159, 160}) {
-		t.Fatalf("recorded versions = %v, want next's 152-155 and the profile ladder at 156-160", versions)
+	if got := desktopRows(t, reopened); !reflect.DeepEqual(got, before) {
+		t.Fatalf("desktops changed from %v to %v, want the refused database left as it was", before, got)
 	}
-	var launchedAt, lastSeen, owner string
-	if err := s.db.QueryRow(`SELECT launched_at, last_seen, profile_id FROM sessions WHERE id = 'agent'`).Scan(&launchedAt, &lastSeen, &owner); err != nil {
-		t.Fatalf("reading the agent after the upgrade: %v", err)
-	}
-	if launchedAt != "2026-09-01T00:00:00Z" || lastSeen != "2026-09-01T00:00:00Z" || owner != profileID {
-		t.Errorf("agent launched_at=%q last_seen=%q profile=%q, want next's launch stamp, a UTC last-seen and its profile kept", launchedAt, lastSeen, owner)
-	}
-	var revision int
-	if err := s.db.QueryRow(`SELECT revision FROM delegation_preference_revisions`).Scan(&revision); err != nil || revision != 3 {
-		t.Errorf("delegation preference revisions carry %d (%v), want the stored revision 3", revision, err)
-	}
-	if after := desktopRows(t, s.db); !reflect.DeepEqual(after, before) {
-		t.Errorf("desktops changed from %v to %v, want the conversion left alone", before, after)
-	}
-	assertWorkspaceSchemaRetired(t, s.db)
 }
 
 func desktopRows(t *testing.T, db *sql.DB) []string {

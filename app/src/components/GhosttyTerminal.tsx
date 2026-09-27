@@ -1616,7 +1616,7 @@ export const GhosttyTerminal = forwardRef<GhosttyTerminalHandle, GhosttyTerminal
           scheduleSynchronizedOutputRenderFallback();
         }
       });
-    }, [enqueueOperation, flushSynchronizedOutputRender, lineAtVisibleRow, scheduleCoalescedRefit, scheduleFindRescan, scheduleSynchronizedOutputRenderFallback, selectionLineAtBufferRow]);
+    }, [enqueueOperation, flushSynchronizedOutputRender, lineAtVisibleRow, scheduleFindRescan, scheduleSynchronizedOutputRenderFallback, selectionLineAtBufferRow]);
 
     const restoreSnapshot = useCallback((snapshot: Uint8Array) => {
       return enqueueOperation('restoreSnapshot', () => {

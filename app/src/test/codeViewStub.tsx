@@ -25,10 +25,10 @@ function Lines({ item, side, onComment }: { item: Item; side: Side; onComment: (
   const label = side === 'additions' ? 'line' : 'old line';
   return (
     <>
-      {lines.map((text, index) => (
-        <div key={`${side}-${index}`}>
-          <button type="button" aria-label={`Comment on ${item.id} ${label} ${index + 1}`} onClick={() => onComment({ side, start: index + 1, end: index + 1 })} />
-          <span>{text}</span>
+      {lines.map((_, offset) => offset + 1).map((lineNumber) => (
+        <div key={`${side}-${lineNumber}`}>
+          <button type="button" aria-label={`Comment on ${item.id} ${label} ${lineNumber}`} onClick={() => onComment({ side, start: lineNumber, end: lineNumber })} />
+          <span>{lines[lineNumber - 1]}</span>
         </div>
       ))}
     </>
