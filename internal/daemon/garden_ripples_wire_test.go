@@ -50,7 +50,7 @@ func TestTheTenderOfAnUnblockedSeedIsRung(t *testing.T) {
 		w.restart()
 		cli := w.Client()
 		registerSessions(t, w, cli, "harvester", "tender", "bystander")
-		if err := cli.RegisterAsMember("bound", "bound", w.Path("bound"), "", "trellis"); err != nil {
+		if err := w.InjectCrewSession("bound", "bound", w.Path("bound"), "trellis"); err != nil {
 			t.Fatalf("bind trellis: %v", err)
 		}
 		everyone := []string{"harvester", "tender", "bystander", "bound"}

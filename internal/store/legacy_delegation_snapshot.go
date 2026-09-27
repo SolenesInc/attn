@@ -80,7 +80,7 @@ func (s *Store) ListLegacyDelegationOperations() ([]LegacyDelegationOperation, e
 func readLegacyDelegationOperations(db *sql.DB) ([]LegacyDelegationOperation, error) {
 	required := []string{
 		"request_id", "operation_id", "request_json", "state", "progress", "session_id",
-		"workspace_id", "ticket_id", "worktree_path", "worktree_owned", "result_json",
+		"ticket_id", "worktree_path", "worktree_owned", "result_json",
 		"error", "created_at", "updated_at",
 	}
 	for _, column := range required {
@@ -92,7 +92,12 @@ func readLegacyDelegationOperations(db *sql.DB) ([]LegacyDelegationOperation, er
 			return nil, fmt.Errorf("delegation_operations.%s is missing", column)
 		}
 	}
-	worktreeToken, chiefSessionID := `''`, `''`
+	workspaceID, worktreeToken, chiefSessionID := `''`, `''`, `''`
+	if has, err := snapshotHasColumn(db, "delegation_operations", "workspace_id"); err != nil {
+		return nil, err
+	} else if has {
+		workspaceID = "workspace_id"
+	}
 	if has, err := snapshotHasColumn(db, "delegation_operations", "worktree_token"); err != nil {
 		return nil, err
 	} else if has {
@@ -104,7 +109,7 @@ func readLegacyDelegationOperations(db *sql.DB) ([]LegacyDelegationOperation, er
 		chiefSessionID = "chief_session_id"
 	}
 	rows, err := db.Query(`SELECT request_id,operation_id,request_json,state,progress,session_id,
-		workspace_id,ticket_id,worktree_path,worktree_owned,` + worktreeToken + `,` + chiefSessionID + `,
+		` + workspaceID + `,ticket_id,worktree_path,worktree_owned,` + worktreeToken + `,` + chiefSessionID + `,
 		result_json,error,created_at,updated_at FROM delegation_operations
 		ORDER BY ticket_id,updated_at,request_id,operation_id`)
 	if err != nil {

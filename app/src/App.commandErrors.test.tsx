@@ -1,6 +1,6 @@
 import { act, fireEvent, screen, within } from '@testing-library/react';
 import { describe, expect, it, vi } from 'vitest';
-import { agentWorkspace, daemonSession } from './test/daemonFixtures';
+import { soloDesktop, daemonSession } from './test/daemonFixtures';
 import type { CommandMessage } from './test/protocol';
 import { gesture, pressShortcut, renderApp } from './test/renderApp';
 import type { ScriptedDaemon } from './test/scriptedDaemon';
@@ -19,7 +19,7 @@ function renderWorkspace() {
   return renderApp({
     initialState: {
       sessions: [daemonSession('s1', { label: 'working' })],
-      workspaces: [agentWorkspace('s1')],
+      desktops: [soloDesktop('s1')],
     },
   });
 }
@@ -69,18 +69,19 @@ describe('App command errors', () => {
     expect(dialog).toHaveTextContent(parked);
   });
 
-  it('shows the daemon error when a workspace rename is refused', async () => {
+  it('shows the daemon error when a desktop rename is refused', async () => {
     vi.spyOn(console, 'error').mockImplementation(() => {});
-    const { daemon } = await renderWorkspace();
-    daemon.on('rename_workspace', () => ({ event: 'command_error', success: false, cmd: 'rename_workspace', error: parked }));
+    const { daemon } = await renderApp({
+      initialState: { sessions: [daemonSession('s1', { label: 'working' })], desktops: [soloDesktop('s1', { name: 'desk' })] },
+    });
+    const refusal = 'desktop desktop-s1 changed since revision 1';
+    daemon.on('desktop_rename', (command) => ({ event: 'profile_action_result', action: command.cmd, request_id: command.request_id, success: false, error: refusal }));
 
-    fireEvent.click(screen.getByRole('button', { name: 'Rename workspace s1' }));
-    const dialog = await rename(daemon, 'Rename workspace', 'new name');
+    fireEvent.click(screen.getByRole('button', { name: 'Rename desk' }));
+    const dialog = await rename(daemon, 'Rename desktop', 'new name');
 
-    expect(daemon.sentOf('rename_workspace')).toEqual([
-      { cmd: 'rename_workspace', workspace_id: 'workspace-s1', title: 'new name' },
-    ]);
-    expect(dialog).toHaveTextContent(parked);
+    expect(daemon.sentOf('desktop_rename')).toEqual([expect.objectContaining({ desktop_id: 'desktop-s1', name: 'new name' })]);
+    expect(dialog).toHaveTextContent(refusal);
   });
 
   it('finishes a repeated PR refresh on the daemon reply and leaves no stale timeout behind', async () => {

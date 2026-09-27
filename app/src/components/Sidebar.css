@@ -9,7 +9,7 @@
   flex-shrink: 0;
   /* The sidebar is interactive chrome (click to select, drag to reorder), not
      readable prose — disabling selection stops the browser from highlighting
-     workspace/session labels while you drag a header or a leaf. */
+     desktop/session labels while you drag a header or a leaf. */
   user-select: none;
   -webkit-user-select: none;
 }
@@ -174,8 +174,80 @@
   margin-bottom: 8px;
 }
 
+.automation-runs {
+  margin: 8px 0 2px;
+  border-top: 1px solid var(--color-border-subtle);
+  padding-top: 4px;
+}
+
+.automation-runs-header {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  color: var(--color-text-muted);
+  font-size: var(--font-size-xs);
+  font-family: 'JetBrains Mono', 'DejaVu Sans Mono', monospace;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  padding: 6px 4px 4px;
+}
+
+.automation-runs-count {
+  color: var(--color-text-dimmed);
+  font-weight: 500;
+  letter-spacing: 0;
+  text-transform: none;
+}
+
+.automation-runs-batch {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  width: 100%;
+  margin: 0 0 3px;
+  padding: 4px 4px 4px 6px;
+  border: 0;
+  border-radius: 6px;
+  background: none;
+  color: var(--color-warning);
+  cursor: pointer;
+  font-family: 'JetBrains Mono', 'DejaVu Sans Mono', monospace;
+  font-size: var(--font-size-xs);
+  text-align: left;
+}
+
+.automation-runs-batch:hover {
+  background: color-mix(in srgb, var(--color-warning) 10%, transparent);
+}
+
+.automation-runs-batch kbd {
+  margin-left: auto;
+  font-family: inherit;
+  font-size: inherit;
+  color: var(--color-text-dimmed);
+}
+
 .automation-session-group {
-  padding: 4px 0;
+  padding: 2px 0;
+}
+
+.automation-session-asking {
+  flex: 0 0 auto;
+  min-width: 15px;
+  height: 14px;
+  padding: 0 4px;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--color-warning) 18%, transparent);
+  color: var(--color-warning);
+  font-size: 9.5px;
+  line-height: 14px;
+  text-align: center;
+  margin-left: auto;
+}
+
+.automation-session-asking + .automation-session-count {
+  margin-left: 0;
 }
 
 .automation-session-header {
@@ -226,7 +298,7 @@
   margin-left: 10px;
 }
 
-.workspace-group {
+.desktop-group {
   margin-bottom: 8px;
   border-radius: 8px;
   border: 1px solid transparent;
@@ -234,40 +306,40 @@
   overflow: hidden;
 }
 
-.workspace-group.selected {
+.desktop-group.selected {
   background: rgba(255, 255, 255, 0.025);
 }
 
-.sidebar--display-boxed .workspace-group.selected {
+.sidebar--display-boxed .desktop-group.selected {
   border-color: rgba(255, 255, 255, 0.12);
   box-shadow: 0 8px 24px rgba(0, 0, 0, 0.18);
 }
 
-.workspace-group--drag-target {
+.desktop-group--drag-target {
   border-color: color-mix(in srgb, var(--accent) 32%, transparent);
   background: color-mix(in srgb, var(--accent) 7%, transparent);
 }
 
-.workspace-group--drag-disabled {
+.desktop-group--drag-disabled {
   opacity: 0.45;
 }
 
-.workspace-group--drag-entering {
+.desktop-group--drag-entering {
   border-color: color-mix(in srgb, var(--accent) 60%, transparent);
   background: color-mix(in srgb, var(--accent) 12%, transparent);
 }
 
-.workspace-group--drag-entering::before {
+.desktop-group--drag-entering::before {
   content: "";
   position: absolute;
   inset: 0 auto 0 0;
   width: 3px;
   background: var(--accent);
   transform-origin: top;
-  animation: workspace-drag-enter 320ms ease-out both;
+  animation: desktop-drag-enter 320ms ease-out both;
 }
 
-@keyframes workspace-drag-enter {
+@keyframes desktop-drag-enter {
   from {
     transform: scaleY(0);
   }
@@ -276,8 +348,8 @@
   }
 }
 
-/* The workspace being reordered fades in place while its ghost follows the cursor. */
-.workspace-group--reorder-source {
+/* The desktop being reordered fades in place while its ghost follows the cursor. */
+.desktop-group--reorder-source {
   opacity: 0.35;
 }
 
@@ -287,7 +359,7 @@
 
 /* A session row dragged out of the sidebar dims in place while a ghost label
    follows the cursor. It reuses the same drop targets as the in-view pane drag:
-   other workspace groups to merge, the "New workspace" zone to split. */
+   other desktop groups to merge, the "New desktop" zone to split. */
 .session-item--draggable {
   touch-action: none;
 }
@@ -314,15 +386,15 @@
   text-overflow: ellipsis;
 }
 
-/* Insertion seam between workspaces, shown only during a reorder drag. It keeps a
+/* Insertion seam between desktops, shown only during a reorder drag. It keeps a
    stable hit-zone so the cursor can land between rows without merging them. */
-.workspace-reorder-seam {
+.desktop-reorder-seam {
   position: relative;
   height: 10px;
   margin: -3px 0;
 }
 
-.workspace-reorder-seam-line {
+.desktop-reorder-seam-line {
   position: absolute;
   left: 2px;
   right: 2px;
@@ -337,21 +409,21 @@
   transition: transform 120ms cubic-bezier(0.2, 0.7, 0.2, 1), opacity 120ms ease;
 }
 
-.workspace-reorder-seam.active .workspace-reorder-seam-line {
+.desktop-reorder-seam.active .desktop-reorder-seam-line {
   transform: translateY(-50%) scaleX(1);
   opacity: 1;
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .workspace-reorder-seam-line {
+  .desktop-reorder-seam-line {
     transition: none;
   }
 }
 
-/* "New workspace" drop-zone at the foot of the list, shown only while a leaf drag
-   is active. Dropping the dragged leaf here splits it into a brand-new workspace.
-   Existing workspace groups stay merge targets; this is the dedicated split target. */
-.new-workspace-dropzone {
+/* "New desktop" drop-zone at the foot of the list, shown only while a leaf drag
+   is active. Dropping the dragged leaf here splits it into a brand-new desktop.
+   Existing desktop groups stay merge targets; this is the dedicated split target. */
+.new-desktop-dropzone {
   display: flex;
   align-items: center;
   justify-content: center;
@@ -367,13 +439,13 @@
   transition: background-color 140ms ease, border-color 140ms ease, box-shadow 140ms ease;
 }
 
-.new-workspace-dropzone-plus {
+.new-desktop-dropzone-plus {
   font-size: 14px;
   font-weight: 700;
   line-height: 1;
 }
 
-.new-workspace-dropzone--active {
+.new-desktop-dropzone--active {
   border-style: solid;
   border-color: var(--accent);
   background: color-mix(in srgb, var(--accent) 14%, transparent);
@@ -381,12 +453,12 @@
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .new-workspace-dropzone {
+  .new-desktop-dropzone {
     transition: none;
   }
 }
 
-.workspace-group-header {
+.desktop-group-header {
   position: relative;
   display: flex;
   align-items: center;
@@ -402,15 +474,15 @@
   text-align: left;
 }
 
-.workspace-group-header:hover {
+.desktop-group-header:hover {
   background: var(--color-bg-elevated);
 }
 
-.workspace-group.selected .workspace-group-header {
+.desktop-group.selected .desktop-group-header {
   background: rgba(255, 255, 255, 0.045);
 }
 
-.workspace-label {
+.desktop-label {
   flex: 1;
   min-width: 0;
   overflow: hidden;
@@ -465,12 +537,12 @@
   margin-top: 6px;
 }
 
-.workspace-group-header .state-indicator,
+.desktop-group-header .state-indicator,
 .session-item > .state-indicator {
   margin-top: 0;
 }
 
-.workspace-tile-indicator {
+.desktop-tile-indicator {
   width: 8px;
   height: 8px;
   border: 1px solid var(--color-text-dimmed);
@@ -478,7 +550,7 @@
   flex-shrink: 0;
 }
 
-.workspace-tile-indicator--browser {
+.desktop-tile-indicator--browser {
   border-radius: 50%;
   box-shadow: inset 0 0 0 2px var(--color-bg-primary);
   background: var(--color-text-dimmed);
@@ -684,7 +756,7 @@
   transition: opacity 0.1s;
 }
 
-.workspace-actions {
+.desktop-actions {
   position: relative;
   z-index: 1;
   align-items: center;
@@ -696,13 +768,13 @@
   transition: opacity 0.1s;
 }
 
-.workspace-group-header:hover .workspace-actions,
-.workspace-group-header:focus-within .workspace-actions {
+.desktop-group-header:hover .desktop-actions,
+.desktop-group-header:focus-within .desktop-actions {
   opacity: 1;
   pointer-events: auto;
 }
 
-.workspace-action-btn {
+.desktop-action-btn {
   align-items: center;
   background: none;
   border: none;
@@ -717,15 +789,7 @@
   width: 18px;
 }
 
-.workspace-action-btn:hover {
-  color: var(--color-text-primary);
-}
-
-/* Keep the pin button visible and accented when the workspace is pinned,
-   even when the header row is not hovered. */
-.pin-workspace-btn.pinned {
-  opacity: 1;
-  pointer-events: auto;
+.desktop-action-btn:hover {
   color: var(--color-text-primary);
 }
 
@@ -1099,9 +1163,9 @@
   letter-spacing: 0.04em;
 }
 
-/* Sessionless (panel-only) workspaces carry content but no agent, so they get a
+/* Sessionless (panel-only) desktops carry content but no agent, so they get a
    neutral, hollow marker instead of a session state dot. */
-.workspace-neutral-indicator {
+.desktop-neutral-indicator {
   display: inline-block;
   flex: 0 0 auto;
   width: 8px;
@@ -1116,7 +1180,7 @@
   opacity: 0.7;
 }
 
-.sidebar--display-open .workspace-group.selected {
+.sidebar--display-open .desktop-group.selected {
   border-color: transparent;
   box-shadow: none;
 }
@@ -1130,11 +1194,11 @@
   padding: 6px;
 }
 
-.sidebar--display-tight .workspace-group {
+.sidebar--display-tight .desktop-group {
   margin-bottom: 4px;
 }
 
-.sidebar--display-tight .workspace-group-header {
+.sidebar--display-tight .desktop-group-header {
   min-height: 30px;
   padding: 5px 8px;
 }
@@ -1241,7 +1305,6 @@
   50% { opacity: 0.3; }
 }
 
-/* Muted workspaces section */
 .muted-sessions-section {
   border-top: 1px solid var(--color-border);
   padding: 4px 0;
@@ -1281,31 +1344,6 @@
 
 .muted-sessions-list {
   padding: 0;
-}
-
-.muted-session {
-  opacity: 0.55;
-}
-
-.muted-workspace {
-  opacity: 0.68;
-}
-
-.muted-workspace:hover,
-.muted-workspace.selected {
-  opacity: 0.9;
-}
-
-.muted-workspace-sessions {
-  padding-bottom: 4px;
-}
-
-.muted-session:hover {
-  opacity: 0.75;
-}
-
-.muted-session[data-state="waiting_input"]::before {
-  display: none;
 }
 
 /* The home row. Above the queue bands and the tree, so it reads as the fixed
@@ -1379,14 +1417,6 @@
   color: var(--color-text-dimmed);
   font-family: 'JetBrains Mono', 'DejaVu Sans Mono', monospace;
   font-size: var(--font-size-xs);
-}
-
-/* Queue arrangement: the chief's anchored slot and the "Your turn" band, both
-   above the workspace tree. The tree below is unchanged, so these rows are
-   additions to the sidebar, never a filter over it. */
-.queue-bands {
-  border-bottom: 1px solid var(--color-border);
-  padding: 4px 0 6px;
 }
 
 .queue-band-header {
@@ -1515,7 +1545,6 @@
    button the current interaction does not match as an invisible hole in an
    otherwise visible strip. */
 .queue-row-controls .session-actions,
-.queue-row-controls .queue-row-pin,
 .queue-row-controls .queue-row-snooze,
 .queue-row-controls .queue-row-sleep,
 .queue-row-controls .queue-row-wake,
@@ -1539,8 +1568,7 @@
 .queue-row-settle,
 .queue-row-snooze,
 .queue-row-sleep,
-.queue-row-wake,
-.queue-row-pin {
+.queue-row-wake {
   flex: 0 0 auto;
   background: none;
   border: none;
@@ -1555,20 +1583,17 @@
 .queue-row:hover .queue-row-snooze,
 .queue-row:hover .queue-row-sleep,
 .queue-row:hover .queue-row-wake,
-.queue-row:hover .queue-row-pin,
 .queue-row-settle:focus-visible,
 .queue-row-snooze:focus-visible,
 .queue-row-sleep:focus-visible,
-.queue-row-wake:focus-visible,
-.queue-row-pin:focus-visible {
+.queue-row-wake:focus-visible {
   opacity: 1;
 }
 
 .queue-row-settle:hover,
 .queue-row-snooze:hover,
 .queue-row-sleep:hover,
-.queue-row-wake:hover,
-.queue-row-pin:hover {
+.queue-row-wake:hover {
   color: var(--color-text-primary);
 }
 

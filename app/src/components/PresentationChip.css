@@ -1,4 +1,4 @@
-/* Presentation-ready indicator, rendered inline inside .workspace-pane-header
+/* Presentation-ready indicator, rendered inline inside .desktop-pane-header
    (see NudgeIndicator.css's ".nudge-header" family, which this mirrors). A
    distinct violet accent so it never reads as a nudge/ticket signal. Literal
    rgba (not theme tokens) so it renders identically in the packaged app

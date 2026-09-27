@@ -83,7 +83,7 @@ func TestRetiredTicketsPointToTheGardenWhileTheirHistoryStaysReadable(t *testing
 		t.Errorf("the inbox claims user activity nobody reported:\n%s", unattended.Stdout)
 	}
 
-	app.Send(protocol.SessionSelectedMessage{Cmd: protocol.CmdSessionSelected, ID: "planner"})
+	app.Send(protocol.DesktopSetCurrentMessage{Cmd: protocol.CmdDesktopSetCurrent, ProfileID: app.SelectedProfile(), DesktopID: "desktop-planner", RequestID: "switch"})
 	report := s.Path("report.md")
 	if err := os.MkdirAll(s.Path(), 0o755); err != nil {
 		t.Fatal(err)

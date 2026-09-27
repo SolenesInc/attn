@@ -32,8 +32,8 @@ func TestTheAppReadsTheLedgerOverTheWebSocket(t *testing.T) {
 	if got := sortedLedgerIDs(both.Result); !slices.Equal(got, want) {
 		t.Errorf("session_list all = %v, want the live and the closed session %v", got, want)
 	}
-	if facets := both.Result.Facets; facets == nil || len(facets.Workspaces) != 2 {
-		t.Errorf("facets = %+v, want a workspace choice per session", facets)
+	if facets := both.Result.Facets; facets == nil || len(facets.Profiles) != 1 || facets.Profiles[0].Count != 2 {
+		t.Errorf("facets = %+v, want the one profile both sessions belong to", facets)
 	}
 
 	first := ledgerListOverTheWebSocket(app, "first", protocol.SessionListMessage{All: protocol.Ptr(true), Limit: protocol.Ptr(1)})

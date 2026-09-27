@@ -128,9 +128,10 @@ func TestTicketActivityNudgesAParticipantOnceItsCountdownRunsOut(t *testing.T) {
 				inBubble(t, func(t *testing.T, w *world) {
 					w.finishStartupWork()
 					app, cli := w.App(), w.Client()
-					if err := cli.RegisterWithAgent("worker", "worker", w.Path("worker"), string(agent)); err != nil {
+					if err := w.InjectSession("worker", "worker", w.Path("worker"), agent); err != nil {
 						t.Fatal(err)
 					}
+					lookAway(t, w, app)
 					ticketReportTake(t, cli, "worker", "pricing")
 					w.advance(ticketNudgeBundleWindow)
 					if err := cli.UpdateState("worker", state); err != nil {
@@ -281,7 +282,7 @@ func TestAWakeRefusedByTheLimitIsVisibleAndLeavesTheMemberUnread(t *testing.T) {
 		w.restart()
 		app, cli := w.App(), w.Client()
 		createTicket(t, cli, "planner", "Refused thread", "refused-thread")
-		if err := cli.RegisterAsMember("alder-day", "alder-day", w.Path("alder-day"), "", "alder"); err != nil {
+		if err := w.InjectCrewSession("alder-day", "alder-day", w.Path("alder-day"), "alder"); err != nil {
 			t.Fatal(err)
 		}
 		if _, err := cli.SubscribeTicket("alder-day", "refused-thread"); err != nil {
@@ -308,7 +309,7 @@ func TestAWakeRefusedByTheLimitIsVisibleAndLeavesTheMemberUnread(t *testing.T) {
 			!strings.Contains(feed[0].Detail, "crew.wake_limit=0") || !strings.Contains(feed[0].Body, "still unread") {
 			t.Fatalf("notifications = %+v, want one naming the wake limit and the unread ticket", feed)
 		}
-		if err := cli.RegisterAsMember("alder-later", "alder-later", w.Path("alder-later"), "", "alder"); err != nil {
+		if err := w.InjectCrewSession("alder-later", "alder-later", w.Path("alder-later"), "alder"); err != nil {
 			t.Fatal(err)
 		}
 		if got := inboxLines(t, cli, "alder-later"); !slices.Equal(got, []string{"refused-thread commented wake up"}) {
@@ -320,6 +321,7 @@ func TestAWakeRefusedByTheLimitIsVisibleAndLeavesTheMemberUnread(t *testing.T) {
 func ticketNudgeReadySessions(t *testing.T, w *world, cli *client.Client, ids ...string) {
 	t.Helper()
 	registerSessions(t, w, cli, ids...)
+	lookAway(t, w, w.App())
 	for _, id := range ids {
 		if err := cli.UpdateState(id, protocol.StateWaitingInput); err != nil {
 			t.Fatal(err)

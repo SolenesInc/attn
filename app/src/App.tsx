@@ -3,6 +3,8 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import './App.css';
 import { AppContent } from './application/AppContent';
 import { setMarkdownAnnotationsTransport } from './components/MarkdownReader/annotations/transport';
+import { MigrationFailureScreen } from './components/MigrationFailureScreen';
+import { MigrationGate } from './components/MigrationPicker/MigrationGate';
 import { DaemonApiProvider } from './contexts/DaemonApiContext';
 import { KeybindingsProvider } from './contexts/KeybindingsContext';
 import { SettingsProvider } from './contexts/SettingsContext';
@@ -11,12 +13,12 @@ import {
   DaemonEndpoint,
   DaemonPlugin,
   DaemonPluginIssue,
-  DaemonWorkspace,
   DaemonWorktree,
   SessionExitInfo,
   useDaemonSocket,
 } from './hooks/useDaemonSocket';
 import { useReleaseUpdates } from './hooks/useReleaseUpdates';
+import { useProfilesStore } from './store/profiles';
 import { useSessionStore } from './store/sessions';
 import { useDaemonStore } from './store/daemonSessions';
 import type { Presentation } from './types/generated';
@@ -47,7 +49,6 @@ function App() {
     [],
   );
 
-  const [daemonWorkspaces, setDaemonWorkspaces] = useState<DaemonWorkspace[]>([]);
 
   const [, setWorktrees] = useState<DaemonWorktree[]>([]);
 
@@ -69,6 +70,12 @@ function App() {
   useEffect(() => {
     hideBootSplash();
   }, []);
+
+  const selectedProfileId = useProfilesStore((state) => state.selectedProfileId);
+  const desktops = useProfilesStore((state) => state.desktops);
+  useEffect(() => {
+    useSessionStore.getState().syncFromArrangement(selectedProfileId ?? '', desktops);
+  }, [selectedProfileId, desktops]);
 
   useEffect(() => {
     async function ensureDaemon() {
@@ -126,10 +133,6 @@ function App() {
     },
     onSeedsUpdate: setSeeds,
     onCrewUpdate: setCrew,
-    onWorkspacesUpdate: (workspaces) => {
-      useSessionStore.getState().syncFromDaemonWorkspaces(workspaces);
-      setDaemonWorkspaces(workspaces);
-    },
     onPRsUpdate: setPRs,
     onEndpointsUpdate: setDaemonEndpoints,
     onPluginsUpdate: handlePluginsUpdate,
@@ -205,33 +208,38 @@ function App() {
     };
   }, [hasReceivedInitialState, getPresentations]);
 
+  if (daemon.migrationFailure) {
+    return <MigrationFailureScreen failure={daemon.migrationFailure} />;
+  }
+
   return (
     <SettingsProvider settings={settings} setSetting={sendSetSetting}>
       <KeybindingsProvider>
         <DaemonApiProvider api={daemon}>
-          <AppContent
-            daemonSessions={daemonSessions}
-            daemonWorkspaces={daemonWorkspaces}
-            prs={prs}
-            daemonEndpoints={daemonEndpoints}
-            daemonPlugins={daemonPlugins}
-            daemonPluginIssues={daemonPluginIssues}
-            daemonGitHubHosts={daemonGitHubHosts}
-            githubPollingOffReason={githubPollingOffReason}
-            settings={settings}
-            updateAvailableVersion={updateAvailableVersion}
-            onOpenLatestRelease={handleOpenLatestRelease}
-            onDismissLatestRelease={handleDismissLatestRelease}
-            presentationNotices={presentationNotices}
-            settingError={settingError}
-            clearSettingError={() => setSettingError(null)}
-            notificationsUnread={notificationsUnread}
-            criticalNotifications={criticalNotifications}
-            notificationsChangeSignal={notificationsChangeSignal}
-            fsChangeSignals={fsChangeSignals}
-            notebookTaskChangeSignal={notebookTaskChangeSignal}
-            registerSessionExitHandler={registerSessionExitHandler}
-          />
+          <MigrationGate>
+            <AppContent
+              daemonSessions={daemonSessions}
+              prs={prs}
+              daemonEndpoints={daemonEndpoints}
+              daemonPlugins={daemonPlugins}
+              daemonPluginIssues={daemonPluginIssues}
+              daemonGitHubHosts={daemonGitHubHosts}
+              githubPollingOffReason={githubPollingOffReason}
+              settings={settings}
+              updateAvailableVersion={updateAvailableVersion}
+              onOpenLatestRelease={handleOpenLatestRelease}
+              onDismissLatestRelease={handleDismissLatestRelease}
+              presentationNotices={presentationNotices}
+              settingError={settingError}
+              clearSettingError={() => setSettingError(null)}
+              notificationsUnread={notificationsUnread}
+              criticalNotifications={criticalNotifications}
+              notificationsChangeSignal={notificationsChangeSignal}
+              fsChangeSignals={fsChangeSignals}
+              notebookTaskChangeSignal={notebookTaskChangeSignal}
+              registerSessionExitHandler={registerSessionExitHandler}
+            />
+          </MigrationGate>
         </DaemonApiProvider>
       </KeybindingsProvider>
     </SettingsProvider>

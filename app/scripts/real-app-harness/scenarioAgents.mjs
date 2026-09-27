@@ -3,7 +3,7 @@ import os from 'node:os';
 import path from 'node:path';
 
 import {
-  waitForFirstWorkspacePane,
+  waitForFirstDesktopPane,
   waitForPaneInputFocus,
   waitForPaneVisible,
   waitForPaneVisibleContent,
@@ -110,7 +110,7 @@ export async function ensureClaudeInitialPanePromptReady(client, sessionId, time
 
   while (Date.now() - startedAt < timeoutMs) {
     await client.request('select_session', { sessionId });
-    const initialPane = await waitForFirstWorkspacePane(client, sessionId, `initial pane for Claude session ${sessionId}`, 20_000);
+    const initialPane = await waitForFirstDesktopPane(client, sessionId, `initial pane for Claude session ${sessionId}`, 20_000);
     await waitForPaneVisible(client, sessionId, initialPane.paneId, 20_000);
     const pane = await client.request('read_pane_text', { sessionId, paneId: initialPane.paneId }, { timeoutMs: 20_000 });
     const text = pane?.text || '';
@@ -142,7 +142,7 @@ export async function ensureCodexInitialPanePromptReady(client, sessionId, timeo
 
   while (Date.now() - startedAt < timeoutMs) {
     await client.request('select_session', { sessionId });
-    const initialPane = await waitForFirstWorkspacePane(client, sessionId, `initial pane for Codex session ${sessionId}`, 20_000);
+    const initialPane = await waitForFirstDesktopPane(client, sessionId, `initial pane for Codex session ${sessionId}`, 20_000);
     await waitForPaneVisible(client, sessionId, initialPane.paneId, 20_000);
     const pane = await client.request('read_pane_text', { sessionId, paneId: initialPane.paneId }, { timeoutMs: 20_000 });
     const text = pane?.text || '';
@@ -191,9 +191,9 @@ async function ensureAgentPromptReadyViaPty(client, sessionId, { label, isReady,
   const handled = [];
 
   while (Date.now() - startedAt < timeoutMs) {
-    // select_session changes the shown workspace without stealing OS focus.
+    // select_session changes the shown desktop without stealing OS focus.
     await client.request('select_session', { sessionId });
-    const initialPane = await waitForFirstWorkspacePane(client, sessionId, `initial pane for ${label} session ${sessionId}`, 20_000);
+    const initialPane = await waitForFirstDesktopPane(client, sessionId, `initial pane for ${label} session ${sessionId}`, 20_000);
     await waitForPaneVisible(client, sessionId, initialPane.paneId, 20_000);
     const pane = await client.request('read_pane_text', { sessionId, paneId: initialPane.paneId }, { timeoutMs: 20_000 });
     const text = pane?.text || '';
@@ -286,7 +286,7 @@ export async function promptAgentForStructuredBlock(client, sessionId, token, li
   const prompt = structuredBlockPrompt(token);
   const lines = structuredBlockLines(token, lineCount);
 
-  const initialPane = await waitForFirstWorkspacePane(client, sessionId, `initial pane for structured block ${sessionId}`, 20_000);
+  const initialPane = await waitForFirstDesktopPane(client, sessionId, `initial pane for structured block ${sessionId}`, 20_000);
   await client.request('click_pane', { sessionId, paneId: initialPane.paneId });
   await waitForPaneInputFocus(client, sessionId, initialPane.paneId, 15_000);
   await client.request('write_pane', { sessionId, paneId: initialPane.paneId, text: prompt, submit: true });

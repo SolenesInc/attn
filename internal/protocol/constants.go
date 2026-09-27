@@ -1,13 +1,8 @@
 package protocol
 
-import (
-	"encoding/json"
-	"errors"
-	"fmt"
-	"time"
-)
+import "time"
 
-const ProtocolVersion = "325"
+const ProtocolVersion = "332"
 
 const (
 	ErrorCodeConflict             = "conflict"
@@ -22,8 +17,6 @@ const (
 const DocSubscriptionsPerClient = 64
 
 const AgentMessageMaxChars = 32 * 1024
-
-const CapabilityWorkspaceSessions = "workspace_sessions"
 
 const CapabilityBrowserHost = "browser_host"
 
@@ -41,253 +34,269 @@ const (
 )
 
 const (
-	CmdClientHello                           = "client_hello"
-	CmdRegister                              = "register"
-	CmdDelegate                              = "delegate"
-	CmdDelegationPreferencesGet              = "delegation_preferences_get"
-	CmdDelegationPreferencesSave             = "delegation_preferences_save"
-	CmdDelegationModels                      = "delegation_models"
-	CmdDelegationRoles                       = "delegation_roles"
-	CmdDelegationPreferencesShow             = "delegation_preferences_show"
-	CmdDelegationPreferencesCommit           = "delegation_preferences_commit"
-	CmdDelegationPreferencesHistory          = "delegation_preferences_history"
-	CmdDelegationPreferencesRollback         = "delegation_preferences_rollback"
-	CmdDelegateStatus                        = "delegate_status"
-	CmdSetTicketStatus                       = "set_ticket_status"
-	CmdTicketInbox                           = "ticket_inbox"
-	CmdTicketList                            = "ticket_list"
-	CmdTicketShow                            = "ticket_show"
-	CmdTicketSubscribe                       = "ticket_subscribe"
-	CmdTicketUnsubscribe                     = "ticket_unsubscribe"
-	CmdTicketTake                            = "ticket_take"
-	CmdTicketAttach                          = "ticket_attach"
-	CmdTicketCreate                          = "ticket_create"
-	CmdTicketComment                         = "ticket_comment"
-	CmdDocDefine                             = "doc_define"
-	CmdDocUndefine                           = "doc_undefine"
-	CmdDocCollections                        = "doc_collections"
-	CmdDocPut                                = "doc_put"
-	CmdDocGet                                = "doc_get"
-	CmdDocDelete                             = "doc_delete"
-	CmdDocQuery                              = "doc_query"
-	CmdDocCount                              = "doc_count"
-	CmdDocSubscribe                          = "doc_subscribe"
-	CmdDocUnsubscribe                        = "doc_unsubscribe"
-	CmdPresentOpen                           = "present_open"
-	CmdPresentFeedback                       = "present_feedback"
-	CmdGetPresentations                      = "get_presentations"
-	CmdGetPresentationRound                  = "get_presentation_round"
-	CmdPresentSubmitRound                    = "present_submit_round"
-	CmdPresentClose                          = "present_close"
-	CmdNotebookList                          = "notebook_list"
-	CmdNotebookRead                          = "notebook_read"
-	CmdNotebookWrite                         = "notebook_write"
-	CmdNotebookGuide                         = "notebook_guide"
-	CmdJournalAppend                         = "journal_append"
-	CmdNotebookBacklinks                     = "notebook_backlinks"
-	CmdNotebookSendToChief                   = "notebook_send_to_chief"
-	CmdTaskList                              = "task_list"
-	CmdTaskRetry                             = "task_retry"
-	CmdNotificationList                      = "notification_list"
-	CmdNotificationMarkRead                  = "notification_mark_read"
-	CmdFsList                                = "fs_list"
-	CmdFsRead                                = "fs_read"
-	CmdFsReadAsset                           = "fs_read_asset"
-	CmdFsWrite                               = "fs_write"
-	CmdFsRename                              = "fs_rename"
-	CmdFsDelete                              = "fs_delete"
-	CmdFsExists                              = "fs_exists"
-	CmdFsWatch                               = "fs_watch"
-	CmdFsUnwatch                             = "fs_unwatch"
-	CmdFsIndex                               = "fs_index"
-	CmdUnregister                            = "unregister"
-	CmdState                                 = "state"
-	CmdHookNotification                      = "hook_notification"
-	CmdHookStopFailure                       = "hook_stop_failure"
-	CmdHookCompaction                        = "hook_compaction"
-	CmdSetSessionResumeID                    = "set_session_resume_id"
-	CmdSessionInstructions                   = "session_instructions"
-	CmdSessionTranscript                     = "session_transcript"
-	CmdSessionList                           = "session_list"
-	CmdSessionShow                           = "session_show"
-	CmdSessionReopen                         = "session_reopen"
-	CmdStateExplain                          = "state_explain"
-	CmdAgentPeek                             = "agent_peek"
-	CmdAgentMsg                              = "agent_msg"
-	CmdAgentClose                            = "agent_close"
-	CmdAgentInbox                            = "agent_inbox"
-	CmdAgentMsgStatus                        = "agent_msg_status"
-	CmdSeedPlant                             = "seed_plant"
-	CmdSeedPlot                              = "seed_plot"
-	CmdSeedList                              = "seed_list"
-	CmdSeedSearch                            = "seed_search"
-	CmdSeedShow                              = "seed_show"
-	CmdSeedDocumentGet                       = "seed_document_get"
-	CmdSeedArtifactTransfer                  = "seed_artifact_transfer"
-	CmdSeedArtifactTarget                    = "seed_artifact_target"
-	CmdSeedEdit                              = "seed_edit"
-	CmdSeedTransition                        = "seed_transition"
-	CmdSeedNote                              = "seed_note"
-	CmdSeedNotes                             = "seed_notes"
-	CmdSeedWatch                             = "seed_watch"
-	CmdSeedLink                              = "seed_link"
-	CmdSeedReady                             = "seed_ready"
-	CmdSeedResume                            = "seed_resume"
-	CmdSeedSendToChief                       = "seed_send_to_chief"
-	CmdSeedReviewStart                       = "seed_review_start"
-	CmdSeedReviewShow                        = "seed_review_show"
-	CmdSeedReviewCancel                      = "seed_review_cancel"
-	CmdSeedReviewRetry                       = "seed_review_retry"
-	CmdSeedReviewKeep                        = "seed_review_keep"
-	CmdSeedReviewDraft                       = "seed_review_draft"
-	CmdCrewList                              = "crew_list"
-	CmdCrewCharterGet                        = "crew_charter_get"
-	CmdCrewCharterSet                        = "crew_charter_set"
-	CmdCrewHandoffsGet                       = "crew_handoffs_get"
-	CmdCrewHandoffGet                        = "crew_handoff_get"
-	CmdCrewWake                              = "crew_wake"
-	CmdCrewSleep                             = "crew_sleep"
-	CmdCrewSet                               = "crew_set"
-	CmdCrewRestart                           = "crew_restart"
-	CmdCrewPrime                             = "crew_prime"
-	CmdCrewHandoff                           = "crew_handoff"
-	CmdStop                                  = "stop"
-	CmdFilesEdited                           = "files_edited"
-	CmdPullRequestCreated                    = "pull_request_created"
-	CmdPullRequestForget                     = "pull_request_forget"
-	CmdPullRequestWatch                      = "pull_request_watch"
-	CmdPullRequestUnwatch                    = "pull_request_unwatch"
-	CmdQuery                                 = "query"
-	CmdHeartbeat                             = "heartbeat"
-	CmdSessionSelected                       = "session_selected"
-	CmdWorkspaceSelected                     = "workspace_selected"
-	CmdTriggerNudge                          = "trigger_nudge"
-	CmdSettleTurn                            = "settle_turn"
-	CmdSnoozeTurn                            = "snooze_turn"
-	CmdWakeTurn                              = "wake_turn"
-	CmdCancelCountdown                       = "cancel_countdown"
-	CmdMuteWorkspace                         = "mute_workspace"
-	CmdPinWorkspace                          = "pin_workspace"
-	CmdPinSession                            = "pin_session"
-	CmdQueryPRs                              = "query_prs"
-	CmdMutePR                                = "mute_pr"
-	CmdMuteRepo                              = "mute_repo"
-	CmdMuteAuthor                            = "mute_author"
-	CmdCollapseRepo                          = "collapse_repo"
-	CmdQueryRepos                            = "query_repos"
-	CmdQueryAuthors                          = "query_authors"
-	CmdFetchPRDetails                        = "fetch_pr_details"
-	CmdRefreshPRs                            = "refresh_prs"
-	CmdClearWarnings                         = "clear_warnings"
-	CmdPRVisited                             = "pr_visited"
-	CmdListWorktrees                         = "list_worktrees"
-	CmdCreateWorktree                        = "create_worktree"
-	CmdDeleteWorktree                        = "delete_worktree"
-	CmdKeptConversationList                  = "kept_conversation_list"
-	CmdKeptConversationKeep                  = "kept_conversation_keep"
-	CmdKeptConversationForget                = "kept_conversation_forget"
-	CmdWorktreeList                          = "worktree_list"
-	CmdWorktreeKeep                          = "worktree_keep"
-	CmdWorktreeSweepLog                      = "worktree_sweep_log"
-	CmdWorktreeRefresh                       = "worktree_refresh"
-	CmdGetSettings                           = "get_settings"
-	CmdSetSetting                            = "set_setting"
-	CmdListPlugins                           = "list_plugins"
-	CmdInstallPlugin                         = "install_plugin"
-	CmdInstallBundledPlugin                  = "install_bundled_plugin"
-	CmdUninstallPlugin                       = "uninstall_plugin"
-	CmdRemovePlugin                          = "remove_plugin"
-	CmdSetPluginPriority                     = "set_plugin_priority"
-	CmdAddEndpoint                           = "add_endpoint"
-	CmdRemoveEndpoint                        = "remove_endpoint"
-	CmdUpdateEndpoint                        = "update_endpoint"
-	CmdListEndpoints                         = "list_endpoints"
-	CmdSetEndpointRemoteWeb                  = "set_endpoint_remote_web"
-	CmdBootstrapEndpoint                     = "bootstrap_endpoint"
-	CmdApprovePR                             = "approve_pr"
-	CmdMergePR                               = "merge_pr"
-	CmdInjectTestPR                          = "inject_test_pr"
-	CmdInjectTestSession                     = "inject_test_session"
-	CmdGetRecentLocations                    = "get_recent_locations"
-	CmdRecentFiles                           = "recent_files"
-	CmdBrowseDirectory                       = "browse_directory"
-	CmdInspectPath                           = "inspect_path"
-	CmdListBranches                          = "list_branches"
-	CmdCreateWorktreeFromBranch              = "create_worktree_from_branch"
-	CmdGetDefaultBranch                      = "get_default_branch"
-	CmdFetchRemotes                          = "fetch_remotes"
-	CmdListRemoteBranches                    = "list_remote_branches"
-	CmdEnsureRepo                            = "ensure_repo"
-	CmdSubscribeGitStatus                    = "subscribe_git_status"
-	CmdUnsubscribeGitStatus                  = "unsubscribe_git_status"
-	CmdGetFileDiff                           = "get_file_diff"
-	CmdGetRepoInfo                           = "get_repo_info"
-	CmdWorkflowRunUpsert                     = "workflow_run_upsert"
-	CmdWorkflowCallUpsert                    = "workflow_call_upsert"
-	CmdWorkflowRunGet                        = "workflow_run_get"
-	CmdWorkflowRunList                       = "workflow_run_list"
-	CmdWorkflowRunCancel                     = "workflow_run_cancel"
-	CmdAutomationApply                       = "automation_apply"
-	CmdAutomationRun                         = "automation_run"
-	CmdAutomationDefinitionsGet              = "automation_definitions_get"
-	CmdAutomationDefinitionGet               = "automation_definition_get"
-	CmdAutomationRunsGet                     = "automation_runs_get"
-	CmdAutomationSetEnabled                  = "automation_set_enabled"
-	CmdAutomationDelete                      = "automation_delete"
-	CmdAutomationCleanup                     = "automation_cleanup"
-	CmdAutomationValidate                    = "automation_validate"
-	CmdSpawnSession                          = "spawn_session"
-	CmdAttachSession                         = "attach_session"
-	CmdDetachSession                         = "detach_session"
-	CmdGetScreenSnapshot                     = "get_screen_snapshot"
-	CmdGetKittyImage                         = "get_kitty_image"
-	CmdPtyInput                              = "pty_input"
-	CmdSupportSnapshot                       = "support_snapshot"
-	CmdTerminalPointerActivity               = "terminal_pointer_activity"
-	CmdBusStatusGet                          = "bus_status_get"
-	CmdBusSetConsumerEnabled                 = "bus_set_consumer_enabled"
-	CmdPtyResize                             = "pty_resize"
-	CmdKillSession                           = "kill_session"
-	CmdReloadSession                         = "reload_session"
-	CmdSetClientPresence                     = "set_client_presence"
-	CmdActivityStatus                        = "activity_status"
-	CmdClearSessionActivity                  = "clear_session_activity"
-	CmdSetTerminalTheme                      = "set_terminal_theme"
-	CmdWorkspaceLayoutGet                    = "workspace_layout_get"
-	CmdWorkspaceLayoutAddSessionPane         = "workspace_layout_add_session_pane"
-	CmdWorkspaceLayoutClosePane              = "workspace_layout_close_pane"
-	CmdWorkspaceLayoutFocusPane              = "workspace_layout_focus_pane"
-	CmdWorkspaceLayoutRenamePane             = "workspace_layout_rename_pane"
-	CmdWorkspaceLayoutSetSplitRatio          = "workspace_layout_set_split_ratio"
-	CmdWorkspaceLayoutDockTile               = "workspace_layout_dock_tile"
-	CmdWorkspaceLayoutUndockTile             = "workspace_layout_undock_tile"
-	CmdWorkspaceLayoutUpdateTile             = "workspace_layout_update_tile"
-	CmdWorkspaceLayoutMoveLeaf               = "workspace_layout_move_leaf"
-	CmdWorkspaceLayoutMoveLeafToWorkspace    = "workspace_layout_move_leaf_to_workspace"
-	CmdWorkspaceLayoutMoveLeafToNewWorkspace = "workspace_layout_move_leaf_to_new_workspace"
-	CmdWorkspaceTileContentGet               = "workspace_tile_content_get"
-	CmdOpenMarkdown                          = "open_markdown"
-	CmdOpenSeed                              = "open_seed"
-	CmdOpenSentFiles                         = "open_sent_files"
-	CmdSessionMessagesGet                    = "session_messages_get"
-	CmdSessionAnnotationsGet                 = "session_annotations_get"
-	CmdSessionAnnotationsSave                = "session_annotations_save"
-	CmdSessionAnnotationsClear               = "session_annotations_clear"
-	CmdSessionAnnotationsSubmit              = "session_annotations_submit"
-	CmdMarkdownAnnotationsGet                = "markdown_annotations_get"
-	CmdMarkdownAnnotationsSave               = "markdown_annotations_save"
-	CmdMarkdownAnnotationsClear              = "markdown_annotations_clear"
-	CmdMarkdownAnnotationsSubmit             = "markdown_annotations_submit"
-	CmdOpenBrowser                           = "open_browser"
-	CmdBrowserControl                        = "browser_control"
-	CmdBrowserControlResult                  = "browser_control_result"
-	CmdRegisterWorkspace                     = "register_workspace"
-	CmdUnregisterWorkspace                   = "unregister_workspace"
-	CmdRenameSession                         = "rename_session"
-	CmdRenameWorkspace                       = "rename_workspace"
-	CmdSetWorkspaceRank                      = "set_workspace_rank"
-	CmdSetChiefOfStaff                       = "set_chief_of_staff"
-	CmdSetSessionContextWindowCap            = "set_session_context_window_cap"
+	CmdClientHello                   = "client_hello"
+	CmdDelegate                      = "delegate"
+	CmdDelegationPreferencesGet      = "delegation_preferences_get"
+	CmdDelegationPreferencesSave     = "delegation_preferences_save"
+	CmdDelegationModels              = "delegation_models"
+	CmdDelegationRoles               = "delegation_roles"
+	CmdDelegationPreferencesShow     = "delegation_preferences_show"
+	CmdDelegationPreferencesCommit   = "delegation_preferences_commit"
+	CmdDelegationPreferencesHistory  = "delegation_preferences_history"
+	CmdDelegationPreferencesRollback = "delegation_preferences_rollback"
+	CmdDelegateStatus                = "delegate_status"
+	CmdSetTicketStatus               = "set_ticket_status"
+	CmdTicketInbox                   = "ticket_inbox"
+	CmdTicketList                    = "ticket_list"
+	CmdTicketShow                    = "ticket_show"
+	CmdTicketSubscribe               = "ticket_subscribe"
+	CmdTicketUnsubscribe             = "ticket_unsubscribe"
+	CmdTicketTake                    = "ticket_take"
+	CmdTicketAttach                  = "ticket_attach"
+	CmdTicketCreate                  = "ticket_create"
+	CmdTicketComment                 = "ticket_comment"
+	CmdDocDefine                     = "doc_define"
+	CmdDocUndefine                   = "doc_undefine"
+	CmdDocCollections                = "doc_collections"
+	CmdDocPut                        = "doc_put"
+	CmdDocGet                        = "doc_get"
+	CmdDocDelete                     = "doc_delete"
+	CmdDocQuery                      = "doc_query"
+	CmdDocCount                      = "doc_count"
+	CmdDocSubscribe                  = "doc_subscribe"
+	CmdDocUnsubscribe                = "doc_unsubscribe"
+	CmdPresentOpen                   = "present_open"
+	CmdPresentFeedback               = "present_feedback"
+	CmdGetPresentations              = "get_presentations"
+	CmdGetPresentationRound          = "get_presentation_round"
+	CmdPresentSubmitRound            = "present_submit_round"
+	CmdPresentClose                  = "present_close"
+	CmdNotebookList                  = "notebook_list"
+	CmdNotebookRead                  = "notebook_read"
+	CmdNotebookWrite                 = "notebook_write"
+	CmdNotebookGuide                 = "notebook_guide"
+	CmdJournalAppend                 = "journal_append"
+	CmdNotebookBacklinks             = "notebook_backlinks"
+	CmdNotebookSendToChief           = "notebook_send_to_chief"
+	CmdTaskList                      = "task_list"
+	CmdTaskRetry                     = "task_retry"
+	CmdNotificationList              = "notification_list"
+	CmdNotificationMarkRead          = "notification_mark_read"
+	CmdFsList                        = "fs_list"
+	CmdFsRead                        = "fs_read"
+	CmdFsReadAsset                   = "fs_read_asset"
+	CmdFsWrite                       = "fs_write"
+	CmdFsRename                      = "fs_rename"
+	CmdFsDelete                      = "fs_delete"
+	CmdFsExists                      = "fs_exists"
+	CmdFsWatch                       = "fs_watch"
+	CmdFsUnwatch                     = "fs_unwatch"
+	CmdFsIndex                       = "fs_index"
+	CmdUnregister                    = "unregister"
+	CmdState                         = "state"
+	CmdHookNotification              = "hook_notification"
+	CmdHookStopFailure               = "hook_stop_failure"
+	CmdHookCompaction                = "hook_compaction"
+	CmdSetSessionResumeID            = "set_session_resume_id"
+	CmdSessionInstructions           = "session_instructions"
+	CmdSessionTranscript             = "session_transcript"
+	CmdSessionList                   = "session_list"
+	CmdSessionShow                   = "session_show"
+	CmdSessionReopen                 = "session_reopen"
+	CmdStateExplain                  = "state_explain"
+	CmdAgentPeek                     = "agent_peek"
+	CmdAgentMsg                      = "agent_msg"
+	CmdAgentClose                    = "agent_close"
+	CmdAgentInbox                    = "agent_inbox"
+	CmdAgentMsgStatus                = "agent_msg_status"
+	CmdSeedPlant                     = "seed_plant"
+	CmdSeedPlot                      = "seed_plot"
+	CmdSeedList                      = "seed_list"
+	CmdSeedSearch                    = "seed_search"
+	CmdSeedShow                      = "seed_show"
+	CmdSeedDocumentGet               = "seed_document_get"
+	CmdSeedArtifactTransfer          = "seed_artifact_transfer"
+	CmdSeedArtifactTarget            = "seed_artifact_target"
+	CmdSeedEdit                      = "seed_edit"
+	CmdSeedTransition                = "seed_transition"
+	CmdSeedNote                      = "seed_note"
+	CmdSeedNotes                     = "seed_notes"
+	CmdSeedWatch                     = "seed_watch"
+	CmdSeedLink                      = "seed_link"
+	CmdSeedReady                     = "seed_ready"
+	CmdSeedResume                    = "seed_resume"
+	CmdSeedSendToChief               = "seed_send_to_chief"
+	CmdSeedReviewStart               = "seed_review_start"
+	CmdSeedReviewShow                = "seed_review_show"
+	CmdSeedReviewCancel              = "seed_review_cancel"
+	CmdSeedReviewRetry               = "seed_review_retry"
+	CmdSeedReviewKeep                = "seed_review_keep"
+	CmdSeedReviewDraft               = "seed_review_draft"
+	CmdCrewList                      = "crew_list"
+	CmdCrewCharterGet                = "crew_charter_get"
+	CmdCrewCharterSet                = "crew_charter_set"
+	CmdCrewHandoffsGet               = "crew_handoffs_get"
+	CmdCrewHandoffGet                = "crew_handoff_get"
+	CmdCrewWake                      = "crew_wake"
+	CmdCrewSleep                     = "crew_sleep"
+	CmdCrewSet                       = "crew_set"
+	CmdCrewRestart                   = "crew_restart"
+	CmdCrewPrime                     = "crew_prime"
+	CmdCrewHandoff                   = "crew_handoff"
+	CmdStop                          = "stop"
+	CmdFilesEdited                   = "files_edited"
+	CmdPullRequestCreated            = "pull_request_created"
+	CmdPullRequestForget             = "pull_request_forget"
+	CmdPullRequestWatch              = "pull_request_watch"
+	CmdPullRequestUnwatch            = "pull_request_unwatch"
+	CmdQuery                         = "query"
+	CmdHeartbeat                     = "heartbeat"
+	CmdTriggerNudge                  = "trigger_nudge"
+	CmdSettleTurn                    = "settle_turn"
+	CmdSnoozeTurn                    = "snooze_turn"
+	CmdWakeTurn                      = "wake_turn"
+	CmdCancelCountdown               = "cancel_countdown"
+	CmdQueryPRs                      = "query_prs"
+	CmdMutePR                        = "mute_pr"
+	CmdMuteRepo                      = "mute_repo"
+	CmdMuteAuthor                    = "mute_author"
+	CmdCollapseRepo                  = "collapse_repo"
+	CmdQueryRepos                    = "query_repos"
+	CmdQueryAuthors                  = "query_authors"
+	CmdFetchPRDetails                = "fetch_pr_details"
+	CmdRefreshPRs                    = "refresh_prs"
+	CmdClearWarnings                 = "clear_warnings"
+	CmdPRVisited                     = "pr_visited"
+	CmdListWorktrees                 = "list_worktrees"
+	CmdCreateWorktree                = "create_worktree"
+	CmdDeleteWorktree                = "delete_worktree"
+	CmdKeptConversationList          = "kept_conversation_list"
+	CmdKeptConversationKeep          = "kept_conversation_keep"
+	CmdKeptConversationForget        = "kept_conversation_forget"
+	CmdWorktreeList                  = "worktree_list"
+	CmdWorktreeKeep                  = "worktree_keep"
+	CmdWorktreeSweepLog              = "worktree_sweep_log"
+	CmdWorktreeRefresh               = "worktree_refresh"
+	CmdGetSettings                   = "get_settings"
+	CmdSetSetting                    = "set_setting"
+	CmdListPlugins                   = "list_plugins"
+	CmdInstallPlugin                 = "install_plugin"
+	CmdInstallBundledPlugin          = "install_bundled_plugin"
+	CmdUninstallPlugin               = "uninstall_plugin"
+	CmdRemovePlugin                  = "remove_plugin"
+	CmdSetPluginPriority             = "set_plugin_priority"
+	CmdAddEndpoint                   = "add_endpoint"
+	CmdRemoveEndpoint                = "remove_endpoint"
+	CmdUpdateEndpoint                = "update_endpoint"
+	CmdListEndpoints                 = "list_endpoints"
+	CmdSetEndpointRemoteWeb          = "set_endpoint_remote_web"
+	CmdBootstrapEndpoint             = "bootstrap_endpoint"
+	CmdApprovePR                     = "approve_pr"
+	CmdMergePR                       = "merge_pr"
+	CmdInjectTestPR                  = "inject_test_pr"
+	CmdInjectTestSession             = "inject_test_session"
+	CmdGetRecentLocations            = "get_recent_locations"
+	CmdRecentFiles                   = "recent_files"
+	CmdBrowseDirectory               = "browse_directory"
+	CmdInspectPath                   = "inspect_path"
+	CmdListBranches                  = "list_branches"
+	CmdCreateWorktreeFromBranch      = "create_worktree_from_branch"
+	CmdGetDefaultBranch              = "get_default_branch"
+	CmdFetchRemotes                  = "fetch_remotes"
+	CmdListRemoteBranches            = "list_remote_branches"
+	CmdEnsureRepo                    = "ensure_repo"
+	CmdSubscribeGitStatus            = "subscribe_git_status"
+	CmdUnsubscribeGitStatus          = "unsubscribe_git_status"
+	CmdGetFileDiff                   = "get_file_diff"
+	CmdGetRepoInfo                   = "get_repo_info"
+	CmdWorkflowRunUpsert             = "workflow_run_upsert"
+	CmdWorkflowCallUpsert            = "workflow_call_upsert"
+	CmdWorkflowRunGet                = "workflow_run_get"
+	CmdWorkflowRunList               = "workflow_run_list"
+	CmdWorkflowRunCancel             = "workflow_run_cancel"
+	CmdAutomationApply               = "automation_apply"
+	CmdAutomationRun                 = "automation_run"
+	CmdAutomationDefinitionsGet      = "automation_definitions_get"
+	CmdAutomationDefinitionGet       = "automation_definition_get"
+	CmdAutomationRunsGet             = "automation_runs_get"
+	CmdAutomationSetEnabled          = "automation_set_enabled"
+	CmdAutomationDelete              = "automation_delete"
+	CmdAutomationCleanup             = "automation_cleanup"
+	CmdAutomationValidate            = "automation_validate"
+	CmdSpawnSession                  = "spawn_session"
+	CmdAttachSession                 = "attach_session"
+	CmdDetachSession                 = "detach_session"
+	CmdGetScreenSnapshot             = "get_screen_snapshot"
+	CmdGetKittyImage                 = "get_kitty_image"
+	CmdPtyInput                      = "pty_input"
+	CmdSupportSnapshot               = "support_snapshot"
+	CmdTerminalPointerActivity       = "terminal_pointer_activity"
+	CmdBusStatusGet                  = "bus_status_get"
+	CmdBusSetConsumerEnabled         = "bus_set_consumer_enabled"
+	CmdPtyResize                     = "pty_resize"
+	CmdKillSession                   = "kill_session"
+	CmdReloadSession                 = "reload_session"
+	CmdSetClientPresence             = "set_client_presence"
+	CmdActivityStatus                = "activity_status"
+	CmdClearSessionActivity          = "clear_session_activity"
+	CmdSetTerminalTheme              = "set_terminal_theme"
+	CmdOpenMarkdown                  = "open_markdown"
+	CmdOpenSeed                      = "open_seed"
+	CmdOpenSentFiles                 = "open_sent_files"
+	CmdSessionMessagesGet            = "session_messages_get"
+	CmdSessionAnnotationsGet         = "session_annotations_get"
+	CmdSessionAnnotationsSave        = "session_annotations_save"
+	CmdSessionAnnotationsClear       = "session_annotations_clear"
+	CmdSessionAnnotationsSubmit      = "session_annotations_submit"
+	CmdMarkdownAnnotationsGet        = "markdown_annotations_get"
+	CmdMarkdownAnnotationsSave       = "markdown_annotations_save"
+	CmdMarkdownAnnotationsClear      = "markdown_annotations_clear"
+	CmdMarkdownAnnotationsSubmit     = "markdown_annotations_submit"
+	CmdOpenBrowser                   = "open_browser"
+	CmdBrowserControl                = "browser_control"
+	CmdBrowserControlResult          = "browser_control_result"
+	CmdRenameSession                 = "rename_session"
+	CmdSetChiefOfStaff               = "set_chief_of_staff"
+	CmdSetSessionContextWindowCap    = "set_session_context_window_cap"
+)
+
+const (
+	CmdProfileCreate          = "profile_create"
+	CmdProfileRename          = "profile_rename"
+	CmdProfileDelete          = "profile_delete"
+	CmdProfileSelect          = "profile_select"
+	CmdSessionMove            = "session_move"
+	CmdDesktopCreate          = "desktop_create"
+	CmdDesktopRename          = "desktop_rename"
+	CmdDesktopSetShortcutSlot = "desktop_set_shortcut_slot"
+	CmdDesktopReorder         = "desktop_reorder"
+	CmdDesktopDelete          = "desktop_delete"
+	CmdDesktopSetCurrent      = "desktop_set_current"
+	CmdDesktopSetActivePane   = "desktop_set_active_pane"
+	CmdDesktopPlaceSession    = "desktop_place_session"
+	CmdDesktopMoveLeaf        = "desktop_move_leaf"
+	CmdDesktopRemoveLeaf      = "desktop_remove_leaf"
+	CmdDesktopSetSplitRatio   = "desktop_set_split_ratio"
+	CmdDesktopDockTile        = "desktop_dock_tile"
+	CmdDesktopUpdateTile      = "desktop_update_tile"
+)
+
+const (
+	CmdMigrationGet     = "migration_get"
+	CmdMigrationKeep    = "migration_keep"
+	CmdMigrationMove    = "migration_move"
+	CmdMigrationSuggest = "migration_suggest"
+	CmdMigrationUndo    = "migration_undo"
+	CmdMigrationFinish  = "migration_finish"
+)
+
+const (
+	EventProfileActionResult       = "profile_action_result"
+	EventProfilesChanged           = "profiles_changed"
+	EventProfileArrangementChanged = "profile_arrangement_changed"
+	EventDesktopTileContent        = "desktop_tile_content"
+	EventMigrationResult           = "migration_result"
+	EventMigrationChanged          = "migration_changed"
 )
 
 const (
@@ -331,9 +340,6 @@ const (
 	EventSessionUnregistered             = "session_unregistered"
 	EventSessionCloseResult              = "session_close_result"
 	EventSessionStateChanged             = "session_state_changed"
-	EventWorkspaceRegistered             = "workspace_registered"
-	EventWorkspaceUnregistered           = "workspace_unregistered"
-	EventWorkspaceStateChanged           = "workspace_state_changed"
 	EventNotebookChanged                 = "notebook_changed"
 	EventSessionsUpdated                 = "sessions_updated"
 	EventPullRequestWatchResult          = "pull_request_watch_result"
@@ -449,10 +455,6 @@ const (
 	EventKittyImageResult                = "kitty_image_result"
 	EventRuntimeRespawned                = "runtime_respawned"
 	EventPtyResized                      = "pty_resized"
-	EventWorkspaceLayout                 = "workspace_layout"
-	EventWorkspaceLayoutUpdated          = "workspace_layout_updated"
-	EventWorkspaceLayoutActionResult     = "workspace_layout_action_result"
-	EventWorkspaceTileContent            = "workspace_tile_content"
 	EventOpenMarkdownResult              = "open_markdown_result"
 	EventOpenSeedResult                  = "open_seed_result"
 	EventSeedDocumentGetResult           = "seed_document_get_result"
@@ -533,1849 +535,6 @@ func (pr *PR) NeedsDetailRefresh() bool {
 		return true
 	}
 	return false
-}
-
-func ParseMessage(data []byte) (string, interface{}, error) {
-	var peek struct {
-		Cmd string `json:"cmd"`
-	}
-	if err := json.Unmarshal(data, &peek); err != nil {
-		return "", nil, err
-	}
-	if peek.Cmd == "" {
-		return "", nil, errors.New("missing cmd field")
-	}
-
-	switch peek.Cmd {
-	case CmdClientHello:
-		var msg ClientHelloMessage
-		if err := json.Unmarshal(data, &msg); err != nil {
-			return "", nil, err
-		}
-		return peek.Cmd, &msg, nil
-
-	case CmdRegister:
-		var msg RegisterMessage
-		if err := json.Unmarshal(data, &msg); err != nil {
-			return "", nil, err
-		}
-		return peek.Cmd, &msg, nil
-
-	case CmdDelegate:
-		var msg DelegateMessage
-		if err := json.Unmarshal(data, &msg); err != nil {
-			return "", nil, err
-		}
-		return peek.Cmd, &msg, nil
-
-	case CmdAutomationApply:
-		var msg AutomationApplyMessage
-		if err := json.Unmarshal(data, &msg); err != nil {
-			return "", nil, err
-		}
-		return peek.Cmd, &msg, nil
-	case CmdAutomationRun:
-		var msg AutomationRunMessage
-		if err := json.Unmarshal(data, &msg); err != nil {
-			return "", nil, err
-		}
-		return peek.Cmd, &msg, nil
-
-	case CmdAutomationDefinitionsGet:
-		var msg AutomationDefinitionsGetMessage
-		if err := json.Unmarshal(data, &msg); err != nil {
-			return "", nil, err
-		}
-		return peek.Cmd, &msg, nil
-
-	case CmdAutomationDefinitionGet:
-		var msg AutomationDefinitionGetMessage
-		if err := json.Unmarshal(data, &msg); err != nil {
-			return "", nil, err
-		}
-		return peek.Cmd, &msg, nil
-
-	case CmdAutomationValidate:
-		var msg AutomationValidateMessage
-		if err := json.Unmarshal(data, &msg); err != nil {
-			return "", nil, err
-		}
-		return peek.Cmd, &msg, nil
-
-	case CmdAutomationRunsGet:
-		var msg AutomationRunsGetMessage
-		if err := json.Unmarshal(data, &msg); err != nil {
-			return "", nil, err
-		}
-		return peek.Cmd, &msg, nil
-
-	case CmdAutomationSetEnabled:
-		var msg AutomationSetEnabledMessage
-		if err := json.Unmarshal(data, &msg); err != nil {
-			return "", nil, err
-		}
-		return peek.Cmd, &msg, nil
-
-	case CmdAutomationDelete:
-		var msg AutomationDeleteMessage
-		if err := json.Unmarshal(data, &msg); err != nil {
-			return "", nil, err
-		}
-		return peek.Cmd, &msg, nil
-
-	case CmdAutomationCleanup:
-		var msg AutomationCleanupMessage
-		if err := json.Unmarshal(data, &msg); err != nil {
-			return "", nil, err
-		}
-		return peek.Cmd, &msg, nil
-
-	case CmdDelegationPreferencesGet:
-		var msg DelegationPreferencesGetMessage
-		if err := json.Unmarshal(data, &msg); err != nil {
-			return "", nil, err
-		}
-		return peek.Cmd, &msg, nil
-
-	case CmdDelegationPreferencesSave:
-		var msg DelegationPreferencesSaveMessage
-		if err := json.Unmarshal(data, &msg); err != nil {
-			return "", nil, err
-		}
-		return peek.Cmd, &msg, nil
-
-	case CmdDelegationModels:
-		var msg DelegationModelsMessage
-		if err := json.Unmarshal(data, &msg); err != nil {
-			return "", nil, err
-		}
-		return peek.Cmd, &msg, nil
-
-	case CmdDelegationPreferencesShow:
-		var msg DelegationPreferencesShowMessage
-		if err := json.Unmarshal(data, &msg); err != nil {
-			return "", nil, err
-		}
-		return peek.Cmd, &msg, nil
-
-	case CmdDelegationPreferencesCommit:
-		var msg DelegationPreferencesCommitMessage
-		if err := json.Unmarshal(data, &msg); err != nil {
-			return "", nil, err
-		}
-		return peek.Cmd, &msg, nil
-
-	case CmdDelegationPreferencesHistory:
-		var msg DelegationPreferencesHistoryMessage
-		if err := json.Unmarshal(data, &msg); err != nil {
-			return "", nil, err
-		}
-		return peek.Cmd, &msg, nil
-
-	case CmdDelegationPreferencesRollback:
-		var msg DelegationPreferencesRollbackMessage
-		if err := json.Unmarshal(data, &msg); err != nil {
-			return "", nil, err
-		}
-		return peek.Cmd, &msg, nil
-
-	case CmdDelegationRoles:
-		var msg DelegationRolesMessage
-		if err := json.Unmarshal(data, &msg); err != nil {
-			return "", nil, err
-		}
-		return peek.Cmd, &msg, nil
-
-	case CmdDelegateStatus:
-		var msg DelegateStatusMessage
-		if err := json.Unmarshal(data, &msg); err != nil {
-			return "", nil, err
-		}
-		return peek.Cmd, &msg, nil
-
-	case CmdSetTicketStatus:
-		var msg SetTicketStatusMessage
-		if err := json.Unmarshal(data, &msg); err != nil {
-			return "", nil, err
-		}
-		return peek.Cmd, &msg, nil
-
-	case CmdTicketInbox:
-		var msg TicketInboxMessage
-		if err := json.Unmarshal(data, &msg); err != nil {
-			return "", nil, err
-		}
-		return peek.Cmd, &msg, nil
-
-	case CmdTicketList:
-		var msg TicketListMessage
-		if err := json.Unmarshal(data, &msg); err != nil {
-			return "", nil, err
-		}
-		return peek.Cmd, &msg, nil
-
-	case CmdTicketShow:
-		var msg TicketShowMessage
-		if err := json.Unmarshal(data, &msg); err != nil {
-			return "", nil, err
-		}
-		return peek.Cmd, &msg, nil
-
-	case CmdTicketSubscribe:
-		var msg TicketSubscribeMessage
-		if err := json.Unmarshal(data, &msg); err != nil {
-			return "", nil, err
-		}
-		return peek.Cmd, &msg, nil
-
-	case CmdTicketUnsubscribe:
-		var msg TicketUnsubscribeMessage
-		if err := json.Unmarshal(data, &msg); err != nil {
-			return "", nil, err
-		}
-		return peek.Cmd, &msg, nil
-
-	case CmdTicketTake:
-		var msg TicketTakeMessage
-		if err := json.Unmarshal(data, &msg); err != nil {
-			return "", nil, err
-		}
-		return peek.Cmd, &msg, nil
-
-	case CmdTicketAttach:
-		var msg TicketAttachMessage
-		if err := json.Unmarshal(data, &msg); err != nil {
-			return "", nil, err
-		}
-		return peek.Cmd, &msg, nil
-
-	case CmdDocDefine:
-		var msg DocDefineMessage
-		if err := json.Unmarshal(data, &msg); err != nil {
-			return "", nil, err
-		}
-		return peek.Cmd, &msg, nil
-
-	case CmdDocUndefine:
-		var msg DocUndefineMessage
-		if err := json.Unmarshal(data, &msg); err != nil {
-			return "", nil, err
-		}
-		return peek.Cmd, &msg, nil
-
-	case CmdDocCollections:
-		var msg DocCollectionsMessage
-		if err := json.Unmarshal(data, &msg); err != nil {
-			return "", nil, err
-		}
-		return peek.Cmd, &msg, nil
-
-	case CmdDocPut:
-		var msg DocPutMessage
-		if err := json.Unmarshal(data, &msg); err != nil {
-			return "", nil, err
-		}
-		return peek.Cmd, &msg, nil
-
-	case CmdDocGet:
-		var msg DocGetMessage
-		if err := json.Unmarshal(data, &msg); err != nil {
-			return "", nil, err
-		}
-		return peek.Cmd, &msg, nil
-
-	case CmdDocDelete:
-		var msg DocDeleteMessage
-		if err := json.Unmarshal(data, &msg); err != nil {
-			return "", nil, err
-		}
-		return peek.Cmd, &msg, nil
-
-	case CmdDocQuery:
-		var msg DocQueryMessage
-		if err := json.Unmarshal(data, &msg); err != nil {
-			return "", nil, err
-		}
-		return peek.Cmd, &msg, nil
-
-	case CmdDocCount:
-		var msg DocCountMessage
-		if err := json.Unmarshal(data, &msg); err != nil {
-			return "", nil, err
-		}
-		return peek.Cmd, &msg, nil
-
-	case CmdDocSubscribe:
-		var msg DocSubscribeMessage
-		if err := json.Unmarshal(data, &msg); err != nil {
-			return "", nil, err
-		}
-		return peek.Cmd, &msg, nil
-
-	case CmdDocUnsubscribe:
-		var msg DocUnsubscribeMessage
-		if err := json.Unmarshal(data, &msg); err != nil {
-			return "", nil, err
-		}
-		return peek.Cmd, &msg, nil
-
-	case CmdAutoModeShow:
-		var msg AutoModeShowMessage
-		if err := json.Unmarshal(data, &msg); err != nil {
-			return "", nil, err
-		}
-		return peek.Cmd, &msg, nil
-
-	case CmdAutoModeEnvSlot:
-		var msg AutoModeEnvSlotMessage
-		if err := json.Unmarshal(data, &msg); err != nil {
-			return "", nil, err
-		}
-		return peek.Cmd, &msg, nil
-
-	case CmdAutoModeEnvNotes:
-		var msg AutoModeEnvNotesMessage
-		if err := json.Unmarshal(data, &msg); err != nil {
-			return "", nil, err
-		}
-		return peek.Cmd, &msg, nil
-
-	case CmdAutoModePropose:
-		var msg AutoModeProposeMessage
-		if err := json.Unmarshal(data, &msg); err != nil {
-			return "", nil, err
-		}
-		return peek.Cmd, &msg, nil
-
-	case CmdAutoModeDenials:
-		var msg AutoModeDenialsMessage
-		if err := json.Unmarshal(data, &msg); err != nil {
-			return "", nil, err
-		}
-		return peek.Cmd, &msg, nil
-
-	case CmdTicketCreate:
-		var msg TicketCreateMessage
-		if err := json.Unmarshal(data, &msg); err != nil {
-			return "", nil, err
-		}
-		return peek.Cmd, &msg, nil
-
-	case CmdTicketComment:
-		var msg TicketCommentMessage
-		if err := json.Unmarshal(data, &msg); err != nil {
-			return "", nil, err
-		}
-		return peek.Cmd, &msg, nil
-
-	case CmdPresentOpen:
-		var msg PresentOpenMessage
-		if err := json.Unmarshal(data, &msg); err != nil {
-			return "", nil, err
-		}
-		return peek.Cmd, &msg, nil
-
-	case CmdPresentFeedback:
-		var msg PresentFeedbackMessage
-		if err := json.Unmarshal(data, &msg); err != nil {
-			return "", nil, err
-		}
-		return peek.Cmd, &msg, nil
-
-	case CmdGetPresentations:
-		var msg GetPresentationsMessage
-		if err := json.Unmarshal(data, &msg); err != nil {
-			return "", nil, err
-		}
-		return peek.Cmd, &msg, nil
-
-	case CmdGetPresentationRound:
-		var msg GetPresentationRoundMessage
-		if err := json.Unmarshal(data, &msg); err != nil {
-			return "", nil, err
-		}
-		return peek.Cmd, &msg, nil
-
-	case CmdPresentSubmitRound:
-		var msg PresentSubmitRoundMessage
-		if err := json.Unmarshal(data, &msg); err != nil {
-			return "", nil, err
-		}
-		return peek.Cmd, &msg, nil
-
-	case CmdPresentClose:
-		var msg PresentCloseMessage
-		if err := json.Unmarshal(data, &msg); err != nil {
-			return "", nil, err
-		}
-		return peek.Cmd, &msg, nil
-
-	case CmdNotebookList:
-		var msg NotebookListMessage
-		if err := json.Unmarshal(data, &msg); err != nil {
-			return "", nil, err
-		}
-		return peek.Cmd, &msg, nil
-
-	case CmdNotebookRead:
-		var msg NotebookReadMessage
-		if err := json.Unmarshal(data, &msg); err != nil {
-			return "", nil, err
-		}
-		return peek.Cmd, &msg, nil
-
-	case CmdNotebookWrite:
-		var msg NotebookWriteMessage
-		if err := json.Unmarshal(data, &msg); err != nil {
-			return "", nil, err
-		}
-		return peek.Cmd, &msg, nil
-
-	case CmdNotebookGuide:
-		var msg NotebookGuideMessage
-		if err := json.Unmarshal(data, &msg); err != nil {
-			return "", nil, err
-		}
-		return peek.Cmd, &msg, nil
-
-	case CmdJournalAppend:
-		var msg JournalAppendMessage
-		if err := json.Unmarshal(data, &msg); err != nil {
-			return "", nil, err
-		}
-		return peek.Cmd, &msg, nil
-
-	case CmdNotebookBacklinks:
-		var msg NotebookBacklinksMessage
-		if err := json.Unmarshal(data, &msg); err != nil {
-			return "", nil, err
-		}
-		return peek.Cmd, &msg, nil
-
-	case CmdNotebookSendToChief:
-		var msg NotebookSendToChiefMessage
-		if err := json.Unmarshal(data, &msg); err != nil {
-			return "", nil, err
-		}
-		return peek.Cmd, &msg, nil
-
-	case CmdTaskList:
-		var msg TaskListMessage
-		if err := json.Unmarshal(data, &msg); err != nil {
-			return "", nil, err
-		}
-		return peek.Cmd, &msg, nil
-
-	case CmdTaskRetry:
-		var msg TaskRetryMessage
-		if err := json.Unmarshal(data, &msg); err != nil {
-			return "", nil, err
-		}
-		return peek.Cmd, &msg, nil
-
-	case CmdNotificationList:
-		var msg NotificationListMessage
-		if err := json.Unmarshal(data, &msg); err != nil {
-			return "", nil, err
-		}
-		return peek.Cmd, &msg, nil
-
-	case CmdNotificationMarkRead:
-		var msg NotificationMarkReadMessage
-		if err := json.Unmarshal(data, &msg); err != nil {
-			return "", nil, err
-		}
-		return peek.Cmd, &msg, nil
-
-	case CmdFsList:
-		var msg FsListMessage
-		if err := json.Unmarshal(data, &msg); err != nil {
-			return "", nil, err
-		}
-		return peek.Cmd, &msg, nil
-
-	case CmdFsRead:
-		var msg FsReadMessage
-		if err := json.Unmarshal(data, &msg); err != nil {
-			return "", nil, err
-		}
-		return peek.Cmd, &msg, nil
-
-	case CmdFsReadAsset:
-		var msg FsReadAssetMessage
-		if err := json.Unmarshal(data, &msg); err != nil {
-			return "", nil, err
-		}
-		return peek.Cmd, &msg, nil
-
-	case CmdFsWrite:
-		var msg FsWriteMessage
-		if err := json.Unmarshal(data, &msg); err != nil {
-			return "", nil, err
-		}
-		return peek.Cmd, &msg, nil
-
-	case CmdFsRename:
-		var msg FsRenameMessage
-		if err := json.Unmarshal(data, &msg); err != nil {
-			return "", nil, err
-		}
-		return peek.Cmd, &msg, nil
-
-	case CmdFsDelete:
-		var msg FsDeleteMessage
-		if err := json.Unmarshal(data, &msg); err != nil {
-			return "", nil, err
-		}
-		return peek.Cmd, &msg, nil
-
-	case CmdFsExists:
-		var msg FsExistsMessage
-		if err := json.Unmarshal(data, &msg); err != nil {
-			return "", nil, err
-		}
-		return peek.Cmd, &msg, nil
-
-	case CmdFsWatch:
-		var msg FsWatchMessage
-		if err := json.Unmarshal(data, &msg); err != nil {
-			return "", nil, err
-		}
-		return peek.Cmd, &msg, nil
-
-	case CmdFsUnwatch:
-		var msg FsUnwatchMessage
-		if err := json.Unmarshal(data, &msg); err != nil {
-			return "", nil, err
-		}
-		return peek.Cmd, &msg, nil
-
-	case CmdFsIndex:
-		var msg FsIndexMessage
-		if err := json.Unmarshal(data, &msg); err != nil {
-			return "", nil, err
-		}
-		return peek.Cmd, &msg, nil
-
-	case CmdUnregister:
-		var msg UnregisterMessage
-		if err := json.Unmarshal(data, &msg); err != nil {
-			return "", nil, err
-		}
-		return peek.Cmd, &msg, nil
-
-	case CmdState:
-		var msg StateMessage
-		if err := json.Unmarshal(data, &msg); err != nil {
-			return "", nil, err
-		}
-		return peek.Cmd, &msg, nil
-
-	case CmdHookNotification:
-		var msg HookNotificationMessage
-		if err := json.Unmarshal(data, &msg); err != nil {
-			return "", nil, err
-		}
-		return peek.Cmd, &msg, nil
-
-	case CmdHookStopFailure:
-		var msg HookStopFailureMessage
-		if err := json.Unmarshal(data, &msg); err != nil {
-			return "", nil, err
-		}
-		return peek.Cmd, &msg, nil
-
-	case CmdHookCompaction:
-		var msg HookCompactionMessage
-		if err := json.Unmarshal(data, &msg); err != nil {
-			return "", nil, err
-		}
-		return peek.Cmd, &msg, nil
-
-	case CmdSetSessionResumeID:
-		var msg SetSessionResumeIDMessage
-		if err := json.Unmarshal(data, &msg); err != nil {
-			return "", nil, err
-		}
-		return peek.Cmd, &msg, nil
-
-	case CmdSessionInstructions:
-		var msg SessionInstructionsMessage
-		if err := json.Unmarshal(data, &msg); err != nil {
-			return "", nil, err
-		}
-		return peek.Cmd, &msg, nil
-
-	case CmdSessionTranscript:
-		var msg SessionTranscriptMessage
-		if err := json.Unmarshal(data, &msg); err != nil {
-			return "", nil, err
-		}
-		return peek.Cmd, &msg, nil
-
-	case CmdSessionList:
-		var msg SessionListMessage
-		if err := json.Unmarshal(data, &msg); err != nil {
-			return "", nil, err
-		}
-		return peek.Cmd, &msg, nil
-
-	case CmdSessionShow:
-		var msg SessionShowMessage
-		if err := json.Unmarshal(data, &msg); err != nil {
-			return "", nil, err
-		}
-		return peek.Cmd, &msg, nil
-
-	case CmdSessionReopen:
-		var msg SessionReopenMessage
-		if err := json.Unmarshal(data, &msg); err != nil {
-			return "", nil, err
-		}
-		return peek.Cmd, &msg, nil
-
-	case CmdStateExplain:
-		var msg StateExplainMessage
-		if err := json.Unmarshal(data, &msg); err != nil {
-			return "", nil, err
-		}
-		return peek.Cmd, &msg, nil
-
-	case CmdAgentPeek:
-		var msg AgentPeekMessage
-		if err := json.Unmarshal(data, &msg); err != nil {
-			return "", nil, err
-		}
-		return peek.Cmd, &msg, nil
-
-	case CmdAgentMsg:
-		var msg AgentMsgMessage
-		if err := json.Unmarshal(data, &msg); err != nil {
-			return "", nil, err
-		}
-		return peek.Cmd, &msg, nil
-
-	case CmdAgentClose:
-		var msg AgentCloseMessage
-		if err := json.Unmarshal(data, &msg); err != nil {
-			return "", nil, err
-		}
-		return peek.Cmd, &msg, nil
-
-	case CmdAgentInbox:
-		var msg AgentInboxMessage
-		if err := json.Unmarshal(data, &msg); err != nil {
-			return "", nil, err
-		}
-		return peek.Cmd, &msg, nil
-
-	case CmdAgentMsgStatus:
-		var msg AgentMsgStatusMessage
-		if err := json.Unmarshal(data, &msg); err != nil {
-			return "", nil, err
-		}
-		return peek.Cmd, &msg, nil
-
-	case CmdCrewList:
-		var msg CrewListMessage
-		if err := json.Unmarshal(data, &msg); err != nil {
-			return "", nil, err
-		}
-		return peek.Cmd, &msg, nil
-
-	case CmdCrewCharterGet:
-		var msg CrewCharterGetMessage
-		if err := json.Unmarshal(data, &msg); err != nil {
-			return "", nil, err
-		}
-		return peek.Cmd, &msg, nil
-
-	case CmdCrewCharterSet:
-		var msg CrewCharterSetMessage
-		if err := json.Unmarshal(data, &msg); err != nil {
-			return "", nil, err
-		}
-		return peek.Cmd, &msg, nil
-
-	case CmdCrewHandoffsGet:
-		var msg CrewHandoffsGetMessage
-		if err := json.Unmarshal(data, &msg); err != nil {
-			return "", nil, err
-		}
-		return peek.Cmd, &msg, nil
-
-	case CmdCrewHandoffGet:
-		var msg CrewHandoffGetMessage
-		if err := json.Unmarshal(data, &msg); err != nil {
-			return "", nil, err
-		}
-		return peek.Cmd, &msg, nil
-
-	case CmdCrewWake:
-		var msg CrewWakeMessage
-		if err := json.Unmarshal(data, &msg); err != nil {
-			return "", nil, err
-		}
-		return peek.Cmd, &msg, nil
-
-	case CmdCrewSleep:
-		var msg CrewSleepMessage
-		if err := json.Unmarshal(data, &msg); err != nil {
-			return "", nil, err
-		}
-		return peek.Cmd, &msg, nil
-
-	case CmdCrewSet:
-		var msg CrewSetMessage
-		if err := json.Unmarshal(data, &msg); err != nil {
-			return "", nil, err
-		}
-		return peek.Cmd, &msg, nil
-
-	case CmdCrewRestart:
-		var msg CrewRestartMessage
-		if err := json.Unmarshal(data, &msg); err != nil {
-			return "", nil, err
-		}
-		return peek.Cmd, &msg, nil
-
-	case CmdCrewPrime:
-		var msg CrewPrimeMessage
-		if err := json.Unmarshal(data, &msg); err != nil {
-			return "", nil, err
-		}
-		return peek.Cmd, &msg, nil
-
-	case CmdCrewHandoff:
-		var msg CrewHandoffMessage
-		if err := json.Unmarshal(data, &msg); err != nil {
-			return "", nil, err
-		}
-		return peek.Cmd, &msg, nil
-
-	case CmdSeedPlant:
-		var msg SeedPlantMessage
-		if err := json.Unmarshal(data, &msg); err != nil {
-			return "", nil, err
-		}
-		return peek.Cmd, &msg, nil
-
-	case CmdSeedPlot:
-		var msg SeedPlotMessage
-		if err := json.Unmarshal(data, &msg); err != nil {
-			return "", nil, err
-		}
-		return peek.Cmd, &msg, nil
-
-	case CmdSeedList:
-		var msg SeedListMessage
-		if err := json.Unmarshal(data, &msg); err != nil {
-			return "", nil, err
-		}
-		return peek.Cmd, &msg, nil
-
-	case CmdSeedSearch:
-		var msg SeedSearchMessage
-		if err := json.Unmarshal(data, &msg); err != nil {
-			return "", nil, err
-		}
-		return peek.Cmd, &msg, nil
-
-	case CmdSeedShow:
-		var msg SeedShowMessage
-		if err := json.Unmarshal(data, &msg); err != nil {
-			return "", nil, err
-		}
-		return peek.Cmd, &msg, nil
-
-	case CmdSeedDocumentGet:
-		var msg SeedDocumentGetMessage
-		if err := json.Unmarshal(data, &msg); err != nil {
-			return "", nil, err
-		}
-		return peek.Cmd, &msg, nil
-
-	case CmdSeedArtifactTransfer:
-		var msg SeedArtifactTransferMessage
-		if err := json.Unmarshal(data, &msg); err != nil {
-			return "", nil, err
-		}
-		return peek.Cmd, &msg, nil
-
-	case CmdSeedArtifactTarget:
-		var msg SeedArtifactTargetMessage
-		if err := json.Unmarshal(data, &msg); err != nil {
-			return "", nil, err
-		}
-		return peek.Cmd, &msg, nil
-
-	case CmdSeedEdit:
-		var msg SeedEditMessage
-		if err := json.Unmarshal(data, &msg); err != nil {
-			return "", nil, err
-		}
-		return peek.Cmd, &msg, nil
-
-	case CmdSeedTransition:
-		var msg SeedTransitionMessage
-		if err := json.Unmarshal(data, &msg); err != nil {
-			return "", nil, err
-		}
-		return peek.Cmd, &msg, nil
-
-	case CmdSeedNote:
-		var msg SeedNoteMessage
-		if err := json.Unmarshal(data, &msg); err != nil {
-			return "", nil, err
-		}
-		return peek.Cmd, &msg, nil
-
-	case CmdSeedNotes:
-		var msg SeedNotesMessage
-		if err := json.Unmarshal(data, &msg); err != nil {
-			return "", nil, err
-		}
-		return peek.Cmd, &msg, nil
-
-	case CmdSeedWatch:
-		var msg SeedWatchMessage
-		if err := json.Unmarshal(data, &msg); err != nil {
-			return "", nil, err
-		}
-		return peek.Cmd, &msg, nil
-
-	case CmdSeedLink:
-		var msg SeedLinkMessage
-		if err := json.Unmarshal(data, &msg); err != nil {
-			return "", nil, err
-		}
-		return peek.Cmd, &msg, nil
-
-	case CmdSeedReady:
-		var msg SeedReadyMessage
-		if err := json.Unmarshal(data, &msg); err != nil {
-			return "", nil, err
-		}
-		return peek.Cmd, &msg, nil
-
-	case CmdSeedResume:
-		var msg SeedResumeMessage
-		if err := json.Unmarshal(data, &msg); err != nil {
-			return "", nil, err
-		}
-		return peek.Cmd, &msg, nil
-
-	case CmdSeedSendToChief:
-		var msg SeedSendToChiefMessage
-		if err := json.Unmarshal(data, &msg); err != nil {
-			return "", nil, err
-		}
-		return peek.Cmd, &msg, nil
-
-	case CmdSeedReviewStart:
-		var msg SeedReviewStartMessage
-		if err := json.Unmarshal(data, &msg); err != nil {
-			return "", nil, err
-		}
-		return peek.Cmd, &msg, nil
-
-	case CmdSeedReviewShow:
-		var msg SeedReviewShowMessage
-		if err := json.Unmarshal(data, &msg); err != nil {
-			return "", nil, err
-		}
-		return peek.Cmd, &msg, nil
-
-	case CmdSeedReviewCancel:
-		var msg SeedReviewCancelMessage
-		if err := json.Unmarshal(data, &msg); err != nil {
-			return "", nil, err
-		}
-		return peek.Cmd, &msg, nil
-
-	case CmdSeedReviewRetry:
-		var msg SeedReviewRetryMessage
-		if err := json.Unmarshal(data, &msg); err != nil {
-			return "", nil, err
-		}
-		return peek.Cmd, &msg, nil
-
-	case CmdSeedReviewKeep:
-		var msg SeedReviewKeepMessage
-		if err := json.Unmarshal(data, &msg); err != nil {
-			return "", nil, err
-		}
-		return peek.Cmd, &msg, nil
-
-	case CmdSeedReviewDraft:
-		var msg SeedReviewDraftMessage
-		if err := json.Unmarshal(data, &msg); err != nil {
-			return "", nil, err
-		}
-		return peek.Cmd, &msg, nil
-
-	case CmdStop:
-		var msg StopMessage
-		if err := json.Unmarshal(data, &msg); err != nil {
-			return "", nil, err
-		}
-		return peek.Cmd, &msg, nil
-
-	case CmdFilesEdited:
-		var msg FilesEditedMessage
-		if err := json.Unmarshal(data, &msg); err != nil {
-			return "", nil, err
-		}
-		return peek.Cmd, &msg, nil
-
-	case CmdPullRequestCreated:
-		var msg PullRequestCreatedMessage
-		if err := json.Unmarshal(data, &msg); err != nil {
-			return "", nil, err
-		}
-		return peek.Cmd, &msg, nil
-
-	case CmdPullRequestForget:
-		var msg PullRequestForgetMessage
-		if err := json.Unmarshal(data, &msg); err != nil {
-			return "", nil, err
-		}
-		return peek.Cmd, &msg, nil
-
-	case CmdPullRequestWatch:
-		var msg PullRequestWatchMessage
-		if err := json.Unmarshal(data, &msg); err != nil {
-			return "", nil, err
-		}
-		return peek.Cmd, &msg, nil
-
-	case CmdPullRequestUnwatch:
-		var msg PullRequestUnwatchMessage
-		if err := json.Unmarshal(data, &msg); err != nil {
-			return "", nil, err
-		}
-		return peek.Cmd, &msg, nil
-
-	case CmdQuery:
-		var msg QueryMessage
-		if err := json.Unmarshal(data, &msg); err != nil {
-			return "", nil, err
-		}
-		return peek.Cmd, &msg, nil
-
-	case CmdHeartbeat:
-		var msg HeartbeatMessage
-		if err := json.Unmarshal(data, &msg); err != nil {
-			return "", nil, err
-		}
-		return peek.Cmd, &msg, nil
-
-	case CmdSessionSelected:
-		var msg SessionSelectedMessage
-		if err := json.Unmarshal(data, &msg); err != nil {
-			return "", nil, err
-		}
-		return peek.Cmd, &msg, nil
-
-	case CmdWorkspaceSelected:
-		var msg WorkspaceSelectedMessage
-		if err := json.Unmarshal(data, &msg); err != nil {
-			return "", nil, err
-		}
-		return peek.Cmd, &msg, nil
-
-	case CmdTriggerNudge:
-		var msg TriggerNudgeMessage
-		if err := json.Unmarshal(data, &msg); err != nil {
-			return "", nil, err
-		}
-		return peek.Cmd, &msg, nil
-
-	case CmdSettleTurn:
-		var msg SettleTurnMessage
-		if err := json.Unmarshal(data, &msg); err != nil {
-			return "", nil, err
-		}
-		return peek.Cmd, &msg, nil
-
-	case CmdSnoozeTurn:
-		var msg SnoozeTurnMessage
-		if err := json.Unmarshal(data, &msg); err != nil {
-			return "", nil, err
-		}
-		return peek.Cmd, &msg, nil
-
-	case CmdWakeTurn:
-		var msg WakeTurnMessage
-		if err := json.Unmarshal(data, &msg); err != nil {
-			return "", nil, err
-		}
-		return peek.Cmd, &msg, nil
-
-	case CmdCancelCountdown:
-		var msg CancelCountdownMessage
-		if err := json.Unmarshal(data, &msg); err != nil {
-			return "", nil, err
-		}
-		return peek.Cmd, &msg, nil
-
-	case CmdMuteWorkspace:
-		var msg MuteWorkspaceMessage
-		if err := json.Unmarshal(data, &msg); err != nil {
-			return "", nil, err
-		}
-		return peek.Cmd, &msg, nil
-
-	case CmdPinWorkspace:
-		var msg PinWorkspaceMessage
-		if err := json.Unmarshal(data, &msg); err != nil {
-			return "", nil, fmt.Errorf("unmarshal pin_workspace: %w", err)
-		}
-		return peek.Cmd, &msg, nil
-
-	case CmdPinSession:
-		var msg PinSessionMessage
-		if err := json.Unmarshal(data, &msg); err != nil {
-			return "", nil, fmt.Errorf("unmarshal pin_session: %w", err)
-		}
-		return peek.Cmd, &msg, nil
-
-	case CmdQueryPRs:
-		var msg QueryPRsMessage
-		if err := json.Unmarshal(data, &msg); err != nil {
-			return "", nil, err
-		}
-		return peek.Cmd, &msg, nil
-
-	case CmdMutePR:
-		var msg MutePRMessage
-		if err := json.Unmarshal(data, &msg); err != nil {
-			return "", nil, err
-		}
-		return peek.Cmd, &msg, nil
-
-	case CmdMuteRepo:
-		var msg MuteRepoMessage
-		if err := json.Unmarshal(data, &msg); err != nil {
-			return "", nil, err
-		}
-		return peek.Cmd, &msg, nil
-
-	case CmdMuteAuthor:
-		var msg MuteAuthorMessage
-		if err := json.Unmarshal(data, &msg); err != nil {
-			return "", nil, err
-		}
-		return peek.Cmd, &msg, nil
-
-	case CmdCollapseRepo:
-		var msg CollapseRepoMessage
-		if err := json.Unmarshal(data, &msg); err != nil {
-			return "", nil, err
-		}
-		return peek.Cmd, &msg, nil
-
-	case CmdQueryRepos:
-		var msg QueryReposMessage
-		if err := json.Unmarshal(data, &msg); err != nil {
-			return "", nil, err
-		}
-		return peek.Cmd, &msg, nil
-
-	case CmdQueryAuthors:
-		var msg QueryAuthorsMessage
-		if err := json.Unmarshal(data, &msg); err != nil {
-			return "", nil, err
-		}
-		return peek.Cmd, &msg, nil
-
-	case CmdFetchPRDetails:
-		var msg FetchPRDetailsMessage
-		if err := json.Unmarshal(data, &msg); err != nil {
-			return "", nil, err
-		}
-		return peek.Cmd, &msg, nil
-
-	case CmdRefreshPRs:
-		var msg RefreshPRsMessage
-		if err := json.Unmarshal(data, &msg); err != nil {
-			return "", nil, err
-		}
-		return peek.Cmd, &msg, nil
-
-	case CmdClearWarnings:
-		var msg ClearWarningsMessage
-		if err := json.Unmarshal(data, &msg); err != nil {
-			return "", nil, err
-		}
-		return peek.Cmd, &msg, nil
-
-	case CmdPRVisited:
-		var msg PRVisitedMessage
-		if err := json.Unmarshal(data, &msg); err != nil {
-			return "", nil, err
-		}
-		return peek.Cmd, &msg, nil
-
-	case CmdListWorktrees:
-		var msg ListWorktreesMessage
-		if err := json.Unmarshal(data, &msg); err != nil {
-			return "", nil, err
-		}
-		return peek.Cmd, &msg, nil
-
-	case CmdCreateWorktree:
-		var msg CreateWorktreeMessage
-		if err := json.Unmarshal(data, &msg); err != nil {
-			return "", nil, err
-		}
-		return peek.Cmd, &msg, nil
-
-	case CmdDeleteWorktree:
-		var msg DeleteWorktreeMessage
-		if err := json.Unmarshal(data, &msg); err != nil {
-			return "", nil, err
-		}
-		return peek.Cmd, &msg, nil
-
-	case CmdKeptConversationList:
-		var msg KeptConversationListMessage
-		if err := json.Unmarshal(data, &msg); err != nil {
-			return "", nil, err
-		}
-		return peek.Cmd, &msg, nil
-
-	case CmdKeptConversationKeep:
-		var msg KeptConversationKeepMessage
-		if err := json.Unmarshal(data, &msg); err != nil {
-			return "", nil, err
-		}
-		return peek.Cmd, &msg, nil
-
-	case CmdKeptConversationForget:
-		var msg KeptConversationForgetMessage
-		if err := json.Unmarshal(data, &msg); err != nil {
-			return "", nil, err
-		}
-		return peek.Cmd, &msg, nil
-
-	case CmdWorktreeList:
-		var msg WorktreeListMessage
-		if err := json.Unmarshal(data, &msg); err != nil {
-			return "", nil, err
-		}
-		return peek.Cmd, &msg, nil
-
-	case CmdWorktreeKeep:
-		var msg WorktreeKeepMessage
-		if err := json.Unmarshal(data, &msg); err != nil {
-			return "", nil, err
-		}
-		return peek.Cmd, &msg, nil
-
-	case CmdWorktreeSweepLog:
-		var msg WorktreeSweepLogMessage
-		if err := json.Unmarshal(data, &msg); err != nil {
-			return "", nil, err
-		}
-		return peek.Cmd, &msg, nil
-
-	case CmdWorktreeRefresh:
-		var msg WorktreeRefreshMessage
-		if err := json.Unmarshal(data, &msg); err != nil {
-			return "", nil, err
-		}
-		return peek.Cmd, &msg, nil
-
-	case CmdGetSettings:
-		var msg GetSettingsMessage
-		if err := json.Unmarshal(data, &msg); err != nil {
-			return "", nil, err
-		}
-		return peek.Cmd, &msg, nil
-
-	case CmdSetSetting:
-		var msg SetSettingMessage
-		if err := json.Unmarshal(data, &msg); err != nil {
-			return "", nil, err
-		}
-		return peek.Cmd, &msg, nil
-
-	case CmdListPlugins:
-		var msg ListPluginsMessage
-		if err := json.Unmarshal(data, &msg); err != nil {
-			return "", nil, err
-		}
-		return peek.Cmd, &msg, nil
-
-	case CmdInstallPlugin:
-		var msg InstallPluginMessage
-		if err := json.Unmarshal(data, &msg); err != nil {
-			return "", nil, err
-		}
-		return peek.Cmd, &msg, nil
-
-	case CmdInstallBundledPlugin:
-		var msg InstallBundledPluginMessage
-		if err := json.Unmarshal(data, &msg); err != nil {
-			return "", nil, err
-		}
-		return peek.Cmd, &msg, nil
-
-	case CmdUninstallPlugin:
-		var msg UninstallPluginMessage
-		if err := json.Unmarshal(data, &msg); err != nil {
-			return "", nil, err
-		}
-		return peek.Cmd, &msg, nil
-
-	case CmdRemovePlugin:
-		var msg RemovePluginMessage
-		if err := json.Unmarshal(data, &msg); err != nil {
-			return "", nil, err
-		}
-		return peek.Cmd, &msg, nil
-
-	case CmdSetPluginPriority:
-		var msg SetPluginPriorityMessage
-		if err := json.Unmarshal(data, &msg); err != nil {
-			return "", nil, err
-		}
-		return peek.Cmd, &msg, nil
-
-	case CmdAddEndpoint:
-		var msg AddEndpointMessage
-		if err := json.Unmarshal(data, &msg); err != nil {
-			return "", nil, err
-		}
-		return peek.Cmd, &msg, nil
-
-	case CmdRemoveEndpoint:
-		var msg RemoveEndpointMessage
-		if err := json.Unmarshal(data, &msg); err != nil {
-			return "", nil, err
-		}
-		return peek.Cmd, &msg, nil
-
-	case CmdUpdateEndpoint:
-		var msg UpdateEndpointMessage
-		if err := json.Unmarshal(data, &msg); err != nil {
-			return "", nil, err
-		}
-		return peek.Cmd, &msg, nil
-
-	case CmdListEndpoints:
-		var msg ListEndpointsMessage
-		if err := json.Unmarshal(data, &msg); err != nil {
-			return "", nil, err
-		}
-		return peek.Cmd, &msg, nil
-
-	case CmdSetEndpointRemoteWeb:
-		var msg SetEndpointRemoteWebMessage
-		if err := json.Unmarshal(data, &msg); err != nil {
-			return "", nil, err
-		}
-		return peek.Cmd, &msg, nil
-
-	case CmdBootstrapEndpoint:
-		var msg BootstrapEndpointMessage
-		if err := json.Unmarshal(data, &msg); err != nil {
-			return "", nil, err
-		}
-		return peek.Cmd, &msg, nil
-
-	case CmdApprovePR:
-		var msg ApprovePRMessage
-		if err := json.Unmarshal(data, &msg); err != nil {
-			return "", nil, err
-		}
-		return peek.Cmd, &msg, nil
-
-	case CmdMergePR:
-		var msg MergePRMessage
-		if err := json.Unmarshal(data, &msg); err != nil {
-			return "", nil, err
-		}
-		return peek.Cmd, &msg, nil
-
-	case CmdInjectTestPR:
-		var msg InjectTestPRMessage
-		if err := json.Unmarshal(data, &msg); err != nil {
-			return "", nil, err
-		}
-		return peek.Cmd, &msg, nil
-
-	case CmdInjectTestSession:
-		var msg InjectTestSessionMessage
-		if err := json.Unmarshal(data, &msg); err != nil {
-			return "", nil, err
-		}
-		return peek.Cmd, &msg, nil
-
-	case CmdGetRecentLocations:
-		var msg GetRecentLocationsMessage
-		if err := json.Unmarshal(data, &msg); err != nil {
-			return "", nil, err
-		}
-		return peek.Cmd, &msg, nil
-
-	case CmdRecentFiles:
-		var msg RecentFilesMessage
-		if err := json.Unmarshal(data, &msg); err != nil {
-			return "", nil, err
-		}
-		return peek.Cmd, &msg, nil
-
-	case CmdBrowseDirectory:
-		var msg BrowseDirectoryMessage
-		if err := json.Unmarshal(data, &msg); err != nil {
-			return "", nil, err
-		}
-		return peek.Cmd, &msg, nil
-
-	case CmdInspectPath:
-		var msg InspectPathMessage
-		if err := json.Unmarshal(data, &msg); err != nil {
-			return "", nil, err
-		}
-		return peek.Cmd, &msg, nil
-
-	case CmdListBranches:
-		var msg ListBranchesMessage
-		if err := json.Unmarshal(data, &msg); err != nil {
-			return "", nil, err
-		}
-		return peek.Cmd, &msg, nil
-
-	case CmdCreateWorktreeFromBranch:
-		var msg CreateWorktreeFromBranchMessage
-		if err := json.Unmarshal(data, &msg); err != nil {
-			return "", nil, err
-		}
-		return peek.Cmd, &msg, nil
-
-	case CmdGetDefaultBranch:
-		var msg GetDefaultBranchMessage
-		if err := json.Unmarshal(data, &msg); err != nil {
-			return "", nil, err
-		}
-		return peek.Cmd, &msg, nil
-
-	case CmdFetchRemotes:
-		var msg FetchRemotesMessage
-		if err := json.Unmarshal(data, &msg); err != nil {
-			return "", nil, err
-		}
-		return peek.Cmd, &msg, nil
-
-	case CmdListRemoteBranches:
-		var msg ListRemoteBranchesMessage
-		if err := json.Unmarshal(data, &msg); err != nil {
-			return "", nil, err
-		}
-		return peek.Cmd, &msg, nil
-
-	case CmdEnsureRepo:
-		var msg EnsureRepoMessage
-		if err := json.Unmarshal(data, &msg); err != nil {
-			return "", nil, err
-		}
-		return peek.Cmd, &msg, nil
-
-	case CmdSubscribeGitStatus:
-		var msg SubscribeGitStatusMessage
-		if err := json.Unmarshal(data, &msg); err != nil {
-			return "", nil, err
-		}
-		return peek.Cmd, &msg, nil
-
-	case CmdUnsubscribeGitStatus:
-		var msg UnsubscribeGitStatusMessage
-		if err := json.Unmarshal(data, &msg); err != nil {
-			return "", nil, err
-		}
-		return peek.Cmd, &msg, nil
-
-	case CmdGetFileDiff:
-		var msg GetFileDiffMessage
-		if err := json.Unmarshal(data, &msg); err != nil {
-			return "", nil, err
-		}
-		return peek.Cmd, &msg, nil
-
-	case CmdGetRepoInfo:
-		var msg GetRepoInfoMessage
-		if err := json.Unmarshal(data, &msg); err != nil {
-			return "", nil, err
-		}
-		return peek.Cmd, &msg, nil
-
-	case CmdWorkflowRunUpsert:
-		var msg WorkflowRunUpsertMessage
-		if err := json.Unmarshal(data, &msg); err != nil {
-			return "", nil, fmt.Errorf("unmarshal workflow_run_upsert: %w", err)
-		}
-		return peek.Cmd, &msg, nil
-
-	case CmdWorkflowCallUpsert:
-		var msg WorkflowCallUpsertMessage
-		if err := json.Unmarshal(data, &msg); err != nil {
-			return "", nil, fmt.Errorf("unmarshal workflow_call_upsert: %w", err)
-		}
-		return peek.Cmd, &msg, nil
-
-	case CmdWorkflowRunGet:
-		var msg WorkflowRunGetMessage
-		if err := json.Unmarshal(data, &msg); err != nil {
-			return "", nil, fmt.Errorf("unmarshal workflow_run_get: %w", err)
-		}
-		return peek.Cmd, &msg, nil
-
-	case CmdWorkflowRunList:
-		var msg WorkflowRunListMessage
-		if err := json.Unmarshal(data, &msg); err != nil {
-			return "", nil, fmt.Errorf("unmarshal workflow_run_list: %w", err)
-		}
-		return peek.Cmd, &msg, nil
-
-	case CmdWorkflowRunCancel:
-		var msg WorkflowRunCancelMessage
-		if err := json.Unmarshal(data, &msg); err != nil {
-			return "", nil, fmt.Errorf("unmarshal workflow_run_cancel: %w", err)
-		}
-		return peek.Cmd, &msg, nil
-
-	case CmdSpawnSession:
-		var msg SpawnSessionMessage
-		if err := json.Unmarshal(data, &msg); err != nil {
-			return "", nil, fmt.Errorf("unmarshal spawn_session: %w", err)
-		}
-		return peek.Cmd, &msg, nil
-
-	case CmdAttachSession:
-		var msg AttachSessionMessage
-		if err := json.Unmarshal(data, &msg); err != nil {
-			return "", nil, fmt.Errorf("unmarshal attach_session: %w", err)
-		}
-		return peek.Cmd, &msg, nil
-
-	case CmdDetachSession:
-		var msg DetachSessionMessage
-		if err := json.Unmarshal(data, &msg); err != nil {
-			return "", nil, fmt.Errorf("unmarshal detach_session: %w", err)
-		}
-		return peek.Cmd, &msg, nil
-
-	case CmdGetScreenSnapshot:
-		var msg GetScreenSnapshotMessage
-		if err := json.Unmarshal(data, &msg); err != nil {
-			return "", nil, fmt.Errorf("unmarshal get_screen_snapshot: %w", err)
-		}
-		return peek.Cmd, &msg, nil
-
-	case CmdGetKittyImage:
-		var msg GetKittyImageMessage
-		if err := json.Unmarshal(data, &msg); err != nil {
-			return "", nil, fmt.Errorf("unmarshal get_kitty_image: %w", err)
-		}
-		return peek.Cmd, &msg, nil
-
-	case CmdPtyInput:
-		var msg PtyInputMessage
-		if err := json.Unmarshal(data, &msg); err != nil {
-			return "", nil, fmt.Errorf("unmarshal pty_input: %w", err)
-		}
-		return peek.Cmd, &msg, nil
-
-	case CmdSupportSnapshot:
-		var msg SupportSnapshotMessage
-		if err := json.Unmarshal(data, &msg); err != nil {
-			return "", nil, fmt.Errorf("unmarshal support_snapshot: %w", err)
-		}
-		return peek.Cmd, &msg, nil
-
-	case CmdTerminalPointerActivity:
-		var msg TerminalPointerActivityMessage
-		if err := json.Unmarshal(data, &msg); err != nil {
-			return "", nil, fmt.Errorf("unmarshal terminal_pointer_activity: %w", err)
-		}
-		return peek.Cmd, &msg, nil
-
-	case CmdBusStatusGet:
-		var msg BusStatusGetMessage
-		if err := json.Unmarshal(data, &msg); err != nil {
-			return "", nil, fmt.Errorf("unmarshal bus_status_get: %w", err)
-		}
-		return peek.Cmd, &msg, nil
-
-	case CmdAutoModeGet:
-		var msg AutoModeGetMessage
-		if err := json.Unmarshal(data, &msg); err != nil {
-			return "", nil, fmt.Errorf("unmarshal automode_get: %w", err)
-		}
-		return peek.Cmd, &msg, nil
-
-	case CmdAutoModePromote:
-		var msg AutoModePromoteMessage
-		if err := json.Unmarshal(data, &msg); err != nil {
-			return "", nil, fmt.Errorf("unmarshal automode_promote: %w", err)
-		}
-		return peek.Cmd, &msg, nil
-
-	case CmdAutoModeDiscard:
-		var msg AutoModeDiscardMessage
-		if err := json.Unmarshal(data, &msg); err != nil {
-			return "", nil, fmt.Errorf("unmarshal automode_discard: %w", err)
-		}
-		return peek.Cmd, &msg, nil
-
-	case CmdAutoModeRuleAdd:
-		var msg AutoModeRuleAddMessage
-		if err := json.Unmarshal(data, &msg); err != nil {
-			return "", nil, fmt.Errorf("unmarshal automode_rule_add: %w", err)
-		}
-		return peek.Cmd, &msg, nil
-
-	case CmdAutoModeRuleRemove:
-		var msg AutoModeRuleRemoveMessage
-		if err := json.Unmarshal(data, &msg); err != nil {
-			return "", nil, fmt.Errorf("unmarshal automode_rule_remove: %w", err)
-		}
-		return peek.Cmd, &msg, nil
-
-	case CmdAutoModeHostAdd:
-		var msg AutoModeHostAddMessage
-		if err := json.Unmarshal(data, &msg); err != nil {
-			return "", nil, fmt.Errorf("unmarshal automode_host_add: %w", err)
-		}
-		return peek.Cmd, &msg, nil
-
-	case CmdAutoModeHostRemove:
-		var msg AutoModeHostRemoveMessage
-		if err := json.Unmarshal(data, &msg); err != nil {
-			return "", nil, fmt.Errorf("unmarshal automode_host_remove: %w", err)
-		}
-		return peek.Cmd, &msg, nil
-
-	case CmdAutoModePolicySet:
-		var msg AutoModePolicySetMessage
-		if err := json.Unmarshal(data, &msg); err != nil {
-			return "", nil, fmt.Errorf("unmarshal automode_policy_set: %w", err)
-		}
-		return peek.Cmd, &msg, nil
-
-	case CmdAutoModeLegacyDismiss:
-		var msg AutoModeLegacyDismissMessage
-		if err := json.Unmarshal(data, &msg); err != nil {
-			return "", nil, fmt.Errorf("unmarshal automode_legacy_dismiss: %w", err)
-		}
-		return peek.Cmd, &msg, nil
-
-	case CmdBusSetConsumerEnabled:
-		var msg BusSetConsumerEnabledMessage
-		if err := json.Unmarshal(data, &msg); err != nil {
-			return "", nil, fmt.Errorf("unmarshal bus_set_consumer_enabled: %w", err)
-		}
-		return peek.Cmd, &msg, nil
-
-	case CmdPtyResize:
-		var msg PtyResizeMessage
-		if err := json.Unmarshal(data, &msg); err != nil {
-			return "", nil, fmt.Errorf("unmarshal pty_resize: %w", err)
-		}
-		return peek.Cmd, &msg, nil
-
-	case CmdKillSession:
-		var msg KillSessionMessage
-		if err := json.Unmarshal(data, &msg); err != nil {
-			return "", nil, fmt.Errorf("unmarshal kill_session: %w", err)
-		}
-		return peek.Cmd, &msg, nil
-
-	case CmdReloadSession:
-		var msg ReloadSessionMessage
-		if err := json.Unmarshal(data, &msg); err != nil {
-			return "", nil, fmt.Errorf("unmarshal reload_session: %w", err)
-		}
-		return peek.Cmd, &msg, nil
-
-	case CmdSetClientPresence:
-		var msg SetClientPresenceMessage
-		if err := json.Unmarshal(data, &msg); err != nil {
-			return "", nil, fmt.Errorf("unmarshal set_client_presence: %w", err)
-		}
-		return peek.Cmd, &msg, nil
-
-	case CmdActivityStatus:
-		var msg ActivityStatusMessage
-		if err := json.Unmarshal(data, &msg); err != nil {
-			return "", nil, fmt.Errorf("unmarshal activity_status: %w", err)
-		}
-		return peek.Cmd, &msg, nil
-
-	case CmdClearSessionActivity:
-		var msg ClearSessionActivityMessage
-		if err := json.Unmarshal(data, &msg); err != nil {
-			return "", nil, fmt.Errorf("unmarshal clear_session_activity: %w", err)
-		}
-		return peek.Cmd, &msg, nil
-
-	case CmdSetTerminalTheme:
-		var msg SetTerminalThemeMessage
-		if err := json.Unmarshal(data, &msg); err != nil {
-			return "", nil, fmt.Errorf("unmarshal set_terminal_theme: %w", err)
-		}
-		return peek.Cmd, &msg, nil
-
-	case CmdWorkspaceLayoutGet:
-		var msg WorkspaceLayoutGetMessage
-		if err := json.Unmarshal(data, &msg); err != nil {
-			return "", nil, fmt.Errorf("unmarshal workspace_layout_get: %w", err)
-		}
-		return peek.Cmd, &msg, nil
-
-	case CmdWorkspaceLayoutAddSessionPane:
-		var msg WorkspaceLayoutAddSessionPaneMessage
-		if err := json.Unmarshal(data, &msg); err != nil {
-			return "", nil, fmt.Errorf("unmarshal workspace_layout_add_session_pane: %w", err)
-		}
-		return peek.Cmd, &msg, nil
-
-	case CmdWorkspaceLayoutClosePane:
-		var msg WorkspaceLayoutClosePaneMessage
-		if err := json.Unmarshal(data, &msg); err != nil {
-			return "", nil, fmt.Errorf("unmarshal workspace_layout_close_pane: %w", err)
-		}
-		return peek.Cmd, &msg, nil
-
-	case CmdWorkspaceLayoutFocusPane:
-		var msg WorkspaceLayoutFocusPaneMessage
-		if err := json.Unmarshal(data, &msg); err != nil {
-			return "", nil, fmt.Errorf("unmarshal workspace_layout_focus_pane: %w", err)
-		}
-		return peek.Cmd, &msg, nil
-
-	case CmdWorkspaceLayoutRenamePane:
-		var msg WorkspaceLayoutRenamePaneMessage
-		if err := json.Unmarshal(data, &msg); err != nil {
-			return "", nil, fmt.Errorf("unmarshal workspace_layout_rename_pane: %w", err)
-		}
-		return peek.Cmd, &msg, nil
-
-	case CmdWorkspaceLayoutSetSplitRatio:
-		var msg WorkspaceLayoutSetSplitRatioMessage
-		if err := json.Unmarshal(data, &msg); err != nil {
-			return "", nil, fmt.Errorf("unmarshal workspace_layout_set_split_ratio: %w", err)
-		}
-		return peek.Cmd, &msg, nil
-
-	case CmdWorkspaceLayoutDockTile:
-		var msg WorkspaceLayoutDockTileMessage
-		if err := json.Unmarshal(data, &msg); err != nil {
-			return "", nil, fmt.Errorf("unmarshal workspace_layout_dock_tile: %w", err)
-		}
-		return peek.Cmd, &msg, nil
-
-	case CmdWorkspaceLayoutUndockTile:
-		var msg WorkspaceLayoutUndockTileMessage
-		if err := json.Unmarshal(data, &msg); err != nil {
-			return "", nil, fmt.Errorf("unmarshal workspace_layout_undock_tile: %w", err)
-		}
-		return peek.Cmd, &msg, nil
-
-	case CmdWorkspaceLayoutUpdateTile:
-		var msg WorkspaceLayoutUpdateTileMessage
-		if err := json.Unmarshal(data, &msg); err != nil {
-			return "", nil, fmt.Errorf("unmarshal workspace_layout_update_tile: %w", err)
-		}
-		return peek.Cmd, &msg, nil
-
-	case CmdWorkspaceLayoutMoveLeaf:
-		var msg WorkspaceLayoutMoveLeafMessage
-		if err := json.Unmarshal(data, &msg); err != nil {
-			return "", nil, fmt.Errorf("unmarshal workspace_layout_move_leaf: %w", err)
-		}
-		return peek.Cmd, &msg, nil
-
-	case CmdWorkspaceLayoutMoveLeafToWorkspace:
-		var msg WorkspaceLayoutMoveLeafToWorkspaceMessage
-		if err := json.Unmarshal(data, &msg); err != nil {
-			return "", nil, fmt.Errorf("unmarshal workspace_layout_move_leaf_to_workspace: %w", err)
-		}
-		return peek.Cmd, &msg, nil
-
-	case CmdWorkspaceLayoutMoveLeafToNewWorkspace:
-		var msg WorkspaceLayoutMoveLeafToNewWorkspaceMessage
-		if err := json.Unmarshal(data, &msg); err != nil {
-			return "", nil, fmt.Errorf("unmarshal workspace_layout_move_leaf_to_new_workspace: %w", err)
-		}
-		return peek.Cmd, &msg, nil
-
-	case CmdWorkspaceTileContentGet:
-		var msg WorkspaceTileContentGetMessage
-		if err := json.Unmarshal(data, &msg); err != nil {
-			return "", nil, fmt.Errorf("unmarshal workspace_tile_content_get: %w", err)
-		}
-		return peek.Cmd, &msg, nil
-
-	case CmdOpenMarkdown:
-		var msg OpenMarkdownMessage
-		if err := json.Unmarshal(data, &msg); err != nil {
-			return "", nil, fmt.Errorf("unmarshal open_markdown: %w", err)
-		}
-		return peek.Cmd, &msg, nil
-
-	case CmdOpenSeed:
-		var msg OpenSeedMessage
-		if err := json.Unmarshal(data, &msg); err != nil {
-			return "", nil, fmt.Errorf("unmarshal open_seed: %w", err)
-		}
-		return peek.Cmd, &msg, nil
-
-	case CmdOpenSentFiles:
-		var msg OpenSentFilesMessage
-		if err := json.Unmarshal(data, &msg); err != nil {
-			return "", nil, fmt.Errorf("unmarshal open_sent_files: %w", err)
-		}
-		return peek.Cmd, &msg, nil
-
-	case CmdSessionMessagesGet:
-		var msg SessionMessagesGetMessage
-		if err := json.Unmarshal(data, &msg); err != nil {
-			return "", nil, fmt.Errorf("unmarshal session_messages_get: %w", err)
-		}
-		return peek.Cmd, &msg, nil
-
-	case CmdSessionAnnotationsGet:
-		var msg SessionAnnotationsGetMessage
-		if err := json.Unmarshal(data, &msg); err != nil {
-			return "", nil, fmt.Errorf("unmarshal session_annotations_get: %w", err)
-		}
-		return peek.Cmd, &msg, nil
-
-	case CmdSessionAnnotationsSave:
-		var msg SessionAnnotationsSaveMessage
-		if err := json.Unmarshal(data, &msg); err != nil {
-			return "", nil, fmt.Errorf("unmarshal session_annotations_save: %w", err)
-		}
-		return peek.Cmd, &msg, nil
-
-	case CmdSessionAnnotationsClear:
-		var msg SessionAnnotationsClearMessage
-		if err := json.Unmarshal(data, &msg); err != nil {
-			return "", nil, fmt.Errorf("unmarshal session_annotations_clear: %w", err)
-		}
-		return peek.Cmd, &msg, nil
-
-	case CmdSessionAnnotationsSubmit:
-		var msg SessionAnnotationsSubmitMessage
-		if err := json.Unmarshal(data, &msg); err != nil {
-			return "", nil, fmt.Errorf("unmarshal session_annotations_submit: %w", err)
-		}
-		return peek.Cmd, &msg, nil
-
-	case CmdMarkdownAnnotationsGet:
-		var msg MarkdownAnnotationsGetMessage
-		if err := json.Unmarshal(data, &msg); err != nil {
-			return "", nil, fmt.Errorf("unmarshal markdown_annotations_get: %w", err)
-		}
-		return peek.Cmd, &msg, nil
-
-	case CmdMarkdownAnnotationsSave:
-		var msg MarkdownAnnotationsSaveMessage
-		if err := json.Unmarshal(data, &msg); err != nil {
-			return "", nil, fmt.Errorf("unmarshal markdown_annotations_save: %w", err)
-		}
-		return peek.Cmd, &msg, nil
-
-	case CmdMarkdownAnnotationsClear:
-		var msg MarkdownAnnotationsClearMessage
-		if err := json.Unmarshal(data, &msg); err != nil {
-			return "", nil, fmt.Errorf("unmarshal markdown_annotations_clear: %w", err)
-		}
-		return peek.Cmd, &msg, nil
-
-	case CmdMarkdownAnnotationsSubmit:
-		var msg MarkdownAnnotationsSubmitMessage
-		if err := json.Unmarshal(data, &msg); err != nil {
-			return "", nil, fmt.Errorf("unmarshal markdown_annotations_submit: %w", err)
-		}
-		return peek.Cmd, &msg, nil
-
-	case CmdOpenBrowser:
-		var msg OpenBrowserMessage
-		if err := json.Unmarshal(data, &msg); err != nil {
-			return "", nil, fmt.Errorf("unmarshal open_browser: %w", err)
-		}
-		return peek.Cmd, &msg, nil
-
-	case CmdBrowserControl:
-		var msg BrowserControlMessage
-		if err := json.Unmarshal(data, &msg); err != nil {
-			return "", nil, fmt.Errorf("unmarshal browser_control: %w", err)
-		}
-		return peek.Cmd, &msg, nil
-
-	case CmdBrowserControlResult:
-		var msg BrowserControlResultMessage
-		if err := json.Unmarshal(data, &msg); err != nil {
-			return "", nil, fmt.Errorf("unmarshal browser_control_result: %w", err)
-		}
-		return peek.Cmd, &msg, nil
-
-	case CmdRegisterWorkspace:
-		var msg RegisterWorkspaceMessage
-		if err := json.Unmarshal(data, &msg); err != nil {
-			return "", nil, fmt.Errorf("unmarshal register_workspace: %w", err)
-		}
-		return peek.Cmd, &msg, nil
-
-	case CmdUnregisterWorkspace:
-		var msg UnregisterWorkspaceMessage
-		if err := json.Unmarshal(data, &msg); err != nil {
-			return "", nil, fmt.Errorf("unmarshal unregister_workspace: %w", err)
-		}
-		return peek.Cmd, &msg, nil
-
-	case CmdRenameSession:
-		var msg RenameSessionMessage
-		if err := json.Unmarshal(data, &msg); err != nil {
-			return "", nil, fmt.Errorf("unmarshal rename_session: %w", err)
-		}
-		return peek.Cmd, &msg, nil
-
-	case CmdRenameWorkspace:
-		var msg RenameWorkspaceMessage
-		if err := json.Unmarshal(data, &msg); err != nil {
-			return "", nil, fmt.Errorf("unmarshal rename_workspace: %w", err)
-		}
-		return peek.Cmd, &msg, nil
-
-	case CmdSetWorkspaceRank:
-		var msg SetWorkspaceRankMessage
-		if err := json.Unmarshal(data, &msg); err != nil {
-			return "", nil, fmt.Errorf("unmarshal set_workspace_rank: %w", err)
-		}
-		return peek.Cmd, &msg, nil
-
-	case CmdSetChiefOfStaff:
-		var msg SetChiefOfStaffMessage
-		if err := json.Unmarshal(data, &msg); err != nil {
-			return "", nil, fmt.Errorf("unmarshal set_chief_of_staff: %w", err)
-		}
-		return peek.Cmd, &msg, nil
-
-	case CmdSetSessionContextWindowCap:
-		var msg SetSessionContextWindowCapMessage
-		if err := json.Unmarshal(data, &msg); err != nil {
-			return "", nil, fmt.Errorf("unmarshal set_session_context_window_cap: %w", err)
-		}
-		return peek.Cmd, &msg, nil
-
-	default:
-		return "", nil, errors.New("unknown command: " + peek.Cmd)
-	}
 }
 
 const (

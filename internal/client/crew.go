@@ -18,10 +18,13 @@ func (c *Client) CrewList() (*protocol.CrewListResult, error) {
 	return resp.CrewListResult, nil
 }
 
-func (c *Client) CrewWake(member, agent string) (*protocol.CrewWakeResult, error) {
+func (c *Client) CrewWake(member, agent, sourceSessionID string) (*protocol.CrewWakeResult, error) {
 	msg := protocol.CrewWakeMessage{Cmd: protocol.CmdCrewWake, Member: member}
 	if agent != "" {
 		msg.Agent = protocol.Ptr(agent)
+	}
+	if sourceSessionID != "" {
+		msg.SourceSessionID = protocol.Ptr(sourceSessionID)
 	}
 	resp, err := c.send(msg)
 	if err != nil {

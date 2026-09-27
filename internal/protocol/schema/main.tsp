@@ -25,46 +25,23 @@ enum PRRole {
   reviewer,
 }
 
-// WorkspaceStatus is the rolled-up status of all sessions in a workspace.
-// Priority (highest first): working > waiting_input > pending_approval > unknown > scheduled > idle > launching.
-// `unknown` sits just below the explicit attention states: a session whose
-// state could not be determined still wants a look, so it out-prioritizes the
-// quiet `scheduled`/`idle` peers — but a clear "needs steering" signal wins.
-// (At the session level `unknown` is already an attention state, so the
-// workspace dot must be able to surface it rather than masquerading as idle.)
-// `scheduled` sits above `idle` because a parked-on-schedule session will
-// auto-resume and carries more information than a settled idle peer, but below
-// the attention states since it needs no steering. `launching` sits below
-// `idle` because it carries less information — any session in a settled state
-// out-prioritizes a peer that's still booting. A truly empty workspace (no
-// member sessions) rolls up to `idle`.
-enum WorkspaceStatus {
-  launching,
-  working,
-  waiting_input,
-  pending_approval,
-  status_unknown: "unknown",
-  scheduled,
-  idle,
-}
-
-enum WorkspaceLayoutPaneKind {
+enum LayoutPaneKind {
   agent,
 }
 
-enum WorkspaceLayoutPaneStatus {
+enum LayoutPaneStatus {
   spawning,
   ready,
   failed,
 }
 
-enum WorkspaceLayoutSplitDirection {
+enum LayoutSplitDirection {
   vertical,
   horizontal,
 }
 
 // Which side of the anchor pane a docked tile lands on.
-enum WorkspaceLayoutDockEdge {
+enum LayoutDockEdge {
   left,
   right,
   top,
@@ -205,8 +182,7 @@ model Session {
   agent: string;                // Built-in ID or registered plugin driver ID
   directory: string;
   endpoint_id?: string;         // Optional: owning endpoint for remote/session-aware routing
-  workspace_id: string;         // Owning workspace
-  workspace_muted?: boolean;    // True when the owning workspace is hidden from normal sidebar/attention surfaces
+  profile_id: string;           // The profile this agent belongs to; set at creation and changed only by a move
   branch?: string;              // Optional: might not be in git repo
   is_worktree?: boolean;        // Optional: false if not worktree
   main_repo?: string;           // Optional: only set if worktree
@@ -225,15 +201,14 @@ model Session {
   dispatcher_member?: string;   // The crew member whose day dispatched this session. Read from the dispatch record and present even when no live session resolves.
   delegation_role?: SessionDelegationRole;
   nudge_fires_at?: string;      // ISO timestamp a pending ticket-nudge countdown will fire; absent when paused (active session) or no countdown
-  turn_owed?: boolean;          // True when the user owes this session a turn. Derived at broadcast from the turn stamps plus the queue's exclusions (shell, chief, pinned, muted); never stored, and never recomputed by a client.
+  turn_owed?: boolean;          // True when the user owes this session a turn. Derived at broadcast from the turn stamps plus the queue's exclusions (shell, chief); never stored, and never recomputed by a client.
   turn_opened_at?: string;      // ISO timestamp the outstanding turn opened; the queue's sort key. Absent when nothing is owed.
   turn_snoozed_until?: string;  // ISO timestamp a live snooze runs to. Present only while the deferral holds; its presence is what puts the row in the sidebar's snoozed section, and while it is set no state can open a turn for this session except one that breaks through.
   auto_settle_fires_at?: string; // ISO timestamp the auto-settle countdown will close this session's turn. Present only while the countdown is running, which is the whole contract: it is what the terminal tile animates against, and its absence is what says nothing is pending. Absent during the arm delay, when auto-settle is off, and after a cancel.
   auto_settle_held?: boolean;   // True while the auto-settle countdown is frozen because the user is typing or moving the pointer in this session. Mutually exclusive with auto_settle_fires_at by construction: a frozen countdown has no deadline to animate against, so the tile draws a full paused bar and waits. It clears on its own five quiet seconds after the last interaction, when a fresh deadline replaces it.
   auto_settle_dismiss_armed?: boolean; // True while a standing dismissal covers this session's next auto-settle, whether the user armed it during a countdown or ahead of one. Excludes the other two by construction: arming is what stops a pending timer. It is spent at the end of the `working` stretch it covers, and pressing the cancel-countdown shortcut again while nothing is counting down disarms it.
-  pinned_at?: string;           // ISO timestamp this session was individually pinned out of the queue. Presence is the pin, and the instant is the pinned band's sort key. Like a pinned workspace it filters at read: the turn stamps keep accruing underneath, so unpinning surfaces whatever was outstanding at its true age.
   context_window_cap?: int32;   // Per-session context-window cap in tokens, set by the user on this one session. Absent means no pin — the launch falls back to the chief or per-agent default settings. A pin outranks both, and takes effect at the next launch of the agent (the daemon reloads a live session in place when the pin changes).
-  parent_session_id?: string;   // The agent session a shell was split from. Spawn-time provenance resolved by the daemon, always an agent id and never another shell's, so there is no chain to walk. Whether the link is live is judged at read (parent present in the same workspace), so the field itself is never cleared.
+  parent_session_id?: string;   // The agent session a shell was split from. Spawn-time provenance resolved by the daemon, always an agent id and never another shell's, so there is no chain to walk. Whether the link is live is judged at read (parent present on the same desktop), so the field itself is never cleared.
   activity?: string;            // One short present-tense line saying what the agent is doing right now, generated from its transcript by a headless agent. Display only — it never feeds attention, the queue, or state classification. Absent when the feature is off or nothing has been generated for this session yet.
   activity_at?: string;         // ISO timestamp the activity line was generated. Present whenever activity is, so a client can age out a line the generator has stopped refreshing rather than showing it as current.
   usage?: SessionUsage;         // Primary native conversation plus native subagents. Visible attn delegations remain separate sessions.
@@ -241,19 +216,6 @@ model Session {
   pull_requests?: SessionPullRequest[]; // Pull requests this session's agent opened, newest first. Joined at broadcast from the session_pull_requests table, never stored on the session row.
   terminal_build_stale?: boolean; // True when this session's pty-worker was built against a different libghostty-vt than the daemon, which happens when the app updates under a running session. The two then hold different terminal implementations and stop agreeing about the grid, so the app offers a reload. Derived at broadcast from the format tag the worker reports at its handshake; never stored, and absent for every same-build session, which is all of them outside an upgrade window.
   last_seen: string;            // ISO timestamp, always set
-}
-
-// Workspace is a directory plus one or more agent sessions and its split layout.
-model Workspace {
-  id: string;
-  title: string;
-  directory: string;
-  status: WorkspaceStatus;
-  muted: boolean;               // Muting parks the whole workspace out of attention surfaces.
-  pinned: boolean;              // Pinned workspaces persist in the sidebar even when empty.
-  rank: string;                 // Fractional-index sort key; default order is opening (creation) order.
-  layout?: WorkspaceLayout;
-  endpoint_id?: string;         // Set by a hub daemon on workspaces mirrored from a remote endpoint; absent/empty means the workspace is local to this daemon. Remote daemons never set this themselves — the hub stamps it at ingest.
 }
 
 // PresentAnnotation is an author-pinned note or thread, resolved at query
@@ -405,7 +367,7 @@ model TicketEventBundle {
 model TicketInboxResult {
   bundles: TicketEventBundle[];
   // last_user_activity_at is the RFC3339 timestamp of the most recent UI-origin
-  // websocket command the daemon observed (session/workspace selection, PR/file
+  // websocket command the daemon observed (session/desktop selection, PR/file
   // views, terminal input/resize) — a proxy for "the user is at the app right
   // now". A watching agent can use it to decide whether to push a notification
   // immediately or hold it until the user is away. Absent when the daemon has
@@ -670,25 +632,63 @@ model GitFileChange {
   old_path?: string;     // For renames
 }
 
-model WorkspaceLayoutPane {
+
+// Why a profile, desktop or pane command was refused. stale_revision means the
+// command named a revision older than the stored one: re-read the broadcast
+// state and retry against its revision.
+enum ProfileErrorCode {
+  invalid,
+  not_found,
+  stale_revision,
+  name_taken,
+  slot_taken,
+  last_profile,
+  last_desktop,
+  profile_deleted,
+  cross_profile,
+  already_placed,
+  session_closed,
+  destination_same,
+  unavailable,
+  internal,
+}
+
+// A profile groups agents and desktops and owns one arrangement shared by every
+// client. revision counts changes to its name and to its set of desktops;
+// current_desktop_id and last_used_at are selection and never move it.
+model Profile {
+  id: string;
+  name: string;
+  current_desktop_id: string;
+  last_used_at?: string;
+  revision: safeint;
+}
+
+// One agent's placement. An agent has at most one pane across the daemon.
+model DesktopPane {
   pane_id: string;
-  runtime_id?: string;
-  workspace_id: string;
-  session_id?: string;
-  kind: WorkspaceLayoutPaneKind;
+  desktop_id: string;
+  kind: LayoutPaneKind;
+  session_id: string;
   title: string;
-  status: WorkspaceLayoutPaneStatus;
+  status: LayoutPaneStatus;
   error?: string;
 }
 
-model WorkspaceLayout {
-  workspace_id: string;
+// revision counts changes to the desktop's name, shortcut slot, order, tree and
+// panes. active_pane_id is selection and never moves it; it names a leaf of
+// this desktop, an agent pane or a tile, or is empty when the desktop has no leaves.
+model Desktop {
+  id: string;
+  profile_id: string;
+  name: string;
+  shortcut_slot?: int32;        // 1-9; absent for a desktop past the shortcut range
+  order_key: string;
+  tree_json: string;            // Split tree of pane and tile leaves; empty for an empty desktop
   active_pane_id: string;
-  layout_json: string;
-  panes: WorkspaceLayoutPane[];
-  updated_at?: string;
+  panes: DesktopPane[];
+  revision: safeint;
 }
-
 
 model EndpointCapabilities {
   protocol_version: string;
@@ -720,9 +720,8 @@ model EndpointInfo {
 // Command Messages (Client → Daemon)
 // ============================================================================
 
-// Sent first thing after a WebSocket connect. Interactive clients must
-// advertise workspace_sessions so the daemon only accepts workspace-first
-// clients.
+// Sent first thing after a WebSocket connect; the daemon refuses every other
+// command until a hello with a valid client token arrives.
 //
 model ClientHelloMessage {
   cmd: "client_hello";
@@ -739,20 +738,11 @@ model ClientHelloMessage {
   // what lets the daemon tell a reconnecting client why it was hung up on
   // (client_eviction_notice); a client that omits it simply gets no notice.
   client_id?: string;
-}
-
-model RegisterMessage {
-  cmd: "register";
-  id: string;
-  label?: string;
-  agent?: string;               // Optional for registered plugin IDs
-  dir: string;
-  workspace_id: string;
-  // The crew member this session launches as. The daemon resolves it against
-  // the registry and stamps the binding — identity is the invocation — or
-  // refuses the whole registration: an unknown name, an outpost daemon, or a
-  // member whose day is already live all fail here, before the agent runs.
-  member?: string;
+  // The profile this client last selected, remembered by the client alone. The
+  // daemon scopes arrangement broadcasts to it; absent, deleted or unknown, the
+  // daemon scopes the client to the most recently used profile instead and says
+  // which in initial_state.selected_profile_id.
+  profile_id?: string;
 }
 
 model UnregisterMessage {
@@ -862,8 +852,9 @@ model SessionListMessage {
   // The id of the last row of the previous page; this page starts after it.
   before?: string;
   // Filters combine with AND and apply before paging, so a page is the newest
-  // rows that match, not the newest rows filtered.
-  workspace_id?: string;
+  // rows that match, not the newest rows filtered. profile_id matches the
+  // profile a row belongs to, deleted profiles included.
+  profile_id?: string;
   repository?: string;
   // Half-open over the row's instant, the close for a closed row and the last
   // sighting for a live one: since inclusive, until exclusive, RFC3339.
@@ -890,6 +881,12 @@ model SessionReopenMessage {
   action?: SessionReopenAction;
   // Where to start, for `start_fresh_elsewhere`.
   directory?: string;
+  // The profile to reopen into. Required when the session's recorded profile
+  // was deleted, and refused when it names another profile than a live
+  // recorded one: membership changes only through a move. Over WebSocket, an
+  // absent profile_id for a deleted recorded profile means the connection's
+  // selected profile.
+  profile_id?: string;
 }
 
 // Replays the daemon's per-session ring of state observations so a wrong color
@@ -1776,16 +1773,6 @@ model HeartbeatMessage {
   id: string;
 }
 
-model SessionSelectedMessage {
-  cmd: "session_selected";
-  id: string;
-}
-
-model WorkspaceSelectedMessage {
-  cmd: "workspace_selected";
-  workspace_id: string;
-}
-
 // TriggerNudgeMessage is the user clicking the incoming-nudge indicator to deliver
 // the pending ticket doorbell immediately, bypassing the countdown. Fire-and-forget.
 model TriggerNudgeMessage {
@@ -1843,26 +1830,6 @@ model WakeTurnMessage {
 model CancelCountdownMessage {
   cmd: "cancel_countdown";
   session_id: string;
-}
-
-model MuteWorkspaceMessage {
-  cmd: "mute_workspace";
-  workspace_id: string;
-  endpoint_id?: string;
-}
-
-model PinWorkspaceMessage {
-  cmd: "pin_workspace";
-  workspace_id: string;
-  pinned: boolean;
-}
-
-// Pins one session out of the queue, leaving its workspace and its siblings
-// where they are. The chief is refused: it already has an anchored slot.
-model PinSessionMessage {
-  cmd: "pin_session";
-  session_id: string;
-  pinned: boolean;
 }
 
 model QueryPRsMessage {
@@ -2112,7 +2079,7 @@ model RecentFilesMessage {
   cmd: "recent_files";
   limit?: int32;  // Default 20
   // The directory the caller is working in (the opener's fuzzy root). Files
-  // under it rank above equally-scored files from elsewhere, so the workspace
+  // under it rank above equally-scored files from elsewhere, so the project
   // in front of you wins without hiding the rest.
   root?: string;
   request_id?: string;
@@ -2214,7 +2181,6 @@ model WorkflowRunGetMessage {
 model WorkflowRunListMessage {
   cmd: "workflow_run_list";
   session_id?: string;
-  workspace_id?: string;
 }
 
 model WorkflowRunCancelMessage {
@@ -2235,6 +2201,10 @@ model AutomationApplyMessage {
   cmd: "automation_apply";
   definition_yaml: string;
   request_id?: string;
+  // The profile a new definition belongs to. Absent means the connection's
+  // selected profile over WebSocket and the most recently used profile over
+  // the socket. An existing definition keeps its profile.
+  profile_id?: string;
   expected_id?: string;
   expected_revision?: int32;
 }
@@ -2307,7 +2277,8 @@ model SpawnSessionMessage {
   id: string;
   cwd: string;
   endpoint_id?: string;
-  workspace_id: string;     // Required owner for agent sessions
+  profile_id: string;       // The profile the session belongs to; empty over WebSocket means the connection's selected profile. Refused before any side effect when it resolves to nothing or to a deleted profile
+  placement?: SessionPlacement; // Absent leaves a new session unplaced and an existing one where it is
   agent: string;            // Built-in ID, "shell", or registered plugin driver ID
   cols: int32;
   rows: int32;
@@ -2336,6 +2307,14 @@ model SpawnSessionMessage {
   copilot_executable?: string; // Backward compatibility
   `model`?: string;            // Pin the launched agent's model; empty = agent default (chief launches fall back to chief_model_<agent>)
   effort?: string;             // Pin the launched agent's reasoning effort; empty = agent default
+}
+
+// Where a spawned session's pane goes, resolved by the daemon when the session
+// is committed. The desktop must belong to the spawn's profile.
+model SessionPlacement {
+  desktop_id?: string;      // Absent: the profile's current desktop
+  anchor_pane_id?: string;  // Absent: that desktop's active pane
+  direction?: LayoutSplitDirection;
 }
 
 model AttachSessionMessage {
@@ -2660,146 +2639,12 @@ model ReloadSessionMessage {
   rows: int32;
 }
 
-model WorkspaceLayoutGetMessage {
-  cmd: "workspace_layout_get";
-  workspace_id: string;
-}
-
-model WorkspaceLayoutAddSessionPaneMessage {
-  cmd: "workspace_layout_add_session_pane";
-  workspace_id: string;
-  pane_id?: string;
-  session_id: string;
-  title?: string;
-  target_pane_id?: string;
-  direction?: WorkspaceLayoutSplitDirection;
-}
-
-model WorkspaceLayoutClosePaneMessage {
-  cmd: "workspace_layout_close_pane";
-  workspace_id: string;
-  pane_id: string;
-}
-
-model WorkspaceLayoutFocusPaneMessage {
-  cmd: "workspace_layout_focus_pane";
-  workspace_id: string;
-  pane_id: string;
-}
-
-model WorkspaceLayoutRenamePaneMessage {
-  cmd: "workspace_layout_rename_pane";
-  workspace_id: string;
-  pane_id: string;
-  title: string;
-}
-
-model WorkspaceLayoutSetSplitRatioMessage {
-  cmd: "workspace_layout_set_split_ratio";
-  workspace_id: string;
-  split_id: string;
-  ratio: float64;
-  request_id?: string;
-}
-
-// Dock (or move) a tile beside an anchor leaf. Docking is idempotent: an
-// existing instance of tile_id is relocated rather than duplicated. tile_kind
-// is opaque to the daemon — it persists where the tile sits, not what it
-// renders. ratio is the new tile's fraction of the split (optional; defaults to
-// a sensible third).
-model WorkspaceLayoutDockTileMessage {
-  cmd: "workspace_layout_dock_tile";
-  workspace_id: string;
-  anchor_pane_id: string;
-  edge: WorkspaceLayoutDockEdge;
-  tile_id: string;
-  tile_kind: string;
-  ratio?: float64;
-
-  // Optional initial tile params for a freshly docked tile. When non-empty it
-  // becomes the tile's params; when omitted/empty, a re-dock (move) preserves
-  // the tile's existing params.
-  tile_params?: string;
-}
-
-model WorkspaceLayoutUndockTileMessage {
-  cmd: "workspace_layout_undock_tile";
-  workspace_id: string;
-  tile_id: string;
-}
-
-model WorkspaceLayoutUpdateTileMessage {
-  cmd: "workspace_layout_update_tile";
-  workspace_id: string;
-  tile_id: string;
-  tile_params: string;
-  // When present, rebind the tile's session binding (markdown tiles' Send
-  // target). tile_params keeps its existing meaning; markdown tiles accept a
-  // retarget-only update (their params stay immutable).
-  tile_session_id?: string;
-  request_id: string;
-}
-
-// Move an existing leaf (terminal pane or docked tile) so it sits beside an
-// anchor leaf on the given edge. An empty anchor_id docks the leaf against the
-// whole workspace (the root), spanning that edge. ratio is the moved leaf's
-// fraction of the new split (optional; defaults to an equal split). Dropping a
-// leaf on itself (leaf_id == anchor_id) is a no-op. The new split is ratio-locked
-// so the dropped size survives normalization.
-model WorkspaceLayoutMoveLeafMessage {
-  cmd: "workspace_layout_move_leaf";
-  workspace_id: string;
-  leaf_id: string;
-  anchor_id: string;
-  edge: WorkspaceLayoutDockEdge;
-  ratio?: float64;
-}
-
-// Move an existing leaf from one workspace layout into another workspace layout.
-// source_workspace_id and target_workspace_id must be owned by the same daemon
-// endpoint; live terminal runtimes are not migrated between endpoints. If the
-// target already contains the moved leaf id, the daemon assigns a fresh suffix
-// and reports final_leaf_id in the action result.
-model WorkspaceLayoutMoveLeafToWorkspaceMessage {
-  cmd: "workspace_layout_move_leaf_to_workspace";
-  source_workspace_id: string;
-  target_workspace_id: string;
-  leaf_id: string;
-  anchor_id?: string;
-  edge: WorkspaceLayoutDockEdge;
-  ratio?: float64;
-}
-
-// Move an existing leaf out of its current workspace into a brand-new workspace
-// the daemon creates on the fly. Like WorkspaceLayoutMoveLeafToWorkspaceMessage
-// but with no target_workspace_id: the daemon registers a fresh workspace (seeded
-// after the current max rank so it lands at the end of the order) and moves the
-// leaf into it. The optional anchor_id/edge/ratio position the leaf within the
-// new layout; an empty anchor docks it against the new workspace root.
-model WorkspaceLayoutMoveLeafToNewWorkspaceMessage {
-  cmd: "workspace_layout_move_leaf_to_new_workspace";
-  source_workspace_id: string;
-  leaf_id: string;
-  anchor_id?: string;
-  edge?: WorkspaceLayoutDockEdge;
-  ratio?: float64;
-}
-
-// Request the current rendered content of a docked tile (e.g. the markdown
-// file a markdown tile points at). The daemon resolves the file from the
-// tile's persisted params, reads it, and replies with WorkspaceTileContentMessage.
-model WorkspaceTileContentGetMessage {
-  cmd: "workspace_tile_content_get";
-  workspace_id: string;
-  tile_id: string;
-}
-
 // Files an agent handed the user with its send-file tool (Claude's
 // SendUserFile), forwarded by the catch-all PostToolUse hook over the unix
 // socket. The daemon gates on the open_sent_files_enabled setting and opens
 // each path attn can show (markdown today); anything else is dropped
-// silently. paths are absolute; session_id binds the tiles to the sending
-// session's workspace, falling back to the currently selected session.
+// silently. paths are absolute; session_id docks the tiles beside the sending
+// session, falling back to the focused agent.
 model OpenSentFilesMessage {
   cmd: "open_sent_files";
   paths: string[];
@@ -2819,7 +2664,7 @@ model OpenMarkdownMessage {
   request_id?: string;
 }
 
-// Result of a websocket open_markdown command. On success workspace_id and
+// Result of a websocket open_markdown command. On success desktop_id and
 // tile_id identify the docked (or reused) markdown tile.
 model OpenMarkdownResultMessage {
   event: "open_markdown_result";
@@ -2827,7 +2672,7 @@ model OpenMarkdownResultMessage {
   success: boolean;
   error?: string;
   path: string;
-  workspace_id?: string;
+  desktop_id?: string;
   tile_id?: string;
 }
 
@@ -2845,7 +2690,7 @@ model OpenSeedResultMessage {
   success: boolean;
   error?: string;
   seed_id: string;
-  workspace_id?: string;
+  desktop_id?: string;
   tile_id?: string;
 }
 
@@ -3075,11 +2920,6 @@ model MarkdownAnnotationsGetMessage {
   source_kind: string;
   path?: string;
   seed_id?: string;
-  // Owning workspace of the requesting markdown tile. On a hub this routes
-  // the command to the endpoint that owns the workspace, so drafts live on
-  // (and are keyed by) the daemon that owns the document — identical paths
-  // on different endpoints never share a draft/generation/tombstone row.
-  workspace_id?: string;
   request_id: string;
 }
 
@@ -3088,10 +2928,8 @@ model MarkdownAnnotationsGetMessage {
 model MarkdownAnnotationsGetResultMessage {
   event: "markdown_annotations_get_result";
   request_id: string;
-  // Echo of the request's workspace_id (client correlation key).
   document_uri: string;
   source_kind: string;
-  workspace_id?: string;
   seed_id?: string;
   success: boolean;
   error?: string;
@@ -3109,8 +2947,6 @@ model MarkdownAnnotationsSaveMessage {
   source_kind: string;
   path?: string;
   seed_id?: string;
-  // See MarkdownAnnotationsGetMessage.workspace_id (hub endpoint routing).
-  workspace_id?: string;
   annotations: MarkdownAnnotation[];
   generation: int32;
   request_id: string;
@@ -3122,10 +2958,8 @@ model MarkdownAnnotationsSaveMessage {
 model MarkdownAnnotationsSaveResultMessage {
   event: "markdown_annotations_save_result";
   request_id: string;
-  // Echo of the request's workspace_id (client correlation key).
   document_uri: string;
   source_kind: string;
-  workspace_id?: string;
   seed_id?: string;
   success: boolean;
   stale?: boolean;
@@ -3143,8 +2977,6 @@ model MarkdownAnnotationsClearMessage {
   source_kind: string;
   path?: string;
   seed_id?: string;
-  // See MarkdownAnnotationsGetMessage.workspace_id (hub endpoint routing).
-  workspace_id?: string;
   generation: int32;
   request_id: string;
 }
@@ -3153,10 +2985,8 @@ model MarkdownAnnotationsClearMessage {
 model MarkdownAnnotationsClearResultMessage {
   event: "markdown_annotations_clear_result";
   request_id: string;
-  // Echo of the request's workspace_id (client correlation key).
   document_uri: string;
   source_kind: string;
-  workspace_id?: string;
   seed_id?: string;
   success: boolean;
   error?: string;
@@ -3171,7 +3001,6 @@ model MarkdownAnnotationsSubmitMessage {
   cmd: "markdown_annotations_submit";
   document_uri: string;
   source_kind: string;
-  workspace_id?: string;
   path?: string;
   seed_id?: string;
   // Exactly one typed destination. A seed destination appends the formatted
@@ -3198,7 +3027,6 @@ model MarkdownAnnotationsSubmitResultMessage {
   request_id: string;
   document_uri: string;
   source_kind: string;
-  workspace_id?: string;
   path?: string;
   seed_id?: string;
   target_session_id?: string;
@@ -3226,7 +3054,6 @@ model BrowserControlMessage {
   selector?: string;
   text?: string;
   session_id?: string;
-  workspace_id?: string;
   request_id?: string;
 }
 
@@ -3249,17 +3076,319 @@ model BrowserControlResponseMessage {
   error?: string;
 }
 
-model RegisterWorkspaceMessage {
-  cmd: "register_workspace";
-  id: string;
-  title: string;
-  directory: string;
-  endpoint_id?: string;
+// ============================================================================
+// Profiles and desktops
+// ============================================================================
+// Every command answers its sender with one profile_action_result carrying the
+// same request_id. Stored changes reach every client through profiles_changed
+// and profile_arrangement_changed, the sender included.
+
+model ProfileCreateMessage {
+  cmd: "profile_create";
+  request_id: string;
+  name: string;
 }
 
-model UnregisterWorkspaceMessage {
-  cmd: "unregister_workspace";
-  id: string;
+model ProfileRenameMessage {
+  cmd: "profile_rename";
+  request_id: string;
+  profile_id: string;
+  name: string;
+  expected_revision: safeint;
+}
+
+// Live agents of the deleted profile move to destination_profile_id without a
+// placement. The last profile cannot be deleted.
+model ProfileDeleteMessage {
+  cmd: "profile_delete";
+  request_id: string;
+  profile_id: string;
+  expected_revision: safeint;
+  destination_profile_id: string;
+}
+
+// Moves a live agent to another profile. It loses its placement and shows up
+// unplaced in the destination's queue; its runtime and session id stay. A
+// profile's chief moved out stops being its chief, and a crew member's agent
+// takes the member along. expected_profile_id is the profile the client saw
+// the agent in: another one answers stale_revision, and an agent already in
+// the destination answers success without a change, so a retry is safe.
+model SessionMoveMessage {
+  cmd: "session_move";
+  request_id: string;
+  session_id: string;
+  expected_profile_id: string;
+  destination_profile_id: string;
+}
+
+// Scopes this connection to a profile and records it as the most recently used.
+// The result carries the profile and all of its desktops.
+model ProfileSelectMessage {
+  cmd: "profile_select";
+  request_id: string;
+  profile_id: string;
+}
+
+model DesktopCreateMessage {
+  cmd: "desktop_create";
+  request_id: string;
+  profile_id: string;
+  name?: string;
+  // Absent, the desktop takes the lowest free slot of 1-9, or none when all are held.
+  shortcut_slot?: int32;
+}
+
+model DesktopRenameMessage {
+  cmd: "desktop_rename";
+  request_id: string;
+  desktop_id: string;
+  name: string;
+  expected_revision: safeint;
+}
+
+// Absent shortcut_slot clears the slot. A slot held by another desktop is refused.
+model DesktopSetShortcutSlotMessage {
+  cmd: "desktop_set_shortcut_slot";
+  request_id: string;
+  desktop_id: string;
+  shortcut_slot?: int32;
+  expected_revision: safeint;
+}
+
+// Places the desktop between two neighbours of the same profile; an absent
+// neighbour means the start or the end.
+model DesktopReorderMessage {
+  cmd: "desktop_reorder";
+  request_id: string;
+  desktop_id: string;
+  previous_desktop_id?: string;
+  next_desktop_id?: string;
+  expected_revision: safeint;
+}
+
+// Agents placed on the desktop lose their placement and stay open. The last
+// desktop of a profile cannot be deleted.
+model DesktopDeleteMessage {
+  cmd: "desktop_delete";
+  request_id: string;
+  desktop_id: string;
+  expected_revision: safeint;
+}
+
+// Selection: last writer wins, no revision.
+model DesktopSetCurrentMessage {
+  cmd: "desktop_set_current";
+  request_id: string;
+  profile_id: string;
+  desktop_id: string;
+}
+
+// Selection: last writer wins, no revision. pane_id is any leaf of the
+// desktop, an agent pane or a tile.
+model DesktopSetActivePaneMessage {
+  cmd: "desktop_set_active_pane";
+  request_id: string;
+  desktop_id: string;
+  pane_id: string;
+}
+
+// Gives an unplaced agent of the desktop's profile a pane, split beside
+// anchor_pane_id or, absent, beside the active leaf. The new pane becomes active.
+model DesktopPlaceSessionMessage {
+  cmd: "desktop_place_session";
+  request_id: string;
+  desktop_id: string;
+  expected_revision: safeint;
+  session_id: string;
+  anchor_pane_id?: string;
+  direction?: LayoutSplitDirection;
+  new_pane_share?: float64;     // The new pane's share of the split, in (0,1)
+}
+
+// Moves a pane or tile beside anchor_id, within one desktop or between two
+// desktops of one profile. An absent anchor_id docks against the target's root.
+// Both revisions are checked and both desktops change in one transaction.
+model DesktopMoveLeafMessage {
+  cmd: "desktop_move_leaf";
+  request_id: string;
+  source_desktop_id: string;
+  target_desktop_id: string;
+  leaf_id: string;
+  anchor_id?: string;
+  edge: LayoutDockEdge;
+  leaf_share?: float64;         // The moved leaf's share of the new split, in (0,1)
+  expected_source_revision: safeint;
+  expected_target_revision: safeint;
+}
+
+// Removes a placement or a tile. It never closes an agent.
+model DesktopRemoveLeafMessage {
+  cmd: "desktop_remove_leaf";
+  request_id: string;
+  desktop_id: string;
+  leaf_id: string;
+  expected_revision: safeint;
+}
+
+model DesktopSetSplitRatioMessage {
+  cmd: "desktop_set_split_ratio";
+  request_id: string;
+  desktop_id: string;
+  split_id: string;
+  ratio: float64;
+  expected_revision: safeint;
+}
+
+// Docks a tile beside anchor_id or, absent, beside the active leaf. The tile
+// becomes the active leaf.
+model DesktopDockTileMessage {
+  cmd: "desktop_dock_tile";
+  request_id: string;
+  desktop_id: string;
+  expected_revision: safeint;
+  tile_id: string;
+  tile_kind: string;
+  tile_params?: string;
+  tile_session_id?: string;
+  anchor_id?: string;
+  edge: LayoutDockEdge;
+  tile_share?: float64;
+}
+
+model DesktopUpdateTileMessage {
+  cmd: "desktop_update_tile";
+  request_id: string;
+  desktop_id: string;
+  expected_revision: safeint;
+  tile_id: string;
+  tile_params?: string;
+  tile_session_id?: string;
+}
+
+model DesktopTileContentMessage {
+  event: "desktop_tile_content";
+  desktop_id: string;
+  tile_id: string;
+  tile_kind: string;
+  path: string;
+  content: string;
+  error?: string;
+}
+
+model ProfileActionResultMessage {
+  event: "profile_action_result";
+  request_id: string;
+  action: string;               // Echo of the command name
+  success: boolean;
+  error?: string;
+  error_code?: ProfileErrorCode;
+  profile?: Profile;
+  desktops?: Desktop[];
+  pane_id?: string;             // The pane desktop_place_session created
+}
+
+// Every live profile, sent to every client when one is created, renamed or deleted.
+model ProfilesChangedMessage {
+  event: "profiles_changed";
+  profiles: Profile[];
+}
+
+model ProfileArrangementChangedMessage {
+  event: "profile_arrangement_changed";
+  profile: Profile;
+  desktops: Desktop[];
+}
+
+// ============================================================================
+// Migration from legacy workspaces to desktops
+// ============================================================================
+
+enum MigrationPhase {
+  placement_required,
+  complete,
+}
+
+model MigrationGroup {
+  group_id: string;             // The legacy workspace id
+  title: string;
+  directory: string;
+  source_desktop_id: string;
+  confirmed: boolean;
+  tree_json: string;            // Surviving panes and tiles as arranged on the source desktop
+  panes: DesktopPane[];
+}
+
+model MigrationDraftDesktop {
+  key: string;                  // The desktop id, or slot-N for a free shortcut slot
+  desktop_id?: string;
+  shortcut_slot?: int32;        // 1-9; absent for an extra desktop
+  tree_json: string;            // Split tree of {"group": id} leaves; ratio is the first child's share; empty when nothing is placed
+}
+
+model MigrationState {
+  phase: MigrationPhase;
+  revision: safeint;
+  profile_id: string;
+  groups: MigrationGroup[];
+  desktops: MigrationDraftDesktop[];
+  can_undo: boolean;
+  suggestion_available: boolean;
+}
+
+model MigrationGetMessage {
+  cmd: "migration_get";
+  request_id: string;
+}
+
+model MigrationKeepMessage {
+  cmd: "migration_keep";
+  request_id: string;
+  expected_revision: safeint;
+  group_ids: string[];
+}
+
+model MigrationMoveMessage {
+  cmd: "migration_move";
+  request_id: string;
+  expected_revision: safeint;
+  group_id: string;
+  target_key: string;
+  anchor_group_id?: string;     // Absent places the group beside the whole desktop
+  edge: LayoutDockEdge;
+  share?: float64;              // The moved group's share of the new split, in (0,1); absent means half
+}
+
+model MigrationSuggestMessage {
+  cmd: "migration_suggest";
+  request_id: string;
+  expected_revision: safeint;
+}
+
+model MigrationUndoMessage {
+  cmd: "migration_undo";
+  request_id: string;
+  expected_revision: safeint;
+}
+
+model MigrationFinishMessage {
+  cmd: "migration_finish";
+  request_id: string;
+  expected_revision: safeint;
+}
+
+model MigrationResultMessage {
+  event: "migration_result";
+  request_id: string;
+  action: string;               // Echo of the command name
+  success: boolean;
+  error?: string;
+  error_code?: ProfileErrorCode;
+  state?: MigrationState;
+}
+
+model MigrationChangedMessage {
+  event: "migration_changed";
+  state: MigrationState;
 }
 
 // Rename a session's display label. The stored label is authoritative once set:
@@ -3268,24 +3397,6 @@ model RenameSessionMessage {
   cmd: "rename_session";
   session_id: string;
   label: string;
-}
-
-// Rename a workspace's title. Like the session label, the stored title wins over
-// the name re-derived at register time, so a rename sticks across reconnects.
-model RenameWorkspaceMessage {
-  cmd: "rename_workspace";
-  workspace_id: string;
-  title: string;
-}
-
-// Reorder a workspace by placing it between two neighbours. The frontend sends
-// neighbour ids only; the daemon computes the fractional-index rank key from
-// the neighbours' ranks. Empty prev = move to top; empty next = move to bottom.
-model SetWorkspaceRankMessage {
-  cmd: "set_workspace_rank";
-  workspace_id: string;
-  prev_workspace_id?: string;
-  next_workspace_id?: string;
 }
 
 // Pin or clear a per-session context-window cap (tokens). cap > 0 pins; cap 0
@@ -3323,7 +3434,11 @@ model InitialStateMessage {
   home_daemon_id?: string;
   sessions?: Session[];
   endpoints?: EndpointInfo[];
-  workspaces?: Workspace[];
+  profiles?: Profile[];
+  migration_phase?: MigrationPhase;
+  // The profile this connection is scoped to, and its desktops.
+  selected_profile_id?: string;
+  desktops?: Desktop[];
   prs?: PR[];
   repos?: RepoState[];
   authors?: AuthorState[];
@@ -3383,21 +3498,6 @@ model SessionStateChangedMessage {
   session: Session;
 }
 
-model WorkspaceRegisteredMessage {
-  event: "workspace_registered";
-  workspace: Workspace;
-}
-
-model WorkspaceUnregisteredMessage {
-  event: "workspace_unregistered";
-  workspace: Workspace;
-}
-
-model WorkspaceStateChangedMessage {
-  event: "workspace_state_changed";
-  workspace: Workspace;
-}
-
 // Broadcast when notebook content changes. origin is agent|ui|external.
 model NotebookChangedMessage {
   event: "notebook_changed";
@@ -3410,20 +3510,9 @@ model SessionsUpdatedMessage {
   sessions?: Session[];
 }
 
-model WorkspaceLayoutMessage {
-  event: "workspace_layout";
-  workspace_layout: WorkspaceLayout;
-}
-
-model WorkspaceLayoutUpdatedMessage {
-  event: "workspace_layout_updated";
-  workspace_layout: WorkspaceLayout;
-}
-
-// Result of a rename_session / rename_workspace command. cmd echoes the command
-// name and id is the renamed session_id or workspace_id, so the client can match
-// it to the pending request. The renamed entity is also broadcast separately via
-// session_state_changed / workspace_state_changed.
+// Result of a rename_session command. cmd echoes the command name and id is the
+// renamed session_id, so the client can match it to the pending request. The
+// renamed session is also broadcast separately via session_state_changed.
 model RenameResultMessage {
   event: "rename_result";
   cmd: string;
@@ -3536,36 +3625,6 @@ model PresentationAddedMessage {
 model PresentationUpdatedMessage {
   event: "presentation_updated";
   presentation: Presentation;
-}
-
-model WorkspaceLayoutActionResultMessage {
-  event: "workspace_layout_action_result";
-  action: string;
-  workspace_id: string;
-  source_workspace_id?: string;
-  target_workspace_id?: string;
-  leaf_id?: string;
-  final_leaf_id?: string;
-  pane_id?: string;
-  split_id?: string;
-  tile_id?: string;
-  request_id?: string;
-  success: boolean;
-  error?: string;
-}
-
-// Rendered content of a docked tile. Sent as the reply to
-// workspace_tile_content_get and broadcast whenever the underlying file
-// changes (live reload). For markdown, content is the raw file text and path is
-// its absolute path; error is set when the file can't be read.
-model WorkspaceTileContentMessage {
-  event: "workspace_tile_content";
-  workspace_id: string;
-  tile_id: string;
-  tile_kind: string;
-  path: string;
-  content: string;
-  error?: string;
 }
 
 model PRsUpdatedMessage {
@@ -3858,7 +3917,6 @@ model WorkflowRun {
   script_hash: string;
   args_json?: string;
   session_id?: string;
-  workspace_id?: string;
   status: WorkflowRunStatus;
   phase?: string;
   harness?: string;
@@ -3926,7 +3984,6 @@ model AutomationRunSummary {
   cancel_reason?: string;
   seed_id?: string;
   session_id?: string;
-  pane_id?: string;
   created_at: string;
   updated_at: string;
   delivered_at?: string;
@@ -4057,6 +4114,12 @@ model SpawnResultMessage {
   id: string;
   success: boolean;
   error?: string;
+  // The pane a requested placement produced. A spawn that asked for a
+  // placement and got none reports why in placement_error; the agent then
+  // runs unplaced in its profile.
+  desktop_id?: string;
+  pane_id?: string;
+  placement_error?: string;
 }
 
 model ReloadSessionResultMessage {
@@ -4319,7 +4382,8 @@ model ClientEvictionNoticeMessage {
 model BrowserControlRequestMessage {
   event: "browser_control_request";
   request_id: string;
-  workspace_id: string;
+  // The desktop the browser tile lives on.
+  desktop_id: string;
   tile_id: string;
   action: string;
   params?: string;
@@ -5365,7 +5429,7 @@ model SeedWatchResult {
 // it was launched with, so the daemon owns every input and the client sends one
 // command. Same session id, so the mirrored conversation resumes; the session
 // and pane reach the UI through the normal session_registered /
-// workspace_layout_updated broadcasts. An untended seed refuses by name —
+// profile_arrangement_changed broadcasts. An untended seed refuses by name —
 // there is nobody to reopen.
 model SeedResumeMessage {
   "cmd": "seed_resume";
@@ -5373,6 +5437,11 @@ model SeedResumeMessage {
   "seed_id": string;
   // Present only when Resume resolves one captured Review garden item.
   "review"?: SeedReviewActionContext;
+  // Where the agent resumes when its recorded profile was deleted. Required then;
+  // otherwise it must name the recorded profile or be absent. Over WebSocket, an
+  // absent profile_id for a deleted recorded profile means the connection's
+  // selected profile.
+  "profile_id"?: string;
 }
 
 // SeedResumeResultMessage replies to seed_resume, correlated by request_id.
@@ -5385,7 +5454,7 @@ model SeedResumeResultMessage {
   "success": boolean;
   "error"?: string;
   "session_id"?: string;
-  "workspace_id"?: string;
+  "profile_id"?: string;
   "already_running"?: boolean;
 }
 
@@ -5420,9 +5489,9 @@ model SeedSendToChiefResultMessage {
   "result"?: SeedSendToChiefResult;
 }
 
-// The whole garden, re-pushed whenever a seed changes. Clients filter by
-// workspace themselves: the panel's scope is a view, and a client that switches
-// workspaces must not have to ask the daemon again.
+// The whole garden, re-pushed whenever a seed changes. Clients filter it
+// themselves: the panel's scope is a view, and a client that switches profiles
+// must not have to ask the daemon again.
 model GardenSeedsUpdatedMessage {
   event: "garden_seeds_updated";
   seeds: Seed[];
@@ -5937,7 +6006,7 @@ model Response {
   delegation_preferences_revision?: DelegationPreferencesRevision;
   delegation_preferences_history?: DelegationPreferencesHistoryResult;
   sessions?: Session[];
-  workspaces?: Workspace[];
+  profiles?: Profile[];
   prs?: PR[];
   repos?: RepoState[];
   authors?: AuthorState[];
@@ -6071,8 +6140,7 @@ model AgentPeekResult {
   session_id: string;
   label: string;
   agent: string;
-  workspace_id: string;
-  workspace_title?: string;
+  profile_name?: string;
   state: string;
   state_reason?: string;
   state_since: string;
@@ -6104,6 +6172,7 @@ model CrewListMessage {
 // One registered crew member. Paths point at the canonical files.
 model CrewMember {
   id: string;
+  profile_id: string; // The profile the member belongs to; it wakes only there
   revision: safeint;
   charter_path: string;
   home_dir: string;
@@ -6244,6 +6313,12 @@ model CrewWakeMessage {
   // The harness to launch; the daemon's default agent when absent.
   agent?: string;
   request_id?: string; // set by the WS frontend to correlate the result event
+  // The profile the wake is asked from. Absent over WebSocket means the
+  // connection's selected profile. A member of another profile is refused.
+  profile_id?: string;
+  // The calling session, for a wake asked by an agent; its profile applies as
+  // profile_id does.
+  source_session_id?: string;
 }
 
 // CrewWakeResultMessage replies to a websocket crew_wake, correlated by
@@ -6257,7 +6332,7 @@ model CrewWakeResultMessage {
   error?: string;
   member?: string;
   session_id?: string;
-  workspace_id?: string;
+  profile_id?: string;
   already_awake?: boolean;
   // Present when wake found a stale binding, released it, and started this
   // fresh day. The caller names the repair instead of silently focusing a
@@ -6268,7 +6343,7 @@ model CrewWakeResultMessage {
 model CrewWakeResult {
   member: string;
   session_id: string;
-  workspace_id: string;
+  profile_id: string;
   // True when the member was already awake and session_id is the day that was
   // already running — nothing was launched.
   already_awake: boolean;
@@ -6556,7 +6631,11 @@ model SessionLedgerEntry {
   label: string;
   agent: string;
   directory: string;
-  workspace_id: string;
+  // The profile the session belongs to; a closed row keeps the profile it
+  // closed in, even after that profile is deleted.
+  profile_id: string;
+  profile_name: string;
+  profile_deleted?: boolean;
   branch?: string;
   is_worktree?: boolean;
   main_repo?: string;
@@ -6574,15 +6653,22 @@ model SessionLedgerEntry {
 }
 
 // Counted over the scope and date window alone, so choosing a repository never
-// empties the workspace choices, or the other way round.
+// empties the profile choices, or the other way round.
 model SessionLedgerFacet {
   value: string;
   count: int32;
 }
 
+model SessionLedgerProfileFacet {
+  profile_id: string;
+  name: string;
+  deleted?: boolean;
+  count: int32;
+}
+
 model SessionLedgerFacets {
   repositories: SessionLedgerFacet[];
-  workspaces: SessionLedgerFacet[];
+  profiles: SessionLedgerProfileFacet[];
 }
 
 model SessionListResult {
@@ -6633,14 +6719,16 @@ model SessionReopen {
   directory_state: string;
   // local | remote_only | gone | merged | unknown
   branch_state?: string;
-  workspace_id: string;
-  workspace_plan: string; // reuse | create
-  pane_plan: string;      // reuse | add
+  // The profile the session reopens into, unplaced: its recorded profile.
+  profile_id: string;
+  // True when the recorded profile was deleted, so reopening needs an
+  // explicit destination profile.
+  profile_deleted: boolean;
 }
 
 model SessionReopenResult {
   session_id: string;
-  workspace_id: string;
+  profile_id: string;
   directory: string;
   action: SessionReopenAction;
   // The session was already running; nothing was reopened.
@@ -6651,7 +6739,7 @@ model SessionReopenResult {
 model DelegateResult {
   seed_id: string;
   session_id: string;
-  workspace_id?: string; // Internal pane placement; CLI output does not depend on it.
+  profile_id?: string;
   directory: string;
   branch?: string;
   checkout: string; // reused | created
@@ -6661,6 +6749,11 @@ model DelegateResult {
   `model`: string;
   effort: string;
   predecessor_session_id?: string;
+  // Where the delegated agent sits. Absent when it runs unplaced.
+  desktop_id?: string;
+  pane_id?: string;
+  // Why the agent stayed unplaced when a placement beside its source was asked for.
+  placement_error?: string;
   // When the harness first reported a turn (hook, transcript or plugin driver).
   // Absent when the delegation completed without that: the first turn is unconfirmed.
   first_turn_at?: string;
@@ -6694,7 +6787,6 @@ model DelegationOperation {
   result?: DelegateResult;
   failure?: DelegationFailure;
   // Historical operation fields remain readable after the protocol upgrade.
-  workspace_id?: string;
   ticket_id?: string;
   error?: string;
   created_at: string;
@@ -7145,12 +7237,8 @@ model WebSocketEvent {
   session_id?: string;
   chief_of_staff?: boolean;
   previous_session_id?: string;
-  workspace_id?: string;
   session?: Session;
   sessions?: Session[];
-  workspace_layout?: WorkspaceLayout;
-  workspace?: Workspace;
-  workspaces?: Workspace[];
   prs?: PR[];
   repos?: RepoState[];
   authors?: AuthorState[];
@@ -7238,14 +7326,14 @@ alias DaemonEvent =
   | SessionUnregisteredMessage
   | SessionCloseResultMessage
   | SessionStateChangedMessage
-  | WorkspaceRegisteredMessage
-  | WorkspaceUnregisteredMessage
-  | WorkspaceStateChangedMessage
   | NotebookChangedMessage
   | SessionsUpdatedMessage
-  | WorkspaceLayoutMessage
-  | WorkspaceLayoutUpdatedMessage
-  | WorkspaceLayoutActionResultMessage
+  | ProfileActionResultMessage
+  | ProfilesChangedMessage
+  | ProfileArrangementChangedMessage
+  | DesktopTileContentMessage
+  | MigrationResultMessage
+  | MigrationChangedMessage
   | RenameResultMessage
   | ChiefOfStaffResultMessage
   | SessionContextWindowCapResultMessage
@@ -7270,7 +7358,6 @@ alias DaemonEvent =
   | CrewSetResultMessage
   | CrewRestartResultMessage
   | TicketAttachResultMessage
-  | WorkspaceTileContentMessage
   | OpenSeedResultMessage
   | BrowserControlResponseMessage
   | PullRequestWatchResultMessage

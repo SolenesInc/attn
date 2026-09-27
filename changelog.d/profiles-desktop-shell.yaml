@@ -1,0 +1,3 @@
+kind: added
+area: workspaces
+change: When the daemon cannot start after a failed data migration, the app shows what broke and where the logs, database and backup are, instead of reconnecting forever.

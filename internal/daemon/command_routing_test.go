@@ -50,7 +50,6 @@ func protocolCommands(t *testing.T) map[string]string {
 const sessionLedgerIsPerDaemon = "the ledger records the sessions this daemon ran; another daemon's rows are read there"
 
 var sessionCommandsAnsweredWhereTheyLand = map[string]string{
-	protocol.CmdRegister:            "arrives from the agent process over the unix socket",
 	protocol.CmdState:               "arrives from the agent process over the unix socket",
 	protocol.CmdStop:                "arrives from the agent process over the unix socket",
 	protocol.CmdFilesEdited:         "arrives from the agent process over the unix socket",
@@ -80,16 +79,19 @@ var sessionCommandsAnsweredWhereTheyLand = map[string]string{
 
 	protocol.CmdTicketAttach:   "the ticket board is the hub's own store",
 	protocol.CmdBrowserControl: "handleRemoteBrowserControl resolves the browser host itself",
+
+	protocol.CmdMarkdownAnnotationsGet:   markdownDraftsLiveWithTheClientsDaemon,
+	protocol.CmdMarkdownAnnotationsSave:  markdownDraftsLiveWithTheClientsDaemon,
+	protocol.CmdMarkdownAnnotationsClear: markdownDraftsLiveWithTheClientsDaemon,
 }
 
 func routingProbe(wire string) []byte {
 	return []byte(`{"cmd":"` + wire + `","id":"probe","session_id":"probe","target_session_id":"probe",` +
-		`"workspace_id":"probe","source_workspace_id":"probe","source_kind":"file","endpoint_id":"probe","directory":"/probe"}`)
+		`"source_kind":"file","endpoint_id":"probe","directory":"/probe"}`)
 }
 
 func routedByAnyRouter(wire string, msg interface{}) bool {
 	return remoteCommandSessionID(wire, msg) != "" ||
-		remoteCommandWorkspaceID(wire, msg) != "" ||
 		remoteCommandPTYTargetID(wire, msg) != ""
 }
 
@@ -120,7 +122,7 @@ func TestSessionScopedCommandsReachTheSessionOwner(t *testing.T) {
 	if len(unrouted) > 0 {
 		t.Fatalf("%d session-scoped command(s) are answered by whichever daemon receives them, so a hub "+
 			"answers them against its own store for a session it does not own:\n  %v\n"+
-			"Add each to remoteCommandSessionID (or the workspace/PTY router that fits), or to "+
+			"Add each to remoteCommandSessionID (or the PTY router, when it addresses a runtime), or to "+
 			"sessionCommandsAnsweredWhereTheyLand with the reason it is safe.", len(unrouted), unrouted)
 	}
 }
@@ -147,3 +149,5 @@ func TestSessionCommandExceptionsAreStillNeeded(t *testing.T) {
 		}
 	}
 }
+
+const markdownDraftsLiveWithTheClientsDaemon = "markdown drafts are keyed by the document path on the daemon the client talks to"

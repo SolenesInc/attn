@@ -39,11 +39,11 @@ func (s *failFirstGardenCursorStore) SetCursor(name string, cursor int64, now ti
 
 func TestGardenSeedEventForARemoteTenderDoesNotBlockLaterLocalBell(t *testing.T) {
 	d := newGardenDaemon(t)
-	d.hubManager = hub.NewManager(d.store, nil, nil, nil, nil, nil)
-	endpoint, err := d.hubManager.AddEndpoint("gpu-box", "gpu.example.test", "")
+	endpoint, err := d.store.AddEndpoint("gpu-box", "gpu.example.test", "")
 	if err != nil {
 		t.Fatal(err)
 	}
+	d.hubManager = hub.NewManager(d.store, nil, nil, nil, nil, nil)
 	if !d.hubManager.ReplaceRemoteSessions(endpoint.ID, []protocol.Session{{ID: "remote-worker"}}) {
 		t.Fatal("remote session was not registered")
 	}

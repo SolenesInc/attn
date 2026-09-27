@@ -372,7 +372,7 @@ func TestTheGardenCommandsPrintWhatAgentsActOn(t *testing.T) {
 			t.Fatalf("review start --json = %+v", started)
 		}
 		requireLines(t, "review show", seedAs(t, s, "", "review", "show", started.Review.Run.ID),
-			"\n"+seed.ID+"  Drifted work\n", "\nactions\tkeep_growing, park, harvest, wither\n")
+			"\n"+seed.ID+"  Drifted work\n", "\nactions\tsend_to_chief, keep_growing, park, harvest, wither\n")
 	})
 }
 

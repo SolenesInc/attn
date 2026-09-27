@@ -7,13 +7,23 @@ import {
   parseCommonArgs,
   printCommonHelp,
 } from './common.mjs';
-import { runShellCommandInPane as runInPane, waitForFirstWorkspacePane, waitForPaneShellReady } from './scenarioAssertions.mjs';
+import { runShellCommandInPane, waitForFirstDesktopPane, waitForPaneShellReady } from './scenarioAssertions.mjs';
 import { ensureCodexPromptReadyViaPty } from './scenarioAgents.mjs';
 import { delay } from './platform.mjs';
 import { writeMockAgentFixture } from './mockAgent.mjs';
 import { UiAutomationClient } from './uiAutomationClient.mjs';
 import { DaemonObserver } from './daemonObserver.mjs';
 import { createScenarioRunner } from './scenarioRunner.mjs';
+
+async function runInPane(client, pane, command, expected) {
+  await client.request('select_session', { sessionId: pane.sessionId });
+  await client.request('dom_wait', {
+    selector: `[data-pane-id="${pane.paneId}"][data-pane-suspended="true"]`,
+    absent: true,
+    timeoutMs: 10_000,
+  });
+  return runShellCommandInPane(client, pane, command, expected);
+}
 
 const BRIEF = 'Reply with exactly GSREOPEN_READY and then wait for the user.';
 const HANDOFF = 'Continue this same seed from the resumed conversation.';
@@ -55,7 +65,7 @@ async function openPane(client, observer, runner, label) {
   const sessionId = await createSessionAndWaitForInitialPane({
     client, observer, cwd, label, agent: 'shell',
   });
-  const pane = await waitForFirstWorkspacePane(client, sessionId, `pane for ${label}`, 20_000);
+  const pane = await waitForFirstDesktopPane(client, sessionId, `pane for ${label}`, 20_000);
   return { sessionId, paneId: pane.paneId, cwd };
 }
 
@@ -76,8 +86,8 @@ async function pollFor(fn, description, timeoutMs = 20_000, intervalMs = 250) {
 
 async function waitForRenderedReply(client, sessionId, expected, timeoutMs = 120_000) {
   const pane = await pollFor(async () => {
-    const workspace = await client.request('get_workspace', { sessionId });
-    return (workspace.panes || []).find((entry) => entry.sessionId === sessionId) ?? null;
+    const desktop = await client.request('get_desktop', { sessionId });
+    return (desktop.panes || []).find((entry) => entry.sessionId === sessionId) ?? null;
   }, `reply pane for ${sessionId}`);
   const deadline = Date.now() + timeoutMs;
   let last = '';

@@ -1,7 +1,7 @@
 import { act, fireEvent, screen, within } from '@testing-library/react';
 import { onOpenUrl } from '@tauri-apps/plugin-deep-link';
 import { describe, expect, it, vi } from 'vitest';
-import { agentWorkspace, daemonSession, daemonWorkspace, type DaemonSession } from './test/daemonFixtures';
+import { agentPane, defaultProfile, dockTiles, emptyDesktop, soloDesktop, daemonSession, daemonDesktop, type DaemonSession } from './test/daemonFixtures';
 import { gesture, pressShortcut, renderApp } from './test/renderApp';
 import type { ScriptedDaemon } from './test/scriptedDaemon';
 
@@ -26,7 +26,7 @@ async function renderQueue({
         agent('s1', { turn_owed: owed.includes('s1'), ...s1 }),
         agent('s2', { turn_owed: owed.includes('s2') }),
       ],
-      workspaces: laidOut.map(agentWorkspace),
+      desktops: laidOut.map((id) => soloDesktop(id)),
       settings: { queue_mode_enabled: 'true' },
     },
   });
@@ -40,7 +40,7 @@ const keys = {
   home: () => press('H', { shift: true }),
   back: () => press('['),
   forward: () => press(']'),
-  grid: () => press('g'),
+  grid: () => pressShortcut('view.toggleGrid'),
   sidebar: () => press('B', { shift: true }),
   settings: () => press(','),
   shortcuts: () => press('/'),
@@ -48,11 +48,17 @@ const keys = {
 };
 
 function open(label: string) {
+  if (!screen.queryByRole('button', { name: `Open ${label}` })) {
+    fireEvent.click(screen.getByRole('button', { name: /All agents/ }));
+  }
   fireEvent.click(screen.getByRole('button', { name: `Open ${label}` }));
 }
 
 function selectedAgent(): string | null {
-  return document.querySelector('.session-item.selected .session-label')?.textContent ?? null;
+  const row = document.querySelector('.session-item.selected[data-session-id] .session-label')?.textContent;
+  if (row) return row;
+  const pane = document.querySelector('[data-session-visible="1"]')?.getAttribute('data-active-pane-id');
+  return pane ? pane.replace(/^pane-/, '') : null;
 }
 
 function isHome(): boolean {
@@ -68,16 +74,16 @@ function setTurn(daemon: ScriptedDaemon, id: 's1' | 's2', owed: boolean) {
 }
 
 function layOut(daemon: ScriptedDaemon, id: string) {
-  daemon.emit({ event: 'workspace_state_changed', workspace: agentWorkspace(id) });
+  daemon.arrange((desktops) => [...desktops, soloDesktop(id)]);
 }
 
 function deepLinkTo(id: string) {
   act(() => vi.mocked(onOpenUrl).mock.lastCall![0]([`attn://spawn?cwd=%2Ftmp%2F${id}`]));
 }
 
-function selectionsOf(daemon: ScriptedDaemon, workspaceId: string) {
+function selectionsOf(daemon: ScriptedDaemon, desktopId: string) {
   return daemon.sent.filter(
-    (command) => command.cmd === 'workspace_selected' && command.workspace_id === workspaceId,
+    (command) => command.cmd === 'desktop_set_current' && command.desktop_id === desktopId,
   );
 }
 
@@ -106,9 +112,24 @@ function queueOf(turns: Turns) {
 
 async function renderAgents(turns: Turns, settings: Record<string, string> = { queue_mode_enabled: 'true' }) {
   const sessions = queueOf(turns);
-  const view = await renderApp({ initialState: { sessions, workspaces: sessions.map((session) => agentWorkspace(session.id)), settings } });
+  const view = await renderApp({ initialState: { sessions, desktops: sessions.map((session) => soloDesktop(session.id)), settings } });
   const update = (next: Turns) => view.daemon.emit({ event: 'sessions_updated', sessions: queueOf(next) });
   return { ...view, update };
+}
+
+function notesDesktop() {
+  return daemonDesktop('notes', { root: { type: 'tile', tile_id: 'tile-notes', tile_kind: 'markdown', tile_params: '/tmp/notes.md' } }, { name: 'notes', shortcut_slot: 9 });
+}
+
+function notesWithAgents(ids: string[]) {
+  const panes = ids.map((id) => ({ type: 'pane', pane_id: `pane-${id}` }));
+  const root = panes.length === 1 ? panes[0] : {
+    type: 'split', split_id: 'agents', direction: 'vertical', ratio: 0.5, children: panes,
+  };
+  return daemonDesktop('d1', {
+    root: dockTiles(root, [{ tile_id: 'tile-notes', tile_kind: 'markdown', tile_params: '/tmp/notes.md' }]),
+    panes: ids.map((id) => agentPane(id, 'd1')),
+  }, { active_pane_id: 'tile-notes', shortcut_slot: 1 });
 }
 
 function focusedPane(): string | null {
@@ -156,7 +177,7 @@ describe('agent navigation', () => {
     layOut(daemon, 's2');
 
     expect(isHome()).toBe(true);
-    expect(selectionsOf(daemon, 'workspace-s2')).toEqual([]);
+    expect(selectionsOf(daemon, 'desktop-s2')).toEqual([]);
   });
 
   it.each([
@@ -195,7 +216,7 @@ describe('agent navigation', () => {
     setTurn(daemon, 's2', true);
 
     expect(isHome()).toBe(true);
-    expect(selectionsOf(daemon, 'workspace-s2')).toEqual([]);
+    expect(selectionsOf(daemon, 'desktop-s2')).toEqual([]);
   });
 
   it('ends the wait when the user leaves home, however they come back', async () => {
@@ -207,7 +228,7 @@ describe('agent navigation', () => {
     setTurn(daemon, 's2', true);
 
     expect(isHome()).toBe(true);
-    expect(selectionsOf(daemon, 'workspace-s2')).toEqual([]);
+    expect(selectionsOf(daemon, 'desktop-s2')).toEqual([]);
   });
 
   it('hands over the oldest owed turn when several opened while home waited', async () => {
@@ -222,30 +243,29 @@ describe('agent navigation', () => {
   });
 
   it('resumes history from home and grid, then traverses normally in the session view', async () => {
-    await renderQueue();
-    open('s1');
-    open('s2');
-    keys.home();
+    const { daemon } = await renderQueue();
+    await gesture(daemon, () => open('s1'));
+    await gesture(daemon, () => open('s2'));
+    await gesture(daemon, keys.home);
 
-    keys.back();
+    await gesture(daemon, keys.back);
     expect(selectedAgent()).toBe('s2');
     expect(isGrid()).toBe(false);
 
-    keys.grid();
-    keys.forward();
-    expect(selectedAgent()).toBe('s2');
+    await gesture(daemon, keys.grid);
+    await gesture(daemon, keys.forward);
     expect(isGrid()).toBe(true);
 
-    keys.back();
+    await gesture(daemon, keys.back);
     expect(selectedAgent()).toBe('s2');
     expect(isGrid()).toBe(false);
 
-    keys.back();
+    await gesture(daemon, keys.back);
     expect(selectedAgent()).toBe('s1');
 
-    keys.forward();
+    await gesture(daemon, keys.forward);
     expect(selectedAgent()).toBe('s2');
-    keys.forward();
+    await gesture(daemon, keys.forward);
     expect(selectedAgent()).toBe('s2');
   });
 
@@ -293,7 +313,6 @@ describe('agent navigation', () => {
     ['goes home when the last owed turn is snoozed', { s1: OWED, s2: SETTLED }, 's1', { s1: SNOOZED, s2: SETTLED }, null],
     ['stays while the watched turn is still owed', { s1: OWED, s2: OWED }, 's1', { s1: { ...OWED, state: 'waiting_input' }, s2: OWED }, 's1'],
     ['stays when the turn that closed was not the watched agent’s', { s1: SETTLED, s2: OWED }, 's1', { s1: SETTLED, s2: SETTLED }, 's1'],
-    ['stays on an agent the user just pinned', { s1: OWED, s2: OWED }, 's1', { s1: { turn_owed: false, pinned_at: '2026-08-03T12:00:00Z' }, s2: OWED }, 's1'],
     ['stays on an agent that left the queue for the crew', { s1: OWED, s2: OWED }, 's1', { s1: { turn_owed: false, crew_member: 'fern' }, s2: OWED }, 's1'],
   ])('%s', async (_, turns, watched, update, landing) => {
     const view = await renderAgents(turns);
@@ -316,6 +335,7 @@ describe('agent navigation', () => {
     expect(focusedPane()).toBe('pane-s2');
 
     keys.back();
+    await view.daemon.idle();
     expect(selectedAgent()).toBe('s1');
   });
 
@@ -358,14 +378,11 @@ describe('agent navigation', () => {
   });
 
   it.each([
-    ['opening a tile-only workspace', () => fireEvent.click(screen.getByRole('button', { name: 'Open workspace notes' }))],
+    ['opening a tile-only desktop', () => pressShortcut('desktop.select9')],
     ['going back through history', () => keys.back()],
   ])('stops waiting for the next turn after %s', async (_, navigate) => {
     const view = await renderAgents({ s1: OWED, s2: SETTLED });
-    view.daemon.emit({
-      event: 'workspace_registered',
-      workspace: daemonWorkspace('notes', { root: { type: 'tile', tile_id: 'tile-notes', tile_kind: 'markdown', tile_params: '/tmp/notes.md' } }, { pinned: true }),
-    });
+    view.daemon.arrange((desktops) => [...desktops, notesDesktop()]);
     open('s1');
     view.update({ s1: SETTLED, s2: SETTLED });
     expect(isHome()).toBe(true);
@@ -378,13 +395,10 @@ describe('agent navigation', () => {
     expect(selectedAgent()).toBe(settledOn);
   });
 
-  it('keeps a tile-only workspace open when another session closes', async () => {
+  it('keeps a tile-only desktop open when another session closes', async () => {
     const view = await renderAgents({ s1: SETTLED, s2: SETTLED });
-    view.daemon.emit({
-      event: 'workspace_registered',
-      workspace: daemonWorkspace('notes', { root: { type: 'tile', tile_id: 'tile-notes', tile_kind: 'markdown', tile_params: '/tmp/notes.md' } }, { title: 'notes', pinned: true }),
-    });
-    fireEvent.click(screen.getByRole('button', { name: 'Open workspace notes' }));
+    view.daemon.arrange((desktops) => [...desktops, notesDesktop()]);
+    pressShortcut('desktop.select9');
     await view.daemon.idle();
 
     view.daemon.emit({ event: 'session_unregistered', session: queueSession('s2', 10) });
@@ -392,6 +406,51 @@ describe('agent navigation', () => {
 
     expect(isHome()).toBe(false);
     expect(document.querySelector('[data-pane-id="tile-notes"]')).not.toBeNull();
+  });
+
+  it('keeps a tile agent when the requested agent closes before focus changes', async () => {
+    const { daemon } = await renderApp({ initialState: {
+      sessions: [agent('s1'), agent('s2')],
+      profiles: [defaultProfile('d1')],
+      desktops: [notesWithAgents(['s1', 's2'])],
+    } });
+    daemon.on('desktop_set_active_pane', () => undefined);
+
+    open('s2');
+    await daemon.received('desktop_set_active_pane', (command) => command.pane_id === 'pane-s2');
+    daemon.emit({ event: 'session_unregistered', session: agent('s2') });
+    daemon.arrange((desktops) => [{ ...notesWithAgents(['s1']), revision: desktops[0].revision + 1 }]);
+    await daemon.idle();
+
+    expect(document.querySelector('[data-pane-id="tile-notes"]')).not.toBeNull();
+    expect(selectedAgent()).toBe('s1');
+  });
+
+  it('updates tile context when a pending agent closes after the old context moves away', async () => {
+    const { daemon } = await renderApp({ initialState: {
+      sessions: [agent('s1'), agent('s2'), daemonSession('s4')],
+      profiles: [defaultProfile('d1')],
+      desktops: [notesWithAgents(['s1', 's2']), emptyDesktop('d2')],
+    } });
+    daemon.on('desktop_place_session', () => undefined);
+
+    pressShortcut('desktop.select1');
+    await daemon.idle();
+    expect(selectedAgent()).toBe('s1');
+
+    open('s4');
+    await daemon.received('desktop_place_session', (command) => command.session_id === 's4');
+    daemon.arrange((desktops) => [
+      { ...notesWithAgents(['s2']), revision: desktops[0].revision + 1 },
+      soloDesktop('s1', { id: 'd2', revision: desktops[1].revision + 1 }),
+    ]);
+    await daemon.idle();
+    expect(selectedAgent()).toBe('s1');
+    daemon.emit({ event: 'session_unregistered', session: daemonSession('s4') });
+    await daemon.idle();
+
+    expect(document.querySelector('[data-pane-id="tile-notes"]')).not.toBeNull();
+    expect(selectedAgent()).toBe('s2');
   });
 
   it.each([
@@ -440,7 +499,7 @@ describe('agent navigation', () => {
     daemon.emit({ event: 'sessions_updated', sessions: [agent('s1'), agent('s2', { state: 'idle' })] });
     expect(isGrid()).toBe(true);
 
-    open('s1');
+    await gesture(daemon, () => open('s1'));
     expect(isGrid()).toBe(false);
     expect(selectedAgent()).toBe('s1');
 
@@ -467,7 +526,7 @@ describe('agent navigation', () => {
       const { daemon } = await renderApp({
         initialState: {
           sessions: ids.map((id) => daemonSession(id, { state: 'idle' })),
-          workspaces: ids.map(agentWorkspace),
+          desktops: ids.map((id) => soloDesktop(id)),
         },
       });
       open('s1');
@@ -500,7 +559,7 @@ describe('agent navigation', () => {
     const { daemon } = await renderApp({
       initialState: {
         sessions: states.map((state) => daemonSession(state, { state })),
-        workspaces: states.map((state) => agentWorkspace(state)),
+        desktops: states.map((state) => soloDesktop(state, { name: state })),
       },
     });
 

@@ -1,4 +1,4 @@
-// Link/image target safety for rendered markdown documents. WorkspaceDockTile
+// Link/image target safety for rendered markdown documents. DesktopDockTile
 // re-exports `resolveMarkdownTarget` for its existing consumers.
 import { invoke } from '@tauri-apps/api/core';
 import { openUrl } from '@tauri-apps/plugin-opener';

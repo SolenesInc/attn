@@ -1,6 +1,6 @@
 import { act, fireEvent, screen, within } from '@testing-library/react';
 import { describe, expect, it, vi } from 'vitest';
-import { agentWorkspace, daemonSession, type DaemonSession } from './test/daemonFixtures';
+import { soloDesktop, daemonSession, type DaemonSession } from './test/daemonFixtures';
 import type { EventMessage } from './test/protocol';
 import { gesture, renderApp } from './test/renderApp';
 import type { ScriptedDaemon } from './test/scriptedDaemon';
@@ -15,7 +15,7 @@ function agent(id: string, overrides: Partial<DaemonSession> = {}): DaemonSessio
 }
 
 function renderHome(sessions: DaemonSession[], initial: Partial<InitialState> = {}) {
-  return renderApp({ initialState: { sessions, workspaces: sessions.map((session) => agentWorkspace(session.id)), ...initial } });
+  return renderApp({ initialState: { sessions, desktops: sessions.map((session) => soloDesktop(session.id)), ...initial } });
 }
 
 const group = (name: string) => screen.queryByTestId(`session-group-${name}`);
@@ -92,7 +92,7 @@ describe('App dashboard', () => {
 
     await gesture(daemon, () => fireEvent.click(within(summary).getByRole('button', { name: /planner/ })));
 
-    expect(daemon.sentOf('session_selected').pop()).toEqual({ cmd: 'session_selected', id: 'chief-1' });
+    expect(daemon.sentOf('desktop_set_current').pop()).toMatchObject({ desktop_id: 'desktop-chief-1' });
   });
 
   it('asks for a chief when none is set', async () => {

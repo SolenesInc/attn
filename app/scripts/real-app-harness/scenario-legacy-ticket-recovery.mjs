@@ -265,9 +265,9 @@ function seedDatabaseFixture(world) {
   if (world.includeWarnings) {
     script += `
       INSERT INTO delegation_operations
-        (request_id,operation_id,request_json,state,progress,session_id,workspace_id,ticket_id,worktree_path,worktree_owned,result_json,error,created_at,updated_at)
+        (request_id,operation_id,request_json,state,progress,session_id,ticket_id,worktree_path,worktree_owned,result_json,error,created_at,updated_at)
       VALUES
-        ('orphan-request','orphan-operation','{"brief":"keep exact request"}','completed','done','','','orphan-delegation','',0,'{"summary":"keep exact result"}','',${sqlString(old)},${sqlString(closed)});`;
+        ('orphan-request','orphan-operation','{"brief":"keep exact request"}','completed','done','','orphan-delegation','',0,'{"summary":"keep exact result"}','',${sqlString(old)},${sqlString(closed)});`;
   }
   queryDaemonDb(world.dbPath, script);
 

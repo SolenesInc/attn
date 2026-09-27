@@ -1,8 +1,9 @@
 import type { EventMessage } from './protocol';
 
 export type DaemonSession = EventMessage<'session_state_changed'>['session'];
-export type DaemonWorkspace = EventMessage<'workspace_state_changed'>['workspace'];
-export type DaemonPane = EventMessage<'workspace_layout_updated'>['workspace_layout']['panes'][number];
+export type DaemonProfile = EventMessage<'profiles_changed'>['profiles'][number];
+export type DaemonDesktop = EventMessage<'profile_arrangement_changed'>['desktops'][number];
+export type DaemonPane = DaemonDesktop['panes'][number];
 export type DaemonSeed = EventMessage<'garden_seeds_updated'>['seeds'][number];
 export type DaemonSeedDocument = NonNullable<EventMessage<'seed_document_get_result'>['document']>;
 export type DaemonCrewMember = EventMessage<'crew_updated'>['members'][number];
@@ -18,13 +19,20 @@ export interface DaemonTile {
 
 const AT = '2026-01-01T00:00:00Z';
 
+export const DEFAULT_PROFILE_ID = 'profile-default';
+export const DEFAULT_DESKTOP_ID = 'desktop-1';
+
+export function defaultProfile(currentDesktopId: string, overrides: Partial<DaemonProfile> = {}): DaemonProfile {
+  return { id: DEFAULT_PROFILE_ID, name: 'Default', current_desktop_id: currentDesktopId, revision: 1, ...overrides };
+}
+
 export function daemonSession(id: string, overrides: Partial<DaemonSession> = {}): DaemonSession {
   return {
     id,
     label: id,
     agent: 'claude',
     directory: `/tmp/${id}`,
-    workspace_id: `workspace-${id}`,
+    profile_id: DEFAULT_PROFILE_ID,
     state: 'working',
     last_seen: AT,
     state_since: AT,
@@ -33,45 +41,43 @@ export function daemonSession(id: string, overrides: Partial<DaemonSession> = {}
   };
 }
 
-export function agentPane(sessionId: string, workspaceId: string): DaemonPane {
+export function agentPane(sessionId: string, desktopId: string): DaemonPane {
   return {
     pane_id: `pane-${sessionId}`,
     session_id: sessionId,
-    runtime_id: sessionId,
-    workspace_id: workspaceId,
+    desktop_id: desktopId,
     kind: 'agent',
     status: 'ready',
     title: sessionId,
-  };
+  } as DaemonPane;
 }
 
-export function daemonWorkspace(
+export function daemonDesktop(
   id: string,
   layout: { root: unknown; panes?: DaemonPane[] },
-  overrides: Partial<DaemonWorkspace> = {},
-): DaemonWorkspace {
+  overrides: Partial<DaemonDesktop> = {},
+): DaemonDesktop {
   const panes = layout.panes ?? [];
   return {
     id,
-    title: id,
-    directory: '/tmp',
-    status: 'idle',
-    muted: false,
-    pinned: false,
-    rank: id,
-    layout: {
-      workspace_id: id,
-      active_pane_id: panes[0]?.pane_id ?? '',
-      layout_json: JSON.stringify(layout.root),
-      panes,
-    },
+    profile_id: DEFAULT_PROFILE_ID,
+    name: '',
+    order_key: id,
+    tree_json: layout.root ? JSON.stringify(layout.root) : '',
+    active_pane_id: panes[0]?.pane_id ?? '',
+    revision: 1,
+    panes,
     ...overrides,
   };
 }
 
-export function splitWorkspace(id: string, sessionIds: string[], overrides: Partial<DaemonWorkspace> = {}): DaemonWorkspace {
+export function emptyDesktop(id: string, overrides: Partial<DaemonDesktop> = {}): DaemonDesktop {
+  return daemonDesktop(id, { root: null }, overrides);
+}
+
+export function splitDesktop(id: string, sessionIds: string[], overrides: Partial<DaemonDesktop> = {}): DaemonDesktop {
   const leaves = sessionIds.map((sessionId) => ({ type: 'pane', pane_id: `pane-${sessionId}` }));
-  return daemonWorkspace(id, {
+  return daemonDesktop(id, {
     root: leaves.length === 1 ? leaves[0] : { type: 'split', split_id: `split-${id}`, direction: 'vertical', ratio: 0.5, children: leaves },
     panes: sessionIds.map((sessionId) => agentPane(sessionId, id)),
   }, overrides);
@@ -92,22 +98,18 @@ export function dockTiles(root: unknown, tiles: DaemonTile[]): unknown {
   }), root);
 }
 
-export function workspaceWithTiles(tiles: DaemonTile[], overrides: Partial<DaemonWorkspace> = {}): DaemonWorkspace {
-  const id = overrides.id ?? 'ws';
-  return daemonWorkspace(
+export function desktopWithTiles(tiles: DaemonTile[], overrides: Partial<DaemonDesktop> = {}): DaemonDesktop {
+  const id = overrides.id ?? DEFAULT_DESKTOP_ID;
+  return daemonDesktop(
     id,
     { root: dockTiles({ type: 'pane', pane_id: 'pane-s1' }, tiles), panes: [agentPane('s1', id)] },
-    { title: id, ...overrides },
+    overrides,
   );
 }
 
-export function agentWorkspace(sessionId: string): DaemonWorkspace {
-  const id = `workspace-${sessionId}`;
-  return daemonWorkspace(
-    id,
-    { root: { type: 'pane', pane_id: `pane-${sessionId}` }, panes: [agentPane(sessionId, id)] },
-    { title: sessionId, directory: `/tmp/${sessionId}` },
-  );
+export function soloDesktop(sessionId: string, overrides: Partial<DaemonDesktop> = {}): DaemonDesktop {
+  const id = overrides.id ?? `desktop-${sessionId}`;
+  return daemonDesktop(id, { root: { type: 'pane', pane_id: `pane-${sessionId}` }, panes: [agentPane(sessionId, id)] }, overrides);
 }
 
 export function daemonSeed(id: string, overrides: Partial<DaemonSeed> = {}): DaemonSeed {
@@ -146,6 +148,7 @@ export function crewMember(id: string, overrides: Partial<DaemonCrewMember> = {}
     charter_path: `/crew/${id}/CHARTER.md`,
     home_dir: `/crew/${id}`,
     awareness_dirs: [],
+    profile_id: DEFAULT_PROFILE_ID,
     resolved_agent: overrides.agent || 'claude',
     ...overrides,
   };

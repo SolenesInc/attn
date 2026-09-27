@@ -32,7 +32,27 @@ function createLocationPickerRepo(worktreeBranches: string[]) {
   };
 }
 
+const sessionLabels = (page: import('@playwright/test').Page) =>
+  page.evaluate(() => (window.__TEST_GET_SESSIONS?.() ?? []).map((session) => session.label));
+
 test.describe('LocationPicker', () => {
+  test.describe('Basic Dialog Operations', () => {
+    test('opens the new-session dialog with Cmd+N', async ({ page, daemon }) => {
+      await daemon.start();
+      await page.goto('/');
+      await page.waitForSelector('.dashboard');
+
+      await expect(page.locator('.location-picker-overlay')).not.toBeVisible();
+
+      await page.keyboard.press('Meta+n');
+
+      await expect(page.locator('.location-picker-overlay')).toBeVisible();
+      await expect(page.locator('.location-picker')).toBeVisible();
+      await expect(page.locator('.picker-title')).toHaveText('New Session Location');
+    });
+
+  });
+
   test.describe('Keyboard Navigation', () => {
     test('arrow keys scroll the selected directory into view', async ({ page, daemon }) => {
       await daemon.start();
@@ -44,7 +64,7 @@ test.describe('LocationPicker', () => {
       try {
         await page.goto('/');
         await page.waitForSelector('.dashboard');
-        await page.keyboard.press('Meta+t');
+        await page.keyboard.press('Meta+n');
         await expect(page.locator('.location-picker-overlay')).toBeVisible();
 
         await page.locator('[data-testid="location-picker-path-input"]').focus();
@@ -74,7 +94,7 @@ test.describe('LocationPicker', () => {
         await page.waitForSelector('.dashboard');
 
         for (const typedPath of [repo.worktrees[0].path, `${repo.worktrees[0].path}/`]) {
-          await page.keyboard.press('Meta+t');
+          await page.keyboard.press('Meta+n');
           await expect(page.locator('.location-picker-overlay')).toBeVisible();
 
           const input = page.locator('[data-testid="location-picker-path-input"]');
@@ -105,7 +125,7 @@ test.describe('LocationPicker', () => {
         const cdp = await page.context().newCDPSession(page);
         // Sixfold CPU throttling reproduced the first ArrowDown reaching the body.
         await cdp.send('Emulation.setCPUThrottlingRate', { rate: 6 });
-        await page.keyboard.press('Meta+t');
+        await page.keyboard.press('Meta+n');
         await expect(page.locator('.location-picker-overlay')).toBeVisible();
 
         const input = page.locator('[data-testid="location-picker-path-input"]');
@@ -130,8 +150,8 @@ test.describe('LocationPicker', () => {
 
         await page.keyboard.press('Enter');
         await expect(page.locator('.location-picker-overlay')).not.toBeVisible();
-        await expect(page.locator('.session-name', { hasText: 'exsin' }).first()).toBeVisible();
-        await expect(page.locator('.session-name', { hasText: 'exsin--feat-images' })).toHaveCount(0);
+        await expect.poll(() => sessionLabels(page)).toContain('exsin');
+        expect(await sessionLabels(page)).not.toContain('exsin--feat-images');
       } finally {
         repo.cleanup();
       }
@@ -144,7 +164,7 @@ test.describe('LocationPicker', () => {
       try {
         await page.goto('/');
         await page.waitForSelector('.dashboard');
-        await page.keyboard.press('Meta+t');
+        await page.keyboard.press('Meta+n');
         await expect(page.locator('.location-picker-overlay')).toBeVisible();
 
         const input = page.locator('[data-testid="location-picker-path-input"]');
@@ -163,7 +183,7 @@ test.describe('LocationPicker', () => {
         await page.keyboard.press('Enter');
 
         await expect(page.locator('.location-picker-overlay')).not.toBeVisible();
-        await expect(page.locator('.session-name', { hasText: 'exsin--feat-more' }).first()).toBeVisible();
+        await expect.poll(() => sessionLabels(page)).toContain('exsin--feat-more');
       } finally {
         repo.cleanup();
       }
@@ -176,7 +196,7 @@ test.describe('LocationPicker', () => {
       try {
         await page.goto('/');
         await page.waitForSelector('.dashboard');
-        await page.keyboard.press('Meta+t');
+        await page.keyboard.press('Meta+n');
         await expect(page.locator('.location-picker-overlay')).toBeVisible();
 
         const input = page.locator('[data-testid="location-picker-path-input"]');
@@ -193,7 +213,7 @@ test.describe('LocationPicker', () => {
         await page.keyboard.press('Enter');
 
         await expect(page.locator('.location-picker-overlay')).not.toBeVisible();
-        await expect(page.locator('.session-name', { hasText: `exsin--${generated}` }).first()).toBeVisible();
+        await expect.poll(() => sessionLabels(page)).toContain(`exsin--${generated}`);
       } finally {
         repo.cleanup();
       }
@@ -206,7 +226,7 @@ test.describe('LocationPicker', () => {
       try {
         await page.goto('/');
         await page.waitForSelector('.dashboard');
-        await page.keyboard.press('Meta+t');
+        await page.keyboard.press('Meta+n');
         await expect(page.locator('.location-picker-overlay')).toBeVisible();
 
         const input = page.locator('[data-testid="location-picker-path-input"]');
@@ -242,7 +262,7 @@ test.describe('LocationPicker', () => {
         await page.goto('/');
         await page.waitForSelector('.dashboard');
 
-        await page.keyboard.press('Meta+t');
+        await page.keyboard.press('Meta+n');
         await expect(page.locator('.location-picker-overlay')).toBeVisible();
 
         const input = page.locator('[data-testid="location-picker-path-input"]');
@@ -251,8 +271,8 @@ test.describe('LocationPicker', () => {
         await page.keyboard.press('Enter');
 
         await expect(page.locator('.location-picker-overlay')).not.toBeVisible();
-        await expect(page.locator('.session-name', { hasText: 'project-with-hidden-child' }).first()).toBeVisible();
-        await expect(page.locator('.session-name', { hasText: '.claude' })).toHaveCount(0);
+        await expect.poll(() => sessionLabels(page)).toContain('project-with-hidden-child');
+        expect(await sessionLabels(page)).not.toContain('.claude');
       } finally {
         fs.rmSync(parentDir, { recursive: true, force: true });
       }
