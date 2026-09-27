@@ -29,6 +29,7 @@ const baseProps = {
   selectedId: null,
   selectedWorkspaceId: null,
   collapsed: false,
+  surface: 'queue' as const,
   headerActions: [],
   onSelectSession: () => {},
   onSelectWorkspace: () => {},
@@ -311,6 +312,18 @@ describe('the queue sidebar', () => {
     expect(rows).toContain('queue-settled-orphan');
   });
 
+  it('drops an open session menu when the sidebar surface changes', () => {
+    const data = sidebarData(sessions);
+    const queue = buildQueueBands(data.workspaces);
+    const view = render(<Sidebar {...baseProps} {...data} queue={queue} />);
+    fireEvent.click(screen.getByTestId('session-actions-older'));
+    expect(screen.getByTestId('reload-session-action')).toBeInTheDocument();
+
+    view.rerender(<Sidebar {...baseProps} {...data} queue={queue} surface="hidden" />);
+    view.rerender(<Sidebar {...baseProps} {...data} queue={queue} surface="queue" />);
+    expect(screen.queryByTestId('reload-session-action')).toBeNull();
+  });
+
   it('keeps the per-session menu reachable from every band', () => {
     renderSidebar(sessions, true, { agentListOpen: true });
     for (const id of ['chief', 'older', 'settled']) {
@@ -531,28 +544,6 @@ describe('walking the queue sidebar from the keyboard', () => {
     fireEvent.click(screen.getByTestId('shortcut'));
     expect(screen.queryByTestId('queue-agent-list')).toBeNull();
     expect(focusedTestId()).toBe('terminal-b');
-  });
-
-  it('leaves focus alone when the sidebar comes back with the list still open', () => {
-    const data = sidebarData(sessions);
-    function WithTerminal({ collapsed }: { collapsed: boolean }) {
-      const { agentListOpen, toggleAgentList } = useAgentList();
-      return (
-        <>
-          <textarea data-testid="terminal" />
-          <Sidebar {...baseProps} {...data} collapsed={collapsed} queue={buildQueueBands(data.workspaces)} agentListOpen={agentListOpen} onToggleAgentList={toggleAgentList} />
-        </>
-      );
-    }
-    const { rerender } = render(<WithTerminal collapsed={false} />);
-    fireEvent.click(screen.getByTestId('queue-agents-toggle'));
-    const terminal = screen.getByTestId('terminal');
-    terminal.focus();
-
-    rerender(<WithTerminal collapsed />);
-    rerender(<WithTerminal collapsed={false} />);
-    expect(screen.getByTestId('queue-agent-list')).toBeInTheDocument();
-    expect(document.activeElement).toBe(terminal);
   });
 
   it('forgets the filter when the list closes', () => {

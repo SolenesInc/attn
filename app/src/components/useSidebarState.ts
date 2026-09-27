@@ -22,6 +22,7 @@ export function useSidebarState({
   selectedTile = null,
   tileContents = EMPTY_TILE_CONTENTS,
   collapsed,
+  surface,
   instance = '',
   headerActions,
   criticalNotifications,
@@ -116,6 +117,13 @@ export function useSidebarState({
     trigger: HTMLElement;
     anchor: { top: number; left: number };
   } | null>(null);
+  const [popoverSurface, setPopoverSurface] = useState(surface);
+  if (surface !== popoverSurface) {
+    setPopoverSurface(surface);
+    setRenameTarget(null);
+    setSessionActionsTarget(null);
+    setCrewActionsTarget(null);
+  }
 
   const openDesktopRename = (
     desktopId: string,

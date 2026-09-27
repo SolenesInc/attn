@@ -8,6 +8,7 @@ const baseProps = {
   selectedId: null,
   selectedWorkspaceId: null,
   collapsed: false,
+  surface: 'tree' as const,
   headerActions: [],
   onSelectSession: vi.fn(),
   onSelectWorkspace: vi.fn(),

@@ -49,6 +49,8 @@ export interface SelectedTile {
   tileId: string;
 }
 
+export type SidebarSurface = 'queue' | 'tree' | 'hidden';
+
 export interface SidebarProps {
   workspaces: SidebarWorkspace[];
   visualIndexByWorkspaceId: Map<string, number>;
@@ -58,6 +60,7 @@ export interface SidebarProps {
   selectedTile?: SelectedTile | null;
   tileContents?: Record<string, TileContentState>;
   collapsed: boolean;
+  surface: SidebarSurface;
   instance?: string;
   headerActions: SidebarHeaderAction[];
   criticalNotifications?: CriticalNotificationState;

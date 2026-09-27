@@ -523,9 +523,13 @@ describe('agent navigation', () => {
     const focusRequests = () => useSessionStore.getState().utilityFocusRequestToken;
     const inSidebar = () => container.querySelector<HTMLElement>('.sidebar button')!;
 
+    const listOpen = () => (mockSidebarProps.mock.lastCall![0] as { agentListOpen: boolean }).agentListOpen;
+    act(() => { shortcutHandlers<{ onShowAgentList: () => void }>().onShowAgentList(); });
+    expect(listOpen()).toBe(true);
     inSidebar().focus();
     let before = focusRequests();
     act(() => { useDesktopFocus.getState().setFocusedLeaf(useProfilesStore.getState().currentDesktopId!, paneIdOf('s1')); });
+    expect(listOpen()).toBe(false);
     expect(focusRequests()).toBe(before + 1);
 
     act(() => { useDesktopFocus.getState().setFocusedLeaf(useProfilesStore.getState().currentDesktopId!, null); });

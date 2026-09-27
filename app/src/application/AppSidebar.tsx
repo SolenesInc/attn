@@ -62,7 +62,7 @@ export function AppSidebar() {
   const { sidebarCollapsed, openNotificationsPanel, toggleSidebarCollapse, agentListOpen, toggleAgentList } =
     useAppPanelsContext();
   const { setProfileSwitcherOpen, setDesktopOverviewOpen } = useDesktopNavigationContext();
-  const { handleOpenPalette, attentionCount } = useAppShell();
+  const { handleOpenPalette, attentionCount, sidebarSurface } = useAppShell();
   const { keybindings, handleToggleSidebarHarnessLogos } = useAppAppearanceContext();
   const { criticalNotifications, settings, notificationsUnread } = useAppInputs();
   const { gridLayout, handleSelectGridLayout } = useAppGridContext();
@@ -111,6 +111,7 @@ export function AppSidebar() {
       selectedTile={selectedTile ? { workspaceId: selectedTile.desktopId, tileId: selectedTile.tileId } : null}
       tileContents={desktopTileContents}
       collapsed={sidebarCollapsed}
+      surface={sidebarSurface}
       instance={BUILD_INSTANCE}
       headerActions={sidebarHeaderActions}
       criticalNotifications={criticalNotifications}

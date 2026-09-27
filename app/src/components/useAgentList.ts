@@ -19,20 +19,24 @@ export function useAgentList() {
   const [agentListOpen, setAgentListOpen] = useState(false);
   const focusBeforeOpen = useRef<HTMLElement | null>(null);
 
+  const closeAgentList = useCallback(() => {
+    const opener = focusBeforeOpen.current;
+    focusBeforeOpen.current = null;
+    if (focusIsOnAgentList()) {
+      (opener?.isConnected ? opener : document.querySelector<HTMLElement>(AGENT_LIST_TOGGLE_SELECTOR))?.focus();
+    }
+    setAgentListOpen(false);
+  }, []);
+
   const toggleAgentList = useCallback(() => {
     if (agentListOpen) {
-      const opener = focusBeforeOpen.current;
-      focusBeforeOpen.current = null;
-      if (focusIsOnAgentList()) {
-        (opener?.isConnected ? opener : document.querySelector<HTMLElement>(AGENT_LIST_TOGGLE_SELECTOR))?.focus();
-      }
-      setAgentListOpen(false);
+      closeAgentList();
       return;
     }
     focusBeforeOpen.current = focusedElement();
     flushSync(() => setAgentListOpen(true));
     document.querySelector<HTMLElement>(AGENT_FILTER_SELECTOR)?.focus();
-  }, [agentListOpen]);
+  }, [agentListOpen, closeAgentList]);
 
-  return { agentListOpen, toggleAgentList };
+  return { agentListOpen, toggleAgentList, closeAgentList };
 }

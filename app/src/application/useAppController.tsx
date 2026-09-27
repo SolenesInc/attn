@@ -27,6 +27,7 @@ import { useAppGrid } from './useAppGrid';
 import { useAppNavigation } from './useAppNavigation';
 import { useAppNotebookSurface } from './useAppNotebookSurface';
 import { useAppPanels } from './useAppPanels';
+import type { SidebarSurface } from '../components/sidebarTypes';
 import { useAppSessions } from './useAppSessions';
 import { useAttentionQueue } from './useAttentionQueue';
 import { useChiefOfStaff } from './useChiefOfStaff';
@@ -246,6 +247,7 @@ export function useAppController({
     toggleSidebarCollapse,
     sidebarCollapsed,
     toggleAgentList,
+    closeAgentList,
     workflowRunPanelOpen,
     gardenHoldsWindow,
     toggleGardenFrame,
@@ -387,17 +389,18 @@ export function useAppController({
   const agentFocused = (surface.kind === 'agent' || surface.kind === 'tile') && currentDesktopAgentFocused;
   const sidebarVisible = !sidebarCollapsed && surface.kind !== 'grid' && !agentFocused;
   const queueSidebarShown = queueModeEnabled && sidebarVisible;
-  const sidebarShape = sidebarVisible ? (queueModeEnabled ? 'queue' : 'tree') : 'hidden';
-  const previousSidebarShape = useRef(sidebarShape);
+  const sidebarSurface: SidebarSurface = sidebarVisible ? (queueModeEnabled ? 'queue' : 'tree') : 'hidden';
+  const previousSidebarSurface = useRef(sidebarSurface);
   useLayoutEffect(() => {
-    const changed = previousSidebarShape.current !== sidebarShape;
-    previousSidebarShape.current = sidebarShape;
+    const changed = previousSidebarSurface.current !== sidebarSurface;
+    previousSidebarSurface.current = sidebarSurface;
     if (!changed) return;
+    closeAgentList();
     const focused = document.activeElement;
     if (!focused || focused === document.body || focused.closest('.sidebar')) {
       useSessionStore.getState().requestTerminalFocus();
     }
-  }, [sidebarShape]);
+  }, [closeAgentList, sidebarSurface]);
 
   const handleOpenPalette = useCallback((mode: PaletteMode) => {
     if (palette !== null) {
@@ -706,6 +709,7 @@ export function useAppController({
         zoomModeBySessionId,
         setZoomModeBySessionId,
         agentFocused,
+        sidebarSurface,
         agentAvailability,
         contextCapPromptSession,
         setContextCapPromptSession,
