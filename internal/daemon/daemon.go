@@ -2106,7 +2106,26 @@ func (d *Daemon) listenHTTP() error {
 		return nil
 	}
 	addr := d.httpServer.Addr
-	listener, err := net.Listen("tcp", addr)
+	var listener net.Listener
+	var err error
+	if rawFD := os.Getenv("ATTN_HARNESS_WS_LISTENER_FD"); rawFD != "" {
+		if os.Getenv("ATTN_HARNESS_DATA_DIR") == "" {
+			return fmt.Errorf("ATTN_HARNESS_WS_LISTENER_FD requires ATTN_HARNESS_DATA_DIR")
+		}
+		fd, parseErr := strconv.Atoi(rawFD)
+		if parseErr != nil {
+			return fmt.Errorf("invalid ATTN_HARNESS_WS_LISTENER_FD %q: %w", rawFD, parseErr)
+		}
+		file := os.NewFile(uintptr(fd), "harness-websocket-listener")
+		listener, err = net.FileListener(file)
+		_ = file.Close()
+		if err == nil && listener.Addr().String() != addr {
+			_ = listener.Close()
+			return fmt.Errorf("harness WebSocket listener is %s, want %s", listener.Addr(), addr)
+		}
+	} else {
+		listener, err = net.Listen("tcp", addr)
+	}
 	if err != nil {
 		return fmt.Errorf(
 			"refusing to start: cannot bind the WebSocket address %s for instance %q: %w. "+
