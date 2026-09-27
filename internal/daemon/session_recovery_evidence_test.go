@@ -36,20 +36,6 @@ func newRecoveryHome(t *testing.T) recoveryHome {
 	return h
 }
 
-func (h recoveryHome) resumableClaude(t *testing.T, resumeID string) {
-	t.Helper()
-	path := filepath.Join(h.claudeProjects, resumeID+".jsonl")
-	if err := os.WriteFile(path, []byte("{}\n"), 0o644); err != nil {
-		t.Fatalf("write claude transcript for %s: %v", resumeID, err)
-	}
-}
-
-func giveRestorationEvidence(t *testing.T, d *Daemon, sessionID, resumeID string) {
-	t.Helper()
-	d.store.SetResumeSessionID(sessionID, resumeID)
-	giveLaunchIntent(t, d, sessionID)
-}
-
 func giveLaunchIntent(t *testing.T, d *Daemon, sessionID string) {
 	t.Helper()
 	d.store.SetLaunchIntent(sessionID, store.LaunchIntent{ApprovalRoute: launchcontract.ApprovalRouteUser})
