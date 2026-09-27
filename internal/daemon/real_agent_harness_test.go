@@ -3,8 +3,6 @@ package daemon
 import (
 	"fmt"
 	"net"
-	"strconv"
-	"testing"
 )
 
 func freeTCPPort() (int, error) {
@@ -18,17 +16,6 @@ func freeTCPPort() (int, error) {
 		return 0, fmt.Errorf("unexpected addr type %T", listener.Addr())
 	}
 	return addr.Port, nil
-}
-
-func useFreeWSPort(t *testing.T) string {
-	t.Helper()
-	port, err := freeTCPPort()
-	if err != nil {
-		t.Fatalf("allocate WebSocket port: %v", err)
-	}
-	value := strconv.Itoa(port)
-	t.Setenv("ATTN_WS_PORT", value)
-	return value
 }
 
 func asString(v interface{}) string {

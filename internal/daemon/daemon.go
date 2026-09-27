@@ -548,18 +548,6 @@ func (d *Daemon) signalStarted() {
 	})
 }
 
-func (d *Daemon) waitStarted(timeout time.Duration) bool {
-	if d.startedCh == nil {
-		return false
-	}
-	select {
-	case <-d.startedCh:
-		return true
-	case <-time.After(timeout):
-		return false
-	}
-}
-
 func (d *Daemon) Started() <-chan struct{} {
 	return d.startedCh
 }
