@@ -248,7 +248,7 @@ describe('shortcut registry', () => {
       });
     });
 
-    it('has expected workspace shortcuts defined', () => {
+    it('has expected desktop shortcuts defined', () => {
       expect(SHORTCUTS['desktop.select1']).toEqual({ key: '1', code: 'Digit1', meta: true });
       expect(SHORTCUTS['desktop.select9']).toEqual({ key: '9', code: 'Digit9', meta: true });
     });

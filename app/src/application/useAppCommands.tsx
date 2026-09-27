@@ -470,9 +470,9 @@ export function useAppCommands(): PaletteCommand[] {
     ],
   );
 
-  const actionMenuItemsWithWorkspaceActions = useMemo<PaletteCommand[]>(() => {
-    const workspace = activeGroupForCommands;
-    if (!workspace) return [...actionMenuItems, ...appViewMenuItems];
+  const actionMenuItemsWithDesktopActions = useMemo<PaletteCommand[]>(() => {
+    const group = activeGroupForCommands;
+    if (!group) return [...actionMenuItems, ...appViewMenuItems];
     const activeSession = activeSessionForCommands;
     const delegationItems: PaletteCommand[] = activeSession
       ? [
@@ -577,7 +577,7 @@ export function useAppCommands(): PaletteCommand[] {
 
   const actionMenuItemsWithQueueActions = useMemo<PaletteCommand[]>(() => {
     if (handleWakeActiveSession) {
-      return [...actionMenuItemsWithWorkspaceActions, {
+      return [...actionMenuItemsWithDesktopActions, {
         id: 'wake-active-session',
         title: 'Wake this agent now',
         description: 'End the snooze and let it back into the queue',
@@ -587,7 +587,7 @@ export function useAppCommands(): PaletteCommand[] {
       }];
     }
     if (handleSnoozeActiveSession) {
-      return [...actionMenuItemsWithWorkspaceActions, {
+      return [...actionMenuItemsWithDesktopActions, {
         id: 'snooze-active-session',
         title: 'Snooze this agent…',
         description: 'Take it off your plate until a time you choose',
@@ -597,8 +597,8 @@ export function useAppCommands(): PaletteCommand[] {
         run: handleSnoozeActiveSession,
       }];
     }
-    return actionMenuItemsWithWorkspaceActions;
-  }, [actionMenuItemsWithWorkspaceActions, handleWakeActiveSession, handleSnoozeActiveSession]);
+    return actionMenuItemsWithDesktopActions;
+  }, [actionMenuItemsWithDesktopActions, handleWakeActiveSession, handleSnoozeActiveSession]);
 
   return useMemo(
     () => [...navigationCommands, ...actionMenuItemsWithQueueActions],

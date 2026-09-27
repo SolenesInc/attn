@@ -159,7 +159,7 @@ agent (or a plain shell), pick a directory, go.
 | Cmd+N | New session beside the focused pane |
 | Cmd+Shift+N | New session, split sideways |
 | Cmd+D / Cmd+Shift+D | Split pane down / sideways |
-| Cmd+Option+←↑→↓ | Move between panes |
+| Cmd+Option+←↑→↓ | Move between panes (steps to the next desktop at an edge) |
 | Cmd+1–9 | Switch to desktop 1–9 |
 | Cmd+Option+1–9 | Send the focused pane to desktop 1–9 |
 | Cmd+G | Desktop overview |

@@ -4,7 +4,7 @@ import { useSessionStore } from '../store/sessions';
 import { normalizeSessionAgent } from '../types/sessionAgent';
 import { normalizeSessionState } from '../types/sessionState';
 import { sessionAttentionFields } from '../navigation/sessionNavigation';
-import { buildDesktopViewModels } from '../utils/workspaceViewModels';
+import { buildDesktopViewModels } from '../utils/desktopViewModels';
 import { AppContentProps } from './appSupport';
 interface Options {
   activeSessionId: string | null;

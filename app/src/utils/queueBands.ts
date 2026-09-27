@@ -1,4 +1,4 @@
-import type { WorkspaceWithSessions, WorkspaceViewSession } from './workspaceViewModels';
+import type { DesktopWithSessions, DesktopViewSession } from './desktopViewModels';
 import { isSnoozed } from './snoozeDurations';
 
 /** Daemon-owned setting selecting the sidebar arrangement. Always read through
@@ -40,7 +40,7 @@ export function autoSettleSeconds(
     : DEFAULT_AUTO_SETTLE_COUNTDOWN_SECONDS;
 }
 
-export interface QueueBandSession extends WorkspaceViewSession {
+export interface QueueBandSession extends DesktopViewSession {
   chiefOfStaff?: boolean;
   turnOwed?: boolean;
   turnOpenedAt?: string;
@@ -83,8 +83,8 @@ export function queueActions(
 
 export interface QueueRow<TSession extends QueueBandSession> {
   session: TSession;
-  workspaceId: string;
-  workspaceTitle: string;
+  desktopId: string;
+  desktopTitle: string;
 }
 
 /** How long a turn has been outstanding, in the coarsest unit that still reads as an
@@ -144,7 +144,7 @@ export interface QueueBands<TSession extends QueueBandSession> {
 /** Derive the sidebar's standing order. Every queue participant lands in one
  * band; automation sessions land in none. */
 export function buildQueueBands<TSession extends QueueBandSession>(
-  workspaces: WorkspaceWithSessions<TSession>[],
+  desktops: DesktopWithSessions<TSession>[],
   optionsOrNow: QueueBandOptions | number = {},
 ): QueueBands<TSession> {
   const options = typeof optionsOrNow === 'number' ? { now: optionsOrNow } : optionsOrNow;
@@ -154,14 +154,14 @@ export function buildQueueBands<TSession extends QueueBandSession>(
   const settled: QueueRow<TSession>[] = [];
   const snoozed: QueueRow<TSession>[] = [];
   const crew: QueueRow<TSession>[] = [];
-  const attachedParents = liveParentIds(workspaces);
+  const attachedParents = liveParentIds(desktops);
 
-  for (const workspace of workspaces) {
-    for (const session of workspace.sessions) {
+  for (const desktop of desktops) {
+    for (const session of desktop.sessions) {
       const row: QueueRow<TSession> = {
         session,
-        workspaceId: workspace.id,
-        workspaceTitle: workspace.title,
+        desktopId: desktop.id,
+        desktopTitle: desktop.title,
       };
       if (session.chiefOfStaff) {
         if (!chief) {
@@ -178,7 +178,7 @@ export function buildQueueBands<TSession extends QueueBandSession>(
           continue;
         }
       }
-      if (isAttachedSatellite(session, workspace.id, attachedParents)) {
+      if (isAttachedSatellite(session, desktop.id, attachedParents)) {
         continue;
       }
       // Before the turn check, so the row's home does not depend on the daemon's settle-as-it-snoozes invariant holding in a mid-broadcast snapshot.
@@ -199,28 +199,28 @@ export function buildQueueBands<TSession extends QueueBandSession>(
   return { chief, turns, settled, snoozed, crew };
 }
 
-/** Index every session by its workspace, so a satellite's parent is confirmed present
+/** Index every session by its desktop, so a satellite's parent is confirmed present
  * *and* co-located in one lookup. */
-function liveParentIds(workspaces: WorkspaceWithSessions<QueueBandSession>[]): Map<string, string> {
+function liveParentIds(desktops: DesktopWithSessions<QueueBandSession>[]): Map<string, string> {
   const byId = new Map<string, string>();
-  for (const workspace of workspaces) {
-    for (const session of workspace.sessions) {
-      byId.set(session.id, workspace.id);
+  for (const desktop of desktops) {
+    for (const session of desktop.sessions) {
+      byId.set(session.id, desktop.id);
     }
   }
   return byId;
 }
 
-/** Whether this is a shell whose parent agent is present in the same workspace — the one
+/** Whether this is a shell whose parent agent is present in the same desktop — the one
  * case that earns no row. An orphan keeps its settled row: the queue reorders, never hides. */
 function isAttachedSatellite(
   session: QueueBandSession,
-  workspaceId: string,
+  desktopId: string,
   parents: Map<string, string>,
 ): boolean {
   const parentId = session.parentSessionId;
   if (!parentId) return false;
-  return parents.get(parentId) === workspaceId;
+  return parents.get(parentId) === desktopId;
 }
 
 /** Member order: by name, so a member's row is where it was yesterday. */

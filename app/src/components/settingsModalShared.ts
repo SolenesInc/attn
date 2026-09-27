@@ -73,7 +73,7 @@ export interface SettingsModalProps {
 
 export type SettingsSectionID =
   | 'general'
-  | 'workspace'
+  | 'desktop'
   | 'hygiene'
   | 'agents'
   | 'backgroundAgents'

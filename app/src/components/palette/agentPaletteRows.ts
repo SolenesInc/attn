@@ -1,9 +1,9 @@
-import type { TileLeaf } from '../../types/workspace';
+import type { TileLeaf } from '../../types/desktop';
 import type { UISessionState } from '../../types/sessionState';
 import { headOfQueue, type QueueBandSession, type QueueBands } from '../../utils/queueBands';
 import { crewDisplayName } from '../../utils/crewName';
 import { isSnoozed } from '../../utils/snoozeDurations';
-import type { WorkspaceWithSessions } from '../../utils/workspaceViewModels';
+import type { DesktopWithSessions } from '../../utils/desktopViewModels';
 import { automationRunGroups, type AutomationRunSession } from '../../utils/automationRuns';
 
 export interface PaletteSession extends Omit<QueueBandSession, 'automation'>, AutomationRunSession {
@@ -20,7 +20,7 @@ export type AgentPaletteRow<S extends PaletteSession> =
 export interface AgentPaletteInput<S extends PaletteSession> {
   bands: QueueBands<S>;
   crewRoster: readonly string[];
-  workspaces: readonly WorkspaceWithSessions<S>[];
+  desktops: readonly DesktopWithSessions<S>[];
   tileTitle: (desktopId: string, tile: TileLeaf) => string;
   now: number;
 }
@@ -54,7 +54,7 @@ function matches(terms: readonly string[], ...texts: (string | undefined)[]): bo
 }
 
 export function agentPaletteRows<S extends PaletteSession>(
-  { bands, crewRoster, workspaces, tileTitle, now }: AgentPaletteInput<S>,
+  { bands, crewRoster, desktops, tileTitle, now }: AgentPaletteInput<S>,
   query: string,
 ): AgentPaletteRow<S>[] {
   const terms = queryTerms(query);
@@ -88,17 +88,17 @@ export function agentPaletteRows<S extends PaletteSession>(
   const rest = [...bands.turns, ...bands.settled, ...bands.snoozed].flatMap((row) => bandRow(row.session, false));
 
   const tiles: AgentPaletteRow<S>[] = [];
-  for (const workspace of workspaces) {
-    for (const child of workspace.children) {
+  for (const desktop of desktops) {
+    for (const child of desktop.children) {
       if (child.kind !== 'tile') continue;
-      const title = tileTitle(workspace.id, child.tile);
+      const title = tileTitle(desktop.id, child.tile);
       if (!matches(terms, title)) continue;
-      tiles.push({ kind: 'tile', key: `tile:${workspace.id}:${child.tile.tileId}`, desktopId: workspace.id, tile: child.tile, title });
+      tiles.push({ kind: 'tile', key: `tile:${desktop.id}:${child.tile.tileId}`, desktopId: desktop.id, tile: child.tile, title });
     }
   }
 
   const runs: AgentPaletteRow<S>[] = [];
-  for (const group of automationRunGroups(workspaces, now)) {
+  for (const group of automationRunGroups(desktops, now)) {
     const byName = matches(terms, group.name);
     const shown = group.runs.flatMap((session) => agentRow(session, false, byName || matches(terms, session.label)));
     if (shown.length === 0) continue;

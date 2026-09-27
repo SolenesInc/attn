@@ -1,10 +1,10 @@
 import { useCallback, useEffect, useRef } from 'react';
 import { useSessionStore, type Session } from '../store/sessions';
 import type { BlockStateSnapshot, PlacementStateSnapshot } from '../components/GhosttyTerminal';
-import type { SessionTerminalWorkspaceHandle } from '../components/SessionTerminalWorkspace';
-import type { LeafDropSnapshot } from '../components/SessionTerminalWorkspace/leafDrag';
-import { usePaneRuntimeEventRouter } from '../components/SessionTerminalWorkspace/paneRuntimeEventRouter';
-import { useWorkspaceDebugHarness } from './useWorkspaceDebugHarness';
+import type { SessionTerminalDesktopHandle } from '../components/SessionTerminalDesktop';
+import type { LeafDropSnapshot } from '../components/SessionTerminalDesktop/leafDrag';
+import { usePaneRuntimeEventRouter } from '../components/SessionTerminalDesktop/paneRuntimeEventRouter';
+import { useDesktopDebugHarness } from './useDesktopDebugHarness';
 import {
   snapshotVisibleTerminalContent,
   type TerminalVisibleContentSnapshot,
@@ -17,7 +17,7 @@ import {
 interface DesktopRuntimeController {
   eventRouter: ReturnType<typeof usePaneRuntimeEventRouter>;
   getActivePaneIdForSession: (session: Session | undefined | null) => string;
-  setDesktopRef: (desktopId: string) => (ref: SessionTerminalWorkspaceHandle | null) => void;
+  setDesktopRef: (desktopId: string) => (ref: SessionTerminalDesktopHandle | null) => void;
   getDesktopLeafDropSnapshot: (desktopId: string | null | undefined) => LeafDropSnapshot | null;
   focusSessionPane: (sessionId: string, paneId: string, retries?: number) => void;
   typeInSessionPaneViaUI: (sessionId: string, paneId: string, text: string) => boolean;
@@ -44,7 +44,7 @@ export function useDesktopRuntimeController(
   sessions: Session[],
   activeSessionId: string | null
 ): DesktopRuntimeController {
-  const desktopRefs = useRef<Map<string, SessionTerminalWorkspaceHandle>>(new Map());
+  const desktopRefs = useRef<Map<string, SessionTerminalDesktopHandle>>(new Map());
   const focusRequest = useSessionStore(state => state.focusRequest);
   const focusedRequest = useRef<typeof focusRequest>(null);
   useEffect(() => {
@@ -58,7 +58,7 @@ export function useDesktopRuntimeController(
   const eventRouter = usePaneRuntimeEventRouter();
   const getActivePaneIdForSession = sessionPaneId;
 
-  useWorkspaceDebugHarness({
+  useDesktopDebugHarness({
     sessions,
     activeSessionId,
     desktopRefs,
@@ -70,7 +70,7 @@ export function useDesktopRuntimeController(
   }, [sessions]);
 
   const setDesktopRef = useCallback(
-    (desktopId: string) => (ref: SessionTerminalWorkspaceHandle | null) => {
+    (desktopId: string) => (ref: SessionTerminalDesktopHandle | null) => {
       if (!ref) {
         desktopRefs.current.delete(desktopId);
         return;

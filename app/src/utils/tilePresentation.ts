@@ -1,4 +1,4 @@
-import { parseNotebookTileParams, type TileContentState, type TileLeaf } from '../types/workspace';
+import { parseNotebookTileParams, type TileContentState, type TileLeaf } from '../types/desktop';
 import { parseAppViewTileKind } from './appBundle';
 
 export function tilePathBasename(path: string): string {

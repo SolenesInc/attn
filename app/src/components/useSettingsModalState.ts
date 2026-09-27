@@ -579,7 +579,7 @@ export function useSettingsModalState({
             keywords: 'theme appearance dark light system font size text scale zoom garden',
           },
           {
-            id: 'workspace',
+            id: 'desktop',
             label: 'Files and locations',
             title: 'Files and locations',
             description:

@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef, useState, type KeyboardEvent } from 'react';
 import { useEscapeStack } from '../hooks/useEscapeStack';
 import type { Desktop } from '../types/generated';
-import { collectLayoutLeaves, getNormalizedPaneBounds, leafSlotId, parseLayoutJSON } from '../types/workspace';
+import { collectLayoutLeaves, getNormalizedPaneBounds, leafSlotId, parseLayoutJSON } from '../types/desktop';
 import { desktopInSlot, desktopLabel, isEmptyDesktop, orderedDesktops, slotShortcut } from '../utils/desktops';
 import './DesktopOverview.css';
 

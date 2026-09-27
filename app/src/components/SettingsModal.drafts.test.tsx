@@ -64,7 +64,7 @@ describe('SettingsModal drafts', () => {
 
   it('keeps a half-typed field when some other setting changes underneath it', async () => {
     const { rerender } = renderModal();
-    fireEvent.click(screen.getByTestId('settings-nav-workspace'));
+    fireEvent.click(screen.getByTestId('settings-nav-desktop'));
 
     const input = await screen.findByTestId('settings-projects-directory-input');
     fireEvent.change(input, { target: { value: '/Users/you/half-typed' } });
@@ -77,7 +77,7 @@ describe('SettingsModal drafts', () => {
 
   it('reseeds a field when its own value changes', async () => {
     const { rerender } = renderModal();
-    fireEvent.click(screen.getByTestId('settings-nav-workspace'));
+    fireEvent.click(screen.getByTestId('settings-nav-desktop'));
 
     await screen.findByTestId('settings-projects-directory-input');
     rerender({ settings: { projects_directory: '/Users/you/code' } });
@@ -89,7 +89,7 @@ describe('SettingsModal drafts', () => {
 
   it('retains an unfinished draft if its parent hides the modal', async () => {
     const { rerender } = renderModal({ settings: { projects_directory: '/Users/you/code' } });
-    fireEvent.click(screen.getByTestId('settings-nav-workspace'));
+    fireEvent.click(screen.getByTestId('settings-nav-desktop'));
 
     const input = await screen.findByTestId('settings-projects-directory-input');
     fireEvent.change(input, { target: { value: '/Users/you/half-typed' } });

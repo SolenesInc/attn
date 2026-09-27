@@ -141,8 +141,8 @@ async function main() {
         agent: 'shell',
         waitForInitialPaneVisible: false,
       });
-      const workspace = await client.request('get_workspace', { sessionId });
-      const pane = workspace.panes[0];
+      const desktop = await client.request('get_desktop', { sessionId });
+      const pane = desktop.panes[0];
       await client.request('select_session', { sessionId });
       await waitForPaneVisible(client, sessionId, pane.paneId, 20_000);
       await waitForPaneAttached(client, sessionId, pane.paneId, 20_000);

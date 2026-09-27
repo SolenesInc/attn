@@ -16,7 +16,7 @@ import {
   SectionStatusPills,
   TerminalSettings,
   WorkflowsSettings,
-  WorkspaceSettings,
+  DesktopSettings,
 } from './SettingsModalSections';
 import { SettingsModalHandle, SettingsModalProps } from './settingsModalShared';
 import { useSettingsModalState, type SettingsModalState } from './useSettingsModalState';
@@ -170,9 +170,9 @@ function SelectedSection({ state }: { state: SettingsModalState }) {
           onMatchAppGardenScale={state.onMatchAppGardenScale}
         />
       );
-    case 'workspace':
+    case 'desktop':
       return (
-        <WorkspaceSettings
+        <DesktopSettings
           editorDraft={state.editorDraft}
           savedFlash={state.savedFlash}
           projectsDirDraft={state.projectsDirDraft}

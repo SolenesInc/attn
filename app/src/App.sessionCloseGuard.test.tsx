@@ -49,7 +49,7 @@ vi.mock('./components/Dashboard', () => ({ Dashboard: () => null }));
 vi.mock('./components/AttentionDrawer', () => ({ AttentionDrawer: () => null }));
 vi.mock('./components/LocationPicker', () => ({ LocationPicker: () => null }));
 vi.mock('./components/UndoToast', () => ({ UndoToast: () => null }));
-vi.mock('./components/SessionTerminalWorkspace', () => ({ SessionTerminalWorkspace: () => null }));
+vi.mock('./components/SessionTerminalDesktop', () => ({ SessionTerminalDesktop: () => null }));
 vi.mock('./components/Toast', () => ({
   Toast: () => null,
   useToast: () => ({ toast: null, showError: mockShowError, showNotice: vi.fn(), clearToast: vi.fn() }),
@@ -142,9 +142,9 @@ describe('chief and crew sessions are protected from close', () => {
       sendPRAction: fn, sendMutePR: fn, sendMuteRepo: fn, sendMuteAuthor: fn, sendPRVisited: fn,
       sendRefreshPRs: vi.fn(async () => ({ success: true })),
       sendUnregisterSession: mockSendUnregisterSession,
-      sendRegisterWorkspace: fn,
-      sendUnregisterWorkspace: vi.fn(async () => {}),
-      sendMuteWorkspace: vi.fn(async () => ({ success: true })),
+      sendRegisterDesktop: fn,
+      sendUnregisterDesktop: vi.fn(async () => {}),
+      sendMuteDesktop: vi.fn(async () => ({ success: true })),
       sendSetSetting: fn,
       sendSetClientPresence: fn,
       sendCreateWorktree: vi.fn(async () => ({ success: true, path: '/tmp/new' })),
@@ -156,7 +156,7 @@ describe('chief and crew sessions are protected from close', () => {
       sendEnsureRepo: vi.fn(async () => ({ success: true, path: '/tmp/repo' })),
       sendSubscribeGitStatus: fn, sendUnsubscribeGitStatus: fn,
       ...fakeDesktopCommands(),
-      sendWorkspaceAddSessionPane: vi.fn(async () => ({ success: true })),
+      sendDesktopAddSessionPane: vi.fn(async () => ({ success: true })),
       sendGetFileDiff: vi.fn(async () => ({ success: true, original: '', modified: '' })),
       getRepoInfo: vi.fn(async () => ({ success: true, is_git_repo: true, branch: 'main' })),
       listWorkflowRuns: vi.fn(async () => ({ success: true, runs: [] })),

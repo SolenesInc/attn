@@ -157,15 +157,15 @@ describe('diagnostic report evidence', () => {
         window: { width: 800, height: 600, devicePixelRatio: 2 },
       },
       panes: [
-        { paneId: 'pane-local', runtimeId: 'runtime-local', sessionId: 'local', title: 'Local', sessionLabel: 'Local', workspaceId: 'w', workspaceLabel: 'Workspace', available: true },
-        { paneId: 'pane-remote', runtimeId: 'runtime-remote', sessionId: 'remote-1a', title: 'Remote', sessionLabel: 'Remote', workspaceId: 'w', workspaceLabel: 'Workspace', available: true },
+        { paneId: 'pane-local', runtimeId: 'runtime-local', sessionId: 'local', title: 'Local', sessionLabel: 'Local', desktopId: 'w', desktopLabel: 'Desktop', available: true },
+        { paneId: 'pane-remote', runtimeId: 'runtime-remote', sessionId: 'remote-1a', title: 'Remote', sessionLabel: 'Remote', desktopId: 'w', desktopLabel: 'Desktop', available: true },
       ],
-      workspaces: [], settings: {}, sendSupportSnapshot,
+      desktops: [], settings: {}, sendSupportSnapshot,
       sessions: [
-        { id: 'local', label: 'Local', state: 'idle', agent: 'codex', cwd: '~', workspaceId: 'w', endpoint: 'local', active: false },
-        { id: 'remote-1a', label: 'Remote', state: 'idle', agent: 'codex', cwd: '~', workspaceId: 'w', endpoint: 'remote', endpointId: 'endpoint-1', active: false },
-        { id: 'remote-1b', label: 'Remote', state: 'idle', agent: 'codex', cwd: '~', workspaceId: 'w', endpoint: 'remote', endpointId: 'endpoint-1', active: false },
-        { id: 'remote-2', label: 'Remote', state: 'idle', agent: 'codex', cwd: '~', workspaceId: 'w', endpoint: 'remote', endpointId: 'endpoint-2', active: false },
+        { id: 'local', label: 'Local', state: 'idle', agent: 'codex', cwd: '~', desktopId: 'w', endpoint: 'local', active: false },
+        { id: 'remote-1a', label: 'Remote', state: 'idle', agent: 'codex', cwd: '~', desktopId: 'w', endpoint: 'remote', endpointId: 'endpoint-1', active: false },
+        { id: 'remote-1b', label: 'Remote', state: 'idle', agent: 'codex', cwd: '~', desktopId: 'w', endpoint: 'remote', endpointId: 'endpoint-1', active: false },
+        { id: 'remote-2', label: 'Remote', state: 'idle', agent: 'codex', cwd: '~', desktopId: 'w', endpoint: 'remote', endpointId: 'endpoint-2', active: false },
       ],
     });
     await capture.daemons;
@@ -186,10 +186,10 @@ function pendingCapture(): PendingDiagnosticCapture {
       window: { width: 800, height: 600, devicePixelRatio: 2 },
     },
     panes: [
-      { paneId: 'pane-1', runtimeId: 'runtime-1', sessionId: 'session-1', title: 'First', sessionLabel: 'First', workspaceId: 'workspace-1', workspaceLabel: 'Workspace', available: true },
-      { paneId: 'pane-2', runtimeId: 'runtime-2', sessionId: 'session-2', title: 'Second', sessionLabel: 'Second', workspaceId: 'workspace-1', workspaceLabel: 'Workspace', available: true },
+      { paneId: 'pane-1', runtimeId: 'runtime-1', sessionId: 'session-1', title: 'First', sessionLabel: 'First', desktopId: 'desktop-1', desktopLabel: 'Desktop', available: true },
+      { paneId: 'pane-2', runtimeId: 'runtime-2', sessionId: 'session-2', title: 'Second', sessionLabel: 'Second', desktopId: 'desktop-1', desktopLabel: 'Desktop', available: true },
     ],
-    sessions: [], workspaces: [], settings: {}, frontendInput: frontend([]),
+    sessions: [], desktops: [], settings: {}, frontendInput: frontend([]),
     terminalGeometry: {},
     terminalDiagnostics: { capacity: 3_000, total: 0, capturedAtUnixMs: 1, events: [] },
     uiDiagnostics: { capacity: 300, total: 0, capturedAtUnixMs: 1, events: [] },
@@ -274,8 +274,8 @@ describe('diagnostic report pane consent', () => {
     capture.context.activePaneId = 'pane-0';
     capture.panes = Array.from({ length: 270 }, (_, index) => ({
       paneId: `pane-${index}`, runtimeId: `runtime-${index}`, sessionId: `session-${index}`,
-      title: `Pane ${index}`, sessionLabel: `Session ${index}`, workspaceId: 'workspace-1',
-      workspaceLabel: 'Workspace', available: true,
+      title: `Pane ${index}`, sessionLabel: `Session ${index}`, desktopId: 'desktop-1',
+      desktopLabel: 'Desktop', available: true,
     }));
     const selected = capture.panes.map((pane) => pane.paneId);
     const report = await createDiagnosticReport(capture, selected, () => ({ text: 'x'.repeat(32 * 1024), available: true }));

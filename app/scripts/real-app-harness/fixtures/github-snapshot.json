@@ -4,7 +4,7 @@
     {
       "repo": "northwind/atlas",
       "number": 412,
-      "title": "Cache the tile layout between workspace switches",
+      "title": "Cache the tile layout between desktop switches",
       "roles": ["author"],
       "author": "harness-user",
       "comments": 4,
@@ -149,7 +149,7 @@
     {
       "repo": "northwind/atlas",
       "number": 396,
-      "title": "Give the empty state a way back to the last workspace",
+      "title": "Give the empty state a way back to the last desktop",
       "roles": ["reviewed-by"],
       "author": "kit-oyelowo",
       "comments": 8,

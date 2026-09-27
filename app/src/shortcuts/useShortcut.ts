@@ -117,7 +117,7 @@ function isPlainCtrlLetter(e: KeyboardEvent): boolean {
 
 function isTerminalTarget(target: EventTarget | null): boolean {
   if (!(target instanceof HTMLElement)) return false;
-  return target.closest('.terminal-container, .session-terminal-workspace') !== null;
+  return target.closest('.terminal-container, .session-terminal-desktop') !== null;
 }
 
 function isNonTerminalEditableTarget(target: EventTarget | null): boolean {

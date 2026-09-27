@@ -6,12 +6,12 @@ import { buildQueueBands } from '../utils/queueBands';
 
 const baseProps = {
   selectedId: null,
-  selectedWorkspaceId: null,
+  selectedDesktopId: null,
   collapsed: false,
   surface: 'tree-open' as const,
   headerActions: [],
   onSelectSession: vi.fn(),
-  onSelectWorkspace: vi.fn(),
+  onSelectDesktop: vi.fn(),
   onNewSession: vi.fn(),
   onCloseSession: vi.fn(),
   onReloadSession: vi.fn(),
@@ -27,18 +27,18 @@ const sessions = [
   { id: 'shell', agent: 'shell', label: 'Run tests' },
   { id: 'plugin', agent: 'custom-driver', label: 'Plugin session' },
   { id: 'missing', agent: undefined, label: 'Older session' },
-].map((session) => ({ ...session, state: 'idle' as const, workspaceId: 'workspace' }));
+].map((session) => ({ ...session, state: 'idle' as const, desktopId: 'desktop' }));
 
 function sidebarData(members = false) {
-  const workspaces = desktopGroups(
-    [{ id: 'workspace', title: 'attn' }],
+  const desktops = desktopGroups(
+    [{ id: 'desktop', title: 'attn' }],
     sessions.map((session) => ({
       ...session,
       chiefOfStaff: members && session.id === 'claude',
       crewMember: members && session.id === 'pi' ? 'fern' : undefined,
     })),
   );
-  return { workspaces, visualIndexByWorkspaceId: new Map([['workspace', 0]]) };
+  return { desktops, visualIndexByDesktopId: new Map([['desktop', 0]]) };
 }
 
 describe('sidebar harness identity', () => {
@@ -59,10 +59,10 @@ describe('sidebar harness identity', () => {
     }
   });
 
-  it('keeps harness identity when switching between workspace and queue arrangements', () => {
+  it('keeps harness identity when switching between desktop and queue arrangements', () => {
     const data = sidebarData(true);
     const props = { ...baseProps, ...data, crew: [{ id: 'fern' }, { id: 'sleeping' }] };
-    const { rerender } = render(<Sidebar {...props} agentListOpen queue={buildQueueBands(data.workspaces)} />);
+    const { rerender } = render(<Sidebar {...props} agentListOpen queue={buildQueueBands(data.desktops)} />);
     expect(within(screen.getByTestId('queue-crew-fern')).getByRole('img', { name: 'Pi' })).toBeInTheDocument();
     expect(within(screen.getByTestId('queue-crew-sleeping')).queryByRole('img')).not.toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Open Implement sidebar logos' })).toHaveAttribute('title', 'Codex');
@@ -81,7 +81,7 @@ describe('sidebar harness identity', () => {
         {...baseProps}
         {...data}
         crew={[{ id: 'fern' }, { id: 'sleeping' }]}
-        queue={queueMode ? buildQueueBands(data.workspaces) : null}
+        queue={queueMode ? buildQueueBands(data.desktops) : null}
         onManageCrew={onManageCrew}
       />,
     );
@@ -99,7 +99,7 @@ describe('sidebar harness identity', () => {
         {...baseProps}
         {...data}
         crew={[{ id: 'fern' }, { id: 'sleeping' }]}
-        queue={buildQueueBands(data.workspaces)}
+        queue={buildQueueBands(data.desktops)}
         agentListOpen
         harnessLogosEnabled={false}
       />,

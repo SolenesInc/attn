@@ -34,7 +34,7 @@ describe('launchTarget', () => {
   it('keeps a requested anchor of this desktop and replaces one from elsewhere with the active pane', () => {
     const current = desktop('pane-b', [['pane-a', 'agent-a'], ['pane-b', 'agent-b']]);
     expect(launchTarget(current, 'vertical', 'pane-a').placement.anchor_pane_id).toBe('pane-a');
-    expect(launchTarget(current, 'vertical', 'pane-from-a-workspace').placement.anchor_pane_id).toBe('pane-b');
+    expect(launchTarget(current, 'vertical', 'pane-from-a-desktop').placement.anchor_pane_id).toBe('pane-b');
   });
 
   it('places on an empty desktop without an anchor or a focused agent', () => {

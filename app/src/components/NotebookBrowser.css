@@ -154,7 +154,7 @@
   initial-value: 280px;
 }
 
-/* Tile variant: the surface fills its workspace tile (no overlay/header), with the
+/* Tile variant: the surface fills its desktop tile (no overlay/header), with the
    body grid taking all of the height. The shell + dialog frame is modal-only. */
 .notebook-surface-tile {
   position: relative; /* positioning context for the in-tile finder overlay */

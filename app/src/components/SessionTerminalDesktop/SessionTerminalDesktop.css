@@ -1,0 +1,739 @@
+.session-terminal-desktop {
+  display: flex;
+  flex-direction: column;
+  width: 100%;
+  height: 100%;
+  background: var(--color-bg-editor);
+}
+
+.session-terminal-desktop.zoom-mode .desktop-pane:not(.active) {
+  opacity: 0.72;
+}
+
+.desktop-focus-bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 8px 12px;
+  border-bottom: 1px solid var(--color-border);
+  background:
+    linear-gradient(90deg, rgba(255, 107, 53, 0.18), rgba(255, 107, 53, 0.04)),
+    var(--color-bg-elevated, var(--color-bg-editor));
+}
+
+.desktop-focus-label {
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+  min-width: 0;
+}
+
+.desktop-focus-kicker {
+  color: var(--color-text-secondary);
+  font-size: var(--font-size-xs);
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.desktop-focus-title {
+  color: var(--color-text-primary);
+  font-size: var(--font-size-sm);
+  font-weight: 600;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.desktop-focus-tabs {
+  display: flex;
+  align-items: center;
+  gap: 3px;
+  min-width: 0;
+  overflow-x: auto;
+  scrollbar-width: none;
+}
+
+.desktop-focus-tab {
+  max-width: 220px;
+  padding: 5px 9px;
+  border: 1px solid transparent;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--color-text-secondary);
+  font-size: var(--font-size-xs);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  cursor: pointer;
+}
+
+.desktop-focus-tab:hover {
+  background: var(--color-bg-button);
+  color: var(--color-text-primary);
+}
+
+.desktop-focus-tab--selected {
+  border-color: color-mix(in srgb, var(--accent) 38%, transparent);
+  background: color-mix(in srgb, var(--accent) 12%, transparent);
+  color: var(--color-text-primary);
+}
+
+.desktop-focus-exit {
+  border: 1px solid rgba(255, 107, 53, 0.35);
+  background: rgba(255, 107, 53, 0.08);
+  color: var(--color-text-primary);
+  border-radius: 999px;
+  padding: 6px 12px;
+  font-size: var(--font-size-xs);
+  font-weight: 600;
+  cursor: pointer;
+  transition: background 120ms ease, border-color 120ms ease;
+}
+
+.desktop-focus-exit:hover {
+  background: rgba(255, 107, 53, 0.16);
+  border-color: rgba(255, 107, 53, 0.55);
+}
+
+.session-terminal-panes {
+  flex: 1;
+  min-height: 0;
+  min-width: 0;
+  position: relative;
+}
+
+.desktop-layout-metadata {
+  display: none;
+}
+
+.session-terminal-desktop.focus-mode .session-terminal-panes {
+  padding: 10px;
+  gap: 0;
+}
+
+.session-terminal-desktop.focus-mode .desktop-pane {
+  border: 1px solid rgba(255, 107, 53, 0.28);
+  box-shadow: 0 0 0 1px rgba(255, 107, 53, 0.08);
+}
+
+.desktop-pane {
+  position: relative;
+  min-width: 0;
+  min-height: 0;
+  background: var(--color-bg-editor);
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  opacity: 0.58;
+  transition: opacity 120ms ease;
+}
+
+.desktop-pane.active {
+  opacity: 1;
+}
+
+.desktop-pane--suspended {
+  z-index: 3;
+  opacity: 1;
+  background: var(--color-bg-elevated, var(--color-bg-editor));
+}
+
+.desktop-suspended-leaf {
+  display: flex;
+  align-items: center;
+  justify-content: flex-start;
+  gap: 7px;
+  width: 100%;
+  height: 100%;
+  min-width: 0;
+  min-height: 0;
+  padding: 6px 8px;
+  border: 1px solid color-mix(in srgb, var(--color-border) 72%, transparent);
+  background: transparent;
+  color: var(--color-text-secondary);
+  cursor: pointer;
+  overflow: hidden;
+}
+
+.desktop-suspended-leaf:hover,
+.desktop-suspended-leaf:focus-visible {
+  border-color: var(--color-border-focus);
+  color: var(--color-text-primary);
+  outline: none;
+}
+
+.desktop-pane--suspended-column .desktop-suspended-leaf {
+  flex-direction: column;
+  padding: 8px 5px;
+}
+
+.desktop-pane--suspended-column .desktop-suspended-label {
+  writing-mode: vertical-rl;
+}
+
+.desktop-suspended-label {
+  min-width: 0;
+  overflow: hidden;
+  color: inherit;
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.03em;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.desktop-suspended-state {
+  width: 8px;
+  height: 8px;
+  flex: 0 0 auto;
+  border-radius: 999px;
+  background: var(--color-text-muted);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--color-text-muted) 14%, transparent);
+}
+
+.desktop-suspended-state--markdown,
+.desktop-suspended-state--seed {
+  background: var(--accent);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 16%, transparent);
+}
+
+/* The selected-leaf treatment applies only when there is another visible leaf
+   to disambiguate. Edge rail is the default: one strong edge without boxing in
+   terminal or document content. The overlay sits above pane-local overlays but
+   never takes pointer input. */
+.session-terminal-desktop.desktop-selection--rail.multi-leaf .desktop-pane.active::after {
+  content: '';
+  position: absolute;
+  inset: 0 auto 0 0;
+  z-index: 10;
+  width: 3px;
+  pointer-events: none;
+  background: var(--accent);
+}
+
+.session-terminal-desktop.desktop-selection--rail.multi-leaf .desktop-pane.active .desktop-pane-title,
+.session-terminal-desktop.desktop-selection--rail.multi-leaf .desktop-pane.active .desktop-dock-tile-title {
+  color: var(--color-text-primary);
+}
+
+/* Spotlight adds static depth and corner marks while preserving the same
+   selected/unselected opacity contrast as the rail. Selection changes animate
+   opacity only, which compositors can handle without repainting pane contents.
+   The shadow and marks never animate; filters, backdrop blur, and permanent
+   will-change layers are intentionally avoided to keep WebGL terminal GPU
+   memory stable. */
+.session-terminal-desktop.desktop-selection--spotlight.multi-leaf .desktop-pane.active {
+  z-index: 4;
+  opacity: 1;
+  box-shadow:
+    0 10px 26px rgba(0, 0, 0, 0.42),
+    inset 0 0 0 1px rgba(255, 255, 255, 0.09);
+}
+
+.session-terminal-desktop.desktop-selection--spotlight.multi-leaf .desktop-pane.active .desktop-pane-header,
+.session-terminal-desktop.desktop-selection--spotlight.multi-leaf .desktop-pane.active .desktop-dock-tile-header {
+  background: color-mix(
+    in srgb,
+    var(--color-bg-elevated, var(--color-bg-editor)) 92%,
+    var(--color-text-primary)
+  );
+}
+
+.session-terminal-desktop.desktop-selection--spotlight.multi-leaf .desktop-pane.active .desktop-pane-title,
+.session-terminal-desktop.desktop-selection--spotlight.multi-leaf .desktop-pane.active .desktop-dock-tile-title {
+  color: var(--color-text-primary);
+}
+
+.session-terminal-desktop.desktop-selection--spotlight.multi-leaf .desktop-pane.active::before,
+.session-terminal-desktop.desktop-selection--spotlight.multi-leaf .desktop-pane.active::after {
+  content: '';
+  position: absolute;
+  z-index: 10;
+  width: 13px;
+  height: 13px;
+  pointer-events: none;
+}
+
+.session-terminal-desktop.desktop-selection--spotlight.multi-leaf .desktop-pane.active::before {
+  inset: 0 auto auto 0;
+  border-top: 2px solid var(--accent);
+  border-left: 2px solid var(--accent);
+}
+
+.session-terminal-desktop.desktop-selection--spotlight.multi-leaf .desktop-pane.active::after {
+  inset: auto 0 0 auto;
+  border-right: 2px solid var(--accent);
+  border-bottom: 2px solid var(--accent);
+}
+
+.session-terminal-panes[data-suspension-animating] > .desktop-pane {
+  transition:
+    left 160ms ease,
+    top 160ms ease,
+    width 160ms ease,
+    height 160ms ease,
+    opacity 120ms ease;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .desktop-pane,
+  .session-terminal-panes[data-suspension-animating] > .desktop-pane {
+    transition: none;
+  }
+}
+
+.session-terminal-panes > .desktop-pane {
+  position: absolute;
+  box-sizing: border-box;
+}
+
+.desktop-split-divider {
+  position: absolute;
+  z-index: 5;
+  background: transparent;
+  touch-action: none;
+}
+
+.desktop-split-divider--vertical {
+  width: 9px;
+  transform: translateX(-50%);
+  cursor: col-resize;
+}
+
+.desktop-split-divider--horizontal {
+  height: 9px;
+  transform: translateY(-50%);
+  cursor: row-resize;
+}
+
+.desktop-split-divider::after {
+  content: '';
+  position: absolute;
+  background: transparent;
+  transition: background 100ms ease;
+}
+
+.desktop-split-divider--vertical::after {
+  top: 0;
+  bottom: 0;
+  left: 50%;
+  width: 1px;
+  transform: translateX(-50%);
+}
+
+.desktop-split-divider--horizontal::after {
+  left: 0;
+  right: 0;
+  top: 50%;
+  height: 1px;
+  transform: translateY(-50%);
+}
+
+.desktop-split-divider:hover::after,
+.desktop-split-divider:active::after {
+  background: var(--color-border-focus);
+}
+
+.desktop-split-divider--vertical:hover::after,
+.desktop-split-divider--vertical:active::after {
+  width: 3px;
+}
+
+.desktop-split-divider--horizontal:hover::after,
+.desktop-split-divider--horizontal:active::after {
+  height: 3px;
+}
+
+.desktop-resize-shield {
+  position: absolute;
+  inset: 0;
+  z-index: 20;
+  background: transparent;
+  pointer-events: auto;
+  touch-action: none;
+}
+
+.desktop-resize-shield--vertical {
+  cursor: col-resize;
+}
+
+.desktop-resize-shield--horizontal {
+  cursor: row-resize;
+}
+
+.desktop-split {
+  display: grid;
+  min-width: 0;
+  min-height: 0;
+  gap: 1px;
+  padding: 1px;
+  background: var(--color-border);
+  flex: 1 1 0;
+}
+
+.desktop-split.split-vertical {
+  grid-template-rows: minmax(0, 1fr);
+}
+
+.desktop-split.split-horizontal {
+  grid-template-columns: minmax(0, 1fr);
+}
+
+.desktop-split-child {
+  min-width: 0;
+  min-height: 0;
+  display: flex;
+  overflow: hidden;
+}
+
+.desktop-split-child > .desktop-pane,
+.desktop-split-child > .desktop-split {
+  flex: 1 1 auto;
+  width: 100%;
+  height: 100%;
+  min-width: 0;
+  min-height: 0;
+  overflow: hidden;
+}
+
+.desktop-pane-header {
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  min-height: 30px;
+  padding: 4px 8px;
+  border-bottom: 1px solid var(--color-border);
+  /* Lit from the top like a title bar rather than flooded with a flat tint: the
+     header is permanent now and names the session, so it reads as the pane's
+     own chrome instead of a highlight laid over the terminal. */
+  background:
+    linear-gradient(180deg, rgba(255, 107, 53, 0.11), rgba(255, 107, 53, 0.03)),
+    linear-gradient(180deg, rgba(255, 255, 255, 0.05), rgba(255, 255, 255, 0));
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.05);
+}
+
+/* The header's dot is a label for the name beside it, not a control — keep it
+   from stretching in the header's flex row. */
+.desktop-pane-header .state-indicator {
+  flex-shrink: 0;
+  margin-top: 0;
+}
+
+.desktop-pane-header .pane-seed-chip {
+  flex: 0 1 auto;
+  min-width: 76px;
+}
+
+/* A lone tile's header: a status bar naming the session and hosting its chips,
+   with nowhere to be dragged to. */
+.desktop-pane-header--static {
+  cursor: default;
+}
+
+/* The header doubles as the drag-to-move handle when the desktop has more than
+   one leaf. */
+.desktop-pane-header--draggable {
+  cursor: grab;
+  user-select: none;
+  touch-action: none;
+}
+
+.desktop-pane-header--draggable:active {
+  cursor: grabbing;
+}
+
+.desktop-pane--dragging {
+  opacity: 0.5;
+}
+
+/* Set in sentence case, not the small-caps heading this used to be: the title is
+   now a generated sentence of up to 48 characters describing what the agent is
+   working on, and caps would both shout it and cost roughly a word of width
+   before the ellipsis.
+
+   Set at the primary text colour and one step up in size: this is the pane's
+   headline, and inactive panes are already dimmed wholesale by
+   `.desktop-pane`'s opacity, so the title does not need to whisper to show
+   which leaf is unfocused. */
+.desktop-pane-identity {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  gap: 2px;
+}
+
+.desktop-pane-identity-main {
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.desktop-pane-title {
+  flex: 0 1 auto;
+  min-width: 0;
+  color: var(--color-text-primary);
+  font-size: var(--font-size-sm);
+  font-weight: 600;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.desktop-pane-usage {
+  flex: none;
+  margin: 0;
+  padding: 2px 3px;
+  border: none;
+  border-radius: 4px;
+  background: transparent;
+  color: var(--color-text-tertiary);
+  cursor: pointer;
+  font-family: inherit;
+  font-size: var(--font-size-xs);
+  font-variant-numeric: tabular-nums;
+  font-weight: 500;
+  line-height: 1;
+  white-space: nowrap;
+}
+
+.desktop-pane-usage:hover,
+.desktop-pane-usage[aria-expanded='true'] {
+  background: var(--color-bg-button);
+  color: var(--color-text-primary);
+}
+
+.desktop-pane-usage:focus-visible {
+  outline: 1px solid var(--color-border-focus);
+  outline-offset: 1px;
+}
+
+.session-usage-popover {
+  position: fixed;
+  z-index: 60;
+  width: 390px;
+  max-width: calc(100vw - 16px);
+  max-height: calc(100vh - 16px);
+  overflow: auto;
+  box-sizing: border-box;
+  padding: 6px;
+  background: var(--color-bg-elevated);
+  border: 1px solid var(--color-border-hover);
+  border-radius: 10px;
+  box-shadow: 0 12px 36px rgba(0, 0, 0, 0.25);
+  outline: none;
+  color: var(--color-text-primary);
+  font-family: inherit;
+  font-size: var(--font-size-sm);
+}
+
+.session-usage-summary,
+.session-usage-model header {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.session-usage-summary {
+  padding: 10px;
+}
+
+.session-usage-summary > div {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.session-usage-summary span,
+.session-usage-model header span {
+  color: var(--color-text-tertiary);
+  font-size: var(--font-size-xs);
+  font-variant-numeric: tabular-nums;
+}
+
+.session-usage-models {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.session-usage-model {
+  padding: 10px;
+  background: var(--color-bg-panel);
+  border: 1px solid var(--color-border-subtle);
+  border-radius: 7px;
+}
+
+.session-usage-model header strong {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.session-usage-model dl {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 7px 18px;
+  margin: 10px 0 0;
+}
+
+.session-usage-model dl > div {
+  display: flex;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.session-usage-model dt {
+  color: var(--color-text-tertiary);
+}
+
+.session-usage-model dd {
+  margin: 0;
+  color: var(--color-text-secondary);
+  font-variant-numeric: tabular-nums;
+}
+
+.session-usage-unpriced {
+  margin: 9px 0 0;
+  color: var(--color-text-tertiary);
+  font-size: var(--font-size-xs);
+}
+
+.session-usage-hint {
+  padding: 8px 10px 3px;
+  color: var(--color-text-tertiary);
+  font-size: var(--font-size-xs);
+}
+
+@media (max-width: 440px) {
+  .session-usage-model dl {
+    grid-template-columns: 1fr;
+  }
+}
+
+.desktop-pane-rename-btn {
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 18px;
+  height: 18px;
+  padding: 0;
+  border: none;
+  background: none;
+  color: var(--color-text-dimmed);
+  cursor: pointer;
+  font-size: 12px;
+  line-height: 1;
+  opacity: 0;
+  transition: opacity 0.1s, color 0.1s;
+}
+
+.desktop-pane-focus-btn {
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 20px;
+  height: 20px;
+  padding: 2px;
+  border: none;
+  border-radius: 4px;
+  background: none;
+  color: var(--color-text-dimmed);
+  cursor: pointer;
+  opacity: 0;
+  transition: opacity 0.1s, color 0.1s, background 0.1s;
+}
+
+.desktop-pane-focus-btn svg {
+  width: 14px;
+  height: 14px;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1.4;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+.desktop-pane-header:hover .desktop-pane-rename-btn,
+.desktop-pane-header:focus-within .desktop-pane-rename-btn,
+.desktop-pane-header:hover .desktop-pane-focus-btn,
+.desktop-pane-header:focus-within .desktop-pane-focus-btn {
+  opacity: 1;
+}
+
+.desktop-pane-rename-btn:hover {
+  color: var(--color-text-primary);
+}
+
+.desktop-pane-focus-btn:hover {
+  background: var(--color-bg-button);
+  color: var(--color-text-primary);
+}
+
+.desktop-pane-body {
+  flex: 1;
+  min-height: 0;
+  min-width: 0;
+  position: relative;
+  overflow: hidden;
+}
+
+/* Placeholder for a virtualized (unmounted) terminal. Only ever shown inside a
+   display:none desktop, so it is purely a layout stand-in until remount. */
+.desktop-pane-virtualized {
+  width: 100%;
+  height: 100%;
+}
+
+.desktop-pane-status {
+  height: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  color: var(--color-text-secondary);
+  font-size: var(--font-size-sm);
+}
+
+.desktop-pane-status-spinner {
+  width: 14px;
+  height: 14px;
+  border: 2px solid var(--color-border);
+  border-top-color: var(--color-accent);
+  border-radius: 50%;
+  animation: desktop-pane-spin 0.8s linear infinite;
+}
+
+.desktop-pane-status--failed .desktop-pane-status-spinner {
+  animation: none;
+  border-color: var(--color-danger, #f87171);
+}
+
+@keyframes desktop-pane-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+.desktop-pane-close {
+  border: none;
+  background: transparent;
+  color: var(--color-text-tertiary);
+  cursor: pointer;
+  font-size: 16px;
+  line-height: 1;
+}
+
+.desktop-pane-close:hover {
+  color: var(--color-text-primary);
+}

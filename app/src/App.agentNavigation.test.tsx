@@ -59,7 +59,7 @@ vi.mock('./components/grid/GridView', () => ({ GridView: () => null }));
 vi.mock('./components/AttentionDrawer', () => ({ AttentionDrawer: () => null }));
 vi.mock('./components/LocationPicker', () => ({ LocationPicker: () => null }));
 vi.mock('./components/UndoToast', () => ({ UndoToast: () => null }));
-vi.mock('./components/SessionTerminalWorkspace', () => ({ SessionTerminalWorkspace: () => null }));
+vi.mock('./components/SessionTerminalDesktop', () => ({ SessionTerminalDesktop: () => null }));
 vi.mock('./components/Toast', () => ({
   Toast: () => null,
   useToast: () => ({ toast: null, showError: vi.fn(), showNotice: vi.fn(), clearToast: vi.fn() }),
@@ -158,7 +158,6 @@ describe('agent navigation', () => {
         label: id,
         state: 'working',
         cwd: `/tmp/${id}`,
-        workspaceId: '',
         profileId: TEST_PROFILE_ID,
         desktopId: `desktop-${id}`,
         agent: 'claude',
@@ -204,9 +203,9 @@ describe('agent navigation', () => {
       sendPRAction: fn, sendMutePR: fn, sendMuteRepo: fn, sendMuteAuthor: fn, sendPRVisited: fn,
       sendRefreshPRs: vi.fn(async () => ({ success: true })),
       sendUnregisterSession: vi.fn(async () => {}),
-      sendRegisterWorkspace: fn,
-      sendUnregisterWorkspace: vi.fn(async () => {}),
-      sendMuteWorkspace: vi.fn(async () => ({ success: true })),
+      sendRegisterDesktop: fn,
+      sendUnregisterDesktop: vi.fn(async () => {}),
+      sendMuteDesktop: vi.fn(async () => ({ success: true })),
       sendSetSetting: fn,
       sendSetClientPresence: fn,
       sendCreateWorktree: vi.fn(async () => ({ success: true, path: '/tmp/new' })),
@@ -219,8 +218,8 @@ describe('agent navigation', () => {
       sendSubscribeGitStatus: fn, sendUnsubscribeGitStatus: fn,
       ...fakeDesktopCommands(),
       sendSessionList: vi.fn(async () => ({ entries: [], omitted: 0 })),
-      sendWorkspaceClosePane: vi.fn(async () => ({ success: true })),
-      sendWorkspaceAddSessionPane: vi.fn(async () => ({ success: true })),
+      sendDesktopClosePane: vi.fn(async () => ({ success: true })),
+      sendDesktopAddSessionPane: vi.fn(async () => ({ success: true })),
       sendGetFileDiff: vi.fn(async () => ({ success: true, original: '', modified: '' })),
       getRepoInfo: vi.fn(async () => ({ success: true, is_git_repo: true, branch: 'main' })),
       listWorkflowRuns: vi.fn(async () => ({ success: true, runs: [] })),

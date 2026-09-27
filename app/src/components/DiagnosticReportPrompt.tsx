@@ -27,9 +27,9 @@ export function DiagnosticReportPrompt({
   const groups = useMemo(() => {
     const grouped = new Map<string, { label: string; panes: DiagnosticPaneDescriptor[] }>();
     for (const pane of capture.panes) {
-      const existing = grouped.get(pane.workspaceId);
+      const existing = grouped.get(pane.desktopId);
       if (existing) existing.panes.push(pane);
-      else grouped.set(pane.workspaceId, { label: pane.workspaceLabel, panes: [pane] });
+      else grouped.set(pane.desktopId, { label: pane.desktopLabel, panes: [pane] });
     }
     return [...grouped.entries()];
   }, [capture.panes]);
@@ -84,8 +84,8 @@ export function DiagnosticReportPrompt({
             </div>
             {groups.length === 0 ? (
               <p className="diagnostic-report-empty">No mounted terminal panes are available.</p>
-            ) : groups.map(([workspaceId, group]) => (
-              <fieldset key={workspaceId}>
+            ) : groups.map(([desktopId, group]) => (
+              <fieldset key={desktopId}>
                 <legend>{group.label}</legend>
                 {group.panes.map((pane) => (
                   <label key={pane.paneId} className={!pane.available ? 'is-unavailable' : undefined}>

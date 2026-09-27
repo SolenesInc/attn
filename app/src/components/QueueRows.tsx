@@ -157,7 +157,7 @@ export function QueueRowView({
       data-testid={`${testIdPrefix}-${session.id}`}
       data-session-id={session.id}
       data-state={session.state}
-      data-workspace-id={row.workspaceId}
+      data-desktop-id={row.desktopId}
     >
       <QueueSessionSelection
         session={session}
@@ -323,7 +323,7 @@ function AwakeCrewRow({
       data-crew-state="awake"
       data-session-id={session.id}
       data-state={session.state}
-      data-workspace-id={row.workspaceId}
+      data-desktop-id={row.desktopId}
     >
       <QueueSessionSelection
         session={session}

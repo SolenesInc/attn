@@ -22,7 +22,7 @@ vi.mock('../contexts/DaemonApiContext', () => ({ useDaemonApi: () => daemonApi }
 // well as in settingsAutomation.
 const SECTION_IDS = [
   'general',
-  'workspace',
+  'desktop',
   'hygiene',
   'agents',
   'backgroundAgents',
@@ -70,7 +70,7 @@ describe('SettingsModal sections', () => {
     fireEvent.click(screen.getByTestId('settings-nav-general'));
     expect(await screen.findByRole('button', { name: 'System', pressed: true })).toBeInTheDocument();
     expect(screen.getByRole('group', { name: 'Theme preference' })).toBeInTheDocument();
-    fireEvent.click(screen.getByTestId('settings-nav-workspace'));
+    fireEvent.click(screen.getByTestId('settings-nav-desktop'));
     expect(await screen.findByLabelText('Projects directory')).toBe(screen.getByTestId('settings-projects-directory-input'));
   });
 
@@ -165,7 +165,7 @@ describe('SettingsModal sections', () => {
     vi.useFakeTimers({ shouldAdvanceTime: true });
     try {
       const onSetSetting = renderModal();
-      fireEvent.click(screen.getByTestId('settings-nav-workspace'));
+      fireEvent.click(screen.getByTestId('settings-nav-desktop'));
 
       const input = await screen.findByTestId('settings-projects-directory-input');
       fireEvent.change(input, { target: { value: '/Users/you/code' } });
@@ -187,7 +187,7 @@ describe('SettingsModal sections', () => {
 
   it('says nothing when a blur-committed field has not changed', async () => {
     const onSetSetting = renderModal({ settings: { projects_directory: '/Users/you/code' } });
-    fireEvent.click(screen.getByTestId('settings-nav-workspace'));
+    fireEvent.click(screen.getByTestId('settings-nav-desktop'));
 
     const input = await screen.findByTestId('settings-projects-directory-input');
     fireEvent.blur(input);

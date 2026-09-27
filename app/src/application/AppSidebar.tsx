@@ -30,8 +30,8 @@ export function AppSidebar() {
     desktopViews,
     currentDesktopId,
     selectedTile,
-    workspaceSelectionStyle,
-    handleWorkspaceSelectionStyleChange,
+    desktopSelectionStyle,
+    handleDesktopSelectionStyleChange,
     handleSelectSession,
     handleSelectDesktop,
     handleSelectTile,
@@ -103,12 +103,12 @@ export function AppSidebar() {
   const { desktopNavigation } = useDesktopNavigationContext();
   return (
     <Sidebar
-      workspaces={desktopViews}
-      visualIndexByWorkspaceId={slotIndexByDesktopId}
+      desktops={desktopViews}
+      visualIndexByDesktopId={slotIndexByDesktopId}
       selectedId={activeSessionId}
       selectionRequest={focusRequest}
-      selectedWorkspaceId={currentDesktopId}
-      selectedTile={selectedTile ? { workspaceId: selectedTile.desktopId, tileId: selectedTile.tileId } : null}
+      selectedDesktopId={currentDesktopId}
+      selectedTile={selectedTile}
       tileContents={desktopTileContents}
       collapsed={sidebarCollapsed}
       surface={sidebarSurface}
@@ -122,12 +122,12 @@ export function AppSidebar() {
       dockCollapsed={keybindings.dock.collapsed}
       onToggleDockCollapsed={() => keybindings.setDockCollapsed(!keybindings.dock.collapsed)}
       onRenameSession={sendRenameSession}
-      onRenameWorkspace={desktopNavigation.renameDesktop}
-      onWorkspaceReorder={({ workspaceId, prevWorkspaceId, nextWorkspaceId }) =>
+      onRenameDesktop={desktopNavigation.renameDesktop}
+      onDesktopReorder={({ desktopId, prevDesktopId, nextDesktopId }) =>
         desktopNavigation.reorderDesktop({
-          desktopId: workspaceId,
-          previousDesktopId: prevWorkspaceId,
-          nextDesktopId: nextWorkspaceId,
+          desktopId,
+          previousDesktopId: prevDesktopId,
+          nextDesktopId,
         })
       }
       onChangeChiefOfStaff={handleChangeChiefOfStaff}
@@ -143,14 +143,14 @@ export function AppSidebar() {
       onToggleCrewQueue={handleToggleCrewQueue}
       harnessLogosEnabled={areSidebarHarnessLogosEnabled(settings)}
       onToggleHarnessLogos={handleToggleSidebarHarnessLogos}
-      workspaceSelectionStyle={workspaceSelectionStyle}
-      onWorkspaceSelectionStyleChange={handleWorkspaceSelectionStyleChange}
-      leafDrag={leafDesktopDrag ? { sourceWorkspaceId: leafDesktopDrag.sourceDesktopId } : null}
-      dragHoverWorkspaceId={dragHoverDesktopId}
-      onWorkspaceDragEnter={handleDesktopDragEnter}
-      onWorkspaceDragLeave={handleDesktopDragLeave}
-      onWorkspaceDragDrop={handleDesktopDragDrop}
-      onNewWorkspaceDrop={handleNewDesktopDrop}
+      desktopSelectionStyle={desktopSelectionStyle}
+      onDesktopSelectionStyleChange={handleDesktopSelectionStyleChange}
+      leafDrag={leafDesktopDrag ? { sourceDesktopId: leafDesktopDrag.sourceDesktopId } : null}
+      dragHoverDesktopId={dragHoverDesktopId}
+      onDesktopDragEnter={handleDesktopDragEnter}
+      onDesktopDragLeave={handleDesktopDragLeave}
+      onDesktopDragDrop={handleDesktopDragDrop}
+      onNewDesktopDrop={handleNewDesktopDrop}
       onSessionDragStart={handleSessionDragStart}
       onSessionDragEnd={handleLeafDragEnd}
       queue={queueBands}
@@ -171,7 +171,7 @@ export function AppSidebar() {
       onScreenSessionIds={onScreenSessionIds}
       onSelectSession={handleSelectSession}
       onTriggerNudge={sendTriggerNudge}
-      onSelectWorkspace={handleSelectDesktop}
+      onSelectDesktop={handleSelectDesktop}
       onSelectTile={handleSelectTile}
       onCloseTile={handleCloseTile}
       onReloadTile={handleReloadTile}

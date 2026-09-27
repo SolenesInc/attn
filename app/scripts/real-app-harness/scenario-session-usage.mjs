@@ -14,7 +14,7 @@ import { DaemonObserver } from './daemonObserver.mjs';
 import { delay } from './platform.mjs';
 import { createScenarioRunner } from './scenarioRunner.mjs';
 import { ensureClaudePromptReadyViaPty } from './scenarioAgents.mjs';
-import { waitForFirstWorkspacePane } from './scenarioAssertions.mjs';
+import { waitForFirstDesktopPane } from './scenarioAssertions.mjs';
 import { writeMockAgentFixture } from './mockAgent.mjs';
 import { recordingEnabled } from './windowRecording.mjs';
 
@@ -125,7 +125,7 @@ async function main() {
         promptReadyTimeoutMs: 60_000,
       });
       await client.request('select_session', { sessionId });
-      const pane = await waitForFirstWorkspacePane(client, sessionId, 'usage receipt pane', 20_000);
+      const pane = await waitForFirstDesktopPane(client, sessionId, 'usage receipt pane', 20_000);
       await submitPrompt(client, sessionId, pane.paneId, 'Measure this session');
       const transcriptDir = path.join(runner.sessionDir, '.attn-mock-agent');
       rootPath = await poll(() => {

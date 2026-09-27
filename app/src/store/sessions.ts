@@ -9,17 +9,17 @@ import { normalizeSessionAgent } from '../types/sessionAgent';
 import type { AutomationProvenance, Desktop, SessionPullRequest } from '../types/generated';
 import { listenPtyEvents, ptyReload, type PtySpawnArgs } from '../pty/bridge';
 import {
-  createDefaultWorkspaceState,
-  type TerminalWorkspaceSnapshot,
-  type TerminalWorkspaceState,
-} from '../types/workspace';
+  createDefaultDesktopState,
+  type TerminalDesktopSnapshot,
+  type TerminalDesktopState,
+} from '../types/desktop';
 import { desktopSnapshot } from '../utils/desktops';
 import {
   recordAgentVisit,
   reconcileAgentHistory,
 } from '../navigation/agentHistory';
 
-export type { TerminalWorkspaceState };
+export type { TerminalDesktopState };
 
 // A reload's exit event looks like a clean voluntary quit (code 0, no signal),
 // which would trip auto-close-on-clean-exit and tear the pane down mid-restore.
@@ -47,7 +47,7 @@ export interface Session {
   isWorktree?: boolean;
   automation?: AutomationProvenance;
   pullRequests?: SessionPullRequest[];
-  desktop: TerminalWorkspaceState;
+  desktop: TerminalDesktopState;
   daemonActivePaneId: string;
 }
 
@@ -85,7 +85,7 @@ export interface SessionStore extends SessionNavigationState, SessionNavigationA
   navigationQueue: QueueBands<QueueBandSession> | null;
   connected: boolean;
   launcherConfig: LauncherConfig;
-  desktopSnapshots: Record<string, TerminalWorkspaceSnapshot>;
+  desktopSnapshots: Record<string, TerminalDesktopSnapshot>;
   desktopIdBySessionId: Record<string, string>;
 
   connect: () => Promise<void>;
@@ -126,7 +126,7 @@ declare global {
     __TEST_INJECT_SESSION?: (session: TestSession) => void;
     __TEST_UPDATE_SESSION_STATE?: (id: string, state: UISessionState) => void;
     __TEST_GET_SESSIONS?: () => Array<{ id: string; label: string; cwd: string }>;
-    __TEST_SET_SESSION_WORKSPACE?: (sessionId: string, workspace: TerminalWorkspaceState, daemonActivePaneId?: string) => void;
+    __TEST_SET_SESSION_DESKTOP?: (sessionId: string, terminalState: TerminalDesktopState, daemonActivePaneId?: string) => void;
   }
 }
 
@@ -216,7 +216,7 @@ export const useSessionStore = create<SessionStore>((set, get) => ({
       autoMode,
       transcriptMatched: resolvedAgent !== 'codex',
       creating: true,
-      desktop: createDefaultWorkspaceState(),
+      desktop: createDefaultDesktopState(),
       daemonActivePaneId: '',
     };
 
@@ -359,7 +359,7 @@ export const useSessionStore = create<SessionStore>((set, get) => ({
           isWorktree: nextIsWorktree,
           automation: daemonSession.automation,
           pullRequests: daemonSession.pull_requests,
-          desktop: desktopSnapshot?.workspace ?? createDefaultWorkspaceState(),
+          desktop: desktopSnapshot?.terminalState ?? createDefaultDesktopState(),
           daemonActivePaneId: desktopSnapshot?.daemonActivePaneId ?? '',
         } satisfies Session;
       });
@@ -399,7 +399,7 @@ export const useSessionStore = create<SessionStore>((set, get) => ({
         return {
           ...session,
           desktopId,
-          desktop: snapshot?.workspace ?? createDefaultWorkspaceState(),
+          desktop: snapshot?.terminalState ?? createDefaultDesktopState(),
           daemonActivePaneId: snapshot?.daemonActivePaneId ?? '',
         };
       });
@@ -431,7 +431,7 @@ if (import.meta.env.DEV) {
           desktopId: '',
           agent: session.agent ?? 'codex',
           transcriptMatched: (session.agent ?? 'codex') !== 'codex',
-          desktop: createDefaultWorkspaceState(),
+          desktop: createDefaultDesktopState(),
           daemonActivePaneId: '',
         },
       ],
@@ -449,11 +449,11 @@ if (import.meta.env.DEV) {
     }));
   };
 
-  window.__TEST_SET_SESSION_WORKSPACE = (sessionId: string, workspace: TerminalWorkspaceState, daemonActivePaneId = workspace.agents[0]?.id || '') => {
+  window.__TEST_SET_SESSION_DESKTOP = (sessionId: string, terminalState: TerminalDesktopState, daemonActivePaneId = terminalState.agents[0]?.id || '') => {
     useSessionStore.setState((state) => reconcileSessionNavigation(state, {
       sessions: state.sessions.map((session) =>
         session.id === sessionId
-          ? { ...session, desktop: workspace, daemonActivePaneId }
+          ? { ...session, desktop: terminalState, daemonActivePaneId }
           : session
       ),
     }));

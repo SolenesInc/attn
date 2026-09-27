@@ -1,33 +1,33 @@
 import { useSidebarContext } from './SidebarContext';
-import type { SidebarWorkspace } from './sidebarTypes';
+import type { SidebarDesktop } from './sidebarTypes';
 
 export function useDesktopChipDrop() {
   const {
     leafDrag,
-    dragHoverWorkspaceId,
+    dragHoverDesktopId,
     canAcceptLeafDrag,
-    onWorkspaceDragEnter,
-    onWorkspaceDragLeave,
-    onWorkspaceDragDrop,
+    onDesktopDragEnter,
+    onDesktopDragLeave,
+    onDesktopDragDrop,
   } = useSidebarContext();
-  return (workspace: SidebarWorkspace) => {
-    const accepts = canAcceptLeafDrag(workspace);
+  return (desktop: SidebarDesktop) => {
+    const accepts = canAcceptLeafDrag(desktop);
     let dropClass = '';
     if (leafDrag) {
       if (!accepts) dropClass = ' is-drop-disabled';
-      else dropClass = dragHoverWorkspaceId === workspace.id ? ' is-drop-entering' : ' is-drop-target';
+      else dropClass = dragHoverDesktopId === desktop.id ? ' is-drop-entering' : ' is-drop-target';
     }
     return {
       dropClass,
       dropHandlers: {
         onPointerEnter: () => {
-          if (accepts) onWorkspaceDragEnter?.(workspace);
+          if (accepts) onDesktopDragEnter?.(desktop);
         },
         onPointerLeave: () => {
-          if (accepts) onWorkspaceDragLeave?.(workspace);
+          if (accepts) onDesktopDragLeave?.(desktop);
         },
         onPointerUp: () => {
-          if (accepts) onWorkspaceDragDrop?.(workspace);
+          if (accepts) onDesktopDragDrop?.(desktop);
         },
       },
     };

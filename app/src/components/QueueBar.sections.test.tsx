@@ -12,7 +12,7 @@ interface TestSession {
   id: string;
   label: string;
   state: 'working' | 'waiting_input' | 'idle';
-  workspaceId?: string;
+  desktopId?: string;
   chiefOfStaff?: boolean;
   turnOwed?: boolean;
   turnOpenedAt?: string;
@@ -23,12 +23,12 @@ interface TestSession {
 
 const baseProps = {
   selectedId: null,
-  selectedWorkspaceId: null,
+  selectedDesktopId: null,
   collapsed: true,
   surface: 'queue-collapsed' as const,
   headerActions: [],
   onSelectSession: () => {},
-  onSelectWorkspace: () => {},
+  onSelectDesktop: () => {},
   onNewSession: () => {},
   onCloseSession: () => {},
   onReloadSession: () => {},
@@ -36,17 +36,17 @@ const baseProps = {
   onToggleCollapse: () => {},
 };
 
-const desktops: TestDesktopGroup[] = [
+const fixtureDesktops: TestDesktopGroup[] = [
   { id: 'ws-a', title: 'alpha' },
   { id: 'ws-b', title: 'beta' },
 ];
 
-function owed(id: string, hour: number, workspaceId = 'ws-a'): TestSession {
+function owed(id: string, hour: number, desktopId = 'ws-a'): TestSession {
   return {
     id,
     label: id,
     state: 'waiting_input',
-    workspaceId,
+    desktopId,
     turnOwed: true,
     turnOpenedAt: `2026-07-26T${String(hour).padStart(2, '0')}:00:00Z`,
   };
@@ -71,17 +71,17 @@ function run(id: string, definition: string, needsYou = false): TestSession {
 function renderBar(
   sessions: TestSession[],
   overrides: Partial<ComponentProps<typeof Sidebar>> = {},
-  groups: TestDesktopGroup[] = desktops,
+  groups: TestDesktopGroup[] = fixtureDesktops,
 ) {
-  const workspaces = desktopGroups(groups, sessions);
-  const slots = overrides.visualIndexByWorkspaceId ?? new Map(groups.map((group, index) => [group.id, index]));
+  const desktops = desktopGroups(groups, sessions);
+  const slots = overrides.visualIndexByDesktopId ?? new Map(groups.map((group, index) => [group.id, index]));
   return render(
     <Sidebar
       {...baseProps}
-      workspaces={workspaces}
+      desktops={desktops}
       {...overrides}
-      visualIndexByWorkspaceId={slots}
-      queue={buildQueueBands(workspaces)}
+      visualIndexByDesktopId={slots}
+      queue={buildQueueBands(desktops)}
     />,
   );
 }
@@ -134,7 +134,7 @@ describe('the waiting pill', () => {
   });
 
   it('reads nothing owed with no turns', () => {
-    renderBar([{ id: 'w', label: 'w', state: 'working', workspaceId: 'ws-a' }]);
+    renderBar([{ id: 'w', label: 'w', state: 'working', desktopId: 'ws-a' }]);
     expect(screen.getByTestId('queue-bar-pill').textContent).toContain('nothing owed');
   });
 
@@ -153,10 +153,10 @@ describe('the waiting pill', () => {
 
 describe('the waiting peek', () => {
   const crewAndBands: TestSession[] = [
-    { id: 'chief', label: 'chief', state: 'idle', workspaceId: 'ws-a', chiefOfStaff: true },
+    { id: 'chief', label: 'chief', state: 'idle', desktopId: 'ws-a', chiefOfStaff: true },
     owed('newer', 11, 'ws-b'),
     owed('older', 9),
-    { id: 'busy', label: 'busy', state: 'working', workspaceId: 'ws-a' },
+    { id: 'busy', label: 'busy', state: 'working', desktopId: 'ws-a' },
     { id: 'loose', label: 'loose', state: 'working' },
     run('r1', 'nightly', true),
   ];
@@ -180,7 +180,7 @@ describe('the waiting peek', () => {
   });
 
   it('tags the head of the queue and shows where each agent lives', () => {
-    renderBar(crewAndBands, { visualIndexByWorkspaceId: new Map([['ws-a', 0]]) });
+    renderBar(crewAndBands, { visualIndexByDesktopId: new Map([['ws-a', 0]]) });
     hover('queue-bar-pill');
 
     const row = (key: string) => screen.getByTestId(`queue-bar-peek-agent:${key}`);
@@ -252,13 +252,13 @@ describe('the waiting peek', () => {
     expect(screen.queryByTestId('queue-bar-waiting-peek')).toBeNull();
 
     fireEvent.pointerEnter(anchor);
-    const workspaces = desktopGroups(desktops, crewAndBands);
+    const desktops = desktopGroups(fixtureDesktops, crewAndBands);
     rerender(
       <Sidebar
         {...baseProps}
-        workspaces={workspaces}
-        visualIndexByWorkspaceId={new Map([['ws-a', 0], ['ws-b', 1]])}
-        queue={buildQueueBands(workspaces)}
+        desktops={desktops}
+        visualIndexByDesktopId={new Map([['ws-a', 0], ['ws-b', 1]])}
+        queue={buildQueueBands(desktops)}
         peeksSilenced
       />,
     );
@@ -267,9 +267,9 @@ describe('the waiting peek', () => {
     rerender(
       <Sidebar
         {...baseProps}
-        workspaces={workspaces}
-        visualIndexByWorkspaceId={new Map([['ws-a', 0], ['ws-b', 1]])}
-        queue={buildQueueBands(workspaces)}
+        desktops={desktops}
+        visualIndexByDesktopId={new Map([['ws-a', 0], ['ws-b', 1]])}
+        queue={buildQueueBands(desktops)}
       />,
     );
     expect(screen.queryByTestId('queue-bar-waiting-peek')).toBeNull();
@@ -320,12 +320,12 @@ describe('the runs chip', () => {
     hover('queue-bar-runs');
     expect(screen.getByTestId('queue-bar-runs-peek')).toBeInTheDocument();
 
-    const without = desktopGroups(desktops, [owed('a', 9)]);
-    rerender(<Sidebar {...baseProps} workspaces={without} visualIndexByWorkspaceId={new Map(desktops.map((group, index) => [group.id, index]))} queue={buildQueueBands(without)} />);
+    const without = desktopGroups(fixtureDesktops, [owed('a', 9)]);
+    rerender(<Sidebar {...baseProps} desktops={without} visualIndexByDesktopId={new Map(fixtureDesktops.map((group, index) => [group.id, index]))} queue={buildQueueBands(without)} />);
     expect(screen.queryByTestId('queue-bar-runs')).toBeNull();
 
-    const back = desktopGroups(desktops, runs);
-    rerender(<Sidebar {...baseProps} workspaces={back} visualIndexByWorkspaceId={new Map(desktops.map((group, index) => [group.id, index]))} queue={buildQueueBands(back)} />);
+    const back = desktopGroups(fixtureDesktops, runs);
+    rerender(<Sidebar {...baseProps} desktops={back} visualIndexByDesktopId={new Map(fixtureDesktops.map((group, index) => [group.id, index]))} queue={buildQueueBands(back)} />);
     expect(screen.getByTestId('queue-bar-runs')).toBeInTheDocument();
     expect(screen.queryByTestId('queue-bar-runs-peek')).toBeNull();
   });
@@ -362,7 +362,7 @@ describe('the runs chip', () => {
 });
 
 describe('the desktop chips', () => {
-  const threeDesktops: TestDesktopGroup[] = [...desktops, { id: 'ws-c', title: 'gamma' }, { id: 'ws-x', title: 'extra' }];
+  const threeDesktops: TestDesktopGroup[] = [...fixtureDesktops, { id: 'ws-c', title: 'gamma' }, { id: 'ws-x', title: 'extra' }];
   const slots = new Map([['ws-a', 0], ['ws-b', 1], ['ws-c', 2]]);
 
   it('badges each desktop with its owed turns and marks the current one', () => {
@@ -370,10 +370,10 @@ describe('the desktop chips', () => {
       [
         owed('a1', 9),
         owed('a2', 10),
-        { id: 'b', label: 'b', state: 'waiting_input', workspaceId: 'ws-b' },
+        { id: 'b', label: 'b', state: 'waiting_input', desktopId: 'ws-b' },
         owed('x', 11, 'ws-x'),
       ],
-      { visualIndexByWorkspaceId: slots, selectedWorkspaceId: 'ws-b' },
+      { visualIndexByDesktopId: slots, selectedDesktopId: 'ws-b' },
       threeDesktops,
     );
 
@@ -388,26 +388,26 @@ describe('the desktop chips', () => {
   });
 
   it('switches desktops and opens the overview from the extras', () => {
-    const onSelectWorkspace = vi.fn();
+    const onSelectDesktop = vi.fn();
     const onOpenOverview = vi.fn();
-    renderBar([], { visualIndexByWorkspaceId: slots, onSelectWorkspace, onOpenOverview }, threeDesktops);
+    renderBar([], { visualIndexByDesktopId: slots, onSelectDesktop, onOpenOverview }, threeDesktops);
 
     fireEvent.click(screen.getByTestId('queue-bar-desktop-2'));
     fireEvent.click(screen.getByTestId('queue-bar-desktop-extras'));
-    expect(onSelectWorkspace).toHaveBeenCalledWith('ws-b');
+    expect(onSelectDesktop).toHaveBeenCalledWith('ws-b');
     expect(onOpenOverview).toHaveBeenCalledOnce();
   });
 
   it('takes a dragged pane on another desktop', () => {
-    const onWorkspaceDragDrop = vi.fn();
+    const onDesktopDragDrop = vi.fn();
     renderBar([owed('a1', 9)], {
-      leafDrag: { sourceWorkspaceId: 'ws-a' },
-      onWorkspaceDragDrop,
+      leafDrag: { sourceDesktopId: 'ws-a' },
+      onDesktopDragDrop,
     });
 
     const target = screen.getByTestId('queue-bar-desktop-2');
     expect(target.classList.contains('is-drop-target')).toBe(true);
     fireEvent.pointerUp(target);
-    expect(onWorkspaceDragDrop).toHaveBeenCalledWith(expect.objectContaining({ id: 'ws-b' }));
+    expect(onDesktopDragDrop).toHaveBeenCalledWith(expect.objectContaining({ id: 'ws-b' }));
   });
 });

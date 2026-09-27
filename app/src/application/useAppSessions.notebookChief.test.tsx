@@ -2,7 +2,7 @@ import { renderHook } from '@testing-library/react';
 import { describe, expect, it, vi } from 'vitest';
 import { useProfilesStore } from '../store/profiles';
 import type { Session } from '../store/sessions';
-import { createDefaultWorkspaceState } from '../types/workspace';
+import { createDefaultDesktopState } from '../types/desktop';
 import type { AppContentProps } from './appSupport';
 import { useAppSessions } from './useAppSessions';
 
@@ -16,7 +16,7 @@ function localSession(id: string, state: Session['state']): Session {
     desktopId: '',
     agent: 'claude',
     transcriptMatched: true,
-    desktop: createDefaultWorkspaceState(),
+    desktop: createDefaultDesktopState(),
     daemonActivePaneId: '',
   };
 }

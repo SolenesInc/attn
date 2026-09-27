@@ -1,6 +1,6 @@
 import { useEffect } from 'react';
-import { SessionTerminalWorkspace } from '../../src/components/SessionTerminalWorkspace';
-import { createPaneRuntimeEventRouterController } from '../../src/components/SessionTerminalWorkspace/paneRuntimeEventRouter';
+import { SessionTerminalDesktop } from '../../src/components/SessionTerminalDesktop';
+import { createPaneRuntimeEventRouterController } from '../../src/components/SessionTerminalDesktop/paneRuntimeEventRouter';
 import { DaemonApiProvider, type DaemonApi } from '../../src/contexts/DaemonApiContext';
 import { BuiltinDelegationRole } from '../../src/types/generated';
 import type { Seed } from '../../src/hooks/useDaemonSocket';
@@ -29,9 +29,9 @@ export function AgentHeaderHarness({ onReady, setTriggerRerender }: HarnessProps
   return (
     <DaemonApiProvider api={api}>
       <div style={{ height: '100vh', display: 'flex', background: 'var(--color-bg-app)' }}>
-        <SessionTerminalWorkspace
-          workspaceId="header-alignment"
-          workspaceSessions={agents.map((agent) => ({
+        <SessionTerminalDesktop
+          desktopId="header-alignment"
+          desktopSessions={agents.map((agent) => ({
             id: agent.sessionId, label: agent.title, agent: 'codex', cwd: '/tmp/header-alignment', state: 'idle',
             seedId: hasSeed ? seed.id : undefined,
             usage: options.has('usage') ? {
@@ -50,7 +50,7 @@ export function AgentHeaderHarness({ onReady, setTriggerRerender }: HarnessProps
           })) : []}
           gardenSeeds={hasSeed ? [seed] : []}
           onOpenSeed={noop}
-          workspace={{ agents, layoutTree: split ? {
+          terminalState={{ agents, layoutTree: split ? {
             type: 'split', splitId: 'split', direction: 'vertical', ratio: 0.5,
             children: [{ type: 'pane', paneId: 'pane-agent' }, { type: 'pane', paneId: 'pane-peer' }],
           } : { type: 'pane', paneId: 'pane-agent' } }}

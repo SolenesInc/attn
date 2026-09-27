@@ -6,7 +6,7 @@ import { claimPaletteFocus } from '../components/palette/paletteClaim';
 import { useDaemonApi } from '../contexts/DaemonApiContext';
 import { useProfilesStore } from '../store/profiles';
 import { useSessionStore } from '../store/sessions';
-import { resolveEditorTileRoot, serializeNotebookTileParams } from '../types/workspace';
+import { resolveEditorTileRoot, serializeNotebookTileParams } from '../types/desktop';
 import { appViewTileKind } from '../utils/appBundle';
 import { AppContentProps } from './appSupport';
 

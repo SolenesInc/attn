@@ -2,7 +2,7 @@ import type { MouseEvent as ReactMouseEvent, PointerEvent as ReactPointerEvent }
 import { useAppViewTitleResolver } from '../hooks/useAppViewTitle';
 import { formatShortcut } from '../shortcuts/formatShortcut';
 import type { SessionPullRequest } from '../types/generated';
-import { type TileContentState, type TileLeaf } from '../types/workspace';
+import { type TileContentState, type TileLeaf } from '../types/desktop';
 import { describeSessionPullRequest, pickSessionPullRequest } from '../utils/sessionPullRequest';
 import { deriveTileTitle } from '../utils/tilePresentation';
 import { ChiefOfStaffBadge } from './ChiefOfStaffBadge';
@@ -61,7 +61,7 @@ export function SidebarSessionIdentity({
 }
 
 export function TileSidebarRow({
-  workspaceId,
+  desktopId,
   tile,
   content,
   selected,
@@ -69,7 +69,7 @@ export function TileSidebarRow({
   onClose,
   onReload,
 }: {
-  workspaceId: string;
+  desktopId: string;
   tile: TileLeaf;
   content?: TileContentState;
   selected: boolean;
@@ -81,8 +81,8 @@ export function TileSidebarRow({
   const title = deriveTileTitle(tile, content, appViewTitle);
   return (
     <div
-      className={`session-item workspace-tile-item grouped ${selected ? 'selected' : ''}`.trim()}
-      data-testid={`sidebar-tile-${workspaceId}-${tile.tileId}`}
+      className={`session-item desktop-tile-item grouped ${selected ? 'selected' : ''}`.trim()}
+      data-testid={`sidebar-tile-${desktopId}-${tile.tileId}`}
       data-tile-kind={tile.tileKind}
     >
       <button
@@ -92,7 +92,7 @@ export function TileSidebarRow({
         onClick={onSelect}
       />
       <span
-        className={`workspace-tile-indicator workspace-tile-indicator--${tile.tileKind}`}
+        className={`desktop-tile-indicator desktop-tile-indicator--${tile.tileKind}`}
         aria-hidden="true"
       />
       <span className="session-label">{title}</span>
@@ -100,7 +100,7 @@ export function TileSidebarRow({
         {tile.tileKind === 'browser' && (
           <button
             className="session-action-btn reload-session-btn"
-            data-testid={`reload-tile-${workspaceId}-${tile.tileId}`}
+            data-testid={`reload-tile-${desktopId}-${tile.tileId}`}
             onClick={(event) => {
               event.stopPropagation();
               onReload();
@@ -113,7 +113,7 @@ export function TileSidebarRow({
         )}
         <button
           className="session-action-btn close-session-btn"
-          data-testid={`close-tile-${workspaceId}-${tile.tileId}`}
+          data-testid={`close-tile-${desktopId}-${tile.tileId}`}
           onClick={(event) => {
             event.stopPropagation();
             onClose();

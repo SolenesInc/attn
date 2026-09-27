@@ -3,7 +3,7 @@ import { execFileSync } from 'node:child_process';
 import {
   assertPaneVisibleContentPreserved,
   runShellCommandInPane,
-  waitForFirstWorkspacePane,
+  waitForFirstDesktopPane,
   waitForPaneInputFocus,
   waitForPaneTextChange,
   waitForPaneVisible,
@@ -167,7 +167,7 @@ describe('waitForPaneVisible', () => {
   });
 });
 
-describe('waitForFirstWorkspacePane', () => {
+describe('waitForFirstDesktopPane', () => {
   afterEach(() => {
     vi.useRealTimers();
   });
@@ -180,11 +180,11 @@ describe('waitForFirstWorkspacePane', () => {
         .mockResolvedValueOnce({ panes: [{ paneId: 'session-pane-1', runtimeId: 'runtime-1' }] }),
     };
 
-    const pending = waitForFirstWorkspacePane(client, 'session-1', 'first pane', 2_000);
+    const pending = waitForFirstDesktopPane(client, 'session-1', 'first pane', 2_000);
     await vi.advanceTimersByTimeAsync(500);
 
     await expect(pending).resolves.toEqual({ paneId: 'session-pane-1', runtimeId: 'runtime-1' });
-    expect(client.request).toHaveBeenCalledWith('get_workspace', { sessionId: 'session-1' }, { timeoutMs: 20_000 });
+    expect(client.request).toHaveBeenCalledWith('get_desktop', { sessionId: 'session-1' }, { timeoutMs: 20_000 });
   });
 });
 

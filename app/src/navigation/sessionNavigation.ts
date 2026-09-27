@@ -16,7 +16,7 @@ import {
   type QueueBands,
   type QueueBandSession,
 } from '../utils/queueBands';
-import { buildDesktopViewModels } from '../utils/workspaceViewModels';
+import { buildDesktopViewModels } from '../utils/desktopViewModels';
 
 export type AppView = 'dashboard' | 'session' | 'grid';
 export type StateUpdate<T> = T | ((previous: T) => T);

@@ -28,7 +28,7 @@ async function injectSessions(
 }
 
 const currentDesktop = (page: import('@playwright/test').Page) =>
-  page.locator('.terminal-wrapper.active [data-session-terminal-workspace]');
+  page.locator('.terminal-wrapper.active [data-session-terminal-desktop]');
 
 const paneOf = (sessionId: string) => `[data-pane-kind="agent"][data-pane-session-id="${sessionId}"]`;
 
@@ -66,7 +66,7 @@ test.describe('Desktop Sessions', () => {
     await openSide(page, 'drag-stay', 'drag-move');
 
     const groupHolding = (sessionId: string) =>
-      page.locator('[data-testid^="sidebar-workspace-"]').filter({ has: page.locator(`[data-testid="sidebar-session-${sessionId}"]`) });
+      page.locator('[data-testid^="sidebar-desktop-"]').filter({ has: page.locator(`[data-testid="sidebar-session-${sessionId}"]`) });
     const dragRowOnto = async (sessionId: string, target: import('@playwright/test').Locator) => {
       const row = (await page.locator(`[data-testid="sidebar-session-${sessionId}"]`).boundingBox())!;
       await page.mouse.move(row.x + row.width / 2, row.y + row.height / 2);
@@ -79,7 +79,7 @@ test.describe('Desktop Sessions', () => {
     };
     const firstDesktopId = await groupHolding('drag-stay').getAttribute('data-testid');
 
-    await dragRowOnto('drag-move', page.locator('[data-testid="new-workspace-dropzone"]'));
+    await dragRowOnto('drag-move', page.locator('[data-testid="new-desktop-dropzone"]'));
 
     await expect(groupHolding('drag-move')).not.toHaveAttribute('data-testid', firstDesktopId!);
     await expect(groupHolding('drag-stay')).toHaveAttribute('data-testid', firstDesktopId!);
@@ -103,24 +103,24 @@ test.describe('Desktop Sessions', () => {
       await page.keyboard.press('Meta+g');
       await page.getByRole('button', { name: '+ New desktop' }).click();
     }
-    const headerLabels = page.locator('.workspace-group-header .workspace-label');
+    const headerLabels = page.locator('.desktop-group-header .desktop-label');
     await expect(headerLabels).toHaveText(['Desktop 1', 'Desktop 2', 'Desktop 3']);
 
     const headerOf = (label: string) =>
-      page.locator('.workspace-group-header', { has: page.locator('.workspace-label', { hasText: label }) });
+      page.locator('.desktop-group-header', { has: page.locator('.desktop-label', { hasText: label }) });
     const dragHeaderToTop = async (label: string) => {
       const source = (await headerOf(label).boundingBox())!;
       const top = (await headerLabels.first().boundingBox())!;
       await page.mouse.move(source.x + 24, source.y + source.height / 2);
       await page.mouse.down();
       await page.mouse.move(source.x + 24, source.y - 12, { steps: 4 });
-      await expect(page.locator('[data-testid="workspace-reorder-seam-0"]')).toBeVisible();
+      await expect(page.locator('[data-testid="desktop-reorder-seam-0"]')).toBeVisible();
       await page.mouse.move(top.x + 24, top.y - 12, { steps: 8 });
     };
 
     await dragHeaderToTop('Desktop 2');
     await page.keyboard.press('Escape');
-    await expect(page.locator('[data-testid="workspace-reorder-seam-0"]')).toHaveCount(0);
+    await expect(page.locator('[data-testid="desktop-reorder-seam-0"]')).toHaveCount(0);
     await page.mouse.up();
     await expect(headerLabels).toHaveText(['Desktop 1', 'Desktop 2', 'Desktop 3']);
 
@@ -181,7 +181,7 @@ test.describe('Desktop Sessions', () => {
     await expect(page.locator('.sidebar')).toBeVisible();
 
     const mainPane = desktop.locator(paneOf('focus-main'));
-    await mainPane.locator('.workspace-pane-header').hover();
+    await mainPane.locator('.desktop-pane-header').hover();
     await mainPane.locator('[data-testid^="focus-pane-"]').click();
 
     await expect(page.locator('.sidebar')).toBeHidden();

@@ -84,7 +84,7 @@ import {
 } from '../pty/runtimeLifecycle';
 import { createPtyTransportState } from '../pty/transportState';
 import { enqueuePerKey } from '../pty/attachQueue';
-import { tileContentKey, tileIdsFromLayoutJSON, type TileContentState } from '../types/workspace';
+import { tileContentKey, tileIdsFromLayoutJSON, type TileContentState } from '../types/desktop';
 import { isSuspiciousTerminalSize } from '../utils/terminalDebug';
 import { crewDisplayName } from '../utils/crewName';
 import { recordDiag } from '../utils/terminalDiagnosticsLog';

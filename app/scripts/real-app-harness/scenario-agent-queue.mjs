@@ -23,7 +23,7 @@ import { UiAutomationClient } from './uiAutomationClient.mjs';
 import { createScenarioRunner } from './scenarioRunner.mjs';
 import { currentHarnessInstance, dataDirForInstance, instanceCliEnv } from './harnessInstance.mjs';
 import { ensureClaudePromptReadyViaPty, writeQueueAgentFixture } from './scenarioAgents.mjs';
-import { waitForFirstWorkspacePane, waitForPaneInputFocus } from './scenarioAssertions.mjs';
+import { waitForFirstDesktopPane, waitForPaneInputFocus } from './scenarioAssertions.mjs';
 import { registeredAgentPid } from './workerRegistry.mjs';
 
 const HARNESS_DIR = path.dirname(fileURLToPath(import.meta.url));
@@ -90,12 +90,12 @@ function snoozedIds(queue) {
   return (queue.snoozed?.rows || []).map((row) => row.id);
 }
 
-async function paneIdFor(client, workspaceSessionId, sessionId) {
-  const workspace = await client.request('get_workspace', { sessionId: workspaceSessionId });
-  const pane = (workspace.panes || []).find((entry) => entry.sessionId === sessionId);
+async function paneIdFor(client, desktopSessionId, sessionId) {
+  const desktopState = await client.request('get_desktop', { sessionId: desktopSessionId });
+  const pane = (desktopState.panes || []).find((entry) => entry.sessionId === sessionId);
   if (!pane) {
     throw new Error(
-      `no pane for session ${sessionId} in ${workspaceSessionId}: ${JSON.stringify((workspace.panes || []).map((entry) => entry.sessionId))}`,
+      `no pane for session ${sessionId} in ${desktopSessionId}: ${JSON.stringify((desktopState.panes || []).map((entry) => entry.sessionId))}`,
     );
   }
   return pane.paneId;
@@ -122,7 +122,7 @@ async function createAgent(client, observer, runner, dirName, label) {
     promptReadyFn: ensureClaudePromptReadyViaPty,
     promptReadyTimeoutMs: 90_000,
   });
-  const pane = await waitForFirstWorkspacePane(client, sessionId, `pane for ${label}`, 20_000);
+  const pane = await waitForFirstDesktopPane(client, sessionId, `pane for ${label}`, 20_000);
   return { sessionId, paneId: pane.paneId, cwd };
 }
 
@@ -274,8 +274,8 @@ async function main() {
     await runner.step('band_is_oldest_first_and_each_agent_appears_once', async () => {
       const queue = await waitForTurns(client, [alpha.sessionId, beta.sessionId], 'both turns, oldest first');
       runner.assert(
-        queue.turns[0].workspaceId !== queue.turns[1].workspaceId,
-        `the two turns come from different workspaces: ${JSON.stringify(queue.turns.map((row) => row.workspaceId))}`,
+        queue.turns[0].desktopId !== queue.turns[1].desktopId,
+        `the two turns come from different desktops: ${JSON.stringify(queue.turns.map((row) => row.desktopId))}`,
       );
       for (const sessionId of [alpha.sessionId, beta.sessionId]) {
         runner.assert(
@@ -304,7 +304,7 @@ async function main() {
         JSON.stringify(collapsed.bar.crumbs) === JSON.stringify(open.turns.map((row) => row.label)),
         `the pill crumbs the turns oldest first: ${JSON.stringify(collapsed.bar.crumbs)}`,
       );
-      const badged = open.turns.map((row) => collapsed.bar.desktops.find((chip) => chip.desktopId === row.workspaceId));
+      const badged = open.turns.map((row) => collapsed.bar.desktops.find((chip) => chip.desktopId === row.desktopId));
       runner.assert(
         badged.every((chip) => chip && chip.waiting === 1),
         `each turn's desktop chip carries its waiting count: ${JSON.stringify(collapsed.bar.desktops)}`,
@@ -464,7 +464,7 @@ async function main() {
       await client.request('set_setting', { key: 'auto_settle_enabled', value: 'true' });
       try {
         await client.request('select_session', { sessionId: alpha.sessionId });
-        const pane = await waitForFirstWorkspacePane(client, alpha.sessionId, `current pane for ${alpha.sessionId}`, 20_000);
+        const pane = await waitForFirstDesktopPane(client, alpha.sessionId, `current pane for ${alpha.sessionId}`, 20_000);
         await typePromptAsUser(
           client,
           alpha.sessionId,
@@ -524,7 +524,7 @@ async function main() {
 
         // A pane can be replaced under a session, and writing to an id it no longer
         // has goes nowhere silently.
-        const pane = await waitForFirstWorkspacePane(client, watched.sessionId, `current pane for ${watched.sessionId}`, 20_000);
+        const pane = await waitForFirstDesktopPane(client, watched.sessionId, `current pane for ${watched.sessionId}`, 20_000);
 
         await typePromptAsUser(
           client,
@@ -579,8 +579,8 @@ async function main() {
         const shown = state.arrangement.desktops.find((desktop) => desktop.id === state.arrangement.currentDesktopId);
         return shown?.panes.some((pane) => pane.sessionId === alpha.sessionId) ? shown : null;
       }, 'alpha on the shown desktop before splitting it', 15_000);
-      const workspace = await client.request('get_workspace', { sessionId: alpha.sessionId });
-      const targetPaneId = workspace.activePaneId || workspace.panes?.[0]?.paneId;
+      const desktop = await client.request('get_desktop', { sessionId: alpha.sessionId });
+      const targetPaneId = desktop.activePaneId || desktop.panes?.[0]?.paneId;
       await client.request('split_pane', { sessionId: alpha.sessionId, targetPaneId, direction: 'vertical' });
       // A pane is registered in the spawn-time `working` color and settles a beat
       // later, so asserting on first sight reads the wrong state.
@@ -636,9 +636,9 @@ async function main() {
         });
       }
       const cleaned = await pollFor(async () => {
-        const workspace = await client.request('get_workspace', { sessionId: alpha.sessionId });
-        return (workspace.panes || []).length === 1 ? workspace : null;
-      }, 'the shell panes to close, leaving the agent alone in its workspace', 15_000);
+        const desktop = await client.request('get_desktop', { sessionId: alpha.sessionId });
+        return (desktop.panes || []).length === 1 ? desktop : null;
+      }, 'the shell panes to close, leaving the agent alone in its desktop', 15_000);
       runner.assert(
         cleaned.panes[0].sessionId === alpha.sessionId,
         `the agent is the only pane left: ${JSON.stringify(cleaned.panes.map((pane) => pane.sessionId))}`,
@@ -673,7 +673,7 @@ async function main() {
       }, 'the band to disappear with the arrangement off', 15_000);
       runner.assert(
         off.treeSessionIds.includes(alpha.sessionId) && off.treeSessionIds.includes(beta.sessionId),
-        `turning the arrangement off restores the whole workspace tree: ${JSON.stringify(off.treeSessionIds)}`,
+        `turning the arrangement off restores the whole desktopState tree: ${JSON.stringify(off.treeSessionIds)}`,
       );
 
       await client.request('set_setting', { key: 'queue_mode_enabled', value: 'true' });

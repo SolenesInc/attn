@@ -48,13 +48,13 @@ async function waitForPaneText(request, sessionId, paneId, predicate, timeoutMs 
   );
 }
 
-async function waitForFirstWorkspacePane(request, sessionId, timeoutMs = 15_000) {
+async function waitForFirstDesktopPane(request, sessionId, timeoutMs = 15_000) {
   const startedAt = Date.now();
-  let lastWorkspace = null;
+  let lastDesktop = null;
 
   while (Date.now() - startedAt < timeoutMs) {
-    lastWorkspace = await request('get_workspace', { sessionId }).catch(() => null);
-    const pane = (lastWorkspace?.panes || [])[0] || null;
+    lastDesktop = await request('get_desktop', { sessionId }).catch(() => null);
+    const pane = (lastDesktop?.panes || [])[0] || null;
     if (pane?.paneId) {
       return pane;
     }
@@ -62,24 +62,24 @@ async function waitForFirstWorkspacePane(request, sessionId, timeoutMs = 15_000)
   }
 
   throw new Error(
-    `Timed out waiting for first workspace pane in ${sessionId}. Last workspace:\n${JSON.stringify(lastWorkspace, null, 2)}`
+    `Timed out waiting for first desktop pane in ${sessionId}. Last desktop:\n${JSON.stringify(lastDesktop, null, 2)}`
   );
 }
 
 async function waitForNewShellPane(request, sessionId, existingPaneIds, timeoutMs = 12_000) {
   const startedAt = Date.now();
-  let lastWorkspace = null;
+  let lastDesktop = null;
 
   while (Date.now() - startedAt < timeoutMs) {
-    lastWorkspace = await request('get_workspace', { sessionId });
-    const newShells = (lastWorkspace.panes || []).filter(
+    lastDesktop = await request('get_desktop', { sessionId });
+    const newShells = (lastDesktop.panes || []).filter(
       (pane) => pane.kind === 'shell' && !existingPaneIds.has(pane.paneId)
     );
     if (newShells.length === 1) {
       return newShells[0];
     }
     if (newShells.length > 1) {
-      const activeShell = newShells.find((pane) => pane.paneId === lastWorkspace.activePaneId);
+      const activeShell = newShells.find((pane) => pane.paneId === lastDesktop.activePaneId);
       if (activeShell) {
         return activeShell;
       }
@@ -88,7 +88,7 @@ async function waitForNewShellPane(request, sessionId, existingPaneIds, timeoutM
   }
 
   throw new Error(
-    `Timed out waiting for new shell pane. Existing pane ids=${JSON.stringify([...existingPaneIds])}. Last workspace:\n${JSON.stringify(lastWorkspace, null, 2)}`
+    `Timed out waiting for new shell pane. Existing pane ids=${JSON.stringify([...existingPaneIds])}. Last desktop:\n${JSON.stringify(lastDesktop, null, 2)}`
   );
 }
 
@@ -204,7 +204,7 @@ async function main() {
     const sessionId = created.sessionId;
     trace.log('session:created', { sessionId, label: sessionLabel, cwd: sessionDir });
 
-    const initialPane = await waitForFirstWorkspacePane(request, sessionId, 20_000);
+    const initialPane = await waitForFirstDesktopPane(request, sessionId, 20_000);
     const initialPaneId = initialPane.paneId;
     await request('get_pane_state', { sessionId, paneId: initialPaneId });
     await request('read_pane_text', { sessionId, paneId: initialPaneId });
@@ -264,8 +264,8 @@ async function main() {
     );
     fs.writeFileSync(path.join(runDir, '05-main-token-1.txt'), mainVisible1.text || '', 'utf8');
 
-    const workspaceBeforeSplit = await request('get_workspace', { sessionId });
-    const existingPaneIds = new Set((workspaceBeforeSplit.panes || []).map((pane) => pane.paneId));
+    const desktopBeforeSplit = await request('get_desktop', { sessionId });
+    const existingPaneIds = new Set((desktopBeforeSplit.panes || []).map((pane) => pane.paneId));
 
     await request('dispatch_shortcut', { shortcutId: 'terminal.splitVertical' });
     const shellPane = await waitForNewShellPane(request, sessionId, existingPaneIds, 15_000);

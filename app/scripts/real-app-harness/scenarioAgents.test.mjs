@@ -8,7 +8,7 @@ describe('ensureCodexInitialPanePromptReady', () => {
     const client = {
       request: vi.fn(async (action) => {
         switch (action) {
-          case 'get_workspace':
+          case 'get_desktop':
             return {
               panes: [{ paneId: 'pane-session-1', runtimeId: 'runtime-session-1' }],
             };

@@ -290,11 +290,11 @@ describe('MarkdownReader link sanitization', () => {
 
   it('scrolls the tile body to a fragment target instead of navigating', () => {
     const { container } = render(
-      <div className="workspace-dock-tile-body">
+      <div className="desktop-dock-tile-body">
         <MarkdownReader content={'[Jump](#setup)\n\n## Setup\n'} source={FILE_SOURCE} />
       </div>,
     );
-    const body = container.querySelector<HTMLElement>('.workspace-dock-tile-body')!;
+    const body = container.querySelector<HTMLElement>('.desktop-dock-tile-body')!;
     const scrollTo = vi.fn();
     body.scrollTo = scrollTo;
 
@@ -309,15 +309,15 @@ describe('MarkdownReader link sanitization', () => {
     const content = '[Jump](#setup)\n\n## Setup\n';
     const { container } = render(
       <>
-        <div className="workspace-dock-tile-body" data-testid="tile-1">
+        <div className="desktop-dock-tile-body" data-testid="tile-1">
           <MarkdownReader content={content} source={FILE_SOURCE} />
         </div>
-        <div className="workspace-dock-tile-body" data-testid="tile-2">
+        <div className="desktop-dock-tile-body" data-testid="tile-2">
           <MarkdownReader content={content} source={FILE_SOURCE} />
         </div>
       </>,
     );
-    const bodies = container.querySelectorAll<HTMLElement>('.workspace-dock-tile-body');
+    const bodies = container.querySelectorAll<HTMLElement>('.desktop-dock-tile-body');
     const firstScrollTo = vi.fn();
     const secondScrollTo = vi.fn();
     bodies[0].scrollTo = firstScrollTo;
@@ -619,7 +619,7 @@ describe('MarkdownReader images + lightbox', () => {
     expect(screen.getByText('[blocked image: script]')).toBeInTheDocument();
   });
 
-  it('blocks local images when local targets are disallowed (remote workspace)', () => {
+  it('blocks local images when local targets are disallowed (remote desktop)', () => {
     const { container } = renderReader('![diagram](docs/pic.png)', false);
 
     expect(container.querySelector('img')).toBeNull();

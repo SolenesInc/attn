@@ -344,7 +344,7 @@ export function useAppController({
     markdownOpenerOpen,
   });
 
-  // Views with nothing focusable (dashboard, empty workspaces) can leave the WebView off first responder, killing EVERY shortcut until the user clicks the window.
+  // Views with nothing focusable (dashboard, empty desktops) can leave the WebView off first responder, killing EVERY shortcut until the user clicks the window.
   useEffect(() => {
     const claimShellFocus = () => {
       if (activeSessionId) return;

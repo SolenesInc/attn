@@ -1,24 +1,24 @@
 import type { MouseEvent as ReactMouseEvent } from 'react';
 import { useMemo, useState } from 'react';
 import { isAttentionSessionState } from '../types/sessionState';
-import { type TileContentState } from '../types/workspace';
+import { type TileContentState } from '../types/desktop';
 import { delegatesByDispatcher } from '../utils/delegationLinks';
 import { sessionParticipatesInQueue } from '../utils/queueBands';
-import { UNPLACED_GROUP_ID } from '../utils/workspaceViewModels';
+import { UNPLACED_GROUP_ID } from '../utils/desktopViewModels';
 import { automationRunGroups } from '../utils/automationRuns';
 import { isSessionless } from './sidebarModel';
-import type { DockItem, LocalSession, SidebarProps, SidebarWorkspace } from './sidebarTypes';
+import type { DockItem, LocalSession, SidebarProps, SidebarDesktop } from './sidebarTypes';
 import { useSidebarDrag } from './useSidebarDrag';
 
 const EMPTY_DOCK_ITEMS: DockItem[] = [];
 const EMPTY_TILE_CONTENTS: Record<string, TileContentState> = {};
 
 export function useSidebarState({
-  workspaces,
-  visualIndexByWorkspaceId,
+  desktops,
+  visualIndexByDesktopId,
   selectedId,
   selectionRequest = null,
-  selectedWorkspaceId,
+  selectedDesktopId,
   selectedTile = null,
   tileContents = EMPTY_TILE_CONTENTS,
   collapsed,
@@ -54,7 +54,7 @@ export function useSidebarState({
   onWakeTurn,
   onScreenSessionIds,
   onRenameSession,
-  onRenameWorkspace,
+  onRenameDesktop,
   onChangeChiefOfStaff,
   showSessionless = false,
   onToggleShowSessionless,
@@ -64,20 +64,20 @@ export function useSidebarState({
   onToggleCrewQueue,
   harnessLogosEnabled = true,
   onToggleHarnessLogos,
-  workspaceSelectionStyle = 'rail',
-  onWorkspaceSelectionStyleChange,
+  desktopSelectionStyle = 'rail',
+  onDesktopSelectionStyleChange,
   leafDrag = null,
-  dragHoverWorkspaceId = null,
-  onWorkspaceDragEnter,
-  onWorkspaceDragLeave,
-  onWorkspaceDragDrop,
-  onNewWorkspaceDrop,
+  dragHoverDesktopId = null,
+  onDesktopDragEnter,
+  onDesktopDragLeave,
+  onDesktopDragDrop,
+  onNewDesktopDrop,
   onSessionDragStart,
   onSessionDragEnd,
-  onWorkspaceReorder,
+  onDesktopReorder,
   onSelectSession,
   onTriggerNudge,
-  onSelectWorkspace,
+  onSelectDesktop,
   onSelectTile,
   onCloseTile,
   onReloadTile,
@@ -100,7 +100,7 @@ export function useSidebarState({
   );
   const [displayMode, setDisplayMode] = useState<'open' | 'tight' | 'boxed'>('boxed');
   const [renameTarget, setRenameTarget] = useState<{
-    kind: 'session' | 'workspace';
+    kind: 'session' | 'desktop';
     id: string;
     name: string;
     defaultName?: string;
@@ -135,7 +135,7 @@ export function useSidebarState({
     event.stopPropagation();
     const rect = event.currentTarget.getBoundingClientRect();
     setRenameTarget({
-      kind: 'workspace',
+      kind: 'desktop',
       id: desktopId,
       name: desktop.name,
       defaultName: desktop.defaultLabel,
@@ -167,7 +167,7 @@ export function useSidebarState({
     });
   };
 
-  const automationGroups = useMemo(() => automationRunGroups(workspaces, Date.now()), [workspaces]);
+  const automationGroups = useMemo(() => automationRunGroups(desktops, Date.now()), [desktops]);
   const [seenSelection, setSeenSelection] = useState<{
     id: string | null;
     request: SidebarProps['selectionRequest'];
@@ -181,11 +181,11 @@ export function useSidebarState({
   }
   const allSessions = useMemo(() => {
     const byId = new Map<string, LocalSession>();
-    for (const workspace of workspaces) {
-      for (const session of workspace.sessions) byId.set(session.id, session);
+    for (const desktopView of desktops) {
+      for (const session of desktopView.sessions) byId.set(session.id, session);
     }
     return [...byId.values()];
-  }, [workspaces]);
+  }, [desktops]);
   const delegates = useMemo(() => delegatesByDispatcher(allSessions), [allSessions]);
   const rowDelegation = (session: LocalSession) => ({
     delegates: delegates.get(session.id) ?? [],
@@ -202,52 +202,52 @@ export function useSidebarState({
     });
   };
 
-  const withoutAutomationRows = (workspace: SidebarWorkspace): SidebarWorkspace => ({
-    ...workspace,
-    sessions: workspace.sessions.filter((session) => !session.automation),
-    children: workspace.children.filter(
+  const withoutAutomationRows = (desktopView: SidebarDesktop): SidebarDesktop => ({
+    ...desktopView,
+    sessions: desktopView.sessions.filter((session) => !session.automation),
+    children: desktopView.children.filter(
       (child) => child.kind === 'tile' || !child.session.automation,
     ),
   });
 
-  const isWorkspaceVisible = (workspace: SidebarWorkspace) =>
-    !isSessionless(workspace) ||
-    workspace.hasUnresolvedAgentPanes ||
+  const isDesktopVisible = (desktopView: SidebarDesktop) =>
+    !isSessionless(desktopView) ||
+    desktopView.hasUnresolvedAgentPanes ||
     showSessionless;
-  const visibleWorkspaces = workspaces.flatMap((candidate) => {
-    const workspace = withoutAutomationRows(candidate);
-    return isWorkspaceVisible(workspace) ? [workspace] : [];
+  const visibleDesktops = desktops.flatMap((candidate) => {
+    const desktopView = withoutAutomationRows(candidate);
+    return isDesktopVisible(desktopView) ? [desktopView] : [];
   });
-  const canAcceptLeafDrag = (workspace: SidebarWorkspace) =>
+  const canAcceptLeafDrag = (desktopView: SidebarDesktop) =>
     Boolean(
       leafDrag &&
-        workspace.id !== leafDrag.sourceWorkspaceId &&
-        workspace.id !== UNPLACED_GROUP_ID &&
-        (workspace.endpointId || '') === (leafDrag.endpointId || ''),
+        desktopView.id !== leafDrag.sourceDesktopId &&
+        desktopView.id !== UNPLACED_GROUP_ID &&
+        (desktopView.endpointId || '') === (leafDrag.endpointId || ''),
     );
 
-  const workspaceDragClass = (workspace: SidebarWorkspace) => {
+  const desktopDragClass = (desktopView: SidebarDesktop) => {
     if (!leafDrag) {
       return '';
     }
-    if (!canAcceptLeafDrag(workspace)) {
-      return ' workspace-group--drag-disabled';
+    if (!canAcceptLeafDrag(desktopView)) {
+      return ' desktop-group--drag-disabled';
     }
-    if (dragHoverWorkspaceId === workspace.id) {
-      return ' workspace-group--drag-entering';
+    if (dragHoverDesktopId === desktopView.id) {
+      return ' desktop-group--drag-entering';
     }
-    return ' workspace-group--drag-target';
+    return ' desktop-group--drag-target';
   };
-  const visibleVisualOrder = workspaces.filter(isWorkspaceVisible);
-  const reorderParticipants = visibleWorkspaces.filter((workspace) => workspace.desktop);
-  const visualIndexOfWorkspace = (id: string) => visualIndexByWorkspaceId.get(id) ?? -1;
+  const visibleVisualOrder = desktops.filter(isDesktopVisible);
+  const reorderParticipants = visibleDesktops.filter((desktopView) => desktopView.desktop);
+  const visualIndexOfDesktop = (id: string) => visualIndexByDesktopId.get(id) ?? -1;
 
-  const [newWorkspaceDropActive, setNewWorkspaceDropActive] = useState(false);
+  const [newDesktopDropActive, setNewDesktopDropActive] = useState(false);
   const {
     reorderDrag,
     sessionDragGhost,
     draggingSessionId,
-    reorderSeamIndexByWorkspaceId,
+    reorderSeamIndexByDesktopId,
     reorderTrailingSeamIndex,
     lastReorderParticipantId,
     renderReorderSeam,
@@ -257,15 +257,15 @@ export function useSidebarState({
     handleSessionClickCapture,
   } = useSidebarDrag({
     reorderParticipants,
-    onWorkspaceReorder,
+    onDesktopReorder,
     onSessionDragStart,
     onSessionDragEnd,
   });
 
   return {
-    workspaces,
+    desktops,
     selectedId,
-    selectedWorkspaceId,
+    selectedDesktopId,
     selectedTile,
     tileContents,
     collapsed,
@@ -302,7 +302,7 @@ export function useSidebarState({
     onWakeTurn,
     onScreenSessionIds,
     onRenameSession,
-    onRenameWorkspace,
+    onRenameDesktop,
     onChangeChiefOfStaff,
     showSessionless,
     onToggleShowSessionless,
@@ -312,18 +312,18 @@ export function useSidebarState({
     onToggleCrewQueue,
     harnessLogosEnabled,
     onToggleHarnessLogos,
-    workspaceSelectionStyle,
-    onWorkspaceSelectionStyleChange,
+    desktopSelectionStyle,
+    onDesktopSelectionStyleChange,
     leafDrag,
-    dragHoverWorkspaceId,
-    onWorkspaceDragEnter,
-    onWorkspaceDragLeave,
-    onWorkspaceDragDrop,
-    onNewWorkspaceDrop,
+    dragHoverDesktopId,
+    onDesktopDragEnter,
+    onDesktopDragLeave,
+    onDesktopDragDrop,
+    onNewDesktopDrop,
     onSessionDragStart,
     onSelectSession,
     onTriggerNudge,
-    onSelectWorkspace,
+    onSelectDesktop,
     onSelectTile,
     onCloseTile,
     onReloadTile,
@@ -351,17 +351,17 @@ export function useSidebarState({
     delegates,
     rowDelegation,
     toggleAutomationGroup,
-    visibleWorkspaces,
+    visibleDesktops,
     visibleVisualOrder,
     canAcceptLeafDrag,
-    workspaceDragClass,
-    visualIndexOfWorkspace,
-    newWorkspaceDropActive,
-    setNewWorkspaceDropActive,
+    desktopDragClass,
+    visualIndexOfDesktop,
+    newDesktopDropActive,
+    setNewDesktopDropActive,
     reorderDrag,
     sessionDragGhost,
     draggingSessionId,
-    reorderSeamIndexByWorkspaceId,
+    reorderSeamIndexByDesktopId,
     reorderTrailingSeamIndex,
     lastReorderParticipantId,
     renderReorderSeam,

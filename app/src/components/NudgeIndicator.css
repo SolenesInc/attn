@@ -1,5 +1,5 @@
 /* Incoming-ticket-nudge indicator, shared by the sidebar row (a thin bar on the
-   session item) and the pane header (an inline chip in .workspace-pane-header).
+   session item) and the pane header (an inline chip in .desktop-pane-header).
    Colors are literal rgba (not theme tokens) so the indicator renders identically in
    the packaged app regardless of which token blocks are defined. Each mode sets a
    single --nudge-accent (r,g,b) channel that the shared dot/glow rules read, so
@@ -27,7 +27,7 @@
   --nudge-accent-solid: #f59e0b;
 }
 
-/* ---- Pane header chip: inline, right-aligned inside .workspace-pane-header ---- */
+/* ---- Pane header chip: inline, right-aligned inside .desktop-pane-header ---- */
 
 .nudge-header {
   display: inline-flex;

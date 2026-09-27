@@ -183,11 +183,11 @@ export function UnifiedPalette<S extends PaletteSession>({
 
   const desktopOfSession = useMemo(() => {
     const byId = new Map<string, string>();
-    for (const workspace of agents.workspaces) {
-      for (const session of workspace.sessions) byId.set(session.id, workspace.id);
+    for (const desktop of agents.desktops) {
+      for (const session of desktop.sessions) byId.set(session.id, desktop.id);
     }
     return byId;
-  }, [agents.workspaces]);
+  }, [agents.desktops]);
   const slotOf = (desktopId: string | undefined, sessionId?: string) => {
     const id = sessionId ? desktopOfSession.get(sessionId) : desktopId;
     const desktop = desktops.find((entry) => entry.id === id);

@@ -49,7 +49,7 @@ const TRANSIENT_SESSION_ACTIONS = new Set([
   'drag_pane_selection',
   'focus_pane',
   'get_pane_state',
-  'get_workspace',
+  'get_desktop',
   'read_pane_text',
   'scroll_pane_to_top',
   'wheel_pane',

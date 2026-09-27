@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
-import type { TileLeaf } from '../../types/workspace';
+import type { TileLeaf } from '../../types/desktop';
 import { buildQueueBands } from '../../utils/queueBands';
-import type { WorkspaceWithSessions } from '../../utils/workspaceViewModels';
+import type { DesktopWithSessions } from '../../utils/desktopViewModels';
 import { agentPaletteRows, selectableCount, type AgentPaletteRow, type PaletteSession } from './agentPaletteRows';
 
 const NOW = Date.parse('2026-09-26T12:00:00Z');
@@ -15,7 +15,7 @@ function desktop(
   id: string,
   sessions: PaletteSession[],
   tiles: TileLeaf[] = [],
-): WorkspaceWithSessions<PaletteSession> {
+): DesktopWithSessions<PaletteSession> {
   return {
     id,
     title: id,
@@ -36,15 +36,15 @@ function tile(tileId: string, tileParams: string): TileLeaf {
 }
 
 function rows(
-  workspaces: WorkspaceWithSessions<PaletteSession>[],
+  desktops: DesktopWithSessions<PaletteSession>[],
   query = '',
   { crewRoster = [] as string[], crewInQueue = false } = {},
 ) {
   return agentPaletteRows(
     {
-      bands: buildQueueBands(workspaces, { crewInQueue, now: NOW }),
+      bands: buildQueueBands(desktops, { crewInQueue, now: NOW }),
       crewRoster,
-      workspaces,
+      desktops,
       tileTitle: (_desktopId, leaf) => leaf.tileParams ?? '',
       now: NOW,
     },

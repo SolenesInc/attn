@@ -114,14 +114,14 @@ function paneSessionIds(root: ParentNode): string[] {
 
 function renderedPanes(desktopId: string): string[] {
   const surface = document.querySelector(
-    `.session-terminal-workspace[data-workspace-id="${desktopId}"]`,
+    `.session-terminal-desktop[data-desktop-id="${desktopId}"]`,
   );
   return surface ? paneSessionIds(surface) : [];
 }
 
 function renderedDesktopIds(): string[] {
-  return Array.from(document.querySelectorAll('.session-terminal-workspace'))
-    .map((node) => node.getAttribute('data-workspace-id') || '')
+  return Array.from(document.querySelectorAll('.session-terminal-desktop'))
+    .map((node) => node.getAttribute('data-desktop-id') || '')
     .sort();
 }
 

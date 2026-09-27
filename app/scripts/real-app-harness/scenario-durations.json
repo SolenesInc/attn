@@ -22,13 +22,13 @@
         "runnerClass": "local macOS",
         "note": "Green focus-free run with the seeds tab, handoff history, charter editing, reconnect recovery and the restart lifecycle; earlier green runs the same day took 48.6s and 54.2s. Remeasure on Linux CI."
       },
-      "workspace-switching": {
-        "run": "workspace-switching-2026-09-15T21-17-34-309Z",
+      "desktop-splits": {
+        "run": "desktop-switching-2026-09-15T21-17-34-309Z",
         "job": "Local serial matrix, rugged-doctor instance",
         "recordedAt": "2026-09-15",
         "seconds": 45.7,
         "runnerClass": "local macOS",
-        "note": "Green matrix-digest.txt, including focus exit and cross-workspace focus reset, with recording. Remeasure on Linux CI."
+        "note": "Green matrix-digest.txt, including focus exit and cross-desktop focus reset, with recording. Remeasure on Linux CI."
       },
       "delegation-chain": {
         "run": "delegation-chain-2026-09-13T23-06-51-792Z",
@@ -168,14 +168,14 @@
     "terminal-context-menu": 9.7,
     "terminal-input": 12.8,
     "terminal-md-link": 15.9,
-    "tile-only-workspace-select": 5,
+    "tile-only-desktop-select": 5,
     "tr201-local-claude": 8.7,
     "tr301-local-claude": 6.9,
     "tr401-local-claude": 14.2,
-    "workspace-close-one-session-keeps-selection": 27.4,
+    "desktop-close-one-session-keeps-selection": 27.4,
     "session-creation-shortcuts": 22.6,
     "desktop-switching": 27.0,
-    "workspace-switching": 45.7,
+    "desktop-splits": 45.7,
     "worktree-surface": 34.3,
     "crew-management": 57.6,
     "desktop-migration": 20.7,

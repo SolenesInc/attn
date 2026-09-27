@@ -17,7 +17,7 @@ import { createWindowDriver } from './platform.mjs';
 import { bundleIdentifierForInstance } from './harnessInstance.mjs';
 import { createScenarioRunner } from './scenarioRunner.mjs';
 import { cleanupSessionViaAppClose } from './scenarioCleanup.mjs';
-import { waitForFirstWorkspacePane } from './scenarioAssertions.mjs';
+import { waitForFirstDesktopPane } from './scenarioAssertions.mjs';
 
 const execFileAsync = promisify(execFile);
 const WITNESS_BUNDLE_ID = 'com.apple.Terminal';
@@ -114,7 +114,7 @@ async function main() {
         sessionWaitMs: 60_000,
       });
     });
-    initialPaneId = (await waitForFirstWorkspacePane(client, sessionId, 'initial pane for focus probe', 20_000)).paneId;
+    initialPaneId = (await waitForFirstDesktopPane(client, sessionId, 'initial pane for focus probe', 20_000)).paneId;
 
     await runner.step('record_baseline_post_launch', async () => {
       observations.baselineAfterLaunchFrontmost = await frontmostBundleId();

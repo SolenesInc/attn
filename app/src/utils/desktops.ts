@@ -1,7 +1,7 @@
 import { formatShortcut } from '../shortcuts/formatShortcut';
 import type { ShortcutId } from '../shortcuts/registry';
 import type { Desktop, DesktopPane } from '../types/generated';
-import { hasLeaf, parseLayoutJSON, type TerminalWorkspaceSnapshot, type TerminalWorkspaceState } from '../types/workspace';
+import { hasLeaf, parseLayoutJSON, type TerminalDesktopSnapshot, type TerminalDesktopState } from '../types/desktop';
 
 export const SHORTCUT_SLOTS = [1, 2, 3, 4, 5, 6, 7, 8, 9] as const;
 
@@ -46,7 +46,7 @@ export function slotShortcut(slot: number): string {
   return formatShortcut(`desktop.select${slot}` as ShortcutId);
 }
 
-export function desktopTerminalState(desktop: Desktop): TerminalWorkspaceState {
+export function desktopTerminalState(desktop: Desktop): TerminalDesktopState {
   return {
     agents: desktop.panes
       .filter((pane) => pane.kind === 'agent')
@@ -62,13 +62,13 @@ export function desktopTerminalState(desktop: Desktop): TerminalWorkspaceState {
   };
 }
 
-export function desktopSnapshot(desktop: Desktop): TerminalWorkspaceSnapshot {
-  const workspace = desktopTerminalState(desktop);
-  const firstPaneId = workspace.agents[0]?.id ?? '';
+export function desktopSnapshot(desktop: Desktop): TerminalDesktopSnapshot {
+  const terminalState = desktopTerminalState(desktop);
+  const firstPaneId = terminalState.agents[0]?.id ?? '';
   const active = desktop.active_pane_id;
   return {
-    workspace,
-    daemonActivePaneId: active && workspace.layoutTree && hasLeaf(workspace.layoutTree, active) ? active : firstPaneId,
+    terminalState,
+    daemonActivePaneId: active && terminalState.layoutTree && hasLeaf(terminalState.layoutTree, active) ? active : firstPaneId,
   };
 }
 

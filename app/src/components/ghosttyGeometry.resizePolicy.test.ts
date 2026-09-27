@@ -3,7 +3,7 @@ import {
   fitRequiresTerminalResize,
   fitShouldBailAsSuspicious,
   geometryOverflowsContainer,
-  isWorkspaceSuspensionAnimating,
+  isDesktopSuspensionAnimating,
 } from './ghosttyGeometry';
 
 describe('ghosttyGeometry resize policy', () => {
@@ -13,11 +13,11 @@ describe('ghosttyGeometry resize policy', () => {
     const terminal = document.createElement('div');
     panes.appendChild(terminal);
 
-    expect(isWorkspaceSuspensionAnimating(terminal)).toBe(false);
+    expect(isDesktopSuspensionAnimating(terminal)).toBe(false);
     panes.dataset.suspensionAnimating = '1';
-    expect(isWorkspaceSuspensionAnimating(terminal)).toBe(true);
+    expect(isDesktopSuspensionAnimating(terminal)).toBe(true);
     delete panes.dataset.suspensionAnimating;
-    expect(isWorkspaceSuspensionAnimating(terminal)).toBe(false);
+    expect(isDesktopSuspensionAnimating(terminal)).toBe(false);
   });
 
   it('treats identical fit geometry as a no-op', () => {

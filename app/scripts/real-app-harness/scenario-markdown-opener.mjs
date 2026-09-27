@@ -15,7 +15,7 @@ import { DaemonObserver } from './daemonObserver.mjs';
 import { createWindowDriver, delay } from './platform.mjs';
 import { captureScreenshotData } from './nativeWindowCapture.mjs';
 import {
-  waitForFirstWorkspacePane,
+  waitForFirstDesktopPane,
   waitForPaneShellReady,
   waitForPaneVisible,
 } from './scenarioAssertions.mjs';
@@ -50,15 +50,15 @@ async function waitForOpener(client, predicate, description, timeoutMs = 10_000)
   throw new Error(`Timed out waiting for ${description}. Last opener state:\n${JSON.stringify(last, null, 2)}`);
 }
 
-async function waitForWorkspaceUi(client, workspaceId, predicate, description, timeoutMs = 20_000) {
+async function waitForDesktopUi(client, desktopId, predicate, description, timeoutMs = 20_000) {
   const startedAt = Date.now();
   let last = null;
   while (Date.now() - startedAt < timeoutMs) {
-    last = await client.request('get_workspace_ui_state', { workspaceId }).catch((error) => ({ error: String(error) }));
+    last = await client.request('get_desktop_ui_state', { desktopId }).catch((error) => ({ error: String(error) }));
     if (predicate(last)) return last;
     await delay(200);
   }
-  throw new Error(`Timed out waiting for ${description}. Last workspace UI state:\n${JSON.stringify(last, null, 2)}`);
+  throw new Error(`Timed out waiting for ${description}. Last desktop UI state:\n${JSON.stringify(last, null, 2)}`);
 }
 
 async function waitForSessionUi(client, sessionId, predicate, description, timeoutMs = 10_000) {
@@ -89,10 +89,10 @@ function markdownTileIds(state) {
   return (state?.tileIds || []).filter((id) => id.startsWith('tile-markdown'));
 }
 
-async function closeWorkspacePanes(client, sessionId) {
+async function closeDesktopPanes(client, sessionId) {
   for (let attempt = 0; attempt < 10; attempt += 1) {
-    const workspace = await client.request('get_workspace', { sessionId }).catch(() => null);
-    const pane = workspace?.panes?.[0];
+    const desktop = await client.request('get_desktop', { sessionId }).catch(() => null);
+    const pane = desktop?.panes?.[0];
     if (!pane) return;
     await client.request('close_pane', { sessionId, paneId: pane.paneId }).catch(() => {});
     await delay(200);
@@ -147,7 +147,7 @@ async function main() {
     const alpha = `alpha-plan-${runner.runId}.md`;
     const beta = `beta-notes-${runner.runId}.md`;
 
-    const { workspaceId, cwd } = await runner.step('create_shell_session', async () => {
+    const { desktopId, cwd } = await runner.step('create_shell_session', async () => {
       const sessionCwd = path.join(runner.sessionDir, 'opener-ws');
       fs.mkdirSync(sessionCwd, { recursive: true });
       seedRepo(sessionCwd, alpha, beta);
@@ -160,19 +160,19 @@ async function main() {
         waitForInitialPaneVisible: false,
         sessionWaitMs: 30_000,
       });
-      runner.registerCleanup('close_session_panes', () => (sessionId ? closeWorkspacePanes(client, sessionId) : null));
-      const pane = await waitForFirstWorkspacePane(client, sessionId, 'initial workspace pane');
+      runner.registerCleanup('close_session_panes', () => (sessionId ? closeDesktopPanes(client, sessionId) : null));
+      const pane = await waitForFirstDesktopPane(client, sessionId, 'initial desktop pane');
       await client.request('select_session', { sessionId });
       await waitForPaneVisible(client, sessionId, pane.paneId, 20_000);
       await waitForPaneShellReady(client, sessionId, pane.paneId, {
         timeoutMs: 20_000,
         description: 'shell prompt ready',
       });
-      const workspace = await client.request('get_workspace', { sessionId });
-      if (!workspace.desktopId) {
-        throw new Error(`Could not resolve workspace id for session ${sessionId}: ${JSON.stringify(workspace)}`);
+      const desktop = await client.request('get_desktop', { sessionId });
+      if (!desktop.desktopId) {
+        throw new Error(`Could not resolve desktop id for session ${sessionId}: ${JSON.stringify(desktop)}`);
       }
-      return { workspaceId: workspace.desktopId, cwd: sessionCwd };
+      return { desktopId: desktop.desktopId, cwd: sessionCwd };
     });
 
     const summon = async (description) => {
@@ -225,9 +225,9 @@ async function main() {
       await captureScreenshotData(path.join(runner.runDir, 'opener-fuzzy.png'), { client }).catch(() => {});
       await pickRow(state, beta);
       await waitForOpener(client, (current) => !current.open, 'picking a file closes the opener');
-      const ui = await waitForWorkspaceUi(
+      const ui = await waitForDesktopUi(
         client,
-        workspaceId,
+        desktopId,
         (state) => markdownTileIds(state).length === 1,
         'picking a file docks its markdown tile',
       );
@@ -236,28 +236,28 @@ async function main() {
       runner.log(`[RealAppHarness] docked ${openedTileId} for ${beta}`);
 
       await client.request('dom_click', {
-        selector: `[data-pane-id="${openedTileId}"] .workspace-dock-tile-focus-action`,
+        selector: `[data-pane-id="${openedTileId}"] .desktop-dock-tile-focus-action`,
       });
       const focused = await waitForSessionUi(
         client,
         sessionId,
-        (state) => state.workspace?.view?.maximizedPaneId === openedTileId,
+        (state) => state.desktop?.view?.maximizedPaneId === openedTileId,
         'the new document to enter Focus',
       );
       runner.assert(
-        focused.workspace?.view?.maximizedPaneId === openedTileId,
-        `The newly opened document must be visible and enter Focus: ${JSON.stringify(focused.workspace?.view)}`,
+        focused.desktop?.view?.maximizedPaneId === openedTileId,
+        `The newly opened document must be visible and enter Focus: ${JSON.stringify(focused.desktop?.view)}`,
       );
 
       await waitForElement(client, `[data-pane-id="${openedTileId}"] .md-reader--annotating h1`);
       await client.request('dom_click', {
-        selector: `[data-pane-id="${openedTileId}"] .workspace-dock-tile-review-button--overall`,
+        selector: `[data-pane-id="${openedTileId}"] .desktop-dock-tile-review-button--overall`,
       });
       await waitForElement(client, '.md-annotation-popover .md-popover-textarea');
       await client.request('dom_focus', { selector: '.md-annotation-popover .md-popover-textarea' });
       await driver.pressKeyCode(53);
       await client.request('dom_click', {
-        selector: `[data-pane-id="${openedTileId}"] .workspace-dock-tile-review-button:not(.workspace-dock-tile-review-button--overall)`,
+        selector: `[data-pane-id="${openedTileId}"] .desktop-dock-tile-review-button:not(.desktop-dock-tile-review-button--overall)`,
       });
       await waitForElement(client, '.md-annotations-sidebar .md-sidebar-title');
       await client.request('dom_click', { selector: '.md-annotations-sidebar .md-sidebar-title' });
@@ -265,23 +265,23 @@ async function main() {
       const stillFocused = await waitForSessionUi(
         client,
         sessionId,
-        (state) => state.workspace?.view?.maximizedPaneId === openedTileId,
+        (state) => state.desktop?.view?.maximizedPaneId === openedTileId,
         'Escape to close the review inspector without leaving Focus',
       );
       runner.assert(
-        stillFocused.workspace?.view?.maximizedPaneId === openedTileId,
-        `Floating review layers must unwind before Focus: ${JSON.stringify(stillFocused.workspace?.view)}`,
+        stillFocused.desktop?.view?.maximizedPaneId === openedTileId,
+        `Floating review layers must unwind before Focus: ${JSON.stringify(stillFocused.desktop?.view)}`,
       );
       await driver.pressKeyCode(53);
       const restored = await waitForSessionUi(
         client,
         sessionId,
-        (state) => state.workspace?.view?.maximizedPaneId === null,
+        (state) => state.desktop?.view?.maximizedPaneId === null,
         'Escape returns from document Focus',
       );
       runner.assert(
-        restored.workspace?.view?.maximizedPaneId === null,
-        `Escape must leave document Focus: ${JSON.stringify(restored.workspace?.view)}`,
+        restored.desktop?.view?.maximizedPaneId === null,
+        `Escape must leave document Focus: ${JSON.stringify(restored.desktop?.view)}`,
       );
     });
 
@@ -294,15 +294,15 @@ async function main() {
         'fuzzy query matches the tracked markdown file',
       );
       await pickRow(state, alpha);
-      await waitForWorkspaceUi(
+      await waitForDesktopUi(
         client,
-        workspaceId,
+        desktopId,
         (state) => markdownTileIds(state).length === 2,
         'the second pick docks a second markdown tile',
       );
     });
 
-    const beforeRecents = await client.request('get_workspace_ui_state', { workspaceId });
+    const beforeRecents = await client.request('get_desktop_ui_state', { desktopId });
     await runner.step('recents_list_opened_files', async () => {
       await summon('re-summon to inspect recents');
       const state = await waitForOpener(
@@ -323,10 +323,10 @@ async function main() {
       await waitForSessionUi(
         client,
         sessionId,
-        (ui) => ui.workspace?.view?.activeLeafId === betaTileId,
-        'the reused tile to take the workspace focus',
+        (ui) => ui.desktop?.view?.activeLeafId === betaTileId,
+        'the reused tile to take the desktop focus',
       );
-      const after = await client.request('get_workspace_ui_state', { workspaceId });
+      const after = await client.request('get_desktop_ui_state', { desktopId });
       const before = markdownTileIds(beforeRecents);
       const now = markdownTileIds(after);
       runner.assert(
@@ -335,7 +335,7 @@ async function main() {
       );
     });
 
-    const result = await runner.finishSuccess({ sessionId, workspaceId, cwd });
+    const result = await runner.finishSuccess({ sessionId, desktopId, cwd });
     console.log('[verify] PASS — markdown opener: fuzzy opens tracked and untracked files, and recents reuse their tile.');
     console.log(JSON.stringify(result, null, 2));
   } catch (error) {
@@ -345,7 +345,7 @@ async function main() {
     process.exitCode = 1;
   } finally {
     if (sessionId) {
-      await closeWorkspacePanes(client, sessionId).catch(() => {});
+      await closeDesktopPanes(client, sessionId).catch(() => {});
     }
     await client.quitApp().catch(() => {});
     await observer.close();

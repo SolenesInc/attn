@@ -13,10 +13,10 @@ import { oldestWantedTurn } from '../utils/queueBands';
 import { formatShortcut } from '../shortcuts/formatShortcut';
 import { probeUiAfterSwitch } from '../utils/uiDiagnosticsLog';
 import {
-  persistWorkspaceSelectionStyle,
-  readWorkspaceSelectionStyle,
-  type WorkspaceSelectionStyle,
-} from '../utils/workspaceSelectionStyle';
+  persistDesktopSelectionStyle,
+  readDesktopSelectionStyle,
+  type DesktopSelectionStyle,
+} from '../utils/desktopSelectionStyle';
 import { AppContentProps } from './appSupport';
 import { useAppSessions } from './useAppSessions';
 import type { useAttentionQueue } from './useAttentionQueue';
@@ -104,18 +104,18 @@ export function useAppNavigation({
     setView((prev) => (prev === 'grid' ? (activeSessionId ? 'session' : 'dashboard') : 'grid'));
   }, [activeSessionId, setView]);
 
-  const [workspaceSelectionStyle, setWorkspaceSelectionStyle] = useState<WorkspaceSelectionStyle>(
-    readWorkspaceSelectionStyle,
+  const [desktopSelectionStyle, setDesktopSelectionStyle] = useState<DesktopSelectionStyle>(
+    readDesktopSelectionStyle,
   );
-  const handleWorkspaceSelectionStyleChange = useCallback((style: WorkspaceSelectionStyle) => {
-    persistWorkspaceSelectionStyle(style);
-    setWorkspaceSelectionStyle(style);
+  const handleDesktopSelectionStyleChange = useCallback((style: DesktopSelectionStyle) => {
+    persistDesktopSelectionStyle(style);
+    setDesktopSelectionStyle(style);
   }, []);
 
   useEffect(() => {
     probeUiAfterSwitch({
       sessionId: activeSessionId,
-      workspaceId: currentDesktopId,
+      desktopId: currentDesktopId,
       view,
     });
   }, [activeSessionId, currentDesktopId, view]);
@@ -217,8 +217,8 @@ export function useAppNavigation({
     goHomeAwaitingNextTurn,
     toggleGridMode,
     desktopViews,
-    workspaceSelectionStyle,
-    handleWorkspaceSelectionStyleChange,
+    desktopSelectionStyle,
+    handleDesktopSelectionStyleChange,
     currentDesktopId,
     currentDesktopIdRef,
     handleSelectDesktop,

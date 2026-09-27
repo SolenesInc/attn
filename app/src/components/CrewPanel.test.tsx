@@ -160,7 +160,7 @@ describe('CrewPanel', () => {
     expect(panel.closest('.crew-panel-layer')).toBeInTheDocument();
   });
 
-  it('keeps member, tab, seed filter and search when a workspace seed returns to Crew', async () => {
+  it('keeps member, tab, seed filter and search when a desktop seed returns to Crew', async () => {
     const planted = seed({ id: 's-g9yxwv', title: 'Artifact presence comes from the daemon', planter_member: 'keel' });
     const onOpenSeed = vi.fn();
     const members = [member('alder', 2), member('keel', 3, { binding_session: 'session-keel' })];

@@ -18,7 +18,7 @@ test.describe('Settings', () => {
     await expect(searchInput).toHaveAttribute('spellcheck', 'false');
 
     await expect(modal.locator('h3', { hasText: 'Mobile Web Client' })).toBeVisible();
-    await modal.getByTestId('settings-nav-workspace').click();
+    await modal.getByTestId('settings-nav-desktop').click();
     await expect(modal.locator('h3', { hasText: 'Projects Directory' })).toBeVisible();
     await modal.getByTestId('settings-nav-hygiene').click();
     await expect(modal.locator('h3', { hasText: 'Muted Repositories' })).toBeVisible();
@@ -53,7 +53,7 @@ test.describe('Settings', () => {
     await page.getByTestId('settings-button').click();
     const modal = page.getByTestId('settings-modal');
     await expect(modal).toBeVisible();
-    await modal.getByTestId('settings-nav-workspace').click();
+    await modal.getByTestId('settings-nav-desktop').click();
 
     const projectsDir = '/tmp/attn-e2e-projects-manual';
     const input = modal.getByTestId('settings-projects-directory-input');
@@ -65,7 +65,7 @@ test.describe('Settings', () => {
 
     await page.getByTestId('settings-button').click();
     await expect(modal).toBeVisible();
-    await modal.getByTestId('settings-nav-workspace').click();
+    await modal.getByTestId('settings-nav-desktop').click();
 
     await expect(input).toHaveValue(projectsDir);
   });

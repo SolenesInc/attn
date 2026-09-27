@@ -1,5 +1,5 @@
 import { openPath } from '@tauri-apps/plugin-opener';
-import { SessionTerminalWorkspace } from '../components/SessionTerminalWorkspace';
+import { SessionTerminalDesktop } from '../components/SessionTerminalDesktop';
 import { useDaemonApi } from '../contexts/DaemonApiContext';
 import { useDaemonStore } from '../store/daemonSessions';
 import { useProfilesStore } from '../store/profiles';
@@ -33,7 +33,7 @@ export function AppDesktops() {
   const currentDesktopId = useProfilesStore((state) => state.currentDesktopId);
   const {
     desktopViews,
-    workspaceSelectionStyle,
+    desktopSelectionStyle,
     utilityFocusRequestToken,
     view,
     handleSelectSession,
@@ -94,14 +94,14 @@ export function AppDesktops() {
     const activePane = terminalState.agents.find((pane) => pane.id === desktop.active_pane_id);
     const contextSessionId = activePane?.sessionId ?? (isCurrent ? activeSessionId : null);
     const contextSession = desktopSessions.find((session) => session.id === contextSessionId);
-    const workspaceDirectory = contextSession && !contextSession.endpointId ? contextSession.cwd : undefined;
+    const desktopDirectory = contextSession && !contextSession.endpointId ? contextSession.cwd : undefined;
     return (
       <div key={desktop.id} className={`terminal-wrapper ${isCurrent ? 'active' : ''}`}>
-        <SessionTerminalWorkspace
+        <SessionTerminalDesktop
           ref={setDesktopRef(desktop.id)}
-          workspaceId={desktop.id}
-          workspaceDirectory={workspaceDirectory}
-          workspaceSessions={desktopSessions.map((entry) => ({
+          desktopId={desktop.id}
+          desktopDirectory={desktopDirectory}
+          desktopSessions={desktopSessions.map((entry) => ({
             id: entry.id,
             label: entry.label,
             agent: entry.agent,
@@ -154,8 +154,8 @@ export function AppDesktops() {
               });
           }}
           onTerminalModelRecovered={handleTerminalModelRecovered}
-          workspace={terminalState}
-          workspaceSelectionStyle={workspaceSelectionStyle}
+          terminalState={terminalState}
+          desktopSelectionStyle={desktopSelectionStyle}
           activePaneId={desktop.active_pane_id}
           fontSize={terminalFontSize}
           resolvedTheme={resolvedTheme}

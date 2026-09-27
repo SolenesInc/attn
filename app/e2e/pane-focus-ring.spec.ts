@@ -5,7 +5,7 @@ test('active-pane selection markers paint above the split divider', async ({ pag
   await page.goto('/test-harness/?component=PaneFocusRing');
   await page.waitForFunction(() => window.__HARNESS__?.ready === true);
 
-  const workspace = page.locator('[data-testid="workspace"]');
+  const desktop = page.locator('[data-testid="desktop"]');
   const pane = page.locator('[data-testid="pane-active"]');
   const inactiveTile = page.locator('[data-testid="tile-inactive"]');
   const overlay = page.locator('[data-testid="split-divider"]');
@@ -14,9 +14,9 @@ test('active-pane selection markers paint above the split divider', async ({ pag
   const overlayZ = Number(await overlay.evaluate((el) => getComputedStyle(el).zIndex));
 
   for (const style of ['rail', 'spotlight']) {
-    await workspace.evaluate((el, selectionStyle) => {
-      el.classList.remove('workspace-selection--dim', 'workspace-selection--rail', 'workspace-selection--spotlight');
-      el.classList.add(`workspace-selection--${selectionStyle}`);
+    await desktop.evaluate((el, selectionStyle) => {
+      el.classList.remove('desktop-selection--dim', 'desktop-selection--rail', 'desktop-selection--spotlight');
+      el.classList.add(`desktop-selection--${selectionStyle}`);
     }, style);
 
     const markerZ = Number(
@@ -27,9 +27,9 @@ test('active-pane selection markers paint above the split divider', async ({ pag
     await expect(pane, `${style} active pane opacity`).toHaveCSS('opacity', '1');
   }
 
-  await workspace.evaluate((el) => {
-    el.classList.remove('workspace-selection--rail', 'workspace-selection--spotlight');
-    el.classList.add('workspace-selection--dim');
+  await desktop.evaluate((el) => {
+    el.classList.remove('desktop-selection--rail', 'desktop-selection--spotlight');
+    el.classList.add('desktop-selection--dim');
   });
 
   expect(await pane.evaluate((el) => getComputedStyle(el, '::before').content)).toBe('none');

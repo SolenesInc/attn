@@ -1,5 +1,5 @@
 import type { MigrationDraftDesktop, MigrationGroup, MigrationState } from '../../types/generated';
-import { collectLayoutLeaves, getNormalizedPaneBounds, leafSlotId, parseLayoutJSON } from '../../types/workspace';
+import { collectLayoutLeaves, getNormalizedPaneBounds, leafSlotId, parseLayoutJSON } from '../../types/desktop';
 
 export type DropEdge = 'left' | 'right' | 'top' | 'bottom';
 
