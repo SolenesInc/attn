@@ -1,9 +1,11 @@
 package main_test
 
 import (
+	"os"
 	"testing"
 
 	"github.com/victorarias/attn/internal/enrollment"
+	"github.com/victorarias/attn/internal/fakeagent"
 	"github.com/victorarias/attn/internal/garden"
 	"github.com/victorarias/attn/internal/testworld"
 )
@@ -43,5 +45,28 @@ func TestAnOutpostFencesEverySeedCommandAndShowsNoGarden(t *testing.T) {
 
 	if seeds := s.App().Initial.Seeds; len(seeds) != 0 {
 		t.Errorf("an outpost's initial state carries %d seeds, want none", len(seeds))
+	}
+}
+
+func TestAnOutpostRefusesADelegationBeforeLaunchingAnything(t *testing.T) {
+	t.Parallel()
+	const home = "d-aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+	s := testworld.NewStack(t, testworld.WithAgents(fakeagent.Codex))
+	if enrolled := s.Attn("enrollment", "enroll", "--home", home); enrolled.Code != 0 {
+		t.Fatalf("enroll exited %d: %s", enrolled.Code, enrolled.Stderr)
+	}
+	s.Start()
+	cwd := s.Path("api")
+	if err := os.MkdirAll(cwd, 0o755); err != nil {
+		t.Fatal(err)
+	}
+
+	refused := s.Attn("delegate", "--brief", "Migrate the store to X", "--cwd", cwd, "--agent", "codex", "--model", "gpt-5.6-sol")
+	if refused.Code == 0 {
+		t.Fatalf("attn delegate answered on an outpost: %s", refused.Stdout)
+	}
+	requireLines(t, "attn delegate on an outpost", refused.Stderr, garden.Surface, home, "attn enrollment leave")
+	if initial := s.App().Initial; len(initial.Sessions) != 0 || len(initial.Workspaces) != 0 {
+		t.Errorf("the refused delegation left sessions %+v and workspaces %+v, want none", initial.Sessions, initial.Workspaces)
 	}
 }
