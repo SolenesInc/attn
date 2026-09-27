@@ -24,26 +24,35 @@ type frame struct {
 	consumed bool
 }
 
+type sequencedOutput struct {
+	seq  uint32
+	data []byte
+}
+
 type Peer struct {
-	T        testing.TB
-	Initial  protocol.InitialStateMessage
-	conn     *websocket.Conn
-	mu       sync.Mutex
-	grew     chan struct{}
-	frames   []frame
-	screens  map[string][]byte
-	attached map[string]bool
-	closeErr error
-	closing  bool
+	T         testing.TB
+	Initial   protocol.InitialStateMessage
+	conn      *websocket.Conn
+	mu        sync.Mutex
+	grew      chan struct{}
+	frames    []frame
+	screens   map[string][]byte
+	received  map[string][]sequencedOutput
+	watermark map[string]uint32
+	attached  map[string]bool
+	closeErr  error
+	closing   bool
 }
 
 func newPeer(t testing.TB, conn *websocket.Conn) *Peer {
 	p := &Peer{
-		T:        t,
-		conn:     conn,
-		grew:     make(chan struct{}),
-		screens:  map[string][]byte{},
-		attached: map[string]bool{},
+		T:         t,
+		conn:      conn,
+		grew:      make(chan struct{}),
+		screens:   map[string][]byte{},
+		received:  map[string][]sequencedOutput{},
+		watermark: map[string]uint32{},
+		attached:  map[string]bool{},
 	}
 	go p.read()
 	return p
@@ -73,9 +82,22 @@ func (p *Peer) read() {
 }
 
 func (p *Peer) recordOutput(data []byte) {
-	sessionID, _, output, err := protocol.DecodePtyOutputFrame(data)
+	sessionID, seq, output, err := protocol.DecodePtyOutputFrame(data)
 	if err != nil {
 		return
+	}
+	p.received[sessionID] = append(p.received[sessionID], sequencedOutput{seq: seq, data: output})
+	if p.attached[sessionID] {
+		p.applyOutput(sessionID, seq, output)
+	}
+}
+
+func (p *Peer) applyOutput(sessionID string, seq uint32, output []byte) {
+	if watermark, ok := p.watermark[sessionID]; ok {
+		if seq <= watermark {
+			return
+		}
+		p.watermark[sessionID] = seq
 	}
 	p.screens[sessionID] = append(p.screens[sessionID], output...)
 }
@@ -89,8 +111,11 @@ func (p *Peer) recordEvent(data []byte) {
 		return
 	}
 	p.frames = append(p.frames, frame{event: envelope.Event, raw: data})
-	if envelope.Event == protocol.EventAttachResult {
+	switch envelope.Event {
+	case protocol.EventAttachResult:
 		p.recordSnapshot(data)
+	case protocol.EventGetScreenSnapshotResult:
+		p.recordScreenSnapshot(data)
 	}
 }
 
@@ -100,16 +125,40 @@ func (p *Peer) recordSnapshot(data []byte) {
 		return
 	}
 	p.attached[result.ID] = true
-	p.screens[result.ID] = nil
 	if result.Snapshot == nil {
+		p.seed(result.ID, nil, nil)
 		return
 	}
-	screen, err := base64.StdEncoding.DecodeString(result.Snapshot.SnapshotB64)
+	lastSeq := uint32(protocol.Deref(result.LastSeq))
+	p.seed(result.ID, p.decodeScreen(result.ID, result.Snapshot.SnapshotB64), &lastSeq)
+}
+
+func (p *Peer) recordScreenSnapshot(data []byte) {
+	var result protocol.GetScreenSnapshotResultMessage
+	if err := json.Unmarshal(data, &result); err != nil || !result.Success {
+		return
+	}
+	lastSeq := uint32(protocol.Deref(result.LastSeq))
+	p.seed(result.ID, p.decodeScreen(result.ID, protocol.Deref(result.ScreenSnapshot)), &lastSeq)
+}
+
+func (p *Peer) decodeScreen(sessionID, encoded string) []byte {
+	screen, err := base64.StdEncoding.DecodeString(encoded)
 	if err != nil {
-		p.T.Errorf("attach snapshot for %s is not base64: %v", result.ID, err)
-		return
+		p.T.Errorf("snapshot of %s is not base64: %v", sessionID, err)
 	}
-	p.screens[result.ID] = screen
+	return screen
+}
+
+func (p *Peer) seed(sessionID string, screen []byte, lastSeq *uint32) {
+	p.screens[sessionID] = screen
+	delete(p.watermark, sessionID)
+	if lastSeq != nil {
+		p.watermark[sessionID] = *lastSeq
+	}
+	for _, output := range p.received[sessionID] {
+		p.applyOutput(sessionID, output.seq, output.data)
+	}
 }
 
 func (p *Peer) Send(cmd any) {
@@ -175,6 +224,12 @@ func (p *Peer) AwaitScreen(sessionID, text string) {
 	}, func() (bool, error) {
 		return bytes.Contains(p.screens[sessionID], []byte(text)), nil
 	})
+}
+
+func (p *Peer) Screen(sessionID string) []byte {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	return append([]byte(nil), p.screens[sessionID]...)
 }
 
 func (p *Peer) attach(sessionID string) {

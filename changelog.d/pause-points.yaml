@@ -1,0 +1,3 @@
+kind: internal
+area: testing
+change: Add pause points, which hold a daemon or PTY worker goroutine at a named spot until a stack test releases it, and move the terminal snapshot race tests onto them as stack tests through the real daemon and PTY worker.

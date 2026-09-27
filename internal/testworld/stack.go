@@ -29,6 +29,7 @@ type Stack struct {
 	daemon        *os.Process
 	exited        chan error
 	allowFallback bool
+	pauses        *pauses
 }
 
 type stackSetup struct {
@@ -123,7 +124,7 @@ func (s *Stack) start(vars ...string) {
 	}
 	defer stderr.Close()
 	cmd := exec.Command(s.binary, "daemon")
-	cmd.Env = append(append(s.env(), vars...), "ATTN_DAEMON_READY_FD=3")
+	cmd.Env = append(append(append(s.env(), s.pauses.env()...), vars...), "ATTN_DAEMON_READY_FD=3")
 	dieWithTestProcess(cmd)
 	cmd.ExtraFiles = []*os.File{signal}
 	cmd.Stdout, cmd.Stderr = stderr, stderr

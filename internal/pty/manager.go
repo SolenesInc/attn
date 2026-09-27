@@ -21,6 +21,7 @@ import (
 	"github.com/victorarias/attn/internal/ghosttyvt"
 	"github.com/victorarias/attn/internal/launchcontract"
 	"github.com/victorarias/attn/internal/launchenv"
+	"github.com/victorarias/attn/internal/pausepoint"
 )
 
 const (
@@ -686,7 +687,8 @@ func buildSpawnEnv(loginShell string, opts SpawnOptions, agent, wrapperPath stri
 	}
 	env = filterEnvKeys(env, launchKeys...)
 	env = MergeEnvironment(env, launchEnv)
-	env = filterEnvKeys(env, "ATTN_PTY_WORKER", "ATTN_CACHED_SHELL_ENV", "ATTN_PTY_EXTERNAL_ENV", "ATTN_PTY_DAEMON_ENV")
+	env = filterEnvKeys(env, "ATTN_PTY_WORKER", "ATTN_CACHED_SHELL_ENV", "ATTN_PTY_EXTERNAL_ENV", "ATTN_PTY_DAEMON_ENV",
+		pausepoint.EnvPoints, pausepoint.EnvSocket)
 
 	env = filterEnvKeys(env, "CLAUDECODE")
 
@@ -730,7 +732,8 @@ func buildSpawnEnv(loginShell string, opts SpawnOptions, agent, wrapperPath stri
 	if len(opts.ExternalEnv) > 0 {
 		env = MergeEnvironment(env, opts.ExternalEnv)
 	}
-	env = filterEnvKeys(env, "ATTN_PTY_WORKER", "ATTN_CACHED_SHELL_ENV", "ATTN_PTY_EXTERNAL_ENV", "ATTN_PTY_DAEMON_ENV")
+	env = filterEnvKeys(env, "ATTN_PTY_WORKER", "ATTN_CACHED_SHELL_ENV", "ATTN_PTY_EXTERNAL_ENV", "ATTN_PTY_DAEMON_ENV",
+		pausepoint.EnvPoints, pausepoint.EnvSocket)
 	env = MergeEnvironment(env, opts.DaemonEnv)
 	return env
 }
