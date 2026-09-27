@@ -276,7 +276,7 @@ test('agent stays painted when split lands while scrolled up', async ({ page, da
   console.log('offset on last draw:', draw?.offset, 'force:', draw?.force, 'quads:', draw?.quads);
 });
 
-test('hidden split workspace defers paints until return after a window resize', async ({ page, daemon }) => {
+test('hidden split desktop defers paints until return after a window resize', async ({ page, daemon }) => {
   await daemon.start();
   await page.setViewportSize({ width: 1400, height: 900 });
   await page.goto('/');
@@ -290,7 +290,6 @@ test('hidden split workspace defers paints until return after a window resize', 
     .toContain('BASELINE line 0');
 
   const sizeBeforeSplit = await page.evaluate((sid) => window.__TEST_GET_SESSION_PANE_SIZE?.(sid) ?? null, agentId);
-  await terminal.click({ position: { x: 80, y: 8 } });
   await splitWithPeer(page, daemon, agentId);
   await expect
     .poll(async () => {
@@ -299,12 +298,19 @@ test('hidden split workspace defers paints until return after a window resize', 
       return size.rows !== sizeBeforeSplit.rows || size.cols !== sizeBeforeSplit.cols ? 'resized' : 'same';
     })
     .toBe('resized');
+  const agentPane = page.locator(`[data-pane-session-id="${agentId}"][data-pane-kind="agent"]`);
+  await terminal.click({ position: { x: 80, y: 8 } });
+  await expect(agentPane).toHaveClass(/\bactive\b/);
   await page.waitForTimeout(100);
 
   await page.keyboard.press('Meta+Shift+h');
   await expect(page.locator('.dashboard')).toBeVisible();
   await page.setViewportSize({ width: 900, height: 650 });
   await page.waitForTimeout(100);
+  await expect(
+    agentPane,
+    'the pane the user left on must stay a live terminal when the narrower window suspends its peer',
+  ).not.toHaveAttribute('data-pane-suspended', 'true');
 
   const paintsBeforeBurst = (await readTrace(page, agentId)).length;
   const hiddenFrame = fullFrame('HIDDEN', 35, 90);
