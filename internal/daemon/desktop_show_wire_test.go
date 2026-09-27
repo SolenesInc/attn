@@ -450,3 +450,29 @@ func TestAMoveTellsClientsWhereTheLeafWentEvenWhenItIsRenamed(t *testing.T) {
 		}
 	})
 }
+
+func TestClosingTheShownAgentHandsTheSelectionOnWithoutAClientCommand(t *testing.T) {
+	inBubble(t, func(t *testing.T, w *world) {
+		app := w.App()
+		profileID := app.SelectedProfile()
+		injectAgent(t, w, "a")
+		injectAgent(t, w, "b")
+		view := viewProfile(t, w, profileID)
+		desktop, paneA := view.paneOf(t, "a")
+		_, paneB := view.paneOf(t, "b")
+		shownIn(t, requestShowSession(app, "b"), desktop.ID, paneB)
+		watcher := w.AppOn(profileID)
+
+		if closed := closeFromApp(app, "b"); closed.Error != nil {
+			t.Fatalf("closing b: %s", *closed.Error)
+		}
+		change := testworld.Await(watcher, protocol.EventProfileArrangementChanged, func(e protocol.ProfileArrangementChangedMessage) bool {
+			shown, ok := desktopIn(e.Desktops, desktop.ID)
+			return ok && !slices.ContainsFunc(shown.Panes, func(p protocol.DesktopPane) bool { return p.PaneID == paneB })
+		})
+		shown, _ := desktopIn(change.Desktops, desktop.ID)
+		if change.Profile.CurrentDesktopID != desktop.ID || shown.ActivePaneID != paneA {
+			t.Fatalf("after closing the shown agent profile %s shows %s leaf %q, want %s leaf %s", profileID, change.Profile.CurrentDesktopID, shown.ActivePaneID, desktop.ID, paneA)
+		}
+	})
+}
