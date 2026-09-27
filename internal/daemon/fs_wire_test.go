@@ -299,7 +299,9 @@ func TestNotebookImageAssetsAreServedWithinTheMessageCap(t *testing.T) {
 		t.Fatalf("the largest asset took a %d byte message, over the %d byte cap", len(message), messageCap)
 	}
 
-	escapedPastTheEnvelopeAllowance := strings.Repeat(strings.Repeat("&", 250)+"/", 4) + "max.png"
+	// 800 '&' escape to 4800 JSON bytes, past the 4 KiB slack, while the whole
+	// path stays under macOS's 1024-byte PATH_MAX.
+	escapedPastTheEnvelopeAllowance := strings.Repeat(strings.Repeat("&", 200)+"/", 4) + "max.png"
 	fsWriteFile(t, filepath.Join(root, filepath.FromSlash(escapedPastTheEnvelopeAllowance)), bytes.Repeat([]byte{0xFF}, readCap))
 	deep := fsAskAsset(app, escapedPastTheEnvelopeAllowance)
 	if deep.Success {
