@@ -1881,7 +1881,7 @@ func applyMigration157(tx *sql.Tx) error {
 		`DELETE FROM document_collections WHERE namespace LIKE 'app/%'`,
 		`DELETE FROM bus_consumers WHERE name LIKE 'app:%'`,
 		`DELETE FROM supervised_parks WHERE child = 'runtime'`,
-		`DELETE FROM notifications WHERE source_kind = 'app_runtime'`,
+		`DELETE FROM notifications WHERE source_kind IN ('app', 'app_runtime')`,
 		`DROP TABLE IF EXISTS app_reconcile_progress`,
 		`DROP TABLE IF EXISTS app_reconcile_requests`,
 		`DROP TABLE IF EXISTS app_invocations`,

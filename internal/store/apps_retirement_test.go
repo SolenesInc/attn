@@ -50,7 +50,7 @@ func TestAppsRetirementKeepsCoreStateAcrossUpgradeAndRestart(t *testing.T) {
 		`INSERT INTO supervised_parks(child, parked_at, restart_attempt, exit_at, exit_code, exit_signal, exit_error) VALUES ('runtime', 'now', 1, 'now', 1, '', ''), ('plugin:pi', 'now', 2, 'now', 2, '', '')`,
 		`INSERT INTO sessions(id, label, directory, state, state_since, state_updated_at, last_seen, agent_driver_plugin_name) VALUES ('session-1', 'Preserved', '/tmp', 'idle', 'now', 'now', 'now', 'attn-pi')`,
 		`INSERT INTO workspaces(id, title, directory, created_at) VALUES ('workspace-1', 'Preserved', '/tmp', 'now')`,
-		`INSERT INTO notifications(id, kind, source_kind, created_at) VALUES ('app-notice', 'warning', 'app_runtime', 'now'), ('core-notice', 'warning', 'plugin', 'now')`,
+		`INSERT INTO notifications(id, kind, source_kind, created_at) VALUES ('app-notice', 'warning', 'app', 'now'), ('app-runtime-notice', 'warning', 'app_runtime', 'now'), ('core-notice', 'warning', 'plugin', 'now')`,
 		`DELETE FROM schema_migrations WHERE version = 157`,
 	} {
 		if _, err := s.db.Exec(query); err != nil {
@@ -90,6 +90,7 @@ func TestAppsRetirementKeepsCoreStateAcrossUpgradeAndRestart(t *testing.T) {
 			`SELECT COUNT(*) FROM workspaces WHERE id='workspace-1'`:                                    1,
 			`SELECT COUNT(*) FROM notifications WHERE id='core-notice'`:                                 1,
 			`SELECT COUNT(*) FROM notifications WHERE id='app-notice'`:                                  0,
+			`SELECT COUNT(*) FROM notifications WHERE id='app-runtime-notice'`:                          0,
 		} {
 			var got int
 			if err := upgraded.db.QueryRow(query).Scan(&got); err != nil || got != want {
