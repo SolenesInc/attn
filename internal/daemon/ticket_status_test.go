@@ -1,12 +1,9 @@
 package daemon
 
 import (
-	"encoding/json"
-	"net"
 	"testing"
 	"time"
 
-	"github.com/victorarias/attn/internal/protocol"
 	"github.com/victorarias/attn/internal/store"
 )
 
@@ -46,37 +43,6 @@ func bindLegacyTicketAs(t *testing.T, d *Daemon, sessionID, delegatorSessionID, 
 		t.Fatalf("bind legacy ticket: %v", err)
 	}
 	return created.ID
-}
-
-func callSetTicketStatus(t *testing.T, d *Daemon, sessionID, workState, comment string) protocol.Response {
-	t.Helper()
-	return callSetTicketStatusByID(t, d, sessionID, workState, comment, "")
-}
-
-func callSetTicketStatusByID(t *testing.T, d *Daemon, sessionID, workState, comment, ticketID string) protocol.Response {
-	t.Helper()
-	msg := &protocol.SetTicketStatusMessage{
-		Cmd:             protocol.CmdSetTicketStatus,
-		SourceSessionID: sessionID,
-		WorkState:       protocol.DispatchWorkState(workState),
-	}
-	if comment != "" {
-		msg.Comment = protocol.Ptr(comment)
-	}
-	if ticketID != "" {
-		msg.TicketID = protocol.Ptr(ticketID)
-	}
-	server, clientConn := net.Pipe()
-	go func() {
-		d.handleSetTicketStatus(server, msg)
-		_ = server.Close()
-	}()
-	var resp protocol.Response
-	if err := json.NewDecoder(clientConn).Decode(&resp); err != nil {
-		t.Fatalf("decode set-ticket-status response: %v", err)
-	}
-	_ = clientConn.Close()
-	return resp
 }
 
 func boundTicketID(t *testing.T, d *Daemon, sessionID string) string {
