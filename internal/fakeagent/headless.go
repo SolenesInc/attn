@@ -30,8 +30,9 @@ type launchedAs struct {
 }
 
 type headlessAnswer struct {
-	Text    string `json:"text"`
-	Failure string `json:"failure,omitempty"`
+	Text    string          `json:"text"`
+	Failure string          `json:"failure,omitempty"`
+	Tool    json.RawMessage `json:"tool,omitempty"`
 }
 
 type HeadlessTask struct {
@@ -110,6 +111,7 @@ type headlessRun struct {
 	model   string
 	effort  string
 	refusal string
+	tools   map[string]*toolServer
 	answer  func(text string) error
 	fail    func(message string)
 }
@@ -128,6 +130,12 @@ func (run headlessRun) serve(cfg config) int {
 	if err := control.start().call(context.Background(), methodHeadless, asked, &answer); err != nil {
 		fmt.Fprintf(os.Stderr, "fake %s: %v\n", run.harness, err)
 		return 1
+	}
+	if answer.Tool != nil {
+		if err := callTool(run.tools, answer.Tool); err != nil {
+			fmt.Fprintf(os.Stderr, "fake %s: %v\n", run.harness, err)
+			return 1
+		}
 	}
 	if answer.Failure != "" {
 		run.fail(answer.Failure)
