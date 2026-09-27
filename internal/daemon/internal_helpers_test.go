@@ -11,8 +11,10 @@ import (
 	"time"
 
 	"github.com/victorarias/attn/internal/enrollment"
+	"github.com/victorarias/attn/internal/fakeagent"
 	"github.com/victorarias/attn/internal/protocol"
 	"github.com/victorarias/attn/internal/store"
+	"github.com/victorarias/attn/internal/testworld"
 )
 
 func writeCodexInteractiveRollout(t *testing.T, codexHome, nativeID, cwd string, at time.Time) string {
@@ -152,4 +154,48 @@ func docFacts(t *testing.T, d *Daemon, name string) []store.BusEvent {
 		}
 	}
 	return out
+}
+
+func TestMain(m *testing.M) {
+	fakeagent.Main()
+	if os.Getenv("ATTN_PLUGIN_HELPER") == "1" {
+		os.Exit(m.Run())
+	}
+	sessionInputSubmitDelay = 0
+	sessionInputTakenWindow = 0
+	os.Exit(testworld.Main(m,
+		"ATTN_PTY_BACKEND=embedded",
+		"ATTN_PTY_SKIP_STARTUP_PROBE=1",
+		"ATTN_CLIENT_TOKEN=daemon-test-client-token",
+		"ATTN_MOCK_GH_URL=http://127.0.0.1:1",
+		"ATTN_MOCK_GH_TOKEN=",
+	))
+}
+
+func waitForSocket(t *testing.T, sockPath string, timeout time.Duration) {
+	t.Helper()
+	deadline := time.Now().Add(timeout)
+	for time.Now().Before(deadline) {
+		conn, err := net.DialTimeout("unix", sockPath, 10*time.Millisecond)
+		if err == nil {
+			conn.Close()
+			return
+		}
+		time.Sleep(10 * time.Millisecond)
+	}
+	t.Fatalf("socket %s not ready after %v", sockPath, timeout)
+}
+
+func shortTempDir(t *testing.T) string {
+	t.Helper()
+	base := "/tmp"
+	if _, err := os.Stat(base); err != nil {
+		base = ""
+	}
+	dir, err := os.MkdirTemp(base, "attn-")
+	if err != nil {
+		t.Fatalf("MkdirTemp() error: %v", err)
+	}
+	t.Cleanup(func() { _ = os.RemoveAll(dir) })
+	return dir
 }

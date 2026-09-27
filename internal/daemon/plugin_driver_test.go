@@ -119,10 +119,3 @@ func sendPluginMethodResponse(t *testing.T, conn net.Conn, id int, method string
 	}
 	return decodeJSONRPCMessage(t, conn)
 }
-
-func respondPluginRequest(t *testing.T, conn net.Conn, request jsonRPCMessage, result interface{}) {
-	t.Helper()
-	if err := json.NewEncoder(conn).Encode(jsonRPCResult(request.ID, result)); err != nil {
-		t.Fatalf("respond plugin request: %v", err)
-	}
-}
