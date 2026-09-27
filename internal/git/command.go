@@ -35,10 +35,8 @@ func NewClient() *Client {
 const slowGitLogThreshold = 2 * time.Second
 
 var (
-	logMu       sync.RWMutex
-	logf        func(format string, args ...interface{})
-	timeoutMu   sync.RWMutex
-	timeoutByOp = map[Operation]time.Duration{}
+	logMu sync.RWMutex
+	logf  func(format string, args ...interface{})
 )
 
 func SetLogFunc(fn func(format string, args ...interface{})) {
@@ -48,13 +46,6 @@ func SetLogFunc(fn func(format string, args ...interface{})) {
 }
 
 func defaultTimeout(op Operation) time.Duration {
-	timeoutMu.RLock()
-	if timeout, ok := timeoutByOp[op]; ok {
-		timeoutMu.RUnlock()
-		return timeout
-	}
-	timeoutMu.RUnlock()
-
 	switch op {
 	case OpStatus, OpMetadata:
 		return 2 * time.Minute
@@ -66,23 +57,6 @@ func defaultTimeout(op Operation) time.Duration {
 		return 60 * time.Minute
 	default:
 		return 2 * time.Minute
-	}
-}
-
-func setTimeoutForTesting(op Operation, timeout time.Duration) func() {
-	timeoutMu.Lock()
-	previous, hadPrevious := timeoutByOp[op]
-	timeoutByOp[op] = timeout
-	timeoutMu.Unlock()
-
-	return func() {
-		timeoutMu.Lock()
-		defer timeoutMu.Unlock()
-		if hadPrevious {
-			timeoutByOp[op] = previous
-			return
-		}
-		delete(timeoutByOp, op)
 	}
 }
 

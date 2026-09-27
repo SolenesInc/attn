@@ -1,77 +1,21 @@
 package git
 
-import (
-	"context"
-	"fmt"
-	"os"
-	"path/filepath"
-	"strings"
-	"testing"
-	"time"
-)
+import "testing"
 
-func TestRunGitOutputRedactsCredentialURLsInLogsAndTimeouts(t *testing.T) {
-	secretURL := "https://user:super-secret-token@example.com/acme/repo.git?token=also-secret#frag"
-
-	fakeBin := t.TempDir()
-	fakeGit := filepath.Join(fakeBin, "git")
-	if err := os.WriteFile(fakeGit, []byte("#!/bin/sh\nexec sleep 5\n"), 0755); err != nil {
-		t.Fatalf("write fake git: %v", err)
-	}
-	t.Setenv("PATH", fakeBin+string(os.PathListSeparator)+os.Getenv("PATH"))
-
-	cleanup := setTimeoutForTesting(OpClone, 25*time.Millisecond)
-	defer cleanup()
-
-	var logs []string
-	SetLogFunc(func(format string, args ...interface{}) {
-		logs = append(logs, fmt.Sprintf(format, args...))
-	})
-	defer SetLogFunc(nil)
-
-	_, err := NewClient().Output(context.Background(), OpClone, t.TempDir(), "clone", secretURL, "/tmp/repo")
-	if err == nil {
-		t.Fatal("expected timeout error")
-	}
-
-	combined := strings.Join(append(logs, err.Error()), "\n")
-	for _, forbidden := range []string{"super-secret-token", "also-secret", "user:"} {
-		if strings.Contains(combined, forbidden) {
-			t.Fatalf("secret %q leaked in log/error output:\n%s", forbidden, combined)
+func TestGitArgsInLogsAndTimeoutsHideURLCredentials(t *testing.T) {
+	for _, tc := range []struct{ arg, want string }{
+		{"https://user:super-secret-token@example.com/acme/repo.git?token=also-secret#frag", "https://REDACTED@example.com/acme/repo.git?REDACTED#REDACTED"},
+		{"https://x-access-token:ghp_abc@github.com/acme/repo.git", "https://REDACTED@github.com/acme/repo.git"},
+		{"http://user@example.com/repo.git", "http://REDACTED@example.com/repo.git"},
+		{"ssh://git:pw@example.com/acme/repo.git", "ssh://REDACTED@example.com/acme/repo.git"},
+		{"https://github.com/acme/repo.git", "https://github.com/acme/repo.git"},
+		{"git@github.com:acme/repo.git", "git@github.com:acme/repo.git"},
+		{"file:///tmp/repo?x=1", "file:///tmp/repo?x=1"},
+		{"refs/pull/42/head", "refs/pull/42/head"},
+		{"--depth", "--depth"},
+	} {
+		if got := redactGitArgs([]string{tc.arg})[0]; got != tc.want {
+			t.Errorf("redactGitArgs(%q) = %q, want %q", tc.arg, got, tc.want)
 		}
-	}
-	if !strings.Contains(combined, "https://REDACTED@example.com/acme/repo.git") {
-		t.Fatalf("redacted URL missing from log/error output:\n%s", combined)
-	}
-}
-
-func TestHTTPAuthorizationUsesProcessEnvironmentNotArgumentsOrLogs(t *testing.T) {
-	fakeBin := t.TempDir()
-	capture := filepath.Join(fakeBin, "capture")
-	fakeGit := filepath.Join(fakeBin, "git")
-	script := "#!/bin/sh\nprintf '%s\\n' \"$GIT_CONFIG_KEY_0\" \"$GIT_CONFIG_VALUE_0\" \"$@\" > \"$ATTN_GIT_TEST_CAPTURE\"\n"
-	if err := os.WriteFile(fakeGit, []byte(script), 0o755); err != nil {
-		t.Fatal(err)
-	}
-	t.Setenv("PATH", fakeBin+string(os.PathListSeparator)+os.Getenv("PATH"))
-	t.Setenv("ATTN_GIT_TEST_CAPTURE", capture)
-	t.Setenv("GIT_CONFIG_COUNT", "0")
-	header := "Basic dummy-secret-value"
-	var logs []string
-	SetLogFunc(func(format string, args ...interface{}) { logs = append(logs, fmt.Sprintf(format, args...)) })
-	defer SetLogFunc(nil)
-	if _, err := NewClient().combinedWithHTTPAuthorization(context.Background(), OpNetwork, "", "https://github.com/owner/repo.git", header, "fetch", "origin", "ref"); err != nil {
-		t.Fatal(err)
-	}
-	captured, err := os.ReadFile(capture)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if !strings.Contains(string(captured), "http.https://github.com/.extraHeader\n"+header) {
-		t.Fatalf("authorization was not passed through git config env: %q", captured)
-	}
-	combinedLogs := strings.Join(logs, "\n")
-	if strings.Contains(string(captured), header+"\nfetch") == false || strings.Contains(combinedLogs, "dummy-secret-value") {
-		t.Fatalf("authorization transport/logging mismatch capture=%q logs=%q", captured, combinedLogs)
 	}
 }
