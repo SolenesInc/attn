@@ -59,14 +59,23 @@ function resolveAttnBin() {
   throw new Error('attn binary not found (build ./attn or set ATTN_HARNESS_BIN)');
 }
 
+const AGENT_LIST_TOGGLE = '[data-testid="queue-agents-toggle"]';
+
+async function clickUnlessGone(client, selector) {
+  try {
+    await client.request('dom_click', { selector });
+  } catch (error) {
+    if (!String(error?.message).includes(`selector not found in DOM: ${selector}`)) throw error;
+  }
+}
+
 async function queueState(client) {
-  const queue = await client.request('queue_get_state');
-  if (!queue.agentList?.present || queue.agentList.expanded) return queue;
-  await client.request('dom_click', { selector: '[data-testid="queue-agents-toggle"]' });
   return pollFor(async () => {
-    const current = await client.request('queue_get_state');
-    return current.agentList.expanded ? current : null;
-  }, 'the agent list to open', 10_000);
+    const queue = await client.request('queue_get_state');
+    if (!queue.agentList?.present || queue.agentList.expanded) return queue;
+    await clickUnlessGone(client, AGENT_LIST_TOGGLE);
+    return null;
+  }, 'the queue state with the agent list open wherever it is shown', 10_000);
 }
 
 function turnIds(queue) {
