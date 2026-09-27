@@ -1108,8 +1108,6 @@ func (d *Daemon) handleClientMessage(client *wsClient, data []byte) {
 		d.handleRefreshPRsWS(client)
 	case protocol.CmdFetchPRDetails:
 		d.handleFetchPRDetailsWS(client, msg.(*protocol.FetchPRDetailsMessage))
-	case protocol.CmdClearSessions:
-		d.handleClearSessionsWS()
 	case protocol.CmdClearWarnings:
 		d.handleClearWarningsWS()
 	case protocol.CmdSessionSelected:

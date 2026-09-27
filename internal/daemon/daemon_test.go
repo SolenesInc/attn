@@ -531,49 +531,6 @@ func TestDaemon_RecoveryBarrier_BlocksPTYCommands(t *testing.T) {
 	}
 }
 
-func TestDaemon_RecoveryBarrier_BlocksClearSessions(t *testing.T) {
-	d := NewForTesting(filepath.Join(t.TempDir(), "test.sock"))
-	d.setRecovering(true)
-
-	now := string(protocol.TimestampNow())
-	d.store.Add(&protocol.Session{
-		ID:             "sess-1",
-		Label:          "sess-1",
-		Agent:          protocol.SessionAgentCodex,
-		Directory:      "/tmp/sess-1",
-		State:          protocol.SessionStateWorking,
-		StateSince:     now,
-		StateUpdatedAt: now,
-		LastSeen:       now,
-	})
-
-	client := &wsClient{
-		send:            make(chan outboundMessage, 2),
-		attachedStreams: make(map[string]ptybackend.Stream),
-	}
-	client.setIdentity("daemon-test", "protocol-"+protocol.ProtocolVersion, []string{protocol.CapabilityWorkspaceSessions})
-
-	d.handleClientMessage(client, []byte(`{"cmd":"clear_sessions"}`))
-
-	msg := <-client.send
-	var event protocol.WebSocketEvent
-	if err := json.Unmarshal(msg.payload, &event); err != nil {
-		t.Fatalf("decode command_error: %v", err)
-	}
-	if event.Event != protocol.EventCommandError {
-		t.Fatalf("event = %q, want %q", event.Event, protocol.EventCommandError)
-	}
-	if protocol.Deref(event.Cmd) != protocol.CmdClearSessions {
-		t.Fatalf("cmd = %q, want %q", protocol.Deref(event.Cmd), protocol.CmdClearSessions)
-	}
-	if protocol.Deref(event.Error) != "daemon_recovering" {
-		t.Fatalf("error = %q, want %q", protocol.Deref(event.Error), "daemon_recovering")
-	}
-	if got := len(d.store.List("")); got != 1 {
-		t.Fatalf("store sessions = %d, want 1 (clear should be blocked during recovery)", got)
-	}
-}
-
 func TestDaemon_RecoveryBarrier_DefersInitialState(t *testing.T) {
 	d := NewForTesting(filepath.Join(t.TempDir(), "test.sock"))
 	d.daemonInstanceID = "d-aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"

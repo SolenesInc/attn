@@ -435,37 +435,6 @@ func (s *Store) Remove(id string) {
 	}
 }
 
-func (s *Store) ClearSessions() {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-
-	if s.db == nil {
-		s.sessions = make(map[string]*protocol.Session)
-		s.sessionCloses = make(map[string]sessionCloseMark)
-		s.agentDriverRuns = make(map[string]AgentDriverReportCursor)
-		s.agentMetadata = make(map[string]string)
-		s.sessionCosts = make(map[string]SessionCostState)
-		s.workspaces = make(map[string]workspacelayout.WorkspaceLayout)
-		return
-	}
-
-	if _, err := s.db.Exec("DELETE FROM workspace_layout_panes"); err != nil {
-		log.Printf("[store] ClearSessions: failed to clear workspace layout panes: %v", err)
-	}
-	if _, err := s.db.Exec("DELETE FROM workspace_layouts"); err != nil {
-		log.Printf("[store] ClearSessions: failed to clear workspace layouts: %v", err)
-	}
-	for _, table := range sessionOwnedTables {
-		if _, err := s.db.Exec("DELETE FROM " + table); err != nil {
-			log.Printf("[store] ClearSessions: failed to clear %s: %v", table, err)
-		}
-	}
-	_, err := s.db.Exec("DELETE FROM sessions")
-	if err != nil {
-		log.Printf("[store] ClearSessions: failed: %v", err)
-	}
-}
-
 func (s *Store) List(stateFilter string) []*protocol.Session {
 	s.mu.RLock()
 	defer s.mu.RUnlock()

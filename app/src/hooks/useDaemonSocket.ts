@@ -314,7 +314,7 @@ export interface RateLimitState {
 }
 
 // Protocol version - must match daemon's ProtocolVersion
-export const PROTOCOL_VERSION = '320';
+export const PROTOCOL_VERSION = '321';
 const MAX_PENDING_ATTACH_OUTPUTS = 512;
 
 const CLIENT_INSTANCE_ID =
@@ -968,7 +968,6 @@ export function useDaemonSocket({
       'pty_input',
       'pty_resize',
       'kill_session',
-      'clear_sessions',
       'unregister',
     ]);
     if (!needsNotice.has(cmd)) {
@@ -4085,13 +4084,6 @@ export function useDaemonSocket({
     return sendKeyedRequest<FetchPRDetailsResult>(key, { cmd: 'fetch_pr_details', id }, 'Fetch PR details timed out', GITHUB_REFRESH_TIMEOUT_MS);
   }, [sendKeyedRequest]);
 
-  const sendClearSessions = useCallback(() => {
-    const ws = wsRef.current;
-    if (!ws || ws.readyState !== WebSocket.OPEN) return;
-
-    ws.send(JSON.stringify({ cmd: 'clear_sessions' }));
-  }, []);
-
   const sendRegisterWorkspace = useCallback((workspaceId: string, title: string, directory: string, endpointId?: string): Promise<void> => {
     return new Promise((resolve, reject) => {
       if (!workspaceId) {
@@ -5399,7 +5391,6 @@ export function useDaemonSocket({
     sendPinSession,
     sendRefreshPRs,
     sendFetchPRDetails,
-    sendClearSessions,
     sendUnregisterSession,
     sendRegisterWorkspace,
     sendUnregisterWorkspace,
