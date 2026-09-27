@@ -39,9 +39,7 @@ export function AppLibrarySurfaces() {
     setLedgerTab,
     setSessionsOpen,
     notebookOpen,
-    notebookRequestedPath,
     setNotebookOpen,
-    setNotebookRequestedPath,
     gardenMode,
     gardenDockRect,
     toggleGardenFrame,
@@ -55,6 +53,7 @@ export function AppLibrarySurfaces() {
     gitOperations,
     sendSessionList,
     sendSessionMove,
+    subscribeSessionLedger,
     getWorktreeSweepLog,
     setWorktreeKeep,
     sendFsList,
@@ -89,7 +88,7 @@ export function AppLibrarySurfaces() {
     handleSendSeedToChief,
   } = useAppGardenActionsContext();
   const { handleReopenSession } = useSessionLifecycleContext();
-  const { sessionCloseNotice, sessionVerdictNotice, notificationsChangeSignal } = useAppInputs();
+  const { notificationsChangeSignal } = useAppInputs();
   const { notebookBrowserListFiles, notebookRootChangeSignal } = useAppNotebookSurfaceContext();
   const { notebookChiefActive } = useAppSessionsContext();
   const seeds = useDaemonStore((state) => state.seeds);
@@ -104,7 +103,10 @@ export function AppLibrarySurfaces() {
         onClose={() => setSessionsOpen(false)}
         yieldsFocus={locationPickerOpen && locationPickerPurpose === 'reopen'}
         sessions={{
-          listSessions: sendSessionList,
+          connection: {
+            list: sendSessionList,
+            subscribe: subscribeSessionLedger,
+          },
           profileNames,
           currentProfileId: selectedProfileId,
           profileMembership,
@@ -114,8 +116,6 @@ export function AppLibrarySurfaces() {
           onOpenSeed: handleOpenSeedTile,
           onReopen: handleReopenSession,
           onMoveSession: sendSessionMove,
-          closeNotice: sessionCloseNotice,
-          verdictNotice: sessionVerdictNotice,
         }}
         worktrees={{
           listWorktrees,
@@ -130,11 +130,7 @@ export function AppLibrarySurfaces() {
       />
       <NotebookBrowser
         isOpen={notebookOpen}
-        initialPath={notebookRequestedPath}
-        onClose={() => {
-          setNotebookOpen(false);
-          setNotebookRequestedPath(null);
-        }}
+        onClose={() => setNotebookOpen(false)}
         listDir={sendFsList}
         readFile={sendFsRead}
         writeFile={sendFsWrite}

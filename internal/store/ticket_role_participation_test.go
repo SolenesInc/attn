@@ -3,7 +3,6 @@ package store
 import (
 	"path/filepath"
 	"testing"
-	"time"
 )
 
 const migration82View = `
@@ -112,64 +111,5 @@ func TestMigration99DetachesPastChiefSessionsFromTheirDelegations(t *testing.T) 
 	cursor, err := migrated.GetTicketCursor(role, "minted")
 	if err != nil || cursor != 1 {
 		t.Errorf("role cursor on minted = %d (err %v), want the pre-migration 1", cursor, err)
-	}
-}
-
-func TestRoleActedEventsAttachTheRoleAndLeaveOtherAuthorsAlone(t *testing.T) {
-	s := New()
-	t.Cleanup(func() { _ = s.Close() })
-	role := TicketRoleIdentity(TicketRoleChiefOfStaff)
-
-	if _, err := s.CreateRoleOwnedTicket(Ticket{
-		ID: "minted", Title: "Minted", Description: "Delegated from scratch.",
-		Status: TicketStatusWorking, Assignee: "agent-1",
-	}, "chief-a", TicketRoleChiefOfStaff, ticketBase); err != nil {
-		t.Fatalf("CreateRoleOwnedTicket: %v", err)
-	}
-	minted := participantSet(t, s, "minted")
-	if minted["chief-a"] || !minted[role] {
-		t.Fatalf("minted participants = %v, want the role attached and not the acting session", minted)
-	}
-
-	if _, err := s.CreateTicket(Ticket{
-		ID: "filed", Title: "Filed", Description: "Someone else's idea.",
-		Status: TicketStatusTodo,
-	}, "author-x", ticketBase); err != nil {
-		t.Fatalf("CreateTicket: %v", err)
-	}
-	if _, err := s.AdoptTicketForDelegation(
-		"filed", "agent-2", "/repo", "codex", "chief-a",
-		TicketRoleChiefOfStaff, nil, false, ticketBase.Add(time.Hour),
-	); err != nil {
-		t.Fatalf("AdoptTicketForDelegation: %v", err)
-	}
-	adopted := participantSet(t, s, "filed")
-	if adopted["chief-a"] {
-		t.Fatalf("adopted participants = %v, want the acting chief attached through the role", adopted)
-	}
-	if !adopted["author-x"] || !adopted[role] || !adopted["agent-2"] {
-		t.Fatalf("adopted participants = %v, want the filer, the role, and the assignee", adopted)
-	}
-}
-
-func TestNonRoleDelegatorKeepsItsOwnAttachment(t *testing.T) {
-	s := New()
-	t.Cleanup(func() { _ = s.Close() })
-
-	if _, err := s.CreateRoleOwnedTicket(Ticket{
-		ID: "handed-on", Title: "Handed on", Description: "Chief delegated it first.",
-		Status: TicketStatusWorking, Assignee: "agent-1",
-	}, "chief-a", TicketRoleChiefOfStaff, ticketBase); err != nil {
-		t.Fatalf("CreateRoleOwnedTicket: %v", err)
-	}
-	if _, err := s.AdoptTicketForDelegation(
-		"handed-on", "agent-2", "/repo", "codex", "session-peer",
-		"", []string{"session-peer"}, true, ticketBase.Add(time.Hour),
-	); err != nil {
-		t.Fatalf("AdoptTicketForDelegation: %v", err)
-	}
-	participants := participantSet(t, s, "handed-on")
-	if !participants["session-peer"] {
-		t.Fatalf("participants = %v, want the ordinary delegator attached personally", participants)
 	}
 }

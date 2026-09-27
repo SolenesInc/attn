@@ -104,14 +104,6 @@ var (
 	}
 )
 
-func (d *Daemon) adviseGardenSeed(ctx context.Context, input gardenAdvisorInput) (gardenAdvice, error) {
-	config, err := d.gardenAdvisorConfig()
-	if err != nil {
-		return gardenAdvice{}, err
-	}
-	return d.adviseGardenSeedWithConfig(ctx, input, config)
-}
-
 func (d *Daemon) adviseGardenSeedWithConfig(
 	ctx context.Context,
 	input gardenAdvisorInput,
@@ -136,14 +128,6 @@ func (d *Daemon) adviseGardenSeedWithConfig(
 		}
 	}
 	return advice, nil
-}
-
-func (d *Daemon) draftGardenHandoff(ctx context.Context, input gardenAdvisorInput) (string, error) {
-	config, err := d.gardenAdvisorConfig()
-	if err != nil {
-		return "", err
-	}
-	return d.draftGardenHandoffWithConfig(ctx, input, config)
 }
 
 func (d *Daemon) draftGardenHandoffWithConfig(
@@ -172,11 +156,7 @@ func (d *Daemon) runGardenAdvisorWithConfig(
 	input gardenAdvisorInput,
 	config gardenAdvisorConfig,
 ) ([]byte, error) {
-	resolve := d.resolveGardenAdvisor
-	if d.gardenAdvisorResolve != nil {
-		resolve = d.gardenAdvisorResolve
-	}
-	provider, executable, err := resolve(config)
+	provider, executable, err := d.resolveGardenAdvisor(config)
 	if err != nil {
 		return nil, err
 	}

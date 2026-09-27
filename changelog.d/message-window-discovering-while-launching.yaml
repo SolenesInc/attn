@@ -1,0 +1,3 @@
+kind: fixed
+area: sessions
+change: The message window of an agent that is still starting keeps saying it is looking for the transcript instead of reporting none half a second after launch.

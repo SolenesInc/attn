@@ -1,4 +1,4 @@
-import { test, expect } from './fixtures';
+import { test, expect, waitForMockPtyBanner } from './fixtures';
 
 type DesktopSessionFixture = {
   id: string;
@@ -236,4 +236,60 @@ test.describe('Desktop Sessions', () => {
     await expect(page.locator('.sidebar button button')).toHaveCount(0);
   });
 
+  test('frees a hidden desktop terminal\'s drawing buffer and repaints it unchanged on return', async ({ page, daemon }) => {
+    await daemon.start();
+    await page.goto('/');
+    await page.waitForSelector('.dashboard');
+    await injectSessions(page, daemon, [{ id: 'gpu-agent', label: 'gpu-agent', cwd: '/tmp/desktop-gpu' }]);
+    await page.getByTestId('session-gpu-agent').click();
+    await waitForMockPtyBanner(page, 'gpu-agent');
+    await page.evaluate(() => window.__TEST_EMIT_PTY_DATA?.('gpu-agent', '\x1b[?25l\x1b[41mpainted before hiding\x1b[0m\r\nsecond row'));
+    await expect
+      .poll(() => page.evaluate(() => window.__TEST_GET_SESSION_PANE_TEXT?.('gpu-agent') ?? ''))
+      .toContain('second row');
+    const canvas = page.locator(`${paneOf('gpu-agent')} canvas`).first();
+    const before = await canvas.screenshot();
+    const shown = await canvas.evaluate((element: HTMLCanvasElement) => [element.width, element.height]);
+    expect(shown[0]).toBeGreaterThan(1);
+
+    await page.keyboard.press('Meta+g');
+    await page.getByRole('button', { name: '+ New desktop' }).click();
+    await expect(page.locator('.desktop-group-header')).toHaveCount(2);
+    await page.keyboard.press('Escape');
+    await page.getByRole('button', { name: 'Open Desktop 2' }).click();
+    await expect(canvas).toHaveJSProperty('width', 1);
+    await injectSessions(page, daemon, [{ id: 'other-agent', label: 'other-agent', cwd: '/tmp/desktop-other' }]);
+    await page.getByTestId('sidebar-session-other-agent').getByRole('button', { name: 'Open other-agent' }).click();
+    await expect.poll(() => page.locator('[data-session-terminal-desktop]').evaluateAll((desktops) => desktops
+      .filter((desktop) => desktop.getAttribute('data-session-visible') === '1')
+      .flatMap((desktop) => [...desktop.querySelectorAll('[data-pane-session-id]')].map((pane) => pane.getAttribute('data-pane-session-id')))))
+      .toEqual(['other-agent']);
+    await expect(canvas).toHaveJSProperty('width', 1);
+    await expect(canvas).toHaveJSProperty('height', 1);
+
+    await page.getByTestId('sidebar-session-gpu-agent').getByRole('button', { name: 'Open gpu-agent' }).click();
+    await expect(canvas).toHaveJSProperty('width', shown[0]);
+    await expect(canvas).toHaveJSProperty('height', shown[1]);
+    expect((await canvas.screenshot()).equals(before)).toBe(true);
+  });
+
+  test('draws terminal cells larger after the user increases the font size', async ({ page, daemon }) => {
+    await daemon.start();
+    await page.goto('/');
+    await page.waitForSelector('.dashboard');
+    await injectSessions(page, daemon, [{ id: 'font-agent', label: 'font-agent', cwd: '/tmp/desktop-font' }]);
+    await page.getByTestId('session-font-agent').click();
+    await waitForMockPtyBanner(page, 'font-agent');
+    const canvas = page.locator(`${paneOf('font-agent')} canvas`).first();
+    const cellWidth = () => canvas.evaluate((element: HTMLCanvasElement) => {
+      const size = window.__TEST_GET_SESSION_PANE_SIZE?.('font-agent');
+      return size ? element.width / size.cols : 0;
+    });
+    const before = await cellWidth();
+    expect(before).toBeGreaterThan(0);
+
+    await page.keyboard.press('Meta+Equal');
+
+    await expect.poll(cellWidth).toBeGreaterThan(before);
+  });
 });

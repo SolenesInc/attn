@@ -29,7 +29,7 @@ func ReapDataDir(dataDir string) []procreap.ReapResult {
 			switch {
 			case entry.HostPID <= 0:
 				result.Outcome, result.Err = procreap.ReapUnreadable, errors.New("missing host PID")
-			case !ptyworker.ProcessAlive(entry.HostPID):
+			case !procreap.ProcessAlive(entry.HostPID):
 				result.Outcome = procreap.ReapAlreadyGone
 			default:
 				result.Err = shutdownHost(dataDir, path, entry)
@@ -111,11 +111,11 @@ func waitHostExit(pid int) bool {
 	defer deadline.Stop()
 	ticker := time.NewTicker(20 * time.Millisecond)
 	defer ticker.Stop()
-	for ptyworker.ProcessAlive(pid) {
+	for procreap.ProcessAlive(pid) {
 		select {
 		case <-ticker.C:
 		case <-deadline.C:
-			return !ptyworker.ProcessAlive(pid)
+			return !procreap.ProcessAlive(pid)
 		}
 	}
 	return true

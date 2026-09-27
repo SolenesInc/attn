@@ -469,7 +469,7 @@ function collectVisualSnapshot(
 
 // SessionProvenance renders the definition name and the PR target as separate
 // spans; only its title carries the whole description at every density.
-export function readProvenance(scope: Element | null | undefined): string {
+function readProvenance(scope: Element | null | undefined): string {
   const node = scope?.querySelector('.session-provenance');
   if (!node) return '';
   return (
@@ -1634,7 +1634,6 @@ function collectSessionsPanelUiState() {
         .map((segment) => segment.textContent?.trim() || '')
         .find((text) => text.startsWith('closed by')) || row.querySelector('.ledger-stamp')?.textContent?.trim() || '',
       verdict,
-      refreshing: Boolean(row.querySelector('.ledger-glyph.is-refreshing')),
       actions: verbs,
     };
   });

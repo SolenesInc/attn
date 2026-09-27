@@ -55,49 +55,61 @@ func (d *Daemon) deliverAgentMailboxItem(delivery agentmailbox.Delivery) error {
 }
 
 func (d *Daemon) deliverAgentMailboxDoorbell(sessionID string) error {
+	state, err := d.claimAgentMailboxDoorbell(sessionID)
+	if state == nil {
+		return err
+	}
+	return d.ringClaimedAgentMailboxDoorbell(sessionID, state)
+}
+
+func (d *Daemon) claimAgentMailboxDoorbell(sessionID string) (*agentMailboxDoorbellState, error) {
 	session := d.store.Get(sessionID)
 	if session == nil {
 		d.forgetAgentMailboxDoorbell(sessionID)
-		return fmt.Errorf("%w: %s", errAgentMailboxRecipientGone, sessionID)
+		return nil, fmt.Errorf("%w: %s", errAgentMailboxRecipientGone, sessionID)
 	}
 	if !sessionReadsInboxDoorbells(session) {
 		d.forgetAgentMailboxDoorbell(sessionID)
-		return fmt.Errorf("%w: %s", errAgentMailboxNoPromptReader, sessionID)
+		return nil, fmt.Errorf("%w: %s", errAgentMailboxNoPromptReader, sessionID)
 	}
 
-	d.gardenWatchMu.Lock()
-	if err := d.discardUncoveredSeedBells(sessionID); err != nil {
-		d.agentMailboxMu.Lock()
-		if state := d.agentMailboxDoorbells[sessionID]; state != nil && state.unread && !state.delivering && state.retry == nil {
-			d.armAgentMailboxDoorbellLocked(sessionID, state, d.agentMailboxCooldown())
-		}
-		d.agentMailboxMu.Unlock()
-		d.gardenWatchMu.Unlock()
-		return fmt.Errorf("check Garden inbox coverage: %w", err)
-	}
 	d.agentMailboxMu.Lock()
+	defer d.agentMailboxMu.Unlock()
 	state := d.agentMailboxDoorbells[sessionID]
 	switch {
 	case state == nil || !state.unread:
-		d.agentMailboxMu.Unlock()
-		d.gardenWatchMu.Unlock()
-		return nil
+		return nil, nil
 	case state.outstanding:
-		d.agentMailboxMu.Unlock()
-		d.gardenWatchMu.Unlock()
-		return errAgentMailboxDoorbellOutstanding
+		return nil, errAgentMailboxDoorbellOutstanding
 	case state.delivering:
-		d.agentMailboxMu.Unlock()
-		d.gardenWatchMu.Unlock()
-		return errAgentMailboxDoorbellInFlight
+		return nil, errAgentMailboxDoorbellInFlight
 	}
 	state.delivering = true
 	if state.retry != nil {
 		state.retry.Stop()
 		state.retry = nil
 	}
-	d.agentMailboxMu.Unlock()
+	return state, nil
+}
 
+func (d *Daemon) ringClaimedAgentMailboxDoorbell(sessionID string, state *agentMailboxDoorbellState) error {
+	d.gardenWatchMu.Lock()
+	coverageErr := d.discardUncoveredSeedBells(sessionID)
+	d.agentMailboxMu.Lock()
+	current := d.agentMailboxDoorbells[sessionID]
+	if coverageErr != nil || current != state || !state.unread {
+		state.delivering = false
+		if coverageErr != nil && current == state && state.unread && state.retry == nil {
+			d.armAgentMailboxDoorbellLocked(sessionID, state, d.agentMailboxCooldown())
+		}
+		d.agentMailboxMu.Unlock()
+		d.gardenWatchMu.Unlock()
+		if coverageErr != nil {
+			return fmt.Errorf("check Garden inbox coverage: %w", coverageErr)
+		}
+		return nil
+	}
+	d.agentMailboxMu.Unlock()
 	d.gardenWatchMu.Unlock()
 
 	attemptKey := uuid.NewString()
@@ -120,7 +132,7 @@ func (d *Daemon) deliverAgentMailboxDoorbell(sessionID string) error {
 	}
 
 	d.agentMailboxMu.Lock()
-	current := d.agentMailboxDoorbells[sessionID]
+	current = d.agentMailboxDoorbells[sessionID]
 	if current != state {
 		d.agentMailboxMu.Unlock()
 		return attempt.err
@@ -181,41 +193,6 @@ func (d *Daemon) armAgentMailboxDoorbellLocked(sessionID string, state *agentMai
 	state.retry = timer
 }
 
-func (d *Daemon) notePostInitialPrompt(sessionID string) {
-	d.agentMailboxMu.Lock()
-	defer d.agentMailboxMu.Unlock()
-	if d.postInitialPrompt == nil {
-		d.postInitialPrompt = make(map[string]struct{})
-	}
-	d.postInitialPrompt[sessionID] = struct{}{}
-}
-
-func (d *Daemon) forgetPostInitialPrompt(sessionID string) {
-	d.agentMailboxMu.Lock()
-	defer d.agentMailboxMu.Unlock()
-	delete(d.postInitialPrompt, sessionID)
-}
-
-func (d *Daemon) initialPromptPending(sessionID string) bool {
-	d.agentMailboxMu.Lock()
-	defer d.agentMailboxMu.Unlock()
-	_, pending := d.postInitialPrompt[sessionID]
-	return pending
-}
-
-func (d *Daemon) runPostInitialPrompt(sessionID, state string) {
-	if state != protocol.StateWorking {
-		return
-	}
-	d.agentMailboxMu.Lock()
-	_, pending := d.postInitialPrompt[sessionID]
-	delete(d.postInitialPrompt, sessionID)
-	d.agentMailboxMu.Unlock()
-	if pending {
-		d.drainAgentMailboxAfterStateChange(sessionID, state)
-	}
-}
-
 func (d *Daemon) rollbackQueuedPeerMessage(sessionID, messageID string) {
 	if err := d.store.DeleteQueuedPeerMessage(messageID); err != nil {
 		d.logf("agent msg rollback: session=%s id=%s err=%v", sessionID, messageID, err)
@@ -264,19 +241,25 @@ func (d *Daemon) seedQueuedAgentMailboxItems() {
 	}
 }
 
-func (d *Daemon) drainAgentMailboxAfterStateChange(sessionID, state string) {
+func (d *Daemon) claimAgentMailboxDrainAfterStateChange(sessionID, state string) (ring func()) {
 	if !sessionInputPhaseAllows(sessionInputWhenPromptReady, protocol.SessionState(state)) ||
 		!d.hasQueuedAgentMailboxItems(sessionID) {
-		return
+		return nil
 	}
-	if d.agentMailboxDrainScheduledHook != nil {
-		d.agentMailboxDrainScheduledHook(sessionID)
+	claimed, err := d.claimAgentMailboxDoorbell(sessionID)
+	return func() {
+		if claimed != nil {
+			err = d.ringClaimedAgentMailboxDoorbell(sessionID, claimed)
+		}
+		d.reportAgentMailboxDrain(sessionID, err)
 	}
-	go d.drainQueuedAgentMailboxItems(sessionID)
 }
 
 func (d *Daemon) drainQueuedAgentMailboxItems(sessionID string) {
-	err := d.deliverAgentMailboxDoorbell(sessionID)
+	d.reportAgentMailboxDrain(sessionID, d.deliverAgentMailboxDoorbell(sessionID))
+}
+
+func (d *Daemon) reportAgentMailboxDrain(sessionID string, err error) {
 	delivered := 0
 	if err == nil {
 		delivered = 1

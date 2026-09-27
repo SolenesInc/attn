@@ -52,21 +52,12 @@ export function delegationTree<TSession extends DelegationSession>(
   return { rows, earlierDispatcher };
 }
 
-export interface DispatcherLink<TSession extends DelegationSession> {
-  session: TSession | null;
-  name: string;
-}
-
 export function dispatcherOf<TSession extends DelegationSession>(
   session: TSession,
   sessions: readonly TSession[],
-): DispatcherLink<TSession> | null {
-  const dispatcher = session.dispatcher_session_id
-    ? sessions.find((candidate) => candidate.id === session.dispatcher_session_id) ?? null
-    : null;
-  const member = session.dispatcher_member?.trim();
-  const name = member ? crewDisplayName(member) : dispatcher?.label.trim();
-  return name ? { session: dispatcher, name } : null;
+): TSession | null {
+  if (!session.dispatcher_session_id) return null;
+  return sessions.find((candidate) => candidate.id === session.dispatcher_session_id) ?? null;
 }
 
 export function delegatesByDispatcher<TSession extends DelegationSession>(

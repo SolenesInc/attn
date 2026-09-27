@@ -1,0 +1,4 @@
+kind: fixed
+area: plugins
+change: A failed plugin install now shows git's own error, with credentials, query and fragment removed from the source URL.
+symptom: The install failed with only "exit status 128".

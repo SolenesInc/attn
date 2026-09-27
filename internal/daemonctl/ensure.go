@@ -439,12 +439,16 @@ func stopRunningDaemon(ctx context.Context) error {
 	ticker := time.NewTicker(100 * time.Millisecond)
 	defer ticker.Stop()
 	for {
-		if !isSocketLive(config.SocketPath()) {
+		released, err := pidLockAvailable()
+		if err != nil {
+			return err
+		}
+		if released {
 			return nil
 		}
 		select {
 		case <-waitCtx.Done():
-			return fmt.Errorf("timed out waiting for daemon to stop")
+			return fmt.Errorf("timed out waiting for daemon pid %d to release its lock", pid)
 		case <-ticker.C:
 		}
 	}

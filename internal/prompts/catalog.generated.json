@@ -3242,6 +3242,18 @@
           }
         },
         {
+          "id": "delegation-roles",
+          "delivery": "reference",
+          "description": "Loaded on demand through attn skill show or the installed skill directory.",
+          "body": {
+            "kind": "text",
+            "id": "attn-skill.delegation-roles",
+            "source": "content/skills/attn/references/delegation-roles.md",
+            "verbatim": true,
+            "keep_final_newline": true
+          }
+        },
+        {
           "id": "delegation",
           "delivery": "reference",
           "description": "Loaded on demand through attn skill show or the installed skill directory.",

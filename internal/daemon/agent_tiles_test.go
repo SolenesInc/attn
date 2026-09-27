@@ -70,20 +70,6 @@ func desktopTree(t *testing.T, d *Daemon, desktopID string) layouttree.Node {
 	return desktop.Tree
 }
 
-func requireBrowserControlRequest(t *testing.T, host *wsClient) protocol.BrowserControlRequestMessage {
-	t.Helper()
-	for {
-		outbound := requireOutbound(t, host, "no browser control request reached the host")
-		var request protocol.BrowserControlRequestMessage
-		if err := json.Unmarshal(outbound.payload, &request); err != nil {
-			t.Fatal(err)
-		}
-		if request.Event == protocol.EventBrowserControlRequest {
-			return request
-		}
-	}
-}
-
 func TestAFocusedTileLeavesNoCurrentAgentAndOpensDockBesideIt(t *testing.T) {
 	d, desktop := setupAgentDesktop(t)
 	notebookDock, err := d.resolvedDesktopTileDock(desktop.ID, desktopTileDock{tileID: "tile-notebook", tileKind: "notebook", edge: protocol.LayoutDockEdgeBottom})

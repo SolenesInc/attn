@@ -1,94 +1,111 @@
-import { describe, expect, it, vi } from 'vitest';
-import { fireEvent, screen, waitFor, within } from '@testing-library/react';
+import { fireEvent, screen, within } from '@testing-library/react';
+import { describe, expect, it } from 'vitest';
 import { SessionReopenAction } from '../../types/generated';
-import { closedEntry, judged, listing, liveEntry, page, renderSessionsTab, rows } from './testSupport';
+import { daemonSession, defaultProfile, DEFAULT_DESKTOP_ID, DEFAULT_PROFILE_ID } from '../../test/daemonFixtures';
+import { closedEntry, entry } from '../../test/sessionLedgerFixtures';
+import type { ScriptedDaemonOptions } from '../../test/scriptedDaemon';
+import { openSessionsLedger, page, pages, rows, type LedgerAnswer } from './testSupport';
 
 const row = (label: string) => rows().getByText(label).closest('.ledger-row') as HTMLElement;
 const inspector = () => screen.getByRole('complementary', { name: 'Details' });
-const profileNames = { 'profile-1': 'Default', 'profile-2': 'Work', 'profile-3': 'Side' };
+
+const WORK = 'profile-work';
+const SIDE = 'profile-side';
+
+function withProfiles(names: Record<string, string>, selected = DEFAULT_PROFILE_ID, sessions: string[] = []): ScriptedDaemonOptions {
+  return {
+    initialState: {
+      profiles: Object.entries(names).map(([id, name]) => defaultProfile(DEFAULT_DESKTOP_ID, { id, name })),
+      selected_profile_id: selected,
+      sessions: sessions.map((id) => daemonSession(id, { state: 'idle' })),
+    },
+  };
+}
+
+const threeProfiles = { [DEFAULT_PROFILE_ID]: 'Default', [WORK]: 'Work', [SIDE]: 'Side' };
+
+async function openLedger(answer: LedgerAnswer, options: ScriptedDaemonOptions) {
+  const view = await openSessionsLedger(answer, options);
+  view.daemon.on('session_move', (command) => ({ event: 'profile_action_result', action: 'session_move', request_id: command.request_id ?? '', success: true }));
+  view.daemon.on('session_reopen', (command) => ({ event: 'session_reopen_result', success: true, result: { session_id: command.session_id, profile_id: command.profile_id ?? DEFAULT_PROFILE_ID, directory: '/tmp', action: command.action ?? 'reopen' } }));
+  return view;
+}
 
 describe('SessionsTab profiles', () => {
   it('moves a live agent to the profile picked from its menu', async () => {
-    const onMoveSession = vi.fn(async () => undefined);
-    const { list } = listing([page({ entries: [liveEntry('s1')] })]);
-    renderSessionsTab({ listSessions: list, profileNames, currentProfileId: 'profile-1', onMoveSession });
+    const view = await openLedger(pages([page({ entries: [entry({ id: 's1' })] })]), withProfiles(threeProfiles, DEFAULT_PROFILE_ID, ['s1']));
 
-    await rows().findByText('run s1');
     fireEvent.keyDown(row('run s1'), { key: '.' });
     fireEvent.keyDown(row('run s1'), { key: '2' });
     const picker = within(row('run s1')).getByRole('menu', { name: 'Move to' });
     expect(within(picker).getAllByRole('menuitem').map((item) => item.textContent)).toEqual(['1Side', '2Work']);
     fireEvent.keyDown(row('run s1'), { key: '2' });
+    await view.daemon.idle();
 
-    expect(onMoveSession).toHaveBeenCalledWith('s1', 'profile-1', 'profile-2');
-    await waitFor(() => expect(within(row('run s1')).queryByRole('menu')).toBeNull());
+    expect(view.daemon.sentOf('session_move').map(({ session_id, expected_profile_id, destination_profile_id }) =>
+      [session_id, expected_profile_id, destination_profile_id])).toEqual([['s1', DEFAULT_PROFILE_ID, WORK]]);
+    expect(within(row('run s1')).queryByRole('menu')).toBeNull();
   });
 
   it('leaves Enter on a Tab-focused choice to that choice', async () => {
-    const onMoveSession = vi.fn(async () => undefined);
-    const onFocusSession = vi.fn();
-    const { list } = listing([page({ entries: [liveEntry('s1')] })]);
-    renderSessionsTab({ listSessions: list, profileNames, currentProfileId: 'profile-1', onMoveSession, onFocusSession });
+    const view = await openLedger(pages([page({ entries: [entry({ id: 's1' })] })]), withProfiles(threeProfiles, DEFAULT_PROFILE_ID, ['s1']));
 
-    await rows().findByText('run s1');
     fireEvent.keyDown(row('run s1'), { key: '.' });
     fireEvent.keyDown(row('run s1'), { key: '2' });
     const work = within(row('run s1')).getByRole('menuitem', { name: /Work/ });
 
-    const notCancelled = fireEvent.keyDown(work, { key: 'Enter' });
-    expect(notCancelled).toBe(true);
-    expect(onFocusSession).not.toHaveBeenCalled();
+    expect(fireEvent.keyDown(work, { key: 'Enter' })).toBe(true);
+    expect(screen.getByRole('dialog', { name: 'Sessions and worktrees' })).toBeInTheDocument();
     fireEvent.click(work);
-    expect(onMoveSession).toHaveBeenCalledWith('s1', 'profile-1', 'profile-2');
+    await view.daemon.idle();
+    expect(view.daemon.sentOf('session_move').map(({ destination_profile_id }) => destination_profile_id)).toEqual([WORK]);
   });
 
   it('keeps a refused move on the row', async () => {
-    const onMoveSession = vi.fn(async () => { throw new Error('session s1 is in profile-2, not profile-1'); });
-    const { list } = listing([page({ entries: [liveEntry('s1')] })]);
-    renderSessionsTab({ listSessions: list, profileNames, onMoveSession });
+    const view = await openLedger(pages([page({ entries: [entry({ id: 's1' })] })]), withProfiles(threeProfiles, DEFAULT_PROFILE_ID, ['s1']));
+    view.daemon.on('session_move', (command) => ({
+      event: 'profile_action_result', action: 'session_move', request_id: command.request_id ?? '', success: false,
+      error: 'session s1 is in profile-work, not profile-default',
+    }));
 
-    await rows().findByText('run s1');
     fireEvent.click(within(inspector()).getByRole('button', { name: 'Move to…' }));
     fireEvent.click(within(row('run s1')).getByRole('menuitem', { name: /Work/ }));
+    await view.daemon.idle();
 
-    expect(await within(row('run s1')).findByText(/not profile-1/)).toBeTruthy();
+    expect(within(row('run s1')).getByText(/not profile-default/)).toBeTruthy();
   });
 
   it('offers no move when the agent has nowhere else to go', async () => {
-    const { list } = listing([page({ entries: [liveEntry('s1')] })]);
-    renderSessionsTab({ listSessions: list, profileNames: { 'profile-1': 'Default' }, onMoveSession: vi.fn() });
+    await openLedger(pages([page({ entries: [entry({ id: 's1' })] })]), withProfiles({ [DEFAULT_PROFILE_ID]: 'Default' }, DEFAULT_PROFILE_ID, ['s1']));
 
-    await rows().findByText('run s1');
     expect(row('run s1').getAttribute('data-verbs')).toBe('Focus');
     expect(within(inspector()).queryByRole('button', { name: 'Move to…' })).toBeNull();
   });
 
   it('asks where to reopen a session whose profile was deleted, current profile first', async () => {
-    const onReopen = vi.fn();
-    const { list } = listing([page({
-      entries: [closedEntry('s1', { profile_id: 'gone', profile_name: 'Old', profile_deleted: true })],
-      reopen: [judged('s1', { profile_id: 'gone', profile_deleted: true })],
-    })]);
-    renderSessionsTab({ listSessions: list, profileNames, currentProfileId: 'profile-2', onReopen });
+    const view = await openLedger(
+      pages([page({ entries: [closedEntry('s1', { profile_id: 'gone', profile_name: 'Old', profile_deleted: true })] })]),
+      withProfiles(threeProfiles, WORK),
+    );
 
-    await rows().findByText('run s1');
     fireEvent.keyDown(row('run s1'), { key: 'Enter' });
     const picker = within(row('run s1')).getByRole('menu', { name: 'Reopen into' });
     expect(within(picker).getAllByRole('menuitem').map((item) => item.textContent)).toEqual(['1Work', '2Default', '3Side']);
-    expect(onReopen).not.toHaveBeenCalled();
+    expect(view.daemon.sentOf('session_reopen')).toEqual([]);
 
     fireEvent.keyDown(row('run s1'), { key: '1' });
-    expect(onReopen).toHaveBeenCalledWith('s1', SessionReopenAction.Reopen, 'profile-2');
+    await view.daemon.idle();
+    expect(view.daemon.sentOf('session_reopen').map(({ session_id, action, profile_id }) => [session_id, action, profile_id]))
+      .toEqual([['s1', SessionReopenAction.Reopen, WORK]]);
   });
 
   it('reopens a session in a live profile without asking', async () => {
-    const onReopen = vi.fn();
-    const { list } = listing([page({ entries: [closedEntry('s1')], reopen: [judged('s1')] })]);
-    renderSessionsTab({ listSessions: list, profileNames, onReopen });
+    const view = await openLedger(pages([page({ entries: [closedEntry('s1')] })]), withProfiles(threeProfiles));
 
-    await rows().findByText('run s1');
     fireEvent.click(within(inspector()).getByRole('button', { name: /Reopen/ }));
+    await view.daemon.idle();
 
-    expect(onReopen).toHaveBeenCalledWith('s1', SessionReopenAction.Reopen, undefined);
+    expect(view.daemon.sentOf('session_reopen').map(({ session_id, action, profile_id }) => [session_id, action, profile_id]))
+      .toEqual([['s1', SessionReopenAction.Reopen, undefined]]);
   });
 });

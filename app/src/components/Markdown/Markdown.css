@@ -1,8 +1,3 @@
-/* One frame, two kinds of block. A code fence and a diagram are both objects
-   in the middle of prose, so they carry the same border, radius, background
-   and header rhythm — language or kind on the left, actions on the right.
-   Reading surfaces can define the tokens; the literals here are the fallback. */
-.markdown-code-frame,
 .markdown-mermaid-frame {
   margin: 0 0 0.7em 0;
   overflow: hidden;
@@ -11,7 +6,6 @@
   background: var(--md-frame-bg, var(--color-bg-input));
 }
 
-.markdown-code-frame-header,
 .markdown-mermaid-toolbar {
   display: flex;
   align-items: center;
@@ -24,43 +18,9 @@
   user-select: none;
 }
 
-.markdown-code-frame-language,
 .markdown-mermaid-label {
   font-family: 'JetBrains Mono', 'SF Mono', Monaco, Menlo, 'DejaVu Sans Mono', monospace;
   letter-spacing: 0.02em;
-}
-
-/* Present at rest so the block never changes height on hover, and legible only
-   when the pointer is on the block it belongs to. */
-.markdown-code-frame-action {
-  padding: 0.2rem 0.45rem;
-  border: 0;
-  border-radius: 5px;
-  background: transparent;
-  color: inherit;
-  font: inherit;
-  opacity: 0;
-  cursor: pointer;
-}
-
-.markdown-code-frame:hover .markdown-code-frame-action,
-.markdown-code-frame-action:focus-visible {
-  opacity: 1;
-}
-
-.markdown-code-frame-action:hover {
-  background: color-mix(in srgb, var(--color-text-primary) 10%, transparent);
-  color: var(--color-text-primary);
-}
-
-/* The frame owns the edge; the pre inside is just the scrolling text. Two
-   classes so it outranks a reading surface's own `<pre>` rule whichever
-   stylesheet the bundler emits last. */
-.markdown-code-frame .markdown-code-frame-pre {
-  margin: 0;
-  border: 0;
-  border-radius: 0;
-  background: none;
 }
 
 .markdown-mermaid {

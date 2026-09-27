@@ -175,7 +175,14 @@ func (d *Daemon) reconcileGroundTruth(ctx context.Context, verdict *ticketReconc
 	if verdict == nil {
 		return nil
 	}
-	host, repoSlug := git.OriginHostOwnerRepo(cwd)
+	identity, err := gitValue(ctx, d.gitExecution(), gitTask{Kind: gitTaskTicketReconcile, Lane: gitDeferred}, func(runCtx context.Context, client *git.Client) ([2]string, error) {
+		host, repo, runErr := client.OriginHostOwnerRepo(runCtx, cwd)
+		return [2]string{host, repo}, runErr
+	})
+	if err != nil {
+		return nil
+	}
+	host, repoSlug := identity[0], identity[1]
 	if repoSlug == "" {
 		return nil
 	}
@@ -194,8 +201,8 @@ func (d *Daemon) reconcileGroundTruth(ctx context.Context, verdict *ticketReconc
 		}
 	}
 
-	fetch := d.ticketReconcilePRFetch
-	if fetch == nil && d.githubAvailable() {
+	var fetch prStateFetcher
+	if d.githubAvailable() {
 		if client, ok := d.ghRegistry.Get(host); ok {
 			fetch = client.FetchPRState
 		}

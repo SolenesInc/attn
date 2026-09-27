@@ -1,0 +1,4 @@
+kind: fixed
+area: sessions
+change: "`attn session list --repository` finds sessions the app started, and `--last` windows start at the local day's first instant where midnight is skipped by a clock change."
+symptom: A session closed within seconds of starting never matched its repository, and on a day whose midnight a clock change skipped, today's window began an hour into yesterday.

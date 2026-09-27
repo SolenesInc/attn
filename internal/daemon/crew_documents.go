@@ -60,9 +60,6 @@ func (d *Daemon) crewCharterSet(name, content, expectedToken string) (*protocol.
 	if expectedToken == "" {
 		return nil, fmt.Errorf("saving %s's charter requires the content token that was read", crew.DisplayName(member.ID))
 	}
-	if d.crewCharterBeforeWriteHook != nil {
-		d.crewCharterBeforeWriteHook()
-	}
 	hash, conflict, err := fsdoc.NewStore(member.HomeDir).Write(crew.CharterFileName, []byte(content), expectedToken)
 	if err != nil {
 		return nil, fmt.Errorf("saving %s's charter: %w", crew.DisplayName(member.ID), err)

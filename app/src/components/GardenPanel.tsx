@@ -1204,7 +1204,6 @@ export function GardenPanel({
             {canSendToChief && !composingContinuation && (
               <button
                 type="button"
-                data-testid={`seed-send-to-chief-${here.id}`}
                 onClick={() => setContinuationDraft(newContinuationDraft(seedDoc?.seed ?? here, 'chief'))}
               >
                 Send to Chief

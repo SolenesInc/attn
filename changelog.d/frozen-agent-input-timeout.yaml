@@ -1,0 +1,4 @@
+kind: fixed
+area: terminal
+change: Input sent to an agent whose terminal stopped reading now fails after five seconds instead of hanging.
+symptom: An agent that stopped reading its terminal could stall prompts and annotations sent to it indefinitely.

@@ -1,0 +1,8 @@
+kind: fixed
+area: sessions
+change: A running Copilot session now follows its own transcript, so it turns *waiting* or *idle* when copilot finishes a turn instead of only when copilot exits.
+symptom: A fresh Copilot session stayed at *launching* for as long as copilot kept running, and a restarted Copilot session started a new conversation instead of resuming its own.
+notes: >
+  attn finds the conversation copilot starts in the session's directory and
+  binds it to the session, so reloading or respawning the session resumes that
+  conversation with `copilot --resume`.

@@ -3,7 +3,6 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { useGhosttyPaneRuntime } from './useGhosttyPaneRuntime';
 import {
   createPaneRuntimeEventRouterController,
-  type PaneRuntimeEventBinding,
   type PaneRuntimeEventRouter,
 } from './paneRuntimeEventRouter';
 import type { GhosttyTerminalHandle } from '../GhosttyTerminal';
@@ -52,7 +51,7 @@ function createTerminal(): GhosttyTerminalHandle {
 }
 
 describe('useGhosttyPaneRuntime', () => {
-  let binding: PaneRuntimeEventBinding | null;
+  let binding: Parameters<PaneRuntimeEventRouter['registerBinding']>[0] | null;
   let router: PaneRuntimeEventRouter;
 
   beforeEach(() => {

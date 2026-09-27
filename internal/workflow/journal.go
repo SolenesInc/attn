@@ -68,16 +68,6 @@ func NewMemJournal() *MemJournal {
 	return &MemJournal{byOrdinal: map[string]int{}}
 }
 
-func (m *MemJournal) Clone() *MemJournal {
-	out := NewMemJournal()
-	out.order = make([]JournalEntry, len(m.order))
-	copy(out.order, m.order)
-	for k, v := range m.byOrdinal {
-		out.byOrdinal[k] = v
-	}
-	return out
-}
-
 func (m *MemJournal) Lookup(ordinal string) (JournalEntry, bool) {
 	idx, ok := m.byOrdinal[ordinal]
 	if !ok {

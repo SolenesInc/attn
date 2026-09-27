@@ -5,8 +5,7 @@
   line-height: 1.25;
 }
 
-.session-provenance--line,
-.session-provenance--detail {
+.session-provenance--line {
   display: flex;
   align-items: center;
   gap: 6px;
@@ -39,12 +38,7 @@
   color: var(--color-text-muted, var(--color-text-tertiary));
 }
 
-.session-provenance--compact .session-provenance__dot + .session-provenance__target::before {
-  content: none;
-}
-
-.session-provenance--line > :not(:last-child)::after,
-.session-provenance--detail > :not(:last-child)::after {
+.session-provenance--line > :not(:last-child)::after {
   content: '·';
   margin-left: 6px;
   color: var(--color-text-muted, var(--color-text-tertiary));
@@ -79,14 +73,6 @@
   color: var(--pr-tone, var(--color-text-tertiary));
 }
 
-.session-provenance__dot {
-  flex: none;
-  width: 7px;
-  height: 7px;
-  border-radius: 50%;
-  background: var(--pr-tone, var(--color-text-tertiary));
-}
-
 .session-provenance__target {
   border: 0;
   padding: 0;
@@ -106,98 +92,9 @@ button.session-provenance__target:hover {
   text-decoration: underline;
 }
 
-.session-provenance__delegation {
-  display: inline-flex;
-  flex: none;
-  gap: 4px;
-  align-items: center;
-  min-width: 0;
-  padding: 1px 6px;
-  border: 1px solid color-mix(in srgb, var(--color-text-tertiary) 28%, transparent);
-  border-radius: 999px;
-  background: transparent;
-  color: var(--color-text-tertiary);
-  font: inherit;
-  white-space: nowrap;
-}
-
-button.session-provenance__delegation {
-  cursor: pointer;
-}
-
-.session-provenance__delegation--up:not(:disabled):hover {
-  border-color: rgba(88, 166, 255, 0.5);
-  background: rgba(88, 166, 255, 0.12);
-  color: #79b8ff;
-}
-
-.session-provenance__delegation--down:not(:disabled):hover,
-.session-provenance__delegation--down[aria-expanded='true'] {
-  border-color: color-mix(in srgb, var(--accent) 58%, transparent);
-  background: color-mix(in srgb, var(--accent) 12%, transparent);
-  color: var(--accent);
-}
-
-.session-provenance__delegation:disabled {
-  cursor: default;
-}
-
-.session-provenance__delegation kbd {
-  padding: 0 3px;
-  border: 1px solid color-mix(in srgb, currentColor 24%, transparent);
-  border-radius: 3px;
-  color: var(--color-text-muted);
-  font-family: 'SF Mono', 'Monaco', 'Menlo', 'DejaVu Sans Mono', monospace;
-  font-size: 9px;
-}
-
-.session-provenance__earlier {
-  color: var(--color-text-muted);
-  font-style: italic;
-}
-
 .session-provenance__title {
   min-width: 0;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
-}
-
-.session-provenance--badge {
-  display: inline-flex;
-  flex: none;
-  align-items: center;
-  gap: 3px;
-}
-
-.session-provenance__badge-mark {
-  display: inline-flex;
-  flex: none;
-  align-items: center;
-  justify-content: center;
-  width: 16px;
-  height: 16px;
-  border: 1px solid color-mix(in srgb, var(--accent) 35%, transparent);
-  border-radius: 5px;
-  background: color-mix(in srgb, var(--accent) 10%, transparent);
-  color: var(--accent);
-  font-size: 9px;
-}
-
-.session-provenance__badge-mark--pr {
-  width: auto;
-  padding: 0 4px;
-  border-color: color-mix(in srgb, var(--pr-tone, var(--color-text-tertiary)) 45%, transparent);
-  background: color-mix(in srgb, var(--pr-tone, var(--color-text-tertiary)) 12%, transparent);
-  color: var(--pr-tone, var(--color-text-tertiary));
-  font-weight: 600;
-}
-
-.session-provenance--detail {
-  flex-wrap: wrap;
-  overflow: visible;
-  padding: 8px 10px;
-  border: 1px solid color-mix(in srgb, var(--accent) 22%, var(--color-border));
-  border-radius: 8px;
-  background: color-mix(in srgb, var(--accent) 5%, transparent);
 }

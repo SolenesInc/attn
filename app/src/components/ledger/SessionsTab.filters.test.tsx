@@ -1,207 +1,207 @@
 import { describe, expect, it, vi } from 'vitest';
-import { act, fireEvent, screen, waitFor } from '@testing-library/react';
-import type { SessionLedgerPage } from '../../hooks/daemonSessionLedgerEvents';
+import { act, fireEvent, screen } from '@testing-library/react';
 import { SESSION_FILTERS_SETTING_KEY } from '../../hooks/sessionFiltersSetting';
-import { NOW, entry, listing, page, renderSessionsTab, rows } from './testSupport';
+import { NOW, entry } from '../../test/sessionLedgerFixtures';
+import { savedSettings, serveSettings } from '../../test/settings';
+import type { ScriptedDaemon } from '../../test/scriptedDaemon';
+import { namedProfiles, openSessionsLedger, page, pages, rows, type LedgerAnswer } from './testSupport';
 
 const query = () => screen.getByLabelText('Filter') as HTMLInputElement;
 const type = (text: string) => fireEvent.change(query(), { target: { value: text } });
-const status = () => screen.getByTestId('status').textContent ?? '';
+const status = () => document.querySelector('.ledger-status-left')?.textContent ?? '';
+const rememberedFilters = (daemon: ScriptedDaemon) =>
+  savedSettings(daemon).filter(([key]) => key === SESSION_FILTERS_SETTING_KEY).map(([, value]) => JSON.parse(value));
+
+async function openLedger(
+  { answer, profileNames = {} }: { answer: LedgerAnswer; profileNames?: Record<string, string> },
+  { values = {} }: { values?: Record<string, string> } = {},
+) {
+  const view = await openSessionsLedger(answer, { initialState: { profiles: namedProfiles(profileNames), settings: values } });
+  serveSettings(view.daemon, values);
+  return view;
+}
+
+async function typeAndPause(view: { daemon: ScriptedDaemon }, text: string) {
+  type(text);
+  await act(() => vi.advanceTimersByTimeAsync(1000));
+  await view.daemon.idle();
+}
 
 describe('SessionsTab query', () => {
   it('asks for both live and closed rows, newest page first', async () => {
-    const { list, calls } = listing([page({ entries: [entry({ id: 's1' })] })]);
-    renderSessionsTab({ listSessions: list });
+    const view = await openLedger({ answer: pages([page({ entries: [entry({ id: 's1' })] })]) });
 
-    await rows().findByText('run s1');
-    expect(calls).toEqual([{ all: true, limit: 50, reopen: true }]);
+    expect(rows().getByText('run s1')).toBeInTheDocument();
+    expect(view.queries()).toEqual([{ all: true, limit: 50 }]);
   });
 
   it('narrows to closed rows without re-reading on every render', async () => {
-    const { list, calls } = listing([page()]);
-    renderSessionsTab({ listSessions: list });
-    await waitFor(() => expect(calls).toHaveLength(1));
+    const view = await openLedger({ answer: pages([page()]) });
+    expect(view.queries()).toHaveLength(1);
 
     fireEvent.click(screen.getByRole('button', { name: 'Closed' }));
-    await waitFor(() => expect(calls).toHaveLength(2));
-    expect(calls[1]).toEqual({ closed: true, limit: 50, reopen: true });
-    await act(async () => { await Promise.resolve(); });
-    expect(calls).toHaveLength(2);
-  });
-
-  it('reads the page again when a profile or an agent\'s profile changes, and only then', async () => {
-    const { list, calls } = listing([
-      page({ entries: [entry({ id: 's1', profile_name: 'Work' })] }),
-      page({ entries: [entry({ id: 's1', profile_name: 'Office' })] }),
-    ]);
-    const { rerender } = renderSessionsTab({ listSessions: list, profileMembership: 'p1:Work\ns1@p1' });
-    await rows().findByText('Work');
-
-    rerender({ profileMembership: 'p1:Work\ns1@p1' });
-    await act(async () => { await Promise.resolve(); });
-    expect(calls).toHaveLength(1);
-
-    rerender({ profileMembership: 'p1:Office\ns1@p1' });
-    await rows().findByText('Office');
-    expect(calls).toHaveLength(2);
+    await view.daemon.idle();
+    expect(view.queries()).toEqual([{ all: true, limit: 50 }, { closed: true, limit: 50 }]);
+    await view.daemon.idle();
+    expect(view.queries()).toHaveLength(2);
   });
 
   it('resolves range words into instants in the viewer timezone', async () => {
-    const { list, calls } = listing([page()]);
-    renderSessionsTab({ listSessions: list });
-    await waitFor(() => expect(calls).toHaveLength(1));
+    const view = await openLedger({ answer: pages([page()]) });
 
-    type('today');
-    await waitFor(() => expect(calls).toHaveLength(2));
+    await typeAndPause(view, 'today');
     const today = new Date(NOW.getFullYear(), NOW.getMonth(), NOW.getDate()).toISOString();
-    expect(calls[1]).toEqual({ all: true, limit: 50, since: today, reopen: true });
+    expect(view.queries()[1]).toEqual({ all: true, limit: 50, since: today });
 
-    type('yesterday');
-    await waitFor(() => expect(calls).toHaveLength(3));
+    await typeAndPause(view, 'yesterday');
     const yesterday = new Date(NOW.getFullYear(), NOW.getMonth(), NOW.getDate() - 1).toISOString();
-    expect(calls[2]).toEqual({ all: true, limit: 50, since: yesterday, until: today, reopen: true });
+    expect(view.queries()[2]).toEqual({ all: true, limit: 50, since: yesterday, until: today });
 
-    type('week');
-    await waitFor(() => expect(calls).toHaveLength(4));
-    expect(calls[3].since).toBe(new Date(NOW.getFullYear(), NOW.getMonth(), NOW.getDate() - 6).toISOString());
-    expect(calls[3].until).toBeUndefined();
+    await typeAndPause(view, 'week');
+    expect(view.queries()[3].since).toBe(new Date(NOW.getFullYear(), NOW.getMonth(), NOW.getDate() - 6).toISOString());
+    expect(view.queries()[3].until).toBeUndefined();
   });
 
   it('counts both ends of a custom range and refuses a backwards one', async () => {
-    const { list, calls } = listing([page()]);
-    renderSessionsTab({ listSessions: list });
-    await waitFor(() => expect(calls).toHaveLength(1));
+    const view = await openLedger({ answer: pages([page()]) });
 
-    type('from:2026-09-01 to:2026-09-03');
-    await waitFor(() => expect(calls).toHaveLength(2));
-    expect(calls[1]).toEqual({
+    await typeAndPause(view, 'from:2026-09-01 to:2026-09-03');
+    expect(view.queries()[1]).toEqual({
       all: true,
       limit: 50,
       since: new Date(2026, 8, 1).toISOString(),
       until: new Date(2026, 8, 4).toISOString(),
-      reopen: true,
     });
 
-    type('from:2026-09-01 to:2026-08-01');
-    await rows().findByText('The range ends before it starts; swap the two dates');
-    expect(calls).toHaveLength(2);
+    await typeAndPause(view, 'from:2026-09-01 to:2026-08-01');
+    expect(rows().getByText('The range ends before it starts; swap the two dates')).toBeInTheDocument();
+    expect(view.queries()).toHaveLength(2);
   });
 
   it('keeps a scope click and a typed range made in one tick', async () => {
-    const { list, calls } = listing([page()]);
-    renderSessionsTab({ listSessions: list });
-    await waitFor(() => expect(calls).toHaveLength(1));
+    const view = await openLedger({ answer: pages([page()]) });
 
     fireEvent.click(screen.getByRole('button', { name: 'Closed' }));
-    type('today');
-    await waitFor(() => {
-      const last = calls[calls.length - 1];
-      expect(last.closed).toBe(true);
-      expect(last.since).toBeTruthy();
-    });
+    await typeAndPause(view, 'today');
+
+    const last = view.queries()[view.queries().length - 1];
+    expect(last.closed).toBe(true);
+    expect(last.since).toBeTruthy();
   });
 
   it('resolves repo: and profile: through the facets and flags a token nothing matches', async () => {
-    const { list, calls } = listing([page({
-      entries: [entry({ id: 's1' })],
-      facets: {
-        profiles: [{ profile_id: 'profile-1', name: 'attn work', count: 4 }],
-        repositories: [{ value: '/Users/victor/projects/attn', count: 7 }],
-      },
-    })]);
-    renderSessionsTab({ listSessions: list, profileNames: { 'profile-1': 'attn work' } });
-    await rows().findByText('run s1');
+    const view = await openLedger({
+      answer: pages([page({
+        entries: [entry({ id: 's1' })],
+        facets: {
+          desktops: [],
+          profiles: [{ profile_id: 'profile-1', name: 'attn work', count: 4 }],
+          repositories: [{ value: '/Users/victor/projects/attn', count: 7 }],
+        },
+      })]),
+      profileNames: { 'profile-1': 'attn work' },
+    });
 
-    type('repo:attn profile:attn-work');
-    await waitFor(() => expect(calls).toHaveLength(2));
-    expect(calls[1]).toEqual({ all: true, limit: 50, repository: '/Users/victor/projects/attn', profile_id: 'profile-1', reopen: true });
+    await typeAndPause(view, 'repo:attn profile:attn-work');
+    expect(view.queries()[1]).toEqual({ all: true, limit: 50, repository: '/Users/victor/projects/attn', profile_id: 'profile-1' });
 
-    type('repo:nope');
-    const chip = await screen.findByRole('button', { name: /repo:nope/ });
+    await typeAndPause(view, 'repo:nope');
+    const chip = screen.getByRole('button', { name: /repo:nope/ });
     expect(chip.className).toContain('is-unresolved');
     fireEvent.click(chip);
     expect(query().value).toBe('');
   });
 
-  it('keeps a profile filter through a rename and when the profile has no rows', async () => {
-    const { list, calls } = listing([page({ facets: { profiles: [], repositories: [] } })]);
-    const { rerender } = renderSessionsTab({ listSessions: list, profileNames: { 'profile-1': 'attn work' } });
-    await waitFor(() => expect(calls).toHaveLength(1));
-
-    type('profile:attn-work');
-    await waitFor(() => expect(calls).toHaveLength(2));
-    expect(calls[1]).toEqual({ all: true, limit: 50, profile_id: 'profile-1', reopen: true });
-
-    rerender({ profileNames: { 'profile-1': 'Office' } });
-    await waitFor(() => expect(query().value).toBe('profile:office'));
-    await act(async () => { await Promise.resolve(); });
-    expect(calls.every((call, index) => index === 0 || call.profile_id === 'profile-1')).toBe(true);
-  });
-
-  it('keeps a chosen profile when a later page\'s facets leave it out', async () => {
-    const deleted = { profile_id: 'profile-old', name: 'Old Side', deleted: true, count: 2 };
-    const { list, calls } = listing([
-      page({ facets: { profiles: [deleted], repositories: [] } }),
-      page({ facets: { profiles: [deleted], repositories: [] } }),
-      page({ facets: { profiles: [], repositories: [] } }),
-      page({ facets: { profiles: [], repositories: [] } }),
-    ]);
-    vi.useFakeTimers({ shouldAdvanceTime: true });
-    try {
-      renderSessionsTab({ listSessions: list });
-      await waitFor(() => expect(calls).toHaveLength(1));
-
-      type('profile:old-side');
-      await waitFor(() => expect(calls).toHaveLength(2));
-      expect(calls[1].profile_id).toBe('profile-old');
-
-      fireEvent.click(screen.getByRole('button', { name: 'Live' }));
-      await waitFor(() => expect(calls).toHaveLength(3));
-      await act(async () => { vi.runOnlyPendingTimers(); });
-      expect(calls.slice(1).every((call) => call.profile_id === 'profile-old')).toBe(true);
-      expect(query().value).toBe('profile:old-side');
-    } finally {
-      vi.useRealTimers();
-    }
-  });
-
   it('narrows the page by words and dir: without asking the daemon', async () => {
-    const { list, calls } = listing([page({ entries: [
+    const view = await openLedger({ answer: pages([page({ entries: [
       entry({ id: 's1', label: 'ledger work', directory: '/Users/victor/projects/attn--wt' }),
       entry({ id: 's2', label: 'other thing', directory: '/Users/victor/projects/elsewhere' }),
-    ] })]);
-    renderSessionsTab({ listSessions: list });
-    await rows().findByText('other thing');
+    ] })]) });
 
-    type('ledger');
-    await waitFor(() => expect(rows().queryByText('other thing')).toBeNull());
+    await typeAndPause(view, 'ledger');
+    expect(rows().queryByText('other thing')).toBeNull();
     expect(rows().getByText('ledger work')).toBeTruthy();
-    await waitFor(() => expect(status()).toContain('1 hidden by the query'));
+    expect(status()).toContain('1 hidden by the query');
 
-    type('dir:~/projects/elsewhere');
-    await waitFor(() => expect(rows().queryByText('ledger work')).toBeNull());
+    await typeAndPause(view, 'dir:~/projects/elsewhere');
+    expect(rows().queryByText('ledger work')).toBeNull();
     expect(rows().getByText('other thing')).toBeTruthy();
-    expect(calls).toHaveLength(1);
+    expect(view.queries()).toHaveLength(1);
   });
 });
 
 describe('SessionsTab pagination', () => {
   it('loads the next page from the cursor and appends it', async () => {
-    const { list, calls } = listing([
+    const view = await openLedger({ answer: pages([
       page({ entries: [entry({ id: 's1' })], omitted: 3, next_before: 's1' }),
       page({ entries: [entry({ id: 's2' })], omitted: 0 }),
-    ]);
-    renderSessionsTab({ listSessions: list });
-    await rows().findByText('run s1');
+    ]) });
+    expect(status()).toContain('3 older');
 
-    await waitFor(() => expect(status()).toContain('3 older'));
     fireEvent.click(screen.getByRole('button', { name: /3 older/ }));
+    await view.daemon.idle();
 
-    await rows().findByText('run s2');
-    expect(calls[1]).toEqual({ all: true, limit: 50, before: 's1', reopen: true });
+    expect(rows().getByText('run s2')).toBeInTheDocument();
+    expect(view.queries()[1]).toEqual({ all: true, limit: 50, before: 's1' });
     expect(rows().getByText('run s1')).toBeTruthy();
-    await waitFor(() => expect(status()).toContain('2 sessions'));
+    expect(status()).toContain('2 sessions');
     expect(screen.queryByRole('button', { name: /older/ })).toBeNull();
+  });
+});
+
+describe('SessionsTab profiles in the query', () => {
+  const renamed = (daemon: ScriptedDaemon, name: string) => {
+    daemon.emit({ event: 'profiles_changed', profiles: namedProfiles({ 'profile-1': name }) });
+  };
+
+  it('reads the page again when a profile is renamed, and only then', async () => {
+    const view = await openLedger({
+      answer: pages([page({ entries: [entry({ id: 's1', profile_name: 'Work' })] })]),
+      profileNames: { 'profile-1': 'Work' },
+    });
+    expect(view.queries()).toHaveLength(1);
+
+    renamed(view.daemon, 'Work');
+    await view.daemon.idle();
+    expect(view.queries()).toHaveLength(1);
+
+    renamed(view.daemon, 'Office');
+    await view.daemon.idle();
+    expect(view.queries()).toHaveLength(2);
+  });
+
+  it('keeps a profile filter through a rename and when the profile has no rows', async () => {
+    const view = await openLedger({
+      answer: pages([page({ facets: { desktops: [], profiles: [], repositories: [] } })]),
+      profileNames: { 'profile-1': 'attn work' },
+    });
+
+    await typeAndPause(view, 'profile:attn-work');
+    expect(view.queries()[1]).toEqual({ all: true, limit: 50, profile_id: 'profile-1' });
+
+    renamed(view.daemon, 'Office');
+    await view.daemon.idle();
+    expect(query().value).toBe('profile:office');
+    expect(view.queries().slice(1).every((sent) => sent.profile_id === 'profile-1')).toBe(true);
+  });
+
+  it('keeps a chosen profile when a later page’s facets leave it out', async () => {
+    const deleted = { profile_id: 'profile-old', name: 'Old Side', deleted: true, count: 2 };
+    const view = await openLedger({
+      answer: pages([
+        page({ facets: { desktops: [], profiles: [deleted], repositories: [] } }),
+        page({ facets: { desktops: [], profiles: [deleted], repositories: [] } }),
+        page({ facets: { desktops: [], profiles: [], repositories: [] } }),
+      ]),
+    });
+
+    await typeAndPause(view, 'profile:old-side');
+    expect(view.queries()[1].profile_id).toBe('profile-old');
+
+    fireEvent.click(screen.getByRole('button', { name: 'Live' }));
+    await typeAndPause(view, 'profile:old-side');
+    expect(view.queries().slice(1).every((sent) => sent.profile_id === 'profile-old')).toBe(true);
+    expect(query().value).toBe('profile:old-side');
   });
 });
 
@@ -211,82 +211,69 @@ describe('SessionsTab filter memory', () => {
   });
 
   it('queries with the remembered filters on the first read and shows them as tokens', async () => {
-    const { list, calls } = listing([page()]);
-    const { setSetting } = renderSessionsTab(
-      { listSessions: list, profileNames: { 'profile-2': 'attn' } },
+    const view = await openLedger(
+      { answer: pages([page()]), profileNames: { 'profile-2': 'attn' } },
       { values: { [SESSION_FILTERS_SETTING_KEY]: stored } },
     );
-    await waitFor(() => expect(calls).toHaveLength(1));
 
     const since = new Date(NOW.getFullYear(), NOW.getMonth(), NOW.getDate() - 6).toISOString();
-    expect(calls[0]).toEqual({ closed: true, since, profile_id: 'profile-2', repository: '/Users/victor/projects/attn', limit: 50, reopen: true });
+    expect(view.queries()).toEqual([{ closed: true, since, repository: '/Users/victor/projects/attn', profile_id: 'profile-2', limit: 50 }]);
     expect(query().value).toBe('repo:attn profile:attn 7d');
-    expect(setSetting).not.toHaveBeenCalled();
+    expect(rememberedFilters(view.daemon)).toEqual([]);
   });
 
   it('keeps the remembered path when repository names collide', async () => {
-    const { list, calls } = listing([page({
-      facets: {
-        profiles: [],
-        repositories: [
-          { value: '/tmp/earlier/attn', count: 4 },
-          { value: '/Users/victor/projects/attn', count: 3 },
-        ],
-      },
-    })]);
-    const { setSetting } = renderSessionsTab(
-      { listSessions: list },
+    const view = await openLedger(
+      { answer: pages([page({
+        facets: {
+          desktops: [],
+          profiles: [],
+          repositories: [
+            { value: '/tmp/earlier/attn', count: 4 },
+            { value: '/Users/victor/projects/attn', count: 3 },
+          ],
+        },
+      })]) },
       { values: { [SESSION_FILTERS_SETTING_KEY]: stored } },
     );
 
-    await waitFor(() => expect(calls).toHaveLength(1));
-    expect(calls[0].repository).toBe('/Users/victor/projects/attn');
+    expect(view.queries()).toHaveLength(1);
+    expect(view.queries()[0].repository).toBe('/Users/victor/projects/attn');
     expect(query().value).toContain('repo:attn');
-    expect(setSetting).not.toHaveBeenCalled();
+    expect(rememberedFilters(view.daemon)).toEqual([]);
   });
 
   it('keeps remembered facet filters while the first page is loading', async () => {
-    vi.useFakeTimers();
-    try {
-      const listSessions = vi.fn(() => new Promise<SessionLedgerPage>(() => {}));
-      const { setSetting } = renderSessionsTab(
-        { listSessions, profileNames: { 'profile-2': 'attn' } },
-        { values: { [SESSION_FILTERS_SETTING_KEY]: stored } },
-      );
+    const view = await openLedger(
+      { answer: () => 'hold', profileNames: { 'profile-2': 'attn' } },
+      { values: { [SESSION_FILTERS_SETTING_KEY]: stored } },
+    );
 
-      await act(async () => { vi.runOnlyPendingTimers(); });
-
-      expect(query().value).toBe('repo:attn profile:attn 7d');
-      expect(setSetting).not.toHaveBeenCalled();
-    } finally {
-      vi.useRealTimers();
-    }
+    expect(query().value).toBe('repo:attn profile:attn 7d');
+    expect(rememberedFilters(view.daemon)).toEqual([]);
   });
 
   it('restores a custom range exactly as it was left', async () => {
-    const { list, calls } = listing([page()]);
-    renderSessionsTab({ listSessions: list }, { values: { [SESSION_FILTERS_SETTING_KEY]: JSON.stringify({
+    const view = await openLedger({ answer: pages([page()]) }, { values: { [SESSION_FILTERS_SETTING_KEY]: JSON.stringify({
       scope: 'all', range: 'custom', customFrom: '2026-08-01', customTo: '2026-08-03', profileId: '', repository: '',
     }) } });
-    await waitFor(() => expect(calls).toHaveLength(1));
 
-    expect(calls[0].since).toBe(new Date(2026, 7, 1).toISOString());
-    expect(calls[0].until).toBe(new Date(2026, 7, 4).toISOString());
+    expect(view.queries()).toHaveLength(1);
+    expect(view.queries()[0].since).toBe(new Date(2026, 7, 1).toISOString());
+    expect(view.queries()[0].until).toBe(new Date(2026, 7, 4).toISOString());
     expect(query().value).toBe('from:2026-08-01 to:2026-08-03');
   });
 
   it('remembers a filter the moment it changes', async () => {
-    const { list, calls } = listing([page()]);
-    const { setSetting } = renderSessionsTab({ listSessions: list });
-    await waitFor(() => expect(calls).toHaveLength(1));
-    const written = () => setSetting.mock.calls.filter(([key]) => key === SESSION_FILTERS_SETTING_KEY).map(([, value]) => JSON.parse(value as string));
+    const view = await openLedger({ answer: pages([page()]) });
+    const written = () => rememberedFilters(view.daemon);
 
     fireEvent.click(screen.getByRole('button', { name: 'Closed' }));
-    await waitFor(() => expect(written()).toHaveLength(1));
-    expect(written()[0]).toEqual({ scope: 'closed', range: 'any', customFrom: '', customTo: '', profileId: '', repository: '' });
+    await view.daemon.idle();
+    expect(written()).toEqual([{ scope: 'closed', range: 'any', customFrom: '', customTo: '', profileId: '', repository: '' }]);
 
-    type('30d');
-    await waitFor(() => expect(written()).toHaveLength(2));
+    await typeAndPause(view, '30d');
+    expect(written()).toHaveLength(2);
     expect(written()[1].range).toBe('30d');
   });
 
@@ -295,8 +282,7 @@ describe('SessionsTab filter memory', () => {
     ['an unknown scope', JSON.stringify({ scope: 'archived', range: 'any' })],
     ['an unreadable date', JSON.stringify({ scope: 'all', range: 'custom', customFrom: 'yesterday' })],
   ])('opens on the defaults when the setting is %s', async (_label, value) => {
-    const { list, calls } = listing([page()]);
-    renderSessionsTab({ listSessions: list }, { values: { [SESSION_FILTERS_SETTING_KEY]: value } });
-    await waitFor(() => expect(calls).toEqual([{ all: true, limit: 50, reopen: true }]));
+    const view = await openLedger({ answer: pages([page()]) }, { values: { [SESSION_FILTERS_SETTING_KEY]: value } });
+    expect(view.queries()).toEqual([{ all: true, limit: 50 }]);
   });
 });

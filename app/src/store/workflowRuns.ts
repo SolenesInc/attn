@@ -7,10 +7,6 @@ interface WorkflowRunsStore {
   upsertWorkflowRun: (run: WorkflowRun) => void;
 
   upsertWorkflowRuns: (runs: WorkflowRun[]) => void;
-
-  removeWorkflowRun: (runId: string) => void;
-
-  reset: () => void;
 }
 
 export const useWorkflowRunsStore = create<WorkflowRunsStore>((set) => ({
@@ -32,16 +28,6 @@ export const useWorkflowRunsStore = create<WorkflowRunsStore>((set) => ({
       }
       return { workflowRuns: next };
     }),
-
-  removeWorkflowRun: (runId) =>
-    set((state) => {
-      if (!runId || !(runId in state.workflowRuns)) return state;
-      const next = { ...state.workflowRuns };
-      delete next[runId];
-      return { workflowRuns: next };
-    }),
-
-  reset: () => set({ workflowRuns: {} }),
 }));
 
 // created_at is an ISO-8601 string, so a lexicographic max is a correct

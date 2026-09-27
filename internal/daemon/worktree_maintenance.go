@@ -6,7 +6,7 @@ import (
 	"sync"
 )
 
-var errWorktreeSweepPreempted = errors.New("worktree sweep preempted")
+var errAutomaticWorktreeCleanupPreempted = errors.New("automatic worktree cleanup preempted")
 
 type worktreeMaintenanceCoordinator struct {
 	gate sync.RWMutex
@@ -21,27 +21,70 @@ type worktreeSweepLease struct {
 	ctx         context.Context
 }
 
-func (d *Daemon) runWorktreeForeground(operation string, run func(context.Context)) {
-	_ = d.worktreeMaintenance.RunForeground(context.Background(), operation, func(ctx context.Context) error {
-		run(ctx)
-		return nil
-	})
+type foregroundCleanupProtection struct {
+	ctx context.Context
 }
 
-func (c *worktreeMaintenanceCoordinator) RunForeground(
-	ctx context.Context,
-	operation string,
-	run func(context.Context) error,
-) error {
-	c.mu.Lock()
-	if c.sweepCancel != nil {
-		c.sweepCancel(errWorktreeSweepPreempted)
-	}
-	c.mu.Unlock()
+type automaticWorktreeCleanupProtection struct {
+	ctx context.Context
+}
 
+type worktreeCleanupProtection interface {
+	Context() context.Context
+}
+
+func (p foregroundCleanupProtection) Context() context.Context {
+	return p.ctx
+}
+
+func (p automaticWorktreeCleanupProtection) Context() context.Context {
+	return p.ctx
+}
+
+func (c *worktreeMaintenanceCoordinator) ProtectFromAutomaticCleanup(
+	ctx context.Context,
+	run func(foregroundCleanupProtection) error,
+) error {
+	c.preemptSweep()
 	c.gate.RLock()
 	defer c.gate.RUnlock()
-	return run(ctx)
+	return run(foregroundCleanupProtection{ctx: ctx})
+}
+
+func (c *worktreeMaintenanceCoordinator) preemptSweep() {
+	c.mu.Lock()
+	if c.sweepCancel != nil {
+		c.sweepCancel(errAutomaticWorktreeCleanupPreempted)
+	}
+	c.mu.Unlock()
+}
+
+func (c *worktreeMaintenanceCoordinator) TryAutomaticRemoval(
+	ctx context.Context,
+	run func(automaticWorktreeCleanupProtection) error,
+) error {
+	c.preemptSweep()
+	if !c.gate.TryLock() {
+		return errAutomaticWorktreeCleanupPreempted
+	}
+	defer c.gate.Unlock()
+	return run(automaticWorktreeCleanupProtection{ctx: ctx})
+}
+
+func (s *worktreeSweepLease) TryAutomaticRemoval(
+	run func(automaticWorktreeCleanupProtection) error,
+) error {
+	if cause := context.Cause(s.ctx); cause != nil {
+		return cause
+	}
+	if !s.coordinator.gate.TryLock() {
+		return errAutomaticWorktreeCleanupPreempted
+	}
+	defer s.coordinator.gate.Unlock()
+	if cause := context.Cause(s.ctx); cause != nil {
+		return cause
+	}
+	return run(automaticWorktreeCleanupProtection{ctx: context.WithoutCancel(s.ctx)})
 }
 
 func (c *worktreeMaintenanceCoordinator) RunSweep(
@@ -69,23 +112,4 @@ func (c *worktreeMaintenanceCoordinator) RunSweep(
 
 func (s *worktreeSweepLease) Context() context.Context {
 	return s.ctx
-}
-
-func (s *worktreeSweepLease) TryDelete(
-	finalCheck func(context.Context) error,
-	commit func(context.Context) error,
-) error {
-	if cause := context.Cause(s.ctx); cause != nil {
-		return cause
-	}
-	if !s.coordinator.gate.TryLock() {
-		return errWorktreeSweepPreempted
-	}
-	defer s.coordinator.gate.Unlock()
-
-	ctx := context.WithoutCancel(s.ctx)
-	if err := finalCheck(ctx); err != nil {
-		return err
-	}
-	return commit(ctx)
 }

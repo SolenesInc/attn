@@ -42,7 +42,7 @@ const AUTOSAVE_DELAY_MS = 700;
 
 // Callers MUST react to 'conflict'/'error': dropping one loses the user's edits behind a
 // navigation with no banner shown.
-export type PersistOutcome = 'saved' | 'conflict' | 'error' | 'noop';
+type PersistOutcome = 'saved' | 'conflict' | 'error' | 'noop';
 
 export interface NotebookSurfaceHandle {
   flushPendingSave: () => Promise<PersistOutcome>;
@@ -142,7 +142,6 @@ export const NotebookSurface = forwardRef<NotebookSurfaceHandle, NotebookSurface
   const handleEscape = useCallback(() => void requestClose(), [requestClose]);
 
   useEscapeStack(handleEscape, variant === 'modal' && active);
-  useEscapeStack(() => setFinderOpen(false), variant === 'modal' && active && finderOpen);
   useEscapeStack(() => { editorRef.current?.closeSearchPanel(); }, active && searchOpen);
 
   const loadFile = useCallback(async (path: string, prefetched?: FsReadResult) => {

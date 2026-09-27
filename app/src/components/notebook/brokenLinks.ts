@@ -35,7 +35,7 @@ export function notebookLinkPath(href: string, baseDir: string): string | null {
   return resolved.kind === 'note' ? resolved.path : null;
 }
 
-export function notebookLinkPaths(state: EditorState, baseDir: string): string[] {
+function notebookLinkPaths(state: EditorState, baseDir: string): string[] {
   const seen = new Set<string>();
   syntaxTree(state).iterate({
     enter: (node) => {
@@ -49,7 +49,7 @@ export function notebookLinkPaths(state: EditorState, baseDir: string): string[]
   return [...seen];
 }
 
-export function brokenLinkDecorations(
+function brokenLinkDecorations(
   state: EditorState,
   baseDir: string,
   missing: (path: string) => boolean,

@@ -1,0 +1,329 @@
+import { fireEvent, screen } from '@testing-library/react';
+import { describe, expect, it } from 'vitest';
+import type { EventMessage } from './test/protocol';
+import { gesture, renderApp } from './test/renderApp';
+import type { Reply, ScriptedDaemon } from './test/scriptedDaemon';
+import { HOLD, answerInTurn } from './test/scriptedDaemon';
+
+type Definition = NonNullable<EventMessage<'automation_definitions_result'>['definitions']>[number];
+
+const API_VERSION = 'attn.dev/automations/v1alpha1';
+
+function definition(id: string, over: Partial<Definition> = {}): Definition {
+  return { id, name: 'PR reviewer', enabled: true, revision: 1, trigger_type: 'manual', updated_at: '2026-01-01T00:00:00Z', ...over };
+}
+
+const manualSpec = (name = 'PR reviewer', id = 'd1') => ({
+  api_version: API_VERSION,
+  id,
+  name,
+  trigger: { type: 'manual' },
+  prompt: 'Do the work',
+  launch: { driver: 'codex', model: 'gpt-5.6-luna', effort: 'medium' },
+  location: { type: 'directory', path: '/tmp/work' },
+});
+
+const githubSpec = {
+  api_version: API_VERSION,
+  id: 'd1',
+  name: 'Reviewer',
+  trigger: { type: 'github_review_requested', repositories: { include: ['github.com/acme/widgets'] } },
+  prompt: 'Review the PR',
+  launch: { driver: 'claude', model: 'sonnet', effort: 'medium' },
+  location: {
+    type: 'repository_worktree',
+    repository_sources: { default: { type: 'managed_cache' }, overrides: { 'github.com/acme/widgets': { type: 'local_clone', path: '/home/user/widgets' } } },
+  },
+};
+
+const sparseSpec = {
+  api_version: API_VERSION,
+  id: 'd1',
+  name: 'Sparse launch',
+  trigger: { type: 'manual' },
+  prompt: 'Do the work',
+  launch: { driver: 'codex' },
+  location: { type: 'directory', path: '/tmp/work' },
+};
+
+interface Scene {
+  definitions: Definition[];
+  spec?: object;
+}
+
+const specResult = (scene: Scene): Reply => ({
+  event: 'automation_definition_result',
+  success: true,
+  spec_json: JSON.stringify(scene.spec ?? manualSpec()),
+  spec_yaml: '',
+  definition: scene.definitions[0],
+});
+
+async function openAutomations(scene: Scene, script: (daemon: ScriptedDaemon) => void = () => {}) {
+  const { daemon } = await renderApp();
+  daemon.on('automation_definitions_get', () => ({ event: 'automation_definitions_result', success: true, definitions: scene.definitions }));
+  daemon.on('automation_runs_get', ({ definition_id }) => ({ event: 'automation_runs_result', success: true, definition_id, runs: [] }));
+  daemon.on('automation_definition_get', () => specResult(scene));
+  daemon.on('automation_apply', ({ expected_id }) => ({
+    event: 'automation_apply_result',
+    success: true,
+    definition: definition(expected_id || 'new-automation', { revision: 2 }),
+    spec_yaml: '',
+  }));
+  daemon.on('automation_delete', () => ({ event: 'automation_delete_result', success: true }));
+  daemon.on('automation_set_enabled', ({ definition_id, enabled }) => ({
+    event: 'automation_set_enabled_result',
+    success: true,
+    definition: definition(definition_id, { enabled }),
+  }));
+  script(daemon);
+  await gesture(daemon, () => fireEvent.click(screen.getByRole('button', { name: 'Show Automations' })));
+  return daemon;
+}
+
+const field = (name: string) => screen.getByTestId(`automation-form-${name}`);
+const type = (name: string, value: string) => fireEvent.change(field(name), { target: { value } });
+const press = (daemon: ScriptedDaemon, name: string) => gesture(daemon, () => fireEvent.click(field(name)));
+
+async function openNew(scene: Scene = { definitions: [definition('d1')] }, script?: (daemon: ScriptedDaemon) => void) {
+  const daemon = await openAutomations(scene, script);
+  await gesture(daemon, () => fireEvent.click(screen.getByTestId('automation-new')));
+  return daemon;
+}
+
+async function openEdit(scene: Scene, script?: (daemon: ScriptedDaemon) => void) {
+  const daemon = await openAutomations(scene, script);
+  await gesture(daemon, () => fireEvent.click(screen.getByTestId('automation-edit-d1')));
+  return daemon;
+}
+
+function fillManual() {
+  type('name', 'My automation');
+  type('directory-path', '/tmp/work');
+  type('prompt', 'Do the work');
+}
+
+const applied = (daemon: ScriptedDaemon) =>
+  daemon.sentOf('automation_apply').map(({ definition_yaml, expected_id, expected_revision }) => ({
+    spec: JSON.parse(definition_yaml),
+    expected_id,
+    expected_revision,
+  }));
+
+describe('App automation form', () => {
+  describe('opening and leaving', () => {
+    it('opens an empty form for a new automation without reading any definition', async () => {
+      const daemon = await openNew();
+
+      expect(screen.getByTestId('automation-form')).toBeInTheDocument();
+      expect(screen.queryByTestId('automations-panel-list')).toBeNull();
+      expect(daemon.sentOf('automation_definition_get')).toEqual([]);
+      expect(screen.queryByTestId('automation-form-enabled')).toBeNull();
+    });
+
+    it('opens the same form from the empty list', async () => {
+      const daemon = await openAutomations({ definitions: [] });
+
+      await gesture(daemon, () => fireEvent.click(screen.getByTestId('automation-new-empty')));
+
+      expect(screen.getByTestId('automation-form')).toBeInTheDocument();
+    });
+
+    it('loads the definition it edits', async () => {
+      const daemon = await openEdit({ definitions: [definition('d1')] });
+
+      expect(daemon.sentOf('automation_definition_get').map(({ definition_id }) => definition_id)).toEqual(['d1']);
+      expect(field('name')).toHaveValue('PR reviewer');
+    });
+
+    it('goes back to the list on Cancel without saving', async () => {
+      const daemon = await openNew();
+      type('name', 'Unsaved');
+
+      await press(daemon, 'cancel');
+
+      expect(screen.queryByTestId('automation-form')).toBeNull();
+      expect(screen.getByTestId('automations-panel-list')).toBeInTheDocument();
+      expect(daemon.sentOf('automation_apply')).toEqual([]);
+    });
+
+    it('keeps the open form and what is typed in it when the daemon says automations changed', async () => {
+      const daemon = await openEdit({ definitions: [definition('d1')] });
+      type('name', 'still typing');
+      const listed = daemon.sentOf('automation_definitions_get').length;
+
+      daemon.emit({ event: 'automations_changed', definition_ids: ['d1'] });
+      await daemon.idle();
+
+      expect(daemon.sentOf('automation_definitions_get').length).toBeGreaterThan(listed);
+      expect(daemon.sentOf('automation_definition_get')).toHaveLength(1);
+      expect(field('name')).toHaveValue('still typing');
+    });
+  });
+
+  describe('creating', () => {
+    it('derives the id from the name until the user sets one', async () => {
+      await openNew();
+
+      type('name', 'Nightly Sync');
+      expect(field('id')).toHaveValue('nightly-sync');
+
+      fireEvent.click(field('id-customize'));
+      type('id', 'custom-id');
+      type('name', 'Nightly Sync more');
+      expect(field('id')).toHaveValue('custom-id');
+    });
+
+    it('applies the spec it built as a new definition and returns to the list', async () => {
+      const daemon = await openNew();
+      fillManual();
+
+      await press(daemon, 'save');
+
+      expect(applied(daemon)).toEqual([{ spec: manualSpec('My automation', 'my-automation'), expected_id: '', expected_revision: 0 }]);
+      expect(screen.queryByTestId('automation-form')).toBeNull();
+      expect(screen.getByTestId('automations-panel-list')).toBeInTheDocument();
+    });
+
+    it('holds the form while the daemon applies it', async () => {
+      const daemon = await openNew({ definitions: [definition('d1')] }, (scripted) => answerInTurn(scripted, 'automation_apply', [HOLD]));
+      fillManual();
+
+      await press(daemon, 'save');
+
+      expect(field('name')).toBeDisabled();
+      expect(field('save')).toHaveTextContent('Saving…');
+    });
+
+    it('says a prompt is required once the user leaves the field empty, and stops saying so when one is typed', async () => {
+      const daemon = await openNew();
+      expect(screen.queryByTestId('automation-form-error-prompt')).toBeNull();
+
+      await gesture(daemon, () => fireEvent.blur(field('prompt')));
+      expect(field('error-prompt')).toHaveTextContent('A prompt is required.');
+
+      await gesture(daemon, () => type('prompt', 'Review it'));
+      expect(screen.queryByTestId('automation-form-error-prompt')).toBeNull();
+    });
+
+    it('refuses to save a schedule until the user chooses what happens to missed runs', async () => {
+      const daemon = await openNew();
+      fireEvent.click(field('trigger-scheduled'));
+      expect(field('catchup-skip')).toBeInTheDocument();
+      fillManual();
+      type('cron', '0 9 * * *');
+
+      await press(daemon, 'save');
+
+      expect(field('error-catchUp')).toHaveTextContent('Choose what happens to missed runs.');
+      expect(daemon.sentOf('automation_apply')).toEqual([]);
+    });
+
+    it('puts a taken id on the id field rather than calling the form stale', async () => {
+      const daemon = await openNew({ definitions: [definition('d1')] }, (scripted) => {
+        scripted.on('automation_apply', () => ({ event: 'automation_apply_result', success: false, error: 'id already exists', error_code: 'id_collision' }));
+      });
+      fillManual();
+
+      await press(daemon, 'save');
+
+      expect(field('error-id')).toHaveTextContent('id already exists');
+      expect(screen.queryByTestId('automation-form-stale-banner')).toBeNull();
+    });
+  });
+
+  describe('editing', () => {
+    it('loads a GitHub definition into its fields and saves it against the revision it loaded', async () => {
+      const daemon = await openEdit({ definitions: [definition('d1', { revision: 7, trigger_type: 'github_review_requested' })], spec: githubSpec });
+
+      expect(field('repositories-include-chip-0')).toHaveTextContent('github.com/acme/widgets');
+      expect(field('model')).toHaveValue('sonnet');
+      expect(screen.getByText('Existing requests are left alone when enabled')).toBeInTheDocument();
+      expect(field('sentence')).toHaveTextContent('fresh worktree at the PR head');
+      expect(field('sentence')).toHaveTextContent('sonnet');
+
+      await press(daemon, 'save');
+
+      expect(applied(daemon)).toEqual([{ spec: githubSpec, expected_id: 'd1', expected_revision: 7 }]);
+    });
+
+    it('rewrites the sentence when the trigger changes', async () => {
+      await openEdit({ definitions: [definition('d1')], spec: githubSpec });
+
+      fireEvent.click(field('trigger-manual'));
+
+      expect(field('sentence')).toHaveTextContent('Run now');
+    });
+
+    it('keeps a launch that names only its agent that way, showing the agent defaults', async () => {
+      const daemon = await openEdit({ definitions: [definition('d1', { revision: 2 })], spec: sparseSpec });
+
+      expect(field('model')).toHaveValue('');
+      expect(field('effort')).toHaveValue('');
+      expect(field('sentence')).not.toHaveTextContent('effort');
+
+      await press(daemon, 'save');
+
+      expect(applied(daemon)[0].spec.launch).toEqual({ driver: 'codex' });
+    });
+
+    it('names a picked model in the sentence without an effort the agent chooses', async () => {
+      await openEdit({ definitions: [definition('d1')], spec: sparseSpec });
+
+      fireEvent.change(field('model'), { target: { value: 'gpt-5.6-luna' } });
+
+      expect(field('sentence')).toHaveTextContent('(gpt-5.6-luna)');
+      expect(field('sentence')).not.toHaveTextContent('effort');
+    });
+
+    it('offers to reload when the definition changed elsewhere, and shows what is there now', async () => {
+      const scene: Scene = { definitions: [definition('d1', { revision: 3 })], spec: manualSpec('Original') };
+      const daemon = await openEdit(scene, (scripted) => {
+        scripted.on('automation_apply', () => ({
+          event: 'automation_apply_result',
+          success: false,
+          error: 'automation definition changed elsewhere — reload before saving',
+          error_code: 'revision_conflict',
+        }));
+      });
+      expect(field('name')).toHaveValue('Original');
+
+      await press(daemon, 'save');
+      expect(field('stale-banner')).toBeInTheDocument();
+
+      scene.definitions = [definition('d1', { revision: 4 })];
+      scene.spec = manualSpec('Changed elsewhere');
+      await press(daemon, 'reload');
+
+      expect(field('name')).toHaveValue('Changed elsewhere');
+      expect(screen.queryByTestId('automation-form-stale-banner')).toBeNull();
+      expect(daemon.sentOf('automation_definition_get')).toHaveLength(2);
+    });
+
+    it('turns the definition off and on from its toggle', async () => {
+      const daemon = await openEdit({ definitions: [definition('d1', { enabled: true })] });
+      expect(field('enabled')).toHaveAttribute('aria-checked', 'true');
+
+      await press(daemon, 'enabled');
+
+      expect(daemon.sentOf('automation_set_enabled').map(({ definition_id, enabled }) => [definition_id, enabled])).toEqual([['d1', false]]);
+      expect(field('enabled')).toHaveAttribute('aria-checked', 'false');
+    });
+
+    it('deletes only on a second click, and forgets the first click when the user moves on', async () => {
+      const daemon = await openEdit({ definitions: [definition('d1')] });
+
+      await press(daemon, 'delete');
+      expect(screen.getByText('Confirm delete')).toBeInTheDocument();
+      await gesture(daemon, () => fireEvent.mouseDown(field('name')));
+      expect(screen.queryByText('Confirm delete')).toBeNull();
+      expect(daemon.sentOf('automation_delete')).toEqual([]);
+
+      await press(daemon, 'delete');
+      await press(daemon, 'delete');
+
+      expect(daemon.sentOf('automation_delete').map(({ definition_id }) => definition_id)).toEqual(['d1']);
+      expect(screen.queryByTestId('automation-form')).toBeNull();
+    });
+  });
+});

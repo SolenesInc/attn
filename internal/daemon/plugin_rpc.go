@@ -461,6 +461,9 @@ func (d *Daemon) handlePluginConnection(conn net.Conn, reader *bufio.Reader, hel
 	defer func() {
 		d.ensurePluginSupervisor().NoteDisconnected(plugin.name, plugin.generation)
 		registry.unregister(plugin)
+		for _, run := range d.store.ListAgentDriverRuns(plugin.name) {
+			d.resolveSoon(run.SessionID)
+		}
 		d.armPluginDriverSilenceWatch(plugin.name)
 		plugin.closePending(io.EOF)
 		d.publishSettingsFact(FactPluginDisconnected, plugin.name)

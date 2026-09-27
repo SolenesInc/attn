@@ -124,9 +124,6 @@ func fprintSessionReopenVerdict(w io.Writer, sessionID string, reopen *protocol.
 	if warning := strings.TrimSpace(protocol.Deref(reopen.Warning)); warning != "" {
 		fmt.Fprintf(w, "warning    %s\n", warning)
 	}
-	if reopen.Checking {
-		fmt.Fprintln(w, "checking   a branch check is running; ask again for a sharper verdict")
-	}
 	if reopen.ProfileDeleted {
 		fmt.Fprintf(w, "lands in   profile %s is gone; pass --profile <id> to choose where\n", reopen.ProfileID)
 	} else {

@@ -3,7 +3,6 @@ import { NotebookSurface } from './NotebookSurface';
 
 interface NotebookBrowserProps {
   isOpen: boolean;
-  initialPath?: string | null;
   onClose: () => void;
   listDir: (path: string) => Promise<FsEntry[]>;
   readFile: (path: string) => Promise<FsReadResult>;

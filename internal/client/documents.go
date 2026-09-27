@@ -4,7 +4,6 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"net"
 
 	"github.com/victorarias/attn/internal/protocol"
 )
@@ -126,9 +125,9 @@ func DocConnectionLost(err error) bool {
 }
 
 func (c *Client) DocSubscribe(query protocol.DocumentQuery, held []protocol.StoredDocument, onWindow func(DocWindow) bool) error {
-	conn, err := net.Dial("unix", c.socketPath)
+	conn, err := c.connect()
 	if err != nil {
-		return explainConnectError(c.socketPath, err)
+		return err
 	}
 	defer conn.Close()
 

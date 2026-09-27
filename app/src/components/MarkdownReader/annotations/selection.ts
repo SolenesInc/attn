@@ -17,16 +17,6 @@ export const ANNOTATION_EXCEPT_SELECTORS = [
 
 const EXCEPT_SELECTOR = ANNOTATION_EXCEPT_SELECTORS.join(', ');
 
-/** The subset of Selection the evaluator reads — mockable in jsdom tests. */
-export interface SelectionLike {
-  isCollapsed: boolean;
-  rangeCount: number;
-  anchorNode: Node | null;
-  focusNode: Node | null;
-  toString(): string;
-  getRangeAt(index: number): Range;
-}
-
 export interface PendingSelection {
   anchor: AnchorRecord;
   /** The anchored (possibly clamped) text, not the raw selection. */
@@ -54,7 +44,7 @@ function owningBlockElement(node: Node): Element | null {
 
 export function evaluateSelection(
   root: HTMLElement,
-  selection: SelectionLike | null,
+  selection: Selection | null,
   content: string,
   blocks: BlockText[],
 ): PendingSelection | null {

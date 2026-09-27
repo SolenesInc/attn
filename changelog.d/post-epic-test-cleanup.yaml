@@ -1,0 +1,3 @@
+kind: internal
+area: testing
+change: Replace legacy daemon, package, and app tests with wire, stack, and kernel tests, and add a crash-point harness for stack tests.

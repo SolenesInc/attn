@@ -2,9 +2,9 @@
 // occluded, a stalled Xvfb display — and the bridge has to keep answering there.
 const FRAME_STALL_FALLBACK_MS = 50;
 
-// Frames a settled read needs, measured by e2e/bridge-settled-read.spec.ts: one frame, even
+// Frames a settled read needs, measured in Chromium: one frame, even
 // with the task after it, still reads the state from before the observer's React commit.
-export const SETTLED_READ_FRAMES = 2;
+const SETTLED_READ_FRAMES = 2;
 
 export function nextAnimationFrame(): Promise<void> {
   return new Promise<void>((resolve) => {

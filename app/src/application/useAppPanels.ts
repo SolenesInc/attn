@@ -34,7 +34,6 @@ export function useAppPanels({ agentSurfaceCount }: Options) {
     setSessionsOpen(true);
   }, []);
   const [notebookOpen, setNotebookOpen] = useState(false);
-  const [notebookRequestedPath, setNotebookRequestedPath] = useState<string | null>(null);
   const [notificationsPanelOpen, setNotificationsPanelOpen] = useState(false);
   const whatsNew = useWhatsNew();
 
@@ -110,8 +109,6 @@ export function useAppPanels({ agentSurfaceCount }: Options) {
     openLedger,
     notebookOpen,
     setNotebookOpen,
-    notebookRequestedPath,
-    setNotebookRequestedPath,
     notificationsPanelOpen,
     toggleNotificationsPanel,
     openNotificationsPanel,

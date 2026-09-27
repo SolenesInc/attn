@@ -1,0 +1,3 @@
+kind: fixed
+area: sessions
+change: A session reopened with a prompt shows its agent working on it instead of staying idle.

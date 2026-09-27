@@ -743,6 +743,7 @@ export const AnnotatedTerminal = forwardRef<GhosttyTerminalHandle, AnnotatedTerm
                 title="More labels"
                 aria-label="More labels"
                 aria-expanded={labelPickerOpen}
+                aria-pressed={Boolean(selectedPickerLabel)}
                 onClick={() => setLabelPickerOpen(!labelPickerOpen)}
                 {...hintProps('More labels')}
               >

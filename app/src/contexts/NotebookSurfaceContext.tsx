@@ -21,7 +21,6 @@ export interface NotebookSurfaceDaemon {
   // Flat list for a tile's ⌘P finder. Unlike backlinksNotebook/sendToChief below,
   // this one DOES follow `root`.
   listFiles: () => Promise<NotebookEntry[]>;
-  changeSignal: number;
 }
 
 // CRITICAL BOUNDARY: backlinksNotebook and sendToChief stay bound to the notebook root
@@ -30,6 +29,7 @@ export type MakeNotebookSurfaceDaemon = (root?: string) => NotebookSurfaceDaemon
 
 export interface NotebookSurfaceContextValue {
   makeDaemon: MakeNotebookSurfaceDaemon;
+  changeSignalFor: (root?: string) => number;
   effectiveNotebookRoot: string;
   sendFsWatch: (root?: string) => Promise<FsWatchResult>;
   sendFsUnwatch: (root?: string) => Promise<FsWatchResult>;

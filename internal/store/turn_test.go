@@ -8,16 +8,6 @@ import (
 	"github.com/victorarias/attn/internal/protocol"
 )
 
-func newTurnStore(t *testing.T) *Store {
-	t.Helper()
-	s, err := newSeededStore(filepath.Join(t.TempDir(), "test.db"))
-	if err != nil {
-		t.Fatalf("failed to create store: %v", err)
-	}
-	t.Cleanup(func() { s.Close() })
-	return s
-}
-
 func addTurnSession(t *testing.T, s *Store, id string, state protocol.SessionState) {
 	t.Helper()
 	now := time.Now().Format(time.RFC3339Nano)
@@ -31,92 +21,6 @@ func addTurnSession(t *testing.T, s *Store, id string, state protocol.SessionSta
 		LastSeen:       now,
 	}); err != nil {
 		t.Fatalf("add session %s: %v", id, err)
-	}
-}
-
-func TestTurnStampsStartEmpty(t *testing.T) {
-	s := newTurnStore(t)
-	addTurnSession(t, s, "s1", protocol.SessionStateWorking)
-
-	stamps := s.TurnStamps("s1")
-	if !stamps.OpenedAt.IsZero() || !stamps.SettledAt.IsZero() {
-		t.Fatalf("stamps = %+v, want both zero", stamps)
-	}
-}
-
-func TestOpenTurnIfClosedDoesNotMoveAnOpenTurn(t *testing.T) {
-	s := newTurnStore(t)
-	addTurnSession(t, s, "s1", protocol.SessionStateWaitingInput)
-
-	first := time.Date(2026, 7, 26, 10, 0, 0, 0, time.UTC)
-	if !s.OpenTurnIfClosed("s1", first) {
-		t.Fatal("first open reported no change")
-	}
-	if s.OpenTurnIfClosed("s1", first.Add(time.Hour)) {
-		t.Error("second open reported a change; the turn was already open")
-	}
-	if got := s.TurnStamps("s1").OpenedAt; !got.Equal(first) {
-		t.Errorf("opened_at = %v, want %v", got, first)
-	}
-}
-
-func TestSettleThenOpenStartsANewTurn(t *testing.T) {
-	s := newTurnStore(t)
-	addTurnSession(t, s, "s1", protocol.SessionStateWaitingInput)
-
-	opened := time.Date(2026, 7, 26, 10, 0, 0, 0, time.UTC)
-	settled := opened.Add(time.Minute)
-	reopened := opened.Add(time.Hour)
-
-	s.OpenTurnIfClosed("s1", opened)
-	if !s.SettleTurn("s1", settled) {
-		t.Fatal("settle reported no change")
-	}
-	stamps := s.TurnStamps("s1")
-	if stamps.OpenedAt.After(stamps.SettledAt) {
-		t.Fatalf("still owed after settling: %+v", stamps)
-	}
-
-	if !s.OpenTurnIfClosed("s1", reopened) {
-		t.Fatal("re-open after settling reported no change")
-	}
-	stamps = s.TurnStamps("s1")
-	if !stamps.OpenedAt.Equal(reopened) {
-		t.Errorf("opened_at = %v, want %v", stamps.OpenedAt, reopened)
-	}
-	if !stamps.OpenedAt.After(stamps.SettledAt) {
-		t.Error("session does not owe a turn after re-opening")
-	}
-}
-
-func TestSettleWithoutAnOpenTurnIsRecorded(t *testing.T) {
-	s := newTurnStore(t)
-	addTurnSession(t, s, "s1", protocol.SessionStateWorking)
-
-	settled := time.Date(2026, 7, 26, 10, 0, 0, 0, time.UTC)
-	if !s.SettleTurn("s1", settled) {
-		t.Fatal("settle reported no change")
-	}
-	if got := s.TurnStamps("s1").SettledAt; !got.Equal(settled) {
-		t.Errorf("settled_at = %v, want %v", got, settled)
-	}
-	if s.OpenTurnIfClosed("s1", settled.Add(-time.Hour)) {
-		if stamps := s.TurnStamps("s1"); stamps.OpenedAt.After(stamps.SettledAt) {
-			t.Error("a turn opened before the settle stamp still owes")
-		}
-	}
-}
-
-func TestTurnStampsForUnknownSession(t *testing.T) {
-	s := newTurnStore(t)
-	if s.OpenTurnIfClosed("nope", time.Now()) {
-		t.Error("opened a turn on a session that does not exist")
-	}
-	if s.SettleTurn("nope", time.Now()) {
-		t.Error("settled a turn on a session that does not exist")
-	}
-	if stamps := s.TurnStamps("nope"); !stamps.OpenedAt.IsZero() {
-		t.Errorf("stamps = %+v, want zero", stamps)
 	}
 }
 

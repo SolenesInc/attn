@@ -26,12 +26,17 @@ const (
 	OpClone    Operation = "clone"
 )
 
+type Client struct{}
+
+func NewClient() *Client {
+	return &Client{}
+}
+
+const slowGitLogThreshold = 2 * time.Second
+
 var (
-	logMu               sync.RWMutex
-	logf                func(format string, args ...interface{})
-	slowGitLogThreshold = 2 * time.Second
-	timeoutMu           sync.RWMutex
-	timeoutByOp         = map[Operation]time.Duration{}
+	logMu sync.RWMutex
+	logf  func(format string, args ...interface{})
 )
 
 func SetLogFunc(fn func(format string, args ...interface{})) {
@@ -40,27 +45,7 @@ func SetLogFunc(fn func(format string, args ...interface{})) {
 	logf = fn
 }
 
-func setSlowLogThresholdForTesting(threshold time.Duration) func() {
-	logMu.Lock()
-	previous := slowGitLogThreshold
-	slowGitLogThreshold = threshold
-	logMu.Unlock()
-
-	return func() {
-		logMu.Lock()
-		defer logMu.Unlock()
-		slowGitLogThreshold = previous
-	}
-}
-
 func defaultTimeout(op Operation) time.Duration {
-	timeoutMu.RLock()
-	if timeout, ok := timeoutByOp[op]; ok {
-		timeoutMu.RUnlock()
-		return timeout
-	}
-	timeoutMu.RUnlock()
-
 	switch op {
 	case OpStatus, OpMetadata:
 		return 2 * time.Minute
@@ -75,111 +60,70 @@ func defaultTimeout(op Operation) time.Duration {
 	}
 }
 
-func setTimeoutForTesting(op Operation, timeout time.Duration) func() {
-	timeoutMu.Lock()
-	previous, hadPrevious := timeoutByOp[op]
-	timeoutByOp[op] = timeout
-	timeoutMu.Unlock()
-
-	return func() {
-		timeoutMu.Lock()
-		defer timeoutMu.Unlock()
-		if hadPrevious {
-			timeoutByOp[op] = previous
-			return
-		}
-		delete(timeoutByOp, op)
-	}
-}
-
-func runGitOutput(op Operation, dir string, args ...string) ([]byte, error) {
-	return runGitCommand(op, dir, nil, false, args...)
-}
-
-func OutputContext(ctx context.Context, op Operation, dir string, args ...string) ([]byte, error) {
-	return runGitCommandContext(ctx, op, dir, nil, false, args...)
-}
-
-func Output(op Operation, dir string, args ...string) ([]byte, error) {
-	return runGitOutput(op, dir, args...)
-}
-
-func OutputWithTimeout(op Operation, timeout time.Duration, dir string, args ...string) ([]byte, error) {
-	return runGitCommandWithTimeout(op, timeout, dir, nil, false, args...)
-}
-
-func runGitCombined(op Operation, dir string, args ...string) ([]byte, error) {
-	return runGitCommand(op, dir, nil, true, args...)
-}
-
-func runGitCombinedWithHTTPAuthorization(op Operation, dir, authorizationURL, authorization string, args ...string) ([]byte, error) {
+func (c *Client) combinedWithHTTPAuthorization(ctx context.Context, op Operation, dir, authorizationURL, authorization string, args ...string) ([]byte, error) {
 	var err error
 	authorization, err = authorizationForGitURL(authorizationURL, authorization)
 	if err != nil {
 		return nil, err
 	}
-	return runGitCommandWithTimeoutAndEnv(op, defaultTimeout(op), dir, nil, true, gitHTTPAuthorizationEnv(authorizationURL, authorization), args...)
+	env := mergedCommandEnv(gitHTTPAuthorizationEnv(authorizationURL, authorization))
+	return launchGit(ctx, op, defaultTimeout(op), gitProcess{dir: dir, combined: true, env: env}, args...)
 }
 
-func runGitWithStdin(op Operation, dir string, stdin io.Reader, args ...string) ([]byte, error) {
-	return runGitCommand(op, dir, stdin, false, args...)
+func (c *Client) Output(ctx context.Context, op Operation, dir string, args ...string) ([]byte, error) {
+	return launchGit(ctx, op, defaultTimeout(op), gitProcess{dir: dir}, args...)
 }
 
-func OutputWithStdin(op Operation, dir string, stdin io.Reader, args ...string) ([]byte, error) {
-	return runGitWithStdin(op, dir, stdin, args...)
+func (c *Client) Combined(ctx context.Context, op Operation, dir string, args ...string) ([]byte, error) {
+	return launchGit(ctx, op, defaultTimeout(op), gitProcess{dir: dir, combined: true}, args...)
 }
 
-func runGitNoOutput(op Operation, dir string, args ...string) error {
-	_, err := runGitCommand(op, dir, nil, true, args...)
+func (c *Client) NoOutput(ctx context.Context, op Operation, dir string, args ...string) error {
+	_, err := c.Combined(ctx, op, dir, args...)
 	return err
 }
 
-func NoOutputContext(ctx context.Context, op Operation, dir string, args ...string) error {
-	_, err := runGitCommandContext(ctx, op, dir, nil, true, args...)
-	return err
+func (c *Client) OutputWithStdin(ctx context.Context, op Operation, dir string, stdin io.Reader, args ...string) ([]byte, error) {
+	return launchGit(ctx, op, defaultTimeout(op), gitProcess{dir: dir, stdin: stdin}, args...)
 }
 
-func runGitCommand(op Operation, dir string, stdin io.Reader, combined bool, args ...string) ([]byte, error) {
-	timeout := defaultTimeout(op)
-	return runGitCommandWithTimeout(op, timeout, dir, stdin, combined, args...)
+func (c *Client) OutputWithTimeout(ctx context.Context, op Operation, timeout time.Duration, dir string, args ...string) ([]byte, error) {
+	return launchGit(ctx, op, timeout, gitProcess{dir: dir}, args...)
 }
 
-func runGitCommandContext(ctx context.Context, op Operation, dir string, stdin io.Reader, combined bool, args ...string) ([]byte, error) {
-	return runGitCommandWithContextAndEnv(ctx, op, defaultTimeout(op), dir, stdin, combined, nil, args...)
+type gitProcess struct {
+	dir                 string
+	stdin               io.Reader
+	combined            bool
+	env                 []string
+	resolveGitOnEnvPATH bool
 }
 
-func runGitCommandWithTimeout(op Operation, timeout time.Duration, dir string, stdin io.Reader, combined bool, args ...string) ([]byte, error) {
-	return runGitCommandWithTimeoutAndEnv(op, timeout, dir, stdin, combined, nil, args...)
-}
-
-func runGitCommandWithTimeoutAndEnv(op Operation, timeout time.Duration, dir string, stdin io.Reader, combined bool, env map[string]string, args ...string) ([]byte, error) {
-	return runGitCommandWithContextAndEnv(context.Background(), op, timeout, dir, stdin, combined, env, args...)
-}
-
-func runGitCommandWithContextAndEnv(parent context.Context, op Operation, timeout time.Duration, dir string, stdin io.Reader, combined bool, env map[string]string, args ...string) ([]byte, error) {
+func launchGit(parent context.Context, op Operation, timeout time.Duration, process gitProcess, args ...string) ([]byte, error) {
 	ctx, cancel := context.WithTimeout(parent, timeout)
 	defer cancel()
 
 	cmd := exec.CommandContext(ctx, "git", args...)
-	cmd.Dir = dir
-	if len(env) > 0 {
-		cmd.Env = mergedCommandEnv(env)
+	if process.resolveGitOnEnvPATH {
+		cmd = exec.CommandContext(ctx, "/usr/bin/env", append([]string{"git"}, args...)...)
 	}
-	if stdin != nil {
-		cmd.Stdin = stdin
+	cmd.Dir = process.dir
+	if process.env != nil {
+		cmd.Env = append([]string{}, process.env...)
+	}
+	if process.stdin != nil {
+		cmd.Stdin = process.stdin
 	}
 
 	started := time.Now()
 	var out []byte
 	var err error
-	if combined {
+	if process.combined {
 		out, err = cmd.CombinedOutput()
 	} else {
 		out, err = cmd.Output()
 	}
-	duration := time.Since(started)
-
-	logGitCommand(op, dir, args, duration, ctx.Err())
+	logGitCommand(op, process.dir, args, time.Since(started), ctx.Err())
 
 	if cause := context.Cause(parent); cause != nil {
 		return out, cause
@@ -229,12 +173,11 @@ func mergedCommandEnv(overrides map[string]string) []string {
 func logGitCommand(op Operation, dir string, args []string, duration time.Duration, ctxErr error) {
 	logMu.RLock()
 	fn := logf
-	threshold := slowGitLogThreshold
 	logMu.RUnlock()
 	if fn == nil {
 		return
 	}
-	if duration < threshold && ctxErr == nil {
+	if duration < slowGitLogThreshold && ctxErr == nil {
 		return
 	}
 	status := "slow"

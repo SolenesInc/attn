@@ -21,12 +21,8 @@ type WorktreeState struct {
 	Prunable bool
 }
 
-func ListWorktreeStates(repoDir string) ([]WorktreeState, error) {
-	return ListWorktreeStatesContext(context.Background(), repoDir)
-}
-
-func ListWorktreeStatesContext(ctx context.Context, repoDir string) ([]WorktreeState, error) {
-	out, err := OutputContext(ctx, OpWorktree, repoDir, "worktree", "list", "--porcelain")
+func (c *Client) ListWorktreeStates(ctx context.Context, repoDir string) ([]WorktreeState, error) {
+	out, err := c.Output(ctx, OpWorktree, repoDir, "worktree", "list", "--porcelain")
 	if err != nil {
 		return nil, err
 	}
@@ -61,12 +57,8 @@ func ListWorktreeStatesContext(ctx context.Context, repoDir string) ([]WorktreeS
 	return states, nil
 }
 
-func WorktreeDirtyCount(path string) (int, error) {
-	return WorktreeDirtyCountContext(context.Background(), path)
-}
-
-func WorktreeDirtyCountContext(ctx context.Context, path string) (int, error) {
-	out, err := OutputContext(ctx, OpStatus, CanonicalizePath(path), "status", "--porcelain", "--untracked-files=all")
+func (c *Client) WorktreeDirtyCount(ctx context.Context, path string) (int, error) {
+	out, err := c.Output(ctx, OpStatus, CanonicalizePath(path), "status", "--porcelain", "--untracked-files=all")
 	if err != nil {
 		return 0, err
 	}
@@ -77,16 +69,11 @@ func WorktreeDirtyCountContext(ctx context.Context, path string) (int, error) {
 	return len(strings.Split(trimmed, "\n")), nil
 }
 
-func IsAncestor(repoDir, commit, base string) bool {
-	merged, _ := IsAncestorContext(context.Background(), repoDir, commit, base)
-	return merged
-}
-
-func IsAncestorContext(ctx context.Context, repoDir, commit, base string) (bool, error) {
+func (c *Client) IsAncestor(ctx context.Context, repoDir, commit, base string) (bool, error) {
 	if commit == "" || base == "" {
 		return false, nil
 	}
-	err := NoOutputContext(ctx, OpMetadata, repoDir, "merge-base", "--is-ancestor", commit, base)
+	err := c.NoOutput(ctx, OpMetadata, repoDir, "merge-base", "--is-ancestor", commit, base)
 	if cause := context.Cause(ctx); cause != nil {
 		return false, cause
 	}
@@ -100,24 +87,16 @@ func IsAncestorContext(ctx context.Context, repoDir, commit, base string) (bool,
 	return false, err
 }
 
-func CommitsAhead(repoDir, base, ref string) (int, error) {
-	return CommitsAheadContext(context.Background(), repoDir, base, ref)
-}
-
-func CommitsAheadContext(ctx context.Context, repoDir, base, ref string) (int, error) {
-	out, err := OutputContext(ctx, OpMetadata, repoDir, "rev-list", "--count", base+".."+ref)
+func (c *Client) CommitsAhead(ctx context.Context, repoDir, base, ref string) (int, error) {
+	out, err := c.Output(ctx, OpMetadata, repoDir, "rev-list", "--count", base+".."+ref)
 	if err != nil {
 		return 0, err
 	}
 	return strconv.Atoi(strings.TrimSpace(string(out)))
 }
 
-func TreeHashesOnHistory(repoDir, base string) (map[string]bool, error) {
-	return TreeHashesOnHistoryContext(context.Background(), repoDir, base)
-}
-
-func TreeHashesOnHistoryContext(ctx context.Context, repoDir, base string) (map[string]bool, error) {
-	out, err := OutputContext(ctx, OpMetadata, repoDir, "rev-list", "--format=%T", base)
+func (c *Client) TreeHashesOnHistory(ctx context.Context, repoDir, base string) (map[string]bool, error) {
+	out, err := c.Output(ctx, OpMetadata, repoDir, "rev-list", "--format=%T", base)
 	if err != nil {
 		return nil, err
 	}
@@ -132,24 +111,16 @@ func TreeHashesOnHistoryContext(ctx context.Context, repoDir, base string) (map[
 	return hashes, nil
 }
 
-func TreeHash(repoDir, ref string) (string, error) {
-	return TreeHashContext(context.Background(), repoDir, ref)
-}
-
-func TreeHashContext(ctx context.Context, repoDir, ref string) (string, error) {
-	out, err := OutputContext(ctx, OpMetadata, repoDir, "rev-parse", ref+"^{tree}")
+func (c *Client) TreeHash(ctx context.Context, repoDir, ref string) (string, error) {
+	out, err := c.Output(ctx, OpMetadata, repoDir, "rev-parse", ref+"^{tree}")
 	if err != nil {
 		return "", err
 	}
 	return strings.TrimSpace(string(out)), nil
 }
 
-func StashCountsByBranch(repoDir string) (map[string]int, error) {
-	return StashCountsByBranchContext(context.Background(), repoDir)
-}
-
-func StashCountsByBranchContext(ctx context.Context, repoDir string) (map[string]int, error) {
-	out, err := OutputContext(ctx, OpMetadata, repoDir, "stash", "list", "--format=%gs")
+func (c *Client) StashCountsByBranch(ctx context.Context, repoDir string) (map[string]int, error) {
+	out, err := c.Output(ctx, OpMetadata, repoDir, "stash", "list", "--format=%gs")
 	if err != nil {
 		return nil, err
 	}
@@ -176,12 +147,8 @@ func StashCountsByBranchContext(ctx context.Context, repoDir string) (map[string
 	return counts, nil
 }
 
-func LastCommitTime(dir string) (time.Time, error) {
-	return LastCommitTimeContext(context.Background(), dir)
-}
-
-func LastCommitTimeContext(ctx context.Context, dir string) (time.Time, error) {
-	out, err := OutputContext(ctx, OpMetadata, dir, "log", "-1", "--format=%cI")
+func (c *Client) LastCommitTime(ctx context.Context, dir string) (time.Time, error) {
+	out, err := c.Output(ctx, OpMetadata, dir, "log", "-1", "--format=%cI")
 	if err != nil {
 		return time.Time{}, err
 	}
@@ -198,10 +165,6 @@ var idleWalkSkipDirs = map[string]bool{
 	".next":        true,
 	".venv":        true,
 	"__pycache__":  true,
-}
-
-func NewestTreeModTime(path string) (time.Time, error) {
-	return NewestTreeModTimeContext(context.Background(), path)
 }
 
 func NewestTreeModTimeContext(ctx context.Context, path string) (time.Time, error) {

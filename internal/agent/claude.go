@@ -476,12 +476,7 @@ func (c *Claude) RecoveredRunningState(ptyState string) (protocol.SessionState, 
 }
 
 func (c *Claude) ResolveSpawnResumeSessionID(existingSessionID, requestedResumeID, storedResumeID string) string {
-	requested := strings.TrimSpace(requestedResumeID)
-	stored := strings.TrimSpace(storedResumeID)
-	if stored != "" && (requested == "" || requested == strings.TrimSpace(existingSessionID)) {
-		return stored
-	}
-	return requested
+	return preferStoredResumeSessionID(existingSessionID, requestedResumeID, storedResumeID)
 }
 
 func (c *Claude) SpawnResumeSessionID(sessionID, resolvedResumeID string, resumePicker bool) string {
@@ -495,7 +490,7 @@ func (c *Claude) SpawnResumeSessionID(sessionID, resolvedResumeID string, resume
 	return ""
 }
 
-func (c *Claude) ResumeSessionIDFromStopTranscriptPath(transcriptPath string) string {
+func (c *Claude) ResumeSessionIDFromTranscriptPath(transcriptPath string) string {
 	clean := strings.TrimSpace(transcriptPath)
 	if clean == "" {
 		return ""

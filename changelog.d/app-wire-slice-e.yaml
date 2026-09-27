@@ -1,0 +1,3 @@
+kind: internal
+area: testing
+change: Delete app tests that guard no promise, fold specified terminal, ledger, link and shortcut logic into table tests, and remove the production code only those tests used.

@@ -1,0 +1,4 @@
+kind: fixed
+area: worktrees
+change: A worktree refresh requested while a sweep pass is already running now runs another pass as soon as that one ends.
+symptom: "`attn worktree refresh` or the app's refresh reported the pass queued, but when it landed during a running pass nothing happened until the hourly sweep, so a merged worktree stayed on disk."

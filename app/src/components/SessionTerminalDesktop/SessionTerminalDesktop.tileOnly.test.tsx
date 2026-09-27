@@ -18,6 +18,7 @@ const testSurfaceValue: NotebookSurfaceContextValue = {
     listFiles: vi.fn(),
     changeSignal: 0,
   }),
+  changeSignalFor: () => 0,
   effectiveNotebookRoot: '',
   sendFsWatch: vi.fn(),
   sendFsUnwatch: vi.fn(),

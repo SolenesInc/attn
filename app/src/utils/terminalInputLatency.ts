@@ -130,7 +130,7 @@ function maybeRecordIncident(
 
 // Older WebKit builds may report epoch milliseconds rather than performance
 // .timeOrigin-relative: normalize both and reject incompatible clocks.
-export function terminalEventQueueDelayMs(
+function terminalEventQueueDelayMs(
   eventTimestamp: number,
   monotonicNow: number,
   timeOrigin: number,
@@ -273,15 +273,4 @@ export function forgetTerminalInputLatencyRuntime(runtimeId: string): void {
   for (const episodeKey of incidentEpisodes.keys()) {
     if (episodeKey.startsWith(episodePrefix)) incidentEpisodes.delete(episodeKey);
   }
-}
-
-export function resetTerminalInputLatencyForTests(): void {
-  samples.length = 0;
-  runtimeContexts.clear();
-  lastProbeAt.clear();
-  pendingProbes.clear();
-  pendingProbeByRuntime.clear();
-  lastHealthyKeySampleAt.clear();
-  incidentEpisodes.clear();
-  probeSequence = 0;
 }

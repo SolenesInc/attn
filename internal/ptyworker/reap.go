@@ -13,6 +13,8 @@ import (
 	"strings"
 	"syscall"
 	"time"
+
+	"github.com/victorarias/attn/internal/procreap"
 )
 
 type ReapOutcome string
@@ -53,10 +55,12 @@ func ReapDataDir(dataDir string) []ReapResult {
 	return results
 }
 
+const workerExitGrace = 500 * time.Millisecond
+
 func reapEntry(entry RegistryEntry, registryPath string) ReapResult {
 	res := ReapResult{SessionID: entry.SessionID, WorkerPID: entry.WorkerPID}
 
-	if entry.WorkerPID <= 0 || !ProcessAlive(entry.WorkerPID) {
+	if entry.WorkerPID <= 0 || !procreap.ProcessAlive(entry.WorkerPID) {
 		res.Outcome = ReapAlreadyGone
 		return res
 	}
@@ -71,6 +75,11 @@ func reapEntry(entry RegistryEntry, registryPath string) ReapResult {
 		res.Err = err
 	}
 
+	if waitForExit(entry.WorkerPID, workerExitGrace) {
+		res.Outcome = ReapAlreadyGone
+		res.Err = nil
+		return res
+	}
 	if !processHasArg(entry.WorkerPID, registryPath) {
 		res.Outcome = ReapUnidentified
 		return res
@@ -142,26 +151,15 @@ func awaitOK(dec *json.Decoder, id string) error {
 	}
 }
 
-func ProcessAlive(pid int) bool {
-	if pid <= 0 {
-		return false
-	}
-	proc, err := os.FindProcess(pid)
-	if err != nil {
-		return false
-	}
-	return proc.Signal(syscall.Signal(0)) == nil
-}
-
 func waitForExit(pid int, timeout time.Duration) bool {
 	deadline := time.Now().Add(timeout)
 	for time.Now().Before(deadline) {
-		if !ProcessAlive(pid) {
+		if !procreap.ProcessAlive(pid) {
 			return true
 		}
 		time.Sleep(50 * time.Millisecond)
 	}
-	return !ProcessAlive(pid)
+	return !procreap.ProcessAlive(pid)
 }
 
 func processHasArg(pid int, want string) bool {

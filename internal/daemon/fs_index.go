@@ -1,6 +1,8 @@
 package daemon
 
 import (
+	"context"
+	"errors"
 	"fmt"
 	"io/fs"
 	"os"
@@ -19,7 +21,7 @@ func (d *Daemon) handleFsIndex(client *wsClient, requestID, rawRoot string, exte
 	var truncated bool
 	root, err := d.resolveFsRoot(client, rawRoot)
 	if err == nil {
-		files, truncated, err = indexRoot(root, maxFsIndexEntries, extensions)
+		files, truncated, err = d.indexRoot(root, maxFsIndexEntries, extensions)
 	}
 	msg := protocol.FsIndexResultMessage{
 		Event:     protocol.EventFsIndexResult,
@@ -76,7 +78,7 @@ func skippedDirName(name string) bool {
 	return name == ".git"
 }
 
-func indexRoot(root string, cap int, extensions []string) ([]string, bool, error) {
+func (d *Daemon) indexRoot(root string, cap int, extensions []string) ([]string, bool, error) {
 	info, err := os.Stat(root)
 	if err != nil {
 		return nil, false, err
@@ -85,17 +87,24 @@ func indexRoot(root string, cap int, extensions []string) ([]string, bool, error
 		return nil, false, fmt.Errorf("root %s is not a directory", root)
 	}
 	wanted := normalizeExtensions(extensions)
-	if files, truncated, ok := indexRootViaGit(root, cap, wanted); ok {
+	if files, truncated, ok, gitErr := d.indexRootViaGit(root, cap, wanted); gitErr != nil {
+		return nil, false, gitErr
+	} else if ok {
 		return files, truncated, nil
 	}
 	return indexRootViaWalk(root, cap, wanted)
 }
 
-func indexRootViaGit(root string, cap int, extensions []string) (files []string, truncated bool, ok bool) {
-	out, err := git.Output(git.OpMetadata, root,
-		"ls-files", "-z", "--cached", "--others", "--exclude-standard")
+func (d *Daemon) indexRootViaGit(root string, cap int, extensions []string) (files []string, truncated bool, ok bool, admissionErr error) {
+	out, err := gitValue(context.Background(), d.gitExecution(), gitTask{Kind: gitTaskFileIndex, Lane: gitInteractive}, func(ctx context.Context, client *git.Client) ([]byte, error) {
+		return client.Output(ctx, git.OpMetadata, root, "ls-files", "-z", "--cached", "--others", "--exclude-standard")
+	})
 	if err != nil {
-		return nil, false, false
+		var saturated *ErrGitQueueSaturated
+		if errors.As(err, &saturated) {
+			return nil, false, false, err
+		}
+		return nil, false, false, nil
 	}
 
 	seen := make(map[string]struct{})
@@ -118,7 +127,7 @@ func indexRootViaGit(root string, cap int, extensions []string) (files []string,
 		files = append(files, rel)
 	}
 	sort.Strings(files)
-	return files, truncated, true
+	return files, truncated, true, nil
 }
 
 func indexRootViaWalk(root string, cap int, extensions []string) ([]string, bool, error) {

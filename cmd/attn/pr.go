@@ -140,7 +140,11 @@ func (transport ghCommandTransport) GraphQL(ctx context.Context, query string, v
 		if !ok {
 			continue
 		}
-		args = append(args, "-F", key+"="+fmt.Sprint(value))
+		flag := "-f"
+		if _, isInt := value.(int); isInt {
+			flag = "-F"
+		}
+		args = append(args, flag, key+"="+fmt.Sprint(value))
 	}
 	if transport.host != "" && transport.host != "github.com" {
 		args = append(args, "--hostname", transport.host)

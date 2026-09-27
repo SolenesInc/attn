@@ -1,12 +1,7 @@
-import { execFileSync, spawn } from 'node:child_process';
-import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
-import { fileURLToPath } from 'node:url';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
-import { isDirectoryUnderRoot, parseCommonArgs, queryDaemonDb } from './common.mjs';
-
-const TEST_DIR = path.dirname(fileURLToPath(import.meta.url));
+import { isDirectoryUnderRoot, parseCommonArgs } from './common.mjs';
 
 function xdgDataHome() {
   return (process.env.XDG_DATA_HOME ?? '').trim() || path.join(os.homedir(), '.local', 'share');
@@ -17,14 +12,6 @@ function installedAppPath(appName) {
     ? path.join(os.homedir(), 'Applications', `${appName}.app`)
     : path.join(xdgDataHome(), appName);
 }
-
-function attnBinary() {
-  const candidates = [process.env.ATTN_HARNESS_BIN, path.resolve(TEST_DIR, '../../../attn')]
-    .filter(Boolean);
-  return candidates.find((candidate) => fs.existsSync(candidate)) ?? null;
-}
-const ATTN_BIN = attnBinary();
-const describeWithBinary = ATTN_BIN ? describe : describe.skip;
 
 const originalHarnessInstance = process.env.ATTN_HARNESS_INSTANCE;
 const originalInstance = process.env.ATTN_INSTANCE;
@@ -72,19 +59,6 @@ describe('parseCommonArgs production safety', () => {
     expect(() => parseCommonArgs(['--run-against-prod'])).not.toThrow();
   });
 
-  it('derives the production daemon from an acknowledged production app path', () => {
-    delete process.env.ATTN_HARNESS_INSTANCE;
-    delete process.env.ATTN_REAL_APP_WS_URL;
-
-    const options = parseCommonArgs([
-      '--app-path',
-      path.join(os.homedir(), 'Applications', 'attn.app'),
-      '--run-against-prod',
-    ]);
-
-    expect(options.wsUrl).toBe('ws://127.0.0.1:9849/ws');
-  });
-
   it('refuses an explicit production websocket while using the dev app', () => {
     expect(() => parseCommonArgs(['--ws-url', 'ws://127.0.0.1:9849/ws'])).toThrow(
       'Refusing to run the real-app harness against production',
@@ -92,44 +66,9 @@ describe('parseCommonArgs production safety', () => {
   });
 });
 
-describeWithBinary('parseCommonArgs one-knob (ATTN_INSTANCE)', () => {
-  it('targets the named instance from ATTN_INSTANCE with no extra flags', () => {
-    process.env.ATTN_INSTANCE = 'agent7';
-
-    const resolved = JSON.parse(
-      execFileSync(ATTN_BIN, ['instance', 'resolve', '--instance', 'agent7', '--json'], {
-        encoding: 'utf8',
-      }),
-    );
-
-    const options = parseCommonArgs([]);
-
-    expect(options.appPath).toBe(path.join(os.homedir(), 'Applications', 'attn-agent7.app'));
-    expect(options.wsUrl).toBe(`ws://127.0.0.1:${resolved.wsPort}/ws`);
-    expect(options.runAgainstProd).toBe(false);
-  });
-
-  it('lets ATTN_HARNESS_INSTANCE override ATTN_INSTANCE', () => {
-    process.env.ATTN_INSTANCE = 'agent7';
-    process.env.ATTN_HARNESS_INSTANCE = 'agent9';
-
-    const options = parseCommonArgs([]);
-
-    expect(options.appPath).toBe(path.join(os.homedir(), 'Applications', 'attn-agent9.app'));
-  });
-});
-
 describe('isDirectoryUnderRoot', () => {
   it('rejects a sibling directory that merely shares the root as a string prefix', () => {
     expect(isDirectoryUnderRoot('/tmp/attn-real-app-sessions-old/keep', ['/tmp/attn-real-app-sessions'])).toBe(false);
-  });
-
-  it('accepts an exact root match', () => {
-    expect(isDirectoryUnderRoot('/tmp/attn-real-app-sessions', ['/tmp/attn-real-app-sessions'])).toBe(true);
-  });
-
-  it('accepts a nested child directory', () => {
-    expect(isDirectoryUnderRoot('/tmp/attn-real-app-sessions/run-1/ws', ['/tmp/attn-real-app-sessions'])).toBe(true);
   });
 
   it('rejects an unrelated path', () => {
@@ -139,69 +78,5 @@ describe('isDirectoryUnderRoot', () => {
   it('rejects a null or empty directory', () => {
     expect(isDirectoryUnderRoot(null, ['/tmp/attn-real-app-sessions'])).toBe(false);
     expect(isDirectoryUnderRoot('', ['/tmp/attn-real-app-sessions'])).toBe(false);
-  });
-
-  it('matches against any of multiple root candidates (symlink realpath form)', () => {
-    const roots = ['/var/folders/xy/attn-real-app-sessions', '/private/var/folders/xy/attn-real-app-sessions'];
-    expect(isDirectoryUnderRoot('/private/var/folders/xy/attn-real-app-sessions/run-2/ws', roots)).toBe(true);
-  });
-});
-
-// A sqlite3 child holding BEGIN EXCLUSIVE is the daemon write a scenario races:
-// with a rollback journal only the commit's exclusive lock shuts readers out.
-function holdExclusiveLock(dbPath) {
-  const child = spawn('sqlite3', ['-batch', dbPath], { stdio: ['pipe', 'pipe', 'pipe'] });
-  child.stdin.write("BEGIN EXCLUSIVE;\nSELECT 'held';\n");
-  return new Promise((resolve, reject) => {
-    let out = '';
-    child.stdout.on('data', (chunk) => {
-      out += chunk;
-      if (out.includes('held')) resolve(child);
-    });
-    child.on('error', reject);
-    child.on('exit', (code) => reject(new Error(`lock holder exited early (${code})`)));
-  });
-}
-
-describe('queryDaemonDb', () => {
-  let dir;
-  let dbPath;
-
-  beforeEach(() => {
-    dir = fs.mkdtempSync(path.join(os.tmpdir(), 'attn-query-daemon-db-'));
-    dbPath = path.join(dir, 'attn.db');
-    execFileSync('sqlite3', ['-batch', dbPath, "CREATE TABLE sessions (id TEXT, resume_session_id TEXT); INSERT INTO sessions VALUES ('s1', 'r1');"]);
-  });
-
-  afterEach(() => {
-    fs.rmSync(dir, { recursive: true, force: true });
-  });
-
-  it('returns a trimmed scalar and parsed rows', () => {
-    expect(queryDaemonDb(dbPath, 'SELECT resume_session_id FROM sessions;')).toBe('r1');
-    expect(queryDaemonDb(dbPath, 'SELECT * FROM sessions;', { json: true })).toEqual([
-      { id: 's1', resume_session_id: 'r1' },
-    ]);
-    expect(queryDaemonDb(dbPath, "SELECT id FROM sessions WHERE id = 'absent';", { json: true })).toEqual([]);
-  });
-
-  it('waits out a writer holding the database instead of failing busy', async () => {
-    const holder = await holdExclusiveLock(dbPath);
-    const releaser = spawn('sh', ['-c', `sleep 0.3; kill ${holder.pid}`]);
-    try {
-      expect(queryDaemonDb(dbPath, 'SELECT resume_session_id FROM sessions;')).toBe('r1');
-    } finally {
-      releaser.kill();
-    }
-  });
-
-  it('names the busy timeout and the SQL when the read cannot get through', async () => {
-    const holder = await holdExclusiveLock(dbPath);
-    try {
-      expect(() => queryDaemonDb(dbPath, 'SELECT resume_session_id FROM sessions;', { busyMs: 0 }))
-        .toThrow(/busy_timeout=0ms[\s\S]*SELECT resume_session_id/);
-    } finally {
-      holder.kill();
-    }
   });
 });

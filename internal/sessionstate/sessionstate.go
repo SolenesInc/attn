@@ -1,6 +1,7 @@
 package sessionstate
 
 import (
+	"slices"
 	"time"
 
 	"github.com/victorarias/attn/internal/protocol"
@@ -50,6 +51,9 @@ type Evidence struct {
 	PendingCron    bool
 	Compacting     bool
 	ReviewerInLoop bool
+
+	InitialPromptOwed bool
+	PlacedInputOwed   bool
 
 	LastBusyAt time.Time
 
@@ -127,6 +131,7 @@ const (
 	ReasonTurnAborted       Reason = "turn_aborted"
 	ReasonClassifierVerdict Reason = "classifier_verdict"
 	ReasonAtPrompt          Reason = "at_prompt"
+	ReasonPromptOwed        Reason = "prompt_owed"
 	ReasonStuck             Reason = "stuck"
 	ReasonNoEvidence        Reason = "no_evidence"
 )
@@ -210,7 +215,7 @@ func Resolve(e Evidence, policy Policy, now time.Time) Resolution {
 		return settled(e, ReasonBracketStale, policy, now)
 	}
 
-	if e.Heartbeat != nil && everTookATurn(e) && !e.TurnOpen && !e.ToolOpen {
+	if e.Heartbeat != nil && TookATurn(e) && !e.TurnOpen && !e.ToolOpen {
 		if e.Heartbeat.Claim == ClaimBusy && !heartbeatSilentFor(e, now, policy.HeartbeatSettleAfter) {
 			return running(e)
 		}
@@ -221,7 +226,10 @@ func Resolve(e Evidence, policy Policy, now time.Time) Resolution {
 		return settled(e, ReasonCronPending, policy, now)
 	}
 
-	if e.Heartbeat != nil && e.Heartbeat.Claim == ClaimSettled && !everTookATurn(e) {
+	if e.Heartbeat != nil && e.Heartbeat.Claim == ClaimSettled && !TookATurn(e) {
+		if e.InitialPromptOwed || e.PlacedInputOwed {
+			return Resolution{Hold: true, Reason: ReasonPromptOwed}
+		}
 		return Resolution{State: protocol.SessionStateIdle, Reason: ReasonAtPrompt}
 	}
 
@@ -234,6 +242,41 @@ func Resolve(e Evidence, policy Policy, now time.Time) Resolution {
 	}
 
 	return Resolution{State: protocol.SessionStateUnknown, Reason: ReasonNoEvidence}
+}
+
+func NextChange(e Evidence, policy Policy, now time.Time) (time.Time, bool) {
+	current := Resolve(e, policy, now)
+	for _, at := range expiryInstants(e, policy, now) {
+		if Resolve(e, policy, at) != current {
+			return at, true
+		}
+	}
+	return time.Time{}, false
+}
+
+func expiryInstants(e Evidence, policy Policy, now time.Time) []time.Time {
+	var instants []time.Time
+	expires := func(base time.Time, lifetime time.Duration) {
+		if base.IsZero() {
+			return
+		}
+		if at := base.Add(lifetime + time.Nanosecond); at.After(now) {
+			instants = append(instants, at)
+		}
+	}
+	if e.Heartbeat != nil {
+		expires(e.Heartbeat.ObservedAt, policy.HeartbeatTTL)
+	}
+	expires(e.LastBusyAt, policy.HeartbeatSettleAfter)
+	expires(e.LastBusyAt, policy.StaleAfter)
+	expires(e.LastBusyAt, policy.StaleAfter+policy.SettleGrace)
+	expires(e.LastMovement, policy.StuckAfter)
+	expires(e.ClassifyingSince, policy.ClassifierTimeout)
+	if e.LastClassifier != nil {
+		expires(e.LastClassifier.ObservedAt, policy.ParkedAfter)
+	}
+	slices.SortFunc(instants, time.Time.Compare)
+	return instants
 }
 
 func running(e Evidence) Resolution {
@@ -347,7 +390,7 @@ func fresh(o *Observation, claim Claim, now time.Time, ttl time.Duration) bool {
 	return o != nil && o.Claim == claim && now.Sub(o.ObservedAt) <= ttl
 }
 
-func everTookATurn(e Evidence) bool {
+func TookATurn(e Evidence) bool {
 	if e.TurnOpen || e.ToolOpen || e.TurnEverOpened {
 		return true
 	}

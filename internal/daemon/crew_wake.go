@@ -265,9 +265,6 @@ func (d *Daemon) crewWake(name, agent string) (*protocol.CrewWakeResult, error) 
 }
 
 func (d *Daemon) crewWakeWithDelivery(name, agent string, autonomous bool, delivery *crewWakeDelivery) (*protocol.CrewWakeResult, error) {
-	if d.crewWakeStartHook != nil {
-		d.crewWakeStartHook(strings.TrimSpace(strings.ToLower(name)))
-	}
 	d.crewWakeMu.Lock()
 	defer d.crewWakeMu.Unlock()
 	return d.crewWakeWithDeliveryLocked(name, agent, autonomous, delivery)
@@ -325,12 +322,8 @@ func (d *Daemon) crewWakeWithDeliveryLocked(name, agent string, autonomous bool,
 	if _, err := d.claimCrewBinding(member.ID, sessionID); err != nil {
 		return nil, err
 	}
-	if d.crewWakeAfterClaimHook != nil {
-		d.crewWakeAfterClaimHook(member.ID, sessionID)
-	}
 
 	initialPrompt := crewWakePrompt
-	d.notePostInitialPrompt(sessionID)
 	if delivery != nil {
 		if delivery.Message != nil {
 			if _, err := d.store.EnqueuePeerMessage(*delivery.Message, sessionID); err != nil {
@@ -359,7 +352,6 @@ func (d *Daemon) crewWakeWithDeliveryLocked(name, agent string, autonomous bool,
 		if delivery != nil && delivery.Message != nil {
 			d.rollbackQueuedPeerMessage(sessionID, delivery.Message.ID)
 		}
-		d.forgetPostInitialPrompt(sessionID)
 		d.releaseCrewBindingIfSession(sessionID)
 		return nil, fmt.Errorf("wake %s: %w", crew.DisplayName(member.ID), err)
 	}

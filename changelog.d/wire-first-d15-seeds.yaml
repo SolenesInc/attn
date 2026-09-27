@@ -1,0 +1,3 @@
+kind: internal
+area: testing
+change: Seed artifact, handover, reader, resume and send-to-Chief promises are guarded by daemon wire tests instead of in-package tests.

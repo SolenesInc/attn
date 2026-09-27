@@ -13,9 +13,10 @@ import (
 )
 
 type Stats struct {
-	Sessions   int            `json:"sessions"`
-	PtyBackend string         `json:"pty_backend"`
-	WorkerPIDs map[string]int `json:"worker_pids,omitempty"`
+	Sessions         int            `json:"sessions"`
+	PtyBackend       string         `json:"pty_backend"`
+	WorkerPIDs       map[string]int `json:"worker_pids,omitempty"`
+	DocSubscriptions int            `json:"doc_subscriptions"`
 }
 
 type StatsFunc func() Stats
@@ -73,14 +74,15 @@ func (s *Server) handleVars(w http.ResponseWriter, _ *http.Request) {
 	}
 
 	out := map[string]any{
-		"pid":         os.Getpid(),
-		"goroutines":  runtime.NumGoroutine(),
-		"gomaxprocs":  runtime.GOMAXPROCS(0),
-		"num_cpu":     runtime.NumCPU(),
-		"go_version":  runtime.Version(),
-		"sessions":    stats.Sessions,
-		"pty_backend": stats.PtyBackend,
-		"worker_pids": stats.WorkerPIDs,
+		"pid":               os.Getpid(),
+		"goroutines":        runtime.NumGoroutine(),
+		"gomaxprocs":        runtime.GOMAXPROCS(0),
+		"num_cpu":           runtime.NumCPU(),
+		"go_version":        runtime.Version(),
+		"sessions":          stats.Sessions,
+		"pty_backend":       stats.PtyBackend,
+		"worker_pids":       stats.WorkerPIDs,
+		"doc_subscriptions": stats.DocSubscriptions,
 		"memstats": map[string]any{
 			"heap_alloc":        ms.HeapAlloc,
 			"heap_sys":          ms.HeapSys,

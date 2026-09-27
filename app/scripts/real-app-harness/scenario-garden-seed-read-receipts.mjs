@@ -17,7 +17,7 @@ import {
 } from './scenarioAssertions.mjs';
 import { ensureCodexPromptReadyViaPty } from './scenarioAgents.mjs';
 import { DaemonObserver } from './daemonObserver.mjs';
-import { transcriptMessages, writeMockAgentFixture } from './mockAgent.mjs';
+import { latestMockCodexRollout, transcriptMessages, writeMockAgentFixture } from './mockAgent.mjs';
 import { delay, appDaemonInTree } from './platform.mjs';
 import { currentHarnessInstance, dataDirForInstance, instanceCliEnv } from './harnessInstance.mjs';
 import { createScenarioRunner } from './scenarioRunner.mjs';
@@ -148,25 +148,24 @@ function inboxBatches(transcript) {
   });
 }
 
-function readWatcherTranscript(sessionID) {
-  const file = queryDaemonDb(path.join(dataDirForInstance(currentHarnessInstance()), 'attn.db'),
-    `SELECT transcript_path FROM sessions WHERE id = '${sessionID}'`);
-  if (!file) throw new Error(`no mock transcript for ${sessionID}`);
-  return fs.readFileSync(file, 'utf8');
+function readWatcherTranscript(cwd) {
+  const rollout = latestMockCodexRollout(cwd);
+  if (!rollout) throw new Error(`no mock transcript for ${cwd}`);
+  return fs.readFileSync(rollout.file, 'utf8');
 }
 
-function mockTranscript(sessionID) {
-  return transcriptMessages(readWatcherTranscript(sessionID));
+function mockTranscript(cwd) {
+  return transcriptMessages(readWatcherTranscript(cwd));
 }
 
-async function waitForTranscriptMessage(sessionID, expected, timeoutMs = 5_000) {
+async function waitForTranscriptMessage(cwd, expected, timeoutMs = 5_000) {
   const deadline = Date.now() + timeoutMs;
   while (Date.now() < deadline) {
-    const messages = mockTranscript(sessionID);
+    const messages = mockTranscript(cwd);
     if (messages.some((message) => saw(message.text, expected))) return messages;
     await delay(50);
   }
-  return mockTranscript(sessionID);
+  return mockTranscript(cwd);
 }
 
 function saw(text, expected) {
@@ -278,7 +277,7 @@ async function main() {
         `noted on ${seed}`,
       );
       const text = await waitForAgentReads(client, watcher, 2, SECOND_NOTE);
-      const transcript = readWatcherTranscript(watcher.sessionId);
+      const transcript = readWatcherTranscript(watcherCwd);
       const doorbells = transcriptMessages(transcript)
         .filter((message) => message.role === 'user' && message.text === GENERIC_DOORBELL);
       runner.assert(doorbells.length === 2,
@@ -310,7 +309,7 @@ async function main() {
       peerMessage = peerMessageID(sent);
       runner.assert(Boolean(peerMessage), 'the peer send returned its message id', { sent });
       const text = await waitForAgentReads(client, watcher, 3, PEER_BODY);
-      const transcript = readWatcherTranscript(watcher.sessionId);
+      const transcript = readWatcherTranscript(watcherCwd);
       const doorbells = transcriptMessages(transcript)
         .filter((message) => message.role === 'user' && message.text === GENERIC_DOORBELL);
       runner.assert(doorbells.length === 3,
@@ -379,7 +378,7 @@ async function main() {
       fs.writeFileSync(path.join(watcherCwd, HOLD_RELEASE), 'release\n');
       await waitForAgentReads(client, watcher, 3, HOLD_DONE);
       await waitForAgentReads(client, watcher, 4, keptChild);
-      const messages = await waitForTranscriptMessage(watcher.sessionId, `${keptChild} moved: note`);
+      const messages = await waitForTranscriptMessage(watcherCwd, `${keptChild} moved: note`);
       runner.assert(messages.some((message) => saw(message.text, `${keptChild} moved: note`)), 'the surviving child update reaches the actual inbox', { keptChild });
       runner.assert(!messages.some((message) => saw(message.text, `${droppedChild} moved: note`)), 'the removed update never reaches the inbox', { droppedChild });
     });
@@ -388,7 +387,7 @@ async function main() {
       await runInShell(client, author, `attn seed watch ${seed} --session ${watcher.sessionId}`, `watching ${seed} and its descendants`);
       cli(['seed', 'note', droppedChild, '-m', 'Rewatch restores delivery', '--ring', '--session', author.sessionId]);
       await waitForAgentReads(client, watcher, 5, droppedChild);
-      const messages = await waitForTranscriptMessage(watcher.sessionId, `${droppedChild} moved: note`);
+      const messages = await waitForTranscriptMessage(watcherCwd, `${droppedChild} moved: note`);
       runner.assert(messages.some((message) => saw(message.text, `${droppedChild} moved: note`)),
         'rewatch delivers the next descendant update', { droppedChild });
       await runInShell(client, author, `attn seed unwatch ${keptChild} --session ${watcher.sessionId}`, `attn seed unwatch ${seed}`);

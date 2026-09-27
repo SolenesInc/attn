@@ -2,38 +2,14 @@ package daemon
 
 import (
 	"context"
-	"encoding/json"
 	"path/filepath"
 	"strings"
 	"sync"
 	"testing"
-	"testing/synctest"
 	"time"
 
 	"github.com/victorarias/attn/internal/protocol"
 )
-
-func readChiefOfStaffResult(t *testing.T, client *wsClient) protocol.ChiefOfStaffResultMessage {
-	t.Helper()
-	select {
-	case raw := <-client.send:
-		var result protocol.ChiefOfStaffResultMessage
-		if err := json.Unmarshal(raw.payload, &result); err != nil {
-			t.Fatalf("decode chief_of_staff_result: %v", err)
-		}
-		return result
-	case <-time.After(time.Second):
-		t.Fatal("timed out waiting for chief_of_staff_result")
-		return protocol.ChiefOfStaffResultMessage{}
-	}
-}
-
-func newChiefOfStaffTestDaemon(t *testing.T) (*Daemon, *wsClient) {
-	t.Helper()
-	d := NewForTesting(filepath.Join(t.TempDir(), "test.sock"))
-	t.Cleanup(func() { _ = d.store.Close() })
-	return d, newRenameTestClient()
-}
 
 func addChiefOfStaffTestSession(d *Daemon, id, label string) {
 	now := string(protocol.TimestampNow())
@@ -42,80 +18,6 @@ func addChiefOfStaffTestSession(d *Daemon, id, label string) {
 		Directory: "/tmp/" + id, ProfileID: recentProfileID(d.store),
 		State: protocol.SessionStateIdle, StateSince: now, StateUpdatedAt: now, LastSeen: now,
 	})
-}
-
-func TestSetChiefOfStaffTransfersSingletonRole(t *testing.T) {
-	d, client := newChiefOfStaffTestDaemon(t)
-	addChiefOfStaffTestSession(d, "session-a", "first")
-	addChiefOfStaffTestSession(d, "session-b", "second")
-
-	d.handleSetChiefOfStaff(client, &protocol.SetChiefOfStaffMessage{
-		Cmd: protocol.CmdSetChiefOfStaff, SessionID: "session-a", ChiefOfStaff: true,
-	})
-	first := readChiefOfStaffResult(t, client)
-	if !first.Success || d.chiefForCaller("") != "session-a" {
-		t.Fatalf("first assignment = %+v role=%q", first, d.chiefForCaller(""))
-	}
-
-	d.handleSetChiefOfStaff(client, &protocol.SetChiefOfStaffMessage{
-		Cmd: protocol.CmdSetChiefOfStaff, SessionID: "session-b", ChiefOfStaff: true,
-	})
-	second := readChiefOfStaffResult(t, client)
-	if !second.Success || protocol.Deref(second.PreviousSessionID) != "session-a" {
-		t.Fatalf("transfer result = %+v", second)
-	}
-	if got := d.chiefForCaller(""); got != "session-b" {
-		t.Fatalf("role after transfer = %q, want session-b", got)
-	}
-
-	sessions := d.mergedSessionsForBroadcast()
-	for _, session := range sessions {
-		switch session.ID {
-		case "session-a":
-			if protocol.Deref(session.ChiefOfStaff) {
-				t.Fatal("previous session still marked chief")
-			}
-		case "session-b":
-			if !protocol.Deref(session.ChiefOfStaff) {
-				t.Fatal("new session not marked chief")
-			}
-		}
-	}
-}
-
-func TestSetChiefOfStaffRejectsUnknownSession(t *testing.T) {
-	d, client := newChiefOfStaffTestDaemon(t)
-
-	d.handleSetChiefOfStaff(client, &protocol.SetChiefOfStaffMessage{
-		Cmd: protocol.CmdSetChiefOfStaff, SessionID: "missing", ChiefOfStaff: true,
-	})
-	result := readChiefOfStaffResult(t, client)
-	if result.Success || protocol.Deref(result.Error) == "" {
-		t.Fatalf("result = %+v, want failure", result)
-	}
-	if got := d.chiefForCaller(""); got != "" {
-		t.Fatalf("role = %q, want empty", got)
-	}
-}
-
-func TestClearChiefOfStaffKeepsTransferredRole(t *testing.T) {
-	d, client := newChiefOfStaffTestDaemon(t)
-	addChiefOfStaffTestSession(d, "session-a", "first")
-	addChiefOfStaffTestSession(d, "session-b", "second")
-	if err := setTestChief(d, "session-b"); err != nil {
-		t.Fatal(err)
-	}
-
-	d.handleSetChiefOfStaff(client, &protocol.SetChiefOfStaffMessage{
-		Cmd: protocol.CmdSetChiefOfStaff, SessionID: "session-a", ChiefOfStaff: false,
-	})
-	result := readChiefOfStaffResult(t, client)
-	if !result.Success {
-		t.Fatalf("clear result = %+v", result)
-	}
-	if got := d.chiefForCaller(""); got != "session-b" {
-		t.Fatalf("role after stale clear = %q, want session-b", got)
-	}
 }
 
 func TestTypeDoorbellDelaysEnterAfterThePaste(t *testing.T) {
@@ -213,37 +115,4 @@ func TestTypeDoorbellDoesNotSubmitInputRacingTheGap(t *testing.T) {
 	if !typedAt.Before(writtenAt[1]) {
 		t.Fatalf("keystroke started at %v, after the Enter at %v — the race never happened", typedAt, writtenAt[1])
 	}
-}
-
-func chiefWasNudged(inputs []string, prompt string) bool {
-	for _, in := range inputs {
-		if strings.Contains(in, prompt) {
-			return true
-		}
-	}
-	return false
-}
-
-func TestNudgeChiefOfStaffHeldOffByTypingLandsAfterTheQuietWindow(t *testing.T) {
-	d := NewForTesting(filepath.Join(t.TempDir(), "test.sock"))
-	chiefID, _, inputs := delegateForNotify(t, d, "codex")
-	prompt := "the notebook inbox has a new entry"
-	quiesceTranscriptWatchers(t, d)
-	synctest.Test(t, func(t *testing.T) {
-		if err := d.writeSessionPTY(chiefID, []byte("half written"), "user"); err != nil {
-			t.Fatalf("user input: %v", err)
-		}
-		if d.nudgeChiefOfStaff(chiefID, "inbox-1", prompt) {
-			t.Fatal("the nudge claimed a composer the user had just used")
-		}
-		if chiefWasNudged(inputs(chiefID), agentMailboxDoorbellText) {
-			t.Fatalf("typed into a composer the user just used: %q", inputs(chiefID))
-		}
-
-		time.Sleep(sessionInputQuietWindow)
-		settleResend(t)
-		if !chiefWasNudged(inputs(chiefID), agentMailboxDoorbellText) {
-			t.Fatalf("nothing resent the chief nudge once the composer went quiet: %q", inputs(chiefID))
-		}
-	})
 }

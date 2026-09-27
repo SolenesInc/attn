@@ -19,22 +19,6 @@ var raggedSeconds = []struct {
 	{"t5", 500 * time.Millisecond},
 }
 
-func storeWithRaggedStamps(t *testing.T) (*Store, docstore.CollectionSchema, time.Time) {
-	t.Helper()
-	s := New()
-	base := time.Date(2026, 8, 5, 10, 0, 0, 0, time.UTC)
-	if _, err := s.DefineDocumentCollection(requestsDeclaration(), base); err != nil {
-		t.Fatalf("define: %v", err)
-	}
-	schema := declOf(t, s, "app/approval-gate", "requests")
-	for _, r := range raggedSeconds {
-		if _, err := s.PutDocument(schema, r.id, []byte(`{"status":"pending"}`), base.Add(r.offset), nil); err != nil {
-			t.Fatalf("put %s: %v", r.id, err)
-		}
-	}
-	return s, schema, base
-}
-
 func chronological() []string {
 	out := make([]string, 0, len(raggedSeconds))
 	for _, r := range raggedSeconds {
@@ -63,120 +47,11 @@ func sameOrder(got, want []string) bool {
 	return true
 }
 
-func stampQuery(sort *docstore.Sort, filters ...docstore.Filter) docstore.Query {
+func stampQuery(sort *docstore.Sort) docstore.Query {
 	return docstore.Query{
 		Namespace:  "app/approval-gate",
 		Collection: "requests",
 		Sort:       sort,
-		Filters:    filters,
-	}
-}
-
-func TestSortingOnAStampOrdersDocumentsByWhenTheyWereWritten(t *testing.T) {
-	s, _, _ := storeWithRaggedStamps(t)
-
-	got, err := readIDs(t, s, stampQuery(&docstore.Sort{Field: docstore.FieldCreatedAt}))
-	if err != nil {
-		t.Fatal(err)
-	}
-	if want := chronological(); !sameOrder(got, want) {
-		t.Fatalf("ascending by created_at gave %v, want %v", got, want)
-	}
-
-	got, err = readIDs(t, s, stampQuery(&docstore.Sort{Field: docstore.FieldCreatedAt, Desc: true}))
-	if err != nil {
-		t.Fatal(err)
-	}
-	if want := reversed(chronological()); !sameOrder(got, want) {
-		t.Fatalf("descending by created_at gave %v, want %v", got, want)
-	}
-}
-
-func TestAChangedSinceFilterFindsEverythingChangedSince(t *testing.T) {
-	s, _, base := storeWithRaggedStamps(t)
-
-	got, err := readIDs(t, s, stampQuery(
-		&docstore.Sort{Field: docstore.FieldUpdatedAt},
-		docstore.Filter{Field: docstore.FieldUpdatedAt, Op: docstore.OpGte, Value: base.Format(time.RFC3339)},
-	))
-	if err != nil {
-		t.Fatal(err)
-	}
-	if want := chronological(); !sameOrder(got, want) {
-		t.Fatalf("updated_at >= the second boundary gave %v, want every document: %v", got, want)
-	}
-
-	got, err = readIDs(t, s, stampQuery(
-		&docstore.Sort{Field: docstore.FieldUpdatedAt},
-		docstore.Filter{Field: docstore.FieldUpdatedAt, Op: docstore.OpGt, Value: base},
-	))
-	if err != nil {
-		t.Fatal(err)
-	}
-	if want := chronological()[1:]; !sameOrder(got, want) {
-		t.Fatalf("updated_at > the first document's stamp gave %v, want %v", got, want)
-	}
-}
-
-func TestASweepResumesFromTheStampItWasHandedBack(t *testing.T) {
-	s, _, _ := storeWithRaggedStamps(t)
-
-	read, found, err := s.ReadQuery(stampQuery(&docstore.Sort{Field: docstore.FieldUpdatedAt}))
-	if err != nil || !found {
-		t.Fatalf("first sweep: found=%v err=%v", found, err)
-	}
-	seen := read.Documents[:2]
-	cursor := seen[len(seen)-1].UpdatedAt.UTC().Format(docstore.TimeFormat)
-
-	got, err := readIDs(t, s, stampQuery(
-		&docstore.Sort{Field: docstore.FieldUpdatedAt},
-		docstore.Filter{Field: docstore.FieldUpdatedAt, Op: docstore.OpGt, Value: cursor},
-	))
-	if err != nil {
-		t.Fatal(err)
-	}
-	if want := chronological()[2:]; !sameOrder(got, want) {
-		t.Fatalf("resuming after %s gave %v, want %v", cursor, got, want)
-	}
-}
-
-func TestABoundMeansTheSameInEveryRFC3339Spelling(t *testing.T) {
-	s, _, _ := storeWithRaggedStamps(t)
-
-	var first []string
-	for _, form := range []string{
-		"2026-08-05T10:00:00Z",
-		"2026-08-05T10:00:00.0Z",
-		"2026-08-05T10:00:00.000000000Z",
-		"2026-08-05T12:00:00+02:00",
-	} {
-		got, err := readIDs(t, s, stampQuery(
-			&docstore.Sort{Field: docstore.FieldCreatedAt},
-			docstore.Filter{Field: docstore.FieldCreatedAt, Op: docstore.OpGte, Value: form},
-		))
-		if err != nil {
-			t.Fatalf("%s: %v", form, err)
-		}
-		if first == nil {
-			first = got
-			if want := chronological(); !sameOrder(got, want) {
-				t.Fatalf("%s matched %v, want %v", form, got, want)
-			}
-			continue
-		}
-		if !sameOrder(got, first) {
-			t.Fatalf("%s matched %v, but the same instant written differently matched %v", form, got, first)
-		}
-	}
-}
-
-func TestAStampFilterRefusesAValueThatIsNotATimestamp(t *testing.T) {
-	s, _, _ := storeWithRaggedStamps(t)
-
-	got, err := readIDs(t, s, stampQuery(nil,
-		docstore.Filter{Field: docstore.FieldUpdatedAt, Op: docstore.OpGt, Value: "last tuesday"}))
-	if err == nil {
-		t.Fatalf("a filter on updated_at accepted \"last tuesday\" and returned %v", got)
 	}
 }
 

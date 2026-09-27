@@ -3,7 +3,6 @@ package client
 import (
 	"encoding/json"
 	"fmt"
-	"net"
 
 	"github.com/victorarias/attn/internal/protocol"
 )
@@ -100,9 +99,9 @@ func (c *Client) AppRuntimeRestart() (*protocol.AppRuntimeRestartResult, error) 
 }
 
 func (c *Client) AppWatch(name string, stop <-chan struct{}, onInvocation func(protocol.AppInvocationInfo) bool) error {
-	conn, err := net.Dial("unix", c.socketPath)
+	conn, err := c.connect()
 	if err != nil {
-		return explainConnectError(c.socketPath, err)
+		return err
 	}
 	defer conn.Close()
 

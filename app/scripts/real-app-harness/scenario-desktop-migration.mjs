@@ -17,7 +17,7 @@ const LEGACY_WORKSPACES = [
   'Side project', 'Plugin runtime', 'Research', 'SSH outpost', 'CLI polish', 'Browser control',
 ];
 const PAIRED = new Set([1, 5, 9]);
-const LAST_SCHEMA_BEFORE_CONVERSION = 152;
+const LAST_SCHEMA_BEFORE_CONVERSION = 156;
 
 function parseArgs(argv) {
   const args = [...argv];

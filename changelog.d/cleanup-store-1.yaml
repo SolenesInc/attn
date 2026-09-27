@@ -1,0 +1,3 @@
+kind: internal
+area: testing
+change: Guard activity, agent mailbox, apps, automations and auto mode promises with daemon wire tests instead of store internals tests.

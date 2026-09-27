@@ -172,12 +172,19 @@ export function useAppNavigation({
   }, []);
 
   const desktopOrder = useMemo(() => orderedDesktops(desktops), [desktops]);
+  const steppedToDesktopId = useRef<string | null>(null);
+  useEffect(() => {
+    steppedToDesktopId.current = null;
+  }, [currentDesktopId]);
+
   const handleStepDesktop = useCallback(
     (step: 1 | -1) => {
-      if (!currentDesktopId || desktopOrder.length === 0) return;
-      const index = desktopOrder.findIndex((desktop) => desktop.id === currentDesktopId);
+      const from = steppedToDesktopId.current ?? currentDesktopId;
+      if (!from || desktopOrder.length === 0) return;
+      const index = desktopOrder.findIndex((desktop) => desktop.id === from);
       if (index < 0) return;
       const next = desktopOrder[(index + step + desktopOrder.length) % desktopOrder.length];
+      steppedToDesktopId.current = next.id;
       handleSelectDesktop(next.id);
     },
     [currentDesktopId, desktopOrder, handleSelectDesktop],
@@ -194,7 +201,7 @@ export function useAppNavigation({
     const session = daemonSessions.find((entry) => entry.id === activeSessionId);
     if (!session) return;
     const dispatcher = dispatcherOf(session, daemonSessions);
-    if (dispatcher?.session) handleSelectSession(dispatcher.session.id);
+    if (dispatcher) handleSelectSession(dispatcher.id);
   }, [activeSessionId, daemonSessions, handleSelectSession]);
 
   return {

@@ -1,6 +1,7 @@
 package present
 
 import (
+	"context"
 	"fmt"
 	"strings"
 
@@ -15,7 +16,7 @@ type FeedbackComment struct {
 	Content   string
 }
 
-func RenderFeedback(repoPath, title string, seq int, baseSHA, headSHA string, submittedAt string, verdict string, comments []FeedbackComment) string {
+func RenderFeedbackWithGit(ctx context.Context, client presentGit, repoPath, title string, seq int, baseSHA, headSHA string, submittedAt string, verdict string, comments []FeedbackComment) string {
 	var b strings.Builder
 
 	fmt.Fprintf(&b, "# %s — round %d\n\n", title, seq)
@@ -47,7 +48,7 @@ func RenderFeedback(repoPath, title string, seq int, baseSHA, headSHA string, su
 		if cached {
 			return lines
 		}
-		out, err := git.Output(git.OpMetadata, repoPath, "show", sha+":"+filepath)
+		out, err := client.Output(ctx, git.OpMetadata, repoPath, "show", sha+":"+filepath)
 		if err == nil {
 			lines = strings.Split(string(out), "\n")
 		}

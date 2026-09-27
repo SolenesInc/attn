@@ -110,9 +110,3 @@ export function snapshotFrontendInputTrace(): FrontendInputTraceSnapshot {
     events: retained,
   };
 }
-
-export function resetFrontendInputTraceForTests(): void {
-  events.fill(undefined);
-  nextTraceSequence = 0;
-  nextEventSequence = 0;
-}

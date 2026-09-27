@@ -31,19 +31,11 @@ import (
 	"github.com/victorarias/attn/internal/pathutil"
 	"github.com/victorarias/attn/internal/present"
 	"github.com/victorarias/attn/internal/probetui"
-	"github.com/victorarias/attn/internal/prompts"
 	"github.com/victorarias/attn/internal/protocol"
 	"github.com/victorarias/attn/internal/ptyworker"
 	"github.com/victorarias/attn/internal/workflowresult"
 	"github.com/victorarias/attn/internal/wrapper"
 	"golang.org/x/sys/unix"
-)
-
-var (
-	version           = ""
-	buildTime         = ""
-	sourceFingerprint = ""
-	gitCommit         = ""
 )
 
 type hookInput struct {
@@ -83,33 +75,6 @@ type todoWriteInput struct {
 		Content string `json:"content"`
 		Status  string `json:"status"`
 	} `json:"todos"`
-}
-
-func init() {
-	applyLegacyBuildInfoOverrides()
-}
-
-func applyLegacyBuildInfoOverrides() {
-	if buildinfo.Version == "dev" {
-		if legacyVersion := strings.TrimSpace(version); legacyVersion != "" {
-			buildinfo.Version = legacyVersion
-		}
-	}
-	if buildinfo.BuildTime == "unknown" {
-		if legacyBuildTime := strings.TrimSpace(buildTime); legacyBuildTime != "" {
-			buildinfo.BuildTime = legacyBuildTime
-		}
-	}
-	if buildinfo.SourceFingerprint == "unknown" {
-		if legacySourceFingerprint := strings.TrimSpace(sourceFingerprint); legacySourceFingerprint != "" {
-			buildinfo.SourceFingerprint = legacySourceFingerprint
-		}
-	}
-	if buildinfo.GitCommit == "unknown" {
-		if legacyGitCommit := strings.TrimSpace(gitCommit); legacyGitCommit != "" {
-			buildinfo.GitCommit = legacyGitCommit
-		}
-	}
 }
 
 func main() {
@@ -375,7 +340,6 @@ func isBuildInfoJSONCommand(args []string) bool {
 }
 
 func runVersion() {
-	applyLegacyBuildInfoOverrides()
 	fmt.Println(buildinfo.Version)
 }
 
@@ -384,7 +348,6 @@ func runProtocolVersion() {
 }
 
 func runBuildInfoJSON() {
-	applyLegacyBuildInfoOverrides()
 	printJSON(map[string]string{
 		"version":           buildinfo.Version,
 		"buildTime":         buildinfo.BuildTime,
@@ -535,6 +498,8 @@ func runDaemon() {
 		os.Exit(1)
 	}
 	d := daemon.New(socketPath)
+	d.RecoverGUIPath()
+	d.RemoveLegacyStateFile()
 	d.ScrubInheritedAgentSessionEnv()
 	startResult := make(chan error, 1)
 	go func() {
@@ -720,20 +685,7 @@ commands:
 
 func runDelegate() {
 	if len(os.Args) >= 3 && os.Args[2] == "roles" {
-		if len(os.Args) > 4 || (len(os.Args) == 4 && os.Args[3] != "--json") {
-			fmt.Fprintln(os.Stderr, "usage: attn delegate roles [--json]")
-			os.Exit(2)
-		}
-		result, err := client.New("").DelegationRoles()
-		if err != nil {
-			fmt.Fprintf(os.Stderr, "delegate roles: %v\n", err)
-			os.Exit(1)
-		}
-		if len(os.Args) == 4 {
-			printJSON(result)
-		} else {
-			fmt.Println(prompts.DelegationRolesText(*result))
-		}
+		runDelegateRoles(os.Args[3:])
 		return
 	}
 	if len(os.Args) == 3 && (os.Args[2] == "-h" || os.Args[2] == "--help") {
@@ -861,6 +813,7 @@ active session requires --allow-worktree-reuse.
 
 discovery:
   attn delegate roles [--json]  complete active roles, choices, and fallback
+  attn delegate roles --help    change the saved roles, with history and rollback
 
 inspection:
   attn delegate status <request-or-operation-id>

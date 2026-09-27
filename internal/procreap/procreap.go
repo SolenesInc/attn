@@ -128,18 +128,22 @@ func reapEntry(entry Entry, grace time.Duration) ReapResult {
 	res := ReapResult{ID: entry.ID, PID: entry.PID}
 	leadsGroup := entry.PGID == entry.PID && entry.PID > 0
 
-	if entry.PID <= 0 || !processAlive(entry.PID) {
+	if entry.PID <= 0 || syscall.Kill(entry.PID, 0) != nil {
 		res.Outcome = ReapAlreadyGone
 		return res
 	}
 
-	current, err := processStartTime(entry.PID)
-	if err != nil || entry.ProcessStartTime == "" || current != entry.ProcessStartTime {
-		if err == nil {
-			err = fmt.Errorf("start time %q does not match recorded %q", current, entry.ProcessStartTime)
+	identityErr := confirmIdentity(entry)
+	if !ProcessAlive(entry.PID) {
+		if leadsGroup && identityErr == nil {
+			sweepGroup(entry.PGID)
 		}
+		res.Outcome = ReapAlreadyGone
+		return res
+	}
+	if identityErr != nil {
 		res.Outcome = ReapUnidentified
-		res.Err = err
+		res.Err = identityErr
 		return res
 	}
 
@@ -176,28 +180,32 @@ func reapEntry(entry Entry, grace time.Duration) ReapResult {
 	return res
 }
 
+func confirmIdentity(entry Entry) error {
+	current, err := processStartTime(entry.PID)
+	if err != nil {
+		return err
+	}
+	if entry.ProcessStartTime == "" || current != entry.ProcessStartTime {
+		return fmt.Errorf("start time %q does not match recorded %q", current, entry.ProcessStartTime)
+	}
+	return nil
+}
+
 func sweepGroup(pgid int) {
 	_ = syscall.Kill(-pgid, syscall.SIGKILL)
 }
 
-func processAlive(pid int) bool {
-	if pid <= 0 {
-		return false
-	}
-	proc, err := os.FindProcess(pid)
-	if err != nil {
-		return false
-	}
-	return proc.Signal(syscall.Signal(0)) == nil
+func ProcessAlive(pid int) bool {
+	return pid > 0 && syscall.Kill(pid, 0) == nil && !isZombie(pid)
 }
 
 func waitForGone(pid int, timeout time.Duration) bool {
 	deadline := time.Now().Add(timeout)
 	for time.Now().Before(deadline) {
-		if !processAlive(pid) {
+		if !ProcessAlive(pid) {
 			return true
 		}
 		time.Sleep(20 * time.Millisecond)
 	}
-	return !processAlive(pid)
+	return !ProcessAlive(pid)
 }
