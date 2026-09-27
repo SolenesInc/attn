@@ -1,6 +1,7 @@
 package ptyworker
 
 import (
+	"context"
 	"encoding/json"
 	"os"
 	"strings"
@@ -70,7 +71,7 @@ func TestConnCtx_HandleRequest_SetThemeReachesSession(t *testing.T) {
 	}
 	t.Cleanup(func() { r.manager.Detach(r.cfg.SessionID, "test-observer") })
 
-	if err := r.manager.Input(r.cfg.SessionID, []byte("bash "+scriptPath+"\n")); err != nil {
+	if err := r.manager.Input(context.Background(), r.cfg.SessionID, []byte("bash "+scriptPath+"\n")); err != nil {
 		t.Fatalf("Input() error: %v", err)
 	}
 

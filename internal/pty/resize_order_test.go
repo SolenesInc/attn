@@ -3,6 +3,7 @@
 package pty
 
 import (
+	"context"
 	"sync"
 	"testing"
 )
@@ -44,7 +45,7 @@ func TestResizeIsDeliveredAfterBytesAlreadyInFlight(t *testing.T) {
 		resizeAdmissionHook.Store(nil)
 	})
 
-	if err := spawn.manager.Input(spawn.id, []byte("\n")); err != nil {
+	if err := spawn.manager.Input(context.Background(), spawn.id, []byte("\n")); err != nil {
 		t.Fatalf("release first output: %v", err)
 	}
 	<-readAdmitted

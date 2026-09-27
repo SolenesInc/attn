@@ -126,6 +126,8 @@ Playing the model, on a `fakeagent.Run`:
 - `Reply` ends the turn with text carrying the `<!-- attn:state=... -->`
   marker. `ReplyAfterStop` writes that reply only after the Stop hook.
 - `Exit` quits with an exit code.
+- `StopReadingTerminal` stops reading input, so what the daemon types backs
+  up in the terminal the way it does for a frozen agent.
 - `Halt` writes the harness's own record of the user interrupting the turn
   (Claude, Codex and Copilot).
 - Claude only: `Stream` writes part of a reply that the next `Reply` revises

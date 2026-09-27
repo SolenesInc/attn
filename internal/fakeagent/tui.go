@@ -6,6 +6,7 @@ import (
 	"os/exec"
 	"strings"
 	"sync"
+	"syscall"
 	"unicode/utf8"
 )
 
@@ -22,6 +23,7 @@ type composer struct {
 
 type terminal struct {
 	style   composer
+	in      *os.File
 	mu      sync.Mutex
 	line    []rune
 	pasting bool
@@ -33,7 +35,11 @@ func openTerminal(style composer) (*terminal, error) {
 	if out, err := raw.CombinedOutput(); err != nil {
 		return nil, fmt.Errorf("stty raw -echo: %v: %s", err, out)
 	}
-	t := &terminal{style: style}
+	fd, err := syscall.Open("/dev/tty", syscall.O_RDWR|syscall.O_NONBLOCK|syscall.O_CLOEXEC, 0)
+	if err != nil {
+		return nil, fmt.Errorf("open /dev/tty: %w", err)
+	}
+	t := &terminal{style: style, in: os.NewFile(uintptr(fd), "/dev/tty")}
 	t.mu.Lock()
 	defer t.mu.Unlock()
 	t.write(bracketedPasteOn + t.composer())
@@ -68,6 +74,10 @@ func (t *terminal) write(s string) {
 	_, _ = os.Stdout.WriteString(s)
 }
 
+func (t *terminal) stopReading() error {
+	return t.in.Close()
+}
+
 func onScreen(text string) string {
 	return strings.ReplaceAll(strings.ReplaceAll(text, "\r\n", "\n"), "\n", "\r\n")
 }
@@ -76,7 +86,7 @@ func (t *terminal) readLines(submit func(string)) {
 	var pending []byte
 	chunk := make([]byte, 4096)
 	for {
-		n, err := os.Stdin.Read(chunk)
+		n, err := t.in.Read(chunk)
 		pending = append(pending, chunk[:n]...)
 		pending = t.consume(pending, submit)
 		if err != nil {

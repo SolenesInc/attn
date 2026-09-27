@@ -2,6 +2,7 @@ package pty
 
 import (
 	"bytes"
+	"context"
 	"errors"
 	"fmt"
 	"io"
@@ -95,7 +96,7 @@ type Session struct {
 	subscribers map[string]*sessionSubscriber
 
 	writeMu    sync.Mutex
-	ptmxClosed bool
+	ptmxClosed atomic.Bool
 
 	themeMu            sync.RWMutex
 	theme              TerminalTheme
@@ -784,18 +785,43 @@ func (s *Session) screenSnapshot() ScreenSnapshotInfo {
 	return info
 }
 
-func (s *Session) input(data []byte) error {
+const inputWriteTimeout = 5 * time.Second
+
+func (s *Session) input(ctx context.Context, data []byte) error {
 	s.exitMu.RLock()
 	running := s.running
 	s.exitMu.RUnlock()
 	if !running {
 		return errors.New("session not running")
 	}
+	if _, ok := ctx.Deadline(); !ok {
+		var cancel context.CancelFunc
+		ctx, cancel = context.WithTimeout(ctx, inputWriteTimeout)
+		defer cancel()
+	}
 
 	s.writeMu.Lock()
 	defer s.writeMu.Unlock()
-
+	if s.ptmxClosed.Load() {
+		return errors.New("session not running")
+	}
+	deadline, _ := ctx.Deadline()
+	if err := s.ptmx.SetWriteDeadline(deadline); err != nil {
+		return err
+	}
+	defer func() { _ = s.ptmx.SetWriteDeadline(time.Time{}) }()
+	expired := make(chan struct{})
+	stop := context.AfterFunc(ctx, func() {
+		defer close(expired)
+		_ = s.ptmx.SetWriteDeadline(time.Unix(1, 0))
+	})
 	_, err := s.ptmx.Write(data)
+	if !stop() {
+		<-expired
+	}
+	if errors.Is(err, os.ErrDeadlineExceeded) {
+		return fmt.Errorf("the terminal did not take input: %w", context.Cause(ctx))
+	}
 	return err
 }
 
@@ -859,7 +885,7 @@ func (s *Session) resize(cols, rows, xpixel, ypixel uint16) (bool, error) {
 	s.replayMu.Unlock()
 
 	s.writeMu.Lock()
-	if !s.ptmxClosed {
+	if !s.ptmxClosed.Load() {
 		err := s.withPTMXFd(func(fd uintptr) error {
 			return setWinsize(fd, cols, rows, xpixel, ypixel)
 		})
@@ -881,12 +907,9 @@ func (s *Session) resize(cols, rows, xpixel, ypixel uint16) (bool, error) {
 }
 
 func (s *Session) closePTMX() {
-	s.writeMu.Lock()
-	defer s.writeMu.Unlock()
-	if s.ptmxClosed {
+	if s.ptmxClosed.Swap(true) {
 		return
 	}
-	s.ptmxClosed = true
 	_ = s.ptmx.Close()
 }
 

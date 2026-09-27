@@ -1,6 +1,7 @@
 package pty
 
 import (
+	"context"
 	"os"
 	"testing"
 	"time"
@@ -210,7 +211,7 @@ func TestShellForegroundPollerObservesARealCommand(t *testing.T) {
 
 	waitForClaim(claimNotBusy)
 
-	if err := s.input([]byte("sleep 1\r")); err != nil {
+	if err := s.input(context.Background(), []byte("sleep 1\r")); err != nil {
 		t.Fatalf("input() error: %v", err)
 	}
 	waitForClaim(claimBusy)

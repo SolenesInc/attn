@@ -199,6 +199,9 @@ type Daemon struct {
 	spawnLocks                        map[string]*spawnLock
 	sessionInputOnce                  sync.Once
 	sessionInputState                 *sessionInputModule
+	lifetimeOnce                      sync.Once
+	lifetimeCtx                       context.Context
+	endLifetime                       context.CancelFunc
 	agentMailboxMu                    sync.Mutex
 	agentMailboxDoorbells             map[string]*agentMailboxDoorbellState
 	agentMailboxCooldownOverride      time.Duration
@@ -1597,9 +1600,23 @@ func (d *Daemon) Stop() {
 	d.stopOnce.Do(d.stop)
 }
 
+func (d *Daemon) lifetime() context.Context {
+	d.lifetimeOnce.Do(func() {
+		d.lifetimeCtx, d.endLifetime = context.WithCancel(context.Background())
+		select {
+		case <-d.done:
+			d.endLifetime()
+		default:
+		}
+	})
+	return d.lifetimeCtx
+}
+
 func (d *Daemon) stop() {
 	d.log("daemon stopping")
 	close(d.done)
+	d.lifetime()
+	d.endLifetime()
 	if d.listener != nil {
 		d.listener.Close()
 		d.listener = nil

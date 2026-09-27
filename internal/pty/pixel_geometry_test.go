@@ -3,6 +3,7 @@
 package pty
 
 import (
+	"context"
 	"fmt"
 	"os"
 	"strings"
@@ -85,7 +86,7 @@ func TestResizeReportsPixelGeometryToTheChild(t *testing.T) {
 	if _, err := spawn.manager.Resize(spawn.id, geomCols, geomRows, geomXPixel, geomYPixel); err != nil {
 		t.Fatalf("Resize() error: %v", err)
 	}
-	if err := spawn.manager.Input(spawn.id, []byte("go\n")); err != nil {
+	if err := spawn.manager.Input(context.Background(), spawn.id, []byte("go\n")); err != nil {
 		t.Fatalf("releasing the helper: %v", err)
 	}
 	spawn.waitForOutput(t, winsizeHelperMarker)
