@@ -596,7 +596,9 @@ func (d *Daemon) delegateOperationProtected(protection foregroundCleanupProtecti
 				return nil, err
 			}
 		}
-		if !d.sessionHasLiveWorker(sessionID) {
+		if recovered := d.takeRecoveredLaunch(sessionID); recovered != nil && (recovered.settled() || d.sessionHasLiveWorker(sessionID)) {
+			watch = recovered
+		} else if !d.sessionHasLiveWorker(sessionID) {
 			if operationID != "" {
 				_ = d.store.UpdateDelegationOperation(operationID, protocol.DelegationOperationStatePreparing,
 					"recovering delegated runtime", existing.WorkspaceID, "", existing.Directory, nil, nil, time.Now())
