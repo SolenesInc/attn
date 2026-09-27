@@ -92,7 +92,9 @@ func TestAPluginAgentOnAnOutpostIsNotToldAboutTheGarden(t *testing.T) {
 	}
 	s.Start()
 	app := s.App()
-	testworld.Await(app, protocol.EventSettingsUpdated, func(m protocol.SettingsUpdatedMessage) bool { return m.Settings["pi_available"] == "true" })
+	if app.Initial.Settings["pi_available"] != "true" {
+		testworld.Await(app, protocol.EventSettingsUpdated, func(m protocol.SettingsUpdatedMessage) bool { return m.Settings["pi_available"] == "true" })
+	}
 	run := s.Launched(s.Spawn(app, fakeagent.Pi, s.Path("shop")))
 
 	at := slices.Index(run.Argv, "--append-system-prompt")
