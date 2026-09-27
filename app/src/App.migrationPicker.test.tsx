@@ -1,7 +1,7 @@
 import { fireEvent, screen, within } from '@testing-library/react';
 import { describe, expect, it } from 'vitest';
 import { importedGroup, migrationState } from './test/migration';
-import { gesture, renderApp } from './test/renderApp';
+import { gesture, pressShortcut, renderApp } from './test/renderApp';
 import { MigrationPhase } from './types/generated';
 
 function twin(id: string, desktopId: string, agent: string) {
@@ -20,9 +20,9 @@ describe('App migration picker', () => {
     });
     await daemon.idle();
     expect(daemon.sentOf('migration_get')).toEqual([expect.objectContaining({ cmd: 'migration_get' })]);
-    screen.getByText('Your workspaces are already desktops. Confirm where each one goes before you continue.');
+    screen.getByRole('heading', { name: 'Your workspaces are now desktops.' });
 
-    await gesture(daemon, () => fireEvent.click(screen.getByRole('button', { name: 'Confirm desktops →' })));
+    await gesture(daemon, () => fireEvent.click(screen.getByRole('button', { name: 'Continue →' })));
     const rows = screen.getByRole('listbox', { name: 'Workspaces' });
     expect(within(rows).getAllByRole('option').map((row) => row.querySelector('.mp-source-name')?.textContent))
       .toEqual(['exo · Chief', 'exo · Delete X tweet history', 'exo · Chief (2)']);
@@ -33,5 +33,22 @@ describe('App migration picker', () => {
     expect(within(dialog).getByRole('button', { name: /Desktop 1\b.*exo · Chief$/ })).toBeInTheDocument();
     expect(within(dialog).getByRole('button', { name: /Desktop 2\b.*exo · Delete X tweet history$/ })).toBeInTheDocument();
     expect(daemon.sentOf('migration_get')).toHaveLength(1);
+  });
+
+  it('changes the saved UI scale with the font size shortcuts, saving only real changes', async () => {
+    const { daemon } = await renderApp({
+      initialState: { migration_phase: MigrationPhase.PlacementRequired, settings: { uiScale: '1.3' } },
+      script: (scripted) => scripted.on('migration_get', () => ({ event: 'migration_result', action: 'migration_get', success: true, state: migrationState() })),
+    });
+    await daemon.idle();
+    screen.getByRole('heading', { name: 'Your workspaces are now desktops.' });
+
+    await gesture(daemon, () => pressShortcut('ui.increaseFontSize'));
+    await gesture(daemon, () => pressShortcut('ui.decreaseFontSize'));
+    await gesture(daemon, () => pressShortcut('ui.decreaseFontSize'));
+    await gesture(daemon, () => pressShortcut('ui.resetFontSize'));
+    await gesture(daemon, () => pressShortcut('ui.resetFontSize'));
+    expect(daemon.sentOf('set_setting').map(({ key, value }) => [key, value]))
+      .toEqual([['uiScale', '1.4'], ['uiScale', '1.3'], ['uiScale', '1.2'], ['uiScale', '1']]);
   });
 });

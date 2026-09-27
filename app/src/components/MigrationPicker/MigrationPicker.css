@@ -121,14 +121,14 @@
   display: flex;
   align-items: center;
   gap: 9px;
-  font-size: var(--font-size-lg);
+  font-size: calc(21px * var(--ui-scale));
   font-weight: 650;
   letter-spacing: -0.7px;
 }
 
 .mp-brandmark {
-  width: 17px;
-  height: 17px;
+  width: 20px;
+  height: 20px;
   border-radius: 4px;
   background: var(--accent);
 }
@@ -138,7 +138,7 @@
   align-items: center;
   gap: 18px;
   color: var(--color-text-muted);
-  font-size: var(--font-size-sm);
+  font-size: calc(14px * var(--ui-scale));
 }
 
 .mp-steps .active {
@@ -152,7 +152,7 @@
 .mp-steps i {
   margin-right: 5px;
   color: var(--accent);
-  font-size: var(--font-size-xs);
+  font-size: var(--font-size-sm);
   font-style: normal;
 }
 
@@ -166,69 +166,224 @@
 }
 
 .mp-welcome {
-  max-width: 640px;
+  max-width: calc(800px * var(--ui-scale));
   margin: 64px auto 70px;
+}
+
+.mp-welcome .mp-eyebrow {
+  font-size: calc(13px * var(--ui-scale));
 }
 
 .mp-welcome h1 {
   margin-top: 16px;
-  font-size: 40px;
+  font-size: calc(52px * var(--ui-scale));
   font-weight: 550;
-  line-height: 1.16;
+  line-height: 1.14;
   letter-spacing: -1.6px;
 }
 
 .mp-welcome-lead {
-  margin-top: 15px !important;
+  margin-top: 18px !important;
   color: var(--color-text-secondary);
-  font-size: 17px;
-  line-height: 1.6;
+  font-size: calc(22px * var(--ui-scale));
+  line-height: 1.55;
 }
 
 .mp-change-list {
   display: grid;
-  gap: 22px;
-  margin: 34px 0;
+  gap: 26px;
+  margin: 38px 0;
 }
 
 .mp-change-list > div {
   display: flex;
   align-items: start;
-  gap: 17px;
+  gap: 18px;
 }
 
 .mp-change-icon {
-  width: 27px;
+  width: 30px;
   color: var(--accent);
-  font-size: 24px;
+  font-size: calc(26px * var(--ui-scale));
   line-height: 1.2;
   text-align: center;
 }
 
 .mp-change-list h2 {
-  font-size: var(--font-size);
+  font-size: calc(20px * var(--ui-scale));
 }
 
 .mp-change-list p {
-  margin-top: 5px;
+  margin-top: 6px;
   color: var(--color-text-tertiary);
-  font-size: var(--font-size-md);
+  font-size: calc(18px * var(--ui-scale));
   line-height: 1.6;
+}
+
+.mp-welcome .mp-change-list kbd {
+  font-size: calc(13px * var(--ui-scale));
 }
 
 .mp-welcome-actions {
   display: flex;
   align-items: center;
   gap: 18px;
-  padding-top: 24px;
+  padding-top: 26px;
   border-top: 1px solid var(--color-border);
 }
 
+.mp-welcome-actions .mp-button {
+  padding: 10px 18px;
+  font-size: calc(18px * var(--ui-scale));
+}
+
 .mp-welcome-actions span {
-  max-width: 220px;
+  max-width: 280px;
   color: var(--color-text-tertiary);
-  font-size: var(--font-size-sm);
+  font-size: calc(15px * var(--ui-scale));
   line-height: 1.6;
+}
+
+.mp-explainer {
+  position: relative;
+  display: inline-block;
+  margin-top: 14px;
+}
+
+.mp-explainer-trigger {
+  padding: 0;
+  border: 0;
+  border-bottom: 1px dashed color-mix(in srgb, var(--accent) 70%, transparent);
+  background: none;
+  color: var(--accent);
+  font: inherit;
+  font-size: calc(18px * var(--ui-scale));
+  cursor: help;
+}
+
+.mp-explainer-popup {
+  position: absolute;
+  top: calc(100% + 10px);
+  left: 0;
+  z-index: 10;
+  display: grid;
+  gap: 14px;
+  width: min(calc(540px * var(--ui-scale)), calc(100vw - 48px));
+  padding: 18px;
+  border: 1px solid var(--color-border-hover);
+  border-radius: 12px;
+  background: var(--color-bg-elevated);
+  box-shadow: 0 18px 50px rgba(0, 0, 0, 0.35);
+}
+
+.mp-explainer-popup[hidden] {
+  display: none;
+}
+
+/* Bridges the gap under the link, so the pointer can reach the popup without closing it. */
+.mp-explainer-popup::before {
+  content: '';
+  position: absolute;
+  inset: -12px 0 auto;
+  height: 12px;
+}
+
+.mp-explainer-art {
+  display: block;
+  width: 100%;
+  height: auto;
+}
+
+.mp-explainer-art .frame {
+  fill: var(--color-bg-app);
+  stroke: var(--color-border);
+}
+
+.mp-explainer-art line.frame {
+  fill: none;
+}
+
+.mp-explainer-art .focus {
+  fill: color-mix(in srgb, var(--accent) 10%, transparent);
+  stroke: var(--accent);
+  stroke-width: 1.5;
+  stroke-dasharray: 5 4;
+}
+
+.mp-explainer-art .row {
+  fill: color-mix(in srgb, var(--color-text-primary) 7%, transparent);
+}
+
+.mp-explainer-art .row.selected {
+  fill: color-mix(in srgb, var(--color-text-primary) 16%, transparent);
+}
+
+.mp-explainer-art .pane {
+  fill: var(--color-bg-panel);
+  stroke: var(--color-border-hover);
+}
+
+.mp-explainer-art .ink {
+  fill: var(--color-text-muted);
+  opacity: 0.45;
+}
+
+.mp-explainer-art text {
+  fill: var(--color-text-secondary);
+  font-family: inherit;
+  font-size: 12px;
+}
+
+.mp-explainer-art .group {
+  fill: var(--color-text-primary);
+  font-weight: 600;
+}
+
+.mp-explainer-art .dim {
+  opacity: 0.45;
+}
+
+.mp-explainer-art .marker {
+  fill: var(--accent);
+}
+
+.mp-explainer-art .marker-text {
+  fill: #1b100a;
+  font-size: 12px;
+  font-weight: 700;
+  text-anchor: middle;
+}
+
+.mp-explainer-key {
+  display: grid;
+  gap: 8px;
+  color: var(--color-text-secondary);
+  font-size: calc(15px * var(--ui-scale));
+  line-height: 1.5;
+}
+
+.mp-explainer-key > span {
+  display: flex;
+  gap: 10px;
+}
+
+.mp-explainer-key b {
+  flex: none;
+  width: 20px;
+  height: 20px;
+  border-radius: 50%;
+  background: var(--accent);
+  color: #1b100a;
+  font-size: var(--font-size-sm);
+  line-height: 20px;
+  text-align: center;
+}
+
+.mp-explainer-foot {
+  padding-top: 12px;
+  border-top: 1px solid var(--color-border);
+  color: var(--color-text-primary);
+  font-size: calc(15px * var(--ui-scale));
 }
 
 .mp-intro {
@@ -241,7 +396,7 @@
 
 .mp-intro h1 {
   margin-top: 9px;
-  font-size: 30px;
+  font-size: calc(30px * var(--ui-scale));
   font-weight: 550;
   letter-spacing: -1px;
 }
@@ -371,7 +526,7 @@
   align-self: center;
   padding: 0 3px 0 7px;
   color: var(--color-text-muted);
-  font-size: 19px;
+  font-size: calc(19px * var(--ui-scale));
 }
 
 .mp-source:hover .mp-grip {
@@ -641,7 +796,7 @@
 .mp-plus {
   margin-right: 7px;
   color: var(--accent);
-  font-size: 22px;
+  font-size: calc(22px * var(--ui-scale));
   font-weight: 300;
 }
 
@@ -858,7 +1013,7 @@
 }
 
 .mp-dialog-top h2 {
-  font-size: 21px;
+  font-size: calc(21px * var(--ui-scale));
 }
 
 .mp-dialog-top p {
@@ -980,12 +1135,12 @@
   border-radius: 50%;
   background: color-mix(in srgb, var(--color-success) 12%, transparent);
   color: var(--color-success);
-  font-size: 24px;
+  font-size: calc(24px * var(--ui-scale));
 }
 
 .mp-done h1 {
   margin: 22px 0 14px;
-  font-size: 34px;
+  font-size: calc(34px * var(--ui-scale));
   font-weight: 550;
 }
 
@@ -996,7 +1151,7 @@
 
 .mp-done-sub {
   color: var(--color-text-primary);
-  font-size: 16px;
+  font-size: calc(16px * var(--ui-scale));
   line-height: 1.8;
 }
 
@@ -1099,7 +1254,7 @@
   }
 
   .mp-intro h1 {
-    font-size: 25px;
+    font-size: calc(25px * var(--ui-scale));
   }
 
   .mp-save {
@@ -1149,7 +1304,7 @@
   }
 
   .mp-welcome h1 {
-    font-size: 32px;
+    font-size: calc(38px * var(--ui-scale));
   }
 
   .mp-welcome-actions {

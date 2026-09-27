@@ -69,6 +69,26 @@ describe('MigrationPicker', () => {
     await waitFor(() => expect(daemon.api.sendMigrationGet).toHaveBeenCalledTimes(2));
   });
 
+  it('explains what a workspace is on hover and on keyboard focus, without leaving the intro', async () => {
+    const user = userEvent.setup();
+    renderGate(fakeMigrationDaemon(migrationState()));
+    await screen.findByText(INTRO_SENTENCE);
+    const trigger = screen.getByRole('button', { name: 'What is a workspace?' });
+
+    await user.hover(trigger);
+    expect(screen.getByRole('tooltip')).toHaveTextContent('A group in the sidebar');
+    await user.keyboard('{Escape}');
+    expect(screen.queryByRole('tooltip')).not.toBeInTheDocument();
+    await user.unhover(trigger);
+
+    await user.keyboard('{Shift>}{Tab}{/Shift}');
+    expect(trigger).toHaveFocus();
+    expect(trigger).toHaveAccessibleDescription(/Everything you see together after clicking it/);
+    await user.keyboard('{Escape}');
+    expect(screen.queryByRole('tooltip')).not.toBeInTheDocument();
+    expect(screen.getByText(INTRO_SENTENCE)).toBeInTheDocument();
+  });
+
   it('resumes on the board when the draft already holds a choice', async () => {
     const daemon = fakeMigrationDaemon(confirm(migrationState(), ['g1']));
     renderGate(daemon);

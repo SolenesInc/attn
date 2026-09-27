@@ -1,6 +1,8 @@
 import { useEffect, useRef, useState, type ReactNode } from 'react';
 import { useDaemonApi } from '../../contexts/DaemonApiContext';
 import { useMigrationAutomationBridge } from '../../hooks/useMigrationAutomationBridge';
+import { useUIScale } from '../../hooks/useUIScale';
+import { useShortcut } from '../../shortcuts/useShortcut';
 import { useProfilesStore } from '../../store/profiles';
 import { MigrationPhase } from '../../types/generated';
 import { MigrationPicker } from './MigrationPicker';
@@ -62,7 +64,12 @@ export function MigrationGate({ children }: { children: ReactNode }) {
   return <>{children}</>;
 }
 
+// The shell that owns the UI scale is not mounted yet, so the migration screens own it here.
 function MigrationScreen({ children }: { children: ReactNode }) {
   useMigrationAutomationBridge();
+  const { increaseScale, decreaseScale, resetScale } = useUIScale();
+  useShortcut('ui.increaseFontSize', increaseScale);
+  useShortcut('ui.decreaseFontSize', decreaseScale);
+  useShortcut('ui.resetFontSize', resetScale);
   return <>{children}</>;
 }

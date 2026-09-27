@@ -177,7 +177,7 @@ async function main() {
       await client.launchFreshApp();
       await client.waitForReady(30_000);
       await observer.connect();
-      await waitForText('main', 'Your workspaces are already desktops. Confirm where each one goes before you continue.');
+      await waitForText('main', 'Each workspace with sessions is already its own desktop. Before you continue, confirm each one is where you want it.');
       const shell = await client.request('dom_wait', { selector: '.app', absent: true, timeoutMs: 2_000 });
       runner.assert(Boolean(shell), 'The normal shell mounted during the migration');
       const state = await waitForDraft((migration) => migration.groups.length === LEGACY_WORKSPACES.length, 'every imported group');
