@@ -787,9 +787,10 @@ func (m *sessionInputModule) writePTY(ctx context.Context, sessionID string, dat
 		}
 	}
 	if m.daemon.noteUserInput(sessionID, source, data) {
-		if lane.heldEnter && !m.promptShowingLocked(ctx, sessionID) {
-			m.dropHeldEnterLocked(lane)
+		if lane.heldEnter && m.promptShowingLocked(ctx, sessionID) {
+			return m.daemon.ptyBackend.Input(ctx, sessionID, data)
 		}
+		m.dropHeldEnterLocked(lane)
 		lane.userGeneration++
 		for _, attempt := range lane.attempts {
 			if !attempt.composer || (attempt.stage != sessionInputPlaced && attempt.stage != sessionInputIndeterminate) {
