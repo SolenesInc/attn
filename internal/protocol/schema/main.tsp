@@ -1916,10 +1916,6 @@ model RefreshPRsMessage {
   cmd: "refresh_prs";
 }
 
-model ClearSessionsMessage {
-  cmd: "clear_sessions";
-}
-
 model ClearWarningsMessage {
   cmd: "clear_warnings";
 }

@@ -2299,11 +2299,6 @@ type ClearSessionActivityMessage struct {
 	ID string `json:"id"`
 }
 
-type ClearSessionsMessage struct {
-	// Cmd corresponds to the JSON schema field "cmd".
-	Cmd string `json:"cmd"`
-}
-
 type ClearWarningsMessage struct {
 	// Cmd corresponds to the JSON schema field "cmd".
 	Cmd string `json:"cmd"`

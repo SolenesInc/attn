@@ -117,7 +117,6 @@ var CommandMeta = map[string]CommandMetadata{
 	protocol.CmdQueryAuthors:                          commandMetadata(ScopeHubLocal, false, true),
 	protocol.CmdFetchPRDetails:                        commandMetadata(ScopeHubLocal, false, true),
 	protocol.CmdRefreshPRs:                            commandMetadata(ScopeHubLocal, false, true),
-	protocol.CmdClearSessions:                         commandMetadata(ScopeHubLocal, true, true),
 	protocol.CmdClearWarnings:                         commandMetadata(ScopeHubLocal, false, true),
 	protocol.CmdPRVisited:                             commandMetadata(ScopeHubLocal, false, true),
 	protocol.CmdListWorktrees:                         commandMetadata(ScopeEndpoint, false, true),
