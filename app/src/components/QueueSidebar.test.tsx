@@ -509,6 +509,30 @@ describe('walking the queue sidebar from the keyboard', () => {
     expect(document.activeElement).toBe(terminal);
   });
 
+  it('keeps focus on the terminal the user moved to while the list was open', () => {
+    const data = sidebarData(sessions);
+    function WithTwoTerminals() {
+      const { agentListOpen, toggleAgentList } = useAgentList();
+      return (
+        <>
+          <textarea data-testid="terminal-a" />
+          <textarea data-testid="terminal-b" />
+          <button data-testid="shortcut" onClick={toggleAgentList} />
+          <Sidebar {...baseProps} {...data} queue={buildQueueBands(data.workspaces)} agentListOpen={agentListOpen} onToggleAgentList={toggleAgentList} />
+        </>
+      );
+    }
+    render(<WithTwoTerminals />);
+    screen.getByTestId('terminal-a').focus();
+    fireEvent.click(screen.getByTestId('shortcut'));
+    expect(focusedTestId()).toBe('queue-agent-filter');
+
+    screen.getByTestId('terminal-b').focus();
+    fireEvent.click(screen.getByTestId('shortcut'));
+    expect(screen.queryByTestId('queue-agent-list')).toBeNull();
+    expect(focusedTestId()).toBe('terminal-b');
+  });
+
   it('leaves focus alone when the sidebar comes back with the list still open', () => {
     const data = sidebarData(sessions);
     function WithTerminal({ collapsed }: { collapsed: boolean }) {

@@ -3,6 +3,11 @@ import { flushSync } from 'react-dom';
 
 const AGENT_FILTER_SELECTOR = '[data-testid="queue-agent-filter"]';
 const AGENT_LIST_TOGGLE_SELECTOR = '[data-testid="queue-agents-toggle"]';
+const AGENT_LIST_SELECTOR = '[data-testid="queue-agent-list"]';
+
+function focusIsOnAgentList() {
+  return document.activeElement?.closest(`${AGENT_LIST_SELECTOR}, ${AGENT_LIST_TOGGLE_SELECTOR}`) != null;
+}
 
 function focusedElement() {
   return document.activeElement instanceof HTMLElement && document.activeElement !== document.body
@@ -16,11 +21,11 @@ export function useAgentList() {
 
   const toggleAgentList = useCallback(() => {
     if (agentListOpen) {
-      const returnTo = focusBeforeOpen.current?.isConnected
-        ? focusBeforeOpen.current
-        : document.querySelector<HTMLElement>(AGENT_LIST_TOGGLE_SELECTOR);
+      const opener = focusBeforeOpen.current;
       focusBeforeOpen.current = null;
-      returnTo?.focus();
+      if (focusIsOnAgentList()) {
+        (opener?.isConnected ? opener : document.querySelector<HTMLElement>(AGENT_LIST_TOGGLE_SELECTOR))?.focus();
+      }
       setAgentListOpen(false);
       return;
     }
