@@ -350,8 +350,6 @@ type Daemon struct {
 	dispatchProjectionRevs map[string]int64
 	dispatchSeedsLoaded    bool
 
-	gardenNotePageSize int
-
 	automationsBroadcastHook func(*protocol.AutomationsChangedMessage)
 
 	eventBus                       *bus.Bus
