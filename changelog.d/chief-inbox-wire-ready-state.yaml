@@ -1,0 +1,3 @@
+kind: internal
+area: daemon
+change: Wait for the chief's current turn to become idle before testing its inbox nudge.
