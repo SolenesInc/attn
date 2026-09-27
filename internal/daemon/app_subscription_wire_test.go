@@ -41,15 +41,26 @@ export default { subscriptions: { "ticket.*": mark("ticket.*"), "ticket.created"
 	if commented["handler"] != "ticket.*" {
 		t.Errorf("ticket.commented was handled as %v, want by the wildcard", commented)
 	}
-	for _, want := range []string{"ticket.created", "ticket.commented"} {
-		got := awaitAppInvocation(t, invocations)
-		if got.Status != "ok" || protocol.Deref(got.EventName) != want {
-			t.Errorf("greeter's watch streamed %+v, want its own ok %s", got, want)
-		}
+	want := map[string]struct {
+		handler string
+		seq     int
+	}{
+		"ticket.created":   {"subscribe:ticket.created", int(created["seq"].(float64))},
+		"ticket.commented": {"subscribe:ticket.*", int(commented["seq"].(float64))},
 	}
-	status := appStatus(t, cli, "greeter")
-	if seq := int(commented["seq"].(float64)); status.App.Consumer == nil || status.App.Consumer.Cursor < seq || status.Stall != nil {
-		t.Errorf("greeter's consumer = %+v with stall %+v, want its cursor past seq %d and no stall", status.App.Consumer, status.Stall, seq)
+	for range 2 {
+		got := awaitAppInvocation(t, invocations)
+		name := protocol.Deref(got.EventName)
+		expected, ok := want[name]
+		if !ok {
+			t.Fatalf("greeter's watch streamed unexpected or repeated %s: %+v", name, got)
+		}
+		delete(want, name)
+		if got.Status != "ok" || got.Handler != expected.handler ||
+			protocol.Deref(got.EventSubject) != ticket.TicketID || protocol.Deref(got.EventSeq) != expected.seq ||
+			got.VersionID != version.VersionID {
+			t.Errorf("greeter's watch streamed %+v, want its own ok %s at seq %d on version %d", got, name, expected.seq, version.VersionID)
+		}
 	}
 }
 

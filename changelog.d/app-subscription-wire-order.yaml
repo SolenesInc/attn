@@ -1,0 +1,3 @@
+kind: internal
+area: apps
+change: Check subscription invocations by fact, regardless of the order concurrent ticket commands publish them.
