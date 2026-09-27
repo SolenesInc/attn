@@ -23,12 +23,6 @@ type Terminals struct {
 	terminals map[string]*Terminal
 	onExit    func(ptybackend.ExitInfo)
 	onState   func(string, pty.Observation)
-	onSpawn   func(*Terminal)
-}
-
-type TerminalWrite struct {
-	At   time.Time
-	Data string
 }
 
 type Terminal struct {
@@ -40,7 +34,6 @@ type Terminal struct {
 	pasteAt   int
 	pasted    []string
 	submitted []string
-	writes    []TerminalWrite
 	screen    []string
 	streams   []chan ptybackend.OutputEvent
 	onSubmit  func(string)
@@ -48,12 +41,6 @@ type Terminal struct {
 
 func NewTerminals() *Terminals {
 	return &Terminals{terminals: map[string]*Terminal{}}
-}
-
-func (b *Terminals) OnSpawn(fn func(*Terminal)) {
-	b.mu.Lock()
-	defer b.mu.Unlock()
-	b.onSpawn = fn
 }
 
 func (b *Terminals) Terminal(sessionID string) *Terminal {
@@ -70,11 +57,7 @@ func (b *Terminals) Spawn(_ context.Context, opts ptybackend.SpawnOptions) error
 	}
 	term := &Terminal{owner: b, Options: opts, running: true, screen: []string{terminalComposer}}
 	b.terminals[opts.ID] = term
-	spawned := b.onSpawn
 	b.mu.Unlock()
-	if spawned != nil {
-		spawned(term)
-	}
 	return nil
 }
 
@@ -109,7 +92,6 @@ func (b *Terminals) Input(_ context.Context, sessionID string, data []byte) erro
 		}
 		return err
 	}
-	term.writes = append(term.writes, TerminalWrite{At: time.Now(), Data: string(data)})
 	submitted := term.consume(string(data))
 	notify := term.onSubmit
 	b.mu.Unlock()
@@ -174,7 +156,7 @@ func (b *Terminals) Kill(_ context.Context, sessionID string, sig syscall.Signal
 	if err != nil {
 		return err
 	}
-	term.exit(128+int(sig), "")
+	term.Exit(128 + int(sig))
 	return nil
 }
 
@@ -251,8 +233,6 @@ func (b *Terminals) ScreenSnapshot(_ context.Context, sessionID string) (pty.Scr
 	}, nil
 }
 
-func (t *Terminal) ID() string { return t.Options.ID }
-
 func (t *Terminal) OnSubmit(fn func(prompt string)) {
 	t.owner.mu.Lock()
 	defer t.owner.mu.Unlock()
@@ -269,25 +249,6 @@ func (t *Terminal) Pasted() []string {
 	t.owner.mu.Lock()
 	defer t.owner.mu.Unlock()
 	return append([]string(nil), t.pasted...)
-}
-
-func (t *Terminal) Writes() []TerminalWrite {
-	t.owner.mu.Lock()
-	defer t.owner.mu.Unlock()
-	return append([]TerminalWrite(nil), t.writes...)
-}
-
-func (t *Terminal) Composer() string {
-	t.owner.mu.Lock()
-	defer t.owner.mu.Unlock()
-	return string(t.line)
-}
-
-func (t *Terminal) Paint(lines ...string) {
-	t.owner.mu.Lock()
-	defer t.owner.mu.Unlock()
-	t.screen = append([]string(nil), lines...)
-	t.emitLocked("\x1b[2J\x1b[H" + strings.Join(lines, "\r\n"))
 }
 
 func (t *Terminal) paintLocked(text string) {
@@ -313,21 +274,13 @@ func (t *Terminal) Heartbeat(claim, detail string) {
 	}
 }
 
-func (t *Terminal) Exit(code int, screen ...string) {
-	t.exit(code, strings.Join(screen, "\n"))
-}
-
-func (t *Terminal) exit(code int, screen string) {
+func (t *Terminal) Exit(code int) {
 	t.owner.mu.Lock()
 	if !t.running {
 		t.owner.mu.Unlock()
 		return
 	}
 	t.running = false
-	if screen != "" {
-		t.screen = strings.Split(screen, "\n")
-		t.emitLocked(screen)
-	}
 	report := t.owner.onExit
 	info := ptybackend.ExitInfo{ID: t.Options.ID, ExitCode: code, LifecycleID: t.Options.LifecycleID}
 	for _, events := range t.streams {
