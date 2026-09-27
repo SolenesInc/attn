@@ -15,7 +15,6 @@ import { isTauri } from '@tauri-apps/api/core';
 import { readMigrationFailureMarker, type MigrationFailure } from '../utils/migrationFailure';
 import type {
   Session as GeneratedSession,
-  Workspace as GeneratedWorkspaceSnapshot,
   PR as GeneratedPR,
   Worktree as GeneratedWorktree,
   WorktreeListResult,
@@ -85,11 +84,10 @@ import {
 } from '../pty/runtimeLifecycle';
 import { createPtyTransportState } from '../pty/transportState';
 import { enqueuePerKey } from '../pty/attachQueue';
-import { parseLayoutJSON, tileContentKey, tileIdsFromLayoutJSON, type TileContentState } from '../types/workspace';
+import { tileContentKey, tileIdsFromLayoutJSON, type TileContentState } from '../types/workspace';
 import { isSuspiciousTerminalSize } from '../utils/terminalDebug';
 import { crewDisplayName } from '../utils/crewName';
-import { collectWorkspaceLayoutDiagnostics } from '../utils/workspaceDiagnostics';
-import { recordDiag, recordLayout } from '../utils/terminalDiagnosticsLog';
+import { recordDiag } from '../utils/terminalDiagnosticsLog';
 import { recordPtyCommand, recordWsBinaryPtyOutput, recordWsJsonParse } from '../utils/ptyPerf';
 import { completeTerminalInputProbe, maybeStartTerminalInputProbe } from '../utils/terminalInputLatency';
 import { decodeBinaryFrame } from '../pty/binaryPtyFrame';
@@ -211,7 +209,6 @@ export interface CrewRestartOptions {
   expectedSessionId: string;
   expectedRevision: number;
 }
-export type DaemonWorkspace = GeneratedWorkspaceSnapshot;
 export type DaemonPR = GeneratedPR;
 export type DaemonWorktree = GeneratedWorktree;
 export type DaemonPlugin = GeneratedPluginInfo;
@@ -259,10 +256,6 @@ type WebSocketEvent = GeneratedWebSocketEvent & {
   id?: string;
   endpoint?: GeneratedEndpoint;
   endpoints?: GeneratedEndpoint[];
-  workspace?: GeneratedWorkspaceSnapshot;
-  workspace_id?: string;
-  source_workspace_id?: string;
-  target_workspace_id?: string;
   leaf_id?: string;
   final_leaf_id?: string;
   split_id?: string;
@@ -317,7 +310,7 @@ export interface RateLimitState {
 }
 
 // Protocol version - must match daemon's ProtocolVersion
-export const PROTOCOL_VERSION = '329';
+export const PROTOCOL_VERSION = '330';
 const MAX_PENDING_ATTACH_OUTPUTS = 512;
 
 const CLIENT_INSTANCE_ID =
@@ -435,6 +428,7 @@ interface EndpointActionResult {
 interface SpawnResult {
   success: boolean;
   error?: string;
+  placementError?: string;
 }
 
 type AttachResult = AttachResultData & {
@@ -458,12 +452,6 @@ interface RepoInfoResult {
   info?: RepoInfo;
   endpoint_id?: string;
   error?: string;
-}
-
-interface WorkspaceActionResult {
-  success: boolean;
-  error?: string;
-  final_leaf_id?: string;
 }
 
 interface GitFileChange {
@@ -612,7 +600,6 @@ interface UseDaemonSocketOptions {
   onCrewUpdate?: (members: CrewMember[]) => void;
   onPresentationAdded?: (presentation: Presentation) => void;
   onPresentationUpdated?: (presentation: Presentation) => void;
-  onWorkspacesUpdate: (workspaces: DaemonWorkspace[]) => void;
   onPRsUpdate: (prs: DaemonPR[]) => void;
   onEndpointsUpdate?: (endpoints: DaemonEndpoint[]) => void;
   onPluginsUpdate?: (plugins: DaemonPlugin[], issues: DaemonPluginIssue[]) => void;
@@ -653,43 +640,6 @@ function upsertSessionByID(sessions: DaemonSession[], session: DaemonSession): D
   return updated;
 }
 
-function workspaceRuntimeIDs(workspaces: DaemonWorkspace[]): Set<string> {
-  const ids = new Set<string>();
-  for (const workspace of workspaces) {
-    for (const pane of workspace.layout?.panes || []) {
-      if (typeof pane.runtime_id === 'string' && pane.runtime_id.length > 0) {
-        ids.add(pane.runtime_id);
-      }
-    }
-  }
-  return ids;
-}
-
-function pruneWorkspacesBySessions(
-  _sessions: DaemonSession[],
-  workspaces: DaemonWorkspace[],
-): DaemonWorkspace[] {
-  return workspaces;
-}
-
-function invalidateWorkspaceLayoutsForSession(
-  workspaces: DaemonWorkspace[],
-  sessionID: string,
-): DaemonWorkspace[] {
-  let changed = false;
-  const nextWorkspaces = workspaces.map((workspace) => {
-    const referencesSession = (workspace.layout?.panes || []).some(
-      (pane) => pane.session_id === sessionID || pane.runtime_id === sessionID,
-    );
-    if (!referencesSession) {
-      return workspace;
-    }
-    changed = true;
-    return { ...workspace, layout: undefined };
-  });
-  return changed ? nextWorkspaces : workspaces;
-}
-
 function upsertEndpointByID(endpoints: DaemonEndpoint[], endpoint: DaemonEndpoint): DaemonEndpoint[] {
   const index = endpoints.findIndex((entry) => entry.id === endpoint.id);
   if (index === -1) {
@@ -699,35 +649,6 @@ function upsertEndpointByID(endpoints: DaemonEndpoint[], endpoint: DaemonEndpoin
   updated[index] = endpoint;
   return updated;
 }
-
-function upsertWorkspaceByID(workspaces: DaemonWorkspace[], workspace: DaemonWorkspace): DaemonWorkspace[] {
-  const index = workspaces.findIndex((entry) => entry.id === workspace.id);
-  if (index === -1) {
-    return [...workspaces, workspace];
-  }
-  const updated = [...workspaces];
-  const existing = updated[index];
-  updated[index] = {
-    ...existing,
-    ...workspace,
-    layout: workspace.layout ?? existing.layout,
-  };
-  return updated;
-}
-
-function workspaceActionKey(action: string, workspaceId: string, entityId?: string, requestId?: string): string {
-  return requestId
-    ? `workspace:${action}:${workspaceId}:request:${requestId}`
-    : `workspace:${action}:${workspaceId}:${entityId || ''}`;
-}
-
-function isValidWorkspaceActionResult(data: WebSocketEvent): data is WebSocketEvent & {
-  action: string;
-  workspace_id: string;
-} {
-  return Boolean(data.action && data.workspace_id);
-}
-
 
 function contentOnCurrentDesktop(
   contents: Record<string, TileContentState>,
@@ -762,7 +683,6 @@ const GIT_WORKTREE_TIMEOUT_MS = 30 * 60_000;
 const GIT_NETWORK_TIMEOUT_MS = 30 * 60_000;
 const GIT_CLONE_TIMEOUT_MS = 90 * 60_000;
 const GITHUB_REFRESH_TIMEOUT_MS = 5 * 60_000;
-const WORKSPACE_SESSIONS_CAPABILITY = 'workspace_sessions';
 const BROWSER_HOST_CAPABILITY = 'browser_host';
 const BINARY_PTY_OUTPUT_CAPABILITY = 'binary_pty_output';
 // "Describe images to me": gates the kitty_placements feed. Deliberately not the same bit as
@@ -834,7 +754,6 @@ export function useDaemonSocket({
   onCrewUpdate,
   onPresentationAdded,
   onPresentationUpdated,
-  onWorkspacesUpdate,
   onPRsUpdate,
   onEndpointsUpdate,
   onPluginsUpdate,
@@ -852,7 +771,6 @@ export function useDaemonSocket({
   const resolvedWsUrl = resolveDaemonWebSocketURL({ endpoint, wsUrl });
   const wsRef = useRef<WebSocket | null>(null);
   const sessionsRef = useRef<DaemonSession[]>([]);
-  const workspacesRef = useRef<DaemonWorkspace[]>([]);
   const prsRef = useRef<DaemonPR[]>([]);
   const endpointsRef = useRef<DaemonEndpoint[]>([]);
   const reposRef = useRef<RepoState[]>([]);
@@ -871,7 +789,6 @@ export function useDaemonSocket({
     onCrewUpdate,
     onPresentationAdded,
     onPresentationUpdated,
-    onWorkspacesUpdate,
     onPRsUpdate,
     onEndpointsUpdate,
     onPluginsUpdate,
@@ -897,7 +814,6 @@ export function useDaemonSocket({
     onCrewUpdate,
     onPresentationAdded,
     onPresentationUpdated,
-    onWorkspacesUpdate,
     onPRsUpdate,
     onEndpointsUpdate,
     onPluginsUpdate,
@@ -990,12 +906,8 @@ export function useDaemonSocket({
     }, 2000);
   }, []);
 
-  const pruneAttachedPtySessions = useCallback((sessions: DaemonSession[], workspaces: DaemonWorkspace[]) => {
-    const attachableIDs = new Set<string>(sessions.map((session) => session.id));
-    for (const runtimeID of workspaceRuntimeIDs(workspaces)) {
-      attachableIDs.add(runtimeID);
-    }
-    ptyTransportRef.current.pruneDetachedRuntimes(attachableIDs);
+  const pruneAttachedPtySessions = useCallback((sessions: DaemonSession[]) => {
+    ptyTransportRef.current.pruneDetachedRuntimes(new Set<string>(sessions.map((session) => session.id)));
   }, []);
 
   const rejectPendingByPredicate = useCallback((predicate: (key: string) => boolean, error: Error) => {
@@ -1026,24 +938,6 @@ export function useDaemonSocket({
         return;
       case 'unregister':
         rejectPendingByPredicate((key) => key.startsWith('unregister:'), error);
-        return;
-      // command_error carries no correlation id, so this fails every registration in flight. Over-rejecting
-      // beats the ten-second silent timeout that a failure used to surface as.
-      case 'register_workspace':
-        rejectPendingByPredicate((key) => key.startsWith('register_workspace:'), error);
-        return;
-      case 'unregister_workspace':
-        rejectPendingByPredicate((key) => key.startsWith('unregister_workspace:'), error);
-        return;
-      case 'workspace_layout_add_session_pane':
-      case 'workspace_layout_close_pane':
-      case 'workspace_layout_focus_pane':
-      case 'workspace_layout_rename_pane':
-      case 'workspace_layout_set_split_ratio':
-      case 'workspace_layout_dock_tile':
-      case 'workspace_layout_undock_tile':
-      case 'workspace_layout_update_tile':
-        rejectPendingByPredicate((key) => key.startsWith(`workspace:${cmd}:`), error);
         return;
       case 'approve_pr':
         rejectPendingByPredicate((key) => key.endsWith(':approve'), error);
@@ -1277,7 +1171,6 @@ export function useDaemonSocket({
           client_id: CLIENT_INSTANCE_ID,
           version: `protocol-${PROTOCOL_VERSION}`,
           capabilities: [
-            WORKSPACE_SESSIONS_CAPABILITY,
             BINARY_PTY_OUTPUT_CAPABILITY,
             KITTY_IMAGES_CAPABILITY,
             ...(browserHostToken ? [BROWSER_HOST_CAPABILITY] : []),
@@ -1404,10 +1297,7 @@ export function useDaemonSocket({
             callbacksRef.current.onCrewUpdate?.(data.crew || []);
             useProfilesStore.getState().enterScope(data.profiles, data.selected_profile_id, data.desktops);
             useProfilesStore.getState().migrationPhaseChanged(data.migration_phase ?? null);
-            const nextWorkspaces = data.workspaces || [];
-            workspacesRef.current = nextWorkspaces;
-            callbacksRef.current.onWorkspacesUpdate(nextWorkspaces);
-            pruneAttachedPtySessions(nextSessions, nextWorkspaces);
+            pruneAttachedPtySessions(nextSessions);
             const nextPRs = data.prs || [];
             prsRef.current = nextPRs;
             callbacksRef.current.onPRsUpdate(nextPRs);
@@ -1458,47 +1348,6 @@ export function useDaemonSocket({
               }
             }
             break;
-
-          case 'workspace_layout':
-          case 'workspace_layout_updated':
-            if (data.workspace_layout) {
-              const workspaceLayout = data.workspace_layout;
-              const workspaceID = workspaceLayout.workspace_id;
-              const layoutDiag = collectWorkspaceLayoutDiagnostics(
-                parseLayoutJSON(workspaceLayout.layout_json || ''),
-              );
-              recordLayout(workspaceID, layoutDiag.panes.map((pane) => pane.paneId), layoutDiag.splitCount);
-              const nextWorkspaces = workspacesRef.current.map((workspace) => (
-                workspace.id === workspaceID
-                  ? { ...workspace, layout: workspaceLayout }
-                  : workspace
-              ));
-              workspacesRef.current = nextWorkspaces;
-              callbacksRef.current.onWorkspacesUpdate(nextWorkspaces);
-              pruneAttachedPtySessions(sessionsRef.current, nextWorkspaces);
-            }
-            break;
-
-          case 'workspace_layout_action_result': {
-            if (!isValidWorkspaceActionResult(data)) {
-              console.warn('[Daemon] Ignoring malformed workspace action result:', data);
-              break;
-            }
-            const action = data.action;
-            const workspaceId = data.workspace_id;
-            const entityId = data.leaf_id || data.pane_id || data.split_id || data.tile_id;
-            const key = workspaceActionKey(action, workspaceId, entityId, data.request_id);
-            const pending = pendingActionsRef.current.get(key);
-            if (pending) {
-              pendingActionsRef.current.delete(key);
-              if (data.success) {
-                pending.resolve({ success: true, final_leaf_id: data.final_leaf_id });
-              } else {
-                pending.reject(new Error(data.error || 'Workspace action failed'));
-              }
-            }
-            break;
-          }
 
           case 'rename_result': {
             if (typeof data.cmd === 'string' && typeof data.id === 'string') {
@@ -1642,7 +1491,7 @@ export function useDaemonSocket({
 
 
           case 'browser_control_request': {
-            const browserContainerId = typeof data.desktop_id === 'string' ? data.desktop_id : data.workspace_id;
+            const browserContainerId = data.desktop_id;
             if (
               typeof data.request_id !== 'string'
               || typeof browserContainerId !== 'string'
@@ -1692,18 +1541,6 @@ export function useDaemonSocket({
             });
             break;
           }
-
-          case 'workspace_registered':
-          case 'workspace_state_changed':
-            if (data.workspace) {
-              const key = `register_workspace:${data.workspace.id}`;
-              pendingActionsRef.current.get(key)?.resolve(undefined);
-              pendingActionsRef.current.delete(key);
-              const nextWorkspaces = upsertWorkspaceByID(workspacesRef.current, data.workspace);
-              workspacesRef.current = nextWorkspaces;
-              callbacksRef.current.onWorkspacesUpdate(nextWorkspaces);
-            }
-            break;
 
           case 'tasks_changed':
             callbacksRef.current.onTasksChanged?.();
@@ -1987,17 +1824,6 @@ export function useDaemonSocket({
             break;
           }
 
-          case 'workspace_unregistered':
-            if (data.workspace) {
-              const key = `unregister_workspace:${data.workspace.id}`;
-              pendingActionsRef.current.get(key)?.resolve(undefined);
-              pendingActionsRef.current.delete(key);
-              const nextWorkspaces = workspacesRef.current.filter((workspace) => workspace.id !== data.workspace!.id);
-              workspacesRef.current = nextWorkspaces;
-              callbacksRef.current.onWorkspacesUpdate(nextWorkspaces);
-            }
-            break;
-
           case 'endpoint_status_changed':
             if (data.endpoint) {
               const nextEndpoints = upsertEndpointByID(endpointsRef.current, data.endpoint);
@@ -2060,7 +1886,7 @@ export function useDaemonSocket({
               if (pending) {
                 pendingActionsRef.current.delete(key);
                 if (data.success) {
-                  pending.resolve({ success: true });
+                  pending.resolve({ success: true, placementError: data.placement_error });
                 } else {
                   pending.reject(new Error(data.error || 'Failed to spawn session'));
                 }
@@ -2340,19 +2166,7 @@ export function useDaemonSocket({
                 (s) => s.id !== data.session!.id
               );
               callbacksRef.current.onSessionsUpdate(sessionsRef.current);
-              const layoutsInvalidated = invalidateWorkspaceLayoutsForSession(
-                workspacesRef.current,
-                data.session.id,
-              );
-              const nextWorkspaces = pruneWorkspacesBySessions(
-                sessionsRef.current,
-                layoutsInvalidated,
-              );
-              if (nextWorkspaces !== workspacesRef.current) {
-                workspacesRef.current = nextWorkspaces;
-                callbacksRef.current.onWorkspacesUpdate(nextWorkspaces);
-              }
-              pruneAttachedPtySessions(sessionsRef.current, workspacesRef.current);
+              pruneAttachedPtySessions(sessionsRef.current);
             }
             break;
 
@@ -2369,15 +2183,7 @@ export function useDaemonSocket({
               const dedupedSessions = dedupeSessionsByID(data.sessions || []);
               sessionsRef.current = dedupedSessions;
               callbacksRef.current.onSessionsUpdate(dedupedSessions);
-              const nextWorkspaces = pruneWorkspacesBySessions(
-                dedupedSessions,
-                workspacesRef.current,
-              );
-              if (nextWorkspaces !== workspacesRef.current) {
-                workspacesRef.current = nextWorkspaces;
-                callbacksRef.current.onWorkspacesUpdate(nextWorkspaces);
-              }
-              pruneAttachedPtySessions(dedupedSessions, workspacesRef.current);
+              pruneAttachedPtySessions(dedupedSessions);
             }
             break;
 
@@ -3459,93 +3265,8 @@ export function useDaemonSocket({
     });
   }, []);
 
-  const sendWorkspaceGet = useCallback((workspaceId: string) => {
-    sendOrQueueCommand({ cmd: 'workspace_layout_get', workspace_id: workspaceId }, { waitForInitialState: true });
-  }, [sendOrQueueCommand]);
 
-  const sendWorkspaceCommand = useCallback((
-    action: string,
-    workspaceId: string,
-    payload: Record<string, unknown>,
-    entityId?: string,
-    requestId?: string,
-  ): Promise<WorkspaceActionResult> => {
-    return new Promise((resolve, reject) => {
-      const key = workspaceActionKey(action, workspaceId, entityId, requestId);
-      pendingActionsRef.current.set(key, { resolve, reject });
-      sendOrQueueCommand(payload, { waitForInitialState: true });
 
-      setTimeout(() => {
-        if (pendingActionsRef.current.has(key)) {
-          pendingActionsRef.current.delete(key);
-          reject(new Error('Workspace action timed out'));
-        }
-      }, 30000);
-    });
-  }, [sendOrQueueCommand]);
-
-  const sendWorkspaceAddSessionPane = useCallback((
-    workspaceId: string,
-    sessionId: string,
-    title?: string,
-    options: { paneId?: string; targetPaneId?: string; direction?: 'vertical' | 'horizontal' } = {},
-  ) => {
-    const paneId = options.paneId || `pane-${sessionId}`;
-    return sendWorkspaceCommand(
-      'workspace_layout_add_session_pane',
-      workspaceId,
-      {
-        cmd: 'workspace_layout_add_session_pane',
-        workspace_id: workspaceId,
-        pane_id: paneId,
-        session_id: sessionId,
-        ...(title ? { title } : {}),
-        ...(options.targetPaneId ? { target_pane_id: options.targetPaneId } : {}),
-        ...(options.direction ? { direction: options.direction } : {}),
-      },
-      paneId,
-    );
-  }, [sendWorkspaceCommand]);
-
-  const sendWorkspaceClosePane = useCallback((workspaceId: string, paneId: string) => {
-    return sendWorkspaceCommand(
-      'workspace_layout_close_pane',
-      workspaceId,
-      {
-        cmd: 'workspace_layout_close_pane',
-        workspace_id: workspaceId,
-        pane_id: paneId,
-      },
-      paneId,
-    );
-  }, [sendWorkspaceCommand]);
-
-  const sendWorkspaceFocusPane = useCallback((workspaceId: string, paneId: string) => {
-    return sendWorkspaceCommand(
-      'workspace_layout_focus_pane',
-      workspaceId,
-      {
-        cmd: 'workspace_layout_focus_pane',
-        workspace_id: workspaceId,
-        pane_id: paneId,
-      },
-      paneId,
-    );
-  }, [sendWorkspaceCommand]);
-
-  const sendWorkspaceRenamePane = useCallback((workspaceId: string, paneId: string, title: string) => {
-    return sendWorkspaceCommand(
-      'workspace_layout_rename_pane',
-      workspaceId,
-      {
-        cmd: 'workspace_layout_rename_pane',
-        workspace_id: workspaceId,
-        pane_id: paneId,
-        title,
-      },
-      paneId,
-    );
-  }, [sendWorkspaceCommand]);
 
 
 
@@ -3730,13 +3451,15 @@ export function useDaemonSocket({
   useEffect(() => {
     setPtyBackend({
       spawn: async (args: PtySpawnArgs) => {
-        if (ptyTransportRef.current.hasAttachedRuntime(args.id)) return;
+        // The mounted pane owns attachment, including replay of startup output.
+        if (ptyTransportRef.current.hasAttachedRuntime(args.id)) return {};
         try {
-          await sendSpawnSession(args);
+          const { placementError } = await sendSpawnSession(args);
+          return { placementError };
         } catch (error) {
           if (!isAlreadyExistsError(error)) throw error;
+          return {};
         }
-        // The mounted pane owns attachment, including replay of startup output.
       },
       attach: async (args: PtyAttachArgs, options?: { forceResizeBeforeAttach?: boolean }) => {
         await attachExistingRuntime({
@@ -3833,7 +3556,7 @@ export function useDaemonSocket({
     const key = markdownAnnotationKey(op, source.uri);
     const requestId = crypto.randomUUID();
     const sourceFields = source.kind === 'file'
-      ? { source_kind: 'file', workspace_id: source.workspaceId, path: source.path }
+      ? { source_kind: 'file', path: source.path }
       : { source_kind: 'seed', seed_id: source.seedId };
     return sendLastWriterWinsRequest<T>(
       mdAnnotationsPendingRef.current,
@@ -3967,51 +3690,6 @@ export function useDaemonSocket({
     ws.send(JSON.stringify({ cmd: 'clear_sessions' }));
   }, []);
 
-  const sendRegisterWorkspace = useCallback((workspaceId: string, title: string, directory: string, endpointId?: string): Promise<void> => {
-    return new Promise((resolve, reject) => {
-      if (!workspaceId) {
-        resolve();
-        return;
-      }
-      const key = `register_workspace:${workspaceId}`;
-      pendingActionsRef.current.set(key, { resolve: () => resolve(), reject });
-      sendOrQueueCommand(
-        { cmd: 'register_workspace', id: workspaceId, title, directory, ...(endpointId ? { endpoint_id: endpointId } : {}) },
-        { waitForInitialState: true },
-      );
-      window.setTimeout(() => {
-        if (!pendingActionsRef.current.has(key)) {
-          return;
-        }
-        pendingActionsRef.current.delete(key);
-        reject(new Error(`Workspace registration timed out for ${workspaceId}`));
-      }, 10_000);
-    });
-  }, [sendOrQueueCommand]);
-
-  const sendUnregisterWorkspace = useCallback((workspaceId: string): Promise<void> => {
-    return new Promise((resolve, reject) => {
-      if (!workspaceId) {
-        resolve();
-        return;
-      }
-      const ws = wsRef.current;
-      if (!ws || ws.readyState !== WebSocket.OPEN) {
-        reject(new Error('WebSocket not connected'));
-        return;
-      }
-      const key = `unregister_workspace:${workspaceId}`;
-      pendingActionsRef.current.set(key, { resolve: () => resolve(), reject });
-      ws.send(JSON.stringify({ cmd: 'unregister_workspace', id: workspaceId }));
-      window.setTimeout(() => {
-        if (!pendingActionsRef.current.has(key)) {
-          return;
-        }
-        pendingActionsRef.current.delete(key);
-        reject(new Error(`Workspace close timed out for ${workspaceId}`));
-      }, 10_000);
-    });
-  }, []);
 
   const sendRenameSession = useCallback((sessionId: string, label: string): Promise<void> => {
     return new Promise((resolve, reject) => {
@@ -5419,8 +5097,6 @@ export function useDaemonSocket({
     sendFetchPRDetails,
     sendClearSessions,
     sendUnregisterSession,
-    sendRegisterWorkspace,
-    sendUnregisterWorkspace,
     sendRenameSession,
     sendSetChiefOfStaff,
     sendSetSessionContextWindowCap,
@@ -5516,11 +5192,6 @@ export function useDaemonSocket({
     sendSnoozeTurn,
     sendWakeTurn,
     sendCancelCountdown,
-    sendWorkspaceGet,
-    sendWorkspaceAddSessionPane,
-    sendWorkspaceClosePane,
-    sendWorkspaceFocusPane,
-    sendWorkspaceRenamePane,
     desktopTileContents,
     sendOpenMarkdown,
     sendOpenSeed,

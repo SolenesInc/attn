@@ -345,7 +345,7 @@ function formatCheckpointSummary(checkpoint) {
 async function createUtilityPanes(client, observer, sessionId, count) {
   let workspace = await client.request('get_workspace', { sessionId });
   const excludedPaneIds = new Set(
-    (observer.getWorkspace(sessionId)?.panes || []).map((pane) => pane.pane_id),
+    (observer.desktopOf(sessionId)?.panes || []).map((pane) => pane.pane_id),
   );
   const utilityPanes = [];
   for (let index = 0; index < count; index += 1) {
@@ -436,7 +436,7 @@ async function runTerminalLoad(client, sessionId, shellPanes, lineCount = 2500) 
     });
     paneRuns.push({
       paneId: pane.pane_id,
-      runtimeId: pane.runtime_id,
+      runtimeId: pane.session_id,
       token,
       doneToken,
       expectedLineCount: lineCount,

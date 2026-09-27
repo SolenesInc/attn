@@ -129,7 +129,7 @@ func TestPluginDriverEndToEnd_InstalledProcessLaunchReportAndResumeThroughWorker
 	}
 	defer ws.Close(websocket.StatusNormalClosure, "")
 
-	sendWorkspaceClientHello(t, ws)
+	sendHello(t, ws)
 	_ = waitForDaemonWebSocketEvent(t, ws, 10*time.Second, func(event map[string]interface{}) bool {
 		return asString(event["event"]) == protocol.EventInitialState
 	})

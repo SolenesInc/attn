@@ -3,6 +3,8 @@ package daemon
 import (
 	"strings"
 
+	"github.com/google/uuid"
+
 	"github.com/victorarias/attn/internal/garden"
 	"github.com/victorarias/attn/internal/layouttree"
 	"github.com/victorarias/attn/internal/profiles"
@@ -42,6 +44,8 @@ type desktopTileDock struct {
 	share     float64
 }
 
+const defaultTileFraction = 0.32
+
 func dockTileOnDesktop(desktop profiles.Desktop, dock desktopTileDock) (profiles.Desktop, error) {
 	if layouttree.HasPane(desktop.Tree, dock.tileID) {
 		return desktop, profiles.Errorf(profiles.CodeInvalid, "%s is a pane of desktop %s, not a tile", dock.tileID, desktop.ID)
@@ -64,7 +68,7 @@ func dockTileOnDesktop(desktop profiles.Desktop, dock desktopTileDock) (profiles
 	if !before {
 		firstChildShare = 1 - share
 	}
-	next, ok := layouttree.DockTile(desktop.Tree, anchor, direction, before, newWorkspaceLayoutEntityID("split"), dock.tileID, dock.tileKind, dock.params, dock.sessionID, firstChildShare)
+	next, ok := layouttree.DockTile(desktop.Tree, anchor, direction, before, "split-"+uuid.NewString(), dock.tileID, dock.tileKind, dock.params, dock.sessionID, firstChildShare)
 	if !ok {
 		return desktop, profiles.Errorf(profiles.CodeInvalid, "tile %s could not dock beside %s on desktop %s", dock.tileID, anchor, desktop.ID)
 	}

@@ -461,7 +461,7 @@ func getOrCreateActiveAutomationContinuityBindingTx(tx *sql.Tx, definitionID, co
 		return err
 	}
 	_, err = tx.Exec(
-		`INSERT INTO automation_continuity_bindings(id,definition_id,continuity_key,seed_id,origin_run_id,ticket_id,session_id,workspace_id,pane_id,profile_id,status,created_at,updated_at) VALUES(?,?,?,?,?,'',?,'','',?,?,?,?)`,
+		`INSERT INTO automation_continuity_bindings(id,definition_id,continuity_key,seed_id,origin_run_id,ticket_id,session_id,profile_id,status,created_at,updated_at) VALUES(?,?,?,?,?,'',?,?,?,?,?)`,
 		uuid.NewString(), definitionID, continuityKey, ids.SeedID, ids.RunID, ids.SessionID, profileID, AutomationBindingStatusActive, nowRaw, nowRaw,
 	)
 	return err
@@ -613,7 +613,7 @@ func (s *Store) ClaimManualAutomationRun(definitionID, requestID, subjectKey, pa
 	if _, err = tx.Exec(`INSERT INTO automation_occurrences(id,definition_id,provider,occurrence_key,subject_key,observed_at,payload_json,created_at) VALUES(?,?, 'manual',?,?,?,?,?)`, ids.OccurrenceID, definitionID, key, subjectKey, now, payloadJSON, now); err != nil {
 		return nil, false, err
 	}
-	if _, err = tx.Exec(`INSERT INTO automation_runs(id,definition_id,occurrence_id,definition_revision,snapshot_json,state,seed_id,ticket_id,session_id,workspace_id,pane_id,profile_id,created_at,updated_at) VALUES(?,?,?,?,?,?,?,'',?,'','',?,?,?)`, ids.RunID, definitionID, ids.OccurrenceID, revision, snapshotJSON, AutomationRunStatePending, ids.SeedID, ids.SessionID, profileID, now, now); err != nil {
+	if _, err = tx.Exec(`INSERT INTO automation_runs(id,definition_id,occurrence_id,definition_revision,snapshot_json,state,seed_id,ticket_id,session_id,profile_id,created_at,updated_at) VALUES(?,?,?,?,?,?,?,'',?,?,?,?)`, ids.RunID, definitionID, ids.OccurrenceID, revision, snapshotJSON, AutomationRunStatePending, ids.SeedID, ids.SessionID, profileID, now, now); err != nil {
 		return nil, false, err
 	}
 	if err = tx.Commit(); err != nil {
@@ -672,7 +672,7 @@ func (s *Store) ClaimScheduledAutomationRun(definitionID, occurrenceKey, continu
 	if _, err = tx.Exec(`INSERT INTO automation_occurrences(id,definition_id,provider,occurrence_key,subject_key,observed_at,payload_json,created_at) VALUES(?,?, 'schedule',?,?,?,?,?)`, ids.OccurrenceID, definitionID, occurrenceKey, continuityKey, now, payloadJSON, now); err != nil {
 		return nil, false, err
 	}
-	if _, err = tx.Exec(`INSERT INTO automation_runs(id,definition_id,occurrence_id,definition_revision,snapshot_json,state,seed_id,ticket_id,session_id,workspace_id,pane_id,profile_id,created_at,updated_at) VALUES(?,?,?,?,?,?,?,'',?,'','',?,?,?)`, ids.RunID, definitionID, ids.OccurrenceID, revision, snapshotJSON, AutomationRunStatePending, ids.SeedID, ids.SessionID, profileID, now, now); err != nil {
+	if _, err = tx.Exec(`INSERT INTO automation_runs(id,definition_id,occurrence_id,definition_revision,snapshot_json,state,seed_id,ticket_id,session_id,profile_id,created_at,updated_at) VALUES(?,?,?,?,?,?,?,'',?,?,?,?)`, ids.RunID, definitionID, ids.OccurrenceID, revision, snapshotJSON, AutomationRunStatePending, ids.SeedID, ids.SessionID, profileID, now, now); err != nil {
 		return nil, false, err
 	}
 	if err = tx.Commit(); err != nil {
@@ -1014,7 +1014,7 @@ func (s *Store) ClaimGitHubReviewAutomationRun(definitionID, subjectKey string, 
 	if _, err = tx.Exec(`INSERT INTO automation_occurrences(id,definition_id,provider,occurrence_key,subject_key,observed_at,payload_json,created_at) VALUES(?,?, 'github',?,?,?,?,?)`, ids.OccurrenceID, definitionID, occurrenceKey, subjectKey, now, payloadJSON, now); err != nil {
 		return nil, false, err
 	}
-	if _, err = tx.Exec(`INSERT INTO automation_runs(id,definition_id,occurrence_id,definition_revision,snapshot_json,state,seed_id,ticket_id,session_id,workspace_id,pane_id,profile_id,created_at,updated_at) VALUES(?,?,?,?,?,?,?,'',?,'','',?,?,?)`, ids.RunID, definitionID, ids.OccurrenceID, revision, snapshotJSON, AutomationRunStatePending, ids.SeedID, ids.SessionID, profileID, now, now); err != nil {
+	if _, err = tx.Exec(`INSERT INTO automation_runs(id,definition_id,occurrence_id,definition_revision,snapshot_json,state,seed_id,ticket_id,session_id,profile_id,created_at,updated_at) VALUES(?,?,?,?,?,?,?,'',?,?,?,?)`, ids.RunID, definitionID, ids.OccurrenceID, revision, snapshotJSON, AutomationRunStatePending, ids.SeedID, ids.SessionID, profileID, now, now); err != nil {
 		return nil, false, err
 	}
 	if err := tx.Commit(); err != nil {

@@ -11,8 +11,7 @@
     "profile_id": "profile-<uuid>",
     "state": "idle",
     "state_since": "<timestamp>",
-    "state_updated_at": "<timestamp>",
-    "workspace_id": ""
+    "state_updated_at": "<timestamp>"
   }
 }
 --- 02 garden_seeds_updated
@@ -81,8 +80,7 @@
     "state_updated_at": "<timestamp>",
     "todos": [
       "write the migration"
-    ],
-    "workspace_id": ""
+    ]
   }
 }
 --- 06 session_state_changed
@@ -101,8 +99,7 @@
     "state_updated_at": "<timestamp>",
     "todos": [
       "write the migration"
-    ],
-    "workspace_id": ""
+    ]
   }
 }
 --- 07 session_closed
@@ -183,8 +180,7 @@
     "state_updated_at": "<timestamp>",
     "todos": [
       "write the migration"
-    ],
-    "workspace_id": ""
+    ]
   }
 }
 --- 11 garden_seeds_updated

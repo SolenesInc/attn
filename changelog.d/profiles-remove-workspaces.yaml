@@ -1,0 +1,4 @@
+kind: removed
+area: daemon
+change: Workspaces are gone. Agents, tiles and layouts live in profiles and desktops, and the upgrade drops the old workspace tables once they are converted. `attn list`, `attn agent list` and `attn agent peek` show an agent's profile where they showed its workspace, and the `workspace_*` WebSocket commands and events are removed.
+notes: Markdown annotation drafts keep their paths, so drafts made before the upgrade survive. App views receive `desktopId` instead of `workspaceId`.

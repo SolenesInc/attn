@@ -11,28 +11,23 @@ import (
 	"github.com/victorarias/attn/internal/protocol"
 )
 
-func closeMetadataFixture(t *testing.T) (*Daemon, *wsClient, string, string, string) {
+func closeMetadataFixture(t *testing.T) (*Daemon, *wsClient, string) {
 	t.Helper()
 	d := newGardenDaemon(t)
 	d.ptyBackend = &fakeSpawnBackend{}
-	client := newWorkspaceProtocolTestClient()
-	workspaceID, sessionID, paneID := "workspace-close-metadata", "session-close-metadata", "pane-close-metadata"
-	cwd := t.TempDir()
-	d.handleRegisterWorkspace(client, &protocol.RegisterWorkspaceMessage{
-		Cmd: protocol.CmdRegisterWorkspace, ID: workspaceID, Title: "Close metadata", Directory: cwd,
-	})
-	d.handleWorkspaceLayoutAddSessionPane(client, &protocol.WorkspaceLayoutAddSessionPaneMessage{
-		Cmd: protocol.CmdWorkspaceLayoutAddSessionPane, WorkspaceID: workspaceID,
-		PaneID: protocol.Ptr(paneID), SessionID: sessionID,
-	})
-	expectWorkspaceLayoutActionResult(t, client, protocol.CmdWorkspaceLayoutAddSessionPane, workspaceID, paneID, true)
+	client := newProtocolTestClient()
+	sessionID := "session-close-metadata"
+	profile, err := d.store.MostRecentlyUsedProfile()
+	if err != nil {
+		t.Fatal(err)
+	}
 	d.store.Add(&protocol.Session{
-		ID: sessionID, Agent: protocol.SessionAgentCodex, Directory: cwd, WorkspaceID: workspaceID, ProfileID: defaultProfileID(t, d.store),
+		ID: sessionID, Agent: protocol.SessionAgentCodex, Directory: t.TempDir(), ProfileID: profile.ID,
 		Branch: protocol.Ptr("feature/current"), MainRepo: protocol.Ptr("/projects/repo"),
 	})
-	d.associateSessionWithWorkspace(sessionID, workspaceID)
+	placeTestSession(t, d, sessionID, profile.CurrentDesktopID)
 	d.store.SetResumeSessionID(sessionID, "native-current")
-	return d, client, workspaceID, sessionID, paneID
+	return d, client, sessionID
 }
 
 func TestClosePanePreservesExecutionWithoutRunningGit(t *testing.T) {
@@ -42,7 +37,7 @@ func TestClosePanePreservesExecutionWithoutRunningGit(t *testing.T) {
 			name = "previously captured"
 		}
 		t.Run(name, func(t *testing.T) {
-			d, client, workspaceID, sessionID, paneID := closeMetadataFixture(t)
+			d, client, sessionID := closeMetadataFixture(t)
 			cwd := d.store.Get(sessionID).Directory
 			if saved {
 				_, err := d.updateGardenDispatch(sessionID, func(current garden.Dispatch) (garden.Dispatch, bool, error) {
@@ -63,16 +58,13 @@ func TestClosePanePreservesExecutionWithoutRunningGit(t *testing.T) {
 			}
 			t.Setenv("PATH", bin+string(os.PathListSeparator)+os.Getenv("PATH"))
 
-			d.handleWorkspaceLayoutClosePane(client, &protocol.WorkspaceLayoutClosePaneMessage{
-				Cmd: protocol.CmdWorkspaceLayoutClosePane, WorkspaceID: workspaceID, PaneID: paneID,
-			})
-			expectWorkspaceLayoutActionResult(t, client, protocol.CmdWorkspaceLayoutClosePane, workspaceID, paneID, true)
+			d.handleUnregisterWS(client, &protocol.UnregisterMessage{Cmd: protocol.CmdUnregister, ID: sessionID})
 			d.waitForSessionTeardown(sessionID)
 			if calls, err := os.ReadFile(calls); !os.IsNotExist(err) {
 				t.Fatalf("closing invoked Git: %s (read error: %v)", calls, err)
 			}
-			if d.store.Get(sessionID) != nil || d.store.GetWorkspaceLayout(workspaceID) != nil {
-				t.Fatal("close retained the session or its layout")
+			if _, placed, _ := d.store.SessionPlacement(sessionID); d.store.Get(sessionID) != nil || placed {
+				t.Fatal("close retained the session or its pane")
 			}
 			execution, ok := d.gardenDispatch(sessionID)
 			if !ok || execution.Cwd != cwd || execution.Agent != "codex" || execution.Resume != "native-current" ||
@@ -87,7 +79,7 @@ func TestClosePanePreservesExecutionWithoutRunningGit(t *testing.T) {
 }
 
 func TestReapedSessionPreservesCheckedOutBranch(t *testing.T) {
-	d, _, _, sessionID, _ := closeMetadataFixture(t)
+	d, _, sessionID := closeMetadataFixture(t)
 	cwd := d.store.Get(sessionID).Directory
 	runGit(t, cwd, "init", "-b", "feature/current")
 	runGit(t, cwd, "-c", "user.name=Test", "-c", "user.email=test@example.com", "commit", "--allow-empty", "-m", "Initial commit")
@@ -118,7 +110,7 @@ func TestClosePaneWinsOverInFlightExecutionCapture(t *testing.T) {
 			name = "before record removal"
 		}
 		t.Run(name, func(t *testing.T) {
-			d, client, workspaceID, sessionID, paneID := closeMetadataFixture(t)
+			d, client, sessionID := closeMetadataFixture(t)
 			d.store.SetResumeSessionID(sessionID, "native-old")
 			read, release := make(chan struct{}), make(chan struct{})
 			var paused atomic.Bool
@@ -154,10 +146,7 @@ func TestClosePaneWinsOverInFlightExecutionCapture(t *testing.T) {
 			}
 			d.store.SetResumeSessionID(sessionID, "native-current")
 			d.store.UpdateBranch(sessionID, "feature/newer", true, "/projects/repo", "/projects/repo")
-			d.handleWorkspaceLayoutClosePane(client, &protocol.WorkspaceLayoutClosePaneMessage{
-				Cmd: protocol.CmdWorkspaceLayoutClosePane, WorkspaceID: workspaceID, PaneID: paneID,
-			})
-			expectWorkspaceLayoutActionResult(t, client, protocol.CmdWorkspaceLayoutClosePane, workspaceID, paneID, true)
+			d.handleUnregisterWS(client, &protocol.UnregisterMessage{Cmd: protocol.CmdUnregister, ID: sessionID})
 			d.waitForSessionTeardown(sessionID)
 			finishCapture()
 			execution, ok := d.gardenDispatch(sessionID)

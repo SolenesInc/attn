@@ -10,7 +10,6 @@ function session(id: string): Session {
     label: id,
     state: 'idle',
     cwd: '/tmp/repo',
-    workspaceId: '',
     profileId: 'profile',
     desktopId: `desktop-${id}`,
     agent: 'claude',

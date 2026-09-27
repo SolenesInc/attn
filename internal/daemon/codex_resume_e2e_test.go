@@ -76,14 +76,6 @@ while :; do sleep 1; done
 	}
 	sessionID := "attn-codex-e2e"
 	cwd := tmpDir
-	workspaceID := "workspace-" + sessionID
-	d.handleRegisterWorkspace(nil, &protocol.RegisterWorkspaceMessage{
-		Cmd:       protocol.CmdRegisterWorkspace,
-		ID:        workspaceID,
-		Title:     "codex-e2e",
-		Directory: cwd,
-	})
-
 	d.handleSpawnSession(client, &protocol.SpawnSessionMessage{
 		Cmd:             protocol.CmdSpawnSession,
 		ID:              sessionID,

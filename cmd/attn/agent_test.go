@@ -43,24 +43,24 @@ func TestParseAgentPeekArgs(t *testing.T) {
 	}
 }
 
-func TestAgentListRowsJoinWorkspaceTitlesAndSort(t *testing.T) {
+func TestAgentListRowsJoinProfileNamesAndSort(t *testing.T) {
 	rows := agentListRows(&client.ListResult{
 		Sessions: []protocol.Session{
-			{ID: "bbbb2222-1111", Label: "zeta", Agent: "claude", WorkspaceID: "ws-2", State: "idle"},
-			{ID: "aaaa1111-2222", Label: "alpha", Agent: "codex", WorkspaceID: "ws-1", State: "working", TurnOwed: protocol.Ptr(true)},
+			{ID: "bbbb2222-1111", Label: "zeta", Agent: "claude", ProfileID: "profile-2", State: "idle"},
+			{ID: "aaaa1111-2222", Label: "alpha", Agent: "codex", ProfileID: "profile-1", State: "working", TurnOwed: protocol.Ptr(true)},
 		},
-		Workspaces: []protocol.Workspace{
-			{ID: "ws-1", Title: "attn"},
-			{ID: "ws-2", Title: "notes"},
+		Profiles: []protocol.Profile{
+			{ID: "profile-1", Name: "attn"},
+			{ID: "profile-2", Name: "notes"},
 		},
 	})
 	if len(rows) != 2 {
 		t.Fatalf("rows = %+v", rows)
 	}
-	if rows[0].Workspace != "attn" || rows[0].Label != "alpha" || !rows[0].TurnOwed {
+	if rows[0].Profile != "attn" || rows[0].Label != "alpha" || !rows[0].TurnOwed {
 		t.Fatalf("first row = %+v", rows[0])
 	}
-	if rows[1].Workspace != "notes" || rows[1].TurnOwed {
+	if rows[1].Profile != "notes" || rows[1].TurnOwed {
 		t.Fatalf("second row = %+v", rows[1])
 	}
 }
@@ -68,8 +68,8 @@ func TestAgentListRowsJoinWorkspaceTitlesAndSort(t *testing.T) {
 func TestPrintAgentListShowsShortIDsAndTurn(t *testing.T) {
 	var out bytes.Buffer
 	printAgentList(&out, []agentListRow{
-		{ID: "aaaa1111-2222-3333", Label: "alpha", Agent: "codex", Workspace: "attn", State: "working", TurnOwed: true},
-		{ID: "bbbb2222-1111-4444", Label: "zeta", Agent: "claude", Workspace: "notes", State: "idle"},
+		{ID: "aaaa1111-2222-3333", Label: "alpha", Agent: "codex", Profile: "attn", State: "working", TurnOwed: true},
+		{ID: "bbbb2222-1111-4444", Label: "zeta", Agent: "claude", Profile: "notes", State: "idle"},
 	})
 	text := out.String()
 	for _, want := range []string{"aaaa1111", "bbbb2222", "alpha", "working", "owed", "attn agent peek"} {
@@ -96,8 +96,7 @@ func TestPrintAgentPeekShowsEverySection(t *testing.T) {
 		SessionID:            "aaaa1111-2222",
 		Label:                "builder",
 		Agent:                "claude",
-		WorkspaceID:          "ws-1",
-		WorkspaceTitle:       protocol.Ptr("attn"),
+		ProfileName:          protocol.Ptr("attn"),
 		State:                "working",
 		StateReason:          protocol.Ptr("classifier_verdict"),
 		StateSince:           "2026-08-10T10:00:00Z",
@@ -110,7 +109,7 @@ func TestPrintAgentPeekShowsEverySection(t *testing.T) {
 	text := out.String()
 	for _, want := range []string{
 		"session aaaa1111-2222 (claude) — builder",
-		"workspace: attn",
+		"profile: attn",
 		"state: working (classifier_verdict)",
 		"turn: owed",
 		"[→] build peek",

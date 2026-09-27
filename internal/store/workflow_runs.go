@@ -27,7 +27,6 @@ type WorkflowRunRow struct {
 	ScriptHash  string
 	ArgsJSON    *string
 	SessionID   *string
-	WorkspaceID *string
 	Status      string
 	Phase       *string
 	Harness     *string
@@ -68,16 +67,15 @@ func (s *Store) UpsertWorkflowRun(run *WorkflowRunRow) error {
 
 	_, err := s.db.Exec(`
 		INSERT INTO workflow_runs (
-			run_id, script_path, script_hash, args_json, session_id, workspace_id,
+			run_id, script_path, script_hash, args_json, session_id,
 			status, phase, harness, result_json, last_error, resumable,
 			created_at, updated_at, completed_at
-		) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+		) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
 		ON CONFLICT(run_id) DO UPDATE SET
 			script_path = excluded.script_path,
 			script_hash = excluded.script_hash,
 			args_json = excluded.args_json,
 			session_id = excluded.session_id,
-			workspace_id = excluded.workspace_id,
 			status = excluded.status,
 			phase = excluded.phase,
 			harness = excluded.harness,
@@ -93,7 +91,6 @@ func (s *Store) UpsertWorkflowRun(run *WorkflowRunRow) error {
 		run.ScriptHash,
 		nullPtrString(run.ArgsJSON),
 		nullPtrString(run.SessionID),
-		nullPtrString(run.WorkspaceID),
 		run.Status,
 		nullPtrString(run.Phase),
 		nullPtrString(run.Harness),
@@ -164,7 +161,7 @@ func (s *Store) GetWorkflowRun(runID string) (*WorkflowRunRow, error) {
 	}
 
 	row := s.db.QueryRow(`
-		SELECT run_id, script_path, script_hash, args_json, session_id, workspace_id,
+		SELECT run_id, script_path, script_hash, args_json, session_id,
 			status, phase, harness, result_json, last_error, resumable,
 			created_at, updated_at, completed_at
 		FROM workflow_runs
@@ -195,7 +192,7 @@ func (s *Store) ListWorkflowRuns(sessionID string) ([]*WorkflowRunRow, error) {
 	)
 	if sessionID == "" {
 		rows, err = s.db.Query(`
-			SELECT run_id, script_path, script_hash, args_json, session_id, workspace_id,
+			SELECT run_id, script_path, script_hash, args_json, session_id,
 				status, phase, harness, result_json, last_error, resumable,
 				created_at, updated_at, completed_at
 			FROM workflow_runs
@@ -203,7 +200,7 @@ func (s *Store) ListWorkflowRuns(sessionID string) ([]*WorkflowRunRow, error) {
 		`)
 	} else {
 		rows, err = s.db.Query(`
-			SELECT run_id, script_path, script_hash, args_json, session_id, workspace_id,
+			SELECT run_id, script_path, script_hash, args_json, session_id,
 				status, phase, harness, result_json, last_error, resumable,
 				created_at, updated_at, completed_at
 			FROM workflow_runs
@@ -279,7 +276,6 @@ func scanWorkflowRun(scanner workflowScanner) (*WorkflowRunRow, error) {
 		run         WorkflowRunRow
 		argsJSON    sql.NullString
 		sessionID   sql.NullString
-		workspaceID sql.NullString
 		phase       sql.NullString
 		harness     sql.NullString
 		resultJSON  sql.NullString
@@ -294,7 +290,6 @@ func scanWorkflowRun(scanner workflowScanner) (*WorkflowRunRow, error) {
 		&run.ScriptHash,
 		&argsJSON,
 		&sessionID,
-		&workspaceID,
 		&run.Status,
 		&phase,
 		&harness,
@@ -313,9 +308,6 @@ func scanWorkflowRun(scanner workflowScanner) (*WorkflowRunRow, error) {
 	}
 	if sessionID.Valid && sessionID.String != "" {
 		run.SessionID = &sessionID.String
-	}
-	if workspaceID.Valid && workspaceID.String != "" {
-		run.WorkspaceID = &workspaceID.String
 	}
 	if phase.Valid && phase.String != "" {
 		run.Phase = &phase.String

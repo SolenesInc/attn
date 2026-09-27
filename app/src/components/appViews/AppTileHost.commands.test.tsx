@@ -41,7 +41,7 @@ function renderHost(sendAppCommand: DaemonApi['sendAppCommand']) {
       <AppTileHost
         app="reviewer"
         view="approvals"
-        workspaceId="ws-1"
+        desktopId="desktop-1"
         sessionId={null}
         tileId="tile-7"
         params=""

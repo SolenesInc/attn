@@ -62,10 +62,9 @@ func TestPrintCrewList_EmptyRosterSaysHowToJoinIt(t *testing.T) {
 func TestAgentListRows_CarryTheCrewMember(t *testing.T) {
 	rows := agentListRows(&client.ListResult{
 		Sessions: []protocol.Session{
-			{ID: "aaaa1111", Label: "alpha", Agent: "claude", WorkspaceID: "ws-1", State: "idle", CrewMember: protocol.Ptr("trellis")},
-			{ID: "bbbb2222", Label: "beta", Agent: "codex", WorkspaceID: "ws-1", State: "idle"},
+			{ID: "aaaa1111", Label: "alpha", Agent: "claude", State: "idle", CrewMember: protocol.Ptr("trellis")},
+			{ID: "bbbb2222", Label: "beta", Agent: "codex", State: "idle"},
 		},
-		Workspaces: []protocol.Workspace{{ID: "ws-1", Title: "attn"}},
 	})
 	if rows[0].Member != "trellis" {
 		t.Errorf("bound row member = %q, want trellis", rows[0].Member)

@@ -54,18 +54,18 @@ func newHelloTestDaemon(t *testing.T, token string) *Daemon {
 
 func TestClientHelloAcceptsTheDaemonsToken(t *testing.T) {
 	t.Setenv("ATTN_DATA_DIR", t.TempDir())
-	client := newWorkspaceProtocolTestClient()
+	client := newProtocolTestClient()
 	d := newHelloTestDaemon(t, "the-token")
 
 	d.handleClientHello(client, &protocol.ClientHelloMessage{
 		ClientKind:   "tauri-app",
 		Version:      "test",
-		Capabilities: []string{protocol.CapabilityWorkspaceSessions},
+		Capabilities: nil,
 		ClientToken:  protocol.Ptr("the-token"),
 	})
 
-	if !client.speaksWorkspaceProtocol() {
-		t.Fatal("hello with the right token did not record the client's capabilities")
+	if !client.hasSaidHello() {
+		t.Fatal("hello with the right token was not recorded")
 	}
 	if got := d.wsHub.ClientCount(); got != 1 {
 		t.Fatalf("hub holds %d clients after an accepted hello, want 1", got)
@@ -78,13 +78,13 @@ func TestClientHelloAcceptsTheDaemonsToken(t *testing.T) {
 
 func TestRefusedClientNeverJoinsTheHubOrSeesState(t *testing.T) {
 	t.Setenv("ATTN_DATA_DIR", t.TempDir())
-	client := newWorkspaceProtocolTestClient()
+	client := newProtocolTestClient()
 	d := newHelloTestDaemon(t, "the-token")
 
 	d.handleClientHello(client, &protocol.ClientHelloMessage{
 		ClientKind:   "impostor",
 		Version:      "test",
-		Capabilities: []string{protocol.CapabilityWorkspaceSessions},
+		Capabilities: nil,
 		ClientToken:  protocol.Ptr("guessed"),
 	})
 
@@ -97,11 +97,11 @@ func TestRefusedClientNeverJoinsTheHubOrSeesState(t *testing.T) {
 		}
 	}
 	go d.wsHub.run()
-	admitted := newWorkspaceProtocolTestClient()
+	admitted := newProtocolTestClient()
 	d.handleClientHello(admitted, &protocol.ClientHelloMessage{
 		ClientKind:   "tauri-app",
 		Version:      "test",
-		Capabilities: []string{protocol.CapabilityWorkspaceSessions},
+		Capabilities: nil,
 		ClientToken:  protocol.Ptr("the-token"),
 	})
 	d.wsHub.Broadcast(&protocol.WebSocketEvent{Event: protocol.EventSettingsUpdated})
@@ -136,17 +136,17 @@ func waitForClientEvent(t *testing.T, client *wsClient, name string) {
 
 func TestBearerAuthorizedClientNeedsNoClientToken(t *testing.T) {
 	t.Setenv("ATTN_DATA_DIR", t.TempDir())
-	client := newWorkspaceProtocolTestClient()
+	client := newProtocolTestClient()
 	client.bearerAuthorized = true
 	d := newHelloTestDaemon(t, "the-token")
 
 	d.handleClientHello(client, &protocol.ClientHelloMessage{
 		ClientKind:   "remote-web",
 		Version:      "test",
-		Capabilities: []string{protocol.CapabilityWorkspaceSessions},
+		Capabilities: nil,
 	})
 
-	if !client.speaksWorkspaceProtocol() {
+	if !client.hasSaidHello() {
 		t.Fatal("a client that cleared the operator bearer was refused")
 	}
 	if got := d.wsHub.ClientCount(); got != 1 {
@@ -156,16 +156,16 @@ func TestBearerAuthorizedClientNeedsNoClientToken(t *testing.T) {
 
 func TestDaemonWithoutATokenAuthorizesNobody(t *testing.T) {
 	t.Setenv("ATTN_DATA_DIR", t.TempDir())
-	client := newWorkspaceProtocolTestClient()
+	client := newProtocolTestClient()
 	d := newHelloTestDaemon(t, "")
 
 	d.handleClientHello(client, &protocol.ClientHelloMessage{
 		ClientKind:   "tauri-app",
 		Version:      "test",
-		Capabilities: []string{protocol.CapabilityWorkspaceSessions},
+		Capabilities: nil,
 	})
 
-	if client.speaksWorkspaceProtocol() {
+	if client.hasSaidHello() {
 		t.Fatal("a tokenless daemon admitted a tokenless client")
 	}
 }
@@ -173,17 +173,17 @@ func TestDaemonWithoutATokenAuthorizesNobody(t *testing.T) {
 func TestClientHelloWithoutTheTokenIsRefusedAndSaysWhere(t *testing.T) {
 	dataDir := t.TempDir()
 	t.Setenv("ATTN_DATA_DIR", dataDir)
-	client := newWorkspaceProtocolTestClient()
+	client := newProtocolTestClient()
 	d := newHelloTestDaemon(t, "the-token")
 
 	d.handleClientHello(client, &protocol.ClientHelloMessage{
 		ClientKind:   "impostor",
 		Version:      "test",
-		Capabilities: []string{protocol.CapabilityWorkspaceSessions},
+		Capabilities: nil,
 	})
 
-	if client.speaksWorkspaceProtocol() {
-		t.Fatal("a refused client kept its capabilities; every later command would be accepted")
+	if client.hasSaidHello() {
+		t.Fatal("a refused client counts as greeted; every later command would be accepted")
 	}
 	events := drainClientEvents(t, client)
 	if len(events) != 1 {
@@ -211,17 +211,17 @@ func TestClientHelloWithoutTheTokenIsRefusedAndSaysWhere(t *testing.T) {
 
 func TestClientHelloWithAnotherInstancesTokenIsRefused(t *testing.T) {
 	t.Setenv("ATTN_DATA_DIR", t.TempDir())
-	client := newWorkspaceProtocolTestClient()
+	client := newProtocolTestClient()
 	d := newHelloTestDaemon(t, "this-instances-token")
 
 	d.handleClientHello(client, &protocol.ClientHelloMessage{
 		ClientKind:   "tauri-app",
 		Version:      "test",
-		Capabilities: []string{protocol.CapabilityWorkspaceSessions},
+		Capabilities: nil,
 		ClientToken:  protocol.Ptr("another-instances-token"),
 	})
 
-	if client.speaksWorkspaceProtocol() {
+	if client.hasSaidHello() {
 		t.Fatal("a neighbouring instance's client was let onto this daemon")
 	}
 }
@@ -286,7 +286,7 @@ func TestDaemonWebSocketRequiresTheClientToken(t *testing.T) {
 		"cmd":          protocol.CmdClientHello,
 		"client_kind":  "impostor",
 		"version":      "protocol-" + protocol.ProtocolVersion,
-		"capabilities": []string{protocol.CapabilityWorkspaceSessions},
+		"capabilities": nil,
 	}); err != nil {
 		t.Fatalf("send tokenless hello: %v", err)
 	}
@@ -308,7 +308,7 @@ func TestDaemonWebSocketRequiresTheClientToken(t *testing.T) {
 
 	accepted := dialWhenListening(t, ctx, wsURL)
 	defer accepted.Close(websocket.StatusNormalClosure, "")
-	sendWorkspaceClientHello(t, accepted)
+	sendHello(t, accepted)
 	if err := writeWS(accepted, map[string]interface{}{"cmd": protocol.CmdGetSettings}); err != nil {
 		t.Fatalf("send get_settings: %v", err)
 	}

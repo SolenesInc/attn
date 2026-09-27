@@ -105,8 +105,8 @@ func TestSharedPTYHostSettingProbeDoesNotBlockClientCommands(t *testing.T) {
 	d := NewForTesting(filepath.Join(t.TempDir(), "daemon.sock"))
 	t.Cleanup(func() { _ = d.store.Close() })
 	d.ptyBackend = backend
-	client := newWorkspaceProtocolTestClient()
-	client.setIdentity("daemon-test", "protocol-"+protocol.ProtocolVersion, []string{protocol.CapabilityWorkspaceSessions})
+	client := newProtocolTestClient()
+	client.setIdentity("daemon-test", "protocol-"+protocol.ProtocolVersion, nil)
 	d.handleClientMessage(client, []byte(`{"cmd":"set_setting","key":"pty_shared_host_enabled","value":"true"}`))
 	<-started
 	d.handleClientMessage(client, []byte(`{"cmd":"get_settings"}`))

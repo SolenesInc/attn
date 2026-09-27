@@ -8,31 +8,16 @@ import (
 	"github.com/victorarias/attn/internal/protocol"
 )
 
-func spawnForChiefTest(t *testing.T, d *Daemon, client *wsClient, workspaceID, sessionID, agent string, chief bool) {
+func spawnForChiefTest(t *testing.T, d *Daemon, client *wsClient, sessionID, agent string, chief bool) {
 	t.Helper()
-	cwd := t.TempDir()
-	d.handleRegisterWorkspace(client, &protocol.RegisterWorkspaceMessage{
-		Cmd:       protocol.CmdRegisterWorkspace,
-		ID:        workspaceID,
-		Title:     "Chief Test",
-		Directory: cwd,
-	})
-	paneID := "pane-" + sessionID
-	d.handleWorkspaceLayoutAddSessionPane(client, &protocol.WorkspaceLayoutAddSessionPaneMessage{
-		Cmd:         protocol.CmdWorkspaceLayoutAddSessionPane,
-		WorkspaceID: workspaceID,
-		PaneID:      protocol.Ptr(paneID),
-		SessionID:   sessionID,
-		Title:       protocol.Ptr(sessionID),
-	})
-	expectWorkspaceLayoutActionResult(t, client, protocol.CmdWorkspaceLayoutAddSessionPane, workspaceID, paneID, true)
 	d.handleSpawnSession(client, &protocol.SpawnSessionMessage{
 		Cmd:          protocol.CmdSpawnSession,
 		ID:           sessionID,
 		Label:        protocol.Ptr(sessionID),
-		Cwd:          cwd,
+		Cwd:          t.TempDir(),
 		Agent:        agent,
 		ProfileID:    defaultProfileID(t, d.store),
+		Placement:    &protocol.SessionPlacement{},
 		Cols:         80,
 		Rows:         24,
 		ChiefOfStaff: protocol.Ptr(chief),
@@ -43,9 +28,9 @@ func TestCreateAsChiefAssignsRoleAtLaunch(t *testing.T) {
 	d := NewForTesting(filepath.Join(t.TempDir(), "test.sock"))
 	t.Cleanup(func() { _ = d.store.Close() })
 	d.ptyBackend = &fakeSpawnBackend{}
-	client := newWorkspaceProtocolTestClient()
+	client := newProtocolTestClient()
 
-	spawnForChiefTest(t, d, client, "ws-chief", "sess-chief", string(protocol.SessionAgentClaude), true)
+	spawnForChiefTest(t, d, client, "sess-chief", string(protocol.SessionAgentClaude), true)
 	expectSpawnResult(t, client, "sess-chief", true)
 
 	if got := d.chiefForCaller(""); got != "sess-chief" {
@@ -65,13 +50,13 @@ func TestCreateAsChiefSkippedWhenChiefExists(t *testing.T) {
 	d := NewForTesting(filepath.Join(t.TempDir(), "test.sock"))
 	t.Cleanup(func() { _ = d.store.Close() })
 	d.ptyBackend = &fakeSpawnBackend{}
-	client := newWorkspaceProtocolTestClient()
+	client := newProtocolTestClient()
 
 	if err := setTestChief(d, "incumbent"); err != nil {
 		t.Fatalf("seed incumbent chief: %v", err)
 	}
 
-	spawnForChiefTest(t, d, client, "ws-second", "sess-second", string(protocol.SessionAgentClaude), true)
+	spawnForChiefTest(t, d, client, "sess-second", string(protocol.SessionAgentClaude), true)
 	expectSpawnResult(t, client, "sess-second", true)
 
 	if got := d.chiefForCaller(""); got != "incumbent" {
@@ -86,9 +71,9 @@ func TestCreateAsChiefIgnoredForShell(t *testing.T) {
 	d := NewForTesting(filepath.Join(t.TempDir(), "test.sock"))
 	t.Cleanup(func() { _ = d.store.Close() })
 	d.ptyBackend = &fakeSpawnBackend{}
-	client := newWorkspaceProtocolTestClient()
+	client := newProtocolTestClient()
 
-	spawnForChiefTest(t, d, client, "ws-shell", "sess-shell", protocol.AgentShellValue, true)
+	spawnForChiefTest(t, d, client, "sess-shell", protocol.AgentShellValue, true)
 	expectSpawnResult(t, client, "sess-shell", true)
 
 	if got := d.chiefForCaller(""); got != "" {
@@ -106,9 +91,9 @@ func TestCreateAsChiefRejectsPluginWithoutLaunchInstructions(t *testing.T) {
 		<-done
 	}()
 	registerTestPluginDriver(t, plugin, "fixture", map[string]bool{"resume": true})
-	client := newWorkspaceProtocolTestClient()
+	client := newProtocolTestClient()
 
-	spawnForChiefTest(t, d, client, "ws-plugin", "sess-plugin", "fixture", true)
+	spawnForChiefTest(t, d, client, "sess-plugin", "fixture", true)
 	expectSpawnResult(t, client, "sess-plugin", false)
 	if got := d.chiefForCaller(""); got != "" {
 		t.Fatalf("chief role holder = %q, want empty", got)
@@ -119,9 +104,9 @@ func TestCreateAsChiefRolledBackOnSpawnFailure(t *testing.T) {
 	d := NewForTesting(filepath.Join(t.TempDir(), "test.sock"))
 	t.Cleanup(func() { _ = d.store.Close() })
 	d.ptyBackend = &failingSpawnBackend{err: errors.New("boom")}
-	client := newWorkspaceProtocolTestClient()
+	client := newProtocolTestClient()
 
-	spawnForChiefTest(t, d, client, "ws-fail", "sess-fail", string(protocol.SessionAgentClaude), true)
+	spawnForChiefTest(t, d, client, "sess-fail", string(protocol.SessionAgentClaude), true)
 	expectSpawnResult(t, client, "sess-fail", false)
 
 	if got := d.chiefForCaller(""); got != "" {

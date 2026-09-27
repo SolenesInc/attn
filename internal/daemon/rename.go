@@ -57,30 +57,6 @@ func (d *Daemon) renameSession(msg *protocol.RenameSessionMessage) error {
 	return nil
 }
 
-func (d *Daemon) handleRenameWorkspace(client *wsClient, msg *protocol.RenameWorkspaceMessage) {
-	workspaceID := strings.TrimSpace(msg.WorkspaceID)
-	title := strings.TrimSpace(msg.Title)
-	if workspaceID == "" {
-		d.sendRenameResult(client, protocol.CmdRenameWorkspace, workspaceID, fmt.Errorf("missing workspace_id"))
-		return
-	}
-	if title == "" {
-		d.sendRenameResult(client, protocol.CmdRenameWorkspace, workspaceID, fmt.Errorf("name cannot be empty"))
-		return
-	}
-	if d.workspaces == nil {
-		d.sendRenameResult(client, protocol.CmdRenameWorkspace, workspaceID, fmt.Errorf("workspace registry unavailable"))
-		return
-	}
-	if _, ok := d.workspaces.rename(workspaceID, title); !ok {
-		d.sendRenameResult(client, protocol.CmdRenameWorkspace, workspaceID, fmt.Errorf("workspace not found: %s", workspaceID))
-		return
-	}
-	d.store.UpdateWorkspaceTitle(workspaceID, title)
-	d.publishFact(FactWorkspaceRenamed, workspaceID, nil)
-	d.sendRenameResult(client, protocol.CmdRenameWorkspace, workspaceID, nil)
-}
-
 func (d *Daemon) sendRenameResult(client *wsClient, cmd, id string, err error) {
 	result := protocol.RenameResultMessage{
 		Event:   protocol.EventRenameResult,

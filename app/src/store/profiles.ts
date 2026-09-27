@@ -26,6 +26,23 @@ export interface TileSelection {
   tileId: string;
 }
 
+export function currentDesktopIn(state: Pick<ProfilesState, 'desktops' | 'currentDesktopId'>): Desktop | null {
+  return state.desktops.find((desktop) => desktop.id === state.currentDesktopId) ?? null;
+}
+
+export function currentDesktopArrived(): Promise<Desktop> {
+  const now = currentDesktopIn(useProfilesStore.getState());
+  if (now) return Promise.resolve(now);
+  return new Promise((resolve) => {
+    const unsubscribe = useProfilesStore.subscribe((state) => {
+      const desktop = currentDesktopIn(state);
+      if (!desktop) return;
+      unsubscribe();
+      resolve(desktop);
+    });
+  });
+}
+
 export function selectedTile(state: Pick<ProfilesState, 'desktops' | 'currentDesktopId'>): TileSelection | null {
   const desktop = state.desktops.find((entry) => entry.id === state.currentDesktopId);
   const leafId = desktop?.active_pane_id;

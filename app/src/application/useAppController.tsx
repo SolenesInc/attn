@@ -42,7 +42,6 @@ import { openPalette, switchPalette, type PaletteMode } from '../components/pale
 
 export function useAppController({
   daemonSessions,
-  daemonWorkspaces,
   prs,
   daemonEndpoints,
   daemonPlugins,
@@ -197,7 +196,6 @@ export function useAppController({
 
   const sessionLaunch = useSessionLaunch({
     settings,
-    daemonSessions,
     daemonEndpoints,
     sessions,
     activeSessionId,
@@ -206,7 +204,7 @@ export function useAppController({
   });
   const {
     sessionCreationJob,
-    createWorkspaceSession,
+    launchAgent,
     createSessionForUiAutomation,
     locationPickerOpen,
     handleNewSession,
@@ -214,7 +212,7 @@ export function useAppController({
     chooseReopenDirectory,
   } = sessionLaunch;
 
-  const prLauncher = usePRLauncher({ settings, createWorkspaceSession, selectCreatedSession });
+  const prLauncher = usePRLauncher({ settings, launchAgent, selectCreatedSession });
   const { openPRLauncherJob, handleRefreshPRs } = prLauncher;
 
   const appAppearance = useAppAppearance({ settings });
@@ -270,7 +268,7 @@ export function useAppController({
   const { seeds } = useDaemonStore();
   const agentAvailability = useMemo(() => getAgentAvailability(settings), [settings]);
 
-  useAppDeepLinks({ selectAgent, createWorkspaceSession, selectCreatedSession });
+  useAppDeepLinks({ selectAgent, launchAgent, selectCreatedSession });
 
   const onReopened = useCallback(() => setSessionsOpen(false), [setSessionsOpen]);
   const sessionLifecycle = useSessionLifecycle({
@@ -651,7 +649,6 @@ export function useAppController({
   return {
     inputs: {
       daemonSessions,
-      daemonWorkspaces,
       prs,
       daemonEndpoints,
       daemonPlugins,

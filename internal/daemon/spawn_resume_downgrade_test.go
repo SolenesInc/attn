@@ -132,7 +132,6 @@ func TestSpawnResumePickerIgnoresGardenReceipt(t *testing.T) {
 
 	const sessionID = "attn-picker-with-garden-receipt"
 	cwd := t.TempDir()
-	addTestWorkspace(d, "workspace-picker", cwd)
 	if err := d.recordGardenDispatch(sessionID, "", "", cwd, "claude", false); err != nil {
 		t.Fatal(err)
 	}
@@ -168,14 +167,12 @@ func TestSpawnReviveReentersLaunchLifecycle(t *testing.T) {
 	d := NewForTesting(filepath.Join(t.TempDir(), "test.sock"))
 	d.ptyBackend = &fakeSpawnBackend{}
 	cwd := t.TempDir()
-	addTestWorkspace(d, "workspace", cwd)
 	now := string(protocol.TimestampNow())
 	d.store.Add(&protocol.Session{
 		ID:             "recoverable",
 		Label:          "recoverable",
 		Agent:          protocol.SessionAgentClaude,
 		Directory:      cwd,
-		WorkspaceID:    "workspace",
 		ProfileID:      defaultProfileID(t, d.store),
 		State:          protocol.SessionStateRecoverable,
 		StateSince:     now,

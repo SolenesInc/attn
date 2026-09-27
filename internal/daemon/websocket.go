@@ -18,7 +18,6 @@ import (
 
 	"github.com/victorarias/attn/internal/buildinfo"
 	"github.com/victorarias/attn/internal/config"
-	"github.com/victorarias/attn/internal/layouttree"
 	"github.com/victorarias/attn/internal/protocol"
 	"github.com/victorarias/attn/internal/ptybackend"
 )
@@ -47,11 +46,8 @@ type wsClient struct {
 
 	docSubscriptions clientDocSubscriptions
 
-	tileContentSubscriptions map[string]struct{}
-	tileContentPending       map[string]time.Time
-	tileContentMu            sync.RWMutex
-
 	admitted          sync.Once
+	saidHello         bool
 	clientKind        string
 	clientVersion     string
 	clientID          string
@@ -115,13 +111,16 @@ func (c *wsClient) updateReadLimit() {
 	}
 }
 
-func (c *wsClient) speaksWorkspaceProtocol() bool {
-	return c.HasCapability(protocol.CapabilityWorkspaceSessions)
+func (c *wsClient) hasSaidHello() bool {
+	c.identityMu.RLock()
+	defer c.identityMu.RUnlock()
+	return c.saidHello
 }
 
 func (c *wsClient) setIdentity(kind, version string, caps []string) {
 	c.identityMu.Lock()
 	defer c.identityMu.Unlock()
+	c.saidHello = true
 	c.clientKind = kind
 	c.clientVersion = version
 	c.capabilities = make(map[string]struct{}, len(caps))
@@ -770,7 +769,6 @@ func (d *Daemon) sendInitialState(client *wsClient) {
 		HomeDaemonID:           protocol.Ptr(homeDaemonID),
 		Sessions:               state.Sessions,
 		Endpoints:              state.Endpoints,
-		Workspaces:             state.Workspaces,
 		Prs:                    state.Prs,
 		Repos:                  state.Repos,
 		Authors:                state.Authors,
@@ -971,8 +969,8 @@ func (d *Daemon) handleClientMessage(client *wsClient, data []byte) {
 	if shouldLogWSCommand(cmd) {
 		d.logf("WebSocket parsed cmd: %s", cmd)
 	}
-	if cmd != protocol.CmdClientHello && !client.speaksWorkspaceProtocol() {
-		errMsg := fmt.Sprintf("client must send client_hello with %q capability", protocol.CapabilityWorkspaceSessions)
+	if cmd != protocol.CmdClientHello && !client.hasSaidHello() {
+		errMsg := "client must send client_hello first"
 		d.logf("rejecting websocket command %s: %s", cmd, errMsg)
 		d.sendCommandError(client, cmd, errMsg)
 		if client.conn != nil {
@@ -1363,18 +1361,6 @@ func (d *Daemon) handleClientMessage(client *wsClient, data []byte) {
 		d.handleSetTerminalTheme(client, msg.(*protocol.SetTerminalThemeMessage))
 	case protocol.CmdSetClientPresence:
 		d.handleSetClientPresence(client, msg.(*protocol.SetClientPresenceMessage))
-	case protocol.CmdWorkspaceLayoutGet:
-		d.handleWorkspaceLayoutGet(client, msg.(*protocol.WorkspaceLayoutGetMessage))
-	case protocol.CmdWorkspaceLayoutAddSessionPane:
-		d.handleWorkspaceLayoutAddSessionPane(client, msg.(*protocol.WorkspaceLayoutAddSessionPaneMessage))
-	case protocol.CmdWorkspaceLayoutClosePane:
-		d.handleWorkspaceLayoutClosePane(client, msg.(*protocol.WorkspaceLayoutClosePaneMessage))
-	case protocol.CmdWorkspaceLayoutFocusPane:
-		d.handleWorkspaceLayoutFocusPane(client, msg.(*protocol.WorkspaceLayoutFocusPaneMessage))
-	case protocol.CmdWorkspaceLayoutRenamePane:
-		d.handleWorkspaceLayoutRenamePane(client, msg.(*protocol.WorkspaceLayoutRenamePaneMessage))
-	case protocol.CmdWorkspaceLayoutSetSplitRatio:
-		d.handleWorkspaceLayoutSetSplitRatio(client, msg.(*protocol.WorkspaceLayoutSetSplitRatioMessage))
 	case protocol.CmdAppViewCrash:
 		d.handleAppViewCrash(client, msg.(*protocol.AppViewCrashMessage))
 	case protocol.CmdAppCommand:
@@ -1383,22 +1369,6 @@ func (d *Daemon) handleClientMessage(client *wsClient, data []byte) {
 		d.handleDocSubscribeWS(client, msg.(*protocol.DocSubscribeMessage))
 	case protocol.CmdDocUnsubscribe:
 		d.handleDocUnsubscribeWS(client, msg.(*protocol.DocUnsubscribeMessage))
-	case protocol.CmdWorkspaceLayoutDockTile:
-		d.handleWorkspaceLayoutDockTile(client, msg.(*protocol.WorkspaceLayoutDockTileMessage))
-	case protocol.CmdWorkspaceLayoutUndockTile:
-		d.handleWorkspaceLayoutUndockTile(client, msg.(*protocol.WorkspaceLayoutUndockTileMessage))
-	case protocol.CmdWorkspaceLayoutUpdateTile:
-		d.handleWorkspaceLayoutUpdateTile(client, msg.(*protocol.WorkspaceLayoutUpdateTileMessage))
-	case protocol.CmdWorkspaceLayoutMoveLeaf:
-		d.handleWorkspaceLayoutMoveLeaf(client, msg.(*protocol.WorkspaceLayoutMoveLeafMessage))
-	case protocol.CmdWorkspaceLayoutMoveLeafToWorkspace:
-		d.handleWorkspaceLayoutMoveLeafToWorkspace(client, msg.(*protocol.WorkspaceLayoutMoveLeafToWorkspaceMessage))
-	case protocol.CmdWorkspaceLayoutMoveLeafToNewWorkspace:
-		d.handleWorkspaceLayoutMoveLeafToNewWorkspace(client, msg.(*protocol.WorkspaceLayoutMoveLeafToNewWorkspaceMessage))
-	case protocol.CmdSetWorkspaceRank:
-		d.handleSetWorkspaceRank(client, msg.(*protocol.SetWorkspaceRankMessage))
-	case protocol.CmdWorkspaceTileContentGet:
-		d.handleWorkspaceTileContentGet(client, msg.(*protocol.WorkspaceTileContentGetMessage))
 	case protocol.CmdOpenMarkdown:
 		d.handleOpenMarkdownWS(client, msg.(*protocol.OpenMarkdownMessage))
 	case protocol.CmdOpenSeed:
@@ -1431,14 +1401,8 @@ func (d *Daemon) handleClientMessage(client *wsClient, data []byte) {
 		go d.handleRemoteBrowserControl(client, msg.(*protocol.BrowserControlMessage))
 	case protocol.CmdBrowserControlResult:
 		d.handleBrowserControlResult(client, msg.(*protocol.BrowserControlResultMessage))
-	case protocol.CmdRegisterWorkspace:
-		d.handleRegisterWorkspace(client, msg.(*protocol.RegisterWorkspaceMessage))
-	case protocol.CmdUnregisterWorkspace:
-		d.handleUnregisterWorkspace(client, msg.(*protocol.UnregisterWorkspaceMessage))
 	case protocol.CmdRenameSession:
 		d.handleRenameSession(client, msg.(*protocol.RenameSessionMessage))
-	case protocol.CmdRenameWorkspace:
-		d.handleRenameWorkspace(client, msg.(*protocol.RenameWorkspaceMessage))
 	case protocol.CmdSetChiefOfStaff:
 		d.handleSetChiefOfStaff(client, msg.(*protocol.SetChiefOfStaffMessage))
 	default:
@@ -1468,31 +1432,6 @@ func (d *Daemon) tryHandleRemoteWSCommand(client *wsClient, cmd string, msg inte
 		if err := d.hubManager.ForwardPTYCommand(context.Background(), ptyTargetID, raw); err != nil {
 			if cmd == protocol.CmdAttachSession {
 				client.clearRemoteAttach(ptyTargetID)
-			}
-			d.sendCommandError(client, cmd, err.Error())
-			return true
-		}
-		return true
-	}
-
-	if workspaceID := remoteCommandWorkspaceID(cmd, msg); workspaceID != "" {
-		endpointID, ok := d.hubManager.EndpointIDForWorkspace(workspaceID)
-		if !ok {
-			return false
-		}
-		if cmd == protocol.CmdWorkspaceTileContentGet {
-			if typed, ok := msg.(*protocol.WorkspaceTileContentGetMessage); ok {
-				if !client.notePendingTileContent(typed.WorkspaceID, typed.TileID) {
-					d.sendCommandError(client, cmd, "too many pending tile content requests")
-					return true
-				}
-			}
-		}
-		if err := d.hubManager.ForwardEndpointCommand(context.Background(), endpointID, raw); err != nil {
-			if cmd == protocol.CmdWorkspaceTileContentGet {
-				if typed, ok := msg.(*protocol.WorkspaceTileContentGetMessage); ok {
-					client.cancelPendingTileContent(typed.WorkspaceID, typed.TileID)
-				}
 			}
 			d.sendCommandError(client, cmd, err.Error())
 			return true
@@ -1651,93 +1590,6 @@ func remoteCommandSessionID(cmd string, msg interface{}) string {
 	return ""
 }
 
-func remoteCommandWorkspaceID(cmd string, msg interface{}) string {
-	switch cmd {
-	case protocol.CmdWorkspaceLayoutGet:
-		if typed, ok := msg.(*protocol.WorkspaceLayoutGetMessage); ok {
-			return typed.WorkspaceID
-		}
-	case protocol.CmdWorkspaceLayoutAddSessionPane:
-		if typed, ok := msg.(*protocol.WorkspaceLayoutAddSessionPaneMessage); ok {
-			return typed.WorkspaceID
-		}
-	case protocol.CmdWorkspaceLayoutClosePane:
-		if typed, ok := msg.(*protocol.WorkspaceLayoutClosePaneMessage); ok {
-			return typed.WorkspaceID
-		}
-	case protocol.CmdWorkspaceLayoutFocusPane:
-		if typed, ok := msg.(*protocol.WorkspaceLayoutFocusPaneMessage); ok {
-			return typed.WorkspaceID
-		}
-	case protocol.CmdWorkspaceLayoutRenamePane:
-		if typed, ok := msg.(*protocol.WorkspaceLayoutRenamePaneMessage); ok {
-			return typed.WorkspaceID
-		}
-	case protocol.CmdWorkspaceLayoutSetSplitRatio:
-		if typed, ok := msg.(*protocol.WorkspaceLayoutSetSplitRatioMessage); ok {
-			return typed.WorkspaceID
-		}
-	case protocol.CmdWorkspaceLayoutDockTile:
-		if typed, ok := msg.(*protocol.WorkspaceLayoutDockTileMessage); ok {
-			return typed.WorkspaceID
-		}
-	case protocol.CmdWorkspaceLayoutUndockTile:
-		if typed, ok := msg.(*protocol.WorkspaceLayoutUndockTileMessage); ok {
-			return typed.WorkspaceID
-		}
-	case protocol.CmdWorkspaceLayoutUpdateTile:
-		if typed, ok := msg.(*protocol.WorkspaceLayoutUpdateTileMessage); ok {
-			return typed.WorkspaceID
-		}
-	case protocol.CmdWorkspaceLayoutMoveLeaf:
-		if typed, ok := msg.(*protocol.WorkspaceLayoutMoveLeafMessage); ok {
-			return typed.WorkspaceID
-		}
-	case protocol.CmdWorkspaceLayoutMoveLeafToWorkspace:
-		if typed, ok := msg.(*protocol.WorkspaceLayoutMoveLeafToWorkspaceMessage); ok {
-			return typed.SourceWorkspaceID
-		}
-	case protocol.CmdWorkspaceLayoutMoveLeafToNewWorkspace:
-		if typed, ok := msg.(*protocol.WorkspaceLayoutMoveLeafToNewWorkspaceMessage); ok {
-			return typed.SourceWorkspaceID
-		}
-	case protocol.CmdSetWorkspaceRank:
-		if typed, ok := msg.(*protocol.SetWorkspaceRankMessage); ok {
-			return typed.WorkspaceID
-		}
-	case protocol.CmdWorkspaceTileContentGet:
-		if typed, ok := msg.(*protocol.WorkspaceTileContentGetMessage); ok {
-			return typed.WorkspaceID
-		}
-	case protocol.CmdMarkdownAnnotationsGet:
-		if typed, ok := msg.(*protocol.MarkdownAnnotationsGetMessage); ok {
-			if typed.SourceKind != annotationSourceFile {
-				return ""
-			}
-			return protocol.Deref(typed.WorkspaceID)
-		}
-	case protocol.CmdMarkdownAnnotationsSave:
-		if typed, ok := msg.(*protocol.MarkdownAnnotationsSaveMessage); ok {
-			if typed.SourceKind != annotationSourceFile {
-				return ""
-			}
-			return protocol.Deref(typed.WorkspaceID)
-		}
-	case protocol.CmdMarkdownAnnotationsClear:
-		if typed, ok := msg.(*protocol.MarkdownAnnotationsClearMessage); ok {
-			if typed.SourceKind != annotationSourceFile {
-				return ""
-			}
-			return protocol.Deref(typed.WorkspaceID)
-		}
-	case protocol.CmdRenameWorkspace:
-		if typed, ok := msg.(*protocol.RenameWorkspaceMessage); ok {
-			return typed.WorkspaceID
-		}
-	}
-	return ""
-}
-
 func remoteCommandEndpointID(cmd string, msg interface{}) string {
 	switch cmd {
 	case protocol.CmdSupportSnapshot:
@@ -1758,10 +1610,6 @@ func remoteCommandEndpointID(cmd string, msg interface{}) string {
 		}
 	case protocol.CmdSpawnSession:
 		if typed, ok := msg.(*protocol.SpawnSessionMessage); ok {
-			return strings.TrimSpace(protocol.Deref(typed.EndpointID))
-		}
-	case protocol.CmdRegisterWorkspace:
-		if typed, ok := msg.(*protocol.RegisterWorkspaceMessage); ok {
 			return strings.TrimSpace(protocol.Deref(typed.EndpointID))
 		}
 	case protocol.CmdCreateWorktree:
@@ -1898,11 +1746,9 @@ func (d *Daemon) broadcastRawWSMessage(payload []byte) {
 		return
 	}
 	var envelope struct {
-		Event       string `json:"event"`
-		ID          string `json:"id"`
-		Success     bool   `json:"success"`
-		WorkspaceID string `json:"workspace_id"`
-		TileID      string `json:"tile_id"`
+		Event   string `json:"event"`
+		ID      string `json:"id"`
+		Success bool   `json:"success"`
 	}
 	if err := json.Unmarshal(payload, &envelope); err != nil {
 		d.wsHub.BroadcastRawText(payload)
@@ -1928,31 +1774,6 @@ func (d *Daemon) broadcastRawWSMessage(payload []byte) {
 			return client.wantsRemoteAttachTraffic(envelope.ID)
 		})
 		return
-	case protocol.EventWorkspaceTileContent:
-		if strings.TrimSpace(envelope.WorkspaceID) == "" || strings.TrimSpace(envelope.TileID) == "" {
-			d.logf("dropping malformed relayed tile content event")
-			return
-		}
-		d.wsHub.SendRawTextToMatchingClients(payload, func(client *wsClient) bool {
-			return client.resolvePendingTileContent(envelope.WorkspaceID, envelope.TileID)
-		})
-		return
-	case protocol.EventWorkspaceLayout, protocol.EventWorkspaceLayoutUpdated:
-		var msg struct {
-			WorkspaceLayout *protocol.WorkspaceLayout `json:"workspace_layout"`
-		}
-		if err := json.Unmarshal(payload, &msg); err == nil && msg.WorkspaceLayout != nil {
-			if layout, err := layouttree.DecodeLayout(msg.WorkspaceLayout.LayoutJson); err == nil {
-				d.pruneTileContentSubscriptionsForLayout(msg.WorkspaceLayout.WorkspaceID, &layout)
-			}
-		}
-	case protocol.EventWorkspaceUnregistered:
-		var msg struct {
-			Workspace *protocol.Workspace `json:"workspace"`
-		}
-		if err := json.Unmarshal(payload, &msg); err == nil && msg.Workspace != nil {
-			d.pruneTileContentSubscriptionsForLayout(msg.Workspace.ID, nil)
-		}
 	case protocol.EventSessionExited:
 		if strings.TrimSpace(envelope.ID) != "" {
 			d.wsHub.ForEachClient(func(client *wsClient) {

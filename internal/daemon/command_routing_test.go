@@ -57,9 +57,9 @@ var commandsPredatingTheScopeGuard = map[string]bool{
 	"notebook_guide": true, "notebook_list": true, "notebook_read": true, "notebook_send_to_chief": true,
 	"notebook_write": true, "notification_list": true, "notification_mark_read": true, "open_browser": true,
 	"present_close": true, "present_feedback": true, "present_open": true,
-	"recent_files": true, "register_workspace": true, "set_endpoint_remote_web": true, "task_list": true,
+	"recent_files": true, "set_endpoint_remote_web": true, "task_list": true,
 	"task_retry": true, "ticket_comment": true, "ticket_list": true, "ticket_show": true, "ticket_subscribe": true,
-	"ticket_take": true, "ticket_unsubscribe": true, "unregister_workspace": true, "workflow_call_upsert": true,
+	"ticket_take": true, "ticket_unsubscribe": true, "workflow_call_upsert": true,
 	"workflow_run_cancel": true, "workflow_run_get": true, "workflow_run_list": true, "workflow_run_upsert": true,
 }
 
@@ -129,16 +129,21 @@ var sessionCommandsAnsweredWhereTheyLand = map[string]string{
 
 	protocol.CmdTicketAttach:   "the ticket board is the hub's own store",
 	protocol.CmdBrowserControl: "handleRemoteBrowserControl resolves the browser host itself",
+
+	protocol.CmdMarkdownAnnotationsGet:   markdownDraftsLiveWithTheClientsDaemon,
+	protocol.CmdMarkdownAnnotationsSave:  markdownDraftsLiveWithTheClientsDaemon,
+	protocol.CmdMarkdownAnnotationsClear: markdownDraftsLiveWithTheClientsDaemon,
 }
+
+const markdownDraftsLiveWithTheClientsDaemon = "markdown drafts are keyed by the document path on the daemon the client talks to"
 
 func routingProbe(wire string) []byte {
 	return []byte(`{"cmd":"` + wire + `","id":"probe","session_id":"probe","target_session_id":"probe",` +
-		`"workspace_id":"probe","source_workspace_id":"probe","source_kind":"file","endpoint_id":"probe","directory":"/probe"}`)
+		`"source_kind":"file","endpoint_id":"probe","directory":"/probe"}`)
 }
 
 func routedByAnyRouter(wire string, msg interface{}) bool {
 	return remoteCommandSessionID(wire, msg) != "" ||
-		remoteCommandWorkspaceID(wire, msg) != "" ||
 		remoteCommandPTYTargetID(wire, msg) != ""
 }
 
@@ -169,7 +174,7 @@ func TestSessionScopedCommandsReachTheSessionOwner(t *testing.T) {
 	if len(unrouted) > 0 {
 		t.Fatalf("%d session-scoped command(s) are answered by whichever daemon receives them, so a hub "+
 			"answers them against its own store for a session it does not own:\n  %v\n"+
-			"Add each to remoteCommandSessionID (or the workspace/PTY router that fits), or to "+
+			"Add each to remoteCommandSessionID (or the PTY router, when it addresses a runtime), or to "+
 			"sessionCommandsAnsweredWhereTheyLand with the reason it is safe.", len(unrouted), unrouted)
 	}
 }

@@ -39,9 +39,10 @@ function legacyWorkspacesSql(fixtureDir) {
     'DELETE FROM desktops;',
     'DELETE FROM profiles;',
     'DELETE FROM profile_migration;',
-    'DELETE FROM workspace_layout_panes;',
-    'DELETE FROM workspace_layouts;',
-    'DELETE FROM workspaces;',
+    'ALTER TABLE sessions ADD COLUMN workspace_id TEXT;',
+    "CREATE TABLE workspaces (id TEXT PRIMARY KEY, title TEXT NOT NULL, directory TEXT NOT NULL, created_at TEXT NOT NULL, muted INTEGER NOT NULL DEFAULT 0, rank TEXT NOT NULL DEFAULT '', pinned INTEGER NOT NULL DEFAULT 0);",
+    'CREATE TABLE workspace_layouts (workspace_id TEXT PRIMARY KEY, active_pane_id TEXT NOT NULL, layout_json TEXT NOT NULL, updated_at TEXT NOT NULL);',
+    "CREATE TABLE workspace_layout_panes (workspace_id TEXT NOT NULL, pane_id TEXT NOT NULL, runtime_id TEXT NOT NULL DEFAULT '', session_id TEXT, kind TEXT NOT NULL, title TEXT NOT NULL, created_at TEXT NOT NULL, updated_at TEXT NOT NULL, status TEXT NOT NULL DEFAULT 'ready', error TEXT NOT NULL DEFAULT '', PRIMARY KEY (workspace_id, pane_id));",
     "UPDATE sessions SET profile_id = '';",
     `DELETE FROM sessions WHERE id IN (${LEGACY_WORKSPACES.flatMap((_, offset) => agentsOf(offset + 1)).map(sql).join(', ')});`,
   ];

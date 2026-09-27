@@ -21,7 +21,7 @@ func callAgentPeek(t *testing.T, d *Daemon, target string) protocol.Response {
 	})
 }
 
-func TestHandleAgentPeekReturnsStateTodosWorkspaceAndLastMessage(t *testing.T) {
+func TestHandleAgentPeekReturnsStateTodosProfileAndLastMessage(t *testing.T) {
 	codexHome := t.TempDir()
 	t.Setenv("CODEX_HOME", codexHome)
 	transcriptDir := filepath.Join(codexHome, "sessions", "2026", "08", "10")
@@ -39,7 +39,7 @@ func TestHandleAgentPeekReturnsStateTodosWorkspaceAndLastMessage(t *testing.T) {
 	}
 
 	d := NewForTesting(filepath.Join(t.TempDir(), "attn.sock"))
-	workspaceID := addCharacterizationSession(t, d, "peek-target", protocol.SessionAgentCodex, protocol.SessionStateWorking)
+	addCharacterizationSession(t, d, "peek-target", protocol.SessionAgentCodex, protocol.SessionStateWorking)
 	d.store.UpdateTodos("peek-target", []string{"[✓] read the plan", "[→] build peek"})
 	if changed, err := d.store.TransitionSessionConversation("peek-target", "native-peek", path); err != nil || !changed {
 		t.Fatalf("seed binding: changed=%v err=%v", changed, err)
@@ -56,8 +56,8 @@ func TestHandleAgentPeekReturnsStateTodosWorkspaceAndLastMessage(t *testing.T) {
 	if len(result.Todos) != 2 || result.Todos[1] != "[→] build peek" {
 		t.Fatalf("todos = %v", result.Todos)
 	}
-	if result.WorkspaceID != workspaceID {
-		t.Fatalf("workspace id = %q, want %q", result.WorkspaceID, workspaceID)
+	if got := protocol.Deref(result.ProfileName); got != "Default" {
+		t.Fatalf("profile name = %q, want Default", got)
 	}
 	if protocol.Deref(result.LastAssistantMessage) != "latest answer" {
 		t.Fatalf("last assistant message = %q", protocol.Deref(result.LastAssistantMessage))
@@ -206,7 +206,7 @@ func TestHandleAgentPeekServesTheScreenKeptWhenTheProcessExited(t *testing.T) {
 	backend.screenUnavailable = false
 	backend.spawnErr = errors.New("pty spawn refused")
 	backend.mu.Unlock()
-	client := newWorkspaceProtocolTestClient()
+	client := newProtocolTestClient()
 	respawn := &protocol.SpawnSessionMessage{
 		Cmd: protocol.CmdSpawnSession, ID: sessionID, Cwd: cwd, ProfileID: defaultProfileID(t, d.store),
 		Agent: protocol.AgentShellValue, Cols: 80, Rows: 24, Label: protocol.Ptr("Source"),

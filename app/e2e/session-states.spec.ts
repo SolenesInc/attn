@@ -5,20 +5,18 @@ async function injectLocalSession(
   session: { id: string; label: string; state: string; cwd?: string }
 ) {
   await page.evaluate((s) => {
-    const workspaceId = `workspace-${s.id}`;
     window.__TEST_INJECT_SESSION?.({
       id: s.id,
       label: s.label,
       state: s.state as 'working' | 'waiting_input' | 'idle',
       cwd: s.cwd || '/tmp/test',
-      workspaceId,
     });
   }, session);
 }
 
 async function createSession(
   page: import('@playwright/test').Page,
-  daemon: { injectSession: (s: { id: string; label: string; state: string; directory?: string; workspace_id?: string }) => Promise<void> },
+  daemon: { injectSession: (s: { id: string; label: string; state: string; directory?: string }) => Promise<void> },
   session: { id: string; label: string; state: string; cwd?: string }
 ) {
   const cwd = session.cwd || '/tmp/test';
@@ -30,7 +28,6 @@ async function createSession(
     label: session.label,
     state: session.state,
     directory: cwd,
-    workspace_id: `workspace-${session.id}`,
   });
 }
 

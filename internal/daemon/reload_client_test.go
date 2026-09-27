@@ -20,14 +20,12 @@ func newReloadClientTestDaemon(t *testing.T, intent *store.LaunchIntent) (*Daemo
 	backend := &fakeSpawnBackend{}
 	d.ptyBackend = backend
 	cwd := t.TempDir()
-	addTestWorkspace(d, "workspace", cwd)
 	now := string(protocol.TimestampNow())
 	d.store.Add(&protocol.Session{
 		ID:             "session",
 		Label:          "session",
 		Agent:          protocol.SessionAgentClaude,
 		Directory:      cwd,
-		WorkspaceID:    "workspace",
 		ProfileID:      defaultProfileID(t, d.store),
 		State:          protocol.SessionStateIdle,
 		StateSince:     now,

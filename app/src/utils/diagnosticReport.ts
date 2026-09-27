@@ -126,7 +126,7 @@ const ALLOWED_DIAGNOSTIC_KEYS = new Set([
   'capturedAtUnixMs', 'cellHeight', 'cellWidth', 'cellsArrayLen', 'center', 'ch',
   'clientHeight', 'clientWidth', 'clipping', 'cols', 'command', 'commit', 'composing',
   'compositionEndedAt', 'compositionStartedAt', 'connected', 'counts', 'cw', 'daemonWriteMs',
-  'dataBytes', 'decodeCount', 'decodedBytes', 'decodeMs', 'delay', 'delayMs', 'display',
+  'dataBytes', 'decodeCount', 'decodedBytes', 'decodeMs', 'delay', 'delayMs', 'desktop', 'display',
   'documentFocused', 'dpr', 'droppedForRecordBudget', 'droppedOps', 'durationMs', 'event',
   'extraCols', 'extraRows', 'fingerprint', 'flooredCols', 'flooredRows', 'focus', 'force',
   'fromCols', 'fromRows', 'generation', 'hasMeasuredSize', 'height', 'initialStateReceived',
@@ -146,7 +146,7 @@ const ALLOWED_DIAGNOSTIC_KEYS = new Set([
   'success', 'syncActive', 'tag', 'terminalFocused', 'terminalWriteBytes', 'terminalWriteCallMs',
   'terminalWriteCount', 'toCols', 'toRows', 'transportReady', 'trigger', 'trusted', 'updatedAt',
   'version', 'view', 'visibility', 'visibilityState', 'visible', 'width', 'winInnerHeight',
-  'winInnerWidth', 'window', 'workspace', 'wsJsonParseMs', 'wsMessageBytes', 'wsMessageCount',
+  'winInnerWidth', 'window', 'wsJsonParseMs', 'wsMessageBytes', 'wsMessageCount',
   'x', 'y',
 ]);
 

@@ -10,7 +10,6 @@ export interface WorkspaceViewSession {
   id: string;
   label: string;
   workspaceId?: string;
-  workspace_id?: string;
   cwd?: string;
   directory?: string;
   endpointId?: string;

@@ -34,15 +34,11 @@ type legacyPaneRow struct {
 func newLegacyFixture(t *testing.T) *legacyFixture {
 	t.Helper()
 	path := filepath.Join(t.TempDir(), "attn.db")
-	db, err := OpenDB(path)
+	db, err := OpenDBAtSchemaVersion(path, ProfileConversionSchemaVersion-1)
 	if err != nil {
-		t.Fatalf("OpenDB: %v", err)
+		t.Fatalf("OpenDBAtSchemaVersion: %v", err)
 	}
 	f := &legacyFixture{t: t, path: path, db: db}
-	f.exec(`
-		DELETE FROM desktop_panes; DELETE FROM desktops; DELETE FROM profiles; DELETE FROM profile_migration;
-		UPDATE sessions SET profile_id = '';
-		DELETE FROM schema_migrations WHERE version >= ?;`, ProfileConversionSchemaVersion)
 	t.Cleanup(func() { f.db.Close() })
 	return f
 }
@@ -267,6 +263,23 @@ func TestConversionOfARealInstallKeepsEveryLiveAgentWhereItWas(t *testing.T) {
 	if err := s.db.QueryRow(`SELECT count(*) FROM sessions WHERE profile_id != ?`, profile.ID).Scan(&unstamped); err != nil || unstamped != 0 {
 		t.Fatalf("%d sessions (closed ones included) lack the Default profile (%v)", unstamped, err)
 	}
+	assertWorkspaceSchemaRetired(t, s.db)
+}
+
+func assertWorkspaceSchemaRetired(t *testing.T, db *sql.DB) {
+	t.Helper()
+	for _, table := range []string{"workspaces", "workspace_layouts", "workspace_layout_panes"} {
+		var count int
+		if err := db.QueryRow(`SELECT count(*) FROM sqlite_master WHERE name = ?`, table).Scan(&count); err != nil || count != 0 {
+			t.Fatalf("table %s still exists after the upgrade (%v)", table, err)
+		}
+	}
+	for _, retired := range retiredWorkspaceColumns {
+		var count int
+		if err := db.QueryRow(`SELECT count(*) FROM pragma_table_info(?) WHERE name = ?`, retired.table, retired.column).Scan(&count); err != nil || count != 0 {
+			t.Fatalf("column %s.%s still exists after the upgrade (%v)", retired.table, retired.column, err)
+		}
+	}
 }
 
 func TestConversionOfAFreshInstallCompletesWithOneEmptyDesktop(t *testing.T) {
@@ -279,6 +292,7 @@ func TestConversionOfAFreshInstallCompletesWithOneEmptyDesktop(t *testing.T) {
 	if err != nil || profile.Name != DefaultProfileName || len(desktops) != 1 || desktops[0].ShortcutSlot != 1 || !layouttree.LayoutEmpty(desktops[0].Tree) {
 		t.Fatalf("fresh arrangement = %+v %+v, %v; want Default with one empty desktop in slot 1", profile, desktops, err)
 	}
+	assertWorkspaceSchemaRetired(t, s.db)
 }
 
 func TestConversionFillsTheNineSlotsByRankAndKeepsTheRestAsExtras(t *testing.T) {

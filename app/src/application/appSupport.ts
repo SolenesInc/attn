@@ -8,7 +8,6 @@ import {
   DaemonPluginIssue,
   DaemonPR,
   DaemonSession,
-  DaemonWorkspace,
   SessionExitInfo,
 } from '../hooks/useDaemonSocket';
 import { type OpenPRProgress } from '../hooks/useOpenPR';
@@ -57,10 +56,6 @@ export interface SplitSessionOptions {
   label?: string;
   yoloMode?: boolean;
   autoMode?: boolean;
-}
-
-export function paneIdForSession(sessionId: string): string {
-  return `pane-${sessionId}`;
 }
 
 export interface GitHubReleaseResponse {
@@ -173,13 +168,11 @@ export type SessionCreationJob = {
   label: string;
   path: string;
   phase: SessionCreationPhase;
-  sessionId?: string;
   error?: string | null;
 };
 
 export interface AppContentProps {
   daemonSessions: DaemonSession[];
-  daemonWorkspaces: DaemonWorkspace[];
   prs: DaemonPR[];
   daemonEndpoints: DaemonEndpoint[];
   daemonPlugins: DaemonPlugin[];

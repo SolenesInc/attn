@@ -37,7 +37,7 @@ function renderHost(apps: AppRegistryEntry[], sendAppViewCrash = vi.fn()) {
       <AppTileHost
         app="reviewer"
         view="approvals"
-        workspaceId="ws-1"
+        desktopId="desktop-1"
         sessionId="sess-1"
         tileId="tile-7"
         params="t-42"
@@ -66,7 +66,7 @@ describe('a view that mounts', () => {
 
     await screen.findByText('approvals body');
     expect(seen[0]).toEqual({
-      workspaceId: 'ws-1',
+      desktopId: 'desktop-1',
       sessionId: 'sess-1',
       tileId: 'tile-7',
       params: 't-42',

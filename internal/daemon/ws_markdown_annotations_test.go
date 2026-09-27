@@ -18,9 +18,9 @@ func mdAnnotationsGet(t *testing.T, d *Daemon, requestID, path string) protocol.
 	t.Helper()
 	client := &wsClient{send: make(chan outboundMessage, 4)}
 	d.handleMarkdownAnnotationsGet(client, &protocol.MarkdownAnnotationsGetMessage{
-		Cmd: protocol.CmdMarkdownAnnotationsGet, DocumentUri: fileDocumentURI("workspace-test", strings.TrimSpace(path)),
-		SourceKind: annotationSourceFile, WorkspaceID: protocol.Ptr("workspace-test"),
-		Path: protocol.Ptr(path), RequestID: requestID,
+		Cmd: protocol.CmdMarkdownAnnotationsGet, DocumentUri: fileDocumentURI(strings.TrimSpace(path)),
+		SourceKind: annotationSourceFile,
+		Path:       protocol.Ptr(path), RequestID: requestID,
 	})
 	var msg protocol.MarkdownAnnotationsGetResultMessage
 	readNotebookWSEvent(t, client.send, &msg)
@@ -31,8 +31,8 @@ func mdAnnotationsSave(t *testing.T, d *Daemon, requestID, path string, annotati
 	t.Helper()
 	client := &wsClient{send: make(chan outboundMessage, 4)}
 	d.handleMarkdownAnnotationsSave(client, &protocol.MarkdownAnnotationsSaveMessage{
-		Cmd: protocol.CmdMarkdownAnnotationsSave, DocumentUri: fileDocumentURI("workspace-test", strings.TrimSpace(path)),
-		SourceKind: annotationSourceFile, WorkspaceID: protocol.Ptr("workspace-test"),
+		Cmd: protocol.CmdMarkdownAnnotationsSave, DocumentUri: fileDocumentURI(strings.TrimSpace(path)),
+		SourceKind:  annotationSourceFile,
 		Path:        protocol.Ptr(path),
 		Annotations: annotations,
 		Generation:  generation,
@@ -47,8 +47,8 @@ func mdAnnotationsClear(t *testing.T, d *Daemon, requestID, path string, generat
 	t.Helper()
 	client := &wsClient{send: make(chan outboundMessage, 4)}
 	d.handleMarkdownAnnotationsClear(client, &protocol.MarkdownAnnotationsClearMessage{
-		Cmd: protocol.CmdMarkdownAnnotationsClear, DocumentUri: fileDocumentURI("workspace-test", strings.TrimSpace(path)),
-		SourceKind: annotationSourceFile, WorkspaceID: protocol.Ptr("workspace-test"),
+		Cmd: protocol.CmdMarkdownAnnotationsClear, DocumentUri: fileDocumentURI(strings.TrimSpace(path)),
+		SourceKind: annotationSourceFile,
 		Path:       protocol.Ptr(path),
 		Generation: generation,
 		RequestID:  requestID,

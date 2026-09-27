@@ -17,7 +17,6 @@ func TestParentSessionIDRoundTrips(t *testing.T) {
 		Label:           "shell",
 		Agent:           protocol.SessionAgentShell,
 		Directory:       "/tmp/shell",
-		WorkspaceID:     "ws-1",
 		State:           protocol.SessionStateIdle,
 		StateSince:      now,
 		StateUpdatedAt:  now,

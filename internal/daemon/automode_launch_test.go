@@ -140,7 +140,6 @@ func TestSpawnCarriesThePromotedAutoModeConfig(t *testing.T) {
 		respondPluginRequest(t, client, request, pluginDriverSpawnResult{Argv: []string{"snipe"}})
 	}()
 
-	addTestWorkspace(d, "workspace-snipe", t.TempDir())
 	ws := &wsClient{send: make(chan outboundMessage, 2), attachedStreams: make(map[string]ptybackend.Stream)}
 	d.handleSpawnSession(ws, &protocol.SpawnSessionMessage{
 		ID:        "snipe-session",
@@ -161,7 +160,6 @@ func TestReloadCarriesThePromotedAutoModeConfig(t *testing.T) {
 	}
 	d := newReloadTestDaemon(t, backend)
 	directory := t.TempDir()
-	addTestWorkspace(d, "ws-snipe-session", directory)
 	addReloadSessionAt(d, "snipe-session", protocol.SessionAgent("snipe"), protocol.SessionStateIdle, directory)
 	d.store.SetSetting(SettingNotebookRoot, t.TempDir())
 
@@ -243,7 +241,6 @@ func TestSpawnOmitsAutoModeForADriverThatDoesNotAskForIt(t *testing.T) {
 		respondPluginRequest(t, client, request, pluginDriverSpawnResult{Argv: []string{"snipe"}})
 	}()
 
-	addTestWorkspace(d, "workspace-snipe", t.TempDir())
 	ws := &wsClient{send: make(chan outboundMessage, 2), attachedStreams: make(map[string]ptybackend.Stream)}
 	d.handleSpawnSession(ws, &protocol.SpawnSessionMessage{
 		ID:        "snipe-session",
@@ -300,7 +297,6 @@ func TestSpawnAppliesThePerSessionAutoModeOverride(t *testing.T) {
 				respondPluginRequest(t, client, request, pluginDriverSpawnResult{Argv: []string{"snipe"}})
 			}()
 
-			addTestWorkspace(d, "workspace-snipe", t.TempDir())
 			ws := &wsClient{send: make(chan outboundMessage, 2), attachedStreams: make(map[string]ptybackend.Stream)}
 			d.handleSpawnSession(ws, &protocol.SpawnSessionMessage{
 				ID:        "snipe-session",
@@ -326,7 +322,7 @@ func TestSpawnAppliesThePerSessionAutoModeOverride(t *testing.T) {
 			if intent.AutoMode == nil || *intent.AutoMode != *tc.override {
 				t.Errorf("intent auto mode = %v, want %t", intent.AutoMode, *tc.override)
 			}
-			session := &protocol.Session{ID: "snipe-session", Directory: t.TempDir(), Agent: "snipe", WorkspaceID: "workspace-snipe", ProfileID: defaultProfileID(t, d.store)}
+			session := &protocol.Session{ID: "snipe-session", Directory: t.TempDir(), Agent: "snipe", ProfileID: defaultProfileID(t, d.store)}
 			revived, _ := buildStoredIntentSpawn(session, intent, 80, 24)
 			if revived.AutoMode == nil || *revived.AutoMode != *tc.override {
 				t.Errorf("revive spawn auto mode = %v, want %t", revived.AutoMode, *tc.override)
@@ -343,7 +339,6 @@ func TestReloadKeepsThePerSessionAutoModeOverride(t *testing.T) {
 	}
 	d := newReloadTestDaemon(t, backend)
 	directory := t.TempDir()
-	addTestWorkspace(d, "ws-snipe-session", directory)
 	addReloadSessionAt(d, "snipe-session", protocol.SessionAgent("snipe"), protocol.SessionStateIdle, directory)
 	d.store.SetSetting(SettingNotebookRoot, t.TempDir())
 	if _, err := d.store.SetAutoModeEnabledDefault(true, time.Now().UTC()); err != nil {
@@ -446,7 +441,6 @@ func TestSpawnDetectsTheSessionsRepository(t *testing.T) {
 		respondPluginRequest(t, client, request, pluginDriverSpawnResult{Argv: []string{"snipe"}})
 	}()
 
-	addTestWorkspace(d, "workspace-snipe", t.TempDir())
 	ws := &wsClient{send: make(chan outboundMessage, 2), attachedStreams: make(map[string]ptybackend.Stream)}
 	d.handleSpawnSession(ws, &protocol.SpawnSessionMessage{
 		ID:        "snipe-session",
@@ -504,7 +498,6 @@ func TestSpawnKeepsTheUsersTrustedRepoOverDetection(t *testing.T) {
 		respondPluginRequest(t, client, request, pluginDriverSpawnResult{Argv: []string{"snipe"}})
 	}()
 
-	addTestWorkspace(d, "workspace-snipe", t.TempDir())
 	ws := &wsClient{send: make(chan outboundMessage, 2), attachedStreams: make(map[string]ptybackend.Stream)}
 	d.handleSpawnSession(ws, &protocol.SpawnSessionMessage{
 		ID:        "snipe-session",

@@ -11,7 +11,7 @@ import { useSessionLaunch } from './useSessionLaunch';
 
 vi.mock('../pty/bridge', async (importOriginal) => ({
   ...(await importOriginal<typeof import('../pty/bridge')>()),
-  ptySpawn: vi.fn(async () => undefined),
+  ptySpawn: vi.fn(async () => ({})),
 }));
 
 function currentDesktop(panes: Array<[string, string]>, activePaneId: string): Desktop {
@@ -34,19 +34,22 @@ function currentDesktop(panes: Array<[string, string]>, activePaneId: string): D
   };
 }
 
-function renderLaunch(activeSessionId: string | null = null, methods: Parameters<typeof createMockDaemonApi>[0] = {}) {
+function renderLaunch(
+  activeSessionId: string | null = null,
+  methods: Parameters<typeof createMockDaemonApi>[0] = {},
+  showError: (message: string) => void = vi.fn(),
+) {
   const api = createMockDaemonApi(methods);
   const wrapper = ({ children }: { children: ReactNode }) => <DaemonApiProvider api={api}>{children}</DaemonApiProvider>;
   return renderHook(
     () =>
       useSessionLaunch({
         settings: {},
-        daemonSessions: [],
         daemonEndpoints: [],
         sessions: useSessionStore((state) => state.sessions),
         activeSessionId,
         selectCreatedSession: vi.fn(() => true),
-        showError: vi.fn(),
+        showError,
       }),
     { wrapper },
   );
@@ -59,7 +62,7 @@ describe('useSessionLaunch placement', () => {
   });
 
   it('starts a split beside the focused agent on the current desktop, in its directory', async () => {
-    await useSessionStore.getState().createSession('focused', '/repo/focused', 'agent-a', 'codex', undefined, false, undefined);
+    await useSessionStore.getState().createSession('focused', '/repo/focused', 'agent-a', 'codex', undefined, false);
     useProfilesStore.setState({
       selectedProfileId: 'profile-1',
       currentDesktopId: 'desktop-1',
@@ -124,8 +127,6 @@ describe('useSessionLaunch from the new-session picker', () => {
   it('launches a chief of staff into a new worktree when the picker asks for one', async () => {
     const { result } = renderLaunch(null, {
       sendCreateWorktree: vi.fn(async () => ({ success: true, path: '/repo/exsin--chief' })),
-      sendRegisterWorkspace: vi.fn(async () => undefined),
-      sendWorkspaceAddSessionPane: vi.fn(async () => ({ success: true })),
     });
 
     await act(async () => {
@@ -134,21 +135,46 @@ describe('useSessionLaunch from the new-session picker', () => {
     });
 
     const { args } = vi.mocked(ptySpawn).mock.calls[0][0];
-    expect(args).toMatchObject({ cwd: '/repo/exsin--chief', chief_of_staff: true });
+    expect(args).toMatchObject({ cwd: '/repo/exsin--chief', chief_of_staff: true, placement: { desktop_id: 'desktop-1' } });
   });
 
-  it('launches a chief of staff when the picker asks for one', async () => {
-    const { result } = renderLaunch(null, {
-      sendRegisterWorkspace: vi.fn(async () => undefined),
-      sendWorkspaceAddSessionPane: vi.fn(async () => ({ success: true })),
-    });
+  it('launches a chief of staff on the current desktop when the picker asks for one', async () => {
+    const { result } = renderLaunch();
 
     await act(async () => {
       await result.current.handleLocationSelect('/repo/chief', 'shell', undefined, false, true);
     });
 
     const { args } = vi.mocked(ptySpawn).mock.calls[0][0];
-    expect(args).toMatchObject({ cwd: '/repo/chief', chief_of_staff: true });
+    expect(args).toMatchObject({ cwd: '/repo/chief', chief_of_staff: true, placement: { desktop_id: 'desktop-1' } });
+  });
+});
+
+describe('useSessionLaunch when the daemon cannot place the agent', () => {
+  beforeEach(() => {
+    vi.mocked(ptySpawn).mockClear();
+    useSessionStore.setState({ sessions: [], activeSessionId: null });
+    useProfilesStore.setState({
+      selectedProfileId: 'profile-1',
+      currentDesktopId: 'desktop-1',
+      desktops: [currentDesktop([], '')],
+    });
+  });
+
+  it('keeps the running agent and says once why it has no pane', async () => {
+    vi.mocked(ptySpawn).mockResolvedValueOnce({ placementError: 'desktop desktop-1 is gone' });
+    const showError = vi.fn();
+    const { result } = renderLaunch(null, {}, showError);
+
+    let sessionId: string | undefined;
+    await act(async () => {
+      sessionId = await result.current.launchAgent('plan', '/repo/plan', 'agent-plan', 'shell');
+    });
+
+    expect(sessionId).toBe('agent-plan');
+    expect(useSessionStore.getState().sessions.map((session) => session.id)).toEqual(['agent-plan']);
+    expect(showError).toHaveBeenCalledTimes(1);
+    expect(showError).toHaveBeenCalledWith('plan started without a pane on this desktop: desktop desktop-1 is gone');
   });
 });
 
@@ -158,22 +184,42 @@ describe('useSessionLaunch on a remote endpoint', () => {
     useSessionStore.setState({ sessions: [], activeSessionId: null });
   });
 
-  it('sends no home desktop placement for an agent started on another daemon', async () => {
-    await useSessionStore.getState().createSession('focused', '/repo/focused', 'agent-a', 'codex', undefined, false, undefined);
+  it('refuses an agent on another daemon before spawning, naming the fence', async () => {
+    await useSessionStore.getState().createSession('focused', '/repo/focused', 'agent-a', 'codex', undefined, false);
     useProfilesStore.setState({
       selectedProfileId: 'profile-1',
       currentDesktopId: 'desktop-1',
       desktops: [currentDesktop([['pane-a', 'agent-a']], 'pane-a')],
     });
-    const { result } = renderLaunch();
+    const showError = vi.fn();
+    const { result } = renderLaunch(null, {}, showError);
 
     await act(async () => {
       await result.current.createSplitSession('codex', 'vertical', undefined, { cwd: '/remote/repo', endpointId: 'outpost-1' });
     });
 
-    const { args } = vi.mocked(ptySpawn).mock.calls[0][0];
-    expect(args.endpoint_id).toBe('outpost-1');
-    expect(args.placement).toBeUndefined();
+    expect(ptySpawn).not.toHaveBeenCalled();
+    expect(showError).toHaveBeenCalledWith(expect.stringContaining('remote endpoints are off'));
+    expect(useSessionStore.getState().sessions.map((session) => session.id)).toEqual(['agent-a']);
+  });
+
+  it('refuses a worktree launch before creating the worktree on the endpoint', async () => {
+    useProfilesStore.setState({
+      selectedProfileId: 'profile-1',
+      currentDesktopId: 'desktop-1',
+      desktops: [currentDesktop([], '')],
+    });
+    const sendCreateWorktree = vi.fn(async () => ({ success: true, path: '/remote/repo--feature' }));
+    const showError = vi.fn();
+    const { result } = renderLaunch(null, { sendCreateWorktree }, showError);
+
+    act(() => {
+      result.current.handleCreateWorktreeSession('/remote/repo', 'feature', 'main', 'outpost-1', 'codex', false);
+    });
+
+    expect(sendCreateWorktree).not.toHaveBeenCalled();
+    expect(showError).toHaveBeenCalledWith(expect.stringContaining('remote endpoints are off'));
+    expect(result.current.sessionCreationJob).toBeNull();
   });
 });
 
@@ -183,23 +229,23 @@ describe('useSessionLaunch from a remote agent', () => {
     useSessionStore.setState({ sessions: [], activeSessionId: null });
   });
 
-  it('splits beside the selected remote agent on its daemon, not beside the home focus', async () => {
-    await useSessionStore.getState().createSession('home', '/repo/home', 'agent-home', 'codex', undefined, false, undefined);
-    await useSessionStore.getState().createSession('remote', '/remote/repo', 'agent-remote', 'codex', 'outpost-1', false, undefined);
+  it('refuses to split a remote agent instead of leaving an unplaced session behind', async () => {
+    await useSessionStore.getState().createSession('home', '/repo/home', 'agent-home', 'codex', undefined, false);
+    await useSessionStore.getState().createSession('remote', '/remote/repo', 'agent-remote', 'codex', 'outpost-1', false);
     useProfilesStore.setState({
       selectedProfileId: 'profile-1',
       currentDesktopId: 'desktop-1',
       desktops: [currentDesktop([['pane-home', 'agent-home']], 'pane-home')],
     });
-    const { result } = renderLaunch('agent-remote');
+    const showError = vi.fn();
+    const { result } = renderLaunch('agent-remote', {}, showError);
 
     await act(async () => {
       await result.current.createSplitSession('codex', 'vertical', 'pane-of-the-remote-agent');
     });
 
-    const { args } = vi.mocked(ptySpawn).mock.calls[0][0];
-    expect(args).toMatchObject({ cwd: '/remote/repo', endpoint_id: 'outpost-1', spawned_from: 'agent-remote' });
-    expect(args.placement).toBeUndefined();
+    expect(ptySpawn).not.toHaveBeenCalled();
+    expect(showError).toHaveBeenCalledWith(expect.stringContaining('remote endpoints are off'));
   });
 });
 

@@ -17,7 +17,7 @@ func respawnDelegatedSession(t *testing.T, d *Daemon, sessionID string) {
 	if session == nil {
 		t.Fatalf("session %s missing before respawn", sessionID)
 	}
-	client := newWorkspaceProtocolTestClient()
+	client := newProtocolTestClient()
 	d.handleSpawnSession(client, &protocol.SpawnSessionMessage{
 		Cmd:       protocol.CmdSpawnSession,
 		ID:        sessionID,

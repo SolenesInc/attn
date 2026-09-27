@@ -99,7 +99,7 @@ function Harness({
   apiRef: { current: UseAnnotationsApi | null };
 }) {
   const rootRef = useRef<HTMLDivElement>(null);
-  const documentSource = source ?? fileMarkdownSource('ws-test', path);
+  const documentSource = source ?? fileMarkdownSource(path);
   apiRef.current = useAnnotations({ rootRef, content, source: documentSource, enabled: true, transport });
   return (
     <div ref={rootRef}>

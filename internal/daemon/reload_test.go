@@ -251,7 +251,7 @@ func addReloadSessionAt(d *Daemon, id string, agent protocol.SessionAgent, state
 	now := string(protocol.TimestampNow())
 	d.store.Add(&protocol.Session{
 		ID: id, Label: id, Agent: agent, Directory: directory,
-		WorkspaceID: "ws-" + id, State: state, StateSince: now, StateUpdatedAt: now, LastSeen: now,
+		State: state, StateSince: now, StateUpdatedAt: now, LastSeen: now,
 		ProfileID: recentProfileID(d.store),
 	})
 }
@@ -535,7 +535,6 @@ func TestReloadSessionAgentRecomposesPluginChiefInstructionsBeforeKill(t *testin
 		},
 	}
 	d := newReloadTestDaemon(t, backend)
-	addTestWorkspace(d, "ws-plugin-chief", t.TempDir())
 	addReloadSession(d, "plugin-chief", protocol.SessionAgent("example"), protocol.SessionStateIdle)
 	d.store.SetSetting(SettingNotebookRoot, t.TempDir())
 	if err := setTestChief(d, "plugin-chief"); err != nil {
@@ -614,7 +613,6 @@ func TestReloadSessionAgentLeavesPluginWorkerAliveWhenResumeCannotBePrepared(t *
 		params:  ptybackend.SessionLaunchParams{Recorded: true},
 	}
 	d := newReloadTestDaemon(t, backend)
-	addTestWorkspace(d, "ws-plugin-chief", t.TempDir())
 	addReloadSession(d, "plugin-chief", protocol.SessionAgent("example"), protocol.SessionStateIdle)
 	d.store.SetSetting(SettingNotebookRoot, t.TempDir())
 	if err := setTestChief(d, "plugin-chief"); err != nil {
@@ -669,7 +667,6 @@ func TestSetChiefOfStaffRejectsPluginRoleChangeWhenResumePreflightFails(t *testi
 				params:  ptybackend.SessionLaunchParams{Recorded: true},
 			}
 			d := newReloadTestDaemon(t, backend)
-			addTestWorkspace(d, "ws-plugin-chief", t.TempDir())
 			addReloadSession(d, "plugin-chief", protocol.SessionAgent("example"), protocol.SessionStateIdle)
 			d.store.SetSetting(SettingNotebookRoot, t.TempDir())
 			if test.initialChief != "" {
@@ -961,7 +958,6 @@ func TestReloadSessionForClientResumesPluginWithoutLaunchInstructions(t *testing
 		params:  ptybackend.SessionLaunchParams{Recorded: true, Model: "provider/model"},
 	}
 	d := newReloadTestDaemon(t, backend)
-	addTestWorkspace(d, "ws-pi-session", t.TempDir())
 	addReloadSession(d, "pi-session", protocol.SessionAgent("pi"), protocol.SessionStateIdle)
 	if !d.store.BeginAgentDriverRun("pi-session", "pi-plugin", "run-old") {
 		t.Fatal("begin old plugin run")
@@ -1030,7 +1026,6 @@ func TestReloadSessionForClientRefusesPluginChiefWithoutLaunchInstructions(t *te
 		params:  ptybackend.SessionLaunchParams{Recorded: true},
 	}
 	d := newReloadTestDaemon(t, backend)
-	addTestWorkspace(d, "ws-pi-chief", t.TempDir())
 	addReloadSession(d, "pi-chief", protocol.SessionAgent("pi"), protocol.SessionStateIdle)
 	if err := setTestChief(d, "pi-chief"); err != nil {
 		t.Fatalf("assign chief role: %v", err)

@@ -7,6 +7,9 @@ import type {
   ProfilesChangedMessage,
 } from '../types/generated';
 import { useProfilesStore } from '../store/profiles';
+import { parseLayoutJSON } from '../types/workspace';
+import { recordLayout } from '../utils/terminalDiagnosticsLog';
+import { collectWorkspaceLayoutDiagnostics } from '../utils/workspaceDiagnostics';
 import { pendingRequestKey, type PendingRequests } from './daemonPendingRequests';
 
 export type ProfileActionResult = ProfileActionResultMessage;
@@ -56,6 +59,10 @@ export function handleProfileDaemonEvent(data: ProfileEvent, pending: PendingReq
       return true;
     case 'profile_arrangement_changed': {
       const message = data as ProfileArrangementChangedMessage;
+      for (const desktop of message.desktops ?? []) {
+        const layout = collectWorkspaceLayoutDiagnostics(parseLayoutJSON(desktop.tree_json));
+        recordLayout(desktop.id, layout.panes.map((pane) => pane.paneId), layout.splitCount);
+      }
       useProfilesStore.getState().arrangementArrived(message.profile, message.desktops ?? []);
       return true;
     }

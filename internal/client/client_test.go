@@ -187,7 +187,7 @@ func TestClient_Query(t *testing.T) {
 	}
 }
 
-func TestClient_ListIncludesWorkspaces(t *testing.T) {
+func TestClient_ListIncludesProfiles(t *testing.T) {
 	tmpDir, err := os.MkdirTemp("/tmp", "attn-client-")
 	if err != nil {
 		t.Fatalf("MkdirTemp error: %v", err)
@@ -216,8 +216,8 @@ func TestClient_ListIncludesWorkspaces(t *testing.T) {
 			Sessions: []protocol.Session{
 				{ID: "1", Label: "one", State: protocol.SessionStateWaitingInput},
 			},
-			Workspaces: []protocol.Workspace{
-				{ID: "workspace-empty", Title: "Empty", Directory: "/repo", Status: protocol.WorkspaceStatusIdle},
+			Profiles: []protocol.Profile{
+				{ID: "profile-default", Name: "Default"},
 			},
 		}
 		json.NewEncoder(conn).Encode(resp)
@@ -231,8 +231,8 @@ func TestClient_ListIncludesWorkspaces(t *testing.T) {
 	if len(result.Sessions) != 1 {
 		t.Fatalf("sessions = %d, want 1", len(result.Sessions))
 	}
-	if len(result.Workspaces) != 1 || result.Workspaces[0].ID != "workspace-empty" {
-		t.Fatalf("workspaces = %+v, want the empty workspace", result.Workspaces)
+	if len(result.Profiles) != 1 || result.Profiles[0].Name != "Default" {
+		t.Fatalf("profiles = %+v, want the Default profile", result.Profiles)
 	}
 }
 

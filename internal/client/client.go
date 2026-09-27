@@ -127,8 +127,8 @@ func (c *Client) AutomationCleanup(id string) (*protocol.AutomationCleanupResult
 }
 
 type ListResult struct {
-	Sessions   []protocol.Session   `json:"sessions"`
-	Workspaces []protocol.Workspace `json:"workspaces"`
+	Sessions []protocol.Session `json:"sessions"`
+	Profiles []protocol.Profile `json:"profiles"`
 }
 
 func New(socketPath string) *Client {
@@ -962,13 +962,13 @@ func (c *Client) List(filter string) (*ListResult, error) {
 	if sessions == nil {
 		sessions = []protocol.Session{}
 	}
-	workspaces := resp.Workspaces
-	if workspaces == nil {
-		workspaces = []protocol.Workspace{}
+	profiles := resp.Profiles
+	if profiles == nil {
+		profiles = []protocol.Profile{}
 	}
 	return &ListResult{
-		Sessions:   sessions,
-		Workspaces: workspaces,
+		Sessions: sessions,
+		Profiles: profiles,
 	}, nil
 }
 

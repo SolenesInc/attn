@@ -12,7 +12,6 @@ function localSession(id: string, state: Session['state']): Session {
     label: id,
     state,
     cwd: '/repo',
-    workspaceId: '',
     profileId: '',
     desktopId: '',
     agent: 'claude',

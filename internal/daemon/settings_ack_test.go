@@ -23,7 +23,7 @@ func TestSettingAcknowledgement(t *testing.T) {
 			if tc.closeStore {
 				_ = d.store.Close()
 			}
-			client := newWorkspaceProtocolTestClient()
+			client := newProtocolTestClient()
 			requestID := "save-" + tc.name
 			d.handleSetSettingWS(client, &protocol.SetSettingMessage{
 				Cmd: protocol.CmdSetSetting, Key: "default_context_window_cap_codex", Value: tc.value, RequestID: &requestID,

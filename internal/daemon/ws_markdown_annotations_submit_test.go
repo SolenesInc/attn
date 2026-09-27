@@ -42,9 +42,8 @@ func sendSubmit(t *testing.T, d *Daemon, target string, orphaned []string) proto
 	client := &wsClient{send: make(chan outboundMessage, 4)}
 	d.handleMarkdownAnnotationsSubmit(client, &protocol.MarkdownAnnotationsSubmitMessage{
 		Cmd:             protocol.CmdMarkdownAnnotationsSubmit,
-		DocumentUri:     fileDocumentURI("workspace-test", submitTestPath),
+		DocumentUri:     fileDocumentURI(submitTestPath),
 		SourceKind:      annotationSourceFile,
-		WorkspaceID:     protocol.Ptr("workspace-test"),
 		Path:            protocol.Ptr(submitTestPath),
 		TargetSessionID: protocol.Ptr(target),
 		OrphanedIds:     orphaned,
@@ -242,9 +241,8 @@ func TestMarkdownAnnotationsSubmitDoesNotRouteAFileDocumentToASeed(t *testing.T)
 	client := &wsClient{send: make(chan outboundMessage, 1)}
 	d.handleMarkdownAnnotationsSubmit(client, &protocol.MarkdownAnnotationsSubmitMessage{
 		Cmd:          protocol.CmdMarkdownAnnotationsSubmit,
-		DocumentUri:  fileDocumentURI("workspace-test", submitTestPath),
+		DocumentUri:  fileDocumentURI(submitTestPath),
 		SourceKind:   annotationSourceFile,
-		WorkspaceID:  protocol.Ptr("workspace-test"),
 		Path:         protocol.Ptr(submitTestPath),
 		TargetSeedID: protocol.Ptr("s-ffffff"),
 		RequestID:    "file-to-seed",

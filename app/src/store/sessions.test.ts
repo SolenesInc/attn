@@ -62,7 +62,7 @@ describe('sessions store', () => {
   });
 
   it('creates sessions with a default daemon-owned workspace view model', async () => {
-    const sessionId = await useSessionStore.getState().createSession('test', '/tmp/test', 'sess-test', 'codex', undefined, false, 'workspace-sess-test');
+    const sessionId = await useSessionStore.getState().createSession('test', '/tmp/test', 'sess-test', 'codex', undefined, false);
     const session = useSessionStore.getState().sessions.find((entry) => entry.id === sessionId);
 
     expect(session?.desktop).toEqual({
@@ -85,7 +85,6 @@ describe('sessions store', () => {
         'shell',
         undefined,
         false,
-        `workspace-${id}`,
       );
     }
 
@@ -119,7 +118,6 @@ describe('sessions store', () => {
         'shell',
         undefined,
         false,
-        `workspace-${id}`,
       );
     }
     expect(useSessionStore.getState().navigateAgentHistory('back')).toBe('sess-b');
@@ -154,7 +152,6 @@ describe('sessions store', () => {
           label: 'Old Label',
           state: 'working',
           cwd: '/tmp/old',
-          workspaceId: 'workspace-sess-1',
           profileId: '',
           desktopId: 'workspace-sess-1',
           agent: 'codex',
@@ -183,7 +180,6 @@ describe('sessions store', () => {
         label: 'New Label',
         agent: 'claude',
         directory: '/tmp/new',
-        workspace_id: 'workspace-sess-1',
         endpoint_id: 'ep-1',
         state: 'idle',
         branch: 'feature/workspace',
@@ -251,14 +247,14 @@ describe('sessions store', () => {
     });
 
     useSessionStore.getState().syncFromDaemonSessions([
-      { id: 'moved-session', label: 'Moved', agent: 'codex', directory: '/tmp/target', workspace_id: 'workspace-target', state: 'working' },
+      { id: 'moved-session', label: 'Moved', agent: 'codex', directory: '/tmp/target', state: 'working' },
     ]);
     expect(useSessionStore.getState().sessions[0].desktop).toEqual(targetLayout);
     expect(useSessionStore.getState().sessions[0].daemonActivePaneId).toBe('pane-moved');
 
     useSessionStore.setState({ sessions: [movedSession], desktopSnapshots: {}, desktopIdBySessionId: {} });
     useSessionStore.getState().syncFromDaemonSessions([
-      { id: 'moved-session', label: 'Moved', agent: 'codex', directory: '/tmp/target', workspace_id: 'workspace-target', state: 'working' },
+      { id: 'moved-session', label: 'Moved', agent: 'codex', directory: '/tmp/target', state: 'working' },
     ]);
     expect(useSessionStore.getState().sessions[0].desktop).toEqual({ agents: [], layoutTree: null });
     expect(useSessionStore.getState().sessions[0].daemonActivePaneId).toBe('');
@@ -274,7 +270,6 @@ describe('sessions store', () => {
           label: 'Root',
           state: 'idle',
           cwd: '/tmp/workspace',
-          workspaceId: 'workspace-root',
           profileId: '',
           desktopId: 'workspace-root',
           agent: 'shell',
@@ -302,7 +297,6 @@ describe('sessions store', () => {
           label: 'Split',
           state: 'idle',
           cwd: '/tmp/workspace',
-          workspaceId: 'workspace-root',
           profileId: '',
           desktopId: 'workspace-root',
           agent: 'shell',
@@ -334,7 +328,6 @@ describe('sessions store', () => {
         label: 'Root',
         agent: 'shell',
         directory: '/tmp/workspace',
-        workspace_id: 'workspace-root',
         state: 'idle',
       },
     ]);
@@ -351,7 +344,6 @@ describe('sessions store', () => {
       label: 'Blip',
       agent: 'codex',
       directory: '/tmp/workspace',
-      workspace_id: '',
       profile_id: 'profile',
       state: 'working',
     };
@@ -384,7 +376,6 @@ describe('sessions store', () => {
           label: 'Launching',
           state: 'launching',
           cwd: '/tmp/launching',
-          workspaceId: 'workspace-launching',
           profileId: '',
           desktopId: 'workspace-launching',
           agent: 'shell',
@@ -416,14 +407,13 @@ describe('sessions store', () => {
       label: 'Neighbour',
       agent: 'shell',
       directory: '/tmp/neighbour',
-      workspace_id: 'workspace-sess-neighbour',
       state: 'idle',
     };
     useSessionStore.getState().syncFromDaemonSessions([neighbour]);
     useSessionStore.getState().setActiveSession('sess-neighbour');
 
     const sessionId = await useSessionStore.getState().createSession(
-      'Racey', '/tmp/racey', 'sess-racey', 'claude', undefined, false, 'workspace-sess-racey',
+      'Racey', '/tmp/racey', 'sess-racey', 'claude', undefined, false,
     );
     expect(useSessionStore.getState().activeSessionId).toBe(sessionId);
 
@@ -440,7 +430,7 @@ describe('sessions store', () => {
 
   it('syncFromDaemonSessions prunes a created session once the daemon has reported it and dropped it', async () => {
     const sessionId = await useSessionStore.getState().createSession(
-      'Racey', '/tmp/racey', 'sess-racey', 'claude', undefined, false, 'workspace-sess-racey',
+      'Racey', '/tmp/racey', 'sess-racey', 'claude', undefined, false,
     );
 
     useSessionStore.getState().syncFromDaemonSessions([{
@@ -448,7 +438,6 @@ describe('sessions store', () => {
       label: 'Racey',
       agent: 'claude',
       directory: '/tmp/racey',
-      workspace_id: 'workspace-sess-racey',
       state: 'idle',
     }]);
     expect(useSessionStore.getState().sessions.find((s) => s.id === sessionId)?.creating).toBeUndefined();
@@ -468,7 +457,6 @@ describe('sessions store', () => {
           label: 'Exited shell',
           state: 'idle',
           cwd: '/tmp/exited',
-          workspaceId: 'workspace-exited',
           profileId: '',
           desktopId: 'workspace-exited',
           agent: 'shell',
@@ -495,7 +483,7 @@ describe('sessions store', () => {
   });
 
   it('takeSessionSpawnArgs applies launcher overrides', async () => {
-    const sessionId = await useSessionStore.getState().createSession('Spawn Test', '/tmp/workspace', 'sess-spawn', 'claude', 'ep-1', true, 'workspace-sess-spawn');
+    const sessionId = await useSessionStore.getState().createSession('Spawn Test', '/tmp/workspace', 'sess-spawn', 'claude', 'ep-1', true);
     useSessionStore.getState().setLauncherConfig({
       executables: { claude: '/opt/bin/claude-custom' },
     });
@@ -518,7 +506,7 @@ describe('sessions store', () => {
   });
 
   it('syncFromArrangement gives each session the desktop it is placed on and that desktop\'s active pane', async () => {
-    const sessionId = await useSessionStore.getState().createSession('Desktop', '/tmp/workspace', 'sess-desktop', 'codex', undefined, false, 'workspace-sess-desktop');
+    const sessionId = await useSessionStore.getState().createSession('Desktop', '/tmp/workspace', 'sess-desktop', 'codex', undefined, false);
 
     useSessionStore.getState().syncFromArrangement('profile', [
       desktopWith(
@@ -564,7 +552,7 @@ describe('sessions store', () => {
   });
 
   it('syncFromArrangement keeps defaults on an invalid tree and falls back to the first pane', async () => {
-    const sessionId = await useSessionStore.getState().createSession('Desktop', '/tmp/workspace', 'sess-desktop', 'codex', undefined, false, 'workspace-sess-desktop');
+    const sessionId = await useSessionStore.getState().createSession('Desktop', '/tmp/workspace', 'sess-desktop', 'codex', undefined, false);
 
     useSessionStore.getState().syncFromArrangement('profile', [
       desktopWith('desktop-1', '{not-json', 'missing-pane', [
@@ -610,7 +598,7 @@ describe('sessions store', () => {
   });
 
   it('reloadSession asks the daemon to reload with clamped geometry', async () => {
-    await useSessionStore.getState().createSession('Remote', '/srv/repo', 'sess-remote', 'codex', 'ep-remote', true, 'workspace-sess-remote');
+    await useSessionStore.getState().createSession('Remote', '/srv/repo', 'sess-remote', 'codex', 'ep-remote', true);
 
     await useSessionStore.getState().reloadSession('sess-remote', { cols: 12, rows: 40 });
 
@@ -618,7 +606,7 @@ describe('sessions store', () => {
   });
 
   it('marks the session as reloading while the daemon reload is pending', async () => {
-    await useSessionStore.getState().createSession('Local', '/srv/repo', 'sess-reload', 'codex', undefined, false, 'workspace-sess-reload');
+    await useSessionStore.getState().createSession('Local', '/srv/repo', 'sess-reload', 'codex', undefined, false);
 
     let duringReload = false;
     mockPtyReload.mockImplementation(async () => {
@@ -633,7 +621,7 @@ describe('sessions store', () => {
   });
 
   it('clears the reloading mark when the daemon reload fails', async () => {
-    await useSessionStore.getState().createSession('Local', '/srv/repo', 'sess-reload-fail', 'codex', undefined, false, 'workspace-sess-reload-fail');
+    await useSessionStore.getState().createSession('Local', '/srv/repo', 'sess-reload-fail', 'codex', undefined, false);
     mockPtyReload.mockRejectedValueOnce(new Error('reload failed'));
 
     await expect(

@@ -233,8 +233,8 @@ func TestSeedResumeRefusesWhenTranscriptGoneWithoutCreatingAnything(t *testing.T
 	if got := spawnCount(backend); got != spawnsBefore {
 		t.Fatalf("spawn count = %d, want unchanged %d", got, spawnsBefore)
 	}
-	if ws := d.store.GetWorkspace("workspace-" + leafID); ws != nil {
-		t.Fatalf("resume left a phantom workspace: %+v", ws)
+	if _, placed, _ := d.store.SessionPlacement(leafID); placed {
+		t.Fatalf("resume left a phantom pane for %s", leafID)
 	}
 	after, _, err := d.readSeed(seedID)
 	if err != nil {
@@ -501,8 +501,8 @@ func TestSeedResumeValidation(t *testing.T) {
 				t.Fatalf("resumeSeed error = %q, want path/message %q", err, tc.message)
 			}
 			if tender != "" {
-				if ws := d.store.GetWorkspace("workspace-" + tender); ws != nil {
-					t.Fatalf("resume left a phantom workspace: %+v", ws)
+				if _, placed, _ := d.store.SessionPlacement(tender); placed {
+					t.Fatalf("resume left a phantom pane for %s", tender)
 				}
 			}
 		})
@@ -525,8 +525,8 @@ func TestSeedResumeRollsBackPaneWhenSpawnFails(t *testing.T) {
 	if _, err := d.resumeSeed(seed.ID); err == nil {
 		t.Fatal("resumeSeed succeeded, want spawn failure")
 	}
-	if ws := d.store.GetWorkspace("workspace-ghost-session"); ws != nil {
-		t.Fatalf("workspace survived a failed resume: %+v", ws)
+	if _, placed, _ := d.store.SessionPlacement("ghost-session"); placed {
+		t.Fatal("a pane survived a failed resume")
 	}
 }
 

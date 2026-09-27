@@ -77,7 +77,7 @@ function Harness({
   layerRef: RefObject<AnnotationLayerHandle | null>;
 }) {
   const rootRef = useRef<HTMLDivElement>(null);
-  const source = fileMarkdownSource('ws-test', path);
+  const source = fileMarkdownSource(path);
   const api = useAnnotations({ rootRef, content, source, enabled: true, transport });
   apiRef.current = api;
   return (

@@ -37,7 +37,7 @@ func TestArrangementInvariantsHoldUnderRandomOperations(t *testing.T) {
 			sessionIDs[i] = fmt.Sprintf("agent-%d", i)
 			now := string(protocol.TimestampNow())
 			if err := s.AddChecked(&protocol.Session{
-				ID: sessionIDs[i], Label: sessionIDs[i], Agent: protocol.SessionAgentCodex, Directory: "/tmp/project", WorkspaceID: "workspace",
+				ID: sessionIDs[i], Label: sessionIDs[i], Agent: protocol.SessionAgentCodex, Directory: "/tmp/project",
 				State: protocol.SessionStateIdle, StateSince: now, StateUpdatedAt: now, LastSeen: now,
 			}); err != nil {
 				t.Fatalf("AddChecked: %v", err)

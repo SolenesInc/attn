@@ -85,7 +85,6 @@ function buildSession(overrides?: Partial<Session>): Session {
     label: 'Session 1',
     state: 'idle',
     cwd: '/tmp/repo',
-    workspaceId: '',
     profileId: 'profile',
     desktopId: 'desktop-1',
     agent: 'claude',

@@ -892,7 +892,7 @@ Remote hub options:
 
     setStep('remote-pty-interaction');
     const existingRemotePaneIds = new Set(
-      (observer.getWorkspace(remoteSessionId)?.panes || []).map((pane) => pane.pane_id),
+      (observer.desktopOf(remoteSessionId)?.panes || []).map((pane) => pane.pane_id),
     );
     const utilityPane = await client.request('split_pane', {
       sessionId: remoteSessionId,

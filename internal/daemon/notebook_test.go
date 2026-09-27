@@ -169,8 +169,8 @@ func TestNotebookReadsDispatchThroughClientMessage(t *testing.T) {
 	writeNote(t, d, "knowledge/areas/b.md", "---\ntype: note\n---\nsee [a](/knowledge/areas/a.md)\n")
 	writeNote(t, d, "journal/2026-06-13.md", "---\ntype: journal\n---\nentry\n")
 
-	client := newWorkspaceProtocolTestClient()
-	client.setIdentity("test", "protocol-"+protocol.ProtocolVersion, []string{protocol.CapabilityWorkspaceSessions})
+	client := newProtocolTestClient()
+	client.setIdentity("test", "protocol-"+protocol.ProtocolVersion, nil)
 
 	d.handleClientMessage(client, []byte(`{"cmd":"notebook_list","request_id":"rl","prefix":"/knowledge"}`))
 	var list protocol.NotebookListResultMessage
@@ -206,8 +206,8 @@ func TestNotebookReadsDispatchThroughClientMessage(t *testing.T) {
 
 func TestNotebookWriteDispatchesThroughClientMessage(t *testing.T) {
 	d := newNotebookDaemon(t)
-	client := newWorkspaceProtocolTestClient()
-	client.setIdentity("test", "protocol-"+protocol.ProtocolVersion, []string{protocol.CapabilityWorkspaceSessions})
+	client := newProtocolTestClient()
+	client.setIdentity("test", "protocol-"+protocol.ProtocolVersion, nil)
 
 	d.handleClientMessage(client, []byte(`{"cmd":"notebook_write","request_id":"w1","path":"/knowledge/areas/a.md","content":"---\ntype: note\n---\nbody\n"}`))
 	var res protocol.NotebookWriteResultMessage
@@ -403,7 +403,7 @@ func addIdleNotebookSession(d *Daemon, id string, state protocol.SessionState) {
 	now := string(protocol.TimestampNow())
 	d.store.Add(&protocol.Session{
 		ID: id, Label: id, Agent: protocol.SessionAgentClaude,
-		Directory: "/tmp/" + id, WorkspaceID: "workspace-" + id, ProfileID: recentProfileID(d.store),
+		Directory: "/tmp/" + id, ProfileID: recentProfileID(d.store),
 		State: state, StateSince: now, StateUpdatedAt: now, LastSeen: now,
 	})
 }
@@ -787,8 +787,8 @@ func TestFormatChiefInboxEntry(t *testing.T) {
 
 func TestNotebookSendToChiefDispatchesThroughClientMessage(t *testing.T) {
 	d := newNotebookDaemon(t)
-	client := newWorkspaceProtocolTestClient()
-	client.setIdentity("test", "protocol-"+protocol.ProtocolVersion, []string{protocol.CapabilityWorkspaceSessions})
+	client := newProtocolTestClient()
+	client.setIdentity("test", "protocol-"+protocol.ProtocolVersion, nil)
 
 	d.handleClientMessage(client, []byte(`{"cmd":"notebook_send_to_chief","request_id":"d1","selection":"dispatched selection","source_path":"/knowledge/index.md"}`))
 	var res protocol.NotebookSendToChiefResultMessage

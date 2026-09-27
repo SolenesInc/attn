@@ -204,7 +204,7 @@ export function clientTokenForInstance(instance = currentHarnessInstance()) {
   }
 }
 
-export function harnessClientHello(clientKind, { version = 'real-app-harness', capabilities = ['workspace_sessions'] } = {}) {
+export function harnessClientHello(clientKind, { version = 'real-app-harness', capabilities = [] } = {}) {
   return {
     cmd: 'client_hello',
     client_kind: clientKind,

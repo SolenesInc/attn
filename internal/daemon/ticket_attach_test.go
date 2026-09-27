@@ -228,8 +228,8 @@ func TestTicketAttachDispatchesFromWebSocketAsUser(t *testing.T) {
 		t.Fatal(err)
 	}
 	source := attachSource(t, t.TempDir(), "plan.md", "plan")
-	client := newWorkspaceProtocolTestClient()
-	client.setIdentity("test", "protocol-"+protocol.ProtocolVersion, []string{protocol.CapabilityWorkspaceSessions})
+	client := newProtocolTestClient()
+	client.setIdentity("test", "protocol-"+protocol.ProtocolVersion, nil)
 	payload, _ := json.Marshal(protocol.TicketAttachMessage{
 		Cmd: protocol.CmdTicketAttach, SourceSessionID: store.TicketAuthorYou,
 		TicketID: protocol.Ptr("ui-ticket"), Files: []protocol.TicketAttachFile{source}, RequestID: protocol.Ptr("h1"),

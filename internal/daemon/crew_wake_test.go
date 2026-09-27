@@ -99,15 +99,12 @@ func TestCrewWake_StartsADayBoundInTheMembersOwnDirectory(t *testing.T) {
 	if _, placed, err := d.store.SessionPlacement(result.SessionID); err != nil || placed {
 		t.Errorf("woken session placed=%v err=%v, want it unplaced for the queue to surface", placed, err)
 	}
-	if d.store.GetWorkspace("workspace-crew-trellis") != nil {
-		t.Error("wake created a per-member workspace")
-	}
 }
 
 func TestCrewWake_RefusesAMemberOfAnotherProfile(t *testing.T) {
 	d, backend, _ := newWakeableDaemon(t)
 	work := createTestProfile(t, d.store, "Work")
-	addTurnSession(t, d, "work-agent", protocol.SessionAgentCodex, "")
+	addTurnSession(t, d, "work-agent", protocol.SessionAgentCodex)
 	if _, err := d.store.MoveSessionToProfile(store.SessionProfileMoveRequest{SessionID: "work-agent", ExpectedProfileID: defaultProfileID(t, d.store), DestinationProfileID: work.ID}); err != nil {
 		t.Fatal(err)
 	}
@@ -1101,7 +1098,7 @@ func TestMovingACrewMembersAgentTakesTheMemberToTheDestination(t *testing.T) {
 	if err != nil {
 		t.Fatalf("wake: %v", err)
 	}
-	client := newWorkspaceProtocolTestClient()
+	client := newProtocolTestClient()
 
 	d.handleSessionMove(client, &protocol.SessionMoveMessage{
 		Cmd: protocol.CmdSessionMove, RequestID: "move-trellis", SessionID: woken.SessionID, ExpectedProfileID: home, DestinationProfileID: work.ID,
@@ -1148,7 +1145,7 @@ func TestAMoveIsRefusedWhenTheCrewRosterCannotBeRead(t *testing.T) {
 		documentChangedFact(crew.Namespace, crew.CollectionMembers, copied.ID, false), time.Now()); err != nil {
 		t.Fatalf("store a member whose home is outside the crew root, as a copied attn.db would: %v", err)
 	}
-	client := newWorkspaceProtocolTestClient()
+	client := newProtocolTestClient()
 
 	d.handleSessionMove(client, &protocol.SessionMoveMessage{
 		Cmd: protocol.CmdSessionMove, RequestID: "move-trellis", SessionID: woken.SessionID, ExpectedProfileID: home, DestinationProfileID: work.ID,

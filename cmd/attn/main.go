@@ -694,7 +694,7 @@ commands:
   automation <command>              manage and run durable automations
   preflight                         diagnose tools, paths, routing, and launch settings
   pr <command>                      watch or inspect pull request readiness
-  list                              list sessions and workspaces
+  list                              list sessions and profiles
   activity [clear <id>]             what each agent is doing right now
   worktree <command>                every tracked worktree, the sweep and the keep pin
   present <command>                 open a review presentation and read feedback
@@ -1662,7 +1662,7 @@ func parseDelegateArgs(args []string) (delegateCLIArgs, error) {
 	provider := fs.String("provider", "", "plugin model provider")
 	model := fs.String("model", "", "pin the delegated agent's model (alias or full id)")
 	effort := fs.String("effort", "", "pin the delegated agent's reasoning effort")
-	name := fs.String("name", "", "name for the agent and, when a new workspace is created, the workspace")
+	name := fs.String("name", "", "name for the agent")
 	sourceSessionID := fs.String("source-session", "", "source session id (defaults to ATTN_SESSION_ID)")
 	yolo := fs.Bool("yolo", false, "launch the target agent in yolo mode")
 	cwd := fs.String("cwd", "", "working folder or repository")

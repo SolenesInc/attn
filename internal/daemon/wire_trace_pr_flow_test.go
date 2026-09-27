@@ -13,7 +13,7 @@ func TestWireTracePRFlowGolden(t *testing.T) {
 	d := NewForTesting(filepath.Join(dir, "test.sock"))
 	trace := wireRecorder(d)
 
-	client := newWorkspaceProtocolTestClient()
+	client := newProtocolTestClient()
 	prID := "github.com/owner/repo#1"
 	injected := protocol.PR{
 		ID: prID, Repo: "owner/repo", Host: "github.com", Number: 1,

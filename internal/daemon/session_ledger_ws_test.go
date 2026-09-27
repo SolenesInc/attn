@@ -48,7 +48,7 @@ func onlySessionListResult(t *testing.T, client *wsClient) protocol.SessionListR
 
 func TestTheWebSocketAnswersSessionListWithAPageAndItsFacets(t *testing.T) {
 	d := NewForTesting(filepath.Join(t.TempDir(), "attn.sock"))
-	client := newWorkspaceProtocolTestClient()
+	client := newProtocolTestClient()
 	addLedgerTestSession(t, d, "live-one", t.TempDir())
 	addLedgerTestSession(t, d, "closed-one", t.TempDir())
 	d.closeSession("closed-one", store.SessionClose{By: store.SessionClosedByUser})
@@ -78,7 +78,7 @@ func TestTheWebSocketAnswersSessionListWithAPageAndItsFacets(t *testing.T) {
 
 func TestAPagedSessionListLeavesTheFacetsBehind(t *testing.T) {
 	d := NewForTesting(filepath.Join(t.TempDir(), "attn.sock"))
-	client := newWorkspaceProtocolTestClient()
+	client := newProtocolTestClient()
 	for _, id := range []string{"one", "two"} {
 		addLedgerTestSession(t, d, id, t.TempDir())
 	}
@@ -107,7 +107,7 @@ func TestAPagedSessionListLeavesTheFacetsBehind(t *testing.T) {
 
 func TestSessionListRefusesAWindowThatCouldHoldNothing(t *testing.T) {
 	d := NewForTesting(filepath.Join(t.TempDir(), "attn.sock"))
-	client := newWorkspaceProtocolTestClient()
+	client := newProtocolTestClient()
 
 	d.sendSessionListWSResult(client, &protocol.SessionListMessage{
 		Cmd: protocol.CmdSessionList, RequestID: protocol.Ptr("req-1"),
@@ -133,7 +133,7 @@ func TestSessionListRefusesAWindowThatCouldHoldNothing(t *testing.T) {
 
 func TestSessionShowOverTheWebSocketNamesASessionItNeverRan(t *testing.T) {
 	d := NewForTesting(filepath.Join(t.TempDir(), "attn.sock"))
-	client := newWorkspaceProtocolTestClient()
+	client := newProtocolTestClient()
 	addLedgerTestSession(t, d, "known", t.TempDir())
 
 	d.sendSessionShowWSResult(client, &protocol.SessionShowMessage{
@@ -207,7 +207,7 @@ func onlySessionReopenResult(t *testing.T, client *wsClient) protocol.SessionReo
 
 func TestTheWebSocketAnswersSessionReopenWithTheRefusalAndItsOffers(t *testing.T) {
 	d := NewForTesting(filepath.Join(t.TempDir(), "attn.sock"))
-	client := newWorkspaceProtocolTestClient()
+	client := newProtocolTestClient()
 	writeCodexRolloutFixture(t, "conv-plain")
 	closeReopenSession(t, d, reopenSession{
 		ID: "plain-gone", Directory: filepath.Join(t.TempDir(), "deleted"), Agent: "codex", Resume: "conv-plain",
@@ -228,7 +228,7 @@ func TestTheWebSocketAnswersSessionReopenWithTheRefusalAndItsOffers(t *testing.T
 
 func TestTheWebSocketAnswersSessionReopenForAnUnknownSession(t *testing.T) {
 	d := NewForTesting(filepath.Join(t.TempDir(), "attn.sock"))
-	client := newWorkspaceProtocolTestClient()
+	client := newProtocolTestClient()
 
 	d.sendSessionReopenWSResult(client, &protocol.SessionReopenMessage{
 		Cmd: protocol.CmdSessionReopen, RequestID: protocol.Ptr("req-2"), SessionID: "never-ran",

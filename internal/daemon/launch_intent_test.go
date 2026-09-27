@@ -35,7 +35,6 @@ func TestLaunchIntentSpawnSuccessPersistsResolvedValues(t *testing.T) {
 	t.Cleanup(func() { _ = d.store.Close() })
 	d.ptyBackend = &fakeSpawnBackend{}
 	cwd := t.TempDir()
-	addTestWorkspace(d, "workspace", cwd)
 	client := spawnTestClient()
 	msg := &protocol.SpawnSessionMessage{
 		Cmd:        protocol.CmdSpawnSession,
@@ -75,7 +74,6 @@ func TestLaunchIntentSpawnFailurePersistsNothing(t *testing.T) {
 	t.Cleanup(func() { _ = d.store.Close() })
 	d.ptyBackend = &failingLaunchIntentBackend{}
 	cwd := t.TempDir()
-	addTestWorkspace(d, "workspace", cwd)
 	client := spawnTestClient()
 	msg := &protocol.SpawnSessionMessage{
 		Cmd:       protocol.CmdSpawnSession,

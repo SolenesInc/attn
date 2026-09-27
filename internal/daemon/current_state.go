@@ -56,7 +56,6 @@ func (d *Daemon) appTicketRows() []appTicketRow {
 type currentStateProjection struct {
 	Sessions    []protocol.Session
 	Endpoints   []protocol.EndpointInfo
-	Workspaces  []protocol.Workspace
 	Prs         []protocol.PR
 	Repos       []protocol.RepoState
 	Authors     []protocol.AuthorState
@@ -71,7 +70,6 @@ func (d *Daemon) currentStateProjection() currentStateProjection {
 	return currentStateProjection{
 		Sessions:    d.mergedSessionsForBroadcast(),
 		Endpoints:   d.listEndpointInfos(),
-		Workspaces:  d.listWorkspaces(),
 		Prs:         protocol.PRsToValues(d.store.ListPRs("")),
 		Repos:       protocol.RepoStatesToValues(d.store.ListRepoStates()),
 		Authors:     protocol.AuthorStatesToValues(d.store.ListAuthorStates()),
@@ -87,7 +85,6 @@ type appCurrentStateSnapshot struct {
 	AsOfSeq     int64                       `json:"asOfSeq"`
 	Sessions    []protocol.Session          `json:"sessions"`
 	Endpoints   []protocol.EndpointInfo     `json:"endpoints"`
-	Workspaces  []protocol.Workspace        `json:"workspaces"`
 	Prs         []protocol.PR               `json:"prs"`
 	Repos       []protocol.RepoState        `json:"repos"`
 	Authors     []protocol.AuthorState      `json:"authors"`
@@ -108,7 +105,6 @@ func (d *Daemon) appCurrentStateSnapshot() (appCurrentStateSnapshot, error) {
 		AsOfSeq:     head,
 		Sessions:    snapshotSlice(state.Sessions),
 		Endpoints:   snapshotSlice(state.Endpoints),
-		Workspaces:  snapshotSlice(state.Workspaces),
 		Prs:         snapshotSlice(state.Prs),
 		Repos:       snapshotSlice(state.Repos),
 		Authors:     snapshotSlice(state.Authors),

@@ -132,8 +132,8 @@ export function WorkspaceDockTile({
     seedArrival,
   } = seedNavigation;
   const documentSource = useMemo(
-    () => (isSeed ? seedMarkdownSource(path) : fileMarkdownSource(workspaceId, path)),
-    [isSeed, path, workspaceId],
+    () => (isSeed ? seedMarkdownSource(path) : fileMarkdownSource(path)),
+    [isSeed, path],
   );
   const annotations = useTileAnnotations({
     isSeed,
@@ -455,7 +455,7 @@ function WorkspaceTileContent({
       <AppTileHost
         app={appView.app}
         view={appView.view}
-        workspaceId={workspaceId}
+        desktopId={workspaceId}
         sessionId={workspaceSessionId}
         tileId={tile.tileId}
         params={tile.tileParams || ''}

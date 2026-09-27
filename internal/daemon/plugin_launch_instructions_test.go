@@ -10,7 +10,6 @@ import (
 func TestPreparePluginLaunchInstructionsBeforeSessionPersistence(t *testing.T) {
 	d := newEnrolledDaemon(t, "")
 	t.Cleanup(func() { _ = d.store.Close() })
-	addTestWorkspace(d, "profile-a", t.TempDir())
 
 	instructions, err := d.preparePluginLaunchInstructions("session-a", "profile-a", false, true)
 	if err != nil {
@@ -33,7 +32,6 @@ func TestPreparePluginLaunchInstructionsBeforeSessionPersistence(t *testing.T) {
 func TestPreparePluginChiefInstructionsUsesNotebook(t *testing.T) {
 	d := newEnrolledDaemon(t, "")
 	t.Cleanup(func() { _ = d.store.Close() })
-	addTestWorkspace(d, "profile-a", t.TempDir())
 	notebookRoot := t.TempDir()
 	d.store.SetSetting(SettingNotebookRoot, notebookRoot)
 
@@ -52,7 +50,6 @@ func TestPreparePluginChiefInstructionsUsesNotebook(t *testing.T) {
 func TestPreparePluginLaunchInstructionsOutpostOmitsGarden(t *testing.T) {
 	d := newEnrolledDaemon(t, "d-aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa")
 	t.Cleanup(func() { _ = d.store.Close() })
-	addTestWorkspace(d, "profile-a", t.TempDir())
 
 	instructions, err := d.preparePluginLaunchInstructions("session-a", "profile-a", false, true)
 	if err != nil {
@@ -69,7 +66,6 @@ func TestPreparePluginLaunchInstructionsOutpostOmitsGarden(t *testing.T) {
 func TestPreparePluginLaunchInstructionsGatePullRequestSelfReporting(t *testing.T) {
 	d := newEnrolledDaemon(t, "d-aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa")
 	t.Cleanup(func() { _ = d.store.Close() })
-	addTestWorkspace(d, "profile-a", t.TempDir())
 
 	told, err := d.preparePluginLaunchInstructions("session-a", "profile-a", false, true)
 	if err != nil {

@@ -750,7 +750,6 @@ func TestMaybeGenerateSessionTitleFromPrompt_InitialPromptTitlesWithoutCorrelati
 
 func TestSpawnPipeline_InitialPromptMarkerBeatsEarlyPromptHook(t *testing.T) {
 	d := newSessionTitleDaemon(t)
-	addTestWorkspace(d, "workspace-title", t.TempDir())
 
 	titled := make(chan string, 1)
 	d.sessionTitleExec = func(ctx context.Context, session *protocol.Session, conversation string) (string, error) {
@@ -790,7 +789,6 @@ func TestSpawnPipeline_InitialPromptMarkerBeatsEarlyPromptHook(t *testing.T) {
 
 func TestSpawnPipeline_FailedLaunchRollsBackInitialPromptMarker(t *testing.T) {
 	d := newSessionTitleDaemon(t)
-	addTestWorkspace(d, "workspace-title", t.TempDir())
 	d.ptyBackend = &fakeSpawnBackend{spawnErr: errors.New("boom")}
 
 	client := &wsClient{send: make(chan outboundMessage, 8), attachedStreams: make(map[string]ptybackend.Stream)}
@@ -834,7 +832,6 @@ func TestMaybeGenerateSessionTitle_StopPathClearsInitialPromptMarker(t *testing.
 
 func TestSpawnPipeline_AlreadyLiveSpawnPreservesInitialPromptMarker(t *testing.T) {
 	d := newSessionTitleDaemon(t)
-	addTestWorkspace(d, "workspace-title", t.TempDir())
 	backend := &fakeSpawnBackend{}
 	d.ptyBackend = backend
 
@@ -892,7 +889,6 @@ func TestTitleProviderAgent_PrefersSessionAgentThenFallsBack(t *testing.T) {
 
 func TestSpawnPipeline_InitialPromptTitlesAtSpawn(t *testing.T) {
 	d := newSessionTitleDaemon(t)
-	addTestWorkspace(d, "workspace-title", t.TempDir())
 	d.ptyBackend = &fakeSpawnBackend{}
 
 	calls := 0

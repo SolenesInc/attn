@@ -47,7 +47,6 @@ func kittyTestImage() pty.KittyImage {
 func kittyCapableClient() *wsClient {
 	client := spawnTestClient()
 	client.setIdentity("test", "v", []string{
-		protocol.CapabilityWorkspaceSessions,
 		protocol.CapabilityKittyImages,
 		protocol.CapabilityBinaryPtyOutput,
 	})
@@ -57,7 +56,6 @@ func kittyCapableClient() *wsClient {
 func kittyRelayClient() *wsClient {
 	client := spawnTestClient()
 	client.setIdentity("test", "v", []string{
-		protocol.CapabilityWorkspaceSessions,
 		protocol.CapabilityKittyImages,
 	})
 	return client
@@ -65,7 +63,7 @@ func kittyRelayClient() *wsClient {
 
 func kittyPlainClient() *wsClient {
 	client := spawnTestClient()
-	client.setIdentity("test", "v", []string{protocol.CapabilityWorkspaceSessions})
+	client.setIdentity("test", "v", nil)
 	return client
 }
 
@@ -90,7 +88,6 @@ func readKittyImageResult(t *testing.T, client *wsClient) protocol.KittyImageRes
 func TestKittyPlacementsReachOnlyClientsThatAskedForThem(t *testing.T) {
 	binaryOnly := spawnTestClient()
 	binaryOnly.setIdentity("test", "v", []string{
-		protocol.CapabilityWorkspaceSessions,
 		protocol.CapabilityBinaryPtyOutput,
 	})
 

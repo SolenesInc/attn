@@ -10,7 +10,6 @@ const snapshot = (id: string, owed = false): DaemonSessionSnapshot => ({
   agent: 'claude',
   state: 'working',
   directory: `/tmp/${id}`,
-  workspace_id: '',
   profile_id: 'profile',
   turn_owed: owed,
   turn_opened_at: id,

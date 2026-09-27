@@ -7,14 +7,11 @@ import {
 } from './documentSource';
 
 describe('Markdown document sources', () => {
-  it('gives files an escaped identity carrying workspace and path', () => {
-    expect(markdownFileDocumentUri('remote/ws:1', '/tmp/a plan.md')).toBe(
-      'attn://file/remote%2Fws%3A1/%2Ftmp%2Fa%20plan.md',
-    );
-    expect(fileMarkdownSource('ws-1', '/tmp/plan.md')).toEqual({
+  it('gives files an escaped identity carrying their path', () => {
+    expect(markdownFileDocumentUri('/tmp/a plan.md')).toBe('attn://file/%2Ftmp%2Fa%20plan.md');
+    expect(fileMarkdownSource('/tmp/plan.md')).toEqual({
       kind: 'file',
-      uri: 'attn://file/ws-1/%2Ftmp%2Fplan.md',
-      workspaceId: 'ws-1',
+      uri: 'attn://file/%2Ftmp%2Fplan.md',
       path: '/tmp/plan.md',
     });
   });

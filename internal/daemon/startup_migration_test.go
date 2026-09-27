@@ -19,12 +19,12 @@ import (
 
 func writeLegacyDatabase(t *testing.T, path string, agents int, schemaVersion int, extra ...string) {
 	t.Helper()
-	db, err := store.OpenDB(path)
+	db, err := store.OpenDBAtSchemaVersion(path, schemaVersion)
 	if err != nil {
-		t.Fatalf("OpenDB: %v", err)
+		t.Fatalf("OpenDBAtSchemaVersion: %v", err)
 	}
 	defer db.Close()
-	statements := []string{`DELETE FROM desktop_panes; DELETE FROM desktops; DELETE FROM profiles; DELETE FROM profile_migration; UPDATE sessions SET profile_id = ''`}
+	var statements []string
 	for i := 1; i <= agents; i++ {
 		statements = append(statements, fmt.Sprintf(`
 			INSERT INTO sessions (id, label, directory, state_since, state_updated_at, last_seen, workspace_id)
@@ -36,7 +36,6 @@ func writeLegacyDatabase(t *testing.T, path string, agents int, schemaVersion in
 				VALUES ('ws-%[1]d', 'pane-agent-%[1]d', 'agent-%[1]d', 'agent-%[1]d', 'agent', 'Agent', 'ready', '', 'now', 'now')`, i))
 	}
 	statements = append(statements, extra...)
-	statements = append(statements, fmt.Sprintf(`DELETE FROM schema_migrations WHERE version > %d`, schemaVersion))
 	for _, statement := range statements {
 		if _, err := db.Exec(statement); err != nil {
 			t.Fatalf("legacy fixture: %v", err)

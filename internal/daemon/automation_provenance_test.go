@@ -55,11 +55,11 @@ func TestAutomationTargetBlockNamesTargetWithoutInjectingProviderText(t *testing
 }
 
 func TestAutomationReviewNamesKeepPRStableAndDistinguishModel(t *testing.T) {
-	workspace, session, seedTitle, ok := automationReviewNames(automation.WorkRequest{
+	pullRequest, session, seedTitle, ok := automationReviewNames(automation.WorkRequest{
 		Context: []byte(automationProvenancePRPayload),
 		Launch:  automation.EffectiveLaunch{Model: "gpt-5.6-sol"},
 	})
-	if !ok || workspace != "feed-nexus-web#101" || session != "feed-nexus-web#101 · gpt-5.6-sol" || seedTitle != "Review feed-nexus-web#101 · gpt-5.6-sol" {
-		t.Fatalf("names = %q %q %q ok=%v", workspace, session, seedTitle, ok)
+	if !ok || pullRequest != "feed-nexus-web#101" || session != "feed-nexus-web#101 · gpt-5.6-sol" || seedTitle != "Review feed-nexus-web#101 · gpt-5.6-sol" {
+		t.Fatalf("names = %q %q %q ok=%v", pullRequest, session, seedTitle, ok)
 	}
 }

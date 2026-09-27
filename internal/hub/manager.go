@@ -84,8 +84,7 @@ type endpointRuntime struct {
 	pendingRemoteWeb *pendingRemoteWebAction
 	pendingBootstrap bool
 
-	sessions   map[string]protocol.Session
-	workspaces map[string]protocol.Workspace
+	sessions map[string]protocol.Session
 }
 
 type pendingRemoteWebAction struct {
@@ -158,10 +157,9 @@ func NewManager(
 	}
 	for _, record := range endpointStore.ListEndpoints() {
 		m.runtimes[record.ID] = &endpointRuntime{
-			record:     record,
-			info:       infoFromRecord(record),
-			sessions:   make(map[string]protocol.Session),
-			workspaces: make(map[string]protocol.Workspace),
+			record:   record,
+			info:     infoFromRecord(record),
+			sessions: make(map[string]protocol.Session),
 		}
 	}
 	return m
@@ -309,9 +307,8 @@ func (m *Manager) UpdateEndpoint(id string, update store.EndpointUpdate) (*store
 	runtime, ok := m.runtimes[id]
 	if !ok {
 		runtime = &endpointRuntime{
-			info:       infoFromRecord(*record),
-			sessions:   make(map[string]protocol.Session),
-			workspaces: make(map[string]protocol.Workspace),
+			info:     infoFromRecord(*record),
+			sessions: make(map[string]protocol.Session),
 		}
 		m.runtimes[id] = runtime
 	}
@@ -435,7 +432,6 @@ func (m *Manager) stopRuntimeLocked(runtime *endpointRuntime) {
 		runtime.cmd = nil
 	}
 	runtime.sessions = make(map[string]protocol.Session)
-	runtime.workspaces = make(map[string]protocol.Workspace)
 	m.clearPendingRoutesLocked(runtime.record.ID)
 	zero := 0
 	runtime.info.SessionCount = protocol.Ptr(zero)
@@ -499,7 +495,6 @@ func (m *Manager) runEndpointLoop(ctx context.Context, id string) {
 		if m.clearRemoteSessions(id) {
 			m.publishSessionsChanged(id)
 		}
-		m.clearRemoteWorkspaceLayouts(id)
 
 		if ctx.Err() != nil {
 			return
@@ -559,7 +554,6 @@ func sendClientHello(ctx context.Context, conn *websocket.Conn, clientToken stri
 		Version:     "protocol-" + protocol.ProtocolVersion,
 		ClientToken: protocol.Ptr(clientToken),
 		Capabilities: []string{
-			protocol.CapabilityWorkspaceSessions,
 			protocol.CapabilityKittyImages,
 		},
 	})
@@ -608,7 +602,6 @@ func (m *Manager) consumeRemote(ctx context.Context, id string, conn *websocket.
 				return false, &VersionMismatchError{RemoteVersion: remoteProtocol, LocalVersion: protocol.ProtocolVersion}
 			}
 			changed := m.ReplaceRemoteSessions(id, msg.Sessions)
-			m.replaceRemoteWorkspaces(id, msg.Workspaces)
 			caps := capabilitiesFromInitialState(&msg)
 			sessionCount := int32(len(msg.Sessions))
 			if fingerMismatch, fingerMsg := fingerprintMismatch(msg.SourceFingerprint); fingerMismatch {
@@ -676,33 +669,6 @@ func (m *Manager) consumeRemote(ctx context.Context, id string, conn *websocket.
 			if changed {
 				m.publishSessionsChanged(id)
 			}
-		case protocol.EventWorkspaceLayout, protocol.EventWorkspaceLayoutUpdated:
-			var msg struct {
-				WorkspaceLayout *protocol.WorkspaceLayout `json:"workspace_layout"`
-			}
-			if err := json.Unmarshal(data, &msg); err != nil || msg.WorkspaceLayout == nil {
-				continue
-			}
-			m.upsertRemoteWorkspaceLayout(id, *msg.WorkspaceLayout)
-			m.publishRawEvent(data)
-		case protocol.EventWorkspaceRegistered, protocol.EventWorkspaceStateChanged:
-			var msg struct {
-				Workspace *protocol.Workspace `json:"workspace"`
-			}
-			if err := json.Unmarshal(data, &msg); err != nil || msg.Workspace == nil {
-				continue
-			}
-			m.upsertRemoteWorkspace(id, *msg.Workspace)
-			m.publishRawEvent(data)
-		case protocol.EventWorkspaceUnregistered:
-			var msg struct {
-				Workspace *protocol.Workspace `json:"workspace"`
-			}
-			if err := json.Unmarshal(data, &msg); err != nil || msg.Workspace == nil {
-				continue
-			}
-			m.removeRemoteWorkspace(id, msg.Workspace.ID)
-			m.publishRawEvent(data)
 		case protocol.EventBrowserControlResponse:
 			m.resolveBrowserControl(id, data)
 		case protocol.EventRenameResult:
@@ -792,8 +758,6 @@ func forwardsRawEvent(event string) bool {
 		protocol.EventKittyPlacements,
 		protocol.EventKittyImageResult,
 		protocol.EventSessionExited,
-		protocol.EventWorkspaceLayoutActionResult,
-		protocol.EventWorkspaceTileContent,
 		protocol.EventMarkdownAnnotationsGetResult,
 		protocol.EventMarkdownAnnotationsSaveResult,
 		protocol.EventMarkdownAnnotationsClearResult,
@@ -835,47 +799,6 @@ func (m *Manager) RemoteSessions() []protocol.Session {
 	return out
 }
 
-func (m *Manager) RemoteWorkspaces() []protocol.Workspace {
-	m.mu.RLock()
-	defer m.mu.RUnlock()
-
-	total := 0
-	for _, runtime := range m.runtimes {
-		total += len(runtime.workspaces)
-	}
-	if total == 0 {
-		return nil
-	}
-
-	out := make([]protocol.Workspace, 0, total)
-	for _, runtime := range m.runtimes {
-		for _, workspace := range runtime.workspaces {
-			out = append(out, workspace)
-		}
-	}
-	sort.Slice(out, func(i, j int) bool {
-		return out[i].ID < out[j].ID
-	})
-	return out
-}
-
-func (m *Manager) RemoteWorkspace(workspaceID string) *protocol.Workspace {
-	m.mu.RLock()
-	defer m.mu.RUnlock()
-	for _, runtime := range m.runtimes {
-		if workspace, ok := runtime.workspaces[workspaceID]; ok {
-			copy := workspace
-			if workspace.Layout != nil {
-				layoutCopy := *workspace.Layout
-				layoutCopy.Panes = append([]protocol.WorkspaceLayoutPane(nil), workspace.Layout.Panes...)
-				copy.Layout = &layoutCopy
-			}
-			return &copy
-		}
-	}
-	return nil
-}
-
 func (m *Manager) EndpointIDForSession(sessionID string) (string, bool) {
 	m.mu.RLock()
 	defer m.mu.RUnlock()
@@ -886,17 +809,6 @@ func (m *Manager) EndpointIDForSession(sessionID string) (string, bool) {
 	}
 	if pending, ok := m.pendingSessionRouteLocked(sessionID, time.Now()); ok {
 		return pending.endpointID, true
-	}
-	return "", false
-}
-
-func (m *Manager) EndpointIDForWorkspace(workspaceID string) (string, bool) {
-	m.mu.RLock()
-	defer m.mu.RUnlock()
-	for endpointID, runtime := range m.runtimes {
-		if _, ok := runtime.workspaces[workspaceID]; ok {
-			return endpointID, true
-		}
 	}
 	return "", false
 }
@@ -950,16 +862,6 @@ func (m *Manager) EndpointIDForPTYTarget(targetID string) (string, bool) {
 	for endpointID, runtime := range m.runtimes {
 		if _, ok := runtime.sessions[targetID]; ok {
 			return endpointID, true
-		}
-		for _, layout := range runtime.workspaces {
-			if layout.Layout == nil {
-				continue
-			}
-			for _, pane := range layout.Layout.Panes {
-				if protocol.Deref(pane.RuntimeID) == targetID {
-					return endpointID, true
-				}
-			}
 		}
 	}
 	if pending, ok := m.pendingSessionRouteLocked(targetID, time.Now()); ok {
@@ -1398,90 +1300,6 @@ func (m *Manager) clearPendingRoutesLocked(endpointID string) {
 	}
 }
 
-func (m *Manager) replaceRemoteWorkspaces(id string, workspaces []protocol.Workspace) bool {
-	m.mu.Lock()
-	defer m.mu.Unlock()
-	runtime, ok := m.runtimes[id]
-	if !ok {
-		return false
-	}
-	next := make(map[string]protocol.Workspace, len(workspaces))
-	for _, workspace := range workspaces {
-		workspace.EndpointID = protocol.Ptr(id)
-		next[workspace.ID] = workspace
-	}
-	if workspaceLayoutsEqual(runtime.workspaces, next) {
-		return false
-	}
-	runtime.workspaces = next
-	return true
-}
-
-func (m *Manager) upsertRemoteWorkspaceLayout(id string, workspace protocol.WorkspaceLayout) bool {
-	m.mu.Lock()
-	defer m.mu.Unlock()
-	runtime, ok := m.runtimes[id]
-	if !ok {
-		return false
-	}
-	if runtime.workspaces == nil {
-		runtime.workspaces = make(map[string]protocol.Workspace)
-	}
-	current, ok := runtime.workspaces[workspace.WorkspaceID]
-	if !ok {
-		return false
-	}
-	if current.Layout != nil && workspaceLayoutsMatch(*current.Layout, workspace) {
-		return false
-	}
-	current.Layout = &workspace
-	runtime.workspaces[workspace.WorkspaceID] = current
-	return true
-}
-
-func (m *Manager) upsertRemoteWorkspace(id string, workspace protocol.Workspace) bool {
-	m.mu.Lock()
-	defer m.mu.Unlock()
-	runtime, ok := m.runtimes[id]
-	if !ok {
-		return false
-	}
-	if runtime.workspaces == nil {
-		runtime.workspaces = make(map[string]protocol.Workspace)
-	}
-	if current, ok := runtime.workspaces[workspace.ID]; ok && workspace.Layout == nil {
-		workspace.Layout = current.Layout
-	}
-	workspace.EndpointID = protocol.Ptr(id)
-	runtime.workspaces[workspace.ID] = workspace
-	return true
-}
-
-func (m *Manager) removeRemoteWorkspace(id, workspaceID string) bool {
-	m.mu.Lock()
-	defer m.mu.Unlock()
-	runtime, ok := m.runtimes[id]
-	if !ok || runtime.workspaces == nil {
-		return false
-	}
-	if _, ok := runtime.workspaces[workspaceID]; !ok {
-		return false
-	}
-	delete(runtime.workspaces, workspaceID)
-	return true
-}
-
-func (m *Manager) clearRemoteWorkspaceLayouts(id string) bool {
-	m.mu.Lock()
-	defer m.mu.Unlock()
-	runtime, ok := m.runtimes[id]
-	if !ok || len(runtime.workspaces) == 0 {
-		return false
-	}
-	runtime.workspaces = make(map[string]protocol.Workspace)
-	return true
-}
-
 func (m *Manager) publishSessionsChanged(endpointID string) {
 	if m.onSessions != nil {
 		m.onSessions(endpointID)
@@ -1539,42 +1357,6 @@ func sessionsMatch(left, right protocol.Session) bool {
 		protocol.Deref(left.NudgeFiresAt) == protocol.Deref(right.NudgeFiresAt) &&
 		strings.Join(left.Todos, "\x00") == strings.Join(right.Todos, "\x00") &&
 		left.LastSeen == right.LastSeen
-}
-
-func workspaceLayoutsEqual(left, right map[string]protocol.Workspace) bool {
-	if len(left) != len(right) {
-		return false
-	}
-	for id, leftWorkspace := range left {
-		rightWorkspace, ok := right[id]
-		if !ok || leftWorkspace.ID != rightWorkspace.ID || leftWorkspace.Title != rightWorkspace.Title ||
-			leftWorkspace.Directory != rightWorkspace.Directory || leftWorkspace.Status != rightWorkspace.Status {
-			return false
-		}
-		if (leftWorkspace.Layout == nil) != (rightWorkspace.Layout == nil) {
-			return false
-		}
-		if leftWorkspace.Layout != nil && !workspaceLayoutsMatch(*leftWorkspace.Layout, *rightWorkspace.Layout) {
-			return false
-		}
-	}
-	return true
-}
-
-func workspaceLayoutsMatch(left, right protocol.WorkspaceLayout) bool {
-	if left.WorkspaceID != right.WorkspaceID ||
-		left.ActivePaneID != right.ActivePaneID ||
-		left.LayoutJson != right.LayoutJson ||
-		protocol.Deref(left.UpdatedAt) != protocol.Deref(right.UpdatedAt) ||
-		len(left.Panes) != len(right.Panes) {
-		return false
-	}
-	for i := range left.Panes {
-		if left.Panes[i] != right.Panes[i] {
-			return false
-		}
-	}
-	return true
 }
 
 func foreignHomeNotice(homeDaemonID string, msg *protocol.InitialStateMessage) string {

@@ -14,28 +14,16 @@ func TestWireTraceProducerGolden(t *testing.T) {
 	d := NewForTesting(filepath.Join(dir, "test.sock"))
 	trace := wireRecorder(d)
 
-	workspaceDir := filepath.Join(dir, "workspace")
-	if err := os.MkdirAll(workspaceDir, 0o755); err != nil {
-		t.Fatalf("create workspace dir: %v", err)
+	projectDir := filepath.Join(dir, "project")
+	if err := os.MkdirAll(projectDir, 0o755); err != nil {
+		t.Fatalf("create project dir: %v", err)
 	}
-	client := newWorkspaceProtocolTestClient()
-	d.handleRegisterWorkspace(client, &protocol.RegisterWorkspaceMessage{
-		Cmd: protocol.CmdRegisterWorkspace, ID: "workspace-1", Title: "One", Directory: workspaceDir,
-	})
-	d.handleWorkspaceLayoutAddSessionPane(client, &protocol.WorkspaceLayoutAddSessionPaneMessage{
-		Cmd: protocol.CmdWorkspaceLayoutAddSessionPane, WorkspaceID: "workspace-1",
-		PaneID: protocol.Ptr("pane-1"), SessionID: "sess-1", Title: protocol.Ptr("one"),
-	})
 	now := string(protocol.TimestampNow())
 	d.store.Add(&protocol.Session{
 		ID: "sess-1", Label: "one", Agent: protocol.SessionAgentClaude,
-		Directory: workspaceDir, WorkspaceID: "workspace-1", ProfileID: defaultProfileID(t, d.store),
+		Directory: projectDir, ProfileID: defaultProfileID(t, d.store),
 		State: protocol.SessionStateIdle, StateSince: now, StateUpdatedAt: now, LastSeen: now,
 	})
-	d.workspaces.associateSession("sess-1", "workspace-1", "one")
-	if _, err := d.ensureWorkspaceLayout("workspace-1"); err != nil {
-		t.Fatalf("ensureWorkspaceLayout: %v", err)
-	}
 
 	worktreeDir := filepath.Join(dir, "worktree")
 
@@ -50,12 +38,10 @@ func TestWireTraceProducerGolden(t *testing.T) {
 		{"rate_limited", func() {
 			d.broadcastRateLimited("github", time.Date(2026, 8, 1, 12, 0, 0, 0, time.UTC))
 		}},
-		{"workspace_layout", func() { d.broadcastWorkspaceLayout("workspace-1") }},
-		{"workspace_layout_updated", func() { d.broadcastWorkspaceLayoutUpdated("workspace-1") }},
 		{"workflow_run_updated", func() {
 			d.publishFact(FactWorkflowRunUpdated, "run-1", &protocol.WorkflowRun{
 				RunID: "run-1", Status: protocol.WorkflowRunStatusRunning,
-				ScriptPath: filepath.Join(workspaceDir, "flow.js"), ScriptHash: "hash-1",
+				ScriptPath: filepath.Join(projectDir, "flow.js"), ScriptHash: "hash-1",
 				CreatedAt: now, UpdatedAt: now,
 			})
 		}},
@@ -69,21 +55,21 @@ func TestWireTraceProducerGolden(t *testing.T) {
 		{"tasks_changed", func() { d.publishFact(FactTaskChanged, "task-1", nil) }},
 		{"notifications_updated", func() { d.publishFact(FactNotificationCreated, "notif-1", nil) }},
 		{"notebook_changed", func() {
-			d.broadcastNotebookChanged("agent", filepath.Join(workspaceDir, "journal.md"))
+			d.broadcastNotebookChanged("agent", filepath.Join(projectDir, "journal.md"))
 		}},
 		{"endpoints_updated", func() { d.publishFact(FactEndpointAdded, "endpoint-1", nil) }},
 		{"endpoint_status_changed", func() {
 			d.broadcastEndpointStatusChanged(protocol.EndpointInfo{ID: "endpoint-1", Name: "remote"})
 		}},
 		{"git_operation", func() {
-			finish := d.beginGitOperation(protocol.GitOperationKindDeleteWorktree, workspaceDir, nil)
+			finish := d.beginGitOperation(protocol.GitOperationKindDeleteWorktree, projectDir, nil)
 			finish(nil)
 		}},
-		{"worktree_created", func() { d.registerCreatedWorktree(workspaceDir, worktreeDir, "feature") }},
+		{"worktree_created", func() { d.registerCreatedWorktree(projectDir, worktreeDir, "feature") }},
 		{"worktree_deleted", func() { d.publishFact(FactWorktreeDeleted, worktreeDir, nil) }},
 		{"worktrees_updated", func() {
-			d.publishFact(FactWorktreeListReconciled, workspaceDir, []protocol.Worktree{{
-				Path: worktreeDir, Branch: "feature", MainRepo: workspaceDir,
+			d.publishFact(FactWorktreeListReconciled, projectDir, []protocol.Worktree{{
+				Path: worktreeDir, Branch: "feature", MainRepo: projectDir,
 				CreatedAt: protocol.Ptr(now),
 			}})
 		}},

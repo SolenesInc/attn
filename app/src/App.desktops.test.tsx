@@ -205,7 +205,6 @@ function session(id: string): Session {
     label: id,
     state: 'working',
     cwd: '/tmp/repo',
-    workspaceId: '',
     profileId: TEST_PROFILE_ID,
     desktopId: '',
     agent: 'claude',
@@ -584,7 +583,6 @@ describe('desktop surface', () => {
           directory: '/tmp/repo',
           state: 'working',
           profile_id: TEST_PROFILE_ID,
-          workspace_id: '',
         })),
       );
     });
@@ -1304,7 +1302,7 @@ describe('desktop surface', () => {
 
     act(() => {
       useSessionStore.getState().syncFromDaemonSessions([
-        { id: 's3', label: 's3', directory: '/tmp/elsewhere', state: 'working', profile_id: TEST_PROFILE_ID, workspace_id: '' },
+        { id: 's3', label: 's3', directory: '/tmp/elsewhere', state: 'working', profile_id: TEST_PROFILE_ID},
       ]);
     });
     await act(async () => {

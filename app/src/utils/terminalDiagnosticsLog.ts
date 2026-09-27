@@ -328,13 +328,13 @@ export function recordFocus(pane: string, retries: number): void {
 
 const lastLayoutSig = new Map<string, string>();
 
-export function recordLayout(workspace: string, paneIds: string[], splitCount: number): void {
+export function recordLayout(desktop: string, paneIds: string[], splitCount: number): void {
   const sig = `${[...paneIds].sort().join(',')}|${splitCount}`;
-  if (lastLayoutSig.get(workspace) === sig) {
+  if (lastLayoutSig.get(desktop) === sig) {
     return;
   }
-  lastLayoutSig.set(workspace, sig);
-  recordDiag({ kind: 'layout', workspace, paneCount: paneIds.length, splitCount, paneIds });
+  lastLayoutSig.set(desktop, sig);
+  recordDiag({ kind: 'layout', desktop, paneCount: paneIds.length, splitCount, paneIds });
 }
 
 export interface PaintSample {

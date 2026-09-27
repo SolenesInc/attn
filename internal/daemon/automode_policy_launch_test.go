@@ -114,7 +114,6 @@ func TestSpawnAppliesThePerSessionPolicyPair(t *testing.T) {
 			})
 			captured := capturePolicyTestSpawn(t, client)
 
-			addTestWorkspace(d, "workspace-snipe", t.TempDir())
 			ws := &wsClient{send: make(chan outboundMessage, 2), attachedStreams: make(map[string]ptybackend.Stream)}
 			msg := &protocol.SpawnSessionMessage{
 				ID:        "snipe-session",
@@ -142,7 +141,7 @@ func TestSpawnAppliesThePerSessionPolicyPair(t *testing.T) {
 					intent.ApprovalPolicy, intent.SandboxMode, tc.policy, tc.sandbox)
 			}
 			session := &protocol.Session{
-				ID: "snipe-session", Directory: t.TempDir(), Agent: "snipe", WorkspaceID: "workspace-snipe", ProfileID: defaultProfileID(t, d.store),
+				ID: "snipe-session", Directory: t.TempDir(), Agent: "snipe", ProfileID: defaultProfileID(t, d.store),
 			}
 			revived, _ := buildStoredIntentSpawn(session, intent, 80, 24)
 			if got := protocol.Deref(revived.ApprovalPolicy); got != tc.policy {
@@ -163,7 +162,6 @@ func TestReloadKeepsThePerSessionPolicyPair(t *testing.T) {
 	}
 	d := newReloadTestDaemon(t, backend)
 	directory := t.TempDir()
-	addTestWorkspace(d, "ws-snipe-session", directory)
 	addReloadSessionAt(d, "snipe-session", protocol.SessionAgent("snipe"), protocol.SessionStateIdle, directory)
 	d.store.SetSetting(SettingNotebookRoot, t.TempDir())
 	setTestAutoModePolicy(t, d, automode.PolicyOnRequest, automode.SandboxWorkspaceWrite)
@@ -199,7 +197,6 @@ func TestYoloOnAnAutoModeDriverLaunchesWithFullAccess(t *testing.T) {
 	})
 	captured := capturePolicyTestSpawn(t, client)
 
-	addTestWorkspace(d, "workspace-snipe", t.TempDir())
 	ws := &wsClient{send: make(chan outboundMessage, 2), attachedStreams: make(map[string]ptybackend.Stream)}
 	d.handleSpawnSession(ws, &protocol.SpawnSessionMessage{
 		ID:             "snipe-session",
@@ -235,7 +232,6 @@ func TestYoloIsStillRefusedForADriverThatReadsNeitherFlag(t *testing.T) {
 	d := NewForTesting(filepath.Join(t.TempDir(), "test.sock"))
 	d.ptyBackend = &fakeSpawnBackend{}
 	registerPolicyTestDriver(t, d, map[string]bool{"launch_instructions": true})
-	addTestWorkspace(d, "workspace-snipe", t.TempDir())
 
 	rejection := d.runSpawnPipeline(&protocol.SpawnSessionMessage{
 		ID:        "snipe-session",
@@ -283,7 +279,6 @@ func TestSpawnRefusesAPolicyPairItCannotHonour(t *testing.T) {
 				capabilities["auto_mode"] = true
 			}
 			registerPolicyTestDriver(t, d, capabilities)
-			addTestWorkspace(d, "workspace-snipe", t.TempDir())
 
 			msg := &protocol.SpawnSessionMessage{
 				ID:        "snipe-session",

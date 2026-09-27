@@ -207,10 +207,10 @@ func (d *Daemon) finishDelegationFailure(id string, err error) {
 		"delegation failed", "", "", nil, err)
 }
 
-func (d *Daemon) persistDelegationTerminal(id string, state protocol.DelegationOperationState, progress, workspaceID, worktreePath string, result *protocol.DelegateResult, operationErr error) {
+func (d *Daemon) persistDelegationTerminal(id string, state protocol.DelegationOperationState, progress, profileID, worktreePath string, result *protocol.DelegateResult, operationErr error) {
 	delay := 100 * time.Millisecond
 	for {
-		if err := d.store.UpdateDelegationOperation(id, state, progress, workspaceID, "", worktreePath, result, operationErr, time.Now()); err == nil {
+		if err := d.store.UpdateDelegationOperation(id, state, progress, profileID, "", worktreePath, result, operationErr, time.Now()); err == nil {
 			return
 		} else {
 			d.logf("persist terminal delegation operation %s: %v", id, err)

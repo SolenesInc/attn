@@ -75,7 +75,7 @@ export type Handler<Collections> = (event: AppEvent, ctx: AppContext<Collections
 /** Why attn requires the app to rebuild its derived collections. `gap`: the consumer
     resumed below the oldest fact still in the log. `version_changed`: a different version serves. */
 export type ReconcileCause = "gap" | "version_changed";
-export type { AppRegistryEntry, AppViewInfo, AutomationProvenance, AuthorState, CrewMember, CrewRestart, CrewRestartState, CurrentStateSnapshot, EndpointCapabilities, EndpointInfo, PR, PullRequestProvenance, RepoState, Seed, SeedContinuation, SeedEdge, SeedPlotProgress, SeedVar, Session, SessionDelegationRole, SessionUsage, SessionUsageModel, TicketRow, Workspace, WorkspaceLayout, WorkspacePane, } from "./currentState";
+export type { AppRegistryEntry, AppViewInfo, AutomationProvenance, AuthorState, CrewMember, CrewRestart, CrewRestartState, CurrentStateSnapshot, EndpointCapabilities, EndpointInfo, PR, PullRequestProvenance, RepoState, Seed, SeedContinuation, SeedEdge, SeedPlotProgress, SeedVar, Session, SessionDelegationRole, SessionUsage, SessionUsageModel, TicketRow, } from "./currentState";
 /** The durable requests coalesced into one reconcile invocation. */
 export interface ReconcileReason {
     /** Sorted as gap, version_changed, independent of arrival order. */
@@ -97,9 +97,9 @@ export interface ReconcileReason {
 export type ReconcileHandler<Collections> = (reason: ReconcileReason, ctx: AppContext<Collections>) => void | Promise<void>;
 /** What a view is given. `params` is what the user typed when docking, which is what makes two tiles of one view differ. */
 export interface ViewProps {
-    /** The workspace this tile is in. */
-    readonly workspaceId: string;
-    /** The session that workspace has selected, if any. */
+    /** The desktop this tile is on. */
+    readonly desktopId: string;
+    /** The agent this tile is bound to, if any. */
     readonly sessionId: string | null;
     /** Stable for the life of this docked tile. */
     readonly tileId: string;

@@ -26,7 +26,7 @@ func newSpawnCharacterizationDaemonOn(t *testing.T, d *Daemon) (*Daemon, *fakeSp
 	t.Helper()
 	backend := &fakeSpawnBackend{}
 	d.ptyBackend = backend
-	client := newWorkspaceProtocolTestClient()
+	client := newProtocolTestClient()
 	cwd := t.TempDir()
 	return d, backend, client, cwd
 }
@@ -293,7 +293,6 @@ func TestSpawnCharacterizationPluginChiefResumeFailureMentionsCapability(t *test
 		plugin, done := startPluginPipe(t, d, "characterization-plugin-error", nil)
 		defer func() { _ = plugin.Close(); <-done }()
 		registerTestPluginDriver(t, plugin, "characterization-error", map[string]bool{"launch_instructions": true})
-		addTestWorkspace(d, "workspace", cwd)
 		msg := spawnCharacterizationMessage("plugin-chief-error", defaultProfileID(t, d.store), cwd)
 		msg.Agent, msg.ChiefOfStaff = "characterization-error", protocol.Ptr(true)
 		d.handleSpawnSession(client, msg)
@@ -312,7 +311,6 @@ func TestSpawnCharacterizationAlreadyLivePluginRespawnSkipsPluginPrep(t *testing
 		plugin, pluginDone := startPluginPipe(t, d, "characterization-live-plugin", nil)
 		defer func() { _ = plugin.Close(); <-pluginDone }()
 		registerTestPluginDriver(t, plugin, "characterization-live", nil)
-		addTestWorkspace(d, "workspace", cwd)
 
 		driverSpawns := make(chan bool, 1)
 		go func() {

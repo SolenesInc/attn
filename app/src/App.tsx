@@ -13,7 +13,6 @@ import {
   DaemonEndpoint,
   DaemonPlugin,
   DaemonPluginIssue,
-  DaemonWorkspace,
   DaemonWorktree,
   SessionExitInfo,
   useDaemonSocket,
@@ -49,7 +48,6 @@ function App() {
     [],
   );
 
-  const [daemonWorkspaces, setDaemonWorkspaces] = useState<DaemonWorkspace[]>([]);
 
   const [, setWorktrees] = useState<DaemonWorktree[]>([]);
 
@@ -146,7 +144,6 @@ function App() {
     onSeedsUpdate: setSeeds,
     onAppsUpdate: setApps,
     onCrewUpdate: setCrew,
-    onWorkspacesUpdate: setDaemonWorkspaces,
     onPRsUpdate: setPRs,
     onEndpointsUpdate: setDaemonEndpoints,
     onPluginsUpdate: handlePluginsUpdate,
@@ -241,7 +238,6 @@ function App() {
           <MigrationGate>
             <AppContent
               daemonSessions={daemonSessions}
-              daemonWorkspaces={daemonWorkspaces}
               prs={prs}
               daemonEndpoints={daemonEndpoints}
               daemonPlugins={daemonPlugins}

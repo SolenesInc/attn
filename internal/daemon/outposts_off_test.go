@@ -53,8 +53,8 @@ func startOutpostsOffDaemon(t *testing.T) *outpostsOffDaemon {
 	<-d.Started()
 	waitFor(t, "the daemon to finish recovering", func() bool { return !d.isRecovering() })
 
-	client := newWorkspaceProtocolTestClient()
-	client.setIdentity("tauri-app", "protocol-"+protocol.ProtocolVersion, []string{protocol.CapabilityWorkspaceSessions})
+	client := newProtocolTestClient()
+	client.setIdentity("tauri-app", "protocol-"+protocol.ProtocolVersion, nil)
 	return &outpostsOffDaemon{t: t, d: d, client: client, endpointID: endpoint.ID, sshLog: sshLog}
 }
 

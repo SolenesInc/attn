@@ -25,7 +25,6 @@ func addTurnSession(t *testing.T, s *Store, id string, state protocol.SessionSta
 		ID:             id,
 		Label:          id,
 		Directory:      "/tmp/" + id,
-		WorkspaceID:    "ws-1",
 		State:          state,
 		StateSince:     now,
 		StateUpdatedAt: now,
