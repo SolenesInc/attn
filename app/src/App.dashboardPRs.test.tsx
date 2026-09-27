@@ -105,6 +105,19 @@ describe('App dashboard pull requests', () => {
     expect(card('ship it')).toBeNull();
   });
 
+  it('approves and mutes a PR from its card', async () => {
+    const { daemon } = await renderApp({ initialState: { prs: [pr('p1', { title: 'review this' })] } });
+    daemon.on('approve_pr', ({ id }) => ({ event: 'pr_action_result', action: 'approve', id, success: true }));
+
+    await gesture(daemon, () => fireEvent.click(within(card('review this')!).getByRole('button', { name: 'Approve' })));
+    await gesture(daemon, () => fireEvent.click(within(card('review this')!).getByRole('button', { name: 'Mute' })));
+
+    expect(daemon.sent.filter(({ cmd }) => cmd === 'approve_pr' || cmd === 'mute_pr')).toEqual([
+      { cmd: 'approve_pr', id: 'p1' },
+      { cmd: 'mute_pr', id: 'p1' },
+    ]);
+  });
+
   it('shortens the links in a GitHub CLI warning to their host and opens the full address', async () => {
     const guide = 'https://github.com/cli/cli/blob/trunk/docs/install_linux.md';
     await renderApp({
