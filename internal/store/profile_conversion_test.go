@@ -11,6 +11,7 @@ import (
 	"sort"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/victorarias/attn/internal/layouttree"
 	"github.com/victorarias/attn/internal/profilemigration"
@@ -410,6 +411,31 @@ func TestConversionKeepsTheNewestOfDuplicatePlacementsAndRenamesCollidingPanes(t
 	}
 	if placed["first-owner"] != desktops[0].ID || placed["second-owner"] != desktops[1].ID {
 		t.Fatalf("placements = %+v, want each owner of pane-shared kept on its own desktop", placed)
+	}
+}
+
+func TestTheUpgradeDropsMuteAndPinButKeepsSnoozeAndTurnStamps(t *testing.T) {
+	f := newLegacyFixture(t)
+	f.agentWorkspace("muted-pinned", "snoozed")
+	f.exec(`UPDATE workspaces SET muted = 1, pinned = 1 WHERE id = 'muted-pinned'`)
+	f.exec(`UPDATE sessions SET pinned_at = '2026-09-01T00:00:00Z', turn_opened_at = ?, turn_settled_at = ?, turn_snoozed_until = ? WHERE id = 'snoozed'`,
+		"2026-09-02T00:00:00.000000000Z", "2026-09-03T00:00:00.000000000Z", "2099-01-01T00:00:00.000000000Z")
+	s, _, desktops := f.mustConvert()
+
+	want := TurnStamps{
+		OpenedAt:     time.Date(2026, 9, 2, 0, 0, 0, 0, time.UTC),
+		SettledAt:    time.Date(2026, 9, 3, 0, 0, 0, 0, time.UTC),
+		SnoozedUntil: time.Date(2099, 1, 1, 0, 0, 0, 0, time.UTC),
+	}
+	if got := s.TurnStamps("snoozed"); !got.OpenedAt.Equal(want.OpenedAt) || !got.SettledAt.Equal(want.SettledAt) || !got.SnoozedUntil.Equal(want.SnoozedUntil) {
+		t.Fatalf("turn stamps = %+v, want %+v carried through the upgrade", got, want)
+	}
+	if placed := placements(desktops); placed["snoozed"] != desktops[0].ID {
+		t.Fatalf("placements = %+v, want the agent of the muted, pinned workspace placed like any other", placed)
+	}
+	var pinnedColumns int
+	if err := s.db.QueryRow(`SELECT count(*) FROM pragma_table_info('sessions') WHERE name = 'pinned_at'`).Scan(&pinnedColumns); err != nil || pinnedColumns != 0 {
+		t.Fatalf("sessions.pinned_at survived the upgrade (%v)", err)
 	}
 }
 
