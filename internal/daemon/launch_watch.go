@@ -157,3 +157,41 @@ func (d *Daemon) noteDelegatedExitOnSeed(seedID, agent, sessionID string, exit *
 		return
 	}
 }
+
+func (d *Daemon) watchRecoveredLaunches() {
+	records, err := d.store.PendingDelegationOperations()
+	if err != nil {
+		d.logf("load pending delegation launches: %v", err)
+		return
+	}
+	for i := range records {
+		sessionID := records[i].Operation.SessionID
+		if d.store.Get(sessionID) == nil {
+			continue
+		}
+		watch := d.watchLaunch(sessionID)
+		d.launchWatchMu.Lock()
+		if d.recoveredLaunches == nil {
+			d.recoveredLaunches = make(map[string]*launchWatch)
+		}
+		d.recoveredLaunches[sessionID] = watch
+		d.launchWatchMu.Unlock()
+	}
+}
+
+func (d *Daemon) takeRecoveredLaunch(sessionID string) *launchWatch {
+	d.launchWatchMu.Lock()
+	defer d.launchWatchMu.Unlock()
+	watch := d.recoveredLaunches[sessionID]
+	delete(d.recoveredLaunches, sessionID)
+	return watch
+}
+
+func (w *launchWatch) settled() bool {
+	select {
+	case <-w.done:
+		return true
+	default:
+		return false
+	}
+}

@@ -185,6 +185,7 @@ type Daemon struct {
 	delegationWaitsForFirstTurn       bool
 	launchWatchMu                     sync.Mutex
 	launchWatches                     map[string]*launchWatch
+	recoveredLaunches                 map[string]*launchWatch
 	reloadingMu                       sync.Mutex
 	reloadingSessions                 map[string]bool
 	prepareSessionTeardownHook        func(string) error
@@ -931,6 +932,7 @@ func (d *Daemon) Start() error {
 	}
 	d.startPermanentMaintenance()
 
+	d.watchRecoveredLaunches()
 	go func() {
 		d.performStartupPTYRecovery(previousRunSessions, recoveryStartedAt)
 		go d.runSessionResolver()
