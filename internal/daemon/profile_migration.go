@@ -34,13 +34,10 @@ func protocolMigrationGroup(group profilemigration.GroupState, confirmed bool) (
 	}, nil
 }
 
-func protocolMigrationDesktop(desktop profilemigration.Desktop, kept map[string]int) (protocol.MigrationDraftDesktop, error) {
+func protocolMigrationDesktop(desktop profilemigration.Desktop) (protocol.MigrationDraftDesktop, error) {
 	out := protocol.MigrationDraftDesktop{Key: desktop.Key}
 	if desktop.DesktopID != "" {
 		out.DesktopID = protocol.Ptr(desktop.DesktopID)
-	}
-	if n := kept[desktop.DesktopID]; n > 0 {
-		out.KeptLeaves = protocol.Ptr(n)
 	}
 	if desktop.ShortcutSlot != 0 {
 		out.ShortcutSlot = protocol.Ptr(desktop.ShortcutSlot)
@@ -81,7 +78,7 @@ func protocolMigrationState(view store.ProfileMigrationView) (protocol.Migration
 		state.Groups = append(state.Groups, wire)
 	}
 	for _, desktop := range view.Plan.Desktops {
-		wire, err := protocolMigrationDesktop(desktop, view.Kept)
+		wire, err := protocolMigrationDesktop(desktop)
 		if err != nil {
 			return state, err
 		}

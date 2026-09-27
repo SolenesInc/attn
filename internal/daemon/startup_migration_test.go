@@ -295,30 +295,3 @@ func TestClosingAnImportedAgentRetiresItsGroupForEveryClient(t *testing.T) {
 		t.Fatalf("groups after the close = %+v, want only ws-1", last.Groups)
 	}
 }
-
-func TestADocumentDockedOnASourceDesktopDuringThePickerIsReportedAsKept(t *testing.T) {
-	w := newMigratingTestDaemon(t, 2)
-	client, initial := w.connect("")
-	var source protocol.Desktop
-	for _, desktop := range initial.Desktops {
-		if protocol.Deref(desktop.ShortcutSlot) == 2 {
-			source = desktop
-		}
-	}
-	if source.ID == "" {
-		t.Fatal("the initial state has no desktop in slot 2")
-	}
-	w.mustSend(client, map[string]any{
-		"cmd": protocol.CmdDesktopDockTile, "desktop_id": source.ID, "expected_revision": source.Revision,
-		"tile_id": "tile-doc", "tile_kind": "markdown", "tile_params": "/fixture/doc.md", "edge": "right",
-	})
-	state := w.mustMigrate(client, map[string]any{"cmd": protocol.CmdMigrationGet})
-	for _, desktop := range state.Desktops {
-		if protocol.Deref(desktop.DesktopID) == source.ID && protocol.Deref(desktop.KeptLeaves) != 1 {
-			t.Fatalf("desktop in slot 2 = %+v, want the docked document reported as kept", desktop)
-		}
-		if protocol.Deref(desktop.DesktopID) != source.ID && protocol.Deref(desktop.KeptLeaves) != 0 {
-			t.Fatalf("desktop %+v reports kept items, want none outside slot 2", desktop)
-		}
-	}
-}

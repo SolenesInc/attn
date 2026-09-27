@@ -139,18 +139,6 @@ func (m *materializer) finalDesktop(existing profiles.Desktop, slot int, tree la
 	return profiles.Settle(desktop)
 }
 
-// KeptLeaves counts, per existing desktop, the leaves outside every live group; Finish keeps them there.
-func KeptLeaves(live []GroupState, current []profiles.Desktop) map[string]int {
-	m := newMaterializer(live, current, nil)
-	kept := make(map[string]int)
-	for _, desktop := range current {
-		if n := len(m.unclaimed(desktop.ID)); n > 0 {
-			kept[desktop.ID] = n
-		}
-	}
-	return kept
-}
-
 func Materialize(plan Plan, live []GroupState, current []profiles.Desktop, newSplitID func() string) (Outcome, error) {
 	if err := plan.Check(live); err != nil {
 		return Outcome{}, err
