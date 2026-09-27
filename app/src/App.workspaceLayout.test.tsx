@@ -1,6 +1,7 @@
 import { act, fireEvent, screen } from '@testing-library/react';
+import { invoke, isTauri } from '@tauri-apps/api/core';
 import { describe, expect, it, vi } from 'vitest';
-import { openSession } from './test/appFixtures';
+import { openActionMenu, openSession } from './test/appFixtures';
 import { agentWorkspace, daemonSession, splitWorkspace } from './test/daemonFixtures';
 import { fakeRects } from './test/layout';
 import { pressShortcut, renderApp } from './test/renderApp';
@@ -418,5 +419,90 @@ describe('App workspace layout', () => {
     await daemon.idle();
 
     expect(zoomedPane()).toBe('pane-s1');
+  });
+
+  describe('native browser tile', () => {
+    const LABEL = 'browser-ws-tile-browser';
+    const browserAt = (url: string) => split('split-a', 'vertical', [pane('s1'), { type: 'tile', tile_id: 'tile-browser', tile_kind: 'browser', tile_params: url }]);
+
+    let nativeVisible: boolean | undefined;
+
+    async function openBrowser(url: string, { holdMount = false } = {}) {
+      let landMount = () => {};
+      nativeVisible = undefined;
+      vi.mocked(isTauri).mockReturnValue(true);
+      vi.mocked(invoke).mockImplementation(async (command: string, args?: unknown) => {
+        const { geometry } = (args ?? {}) as { geometry?: { visible: boolean } };
+        if (command === 'browser_host_mount') {
+          if (holdMount) await new Promise<void>((resolve) => { landMount = resolve; });
+          nativeVisible = geometry!.visible;
+        }
+        if (command === 'browser_host_update') {
+          if (nativeVisible === undefined) throw new Error('browser host not mounted');
+          nativeVisible = geometry!.visible;
+        }
+        return undefined;
+      });
+      const view = await openWorkspace(pane('s1'), ['s1']);
+      const layOut = async (root: unknown) => {
+        view.daemon.emit({ event: 'workspace_layout_updated', workspace_layout: laidOutWorkspace(root, ['s1']).layout! });
+        await view.daemon.idle();
+      };
+      await layOut(browserAt(url));
+      const land = async () => {
+        landMount();
+        await view.daemon.idle();
+      };
+      return { ...view, layOut, land };
+    }
+
+    const host = (command: string) => vi.mocked(invoke).mock.calls.filter(([name]) => name === command).map(([, args]) => args as Record<string, unknown>);
+    const mounted = () => host('browser_host_mount').map(({ url }) => url);
+
+    it('points the open browser at a new address in place, and closes it with its tile', async () => {
+      const { layOut } = await openBrowser('https://first.example');
+      expect(mounted()).toEqual(['https://first.example']);
+
+      await layOut(browserAt('https://second.example'));
+      expect(mounted()).toEqual(['https://first.example', 'https://second.example']);
+      expect(host('browser_host_unmount')).toEqual([]);
+
+      await layOut(pane('s1'));
+      expect(host('browser_host_unmount')).toEqual([{ label: LABEL }]);
+    });
+
+    it('does not load a page again when the daemon stores the address the user browsed to', async () => {
+      const { daemon, layOut } = await openBrowser('https://first.example');
+
+      act(() => {
+        window.dispatchEvent(new CustomEvent('attn:browser-location', { detail: { label: LABEL, url: 'https://first.example/dashboard' } }));
+      });
+      await daemon.idle();
+      await layOut(browserAt('https://first.example/dashboard'));
+
+      expect(mounted()).toEqual(['https://first.example']);
+    });
+
+    it('closes a browser whose tile went away while it was still opening, once it has opened', async () => {
+      const { layOut, land } = await openBrowser('https://first.example', { holdMount: true });
+
+      await layOut(pane('s1'));
+      expect(host('browser_host_unmount')).toEqual([]);
+
+      await land();
+      expect(host('browser_host_unmount')).toEqual([{ label: LABEL }]);
+    });
+
+    it('hides the browser under an overlay, even one that opened while the browser was still opening', async () => {
+      const { daemon, land } = await openBrowser('https://first.example', { holdMount: true });
+
+      const search = await openActionMenu(daemon);
+      await land();
+      expect(nativeVisible).toBe(false);
+
+      fireEvent.keyDown(search, { key: 'Escape' });
+      await daemon.idle();
+      expect(nativeVisible).toBe(true);
+    });
   });
 });

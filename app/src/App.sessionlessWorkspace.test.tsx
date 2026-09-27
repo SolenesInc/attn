@@ -110,6 +110,16 @@ describe('tile-only (sessionless) workspace selection and render', () => {
     expect(leavesOf('ws-tiles')).toEqual([{ id: 'tile-readme', kind: 'tile' }]);
   });
 
+  it('shows the tile’s document and gives it the keyboard, so the workspace scrolls by key', async () => {
+    const { daemon } = await renderSessionAndNotes();
+    open('Open workspace Notes');
+    daemon.emit({ event: 'workspace_tile_content', workspace_id: 'ws-tiles', tile_id: 'tile-readme', tile_kind: 'markdown', path: '/tmp/project/README.md', content: '# Project notes' });
+    await act(() => vi.advanceTimersToNextFrame());
+
+    expect(screen.getByRole('heading', { name: 'Project notes' })).toBeInTheDocument();
+    expect(document.activeElement).toBe(document.querySelector('[data-pane-id="tile-readme"] .workspace-dock-tile-body'));
+  });
+
   it('releases a focused agent pane while a tile-only workspace is selected', async () => {
     await renderSessionAndNotes();
     open('Open working-session');

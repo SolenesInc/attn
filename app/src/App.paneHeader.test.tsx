@@ -80,15 +80,40 @@ describe('App pane header', () => {
     expect(inHeader().queryByLabelText('state unknown')).toBeNull();
   });
 
-  it('renames the session from the header', async () => {
+  it('renames the session from the header, with the whole old name selected so typing replaces it', async () => {
     const { daemon } = await openPane();
+    daemon.on('rename_session', ({ session_id }) => ({ event: 'rename_result', cmd: 'rename_session', id: session_id, success: true }));
 
     fireEvent.click(inHeader().getByRole('button', { name: 'Rename session ledger sweep' }));
-    const name = screen.getByDisplayValue('ledger sweep');
-    fireEvent.change(name, { target: { value: 'nightly ledger sweep' } });
+    const name = screen.getByDisplayValue('ledger sweep') as HTMLInputElement;
+    expect(name).toHaveFocus();
+    expect([name.selectionStart, name.selectionEnd]).toEqual([0, 'ledger sweep'.length]);
+    fireEvent.change(name, { target: { value: '  nightly ledger sweep  ' } });
     await gesture(daemon, () => fireEvent.keyDown(name, { key: 'Enter' }));
 
     expect(daemon.sentOf('rename_session')).toEqual([{ cmd: 'rename_session', session_id: 's1', label: 'nightly ledger sweep' }]);
+    expect(screen.queryByRole('dialog', { name: 'Rename session' })).toBeNull();
+  });
+
+  it('sends no rename for an unchanged name or on Escape, and refuses an empty one', async () => {
+    const { daemon } = await openPane();
+    const rename = () => {
+      fireEvent.click(inHeader().getByRole('button', { name: 'Rename session ledger sweep' }));
+      return screen.getByRole('dialog', { name: 'Rename session' });
+    };
+
+    await gesture(daemon, () => fireEvent.keyDown(rename(), { key: 'Enter' }));
+    expect(screen.queryByRole('dialog', { name: 'Rename session' })).toBeNull();
+
+    await gesture(daemon, () => fireEvent.keyDown(rename(), { key: 'Escape' }));
+    expect(screen.queryByRole('dialog', { name: 'Rename session' })).toBeNull();
+
+    const dialog = rename();
+    fireEvent.change(within(dialog).getByRole('textbox'), { target: { value: '   ' } });
+    await gesture(daemon, () => fireEvent.keyDown(dialog, { key: 'Enter' }));
+    expect(within(dialog).getByText('Name cannot be empty')).toBeInTheDocument();
+
+    expect(daemon.sentOf('rename_session')).toEqual([]);
   });
 
   it('focuses the agent from its header until the user returns to the split', async () => {
