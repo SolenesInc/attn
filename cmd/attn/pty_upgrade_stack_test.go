@@ -1,4 +1,4 @@
-package daemon
+package main_test
 
 import (
 	"bytes"
@@ -7,6 +7,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"maps"
+	"net"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -25,12 +26,16 @@ import (
 	"nhooyr.io/websocket"
 )
 
-func TestPTYUpgradeAcrossDaemonBinaries(t *testing.T) {
+func TestSessionsSurviveDaemonUpgradesAndSharedHostGenerations(t *testing.T) {
 	oldBinary, hostBinary := os.Getenv("ATTN_UPGRADE_OLD_BIN"), os.Getenv("ATTN_TEST_PTY_HOST")
 	if oldBinary == "" || hostBinary == "" {
 		t.Skip("run scripts/test-pty-upgrade.sh for the two-binary upgrade test")
 	}
-	root := shortTempDir(t)
+	root, err := os.MkdirTemp("/tmp", "attn-upgrade-")
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = os.RemoveAll(root) })
 	newBinary := testworld.AttnBinary(t)
 	fixture := filepath.Join(root, "fixture-codex")
 	script := `#!/bin/sh
@@ -187,7 +192,7 @@ done
 	current = start(newBinary, brokenHost)
 	current.assertSharedSetting(true, true)
 	current.waitForLog("failed validation", nil)
-	if got := current.notificationCount(notificationKindPTYHostRejected); got != 1 {
+	if got := current.notificationCount("pty_host_rejected"); got != 1 {
 		t.Fatalf("rejection notifications = %d, want exactly one", got)
 	}
 	assertAll(current, "rejected-candidate")
@@ -204,7 +209,7 @@ done
 	current = start(newBinary, brokenHost)
 	current.assertSharedSetting(true, true)
 	assertAll(current, "unchanged-rejected-candidate")
-	if got := current.notificationCount(notificationKindPTYHostRejected); got != 1 {
+	if got := current.notificationCount("pty_host_rejected"); got != 1 {
 		t.Fatalf("restart rechecked an unchanged rejected build: %d rejection notifications", got)
 	}
 	current.stop()
@@ -228,6 +233,11 @@ done
 	current.stop()
 }
 
+const (
+	upgradeSharedHostEnabled = "pty_shared_host_enabled"
+	upgradeSharedHostActive  = "pty_shared_host_active"
+)
+
 type upgradeDaemon struct {
 	t          *testing.T
 	root       string
@@ -244,10 +254,12 @@ type upgradeDaemon struct {
 
 func startUpgradeDaemon(t *testing.T, root, binary, host string) *upgradeDaemon {
 	t.Helper()
-	port, err := freeTCPPort()
+	listener, err := net.Listen("tcp", "127.0.0.1:0")
 	if err != nil {
 		t.Fatal(err)
 	}
+	port := listener.Addr().(*net.TCPAddr).Port
+	_ = listener.Close()
 	var offset int64
 	if info, err := os.Stat(filepath.Join(root, "daemon.log")); err == nil {
 		offset = info.Size()
@@ -406,8 +418,8 @@ func (d *upgradeDaemon) read(ctx context.Context) (map[string]any, string, []byt
 		d.t.Fatalf("invalid event: %v: %q", err, data)
 	}
 	if event["event"] == "pty_output" {
-		output, _ := base64.StdEncoding.DecodeString(asString(event["data"]))
-		return event, asString(event["id"]), output
+		output, _ := base64.StdEncoding.DecodeString(fmt.Sprint(event["data"]))
+		return event, fmt.Sprint(event["id"]), output
 	}
 	return event, "", nil
 }
@@ -447,7 +459,7 @@ func (d *upgradeDaemon) assertSharedSetting(enabled, active bool) {
 			continue
 		}
 		settings, ok := event["settings"].(map[string]any)
-		if !ok || settings[SettingSharedPTYHostEnabled] != strconv.FormatBool(enabled) || settings[SettingSharedPTYHostActive] != strconv.FormatBool(active) {
+		if !ok || settings[upgradeSharedHostEnabled] != strconv.FormatBool(enabled) || settings[upgradeSharedHostActive] != strconv.FormatBool(active) {
 			d.t.Fatalf("want shared enabled=%v active=%v, got %v", enabled, active, settings)
 		}
 		return
@@ -464,17 +476,17 @@ func (d *upgradeDaemon) waitForSharedHostActive() {
 		if event["event"] != "settings_updated" {
 			continue
 		}
-		if event["changed_key"] != nil && event["changed_key"] != SettingSharedPTYHostActive {
+		if event["changed_key"] != nil && event["changed_key"] != upgradeSharedHostActive {
 			continue
 		}
 		settings, ok := event["settings"].(map[string]any)
-		if !ok || settings[SettingSharedPTYHostEnabled] != "true" {
+		if !ok || settings[upgradeSharedHostEnabled] != "true" {
 			d.t.Fatalf("want shared host enabled, got %v", event)
 		}
-		if settings[SettingSharedPTYHostActive] == "true" {
+		if settings[upgradeSharedHostActive] == "true" {
 			return
 		}
-		if event["changed_key"] == SettingSharedPTYHostActive {
+		if event["changed_key"] == upgradeSharedHostActive {
 			d.t.Fatalf("shared host activation event reported inactive: %v", event)
 		}
 	}
@@ -482,12 +494,12 @@ func (d *upgradeDaemon) waitForSharedHostActive() {
 
 func (d *upgradeDaemon) setSharedSetting(enabled bool) {
 	d.t.Helper()
-	d.write(map[string]any{"cmd": "set_setting", "key": SettingSharedPTYHostEnabled, "value": strconv.FormatBool(enabled)})
+	d.write(map[string]any{"cmd": "set_setting", "key": upgradeSharedHostEnabled, "value": strconv.FormatBool(enabled)})
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
 	for {
 		event, _, _ := d.read(ctx)
-		if event["event"] != "settings_updated" || event["changed_key"] != SettingSharedPTYHostEnabled {
+		if event["event"] != "settings_updated" || event["changed_key"] != upgradeSharedHostEnabled {
 			continue
 		}
 		if event["success"] == false {

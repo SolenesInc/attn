@@ -84,13 +84,3 @@ func transition(t *testing.T, d *Daemon, session, seedID string, verb garden.Ver
 	}
 	return gardenCall(t, func(c net.Conn) { d.handleSeedTransition(c, &msg) })
 }
-
-func mustLink(t *testing.T, d *Daemon, from, kind, to string) protocol.SeedLinkResult {
-	t.Helper()
-	msg := protocol.SeedLinkMessage{Cmd: protocol.CmdSeedLink, SeedID: from, Kind: kind, ToSeedID: to}
-	resp := gardenCall(t, func(c net.Conn) { d.handleSeedLink(c, &msg) })
-	if !resp.Ok {
-		t.Fatalf("link %s %s %s: %v", from, kind, to, protocol.Deref(resp.Error))
-	}
-	return *resp.SeedLinkResult
-}
