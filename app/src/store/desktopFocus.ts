@@ -1,4 +1,5 @@
 import { create } from 'zustand';
+import { useProfilesStore } from './profiles';
 
 interface DesktopFocusState {
   focusedLeafByDesktop: Readonly<Record<string, string>>;
@@ -14,3 +15,11 @@ export const useDesktopFocus = create<DesktopFocusState>((set) => ({
       return { focusedLeafByDesktop: leafId ? { ...others, [desktopId]: leafId } : others };
     }),
 }));
+
+useProfilesStore.subscribe((state, previous) => {
+  if (state.desktops === previous.desktops || state.selectedProfileId !== previous.selectedProfileId) return;
+  const remaining = new Set(state.desktops.map((desktop) => desktop.id));
+  for (const desktop of previous.desktops) {
+    if (!remaining.has(desktop.id)) useDesktopFocus.getState().setFocusedLeaf(desktop.id, null);
+  }
+});
