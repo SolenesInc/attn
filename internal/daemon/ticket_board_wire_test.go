@@ -200,6 +200,7 @@ func ticketBoardRows(tickets []protocol.Ticket) []string {
 func TestAnAppsCurrentStateCarriesTheTicketBoardWithoutBriefs(t *testing.T) {
 	runtime := testworld.NewFakeAppRuntime(t)
 	w := newWorld(t)
+	w.finishStartupWork()
 	cli := w.Client()
 	applySubscribedApp(t, cli, "board-reader")
 	if _, err := cli.AppRuntimeRestart(); err != nil {
