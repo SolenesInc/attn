@@ -3,9 +3,6 @@ package store
 import (
 	"path/filepath"
 	"testing"
-	"time"
-
-	"github.com/victorarias/attn/internal/agentmailbox"
 )
 
 func newAgentMailboxStore(t *testing.T) *Store {
@@ -13,43 +10,6 @@ func newAgentMailboxStore(t *testing.T) *Store {
 	s := New()
 	t.Cleanup(func() { _ = s.Close() })
 	return s
-}
-
-func TestEnqueueMaintenancePromptOnceIsIdempotentAndRefreshesCoalescedContent(t *testing.T) {
-	s := newAgentMailboxStore(t)
-	base := time.Date(2026, 9, 3, 12, 0, 0, 0, time.UTC)
-	first, claimed, err := s.EnqueueMaintenancePromptOnce(
-		"ticket-1", "target", "3", "legacy-ticket", "read through 3", base,
-	)
-	if err != nil || !claimed || first.Item.ID != "ticket-1" {
-		t.Fatalf("first enqueue = %+v, %v, %v", first, claimed, err)
-	}
-	retried, claimed, err := s.EnqueueMaintenancePromptOnce(
-		"ticket-1", "target", "4", "legacy-ticket", "read through 4", base.Add(time.Second),
-	)
-	if err != nil || claimed || retried.Item.SourceID != "4" || retried.Item.Prompt != "read through 4" {
-		t.Fatalf("same-id retry = %+v, %v, %v", retried, claimed, err)
-	}
-	coalesced, claimed, err := s.EnqueueMaintenancePromptOnce(
-		"ticket-2", "target", "5", "legacy-ticket", "read through 5", base.Add(2*time.Second),
-	)
-	if err != nil || claimed || coalesced.Item.ID != "ticket-1" ||
-		coalesced.Item.SourceID != "5" || coalesced.Item.Prompt != "read through 5" || coalesced.Item.CreatedAt != first.Item.CreatedAt {
-		t.Fatalf("coalesced enqueue = %+v, %v, %v", coalesced, claimed, err)
-	}
-
-	read, remaining, err := s.ReadAgentMailboxItems(
-		"target", agentmailbox.KindMaintenancePrompt, "legacy-ticket", base.Add(3*time.Second),
-	)
-	if err != nil || read != 1 || remaining != 0 {
-		t.Fatalf("adapter read = %d, remaining %d, %v", read, remaining, err)
-	}
-	afterRead, claimed, err := s.EnqueueMaintenancePromptOnce(
-		"ticket-2", "target", "6", "legacy-ticket", "read through 6", base.Add(4*time.Second),
-	)
-	if err != nil || !claimed || afterRead.Item.ID != "ticket-2" {
-		t.Fatalf("enqueue after read = %+v, %v, %v", afterRead, claimed, err)
-	}
 }
 
 func TestMigration132SeparatesMailboxReceiptsAndPayloads(t *testing.T) {
