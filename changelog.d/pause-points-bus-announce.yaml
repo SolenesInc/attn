@@ -1,0 +1,3 @@
+kind: internal
+area: testing
+change: The event bus's racing-writers test now runs through the real daemon on a pause point, planting a seed while a settings change announces ahead of it.
