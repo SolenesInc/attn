@@ -53,12 +53,6 @@ func newWakeableDaemon(t *testing.T) (*Daemon, *fakeSpawnBackend, func() string)
 	}
 }
 
-func crewSet(t *testing.T, d *Daemon, msg protocol.CrewSetMessage) protocol.Response {
-	t.Helper()
-	msg.Cmd = protocol.CmdCrewSet
-	return gardenCall(t, func(c net.Conn) { d.handleCrewSet(c, &msg) })
-}
-
 type crewRuntimeBackend struct {
 	*fakeSpawnBackend
 	running map[string]bool
