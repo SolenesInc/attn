@@ -8,7 +8,7 @@ export interface PaletteCommand {
   icon?: ReactNode;
   shortcut?: string[][];
   detail?: string;
-  run: () => void;
+  run: (opener: HTMLElement | null) => void;
 }
 
 function commandScore(command: PaletteCommand, terms: readonly string[]): number {

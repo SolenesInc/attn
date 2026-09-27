@@ -207,9 +207,9 @@ describe('UnifiedPalette keyboard flow', () => {
     expect(palette.onSettle).not.toHaveBeenCalled();
   });
 
-  it('hands focus back to what had it before the palette opened, then runs the command', () => {
+  it('runs a command with the element that had focus before the palette opened, without moving focus to it', () => {
     let focusAtRun: Element | null = null;
-    const run = () => { focusAtRun = document.activeElement; };
+    const run = vi.fn(() => { focusAtRun = document.activeElement; });
     const views = workspaces(FIXTURE);
     function Launcher() {
       const [open, setOpen] = useState(false);
@@ -243,6 +243,7 @@ describe('UnifiedPalette keyboard flow', () => {
 
     fireEvent.keyDown(screen.getByRole('combobox'), { key: 'Enter' });
     expect(screen.queryByRole('combobox')).toBeNull();
-    expect(focusAtRun).toBe(terminal);
+    expect(run).toHaveBeenCalledWith(terminal);
+    expect(focusAtRun).not.toBe(terminal);
   });
 });

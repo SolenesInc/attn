@@ -1,5 +1,4 @@
 import { useMemo, useState, type KeyboardEvent } from 'react';
-import { flushSync } from 'react-dom';
 import FocusTrap from 'focus-trap-react';
 import type { Desktop } from '../../types/generated';
 import { formatShortcut } from '../../shortcuts/formatShortcut';
@@ -276,13 +275,11 @@ export function UnifiedPalette<S extends PaletteSession>({
       leaveSnooze(snoozing.session);
       return;
     }
+    onClose();
     if (item.mode === 'commands') {
-      flushSync(onClose);
-      if (opener?.isConnected) opener.focus();
-      item.command.run();
+      item.command.run(opener);
       return;
     }
-    onClose();
     const { row } = item;
     if (row.kind === 'agent') onOpenAgent(row.session);
     else if (row.kind === 'member') onWakeMember(row.member);
