@@ -55,12 +55,14 @@ func codexExec(args parsedArgs) headlessRun {
 		run.prompt = args.positionals[len(args.positionals)-1]
 	}
 	for _, override := range args.values["-c"] {
-		if strings.HasPrefix(override, "mcp_servers.") {
-			run.refusal = "codex exec with MCP tool servers"
-		}
 		if effort, ok := strings.CutPrefix(override, "model_reasoning_effort="); ok {
 			run.effort = strings.Trim(effort, `"`)
 		}
+	}
+	if servers, ok := codexToolServers(args.values["-c"]); ok {
+		run.tools = servers
+	} else {
+		run.refusal = "codex exec with an MCP server that has no command"
 	}
 	thread := uuid.NewString()
 	run.answer = func(text string) error {

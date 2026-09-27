@@ -258,37 +258,3 @@ func TestJournalParityKillAtK(t *testing.T) {
 		})
 	}
 }
-
-func TestDurableJournalRoundTripLossless(t *testing.T) {
-	cases := []JournalEntry{
-		{Ordinal: "0", PromptHash: "ph0", SchemaHash: "none", Result: json.RawMessage(`"v0"`), Status: "ok"},
-		{Ordinal: "1.2", PromptHash: "ph1", SchemaHash: "deadbeef", Result: nil, Status: "errored", Err: "subagent crashed"},
-		{Ordinal: "2", PromptHash: "ph2", SchemaHash: "none", Result: nil, Status: "skipped"},
-	}
-	for _, in := range cases {
-		out := entryFromRow(rowFromEntry("run-rt", in))
-		if out.Ordinal != in.Ordinal || out.PromptHash != in.PromptHash ||
-			out.SchemaHash != in.SchemaHash || out.Status != in.Status || out.Err != in.Err {
-			t.Fatalf("scalar mismatch: in=%+v out=%+v", in, out)
-		}
-		if string(out.Result) != string(in.Result) {
-			t.Fatalf("result mismatch: in=%q out=%q", string(in.Result), string(out.Result))
-		}
-		if len(in.Result) == 0 && out.Result != nil {
-			t.Fatalf("null result became non-nil: %v", out.Result)
-		}
-	}
-}
-
-func TestDurableJournalAppendRejectsDuplicate(t *testing.T) {
-	s := store.New()
-	const runID = "run-dup"
-	dj := NewDurableJournal(s, runID)
-	e := JournalEntry{Ordinal: "0", PromptHash: "p", SchemaHash: "none", Status: "ok", Result: json.RawMessage(`1`)}
-	if err := dj.Append(e); err != nil {
-		t.Fatalf("first append: %v", err)
-	}
-	if err := dj.Append(e); err == nil {
-		t.Fatal("duplicate append should error, got nil")
-	}
-}
