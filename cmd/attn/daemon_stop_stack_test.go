@@ -2,6 +2,7 @@ package main_test
 
 import (
 	"bufio"
+	"fmt"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -18,7 +19,15 @@ import (
 
 func startBystander(t *testing.T, args ...string) *os.Process {
 	t.Helper()
+	return startBystanderWith(t, nil, args...)
+}
+
+func startBystanderWith(t *testing.T, env []string, args ...string) *os.Process {
+	t.Helper()
 	cmd := exec.Command(args[0], args[1:]...)
+	if env != nil {
+		cmd.Env = append(os.Environ(), env...)
+	}
 	stdout, err := cmd.StdoutPipe()
 	if err != nil {
 		t.Fatal(err)
@@ -48,7 +57,33 @@ func startBystander(t *testing.T, args ...string) *os.Process {
 
 func holdDaemonLock(t *testing.T, pidPath, content string) *os.Process {
 	t.Helper()
-	return startBystander(t, "/bin/sh", "-c", `exec 9<>"$1" && flock -x 9 && printf %s "$2" > "$1" && echo locked && exec sleep 3600`, "sh", pidPath, content)
+	return startBystanderWith(t, []string{"ATTN_TEST_HOLD_DAEMON_LOCK=" + pidPath, "ATTN_TEST_DAEMON_LOCK_CONTENT=" + content}, os.Args[0])
+}
+
+// Runs in a re-exec of the test binary: flock(1) is Linux-only, so the lock
+// holder takes the daemon's flock itself and reports ready on stdout.
+func holdDaemonLockForever(pidPath, content string) {
+	file, err := os.OpenFile(pidPath, os.O_RDWR|os.O_CREATE, 0o644)
+	if err != nil {
+		fmt.Fprintln(os.Stderr, err)
+		os.Exit(1)
+	}
+	if err := syscall.Flock(int(file.Fd()), syscall.LOCK_EX); err != nil {
+		fmt.Fprintln(os.Stderr, err)
+		os.Exit(1)
+	}
+	if err := file.Truncate(0); err != nil {
+		fmt.Fprintln(os.Stderr, err)
+		os.Exit(1)
+	}
+	if _, err := file.WriteAt([]byte(content), 0); err != nil {
+		fmt.Fprintln(os.Stderr, err)
+		os.Exit(1)
+	}
+	fmt.Println("locked")
+	for {
+		time.Sleep(time.Hour)
+	}
 }
 
 func alive(p *os.Process) bool {
