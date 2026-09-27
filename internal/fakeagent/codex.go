@@ -31,6 +31,7 @@ type codex struct {
 	model        string
 	prompt       string
 	turnID       string
+	lastThread   string
 }
 
 var codexExecFlags = flagSpec{
@@ -188,7 +189,7 @@ func (c *codex) hookInput(event string, extra map[string]any) map[string]any {
 
 func (c *codex) submit(prompt string) error {
 	if strings.TrimSpace(prompt) == "/new" {
-		c.resumed = false
+		c.resumed, c.lastThread = false, ""
 		return c.startRollout()
 	}
 	c.turnID = uuid.NewString()
@@ -215,6 +216,9 @@ func (c *codex) reply(text string, afterStop bool) error {
 			},
 		},
 	)
+	if err == nil {
+		err = appendLines(c.transcript, c.usageLines(text)...)
+	}
 	if err != nil {
 		return err
 	}

@@ -285,6 +285,8 @@ func (a *agent) handle(_ *rpcPeer, method string, params json.RawMessage) (any, 
 		default:
 			return struct{}{}, author.deleteSubagentTranscripts()
 		}
+	case methodGuardian:
+		return a.handleGuardian(params)
 	case methodHalt:
 		halting, ok := a.conv.(halter)
 		if !ok {
