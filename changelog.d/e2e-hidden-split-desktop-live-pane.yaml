@@ -1,0 +1,3 @@
+kind: internal
+area: e2e
+change: Three epic E2E checks pass on Linux CI. The hidden split desktop test keeps the agent pane focused before the window shrinks, so the attention layout suspends the peer instead of the pane under test. The desktop header reorder test presses Meta+G for the desktop overview; ControlOrMeta sent Ctrl+G on Linux runners, which the macOS-configured test page does not bind. The prompt editor collaboration script waits for the fork's draft save before reading the fork.

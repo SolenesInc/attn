@@ -124,12 +124,16 @@ try {
     await expect(second.locator("#collaboration-error")).toContainText("source changed");
     await expect(second.locator("#source")).toHaveValue("Keep this concurrent maintainer edit.\n");
     await expect(page.locator("#source")).toHaveValue("Keep this concurrent agent edit.\n");
+    const forkSaved = second.waitForResponse((response) => response.url().endsWith("/api/operation") && response.request().postDataJSON()?.op === "draft-put" && response.request().postDataJSON().id !== draftID);
     await second.locator("#fork-local").click();
+    const forkPut = await forkSaved;
+    assert.ok(forkPut.ok());
     await expect(second.locator("#collaboration-error")).toBeHidden();
     await expect(second).not.toHaveURL(new RegExp(draftID));
     await expect(second.locator("#file-state")).toContainText("Shared draft");
     const forkID = new URL(second.url()).searchParams.get("draft");
     assert.notEqual(forkID, draftID);
+    assert.equal(forkPut.request().postDataJSON().id, forkID);
     assert.equal(cli("draft", "get", forkID).files[source].text, "Keep this concurrent maintainer edit.\n");
     assert.equal(cli("draft", "get", draftID).files[source].text, "Keep this concurrent agent edit.\n");
     await page.locator("#share-review").click();
