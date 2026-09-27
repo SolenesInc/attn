@@ -15,16 +15,16 @@ import (
 )
 
 func TestRecentLocationsRankByFrecencyBeforeApplyingTheLimit(t *testing.T) {
-	inBubble(t, func(t *testing.T, w *world) {
+	inBubbleWithAgents(t, func(t *testing.T, w *world) {
 		app := w.App()
 		frequentOld, recentOnce, staleOnce := w.Path("frequent-old"), w.Path("recent-once"), w.Path("stale-once")
 
-		workIn(t, app, staleOnce)
+		workIn(t, w, app, staleOnce)
 		for range 3 {
-			workIn(t, app, frequentOld)
+			workIn(t, w, app, frequentOld)
 		}
 		w.advance(time.Second)
-		workIn(t, app, recentOnce)
+		workIn(t, w, app, recentOnce)
 
 		locations := recentLocations(app, 0)
 		if got := locationPaths(locations); !slices.Equal(got, []string{frequentOld, recentOnce, staleOnce}) {
@@ -35,7 +35,7 @@ func TestRecentLocationsRankByFrecencyBeforeApplyingTheLimit(t *testing.T) {
 		}
 
 		for i := range 5 {
-			workIn(t, app, w.Path(fmt.Sprintf("fresh-%d", i)))
+			workIn(t, w, app, w.Path(fmt.Sprintf("fresh-%d", i)))
 		}
 		if got := locationPaths(recentLocations(app, 2)); len(got) != 2 || got[0] != frequentOld {
 			t.Errorf("the top two = %v, want the best-ranked location kept above the many newer ones", got)
@@ -55,14 +55,14 @@ func TestRecentLocationsCollapseWorktreesIntoTheirMainRepo(t *testing.T) {
 	later := filepath.Join(filepath.Dir(repo), "shop--later")
 	subdirectory := filepath.Join(repo, "app")
 
-	workIn(t, app, worktree)
-	workIn(t, app, filepath.Join(worktree, "web"))
-	workIn(t, app, later)
+	workIn(t, w, app, worktree)
+	workIn(t, w, app, filepath.Join(worktree, "web"))
+	workIn(t, w, app, later)
 	if got := locationPaths(recentLocations(app, 0)); !slices.Contains(got, later) {
 		t.Fatalf("recent locations = %v, want %s recorded while it is a plain directory", got, later)
 	}
 	runGit(t, repo, "worktree", "add", "-b", "later", later)
-	workIn(t, app, subdirectory)
+	workIn(t, w, app, subdirectory)
 
 	locations := recentLocations(app, 0)
 	if got := locationPaths(locations); !slices.Equal(got, []string{repo, subdirectory}) {
@@ -73,14 +73,9 @@ func TestRecentLocationsCollapseWorktreesIntoTheirMainRepo(t *testing.T) {
 	}
 }
 
-func workIn(t *testing.T, app *testworld.Peer, dir string) {
+func workIn(t *testing.T, w *world, app *testworld.Peer, dir string) {
 	t.Helper()
-	if err := os.MkdirAll(dir, 0o755); err != nil {
-		t.Fatal(err)
-	}
-	testworld.Request(app, protocol.RegisterWorkspaceMessage{
-		Cmd: protocol.CmdRegisterWorkspace, ID: uuid.NewString(), Title: filepath.Base(dir), Directory: dir,
-	}, protocol.EventWorkspaceRegistered, func(protocol.WebSocketEvent) bool { return true })
+	w.Spawn(app, shellHarness, dir)
 }
 
 func recentLocations(app *testworld.Peer, limit int) []protocol.RecentLocation {

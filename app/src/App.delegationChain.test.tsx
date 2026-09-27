@@ -1,6 +1,6 @@
 import { fireEvent, screen, within } from '@testing-library/react';
 import { describe, expect, it } from 'vitest';
-import { agentPane, agentWorkspace, daemonSession, daemonWorkspace, type DaemonSession } from './test/daemonFixtures';
+import { agentPane, soloDesktop, daemonSession, daemonDesktop, type DaemonSession } from './test/daemonFixtures';
 import { gesture, pressShortcut, renderApp } from './test/renderApp';
 import type { ScriptedDaemon } from './test/scriptedDaemon';
 
@@ -14,7 +14,7 @@ const team = [
 ];
 
 function renderTeam(sessions: DaemonSession[] = team) {
-  return renderApp({ initialState: { sessions, workspaces: sessions.map((session) => agentWorkspace(session.id)) } });
+  return renderApp({ initialState: { sessions, desktops: sessions.map((session) => soloDesktop(session.id)) } });
 }
 
 const chain = () => screen.queryByRole('dialog', { name: 'Delegation chain' });
@@ -37,7 +37,7 @@ describe('App delegation chain', () => {
   });
 
   it('offers the chain on a dispatcher in the queue because of the delegates it sent', async () => {
-    await renderApp({
+    const { daemon } = await renderApp({
       initialState: {
         settings: { queue_mode_enabled: 'true' },
         sessions: [
@@ -45,9 +45,10 @@ describe('App delegation chain', () => {
           daemonSession('child', { label: 'child', dispatcher_session_id: 'root' }),
           daemonSession('alone', { label: 'alone' }),
         ],
-        workspaces: ['root', 'child', 'alone'].map(agentWorkspace),
+        desktops: ['root', 'child', 'alone'].map((id) => soloDesktop(id)),
       },
     });
+    await gesture(daemon, () => fireEvent.click(screen.getByRole('button', { name: /All agents/ })));
     const queue = within(screen.getByTestId('sidebar-queue'));
 
     expect(queue.getByRole('button', { name: 'Show delegation chain for root session' })).toBeInTheDocument();
@@ -106,11 +107,11 @@ describe('App delegation chain', () => {
     await gesture(daemon, () => fireEvent.click(screen.getByRole('button', { name: /^Open child/ })));
 
     await gesture(daemon, () => pressShortcut('session.orchestrator'));
-    expect(daemon.sentOf('session_selected').pop()).toEqual({ cmd: 'session_selected', id: 'root' });
+    expect(daemon.sentOf('desktop_set_current').pop()).toMatchObject({ desktop_id: 'desktop-root' });
 
     await gesture(daemon, () => fireEvent.click(screen.getByRole('button', { name: /^Open orphan/ })));
     await gesture(daemon, () => pressShortcut('session.orchestrator'));
-    expect(daemon.sentOf('session_selected').pop()).toEqual({ cmd: 'session_selected', id: 'orphan' });
+    expect(daemon.sentOf('desktop_set_current').pop()).toMatchObject({ desktop_id: 'desktop-orphan' });
   });
 
   it('does not reopen under a pointer that has not moved since the user dismissed it', async () => {
@@ -130,7 +131,7 @@ describe('App delegation chain', () => {
   });
 
   describe('beside a terminal pane', () => {
-    const workspace = daemonWorkspace('ws', {
+    const workspace = daemonDesktop('ws', {
       root: {
         type: 'split',
         split_id: 'split-1',
@@ -139,11 +140,11 @@ describe('App delegation chain', () => {
         children: [{ type: 'pane', pane_id: 'pane-root' }, { type: 'pane', pane_id: 'pane-build' }],
       },
       panes: [agentPane('root', 'ws'), agentPane('build', 'ws')],
-    }, { title: 'ws' });
+    }, { name: 'ws' });
 
     async function renderPanes(): Promise<ScriptedDaemon> {
       const { daemon } = await renderApp({
-        initialState: { sessions: team.slice(0, 2).map((session) => ({ ...session, workspace_id: 'ws' })), workspaces: [workspace] },
+        initialState: { sessions: team.slice(0, 2).map((session) => ({ ...session })), desktops: [workspace] },
       });
       await gesture(daemon, () => fireEvent.click(screen.getByRole('button', { name: /^Open Coordinate identity/ })));
       return daemon;
@@ -153,7 +154,7 @@ describe('App delegation chain', () => {
 
     it('keeps presses on the pane header’s chain and on the chain itself from selecting the pane', async () => {
       const daemon = await renderPanes();
-      const selectedBefore = daemon.sentOf('session_selected').length;
+      const selectedBefore = daemon.sentOf('desktop_set_active_pane').length;
       const headerTrigger = within(buildPane()).getByRole('button', { name: /Show delegation chain for Build navigator/ });
 
       fireEvent.mouseDown(headerTrigger);
@@ -162,7 +163,7 @@ describe('App delegation chain', () => {
       expect(current).toHaveFocus();
       await gesture(daemon, () => fireEvent.mouseDown(current));
 
-      expect(daemon.sentOf('session_selected').slice(selectedBefore)).toEqual([]);
+      expect(daemon.sentOf('desktop_set_active_pane').slice(selectedBefore)).toEqual([]);
     });
 
     it('closes on a pointer press in the terminal pane', async () => {

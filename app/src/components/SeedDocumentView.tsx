@@ -131,7 +131,7 @@ export function SeedDocumentView({
   return (
     <div
       className={`seed-document${compact ? ' seed-document--compact' : ''}`}
-      // Which seed this is showing: a workspace can hold several seed tiles, so
+      // Which seed this is showing: a desktop can hold several seed tiles, so
       // reading one means naming it.
       data-seed-id={seed.id}
       data-arrival={arrival}

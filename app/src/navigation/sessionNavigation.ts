@@ -1,5 +1,5 @@
 import type { DaemonSessionSnapshot, Session } from '../store/sessions';
-import type { DaemonWorkspace } from '../hooks/useDaemonSocket';
+import type { Desktop } from '../types/generated';
 import {
   createAgentHistory,
   moveAgentHistory,
@@ -16,45 +16,29 @@ import {
   type QueueBands,
   type QueueBandSession,
 } from '../utils/queueBands';
-import {
-  buildWorkspaceViewModels,
-  filterSessionsRepresentedInWorkspaceLayouts,
-} from '../utils/workspaceViewModels';
-import { selectWorkspacePane, type WorkspacePaneSelections } from './workspacePaneSelection';
+import { buildDesktopViewModels } from '../utils/desktopViewModels';
 
 export type AppView = 'dashboard' | 'session' | 'grid';
 export type StateUpdate<T> = T | ((previous: T) => T);
-export interface TileSelection {
-  workspaceId: string;
-  tileId: string;
-}
 export interface SessionNavigationState {
   activeSessionId: string | null;
-  recentSessionIds: string[];
   agentHistory: AgentHistoryState;
   view: AppView;
   followNextTurn: boolean;
-  selectedSessionlessWorkspaceId: string | null;
-  selectedTile: TileSelection | null;
   pendingSelection: { sessionId: string; seen: boolean } | null;
   focusRequest: { sessionId: string; paneId: string } | null;
   utilityFocusRequestToken: number;
-  workspacePaneSelections: WorkspacePaneSelections;
 }
 
 export function initialSessionNavigation(): SessionNavigationState {
   return {
     activeSessionId: null,
-    recentSessionIds: [],
     agentHistory: createAgentHistory(),
     view: 'dashboard',
     followNextTurn: false,
-    selectedSessionlessWorkspaceId: null,
-    selectedTile: null,
     pendingSelection: null,
     focusRequest: null,
     utilityFocusRequestToken: 0,
-    workspacePaneSelections: {},
   };
 }
 
@@ -62,13 +46,6 @@ export function activateSession(
   state: SessionNavigationState,
   id: string | null,
 ): SessionNavigationState {
-  const recent =
-    state.activeSessionId && state.activeSessionId !== id
-      ? [
-          state.activeSessionId,
-          ...state.recentSessionIds.filter((entry) => entry !== state.activeSessionId),
-        ]
-      : state.recentSessionIds;
   return {
     ...state,
     activeSessionId: id,
@@ -76,9 +53,6 @@ export function activateSession(
     focusRequest: null,
     view: id ? 'session' : state.view,
     followNextTurn: id ? false : state.followNextTurn,
-    selectedTile: id ? null : state.selectedTile,
-    selectedSessionlessWorkspaceId: id ? null : state.selectedSessionlessWorkspaceId,
-    recentSessionIds: recent.filter((entry) => entry !== id),
     agentHistory:
       id && id !== state.activeSessionId
         ? recordAgentVisit(state.agentHistory, id)
@@ -93,7 +67,7 @@ export function selectAgent(
   paneId?: string,
 ): SessionNavigationState {
   const session = sessions.find((entry) => entry.id === sessionId);
-  const pane = session?.workspace.agents.find(
+  const pane = session?.desktop.agents.find(
     (entry) => entry.sessionId === sessionId && (!paneId || entry.id === paneId),
   );
   if (!session || !pane)
@@ -105,7 +79,6 @@ export function selectAgent(
     };
   return {
     ...activateSession(state, sessionId),
-    workspacePaneSelections: selectWorkspacePane(state.workspacePaneSelections, session, pane.id),
     focusRequest: { sessionId, paneId: pane.id },
     utilityFocusRequestToken: state.utilityFocusRequestToken + 1,
   };
@@ -119,8 +92,6 @@ export function enterHome(
     ...activateSession(state, null),
     view: 'dashboard',
     followNextTurn,
-    selectedSessionlessWorkspaceId: null,
-    selectedTile: null,
   };
 }
 
@@ -182,7 +153,7 @@ export function sessionAttentionFields(session: DaemonSessionSnapshot | undefine
     turnOwed: session?.turn_owed ?? false,
     turnOpenedAt: session?.turn_opened_at,
     turnSnoozedUntil: session?.turn_snoozed_until,
-    pinnedAt: session?.pinned_at,
+    stateSince: session?.state_since,
     crewMember: session?.crew_member,
     parentSessionId: session?.parent_session_id,
   };
@@ -190,18 +161,18 @@ export function sessionAttentionFields(session: DaemonSessionSnapshot | undefine
 
 export function navigationQueue(
   sessions: DaemonSessionSnapshot[],
-  workspaces: DaemonWorkspace[],
+  profileId: string,
+  desktops: Desktop[],
   settings: Record<string, string>,
 ): QueueBands<QueueBandSession> | null {
   if (!isQueueModeEnabled(settings)) return null;
-  const queueSessions = sessions.map((session) => ({
-    ...session,
-    ...sessionAttentionFields(session),
-  }));
-  const visible = filterSessionsRepresentedInWorkspaceLayouts(workspaces, queueSessions);
-  const views = buildWorkspaceViewModels(workspaces, visible).filter(
-    (workspace) => !workspace.muted,
-  );
+  const queueSessions = sessions
+    .filter((session) => session.profile_id === profileId)
+    .map((session) => ({
+      ...session,
+      ...sessionAttentionFields(session),
+    }));
+  const views = buildDesktopViewModels(desktops, queueSessions);
   return buildQueueBands(views, { crewInQueue: isCrewQueueEnabled(settings) });
 }
 
@@ -210,14 +181,14 @@ export function advanceQueue(
   sessions: Session[],
   previous: QueueBands<QueueBandSession> | null,
   next: QueueBands<QueueBandSession> | null,
+  tileSelected: boolean,
 ): SessionNavigationState {
   if (!next || state.pendingSelection) return state;
   if (state.view === 'dashboard' && state.followNextTurn) {
     const target = headOfQueue(next);
     return target ? selectAgent(state, sessions, target.session.id) : state;
   }
-  if (state.view !== 'session' || state.selectedSessionlessWorkspaceId || state.selectedTile)
-    return state;
+  if (state.view !== 'session' || tileSelected) return state;
   const advance = advanceAfterTurnClosed(previous?.turns ?? [], next, state.activeSessionId);
   if (!advance) return state;
   return advance.to === 'session'

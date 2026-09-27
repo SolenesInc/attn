@@ -6,11 +6,11 @@ import type {
   SessionPullRequest,
 } from '../types/generated';
 import { type UISessionState } from '../types/sessionState';
-import { type TileContentState } from '../types/workspace';
+import { type TileContentState } from '../types/desktop';
 import { type QueueBands as QueueBandsModel } from '../utils/queueBands';
-import type { WorkspaceSelectionStyle } from '../utils/workspaceSelectionStyle';
-import type { WorkspaceWithSessions } from '../utils/workspaceViewModels';
-import { type CrewMemberView } from './QueueBands';
+import type { DesktopSelectionStyle } from '../utils/desktopSelectionStyle';
+import type { DesktopWithSessions } from '../utils/desktopViewModels';
+import { type CrewMemberView } from './QueueRows';
 import type { GridLayout } from './grid/gridLayout';
 
 export interface LocalSession {
@@ -33,6 +33,7 @@ export interface LocalSession {
   state_reason?: string;
   turnOwed?: boolean;
   turnOpenedAt?: string;
+  turnSnoozedUntil?: string;
   crewMember?: string;
   dispatcher_session_id?: string;
   dispatcher_member?: string;
@@ -41,22 +42,25 @@ export interface LocalSession {
   pullRequests?: SessionPullRequest[];
 }
 
-export type SidebarWorkspace = WorkspaceWithSessions<LocalSession>;
+export type SidebarDesktop = DesktopWithSessions<LocalSession>;
 
 export interface SelectedTile {
-  workspaceId: string;
+  desktopId: string;
   tileId: string;
 }
 
+export type SidebarSurface = 'queue-open' | 'queue-collapsed' | 'tree-open' | 'tree-collapsed' | 'hidden';
+
 export interface SidebarProps {
-  workspaces: SidebarWorkspace[];
-  visualOrder: SidebarWorkspace[];
-  visualIndexByWorkspaceId: Map<string, number>;
+  desktops: SidebarDesktop[];
+  visualIndexByDesktopId: Map<string, number>;
   selectedId: string | null;
-  selectedWorkspaceId: string | null;
+  selectionRequest?: { sessionId: string } | null;
+  selectedDesktopId: string | null;
   selectedTile?: SelectedTile | null;
   tileContents?: Record<string, TileContentState>;
   collapsed: boolean;
+  surface: SidebarSurface;
   instance?: string;
   headerActions: SidebarHeaderAction[];
   criticalNotifications?: CriticalNotificationState;
@@ -73,19 +77,24 @@ export interface SidebarProps {
   onManageCrew?: (event: ReactMouseEvent<HTMLButtonElement>) => void;
   onOpenCrewMemberDetails?: (member: string, returnFocus: HTMLElement) => void;
   onSettleTurn?: (id: string) => void;
+  onWalkRuns?: () => void;
+  onJumpToWaiting?: () => void;
+  profileName?: string;
+  onSwitchProfile?: () => void;
+  onOpenCommands?: () => void;
+  onOpenAgents?: () => void;
+  peeksSilenced?: boolean;
+  commandsBadge?: number;
+  agentListOpen?: boolean;
+  onToggleAgentList?: () => void;
+  onOpenOverview?: () => void;
   onOpenSnooze?: (session: { id: string; label: string }, event: ReactMouseEvent) => void;
   onWakeTurn?: (id: string) => void;
   /** The auto-settle countdown lives on the tile, so the sidebar draws it only
       for sessions NOT in here, or it would run twice. */
   onScreenSessionIds?: ReadonlySet<string>;
-  mutedWorkspaces?: SidebarWorkspace[];
-  mutedExpanded?: boolean;
-  onMutedExpandedChange?: (expanded: boolean) => void;
-  onMuteWorkspace?: (workspaceId: string, endpointId?: string) => void;
-  onPinWorkspace?: (workspaceId: string, pinned: boolean) => void;
-  onPinSession?: (sessionId: string, pinned: boolean) => void;
   onRenameSession?: (sessionId: string, label: string) => Promise<void>;
-  onRenameWorkspace?: (workspaceId: string, title: string) => Promise<void>;
+  onRenameDesktop?: (desktopId: string, title: string) => Promise<void>;
   onChangeChiefOfStaff?: (sessionId: string, enabled: boolean) => void;
   showSessionless?: boolean;
   onToggleShowSessionless?: () => void;
@@ -95,33 +104,33 @@ export interface SidebarProps {
   onToggleCrewQueue?: () => void;
   harnessLogosEnabled?: boolean;
   onToggleHarnessLogos?: () => void;
-  workspaceSelectionStyle?: WorkspaceSelectionStyle;
-  onWorkspaceSelectionStyleChange?: (style: WorkspaceSelectionStyle) => void;
-  leafDrag?: { sourceWorkspaceId: string; endpointId?: string } | null;
-  dragHoverWorkspaceId?: string | null;
-  onWorkspaceDragEnter?: (workspace: SidebarWorkspace) => void;
-  onWorkspaceDragLeave?: (workspace: SidebarWorkspace) => void;
-  onWorkspaceDragDrop?: (workspace: SidebarWorkspace) => void;
-  onNewWorkspaceDrop?: () => void;
+  desktopSelectionStyle?: DesktopSelectionStyle;
+  onDesktopSelectionStyleChange?: (style: DesktopSelectionStyle) => void;
+  leafDrag?: { sourceDesktopId: string; endpointId?: string } | null;
+  dragHoverDesktopId?: string | null;
+  onDesktopDragEnter?: (desktop: SidebarDesktop) => void;
+  onDesktopDragLeave?: (desktop: SidebarDesktop) => void;
+  onDesktopDragDrop?: (desktop: SidebarDesktop) => void;
+  onNewDesktopDrop?: () => void;
   onSessionDragStart?: (
-    workspaceId: string,
+    desktopId: string,
     endpointId: string | undefined,
     paneId: string,
   ) => void;
   onSessionDragEnd?: () => void;
-  // prevWorkspaceId ends up directly above the moved workspace, nextWorkspaceId
+  // prevDesktopId ends up directly above the moved desktop, nextDesktopId
   // directly below; either may be undefined at the very top or bottom.
-  onWorkspaceReorder?: (args: {
-    workspaceId: string;
-    prevWorkspaceId?: string;
-    nextWorkspaceId?: string;
+  onDesktopReorder?: (args: {
+    desktopId: string;
+    prevDesktopId?: string;
+    nextDesktopId?: string;
   }) => void;
   onSelectSession: (id: string) => void;
   onTriggerNudge?: (id: string) => void;
-  onSelectWorkspace: (id: string) => void;
-  onSelectTile?: (workspaceId: string, tileId: string) => void;
-  onCloseTile?: (workspaceId: string, tileId: string) => void;
-  onReloadTile?: (workspaceId: string, tileId: string) => void;
+  onSelectDesktop: (id: string) => void;
+  onSelectTile?: (desktopId: string, tileId: string) => void;
+  onCloseTile?: (desktopId: string, tileId: string) => void;
+  onReloadTile?: (desktopId: string, tileId: string) => void;
   onNewSession: () => void;
   onCloseSession: (id: string) => void;
   onReloadSession: (id: string) => void;

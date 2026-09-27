@@ -143,14 +143,7 @@ func TestASeedBeingDelegatedRefusesOtherClaimsWhileItsDelegateBoots(t *testing.T
 	if err != nil {
 		t.Fatal(err)
 	}
-	testworld.Await(app, protocol.EventWorkspaceLayoutUpdated, func(m protocol.WorkspaceLayoutUpdatedMessage) bool {
-		for _, pane := range m.WorkspaceLayout.Panes {
-			if protocol.Deref(pane.SessionID) == accepted.SessionID && pane.Status == protocol.WorkspaceLayoutPaneStatusReady {
-				return true
-			}
-		}
-		return false
-	})
+	testworld.AwaitSession(app, accepted.SessionID, func(protocol.Session) bool { return true })
 
 	if _, err := cli.SeedTransition("contender", seed, "tend", "", "", false, client.SeedTransitionOptions{}); err == nil || !strings.Contains(err.Error(), "being tended by "+accepted.SessionID) {
 		t.Errorf("claiming the seed while its delegate boots = %v, want it refused naming the delegate", err)

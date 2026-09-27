@@ -78,6 +78,9 @@ pnpm --dir app real-app:linux stop
 
 ## Remote endpoint scenarios
 
+Remote endpoints are off in this release, so the catalog skips these scenarios on
+every platform until outpost integration returns.
+
 The `tr*` scenarios run the app locally and connect to a second machine. Install
 only their mock-agent fixtures with `real-app:linux fixtures`. Their
 `ATTN_HARNESS_REMOTE_SSH_TARGET` must be an alias that ordinary `ssh` can resolve,

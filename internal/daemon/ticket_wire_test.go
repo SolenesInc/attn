@@ -173,7 +173,7 @@ func TestASessionThatJoinsTheCrewKeepsItsTicketThreadsWithoutReplayingThem(t *te
 		w.restart()
 		cli := w.Client()
 		for _, day := range []string{"day-a", "day-b"} {
-			if err := cli.Register(day, day, w.Path(day)); err != nil {
+			if err := w.InjectSession(day, day, w.Path(day), protocol.SessionAgentClaude); err != nil {
 				t.Fatal(err)
 			}
 		}
@@ -193,7 +193,7 @@ func TestASessionThatJoinsTheCrewKeepsItsTicketThreadsWithoutReplayingThem(t *te
 		}
 		commentOnTicket(t, cli, "planner", "own-thread", "while you were away")
 
-		if err := cli.RegisterAsMember("day-a", "day-a", w.Path("day-a"), "", "trellis"); err != nil {
+		if err := w.InjectCrewSession("day-a", "day-a", w.Path("day-a"), "trellis"); err != nil {
 			t.Fatalf("join the crew as trellis: %v", err)
 		}
 
@@ -213,7 +213,7 @@ func TestASessionThatJoinsTheCrewKeepsItsTicketThreadsWithoutReplayingThem(t *te
 		if err := cli.Unregister("day-a"); err != nil {
 			t.Fatal(err)
 		}
-		if err := cli.RegisterAsMember("day-b", "day-b", w.Path("day-b"), "", "trellis"); err != nil {
+		if err := w.InjectCrewSession("day-b", "day-b", w.Path("day-b"), "trellis"); err != nil {
 			t.Fatalf("day-b wakes as trellis: %v", err)
 		}
 		if got := inboxLines(t, cli, "day-b"); len(got) != 0 {

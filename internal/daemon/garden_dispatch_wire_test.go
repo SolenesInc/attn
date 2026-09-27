@@ -49,7 +49,7 @@ func TestADelegateShowsItsDispatcherAcrossTheDispatchersLife(t *testing.T) {
 	w.Launched(secondDay)
 	shows("once alder woke into a new day", fromAlder, secondDay, "alder")
 
-	closePane(app, sessionPane{session: plain.ID, workspace: workspace, pane: pane})
+	closePane(app, sessionPane{session: plain.ID, desktop: workspace, pane: pane})
 	awaitClosed(app, plain.ID)
 	shows("once its plain dispatcher closed", fromPlain, "", "")
 }

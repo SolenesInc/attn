@@ -1,9 +1,8 @@
 import { useCallback } from 'react';
-import { useErrorToast } from '../components/ErrorToast';
+import { useToast } from '../components/Toast';
 import { useDaemonApi } from '../contexts/DaemonApiContext';
 import { type SeedPlacement, type SeedReviewActionContext } from '../hooks/useDaemonSocket';
 import { useDockPanels } from '../hooks/useDockPanels';
-import { useSessionWorkspaceController } from '../hooks/useSessionWorkspaceController';
 import { useDaemonStore } from '../store/daemonSessions';
 import { gardenPathToSeed, useGardenWalk } from '../store/gardenWalk';
 import { useSessionStore } from '../store/sessions';
@@ -11,7 +10,7 @@ import { crewDisplayName } from '../utils/crewName';
 interface Options {
   sendOpenSeed: ReturnType<typeof useDaemonApi>['sendOpenSeed'];
   activeSessionId: ReturnType<typeof useSessionStore.getState>['activeSessionId'];
-  showError: ReturnType<typeof useErrorToast>['showError'];
+  showError: ReturnType<typeof useToast>['showError'];
   seeds: ReturnType<typeof useDaemonStore.getState>['seeds'];
   openDockPanel: ReturnType<typeof useDockPanels>['openDockPanel'];
   sendFsExists: ReturnType<typeof useDaemonApi>['sendFsExists'];
@@ -22,9 +21,8 @@ interface Options {
   sendSeedToChief: ReturnType<typeof useDaemonApi>['sendSeedToChief'];
   sendCrewWake: ReturnType<typeof useDaemonApi>['sendCrewWake'];
   sendCrewSleep: ReturnType<typeof useDaemonApi>['sendCrewSleep'];
-  handleSelectTile: (workspaceId: string, tileId: string) => void;
-  focusWorkspaceLeaf: ReturnType<typeof useSessionWorkspaceController>['focusWorkspaceLeaf'];
-  setCrewSeedTile: (tile: { workspaceId: string; tileId: string } | null) => void;
+  handleSelectDesktop: (desktopId: string) => void;
+  setCrewSeedTile: (tile: { desktopId: string; tileId: string } | null) => void;
   closeCrewPanel: () => void;
 }
 export function useAppGardenActions({
@@ -41,8 +39,7 @@ export function useAppGardenActions({
   sendSeedToChief,
   sendCrewWake,
   sendCrewSleep,
-  handleSelectTile,
-  focusWorkspaceLeaf,
+  handleSelectDesktop,
   setCrewSeedTile,
   closeCrewPanel,
 }: Options) {
@@ -50,18 +47,18 @@ export function useAppGardenActions({
     async (
       seedId: string,
       placement: SeedPlacement,
-      beforeFocus?: (opened: { workspaceId: string; tileId: string }) => void,
+      beforeFocus?: (opened: { desktopId: string; tileId: string }) => void,
     ) => {
       const opened = await sendOpenSeed(seedId, placement);
-      if (!opened.workspaceId || !opened.tileId) {
-        throw new Error(`The daemon opened ${seedId} without a workspace tile`);
+      if (!opened.desktopId || !opened.tileId) {
+        throw new Error(`The daemon opened ${seedId} without a desktop tile`);
       }
-      const { workspaceId, tileId } = opened;
-      beforeFocus?.({ workspaceId, tileId });
-      handleSelectTile(workspaceId, tileId);
+      const { desktopId, tileId } = opened;
+      beforeFocus?.({ desktopId, tileId });
+      handleSelectDesktop(desktopId);
       return opened;
     },
-    [sendOpenSeed, handleSelectTile],
+    [sendOpenSeed, handleSelectDesktop],
   );
 
   const handleOpenSeedTile = useCallback(
@@ -116,14 +113,14 @@ export function useAppGardenActions({
   const handleOpenMarkdownArtifact = useCallback(
     (path: string) => {
       void sendOpenMarkdown(path, '')
-        .then(({ workspaceId, tileId }) => {
-          if (workspaceId && tileId) focusWorkspaceLeaf(workspaceId, tileId);
+        .then(({ desktopId, tileId }) => {
+          if (desktopId && tileId) handleSelectDesktop(desktopId);
         })
         .catch((error) => {
           showError(error instanceof Error ? error.message : 'Could not open the document');
         });
     },
-    [focusWorkspaceLeaf, sendOpenMarkdown, showError],
+    [handleSelectDesktop, sendOpenMarkdown, showError],
   );
 
   const handleResumeSeed = useCallback(

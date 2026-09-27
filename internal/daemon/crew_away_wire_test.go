@@ -19,7 +19,7 @@ func TestAHandoffWhileTheUserIsAwayEndsTheDayUnlessItAsksForANap(t *testing.T) {
 			setSetting(t, app, key, value)
 		}
 		for _, member := range []string{"trellis", "alder"} {
-			if err := cli.RegisterAsMember(member+"-day", member+"-day", w.Path(member+"-day"), "", member); err != nil {
+			if err := w.InjectCrewSession(member+"-day", member+"-day", w.Path(member+"-day"), member); err != nil {
 				t.Fatal(err)
 			}
 		}

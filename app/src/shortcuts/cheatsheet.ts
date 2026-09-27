@@ -20,14 +20,13 @@ function fromId(id: ShortcutId): string[] {
 export function buildCheatsheet(): CheatsheetCategory[] {
   return [
     {
-      title: 'Workspaces & Sessions',
+      title: 'Desktops & Sessions',
       rows: [
-        { label: 'New session in this workspace', combos: [fromId('session.new')] },
+        { label: 'New session on this desktop', combos: [fromId('session.new')] },
         { label: 'New session, split sideways', combos: [fromId('session.newHorizontal')] },
-        { label: 'New workspace', combos: [fromId('session.newWorkspace')] },
         { label: 'Close session (or focused pane)', combos: [fromId('session.close')] },
         {
-          label: 'Previous / next workspace',
+          label: 'Previous / next desktop',
           combos: [fromId('session.prev'), fromId('session.next')],
         },
         {
@@ -35,11 +34,20 @@ export function buildCheatsheet(): CheatsheetCategory[] {
           combos: [fromId('session.historyBack'), fromId('session.historyForward')],
         },
         { label: 'Jump to this session\'s dispatcher', combos: [fromId('session.orchestrator')] },
-        { label: 'Jump to workspace 1–9', combos: [[...modifierTokens('workspace.select1'), '1–9']] },
+        {
+          label: 'Switch to desktop 1–9',
+          combos: [[...modifierTokens('desktop.select1'), '1–9']],
+          note: 'The digit of the current desktop goes back to the previous one.',
+        },
+        { label: 'Send the focused pane to desktop 1–9', combos: [[...modifierTokens('desktop.send1'), '1–9']] },
+        { label: 'Desktop overview', combos: [fromId('desktop.overview')] },
+        { label: 'Switch profile', combos: [fromId('profile.switch')] },
         { label: 'Go to dashboard (home)', combos: [fromId('session.goToDashboard')] },
         { label: 'Toggle grid view', combos: [fromId('view.toggleGrid')] },
         { label: 'Jump to next waiting session', combos: [fromId('session.jumpToWaiting')] },
-        { label: 'Settle turn, go to next', combos: [fromId('session.settle')] },
+        { label: 'Next automation run needing you', combos: [fromId('session.nextRun')] },
+        { label: 'All agents', combos: [fromId('sidebar.agentList')] },
+        { label: 'Settle turn', combos: [fromId('session.settle')] },
         { label: 'Snooze this agent', combos: [fromId('session.snooze')] },
         { label: 'Stop the countdown, or keep the next turn', combos: [fromId('session.cancelCountdown')] },
         { label: 'Toggle sidebar', combos: [fromId('session.toggleSidebar')] },
@@ -59,7 +67,7 @@ export function buildCheatsheet(): CheatsheetCategory[] {
         {
           label: 'Move focus between panes',
           combos: [[...modifierTokens('terminal.focusLeft'), '←↑→↓']],
-          note: 'Crosses into the next workspace at an edge.',
+          note: 'Steps to the next desktop at an edge.',
         },
         { label: 'Zoom active pane', combos: [fromId('terminal.toggleZoom')] },
         { label: 'Focus active pane', combos: [fromId('terminal.toggleMaximize')] },
@@ -91,7 +99,8 @@ export function buildCheatsheet(): CheatsheetCategory[] {
     {
       title: 'App',
       rows: [
-        { label: 'Action menu', combos: [fromId('ui.actionMenu')] },
+        { label: 'Agent palette', combos: [fromId('ui.actionMenu')] },
+        { label: 'Command palette', combos: [fromId('ui.commandPalette')] },
         { label: 'Settings', combos: [fromId('ui.openSettings')] },
         {
           label: 'Font size up / down / reset',

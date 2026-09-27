@@ -149,7 +149,7 @@ func (d *Daemon) agentCloseRule(caller, target *protocol.Session) (protocol.Agen
 	if caller.ID == target.ID {
 		return protocol.AgentCloseRuleSelf, nil
 	}
-	if d.isChiefOfStaffSession(caller.ID) {
+	if d.chiefOfProfile(target.ProfileID) == caller.ID || (target.ProfileID == "" && d.isChiefOfStaffSession(caller.ID)) {
 		return protocol.AgentCloseRuleChiefOfStaff, nil
 	}
 	dispatcher := ""
@@ -159,7 +159,7 @@ func (d *Daemon) agentCloseRule(caller, target *protocol.Session) (protocol.Agen
 	if dispatcher != "" && dispatcher == caller.ID {
 		return protocol.AgentCloseRuleDispatcher, nil
 	}
-	const rules = "a session may close itself and the sessions it dispatched, and the chief of staff may close any"
+	const rules = "a session may close itself and the sessions it dispatched, and a profile's chief of staff may close any agent of that profile"
 	if dispatcher == "" {
 		return "", fmt.Errorf("%s. Session %s was not dispatched by anyone, so only it and the chief of staff can close it",
 			rules, shortSessionID(target.ID))

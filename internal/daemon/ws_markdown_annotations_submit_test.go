@@ -84,8 +84,8 @@ func TestMarkdownAnnotationsSubmitClearFailureStillDelivered(t *testing.T) {
 	saveSubmitDraft(t, d, path)
 
 	res := sendSubmit(t, d, protocol.MarkdownAnnotationsSubmitMessage{
-		DocumentUri: fileDocumentURI("workspace-test", path), SourceKind: annotationSourceFile,
-		WorkspaceID: protocol.Ptr("workspace-test"), Path: protocol.Ptr(path), TargetSessionID: protocol.Ptr("target"),
+		DocumentUri: fileDocumentURI(path), SourceKind: annotationSourceFile,
+		Path: protocol.Ptr(path), TargetSessionID: protocol.Ptr("target"),
 	})
 
 	requireSucceededWithUnclearedDraft(t, res, annotationSubmitStatusDelivered)

@@ -15,7 +15,7 @@ import {
   assertPaneVisibleContent,
   captureSessionArtifacts,
   compactTerminalText,
-  waitForFirstWorkspacePane,
+  waitForFirstDesktopPane,
   waitForNewShellPane,
   waitForPaneInputFocus,
   waitForPaneState,
@@ -80,9 +80,9 @@ async function main() {
     });
 
     utilityPaneId = await runner.step('create_primary_utility', async () => {
-      const workspaceBefore = await client.request('get_workspace', { sessionId: primarySessionId });
-      const existingPaneIds = new Set((workspaceBefore.panes || []).map((pane) => pane.paneId));
-      primaryInitialPaneId = (await waitForFirstWorkspacePane(client, primarySessionId, 'primary initial pane before utility split', 20_000)).paneId;
+      const desktopBefore = await client.request('get_desktop', { sessionId: primarySessionId });
+      const existingPaneIds = new Set((desktopBefore.panes || []).map((pane) => pane.paneId));
+      primaryInitialPaneId = (await waitForFirstDesktopPane(client, primarySessionId, 'primary initial pane before utility split', 20_000)).paneId;
       await client.request('split_pane', {
         sessionId: primarySessionId,
         targetPaneId: primaryInitialPaneId,

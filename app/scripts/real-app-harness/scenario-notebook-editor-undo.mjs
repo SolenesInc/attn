@@ -16,7 +16,7 @@ import { DaemonObserver } from './daemonObserver.mjs';
 import { createWindowDriver } from './platform.mjs';
 import { captureScreenshotData } from './nativeWindowCapture.mjs';
 import {
-  waitForFirstWorkspacePane,
+  waitForFirstDesktopPane,
   waitForPaneShellReady,
   waitForPaneVisible,
 } from './scenarioAssertions.mjs';
@@ -34,8 +34,8 @@ function parseArgs(argv) {
   };
 }
 
-// Scope probes to the ACTIVE workspace: hidden workspaces stay mounted, so an
-// unscoped selector can match a stale editor from a previous run's workspace.
+// Scope probes to the ACTIVE desktop: hidden desktops stay mounted, so an
+// unscoped selector can match a stale editor from a previous run's desktop.
 const FINDER_SELECTOR = '.terminal-wrapper.active .notebook-finder';
 const EDITOR_SELECTOR = '.terminal-wrapper.active .cm-content';
 const ORIGINAL_CONTENT = '# Undo Probe\n\nThis paragraph exists before the probe types anything.\n';
@@ -82,17 +82,17 @@ async function waitForDomSelector(client, selector, present, description, timeou
   throw new Error(`Timed out waiting for ${selector} to be ${present ? 'present' : 'absent'}: ${description}`);
 }
 
-async function waitForWorkspaceUi(client, workspaceId, predicate, description, timeoutMs = 20_000) {
+async function waitForDesktopUi(client, desktopId, predicate, description, timeoutMs = 20_000) {
   const startedAt = Date.now();
   let last = null;
   while (Date.now() - startedAt < timeoutMs) {
-    last = await client.request('get_workspace_ui_state', { workspaceId }).catch((error) => ({ error: String(error) }));
+    last = await client.request('get_desktop_ui_state', { desktopId }).catch((error) => ({ error: String(error) }));
     if (predicate(last)) {
       return last;
     }
     await new Promise((resolve) => setTimeout(resolve, 200));
   }
-  throw new Error(`Timed out waiting for ${description}. Last workspace UI state:\n${JSON.stringify(last, null, 2)}`);
+  throw new Error(`Timed out waiting for ${description}. Last desktop UI state:\n${JSON.stringify(last, null, 2)}`);
 }
 
 // Autosave is debounced 700ms (NotebookSurface AUTOSAVE_DELAY_MS).
@@ -127,10 +127,10 @@ async function pressUntilFileMatches(driver, filePath, key, modifiers, predicate
   throw new Error(`${description}: still not satisfied after ${maxPresses} presses of ${key}. Final content:\n${finalContent}`);
 }
 
-async function closeWorkspacePanes(client, sessionId) {
+async function closeDesktopPanes(client, sessionId) {
   for (let attempt = 0; attempt < 10; attempt += 1) {
-    const workspace = await client.request('get_workspace', { sessionId }).catch(() => null);
-    const pane = workspace?.panes?.[0];
+    const desktop = await client.request('get_desktop', { sessionId }).catch(() => null);
+    const pane = desktop?.panes?.[0];
     if (!pane) {
       return;
     }
@@ -143,7 +143,7 @@ async function closeExistingSessions(client, sessionRootDir) {
   const initial = await client.request('get_state');
   const harnessSessions = (initial.sessions || []).filter((session) => session.cwd?.startsWith(sessionRootDir));
   for (const session of harnessSessions) {
-    await closeWorkspacePanes(client, session.id).catch(() => {});
+    await closeDesktopPanes(client, session.id).catch(() => {});
   }
 }
 
@@ -198,7 +198,7 @@ async function main() {
       return { cwd: dir, probeBasename: basename };
     });
 
-    const { workspaceId } = await runner.step('create_shell_session', async () => {
+    const { desktopId } = await runner.step('create_shell_session', async () => {
       sessionId = await createSessionAndWaitForInitialPane({
         client,
         observer,
@@ -208,8 +208,8 @@ async function main() {
         waitForInitialPaneVisible: false,
         sessionWaitMs: 30_000,
       });
-      runner.registerCleanup('close_session_panes', () => (sessionId ? closeWorkspacePanes(client, sessionId) : null));
-      const pane = await waitForFirstWorkspacePane(client, sessionId, 'initial workspace pane');
+      runner.registerCleanup('close_session_panes', () => (sessionId ? closeDesktopPanes(client, sessionId) : null));
+      const pane = await waitForFirstDesktopPane(client, sessionId, 'initial desktop pane');
       await client.request('select_session', { sessionId });
       await waitForPaneVisible(client, sessionId, pane.paneId, 20_000);
       await waitForPaneShellReady(client, sessionId, pane.paneId, {
@@ -217,12 +217,12 @@ async function main() {
         description: 'shell prompt ready',
       });
 
-      const workspace = await client.request('get_workspace', { sessionId });
-      const id = workspace.workspaceId;
+      const desktop = await client.request('get_desktop', { sessionId });
+      const id = desktop.desktopId;
       if (!id) {
-        throw new Error(`Could not resolve workspace id for session ${sessionId}: ${JSON.stringify(workspace)}`);
+        throw new Error(`Could not resolve desktop id for session ${sessionId}: ${JSON.stringify(desktop)}`);
       }
-      return { workspaceId: id };
+      return { desktopId: id };
     });
 
     const docked = await runner.step('dock_notebook_tile', async () => {
@@ -230,9 +230,9 @@ async function main() {
 
       let result;
       try {
-        result = await waitForWorkspaceUi(
+        result = await waitForDesktopUi(
           client,
-          workspaceId,
+          desktopId,
           (state) => Array.isArray(state?.tileIds) && state.tileIds.length === 1
             && Array.isArray(state?.tileTitles) && state.tileTitles.includes('Editor'),
           'native Cmd+Opt+N to dock a fresh notebook tile (titled "Editor")',
@@ -340,7 +340,7 @@ async function main() {
 
     await runner.step('assert_no_pane_zoom', async () => {
       const sessionUiState = await client.request('get_session_ui_state', { sessionId });
-      const zoomedPaneId = sessionUiState?.workspace?.view?.zoomedPaneId ?? null;
+      const zoomedPaneId = sessionUiState?.desktop?.view?.zoomedPaneId ?? null;
       runner.assert(
         !zoomedPaneId,
         `Shift+Cmd+Z zoomed pane ${zoomedPaneId} instead of (only) redoing in the editor — `
@@ -350,7 +350,7 @@ async function main() {
     });
 
     const summary = await runner.finishSuccess({
-      workspaceId,
+      desktopId,
       tileId: docked.tileIds[0],
       probeFilePath,
     });
@@ -362,7 +362,7 @@ async function main() {
     process.exitCode = 1;
   } finally {
     if (sessionId) {
-      await closeWorkspacePanes(client, sessionId).catch(() => {});
+      await closeDesktopPanes(client, sessionId).catch(() => {});
     }
     if (probeFilePath) {
       fs.rmSync(probeFilePath, { force: true });

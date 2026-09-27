@@ -21,13 +21,13 @@ import {
   compactTerminalText,
   scrollPaneToTop,
   waitForNewShellPane,
-  waitForFirstWorkspacePane,
+  waitForFirstDesktopPane,
   waitForPaneAttached,
   waitForPaneState,
   waitForPaneStyle,
   waitForPaneText,
   waitForPaneVisible,
-  waitForSessionWorkspace,
+  waitForSessionDesktop,
   tokenAnchorIgnorePatterns,
 } from './scenarioAssertions.mjs';
 import {
@@ -147,8 +147,8 @@ async function main() {
       if (typeof preSplitCols !== 'number' || preSplitCols <= 0) {
         throw new Error(`initial pane has no column count before split: ${JSON.stringify(preSplitState?.pane?.visibleContent)}`);
       }
-      const workspaceBefore = await client.request('get_workspace', { sessionId });
-      const existingPaneIds = new Set((workspaceBefore.panes || []).map((pane) => pane.paneId));
+      const desktopBefore = await client.request('get_desktop', { sessionId });
+      const existingPaneIds = new Set((desktopBefore.panes || []).map((pane) => pane.paneId));
       await client.request('split_pane', {
         sessionId,
         targetPaneId: initialPaneId,
@@ -322,24 +322,24 @@ async function main() {
       await widenWindowForSplitPanes(client);
       await client.request('select_session', { sessionId });
 
-      const restoredWorkspace = await waitForSessionWorkspace(
+      const restoredDesktop = await waitForSessionDesktop(
         client,
         sessionId,
-        (workspace) => {
-          const paneIds = new Set((workspace.panes || []).map((pane) => pane.paneId));
+        (desktop) => {
+          const paneIds = new Set((desktop.panes || []).map((pane) => pane.paneId));
           return paneIds.has(initialPaneId) && paneIds.has(utilityPaneId);
         },
-        `restored split workspace for ${sessionId}`,
+        `restored split desktop for ${sessionId}`,
         30_000,
       );
-      runner.assert((restoredWorkspace.panes || []).length >= 2, 'restored workspace still exposes both split panes', {
+      runner.assert((restoredDesktop.panes || []).length >= 2, 'restored desktop still exposes both split panes', {
         sessionId,
         utilityPaneId,
-        paneCount: (restoredWorkspace.panes || []).length,
+        paneCount: (restoredDesktop.panes || []).length,
       });
 
       if (!initialPaneId) {
-        initialPaneId = (await waitForFirstWorkspacePane(client, sessionId, 'restored initial pane', 20_000)).paneId;
+        initialPaneId = (await waitForFirstDesktopPane(client, sessionId, 'restored initial pane', 20_000)).paneId;
       }
       await waitForPaneVisible(client, sessionId, initialPaneId, 20_000);
       await waitForPaneVisible(client, sessionId, utilityPaneId, 20_000);

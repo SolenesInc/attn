@@ -1,6 +1,7 @@
 package daemon
 
 import (
+	"strings"
 	"syscall"
 	"testing"
 
@@ -64,7 +65,39 @@ func TestSeedResumeRollsBackPaneWhenSpawnFails(t *testing.T) {
 	if _, err := d.resumeSeed(seed.ID); err == nil {
 		t.Fatal("resumeSeed succeeded, want spawn failure")
 	}
-	if ws := d.store.GetWorkspace("workspace-ghost-session"); ws != nil {
-		t.Fatalf("workspace survived a failed resume: %+v", ws)
+	if _, placed, _ := d.store.SessionPlacement("ghost-session"); placed {
+		t.Fatal("a pane survived a failed resume")
+	}
+}
+
+func TestSeedResumeNeedsADestinationWhenTheTendersProfileWasDeleted(t *testing.T) {
+	d, backend, sourceSessionID := newGardenDelegationDaemon(t)
+	leafID, seedID := delegateBoundSeed(t, d, backend, sourceSessionID, "codex")
+	writeCodexRolloutFixture(t, "codex-conv-orphan")
+	d.persistResumeSessionID(leafID, "codex-conv-orphan")
+	d.handleUnregister(drainedConn(t), &protocol.UnregisterMessage{ID: leafID})
+	d.waitForSessionTeardown(leafID)
+	kept := createTestProfile(t, d.store, "Kept")
+	deleteTestProfile(t, d.store, defaultProfileID(t, d.store), kept.ID)
+	since := spawnCount(backend)
+
+	if _, err := d.resumeSeed(seedID); err == nil || !strings.Contains(err.Error(), "Sessions ledger") {
+		t.Fatalf("resume without a destination = %v, want a refusal pointing to the Sessions ledger", err)
+	}
+	if spawnCount(backend) != since {
+		t.Fatal("a refused resume spawned the agent")
+	}
+
+	client := spawnTestClient()
+	client.selectProfile(kept.ID)
+	d.handleSeedResume(client, &protocol.SeedResumeMessage{Cmd: protocol.CmdSeedResume, SeedID: seedID, RequestID: protocol.Ptr("resume-1")})
+	var result protocol.SeedResumeResultMessage
+	for _, payload := range drainClientPayloads(t, client) {
+		if eventName(t, payload) == protocol.EventSeedResumeResult {
+			decodeInto(t, payload, &result)
+		}
+	}
+	if !result.Success || protocol.Deref(result.ProfileID) != kept.ID || d.store.Get(leafID).ProfileID != kept.ID {
+		t.Fatalf("Garden Resume from a connection in %s = %+v, want the agent resumed there", kept.ID, result)
 	}
 }

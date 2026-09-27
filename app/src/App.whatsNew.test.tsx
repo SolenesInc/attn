@@ -3,7 +3,7 @@ import { describe, expect, it } from 'vitest';
 import { WHATS_NEW_STORAGE_KEY } from './hooks/useWhatsNew';
 import { gesture, renderApp, restartApp } from './test/renderApp';
 
-const whatsNew = () => screen.queryByRole('dialog', { name: 'attn is organized around workspaces' });
+const whatsNew = () => screen.queryByRole('dialog', { name: 'attn is organized around desktops' });
 
 async function launchAfterUpdate() {
   localStorage.setItem(WHATS_NEW_STORAGE_KEY, 'an-earlier-release');
@@ -11,13 +11,13 @@ async function launchAfterUpdate() {
 }
 
 describe('App what’s new', () => {
-  it('greets the first launch after an update with the ⌘N change called out', async () => {
+  it('greets the first launch after an update with the desktop change called out', async () => {
     await launchAfterUpdate();
 
     const callout = screen.getByText('Changed').closest('section')!;
-    expect(callout).toHaveTextContent('⌘N opens a session inside this workspace');
-    expect(Array.from(callout.querySelectorAll('.key-combo'), (combo) => combo.textContent)).toEqual(['⌘N', '⌘T']);
-    expect(screen.getByRole('heading', { name: 'The sidebar lists workspaces' })).toBeInTheDocument();
+    expect(callout).toHaveTextContent('Agents live on desktops');
+    expect(Array.from(callout.querySelectorAll('.key-combo'), (combo) => combo.textContent)).toEqual(['⌘1–9']);
+    expect(screen.getByRole('heading', { name: 'Profiles group everything' })).toBeInTheDocument();
   });
 
   it('hands off to the full shortcut list', async () => {

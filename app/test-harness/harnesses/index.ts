@@ -12,6 +12,7 @@ import { NotebookBrowserHarness } from './NotebookBrowserHarness';
 import { NotebookTileHarness } from './NotebookTileHarness';
 import { PaneFocusRingHarness } from './PaneFocusRingHarness';
 import { PresentTourHarness } from './PresentTourHarness';
+import { QueueBarHarness } from './QueueBarHarness';
 import { TileHeaderHarness } from './TileHeaderHarness';
 import { SeedHeaderHarness } from './SeedHeaderHarness';
 import { TerminalAnnotationsHarness } from './TerminalAnnotationsHarness';
@@ -37,4 +38,5 @@ export const harnesses: Record<string, React.ComponentType<HarnessProps>> = {
   SeedHeader: SeedHeaderHarness,
   TerminalAnnotations: TerminalAnnotationsHarness,
   DelegationChain: DelegationChainHarness,
+  QueueBar: QueueBarHarness,
 };

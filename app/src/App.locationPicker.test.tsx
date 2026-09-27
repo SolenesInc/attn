@@ -2,7 +2,7 @@ import { act, fireEvent, screen, within } from '@testing-library/react';
 import { describe, expect, it, vi } from 'vitest';
 import type { CommandMessage, EventMessage } from './test/protocol';
 import { openSessionsLedger, page, pages, rows } from './components/ledger/testSupport';
-import { agentWorkspace, daemonEndpoint, daemonSession } from './test/daemonFixtures';
+import { soloDesktop, daemonEndpoint, daemonSession, DEFAULT_PROFILE_ID } from './test/daemonFixtures';
 import { gesture, pressShortcut, renderApp } from './test/renderApp';
 import type { Reply, ScriptedDaemon } from './test/scriptedDaemon';
 import { closedEntry, verdict } from './test/sessionLedgerFixtures';
@@ -116,17 +116,23 @@ describe('App location picker', () => {
       expect(pickerOpen()).toBe(false);
     });
 
-    it.each([
-      ['on this machine', {}, undefined],
-      ['on a remote endpoint', { endpoints: [GPU_BOX] }, 'ep-1'],
-    ])('launches at the root directory as typed %s', async (_, initialState: InitialState, endpointId) => {
-      const { daemon } = await openPicker({}, initialState);
-      if (endpointId) await gesture(daemon, () => fireEvent.click(radio(/gpu-box/i)));
+    it('launches at the root directory as typed', async () => {
+      const { daemon } = await openPicker();
 
       await submitPath(daemon, '/');
 
-      expect(daemon.sentOf('inspect_path').map(({ path, endpoint_id }) => ({ path, endpoint_id }))).toEqual([{ path: '/', endpoint_id: endpointId }]);
-      expect(launchedAt(daemon)).toEqual([{ cwd: '/', agent: endpointId ? 'codex' : 'claude', ...(endpointId ? { endpoint_id: endpointId } : {}) }]);
+      expect(daemon.sentOf('inspect_path').map(({ path, endpoint_id }) => ({ path, endpoint_id }))).toEqual([{ path: '/', endpoint_id: undefined }]);
+      expect(launchedAt(daemon)).toEqual([{ cwd: '/', agent: 'claude' }]);
+    });
+
+    it('refuses a launch on a remote endpoint, saying remote endpoints are off', async () => {
+      const { daemon } = await openPicker({}, { endpoints: [GPU_BOX] });
+      await gesture(daemon, () => fireEvent.click(radio(/gpu-box/i)));
+
+      await submitPath(daemon, '/');
+
+      expect(launchedAt(daemon)).toEqual([]);
+      expect(screen.getByText(/remote endpoints are off/)).toBeInTheDocument();
     });
 
     it.each([
@@ -254,7 +260,7 @@ describe('App location picker', () => {
       await press(daemon, 'Escape');
       const recentRequest = holdAnswers(daemon, 'get_recent_locations');
 
-      await gesture(daemon, () => pressShortcut('session.newWorkspace'));
+      await gesture(daemon, () => pressShortcut('session.new'));
       expect(row(0)).toBeInTheDocument();
       expect(highlighted()).toEqual([]);
       await press(daemon, 'Enter');
@@ -273,20 +279,6 @@ describe('App location picker', () => {
   describe('agents and targets', () => {
     const agentChosen = (name: RegExp) => radio(name).getAttribute('aria-checked') === 'true';
 
-    it('launches on a remote endpoint with an agent only that endpoint offers, without reading repo info', async () => {
-      const { daemon } = await openPicker({}, {
-        endpoints: [daemonEndpoint('ep-1', { capabilities: { ...REMOTE_CAPABILITIES, agents_available: ['snipe'], projects_directory: '/srv/projects' } })],
-      });
-
-      await gesture(daemon, () => fireEvent.click(radio(/gpu-box/i)));
-      expect(agentChosen(/snipe/i)).toBe(true);
-      await submitPath(daemon, '~/projects/remote-repo');
-
-      expect(daemon.sentOf('inspect_path').map(({ path, endpoint_id }) => ({ path, endpoint_id }))).toEqual([{ path: `${HOME}/projects/remote-repo`, endpoint_id: 'ep-1' }]);
-      expect(daemon.sentOf('get_repo_info')).toEqual([]);
-      expect(launchedAt(daemon)).toEqual([{ cwd: `${HOME}/projects/remote-repo`, agent: 'snipe', endpoint_id: 'ep-1' }]);
-    });
-
     it('offers Terminal on a remote endpoint that reports only agent CLIs', async () => {
       const { daemon } = await openPicker({}, { endpoints: [GPU_BOX] });
 
@@ -302,7 +294,7 @@ describe('App location picker', () => {
       await gesture(daemon, () => fireEvent.click(radio(/codex/i)));
       await press(daemon, 'Escape');
       expect(pickerOpen()).toBe(false);
-      await gesture(daemon, () => pressShortcut('session.newWorkspace'));
+      await gesture(daemon, () => pressShortcut('session.new'));
 
       expect(daemon.sentOf('set_setting').filter(({ key }) => key === 'new_session_agent')).toEqual([{ cmd: 'set_setting', key: 'new_session_agent', value: 'codex' }]);
       expect(agentChosen(/codex/i)).toBe(true);
@@ -310,7 +302,7 @@ describe('App location picker', () => {
 
     it('switches agents with ⌥ and a digit, and neither advertises nor applies one for an unavailable agent', async () => {
       const { daemon } = await openPicker({}, { settings: { codex_available: 'false', copilot_available: 'true' } });
-      expect(within(screen.getByRole('radiogroup', { name: 'Initial workspace session agent' })).queryByText('⌥2')).toBeNull();
+      expect(within(screen.getByRole('radiogroup', { name: 'Session agent' })).queryByText('⌥2')).toBeNull();
 
       await press(daemon, '™', { code: 'Digit2', altKey: true });
 
@@ -318,17 +310,14 @@ describe('App location picker', () => {
       expect(agentChosen(/copilot/i)).toBe(false);
     });
 
-    it.each([
-      ['workspace', 'session.newWorkspace' as const],
-      ['session', 'session.new' as const],
-    ])('offers Terminal on ⌥T in the %s picker and launches a shell without remembering it as the preferred agent', async (_, shortcut) => {
-      const view = await renderApp({ initialState: { sessions: [daemonSession('s1', { state: 'idle' })], workspaces: [agentWorkspace('s1')] } });
+    it('offers Terminal on ⌥T and launches a shell without remembering it as the preferred agent', async () => {
+      const view = await renderApp({ initialState: { sessions: [daemonSession('s1', { state: 'idle' })], desktops: [soloDesktop('s1')] } });
       const { daemon } = view;
       serveMachine(daemon);
       serveLaunches(daemon);
       serveSettings(daemon);
       await gesture(daemon, () => fireEvent.click(screen.getByRole('button', { name: 'Open s1' })));
-      await gesture(daemon, () => pressShortcut(shortcut));
+      await gesture(daemon, () => pressShortcut('session.new'));
       expect(within(radio(/terminal/i)).getByText('⌥T')).toBeInTheDocument();
 
       await press(daemon, '†', { code: 'KeyT', altKey: true });
@@ -366,49 +355,25 @@ describe('App location picker', () => {
       expect(pathInput()).toHaveValue('/Users/victor/projects/');
       expect(radio(/local/i)).toHaveAttribute('aria-checked', 'true');
     });
-
-    it('turns on yolo for a remote daemon when its target is chosen again, remembers that for the daemon, and launches with it', async () => {
-      const { daemon } = await openPicker({}, {
-        settings: { claude_cap_yolo: 'true' },
-        endpoints: [daemonEndpoint('ep-1', { capabilities: { protocol_version: '47', daemon_instance_id: 'daemon-remote-1', agents_available: ['claude'] } })],
-      });
-
-      await gesture(daemon, () => fireEvent.click(radio(/gpu-box/i)));
-      await gesture(daemon, () => fireEvent.click(radio(/gpu-box/i)));
-      await submitPath(daemon, '~/projects/remote-repo');
-
-      expect(daemon.sentOf('set_setting')).toEqual([{ cmd: 'set_setting', key: 'new_session_yolo_daemon_daemon-remote-1', value: 'true' }]);
-      expect(launchedAt(daemon)).toEqual([{ cwd: `${HOME}/projects/remote-repo`, agent: 'claude', endpoint_id: 'ep-1', yolo_mode: true }]);
-    });
   });
 
   describe('launching as chief of staff', () => {
     const chiefToggle = () => screen.queryByTestId('location-picker-chief-toggle');
 
-    it('offers the chief toggle only for a claude workspace while no chief exists', async () => {
+    it('offers the chief toggle only for a claude session while no chief exists', async () => {
       const { daemon } = await openPicker();
       expect(chiefToggle()).not.toBeNull();
       await gesture(daemon, () => fireEvent.click(radio(/terminal/i)));
       expect(chiefToggle()).toBeNull();
 
-      await openPicker({}, { sessions: [daemonSession('chief', { chief_of_staff: true })], workspaces: [agentWorkspace('chief')] });
-      expect(chiefToggle()).toBeNull();
-    });
-
-    it('leaves the chief toggle out of the picker for a session beside the current one', async () => {
-      const view = await renderApp({ initialState: { sessions: [daemonSession('s1', { state: 'idle' })], workspaces: [agentWorkspace('s1')] } });
-      serveMachine(view.daemon);
-      await gesture(view.daemon, () => fireEvent.click(screen.getByRole('button', { name: 'Open s1' })));
-      await gesture(view.daemon, () => pressShortcut('session.new'));
-
-      expect(screen.getByTestId('location-picker-title')).toHaveTextContent('New Session Location');
+      await openPicker({}, { sessions: [daemonSession('chief', { chief_of_staff: true })], desktops: [soloDesktop('chief')] });
       expect(chiefToggle()).toBeNull();
     });
 
     it('launches as chief only when the toggle is on', async () => {
       const { daemon } = await openPicker();
       await submitPath(daemon, '/tmp/plain');
-      await gesture(daemon, () => pressShortcut('session.newWorkspace'));
+      await gesture(daemon, () => pressShortcut('session.new'));
       await gesture(daemon, () => fireEvent.click(chiefToggle()!));
       await submitPath(daemon, '/tmp/chief');
 
@@ -441,7 +406,7 @@ describe('App location picker', () => {
       await submitPath(daemon, '/tmp/claude-here');
 
       expect(launchedAt(daemon)[0]).not.toHaveProperty('auto_mode');
-      await gesture(daemon, () => pressShortcut('session.newWorkspace'));
+      await gesture(daemon, () => pressShortcut('session.new'));
       await gesture(daemon, () => fireEvent.click(radio(/snipe/i)));
       expect(autoMode()).not.toBeNull();
     });
@@ -515,7 +480,7 @@ describe('App location picker', () => {
       expect(memoryWrites(daemon)).toEqual([{ cmd: 'set_setting', key: MEMORY, value: 'main_repo' }]);
       expect(launchedAt(daemon)).toEqual([{ cwd: REPO, agent: 'claude' }]);
 
-      await gesture(daemon, () => pressShortcut('session.newWorkspace'));
+      await gesture(daemon, () => pressShortcut('session.new'));
       await submitPath(daemon, '~/projects/exsin');
       expect(chosenRow()).toBe(0);
       await press(daemon, 'Enter', {}, chooser()!);
@@ -532,7 +497,7 @@ describe('App location picker', () => {
       expect(launchedAt(daemon)).toEqual([{ cwd: FEAT_IMAGES, agent: 'claude' }]);
       expect(memoryWrites(daemon)).toEqual([]);
 
-      await gesture(daemon, () => pressShortcut('session.newWorkspace'));
+      await gesture(daemon, () => pressShortcut('session.new'));
       await submitPath(daemon, '~/projects/exsin');
       await press(daemon, 'ArrowUp', {}, chooser()!);
       fireEvent.change(screen.getByTestId('repo-new-worktree-input'), { target: { value: 'feat-more' } });
@@ -584,7 +549,7 @@ describe('App location picker', () => {
       ['the user typed another path', async (daemon: ScriptedDaemon) => typePath(daemon, '/tmp/other')],
       ['the picker was closed and opened again', async (daemon: ScriptedDaemon) => {
         await gesture(daemon, () => fireEvent.click(screen.getByTestId('location-picker-overlay')));
-        await gesture(daemon, () => pressShortcut('session.newWorkspace'));
+        await gesture(daemon, () => pressShortcut('session.new'));
       }],
     ])('ignores a path inspection answered after %s, success or failure', async (_, moveOn) => {
       const { daemon } = await openPicker({ repos: [EXSIN] }, { endpoints: [GPU_BOX] });
@@ -608,7 +573,7 @@ describe('App location picker', () => {
       await submitPath(daemon, '~/projects/exsin');
 
       await press(daemon, 'Escape');
-      await gesture(daemon, () => pressShortcut('session.newWorkspace'));
+      await gesture(daemon, () => pressShortcut('session.new'));
       await answer(daemon, repoRequest(), { event: 'get_repo_info_result', success: true, info: EXSIN });
 
       expect(screen.getByTestId('location-picker-title')).toBeInTheDocument();
@@ -641,7 +606,7 @@ describe('App location picker', () => {
       serveLaunches(daemon);
       daemon.on('session_reopen', ({ session_id, action, directory }) => (
         action === SessionReopenAction.StartFreshElsewhere
-          ? { event: 'session_reopen_result', success: true, result: { action, directory: directory!, session_id, workspace_id: 'ws-1' } }
+          ? { event: 'session_reopen_result', success: true, result: { action, directory: directory!, session_id, profile_id: DEFAULT_PROFILE_ID } }
           : {
             event: 'session_reopen_result',
             success: false,

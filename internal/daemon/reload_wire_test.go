@@ -149,7 +149,7 @@ func TestChangingTheChiefRelaunchesExactlyTheAffectedAgents(t *testing.T) {
 		return id
 	}
 	alice, bob, carol := conversing("alice"), conversing("bob"), conversing("carol")
-	shell := w.Spawn(app, workspaceShell, w.Path("dora"))
+	shell := w.Spawn(app, shellHarness, w.Path("dora"))
 	runs[carol].Exit(0)
 	testworld.Await(app, protocol.EventSessionExited, func(e protocol.SessionExitedMessage) bool { return e.ID == carol })
 

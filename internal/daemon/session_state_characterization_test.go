@@ -14,21 +14,18 @@ func addCharacterizationSession(
 	id string,
 	agent protocol.SessionAgent,
 	state protocol.SessionState,
-) string {
+) {
 	t.Helper()
 	directory := t.TempDir()
-	workspaceID := "workspace-" + id
-	addTestWorkspace(d, workspaceID, directory)
 	d.store.Add(&protocol.Session{
 		ID:             id,
 		Label:          id,
 		Agent:          agent,
 		Directory:      directory,
+		ProfileID:      defaultProfileID(t, d.store),
 		State:          state,
 		StateSince:     characterizationOldTimestamp,
 		StateUpdatedAt: characterizationOldTimestamp,
 		LastSeen:       characterizationOldTimestamp,
 	})
-	d.associateSessionWithWorkspace(id, workspaceID)
-	return workspaceID
 }

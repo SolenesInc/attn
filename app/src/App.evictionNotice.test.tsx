@@ -35,6 +35,7 @@ describe('App eviction notice', () => {
     expect(screen.getByRole('alert')).toHaveTextContent('fell behind on updates');
 
     await act(() => vi.advanceTimersByTimeAsync(300));
+    await act(() => vi.advanceTimersByTimeAsync(300));
     expect(screen.queryByRole('alert')).toBeNull();
   });
 

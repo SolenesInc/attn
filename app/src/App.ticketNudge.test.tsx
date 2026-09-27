@@ -1,12 +1,12 @@
 import { fireEvent, screen, within } from '@testing-library/react';
 import { describe, expect, it } from 'vitest';
-import { agentPane, daemonSession, daemonWorkspace, type DaemonSession } from './test/daemonFixtures';
+import { agentPane, daemonSession, daemonDesktop, type DaemonSession } from './test/daemonFixtures';
 import { gesture, renderApp } from './test/renderApp';
 
-const WORKSPACE = 'workspace-main';
+const WORKSPACE = 'desktop-main';
 const FIRES_AT = '2999-01-01T00:00:00.000Z';
 
-const splitWorkspace = daemonWorkspace(WORKSPACE, {
+const splitDesktop = daemonDesktop(WORKSPACE, {
   root: {
     type: 'split',
     split_id: 'split-1',
@@ -24,10 +24,10 @@ async function renderNudge(target: Partial<DaemonSession>, { selected }: { selec
   const view = await renderApp({
     initialState: {
       sessions: [
-        daemonSession('target', { workspace_id: WORKSPACE, state: 'idle', ...target }),
-        daemonSession('other', { workspace_id: WORKSPACE, state: 'idle' }),
+        daemonSession('target', { state: 'idle', ...target }),
+        daemonSession('other', { state: 'idle' }),
       ],
-      workspaces: [splitWorkspace],
+      desktops: [splitDesktop],
     },
   });
   await gesture(view.daemon, () => fireEvent.click(screen.getByRole('button', { name: `Open ${selected ? 'target' : 'other'}` })));

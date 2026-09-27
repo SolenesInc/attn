@@ -19,13 +19,13 @@ import {
   assertPaneVisibleContent,
   compactTerminalText,
   captureSessionArtifacts,
-  waitForFirstWorkspacePane,
+  waitForFirstDesktopPane,
   waitForNewShellPane,
   waitForPaneShellReady,
   waitForPaneTextChange,
   waitForPaneText,
   waitForPaneVisible,
-  waitForSessionWorkspace,
+  waitForSessionDesktop,
 } from './scenarioAssertions.mjs';
 import {
   buildRemoteHarnessPaths,
@@ -122,7 +122,7 @@ async function main() {
   const remoteHome = await getRemoteHome(options.sshTarget);
   const remoteHarnessBase = `${remoteHome}/.attn/harness`;
   const remotePaths = buildRemoteHarnessPaths(remoteHome, runner.runId);
-  const remoteDirectory = options.remoteDirectory || `${remotePaths.remoteHarnessRoot}/workspace`;
+  const remoteDirectory = options.remoteDirectory || `${remotePaths.remoteHarnessRoot}/desktopState`;
   const remoteTripwire = buildRemoteAgentTripwire({
     remoteHome,
     remotePaths,
@@ -257,17 +257,17 @@ async function main() {
         endpointId: endpoint.id,
         waitForInitialPaneVisible: false,
       });
-      await observer.waitForWorkspace(
+      await observer.waitForDesktopOf(
         resultSessionId,
-        (workspace) => (workspace.panes || []).length >= 1,
-        `initial workspace for ${resultSessionId}`,
+        (desktop) => desktop.panes.length >= 1,
+        `initial desktop for ${resultSessionId}`,
         30_000,
       );
-      await waitForSessionWorkspace(
+      await waitForSessionDesktop(
         client,
         resultSessionId,
-        (workspace) => (workspace.panes || []).length >= 1,
-        `frontend workspace for ${resultSessionId}`,
+        (desktopState) => (desktopState.panes || []).length >= 1,
+        `frontend desktopState for ${resultSessionId}`,
         30_000,
       );
       return resultSessionId;
@@ -275,7 +275,7 @@ async function main() {
 
     initialShellPaneId = await runner.step('create_initial_split_before_relaunch', async () => {
       await client.request('select_session', { sessionId });
-      initialPaneId = (await waitForFirstWorkspacePane(client, sessionId, 'remote initial pane before relaunch', 30_000)).paneId;
+      initialPaneId = (await waitForFirstDesktopPane(client, sessionId, 'remote initial pane before relaunch', 30_000)).paneId;
       await waitForPaneVisible(client, sessionId, initialPaneId, 30_000);
       await assertPaneVisibleContent(client, sessionId, initialPaneId, {
         minNonEmptyLines: 2,
@@ -389,14 +389,14 @@ async function main() {
       });
       await waitForEndpointConnected(observer, endpoint.name, 45_000);
       await client.request('select_session', { sessionId });
-      await waitForSessionWorkspace(
+      await waitForSessionDesktop(
         client,
         sessionId,
-        (workspace) => {
-          const paneIds = new Set((workspace.panes || []).map((pane) => pane.paneId));
+        (desktopState) => {
+          const paneIds = new Set((desktopState.panes || []).map((pane) => pane.paneId));
           return paneIds.has(initialPaneId) && paneIds.has(initialShellPaneId);
         },
-        `frontend workspace after relaunch for ${sessionId}`,
+        `frontend desktopState after relaunch for ${sessionId}`,
         45_000,
       );
       await client.request('focus_pane', { sessionId, paneId: initialPaneId });
@@ -446,8 +446,8 @@ async function main() {
 
     postRelaunchMainSplitPaneId = await runner.step('split_from_main_after_relaunch', async () => {
       await client.request('focus_pane', { sessionId, paneId: initialPaneId });
-      const workspaceBefore = await client.request('get_workspace', { sessionId });
-      const existingPaneIds = new Set((workspaceBefore.panes || []).map((pane) => pane.paneId));
+      const desktopBefore = await client.request('get_desktop', { sessionId });
+      const existingPaneIds = new Set((desktopBefore.panes || []).map((pane) => pane.paneId));
       await client.request('split_pane', {
         sessionId,
         targetPaneId: initialPaneId,
@@ -530,8 +530,8 @@ async function main() {
 
     postRelaunchShellSplitPaneId = await runner.step('split_from_existing_shell_after_relaunch', async () => {
       await client.request('focus_pane', { sessionId, paneId: initialShellPaneId });
-      const workspaceBefore = await client.request('get_workspace', { sessionId });
-      const existingPaneIds = new Set((workspaceBefore.panes || []).map((pane) => pane.paneId));
+      const desktopBefore = await client.request('get_desktop', { sessionId });
+      const existingPaneIds = new Set((desktopBefore.panes || []).map((pane) => pane.paneId));
       await client.request('split_pane', {
         sessionId,
         targetPaneId: initialShellPaneId,
@@ -606,7 +606,7 @@ async function main() {
     remoteTripwireLedger = await runner.step('verify_remote_agent_ledger', async () => (
       collectRemoteAgentTripwire({ target: options.sshTarget, fixture: remoteTripwire, runner })
     ));
-    const finalWorkspace = await client.request('get_workspace', { sessionId });
+    const finalDesktop = await client.request('get_desktop', { sessionId });
     const summary = await runner.finishSuccess({
       sessionId,
       endpointId: endpoint?.id || null,
@@ -632,10 +632,10 @@ async function main() {
       },
       timings,
       shellTypingReadiness,
-      finalWorkspace: {
-        activePaneId: finalWorkspace.activePaneId,
-        paneIds: (finalWorkspace.panes || []).map((pane) => pane.paneId),
-        otherPaneIds: (finalWorkspace.panes || [])
+      finalDesktop: {
+        activePaneId: finalDesktop.activePaneId,
+        paneIds: (finalDesktop.panes || []).map((pane) => pane.paneId),
+        otherPaneIds: (finalDesktop.panes || [])
           .map((pane) => pane.paneId)
           .filter((paneId) => paneId !== initialPaneId),
       },

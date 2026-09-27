@@ -400,3 +400,41 @@ func (p *Peer) take(awaiting string, accept func(frame) (bool, error)) {
 		return false, nil
 	})
 }
+
+func (p *Peer) SelectedProfile() string {
+	if selected := protocol.Deref(p.Initial.SelectedProfileID); selected != "" {
+		return selected
+	}
+	if len(p.Initial.Profiles) > 0 {
+		return p.Initial.Profiles[0].ID
+	}
+	return ""
+}
+
+func (p *Peer) Placed(sessionID string) bool {
+	desktops := map[string]protocol.Desktop{}
+	for _, desktop := range p.Initial.Desktops {
+		desktops[desktop.ID] = desktop
+	}
+	p.mu.Lock()
+	for _, f := range p.frames {
+		if f.event != protocol.EventProfileArrangementChanged {
+			continue
+		}
+		var arrangement protocol.ProfileArrangementChangedMessage
+		if json.Unmarshal(f.raw, &arrangement) == nil {
+			for _, desktop := range arrangement.Desktops {
+				desktops[desktop.ID] = desktop
+			}
+		}
+	}
+	p.mu.Unlock()
+	for _, desktop := range desktops {
+		for _, pane := range desktop.Panes {
+			if pane.SessionID == sessionID {
+				return true
+			}
+		}
+	}
+	return false
+}

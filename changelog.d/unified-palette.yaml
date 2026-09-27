@@ -1,0 +1,3 @@
+kind: added
+area: app
+change: One palette replaces the Action menu. Cmd+K searches crew, agents, tiles and automation runs in queue order, and settles or snoozes the highlighted agent in place; Cmd+Shift+K (Ctrl+Alt+K on Linux), or typing `>`, switches to commands, which now include desktops, profiles, the sidebar and every tool panel.

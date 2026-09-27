@@ -296,7 +296,7 @@ commands:
         read provider-neutral, timestamped, redacted conversation and tool
         events. --after resumes strictly after a prior cursor; --follow polls
         until interrupted; --json emits one event per line.
-  list [--closed | --all] [--limit <n>] [--before <id>] [--workspace <id>]
+  list [--closed | --all] [--limit <n>] [--before <id>] [--profile <id>]
        [--repository <path>] [--last <preset> | --since <when> [--until <when>]]
        [--reopen] [--json]
         read the session ledger, newest first: live sessions by default,
@@ -316,11 +316,13 @@ commands:
         a few plain words about the work, up to 48 characters. Defaults to the
         session running this command. Rename when the main work drifts from
         the name it started with.
-  reopen <id> [--action <name>] [--cwd <path>] [--json]
-        bring a closed session back under its own id. Without --action it
-        performs the plain reopen and refuses, naming what is offered, when the
-        verdict does not allow one. Actions that recreate a worktree or fetch a
-        branch write to the repository and only ever run when named here.
+  reopen <id> [--action <name>] [--cwd <path>] [--profile <id>] [--json]
+        bring a closed session back under its own id, unplaced in its
+        profile. Without --action it performs the plain reopen and refuses,
+        naming what is offered, when the verdict does not allow one. Actions
+        that recreate a worktree or fetch a branch write to the repository and
+        only ever run when named here.
         --cwd is where start_fresh_elsewhere starts.
+        --profile chooses where it lands when its own profile was deleted.
 `)
 }

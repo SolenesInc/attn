@@ -15,15 +15,15 @@ describe('App endpoint actions', () => {
       ],
     });
 
-    fireEvent.click(endpointCard('gpu-box').getByRole('button', { name: 'Disable' }));
-    const update = await daemon.received('update_endpoint');
-    expect(update).toMatchObject({ endpoint_id: 'ep-1', enabled: false });
-    expect(endpointCard('build-box').getByRole('button', { name: 'Disable' })).toBeDisabled();
+    fireEvent.click(endpointCard('gpu-box').getByRole('button', { name: 'Remove' }));
+    const removal = await daemon.received('remove_endpoint');
+    expect(removal).toMatchObject({ endpoint_id: 'ep-1' });
+    expect(endpointCard('build-box').getByRole('button', { name: 'Remove' })).toBeDisabled();
 
-    daemon.emit({ event: 'endpoint_action_result', action: 'update', endpoint_id: 'ep-1', success: true });
+    daemon.emit({ event: 'endpoint_action_result', action: 'remove', endpoint_id: 'ep-1', success: true });
     await daemon.idle();
 
-    expect(endpointCard('build-box').getByRole('button', { name: 'Disable' })).toBeEnabled();
-    expect(daemon.sentOf('update_endpoint')).toHaveLength(1);
+    expect(endpointCard('build-box').getByRole('button', { name: 'Remove' })).toBeEnabled();
+    expect(daemon.sentOf('remove_endpoint')).toHaveLength(1);
   });
 });

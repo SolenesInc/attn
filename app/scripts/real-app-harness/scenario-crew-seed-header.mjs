@@ -82,7 +82,7 @@ async function main() {
   }, `header ${title ?? 'to clear'}`);
   const capture = async (name, sessionId) => {
     const shot = await client.request('capture_screenshot_data', {
-      selector: `[data-pane-session-id="${sessionId}"] .workspace-pane-header`,
+      selector: `[data-pane-session-id="${sessionId}"] .desktop-pane-header`,
     });
     fs.writeFileSync(path.join(runner.runDir, `${name}.png`), Buffer.from(shot.pngBase64, 'base64'));
     if (process.env.ATTN_HARNESS_RECORD === '1') await delay(1800);

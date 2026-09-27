@@ -4,7 +4,7 @@ interface Overlays {
   settingsOpen: boolean;
   shortcutsOpen: boolean;
   shortcutEditorOpen: boolean;
-  actionMenuOpen: boolean;
+  paletteOpen: boolean;
   sessionsOpen: boolean;
   notebookOpen: boolean;
   crewPanelOpen: boolean;
@@ -15,6 +15,8 @@ interface Overlays {
   prLauncherOpen: boolean;
   diagnosticCaptureOpen: boolean;
   markdownOpenerOpen: boolean;
+  desktopOverviewOpen: boolean;
+  profileSwitcherOpen: boolean;
 }
 
 export function appOverlayPolicy(overlays: Overlays) {
@@ -30,10 +32,12 @@ export function appOverlayPolicy(overlays: Overlays) {
     overlays.locationPickerOpen,
     overlays.whatsNewOpen,
     overlays.shortcutEditorOpen,
-    overlays.actionMenuOpen,
+    overlays.paletteOpen,
+    overlays.desktopOverviewOpen,
+    overlays.profileSwitcherOpen,
     libraryOpen,
   ].some(Boolean);
-  const actionMenuBlocked = [
+  const paletteBlocked = [
     promptOpen,
     overlays.settingsOpen,
     overlays.shortcutsOpen,
@@ -42,9 +46,11 @@ export function appOverlayPolicy(overlays: Overlays) {
     libraryOpen,
     overlays.gardenHoldsWindow,
   ].some(Boolean);
+  const blockingOverlayOpen = navigationCaptured || paletteBlocked;
   return {
-    blockingOverlayOpen: navigationCaptured || actionMenuBlocked,
-    actionMenuBlocked,
+    blockingOverlayOpen,
+    windowCovered: blockingOverlayOpen || overlays.markdownOpenerOpen,
+    paletteBlocked,
     appShortcutsEnabled: !navigationCaptured && !overlays.markdownOpenerOpen,
   };
 }

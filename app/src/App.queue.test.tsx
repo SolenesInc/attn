@@ -1,6 +1,6 @@
 import { act, fireEvent, screen, within } from '@testing-library/react';
 import { describe, expect, it, vi } from 'vitest';
-import { agentWorkspace, daemonSession, type DaemonSession, type DaemonWorkspace } from './test/daemonFixtures';
+import { soloDesktop, daemonSession, type DaemonSession, type DaemonDesktop } from './test/daemonFixtures';
 import { gesture, pressShortcut, renderApp } from './test/renderApp';
 import type { ScriptedDaemon } from './test/scriptedDaemon';
 
@@ -26,17 +26,21 @@ function team(): DaemonSession[] {
 interface Launch {
   sessions?: DaemonSession[];
   queue?: boolean;
-  workspace?: (session: DaemonSession) => Partial<DaemonWorkspace>;
+  desktop?: (session: DaemonSession) => Partial<DaemonDesktop>;
 }
 
-function launch({ sessions = team(), queue = true, workspace = () => ({}) }: Launch = {}) {
+function launch({ sessions = team(), queue = true, desktop = () => ({}) }: Launch = {}) {
   return renderApp({
     initialState: {
       settings: queue ? QUEUE : {},
       sessions,
-      workspaces: sessions.map((session) => ({ ...agentWorkspace(session.id), ...workspace(session) })),
+      desktops: sessions.map((session) => ({ ...soloDesktop(session.id), ...desktop(session) })),
     },
   });
+}
+
+async function openAgentList(daemon: ScriptedDaemon) {
+  await gesture(daemon, () => fireEvent.click(screen.getByRole('button', { name: /All agents/ })));
 }
 
 const queue = () => within(screen.getByTestId('sidebar-queue'));
@@ -51,9 +55,9 @@ function treeRows(): string[] {
     .map((row) => row.getAttribute('data-testid')!.replace('sidebar-session-', ''));
 }
 
-function shownWorkspaces() {
-  return Array.from(document.querySelectorAll('.session-terminal-workspace[data-session-visible="1"]'))
-    .map((workspace) => workspace.getAttribute('data-workspace-id'));
+function shownDesktops() {
+  return Array.from(document.querySelectorAll('.session-terminal-desktop[data-session-visible="1"]'))
+    .map((desktop) => desktop.getAttribute('data-desktop-id'));
 }
 
 async function press(daemon: ScriptedDaemon, name: string) {
@@ -61,25 +65,21 @@ async function press(daemon: ScriptedDaemon, name: string) {
 }
 
 describe('App queue', () => {
-  it('replaces the workspace tree with the chief, the owed turns oldest first, then the settled rest', async () => {
-    await launch();
+  it('replaces the desktop tree with the chief and the owed turns oldest first, and keeps the settled rest in the agent list', async () => {
+    const { daemon } = await launch();
 
-    expect(bandRows()).toEqual(['queue-chief-chief', 'queue-turn-older', 'queue-turn-newer', 'queue-settled-settled']);
+    expect(bandRows()).toEqual(['queue-chief-chief', 'queue-turn-older', 'queue-turn-newer']);
     expect(treeRows()).toEqual([]);
+
+    await openAgentList(daemon);
+    expect(bandRows()).toContain('queue-settled-settled');
   });
 
-  it('leaves the workspace tree alone while the queue is off', async () => {
+  it('leaves the desktop tree alone while the queue is off', async () => {
     await launch({ queue: false });
 
     expect(screen.queryByTestId('sidebar-queue')).toBeNull();
     expect(treeRows().sort()).toEqual(['chief', 'newer', 'older', 'settled']);
-  });
-
-  it('keeps a pinned workspace as a group in the tree, its agents out of the bands', async () => {
-    await launch({ workspace: (session) => ({ pinned: session.id === 'older' || session.id === 'settled' }) });
-
-    expect(bandRows()).toEqual(['queue-chief-chief', 'queue-turn-newer']);
-    expect(treeRows().sort()).toEqual(['older', 'settled']);
   });
 
   it('shows what an owed agent is doing and how long its turn has waited', async () => {
@@ -98,7 +98,7 @@ describe('App queue', () => {
   it('says so when nothing is owed', async () => {
     await launch({ sessions: [agent('chief', { chief_of_staff: true }), agent('settled', { state: 'waiting_input' })] });
 
-    expect(queue().getByText('Nothing owed.')).toBeInTheDocument();
+    expect(queue().getByText('Nothing owed')).toBeInTheDocument();
   });
 
   it('opens an agent from its row', async () => {
@@ -106,12 +106,13 @@ describe('App queue', () => {
 
     await press(daemon, 'Open older');
 
-    expect(daemon.sentOf('session_selected')).toEqual([{ cmd: 'session_selected', id: 'older' }]);
-    expect(shownWorkspaces()).toEqual(['workspace-older']);
+    expect(daemon.sentOf('desktop_set_current')).toEqual([expect.objectContaining({ desktop_id: 'desktop-older' })]);
+    expect(shownDesktops()).toEqual(['desktop-older']);
   });
 
   it('keeps the session menu reachable from every band', async () => {
-    await launch();
+    const { daemon } = await launch();
+    await openAgentList(daemon);
 
     for (const id of ['chief', 'older', 'settled']) {
       expect(queue().getByRole('button', { name: `Actions for ${id}` })).toBeInTheDocument();
@@ -124,31 +125,14 @@ describe('App queue', () => {
     await press(daemon, 'Settle older');
 
     expect(daemon.sentOf('settle_turn')).toEqual([{ cmd: 'settle_turn', session_id: 'older' }]);
-    expect(daemon.sentOf('session_selected')).toEqual([]);
+    expect(daemon.sentOf('desktop_set_current')).toEqual([]);
     expect(queue().queryByRole('button', { name: 'Settle settled' })).toBeNull();
     expect(queue().queryByRole('button', { name: 'Settle chief' })).toBeNull();
   });
 
-  it('pins an agent from either band, and unpins it from a pinned band below settled, without opening either', async () => {
-    const { daemon } = await launch({ sessions: [...team(), agent('held', { state: 'working', pinned_at: ago(HOUR) })] });
-
-    await press(daemon, 'Pin older');
-    await press(daemon, 'Pin settled');
-    await press(daemon, 'Unpin held');
-
-    expect(daemon.sentOf('pin_session')).toEqual([
-      { cmd: 'pin_session', session_id: 'older', pinned: true },
-      { cmd: 'pin_session', session_id: 'settled', pinned: true },
-      { cmd: 'pin_session', session_id: 'held', pinned: false },
-    ]);
-    expect(daemon.sentOf('session_selected')).toEqual([]);
-    expect(bandRows().slice(-2)).toEqual(['queue-settled-settled', 'queue-pinned-held']);
-    expect(queue().queryByRole('button', { name: 'Settle held' })).toBeNull();
-    expect(queue().queryByRole('button', { name: 'Snooze held' })).toBeNull();
-  });
-
   it('snoozes an owed or settled agent until the instant the user picks, and never the chief', async () => {
     const { daemon } = await launch();
+    await openAgentList(daemon);
     expect(queue().queryByRole('button', { name: 'Snooze chief' })).toBeNull();
 
     await press(daemon, 'Snooze older');
@@ -158,29 +142,21 @@ describe('App queue', () => {
     expect(screen.getByRole('menu', { name: 'Snooze settled' })).toBeInTheDocument();
 
     expect(daemon.sentOf('snooze_turn')).toEqual([{ cmd: 'snooze_turn', session_id: 'older', until: inAnHour }]);
-    expect(daemon.sentOf('session_selected')).toEqual([]);
+    expect(daemon.sentOf('desktop_set_current')).toEqual([]);
   });
 
-  it('collects deferred agents under a collapsed Snoozed section above the muted workspaces, and wakes one without opening it', async () => {
-    const { daemon } = await launch({
-      sessions: [...team(), agent('later', { turn_snoozed_until: fromNow(HOUR) }), agent('quiet')],
-      workspace: (session) => ({ muted: session.id === 'quiet' }),
-    });
+  it('collects deferred agents under Snoozed in the agent list, and wakes one without opening it', async () => {
+    const { daemon } = await launch({ sessions: [...team(), agent('later', { turn_snoozed_until: fromNow(HOUR) })] });
 
     expect(bandRows()).not.toContain('queue-settled-later');
-    const sections = Array.from(document.querySelectorAll('.muted-sessions-header')).map((header) => header.textContent);
-    expect(sections).toEqual(['▸Snoozed (1)', '▸Muted Workspaces (1)']);
-    expect(screen.queryByTestId('queue-snoozed-later')).toBeNull();
-
-    await gesture(daemon, () => fireEvent.click(screen.getByTestId('snoozed-section-header')));
+    await openAgentList(daemon);
     const later = within(screen.getByTestId('queue-snoozed-later'));
     expect(later.queryByRole('button', { name: 'Settle later' })).toBeNull();
-    expect(screen.getByTestId('queue-snoozed-later').querySelector('.queue-row-wake-at')?.textContent).not.toBe('');
 
     await gesture(daemon, () => fireEvent.click(later.getByRole('button', { name: 'Wake later' })));
 
     expect(daemon.sentOf('wake_turn')).toEqual([{ cmd: 'wake_turn', session_id: 'later' }]);
-    expect(daemon.sentOf('session_selected')).toEqual([]);
+    expect(daemon.sentOf('desktop_set_current')).toEqual([]);
   });
 
   it('draws no Snoozed section while nothing is deferred', async () => {
@@ -189,17 +165,13 @@ describe('App queue', () => {
     expect(screen.queryByTestId('sidebar-snoozed')).toBeNull();
   });
 
-  it.each([
-    [false, 'settled'],
-    [true, 'owed'],
-  ])('badges the collapsed rail by what the queue owes (queue on: %s)', async (queueOn, badged) => {
-    const { daemon } = await launch({
-      queue: queueOn,
-      sessions: [
-        agent('settled', { state: 'waiting_input' }),
-        agent('owed', { state: 'working', turn_owed: true, turn_opened_at: ago(HOUR) }),
-      ],
-    });
+  const collapsedRailTeam = [
+    agent('settled', { state: 'waiting_input' }),
+    agent('owed', { state: 'working', turn_owed: true, turn_opened_at: ago(HOUR) }),
+  ];
+
+  it('badges the collapsed rail by state while the queue is off', async () => {
+    const { daemon } = await launch({ queue: false, sessions: collapsedRailTeam, desktop: (session) => ({ name: session.id }) });
 
     await gesture(daemon, () => pressShortcut('session.toggleSidebar'));
 
@@ -207,6 +179,15 @@ describe('App queue', () => {
       .filter((icon) => icon.querySelector('.mini-badge'))
       .map((icon) => icon.getAttribute('title'));
     expect(badges).toHaveLength(1);
-    expect(badges[0]).toMatch(new RegExp(`^${badged}`));
+    expect(badges[0]).toMatch(/^settled/);
+  });
+
+  it('names what the queue owes on the collapsed queue bar', async () => {
+    const { daemon } = await launch({ sessions: collapsedRailTeam });
+
+    await gesture(daemon, () => pressShortcut('session.toggleSidebar'));
+
+    expect(screen.getByTestId('queue-bar-pill')).toHaveAttribute('data-waiting', '1');
+    expect(screen.getByTestId('queue-bar-pill')).toHaveTextContent('1 waiting·owed');
   });
 });

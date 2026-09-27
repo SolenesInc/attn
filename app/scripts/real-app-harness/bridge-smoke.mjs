@@ -51,10 +51,10 @@ async function main() {
       throw new Error(`Created session mismatch: bridge=${sessionId} daemon=${session.id}`);
     }
 
-    const initialState = await client.request('get_workspace', { sessionId });
+    const initialState = await client.request('get_desktop', { sessionId });
     const targetPaneId = initialState.activePaneId || initialState.panes?.[0]?.paneId;
     if (!targetPaneId) {
-      throw new Error(`No pane available to split in workspace ${sessionId}`);
+      throw new Error(`No pane available to split in desktop ${sessionId}`);
     }
     const existingPaneIds = new Set((initialState.panes || []).map((pane) => pane.paneId));
     await client.request('split_pane', {
@@ -64,7 +64,7 @@ async function main() {
     });
 
     const utilityPane = await observer.waitForUtilityPane(sessionId, 20_000, existingPaneIds);
-    if (!utilityPane?.runtime_id) {
+    if (!utilityPane?.session_id) {
       throw new Error('Utility pane runtime not found');
     }
 

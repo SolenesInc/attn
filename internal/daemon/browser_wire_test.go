@@ -2,7 +2,6 @@ package daemon_test
 
 import (
 	"net/http"
-	"slices"
 	"strings"
 	"testing"
 
@@ -38,71 +37,53 @@ func TestBrowserCommandsRefuseWhatTheHostCannotRun(t *testing.T) {
 		})
 	}
 	for _, action := range []string{"snapshot", "click", "type", "reload", "navigate", "screenshot", "find_element", "perform_actions", "get_all_cookies", "print_page", "wait_for"} {
-		if _, err := cli.BrowserCommand(action, "", "#query", "https://example.com", ""); err == nil || !strings.Contains(err.Error(), "no workspace selected") {
-			t.Errorf("browser %s = %v, want it accepted up to resolving its target workspace", action, err)
+		if _, err := cli.BrowserCommand(action, "", "#query", "https://example.com", ""); err == nil || !strings.Contains(err.Error(), "no browser tile is open") {
+			t.Errorf("browser %s = %v, want it accepted up to finding its browser tile", action, err)
 		}
 	}
 }
 
-func TestAttnBrowserOpenDocksIntoTheSelectedWorkspace(t *testing.T) {
+func TestAttnBrowserOpenDocksBesideTheFocusedAgent(t *testing.T) {
 	t.Setenv("ATTN_BROWSER_HOST_TOKEN", browserHostToken)
 	w := newWorld(t)
 	app, cli := w.App(), w.Client()
 	host := browserHostPeer(w, "tauri://localhost", browserHostToken)
-	shop, shopWorkspace, shopPane := w.RequestSpawn(app, workspaceShell, w.Path("shop"))
-	browserAppSelects(app, protocol.SessionSelectedMessage{Cmd: protocol.CmdSessionSelected, ID: shop.ID})
+	shop, shopDesktop, shopPane := w.RequestSpawn(app, shellHarness, w.Path("shop"))
+	focusAgent(t, w, app, shop.ID)
 
 	if err := cli.OpenBrowser("  http://localhost:3000/path  ", ""); err != nil {
 		t.Fatalf("attn browser open: %v", err)
 	}
-	awaitBrowserTile(t, app, shopWorkspace, "http://localhost:3000/path")
+	awaitBrowserTile(t, app, shopDesktop, "http://localhost:3000/path")
 
 	if err := cli.OpenBrowser("http://localhost:3000/path", ""); err != nil {
 		t.Fatalf("attn browser open again: %v", err)
 	}
-	awaitBrowserNavigation(host, shopWorkspace, "http://localhost:3000/path")
-	if leaves := workspaceLayoutTree(t, workspaceLayoutNow(t, w, shopWorkspace)).leafIDs(); !slices.Equal(leaves, []string{shopPane, "tile-browser"}) {
-		t.Errorf("after opening the same URL the layout holds %v, want the pane and one browser tile", leaves)
+	awaitBrowserNavigation(host, shopDesktop, "http://localhost:3000/path")
+	if leaves := desktopTree(t, desktopOfDelegate(t, w, shopDesktop)).leafIDs(); len(leaves) != 2 || leaves[0] != shopPane {
+		t.Errorf("after opening the same URL the desktop holds %v, want the pane and one browser tile", leaves)
 	}
 
-	closeBrowserWorkspacePane(t, app, shopWorkspace, shopPane)
-	browserAppSelects(app, protocol.WorkspaceSelectedMessage{Cmd: protocol.CmdWorkspaceSelected, WorkspaceID: shopWorkspace})
+	closeFromApp(app, shop.ID)
 	if err := cli.OpenBrowser("https://example.com/retargeted", ""); err != nil {
-		t.Fatalf("attn browser open in the tile-only workspace: %v", err)
+		t.Fatalf("attn browser open on the tile-only desktop: %v", err)
 	}
-	awaitBrowserTile(t, app, shopWorkspace, "https://example.com/retargeted")
-	awaitBrowserNavigation(host, shopWorkspace, "https://example.com/retargeted")
-
-	docs, docsWorkspace, docsPane := w.RequestSpawn(app, workspaceShell, w.Path("docs"))
-	docked := workspaceLayoutAction(app, protocol.WorkspaceLayoutDockTileMessage{
-		Cmd: protocol.CmdWorkspaceLayoutDockTile, WorkspaceID: docsWorkspace, AnchorPaneID: docsPane, Edge: protocol.WorkspaceLayoutDockEdgeRight,
-		TileID: "tile-notes", TileKind: "markdown", TileParams: protocol.Ptr(w.Path("docs", "notes.md")),
-	}, protocol.CmdWorkspaceLayoutDockTile, docsWorkspace)
-	if !docked.Success {
-		t.Fatalf("docking notes beside %s: %s", docs.ID, protocol.Deref(docked.Error))
-	}
-	closeBrowserWorkspacePane(t, app, docsWorkspace, docsPane)
-	browserAppSelects(app, protocol.WorkspaceSelectedMessage{Cmd: protocol.CmdWorkspaceSelected, WorkspaceID: docsWorkspace})
-	if err := cli.OpenBrowser("https://example.com", ""); err != nil {
-		t.Fatalf("attn browser open beside the notes: %v", err)
-	}
-	if tiles := awaitBrowserTile(t, app, docsWorkspace, "https://example.com"); tiles["tile-notes"].TileKind != "markdown" {
-		t.Errorf("tiles = %+v, want the browser docked beside the notes", tiles)
-	}
+	awaitBrowserTile(t, app, shopDesktop, "https://example.com/retargeted")
+	awaitBrowserNavigation(host, shopDesktop, "https://example.com/retargeted")
 }
 
 func TestBrowserControlIsBrokeredToTheHostThatWasAsked(t *testing.T) {
 	t.Setenv("ATTN_BROWSER_HOST_TOKEN", browserHostToken)
 	w := newWorld(t)
 	app, cli := w.App(), w.Client()
-	shop, shopWorkspace, _ := w.RequestSpawn(app, workspaceShell, w.Path("shop"))
-	docs, docsWorkspace, _ := w.RequestSpawn(app, workspaceShell, w.Path("docs"))
+	shop, shopDesktop, _ := w.RequestSpawn(app, shellHarness, w.Path("shop"))
+	docs, _, _ := w.RequestSpawn(app, shellHarness, w.Path("docs"))
 	for _, session := range []string{shop.ID, docs.ID} {
 		if err := cli.OpenBrowser("http://localhost:3000", session); err != nil {
 			t.Fatalf("open a browser for %s: %v", session, err)
 		}
 	}
-	browserAppSelects(app, protocol.SessionSelectedMessage{Cmd: protocol.CmdSessionSelected, ID: shop.ID})
+	focusAgent(t, w, app, shop.ID)
 	spoof := browserHostPeer(w, "tauri://localhost", browserHostToken)
 	host := browserHostPeer(w, "http://tauri.localhost", browserHostToken)
 
@@ -112,8 +93,8 @@ func TestBrowserControlIsBrokeredToTheHostThatWasAsked(t *testing.T) {
 		answered <- browserControlAnswer{data, err}
 	}()
 	request := testworld.Await(host, protocol.EventBrowserControlRequest, func(r protocol.BrowserControlRequestMessage) bool { return r.Action == "type" })
-	if request.WorkspaceID != shopWorkspace || protocol.Deref(request.Selector) != "#query" || protocol.Deref(request.Text) != "browser text" {
-		t.Errorf("the host was asked %+v, want to type into #query in %s", request, shopWorkspace)
+	if request.DesktopID != shopDesktop || protocol.Deref(request.Selector) != "#query" || protocol.Deref(request.Text) != "browser text" {
+		t.Errorf("the host was asked %+v, want to type into #query on %s", request, shopDesktop)
 	}
 	spoof.Send(protocol.BrowserControlResultMessage{Cmd: protocol.CmdBrowserControlResult, RequestID: request.RequestID, Success: true, Data: protocol.Ptr("spoofed")})
 	browserPeerCaughtUp(spoof)
@@ -123,35 +104,23 @@ func TestBrowserControlIsBrokeredToTheHostThatWasAsked(t *testing.T) {
 		t.Errorf("the CLI got %d bytes (%v), want the host's %d-byte result and not the spoof's", len(got.data), got.err, len(large))
 	}
 
-	hub := w.App()
-	hub.Send(protocol.BrowserControlMessage{Cmd: protocol.CmdBrowserControl, Action: "get_title", RequestID: protocol.Ptr("remote-request-1"), WorkspaceID: protocol.Ptr(docsWorkspace)})
-	forwarded := testworld.Await(host, protocol.EventBrowserControlRequest, func(r protocol.BrowserControlRequestMessage) bool { return r.Action == "get_title" })
-	if forwarded.WorkspaceID != docsWorkspace {
-		t.Errorf("the hub's request reached the host for %s, want the named workspace %s", forwarded.WorkspaceID, docsWorkspace)
-	}
-	host.Send(protocol.BrowserControlResultMessage{Cmd: protocol.CmdBrowserControlResult, RequestID: forwarded.RequestID, Success: true, Data: protocol.Ptr(`"Remote title"`)})
-	response := testworld.Await(hub, protocol.EventBrowserControlResponse, func(r protocol.BrowserControlResponseMessage) bool { return r.RequestID == "remote-request-1" })
-	if !response.Success || protocol.Deref(response.Data) != `"Remote title"` {
-		t.Errorf("the hub got %+v, want the host's title", response)
-	}
-
 	ordinary := w.App()
 	ordinary.Send(protocol.PtyInputMessage{Cmd: protocol.CmdPtyInput, ID: shop.ID, Data: strings.Repeat("x", 1<<20)})
 	if status := ordinary.Closed(); status.Code != websocket.StatusMessageTooBig {
 		t.Errorf("an app peer sending a message past the command-sized limit was closed with %d, want %d", status.Code, websocket.StatusMessageTooBig)
 	}
-	exitWorkspaceShells(app, shop.ID, docs.ID)
+	exitShells(app, shop.ID, docs.ID)
 }
 
 func TestOnlyTheAppsOriginWithTheHostTokenBecomesTheBrowserHost(t *testing.T) {
 	t.Setenv("ATTN_BROWSER_HOST_TOKEN", browserHostToken)
 	w := newWorld(t)
 	app, cli := w.App(), w.Client()
-	shop, _, _ := w.RequestSpawn(app, workspaceShell, w.Path("shop"))
+	shop, _, _ := w.RequestSpawn(app, shellHarness, w.Path("shop"))
 	if err := cli.OpenBrowser("http://localhost:3000", shop.ID); err != nil {
 		t.Fatalf("open a browser: %v", err)
 	}
-	browserAppSelects(app, protocol.SessionSelectedMessage{Cmd: protocol.CmdSessionSelected, ID: shop.ID})
+	focusAgent(t, w, app, shop.ID)
 
 	for _, tc := range []struct {
 		instance, origin, token string
@@ -189,7 +158,7 @@ func TestOnlyTheAppsOriginWithTheHostTokenBecomesTheBrowserHost(t *testing.T) {
 			}
 		})
 	}
-	exitWorkspaceShells(app, shop.ID)
+	exitShells(app, shop.ID)
 }
 
 type browserControlAnswer struct {
@@ -207,18 +176,12 @@ func browserHostPeer(w *world, origin, token string) *testworld.Peer {
 		Cmd:              protocol.CmdClientHello,
 		ClientKind:       "tauri-app",
 		Version:          "protocol-" + protocol.ProtocolVersion,
-		Capabilities:     []string{protocol.CapabilityWorkspaceSessions, protocol.CapabilityBrowserHost},
+		Capabilities:     []string{protocol.CapabilityBrowserHost},
 		ClientToken:      protocol.Ptr(config.ClientToken()),
 		BrowserHostToken: protocol.Ptr(token),
 	}, header)
 	testworld.Await[protocol.InitialStateMessage](p, protocol.EventInitialState, nil)
 	return p
-}
-
-func browserAppSelects(app *testworld.Peer, selection any) {
-	app.T.Helper()
-	app.Send(selection)
-	browserPeerCaughtUp(app)
 }
 
 func browserPeerCaughtUp(p *testworld.Peer) {
@@ -227,31 +190,22 @@ func browserPeerCaughtUp(p *testworld.Peer) {
 		func(protocol.GetPresentationsResultMessage) bool { return true })
 }
 
-func awaitBrowserTile(t *testing.T, app *testworld.Peer, workspaceID, url string) map[string]workspaceLayoutNode {
+func awaitBrowserTile(t *testing.T, app *testworld.Peer, desktopID, url string) map[string]layoutNode {
 	t.Helper()
-	updated := testworld.Await(app, protocol.EventWorkspaceLayoutUpdated, func(m protocol.WorkspaceLayoutUpdatedMessage) bool {
-		if m.WorkspaceLayout.WorkspaceID != workspaceID {
-			return false
+	desktop := awaitDesktop(app, desktopID, func(d protocol.Desktop) bool {
+		for _, tile := range desktopTree(t, d).tiles() {
+			if tile.TileKind == "browser" && tile.TileParams == url {
+				return true
+			}
 		}
-		tile, ok := workspaceLayoutTree(t, m.WorkspaceLayout).tiles()["tile-browser"]
-		return ok && tile.TileKind == "browser" && tile.TileParams == url
+		return false
 	})
-	return workspaceLayoutTree(t, updated.WorkspaceLayout).tiles()
+	return desktopTree(t, desktop).tiles()
 }
 
-func awaitBrowserNavigation(host *testworld.Peer, workspaceID, url string) {
+func awaitBrowserNavigation(host *testworld.Peer, desktopID, url string) {
 	host.T.Helper()
 	testworld.Await(host, protocol.EventBrowserControlRequest, func(r protocol.BrowserControlRequestMessage) bool {
-		return r.Action == "navigate" && r.WorkspaceID == workspaceID && protocol.Deref(r.Text) == url
+		return r.Action == "navigate" && r.DesktopID == desktopID && protocol.Deref(r.Text) == url
 	})
-}
-
-func closeBrowserWorkspacePane(t *testing.T, app *testworld.Peer, workspaceID, paneID string) {
-	t.Helper()
-	closed := workspaceLayoutAction(app, protocol.WorkspaceLayoutClosePaneMessage{
-		Cmd: protocol.CmdWorkspaceLayoutClosePane, WorkspaceID: workspaceID, PaneID: paneID,
-	}, protocol.CmdWorkspaceLayoutClosePane, workspaceID)
-	if !closed.Success {
-		t.Fatalf("closing pane %s: %s", paneID, protocol.Deref(closed.Error))
-	}
 }

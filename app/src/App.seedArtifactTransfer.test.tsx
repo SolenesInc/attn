@@ -1,6 +1,6 @@
 import { act, fireEvent, screen, within } from '@testing-library/react';
 import { describe, expect, it, vi } from 'vitest';
-import { agentWorkspace, daemonSeed, daemonSession, seedDocument } from './test/daemonFixtures';
+import { soloDesktop, daemonSeed, daemonSession, seedDocument } from './test/daemonFixtures';
 import { gesture, pressShortcut, renderApp } from './test/renderApp';
 
 const FIVE_MINUTES = 5 * 60 * 1000;
@@ -10,7 +10,7 @@ const SEED = daemonSeed('s-7k3f9m', { title: 'ship the report' });
 
 async function moveLinkedFileIntoSeed() {
   const { daemon } = await renderApp({
-    initialState: { sessions: [daemonSession('s1')], workspaces: [agentWorkspace('s1')], seeds: [SEED] },
+    initialState: { sessions: [daemonSession('s1')], desktops: [soloDesktop('s1')], seeds: [SEED] },
   });
   daemon.on('seed_document_get', () => ({
     event: 'seed_document_get_result',

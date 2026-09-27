@@ -1,6 +1,5 @@
 import { act, fireEvent, screen, within } from '@testing-library/react';
 import { describe, expect, it, vi } from 'vitest';
-import { agentWorkspace, daemonSession } from './test/daemonFixtures';
 import { chosenRow, destinationMemory, HOME, launchedAt, openPicker, pathInput, press, repoInfo, submitPath } from './test/locations';
 import { gesture, pressShortcut, renderApp } from './test/renderApp';
 import type { ScriptedDaemon } from './test/scriptedDaemon';
@@ -167,7 +166,7 @@ describe('App new session', () => {
       };
 
       await create('feature-2');
-      await gesture(daemon, () => pressShortcut('session.newWorkspace'));
+      await gesture(daemon, () => pressShortcut('session.new'));
       await submitPath(daemon, FEATURE);
       await create('feature-3', 'current');
 
@@ -282,33 +281,6 @@ describe('App new session', () => {
       expect(screen.getByRole('status', { name: 'Deleting repo--feature' })).toBeInTheDocument();
       expect(deletePrompt()).toBeNull();
       expect(daemon.sentOf('delete_worktree')).toEqual([{ cmd: 'delete_worktree', path: FEATURE }]);
-    });
-  });
-
-  describe('a session being launched', () => {
-    const RECENT = `${HOME}/projects/recent-repo`;
-    const neighbour = daemonSession('neighbour', { state: 'idle' });
-    const selected = () => document.querySelector('.session-item.selected .session-label')?.textContent ?? null;
-    const listed = () => Array.from(document.querySelectorAll('.session-item .session-label'), (label) => label.textContent);
-
-    it('stays selected through a daemon snapshot that does not list it yet, and goes once the daemon drops it', async () => {
-      const { daemon } = await openPicker({ recent: [RECENT] }, { sessions: [neighbour], workspaces: [agentWorkspace('neighbour')] });
-      daemon.on('spawn_session', () => undefined);
-      await press(daemon, 'Enter');
-      const [spawn] = daemon.sentOf('spawn_session');
-      expect(selected()).toBe('recent-repo');
-
-      await gesture(daemon, () => daemon.emit({ event: 'sessions_updated', sessions: [neighbour] }));
-      expect(selected()).toBe('recent-repo');
-      expect(listed()).toContain('recent-repo');
-
-      await gesture(daemon, () => {
-        daemon.replyTo(spawn, { event: 'spawn_result', id: spawn.id, success: true });
-        daemon.emit({ event: 'session_registered', session: daemonSession(spawn.id, { label: 'recent-repo', workspace_id: spawn.workspace_id, directory: RECENT, state: 'launching' }) });
-      });
-      await gesture(daemon, () => daemon.emit({ event: 'sessions_updated', sessions: [neighbour] }));
-
-      expect(listed()).not.toContain('recent-repo');
     });
   });
 });

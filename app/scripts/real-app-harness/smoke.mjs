@@ -15,7 +15,7 @@ import {
 } from './common.mjs';
 import {
   compactTerminalText,
-  waitForFirstWorkspacePane,
+  waitForFirstDesktopPane,
   waitForNewShellPane,
   waitForPaneInputFocus,
   waitForPaneState,
@@ -61,9 +61,9 @@ async function main() {
     console.log(`[RealAppHarness] session=${session.id} agent=${session.agent} state=${session.state}`);
     await captureScreenshot(driver, path.join(runDir, '02-session-opened.png'));
 
-    const workspaceBeforeSplit = await client.request('get_workspace', { sessionId });
-    const existingPaneIds = new Set((workspaceBeforeSplit.panes || []).map((pane) => pane.paneId));
-    const initialPane = await waitForFirstWorkspacePane(client, sessionId, `initial pane for session ${sessionId}`, 20_000);
+    const desktopBeforeSplit = await client.request('get_desktop', { sessionId });
+    const existingPaneIds = new Set((desktopBeforeSplit.panes || []).map((pane) => pane.paneId));
+    const initialPane = await waitForFirstDesktopPane(client, sessionId, `initial pane for session ${sessionId}`, 20_000);
     await client.request('split_pane', {
       sessionId,
       targetPaneId: initialPane.paneId,
@@ -118,7 +118,7 @@ async function main() {
     fs.writeFileSync(path.join(runDir, 'utility-scrollback.txt'), utilityPaneText?.text || '', 'utf8');
     await captureScreenshot(driver, path.join(runDir, '04-utility-output.png'));
 
-    const workspace = observer.getWorkspace(sessionId);
+    const desktop = observer.desktopOf(sessionId);
     const summary = {
       ok: true,
       runId,
@@ -128,10 +128,10 @@ async function main() {
         directory: session.directory,
         agent: session.agent,
       },
-      workspace: workspace
+      desktop: desktop
         ? {
-            activePaneId: workspace.active_pane_id,
-            panes: workspace.panes,
+            activePaneId: desktop.active_pane_id,
+            panes: desktop.panes,
           }
         : null,
       utilityToken,

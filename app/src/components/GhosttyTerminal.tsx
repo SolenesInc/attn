@@ -95,7 +95,7 @@ import {
   fitRequiresTerminalResize,
   fitShouldBailAsSuspicious,
   geometryOverflowsContainer,
-  isWorkspaceSuspensionAnimating,
+  isDesktopSuspensionAnimating,
   recoveryDelayMs,
 } from './ghosttyGeometry';
 import { recordTerminalLinkHitTestEvent } from '../utils/terminalLinkHitTestLog';
@@ -136,7 +136,7 @@ import {
   type MessageRowAccess,
   type TerminalAnnotationStore,
 } from '../utils/terminalAnnotations';
-import { createTerminalKeyInterceptor } from './SessionTerminalWorkspace/terminalKeyHandler';
+import { createTerminalKeyInterceptor } from './SessionTerminalDesktop/terminalKeyHandler';
 import {
   forgetTerminalInputLatencyRuntime,
   noteTerminalKeyEvent,
@@ -364,11 +364,11 @@ function sameSeedAnchor(a: TerminalSeedAnchor, b: TerminalSeedAnchor): boolean {
 
 const utf8Encoder = new TextEncoder();
 
-function isWorkspaceResizeActive(element: HTMLElement | null): boolean {
-  if (document.documentElement.dataset.attnWorkspaceResizing === '1') {
+function isDesktopResizeActive(element: HTMLElement | null): boolean {
+  if (document.documentElement.dataset.attnDesktopResizing === '1') {
     return true;
   }
-  const suppressUntil = Number(document.documentElement.dataset.attnWorkspaceMouseSuppressUntil || 0);
+  const suppressUntil = Number(document.documentElement.dataset.attnDesktopMouseSuppressUntil || 0);
   if (Number.isFinite(suppressUntil) && suppressUntil > Date.now()) {
     return true;
   }
@@ -1619,7 +1619,7 @@ export const GhosttyTerminal = forwardRef<GhosttyTerminalHandle, GhosttyTerminal
           scheduleSynchronizedOutputRenderFallback();
         }
       });
-    }, [enqueueOperation, flushSynchronizedOutputRender, lineAtVisibleRow, scheduleCoalescedRefit, scheduleFindRescan, scheduleSynchronizedOutputRenderFallback, selectionLineAtBufferRow]);
+    }, [enqueueOperation, flushSynchronizedOutputRender, lineAtVisibleRow, scheduleFindRescan, scheduleSynchronizedOutputRenderFallback, selectionLineAtBufferRow]);
 
     const restoreSnapshot = useCallback((snapshot: Uint8Array) => {
       return enqueueOperation('restoreSnapshot', () => {
@@ -1934,7 +1934,7 @@ export const GhosttyTerminal = forwardRef<GhosttyTerminalHandle, GhosttyTerminal
         noteResize(diagKeyRef.current, { session, paneKind, source: 'fit', bail: 'surfaceReleased', cw: container.clientWidth, ch: container.clientHeight });
         return;
       }
-      if (isWorkspaceSuspensionAnimating(container)) {
+      if (isDesktopSuspensionAnimating(container)) {
         noteResize(diagKeyRef.current, { session, paneKind, source: 'fit', bail: 'suspensionAnimating', cw: container.clientWidth, ch: container.clientHeight });
         return;
       }
@@ -2222,7 +2222,7 @@ export const GhosttyTerminal = forwardRef<GhosttyTerminalHandle, GhosttyTerminal
         startupRef.current.firstReadyAt = Date.now();
         startupRef.current.firstReadyCols = terminal.cols;
         startupRef.current.firstReadyRows = terminal.rows;
-        // The workspace observer projects collapse/restore before the next frame.
+        // The desktop observer projects collapse/restore before the next frame.
         resources.observeResize(container, scheduleCoalescedRefit);
         onReadyRef.current({
           fit,
@@ -3119,7 +3119,7 @@ export const GhosttyTerminal = forwardRef<GhosttyTerminalHandle, GhosttyTerminal
       action: 'press' | 'move' | 'release',
       event: React.MouseEvent,
     ): boolean => {
-      if (isWorkspaceResizeActive(containerRef.current)) return false;
+      if (isDesktopResizeActive(containerRef.current)) return false;
       const terminal = terminalRef.current;
       if (action === 'release') {
         const released = releaseTrackedMouse(event);
@@ -3427,7 +3427,7 @@ export const GhosttyTerminal = forwardRef<GhosttyTerminalHandle, GhosttyTerminal
           onInputRef.current('\x16');
         }}
         onWheel={(event) => {
-          if (isWorkspaceResizeActive(containerRef.current)) {
+          if (isDesktopResizeActive(containerRef.current)) {
             event.preventDefault();
             event.stopPropagation();
             return;
@@ -3487,7 +3487,7 @@ export const GhosttyTerminal = forwardRef<GhosttyTerminalHandle, GhosttyTerminal
           scheduleScrollRender();
         }}
         onMouseDown={(event) => {
-          if (isWorkspaceResizeActive(containerRef.current)) {
+          if (isDesktopResizeActive(containerRef.current)) {
             event.preventDefault();
             event.stopPropagation();
             return;
@@ -3541,7 +3541,7 @@ export const GhosttyTerminal = forwardRef<GhosttyTerminalHandle, GhosttyTerminal
             lastPointerActivityAtRef.current = pointerActivityAt;
             onPointerActivityRef.current?.();
           }
-          if (isWorkspaceResizeActive(containerRef.current)) {
+          if (isDesktopResizeActive(containerRef.current)) {
             event.preventDefault();
             event.stopPropagation();
             return;
@@ -3596,7 +3596,7 @@ export const GhosttyTerminal = forwardRef<GhosttyTerminalHandle, GhosttyTerminal
           });
         }}
         onMouseUp={(event) => {
-          if (isWorkspaceResizeActive(containerRef.current)) {
+          if (isDesktopResizeActive(containerRef.current)) {
             event.preventDefault();
             event.stopPropagation();
             return;

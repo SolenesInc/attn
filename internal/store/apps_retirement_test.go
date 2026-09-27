@@ -49,9 +49,8 @@ func TestAppsRetirementKeepsCoreStateAcrossUpgradeAndRestart(t *testing.T) {
 		`INSERT INTO bus_consumers(name, cursor, filter, enabled, updated_at) VALUES ('app:obsolete', 7, '*', 1, 'now'), ('garden-seed-bells', 11, 'garden.*', 1, 'now')`,
 		`INSERT INTO supervised_parks(child, parked_at, restart_attempt, exit_at, exit_code, exit_signal, exit_error) VALUES ('runtime', 'now', 1, 'now', 1, '', ''), ('plugin:pi', 'now', 2, 'now', 2, '', '')`,
 		`INSERT INTO sessions(id, label, directory, state, state_since, state_updated_at, last_seen, agent_driver_plugin_name) VALUES ('session-1', 'Preserved', '/tmp', 'idle', 'now', 'now', 'now', 'attn-pi')`,
-		`INSERT INTO workspaces(id, title, directory, created_at) VALUES ('workspace-1', 'Preserved', '/tmp', 'now')`,
 		`INSERT INTO notifications(id, kind, source_kind, created_at) VALUES ('app-notice', 'warning', 'app', 'now'), ('app-runtime-notice', 'warning', 'app_runtime', 'now'), ('core-notice', 'warning', 'plugin', 'now')`,
-		`DELETE FROM schema_migrations WHERE version = 157`,
+		`DELETE FROM schema_migrations WHERE version >= 157`,
 	} {
 		if _, err := s.db.Exec(query); err != nil {
 			t.Fatal(err)
@@ -87,7 +86,6 @@ func TestAppsRetirementKeepsCoreStateAcrossUpgradeAndRestart(t *testing.T) {
 			`SELECT COUNT(*) FROM supervised_parks WHERE child='plugin:pi'`:                             1,
 			`SELECT COUNT(*) FROM supervised_parks WHERE child='runtime'`:                               0,
 			`SELECT COUNT(*) FROM sessions WHERE id='session-1' AND agent_driver_plugin_name='attn-pi'`: 1,
-			`SELECT COUNT(*) FROM workspaces WHERE id='workspace-1'`:                                    1,
 			`SELECT COUNT(*) FROM notifications WHERE id='core-notice'`:                                 1,
 			`SELECT COUNT(*) FROM notifications WHERE id='app-notice'`:                                  0,
 			`SELECT COUNT(*) FROM notifications WHERE id='app-runtime-notice'`:                          0,

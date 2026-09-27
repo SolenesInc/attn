@@ -139,7 +139,7 @@ export function captureUiSnapshot(): Record<string, unknown> {
 
 export function probeUiAfterSwitch(context: {
   sessionId: string | null;
-  workspaceId: string | null;
+  desktopId: string | null;
   view: string;
 }): void {
   const generation = ++switchGeneration;

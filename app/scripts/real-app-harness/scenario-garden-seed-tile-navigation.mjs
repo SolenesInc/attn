@@ -8,7 +8,7 @@ import {
   parseCommonArgs,
   printCommonHelp,
 } from './common.mjs';
-import { waitForFirstWorkspacePane } from './scenarioAssertions.mjs';
+import { waitForFirstDesktopPane } from './scenarioAssertions.mjs';
 import { createWindowDriver, delay } from './platform.mjs';
 import { UiAutomationClient } from './uiAutomationClient.mjs';
 import { DaemonObserver } from './daemonObserver.mjs';
@@ -68,7 +68,7 @@ async function openPane(client, observer, runner) {
   const sessionId = await createSessionAndWaitForInitialPane({
     client, observer, cwd, label: 'gardener', agent: 'shell',
   });
-  const pane = await waitForFirstWorkspacePane(client, sessionId, 'garden tile pane', 20_000);
+  const pane = await waitForFirstDesktopPane(client, sessionId, 'garden tile pane', 20_000);
   return { sessionId, paneId: pane.paneId };
 }
 
@@ -89,7 +89,7 @@ async function awaitSeedTile(client, seedID, timeoutMs = 20_000) {
 }
 
 function tileBodySelector(seedID) {
-  return `.workspace-dock-tile:has(.seed-document[data-seed-id="${seedID}"]) .workspace-dock-tile-body`;
+  return `.desktop-dock-tile:has(.seed-document[data-seed-id="${seedID}"]) .desktop-dock-tile-body`;
 }
 
 async function pressEscape(client, driver, seedID) {
@@ -203,7 +203,7 @@ async function main() {
       });
       await awaitSeedTile(client, child);
       await client.request('dom_click', {
-        selector: `.workspace-dock-tile:has(.seed-document[data-seed-id="${child}"]) [aria-label="Reveal in Garden"]`,
+        selector: `.desktop-dock-tile:has(.seed-document[data-seed-id="${child}"]) [aria-label="Reveal in Garden"]`,
       });
       const garden = await client.request('garden_get_state', {});
       runner.assert(garden.present && garden.here === PLOT.children[0].title,

@@ -94,13 +94,17 @@ func backupPreMigration(db *sql.DB, dbPath string, version int) (string, error) 
 		return "", fmt.Errorf("create dir %s: %w", dir, err)
 	}
 
-	name := fmt.Sprintf("attn-premigration-%d-%s%s", version, time.Now().UTC().Format(backupNameLayout), backupNameSuffix)
-	target := filepath.Join(dir, name)
-
-	if _, err := os.Stat(target); err == nil {
-		return "", fmt.Errorf("target %s already exists", target)
-	} else if !os.IsNotExist(err) {
-		return "", fmt.Errorf("stat target %s: %w", target, err)
+	stamp := time.Now().UTC().Format(backupNameLayout)
+	target := filepath.Join(dir, fmt.Sprintf("%s%d-%s%s", premigrationNamePrefix, version, stamp, backupNameSuffix))
+	for attempt := 2; ; attempt++ {
+		_, err := os.Stat(target)
+		if os.IsNotExist(err) {
+			break
+		}
+		if err != nil {
+			return "", fmt.Errorf("stat target %s: %w", target, err)
+		}
+		target = filepath.Join(dir, fmt.Sprintf("%s%d.%d-%s%s", premigrationNamePrefix, version, attempt, stamp, backupNameSuffix))
 	}
 
 	if _, err := db.Exec("VACUUM INTO ?", target); err != nil {

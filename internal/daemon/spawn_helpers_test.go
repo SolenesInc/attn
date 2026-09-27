@@ -6,10 +6,16 @@ import (
 	"sync"
 	"syscall"
 
-	"github.com/victorarias/attn/internal/protocol"
 	"github.com/victorarias/attn/internal/pty"
 	"github.com/victorarias/attn/internal/ptybackend"
 )
+
+func spawnTestClient() *wsClient {
+	return &wsClient{
+		send:            make(chan outboundMessage, 8),
+		attachedStreams: make(map[string]ptybackend.Stream),
+	}
+}
 
 type fakeWorkerReconcileBackend struct {
 	liveIDs []string
@@ -238,10 +244,4 @@ func (b *fakeSpawnBackend) RemovedIDs() []string {
 	b.mu.Lock()
 	defer b.mu.Unlock()
 	return append([]string(nil), b.removed...)
-}
-
-func addTestWorkspace(d *Daemon, id, directory string) {
-	rank := d.resolveWorkspaceRank(d.store.GetWorkspace(id))
-	d.store.AddWorkspace(&protocol.Workspace{ID: id, Title: id, Directory: directory, Status: protocol.WorkspaceStatusLaunching, Rank: rank})
-	d.workspaces.register(id, id, directory, rank, false, false)
 }

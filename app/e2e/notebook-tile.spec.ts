@@ -1,6 +1,6 @@
 import { test, expect } from '@playwright/test';
 
-test.describe('NotebookTile (workspace tile)', () => {
+test.describe('NotebookTile (desktop tile)', () => {
   test('renders the live surface and folds its rail then tree as it narrows', async ({ page }) => {
     await page.goto('/test-harness/?component=NotebookTile');
 

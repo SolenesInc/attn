@@ -79,7 +79,7 @@ func TestPullRequestCommandsAHubForwardsLandOnTheOwningSession(t *testing.T) {
 	}
 	hubPeer := w.Connect(protocol.ClientHelloMessage{
 		Cmd: protocol.CmdClientHello, ClientKind: "hub", Version: "protocol-" + protocol.ProtocolVersion,
-		Capabilities: []string{protocol.CapabilityWorkspaceSessions}, ClientToken: protocol.Ptr(strings.TrimSpace(string(token))),
+		Capabilities: []string{}, ClientToken: protocol.Ptr(strings.TrimSpace(string(token))),
 	}, nil)
 	testworld.Await[protocol.InitialStateMessage](hubPeer, protocol.EventInitialState, nil)
 	const url = "https://github.com/victorarias/attn/pull/71"

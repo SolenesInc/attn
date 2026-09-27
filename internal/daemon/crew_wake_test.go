@@ -17,6 +17,7 @@ import (
 	"github.com/victorarias/attn/internal/protocol"
 	"github.com/victorarias/attn/internal/pty"
 	"github.com/victorarias/attn/internal/ptybackend"
+	"github.com/victorarias/attn/internal/store"
 )
 
 func newWakeableDaemon(t *testing.T) (*Daemon, *fakeSpawnBackend, func() string) {
@@ -261,4 +262,112 @@ func spawnedSessions(t *testing.T, backend *fakeSpawnBackend) []ptybackend.Spawn
 	backend.mu.Lock()
 	defer backend.mu.Unlock()
 	return append([]ptybackend.SpawnOptions(nil), backend.spawnOpts...)
+}
+
+func TestCrewWake_RefusesAMemberOfAnotherProfile(t *testing.T) {
+	d, backend, _ := newWakeableDaemon(t)
+	work := createTestProfile(t, d.store, "Work")
+	addTurnSession(t, d, "work-agent", protocol.SessionAgentCodex)
+	if _, err := d.store.MoveSessionToProfile(store.SessionProfileMoveRequest{SessionID: "work-agent", ExpectedProfileID: defaultProfileID(t, d.store), DestinationProfileID: work.ID}); err != nil {
+		t.Fatal(err)
+	}
+
+	for _, msg := range []*protocol.CrewWakeMessage{
+		{Member: "trellis", ProfileID: protocol.Ptr(work.ID)},
+		{Member: "trellis", SourceSessionID: protocol.Ptr("work-agent")},
+		{Member: "trellis", SourceSessionID: protocol.Ptr("work-agent"), ProfileID: protocol.Ptr(defaultProfileID(t, d.store))},
+	} {
+		if _, err := d.crewWakeAsked(msg); err == nil || !strings.Contains(err.Error(), work.ID) {
+			t.Fatalf("wake %+v = %v, want a refusal naming profile %s", msg, err, work.ID)
+		}
+	}
+	if spawnCount(backend) != 0 {
+		t.Fatal("a refused wake spawned a session")
+	}
+
+	result, err := d.crewWakeAsked(&protocol.CrewWakeMessage{Member: "trellis", ProfileID: protocol.Ptr(defaultProfileID(t, d.store))})
+	if err != nil || result.ProfileID != defaultProfileID(t, d.store) {
+		t.Fatalf("wake from the member's own profile = %+v, %v", result, err)
+	}
+}
+
+func TestMovingACrewMembersAgentTakesTheMemberToTheDestination(t *testing.T) {
+	d, _, _ := newWakeableDaemon(t)
+	home := defaultProfileID(t, d.store)
+	work := createTestProfile(t, d.store, "Work")
+	if resp := crewSet(t, d, protocol.CrewSetMessage{Member: "trellis", Cwd: protocol.Ptr(t.TempDir())}); !resp.Ok {
+		t.Fatalf("crew set: %v", protocol.Deref(resp.Error))
+	}
+	woken, err := d.crewWake("trellis", "")
+	if err != nil {
+		t.Fatalf("wake: %v", err)
+	}
+	client := newProtocolTestClient()
+
+	d.handleSessionMove(client, &protocol.SessionMoveMessage{
+		Cmd: protocol.CmdSessionMove, RequestID: "move-trellis", SessionID: woken.SessionID, ExpectedProfileID: home, DestinationProfileID: work.ID,
+	})
+
+	if member, err := d.store.CrewProfile("trellis"); err != nil || member != work.ID {
+		t.Fatalf("trellis belongs to %q, %v after its agent moved; want %s", member, err, work.ID)
+	}
+	if got := protocol.Deref(memberByID(t, crewList(t, d), "trellis").BindingSession); got != woken.SessionID {
+		t.Fatalf("trellis is bound to %q after the move, want the same session %s", got, woken.SessionID)
+	}
+	if _, err := d.crewWakeAsked(&protocol.CrewWakeMessage{Member: "trellis", ProfileID: protocol.Ptr(home)}); err == nil || !strings.Contains(err.Error(), work.ID) {
+		t.Fatalf("waking trellis from its old profile = %v, want a refusal naming %s", err, work.ID)
+	}
+}
+
+func TestAMoveIsRefusedWhenTheCrewRosterCannotBeRead(t *testing.T) {
+	d, _, _ := newWakeableDaemon(t)
+	home := defaultProfileID(t, d.store)
+	work := createTestProfile(t, d.store, "Work")
+	if resp := crewSet(t, d, protocol.CrewSetMessage{Member: "trellis", Cwd: protocol.Ptr(t.TempDir())}); !resp.Ok {
+		t.Fatalf("crew set: %v", protocol.Deref(resp.Error))
+	}
+	woken, err := d.crewWake("trellis", "")
+	if err != nil {
+		t.Fatalf("wake: %v", err)
+	}
+	schema, err := d.crewCollection()
+	if err != nil {
+		t.Fatal(err)
+	}
+	members, docs, err := d.readCrewMembers()
+	if err != nil {
+		t.Fatal(err)
+	}
+	copied := members[0]
+	copied.HomeDir = t.TempDir()
+	body, err := copied.Encode()
+	if err != nil {
+		t.Fatal(err)
+	}
+	expected := docs[copied.ID].Rev
+	if _, err := d.store.CommitDocumentWrite(store.DocumentWrite{Schema: *schema, ID: copied.ID, Body: body, Expected: &expected},
+		documentChangedFact(crew.Namespace, crew.CollectionMembers, copied.ID, false), time.Now()); err != nil {
+		t.Fatalf("store a member whose home is outside the crew root, as a copied attn.db would: %v", err)
+	}
+	client := newProtocolTestClient()
+
+	d.handleSessionMove(client, &protocol.SessionMoveMessage{
+		Cmd: protocol.CmdSessionMove, RequestID: "move-trellis", SessionID: woken.SessionID, ExpectedProfileID: home, DestinationProfileID: work.ID,
+	})
+
+	var result protocol.ProfileActionResultMessage
+	for _, payload := range drainClientPayloads(t, client) {
+		if eventName(t, payload) == protocol.EventProfileActionResult {
+			decodeInto(t, payload, &result)
+		}
+	}
+	if result.Success || !strings.Contains(protocol.Deref(result.Error), "crew roster") {
+		t.Fatalf("move with an unreadable roster answered %q, want a refusal naming the roster", protocol.Deref(result.Error))
+	}
+	if profileID, _ := d.store.SessionProfileID(woken.SessionID); profileID != home {
+		t.Fatalf("the refused move left the agent in %s, want %s", profileID, home)
+	}
+	if member, _ := d.store.CrewProfile("trellis"); member != home {
+		t.Fatalf("the refused move left trellis in %q, want %s", member, home)
+	}
 }
