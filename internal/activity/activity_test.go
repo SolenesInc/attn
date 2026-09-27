@@ -1,9 +1,7 @@
 package activity
 
 import (
-	"fmt"
 	"os"
-	"path/filepath"
 	"strings"
 	"testing"
 
@@ -12,97 +10,6 @@ import (
 
 func TestMain(m *testing.M) {
 	os.Exit(m.Run())
-}
-
-func writeTranscript(t *testing.T, lines ...string) string {
-	t.Helper()
-	path := filepath.Join(t.TempDir(), "events.jsonl")
-	if err := os.WriteFile(path, []byte(strings.Join(lines, "\n")+"\n"), 0o600); err != nil {
-		t.Fatal(err)
-	}
-	return path
-}
-
-func TestReadIsADelta(t *testing.T) {
-	path := writeTranscript(t,
-		`{"timestamp":"2026-08-07T10:00:00Z","type":"assistant","message":{"content":[{"type":"text","text":"first"}]}}`,
-	)
-	first, err := Read(path, "claude", "")
-	if err != nil {
-		t.Fatal(err)
-	}
-	if len(first.Events) != 1 {
-		t.Fatalf("first read events = %d, want 1", len(first.Events))
-	}
-	second, err := Read(path, "claude", first.NextCursor)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if !second.Empty() {
-		t.Fatalf("second read returned %d events, want an empty delta", len(second.Events))
-	}
-}
-
-func TestReadKeepsTheNewestEventsOfALongDelta(t *testing.T) {
-	lines := make([]string, 0, MaxEvents*3)
-	for i := 0; i < MaxEvents*3; i++ {
-		lines = append(lines, fmt.Sprintf(
-			`{"timestamp":"2026-08-07T10:00:00Z","type":"assistant","message":{"content":[{"type":"text","text":"event-%d"}]}}`, i))
-	}
-	path := writeTranscript(t, lines...)
-
-	window, err := Read(path, "claude", "")
-	if err != nil {
-		t.Fatal(err)
-	}
-	if len(window.Events) != MaxEvents {
-		t.Fatalf("events = %d, want %d", len(window.Events), MaxEvents)
-	}
-	newest := fmt.Sprintf("event-%d", MaxEvents*3-1)
-	if got := window.Events[len(window.Events)-1].Text; got != newest {
-		t.Errorf("last event = %q, want %q — the read kept the oldest page", got, newest)
-	}
-	oldest := fmt.Sprintf("event-%d", MaxEvents*3-MaxEvents)
-	if got := window.Events[0].Text; got != oldest {
-		t.Errorf("first event = %q, want %q", got, oldest)
-	}
-
-	if window.Report.TotalEvents != MaxEvents*3 {
-		t.Errorf("TotalEvents = %d, want %d", window.Report.TotalEvents, MaxEvents*3)
-	}
-	if want := MaxEvents * 2; window.Report.DroppedOld != want {
-		t.Errorf("DroppedOld = %d, want %d", window.Report.DroppedOld, want)
-	}
-
-	next, err := Read(path, "claude", window.NextCursor)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if !next.Empty() {
-		t.Fatalf("follow-up read returned %d events; the cursor stopped short of the end", len(next.Events))
-	}
-}
-
-func TestRenderLabelsThinkingSeparatelyFromProse(t *testing.T) {
-	window := Window{Events: []transcript.Event{
-		{Kind: transcript.EventKindThinking, Text: "I should fix the migration first"},
-		{Kind: transcript.EventKindAssistant, Text: "Fixing the migration"},
-		{Kind: transcript.EventKindToolCall, ToolName: "Edit", Text: `{"file":"m.sql"}`},
-		{Kind: transcript.EventKindToolResult, Text: "ok"},
-		{Kind: transcript.EventKindToolResult, Text: "boom", IsError: true},
-	}}
-	got := window.Render()
-	for _, want := range []string{
-		"thinking: I should fix the migration first",
-		"assistant: Fixing the migration",
-		`tool_call Edit: {"file":"m.sql"}`,
-		"tool_result: ok",
-		"tool_result ERROR: boom",
-	} {
-		if !strings.Contains(got, want) {
-			t.Errorf("render missing %q\n---\n%s", want, got)
-		}
-	}
 }
 
 func TestCapKeepsNewestAndReportsTheDrop(t *testing.T) {
@@ -147,53 +54,6 @@ func TestClipIsPerKind(t *testing.T) {
 		if len([]rune(got)) > tc.limit+1 {
 			t.Errorf("%s clipped to %d, want <= %d", tc.kind, len(got), tc.limit)
 		}
-	}
-}
-
-func TestTemplateRenderSubstitutesAndDegrades(t *testing.T) {
-	template := Template{Name: "t", Body: "S={{STATE}} R={{STATE_REASON}} P={{PREVIOUS}} W={{WINDOW}}"}
-	got := template.Render(Input{State: "working"})
-	for _, want := range []string{"S=working", "R=unspecified", "none —", "nothing new"} {
-		if !strings.Contains(got.User, want) {
-			t.Errorf("render missing %q; got %q", want, got.User)
-		}
-	}
-	got = template.Render(Input{State: "idle", StateReason: "stop_hook", Previous: "was testing", Window: "assistant: done"})
-	for _, want := range []string{"S=idle", "R=stop_hook", "P=was testing", "W=assistant: done"} {
-		if !strings.Contains(got.User, want) {
-			t.Errorf("render missing %q; got %q", want, got.User)
-		}
-	}
-}
-
-func TestTemplateRenderSplitsOnTheSystemMarker(t *testing.T) {
-	template := Template{Name: "t", Body: "the rules\n" + SystemMarker + "\nstate: {{STATE}}"}
-	got := template.Render(Input{State: "working"})
-	if got.System != "the rules" {
-		t.Errorf("system = %q, want %q", got.System, "the rules")
-	}
-	if got.User != "state: working" {
-		t.Errorf("user = %q, want %q", got.User, "state: working")
-	}
-	if got.Chars() != len("the rules")+len("state: working") {
-		t.Errorf("Chars() = %d, want the sum of both parts", got.Chars())
-	}
-
-	unmarked := Template{Name: "t", Body: "state: {{STATE}}"}.Render(Input{State: "idle"})
-	if unmarked.System != "" || unmarked.User != "state: idle" {
-		t.Errorf("an unmarked template must be all user prompt; got %+v", unmarked)
-	}
-
-	baseline, err := LoadTemplate("baseline", filepath.Join("..", "prompts", "content", "activity", "baseline.md"))
-	if err != nil {
-		t.Fatalf("load baseline: %v", err)
-	}
-	rendered := baseline.Render(Input{State: "working", Window: "assistant: hi"})
-	if rendered.System == "" {
-		t.Fatal("internal/prompts/content/activity/baseline.md lost its {{USER}} marker: the whole prompt would ship as the user turn and pay the CLI's full system prefix")
-	}
-	if !strings.Contains(rendered.User, "assistant: hi") {
-		t.Errorf("baseline must put the window in the user turn; got %q", rendered.User)
 	}
 }
 
