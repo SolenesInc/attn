@@ -18,12 +18,6 @@ func seedNoteCount(t *testing.T, d *Daemon, seedID string) int {
 	return len(notes)
 }
 
-func spawnCount(backend *fakeSpawnBackend) int {
-	backend.mu.Lock()
-	defer backend.mu.Unlock()
-	return len(backend.spawnOpts)
-}
-
 func delegateBoundSeed(t *testing.T, d *Daemon, backend *fakeSpawnBackend, sourceSessionID, agent string) (string, string) {
 	t.Helper()
 	if d.daemonInstanceID == "" {

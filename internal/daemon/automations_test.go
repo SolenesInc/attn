@@ -198,20 +198,6 @@ func enrollHomeForTest(t *testing.T, d *Daemon) {
 	}
 }
 
-func writeCodexRolloutFixture(t *testing.T, resumeID string) {
-	t.Helper()
-	codexHome := t.TempDir()
-	t.Setenv("CODEX_HOME", codexHome)
-	sessionsDir := filepath.Join(codexHome, "sessions", "2026", "07", "20")
-	if err := os.MkdirAll(sessionsDir, 0o755); err != nil {
-		t.Fatalf("mkdir Codex sessions dir: %v", err)
-	}
-	rollout := []byte(`{"type":"session_meta","payload":{"id":"` + resumeID + `","cwd":"/tmp"}}` + "\n")
-	if err := os.WriteFile(filepath.Join(sessionsDir, "rollout-"+resumeID+".jsonl"), rollout, 0o644); err != nil {
-		t.Fatalf("write Codex rollout fixture: %v", err)
-	}
-}
-
 const manualAutomationYAML = `api_version: attn.dev/automations/v1alpha1
 id: manual-check
 name: Manual check
