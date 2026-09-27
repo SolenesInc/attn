@@ -187,3 +187,12 @@ func TestRecoveredApprovalDropsWhenTheAgentMovedOn(t *testing.T) {
 		t.Fatalf("resolved state = %q, want idle", got)
 	}
 }
+
+func evidenceOf(t *testing.T, d *Daemon, sessionID string) sessionstate.Evidence {
+	t.Helper()
+	got, ok := d.evidenceTable().snapshot(sessionID)
+	if !ok {
+		t.Fatalf("no evidence recorded for %s", sessionID)
+	}
+	return got
+}
