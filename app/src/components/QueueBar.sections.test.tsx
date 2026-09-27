@@ -306,6 +306,21 @@ describe('the runs chip', () => {
     expect(onWalkRuns).toHaveBeenCalledOnce();
   });
 
+  it('comes back closed after its last run leaves while the peek was open', () => {
+    const { rerender } = renderBar(runs);
+    hover('queue-bar-runs');
+    expect(screen.getByTestId('queue-bar-runs-peek')).toBeInTheDocument();
+
+    const without = desktopGroups(desktops, [owed('a', 9)]);
+    rerender(<Sidebar {...baseProps} workspaces={without} visualIndexByWorkspaceId={new Map(desktops.map((group, index) => [group.id, index]))} queue={buildQueueBands(without)} />);
+    expect(screen.queryByTestId('queue-bar-runs')).toBeNull();
+
+    const back = desktopGroups(desktops, runs);
+    rerender(<Sidebar {...baseProps} workspaces={back} visualIndexByWorkspaceId={new Map(desktops.map((group, index) => [group.id, index]))} queue={buildQueueBands(back)} />);
+    expect(screen.getByTestId('queue-bar-runs')).toBeInTheDocument();
+    expect(screen.queryByTestId('queue-bar-runs-peek')).toBeNull();
+  });
+
   it('closes its peek when clicked to walk to the next run', () => {
     renderBar(runs, { onWalkRuns: vi.fn() });
     hover('queue-bar-runs');

@@ -21,21 +21,12 @@ import { useDesktopChipDrop } from './useDesktopChipDrop';
 const LEAD_TURNS = 3;
 const PEEK_ROWS = 16;
 
-type Peek = 'waiting' | 'runs';
-
 export function QueueBar() {
-  const { instance, criticalNotifications, onOpenNotifications, profileName, onSwitchProfile, onToggleCollapse, peeksSilenced } =
+  const { instance, criticalNotifications, onOpenNotifications, profileName, onSwitchProfile, onToggleCollapse } =
     useSidebarContext();
-  const [peek, setPeek] = useState<Peek | null>(null);
-  const peekHandlers = (which: Peek) => ({
-    onPointerEnter: () => setPeek(which),
-    onPointerLeave: () => setPeek((open) => (open === which ? null : open)),
-  });
-  if (peeksSilenced && peek !== null) setPeek(null);
-  const shown = peeksSilenced ? null : peek;
 
   return (
-    <div className="queue-bar" data-testid="queue-bar" onClickCapture={() => setPeek(null)}>
+    <div className="queue-bar" data-testid="queue-bar">
       <button
         type="button"
         className="queue-bar-tool"
@@ -62,10 +53,9 @@ export function QueueBar() {
         <strong>{profileName ?? 'Profile'}</strong>
         <span className="queue-bar-chevron" aria-hidden="true">▾</span>
       </button>
-      <div className="queue-bar-peek-anchor queue-bar-waiting-anchor" data-testid="queue-bar-waiting" {...peekHandlers('waiting')}>
+      <PeekAnchor className="queue-bar-waiting-anchor" testId="queue-bar-waiting" peek={<WaitingPeek />}>
         <WaitingPill />
-        {shown === 'waiting' && <WaitingPeek />}
-      </div>
+      </PeekAnchor>
       {onOpenNotifications && (
         <CriticalNotificationStrip
           count={criticalNotifications?.count ?? 0}
@@ -74,7 +64,7 @@ export function QueueBar() {
         />
       )}
       <span className="queue-bar-spacer" />
-      <RunsChip peekHandlers={peekHandlers('runs')} peekOpen={shown === 'runs'} />
+      <RunsChip />
       <DesktopChips />
     </div>
   );
@@ -220,13 +210,35 @@ function QueueBarPeek({ testId, alignRight = false, children }: { testId: string
   );
 }
 
-function RunsChip({
-  peekHandlers,
-  peekOpen,
+function PeekAnchor({
+  className,
+  testId,
+  peek,
+  children,
 }: {
-  peekHandlers: { onPointerEnter: () => void; onPointerLeave: () => void };
-  peekOpen: boolean;
+  className?: string;
+  testId: string;
+  peek: ReactNode;
+  children: ReactNode;
 }) {
+  const { peeksSilenced } = useSidebarContext();
+  const [hovered, setHovered] = useState(false);
+  if (peeksSilenced && hovered) setHovered(false);
+  return (
+    <div
+      className={`queue-bar-peek-anchor${className ? ` ${className}` : ''}`}
+      data-testid={testId}
+      onPointerEnter={() => setHovered(true)}
+      onPointerLeave={() => setHovered(false)}
+      onClickCapture={() => setHovered(false)}
+    >
+      {children}
+      {hovered && !peeksSilenced && peek}
+    </div>
+  );
+}
+
+function RunsChip() {
   const { automationGroups, onWalkRuns } = useSidebarContext();
   const runs = runCount(automationGroups);
   if (runs === 0) return null;
@@ -240,7 +252,7 @@ function RunsChip({
   ].join(' · ');
   return (
     <>
-      <div className="queue-bar-peek-anchor" data-testid="queue-bar-runs-anchor" {...peekHandlers}>
+      <PeekAnchor testId="queue-bar-runs-anchor" peek={<RunsPeek />}>
         <button
           type="button"
           className="queue-bar-runs"
@@ -253,8 +265,7 @@ function RunsChip({
           ⚙ {runs}
           {needingYou > 0 && <span className="queue-bar-runs-needing">{needingYou}</span>}
         </button>
-        {peekOpen && <RunsPeek />}
-      </div>
+      </PeekAnchor>
       <span className="queue-bar-divider" />
     </>
   );
