@@ -1612,6 +1612,10 @@ func applyPendingMigrations(db *sql.DB, recorded, currentVersion, through int) e
 	if err := recordLegacySchemaVersions(tx, recorded, currentVersion); err != nil {
 		return err
 	}
+	currentVersion, err = moveProfileLadderPastNextMigrations(tx, currentVersion)
+	if err != nil {
+		return fmt.Errorf("moving the profile migrations past next's: %w", err)
+	}
 
 	for _, m := range migrations {
 		if m.version <= currentVersion {
@@ -2083,6 +2087,35 @@ func applyPendingMigrations(db *sql.DB, recorded, currentVersion, through int) e
 		return fmt.Errorf("committing the schema upgrade: %w", err)
 	}
 	return nil
+}
+
+// Before next's 152–155 landed, the desktops branch recorded its profile migrations as
+// 152–156. Such a database has profiles but no sessions.launched_at; renumber it and add next's four.
+func moveProfileLadderPastNextMigrations(tx *sql.Tx, current int) (int, error) {
+	if current < 152 || current > 156 {
+		return current, nil
+	}
+	if profiles, err := tableExists(tx, "profiles"); err != nil || !profiles {
+		return current, err
+	}
+	if launched, err := columnExists(tx, "sessions", "launched_at"); err != nil || launched {
+		return current, err
+	}
+	for version := current; version >= 152; version-- {
+		if _, err := tx.Exec("UPDATE schema_migrations SET version = ? WHERE version = ?", version+4, version); err != nil {
+			return current, err
+		}
+	}
+	for i, apply := range []func(*sql.Tx) error{applyMigration152, applyMigration153, applyMigration154, applyMigration155} {
+		version := 152 + i
+		if err := apply(tx); err != nil {
+			return current, fmt.Errorf("migration %d: %w", version, err)
+		}
+		if _, err := tx.Exec("INSERT INTO schema_migrations (version, applied_at) VALUES (?, datetime('now'))", version); err != nil {
+			return current, err
+		}
+	}
+	return current + 4, nil
 }
 
 func applyMigration152(tx *sql.Tx) error {
