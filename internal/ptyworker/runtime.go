@@ -18,6 +18,7 @@ import (
 
 	"github.com/victorarias/attn/internal/buildinfo"
 	"github.com/victorarias/attn/internal/launchcontract"
+	"github.com/victorarias/attn/internal/pausepoint"
 	"github.com/victorarias/attn/internal/pty"
 )
 
@@ -1195,11 +1196,6 @@ func (c *connCtx) handleRequest(req RequestEnvelope) {
 	case MethodWatch:
 		c.runtime.deliverMu.Lock()
 		defer c.runtime.deliverMu.Unlock()
-		if !c.watching {
-			c.watching = true
-			c.runtime.addWatcher(c)
-			c.runtime.logf("worker conn lifecycle watch enabled: conn=%s", c.connID)
-		}
 		c.sendResult(req.ID, map[string]any{"ok": true})
 
 		c.runtime.stateMu.RLock()
@@ -1208,6 +1204,14 @@ func (c *connCtx) handleRequest(req RequestEnvelope) {
 		exitSignal := c.runtime.exitSignal
 		lastEvidence := c.runtime.lastEvidence
 		c.runtime.stateMu.RUnlock()
+		if lastEvidence != nil {
+			pausepoint.At(pausepoint.PtyWatchReplay)
+		}
+		if !c.watching {
+			c.watching = true
+			c.runtime.addWatcher(c)
+			c.runtime.logf("worker conn lifecycle watch enabled: conn=%s", c.connID)
+		}
 		if state == "" {
 			state = "working"
 		}
