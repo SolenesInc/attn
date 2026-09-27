@@ -130,6 +130,40 @@ func TestDelegatingAtASeedHandsItToTheDelegate(t *testing.T) {
 	}
 }
 
+func TestASeedBeingDelegatedRefusesOtherClaimsWhileItsDelegateBoots(t *testing.T) {
+	w := newWorld(t, fakeagent.Codex)
+	app, cli := w.App(), w.Client()
+	cwd := registerDelegationCaller(t, w, cli, "caller")
+	registerSessions(t, w, cli, "contender")
+	seed := plantDelegationSeed(t, cli, "caller", "Reserved work")
+	request := delegateAtSeed("caller", cwd, seed)
+	request.RequestID = "reserve"
+	boot := w.HoldNextBoot()
+	accepted, err := cli.StartDelegation(request)
+	if err != nil {
+		t.Fatal(err)
+	}
+	testworld.Await(app, protocol.EventWorkspaceLayoutUpdated, func(m protocol.WorkspaceLayoutUpdatedMessage) bool {
+		for _, pane := range m.WorkspaceLayout.Panes {
+			if protocol.Deref(pane.SessionID) == accepted.SessionID && pane.Status == protocol.WorkspaceLayoutPaneStatusReady {
+				return true
+			}
+		}
+		return false
+	})
+
+	if _, err := cli.SeedTransition("contender", seed, "tend", "", "", false, client.SeedTransitionOptions{}); err == nil || !strings.Contains(err.Error(), "being tended by "+accepted.SessionID) {
+		t.Errorf("claiming the seed while its delegate boots = %v, want it refused naming the delegate", err)
+	}
+	boot()
+	if result, err := cli.Delegate(request); err != nil || result.SessionID != accepted.SessionID {
+		t.Fatalf("the delegation = %+v, %v; want it to finish as %s", result, err, accepted.SessionID)
+	}
+	if shown := lifeShow(t, cli, seed); shown.Seed.TenderSession != accepted.SessionID {
+		t.Errorf("the seed is tended by %q, want the delegate %s", shown.Seed.TenderSession, accepted.SessionID)
+	}
+}
+
 func subscribeToDelegatedSeedNotes(app *testworld.Peer, seedID string) string {
 	app.T.Helper()
 	subscription := subscribeOverTheWire(app, protocol.DocumentQuery{Namespace: "core/garden", Collection: "notes", Filters: []protocol.DocumentFilter{where("seed", "eq", seedID)}})

@@ -33,10 +33,12 @@ type Kit struct {
 	mu       sync.Mutex
 	launches map[string]chan *Run
 	nextBoot chan struct{}
+	bootAsk  chan struct{}
 	fakes    []*fake
 	failures []string
-
-	headlessTasks int
+	headless chan *HeadlessTask
+	nextExit *bootingResult
+	answerer func(*HeadlessTask)
 }
 
 type fake struct {
@@ -81,7 +83,11 @@ func Install(t testing.TB, dir string, harnesses []Harness, wrapper string) *Kit
 	if err != nil {
 		t.Fatal(err)
 	}
-	k := &Kit{t: t, cfg: cfg, control: listener, launches: map[string]chan *Run{}}
+	k := &Kit{
+		t: t, cfg: cfg, control: listener,
+		launches: map[string]chan *Run{},
+		headless: make(chan *HeadlessTask, headlessTaskBacklog),
+	}
 	go k.accept()
 	t.Cleanup(k.verify)
 	return k
@@ -135,17 +141,19 @@ func (k *Kit) HoldNextBoot() (boot func()) {
 	k.mu.Lock()
 	defer k.mu.Unlock()
 	k.nextBoot = cue
+	k.bootAsk = make(chan struct{})
 	return sync.OnceFunc(func() { close(cue) })
 }
 
 func (k *Kit) awaitBoot(sessionID string) {
 	k.mu.Lock()
-	cue := k.nextBoot
+	cue, ask := k.nextBoot, k.bootAsk
 	k.nextBoot = nil
 	k.mu.Unlock()
 	if cue == nil {
 		return
 	}
+	close(ask)
 	select {
 	case <-cue:
 	case <-time.After(HangGuard):
@@ -172,6 +180,12 @@ func (k *Kit) accept() {
 		}
 		f := &fake{}
 		f.peer = newRPCPeer(conn, func(_ *rpcPeer, method string, params json.RawMessage) (any, error) {
+			if method == methodHeadless {
+				return k.receiveHeadlessTask(f, params)
+			}
+			if method == methodBooting {
+				return k.boot(params)
+			}
 			return struct{}{}, k.handle(f, method, params)
 		})
 		f.peer.start()
@@ -180,12 +194,6 @@ func (k *Kit) accept() {
 
 func (k *Kit) handle(f *fake, method string, params json.RawMessage) error {
 	switch method {
-	case methodBooting:
-		var booting bootingParams
-		if err := json.Unmarshal(params, &booting); err != nil {
-			return err
-		}
-		k.awaitBoot(booting.AttnSessionID)
 	case methodLaunched:
 		if err := json.Unmarshal(params, &f.launch); err != nil {
 			return err
@@ -202,6 +210,7 @@ func (k *Kit) handle(f *fake, method string, params json.RawMessage) error {
 				SessionID:      f.AttnSessionID,
 				ConversationID: f.ConversationID,
 				Resumed:        f.Resumed,
+				ResumePicker:   f.ResumePicker,
 				Argv:           f.Argv,
 				Env:            f.Env,
 				AutoMode:       f.AutoMode,
@@ -216,10 +225,6 @@ func (k *Kit) handle(f *fake, method string, params json.RawMessage) error {
 			return err
 		}
 		k.fail(fmt.Sprintf("%s (argv %q)", unexpected.Reason, unexpected.Argv))
-	case methodHeadless:
-		k.mu.Lock()
-		k.headlessTasks++
-		k.mu.Unlock()
 	case methodExiting:
 		var exit exitParams
 		if err := json.Unmarshal(params, &exit); err != nil {
@@ -272,6 +277,7 @@ func (k *Kit) verify() {
 			_ = syscall.Kill(f.Pid, syscall.SIGKILL)
 		}
 	}
+	k.failUnansweredHeadlessTasks()
 	_ = k.control.Close()
 	for _, f := range fakes {
 		f.peer.close()

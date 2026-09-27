@@ -75,7 +75,7 @@ export function parseFrontmatter(doc: string): Frontmatter | null {
 
 // Shared by every editor extension, so a fence that closes beyond it is
 // not-frontmatter everywhere.
-export const FRONTMATTER_SCAN_LIMIT = 4096;
+const FRONTMATTER_SCAN_LIMIT = 4096;
 
 export function parseFrontmatterFromDoc(doc: Text): Frontmatter | null {
   return parseFrontmatter(doc.sliceString(0, Math.min(doc.length, FRONTMATTER_SCAN_LIMIT)));

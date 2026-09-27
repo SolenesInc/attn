@@ -171,7 +171,6 @@ type Daemon struct {
 	pendingConversation               map[string]agentConversationObservation
 	ticketReconcileMu                 sync.Mutex
 	ticketReconcileExec               func(ctx context.Context, in ticketReconcileInputs) (agentdriver.HeadlessTaskResult, error)
-	ticketReconcileDone               func(ticketID string)
 	ticketOrphanFirstSeen             map[string]time.Time
 	sessionTitleMu                    sync.Mutex
 	sessionTitleExec                  func(ctx context.Context, session *protocol.Session, conversation string) (string, error)
@@ -183,11 +182,10 @@ type Daemon struct {
 	delegationMu                      sync.Mutex
 	delegationRunning                 map[string]bool
 	delegationCheckoutMu              sync.Mutex
-	delegationWorktreePrepareHook     func(path string)
-	delegationFinalizeHook            func() error
 	delegationWaitsForFirstTurn       bool
 	launchWatchMu                     sync.Mutex
 	launchWatches                     map[string]*launchWatch
+	recoveredLaunches                 map[string]*launchWatch
 	reloadingMu                       sync.Mutex
 	reloadingSessions                 map[string]bool
 	prepareSessionTeardownHook        func(string) error
@@ -199,6 +197,9 @@ type Daemon struct {
 	spawnLocks                        map[string]*spawnLock
 	sessionInputOnce                  sync.Once
 	sessionInputState                 *sessionInputModule
+	lifetimeOnce                      sync.Once
+	lifetimeCtx                       context.Context
+	endLifetime                       context.CancelFunc
 	agentMailboxMu                    sync.Mutex
 	agentMailboxDoorbells             map[string]*agentMailboxDoorbellState
 	agentMailboxCooldownOverride      time.Duration
@@ -330,28 +331,22 @@ type Daemon struct {
 	lastBackupMu sync.Mutex
 	lastBackupAt time.Time
 
-	workflowBroadcastMu       sync.Mutex
-	workflowDirty             map[string]bool
-	workflowEngineMu          sync.Mutex
-	workflowEngineConn        map[string]workflowEngineSink
-	gardenBroadcastHook       func([]protocol.Seed, int)
-	appsBroadcastHook         func([]protocol.AppRegistryEntry)
-	gardenMintID              func() (string, error)
-	gardenMintNoteID          func() (string, error)
-	gardenNow                 func() time.Time
-	gardenDispatchBeforeWrite func(string)
-	gardenDispatchAfterWrite  func(string)
-	gitHubPollingOffLogged    bool
-	gardenWatchMu             sync.Mutex
-	gardenReviewMu            sync.Mutex
-	dispatchSeedsMu           sync.Mutex
-	dispatchSeeds             map[string]string
-	dispatchersBySession      map[string]garden.Tender
-	dispatchFromChief         map[string]bool
-	dispatchProjectionRevs    map[string]int64
-	dispatchSeedsLoaded       bool
-
-	gardenNotePageSize int
+	workflowBroadcastMu    sync.Mutex
+	workflowDirty          map[string]bool
+	workflowEngineMu       sync.Mutex
+	workflowEngineConn     map[string]workflowEngineSink
+	appsBroadcastHook      func([]protocol.AppRegistryEntry)
+	gardenMintNoteID       func() (string, error)
+	gardenNow              func() time.Time
+	gitHubPollingOffLogged bool
+	gardenWatchMu          sync.Mutex
+	gardenReviewMu         sync.Mutex
+	dispatchSeedsMu        sync.Mutex
+	dispatchSeeds          map[string]string
+	dispatchersBySession   map[string]garden.Tender
+	dispatchFromChief      map[string]bool
+	dispatchProjectionRevs map[string]int64
+	dispatchSeedsLoaded    bool
 
 	automationsBroadcastHook func(*protocol.AutomationsChangedMessage)
 
@@ -381,17 +376,9 @@ type Daemon struct {
 	pendingSnapshots     map[string]func()
 	pendingSnapshotOrder []string
 
-	jobQueueMu               sync.RWMutex
-	jobQueue                 *jobs.Runner
-	taskFailureRenderers     map[string]taskFailureRenderer
-	sessionActivityExecution func(
-		ctx context.Context,
-		provider agentdriver.HeadlessTaskProvider,
-		request agentdriver.HeadlessTaskRequest,
-	) (agentdriver.HeadlessTaskResult, error)
-	gardenAdvisorResolve func(
-		config gardenAdvisorConfig,
-	) (agentdriver.HeadlessTaskProvider, string, error)
+	jobQueueMu           sync.RWMutex
+	jobQueue             *jobs.Runner
+	taskFailureRenderers map[string]taskFailureRenderer
 
 	sessionActivityRunsMu sync.Mutex
 	sessionActivityRuns   map[string]sessionActivityRun
@@ -560,18 +547,6 @@ func (d *Daemon) signalStarted() {
 		}
 		close(d.startedCh)
 	})
-}
-
-func (d *Daemon) waitStarted(timeout time.Duration) bool {
-	if d.startedCh == nil {
-		return false
-	}
-	select {
-	case <-d.startedCh:
-		return true
-	case <-time.After(timeout):
-		return false
-	}
 }
 
 func (d *Daemon) Started() <-chan struct{} {
@@ -957,8 +932,10 @@ func (d *Daemon) Start() error {
 	}
 	d.startPermanentMaintenance()
 
+	d.watchRecoveredLaunches()
 	go func() {
 		d.performStartupPTYRecovery(previousRunSessions, recoveryStartedAt)
+		d.resolveDue(time.Now())
 		go d.runSessionResolver()
 		if _, routed := d.ptyBackend.(*ptybackend.MigratingBackend); routed {
 			go d.validateSharedPTYHostAfterRecovery()
@@ -1600,9 +1577,23 @@ func (d *Daemon) Stop() {
 	d.stopOnce.Do(d.stop)
 }
 
+func (d *Daemon) lifetime() context.Context {
+	d.lifetimeOnce.Do(func() {
+		d.lifetimeCtx, d.endLifetime = context.WithCancel(context.Background())
+		select {
+		case <-d.done:
+			d.endLifetime()
+		default:
+		}
+	})
+	return d.lifetimeCtx
+}
+
 func (d *Daemon) stop() {
 	d.log("daemon stopping")
 	close(d.done)
+	d.lifetime()
+	d.endLifetime()
 	if d.listener != nil {
 		d.listener.Close()
 		d.listener = nil
@@ -2146,7 +2137,7 @@ func (d *Daemon) maybeStartDiagServer() {
 }
 
 func (d *Daemon) diagStats() diag.Stats {
-	stats := diag.Stats{PtyBackend: d.ptyBackendMode()}
+	stats := diag.Stats{PtyBackend: d.ptyBackendMode(), DocSubscriptions: d.documentSubscriptionCount()}
 	if d.ptyBackend == nil {
 		stats.PtyBackend = "embedded"
 		return stats
@@ -2944,6 +2935,10 @@ func (d *Daemon) handleStop(conn net.Conn, msg *protocol.StopMessage) {
 	d.logf("handleStop: session=%s, transcript_path=%s", msg.ID, msg.TranscriptPath)
 
 	relaxBackgroundWork := d.isChiefOfStaffSession(msg.ID)
+	classifies := !d.consumeForcedStopClassification(msg.ID)
+	if classifies {
+		d.cancelAutoSettle(msg.ID, "stop judged")
+	}
 	d.recordStopFacts(
 		msg.ID,
 		!relaxBackgroundWork && hasActiveBackgroundTask(msg),
@@ -2961,7 +2956,7 @@ func (d *Daemon) handleStop(conn net.Conn, msg *protocol.StopMessage) {
 			"",
 		)
 		d.sendOK(conn)
-		if d.consumeForcedStopClassification(msg.ID) {
+		if !classifies {
 			d.logf("handleStop: skipping yield classification for daemon-terminated session=%s", msg.ID)
 			return
 		}
@@ -2972,7 +2967,6 @@ func (d *Daemon) handleStop(conn net.Conn, msg *protocol.StopMessage) {
 		return
 	}
 
-	classifies := !d.consumeForcedStopClassification(msg.ID)
 	d.recordTurnEndedEvidence(msg.ID, classifies)
 
 	if session := d.store.Get(msg.ID); session != nil {

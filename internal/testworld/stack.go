@@ -3,6 +3,7 @@ package testworld
 import (
 	"bufio"
 	"context"
+	"errors"
 	"fmt"
 	"net"
 	"os"
@@ -24,9 +25,10 @@ import (
 
 type Stack struct {
 	*World
-	binary string
-	daemon *os.Process
-	exited chan error
+	binary        string
+	daemon        *os.Process
+	exited        chan error
+	allowFallback bool
 }
 
 type stackSetup struct {
@@ -71,6 +73,42 @@ func NewStack(t *testing.T, opts ...StackOption) *Stack {
 
 func (s *Stack) Start() {
 	s.T.Helper()
+	s.start()
+}
+
+func (s *Stack) StartCrashingAt(point string) {
+	s.T.Helper()
+	s.start("ATTN_CRASH_AT=" + point)
+}
+
+func (s *Stack) AwaitCrash() {
+	s.T.Helper()
+	if s.daemon == nil {
+		s.T.Fatal("AwaitCrash: the stack's daemon is not running")
+	}
+	pid := s.daemon.Pid
+	var err error
+	select {
+	case err = <-s.exited:
+	case <-time.After(fakeagent.HangGuard):
+		s.T.Errorf("attn daemon (pid %d) did not crash within %s", pid, fakeagent.HangGuard)
+		s.Stop()
+		s.T.FailNow()
+	}
+	s.ClosePeers()
+	s.daemon, s.exited = nil, nil
+	var exit *exec.ExitError
+	if errors.As(err, &exit) {
+		if status, ok := exit.Sys().(syscall.WaitStatus); ok && status.Signaled() && status.Signal() == syscall.SIGKILL {
+			return
+		}
+	}
+	s.LogDaemonTail()
+	s.T.Fatalf("attn daemon (pid %d) exited with %v, want it killed by SIGKILL at its crash point", pid, err)
+}
+
+func (s *Stack) start(vars ...string) {
+	s.T.Helper()
 	if s.daemon != nil {
 		s.T.Fatal("Start: the stack's daemon is already running")
 	}
@@ -85,7 +123,7 @@ func (s *Stack) Start() {
 	}
 	defer stderr.Close()
 	cmd := exec.Command(s.binary, "daemon")
-	cmd.Env = append(s.env(), "ATTN_DAEMON_READY_FD=3")
+	cmd.Env = append(append(s.env(), vars...), "ATTN_DAEMON_READY_FD=3")
 	dieWithTestProcess(cmd)
 	cmd.ExtraFiles = []*os.File{signal}
 	cmd.Stdout, cmd.Stderr = stderr, stderr
@@ -114,7 +152,7 @@ func (s *Stack) Start() {
 
 	probe := s.App()
 	for _, warning := range probe.Initial.Warnings {
-		if strings.HasPrefix(warning.Code, "pty_backend_") {
+		if strings.HasPrefix(warning.Code, "pty_backend_") && !s.allowFallback {
 			s.T.Fatalf("the daemon started on a fallback PTY backend: %s: %s", warning.Code, warning.Message)
 		}
 	}

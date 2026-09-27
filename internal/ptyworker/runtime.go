@@ -1022,7 +1022,7 @@ func (c *connCtx) handleRequest(req RequestEnvelope) {
 		if c.runtime.capture != nil {
 			c.runtime.capture.recordInput(data)
 		}
-		if err := c.runtime.manager.Input(c.runtime.cfg.SessionID, data); err != nil {
+		if err := c.runtime.manager.Input(context.Background(), c.runtime.cfg.SessionID, data); err != nil {
 			if errors.Is(err, pty.ErrSessionNotFound) {
 				c.sendError(req.ID, ErrSessionNotFound, err.Error())
 				return

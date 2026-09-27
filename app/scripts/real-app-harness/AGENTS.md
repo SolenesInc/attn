@@ -11,8 +11,9 @@ Run commands from the repository root.
   long as the holder is alive and heartbeating (a matrix can hold for hours) and
   gives up on a wedged holder (5 min without a heartbeat);
   `ATTN_REAL_APP_SCENARIO_LOCK_WAIT_MS` caps the total wait (0 fails fast).
-- Profile: `ATTN_HARNESS_PROFILE` overrides `ATTN_PROFILE`, which defaults to `dev`.
-  Production needs `ATTN_HARNESS_PROFILE=`, `--run-against-prod`, and explicit approval.
+- Instance: `ATTN_HARNESS_INSTANCE` overrides `ATTN_INSTANCE`, which defaults to
+  `dev`. Production needs `ATTN_HARNESS_INSTANCE=`, `--run-against-prod`, and
+  explicit approval.
 - Install the current checkout; source fingerprint mismatches fail.
 - Remote target: `attn-remote@orb`; provision with
   `pnpm --dir app run real-app:provision-remote`.
@@ -126,11 +127,11 @@ fails the scenario on a non-empty ledger and prints the lines.
 
 ## Recordings
 
-Record the installed verification profile; watch for private data before publishing
+Record the instance used for verification; watch for private data before publishing
 to the public evidence repository:
 
 ```bash
-./scripts/pr-evidence.sh record --profile <name> --seconds 20 --out clip.mp4
+./scripts/pr-evidence.sh record --instance <name> --seconds 20 --out clip.mp4
 ./scripts/pr-evidence.sh publish clip.mp4
 ```
 

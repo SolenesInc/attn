@@ -2,6 +2,7 @@ package daemon
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"os"
 	"path/filepath"
@@ -12,6 +13,7 @@ import (
 	"time"
 
 	agentdriver "github.com/victorarias/attn/internal/agent"
+	"github.com/victorarias/attn/internal/jobs"
 	"github.com/victorarias/attn/internal/protocol"
 	"github.com/victorarias/attn/internal/store"
 )
@@ -289,5 +291,34 @@ func TestGroundTruthUntrackedLines(t *testing.T) {
 				t.Errorf("lines %q after looking up %v with caps %+v, want %q after %v with %+v", lines, lookups, caps, tc.wantLines, tc.wantLookups, tc.wantCaps)
 			}
 		})
+	}
+}
+
+func reconcileComments(t *testing.T, d *Daemon, ticketID string) []string {
+	t.Helper()
+	full, err := d.store.GetTicket(ticketID)
+	if err != nil || full == nil {
+		t.Fatalf("GetTicket %s: %v, %v", ticketID, full, err)
+	}
+	var out []string
+	for _, a := range full.Activity {
+		if a.Kind == store.TicketActivityComment && a.Author == store.TicketAuthorAttn &&
+			strings.HasPrefix(a.Comment, ticketReconcileCommentPrefix) {
+			out = append(out, a.Comment)
+		}
+	}
+	return out
+}
+
+func reconcileTask(in ticketReconcileInputs) *jobs.Job {
+	payload, err := json.Marshal(in)
+	if err != nil {
+		panic("marshal reconcile inputs: " + err.Error())
+	}
+	return &jobs.Job{
+		ID:        "job-" + in.TicketID,
+		Kind:      reconcileKind,
+		UniqueKey: in.TicketID,
+		Payload:   payload,
 	}
 }

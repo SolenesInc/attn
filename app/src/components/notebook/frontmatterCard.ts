@@ -144,7 +144,7 @@ class FrontmatterCardWidget extends WidgetType {
   }
 }
 
-export function frontmatterCardDecorations(state: EditorState, editing: boolean): DecorationSet {
+function frontmatterCardDecorations(state: EditorState, editing: boolean): DecorationSet {
   const fm = parseFrontmatterFromDoc(state.doc);
   if (!fm || fm.to <= fm.from) return Decoration.none;
   if (fm.to >= state.doc.length) return Decoration.none;

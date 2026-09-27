@@ -69,16 +69,6 @@ func newPRDaemonForTest(t *testing.T, sessionID string) *Daemon {
 	return d
 }
 
-func sessionUpdates(cap *broadcastCapture, sessionID string) []protocol.WebSocketEvent {
-	var out []protocol.WebSocketEvent
-	for _, event := range cap.snapshot() {
-		if event.Event == protocol.EventSessionStateChanged && event.Session != nil && event.Session.ID == sessionID {
-			out = append(out, event)
-		}
-	}
-	return out
-}
-
 func sessionPullRequests(t *testing.T, d *Daemon, sessionID string) []protocol.SessionPullRequest {
 	t.Helper()
 	session := d.sessionForBroadcast(d.store.Get(sessionID))

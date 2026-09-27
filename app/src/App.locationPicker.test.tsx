@@ -1,8 +1,8 @@
-import { fireEvent, screen, within } from '@testing-library/react';
-import { describe, expect, it } from 'vitest';
+import { act, fireEvent, screen, within } from '@testing-library/react';
+import { describe, expect, it, vi } from 'vitest';
 import type { CommandMessage, EventMessage } from './test/protocol';
 import { openSessionsLedger, page, pages, rows } from './components/ledger/testSupport';
-import { agentWorkspace, daemonSession } from './test/daemonFixtures';
+import { agentWorkspace, daemonEndpoint, daemonSession } from './test/daemonFixtures';
 import { gesture, pressShortcut, renderApp } from './test/renderApp';
 import type { Reply, ScriptedDaemon } from './test/scriptedDaemon';
 import { closedEntry, verdict } from './test/sessionLedgerFixtures';
@@ -17,7 +17,6 @@ import {
   openPicker,
   pathInput,
   press,
-  remoteEndpoint,
   repoInfo,
   serveLaunches,
   serveMachine,
@@ -26,12 +25,13 @@ import {
 } from './test/locations';
 
 type InitialState = Partial<EventMessage<'initial_state'>>;
-type HeldCommand = 'inspect_path' | 'get_repo_info' | 'create_worktree' | 'get_recent_locations';
+type HeldCommand = 'inspect_path' | 'get_repo_info' | 'create_worktree' | 'get_recent_locations' | 'browse_directory';
 
 const REPO = `${HOME}/projects/exsin`;
 const FEAT_IMAGES = `${REPO}--feat-images`;
 const EXSIN = repoInfo(REPO, [{ path: FEAT_IMAGES, branch: 'feat-images' }]);
-const GPU_BOX = remoteEndpoint('ep-1', 'gpu-box', { agents_available: ['codex'], projects_directory: '/srv/projects' });
+const REMOTE_CAPABILITIES = { protocol_version: '46', agents_available: ['codex'] };
+const GPU_BOX = daemonEndpoint('ep-1', { capabilities: { ...REMOTE_CAPABILITIES, projects_directory: '/srv/projects' } });
 
 function row(index: number) {
   return screen.getByTestId(`location-picker-item-${index}`);
@@ -43,6 +43,14 @@ function highlighted() {
 
 function pickerOpen() {
   return screen.queryByTestId('location-picker') !== null;
+}
+
+function suggestions() {
+  return screen.queryAllByTestId(/^location-picker-item-\d+$/).map((item) => item.querySelector('.picker-name')?.textContent);
+}
+
+function browsed(daemon: ScriptedDaemon) {
+  return daemon.sentOf('browse_directory').map(({ input_path, endpoint_id }) => (endpoint_id ? { input_path, endpoint_id } : { input_path }));
 }
 
 function radio(name: RegExp) {
@@ -120,6 +128,70 @@ describe('App location picker', () => {
       expect(daemon.sentOf('inspect_path').map(({ path, endpoint_id }) => ({ path, endpoint_id }))).toEqual([{ path: '/', endpoint_id: endpointId }]);
       expect(launchedAt(daemon)).toEqual([{ cwd: '/', agent: endpointId ? 'codex' : 'claude', ...(endpointId ? { endpoint_id: endpointId } : {}) }]);
     });
+
+    it.each([
+      ['/tmp/project/', '/tmp/project'],
+      ['/tmp/project', '/tmp/project'],
+      ['~/', HOME],
+    ])('inspects %s as %s', async (typed, path) => {
+      const { daemon } = await openPicker();
+
+      await submitPath(daemon, typed);
+
+      expect(daemon.sentOf('inspect_path').map((command) => command.path)).toEqual([path]);
+    });
+  });
+
+  describe('browsing', () => {
+    it('asks the host the session will run on, and never shows another host’s directories', async () => {
+      const { daemon } = await openPicker({ directories: { [`${HOME}/projects`]: ['local-repo'] } }, { endpoints: [GPU_BOX] });
+      await typePath(daemon, '~/projects/');
+      expect(suggestions()).toEqual(['local-repo']);
+      holdAnswers(daemon, 'browse_directory');
+
+      await gesture(daemon, () => fireEvent.click(radio(/gpu-box/i)));
+      expect(suggestions()).toEqual([]);
+      expect(browsed(daemon)).toEqual([{ input_path: '~/projects/' }, { input_path: '/srv/projects/', endpoint_id: 'ep-1' }]);
+      const [, remote] = daemon.sentOf('browse_directory');
+
+      await answer(daemon, remote, {
+        event: 'browse_directory_result',
+        success: true,
+        input_path: remote.input_path,
+        directory: '/srv/projects',
+        home_path: '/home/remote',
+        entries: [{ name: 'remote-repo', path: '/srv/projects/remote-repo', is_dir: true }],
+      });
+      expect(suggestions()).toEqual(['remote-repo']);
+    });
+
+    it('asks once for the path the user settles on, not for every keystroke', async () => {
+      const { daemon } = await openPicker();
+      await typePath(daemon, '~/projects/');
+
+      for (const path of ['~/projects/a', '~/projects/at', '~/projects/att', '~/projects/attn']) {
+        fireEvent.change(pathInput(), { target: { value: path } });
+        await act(() => vi.advanceTimersByTimeAsync(50));
+      }
+      await act(() => vi.advanceTimersByTimeAsync(150));
+      await daemon.idle();
+
+      expect(browsed(daemon)).toEqual([{ input_path: '~/projects/' }, { input_path: '~/projects/attn' }]);
+    });
+
+    it('stops browsing once the picker closes', async () => {
+      const { daemon } = await openPicker({ directories: { [`${HOME}/projects`]: ['attn'] } });
+      await typePath(daemon, '~/projects/');
+      expect(suggestions()).toEqual(['attn']);
+
+      fireEvent.change(pathInput(), { target: { value: '~/projects/attn' } });
+      await press(daemon, 'Escape');
+      await act(() => vi.advanceTimersByTimeAsync(500));
+      await daemon.idle();
+
+      expect(pickerOpen()).toBe(false);
+      expect(browsed(daemon)).toEqual([{ input_path: '~/projects/' }]);
+    });
   });
 
   describe('recent locations', () => {
@@ -195,7 +267,7 @@ describe('App location picker', () => {
 
     it('launches on a remote endpoint with an agent only that endpoint offers, without reading repo info', async () => {
       const { daemon } = await openPicker({}, {
-        endpoints: [remoteEndpoint('ep-1', 'gpu-box', { agents_available: ['snipe'], projects_directory: '/srv/projects' })],
+        endpoints: [daemonEndpoint('ep-1', { capabilities: { ...REMOTE_CAPABILITIES, agents_available: ['snipe'], projects_directory: '/srv/projects' } })],
       });
 
       await gesture(daemon, () => fireEvent.click(radio(/gpu-box/i)));
@@ -252,8 +324,8 @@ describe('App location picker', () => {
         settings: { projects_directory: '/Users/victor/projects' },
         endpoints: [
           GPU_BOX,
-          remoteEndpoint('ep-2', 'lab-box', { projects_directory: '/opt/work' }),
-          remoteEndpoint('ep-3', 'dark-box', {}, 'disconnected'),
+          daemonEndpoint('ep-2', { name: 'lab-box', capabilities: { ...REMOTE_CAPABILITIES, projects_directory: '/opt/work' } }),
+          daemonEndpoint('ep-3', { name: 'dark-box', status: 'disconnected', capabilities: REMOTE_CAPABILITIES }),
         ],
       });
       expect(pathInput()).toHaveValue('/Users/victor/projects/');
@@ -278,7 +350,7 @@ describe('App location picker', () => {
     it('turns on yolo for a remote daemon when its target is chosen again, remembers that for the daemon, and launches with it', async () => {
       const { daemon } = await openPicker({}, {
         settings: { claude_cap_yolo: 'true' },
-        endpoints: [remoteEndpoint('ep-1', 'gpu-box', { protocol_version: '47', daemon_instance_id: 'daemon-remote-1', agents_available: ['claude'] })],
+        endpoints: [daemonEndpoint('ep-1', { capabilities: { protocol_version: '47', daemon_instance_id: 'daemon-remote-1', agents_available: ['claude'] } })],
       });
 
       await gesture(daemon, () => fireEvent.click(radio(/gpu-box/i)));

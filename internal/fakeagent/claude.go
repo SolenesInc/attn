@@ -1,10 +1,13 @@
 package fakeagent
 
 import (
+	"encoding/json"
 	"errors"
+	"fmt"
 	"os"
 	"path/filepath"
 	"regexp"
+	"slices"
 	"strings"
 
 	"github.com/google/uuid"
@@ -39,10 +42,76 @@ type claude struct {
 	permission   string
 	prompt       string
 	streaming    string
+	picker       bool
+}
+
+var claudePrintFlags = flagSpec{
+	values: map[string]bool{
+		"--model": true, "--effort": true, "--max-turns": true, "--max-budget-usd": true,
+		"--json-schema": true, "--system-prompt": true, "--setting-sources": true, "--mcp-config": true,
+		"--tools": true, "--allowedTools": true, "--disallowedTools": true,
+		"--permission-mode": true, "--output-format": true,
+	},
 }
 
 func runClaude(cfg config) int {
+	if slices.Contains(os.Args[1:], "--print") && slices.Contains(os.Args[1:], "--input-format") {
+		return claudeModelDiscovery()
+	}
+	if slices.Contains(os.Args[1:], "--print") || slices.Contains(os.Args[1:], "-p") {
+		return claudePrint(claudePrintFlags.parse(os.Args[1:])).serve(cfg)
+	}
 	return serve(cfg, claudeComposer, &claude{cfg: cfg})
+}
+
+func claudePrint(args parsedArgs) headlessRun {
+	run := headlessRun{harness: Claude, model: args.value("--model"), effort: args.value("--effort")}
+	if len(args.positionals) > 0 {
+		run.prompt = joinSystemPrompt(args.value("--system-prompt"), args.positionals[len(args.positionals)-1])
+	}
+	if args.has("--mcp-config") {
+		run.refusal = "claude --print with MCP tool servers"
+	}
+	structured := args.has("--json-schema")
+	asJSON := args.value("--output-format") == "json"
+	run.answer = func(text string) error {
+		if !asJSON {
+			_, err := fmt.Println(text)
+			return err
+		}
+		result := claudeResult(false, text)
+		if structured {
+			if !json.Valid([]byte(text)) {
+				return fmt.Errorf("claude --json-schema answer is not JSON: %q", text)
+			}
+			result["structured_output"] = json.RawMessage(text)
+		}
+		return printJSONLines(result)
+	}
+	run.fail = func(message string) {
+		if !asJSON {
+			fmt.Fprintln(os.Stderr, message)
+			return
+		}
+		_ = printJSONLines(claudeResult(true, message))
+	}
+	return run
+}
+
+func claudeResult(failed bool, text string) map[string]any {
+	subtype := "success"
+	if failed {
+		subtype = "error_during_execution"
+	}
+	return map[string]any{
+		"type":           "result",
+		"subtype":        subtype,
+		"is_error":       failed,
+		"result":         text,
+		"num_turns":      1,
+		"total_cost_usd": 0,
+		"session_id":     uuid.NewString(),
+	}
 }
 
 func (c *claude) begin(term *terminal) error {
@@ -56,7 +125,7 @@ func (c *claude) begin(term *terminal) error {
 	if args.has("-r", "--resume") {
 		c.conversation, c.resumed = args.value("-r", "--resume"), true
 		if c.conversation == "" {
-			return errors.New("claude -r without a session id opens the resume picker, which the fake does not script")
+			c.conversation, c.resumed, c.picker = uuid.NewString(), false, true
 		}
 	}
 	if c.conversation == "" {
@@ -106,6 +175,7 @@ func (c *claude) launch() launch {
 		Harness:        Claude,
 		ConversationID: c.conversation,
 		Resumed:        c.resumed,
+		ResumePicker:   c.picker,
 	}
 }
 

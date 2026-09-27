@@ -16,10 +16,6 @@ type FeedbackComment struct {
 	Content   string
 }
 
-func RenderFeedback(repoPath, title string, seq int, baseSHA, headSHA string, submittedAt string, verdict string, comments []FeedbackComment) string {
-	return RenderFeedbackWithGit(context.Background(), git.NewClient(), repoPath, title, seq, baseSHA, headSHA, submittedAt, verdict, comments)
-}
-
 func RenderFeedbackWithGit(ctx context.Context, client presentGit, repoPath, title string, seq int, baseSHA, headSHA string, submittedAt string, verdict string, comments []FeedbackComment) string {
 	var b strings.Builder
 

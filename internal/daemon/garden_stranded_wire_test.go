@@ -6,7 +6,9 @@ import (
 	"testing"
 
 	"github.com/victorarias/attn/internal/client"
+	"github.com/victorarias/attn/internal/fakeagent"
 	"github.com/victorarias/attn/internal/protocol"
+	"github.com/victorarias/attn/internal/testworld"
 )
 
 func TestStrandedTicketsAreReplantedAsWitheredSeedsOnce(t *testing.T) {
@@ -92,6 +94,51 @@ func TestStrandedTicketsAreReplantedAsWitheredSeedsOnce(t *testing.T) {
 			t.Errorf("with the dead session back the ready seeds are %+v (%v), want none", ready, err)
 		}
 	})
+}
+
+func TestATicketWhoseSessionDiedIsReplantedCarryingItsReconcileVerdict(t *testing.T) {
+	w := newTitlingWorld(t, fakeagent.Claude)
+	w.finishStartupWork()
+	app, cli := w.App(), w.Client()
+	worker := w.Spawn(app, fakeagent.Claude, w.Path("shop"), func(m *protocol.SpawnSessionMessage) { m.Label = protocol.Ptr("store") })
+	agent := w.Launched(worker)
+	if _, err := cli.CreateTicket("planner", "Migrate the store", "Move the store onto the new backend.", "migrate-store"); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := cli.TakeTicket(worker, "migrate-store", false); err != nil {
+		t.Fatal(err)
+	}
+	inboxLines(t, cli, worker)
+	reportTicket(t, cli, worker, "migrate-store", protocol.DispatchWorkStateInProgress, "")
+	app.TypeLine(worker, "migrate the store")
+	agent.Prompted()
+	testworld.AwaitSession(app, worker, func(s protocol.Session) bool { return s.State == protocol.SessionStateWorking })
+
+	agent.Exit(1)
+	task := w.HeadlessTask()
+	if !strings.Contains(task.Prompt, "migrate-store") {
+		t.Fatalf("the daemon asked %q, want the crashed ticket's reconciliation", task.Prompt)
+	}
+	if _, planted := gardenStrandedSeedsByTitle(t, cli)["Migrate the store"]; planted {
+		t.Fatal("the crashed ticket was replanted before its verdict landed")
+	}
+	task.Answer(`{"assessment":"partial","confidence":"medium","whats_left":"e2e spec never ran","evidence":"tests pass except e2e"}`)
+	awaitReconcileTask(app, "migrate-store", func(task protocol.Task) bool { return task.State == "done" })
+
+	seed, planted := gardenStrandedSeedsByTitle(t, cli)["Migrate the store"]
+	if !planted {
+		t.Fatal("the reconciled crashed ticket was not replanted")
+	}
+	notes, err := cli.SeedNotes("", seed.ID, 0)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(notes.Notes) != 1 || !strings.Contains(notes.Notes[0].Body, "What's left: e2e spec never ran") {
+		t.Errorf("the replanted seed's log = %+v, want one note carrying the verdict", notes.Notes)
+	}
+	if ticket := showTicket(t, cli, "migrate-store"); ticket.Status != protocol.TicketStatusCrashed || ticket.ArchivedAt != nil {
+		t.Errorf("replanting left the ticket %s archived at %v, want it crashed and on the board", ticket.Status, protocol.Deref(ticket.ArchivedAt))
+	}
 }
 
 func gardenStrandedSeedsByTitle(t *testing.T, cli *client.Client) map[string]protocol.Seed {

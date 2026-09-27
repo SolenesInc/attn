@@ -18,11 +18,9 @@ export {
   isAllowedConflict,
 } from './registry';
 export {
-  LEADER_TIMEOUT_MS,
   type ChordCandidate,
   subscribeChord,
   getChordSnapshot,
-  isLeaderPending,
   enterLeader,
   cancelLeader,
   resolvePendingThen,
@@ -58,7 +56,6 @@ export {
   DEFAULT_DOCK_ITEMS,
   resolveBinding,
   resolvedShortcutEntries,
-  isUnbound,
   isCustomized,
   findConflict,
   eventToBinding,

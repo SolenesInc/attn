@@ -1,170 +1,110 @@
 package daemon
 
 import (
-	"context"
 	"encoding/json"
-	"fmt"
 	"path/filepath"
 	"strings"
 	"testing"
 	"time"
 
 	"github.com/victorarias/attn/internal/protocol"
+	"github.com/victorarias/attn/internal/store"
 )
 
-const submitTestPath = "/tmp/annotated-doc.md"
-
-func newMarkdownAnnotationsDaemon(t *testing.T) *Daemon {
+func refuseDraftClears(t *testing.T, d *Daemon) {
 	t.Helper()
-	return NewForTesting(filepath.Join(t.TempDir(), "test.sock"))
-}
-
-func seedSubmitDraft(t *testing.T, d *Daemon, generation int, anns []protocol.MarkdownAnnotation) {
-	t.Helper()
-	blob, err := json.Marshal(anns)
+	d.stopEventBus()
+	if err := d.store.Close(); err != nil {
+		t.Fatal(err)
+	}
+	path := filepath.Join(t.TempDir(), "attn.db")
+	persistent, err := store.NewWithDB(path)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if err := d.store.SaveMarkdownAnnotationDraft(submitTestPath, string(blob), generation, time.Now()); err != nil {
-		t.Fatalf("seed draft: %v", err)
-	}
-}
-
-func submitTestAnnotations() []protocol.MarkdownAnnotation {
-	return []protocol.MarkdownAnnotation{
-		{ID: "c1", Type: "comment", Anchor: mdAnchor(3, 3, 0, "hello"), Text: protocol.Ptr("hi"), CreatedAt: 1},
-	}
-}
-
-func sendSubmit(t *testing.T, d *Daemon, target string, orphaned []string) protocol.MarkdownAnnotationsSubmitResultMessage {
-	t.Helper()
-	client := &wsClient{send: make(chan outboundMessage, 4)}
-	d.handleMarkdownAnnotationsSubmit(client, &protocol.MarkdownAnnotationsSubmitMessage{
-		Cmd:             protocol.CmdMarkdownAnnotationsSubmit,
-		DocumentUri:     fileDocumentURI("workspace-test", submitTestPath),
-		SourceKind:      annotationSourceFile,
-		WorkspaceID:     protocol.Ptr("workspace-test"),
-		Path:            protocol.Ptr(submitTestPath),
-		TargetSessionID: protocol.Ptr(target),
-		OrphanedIds:     orphaned,
-		RequestID:       "req-1",
-	})
-	var res protocol.MarkdownAnnotationsSubmitResultMessage
-	readNotebookWSEvent(t, client.send, &res)
-	if res.Event != protocol.EventMarkdownAnnotationsSubmitResult || res.RequestID != "req-1" {
-		t.Fatalf("unexpected result envelope: %+v", res)
-	}
-	return res
-}
-
-func seedSeedSubmitDraft(t *testing.T, d *Daemon, seedID string, generation int) {
-	t.Helper()
-	blob, err := json.Marshal(submitTestAnnotations())
+	t.Cleanup(func() { _ = persistent.Close() })
+	d.store = persistent
+	d.eventBus = nil
+	d.ensureEventBus()
+	t.Cleanup(d.stopEventBus)
+	direct, err := store.OpenDB(path)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if err := d.store.SaveMarkdownAnnotationDraft(seedDocumentURI(seedID), string(blob), generation, time.Now()); err != nil {
-		t.Fatalf("seed seed draft: %v", err)
+	t.Cleanup(func() { _ = direct.Close() })
+	if _, err := direct.Exec(`CREATE TRIGGER refuse_draft_clear BEFORE UPDATE ON markdown_annotation_drafts
+		WHEN NEW.annotations_json = '[]' BEGIN SELECT RAISE(ABORT, 'disk refused the clear'); END`); err != nil {
+		t.Fatal(err)
 	}
 }
 
-func sendSeedSubmit(t *testing.T, d *Daemon, sourceSeed string, targetSession, targetSeed *string) protocol.MarkdownAnnotationsSubmitResultMessage {
+func saveSubmitDraft(t *testing.T, d *Daemon, key string) {
+	t.Helper()
+	blob, err := json.Marshal([]protocol.MarkdownAnnotation{{ID: "g1", Type: "global", Text: protocol.Ptr("hi"), CreatedAt: 1}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := d.store.SaveMarkdownAnnotationDraft(key, string(blob), 2, time.Now()); err != nil {
+		t.Fatalf("save draft: %v", err)
+	}
+}
+
+func sendSubmit(t *testing.T, d *Daemon, msg protocol.MarkdownAnnotationsSubmitMessage) protocol.MarkdownAnnotationsSubmitResultMessage {
 	t.Helper()
 	client := &wsClient{send: make(chan outboundMessage, 4)}
-	d.handleMarkdownAnnotationsSubmit(client, &protocol.MarkdownAnnotationsSubmitMessage{
-		Cmd:             protocol.CmdMarkdownAnnotationsSubmit,
-		DocumentUri:     seedDocumentURI(sourceSeed),
-		SourceKind:      annotationSourceSeed,
-		SeedID:          protocol.Ptr(sourceSeed),
-		TargetSessionID: targetSession,
-		TargetSeedID:    targetSeed,
-		RequestID:       "req-seed",
-	})
+	msg.Cmd, msg.RequestID = protocol.CmdMarkdownAnnotationsSubmit, "req-1"
+	d.handleMarkdownAnnotationsSubmit(client, &msg)
 	var res protocol.MarkdownAnnotationsSubmitResultMessage
 	readNotebookWSEvent(t, client.send, &res)
 	return res
 }
 
-func storedSubmitDraftCount(t *testing.T, d *Daemon) int {
+func requireSucceededWithUnclearedDraft(t *testing.T, res protocol.MarkdownAnnotationsSubmitResultMessage, status string) {
 	t.Helper()
-	draft, err := d.store.GetMarkdownAnnotationDraft(submitTestPath)
-	if err != nil {
-		t.Fatal(err)
+	if !res.Success || res.Status != status {
+		t.Fatalf("result = %+v, want %s despite the clear failure", res, status)
 	}
-	anns, err := decodeMarkdownAnnotations(draft.Annotations)
-	if err != nil {
-		t.Fatal(err)
-	}
-	return len(anns)
-}
-
-func TestMarkdownAnnotationsSubmitNoteClearFailureStillReportsNoted(t *testing.T) {
-	d := newGardenDaemon(t)
-	seed := plant(t, d, protocol.SeedPlantMessage{Title: "Keep one note"})
-	seedSeedSubmitDraft(t, d, seed.ID, 2)
-	d.gardenBroadcastHook = func([]protocol.Seed, int) {
-		if err := d.store.Close(); err != nil {
-			t.Errorf("closing store after note: %v", err)
-		}
-	}
-
-	res := sendSeedSubmit(t, d, seed.ID, nil, protocol.Ptr(seed.ID))
-
-	if !res.Success || res.Status != annotationSubmitStatusNoted {
-		t.Fatalf("result = %+v, want noted despite clear failure", res)
-	}
-	if res.Error == nil || !strings.Contains(*res.Error, "noted; failed to clear drafts") {
-		t.Fatalf("error = %v, want noted-but-not-cleared marker", res.Error)
+	if res.Error == nil || !strings.Contains(*res.Error, status+"; failed to clear drafts") {
+		t.Fatalf("error = %v, want the %s-but-not-cleared warning", res.Error, status)
 	}
 	if res.Generation != nil {
-		t.Fatalf("generation should be absent when the clear failed, got %v", res.Generation)
-	}
-}
-
-func TestMarkdownAnnotationsSubmitDeliveryFailure(t *testing.T) {
-	d := newMarkdownAnnotationsDaemon(t)
-	d.ptyBackend = &failingInputBackend{fakeSpawnBackend: &fakeSpawnBackend{}}
-	addIdleNotebookSession(d, "target", protocol.SessionStateIdle)
-	seedSubmitDraft(t, d, 2, submitTestAnnotations())
-
-	res := sendSubmit(t, d, "target", nil)
-
-	if res.Success || res.Status != annotationSubmitStatusError ||
-		res.Error == nil || !strings.Contains(*res.Error, "pty write exploded") {
-		t.Fatalf("result = %+v, want delivery error", res)
-	}
-	if n := storedSubmitDraftCount(t, d); n != 1 {
-		t.Fatalf("draft must stay intact when delivery fails, got %d annotations", n)
+		t.Fatalf("generation = %d, want none when the clear failed", *res.Generation)
 	}
 }
 
 func TestMarkdownAnnotationsSubmitClearFailureStillDelivered(t *testing.T) {
-	d := newMarkdownAnnotationsDaemon(t)
-	d.ptyBackend = &fakeSpawnBackend{onInput: func(string, []byte) {
-		if err := d.store.Close(); err != nil {
-			t.Errorf("closing store: %v", err)
-		}
-	}}
-	addIdleNotebookSession(d, "target", protocol.SessionStateIdle)
-	seedSubmitDraft(t, d, 2, submitTestAnnotations())
+	d := NewForTesting(filepath.Join(t.TempDir(), "test.sock"))
+	refuseDraftClears(t, d)
+	typed := 0
+	d.ptyBackend = &fakeSpawnBackend{onInput: func(string, []byte) { typed++ }}
+	now := string(protocol.TimestampNow())
+	d.store.Add(&protocol.Session{ID: "target", Label: "target", Agent: protocol.SessionAgentClaude, Directory: "/tmp/target",
+		State: protocol.SessionStateIdle, StateSince: now, StateUpdatedAt: now, LastSeen: now})
+	path := "/tmp/annotated-doc.md"
+	saveSubmitDraft(t, d, path)
 
-	res := sendSubmit(t, d, "target", nil)
+	res := sendSubmit(t, d, protocol.MarkdownAnnotationsSubmitMessage{
+		DocumentUri: fileDocumentURI("workspace-test", path), SourceKind: annotationSourceFile,
+		WorkspaceID: protocol.Ptr("workspace-test"), Path: protocol.Ptr(path), TargetSessionID: protocol.Ptr("target"),
+	})
 
-	if !res.Success || res.Status != annotationSubmitStatusDelivered {
-		t.Fatalf("result = %+v, want delivered despite clear failure", res)
-	}
-	if res.Error == nil || !strings.Contains(*res.Error, "delivered; failed to clear drafts") {
-		t.Fatalf("error = %v, want delivered-but-not-cleared marker", res.Error)
-	}
-	if res.Generation != nil {
-		t.Fatalf("generation should be absent when the clear failed, got %v", res.Generation)
+	requireSucceededWithUnclearedDraft(t, res, annotationSubmitStatusDelivered)
+	if typed == 0 {
+		t.Fatal("the annotations were never typed into the session")
 	}
 }
 
-type failingInputBackend struct {
-	*fakeSpawnBackend
-}
+func TestMarkdownAnnotationsSubmitNoteClearFailureStillReportsNoted(t *testing.T) {
+	d := newGardenDaemon(t)
+	refuseDraftClears(t, d)
+	d.ensureGardenCollections()
+	seed := plant(t, d, protocol.SeedPlantMessage{Title: "Keep one note"})
+	saveSubmitDraft(t, d, seedDocumentURI(seed.ID))
 
-func (b *failingInputBackend) Input(context.Context, string, []byte) error {
-	return fmt.Errorf("pty write exploded")
+	res := sendSubmit(t, d, protocol.MarkdownAnnotationsSubmitMessage{
+		DocumentUri: seedDocumentURI(seed.ID), SourceKind: annotationSourceSeed,
+		SeedID: protocol.Ptr(seed.ID), TargetSeedID: protocol.Ptr(seed.ID),
+	})
+
+	requireSucceededWithUnclearedDraft(t, res, annotationSubmitStatusNoted)
 }

@@ -9,15 +9,7 @@ import (
 
 	"github.com/victorarias/attn/internal/hub"
 	"github.com/victorarias/attn/internal/protocol"
-	"github.com/victorarias/attn/internal/ptybackend"
 )
-
-func newRenameTestClient() *wsClient {
-	return &wsClient{
-		send:            make(chan outboundMessage, 4),
-		attachedStreams: make(map[string]ptybackend.Stream),
-	}
-}
 
 func TestRenameSessionOverTheUnixSocketTravelsToTheSessionOwner(t *testing.T) {
 	d := NewForTesting(filepath.Join(t.TempDir(), "test.sock"))

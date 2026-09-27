@@ -205,9 +205,6 @@ func (d *Daemon) updateGardenDispatch(
 		if found {
 			expected = doc.Rev
 		}
-		if d.gardenDispatchBeforeWrite != nil {
-			d.gardenDispatchBeforeWrite(sessionID)
-		}
 		fact := documentChangedFact(garden.Namespace, garden.CollectionDispatches, sessionID, false)
 		commit := store.DocumentCommit{Write: store.DocumentWrite{
 			Schema: *schema, ID: sessionID, Body: body, Expected: &expected,
@@ -235,9 +232,6 @@ func (d *Daemon) updateGardenDispatch(
 			return garden.Dispatch{}, writeErr
 		}
 		d.announceCommittedWrite(fact, written.Seq)
-		if d.gardenDispatchAfterWrite != nil {
-			d.gardenDispatchAfterWrite(sessionID)
-		}
 		d.rememberDispatchProjection(sessionID, next, written.Rev)
 		return next, nil
 	}

@@ -423,12 +423,12 @@ func (m *Manager) Detach(sessionID, subscriberID string) {
 	session.removeSubscriber(subscriberID)
 }
 
-func (m *Manager) Input(sessionID string, data []byte) error {
+func (m *Manager) Input(ctx context.Context, sessionID string, data []byte) error {
 	session, err := m.getSession(sessionID)
 	if err != nil {
 		return err
 	}
-	return session.input(data)
+	return session.input(ctx, data)
 }
 
 func (m *Manager) Resize(sessionID string, cols, rows, xpixel, ypixel uint16) (bool, error) {

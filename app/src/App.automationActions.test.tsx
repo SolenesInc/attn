@@ -45,7 +45,7 @@ describe('App automation actions', () => {
     expect(screen.queryByText('Not asked for')).toBeNull();
   });
 
-  it('shows the daemon’s reason when it refuses to disable an automation', async () => {
+  it('shows the daemon’s reason when it refuses to disable an automation, and leaves the toggle as the daemon has it', async () => {
     const { daemon } = await renderAutomations();
     daemon.on('automation_set_enabled', () => ({
       event: 'automation_set_enabled_result',
@@ -60,6 +60,7 @@ describe('App automation actions', () => {
       expect.objectContaining({ definition_id: 'd1', enabled: false }),
     ]);
     expect(screen.getByTestId('automation-toggle-error-d1')).toHaveTextContent('automation definition is disabled elsewhere');
+    expect(screen.getByTestId('automation-toggle-d1')).toBeChecked();
   });
 
   it('runs a manual automation and is ready to run it again once the daemon answers', async () => {

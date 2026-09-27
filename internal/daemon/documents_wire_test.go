@@ -174,6 +174,17 @@ func TestAQueryIsCheckedAgainstTheCurrentDeclaration(t *testing.T) {
 		t.Fatalf("attempts = 2 matched %q, want b", got)
 	}
 
+	defineCollection(t, cli, gateNS, "flags", protocol.DocumentFieldSpec{Name: "urgent", Type: "bool"})
+	for id, body := range map[string]string{"yes": `{"urgent":true}`, "no": `{"urgent":false}`} {
+		if _, err := cli.DocPut(gateNS, "flags", id, body, nil); err != nil {
+			t.Fatal(err)
+		}
+	}
+	urgent := protocol.DocumentQuery{Namespace: gateNS, Collection: "flags", Filters: []protocol.DocumentFilter{where("urgent", "eq", true)}}
+	if got := docIDs(query(t, cli, urgent)); got != "yes" {
+		t.Fatalf("urgent = true matched %q, want yes", got)
+	}
+
 	defineRequests(t, cli, gateNS, protocol.DocumentFieldSpec{Name: "attempts", Type: "string"})
 	if _, err := cli.DocQuery(numeric); err == nil || !strings.Contains(err.Error(), "needs a string value") {
 		t.Fatalf("a numeric filter after attempts became a string = %v, want the type named", err)

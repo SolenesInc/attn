@@ -412,7 +412,6 @@ func (d *Daemon) recordWorktreeRemoval(
 		Action: action, Reason: reason,
 	}
 	entry.ID = d.store.AppendWorktreeSweepLog(entry, now)
-	d.publishFact(FactWorktreeSwept, wt.Path, protocolSweepEntry(entry))
 
 	body := fmt.Sprintf("attn %s the worktree %s (branch %s of %s): %s.",
 		action, wt.Path, wt.Branch, wt.MainRepo, reason)
@@ -421,6 +420,7 @@ func (d *Daemon) recordWorktreeRemoval(
 			d.logf("worktree removal: noting %s on seed %s: %v", wt.Path, seedID, err)
 		}
 	}
+	d.publishFact(FactWorktreeSwept, wt.Path, protocolSweepEntry(entry))
 }
 
 func (d *Daemon) seedsForWorktree(wt *store.Worktree) []string {

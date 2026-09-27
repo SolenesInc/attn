@@ -46,9 +46,13 @@ func (d *Daemon) handleInstallPluginWS(client *wsClient, msg *protocol.InstallPl
 	options := plugins.InstallOptions{
 		Env: d.pluginCommandEnv(),
 		CloneGit: func(ctx context.Context, source, target string, environment []string) ([]byte, error) {
-			return gitValue(ctx, d.gitExecution(), gitTask{Kind: gitTaskPluginInstall, Lane: gitInteractive}, func(runCtx context.Context, client *attngit.Client) ([]byte, error) {
-				return client.CloneDepthOne(runCtx, source, target, environment)
+			var output []byte
+			err := d.gitExecution().Run(ctx, gitTask{Kind: gitTaskPluginInstall, Lane: gitInteractive}, func(runCtx context.Context, client *attngit.Client) error {
+				var runErr error
+				output, runErr = client.CloneDepthOne(runCtx, source, target, environment)
+				return runErr
 			})
+			return output, err
 		},
 	}
 	var manifest plugins.Manifest

@@ -45,6 +45,20 @@ func TestBadDocumentRequestsAreRefusedUpFrontWithWhatToDo(t *testing.T) {
 		q.Sort = &protocol.DocumentSort{Field: field}
 		return q
 	}
+	defined := func(namespace string, fields ...protocol.DocumentFieldSpec) func(*testing.T) (string, string) {
+		return func(*testing.T) (string, string) {
+			_, err := cli.DocDefine(protocol.DocumentCollectionSchema{Namespace: namespace, Collection: "other", Fields: fields})
+			return docRefusal(err)
+		}
+	}
+	written := func(body string) func(*testing.T) (string, string) {
+		return func(*testing.T) (string, string) {
+			_, err := cli.DocPut(gateNS, requests, "b", body, nil)
+			return docRefusal(err)
+		}
+	}
+	limited := requestsWhere(gateNS)
+	limited.Limit = protocol.Ptr(1001)
 	after := func(id string) protocol.DocumentQuery {
 		q := requestsWhere(gateNS)
 		q.After = protocol.Ptr(id)
@@ -60,11 +74,25 @@ func TestBadDocumentRequestsAreRefusedUpFrontWithWhatToDo(t *testing.T) {
 		{"a read of an undeclared collection", queried(protocol.DocumentQuery{Namespace: gateNS, Collection: "nope"}),
 			protocol.ErrorCodeUndeclaredCollection, []string{gateNS, "nope", "doc define"}},
 		{"a filter on an undeclared field", queried(requestsWhere(gateNS, where("not-declared", "eq", "x"))),
-			protocol.ErrorCodeInvalidQuery, []string{"not-declared"}},
+			protocol.ErrorCodeInvalidQuery, []string{"not-declared", "status", "attempts", "created_at", "updated_at"}},
 		{"a filter bound of the wrong type", queried(requestsWhere(gateNS, where("status", "eq", 5))),
 			protocol.ErrorCodeInvalidQuery, []string{"status"}},
 		{"an after cursor to a document that is gone", queried(after("gone")),
 			"", []string{"gone", "no longer exists"}},
+		{"a limit above the ceiling", queried(limited),
+			protocol.ErrorCodeInvalidQuery, []string{"1001", "1000", "after cursor"}},
+		{"a declaration of a reserved field", defined(gateNS, protocol.DocumentFieldSpec{Name: "created_at", Type: "string"}),
+			"", []string{"created_at", "reserved"}},
+		{"a declaration of a field that is not an identifier", defined(gateNS, protocol.DocumentFieldSpec{Name: "has space", Type: "string"}),
+			"", []string{"has space"}},
+		{"a declaration in a one-part namespace", defined("approval-gate"),
+			"", []string{"approval-gate"}},
+		{"a declaration in a capitalised namespace", defined("App/Name"),
+			"", []string{"App/Name"}},
+		{"a body that is a list", written(`[1,2]`),
+			"", []string{"object"}},
+		{"a body that is a string", written(`"text"`),
+			"", []string{"object"}},
 		{"a live query sorted by an undeclared field", subscribed(sortedBy("undeclared")),
 			protocol.ErrorCodeInvalidQuery, []string{"undeclared"}},
 	} {

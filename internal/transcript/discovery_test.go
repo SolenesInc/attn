@@ -6,219 +6,84 @@ import (
 	"path/filepath"
 	"testing"
 	"time"
-
-	"github.com/victorarias/attn/internal/toolhome"
 )
 
-func writeCopilotSessionState(
-	t *testing.T,
-	homeDir,
-	sessionID,
-	cwd string,
-	startTime time.Time,
-	withStart,
-	withAssistant bool,
-	modTime time.Time,
-) string {
+type codexRollout struct {
+	id, cwd, source   string
+	started, modified time.Duration
+}
+
+func writeCodexRollout(t *testing.T, sessionsDir string, anchor time.Time, r codexRollout) string {
 	t.Helper()
-
-	sessionDir := filepath.Join(homeDir, ".copilot", "session-state", sessionID)
-	if err := os.MkdirAll(sessionDir, 0o755); err != nil {
-		t.Fatalf("mkdir session dir: %v", err)
-	}
-
-	workspace := fmt.Sprintf("id: %s\ncwd: %s\n", sessionID, cwd)
-	if err := os.WriteFile(filepath.Join(sessionDir, "workspace.yaml"), []byte(workspace), 0o644); err != nil {
-		t.Fatalf("write workspace.yaml: %v", err)
-	}
-
-	lines := ""
-	if withStart {
-		lines += fmt.Sprintf(
-			`{"type":"session.start","data":{"sessionId":"%s","startTime":"%s"}}`+"\n",
-			sessionID,
-			startTime.UTC().Format(time.RFC3339Nano),
-		)
-	}
-	if withAssistant {
-		lines += `{"type":"assistant.message","data":{"content":"ok"}}` + "\n"
-	} else {
-		lines += `{"type":"user.message","data":{"content":"hi"}}` + "\n"
-	}
-
-	eventsPath := filepath.Join(sessionDir, "events.jsonl")
-	if err := os.WriteFile(eventsPath, []byte(lines), 0o644); err != nil {
-		t.Fatalf("write events.jsonl: %v", err)
-	}
-	if err := os.Chtimes(eventsPath, modTime, modTime); err != nil {
-		t.Fatalf("chtimes events.jsonl: %v", err)
-	}
-
-	return eventsPath
-}
-
-func writeCodexTranscript(
-	t *testing.T,
-	homeDir,
-	sessionID,
-	cwd string,
-	startTime time.Time,
-	modTime time.Time,
-) string {
-	t.Helper()
-	return writeCodexTranscriptWithSource(t, homeDir, sessionID, cwd, "", startTime, modTime)
-}
-
-func writeCodexTranscriptWithSource(
-	t *testing.T,
-	homeDir,
-	sessionID,
-	cwd,
-	source string,
-	startTime time.Time,
-	modTime time.Time,
-) string {
-	t.Helper()
-
-	sessionDir := filepath.Join(homeDir, ".codex", "sessions", "2026", "05", "17")
-	if err := os.MkdirAll(sessionDir, 0o755); err != nil {
-		t.Fatalf("mkdir codex session dir: %v", err)
-	}
-
-	sourceField := ""
-	if source != "" {
-		sourceField = fmt.Sprintf(`,"source":"%s"`, source)
-	}
-	transcriptPath := filepath.Join(sessionDir, fmt.Sprintf("rollout-%s-%s.jsonl", startTime.UTC().Format("2006-01-02T15-04-05"), sessionID))
-	lines := fmt.Sprintf(
-		`{"timestamp":"%s","type":"session_meta","payload":{"id":"%s","timestamp":"%s","cwd":"%s"%s}}`+"\n",
-		startTime.UTC().Format(time.RFC3339Nano),
-		sessionID,
-		startTime.UTC().Format(time.RFC3339Nano),
-		cwd,
-		sourceField,
-	)
-	if err := os.WriteFile(transcriptPath, []byte(lines), 0o644); err != nil {
-		t.Fatalf("write codex transcript: %v", err)
-	}
-	if err := os.Chtimes(transcriptPath, modTime, modTime); err != nil {
-		t.Fatalf("chtimes codex transcript: %v", err)
-	}
-
-	return transcriptPath
-}
-
-func TestFindCodexTranscript_MatchesSymlinkEquivalentCWD(t *testing.T) {
-	homeDir := t.TempDir()
-	t.Setenv("CODEX_HOME", "")
-	t.Setenv(toolhome.EnvVar, homeDir)
-
-	root := t.TempDir()
-	realCWD := filepath.Join(root, "real", "project")
-	if err := os.MkdirAll(realCWD, 0o755); err != nil {
-		t.Fatalf("mkdir real cwd: %v", err)
-	}
-	linkRoot := filepath.Join(root, "link")
-	if err := os.Symlink(filepath.Join(root, "real"), linkRoot); err != nil {
-		t.Skipf("symlink unavailable: %v", err)
-	}
-	linkCWD := filepath.Join(linkRoot, "project")
-	startedAt := time.Date(2026, 5, 17, 14, 6, 42, 0, time.UTC)
-
-	expected := writeCodexTranscript(
-		t,
-		homeDir,
-		"codex-session-123",
-		realCWD,
-		startedAt,
-		startedAt.Add(1*time.Minute),
-	)
-
-	got := FindCodexTranscript(linkCWD, startedAt)
-	if got != expected {
-		t.Fatalf("FindCodexTranscript() = %q, want %q", got, expected)
-	}
-}
-
-func TestFindCodexTranscript_IgnoresExecSourcedRollouts(t *testing.T) {
-	homeDir := t.TempDir()
-	t.Setenv("CODEX_HOME", "")
-	t.Setenv(toolhome.EnvVar, homeDir)
-
-	cwd := "/repo/project"
-	startedAt := time.Date(2026, 5, 17, 14, 0, 0, 0, time.UTC)
-
-	session := writeCodexTranscriptWithSource(
-		t, homeDir, "codex-session-real", cwd, "cli",
-		startedAt.Add(5*time.Second), startedAt.Add(5*time.Second),
-	)
-	classifier := writeCodexTranscriptWithSource(
-		t, homeDir, "codex-classifier-decoy", cwd, "exec",
-		startedAt.Add(11*time.Second), startedAt.Add(11*time.Second),
-	)
-
-	if got := FindCodexTranscript(cwd, startedAt); got != session {
-		t.Fatalf("FindCodexTranscript() = %q, want session rollout %q (classifier decoy=%q)", got, session, classifier)
-	}
-}
-
-func TestFindCodexTranscript_FallbackIgnoresExecSourcedRollouts(t *testing.T) {
-	homeDir := t.TempDir()
-	t.Setenv("CODEX_HOME", "")
-	t.Setenv(toolhome.EnvVar, homeDir)
-
-	cwd := "/repo/project"
-	startedAt := time.Date(2026, 5, 17, 14, 0, 0, 0, time.UTC)
-
-	session := writeCodexTranscriptWithSource(
-		t, homeDir, "codex-session-resumed", cwd, "cli",
-		startedAt.Add(-2*time.Hour), startedAt.Add(1*time.Minute),
-	)
-	classifier := writeCodexTranscriptWithSource(
-		t, homeDir, "codex-classifier-decoy", cwd, "exec",
-		startedAt.Add(-1*time.Hour), startedAt.Add(2*time.Minute),
-	)
-
-	if got := FindCodexTranscript(cwd, startedAt); got != session {
-		t.Fatalf("FindCodexTranscript() = %q, want session rollout %q (classifier decoy=%q)", got, session, classifier)
-	}
-}
-
-func TestFindCodexTranscriptForResume_SelectsExactNativeID(t *testing.T) {
-	homeDir := t.TempDir()
-	t.Setenv("CODEX_HOME", "")
-	t.Setenv(toolhome.EnvVar, homeDir)
-	now := time.Date(2026, 7, 18, 12, 0, 0, 0, time.UTC)
-	wrong := writeCodexTranscript(t, homeDir, "native-wrong", "/repo", now, now)
-	want := writeCodexTranscript(t, homeDir, "native-target", "/other", now.Add(time.Second), now.Add(time.Second))
-	if got := FindCodexTranscriptForResume("native-target"); got != want {
-		t.Fatalf("FindCodexTranscriptForResume() = %q, want %q (wrong=%q)", got, want, wrong)
-	}
-}
-
-func TestFindCodexTranscriptForResume_HonorsCodexHome(t *testing.T) {
-	codexHome := t.TempDir()
-	t.Setenv("CODEX_HOME", codexHome)
-	t.Setenv(toolhome.EnvVar, t.TempDir())
-	start := time.Date(2026, 7, 18, 12, 0, 0, 0, time.UTC)
-	sessionDir := filepath.Join(codexHome, "sessions", "2026", "07", "18")
-	if err := os.MkdirAll(sessionDir, 0o755); err != nil {
+	dir := filepath.Join(sessionsDir, "2026", "05", "17")
+	if err := os.MkdirAll(dir, 0o755); err != nil {
 		t.Fatal(err)
 	}
-	want := filepath.Join(sessionDir, "rollout-native-target.jsonl")
-	line := fmt.Sprintf(`{"type":"session_meta","payload":{"id":"%s","cwd":"/synthetic"}}`+"\n", "native-target")
-	if err := os.WriteFile(want, []byte(line), 0o644); err != nil {
+	started := anchor.Add(r.started).UTC()
+	path := filepath.Join(dir, fmt.Sprintf("rollout-%s-%s.jsonl", started.Format("2006-01-02T15-04-05"), r.id))
+	line := fmt.Sprintf(`{"timestamp":"%[1]s","type":"session_meta","payload":{"id":"%[2]s","timestamp":"%[1]s","cwd":"%[3]s","source":"%[4]s"}}`+"\n",
+		started.Format(time.RFC3339Nano), r.id, r.cwd, r.source)
+	if err := os.WriteFile(path, []byte(line), 0o644); err != nil {
 		t.Fatal(err)
 	}
-	if err := os.Chtimes(want, start, start); err != nil {
+	modified := anchor.Add(r.modified)
+	if err := os.Chtimes(path, modified, modified); err != nil {
 		t.Fatal(err)
 	}
-	if got := FindCodexTranscriptForResume("native-target"); got != want {
-		t.Fatalf("FindCodexTranscriptForResume() = %q, want %q", got, want)
+	return path
+}
+
+func TestACodexLaunchFindsTheInteractiveRolloutStartedInItsDirectory(t *testing.T) {
+	anchor := time.Date(2026, 5, 17, 14, 0, 0, 0, time.UTC)
+	cases := []struct {
+		name     string
+		lookIn   string
+		rollouts []codexRollout
+		want     string
+	}{
+		{name: "a link to the directory finds the rollout recorded under its real path",
+			lookIn:   "link/project",
+			rollouts: []codexRollout{{id: "session", cwd: "real/project", source: "cli", started: time.Minute, modified: time.Minute}},
+			want:     "session"},
+		{name: "a classifier's exec rollout started later is not the session",
+			lookIn: "real/project",
+			rollouts: []codexRollout{
+				{id: "session", cwd: "real/project", source: "cli", started: 5 * time.Second, modified: 5 * time.Second},
+				{id: "classifier", cwd: "real/project", source: "exec", started: 11 * time.Second, modified: 11 * time.Second},
+			},
+			want: "session"},
+		{name: "a resumed session found by modification time still skips exec rollouts",
+			lookIn: "real/project",
+			rollouts: []codexRollout{
+				{id: "resumed", cwd: "real/project", source: "cli", started: -2 * time.Hour, modified: time.Minute},
+				{id: "classifier", cwd: "real/project", source: "exec", started: -time.Hour, modified: 2 * time.Minute},
+			},
+			want: "resumed"},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			root := t.TempDir()
+			if err := os.MkdirAll(filepath.Join(root, "real", "project"), 0o755); err != nil {
+				t.Fatal(err)
+			}
+			if err := os.Symlink(filepath.Join(root, "real"), filepath.Join(root, "link")); err != nil {
+				t.Fatal(err)
+			}
+			codexHome := filepath.Join(root, "codex-home")
+			t.Setenv("CODEX_HOME", codexHome)
+			paths := map[string]string{}
+			for _, r := range tc.rollouts {
+				r.cwd = filepath.Join(root, r.cwd)
+				paths[r.id] = writeCodexRollout(t, filepath.Join(codexHome, "sessions"), anchor, r)
+			}
+			if got := FindCodexTranscript(filepath.Join(root, tc.lookIn), anchor); got != paths[tc.want] {
+				t.Errorf("FindCodexTranscript = %q, want the %s rollout %q", got, tc.want, paths[tc.want])
+			}
+		})
 	}
 }
 
-func TestFindCodexTranscriptForResume_OpensOnlyFilenameCandidates(t *testing.T) {
+func TestAResumeLookupOpensOnlyRolloutsNamedForTheConversation(t *testing.T) {
 	sessionsDir := t.TempDir()
 	for i := range 512 {
 		path := filepath.Join(sessionsDir, fmt.Sprintf("rollout-native-decoy-%03d.jsonl", i))
@@ -230,171 +95,12 @@ func TestFindCodexTranscriptForResume_OpensOnlyFilenameCandidates(t *testing.T) 
 	if err := os.WriteFile(want, []byte(`{"type":"session_meta","payload":{"id":"native-target"}}`+"\n"), 0o644); err != nil {
 		t.Fatal(err)
 	}
-
 	opened := 0
 	got := findCodexTranscriptForResumeIn(sessionsDir, "native-target", func(path string) ([]byte, error) {
 		opened++
 		return readFirstJSONLLine(path)
 	})
-	if got != want {
-		t.Fatalf("findCodexTranscriptForResumeIn() = %q, want %q", got, want)
-	}
-	if opened != 1 {
-		t.Fatalf("opened %d transcripts, want only the one filename candidate", opened)
-	}
-}
-
-func TestFindCodexTranscriptForResume_VerifiesCandidateMetadata(t *testing.T) {
-	sessionsDir := t.TempDir()
-	badDir := filepath.Join(sessionsDir, "2026", "07", "17")
-	goodDir := filepath.Join(sessionsDir, "2026", "07", "18")
-	if err := os.MkdirAll(badDir, 0o755); err != nil {
-		t.Fatal(err)
-	}
-	if err := os.MkdirAll(goodDir, 0o755); err != nil {
-		t.Fatal(err)
-	}
-	bad := filepath.Join(badDir, "rollout-native-target.jsonl")
-	if err := os.WriteFile(bad, []byte(`not-json`+"\n"), 0o644); err != nil {
-		t.Fatal(err)
-	}
-	want := filepath.Join(goodDir, "rollout-native-target.jsonl")
-	if err := os.WriteFile(want, []byte(`{"type":"session_meta","payload":{"id":"native-target"}}`+"\n"), 0o644); err != nil {
-		t.Fatal(err)
-	}
-
-	opened := 0
-	got := findCodexTranscriptForResumeIn(sessionsDir, "native-target", func(path string) ([]byte, error) {
-		opened++
-		return readFirstJSONLLine(path)
-	})
-	if got != want {
-		t.Fatalf("findCodexTranscriptForResumeIn() = %q, want %q", got, want)
-	}
-	if opened != 2 {
-		t.Fatalf("opened %d transcripts, want both filename candidates", opened)
-	}
-}
-
-func TestFindCopilotTranscript_PrefersClosestStartTime(t *testing.T) {
-	homeDir := t.TempDir()
-	t.Setenv(toolhome.EnvVar, homeDir)
-
-	cwd := "/repo/project"
-	startedAt := time.Date(2026, 2, 8, 15, 30, 0, 0, time.UTC)
-
-	expected := writeCopilotSessionState(
-		t,
-		homeDir,
-		"session-a",
-		cwd,
-		startedAt.Add(5*time.Second),
-		true,
-		true,
-		startedAt.Add(1*time.Minute),
-	)
-	_ = writeCopilotSessionState(
-		t,
-		homeDir,
-		"session-b",
-		cwd,
-		startedAt.Add(-30*time.Minute),
-		true,
-		true,
-		startedAt.Add(2*time.Minute),
-	)
-
-	got := FindCopilotTranscript(cwd, startedAt)
-	if got != expected {
-		t.Fatalf("FindCopilotTranscript() = %q, want %q", got, expected)
-	}
-}
-
-func TestFindCopilotTranscript_MatchesThroughASymlinkedCWD(t *testing.T) {
-	homeDir := t.TempDir()
-	t.Setenv(toolhome.EnvVar, homeDir)
-
-	real := filepath.Join(t.TempDir(), "project")
-	if err := os.MkdirAll(real, 0o755); err != nil {
-		t.Fatal(err)
-	}
-	link := filepath.Join(t.TempDir(), "link-to-project")
-	if err := os.Symlink(real, link); err != nil {
-		t.Fatal(err)
-	}
-
-	startedAt := time.Date(2026, 2, 8, 15, 30, 0, 0, time.UTC)
-	expected := writeCopilotSessionState(t, homeDir, "session-a", real, startedAt, true, true, startedAt.Add(time.Minute))
-	if got := FindCopilotTranscript(link, startedAt); got != expected {
-		t.Fatalf("FindCopilotTranscript() = %q, want %q", got, expected)
-	}
-}
-
-func TestFindCopilotTranscript_FallsBackToNewestModTime(t *testing.T) {
-	homeDir := t.TempDir()
-	t.Setenv(toolhome.EnvVar, homeDir)
-
-	cwd := "/repo/project"
-	startedAt := time.Date(2026, 2, 8, 15, 30, 0, 0, time.UTC)
-
-	_ = writeCopilotSessionState(
-		t,
-		homeDir,
-		"session-a",
-		cwd,
-		startedAt,
-		false,
-		true,
-		startedAt.Add(1*time.Minute),
-	)
-	expected := writeCopilotSessionState(
-		t,
-		homeDir,
-		"session-b",
-		cwd,
-		startedAt,
-		false,
-		true,
-		startedAt.Add(2*time.Minute),
-	)
-
-	got := FindCopilotTranscript(cwd, startedAt)
-	if got != expected {
-		t.Fatalf("FindCopilotTranscript() = %q, want %q", got, expected)
-	}
-}
-
-func TestFindClaudeTranscript_FindsSessionFile(t *testing.T) {
-	homeDir := t.TempDir()
-	t.Setenv(toolhome.EnvVar, homeDir)
-
-	sessionID := "claude-session-123"
-	projectDir := filepath.Join(homeDir, ".claude", "projects", "-Users-test-repo")
-	if err := os.MkdirAll(projectDir, 0o755); err != nil {
-		t.Fatalf("mkdir project dir: %v", err)
-	}
-
-	expected := filepath.Join(projectDir, sessionID+".jsonl")
-	if err := os.WriteFile(expected, []byte("{}\n"), 0o644); err != nil {
-		t.Fatalf("write transcript: %v", err)
-	}
-
-	got := FindClaudeTranscript(sessionID)
-	if got != expected {
-		t.Fatalf("FindClaudeTranscript() = %q, want %q", got, expected)
-	}
-}
-
-func TestFindClaudeTranscript_ReturnsEmptyWhenMissing(t *testing.T) {
-	homeDir := t.TempDir()
-	t.Setenv(toolhome.EnvVar, homeDir)
-
-	projectDir := filepath.Join(homeDir, ".claude", "projects", "-Users-test-repo")
-	if err := os.MkdirAll(projectDir, 0o755); err != nil {
-		t.Fatalf("mkdir project dir: %v", err)
-	}
-
-	if got := FindClaudeTranscript("missing-session"); got != "" {
-		t.Fatalf("FindClaudeTranscript() = %q, want empty", got)
+	if got != want || opened != 1 {
+		t.Fatalf("the lookup found %q after opening %d rollouts, want %q after opening one", got, opened, want)
 	}
 }

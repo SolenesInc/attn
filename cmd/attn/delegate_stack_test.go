@@ -1,6 +1,7 @@
 package main_test
 
 import (
+	"encoding/json"
 	"fmt"
 	"os"
 	"os/exec"
@@ -169,4 +170,57 @@ func TestDelegateStartsTheRequestItsFlagsDescribeAndRefusesRetiredOnes(t *testin
 			run.Exit(0)
 		})
 	}
+}
+
+func TestDelegateRolesEditWalkBackAndRestoreTheDaemonsTable(t *testing.T) {
+	t.Parallel()
+	s := testworld.NewStack(t)
+	s.Start()
+	roles := func(args ...string) string {
+		t.Helper()
+		got := s.Attn(append([]string{"delegate", "roles"}, args...)...)
+		if got.Code != 0 {
+			t.Fatalf("attn delegate roles %q exited %d: %s", args, got.Code, got.Stderr)
+		}
+		return got.Stdout
+	}
+	refused := func(want string, args ...string) {
+		t.Helper()
+		if got := s.Attn(append([]string{"delegate", "roles"}, args...)...); got.Code == 0 || !strings.Contains(got.Stderr, want) {
+			t.Errorf("attn delegate roles %q exited %d with stderr %q, want a refusal containing %q", args, got.Code, got.Stderr, want)
+		}
+	}
+
+	requireLines(t, "roles add", roles("add", "build", "--name", "Build", "--agent", "claude", "--model", "opus", "--effort", "high", "-m", "the user wants a builder"),
+		"revision 1", "added role build (claude opus high)")
+	requireLines(t, "roles add alternative", roles("add", "build/hard", "--when", "Concurrency", "--agent", "codex", "--model", "gpt-5.6-sol"),
+		"build: added alternative hard (codex gpt-5.6-sol)")
+	requireLines(t, "roles set", roles("set", "build", "--model", "sonnet"), "revision 3", "build: claude opus high → claude sonnet")
+	refused("needs a default choice", "rm", "build/default")
+
+	var exported protocol.DelegationPreferences
+	s.Attn("delegate", "roles", "show", "--json").JSON(t, &exported)
+	if exported.Revision != 3 || len(exported.Roles) != 1 {
+		t.Fatalf("roles show --json after a refused edit = revision %d with %d roles, want revision 3 with build", exported.Revision, len(exported.Roles))
+	}
+	slices.Reverse(exported.Roles[0].Choices)
+	raw, err := json.Marshal(exported)
+	if err != nil {
+		t.Fatal(err)
+	}
+	edited := s.Path("roles.json")
+	if err := os.MkdirAll(filepath.Dir(edited), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(edited, raw, 0o600); err != nil {
+		t.Fatal(err)
+	}
+	requireLines(t, "roles apply", roles("apply", edited), "revision 4", "build: reordered alternatives")
+	refused("the table changed after revision 3", "apply", edited)
+
+	requireLines(t, "roles rollback", roles("rollback"), "revision 5 restores revision 3", "build: reordered alternatives")
+	requireLines(t, "roles rollback", roles("rollback"), "revision 6 restores revision 2", "build: claude sonnet → claude opus high")
+	requireLines(t, "roles rollback 4", roles("rollback", "4"), "revision 7 restores revision 4", "build: claude opus high → claude sonnet", "build: reordered alternatives")
+	requireLines(t, "roles show", roles("show"), "revision 7", "build", "claude sonnet", "/hard", "when: Concurrency")
+	requireLines(t, "roles history", roles("history", "--limit", "7"), "revision 7 (live)", "restores 4", "from the CLI", `"the user wants a builder"`, "added role build (claude opus high)")
 }

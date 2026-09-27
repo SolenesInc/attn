@@ -77,3 +77,42 @@ func TestAppStatusSaysWhatTheRuntimeAndReconcileOwe(t *testing.T) {
 	requireLines(t, "digest's reconcile row", statusRow(t, s.Attn("app", "status", "digest"), "reconcile:"),
 		fmt.Sprintf("owed through seq %d (version_changed)", owed.Reason.ThroughSeq))
 }
+
+func TestOwedAppReconcileSurvivesADaemonRestart(t *testing.T) {
+	t.Parallel()
+	s := testworld.NewStack(t)
+	s.Start()
+	applyApp(t, s, "digest", subscribedApp("digest", "ticket.*", true), "export default { edition: 1 }\n")
+	requireStdout(t, s.Attn("app", "disable", "digest"), "app digest disabled")
+	applyApp(t, s, "digest", subscribedApp("digest", "ticket.*", true), "export default { edition: 2 }\n")
+
+	owedReconcile := func() string {
+		var status struct {
+			Reconcile struct {
+				State  string `json:"state"`
+				Reason *struct {
+					Causes           []string `json:"causes"`
+					Version          int      `json:"version"`
+					ThroughSeq       int      `json:"through_seq"`
+					PreviousVersions []int    `json:"previous_versions"`
+				} `json:"reason"`
+			} `json:"reconcile"`
+		}
+		s.Attn("app", "status", "digest", "--json").JSON(t, &status)
+		if status.Reconcile.Reason == nil {
+			return status.Reconcile.State
+		}
+		return fmt.Sprintf("%s %+v", status.Reconcile.State, *status.Reconcile.Reason)
+	}
+	before := owedReconcile()
+	if want := "owed {Causes:[version_changed] Version:2 ThroughSeq:"; !strings.HasPrefix(before, want) || strings.Contains(before, "ThroughSeq:0 ") {
+		t.Fatalf("digest's reconcile after a version move while disabled = %s, want owed for the version change through a fence", before)
+	}
+
+	s.Stop()
+	s.Start()
+
+	if after := owedReconcile(); after != before {
+		t.Fatalf("digest's owed reconcile across a daemon restart:\nbefore %s\nafter  %s", before, after)
+	}
+}

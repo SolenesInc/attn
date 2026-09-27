@@ -567,6 +567,31 @@ describe('SettingsModal font size', () => {
 
     expect(savedSettings(daemon)).toEqual([['gardenScale', '1.4'], ['gardenScale', '']]);
   });
+
+  it('steps the garden from the app’s own size when it first leaves Match app, and sizes the garden by it', async () => {
+    const daemon = await openSection('general', { settings: { uiScale: '1.1' } });
+    const gardenScale = () => document.documentElement.style.getPropertyValue('--garden-scale');
+    expect(gardenScale()).toBe('');
+
+    await gesture(daemon, () => fireEvent.click(screen.getByLabelText('Increase garden font size')));
+    expect(screen.getByTestId('settings-garden-font-scale-value')).toHaveTextContent('120%');
+    expect(gardenScale()).toBe('1.2');
+
+    await gesture(daemon, () => fireEvent.click(screen.getByText('Match app', { selector: 'button' })));
+    expect(gardenScale()).toBe('');
+    expect(savedSettings(daemon).filter(([key]) => key === 'gardenScale')).toEqual([['gardenScale', '1.2'], ['gardenScale', '']]);
+  });
+
+  it.each([
+    ['1.5', 'Increase garden font size', '150%'],
+    ['0.7', 'Decrease garden font size', '70%'],
+  ])('holds the garden at its bound from %s', async (stored, control, shown) => {
+    const daemon = await openSection('general', { settings: { gardenScale: stored } });
+
+    await gesture(daemon, () => fireEvent.click(screen.getByLabelText(control)));
+
+    expect(screen.getByTestId('settings-garden-font-scale-value')).toHaveTextContent(shown);
+  });
 });
 
 describe('SettingsModal automation handle', () => {

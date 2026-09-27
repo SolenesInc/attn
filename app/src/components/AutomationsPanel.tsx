@@ -30,11 +30,11 @@ type EditorTarget = { definitionId: string | null } | null;
 
 // session_id/pane_id are always present on AutomationRunSummary but "" means absent.
 // absent, so a plain truthiness check is the correct emptiness test.
-export type RunNavigationTarget =
+type RunNavigationTarget =
   | { kind: 'session'; sessionId: string; paneId: string | null }
   | null;
 
-export function runNavigationTarget(run: AutomationRunSummary): RunNavigationTarget {
+function runNavigationTarget(run: AutomationRunSummary): RunNavigationTarget {
   if (run.session_id) return { kind: 'session', sessionId: run.session_id, paneId: run.pane_id || null };
   return null;
 }

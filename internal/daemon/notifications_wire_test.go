@@ -108,3 +108,38 @@ func markNotificationRead(app *testworld.Peer, id *string) protocol.Notification
 	return testworld.Request(app, protocol.NotificationMarkReadMessage{Cmd: protocol.CmdNotificationMarkRead, NotificationID: id, RequestID: protocol.Ptr(requestID)},
 		protocol.EventNotificationMarkReadResult, func(r protocol.NotificationMarkReadResultMessage) bool { return r.RequestID == requestID })
 }
+
+func TestATaskThatFailsForGoodLeavesOneWarningWhoseRetryRequeuesIt(t *testing.T) {
+	inBubble(t, func(t *testing.T, w *world) {
+		app, cli := w.App(), w.Client()
+		gardenReviewRegisteredAbandonedSeed(t, w, cli, "gardener", "Old checkout work")
+		gardenReviewStart(t, cli)
+		w.advance(0)
+		w.advance(time.Minute)
+		w.advance(2 * time.Minute)
+
+		feed := listNotifications(app)
+		if len(feed.Notifications) != 1 || feed.UnreadCount != 1 || feed.UnreadCriticalCount != 0 {
+			t.Fatalf("feed = %+v, want one unread warning and nothing critical", feed)
+		}
+		warning := feed.Notifications[0]
+		if warning.Kind != "task_failed" || warning.Severity != protocol.NotificationSeverityWarning || warning.SourceKind != "task" ||
+			!strings.Contains(warning.Title, "Old checkout work") || warning.Trigger == "" || warning.Impact == "" || warning.Cause == "" {
+			t.Errorf("the warning = %+v, want a task_failed warning naming the item, its trigger, impact and cause", warning)
+		}
+		if len(warning.Actions) != 1 || warning.Actions[0].Kind != "retry_task" || warning.Actions[0].TargetID != warning.SourceID {
+			t.Fatalf("the warning offers %+v, want one retry of its task", warning.Actions)
+		}
+
+		requestID := uuid.NewString()
+		retried := testworld.Request(app, protocol.TaskRetryMessage{Cmd: protocol.CmdTaskRetry, TaskID: warning.Actions[0].TargetID, RequestID: protocol.Ptr(requestID)},
+			protocol.EventTaskRetryResult, func(r protocol.TaskRetryResultMessage) bool { return r.RequestID == requestID })
+		if !retried.Success || retried.Task == nil || retried.Task.State != "queued" || retried.Task.Attempts != 0 {
+			t.Fatalf("retrying the dead task = %+v, want it queued with its attempts reset", retried)
+		}
+		w.advance(0)
+		if again := listNotifications(app); len(again.Notifications) != 1 {
+			t.Errorf("after the retried task failed once more the feed holds %d notifications, want still one", len(again.Notifications))
+		}
+	})
+}

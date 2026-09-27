@@ -189,6 +189,9 @@ func (d *Daemon) runDelegationOperationProtected(protection foregroundCleanupPro
 		return
 	}
 	result, launchErr := d.delegateOperationProtected(protection, runtime, id, record.Operation.SessionID, protocol.Deref(record.Operation.WorktreePath), record.WorktreeOwned, record.WorktreeToken, record.ChiefSessionID, resolved)
+	if errors.Is(launchErr, errDelegationInterrupted) {
+		return
+	}
 	if launchErr != nil {
 		d.finishDelegationFailure(id, launchErr)
 		return

@@ -17,7 +17,7 @@ function ActingView() {
   const refresh = useCommand('refresh');
   const [answer, setAnswer] = useState('none yet');
   const show = (outcome: Awaited<ReturnType<typeof approve>>) => {
-    if (outcome.ok) setAnswer(JSON.stringify(outcome.value) ?? 'nothing');
+    setAnswer(outcome.ok ? JSON.stringify(outcome.value) ?? 'nothing' : `refused: ${outcome.code ?? 'no code'}`);
   };
   return (
     <>
@@ -74,5 +74,22 @@ describe('a view invoking a command', () => {
     await gesture(daemon, () => fireEvent.click(screen.getByRole('button', { name: 'Approve' })));
 
     expect(screen.getByTestId('command-error').textContent).toContain('attn app enable reviewer');
+  });
+
+  it.each([
+    ['names the refusal', { error_code: 'reconcile_owed' }, 'refused: reconcile_owed'],
+    ['names none', {}, 'refused: no code'],
+  ])('hands the view a refusal that %s as the daemon gave it', async (_, refusal, answer) => {
+    const daemon = await openActingView({
+      event: 'app_command_result',
+      success: false,
+      error: 'reviewer is rebuilding its collections',
+      ...refusal,
+    });
+
+    await gesture(daemon, () => fireEvent.click(screen.getByRole('button', { name: 'Approve' })));
+
+    expect(screen.getByTestId('command-answer')).toHaveTextContent(answer);
+    expect(screen.getByTestId('command-error')).toHaveTextContent('reviewer is rebuilding its collections');
   });
 });

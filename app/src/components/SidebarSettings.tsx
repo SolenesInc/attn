@@ -77,7 +77,6 @@ export function SidebarSettings({
             className="sidebar-settings-switch-row sidebar-settings-switch-row--lead"
             role="switch"
             aria-checked={queueModeEnabled}
-            data-testid="toggle-queue-mode"
             onClick={() => onToggleQueueMode?.()}
           >
             <span className="sidebar-settings-switch-label">Agent queue</span>
@@ -91,7 +90,6 @@ export function SidebarSettings({
             className="sidebar-settings-switch-row"
             role="switch"
             aria-checked={crewQueueEnabled}
-            data-testid="toggle-crew-queue"
             onClick={() => onToggleCrewQueue?.()}
           >
             <span className="sidebar-settings-switch-label">Crew in queue</span>
@@ -105,7 +103,6 @@ export function SidebarSettings({
             className="sidebar-settings-switch-row sidebar-settings-switch-row--adjacent"
             role="switch"
             aria-checked={harnessLogosEnabled}
-            data-testid="toggle-harness-logos"
             onClick={() => onToggleHarnessLogos?.()}
           >
             <span className="sidebar-settings-switch-label">Harness logos</span>

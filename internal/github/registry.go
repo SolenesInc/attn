@@ -71,28 +71,6 @@ func (r *ClientRegistry) FetchAllPRs() ([]*protocol.PR, error) {
 	return allPRs, errOut
 }
 
-func (r *ClientRegistry) IsAnyHostRateLimited(resource string) bool {
-	clients := r.snapshotClients()
-	for _, client := range clients {
-		if limited, _ := client.IsRateLimited(resource); limited {
-			return true
-		}
-	}
-	return false
-}
-
-func (r *ClientRegistry) GetRateLimitedHosts(resource string) []string {
-	clients := r.snapshotClients()
-	var hosts []string
-	for host, client := range clients {
-		if limited, _ := client.IsRateLimited(resource); limited {
-			hosts = append(hosts, host)
-		}
-	}
-	sort.Strings(hosts)
-	return hosts
-}
-
 func NewClientForHost(host, apiURL, token string) (*Client, error) {
 	if apiURL == "" {
 		apiURL = mapHostToAPIURL(host)

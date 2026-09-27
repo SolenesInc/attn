@@ -44,3 +44,18 @@ func TestActivityStaysOffUntilTheUserNamesAnAgentItCanRun(t *testing.T) {
 		namesTheUnsetAgent("the refused " + refused.raw)
 	}
 }
+
+func TestActivityIntervalsDefaultAndClampIntoTheirRange(t *testing.T) {
+	w := newWorld(t)
+	app := w.App()
+	if got := app.Initial.Settings["activity.intervals"]; got != `{"watching":120,"present":300}` {
+		t.Errorf("with nothing saved the app is sent intervals %v, want the defaults", got)
+	}
+	setSetting(t, app, "activity.intervals", `{"watching":1,"present":99999}`)
+	if got := w.App().Initial.Settings["activity.intervals"]; got != `{"watching":30,"present":3600}` {
+		t.Errorf("out-of-range intervals are reported as %v, want them clamped to 30 and 3600 seconds", got)
+	}
+	if refused := gardenAdvisorSetSetting(app, "activity.intervals", `{"watching":120,"away":0}`); protocol.Deref(refused.Success) {
+		t.Error("an away interval was accepted; away stops generation rather than setting a rate")
+	}
+}

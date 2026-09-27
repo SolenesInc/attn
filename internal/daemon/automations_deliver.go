@@ -72,11 +72,11 @@ func automationFailureComment(run *store.AutomationRun, message string) string {
 func (d *Daemon) cancelAutomationRun(run *store.AutomationRun, reason, message string) (*store.AutomationRun, error) {
 	now := time.Now()
 	var persistErr error
-	if err := d.store.MarkAutomationRunCancelled(run.ID, reason, now); err != nil {
-		persistErr = errors.Join(persistErr, fmt.Errorf("mark run cancelled: %w", err))
-	}
 	if err := d.recordAutomationRunSeedOutcome(run, automationFailureComment(run, message)); err != nil {
 		persistErr = errors.Join(persistErr, err)
+	}
+	if err := d.store.MarkAutomationRunCancelled(run.ID, reason, now); err != nil {
+		persistErr = errors.Join(persistErr, fmt.Errorf("mark run cancelled: %w", err))
 	}
 	d.broadcastAutomationsChanged(run.DefinitionID)
 	cancelled, err := d.store.GetAutomationRun(run.ID)

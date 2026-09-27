@@ -206,6 +206,9 @@ func (d *Daemon) refreshSessionPullRequestsContext(ctx context.Context, now time
 		if status == group.previous {
 			continue
 		}
+		if status.State == sessionPullRequestMerged {
+			crashAt(crashAfterMergePersisted)
+		}
 		changed++
 		if err := d.store.TouchSessionPullRequestActivity(group.prID, now); err != nil {
 			d.logf("session pull requests: mark %s active: %v", group.prID, err)

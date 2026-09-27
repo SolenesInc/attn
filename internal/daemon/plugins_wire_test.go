@@ -79,6 +79,34 @@ func TestAPluginThatExitsIsShownBackingOffWithItsExit(t *testing.T) {
 	}
 }
 
+func TestAPluginThatNeverStaysUpIsParkedWithACriticalNotificationThatSurvivesARestart(t *testing.T) {
+	inBubble(t, func(t *testing.T, w *world) {
+		app := w.App()
+		checkout := pluginsCheckout(t, w.Path("checkouts", "looper"), "looper", "0.1.0", pluginsCrash)
+		pluginsAct(t, app, protocol.InstallPluginMessage{Cmd: protocol.CmdInstallPlugin, Source: checkout, Link: protocol.Ptr(true)}, "link", "looper")
+
+		w.advance(3 * time.Minute)
+		parked := pluginsListed(app, "looper parked", func(plugins []protocol.PluginInfo) bool {
+			p, ok := pluginsNamed(plugins, "looper")
+			return ok && protocol.Deref(p.RuntimePhase) == "parked"
+		})
+		if p, _ := pluginsNamed(parked, "looper"); p.RuntimeState != "parked" || p.NextRestartAt != nil {
+			t.Errorf("the parked plugin is listed %s with next restart %v, want parked with none scheduled", p.RuntimeState, protocol.Deref(p.NextRestartAt))
+		}
+
+		w.restart()
+		var notes []protocol.Notification
+		for _, n := range listNotifications(w.App()).Notifications {
+			if n.Kind == "plugin_parked" {
+				notes = append(notes, n)
+			}
+		}
+		if len(notes) != 1 || notes[0].Severity != "critical" || !strings.Contains(notes[0].Title, "looper") || !strings.Contains(notes[0].Detail, "exit status 17") {
+			t.Errorf("after a restart the plugin notifications are %+v, want one critical note naming looper and its last exit", notes)
+		}
+	})
+}
+
 func TestInstallingAndRemovingAPluginFromGit(t *testing.T) {
 	alive := filepath.Join(t.TempDir(), "alive")
 	if err := syscall.Mkfifo(alive, 0o600); err != nil {

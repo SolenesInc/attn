@@ -4,6 +4,7 @@ import { act, fireEvent, render, type RenderResult } from '@testing-library/reac
 import { vi } from 'vitest';
 import App from '../App';
 import { defaultShortcut, type ShortcutId } from '../shortcuts/registry';
+import { forgetAppMemory } from './appMemory';
 import { installScriptedDaemon, type ScriptedDaemon, type ScriptedDaemonOptions } from './scriptedDaemon';
 
 vi.mock('../ghostty/wasm', async () => {
@@ -50,6 +51,12 @@ export async function renderApp(options: ScriptedDaemonOptions = {}): Promise<Ap
   const result = render(<App />);
   await act(() => daemon.connected());
   return { daemon, ...result };
+}
+
+export async function restartApp(running: AppRender, options: ScriptedDaemonOptions = {}): Promise<AppRender> {
+  running.unmount();
+  forgetAppMemory();
+  return renderApp(options);
 }
 
 export async function gesture(daemon: ScriptedDaemon, action: () => void) {

@@ -46,6 +46,32 @@ func TestARespawnResumesTheConversationClaudeStartedWithClear(t *testing.T) {
 	}
 }
 
+func TestARespawnResumesTheConversationCodexStartedWithNew(t *testing.T) {
+	w := newWorld(t, fakeagent.Codex)
+	app := w.App()
+	cwd := w.Path("shop")
+	session := w.Spawn(app, fakeagent.Codex, cwd)
+	first := w.Launched(session)
+	launched := first.ConversationID
+	app.TypeLine(session, "/new")
+	if got := first.Prompted(); got != "/new" {
+		t.Fatalf("codex received %q", got)
+	}
+	app.TypeLine(session, "add a discount field")
+	first.Prompted()
+	started := first.ConversationID
+	if started == launched {
+		t.Fatalf("/new kept codex in conversation %s", launched)
+	}
+	first.Reply("Added. <!-- attn:state=idle -->")
+	testworld.AwaitSession(app, session, func(s protocol.Session) bool { return s.State == protocol.SessionStateIdle })
+
+	resumed := respawn(w, app, fakeagent.Codex, session, cwd)
+	if !resumed.Resumed || resumed.ConversationID != started {
+		t.Fatalf("respawn ran codex %q; want it to resume %s, the conversation /new started", resumed.Argv, started)
+	}
+}
+
 func TestASessionLaunchedToResumeAConversationKeepsResumingIt(t *testing.T) {
 	w := newWorld(t, fakeagent.Codex)
 	app := w.App()

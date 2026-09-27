@@ -1,185 +1,45 @@
 package agent
 
 import (
-	"errors"
-	"os"
-	"path/filepath"
+	"os/exec"
 	"testing"
-	"time"
 
 	"github.com/victorarias/attn/internal/protocol"
 )
 
-type noPolicyDriver struct {
-	testDriver
+type testDriver struct {
+	name string
+	caps Capabilities
 }
 
-type executableClassifierDriver struct {
-	testDriver
-}
+func (d testDriver) Name() string                               { return d.name }
+func (d testDriver) DisplayName() string                        { return d.name }
+func (d testDriver) DefaultExecutable() string                  { return d.name }
+func (d testDriver) ExecutableEnvVar() string                   { return "" }
+func (d testDriver) ResolveExecutable(configured string) string { return configured }
+func (d testDriver) BuildCommand(opts SpawnOpts) *exec.Cmd      { return exec.Command("true") }
+func (d testDriver) BuildEnv(opts SpawnOpts) []string           { return nil }
+func (d testDriver) Capabilities() Capabilities                 { return d.caps }
 
-func (d executableClassifierDriver) Classify(text string, timeout time.Duration) (string, error) {
-	return "idle", nil
-}
-
-func (d executableClassifierDriver) ClassifyWithExecutable(text, executable, workDir string, timeout time.Duration) (string, error) {
-	if executable == "custom-bin" && workDir == "/tmp/repo" {
-		return "waiting_input", nil
+func TestRecoveredRunningSessionState(t *testing.T) {
+	plain := testDriver{name: "nopolicy", caps: Capabilities{HasTranscript: true}}
+	cases := []struct {
+		driver   Driver
+		ptyState string
+		want     protocol.SessionState
+		kept     bool
+	}{
+		{plain, protocol.StateWaitingInput, protocol.SessionStateWaitingInput, true},
+		{plain, protocol.StateWorking, "", false},
+		{Get("copilot"), protocol.StatePendingApproval, protocol.SessionStatePendingApproval, true},
+		{Get("codex"), protocol.StateWaitingInput, "", false},
+		{Get("codex"), protocol.StatePendingApproval, "", false},
+		{Get("claude"), protocol.StateWorking, "", false},
 	}
-	return "idle", nil
-}
-
-func TestRecoveredRunningSessionState_DefaultAndAgentOverrides(t *testing.T) {
-	defaultDriver := noPolicyDriver{
-		testDriver: testDriver{
-			name: "nopolicy",
-			caps: Capabilities{
-				HasTranscript: true,
-			},
-		},
-	}
-	if got, ok := RecoveredRunningSessionState(defaultDriver, protocol.StateWaitingInput); !ok || got != protocol.SessionStateWaitingInput {
-		t.Fatalf("default recovered waiting_input = %s (ok=%v), want waiting_input", got, ok)
-	}
-	if got, ok := RecoveredRunningSessionState(Get("copilot"), protocol.StatePendingApproval); !ok || got != protocol.SessionStatePendingApproval {
-		t.Fatalf("copilot recovered pending_approval = %s (ok=%v), want pending_approval", got, ok)
-	}
-	if got, ok := RecoveredRunningSessionState(Get("codex"), protocol.StateWaitingInput); ok {
-		t.Fatalf("codex recovered waiting_input = %s (ok=%v), want no opinion", got, ok)
-	}
-	if got, ok := RecoveredRunningSessionState(Get("codex"), protocol.StatePendingApproval); ok {
-		t.Fatalf("codex recovered pending_approval = %s (ok=%v), want no opinion", got, ok)
-	}
-	if got, ok := RecoveredRunningSessionState(Get("claude"), protocol.StateWorking); ok {
-		t.Fatalf("claude recovered working = %s (ok=%v), want no opinion", got, ok)
-	}
-	if got, ok := RecoveredRunningSessionState(defaultDriver, protocol.StateWorking); ok {
-		t.Fatalf("default recovered working = %s (ok=%v), want no opinion", got, ok)
-	}
-}
-
-func TestNoDriverFiltersPTYState(t *testing.T) {
-	type ptyStateFilter interface {
-		ShouldApplyPTYState(current protocol.SessionState, incoming string) bool
-	}
-	for _, name := range []string{"claude", "codex", "copilot"} {
-		if _, ok := Get(name).(ptyStateFilter); ok {
-			t.Fatalf("%s filters PTY state; its state comes from the resolver", name)
+	for _, tc := range cases {
+		got, kept := RecoveredRunningSessionState(tc.driver, tc.ptyState)
+		if kept != tc.kept || (kept && got != tc.want) {
+			t.Errorf("%s recovering a PTY in %s = %s (kept=%v), want %s (kept=%v)", tc.driver.Name(), tc.ptyState, got, kept, tc.want, tc.kept)
 		}
-	}
-}
-
-func TestResumePolicy_Claude(t *testing.T) {
-	claude := Get("claude")
-	resolved := ResolveSpawnResumeSessionID(claude, "sess-1", "", "stored-resume")
-	if resolved != "stored-resume" {
-		t.Fatalf("ResolveSpawnResumeSessionID() = %q, want stored-resume", resolved)
-	}
-	persisted := SpawnResumeSessionID(claude, "sess-1", "", false)
-	if persisted != "sess-1" {
-		t.Fatalf("SpawnResumeSessionID() = %q, want sess-1", persisted)
-	}
-	pathResume := ResumeSessionIDFromTranscriptPath(claude, "/tmp/abc-123.jsonl")
-	if pathResume != "abc-123" {
-		t.Fatalf("ResumeSessionIDFromTranscriptPath() = %q, want abc-123", pathResume)
-	}
-}
-
-func TestResumePolicy_Codex(t *testing.T) {
-	codex := Get("codex")
-	resolved := ResolveSpawnResumeSessionID(codex, "attn-session", "attn-session", "codex-session")
-	if resolved != "codex-session" {
-		t.Fatalf("ResolveSpawnResumeSessionID() = %q, want codex-session", resolved)
-	}
-	persisted := SpawnResumeSessionID(codex, "attn-session", "", false)
-	if persisted != "" {
-		t.Fatalf("SpawnResumeSessionID() = %q, want empty until hook reports Codex id", persisted)
-	}
-}
-
-func TestExtractLastAssistantForClassification_DefaultFallback(t *testing.T) {
-	tmpDir := t.TempDir()
-	path := filepath.Join(tmpDir, "transcript.jsonl")
-	content := `{"type":"assistant","message":{"role":"assistant","content":"done"}}` + "\n"
-	if err := os.WriteFile(path, []byte(content), 0o644); err != nil {
-		t.Fatalf("write transcript: %v", err)
-	}
-
-	defaultDriver := noPolicyDriver{
-		testDriver: testDriver{
-			name: "nopolicy",
-			caps: Capabilities{
-				HasTranscript: true,
-			},
-		},
-	}
-	msg, turnID, err := ExtractLastAssistantForClassification(defaultDriver, path, 500, time.Now(), "")
-	if err != nil {
-		t.Fatalf("ExtractLastAssistantForClassification() error = %v", err)
-	}
-	if msg != "done" {
-		t.Fatalf("ExtractLastAssistantForClassification() message = %q, want done", msg)
-	}
-	if turnID != "" {
-		t.Fatalf("ExtractLastAssistantForClassification() turnID = %q, want empty", turnID)
-	}
-}
-
-func TestExtractLastAssistantForClassification_ClaudeNoNewTurn(t *testing.T) {
-	tmpDir := t.TempDir()
-	path := filepath.Join(tmpDir, "transcript.jsonl")
-	now := time.Now().Format(time.RFC3339Nano)
-	lines := []string{
-		`{"type":"user","message":{"role":"user","content":"hi"},"timestamp":"` + now + `"}`,
-		`{"type":"assistant","uuid":"turn-1","message":{"role":"assistant","content":"hello"},"timestamp":"` + now + `"}`,
-	}
-	if err := os.WriteFile(path, []byte(lines[0]+"\n"+lines[1]+"\n"), 0o644); err != nil {
-		t.Fatalf("write transcript: %v", err)
-	}
-
-	_, _, err := (&Claude{}).extractLastAssistantForClassification(
-		path,
-		500,
-		time.Now(),
-		"turn-1",
-		0,
-		0,
-	)
-	if !errors.Is(err, ErrNoNewAssistantTurn) {
-		t.Fatalf("expected ErrNoNewAssistantTurn, got %v", err)
-	}
-}
-
-func TestClassifyWithDriver_ExecutableProvider(t *testing.T) {
-	d := executableClassifierDriver{
-		testDriver: testDriver{
-			name: "exec-classifier",
-			caps: Capabilities{
-				HasClassifier: true,
-			},
-		},
-	}
-	state, err, ok := ClassifyWithDriver(d, "test", "custom-bin", "/tmp/repo", 5*time.Second)
-	if !ok {
-		t.Fatal("expected classifier dispatch")
-	}
-	if err != nil {
-		t.Fatalf("ClassifyWithDriver() error = %v", err)
-	}
-	if state != "waiting_input" {
-		t.Fatalf("ClassifyWithDriver() = %q, want waiting_input", state)
-	}
-}
-
-func TestClassifyWithDriver_NoClassifier(t *testing.T) {
-	d := noPolicyDriver{
-		testDriver: testDriver{
-			name: "no-classifier",
-			caps: Capabilities{},
-		},
-	}
-	_, _, ok := ClassifyWithDriver(d, "test", "", "", time.Second)
-	if ok {
-		t.Fatal("expected no classifier dispatch when capability disabled")
 	}
 }

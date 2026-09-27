@@ -489,6 +489,9 @@ func (m *sessionInputModule) try(ctx context.Context, delivery sessionInputDeliv
 	if key == "" || strings.TrimSpace(delivery.sessionID) == "" || strings.TrimSpace(delivery.text) == "" {
 		return sessionInputAttempt{id: delivery.id, stage: sessionInputIndeterminate, reason: sessionInputReasonUnsupported, err: errors.New("session input needs an attempt id, session id, and text")}
 	}
+	ctx, cancel := context.WithCancel(ctx)
+	defer cancel()
+	defer context.AfterFunc(m.daemon.lifetime(), cancel)()
 	lane := m.lane(delivery.sessionID)
 	lane.mu.Lock()
 	defer lane.mu.Unlock()

@@ -1,9 +1,14 @@
 package main_test
 
 import (
+	"os"
+	"os/exec"
+	"path/filepath"
+	"regexp"
 	"strings"
 	"testing"
 
+	"github.com/victorarias/attn/internal/automode"
 	"github.com/victorarias/attn/internal/fakeagent"
 	"github.com/victorarias/attn/internal/protocol"
 	"github.com/victorarias/attn/internal/testworld"
@@ -93,6 +98,18 @@ func TestAutoModeRecordsRuleProposalsFromTheirTokensAndListsDenials(t *testing.T
 	requireStdout(t, shown, "pending proposals (promote them in the attn app):\n",
 		"allow, bypass sandbox: git push origin", "allow, bypass sandbox: git fetch origin",
 		"prompt, inherit sandbox: git rebase", "allow, inherit sandbox: cargo test", "allow, inherit sandbox: go vet")
+	if !regexp.MustCompile(`(?m)^  trusted_repo +\(unset: `).MatchString(shown.Stdout) {
+		t.Errorf("outside a repository automode show offers a trusted_repo:\n%s", shown.Stdout)
+	}
+	widgets := s.Path("widgets")
+	gitRepo(t, widgets)
+	for _, remote := range [][]string{{"origin", "git@github.com:acme/widgets.git"}, {"upstream", "https://github.com/upstream-org/widgets"}} {
+		if out, err := exec.Command("git", "-C", widgets, "remote", "add", remote[0], remote[1]).CombinedOutput(); err != nil {
+			t.Fatalf("git remote add %s: %v: %s", remote[0], err, out)
+		}
+	}
+	inRepo := s.Run(testworld.Invocation{Args: []string{"automode", "show"}, Dir: widgets})
+	requireStdout(t, inRepo, "(detected here: ", filepath.Base(widgets)+", github.com/acme/widgets, github.com/upstream-org/widgets)")
 
 	app := s.App()
 	awaitAgentAvailable(app, fakeagent.Pi)
@@ -122,4 +139,10 @@ func TestAutoModeRecordsRuleProposalsFromTheirTokensAndListsDenials(t *testing.T
 	if strings.Contains(spaced.Stdout, fetcher) || joined.Code != 0 || joined.Stdout != spaced.Stdout {
 		t.Errorf("--limit 1 printed:\n%s\n--limit=1 exited %d and printed:\n%s\nwant the newest denial alone from both", spaced.Stdout, joined.Code, joined.Stdout)
 	}
+
+	rotated := `{"type":"rotated","dropped":3}` + "\n"
+	if err := os.WriteFile(automode.DenialLedgerPath(s.Dir)+".1", []byte(rotated), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	requireStdout(t, s.Attn("automode", "denials"), pusher, fetcher, "note: 3 older denials were dropped when the local ledger rotated")
 }

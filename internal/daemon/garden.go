@@ -393,9 +393,6 @@ func (d *Daemon) projectGardenSeeds() {
 			d.logf("garden: %d seeds, pushing the newest %d (limit %d); the panel says so",
 				total, len(seeds), gardenSnapshotLimit)
 		}
-		if d.gardenBroadcastHook != nil {
-			d.gardenBroadcastHook(seeds, total)
-		}
 		if d.wsHub == nil {
 			return
 		}
@@ -587,9 +584,6 @@ func (d *Daemon) mintAndPlantProtected(protection foregroundCleanupProtection, s
 }
 
 func (d *Daemon) mintSeedID() (string, error) {
-	if d.gardenMintID != nil {
-		return d.gardenMintID()
-	}
 	return garden.NewID()
 }
 
@@ -888,7 +882,7 @@ func (d *Daemon) handleSeedLink(conn net.Conn, msg *protocol.SeedLinkMessage) {
 
 	const attempts = 3
 	for range attempts {
-		read, err := d.readGarden()
+		read, err := d.readGardenTo(0)
 		if err != nil {
 			d.sendGardenError(conn, verb, err)
 			return
@@ -1942,10 +1936,7 @@ func (d *Daemon) readNotesDomain(seedID string) ([]garden.Note, error) {
 	if d.store == nil {
 		return nil, errors.New("no database")
 	}
-	page := d.gardenNotePageSize
-	if page <= 0 {
-		page = docstore.MaxLimit
-	}
+	page := docstore.MaxLimit
 	notes := []garden.Note{}
 	after := ""
 	for {

@@ -1,11 +1,15 @@
 package daemon_test
 
 import (
+	"context"
 	"fmt"
+	"net"
 	"path/filepath"
 	"slices"
 	"strings"
 	"testing"
+
+	"nhooyr.io/websocket"
 
 	"github.com/victorarias/attn/internal/protocol"
 	"github.com/victorarias/attn/internal/testworld"
@@ -97,6 +101,43 @@ func TestAWatchedRootStaysWatchedUntilItsLastClientUnwatches(t *testing.T) {
 		return m.Root == shared && (slices.Contains(m.Paths, "no-longer-watched.txt") || slices.Contains(m.Paths, "watched-again.txt"))
 	}); slices.Contains(first.Paths, "no-longer-watched.txt") {
 		t.Fatalf("after its last client unwatched it, %s still reported %+v", shared, first)
+	}
+}
+
+func TestAWatchedRootOutlivesAClientThatVanishesWithoutUnwatching(t *testing.T) {
+	w := newFsWorld(t)
+	vanishing, vanish := peerThatCanVanish(w, func() *testworld.Peer { return pickerApp(w) })
+	staying := pickerApp(w)
+	shared := fsDir(t, "shared")
+	fsMustWatch(t, vanishing, shared)
+	fsMustWatch(t, staying, shared)
+
+	vanish()
+	fsWriteFile(t, filepath.Join(shared, "still-watched.txt"), []byte("x"))
+	fsAwaitChanged(staying, func(m protocol.FsChangedMessage) bool {
+		return m.Root == shared && m.Origin == "external" && slices.Contains(m.Paths, "still-watched.txt")
+	})
+}
+
+func peerThatCanVanish(w *world, connect func() *testworld.Peer) (*testworld.Peer, func()) {
+	w.T.Helper()
+	dial := w.Dial
+	var conn net.Conn
+	w.Dial = func(ctx context.Context) (net.Conn, error) {
+		dialed, err := dial(ctx)
+		conn = dialed
+		return dialed, err
+	}
+	p := connect()
+	w.Dial = dial
+	return p, func() {
+		w.T.Helper()
+		if err := conn.(*net.TCPConn).CloseWrite(); err != nil {
+			w.T.Fatal(err)
+		}
+		if goodbye := p.Closed(); goodbye.Code != websocket.StatusNormalClosure {
+			w.T.Fatalf("the daemon closed the vanished client with %v", goodbye)
+		}
 	}
 }
 

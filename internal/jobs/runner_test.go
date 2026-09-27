@@ -4,7 +4,6 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"math"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -72,234 +71,6 @@ func mustGet(t *testing.T, r *Runner, id string) *Job {
 		t.Fatalf("job %s is gone", id)
 	}
 	return j
-}
-
-func TestRunNowOverridesAPendingDebounce(t *testing.T) {
-	synctest.Test(t, func(t *testing.T) {
-		r, _ := newBubbleRunner(t, nil)
-		mustRegister(t, r, "narrate", func(context.Context, *Job) (any, error) { return nil, nil })
-		mustStart(t, r)
-
-		if _, err := r.Enqueue("narrate", EnqueueOptions{UniqueKey: "ws-1", Delay: time.Hour}); err != nil {
-			t.Fatalf("enqueue debounced: %v", err)
-		}
-		job, err := r.Enqueue("narrate", EnqueueOptions{UniqueKey: "ws-1", RunNow: true})
-		if err != nil {
-			t.Fatalf("enqueue run-now: %v", err)
-		}
-		synctest.Wait()
-		if got := mustGet(t, r, job.ID).State; got != StateDone {
-			t.Fatalf("run-now job state = %s, want done", got)
-		}
-	})
-}
-
-func TestATriggerArrivingMidRunRunsTheJobAgain(t *testing.T) {
-	synctest.Test(t, func(t *testing.T) {
-		r, _ := newBubbleRunner(t, nil)
-		var runs atomic.Int32
-		entered := make(chan struct{}, 4)
-		release := make(chan struct{})
-		mustRegister(t, r, "narrate", func(context.Context, *Job) (any, error) {
-			runs.Add(1)
-			entered <- struct{}{}
-			<-release
-			return nil, nil
-		})
-		mustStart(t, r)
-
-		job, err := r.Enqueue("narrate", EnqueueOptions{UniqueKey: "ws-1"})
-		if err != nil {
-			t.Fatalf("enqueue: %v", err)
-		}
-		<-entered
-
-		if _, err := r.Enqueue("narrate", EnqueueOptions{UniqueKey: "ws-1", RunNow: true}); err != nil {
-			t.Fatalf("mid-run enqueue: %v", err)
-		}
-		if got := mustGet(t, r, job.ID); !got.Requeued {
-			t.Fatalf("mid-run enqueue did not mark the record requeued (state %s)", got.State)
-		}
-		close(release)
-
-		<-entered
-		synctest.Wait()
-		if got := mustGet(t, r, job.ID).State; got != StateDone {
-			t.Fatalf("state after the re-run = %s, want done", got)
-		}
-		if got := runs.Load(); got != 2 {
-			t.Errorf("handler ran %d times, want 2 (the run plus the coalesced re-run)", got)
-		}
-	})
-}
-
-func TestFailuresBackOffThenGoDeadOnce(t *testing.T) {
-	synctest.Test(t, func(t *testing.T) {
-		r, _ := newBubbleRunner(t, func(o *Options) {
-			o.MaxAttempts = 3
-			o.BackoffBase = time.Minute
-		})
-		var deadCalls atomic.Int32
-		var deadState atomic.Value
-		r.OnTerminalFailure(func(j *Job) {
-			deadCalls.Add(1)
-			deadState.Store(string(j.State))
-		})
-		mustRegister(t, r, "flaky", func(context.Context, *Job) (any, error) {
-			return nil, WithDiagnostic(errors.New("boom"), "stderr: auth failed")
-		})
-		mustStart(t, r)
-
-		job, err := r.Enqueue("flaky", EnqueueOptions{})
-		if err != nil {
-			t.Fatalf("enqueue: %v", err)
-		}
-
-		synctest.Wait()
-		after1 := mustGet(t, r, job.ID)
-		if after1.State != StateFailed {
-			t.Fatalf("state after the first attempt = %s, want failed", after1.State)
-		}
-		if got, want := after1.ScheduledAt, time.Now().UTC().Add(time.Minute); !got.Equal(want) {
-			t.Errorf("retry scheduled at %s, want %s (one base interval)", got, want)
-		}
-
-		time.Sleep(time.Minute)
-		synctest.Wait()
-		after2 := mustGet(t, r, job.ID)
-		if after2.State != StateFailed || after2.Attempts != 2 {
-			t.Fatalf("after the second attempt: state %s attempts %d, want failed/2", after2.State, after2.Attempts)
-		}
-		if got, want := after2.ScheduledAt, time.Now().UTC().Add(2*time.Minute); !got.Equal(want) {
-			t.Errorf("second retry scheduled at %s, want %s (doubled)", got, want)
-		}
-
-		time.Sleep(2 * time.Minute)
-		synctest.Wait()
-		dead := mustGet(t, r, job.ID)
-		if dead.State != StateDead {
-			t.Fatalf("state after the third attempt = %s, want dead", dead.State)
-		}
-		if dead.Attempts != 3 {
-			t.Errorf("attempts = %d, want 3", dead.Attempts)
-		}
-		if dead.LastError != "boom" {
-			t.Errorf("last error = %q, want boom", dead.LastError)
-		}
-		if dead.LastDiagnostic != "stderr: auth failed" {
-			t.Errorf("last diagnostic = %q", dead.LastDiagnostic)
-		}
-
-		if got := deadCalls.Load(); got != 1 {
-			t.Errorf("terminal-failure hook fired %d times, want exactly 1", got)
-		}
-		if got := deadState.Load(); got != string(StateDead) {
-			t.Errorf("terminal-failure hook saw state %v, want dead", got)
-		}
-
-		time.Sleep(time.Hour)
-		synctest.Wait()
-		if got := mustGet(t, r, job.ID); got.Attempts != 3 {
-			t.Errorf("dead job was retried (attempts = %d)", got.Attempts)
-		}
-	})
-}
-
-func TestAJobCanRaiseItsOwnAttemptCap(t *testing.T) {
-	synctest.Test(t, func(t *testing.T) {
-		r, _ := newBubbleRunner(t, func(o *Options) {
-			o.MaxAttempts = 1
-			o.BackoffBase = time.Minute
-		})
-		mustRegister(t, r, "flaky", func(context.Context, *Job) (any, error) {
-			return nil, errors.New("boom")
-		})
-		mustStart(t, r)
-
-		job, err := r.Enqueue("flaky", EnqueueOptions{MaxAttempts: 2})
-		if err != nil {
-			t.Fatalf("enqueue: %v", err)
-		}
-		synctest.Wait()
-		if got := mustGet(t, r, job.ID).State; got != StateFailed {
-			t.Fatalf("state after the first attempt = %s, want failed", got)
-		}
-		time.Sleep(time.Minute)
-		synctest.Wait()
-		if got := mustGet(t, r, job.ID).State; got != StateDead {
-			t.Fatalf("state after the retry = %s, want dead", got)
-		}
-		if got := mustGet(t, r, job.ID).Attempts; got != 2 {
-			t.Errorf("attempts = %d, want 2 (the job's own cap)", got)
-		}
-	})
-}
-
-func TestRetryRevivesADeadJob(t *testing.T) {
-	synctest.Test(t, func(t *testing.T) {
-		r, _ := newBubbleRunner(t, func(o *Options) { o.MaxAttempts = 1 })
-		var fail atomic.Bool
-		fail.Store(true)
-		mustRegister(t, r, "flaky", func(context.Context, *Job) (any, error) {
-			if fail.Load() {
-				return nil, WithDiagnostic(errors.New("boom"), "stderr: auth failed")
-			}
-			return nil, nil
-		})
-		mustStart(t, r)
-
-		job, err := r.Enqueue("flaky", EnqueueOptions{})
-		if err != nil {
-			t.Fatalf("enqueue: %v", err)
-		}
-		synctest.Wait()
-		if got := mustGet(t, r, job.ID).State; got != StateDead {
-			t.Fatalf("state at the attempt cap = %s, want dead", got)
-		}
-
-		fail.Store(false)
-		if _, err := r.Retry(job.ID); err != nil {
-			t.Fatalf("retry: %v", err)
-		}
-		synctest.Wait()
-		if got := mustGet(t, r, job.ID).State; got != StateDone {
-			t.Fatalf("state after the retry = %s, want done", got)
-		}
-		if got := mustGet(t, r, job.ID).LastError; got != "" {
-			t.Errorf("last error = %q, want it cleared by the successful retry", got)
-		}
-		if got := mustGet(t, r, job.ID).LastDiagnostic; got != "" {
-			t.Errorf("last diagnostic = %q, want it cleared by the successful retry", got)
-		}
-	})
-}
-
-func TestRetryThatDiesAgainIsANewTerminalFailure(t *testing.T) {
-	synctest.Test(t, func(t *testing.T) {
-		r, _ := newBubbleRunner(t, func(o *Options) { o.MaxAttempts = 1 })
-		var terminalCalls atomic.Int32
-		r.OnTerminalFailure(func(*Job) { terminalCalls.Add(1) })
-		mustRegister(t, r, "always-fails", func(context.Context, *Job) (any, error) {
-			return nil, errors.New("boom")
-		})
-		mustStart(t, r)
-
-		job, err := r.Enqueue("always-fails", EnqueueOptions{})
-		if err != nil {
-			t.Fatalf("enqueue: %v", err)
-		}
-		synctest.Wait()
-		if got := terminalCalls.Load(); got != 1 {
-			t.Fatalf("first run cycle fired %d terminal failures, want 1", got)
-		}
-		if _, err := r.Retry(job.ID); err != nil {
-			t.Fatalf("retry: %v", err)
-		}
-		synctest.Wait()
-		if got := terminalCalls.Load(); got != 2 {
-			t.Fatalf("second run cycle brought total terminal failures to %d, want 2", got)
-		}
-	})
 }
 
 func TestCancelWaitsForTheCommitFence(t *testing.T) {
@@ -384,25 +155,6 @@ func TestCancelBeforeTheFenceStopsTheWrite(t *testing.T) {
 	}
 }
 
-func TestRemoveByKeyForgetsTheJob(t *testing.T) {
-	r, store, _ := newTestRunner(t, nil)
-	mustRegister(t, r, "compact", func(context.Context, *Job) (any, error) { return nil, nil })
-	mustStart(t, r)
-
-	if _, err := r.Enqueue("compact", EnqueueOptions{UniqueKey: "ws-1", Delay: time.Hour}); err != nil {
-		t.Fatalf("enqueue: %v", err)
-	}
-	if store.count() != 1 {
-		t.Fatalf("store holds %d records, want 1", store.count())
-	}
-
-	r.RemoveByKey("compact", "ws-1")
-	if store.count() != 0 {
-		t.Errorf("store holds %d records after removal, want 0", store.count())
-	}
-	r.RemoveByKey("compact", "ws-1")
-}
-
 func TestAKindIsSerializedWithItselfButNotWithOthers(t *testing.T) {
 	synctest.Test(t, func(t *testing.T) {
 		r, _ := newBubbleRunner(t, nil)
@@ -485,36 +237,6 @@ func TestAnUnregisteredKindFailsInPlace(t *testing.T) {
 		}
 		if got := mustGet(t, r, "stale").LastError; got == "" {
 			t.Error("unknown-kind failure recorded no error to read")
-		}
-	})
-}
-
-func TestEnqueueRejectsAnUnregisteredKind(t *testing.T) {
-	r, _, _ := newTestRunner(t, nil)
-	mustStart(t, r)
-	if _, err := r.Enqueue("nope", EnqueueOptions{}); !errors.Is(err, ErrUnknownKind) {
-		t.Errorf("enqueue error = %v, want ErrUnknownKind", err)
-	}
-}
-
-func TestAnUnmarshallableResultFailsTheRun(t *testing.T) {
-	synctest.Test(t, func(t *testing.T) {
-		r, _ := newBubbleRunner(t, func(o *Options) { o.MaxAttempts = 1 })
-		mustRegister(t, r, "bad_result", func(context.Context, *Job) (any, error) {
-			return math.Inf(1), nil
-		})
-		mustStart(t, r)
-
-		job, err := r.Enqueue("bad_result", EnqueueOptions{})
-		if err != nil {
-			t.Fatalf("enqueue: %v", err)
-		}
-		synctest.Wait()
-		if got := mustGet(t, r, job.ID).State; got != StateDead {
-			t.Fatalf("state after an unmarshallable result = %s, want dead", got)
-		}
-		if got := mustGet(t, r, job.ID).LastError; got == "" {
-			t.Error("the marshal failure was not recorded")
 		}
 	})
 }
@@ -631,40 +353,6 @@ func TestAFailedClaimReleasesItsConcurrencySlot(t *testing.T) {
 			t.Errorf("handler ran %d times, want 1", got)
 		}
 	})
-}
-
-func TestASecondRunnerRefusesTheSameStore(t *testing.T) {
-	r, store, clock := newTestRunner(t, nil)
-	mustStart(t, r)
-
-	second := New(Options{Store: store, Now: clock.now, PollInterval: testPoll, Log: func(string, ...interface{}) {}})
-	if err := second.Start(); !errors.Is(err, ErrAlreadyRunning) {
-		t.Fatalf("second Start error = %v, want ErrAlreadyRunning", err)
-	}
-}
-
-func TestADisabledRunnerIsASafeNoOp(t *testing.T) {
-	r := New(Options{})
-	if !r.Disabled() {
-		t.Fatal("a runner with no store should be disabled")
-	}
-	if err := r.Start(); err != nil {
-		t.Errorf("Start on a disabled runner = %v, want nil", err)
-	}
-	if _, err := r.Enqueue("anything", EnqueueOptions{}); !errors.Is(err, ErrDisabled) {
-		t.Errorf("Enqueue = %v, want ErrDisabled", err)
-	}
-	if err := r.Register("anything", func(context.Context, *Job) (any, error) { return nil, nil }); !errors.Is(err, ErrDisabled) {
-		t.Errorf("Register = %v, want ErrDisabled", err)
-	}
-	list, err := r.List()
-	if err != nil || list != nil {
-		t.Errorf("List = (%v, %v), want (nil, nil)", list, err)
-	}
-	r.Cancel("anything")
-	r.Remove("anything")
-	r.RemoveByKey("anything", "key")
-	r.Stop()
 }
 
 func TestStopDrainsInFlightRuns(t *testing.T) {

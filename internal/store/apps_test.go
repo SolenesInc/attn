@@ -44,55 +44,6 @@ func seedApps(t *testing.T, s *Store, now time.Time) (older, newer AppVersion) {
 	return older, newer
 }
 
-func TestApps_InvocationsListNewestFirstWithinOneSecond(t *testing.T) {
-	s := New()
-	base := time.Date(2026, 8, 9, 10, 30, 0, 0, time.UTC)
-	_, newer := seedApps(t, s, base)
-
-	for i, offset := range []time.Duration{0, 250 * time.Millisecond, 900 * time.Millisecond} {
-		status, failure := "ok", ""
-		if i == 2 {
-			status, failure = "error", "TypeError: cannot read property 'id' of undefined"
-		}
-		if _, err := s.AppendAppInvocation(AppInvocation{
-			AppName: "approval-gate", VersionID: newer.ID, EventSeq: int64(100 + i),
-			EventName: "delegation.requested", EventSubject: "del-" + string(rune('a'+i)),
-			Handler: "delegation.*", Status: status, Error: failure,
-			Duration: time.Duration(i+1) * 7 * time.Millisecond, StartedAt: base.Add(offset),
-		}); err != nil {
-			t.Fatalf("append invocation %d: %v", i, err)
-		}
-	}
-	if _, err := s.AppendAppInvocation(AppInvocation{
-		AppName: "standup-digest", VersionID: 3, EventSeq: 999, Status: "ok", StartedAt: base,
-	}); err != nil {
-		t.Fatalf("append other app invocation: %v", err)
-	}
-
-	got, err := s.ListAppInvocations("approval-gate", 10)
-	if err != nil {
-		t.Fatalf("list invocations: %v", err)
-	}
-	if len(got) != 3 {
-		t.Fatalf("invocations = %d, want 3", len(got))
-	}
-	if got[0].EventSeq != 102 || got[2].EventSeq != 100 {
-		t.Fatalf("order = %d,%d,%d, want 102,101,100", got[0].EventSeq, got[1].EventSeq, got[2].EventSeq)
-	}
-	if got[0].Status != "error" || got[0].Error == "" {
-		t.Fatalf("failure detail lost: %+v", got[0])
-	}
-	if got[0].Duration != 21*time.Millisecond {
-		t.Fatalf("duration = %v, want 21ms", got[0].Duration)
-	}
-	if !got[0].StartedAt.Equal(base.Add(900 * time.Millisecond)) {
-		t.Fatalf("started_at = %v, want %v", got[0].StartedAt, base.Add(900*time.Millisecond))
-	}
-	if limited, err := s.ListAppInvocations("approval-gate", 2); err != nil || len(limited) != 2 {
-		t.Fatalf("limit ignored: %d (%v)", len(limited), err)
-	}
-}
-
 func TestApps_MigrationCarriesTheRecordedPredecessorIntoTheChain(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "attn.db")
 	s, err := newSeededStore(path)

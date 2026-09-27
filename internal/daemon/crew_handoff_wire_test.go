@@ -84,6 +84,9 @@ func TestAHandoffFilesTheLetterAndWakesTheNextDay(t *testing.T) {
 		if next.Harness != fakeagent.Codex || crewLaunchFlag(next.Argv, "--model") != "" {
 			t.Fatalf("the successor launched %s with argv %q, want codex on its default model", next.Harness, next.Argv)
 		}
+		if !strings.Contains(strings.Join(next.Argv, "\n"), "crew member of this attn home") {
+			t.Errorf("the codex successor launched without its crew priming: argv %q", next.Argv)
+		}
 		if primed := crewPriming(t, cli, protocol.Deref(handed.SessionID)); !strings.Contains(primed, "Codex signing off: the fence lands first.") {
 			t.Errorf("the codex successor's priming does not carry the letter:\n%s", primed)
 		}
@@ -200,6 +203,13 @@ func TestHandoffRefusalsLeaveTheDayRunning(t *testing.T) {
 	w.Launched(day.SessionID)
 	_, err = cli.CrewHandoff(day.SessionID, "", true, "")
 	crewErrorContains(t, err, "attn handoff -m")
+	_, err = cli.CrewHandoff(day.SessionID, "  \n\t ", false, "")
+	crewErrorContains(t, err, "nothing to file")
+	_, err = cli.CrewHandoff(day.SessionID, strings.Repeat("x", crew.MaxHandoffBytes+1), false, "")
+	crewErrorContains(t, err, "64001", "64000")
+	if letters := crewLetters(t, w, "trellis"); len(letters) != 1 {
+		t.Fatalf("refused letters were filed: %q", letters)
+	}
 
 	now := time.Now()
 	for _, at := range []time.Time{now, now.Add(time.Minute)} {

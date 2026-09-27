@@ -1,631 +1,166 @@
 import { describe, expect, it } from 'vitest';
-import {
-  advanceAfterTurnClosed,
-  buildQueueBands,
-  headOfQueue,
-  oldestWantedTurn,
-  sessionParticipatesInQueue,
-  type QueueBandSession,
-} from './queueBands';
+import { buildQueueBands, type QueueBandSession } from './queueBands';
 import { buildWorkspaceViewModels } from './workspaceViewModels';
 
-const workspaces = [
-  { id: 'ws-a', title: 'A', directory: '/repo/a', rank: 'a' },
-  { id: 'ws-b', title: 'B', directory: '/repo/b', rank: 'b' },
-];
+const NOW = Date.parse('2026-07-26T12:00:00Z');
+const LATER_TODAY = '2026-07-26T13:00:00Z';
+const LATER_STILL = '2026-07-26T18:00:00Z';
 
-function views(sessions: QueueBandSession[]) {
-  return buildWorkspaceViewModels(workspaces, sessions);
+interface Workspace {
+  id: string;
+  title: string;
+  directory: string;
+  rank: string;
+  pinned?: boolean;
+  muted?: boolean;
 }
 
-describe('sessionParticipatesInQueue', () => {
-  it('keeps automation sessions out and makes crew participation opt-in', () => {
-    expect(sessionParticipatesInQueue({})).toBe(true);
-    expect(sessionParticipatesInQueue({ crewMember: 'goalie' })).toBe(false);
-    expect(sessionParticipatesInQueue({ crewMember: 'goalie' }, true)).toBe(true);
-    expect(sessionParticipatesInQueue({ automation: { definition_id: 'daily-review' } }, true)).toBe(false);
-  });
-});
+const A: Workspace = { id: 'ws-a', title: 'A', directory: '/repo/a', rank: 'a' };
+const B: Workspace = { id: 'ws-b', title: 'B', directory: '/repo/b', rank: 'b' };
+
+interface Bands {
+  chief?: string;
+  turns?: string[];
+  settled?: string[];
+  pinned?: string[];
+  crew?: string[];
+  snoozed?: string[];
+}
+
+function session(id: string, workspaceId: string, fields: Partial<QueueBandSession> = {}): QueueBandSession {
+  return { id, label: id, workspaceId, ...fields };
+}
+
+function owed(id: string, workspaceId: string, openedAt: string, fields: Partial<QueueBandSession> = {}): QueueBandSession {
+  return session(id, workspaceId, { turnOwed: true, turnOpenedAt: openedAt, ...fields });
+}
+
+const at = (hour: number) => `2026-07-26T${String(hour).padStart(2, '0')}:00:00Z`;
+
+const CASES: Array<[string, { workspaces?: Workspace[]; sessions: QueueBandSession[]; crewInQueue?: boolean }, Bands]> = [
+  ['lists the oldest turn first, across workspaces', {
+    sessions: [owed('newest', 'ws-a', at(12)), owed('oldest', 'ws-b', at(9)), owed('middle', 'ws-a', at(10))],
+  }, { turns: ['oldest', 'middle', 'newest'] }],
+  ['puts a new arrival below the rows already owed', {
+    sessions: [owed('first', 'ws-a', at(9)), owed('second', 'ws-a', at(10)), owed('arrival', 'ws-b', at(11))],
+  }, { turns: ['first', 'second', 'arrival'] }],
+  ['orders by when a turn opened, whatever the agent is doing', {
+    sessions: [owed('older', 'ws-a', at(9)), owed('steered', 'ws-a', at(10), { state: 'working' }), owed('newer', 'ws-a', at(11), { state: 'waiting_input' })],
+  }, { turns: ['older', 'steered', 'newer'] }],
+  ['ignores dispatcher fields', {
+    sessions: [session('root', 'ws-a'), owed('newer', 'ws-a', at(11), { dispatcher_session_id: 'root', dispatcher_member: 'alder' }), owed('older', 'ws-b', at(9), { dispatcher_session_id: 'root' })],
+  }, { turns: ['older', 'newer'], settled: ['root'] }],
+  ['reads turn_owed rather than deriving it from state', {
+    sessions: [session('waiting-but-settled', 'ws-a', { state: 'waiting_input', turnOwed: false }), owed('working-but-owed', 'ws-a', at(9), { state: 'working' })],
+  }, { turns: ['working-but-owed'], settled: ['waiting-but-settled'] }],
+  ['settles a row out of the turns into the settled band', {
+    sessions: [owed('a', 'ws-a', at(9)), session('b', 'ws-a', { turnOpenedAt: at(10) }), owed('c', 'ws-a', at(11))],
+  }, { turns: ['a', 'c'], settled: ['b'] }],
+  ['puts everything not owed into settled', {
+    sessions: [owed('owed', 'ws-a', at(9)), session('quiet', 'ws-a'), session('busy', 'ws-b', { state: 'working' })],
+  }, { turns: ['owed'], settled: ['quiet', 'busy'] }],
+  ['is empty when nothing is owed', {
+    sessions: [session('a', 'ws-a', { state: 'working' })],
+  }, { settled: ['a'] }],
+  ['anchors the chief and never queues it', {
+    sessions: [owed('chief', 'ws-a', at(9), { chiefOfStaff: true }), owed('agent', 'ws-a', at(10))],
+  }, { chief: 'chief', turns: ['agent'] }],
+  ['anchors the chief from a pinned workspace', {
+    workspaces: [{ ...A, pinned: true }], sessions: [session('chief', 'ws-a', { chiefOfStaff: true })],
+  }, { chief: 'chief' }],
+  ['anchors the chief from a muted workspace', {
+    workspaces: [{ ...A, muted: true }], sessions: [session('chief', 'ws-a', { chiefOfStaff: true })],
+  }, { chief: 'chief' }],
+  ['leaves automation sessions out of every band', {
+    sessions: [owed('automation-run', 'ws-a', at(9), { automation: { definition_id: 'review-sol' } }), session('agent', 'ws-a')],
+  }, { settled: ['agent'] }],
+  ['keeps pinned and muted workspaces out of the bands', {
+    workspaces: [{ ...A, pinned: true }, { ...B, muted: true }],
+    sessions: [owed('pinned-owed', 'ws-a', at(9)), session('muted-quiet', 'ws-b')],
+  }, {}],
+  ['takes a snoozed agent into its own list', {
+    sessions: [owed('owed', 'ws-a', at(9)), session('quiet', 'ws-a'), session('deferred', 'ws-b', { turnSnoozedUntil: LATER_TODAY })],
+  }, { turns: ['owed'], settled: ['quiet'], snoozed: ['deferred'] }],
+  ['orders snoozed agents by when they come back', {
+    sessions: [session('late', 'ws-a', { turnSnoozedUntil: LATER_STILL }), session('soon', 'ws-b', { turnSnoozedUntil: LATER_TODAY })],
+  }, { snoozed: ['soon', 'late'] }],
+  ['returns a lapsed snooze to the settled band', {
+    sessions: [session('woken', 'ws-a', { turnSnoozedUntil: at(11) })],
+  }, { settled: ['woken'] }],
+  ['keeps a snoozed agent out of the turns even while it is owed', {
+    sessions: [owed('both', 'ws-a', at(9), { turnSnoozedUntil: LATER_TODAY })],
+  }, { snoozed: ['both'] }],
+  ['leaves a pinned workspace out of the snoozed list', {
+    workspaces: [{ ...A, pinned: true }], sessions: [session('pinned', 'ws-a', { turnSnoozedUntil: LATER_TODAY })],
+  }, {}],
+  ['holds pinned sessions in pin order, out of every other band', {
+    sessions: [
+      owed('later', 'ws-a', at(9), { pinnedAt: at(11) }),
+      session('earlier', 'ws-b', { pinnedAt: at(10) }),
+      owed('unpinned', 'ws-a', at(8)),
+    ],
+  }, { pinned: ['earlier', 'later'], turns: ['unpinned'] }],
+  ['keeps pin order whatever the pinned agents are doing', {
+    sessions: [session('other', 'ws-a', { pinnedAt: at(9) }), session('held', 'ws-a', { state: 'working', pinnedAt: at(10) })],
+  }, { pinned: ['other', 'held'] }],
+  ['leaves a pinned session in a pinned workspace out of the bands', {
+    workspaces: [{ ...A, pinned: true }], sessions: [session('both', 'ws-a', { pinnedAt: at(10) })],
+  }, {}],
+  ['keeps the chief out of the pinned band', {
+    sessions: [session('chief', 'ws-a', { chiefOfStaff: true, pinnedAt: at(10) })],
+  }, { chief: 'chief' }],
+  ['lets a pin outrank a live snooze', {
+    sessions: [session('both', 'ws-a', { pinnedAt: at(10), turnSnoozedUntil: '2100-01-01T00:00:00Z' })],
+  }, { pinned: ['both'] }],
+  ['gives no row to a shell whose agent is alive in its workspace', {
+    sessions: [session('agent', 'ws-a'), session('shell', 'ws-a', { parentSessionId: 'agent' })],
+  }, { settled: ['agent'] }],
+  ['gives an orphaned shell its row back', {
+    sessions: [session('shell', 'ws-a', { parentSessionId: 'closed-agent' })],
+  }, { settled: ['shell'] }],
+  ['gives a shell moved away from its agent its row back', {
+    sessions: [session('agent', 'ws-a'), session('shell', 'ws-b', { parentSessionId: 'agent' })],
+  }, { settled: ['agent', 'shell'] }],
+  ['keeps a shell with no parent', {
+    sessions: [session('shell', 'ws-a')],
+  }, { settled: ['shell'] }],
+  ['shows a pinned satellite in the pinned band', {
+    sessions: [session('agent', 'ws-a'), session('shell', 'ws-a', { parentSessionId: 'agent', pinnedAt: at(10) })],
+  }, { settled: ['agent'], pinned: ['shell'] }],
+  ['takes crew members out of every other band', {
+    sessions: [
+      owed('sess-trellis', 'ws-a', at(9), { crewMember: 'trellis' }),
+      session('sess-keel', 'ws-a', { crewMember: 'keel', pinnedAt: at(8) }),
+      owed('worker', 'ws-b', '2026-07-26T09:30:00Z'),
+    ],
+  }, { crew: ['sess-keel', 'sess-trellis'], turns: ['worker'] }],
+  ['lets crew members into the queue when crew queueing is on', {
+    sessions: [owed('owed', 'ws-a', at(9), { crewMember: 'trellis' }), session('settled', 'ws-a', { crewMember: 'keel' })],
+    crewInQueue: true,
+  }, { turns: ['owed'], settled: ['settled'], crew: ['settled', 'owed'] }],
+  ['keeps a crew member from a pinned workspace', {
+    workspaces: [{ ...A, pinned: true }], sessions: [session('sess-alder', 'ws-a', { crewMember: 'alder' })],
+  }, { crew: ['sess-alder'] }],
+  ['leaves the chief the chief when it is a crew member', {
+    sessions: [session('sess-chief', 'ws-a', { chiefOfStaff: true, crewMember: 'keel' })],
+  }, { chief: 'sess-chief' }],
+];
 
 describe('buildQueueBands', () => {
-  it('keeps band order unchanged when sessions carry dispatcher fields', () => {
-    const sessions: QueueBandSession[] = [
-      { id: 'root', label: 'root', workspaceId: 'ws-a' },
-      { id: 'newer', label: 'newer', workspaceId: 'ws-a', turnOwed: true, turnOpenedAt: '2026-07-26T11:00:00Z' },
-      { id: 'older', label: 'older', workspaceId: 'ws-b', turnOwed: true, turnOpenedAt: '2026-07-26T09:00:00Z' },
-    ];
-    const withDispatchers = sessions.map((session) => (
-      session.id === 'root'
-        ? session
-        : { ...session, dispatcher_session_id: 'root', dispatcher_member: 'alder' }
-    ));
-    const ids = (bands: ReturnType<typeof buildQueueBands<QueueBandSession>>) => ({
-      chief: bands.chief?.session.id ?? null,
+  it.each(CASES)('%s', (_, { workspaces = [A, B], sessions, crewInQueue }, expected) => {
+    const tree = buildWorkspaceViewModels(workspaces, sessions);
+    const treeBefore = JSON.stringify(tree);
+
+    const bands = buildQueueBands(tree, { now: NOW, crewInQueue });
+
+    expect({
+      chief: bands.chief?.session.id,
       turns: bands.turns.map((row) => row.session.id),
       settled: bands.settled.map((row) => row.session.id),
       pinned: bands.pinned.map((row) => row.session.id),
       crew: bands.crew.map((row) => row.session.id),
       snoozed: bands.snoozed.map((row) => row.session.id),
-    });
-
-    expect(ids(buildQueueBands(views(withDispatchers)))).toEqual(ids(buildQueueBands(views(sessions))));
-  });
-
-  it('lists the oldest turn first, across workspaces', () => {
-    const bands = buildQueueBands(views([
-      { id: 'newest', label: 'newest', workspaceId: 'ws-a', turnOwed: true, turnOpenedAt: '2026-07-26T12:00:00Z' },
-      { id: 'oldest', label: 'oldest', workspaceId: 'ws-b', turnOwed: true, turnOpenedAt: '2026-07-26T09:00:00Z' },
-      { id: 'middle', label: 'middle', workspaceId: 'ws-a', turnOwed: true, turnOpenedAt: '2026-07-26T10:00:00Z' },
-    ]));
-
-    expect(bands.turns.map((row) => row.session.id)).toEqual(['oldest', 'middle', 'newest']);
-    expect(bands.turns.map((row) => row.workspaceTitle)).toEqual(['B', 'A', 'A']);
-  });
-
-  it('reads turn_owed rather than deriving it from state', () => {
-    const bands = buildQueueBands(views([
-      { id: 'waiting-but-settled', label: 'a', workspaceId: 'ws-a', state: 'waiting_input', turnOwed: false },
-      { id: 'working-but-owed', label: 'b', workspaceId: 'ws-a', state: 'working', turnOwed: true, turnOpenedAt: '2026-07-26T09:00:00Z' },
-    ]));
-
-    expect(bands.turns.map((row) => row.session.id)).toEqual(['working-but-owed']);
-  });
-
-  it('puts a new arrival at the bottom and leaves the rows above untouched', () => {
-    const existing: QueueBandSession[] = [
-      { id: 'first', label: 'first', workspaceId: 'ws-a', turnOwed: true, turnOpenedAt: '2026-07-26T09:00:00Z' },
-      { id: 'second', label: 'second', workspaceId: 'ws-a', turnOwed: true, turnOpenedAt: '2026-07-26T10:00:00Z' },
-    ];
-    const before = buildQueueBands(views(existing));
-    const after = buildQueueBands(views([
-      ...existing,
-      { id: 'arrival', label: 'arrival', workspaceId: 'ws-b', turnOwed: true, turnOpenedAt: '2026-07-26T11:00:00Z' },
-    ]));
-
-    expect(after.turns.map((row) => row.session.id))
-      .toEqual([...before.turns.map((row) => row.session.id), 'arrival']);
-  });
-
-  it('does not move a row when its state changes', () => {
-    const session = (state: string): QueueBandSession => ({
-      id: 'steered', label: 'steered', workspaceId: 'ws-a', state, turnOwed: true, turnOpenedAt: '2026-07-26T10:00:00Z',
-    });
-    const others: QueueBandSession[] = [
-      { id: 'older', label: 'older', workspaceId: 'ws-a', turnOwed: true, turnOpenedAt: '2026-07-26T09:00:00Z' },
-      { id: 'newer', label: 'newer', workspaceId: 'ws-a', turnOwed: true, turnOpenedAt: '2026-07-26T11:00:00Z' },
-    ];
-
-    const waiting = buildQueueBands(views([...others, session('waiting_input')]));
-    const working = buildQueueBands(views([...others, session('working')]));
-
-    expect(waiting.turns.map((row) => row.session.id)).toEqual(['older', 'steered', 'newer']);
-    expect(working.turns.map((row) => row.session.id)).toEqual(['older', 'steered', 'newer']);
-  });
-
-  it('settling a row moves only the rows below it', () => {
-    const all: QueueBandSession[] = [
-      { id: 'a', label: 'a', workspaceId: 'ws-a', turnOwed: true, turnOpenedAt: '2026-07-26T09:00:00Z' },
-      { id: 'b', label: 'b', workspaceId: 'ws-a', turnOwed: true, turnOpenedAt: '2026-07-26T10:00:00Z' },
-      { id: 'c', label: 'c', workspaceId: 'ws-a', turnOwed: true, turnOpenedAt: '2026-07-26T11:00:00Z' },
-    ];
-    const settled = all.map((session) => (session.id === 'b' ? { ...session, turnOwed: false } : session));
-
-    expect(buildQueueBands(views(settled)).turns.map((row) => row.session.id)).toEqual(['a', 'c']);
-  });
-
-  it('anchors the chief and never queues it', () => {
-    const bands = buildQueueBands(views([
-      { id: 'chief', label: 'chief', workspaceId: 'ws-a', chiefOfStaff: true, turnOwed: true, turnOpenedAt: '2026-07-26T09:00:00Z' },
-      { id: 'agent', label: 'agent', workspaceId: 'ws-a', turnOwed: true, turnOpenedAt: '2026-07-26T10:00:00Z' },
-    ]));
-
-    expect(bands.chief?.session.id).toBe('chief');
-    expect(bands.turns.map((row) => row.session.id)).toEqual(['agent']);
-  });
-
-  it('leaves automation sessions out of every queue band', () => {
-    const bands = buildQueueBands(views([
-      {
-        id: 'automation-run',
-        label: 'automation-run',
-        workspaceId: 'ws-a',
-        turnOwed: true,
-        turnOpenedAt: '2026-07-26T09:00:00Z',
-        automation: { definition_id: 'review-sol' },
-      },
-      { id: 'agent', label: 'agent', workspaceId: 'ws-a' },
-    ]));
-
-    expect(bands.turns.map((row) => row.session.id)).toEqual([]);
-    expect(bands.settled.map((row) => row.session.id)).toEqual(['agent']);
-    expect(bands.pinned).toEqual([]);
-    expect(bands.snoozed).toEqual([]);
-  });
-
-  it('is empty when nothing is owed', () => {
-    const bands = buildQueueBands(views([
-      { id: 'a', label: 'a', workspaceId: 'ws-a', state: 'working' },
-    ]));
-
-    expect(bands.chief).toBeNull();
-    expect(bands.turns).toEqual([]);
-  });
-
-  it('puts everything not owed into settled, so no agent is in both bands', () => {
-    const bands = buildQueueBands(views([
-      { id: 'owed', label: 'owed', workspaceId: 'ws-a', turnOwed: true, turnOpenedAt: '2026-07-26T09:00:00Z' },
-      { id: 'quiet', label: 'quiet', workspaceId: 'ws-a' },
-      { id: 'busy', label: 'busy', workspaceId: 'ws-b', state: 'working' },
-    ]));
-
-    expect(bands.turns.map((row) => row.session.id)).toEqual(['owed']);
-    expect(bands.settled.map((row) => row.session.id)).toEqual(['quiet', 'busy']);
-  });
-
-  it('settling moves a row from one band to the other rather than out of the sidebar', () => {
-    const session: QueueBandSession = {
-      id: 'a', label: 'a', workspaceId: 'ws-a', turnOwed: true, turnOpenedAt: '2026-07-26T09:00:00Z',
-    };
-    const before = buildQueueBands(views([session]));
-    const after = buildQueueBands(views([{ ...session, turnOwed: false }]));
-
-    expect(before.turns.map((row) => row.session.id)).toEqual(['a']);
-    expect(before.settled).toEqual([]);
-    expect(after.turns).toEqual([]);
-    expect(after.settled.map((row) => row.session.id)).toEqual(['a']);
-  });
-
-  it('keeps pinned and muted workspaces out of both bands — they stay in the tree', () => {
-    const pinnedAndMuted = [
-      { id: 'ws-a', title: 'A', directory: '/repo/a', rank: 'a', pinned: true },
-      { id: 'ws-b', title: 'B', directory: '/repo/b', rank: 'b', muted: true },
-    ];
-    const bands = buildQueueBands(buildWorkspaceViewModels(pinnedAndMuted, [
-      { id: 'pinned-owed', label: 'a', workspaceId: 'ws-a', turnOwed: true, turnOpenedAt: '2026-07-26T09:00:00Z' },
-      { id: 'muted-quiet', label: 'b', workspaceId: 'ws-b' },
-    ]));
-
-    expect(bands.turns).toEqual([]);
-    expect(bands.settled).toEqual([]);
-  });
-
-  it('anchors the chief even when its workspace is pinned or muted', () => {
-    for (const flag of [{ pinned: true }, { muted: true }]) {
-      const bands = buildQueueBands(buildWorkspaceViewModels(
-        [{ id: 'ws-a', title: 'A', directory: '/repo/a', rank: 'a', ...flag }],
-        [{ id: 'chief', label: 'chief', workspaceId: 'ws-a', chiefOfStaff: true }],
-      ));
-
-      expect(bands.chief?.session.id).toBe('chief');
-    }
-  });
-
-  it('leaves the workspace tree untouched — it is not an output of the queue', () => {
-    const sessions: QueueBandSession[] = [
-      { id: 'a', label: 'a', workspaceId: 'ws-a', turnOwed: true, turnOpenedAt: '2026-07-26T09:00:00Z' },
-      { id: 'b', label: 'b', workspaceId: 'ws-b' },
-    ];
-    const tree = views(sessions);
-    buildQueueBands(tree);
-
-    expect(tree.map((workspace) => workspace.sessions.map((session) => session.id))).toEqual([['a'], ['b']]);
-  });
-
-  describe('snoozed', () => {
-    // Fixed clocks: a snooze is a comparison against now, and a test whose deadlines drift
-    // with the wall clock is a test that expires.
-    const now = Date.parse('2026-07-26T12:00:00Z');
-    const laterToday = '2026-07-26T13:00:00Z';
-    const laterStill = '2026-07-26T18:00:00Z';
-
-    it('takes a deferred agent out of both bands into its own list', () => {
-      const bands = buildQueueBands(views([
-        { id: 'owed', label: 'owed', workspaceId: 'ws-a', turnOwed: true, turnOpenedAt: '2026-07-26T09:00:00Z' },
-        { id: 'quiet', label: 'quiet', workspaceId: 'ws-a' },
-        { id: 'deferred', label: 'deferred', workspaceId: 'ws-b', turnSnoozedUntil: laterToday },
-      ]), now);
-
-      expect(bands.turns.map((row) => row.session.id)).toEqual(['owed']);
-      expect(bands.settled.map((row) => row.session.id)).toEqual(['quiet']);
-      expect(bands.snoozed.map((row) => row.session.id)).toEqual(['deferred']);
-    });
-
-    it('orders by when each comes back, soonest first', () => {
-      const bands = buildQueueBands(views([
-        { id: 'late', label: 'late', workspaceId: 'ws-a', turnSnoozedUntil: laterStill },
-        { id: 'soon', label: 'soon', workspaceId: 'ws-b', turnSnoozedUntil: laterToday },
-      ]), now);
-
-      expect(bands.snoozed.map((row) => row.session.id)).toEqual(['soon', 'late']);
-    });
-
-    it('returns a lapsed deadline to the settled band', () => {
-      const bands = buildQueueBands(views([
-        { id: 'woken', label: 'woken', workspaceId: 'ws-a', turnSnoozedUntil: '2026-07-26T11:00:00Z' },
-      ]), now);
-
-      expect(bands.snoozed).toEqual([]);
-      expect(bands.settled.map((row) => row.session.id)).toEqual(['woken']);
-    });
-
-    it('keeps a snoozed agent out of the turns band even if a snapshot still says owed', () => {
-      const bands = buildQueueBands(views([
-        { id: 'both', label: 'both', workspaceId: 'ws-a', turnOwed: true, turnOpenedAt: '2026-07-26T09:00:00Z', turnSnoozedUntil: laterToday },
-      ]), now);
-
-      expect(bands.turns).toEqual([]);
-      expect(bands.snoozed.map((row) => row.session.id)).toEqual(['both']);
-    });
-
-    it('leaves a pinned workspace out of the snoozed list too', () => {
-      const pinnedViews = buildWorkspaceViewModels(
-        [{ id: 'ws-p', title: 'P', directory: '/repo/p', rank: 'a', pinned: true }],
-        [{ id: 'pinned', label: 'pinned', workspaceId: 'ws-p', turnSnoozedUntil: laterToday }],
-      );
-
-      expect(buildQueueBands(pinnedViews, now).snoozed).toEqual([]);
-    });
-  });
-
-});
-
-describe('oldestWantedTurn', () => {
-  const wantsOwed = (session: QueueBandSession) => Boolean(session.turnOwed);
-
-  it('lands on the turn owed longest, not the first in list order', () => {
-    const target = oldestWantedTurn([
-      { id: 'newest', label: 'newest', workspaceId: 'ws-a', turnOwed: true, turnOpenedAt: '2026-07-26T12:00:00Z' },
-      { id: 'oldest', label: 'oldest', workspaceId: 'ws-b', turnOwed: true, turnOpenedAt: '2026-07-26T09:00:00Z' },
-      { id: 'middle', label: 'middle', workspaceId: 'ws-a', turnOwed: true, turnOpenedAt: '2026-07-26T10:00:00Z' },
-    ], wantsOwed);
-
-    expect(target?.id).toBe('oldest');
-  });
-
-  it('skips sessions that do not want the user, whatever their stamp says', () => {
-    const target = oldestWantedTurn([
-      { id: 'settled-old', label: 'a', workspaceId: 'ws-a', turnOwed: false, turnOpenedAt: '2026-07-26T08:00:00Z' },
-      { id: 'owed', label: 'b', workspaceId: 'ws-a', turnOwed: true, turnOpenedAt: '2026-07-26T10:00:00Z' },
-    ], wantsOwed);
-
-    expect(target?.id).toBe('owed');
-  });
-
-  it('is null when nothing wants the user', () => {
-    expect(oldestWantedTurn([
-      { id: 'quiet', label: 'quiet', workspaceId: 'ws-a' },
-    ], wantsOwed)).toBeNull();
-    expect(oldestWantedTurn([], wantsOwed)).toBeNull();
-  });
-});
-
-describe('advanceAfterTurnClosed', () => {
-  function owed(id: string, hour: number, workspaceId = 'ws-a'): QueueBandSession {
-    return { id, label: id, workspaceId, turnOwed: true, turnOpenedAt: `2026-07-26T0${hour}:00:00Z` };
-  }
-
-  it('moves on to the next turn in queue order when the watched turn closes', () => {
-    const queue = [owed('watched', 0), owed('next', 1), owed('after', 2)];
-    const before = buildQueueBands(views(queue));
-    const after = buildQueueBands(views([{ ...queue[0], turnOwed: false }, queue[1], queue[2]]));
-
-    const advance = advanceAfterTurnClosed(before.turns, after, 'watched');
-
-    expect(advance).toEqual({ to: 'session', row: expect.objectContaining({ workspaceTitle: 'A' }) });
-    expect(advance?.to === 'session' && advance.row.session.id).toBe('next');
-  });
-
-  it('reads the position from the earlier snapshot, where the closed row still is', () => {
-    const queue = [owed('oldest', 0), owed('watched', 1), owed('newest', 2)];
-    const before = buildQueueBands(views(queue));
-    const after = buildQueueBands(views([queue[0], { ...queue[1], turnOwed: false }, queue[2]]));
-
-    const advance = advanceAfterTurnClosed(before.turns, after, 'watched');
-
-    expect(advance?.to === 'session' && advance.row.session.id).toBe('newest');
-  });
-
-  it('wraps to the top when the bottom row is the one that closed', () => {
-    const queue = [owed('oldest', 0), owed('middle', 1), owed('watched', 2)];
-    const before = buildQueueBands(views(queue));
-    const after = buildQueueBands(views([queue[0], queue[1], { ...queue[2], turnOwed: false }]));
-
-    const advance = advanceAfterTurnClosed(before.turns, after, 'watched');
-
-    expect(advance?.to === 'session' && advance.row.session.id).toBe('oldest');
-  });
-
-  it('skips a successor that settled in the same broadcast', () => {
-    const queue = [owed('watched', 0), owed('alsoSettled', 1), owed('after', 2)];
-    const before = buildQueueBands(views(queue));
-    const after = buildQueueBands(views([
-      { ...queue[0], turnOwed: false },
-      { ...queue[1], turnOwed: false },
-      queue[2],
-    ]));
-
-    const advance = advanceAfterTurnClosed(before.turns, after, 'watched');
-
-    expect(advance?.to === 'session' && advance.row.session.id).toBe('after');
-  });
-
-  it('wraps past a coalesced settle rather than falling through to home', () => {
-    const queue = [owed('stillOwed', 0), owed('watched', 1), owed('alsoSettled', 2)];
-    const before = buildQueueBands(views(queue));
-    const after = buildQueueBands(views([
-      queue[0],
-      { ...queue[1], turnOwed: false },
-      { ...queue[2], turnOwed: false },
-    ]));
-
-    const advance = advanceAfterTurnClosed(before.turns, after, 'watched');
-
-    expect(advance?.to === 'session' && advance.row.session.id).toBe('stillOwed');
-  });
-
-  it('lands on a turn that opened in the same broadcast that closed this one', () => {
-    const watched = owed('watched', 0);
-    const before = buildQueueBands(views([watched]));
-    const after = buildQueueBands(views([{ ...watched, turnOwed: false }, owed('arrival', 1)]));
-
-    const advance = advanceAfterTurnClosed(before.turns, after, 'watched');
-
-    expect(advance?.to === 'session' && advance.row.session.id).toBe('arrival');
-  });
-
-  it('goes home when the closed turn was the last one owed', () => {
-    const only = owed('watched', 0);
-    const before = buildQueueBands(views([only]));
-    const after = buildQueueBands(views([{ ...only, turnOwed: false }]));
-
-    expect(advanceAfterTurnClosed(before.turns, after, 'watched')).toEqual({ to: 'dashboard' });
-  });
-
-  it('stays put while the turn is still owed', () => {
-    const queue = [owed('watched', 0), owed('next', 1)];
-    const bands = buildQueueBands(views(queue));
-
-    expect(advanceAfterTurnClosed(bands.turns, bands, 'watched')).toBeNull();
-  });
-
-  it('stays put when the watched agent never owed the turn that closed', () => {
-    const queue = [owed('elsewhere', 0)];
-    const before = buildQueueBands(views(queue));
-    const after = buildQueueBands(views([{ ...queue[0], turnOwed: false }, { id: 'watched', label: 'watched', workspaceId: 'ws-a' }]));
-
-    expect(advanceAfterTurnClosed(before.turns, after, 'watched')).toBeNull();
-  });
-
-  it('stays put when the row left the queue by being pinned rather than settled', () => {
-    const watched = owed('watched', 0);
-    const before = buildQueueBands(views([watched, owed('next', 1, 'ws-b')]));
-    const after = buildQueueBands(buildWorkspaceViewModels(
-      [{ id: 'ws-a', title: 'A', directory: '/repo/a', rank: 'a', pinned: true }, workspaces[1]],
-      [{ ...watched, turnOwed: false }, owed('next', 1, 'ws-b')],
-    ));
-
-    expect(after.turns.map((row) => row.session.id)).toEqual(['next']);
-    expect(after.settled).toEqual([]);
-    expect(advanceAfterTurnClosed(before.turns, after, 'watched')).toBeNull();
-  });
-
-  it('stays put when the watched agent is gone from the bands entirely', () => {
-    const watched = owed('watched', 0);
-    const before = buildQueueBands(views([watched, owed('next', 1)]));
-    const after = buildQueueBands(views([owed('next', 1)]));
-
-    expect(advanceAfterTurnClosed(before.turns, after, 'watched')).toBeNull();
-  });
-
-  it('moves on when the watched turn closed by being snoozed', () => {
-    const watched = owed('watched', 0);
-    const before = buildQueueBands(views([watched, owed('next', 1)]));
-    const after = buildQueueBands(views([
-      { ...watched, turnOwed: false, turnSnoozedUntil: '2026-07-26T20:00:00Z' },
-      owed('next', 1),
-    ]), Date.parse('2026-07-26T12:00:00Z'));
-
-    expect(after.snoozed.map((row) => row.session.id)).toEqual(['watched']);
-    expect(advanceAfterTurnClosed(before.turns, after, 'watched')).toEqual({
-      to: 'session',
-      row: expect.objectContaining({ session: expect.objectContaining({ id: 'next' }) }),
-    });
-  });
-
-  it('goes home when the snoozed turn was the last one owed', () => {
-    const only = owed('watched', 0);
-    const before = buildQueueBands(views([only]));
-    const after = buildQueueBands(views([
-      { ...only, turnOwed: false, turnSnoozedUntil: '2026-07-26T20:00:00Z' },
-    ]), Date.parse('2026-07-26T12:00:00Z'));
-
-    expect(advanceAfterTurnClosed(before.turns, after, 'watched')).toEqual({ to: 'dashboard' });
-  });
-
-  it('stays put with no agent selected, or before any bands exist', () => {
-    const bands = buildQueueBands(views([owed('a', 0)]));
-
-    expect(advanceAfterTurnClosed(bands.turns, bands, null)).toBeNull();
-    expect(advanceAfterTurnClosed(bands.turns, null, 'a')).toBeNull();
-  });
-});
-
-describe('headOfQueue', () => {
-  it('is the turn owed longest, not the first one listed by the workspace tree', () => {
-    const bands = buildQueueBands(views([
-      { id: 'newer', label: 'newer', workspaceId: 'ws-a', turnOwed: true, turnOpenedAt: '2026-07-26T12:00:00Z' },
-      { id: 'older', label: 'older', workspaceId: 'ws-b', turnOwed: true, turnOpenedAt: '2026-07-26T09:00:00Z' },
-    ]));
-
-    expect(headOfQueue(bands)?.session.id).toBe('older');
-  });
-
-  it('is null while nothing is owed, and with no bands at all', () => {
-    const settled = buildQueueBands(views([
-      { id: 'a', label: 'a', workspaceId: 'ws-a', turnOwed: false },
-    ]));
-
-    expect(headOfQueue(settled)).toBeNull();
-    expect(headOfQueue(null)).toBeNull();
-  });
-});
-
-describe('the pinned band', () => {
-  it('holds pinned sessions in pin order, out of every other band', () => {
-    const bands = buildQueueBands(views([
-      { id: 'later', label: 'later', workspaceId: 'ws-a', turnOwed: true, turnOpenedAt: '2026-08-05T09:00:00Z', pinnedAt: '2026-08-05T11:00:00Z' },
-      { id: 'earlier', label: 'earlier', workspaceId: 'ws-b', pinnedAt: '2026-08-05T10:00:00Z' },
-      { id: 'unpinned', label: 'unpinned', workspaceId: 'ws-a', turnOwed: true, turnOpenedAt: '2026-08-05T08:00:00Z' },
-    ]));
-
-    expect(bands.pinned.map((row) => row.session.id)).toEqual(['earlier', 'later']);
-    expect(bands.turns.map((row) => row.session.id)).toEqual(['unpinned']);
-    expect(bands.settled).toEqual([]);
-  });
-
-  it('does not move a pinned row when the agent it holds changes state', () => {
-    const session = (state: string): QueueBandSession => ({
-      id: 'held', label: 'held', workspaceId: 'ws-a', state, pinnedAt: '2026-08-05T10:00:00Z',
-    });
-    const other: QueueBandSession = { id: 'other', label: 'other', workspaceId: 'ws-a', pinnedAt: '2026-08-05T09:00:00Z' };
-
-    const idle = buildQueueBands(views([other, session('idle')]));
-    const working = buildQueueBands(views([other, session('working')]));
-
-    expect(working.pinned.map((row) => row.session.id)).toEqual(idle.pinned.map((row) => row.session.id));
-  });
-
-  it('leaves a pinned session in a pinned workspace out of the bands entirely', () => {
-    const bands = buildQueueBands(buildWorkspaceViewModels(
-      [{ id: 'ws-a', title: 'A', directory: '/repo/a', rank: 'a', pinned: true }],
-      [{ id: 'both', label: 'both', workspaceId: 'ws-a', pinnedAt: '2026-08-05T10:00:00Z' }],
-    ));
-
-    expect(bands.pinned).toEqual([]);
-    expect(bands.settled).toEqual([]);
-  });
-
-  it('keeps the chief out of the pinned band even if a pin was somehow stamped', () => {
-    const bands = buildQueueBands(views([
-      { id: 'chief', label: 'chief', workspaceId: 'ws-a', chiefOfStaff: true, pinnedAt: '2026-08-05T10:00:00Z' },
-    ]));
-
-    expect(bands.chief?.session.id).toBe('chief');
-    expect(bands.pinned).toEqual([]);
-  });
-
-  it('outranks a live snooze, because a pin has no time to come back from', () => {
-    const bands = buildQueueBands(views([
-      { id: 'both', label: 'both', workspaceId: 'ws-a', pinnedAt: '2026-08-05T10:00:00Z', turnSnoozedUntil: '2100-01-01T00:00:00Z' },
-    ]));
-
-    expect(bands.pinned.map((row) => row.session.id)).toEqual(['both']);
-    expect(bands.snoozed).toEqual([]);
-  });
-});
-
-describe('satellite shells', () => {
-  it('gives no row to a shell whose agent is alive in the same workspace', () => {
-    const bands = buildQueueBands(views([
-      { id: 'agent', label: 'agent', workspaceId: 'ws-a' },
-      { id: 'shell', label: 'shell', workspaceId: 'ws-a', parentSessionId: 'agent' },
-    ]));
-
-    expect(bands.settled.map((row) => row.session.id)).toEqual(['agent']);
-  });
-
-  it('gives an orphan its row back when the agent is gone', () => {
-    const bands = buildQueueBands(views([
-      { id: 'shell', label: 'shell', workspaceId: 'ws-a', parentSessionId: 'closed-agent' },
-    ]));
-
-    expect(bands.settled.map((row) => row.session.id)).toEqual(['shell']);
-  });
-
-  it('gives a satellite its row back once it is moved away from its agent', () => {
-    const bands = buildQueueBands(views([
-      { id: 'agent', label: 'agent', workspaceId: 'ws-a' },
-      { id: 'shell', label: 'shell', workspaceId: 'ws-b', parentSessionId: 'agent' },
-    ]));
-
-    expect(bands.settled.map((row) => row.session.id)).toEqual(['agent', 'shell']);
-  });
-
-  it('keeps a shell with no parent at all, as every pre-migration shell has', () => {
-    const bands = buildQueueBands(views([
-      { id: 'shell', label: 'shell', workspaceId: 'ws-a' },
-    ]));
-
-    expect(bands.settled.map((row) => row.session.id)).toEqual(['shell']);
-  });
-
-  it('shows a pinned satellite, since the pinned band is where it was put on purpose', () => {
-    const bands = buildQueueBands(views([
-      { id: 'agent', label: 'agent', workspaceId: 'ws-a' },
-      { id: 'shell', label: 'shell', workspaceId: 'ws-a', parentSessionId: 'agent', pinnedAt: '2026-08-05T10:00:00Z' },
-    ]));
-
-    expect(bands.pinned.map((row) => row.session.id)).toEqual(['shell']);
-  });
-});
-
-describe('advanceAfterTurnClosed and the pinned band', () => {
-  it('does not move the user off an agent they just pinned', () => {
-    const owed: QueueBandSession[] = [
-      { id: 'pinned-one', label: 'a', workspaceId: 'ws-a', turnOwed: true, turnOpenedAt: '2026-08-05T09:00:00Z' },
-      { id: 'next', label: 'b', workspaceId: 'ws-a', turnOwed: true, turnOpenedAt: '2026-08-05T10:00:00Z' },
-    ];
-    const before = buildQueueBands(views(owed));
-    const after = buildQueueBands(views([
-      { ...owed[0], turnOwed: false, turnOpenedAt: undefined, pinnedAt: '2026-08-05T11:00:00Z' },
-      owed[1],
-    ]));
-
-    expect(after.pinned.map((row) => row.session.id)).toEqual(['pinned-one']);
-    expect(advanceAfterTurnClosed(before.turns, after, 'pinned-one')).toBeNull();
-  });
-});
-
-describe('the crew band', () => {
-  it('takes a member day out of every other band, whatever it is doing', () => {
-    const bands = buildQueueBands(views([
-      { id: 'sess-trellis', label: 'trellis', workspaceId: 'ws-a', crewMember: 'trellis', turnOwed: true, turnOpenedAt: '2026-08-14T09:00:00Z' },
-      { id: 'sess-keel', label: 'keel', workspaceId: 'ws-a', crewMember: 'keel', pinnedAt: '2026-08-14T08:00:00Z' },
-      { id: 'worker', label: 'worker', workspaceId: 'ws-b', turnOwed: true, turnOpenedAt: '2026-08-14T09:30:00Z' },
-    ]));
-
-    expect(bands.crew.map((row) => row.session.id)).toEqual(['sess-keel', 'sess-trellis']);
-    expect(bands.turns.map((row) => row.session.id)).toEqual(['worker']);
-    expect(bands.pinned).toHaveLength(0);
-    expect(bands.settled).toHaveLength(0);
-  });
-
-  it('lets awake members enter normal queue bands when enabled', () => {
-    const bands = buildQueueBands(views([
-      { id: 'owed', label: 'owed', workspaceId: 'ws-a', crewMember: 'trellis', turnOwed: true, turnOpenedAt: '2026-08-14T09:00:00Z' },
-      { id: 'settled', label: 'settled', workspaceId: 'ws-a', crewMember: 'keel' },
-    ]), { crewInQueue: true });
-
-    expect(bands.turns.map((row) => row.session.id)).toEqual(['owed']);
-    expect(bands.settled.map((row) => row.session.id)).toEqual(['settled']);
-    expect(bands.crew.map((row) => row.session.id)).toEqual(['settled', 'owed']);
-  });
-
-  it('keeps a member visible from a pinned or muted workspace', () => {
-    const bands = buildQueueBands(buildWorkspaceViewModels(
-      [{ id: 'ws-hidden', title: 'Hidden', directory: '/repo/hidden', rank: 'a', pinned: true }],
-      [{ id: 'sess-alder', label: 'alder', workspaceId: 'ws-hidden', crewMember: 'alder' }],
-    ));
-
-    expect(bands.crew.map((row) => row.session.id)).toEqual(['sess-alder']);
-  });
-
-  it('leaves the chief the chief', () => {
-    const bands = buildQueueBands(views([
-      { id: 'sess-chief', label: 'chief', workspaceId: 'ws-a', chiefOfStaff: true, crewMember: 'keel' },
-    ]));
-
-    expect(bands.chief?.session.id).toBe('sess-chief');
-    expect(bands.crew).toHaveLength(0);
+    }).toEqual({ chief: undefined, turns: [], settled: [], pinned: [], crew: [], snoozed: [], ...expected });
+    expect(JSON.stringify(tree)).toBe(treeBefore);
   });
 });

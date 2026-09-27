@@ -12,6 +12,7 @@ type Run struct {
 	SessionID      string
 	ConversationID string
 	Resumed        bool
+	ResumePicker   bool
 	Argv           []string
 	Env            []string
 	AutoMode       json.RawMessage
@@ -63,6 +64,7 @@ type Denial struct {
 	Action string `json:"action"`
 	Reason string `json:"reason"`
 	Rule   string `json:"rule"`
+	At     string `json:"at,omitempty"`
 }
 
 func (r *Run) Deny(denial Denial) {
@@ -83,6 +85,11 @@ func (r *Run) Exit(code int) {
 	if got := r.fake.exited(); got != code {
 		r.t.Fatalf("%s for session %s exited %d, want %d", r.Harness, r.SessionID, got, code)
 	}
+}
+
+func (r *Run) StopReadingTerminal() {
+	r.t.Helper()
+	r.call(methodStopRead, struct{}{}, nil)
 }
 
 func (r *Run) call(method string, params, result any) {

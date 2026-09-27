@@ -24,7 +24,6 @@ type readinessPageInfo struct {
 
 type readinessActor struct {
 	TypeName string `json:"__typename"`
-	ID       string `json:"id"`
 	Login    string `json:"login"`
 	Slug     string `json:"slug"`
 }
@@ -94,39 +93,39 @@ const pullRequestReadinessQuery = `
 query PullRequestReadiness($owner:String!,$name:String!,$number:Int!){
   repository(owner:$owner,name:$name){pullRequest(number:$number){
     number url title state isDraft merged headRefOid headRefName mergeStateStatus reviewDecision
-    reactions(first:100){nodes{id content user{__typename id login}} pageInfo{hasNextPage endCursor}}
-	latestOpinionatedReviews(first:100){nodes{id state bodyText submittedAt author{__typename id login}} pageInfo{hasNextPage endCursor}}
-	reviews(first:100){nodes{id state bodyText submittedAt author{__typename id login}} pageInfo{hasNextPage endCursor}}
+    reactions(first:100){nodes{id content user{__typename login}} pageInfo{hasNextPage endCursor}}
+	latestOpinionatedReviews(first:100){nodes{id state bodyText submittedAt author{__typename login}} pageInfo{hasNextPage endCursor}}
+	reviews(first:100){nodes{id state bodyText submittedAt author{__typename login}} pageInfo{hasNextPage endCursor}}
 	reviewRequests(first:100){nodes{requestedReviewer{__typename ... on Bot{login} ... on User{login} ... on Mannequin{login} ... on Team{slug} ... on EnterpriseTeam{slug}}} pageInfo{hasNextPage endCursor}}
     commits(last:1){nodes{commit{statusCheckRollup{contexts(first:100){
       nodes{__typename ... on CheckRun{id name status conclusion detailsUrl} ... on StatusContext{id context state targetUrl}}
       pageInfo{hasNextPage endCursor}
     }}}}}
-  }}}
+  }}
 }`
 
 const pullRequestReactionPageQuery = `
 query PullRequestReactions($owner:String!,$name:String!,$number:Int!,$cursor:String!){
   repository(owner:$owner,name:$name){pullRequest(number:$number){
     headRefOid
-    reactions(first:100,after:$cursor){nodes{id content user{__typename id login}} pageInfo{hasNextPage endCursor}}
-  }}}
+    reactions(first:100,after:$cursor){nodes{id content user{__typename login}} pageInfo{hasNextPage endCursor}}
+  }}
 }`
 
 const pullRequestOpinionPageQuery = `
 query PullRequestOpinions($owner:String!,$name:String!,$number:Int!,$cursor:String!){
   repository(owner:$owner,name:$name){pullRequest(number:$number){
     headRefOid
-    latestOpinionatedReviews(first:100,after:$cursor){nodes{id state bodyText submittedAt author{__typename id login}} pageInfo{hasNextPage endCursor}}
-  }}}
+    latestOpinionatedReviews(first:100,after:$cursor){nodes{id state bodyText submittedAt author{__typename login}} pageInfo{hasNextPage endCursor}}
+  }}
 }`
 
 const pullRequestReviewPageQuery = `
 query PullRequestReviews($owner:String!,$name:String!,$number:Int!,$cursor:String!){
   repository(owner:$owner,name:$name){pullRequest(number:$number){
     headRefOid
-    reviews(first:100,after:$cursor){nodes{id state bodyText submittedAt author{__typename id login}} pageInfo{hasNextPage endCursor}}
-  }}}
+    reviews(first:100,after:$cursor){nodes{id state bodyText submittedAt author{__typename login}} pageInfo{hasNextPage endCursor}}
+  }}
 }`
 
 const pullRequestReviewRequestPageQuery = `
@@ -134,7 +133,7 @@ query PullRequestReviewRequests($owner:String!,$name:String!,$number:Int!,$curso
   repository(owner:$owner,name:$name){pullRequest(number:$number){
     headRefOid
     reviewRequests(first:100,after:$cursor){nodes{requestedReviewer{__typename ... on Bot{login} ... on User{login} ... on Mannequin{login} ... on Team{slug} ... on EnterpriseTeam{slug}}} pageInfo{hasNextPage endCursor}}
-  }}}
+  }}
 }`
 
 const pullRequestCheckPageQuery = `
@@ -463,43 +462,43 @@ type feedbackPullRequest struct {
 const pullRequestFeedbackQuery = `
 query PullRequestFeedback($owner:String!,$name:String!,$number:Int!){
   repository(owner:$owner,name:$name){pullRequest(number:$number){
-    comments(first:100){nodes{id bodyText createdAt author{__typename id login}} pageInfo{hasNextPage endCursor}}
-    reviews(first:100){nodes{id state bodyText submittedAt author{__typename id login}} pageInfo{hasNextPage endCursor}}
+    comments(first:100){nodes{id bodyText createdAt author{__typename login}} pageInfo{hasNextPage endCursor}}
+    reviews(first:100){nodes{id state bodyText submittedAt author{__typename login}} pageInfo{hasNextPage endCursor}}
     reviewThreads(first:100){nodes{id isResolved comments(first:100){
-      nodes{id bodyText createdAt path line originalLine author{__typename id login}}
+      nodes{id bodyText createdAt path line originalLine author{__typename login}}
       pageInfo{hasNextPage endCursor}
     }} pageInfo{hasNextPage endCursor}}
-  }}}
+  }}
 }`
 
 const pullRequestFeedbackReviewPageQuery = `
 query PullRequestReviewBodies($owner:String!,$name:String!,$number:Int!,$cursor:String!){
   repository(owner:$owner,name:$name){pullRequest(number:$number){
-    reviews(first:100,after:$cursor){nodes{id state bodyText submittedAt author{__typename id login}} pageInfo{hasNextPage endCursor}}
+    reviews(first:100,after:$cursor){nodes{id state bodyText submittedAt author{__typename login}} pageInfo{hasNextPage endCursor}}
   }}
 }`
 
 const pullRequestCommentPageQuery = `
 query PullRequestComments($owner:String!,$name:String!,$number:Int!,$cursor:String!){
   repository(owner:$owner,name:$name){pullRequest(number:$number){
-    comments(first:100,after:$cursor){nodes{id bodyText createdAt author{__typename id login}} pageInfo{hasNextPage endCursor}}
-  }}}
+    comments(first:100,after:$cursor){nodes{id bodyText createdAt author{__typename login}} pageInfo{hasNextPage endCursor}}
+  }}
 }`
 
 const pullRequestThreadPageQuery = `
 query PullRequestThreads($owner:String!,$name:String!,$number:Int!,$cursor:String!){
   repository(owner:$owner,name:$name){pullRequest(number:$number){
     reviewThreads(first:100,after:$cursor){nodes{id isResolved comments(first:100){
-      nodes{id bodyText createdAt path line originalLine author{__typename id login}}
+      nodes{id bodyText createdAt path line originalLine author{__typename login}}
       pageInfo{hasNextPage endCursor}
     }} pageInfo{hasNextPage endCursor}}
-  }}}
+  }}
 }`
 
 const pullRequestThreadCommentsPageQuery = `
 query PullRequestThreadComments($id:ID!,$cursor:String!){
   node(id:$id){... on PullRequestReviewThread{comments(first:100,after:$cursor){
-    nodes{id bodyText createdAt path line originalLine author{__typename id login}}
+    nodes{id bodyText createdAt path line originalLine author{__typename login}}
     pageInfo{hasNextPage endCursor}
   }}}
 }`

@@ -1,58 +1,12 @@
 package daemon
 
 import (
-	"fmt"
-	"os"
 	"path/filepath"
 	"testing"
 	"time"
 
 	"github.com/victorarias/attn/internal/protocol"
 )
-
-func writeCodexInteractiveRollout(t *testing.T, codexHome, nativeID, cwd string, at time.Time) string {
-	t.Helper()
-	dir := filepath.Join(codexHome, "sessions", "2026", "05", "17")
-	if err := os.MkdirAll(dir, 0o755); err != nil {
-		t.Fatalf("mkdir rollout dir: %v", err)
-	}
-	path := filepath.Join(dir, fmt.Sprintf("rollout-%s-%s.jsonl", at.UTC().Format("2006-01-02T15-04-05"), nativeID))
-	line := fmt.Sprintf(
-		`{"timestamp":"%s","type":"session_meta","payload":{"id":"%s","timestamp":"%s","cwd":"%s","source":"cli"}}`+"\n",
-		at.UTC().Format(time.RFC3339Nano), nativeID, at.UTC().Format(time.RFC3339Nano), cwd,
-	)
-	if err := os.WriteFile(path, []byte(line), 0o644); err != nil {
-		t.Fatalf("write rollout: %v", err)
-	}
-	if err := os.Chtimes(path, at, at); err != nil {
-		t.Fatalf("chtimes rollout: %v", err)
-	}
-	return path
-}
-
-func TestResolveStopTranscriptPath_RejectsAReportedSameCWDNeighbor(t *testing.T) {
-	codexHome := t.TempDir()
-	t.Setenv("CODEX_HOME", codexHome)
-
-	d := NewForTesting(filepath.Join(t.TempDir(), "test.sock"))
-	cwd := "/repo/project"
-	now := time.Now()
-	own := writeCodexInteractiveRollout(t, codexHome, "native-coda", cwd, now.Add(-time.Minute))
-	neighbor := writeCodexInteractiveRollout(t, codexHome, "native-goalie", cwd, now)
-
-	d.store.Add(&protocol.Session{ID: "coda", Agent: protocol.SessionAgentCodex, Directory: cwd})
-	d.store.Add(&protocol.Session{ID: "goalie", Agent: protocol.SessionAgentCodex, Directory: cwd})
-	if changed, err := d.store.TransitionSessionConversation("coda", "native-coda", own); err != nil || !changed {
-		t.Fatalf("bind coda: changed=%v err=%v", changed, err)
-	}
-	if changed, err := d.store.TransitionSessionConversation("goalie", "native-goalie", neighbor); err != nil || !changed {
-		t.Fatalf("bind goalie: changed=%v err=%v", changed, err)
-	}
-
-	if got := d.resolveStopTranscriptPath(d.store.Get("coda"), neighbor); got != own {
-		t.Fatalf("Coda stop resolved to %q, want its bound transcript %q", got, own)
-	}
-}
 
 func TestResolveStopTranscriptPath_RejectsAReportedNeighborWhenBoundPathIsMissing(t *testing.T) {
 	codexHome := t.TempDir()

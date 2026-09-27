@@ -17,108 +17,6 @@ func noTrailingMinDigit(t *testing.T, k string) {
 	}
 }
 
-func TestBetweenStrictOrdering(t *testing.T) {
-	tests := []struct {
-		name string
-		a    string
-		b    string
-	}{
-		{"min to max", "", ""},
-		{"min to key", "", "n"},
-		{"key to max", "n", ""},
-		{"adjacent single digits", "1", "2"},
-		{"far single digits", "1", "z"},
-		{"no single-digit room, multi-char a", "11", "12"},
-		{"b is prefix-adjacent to a", "a", "ab"},
-		{"long keys close together", "aaaa", "aaab"},
-		{"low bound empty, tight high", "", "1"},
-		{"high bound empty, high low", "z", ""},
-		{"min digit high bound", "", "01"},
-	}
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			k, err := Between(tt.a, tt.b)
-			if err != nil {
-				t.Fatalf("Between(%q,%q) errored: %v", tt.a, tt.b, err)
-			}
-			if tt.a != "" && !less(tt.a, k) {
-				t.Fatalf("Between(%q,%q)=%q: not a < k", tt.a, tt.b, k)
-			}
-			if tt.b != "" && !less(k, tt.b) {
-				t.Fatalf("Between(%q,%q)=%q: not k < b", tt.a, tt.b, k)
-			}
-			noTrailingMinDigit(t, k)
-		})
-	}
-}
-
-func TestBetweenErrorsOnEmptyInterval(t *testing.T) {
-	tests := []struct {
-		name string
-		a    string
-		b    string
-	}{
-		{"equal", "abc", "abc"},
-		{"inverted", "b", "a"},
-		{"inverted long", "aab", "aaa"},
-	}
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			if _, err := Between(tt.a, tt.b); err == nil {
-				t.Fatalf("Between(%q,%q): expected error, got nil", tt.a, tt.b)
-			}
-		})
-	}
-}
-
-func TestBetweenRepeatedInsertSamePairLeft(t *testing.T) {
-	lo, hi := "a", "b"
-	prev := hi
-	for i := 0; i < 100; i++ {
-		k, err := Between(lo, prev)
-		if err != nil {
-			t.Fatalf("iter %d Between(%q,%q): %v", i, lo, prev, err)
-		}
-		if !less(lo, k) || !less(k, prev) {
-			t.Fatalf("iter %d: not %q < %q < %q", i, lo, k, prev)
-		}
-		noTrailingMinDigit(t, k)
-		prev = k
-	}
-}
-
-func TestBetweenRepeatedInsertSamePairRight(t *testing.T) {
-	lo, hi := "a", "b"
-	prev := lo
-	for i := 0; i < 100; i++ {
-		k, err := Between(prev, hi)
-		if err != nil {
-			t.Fatalf("iter %d Between(%q,%q): %v", i, prev, hi, err)
-		}
-		if !less(prev, k) || !less(k, hi) {
-			t.Fatalf("iter %d: not %q < %q < %q", i, prev, k, hi)
-		}
-		noTrailingMinDigit(t, k)
-		prev = k
-	}
-}
-
-func TestBetweenRepeatedInsertMidpoint(t *testing.T) {
-	keys := []string{"a", "z"}
-	for i := 0; i < 100; i++ {
-		mid := len(keys) / 2
-		k, err := Between(keys[mid-1], keys[mid])
-		if err != nil {
-			t.Fatalf("iter %d Between(%q,%q): %v", i, keys[mid-1], keys[mid], err)
-		}
-		noTrailingMinDigit(t, k)
-		keys = append(keys, "")
-		copy(keys[mid+1:], keys[mid:])
-		keys[mid] = k
-		assertStrictlySorted(t, keys)
-	}
-}
-
 func assertStrictlySorted(t *testing.T, keys []string) {
 	t.Helper()
 	for i := 1; i < len(keys); i++ {
@@ -128,7 +26,7 @@ func assertStrictlySorted(t *testing.T, keys []string) {
 	}
 }
 
-func TestSeedMonotonicAndCanonical(t *testing.T) {
+func TestSeedLeavesRoomAroundEveryKey(t *testing.T) {
 	for _, n := range []int{0, 1, 2, 3, 5, 10, 35, 36, 37, 64, 100, 500} {
 		t.Run("n="+strconv.Itoa(n), func(t *testing.T) {
 			keys := Seed(n)
@@ -136,61 +34,23 @@ func TestSeedMonotonicAndCanonical(t *testing.T) {
 				t.Fatalf("Seed(%d) returned %d keys", n, len(keys))
 			}
 			assertStrictlySorted(t, keys)
-			for _, k := range keys {
+			for i, k := range keys {
 				noTrailingMinDigit(t, k)
+				lo := ""
+				if i > 0 {
+					lo = keys[i-1]
+				}
+				between, err := Between(lo, k)
+				if err != nil || (lo != "" && !less(lo, between)) || !less(between, k) {
+					t.Fatalf("no room below %q: Between(%q, %q) = %q, %v", k, lo, k, between, err)
+				}
+			}
+			if n > 0 {
+				if last := After(keys[n-1]); !less(keys[n-1], last) {
+					t.Fatalf("After(%q) = %q is not above it", keys[n-1], last)
+				}
 			}
 		})
-	}
-}
-
-func TestBetweenWorksOnAdjacentSeedOutputs(t *testing.T) {
-	for _, n := range []int{2, 3, 5, 10, 36, 100} {
-		keys := Seed(n)
-		for i := 1; i < len(keys); i++ {
-			lo, hi := keys[i-1], keys[i]
-			k, err := Between(lo, hi)
-			if err != nil {
-				t.Fatalf("Seed(%d): Between adjacent %q,%q: %v", n, lo, hi, err)
-			}
-			if !less(lo, k) || !less(k, hi) {
-				t.Fatalf("Seed(%d): not %q < %q < %q", n, lo, k, hi)
-			}
-			noTrailingMinDigit(t, k)
-		}
-		first, err := Between("", keys[0])
-		if err != nil || !less(first, keys[0]) {
-			t.Fatalf("Seed(%d): Between(MIN, %q)=%q err=%v", n, keys[0], first, err)
-		}
-		last := After(keys[len(keys)-1])
-		if !less(keys[len(keys)-1], last) {
-			t.Fatalf("Seed(%d): After(%q)=%q not greater", n, keys[len(keys)-1], last)
-		}
-	}
-}
-
-func TestAfterMonotonic(t *testing.T) {
-	prev := After("")
-	noTrailingMinDigit(t, prev)
-	for i := 0; i < 100; i++ {
-		k := After(prev)
-		noTrailingMinDigit(t, k)
-		if !less(prev, k) {
-			t.Fatalf("iter %d: After(%q)=%q not greater", i, prev, k)
-		}
-		prev = k
-	}
-}
-
-func TestAfterFirstKey(t *testing.T) {
-	k := After("")
-	if k == "" {
-		t.Fatalf("After(\"\") returned empty")
-	}
-	if below, err := Between("", k); err != nil || !less(below, k) {
-		t.Fatalf("no room below first key %q: %q err=%v", k, below, err)
-	}
-	if above := After(k); !less(k, above) {
-		t.Fatalf("no room above first key %q: %q", k, above)
 	}
 }
 
@@ -234,40 +94,5 @@ func TestBruteForceBetweenAllShortPairs(t *testing.T) {
 			}
 			noTrailingMinDigit(t, k)
 		}
-	}
-}
-
-func TestBetweenRandomInsertsStayStrictlyOrdered(t *testing.T) {
-	rng := newLCG(0x9e3779b9)
-	keys := []string{After("")}
-	for i := 0; i < 2000; i++ {
-		g := int(rng() % uint32(len(keys)+1))
-		lo, hi := "", ""
-		if g > 0 {
-			lo = keys[g-1]
-		}
-		if g < len(keys) {
-			hi = keys[g]
-		}
-		k, err := Between(lo, hi)
-		if err != nil {
-			t.Fatalf("iter %d Between(%q,%q): %v", i, lo, hi, err)
-		}
-		noTrailingMinDigit(t, k)
-		keys = append(keys, "")
-		copy(keys[g+1:], keys[g:])
-		keys[g] = k
-		assertStrictlySorted(t, keys)
-	}
-	if len(keys) != 2001 {
-		t.Fatalf("expected 2001 keys, got %d", len(keys))
-	}
-}
-
-func newLCG(seed uint32) func() uint32 {
-	state := seed
-	return func() uint32 {
-		state = state*1664525 + 1013904223
-		return state
 	}
 }

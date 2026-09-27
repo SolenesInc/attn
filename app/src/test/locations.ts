@@ -10,18 +10,6 @@ export const HOME = '/home/me';
 const AT = '2026-05-16T16:00:00Z';
 
 type RepoInfo = NonNullable<EventMessage<'get_repo_info_result'>['info']>;
-type DaemonEndpoint = NonNullable<EventMessage<'endpoints_updated'>['endpoints']>[number];
-
-export function remoteEndpoint(id: string, name: string, overrides: Partial<DaemonEndpoint['capabilities']> = {}, status = 'connected'): DaemonEndpoint {
-  return {
-    id,
-    name,
-    ssh_target: name,
-    status,
-    enabled: true,
-    capabilities: { protocol_version: '46', agents_available: ['codex'], projects_directory: `/srv/${name}`, ...overrides },
-  };
-}
 
 export function repoInfo(repo: string, worktrees: Array<{ path: string; branch: string }> = [], overrides: Partial<RepoInfo> = {}): RepoInfo {
   return {

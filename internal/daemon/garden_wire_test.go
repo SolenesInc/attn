@@ -1,17 +1,21 @@
 package daemon_test
 
 import (
+	"encoding/json"
 	"reflect"
 	"slices"
+	"strconv"
 	"strings"
 	"sync"
 	"testing"
 	"time"
 
 	"github.com/victorarias/attn/internal/client"
+	"github.com/victorarias/attn/internal/config"
 	"github.com/victorarias/attn/internal/fakeagent"
 	"github.com/victorarias/attn/internal/garden"
 	"github.com/victorarias/attn/internal/protocol"
+	"github.com/victorarias/attn/internal/store"
 	"github.com/victorarias/attn/internal/testworld"
 )
 
@@ -263,6 +267,14 @@ func TestSeedRefusalsNameWhatIsWrongAndChangeNothing(t *testing.T) {
 			_, err := cli.SeedPlant("", "   ", "", "", "", "")
 			return err
 		}, []string{"attn seed plant"}},
+		{"an over-long title", func() error {
+			_, err := cli.SeedPlant("", strings.Repeat("x", garden.MaxTitleChars+1), "", "", "", "")
+			return err
+		}, []string{"401", "400"}},
+		{"a note past the limit", func() error {
+			_, err := cli.SeedNote("", seed, strings.Repeat("x", garden.MaxNoteBytes+1), "", "", false, nil)
+			return err
+		}, []string{strconv.Itoa(garden.MaxNoteBytes + 1)}},
 		{"a malformed id", func() error {
 			_, err := cli.SeedShow("", "nope")
 			return err
@@ -441,6 +453,46 @@ func TestASeedsStateClockMovesOnlyWithItsLifecycle(t *testing.T) {
 		w.advance(time.Second)
 		lifeClockAt(t, "tending", lifeMove(t, cli, "worker", planted.Seed.ID, "tend", "", ""), time.Now())
 	})
+}
+
+func TestASeedWrittenBeforeTheStateClockShowsItsLastUpdateAsInexact(t *testing.T) {
+	w := newWorld(t)
+	seed := plantSeedAs(t, w.Client(), "", "old work")
+	w.stop()
+	updated := time.Date(2026, 8, 22, 14, 30, 0, 0, time.UTC)
+	older, err := store.NewWithDB(config.DBPath())
+	if err != nil {
+		t.Fatal(err)
+	}
+	schema, found, err := older.DocumentCollection(garden.Namespace, garden.CollectionSeeds)
+	if err != nil || !found {
+		t.Fatalf("the seeds collection = %v, %v", found, err)
+	}
+	doc, _, err := older.GetDocument(*schema, seed)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var body map[string]any
+	if err := json.Unmarshal(doc.Body, &body); err != nil {
+		t.Fatal(err)
+	}
+	delete(body, "state_changed_at")
+	legacy, err := json.Marshal(body)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := older.PutDocument(*schema, seed, legacy, updated, &doc.Rev); err != nil {
+		t.Fatal(err)
+	}
+	if err := older.Close(); err != nil {
+		t.Fatal(err)
+	}
+	w.start()
+
+	shown := lifeShow(t, w.Client(), seed).Seed
+	if shown.StateChangedAt != updated.Format(time.RFC3339Nano) || shown.StateChangedAtExact {
+		t.Errorf("the legacy seed's state clock reads %q (exact=%t), want its last update %s marked inexact", shown.StateChangedAt, shown.StateChangedAtExact, updated.Format(time.RFC3339Nano))
+	}
 }
 
 func lifeClockAt(t *testing.T, move string, seed protocol.Seed, want time.Time) {

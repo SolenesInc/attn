@@ -118,6 +118,14 @@ Agents:
   pane the way the app does.
 - `w.HoldNextBoot()` keeps the next agent booting, before it paints its
   resting title or reads input, until the test calls the returned function.
+- `w.ExitAtNextBoot(code, screen)` makes the next agent print `screen` and
+  exit with `code` before it starts, the way a harness that cannot start does.
+- `w.RefusePiLaunches(reason)` makes the Pi driver refuse every launch and
+  resume with `reason` until the test calls the returned function. Setting
+  `fakeagent.PiCapabilitiesEnv` (such as `launch_instructions,resume=false`)
+  before the world starts changes the capabilities the Pi driver registers.
+  `fakeagent.PiAgentEnv` registers the driver under another harness name, and
+  `fakeagent.PiModelsEnv` holds the catalog JSON it answers `driver.models` with.
 
 Playing the model, on a `fakeagent.Run`:
 
@@ -126,11 +134,20 @@ Playing the model, on a `fakeagent.Run`:
 - `Reply` ends the turn with text carrying the `<!-- attn:state=... -->`
   marker. `ReplyAfterStop` writes that reply only after the Stop hook.
 - `Exit` quits with an exit code.
+- `StopReadingTerminal` stops reading input, so what the daemon types backs
+  up in the terminal the way it does for a frozen agent.
 - `Halt` writes the harness's own record of the user interrupting the turn
   (Claude, Codex and Copilot).
 - Claude only: `Stream` writes part of a reply that the next `Reply` revises
   under the same message. `Subagent` writes a subagent's transcript, and
   `DeleteSubagentTranscripts` removes those transcripts.
+  A Claude launched with a bare `-r` opens its resume picker, which starts a
+  new conversation and sets `ResumePicker` on its `Run`.
+- Headless tasks, the one-shot model calls such as titles and turn verdicts,
+  are off unless the test sets `ATTN_HEADLESS_TASKS=on`. Then `w.HeadlessTask()`
+  returns the next task's `Harness`, `Model`, `Effort` and `Prompt` to `Answer`
+  or `Fail`, and a task the test never takes fails it. The task also carries
+  the `Argv`, `Env` and working `Dir` the harness process was started with.
 
 Waiting for results:
 
@@ -168,6 +185,10 @@ returns `testworld.Main(m)`.
   prepares a data directory for the built `attn` binary.
 - `s.Start()` runs `attn daemon` and returns once it signals ready. `s.Stop()`
   ends it. A `Start` after `Stop` restarts over the same data.
+- For a promise about a crash mid-operation, `s.StartCrashingAt(point)` runs
+  a daemon that kills itself with SIGKILL at a crash point named in the
+  daemon (`ATTN_CRASH_AT`). `s.AwaitCrash()` returns once it has, and a later
+  `Start` recovers from the state the real daemon left behind.
 - The world helpers from daemon wire tests work here too.
 - `s.Attn(args...)` runs a CLI command to completion. `s.Run` takes an
   `Invocation` when the command needs stdin, a session, extra env, or another

@@ -116,3 +116,29 @@ func TestATimestampBoundThatIsNotATimestampIsRefused(t *testing.T) {
 		t.Fatalf("error names neither the expected form nor the value given: %v", err)
 	}
 }
+
+func requestsSchema() CollectionSchema {
+	return CollectionSchema{
+		Namespace:  "app/approval-gate",
+		Collection: "requests",
+		Fields: []FieldSpec{
+			{Name: "status", Type: FieldString},
+			{Name: "attempts", Type: FieldNumber},
+			{Name: "urgent", Type: FieldBool},
+		},
+		Table: "doc_12",
+	}
+}
+
+func mustCompile(t *testing.T, q Query, anchor ...*Document) Compiled {
+	t.Helper()
+	var after *Document
+	if len(anchor) == 1 {
+		after = anchor[0]
+	}
+	c, err := q.Compile(requestsSchema(), after)
+	if err != nil {
+		t.Fatalf("compile: %v", err)
+	}
+	return c
+}

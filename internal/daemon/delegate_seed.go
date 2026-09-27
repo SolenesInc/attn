@@ -1,7 +1,6 @@
 package daemon
 
 import (
-	"context"
 	"errors"
 	"fmt"
 	"strings"
@@ -149,17 +148,6 @@ func (d *Daemon) bindDelegationAssignmentProtected(_ foregroundCleanupProtection
 	return seed.ID, nil
 }
 
-func (d *Daemon) bindDelegationSeed(sessionID, plannerSessionID, brief, name, crown, cwd, agent string, fromChief bool) (string, error) {
-	observed := d.observeGardenDispatchExecution(sessionID, cwd, agent)
-	var seedID string
-	err := d.worktreeMaintenance.ProtectFromAutomaticCleanup(context.Background(), func(protection foregroundCleanupProtection) error {
-		var err error
-		seedID, err = d.bindDelegationSeedProtected(protection, sessionID, plannerSessionID, brief, name, crown, observed, fromChief)
-		return err
-	})
-	return seedID, err
-}
-
 func (d *Daemon) bindDelegationSeedProtected(protection foregroundCleanupProtection, sessionID, plannerSessionID, brief, name, crown string, observed garden.Dispatch, fromChief bool) (string, error) {
 	seedID, err := d.bindDelegatedSeedProtected(protection, sessionID, plannerSessionID, brief, name, crown, observed, fromChief)
 	switch {
@@ -169,17 +157,6 @@ func (d *Daemon) bindDelegationSeedProtected(protection foregroundCleanupProtect
 		return "", fmt.Errorf("bind delegation for session %s: %w", sessionID, err)
 	}
 	return seedID, nil
-}
-
-func (d *Daemon) bindDelegatedSeed(sessionID, plannerSessionID, brief, name, crown, cwd, agent string, fromChief bool) (string, error) {
-	observed := d.observeGardenDispatchExecution(sessionID, cwd, agent)
-	var seedID string
-	err := d.worktreeMaintenance.ProtectFromAutomaticCleanup(context.Background(), func(protection foregroundCleanupProtection) error {
-		var err error
-		seedID, err = d.bindDelegatedSeedProtected(protection, sessionID, plannerSessionID, brief, name, crown, observed, fromChief)
-		return err
-	})
-	return seedID, err
 }
 
 func (d *Daemon) bindDelegatedSeedProtected(protection foregroundCleanupProtection, sessionID, plannerSessionID, brief, name, crown string, observed garden.Dispatch, fromChief bool) (string, error) {

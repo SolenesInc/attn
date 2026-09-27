@@ -2,7 +2,7 @@ import { act, fireEvent, screen, within } from '@testing-library/react';
 import { EditorView } from '@codemirror/view';
 import { describe, expect, it, onTestFinished, vi } from 'vitest';
 import { stubTextLayout } from './test/appFixtures';
-import { agentWorkspace, daemonSession, type DaemonSession } from './test/daemonFixtures';
+import { agentWorkspace, daemonEndpoint, daemonSession, type DaemonSession, type DaemonWorkspace } from './test/daemonFixtures';
 import { stubNavigatorPlatform } from './test/platformStub';
 import { pressShortcut, renderApp } from './test/renderApp';
 import type { ScriptedDaemon } from './test/scriptedDaemon';
@@ -397,6 +397,144 @@ describe('App notebook saving', () => {
   });
 });
 
+describe('App notebook file kinds', () => {
+  it.each([
+    ['NOTES.MARKDOWN', 'note'],
+    ['config.json', 'text'],
+    ['Makefile', 'text'],
+    ['README', 'text'],
+    ['clip.MP4', 'placeholder'],
+    ['fonts.woff2', 'placeholder'],
+    ['installer.pkg', 'placeholder'],
+    ['attachment', 'placeholder'],
+    ['.gitignore', 'placeholder'],
+  ])('shows %s as %s', async (name, kind) => {
+    const vault = freshVault();
+    vault.tree[''].push(file(name));
+    vault.files[name] = '# contents';
+    const { daemon } = await openVault({ vault });
+
+    await click(daemon, treeItem(name));
+
+    const shown = {
+      note: () => documentPane().querySelector('.cm-md-h1'),
+      text: () => notebook().queryByRole('textbox', { name: 'File contents' }),
+      placeholder: () => notebook().queryByText(`${name} can't be opened here yet.`),
+    };
+    for (const [candidate, found] of Object.entries(shown)) {
+      expect(found() !== null).toBe(candidate === kind);
+    }
+    expect(fsReadsOf(daemon, name)).toHaveLength(kind === 'placeholder' ? 0 : 1);
+  });
+});
+
+describe('App notebook live preview', () => {
+  async function openNote(content: string) {
+    const vault = freshVault();
+    vault.files['knowledge/index.md'] = content;
+    return openVault({ vault });
+  }
+
+  function shownLines(): string[] {
+    return Array.from(documentPane().querySelectorAll('.cm-line, .cm-md-image, .cm-md-frontmatter')).map((line) => {
+      if (line.classList.contains('cm-md-image')) return '[image]';
+      if (line.classList.contains('cm-md-frontmatter')) return '[properties]';
+      return line.textContent ?? '';
+    });
+  }
+
+  function placeCursor(anchor: number) {
+    const editor = noteEditor();
+    act(() => editor.dispatch({ selection: { anchor } }));
+  }
+
+  it.each([
+    ['a heading without its marker', '# Title\n\nbody', ['Title', '', 'body']],
+    ['inline styles and a link as text alone', 'x **b** *i* `c` ~~s~~ [the note](/k/foo.md)', ['x b i c s the note']],
+    ['bullets and task boxes, and an ordered list as written', '- item\n- [ ] todo\n- [x] done\n\n1. first', ['• item', '☐ todo', '☑ done', '', '1. first']],
+    ['a fenced code block with its fences', '```ts\ncode\n```', ['```ts', 'code', '```']],
+    ['every line of a blockquote, nested ones too, without their marks', '> one\n> two\n\n> > nested', ['one', 'two', '', 'nested']],
+    ['a rule, but not the underline of a heading', 'para\n\n---\n\ntitle\n---', ['para', '', '', '', 'title', '---']],
+    ['an image on its own line', 'Before.\n\n![a cat](a.png)\n\nAfter.', ['Before.', '', '[image]', '', 'After.']],
+    ['frontmatter as a properties card', '---\ntype: area\n---\n# Body', ['[properties]', 'Body']],
+    ['frontmatter with no body line as raw YAML', '---\ntype: area\n---\n', ['---', 'type: area', '---', '']],
+    ['an unclosed frontmatter fence as markdown', '---\ntags:\n  - one\n- item', ['', 'tags:', '  • one', '• item']],
+  ])('renders %s', async (_, content, lines) => {
+    await openNote(content);
+
+    expect(shownLines()).toEqual(lines);
+  });
+
+  it.each([
+    ['inside a paragraph', 'Look ![a cat](a.png) here'],
+    ['followed by text', '![a cat](a.png) is cute'],
+    ['beside another image', '![one](a.png)![two](b.png)'],
+  ])('leaves an image %s in the text', async (_, content) => {
+    await openNote(content);
+
+    expect(shownLines()).toHaveLength(1);
+    expect(documentPane().querySelector('.cm-md-image')).toBeNull();
+  });
+
+  it('reads a fence that does not close near the top as markdown, not frontmatter', async () => {
+    await openNote(`---\n${'padding line\n'.repeat(400)}---\n# Body\n`);
+
+    expect(shownLines()[1]).toBe('padding line');
+    expect(documentPane().querySelector('.cm-md-frontmatter')).toBeNull();
+  });
+
+  it('styles what it renders', async () => {
+    await openNote('# Title\n\nx **b** *i* `c` ~~s~~ [the note](/k/foo.md)\n\n```ts\ncode\n```\n\n> quote');
+    const content = documentPane().querySelector('.cm-content')!;
+
+    expect(content.querySelector('.cm-md-h1')).toHaveTextContent('Title');
+    for (const [style, text] of [['strong', 'b'], ['em', 'i'], ['code', 'c'], ['strike', 's']]) {
+      expect(content.querySelector(`.cm-md-${style}`)).toHaveTextContent(text);
+    }
+    expect(content.querySelector('.cm-md-link')).toHaveAttribute('data-href', '/k/foo.md');
+    expect(content.querySelectorAll('.cm-md-codeblock')).toHaveLength(3);
+    expect(content.querySelectorAll('.cm-md-codeblock .cm-md-code')).toHaveLength(0);
+    expect(content.querySelector('.cm-md-codeinfo')).toHaveTextContent('ts');
+    expect(content.querySelector('.cm-md-blockquote')).toHaveTextContent('quote');
+  });
+
+  it('reveals the source of the line the cursor is on while the note has focus, and of nothing once it leaves', async () => {
+    const note = '# Title\n\n- [ ] todo\n\n> quote\n\n---\n\n![a cat](a.png)\n\nend';
+    const { daemon } = await openNote(note);
+    act(() => noteEditor().focus());
+    await daemon.idle();
+
+    placeCursor(note.indexOf('itle'));
+    expect(shownLines().slice(0, 3)).toEqual(['# Title', '', '☐ todo']);
+
+    placeCursor(note.indexOf('todo'));
+    expect(shownLines().slice(0, 5)).toEqual(['Title', '', '- [ ] todo', '', 'quote']);
+
+    placeCursor(note.indexOf('quote'));
+    expect(shownLines()[4]).toBe('> quote');
+
+    placeCursor(note.indexOf('---') + 1);
+    expect(shownLines()[6]).toBe('---');
+
+    placeCursor(note.indexOf('![') + 2);
+    expect(shownLines()[8]).toBe('![a cat](a.png)');
+
+    placeCursor(note.indexOf('Title'));
+    act(() => noteEditor().contentDOM.blur());
+    expect(shownLines()[0]).toBe('Title');
+  });
+
+  it('opens the properties for editing from the keyboard, leaving the YAML lists as written', async () => {
+    await openNote('---\ntags:\n  - one\n---\n# Body');
+    const card = screen.getByRole('button', { name: 'Edit note properties' });
+
+    act(() => card.focus());
+    fireEvent.keyDown(card, { key: 'Enter' });
+
+    expect(shownLines()).toEqual(['---', 'tags:', '  - one', '---', 'Body']);
+  });
+});
+
 describe('App notebook send to chief', () => {
   it('sends the selected text with its note to the chief and says it landed', async () => {
     stubTextLayout();
@@ -484,5 +622,34 @@ describe('App notebook finder', () => {
 
     expect(screen.getByRole('dialog', { name: 'Open a markdown file' })).toBeInTheDocument();
     expect(screen.queryByRole('dialog', { name: 'Find a note' })).toBeNull();
+  });
+});
+
+describe('App notebook tile root', () => {
+  it.each<[string, Array<Partial<DaemonWorkspace>>, string | undefined, string?]>([
+    ['a workspace outside the notebook', [{ directory: '/tmp/project' }], '{"root":"/tmp/project"}'],
+    ['a workspace padded with spaces', [{ directory: '  /tmp/project  ' }], '{"root":"/tmp/project"}'],
+    ['the notebook itself', [{ directory: NOTEBOOK_ROOT }], undefined],
+    ['a workspace without a directory', [{ directory: '' }], undefined],
+    ['a remote workspace', [{ directory: '/srv/project', endpoint_id: 'ep-1' }], undefined, 'ep-1'],
+    ['a workspace id a remote twin shares', [{ directory: '/tmp/project' }, { directory: '/srv/project', endpoint_id: 'ep-1' }], undefined],
+  ])('roots a notebook tile opened in %s', async (_, records, tileParams, endpoint) => {
+    const { daemon } = await renderApp({
+      initialState: {
+        settings: { 'notebook.root.effective': NOTEBOOK_ROOT },
+        endpoints: [daemonEndpoint('ep-1')],
+        sessions: [daemonSession('s1', { state: 'idle', ...(endpoint ? { endpoint_id: endpoint } : {}) })],
+        workspaces: records.map((record) => ({ ...agentWorkspace('s1'), ...record })),
+      },
+    });
+    fireEvent.click(screen.getAllByRole('button', { name: 'Open s1' })[0]);
+    await daemon.idle();
+
+    pressShortcut('notebook.openTile');
+    await daemon.idle();
+
+    const [dock] = daemon.sentOf('workspace_layout_dock_tile');
+    expect(dock).toMatchObject({ workspace_id: 'workspace-s1', tile_kind: 'notebook' });
+    expect(dock.tile_params).toBe(tileParams);
   });
 });

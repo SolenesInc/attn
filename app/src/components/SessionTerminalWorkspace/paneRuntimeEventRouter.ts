@@ -1,7 +1,7 @@
 import { useEffect, useMemo } from 'react';
 import { listenPtyEvents, type PtyEventPayload } from '../../pty/bridge';
 
-export interface PaneRuntimeEventBinding {
+interface PaneRuntimeEventBinding {
   sessionId?: string;
   paneId: string;
   runtimeId: string;
@@ -42,7 +42,8 @@ export function createPaneRuntimeEventRouterController(): PaneRuntimeEventRouter
     }
     const authority = bindings.find((binding) => binding.isLive?.() ?? true) ?? bindings[0];
     for (const binding of bindings) {
-      binding.onEvent(binding === authority || event.event !== 'data' ? event : { ...event, suppressResponses: true });
+      const writesBytes = event.event === 'data' || event.event === 'restore_fallback';
+      binding.onEvent(binding === authority || !writesBytes ? event : { ...event, suppressResponses: true });
     }
   };
 

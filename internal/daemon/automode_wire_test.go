@@ -14,6 +14,7 @@ import (
 
 	"github.com/victorarias/attn/internal/automode"
 	"github.com/victorarias/attn/internal/client"
+	"github.com/victorarias/attn/internal/fakeagent"
 	attngit "github.com/victorarias/attn/internal/git"
 	"github.com/victorarias/attn/internal/protocol"
 	"github.com/victorarias/attn/internal/testworld"
@@ -439,8 +440,15 @@ func TestAutoModePolicyFieldsAndTheGuardianAreSetIndependently(t *testing.T) {
 	if refused := set(protocol.AutoModePolicySetMessage{ApprovalPolicy: protocol.Ptr("yolo")}); refused.Success || !strings.Contains(protocol.Deref(refused.Error), automode.PolicyOnRequest) {
 		t.Errorf("an unknown policy = %+v, want a refusal naming the choices", refused)
 	}
-	if refused := set(protocol.AutoModePolicySetMessage{Guardian: &protocol.GuardianSelection{Provider: protocol.Ptr("broken")}}); refused.Success {
-		t.Error("a guardian without a model was accepted")
+	for name, broken := range map[string]protocol.GuardianSelection{
+		"a provider without a model": {Provider: protocol.Ptr("broken")},
+		"a model without a provider": {Model: protocol.Ptr("review/model")},
+		"an effort nobody offers":    {Effort: protocol.Ptr("unknown")},
+		"a provider holding a space": {Provider: protocol.Ptr("p q"), Model: protocol.Ptr("m")},
+	} {
+		if refused := set(protocol.AutoModePolicySetMessage{Guardian: &broken}); refused.Success {
+			t.Errorf("a guardian with %s was accepted", name)
+		}
 	}
 	if cfg := set(protocol.AutoModePolicySetMessage{AllowLocalBinding: protocol.Ptr(true)}).Config; !cfg.Network.AllowLocalBinding || cfg.ApprovalPolicy != automode.PolicyNever {
 		t.Errorf("local binding %t with policy %q, want local binding on and the policy it was not told about held", cfg.Network.AllowLocalBinding, cfg.ApprovalPolicy)
@@ -901,4 +909,55 @@ func denialLedgerLine(t *testing.T, record any) string {
 		t.Fatal(err)
 	}
 	return string(line)
+}
+
+func TestADenialArrivingByRelayAndByTheLedgerIsListedAndAnnouncedOnce(t *testing.T) {
+	w := newWorld(t, fakeagent.Pi)
+	app, cli := w.App(), w.Client()
+	awaitAgentAvailable(app, string(fakeagent.Pi))
+	relayedFirst, recoveredFirst := w.Spawn(app, fakeagent.Pi, w.Path("shop")), w.Spawn(app, fakeagent.Pi, w.Path("blog"))
+	const action = "bash: curl https://one.example"
+	stamps := map[string]string{relayedFirst: "2026-08-18T10:00:00.123Z", recoveredFirst: "2026-08-18T10:00:01.456Z"}
+	deny := func(session string) {
+		w.Launched(session).Deny(fakeagent.Denial{Tool: "bash", Action: action, Reason: "outside the envelope", Rule: "classifier-2a", At: stamps[session]})
+	}
+	listedOnce := func(when string) {
+		t.Helper()
+		listed, err := cli.AutoModeDenials(10)
+		if err != nil {
+			t.Fatal(err)
+		}
+		var sessions []string
+		for _, d := range listed.Denials {
+			sessions = append(sessions, d.SessionID)
+		}
+		slices.Sort(sessions)
+		want := []string{relayedFirst, recoveredFirst}
+		slices.Sort(want)
+		if !slices.Equal(sessions, want) {
+			t.Errorf("%s the denials are from %v, want one from each session", when, sessions)
+		}
+	}
+
+	deny(relayedFirst)
+	var ledger []string
+	for _, session := range []string{relayedFirst, recoveredFirst} {
+		ledger = append(ledger, denialLedgerLine(t, map[string]string{
+			"session_id": session, "tool": "bash", "action": action, "reason": "outside the envelope", "rule": "classifier-2a", "at": stamps[session],
+		}))
+	}
+	writeDenialLedger(t, w, ledger...)
+	listedOnce("after the ledger repeated a relayed denial")
+	deny(recoveredFirst)
+	listedOnce("after a relay repeated a denial the ledger recovered")
+
+	announced := 0
+	for _, n := range listNotifications(app).Notifications {
+		if n.Kind == "automode_denied" {
+			announced++
+		}
+	}
+	if announced != 2 {
+		t.Errorf("the app was told of %d denials, want one per denial", announced)
+	}
 }

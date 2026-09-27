@@ -15,14 +15,7 @@ import (
 )
 
 func TestTheDiagnosticsServerIsOptInAndLoopbackOnly(t *testing.T) {
-	reserved, err := net.Listen("tcp", "127.0.0.1:0")
-	if err != nil {
-		t.Fatal(err)
-	}
-	port := strconv.Itoa(reserved.Addr().(*net.TCPAddr).Port)
-	if err := reserved.Close(); err != nil {
-		t.Fatal(err)
-	}
+	port := reserveDiagPort(t)
 	loopback := net.JoinHostPort("127.0.0.1", port)
 	vars := "http://" + loopback + "/debug/vars"
 	dial := func(addr string) error {
@@ -73,6 +66,19 @@ func TestTheDiagnosticsServerIsOptInAndLoopbackOnly(t *testing.T) {
 	if backend := app.Initial.Settings["pty_backend_mode"]; reported.PtyBackend != backend || reported.Sessions != 1 {
 		t.Errorf("/debug/vars reports backend %q with %d sessions, want the app's %v with the one spawned session", reported.PtyBackend, reported.Sessions, backend)
 	}
+}
+
+func reserveDiagPort(t *testing.T) string {
+	t.Helper()
+	reserved, err := net.Listen("tcp", "127.0.0.1:0")
+	if err != nil {
+		t.Fatal(err)
+	}
+	port := strconv.Itoa(reserved.Addr().(*net.TCPAddr).Port)
+	if err := reserved.Close(); err != nil {
+		t.Fatal(err)
+	}
+	return port
 }
 
 func firstNonLoopbackIPv4ForDiag(t *testing.T) net.IP {

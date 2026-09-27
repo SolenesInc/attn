@@ -420,6 +420,7 @@ async function main() {
       runJSON(binary, ['automation', 'apply', '--file', stormGuardDefinitionFile], daemonEnv);
       stormGuardApplied = true;
       await waitForScheduleAnchor(dbPath, stormGuardID);
+      disableDefinition(binary, stormGuardID, daemonEnv);
       const anchoredRows = runJSON(binary, ['automation', 'runs', stormGuardID], daemonEnv) || [];
       runner.assert(anchoredRows.length === 0, 'storm-guard probe does not fire on its anchor-only tick', { anchoredRows });
 
@@ -427,6 +428,7 @@ async function main() {
       await delay(DOWNTIME_MS);
       run(binary, ['daemon', 'ensure'], daemonEnv);
       await waitForDaemonReady(binary, daemonEnv);
+      runJSON(binary, ['automation', 'enable', stormGuardID], daemonEnv);
 
       const claimed = await poll(() => {
         const list = runJSON(binary, ['automation', 'runs', stormGuardID], daemonEnv) || [];

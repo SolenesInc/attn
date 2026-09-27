@@ -88,14 +88,26 @@ func TestAttachingWithReviveRelaunchesARecoverableSession(t *testing.T) {
 				}
 			},
 		},
+		{
+			name:  "pi resumes through its driver",
+			agent: fakeagent.Pi,
+			start: func(t *testing.T, w *world, app *testworld.Peer) string {
+				return w.Spawn(app, fakeagent.Pi, w.Path("shop"))
+			},
+		},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			w := newWorld(t, tc.agent)
 			app := w.App()
 			session := tc.start(t, w, app)
 			first := w.Launched(session)
-			tc.want(t, w, first.Argv)
+			if tc.want != nil {
+				tc.want(t, w, first.Argv)
+			}
 			app = attachReviveMakeRecoverable(t, w, app, session, first, tc.withTask)
+			if tc.agent == fakeagent.Pi {
+				pluginDriverSettings(app, "pi")
+			}
 
 			revived := attachRevive(app, session, 101, 37)
 			if !revived.Success || !protocol.Deref(revived.Revived) || protocol.Deref(revived.Cols) != 101 || protocol.Deref(revived.Rows) != 37 {
@@ -105,7 +117,9 @@ func TestAttachingWithReviveRelaunchesARecoverableSession(t *testing.T) {
 			if !relaunched.Resumed || relaunched.ConversationID != first.ConversationID {
 				t.Errorf("the revive ran %s %q, want it resuming conversation %s", tc.agent, relaunched.Argv, first.ConversationID)
 			}
-			tc.want(t, w, relaunched.Argv)
+			if tc.want != nil {
+				tc.want(t, w, relaunched.Argv)
+			}
 		})
 	}
 }

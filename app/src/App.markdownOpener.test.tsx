@@ -168,7 +168,7 @@ describe('App markdown opener', () => {
     expect(daemon.sentOf('browse_directory').slice(-1)[0]).toMatchObject({ input_path: '/repo/docs/' });
   });
 
-  it('closes on Escape without dismissing what is open beneath it', async () => {
+  it('closes on Escape without dismissing what is open beneath it, which the next Escape closes', async () => {
     const session = daemonSession('s1', { workspace_id: 'ws', directory: '/repo' });
     const view = await renderApp({
       initialState: {
@@ -189,6 +189,10 @@ describe('App markdown opener', () => {
 
     expect(screen.queryByRole('dialog', { name: 'Open a markdown file' })).toBeNull();
     expect(document.querySelector('.md-lightbox')).toBeInTheDocument();
+
+    fireEvent.keyDown(window, { key: 'Escape' });
+
+    expect(document.querySelector('.md-lightbox')).toBeNull();
   });
 
   it('closes on a press outside its box, but not on one inside it', async () => {

@@ -6,7 +6,7 @@ import { type EditorState, type Extension, type Range, StateField } from '@codem
 import { Decoration, type DecorationSet, EditorView, WidgetType } from '@codemirror/view';
 import type { SyntaxNode } from '@lezer/common';
 
-export interface ImageTarget {
+interface ImageTarget {
   lineFrom: number;
   lineTo: number;
   alt: string;
@@ -39,7 +39,7 @@ function parseImageNode(node: SyntaxNode, state: EditorState): { alt: string; sr
   };
 }
 
-export function imageTargets(state: EditorState): ImageTarget[] {
+function imageTargets(state: EditorState): ImageTarget[] {
   const tree = ensureSyntaxTree(state, state.doc.length, 50);
   if (!tree) return [];
   const targets: ImageTarget[] = [];

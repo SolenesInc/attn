@@ -29,7 +29,6 @@ type Watcher struct {
 	selfWrites map[string]selfWriteRecord
 	closeOnce  sync.Once
 	loopDone   chan struct{}
-	now        func() time.Time
 }
 
 type selfWriteRecord struct {
@@ -65,7 +64,6 @@ func NewWatcherWithCleaner(root string, debounce time.Duration, cleanPath func(s
 		fsw:        fsw,
 		selfWrites: make(map[string]selfWriteRecord),
 		loopDone:   make(chan struct{}),
-		now:        time.Now,
 	}
 	if _, err := w.addTree(w.root); err != nil {
 		_ = fsw.Close()
@@ -81,7 +79,7 @@ func (w *Watcher) NoteSelfWrite(writes ...SelfWrite) {
 	}
 	w.mu.Lock()
 	defer w.mu.Unlock()
-	exp := w.now().Add(selfWriteTTL)
+	exp := time.Now().Add(selfWriteTTL)
 	for _, sw := range writes {
 		clean, err := w.cleanPath(sw.Rel)
 		if err != nil {
@@ -165,7 +163,7 @@ func (w *Watcher) flush(pending map[string]struct{}) {
 
 func (w *Watcher) dropSelfWrites(rels []string) []string {
 	w.mu.Lock()
-	now := w.now()
+	now := time.Now()
 	for k, rec := range w.selfWrites {
 		if now.After(rec.expiry) {
 			delete(w.selfWrites, k)

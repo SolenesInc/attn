@@ -1,6 +1,10 @@
 package main_test
 
 import (
+	"fmt"
+	"io"
+	"net/http"
+	"net/http/httptest"
 	"os"
 	"path/filepath"
 	"regexp"
@@ -130,6 +134,12 @@ func TestTheGardenCommandsPrintWhatAgentsActOn(t *testing.T) {
 		requireLines(t, "note", seedAs(t, s, "", "note", carried.ID, "-m", "ordinary progress"), "noted on "+carried.ID)
 		requireLines(t, "handoff", seedAs(t, s, "", "note", carried.ID, "-m", "first line\nsecond line\n", "--handoff", "--member", "keel"),
 			"handoff left on "+carried.ID+" — whoever tends it next reads this first")
+
+		exported := seedAs(t, s, "", "export", carried.ID, "--out", "-")
+		if !strings.HasPrefix(exported, "# Carry this\n") || !strings.Contains(exported, "\nthe plan\n") {
+			t.Errorf("export does not carry the title and body:\n%s", exported)
+		}
+		requireLines(t, "export", exported, "edit the crown, not this file", "`"+carried.ID+"`")
 
 		shown := seedAs(t, s, "", "show", carried.ID)
 		if !strings.HasPrefix(shown, "handoff — Keel, ") || !strings.Contains(shown, "\n  first line\n  second line\n\n"+carried.ID+" ") {
@@ -348,4 +358,135 @@ func TestTheGardenCommandsPrintWhatAgentsActOn(t *testing.T) {
 		}
 		requireFailure(t, s.Attn("seed", "review", "keep", "r-missing", "--json", "s-7k3f9m"), "seed review keep: ", "no Garden review r-missing exists")
 	})
+
+	t.Run("review show lists what each seed offers", func(t *testing.T) {
+		register(t, s, "drifter", "drifter")
+		seed := plant(t, s, "Drifted work")
+		seedAs(t, s, "drifter", "tend", seed.ID)
+		if err := s.Client().Unregister("drifter"); err != nil {
+			t.Fatal(err)
+		}
+		var started protocol.SeedReviewResult
+		s.Attn("seed", "review", "start", "--json").JSON(t, &started)
+		if started.Review == nil {
+			t.Fatalf("review start --json = %+v", started)
+		}
+		requireLines(t, "review show", seedAs(t, s, "", "review", "show", started.Review.Run.ID),
+			"\n"+seed.ID+"  Drifted work\n", "\nactions\tkeep_growing, park, harvest, wither\n")
+	})
+}
+
+func TestAMoveCrashedAfterStagingFinishesWhenRetried(t *testing.T) {
+	t.Parallel()
+	s := testworld.NewStack(t)
+	folder := seedArtifactsFolderOf(t, s)
+	s.StartCrashingAt("seed-artifact-staged")
+	seed := plant(t, s, "Durable files")
+	source := filepath.Join(t.TempDir(), "recover.bin")
+	if err := os.WriteFile(source, []byte("payload"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	s.Attn("seed", "attach", seed.ID, "--path", source, "--move")
+	s.AwaitCrash()
+
+	s.Start()
+	var retried protocol.SeedArtifactTransferResult
+	s.Attn("seed", "attach", seed.ID, "--path", source, "--move", "--json").JSON(t, &retried)
+	if !retried.Recovered {
+		t.Errorf("retrying the crashed move = %+v, want it recovered", retried)
+	}
+	if got, err := os.ReadFile(retried.DestinationPath); err != nil || string(got) != "payload" {
+		t.Errorf("the seed's copy holds %q (%v), want the source's bytes", got, err)
+	}
+	if _, err := os.Lstat(source); !os.IsNotExist(err) {
+		t.Errorf("the source survived the recovered move: %v", err)
+	}
+	if entries := folder(seed.ID); !slices.Equal(entries, []string{"recover.bin"}) {
+		t.Errorf("after the recovered move the seed's folder holds %q, want only the artifact", entries)
+	}
+}
+
+func TestAMoveCrashedAfterInstallingKeepsASourceReplacedBeforeTheRetry(t *testing.T) {
+	t.Parallel()
+	s := testworld.NewStack(t)
+	folder := seedArtifactsFolderOf(t, s)
+	s.StartCrashingAt("seed-artifact-installed")
+	seed := plant(t, s, "Durable files")
+	source := filepath.Join(t.TempDir(), "recover.bin")
+	if err := os.WriteFile(source, []byte("old"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	s.Attn("seed", "attach", seed.ID, "--path", source, "--move")
+	s.AwaitCrash()
+	if err := os.WriteFile(source, []byte("newer"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	s.Start()
+	requireFailure(t, s.Attn("seed", "attach", seed.ID, "--path", source, "--move"), "seed attach: ", "newer source was not removed", source)
+	destination := filepath.Join(s.Dir, "notebook", "seeds", seed.ID, "recover.bin")
+	for path, body := range map[string]string{source: "newer", destination: "old"} {
+		if got, err := os.ReadFile(path); err != nil || string(got) != body {
+			t.Errorf("%s holds %q (%v), want %q", path, got, err, body)
+		}
+	}
+	if entries := folder(seed.ID); !slices.Equal(entries, []string{"recover.bin"}) {
+		t.Errorf("after the refused retry the seed's folder holds %q, want only the artifact", entries)
+	}
+}
+
+func seedArtifactsFolderOf(t *testing.T, s *testworld.Stack) func(seedID string) []string {
+	t.Helper()
+	root := filepath.Join(s.Dir, "notebook")
+	if err := os.MkdirAll(root, 0o700); err != nil {
+		t.Fatal(err)
+	}
+	return func(seedID string) []string {
+		t.Helper()
+		entries, err := os.ReadDir(filepath.Join(root, "seeds", seedID))
+		if err != nil {
+			t.Fatal(err)
+		}
+		var names []string
+		for _, entry := range entries {
+			names = append(names, entry.Name())
+		}
+		return names
+	}
+}
+
+func TestAMergePersistedBeforeACrashHarvestsItsSeedOnRestart(t *testing.T) {
+	t.Parallel()
+	s := testworld.NewStack(t)
+	const url = "https://github.test/acme/shop/pull/71"
+	github := httptest.NewServer(http.HandlerFunc(func(rw http.ResponseWriter, r *http.Request) {
+		query, _ := io.ReadAll(r.Body)
+		rw.Header().Set("Connection", "close")
+		rw.Header().Set("Content-Type", "application/json")
+		switch {
+		case r.URL.Path != "/graphql":
+			rw.WriteHeader(http.StatusNotFound)
+			_, _ = rw.Write([]byte(`{"message":"Not Found"}`))
+		case strings.Contains(string(query), "PullRequestReadiness"):
+			_, _ = fmt.Fprintf(rw, `{"data":{"repository":{"pullRequest":{"number":71,"url":%q,"title":"Harvest across a crash","state":"MERGED","merged":true,"headRefOid":"abcdef012345","mergeStateStatus":"UNKNOWN","reactions":{"nodes":[]},"latestOpinionatedReviews":{"nodes":[]},"reviews":{"nodes":[]},"reviewRequests":{"nodes":[]},"commits":{"nodes":[]}}}}}`, url)
+		default:
+			_, _ = rw.Write([]byte(feedbackJSON()))
+		}
+	}))
+	t.Cleanup(github.Close)
+	s.Vars = append(s.Vars, "ATTN_MOCK_GH_URL="+github.URL, "ATTN_MOCK_GH_TOKEN=test-token", "ATTN_MOCK_GH_HOST=github.test")
+
+	s.StartCrashingAt("pull-request-merge-persisted")
+	register(t, s, "shipper", "shipper")
+	seed := plant(t, s, "Merged as the daemon went down")
+	requireLines(t, "arm", seedAs(t, s, "shipper", "harvest", seed.ID, "--when-merged", url), "harvests when acme/shop#71 merges")
+	s.Run(testworld.Invocation{Args: []string{"pr", "watch", url}, Session: "shipper"})
+	s.AwaitCrash()
+
+	s.Start()
+	got := showSeed(t, s, "", seed.ID).Seed
+	if got.Status != "harvested" || protocol.Deref(got.Reason) != "PR #71 merged: Harvest across a crash" {
+		t.Errorf("after the restart the armed seed is %s with reason %q, want it harvested by the merge the daemon persisted before it crashed",
+			got.Status, protocol.Deref(got.Reason))
+	}
 }

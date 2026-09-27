@@ -27,7 +27,7 @@ func TestAPiDriverPublishesItsCapabilitiesAndIsRefusedLaunchesBeyondThem(t *test
 		"pi_cap_initial_prompt":   "true",
 		"pi_cap_state_reporting":  "true",
 		"pi_cap_auto_mode":        "true",
-		"pi_cap_resume":           "false",
+		"pi_cap_resume":           "true",
 		"pi_cap_message_delivery": "false",
 	} {
 		if got := settings[key]; got != want {
@@ -44,8 +44,6 @@ func TestAPiDriverPublishesItsCapabilitiesAndIsRefusedLaunchesBeyondThem(t *test
 			refusal: []string{"does not support model pins"}},
 		{name: "pinned-effort", launch: func(m *protocol.SpawnSessionMessage) { m.Effort = protocol.Ptr("low") },
 			refusal: []string{"does not support effort pins"}},
-		{name: "named-conversation", launch: func(m *protocol.SpawnSessionMessage) { m.ResumeSessionID = protocol.Ptr("conv-1") },
-			refusal: []string{"conv-1", "does not support resume"}},
 	} {
 		refused := refuseSpawnLikeTheApp(w, app, fakeagent.Pi, w.Path(row.name), row.launch)
 		for _, want := range row.refusal {
@@ -56,7 +54,24 @@ func TestAPiDriverPublishesItsCapabilitiesAndIsRefusedLaunchesBeyondThem(t *test
 	}
 }
 
-func TestAPiSessionFollowsItsDriversReportsAndRelaunchesAfterItExits(t *testing.T) {
+func TestAPiDriverWithoutResumeIsRefusedANamedConversation(t *testing.T) {
+	t.Setenv(fakeagent.PiWithoutResumeEnv, "1")
+	w := newWorld(t, fakeagent.Pi)
+	app := w.App()
+	if got := pluginDriverSettings(app, "pi")["pi_cap_resume"]; got != "false" {
+		t.Fatalf("the app sees pi_cap_resume = %q, want \"false\" from a driver registered without resume", got)
+	}
+	refused := refuseSpawnLikeTheApp(w, app, fakeagent.Pi, w.Path("named-conversation"), func(m *protocol.SpawnSessionMessage) {
+		m.ResumeSessionID = protocol.Ptr("conv-1")
+	})
+	for _, want := range []string{"conv-1", "does not support resume"} {
+		if !strings.Contains(protocol.Deref(refused.Error), want) {
+			t.Errorf("the spawn was refused with %q, want it to say %q", protocol.Deref(refused.Error), want)
+		}
+	}
+}
+
+func TestAPiSessionFollowsItsDriversReportsAndResumesItsConversationAfterItExits(t *testing.T) {
 	w := newWorld(t, fakeagent.Pi)
 	app := w.App()
 	pluginDriverSettings(app, "pi")
@@ -84,11 +99,12 @@ func TestAPiSessionFollowsItsDriversReportsAndRelaunchesAfterItExits(t *testing.
 	testworld.AwaitSession(app, session, func(s protocol.Session) bool { return s.State == protocol.SessionStateIdle })
 
 	relaunchedBy := w.App()
-	w.Spawn(relaunchedBy, fakeagent.Pi, cwd, func(m *protocol.SpawnSessionMessage) {
-		m.ID = session
-		m.InitialPrompt = protocol.Ptr("now in euros")
-	})
+	w.Spawn(relaunchedBy, fakeagent.Pi, cwd, func(m *protocol.SpawnSessionMessage) { m.ID = session })
 	second := w.Launched(session)
+	if !second.Resumed || second.ConversationID != first.ConversationID {
+		t.Fatalf("the relaunch ran pi %q, want its driver resuming conversation %s from the metadata it reported", second.Argv, first.ConversationID)
+	}
+	relaunchedBy.TypeLine(session, "now in euros")
 	if got := second.Prompted(); got != "now in euros" {
 		t.Fatalf("the relaunched pi received %q", got)
 	}

@@ -11,7 +11,6 @@ function workspace(id: string, sessionIds: string[]): WorkspaceWithSessions<{ id
     sessions,
     children: sessions.map((session) => ({ kind: 'session' as const, id: session.id, session })),
     firstSessionId: sessionIds[0] ?? null,
-    focusedSessionId: sessionIds[0] ?? null,
     hasUnresolvedAgentPanes: false,
   };
 }

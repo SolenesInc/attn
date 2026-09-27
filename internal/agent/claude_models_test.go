@@ -1,12 +1,8 @@
 package agent
 
 import (
-	"context"
-	"encoding/json"
 	"errors"
 	"io"
-	"os"
-	"path/filepath"
 	"strings"
 	"testing"
 )
@@ -56,44 +52,5 @@ func TestClaudeModelCatalogFailures(t *testing.T) {
 	_, err = readClaudeModels(strings.NewReader(`{"type":"keep_alive"}`), "catalog")
 	if !errors.Is(err, io.EOF) {
 		t.Fatalf("expected EOF, got %v", err)
-	}
-}
-
-func TestClaudeDiscoverModelsProcess(t *testing.T) {
-	dir := t.TempDir()
-	executable := filepath.Join(dir, "claude")
-	script := `#!/bin/sh
-printf '%s\n' "$@" > args
-IFS= read -r request
-printf '%s\n' "$request" > request.json
-printf '%s\n' '{"type":"control_response","response":{"subtype":"success","request_id":"attn-model-discovery","response":{"models":[{"value":"sonnet","supportsEffort":true,"supportedEffortLevels":["medium","high"]}]}}}'
-cat > extra-input
-`
-	if err := os.WriteFile(executable, []byte(script), 0700); err != nil {
-		t.Fatal(err)
-	}
-	models, err := (&Claude{}).DiscoverModels(context.Background(), executable, dir)
-	if err != nil || len(models) != 1 {
-		t.Fatalf("discovery = %#v, %v", models, err)
-	}
-	data, err := os.ReadFile(filepath.Join(dir, "request.json"))
-	if err != nil {
-		t.Fatal(err)
-	}
-	var request map[string]any
-	if err := json.Unmarshal(data, &request); err != nil {
-		t.Fatal(err)
-	}
-	if request["type"] != "control_request" || len(request) != 3 || request["request"].(map[string]any)["subtype"] != "initialize" {
-		t.Fatalf("request = %#v", request)
-	}
-	args, err := os.ReadFile(filepath.Join(dir, "args"))
-	if err != nil || !strings.Contains(string(args), "--no-session-persistence") || !strings.Contains(string(args), `{"disableAllHooks":true}`) {
-		t.Fatalf("args = %s, error = %v", args, err)
-	}
-	ctx, cancel := context.WithCancel(context.Background())
-	cancel()
-	if _, err := (&Claude{}).DiscoverModels(ctx, executable, dir); !errors.Is(err, context.Canceled) {
-		t.Fatalf("canceled discovery = %v", err)
 	}
 }

@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"slices"
 	"strconv"
 	"time"
 
@@ -30,8 +31,29 @@ type copilot struct {
 	prompt       string
 }
 
+var copilotPromptFlags = flagSpec{
+	values: map[string]bool{"-p": true, "--prompt": true, "--model": true, "--effort": true},
+}
+
 func runCopilot(cfg config) int {
+	if slices.Contains(os.Args[1:], "-p") || slices.Contains(os.Args[1:], "--prompt") {
+		return copilotPrompt(copilotPromptFlags.parse(os.Args[1:])).serve(cfg)
+	}
 	return serve(cfg, copilotComposer, &copilot{cfg: cfg})
+}
+
+func copilotPrompt(args parsedArgs) headlessRun {
+	return headlessRun{
+		harness: Copilot,
+		prompt:  args.value("-p", "--prompt"),
+		model:   args.value("--model"),
+		effort:  args.value("--effort"),
+		answer: func(text string) error {
+			_, err := fmt.Println(text)
+			return err
+		},
+		fail: func(message string) { fmt.Fprintln(os.Stderr, message) },
+	}
 }
 
 func (c *copilot) begin(term *terminal) error {
