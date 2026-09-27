@@ -37,17 +37,6 @@ func writeLine(t *testing.T, path, line string) {
 	}
 }
 
-func requireTranscriptDiscovery(t *testing.T, d *Daemon, sessionID string) {
-	t.Helper()
-	advancePolls(2)
-	d.watchersMu.Lock()
-	watcher := d.transcriptWatch[sessionID]
-	d.watchersMu.Unlock()
-	if watcher == nil || watcher.snapshot().Status != protocol.SessionMessageWindowStatusReady {
-		t.Fatal("watcher never discovered the transcript")
-	}
-}
-
 func advancePolls(n int) {
 	time.Sleep(time.Duration(n) * transcriptPollInterval)
 	synctest.Wait()
