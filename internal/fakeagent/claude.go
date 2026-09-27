@@ -42,6 +42,7 @@ type claude struct {
 	permission   string
 	prompt       string
 	streaming    string
+	picker       bool
 }
 
 var claudePrintFlags = flagSpec{
@@ -121,7 +122,7 @@ func (c *claude) begin(term *terminal) error {
 	if args.has("-r", "--resume") {
 		c.conversation, c.resumed = args.value("-r", "--resume"), true
 		if c.conversation == "" {
-			return errors.New("claude -r without a session id opens the resume picker, which the fake does not script")
+			c.conversation, c.resumed, c.picker = uuid.NewString(), false, true
 		}
 	}
 	if c.conversation == "" {
@@ -171,6 +172,7 @@ func (c *claude) launch() launch {
 		Harness:        Claude,
 		ConversationID: c.conversation,
 		Resumed:        c.resumed,
+		ResumePicker:   c.picker,
 	}
 }
 

@@ -12,6 +12,7 @@ type Run struct {
 	SessionID      string
 	ConversationID string
 	Resumed        bool
+	ResumePicker   bool
 	Argv           []string
 	Env            []string
 	AutoMode       json.RawMessage
