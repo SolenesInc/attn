@@ -13,8 +13,8 @@ An awake crew member's stable name also addresses `peek` and `msg`.
 
 ## Watching costs the watched nothing
 
-`attn agent peek <session-or-member>` reads a session's state, todos, last
-assistant message, and rendered screen. A crew name follows its current session
+`attn agent peek <session-or-member>` reads a session's state, last assistant
+message, and rendered screen. A crew name follows its current session
 binding; a sleeping member stays asleep. Peek is passive by construction:
 everything it shows is already held by the daemon, so peeking never types into
 that session, never wakes its agent, and never consumes its tokens. It leaves

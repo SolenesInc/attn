@@ -22,7 +22,7 @@ func TestAnEvictionFiledMidHelloIsNotLostWithTheConnection(t *testing.T) {
 
 	client.closeSendChannelWithStatus(websocket.StatusPolicyViolation, slowClientCloseReason)
 	d.wsHub.rememberEviction(clientID, evictionRecord{
-		at: time.Now(), reason: slowClientCloseReason, undelivered: maxSlowCount,
+		at: time.Now(), reason: slowClientCloseReason, undelivered: 1,
 	})
 
 	d.handleClientHello(client, &protocol.ClientHelloMessage{
@@ -38,7 +38,7 @@ func TestAnEvictionFiledMidHelloIsNotLostWithTheConnection(t *testing.T) {
 	if record.reason != slowClientCloseReason {
 		t.Errorf("re-filed reason = %q, want %q", record.reason, slowClientCloseReason)
 	}
-	if record.undelivered < maxSlowCount {
-		t.Errorf("re-filed undelivered = %d, want at least %d", record.undelivered, maxSlowCount)
+	if record.undelivered < 1 {
+		t.Errorf("re-filed undelivered = %d, want at least 1", record.undelivered)
 	}
 }

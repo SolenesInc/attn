@@ -1,7 +1,5 @@
 import type { HarnessProps } from '../types';
-import { BridgeSettledReadHarness } from './BridgeSettledReadHarness';
 import { BrokenLinksHarness } from './BrokenLinksHarness';
-import { DashboardPRsHarness } from './DashboardPRsHarness';
 import { DiffViewHarness } from './DiffViewHarness';
 import { FileTreeHarness } from './FileTreeHarness';
 import { FrontmatterCardHarness } from './FrontmatterCardHarness';
@@ -22,9 +20,7 @@ import { AgentHeaderHarness } from './AgentHeaderHarness';
 
 export const harnesses: Record<string, React.ComponentType<HarnessProps>> = {
   AgentHeader: AgentHeaderHarness,
-  BridgeSettledRead: BridgeSettledReadHarness,
   BrokenLinks: BrokenLinksHarness,
-  DashboardPRs: DashboardPRsHarness,
   DiffView: DiffViewHarness,
   FileTree: FileTreeHarness,
   FrontmatterCard: FrontmatterCardHarness,

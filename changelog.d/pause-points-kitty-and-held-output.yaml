@@ -1,0 +1,3 @@
+kind: internal
+area: testing
+change: The kitty placement and held-escape terminal tests now run through the real daemon and pty worker on pause points, and the pty package's test-only hooks are gone.

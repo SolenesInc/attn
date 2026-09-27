@@ -66,7 +66,7 @@ func (e Exit) String() string {
 	if e.At.IsZero() {
 		return detail
 	}
-	return fmt.Sprintf("%s: %s", e.At.Format(time.RFC3339), detail)
+	return fmt.Sprintf("%s: %s", e.At.UTC().Format(time.RFC3339), detail)
 }
 
 type Snapshot struct {

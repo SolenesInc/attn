@@ -1,0 +1,4 @@
+kind: fixed
+area: garden
+change: The one-time garden cutover converts only the backlog tickets that existed when the daemon started.
+symptom: A ticket created while the cutover was still running in the background could be turned into a seed and archived moments after it was made.

@@ -127,7 +127,7 @@ func startAgentCloseOutpost(t *testing.T, d *Daemon, sessions ...protocol.Sessio
 	go func() {
 		_ = d.hubManager.AttachEndpointConnection(ctx, endpoint.ID, conn, outpost.clientToken)
 	}()
-	waitFor(t, "the hub to mirror the sessions the outpost owns", func() bool {
+	waitForAgentClose(t, "the hub to mirror the sessions the outpost owns", func() bool {
 		for _, session := range sessions {
 			if d.hubManager.RemoteSession(session.ID) == nil {
 				return false
@@ -135,8 +135,20 @@ func startAgentCloseOutpost(t *testing.T, d *Daemon, sessions ...protocol.Sessio
 		}
 		return true
 	})
-	waitFor(t, "the outpost to finish recovering", func() bool { return !outpost.isRecovering() })
+	waitForAgentClose(t, "the outpost to finish recovering", func() bool { return !outpost.isRecovering() })
 	return outpost
+}
+
+func waitForAgentClose(t *testing.T, what string, cond func() bool) {
+	t.Helper()
+	deadline := time.Now().Add(5 * time.Second)
+	for time.Now().Before(deadline) {
+		if cond() {
+			return
+		}
+		time.Sleep(time.Millisecond)
+	}
+	t.Fatalf("timed out waiting for %s", what)
 }
 
 func remoteAgentCloseSession(id, label string) protocol.Session {

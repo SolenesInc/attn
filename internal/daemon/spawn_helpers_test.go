@@ -11,13 +11,6 @@ import (
 	"github.com/victorarias/attn/internal/ptybackend"
 )
 
-func spawnTestClient() *wsClient {
-	return &wsClient{
-		send:            make(chan outboundMessage, 8),
-		attachedStreams: make(map[string]ptybackend.Stream),
-	}
-}
-
 type fakeWorkerReconcileBackend struct {
 	liveIDs []string
 	info    map[string]ptybackend.SessionInfo
@@ -102,61 +95,24 @@ func (s *fakeOutputStream) ClosedCount() int {
 }
 
 type fakeSpawnBackend struct {
-	mu                 sync.Mutex
-	spawnOpts          []ptybackend.SpawnOptions
-	killed             []string
-	removed            []string
-	onSpawn            func(ptybackend.SpawnOptions)
-	onInput            func(string, []byte)
-	onInputResult      func(string, []byte) error
-	onKill             func()
-	killErr            error
-	spawnErr           error
-	sessionIDs         []string
-	themeCalls         []pty.TerminalTheme
-	themeCallIDs       []string
-	setThemeErr        error
-	screen             string
-	screenUnavailable  bool
-	onSnapshot         func()
-	terminalBuild      string
-	terminalBuildKnown bool
-	upgradeErr         error
-	onUpgrade          func(*fakeSpawnBackend)
-	upgraded           []string
-	upgradeDone        chan string
-	upgradeEntered     chan string
-	upgradeGate        chan struct{}
-	onRecover          func()
-}
-
-func (b *fakeSpawnBackend) UpgradeWorker(_ context.Context, sessionID string) error {
-	b.mu.Lock()
-	b.upgraded = append(b.upgraded, sessionID)
-	err := b.upgradeErr
-	if err == nil && b.onUpgrade != nil {
-		b.onUpgrade(b)
-	}
-	done := b.upgradeDone
-	entered := b.upgradeEntered
-	gate := b.upgradeGate
-	b.mu.Unlock()
-	if entered != nil {
-		entered <- sessionID
-	}
-	if gate != nil {
-		<-gate
-	}
-	if done != nil {
-		done <- sessionID
-	}
-	return err
-}
-
-func (b *fakeSpawnBackend) SessionTerminalBuild(string) (string, bool) {
-	b.mu.Lock()
-	defer b.mu.Unlock()
-	return b.terminalBuild, b.terminalBuildKnown
+	mu                sync.Mutex
+	spawnOpts         []ptybackend.SpawnOptions
+	killed            []string
+	removed           []string
+	onSpawn           func(ptybackend.SpawnOptions)
+	onInput           func(string, []byte)
+	onInputResult     func(string, []byte) error
+	onKill            func()
+	killErr           error
+	spawnErr          error
+	sessionIDs        []string
+	themeCalls        []pty.TerminalTheme
+	themeCallIDs      []string
+	setThemeErr       error
+	screen            string
+	screenUnavailable bool
+	onSnapshot        func()
+	onRecover         func()
 }
 
 func (b *fakeSpawnBackend) ScreenSnapshot(_ context.Context, _ string) (pty.ScreenSnapshotInfo, error) {
@@ -288,10 +244,4 @@ func addTestWorkspace(d *Daemon, id, directory string) {
 	rank := d.resolveWorkspaceRank(d.store.GetWorkspace(id))
 	d.store.AddWorkspace(&protocol.Workspace{ID: id, Title: id, Directory: directory, Status: protocol.WorkspaceStatusLaunching, Rank: rank})
 	d.workspaces.register(id, id, directory, rank, false, false)
-}
-
-func (b *fakeSpawnBackend) upgradedSessions() []string {
-	b.mu.Lock()
-	defer b.mu.Unlock()
-	return append([]string(nil), b.upgraded...)
 }

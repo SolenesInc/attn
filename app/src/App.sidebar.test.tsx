@@ -152,6 +152,17 @@ describe('App sidebar', () => {
       expect(row('s1').getByText(label)).toBeInTheDocument();
     });
 
+    it.each<[string, string, string | null]>([
+      ['stuck', 'Stuck — the agent has stopped reporting anything at all', 'Stuck — the agent has stopped reporting anything at all'],
+      ['no_evidence', 'No signal from this agent yet', 'No signal from this agent yet'],
+      ['some_future_clause', 'state unknown', null],
+    ])('explains an unknown state from the daemon’s %s reason, and invents nothing for a reason it does not know', async (reason, label, hover) => {
+      await launch({ sessions: [daemonSession('s1', { state: 'unknown', state_reason: reason })] });
+
+      const indicator = row('s1').getByLabelText(label);
+      expect(indicator.getAttribute('title')).toBe(hover);
+    });
+
     it('shows the delegated-from-chief badge only on sessions the chief delegated', async () => {
       await launch({ sessions: [daemonSession('s1', { delegated_from_chief: true }), daemonSession('s2')] });
 

@@ -49,7 +49,7 @@ func sameOrder(got, want []string) bool {
 
 func stampQuery(sort *docstore.Sort) docstore.Query {
 	return docstore.Query{
-		Namespace:  "app/approval-gate",
+		Namespace:  "test/approval-gate",
 		Collection: "requests",
 		Sort:       sort,
 	}
@@ -67,14 +67,14 @@ func TestMigration91RewritesStampsThatDoNotSort(t *testing.T) {
 	if _, err := s.DefineDocumentCollection(requestsDeclaration(), base); err != nil {
 		t.Fatalf("define: %v", err)
 	}
-	schema := declOf(t, s, "app/approval-gate", "requests")
+	schema := declOf(t, s, "test/approval-gate", "requests")
 	for _, r := range raggedSeconds {
 		if _, err := s.PutDocument(schema, r.id, []byte(`{"status":"pending"}`), base.Add(r.offset), nil); err != nil {
 			t.Fatalf("put %s: %v", r.id, err)
 		}
 	}
 
-	table := docstore.TableName(collectionID(t, s, "app/approval-gate", "requests"))
+	table := docstore.TableName(collectionID(t, s, "test/approval-gate", "requests"))
 	for _, r := range raggedSeconds {
 		old := base.Add(r.offset).Format(time.RFC3339Nano)
 		if _, err := s.db.Exec(fmt.Sprintf(`UPDATE %s SET created_at = ?, updated_at = ? WHERE id = ?`, table),

@@ -1,19 +1,12 @@
 package daemon
 
 import (
-	"context"
 	"os"
 	"strings"
-	"syscall"
 
 	"github.com/victorarias/attn/internal/protocol"
 	"github.com/victorarias/attn/internal/store"
 )
-
-func (d *Daemon) handleClearSessionsWS() {
-	d.logf("Clearing all sessions")
-	d.clearAllSessions()
-}
 
 func (d *Daemon) handleClearWarningsWS() {
 	d.logf("Clearing daemon warnings")
@@ -89,44 +82,5 @@ func (d *Daemon) handleRecentFilesWS(client *wsClient, msg *protocol.RecentFiles
 		Files:     d.store.GetRecentFiles(limit, strings.TrimSpace(protocol.Deref(msg.Root))),
 		RequestID: strings.TrimSpace(protocol.Deref(msg.RequestID)),
 		Success:   true,
-	})
-}
-
-func (d *Daemon) clearAllSessions() {
-	sessionIDs := make(map[string]struct{})
-	for _, session := range d.store.List("") {
-		sessionIDs[session.ID] = struct{}{}
-	}
-
-	if d.ptyBackend != nil {
-		recoverCtx, cancel := context.WithTimeout(context.Background(), deferredRecoveryRPCTimeout)
-		report, err := d.ptyBackend.Recover(recoverCtx)
-		cancel()
-		if err != nil {
-			d.logf("clear_sessions recovery scan failed: %v", err)
-		} else if report.Recovered > 0 || report.Pruned > 0 || report.Missing > 0 || report.Failed > 0 {
-			d.logf(
-				"clear_sessions recovery summary: recovered=%d pruned=%d missing=%d failed=%d",
-				report.Recovered,
-				report.Pruned,
-				report.Missing,
-				report.Failed,
-			)
-		}
-		for _, sessionID := range d.liveRuntimeSessionIDs(context.Background()) {
-			sessionIDs[sessionID] = struct{}{}
-		}
-	}
-
-	d.coalesceSnapshots(func() {
-		for sessionID := range sessionIDs {
-			d.terminateSession(sessionID, syscall.SIGTERM)
-		}
-		d.store.ClearSessions()
-		d.clearChiefOfStaffIfSession(d.chiefOfStaffSessionID())
-		for sessionID := range sessionIDs {
-			d.forgetSessionTrace(sessionID)
-			d.publishFact(FactSessionTerminated, sessionID, nil)
-		}
 	})
 }

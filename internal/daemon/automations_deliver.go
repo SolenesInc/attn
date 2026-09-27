@@ -38,10 +38,6 @@ func (d *Daemon) handleAutomationDeliveryError(run *store.AutomationRun, deliver
 		current, err := d.store.GetAutomationRun(run.ID)
 		return current, errors.Join(deliveryErr, err)
 	}
-	if errors.Is(deliveryErr, errAutomationReviewWithdrawn) {
-		cancelled, cancelErr := d.cancelAutomationRun(run, store.AutomationCancelReasonReviewWithdrawn, deliveryErr.Error())
-		return cancelled, errors.Join(deliveryErr, cancelErr)
-	}
 	failed, failErr := d.failAutomationRun(run, deliveryErr)
 	return failed, errors.Join(deliveryErr, failErr)
 }
@@ -178,15 +174,6 @@ func (d *Daemon) deliverAutomationRun(ctx context.Context, run *store.Automation
 	if occurrence == nil {
 		return errors.New("automation occurrence missing")
 	}
-	if occurrence.Provider == "github" {
-		stillRequested, err := d.store.GitHubReviewAutomationRunStillRequested(run.ID)
-		if err != nil {
-			return err
-		}
-		if !stillRequested {
-			return errAutomationReviewWithdrawn
-		}
-	}
 	continuityKey := ""
 	switch snapshot.Continuity {
 	case "per_subject":
@@ -312,7 +299,7 @@ func (d *Daemon) validateAutomationContinuation(req automation.WorkRequest) erro
 			return errors.New("automation reviewer pull-request identity changed; refusing to reuse its session")
 		}
 	}
-	if d.canStartWithdrawnUndeliveredReviewer(origin, req.IDs.SessionID) {
+	if canStartWithdrawnUndeliveredReviewer(origin) {
 		return nil
 	}
 	if d.automationSessionIsLive(req.IDs.SessionID) {
@@ -672,7 +659,7 @@ func (d *Daemon) ensureAutomationSession(ctx context.Context, req automation.Wor
 		return d.verifyUnattendedLaunch(req)
 	}
 	if continuationRun != nil {
-		if d.canStartWithdrawnUndeliveredReviewer(continuationRun, req.IDs.SessionID) {
+		if canStartWithdrawnUndeliveredReviewer(continuationRun) {
 			return d.startAutomationSession(req, directory, inputPath)
 		}
 		return d.continueAutomationSession(ctx, req, directory)
@@ -738,8 +725,8 @@ func (d *Daemon) startAutomationSession(req automation.WorkRequest, directory, i
 	}
 	return d.verifyUnattendedLaunch(req)
 }
-func (d *Daemon) canStartWithdrawnUndeliveredReviewer(origin *store.AutomationRun, sessionID string) bool {
-	return origin != nil && origin.State == store.AutomationRunStateCancelled && origin.CancelReason == store.AutomationCancelReasonReviewWithdrawn && d.store.SessionLedgerEntry(sessionID) == nil
+func canStartWithdrawnUndeliveredReviewer(origin *store.AutomationRun) bool {
+	return origin != nil && origin.State == store.AutomationRunStateCancelled && origin.CancelReason == store.AutomationCancelReasonReviewWithdrawn
 }
 func (d *Daemon) automationContinuationOrigin(req automation.WorkRequest) (*store.AutomationRun, error) {
 	if req.ContinuityKey == "" {

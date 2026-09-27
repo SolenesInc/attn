@@ -227,8 +227,8 @@ export function EventBusSettings({ getBusStatus, setConsumerEnabled }: EventBusS
         <div className="bus-section-head">
           <h4>Consumers</h4>
           <span className="settings-hint">
-            Disabling stops delivery. Ordinary consumers release retention; installed apps keep
-            their cursor and unread backlog until they are enabled or uninstalled.
+            Disabling stops delivery and releases retention. Enabling resumes from the saved cursor
+            if it remains in the log.
           </span>
         </div>
         {status.consumers.length === 0 ? (

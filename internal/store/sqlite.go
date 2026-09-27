@@ -874,42 +874,6 @@ CREATE TABLE IF NOT EXISTS document_collections (
 			ON agent_messages(sender_session_id, target_session_id, created_at);
 		DROP TABLE IF EXISTS chief_of_staff_dispatch_messages;
 	`},
-	{102, "create the app registry", `CREATE TABLE IF NOT EXISTS apps (
-    name               TEXT PRIMARY KEY,
-    current_version_id INTEGER,
-    created_at         TEXT NOT NULL,
-    updated_at         TEXT NOT NULL
-);
-CREATE TABLE IF NOT EXISTS app_versions (
-    id            INTEGER PRIMARY KEY AUTOINCREMENT,
-    app_name      TEXT NOT NULL,
-    content_hash  TEXT NOT NULL,
-    declaration   TEXT NOT NULL,
-    artifact_path TEXT NOT NULL,
-    created_at    TEXT NOT NULL,
-    UNIQUE(app_name, content_hash)
-);
--- History for one app, newest first: the rollback picker's access path.
-CREATE INDEX IF NOT EXISTS idx_app_versions_app ON app_versions(app_name, id DESC);
-CREATE TABLE IF NOT EXISTS app_invocations (
-    id            INTEGER PRIMARY KEY AUTOINCREMENT,
-    app_name      TEXT NOT NULL,
-    version_id    INTEGER NOT NULL,
-    event_seq     INTEGER NOT NULL,
-    event_name    TEXT NOT NULL DEFAULT '',
-    event_subject TEXT NOT NULL DEFAULT '',
-    handler       TEXT NOT NULL DEFAULT '',
-    status        TEXT NOT NULL,
-    error         TEXT NOT NULL DEFAULT '',
-    duration_ms   INTEGER NOT NULL DEFAULT 0,
-    started_at    TEXT NOT NULL
-);
--- One app's recent invocations, and the age window retention trims by. Both
--- read this index; started_at is written fixed-width so text order is time
--- order.
-CREATE INDEX IF NOT EXISTS idx_app_invocations_app ON app_invocations(app_name, started_at DESC);
-CREATE INDEX IF NOT EXISTS idx_app_invocations_started ON app_invocations(started_at);`},
-	{103, "record the previously-serving version of each app", ``},
 	{104, "remember a parked supervised child across daemon restarts", `CREATE TABLE IF NOT EXISTS supervised_parks (
     child           TEXT PRIMARY KEY,
     parked_at       TEXT NOT NULL,
@@ -919,7 +883,6 @@ CREATE INDEX IF NOT EXISTS idx_app_invocations_started ON app_invocations(starte
     exit_signal     TEXT NOT NULL DEFAULT '',
     exit_error      TEXT NOT NULL DEFAULT ''
 );`},
-	{105, "walk an app's serving history as a chain", ``},
 	{106, "add durable per-session token cost state", ``},
 	{107, "record which ticket event a delivery covered", ``},
 	{109, "auto mode config, proposals and denials", `CREATE TABLE IF NOT EXISTS automode_config (
@@ -959,29 +922,6 @@ CREATE INDEX IF NOT EXISTS idx_automode_denials_recent ON automode_denials(id DE
     ON automode_proposals(kind, target, value, proposed_by)
     WHERE state = 'pending';`},
 	{114, "auto mode judges from an ordered model list per layer", ``},
-	{115, "record app reconciliation owed across cursor fences", `CREATE TABLE IF NOT EXISTS app_reconcile_requests (
-    id                  INTEGER PRIMARY KEY AUTOINCREMENT,
-    app_name            TEXT NOT NULL,
-    reason              TEXT NOT NULL,
-    version_id          INTEGER NOT NULL,
-    through_seq         INTEGER NOT NULL,
-    previous_version_id INTEGER,
-    cursor              INTEGER,
-    earliest            INTEGER,
-    missed              INTEGER,
-    created_at          TEXT NOT NULL
-);
-CREATE INDEX IF NOT EXISTS idx_app_reconcile_requests_pending
-    ON app_reconcile_requests(app_name, id);
-CREATE UNIQUE INDEX IF NOT EXISTS idx_app_reconcile_requests_gap
-    ON app_reconcile_requests(app_name, cursor, earliest, through_seq)
-    WHERE reason = 'gap';
-CREATE TABLE IF NOT EXISTS app_reconcile_progress (
-    app_name             TEXT PRIMARY KEY,
-    completed_request_id INTEGER NOT NULL,
-    updated_at           TEXT NOT NULL
-);`},
-	{116, "record app reconcile invocation lifecycles", ``},
 	{117, "index automation provenance lookups", `
 		CREATE INDEX IF NOT EXISTS idx_automation_runs_session_created
 			ON automation_runs(session_id, created_at DESC, id DESC);
@@ -1252,6 +1192,8 @@ CREATE TABLE IF NOT EXISTS app_reconcile_progress (
 	{153, "keep every delegation preferences revision", ``},
 	{154, "record when a session's agent process launched", ""},
 	{155, "session last-seen stamps move to UTC so the ledger window compares instants", ""},
+	{156, "drop session todos", ""},
+	{157, "retire the apps platform state", ""},
 }
 
 const migration99SQL = `
@@ -1470,7 +1412,12 @@ func migrateDB(db *sql.DB, dbPath string) error {
 			return fmt.Errorf("starting transaction for migration %d: %w", m.version, err)
 		}
 
-		if m.version == 141 {
+		if m.version == 156 {
+			if err := applyMigration156(tx); err != nil {
+				tx.Rollback()
+				return fmt.Errorf("migration %d (%s): %w", m.version, m.desc, err)
+			}
+		} else if m.version == 141 {
 			if err := applyMigration141(tx); err != nil {
 				tx.Rollback()
 				return fmt.Errorf("migration %d (%s): %w", m.version, m.desc, err)
@@ -1719,16 +1666,6 @@ func migrateDB(db *sql.DB, dbPath string) error {
 				tx.Rollback()
 				return fmt.Errorf("migration %d (%s): %w", m.version, m.desc, err)
 			}
-		} else if m.version == 103 {
-			if err := applyMigration103(tx); err != nil {
-				tx.Rollback()
-				return fmt.Errorf("migration %d (%s): %w", m.version, m.desc, err)
-			}
-		} else if m.version == 105 {
-			if err := applyMigration105(tx); err != nil {
-				tx.Rollback()
-				return fmt.Errorf("migration %d (%s): %w", m.version, m.desc, err)
-			}
 		} else if m.version == 106 {
 			if err := applyMigration106(tx); err != nil {
 				tx.Rollback()
@@ -1741,11 +1678,6 @@ func migrateDB(db *sql.DB, dbPath string) error {
 			}
 		} else if m.version == 110 {
 			if err := applyMigration110(tx); err != nil {
-				tx.Rollback()
-				return fmt.Errorf("migration %d (%s): %w", m.version, m.desc, err)
-			}
-		} else if m.version == 116 {
-			if err := applyMigration116(tx); err != nil {
 				tx.Rollback()
 				return fmt.Errorf("migration %d (%s): %w", m.version, m.desc, err)
 			}
@@ -1892,6 +1824,11 @@ func migrateDB(db *sql.DB, dbPath string) error {
 				tx.Rollback()
 				return fmt.Errorf("migration %d (%s): %w", m.version, m.desc, err)
 			}
+		} else if m.version == 157 {
+			if err := applyMigration157(tx); err != nil {
+				tx.Rollback()
+				return fmt.Errorf("migration %d (%s): %w", m.version, m.desc, err)
+			}
 		} else {
 			if _, err := tx.Exec(m.sql); err != nil {
 				tx.Rollback()
@@ -1912,6 +1849,50 @@ func migrateDB(db *sql.DB, dbPath string) error {
 		}
 	}
 
+	return nil
+}
+
+func applyMigration157(tx *sql.Tx) error {
+	rows, err := tx.Query(`SELECT id FROM document_collections WHERE namespace LIKE 'app/%'`)
+	if err != nil {
+		return err
+	}
+	var collectionIDs []int64
+	for rows.Next() {
+		var id int64
+		if err := rows.Scan(&id); err != nil {
+			rows.Close()
+			return err
+		}
+		collectionIDs = append(collectionIDs, id)
+	}
+	if err := rows.Close(); err != nil {
+		return err
+	}
+	if err := rows.Err(); err != nil {
+		return err
+	}
+	for _, id := range collectionIDs {
+		if _, err := tx.Exec(`DROP TABLE IF EXISTS ` + docstore.TableName(id)); err != nil {
+			return err
+		}
+	}
+	for _, query := range []string{
+		`DELETE FROM document_collections WHERE namespace LIKE 'app/%'`,
+		`DELETE FROM bus_consumers WHERE name LIKE 'app:%'`,
+		`DELETE FROM supervised_parks WHERE child = 'runtime'`,
+		`DELETE FROM notifications WHERE source_kind IN ('app', 'app_runtime')`,
+		`DROP TABLE IF EXISTS app_reconcile_progress`,
+		`DROP TABLE IF EXISTS app_reconcile_requests`,
+		`DROP TABLE IF EXISTS app_invocations`,
+		`DROP TABLE IF EXISTS app_serving_steps`,
+		`DROP TABLE IF EXISTS app_versions`,
+		`DROP TABLE IF EXISTS apps`,
+	} {
+		if _, err := tx.Exec(query); err != nil {
+			return err
+		}
+	}
 	return nil
 }
 
@@ -2340,6 +2321,15 @@ func applyMigration136(tx *sql.Tx, schema string) error {
 	return err
 }
 
+func applyMigration156(tx *sql.Tx) error {
+	has, err := columnExists(tx, "sessions", "todos")
+	if err != nil || !has {
+		return err
+	}
+	_, err = tx.Exec("ALTER TABLE sessions DROP COLUMN todos")
+	return err
+}
+
 func applyMigration141(tx *sql.Tx) error {
 	has, err := columnExists(tx, "sessions", "agent_driver_transcript_path")
 	if err != nil || has {
@@ -2400,45 +2390,6 @@ func applyMigration107(tx *sql.Tx) error {
 		return nil
 	}
 	_, err = tx.Exec(`ALTER TABLE ticket_delivery_attention ADD COLUMN delivered_through_seq INTEGER NOT NULL DEFAULT 0`)
-	return err
-}
-
-func applyMigration116(tx *sql.Tx) error {
-	hadKind, err := columnExists(tx, "app_invocations", "kind")
-	if err != nil {
-		return err
-	}
-	columns := []struct {
-		name string
-		sql  string
-	}{
-		{"kind", `ALTER TABLE app_invocations ADD COLUMN kind TEXT NOT NULL DEFAULT 'subscription'`},
-		{"reconcile_reason", `ALTER TABLE app_invocations ADD COLUMN reconcile_reason TEXT NOT NULL DEFAULT ''`},
-		{"through_request_id", `ALTER TABLE app_invocations ADD COLUMN through_request_id INTEGER`},
-		{"through_seq", `ALTER TABLE app_invocations ADD COLUMN through_seq INTEGER`},
-		{"finished_at", `ALTER TABLE app_invocations ADD COLUMN finished_at TEXT`},
-	}
-	for _, column := range columns {
-		exists, err := columnExists(tx, "app_invocations", column.name)
-		if err != nil {
-			return err
-		}
-		if exists {
-			continue
-		}
-		if _, err := tx.Exec(column.sql); err != nil {
-			return err
-		}
-	}
-	if hadKind {
-		return nil
-	}
-	_, err = tx.Exec(`UPDATE app_invocations
-		SET kind = CASE event_name
-			WHEN 'app.command' THEN 'command'
-			WHEN 'app.view.crashed' THEN 'view'
-			ELSE 'subscription'
-		END`)
 	return err
 }
 
@@ -3449,15 +3400,6 @@ func applyMigration100(tx *sql.Tx) error {
 	return err
 }
 
-func applyMigration103(tx *sql.Tx) error {
-	has, err := columnExists(tx, "apps", "previous_version_id")
-	if err != nil || has {
-		return err
-	}
-	_, err = tx.Exec("ALTER TABLE apps ADD COLUMN previous_version_id INTEGER")
-	return err
-}
-
 func applyMigration110(tx *sql.Tx) error {
 	has, err := columnExists(tx, "automode_denials", "rule")
 	if err != nil || has {
@@ -3836,64 +3778,6 @@ func applyMigration106(tx *sql.Tx) error {
 		return err
 	}
 	_, err = tx.Exec("ALTER TABLE sessions ADD COLUMN session_cost_json TEXT NOT NULL DEFAULT ''")
-	return err
-}
-
-func applyMigration105(tx *sql.Tx) error {
-	if _, err := tx.Exec(`
--- No index beyond the primary key: every reader arrives holding a step id —
--- the registry's cursor, or the parent of the step it is standing on — so the
--- chain is walked by rowid. app_name is carried to keep a step readable on its
--- own and for the one-time carry below.
-CREATE TABLE IF NOT EXISTS app_serving_steps (
-    id         INTEGER PRIMARY KEY AUTOINCREMENT,
-    app_name   TEXT NOT NULL,
-    version_id INTEGER NOT NULL,
-    parent_id  INTEGER,
-    created_at TEXT NOT NULL
-);`); err != nil {
-		return err
-	}
-	has, err := columnExists(tx, "apps", "serving_step_id")
-	if err != nil || has {
-		return err
-	}
-	if _, err := tx.Exec("ALTER TABLE apps ADD COLUMN serving_step_id INTEGER"); err != nil {
-		return err
-	}
-
-	carried, err := columnExists(tx, "apps", "previous_version_id")
-	if err != nil {
-		return err
-	}
-	if carried {
-		if _, err := tx.Exec(`
-			INSERT INTO app_serving_steps (app_name, version_id, parent_id, created_at)
-			SELECT name, previous_version_id, NULL, updated_at FROM apps
-			WHERE current_version_id IS NOT NULL
-				AND previous_version_id IS NOT NULL
-				AND previous_version_id <> current_version_id`); err != nil {
-			return err
-		}
-	}
-	if _, err := tx.Exec(`
-		INSERT INTO app_serving_steps (app_name, version_id, parent_id, created_at)
-		SELECT a.name, a.current_version_id,
-		       (SELECT MIN(p.id) FROM app_serving_steps p WHERE p.app_name = a.name),
-		       a.updated_at
-		FROM apps a WHERE a.current_version_id IS NOT NULL`); err != nil {
-		return err
-	}
-	if _, err := tx.Exec(`
-		UPDATE apps SET serving_step_id = (
-			SELECT MAX(s.id) FROM app_serving_steps s WHERE s.app_name = apps.name
-		) WHERE current_version_id IS NOT NULL`); err != nil {
-		return err
-	}
-	if !carried {
-		return nil
-	}
-	_, err = tx.Exec("ALTER TABLE apps DROP COLUMN previous_version_id")
 	return err
 }
 

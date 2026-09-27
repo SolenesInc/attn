@@ -98,14 +98,10 @@
 - Journal: a dated record of work.
 - Knowledge base: knowledge worth keeping across sessions.
 
-## Apps
+## Plugins and tiles
 
-- App: a named automation running in attn.
 - Plugin: an installed integration that adds capabilities to attn.
-- Version: a saved app build.
-- View: an app's visual interface.
-- Tile: an open instance of a view.
-- Command: a named action available in a view.
+- Tile: a docked browser, Markdown, seed, or editor surface in a workspace.
 
 ## Daemons and permissions
 

@@ -40,12 +40,12 @@ import (
 	"github.com/victorarias/attn/internal/logging"
 	"github.com/victorarias/attn/internal/notebook"
 	"github.com/victorarias/attn/internal/pathutil"
+	"github.com/victorarias/attn/internal/pausepoint"
 	"github.com/victorarias/attn/internal/protocol"
 	"github.com/victorarias/attn/internal/pty"
 	"github.com/victorarias/attn/internal/ptybackend"
 	"github.com/victorarias/attn/internal/statetrace"
 	"github.com/victorarias/attn/internal/store"
-	"github.com/victorarias/attn/internal/supervise"
 	"github.com/victorarias/attn/internal/transcript"
 	"github.com/victorarias/attn/internal/workspacelayout"
 )
@@ -147,6 +147,7 @@ type Daemon struct {
 	warnings                          []protocol.DaemonWarning
 	warningsMu                        sync.RWMutex
 	legacyTicketRecoveryFinishOnce    sync.Once
+	backlogAtStart                    map[string]struct{}
 	legacyTicketSnapshotIdentity      func(string) (store.LegacyTicketRecoverySource, error)
 	legacyTicketSnapshotRead          func(string) (store.LegacyTicketSnapshotRead, error)
 	legacyRecoveryArtifactWrite       func(string, []byte) error
@@ -242,66 +243,40 @@ type Daemon struct {
 
 	snoozeMu sync.Mutex
 
-	recoveryMu           sync.RWMutex
-	recovering           bool
-	recoverySettled      chan struct{}
-	notebookMu           sync.Mutex
-	notebookStore        *notebook.Store
-	notebookWatcherMu    sync.Mutex
-	notebookWatcher      *notebook.Watcher
-	notebookWatchedRoot  string
-	fsMu                 sync.Mutex
-	fsStores             map[string]*fsdoc.Store
-	fsWatchMu            sync.Mutex
-	fsWatchers           map[string]*fsRootWatch
-	pendingInitialWS     map[*wsClient]struct{}
-	startedOnce          sync.Once
-	startedCh            chan struct{}
-	tailscale            *tailscaleRuntime
-	plugins              *pluginRegistry
-	pluginSupervisorMu   sync.Mutex
-	pluginSupervisor     *pluginSupervisor
-	pluginHealthEnabled  bool
-	pluginDriverMu       sync.Mutex
-	pluginLaunching      map[string]pluginSessionLaunch
-	pluginReports        map[string][]pendingPluginReport
-	pluginExits          map[string]ptybackend.ExitInfo
-	pluginDir            string
-	bundledPluginDir     string
-	appsDir              string
-	appRuntimeMu         sync.Mutex
-	appRuntimeSupervisor *supervise.Supervisor
-	appRuntimeSupervise  supervise.Options
-	appRuntimeWait       time.Duration
-	appPingWait          time.Duration
-	appDispatchWait      time.Duration
-	appRuntimeConn       *appRuntimeConnection
-	appRuntimeReady      chan struct{}
-	appDispatchMu        sync.Mutex
-	appDispatches        map[string]*appDispatch
-	appDispatchSeq       uint64
-	appLaneMu            sync.Mutex
-	appLanes             map[string]appLane
-	appStallMu           sync.Mutex
-	appStalls            map[string]*appStall
-	appEnteredMu         sync.Mutex
-	appEntered           map[string]enteredHandler
-	appEnteredGen        uint64
-	appEnteredSeq        uint64
-	appCrashMu           sync.Mutex
-	appCrashes           map[string][]time.Time
-	busPinMu             sync.Mutex
-	busPinEpisodes       map[string]*busPinEpisode
-	busPinAge            time.Duration
-	appWatcherMu         sync.Mutex
-	appWatchers          map[*appWatcher]struct{}
-	appClock             func() time.Time
-	appAutoDisableWait   time.Duration
-	removePlugin         func(pluginDir, name string) error
-	pluginActionMu       sync.Mutex
-	bundledPluginMu      sync.Mutex
-	bundledPluginSet     map[string]struct{}
-	bundledPluginLoaded  bool
+	recoveryMu          sync.RWMutex
+	recovering          bool
+	recoverySettled     chan struct{}
+	notebookMu          sync.Mutex
+	notebookStore       *notebook.Store
+	notebookWatcherMu   sync.Mutex
+	notebookWatcher     *notebook.Watcher
+	notebookWatchedRoot string
+	fsMu                sync.Mutex
+	fsStores            map[string]*fsdoc.Store
+	fsWatchMu           sync.Mutex
+	fsWatchers          map[string]*fsRootWatch
+	pendingInitialWS    map[*wsClient]struct{}
+	startedOnce         sync.Once
+	startedCh           chan struct{}
+	tailscale           *tailscaleRuntime
+	plugins             *pluginRegistry
+	pluginSupervisorMu  sync.Mutex
+	pluginSupervisor    *pluginSupervisor
+	pluginHealthEnabled bool
+	pluginDriverMu      sync.Mutex
+	pluginLaunching     map[string]pluginSessionLaunch
+	pluginReports       map[string][]pendingPluginReport
+	pluginExits         map[string]ptybackend.ExitInfo
+	pluginDir           string
+	bundledPluginDir    string
+	busPinMu            sync.Mutex
+	busPinEpisodes      map[string]*busPinEpisode
+	busPinAge           time.Duration
+	removePlugin        func(pluginDir, name string) error
+	pluginActionMu      sync.Mutex
+	bundledPluginMu     sync.Mutex
+	bundledPluginSet    map[string]struct{}
+	bundledPluginLoaded bool
 
 	worktreePluginCallTimeout         time.Duration
 	worktreeCreateProviderCallTimeout time.Duration
@@ -335,7 +310,6 @@ type Daemon struct {
 	workflowDirty          map[string]bool
 	workflowEngineMu       sync.Mutex
 	workflowEngineConn     map[string]workflowEngineSink
-	appsBroadcastHook      func([]protocol.AppRegistryEntry)
 	gardenMintNoteID       func() (string, error)
 	gardenNow              func() time.Time
 	gitHubPollingOffLogged bool
@@ -611,7 +585,6 @@ func New(socketPath string) *Daemon {
 		pluginHealthEnabled: true,
 		pluginDir:           pluginDirForSocket(socketPath),
 		bundledPluginDir:    bundledPluginDirForExecutable(),
-		appsDir:             config.AppsDir(),
 		workspaces:          newWorkspaceRegistry(),
 		spawnLocks:          make(map[string]*spawnLock),
 	}
@@ -650,7 +623,6 @@ func NewForTesting(socketPath string) *Daemon {
 		plugins:             newPluginRegistry(),
 		pluginDir:           pluginDirForSocket(socketPath),
 		bundledPluginDir:    bundledPluginDirForExecutable(),
-		appsDir:             config.AppsDir(),
 		workspaces:          newWorkspaceRegistry(),
 		workflowDirty:       make(map[string]bool),
 		workflowEngineConn:  make(map[string]workflowEngineSink),
@@ -663,9 +635,6 @@ func NewForTesting(socketPath string) *Daemon {
 }
 
 func (d *Daemon) Start() error {
-	if err := d.resolveAppRuntimeTripwires(); err != nil {
-		return fmt.Errorf("resolve app runtime tripwires: %w", err)
-	}
 	if d.dataRoot == "" {
 		d.dataRoot = filepath.Dir(d.socketPath)
 	}
@@ -738,6 +707,7 @@ func (d *Daemon) Start() error {
 	if err != nil {
 		return fmt.Errorf("prepare legacy ticket recovery: %w", err)
 	}
+	d.backlogAtStart = d.snapshotBacklogAtStart()
 	d.ensureCrewCollections()
 	d.importCrewHomes()
 	if err := d.migrateCrewTicketIdentities(); err != nil {
@@ -874,14 +844,8 @@ func (d *Daemon) Start() error {
 	listener := d.listener
 	d.log("daemon started")
 	d.startInstalledPlugins()
-	d.restoreAppRuntimePark()
-	if err := d.repairInterruptedAppInvocations(); err != nil {
-		return err
-	}
-	d.registerAppConsumers()
 
 	d.wsHub.logf = d.logf
-	go d.wsHub.runUntil(d.done)
 
 	go d.startWorkflowBroadcastLoop(d.doneContext())
 
@@ -934,6 +898,7 @@ func (d *Daemon) Start() error {
 
 	d.watchRecoveredLaunches()
 	go func() {
+		pausepoint.At(pausepoint.DaemonStartupRecovery)
 		d.performStartupPTYRecovery(previousRunSessions, recoveryStartedAt)
 		d.resolveDue(time.Now())
 		go d.runSessionResolver()
@@ -1612,7 +1577,6 @@ func (d *Daemon) stop() {
 		d.hubManager.Stop()
 	}
 	d.stopInstalledPlugins()
-	d.stopAppRuntime()
 	d.stopAllTranscriptWatchers()
 	d.stopNudgeCountdowns()
 	d.stopAgentMailboxDoorbells()
@@ -2080,7 +2044,6 @@ func (d *Daemon) initHTTPServer() {
 	mux.HandleFunc("/ws", d.handleWS)
 	mux.HandleFunc("/health", d.handleHealth)
 	mux.HandleFunc("/agents", d.handleAgents)
-	mux.HandleFunc(appBundleRoutePrefix, d.handleAppBundle)
 	mux.HandleFunc("/favicon.ico", func(w http.ResponseWriter, _ *http.Request) {
 		setNoStoreHeaders(w.Header())
 		w.WriteHeader(http.StatusNoContent)
@@ -2429,15 +2392,6 @@ func (d *Daemon) handleConnection(conn net.Conn) {
 		return
 	}
 
-	if runtimeHelloID, runtimeParams, runtimeMode, err := parseAppRuntimeHello(data); runtimeMode {
-		if err != nil {
-			_ = json.NewEncoder(conn).Encode(jsonRPCFailure(runtimeHelloID, jsonRPCInvalidRequest, err.Error()))
-			return
-		}
-		d.handleAppRuntimeConnection(conn, reader, runtimeHelloID, runtimeParams)
-		return
-	}
-
 	helloID, helloParams, pluginMode, err := parsePluginHello(data)
 	if pluginMode {
 		if err != nil {
@@ -2509,26 +2463,6 @@ func (d *Daemon) handleConnection(conn net.Conn) {
 		d.handleDocCount(conn, msg.(*protocol.DocCountMessage))
 	case protocol.CmdDocSubscribe:
 		d.handleDocSubscribe(conn, msg.(*protocol.DocSubscribeMessage))
-	case protocol.CmdAppList:
-		d.handleAppList(conn, msg.(*protocol.AppListMessage))
-	case protocol.CmdAppStatus:
-		d.handleAppStatus(conn, msg.(*protocol.AppStatusMessage))
-	case protocol.CmdAppSetEnabled:
-		d.handleAppSetEnabled(conn, msg.(*protocol.AppSetEnabledMessage))
-	case protocol.CmdAppRemove:
-		d.handleAppRemove(conn, msg.(*protocol.AppRemoveMessage))
-	case protocol.CmdAppApply:
-		d.handleAppApply(conn, msg.(*protocol.AppApplyMessage))
-	case protocol.CmdAppRollback:
-		d.handleAppRollback(conn, msg.(*protocol.AppRollbackMessage))
-	case protocol.CmdAppLogs:
-		d.handleAppLogs(conn, msg.(*protocol.AppLogsMessage))
-	case protocol.CmdAppRuntimeStatus:
-		d.handleAppRuntimeStatus(conn, msg.(*protocol.AppRuntimeStatusMessage))
-	case protocol.CmdAppRuntimeRestart:
-		d.handleAppRuntimeRestart(conn, msg.(*protocol.AppRuntimeRestartMessage))
-	case protocol.CmdAppWatch:
-		d.handleAppWatch(conn, msg.(*protocol.AppWatchMessage))
 	case protocol.CmdAutoModeShow:
 		d.handleAutoModeShow(conn, msg.(*protocol.AutoModeShowMessage))
 	case protocol.CmdAutoModeEnvSlot:
@@ -2652,8 +2586,6 @@ func (d *Daemon) handleConnection(conn net.Conn) {
 		d.handleCrewHandoff(conn, msg.(*protocol.CrewHandoffMessage))
 	case protocol.CmdStop:
 		d.handleStop(conn, msg.(*protocol.StopMessage))
-	case protocol.CmdTodos:
-		d.handleTodos(conn, msg.(*protocol.TodosMessage))
 	case protocol.CmdFilesEdited:
 		d.handleFilesEdited(conn, msg.(*protocol.FilesEditedMessage))
 	case protocol.CmdPullRequestCreated:
@@ -3157,9 +3089,6 @@ func cloneSession(session *protocol.Session) *protocol.Session {
 		return nil
 	}
 	clone := *session
-	if len(session.Todos) > 0 {
-		clone.Todos = append([]string(nil), session.Todos...)
-	}
 	return &clone
 }
 
@@ -3322,19 +3251,6 @@ func (d *Daemon) handleFilesEdited(conn net.Conn, msg *protocol.FilesEditedMessa
 		d.store.RecordFileActivity(path, store.FileActivitySourceEdited, msg.ID)
 	}
 	d.sendOK(conn)
-}
-
-func (d *Daemon) handleTodos(conn net.Conn, msg *protocol.TodosMessage) {
-	d.store.UpdateTodos(msg.ID, msg.Todos)
-	d.store.Touch(msg.ID)
-	d.sendOK(conn)
-
-	for _, s := range d.store.List("") {
-		if s.ID == msg.ID {
-			d.publishFact(FactSessionTodosChanged, s.ID, nil)
-			break
-		}
-	}
 }
 
 func (d *Daemon) handleQuery(conn net.Conn, msg *protocol.QueryMessage) {

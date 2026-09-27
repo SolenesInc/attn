@@ -240,7 +240,6 @@ model Session {
   automation?: AutomationProvenance; // Present when this session was launched by an automation; latest run wins for a continuity thread.
   pull_requests?: SessionPullRequest[]; // Pull requests this session's agent opened, newest first. Joined at broadcast from the session_pull_requests table, never stored on the session row.
   terminal_build_stale?: boolean; // True when this session's pty-worker was built against a different libghostty-vt than the daemon, which happens when the app updates under a running session. The two then hold different terminal implementations and stop agreeing about the grid, so the app offers a reload. Derived at broadcast from the format tag the worker reports at its handshake; never stored, and absent for every same-build session, which is all of them outside an upgrade window.
-  todos?: string[];             // Optional: can be empty/absent
   last_seen: string;            // ISO timestamp, always set
 }
 
@@ -901,7 +900,7 @@ model StateExplainMessage {
   target_session_id: string;
 }
 
-// One agent observes another without interrupting it: state, todos, the last
+// One agent observes another without interrupting it: state, the last
 // assistant message, and the rendered screen, all served from what the daemon
 // already holds. Passive by construction — nothing here touches the target's
 // PTY or generates input, so watching costs the observed agent nothing.
@@ -996,12 +995,6 @@ model StopBackgroundTask {
   type: string;
   status: string;
   name?: string;
-}
-
-model TodosMessage {
-  cmd: "todos";
-  id: string;
-  todos: string[];
 }
 
 // Files an agent just wrote, reported by the tool-use hook after a completed
@@ -1916,10 +1909,6 @@ model RefreshPRsMessage {
   cmd: "refresh_prs";
 }
 
-model ClearSessionsMessage {
-  cmd: "clear_sessions";
-}
-
 model ClearWarningsMessage {
   cmd: "clear_warnings";
 }
@@ -2545,9 +2534,7 @@ model BusStatusResultMessage {
   recent_window_seconds: float64;
   baseline_window_seconds: float64;
   surge_rate_per_hour: float64;
-  // How long an enabled consumer may pin the retention floor before the pin is
-  // reported. Disabled installed-app lanes are retained but do not use this
-  // alarm; their future size tripwire needs a measured receipt first.
+  // How long an enabled consumer may pin the retention floor before the pin is reported.
   pin_alarm_seconds: float64;
   producers: BusProducerStatus[];
   consumers: BusConsumerStatus[];
@@ -2555,9 +2542,7 @@ model BusStatusResultMessage {
 }
 
 // Flips a durable consumer's kill switch, the same bit `attn bus enable|disable`
-// writes. Disabling stops delivery. An ordinary consumer stops pinning
-// retention; an installed app keeps its cursor and unread backlog until it is
-// enabled or uninstalled.
+// writes. Disabling stops delivery and releases its retention pin.
 model BusSetConsumerEnabledMessage {
   cmd: "bus_set_consumer_enabled";
   consumer: string;
@@ -3352,12 +3337,6 @@ model InitialStateMessage {
   // as well as on garden_seeds_updated so a client that connects to an
   // over-large garden knows it is short before anything moves.
   seeds_total?: int32;
-  // Every app registered on THIS daemon, with the views it offers. It is what
-  // the dock picker lists and what a mounted app tile resolves its bundle URL
-  // from. Local only: an app's bundle is an HTTP artifact on the daemon holding
-  // it and the hub relays WebSocket messages rather than proxying HTTP, so a
-  // remote endpoint's apps are deliberately never offered here.
-  apps?: AppRegistryEntry[];
   // The crew roster, so the sidebar draws every member — awake or asleep — from
   // the first push rather than asking for one.
   crew?: CrewMember[];
@@ -3424,11 +3403,6 @@ model NotebookChangedMessage {
   event: "notebook_changed";
   paths: string[];
   origin: string;
-}
-
-model SessionTodosUpdatedMessage {
-  event: "session_todos_updated";
-  session: Session;
 }
 
 model SessionsUpdatedMessage {
@@ -5518,515 +5492,6 @@ model GardenReviewUpdatedMessage {
 }
 
 // ============================================================================
-// App registry
-// ============================================================================
-//
-// An app is a manifest-declared automation running in attn's shared runtime: it
-// consumes facts from the durable bus as its own consumer `app:<name>`, keeps
-// state in the document namespace `app/<name>`, and is versioned by the content
-// hash of its built artifact. A plugin is the other thing entirely — an
-// integration with its own process — and the two never share a surface.
-//
-// Scaffolding an app is a local act with no daemon in it — `attn app new` writes
-// a directory. Building is the caller's too: it runs the developer's bun and the
-// TypeScript attn keeps under its data dir, and only the finished result crosses
-// this surface. What the daemon owns is the part that must be atomic and
-// observed — recording the version, moving the pointer, publishing the fact.
-
-// One app as `attn app list` shows it: the registry row, plus the consumer that
-// carries its enabled state. There is no enabled field on the app itself —
-// enabled IS the consumer's bit, and a second copy here would be a value that
-// can disagree with the one the bus actually reads.
-model AppSummary {
-  "name": string;
-  // The version this app currently runs. Absent when no version has been
-  // applied yet: a registry row can exist ahead of its first successful build.
-  "current_version"?: AppVersionInfo;
-  "created_at": string;
-  "updated_at": string;
-  // Absent when the app has no `app:<name>` consumer registered. That is a real
-  // state, not a gap in the answer: it means nothing is delivering facts to
-  // this app.
-  "consumer"?: AppConsumerInfo;
-  // The views the serving version declares, read back out of its frozen
-  // declaration. Empty for an app with no views, and for an app with no version
-  // applied yet — a view exists only inside a built version.
-  "views"?: AppViewInfo[];
-  // The commands the serving version declares, same rule as views: what an app
-  // answers is what the version now serving declared, not what its manifest
-  // says today. It is the only way to see a command exists without invoking it.
-  "commands"?: AppCommandInfo[];
-}
-
-// One declared command: something a view of this app can ask it to do.
-model AppCommandInfo {
-  "name": string;
-  // The manifest's description, when it has one. attn renders no UI from it —
-  // an app draws its own button — so this is for a reader of `attn app status`.
-  "description"?: string;
-}
-
-// One declared view: a named component the app offers attn to render, as the
-// dock picker and the tile header show it.
-//
-// `entrypoint` is deliberately absent. It is a path in the author's source tree
-// and says nothing to a UI that mounts a built artifact; what the frontend needs
-// is the name (which addresses the artifact and the tile kind), the kind (where
-// attn may put it) and the title (what a person reads).
-model AppViewInfo {
-  "name": string;
-  // "tile" is the only kind this attn mounts. It is carried rather than assumed
-  // so a client meeting a kind it cannot render says so instead of mounting the
-  // wrong surface.
-  "kind": string;
-  "title": string;
-  // Set when the view declares `params`: the dock picker asks for one line of
-  // text with this label before placing the tile, and hands the string to the
-  // view untouched. Absent means the view takes no params and the picker asks
-  // for nothing.
-  "params_label"?: string;
-  "params_placeholder"?: string;
-}
-
-// One app as the UI needs it: what is mountable, from where, and whether it is
-// running. Deliberately not AppSummary — that answer carries the consumer's
-// cursor and lag, which cost a bus-head read per push and mean nothing to a
-// tile.
-//
-// `content_hash` is what makes the bundle URL: an artifact is addressed by the
-// version's hash, so a new version is a different URL rather than a cache to
-// bust, and a tile remounts by noticing this value moved.
-model AppRegistryEntry {
-  "name": string;
-  // The manifest's description, when it has one — what the dock picker shows
-  // under the view's title.
-  "description"?: string;
-  // The app's enabled state, which IS its bus consumer's bit. False when the app
-  // has no consumer at all: nothing would run it either way, and a tile has no
-  // use for the distinction.
-  "enabled": boolean;
-  // Absent until a version has been applied. A registry row can exist ahead of
-  // its first successful build, and such an app has nothing to mount.
-  "version_id"?: safeint;
-  "content_hash"?: string;
-  "views": AppViewInfo[];
-}
-
-// The app registry changed: a version flipped, an app was enabled or disabled,
-// or an app was removed. A whole-list push, like tickets and seeds — the list is
-// short (a machine has a handful of apps) and every mounted tile has to
-// re-decide what it is serving from it.
-model AppsUpdatedMessage {
-  event: "apps_updated";
-  apps: AppRegistryEntry[];
-}
-
-// A docked view threw while rendering, caught by the host's per-app error
-// boundary.
-//
-// It is a report, not a request: the tile has already shown the error and the
-// way back, and the daemon's job is to make the crash visible to the agent that
-// wrote the view — it is recorded as an app invocation stamped with the version
-// that served it, so `attn app logs` and `attn app status` show it beside handler
-// failures.
-model AppViewCrashMessage {
-  "cmd": "app_view_crash";
-  "app": string;
-  "view": string;
-  // The version that served the bundle, which a rollback must not rewrite. The
-  // report is dropped when it does not match a version of this app.
-  "version_id": safeint;
-  // The tile the crash happened in — the subject a reader uses to tell "one tile
-  // is broken" from "every mount of this view crashes".
-  "tile_id": string;
-  // The error as the boundary caught it: message first, then the component stack
-  // when React gave one.
-  "error": string;
-}
-
-// A view asks its app to do something.
-//
-// The envelope is generic on purpose: attn knows the app, the command name and
-// a payload it never looks inside, and the app's handler is what gives any of
-// it meaning. That is the whole surface — there is no per-command shape in the
-// protocol, and adding a command is a manifest line plus a handler.
-//
-// `app` is composed by the host from the mount's identity and never by the
-// view, the same rule that makes a view unable to read another app's documents.
-model AppCommandMessage {
-  "cmd": "app_command";
-  "request_id": string;
-  "app": string;
-  "command": string;
-  // The argument, as JSON text. Text rather than a typed field because the
-  // daemon never interprets it: it is handed to the app's handler and its
-  // answer comes back the same way, exactly as a document body travels.
-  // Absent when the command takes none.
-  "payload"?: string;
-}
-
-// What the app's command handler answered.
-//
-// `success` false covers every way the command did not run — the app is not
-// installed, disabled, has no serving version, does not declare this command,
-// the runtime is not there, or the handler threw — and `error` is the sentence
-// a person reads in the tile. A handler that threw is a failed command, never a
-// dead socket: the distinction the runtime draws between an app's fault and its
-// own is unchanged here.
-model AppCommandResultMessage {
-  event: "app_command_result";
-  "request_id": string;
-  "success": boolean;
-  "error"?: string;
-  // Stable refusal code for callers that need to distinguish a command held
-  // behind the reconcile fence from an app or handler failure.
-  "error_code"?: string;
-  // Present with error_code=reconcile_owed. The message remains the surface a
-  // person reads; this is the structured fence a caller can inspect.
-  "reconcile"?: AppReconcileReasonInfo;
-  // The handler's return value as JSON text, when it returned one.
-  "payload"?: string;
-}
-
-model AppVersionInfo {
-  "id": safeint;
-  // The content hash of the built artifact — the version's identity, which is
-  // why re-applying byte-identical content reports this same version.
-  "content_hash": string;
-  "artifact_path": string;
-  "created_at": string;
-}
-
-// The bus consumer behind an app. `enabled` is the app's enabled state, `lag` is
-// head minus cursor: how many facts the app has yet to be delivered.
-model AppConsumerInfo {
-  "name": string;
-  "enabled": boolean;
-  "cursor": safeint;
-  "lag": safeint;
-  "filter": string;
-}
-
-model AppListMessage {
-  "cmd": "app_list";
-}
-
-model AppListResult {
-  "apps": AppSummary[];
-}
-
-model AppStatusMessage {
-  "cmd": "app_status";
-  "name": string;
-}
-
-// The lost range carried by a gap reconcile request.
-model AppReconcileGapInfo {
-  "cursor": safeint;
-  "earliest": safeint;
-  "missed": safeint;
-}
-
-// The durable requests folded into one reconcile attempt. Causes are ordered
-// gap, version_changed; previous_versions stays in request order with repeats
-// removed.
-model AppReconcileReasonInfo {
-  "causes": string[];
-  "version": safeint;
-  "through_seq": safeint;
-  "gap"?: AppReconcileGapInfo;
-  "previous_versions": safeint[];
-}
-
-// Reconcile state as one `attn app status` call observes it.
-model AppReconcileStatus {
-  // "not_needed" | "unsupported" | "idle" | "owed" | "running".
-  "state": string;
-  "reason"?: AppReconcileReasonInfo;
-  // The durable running row. Startup repairs an attempt interrupted before it
-  // settled, so a current attempt is never inferred from process memory.
-  "current_attempt"?: AppInvocationInfo;
-  // The latest settled reconcile failure, kept visible while the request stays
-  // owed and after an interrupted daemon has restarted.
-  "last_error"?: string;
-}
-
-// What is known about one app, and only what is known: the registry row, the
-// consumer if there is one, the invocations recorded so far, and the shared
-// runtime's state. An app's status must not claim a health it cannot observe, so
-// every field the runtime owns is absent when there is no runtime.
-model AppStatusResult {
-  "app": AppSummary;
-  "versions": safeint;
-  "invocations": safeint;
-  // Required because unsupported is a real operator state, not missing data.
-  "reconcile": AppReconcileStatus;
-  // The most recent versions, newest first, capped — "versions" above says how
-  // many exist. Rollback names ids in its refusals and there is nowhere else to
-  // read them, so a status that carried only a count sent the reader looking for
-  // a list that does not exist.
-  "recent_versions"?: AppVersionInfo[];
-  // The app's serving history: the version it serves now, then each version one
-  // bare rollback further back, capped. It is the only way to see whether a
-  // rollback has anywhere left to go without running it. A version missing from
-  // here is not gone — the walk went past it and it is still in
-  // "recent_versions", reachable by name.
-  "serving_history"?: AppVersionInfo[];
-  // How many steps that history has in total — "serving_history" carries the
-  // newest of them, so a walk longer than the cap is visible rather than
-  // silently ending.
-  "serving_history_steps"?: safeint;
-  // The most recent invocations, newest first, when any have been recorded.
-  "recent"?: AppInvocationInfo[];
-  // The shared runtime every app's handlers execute in. Absent until it has been
-  // started once — a daemon with quiet apps starts no sidecar, and reporting a
-  // "stopped" runtime that was never asked to run would read as a fault.
-  "runtime"?: AppRuntimeInfo;
-  // What this app is currently stuck on, when it is stuck. Present only while a
-  // handler is failing on the same event; a successful delivery clears it.
-  "stall"?: AppStallInfo;
-}
-
-// The shared app runtime as the supervisor sees it. One process for every app —
-// isolation between apps is failure attribution, not an OS boundary — so this
-// answer is the same whichever app's status asked for it.
-model AppRuntimeInfo {
-  // "starting" | "connected" | "backoff" | "stopped" | "parked". Parked is the
-  // one that needs acting on: it means attn gave up restarting and no app's
-  // handlers are running until `attn app runtime restart`.
-  "phase": string;
-  // "running" | "stopped" — what attn is trying to achieve, as opposed to where
-  // it currently is.
-  "desired": string;
-  "running": boolean;
-  "connected": boolean;
-  // Increments on every start. The supervisor fences stale processes by it, so a
-  // generation that keeps climbing is a crash loop in one number.
-  "generation": safeint;
-  "restart_attempt": int32;
-  // The connected runtime's process id. Absent when nothing is connected.
-  "pid"?: safeint;
-  "started_at"?: string;
-  "connected_at"?: string;
-  // When the next restart fires, while backing off.
-  "next_restart_at"?: string;
-  // When attn gave up restarting. Present only while parked, and it survives a
-  // daemon restart: a park has one timestamp for as long as it lasts, so a
-  // reader can tell a runtime that has been down since this morning from one
-  // that just crash-looped.
-  "parked_at"?: string;
-  // How the last process ended, rendered. Absent when it has never exited.
-  "last_exit"?: string;
-}
-
-// An app that has failed on the same delivery or reconcile claim long enough to
-// be on the clock.
-//
-// `disables_at` is the whole point of reporting this: an app stalled on one
-// event holds the durable log's retention floor open for every other consumer,
-// so attn disables it, and the reader is entitled to know when.
-model AppStallInfo {
-  // "subscription" | "reconcile".
-  "kind": string;
-  "event_seq"?: safeint;
-  "event_name"?: string;
-  // The immutable claim boundary while a reconcile request is retrying.
-  "through_request_id"?: safeint;
-  // When the app first failed on this work item.
-  "since": string;
-  "attempts": int32;
-  "last_error": string;
-  "disables_at": string;
-}
-
-// The shared runtime's own surface, addressed as `runtime` rather than as an app
-// — which is why no app may be called that.
-model AppRuntimeStatusMessage {
-  "cmd": "app_runtime_status";
-}
-
-model AppRuntimeStatusResult {
-  // Absent when the runtime has never been started in this daemon.
-  "runtime"?: AppRuntimeInfo;
-  // How many apps are registered, and how many of those are enabled — the answer
-  // to "should anything be running at all".
-  "apps": safeint;
-  "apps_enabled": safeint;
-  // The binary that gets launched. Absent, with `host_error` set, when it cannot
-  // be found: a runtime that will never start must say so before it is asked to.
-  "host_path"?: string;
-  "host_error"?: string;
-  // Where the runtime's captured output lands. `attn app logs` reads it.
-  "log_path": string;
-}
-
-// Restart the shared runtime: kill the current process if there is one, and
-// start a fresh generation. It is also the way out of `parked` — a crash-looped
-// runtime is not retried until somebody asks.
-//
-// It takes no app name, deliberately. There is one runtime for every app, so
-// naming one would suggest a per-app restart that does not exist.
-model AppRuntimeRestartMessage {
-  "cmd": "app_runtime_restart";
-}
-
-model AppRuntimeRestartResult {
-  // The phase the runtime was in before the restart, so the answer says what
-  // actually changed — reviving a parked runtime and bouncing a healthy one are
-  // different acts with the same verb.
-  "was": string;
-  "runtime": AppRuntimeInfo;
-}
-
-// The shared runtime's captured stdout and stderr, filtered to one app.
-//
-// Every app's handlers print to the same process's output, so the runtime tags
-// each line with the app that wrote it and this reads the tag back. `runtime` as
-// the name means the whole log, untagged lines included — the runtime's own
-// output, which is where a startup failure appears.
-model AppLogsMessage {
-  "cmd": "app_logs";
-  "name": string;
-  // How many matching lines to return, newest last. 0 means the default.
-  "lines"?: int32;
-}
-
-model AppLogsResult {
-  "name": string;
-  "path": string;
-  // Matching lines in the order they were written, with the app tag removed.
-  "lines": string[];
-  // True when older matching lines were dropped to honour the limit.
-  "truncated": boolean;
-}
-
-// Stream an app's invocations as they are recorded. The connection stays open
-// and one result is written per invocation, which is what `attn app dev` renders
-// beside its apply results: an app author editing a handler sees the handler run.
-model AppWatchMessage {
-  "cmd": "app_watch";
-  "name": string;
-}
-
-model AppWatchResult {
-  "invocation": AppInvocationInfo;
-}
-
-model AppInvocationInfo {
-  "id": safeint;
-  // The version that actually ran, which is not necessarily the one the app
-  // points at now — a rollback does not rewrite what happened.
-  "version_id": safeint;
-  // "subscription" | "command" | "view" | "reconcile".
-  "kind": string;
-  // Fact identity exists only for subscription invocations.
-  "event_seq"?: safeint;
-  "event_name"?: string;
-  "event_subject"?: string;
-  "handler": string;
-  "status": string;
-  "error"?: string;
-  // Absent while status=running.
-  "duration_ms"?: safeint;
-  "started_at": string;
-  "finished_at"?: string;
-  // Reconcile attempts retain the exact claimed input and request boundary, so
-  // retries and interruptions remain inspectable after restart.
-  "reconcile"?: AppReconcileReasonInfo;
-  "through_request_id"?: safeint;
-}
-
-// Flip an app's enabled state, which is its bus consumer's enabled bit and
-// nothing else. Refused when the app has no consumer: there is no state to flip,
-// and inventing one would leave the app looking enabled while nothing delivers
-// to it.
-model AppSetEnabledMessage {
-  "cmd": "app_set_enabled";
-  "name": string;
-  "enabled": boolean;
-}
-
-model AppSetEnabledResult {
-  "name": string;
-  "consumer": string;
-  "enabled": boolean;
-}
-
-// Uninstall an app: stop and delete its bus consumer, then delete its registry
-// row. What survives is deliberate — version history, the invocation log, and
-// every document under `app/<name>`. The result counts them so the answer says
-// what was kept rather than leaving the caller to guess.
-model AppRemoveMessage {
-  "cmd": "app_remove";
-  "name": string;
-}
-
-model AppRemoveResult {
-  "name": string;
-  "consumer_removed": boolean;
-  "versions_kept": safeint;
-  "invocations_kept": safeint;
-  "namespace_kept": string;
-}
-
-// Record a built version and point the app at it — the whole of what an apply
-// changes, in one transaction.
-//
-// The caller has already parsed the manifest, regenerated the derived types,
-// typechecked, bundled and placed the artifact in the content-addressed store;
-// everything that could be refused has been. The daemon does not take that on
-// trust: it re-derives the hash from the declaration and the bytes on disk
-// before recording anything, so a version row never names content that is not
-// what it says it is.
-model AppApplyMessage {
-  "cmd": "app_apply";
-  "name": string;
-  // The version's identity: the frozen declaration and the built bundle hashed
-  // together. The bundle alone would be wrong — generated types are erased at
-  // build time, so a manifest edit can leave the bundle byte-identical while
-  // changing what the app declares.
-  "content_hash": string;
-  // The manifest's snapshot as JSON, frozen onto the version row so what an old
-  // version declared survives editing the file.
-  "declaration": string;
-  // Where it was built from. Logged, never stored: attn does not remember where
-  // an app's source lives.
-  "source_path"?: string;
-}
-
-model AppApplyResult {
-  "name": string;
-  "version_id": safeint;
-  "content_hash": string;
-  "artifact_path": string;
-  // False when this exact content was already a version of this app. Applying
-  // byte-identical content mints no row — the hash is the version's identity —
-  // so the pointer simply lands back on the version that already was.
-  "version_created": boolean;
-  // What the app pointed at before this apply. Absent when it pointed at
-  // nothing, which is every app's first apply.
-  "previous_version_id"?: safeint;
-}
-
-// Move an app onto a version it already has. Rollback builds nothing: a version
-// is an immutable row and an artifact that is still on disk, so going back is a
-// pointer move and nothing else.
-model AppRollbackMessage {
-  "cmd": "app_rollback";
-  "name": string;
-  // Absent means the version applied before the current one.
-  "version_id"?: safeint;
-}
-
-model AppRollbackResult {
-  "name": string;
-  "version_id": safeint;
-  "content_hash": string;
-  "artifact_path": string;
-  "previous_version_id"?: safeint;
-}
-
-// ============================================================================
 // Auto mode
 // ============================================================================
 //
@@ -6468,16 +5933,6 @@ model Response {
   doc_query_result?: DocQueryResult;
   doc_count_result?: DocCountResult;
   doc_subscribe_result?: DocSubscribeResult;
-  app_list_result?: AppListResult;
-  app_status_result?: AppStatusResult;
-  app_set_enabled_result?: AppSetEnabledResult;
-  app_remove_result?: AppRemoveResult;
-  app_apply_result?: AppApplyResult;
-  app_rollback_result?: AppRollbackResult;
-  app_logs_result?: AppLogsResult;
-  app_runtime_status_result?: AppRuntimeStatusResult;
-  app_runtime_restart_result?: AppRuntimeRestartResult;
-  app_watch_result?: AppWatchResult;
   automode_show_result?: AutoModeShowResult;
   automode_env_result?: AutoModeEnvResult;
   automode_config_result?: AutoModeConfigResult;
@@ -6545,9 +6000,6 @@ model AgentPeekResult {
   state_since: string;
   last_seen: string;
   turn_owed?: boolean;
-  // The flat strings the todo hook stores, served as-is; consumers parse the
-  // [✓]/[→]/[ ] prefix if they care.
-  todos: string[];
   // Absent is not an error: a session with no inspectable transcript, or one
   // that has said nothing yet, simply has no message to show.
   last_assistant_message?: string;
@@ -7710,7 +7162,6 @@ alias DaemonEvent =
   | WorkspaceUnregisteredMessage
   | WorkspaceStateChangedMessage
   | NotebookChangedMessage
-  | SessionTodosUpdatedMessage
   | SessionsUpdatedMessage
   | WorkspaceLayoutMessage
   | WorkspaceLayoutUpdatedMessage
@@ -7849,8 +7300,6 @@ alias DaemonEvent =
   | MarkdownAnnotationsSubmitResultMessage
   | BusStatusResultMessage
   | BusSetConsumerEnabledResultMessage
-  | AppsUpdatedMessage
-  | AppCommandResultMessage
   | DocSubscriptionDeliveryMessage
   | DocSubscriptionEndedMessage
   | AutoModeStateResultMessage

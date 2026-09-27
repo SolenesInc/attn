@@ -9,6 +9,8 @@ var agentSessionIdentityEnvKeys = []string{
 	"CLAUDE_CODE_CHILD_SESSION",
 	"CLAUDE_CODE_EXECPATH",
 	"CLAUDE_CODE_SSE_PORT",
+	"ATTN_AGENT_GUIDANCE",
+	"ATTN_CHIEF_GUIDANCE",
 }
 
 var agentSessionTuningEnvKeys = []string{

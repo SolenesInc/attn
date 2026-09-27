@@ -210,10 +210,10 @@ func quoteIdent(name string) string {
 
 func ValidateNamespace(ns string) error {
 	if ns == "" {
-		return fmt.Errorf("docstore: namespace is required, as owner/name (for example app/approval-gate)")
+		return fmt.Errorf("docstore: namespace is required, as owner/name (for example core/garden)")
 	}
 	if !namespaceRe.MatchString(ns) {
-		return fmt.Errorf("docstore: namespace %q is not owner/name, where each part is lowercase letters, digits, - or _ (for example app/approval-gate)", ns)
+		return fmt.Errorf("docstore: namespace %q is not owner/name, where each part is lowercase letters, digits, - or _ (for example core/garden)", ns)
 	}
 	return nil
 }

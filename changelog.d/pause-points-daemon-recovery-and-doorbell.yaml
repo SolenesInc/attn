@@ -1,0 +1,3 @@
+kind: internal
+area: testing
+change: The recovery barrier and doorbell typing-race tests now run through the real daemon on pause points, and two in-package tests that set up states the daemon never reaches are gone.

@@ -152,7 +152,7 @@ func TestToolFreeHeadlessTasksRunReadOnlyWithOnlyTheirProvidersEnvironment(t *te
 			if tc.capped != nil && !tc.capped(task) {
 				t.Errorf("the title task ran %s without the headless context window cap: %q", tc.harness, task.Argv)
 			}
-			if home, _ := envEntry(task.Env, "COPILOT_HOME"); tc.homeIsTheRun && (home == "" || home != task.Dir) {
+			if home, _ := envEntry(task.Env, "COPILOT_HOME"); tc.homeIsTheRun && (home == "" || resolvedParent(t, home) != resolvedParent(t, task.Dir)) {
 				t.Errorf("the title task ran copilot with home %q from %q, want its own scratch directory", home, task.Dir)
 			}
 		})
@@ -259,4 +259,15 @@ func TestAgentsFindTheActiveAttnFirstOnTheirPath(t *testing.T) {
 			t.Errorf("%s runs with PATH starting at %q, want the active attn's %q", name, first, active)
 		}
 	}
+}
+
+// The run's scratch directory is gone by now; resolve its parent so macOS's
+// /var -> /private/var link does not make one directory look like two.
+func resolvedParent(t *testing.T, dir string) string {
+	t.Helper()
+	parent, err := filepath.EvalSymlinks(filepath.Dir(dir))
+	if err != nil {
+		t.Fatalf("resolve %s: %v", filepath.Dir(dir), err)
+	}
+	return filepath.Join(parent, filepath.Base(dir))
 }

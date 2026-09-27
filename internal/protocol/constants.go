@@ -7,7 +7,7 @@ import (
 	"time"
 )
 
-const ProtocolVersion = "320"
+const ProtocolVersion = "323"
 
 const (
 	ErrorCodeConflict             = "conflict"
@@ -16,7 +16,6 @@ const (
 	ErrorCodeCollectionUndefined  = "collection_undefined"
 	ErrorCodeCollectionRedeclared = "collection_redeclared"
 	ErrorCodeSubscriptionLimit    = "subscription_limit"
-	ErrorCodeReconcileOwed        = "reconcile_owed"
 	ErrorCodeUnauthorizedClient   = "unauthorized_client"
 )
 
@@ -74,18 +73,6 @@ const (
 	CmdDocCount                              = "doc_count"
 	CmdDocSubscribe                          = "doc_subscribe"
 	CmdDocUnsubscribe                        = "doc_unsubscribe"
-	CmdAppList                               = "app_list"
-	CmdAppStatus                             = "app_status"
-	CmdAppSetEnabled                         = "app_set_enabled"
-	CmdAppRemove                             = "app_remove"
-	CmdAppApply                              = "app_apply"
-	CmdAppRollback                           = "app_rollback"
-	CmdAppLogs                               = "app_logs"
-	CmdAppRuntimeStatus                      = "app_runtime_status"
-	CmdAppRuntimeRestart                     = "app_runtime_restart"
-	CmdAppWatch                              = "app_watch"
-	CmdAppViewCrash                          = "app_view_crash"
-	CmdAppCommand                            = "app_command"
 	CmdPresentOpen                           = "present_open"
 	CmdPresentFeedback                       = "present_feedback"
 	CmdGetPresentations                      = "get_presentations"
@@ -165,7 +152,6 @@ const (
 	CmdCrewPrime                             = "crew_prime"
 	CmdCrewHandoff                           = "crew_handoff"
 	CmdStop                                  = "stop"
-	CmdTodos                                 = "todos"
 	CmdFilesEdited                           = "files_edited"
 	CmdPullRequestCreated                    = "pull_request_created"
 	CmdPullRequestForget                     = "pull_request_forget"
@@ -192,7 +178,6 @@ const (
 	CmdQueryAuthors                          = "query_authors"
 	CmdFetchPRDetails                        = "fetch_pr_details"
 	CmdRefreshPRs                            = "refresh_prs"
-	CmdClearSessions                         = "clear_sessions"
 	CmdClearWarnings                         = "clear_warnings"
 	CmdPRVisited                             = "pr_visited"
 	CmdListWorktrees                         = "list_worktrees"
@@ -347,7 +332,6 @@ const (
 	EventWorkspaceUnregistered           = "workspace_unregistered"
 	EventWorkspaceStateChanged           = "workspace_state_changed"
 	EventNotebookChanged                 = "notebook_changed"
-	EventSessionTodosUpdated             = "session_todos_updated"
 	EventSessionsUpdated                 = "sessions_updated"
 	EventPullRequestWatchResult          = "pull_request_watch_result"
 	EventPullRequestUnwatchResult        = "pull_request_unwatch_result"
@@ -356,8 +340,6 @@ const (
 	EventSessionContextWindowCapResult   = "session_context_window_cap_result"
 	EventGardenSeedsUpdated              = "garden_seeds_updated"
 	EventGardenReviewUpdated             = "garden_review_updated"
-	EventAppsUpdated                     = "apps_updated"
-	EventAppCommandResult                = "app_command_result"
 	EventDocSubscriptionDelivery         = "doc_subscription_delivery"
 	EventDocSubscriptionEnded            = "doc_subscription_ended"
 	EventCrewUpdated                     = "crew_updated"
@@ -825,90 +807,6 @@ func ParseMessage(data []byte) (string, interface{}, error) {
 
 	case CmdDocUnsubscribe:
 		var msg DocUnsubscribeMessage
-		if err := json.Unmarshal(data, &msg); err != nil {
-			return "", nil, err
-		}
-		return peek.Cmd, &msg, nil
-
-	case CmdAppList:
-		var msg AppListMessage
-		if err := json.Unmarshal(data, &msg); err != nil {
-			return "", nil, err
-		}
-		return peek.Cmd, &msg, nil
-
-	case CmdAppStatus:
-		var msg AppStatusMessage
-		if err := json.Unmarshal(data, &msg); err != nil {
-			return "", nil, err
-		}
-		return peek.Cmd, &msg, nil
-
-	case CmdAppSetEnabled:
-		var msg AppSetEnabledMessage
-		if err := json.Unmarshal(data, &msg); err != nil {
-			return "", nil, err
-		}
-		return peek.Cmd, &msg, nil
-
-	case CmdAppRemove:
-		var msg AppRemoveMessage
-		if err := json.Unmarshal(data, &msg); err != nil {
-			return "", nil, err
-		}
-		return peek.Cmd, &msg, nil
-
-	case CmdAppApply:
-		var msg AppApplyMessage
-		if err := json.Unmarshal(data, &msg); err != nil {
-			return "", nil, err
-		}
-		return peek.Cmd, &msg, nil
-
-	case CmdAppRollback:
-		var msg AppRollbackMessage
-		if err := json.Unmarshal(data, &msg); err != nil {
-			return "", nil, err
-		}
-		return peek.Cmd, &msg, nil
-
-	case CmdAppLogs:
-		var msg AppLogsMessage
-		if err := json.Unmarshal(data, &msg); err != nil {
-			return "", nil, err
-		}
-		return peek.Cmd, &msg, nil
-
-	case CmdAppRuntimeStatus:
-		var msg AppRuntimeStatusMessage
-		if err := json.Unmarshal(data, &msg); err != nil {
-			return "", nil, err
-		}
-		return peek.Cmd, &msg, nil
-
-	case CmdAppRuntimeRestart:
-		var msg AppRuntimeRestartMessage
-		if err := json.Unmarshal(data, &msg); err != nil {
-			return "", nil, err
-		}
-		return peek.Cmd, &msg, nil
-
-	case CmdAppViewCrash:
-		var msg AppViewCrashMessage
-		if err := json.Unmarshal(data, &msg); err != nil {
-			return "", nil, err
-		}
-		return peek.Cmd, &msg, nil
-
-	case CmdAppCommand:
-		var msg AppCommandMessage
-		if err := json.Unmarshal(data, &msg); err != nil {
-			return "", nil, err
-		}
-		return peek.Cmd, &msg, nil
-
-	case CmdAppWatch:
-		var msg AppWatchMessage
 		if err := json.Unmarshal(data, &msg); err != nil {
 			return "", nil, err
 		}
@@ -1516,13 +1414,6 @@ func ParseMessage(data []byte) (string, interface{}, error) {
 		}
 		return peek.Cmd, &msg, nil
 
-	case CmdTodos:
-		var msg TodosMessage
-		if err := json.Unmarshal(data, &msg); err != nil {
-			return "", nil, err
-		}
-		return peek.Cmd, &msg, nil
-
 	case CmdFilesEdited:
 		var msg FilesEditedMessage
 		if err := json.Unmarshal(data, &msg); err != nil {
@@ -1700,13 +1591,6 @@ func ParseMessage(data []byte) (string, interface{}, error) {
 
 	case CmdRefreshPRs:
 		var msg RefreshPRsMessage
-		if err := json.Unmarshal(data, &msg); err != nil {
-			return "", nil, err
-		}
-		return peek.Cmd, &msg, nil
-
-	case CmdClearSessions:
-		var msg ClearSessionsMessage
 		if err := json.Unmarshal(data, &msg); err != nil {
 			return "", nil, err
 		}

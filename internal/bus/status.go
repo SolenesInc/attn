@@ -252,12 +252,6 @@ func health(s Status, now time.Time) []Health {
 				Message: fmt.Sprintf("consumer %s is registered and enabled but has no delivery loop in this daemon, so nothing is reading its %s backlog",
 					c.Name, events(c.Lag)),
 			})
-		case !c.Enabled && c.PinsRetention:
-			out = append(out, Health{
-				Level: HealthWarn, Kind: HealthConsumerDisabled, Subject: c.Name,
-				Message: fmt.Sprintf("consumer %s is disabled: delivery is paused at seq %d and its installed app keeps the unread backlog; enable it to resume from this cursor or uninstall it to release retention",
-					c.Name, c.Cursor),
-			})
 		case !c.Enabled:
 			out = append(out, Health{
 				Level: HealthWarn, Kind: HealthConsumerDisabled, Subject: c.Name,

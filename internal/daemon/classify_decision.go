@@ -36,12 +36,10 @@ type stopClassification struct {
 	runningBackgroundTasks int
 }
 
-func classifyPreTranscript(pendingTodos int, transcriptEnabled, classifierEnabled bool, stop stopClassification) classifyDecision {
+func classifyPreTranscript(transcriptEnabled, classifierEnabled bool, stop stopClassification) classifyDecision {
 	switch {
 	case stop.yielded && (!transcriptEnabled || !classifierEnabled):
 		return classifyDecision{action: classifySkip, reason: "yield_unjudgeable"}
-	case !stop.yielded && pendingTodos > 0:
-		return classifyDecision{action: classifyApply, state: protocol.StateWaitingInput, reason: "pending_todos"}
 	case !transcriptEnabled:
 		return classifyDecision{action: classifyApply, state: protocol.StateIdle, reason: "transcript_disabled"}
 	case !classifierEnabled:
@@ -126,15 +124,7 @@ func (d *Daemon) classifyStop(sessionID, transcriptPath string, stop stopClassif
 		classifierEnabled = caps.HasClassifier
 	}
 
-	pendingTodos := 0
-	for _, todo := range session.Todos {
-		if !strings.HasPrefix(todo, "[✓]") {
-			pendingTodos++
-		}
-	}
-	d.logf("classifySessionState: session %s has %d total todos, %d pending", sessionID, len(session.Todos), pendingTodos)
-
-	decision := classifyPreTranscript(pendingTodos, transcriptEnabled, classifierEnabled, stop)
+	decision := classifyPreTranscript(transcriptEnabled, classifierEnabled, stop)
 	if decision.action != classifyReadTranscript {
 		apply(decision)
 		return

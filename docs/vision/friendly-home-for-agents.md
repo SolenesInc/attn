@@ -133,7 +133,7 @@ for user-defined crew members.
   messages, which can address a seed's participants as routing sugar (seed
   comments as a separate mechanism were considered and skipped: a comment is
   a message with no addressee). Observation is the daemon's to serve, passively:
-  state, todos, the latest assistant message, the screen. Asking an agent
+  state, the latest assistant message, the screen. Asking an agent
   what it is doing costs it a turn; watching it must cost nothing.
   `attn delegate` already proves inspect-and-converse for the human; the
   agent-facing surface is the same daemon capability with a different

@@ -1,3 +1,4 @@
+import crypto from 'node:crypto';
 import WebSocket from 'ws';
 import { assertProductionRunAllowed, defaultWSURLForInstance, harnessClientHello } from './harnessInstance.mjs';
 
@@ -140,6 +141,21 @@ export class DaemonObserver {
       };
       ws.once('close', onClose);
     });
+  }
+
+  async requestResult(message, resultEvent, timeoutMs = 10_000) {
+    const request_id = crypto.randomUUID();
+    const result = this.waitForMessage(
+      (data) => (data.event === resultEvent && data.request_id === request_id ? data : null),
+      `${resultEvent} for ${message.cmd}`,
+      timeoutMs,
+    );
+    this.send({ ...message, request_id });
+    const data = await result;
+    if (data.success === false) {
+      throw new Error(`${message.cmd} failed: ${data.error || 'no error given'}`);
+    }
+    return data;
   }
 
   send(message) {
@@ -439,7 +455,6 @@ export class DaemonObserver {
         break;
       case 'session_registered':
       case 'session_state_changed':
-      case 'session_todos_updated':
         if (data.session?.id) {
           this.sessionsById.set(data.session.id, data.session);
         }

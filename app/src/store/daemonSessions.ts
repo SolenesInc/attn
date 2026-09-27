@@ -1,5 +1,5 @@
 import { create } from 'zustand';
-import { DaemonSession, DaemonPR, RepoState, AuthorState, Seed, CrewMember, AppRegistryEntry } from '../hooks/useDaemonSocket';
+import { DaemonSession, DaemonPR, RepoState, AuthorState, Seed, CrewMember } from '../hooks/useDaemonSocket';
 
 interface DaemonStore {
   daemonSessions: DaemonSession[];
@@ -16,9 +16,6 @@ interface DaemonStore {
 
   prs: DaemonPR[];
   setPRs: (prs: DaemonPR[]) => void;
-
-  apps: AppRegistryEntry[];
-  setApps: (apps: AppRegistryEntry[]) => void;
 
   repoStates: RepoState[];
   setRepoStates: (repos: RepoState[]) => void;
@@ -48,9 +45,6 @@ export const useDaemonStore = create<DaemonStore>((set, get) => ({
 
   prs: [],
   setPRs: (prs) => set({ prs }),
-
-  apps: [],
-  setApps: (apps) => set({ apps }),
 
   repoStates: [],
   setRepoStates: (repos) => set({ repoStates: repos }),

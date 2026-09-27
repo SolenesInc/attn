@@ -17,6 +17,7 @@ import (
 
 	"github.com/victorarias/attn/internal/buildinfo"
 	"github.com/victorarias/attn/internal/ghosttyvt"
+	"github.com/victorarias/attn/internal/pausepoint"
 )
 
 type TerminalTheme struct {
@@ -31,10 +32,6 @@ const (
 	defaultThemeBackground = "#1e1e1e"
 	defaultThemeCursor     = "#d4d4d4"
 )
-
-var infoSnapshotHook func()
-
-var readLoopSeqGapHook func()
 
 var readLoopAdmissionGapHook atomic.Pointer[func()]
 
@@ -167,6 +164,7 @@ func (s *Session) fanOut(data []byte, seq uint32) {
 			if sub.onDrop != nil {
 				sub.onDrop("buffer_overflow")
 			}
+			pausepoint.At(pausepoint.PtySubscriberDrop)
 		}
 	}
 
@@ -355,9 +353,7 @@ func (s *Session) readLoop(onExit func(exitCode int, signal string), logf func(s
 				}
 
 				seq := s.seqCounter.Add(1)
-				if readLoopSeqGapHook != nil {
-					readLoopSeqGapHook()
-				}
+				pausepoint.At(pausepoint.PtyOutputSequenced)
 				wire, resync := data, ""
 				var placements []KittyPlacement
 				placementsMoved := false
@@ -382,6 +378,9 @@ func (s *Session) readLoop(onExit func(exitCode int, signal string), logf func(s
 					if queries.da1 {
 						s.writeDeviceAttributesResponse(logf)
 					}
+				}
+				if len(wire) == 0 {
+					pausepoint.At(pausepoint.PtyOutputHeld)
 				}
 				if len(wire) > 0 {
 					s.fanOut(wire, seq)
@@ -701,9 +700,7 @@ func (s *Session) info() AttachInfo {
 	replayWatermark := s.lastReplaySeq
 	s.replayMu.Unlock()
 
-	if infoSnapshotHook != nil {
-		infoSnapshotHook()
-	}
+	pausepoint.At(pausepoint.PtyAttachSnapshot)
 
 	return AttachInfo{
 		LastSeq:                    replayWatermark,

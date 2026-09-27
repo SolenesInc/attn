@@ -242,8 +242,9 @@ func TestSendToChiefAppendsToTheInboxAndRingsOnlyAReadyChief(t *testing.T) {
 	agent := w.Launched(chief)
 	app.TypeLine(chief, "keep the notebook")
 	agent.Prompted()
+	working := testworld.AwaitSession(app, chief, func(s protocol.Session) bool { return s.State == protocol.SessionStateWorking })
 	agent.Reply("Ready. <!-- attn:state=idle -->")
-	testworld.AwaitSession(app, chief, func(s protocol.Session) bool { return s.State == protocol.SessionStateIdle })
+	testworld.AwaitStateAfter(app, working, func(s protocol.Session) bool { return s.State == protocol.SessionStateIdle })
 
 	sent := notebookAskSendToChief(app, "/knowledge/index.md", "remember this decision")
 	if !sent.Success || sent.Result == nil || sent.Result.Path != "inbox.md" || !sent.Result.Nudged {

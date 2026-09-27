@@ -129,9 +129,6 @@ func cloneSession(session *protocol.Session) *protocol.Session {
 	if session.ActivityAt != nil {
 		cloned.ActivityAt = protocol.Ptr(protocol.Deref(session.ActivityAt))
 	}
-	if session.Todos != nil {
-		cloned.Todos = append([]string(nil), session.Todos...)
-	}
 	return &cloned
 }
 
@@ -241,10 +238,6 @@ func (s *Store) addCheckedLocked(session *protocol.Session, rejectTeardown bool)
 		return fmt.Errorf("add session %s: %w", session.ID, ErrSessionClosed)
 	}
 
-	todosJSON, err := json.Marshal(session.Todos)
-	if err != nil {
-		return fmt.Errorf("marshal todos for session %s: %w", session.ID, err)
-	}
 	normalizedAgent := strings.TrimSpace(strings.ToLower(string(session.Agent)))
 	if normalizedAgent == "" {
 		normalizedAgent = string(protocol.SessionAgentCodex)
@@ -254,10 +247,10 @@ func (s *Store) addCheckedLocked(session *protocol.Session, rejectTeardown bool)
 	if lastModelRequestAt == "" {
 		lastModelRequestAt = session.StateUpdatedAt
 	}
-	_, err = s.db.Exec(`
+	_, err := s.db.Exec(`
 		INSERT INTO sessions
-		(id, label, agent, directory, endpoint_id, workspace_id, branch, is_worktree, main_repo, repository, state, state_since, state_updated_at, last_model_request_at, parent_session_id, todos, last_seen)
-		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+		(id, label, agent, directory, endpoint_id, workspace_id, branch, is_worktree, main_repo, repository, state, state_since, state_updated_at, last_model_request_at, parent_session_id, last_seen)
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
 		ON CONFLICT(id) DO UPDATE SET
 			label = excluded.label,
 			agent = excluded.agent,
@@ -276,7 +269,6 @@ func (s *Store) addCheckedLocked(session *protocol.Session, rejectTeardown bool)
 				ELSE sessions.last_model_request_at
 			END,
 			parent_session_id = excluded.parent_session_id,
-			todos = excluded.todos,
 			last_seen = excluded.last_seen`,
 		session.ID,
 		session.Label,
@@ -293,7 +285,6 @@ func (s *Store) addCheckedLocked(session *protocol.Session, rejectTeardown bool)
 		session.StateUpdatedAt,
 		lastModelRequestAt,
 		protocol.Deref(session.ParentSessionID),
-		string(todosJSON),
 		session.LastSeen,
 	)
 	if err != nil {
@@ -315,7 +306,6 @@ func (s *Store) Get(id string) *protocol.Session {
 	}
 
 	var session protocol.Session
-	var todosJSON string
 	var stateSince, stateUpdatedAt, lastSeen string
 	var turnOpenedAt, turnSettledAt, turnSnoozedUntil string
 	var isWorktree int
@@ -323,7 +313,7 @@ func (s *Store) Get(id string) *protocol.Session {
 	var endpointID, workspaceID, branch, mainRepo, repository, pinnedAt, parentSessionID, activity, activityAt, lastModelRequestAt sql.NullString
 
 	err := s.db.QueryRow(`
-		SELECT id, label, agent, directory, endpoint_id, workspace_id, branch, is_worktree, main_repo, repository, state, state_since, state_updated_at, last_model_request_at, pinned_at, context_window_cap, parent_session_id, activity, activity_at, todos, last_seen, turn_opened_at, turn_settled_at, turn_snoozed_until
+		SELECT id, label, agent, directory, endpoint_id, workspace_id, branch, is_worktree, main_repo, repository, state, state_since, state_updated_at, last_model_request_at, pinned_at, context_window_cap, parent_session_id, activity, activity_at, last_seen, turn_opened_at, turn_settled_at, turn_snoozed_until
 		FROM sessions WHERE id = ? AND closed_at = ''`, id).Scan(
 		&session.ID,
 		&session.Label,
@@ -344,7 +334,6 @@ func (s *Store) Get(id string) *protocol.Session {
 		&parentSessionID,
 		&activity,
 		&activityAt,
-		&todosJSON,
 		&lastSeen,
 		&turnOpenedAt,
 		&turnSettledAt,
@@ -394,11 +383,6 @@ func (s *Store) Get(id string) *protocol.Session {
 		session.LastModelRequestAt = protocol.Ptr(lastModelRequestAt.String)
 	}
 	session.LastSeen = lastSeen
-	if todosJSON != "" && todosJSON != "null" {
-		if err := json.Unmarshal([]byte(todosJSON), &session.Todos); err != nil {
-			log.Printf("[store] Get: failed to unmarshal todos for session %s: %v", id, err)
-		}
-	}
 
 	return &session
 }
@@ -435,37 +419,6 @@ func (s *Store) Remove(id string) {
 	}
 }
 
-func (s *Store) ClearSessions() {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-
-	if s.db == nil {
-		s.sessions = make(map[string]*protocol.Session)
-		s.sessionCloses = make(map[string]sessionCloseMark)
-		s.agentDriverRuns = make(map[string]AgentDriverReportCursor)
-		s.agentMetadata = make(map[string]string)
-		s.sessionCosts = make(map[string]SessionCostState)
-		s.workspaces = make(map[string]workspacelayout.WorkspaceLayout)
-		return
-	}
-
-	if _, err := s.db.Exec("DELETE FROM workspace_layout_panes"); err != nil {
-		log.Printf("[store] ClearSessions: failed to clear workspace layout panes: %v", err)
-	}
-	if _, err := s.db.Exec("DELETE FROM workspace_layouts"); err != nil {
-		log.Printf("[store] ClearSessions: failed to clear workspace layouts: %v", err)
-	}
-	for _, table := range sessionOwnedTables {
-		if _, err := s.db.Exec("DELETE FROM " + table); err != nil {
-			log.Printf("[store] ClearSessions: failed to clear %s: %v", table, err)
-		}
-	}
-	_, err := s.db.Exec("DELETE FROM sessions")
-	if err != nil {
-		log.Printf("[store] ClearSessions: failed: %v", err)
-	}
-}
-
 func (s *Store) List(stateFilter string) []*protocol.Session {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
@@ -494,11 +447,11 @@ func (s *Store) List(stateFilter string) []*protocol.Session {
 
 	if stateFilter == "" {
 		rows, err = s.db.Query(`
-			SELECT id, label, agent, directory, endpoint_id, workspace_id, branch, is_worktree, main_repo, repository, state, state_since, state_updated_at, last_model_request_at, pinned_at, context_window_cap, parent_session_id, activity, activity_at, todos, last_seen, turn_opened_at, turn_settled_at, turn_snoozed_until
+			SELECT id, label, agent, directory, endpoint_id, workspace_id, branch, is_worktree, main_repo, repository, state, state_since, state_updated_at, last_model_request_at, pinned_at, context_window_cap, parent_session_id, activity, activity_at, last_seen, turn_opened_at, turn_settled_at, turn_snoozed_until
 			FROM sessions WHERE closed_at = '' ORDER BY label, id`)
 	} else {
 		rows, err = s.db.Query(`
-			SELECT id, label, agent, directory, endpoint_id, workspace_id, branch, is_worktree, main_repo, repository, state, state_since, state_updated_at, last_model_request_at, pinned_at, context_window_cap, parent_session_id, activity, activity_at, todos, last_seen, turn_opened_at, turn_settled_at, turn_snoozed_until
+			SELECT id, label, agent, directory, endpoint_id, workspace_id, branch, is_worktree, main_repo, repository, state, state_since, state_updated_at, last_model_request_at, pinned_at, context_window_cap, parent_session_id, activity, activity_at, last_seen, turn_opened_at, turn_settled_at, turn_snoozed_until
 			FROM sessions WHERE state = ? AND closed_at = '' ORDER BY label, id`, stateFilter)
 	}
 	if err != nil {
@@ -509,7 +462,6 @@ func (s *Store) List(stateFilter string) []*protocol.Session {
 	var result []*protocol.Session
 	for rows.Next() {
 		var session protocol.Session
-		var todosJSON string
 		var stateSince, stateUpdatedAt, lastSeen string
 		var turnOpenedAt, turnSettledAt, turnSnoozedUntil string
 		var isWorktree int
@@ -536,7 +488,6 @@ func (s *Store) List(stateFilter string) []*protocol.Session {
 			&parentSessionID,
 			&activity,
 			&activityAt,
-			&todosJSON,
 			&lastSeen,
 			&turnOpenedAt,
 			&turnSettledAt,
@@ -586,11 +537,6 @@ func (s *Store) List(stateFilter string) []*protocol.Session {
 			session.LastModelRequestAt = protocol.Ptr(lastModelRequestAt.String)
 		}
 		session.LastSeen = lastSeen
-		if todosJSON != "" && todosJSON != "null" {
-			if err := json.Unmarshal([]byte(todosJSON), &session.Todos); err != nil {
-				log.Printf("[store] List: failed to unmarshal todos for session %s: %v", session.ID, err)
-			}
-		}
 
 		result = append(result, &session)
 	}
@@ -685,28 +631,6 @@ func (s *Store) MarkModelRequestStarted(id string, at time.Time) bool {
 	}
 	updated, _ := result.RowsAffected()
 	return updated == 1
-}
-
-func (s *Store) UpdateTodos(id string, todos []string) {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-
-	if s.db == nil {
-		if session := s.sessions[id]; session != nil {
-			session.Todos = append([]string(nil), todos...)
-		}
-		return
-	}
-
-	todosJSON, err := json.Marshal(todos)
-	if err != nil {
-		log.Printf("[store] UpdateTodos: failed to marshal todos for session %s: %v", id, err)
-		return
-	}
-	_, err = s.db.Exec("UPDATE sessions SET todos = ? WHERE id = ? AND closed_at = ''", string(todosJSON), id)
-	if err != nil {
-		log.Printf("[store] UpdateTodos: failed for session %s: %v", id, err)
-	}
 }
 
 func (s *Store) UpdateBranch(id, branch string, isWorktree bool, mainRepo, repository string) {

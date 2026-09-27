@@ -574,16 +574,6 @@ func (c *Client) SendStop(id, transcriptPath string, facts StopFacts) error {
 	return err
 }
 
-func (c *Client) UpdateTodos(id string, todos []string) error {
-	msg := protocol.TodosMessage{
-		Cmd:   protocol.CmdTodos,
-		ID:    id,
-		Todos: todos,
-	}
-	_, err := c.send(msg)
-	return err
-}
-
 func (c *Client) RecordFilesEdited(id string, paths []string) error {
 	msg := protocol.FilesEditedMessage{
 		Cmd:   protocol.CmdFilesEdited,

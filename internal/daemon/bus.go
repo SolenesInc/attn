@@ -17,7 +17,6 @@ const (
 	FactSessionRenamed                = "session.renamed"
 	FactSessionUnregistered           = "session.unregistered"
 	FactSessionClosed                 = "session.closed"
-	FactSessionTodosChanged           = "session.todos.changed"
 	FactSessionAssistantWindowChanged = "session.assistant_window.changed"
 	FactSessionRespawned              = "session.respawned"
 	FactSessionPTYResized             = "session.pty.resized"
@@ -128,11 +127,6 @@ const (
 	FactCrewBound      = "crew.bound"
 	FactCrewReleased   = "crew.released"
 	FactCrewUpdated    = "crew.updated"
-
-	FactAppEnabledChanged = "app.enabled.changed"
-	FactAppRemoved        = "app.removed"
-	FactAppVersionChanged = "app.version.changed"
-	FactAppRuntimeChanged = "app.runtime.changed"
 )
 
 var CompactableFacts = []string{FactDocumentChanged, FactDocumentCollectionRemoved, FactDocumentCollectionRedeclared, FactSessionAssistantWindowChanged}
@@ -196,12 +190,6 @@ func buildWireProjections() []projection {
 			filter: bus.Filter{FactSessionReregistered, FactSessionRenamed},
 			apply: func(d *Daemon, ev bus.Event) {
 				d.projectSessionEvent(protocol.EventSessionStateChanged, ev.Subject)
-			},
-		},
-		{
-			filter: bus.Filter{FactSessionTodosChanged},
-			apply: func(d *Daemon, ev bus.Event) {
-				d.projectSessionEvent(protocol.EventSessionTodosUpdated, ev.Subject)
 			},
 		},
 		{
@@ -415,10 +403,6 @@ func buildWireProjections() []projection {
 			filter: bus.Filter{FactPresentationAdded, FactPresentationUpdated},
 			apply:  func(d *Daemon, ev bus.Event) { d.projectPresentation(ev) },
 		},
-		{
-			filter: bus.Filter{FactAppVersionChanged, FactAppEnabledChanged, FactAppRemoved},
-			apply:  func(d *Daemon, _ bus.Event) { d.projectAppsUpdated() },
-		},
 	}
 }
 
@@ -569,7 +553,6 @@ const (
 	snapshotNotifs      = "notifications_updated"
 	snapshotAutomations = "automations_changed"
 	snapshotTasks       = "tasks_changed"
-	snapshotApps        = "apps_updated"
 	snapshotAutoMode    = "automode_state_changed"
 )
 

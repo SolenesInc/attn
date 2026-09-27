@@ -1,10 +1,12 @@
 package daemon_test
 
 import (
+	"bytes"
 	"os"
 	"path/filepath"
 	"regexp"
 	"strconv"
+	"strings"
 	"testing"
 
 	"github.com/victorarias/attn/internal/protocol"
@@ -50,15 +52,8 @@ func TestAClientAttachingMidFloodContinuesFromItsSnapshotWithoutAGapOrARepeat(t 
 	}
 
 	for i, client := range clients {
-		transportAwaitOutput(client.peer, shell, "-lines")
-		lines := restoredSnapshotLines(t, client.result)
-		last := ""
-		for _, line := range lines {
-			if line != "" {
-				last = line
-			}
-		}
-		stream := []byte(last)
+		client.result = floodAwaitEnd(t, client.peer, shell, client.result)
+		stream := []byte(floodSnapshot(t, client.result))
 		for _, e := range client.peer.Received() {
 			if e.Event == protocol.EventPtyOutput && protocol.Deref(e.ID) == shell && protocol.Deref(e.Seq) > protocol.Deref(client.result.LastSeq) {
 				stream = append(stream, transportDecodeOutput(t, e)...)
@@ -71,7 +66,7 @@ func TestAClientAttachingMidFloodContinuesFromItsSnapshotWithoutAGapOrARepeat(t 
 		total, _ := strconv.Atoi(ended[1])
 		matches := floodLine.FindAllStringSubmatch(string(stream), -1)
 		if len(matches) == 0 {
-			t.Errorf("client %d saw no flood lines after a snapshot ending %q", i, last)
+			t.Errorf("client %d saw no flood lines", i)
 			continue
 		}
 		previous, _ := strconv.Atoi(matches[0][1])
@@ -88,4 +83,45 @@ func TestAClientAttachingMidFloodContinuesFromItsSnapshotWithoutAGapOrARepeat(t 
 		}
 	}
 	exitWorkspaceShells(app, shell)
+}
+
+func floodSnapshot(t *testing.T, result protocol.AttachResultMessage) string {
+	t.Helper()
+	lines := restoredSnapshotLines(t, result)
+	first, last := -1, -1
+	for i, line := range lines {
+		if first < 0 && floodLine.MatchString(line) {
+			first = i
+		}
+		if line != "" {
+			last = i
+		}
+	}
+	if first < 0 {
+		return lines[last]
+	}
+	return strings.Join(lines[first:last+1], "\n")
+}
+
+func floodAwaitEnd(t *testing.T, p *testworld.Peer, session string, result protocol.AttachResultMessage) protocol.AttachResultMessage {
+	t.Helper()
+	for {
+		seen := []byte(floodSnapshot(t, result))
+		if bytes.Contains(seen, []byte("-lines")) {
+			return result
+		}
+		e := testworld.AwaitEvent(p, "the flood's end or a desync", func(e protocol.WebSocketEvent) bool {
+			if protocol.Deref(e.ID) != session {
+				return false
+			}
+			if e.Event == protocol.EventPtyOutput {
+				seen = append(seen, transportDecodeOutput(t, e)...)
+			}
+			return e.Event == protocol.EventPtyDesync || bytes.Contains(seen, []byte("-lines"))
+		})
+		if e.Event != protocol.EventPtyDesync {
+			return result
+		}
+		result = kittyAttach(p, session)
+	}
 }

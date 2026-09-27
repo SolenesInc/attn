@@ -40,7 +40,6 @@ export function WorkspaceTilePane({
     onRequestTileContent,
     renamePane,
     tileSessionOptions,
-    activePaneSessionId,
     activeLeafId,
     effectivePaneId,
     suspendedLeafIds,
@@ -96,7 +95,6 @@ export function WorkspaceTilePane({
         }
         workspaceSessions={tileLeaf.tileKind === 'seed' ? seedTargetSessions : tileSessionOptions}
         gardenSeeds={gardenSeeds}
-        workspaceSessionId={activePaneSessionId}
         workspaceDirectory={workspaceDirectory}
         onClose={() => onUndockTile?.(tileLeaf.tileId)}
         onFocusDocument={

@@ -78,9 +78,11 @@ func (h *wsHub) evict(client *wsClient, reason string) {
 	record := evictionRecord{
 		at:          time.Now(),
 		reason:      reason,
-		undelivered: client.slowCount + len(client.send),
+		undelivered: len(client.send) + 1,
 	}
-	client.closeSendChannelWithStatus(websocket.StatusPolicyViolation, reason)
+	if !client.closeSendChannelWithStatus(websocket.StatusPolicyViolation, reason) {
+		return
+	}
 	h.rememberEviction(client.ClientID(), record)
 	go client.hangUp(websocket.StatusPolicyViolation, reason, evictionCloseGrace)
 }

@@ -37,6 +37,7 @@ export type DiagKind =
   | 'watchdog'
   | 'incident'
   | 'recovery'
+  | 'wake'
   | 'model_fault';
 
 export interface DiagEvent {
@@ -62,6 +63,7 @@ const LIFECYCLE_KINDS = new Set<DiagKind>([
   'watchdog',
   'incident',
   'recovery',
+  'wake',
   'model_fault',
 ]);
 
@@ -122,7 +124,7 @@ declare global {
     __ATTN_TERMINAL_DIAG_FILES?: { lifecycle: string; incidents: string };
     __ATTN_TERMINAL_DIAG_ENABLE?: (enabled: boolean) => void;
     __ATTN_TERMINAL_GEOMETRY?: () => TerminalGeometrySnapshot[];
-    // Back-compat alias used by the split-blank e2e repro spec.
+    // Back-compat alias used by e2e/split-paint.spec.ts.
     __ATTN_RENDER_TRACE?: unknown[];
     __ATTN_RENDER_TRACE_ON?: boolean;
   }
@@ -461,6 +463,24 @@ export function noteRecovery(
   },
 ): void {
   recordDiag({ kind: 'recovery', pane, ...info });
+}
+
+export function noteWake(
+  pane: string,
+  info: {
+    session?: string;
+    trigger: 'visible' | 'screens_did_wake' | 'did_wake';
+    hiddenForMs: number | null;
+    released: boolean;
+    contextLost: boolean;
+    canvasW: number;
+    canvasH: number;
+    rectW: number;
+    rectH: number;
+    lastPaintAgoMs: number | null;
+  },
+): void {
+  recordDiag({ kind: 'wake', pane, ...info });
 }
 
 // `capture` makes the record a replayable repro:

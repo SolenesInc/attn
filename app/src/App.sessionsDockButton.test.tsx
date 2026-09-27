@@ -1,6 +1,6 @@
-import { fireEvent, screen, within } from '@testing-library/react';
-import { describe, expect, it } from 'vitest';
-import { pressShortcut, renderApp } from './test/renderApp';
+import { act, fireEvent, screen, within } from '@testing-library/react';
+import { describe, expect, it, vi } from 'vitest';
+import { gesture, pressShortcut, renderApp } from './test/renderApp';
 
 function sessionsButton() {
   return screen.getByRole('button', { name: /^Open Sessions \(/ });
@@ -65,5 +65,27 @@ describe('sessions dock button', () => {
 
     pressSessionsKey();
     expect(shownList()).toBe('Sessions');
+  });
+
+  it('slides a closing dock panel out from where it sat, beside a panel opened after it', async () => {
+    const { daemon } = await renderApp();
+    const offset = (className: string) => document.querySelector<HTMLElement>(`.${className}`)!.style.getPropertyValue('--side-panel-offset');
+    const isOpen = (className: string) => document.querySelector(`.${className}`)!.closest('.side-panel-shell')!.classList.contains('is-open');
+
+    await gesture(daemon, () => fireEvent.click(screen.getByRole('button', { name: 'Show Automations' })));
+    await gesture(daemon, () => pressShortcut('dock.attention'));
+    expect(offset('dock-panel--attention')).toBe('clamp(420px, 42vw, 640px)');
+
+    await gesture(daemon, () => fireEvent.click(screen.getByRole('button', { name: 'Hide Automations' })));
+
+    expect(isOpen('dock-panel--automations')).toBe(false);
+    expect(offset('dock-panel--automations')).toBe('0px');
+    expect(offset('dock-panel--attention')).toBe('0px');
+
+    await act(() => vi.advanceTimersByTimeAsync(260));
+    await gesture(daemon, () => fireEvent.click(screen.getByRole('button', { name: 'Show Automations' })));
+
+    expect(offset('dock-panel--automations')).toBe('clamp(360px, 48vw, 600px)');
+    expect(isOpen('dock-panel--attention')).toBe(true);
   });
 });

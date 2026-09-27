@@ -3,10 +3,8 @@ package daemon
 import (
 	"context"
 	"fmt"
-	"strings"
 	"time"
 
-	"github.com/victorarias/attn/internal/apps"
 	"github.com/victorarias/attn/internal/bus"
 	"github.com/victorarias/attn/internal/jobs"
 	"github.com/victorarias/attn/internal/store"
@@ -110,10 +108,5 @@ func (d *Daemon) notifyBusPin(p bus.Pin) {
 }
 
 func busPinNotificationBody(p bus.Pin) string {
-	way := fmt.Sprintf("`attn bus status` shows why it stopped; `attn bus disable %s` releases the log if you do not need it to catch up.", p.Consumer)
-	if name, ok := strings.CutPrefix(p.Consumer, apps.ConsumerPrefix); ok {
-		way = fmt.Sprintf("This is the %s app. `attn app status %s` and `attn app runtime status` show why it stopped — a parked runtime is the usual cause, and `attn app runtime restart` starts it again. `attn bus disable %s` releases the log instead.",
-			name, name, p.Consumer)
-	}
-	return bus.PinMessage(p) + ". " + way
+	return bus.PinMessage(p) + ". " + fmt.Sprintf("`attn bus status` shows why it stopped; `attn bus disable %s` releases the log if you do not need it to catch up.", p.Consumer)
 }

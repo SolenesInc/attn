@@ -18,6 +18,8 @@ import { loadGhostty } from '../ghostty/wasm';
 import { openPath, openUrl } from '@tauri-apps/plugin-opener';
 import { exists } from '@tauri-apps/plugin-fs';
 import { homeDir } from '@tauri-apps/api/path';
+import { isTauri } from '@tauri-apps/api/core';
+import { listen } from '@tauri-apps/api/event';
 import {
   fragmentAtColumn,
   hyperlinkRangeAt,
@@ -103,6 +105,7 @@ import {
   noteModelFault,
   noteRecovery,
   noteResize,
+  noteWake,
   registerRenderProbe,
   disposePaneDiagnostics,
   TERMINAL_DIAGNOSTICS_FILE,
@@ -2020,6 +2023,47 @@ export const GhosttyTerminal = forwardRef<GhosttyTerminalHandle, GhosttyTerminal
       const container = containerRef.current;
       const canvas = canvasRef.current;
       if (!container || !canvas) return;
+      let hiddenAt: number | null = null;
+      const wake = (trigger: 'visible' | 'screens_did_wake' | 'did_wake') => {
+        const now = Date.now();
+        const released = surfaceReleasedRef.current || runtimeMetaRef.current?.isActiveSession === false;
+        const rect = canvas.getBoundingClientRect();
+        noteWake(diagKeyRef.current, {
+          session: runtimeMetaRef.current?.sessionId ?? undefined,
+          trigger,
+          hiddenForMs: hiddenAt === null ? null : now - hiddenAt,
+          released,
+          contextLost: rendererRef.current ? canvas.getContext('webgl2')?.isContextLost() ?? false : false,
+          canvasW: canvas.width,
+          canvasH: canvas.height,
+          rectW: rect.width,
+          rectH: rect.height,
+          lastPaintAgoMs: lastRenderAtRef.current ? now - lastRenderAtRef.current : null,
+        });
+        if (released || !readyRef.current || !rendererRef.current) return;
+        rendererRef.current.releaseDrawingBuffer();
+        rendererRef.current.restoreDrawingBuffer();
+        renderSurface(true);
+      };
+      const onVisibilityChange = () => {
+        if (document.visibilityState === 'hidden') hiddenAt = Date.now();
+        else if (document.visibilityState === 'visible') wake('visible');
+      };
+      const onFocus = () => {
+        if (surfaceReleasedRef.current || !readyRef.current || !rendererRef.current) return;
+        renderSurface(true);
+      };
+      document.addEventListener('visibilitychange', onVisibilityChange);
+      window.addEventListener('focus', onFocus);
+      let unlistenWake: (() => void) | undefined;
+      if (isTauri()) {
+        void listen<{ reason: 'screens_did_wake' | 'did_wake' }>('native-wake', (event) => {
+          wake(event.payload.reason);
+        }).then((unlisten) => {
+          if (active) unlistenWake = unlisten;
+          else unlisten();
+        });
+      }
       const inputDiagnostics = observeTerminalInput(container, () => ({
         runtimeId: runtimeMetaRef.current?.runtimeId,
         sessionId: runtimeMetaRef.current?.sessionId,
@@ -2297,6 +2341,9 @@ export const GhosttyTerminal = forwardRef<GhosttyTerminalHandle, GhosttyTerminal
       });
       return () => {
         active = false;
+        document.removeEventListener('visibilitychange', onVisibilityChange);
+        window.removeEventListener('focus', onFocus);
+        unlistenWake?.();
         inputDiagnostics.dispose();
         resources.dispose();
         recordDiag({

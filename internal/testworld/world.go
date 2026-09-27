@@ -52,6 +52,11 @@ func Prepare(t testing.TB, wrapper string, harnesses ...fakeagent.Harness) *Worl
 	}
 	w := &World{T: t, Dir: dir, Socket: filepath.Join(dir, "attn.sock")}
 	w.kit = fakeagent.Install(t, dir, harnesses, wrapper)
+	// macOS asks dscl for the login shell before $SHELL; this dscl answers $SHELL
+	// so a world runs the shell its test chose, never the developer's own.
+	if err := os.WriteFile(filepath.Join(dir, "bin", "dscl"), []byte("#!/bin/sh\nprintf 'UserShell: %s\\n' \"$SHELL\"\n"), 0o755); err != nil {
+		t.Fatal(err)
+	}
 	w.Vars = append([]string{
 		"ATTN_DATA_DIR=" + dir,
 		"ATTN_HARNESS_DATA_DIR=" + dir,
@@ -73,22 +78,27 @@ func (w *World) Client() *client.Client {
 
 func (w *World) App() *Peer {
 	w.T.Helper()
-	token, err := os.ReadFile(filepath.Join(w.Dir, config.ClientTokenFile))
-	if err != nil {
-		w.T.Fatalf("read the client token the daemon minted: %v", err)
-	}
-	p := w.Connect(protocol.ClientHelloMessage{
-		Cmd:          protocol.CmdClientHello,
-		ClientKind:   "tauri-app",
-		Version:      "protocol-" + protocol.ProtocolVersion,
-		Capabilities: []string{protocol.CapabilityWorkspaceSessions, protocol.CapabilityBinaryPtyOutput},
-		ClientToken:  protocol.Ptr(strings.TrimSpace(string(token))),
-	}, nil)
+	p := w.ConnectApp()
 	p.Initial = Await[protocol.InitialStateMessage](p, protocol.EventInitialState, nil)
 	if got := protocol.Deref(p.Initial.ProtocolVersion); got != protocol.ProtocolVersion {
 		w.T.Fatalf("daemon speaks protocol %q, want %q", got, protocol.ProtocolVersion)
 	}
 	return p
+}
+
+func (w *World) ConnectApp() *Peer {
+	w.T.Helper()
+	token, err := os.ReadFile(filepath.Join(w.Dir, config.ClientTokenFile))
+	if err != nil {
+		w.T.Fatalf("read the client token the daemon minted: %v", err)
+	}
+	return w.Connect(protocol.ClientHelloMessage{
+		Cmd:          protocol.CmdClientHello,
+		ClientKind:   "tauri-app",
+		Version:      "protocol-" + protocol.ProtocolVersion,
+		Capabilities: []string{protocol.CapabilityWorkspaceSessions, protocol.CapabilityBinaryPtyOutput, protocol.CapabilityKittyImages},
+		ClientToken:  protocol.Ptr(strings.TrimSpace(string(token))),
+	}, nil)
 }
 
 func (w *World) Connect(hello protocol.ClientHelloMessage, header http.Header) *Peer {

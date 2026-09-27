@@ -15,7 +15,6 @@ import (
 	"sync"
 	"time"
 
-	"github.com/victorarias/attn/internal/apps"
 	"github.com/victorarias/attn/internal/buildinfo"
 	"github.com/victorarias/attn/internal/config"
 	"github.com/victorarias/attn/internal/enrollment"
@@ -27,18 +26,13 @@ const githubRepo = "victorarias/attn"
 const remoteDaemonReadyTimeout = 35 * time.Second
 const remoteHarnessRootMarker = "/.attn/harness/"
 
-const (
-	remoteReadyBudget    = 180 * time.Second
-	appRuntimeShipBudget = 300 * time.Second
-)
+const remoteReadyBudget = 180 * time.Second
 
 type RemotePlatform struct {
 	GOOS                string
 	GOARCH              string
 	ArtifactName        string
-	RuntimeArtifactName string
 	PTYHostArtifactName string
-	BunTarget           string
 }
 
 type Bootstrapper struct {
@@ -48,8 +42,7 @@ type Bootstrapper struct {
 	version     string
 	versionErr  error
 
-	makeReady      func(ctx context.Context, sshTarget, instance, homeDaemonID string) (readyRemote, error)
-	shipAppRuntime func(ctx context.Context, sshTarget, instance string, ready readyRemote) error
+	makeReady func(ctx context.Context, sshTarget, instance, homeDaemonID string) (readyRemote, error)
 }
 
 func NewBootstrapper(logf func(format string, args ...interface{})) *Bootstrapper {
@@ -58,7 +51,6 @@ func NewBootstrapper(logf func(format string, args ...interface{})) *Bootstrappe
 	}
 	b := &Bootstrapper{logf: logf}
 	b.makeReady = b.makeRemoteReady
-	b.shipAppRuntime = b.shipRemoteAppRuntime
 	return b
 }
 
@@ -70,18 +62,9 @@ type readyRemote struct {
 
 func (b *Bootstrapper) EnsureRemoteReady(ctx context.Context, sshTarget, instance, homeDaemonID string) error {
 	readyCtx, cancelReady := context.WithTimeout(ctx, remoteReadyBudget)
-	ready, err := b.makeReady(readyCtx, sshTarget, instance, homeDaemonID)
+	_, err := b.makeReady(readyCtx, sshTarget, instance, homeDaemonID)
 	cancelReady()
-	if err != nil {
-		return err
-	}
-
-	shipCtx, cancelShip := context.WithTimeout(ctx, appRuntimeShipBudget)
-	defer cancelShip()
-	if err := b.shipAppRuntime(shipCtx, sshTarget, instance, ready); err != nil {
-		b.logf("%v", err)
-	}
-	return nil
+	return err
 }
 
 func (b *Bootstrapper) makeRemoteReady(ctx context.Context, sshTarget, instance, homeDaemonID string) (readyRemote, error) {
@@ -154,40 +137,6 @@ func (b *Bootstrapper) makeRemoteReady(ctx context.Context, sshTarget, instance,
 		return ready, fmt.Errorf("ensure remote daemon on %s: %w", sshTarget, err)
 	}
 	return ready, nil
-}
-
-func (b *Bootstrapper) shipRemoteAppRuntime(ctx context.Context, sshTarget, instance string, ready readyRemote) error {
-	updated, err := b.ensureRemoteAppRuntime(ctx, sshTarget, instance, ready.platform, ready.version, ready.remoteInstallPath)
-	if err != nil {
-		return err
-	}
-	if !updated {
-		return nil
-	}
-	return b.bounceRemoteAppRuntime(ctx, sshTarget, instance)
-}
-
-func (b *Bootstrapper) bounceRemoteAppRuntime(ctx context.Context, sshTarget, instance string) error {
-	stdout, _, code, err := runSSHExit(ctx, sshTarget, instance, remoteAttnCommand(instance, "app", "runtime", "status", "--json"))
-	if err != nil || code != 0 {
-		return fmt.Errorf("could not ask %s whether its app runtime is running, so the sidecar it just received is not in use yet; `attn app runtime restart` there picks it up", sshTarget)
-	}
-	var status struct {
-		Runtime *struct {
-			Running bool `json:"running"`
-		} `json:"runtime"`
-	}
-	if jsonErr := json.Unmarshal([]byte(stdout), &status); jsonErr != nil {
-		return fmt.Errorf("app runtime status on %s returned unreadable output %q", sshTarget, stdout)
-	}
-	if status.Runtime == nil || !status.Runtime.Running {
-		return nil
-	}
-	if _, _, code, err := runSSHExit(ctx, sshTarget, instance, remoteAttnCommand(instance, "app", "runtime", "restart")); err != nil || code != 0 {
-		return fmt.Errorf("the app runtime on %s is still running the previous sidecar; `attn app runtime restart` there picks up the new one", sshTarget)
-	}
-	b.logf("restarted the app runtime on %s onto the sidecar just installed", sshTarget)
-	return nil
 }
 
 const enrollmentRefusedExitCode = 3
@@ -277,18 +226,14 @@ func remoteLinuxPlatform(machine string) (RemotePlatform, error) {
 			GOOS:                "linux",
 			GOARCH:              "amd64",
 			ArtifactName:        "attn-linux-amd64",
-			RuntimeArtifactName: apps.RuntimeHostBinaryName + "-linux-amd64",
 			PTYHostArtifactName: ptyhost.BinaryName + "-linux-amd64",
-			BunTarget:           "bun-linux-x64",
 		}, nil
 	case "aarch64", "arm64":
 		return RemotePlatform{
 			GOOS:                "linux",
 			GOARCH:              "arm64",
 			ArtifactName:        "attn-linux-arm64",
-			RuntimeArtifactName: apps.RuntimeHostBinaryName + "-linux-arm64",
 			PTYHostArtifactName: ptyhost.BinaryName + "-linux-arm64",
-			BunTarget:           "bun-linux-arm64",
 		}, nil
 	default:
 		return RemotePlatform{}, fmt.Errorf("unsupported architecture %q", machine)
@@ -390,41 +335,6 @@ func (b *Bootstrapper) downloadReleaseArtifact(ctx context.Context, version, art
 	return nil
 }
 
-func appRuntimeCacheDir(key string) string {
-	return filepath.Join(config.DataDir(), "remotes", "app-runtime", key)
-}
-
-func (b *Bootstrapper) ensureLocalAppRuntime(ctx context.Context, platform RemotePlatform, version string) (string, error) {
-	var reasons []string
-	if sourceCheckoutAvailable() {
-		stageDir := appRuntimeCacheDir(platform.GOOS + "_" + platform.GOARCH)
-		if err := b.buildAppRuntimeFromSource(ctx, platform, stageDir); err == nil {
-			return filepath.Join(stageDir, apps.RuntimeHostBinaryName), nil
-		} else {
-			reasons = append(reasons, fmt.Sprintf("source build: %v", err))
-		}
-	}
-
-	if version != "" && version != "dev" {
-		cachePath := filepath.Join(appRuntimeCacheDir(version), platform.RuntimeArtifactName)
-		if info, err := os.Stat(cachePath); err == nil && info.Mode().IsRegular() {
-			return cachePath, nil
-		}
-		if err := os.MkdirAll(filepath.Dir(cachePath), 0o755); err != nil {
-			return "", err
-		}
-		if err := b.downloadReleaseArtifact(ctx, version, platform.RuntimeArtifactName, filepath.Dir(cachePath)); err == nil {
-			return cachePath, nil
-		} else {
-			reasons = append(reasons, fmt.Sprintf("release download: %v", err))
-		}
-	} else {
-		reasons = append(reasons, "no published release to download it from (this hub reports version "+version+")")
-	}
-
-	return "", fmt.Errorf("no %s available (%s)", platform.RuntimeArtifactName, strings.Join(reasons, "; "))
-}
-
 func ptyHostCacheDir(key string) string {
 	return filepath.Join(config.DataDir(), "remotes", "pty-host", key)
 }
@@ -477,30 +387,6 @@ func (b *Bootstrapper) buildPTYHostFromSource(ctx context.Context, platform Remo
 	return path, nil
 }
 
-func (b *Bootstrapper) buildAppRuntimeFromSource(ctx context.Context, platform RemotePlatform, stageDir string) error {
-	root := sourceRoot()
-	if root == "" {
-		return fmt.Errorf("source checkout not available")
-	}
-	if platform.BunTarget == "" {
-		return fmt.Errorf("no bun target for %s/%s", platform.GOOS, platform.GOARCH)
-	}
-	script := filepath.Join(root, "scripts", "build-app-runtime-host.sh")
-	if _, err := os.Stat(script); err != nil {
-		return fmt.Errorf("%s is not in this checkout", script)
-	}
-	cmd := exec.CommandContext(ctx, "bash", script, stageDir, platform.BunTarget)
-	cmd.Dir = root
-	if out, err := cmd.CombinedOutput(); err != nil {
-		return fmt.Errorf("%s", strings.TrimSpace(string(out)))
-	}
-	return nil
-}
-
-func remoteAppRuntimePath(remoteInstallPath, instance string) string {
-	return filepath.Join(filepath.Dir(remoteInstallPath), apps.RuntimeHostBinaryNameForInstance(instance))
-}
-
 func remotePTYHostPath(remoteInstallPath, instance string) string {
 	return filepath.Join(filepath.Dir(remoteInstallPath), ptyhost.BinaryNameForInstance(instance))
 }
@@ -532,37 +418,6 @@ func (b *Bootstrapper) ensureRemotePTYHost(ctx context.Context, sshTarget, insta
 	}
 	b.logf("installed the shared PTY host on %s at %s (%s)", sshTarget, remotePath, localHash[:12])
 	return true, wasMissing, nil
-}
-
-func (b *Bootstrapper) ensureRemoteAppRuntime(ctx context.Context, sshTarget, instance string, platform RemotePlatform, version, remoteInstallPath string) (bool, error) {
-	remotePath := remoteAppRuntimePath(remoteInstallPath, instance)
-
-	localPath, err := b.ensureLocalAppRuntime(ctx, platform, version)
-	if err != nil {
-		return false, fmt.Errorf(
-			"the app runtime host is missing from %s at %s: %w. That daemon falls back to an unsuffixed %s beside it and parks its apps only if there is none; run the hub from a source checkout with bun installed, or copy %s there yourself",
-			sshTarget, remotePath, err, apps.RuntimeHostBinaryName, platform.RuntimeArtifactName)
-	}
-
-	localHash, err := fileSHA256(localPath)
-	if err != nil {
-		return false, fmt.Errorf("hash the local app runtime host %s: %w", localPath, err)
-	}
-	remoteHash, err := b.remoteFileSHA256(ctx, sshTarget, instance, shellQuote(remotePath))
-	if err != nil {
-		return false, fmt.Errorf("hash the app runtime host on %s at %s: %w", sshTarget, remotePath, err)
-	}
-	if remoteHash == localHash {
-		return false, nil
-	}
-
-	if err := b.uploadRemoteFile(ctx, sshTarget, instance, localPath, remotePath); err != nil {
-		return false, fmt.Errorf(
-			"the app runtime host could not be installed on %s at %s: %w. That daemon keeps whatever host it already resolves — an unsuffixed %s beside it, or none, in which case its apps park",
-			sshTarget, remotePath, err, apps.RuntimeHostBinaryName)
-	}
-	b.logf("installed the app runtime host on %s at %s (%s)", sshTarget, remotePath, localHash[:12])
-	return true, nil
 }
 
 func sourceRoot() string {

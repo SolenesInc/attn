@@ -641,7 +641,7 @@ func (m *Manager) consumeRemote(ctx context.Context, id string, conn *websocket.
 			if changed {
 				m.publishSessionsChanged(id)
 			}
-		case protocol.EventSessionRegistered, protocol.EventSessionStateChanged, protocol.EventSessionTodosUpdated:
+		case protocol.EventSessionRegistered, protocol.EventSessionStateChanged:
 			var msg struct {
 				Session *protocol.Session `json:"session"`
 			}
@@ -908,9 +908,6 @@ func (m *Manager) RemoteSession(sessionID string) *protocol.Session {
 	for _, runtime := range m.runtimes {
 		if session, ok := runtime.sessions[sessionID]; ok {
 			copy := session
-			if len(session.Todos) > 0 {
-				copy.Todos = append([]string(nil), session.Todos...)
-			}
 			return &copy
 		}
 	}
@@ -1493,9 +1490,6 @@ func (m *Manager) publishRawEvent(data []byte) {
 func tagRemoteSession(endpointID string, session protocol.Session) protocol.Session {
 	tagged := session
 	tagged.EndpointID = protocol.Ptr(endpointID)
-	if len(session.Todos) > 0 {
-		tagged.Todos = append([]string(nil), session.Todos...)
-	}
 	return tagged
 }
 
@@ -1532,7 +1526,6 @@ func sessionsMatch(left, right protocol.Session) bool {
 		protocol.Deref(left.ParentSessionID) == protocol.Deref(right.ParentSessionID) &&
 		protocol.Deref(left.TicketUnread) == protocol.Deref(right.TicketUnread) &&
 		protocol.Deref(left.NudgeFiresAt) == protocol.Deref(right.NudgeFiresAt) &&
-		strings.Join(left.Todos, "\x00") == strings.Join(right.Todos, "\x00") &&
 		left.LastSeen == right.LastSeen
 }
 

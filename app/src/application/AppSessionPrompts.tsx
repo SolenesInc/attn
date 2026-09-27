@@ -3,7 +3,6 @@ import { LocationPicker } from '../components/LocationPicker';
 import { SessionContextCapPrompt } from '../components/SessionContextCapPrompt';
 import { SessionCreationProgress } from '../components/SessionCreationProgress';
 import { UndoToast } from '../components/UndoToast';
-import { AppViewParamsPrompt } from '../components/appViews/AppViewParamsPrompt';
 import { useDaemonApi } from '../contexts/DaemonApiContext';
 import {
   useAppErrorsContext,
@@ -11,7 +10,6 @@ import {
   useAppShell,
   useChiefOfStaffContext,
   useSessionLaunchContext,
-  useWorkspaceTilesContext,
 } from './AppContexts';
 
 export function AppSessionPrompts() {
@@ -43,8 +41,6 @@ export function AppSessionPrompts() {
     handleConfirmChiefTransfer,
     setChiefTransferTarget,
   } = useChiefOfStaffContext();
-  const { appViewParamsPrompt, dockAppViewTile, setAppViewParamsPrompt } =
-    useWorkspaceTilesContext();
   return (
     <>
       <LocationPicker
@@ -86,17 +82,6 @@ export function AppSessionPrompts() {
           }
         }}
       />
-      {appViewParamsPrompt && (
-        <AppViewParamsPrompt
-          viewTitle={appViewParamsPrompt.viewTitle}
-          label={appViewParamsPrompt.label}
-          placeholder={appViewParamsPrompt.placeholder}
-          onSubmit={(params) =>
-            dockAppViewTile(appViewParamsPrompt.app, appViewParamsPrompt.view, params)
-          }
-          onClose={() => setAppViewParamsPrompt(null)}
-        />
-      )}
       {contextCapPromptSession && (
         <SessionContextCapPrompt
           sessionLabel={contextCapPromptSession.label}

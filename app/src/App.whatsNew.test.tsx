@@ -6,7 +6,7 @@ import { gesture, renderApp, restartApp } from './test/renderApp';
 const whatsNew = () => screen.queryByRole('dialog', { name: 'attn is organized around workspaces' });
 
 async function launchAfterUpdate() {
-  localStorage.removeItem(WHATS_NEW_STORAGE_KEY);
+  localStorage.setItem(WHATS_NEW_STORAGE_KEY, 'an-earlier-release');
   return renderApp();
 }
 

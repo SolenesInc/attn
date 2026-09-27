@@ -37,12 +37,9 @@ func TestMovedCursorRestartsTheConfirmation(t *testing.T) {
 	}
 }
 
-func TestNonAppPinNotificationOffersTheBusWayOut(t *testing.T) {
+func TestPinNotificationOffersTheBusWayOut(t *testing.T) {
 	body := busPinNotificationBody(samplePin("notifier", 12))
 
-	if strings.Contains(body, "app runtime") {
-		t.Errorf("a non-app consumer was told to restart the app runtime:\n%s", body)
-	}
 	for _, want := range []string{"attn bus status", "attn bus disable notifier"} {
 		if !strings.Contains(body, want) {
 			t.Errorf("body is missing %q:\n%s", want, body)

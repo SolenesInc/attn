@@ -114,3 +114,85 @@ func TestAWorkerRefusingAnUpgradeKeepsRunningItsProgramAndStaysStale(t *testing.
 		t.Errorf("the shell was pid %s before the refused upgrade and %s after, want the same process", before, after)
 	}
 }
+
+func TestWithInPlaceUpgradesOffAnUpdatedTerminalKeepsItsOldWorkerAndShowsTheReloadNotice(t *testing.T) {
+	t.Parallel()
+	s := testworld.NewStack(t)
+	next := testworld.AttnBinaryWithSnapshotFormat(t, "next-format")
+	s.Start()
+	app := s.App()
+	shell := s.Spawn(app, fakeagent.Harness(protocol.SessionAgentShell), s.Path("shop"))
+	app.TypeLine(shell, "echo started-$((1+1))")
+	app.AwaitScreen(shell, "started-2")
+	s.Stop()
+
+	s.StartBinary(next, "ATTN_WORKER_INPLACE_UPGRADE=0")
+	app = s.App()
+	if came := initialSession(t, app, shell); !protocol.Deref(came.TerminalBuildStale) {
+		t.Errorf("the terminal came back without the reload notice, want it offered while in-place upgrades are off")
+	}
+	attached := testworld.Request(app, protocol.AttachSessionMessage{Cmd: protocol.CmdAttachSession, ID: shell},
+		protocol.EventAttachResult, func(r protocol.AttachResultMessage) bool { return r.ID == shell })
+	if attached.Snapshot == nil || protocol.Deref(attached.Snapshot.Format) == "next-format" {
+		t.Fatalf("the terminal attached with snapshot %+v, want its worker still on the old build", attached.Snapshot)
+	}
+	app.TypeLine(shell, "echo still-$((2+2))")
+	app.AwaitScreen(shell, "still-4")
+}
+
+func TestAnAgentWhoseTerminalEndedWhileTheDaemonWasDownShowsNoReloadNotice(t *testing.T) {
+	t.Parallel()
+	s := testworld.NewStack(t, testworld.WithAgents(fakeagent.Codex))
+	s.Start()
+	app := s.App()
+	session := s.Spawn(app, fakeagent.Codex, s.Path("shop"))
+	codex := s.Launched(session)
+	app.TypeLine(session, "add a discount field")
+	codex.Prompted()
+	codex.Reply("Done. <!-- attn:state=idle -->")
+	s.Stop()
+	codex.Exit(0)
+
+	s.Start()
+	if came := initialSession(t, s.App(), session); came.TerminalBuildStale != nil {
+		t.Errorf("the agent without a terminal came back with terminal_build_stale=%t, want no reload notice", *came.TerminalBuildStale)
+	}
+}
+
+func TestASharedHostTerminalShowsNoReloadNoticeAfterAnUpdate(t *testing.T) {
+	t.Parallel()
+	host := os.Getenv("ATTN_TEST_PTY_HOST")
+	if host == "" {
+		t.Skip("set ATTN_TEST_PTY_HOST to an attn-pty-host binary")
+	}
+	s := testworld.NewStack(t)
+	next := testworld.AttnBinaryWithSnapshotFormat(t, "next-format")
+	s.Vars = append(s.Vars, "ATTN_PTY_BACKEND=shared", "ATTN_PTY_HOST_BINARY="+host)
+	s.Start()
+	app := s.App()
+	shell := s.Spawn(app, fakeagent.Harness(protocol.SessionAgentShell), s.Path("shop"))
+	app.TypeLine(shell, "echo started-$((1+1))")
+	app.AwaitScreen(shell, "started-2")
+	s.Stop()
+
+	s.StartBinary(next)
+	app = s.App()
+	if came := initialSession(t, app, shell); came.TerminalBuildStale != nil {
+		t.Errorf("the shared-host terminal came back with terminal_build_stale=%t, want it replayed without a reload notice", *came.TerminalBuildStale)
+	}
+	testworld.Request(app, protocol.AttachSessionMessage{Cmd: protocol.CmdAttachSession, ID: shell},
+		protocol.EventAttachResult, func(r protocol.AttachResultMessage) bool { return r.ID == shell })
+	app.TypeLine(shell, "echo still-$((2+2))")
+	app.AwaitScreen(shell, "still-4")
+}
+
+func initialSession(t *testing.T, app *testworld.Peer, id string) protocol.Session {
+	t.Helper()
+	for _, x := range app.Initial.Sessions {
+		if x.ID == id {
+			return x
+		}
+	}
+	t.Fatalf("session %s is missing from the initial state", id)
+	return protocol.Session{}
+}

@@ -1,7 +1,6 @@
 package daemon_test
 
 import (
-	"encoding/json"
 	"os"
 	"path/filepath"
 	"slices"
@@ -9,7 +8,6 @@ import (
 	"testing"
 
 	"github.com/victorarias/attn/internal/protocol"
-	"github.com/victorarias/attn/internal/testworld"
 )
 
 func TestCreatingATicketMintsAnUnassignedTodoUnderItsTitleSlug(t *testing.T) {
@@ -195,41 +193,4 @@ func ticketBoardRows(tickets []protocol.Ticket) []string {
 	}
 	slices.Sort(rows)
 	return rows
-}
-
-func TestAnAppsCurrentStateCarriesTheTicketBoardWithoutBriefs(t *testing.T) {
-	runtime := testworld.NewFakeAppRuntime(t)
-	w := newWorld(t)
-	w.finishStartupWork()
-	cli := w.Client()
-	applySubscribedApp(t, cli, "board-reader")
-	if _, err := cli.AppRuntimeRestart(); err != nil {
-		t.Fatal(err)
-	}
-	handler := runtime.Connect(w.DialUnix)
-	brief := strings.Repeat("a delegation brief nobody renders from a board row. ", 200)
-	if _, err := cli.CreateTicket("planner", "Migrate the store", brief, "store-migration"); err != nil {
-		t.Fatal(err)
-	}
-
-	event, release := handler.HoldDispatch()
-	defer release()
-	var snapshot struct {
-		Tickets []map[string]any `json:"tickets"`
-	}
-	if err := json.Unmarshal(handler.Call("app.current.snapshot", map[string]string{"dispatch": event.Dispatch}), &snapshot); err != nil {
-		t.Fatal(err)
-	}
-	if len(snapshot.Tickets) != 1 {
-		t.Fatalf("the app's current state holds tickets %v, want the one on the board", snapshot.Tickets)
-	}
-	row := snapshot.Tickets[0]
-	if row["id"] != "store-migration" || row["title"] != "Migrate the store" || row["status"] != string(protocol.TicketStatusTodo) || row["updated_at"] == "" {
-		t.Errorf("the board row = %v, want the ticket's id, title, status and update time", row)
-	}
-	for _, field := range []string{"description", "activity", "artifacts"} {
-		if _, carried := row[field]; carried {
-			t.Errorf("the board row carries %s: %v", field, row)
-		}
-	}
 }

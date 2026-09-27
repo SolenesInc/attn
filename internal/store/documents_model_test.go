@@ -17,7 +17,7 @@ const modelField = "n"
 
 func modelDeclaration() docstore.CollectionSchema {
 	return docstore.CollectionSchema{
-		Namespace:  "app/model",
+		Namespace:  "test/model",
 		Collection: "docs",
 		Fields:     []docstore.FieldSpec{{Name: modelField, Type: docstore.FieldNumber}},
 	}
@@ -346,7 +346,7 @@ func modelQueries() []docstore.Query {
 			for limit := 1; limit <= len(modelIDs); limit++ {
 				for _, after := range afters {
 					out = append(out, docstore.Query{
-						Namespace:  "app/model",
+						Namespace:  "test/model",
 						Collection: "docs",
 						Filters:    filters,
 						Sort:       s,
@@ -533,7 +533,7 @@ const (
 
 func largeDeclaration() docstore.CollectionSchema {
 	return docstore.CollectionSchema{
-		Namespace:  "app/model",
+		Namespace:  "test/model",
 		Collection: "large",
 		Fields: []docstore.FieldSpec{
 			{Name: "n", Type: docstore.FieldNumber},

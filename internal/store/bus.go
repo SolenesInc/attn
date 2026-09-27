@@ -361,39 +361,6 @@ func (s *Store) SetBusConsumerEnabled(name string, enabled bool, now time.Time) 
 	return n > 0, err
 }
 
-func (s *Store) SetAppBusConsumerEnabled(appName string, enabled bool, now time.Time) (exists, changed bool, err error) {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	if s.db == nil {
-		return false, false, nil
-	}
-	tx, err := s.db.Begin()
-	if err != nil {
-		return false, false, err
-	}
-	defer func() { _ = tx.Rollback() }()
-	consumerName := "app:" + appName
-	var current int
-	if err := tx.QueryRow(`SELECT enabled FROM bus_consumers WHERE name = ?`, consumerName).Scan(&current); err != nil {
-		if err == sql.ErrNoRows {
-			return false, false, nil
-		}
-		return false, false, err
-	}
-	want := 0
-	if enabled {
-		want = 1
-	}
-	if current == want {
-		return true, false, tx.Commit()
-	}
-	stamp := now.UTC().Format(sortableTimeFormat)
-	if _, err := tx.Exec(`UPDATE bus_consumers SET enabled = ?, updated_at = ? WHERE name = ?`, want, stamp, consumerName); err != nil {
-		return false, false, err
-	}
-	return true, true, tx.Commit()
-}
-
 func (s *Store) DeleteBusConsumer(name string) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -414,7 +381,6 @@ func (s *Store) ListBusConsumers() ([]BusConsumer, error) {
 	}
 	rows, err := s.db.Query(`
 		SELECT c.name, c.cursor, c.filter, c.enabled,
-		       EXISTS (SELECT 1 FROM apps a WHERE c.name = 'app:' || a.name),
 		       c.updated_at
 		FROM bus_consumers c ORDER BY c.name ASC
 	`)
@@ -430,12 +396,11 @@ func (s *Store) ListBusConsumers() ([]BusConsumer, error) {
 			enabled   int
 			updatedAt string
 		)
-		var pinsRetention int
-		if err := rows.Scan(&c.Name, &c.Cursor, &c.Filter, &enabled, &pinsRetention, &updatedAt); err != nil {
+		if err := rows.Scan(&c.Name, &c.Cursor, &c.Filter, &enabled, &updatedAt); err != nil {
 			return nil, err
 		}
 		c.Enabled = enabled != 0
-		c.PinsRetention = pinsRetention != 0
+		c.PinsRetention = c.Enabled
 		c.UpdatedAt = parseTicketTime(updatedAt)
 		out = append(out, c)
 	}
@@ -460,8 +425,7 @@ func (s *Store) TrimBusEvents(cutoff time.Time) (int, error) {
 		  AND seq <= COALESCE(
 		      (SELECT MIN(c.cursor)
 		         FROM bus_consumers c
-		        WHERE c.enabled = 1
-		           OR EXISTS (SELECT 1 FROM apps a WHERE c.name = 'app:' || a.name)),
+		        WHERE c.enabled = 1),
 		      (SELECT COALESCE(MAX(seq), 0) FROM bus_events)
 		  )
 	`, formatTicketTime(cutoff))

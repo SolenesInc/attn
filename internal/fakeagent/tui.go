@@ -28,6 +28,7 @@ type terminal struct {
 	line    []rune
 	pasting bool
 	modal   *modal
+	answers chan string
 }
 
 func openTerminal(style composer) (*terminal, error) {
@@ -36,11 +37,20 @@ func openTerminal(style composer) (*terminal, error) {
 	if out, err := raw.CombinedOutput(); err != nil {
 		return nil, fmt.Errorf("stty raw -echo: %v: %s", err, out)
 	}
-	fd, err := syscall.Open("/dev/tty", syscall.O_RDWR|syscall.O_NONBLOCK|syscall.O_CLOEXEC, 0)
+	name := exec.Command("tty")
+	name.Stdin = os.Stdin
+	out, err := name.Output()
 	if err != nil {
-		return nil, fmt.Errorf("open /dev/tty: %w", err)
+		return nil, fmt.Errorf("tty: %w", err)
 	}
-	t := &terminal{style: style, in: os.NewFile(uintptr(fd), "/dev/tty")}
+	// Open the device by name, not /dev/tty: macOS kqueue rejects that alias, and
+	// without the poller a non-blocking read fails with EAGAIN instead of waiting.
+	path := strings.TrimSpace(string(out))
+	fd, err := syscall.Open(path, syscall.O_RDWR|syscall.O_NONBLOCK|syscall.O_CLOEXEC, 0)
+	if err != nil {
+		return nil, fmt.Errorf("open %s: %w", path, err)
+	}
+	t := &terminal{style: style, in: os.NewFile(uintptr(fd), path), answers: make(chan string, 4)}
 	t.mu.Lock()
 	defer t.mu.Unlock()
 	t.write(bracketedPasteOn + t.composer())

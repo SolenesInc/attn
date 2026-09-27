@@ -10,6 +10,7 @@ const (
 	methodShowSelector = "show_selector"
 	methodAskApproval  = "ask_approval"
 	methodDismiss      = "dismiss"
+	methodAnswered     = "answered"
 )
 
 var selectorLines = []string{
@@ -20,9 +21,11 @@ var selectorLines = []string{
 }
 
 type modal struct {
-	lines   []string
-	resting func()
-	typed   []byte
+	title     string
+	lines     []string
+	resting   func()
+	typed     []byte
+	answering bool
 }
 
 type approvalAsker interface {
@@ -44,6 +47,13 @@ func (r *Run) AskApproval() {
 	r.call(methodAskApproval, struct{}{}, nil)
 }
 
+func (r *Run) Answered() (key string) {
+	r.t.Helper()
+	var result modalResult
+	r.call(methodAnswered, struct{}{}, &result)
+	return result.Typed
+}
+
 func (r *Run) Dismiss() (typed string) {
 	r.t.Helper()
 	var result modalResult
@@ -52,6 +62,9 @@ func (r *Run) Dismiss() (typed string) {
 }
 
 func (a *agent) handleModal(method string) (any, error) {
+	if method == methodAnswered {
+		return modalResult{Typed: <-a.term.answers}, nil
+	}
 	a.turn.Lock()
 	defer a.turn.Unlock()
 	switch method {
@@ -62,10 +75,11 @@ func (a *agent) handleModal(method string) (any, error) {
 		if !ok {
 			return nil, fmt.Errorf("%T does not script an approval prompt", a.conv)
 		}
-		a.term.title(asker.approvalTitle())
 		return struct{}{}, a.term.openModal(&modal{
-			lines:   []string{"Allow the command to run?", "› 1. Yes, proceed", "  2. No, and tell Codex what to do differently"},
-			resting: asker.approvalAnswered,
+			title:     asker.approvalTitle(),
+			lines:     []string{"Allow the command to run?", "› 1. Yes, proceed", "  2. No, and tell Codex what to do differently", "Press enter to confirm or esc to cancel"},
+			resting:   asker.approvalAnswered,
+			answering: true,
 		})
 	case methodDismiss:
 		typed, err := a.term.closeModal()
@@ -82,7 +96,12 @@ func (t *terminal) openModal(m *modal) error {
 		return fmt.Errorf("a modal is already open")
 	}
 	t.modal = m
-	t.write("\r\x1b[J" + strings.Join(m.lines, "\r\n"))
+	title := ""
+	if m.title != "" {
+		title = "\x1b]0;" + m.title + "\x07"
+	}
+	// One write, so a test seeing the prompt on screen knows the worker read the title too.
+	t.write(title + "\r\x1b[J" + strings.Join(m.lines, "\r\n"))
 	return nil
 }
 
@@ -93,20 +112,24 @@ func (t *terminal) closeModal() (string, error) {
 		t.mu.Unlock()
 		return "", fmt.Errorf("no modal is open")
 	}
-	t.modal = nil
-	t.write("\x1b[" + strconv.Itoa(len(m.lines)-1) + "A\r\x1b[J" + t.composer())
-	t.mu.Unlock()
-	m.resting()
+	t.closeModalAndUnlock(m)
 	return string(m.typed), nil
 }
 
 func (t *terminal) capturedByModal(input []byte) bool {
 	t.mu.Lock()
-	defer t.mu.Unlock()
-	if t.modal == nil {
+	m := t.modal
+	if m == nil {
+		t.mu.Unlock()
 		return false
 	}
-	t.modal.typed = append(t.modal.typed, input...)
+	m.typed = append(m.typed, input...)
+	if !m.answering {
+		t.mu.Unlock()
+		return true
+	}
+	t.closeModalAndUnlock(m)
+	t.answers <- string(input)
 	return true
 }
 
@@ -116,4 +139,11 @@ func (c *codex) approvalTitle() string {
 
 func (c *codex) approvalAnswered() {
 	c.term.title(codexBusyGlyph + c.restingTitle())
+}
+
+func (t *terminal) closeModalAndUnlock(m *modal) {
+	t.modal = nil
+	t.write("\x1b[" + strconv.Itoa(len(m.lines)-1) + "A\r\x1b[J" + t.composer())
+	t.mu.Unlock()
+	m.resting()
 }

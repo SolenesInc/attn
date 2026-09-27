@@ -2920,23 +2920,6 @@ export function useUiAutomationBridge({
         await settleUi();
         return { workspaceId };
       }
-      case 'app_view_get_state': {
-        const scope = typeof payload.workspaceId === 'string' && payload.workspaceId
-          ? document.querySelector(`[data-session-terminal-workspace="${payload.workspaceId}"]`)
-          : document;
-        const hosts = Array.from(scope?.querySelectorAll('[data-app-view-host]') ?? []);
-        return {
-          hosts: hosts.map((host) => ({
-            view: host.getAttribute('data-app-view-host') || '',
-            tileId: host.getAttribute('data-app-view-tile') || '',
-            stale: host.getAttribute('data-app-view-stale') === '1',
-            badge: host.querySelector('.app-tile-host-badge')?.textContent?.trim() || '',
-            placeholder: host.querySelector('[data-app-view-placeholder]')
-              ?.getAttribute('data-app-view-placeholder') || '',
-            text: host.textContent?.trim() || '',
-          })),
-        };
-      }
       case 'get_workspace_ui_state': {
         const workspaceId = typeof payload.workspaceId === 'string' ? payload.workspaceId : '';
         if (!workspaceId) {

@@ -9,6 +9,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/victorarias/attn/internal/pausepoint"
 	"github.com/victorarias/attn/internal/protocol"
 )
 
@@ -192,6 +193,7 @@ type sessionInputLane struct {
 	epoch          uint64
 	userGeneration uint64
 	userSubmit     bool
+	heldEnter      bool
 	phase          protocol.SessionState
 	stopped        bool
 	running        sync.WaitGroup
@@ -253,6 +255,8 @@ type sessionInputRetry struct {
 }
 
 var sessionInputComposerRetry = sessionInputTakenWindow
+
+const sessionInputHeldEnterKey = "\x00held-enter"
 
 func sessionInputRetryDelay(err error) (time.Duration, bool) {
 	var quiet *sessionInputQuietError
@@ -416,7 +420,14 @@ func (m *sessionInputModule) closeLane(sessionID string) *sessionInputLane {
 
 func (m *sessionInputModule) armRetryLocked(lane *sessionInputLane, delivery sessionInputDelivery, err error) {
 	after, retryable := sessionInputRetryDelay(err)
-	if !retryable || delivery.resend == nil || lane.stopped {
+	if !retryable || delivery.resend == nil {
+		return
+	}
+	m.scheduleLocked(lane, delivery.sessionID, delivery.id.String(), after, delivery.resend)
+}
+
+func (m *sessionInputModule) scheduleLocked(lane *sessionInputLane, sessionID, key string, after time.Duration, resend func()) {
+	if lane.stopped {
 		return
 	}
 	select {
@@ -424,17 +435,67 @@ func (m *sessionInputModule) armRetryLocked(lane *sessionInputLane, delivery ses
 		return
 	default:
 	}
-	key := delivery.id.String()
 	if lane.retries == nil {
 		lane.retries = make(map[string]*sessionInputRetry)
 	}
 	if existing := lane.retries[key]; existing != nil {
 		existing.timer.Stop()
 	}
-	entry := &sessionInputRetry{resend: delivery.resend}
-	sessionID := delivery.sessionID
+	entry := &sessionInputRetry{resend: resend}
 	entry.timer = time.AfterFunc(after, func() { m.fireRetry(sessionID, key, entry) })
 	lane.retries[key] = entry
+}
+
+func (m *sessionInputModule) holdEnterLocked(lane *sessionInputLane, sessionID string, after time.Duration) {
+	lane.heldEnter = true
+	m.scheduleLocked(lane, sessionID, sessionInputHeldEnterKey, after, func() { m.pressHeldEnter(sessionID) })
+}
+
+func (m *sessionInputModule) dropHeldEnterLocked(lane *sessionInputLane) {
+	lane.heldEnter = false
+	if entry := lane.retries[sessionInputHeldEnterKey]; entry != nil {
+		entry.timer.Stop()
+		delete(lane.retries, sessionInputHeldEnterKey)
+	}
+}
+
+func (m *sessionInputModule) pressHeldEnter(sessionID string) {
+	lane := m.lane(sessionID)
+	lane.mu.Lock()
+	defer lane.mu.Unlock()
+	if !lane.heldEnter || lane.stopped {
+		return
+	}
+	ctx := m.daemon.lifetime()
+	if _, blocked := m.promptInTheWayLocked(ctx, sessionID); blocked {
+		m.holdEnterLocked(lane, sessionID, sessionInputComposerRetry)
+		return
+	}
+	if err := m.daemon.ptyBackend.Input(ctx, sessionID, []byte("\r")); err != nil {
+		m.daemon.logf("session input held Enter failed session=%s: %v", sessionID, err)
+		m.holdEnterLocked(lane, sessionID, sessionInputComposerRetry)
+		return
+	}
+	m.dropHeldEnterLocked(lane)
+}
+
+func (m *sessionInputModule) promptInTheWayLocked(ctx context.Context, sessionID string) (sessionInputReason, bool) {
+	if state := m.daemon.store.Get(sessionID); state != nil && state.State == protocol.SessionStatePendingApproval {
+		return sessionInputReasonApproval, true
+	}
+	_, known, selector := m.daemon.sessionInputScreen(ctx, sessionID)
+	switch {
+	case !known:
+		return sessionInputReasonScreenUnavailable, true
+	case selector:
+		return sessionInputReasonSelector, true
+	}
+	return sessionInputReasonNone, false
+}
+
+func (m *sessionInputModule) promptShowingLocked(ctx context.Context, sessionID string) bool {
+	_, known, selector := m.daemon.sessionInputScreen(ctx, sessionID)
+	return !known || selector
 }
 
 func (m *sessionInputModule) fireRetry(sessionID, key string, self *sessionInputRetry) {
@@ -537,6 +598,7 @@ func (m *sessionInputModule) try(ctx context.Context, delivery sessionInputDeliv
 				return sessionInputAttempt{id: delivery.id, stage: sessionInputPlaced, route: existing.route, reason: reason, wait: existing.wait, err: err}
 			}
 			m.clearUnstartedUserSubmitLocked(lane, delivery.sessionID)
+			m.dropHeldEnterLocked(lane)
 			existing.stage = sessionInputPlaced
 			m.recordOwedLocked(lane, delivery.sessionID)
 			if err := m.daemon.ptyBackend.Input(ctx, delivery.sessionID, []byte("\r")); err != nil {
@@ -549,6 +611,10 @@ func (m *sessionInputModule) try(ctx context.Context, delivery sessionInputDeliv
 	if lane.placing {
 		m.armRetryLocked(lane, delivery, errSessionInputPlacingAnother)
 		return sessionInputAttempt{id: delivery.id, stage: sessionInputDeferred, reason: sessionInputReasonBusy, err: errSessionInputPlacingAnother}
+	}
+	if lane.heldEnter {
+		m.armRetryLocked(lane, delivery, errSessionInputComposerOccupied)
+		return sessionInputAttempt{id: delivery.id, stage: sessionInputDeferred, reason: sessionInputReasonBusy, err: errSessionInputComposerOccupied}
 	}
 	for _, existing := range lane.attempts {
 		if existing.composer && (existing.stage == sessionInputPlaced || existing.stage == sessionInputIndeterminate) {
@@ -625,7 +691,13 @@ func (m *sessionInputModule) try(ctx context.Context, delivery sessionInputDeliv
 		attempt.stage = sessionInputIndeterminate
 		return sessionInputAttempt{id: delivery.id, stage: sessionInputIndeterminate, route: sessionInputRoutePTY, reason: sessionInputReasonTransport, wait: attempt.wait, err: err}
 	}
+	pausepoint.At(pausepoint.SessionInputPasteGap)
 	time.Sleep(sessionInputSubmitDelay)
+	if reason, blocked := m.promptInTheWayLocked(ctx, delivery.sessionID); blocked {
+		m.daemon.logf("session input holding Enter session=%s: a prompt appeared after the paste", delivery.sessionID)
+		m.holdEnterLocked(lane, delivery.sessionID, sessionInputComposerRetry)
+		return sessionInputAttempt{id: delivery.id, stage: sessionInputPlaced, route: sessionInputRoutePTY, reason: reason, wait: attempt.wait}
+	}
 	if err := m.daemon.ptyBackend.Input(ctx, delivery.sessionID, []byte("\r")); err != nil {
 		attempt.stage = sessionInputIndeterminate
 		return sessionInputAttempt{id: delivery.id, stage: sessionInputIndeterminate, route: sessionInputRoutePTY, reason: sessionInputReasonTransport, wait: attempt.wait, err: err}
@@ -701,7 +773,10 @@ func (m *sessionInputModule) ptySafetyLocked(ctx context.Context, sessionID stri
 
 func (m *sessionInputModule) writePTY(ctx context.Context, sessionID string, data []byte, source string) error {
 	lane := m.lane(sessionID)
-	lane.mu.Lock()
+	if !lane.mu.TryLock() {
+		pausepoint.At(pausepoint.SessionInputLaneContended)
+		lane.mu.Lock()
+	}
 	defer lane.mu.Unlock()
 	if m.daemon.ptyBackend == nil {
 		return errors.New("session has no PTY backend")
@@ -712,6 +787,10 @@ func (m *sessionInputModule) writePTY(ctx context.Context, sessionID string, dat
 		}
 	}
 	if m.daemon.noteUserInput(sessionID, source, data) {
+		if lane.heldEnter && m.promptShowingLocked(ctx, sessionID) {
+			return m.daemon.ptyBackend.Input(ctx, sessionID, data)
+		}
+		m.dropHeldEnterLocked(lane)
 		lane.userGeneration++
 		for _, attempt := range lane.attempts {
 			if !attempt.composer || (attempt.stage != sessionInputPlaced && attempt.stage != sessionInputIndeterminate) {
@@ -867,6 +946,9 @@ func (m *sessionInputModule) observePhase(sessionID string, phase protocol.Sessi
 	defer lane.mu.Unlock()
 	previous := lane.phase
 	lane.phase = phase
+	if lane.heldEnter && previous == protocol.SessionStatePendingApproval && phase != previous {
+		m.holdEnterLocked(lane, sessionID, 0)
+	}
 	if phase == protocol.SessionStateWorking {
 		m.ensureRunLocked(lane, sessionID)
 		if previous == protocol.SessionStatePendingApproval {

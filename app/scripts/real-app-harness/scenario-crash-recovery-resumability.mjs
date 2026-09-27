@@ -9,7 +9,6 @@ import {
   launchFreshAppAndConnect,
   parseCommonArgs,
   printCommonHelp,
-  queryDaemonDb,
   relaunchAppAndConnect,
 } from './common.mjs';
 import { UiAutomationClient } from './uiAutomationClient.mjs';
@@ -27,7 +26,7 @@ import {
   ensureClaudeInitialPanePromptReady,
   ensureCodexInitialPanePromptReady,
 } from './scenarioAgents.mjs';
-import { agentHomeRoots, writeMockAgentFixture } from './mockAgent.mjs';
+import { claudeTranscriptPath, latestMockCodexRollout, writeMockAgentFixture } from './mockAgent.mjs';
 import { currentHarnessInstance, dataDirForInstance, instanceCliEnv } from './harnessInstance.mjs';
 import { appDaemonInTree } from './platform.mjs';
 
@@ -40,22 +39,6 @@ function parseArgs(argv) {
   return { options, help: args.includes('--help') || args.includes('-h') };
 }
 
-function readPersistedResumeId(dataDir, sessionId) {
-  const dbPath = path.join(dataDir, 'attn.db');
-  return queryDaemonDb(
-    dbPath,
-    `select coalesce(resume_session_id, '') from sessions where id = '${sessionId}';`,
-  );
-}
-
-function readPersistedTranscriptPath(dataDir, sessionId) {
-  const dbPath = path.join(dataDir, 'attn.db');
-  return queryDaemonDb(
-    dbPath,
-    `select coalesce(transcript_path, '') from sessions where id = '${sessionId}';`,
-  );
-}
-
 function normalizeExistingPath(value) {
   const resolved = path.resolve(String(value || ''));
   try {
@@ -65,38 +48,11 @@ function normalizeExistingPath(value) {
   }
 }
 
-// A rollout's first line carries the session_meta naming its id, which is how
-// the daemon's own codex driver locates it.
-function findCodexRollout(resumeId) {
-  const root = agentHomeRoots().codexSessions;
-  const stack = [root];
-  while (stack.length > 0) {
-    const dir = stack.pop();
-    let entries = [];
-    try {
-      entries = fs.readdirSync(dir, { withFileTypes: true });
-    } catch {
-      continue;
-    }
-    for (const entry of entries) {
-      const full = path.join(dir, entry.name);
-      if (entry.isDirectory()) {
-        stack.push(full);
-        continue;
-      }
-      // internal/transcript/discovery.go narrows on the file name first; without
-      // it this reads every rollout the machine has ever written.
-      if (!entry.name.endsWith(`${resumeId}.jsonl`)) continue;
-      let head = '';
-      try {
-        head = fs.readFileSync(full, 'utf8').split('\n', 1)[0] || '';
-      } catch {
-        continue;
-      }
-      if (head.includes(`"id":"${resumeId}"`)) return full;
-    }
-  }
-  return null;
+function hasClaudeTranscript(cwd) {
+  return [cwd, normalizeExistingPath(cwd)].some((dir) => {
+    const project = path.dirname(claudeTranscriptPath(dir, 'none'));
+    return fs.existsSync(project) && fs.readdirSync(project).some((name) => name.endsWith('.jsonl'));
+  });
 }
 
 async function waitFor(description, predicate, timeoutMs) {
@@ -236,40 +192,26 @@ async function main() {
       });
       const pane = await waitForFirstWorkspacePane(client, sessionId, 'codex pane', 20_000);
       codexResumeId = await waitFor(
-        'codex to report its native resume id',
-        async () => (readPersistedResumeId(dataDir, sessionId)) || null,
+        'the mock codex to write its rollout',
+        () => latestMockCodexRollout(runner.sessionDir)?.id ?? null,
         90_000,
       );
       await submitCodexPrompt(client, sessionId, pane.paneId, `Reply with exactly ${token} and nothing else.`);
       // The pane would show the token from local echo alone, so the claim needs
       // the rollout on disk.
-      const rollout = await waitFor(
+      codexTranscriptPath = await waitFor(
         'the token to reach the codex rollout on disk',
         () => {
-          const file = findCodexRollout(codexResumeId);
-          if (!file) return null;
-          return fs.readFileSync(file, 'utf8').includes(token) ? file : null;
+          const rollout = latestMockCodexRollout(runner.sessionDir);
+          if (!rollout) return null;
+          return fs.readFileSync(rollout.file, 'utf8').includes(token) ? rollout.file : null;
         },
         120_000,
       );
-      // The binding assertions after the crash compare against what the daemon
-      // persisted, so wait for that write instead of assuming it landed.
-      codexTranscriptPath = await waitFor(
-        `the daemon to persist ${rollout} as the codex transcript path`,
-        () => {
-          const stored = readPersistedTranscriptPath(dataDir, sessionId);
-          return stored && normalizeExistingPath(stored) === normalizeExistingPath(rollout) ? stored : null;
-        },
-        30_000,
-      );
       runner.writeJson('codex-conversation.json', {
         resumeId: codexResumeId,
-        rollout,
         transcriptPath: codexTranscriptPath,
       });
-      if (codexResumeId === sessionId) {
-        throw new Error(`the stored resume id is the attn session id (${sessionId}); it must be codex's own native id`);
-      }
       return sessionId;
     });
 
@@ -288,11 +230,7 @@ async function main() {
     });
 
     await runner.step('record_state_before_the_crash', async () => {
-      const claudeResumeId = readPersistedResumeId(dataDir, claudeSessionId);
-      const claudeTranscript = agentHomeRoots().claudeProjects;
-      const claudeHasTranscript = fs.existsSync(claudeTranscript)
-        && fs.readdirSync(claudeTranscript).some((dir) => fs.existsSync(path.join(claudeTranscript, dir, `${claudeResumeId}.jsonl`)));
-      if (claudeHasTranscript) {
+      if (hasClaudeTranscript(claudeDir)) {
         throw new Error('the claude session already has a transcript; it cannot stand in for the unresumable case');
       }
       summariesBeforeCrash = reconciliationSummaries(dataDir).length;
@@ -302,7 +240,7 @@ async function main() {
           resumeId: codexResumeId,
           transcriptPath: codexTranscriptPath,
         },
-        claude: { session: observer.getSession(claudeSessionId), resumeId: claudeResumeId, hasTranscript: false },
+        claude: { session: observer.getSession(claudeSessionId), hasTranscript: false },
         reconciliationSummaries: summariesBeforeCrash,
       });
     });
@@ -398,30 +336,14 @@ async function main() {
     });
 
     await runner.step('assert_the_codex_binding_outlived_the_crash', async () => {
-      const resumeId = await waitFor(
-        `the codex resume id to still be ${codexResumeId} after the crash`,
-        () => (readPersistedResumeId(dataDir, codexSessionId) === codexResumeId ? codexResumeId : null),
-        30_000,
-      );
-      const transcriptPath = await waitFor(
-        `the codex transcript path to still be ${codexTranscriptPath} after the crash`,
-        () => {
-          const stored = readPersistedTranscriptPath(dataDir, codexSessionId);
-          return stored && normalizeExistingPath(stored) === normalizeExistingPath(codexTranscriptPath)
-            ? stored
-            : null;
-        },
-        30_000,
-      );
       const { stdout } = await execFileAsync(attnBin, ['session', 'transcript', codexSessionId, '--json'], {
         env: daemonEnv,
         timeout: 20_000,
       });
       runner.writeText('transcript-after-crash.json', stdout);
       if (!stdout.includes(token)) {
-        throw new Error(`the rebooted daemon's public CLI did not read the pre-crash reply back from ${transcriptPath}`);
+        throw new Error(`the rebooted daemon's public CLI did not read the pre-crash reply back from ${codexTranscriptPath}`);
       }
-      runner.writeJson('binding-after-crash.json', { resumeId, transcriptPath });
     });
 
     const summary = await runner.finishSuccess({
