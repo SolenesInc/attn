@@ -36,3 +36,12 @@ func TestTheDaemonSocketAcceptsOnceItExistsAndReplacesAStaleOne(t *testing.T) {
 		t.Fatalf("the daemon left staging sockets behind: %v", staged)
 	}
 }
+
+func TestACommandWithNoDaemonNamesTheSocketAndInstanceItTried(t *testing.T) {
+	t.Parallel()
+	s := testworld.NewStack(t)
+	got := s.Attn("agent", "list")
+	if got.Code == 0 || !strings.Contains(got.Stderr, "connect to daemon at "+s.Socket+" (instance=default): ") {
+		t.Fatalf("attn agent list with no daemon exited %d with stderr %q, want it to name %s and the default instance", got.Code, got.Stderr, s.Socket)
+	}
+}
