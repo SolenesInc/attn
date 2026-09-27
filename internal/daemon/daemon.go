@@ -933,6 +933,7 @@ func (d *Daemon) Start() error {
 
 	go func() {
 		d.performStartupPTYRecovery(previousRunSessions, recoveryStartedAt)
+		d.resolveDue(time.Now())
 		go d.runSessionResolver()
 		if _, routed := d.ptyBackend.(*ptybackend.MigratingBackend); routed {
 			go d.validateSharedPTYHostAfterRecovery()
