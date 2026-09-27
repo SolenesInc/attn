@@ -69,10 +69,7 @@ func (d *Daemon) readGardenLogs() (map[string][]string, error) {
 	if d.store == nil {
 		return nil, errors.New("no database")
 	}
-	page := d.gardenNotePageSize
-	if page <= 0 {
-		page = docstore.MaxLimit
-	}
+	page := docstore.MaxLimit
 	logs := map[string][]string{}
 	after := ""
 	for {

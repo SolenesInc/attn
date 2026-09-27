@@ -2,6 +2,7 @@ package daemon
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"os"
 	"path/filepath"
@@ -12,6 +13,7 @@ import (
 	"time"
 
 	agentdriver "github.com/victorarias/attn/internal/agent"
+	"github.com/victorarias/attn/internal/jobs"
 	"github.com/victorarias/attn/internal/protocol"
 	"github.com/victorarias/attn/internal/store"
 )
@@ -306,4 +308,17 @@ func reconcileComments(t *testing.T, d *Daemon, ticketID string) []string {
 		}
 	}
 	return out
+}
+
+func reconcileTask(in ticketReconcileInputs) *jobs.Job {
+	payload, err := json.Marshal(in)
+	if err != nil {
+		panic("marshal reconcile inputs: " + err.Error())
+	}
+	return &jobs.Job{
+		ID:        "job-" + in.TicketID,
+		Kind:      reconcileKind,
+		UniqueKey: in.TicketID,
+		Payload:   payload,
+	}
 }

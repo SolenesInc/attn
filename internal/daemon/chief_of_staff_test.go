@@ -28,13 +28,6 @@ func readChiefOfStaffResult(t *testing.T, client *wsClient) protocol.ChiefOfStaf
 	}
 }
 
-func newChiefOfStaffTestDaemon(t *testing.T) (*Daemon, *wsClient) {
-	t.Helper()
-	d := NewForTesting(filepath.Join(t.TempDir(), "test.sock"))
-	t.Cleanup(func() { _ = d.store.Close() })
-	return d, newRenameTestClient()
-}
-
 func addChiefOfStaffTestSession(d *Daemon, id, label string) {
 	now := string(protocol.TimestampNow())
 	d.store.Add(&protocol.Session{

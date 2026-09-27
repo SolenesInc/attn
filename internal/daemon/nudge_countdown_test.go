@@ -20,25 +20,6 @@ func currentNudgeTimer(d *Daemon, sessionID string) *time.Timer {
 	return nil
 }
 
-func currentNudgeDeadline(d *Daemon, sessionID string) time.Time {
-	d.nudgeMu.Lock()
-	defer d.nudgeMu.Unlock()
-	if c, ok := d.nudgeCountdowns[sessionID]; ok {
-		return c.firesAt
-	}
-	return time.Time{}
-}
-
-func settledNudgeDeadline(t *testing.T, d *Daemon, sessionID string) time.Time {
-	t.Helper()
-	synctest.Wait()
-	deadline := currentNudgeDeadline(d, sessionID)
-	if deadline.IsZero() {
-		t.Fatalf("no nudge deadline armed for %s once the daemon settled", sessionID)
-	}
-	return deadline
-}
-
 func fireNudgeNow(t *testing.T, d *Daemon, sessionID string) {
 	t.Helper()
 	timer := currentNudgeTimer(d, sessionID)
