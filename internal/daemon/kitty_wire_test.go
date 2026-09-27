@@ -8,6 +8,7 @@ import (
 	"testing"
 
 	"github.com/victorarias/attn/internal/protocol"
+	"github.com/victorarias/attn/internal/ptyworker"
 	"github.com/victorarias/attn/internal/testworld"
 )
 
@@ -19,7 +20,10 @@ const (
 var kittyImagePixels = []byte{1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12}
 
 func TestKittyPlacementsReachOnlyClientsThatAskedForThem(t *testing.T) {
-	w := newWorld(t)
+	onEachPtyBackend(t, testKittyPlacementsReachOnlyClientsThatAskedForThem)
+}
+
+func testKittyPlacementsReachOnlyClientsThatAskedForThem(t *testing.T, w *world) {
 	framesOnly := w.App()
 	session := w.Spawn(framesOnly, workspaceShell, w.Path("shop"))
 	peers := map[string]*testworld.Peer{
@@ -64,7 +68,10 @@ func TestKittyPlacementsReachOnlyClientsThatAskedForThem(t *testing.T) {
 }
 
 func TestKittyImagesOnScreenAreServedInTheFormEachClientReads(t *testing.T) {
-	w := newWorld(t)
+	onEachPtyBackend(t, testKittyImagesOnScreenAreServedInTheFormEachClientReads)
+}
+
+func testKittyImagesOnScreenAreServedInTheFormEachClientReads(t *testing.T, w *world) {
 	app := w.App()
 	session := w.Spawn(app, workspaceShell, w.Path("shop"))
 	describer := transportPeer(w, protocol.CapabilityKittyImages)
@@ -105,6 +112,94 @@ func TestKittyImagesOnScreenAreServedInTheFormEachClientReads(t *testing.T) {
 	attached := kittyAttach(transportPeer(w, protocol.CapabilityKittyImages, protocol.CapabilityBinaryPtyOutput), session)
 	if attached.Snapshot == nil || len(attached.Snapshot.Placements) != 1 || attached.Snapshot.Placements[0].ImageID != 77 {
 		t.Errorf("a client attaching while the image is on screen got snapshot %+v, want the placement of image 77", attached.Snapshot)
+	}
+}
+
+func TestAKittyImageKeepsOneIdentityThatNoOtherSessionShares(t *testing.T) {
+	onEachPtyBackend(t, func(t *testing.T, w *world) {
+		app := w.App()
+		describer := transportPeer(w, protocol.CapabilityKittyImages)
+		generations := map[string]int{}
+		var sessions []string
+		for _, dir := range []string{"shop", "docs"} {
+			session := w.Spawn(app, workspaceShell, w.Path(dir))
+			kittyAttach(describer, session)
+			describer.TypeLine(session, "clear; "+kittyShowImage)
+			placed := testworld.Await(describer, protocol.EventKittyPlacements, func(m protocol.KittyPlacementsMessage) bool {
+				return m.ID == session && len(m.Placements) == 1
+			})
+			generations[session] = placed.Placements[0].ImageGeneration
+			sessions = append(sessions, session)
+		}
+		shop, docs := sessions[0], sessions[1]
+		if generations[shop] == generations[docs] || generations[shop] >= 1<<53 || generations[docs] >= 1<<53 {
+			t.Errorf("image 77 has generation %d in one session and %d in the other, want distinct identities a JavaScript number holds exactly", generations[shop], generations[docs])
+		}
+
+		reattached := kittyAttach(transportPeer(w, protocol.CapabilityKittyImages), shop)
+		if reattached.Snapshot == nil || len(reattached.Snapshot.Placements) != 1 || reattached.Snapshot.Placements[0].ImageGeneration != generations[shop] {
+			t.Errorf("a client attaching later got snapshot placements %+v, want image 77 at generation %d", reattached.Snapshot, generations[shop])
+		}
+		describer.Send(protocol.PtyResizeMessage{Cmd: protocol.CmdPtyResize, ID: shop, Cols: 60, Rows: 12})
+		resized := testworld.Await(describer, protocol.EventKittyPlacements, func(m protocol.KittyPlacementsMessage) bool { return m.ID == shop })
+		if len(resized.Placements) != 1 || resized.Placements[0].ImageGeneration != generations[shop] {
+			t.Errorf("after a resize the placements are %+v, want image 77 described again at generation %d", resized.Placements, generations[shop])
+		}
+		if served := kittyImage(describer, shop, 77); protocol.Deref(served.Generation) != generations[shop] {
+			t.Errorf("image 77 is served at generation %d, want the %d its placement names", protocol.Deref(served.Generation), generations[shop])
+		}
+	})
+}
+
+func TestAKittyStorageLimitOfZeroTurnsImagesOff(t *testing.T) {
+	t.Setenv("ATTN_KITTY_STORAGE_LIMIT", "0")
+	w := newWorld(t)
+	session := w.Spawn(w.App(), workspaceShell, w.Path("shop"))
+	describer := transportPeer(w, protocol.CapabilityKittyImages)
+	kittyAttach(describer, session)
+
+	describer.TypeLine(session, kittyShowImage+`; printf 'mark%s\n' er-drawn`)
+	transportAwaitOutput(describer, session, "marker-drawn")
+	describer.Send(protocol.PtyResizeMessage{Cmd: protocol.CmdPtyResize, ID: session, Cols: 60, Rows: 12})
+	if missing := kittyImage(describer, session, 77); missing.Success {
+		t.Errorf("with images off image 77 was served at generation %d", protocol.Deref(missing.Generation))
+	}
+	for _, e := range describer.Received() {
+		if e.Event == protocol.EventKittyPlacements {
+			t.Errorf("with images off the daemon described placements at seq %d", protocol.Deref(e.Seq))
+		}
+	}
+}
+
+func TestResizingASessionWithoutImagesDescribesNoPlacements(t *testing.T) {
+	w := newWorld(t)
+	session := w.Spawn(w.App(), workspaceShell, w.Path("shop"))
+	describer := transportPeer(w, protocol.CapabilityKittyImages)
+	kittyAttach(describer, session)
+
+	describer.Send(protocol.PtyResizeMessage{Cmd: protocol.CmdPtyResize, ID: session, Cols: 60, Rows: 12})
+	describer.TypeLine(session, `printf 'mark%s\n' er-resized`)
+	transportAwaitOutput(describer, session, "marker-resized")
+	for _, e := range describer.Received() {
+		if e.Event == protocol.EventKittyPlacements {
+			t.Errorf("a session that never drew an image described placements at seq %d", protocol.Deref(e.Seq))
+		}
+	}
+}
+
+func onEachPtyBackend(t *testing.T, script func(t *testing.T, w *world)) {
+	for _, backend := range []string{"embedded", "worker"} {
+		t.Run(backend, func(t *testing.T) {
+			if backend == "worker" {
+				t.Setenv("ATTN_PTY_BACKEND", "worker")
+				t.Setenv("ATTN_PTY_WORKER_BINARY", testworld.AttnBinary(t))
+			}
+			w := newWorld(t)
+			if backend == "worker" {
+				t.Cleanup(func() { ptyworker.ReapDataDir(w.Dir) })
+			}
+			script(t, w)
+		})
 	}
 }
 
