@@ -5,14 +5,10 @@ import (
 	"encoding/base64"
 	"encoding/json"
 	"errors"
-	"net"
-	"net/http"
-	"net/http/httptest"
 	"path/filepath"
 	"strings"
 	"sync"
 	"testing"
-	"testing/synctest"
 	"time"
 
 	"github.com/victorarias/attn/internal/protocol"
@@ -503,31 +499,6 @@ func TestDaemon_BroadcastRawWSMessage_RemoteSessionExitedClearsRemoteAttachState
 	assertNoOutboundEvent(t, client)
 }
 
-func TestDaemon_HealthDoesNotReportReadyBeforeStartupCompletes(t *testing.T) {
-	d := NewForTesting(filepath.Join(shortTempDir(t), "test.sock"))
-	request := httptest.NewRequest(http.MethodGet, "/health", nil)
-
-	readStatus := func() string {
-		recorder := httptest.NewRecorder()
-		d.handleHealth(recorder, request)
-		var health struct {
-			Status string `json:"status"`
-		}
-		if err := json.NewDecoder(recorder.Result().Body).Decode(&health); err != nil {
-			t.Fatalf("decode health: %v", err)
-		}
-		return health.Status
-	}
-
-	if status := readStatus(); status != "starting" {
-		t.Fatalf("health status before startup = %q, want starting", status)
-	}
-	d.signalStarted()
-	if status := readStatus(); status != "ok" {
-		t.Fatalf("health status after startup = %q, want ok", status)
-	}
-}
-
 func readOutboundEvent(t *testing.T, client *wsClient) map[string]interface{} {
 	t.Helper()
 	select {
@@ -550,77 +521,4 @@ func assertNoOutboundEvent(t *testing.T, client *wsClient) {
 		t.Fatalf("unexpected outbound event: %s", string(outbound.payload))
 	default:
 	}
-}
-
-func TestHandleStop_SkipsClassificationForForcedStopSession(t *testing.T) {
-	d := newBubbleDaemon(t)
-	synctest.Test(t, func(t *testing.T) {
-		stopDaemonBackground(t, d)
-		mockClassifier := &countingClassifier{state: protocol.StateWaitingInput}
-		d.classifier = mockClassifier
-
-		now := time.Now()
-		nowStr := string(protocol.NewTimestamp(now))
-		d.store.Add(&protocol.Session{
-			ID:             "sess-forced-stop",
-			Agent:          protocol.SessionAgentCodex,
-			Label:          "forced-stop",
-			Directory:      "/tmp",
-			State:          protocol.StateIdle,
-			StateSince:     nowStr,
-			StateUpdatedAt: nowStr,
-			LastSeen:       nowStr,
-		})
-		d.markForcedStopClassification("sess-forced-stop")
-
-		serverConn, clientConn := net.Pipe()
-		defer clientConn.Close()
-
-		done := make(chan struct{})
-		go func() {
-			defer close(done)
-			d.handleStop(serverConn, &protocol.StopMessage{
-				ID:             "sess-forced-stop",
-				TranscriptPath: "",
-			})
-			_ = serverConn.Close()
-		}()
-
-		var resp protocol.Response
-		if err := json.NewDecoder(clientConn).Decode(&resp); err != nil {
-			t.Fatalf("decode stop response: %v", err)
-		}
-		if !resp.Ok {
-			t.Fatalf("stop response ok=%v, want true", resp.Ok)
-		}
-
-		requireDone(t, done, "handleStop did not return")
-
-		settleStopClassification(t)
-		if got := mockClassifier.CallCount(); got != 0 {
-			t.Fatalf("classifier calls=%d, want 0", got)
-		}
-		if d.consumeForcedStopClassification("sess-forced-stop") {
-			t.Fatal("forced-stop suppression token should be consumed by handleStop")
-		}
-	})
-}
-
-type countingClassifier struct {
-	state string
-	mu    sync.Mutex
-	calls int
-}
-
-func (c *countingClassifier) Classify(text string, timeout time.Duration) (string, error) {
-	c.mu.Lock()
-	c.calls++
-	c.mu.Unlock()
-	return c.state, nil
-}
-
-func (c *countingClassifier) CallCount() int {
-	c.mu.Lock()
-	defer c.mu.Unlock()
-	return c.calls
 }

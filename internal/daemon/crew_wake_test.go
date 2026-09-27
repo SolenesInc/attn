@@ -1,7 +1,6 @@
 package daemon
 
 import (
-	"context"
 	"fmt"
 	"net"
 	"os"
@@ -15,8 +14,6 @@ import (
 	"github.com/victorarias/attn/internal/garden"
 	"github.com/victorarias/attn/internal/logging"
 	"github.com/victorarias/attn/internal/protocol"
-	"github.com/victorarias/attn/internal/pty"
-	"github.com/victorarias/attn/internal/ptybackend"
 )
 
 func newWakeableDaemon(t *testing.T) (*Daemon, *fakeSpawnBackend, func() string) {
@@ -51,31 +48,6 @@ func newWakeableDaemon(t *testing.T) (*Daemon, *fakeSpawnBackend, func() string)
 		}
 		return string(body)
 	}
-}
-
-type crewRuntimeBackend struct {
-	*fakeSpawnBackend
-	running map[string]bool
-	infoErr map[string]error
-}
-
-func (b *crewRuntimeBackend) Spawn(ctx context.Context, opts ptybackend.SpawnOptions) error {
-	if err := b.fakeSpawnBackend.Spawn(ctx, opts); err != nil {
-		return err
-	}
-	b.running[opts.ID] = true
-	return nil
-}
-
-func (b *crewRuntimeBackend) SessionInfo(_ context.Context, sessionID string) (ptybackend.SessionInfo, error) {
-	if err := b.infoErr[sessionID]; err != nil {
-		return ptybackend.SessionInfo{}, err
-	}
-	running, ok := b.running[sessionID]
-	if !ok {
-		return ptybackend.SessionInfo{}, pty.ErrSessionNotFound
-	}
-	return ptybackend.SessionInfo{SessionID: sessionID, Running: running}, nil
 }
 
 func TestCrewSet_ACwdInsideAnotherInstancesCrewIsRefused(t *testing.T) {
@@ -254,11 +226,4 @@ func memberByID(t *testing.T, members []protocol.CrewMember, id string) protocol
 	}
 	t.Fatalf("no member %q in the roster", id)
 	return protocol.CrewMember{}
-}
-
-func spawnedSessions(t *testing.T, backend *fakeSpawnBackend) []ptybackend.SpawnOptions {
-	t.Helper()
-	backend.mu.Lock()
-	defer backend.mu.Unlock()
-	return append([]ptybackend.SpawnOptions(nil), backend.spawnOpts...)
 }

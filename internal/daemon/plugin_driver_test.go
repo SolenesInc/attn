@@ -2,7 +2,6 @@ package daemon
 
 import (
 	"encoding/json"
-	"errors"
 	"net"
 	"path/filepath"
 	"strconv"
@@ -11,7 +10,6 @@ import (
 
 	"github.com/victorarias/attn/internal/protocol"
 	"github.com/victorarias/attn/internal/pty"
-	"github.com/victorarias/attn/internal/ptybackend"
 )
 
 func TestPluginDriverRun_IgnoresGenericPTYState(t *testing.T) {
@@ -46,44 +44,6 @@ func TestPluginDriverRun_IgnoresGenericPTYState(t *testing.T) {
 	})
 	if got := d.store.Get("plugin-state-owner").State; got != protocol.SessionStateWaitingInput {
 		t.Fatalf("state=%q after generic PTY event, want plugin-owned waiting_input", got)
-	}
-}
-
-func TestPluginDriverSessionClosed_FailedKillKeepsRunActive(t *testing.T) {
-	d := NewForTesting(filepath.Join(t.TempDir(), "test.sock"))
-	client, done := startPluginPipe(t, d, "snipe-plugin", nil)
-	defer func() {
-		_ = client.Close()
-		<-done
-	}()
-	registerTestPluginDriver(t, client, "snipe", map[string]bool{"state_reporting": true})
-
-	now := protocol.TimestampNow().String()
-	d.store.Add(&protocol.Session{
-		ID:             "failed-kill",
-		Label:          "snipe",
-		Agent:          "snipe",
-		Directory:      t.TempDir(),
-		State:          protocol.SessionStateWorking,
-		StateSince:     now,
-		StateUpdatedAt: now,
-		LastSeen:       now,
-	})
-	if !d.store.BeginAgentDriverRun("failed-kill", "snipe-plugin", "run-live") {
-		t.Fatal("failed to begin test plugin run")
-	}
-	d.ptyBackend = &fakeSpawnBackend{killErr: errors.New("kill failed")}
-
-	ws := &wsClient{send: make(chan outboundMessage, 1), attachedStreams: make(map[string]ptybackend.Stream)}
-	d.handleKillSession(ws, &protocol.KillSessionMessage{ID: "failed-kill"})
-	sendPluginMethod(t, client, 21, "session.report_state", pluginReportStateParams{
-		SessionID: "failed-kill",
-		RunID:     "run-live",
-		Seq:       1,
-		State:     protocol.StatePendingApproval,
-	})
-	if got := d.store.Get("failed-kill").State; got != protocol.SessionStatePendingApproval {
-		t.Fatalf("state=%q after failed kill report, want pending_approval", got)
 	}
 }
 

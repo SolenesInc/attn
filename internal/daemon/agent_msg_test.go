@@ -4,37 +4,10 @@ import (
 	"errors"
 	"net"
 	"strings"
-	"sync"
 	"testing"
 
 	"github.com/victorarias/attn/internal/protocol"
 )
-
-type recordingDoorbell struct {
-	mu     sync.Mutex
-	writes []string
-}
-
-func (r *recordingDoorbell) backend() *fakeSpawnBackend {
-	return &fakeSpawnBackend{onInput: func(_ string, data []byte) {
-		r.mu.Lock()
-		defer r.mu.Unlock()
-		r.writes = append(r.writes, string(data))
-	}}
-}
-
-func (r *recordingDoorbell) pasted() []string {
-	r.mu.Lock()
-	defer r.mu.Unlock()
-	prompts := []string{}
-	for _, write := range r.writes {
-		if !strings.HasPrefix(write, sessionInputPasteStart) {
-			continue
-		}
-		prompts = append(prompts, strings.TrimSuffix(strings.TrimPrefix(write, sessionInputPasteStart), sessionInputPasteEnd))
-	}
-	return prompts
-}
 
 func callAgentMsg(t *testing.T, d *Daemon, target, source, content string) protocol.Response {
 	t.Helper()
