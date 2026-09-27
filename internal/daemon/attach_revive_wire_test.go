@@ -99,6 +99,9 @@ func TestAttachingWithReviveRelaunchesARecoverableSession(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			w := newWorld(t, tc.agent)
 			app := w.App()
+			if tc.agent == fakeagent.Pi {
+				awaitAgentAvailable(app, string(fakeagent.Pi))
+			}
 			session := tc.start(t, w, app)
 			first := w.Launched(session)
 			if tc.want != nil {
