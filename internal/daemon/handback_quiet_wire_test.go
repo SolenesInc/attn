@@ -47,7 +47,7 @@ func TestANotebookEntryForAChiefHeldByTheUsersTypingLandsOnceTheyAreQuiet(t *tes
 			t.Fatalf("make %s the chief: %s", chief.id, protocol.Deref(set.Error))
 		}
 		synctest.Wait()
-		chief = w.bootBubbleClaude(t, app, chief.id)
+		chief = w.bootBubbleClaude(t, chief.id)
 
 		app.Send(protocol.PtyInputMessage{Cmd: protocol.CmdPtyInput, ID: chief.id, Data: "half a thought"})
 		sent := notebookAskSendToChief(app, "notes/today.md", "follow up on the release")

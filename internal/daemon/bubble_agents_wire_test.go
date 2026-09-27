@@ -37,10 +37,14 @@ type bubbleClaude struct {
 func (w *world) bubbleClaude(t *testing.T, app *testworld.Peer, dir string) *bubbleClaude {
 	t.Helper()
 	id := w.Spawn(app, fakeagent.Claude, w.Path(dir))
-	return w.bootBubbleClaude(t, app, id)
+	agent := w.bootBubbleClaude(t, id)
+	if booted := queriedSession(t, agent.cli, id); booted.State != protocol.SessionStateIdle {
+		t.Fatalf("%s booted %s, want idle", id, booted.State)
+	}
+	return agent
 }
 
-func (w *world) bootBubbleClaude(t *testing.T, app *testworld.Peer, id string) *bubbleClaude {
+func (w *world) bootBubbleClaude(t *testing.T, id string) *bubbleClaude {
 	t.Helper()
 	term := w.terms.Terminal(id)
 	if term == nil {
@@ -56,10 +60,14 @@ func (w *world) bootBubbleClaude(t *testing.T, app *testworld.Peer, id string) *
 		t.Fatalf("session start of %s: %v", id, err)
 	}
 	term.Heartbeat("not_busy", "Claude Code")
-	synctest.Wait()
-	if booted := queriedSession(t, agent.cli, id); booted.State != protocol.SessionStateIdle {
-		t.Fatalf("%s booted %s, want idle", id, booted.State)
+	if path := term.Options.InitialPromptFile; path != "" {
+		prompt, err := os.ReadFile(path)
+		if err != nil {
+			t.Fatalf("read the initial prompt of %s: %v", id, err)
+		}
+		agent.take(string(prompt))
 	}
+	synctest.Wait()
 	return agent
 }
 
