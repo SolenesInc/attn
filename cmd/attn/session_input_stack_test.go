@@ -54,6 +54,7 @@ func TestAnApprovalPromptThatAppearsAfterAttnPastesItsMessageIsLeftForTheUser(t 
 
 	sent := s.Launch(testworld.Invocation{Args: []string{"agent", "msg", recipient, "the build is green"}, Session: reviewer})
 	gap.Await()
+	app.AwaitScreen(recipient, "attn agent inbox")
 	codex.AskApproval()
 	app.AwaitScreen(recipient, "Yes, proceed")
 	gap.Release()

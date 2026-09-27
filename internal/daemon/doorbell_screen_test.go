@@ -38,9 +38,10 @@ func TestScreenShowsSelector(t *testing.T) {
 		{name: "prose about picking", screen: "  I will pick the branch to rebase onto and then open the PR."},
 		{name: "prose about choosing", screen: "  Waiting for you to choose which one to keep."},
 		{name: "an empty screen", screen: ""},
-		{name: "pasted text that mentions a footer", screen: "› Press esc to cancel the rollout\n", pasted: "Press esc to cancel the rollout"},
+		{name: "pasted text that mentions a footer", screen: "› Ship it.\nPress esc to cancel the rollout\n", pasted: "Ship it.\nPress esc to cancel the rollout"},
+		{name: "a footer the hidden pasted text quotes", screen: "Allow?\n" + selectorFooter, pasted: "Ship it.\n" + selectorFooter, blocked: true},
 		{name: "a footer under pasted text", screen: "› tell me\n" + selectorFooter, pasted: "tell me", blocked: true},
-		{name: "a footer under pasted text quoting it", screen: "› Enter to select · Esc to cancel\n" + selectorFooter, pasted: "Enter to select · Esc to cancel", blocked: true},
+		{name: "a footer under pasted text quoting it", screen: "› Ship it.\nEnter to select · Esc to cancel\n" + selectorFooter, pasted: "Ship it.\nEnter to select · Esc to cancel", blocked: true},
 	} {
 		line, blocked := screenShowsSelector(tc.screen, tc.pasted)
 		if blocked != tc.blocked {

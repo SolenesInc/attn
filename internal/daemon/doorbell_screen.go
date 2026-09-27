@@ -28,7 +28,13 @@ func screenShowsSelector(text, pasted string) (string, bool) {
 	if len(lines) > doorbellScreenTailLines {
 		lines = lines[len(lines)-doorbellScreenTailLines:]
 	}
-	quoted := len(doorbellSelectorFooter.FindAllStringIndex(pasted, -1))
+	quoted := 0
+	for _, line := range lines {
+		if !doorbellSelectorFooter.MatchString(line) && partOfPaste(line, pasted) {
+			quoted = len(doorbellSelectorFooter.FindAllStringIndex(pasted, -1))
+			break
+		}
+	}
 	for _, line := range lines {
 		matches := len(doorbellSelectorFooter.FindAllStringIndex(line, -1))
 		if matches == 0 {

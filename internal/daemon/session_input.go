@@ -480,7 +480,7 @@ func (m *sessionInputModule) pressHeldEnter(sessionID string) {
 }
 
 func (m *sessionInputModule) promptInTheWayLocked(ctx context.Context, sessionID, pasted string) (sessionInputReason, bool) {
-	if m.pendingApproval(sessionID) {
+	if state := m.daemon.store.Get(sessionID); state != nil && state.State == protocol.SessionStatePendingApproval {
 		return sessionInputReasonApproval, true
 	}
 	_, known, selector := m.daemon.sessionInputScreen(ctx, sessionID, pasted)
@@ -494,15 +494,8 @@ func (m *sessionInputModule) promptInTheWayLocked(ctx context.Context, sessionID
 }
 
 func (m *sessionInputModule) promptShowingLocked(ctx context.Context, sessionID, pasted string) bool {
-	if _, known, selector := m.daemon.sessionInputScreen(ctx, sessionID, pasted); known {
-		return selector
-	}
-	return m.pendingApproval(sessionID)
-}
-
-func (m *sessionInputModule) pendingApproval(sessionID string) bool {
-	state := m.daemon.store.Get(sessionID)
-	return state != nil && state.State == protocol.SessionStatePendingApproval
+	_, known, selector := m.daemon.sessionInputScreen(ctx, sessionID, pasted)
+	return !known || selector
 }
 
 func (m *sessionInputModule) fireRetry(sessionID, key string, self *sessionInputRetry) {
