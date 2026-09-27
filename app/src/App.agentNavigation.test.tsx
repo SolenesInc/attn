@@ -184,7 +184,6 @@ describe('agent navigation', () => {
         id,
         label: id,
         directory: `/tmp/${id}`,
-        workspace_id: '',
         profile_id: TEST_PROFILE_ID,
         agent: 'claude',
         state: 'working',

@@ -8,9 +8,8 @@ const reopen = {
   actions: ['reopen'],
   checking: false,
   directory_state: 'present',
-  workspace_id: 'ws-1',
-  workspace_plan: 'reuse',
-  pane_plan: 'add',
+  profile_id: 'profile-1',
+  profile_deleted: false,
 };
 
 describe('session ledger daemon events for reopen', () => {
@@ -28,7 +27,7 @@ describe('session ledger daemon events for reopen', () => {
     const pending: PendingRequests = new Map();
     const resolve = vi.fn();
     pending.set(pendingRequestKey('session_reopen', 'req-1'), { resolve, reject: vi.fn() });
-    const result = { session_id: 's1', workspace_id: 'ws-1', directory: '/tmp/x', action: 'reopen' };
+    const result = { session_id: 's1', profile_id: 'profile-1', directory: '/tmp/x', action: 'reopen' };
     handleSessionLedgerDaemonEvent(
       { event: 'session_reopen_result', request_id: 'req-1', success: true, result },
       { pending },

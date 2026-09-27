@@ -67,7 +67,6 @@ function session(id: string, label: string) {
     label,
     agent: 'claude',
     directory: '/tmp/repo',
-    workspace_id: '',
     profile_id: PROFILE.id,
     state: 'idle',
   };
@@ -139,7 +138,6 @@ async function connect(sessions: ReturnType<typeof session>[], desktops: ReturnT
       event: 'initial_state',
       protocol_version: PROTOCOL_VERSION,
       sessions,
-      workspaces: [],
       profiles: [PROFILE],
       selected_profile_id: PROFILE.id,
       desktops,

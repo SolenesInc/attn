@@ -344,7 +344,6 @@ describe('sessions store', () => {
       label: 'Blip',
       agent: 'codex',
       directory: '/tmp/workspace',
-      workspace_id: '',
       profile_id: 'profile',
       state: 'working',
     };
@@ -408,7 +407,6 @@ describe('sessions store', () => {
       label: 'Neighbour',
       agent: 'shell',
       directory: '/tmp/neighbour',
-      workspace_id: 'workspace-sess-neighbour',
       state: 'idle',
     };
     useSessionStore.getState().syncFromDaemonSessions([neighbour]);

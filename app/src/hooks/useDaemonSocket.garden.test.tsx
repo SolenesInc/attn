@@ -59,7 +59,6 @@ function seed(id: string, title: string) {
     body: '',
     status: 'planted',
     step_slug: title,
-    workspace_id: 'ws-1',
     planter_session: '',
     planter_member: '',
     tender_session: '',

@@ -583,7 +583,6 @@ describe('desktop surface', () => {
           directory: '/tmp/repo',
           state: 'working',
           profile_id: TEST_PROFILE_ID,
-          workspace_id: '',
         })),
       );
     });
