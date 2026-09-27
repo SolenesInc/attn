@@ -17,6 +17,7 @@ import (
 
 	"github.com/victorarias/attn/internal/buildinfo"
 	"github.com/victorarias/attn/internal/ghosttyvt"
+	"github.com/victorarias/attn/internal/pausepoint"
 )
 
 type TerminalTheme struct {
@@ -355,6 +356,7 @@ func (s *Session) readLoop(onExit func(exitCode int, signal string), logf func(s
 				}
 
 				seq := s.seqCounter.Add(1)
+				pausepoint.At(pausepoint.PtyOutputSequenced)
 				if readLoopSeqGapHook != nil {
 					readLoopSeqGapHook()
 				}
@@ -701,6 +703,7 @@ func (s *Session) info() AttachInfo {
 	replayWatermark := s.lastReplaySeq
 	s.replayMu.Unlock()
 
+	pausepoint.At(pausepoint.PtyAttachSnapshot)
 	if infoSnapshotHook != nil {
 		infoSnapshotHook()
 	}

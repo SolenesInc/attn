@@ -1,0 +1,4 @@
+kind: fixed
+area: sessions
+change: A session's state change always reaches the app, even while another pane streams heavy output; an app too far behind to take it is disconnected and resyncs on reconnect.
+symptom: While a terminal scrolled fast, an agent that finished its turn could stay marked busy in the sidebar and queue mode until something else about it changed.
