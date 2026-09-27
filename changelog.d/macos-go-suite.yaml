@@ -1,3 +1,3 @@
 kind: fixed
 area: daemon
-change: Shells and agents now start with your $SHELL on macOS as they do on Linux, an app runtime's "last exit" time reads the same before and after a daemon restart, and agents no longer inherit another session's guidance markers from the daemon's environment.
+change: An app runtime's "last exit" time reads the same before and after a daemon restart, and agents no longer inherit another session's guidance markers from the daemon's environment.

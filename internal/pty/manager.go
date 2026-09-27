@@ -886,10 +886,6 @@ func shellQuote(value string) string {
 }
 
 func GetUserLoginShell() string {
-	if shell := strings.TrimSpace(os.Getenv("SHELL")); shell != "" {
-		return shell
-	}
-
 	if runtime.GOOS == "darwin" {
 		if usr, err := user.Current(); err == nil {
 			out, dsclErr := exec.Command("dscl", ".", "-read", "/Users/"+usr.Username, "UserShell").Output()
@@ -905,6 +901,10 @@ func GetUserLoginShell() string {
 				}
 			}
 		}
+	}
+
+	if shell := strings.TrimSpace(os.Getenv("SHELL")); shell != "" {
+		return shell
 	}
 
 	if usr, err := user.Current(); err == nil {

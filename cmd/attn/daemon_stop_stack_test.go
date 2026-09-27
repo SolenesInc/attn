@@ -63,20 +63,18 @@ func holdDaemonLock(t *testing.T, pidPath, content string) *os.Process {
 // Runs in a re-exec of the test binary: flock(1) is Linux-only, so the lock
 // holder takes the daemon's flock itself and reports ready on stdout.
 func holdDaemonLockForever(pidPath, content string) {
-	file, err := os.OpenFile(pidPath, os.O_RDWR|os.O_CREATE, 0o644)
+	// A raw fd has no finalizer, so the idle loop's GCs never close it and drop the lock.
+	fd, err := syscall.Open(pidPath, syscall.O_RDWR|syscall.O_CREAT, 0o644)
+	if err == nil {
+		err = syscall.Flock(fd, syscall.LOCK_EX)
+	}
+	if err == nil {
+		err = syscall.Ftruncate(fd, 0)
+	}
+	if err == nil {
+		_, err = syscall.Pwrite(fd, []byte(content), 0)
+	}
 	if err != nil {
-		fmt.Fprintln(os.Stderr, err)
-		os.Exit(1)
-	}
-	if err := syscall.Flock(int(file.Fd()), syscall.LOCK_EX); err != nil {
-		fmt.Fprintln(os.Stderr, err)
-		os.Exit(1)
-	}
-	if err := file.Truncate(0); err != nil {
-		fmt.Fprintln(os.Stderr, err)
-		os.Exit(1)
-	}
-	if _, err := file.WriteAt([]byte(content), 0); err != nil {
 		fmt.Fprintln(os.Stderr, err)
 		os.Exit(1)
 	}
