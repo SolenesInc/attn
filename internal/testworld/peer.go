@@ -34,6 +34,7 @@ type Peer struct {
 	screens  map[string][]byte
 	attached map[string]bool
 	closeErr error
+	closing  bool
 }
 
 func newPeer(t testing.TB, conn *websocket.Conn) *Peer {
@@ -58,9 +59,11 @@ func (p *Peer) read() {
 			p.mu.Unlock()
 			return
 		}
-		if kind == websocket.MessageBinary {
+		switch {
+		case p.closing:
+		case kind == websocket.MessageBinary:
 			p.recordOutput(data)
-		} else {
+		default:
 			p.recordEvent(data)
 		}
 		close(p.grew)
@@ -152,6 +155,9 @@ func (p *Peer) Received() []protocol.WebSocketEvent {
 }
 
 func (p *Peer) Close() {
+	p.mu.Lock()
+	p.closing = true
+	p.mu.Unlock()
 	_ = p.conn.Close(websocket.StatusNormalClosure, "")
 }
 
