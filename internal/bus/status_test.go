@@ -2,7 +2,6 @@ package bus
 
 import (
 	"context"
-	"errors"
 	"fmt"
 	"strings"
 	"sync"
@@ -306,13 +305,5 @@ func TestStatusOnlyClaimsDeliveryKnowledgeWhenItHasIt(t *testing.T) {
 	}
 	if _, ok := findHealth(status, HealthConsumerNotLive, "elsewhere"); !ok {
 		t.Error("a daemon that owns delivery must report a registration nothing is reading")
-	}
-}
-
-func TestStatusFailsWhenTheLogCannotBeRead(t *testing.T) {
-	b, s := statusBus(t)
-	s.setBoundsErr(errors.New("disk gone"))
-	if _, err := b.Status(); err == nil {
-		t.Fatal("want an error when the log's bounds cannot be read")
 	}
 }

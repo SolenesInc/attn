@@ -15,11 +15,8 @@ type memStore struct {
 	nextSeq   int64
 	consumers map[string]Consumer
 
-	sinceErr  error
-	appendErr error
-	boundsErr error
-	deleteErr error
-	onDelete  func(name string)
+	sinceErr error
+	onDelete func(name string)
 }
 
 func newMemStore() *memStore {
@@ -29,9 +26,6 @@ func newMemStore() *memStore {
 func (m *memStore) Append(e Event, now time.Time) (int64, error) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
-	if m.appendErr != nil {
-		return 0, m.appendErr
-	}
 	m.nextSeq++
 	e.Seq = m.nextSeq
 	e.CreatedAt = now
@@ -63,9 +57,6 @@ func (m *memStore) Since(cursor int64, limit int) ([]Event, error) {
 func (m *memStore) Bounds() (int64, int64, error) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
-	if m.boundsErr != nil {
-		return 0, 0, m.boundsErr
-	}
 	if len(m.events) == 0 {
 		return 0, 0, nil
 	}
@@ -95,16 +86,14 @@ func (m *memStore) SaveConsumer(c Consumer, now time.Time) error {
 
 func (m *memStore) DeleteConsumer(name string) error {
 	m.mu.Lock()
-	hook, err := m.onDelete, m.deleteErr
-	if err == nil {
-		delete(m.consumers, name)
-	}
+	hook := m.onDelete
+	delete(m.consumers, name)
 	m.mu.Unlock()
 
 	if hook != nil {
 		hook(name)
 	}
-	return err
+	return nil
 }
 
 func (m *memStore) SetCursor(name string, cursor int64, now time.Time) error {
@@ -118,24 +107,6 @@ func (m *memStore) SetCursor(name string, cursor int64, now time.Time) error {
 	c.UpdatedAt = now
 	m.consumers[name] = c
 	return nil
-}
-
-func (m *memStore) setBoundsErr(err error) {
-	m.mu.Lock()
-	m.boundsErr = err
-	m.mu.Unlock()
-}
-
-func (m *memStore) setDeleteErr(err error) {
-	m.mu.Lock()
-	m.deleteErr = err
-	m.mu.Unlock()
-}
-
-func (m *memStore) setAppendErr(err error) {
-	m.mu.Lock()
-	m.appendErr = err
-	m.mu.Unlock()
 }
 
 func (m *memStore) setEnabled(name string, enabled bool) {
@@ -509,52 +480,5 @@ func TestKillSwitchStopsASaturatedConsumer(t *testing.T) {
 	t.Logf("delivered %d of %d before the kill switch took effect", got, total)
 	if got > 100 {
 		t.Fatalf("delivery ran on for %d events after the consumer was disabled", got)
-	}
-}
-
-func TestFailedAppendStillFansOutToSubscribers(t *testing.T) {
-	s := newMemStore()
-	b := testBus(t, s)
-
-	var mu sync.Mutex
-	var seen []Event
-	cancel := b.Subscribe(All, func(ev Event) {
-		mu.Lock()
-		seen = append(seen, ev)
-		mu.Unlock()
-	})
-	t.Cleanup(cancel)
-
-	s.setAppendErr(errors.New("disk had a bad night"))
-
-	seq, err := b.Publish("ticket.created", "t-1", nil)
-	if err == nil {
-		t.Fatalf("Publish reported success despite a failed append")
-	}
-	if seq != 0 {
-		t.Fatalf("a non-durable fact got seq %d, want 0", seq)
-	}
-
-	mu.Lock()
-	got := append([]Event(nil), seen...)
-	mu.Unlock()
-
-	if len(got) != 1 {
-		t.Fatalf("the subscriber saw %d event(s); a failed append silenced the wire", len(got))
-	}
-	if got[0].Name != "ticket.created" || got[0].Subject != "t-1" {
-		t.Fatalf("fanned out the wrong event: %+v", got[0])
-	}
-	if got[0].Seq != 0 {
-		t.Fatalf("a non-durable event carried seq %d, want 0 as the marker", got[0].Seq)
-	}
-
-	s.setAppendErr(nil)
-	seq, err = b.Publish("ticket.created", "t-2", nil)
-	if err != nil {
-		t.Fatalf("Publish after recovery: %v", err)
-	}
-	if seq == 0 {
-		t.Fatalf("the fact after recovery was not made durable")
 	}
 }

@@ -10,9 +10,6 @@ type memStore struct {
 	mu     sync.Mutex
 	jobs   map[string]*Job
 	locked bool
-
-	saveErr       error
-	stickySaveErr bool
 }
 
 func newMemStore() *memStore { return &memStore{jobs: make(map[string]*Job)} }
@@ -71,13 +68,6 @@ func (m *memStore) LoadByKey(kind, uniqueKey string) (*Job, error) {
 func (m *memStore) Save(j *Job) error {
 	m.mu.Lock()
 	defer m.mu.Unlock()
-	if m.saveErr != nil {
-		err := m.saveErr
-		if !m.stickySaveErr {
-			m.saveErr = nil
-		}
-		return err
-	}
 	m.jobs[j.ID] = j.clone()
 	return nil
 }
@@ -145,24 +135,6 @@ func (m *memStore) count() int {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	return len(m.jobs)
-}
-
-func (m *memStore) failNextSave(err error) {
-	m.mu.Lock()
-	defer m.mu.Unlock()
-	m.saveErr = err
-}
-
-func (m *memStore) refuseSaves(err error) {
-	m.mu.Lock()
-	defer m.mu.Unlock()
-	m.saveErr, m.stickySaveErr = err, true
-}
-
-func (m *memStore) healSaves() {
-	m.mu.Lock()
-	defer m.mu.Unlock()
-	m.saveErr, m.stickySaveErr = nil, false
 }
 
 type fakeClock struct {

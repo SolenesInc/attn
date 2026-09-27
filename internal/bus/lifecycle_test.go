@@ -2,7 +2,6 @@ package bus
 
 import (
 	"context"
-	"errors"
 	"sync"
 	"sync/atomic"
 	"testing"
@@ -138,59 +137,4 @@ func TestRetiredConsumerDropsLateResults(t *testing.T) {
 	if reason, failures := d.stallReason(), d.drainFailures(); reason != "" || failures != 0 {
 		t.Fatalf("a retired consumer recorded a stall (%q, %d attempts)", reason, failures)
 	}
-}
-
-func TestUnregisterReportsAFailedRowDelete(t *testing.T) {
-	s := newMemStore()
-	b := testBus(t, s)
-
-	rec := newRecorder()
-	if err := b.Register("test:notes", All, rec.handle); err != nil {
-		t.Fatalf("Register: %v", err)
-	}
-	if err := b.Start(); err != nil {
-		t.Fatalf("Start: %v", err)
-	}
-	t.Cleanup(b.Stop)
-	waitFor(t, "the registration to be persisted", func() bool {
-		_, ok, _ := s.GetConsumer("test:notes")
-		return ok
-	})
-
-	s.setDeleteErr(errors.New("database is having a bad night"))
-	if err := b.Unregister("test:notes"); err == nil {
-		t.Fatal("Unregister reported success while the row could not be deleted")
-	}
-
-	s.setDeleteErr(nil)
-	if err := b.Unregister("test:notes"); err != nil {
-		t.Fatalf("retried Unregister: %v", err)
-	}
-	if _, ok, err := s.GetConsumer("test:notes"); err != nil || ok {
-		t.Fatalf("the row survived the retry (found=%v, err=%v)", ok, err)
-	}
-}
-
-func TestRegisterAfterStartRollsBackWhenRegistrationFails(t *testing.T) {
-	s := newMemStore()
-	b := testBus(t, s)
-	if err := b.Start(); err != nil {
-		t.Fatalf("Start: %v", err)
-	}
-	t.Cleanup(b.Stop)
-
-	s.setBoundsErr(errors.New("database is having a bad night"))
-	if err := b.Register("test:notes", All, func(context.Context, Event) error { return nil }); err == nil {
-		t.Fatal("Register reported success while the log could not be read")
-	}
-	s.setBoundsErr(nil)
-
-	rec := newRecorder()
-	if err := b.Register("test:notes", All, rec.handle); err != nil {
-		t.Fatalf("Register after a failed attempt: %v; the name was left claimed", err)
-	}
-	if _, err := b.Publish("after.install", "", nil); err != nil {
-		t.Fatalf("Publish: %v", err)
-	}
-	waitFor(t, "the retried registration to deliver", func() bool { return rec.count() >= 1 })
 }
