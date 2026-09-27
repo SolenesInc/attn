@@ -106,10 +106,7 @@ func (t *terminal) closeModal() (string, error) {
 		t.mu.Unlock()
 		return "", fmt.Errorf("no modal is open")
 	}
-	t.modal = nil
-	t.write("\x1b[" + strconv.Itoa(len(m.lines)-1) + "A\r\x1b[J" + t.composer())
-	t.mu.Unlock()
-	m.resting()
+	t.closeModalAndUnlock(m)
 	return string(m.typed), nil
 }
 
@@ -125,10 +122,7 @@ func (t *terminal) capturedByModal(input []byte) bool {
 		t.mu.Unlock()
 		return true
 	}
-	t.modal = nil
-	t.write("\x1b[" + strconv.Itoa(len(m.lines)-1) + "A\r\x1b[J" + t.composer())
-	t.mu.Unlock()
-	m.resting()
+	t.closeModalAndUnlock(m)
 	t.answers <- string(input)
 	return true
 }
@@ -139,4 +133,11 @@ func (c *codex) approvalTitle() string {
 
 func (c *codex) approvalAnswered() {
 	c.term.title(codexBusyGlyph + c.restingTitle())
+}
+
+func (t *terminal) closeModalAndUnlock(m *modal) {
+	t.modal = nil
+	t.write("\x1b[" + strconv.Itoa(len(m.lines)-1) + "A\r\x1b[J" + t.composer())
+	t.mu.Unlock()
+	m.resting()
 }

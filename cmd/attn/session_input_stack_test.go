@@ -45,6 +45,7 @@ func TestAnApprovalPromptThatAppearsAfterAttnPastesItsMessageIsLeftForTheUser(t 
 	gap := s.PauseAt(pausepoint.SessionInputPasteGap)
 	s.Start()
 	app := s.App()
+	setSetting(t, app, "auto_approve_enabled", "true")
 	const reviewer = "rev-1111-2222"
 	register(t, s, reviewer, "reviewer")
 	recipient := s.Spawn(app, fakeagent.Codex, s.Path("shop"))
@@ -60,7 +61,6 @@ func TestAnApprovalPromptThatAppearsAfterAttnPastesItsMessageIsLeftForTheUser(t 
 		t.Fatalf("attn agent msg exited %d: %s", result.Code, result.Stderr)
 	}
 
-	testworld.AwaitSession(app, recipient, func(x protocol.Session) bool { return x.State == protocol.SessionStatePendingApproval })
 	app.Send(protocol.PtyInputMessage{Cmd: protocol.CmdPtyInput, ID: recipient, Data: "1"})
 	if answer := codex.Answered(); answer != "1" {
 		t.Fatalf("codex's approval prompt was answered with %q, want the user's %q", answer, "1")

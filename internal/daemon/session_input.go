@@ -776,7 +776,7 @@ func (m *sessionInputModule) writePTY(ctx context.Context, sessionID string, dat
 		}
 	}
 	if m.daemon.noteUserInput(sessionID, source, data) {
-		if lane.heldEnter && lane.phase != protocol.SessionStatePendingApproval {
+		if _, answering := m.promptInTheWayLocked(ctx, sessionID); lane.heldEnter && !answering {
 			m.dropHeldEnterLocked(lane)
 		}
 		lane.userGeneration++
