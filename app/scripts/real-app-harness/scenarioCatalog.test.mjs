@@ -161,32 +161,43 @@ describe('every catalog command', () => {
 
   // A catalog entry pointing at a deleted file used to fail only when the matrix
   // reached it, ~18 minutes into a Linux run.
+  function scenarioFileOf(scenario) {
+    const command = scenario.command || [];
+    let script = command.join(' ');
+    if (command[0] === 'pnpm') {
+      script = scripts[command[2]];
+      if (!script) {
+        return { broken: `no package.json script "${command[2]}"` };
+      }
+    }
+    const file = /(scripts\/real-app-harness\/[\w.-]+\.mjs)/.exec(script)?.[1];
+    return file ? { file } : { broken: `no scenario file in "${script}"` };
+  }
+
   it('resolves to a scenario file that exists', () => {
     const broken = [];
     for (const scenario of scenarioCatalog) {
-      const command = scenario.command || [];
-      let script = null;
-      if (command[0] === 'pnpm') {
-        const name = command[2];
-        script = scripts[name];
-        if (!script) {
-          broken.push(`${scenario.id}: no package.json script "${name}"`);
-          continue;
-        }
-      } else {
-        script = command.join(' ');
-      }
-      const file = /(scripts\/real-app-harness\/[\w.-]+\.mjs)/.exec(script)?.[1];
-      if (!file) {
-        broken.push(`${scenario.id}: no scenario file in "${script}"`);
-        continue;
-      }
-      if (!fs.existsSync(path.join(appDir, file))) {
+      const { file, broken: reason } = scenarioFileOf(scenario);
+      if (reason) {
+        broken.push(`${scenario.id}: ${reason}`);
+      } else if (!fs.existsSync(path.join(appDir, file))) {
         broken.push(`${scenario.id}: ${file} does not exist`);
       }
     }
-
     expect(broken, 'a catalog entry points at a scenario file that is not on disk').toEqual([]);
+  });
+
+  it('runs under the runner id the catalog names', () => {
+    const mismatched = [];
+    for (const scenario of scenarioCatalog.filter((entry) => entry.runnerId)) {
+      const { file } = scenarioFileOf(scenario);
+      const declared = file && /scenarioId: '([^']+)'/.exec(fs.readFileSync(path.join(appDir, file), 'utf8'))?.[1];
+      if (declared && declared !== scenario.runnerId) {
+        mismatched.push(`${scenario.id}: catalog ${scenario.runnerId}, ${file} ${declared}`);
+      }
+    }
+
+    expect(mismatched, 'receipts and the real-agent policy follow the runner id').toEqual([]);
   });
 });
 

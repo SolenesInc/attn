@@ -1,6 +1,6 @@
 export type DesktopSelectionStyle = 'dim' | 'rail' | 'spotlight';
 
-export const DESKTOP_SELECTION_STYLE_STORAGE_KEY = 'attn.desktop.selectionStyle';
+export const DESKTOP_SELECTION_STYLE_STORAGE_KEY = 'attn.workspace.selectionStyle';
 
 export function readDesktopSelectionStyle(): DesktopSelectionStyle {
   try {

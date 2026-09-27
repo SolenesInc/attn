@@ -10,7 +10,9 @@ import {
 import { LayoutPaneKind, LayoutPaneStatus, type Desktop } from '../types/generated';
 import { buildDesktopViewModels } from './desktopViewModels';
 
-function desktop(id: string, slot: number, sessions: QueueBandSession[]): Desktop {
+type PlacedSession = QueueBandSession & { desktopId?: string };
+
+function desktop(id: string, slot: number, sessions: PlacedSession[]): Desktop {
   const holds = sessions.filter((session) => session.desktopId === id);
   return {
     id,
@@ -32,7 +34,7 @@ function desktop(id: string, slot: number, sessions: QueueBandSession[]): Deskto
   };
 }
 
-function views(sessions: QueueBandSession[]) {
+function views(sessions: PlacedSession[]) {
   return buildDesktopViewModels([desktop('ws-a', 1, sessions), desktop('ws-b', 2, sessions)], sessions);
 }
 
@@ -47,7 +49,7 @@ describe('sessionParticipatesInQueue', () => {
 
 describe('buildQueueBands', () => {
   it('keeps band order unchanged when sessions carry dispatcher fields', () => {
-    const sessions: QueueBandSession[] = [
+    const sessions: PlacedSession[] = [
       { id: 'root', label: 'root', desktopId: 'ws-a' },
       { id: 'newer', label: 'newer', desktopId: 'ws-a', turnOwed: true, turnOpenedAt: '2026-07-26T11:00:00Z' },
       { id: 'older', label: 'older', desktopId: 'ws-b', turnOwed: true, turnOpenedAt: '2026-07-26T09:00:00Z' },
@@ -57,7 +59,7 @@ describe('buildQueueBands', () => {
         ? session
         : { ...session, dispatcher_session_id: 'root', dispatcher_member: 'alder' }
     ));
-    const ids = (bands: ReturnType<typeof buildQueueBands<QueueBandSession>>) => ({
+    const ids = (bands: ReturnType<typeof buildQueueBands<PlacedSession>>) => ({
       chief: bands.chief?.session.id ?? null,
       turns: bands.turns.map((row) => row.session.id),
       settled: bands.settled.map((row) => row.session.id),
@@ -89,7 +91,7 @@ describe('buildQueueBands', () => {
   });
 
   it('puts a new arrival at the bottom and leaves the rows above untouched', () => {
-    const existing: QueueBandSession[] = [
+    const existing: PlacedSession[] = [
       { id: 'first', label: 'first', desktopId: 'ws-a', turnOwed: true, turnOpenedAt: '2026-07-26T09:00:00Z' },
       { id: 'second', label: 'second', desktopId: 'ws-a', turnOwed: true, turnOpenedAt: '2026-07-26T10:00:00Z' },
     ];
@@ -104,10 +106,10 @@ describe('buildQueueBands', () => {
   });
 
   it('does not move a row when its state changes', () => {
-    const session = (state: string): QueueBandSession => ({
+    const session = (state: string): PlacedSession => ({
       id: 'steered', label: 'steered', desktopId: 'ws-a', state, turnOwed: true, turnOpenedAt: '2026-07-26T10:00:00Z',
     });
-    const others: QueueBandSession[] = [
+    const others: PlacedSession[] = [
       { id: 'older', label: 'older', desktopId: 'ws-a', turnOwed: true, turnOpenedAt: '2026-07-26T09:00:00Z' },
       { id: 'newer', label: 'newer', desktopId: 'ws-a', turnOwed: true, turnOpenedAt: '2026-07-26T11:00:00Z' },
     ];
@@ -120,7 +122,7 @@ describe('buildQueueBands', () => {
   });
 
   it('settling a row moves only the rows below it', () => {
-    const all: QueueBandSession[] = [
+    const all: PlacedSession[] = [
       { id: 'a', label: 'a', desktopId: 'ws-a', turnOwed: true, turnOpenedAt: '2026-07-26T09:00:00Z' },
       { id: 'b', label: 'b', desktopId: 'ws-a', turnOwed: true, turnOpenedAt: '2026-07-26T10:00:00Z' },
       { id: 'c', label: 'c', desktopId: 'ws-a', turnOwed: true, turnOpenedAt: '2026-07-26T11:00:00Z' },
@@ -179,7 +181,7 @@ describe('buildQueueBands', () => {
   });
 
   it('settling moves a row from one band to the other rather than out of the sidebar', () => {
-    const session: QueueBandSession = {
+    const session: PlacedSession = {
       id: 'a', label: 'a', desktopId: 'ws-a', turnOwed: true, turnOpenedAt: '2026-07-26T09:00:00Z',
     };
     const before = buildQueueBands(views([session]));
@@ -192,7 +194,7 @@ describe('buildQueueBands', () => {
   });
 
   it('leaves the desktop tree untouched — it is not an output of the queue', () => {
-    const sessions: QueueBandSession[] = [
+    const sessions: PlacedSession[] = [
       { id: 'a', label: 'a', desktopId: 'ws-a', turnOwed: true, turnOpenedAt: '2026-07-26T09:00:00Z' },
       { id: 'b', label: 'b', desktopId: 'ws-b' },
     ];
@@ -252,7 +254,7 @@ describe('buildQueueBands', () => {
 });
 
 describe('oldestWantedTurn', () => {
-  const wantsOwed = (session: QueueBandSession) => Boolean(session.turnOwed);
+  const wantsOwed = (session: PlacedSession) => Boolean(session.turnOwed);
 
   it('lands on the turn owed longest, not the first in list order', () => {
     const target = oldestWantedTurn([
@@ -282,7 +284,7 @@ describe('oldestWantedTurn', () => {
 });
 
 describe('advanceAfterTurnClosed', () => {
-  function owed(id: string, hour: number, desktopId = 'ws-a'): QueueBandSession {
+  function owed(id: string, hour: number, desktopId = 'ws-a'): PlacedSession {
     return { id, label: id, desktopId, turnOwed: true, turnOpenedAt: `2026-07-26T0${hour}:00:00Z` };
   }
 

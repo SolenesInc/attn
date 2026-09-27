@@ -219,14 +219,14 @@ async function waitForNoSessionsUnderDir(client, dir, timeoutMs = 20_000) {
 async function main() {
   const { options, help } = parseArgs(process.argv.slice(2));
   if (help) {
-    printCommonHelp('scripts/real-app-harness/scenario-desktop-switching.mjs');
+    printCommonHelp('scripts/real-app-harness/scenario-desktop-splits.mjs');
     return;
   }
 
   const runner = createScenarioRunner(options, {
-    scenarioId: 'DESKTOP-SWITCHING',
+    scenarioId: 'DESKTOP-SPLITS',
     tier: 'tier1-local-shell',
-    prefix: 'desktop-switching',
+    prefix: 'desktop-splits',
     metadata: {
       agent: 'shell',
       focus: 'session switching keeps each desktop\'s panes and history isolated, focus mode gives one agent the shell and restores it, and closing one split leaves the surviving shells and their scrollback intact',

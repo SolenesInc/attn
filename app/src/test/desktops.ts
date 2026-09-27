@@ -104,7 +104,9 @@ export interface TestDesktopGroup {
   tree?: unknown;
 }
 
-export function desktopGroups<TSession extends DesktopViewSession>(
+export type PlacedTestSession = DesktopViewSession & { desktopId?: string };
+
+export function desktopGroups<TSession extends PlacedTestSession>(
   groups: TestDesktopGroup[],
   sessions: TSession[],
 ): DesktopWithSessions<TSession>[] {
