@@ -284,6 +284,15 @@ describe('the runs chip', () => {
     expect(onWalkRuns).toHaveBeenCalledOnce();
   });
 
+  it('closes its peek when clicked to walk to the next run', () => {
+    renderBar(runs, { onWalkRuns: vi.fn() });
+    hover('queue-bar-runs');
+    expect(screen.getByTestId('queue-bar-runs-peek')).toBeInTheDocument();
+
+    fireEvent.click(screen.getByTestId('queue-bar-runs'));
+    expect(screen.queryByTestId('queue-bar-runs-peek')).toBeNull();
+  });
+
   it('peeks every run by definition and tags the one the walk opens next from the agent on screen', () => {
     const onSelectSession = vi.fn();
     arrangeDesktops([agentDesktop('d1', 1, ['n1'])]);

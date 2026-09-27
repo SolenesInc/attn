@@ -250,7 +250,10 @@ function RunsChip({
           data-runs={runs}
           data-needing={needingYou}
           title={title}
-          onClick={onWalkRuns}
+          onClick={() => {
+            onPicked();
+            onWalkRuns?.();
+          }}
         >
           ⚙ {runs}
           {needingYou > 0 && <span className="queue-bar-runs-needing">{needingYou}</span>}
