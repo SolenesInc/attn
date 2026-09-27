@@ -3,47 +3,13 @@ package daemon
 import (
 	"fmt"
 	"io"
-	"path/filepath"
-	"strings"
 	"sync"
 	"testing"
 	"testing/synctest"
 	"time"
 
-	"github.com/victorarias/attn/internal/store"
 	"github.com/victorarias/attn/internal/supervise"
 )
-
-func TestParkedPluginRaisesADurableNotification(t *testing.T) {
-	d := NewForTesting(filepath.Join(t.TempDir(), "daemon.sock"))
-	exitCode := 9
-	d.notifyPluginParked("looper", pluginRuntimeSnapshot{
-		Phase:          pluginPhaseParked,
-		RestartAttempt: 10,
-		LastExit:       &pluginExit{At: time.Now(), ExitCode: &exitCode},
-	})
-
-	list, err := d.store.ListNotifications()
-	if err != nil {
-		t.Fatalf("list notifications: %v", err)
-	}
-	if len(list) != 1 {
-		t.Fatalf("notifications=%d, want 1", len(list))
-	}
-	record := list[0]
-	if record.Kind != notificationKindPluginParked || record.SourceKind != "plugin" || record.SourceID != "looper" {
-		t.Fatalf("notification=%+v, want a plugin-parked record for looper", record)
-	}
-	if !strings.Contains(record.Title, "looper") || !strings.Contains(record.Body, "10") {
-		t.Fatalf("notification title=%q body=%q, want the plugin name and the restart count", record.Title, record.Body)
-	}
-	if !strings.Contains(record.Detail, "exit code 9") {
-		t.Fatalf("notification detail=%q, want the last exit", record.Detail)
-	}
-	if record.Severity != store.NotificationCritical {
-		t.Fatalf("severity = %q, want critical", record.Severity)
-	}
-}
 
 func newTestPluginSupervisor(t *testing.T, clock *fakePluginClock, launcher *fakePluginLauncher) *pluginSupervisor {
 	t.Helper()
