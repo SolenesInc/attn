@@ -42,14 +42,16 @@ type AppRuntimeConn struct {
 	t      testing.TB
 	conn   net.Conn
 	reader *bufio.Reader
+	calls  int
 }
 
 type AppDispatchEvent struct {
-	App     string          `json:"-"`
-	Name    string          `json:"name"`
-	Subject string          `json:"subject"`
-	Seq     int64           `json:"seq"`
-	Payload json.RawMessage `json:"payload"`
+	App      string          `json:"-"`
+	Dispatch string          `json:"-"`
+	Name     string          `json:"name"`
+	Subject  string          `json:"subject"`
+	Seq      int64           `json:"seq"`
+	Payload  json.RawMessage `json:"payload"`
 }
 
 func (r *FakeAppRuntime) Connect(dial func() (net.Conn, error)) *AppRuntimeConn {
@@ -86,24 +88,57 @@ func (r *FakeAppRuntime) Connect(dial func() (net.Conn, error)) *AppRuntimeConn 
 
 func (c *AppRuntimeConn) NextDispatch() AppDispatchEvent {
 	c.t.Helper()
+	event, release := c.HoldDispatch()
+	release()
+	return event
+}
+
+func (c *AppRuntimeConn) HoldDispatch() (AppDispatchEvent, func()) {
+	c.t.Helper()
 	for {
 		msg := c.read()
-		if msg.Method == "" {
-			continue
-		}
-		c.send(map[string]any{"jsonrpc": "2.0", "id": msg.ID, "result": map[string]any{"ok": true}})
 		if msg.Method != "app.dispatch" {
+			c.answer(msg)
 			continue
 		}
 		var params struct {
-			App   string           `json:"app"`
-			Event AppDispatchEvent `json:"event"`
+			Dispatch string           `json:"dispatch"`
+			App      string           `json:"app"`
+			Event    AppDispatchEvent `json:"event"`
 		}
 		if err := json.Unmarshal(msg.Params, &params); err != nil {
 			c.t.Fatalf("decode app.dispatch %s: %v", msg.Params, err)
 		}
-		params.Event.App = params.App
-		return params.Event
+		params.Event.App, params.Event.Dispatch = params.App, params.Dispatch
+		return params.Event, func() { c.answer(msg) }
+	}
+}
+
+func (c *AppRuntimeConn) Call(method string, params any) json.RawMessage {
+	c.t.Helper()
+	c.calls++
+	id := "call-" + strconv.Itoa(c.calls)
+	c.send(map[string]any{"jsonrpc": "2.0", "id": id, "method": method, "params": params})
+	for {
+		msg := c.read()
+		if msg.Method != "" {
+			c.answer(msg)
+			continue
+		}
+		if string(msg.ID) != strconv.Quote(id) {
+			continue
+		}
+		if msg.Error != nil {
+			c.t.Fatalf("%s as the app runtime: %s", method, msg.Error)
+		}
+		return msg.Result
+	}
+}
+
+func (c *AppRuntimeConn) answer(msg appRuntimeMessage) {
+	c.t.Helper()
+	if msg.Method != "" {
+		c.send(map[string]any{"jsonrpc": "2.0", "id": msg.ID, "result": map[string]any{"ok": true}})
 	}
 }
 
@@ -111,6 +146,7 @@ type appRuntimeMessage struct {
 	ID     json.RawMessage `json:"id"`
 	Method string          `json:"method"`
 	Params json.RawMessage `json:"params"`
+	Result json.RawMessage `json:"result"`
 	Error  json.RawMessage `json:"error"`
 }
 
