@@ -10,25 +10,6 @@ import (
 	"github.com/victorarias/attn/internal/protocol"
 )
 
-func currentNudgeTimer(d *Daemon, sessionID string) *time.Timer {
-	d.nudgeMu.Lock()
-	defer d.nudgeMu.Unlock()
-	if c, ok := d.nudgeCountdowns[sessionID]; ok {
-		return c.timer
-	}
-	return nil
-}
-
-func fireNudgeNow(t *testing.T, d *Daemon, sessionID string) {
-	t.Helper()
-	timer := currentNudgeTimer(d, sessionID)
-	if timer == nil {
-		t.Fatalf("no nudge countdown armed for session %s", sessionID)
-	}
-	timer.Stop()
-	d.nudgeCountdownFire(sessionID, timer)
-}
-
 func TestSessionInputWriteDoesNotInterleaveWithPendingApproval(t *testing.T) {
 	d := NewForTesting(filepath.Join(t.TempDir(), "test.sock"))
 	sessionID := "doorbell-state-fence"
