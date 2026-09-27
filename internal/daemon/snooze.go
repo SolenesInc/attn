@@ -185,19 +185,7 @@ func (d *Daemon) snoozeWakeHandler(ctx context.Context, job *jobs.Job) (any, err
 	if err := ctx.Err(); err != nil {
 		return nil, err
 	}
-	changed, err := func() (bool, error) {
-		if job.CommitGuard != nil {
-			if !job.CommitGuard.Enter() {
-				return false, context.Canceled
-			}
-			defer job.CommitGuard.Leave()
-		}
-		return d.applySnoozeWakeAt(sessionID, payload.Deadline, payload.Deadline), nil
-	}()
-	if err != nil {
-		return nil, err
-	}
-	if !changed {
+	if !d.applySnoozeWakeAt(sessionID, payload.Deadline, payload.Deadline) {
 		if d.debugLogging {
 			d.logf("snooze wake superseded: session=%s deadline=%s", sessionID,
 				payload.Deadline.UTC().Format(time.RFC3339Nano))
