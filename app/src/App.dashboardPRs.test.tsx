@@ -1,4 +1,5 @@
 import { act, fireEvent, screen, within } from '@testing-library/react';
+import { openUrl } from '@tauri-apps/plugin-opener';
 import { describe, expect, it, vi } from 'vitest';
 import { daemonPR as pr } from './test/daemonFixtures';
 import { gesture, renderApp } from './test/renderApp';
@@ -102,5 +103,26 @@ describe('App dashboard pull requests', () => {
     await act(() => vi.advanceTimersByTimeAsync(1500 + 350));
 
     expect(card('ship it')).toBeNull();
+  });
+
+  it('shortens the links in a GitHub CLI warning to their host and opens the full address', async () => {
+    const guide = 'https://github.com/cli/cli/blob/trunk/docs/install_linux.md';
+    await renderApp({
+      initialState: {
+        warnings: [
+          { code: 'gh_not_installed', message: `GitHub CLI not installed. PR monitoring disabled. See ${guide}` },
+          { code: 'gh_version_too_old', message: 'See https://cli.github.com, then retry.' },
+        ],
+      },
+    });
+
+    const banner = document.querySelector<HTMLElement>('.warning-banner')!;
+    expect(banner).toHaveTextContent('GitHub CLI not installed. PR monitoring disabled. See github.com/… See cli.github.com, then retry.');
+
+    vi.mocked(openUrl).mockClear();
+    fireEvent.click(within(banner).getByRole('button', { name: 'github.com/…' }));
+    fireEvent.click(within(banner).getByRole('button', { name: 'cli.github.com' }));
+
+    expect(vi.mocked(openUrl).mock.calls.map(([url]) => url)).toEqual([guide, 'https://cli.github.com']);
   });
 });
