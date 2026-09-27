@@ -609,6 +609,17 @@ describe('agent navigation', () => {
     expect(sidebar().peeksSilenced).toBe(true);
   });
 
+  it('silences the bar peeks while the grid hides the bar', () => {
+    render(<App />);
+    broadcast();
+    const sidebar = () => mockSidebarProps.mock.lastCall![0] as { peeksSilenced: boolean };
+    act(() => { shortcutHandlers<{ onToggleSidebar: () => void }>().onToggleSidebar(); });
+    expect(sidebar().peeksSilenced).toBe(false);
+
+    act(() => { useSessionStore.getState().setView('grid'); });
+    expect(sidebar().peeksSilenced).toBe(true);
+  });
+
   it('opens the palette on agents in grid view, where the grid covers the queue sidebar', () => {
     const { container } = render(<App />);
     broadcast();
