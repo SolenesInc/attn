@@ -164,6 +164,7 @@ func (s *Session) fanOut(data []byte, seq uint32) {
 			if sub.onDrop != nil {
 				sub.onDrop("buffer_overflow")
 			}
+			pausepoint.At(pausepoint.PtySubscriberDrop)
 		}
 	}
 
