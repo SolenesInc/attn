@@ -9,7 +9,7 @@ import (
 	"github.com/victorarias/attn/internal/testworld"
 )
 
-func TestAgentPeekShowsStateTodosWorkspaceLatestReplyAndScreen(t *testing.T) {
+func TestAgentPeekShowsStateWorkspaceLatestReplyAndScreen(t *testing.T) {
 	w := newWorld(t, fakeagent.Codex)
 	app, cli := w.App(), w.Client()
 	session := w.Spawn(app, fakeagent.Codex, w.Path("shop"))
@@ -20,10 +20,6 @@ func TestAgentPeekShowsStateTodosWorkspaceLatestReplyAndScreen(t *testing.T) {
 	testworld.AwaitSession(app, session, func(s protocol.Session) bool { return s.State == protocol.SessionStateIdle })
 	app.TypeLine(session, "build it")
 	codex.Prompted()
-	todos := []string{"[✓] read the plan", "[→] build peek"}
-	if err := cli.UpdateTodos(session, todos); err != nil {
-		t.Fatal(err)
-	}
 	codex.Reply("latest answer <!-- attn:state=waiting_input -->")
 	testworld.AwaitSession(app, session, func(s protocol.Session) bool { return s.State == protocol.SessionStateWaitingInput })
 
@@ -33,9 +29,6 @@ func TestAgentPeekShowsStateTodosWorkspaceLatestReplyAndScreen(t *testing.T) {
 	}
 	if peek.SessionID != session || peek.State != string(protocol.SessionStateWaitingInput) || peek.WorkspaceID != "workspace-shop" {
 		t.Errorf("peek = %+v, want %s waiting for input in workspace-shop", peek, session)
-	}
-	if strings.Join(peek.Todos, "|") != strings.Join(todos, "|") {
-		t.Errorf("todos = %q, want %q", peek.Todos, todos)
 	}
 	if last := protocol.Deref(peek.LastAssistantMessage); !strings.Contains(last, "latest answer") || strings.Contains(last, "first answer") {
 		t.Errorf("last assistant message = %q, want the latest reply", last)

@@ -4,6 +4,7 @@ mod instance;
 mod native_input;
 mod native_input_diagnostics;
 mod ui_automation;
+mod wake;
 
 use std::env;
 use std::io::{Read, Write};
@@ -1340,6 +1341,8 @@ Object.defineProperty(window, "__ATTN_NATIVE_DIALOGS", {
             instance::hold_app_lock()?;
             instance::write_app_pid_file();
             native_input_diagnostics::install();
+            #[cfg(target_os = "macos")]
+            wake::install(&app.handle().clone());
             ui_automation::maybe_start(&app.handle().clone());
             // Harness-only: visible so WKWebView does not throttle for occlusion, never
             // active. Accessory policy keeps it off the Dock; set_focusable(false) stops key theft.

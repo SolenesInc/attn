@@ -17,7 +17,6 @@ const (
 	FactSessionRenamed                = "session.renamed"
 	FactSessionUnregistered           = "session.unregistered"
 	FactSessionClosed                 = "session.closed"
-	FactSessionTodosChanged           = "session.todos.changed"
 	FactSessionAssistantWindowChanged = "session.assistant_window.changed"
 	FactSessionRespawned              = "session.respawned"
 	FactSessionPTYResized             = "session.pty.resized"
@@ -196,12 +195,6 @@ func buildWireProjections() []projection {
 			filter: bus.Filter{FactSessionReregistered, FactSessionRenamed},
 			apply: func(d *Daemon, ev bus.Event) {
 				d.projectSessionEvent(protocol.EventSessionStateChanged, ev.Subject)
-			},
-		},
-		{
-			filter: bus.Filter{FactSessionTodosChanged},
-			apply: func(d *Daemon, ev bus.Event) {
-				d.projectSessionEvent(protocol.EventSessionTodosUpdated, ev.Subject)
 			},
 		},
 		{

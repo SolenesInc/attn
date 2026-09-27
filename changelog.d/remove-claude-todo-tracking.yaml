@@ -1,0 +1,3 @@
+kind: removed
+area: sessions
+change: attn no longer tracks Claude Code's todo list. A Claude session that stops with unfinished todos is now sorted by its last message like any other stop, and `attn agent peek` no longer prints todos.

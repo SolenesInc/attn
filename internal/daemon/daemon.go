@@ -2655,8 +2655,6 @@ func (d *Daemon) handleConnection(conn net.Conn) {
 		d.handleCrewHandoff(conn, msg.(*protocol.CrewHandoffMessage))
 	case protocol.CmdStop:
 		d.handleStop(conn, msg.(*protocol.StopMessage))
-	case protocol.CmdTodos:
-		d.handleTodos(conn, msg.(*protocol.TodosMessage))
 	case protocol.CmdFilesEdited:
 		d.handleFilesEdited(conn, msg.(*protocol.FilesEditedMessage))
 	case protocol.CmdPullRequestCreated:
@@ -3160,9 +3158,6 @@ func cloneSession(session *protocol.Session) *protocol.Session {
 		return nil
 	}
 	clone := *session
-	if len(session.Todos) > 0 {
-		clone.Todos = append([]string(nil), session.Todos...)
-	}
 	return &clone
 }
 
@@ -3325,19 +3320,6 @@ func (d *Daemon) handleFilesEdited(conn net.Conn, msg *protocol.FilesEditedMessa
 		d.store.RecordFileActivity(path, store.FileActivitySourceEdited, msg.ID)
 	}
 	d.sendOK(conn)
-}
-
-func (d *Daemon) handleTodos(conn net.Conn, msg *protocol.TodosMessage) {
-	d.store.UpdateTodos(msg.ID, msg.Todos)
-	d.store.Touch(msg.ID)
-	d.sendOK(conn)
-
-	for _, s := range d.store.List("") {
-		if s.ID == msg.ID {
-			d.publishFact(FactSessionTodosChanged, s.ID, nil)
-			break
-		}
-	}
 }
 
 func (d *Daemon) handleQuery(conn net.Conn, msg *protocol.QueryMessage) {

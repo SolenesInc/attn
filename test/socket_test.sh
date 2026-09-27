@@ -89,17 +89,8 @@ else
     fail "State not working: $RESULT"
 fi
 
-# 7. Test todos update
-info "7. Add todos..."
-RESULT=$(echo "{\"cmd\":\"todos\",\"id\":\"$SESSION_ID\",\"todos\":[\"[ ] Task 1\",\"[ ] Task 2\"]}" | nc -U $SOCKET)
-if [[ "$RESULT" == *'"ok":true'* ]]; then
-    pass "Todos updated"
-else
-    fail "Todos update failed: $RESULT"
-fi
-
-# 8. Unregister session
-info "8. Unregister session..."
+# 7. Unregister session
+info "7. Unregister session..."
 RESULT=$(echo "{\"cmd\":\"unregister\",\"id\":\"$SESSION_ID\"}" | nc -U $SOCKET)
 if [[ "$RESULT" == *'"ok":true'* ]]; then
     pass "Unregister session"
@@ -107,8 +98,8 @@ else
     fail "Unregister failed: $RESULT"
 fi
 
-# 9. Verify session is gone
-info "9. Verify session removed..."
+# 8. Verify session is gone
+info "8. Verify session removed..."
 RESULT=$(echo "{\"cmd\":\"query\",\"state\":\"\"}" | nc -U $SOCKET)
 if [[ "$RESULT" != *"\"$SESSION_ID\""* ]]; then
     pass "Session removed"

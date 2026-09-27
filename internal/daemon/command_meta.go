@@ -90,7 +90,6 @@ var CommandMeta = map[string]CommandMetadata{
 	protocol.CmdCrewPrime:                             commandMetadata(ScopeHubLocal, false, true),
 	protocol.CmdCrewHandoff:                           commandMetadata(ScopeHubLocal, false, true),
 	protocol.CmdStop:                                  commandMetadata(ScopeSession, false, true),
-	protocol.CmdTodos:                                 commandMetadata(ScopeSession, false, true),
 	protocol.CmdFilesEdited:                           commandMetadata(ScopeSession, false, true),
 	protocol.CmdPullRequestCreated:                    commandMetadata(ScopeSession, false, true),
 	protocol.CmdPullRequestForget:                     commandMetadata(ScopeSession, false, true),

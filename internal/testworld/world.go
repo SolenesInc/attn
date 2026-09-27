@@ -52,6 +52,11 @@ func Prepare(t testing.TB, wrapper string, harnesses ...fakeagent.Harness) *Worl
 	}
 	w := &World{T: t, Dir: dir, Socket: filepath.Join(dir, "attn.sock")}
 	w.kit = fakeagent.Install(t, dir, harnesses, wrapper)
+	// macOS asks dscl for the login shell before $SHELL; this dscl answers $SHELL
+	// so a world runs the shell its test chose, never the developer's own.
+	if err := os.WriteFile(filepath.Join(dir, "bin", "dscl"), []byte("#!/bin/sh\nprintf 'UserShell: %s\\n' \"$SHELL\"\n"), 0o755); err != nil {
+		t.Fatal(err)
+	}
 	w.Vars = append([]string{
 		"ATTN_DATA_DIR=" + dir,
 		"ATTN_HARNESS_DATA_DIR=" + dir,

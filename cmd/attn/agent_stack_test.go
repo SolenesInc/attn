@@ -66,9 +66,6 @@ func TestAgentPeekShowsASessionWithoutInterruptingIt(t *testing.T) {
 	claude := s.Launched(builder)
 	app.TypeLine(builder, "add a discount field")
 	claude.Prompted()
-	if err := s.Client().UpdateTodos(builder, []string{"[✓] read the plan", "[→] build peek"}); err != nil {
-		t.Fatal(err)
-	}
 	claude.Reply("working on it\nsecond line <!-- attn:state=waiting_input -->")
 	testworld.AwaitSession(app, builder, func(x protocol.Session) bool {
 		return x.State == protocol.SessionStateWaitingInput && protocol.Deref(x.TurnOwed)
@@ -80,7 +77,6 @@ func TestAgentPeekShowsASessionWithoutInterruptingIt(t *testing.T) {
 		"workspace: shop\n",
 		"state: waiting_input (",
 		"turn: owed to this session\n",
-		"todos:\n  [✓] read the plan\n  [→] build peek\n",
 		"last assistant message:\n  working on it\n  second line",
 	)
 	requireScreen(t, peek.Stdout, "screen", "working on it")
@@ -96,7 +92,7 @@ func TestAgentPeekShowsASessionWithoutInterruptingIt(t *testing.T) {
 	register(t, s, "quiet-1111-2222", "quiet")
 	quiet := s.Attn("agent", "peek", "quiet-1111-2222").Stdout
 	requireLines(t, "peek of a session with nothing to show", quiet, "session quiet-1111-2222 (", "state: ", "screen unavailable")
-	for _, empty := range []string{"todos:", "last assistant message:", "turn:"} {
+	for _, empty := range []string{"last assistant message:", "turn:"} {
 		if strings.Contains(quiet, empty) {
 			t.Errorf("peek shows the empty section %q:\n%s", empty, quiet)
 		}

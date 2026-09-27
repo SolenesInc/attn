@@ -240,7 +240,6 @@ model Session {
   automation?: AutomationProvenance; // Present when this session was launched by an automation; latest run wins for a continuity thread.
   pull_requests?: SessionPullRequest[]; // Pull requests this session's agent opened, newest first. Joined at broadcast from the session_pull_requests table, never stored on the session row.
   terminal_build_stale?: boolean; // True when this session's pty-worker was built against a different libghostty-vt than the daemon, which happens when the app updates under a running session. The two then hold different terminal implementations and stop agreeing about the grid, so the app offers a reload. Derived at broadcast from the format tag the worker reports at its handshake; never stored, and absent for every same-build session, which is all of them outside an upgrade window.
-  todos?: string[];             // Optional: can be empty/absent
   last_seen: string;            // ISO timestamp, always set
 }
 
@@ -901,7 +900,7 @@ model StateExplainMessage {
   target_session_id: string;
 }
 
-// One agent observes another without interrupting it: state, todos, the last
+// One agent observes another without interrupting it: state, the last
 // assistant message, and the rendered screen, all served from what the daemon
 // already holds. Passive by construction — nothing here touches the target's
 // PTY or generates input, so watching costs the observed agent nothing.
@@ -996,12 +995,6 @@ model StopBackgroundTask {
   type: string;
   status: string;
   name?: string;
-}
-
-model TodosMessage {
-  cmd: "todos";
-  id: string;
-  todos: string[];
 }
 
 // Files an agent just wrote, reported by the tool-use hook after a completed
@@ -3420,11 +3413,6 @@ model NotebookChangedMessage {
   event: "notebook_changed";
   paths: string[];
   origin: string;
-}
-
-model SessionTodosUpdatedMessage {
-  event: "session_todos_updated";
-  session: Session;
 }
 
 model SessionsUpdatedMessage {
@@ -6541,9 +6529,6 @@ model AgentPeekResult {
   state_since: string;
   last_seen: string;
   turn_owed?: boolean;
-  // The flat strings the todo hook stores, served as-is; consumers parse the
-  // [✓]/[→]/[ ] prefix if they care.
-  todos: string[];
   // Absent is not an error: a session with no inspectable transcript, or one
   // that has said nothing yet, simply has no message to show.
   last_assistant_message?: string;
@@ -7706,7 +7691,6 @@ alias DaemonEvent =
   | WorkspaceUnregisteredMessage
   | WorkspaceStateChangedMessage
   | NotebookChangedMessage
-  | SessionTodosUpdatedMessage
   | SessionsUpdatedMessage
   | WorkspaceLayoutMessage
   | WorkspaceLayoutUpdatedMessage

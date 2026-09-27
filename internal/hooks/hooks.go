@@ -183,15 +183,6 @@ func Generate(sessionID, socketPath, wrapperPath string, env map[string]string) 
 			},
 			"PostToolUse": {
 				{
-					Matcher: "TodoWrite",
-					Hooks: []Hook{
-						{
-							Type:    "command",
-							Command: fmt.Sprintf(`ATTN_SOCKET_PATH=%s %s _hook-todo "%s"`, socketCmd, wrapperCmd, sessionID),
-						},
-					},
-				},
-				{
 					Matcher: "AskUserQuestion",
 					Hooks: []Hook{
 						{
