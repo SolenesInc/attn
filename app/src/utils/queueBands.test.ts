@@ -48,8 +48,8 @@ describe('sessionParticipatesInQueue', () => {
 describe('buildQueueBands', () => {
   it('keeps band order unchanged when sessions carry dispatcher fields', () => {
     const sessions: QueueBandSession[] = [
-      { id: 'root', label: 'root' },
-      { id: 'newer', label: 'newer', turnOwed: true, turnOpenedAt: '2026-07-26T11:00:00Z' },
+      { id: 'root', label: 'root', workspaceId: 'ws-a' },
+      { id: 'newer', label: 'newer', workspaceId: 'ws-a', turnOwed: true, turnOpenedAt: '2026-07-26T11:00:00Z' },
       { id: 'older', label: 'older', workspaceId: 'ws-b', turnOwed: true, turnOpenedAt: '2026-07-26T09:00:00Z' },
     ];
     const withDispatchers = sessions.map((session) => (
@@ -70,9 +70,9 @@ describe('buildQueueBands', () => {
 
   it('lists the oldest turn first, across workspaces', () => {
     const bands = buildQueueBands(views([
-      { id: 'newest', label: 'newest', turnOwed: true, turnOpenedAt: '2026-07-26T12:00:00Z' },
+      { id: 'newest', label: 'newest', workspaceId: 'ws-a', turnOwed: true, turnOpenedAt: '2026-07-26T12:00:00Z' },
       { id: 'oldest', label: 'oldest', workspaceId: 'ws-b', turnOwed: true, turnOpenedAt: '2026-07-26T09:00:00Z' },
-      { id: 'middle', label: 'middle', turnOwed: true, turnOpenedAt: '2026-07-26T10:00:00Z' },
+      { id: 'middle', label: 'middle', workspaceId: 'ws-a', turnOwed: true, turnOpenedAt: '2026-07-26T10:00:00Z' },
     ]));
 
     expect(bands.turns.map((row) => row.session.id)).toEqual(['oldest', 'middle', 'newest']);
@@ -81,8 +81,8 @@ describe('buildQueueBands', () => {
 
   it('reads turn_owed rather than deriving it from state', () => {
     const bands = buildQueueBands(views([
-      { id: 'waiting-but-settled', label: 'a', state: 'waiting_input', turnOwed: false },
-      { id: 'working-but-owed', label: 'b', state: 'working', turnOwed: true, turnOpenedAt: '2026-07-26T09:00:00Z' },
+      { id: 'waiting-but-settled', label: 'a', workspaceId: 'ws-a', state: 'waiting_input', turnOwed: false },
+      { id: 'working-but-owed', label: 'b', workspaceId: 'ws-a', state: 'working', turnOwed: true, turnOpenedAt: '2026-07-26T09:00:00Z' },
     ]));
 
     expect(bands.turns.map((row) => row.session.id)).toEqual(['working-but-owed']);
@@ -90,8 +90,8 @@ describe('buildQueueBands', () => {
 
   it('puts a new arrival at the bottom and leaves the rows above untouched', () => {
     const existing: QueueBandSession[] = [
-      { id: 'first', label: 'first', turnOwed: true, turnOpenedAt: '2026-07-26T09:00:00Z' },
-      { id: 'second', label: 'second', turnOwed: true, turnOpenedAt: '2026-07-26T10:00:00Z' },
+      { id: 'first', label: 'first', workspaceId: 'ws-a', turnOwed: true, turnOpenedAt: '2026-07-26T09:00:00Z' },
+      { id: 'second', label: 'second', workspaceId: 'ws-a', turnOwed: true, turnOpenedAt: '2026-07-26T10:00:00Z' },
     ];
     const before = buildQueueBands(views(existing));
     const after = buildQueueBands(views([
@@ -105,11 +105,11 @@ describe('buildQueueBands', () => {
 
   it('does not move a row when its state changes', () => {
     const session = (state: string): QueueBandSession => ({
-      id: 'steered', label: 'steered', state, turnOwed: true, turnOpenedAt: '2026-07-26T10:00:00Z',
+      id: 'steered', label: 'steered', workspaceId: 'ws-a', state, turnOwed: true, turnOpenedAt: '2026-07-26T10:00:00Z',
     });
     const others: QueueBandSession[] = [
-      { id: 'older', label: 'older', turnOwed: true, turnOpenedAt: '2026-07-26T09:00:00Z' },
-      { id: 'newer', label: 'newer', turnOwed: true, turnOpenedAt: '2026-07-26T11:00:00Z' },
+      { id: 'older', label: 'older', workspaceId: 'ws-a', turnOwed: true, turnOpenedAt: '2026-07-26T09:00:00Z' },
+      { id: 'newer', label: 'newer', workspaceId: 'ws-a', turnOwed: true, turnOpenedAt: '2026-07-26T11:00:00Z' },
     ];
 
     const waiting = buildQueueBands(views([...others, session('waiting_input')]));
@@ -121,9 +121,9 @@ describe('buildQueueBands', () => {
 
   it('settling a row moves only the rows below it', () => {
     const all: QueueBandSession[] = [
-      { id: 'a', label: 'a', turnOwed: true, turnOpenedAt: '2026-07-26T09:00:00Z' },
-      { id: 'b', label: 'b', turnOwed: true, turnOpenedAt: '2026-07-26T10:00:00Z' },
-      { id: 'c', label: 'c', turnOwed: true, turnOpenedAt: '2026-07-26T11:00:00Z' },
+      { id: 'a', label: 'a', workspaceId: 'ws-a', turnOwed: true, turnOpenedAt: '2026-07-26T09:00:00Z' },
+      { id: 'b', label: 'b', workspaceId: 'ws-a', turnOwed: true, turnOpenedAt: '2026-07-26T10:00:00Z' },
+      { id: 'c', label: 'c', workspaceId: 'ws-a', turnOwed: true, turnOpenedAt: '2026-07-26T11:00:00Z' },
     ];
     const settled = all.map((session) => (session.id === 'b' ? { ...session, turnOwed: false } : session));
 
@@ -132,8 +132,8 @@ describe('buildQueueBands', () => {
 
   it('anchors the chief and never queues it', () => {
     const bands = buildQueueBands(views([
-      { id: 'chief', label: 'chief', chiefOfStaff: true, turnOwed: true, turnOpenedAt: '2026-07-26T09:00:00Z' },
-      { id: 'agent', label: 'agent', turnOwed: true, turnOpenedAt: '2026-07-26T10:00:00Z' },
+      { id: 'chief', label: 'chief', workspaceId: 'ws-a', chiefOfStaff: true, turnOwed: true, turnOpenedAt: '2026-07-26T09:00:00Z' },
+      { id: 'agent', label: 'agent', workspaceId: 'ws-a', turnOwed: true, turnOpenedAt: '2026-07-26T10:00:00Z' },
     ]));
 
     expect(bands.chief?.session.id).toBe('chief');
@@ -150,7 +150,7 @@ describe('buildQueueBands', () => {
         turnOpenedAt: '2026-07-26T09:00:00Z',
         automation: { definition_id: 'review-sol' },
       },
-      { id: 'agent', label: 'agent' },
+      { id: 'agent', label: 'agent', workspaceId: 'ws-a' },
     ]));
 
     expect(bands.turns.map((row) => row.session.id)).toEqual([]);
@@ -160,7 +160,7 @@ describe('buildQueueBands', () => {
 
   it('is empty when nothing is owed', () => {
     const bands = buildQueueBands(views([
-      { id: 'a', label: 'a', state: 'working' },
+      { id: 'a', label: 'a', workspaceId: 'ws-a', state: 'working' },
     ]));
 
     expect(bands.chief).toBeNull();
@@ -169,8 +169,8 @@ describe('buildQueueBands', () => {
 
   it('puts everything not owed into settled, so no agent is in both bands', () => {
     const bands = buildQueueBands(views([
-      { id: 'owed', label: 'owed', turnOwed: true, turnOpenedAt: '2026-07-26T09:00:00Z' },
-      { id: 'quiet', label: 'quiet' },
+      { id: 'owed', label: 'owed', workspaceId: 'ws-a', turnOwed: true, turnOpenedAt: '2026-07-26T09:00:00Z' },
+      { id: 'quiet', label: 'quiet', workspaceId: 'ws-a' },
       { id: 'busy', label: 'busy', workspaceId: 'ws-b', state: 'working' },
     ]));
 
@@ -180,7 +180,7 @@ describe('buildQueueBands', () => {
 
   it('settling moves a row from one band to the other rather than out of the sidebar', () => {
     const session: QueueBandSession = {
-      id: 'a', label: 'a', turnOwed: true, turnOpenedAt: '2026-07-26T09:00:00Z',
+      id: 'a', label: 'a', workspaceId: 'ws-a', turnOwed: true, turnOpenedAt: '2026-07-26T09:00:00Z',
     };
     const before = buildQueueBands(views([session]));
     const after = buildQueueBands(views([{ ...session, turnOwed: false }]));
@@ -193,7 +193,7 @@ describe('buildQueueBands', () => {
 
   it('leaves the workspace tree untouched — it is not an output of the queue', () => {
     const sessions: QueueBandSession[] = [
-      { id: 'a', label: 'a', turnOwed: true, turnOpenedAt: '2026-07-26T09:00:00Z' },
+      { id: 'a', label: 'a', workspaceId: 'ws-a', turnOwed: true, turnOpenedAt: '2026-07-26T09:00:00Z' },
       { id: 'b', label: 'b', workspaceId: 'ws-b' },
     ];
     const tree = views(sessions);
@@ -211,8 +211,8 @@ describe('buildQueueBands', () => {
 
     it('takes a deferred agent out of both bands into its own list', () => {
       const bands = buildQueueBands(views([
-        { id: 'owed', label: 'owed', turnOwed: true, turnOpenedAt: '2026-07-26T09:00:00Z' },
-        { id: 'quiet', label: 'quiet' },
+        { id: 'owed', label: 'owed', workspaceId: 'ws-a', turnOwed: true, turnOpenedAt: '2026-07-26T09:00:00Z' },
+        { id: 'quiet', label: 'quiet', workspaceId: 'ws-a' },
         { id: 'deferred', label: 'deferred', workspaceId: 'ws-b', turnSnoozedUntil: laterToday },
       ]), now);
 
@@ -223,7 +223,7 @@ describe('buildQueueBands', () => {
 
     it('orders by when each comes back, soonest first', () => {
       const bands = buildQueueBands(views([
-        { id: 'late', label: 'late', turnSnoozedUntil: laterStill },
+        { id: 'late', label: 'late', workspaceId: 'ws-a', turnSnoozedUntil: laterStill },
         { id: 'soon', label: 'soon', workspaceId: 'ws-b', turnSnoozedUntil: laterToday },
       ]), now);
 
@@ -232,7 +232,7 @@ describe('buildQueueBands', () => {
 
     it('returns a lapsed deadline to the settled band', () => {
       const bands = buildQueueBands(views([
-        { id: 'woken', label: 'woken', turnSnoozedUntil: '2026-07-26T11:00:00Z' },
+        { id: 'woken', label: 'woken', workspaceId: 'ws-a', turnSnoozedUntil: '2026-07-26T11:00:00Z' },
       ]), now);
 
       expect(bands.snoozed).toEqual([]);
@@ -241,7 +241,7 @@ describe('buildQueueBands', () => {
 
     it('keeps a snoozed agent out of the turns band even if a snapshot still says owed', () => {
       const bands = buildQueueBands(views([
-        { id: 'both', label: 'both', turnOwed: true, turnOpenedAt: '2026-07-26T09:00:00Z', turnSnoozedUntil: laterToday },
+        { id: 'both', label: 'both', workspaceId: 'ws-a', turnOwed: true, turnOpenedAt: '2026-07-26T09:00:00Z', turnSnoozedUntil: laterToday },
       ]), now);
 
       expect(bands.turns).toEqual([]);
@@ -256,9 +256,9 @@ describe('oldestWantedTurn', () => {
 
   it('lands on the turn owed longest, not the first in list order', () => {
     const target = oldestWantedTurn([
-      { id: 'newest', label: 'newest', turnOwed: true, turnOpenedAt: '2026-07-26T12:00:00Z' },
+      { id: 'newest', label: 'newest', workspaceId: 'ws-a', turnOwed: true, turnOpenedAt: '2026-07-26T12:00:00Z' },
       { id: 'oldest', label: 'oldest', workspaceId: 'ws-b', turnOwed: true, turnOpenedAt: '2026-07-26T09:00:00Z' },
-      { id: 'middle', label: 'middle', turnOwed: true, turnOpenedAt: '2026-07-26T10:00:00Z' },
+      { id: 'middle', label: 'middle', workspaceId: 'ws-a', turnOwed: true, turnOpenedAt: '2026-07-26T10:00:00Z' },
     ], wantsOwed);
 
     expect(target?.id).toBe('oldest');
@@ -266,8 +266,8 @@ describe('oldestWantedTurn', () => {
 
   it('skips sessions that do not want the user, whatever their stamp says', () => {
     const target = oldestWantedTurn([
-      { id: 'settled-old', label: 'a', turnOwed: false, turnOpenedAt: '2026-07-26T08:00:00Z' },
-      { id: 'owed', label: 'b', turnOwed: true, turnOpenedAt: '2026-07-26T10:00:00Z' },
+      { id: 'settled-old', label: 'a', workspaceId: 'ws-a', turnOwed: false, turnOpenedAt: '2026-07-26T08:00:00Z' },
+      { id: 'owed', label: 'b', workspaceId: 'ws-a', turnOwed: true, turnOpenedAt: '2026-07-26T10:00:00Z' },
     ], wantsOwed);
 
     expect(target?.id).toBe('owed');
@@ -275,7 +275,7 @@ describe('oldestWantedTurn', () => {
 
   it('is null when nothing wants the user', () => {
     expect(oldestWantedTurn([
-      { id: 'quiet', label: 'quiet' },
+      { id: 'quiet', label: 'quiet', workspaceId: 'ws-a' },
     ], wantsOwed)).toBeNull();
     expect(oldestWantedTurn([], wantsOwed)).toBeNull();
   });
@@ -373,7 +373,7 @@ describe('advanceAfterTurnClosed', () => {
   it('stays put when the watched agent never owed the turn that closed', () => {
     const queue = [owed('elsewhere', 0)];
     const before = buildQueueBands(views(queue));
-    const after = buildQueueBands(views([{ ...queue[0], turnOwed: false }, { id: 'watched', label: 'watched' }]));
+    const after = buildQueueBands(views([{ ...queue[0], turnOwed: false }, { id: 'watched', label: 'watched', workspaceId: 'ws-a' }]));
 
     expect(advanceAfterTurnClosed(before.turns, after, 'watched')).toBeNull();
   });
@@ -422,7 +422,7 @@ describe('advanceAfterTurnClosed', () => {
 describe('headOfQueue', () => {
   it('is the turn owed longest, not the first one listed by the workspace tree', () => {
     const bands = buildQueueBands(views([
-      { id: 'newer', label: 'newer', turnOwed: true, turnOpenedAt: '2026-07-26T12:00:00Z' },
+      { id: 'newer', label: 'newer', workspaceId: 'ws-a', turnOwed: true, turnOpenedAt: '2026-07-26T12:00:00Z' },
       { id: 'older', label: 'older', workspaceId: 'ws-b', turnOwed: true, turnOpenedAt: '2026-07-26T09:00:00Z' },
     ]));
 
@@ -431,7 +431,7 @@ describe('headOfQueue', () => {
 
   it('is null while nothing is owed, and with no bands at all', () => {
     const settled = buildQueueBands(views([
-      { id: 'a', label: 'a', turnOwed: false },
+      { id: 'a', label: 'a', workspaceId: 'ws-a', turnOwed: false },
     ]));
 
     expect(headOfQueue(settled)).toBeNull();
@@ -442,8 +442,8 @@ describe('headOfQueue', () => {
 describe('satellite shells', () => {
   it('gives no row to a shell whose agent is alive in the same workspace', () => {
     const bands = buildQueueBands(views([
-      { id: 'agent', label: 'agent' },
-      { id: 'shell', label: 'shell', parentSessionId: 'agent' },
+      { id: 'agent', label: 'agent', workspaceId: 'ws-a' },
+      { id: 'shell', label: 'shell', workspaceId: 'ws-a', parentSessionId: 'agent' },
     ]));
 
     expect(bands.settled.map((row) => row.session.id)).toEqual(['agent']);
@@ -451,7 +451,7 @@ describe('satellite shells', () => {
 
   it('gives an orphan its row back when the agent is gone', () => {
     const bands = buildQueueBands(views([
-      { id: 'shell', label: 'shell', parentSessionId: 'closed-agent' },
+      { id: 'shell', label: 'shell', workspaceId: 'ws-a', parentSessionId: 'closed-agent' },
     ]));
 
     expect(bands.settled.map((row) => row.session.id)).toEqual(['shell']);
@@ -459,7 +459,7 @@ describe('satellite shells', () => {
 
   it('gives a satellite its row back once it is moved away from its agent', () => {
     const bands = buildQueueBands(views([
-      { id: 'agent', label: 'agent' },
+      { id: 'agent', label: 'agent', workspaceId: 'ws-a' },
       { id: 'shell', label: 'shell', workspaceId: 'ws-b', parentSessionId: 'agent' },
     ]));
 
@@ -468,7 +468,7 @@ describe('satellite shells', () => {
 
   it('keeps a shell with no parent at all, as every pre-migration shell has', () => {
     const bands = buildQueueBands(views([
-      { id: 'shell', label: 'shell' },
+      { id: 'shell', label: 'shell', workspaceId: 'ws-a' },
     ]));
 
     expect(bands.settled.map((row) => row.session.id)).toEqual(['shell']);
@@ -478,8 +478,8 @@ describe('satellite shells', () => {
 describe('the crew band', () => {
   it('takes a member day out of every other band, whatever it is doing', () => {
     const bands = buildQueueBands(views([
-      { id: 'sess-trellis', label: 'trellis', crewMember: 'trellis', turnOwed: true, turnOpenedAt: '2026-08-14T09:00:00Z' },
-      { id: 'sess-keel', label: 'keel', crewMember: 'keel' },
+      { id: 'sess-trellis', label: 'trellis', workspaceId: 'ws-a', crewMember: 'trellis', turnOwed: true, turnOpenedAt: '2026-08-14T09:00:00Z' },
+      { id: 'sess-keel', label: 'keel', workspaceId: 'ws-a', crewMember: 'keel' },
       { id: 'worker', label: 'worker', workspaceId: 'ws-b', turnOwed: true, turnOpenedAt: '2026-08-14T09:30:00Z' },
     ]));
 
@@ -490,8 +490,8 @@ describe('the crew band', () => {
 
   it('lets awake members enter normal queue bands when enabled', () => {
     const bands = buildQueueBands(views([
-      { id: 'owed', label: 'owed', crewMember: 'trellis', turnOwed: true, turnOpenedAt: '2026-08-14T09:00:00Z' },
-      { id: 'settled', label: 'settled', crewMember: 'keel' },
+      { id: 'owed', label: 'owed', workspaceId: 'ws-a', crewMember: 'trellis', turnOwed: true, turnOpenedAt: '2026-08-14T09:00:00Z' },
+      { id: 'settled', label: 'settled', workspaceId: 'ws-a', crewMember: 'keel' },
     ]), { crewInQueue: true });
 
     expect(bands.turns.map((row) => row.session.id)).toEqual(['owed']);
@@ -501,7 +501,7 @@ describe('the crew band', () => {
 
   it('leaves the chief the chief', () => {
     const bands = buildQueueBands(views([
-      { id: 'sess-chief', label: 'chief', chiefOfStaff: true, crewMember: 'keel' },
+      { id: 'sess-chief', label: 'chief', workspaceId: 'ws-a', chiefOfStaff: true, crewMember: 'keel' },
     ]));
 
     expect(bands.chief?.session.id).toBe('sess-chief');

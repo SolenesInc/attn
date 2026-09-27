@@ -9,6 +9,7 @@ import { defaultDesktopLabel, desktopLabel, orderedDesktops } from './desktops';
 export interface WorkspaceViewSession {
   id: string;
   label: string;
+  workspaceId?: string;
   cwd?: string;
   directory?: string;
   endpointId?: string;
