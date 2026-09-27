@@ -1,0 +1,4 @@
+kind: fixed
+area: sessions
+change: When an approval prompt appears just after attn pastes a message into an agent, attn waits for your answer before pressing Enter.
+symptom: attn's Enter could land on the prompt and pick "Yes, proceed", approving a command you never saw.
