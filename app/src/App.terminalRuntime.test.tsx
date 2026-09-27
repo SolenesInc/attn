@@ -83,6 +83,9 @@ function snapshotReply(id: string, snapshot = snapshotOf()) {
   return { event: 'attach_result' as const, id, success: true, cols: 40, rows: 6, last_seq: 10, running: true, snapshot };
 }
 
+const OSC_133 = '\x1b]133;';
+const BLOCK_STREAM = `${OSC_133}A\x07prompt> ${OSC_133}B\x07echo hello\r\n${OSC_133}C;cmdline_url=echo%20hello\x07hello\r\nworld\r\n${OSC_133}D;0\x07${OSC_133}A\x07prompt> `;
+
 const FAMILY = '\u{1F468}\u200D\u{1F469}\u200D\u{1F467}\u200D\u{1F466}';
 
 function utf8Base64(text: string) {
@@ -119,6 +122,23 @@ async function openKittyImages(sessionId: string) {
     await view.daemon.idle();
   };
   return { ...view, place };
+}
+
+const TERMINAL_CELL_HEIGHT = 21;
+
+function rowCenter(row: number) {
+  return (row + 0.5) * TERMINAL_CELL_HEIGHT;
+}
+
+async function copyBlockAt(sessionId: string, clientY: number, item: 'Copy command' | 'Copy output') {
+  const copied = vi.spyOn(navigator.clipboard, 'writeText').mockResolvedValue();
+  const canvas = document.querySelector(`[data-pane-id="pane-${sessionId}"] canvas`)!;
+  fireEvent.contextMenu(canvas, { clientX: 10, clientY });
+  const menuItem = screen.getByRole('menuitem', { name: new RegExp(`^${item}`) });
+  if ((menuItem as HTMLButtonElement).disabled) return null;
+  fireEvent.click(menuItem);
+  await act(() => Promise.resolve());
+  return copied.mock.calls.at(-1)?.[0] ?? null;
 }
 
 function visibleText(sessionId: string) {
@@ -765,6 +785,32 @@ describe('App terminal runtime', () => {
 
     await place(kittyPlacement(7, 12));
     expect(daemon.sentOf('get_kitty_image')).toHaveLength(2);
+  });
+
+  it('copies a command block the daemon’s snapshot restored', async () => {
+    fakeRects((element) => (element.tagName === 'CANVAS' ? new DOMRect(0, 0, 800, 600) : null));
+    const { daemon } = await renderSessions(daemonSession('s1', { state: 'idle' }));
+    const blocks = [{ id: 4, pending: false, prompt_row: 29, input_row: 29, input_col: 0, output_start_row: 30, end_row: 32, command: 'tail rows', exit_code: 0 }];
+    daemon.on('attach_session', ({ id }) => snapshotReply(id, { ...snapshotOf(), blocks }));
+    open('s1');
+    await daemon.idle();
+
+    expect(await copyBlockAt('s1', rowCenter(1), 'Copy output')).toBe('row-1200 tail\nSTYLED');
+    expect(await copyBlockAt('s1', rowCenter(1), 'Copy command')).toBe('tail rows');
+  });
+
+  it('keeps a command block copyable after the terminal gets shorter', async () => {
+    const { daemon } = await openAttachedTerminals({
+      sessions: [daemonSession('s1', { state: 'idle' })],
+      workspaces: [agentWorkspace('s1')],
+      output: { s1: `${'filler\r\n'.repeat(20)}${BLOCK_STREAM}` },
+    });
+
+    daemon.emit({ event: 'pty_resized', id: 's1', cols: 80, rows: 12 });
+    await daemon.idle();
+    const rows = visibleText('s1')!.split('\n');
+
+    expect(await copyBlockAt('s1', rowCenter(rows.indexOf('hello')), 'Copy output')).toBe('hello\nworld');
   });
 
   it('paints replayed output once', async () => {
