@@ -204,6 +204,7 @@ async function main() {
       const tree = draftDesktop(merged.migration, 1);
       runner.assert(tree.direction === 'horizontal', `The merge did not split below: ${JSON.stringify(tree)}`);
       runner.assert(draftDesktop(merged.migration, 2) === null, 'Desktop 2 did not stay as an empty slot');
+      runner.assert(!group(merged.migration, 'mig-ws-2')?.confirmed, 'The merge confirmed attn zero; a move must leave it for a keep');
       await screenshot('02-keyboard-merge.png');
     });
 

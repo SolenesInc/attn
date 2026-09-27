@@ -77,12 +77,14 @@ describe('MigrationPicker', () => {
     expect(screen.getByText('1 of 3', { exact: false })).toBeInTheDocument();
   });
 
-  it('completes with the keyboard only: keep, merge through the dialog, bulk keep and finish', async () => {
+  it('completes with the keyboard only: keep, merge through the dialog, keep the merged group, bulk keep and finish', async () => {
     const user = userEvent.setup();
     const initial = migrationState();
     const daemon = fakeMigrationDaemon(initial);
     daemon.respond('migration_move', (state) => ({
-      ...confirm(state, ['g2']),
+      ...state,
+      revision: state.revision + 1,
+      can_undo: true,
       desktops: slotsWith(
         { 1: ['d1', { direction: 'horizontal', ratio: 0.5, children: [{ group: 'g1' }, { group: 'g2' }] }], 2: ['d2', null] },
         [['d3', { group: 'g3' }]],
@@ -111,14 +113,20 @@ describe('MigrationPicker', () => {
     });
     await screen.findByText('Garden & crew merged into Desktop 1.');
     expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
+    expect(sourceRow('Garden & crew')).toHaveClass('selected');
+    expect(sourceRow('Garden & crew')).not.toHaveClass('confirmed');
+
+    await user.keyboard('k');
+    expect(daemon.api.sendMigrationKeep).toHaveBeenLastCalledWith(['g2'], 5);
+    await screen.findByText('Garden & crew stays on Desktop 1.');
 
     await user.click(screen.getByRole('button', { name: 'Keep the remaining 1 where they are' }));
-    expect(daemon.api.sendMigrationKeep).toHaveBeenLastCalledWith(['g3'], 5);
+    expect(daemon.api.sendMigrationKeep).toHaveBeenLastCalledWith(['g3'], 6);
 
     const finish = await screen.findByRole('button', { name: 'Finish →' });
     await waitFor(() => expect(finish).toBeEnabled());
     await user.click(finish);
-    expect(daemon.api.sendMigrationFinish).toHaveBeenCalledWith(6);
+    expect(daemon.api.sendMigrationFinish).toHaveBeenCalledWith(7);
 
     expect(await screen.findByRole('heading', { name: 'Your Default profile is ready.' })).toBeInTheDocument();
     expect(screen.getByText('You can now have different attn profiles, for example, one for work, and one for personal agents.')).toBeInTheDocument();
@@ -246,7 +254,7 @@ describe('MigrationPicker', () => {
     const user = userEvent.setup();
     const initial = migrationState();
     const daemon = fakeMigrationDaemon(initial);
-    daemon.respond('migration_move', (state) => confirm(state, ['g3']));
+    daemon.respond('migration_move', (state) => ({ ...state, revision: state.revision + 1, can_undo: true }));
     renderGate(daemon);
     await startPlacing(user);
 
