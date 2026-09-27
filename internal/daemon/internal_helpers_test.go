@@ -144,3 +144,18 @@ func captureBroadcasts(d *Daemon) *broadcastCapture {
 	}
 	return c
 }
+
+func mdAnchor(startLine, endLine, start int, exact string) *protocol.MarkdownAnnotationAnchor {
+	return &protocol.MarkdownAnnotationAnchor{
+		BlockID:   "b",
+		StartLine: startLine,
+		EndLine:   endLine,
+		Start:     start,
+		End:       start + len(exact),
+		Exact:     exact,
+	}
+}
+
+func fileAnnotationSource(path string) annotationDocumentSource {
+	return annotationDocumentSource{kind: annotationSourceFile, path: path}
+}
