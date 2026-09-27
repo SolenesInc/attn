@@ -29,9 +29,10 @@ export function useUIScale() {
 
   // Persistence happens in the actions, so a value read from settings is never echoed back.
   const applyScale = useCallback((next: number) => {
+    if (next === scale) return;
     setScale(next);
     setSetting(SETTINGS_KEY, next.toString());
-  }, [setSetting]);
+  }, [scale, setSetting]);
 
   const increaseScale = useCallback(() => {
     applyScale(Math.min(MAX_SCALE, Math.round((scale + SCALE_STEP) * 10) / 10));

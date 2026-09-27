@@ -204,7 +204,7 @@
 .mp-change-icon {
   width: 30px;
   color: var(--accent);
-  font-size: 26px;
+  font-size: calc(26px * var(--ui-scale));
   line-height: 1.2;
   text-align: center;
 }
@@ -396,7 +396,7 @@
 
 .mp-intro h1 {
   margin-top: 9px;
-  font-size: 30px;
+  font-size: calc(30px * var(--ui-scale));
   font-weight: 550;
   letter-spacing: -1px;
 }
@@ -526,7 +526,7 @@
   align-self: center;
   padding: 0 3px 0 7px;
   color: var(--color-text-muted);
-  font-size: 19px;
+  font-size: calc(19px * var(--ui-scale));
 }
 
 .mp-source:hover .mp-grip {
@@ -796,7 +796,7 @@
 .mp-plus {
   margin-right: 7px;
   color: var(--accent);
-  font-size: 22px;
+  font-size: calc(22px * var(--ui-scale));
   font-weight: 300;
 }
 
@@ -1013,7 +1013,7 @@
 }
 
 .mp-dialog-top h2 {
-  font-size: 21px;
+  font-size: calc(21px * var(--ui-scale));
 }
 
 .mp-dialog-top p {
@@ -1135,12 +1135,12 @@
   border-radius: 50%;
   background: color-mix(in srgb, var(--color-success) 12%, transparent);
   color: var(--color-success);
-  font-size: 24px;
+  font-size: calc(24px * var(--ui-scale));
 }
 
 .mp-done h1 {
   margin: 22px 0 14px;
-  font-size: 34px;
+  font-size: calc(34px * var(--ui-scale));
   font-weight: 550;
 }
 
@@ -1151,7 +1151,7 @@
 
 .mp-done-sub {
   color: var(--color-text-primary);
-  font-size: 16px;
+  font-size: calc(16px * var(--ui-scale));
   line-height: 1.8;
 }
 
@@ -1254,7 +1254,7 @@
   }
 
   .mp-intro h1 {
-    font-size: 25px;
+    font-size: calc(25px * var(--ui-scale));
   }
 
   .mp-save {

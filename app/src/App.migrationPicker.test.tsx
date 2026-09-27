@@ -35,7 +35,7 @@ describe('App migration picker', () => {
     expect(daemon.sentOf('migration_get')).toHaveLength(1);
   });
 
-  it('changes the saved UI scale with the font size shortcuts', async () => {
+  it('changes the saved UI scale with the font size shortcuts, saving only real changes', async () => {
     const { daemon } = await renderApp({
       initialState: { migration_phase: MigrationPhase.PlacementRequired, settings: { uiScale: '1.3' } },
       script: (scripted) => scripted.on('migration_get', () => ({ event: 'migration_result', action: 'migration_get', success: true, state: migrationState() })),
@@ -46,6 +46,7 @@ describe('App migration picker', () => {
     await gesture(daemon, () => pressShortcut('ui.increaseFontSize'));
     await gesture(daemon, () => pressShortcut('ui.decreaseFontSize'));
     await gesture(daemon, () => pressShortcut('ui.decreaseFontSize'));
+    await gesture(daemon, () => pressShortcut('ui.resetFontSize'));
     await gesture(daemon, () => pressShortcut('ui.resetFontSize'));
     expect(daemon.sentOf('set_setting').map(({ key, value }) => [key, value]))
       .toEqual([['uiScale', '1.4'], ['uiScale', '1.3'], ['uiScale', '1.2'], ['uiScale', '1']]);
