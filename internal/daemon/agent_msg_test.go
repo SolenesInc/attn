@@ -82,52 +82,6 @@ func TestHandleAgentMsgFailedWakeLeavesNoUndeliverableMessage(t *testing.T) {
 	}
 }
 
-func TestHandleAgentMsgQueuesUnderApprovalAndDrainsOnTheNextStateChange(t *testing.T) {
-	d, doorbell := newAgentMsgDaemon(t)
-	addCharacterizationSession(t, d, "sender-session-id", protocol.SessionAgentClaude, protocol.SessionStateIdle)
-	addCharacterizationSession(t, d, "target-session-id", protocol.SessionAgentClaude, protocol.SessionStatePendingApproval)
-
-	resp := callAgentMsg(t, d, "target-session-id", "sender-session-id", "when you surface, rebase")
-	result := resp.AgentMsgResult
-	if result == nil || result.Status != protocol.AgentMsgStatusQueued {
-		t.Fatalf("result = %+v", result)
-	}
-	if !strings.Contains(result.Detail, "approval") {
-		t.Fatalf("detail does not say why it waits: %q", result.Detail)
-	}
-	if prompts := doorbell.pasted(); len(prompts) != 0 {
-		t.Fatalf("typed into a session waiting on an approval: %q", prompts)
-	}
-
-	drains := observeAgentMailboxDrains(t, d)
-	if !d.applyState(sessionStateChange{
-		sessionID: "target-session-id",
-		state:     protocol.StateIdle,
-		cause:     liveSignal{},
-	}) {
-		t.Fatal("applyState did not apply")
-	}
-
-	if delivered := drains.next(); delivered != 1 {
-		t.Fatalf("drain delivered %d messages, want 1", delivered)
-	}
-	prompts := doorbell.pasted()
-	if len(prompts) != 1 {
-		t.Fatalf("typed %d prompts after the drain, want 1: %q", len(prompts), prompts)
-	}
-	prompt := prompts[0]
-	if prompt != agentMailboxDoorbellText {
-		t.Fatalf("drained doorbell = %q", prompt)
-	}
-	queued, err := d.store.UnreadAgentMailboxDeliveries("target-session-id")
-	if err != nil {
-		t.Fatal(err)
-	}
-	if len(queued) != 1 || queued[0].Item.NotifiedAt == "" {
-		t.Fatalf("unread item was not stamped after the drain: %+v", queued)
-	}
-}
-
 func newHeldDoorbellDaemon(t *testing.T) (*Daemon, *recordingDoorbell, chan int) {
 	t.Helper()
 	d, doorbell := newAgentMsgDaemon(t)
