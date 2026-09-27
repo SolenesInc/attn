@@ -758,3 +758,10 @@ func TestSessionInputRetryCannotResendThroughAReplacedLane(t *testing.T) {
 		}
 	})
 }
+
+func autoSettlePending(d *Daemon, sessionID string) (*autoSettleTimer, bool) {
+	d.autoSettleMu.Lock()
+	defer d.autoSettleMu.Unlock()
+	entry, ok := d.autoSettleTimers[sessionID]
+	return entry, ok
+}
