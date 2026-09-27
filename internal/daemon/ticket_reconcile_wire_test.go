@@ -59,6 +59,32 @@ func TestAVerdictIsDroppedWhenTheTicketMovedWhileItWasJudged(t *testing.T) {
 	}
 }
 
+func TestAFailedReconciliationLeavesOneBoundedDiagnosticNoteAndKeepsTheColumn(t *testing.T) {
+	w := newTitlingWorld(t, fakeagent.Claude)
+	app, cli := w.App(), w.Client()
+	reconcilingSession(t, w, app, "migrate-store", "Move the store onto the new backend.")
+	output := "MCP server needs authentication " + strings.Repeat("x", 3000) + " model not found"
+	w.HeadlessTask().Fail(output)
+	awaitReconcileTask(app, "migrate-store", func(task protocol.Task) bool { return task.State == "done" })
+
+	ticket := showTicket(t, cli, "migrate-store")
+	notes := ticketReconciliationNotes(ticket)
+	if len(notes) != 1 {
+		t.Fatalf("the ticket holds reconciliation notes %q, want one", notes)
+	}
+	for _, want := range []string{"could not determine", "classifier run failed", "MCP server needs authentication", "model not found", "…(truncated)"} {
+		if !strings.Contains(notes[0], want) {
+			t.Errorf("the failure note lacks %q:\n%s", want, notes[0])
+		}
+	}
+	if len(notes[0]) > 2000 || strings.Contains(notes[0], strings.Repeat("x", 1000)) {
+		t.Errorf("the failure note carries %d bytes, want the model's output cut to a bounded excerpt", len(notes[0]))
+	}
+	if ticket.Status != protocol.TicketStatusWorking {
+		t.Errorf("the failed reconciliation moved the ticket to %s, want it left working", ticket.Status)
+	}
+}
+
 func reconcilingSession(t *testing.T, w *world, app *testworld.Peer, ticket, brief string) string {
 	t.Helper()
 	cli := w.Client()
