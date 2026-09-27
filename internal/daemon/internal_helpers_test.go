@@ -7,7 +7,6 @@ import (
 	"net"
 	"os"
 	"path/filepath"
-	"sync"
 	"testing"
 	"time"
 
@@ -118,32 +117,6 @@ func decodeJSONRPCMessage(t *testing.T, conn net.Conn) jsonRPCMessage {
 func newDaemonForTest(t *testing.T) *Daemon {
 	t.Helper()
 	return NewForTesting(filepath.Join(t.TempDir(), "test.sock"))
-}
-
-type broadcastCapture struct {
-	mu     sync.Mutex
-	events []protocol.WebSocketEvent
-}
-
-func (c *broadcastCapture) snapshot() []protocol.WebSocketEvent {
-	c.mu.Lock()
-	defer c.mu.Unlock()
-	out := make([]protocol.WebSocketEvent, len(c.events))
-	copy(out, c.events)
-	return out
-}
-
-func captureBroadcasts(d *Daemon) *broadcastCapture {
-	c := &broadcastCapture{}
-	d.wsHub.broadcastListener = func(event *protocol.WebSocketEvent) {
-		if event == nil {
-			return
-		}
-		c.mu.Lock()
-		c.events = append(c.events, *event)
-		c.mu.Unlock()
-	}
-	return c
 }
 
 func mdAnchor(startLine, endLine, start int, exact string) *protocol.MarkdownAnnotationAnchor {

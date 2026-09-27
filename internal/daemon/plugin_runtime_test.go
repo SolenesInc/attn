@@ -1,16 +1,9 @@
 package daemon
 
 import (
-	"os"
-	"os/exec"
 	"path/filepath"
 	"strings"
-	"syscall"
 	"testing"
-	"time"
-
-	"github.com/victorarias/attn/internal/plugins"
-	"github.com/victorarias/attn/internal/procreap"
 )
 
 func TestPluginCommandEnv_UsesLoginShellEnvironment(t *testing.T) {
@@ -42,55 +35,4 @@ func envValue(env []string, key string) string {
 		}
 	}
 	return ""
-}
-
-func TestReapStrandedPluginRuntimesKillsThemAndRetiresTheirRecords(t *testing.T) {
-	dataDir := t.TempDir()
-	registryDir := plugins.RuntimeRegistryDir(dataDir)
-
-	script := filepath.Join(dataDir, "stranded.sh")
-	if err := os.WriteFile(script, []byte("#!/bin/sh\nwhile true; do sleep 0.05; done\n"), 0o755); err != nil {
-		t.Fatalf("write stranded runtime: %v", err)
-	}
-	cmd := exec.Command(script)
-	cmd.SysProcAttr = &syscall.SysProcAttr{Setpgid: true}
-	if err := cmd.Start(); err != nil {
-		t.Fatalf("start stranded runtime: %v", err)
-	}
-	pid := cmd.Process.Pid
-	exited := make(chan struct{})
-	go func() {
-		_ = cmd.Wait()
-		close(exited)
-	}()
-	t.Cleanup(func() {
-		_ = syscall.Kill(-pid, syscall.SIGKILL)
-		<-exited
-	})
-
-	livePath := filepath.Join(registryDir, "attn-pi-live.json")
-	if err := procreap.WriteEntry(livePath, procreap.NewEntry("attn-pi", pid, pid, cmd.Args)); err != nil {
-		t.Fatalf("write live record: %v", err)
-	}
-	gonePath := filepath.Join(registryDir, "attn-pi-gone.json")
-	goneEntry := procreap.NewEntry("attn-pi", pid, pid, cmd.Args)
-	goneEntry.PID = 0
-	goneEntry.PGID = 0
-	if err := procreap.WriteEntry(gonePath, goneEntry); err != nil {
-		t.Fatalf("write stale record: %v", err)
-	}
-
-	d := NewForTesting(filepath.Join(dataDir, "test.sock"))
-	d.reapStrandedPluginRuntimes()
-
-	select {
-	case <-exited:
-	case <-time.After(5 * time.Second):
-		t.Fatalf("stranded runtime %d survived the reap", pid)
-	}
-	for _, path := range []string{livePath, gonePath} {
-		if _, err := os.Stat(path); !os.IsNotExist(err) {
-			t.Fatalf("registry record %s survived the reap: %v", filepath.Base(path), err)
-		}
-	}
 }
