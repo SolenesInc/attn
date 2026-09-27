@@ -231,6 +231,9 @@ function PeekAnchor({
       onPointerEnter={() => setHovered(true)}
       onPointerLeave={() => setHovered(false)}
       onClickCapture={() => setHovered(false)}
+      onKeyDownCapture={(event) => {
+        if (event.key === 'Enter' || event.key === ' ') setHovered(false);
+      }}
     >
       {children}
       {hovered && !peeksSilenced && peek}

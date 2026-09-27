@@ -285,6 +285,15 @@ describe('the waiting peek', () => {
     expect(onOpenAgents).toHaveBeenCalledOnce();
     expect(screen.queryByTestId('queue-bar-waiting-peek')).toBeNull();
   });
+
+  it('closes when the pill is activated from the keyboard', () => {
+    renderBar(crewAndBands, { onOpenAgents: vi.fn() });
+    hover('queue-bar-pill');
+    expect(screen.getByTestId('queue-bar-waiting-peek')).toBeInTheDocument();
+
+    fireEvent.keyDown(screen.getByTestId('queue-bar-pill'), { key: 'Enter' });
+    expect(screen.queryByTestId('queue-bar-waiting-peek')).toBeNull();
+  });
 });
 
 describe('the runs chip', () => {
