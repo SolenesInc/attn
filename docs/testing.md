@@ -124,6 +124,8 @@ Agents:
   resume with `reason` until the test calls the returned function. Setting
   `fakeagent.PiCapabilitiesEnv` (such as `launch_instructions,resume=false`)
   before the world starts changes the capabilities the Pi driver registers.
+  `fakeagent.PiAgentEnv` registers the driver under another harness name, and
+  `fakeagent.PiModelsEnv` holds the catalog JSON it answers `driver.models` with.
 
 Playing the model, on a `fakeagent.Run`:
 

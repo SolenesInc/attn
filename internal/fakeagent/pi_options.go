@@ -9,8 +9,17 @@ import (
 
 const (
 	PiCapabilitiesEnv = "ATTN_FAKE_PI_CAPABILITIES"
+	PiAgentEnv        = "ATTN_FAKE_PI_AGENT"
+	PiModelsEnv       = "ATTN_FAKE_PI_MODELS"
 	piRefusalFile     = "refuse-launch"
 )
+
+func piAgentName() string {
+	if agent := strings.TrimSpace(os.Getenv(PiAgentEnv)); agent != "" {
+		return agent
+	}
+	return "pi"
+}
 
 func withPiCapabilityOverrides(capabilities map[string]bool) map[string]bool {
 	for _, field := range strings.Split(os.Getenv(PiCapabilitiesEnv), ",") {

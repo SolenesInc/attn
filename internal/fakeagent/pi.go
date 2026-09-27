@@ -223,7 +223,7 @@ func (p *piPlugin) connect() error {
 	}
 	var registered okResult
 	err = p.daemon.call(context.Background(), "driver.register", map[string]any{
-		"agent": "pi",
+		"agent": piAgentName(),
 		"capabilities": withPiCapabilityOverrides(map[string]bool{
 			"resume":           p.resume,
 			"initial_prompt":   true,
@@ -259,6 +259,11 @@ func (p *piPlugin) handleDaemon(_ *rpcPeer, method string, params json.RawMessag
 			return nil, fmt.Errorf("unknown method %q", method)
 		}
 		return p.launchRun(params, true)
+	case "driver.models":
+		if catalog := os.Getenv(PiModelsEnv); catalog != "" {
+			return json.RawMessage(catalog), nil
+		}
+		return nil, fmt.Errorf("unknown method %q", method)
 	case "driver.session_closed":
 		var closed piRunParams
 		if err := json.Unmarshal(params, &closed); err != nil {
