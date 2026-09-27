@@ -147,4 +147,3 @@ func watchPRForRefresh(t *testing.T, d *Daemon, sessionID string, mode prreadine
 		t.Fatal(err)
 	}
 }
-
