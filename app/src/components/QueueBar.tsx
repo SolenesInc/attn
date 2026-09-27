@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react';
+import { useLayoutEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { useAppViewTitleResolver } from '../hooks/useAppViewTitle';
 import { useAgentOnScreen } from '../hooks/useDesktopSelectionBridge';
 import { TURN_AGE_TICK_MS, useNow } from '../hooks/useNow';
@@ -7,6 +7,7 @@ import { tileContentKey, type TileLeaf } from '../types/workspace';
 import { nextRunNeedingYou, runCount, runsNeedingYouCount } from '../utils/automationRuns';
 import { slotShortcut } from '../utils/desktops';
 import { deriveTileTitle } from '../utils/tilePresentation';
+import { clampIntoViewport } from '../utils/viewportClamp';
 import { UNPLACED_GROUP_ID } from '../utils/workspaceViewModels';
 import { CriticalNotificationStrip } from './CriticalNotificationStrip';
 import { AgentRowView, AgentSessionRow, type SlotOf } from './palette/AgentRows';
@@ -165,32 +166,51 @@ function WaitingPeek({ onPicked }: { onPicked: () => void }) {
   };
 
   return (
-    <div className="queue-bar-peek" data-testid="queue-bar-waiting-peek">
-      <div className="queue-bar-peek-panel">
-        {shown.map((row) =>
-          row.kind === 'divider' ? (
-            <AgentRowView key={row.key} row={row} now={now} slotOf={slotOf} />
-          ) : (
-            <button
-              key={row.key}
-              type="button"
-              tabIndex={-1}
-              className="queue-bar-peek-row"
-              data-testid={`queue-bar-peek-${row.key}`}
-              onClick={() => pick(row)}
-            >
-              <AgentRowView row={row} now={now} slotOf={slotOf} />
-            </button>
-          ),
-        )}
-        {more > 0 && (
-          <div className="queue-bar-peek-more" data-testid="queue-bar-peek-more">
-            {more} more · {formatShortcut('ui.actionMenu')} to filter · {formatShortcut('ui.commandPalette')} commands
-          </div>
-        )}
-        <div className="queue-bar-peek-foot">
-          Automation runs are not in the queue · ⚙ chip on the right, or {formatShortcut('session.nextRun')}
+    <QueueBarPeek testId="queue-bar-waiting-peek">
+      {shown.map((row) =>
+        row.kind === 'divider' ? (
+          <AgentRowView key={row.key} row={row} now={now} slotOf={slotOf} />
+        ) : (
+          <button
+            key={row.key}
+            type="button"
+            tabIndex={-1}
+            className="queue-bar-peek-row"
+            data-testid={`queue-bar-peek-${row.key}`}
+            onClick={() => pick(row)}
+          >
+            <AgentRowView row={row} now={now} slotOf={slotOf} />
+          </button>
+        ),
+      )}
+      {more > 0 && (
+        <div className="queue-bar-peek-more" data-testid="queue-bar-peek-more">
+          {more} more · {formatShortcut('ui.actionMenu')} to filter · {formatShortcut('ui.commandPalette')} commands
         </div>
+      )}
+      <div className="queue-bar-peek-foot">
+        Automation runs are not in the queue · ⚙ chip on the right, or {formatShortcut('session.nextRun')}
+      </div>
+    </QueueBarPeek>
+  );
+}
+
+function QueueBarPeek({ testId, alignRight = false, children }: { testId: string; alignRight?: boolean; children: ReactNode }) {
+  const panelRef = useRef<HTMLDivElement>(null);
+  const [shift, setShift] = useState({ x: 0, y: 0 });
+  useLayoutEffect(() => {
+    const rect = panelRef.current!.getBoundingClientRect();
+    const clamped = clampIntoViewport(rect, rect);
+    setShift({ x: clamped.left - rect.left, y: clamped.top - rect.top });
+  }, []);
+  return (
+    <div className={`queue-bar-peek${alignRight ? ' is-right' : ''}`} data-testid={testId}>
+      <div
+        ref={panelRef}
+        className="queue-bar-peek-panel"
+        style={shift.x || shift.y ? { transform: `translate(${shift.x}px, ${shift.y}px)` } : undefined}
+      >
+        {children}
       </div>
     </div>
   );
@@ -245,45 +265,43 @@ function RunsPeek({ onPicked }: { onPicked: () => void }) {
   const slotOf = useSlotOf();
   const next = nextRunNeedingYou(automationGroups, agentOnScreenId)?.run.id;
   return (
-    <div className="queue-bar-peek is-right" data-testid="queue-bar-runs-peek">
-      <div className="queue-bar-peek-panel">
-        {automationGroups.map((group) => (
-          <div key={group.id} data-testid={`queue-bar-runs-group-${group.id}`}>
-            <div className="queue-bar-peek-group">
-              <span className="queue-bar-peek-group-name" title={group.name}>{group.name}</span>
-              <span className="queue-bar-peek-group-count">
-                {group.needingYou.length > 0 && `${group.needingYou.length} need you · `}
-                {group.runs.length} run{group.runs.length === 1 ? '' : 's'}
-              </span>
-            </div>
-            {group.runs.map((run) => (
-              <button
-                key={run.id}
-                type="button"
-                tabIndex={-1}
-                className="queue-bar-peek-row"
-                data-testid={`queue-bar-peek-run-${run.id}`}
-                onClick={() => {
-                  onPicked();
-                  onSelectSession(run.id);
-                }}
-              >
-                <AgentSessionRow
-                  session={run}
-                  tag={run.id === next ? 'session.nextRun' : null}
-                  now={now}
-                  slot={slotOf(undefined, run.id)}
-                />
-              </button>
-            ))}
+    <QueueBarPeek testId="queue-bar-runs-peek" alignRight>
+      {automationGroups.map((group) => (
+        <div key={group.id} data-testid={`queue-bar-runs-group-${group.id}`}>
+          <div className="queue-bar-peek-group">
+            <span className="queue-bar-peek-group-name" title={group.name}>{group.name}</span>
+            <span className="queue-bar-peek-group-count">
+              {group.needingYou.length > 0 && `${group.needingYou.length} need you · `}
+              {group.runs.length} run{group.runs.length === 1 ? '' : 's'}
+            </span>
           </div>
-        ))}
-        <div className="queue-bar-peek-foot">
-          Automation runs never join the queue ·{' '}
-          {next ? `${formatShortcut('session.nextRun')} opens the next one needing you` : 'nothing here needs you'}
+          {group.runs.map((run) => (
+            <button
+              key={run.id}
+              type="button"
+              tabIndex={-1}
+              className="queue-bar-peek-row"
+              data-testid={`queue-bar-peek-run-${run.id}`}
+              onClick={() => {
+                onPicked();
+                onSelectSession(run.id);
+              }}
+            >
+              <AgentSessionRow
+                session={run}
+                tag={run.id === next ? 'session.nextRun' : null}
+                now={now}
+                slot={slotOf(undefined, run.id)}
+              />
+            </button>
+          ))}
         </div>
+      ))}
+      <div className="queue-bar-peek-foot">
+        Automation runs never join the queue ·{' '}
+        {next ? `${formatShortcut('session.nextRun')} opens the next one needing you` : 'nothing here needs you'}
       </div>
-    </div>
+    </QueueBarPeek>
   );
 }
 

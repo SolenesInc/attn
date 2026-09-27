@@ -9,14 +9,16 @@ import '../../src/App.css';
 const noop = () => {};
 const long = (words: string) => `${words}-${'and-then-some-more-'.repeat(4)}end`;
 
-const desktopIds = Array.from({ length: 11 }, (_, index) => `desk-${index + 1}`);
+const params = new URLSearchParams(window.location.search);
+const underGrid = params.has('grid');
+const desktopIds = Array.from({ length: params.has('oneDesktop') ? 1 : 11 }, (_, index) => `desk-${index + 1}`);
 
 const sessions = [
-  ...desktopIds.slice(0, 4).map((desktopId, index) => ({
+  ...[0, 1, 2, 3].map((index) => ({
     id: `owed-${index}`,
     label: long(`an-agent-with-a-long-label-${index}`),
     state: 'waiting_input' as const,
-    workspaceId: desktopId,
+    workspaceId: desktopIds[index % desktopIds.length],
     turnOwed: true,
     turnOpenedAt: `2026-09-26T0${index}:00:00Z`,
   })),
@@ -24,7 +26,7 @@ const sessions = [
     id: `run-${index}`,
     label: `run #${index}`,
     state: 'waiting_input' as const,
-    workspaceId: desktopIds[5],
+    workspaceId: desktopIds[Math.min(5, desktopIds.length - 1)],
     turnOwed: true,
     turnOpenedAt: `2026-09-26T0${index}:30:00Z`,
     automation: {
@@ -60,8 +62,6 @@ function desktop(id: string, slot: number): Desktop {
 
 const workspaces = buildDesktopViewModels(desktopIds.map((id, index) => desktop(id, index + 1)), sessions);
 
-const underGrid = new URLSearchParams(window.location.search).has('grid');
-
 export function QueueBarHarness({ onReady, setTriggerRerender }: HarnessProps) {
   useEffect(() => {
     onReady();
@@ -79,7 +79,7 @@ export function QueueBarHarness({ onReady, setTriggerRerender }: HarnessProps) {
           visualIndexByWorkspaceId={new Map(desktopIds.slice(0, 9).map((id, index) => [id, index]))}
           queue={buildQueueBands(workspaces)}
           instance="harness"
-          profileName={long('A-very-long-profile-name-typed-without-spaces')}
+          profileName={long('A-very-long-profile-name-typed-without-spaces').repeat(params.has('oneDesktop') ? 6 : 1)}
           criticalNotifications={{ count: 3, title: long('a-critical-notification-title') }}
           onOpenNotifications={noop}
           onSelectSession={noop}

@@ -50,3 +50,21 @@ test('lets the grid cover the bar without moving what sits under it', async ({ p
   );
   expect(hit).toBe('grid-stand-in');
 });
+
+test('keeps both peeks on screen when a long profile pushes the waiting pill right on a single desktop', async ({ page }) => {
+  await page.setViewportSize({ width: 800, height: 600 });
+  await page.goto('/test-harness/?component=QueueBar&oneDesktop');
+  await page.waitForFunction(() => window.__HARNESS__?.ready === true);
+
+  const anchor = (await page.getByTestId('queue-bar-waiting').boundingBox())!;
+  expect(anchor.x + 420).toBeGreaterThan(800);
+
+  for (const [chip, peek] of [['queue-bar-waiting', 'queue-bar-waiting-peek'], ['queue-bar-runs', 'queue-bar-runs-peek']]) {
+    await page.getByTestId(chip).hover();
+    const panel = (await page.locator(`[data-testid=${peek}] .queue-bar-peek-panel`).boundingBox())!;
+    expect(panel.x, peek).toBeGreaterThanOrEqual(0);
+    expect(panel.x + panel.width, peek).toBeLessThanOrEqual(800);
+    await page.mouse.move(400, 500);
+    await expect(page.getByTestId(peek)).toBeHidden();
+  }
+});
