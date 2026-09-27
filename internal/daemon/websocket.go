@@ -501,6 +501,30 @@ func (h *wsHub) sendToMatchingClients(message outboundMessage, match func(*wsCli
 	}
 }
 
+func (h *wsHub) sendStreamToMatchingClients(payload []byte, match func(*wsClient) bool) {
+	message := outboundMessage{kind: messageKindText, payload: append([]byte(nil), payload...)}
+	var targets []*wsClient
+	h.ForEachClient(func(client *wsClient) {
+		if match(client) {
+			targets = append(targets, client)
+		}
+	})
+	for _, client := range targets {
+		if client.sendStream(message, ptyOutputSendWait) || client.conn == nil || client.sendChannelClosed() {
+			continue
+		}
+		h.logf("WebSocket client stopped draining relayed terminal output, disconnecting")
+		h.evict(client, slowClientCloseReason)
+		h.forget(client)
+	}
+}
+
+func (h *wsHub) forget(client *wsClient) {
+	h.mu.Lock()
+	delete(h.clients, client)
+	h.mu.Unlock()
+}
+
 func (h *wsHub) deliver(client *wsClient, message outboundMessage) (queued, evicted bool) {
 	queued, full := client.offer(message)
 	if !full || client.conn == nil {
@@ -798,9 +822,7 @@ func (d *Daemon) sendOutbound(client *wsClient, message outboundMessage) bool {
 	}
 	queued, evicted := d.wsHub.deliver(client, message)
 	if evicted {
-		d.wsHub.mu.Lock()
-		delete(d.wsHub.clients, client)
-		d.wsHub.mu.Unlock()
+		d.wsHub.forget(client)
 	}
 	return queued
 }
@@ -1855,7 +1877,7 @@ func (d *Daemon) broadcastRawWSMessage(payload []byte) {
 			d.wsHub.BroadcastRawText(payload)
 			return
 		}
-		d.wsHub.sendToMatchingClients(outboundMessage{kind: messageKindText, payload: payload, stream: true}, func(client *wsClient) bool {
+		d.wsHub.sendStreamToMatchingClients(payload, func(client *wsClient) bool {
 			return client.wantsRemoteAttachTraffic(envelope.ID)
 		})
 		return
