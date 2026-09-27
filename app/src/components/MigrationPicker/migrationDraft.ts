@@ -222,9 +222,11 @@ export function summarize(view: GroupView): string {
   return `${agents} · ${view.tiles} tile${view.tiles === 1 ? '' : 's'}`;
 }
 
-// An emptied desktop stays after Finish; a free slot gets a desktop only once something lands there.
+// Says what Finish leaves on a desktop with no group placed: a free slot gets no desktop at all.
 export function emptyLabel(desktop: DraftDesktopView): string {
-  return desktop.desktop.desktop_id ? 'Stays empty' : 'Free slot';
+  if (!desktop.desktop.desktop_id) return 'Free slot';
+  const kept = desktop.desktop.kept_tiles ?? 0;
+  return kept ? `Keeps ${plural(kept, 'tile')}` : 'Stays empty';
 }
 
 export function allDraftDesktops(view: DraftView): DraftDesktopView[] {

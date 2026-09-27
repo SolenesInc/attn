@@ -6274,6 +6274,7 @@ export interface State {
 
 export interface DesktopObject {
     desktop_id?:    string;
+    kept_tiles?:    number;
     key:            string;
     shortcut_slot?: number;
     tree_json:      string;
@@ -6293,6 +6294,7 @@ export interface GroupElement {
 
 export interface MigrationDraftDesktop {
     desktop_id?:    string;
+    kept_tiles?:    number;
     key:            string;
     shortcut_slot?: number;
     tree_json:      string;
@@ -20781,6 +20783,7 @@ const typeMap: any = {
     ], "any"),
     "DesktopObject": o([
         { json: "desktop_id", js: "desktop_id", typ: u(undefined, "") },
+        { json: "kept_tiles", js: "kept_tiles", typ: u(undefined, 0) },
         { json: "key", js: "key", typ: "" },
         { json: "shortcut_slot", js: "shortcut_slot", typ: u(undefined, 0) },
         { json: "tree_json", js: "tree_json", typ: "" },
@@ -20796,6 +20799,7 @@ const typeMap: any = {
     ], "any"),
     "MigrationDraftDesktop": o([
         { json: "desktop_id", js: "desktop_id", typ: u(undefined, "") },
+        { json: "kept_tiles", js: "kept_tiles", typ: u(undefined, 0) },
         { json: "key", js: "key", typ: "" },
         { json: "shortcut_slot", js: "shortcut_slot", typ: u(undefined, 0) },
         { json: "tree_json", js: "tree_json", typ: "" },

@@ -14,6 +14,7 @@ type ProfileMigrationView struct {
 	Manifest profilemigration.Manifest
 	Plan     profilemigration.Plan
 	Live     []profilemigration.GroupState
+	Kept     map[string]int
 }
 
 func (v ProfileMigrationView) PlacementRequired() bool {
@@ -52,6 +53,7 @@ func loadProfileMigration(tx *sql.Tx) (ProfileMigrationView, error) {
 	}
 	view.Live = profilemigration.LiveGroups(view.Manifest, desktops)
 	view.Plan = view.Plan.Reconcile(desktops).Retire(view.Live)
+	view.Kept = profilemigration.KeptLeaves(view.Live, desktops)
 	return view, nil
 }
 

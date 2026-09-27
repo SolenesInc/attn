@@ -3334,6 +3334,7 @@ model MigrationDraftDesktop {
   desktop_id?: string;
   shortcut_slot?: int32;        // 1-9; absent for an extra desktop
   tree_json: string;            // Split tree of {"group": id} leaves; ratio is the first child's share; empty when nothing is placed
+  kept_tiles?: int32;           // Panes and tiles outside every imported group that Finish keeps on this desktop
 }
 
 model MigrationState {
