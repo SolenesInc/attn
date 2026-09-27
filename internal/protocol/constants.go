@@ -7,7 +7,7 @@ import (
 	"time"
 )
 
-const ProtocolVersion = "321"
+const ProtocolVersion = "322"
 
 const (
 	ErrorCodeConflict             = "conflict"
@@ -165,7 +165,6 @@ const (
 	CmdCrewPrime                             = "crew_prime"
 	CmdCrewHandoff                           = "crew_handoff"
 	CmdStop                                  = "stop"
-	CmdTodos                                 = "todos"
 	CmdFilesEdited                           = "files_edited"
 	CmdPullRequestCreated                    = "pull_request_created"
 	CmdPullRequestForget                     = "pull_request_forget"
@@ -346,7 +345,6 @@ const (
 	EventWorkspaceUnregistered           = "workspace_unregistered"
 	EventWorkspaceStateChanged           = "workspace_state_changed"
 	EventNotebookChanged                 = "notebook_changed"
-	EventSessionTodosUpdated             = "session_todos_updated"
 	EventSessionsUpdated                 = "sessions_updated"
 	EventPullRequestWatchResult          = "pull_request_watch_result"
 	EventPullRequestUnwatchResult        = "pull_request_unwatch_result"
@@ -1510,13 +1508,6 @@ func ParseMessage(data []byte) (string, interface{}, error) {
 
 	case CmdStop:
 		var msg StopMessage
-		if err := json.Unmarshal(data, &msg); err != nil {
-			return "", nil, err
-		}
-		return peek.Cmd, &msg, nil
-
-	case CmdTodos:
-		var msg TodosMessage
 		if err := json.Unmarshal(data, &msg); err != nil {
 			return "", nil, err
 		}

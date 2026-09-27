@@ -53,7 +53,6 @@ var sessionCommandsAnsweredWhereTheyLand = map[string]string{
 	protocol.CmdRegister:            "arrives from the agent process over the unix socket",
 	protocol.CmdState:               "arrives from the agent process over the unix socket",
 	protocol.CmdStop:                "arrives from the agent process over the unix socket",
-	protocol.CmdTodos:               "arrives from the agent process over the unix socket",
 	protocol.CmdFilesEdited:         "arrives from the agent process over the unix socket",
 	protocol.CmdHeartbeat:           "arrives from the agent process over the unix socket",
 	protocol.CmdHookNotification:    "arrives from the agent process over the unix socket",

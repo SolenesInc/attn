@@ -92,11 +92,7 @@ func (d *Daemon) agentPeekResult(session *protocol.Session) *protocol.AgentPeekR
 		LastSeen:    decorated.LastSeen,
 		StateReason: decorated.StateReason,
 		TurnOwed:    decorated.TurnOwed,
-		Todos:       decorated.Todos,
 		CrewMember:  decorated.CrewMember,
-	}
-	if result.Todos == nil {
-		result.Todos = []string{}
 	}
 	if workspace := d.store.GetWorkspace(decorated.WorkspaceID); workspace != nil {
 		result.WorkspaceTitle = protocol.Ptr(workspace.Title)

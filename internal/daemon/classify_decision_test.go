@@ -13,7 +13,6 @@ import (
 func TestClassifyPreTranscript(t *testing.T) {
 	cases := []struct {
 		name              string
-		pendingTodos      int
 		transcriptEnabled bool
 		classifierEnabled bool
 		stop              stopClassification
@@ -21,8 +20,7 @@ func TestClassifyPreTranscript(t *testing.T) {
 		wantState         string
 	}{
 		{
-			name:              "a yield ignores pending todos and reads the transcript",
-			pendingTodos:      3,
+			name:              "a yield with a classifier reads the transcript",
 			transcriptEnabled: true,
 			classifierEnabled: true,
 			stop:              stopClassification{yielded: true},
@@ -34,22 +32,6 @@ func TestClassifyPreTranscript(t *testing.T) {
 			classifierEnabled: false,
 			stop:              stopClassification{yielded: true},
 			wantAction:        classifySkip,
-		},
-		{
-			name:              "pending todos outrank everything",
-			pendingTodos:      1,
-			transcriptEnabled: true,
-			classifierEnabled: true,
-			wantAction:        classifyApply,
-			wantState:         protocol.StateWaitingInput,
-		},
-		{
-			name:              "pending todos win even with both capabilities off",
-			pendingTodos:      2,
-			transcriptEnabled: false,
-			classifierEnabled: false,
-			wantAction:        classifyApply,
-			wantState:         protocol.StateWaitingInput,
 		},
 		{
 			name:              "transcript disabled settles idle",
@@ -74,7 +56,7 @@ func TestClassifyPreTranscript(t *testing.T) {
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
-			got := classifyPreTranscript(tc.pendingTodos, tc.transcriptEnabled, tc.classifierEnabled, tc.stop)
+			got := classifyPreTranscript(tc.transcriptEnabled, tc.classifierEnabled, tc.stop)
 			if got.action != tc.wantAction || got.state != tc.wantState {
 				t.Fatalf("classifyPreTranscript() = %+v, want action %v state %q", got, tc.wantAction, tc.wantState)
 			}

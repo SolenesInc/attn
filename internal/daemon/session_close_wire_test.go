@@ -58,7 +58,6 @@ func TestALateReportCannotRewriteAClosedSession(t *testing.T) {
 
 	_ = cli.UpdateState(session, protocol.StateWaitingInput)
 	_ = cli.UpdateStateFromHookEvidence(session, protocol.StateWaitingInput, "", "Stop", "")
-	_ = cli.UpdateTodos(session, []string{"late todo"})
 	_ = cli.RenameSession(session, "renamed after the close")
 	if err := cli.Register(session, "brief", w.Path("elsewhere")); err == nil {
 		t.Error("a late register recreated the closed session")

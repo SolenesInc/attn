@@ -10,35 +10,6 @@ import (
 	"github.com/victorarias/attn/internal/testworld"
 )
 
-func TestAStopWithOpenTodosWaitsForTheUserWithoutAskingTheModel(t *testing.T) {
-	w := newTitlingWorld(t, fakeagent.Claude)
-	app, cli := w.App(), w.Client()
-	transcript, _ := hookedClaudeAtWork(t, w, app, cli, "migrate the orders table")
-	if err := cli.UpdateTodos("s1", []string{"[✓] write the migration", "[ ] run it against staging"}); err != nil {
-		t.Fatalf("report todos: %v", err)
-	}
-	transcript.Answer("The migration is written; staging is next.")
-	if err := cli.SendStop("s1", transcript.Path, client.StopFacts{}); err != nil {
-		t.Fatalf("stop: %v", err)
-	}
-	testworld.AwaitSession(app, "s1", func(s protocol.Session) bool { return s.State == protocol.SessionStateWaitingInput })
-}
-
-func TestAStopWithEveryTodoDoneTakesTheModelsVerdict(t *testing.T) {
-	w := newTitlingWorld(t, fakeagent.Claude)
-	app, cli := w.App(), w.Client()
-	transcript, _ := hookedClaudeAtWork(t, w, app, cli, "migrate the orders table")
-	if err := cli.UpdateTodos("s1", []string{"[✓] write the migration", "[✓] run it against staging"}); err != nil {
-		t.Fatalf("report todos: %v", err)
-	}
-	transcript.Answer("Staging is migrated. Should I run it against production?")
-	if err := cli.SendStop("s1", transcript.Path, client.StopFacts{}); err != nil {
-		t.Fatalf("stop: %v", err)
-	}
-	answerTurnVerdict(t, w, "WAITING")
-	testworld.AwaitSession(app, "s1", func(s protocol.Session) bool { return s.State == protocol.SessionStateWaitingInput })
-}
-
 func TestATurnIsJudgedOnceHoweverManyStopsReportIt(t *testing.T) {
 	w := newTitlingWorld(t, fakeagent.Claude)
 	app, cli := w.App(), w.Client()

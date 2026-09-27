@@ -177,9 +177,6 @@ func TestTheBusCommandsReportAndTrimTheLogTheDaemonWrote(t *testing.T) {
 	if err := busy.RenameSession("bus-session", "renamed"); err != nil {
 		t.Fatal(err)
 	}
-	if err := busy.UpdateTodos("bus-session", []string{"trim the log"}); err != nil {
-		t.Fatal(err)
-	}
 	if err := busy.UpdateState("bus-session", "waiting_input"); err != nil {
 		t.Fatal(err)
 	}

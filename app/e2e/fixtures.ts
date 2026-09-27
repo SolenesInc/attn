@@ -382,7 +382,6 @@ async function injectTestSession(
           ...(session.workspace_id ? { workspace_id: session.workspace_id } : {}),
           state_since: new Date().toISOString(),
           last_seen: new Date().toISOString(),
-          todos: null,
           muted: false,
           ...(session.is_worktree !== undefined ? { is_worktree: session.is_worktree } : {}),
           ...(session.branch ? { branch: session.branch } : {}),

@@ -256,9 +256,6 @@ type AgentPeekResult struct {
 	// StateSince corresponds to the JSON schema field "state_since".
 	StateSince string `json:"state_since"`
 
-	// Todos corresponds to the JSON schema field "todos".
-	Todos []string `json:"todos"`
-
 	// TurnOwed corresponds to the JSON schema field "turn_owed".
 	TurnOwed *bool `json:"turn_owed,omitempty,omitzero"`
 
@@ -8930,9 +8927,6 @@ type Session struct {
 	// TicketUnread corresponds to the JSON schema field "ticket_unread".
 	TicketUnread *bool `json:"ticket_unread,omitempty,omitzero"`
 
-	// Todos corresponds to the JSON schema field "todos".
-	Todos []string `json:"todos,omitempty,omitzero"`
-
 	// TurnOpenedAt corresponds to the JSON schema field "turn_opened_at".
 	TurnOpenedAt *string `json:"turn_opened_at,omitempty,omitzero"`
 
@@ -9649,14 +9643,6 @@ const SessionStateScheduled SessionState = "scheduled"
 const SessionStateUnknown SessionState = "unknown"
 const SessionStateWaitingInput SessionState = "waiting_input"
 const SessionStateWorking SessionState = "working"
-
-type SessionTodosUpdatedMessage struct {
-	// Event corresponds to the JSON schema field "event".
-	Event string `json:"event"`
-
-	// Session corresponds to the JSON schema field "session".
-	Session Session `json:"session"`
-}
 
 type SessionTranscriptEvent struct {
 	// Cursor corresponds to the JSON schema field "cursor".
@@ -10813,17 +10799,6 @@ type TicketUnsubscribeMessage struct {
 type TicketUnsubscribeResult struct {
 	// TicketID corresponds to the JSON schema field "ticket_id".
 	TicketID string `json:"ticket_id"`
-}
-
-type TodosMessage struct {
-	// Cmd corresponds to the JSON schema field "cmd".
-	Cmd string `json:"cmd"`
-
-	// ID corresponds to the JSON schema field "id".
-	ID string `json:"id"`
-
-	// Todos corresponds to the JSON schema field "todos".
-	Todos []string `json:"todos"`
 }
 
 type TriggerNudgeMessage struct {

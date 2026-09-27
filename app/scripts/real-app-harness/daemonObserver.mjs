@@ -455,7 +455,6 @@ export class DaemonObserver {
         break;
       case 'session_registered':
       case 'session_state_changed':
-      case 'session_todos_updated':
         if (data.session?.id) {
           this.sessionsById.set(data.session.id, data.session);
         }

@@ -86,7 +86,6 @@ export interface Session {
     readonly state_updated_at: string;
     readonly terminal_build_stale?: boolean;
     readonly ticket_unread?: boolean;
-    readonly todos?: readonly string[];
     readonly turn_opened_at?: string;
     readonly turn_owed?: boolean;
     readonly turn_snoozed_until?: string;
