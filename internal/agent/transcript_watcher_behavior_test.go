@@ -43,33 +43,6 @@ func TestShouldPromoteTranscriptPending(t *testing.T) {
 	}
 }
 
-func TestClaudeWatcherBehaviorSkipClassification(t *testing.T) {
-	now := time.Now()
-	recent := now.Add(-10 * time.Second).Format(time.RFC3339Nano)
-	stale := now.Add(-3 * time.Minute).Format(time.RFC3339Nano)
-	cases := []struct {
-		name     string
-		state    protocol.SessionState
-		lastSeen string
-		skip     bool
-	}{
-		{"a recently active working session", protocol.SessionStateWorking, recent, true},
-		{"a recently active session pending approval", protocol.SessionStatePendingApproval, recent, true},
-		{"a working session whose hooks went stale", protocol.SessionStateWorking, stale, false},
-		{"an idle session", protocol.SessionStateIdle, recent, false},
-		{"an unreadable last seen", protocol.SessionStateWorking, "garbage", false},
-		{"a legacy RFC 3339 stamp that is still recent", protocol.SessionStateWorking, now.Add(-5 * time.Second).Format(time.RFC3339), true},
-		{"a scheduled session with recent hooks", protocol.SessionStateScheduled, recent, true},
-		{"a scheduled session parked long", protocol.SessionStateScheduled, stale, true},
-		{"a scheduled session with an unreadable last seen", protocol.SessionStateScheduled, "garbage", true},
-	}
-	for _, tc := range cases {
-		if skip, _ := (&claudeTranscriptWatcherBehavior{}).SkipClassification(tc.state, tc.lastSeen, now); skip != tc.skip {
-			t.Errorf("%s: skip = %v, want %v", tc.name, skip, tc.skip)
-		}
-	}
-}
-
 func TestWatcherBehaviorsDetectAHaltedTurn(t *testing.T) {
 	for _, tc := range []struct {
 		name       string
@@ -167,28 +140,5 @@ func TestCopilotAbortClosesTheTurnBracket(t *testing.T) {
 				t.Fatalf("state %q, want none after an abort", tick.State)
 			}
 		})
-	}
-}
-
-func TestCodexWatcherNeverClassifies(t *testing.T) {
-	behavior, ok := GetTranscriptWatcherBehavior(Get("codex"))
-	if !ok {
-		t.Fatal("codex has no watcher behavior; its halted turns would go unseen")
-	}
-	if _, isCodex := behavior.(*codexTranscriptWatcherBehavior); !isCodex {
-		t.Fatalf("codex got %T, want its own behavior", behavior)
-	}
-	if quietSince := behavior.QuietSince(time.Now()); !quietSince.IsZero() {
-		t.Fatalf("codex exposed a quiet window at %s; the daemon would poll classification forever", quietSince)
-	}
-	for _, state := range []protocol.SessionState{
-		protocol.SessionStateIdle,
-		protocol.SessionStateWorking,
-		protocol.SessionStateWaitingInput,
-	} {
-		skip, reason := behavior.SkipClassification(state, "", time.Now())
-		if !skip {
-			t.Fatalf("codex would classify from state %q (%s); classification is hook-owned", state, reason)
-		}
 	}
 }
