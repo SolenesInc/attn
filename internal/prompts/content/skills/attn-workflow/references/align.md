@@ -3,7 +3,9 @@
 
 Build shared understanding. Make your interpretation visible to the user, uncover differences, and challenge assumptions to strengthen the idea.
 
-Read and use [discuss](discuss.md) for the interview: investigation, question rounds, recommendations, and the closing summary. Apply the alignment concerns below within that conversation.
+Read and use [discuss](discuss.md) for the interview: investigation, question rounds, and recommendations. Apply the alignment concerns below within that conversation, and close with the reflection under Finish in conversation.
+
+Scale the check to what is still unsettled. Before a consequential step in work you have already discussed, reflect your understanding, the decisions you made on your own, and the assumptions the next step relies on, and ask only where you and the user could differ.
 
 ## Investigate
 
