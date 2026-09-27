@@ -15,7 +15,7 @@ export interface BoardState {
 }
 
 function groupTitles(view: DraftView, ids: string[]): string[] {
-  return ids.map((id) => view.groupById.get(id)?.group.title ?? id);
+  return ids.map((id) => view.groupById.get(id)?.name ?? id);
 }
 
 function unconfirmedOn(view: DraftView, desktop: DraftDesktopView): string[] {
@@ -144,7 +144,7 @@ function SourceRow({ row, board, onSelect, onKeep }: SourceRowProps) {
       >
         <div className="mp-source-title">
           <span className={`mp-dot ${dot}`} />
-          <span className="mp-source-name">{group.title}</span>
+          <span className="mp-source-name">{row.name}</span>
         </div>
         <div className="mp-source-meta">{summarize(row)}</div>
         {group.directory && <div className="mp-source-meta mp-source-directory" title={group.directory}>{group.directory}</div>}
@@ -161,7 +161,7 @@ function SourceRow({ row, board, onSelect, onKeep }: SourceRowProps) {
           data-no-drag
           disabled={board.busy}
           className={`mp-keep-inline${group.group_id === board.pulseId ? ' pulse' : ''}`}
-          aria-label={`Keep ${group.title} on ${location?.label ?? 'its desktop'}`}
+          aria-label={`Keep ${row.name} on ${location?.label ?? 'its desktop'}`}
           title="Keep here"
           onClick={onKeep}
         >
@@ -300,7 +300,7 @@ export function DragOverlay({ drag, view }: { drag: GroupDragView | null; view: 
   return (
     <>
       <div className="mp-drag-label" style={{ left: drag.x + 12, top: drag.y + 14 }}>
-        {view.groupById.get(drag.groupId)?.group.title}
+        {view.groupById.get(drag.groupId)?.name}
       </div>
       {target && (
         <>

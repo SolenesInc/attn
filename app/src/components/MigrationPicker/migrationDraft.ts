@@ -23,6 +23,7 @@ export interface GroupLeaf extends Box {
 
 export interface GroupView {
   group: MigrationGroup;
+  name: string;
   leaves: GroupLeaf[];
   agents: number;
   tiles: number;
@@ -121,11 +122,11 @@ export function planBoxes(node: PlanNode | null): Map<string, Box> {
   return boxes;
 }
 
-function groupView(group: MigrationGroup): GroupView {
+function groupLeaves(group: MigrationGroup): GroupLeaf[] {
   const tree = parseLayoutJSON(group.tree_json);
   const bounds = tree ? getNormalizedPaneBounds(tree) : new Map<string, Box>();
   const paneById = new Map(group.panes.map((pane) => [pane.pane_id, pane]));
-  const leaves = collectLayoutLeaves(tree).flatMap((leaf): GroupLeaf[] => {
+  return collectLayoutLeaves(tree).flatMap((leaf): GroupLeaf[] => {
     const id = leafSlotId(leaf);
     const box = bounds.get(id);
     if (!box) return [];
@@ -141,8 +142,32 @@ function groupView(group: MigrationGroup): GroupView {
       status: pane?.status ?? 'ready',
     }];
   });
+}
+
+// Two workspaces may share a title (same directory); the first agent's title tells them apart.
+export function groupNames(groups: MigrationGroup[]): Map<string, string> {
+  const count = new Map<string, number>();
+  for (const group of groups) count.set(group.title, (count.get(group.title) ?? 0) + 1);
+  const names = new Map<string, string>();
+  const used = new Set<string>();
+  for (const group of groups) {
+    let name = group.title;
+    if ((count.get(group.title) ?? 0) > 1) {
+      const agent = groupLeaves(group).find((leaf) => !leaf.tile)?.label;
+      name = agent ? `${group.title} · ${agent}` : group.title;
+      for (let n = 2; used.has(name); n++) name = `${group.title} (${n})`;
+    }
+    used.add(name);
+    names.set(group.group_id, name);
+  }
+  return names;
+}
+
+function groupView(group: MigrationGroup, name: string): GroupView {
+  const leaves = groupLeaves(group);
   return {
     group,
+    name,
     leaves,
     agents: leaves.filter((leaf) => !leaf.tile).length,
     tiles: leaves.filter((leaf) => leaf.tile).length,
@@ -152,7 +177,8 @@ function groupView(group: MigrationGroup): GroupView {
 }
 
 export function draftView(state: MigrationState): DraftView {
-  const groups = state.groups.map(groupView);
+  const names = groupNames(state.groups);
+  const groups = state.groups.map((group) => groupView(group, names.get(group.group_id) ?? group.title));
   const slots: DraftDesktopView[] = [];
   const extras: DraftDesktopView[] = [];
   for (const desktop of state.desktops) {

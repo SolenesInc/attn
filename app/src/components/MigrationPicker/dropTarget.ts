@@ -5,7 +5,7 @@ import type { GroupDropTarget } from './useGroupDrag';
 function dropLabel(target: Omit<GroupDropTarget, 'label'>, view: DraftView, desktop: DraftDesktopView): string {
   if (target.empty) return `Move to ${desktop.label}`;
   const side = target.edge === 'top' ? 'above' : target.edge === 'bottom' ? 'below' : `${target.edge} of`;
-  const anchor = target.anchorGroupId ? view.groupById.get(target.anchorGroupId)?.group.title : 'the desktop';
+  const anchor = target.anchorGroupId ? view.groupById.get(target.anchorGroupId)?.name : 'the desktop';
   return `Merge ${side} ${anchor}`;
 }
 

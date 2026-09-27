@@ -109,20 +109,20 @@ function PlacementBoard({ readError, migration, view, profileName, onShowIntro }
     if (planWithout(desktop.tree, selected)) {
       setDialog({ kind: 'merge', groupId: selected, desktopKey: desktop.desktop.key, revision: currentRevision() });
     } else if (desktop.groupIds.includes(selected)) {
-      keepGroups([selected], `${view.groupById.get(selected)?.group.title ?? selected} stays on ${desktop.label}.`);
+      keepGroups([selected], `${view.groupById.get(selected)?.name ?? selected} stays on ${desktop.label}.`);
     } else {
       moveGroup(selected, desktop, null, 'right', 0.5, currentRevision());
     }
   }, [isBusy, keepGroups, moveGroup, selected, setDialog, setStatus, view]);
 
   const keepSelected = useCallback(() => {
-    const group = selected ? view.groupById.get(selected)?.group : undefined;
-    if (!group) return;
-    if (group.confirmed) {
-      setStatus(`${group.title} is already confirmed.`);
+    const row = selected ? view.groupById.get(selected) : undefined;
+    if (!row) return;
+    if (row.group.confirmed) {
+      setStatus(`${row.name} is already confirmed.`);
       return;
     }
-    keepGroups([group.group_id], `${group.title} stays on ${view.desktopOfGroup.get(group.group_id)?.label ?? 'its desktop'}.`);
+    keepGroups([row.group.group_id], `${row.name} stays on ${view.desktopOfGroup.get(row.group.group_id)?.label ?? 'its desktop'}.`);
   }, [keepGroups, selected, setStatus, view]);
 
   usePickerKeyboard({
@@ -177,7 +177,7 @@ function PlacementBoard({ readError, migration, view, profileName, onShowIntro }
           onSelect={setSelectedId}
           onKeep={(row: GroupView) => {
             setSelectedId(row.group.group_id);
-            keepGroups([row.group.group_id], `${row.group.title} stays on ${view.desktopOfGroup.get(row.group.group_id)?.label ?? 'its desktop'}.`);
+            keepGroups([row.group.group_id], `${row.name} stays on ${view.desktopOfGroup.get(row.group.group_id)?.label ?? 'its desktop'}.`);
           }}
         />
         <DestinationPanel
