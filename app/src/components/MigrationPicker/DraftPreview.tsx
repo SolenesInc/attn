@@ -47,7 +47,7 @@ export function DraftPreview({ tree, groupById, selectedId, highlightId, draggin
             style={boxStyle(box)}
             data-migration-group={groupId}
             {...(draggable ? { 'data-drag-group': groupId } : {})}
-            title={`${view.group.title}${confirmed ? ' · confirmed' : ' · needs your confirmation'}`}
+            title={`${view.name}${confirmed ? ' · confirmed' : ' · needs your confirmation'}`}
           >
             {view.leaves.map((leaf) => (
               <div

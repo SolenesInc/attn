@@ -4,7 +4,7 @@ import { ProfileCommandError } from '../../hooks/daemonProfileEvents';
 import { useProfilesStore } from '../../store/profiles';
 import { ProfileErrorCode } from '../../types/generated';
 import type { MergeChoice } from './MergeDialog';
-import type { DraftDesktopView } from './migrationDraft';
+import { groupNames, type DraftDesktopView } from './migrationDraft';
 
 export interface Notice {
   tone: 'alert' | 'info';
@@ -42,8 +42,8 @@ export function currentRevision(): number {
   return useProfilesStore.getState().migration?.revision ?? 0;
 }
 
-function groupTitle(groupId: string): string {
-  return useProfilesStore.getState().migration?.groups.find((group) => group.group_id === groupId)?.title ?? groupId;
+function groupName(groupId: string): string {
+  return groupNames(useProfilesStore.getState().migration?.groups ?? []).get(groupId) ?? groupId;
 }
 
 export function useDraftReader(): Notice | null {
@@ -115,7 +115,7 @@ export function useMigrationActions() {
   }, [run, sendMigrationKeep]);
 
   const move = useCallback(({ groupId, desktop, choice, expectedRevision, verb }: MoveRequest, onDone?: () => void) => {
-    const title = groupTitle(groupId);
+    const title = groupName(groupId);
     void run(
       () => sendMigrationMove({
         groupId,

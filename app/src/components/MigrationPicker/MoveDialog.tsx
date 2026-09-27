@@ -22,7 +22,7 @@ export function MoveDialog({ moving, desktops, currentKey, groupById, onPick, on
         <div className="mp-dialog-top">
           <div>
             <div className="mp-eyebrow">Move</div>
-            <h2 id="mp-move-title">Move {moving.group.title} to…</h2>
+            <h2 id="mp-move-title">Move {moving.name} to…</h2>
             <p>Pick any desktop, including the extras.</p>
           </div>
           <button type="button" className="mp-button quiet small" aria-label="Cancel move" onClick={onCancel}>×</button>
@@ -40,7 +40,7 @@ export function MoveDialog({ moving, desktops, currentKey, groupById, onPick, on
                 {desktop.desktop.shortcut_slot ? <kbd>{desktop.desktop.shortcut_slot}</kbd> : null}
                 {desktop.label}
                 <span className="mp-move-names">
-                  {desktop.groupIds.map((id) => groupById.get(id)?.group.title ?? id).join(', ') || 'empty'}
+                  {desktop.groupIds.map((id) => groupById.get(id)?.name ?? id).join(', ') || 'empty'}
                 </span>
               </button>
             ))}

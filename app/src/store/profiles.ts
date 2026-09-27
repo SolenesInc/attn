@@ -1,6 +1,7 @@
 import { create } from 'zustand';
 import { useShallow } from 'zustand/react/shallow';
 import type { Desktop, MigrationPhase, MigrationState, Profile } from '../types/generated';
+import { groupNames } from '../components/MigrationPicker/migrationDraft';
 import { persistSelectedProfileId } from '../utils/selectedProfile';
 
 export interface ProfilesState {
@@ -76,7 +77,8 @@ function arrangementOf(state: Arrangement, profile: Profile, desktops: Desktop[]
 function departedGroupTitles(previous: MigrationState, next: MigrationState): string[] {
   if (next.phase !== previous.phase) return [];
   const remaining = new Set(next.groups.map((group) => group.group_id));
-  return previous.groups.filter((group) => !remaining.has(group.group_id)).map((group) => group.title);
+  const names = groupNames(previous.groups);
+  return previous.groups.filter((group) => !remaining.has(group.group_id)).map((group) => names.get(group.group_id) ?? group.title);
 }
 
 export const useProfilesStore = create<ProfilesState>((set) => ({

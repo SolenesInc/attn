@@ -60,7 +60,7 @@ export function MergeDialog({ moving, target, remaining, groupById, draftChanged
         <div className="mp-dialog-top">
           <div>
             <div className="mp-eyebrow">{target.label} · add a split</div>
-            <h2 id="mp-merge-title">Merge {moving.group.title}</h2>
+            <h2 id="mp-merge-title">Merge {moving.name}</h2>
             <p>Choose a side. The splits inside each workspace stay as they are.</p>
           </div>
           <button type="button" className="mp-button quiet small" aria-label="Cancel merge" onClick={onCancel}>×</button>
@@ -77,7 +77,7 @@ export function MergeDialog({ moving, target, remaining, groupById, draftChanged
             >
               <option value="">Entire desktop</option>
               {planGroupIds(remaining).map((id) => (
-                <option key={id} value={id}>{groupById.get(id)?.group.title ?? id}</option>
+                <option key={id} value={id}>{groupById.get(id)?.name ?? id}</option>
               ))}
             </select>
           </label>

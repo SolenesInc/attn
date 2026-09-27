@@ -1004,19 +1004,29 @@
   margin-top: 25px;
 }
 
+/* The ring animates only transform and opacity; an animated box-shadow repaints every frame. */
 @keyframes mp-pulse {
-  0% { box-shadow: 0 0 0 0 color-mix(in srgb, var(--accent) 60%, transparent); }
-  70% { box-shadow: 0 0 0 9px transparent; }
-  100% { box-shadow: 0 0 0 0 transparent; }
+  0% { opacity: 1; transform: scale(1); }
+  70%, 100% { opacity: 0; transform: scale(1.12); }
 }
 
 .mp-shell .pulse {
+  position: relative;
   border-color: var(--accent);
-  animation: mp-pulse 1.6s ease-out 5;
+}
+
+.mp-shell .pulse::after {
+  content: '';
+  position: absolute;
+  inset: -1px;
+  border-radius: inherit;
+  box-shadow: 0 0 0 4px color-mix(in srgb, var(--accent) 60%, transparent);
+  pointer-events: none;
+  animation: mp-pulse 1.6s ease-out infinite;
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .mp-shell .pulse {
+  .mp-shell .pulse::after {
     animation: none;
     box-shadow: 0 0 0 2px color-mix(in srgb, var(--accent) 60%, transparent);
   }
