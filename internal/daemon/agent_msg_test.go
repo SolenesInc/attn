@@ -3,7 +3,6 @@ package daemon
 import (
 	"errors"
 	"net"
-	"path/filepath"
 	"strings"
 	"sync"
 	"testing"
@@ -35,19 +34,6 @@ func (r *recordingDoorbell) pasted() []string {
 		prompts = append(prompts, strings.TrimSuffix(strings.TrimPrefix(write, sessionInputPasteStart), sessionInputPasteEnd))
 	}
 	return prompts
-}
-
-func newAgentMsgDaemon(t *testing.T) (*Daemon, *recordingDoorbell) {
-	t.Helper()
-	d := NewForTesting(filepath.Join(t.TempDir(), "attn.sock"))
-	t.Cleanup(func() {
-		d.sessionInputs().stopRetries()
-		d.stopAgentMailboxDoorbells()
-		_ = d.store.Close()
-	})
-	doorbell := &recordingDoorbell{}
-	d.ptyBackend = doorbell.backend()
-	return d, doorbell
 }
 
 func callAgentMsg(t *testing.T, d *Daemon, target, source, content string) protocol.Response {
