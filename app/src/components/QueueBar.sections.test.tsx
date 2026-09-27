@@ -262,6 +262,27 @@ describe('the waiting peek', () => {
       />,
     );
     expect(screen.queryByTestId('queue-bar-waiting-peek')).toBeNull();
+
+    rerender(
+      <Sidebar
+        {...baseProps}
+        workspaces={workspaces}
+        visualIndexByWorkspaceId={new Map([['ws-a', 0], ['ws-b', 1]])}
+        queue={buildQueueBands(workspaces)}
+      />,
+    );
+    expect(screen.queryByTestId('queue-bar-waiting-peek')).toBeNull();
+  });
+
+  it('closes when the pill is clicked to open the palette', () => {
+    const onOpenAgents = vi.fn();
+    renderBar(crewAndBands, { onOpenAgents });
+    hover('queue-bar-pill');
+    expect(screen.getByTestId('queue-bar-waiting-peek')).toBeInTheDocument();
+
+    fireEvent.click(screen.getByTestId('queue-bar-pill'));
+    expect(onOpenAgents).toHaveBeenCalledOnce();
+    expect(screen.queryByTestId('queue-bar-waiting-peek')).toBeNull();
   });
 });
 

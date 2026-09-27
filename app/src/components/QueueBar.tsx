@@ -31,10 +31,11 @@ export function QueueBar() {
     onPointerEnter: () => setPeek(which),
     onPointerLeave: () => setPeek((open) => (open === which ? null : open)),
   });
+  if (peeksSilenced && peek !== null) setPeek(null);
   const shown = peeksSilenced ? null : peek;
 
   return (
-    <div className="queue-bar" data-testid="queue-bar">
+    <div className="queue-bar" data-testid="queue-bar" onClickCapture={() => setPeek(null)}>
       <button
         type="button"
         className="queue-bar-tool"
@@ -63,7 +64,7 @@ export function QueueBar() {
       </button>
       <div className="queue-bar-peek-anchor queue-bar-waiting-anchor" data-testid="queue-bar-waiting" {...peekHandlers('waiting')}>
         <WaitingPill />
-        {shown === 'waiting' && <WaitingPeek onPicked={() => setPeek(null)} />}
+        {shown === 'waiting' && <WaitingPeek />}
       </div>
       {onOpenNotifications && (
         <CriticalNotificationStrip
@@ -73,7 +74,7 @@ export function QueueBar() {
         />
       )}
       <span className="queue-bar-spacer" />
-      <RunsChip peekHandlers={peekHandlers('runs')} peekOpen={shown === 'runs'} onPicked={() => setPeek(null)} />
+      <RunsChip peekHandlers={peekHandlers('runs')} peekOpen={shown === 'runs'} />
       <DesktopChips />
     </div>
   );
@@ -127,7 +128,7 @@ function useSlotOf(): SlotOf {
   };
 }
 
-function WaitingPeek({ onPicked }: { onPicked: () => void }) {
+function WaitingPeek() {
   const { queue, crew, workspaces, tileContents, onSelectSession, onWakeCrewMember, onSelectTile } =
     useSidebarContext();
   const now = useNow(TURN_AGE_TICK_MS);
@@ -157,7 +158,6 @@ function WaitingPeek({ onPicked }: { onPicked: () => void }) {
   const more = rows.filter((row) => row.kind !== 'divider').length - entries;
 
   const pick = (row: AgentPaletteRow<LocalSession>) => {
-    onPicked();
     if (row.kind === 'agent') onSelectSession(row.session.id);
     else if (row.kind === 'member') onWakeCrewMember?.(row.member);
     else if (row.kind === 'tile') onSelectTile?.(row.desktopId, row.tile.tileId);
@@ -223,11 +223,9 @@ function QueueBarPeek({ testId, alignRight = false, children }: { testId: string
 function RunsChip({
   peekHandlers,
   peekOpen,
-  onPicked,
 }: {
   peekHandlers: { onPointerEnter: () => void; onPointerLeave: () => void };
   peekOpen: boolean;
-  onPicked: () => void;
 }) {
   const { automationGroups, onWalkRuns } = useSidebarContext();
   const runs = runCount(automationGroups);
@@ -250,22 +248,19 @@ function RunsChip({
           data-runs={runs}
           data-needing={needingYou}
           title={title}
-          onClick={() => {
-            onPicked();
-            onWalkRuns?.();
-          }}
+          onClick={onWalkRuns}
         >
           ⚙ {runs}
           {needingYou > 0 && <span className="queue-bar-runs-needing">{needingYou}</span>}
         </button>
-        {peekOpen && <RunsPeek onPicked={onPicked} />}
+        {peekOpen && <RunsPeek />}
       </div>
       <span className="queue-bar-divider" />
     </>
   );
 }
 
-function RunsPeek({ onPicked }: { onPicked: () => void }) {
+function RunsPeek() {
   const { automationGroups, onSelectSession } = useSidebarContext();
   const agentOnScreenId = useAgentOnScreen();
   const now = useNow(TURN_AGE_TICK_MS);
@@ -289,10 +284,7 @@ function RunsPeek({ onPicked }: { onPicked: () => void }) {
               tabIndex={-1}
               className="queue-bar-peek-row"
               data-testid={`queue-bar-peek-run-${run.id}`}
-              onClick={() => {
-                onPicked();
-                onSelectSession(run.id);
-              }}
+              onClick={() => onSelectSession(run.id)}
             >
               <AgentSessionRow
                 session={run}
