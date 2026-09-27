@@ -9,6 +9,7 @@ import { agentPane, agentWorkspace, daemonSession, daemonWorkspace, splitWorkspa
 import { fakeRects, sizeTerminals } from './test/layout';
 import { pressShortcut, renderApp } from './test/renderApp';
 import type { CommandMessage } from './test/protocol';
+import type { AttachBlock } from './types/generated';
 import { initialState, type ScriptedDaemon } from './test/scriptedDaemon';
 import { WORKSPACE_RESIZE_COALESCE_MS } from './utils/ghosttyResize';
 import { WARM_WORKSPACE_LIMIT_STORAGE_KEY } from './utils/terminalVirtualization';
@@ -79,7 +80,7 @@ function snapshotOf(bytes: Uint8Array = NATIVE_SNAPSHOT, format: string | null =
   };
 }
 
-function snapshotReply(id: string, snapshot = snapshotOf()) {
+function snapshotReply(id: string, snapshot: ReturnType<typeof snapshotOf> & { blocks?: AttachBlock[] } = snapshotOf()) {
   return { event: 'attach_result' as const, id, success: true, cols: 40, rows: 6, last_seq: 10, running: true, snapshot };
 }
 
@@ -138,7 +139,7 @@ async function copyBlockAt(sessionId: string, clientY: number, item: 'Copy comma
   if ((menuItem as HTMLButtonElement).disabled) return null;
   fireEvent.click(menuItem);
   await act(() => Promise.resolve());
-  return copied.mock.calls.at(-1)?.[0] ?? null;
+  return copied.mock.calls.slice(-1)[0]?.[0] ?? null;
 }
 
 function visibleText(sessionId: string) {
