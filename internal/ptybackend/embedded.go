@@ -210,6 +210,10 @@ func (s *embeddedStream) publish(evt OutputEvent) (ok bool) {
 	if s.closed {
 		return false
 	}
+	// The last slot is reserved for the overflow desync; without it the client never reattaches.
+	if evt.Kind != OutputEventKindDesync && len(s.events) >= cap(s.events)-1 {
+		return false
+	}
 	select {
 	case s.events <- evt:
 		return true

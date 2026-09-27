@@ -306,6 +306,23 @@ func Await[T any](p *Peer, event string, match func(T) bool) T {
 	return found
 }
 
+func AwaitEvent(p *Peer, awaiting string, match func(protocol.WebSocketEvent) bool) protocol.WebSocketEvent {
+	p.T.Helper()
+	var found protocol.WebSocketEvent
+	p.take(awaiting, func(f frame) (bool, error) {
+		var candidate protocol.WebSocketEvent
+		if err := json.Unmarshal(f.raw, &candidate); err != nil {
+			return false, fmt.Errorf("decode %s: %w: %s", f.event, err, f.raw)
+		}
+		if !match(candidate) {
+			return false, nil
+		}
+		found = candidate
+		return true, nil
+	})
+	return found
+}
+
 func Request[T any](p *Peer, cmd any, event string, match func(T) bool) T {
 	p.T.Helper()
 	p.Send(cmd)
