@@ -1,6 +1,7 @@
 package daemon
 
 import (
+	"errors"
 	"fmt"
 	"strings"
 	"time"
@@ -14,10 +15,13 @@ const delegationFirstTurnTimeout = 90 * time.Second
 
 const seedNoteExitScreenMaxBytes = garden.MaxNoteBytes / 2
 
+var errDelegationInterrupted = errors.New("the daemon stopped before the delegate's first turn")
+
 type launchOutcome struct {
 	startedAt   time.Time
 	exit        *store.SessionExitScreen
 	unconfirmed string
+	interrupted bool
 }
 
 type launchWatch struct {
@@ -108,7 +112,7 @@ func (d *Daemon) awaitDelegatedLaunch(sessionID string, watch *launchWatch) laun
 			"no turn reported by the agent within %s; the session is up, `attn agent peek %s` shows its pane",
 			delegationFirstTurnTimeout, shortSessionID(sessionID))}
 	case <-d.done:
-		return launchOutcome{}
+		return launchOutcome{interrupted: true}
 	}
 }
 

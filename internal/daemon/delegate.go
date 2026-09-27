@@ -881,6 +881,9 @@ func (d *Daemon) confirmDelegatedLaunch(operationID, sessionID, agent string, wa
 			fmt.Sprintf("waiting for %s's first turn", agent), "", "", "", nil, nil, time.Now())
 	}
 	outcome := d.awaitDelegatedLaunch(sessionID, watch)
+	if outcome.interrupted {
+		return errDelegationInterrupted
+	}
 	if outcome.exit != nil {
 		seedID, _ := d.gardenDispatchCrown(sessionID)
 		d.noteDelegatedExitOnSeed(seedID, agent, sessionID, outcome.exit)

@@ -1,6 +1,9 @@
 package fakeagent
 
-import "encoding/json"
+import (
+	"encoding/json"
+	"time"
+)
 
 type bootingResult struct {
 	Exit   bool   `json:"exit,omitempty"`
@@ -27,4 +30,19 @@ func (k *Kit) boot(params json.RawMessage) (any, error) {
 		result, k.nextExit = *k.nextExit, nil
 	}
 	return result, nil
+}
+
+func (k *Kit) AwaitHeldBoot() {
+	k.t.Helper()
+	k.mu.Lock()
+	ask := k.bootAsk
+	k.mu.Unlock()
+	if ask == nil {
+		k.t.Fatal("no boot is held")
+	}
+	select {
+	case <-ask:
+	case <-time.After(HangGuard):
+		k.t.Fatalf("no agent asked to boot within %s%s", HangGuard, k.failureSummary())
+	}
 }
