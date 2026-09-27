@@ -101,7 +101,11 @@ func (d *Daemon) awaitDelegatedLaunch(sessionID string, watch *launchWatch) laun
 	if !d.delegationWaitsForFirstTurn {
 		return launchOutcome{}
 	}
-	timer := time.NewTimer(delegationFirstTurnTimeout)
+	wait := delegationFirstTurnTimeout
+	if launched := d.store.SessionLaunchedAt(sessionID); !launched.IsZero() {
+		wait = min(wait, max(0, wait-time.Since(launched)))
+	}
+	timer := time.NewTimer(wait)
 	defer timer.Stop()
 	select {
 	case <-watch.done:

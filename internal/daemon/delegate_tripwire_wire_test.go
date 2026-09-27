@@ -39,3 +39,33 @@ func TestADelegationWhoseAgentReportsNoTurnReturnsAtTheTripwireNamingPeek(t *tes
 		}
 	})
 }
+
+func TestADelegationTripwireCountsFromTheLaunchAcrossADaemonRestart(t *testing.T) {
+	inBubbleWithAgents(t, func(t *testing.T, w *world) {
+		cwd := w.Path("api")
+		if err := os.MkdirAll(cwd, 0o755); err != nil {
+			t.Fatal(err)
+		}
+		request := brief(cwd, "Say hello")
+		request.RequestID = "tripwire-across-restart"
+		request.Agent = protocol.Ptr("claude")
+		request.Label = protocol.Ptr("hello")
+
+		interrupted := w.Client()
+		go func() { _, _ = interrupted.Delegate(request) }()
+		w.advance(60 * time.Second)
+		w.restart()
+
+		asked := time.Now()
+		result, err := w.Client().Delegate(request)
+		if err != nil {
+			t.Fatalf("delegating again after the restart: %v", err)
+		}
+		if waited := time.Since(asked); waited < 30*time.Second || waited > 31*time.Second {
+			t.Errorf("after the restart the delegation returned in %s, want the 30s left of its 90s tripwire", waited)
+		}
+		if result.FirstTurnUnconfirmed == nil {
+			t.Errorf("the delegation = %+v, want its first turn unconfirmed", result)
+		}
+	})
+}
