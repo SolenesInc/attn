@@ -1,4 +1,4 @@
-import { useMemo, type MouseEvent as ReactMouseEvent } from 'react';
+import type { MouseEvent as ReactMouseEvent } from 'react';
 import { StateIndicator } from './StateIndicator';
 import { SessionLabel } from './SessionLabel';
 import { HarnessIcon } from './HarnessIcon';
@@ -8,21 +8,14 @@ import { SidebarSettlingBar } from './SettlingIndicator';
 import { CrewWakeSun, useWakeConfirm } from './CrewWake';
 import { formatShortcut } from '../shortcuts/formatShortcut';
 import type { UISessionState } from '../types/sessionState';
-import {
-  formatTurnAge,
-  type QueueBands as QueueBandsModel,
-  type QueueRow,
-} from '../utils/queueBands';
-import { formatWakeTime } from '../utils/snoozeDurations';
+import type { QueueRow } from '../utils/queueBands';
 import { crewDisplayName } from '../utils/crewName';
-import { useNow, TURN_AGE_TICK_MS } from '../hooks/useNow';
 import type {
   AutomationProvenance as AutomationProvenanceValue,
   SessionDelegationRole,
 } from '../types/generated';
 import { SessionProvenance } from './SessionProvenance';
 import { DelegationChainTrigger } from './DelegationChain';
-import { delegatesByDispatcher } from '../utils/delegationLinks';
 
 export interface QueueBandSessionView {
   id: string;
@@ -46,24 +39,6 @@ export interface QueueBandSessionView {
 export interface CrewMemberView {
   id: string;
   binding_session?: string;
-}
-
-interface QueueBandsProps {
-  bands: QueueBandsModel<QueueBandSessionView>;
-  crew?: CrewMemberView[];
-  onWakeCrewMember?: (member: string) => void;
-  onSleepCrewMember?: (member: string) => void;
-  onOpenCrewMemberActions?: (member: string, event: ReactMouseEvent<HTMLButtonElement>) => void;
-  selectedId: string | null;
-  onSelectSession: (id: string) => void;
-  onSettleTurn: (id: string) => void;
-  onScreenSessionIds?: ReadonlySet<string>;
-  onOpenActions?: (
-    session: { id: string; label: string; chiefOfStaff?: boolean },
-    event: ReactMouseEvent,
-  ) => void;
-  onOpenSnooze?: (session: { id: string; label: string }, event: ReactMouseEvent) => void;
-  allSessions: readonly QueueBandSessionView[];
 }
 
 function QueueRowControls({
@@ -146,9 +121,10 @@ function QueueRowControls({
   );
 }
 
-function QueueRowView({
+export function QueueRowView({
   row,
   selected,
+  where,
   age,
   wake,
   onSelect,
@@ -162,6 +138,7 @@ function QueueRowView({
 }: {
   row: QueueRow<QueueBandSessionView>;
   selected: boolean;
+  where?: RowWhere;
   age?: string;
   wake?: string;
   onSelect: () => void;
@@ -178,6 +155,7 @@ function QueueRowView({
     <div
       className={`session-item queue-row ${selected ? 'selected' : ''}`.trim()}
       data-testid={`${testIdPrefix}-${session.id}`}
+      data-session-id={session.id}
       data-state={session.state}
       data-workspace-id={row.workspaceId}
     >
@@ -200,6 +178,7 @@ function QueueRowView({
       </span>
       {session.chiefOfStaff && <ChiefOfStaffBadge />}
       <DelegationChainTrigger session={session} hasDelegates={delegates.length > 0} />
+      {where && <RowWhereChip where={where} />}
       {age && <span className="queue-row-age">{age}</span>}
       {wake && <span className="queue-row-wake-at">{wake}</span>}
       <QueueRowControls
@@ -216,142 +195,17 @@ function QueueRowView({
   );
 }
 
-export function QueueBands({
-  bands,
-  crew,
-  onWakeCrewMember,
-  onSleepCrewMember,
-  onOpenCrewMemberActions,
-  selectedId,
-  onSelectSession,
-  onSettleTurn,
-  onScreenSessionIds,
-  onOpenActions,
-  onOpenSnooze,
-  allSessions,
-}: QueueBandsProps) {
-  const now = useNow(TURN_AGE_TICK_MS);
-  const offScreen = (id: string) => !onScreenSessionIds?.has(id);
-  const snoozeHandler = (session: QueueBandSessionView) =>
-    onOpenSnooze && ((event: ReactMouseEvent) => onOpenSnooze(session, event));
-  const crewInOtherBands = new Set(
-    [...bands.turns, ...bands.settled, ...bands.snoozed].flatMap((row) =>
-      row.session.crewMember ? [row.session.crewMember] : [],
-    ),
-  );
-  const crewRows = buildCrewRows(crew, bands.crew, crewInOtherBands);
-  const delegates = useMemo(() => delegatesByDispatcher(allSessions), [allSessions]);
-  const rowDelegation = (session: QueueBandSessionView) => ({
-    delegates: delegates.get(session.id) ?? [],
-  });
-
-  return (
-    <div className="queue-bands" data-testid="sidebar-queue">
-      {bands.chief && (
-        <QueueRowView
-          row={bands.chief}
-          selected={selectedId === bands.chief.session.id}
-          onSelect={() => onSelectSession(bands.chief!.session.id)}
-          onOpenActions={onOpenActions && ((event) => onOpenActions(bands.chief!.session, event))}
-          {...rowDelegation(bands.chief.session)}
-          testIdPrefix="queue-chief"
-        />
-      )}
-      <div className="queue-band-header">
-        <span>Your turn</span>
-        {bands.turns.length > 0 && <span className="queue-band-count">{bands.turns.length}</span>}
-      </div>
-      {bands.turns.length === 0 ? (
-        <div className="queue-band-empty" data-testid="queue-empty">
-          Nothing owed.
-        </div>
-      ) : (
-        bands.turns.map((row) => (
-          <QueueRowView
-            key={row.session.id}
-            row={row}
-            selected={selectedId === row.session.id}
-            age={formatTurnAge(row.session.turnOpenedAt, now)}
-            onSelect={() => onSelectSession(row.session.id)}
-            onSettle={() => onSettleTurn(row.session.id)}
-            onSnooze={snoozeHandler(row.session)}
-            onOpenActions={onOpenActions && ((event) => onOpenActions(row.session, event))}
-            showSettling={offScreen(row.session.id)}
-            {...rowDelegation(row.session)}
-            testIdPrefix="queue-turn"
-          />
-        ))
-      )}
-      {bands.settled.length > 0 && (
-        <>
-          <div className="queue-band-header">
-            <span>Settled</span>
-          </div>
-          {bands.settled.map((row) => (
-            <QueueRowView
-              key={row.session.id}
-              row={row}
-              selected={selectedId === row.session.id}
-              onSelect={() => onSelectSession(row.session.id)}
-              onSnooze={snoozeHandler(row.session)}
-              onOpenActions={onOpenActions && ((event) => onOpenActions(row.session, event))}
-              {...rowDelegation(row.session)}
-              testIdPrefix="queue-settled"
-            />
-          ))}
-        </>
-      )}
-      {crewRows.length > 0 && (
-        <>
-          <div className="queue-band-header">
-            <span>Crew</span>
-            <span className="queue-band-count">{crewRows.length}</span>
-          </div>
-          {crewRows.map((crewRow) => (
-            <CrewRowView
-              key={crewRow.member}
-              member={crewRow.member}
-              row={crewRow.row}
-              selected={crewRow.row ? selectedId === crewRow.row.session.id : false}
-              onSelect={crewRow.row ? () => onSelectSession(crewRow.row!.session.id) : undefined}
-              onWake={onWakeCrewMember && (() => onWakeCrewMember(crewRow.member))}
-              onSleep={
-                crewRow.row && onSleepCrewMember
-                  ? () => onSleepCrewMember(crewRow.member)
-                  : undefined
-              }
-              onOpenActions={
-                crewRow.row && onOpenActions
-                  ? (event) => onOpenActions(crewRow.row!.session, event)
-                  : undefined
-              }
-              delegates={crewRow.row ? (delegates.get(crewRow.row.session.id) ?? []) : []}
-              onOpenMemberActions={
-                onOpenCrewMemberActions && ((event) => onOpenCrewMemberActions(crewRow.member, event))
-              }
-            />
-          ))}
-        </>
-      )}
-    </div>
-  );
+export interface RowWhere {
+  slot: string;
+  title: string;
 }
 
-function buildCrewRows(
-  crew: CrewMemberView[] | undefined,
-  awake: QueueRow<QueueBandSessionView>[],
-  membersInOtherBands: ReadonlySet<string>,
-): { member: string; row?: QueueRow<QueueBandSessionView> }[] {
-  const byMember = new Map<string, QueueRow<QueueBandSessionView>>();
-  for (const row of awake) {
-    const member = row.session.crewMember;
-    if (member && !byMember.has(member)) byMember.set(member, row);
-  }
-  const members = new Set<string>([...(crew ?? []).map((entry) => entry.id), ...byMember.keys()]);
-  return [...members]
-    .filter((member) => !membersInOtherBands.has(member))
-    .sort((a, b) => (a < b ? -1 : a > b ? 1 : 0))
-    .map((member) => ({ member, row: byMember.get(member) }));
+function RowWhereChip({ where }: { where: RowWhere }) {
+  return (
+    <span className={`queue-row-where ${where.slot === '—' ? 'is-unplaced' : ''}`.trim()} title={where.title}>
+      {where.slot}
+    </span>
+  );
 }
 
 interface CrewRowProps {
@@ -366,7 +220,7 @@ interface CrewRowProps {
   delegates: readonly QueueBandSessionView[];
 }
 
-function CrewRowView(props: CrewRowProps) {
+export function CrewRowView(props: CrewRowProps) {
   return props.row ? (
     <AwakeCrewRow {...props} row={props.row} />
   ) : (
@@ -467,6 +321,7 @@ function AwakeCrewRow({
       data-testid={`queue-crew-${member}`}
       data-crew-member={member}
       data-crew-state="awake"
+      data-session-id={session.id}
       data-state={session.state}
       data-workspace-id={row.workspaceId}
     >
@@ -508,61 +363,6 @@ function AwakeCrewRow({
               •••
             </button>
           )}
-        </div>
-      )}
-    </div>
-  );
-}
-
-interface QueueSnoozedSectionProps {
-  rows: QueueRow<QueueBandSessionView>[];
-  selectedId: string | null;
-  expanded: boolean;
-  onToggleExpanded: () => void;
-  onSelectSession: (id: string) => void;
-  onWakeTurn: (id: string) => void;
-  allSessions: readonly QueueBandSessionView[];
-}
-
-export function QueueSnoozedSection({
-  rows,
-  selectedId,
-  expanded,
-  onToggleExpanded,
-  onSelectSession,
-  onWakeTurn,
-  allSessions,
-}: QueueSnoozedSectionProps) {
-  const now = useNow(TURN_AGE_TICK_MS);
-  if (rows.length === 0) return null;
-  const delegates = delegatesByDispatcher(allSessions);
-
-  return (
-    <div className="muted-sessions-section" data-testid="sidebar-snoozed">
-      <button
-        type="button"
-        className="muted-sessions-header"
-        onClick={onToggleExpanded}
-        aria-expanded={expanded}
-        data-testid="snoozed-section-header"
-      >
-        <span className={`muted-sessions-chevron ${expanded ? 'expanded' : ''}`}>▸</span>
-        Snoozed ({rows.length})
-      </button>
-      {expanded && (
-        <div className="muted-sessions-list">
-          {rows.map((row) => (
-            <QueueRowView
-              key={row.session.id}
-              row={row}
-              selected={selectedId === row.session.id}
-              wake={formatWakeTime(row.session.turnSnoozedUntil, now)}
-              onSelect={() => onSelectSession(row.session.id)}
-              onWake={() => onWakeTurn(row.session.id)}
-              delegates={delegates.get(row.session.id) ?? []}
-              testIdPrefix="queue-snoozed"
-            />
-          ))}
         </div>
       )}
     </div>

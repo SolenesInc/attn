@@ -206,4 +206,44 @@ describe('UnifiedPalette keyboard flow', () => {
     fireEvent.keyDown(palette.input(), { key: 'e', metaKey: true, shiftKey: true });
     expect(palette.onSettle).not.toHaveBeenCalled();
   });
+
+  it('runs a command with the element that had focus before the palette opened, without moving focus to it', () => {
+    let focusAtRun: Element | null = null;
+    const run = vi.fn(() => { focusAtRun = document.activeElement; });
+    const views = workspaces(FIXTURE);
+    function Launcher() {
+      const [open, setOpen] = useState(false);
+      const [state, setState] = useState<PaletteState>({ mode: 'search', query: '>' });
+      return (
+        <>
+          <textarea data-testid="terminal" onKeyDown={() => setOpen(true)} />
+          {open && (
+            <UnifiedPalette
+              state={state}
+              onStateChange={setState}
+              agents={{ bands: buildQueueBands(views, { now: NOW }), crewRoster: [], workspaces: views, tileTitle: () => '', now: NOW }}
+              desktops={[]}
+              commands={[{ id: 'crew', title: 'Manage crew', run }]}
+              onClose={() => setOpen(false)}
+              onOpenAgent={vi.fn()}
+              onWakeMember={vi.fn()}
+              onOpenTile={vi.fn()}
+              onSettle={vi.fn()}
+              onSnooze={vi.fn()}
+            />
+          )}
+        </>
+      );
+    }
+    render(<Launcher />);
+    const terminal = screen.getByTestId('terminal');
+    terminal.focus();
+    fireEvent.keyDown(terminal, { key: 'k', metaKey: true });
+    expect(document.activeElement).toBe(screen.getByRole('combobox'));
+
+    fireEvent.keyDown(screen.getByRole('combobox'), { key: 'Enter' });
+    expect(screen.queryByRole('combobox')).toBeNull();
+    expect(run).toHaveBeenCalledWith(terminal);
+    expect(focusAtRun).not.toBe(terminal);
+  });
 });

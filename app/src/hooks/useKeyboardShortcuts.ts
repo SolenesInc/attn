@@ -26,6 +26,7 @@ interface KeyboardShortcutsConfig {
   onHistoryForward: () => void;
   onSelectOrchestrator?: () => void;
   onToggleSidebar?: () => void;
+  onShowAgentList: () => void;
   onRefreshPRs?: () => void;
   onToggleAttentionPanel?: () => void;
   onOpenSettings?: () => void;
@@ -66,6 +67,7 @@ export function useKeyboardShortcuts({
   onHistoryForward,
   onSelectOrchestrator,
   onToggleSidebar,
+  onShowAgentList,
   onRefreshPRs,
   onToggleAttentionPanel,
   onOpenSettings,
@@ -98,6 +100,7 @@ export function useKeyboardShortcuts({
   useShortcut('view.toggleGrid', onToggleGridMode ?? (() => {}), enabled && !!onToggleGridMode);
   useShortcut('session.jumpToWaiting', onJumpToWaiting, enabled);
   useShortcut('session.nextRun', onNextRun, enabled);
+  useShortcut('sidebar.agentList', onShowAgentList, enabled);
   useShortcut('session.settle', onSettleTurn ?? (() => {}), enabled && !!onSettleTurn);
   useShortcut('session.snooze', onSnoozeTurn ?? (() => {}), enabled && !!onSnoozeTurn);
   // Delivered by a native menu item, not the page's keydown listener: AppKit eats

@@ -1,5 +1,5 @@
 import { invoke, isTauri } from '@tauri-apps/api/core';
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { useDaemonApi } from '../contexts/DaemonApiContext';
 import { useClientPresence } from '../hooks/useClientPresence';
 import { type DockPanelId } from '../hooks/useDockPanels';
@@ -7,9 +7,11 @@ import { useKeyboardShortcuts } from '../hooks/useKeyboardShortcuts';
 import { usePRsNeedingAttention } from '../hooks/usePRsNeedingAttention';
 import { useDesktopNavigation } from '../hooks/useDesktopNavigation';
 import { useDesktopRuntimeController } from '../hooks/useDesktopRuntimeController';
-import { useDesktopSelectionBridge } from '../hooks/useDesktopSelectionBridge';
+import { useDesktopSelectionBridge, useSurface } from '../hooks/useDesktopSelectionBridge';
 import { useUiAutomationBridge } from '../hooks/useUiAutomationBridge';
 import { useDaemonStore } from '../store/daemonSessions';
+import { useDesktopFocus } from '../store/desktopFocus';
+import { useProfilesStore } from '../store/profiles';
 import { useSessionStore } from '../store/sessions';
 import { getAgentAvailability } from '../utils/agentAvailability';
 import { latestPresentationBySessionId } from '../utils/presentationNotices';
@@ -25,6 +27,7 @@ import { useAppGrid } from './useAppGrid';
 import { useAppNavigation } from './useAppNavigation';
 import { useAppNotebookSurface } from './useAppNotebookSurface';
 import { useAppPanels } from './useAppPanels';
+import type { SidebarSurface } from '../components/sidebarTypes';
 import { useAppSessions } from './useAppSessions';
 import { useAttentionQueue } from './useAttentionQueue';
 import { useChiefOfStaff } from './useChiefOfStaff';
@@ -156,8 +159,9 @@ export function useAppController({
   const {
     wantsAttention,
     waitingLocalSessions,
-    handleSettleActiveTurn,
-    handleSnoozeActiveSession,
+    handleSettleShortcut,
+    handleSnoozeShortcut,
+    queueModeEnabled,
   } = attentionQueue;
 
   const navigation = useAppNavigation({
@@ -241,6 +245,9 @@ export function useAppController({
     toggleDockPanel,
     openDockPanel,
     toggleSidebarCollapse,
+    sidebarCollapsed,
+    toggleAgentList,
+    closeAgentList,
     workflowRunPanelOpen,
     gardenHoldsWindow,
     toggleGardenFrame,
@@ -371,6 +378,32 @@ export function useAppController({
     },
     [sendDeleteWorktree],
   );
+
+  const surface = useSurface();
+  const focusedLeafByDesktop = useDesktopFocus((state) => state.focusedLeafByDesktop);
+  const currentDesktopAgentFocused = useProfilesStore((state) => {
+    const leafId = state.currentDesktopId ? focusedLeafByDesktop[state.currentDesktopId] : undefined;
+    const desktop = state.desktops.find((entry) => entry.id === state.currentDesktopId);
+    return Boolean(leafId && desktop?.panes.some((pane) => pane.pane_id === leafId && pane.session_id));
+  });
+  const agentFocused = (surface.kind === 'agent' || surface.kind === 'tile') && currentDesktopAgentFocused;
+  const sidebarVisible = !sidebarCollapsed && surface.kind !== 'grid' && !agentFocused;
+  const queueSidebarShown = queueModeEnabled && sidebarVisible;
+  const sidebarHidden = surface.kind === 'grid' || agentFocused;
+  const sidebarSurface: SidebarSurface = sidebarHidden
+    ? 'hidden'
+    : `${queueModeEnabled ? 'queue' : 'tree'}-${sidebarCollapsed ? 'collapsed' : 'open'}`;
+  const previousSidebarSurface = useRef(sidebarSurface);
+  useLayoutEffect(() => {
+    const changed = previousSidebarSurface.current !== sidebarSurface;
+    previousSidebarSurface.current = sidebarSurface;
+    if (!changed) return;
+    closeAgentList();
+    const focused = document.activeElement;
+    if (!focused || focused === document.body || focused.closest('.sidebar')) {
+      useSessionStore.getState().requestTerminalFocus();
+    }
+  }, [closeAgentList, sidebarSurface]);
 
   const handleOpenPalette = useCallback((mode: PaletteMode) => {
     if (palette !== null) {
@@ -559,8 +592,8 @@ export function useAppController({
     onToggleGridMode: toggleGridMode,
     onJumpToWaiting: handleJumpToWaiting,
     onNextRun: handleNextRun,
-    onSettleTurn: handleSettleActiveTurn,
-    onSnoozeTurn: handleSnoozeActiveSession,
+    onSettleTurn: handleSettleShortcut,
+    onSnoozeTurn: handleSnoozeShortcut,
     onCancelCountdown: handleCancelCountdown,
     onSwitchToDesktopSlot: (slot) => {
       setView('session');
@@ -575,6 +608,7 @@ export function useAppController({
     onHistoryForward: () => navigateAgentHistoryForward(view !== 'session'),
     onSelectOrchestrator: handleSelectOrchestrator,
     onToggleSidebar: toggleSidebarCollapse,
+    onShowAgentList: queueSidebarShown ? toggleAgentList : () => handleOpenPalette('agents'),
     onRefreshPRs: handleRefreshPRs,
     onToggleAttentionPanel: () => toggleDockPanel('attention'),
     onOpenSettings: useCallback(() => {
@@ -677,6 +711,8 @@ export function useAppController({
         blockingOverlayOpen,
         zoomModeBySessionId,
         setZoomModeBySessionId,
+        agentFocused,
+        sidebarSurface,
         agentAvailability,
         contextCapPromptSession,
         setContextCapPromptSession,
@@ -685,6 +721,7 @@ export function useAppController({
         seedForSession,
         attentionCount,
         hasCriticalNotification,
+        handleOpenPalette,
       },
       appAppearance,
       appPanels,

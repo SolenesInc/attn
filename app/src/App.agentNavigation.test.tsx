@@ -3,7 +3,8 @@ import { act, fireEvent, render, screen } from '@testing-library/react';
 import App from './App';
 import { useProfilesStore } from './store/profiles';
 import { useSessionStore } from './store/sessions';
-import { agentDesktop, arrangeDesktops, fakeDesktopCommands, TEST_PROFILE_ID } from './test/desktops';
+import { agentDesktop, arrangeDesktops, fakeDesktopCommands, paneIdOf, TEST_PROFILE_ID } from './test/desktops';
+import { useDesktopFocus } from './store/desktopFocus';
 import { WHATS_NEW_ID, WHATS_NEW_STORAGE_KEY } from './hooks/useWhatsNew';
 
 
@@ -11,6 +12,8 @@ const mockUseDaemonStore = vi.fn();
 const mockUseDaemonSocket = vi.fn();
 const mockUseKeyboardShortcuts = vi.fn();
 const mockUseUiAutomationBridge = vi.fn();
+const mockSidebarProps = vi.fn();
+const mockSendSettleTurn = vi.fn();
 
 const { mockSetActiveSession } = vi.hoisted(() => ({
   mockSetActiveSession: vi.fn(),
@@ -18,6 +21,7 @@ const { mockSetActiveSession } = vi.hoisted(() => ({
 
 let turnOwed: Record<string, boolean>;
 let sessionIds: string[];
+let chiefId: string | null;
 
 vi.mock('@tauri-apps/plugin-deep-link', () => ({
   onOpenUrl: vi.fn(async () => () => {}),
@@ -39,7 +43,14 @@ vi.mock('./components/Sidebar', async () => {
     PRsIcon: () => null,
     NotebookIcon: () => null,
     MarkdownIcon: () => null,
-    Sidebar: () => <DelegationChainTrigger session={{ id: 's1', label: 's1', delegation_role: { name: 'Builder' } }} />,
+    Sidebar: (props: unknown) => {
+      mockSidebarProps(props);
+      return (
+        <div className="sidebar">
+          <DelegationChainTrigger session={{ id: 's1', label: 's1', delegation_role: { name: 'Builder' } }} />
+        </div>
+      );
+    },
   };
 });
 
@@ -137,6 +148,7 @@ describe('agent navigation', () => {
     localStorage.setItem(WHATS_NEW_STORAGE_KEY, WHATS_NEW_ID);
     turnOwed = { s1: true, s2: false };
     sessionIds = ['s1', 's2'];
+    chiefId = null;
 
     mockSetActiveSession.mockImplementation((id: string | null) => useSessionStore.getState().setActiveSession(id));
 
@@ -177,6 +189,7 @@ describe('agent navigation', () => {
         agent: 'claude',
         state: 'working',
         turn_owed: turnOwed[id],
+        chief_of_staff: id === chiefId,
         turn_opened_at: id === 's1' ? '2026-08-03T09:00:00Z' : '2026-08-03T10:00:00Z',
       })),
       crew: [],
@@ -221,6 +234,7 @@ describe('agent navigation', () => {
       warnings: [],
       clearWarnings: fn,
       sendSetTerminalTheme: fn,
+      sendSettleTurn: mockSendSettleTurn,
     });
   });
 
@@ -347,6 +361,230 @@ describe('agent navigation', () => {
     broadcast();
 
     expect(useSessionStore.getState().activeSessionId).toBe('s1');
+  });
+
+  describe('acting on the queue sidebar row that holds focus', () => {
+    function focusQueueRow(sessionId: string | null) {
+      const sidebar = document.createElement('div');
+      sidebar.className = 'queue-sidebar-body';
+      const holds = sessionId ? ` data-session-id="${sessionId}"` : '';
+      sidebar.innerHTML = `<div class="session-item queue-row"${holds}><button class="queue-row-select"></button></div>`;
+      document.body.append(sidebar);
+      sidebar.querySelector('button')!.focus();
+      return () => sidebar.remove();
+    }
+
+    function activeOnS2() {
+      render(<App />);
+      broadcast();
+      act(() => { mockSetActiveSession('s2'); });
+      broadcast();
+    }
+
+    it('settles the focused row rather than the active agent', () => {
+      turnOwed.s2 = true;
+      activeOnS2();
+      const unfocus = focusQueueRow('s1');
+      try {
+        act(() => { shortcutHandlers<{ onSettleTurn?: () => void }>().onSettleTurn?.(); });
+        expect(mockSendSettleTurn.mock.calls).toEqual([['s1']]);
+      } finally {
+        unfocus();
+      }
+    });
+
+    it('settles nothing when the focused row owes no turn', () => {
+      turnOwed.s2 = true;
+      turnOwed.s1 = false;
+      activeOnS2();
+      const unfocus = focusQueueRow('s1');
+      try {
+        act(() => { shortcutHandlers<{ onSettleTurn?: () => void }>().onSettleTurn?.(); });
+        expect(mockSendSettleTurn).not.toHaveBeenCalled();
+      } finally {
+        unfocus();
+      }
+    });
+
+    it('settles the active agent when no row holds focus', () => {
+      turnOwed.s2 = true;
+      activeOnS2();
+      act(() => { shortcutHandlers<{ onSettleTurn?: () => void }>().onSettleTurn?.(); });
+      expect(mockSendSettleTurn.mock.calls).toEqual([['s2']]);
+    });
+
+    it('acts on no agent while a tile holds the surface and no row holds focus', () => {
+      turnOwed.s2 = true;
+      activeOnS2();
+      act(() => {
+        const { desktops, currentDesktopId } = useProfilesStore.getState();
+        arrangeDesktops(
+          desktops.map((desktop) => (desktop.id === currentDesktopId ? { ...desktop, active_pane_id: 'tile-notes' } : desktop)),
+          currentDesktopId!,
+        );
+      });
+      expect(useSessionStore.getState().activeSessionId).toBe('s2');
+
+      const shortcuts = shortcutHandlers<{ onSettleTurn?: () => void; onSnoozeTurn?: () => void }>();
+      act(() => { shortcuts.onSettleTurn?.(); });
+      act(() => { shortcuts.onSnoozeTurn?.(); });
+      expect(mockSendSettleTurn).not.toHaveBeenCalled();
+      expect(screen.queryByRole('menu', { name: /^Snooze/ })).toBeNull();
+    });
+
+    it('snoozes the focused row rather than the active agent', () => {
+      activeOnS2();
+      const unfocus = focusQueueRow('s1');
+      try {
+        act(() => { shortcutHandlers<{ onSnoozeTurn?: () => void }>().onSnoozeTurn?.(); });
+        expect(screen.getByRole('menu', { name: 'Snooze s1' })).toBeInTheDocument();
+      } finally {
+        unfocus();
+      }
+    });
+
+    it('opens the snooze menu beside the focused copy of an agent listed twice', () => {
+      activeOnS2();
+      const sidebar = document.createElement('div');
+      sidebar.className = 'queue-sidebar-body';
+      sidebar.innerHTML = [0, 1]
+        .map(() => '<div class="session-item queue-row" data-session-id="s1"><button class="queue-row-select"></button></div>')
+        .join('');
+      document.body.append(sidebar);
+      const waitingCopy = sidebar.querySelectorAll<HTMLElement>('.queue-row')[1];
+      waitingCopy.getBoundingClientRect = () => DOMRect.fromRect({ x: 40, y: 280, width: 180, height: 20 });
+      waitingCopy.querySelector('button')!.focus();
+      try {
+        act(() => { shortcutHandlers<{ onSnoozeTurn?: () => void }>().onSnoozeTurn?.(); });
+        const menu = screen.getByRole('menu', { name: 'Snooze s1' });
+        expect(menu.style.top).toBe('304px');
+        expect(menu.style.left).toBe('40px');
+      } finally {
+        sidebar.remove();
+      }
+    });
+
+    it('acts on no agent from a focused row that holds none, like a sleeping crew member', () => {
+      turnOwed.s2 = true;
+      activeOnS2();
+      const unfocus = focusQueueRow(null);
+      try {
+        const shortcuts = shortcutHandlers<{ onSettleTurn?: () => void; onSnoozeTurn?: () => void }>();
+        act(() => { shortcuts.onSettleTurn?.(); });
+        act(() => { shortcuts.onSnoozeTurn?.(); });
+        expect(mockSendSettleTurn).not.toHaveBeenCalled();
+        expect(screen.queryByRole('menu', { name: /^Snooze/ })).toBeNull();
+      } finally {
+        unfocus();
+      }
+    });
+
+    it('never snoozes the chief, focused or active', () => {
+      chiefId = 's1';
+      activeOnS2();
+      const unfocus = focusQueueRow('s1');
+      try {
+        act(() => { shortcutHandlers<{ onSnoozeTurn?: () => void }>().onSnoozeTurn?.(); });
+        expect(screen.queryByRole('menu', { name: /^Snooze/ })).toBeNull();
+      } finally {
+        unfocus();
+      }
+
+      chiefId = 's2';
+      broadcast();
+      act(() => { shortcutHandlers<{ onSnoozeTurn?: () => void }>().onSnoozeTurn?.(); });
+      expect(screen.queryByRole('menu', { name: /^Snooze/ })).toBeNull();
+    });
+  });
+
+  it('toggles the agent list in the open queue sidebar, and opens the palette on agents otherwise', () => {
+    render(<App />);
+    broadcast();
+    const listOpen = () => (mockSidebarProps.mock.lastCall![0] as { agentListOpen: boolean }).agentListOpen;
+    const showAgentList = () => act(() => { shortcutHandlers<{ onShowAgentList: () => void }>().onShowAgentList(); });
+
+    expect(listOpen()).toBe(false);
+    showAgentList();
+    expect(listOpen()).toBe(true);
+    showAgentList();
+    expect(listOpen()).toBe(false);
+    expect(screen.queryByTestId('palette-agent-s1')).toBeNull();
+
+    act(() => { socketArgs().onSettingsUpdate?.({ queue_mode_enabled: 'false' }); });
+    showAgentList();
+    expect(listOpen()).toBe(false);
+    expect(screen.getByTestId('palette-agent-s1')).toBeInTheDocument();
+  });
+
+  it('hands focus to the terminal when the sidebar hides with focus inside it', () => {
+    const { container } = render(<App />);
+    broadcast();
+    act(() => { mockSetActiveSession('s1'); });
+    const focusRequests = () => useSessionStore.getState().utilityFocusRequestToken;
+    const inSidebar = () => container.querySelector<HTMLElement>('.sidebar button')!;
+
+    const listOpen = () => (mockSidebarProps.mock.lastCall![0] as { agentListOpen: boolean }).agentListOpen;
+    act(() => { shortcutHandlers<{ onShowAgentList: () => void }>().onShowAgentList(); });
+    expect(listOpen()).toBe(true);
+    inSidebar().focus();
+    let before = focusRequests();
+    act(() => { useDesktopFocus.getState().setFocusedLeaf(useProfilesStore.getState().currentDesktopId!, paneIdOf('s1')); });
+    expect(listOpen()).toBe(false);
+    expect(focusRequests()).toBe(before + 1);
+
+    act(() => { useDesktopFocus.getState().setFocusedLeaf(useProfilesStore.getState().currentDesktopId!, null); });
+    inSidebar().focus();
+    before = focusRequests();
+    act(() => { shortcutHandlers<{ onToggleSidebar: () => void }>().onToggleSidebar(); });
+    expect(focusRequests()).toBe(before + 1);
+  });
+
+  it('hands focus to the terminal when the queue switch swaps the sidebar under focus', () => {
+    const { container } = render(<App />);
+    broadcast();
+    act(() => { mockSetActiveSession('s1'); });
+    const focusRequests = () => useSessionStore.getState().utilityFocusRequestToken;
+    container.querySelector<HTMLElement>('.sidebar button')!.focus();
+    const before = focusRequests();
+
+    act(() => { socketArgs().onSettingsUpdate?.({ queue_mode_enabled: 'false' }); });
+    expect(focusRequests()).toBe(before + 1);
+
+    act(() => { shortcutHandlers<{ onToggleSidebar: () => void }>().onToggleSidebar(); });
+    container.querySelector<HTMLElement>('.sidebar button')!.focus();
+    const collapsed = focusRequests();
+    act(() => { socketArgs().onSettingsUpdate?.({ queue_mode_enabled: 'true' }); });
+    expect(focusRequests()).toBe(collapsed + 1);
+  });
+
+  it('hides the sidebar while an agent is focused and opens the palette on agents instead', () => {
+    const { container } = render(<App />);
+    broadcast();
+    act(() => { mockSetActiveSession('s1'); });
+    const listOpen = () => (mockSidebarProps.mock.lastCall![0] as { agentListOpen: boolean }).agentListOpen;
+    const app = () => container.querySelector('.app')!;
+
+    act(() => { useDesktopFocus.getState().setFocusedLeaf(useProfilesStore.getState().currentDesktopId!, paneIdOf('s1')); });
+    expect(app()).toHaveClass('is-agent-focused');
+    act(() => { shortcutHandlers<{ onShowAgentList: () => void }>().onShowAgentList(); });
+    expect(listOpen()).toBe(false);
+    expect(screen.getByTestId('palette-agent-s1')).toBeInTheDocument();
+
+    act(() => { useDesktopFocus.getState().setFocusedLeaf(useProfilesStore.getState().currentDesktopId!, null); });
+    expect(app()).not.toHaveClass('is-agent-focused');
+  });
+
+  it('opens the palette on agents in grid view, where the grid covers the queue sidebar', () => {
+    render(<App />);
+    broadcast();
+    const listOpen = () => (mockSidebarProps.mock.lastCall![0] as { agentListOpen: boolean }).agentListOpen;
+
+    act(() => { shortcutHandlers<{ onToggleGridMode: () => void }>().onToggleGridMode(); });
+    expect(useSessionStore.getState().view).toBe('grid');
+    act(() => { shortcutHandlers<{ onShowAgentList: () => void }>().onShowAgentList(); });
+
+    expect(listOpen()).toBe(false);
+    expect(screen.getByTestId('palette-agent-s1')).toBeInTheDocument();
   });
 
   it('resumes history from dashboard and grid, then traverses normally in the session view', () => {

@@ -46,6 +46,7 @@ export function buildCheatsheet(): CheatsheetCategory[] {
         { label: 'Toggle grid view', combos: [fromId('view.toggleGrid')] },
         { label: 'Jump to next waiting session', combos: [fromId('session.jumpToWaiting')] },
         { label: 'Next automation run needing you', combos: [fromId('session.nextRun')] },
+        { label: 'All agents', combos: [fromId('sidebar.agentList')] },
         { label: 'Settle turn', combos: [fromId('session.settle')] },
         { label: 'Snooze this agent', combos: [fromId('session.snooze')] },
         { label: 'Stop the countdown, or keep the next turn', combos: [fromId('session.cancelCountdown')] },

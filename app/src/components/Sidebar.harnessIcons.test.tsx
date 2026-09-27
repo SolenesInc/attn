@@ -8,6 +8,7 @@ const baseProps = {
   selectedId: null,
   selectedWorkspaceId: null,
   collapsed: false,
+  surface: 'tree-open' as const,
   headerActions: [],
   onSelectSession: vi.fn(),
   onSelectWorkspace: vi.fn(),
@@ -61,7 +62,7 @@ describe('sidebar harness identity', () => {
   it('keeps harness identity when switching between workspace and queue arrangements', () => {
     const data = sidebarData(true);
     const props = { ...baseProps, ...data, crew: [{ id: 'fern' }, { id: 'sleeping' }] };
-    const { rerender } = render(<Sidebar {...props} queue={buildQueueBands(data.workspaces)} />);
+    const { rerender } = render(<Sidebar {...props} agentListOpen queue={buildQueueBands(data.workspaces)} />);
     expect(within(screen.getByTestId('queue-crew-fern')).getByRole('img', { name: 'Pi' })).toBeInTheDocument();
     expect(within(screen.getByTestId('queue-crew-sleeping')).queryByRole('img')).not.toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Open Implement sidebar logos' })).toHaveAttribute('title', 'Codex');
@@ -99,6 +100,7 @@ describe('sidebar harness identity', () => {
         {...data}
         crew={[{ id: 'fern' }, { id: 'sleeping' }]}
         queue={buildQueueBands(data.workspaces)}
+        agentListOpen
         harnessLogosEnabled={false}
       />,
     );

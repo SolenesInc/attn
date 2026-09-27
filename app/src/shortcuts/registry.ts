@@ -62,6 +62,7 @@ export const MAC_SHORTCUTS = {
   'profile.switch': { key: 'u', meta: true, shift: true },
   'session.jumpToWaiting': { key: 'j', meta: true },
   'session.nextRun': { key: 'j', meta: true, shift: true },
+  'sidebar.agentList': { key: 'a', meta: true, shift: true },
   // ⌘E stays free: Notebook inline code uses it, and the shortcut editor's chord
   // tests record it as an exclusive leader.
   'session.settle': { key: 'e', meta: true, shift: true },
@@ -158,6 +159,7 @@ export const LINUX_SHORTCUTS = {
   'profile.switch': { key: 'u', meta: true, alt: true },
   'session.jumpToWaiting': { key: 'j', meta: true, shift: true },
   'session.nextRun': { key: 'j', meta: true, alt: true },
+  'sidebar.agentList': { key: 'a', meta: true, alt: true },
   'session.settle': { key: 'e', meta: true, alt: true },
   'session.snooze': { key: 's', meta: true, alt: true },
   'session.cancelCountdown': { key: '.', code: 'Period', meta: true, shift: true },

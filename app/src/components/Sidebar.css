@@ -1419,14 +1419,6 @@
   font-size: var(--font-size-xs);
 }
 
-/* Queue arrangement: the chief's anchored slot and the "Your turn" band, both
-   above the workspace tree. The tree below is unchanged, so these rows are
-   additions to the sidebar, never a filter over it. */
-.queue-bands {
-  border-bottom: 1px solid var(--color-border);
-  padding: 4px 0 6px;
-}
-
 .queue-band-header {
   display: flex;
   align-items: center;

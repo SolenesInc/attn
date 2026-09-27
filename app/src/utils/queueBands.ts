@@ -67,6 +67,20 @@ export function sessionParticipatesInQueue(
   return !session.automation && (!session.crewMember || crewInQueue);
 }
 
+export interface QueueActions {
+  settle: boolean;
+  snooze: boolean;
+}
+
+export function queueActions(
+  session: Pick<QueueBandSession, 'automation' | 'crewMember' | 'chiefOfStaff' | 'turnOwed' | 'turnSnoozedUntil'>,
+  { queueMode, crewInQueue, now }: { queueMode: boolean; crewInQueue: boolean; now: number },
+): QueueActions {
+  if (session.chiefOfStaff || isSnoozed(session.turnSnoozedUntil, now)) return { settle: false, snooze: false };
+  const inQueue = queueMode && sessionParticipatesInQueue(session, crewInQueue);
+  return { settle: Boolean(session.turnOwed) && (inQueue || Boolean(session.automation)), snooze: inQueue };
+}
+
 export interface QueueRow<TSession extends QueueBandSession> {
   session: TSession;
   workspaceId: string;
@@ -277,4 +291,21 @@ export function advanceAfterTurnClosed<TSession extends QueueBandSession>(
   const stillOwed = new Set(bands.turns.map((row) => row.session.id));
   const next = nextOwedAfter(previousTurns, sessionId, stillOwed) ?? headOfQueue(bands);
   return next ? { to: 'session', row: next } : { to: 'dashboard' };
+}
+
+export function crewRows<TSession extends QueueBandSession>(
+  crew: readonly { id: string }[] | undefined,
+  bands: Pick<QueueBands<TSession>, 'chief' | 'crew'>,
+): { member: string; row?: QueueRow<TSession> }[] {
+  const byMember = new Map<string, QueueRow<TSession>>();
+  for (const row of bands.crew) {
+    const member = row.session.crewMember;
+    if (member && !byMember.has(member)) byMember.set(member, row);
+  }
+  const members = new Set<string>([...(crew ?? []).map((entry) => entry.id), ...byMember.keys()]);
+  const chiefMember = bands.chief?.session.crewMember;
+  if (chiefMember) members.delete(chiefMember);
+  return [...members]
+    .sort((a, b) => (a < b ? -1 : a > b ? 1 : 0))
+    .map((member) => ({ member, row: byMember.get(member) }));
 }

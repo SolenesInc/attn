@@ -156,6 +156,17 @@ export function SidebarFooter() {
   );
 }
 
+export function SidebarCrewManage() {
+  const { crew, onManageCrew } = useSidebarContext();
+  if (!crew?.length || !onManageCrew) return null;
+  return (
+    <button type="button" className="sidebar-crew-manage" data-testid="manage-crew" onClick={onManageCrew}>
+      <span>Manage crew</span>
+      <span className="sidebar-crew-count">{crew.length}</span>
+    </button>
+  );
+}
+
 export function SidebarPopovers() {
   const {
     onRenameSession,

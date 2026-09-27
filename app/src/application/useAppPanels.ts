@@ -2,6 +2,7 @@ import type { PaletteState } from '../components/palette/paletteState';
 import { useCallback, useRef, useState } from 'react';
 import { type DelegationChainHandle } from '../components/DelegationChain';
 import { useDockSlotRect } from '../components/GardenFrame';
+import { useAgentList } from '../components/useAgentList';
 import { type SettingsModalHandle } from '../components/SettingsModal';
 import type { LedgerTab } from '../components/ledger/LedgerSurface';
 import { useDockPanels } from '../hooks/useDockPanels';
@@ -50,6 +51,8 @@ export function useAppPanels({ agentSurfaceCount }: Options) {
     delegationChainRef.current?.dismiss('sidebar-collapse');
     setSidebarState((state) => ({ ...state, collapsed: !state.collapsed }));
   }, []);
+
+  const { agentListOpen, toggleAgentList, closeAgentList } = useAgentList();
 
   const openDockPanels = dockState.openPanels;
   const dockPanelStack = dockState.stack;
@@ -120,6 +123,9 @@ export function useAppPanels({ agentSurfaceCount }: Options) {
     sidebarCollapsed,
     setSidebarCollapsed,
     toggleSidebarCollapse,
+    agentListOpen,
+    toggleAgentList,
+    closeAgentList,
     dockPanelStack,
     workflowRunPanelOpen,
     attentionPanelOpen,

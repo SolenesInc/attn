@@ -12,14 +12,18 @@ import { useSessionStore } from '../store/sessions';
 import {
   AUTO_SETTLE_ENABLED_SETTING,
   isAutoSettleEnabled,
+  isCrewQueueEnabled,
   isQueueModeEnabled,
 } from '../utils/queueBands';
+import { areSidebarHarnessLogosEnabled } from '../utils/sidebarHarnessLogos';
 import {
+  useAppAppearanceContext,
   useAppDiagnosticsContext,
   useAppInputs,
   useAppPanelsContext,
   useAppShell,
   useAttentionQueueContext,
+  useCrewPanelContext,
   useDesktopNavigationContext,
   useDesktopTilesContext,
   useNavigationContext,
@@ -53,16 +57,18 @@ export function useAppCommands(): PaletteCommand[] {
     setUsagePopoverRequest,
   } = useAppPanelsContext();
   const { settings } = useAppInputs();
+  const { handleToggleSidebarHarnessLogos } = useAppAppearanceContext();
+  const { handleOpenCrew } = useCrewPanelContext();
+  const { toggleGridMode } = useNavigationContext();
   const {
+    handleToggleCrewQueue,
     handleToggleQueueMode,
     activeGroupForCommands,
     activeSessionForCommands,
-    activeSessionQueueEligible,
-    queueModeEnabled,
     handleSnoozeActiveSession,
+    handleWakeActiveSession,
   } = useAttentionQueueContext();
-  const { sendSetSetting, sendWakeTurn } =
-    useDaemonApi();
+  const { sendSetSetting } = useDaemonApi();
   const { handleCreateDiagnosticReport } = useAppDiagnosticsContext();
   const activeSessionId = useSessionStore((state) => state.activeSessionId);
   const desktops = useProfilesStore((state) => state.desktops);
@@ -366,10 +372,45 @@ export function useAppCommands(): PaletteCommand[] {
         title: isQueueModeEnabled(settings)
           ? 'Turn off the agent queue'
           : 'Turn on the agent queue',
-        description: 'Show the turns you owe above the workspace tree',
+        description: 'Swap the desktop tree for the queue sidebar: the turns you owe, your crew and your runs',
         keywords: ['queue', 'turn', 'settle', 'attention', 'sidebar'],
         icon: <AttentionActionIcon />,
         run: handleToggleQueueMode,
+      },
+      {
+        id: 'toggle-crew-queue',
+        title: isCrewQueueEnabled(settings) ? 'Take the crew out of the queue' : 'Put the crew in the queue',
+        description: 'Whether a crew member owing a turn also waits in the queue',
+        keywords: ['crew', 'queue', 'turn', 'member', 'sidebar'],
+        icon: <AttentionActionIcon />,
+        run: handleToggleCrewQueue,
+      },
+      {
+        id: 'manage-crew',
+        title: 'Manage crew',
+        description: 'Wake, charter and hand off to crew members',
+        keywords: ['crew', 'member', 'charter', 'wake', 'sleep'],
+        icon: <ContextActionIcon />,
+        run: (opener) => handleOpenCrew(undefined, opener ?? undefined),
+      },
+      {
+        id: 'toggle-harness-logos',
+        title: areSidebarHarnessLogosEnabled(settings)
+          ? 'Hide harness logos in the sidebar'
+          : 'Show harness logos in the sidebar',
+        description: 'The Claude, Codex, Copilot or Pi mark beside each agent',
+        keywords: ['harness', 'logo', 'icon', 'sidebar', 'claude', 'codex'],
+        icon: <ContextActionIcon />,
+        run: handleToggleSidebarHarnessLogos,
+      },
+      {
+        id: 'toggle-grid-view',
+        title: 'Toggle grid view',
+        description: 'Every agent on screen at once',
+        keywords: ['grid', 'view', 'tiles', 'all'],
+        icon: <ContextActionIcon />,
+        shortcut: [shortcutTokens('view.toggleGrid')],
+        run: toggleGridMode,
       },
       {
         id: 'toggle-auto-settle',
@@ -420,6 +461,10 @@ export function useAppCommands(): PaletteCommand[] {
       gardenMode,
       settings,
       handleToggleQueueMode,
+      handleToggleCrewQueue,
+      handleOpenCrew,
+      handleToggleSidebarHarnessLogos,
+      toggleGridMode,
       sendSetSetting,
       handleCreateDiagnosticReport,
     ],
@@ -527,29 +572,22 @@ export function useAppCommands(): PaletteCommand[] {
     appViewMenuItems,
     activeGroupForCommands,
     activeSessionForCommands,
-    activeSessionQueueEligible,
     seeds,
   ]);
 
-  const activeSessionSnoozedUntil = activeSessionQueueEligible
-    ? activeSessionForCommands?.turnSnoozedUntil
-    : undefined;
   const actionMenuItemsWithQueueActions = useMemo<PaletteCommand[]>(() => {
-    if (!queueModeEnabled || !activeSessionId || !activeSessionQueueEligible) {
-      return actionMenuItemsWithWorkspaceActions;
-    }
-    const items = [...actionMenuItemsWithWorkspaceActions];
-    if (activeSessionSnoozedUntil) {
-      items.push({
+    if (handleWakeActiveSession) {
+      return [...actionMenuItemsWithWorkspaceActions, {
         id: 'wake-active-session',
         title: 'Wake this agent now',
         description: 'End the snooze and let it back into the queue',
         keywords: ['wake', 'snooze', 'defer', 'queue', 'turn'],
         icon: <AttentionActionIcon />,
-        run: () => sendWakeTurn(activeSessionId),
-      });
-    } else if (handleSnoozeActiveSession) {
-      items.push({
+        run: handleWakeActiveSession,
+      }];
+    }
+    if (handleSnoozeActiveSession) {
+      return [...actionMenuItemsWithWorkspaceActions, {
         id: 'snooze-active-session',
         title: 'Snooze this agent…',
         description: 'Take it off your plate until a time you choose',
@@ -557,18 +595,10 @@ export function useAppCommands(): PaletteCommand[] {
         icon: <AttentionActionIcon />,
         shortcut: [shortcutTokens('session.snooze')],
         run: handleSnoozeActiveSession,
-      });
+      }];
     }
-    return items;
-  }, [
-    actionMenuItemsWithWorkspaceActions,
-    queueModeEnabled,
-    activeSessionId,
-    activeSessionQueueEligible,
-    activeSessionSnoozedUntil,
-    handleSnoozeActiveSession,
-    sendWakeTurn,
-  ]);
+    return actionMenuItemsWithWorkspaceActions;
+  }, [actionMenuItemsWithWorkspaceActions, handleWakeActiveSession, handleSnoozeActiveSession]);
 
   return useMemo(
     () => [...navigationCommands, ...actionMenuItemsWithQueueActions],

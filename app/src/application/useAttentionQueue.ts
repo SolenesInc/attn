@@ -1,5 +1,6 @@
 import type { MouseEvent as ReactMouseEvent } from 'react';
 import { useCallback, useMemo, useState } from 'react';
+import { focusedQueueRow } from '../components/focusedQueueRow';
 import { useDaemonApi } from '../contexts/DaemonApiContext';
 import { useAgentOnScreen } from '../hooks/useDesktopSelectionBridge';
 import { isAttentionSessionState, type UISessionState } from '../types/sessionState';
@@ -9,6 +10,7 @@ import {
   isQueueModeEnabled,
   QUEUE_CREW_SETTING,
   QUEUE_MODE_SETTING,
+  queueActions,
   sessionParticipatesInQueue,
 } from '../utils/queueBands';
 import { AppContentProps } from './appSupport';
@@ -31,7 +33,7 @@ export function useAttentionQueue({
   enrichedLocalSessions,
   activeSessionId,
 }: Options) {
-  const { sendSetSetting, sendSettleTurn } = useDaemonApi();
+  const { sendSetSetting, sendSettleTurn, sendWakeTurn } = useDaemonApi();
   const handleToggleQueueMode = useCallback(() => {
     sendSetSetting(QUEUE_MODE_SETTING, isQueueModeEnabled(settings) ? 'false' : 'true');
   }, [sendSetSetting, settings]);
@@ -61,10 +63,6 @@ export function useAttentionQueue({
       null,
     [activeGroupForCommands, activeSessionId],
   );
-  const activeSessionQueueEligible = Boolean(
-    activeSessionForCommands &&
-      sessionParticipatesInQueue(activeSessionForCommands, crewQueueEnabled),
-  );
 
   const wantsAttention = useCallback(
     (session: {
@@ -81,18 +79,6 @@ export function useAttentionQueue({
 
   const waitingLocalSessions = unmutedEnrichedSessions.filter(wantsAttention);
 
-  const agentOnScreenId = useAgentOnScreen();
-  const agentOnScreen = enrichedLocalSessions.find((session) => session.id === agentOnScreenId) ?? null;
-  const settleable = Boolean(
-    agentOnScreen &&
-      ((queueModeEnabled && sessionParticipatesInQueue(agentOnScreen, crewQueueEnabled)) ||
-        (agentOnScreen.automation && agentOnScreen.turnOwed)),
-  );
-  const handleSettleActiveTurn = useMemo(
-    () => (settleable && agentOnScreenId ? () => sendSettleTurn(agentOnScreenId) : undefined),
-    [settleable, agentOnScreenId, sendSettleTurn],
-  );
-
   const [snoozeMenu, setSnoozeMenu] = useState<{
     session: { id: string; label: string };
     anchor: { top: number; left: number };
@@ -106,24 +92,76 @@ export function useAttentionQueue({
     [],
   );
 
+  const openSnoozeForSession = useCallback((session: { id: string; label: string }, row?: HTMLElement) => {
+    const anchorRow = row ?? document.querySelector<HTMLElement>(`.queue-row[data-session-id="${session.id}"]`);
+    const rect = anchorRow?.getBoundingClientRect();
+    setSnoozeMenu({
+      session: { id: session.id, label: session.label },
+      anchor: rect ? { top: rect.bottom + 4, left: rect.left } : { top: 72, left: 72 },
+    });
+  }, []);
+
+  const actionsFor = useCallback(
+    (session: EnrichedSession) =>
+      queueActions(session, { queueMode: queueModeEnabled, crewInQueue: crewQueueEnabled, now: Date.now() }),
+    [queueModeEnabled, crewQueueEnabled],
+  );
+
+  const agentOnScreenId = useAgentOnScreen();
+  const agentOnScreen = enrichedLocalSessions.find((session) => session.id === agentOnScreenId) ?? null;
+  const agentOnScreenActions = agentOnScreen ? actionsFor(agentOnScreen) : null;
+
+  const handleSettleActiveTurn = useMemo(
+    () =>
+      agentOnScreen && agentOnScreenActions?.settle ? () => sendSettleTurn(agentOnScreen.id) : undefined,
+    [agentOnScreen, agentOnScreenActions?.settle, sendSettleTurn],
+  );
+
   const handleSnoozeActiveSession = useMemo(
     () =>
-      queueModeEnabled && activeSessionQueueEligible
+      agentOnScreen && agentOnScreenActions?.snooze ? () => openSnoozeForSession(agentOnScreen) : undefined,
+    [agentOnScreen, agentOnScreenActions?.snooze, openSnoozeForSession],
+  );
+
+  const handleWakeActiveSession = useMemo(
+    () =>
+      queueModeEnabled &&
+      agentOnScreen?.turnSnoozedUntil &&
+      sessionParticipatesInQueue(agentOnScreen, crewQueueEnabled)
+        ? () => sendWakeTurn(agentOnScreen.id)
+        : undefined,
+    [queueModeEnabled, crewQueueEnabled, agentOnScreen, sendWakeTurn],
+  );
+
+  const shortcutTarget = useCallback(() => {
+    const focused = focusedQueueRow();
+    if (focused.kind === 'other') return null;
+    const id = focused.kind === 'session' ? focused.sessionId : agentOnScreenId;
+    const session = enrichedLocalSessions.find((entry) => entry.id === id);
+    if (!session) return null;
+    return { session, actions: actionsFor(session), row: focused.kind === 'session' ? focused.row : undefined };
+  }, [agentOnScreenId, enrichedLocalSessions, actionsFor]);
+
+  const handleSettleShortcut = useMemo(
+    () =>
+      queueModeEnabled || handleSettleActiveTurn
         ? () => {
-            if (!activeSessionId) return;
-            const session = enrichedLocalSessions.find((s) => s.id === activeSessionId);
-            if (!session) return;
-            const row = document.querySelector<HTMLElement>(
-              `[data-testid$="-${activeSessionId}"].queue-row`,
-            );
-            const rect = row?.getBoundingClientRect();
-            setSnoozeMenu({
-              session: { id: session.id, label: session.label },
-              anchor: rect ? { top: rect.bottom + 4, left: rect.left } : { top: 72, left: 72 },
-            });
+            const target = shortcutTarget();
+            if (target?.actions.settle) sendSettleTurn(target.session.id);
           }
         : undefined,
-    [queueModeEnabled, activeSessionQueueEligible, activeSessionId, enrichedLocalSessions],
+    [queueModeEnabled, handleSettleActiveTurn, shortcutTarget, sendSettleTurn],
+  );
+
+  const handleSnoozeShortcut = useMemo(
+    () =>
+      queueModeEnabled
+        ? () => {
+            const target = shortcutTarget();
+            if (target?.actions.snooze) openSnoozeForSession(target.session, target.row);
+          }
+        : undefined,
+    [queueModeEnabled, shortcutTarget, openSnoozeForSession],
   );
 
   return {
@@ -132,7 +170,7 @@ export function useAttentionQueue({
     queueBands,
     activeGroupForCommands,
     activeSessionForCommands,
-    activeSessionQueueEligible,
+    handleWakeActiveSession,
     wantsAttention,
     waitingLocalSessions,
     handleSettleActiveTurn,
@@ -140,6 +178,8 @@ export function useAttentionQueue({
     setSnoozeMenu,
     openSnoozeMenu,
     handleSnoozeActiveSession,
+    handleSettleShortcut,
+    handleSnoozeShortcut,
     handleToggleQueueMode,
     handleToggleCrewQueue,
   };

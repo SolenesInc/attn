@@ -227,6 +227,11 @@ function PaletteFooter({ mode }: { mode: 'agents' | 'commands' | 'snooze' }) {
   );
 }
 
+function focusedElement(): HTMLElement | null {
+  const active = document.activeElement;
+  return active instanceof HTMLElement && active !== document.body ? active : null;
+}
+
 export function UnifiedPalette<S extends PaletteSession>({
   state,
   onStateChange,
@@ -261,6 +266,8 @@ export function UnifiedPalette<S extends PaletteSession>({
     return desktop.shortcut_slot ? slotShortcut(desktop.shortcut_slot) : '·';
   };
 
+  const [opener] = useState(focusedElement);
+
   const pick = (item: Item<S>) => {
     if (item.mode === 'snooze') {
       if (!snoozing) return;
@@ -270,7 +277,7 @@ export function UnifiedPalette<S extends PaletteSession>({
     }
     onClose();
     if (item.mode === 'commands') {
-      item.command.run();
+      item.command.run(opener);
       return;
     }
     const { row } = item;

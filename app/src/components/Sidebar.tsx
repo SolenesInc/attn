@@ -1,8 +1,8 @@
 import { formatShortcut } from '../shortcuts/formatShortcut';
 import { CriticalNotificationStrip } from './CriticalNotificationStrip';
-import { QueueBands, QueueSnoozedSection } from './QueueBands';
+import { QueueSidebar } from './QueueSidebar';
 import './Sidebar.css';
-import { SidebarCollapsed, SidebarFooter, SidebarHeader, SidebarPopovers } from './SidebarChrome';
+import { SidebarCollapsed, SidebarCrewManage, SidebarFooter, SidebarHeader, SidebarPopovers } from './SidebarChrome';
 import { SidebarContext, useSidebarContext } from './SidebarContext';
 import { HomeIcon } from './SidebarIcons';
 import type { SidebarProps } from './sidebarTypes';
@@ -17,36 +17,21 @@ export function Sidebar(props: SidebarProps) {
   const state = useSidebarState(props);
   return (
     <SidebarContext.Provider value={state}>
-      {props.collapsed ? <SidebarCollapsed /> : <SidebarExpanded />}
+      {props.collapsed ? <SidebarCollapsed /> : props.queue ? <QueueSidebar /> : <SidebarExpanded />}
     </SidebarContext.Provider>
   );
 }
 
 function SidebarExpanded() {
   const {
-    selectedId,
     criticalNotifications,
     onOpenNotifications,
-    queue,
-    crew,
-    onWakeCrewMember,
-    onSleepCrewMember,
-    openCrewMemberActions,
-    onSettleTurn,
-    onOpenSnooze,
-    onWakeTurn,
-    onScreenSessionIds,
     harnessLogosEnabled,
     leafDrag,
     onNewWorkspaceDrop,
-    onSelectSession,
     onGoToDashboard,
     homeActive,
-    snoozedExpanded,
-    setSnoozedExpanded,
     displayMode,
-    openSessionActions,
-    allSessions,
     newWorkspaceDropActive,
     setNewWorkspaceDropActive,
     reorderDrag,
@@ -81,23 +66,6 @@ function SidebarExpanded() {
 
       <SidebarCrewManage />
 
-      {queue && (
-        <QueueBands
-          bands={queue}
-          crew={crew}
-          onWakeCrewMember={onWakeCrewMember}
-          onSleepCrewMember={onSleepCrewMember}
-          onOpenCrewMemberActions={openCrewMemberActions}
-          selectedId={selectedId}
-          onSelectSession={onSelectSession}
-          onSettleTurn={(id) => onSettleTurn?.(id)}
-          onScreenSessionIds={onScreenSessionIds}
-          onOpenActions={openSessionActions}
-          onOpenSnooze={onOpenSnooze}
-          allSessions={allSessions}
-        />
-      )}
-
       <div className={`session-list ${reorderDrag ? 'session-list--reordering' : ''}`.trim()}>
         <SidebarWorkspaceList />
         <SidebarAutomationGroups />
@@ -127,32 +95,9 @@ function SidebarExpanded() {
         )}
       </div>
 
-      {queue && onWakeTurn && (
-        <QueueSnoozedSection
-          rows={queue.snoozed}
-          selectedId={selectedId}
-          expanded={snoozedExpanded}
-          onToggleExpanded={() => setSnoozedExpanded(!snoozedExpanded)}
-          onSelectSession={onSelectSession}
-          onWakeTurn={onWakeTurn}
-          allSessions={allSessions}
-        />
-      )}
-
       <SidebarFooter />
       <SidebarPopovers />
     </div>
-  );
-}
-
-function SidebarCrewManage() {
-  const { crew, onManageCrew } = useSidebarContext();
-  if (!crew?.length || !onManageCrew) return null;
-  return (
-    <button type="button" className="sidebar-crew-manage" data-testid="manage-crew" onClick={onManageCrew}>
-      <span>Manage crew</span>
-      <span className="sidebar-crew-count">{crew.length}</span>
-    </button>
   );
 }
 
