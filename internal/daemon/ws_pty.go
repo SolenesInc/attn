@@ -545,7 +545,7 @@ func (d *Daemon) forwardPTYStreamEvents(client *wsClient, sessionID string, stre
 			}
 			if !d.sendStream(client, outbound) {
 				d.logf("pty_output send failed, closing stream: id=%s seq=%d", sessionID, event.Seq)
-				_ = stream.Close()
+				d.desyncPTYStream(client, sessionID, stream)
 				return
 			}
 		case ptybackend.OutputEventKindPlacements:
@@ -559,7 +559,7 @@ func (d *Daemon) forwardPTYStreamEvents(client *wsClient, sessionID string, stre
 			}
 			if !d.sendStream(client, outbound) {
 				d.logf("kitty_placements send failed, closing stream: id=%s seq=%d", sessionID, event.Seq)
-				_ = stream.Close()
+				d.desyncPTYStream(client, sessionID, stream)
 				return
 			}
 		case ptybackend.OutputEventKindResize:
@@ -578,7 +578,7 @@ func (d *Daemon) forwardPTYStreamEvents(client *wsClient, sessionID string, stre
 				continue
 			}
 			if !d.sendStream(client, outboundMessage{kind: messageKindText, payload: payload}) {
-				_ = stream.Close()
+				d.desyncPTYStream(client, sessionID, stream)
 				return
 			}
 		case ptybackend.OutputEventKindDesync:
@@ -602,6 +602,18 @@ func (d *Daemon) forwardPTYStreamEvents(client *wsClient, sessionID string, stre
 	}
 
 	d.logf("pty stream events closed: id=%s", sessionID)
+}
+
+func (d *Daemon) desyncPTYStream(client *wsClient, sessionID string, stream ptybackend.Stream) {
+	_ = stream.Close()
+	payload, err := json.Marshal(&protocol.WebSocketEvent{
+		Event:  protocol.EventPtyDesync,
+		ID:     protocol.Ptr(sessionID),
+		Reason: protocol.Ptr("stream_backpressure"),
+	})
+	if err == nil {
+		d.sendOutbound(client, outboundMessage{kind: messageKindText, payload: payload})
+	}
 }
 
 func (d *Daemon) handlePtyInput(client *wsClient, msg *protocol.PtyInputMessage) {

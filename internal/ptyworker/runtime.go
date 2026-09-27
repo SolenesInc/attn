@@ -648,6 +648,8 @@ type connCtx struct {
 	dec          *json.Decoder
 	sendMu       sync.RWMutex
 	sendQ        chan any
+	sendSlots    chan struct{}
+	sendReserve  chan struct{}
 	sendDone     chan struct{}
 	sendOnce     sync.Once
 	closed       bool
@@ -661,13 +663,15 @@ type connCtx struct {
 
 func (r *Runtime) handleConn(conn net.Conn) {
 	ctx := &connCtx{
-		runtime:  r,
-		conn:     conn,
-		enc:      json.NewEncoder(conn),
-		dec:      json.NewDecoder(conn),
-		sendQ:    make(chan any, connSendQueueSize),
-		sendDone: make(chan struct{}),
-		connID:   strconv.FormatUint(r.connSeq.Add(1), 10),
+		runtime:     r,
+		conn:        conn,
+		enc:         json.NewEncoder(conn),
+		dec:         json.NewDecoder(conn),
+		sendQ:       make(chan any, connSendQueueSize+1),
+		sendSlots:   make(chan struct{}, connSendQueueSize),
+		sendReserve: make(chan struct{}, 1),
+		sendDone:    make(chan struct{}),
+		connID:      strconv.FormatUint(r.connSeq.Add(1), 10),
 	}
 	go ctx.writeLoop()
 	defer func() {
@@ -729,7 +733,18 @@ func (c *connCtx) nextReadTimeout() (time.Duration, bool) {
 func (c *connCtx) writeLoop() {
 	defer close(c.sendDone)
 	for msg := range c.sendQ {
-		_ = c.conn.SetWriteDeadline(time.Now().Add(connWriteTimeout))
+		if r, ok := msg.(reservedSend); ok {
+			msg = r.msg
+			<-c.sendReserve
+		} else if c.sendSlots != nil {
+			<-c.sendSlots
+		}
+		// A stalled daemon must not cut its stream mid-frame; it reads the backlog when it resumes.
+		deadline := time.Time{}
+		if _, event := msg.(EventEnvelope); !event {
+			deadline = time.Now().Add(connWriteTimeout)
+		}
+		_ = c.conn.SetWriteDeadline(deadline)
 		if err := c.enc.Encode(msg); err != nil {
 			c.runtime.logf("worker conn write error: conn=%s err=%v", c.connID, err)
 			c.closeSend()
@@ -747,6 +762,8 @@ func (c *connCtx) closeSend() {
 	})
 }
 
+type reservedSend struct{ msg any }
+
 func (c *connCtx) enqueue(v any, wait time.Duration) bool {
 	c.sendMu.RLock()
 	defer c.sendMu.RUnlock()
@@ -754,9 +771,16 @@ func (c *connCtx) enqueue(v any, wait time.Duration) bool {
 		c.runtime.logf("worker conn enqueue rejected: conn=%s closed=true type=%T", c.connID, v)
 		return false
 	}
+	queue, slots := c.sendQ, c.sendSlots
+	if slots != nil {
+		queue = nil
+	}
 	if wait <= 0 {
 		select {
-		case c.sendQ <- v:
+		case queue <- v:
+			return true
+		case slots <- struct{}{}:
+			c.sendQ <- v
 			return true
 		default:
 			c.runtime.logf("worker conn enqueue dropped: conn=%s wait=0 type=%T", c.connID, v)
@@ -766,10 +790,28 @@ func (c *connCtx) enqueue(v any, wait time.Duration) bool {
 	timer := time.NewTimer(wait)
 	defer timer.Stop()
 	select {
-	case c.sendQ <- v:
+	case queue <- v:
+		return true
+	case slots <- struct{}{}:
+		c.sendQ <- v
 		return true
 	case <-timer.C:
 		c.runtime.logf("worker conn enqueue timeout: conn=%s wait=%s type=%T", c.connID, wait, v)
+		return false
+	}
+}
+
+func (c *connCtx) enqueueReserved(v any) bool {
+	c.sendMu.RLock()
+	defer c.sendMu.RUnlock()
+	if c.closed {
+		return false
+	}
+	select {
+	case c.sendReserve <- struct{}{}:
+		c.sendQ <- reservedSend{v}
+		return true
+	default:
 		return false
 	}
 }
@@ -913,12 +955,13 @@ func (c *connCtx) handleRequest(req RequestEnvelope) {
 				subID,
 				reason,
 			)
-			if !c.sendEvent(EventEnvelope{
+			desync := EventEnvelope{
 				Type:      "evt",
 				Event:     EventDesync,
 				SessionID: c.runtime.cfg.SessionID,
 				Reason:    &reason,
-			}) {
+			}
+			if !c.enqueueReserved(desync) && !c.sendEvent(desync) {
 				c.runtime.logf(
 					"worker output desync forward failed: session=%s conn=%s sub=%s reason=%s",
 					c.runtime.cfg.SessionID,
