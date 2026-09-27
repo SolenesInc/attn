@@ -1,5 +1,5 @@
-import { fireEvent, screen } from '@testing-library/react';
-import { describe, expect, it, onTestFinished } from 'vitest';
+import { act, fireEvent, screen } from '@testing-library/react';
+import { describe, expect, it, onTestFinished, vi } from 'vitest';
 import { openAttachedTerminals } from './test/appFixtures';
 import { agentWorkspace, daemonSession, splitWorkspace, workspaceWithTiles, type DaemonSession, type DaemonWorkspace } from './test/daemonFixtures';
 import { stubNavigatorPlatform } from './test/platformStub';
@@ -151,6 +151,19 @@ describe('App keyboard shortcuts', () => {
     expect(ptyInput(daemon)).toEqual([]);
   });
 
+  it('selects a workspace by its number from a focused terminal without typing into it', async () => {
+    const { daemon, terminal, press } = await openWorkspace({
+      sessions: [daemonSession('s1', { state: 'idle' }), daemonSession('s2', { state: 'idle' })],
+      workspaces: [agentWorkspace('s1'), agentWorkspace('s2')],
+    });
+    const selections = daemon.sentOf('workspace_selected').length;
+
+    await press(terminal(), { key: '2', code: 'Digit2', metaKey: true });
+
+    expect(daemon.sentOf('workspace_selected').slice(selections)).toEqual([{ cmd: 'workspace_selected', workspace_id: 'workspace-s2' }]);
+    expect(ptyInput(daemon)).toEqual([]);
+  });
+
   describe('leader-key chords', () => {
     it('fires on the follow key without either keystroke reaching the terminal', async () => {
       const { daemon, terminal, press } = await openWorkspace({ settings: ZOOM_CHORD });
@@ -162,6 +175,19 @@ describe('App keyboard shortcuts', () => {
       expect(zoomedPane()).toBe('pane-s1');
       expect(chordHud()).toBeNull();
       expect(ptyInput(daemon)).toEqual([]);
+    });
+
+    it('lets a leader lapse when no follow key arrives, so the next key reaches the terminal', async () => {
+      const { daemon, terminal, press } = await openWorkspace({ settings: ZOOM_CHORD });
+
+      await press(terminal(), { key: 'y', metaKey: true });
+      expect(chordHud()).not.toBeNull();
+      await act(() => vi.advanceTimersByTimeAsync(1000));
+      expect(chordHud()).toBeNull();
+      await press(terminal(), { key: 'z', code: 'KeyZ' });
+
+      expect(zoomedPane()).toBeNull();
+      expect(ptyInput(daemon)).toEqual(['z']);
     });
 
     it.each([

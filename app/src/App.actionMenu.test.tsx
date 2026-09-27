@@ -2,7 +2,7 @@ import { act, fireEvent, screen, within } from '@testing-library/react';
 import { describe, expect, it, vi } from 'vitest';
 import { openActionMenu, openSession } from './test/appFixtures';
 import { agentWorkspace, daemonSession } from './test/daemonFixtures';
-import { renderApp } from './test/renderApp';
+import { pressShortcut, renderApp } from './test/renderApp';
 
 function listedActions() {
   return within(screen.getByRole('dialog', { name: 'Action menu' }))
@@ -62,5 +62,22 @@ describe('App action menu', () => {
     await daemon.idle();
 
     expect(terminal).toHaveFocus();
+  });
+
+  it('holds app shortcuts while open, and opens the attention drawer from its entry', async () => {
+    const { daemon } = await renderApp();
+    const drawer = screen.getByText('Needs Attention').closest('aside');
+    await openActionMenu(daemon);
+    expect(drawer).toHaveAttribute('aria-hidden', 'true');
+
+    pressShortcut('session.new');
+    await daemon.idle();
+    expect(screen.queryByTestId('location-picker-overlay')).toBeNull();
+
+    fireEvent.click(screen.getByText('Open attention drawer'));
+    await daemon.idle();
+
+    expect(screen.queryByRole('dialog', { name: 'Action menu' })).toBeNull();
+    expect(drawer).toHaveAttribute('aria-hidden', 'false');
   });
 });
