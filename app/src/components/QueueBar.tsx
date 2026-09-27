@@ -197,19 +197,23 @@ function WaitingPeek({ onPicked }: { onPicked: () => void }) {
 
 function QueueBarPeek({ testId, alignRight = false, children }: { testId: string; alignRight?: boolean; children: ReactNode }) {
   const panelRef = useRef<HTMLDivElement>(null);
-  const [shift, setShift] = useState({ x: 0, y: 0 });
   useLayoutEffect(() => {
-    const rect = panelRef.current!.getBoundingClientRect();
-    const clamped = clampIntoViewport(rect, rect);
-    setShift({ x: clamped.left - rect.left, y: clamped.top - rect.top });
+    const panel = panelRef.current!;
+    const shiftIntoViewport = () => {
+      panel.style.transform = '';
+      const rect = panel.getBoundingClientRect();
+      const clamped = clampIntoViewport(rect, rect);
+      const x = clamped.left - rect.left;
+      const y = clamped.top - rect.top;
+      panel.style.transform = x || y ? `translate(${x}px, ${y}px)` : '';
+    };
+    shiftIntoViewport();
+    window.addEventListener('resize', shiftIntoViewport);
+    return () => window.removeEventListener('resize', shiftIntoViewport);
   }, []);
   return (
     <div className={`queue-bar-peek${alignRight ? ' is-right' : ''}`} data-testid={testId}>
-      <div
-        ref={panelRef}
-        className="queue-bar-peek-panel"
-        style={shift.x || shift.y ? { transform: `translate(${shift.x}px, ${shift.y}px)` } : undefined}
-      >
+      <div ref={panelRef} className="queue-bar-peek-panel">
         {children}
       </div>
     </div>

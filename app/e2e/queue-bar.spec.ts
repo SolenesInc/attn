@@ -68,3 +68,23 @@ test('keeps both peeks on screen when a long profile pushes the waiting pill rig
     await expect(page.getByTestId(peek)).toBeHidden();
   }
 });
+
+test('an open peek shifts back on screen when the window narrows under it', async ({ page }) => {
+  await page.setViewportSize({ width: 1400, height: 600 });
+  await page.goto('/test-harness/?component=QueueBar&oneDesktop');
+  await page.waitForFunction(() => window.__HARNESS__?.ready === true);
+
+  await page.getByTestId('queue-bar-waiting').hover();
+  const panel = page.locator('[data-testid=queue-bar-waiting-peek] .queue-bar-peek-panel');
+  const wide = (await panel.boundingBox())!;
+  const pointerX = 750;
+  expect(pointerX).toBeGreaterThan(wide.x);
+  await page.mouse.move(pointerX, wide.y + 20);
+
+  await page.setViewportSize({ width: 800, height: 600 });
+  await expect(panel).toBeVisible();
+  await expect.poll(async () => {
+    const box = (await panel.boundingBox())!;
+    return box.x + box.width;
+  }).toBeLessThanOrEqual(800);
+});
