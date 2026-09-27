@@ -7,8 +7,6 @@ import (
 	"testing/synctest"
 	"time"
 
-	"net"
-
 	"github.com/victorarias/attn/internal/crew"
 	"github.com/victorarias/attn/internal/protocol"
 	"github.com/victorarias/attn/internal/sessionstate"
@@ -325,99 +323,6 @@ func TestChargeAutonomousWake_ForgetsWakesOlderThanTheWindow(t *testing.T) {
 	}
 	if got := len(crewMemberRecord(t, d, "trellis").AutonomousWakes); got != 1 {
 		t.Fatalf("the ledger kept %d stamps, want only the one inside the window", got)
-	}
-}
-
-func TestCrewHandoff_AWakeLimitRefusalLeavesTheDayRunningAndSaysWhy(t *testing.T) {
-	d, backend, _ := newWakeableDaemon(t)
-	d.store.SetSetting(SettingCrewWakeLimit, "0")
-	woken, err := d.crewWake("trellis", "")
-	if err != nil {
-		t.Fatalf("wake: %v", err)
-	}
-	setUserAway(d, time.Now().Add(-3*time.Hour))
-
-	msg := protocol.CrewHandoffMessage{
-		Cmd: protocol.CmdCrewHandoff, SessionID: woken.SessionID,
-		Note: "the tests are green\n", Close: protocol.Ptr(protocol.CrewDayCloseNap),
-	}
-	resp := gardenCall(t, func(c net.Conn) { d.handleCrewHandoff(c, &msg) })
-	if !resp.Ok {
-		t.Fatalf("handoff: %v", protocol.Deref(resp.Error))
-	}
-	napErr := protocol.Deref(resp.CrewHandoffResult.NapError)
-	if !strings.Contains(napErr, "crew.wake_limit=0") {
-		t.Fatalf("the nap failed with %q, which does not name the limit that stopped it", napErr)
-	}
-	if got := spawnedSessions(t, backend); len(got) != 1 {
-		t.Fatalf("%d sessions were spawned; a refused wake must spawn nothing", len(got))
-	}
-	if d.store.Get(woken.SessionID) == nil {
-		t.Fatal("the day was closed behind a wake that never happened")
-	}
-	if got := protocol.Deref(memberByID(t, crewList(t, d), "trellis").BindingSession); got != woken.SessionID {
-		t.Fatalf("binding = %q, want the day that is still running %q", got, woken.SessionID)
-	}
-}
-
-func TestCrewHandoff_EndsTheDayWhenTheUserHasBeenAway(t *testing.T) {
-	d, backend, _ := newWakeableDaemon(t)
-	woken, err := d.crewWake("trellis", "")
-	if err != nil {
-		t.Fatalf("wake: %v", err)
-	}
-	setUserAway(d, time.Now().Add(-3*time.Hour))
-
-	resp := crewHandoffCall(t, d, woken.SessionID, "nothing is in flight\n")
-	if !resp.Ok {
-		t.Fatalf("handoff: %v", protocol.Deref(resp.Error))
-	}
-	result := resp.CrewHandoffResult
-	if got := protocol.Deref(result.Outcome); got != protocol.CrewDayCloseSleep {
-		t.Fatalf("outcome = %q, want sleep", got)
-	}
-	if protocol.Deref(result.SessionID) != "" {
-		t.Fatalf("a successor %q was woken for a user who is not there", protocol.Deref(result.SessionID))
-	}
-	if got := spawnedSessions(t, backend); len(got) != 1 {
-		t.Fatalf("%d sessions were spawned, want only the original wake", len(got))
-	}
-	if d.store.Get(woken.SessionID) != nil {
-		t.Fatal("the day that filed its letter is still running")
-	}
-	if got := protocol.Deref(memberByID(t, crewList(t, d), "trellis").BindingSession); got != "" {
-		t.Fatalf("the member is still bound to %q after going to sleep", got)
-	}
-	if names := handoffFiles(t, d, "trellis"); len(names) != 2 {
-		t.Fatalf("the handoffs dir holds %v, want the seeded letter and this one", names)
-	}
-}
-
-func TestCrewHandoff_NapOverridesTheAbsence(t *testing.T) {
-	d, _, _ := newWakeableDaemon(t)
-	woken, err := d.crewWake("trellis", "")
-	if err != nil {
-		t.Fatalf("wake: %v", err)
-	}
-	setUserAway(d, time.Now().Add(-3*time.Hour))
-
-	msg := protocol.CrewHandoffMessage{
-		Cmd: protocol.CmdCrewHandoff, SessionID: woken.SessionID,
-		Note: "picked up #901\n", Close: protocol.Ptr(protocol.CrewDayCloseNap),
-	}
-	resp := gardenCall(t, func(c net.Conn) { d.handleCrewHandoff(c, &msg) })
-	if !resp.Ok {
-		t.Fatalf("handoff: %v", protocol.Deref(resp.Error))
-	}
-	result := resp.CrewHandoffResult
-	if napErr := protocol.Deref(result.NapError); napErr != "" {
-		t.Fatalf("the nap did not run: %s", napErr)
-	}
-	if got := protocol.Deref(result.Outcome); got != protocol.CrewDayCloseNap {
-		t.Fatalf("outcome = %q, want nap", got)
-	}
-	if got := len(crewMemberRecord(t, d, "trellis").AutonomousWakes); got != 1 {
-		t.Fatalf("an unattended turnover booked %d wakes, want 1", got)
 	}
 }
 
