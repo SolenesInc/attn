@@ -32,17 +32,3 @@ func addCharacterizationSession(
 	d.associateSessionWithWorkspace(id, workspaceID)
 	return workspaceID
 }
-
-func characterizationEventCount(events []protocol.WebSocketEvent, eventName, sessionID string) int {
-	count := 0
-	for _, event := range events {
-		if event.Event != eventName {
-			continue
-		}
-		if sessionID != "" && (event.Session == nil || event.Session.ID != sessionID) {
-			continue
-		}
-		count++
-	}
-	return count
-}
