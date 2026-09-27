@@ -13,6 +13,7 @@ import (
 
 	"github.com/victorarias/attn/internal/enrollment"
 	"github.com/victorarias/attn/internal/protocol"
+	"github.com/victorarias/attn/internal/store"
 )
 
 func writeCodexInteractiveRollout(t *testing.T, codexHome, nativeID, cwd string, at time.Time) string {
@@ -158,4 +159,24 @@ func mdAnchor(startLine, endLine, start int, exact string) *protocol.MarkdownAnn
 
 func fileAnnotationSource(path string) annotationDocumentSource {
 	return annotationDocumentSource{kind: annotationSourceFile, path: path}
+}
+
+func factsOf(t *testing.T, d *Daemon) []store.BusEvent {
+	t.Helper()
+	events, err := d.store.BusEventsSince(0, 1000)
+	if err != nil {
+		t.Fatalf("reading the log: %v", err)
+	}
+	return events
+}
+
+func docFacts(t *testing.T, d *Daemon, name string) []store.BusEvent {
+	t.Helper()
+	var out []store.BusEvent
+	for _, e := range factsOf(t, d) {
+		if e.Name == name {
+			out = append(out, e)
+		}
+	}
+	return out
 }
