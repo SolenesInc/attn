@@ -25,6 +25,7 @@ const KNOWN_FACTS: Array<[key: string, label: string]> = [
   ['schema_version_to', 'Schema version after'],
   ['error', 'Error'],
   ['binary_version', 'attn version'],
+  ['binary_commit', 'attn commit'],
   ['failed_at', 'Failed at'],
 ];
 
