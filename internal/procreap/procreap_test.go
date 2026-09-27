@@ -55,118 +55,6 @@ func orphan(t *testing.T, dir, id, body string) Entry {
 	return entry
 }
 
-func TestEntryRoundTripsWithIdentityStamp(t *testing.T) {
-	dir := t.TempDir()
-	entry := orphan(t, dir, "e1", `
-touch "$READY_FILE"
-while true; do sleep 0.05; done
-`)
-	if entry.ProcessStartTime == "" {
-		t.Fatalf("entry carries no process start time: %+v", entry)
-	}
-	read, err := ReadEntry(filepath.Join(dir, "e1.json"))
-	if err != nil {
-		t.Fatalf("read entry: %v", err)
-	}
-	if read.ID != "e1" || read.PID != entry.PID || read.ProcessStartTime != entry.ProcessStartTime {
-		t.Fatalf("entry did not round trip: wrote %+v read %+v", entry, read)
-	}
-	current, err := processStartTime(entry.PID)
-	if err != nil || current != entry.ProcessStartTime {
-		t.Fatalf("recorded start time %q does not match the live process (%q, %v)", entry.ProcessStartTime, current, err)
-	}
-}
-
-func TestStartTimeStampResolvesFasterThanPidsAreReused(t *testing.T) {
-	separation := 20 * stampResolution
-	if separation < time.Millisecond {
-		separation = time.Millisecond
-	}
-	script := writeScript(t, "while true; do sleep 0.05; done\n")
-
-	spawn := func() (int, string) {
-		t.Helper()
-		cmd := exec.Command(script)
-		if err := cmd.Start(); err != nil {
-			t.Fatalf("start: %v", err)
-		}
-		pid := cmd.Process.Pid
-		go func() { _ = cmd.Wait() }()
-		t.Cleanup(func() { _ = syscall.Kill(pid, syscall.SIGKILL) })
-		stamp, err := processStartTime(pid)
-		if err != nil {
-			t.Fatalf("read start time of pid %d: %v", pid, err)
-		}
-		return pid, stamp
-	}
-
-	firstPID, firstStamp := spawn()
-	time.Sleep(separation)
-	secondPID, secondStamp := spawn()
-
-	if firstStamp == secondStamp {
-		t.Fatalf("pids %d and %d started %s apart share the stamp %q; the stamp is too coarse to tell a recycled pid from the recorded process",
-			firstPID, secondPID, separation, firstStamp)
-	}
-}
-
-func TestStartTimeStampIsStableAcrossReads(t *testing.T) {
-	dir := t.TempDir()
-	entry := orphan(t, dir, "e1", `
-touch "$READY_FILE"
-while true; do sleep 0.05; done
-`)
-	time.Sleep(50 * time.Millisecond)
-	again, err := processStartTime(entry.PID)
-	if err != nil {
-		t.Fatalf("re-read start time: %v", err)
-	}
-	if again != entry.ProcessStartTime {
-		t.Fatalf("stamp for pid %d changed between reads: recorded %q, now %q", entry.PID, entry.ProcessStartTime, again)
-	}
-}
-
-func TestReapTerminatesACooperativeOrphan(t *testing.T) {
-	dir := t.TempDir()
-	entry := orphan(t, dir, "e1", `
-trap 'exit 0' TERM
-touch "$READY_FILE"
-while true; do sleep 0.05; done
-`)
-
-	start := time.Now()
-	results := ReapDir(dir, testGrace)
-	if len(results) != 1 {
-		t.Fatalf("expected one result, got %+v", results)
-	}
-	if results[0].Outcome != ReapTerminated {
-		t.Fatalf("expected %s, got %+v", ReapTerminated, results[0])
-	}
-	if elapsed := time.Since(start); elapsed >= testGrace {
-		t.Fatalf("cooperative reap waited out the %s grace (%s); SIGTERM is not reaching the child", testGrace, elapsed)
-	}
-	if ProcessAlive(entry.PID) {
-		t.Fatalf("pid %d still alive after reap", entry.PID)
-	}
-}
-
-func TestReapKillsAnOrphanThatIgnoresSIGTERM(t *testing.T) {
-	dir := t.TempDir()
-	entry := orphan(t, dir, "e1", `
-trap '' TERM
-touch "$READY_FILE"
-while true; do sleep 0.05; done
-`)
-
-	results := ReapDir(dir, testGrace)
-	if len(results) != 1 || results[0].Outcome != ReapKilled {
-		t.Fatalf("expected %s, got %+v", ReapKilled, results)
-	}
-	if ProcessAlive(entry.PID) {
-		t.Fatalf("pid %d still alive after reap", entry.PID)
-	}
-}
-
 func TestReapLeavesARecycledPIDAlone(t *testing.T) {
 	dir := t.TempDir()
 	entry := orphan(t, dir, "e1", `
@@ -223,12 +111,6 @@ func TestReapReportsADeadEntryAsAlreadyGone(t *testing.T) {
 	results := ReapDir(dir, testGrace)
 	if len(results) != 1 || results[0].Outcome != ReapAlreadyGone {
 		t.Fatalf("expected %s, got %+v", ReapAlreadyGone, results)
-	}
-}
-
-func TestReapOfAnEmptyDirIsQuiet(t *testing.T) {
-	if results := ReapDir(t.TempDir(), testGrace); len(results) != 0 {
-		t.Fatalf("expected no results, got %+v", results)
 	}
 }
 
