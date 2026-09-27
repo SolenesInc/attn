@@ -1,6 +1,7 @@
 import { describe, it, expect, vi } from 'vitest';
 import { useState } from 'react';
 import { render, screen, fireEvent } from '../../test/utils';
+import { useEscapeStack } from '../../hooks/useEscapeStack';
 import { Palette } from './Palette';
 
 interface Row { path: string }
@@ -60,6 +61,25 @@ describe('Palette', () => {
     expect(onPick).toHaveBeenCalledWith({ path: 'b.md' });
   });
 
+  it('keeps the first row highlighted when a row arrives above it before any navigation', () => {
+    const onPick = vi.fn();
+    const { rerender } = render(<Harness rows={['b.md', 'c.md']} onPick={onPick} />);
+    rerender(<Harness rows={['a.md', 'b.md', 'c.md']} onPick={onPick} />);
+
+    fireEvent.keyDown(input(), { key: 'Enter' });
+    expect(onPick).toHaveBeenCalledWith({ path: 'b.md' });
+  });
+
+  it('highlights the first result again after the query changes', () => {
+    const onPick = vi.fn();
+    render(<Harness rows={['alpha.md', 'beta.md', 'alphabet.md']} onPick={onPick} />);
+    fireEvent.keyDown(input(), { key: 'ArrowDown' });
+    fireEvent.change(input(), { target: { value: 'alpha' } });
+
+    fireEvent.keyDown(input(), { key: 'Enter' });
+    expect(onPick).toHaveBeenCalledWith({ path: 'alpha.md' });
+  });
+
   it('clamps the highlight when the list shrinks under it', () => {
     const onPick = vi.fn();
     render(<Harness rows={['alpha.md', 'beta.md', 'alphabet.md']} onPick={onPick} />);
@@ -96,6 +116,26 @@ describe('Palette', () => {
     fireEvent.keyDown(input(), { key: 'Escape' });
     expect(onClose).toHaveBeenCalledTimes(1);
     expect(outerEscape).not.toHaveBeenCalled();
+  });
+
+  it('takes Escape ahead of a surface it opened over, leaving that surface open', () => {
+    const onClose = vi.fn();
+    const surfaceEscape = vi.fn();
+    function SurfaceBeneath() {
+      useEscapeStack(surfaceEscape, true);
+      return null;
+    }
+    const { rerender } = render(<SurfaceBeneath />);
+    rerender(
+      <>
+        <SurfaceBeneath />
+        <Harness rows={['a.md']} onClose={onClose} />
+      </>,
+    );
+
+    fireEvent.keyDown(input(), { key: 'Escape' });
+    expect(onClose).toHaveBeenCalledTimes(1);
+    expect(surfaceEscape).not.toHaveBeenCalled();
   });
 
   it('closes on a backdrop click but not on a click inside the box', () => {

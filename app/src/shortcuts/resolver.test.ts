@@ -49,6 +49,19 @@ describe('resolveBinding', () => {
     expect(isUnbound('session.new')).toBe(true);
   });
 
+  it('leaves a default unbound when the user already bound its combo to another action', () => {
+    setShortcutOverrides({ 'session.new': SHORTCUTS['ui.commandPalette'] });
+    expect(resolveBinding('ui.commandPalette')).toBeNull();
+    expect(isCustomized('ui.commandPalette')).toBe(false);
+    expect(resolveBinding('session.new')).toEqual(SHORTCUTS['ui.commandPalette']);
+    expect(findConflict(SHORTCUTS['ui.commandPalette'], 'session.new')).toBeNull();
+  });
+
+  it('leaves a default unbound when a user chord leads with its combo', () => {
+    setShortcutOverrides({ 'session.new': { leader: SHORTCUTS['ui.commandPalette'], then: { key: 'n' } } });
+    expect(resolveBinding('ui.commandPalette')).toBeNull();
+  });
+
   it('reports whether an id is customized', () => {
     expect(isCustomized('session.new')).toBe(false);
     setShortcutOverrides({ 'session.new': null });

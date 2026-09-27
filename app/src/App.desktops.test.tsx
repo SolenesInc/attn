@@ -1,12 +1,13 @@
 import { describe, expect, it, beforeEach, vi } from 'vitest';
-import { act, render, screen, waitFor } from '@testing-library/react';
+import { act, render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import App from './App';
 import { useProfilesStore } from './store/profiles';
 import { useSessionStore, type Session } from './store/sessions';
 import { WHATS_NEW_ID, WHATS_NEW_STORAGE_KEY } from './hooks/useWhatsNew';
 import { ProfileCommandError } from './hooks/daemonProfileEvents';
-import { MigrationPhase, type Desktop } from './types/generated';
+import { MigrationPhase, type CrewMember, type Desktop } from './types/generated';
+import { useKeyboardShortcuts } from './hooks/useKeyboardShortcuts';
 import type { TerminalLayoutNode } from './types/workspace';
 import { agentDesktop, arrangeDesktops, fakeDesktopCommands, TEST_PROFILE_ID } from './test/desktops';
 
@@ -49,13 +50,17 @@ vi.mock('./components/Sidebar', () => ({
   MarkdownIcon: () => null,
   Sidebar: ({
     workspaces,
+    crew,
     selectedWorkspaceId,
     selectedTile,
     onSelectWorkspace,
     onSelectTile,
     onSelectGridLayout,
+    headerActions,
   }: {
+    headerActions: Array<{ id: string; disabled?: boolean }>;
     workspaces: Array<{ id: string; title: string; sessions: Array<{ id: string }> }>;
+    crew?: Array<{ id: string }>;
     selectedWorkspaceId: string | null;
     selectedTile?: { workspaceId: string; tileId: string } | null;
     onSelectWorkspace: (id: string) => void;
@@ -64,7 +69,9 @@ vi.mock('./components/Sidebar', () => ({
   }) => (
     <div
       data-testid="sidebar"
+      data-editor-enabled={String(headerActions.some((action) => action.id === 'editor' && !action.disabled))}
       data-selected-desktop={selectedWorkspaceId ?? ''}
+      data-crew={(crew ?? []).map((member) => member.id).join(',')}
       data-selected-tile={selectedTile ? `${selectedTile.workspaceId}:${selectedTile.tileId}` : ''}
       data-groups={workspaces.map((group) => `${group.title}=${group.sessions.map((entry) => entry.id).join('+')}`).join(',')}
     >
@@ -304,6 +311,84 @@ describe('desktop surface', () => {
         'Desktop 1=s1+s2,Desktop 2=,Desktop 3=s3,Not on a desktop=s4',
       );
     });
+  });
+
+  it('opens the agent palette on this profile’s crew, agents and tiles, and focuses a picked tile', async () => {
+    const crewMember = (id: string, profileId: string): CrewMember => ({
+      id,
+      profile_id: profileId,
+      awareness_dirs: [],
+      charter_path: '',
+      home_dir: '',
+      resolved_agent: 'claude',
+      revision: 1,
+    });
+    mockUseDaemonStore.mockReturnValue({
+      ...mockUseDaemonStore(),
+      crew: [crewMember('figgy', TEST_PROFILE_ID), crewMember('ops', 'profile-other')],
+    });
+    render(<App />);
+    await waitFor(() => expect(screen.getByTestId('sidebar').getAttribute('data-crew')).toBe('figgy'));
+
+    act(() => vi.mocked(useKeyboardShortcuts).mock.lastCall![0].onOpenPalette('agents'));
+    const palette = await screen.findByRole('dialog', { name: 'Agents' });
+    const options = within(palette).getAllByRole('option').map((option) => option.textContent ?? '');
+    expect(options.some((text) => text.includes('Figgy'))).toBe(true);
+    expect(options.some((text) => text.includes('Ops'))).toBe(false);
+    expect(options.filter((text) => /^s\d/.test(text)).map((text) => text.slice(0, 2))).toEqual(['s1', 's2', 's3', 's4']);
+    expect(options.some((text) => text.includes('README.md'))).toBe(true);
+
+    await userEvent.type(within(palette).getByRole('combobox'), 'readme{Enter}');
+    await waitFor(() => expect(desktopCommands.sendDesktopSetActivePane).toHaveBeenCalledWith('d2', 'tile-readme'));
+    expect(screen.queryByRole('dialog', { name: 'Agents' })).toBeNull();
+  });
+
+  it('offers agent-scoped commands only while an agent is active', async () => {
+    render(<App />);
+    await screen.findByTestId('sidebar');
+    const commandTitles = async () => {
+      act(() => vi.mocked(useKeyboardShortcuts).mock.lastCall![0].onOpenPalette('commands'));
+      const palette = await screen.findByRole('dialog');
+      const titles = within(palette).getAllByRole('option').map((option) => option.textContent ?? '');
+      act(() => vi.mocked(useKeyboardShortcuts).mock.lastCall![0].onOpenPalette('commands'));
+      await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull());
+      return titles;
+    };
+
+    await waitFor(() => expect(useSessionStore.getState().activeSessionId).toBe('s1'));
+    const withAgent = await commandTitles();
+    expect(withAgent.some((text) => text.includes('Show workflow runs'))).toBe(true);
+    expect(withAgent.some((text) => text.includes('Open in editor'))).toBe(true);
+
+    act(() => vi.mocked(useKeyboardShortcuts).mock.lastCall![0].onGoToDashboard());
+    await waitFor(() => expect(useSessionStore.getState().activeSessionId).toBeNull());
+    const atHome = await commandTitles();
+    expect(atHome.some((text) => text.includes('workflow runs'))).toBe(false);
+    expect(atHome.some((text) => text.includes('Open in editor'))).toBe(false);
+  });
+
+  it('offers Open in editor exactly when the sidebar enables it', async () => {
+    render(<App />);
+    await waitFor(() => expect(useSessionStore.getState().activeSessionId).toBe('s1'));
+    const offersEditor = async () => {
+      act(() => vi.mocked(useKeyboardShortcuts).mock.lastCall![0].onOpenPalette('commands'));
+      const palette = await screen.findByRole('dialog');
+      const offered = within(palette).getAllByRole('option').some((option) => option.textContent?.includes('Open in editor'));
+      act(() => vi.mocked(useKeyboardShortcuts).mock.lastCall![0].onOpenPalette('commands'));
+      await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull());
+      return offered;
+    };
+
+    expect(screen.getByTestId('sidebar').getAttribute('data-editor-enabled')).toBe('true');
+    expect(await offersEditor()).toBe(true);
+
+    act(() => {
+      useSessionStore.setState((state) => ({
+        sessions: state.sessions.map((entry) => (entry.id === 's1' ? { ...entry, endpointId: 'remote-box' } : entry)),
+      }));
+    });
+    await waitFor(() => expect(screen.getByTestId('sidebar').getAttribute('data-editor-enabled')).toBe('false'));
+    expect(await offersEditor()).toBe(false);
   });
 
   it('mounts only the current desktop until the user leaves it', async () => {

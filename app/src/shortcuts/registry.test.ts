@@ -333,6 +333,7 @@ describe('shortcut registry', () => {
       expect(LINUX_SHORTCUTS['terminal.close']).toEqual({ key: 'w', meta: true, shift: true });
       expect(LINUX_SHORTCUTS['session.new']).toEqual({ key: 'n', meta: true, shift: true });
       expect(LINUX_SHORTCUTS['ui.actionMenu']).toEqual({ key: 'k', meta: true, shift: true });
+      expect(LINUX_SHORTCUTS['ui.commandPalette']).toEqual({ key: 'k', meta: true, alt: true });
       expect(LINUX_SHORTCUTS['terminal.splitHorizontal']).toEqual({ key: 'd', meta: true, alt: true });
       expect(LINUX_SHORTCUTS['terminal.focusLeft']).toEqual({ key: 'ArrowLeft', meta: true, shift: true });
     });

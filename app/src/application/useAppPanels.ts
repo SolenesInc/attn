@@ -1,3 +1,4 @@
+import type { PaletteState } from '../components/palette/paletteState';
 import { useCallback, useRef, useState } from 'react';
 import { type DelegationChainHandle } from '../components/DelegationChain';
 import { useDockSlotRect } from '../components/GardenFrame';
@@ -15,7 +16,7 @@ export function useAppPanels({ agentSurfaceCount }: Options) {
   const settingsModalRef = useRef<SettingsModalHandle>(null);
   const [shortcutsOpen, setShortcutsOpen] = useState(false);
   const [shortcutEditorOpen, setShortcutEditorOpen] = useState(false);
-  const [actionMenuOpen, setActionMenuOpen] = useState(false);
+  const [palette, setPalette] = useState<PaletteState | null>(null);
   const delegationChainRef = useRef<DelegationChainHandle>(null);
   const [seedPopoverRequest, setSeedPopoverRequest] = useState<{
     sessionId: string;
@@ -92,8 +93,8 @@ export function useAppPanels({ agentSurfaceCount }: Options) {
     setShortcutsOpen,
     shortcutEditorOpen,
     setShortcutEditorOpen,
-    actionMenuOpen,
-    setActionMenuOpen,
+    palette,
+    setPalette,
     delegationChainRef,
     seedPopoverRequest,
     setSeedPopoverRequest,

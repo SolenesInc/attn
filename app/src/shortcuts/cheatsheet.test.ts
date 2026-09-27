@@ -38,8 +38,10 @@ describe('buildCheatsheet', () => {
   it('renders Linux action and pane-focus chords from the Linux table', () => {
     withNavigatorPlatform('Linux aarch64', () => {
       const rows = buildCheatsheet().flatMap((category) => category.rows);
-      expect(rows.find((row) => row.label === 'Action menu')?.combos[0])
+      expect(rows.find((row) => row.label === 'Agent palette')?.combos[0])
         .toEqual(['Ctrl', 'Shift', 'K']);
+      expect(rows.find((row) => row.label === 'Command palette')?.combos[0])
+        .toEqual(['Ctrl', 'Alt', 'K']);
       expect(rows.find((row) => row.label === 'Move focus between panes')?.combos[0])
         .toEqual(['Ctrl', 'Shift', '←↑→↓']);
     });

@@ -35,6 +35,7 @@ import { useWorkflowPanel } from './useWorkflowPanel';
 import { useDesktopResidency } from './useDesktopResidency';
 import { useLeafDrag } from './useLeafDrag';
 import { useDesktopTiles } from './useDesktopTiles';
+import { openPalette, switchPalette, type PaletteMode } from '../components/palette/paletteState';
 
 export function useAppController({
   daemonSessions,
@@ -227,8 +228,8 @@ export function useAppController({
     setShortcutsOpen,
     shortcutEditorOpen,
     setShortcutEditorOpen,
-    actionMenuOpen,
-    setActionMenuOpen,
+    palette,
+    setPalette,
     delegationChainRef,
     sessionsOpen,
     setSessionsOpen,
@@ -298,7 +299,7 @@ export function useAppController({
     sendSupportSnapshot,
     getPaneText,
   });
-  const { diagnosticCapture, actionMenuOriginRef } = appDiagnostics;
+  const { diagnosticCapture, paletteOriginRef } = appDiagnostics;
 
   const chiefOfStaff = useChiefOfStaff({ enrichedLocalSessions, daemonSessions, showError });
   const { chiefTransferTarget } = chiefOfStaff;
@@ -313,7 +314,7 @@ export function useAppController({
 
   const [desktopOverviewOpen, setDesktopOverviewOpen] = useState(false);
   const [profileSwitcherOpen, setProfileSwitcherOpen] = useState(false);
-  const { blockingOverlayOpen, actionMenuBlocked, appShortcutsEnabled } = appOverlayPolicy({
+  const { blockingOverlayOpen, paletteBlocked, appShortcutsEnabled } = appOverlayPolicy({
     desktopOverviewOpen,
     profileSwitcherOpen,
     locationPickerOpen,
@@ -321,7 +322,7 @@ export function useAppController({
     settingsOpen,
     shortcutsOpen,
     shortcutEditorOpen,
-    actionMenuOpen,
+    paletteOpen: palette !== null,
     sessionsOpen,
     notebookOpen,
     crewPanelOpen: crewPanel.open,
@@ -369,18 +370,18 @@ export function useAppController({
     [sendDeleteWorktree],
   );
 
-  const handleToggleActionMenu = useCallback(() => {
-    if (actionMenuOpen) {
-      setActionMenuOpen(false);
+  const handleOpenPalette = useCallback((mode: PaletteMode) => {
+    if (palette !== null) {
+      setPalette(switchPalette(palette, mode));
       return;
     }
-    if (actionMenuBlocked) {
+    if (paletteBlocked) {
       return;
     }
     const activeSession = activeSessionId
       ? sessions.find((session) => session.id === activeSessionId)
       : null;
-    actionMenuOriginRef.current = {
+    paletteOriginRef.current = {
       capturedAtUnixMs: Date.now(),
       view,
       activeSessionId,
@@ -395,12 +396,12 @@ export function useAppController({
       },
     };
     delegationChainRef.current?.prepareCommand();
-    setActionMenuOpen(true);
+    setPalette(openPalette(mode));
   }, [
-    actionMenuOpen,
-    actionMenuBlocked,
-    actionMenuOriginRef,
-    setActionMenuOpen,
+    palette,
+    paletteBlocked,
+    paletteOriginRef,
+    setPalette,
     delegationChainRef,
     activeSessionId,
     sessions,
@@ -551,7 +552,7 @@ export function useAppController({
     onNewSession: () => handleNewSession('vertical'),
     onNewSessionHorizontal: () => handleNewSession('horizontal'),
     onCloseSession: handleCloseCurrentSessionShortcut,
-    onToggleActionMenu: handleToggleActionMenu,
+    onOpenPalette: handleOpenPalette,
     onGoToDashboard: goToDashboard,
     onToggleGridMode: toggleGridMode,
     onJumpToWaiting: handleJumpToWaiting,
