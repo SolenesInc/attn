@@ -177,6 +177,10 @@ func (a *Arrangement) confirm(groupID string) {
 	}
 }
 
+func (a *Arrangement) unconfirm(groupID string) {
+	a.Confirmed = slices.DeleteFunc(a.Confirmed, func(id string) bool { return id == groupID })
+}
+
 func (a Arrangement) retire(live map[string]GroupState) Arrangement {
 	out := a.clone()
 	var placed []string
@@ -405,7 +409,8 @@ func (p Plan) Move(live []GroupState, groupID, targetKey, anchorGroupID string, 
 	if err := next.insert(groupID, strings.TrimSpace(targetKey), strings.TrimSpace(anchorGroupID), edge, share); err != nil {
 		return p, err
 	}
-	next.confirm(groupID)
+	// A move only places the group; the user confirms where it went with a keep.
+	next.unconfirm(groupID)
 	return next, nil
 }
 

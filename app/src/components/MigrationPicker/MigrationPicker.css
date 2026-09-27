@@ -468,7 +468,7 @@
 .mp-keep-inline {
   align-self: center;
   padding: 8px 9px;
-  border: 1px solid transparent;
+  border: 0;
   border-radius: 6px;
   background: none;
   color: var(--color-success);
@@ -1013,6 +1013,7 @@
 .mp-shell .pulse {
   position: relative;
   border-color: var(--accent);
+  color: color-mix(in srgb, var(--accent) 35%, white);
 }
 
 .mp-shell .pulse::after {

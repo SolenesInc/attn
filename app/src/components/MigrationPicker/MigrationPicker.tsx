@@ -96,7 +96,7 @@ function PlacementBoard({ readError, migration, view, profileName, onShowIntro }
     setDialog(null);
     move(
       { groupId, desktop, choice: { anchorGroupId, edge, share }, expectedRevision, verb: planWithout(desktop.tree, groupId) ? 'merged into' : 'moved to' },
-      () => setSelectedId(firstUnconfirmedExcept(groupId) ?? groupId),
+      () => setSelectedId(groupId),
     );
   }, [move, setDialog]);
 

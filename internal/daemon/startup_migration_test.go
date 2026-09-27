@@ -237,6 +237,11 @@ func TestTwoClientsShareOneMigrationDraftAndEitherMayFinish(t *testing.T) {
 		"cmd": protocol.CmdMigrationMove, "expected_revision": state.Revision,
 		"group_id": "ws-2", "target_key": target, "edge": "right", "share": 0.3,
 	})
+	for _, group := range moved.Groups {
+		if group.Confirmed {
+			t.Fatalf("after the move %s is confirmed, want a move to confirm nothing", group.GroupID)
+		}
+	}
 	if seen := migrationBroadcasts(t, b); len(seen) != 1 || seen[0].Revision != moved.Revision {
 		t.Fatalf("the second client saw %+v, want the move at revision %d", seen, moved.Revision)
 	}
@@ -249,7 +254,7 @@ func TestTwoClientsShareOneMigrationDraftAndEitherMayFinish(t *testing.T) {
 	if early.Success || early.ErrorCode == nil || *early.ErrorCode != protocol.ProfileErrorCodeInvalid {
 		t.Fatalf("finishing with unconfirmed groups = %+v, want invalid", early)
 	}
-	kept := w.mustMigrate(b, map[string]any{"cmd": protocol.CmdMigrationKeep, "expected_revision": moved.Revision, "group_ids": []string{"ws-1", "ws-3"}})
+	kept := w.mustMigrate(b, map[string]any{"cmd": protocol.CmdMigrationKeep, "expected_revision": moved.Revision, "group_ids": []string{"ws-1", "ws-2", "ws-3"}})
 	drainClientPayloads(t, a)
 
 	done := w.mustMigrate(b, map[string]any{"cmd": protocol.CmdMigrationFinish, "expected_revision": kept.Revision})

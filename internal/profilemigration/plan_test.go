@@ -134,14 +134,29 @@ func TestMovingTheOnlyGroupOfAnExtraRemovesItButAnEmptiedSlotStays(t *testing.T)
 	if !reflect.DeepEqual(plan.Desktops[2].Tree, want) {
 		t.Fatalf("desktop 3 = %+v, want %+v", plan.Desktops[2].Tree, want)
 	}
-	if !reflect.DeepEqual(plan.Confirmed, []string{"group-10", "group-2"}) {
-		t.Fatalf("confirmed = %v, want the moved groups", plan.Confirmed)
+	if len(plan.Confirmed) != 0 {
+		t.Fatalf("confirmed = %v, want a move to confirm nothing", plan.Confirmed)
 	}
 	if _, err := plan.Move(live, "group-11", "desktop-11", "", EdgeRight, 0); err == nil {
 		t.Fatal("moving a lone extra into itself succeeded")
 	}
 	if _, err := plan.Move(live, "group-1", "desktop-3", "group-9", EdgeRight, 0); err == nil {
 		t.Fatal("anchoring beside a group on another desktop succeeded")
+	}
+}
+
+func TestSwappingTwoGroupsLeavesBothForTheUserToConfirm(t *testing.T) {
+	w := newWorld(5)
+	live := w.live()
+	plan := must(t)(InitialPlan(w.manifest).Keep(live, []string{"group-1"}))
+	plan = must(t)(plan.Move(live, "group-5", "desktop-1", "", EdgeRight, 0))
+	plan = must(t)(plan.Move(live, "group-1", "desktop-5", "", EdgeRight, 0))
+	if len(plan.Confirmed) != 0 {
+		t.Fatalf("confirmed after the swap = %v, want neither group confirmed", plan.Confirmed)
+	}
+	plan = must(t)(plan.Undo())
+	if !reflect.DeepEqual(plan.Confirmed, []string{"group-1"}) {
+		t.Fatalf("confirmed after undoing the second move = %v, want group-1's earlier keep back", plan.Confirmed)
 	}
 }
 
@@ -220,7 +235,7 @@ func TestFinishKeepsConcurrentAgentsWhereTheyWereLaunched(t *testing.T) {
 	live := w.live()
 	plan := InitialPlan(w.manifest)
 	plan = must(t)(plan.Move(live, "group-2", "desktop-3", "", EdgeLeft, 0.4))
-	plan = must(t)(plan.Keep(live, []string{"group-1", "group-3"}))
+	plan = must(t)(plan.Keep(live, []string{"group-1", "group-2", "group-3"}))
 	outcome, err := Materialize(plan, live, w.desktops, counter())
 	if err != nil {
 		t.Fatal(err)
@@ -261,7 +276,7 @@ func TestFinishDeletesEmptiedExtrasAndCreatesDesktopsForUsedFreeSlots(t *testing
 	live := w.live()
 	plan := InitialPlan(w.manifest)
 	plan = must(t)(plan.Move(live, "group-10", "slot-5", "", EdgeRight, 0))
-	plan = must(t)(plan.Keep(live, []string{"group-1", "group-2"}))
+	plan = must(t)(plan.Keep(live, []string{"group-1", "group-2", "group-10"}))
 	outcome, err := Materialize(plan, live, w.desktops, counter())
 	if err != nil {
 		t.Fatal(err)
@@ -275,6 +290,7 @@ func TestFinishDeletesEmptiedExtrasAndCreatesDesktopsForUsedFreeSlots(t *testing
 	}
 
 	plan = must(t)(plan.Move(live, "group-10", "desktop-2", "group-2", EdgeBottom, 0))
+	plan = must(t)(plan.Keep(live, []string{"group-10"}))
 	outcome, err = Materialize(plan, live, w.desktops, counter())
 	if err != nil {
 		t.Fatal(err)
