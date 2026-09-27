@@ -197,16 +197,6 @@ func headlessEnvironment(provider, workDir string) []string {
 	return launchenv.WithActiveAttnFirst(env, launchenv.ActiveAttnExecutable())
 }
 
-func environmentContains(env []string, name string) bool {
-	prefix := name + "="
-	for _, entry := range env {
-		if strings.HasPrefix(entry, prefix) {
-			return true
-		}
-	}
-	return false
-}
-
 func classifyHeadlessFailure(output string) string {
 	lower := strings.ToLower(output)
 	switch {
