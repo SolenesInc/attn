@@ -391,7 +391,7 @@ export function useAppCommands(): PaletteCommand[] {
         description: 'Wake, charter and hand off to crew members',
         keywords: ['crew', 'member', 'charter', 'wake', 'sleep'],
         icon: <ContextActionIcon />,
-        run: () => handleOpenCrew(undefined, document.body),
+        run: () => handleOpenCrew(undefined, document.activeElement instanceof HTMLElement ? document.activeElement : undefined),
       },
       {
         id: 'toggle-harness-logos',

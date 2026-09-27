@@ -1,4 +1,5 @@
 import { useMemo, useState, type KeyboardEvent } from 'react';
+import { flushSync } from 'react-dom';
 import FocusTrap from 'focus-trap-react';
 import type { Desktop } from '../../types/generated';
 import { formatShortcut } from '../../shortcuts/formatShortcut';
@@ -227,6 +228,11 @@ function PaletteFooter({ mode }: { mode: 'agents' | 'commands' | 'snooze' }) {
   );
 }
 
+function focusedElement(): HTMLElement | null {
+  const active = document.activeElement;
+  return active instanceof HTMLElement && active !== document.body ? active : null;
+}
+
 export function UnifiedPalette<S extends PaletteSession>({
   state,
   onStateChange,
@@ -261,6 +267,8 @@ export function UnifiedPalette<S extends PaletteSession>({
     return desktop.shortcut_slot ? slotShortcut(desktop.shortcut_slot) : '·';
   };
 
+  const [opener] = useState(focusedElement);
+
   const pick = (item: Item<S>) => {
     if (item.mode === 'snooze') {
       if (!snoozing) return;
@@ -268,11 +276,13 @@ export function UnifiedPalette<S extends PaletteSession>({
       leaveSnooze(snoozing.session);
       return;
     }
-    onClose();
     if (item.mode === 'commands') {
+      flushSync(onClose);
+      if (opener?.isConnected) opener.focus();
       item.command.run();
       return;
     }
+    onClose();
     const { row } = item;
     if (row.kind === 'agent') onOpenAgent(row.session);
     else if (row.kind === 'member') onWakeMember(row.member);

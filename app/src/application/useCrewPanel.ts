@@ -1,4 +1,5 @@
 import { useCallback, useState } from 'react';
+import { useSessionStore } from '../store/sessions';
 
 interface CrewPanelState {
   open: boolean;
@@ -10,7 +11,7 @@ interface CrewPanelState {
 export function useCrewPanel() {
   const [crewPanel, setCrewPanel] = useState<CrewPanelState>({ open: false, visit: 0 });
 
-  const handleOpenCrew = useCallback((member: string | undefined, returnFocus: HTMLElement) => {
+  const handleOpenCrew = useCallback((member: string | undefined, returnFocus: HTMLElement | undefined) => {
     setCrewPanel((current) => ({ open: true, visit: current.visit + 1, member, returnFocus }));
   }, []);
 
@@ -22,7 +23,8 @@ export function useCrewPanel() {
     const returnFocus = crewPanel.returnFocus;
     closeCrewPanel();
     window.requestAnimationFrame(() => {
-      if (returnFocus?.isConnected) returnFocus.focus();
+      if (returnFocus?.isConnected && returnFocus !== document.body) returnFocus.focus();
+      else useSessionStore.getState().requestTerminalFocus();
     });
   }, [closeCrewPanel, crewPanel.returnFocus]);
 
