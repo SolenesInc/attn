@@ -57,11 +57,14 @@ func TestAThrownHandlerIsRecordedWithItsStackAndItsFactRetriedUntilItPasses(t *t
 	testworld.UseRealAppRuntime(t)
 	w := newWorld(t)
 	cli := w.Client()
-	applyRunningApp(t, cli, withCollections(subscriber("greeter", "ticket.*"), "switch"), `
-export default { subscriptions: { "ticket.*": async (ev, ctx) => {
-  if (!(await ctx.collections.switch.get("fixed"))) throw new TypeError("cannot read properties of undefined")
-  await ctx.collections.marks.put(ev.subject, { seq: ev.seq })
-} } }
+	applyRunningApp(t, cli, settling(withCollections(subscriber("greeter", "ticket.*"), "switch")), `
+export default {
+  subscriptions: { "ticket.*": async (ev, ctx) => {
+    if (!(await ctx.collections.switch.get("fixed"))) throw new TypeError("cannot read properties of undefined")
+    await ctx.collections.marks.put(ev.subject, { seq: ev.seq })
+  } },
+  commands: { settle: () => {} },
+}
 `)
 	marks := watchAppDocs(t, w, "greeter", "marks")
 	invocations := watchAppInvocations(t, w, "greeter")
@@ -74,6 +77,7 @@ export default { subscriptions: { "ticket.*": async (ev, ctx) => {
 	if thrown.Status != "error" || !strings.Contains(protocol.Deref(thrown.Error), "TypeError") || !strings.Contains(protocol.Deref(thrown.Error), "\n    at ") {
 		t.Fatalf("the throw was recorded as %+v, want an error carrying the handler's stack", thrown)
 	}
+	settleApp(w.App(), "greeter")
 	stall := appStatus(t, cli, "greeter").Stall
 	if stall == nil || stall.Kind != "subscription" || protocol.Deref(stall.EventName) != "ticket.created" ||
 		protocol.Deref(stall.EventSeq) != protocol.Deref(thrown.EventSeq) || stall.Attempts < 1 || !strings.Contains(stall.LastError, "TypeError") {
@@ -86,11 +90,12 @@ export default { subscriptions: { "ticket.*": async (ev, ctx) => {
 	if _, err := cli.DocPut("app/greeter", "switch", "fixed", `{}`, nil); err != nil {
 		t.Fatal(err)
 	}
-	passed := awaitInvocationWith(t, invocations, "ok")
+	passed := nextOfKind(t, invocations, "subscription", "ok")
 	if protocol.Deref(passed.EventSeq) != protocol.Deref(thrown.EventSeq) {
 		t.Errorf("the retry handled seq %d, want the fact that threw, seq %d", protocol.Deref(passed.EventSeq), protocol.Deref(thrown.EventSeq))
 	}
 	marks.await(ticket.TicketID)
+	settleApp(w.App(), "greeter")
 	if status := appStatus(t, cli, "greeter"); status.Stall != nil || !status.App.Consumer.Enabled {
 		t.Errorf("after the retry passed: stall %+v, consumer %+v", status.Stall, status.App.Consumer)
 	}

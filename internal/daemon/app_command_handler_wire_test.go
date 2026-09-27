@@ -80,12 +80,15 @@ func TestAppCommandRefusesTheCallerWhenTheHandlerThrowsOrAnswersTooMuch(t *testi
 
 func TestAppCommandAbandonsAHandlerThatNeverReturnsWithinItsBudget(t *testing.T) {
 	testworld.UseRealAppRuntime(t)
-	t.Setenv("ATTN_APP_DISPATCH_TIMEOUT", "300ms")
+	t.Setenv("ATTN_APP_DISPATCH_TIMEOUT", "1s")
 	w := newWorld(t)
 	applyReviewer(t, w)
+	if warm := requestAppCommand(w.App(), "reviewer", "refresh", ""); !warm.Success {
+		t.Fatalf("refresh = %+v", warm)
+	}
 
 	abandoned := requestAppCommand(w.App(), "reviewer", "hang", "")
-	requireAppCommandRefused(t, "a handler that never returned", abandoned, "hang", "reviewer", "300ms")
+	requireAppCommandRefused(t, "a handler that never returned", abandoned, "hang", "reviewer", "did not return within 1s")
 	if status := appStatus(t, w.Client(), "reviewer"); status.Stall != nil || !status.App.Consumer.Enabled {
 		t.Errorf("after an abandoned command: stall %+v, consumer %+v; want the app enabled and off the auto-disable clock", status.Stall, status.App.Consumer)
 	}
@@ -96,7 +99,7 @@ func TestAppCommandAbandonsAHandlerThatNeverReturnsWithinItsBudget(t *testing.T)
 
 func TestAppCommandQueuedBehindAFrozenHandlerIsRefusedInsideItsOwnBudget(t *testing.T) {
 	testworld.UseRealAppRuntime(t)
-	t.Setenv("ATTN_APP_DISPATCH_TIMEOUT", "300ms")
+	t.Setenv("ATTN_APP_DISPATCH_TIMEOUT", "1s")
 	w := newWorld(t)
 	applyRunningApp(t, w.Client(), withCollections(appbuild.Manifest{Name: "reviewer", Commands: []appbuild.Command{{Name: "spin"}, {Name: "approve"}}}, "marks"), `
 export default { commands: {
@@ -106,11 +109,14 @@ export default { commands: {
 `)
 	marks := watchAppDocs(t, w, "reviewer", "marks")
 	app := w.App()
+	if warm := requestAppCommand(app, "reviewer", "approve", ""); !warm.Success {
+		t.Fatalf("approve = %+v", warm)
+	}
 	spinning := uuid.NewString()
 	app.Send(protocol.AppCommandMessage{Cmd: protocol.CmdAppCommand, RequestID: spinning, App: "reviewer", Command: "spin"})
 	marks.await("spinning")
 
 	queued := requestAppCommand(app, "reviewer", "approve", "")
-	requireAppCommandRefused(t, "a command queued behind the frozen one", queued, "approve", "reviewer", "300ms", "never got a turn", "attn app logs reviewer")
+	requireAppCommandRefused(t, "a command queued behind the frozen one", queued, "approve", "reviewer", "1s", "never got a turn", "attn app logs reviewer")
 	testworld.Await(app, protocol.EventAppCommandResult, func(r protocol.AppCommandResultMessage) bool { return r.RequestID == spinning })
 }

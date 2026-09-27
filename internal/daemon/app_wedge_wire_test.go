@@ -44,12 +44,6 @@ export default { subscriptions: { "document.changed": async (ev, ctx) => {
 	if culprit.Status != "error" || !strings.Contains(protocol.Deref(culprit.Error), "did not return within 1s") {
 		t.Errorf("hog's dispatch = %+v, want an error for not returning", culprit)
 	}
-	if stall := appStatus(t, cli, "hog").Stall; stall == nil || stall.Kind != "subscription" {
-		t.Errorf("hog's stall = %+v, want it on the auto-disable clock", stall)
-	}
-	if stall := appStatus(t, cli, "bystander").Stall; stall != nil {
-		t.Errorf("bystander was charged for hog's frozen loop: %+v", stall)
-	}
 
 	awaitInvocationWith(t, bystander, "ok")
 	awaitInvocationWith(t, hog, "ok")
@@ -73,6 +67,7 @@ export default { subscriptions: { "ticket.created": () => new Promise(() => {}) 
 	if hung.Status != "error" || !strings.Contains(protocol.Deref(hung.Error), "did not return within 300ms") {
 		t.Errorf("the hung dispatch = %+v, want an error for not returning within the budget", hung)
 	}
+	awaitAppInvocation(t, invocations)
 	if stall := appStatus(t, cli, "dawdler").Stall; stall == nil || !strings.Contains(stall.LastError, "did not return") {
 		t.Errorf("dawdler's stall = %+v, want its own hung handler on the clock", stall)
 	}

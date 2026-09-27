@@ -22,7 +22,7 @@ export default { subscriptions: { "ticket.created": () => {
 	}
 	awaitAppEnabled(app, "leaker", false)
 
-	notes := appNotificationsOf(app, "app_auto_disabled")
+	notes := awaitAppNotifications(app, "app_auto_disabled")
 	if len(notes) != 1 || notes[0].SourceID != "leaker" {
 		t.Fatalf("auto-disable notifications = %+v, want one for leaker", notes)
 	}

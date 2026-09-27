@@ -125,3 +125,23 @@ func requireMentions(t *testing.T, what, text string, wants ...string) {
 		}
 	}
 }
+
+func settling(m appbuild.Manifest) appbuild.Manifest {
+	m.Commands = append(m.Commands, appbuild.Command{Name: "settle"})
+	return m
+}
+
+func settleApp(app *testworld.Peer, name string) {
+	app.T.Helper()
+	requestAppCommand(app, name, "settle", "")
+}
+
+func awaitAppNotifications(app *testworld.Peer, kind string) []protocol.Notification {
+	app.T.Helper()
+	for {
+		if notes := appNotificationsOf(app, kind); len(notes) > 0 {
+			return notes
+		}
+		testworld.Await(app, protocol.EventNotificationsUpdated, func(protocol.NotificationsUpdatedMessage) bool { return true })
+	}
+}

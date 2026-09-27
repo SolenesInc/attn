@@ -139,6 +139,7 @@ func TestAReconcileThatThrowsHoldsFactsAndCommandsBackAndIsRetriedWithTheSameRea
 	held := fileTicket(t, cli, "Price the order")
 
 	thrown := nextOfKind(t, invocations, "reconcile", "error")
+	refused := requestAppCommand(w.App(), "greeter", "refresh", "")
 	status := appStatus(t, cli, "greeter")
 	if status.Reconcile.State != "owed" || !strings.Contains(protocol.Deref(status.Reconcile.LastError), "TypeError") {
 		t.Errorf("reconcile status after a throw = %+v, want owed with what threw", status.Reconcile)
@@ -146,7 +147,6 @@ func TestAReconcileThatThrowsHoldsFactsAndCommandsBackAndIsRetriedWithTheSameRea
 	if status.Stall == nil || status.Stall.Kind != "reconcile" || protocol.Deref(status.Stall.ThroughRequestID) != protocol.Deref(thrown.ThroughRequestID) {
 		t.Errorf("stall after a throw = %+v, want the clock on the owed rebuild", status.Stall)
 	}
-	refused := requestAppCommand(w.App(), "greeter", "refresh", "")
 	if refused.Success || protocol.Deref(refused.ErrorCode) != protocol.ErrorCodeReconcileOwed || refused.Reconcile == nil ||
 		fmt.Sprint(refused.Reconcile.Causes) != "[version_changed]" || strings.HasPrefix(protocol.Deref(refused.Error), protocol.ErrorCodeReconcileOwed) {
 		t.Errorf("a command while the rebuild is owed = %+v, want a refusal coded %s with the reason", refused, protocol.ErrorCodeReconcileOwed)
@@ -181,7 +181,7 @@ func TestAReconcileThatKeepsThrowingDisablesTheAppAndLeavesTheRebuildOwed(t *tes
 
 	awaitAppEnabled(app, "greeter", false)
 
-	notes := appNotificationsOf(app, "app_auto_disabled")
+	notes := awaitAppNotifications(app, "app_auto_disabled")
 	if len(notes) != 1 {
 		t.Fatalf("auto-disable notifications = %+v, want one", notes)
 	}
