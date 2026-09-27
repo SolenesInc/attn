@@ -6,10 +6,7 @@ import (
 	"path/filepath"
 	"strconv"
 	"strings"
-	"time"
 )
-
-const stampResolution = 10 * time.Millisecond
 
 func processStartTime(pid int) (string, error) {
 	fields, err := procStatFields(pid)

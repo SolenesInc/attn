@@ -7,13 +7,9 @@ import (
 	"os/exec"
 	"path/filepath"
 	"runtime"
-	"strconv"
-	"strings"
 	"syscall"
 	"testing"
 	"time"
-
-	"github.com/victorarias/attn/internal/ptyworker"
 )
 
 func pidExists(pid int) bool {
@@ -39,34 +35,6 @@ func waitForPIDsGone(timeout time.Duration, pids ...int) bool {
 		time.Sleep(50 * time.Millisecond)
 	}
 	return false
-}
-
-func debugProcessState(t *testing.T, pids ...int) string {
-	t.Helper()
-	args := []string{"-o", "pid=,ppid=,stat=,comm=,command="}
-	for _, pid := range pids {
-		args = append(args, "-p", strconv.Itoa(pid))
-	}
-	cmd := exec.Command("ps", args...)
-	output, err := cmd.CombinedOutput()
-	if err != nil && len(output) == 0 {
-		return err.Error()
-	}
-	return strings.TrimSpace(string(output))
-}
-
-func waitForRegistryEntry(path string, timeout time.Duration) (ptyworker.RegistryEntry, error) {
-	deadline := time.Now().Add(timeout)
-	var lastErr error
-	for time.Now().Before(deadline) {
-		entry, err := ptyworker.ReadRegistry(path)
-		if err == nil {
-			return entry, nil
-		}
-		lastErr = err
-		time.Sleep(50 * time.Millisecond)
-	}
-	return ptyworker.RegistryEntry{}, lastErr
 }
 
 func buildAttnBinary(t *testing.T) string {

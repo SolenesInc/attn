@@ -2,12 +2,9 @@ package procreap
 
 import (
 	"fmt"
-	"time"
 
 	"golang.org/x/sys/unix"
 )
-
-const stampResolution = time.Microsecond
 
 const darwinZombieState = 5
 

@@ -243,10 +243,6 @@ func (r ptyRead) acknowledgeAdmission() {
 	}
 }
 
-func nextCoalescedRead(reads <-chan ptyRead, maxBytes int, window time.Duration) ([]byte, error) {
-	return nextCoalescedReadAdmitted(reads, maxBytes, window, nil)
-}
-
 func nextCoalescedReadAdmitted(
 	reads <-chan ptyRead,
 	maxBytes int,

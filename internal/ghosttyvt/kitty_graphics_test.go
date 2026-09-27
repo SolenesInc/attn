@@ -118,4 +118,3 @@ func encodeWidePNG(t *testing.T, w int) []byte {
 	}
 	return buf.Bytes()
 }
-
