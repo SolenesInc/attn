@@ -26,9 +26,8 @@ import {
   KeyboardActionIcon,
 } from './AppIcons';
 export function useAppActionItems() {
-  const apps = useDaemonStore((state) => state.apps);
   const seeds = useDaemonStore((state) => state.seeds);
-  const { setAppViewParamsPrompt, dockAppViewTile, setMarkdownOpenerOpen, handleOpenNotebookTile } =
+  const { setMarkdownOpenerOpen, handleOpenNotebookTile } =
     useWorkspaceTilesContext();
   const { setContextCapPromptSession } = useAppShell();
   const {
@@ -54,35 +53,6 @@ export function useAppActionItems() {
     useDaemonApi();
   const { handleCreateDiagnosticReport } = useAppDiagnosticsContext();
   const activeSessionId = useSessionStore((state) => state.activeSessionId);
-  const appViewMenuItems = useMemo<ActionMenuItem[]>(() => {
-    const items: ActionMenuItem[] = [];
-    for (const app of apps ?? []) {
-      if (!app.enabled) continue;
-      for (const view of app.views ?? []) {
-        items.push({
-          id: `app-view-${app.name}-${view.name}`,
-          title: `${view.title} — ${app.name}`,
-          description: app.description || `Dock ${app.name}'s ${view.name} view`,
-          keywords: ['app', 'view', 'dock', 'tile', app.name, view.name],
-          icon: <ContextActionIcon />,
-          run: () => {
-            if (view.params_label) {
-              setAppViewParamsPrompt({
-                app: app.name,
-                view: view.name,
-                viewTitle: `${app.name}/${view.name}`,
-                label: view.params_label,
-                ...(view.params_placeholder ? { placeholder: view.params_placeholder } : {}),
-              });
-              return;
-            }
-            dockAppViewTile(app.name, view.name, '');
-          },
-        });
-      }
-    }
-    return items;
-  }, [apps, dockAppViewTile, setAppViewParamsPrompt]);
 
   const actionMenuItems = useMemo<ActionMenuItem[]>(
     () => [
@@ -210,7 +180,7 @@ export function useAppActionItems() {
 
   const actionMenuItemsWithWorkspaceActions = useMemo<ActionMenuItem[]>(() => {
     const workspace = activeWorkspaceForCommands;
-    if (!workspace) return [...actionMenuItems, ...appViewMenuItems];
+    if (!workspace) return actionMenuItems;
     const activeSession = activeSessionForCommands;
     const delegationItems: ActionMenuItem[] = activeSession
       ? [
@@ -312,7 +282,6 @@ export function useAppActionItems() {
         : [];
     return [
       ...actionMenuItems,
-      ...appViewMenuItems,
       ...sessionPinItems,
       ...delegationItems,
       ...sessionSeedItems,
@@ -345,7 +314,6 @@ export function useAppActionItems() {
     setUsagePopoverRequest,
     setContextCapPromptSession,
     actionMenuItems,
-    appViewMenuItems,
     activeWorkspaceForCommands,
     activeSessionForCommands,
     activeSessionQueueEligible,

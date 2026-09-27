@@ -7,7 +7,7 @@ those scratch checks out of commits.
 ## Promises
 
 A promise is behavior that someone outside the code relies on: the user, the
-agents attn runs, the daemon's clients, app authors, or a later version of attn
+agents attn runs, the daemon's clients, or a later version of attn
 reading today's data. attn's promises include:
 
 - **Protocol**: the commands, responses, and events exchanged between the
@@ -16,9 +16,6 @@ reading today's data. attn's promises include:
   and machine restarts, and upgrades between versions.
 - **CLI**: commands, output, and exit codes that users and agents rely on.
 - **Screen**: what the user sees, and what keyboard and pointer input does.
-- **App SDK**: the API that apps and their views build against. Its declared
-  types must match the protocol shapes they mirror, and one check comparing
-  the two guards both promises.
 - **Performance**: idle attn stays quiet, and memory does not creep.
   Benchmarks and memory scenarios track it; see
   [Performance testing](perf-testing.md).

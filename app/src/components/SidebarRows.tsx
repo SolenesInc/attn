@@ -1,5 +1,4 @@
 import type { MouseEvent as ReactMouseEvent, PointerEvent as ReactPointerEvent } from 'react';
-import { useAppViewTitleResolver } from '../hooks/useAppViewTitle';
 import { formatShortcut } from '../shortcuts/formatShortcut';
 import type { SessionPullRequest } from '../types/generated';
 import { type TileContentState, type TileLeaf } from '../types/workspace';
@@ -79,8 +78,7 @@ export function TileSidebarRow({
   onClose: () => void;
   onReload: () => void;
 }) {
-  const appViewTitle = useAppViewTitleResolver();
-  const title = deriveTileTitle(tile, content, appViewTitle);
+  const title = deriveTileTitle(tile, content);
   return (
     <div
       className={`session-item workspace-tile-item grouped ${selected ? 'selected' : ''} ${muted ? 'muted-session' : ''}`.trim()}

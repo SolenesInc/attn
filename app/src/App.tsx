@@ -59,7 +59,6 @@ function App() {
     daemonSessions,
     setDaemonSessions,
     setSeeds,
-    setApps,
     setCrew,
     prs,
     setPRs,
@@ -126,7 +125,6 @@ function App() {
       setNotificationsChangeSignal((n) => n + 1);
     },
     onSeedsUpdate: setSeeds,
-    onAppsUpdate: setApps,
     onCrewUpdate: setCrew,
     onWorkspacesUpdate: (workspaces) => {
       useSessionStore.getState().syncFromDaemonWorkspaces(workspaces);

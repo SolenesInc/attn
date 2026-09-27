@@ -11,7 +11,7 @@ import (
 
 func requestsDeclaration() docstore.CollectionSchema {
 	return docstore.CollectionSchema{
-		Namespace:  "app/approval-gate",
+		Namespace:  "test/approval-gate",
 		Collection: "requests",
 		Fields: []docstore.FieldSpec{
 			{Name: "status", Type: docstore.FieldString},
@@ -30,7 +30,7 @@ func storeWithRequests(t *testing.T, bodies map[string]string) (*Store, time.Tim
 	}
 	i := 0
 	for _, id := range sortedKeys(bodies) {
-		if _, err := s.PutDocument(declOf(t, s, "app/approval-gate", "requests"), id, []byte(bodies[id]), base.Add(time.Duration(i)*time.Second), nil); err != nil {
+		if _, err := s.PutDocument(declOf(t, s, "test/approval-gate", "requests"), id, []byte(bodies[id]), base.Add(time.Duration(i)*time.Second), nil); err != nil {
 			t.Fatalf("put %s: %v", id, err)
 		}
 		i++
@@ -97,7 +97,7 @@ func rev(n int64) *int64 { return &n }
 
 func requestsDecl(t *testing.T, s *Store) docstore.CollectionSchema {
 	t.Helper()
-	return declOf(t, s, "app/approval-gate", "requests")
+	return declOf(t, s, "test/approval-gate", "requests")
 }
 
 func seedV88DocumentStore(t *testing.T, dbPath string) {
@@ -125,20 +125,20 @@ func seedV88DocumentStore(t *testing.T, dbPath string) {
 		    PRIMARY KEY (namespace, collection)
 		);
 		INSERT INTO document_collections VALUES
-		    ('app/approval-gate', 'requests',
+		    ('test/approval-gate', 'requests',
 		     '[{"name":"status","type":"string"},{"name":"attempts","type":"number"}]',
 		     '2026-08-02T09:00:00Z'),
-		    ('app/notes', 'scratch', '[]', '2026-08-02T09:30:00Z');
+		    ('test/notes', 'scratch', '[]', '2026-08-02T09:30:00Z');
 		INSERT INTO documents VALUES
-		    ('app/approval-gate', 'requests', 'r1', '{"status":"open","attempts":2,"note":"kept"}',
+		    ('test/approval-gate', 'requests', 'r1', '{"status":"open","attempts":2,"note":"kept"}',
 		     '2026-08-02T10:00:00Z', '2026-08-02T10:00:00Z'),
-		    ('app/approval-gate', 'requests', 'r2', '{"status":"done","attempts":"10"}',
+		    ('test/approval-gate', 'requests', 'r2', '{"status":"done","attempts":"10"}',
 		     '2026-08-02T10:01:00Z', '2026-08-02T10:05:00Z'),
-		    ('app/approval-gate', 'requests', 'r3', '{"status":"open","attempts":7}',
+		    ('test/approval-gate', 'requests', 'r3', '{"status":"open","attempts":7}',
 		     '2026-08-02T10:02:00Z', '2026-08-02T10:02:00Z'),
-		    ('app/notes', 'scratch', 'n1', '{"anything":true}',
+		    ('test/notes', 'scratch', 'n1', '{"anything":true}',
 		     '2026-08-02T11:00:00Z', '2026-08-02T11:00:00Z'),
-		    ('app/ghost', 'lost', 'g1', '{"orphaned":true}',
+		    ('test/ghost', 'lost', 'g1', '{"orphaned":true}',
 		     '2026-08-02T12:00:00Z', '2026-08-02T12:00:00Z');
 		DELETE FROM schema_migrations WHERE version >= 89;
 	`); err != nil {
@@ -159,7 +159,7 @@ func TestAPopulatedV88StoreIsCarriedIntoItsOwnTables(t *testing.T) {
 	}
 	defer s.Close()
 
-	schema := declOf(t, s, "app/approval-gate", "requests")
+	schema := declOf(t, s, "test/approval-gate", "requests")
 	if len(schema.Fields) != 2 || schema.Fields[0].Name != "status" || schema.Fields[1].Type != docstore.FieldNumber {
 		t.Fatalf("declaration did not survive: %+v", schema.Fields)
 	}
@@ -177,7 +177,7 @@ func TestAPopulatedV88StoreIsCarriedIntoItsOwnTables(t *testing.T) {
 	}
 
 	q := docstore.Query{
-		Namespace: "app/approval-gate", Collection: "requests",
+		Namespace: "test/approval-gate", Collection: "requests",
 		Filters: []docstore.Filter{{Field: "status", Op: docstore.OpEq, Value: "open"}},
 		Sort:    &docstore.Sort{Field: "attempts"},
 	}
@@ -196,12 +196,12 @@ func TestAPopulatedV88StoreIsCarriedIntoItsOwnTables(t *testing.T) {
 		t.Fatalf("carried collection has no index: %s", joined)
 	}
 
-	notes := declOf(t, s, "app/notes", "scratch")
+	notes := declOf(t, s, "test/notes", "scratch")
 	if _, found, err := s.GetDocument(notes, "n1"); err != nil || !found {
 		t.Fatalf("n1 after migration: found=%v err=%v", found, err)
 	}
 
-	ghost, ok, err := s.DocumentCollection("app/ghost", "lost")
+	ghost, ok, err := s.DocumentCollection("test/ghost", "lost")
 	if err != nil || !ok {
 		t.Fatalf("undeclared address was not carried: ok=%v err=%v", ok, err)
 	}
@@ -230,7 +230,7 @@ func seedPreRevisionDocuments(t *testing.T, dbPath string) {
 	if _, err := s.DefineDocumentCollection(requestsDeclaration(), base); err != nil {
 		t.Fatalf("seed declaration: %v", err)
 	}
-	schema := declOf(t, s, "app/approval-gate", "requests")
+	schema := declOf(t, s, "test/approval-gate", "requests")
 	for _, doc := range []struct{ id, body string }{
 		{"r1", `{"status":"open","attempts":2}`},
 		{"r2", `{"status":"done","attempts":9}`},
@@ -258,7 +258,7 @@ func TestDocumentsStoredBeforeRevisionsGetTheFirstOne(t *testing.T) {
 	}
 	defer s.Close()
 
-	schema := declOf(t, s, "app/approval-gate", "requests")
+	schema := declOf(t, s, "test/approval-gate", "requests")
 	doc, found, err := s.GetDocument(schema, "r1")
 	if err != nil || !found {
 		t.Fatalf("r1 after migration: found=%v err=%v", found, err)
@@ -283,7 +283,7 @@ func TestDocumentsStoredBeforeRevisionsGetTheFirstOne(t *testing.T) {
 		t.Fatalf("a second write at the carried revision returned %v, want a conflict", err)
 	}
 
-	if got := queryIDs(t, s, docstore.Query{Namespace: "app/approval-gate", Collection: "requests"}); len(got) != 2 {
+	if got := queryIDs(t, s, docstore.Query{Namespace: "test/approval-gate", Collection: "requests"}); len(got) != 2 {
 		t.Fatalf("documents after migration = %v, want both", got)
 	}
 }

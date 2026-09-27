@@ -1,124 +1,17 @@
 package hub
 
 import (
-	"context"
-	"errors"
 	"testing"
 	"time"
 )
 
-func TestEnsureRemoteReadyRevivesTheDaemonBeforeShippingTheSidecar(t *testing.T) {
-	b := NewBootstrapper(nil)
-	var order []string
-
-	b.makeReady = func(ctx context.Context, sshTarget, instance, homeDaemonID string) (readyRemote, error) {
-		order = append(order, "ready")
-		return readyRemote{remoteInstallPath: "/home/x/.local/bin/attn"}, nil
-	}
-	b.shipAppRuntime = func(ctx context.Context, sshTarget, instance string, ready readyRemote) error {
-		order = append(order, "ship")
-		if ready.remoteInstallPath != "/home/x/.local/bin/attn" {
-			t.Errorf("ship phase got %q, want what the ready phase resolved", ready.remoteInstallPath)
-		}
-		return nil
-	}
-
-	if err := b.EnsureRemoteReady(context.Background(), "host", "", "home-1"); err != nil {
-		t.Fatalf("EnsureRemoteReady() = %v, want nil", err)
-	}
-	if len(order) != 2 || order[0] != "ready" || order[1] != "ship" {
-		t.Fatalf("phases ran %v, want [ready ship]", order)
-	}
-}
-
-func TestEnsureRemoteReadySkipsTheSidecarWhenTheRemoteNeverBecameReady(t *testing.T) {
-	b := NewBootstrapper(nil)
-	shipped := false
-
-	b.makeReady = func(ctx context.Context, sshTarget, instance, homeDaemonID string) (readyRemote, error) {
-		return readyRemote{}, errors.New("daemon did not become ready")
-	}
-	b.shipAppRuntime = func(ctx context.Context, sshTarget, instance string, ready readyRemote) error {
-		shipped = true
-		return nil
-	}
-
-	if err := b.EnsureRemoteReady(context.Background(), "host", "", "home-1"); err == nil {
-		t.Fatal("EnsureRemoteReady() = nil, want the readiness failure")
-	}
-	if shipped {
-		t.Fatal("shipped the sidecar to a remote whose daemon is not running")
-	}
-}
-
-func TestEnsureRemoteReadyGivesTheSidecarItsOwnBudget(t *testing.T) {
-	b := NewBootstrapper(nil)
-	var readyDeadline, shipDeadline time.Time
-	var shipCtxErr error
-
-	b.makeReady = func(ctx context.Context, sshTarget, instance, homeDaemonID string) (readyRemote, error) {
-		readyDeadline, _ = ctx.Deadline()
-		return readyRemote{}, nil
-	}
-	b.shipAppRuntime = func(ctx context.Context, sshTarget, instance string, ready readyRemote) error {
-		shipDeadline, _ = ctx.Deadline()
-		shipCtxErr = ctx.Err()
-		return nil
-	}
-
-	if err := b.EnsureRemoteReady(context.Background(), "host", "", "home-1"); err != nil {
-		t.Fatalf("EnsureRemoteReady() = %v, want nil", err)
-	}
-
-	if readyDeadline.IsZero() || shipDeadline.IsZero() {
-		t.Fatal("both phases must run under a deadline")
-	}
-	if shipCtxErr != nil {
-		t.Fatalf("ship phase context was already %v; it is not independent of the ready phase", shipCtxErr)
-	}
-	if !shipDeadline.After(readyDeadline) {
-		t.Fatalf("ship deadline %v is not later than ready deadline %v", shipDeadline, readyDeadline)
-	}
-	if remaining := time.Until(shipDeadline); remaining <= remoteReadyBudget {
-		t.Fatalf("ship phase had %v, which is no more than the whole ready budget %v — it inherited rather than got its own", remaining, remoteReadyBudget)
-	}
-}
-
-func TestEnsureRemoteReadySurvivesASidecarThatCannotBeShipped(t *testing.T) {
-	var logged []string
-	b := NewBootstrapper(func(format string, args ...interface{}) {
-		logged = append(logged, format)
-	})
-
-	b.makeReady = func(ctx context.Context, sshTarget, instance, homeDaemonID string) (readyRemote, error) {
-		return readyRemote{}, nil
-	}
-	b.shipAppRuntime = func(ctx context.Context, sshTarget, instance string, ready readyRemote) error {
-		return errors.New("the app runtime host is missing")
-	}
-
-	if err := b.EnsureRemoteReady(context.Background(), "host", "", "home-1"); err != nil {
-		t.Fatalf("EnsureRemoteReady() = %v, want nil — the daemon is up and sessions work", err)
-	}
-	if len(logged) == 0 {
-		t.Fatal("a sidecar that could not be shipped must still be reported")
-	}
-}
-
-func TestRemoteBudgetsCoverTheArtifactsTheyCarry(t *testing.T) {
+func TestRemoteReadyBudgetCoversTheBinaryItCarries(t *testing.T) {
 	const slowLinkBitsPerSecond = 5_000_000
 	const attnBinaryBytes = 58_934_608
-	const appRuntimeBytes = 93_694_096
 
 	binaryTransfer := time.Duration(float64(attnBinaryBytes*8) / slowLinkBitsPerSecond * float64(time.Second))
 	if want := binaryTransfer + remoteDaemonReadyTimeout; remoteReadyBudget <= want {
 		t.Errorf("remoteReadyBudget %v does not cover a %d-byte binary at 5 Mbit/s plus the %v readiness wait (%v)",
 			remoteReadyBudget, attnBinaryBytes, remoteDaemonReadyTimeout, want)
-	}
-
-	runtimeTransfer := time.Duration(float64(appRuntimeBytes*8) / slowLinkBitsPerSecond * float64(time.Second))
-	if appRuntimeShipBudget <= runtimeTransfer {
-		t.Errorf("appRuntimeShipBudget %v does not cover a %d-byte sidecar at 5 Mbit/s (%v)",
-			appRuntimeShipBudget, appRuntimeBytes, runtimeTransfer)
 	}
 }

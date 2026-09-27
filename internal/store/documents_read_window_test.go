@@ -26,7 +26,7 @@ func readIDs(t *testing.T, s *Store, q docstore.Query) ([]string, error) {
 
 func pagedByAttempts(after string) docstore.Query {
 	return docstore.Query{
-		Namespace:  "app/approval-gate",
+		Namespace:  "test/approval-gate",
 		Collection: "requests",
 		Sort:       &docstore.Sort{Field: "attempts"},
 		After:      after,

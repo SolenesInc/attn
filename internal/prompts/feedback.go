@@ -17,9 +17,8 @@ func feedbackEvents() []Event {
 }
 
 func resourceRecipient() Recipient {
-	return Recipient{ID: "authoring-agent", Description: "Agent-facing guidance loaded from CLI output or a generated project file.", Events: []Event{
+	return Recipient{ID: "authoring-agent", Description: "Agent-facing guidance loaded from CLI output.", Events: []Event{
 		On("seed-guide", "cli_output", "attn seed guide: guidance for planning and reporting work.", Document("authoring.seed-guide", "content/resources/seed-guide.md")),
-		On("app-guidance", "project_instructions", "AGENTS.md written by app scaffolding; the harness loads it from the generated project.", template("authoring.app-guidance", "content/resources/app-guidance.md", TextField("app_name", "App name."), TextField("sdk_module", "SDK import path."))),
 	}}
 }
 

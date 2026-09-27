@@ -3944,7 +3944,7 @@
     },
     {
       "id": "authoring-agent",
-      "description": "Agent-facing guidance loaded from CLI output or a generated project file.",
+      "description": "Agent-facing guidance loaded from CLI output.",
       "events": [
         {
           "id": "seed-guide",
@@ -3956,40 +3956,6 @@
             "source": "content/resources/seed-guide.md",
             "verbatim": true,
             "keep_final_newline": true
-          }
-        },
-        {
-          "id": "app-guidance",
-          "delivery": "project_instructions",
-          "description": "AGENTS.md written by app scaffolding; the harness loads it from the generated project.",
-          "body": {
-            "kind": "text",
-            "id": "authoring.app-guidance",
-            "source": "content/resources/app-guidance.md",
-            "bindings": [
-              {
-                "name": "app_name",
-                "node": {
-                  "kind": "input",
-                  "field": {
-                    "name": "app_name",
-                    "kind": "text",
-                    "description": "App name."
-                  }
-                }
-              },
-              {
-                "name": "sdk_module",
-                "node": {
-                  "kind": "input",
-                  "field": {
-                    "name": "sdk_module",
-                    "kind": "text",
-                    "description": "SDK import path."
-                  }
-                }
-              }
-            ]
           }
         }
       ]
@@ -4927,5 +4893,5 @@
       ]
     }
   ],
-  "definitions_hash": "f1998f22d20a37e7dc0ae41ec63f6a1d9ea5b3e58c5af44cc78dae16871dc25e"
+  "definitions_hash": "378b1b4a65ed5eb3b9b0305cfe3d2091c053d5f213e96f004bd177b41d0ae1c2"
 }

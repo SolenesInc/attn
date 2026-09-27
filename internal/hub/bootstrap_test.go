@@ -16,9 +16,6 @@ func TestRemoteCachesStayInsideTheActiveInstanceDataDir(t *testing.T) {
 	if got, want := remoteBinaryCachePath("build-key", platform), filepath.Join(dataDir, "remotes", "binaries", "build-key", platform.ArtifactName); got != want {
 		t.Errorf("binary cache = %q, want %q", got, want)
 	}
-	if got, want := appRuntimeCacheDir("runtime-key"), filepath.Join(dataDir, "remotes", "app-runtime", "runtime-key"); got != want {
-		t.Errorf("app runtime cache = %q, want %q", got, want)
-	}
 	if got := config.DataDir(); got != dataDir {
 		t.Fatalf("test instance data dir = %q, want %q", got, dataDir)
 	}
@@ -235,23 +232,6 @@ func TestResolveRemoteInstallPath(t *testing.T) {
 	}
 }
 
-func TestRemoteAppRuntimePath(t *testing.T) {
-	cases := []struct {
-		remoteInstallPath string
-		instance          string
-		want              string
-	}{
-		{"/home/v/.local/bin/attn", "", "/home/v/.local/bin/attn-app-runtime"},
-		{"/home/v/.local/bin/attn-dev", "dev", "/home/v/.local/bin/attn-app-runtime-dev"},
-		{"/home/v/.attn/harness/run-1/bin/attn", "", "/home/v/.attn/harness/run-1/bin/attn-app-runtime"},
-	}
-	for _, c := range cases {
-		if got := remoteAppRuntimePath(c.remoteInstallPath, c.instance); got != c.want {
-			t.Errorf("remoteAppRuntimePath(%q, %q) = %q, want %q", c.remoteInstallPath, c.instance, got, c.want)
-		}
-	}
-}
-
 func TestRemotePTYHostPath(t *testing.T) {
 	cases := []struct {
 		remoteInstallPath string
@@ -271,25 +251,23 @@ func TestRemotePTYHostPath(t *testing.T) {
 
 func TestRemoteLinuxPlatformArtifacts(t *testing.T) {
 	cases := []struct {
-		machine   string
-		goarch    string
-		runtime   string
-		ptyHost   string
-		bunTarget string
+		machine string
+		goarch  string
+		ptyHost string
 	}{
-		{"x86_64", "amd64", "attn-app-runtime-linux-amd64", "attn-pty-host-linux-amd64", "bun-linux-x64"},
-		{"amd64", "amd64", "attn-app-runtime-linux-amd64", "attn-pty-host-linux-amd64", "bun-linux-x64"},
-		{"aarch64", "arm64", "attn-app-runtime-linux-arm64", "attn-pty-host-linux-arm64", "bun-linux-arm64"},
-		{"arm64", "arm64", "attn-app-runtime-linux-arm64", "attn-pty-host-linux-arm64", "bun-linux-arm64"},
+		{"x86_64", "amd64", "attn-pty-host-linux-amd64"},
+		{"amd64", "amd64", "attn-pty-host-linux-amd64"},
+		{"aarch64", "arm64", "attn-pty-host-linux-arm64"},
+		{"arm64", "arm64", "attn-pty-host-linux-arm64"},
 	}
 	for _, c := range cases {
 		platform, err := remoteLinuxPlatform(c.machine)
 		if err != nil {
 			t.Fatalf("remoteLinuxPlatform(%q): %v", c.machine, err)
 		}
-		if platform.GOARCH != c.goarch || platform.RuntimeArtifactName != c.runtime || platform.PTYHostArtifactName != c.ptyHost || platform.BunTarget != c.bunTarget {
-			t.Errorf("remoteLinuxPlatform(%q) = %+v, want goarch %s runtime %s pty host %s bun %s",
-				c.machine, platform, c.goarch, c.runtime, c.ptyHost, c.bunTarget)
+		if platform.GOARCH != c.goarch || platform.PTYHostArtifactName != c.ptyHost {
+			t.Errorf("remoteLinuxPlatform(%q) = %+v, want goarch %s pty host %s",
+				c.machine, platform, c.goarch, c.ptyHost)
 		}
 	}
 	if _, err := remoteLinuxPlatform("riscv64"); err == nil {
@@ -298,11 +276,11 @@ func TestRemoteLinuxPlatformArtifacts(t *testing.T) {
 }
 
 func TestRemoteSHA256ScriptHandlesAMissingFile(t *testing.T) {
-	script := remoteSHA256Script(shellQuote("/home/v/.local/bin/attn-app-runtime"))
+	script := remoteSHA256Script(shellQuote("/home/v/.local/bin/attn-pty-host"))
 	if !strings.Contains(script, "printf NOT_FOUND") {
 		t.Fatalf("hash script has no missing-file answer: %s", script)
 	}
-	if !strings.Contains(script, `sha256sum '/home/v/.local/bin/attn-app-runtime'`) {
+	if !strings.Contains(script, `sha256sum '/home/v/.local/bin/attn-pty-host'`) {
 		t.Fatalf("hash script does not hash the path it was given: %s", script)
 	}
 	if !strings.Contains(script, "shasum -a 256") {
