@@ -370,9 +370,6 @@ func (d *Daemon) createDelegationWorktree(protection foregroundCleanupProtection
 			return "", false, fmt.Errorf("record delegated worktree preparation: %w", err)
 		}
 	}
-	if d.delegationWorktreePrepareHook != nil {
-		d.delegationWorktreePrepareHook(expectedPath)
-	}
 	startingFrom := request.StartingFrom
 	if protocol.Deref(request.ExistingBranch) && strings.TrimSpace(protocol.Deref(startingFrom)) != "" {
 		return "", false, fmt.Errorf("an existing branch does not accept a starting ref")
@@ -839,11 +836,6 @@ func (d *Daemon) delegateOperationProtected(protection foregroundCleanupProtecti
 	rollback.onSessionSpawned(sessionID)
 	d.delegationCheckoutMu.Unlock()
 	checkoutLocked = false
-	if d.delegationFinalizeHook != nil {
-		if err := d.delegationFinalizeHook(); err != nil {
-			return nil, rollback.fail(protection, err)
-		}
-	}
 	if delegatedByChief {
 		if _, errMsg := d.setWorkspaceMuted(workspaceID, false); errMsg != "" {
 			return nil, rollback.fail(protection, fmt.Errorf("make delegated workspace visible: %s", errMsg))

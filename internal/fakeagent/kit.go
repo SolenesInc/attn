@@ -36,6 +36,7 @@ type Kit struct {
 	fakes    []*fake
 	failures []string
 	headless chan *HeadlessTask
+	nextExit *bootingResult
 }
 
 type fake struct {
@@ -178,6 +179,9 @@ func (k *Kit) accept() {
 			if method == methodHeadless {
 				return k.receiveHeadlessTask(f, params)
 			}
+			if method == methodBooting {
+				return k.boot(params)
+			}
 			return struct{}{}, k.handle(f, method, params)
 		})
 		f.peer.start()
@@ -186,12 +190,6 @@ func (k *Kit) accept() {
 
 func (k *Kit) handle(f *fake, method string, params json.RawMessage) error {
 	switch method {
-	case methodBooting:
-		var booting bootingParams
-		if err := json.Unmarshal(params, &booting); err != nil {
-			return err
-		}
-		k.awaitBoot(booting.AttnSessionID)
 	case methodLaunched:
 		if err := json.Unmarshal(params, &f.launch); err != nil {
 			return err
@@ -208,6 +206,7 @@ func (k *Kit) handle(f *fake, method string, params json.RawMessage) error {
 				SessionID:      f.AttnSessionID,
 				ConversationID: f.ConversationID,
 				Resumed:        f.Resumed,
+				ResumePicker:   f.ResumePicker,
 				Argv:           f.Argv,
 				Env:            f.Env,
 				AutoMode:       f.AutoMode,

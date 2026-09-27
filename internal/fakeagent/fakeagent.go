@@ -69,6 +69,7 @@ type launch struct {
 	AttnSessionID  string          `json:"attn_session_id,omitempty"`
 	ConversationID string          `json:"conversation_id,omitempty"`
 	Resumed        bool            `json:"resumed,omitempty"`
+	ResumePicker   bool            `json:"resume_picker,omitempty"`
 	AutoMode       json.RawMessage `json:"auto_mode,omitempty"`
 	Yolo           bool            `json:"yolo,omitempty"`
 	Error          string          `json:"error,omitempty"`
@@ -216,8 +217,13 @@ func serve(cfg config, style composer, conv conversation) int {
 		return 1
 	}
 	a.control.start()
-	if err := a.control.call(context.Background(), methodBooting, bootingParams{AttnSessionID: os.Getenv("ATTN_SESSION_ID")}, nil); err != nil {
+	var boot bootingResult
+	if err := a.control.call(context.Background(), methodBooting, bootingParams{AttnSessionID: os.Getenv("ATTN_SESSION_ID")}, &boot); err != nil {
 		return 1
+	}
+	if boot.Exit {
+		term.print(boot.Screen)
+		return boot.Code
 	}
 	began := conv.begin(term)
 	report := conv.launch()
