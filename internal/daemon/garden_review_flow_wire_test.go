@@ -47,7 +47,7 @@ func TestAGardenReviewFreezesItsCandidatesAndRecipe(t *testing.T) {
 	if first.Run.Status != "running" || !slices.Equal(first.Run.CandidateIds, []string{abandoned}) || !reflect.DeepEqual(first.Run.Recipe, frozen) {
 		t.Fatalf("the started review = %+v, want it running over %s with the saved recipe", first.Run, abandoned)
 	}
-	if len(first.Items) != 1 || !slices.Equal(first.Items[0].Actions, []string{"keep_growing", "park", "harvest", "wither"}) {
+	if len(first.Items) != 1 || !slices.Equal(first.Items[0].Actions, []string{"send_to_chief", "keep_growing", "park", "harvest", "wither"}) {
 		t.Fatalf("the review items = %+v, want the abandoned seed with the growing seed's actions", first.Items)
 	}
 

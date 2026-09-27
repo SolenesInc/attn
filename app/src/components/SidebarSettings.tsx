@@ -9,8 +9,8 @@ export function SidebarSettings({
   onToggleCrewQueue,
   harnessLogosEnabled,
   onToggleHarnessLogos,
-  workspaceSelectionStyle,
-  onWorkspaceSelectionStyleChange,
+  desktopSelectionStyle,
+  onDesktopSelectionStyleChange,
   showSessionless,
   onToggleShowSessionless,
   displayMode,
@@ -23,8 +23,8 @@ export function SidebarSettings({
   | 'onToggleCrewQueue'
   | 'harnessLogosEnabled'
   | 'onToggleHarnessLogos'
-  | 'workspaceSelectionStyle'
-  | 'onWorkspaceSelectionStyleChange'
+  | 'desktopSelectionStyle'
+  | 'onDesktopSelectionStyleChange'
   | 'showSessionless'
   | 'onToggleShowSessionless'
 > & {
@@ -135,9 +135,9 @@ export function SidebarSettings({
               <button
                 type="button"
                 key={style}
-                className={workspaceSelectionStyle === style ? 'active' : ''}
-                aria-pressed={workspaceSelectionStyle === style}
-                onClick={() => onWorkspaceSelectionStyleChange?.(style)}
+                className={desktopSelectionStyle === style ? 'active' : ''}
+                aria-pressed={desktopSelectionStyle === style}
+                onClick={() => onDesktopSelectionStyleChange?.(style)}
               >
                 {style}
               </button>
@@ -151,7 +151,7 @@ export function SidebarSettings({
             data-testid="toggle-show-sessionless"
             onClick={() => onToggleShowSessionless?.()}
           >
-            <span className="sidebar-settings-switch-label">Tile-only workspaces</span>
+            <span className="sidebar-settings-switch-label">Tile-only desktops</span>
             <span
               className={`sidebar-settings-switch ${showSessionless ? 'on' : ''}`}
               aria-hidden="true"

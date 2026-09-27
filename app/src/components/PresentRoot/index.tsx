@@ -167,7 +167,6 @@ export function PresentRoot() {
     closePresentation,
   } = useDaemonSocket({
     onSessionsUpdate: noop,
-    onWorkspacesUpdate: noop,
     onPRsUpdate: noop,
     onReposUpdate: noop,
     onAuthorsUpdate: noop,

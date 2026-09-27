@@ -1,7 +1,7 @@
 import { act, fireEvent, screen } from '@testing-library/react';
 import { describe, expect, it, vi } from 'vitest';
 import type { EventMessage } from './test/protocol';
-import { agentWorkspace, daemonSession } from './test/daemonFixtures';
+import { soloDesktop, daemonSession } from './test/daemonFixtures';
 import { gesture, renderApp } from './test/renderApp';
 import type { ScriptedDaemon } from './test/scriptedDaemon';
 
@@ -30,7 +30,7 @@ function serveAutomations(daemon: ScriptedDaemon, scene: Scene) {
 
 async function openAutomations(scene: Scene, script: (daemon: ScriptedDaemon) => void = () => {}) {
   const view = await renderApp({
-    initialState: { sessions: [daemonSession('s1'), daemonSession('s2')], workspaces: [agentWorkspace('s1'), agentWorkspace('s2')] },
+    initialState: { sessions: [daemonSession('s1'), daemonSession('s2')], desktops: [soloDesktop('s1'), soloDesktop('s2')] },
   });
   serveAutomations(view.daemon, scene);
   script(view.daemon);

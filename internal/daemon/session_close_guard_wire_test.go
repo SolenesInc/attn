@@ -23,15 +23,7 @@ func TestTheChiefAndCrewMembersCannotBeClosedButTheirNeighboursCan(t *testing.T)
 	}
 	woken := wakeCrew(t, cli, "trellis", "")
 	w.Launched(woken.SessionID)
-	layout := testworld.Await(app, protocol.EventWorkspaceLayoutUpdated, func(e protocol.WorkspaceLayoutUpdatedMessage) bool {
-		return slices.ContainsFunc(e.WorkspaceLayout.Panes, func(p protocol.WorkspaceLayoutPane) bool { return protocol.Deref(p.SessionID) == woken.SessionID })
-	})
-	crewPane := sessionPane{session: woken.SessionID, workspace: woken.WorkspaceID}
-	for _, p := range layout.WorkspaceLayout.Panes {
-		if protocol.Deref(p.SessionID) == woken.SessionID {
-			crewPane.pane = p.PaneID
-		}
-	}
+	crewPane := sessionPane{session: woken.SessionID}
 
 	protected := []struct {
 		pane    sessionPane
@@ -44,14 +36,6 @@ func TestTheChiefAndCrewMembersCannotBeClosedButTheirNeighboursCan(t *testing.T)
 		app.Send(protocol.UnregisterMessage{Cmd: protocol.CmdUnregister, ID: p.pane.session})
 		if refused := testworld.Refused(app); protocol.Deref(refused.Cmd) != protocol.CmdUnregister || !strings.Contains(protocol.Deref(refused.Error), p.refusal) {
 			t.Errorf("unregister %s refused with %s: %q, want %q", p.pane.session, protocol.Deref(refused.Cmd), protocol.Deref(refused.Error), p.refusal)
-		}
-		closed := testworld.Request(app, protocol.WorkspaceLayoutClosePaneMessage{
-			Cmd: protocol.CmdWorkspaceLayoutClosePane, WorkspaceID: p.pane.workspace, PaneID: p.pane.pane,
-		}, protocol.EventWorkspaceLayoutActionResult, func(r protocol.WorkspaceLayoutActionResultMessage) bool {
-			return r.Action == protocol.CmdWorkspaceLayoutClosePane && protocol.Deref(r.PaneID) == p.pane.pane
-		})
-		if closed.Success {
-			t.Errorf("closing the pane of %s was accepted", p.pane.session)
 		}
 	}
 
@@ -83,11 +67,9 @@ func TestTheChiefAndCrewMembersCannotBeClosedButTheirNeighboursCan(t *testing.T)
 			t.Errorf("%s is still live after it was closed", gone)
 		}
 	}
-	for _, p := range []sessionPane{chief, crewPane} {
-		if !slices.ContainsFunc(view.Workspaces, func(ws protocol.Workspace) bool {
-			return ws.ID == p.workspace && ws.Layout != nil && slices.ContainsFunc(ws.Layout.Panes, func(pane protocol.WorkspaceLayoutPane) bool { return pane.PaneID == p.pane })
-		}) {
-			t.Errorf("the refused close removed pane %s of %s from its layout", p.pane, p.session)
-		}
+	if !slices.ContainsFunc(view.Desktops, func(desktop protocol.Desktop) bool {
+		return desktop.ID == chief.desktop && slices.ContainsFunc(desktop.Panes, func(pane protocol.DesktopPane) bool { return pane.PaneID == chief.pane })
+	}) {
+		t.Errorf("the refused close removed pane %s of %s from its desktop", chief.pane, chief.session)
 	}
 }

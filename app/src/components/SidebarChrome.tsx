@@ -7,24 +7,24 @@ import { crewDisplayName } from '../utils/crewName';
 import './Sidebar.css';
 import { useSidebarContext } from './SidebarContext';
 import { CollapseIcon, ExpandIcon, HomeIcon, PlusIcon } from './SidebarIcons';
-import { isSessionless, workspaceShortcut } from './sidebarModel';
+import { isSessionless, desktopShortcut } from './sidebarModel';
 import { SidebarSettings } from './SidebarSettings';
 
 export function SidebarCollapsed() {
   const {
-    selectedWorkspaceId,
+    selectedDesktopId,
     instance,
     headerActions,
     gridLayout,
     onSelectGridLayout,
-    onSelectWorkspace,
+    onSelectDesktop,
     onNewSession,
     onGoToDashboard,
     homeActive,
     onToggleCollapse,
     sessionWantsAttention,
     visibleVisualOrder,
-    visualIndexOfWorkspace,
+    visualIndexOfDesktop,
   } = useSidebarContext();
   return (
     <div className="sidebar collapsed">
@@ -68,21 +68,21 @@ export function SidebarCollapsed() {
           </button>
         ))}
         <div className="icon-divider" />
-        {visibleVisualOrder.map((workspace) => (
+        {visibleVisualOrder.map((desktopView) => (
           <button
-            key={workspace.id}
-            className={`icon-btn session-icon ${selectedWorkspaceId === workspace.id ? 'active' : ''} ${isSessionless(workspace) ? 'sessionless' : ''}`}
-            onClick={() => onSelectWorkspace(workspace.id)}
+            key={desktopView.id}
+            className={`icon-btn session-icon ${selectedDesktopId === desktopView.id ? 'active' : ''} ${isSessionless(desktopView) ? 'sessionless' : ''}`}
+            onClick={() => onSelectDesktop(desktopView.id)}
             title={
-              workspaceShortcut(visualIndexOfWorkspace(workspace.id))
-                ? `${workspace.title} (${workspaceShortcut(visualIndexOfWorkspace(workspace.id))})`
-                : workspace.title
+              desktopShortcut(visualIndexOfDesktop(desktopView.id))
+                ? `${desktopView.title} (${desktopShortcut(visualIndexOfDesktop(desktopView.id))})`
+                : desktopView.title
             }
           >
             ▸
-            {workspace.sessions.some(sessionWantsAttention) && (
+            {desktopView.sessions.some(sessionWantsAttention) && (
               <span
-                className={`mini-badge ${workspace.status === 'pending_approval' ? 'pending' : ''} ${workspace.status === 'unknown' ? 'unknown' : ''}`}
+                className={`mini-badge ${desktopView.status === 'pending_approval' ? 'pending' : ''} ${desktopView.status === 'unknown' ? 'unknown' : ''}`}
               />
             )}
           </button>
@@ -156,10 +156,21 @@ export function SidebarFooter() {
   );
 }
 
+export function SidebarCrewManage() {
+  const { crew, onManageCrew } = useSidebarContext();
+  if (!crew?.length || !onManageCrew) return null;
+  return (
+    <button type="button" className="sidebar-crew-manage" data-testid="manage-crew" onClick={onManageCrew}>
+      <span>Manage crew</span>
+      <span className="sidebar-crew-count">{crew.length}</span>
+    </button>
+  );
+}
+
 export function SidebarPopovers() {
   const {
     onRenameSession,
-    onRenameWorkspace,
+    onRenameDesktop,
     onChangeChiefOfStaff,
     onCloseSession,
     onReloadSession,
@@ -177,11 +188,12 @@ export function SidebarPopovers() {
         <RenamePopover
           key={`${renameTarget.kind}:${renameTarget.id}`}
           initialValue={renameTarget.name}
-          label={renameTarget.kind === 'workspace' ? 'Rename workspace' : 'Rename session'}
+          defaultName={renameTarget.defaultName}
+          label={renameTarget.kind === 'desktop' ? 'Rename desktop' : 'Rename session'}
           anchor={renameTarget.anchor}
           onSubmit={async (value) => {
-            if (renameTarget.kind === 'workspace') {
-              await onRenameWorkspace?.(renameTarget.id, value);
+            if (renameTarget.kind === 'desktop') {
+              await onRenameDesktop?.(renameTarget.id, value);
             } else {
               await onRenameSession?.(renameTarget.id, value);
             }
@@ -250,8 +262,8 @@ export function SidebarHeader() {
     onToggleCrewQueue,
     harnessLogosEnabled,
     onToggleHarnessLogos,
-    workspaceSelectionStyle,
-    onWorkspaceSelectionStyleChange,
+    desktopSelectionStyle,
+    onDesktopSelectionStyleChange,
     onNewSession,
     onToggleCollapse,
     displayMode,
@@ -311,8 +323,8 @@ export function SidebarHeader() {
             onToggleCrewQueue={onToggleCrewQueue}
             harnessLogosEnabled={harnessLogosEnabled}
             onToggleHarnessLogos={onToggleHarnessLogos}
-            workspaceSelectionStyle={workspaceSelectionStyle}
-            onWorkspaceSelectionStyleChange={onWorkspaceSelectionStyleChange}
+            desktopSelectionStyle={desktopSelectionStyle}
+            onDesktopSelectionStyleChange={onDesktopSelectionStyleChange}
             showSessionless={showSessionless}
             onToggleShowSessionless={onToggleShowSessionless}
             displayMode={displayMode}

@@ -205,13 +205,6 @@ func agentMessageQueuedDetail(err error) string {
 	return "queued (target is not taking input right now — lands when it is running again; don't wait for a reply)"
 }
 
-func (d *Daemon) sessionOriginName(session *protocol.Session) string {
-	if workspace := d.store.GetWorkspace(session.WorkspaceID); workspace != nil && strings.TrimSpace(workspace.Title) != "" {
-		return workspace.Title
-	}
-	return sessionDisplayName(session)
-}
-
 func sessionDisplayName(session *protocol.Session) string {
 	if label := strings.TrimSpace(session.Label); label != "" {
 		return label

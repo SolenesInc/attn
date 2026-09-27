@@ -1,6 +1,6 @@
 import { act, fireEvent, screen } from '@testing-library/react';
 import { describe, expect, it, vi } from 'vitest';
-import { agentWorkspace, crewMember, daemonSeed, daemonSession } from './test/daemonFixtures';
+import { soloDesktop, crewMember, daemonSeed, daemonSession } from './test/daemonFixtures';
 import { openRow, renderGarden } from './test/garden';
 import type { CommandMessage } from './test/protocol';
 import { gesture, pressShortcut, renderApp } from './test/renderApp';
@@ -65,7 +65,8 @@ const handedOver = ({ cwd }: CommandMessage<'delegate'>): Reply => ({
   success: true,
   result: {
     session_id: 'tender',
-    workspace_id: 'workspace-tender',
+    desktop_id: 'desktop-tender',
+    pane_id: 'pane-tender',
     directory: cwd,
     agent: 'claude',
     checkout: 'none',
@@ -84,7 +85,7 @@ async function composeHandover(daemon: ScriptedDaemon) {
 }
 
 function selectedSessions(daemon: ScriptedDaemon) {
-  return daemon.sentOf('session_selected').map((command) => command.id);
+  return daemon.sentOf('desktop_set_current').map((command) => command.desktop_id.replace(/^desktop-/, ''));
 }
 
 describe('App garden continuation', () => {
@@ -94,7 +95,6 @@ describe('App garden continuation', () => {
       event: 'seed_resume_result',
       success: true,
       session_id: 'tender',
-      workspace_id: 'workspace-tender',
     }));
 
     await gesture(daemon, () => fireEvent.click(screen.getByRole('button', { name: 'Resume' })));
@@ -165,7 +165,7 @@ describe('App garden continuation', () => {
       initialState: {
         crew: [KEEL],
         sessions: [daemonSession('s1')],
-        workspaces: [agentWorkspace('s1')],
+        desktops: [soloDesktop('s1')],
         seeds: [daemonSeed('s-7k3f9m', { title: 'crew seed', status: 'planted', planter_member: 'keel' })],
       },
     });

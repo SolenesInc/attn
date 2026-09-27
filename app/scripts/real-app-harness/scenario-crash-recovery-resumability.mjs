@@ -18,7 +18,7 @@ import { cleanupSessionViaAppClose } from './scenarioCleanup.mjs';
 import {
   captureSessionArtifacts,
   sleep,
-  waitForFirstWorkspacePane,
+  waitForFirstDesktopPane,
   waitForPaneText,
   waitForPaneVisible,
 } from './scenarioAssertions.mjs';
@@ -190,7 +190,7 @@ async function main() {
         agent: 'codex',
         promptReadyFn: ensureCodexInitialPanePromptReady,
       });
-      const pane = await waitForFirstWorkspacePane(client, sessionId, 'codex pane', 20_000);
+      const pane = await waitForFirstDesktopPane(client, sessionId, 'codex pane', 20_000);
       codexResumeId = await waitFor(
         'the mock codex to write its rollout',
         () => latestMockCodexRollout(runner.sessionDir)?.id ?? null,
@@ -304,15 +304,15 @@ async function main() {
       if (session) {
         throw new Error(`claude session survived as ${session.state}; it has no transcript to resume`);
       }
-      const workspace = observer.getWorkspace(claudeSessionId);
-      if (workspace) {
-        throw new Error('the reaped claude session left its workspace pane behind');
+      const holder = observer.desktops.find((desktop) => desktop.panes.some((pane) => pane.session_id === claudeSessionId));
+      if (holder) {
+        throw new Error(`the reaped claude session left its pane behind on desktop ${holder.id}:\n${observer.describeArrangement()}`);
       }
     });
 
     await runner.step('revive_the_codex_pane_and_read_the_old_conversation_back', async () => {
       await client.request('select_session', { sessionId: codexSessionId });
-      const pane = await waitForFirstWorkspacePane(client, codexSessionId, 'revived codex pane', 30_000);
+      const pane = await waitForFirstDesktopPane(client, codexSessionId, 'revived codex pane', 30_000);
       await waitForPaneVisible(client, codexSessionId, pane.paneId, 30_000);
       await waitForPaneText(
         client,

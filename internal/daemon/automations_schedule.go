@@ -135,7 +135,7 @@ func (d *Daemon) claimAndDeliverScheduledRun(definition store.AutomationDefiniti
 	if continuity == "singleton" {
 		continuityKey = "singleton"
 	}
-	reservation, claimErr := d.newAutomationRunReservation()
+	reservation, claimErr := d.newAutomationRunReservation(&definition)
 	if claimErr != nil {
 		observationLock.Unlock()
 		return claimErr

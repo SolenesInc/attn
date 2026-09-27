@@ -1,6 +1,6 @@
 import { act, fireEvent, screen } from '@testing-library/react';
 import { onTestFinished, vi } from 'vitest';
-import { daemonSession, workspaceWithTiles, type DaemonSession, type DaemonTile, type DaemonWorkspace } from './daemonFixtures';
+import { daemonSession, desktopWithTiles, type DaemonDesktop, type DaemonSession, type DaemonTile } from './daemonFixtures';
 import { fakeRects } from './layout';
 import type { EventMessage } from './protocol';
 import { pressShortcut, renderApp } from './renderApp';
@@ -14,10 +14,10 @@ export async function openSession(daemon: ScriptedDaemon, sessionId: string) {
 }
 
 export async function openActionMenu(daemon: ScriptedDaemon) {
-  pressShortcut('ui.actionMenu');
+  pressShortcut('ui.commandPalette');
   await act(() => vi.advanceTimersToNextFrame());
   await daemon.idle();
-  return screen.getByRole('textbox', { name: 'Search actions' });
+  return screen.getByRole('combobox', { name: 'Commands' });
 }
 
 export function stubTextLayout() {
@@ -33,26 +33,27 @@ export function stubTextLayout() {
 }
 
 export interface TileOptions {
-  workspace?: Partial<DaemonWorkspace>;
+  desktop?: Partial<DaemonDesktop>;
   session?: Partial<DaemonSession>;
   initialState?: InitialState;
   persisted?: boolean;
   script?: (daemon: ScriptedDaemon) => void;
 }
 
-export async function openTiles(tiles: DaemonTile[], { workspace = {}, session = {}, initialState = {}, persisted = false, script }: TileOptions = {}) {
-  const layoutOf = (next: DaemonTile[]) => workspaceWithTiles(next, workspace);
+export async function openTiles(tiles: DaemonTile[], { desktop = {}, session = {}, initialState = {}, persisted = false, script }: TileOptions = {}) {
+  const layoutOf = (next: DaemonTile[]) => desktopWithTiles(next, desktop);
   const view = await renderApp({
     initialState: {
-      sessions: [daemonSession('s1', { workspace_id: layoutOf([]).id, ...session })],
-      workspaces: [layoutOf(persisted ? tiles : [])],
+      sessions: [daemonSession('s1', session)],
+      desktops: [layoutOf(persisted ? tiles : [])],
       ...initialState,
     },
   });
   script?.(view.daemon);
   await openSession(view.daemon, 's1');
   const layout = async (next: DaemonTile[]) => {
-    view.daemon.emit({ event: 'workspace_layout_updated', workspace_layout: layoutOf(next).layout! });
+    const laidOut = layoutOf(next);
+    view.daemon.arrange((desktops) => desktops.map((existing) => (existing.id === laidOut.id ? { ...laidOut, revision: existing.revision + 1 } : existing)));
     await view.daemon.idle();
   };
   await layout(tiles);
@@ -65,10 +66,10 @@ export async function openMarkdownTiles(
   { path, tileIds = ['tile-a'], ...options }: TileOptions & { path: string; tileIds?: string[] },
 ) {
   const view = await openTiles(tileIds.map((tileId) => ({ tile_id: tileId, tile_kind: 'markdown', tile_params: path, tile_session_id: 's1' })), options);
-  const workspaceId = options.workspace?.id ?? 'ws';
+  const desktopId = view.daemon.arrangement.profile.current_desktop_id;
   const show = async (next: string) => {
     for (const tileId of tileIds) {
-      view.daemon.emit({ event: 'workspace_tile_content', workspace_id: workspaceId, tile_id: tileId, tile_kind: 'markdown', path, content: next });
+      view.daemon.emit({ event: 'desktop_tile_content', desktop_id: desktopId, tile_id: tileId, tile_kind: 'markdown', path, content: next });
     }
     await view.daemon.idle();
   };
@@ -78,17 +79,21 @@ export async function openMarkdownTiles(
 
 export interface TerminalOptions {
   sessions: DaemonSession[];
-  workspaces: DaemonWorkspace[];
+  desktops: DaemonDesktop[];
   initialState?: InitialState;
   output?: Record<string, string>;
   script?: (daemon: ScriptedDaemon) => void;
 }
 
-export async function openAttachedTerminals({ sessions, workspaces, initialState = {}, output = {}, script }: TerminalOptions) {
+export async function openAttachedTerminals({ sessions, desktops, initialState = {}, output = {}, script }: TerminalOptions) {
   fakeRects((element) => (element.tagName === 'CANVAS' ? new DOMRect(0, 0, 800, 600) : null));
-  const view = await renderApp({ initialState: { sessions, workspaces, ...initialState } });
-  view.daemon.on('attach_session', ({ id }) => ({ event: 'attach_result', id, success: true, cols: 80, rows: 24, running: true }));
-  script?.(view.daemon);
+  const view = await renderApp({
+    initialState: { sessions, desktops, ...initialState },
+    script: (daemon) => {
+      daemon.on('attach_session', ({ id }) => ({ event: 'attach_result', id, success: true, cols: 80, rows: 24, running: true }));
+      script?.(daemon);
+    },
+  });
   await openSession(view.daemon, sessions[0].id);
   for (const [sessionId, text] of Object.entries(output)) {
     view.daemon.emit({ event: 'pty_output', id: sessionId, seq: 1, data: btoa(text) });

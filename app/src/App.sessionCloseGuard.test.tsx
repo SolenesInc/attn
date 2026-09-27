@@ -1,6 +1,6 @@
 import { fireEvent, screen } from '@testing-library/react';
 import { describe, expect, it } from 'vitest';
-import { agentWorkspace, daemonSession, type DaemonSession } from './test/daemonFixtures';
+import { soloDesktop, daemonSession, type DaemonSession } from './test/daemonFixtures';
 import { renderApp } from './test/renderApp';
 import type { ScriptedDaemon } from './test/scriptedDaemon';
 
@@ -8,7 +8,7 @@ async function renderOrchestrator(overrides: Partial<DaemonSession> = {}) {
   const rendered = await renderApp({
     initialState: {
       sessions: [daemonSession('s1', { label: 'orchestrator', ...overrides })],
-      workspaces: [agentWorkspace('s1')],
+      desktops: [soloDesktop('s1')],
     },
   });
   fireEvent.click(screen.getByRole('button', { name: 'Open orchestrator' }));
@@ -26,7 +26,7 @@ function pressCmdW() {
 
 function closeCommands(daemon: ScriptedDaemon) {
   return daemon.sent.filter(
-    (command) => command.cmd === 'workspace_layout_close_pane' || command.cmd === 'unregister',
+    (command) => command.cmd === 'desktop_remove_leaf' || command.cmd === 'unregister',
   );
 }
 
@@ -64,13 +64,7 @@ describe('chief and crew sessions are protected from close', () => {
 
     closeFromSidebar();
 
-    expect(closeCommands(daemon)).toEqual([
-      expect.objectContaining({
-        cmd: 'workspace_layout_close_pane',
-        workspace_id: 'workspace-s1',
-        pane_id: 'pane-s1',
-      }),
-    ]);
+    expect(closeCommands(daemon)).toEqual([{ cmd: 'unregister', id: 's1' }]);
     expect(toast()).toBeNull();
   });
 });

@@ -151,14 +151,14 @@ func (s *Store) SessionDelegationRoles() (map[string]*protocol.SessionDelegation
 
 func getDelegationOperation(db *sql.DB, id string) (*DelegationOperationRecord, error) {
 	var rec DelegationOperationRecord
-	var state, workspaceID, ticketID, directory, branch, baseCommit, handoffNoteID, worktreePath, worktreeToken, chiefSessionID, resultJSON, errorText, failureCode string
+	var state, ticketID, directory, branch, baseCommit, handoffNoteID, worktreePath, worktreeToken, chiefSessionID, resultJSON, errorText, failureCode string
 	var worktreeOwned int
 	err := db.QueryRow(`SELECT request_id, operation_id, request_json, state, progress,
-		session_id, workspace_id, ticket_id, directory, branch, base_commit, parent_seed_id, handoff_note_id, worktree_path, worktree_owned, worktree_token, chief_session_id,
+		session_id, ticket_id, directory, branch, base_commit, parent_seed_id, handoff_note_id, worktree_path, worktree_owned, worktree_token, chief_session_id,
 		handover_seed_rev, handover_tender_session, handover_tender_member, result_json, error, failure_code, resolved_preferences, created_at, updated_at
 		FROM delegation_operations WHERE request_id = ? OR operation_id = ?`, id, id).Scan(
 		&rec.Operation.RequestID, &rec.Operation.OperationID, &rec.RequestJSON, &state,
-		&rec.Operation.Progress, &rec.Operation.SessionID, &workspaceID, &ticketID,
+		&rec.Operation.Progress, &rec.Operation.SessionID, &ticketID,
 		&directory, &branch, &baseCommit, &rec.ParentSeedID, &handoffNoteID, &worktreePath, &worktreeOwned, &worktreeToken, &chiefSessionID,
 		&rec.HandoverSeedRev, &rec.HandoverTenderSession, &rec.HandoverTenderMember,
 		&resultJSON, &errorText, &failureCode, &rec.ResolvedPreferences, &rec.Operation.CreatedAt, &rec.Operation.UpdatedAt)
@@ -171,9 +171,6 @@ func getDelegationOperation(db *sql.DB, id string) (*DelegationOperationRecord, 
 	rec.ChiefSessionID = chiefSessionID
 	rec.BaseCommit = baseCommit
 	rec.HandoffNoteID = handoffNoteID
-	if workspaceID != "" {
-		rec.Operation.WorkspaceID = protocol.Ptr(workspaceID)
-	}
 	if ticketID != "" {
 		if delegationRequestUsesSeed(rec.RequestJSON) {
 			rec.Operation.SeedID = protocol.Ptr(ticketID)
@@ -245,7 +242,7 @@ func (s *Store) MarkDelegationWorktreeOwned(id, path, token string, now time.Tim
 	return err
 }
 
-func (s *Store) UpdateDelegationOperation(id string, state protocol.DelegationOperationState, progress, workspaceID, ticketID, worktreePath string, result *protocol.DelegateResult, operationErr error, now time.Time) error {
+func (s *Store) UpdateDelegationOperation(id string, state protocol.DelegationOperationState, progress, profileID, ticketID, worktreePath string, result *protocol.DelegateResult, operationErr error, now time.Time) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	if s.db == nil {
@@ -278,13 +275,13 @@ func (s *Store) UpdateDelegationOperation(id string, state protocol.DelegationOp
 		resultBranch = protocol.Deref(result.Branch)
 	}
 	_, err := s.db.Exec(`UPDATE delegation_operations SET state = ?, progress = ?,
-		workspace_id = CASE WHEN ? = '' THEN workspace_id ELSE ? END,
+		profile_id = CASE WHEN ? = '' THEN profile_id ELSE ? END,
 		ticket_id = CASE WHEN ? = '' THEN ticket_id ELSE ? END,
 		directory = CASE WHEN ? = '' THEN directory ELSE ? END,
 		branch = CASE WHEN ? = '' THEN branch ELSE ? END,
 		worktree_path = CASE WHEN ? = '' THEN worktree_path ELSE ? END,
 		result_json = ?, error = ?, failure_code = ?, updated_at = ? WHERE request_id = ? OR operation_id = ?`,
-		string(state), progress, workspaceID, workspaceID, ticketID, ticketID,
+		string(state), progress, profileID, profileID, ticketID, ticketID,
 		resultDirectory, resultDirectory, resultBranch, resultBranch,
 		worktreePath, worktreePath, resultJSON, errorText, failureCode, stamp, id, id)
 	return err

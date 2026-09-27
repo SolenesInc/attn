@@ -23,7 +23,7 @@ echo burst-$((1+1))
 func TestEveryAttachDuringABlockBurstGetsBlocksThatPointAtTheirOwnPrompts(t *testing.T) {
 	w := newWorld(t)
 	app := w.App()
-	result, ws, pane := w.RequestSpawn(app, workspaceShell, w.Path("shop"))
+	result, _, _ := w.RequestSpawn(app, shellHarness, w.Path("shop"))
 	shell := result.ID
 	burst := filepath.Join(w.Dir, "burst.sh")
 	if err := os.WriteFile(burst, []byte(blockBurst), 0o755); err != nil {
@@ -59,11 +59,9 @@ func TestEveryAttachDuringABlockBurstGetsBlocksThatPointAtTheirOwnPrompts(t *tes
 
 	closing := transportPeer(w)
 	closing.Send(protocol.AttachSessionMessage{Cmd: protocol.CmdAttachSession, ID: shell})
-	closed := workspaceLayoutAction(app, protocol.WorkspaceLayoutClosePaneMessage{
-		Cmd: protocol.CmdWorkspaceLayoutClosePane, WorkspaceID: ws, PaneID: pane,
-	}, protocol.CmdWorkspaceLayoutClosePane, ws)
-	if !closed.Success {
-		t.Fatalf("closing the pane while a client attached failed: %s", protocol.Deref(closed.Error))
+	closed := closeFromApp(app, shell)
+	if !closed.Accepted {
+		t.Fatalf("closing the session while a client attached failed: %s", protocol.Deref(closed.Error))
 	}
 }
 

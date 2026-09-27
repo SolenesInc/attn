@@ -87,7 +87,7 @@ func TestStrandedTicketsAreReplantedAsWitheredSeedsOnce(t *testing.T) {
 				t.Errorf("%s was archived: %+v", id, ticket)
 			}
 		}
-		if err := cli.Register("worker", "worker", w.Path("worker")); err != nil {
+		if err := w.InjectSession("worker", "worker", w.Path("worker"), protocol.SessionAgentClaude); err != nil {
 			t.Fatal(err)
 		}
 		if ready, err := cli.SeedReady("", "", true); err != nil || len(ready.Seeds) != 0 {

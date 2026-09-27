@@ -356,12 +356,10 @@ export async function teardownInstanceState({ client, instance, wipe = true }) {
 }
 
 export async function paneIdForSession(client, sessionId) {
-  const ws = await client.request('get_workspace', { sessionId }, { timeoutMs: 10_000 });
+  const ws = await client.request('get_desktop', { sessionId }, { timeoutMs: 10_000 });
   return ws.activePaneId || ws.panes?.[0]?.paneId || null;
 }
 
-// The observer's WS `unregister` is rejected without the workspace_sessions
-// capability, so close_session is the supported cleanup path.
 export async function closeSessions(client, ids) {
   await Promise.allSettled([...new Set(ids)].map((sessionId) => (
     client.request('close_session', { sessionId }, { timeoutMs: 15_000 })

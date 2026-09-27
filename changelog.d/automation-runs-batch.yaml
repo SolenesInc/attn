@@ -1,0 +1,3 @@
+kind: added
+area: app
+change: Automation runs that stopped with a question stand out in the sidebar, with a count on each automation and an "n runs need you" line. Cmd+Shift+J (Ctrl+Alt+J on Linux) walks those runs one at a time and Cmd+Shift+E settles the one on screen, with or without the queue. Runs sort by what needs you, then live, then newest finished, and selecting a run opens its automation's group.

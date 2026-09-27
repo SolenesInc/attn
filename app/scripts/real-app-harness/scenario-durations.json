@@ -6,6 +6,14 @@
     "matrixSeconds": 826.7,
     "note": "Seconds each scenario took in a green Linux serial matrix. Remeasure from matrix-digest.txt when a scenario changes shape; the shard planner balances on these.",
     "updates": {
+      "desktop-switching": {
+        "run": "desktop-switching-2026-09-23T23-14-11-901Z",
+        "job": "Local scenario run, pr2desk instance",
+        "recordedAt": "2026-09-23",
+        "seconds": 27.0,
+        "runnerClass": "local macOS",
+        "note": "First green run: switch, send, bounce, overview and a second client. Remeasure on Linux CI."
+      },
       "crew-management": {
         "run": "crew-management-2026-09-19T20-31-21-890Z",
         "job": "Local scenario run, traincrew instance",
@@ -14,7 +22,7 @@
         "runnerClass": "local macOS",
         "note": "Green focus-free run with the seeds tab, handoff history, charter editing, reconnect recovery and the restart lifecycle; earlier green runs the same day took 48.6s and 54.2s. Remeasure on Linux CI."
       },
-      "workspace-switching": {
+      "desktop-splits": {
         "run": "workspace-switching-2026-09-15T21-17-34-309Z",
         "job": "Local serial matrix, rugged-doctor instance",
         "recordedAt": "2026-09-15",
@@ -106,12 +114,27 @@
         "recordedAt": "2026-09-11",
         "seconds": 24.0,
         "runnerClass": "github-hosted 4vcpu/16GB"
+      },
+      "desktop-migration": {
+        "run": "https://github.com/SolenesInc/attn/actions/runs/36256347056",
+        "job": "App acceptance shard 4/4",
+        "recordedAt": "2026-09-26",
+        "seconds": 20.7,
+        "runnerClass": "github-hosted 4vcpu/16GB"
+      },
+      "profile-lifecycle": {
+        "run": "profile-lifecycle-2026-09-26T17-04-27-548Z",
+        "job": "Local scenario run, plife instance",
+        "recordedAt": "2026-09-26",
+        "seconds": 18.5,
+        "runnerClass": "local macOS",
+        "note": "First green runs, twice in a row: create, move, rename, delete and reopen into a chosen profile. Remeasure on Linux CI."
       }
     }
   },
   "seconds": {
     "agent-close": 8.2,
-    "agent-queue": 93.8,
+    "agent-queue": 135.0,
     "agent-settings": 18.7,
     "autoclose-on-exit": 19.1,
     "automation-form": 10.2,
@@ -145,14 +168,17 @@
     "terminal-context-menu": 9.7,
     "terminal-input": 12.8,
     "terminal-md-link": 15.9,
-    "tile-only-workspace-select": 5,
+    "tile-only-desktop-select": 5,
     "tr201-local-claude": 8.7,
     "tr301-local-claude": 6.9,
     "tr401-local-claude": 14.2,
-    "workspace-close-one-session-keeps-selection": 27.4,
-    "workspace-creation-shortcuts": 22.6,
-    "workspace-switching": 45.7,
+    "desktop-close-one-session-keeps-selection": 27.4,
+    "session-creation-shortcuts": 22.6,
+    "desktop-switching": 27.0,
+    "desktop-splits": 45.7,
     "worktree-surface": 34.3,
-    "crew-management": 57.6
+    "crew-management": 57.6,
+    "desktop-migration": 20.7,
+    "profile-lifecycle": 18.5
   }
 }

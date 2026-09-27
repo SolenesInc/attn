@@ -2,11 +2,11 @@ import { describe, expect, it, vi } from 'vitest';
 import { fireEvent, screen, within } from '@testing-library/react';
 import type { SessionReopen } from '../../types/generated';
 import { SessionReopenAction } from '../../types/generated';
-import { agentWorkspace, daemonSession } from '../../test/daemonFixtures';
+import { soloDesktop, daemonSession, DEFAULT_PROFILE_ID } from '../../test/daemonFixtures';
 import type { CommandMessage } from '../../test/protocol';
 import type { Reply, ScriptedDaemon } from '../../test/scriptedDaemon';
 import { closedEntry, entry, liveEntry, verdict } from '../../test/sessionLedgerFixtures';
-import { namedWorkspaces, openSessionsLedger, page, pages, rows, type LedgerAnswer } from './testSupport';
+import { openSessionsLedger, page, pages, rows, type LedgerAnswer } from './testSupport';
 
 type ReopenReply = Reply | 'hold';
 
@@ -19,7 +19,6 @@ const goneEverywhere = verdict({
   reason: 'the directory is gone; branch feat/x is gone from this repository and its remotes',
   directory_state: 'missing',
   branch_state: 'gone',
-  workspace_plan: 'create',
   actions: [SessionReopenAction.StartFreshDefaultBranch, SessionReopenAction.StartFreshElsewhere],
 });
 
@@ -37,12 +36,12 @@ function failed(error: string): Reply {
 
 async function openLedger(
   answer: LedgerAnswer,
-  { live = [], workspaceNames = {}, reopen = [] }: { live?: string[]; workspaceNames?: Record<string, string>; reopen?: ReopenReply[] } = {},
+  { live = [], reopen = [] }: { live?: string[]; reopen?: ReopenReply[] } = {},
 ) {
   const view = await openSessionsLedger(answer, {
     initialState: {
       sessions: live.map((id) => daemonSession(id, { label: `run ${id}` })),
-      workspaces: [...live.map(agentWorkspace), ...namedWorkspaces(workspaceNames)],
+      desktops: live.map((id) => soloDesktop(id)),
     },
   });
   const held: CommandMessage<'session_reopen'>[] = [];
@@ -63,7 +62,7 @@ async function openLedger(
         event: 'session_reopen_result',
         request_id: command.request_id,
         success: true,
-        result: { action: command.action ?? SessionReopenAction.Reopen, directory: '/Users/victor/projects/attn', session_id: command.session_id, workspace_id: 'ws-1' },
+        result: { action: command.action ?? SessionReopenAction.Reopen, directory: '/Users/victor/projects/attn', session_id: command.session_id, profile_id: DEFAULT_PROFILE_ID },
       });
       await view.daemon.idle();
     },
@@ -118,7 +117,7 @@ describe('SessionsTab reopens on demand', () => {
   it('turns a refusal into the actions the session offers instead, and reads them in the inspector', async () => {
     const view = await openLedger(
       pages([page({ entries: [closedEntry('s1', { branch: 'feat/x' })] })]),
-      { reopen: [refused(goneEverywhere)], workspaceNames: { 'ws-1': 'attn' } },
+      { reopen: [refused(goneEverywhere)] },
     );
 
     await refuseFirstReopen(view, 'run s1');
@@ -128,7 +127,7 @@ describe('SessionsTab reopens on demand', () => {
     expect(within(refusedRow).getByRole('button', { name: 'Start fresh on the default branch' })).toBeTruthy();
     expect(within(inspector()).getByText('directory is gone')).toBeTruthy();
     expect(within(inspector()).getByText('branch is gone everywhere')).toBeTruthy();
-    expect(within(inspector()).getByText('opens a workspace named after the session, in a new pane')).toBeTruthy();
+    expect(within(inspector()).getByText('lands unplaced in its profile')).toBeTruthy();
     expect(within(inspector()).getByRole('button', { name: /Start fresh elsewhere/ })).toBeTruthy();
   });
 
@@ -243,7 +242,7 @@ describe('SessionsTab row grammar', () => {
       pages([page({
         entries: [entry({ id: 'aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee', label: 'Fixture run' }), closedEntry('s2', { label: '', close_reason: 'aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee asked' })],
       })]),
-      { reopen: [refused(deadEnd)], workspaceNames: { 'ws-1': 'workspace-12345678-1234-1234-1234-123456789abc' } },
+      { reopen: [refused(deadEnd)] },
     );
 
     expect(within(row('untitled session')).getByText('closed by you: Fixture run asked')).toBeTruthy();

@@ -17,7 +17,7 @@ func TestMailQueuedForABusyAgentRingsItOnceAfterADaemonRestart(t *testing.T) {
 	s.Start()
 	app, cli := s.App(), s.Client()
 	recipient, run := claudeAtWork(t, s, app, "shop")
-	if err := cli.Register("reviewer", "reviewer", s.Path("reviewer")); err != nil {
+	if err := s.InjectSession("reviewer", "reviewer", s.Path("reviewer"), protocol.SessionAgentClaude); err != nil {
 		t.Fatalf("register the sender: %v", err)
 	}
 	sent, err := cli.AgentMsg(recipient, "reviewer", "the discount is applied after tax")

@@ -3,12 +3,14 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import { CrewRestartState, type CrewMember } from '../types/generated';
 import {
   agentPane,
-  agentWorkspace,
+  soloDesktop,
   daemonSeed,
   daemonSession,
-  daemonWorkspace,
+  daemonDesktop,
   type DaemonSeed,
   type DaemonSession,
+  DEFAULT_DESKTOP_ID,
+  DEFAULT_PROFILE_ID,
 } from '../test/daemonFixtures';
 import { gesture, renderApp } from '../test/renderApp';
 import type { CommandMessage } from '../test/protocol';
@@ -21,6 +23,7 @@ function member(id: string, revision: number, values: Partial<CrewMember> = {}):
     charter_path: `/crew/${id}/CHARTER.md`,
     home_dir: `/crew/${id}`,
     awareness_dirs: [],
+    profile_id: DEFAULT_PROFILE_ID,
     resolved_agent: 'claude',
     ...values,
   };
@@ -90,7 +93,7 @@ async function renderPanel({
 } = {}) {
   const everySession = [daemonSession('s1'), ...sessions];
   const { daemon } = await renderApp({
-    initialState: { crew: members, seeds, sessions: everySession, workspaces: everySession.map((session) => agentWorkspace(session.id)) },
+    initialState: { crew: members, seeds, sessions: everySession, desktops: everySession.map((session) => soloDesktop(session.id)) },
   });
   for (const [cmd, answers] of Object.entries({ ...defaults, ...script })) {
     answerInTurn(daemon, cmd as CrewCommand, answers, { repeatLast: true });
@@ -130,12 +133,12 @@ describe('CrewPanel', () => {
     expect(dialog.closest('.crew-panel-layer')).toBeInTheDocument();
   });
 
-  it('keeps member, tab, seed filter and search when a workspace seed returns to Crew', async () => {
+  it('keeps member, tab, seed filter and search when a desktop seed returns to Crew', async () => {
     const planted = daemonSeed('s-g9yxwv', { title: 'Artifact presence comes from the daemon', status: 'planted', planter_member: 'keel' });
     const members = [member('alder', 2), member('keel', 3, { binding_session: 'session-keel' })];
     const { daemon } = await renderPanel({ members, seeds: [planted], sessions: [daemonSession('session-keel')] });
-    daemon.on('open_seed', ({ seed_id, session_id }) => ({
-      event: 'open_seed_result', success: true, seed_id, workspace_id: `workspace-${session_id}`, tile_id: 'tile-seed',
+    daemon.on('open_seed', ({ seed_id }) => ({
+      event: 'open_seed_result', success: true, seed_id, desktop_id: DEFAULT_DESKTOP_ID, tile_id: 'tile-seed',
     }));
 
     expect(panel().getByLabelText('Harness')).toBeEnabled();
@@ -145,21 +148,19 @@ describe('CrewPanel', () => {
     fireEvent.change(panel().getByLabelText('Find a seed'), { target: { value: 'Artifact presence' } });
     await click(daemon, /Artifact presence comes from the daemon/);
     expect(openedSeeds(daemon)).toEqual([{ seed_id: planted.id, session_id: 'session-keel', standalone: undefined }]);
-    expect(isPanelOpen()).toBe(false);
 
-    daemon.emit({
-      event: 'workspace_state_changed',
-      workspace: daemonWorkspace('workspace-session-keel', {
-        root: {
-          type: 'split', split_id: 'split-seed', direction: 'vertical',
-          children: [
-            { type: 'pane', pane_id: 'pane-session-keel' },
-            { type: 'tile', tile_id: 'tile-seed', tile_kind: 'seed', tile_params: planted.id },
-          ],
-        },
-        panes: [agentPane('session-keel', 'workspace-session-keel')],
-      }, { title: 'session-keel', directory: '/tmp/session-keel' }),
-    });
+    daemon.arrange((desktops) => desktops.map((desktop) => (desktop.id === DEFAULT_DESKTOP_ID ? daemonDesktop(DEFAULT_DESKTOP_ID, {
+      root: {
+        type: 'split', split_id: 'split-seed', direction: 'vertical',
+        children: [
+          { type: 'pane', pane_id: 'pane-session-keel' },
+          { type: 'tile', tile_id: 'tile-seed', tile_kind: 'seed', tile_params: planted.id },
+        ],
+      },
+      panes: [agentPane('session-keel', DEFAULT_DESKTOP_ID)],
+    }, { revision: desktop.revision + 1 }) : desktop)));
+    await daemon.idle();
+    expect(isPanelOpen()).toBe(false);
     await gesture(daemon, () => fireEvent.click(screen.getByTestId('crew-seed-back')));
 
     expect(isPanelOpen()).toBe(true);

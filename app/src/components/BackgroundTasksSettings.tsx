@@ -78,7 +78,7 @@ export function BackgroundTasksSettings({
         <span className="settings-kicker">Background Tasks</span>
         <h3>Durable task runner</h3>
         <p className="settings-description">
-          Background work attn runs for you — context compaction, session summaries, workspace
+          Background work attn runs for you — context compaction, session summaries, desktop
           narration, and ticket reconciliation. A task that exhausts its retries becomes a
           notification you can retry from here.
         </p>

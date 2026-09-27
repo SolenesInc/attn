@@ -19,6 +19,27 @@ func TicketRoleIdentity(role string) string {
 	return ticketRoleIdentityPrefix + role
 }
 
+func TicketChiefIdentity(profileID string) string {
+	profileID = strings.TrimSpace(profileID)
+	if profileID == "" {
+		return ""
+	}
+	return TicketRoleIdentity(TicketRoleChiefOfStaff) + ":" + profileID
+}
+
+func ParseTicketChiefIdentity(identity string) (profileID string, legacy bool, ok bool) {
+	identity = strings.TrimSpace(identity)
+	legacyIdentity := TicketRoleIdentity(TicketRoleChiefOfStaff)
+	if identity == legacyIdentity {
+		return "", true, true
+	}
+	profileID, found := strings.CutPrefix(identity, legacyIdentity+":")
+	if !found || profileID == "" {
+		return "", false, false
+	}
+	return profileID, false, true
+}
+
 func (s *Store) IsTicketRoleOwner(role, ticketID string) (bool, error) {
 	s.mu.RLock()
 	defer s.mu.RUnlock()

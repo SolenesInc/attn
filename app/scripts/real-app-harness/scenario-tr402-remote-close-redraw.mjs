@@ -11,11 +11,11 @@ import {
   assertPaneVisibleContent,
   assertPaneVisibleContentPreserved,
   captureSessionArtifacts,
-  waitForFirstWorkspacePane,
+  waitForFirstDesktopPane,
   waitForNewShellPane,
   waitForPaneState,
   waitForPaneVisible,
-  waitForSessionWorkspace,
+  waitForSessionDesktop,
 } from './scenarioAssertions.mjs';
 import {
   buildRemoteHarnessPaths,
@@ -148,10 +148,10 @@ async function main() {
         endpoint_id: endpoint.id,
       });
       await observer.waitForSession({ id: result.sessionId, timeoutMs: 30_000 });
-      await observer.waitForWorkspace(
+      await observer.waitForDesktopOf(
         result.sessionId,
-        (workspace) => (workspace.panes || []).length >= 1,
-        `initial workspace for ${result.sessionId}`,
+        (desktop) => desktop.panes.length >= 1,
+        `initial desktop for ${result.sessionId}`,
         30_000,
       );
       return result.sessionId;
@@ -159,7 +159,7 @@ async function main() {
 
     await runner.step('capture_baseline_main', async () => {
       await client.request('select_session', { sessionId });
-      initialPaneId = (await waitForFirstWorkspacePane(client, sessionId, 'remote initial pane', 30_000)).paneId;
+      initialPaneId = (await waitForFirstDesktopPane(client, sessionId, 'remote initial pane', 30_000)).paneId;
       await waitForPaneVisible(client, sessionId, initialPaneId, 45_000);
       baselineMainState = await assertPaneVisibleContent(client, sessionId, initialPaneId, {
         minNonEmptyLines: 2,
@@ -194,8 +194,8 @@ async function main() {
     });
 
     splitPaneId = await runner.step('split_from_main', async () => {
-      const workspaceBefore = await client.request('get_workspace', { sessionId });
-      const existingPaneIds = new Set((workspaceBefore.panes || []).map((pane) => pane.paneId));
+      const desktopBefore = await client.request('get_desktop', { sessionId });
+      const existingPaneIds = new Set((desktopBefore.panes || []).map((pane) => pane.paneId));
       await client.request('split_pane', {
         sessionId,
         targetPaneId: initialPaneId,
@@ -255,14 +255,14 @@ async function main() {
       await client.request('focus_pane', { sessionId, paneId: splitPaneId });
       await waitForPaneVisible(client, sessionId, splitPaneId, 20_000);
       await client.request('close_pane', { sessionId, paneId: splitPaneId });
-      await waitForSessionWorkspace(
+      await waitForSessionDesktop(
         client,
         sessionId,
-        (workspace) => {
-          const panes = workspace.panes || [];
+        (desktopState) => {
+          const panes = desktopState.panes || [];
           return panes.length === 1 && panes[0].paneId === initialPaneId;
         },
-        'workspace to collapse back to one pane after closing split',
+        'desktop to collapse back to one pane after closing split',
         20_000,
       );
       recoveredMainState = await waitForPaneState(

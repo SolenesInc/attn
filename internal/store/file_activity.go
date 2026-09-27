@@ -13,8 +13,8 @@ const FileActivitySourceOpened = "opened"
 const FileActivitySourceEdited = "edited"
 
 const (
-	editedWeight     = 0.6
-	inWorkspaceBonus = 1.5
+	editedWeight = 0.6
+	inRootBonus  = 1.5
 )
 
 func sourceWeight(source string) float64 {
@@ -67,7 +67,7 @@ func (s *Store) GetRecentFiles(limit int, root string) []protocol.FileActivity {
 	defer rows.Close()
 
 	now := time.Now()
-	prefix := workspacePrefix(root)
+	prefix := rootPrefix(root)
 	merged := map[string]*protocol.FileActivity{}
 	scores := map[string]float64{}
 	var order []string
@@ -99,7 +99,7 @@ func (s *Store) GetRecentFiles(limit int, root string) []protocol.FileActivity {
 
 	for path := range scores {
 		if prefix != "" && strings.HasPrefix(path, prefix) {
-			scores[path] *= inWorkspaceBonus
+			scores[path] *= inRootBonus
 		}
 	}
 
@@ -124,7 +124,7 @@ func (s *Store) GetRecentFiles(limit int, root string) []protocol.FileActivity {
 	return all
 }
 
-func workspacePrefix(root string) string {
+func rootPrefix(root string) string {
 	root = strings.TrimSpace(root)
 	if root == "" || root == "/" {
 		return ""

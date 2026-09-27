@@ -195,7 +195,7 @@ func (d *Daemon) handleNotebookGuide(conn net.Conn, msg *protocol.NotebookGuideM
 		return
 	}
 	sessionID := strings.TrimSpace(protocol.Deref(msg.SessionID))
-	sessionIsChief := sessionID != "" && sessionID == d.chiefOfStaffSessionID()
+	sessionIsChief := d.isChiefOfStaffSession(sessionID)
 	if sessionIsChief {
 		if _, _, serr := d.ensureNotebookScaffold(); serr != nil {
 			d.logf("notebook guide: ensure scaffold failed: %v", serr)
@@ -334,7 +334,7 @@ func (d *Daemon) sendNotebookToChiefWSResult(client *wsClient, requestID, source
 			d.broadcastNotebookChanged(originUI, relPath)
 			result = &protocol.NotebookSendToChiefResult{
 				Path:   relPath,
-				Nudged: d.nudgeChiefOfStaff(requestID, chiefInboxNudgePrompt(store.Root())),
+				Nudged: d.nudgeChiefOfStaff(d.chiefForClient(client), requestID, chiefInboxNudgePrompt(store.Root())),
 			}
 		}
 	}

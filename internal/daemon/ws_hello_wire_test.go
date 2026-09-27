@@ -71,7 +71,7 @@ func helloWithToken(token *string) protocol.ClientHelloMessage {
 		Cmd:          protocol.CmdClientHello,
 		ClientKind:   "remote-web",
 		Version:      "protocol-" + protocol.ProtocolVersion,
-		Capabilities: []string{protocol.CapabilityWorkspaceSessions},
+		Capabilities: []string{},
 		ClientToken:  token,
 	}
 }

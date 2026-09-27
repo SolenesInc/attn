@@ -19,9 +19,10 @@ func TestTheNudgeCountdownRunsOnlyWhileTheSessionIsUnseenAndCanTakeIt(t *testing
 	inBubble(t, func(t *testing.T, w *world) {
 		app, cli := w.App(), w.Client()
 		registerSessions(t, w, cli, "author", "worker", "other")
+		lookAway(t, w, app)
 		createTicket(t, cli, "worker", "fix the build", "fix-build")
 		selectForNudge := func(id string) {
-			app.Send(protocol.SessionSelectedMessage{Cmd: protocol.CmdSessionSelected, ID: id})
+			focusAgent(t, w, app, id)
 			w.advance(0)
 		}
 		awaitNudge := func(match func(s protocol.Session) bool) protocol.Session {
@@ -98,6 +99,7 @@ func TestAnUnreadTicketNudgeIsReArmedAfterARestart(t *testing.T) {
 	run.Prompted()
 	run.Reply("Fixed. <!-- attn:state=idle -->")
 	testworld.AwaitSession(app, session, func(s protocol.Session) bool { return s.State == protocol.SessionStateIdle })
+	lookAway(t, w, app)
 	createTicket(t, cli, session, "fix the build", "fix-build")
 	commentOnTicket(t, cli, author, "fix-build", "take a look")
 	testworld.AwaitSession(app, session, func(s protocol.Session) bool { return protocol.Deref(s.NudgeFiresAt) != "" })

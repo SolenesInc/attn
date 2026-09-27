@@ -3,17 +3,17 @@ import { test, expect, type Page } from '@playwright/test';
 async function openEditor(page: Page) {
   await page.goto('/test-harness/?component=TerminalAnnotations');
   await page.waitForFunction(() => window.__HARNESS__?.ready);
-  await expect(page.getByTestId('workspace-first').locator('canvas').first()).toBeVisible();
+  await expect(page.getByTestId('desktop-first').locator('canvas').first()).toBeVisible();
   await page.getByTitle('Edit this annotation').click();
   const editor = page.getByRole('textbox', { name: 'Annotation comment', exact: true });
   await expect(editor).toBeFocused();
   return editor;
 }
 
-test('panel editing owns the keyboard through workspace updates', async ({ page }) => {
+test('panel editing owns the keyboard through desktop updates', async ({ page }) => {
   const editor = await openEditor(page);
   await editor.pressSequentially('Draft before update.');
-  await page.evaluate(() => window.__ANNOTATIONS__.refreshWorkspace());
+  await page.evaluate(() => window.__ANNOTATIONS__.refreshDesktop());
   await expect(editor).toBeFocused();
   await page.keyboard.type(' Still editing.');
   await expect(editor).toHaveValue('Draft before update. Still editing.');
@@ -31,17 +31,17 @@ test('message delivery while editing preserves keyboard ownership', async ({ pag
   await expect(editor).toHaveValue('Unsaved thought continued');
 });
 
-test('another workspace can take focus while an annotation draft is open', async ({ page }) => {
+test('another desktop can take focus while an annotation draft is open', async ({ page }) => {
   const editor = await openEditor(page);
   await editor.fill('Keep this draft');
-  await page.evaluate(() => window.__ANNOTATIONS__.switchWorkspace());
-  await expect(page.getByTestId('workspace-second').getByRole('textbox', { name: 'Terminal input' })).toBeFocused();
+  await page.evaluate(() => window.__ANNOTATIONS__.switchDesktop());
+  await expect(page.getByTestId('desktop-second').getByRole('textbox', { name: 'Terminal input' })).toBeFocused();
 });
 
 test('pointer focus moves between terminal and editor without losing text', async ({ page }) => {
   const editor = await openEditor(page);
   await editor.fill('Keep this thought');
-  const terminal = page.getByTestId('workspace-first').getByRole('textbox', { name: 'Terminal input' });
+  const terminal = page.getByTestId('desktop-first').getByRole('textbox', { name: 'Terminal input' });
   await terminal.click({ position: { x: 20, y: 20 } });
   await expect(terminal).toBeFocused();
   await expect(editor).toHaveValue('Keep this thought');
@@ -53,7 +53,7 @@ test('pointer focus moves between terminal and editor without losing text', asyn
 
 async function expectPopupWithinPane(page: Page) {
   const popup = await page.getByRole('dialog', { name: 'Edit terminal annotation' }).boundingBox();
-  const pane = await page.getByTestId('workspace-first').getByRole('textbox', { name: 'Terminal input' }).boundingBox();
+  const pane = await page.getByTestId('desktop-first').getByRole('textbox', { name: 'Terminal input' }).boundingBox();
   expect(popup).not.toBeNull();
   expect(pane).not.toBeNull();
   expect(popup!.x).toBeGreaterThanOrEqual(pane!.x);
@@ -119,7 +119,7 @@ test('note editing preserves the marks', async ({ page }) => {
   await page.getByRole('button', { name: 'Cancel', exact: true }).click();
   const note = page.getByTestId('annotation-note');
   await note.fill('Consider the whole response.');
-  await page.evaluate(() => window.__ANNOTATIONS__.refreshWorkspace());
+  await page.evaluate(() => window.__ANNOTATIONS__.refreshDesktop());
   await expect(note).toBeFocused();
   await expect(note).toHaveValue('Consider the whole response.');
   await expect(page.locator('.anno-card')).toHaveCount(1);
@@ -141,6 +141,6 @@ test('native pointer receipt reports delivery to the wrong target', async ({ pag
   await openEditor(page);
   await page.evaluate(() => window.__ANNOTATIONS__.armPointer('.anno-popup-quote'));
   const receipt = page.evaluate(() => window.__ANNOTATIONS__.waitPointer());
-  await page.getByTestId('workspace-first').getByRole('textbox', { name: 'Terminal input' }).click({ position: { x: 20, y: 20 } });
+  await page.getByTestId('desktop-first').getByRole('textbox', { name: 'Terminal input' }).click({ position: { x: 20, y: 20 } });
   expect(await receipt).toMatchObject({ matches: false, target: 'canvas.' });
 });

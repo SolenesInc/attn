@@ -16,7 +16,7 @@ import { cleanupSessionViaAppClose } from './scenarioCleanup.mjs';
 import {
   captureSessionArtifacts,
   scrollPaneToTop,
-  waitForFirstWorkspacePane,
+  waitForFirstDesktopPane,
   waitForNewShellPane,
   waitForPaneAttached,
   waitForPaneState,
@@ -74,11 +74,11 @@ async function main() {
     });
 
     shellPaneId = await runner.step('open_shell_pane', async () => {
-      const initialPane = await waitForFirstWorkspacePane(client, sessionId, 'initial pane for scrollback split', 20_000);
+      const initialPane = await waitForFirstDesktopPane(client, sessionId, 'initial pane for scrollback split', 20_000);
       // Capture the baseline after the initial pane exists, or the split helper can
       // mistake the initial pane for the new shell pane.
-      const workspace = await client.request('get_workspace', { sessionId });
-      const existingPaneIds = new Set((workspace.panes || []).map((pane) => pane.paneId));
+      const desktop = await client.request('get_desktop', { sessionId });
+      const existingPaneIds = new Set((desktop.panes || []).map((pane) => pane.paneId));
       existingPaneIds.add(initialPane.paneId);
       await client.request('split_pane', {
         sessionId,

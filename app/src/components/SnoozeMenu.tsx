@@ -1,6 +1,7 @@
 import { useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { useEscapeStack } from '../hooks/useEscapeStack';
 import { SNOOZE_CHOICES, snoozeInstant, type SnoozeChoiceId } from '../utils/snoozeDurations';
+import { clampIntoViewport } from '../utils/viewportClamp';
 import './SnoozeMenu.css';
 
 interface SnoozeMenuProps {
@@ -9,8 +10,6 @@ interface SnoozeMenuProps {
   onSnooze: (until: Date) => void;
   onClose: () => void;
 }
-
-const VIEWPORT_MARGIN = 8;
 
 /** The durations a turn can be deferred by. `now` is frozen when the menu opens, so the
  * instant shown beside a row is the instant that gets sent. */
@@ -26,17 +25,7 @@ export function SnoozeMenu({ sessionLabel, anchor, onSnooze, onClose }: SnoozeMe
   useLayoutEffect(() => {
     const menu = menuRef.current;
     if (!menu) return;
-    const rect = menu.getBoundingClientRect();
-    setPosition({
-      top: Math.max(
-        VIEWPORT_MARGIN,
-        Math.min(anchor.top, window.innerHeight - rect.height - VIEWPORT_MARGIN),
-      ),
-      left: Math.max(
-        VIEWPORT_MARGIN,
-        Math.min(anchor.left, window.innerWidth - rect.width - VIEWPORT_MARGIN),
-      ),
-    });
+    setPosition(clampIntoViewport(anchor, menu.getBoundingClientRect()));
   }, [anchor]);
 
   useEffect(() => {

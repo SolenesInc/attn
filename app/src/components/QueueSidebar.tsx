@@ -1,0 +1,493 @@
+import { useRef, type KeyboardEvent as ReactKeyboardEvent } from 'react';
+import { TURN_AGE_TICK_MS, useNow } from '../hooks/useNow';
+import { formatShortcut } from '../shortcuts/formatShortcut';
+import { crewRows, formatTurnAge, type QueueRow } from '../utils/queueBands';
+import { slotShortcut } from '../utils/desktops';
+import { formatWakeTime } from '../utils/snoozeDurations';
+import { UNPLACED_GROUP_ID } from '../utils/desktopViewModels';
+import { CriticalNotificationStrip } from './CriticalNotificationStrip';
+import { CrewRowView, QueueRowView, type QueueBandSessionView, type RowWhere } from './QueueRows';
+import './QueueSidebar.css';
+import { SidebarCrewManage, SidebarPopovers } from './SidebarChrome';
+import { useSidebarContext } from './SidebarContext';
+import { useDesktopChipDrop } from './useDesktopChipDrop';
+import { CollapseIcon, HomeIcon, PlusIcon } from './SidebarIcons';
+import { SidebarAutomationGroups } from './SidebarDesktops';
+
+const LEAD_TURNS = 3;
+const WALK_ROW_SELECTOR = '.queue-row-select, .sidebar-row-select';
+
+export function QueueSidebar() {
+  const {
+    harnessLogosEnabled,
+    criticalNotifications,
+    onOpenNotifications,
+    agentListOpen,
+    onToggleAgentList,
+    agentFilter,
+    setAgentFilter,
+    selectedId,
+    onSelectSession,
+  } = useSidebarContext();
+  const rootRef = useRef<HTMLDivElement>(null);
+
+  const onKeyDown = (event: ReactKeyboardEvent<HTMLDivElement>) => {
+    if (event.metaKey || event.ctrlKey || event.altKey) return;
+    const root = rootRef.current;
+    if (!root) return;
+    const target = event.target as HTMLElement;
+    if (!target.closest('.queue-sidebar-body')) return;
+    const inFilter = target.matches('[data-testid="queue-agent-filter"]');
+    if (event.key === 'ArrowDown' || event.key === 'ArrowUp') {
+      const rows = Array.from(root.querySelectorAll<HTMLElement>(WALK_ROW_SELECTOR));
+      if (rows.length === 0) return;
+      event.preventDefault();
+      const at = rows.indexOf(target);
+      const step = event.key === 'ArrowDown' ? 1 : -1;
+      const next = at === -1 ? (step === 1 ? 0 : rows.length - 1) : (at + step + rows.length) % rows.length;
+      rows[next].focus();
+      return;
+    }
+    if (event.key === 'Escape') {
+      event.preventDefault();
+      if (agentFilter) {
+        setAgentFilter('');
+      } else if (agentListOpen) {
+        onToggleAgentList?.();
+      } else if (selectedId) {
+        onSelectSession(selectedId);
+      } else {
+        target.blur();
+      }
+      return;
+    }
+    if (agentListOpen && !inFilter && /^[\p{L}\p{N}]$/u.test(event.key)) {
+      event.preventDefault();
+      setAgentFilter(agentFilter + event.key);
+      root.querySelector<HTMLInputElement>('[data-testid="queue-agent-filter"]')?.focus();
+    }
+  };
+
+  return (
+    <div
+      ref={rootRef}
+      className={`sidebar queue-sidebar ${harnessLogosEnabled ? '' : 'sidebar--hide-harness-logos'}`.trim()}
+      data-testid="queue-sidebar"
+      onKeyDown={onKeyDown}
+    >
+      <QueueSidebarHeader />
+      {onOpenNotifications && (
+        <CriticalNotificationStrip
+          count={criticalNotifications?.count ?? 0}
+          title={criticalNotifications?.title ?? ''}
+          onOpen={onOpenNotifications}
+        />
+      )}
+      <div className="queue-sidebar-body" data-testid="sidebar-queue">
+        <HomeRow />
+        <CrewBlock />
+        <WaitingCard />
+        <SidebarAutomationGroups />
+      </div>
+      <DesktopStrip />
+      <SidebarPopovers />
+    </div>
+  );
+}
+
+function QueueSidebarHeader() {
+  const { instance, queue, profileName, onSwitchProfile, onNewSession, onOpenCommands, commandsBadge, onToggleCollapse } =
+    useSidebarContext();
+  const waiting = queue?.turns.length ?? 0;
+  return (
+    <div className="queue-sidebar-header">
+      {instance && (
+        <div className="sidebar-instance-marker" data-testid="sidebar-instance-marker">
+          instance <strong>{instance}</strong>
+        </div>
+      )}
+      <button
+        type="button"
+        className="queue-profile-pill"
+        data-testid="queue-profile-pill"
+        title={`Switch profile (${formatShortcut('profile.switch')})`}
+        onClick={onSwitchProfile}
+        disabled={!onSwitchProfile}
+      >
+        <strong>{profileName ?? 'Profile'}</strong>
+        {waiting > 0 && <span className="queue-profile-pill-waiting">{waiting}</span>}
+        <span className="queue-profile-pill-chevron" aria-hidden="true">▾</span>
+      </button>
+      <div className="queue-sidebar-tools">
+        <button
+          type="button"
+          className="queue-sidebar-tool queue-sidebar-tool--primary"
+          data-testid="queue-new-agent"
+          title={`New agent (${formatShortcut('session.new')})`}
+          aria-label="New agent"
+          onClick={onNewSession}
+        >
+          <PlusIcon />
+        </button>
+        <button
+          type="button"
+          className="queue-sidebar-tool"
+          data-testid="queue-commands"
+          title={`Commands (${formatShortcut('ui.commandPalette')})`}
+          aria-label="Commands"
+          onClick={onOpenCommands}
+          disabled={!onOpenCommands}
+        >
+          ⋯
+          {commandsBadge ? <span className="queue-sidebar-tool-badge">{commandsBadge > 9 ? '9+' : commandsBadge}</span> : null}
+        </button>
+        <button
+          type="button"
+          className="queue-sidebar-tool"
+          title={`Collapse sidebar (${formatShortcut('session.toggleSidebar')})`}
+          aria-label="Collapse sidebar"
+          onClick={onToggleCollapse}
+        >
+          <CollapseIcon />
+        </button>
+      </div>
+    </div>
+  );
+}
+
+function HomeRow() {
+  const { onGoToDashboard, homeActive } = useSidebarContext();
+  return (
+    <button
+      type="button"
+      className={`sidebar-home-row ${homeActive ? 'selected' : ''}`}
+      data-testid="sidebar-home"
+      onClick={onGoToDashboard}
+      aria-current={homeActive ? 'page' : undefined}
+    >
+      <HomeIcon />
+      <span className="sidebar-home-label">Home</span>
+      <span className="sidebar-home-shortcut">{formatShortcut('session.goToDashboard')}</span>
+    </button>
+  );
+}
+
+function useRowWhere(): (row: QueueRow<QueueBandSessionView>) => RowWhere {
+  const { visualIndexOfDesktop } = useSidebarContext();
+  return (row) => {
+    if (row.desktopId === UNPLACED_GROUP_ID) {
+      return { slot: '—', title: 'Not on a desktop; opening places it beside the active pane' };
+    }
+    const index = visualIndexOfDesktop(row.desktopId);
+    return index >= 0
+      ? { slot: String(index + 1), title: row.desktopTitle }
+      : { slot: '·', title: `${row.desktopTitle} · no shortcut` };
+  };
+}
+
+function CrewBlock() {
+  const {
+    queue,
+    crew,
+    selectedId,
+    onSelectSession,
+    onWakeCrewMember,
+    onSleepCrewMember,
+    openCrewMemberActions,
+    openSessionActions,
+    delegates,
+  } = useSidebarContext();
+  const where = useRowWhere();
+  if (!queue) return null;
+  const members = crewRows(crew, queue);
+  if (!queue.chief && members.length === 0) return null;
+  const chief = queue.chief;
+  return (
+    <div className="queue-crew-block" data-testid="queue-crew-block">
+      {chief && (
+        <QueueRowView
+          row={chief}
+          selected={selectedId === chief.session.id}
+          where={where(chief)}
+          onSelect={() => onSelectSession(chief.session.id)}
+          onOpenActions={(event) => openSessionActions(chief.session, event)}
+          delegates={delegates.get(chief.session.id) ?? []}
+          testIdPrefix="queue-chief"
+        />
+      )}
+      {members.map(({ member, row }) => (
+        <CrewRowView
+          key={member}
+          member={member}
+          row={row}
+          selected={row ? selectedId === row.session.id : false}
+          onSelect={row ? () => onSelectSession(row.session.id) : undefined}
+          onWake={onWakeCrewMember && (() => onWakeCrewMember(member))}
+          onSleep={row && onSleepCrewMember ? () => onSleepCrewMember(member) : undefined}
+          onOpenActions={row ? (event) => openSessionActions(row.session, event) : undefined}
+          delegates={row ? (delegates.get(row.session.id) ?? []) : []}
+          onOpenMemberActions={(event) => openCrewMemberActions(member, event)}
+        />
+      ))}
+      <SidebarCrewManage />
+    </div>
+  );
+}
+
+function WaitingCard() {
+  const {
+    queue,
+    crew,
+    selectedId,
+    onSelectSession,
+    onSettleTurn,
+    onOpenSnooze,
+    onWakeTurn,
+    onJumpToWaiting,
+    openSessionActions,
+    onScreenSessionIds,
+    delegates,
+    agentListOpen,
+    onToggleAgentList,
+    agentFilter,
+    setAgentFilter,
+  } = useSidebarContext();
+  const now = useNow(TURN_AGE_TICK_MS);
+  const where = useRowWhere();
+  if (!queue) return null;
+
+  const turns = queue.turns;
+  const lead = turns.slice(0, LEAD_TURNS);
+  const hidden = turns.length - lead.length;
+  const matches = (row: QueueRow<QueueBandSessionView>) =>
+    !agentFilter || row.session.label.toLowerCase().includes(agentFilter.toLowerCase());
+  const counts = agentCounts(queue, crewRows(crew, queue));
+
+  const turnRow = (row: QueueRow<QueueBandSessionView>) => (
+    <QueueRowView
+      key={row.session.id}
+      row={row}
+      selected={selectedId === row.session.id}
+      where={where(row)}
+      age={formatTurnAge(row.session.turnOpenedAt, now)}
+      onSelect={() => onSelectSession(row.session.id)}
+      onSettle={onSettleTurn && (() => onSettleTurn(row.session.id))}
+      onSnooze={onOpenSnooze && ((event) => onOpenSnooze(row.session, event))}
+      onOpenActions={(event) => openSessionActions(row.session, event)}
+      showSettling={!onScreenSessionIds?.has(row.session.id)}
+      delegates={delegates.get(row.session.id) ?? []}
+      testIdPrefix="queue-turn"
+    />
+  );
+  const working = queue.settled.filter(matches);
+  const snoozed = queue.snoozed.filter(matches);
+
+  return (
+    <div className="queue-waiting-card" data-testid="queue-waiting-card" data-waiting={turns.length}>
+      <button
+        type="button"
+        className="queue-waiting-head"
+        data-testid="queue-waiting-head"
+        title={`Open the oldest turn (${formatShortcut('session.jumpToWaiting')})`}
+        onClick={onJumpToWaiting}
+        disabled={turns.length === 0}
+      >
+        {turns.length > 0 ? (
+          <span className="queue-waiting-count">
+            <span className="queue-waiting-number">{turns.length}</span> waiting
+          </span>
+        ) : (
+          <span className="queue-waiting-count is-zero" data-testid="queue-empty">
+            Nothing owed
+          </span>
+        )}
+        <kbd>{formatShortcut('session.jumpToWaiting')}</kbd>
+      </button>
+      {lead.length > 0 && <div className="queue-waiting-lead">{lead.map(turnRow)}</div>}
+      {hidden > 0 && !agentListOpen && (
+        <div className="queue-waiting-more" data-testid="queue-waiting-more">
+          +{hidden} more waiting
+        </div>
+      )}
+      <button
+        type="button"
+        className="queue-agents-toggle"
+        data-testid="queue-agents-toggle"
+        aria-expanded={Boolean(agentListOpen)}
+        title={`Show every agent in this profile (${formatShortcut('sidebar.agentList')})`}
+        onClick={onToggleAgentList}
+      >
+        <span className={`queue-agents-chevron ${agentListOpen ? 'is-open' : ''}`}>▸</span>
+        All agents <b>{counts.all}</b>
+        <kbd>{formatShortcut('sidebar.agentList')}</kbd>
+      </button>
+      <div className="queue-agents-counts" data-testid="queue-agents-counts">
+        <span>
+          <b>{counts.working}</b> working
+        </span>
+        {counts.snoozed > 0 && (
+          <span>
+            <b>{counts.snoozed}</b> snoozed
+          </span>
+        )}
+        {counts.unplaced > 0 && (
+          <span>
+            <b>{counts.unplaced}</b> unplaced
+          </span>
+        )}
+      </div>
+      {agentListOpen && (
+        <div className="queue-agent-list" data-testid="queue-agent-list">
+          <label className="queue-agent-filter">
+            <span aria-hidden="true">⌕</span>
+            <input
+              data-testid="queue-agent-filter"
+              placeholder="filter agents"
+              aria-label="Filter agents"
+              value={agentFilter}
+              onChange={(event) => setAgentFilter(event.target.value)}
+            />
+          </label>
+          {turns.slice(LEAD_TURNS).filter(matches).map(turnRow)}
+          <div className="queue-band-header">
+            <span>Working</span>
+            <span className="queue-band-count">{working.length}</span>
+          </div>
+          {working.length === 0 ? (
+            <div className="queue-band-empty">Nobody else.</div>
+          ) : (
+            working.map((row) => (
+              <QueueRowView
+                key={row.session.id}
+                row={row}
+                selected={selectedId === row.session.id}
+                where={where(row)}
+                onSelect={() => onSelectSession(row.session.id)}
+                onSnooze={onOpenSnooze && ((event) => onOpenSnooze(row.session, event))}
+                onOpenActions={(event) => openSessionActions(row.session, event)}
+                delegates={delegates.get(row.session.id) ?? []}
+                testIdPrefix="queue-settled"
+              />
+            ))
+          )}
+          {snoozed.length > 0 && (
+            <>
+              <div className="queue-band-header" data-testid="queue-snoozed-header">
+                <span>Snoozed</span>
+                <span className="queue-band-count">{snoozed.length}</span>
+              </div>
+              {snoozed.map((row) => (
+                <QueueRowView
+                  key={row.session.id}
+                  row={row}
+                  selected={selectedId === row.session.id}
+                  where={where(row)}
+                  wake={formatWakeTime(row.session.turnSnoozedUntil, now)}
+                  onSelect={() => onSelectSession(row.session.id)}
+                  onWake={onWakeTurn && (() => onWakeTurn(row.session.id))}
+                  delegates={delegates.get(row.session.id) ?? []}
+                  testIdPrefix="queue-snoozed"
+                />
+              ))}
+            </>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
+function agentCounts(
+  queue: NonNullable<ReturnType<typeof useSidebarContext>['queue']>,
+  crewMembers: ReturnType<typeof crewRows>,
+) {
+  const agentRows = new Map<string, { desktopId: string }>();
+  for (const row of [queue.chief, ...queue.crew, ...queue.turns, ...queue.settled, ...queue.snoozed]) {
+    if (row) agentRows.set(row.session.id, row);
+  }
+  const asleep = crewMembers.filter((member) => !member.row).length;
+  const unplaced = [...agentRows.values()].filter((row) => row.desktopId === UNPLACED_GROUP_ID).length;
+  return {
+    all: agentRows.size + asleep,
+    working: queue.settled.length,
+    snoozed: queue.snoozed.length,
+    unplaced,
+  };
+}
+
+function DesktopStrip() {
+  const {
+    desktops,
+    queue,
+    selectedDesktopId,
+    visualIndexOfDesktop,
+    onSelectDesktop,
+    onOpenOverview,
+  } = useSidebarContext();
+  const chipDrop = useDesktopChipDrop();
+  const placed = desktops.filter((desktop) => desktop.id !== UNPLACED_GROUP_ID);
+  const slotted = placed
+    .filter((desktop) => visualIndexOfDesktop(desktop.id) >= 0)
+    .sort((a, b) => visualIndexOfDesktop(a.id) - visualIndexOfDesktop(b.id));
+  const extras = placed.filter((desktop) => visualIndexOfDesktop(desktop.id) < 0);
+  const waitingOn = new Set((queue?.turns ?? []).map((row) => row.desktopId));
+  const current = placed.find((desktop) => desktop.id === selectedDesktopId);
+  const currentIsExtra = Boolean(current && visualIndexOfDesktop(current.id) < 0);
+
+  return (
+    <div className="queue-desktop-strip" data-testid="queue-desktop-strip">
+      <div className="queue-desktop-chips">
+        {slotted.map((desktop) => {
+          const slot = visualIndexOfDesktop(desktop.id) + 1;
+          const waiting = waitingOn.has(desktop.id);
+          const { dropClass, dropHandlers } = chipDrop(desktop);
+          return (
+            <button
+              key={desktop.id}
+              type="button"
+              className={`queue-desktop-chip${desktop.sessions.length || desktop.children.length ? ' has-panes' : ''}${desktop.id === selectedDesktopId ? ' is-current' : ''}${dropClass}`}
+              data-testid={`queue-desktop-chip-${slot}`}
+              data-desktop-id={desktop.id}
+              data-waiting={waiting || undefined}
+              title={`${desktop.title} (${slotShortcut(slot)})`}
+              onClick={() => onSelectDesktop(desktop.id)}
+              {...dropHandlers}
+            >
+              {slot}
+              {waiting && <span className="queue-desktop-chip-waiting" aria-label="has turns waiting" />}
+            </button>
+          );
+        })}
+        {extras.length > 0 && (
+          <button
+            type="button"
+            className={`queue-desktop-chip is-extra${currentIsExtra ? ' is-current' : ''}`}
+            data-testid="queue-desktop-extras"
+            title={`${extras.length} more desktop${extras.length === 1 ? '' : 's'} without a shortcut (${formatShortcut('desktop.overview')})`}
+            onClick={onOpenOverview}
+          >
+            +{extras.length}
+            {extras.some((desktop) => waitingOn.has(desktop.id)) && (
+              <span className="queue-desktop-chip-waiting" aria-label="has turns waiting" />
+            )}
+          </button>
+        )}
+        <button
+          type="button"
+          className="queue-desktop-chip is-extra"
+          data-testid="queue-desktop-overview"
+          title={`Overview (${formatShortcut('desktop.overview')})`}
+          aria-label="Desktop overview"
+          onClick={onOpenOverview}
+        >
+          ⊞
+        </button>
+      </div>
+      <div className="queue-desktop-current" data-testid="queue-desktop-current">
+        <span className="queue-desktop-current-name">{current?.title ?? ''}</span>
+        {currentIsExtra && <i>no shortcut</i>}
+        <kbd>{formatShortcut('desktop.overview')}</kbd>
+      </div>
+    </div>
+  );
+}

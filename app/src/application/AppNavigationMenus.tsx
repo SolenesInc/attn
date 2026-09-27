@@ -2,11 +2,11 @@ import { openPath } from '@tauri-apps/plugin-opener';
 import { SnoozeMenu } from '../components/SnoozeMenu';
 import { MarkdownOpener } from '../components/palette/MarkdownOpener';
 import { useDaemonApi } from '../contexts/DaemonApiContext';
-import { AppActionMenu } from './AppActionMenu';
+import { AppPalette } from './AppPalette';
 import {
   useAttentionQueueContext,
-  useWorkspaceRuntimeContext,
-  useWorkspaceTilesContext,
+  useDesktopTilesContext,
+  useNavigationContext,
 } from './AppContexts';
 
 export function AppNavigationMenus() {
@@ -16,9 +16,9 @@ export function AppNavigationMenus() {
     loadOpenerRecents,
     loadOpenerIndex,
     setMarkdownOpenerOpen,
-  } = useWorkspaceTilesContext();
+  } = useDesktopTilesContext();
   const { sendBrowseDirectory, sendOpenMarkdown, sendSnoozeTurn } = useDaemonApi();
-  const { focusWorkspaceLeaf } = useWorkspaceRuntimeContext();
+  const { handleSelectDesktop } = useNavigationContext();
   const { snoozeMenu, setSnoozeMenu } = useAttentionQueueContext();
   return (
     <>
@@ -40,8 +40,8 @@ export function AppNavigationMenus() {
               return;
             }
             void sendOpenMarkdown(path, bindTo)
-              .then(({ workspaceId, tileId }) => {
-                if (workspaceId && tileId) focusWorkspaceLeaf(workspaceId, tileId);
+              .then(({ desktopId, tileId }) => {
+                if (desktopId && tileId) handleSelectDesktop(desktopId);
               })
               .catch((error) => {
                 console.error(
@@ -63,7 +63,7 @@ export function AppNavigationMenus() {
           onClose={() => setSnoozeMenu(null)}
         />
       )}
-      <AppActionMenu />
+      <AppPalette />
     </>
   );
 }

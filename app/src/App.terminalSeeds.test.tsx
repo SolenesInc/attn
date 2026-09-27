@@ -1,7 +1,7 @@
 import { act, fireEvent, screen, within } from '@testing-library/react';
 import { describe, expect, it, vi } from 'vitest';
 import { openAttachedTerminals } from './test/appFixtures';
-import { agentWorkspace, daemonSeed, daemonSession } from './test/daemonFixtures';
+import { soloDesktop, daemonSeed, daemonSession } from './test/daemonFixtures';
 
 const SEED = daemonSeed('s-7k3f9m', {
   title: 'Make seed IDs navigable',
@@ -12,7 +12,7 @@ const SEED = daemonSeed('s-7k3f9m', {
 async function openTerminalShowing(output: string) {
   const view = await openAttachedTerminals({
     sessions: [daemonSession('s1', { state: 'idle' })],
-    workspaces: [agentWorkspace('s1')],
+    desktops: [soloDesktop('s1')],
     initialState: { seeds: [SEED] },
     output: { s1: output },
   });

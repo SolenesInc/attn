@@ -34,12 +34,6 @@ func TestAReviewRequestStartsOneReviewerOnTheHeadGitHubNames(t *testing.T) {
 		t.Errorf("the run's provenance = %+v, want the validated pull request github.test/acme/shop#42 at %s", first.Automation, r.head)
 	}
 	reviewer := testworld.AwaitSession(r.app, session, func(s protocol.Session) bool { return s.Label == "shop#42 · sonnet" })
-	workspace := testworld.Await(r.app, protocol.EventWorkspaceRegistered, func(e protocol.WebSocketEvent) bool {
-		return e.Workspace != nil && e.Workspace.ID == reviewer.WorkspaceID
-	})
-	if workspace.Workspace.Title != "shop#42" {
-		t.Errorf("the reviewer's workspace is named %q, want shop#42", workspace.Workspace.Title)
-	}
 	if head := strings.TrimSpace(runGit(t, reviewer.Directory, "rev-parse", "HEAD")); head != r.head {
 		t.Errorf("the reviewer's checkout is at %s, want the requested head %s", head, r.head)
 	}

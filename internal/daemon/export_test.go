@@ -29,6 +29,9 @@ func StartWireDaemonWithTerminals(socketPath string, unix, ws net.Listener, term
 	case <-d.Started():
 		return w, nil
 	case err := <-w.stopped:
+		if d.store == nil {
+			return nil, err
+		}
 		return nil, errors.Join(err, d.store.Close())
 	}
 }

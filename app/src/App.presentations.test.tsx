@@ -1,7 +1,7 @@
 import { fireEvent, screen, within } from '@testing-library/react';
 import { invoke } from '@tauri-apps/api/core';
 import { describe, expect, it, vi } from 'vitest';
-import { agentPane, daemonSession, daemonWorkspace } from './test/daemonFixtures';
+import { agentPane, daemonSession, daemonDesktop } from './test/daemonFixtures';
 import type { EventMessage } from './test/protocol';
 import { renderApp } from './test/renderApp';
 import type { ScriptedDaemon } from './test/scriptedDaemon';
@@ -21,7 +21,7 @@ const REVIEW: Presentation = {
 };
 
 async function openSplit() {
-  const workspace = daemonWorkspace('ws', {
+  const workspace = daemonDesktop('ws', {
     root: {
       type: 'split',
       split_id: 'split-a',
@@ -30,11 +30,11 @@ async function openSplit() {
       children: [{ type: 'pane', pane_id: 'pane-s1' }, { type: 'pane', pane_id: 'pane-s2' }],
     },
     panes: [agentPane('s1', 'ws'), agentPane('s2', 'ws')],
-  }, { title: 'ws' });
+  }, { name: 'ws' });
   const view = await renderApp({
     initialState: {
-      sessions: [daemonSession('s1', { workspace_id: 'ws', state: 'idle' }), daemonSession('s2', { workspace_id: 'ws', state: 'idle' })],
-      workspaces: [workspace],
+      sessions: [daemonSession('s1', { state: 'idle' }), daemonSession('s2', { state: 'idle' })],
+      desktops: [workspace],
     },
   });
   fireEvent.click(screen.getByRole('button', { name: 'Open s1' }));

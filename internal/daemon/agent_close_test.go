@@ -12,7 +12,6 @@ import (
 
 	"nhooyr.io/websocket"
 
-	"github.com/victorarias/attn/internal/client"
 	"github.com/victorarias/attn/internal/enrollment"
 	"github.com/victorarias/attn/internal/garden"
 	"github.com/victorarias/attn/internal/hub"
@@ -39,7 +38,7 @@ func addAgentCloseSession(t *testing.T, d *Daemon, id, label string) {
 	now := string(protocol.TimestampNow())
 	d.store.Add(&protocol.Session{
 		ID: id, Label: label, Agent: protocol.SessionAgentClaude,
-		Directory: "/tmp/" + id, WorkspaceID: "ws-" + id,
+		Directory: "/tmp/" + id, ProfileID: defaultProfileID(t, d.store),
 		State: protocol.SessionStateIdle, StateSince: now, StateUpdatedAt: now, LastSeen: now,
 	})
 }
@@ -106,18 +105,17 @@ func startAgentCloseOutpost(t *testing.T, d *Daemon, sessions ...protocol.Sessio
 	})
 	waitForSocket(t, outpost.socketPath, 10*time.Second)
 
-	outpostClient := client.New(outpost.socketPath)
 	for _, session := range sessions {
-		if err := outpostClient.Register(session.ID, session.Label, session.Directory); err != nil {
+		if err := registerTestSession(outpost.socketPath, session.ID, session.Label, session.Directory); err != nil {
 			t.Fatalf("register %s on the outpost: %v", session.ID, err)
 		}
 	}
 
-	d.hubManager = hub.NewManager(d.store, nil, nil, nil, nil, nil)
-	endpoint, err := d.hubManager.AddEndpoint("gpu-box", "gpu", "")
+	endpoint, err := d.store.AddEndpoint("gpu-box", "gpu", "")
 	if err != nil {
 		t.Fatalf("AddEndpoint: %v", err)
 	}
+	d.hubManager = hub.NewManager(d.store, nil, nil, nil, nil, nil)
 	ctx, cancel := context.WithCancel(context.Background())
 	t.Cleanup(cancel)
 	conn, _, err := websocket.Dial(ctx, fmt.Sprintf("ws://127.0.0.1:%d/ws", port), nil)
@@ -182,7 +180,7 @@ func TestAgentCloseLetsTheChiefCloseASessionOnAnotherEndpoint(t *testing.T) {
 	d := newAgentCloseDaemon(t)
 	addAgentCloseSession(t, d, "chief", "Chief")
 	startAgentCloseOutpost(t, d, remoteAgentCloseSession("remote-worker", "Remote worker"))
-	if err := d.store.SetInstanceRole(instanceRoleChiefOfStaff, "chief"); err != nil {
+	if err := setTestChief(d, "chief"); err != nil {
 		t.Fatal(err)
 	}
 
@@ -224,7 +222,7 @@ func TestAgentCloseRepeatsWhyTheOwningDaemonRefused(t *testing.T) {
 	d := newAgentCloseDaemon(t)
 	addAgentCloseSession(t, d, "chief", "Chief")
 	outpost := startAgentCloseOutpost(t, d, remoteAgentCloseSession("remote-worker", "Remote worker"))
-	if err := d.store.SetInstanceRole(instanceRoleChiefOfStaff, "chief"); err != nil {
+	if err := setTestChief(d, "chief"); err != nil {
 		t.Fatal(err)
 	}
 	outpost.setRecovering(true)
@@ -248,14 +246,14 @@ func TestAgentCloseRepeatsWhyTheOwningDaemonRefused(t *testing.T) {
 func TestAgentCloseRefusesWhenTheOwningEndpointCannotTakeIt(t *testing.T) {
 	d := newAgentCloseDaemon(t)
 	addAgentCloseSession(t, d, "chief", "Chief")
-	if err := d.store.SetInstanceRole(instanceRoleChiefOfStaff, "chief"); err != nil {
+	if err := setTestChief(d, "chief"); err != nil {
 		t.Fatal(err)
 	}
-	d.hubManager = hub.NewManager(d.store, nil, nil, nil, nil, nil)
-	endpoint, err := d.hubManager.AddEndpoint("gpu-box", "gpu", "")
+	endpoint, err := d.store.AddEndpoint("gpu-box", "gpu", "")
 	if err != nil {
 		t.Fatalf("AddEndpoint: %v", err)
 	}
+	d.hubManager = hub.NewManager(d.store, nil, nil, nil, nil, nil)
 	if !d.hubManager.ReplaceRemoteSessions(endpoint.ID, []protocol.Session{
 		remoteAgentCloseSession("remote-worker", "Remote worker"),
 	}) {

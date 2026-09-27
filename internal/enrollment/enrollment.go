@@ -299,6 +299,47 @@ func Leave(dataRoot string) (Result, error) {
 	}, nil
 }
 
+type OutpostError struct {
+	DataRoot     string
+	DaemonID     string
+	HomeDaemonID string
+}
+
+func (e *OutpostError) Error() string {
+	if e.DaemonID == "" {
+		return fmt.Sprintf(
+			"refused to run a daemon here: %s has an enrollment record naming home %s but no %s file, so attn cannot tell whether this daemon is that home.\n"+
+				"Nothing was opened or changed. If this data directory is that home, restore %s with %s; otherwise move %s aside and start again to make it a new home.",
+			e.DataRoot, e.HomeDaemonID, DaemonIDFileName, DaemonIDFileName, e.HomeDaemonID, RecordFileName,
+		)
+	}
+	return fmt.Sprintf(
+		"refused to run a daemon here: %s is enrolled as an outpost, and this attn runs home daemons only.\n"+
+			"  this daemon: %s\n"+
+			"  its home:    %s\n"+
+			"Nothing was opened or changed. Run `attn enrollment leave` to make this data directory its own home again.",
+		e.DataRoot, displayID(e.DaemonID), e.HomeDaemonID,
+	)
+}
+
+func RefuseOutpost(dataRoot string) error {
+	record, err := readRecord(filepath.Join(dataRoot, RecordFileName))
+	if errors.Is(err, ErrNoRecord) {
+		return nil
+	}
+	if err != nil {
+		return fmt.Errorf("refused to run a daemon here: attn cannot tell whether %s is a home or an outpost: %w\nNothing was opened or changed. Repair %s, or move it aside and start again to make this data directory a new home", dataRoot, err, RecordFileName)
+	}
+	daemonID, err := ReadDaemonID(dataRoot)
+	if err != nil && !errors.Is(err, ErrNoDaemonID) {
+		return fmt.Errorf("refused to run a daemon here: %w", err)
+	}
+	if daemonID != "" && daemonID == record.HomeDaemonID {
+		return nil
+	}
+	return &OutpostError{DataRoot: dataRoot, DaemonID: daemonID, HomeDaemonID: record.HomeDaemonID}
+}
+
 func ValidDaemonID(id string) bool {
 	if !strings.HasPrefix(id, "d-") {
 		return false

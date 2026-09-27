@@ -9,15 +9,8 @@ import { gesture } from './test/renderApp';
 
 const DOC = '/tmp/doc.md';
 
-async function openMarkdown(content: string, { tiles = ['tile-a'], endpointId }: { tiles?: string[]; endpointId?: string } = {}) {
-  const remote = endpointId ? { endpoint_id: endpointId } : {};
-  const view = await openMarkdownTiles(content, {
-    path: DOC,
-    tileIds: tiles,
-    workspace: remote,
-    session: remote,
-    initialState: endpointId ? { endpoints: [{ id: endpointId, name: 'gpu-box', ssh_target: 'user@gpu-box', status: 'connected', enabled: true }] } : {},
-  });
+async function openMarkdown(content: string, { tiles = ['tile-a'] }: { tiles?: string[] } = {}) {
+  const view = await openMarkdownTiles(content, { path: DOC, tileIds: tiles });
   return { ...view, reader: within(view.tile()) };
 }
 
@@ -135,7 +128,7 @@ describe('App markdown rendering', () => {
 
     fireEvent.click(within(tile('tile-b')).getByRole('link', { name: 'Jump' }));
 
-    expect(scrolls.mock.contexts).toEqual([tile('tile-b').querySelector('.workspace-dock-tile-body')]);
+    expect(scrolls.mock.contexts).toEqual([tile('tile-b').querySelector('.desktop-dock-tile-body')]);
     expect(scrolls).toHaveBeenCalledWith(expect.objectContaining({ behavior: 'smooth' }));
   });
 
@@ -159,13 +152,6 @@ describe('App markdown rendering', () => {
     fireEvent.click(image);
     fireEvent.click(lightbox()!);
     expect(lightbox()).toBeNull();
-  });
-
-  it('blocks a relative image in a remote workspace’s document', async () => {
-    const { reader } = await openMarkdown('![diagram](docs/pic.png)\n', { endpointId: 'ep-remote' });
-
-    expect(reader.queryByRole('img')).toBeNull();
-    expect(reader.getByText('[blocked image: diagram]')).toBeInTheDocument();
   });
 
   it('keeps what the user opened when the daemon re-sends the same content, and re-renders changed content', async () => {

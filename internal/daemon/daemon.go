@@ -27,7 +27,6 @@ import (
 	"github.com/victorarias/attn/internal/bus"
 	"github.com/victorarias/attn/internal/classifier"
 	"github.com/victorarias/attn/internal/config"
-	"github.com/victorarias/attn/internal/crew"
 	"github.com/victorarias/attn/internal/diag"
 	"github.com/victorarias/attn/internal/enrollment"
 	"github.com/victorarias/attn/internal/fsdoc"
@@ -37,6 +36,7 @@ import (
 	"github.com/victorarias/attn/internal/headless"
 	"github.com/victorarias/attn/internal/hub"
 	"github.com/victorarias/attn/internal/jobs"
+	"github.com/victorarias/attn/internal/layouttree"
 	"github.com/victorarias/attn/internal/logging"
 	"github.com/victorarias/attn/internal/notebook"
 	"github.com/victorarias/attn/internal/pathutil"
@@ -47,7 +47,6 @@ import (
 	"github.com/victorarias/attn/internal/statetrace"
 	"github.com/victorarias/attn/internal/store"
 	"github.com/victorarias/attn/internal/transcript"
-	"github.com/victorarias/attn/internal/workspacelayout"
 )
 
 type workerReconcileReport struct {
@@ -85,7 +84,6 @@ const (
 	deferredRecoveryRPCTimeout    = 5 * time.Second
 	workerStartupProbeTimeout     = 20 * time.Second
 
-	warnPersistenceDegraded       = "persistence_degraded"
 	warnWorkerRecoveryPartial     = "worker_recovery_partial"
 	warnStaleSessionsPruned       = "stale_sessions_pruned"
 	warnStaleSessionMissingWorker = "stale_session_missing_worker"
@@ -140,7 +138,6 @@ type Daemon struct {
 	reopenGitMu                       sync.Mutex
 	reopenBranches                    *sharedCalls[reopenBranchKey, branchInspection]
 	reopenInspect                     func(context.Context, *git.Client, string, string) (branchInspection, error)
-	workspaceOccupancyMu              sync.Mutex
 	gitReaderMu                       sync.Mutex
 	gitStatus                         *gitStatusReader
 	fileDiff                          *fileDiffReader
@@ -289,18 +286,14 @@ type Daemon struct {
 	terminalThemeMu sync.Mutex
 	terminalTheme   pty.TerminalTheme
 
-	workspaces *workspaceRegistry
-
-	selectedSessionMu   sync.RWMutex
-	selectedSessionID   string
-	selectedWorkspaceID string
+	currentAgentMu        sync.RWMutex
+	currentAgentSessionID string
 
 	openTileMu sync.Mutex
 
 	lastUserActivityAtNano atomic.Int64
 
-	markdownSeenMu sync.Mutex
-	markdownSeen   map[string]tileContentSig
+	desktopTiles desktopTileDelivery
 
 	browserControlMu sync.Mutex
 	browserControl   map[string]browserControlPending
@@ -540,22 +533,6 @@ func New(socketPath string) *Daemon {
 		logger.Infof(format, args...)
 	})
 
-	dbPath := config.DBPath()
-	sessionStore, err := store.NewWithDB(dbPath)
-	var startupWarnings []protocol.DaemonWarning
-	if err != nil {
-		logger.Infof("Failed to open DB at %s: %v (using in-memory)", dbPath, err)
-		sessionStore = store.New()
-		startupWarnings = append(startupWarnings, protocol.DaemonWarning{
-			Code: warnPersistenceDegraded,
-			Message: fmt.Sprintf(
-				"Persistence degraded: unable to open durable state at %s. Running in-memory only; session state will not survive daemon restarts. See daemon log in %s for details.",
-				dbPath,
-				config.LogPath(),
-			),
-		})
-	}
-
 	dataRoot := filepath.Dir(socketPath)
 	pidPath := filepath.Join(dataRoot, "attn.pid")
 	manager := pty.NewManager(logger.Infof)
@@ -564,15 +541,14 @@ func New(socketPath string) *Daemon {
 		socketPath:          socketPath,
 		pidPath:             pidPath,
 		dataRoot:            dataRoot,
-		store:               sessionStore,
 		wsHub:               newWSHub(),
 		presentSince:        time.Now(),
 		done:                make(chan struct{}),
+		desktopTiles:        newDesktopTileDelivery(),
 		logger:              logger,
 		debugLogging:        logger != nil && logger.DebugEnabled(),
 		ghRegistry:          github.NewClientRegistry(),
 		hubManager:          nil,
-		warnings:            startupWarnings,
 		workflowDirty:       make(map[string]bool),
 		workflowEngineConn:  make(map[string]workflowEngineSink),
 		ptyBackend:          ptybackend.NewEmbedded(manager),
@@ -588,13 +564,11 @@ func New(socketPath string) *Daemon {
 		pluginHealthEnabled: true,
 		pluginDir:           pluginDirForSocket(socketPath),
 		bundledPluginDir:    bundledPluginDirForExecutable(),
-		workspaces:          newWorkspaceRegistry(),
 		spawnLocks:          make(map[string]*spawnLock),
 	}
 	d.wireGitExecution(productionGitExecutorConfig)
 	d.delegationWaitsForFirstTurn = true
 	d.ticketReconcileExec = d.execTicketReconcileClassifier
-	d.ensureEventBus()
 	d.sessionTitleExec = d.execSessionTitle
 	return d
 }
@@ -611,6 +585,7 @@ func NewForTesting(socketPath string) *Daemon {
 		wsHub:               newWSHub(),
 		presentSince:        time.Now(),
 		done:                make(chan struct{}),
+		desktopTiles:        newDesktopTileDelivery(),
 		logger:              nil,
 		ghRegistry:          github.NewClientRegistry(),
 		hubManager:          nil,
@@ -626,7 +601,6 @@ func NewForTesting(socketPath string) *Daemon {
 		plugins:             newPluginRegistry(),
 		pluginDir:           pluginDirForSocket(socketPath),
 		bundledPluginDir:    bundledPluginDirForExecutable(),
-		workspaces:          newWorkspaceRegistry(),
 		workflowDirty:       make(map[string]bool),
 		workflowEngineConn:  make(map[string]workflowEngineSink),
 		spawnLocks:          make(map[string]*spawnLock),
@@ -635,6 +609,14 @@ func NewForTesting(socketPath string) *Daemon {
 	d.wireGitExecution(productionGitExecutorConfig)
 	d.ensureEventBus()
 	return d
+}
+
+func (d *Daemon) removeLegacyStateFile() {
+	legacyPath := config.StatePath()
+	if _, err := os.Stat(legacyPath); err == nil {
+		os.Remove(legacyPath)
+		d.logf("Removed legacy state file: %s", legacyPath)
+	}
 }
 
 func (d *Daemon) Start() error {
@@ -665,13 +647,13 @@ func (d *Daemon) Start() error {
 	if d.tailscale == nil {
 		d.tailscale = newTailscaleRuntime()
 	}
-	if d.workspaces == nil {
-		d.workspaces = newWorkspaceRegistry()
-	}
 	if d.plugins == nil {
 		d.plugins = newPluginRegistry()
 	}
 	startSucceeded := false
+	if err := enrollment.RefuseOutpost(d.dataRoot); err != nil {
+		return err
+	}
 	if err := d.acquirePIDLock(); err != nil {
 		return fmt.Errorf("acquire PID lock: %w", err)
 	}
@@ -681,19 +663,22 @@ func (d *Daemon) Start() error {
 		}
 		d.Stop()
 	}()
-	d.ensurePluginSupervisor()
-	d.applyHeadlessContextWindowCap()
-	d.applyHeadlessTasksMode()
-	if err := d.startEventBus(); err != nil {
-		return fmt.Errorf("start event bus: %w", err)
-	}
-	d.loadWorkspacesFromStore()
 	if d.daemonInstanceID == "" {
 		instanceID, err := enrollment.EnsureDaemonID(d.dataRoot)
 		if err != nil {
 			return fmt.Errorf("ensure daemon instance id: %w", err)
 		}
 		d.daemonInstanceID = instanceID
+	}
+	if err := d.openStore(); err != nil {
+		return err
+	}
+	d.removeLegacyStateFile()
+	d.ensurePluginSupervisor()
+	d.applyHeadlessContextWindowCap()
+	d.applyHeadlessTasksMode()
+	if err := d.startEventBus(); err != nil {
+		return fmt.Errorf("start event bus: %w", err)
 	}
 	if d.clientToken == "" {
 		token, err := config.EnsureClientToken(d.dataRoot)
@@ -713,6 +698,7 @@ func (d *Daemon) Start() error {
 	d.backlogAtStart = d.snapshotBacklogAtStart()
 	d.ensureCrewCollections()
 	d.importCrewHomes()
+	d.refreshCurrentAgent()
 	if err := d.migrateCrewTicketIdentities(); err != nil {
 		return fmt.Errorf("migrate crew ticket identities: %w", err)
 	}
@@ -1074,8 +1060,7 @@ func (d *Daemon) performStartupPTYRecovery(previousRunSessions map[string]struct
 	if _, ok := d.ptyBackend.(ptybackend.RecoverableRuntime); ok {
 		d.reconcileStartupWorkerSessions(recoveryReport, recoverErr, previousRunSessions, recoveryStartedAt)
 		d.restoreTranscriptWatchers()
-		d.reconcileWorkspaceLayoutsWithPTYBackend(context.Background())
-		d.reseedWorkspaceStatuses()
+		d.pruneRuntimesWithoutSession(context.Background())
 		return
 	}
 
@@ -1087,9 +1072,22 @@ func (d *Daemon) performStartupPTYRecovery(previousRunSessions map[string]struct
 			fmt.Sprintf("Removed %d stale sessions from a previous daemon run because no live PTY was found.", removedSessions),
 		)
 	}
-	d.reconcileWorkspaceLayoutsWithPTYBackend(context.Background())
+	d.pruneRuntimesWithoutSession(context.Background())
 	d.restoreTranscriptWatchers()
-	d.reseedWorkspaceStatuses()
+}
+
+func (d *Daemon) pruneRuntimesWithoutSession(ctx context.Context) {
+	if d.store == nil {
+		return
+	}
+	for _, runtimeID := range d.liveRuntimeSessionIDs(ctx) {
+		if d.store.Get(runtimeID) != nil {
+			continue
+		}
+		if err := d.removePTYSession(runtimeID); err != nil {
+			d.logf("pruning runtime %s without a session failed: %v", runtimeID, err)
+		}
+	}
 }
 
 func (d *Daemon) rebuildTicketDeliverySchedules() {
@@ -1285,11 +1283,18 @@ func (d *Daemon) reconcileSessionsWithWorkerBackendState(ctx context.Context, al
 				state = protocol.SessionStateLaunching
 			}
 
+			profile, err := d.store.MostRecentlyUsedProfile()
+			if err != nil {
+				d.logf("worker reconciliation left runtime %s without a session row: no profile to adopt it into: %v", sessionID, err)
+				report.MissingMetadata++
+				continue
+			}
 			recoveredSession := &protocol.Session{
 				ID:             sessionID,
 				Label:          label,
 				Agent:          normalizeStoredSessionAgent(info.Agent, protocol.SessionAgentCodex),
 				Directory:      directory,
+				ProfileID:      profile.ID,
 				State:          state,
 				StateSince:     now,
 				StateUpdatedAt: now,
@@ -1939,6 +1944,7 @@ func (d *Daemon) restoreSessionClose(sessionID string, closed store.SessionClose
 }
 
 func (d *Daemon) recordSessionClose(sessionID string, commit func() (bool, error)) {
+	defer d.announceUnplacement(sessionID)()
 	if session := d.store.Get(sessionID); session != nil {
 		if _, err := d.captureGardenSessionSnapshot(session); err != nil {
 			d.logf("garden: preserving execution %s before closing it: %v", sessionID, err)
@@ -1966,6 +1972,7 @@ func (d *Daemon) recordSessionClose(sessionID string, commit func() (bool, error
 }
 
 func (d *Daemon) removeReapedSession(sessionID string) {
+	defer d.announceUnplacement(sessionID)()
 	if session := d.store.Get(sessionID); session != nil {
 		if _, err := d.captureGardenSessionExecution(session); err != nil {
 			d.logf("garden: preserving execution %s before reaping: %v", sessionID, err)
@@ -1976,8 +1983,6 @@ func (d *Daemon) removeReapedSession(sessionID string) {
 	d.forgetSessionTrace(sessionID)
 	d.clearChiefOfStaffIfSession(sessionID)
 	d.releaseCrewBindingIfSession(sessionID)
-	d.dissociateSessionFromWorkspace(sessionID)
-	d.removeWorkspaceLayoutPaneForSession(sessionID)
 }
 
 func (d *Daemon) forgetSessionRuntime(sessionID string) {
@@ -2419,8 +2424,6 @@ func (d *Daemon) handleConnection(conn net.Conn) {
 	}
 
 	switch cmd {
-	case protocol.CmdRegister:
-		d.handleRegister(conn, msg.(*protocol.RegisterMessage))
 	case protocol.CmdDelegate:
 		d.handleDelegate(conn, msg.(*protocol.DelegateMessage))
 	case protocol.CmdAutomationApply, protocol.CmdAutomationValidate, protocol.CmdAutomationDefinitionsGet, protocol.CmdAutomationDefinitionGet, protocol.CmdAutomationRun, protocol.CmdAutomationRunsGet, protocol.CmdAutomationSetEnabled, protocol.CmdAutomationDelete, protocol.CmdAutomationCleanup:
@@ -2626,26 +2629,6 @@ func (d *Daemon) handleConnection(conn net.Conn) {
 		d.handleMutePR(conn, msg.(*protocol.MutePRMessage))
 	case protocol.CmdMuteRepo:
 		d.handleMuteRepo(conn, msg.(*protocol.MuteRepoMessage))
-	case protocol.CmdMuteWorkspace:
-		if _, errMsg := d.toggleWorkspaceMute(msg.(*protocol.MuteWorkspaceMessage).WorkspaceID); errMsg != "" {
-			d.sendError(conn, errMsg)
-			return
-		}
-		d.sendOK(conn)
-	case protocol.CmdPinWorkspace:
-		m := msg.(*protocol.PinWorkspaceMessage)
-		if _, errMsg := d.setWorkspacePinned(m.WorkspaceID, m.Pinned); errMsg != "" {
-			d.sendError(conn, errMsg)
-			return
-		}
-		d.sendOK(conn)
-	case protocol.CmdPinSession:
-		m := msg.(*protocol.PinSessionMessage)
-		if errMsg := d.setSessionPinned(m.SessionID, m.Pinned); errMsg != "" {
-			d.sendError(conn, errMsg)
-			return
-		}
-		d.sendOK(conn)
 	case protocol.CmdSetSessionContextWindowCap:
 		m := msg.(*protocol.SetSessionContextWindowCapMessage)
 		if err := d.setSessionContextWindowCap(m.SessionID, m.Cap); err != nil {
@@ -2694,105 +2677,6 @@ func (d *Daemon) handleConnection(conn net.Conn) {
 	}
 }
 
-func (d *Daemon) handleRegister(conn net.Conn, msg *protocol.RegisterMessage) {
-	_ = d.worktreeMaintenance.ProtectFromAutomaticCleanup(context.Background(), func(protection foregroundCleanupProtection) error {
-		d.handleRegisterProtected(protection, conn, msg)
-		return nil
-	})
-}
-
-func (d *Daemon) handleRegisterProtected(protection foregroundCleanupProtection, conn net.Conn, msg *protocol.RegisterMessage) {
-	d.logf("session registered: id=%s label=%s dir=%s", msg.ID, protocol.Deref(msg.Label), msg.Dir)
-	existing := d.store.Get(msg.ID)
-
-	branchInfo, _ := d.readBranchInfo(protection.Context(), gitTask{Kind: gitTaskSessionIdentity, Lane: gitInteractive}, msg.Dir)
-
-	nowStr := string(protocol.TimestampNow())
-	agent := normalizeStoredSessionAgent(string(protocol.Deref(msg.Agent)), protocol.SessionAgentClaude)
-	sessionLabel := protocol.Deref(msg.Label)
-	if existing != nil && strings.TrimSpace(existing.Label) != "" {
-		sessionLabel = existing.Label
-	}
-	session := &protocol.Session{
-		ID:             msg.ID,
-		Label:          sessionLabel,
-		Agent:          agent,
-		Directory:      msg.Dir,
-		State:          protocol.SessionStateLaunching,
-		StateSince:     nowStr,
-		StateUpdatedAt: nowStr,
-		LastSeen:       nowStr,
-	}
-	if branchInfo != nil {
-		if branchInfo.Branch != "" {
-			session.Branch = protocol.Ptr(branchInfo.Branch)
-		}
-		if branchInfo.IsWorktree {
-			session.IsWorktree = protocol.Ptr(true)
-		}
-		if branchInfo.MainRepo != "" {
-			session.MainRepo = protocol.Ptr(branchInfo.MainRepo)
-		}
-		if branchInfo.Repository != "" {
-			session.Repository = protocol.Ptr(branchInfo.Repository)
-		}
-	}
-	workspaceID := strings.TrimSpace(msg.WorkspaceID)
-	if workspaceID == "" {
-		d.sendError(conn, "missing workspace_id")
-		return
-	}
-	if member := strings.TrimSpace(protocol.Deref(msg.Member)); member != "" {
-		memberID, err := d.claimCrewBinding(member, msg.ID)
-		if err != nil {
-			d.sendError(conn, fmt.Sprintf("crew bind %q: %v", member, err))
-			return
-		}
-		d.logf("session %s registering as crew member %s", msg.ID, crew.DisplayName(memberID))
-	} else {
-		d.releaseCrewBindingIfSession(msg.ID)
-	}
-	session.WorkspaceID = workspaceID
-	persistErr := d.store.AddCheckedUnlessTeardown(session)
-	if persistErr != nil {
-		d.releaseCrewBindingIfSession(session.ID)
-		d.sendError(conn, persistErr.Error())
-		return
-	}
-	d.resolveSoon(session.ID)
-	existingWS := d.store.GetWorkspace(workspaceID)
-	workspaceTitle := session.Label
-	if existingWS != nil && strings.TrimSpace(existingWS.Title) != "" {
-		workspaceTitle = existingWS.Title
-	}
-	workspaceRank := d.resolveWorkspaceRank(existingWS)
-	d.store.AddWorkspace(&protocol.Workspace{ID: workspaceID, Title: workspaceTitle, Directory: session.Directory, Status: protocol.WorkspaceStatusLaunching, Rank: workspaceRank})
-	d.workspaces.register(workspaceID, workspaceTitle, session.Directory, workspaceRank, false, false)
-	if pending, ok := d.consumePendingAgentConversation(session.ID); ok {
-		d.observeAgentConversation(pending)
-	}
-	if err := d.store.ClearTicketReconciliationForAssignee(session.ID); err != nil {
-		d.logf("clear ticket reconciliation on register for %s: %v", session.ID, err)
-	}
-	d.reviveCrashedTicketsForSession(session.ID)
-	d.associateSessionWithWorkspace(session.ID, workspaceID)
-	if _, err := d.ensureWorkspaceLayout(workspaceID); err != nil {
-		d.logf("workspace layout bootstrap failed for workspace %s: %v", workspaceID, err)
-	}
-
-	d.store.UpsertRecentLocation(msg.Dir)
-
-	d.sendOK(conn)
-
-	fact := FactSessionRegistered
-	if existing != nil {
-		fact = FactSessionReregistered
-	}
-	d.publishFact(fact, session.ID, nil)
-	d.broadcastWorkspaceLayout(workspaceID)
-	d.recomputeAndBroadcastWorkspaceForSession(session.ID)
-}
-
 func (d *Daemon) projectSessionEvent(event, sessionID string) {
 	decorated := d.sessionForBroadcast(d.store.Get(sessionID))
 	if decorated == nil {
@@ -2834,8 +2718,6 @@ func (d *Daemon) handleUnregister(conn net.Conn, msg *protocol.UnregisterMessage
 
 	if teardown != nil && teardown.session != nil {
 		d.publishSessionUnregistered(teardown.session)
-		d.dissociateSessionFromWorkspace(teardown.session.ID)
-		d.removeWorkspaceLayoutPaneForSession(teardown.session.ID)
 	}
 	if teardown != nil {
 		d.terminateSessionAsync(msg.ID, syscall.SIGTERM, teardown)
@@ -3105,7 +2987,7 @@ func cloneSession(session *protocol.Session) *protocol.Session {
 func (d *Daemon) sessionForBroadcast(session *protocol.Session) *protocol.Session {
 	decorated := d.sessionForBroadcastWithChiefOfStaff(
 		session,
-		d.chiefOfStaffSessionID(),
+		d.profileChiefs(),
 		d.delegatedFromChiefSessionIDs(),
 		d.crewMembersBySession(),
 		d.gardenDispatchSeedsBySession(),
@@ -3121,7 +3003,7 @@ func (d *Daemon) sessionForBroadcast(session *protocol.Session) *protocol.Sessio
 
 func (d *Daemon) sessionForBroadcastWithChiefOfStaff(
 	session *protocol.Session,
-	chiefOfStaffSessionID string,
+	chiefs map[string]string,
 	delegatedFromChief map[string]bool,
 	crewBySession map[string]string,
 	seedBySession map[string]string,
@@ -3135,13 +3017,11 @@ func (d *Daemon) sessionForBroadcastWithChiefOfStaff(
 	d.decorateSessionWithNudge(clone)
 	d.decorateSessionWithAutoSettle(clone)
 	d.decorateSessionWithSnooze(clone)
-	d.decorateChiefOfStaffWithSessionID(clone, chiefOfStaffSessionID)
+	d.decorateChiefOfStaff(clone, chiefs)
 	d.decorateDelegatedFromChief(clone, delegatedFromChief)
 	d.decorateCrewMember(clone, crewBySession)
 	d.decorateSessionSeed(clone, seedBySession)
 	d.decorateSessionDispatcher(clone, dispatcherBySession)
-	d.decorateSessionWithWorkspace(clone)
-	d.decorateSessionWithWorkspaceMute(clone)
 	d.decorateSessionWithCost(clone)
 	d.decorateSessionWithTerminalBuild(clone)
 	d.decorateSessionWithTurn(clone)
@@ -3152,7 +3032,7 @@ func (d *Daemon) sessionsForBroadcast(sessions []*protocol.Session) []protocol.S
 	if len(sessions) == 0 {
 		return nil
 	}
-	chiefOfStaffSessionID := d.chiefOfStaffSessionID()
+	chiefs := d.profileChiefs()
 	delegatedFromChief := d.delegatedFromChiefSessionIDs()
 	crewBySession := d.crewMembersBySession()
 	seedBySession := d.gardenDispatchSeedsBySession()
@@ -3163,7 +3043,7 @@ func (d *Daemon) sessionsForBroadcast(sessions []*protocol.Session) []protocol.S
 	pullRequestWatchesByPR := d.pullRequestWatchesByPR()
 	out := make([]protocol.Session, 0, len(sessions))
 	for _, session := range sessions {
-		if decorated := d.sessionForBroadcastWithChiefOfStaff(session, chiefOfStaffSessionID, delegatedFromChief, crewBySession, seedBySession, dispatcherBySession); decorated != nil {
+		if decorated := d.sessionForBroadcastWithChiefOfStaff(session, chiefs, delegatedFromChief, crewBySession, seedBySession, dispatcherBySession); decorated != nil {
 			decorated.DelegationRole = rolesBySession[decorated.ID]
 			decorated.Automation = bySession[decorated.ID]
 			decorated.PullRequests = d.sessionPullRequestsForBroadcast(pullRequestsBySession[decorated.ID], pullRequestWatchesByPR)
@@ -3201,16 +3081,15 @@ func (d *Daemon) remoteSessionsForBroadcast() []protocol.Session {
 		return nil
 	}
 	sessions := d.hubManager.RemoteSessions()
-	chiefOfStaffSessionID := d.chiefOfStaffSessionID()
+	chiefs := d.profileChiefs()
 	for i := range sessions {
-		d.decorateChiefOfStaffWithSessionID(&sessions[i], chiefOfStaffSessionID)
+		d.decorateChiefOfStaff(&sessions[i], chiefs)
 	}
 	return sessions
 }
 
 func (d *Daemon) broadcastSessionStateChanged(sessionID string) {
 	d.publishFact(FactSessionStateChanged, sessionID, nil)
-	d.recomputeAndBroadcastWorkspaceForSession(sessionID)
 }
 
 func (d *Daemon) projectSessionStateChanged(sessionID string) {
@@ -3265,10 +3144,15 @@ func (d *Daemon) handleFilesEdited(conn net.Conn, msg *protocol.FilesEditedMessa
 
 func (d *Daemon) handleQuery(conn net.Conn, msg *protocol.QueryMessage) {
 	sessions := d.store.List(protocol.Deref(msg.Filter))
+	profiles, err := d.liveProtocolProfiles()
+	if err != nil {
+		d.sendError(conn, "query: "+err.Error())
+		return
+	}
 	resp := protocol.Response{
-		Ok:         true,
-		Sessions:   d.sessionsForBroadcast(sessions),
-		Workspaces: d.listLocalWorkspaces(),
+		Ok:       true,
+		Sessions: d.sessionsForBroadcast(sessions),
+		Profiles: profiles,
 	}
 	json.NewEncoder(conn).Encode(resp)
 }
@@ -3718,68 +3602,26 @@ func (d *Daemon) handleInjectTestSession(conn net.Conn, msg *protocol.InjectTest
 
 	msg.Session.Agent = normalizeStoredSessionAgent(string(msg.Session.Agent), protocol.SessionAgentCodex)
 	stampSessionTimestamps(&msg.Session, string(protocol.TimestampNow()))
-	workspaceID := strings.TrimSpace(msg.Session.WorkspaceID)
-	if workspaceID == "" {
-		workspaceID = "workspace-" + msg.Session.ID
-	}
-	msg.Session.WorkspaceID = workspaceID
-	existingWS := d.store.GetWorkspace(workspaceID)
-	workspaceRank := d.resolveWorkspaceRank(existingWS)
-	if existingWS == nil {
-		d.store.AddWorkspace(&protocol.Workspace{
-			ID:        workspaceID,
-			Title:     msg.Session.Label,
-			Directory: msg.Session.Directory,
-			Status:    protocol.WorkspaceStatusLaunching,
-			Rank:      workspaceRank,
-		})
-	}
-	d.workspaces.register(workspaceID, msg.Session.Label, msg.Session.Directory, workspaceRank, false, false)
-
-	d.store.Add(&msg.Session)
-	d.associateSessionWithWorkspace(msg.Session.ID, workspaceID)
-	paneID := "pane-" + msg.Session.ID
-	layout := workspacelayout.DefaultWorkspaceLayout(workspaceID, paneID, msg.Session.ID)
-	if current := d.store.GetWorkspaceLayout(workspaceID); current != nil {
-		layout = workspacelayout.NormalizeWorkspaceLayout(*current)
-		if !workspacelayout.HasPane(layout.Layout, paneID) {
-			layout.Panes = append(layout.Panes, workspacelayout.Pane{
-				PaneID:    paneID,
-				RuntimeID: msg.Session.ID,
-				SessionID: msg.Session.ID,
-				Kind:      workspacelayout.PaneKindAgent,
-				Title:     msg.Session.Label,
-				Status:    workspacelayout.PaneStatusReady,
-			})
-			targetPaneID := layout.ActivePaneID
-			if targetPaneID == "" {
-				targetPaneID = firstWorkspaceLayoutPaneID(layout)
-			}
-			if targetPaneID == "" || layout.Layout.Type == "" {
-				layout.Layout = workspacelayout.DefaultLayout(paneID)
-			} else {
-				nextLayout, _ := workspacelayout.Split(
-					layout.Layout,
-					targetPaneID,
-					paneID,
-					newWorkspaceLayoutEntityID("split"),
-					workspacelayout.DirectionVertical,
-					workspacelayout.DefaultSplitRatio,
-				)
-				layout.Layout = nextLayout
-			}
-			layout.ActivePaneID = paneID
-			layout = workspacelayout.NormalizeWorkspaceLayout(layout)
-		}
-	}
-	if err := d.store.SaveWorkspaceLayout(layout); err != nil {
+	profile, err := d.requestedOrRecentProfile(msg.Session.ProfileID)
+	if err != nil {
 		d.sendError(conn, err.Error())
 		return
 	}
-	d.sendOK(conn)
-
+	msg.Session.ProfileID = profile.ID
+	if member := strings.TrimSpace(protocol.Deref(msg.Session.CrewMember)); member != "" {
+		if _, err := d.claimCrewBinding(member, msg.Session.ID); err != nil {
+			d.sendError(conn, fmt.Sprintf("crew bind %q: %v", member, err))
+			return
+		}
+	}
+	if err := d.store.AddChecked(&msg.Session); err != nil {
+		d.releaseCrewBindingIfSession(msg.Session.ID)
+		d.sendError(conn, err.Error())
+		return
+	}
 	d.publishFact(FactSessionRegistered, msg.Session.ID, nil)
-	d.broadcastWorkspaceLayout(workspaceID)
+	d.placeLaunchedSession(&msg.Session, &launchPlacement{direction: layouttree.DirectionVertical, focus: true})
+	d.sendOK(conn)
 }
 
 func (d *Daemon) RefreshPRs() {

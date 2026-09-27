@@ -1,6 +1,6 @@
 import { act, fireEvent, screen, within } from '@testing-library/react';
 import { describe, expect, it, vi } from 'vitest';
-import { agentPane, agentWorkspace, daemonSession, daemonWorkspace } from './test/daemonFixtures';
+import { agentPane, soloDesktop, daemonSession, daemonDesktop, emptyDesktop, DEFAULT_DESKTOP_ID } from './test/daemonFixtures';
 import type { CommandMessage, EventMessage } from './test/protocol';
 import { openAttachedTerminals, openSession } from './test/appFixtures';
 import { renderApp } from './test/renderApp';
@@ -32,7 +32,7 @@ async function openAnnotatedSession(stored: { annotations: StoredAnnotation[]; n
   const view = await renderApp({
     initialState: {
       sessions: [daemonSession('s1', { state: 'idle' }), daemonSession('s2', { state: 'idle' })],
-      workspaces: [agentWorkspace('s1'), agentWorkspace('s2')],
+      desktops: [emptyDesktop(DEFAULT_DESKTOP_ID), soloDesktop('s1'), soloDesktop('s2')],
     },
   });
   view.daemon.on('session_messages_get', ({ session_id }) => ({
@@ -98,14 +98,14 @@ function deliver(daemon: ScriptedDaemon, submit: CommandMessage<'session_annotat
 
 async function openTerminalWithWindow(messageWindow: MessageWindow | null, { sessions = ['s1'], apart = false }: { sessions?: string[]; apart?: boolean } = {}) {
   const split = sessions.length > 1 && !apart
-    ? daemonWorkspace('ws', {
+    ? daemonDesktop('ws', {
       root: { type: 'split', split_id: 'split-a', direction: 'vertical', ratio: 0.5, children: sessions.map((id) => ({ type: 'pane', pane_id: `pane-${id}` })) },
       panes: sessions.map((id) => agentPane(id, 'ws')),
-    }, { title: 'ws' })
+    }, { name: 'ws' })
     : null;
   return openAttachedTerminals({
-    sessions: sessions.map((id) => daemonSession(id, { state: 'idle', ...(split ? { workspace_id: split.id } : {}) })),
-    workspaces: split ? [split] : sessions.map(agentWorkspace),
+    sessions: sessions.map((id) => daemonSession(id, { state: 'idle' })),
+    desktops: split ? [split] : sessions.map((id) => soloDesktop(id)),
     output: { s1: AGENT_TEXT },
     script: (daemon) => {
       if (messageWindow) {

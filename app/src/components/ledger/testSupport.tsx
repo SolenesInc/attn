@@ -5,7 +5,7 @@ import type { SessionLedgerEntry } from '../../types/generated';
 import { pressShortcut, renderApp } from '../../test/renderApp';
 import type { CommandMessage } from '../../test/protocol';
 import type { ScriptedDaemon, ScriptedDaemonOptions } from '../../test/scriptedDaemon';
-import { daemonWorkspace } from '../../test/daemonFixtures';
+import { DEFAULT_DESKTOP_ID, defaultProfile } from '../../test/daemonFixtures';
 import { NOW } from '../../test/sessionLedgerFixtures';
 
 export type LedgerAnswer = (query: SessionLedgerQuery, index: number) => SessionLedgerPage | Error | 'hold';
@@ -58,6 +58,9 @@ export async function openSessionsLedger(answer: LedgerAnswer, options: Scripted
   return { ...view, ...ledger };
 }
 
-export function namedWorkspaces(names: Record<string, string>) {
-  return Object.entries(names).map(([id, title]) => daemonWorkspace(id, { root: { type: 'pane', pane_id: `pane-${id}` } }, { title }));
+export function namedProfiles(names: Record<string, string>) {
+  return [
+    defaultProfile(DEFAULT_DESKTOP_ID),
+    ...Object.entries(names).map(([id, name]) => defaultProfile('', { id, name })),
+  ];
 }

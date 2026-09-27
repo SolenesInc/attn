@@ -28,7 +28,7 @@ func TestAnEvictionFiledMidHelloIsNotLostWithTheConnection(t *testing.T) {
 	d.handleClientHello(client, &protocol.ClientHelloMessage{
 		Cmd: protocol.CmdClientHello, ClientKind: "daemon-test", ClientID: protocol.Ptr(clientID),
 		Version:      "protocol-" + protocol.ProtocolVersion,
-		Capabilities: []string{protocol.CapabilityWorkspaceSessions},
+		Capabilities: nil,
 	})
 
 	record, ok := d.wsHub.takeEviction(clientID)
