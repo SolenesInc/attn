@@ -287,6 +287,8 @@ func (a *agent) handle(_ *rpcPeer, method string, params json.RawMessage) (any, 
 		}
 	case methodGuardian:
 		return a.handleGuardian(params)
+	case methodReplyUnheard:
+		return a.replyUnheard(params)
 	case methodHalt:
 		halting, ok := a.conv.(halter)
 		if !ok {

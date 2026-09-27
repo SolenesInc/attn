@@ -49,7 +49,10 @@ func (s hookSet) run(event, target string, payload any) error {
 			}
 		}
 	}
-	return errors.Join(failures...)
+	if len(failures) > 0 {
+		return hookFailure{errors.Join(failures...)}
+	}
+	return nil
 }
 
 func (s hookSet) exec(command string, input []byte) error {
