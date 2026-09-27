@@ -17,19 +17,6 @@ import (
 	"github.com/victorarias/attn/internal/store"
 )
 
-func resumeSpawnForSession(t *testing.T, backend *fakeSpawnBackend, sessionID string, since int) ptybackend.SpawnOptions {
-	t.Helper()
-	backend.mu.Lock()
-	defer backend.mu.Unlock()
-	for i := since; i < len(backend.spawnOpts); i++ {
-		if backend.spawnOpts[i].ID == sessionID {
-			return backend.spawnOpts[i]
-		}
-	}
-	t.Fatalf("no spawn recorded for %s at/after index %d (spawns=%d)", sessionID, since, len(backend.spawnOpts))
-	return ptybackend.SpawnOptions{}
-}
-
 func seedNoteCount(t *testing.T, d *Daemon, seedID string) int {
 	t.Helper()
 	notes, err := d.readNotesDomain(seedID)
