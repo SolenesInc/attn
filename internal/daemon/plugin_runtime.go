@@ -18,8 +18,6 @@ import (
 	"github.com/victorarias/attn/internal/supervise"
 )
 
-const pluginManifestName = plugins.ManifestName
-
 type pluginManifest = plugins.Manifest
 type pluginManifestIssue = plugins.ManifestIssue
 
@@ -60,10 +58,6 @@ func bundledPluginDirForExecutable() string {
 		return ""
 	}
 	return filepath.Join(resources, "plugins")
-}
-
-func loadPluginManifest(path string) (pluginManifest, error) {
-	return plugins.LoadManifest(path)
 }
 
 func (d *Daemon) ensurePluginSupervisor() *pluginSupervisor {

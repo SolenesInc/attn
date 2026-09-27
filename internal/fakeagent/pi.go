@@ -125,7 +125,11 @@ type relayDenial struct {
 }
 
 func (p *piTerminal) deny(denial Denial) error {
-	return p.relay.call(context.Background(), "report_denial", relayDenial{Denial: denial, At: now()}, nil)
+	at := denial.At
+	if at == "" {
+		at = now()
+	}
+	return p.relay.call(context.Background(), "report_denial", relayDenial{Denial: denial, At: at}, nil)
 }
 
 type piPlugin struct {
