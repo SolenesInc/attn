@@ -147,6 +147,7 @@ type Daemon struct {
 	warnings                          []protocol.DaemonWarning
 	warningsMu                        sync.RWMutex
 	legacyTicketRecoveryFinishOnce    sync.Once
+	backlogAtStart                    map[string]struct{}
 	legacyTicketSnapshotIdentity      func(string) (store.LegacyTicketRecoverySource, error)
 	legacyTicketSnapshotRead          func(string) (store.LegacyTicketSnapshotRead, error)
 	legacyRecoveryArtifactWrite       func(string, []byte) error
@@ -738,6 +739,7 @@ func (d *Daemon) Start() error {
 	if err != nil {
 		return fmt.Errorf("prepare legacy ticket recovery: %w", err)
 	}
+	d.backlogAtStart = d.snapshotBacklogAtStart()
 	d.ensureCrewCollections()
 	d.importCrewHomes()
 	if err := d.migrateCrewTicketIdentities(); err != nil {
