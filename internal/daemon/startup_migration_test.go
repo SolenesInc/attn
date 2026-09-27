@@ -296,26 +296,29 @@ func TestClosingAnImportedAgentRetiresItsGroupForEveryClient(t *testing.T) {
 	}
 }
 
-func TestADesktopWhoseAgentsClosedReportsTheTilesFinishKeeps(t *testing.T) {
-	t.Setenv("ATTN_DATA_DIR", t.TempDir())
-	w := &profilesTestDaemon{t: t, dbPath: filepath.Join(t.TempDir(), "attn.db")}
-	writeLegacyDatabase(t, w.dbPath, 2, store.ProfileConversionSchemaVersion-1,
-		`UPDATE workspace_layouts SET layout_json = '{"type":"split","split_id":"s-2","direction":"vertical","ratio":0.5,"children":[{"type":"pane","pane_id":"pane-agent-2"},{"type":"tile","tile_id":"tile-doc","tile_kind":"markdown","tile_params":"/fixture/doc.md"}]}' WHERE workspace_id = 'ws-2'`)
-	w.start()
-	client, _ := w.connect("")
-	w.d.closeSession("agent-2", store.SessionClose{})
-	seen := migrationBroadcasts(t, client)
-	if len(seen) == 0 {
-		t.Fatal("closing an imported agent sent no migration_changed")
-	}
-	for _, desktop := range seen[len(seen)-1].Desktops {
-		if protocol.Deref(desktop.ShortcutSlot) != 2 {
-			continue
+func TestADocumentDockedOnASourceDesktopDuringThePickerIsReportedAsKept(t *testing.T) {
+	w := newMigratingTestDaemon(t, 2)
+	client, initial := w.connect("")
+	var source protocol.Desktop
+	for _, desktop := range initial.Desktops {
+		if protocol.Deref(desktop.ShortcutSlot) == 2 {
+			source = desktop
 		}
-		if desktop.TreeJson != "" || protocol.Deref(desktop.KeptLeaves) != 1 {
-			t.Fatalf("slot 2 = %+v, want no group placed and the document tile kept", desktop)
-		}
-		return
 	}
-	t.Fatal("the draft has no desktop in slot 2")
+	if source.ID == "" {
+		t.Fatal("the initial state has no desktop in slot 2")
+	}
+	w.mustSend(client, map[string]any{
+		"cmd": protocol.CmdDesktopDockTile, "desktop_id": source.ID, "expected_revision": source.Revision,
+		"tile_id": "tile-doc", "tile_kind": "markdown", "tile_params": "/fixture/doc.md", "edge": "right",
+	})
+	state := w.mustMigrate(client, map[string]any{"cmd": protocol.CmdMigrationGet})
+	for _, desktop := range state.Desktops {
+		if protocol.Deref(desktop.DesktopID) == source.ID && protocol.Deref(desktop.KeptLeaves) != 1 {
+			t.Fatalf("desktop in slot 2 = %+v, want the docked document reported as kept", desktop)
+		}
+		if protocol.Deref(desktop.DesktopID) != source.ID && protocol.Deref(desktop.KeptLeaves) != 0 {
+			t.Fatalf("desktop %+v reports kept items, want none outside slot 2", desktop)
+		}
+	}
 }
