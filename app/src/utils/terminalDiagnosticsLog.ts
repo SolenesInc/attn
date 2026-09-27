@@ -37,6 +37,7 @@ export type DiagKind =
   | 'watchdog'
   | 'incident'
   | 'recovery'
+  | 'wake'
   | 'model_fault';
 
 export interface DiagEvent {
@@ -62,6 +63,7 @@ const LIFECYCLE_KINDS = new Set<DiagKind>([
   'watchdog',
   'incident',
   'recovery',
+  'wake',
   'model_fault',
 ]);
 
@@ -461,6 +463,24 @@ export function noteRecovery(
   },
 ): void {
   recordDiag({ kind: 'recovery', pane, ...info });
+}
+
+export function noteWake(
+  pane: string,
+  info: {
+    session?: string;
+    trigger: 'visible' | 'screens_did_wake' | 'did_wake';
+    hiddenForMs: number | null;
+    released: boolean;
+    contextLost: boolean;
+    canvasW: number;
+    canvasH: number;
+    rectW: number;
+    rectH: number;
+    lastPaintAgoMs: number | null;
+  },
+): void {
+  recordDiag({ kind: 'wake', pane, ...info });
 }
 
 // `capture` makes the record a replayable repro:
