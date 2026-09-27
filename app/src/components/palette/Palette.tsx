@@ -62,6 +62,8 @@ export function Palette<T>({
     ? selectedIndex
     : items.findIndex(isSelectable);
   const highlighted = activeIndex >= 0 ? items[activeIndex] : undefined;
+  const highlightedKey = highlighted === undefined ? null : itemKey(highlighted);
+  if (selectedIndex !== activeIndex && highlightedKey !== null) setSelectedKey(highlightedKey);
   const selectIndex = (index: number) => setSelectedKey(index >= 0 ? itemKey(items[index]) : null);
 
   useEffect(() => {

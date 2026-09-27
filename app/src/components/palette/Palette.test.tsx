@@ -61,6 +61,25 @@ describe('Palette', () => {
     expect(onPick).toHaveBeenCalledWith({ path: 'b.md' });
   });
 
+  it('keeps the first row highlighted when a row arrives above it before any navigation', () => {
+    const onPick = vi.fn();
+    const { rerender } = render(<Harness rows={['b.md', 'c.md']} onPick={onPick} />);
+    rerender(<Harness rows={['a.md', 'b.md', 'c.md']} onPick={onPick} />);
+
+    fireEvent.keyDown(input(), { key: 'Enter' });
+    expect(onPick).toHaveBeenCalledWith({ path: 'b.md' });
+  });
+
+  it('highlights the first result again after the query changes', () => {
+    const onPick = vi.fn();
+    render(<Harness rows={['alpha.md', 'beta.md', 'alphabet.md']} onPick={onPick} />);
+    fireEvent.keyDown(input(), { key: 'ArrowDown' });
+    fireEvent.change(input(), { target: { value: 'alpha' } });
+
+    fireEvent.keyDown(input(), { key: 'Enter' });
+    expect(onPick).toHaveBeenCalledWith({ path: 'alpha.md' });
+  });
+
   it('clamps the highlight when the list shrinks under it', () => {
     const onPick = vi.fn();
     render(<Harness rows={['alpha.md', 'beta.md', 'alphabet.md']} onPick={onPick} />);
