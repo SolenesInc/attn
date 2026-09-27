@@ -80,7 +80,7 @@ func TestAppStatusSaysWhatTheRuntimeAndReconcileOwe(t *testing.T) {
 
 func TestOwedAppReconcileSurvivesADaemonRestart(t *testing.T) {
 	t.Parallel()
-	s := testworld.NewStack(t)
+	s := testworld.NewStack(t, testworld.WithHeldWebSocketListener())
 	s.Start()
 	applyApp(t, s, "digest", subscribedApp("digest", "ticket.*", true), "export default { edition: 1 }\n")
 	requireStdout(t, s.Attn("app", "disable", "digest"), "app digest disabled")

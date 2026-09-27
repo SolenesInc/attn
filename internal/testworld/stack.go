@@ -29,16 +29,23 @@ type Stack struct {
 	daemon        *os.Process
 	exited        chan error
 	allowFallback bool
+	wsListener    *net.TCPListener
 }
 
 type stackSetup struct {
-	harnesses []fakeagent.Harness
+	harnesses      []fakeagent.Harness
+	holdWSListener bool
 }
 
 type StackOption func(*stackSetup)
 
 func WithAgents(h ...fakeagent.Harness) StackOption {
 	return func(s *stackSetup) { s.harnesses = append(s.harnesses, h...) }
+}
+
+// WithHeldWebSocketListener keeps the port bound across daemon restarts.
+func WithHeldWebSocketListener() StackOption {
+	return func(s *stackSetup) { s.holdWSListener = true }
 }
 
 func NewStack(t *testing.T, opts ...StackOption) *Stack {
@@ -52,7 +59,18 @@ func NewStack(t *testing.T, opts ...StackOption) *Stack {
 	}
 	binary := AttnBinary(t)
 	s := &Stack{World: Prepare(t, binary, setup.harnesses...), binary: binary}
-	port := strconv.Itoa(reservePort(t))
+	var port string
+	if setup.holdWSListener {
+		listener, err := net.Listen("tcp", "127.0.0.1:0")
+		if err != nil {
+			t.Fatal(err)
+		}
+		s.wsListener = listener.(*net.TCPListener)
+		t.Cleanup(func() { _ = s.wsListener.Close() })
+		port = strconv.Itoa(listener.Addr().(*net.TCPAddr).Port)
+	} else {
+		port = strconv.Itoa(reservePort(t))
+	}
 	wsAddr := net.JoinHostPort("127.0.0.1", port)
 	s.WSAddr = wsAddr
 	s.Dial = func(ctx context.Context) (net.Conn, error) {
@@ -126,6 +144,15 @@ func (s *Stack) start(vars ...string) {
 	cmd.Env = append(append(s.env(), vars...), "ATTN_DAEMON_READY_FD=3")
 	dieWithTestProcess(cmd)
 	cmd.ExtraFiles = []*os.File{signal}
+	if s.wsListener != nil {
+		file, err := s.wsListener.File()
+		if err != nil {
+			s.T.Fatal(err)
+		}
+		defer file.Close()
+		cmd.ExtraFiles = append(cmd.ExtraFiles, file)
+		cmd.Env = append(cmd.Env, "ATTN_HARNESS_WS_LISTENER_FD=4")
+	}
 	cmd.Stdout, cmd.Stderr = stderr, stderr
 	err = cmd.Start()
 	signal.Close()

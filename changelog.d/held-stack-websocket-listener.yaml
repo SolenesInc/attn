@@ -1,0 +1,3 @@
+kind: internal
+area: testing
+change: Keep the restart stack test's WebSocket port reserved across daemon starts.
