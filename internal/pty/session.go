@@ -33,10 +33,6 @@ const (
 	defaultThemeCursor     = "#d4d4d4"
 )
 
-var infoSnapshotHook func()
-
-var readLoopSeqGapHook func()
-
 var readLoopAdmissionGapHook atomic.Pointer[func()]
 
 var resizeAdmissionHook atomic.Pointer[func()]
@@ -357,9 +353,6 @@ func (s *Session) readLoop(onExit func(exitCode int, signal string), logf func(s
 
 				seq := s.seqCounter.Add(1)
 				pausepoint.At(pausepoint.PtyOutputSequenced)
-				if readLoopSeqGapHook != nil {
-					readLoopSeqGapHook()
-				}
 				wire, resync := data, ""
 				var placements []KittyPlacement
 				placementsMoved := false
@@ -384,6 +377,9 @@ func (s *Session) readLoop(onExit func(exitCode int, signal string), logf func(s
 					if queries.da1 {
 						s.writeDeviceAttributesResponse(logf)
 					}
+				}
+				if len(wire) == 0 {
+					pausepoint.At(pausepoint.PtyOutputHeld)
 				}
 				if len(wire) > 0 {
 					s.fanOut(wire, seq)
@@ -704,9 +700,6 @@ func (s *Session) info() AttachInfo {
 	s.replayMu.Unlock()
 
 	pausepoint.At(pausepoint.PtyAttachSnapshot)
-	if infoSnapshotHook != nil {
-		infoSnapshotHook()
-	}
 
 	return AttachInfo{
 		LastSeq:                    replayWatermark,

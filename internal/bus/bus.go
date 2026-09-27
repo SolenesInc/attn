@@ -9,6 +9,8 @@ import (
 	"strings"
 	"sync"
 	"time"
+
+	"github.com/victorarias/attn/internal/pausepoint"
 )
 
 const (
@@ -221,6 +223,7 @@ func (b *Bus) Announce() {
 	if b.store == nil {
 		return
 	}
+	pausepoint.At(pausepoint.BusAnnounce)
 	b.publishMu.Lock()
 	defer b.publishMu.Unlock()
 	b.announceLocked(nil)

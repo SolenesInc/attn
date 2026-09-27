@@ -39,6 +39,7 @@ type Peer struct {
 	screens   map[string][]byte
 	received  map[string][]sequencedOutput
 	watermark map[string]uint32
+	empties   map[string]int
 	attached  map[string]bool
 	closeErr  error
 	closing   bool
@@ -52,6 +53,7 @@ func newPeer(t testing.TB, conn *websocket.Conn) *Peer {
 		screens:   map[string][]byte{},
 		received:  map[string][]sequencedOutput{},
 		watermark: map[string]uint32{},
+		empties:   map[string]int{},
 		attached:  map[string]bool{},
 	}
 	go p.read()
@@ -85,6 +87,9 @@ func (p *Peer) recordOutput(data []byte) {
 	sessionID, seq, output, err := protocol.DecodePtyOutputFrame(data)
 	if err != nil {
 		return
+	}
+	if len(output) == 0 {
+		p.empties[sessionID]++
 	}
 	p.received[sessionID] = append(p.received[sessionID], sequencedOutput{seq: seq, data: output})
 	if p.attached[sessionID] {
@@ -232,6 +237,12 @@ func (p *Peer) Screen(sessionID string) []byte {
 	return append([]byte(nil), p.screens[sessionID]...)
 }
 
+func (p *Peer) EmptyOutputs(sessionID string) int {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	return p.empties[sessionID]
+}
+
 func (p *Peer) attach(sessionID string) {
 	p.T.Helper()
 	p.mu.Lock()
@@ -287,6 +298,23 @@ func Await[T any](p *Peer, event string, match func(T) bool) T {
 			return false, fmt.Errorf("decode %s: %w: %s", event, err, f.raw)
 		}
 		if match != nil && !match(candidate) {
+			return false, nil
+		}
+		found = candidate
+		return true, nil
+	})
+	return found
+}
+
+func AwaitEvent(p *Peer, awaiting string, match func(protocol.WebSocketEvent) bool) protocol.WebSocketEvent {
+	p.T.Helper()
+	var found protocol.WebSocketEvent
+	p.take(awaiting, func(f frame) (bool, error) {
+		var candidate protocol.WebSocketEvent
+		if err := json.Unmarshal(f.raw, &candidate); err != nil {
+			return false, fmt.Errorf("decode %s: %w: %s", f.event, err, f.raw)
+		}
+		if !match(candidate) {
 			return false, nil
 		}
 		found = candidate

@@ -18,6 +18,12 @@ const (
 const (
 	PtyAttachSnapshot  = "pty-attach-snapshot"
 	PtyOutputSequenced = "pty-output-sequenced"
+	PtyOutputHeld      = "pty-output-held"
+	BusAnnounce        = "bus-announce"
+
+	DaemonStartupRecovery     = "daemon-startup-recovery"
+	SessionInputPasteGap      = "session-input-paste-gap"
+	SessionInputLaneContended = "session-input-lane-contended"
 )
 
 type armed struct {
