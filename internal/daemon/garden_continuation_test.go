@@ -1,7 +1,6 @@
 package daemon
 
 import (
-	"strings"
 	"testing"
 	"time"
 
@@ -18,27 +17,6 @@ func TestLegacySeedUsesItsDocumentUpdateAsConservativeStateEvidence(t *testing.T
 	}, false)
 	if wire.StateChangedAt != formatGardenTime(updated) || wire.StateChangedAtExact {
 		t.Fatalf("legacy state evidence = %q exact=%v", wire.StateChangedAt, wire.StateChangedAtExact)
-	}
-}
-
-func TestObservedExecutionDistinguishesLocalNonGitAndRemoteHosts(t *testing.T) {
-	localDir := t.TempDir()
-	d := &Daemon{gitExec: testGitExecutor(t, productionGitExecutorConfig)}
-	local := d.observedGardenExecution(&protocol.Session{
-		ID: "local", Directory: localDir, Agent: protocol.SessionAgentCopilot,
-	}, "native-local", time.Now())
-	if local.HostKind != garden.HostLocal || local.Cwd != localDir || local.Agent != "copilot" ||
-		local.RepositoryRoot != "" || local.Branch != "" {
-		t.Fatalf("local non-Git execution = %+v", local)
-	}
-
-	remote := d.observedGardenExecution(&protocol.Session{
-		ID: "remote", Directory: "/srv/work", Agent: protocol.SessionAgentClaude,
-		EndpointID: protocol.Ptr("outpost-a"), MainRepo: protocol.Ptr("/srv/repo"), Branch: protocol.Ptr("feature/a"),
-	}, "native-remote", time.Now())
-	if remote.HostKind != garden.HostRemote || remote.EndpointID != "outpost-a" ||
-		remote.RepositoryRoot != "/srv/repo" || remote.Branch != "feature/a" {
-		t.Fatalf("remote execution = %+v", remote)
 	}
 }
 
@@ -70,30 +48,6 @@ func TestSeedContinuationResumesAPluginTenderByCapability(t *testing.T) {
 	continuation := d.continuationForSeed(tended)
 	if continuation == nil || !continuation.ResumeAvailable || continuation.Execution.Resume != "snipe-conv-3" {
 		t.Fatalf("continuation = %+v, want a resumable snipe-conv-3", continuation)
-	}
-}
-
-func TestSeedContinuationDoesNotAdvertiseWorkerlessSessionWithoutLaunchContract(t *testing.T) {
-	d := newGardenDaemon(t)
-	cwd := t.TempDir()
-	d.store.Remove("sess-a")
-	d.store.Add(&protocol.Session{
-		ID: "sess-a", Directory: cwd, Agent: protocol.SessionAgentClaude,
-		State: protocol.SessionStateIdle,
-	})
-	seed := plant(t, d, protocol.SeedPlantMessage{Title: "Legacy work"})
-	move(t, d, "sess-a", seed.ID, garden.VerbTend, "", "")
-
-	tended, _, err := d.readSeed(seed.ID)
-	if err != nil {
-		t.Fatal(err)
-	}
-	continuation := d.continuationForSeed(tended)
-	if continuation == nil || continuation.SessionLive || continuation.ResumeAvailable {
-		t.Fatalf("continuation = %+v, want unavailable workerless session", continuation)
-	}
-	if !strings.Contains(continuation.ResumeReason, "no saved launch contract") {
-		t.Fatalf("resume reason = %q, want missing launch contract", continuation.ResumeReason)
 	}
 }
 

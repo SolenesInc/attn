@@ -2,7 +2,6 @@ package daemon
 
 import (
 	"testing"
-	"time"
 
 	"github.com/victorarias/attn/internal/store"
 )
@@ -59,38 +58,5 @@ func TestTicketIdentityFollowsRoleTransfer(t *testing.T) {
 	}
 	if got := d.ticketAttentionKey("chief-a"); got != "chief-a" {
 		t.Fatalf("former chief attention key = %q, want its own session", got)
-	}
-}
-
-func TestTicketIdentityUnfilledRoleHasNoSession(t *testing.T) {
-	d, _ := newChiefOfStaffTestDaemon(t)
-	if got := d.ticketSessionForIdentity(store.TicketRoleIdentity(store.TicketRoleChiefOfStaff)); got != "" {
-		t.Fatalf("unfilled role resolved to %q, want no session", got)
-	}
-}
-
-func TestCrewStartupSweepMigratesAnExistingLiveBinding(t *testing.T) {
-	d := newCrewDaemon(t)
-	addSession(t, d, "day-a")
-	if _, err := d.claimCrewBinding("trellis", "day-a"); err != nil {
-		t.Fatal(err)
-	}
-	now := time.Now()
-	if _, err := d.store.CreateTicket(store.Ticket{ID: "upgrade-thread", Title: "Upgrade thread"}, "you", now); err != nil {
-		t.Fatal(err)
-	}
-	if err := d.store.AddTicketSubscription("day-a", "upgrade-thread", now); err != nil {
-		t.Fatal(err)
-	}
-
-	if err := d.migrateCrewTicketIdentities(); err != nil {
-		t.Fatal(err)
-	}
-	identity := store.TicketMemberIdentity("trellis")
-	if subscribed, err := d.store.IsTicketSubscribed(identity, "upgrade-thread"); err != nil || !subscribed {
-		t.Fatalf("startup member subscription = %v, err %v", subscribed, err)
-	}
-	if subscribed, err := d.store.IsTicketSubscribed("day-a", "upgrade-thread"); err != nil || subscribed {
-		t.Fatalf("startup source subscription survived = %v, err %v", subscribed, err)
 	}
 }

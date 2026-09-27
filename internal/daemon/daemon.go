@@ -337,7 +337,6 @@ type Daemon struct {
 	workflowEngineMu       sync.Mutex
 	workflowEngineConn     map[string]workflowEngineSink
 	appsBroadcastHook      func([]protocol.AppRegistryEntry)
-	gardenMintID           func() (string, error)
 	gardenMintNoteID       func() (string, error)
 	gardenNow              func() time.Time
 	gitHubPollingOffLogged bool

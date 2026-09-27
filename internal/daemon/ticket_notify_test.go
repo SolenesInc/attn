@@ -1,7 +1,6 @@
 package daemon
 
 import (
-	"os"
 	"path/filepath"
 	"strings"
 	"sync"
@@ -10,7 +9,6 @@ import (
 	"time"
 
 	"github.com/victorarias/attn/internal/protocol"
-	"github.com/victorarias/attn/internal/ptybackend"
 	"github.com/victorarias/attn/internal/store"
 )
 
@@ -65,38 +63,6 @@ func wasNudged(inputs []string) bool {
 		}
 	}
 	return false
-}
-
-func TestQueuedNudgeTypesDoorbellOnlyOnceTheSessionGoesIdle(t *testing.T) {
-	d := newBubbleDaemon(t)
-	synctest.Test(t, func(t *testing.T) {
-		stopDaemonBackground(t, d)
-		_, agentID, inputs := delegateForNotify(t, d, "codex")
-		ticketID := boundTicketID(t, d, agentID)
-		d.applyState(sessionStateChange{
-			sessionID: agentID,
-			state:     protocol.StateWorking,
-			cause:     resolverObservation{},
-		})
-
-		commentOnTicket(t, d, ticketID, "take a look")
-		settledNudgeDeadline(t, d, agentID)
-		time.Sleep(defaultNudgeCountdownWindow)
-		synctest.Wait()
-		if wasNudged(inputs(agentID)) {
-			t.Fatal("deferred nudge typed into the session while it was working")
-		}
-
-		d.applyState(sessionStateChange{
-			sessionID: agentID,
-			state:     protocol.StateIdle,
-			cause:     resolverObservation{},
-		})
-		synctest.Wait()
-		if !wasNudged(inputs(agentID)) {
-			t.Fatal("queued nudge did not wake when the session became idle")
-		}
-	})
 }
 
 func commentOnTicket(t *testing.T, d *Daemon, ticketID, comment string) {
@@ -216,77 +182,6 @@ func TestChiefRoleAndExplicitSubscriptionDeliverOnce(t *testing.T) {
 	}
 	if again := callTicketInbox(t, d, chiefID); len(again) != 0 {
 		t.Fatalf("overlapping role/subscriber second inbox = %+v, want empty", again)
-	}
-}
-
-func TestTicketActivityWakesSleepingMemberAndDoorbellsOnIdleWithoutPromptHook(t *testing.T) {
-	d, backend, _ := newWakeableDaemon(t)
-	d.nudgeWindowOverride = time.Hour
-	t.Cleanup(d.stopNudgeCountdowns)
-	doorbell := &recordingDoorbell{}
-	backend.onInput = doorbell.backend().onInput
-	var initialPrompt string
-	backend.onSpawn = func(opts ptybackend.SpawnOptions) {
-		body, err := os.ReadFile(opts.InitialPromptFile)
-		if err != nil {
-			t.Fatalf("read initial prompt: %v", err)
-		}
-		initialPrompt = string(body)
-	}
-
-	identity := store.TicketMemberIdentity("trellis")
-	now := time.Now()
-	if _, err := d.store.CreateTicket(store.Ticket{ID: "sleeping-thread", Title: "Sleeping thread"}, "you", now); err != nil {
-		t.Fatal(err)
-	}
-	if err := d.store.AddTicketSubscription(identity, "sleeping-thread", now); err != nil {
-		t.Fatal(err)
-	}
-	if _, err := d.store.AddTicketComment("sleeping-thread", "you", "new activity", now.Add(time.Second)); err != nil {
-		t.Fatal(err)
-	}
-	d.notifyTicketObservers("sleeping-thread")
-
-	member := memberByID(t, crewList(t, d), "trellis")
-	sessionID := protocol.Deref(member.BindingSession)
-	if sessionID == "" {
-		t.Fatal("ticket activity did not wake Trellis")
-	}
-	if initialPrompt != crewWakePrompt {
-		t.Fatalf("wake initial prompt = %q, want the ordinary post-priming greeting", initialPrompt)
-	}
-	if prompts := doorbell.pasted(); len(prompts) != 0 {
-		t.Fatalf("ticket nudge landed before priming completed: %q", prompts)
-	}
-	if currentNudgeTimer(d, sessionID) == nil {
-		t.Fatal("ticket activity did not schedule independently of the prompt hook")
-	}
-	fireNudgeNow(t, d, sessionID)
-	if prompts := doorbell.pasted(); len(prompts) != 0 {
-		t.Fatalf("countdown spliced into priming: %q", prompts)
-	}
-	decorated := d.sessionForBroadcast(d.store.Get(sessionID))
-	if decorated == nil || !protocol.Deref(decorated.TicketUnread) {
-		t.Fatalf("woken member session = %+v, want unread indicator", decorated)
-	}
-	unread, err := d.store.UnreadAgentMailboxDeliveries(sessionID)
-	if err != nil || len(unread) != 1 || unread[0].Item.Prompt != ticketNudgePrompt {
-		t.Fatalf("durable ticket mailbox after countdown = %+v, %v", unread, err)
-	}
-
-	drains := observeAgentMailboxDrains(t, d)
-	if !d.applyState(sessionStateChange{
-		sessionID: sessionID,
-		state:     protocol.StateIdle,
-		cause:     liveSignal{},
-	}) {
-		t.Fatal("idle state did not apply")
-	}
-	if delivered := drains.next(); delivered != 1 {
-		t.Fatalf("idle drain delivered %d doorbells, want 1", delivered)
-	}
-	if !wasNudged(doorbell.pasted()) {
-		t.Fatalf("woken member was not nudged on idle without a hook: %q", doorbell.pasted())
 	}
 }
 

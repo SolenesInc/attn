@@ -584,9 +584,6 @@ func (d *Daemon) mintAndPlantProtected(protection foregroundCleanupProtection, s
 }
 
 func (d *Daemon) mintSeedID() (string, error) {
-	if d.gardenMintID != nil {
-		return d.gardenMintID()
-	}
 	return garden.NewID()
 }
 

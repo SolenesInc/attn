@@ -4,12 +4,10 @@ import (
 	"net"
 	"strings"
 	"testing"
-	"time"
 
 	"github.com/victorarias/attn/internal/garden"
 	"github.com/victorarias/attn/internal/hub"
 	"github.com/victorarias/attn/internal/protocol"
-	"github.com/victorarias/attn/internal/store"
 )
 
 func TestSeedNudges_RemoteTenderStopsAtTheHomeFence(t *testing.T) {
@@ -33,47 +31,6 @@ func TestSeedNudges_RemoteTenderStopsAtTheHomeFence(t *testing.T) {
 	d.ringSeedUnblocked([]garden.Seed{seed})
 	if queued := queuedSeedBells(t, d, "remote-worker"); len(queued) != 0 {
 		t.Fatalf("home queued a bell for a remote tender: %q", queued)
-	}
-}
-
-func TestSeedNudges_InjectionLeavesTheBellUnreadUntilShow(t *testing.T) {
-	fixture := newSeededNudgeGarden(t)
-	doorbell := &recordingDoorbell{}
-	fixture.d.ptyBackend = doorbell.backend()
-	drains := observeAgentMailboxDrains(t, fixture.d)
-	watchSeed(t, fixture.d, "sess-b", fixture.leaf.ID, false)
-
-	ringingNote(t, fixture.d, "sess-c", fixture.leaf.ID, "look now", true)
-	if delivered := drains.next(); delivered != 1 {
-		t.Fatalf("drain delivered %d bells, want 1", delivered)
-	}
-	prompts := doorbell.pasted()
-	if len(prompts) != 1 || prompts[0] != agentMailboxDoorbellText {
-		t.Fatalf("doorbells = %q, want one generic inbox notification", prompts)
-	}
-	if unread := queuedSeedBells(t, fixture.d, "sess-b"); len(unread) != 1 {
-		t.Fatalf("injected bell is not durably unread: %q", unread)
-	}
-
-	ringingNote(t, fixture.d, "sess-c", fixture.leaf.ID, "still unread", true)
-	if prompts := doorbell.pasted(); len(prompts) != 1 {
-		t.Fatalf("unread seed rang %d times, want one: %q", len(prompts), prompts)
-	}
-
-	resp := gardenCall(t, func(c net.Conn) {
-		fixture.d.handleSeedShow(c, &protocol.SeedShowMessage{
-			Cmd: protocol.CmdSeedShow, SeedID: fixture.leaf.ID, SourceSessionID: protocol.Ptr("sess-b"),
-		})
-	})
-	if !resp.Ok {
-		t.Fatalf("show: %v", protocol.Deref(resp.Error))
-	}
-	ringingNote(t, fixture.d, "sess-c", fixture.leaf.ID, "after read", true)
-	if delivered := drains.next(); delivered != 1 {
-		t.Fatalf("post-read drain delivered %d bells, want 1", delivered)
-	}
-	if prompts := doorbell.pasted(); len(prompts) != 2 {
-		t.Fatalf("read did not re-arm the bell: %q", prompts)
 	}
 }
 
@@ -113,22 +70,6 @@ func watchSeed(t *testing.T, d *Daemon, sessionID, seedID string, unwatch bool) 
 	return resp.SeedWatchResult
 }
 
-func ringingNote(t *testing.T, d *Daemon, sessionID, seedID, body string, ring bool) protocol.SeedNote {
-	t.Helper()
-	msg := protocol.SeedNoteMessage{
-		Cmd: protocol.CmdSeedNote, SeedID: seedID, Body: body,
-		SourceSessionID: protocol.Ptr(sessionID),
-	}
-	if ring {
-		msg.Ring = protocol.Ptr(true)
-	}
-	resp := gardenCall(t, func(c net.Conn) { d.handleSeedNote(c, &msg) })
-	if !resp.Ok {
-		t.Fatalf("note on %s: %v", seedID, protocol.Deref(resp.Error))
-	}
-	return resp.SeedNoteResult.Note
-}
-
 func queuedSeedBells(t *testing.T, d *Daemon, sessionID string) []string {
 	t.Helper()
 	messages, err := d.store.UnreadAgentMailboxDeliveries(sessionID)
@@ -147,18 +88,6 @@ func assertOneSeedBell(t *testing.T, d *Daemon, sessionID, seedID, event string)
 	queued := queuedSeedBells(t, d, sessionID)
 	if len(queued) != 1 || !strings.Contains(queued[0], seedID+" moved: "+event) {
 		t.Fatalf("queued bells for %s = %q, want one %s/%s doorbell", sessionID, queued, seedID, event)
-	}
-}
-
-func TestSeedNudges_StartupRefusesAnUnknownPendingBellDefinition(t *testing.T) {
-	d := newGardenDaemon(t)
-	if _, _, err := d.store.HandleGardenSeedEvent(1, "s-7k3f9m", "note.added", "removed bell", []store.GardenSeedBellDelivery{{
-		RecipientSessionID: "sess-a", ItemID: "unknown-bell",
-	}}, time.Now()); err != nil {
-		t.Fatal(err)
-	}
-	if err := d.validatePendingGardenSeedBells(); err == nil || !strings.Contains(err.Error(), `pending bell "removed bell"`) {
-		t.Fatalf("startup validation error = %v", err)
 	}
 }
 

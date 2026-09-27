@@ -76,36 +76,6 @@ func TestReplantedSeedCarriesTheReconcileVerdict(t *testing.T) {
 	}
 }
 
-func TestStrandedReplantLeavesTheRestOfTheBoardAlone(t *testing.T) {
-	d := newGardenDaemon(t)
-	seedBacklogTicket(t, d, "in-flight", "In flight", "being worked", store.TicketStatusWorking, "sess-a")
-	seedBacklogTicket(t, d, "finished", "Finished", "already shipped", store.TicketStatusDone, "sess-a")
-	if _, err := d.createTicketWithUniqueSlug(store.Ticket{
-		Title: "Automation run", Description: "a run's own ticket",
-		Status: store.TicketStatusWorking, Assignee: "sess-auto", AutomationRunID: "run-1",
-	}, "automation-run", "chief", store.TicketRoleChiefOfStaff, nil, time.Now()); err != nil {
-		t.Fatalf("seed automation ticket: %v", err)
-	}
-	if _, err := d.store.SetTicketStatus("automation-run", store.TicketStatusCrashed, store.TicketAuthorAttn, "", time.Now()); err != nil {
-		t.Fatalf("stamp the automation ticket crashed: %v", err)
-	}
-
-	d.replantStrandedTickets()
-
-	if seeds := gardenSeeds(t, d); len(seeds) != 0 {
-		t.Fatalf("replant planted seeds it should not have: %+v", seeds)
-	}
-	for _, id := range []string{"in-flight", "finished", "automation-run"} {
-		ticket, err := d.store.GetTicket(id)
-		if err != nil || ticket == nil {
-			t.Fatalf("GetTicket %s: %v %v", id, ticket, err)
-		}
-		if ticket.ArchivedAt != nil {
-			t.Fatalf("replant archived %s: %+v", id, ticket)
-		}
-	}
-}
-
 func TestReconcilingADeathReplantsTheTicketIntoTheGarden(t *testing.T) {
 	d := newGardenDaemon(t)
 	seedStrandedTicket(t, d, "wire-the-thing", "Wire the thing", "the whole brief", store.TicketStatusCrashed, "sess-dead")

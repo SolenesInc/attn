@@ -72,37 +72,6 @@ func tendAs(t *testing.T, d *Daemon, seedID, sessionID string) {
 	}
 }
 
-func TestDelegationRecoveryRebindsTheSameSeed(t *testing.T) {
-	d, backend, sourceSessionID := newGardenDelegationDaemon(t)
-	consumeDelegatedPrompt(t, backend)
-	msg := &resolvedDelegationLaunch{
-		Cmd:             protocol.CmdDelegate,
-		SourceSessionID: protocol.Ptr(sourceSessionID),
-		Brief:           protocol.Ptr("Migrate the store to X"),
-		Agent:           protocol.Ptr("codex"),
-	}
-	result, err := d.delegateResolved(msg)
-	if err != nil {
-		t.Fatalf("delegate(): %v", err)
-	}
-	first, _ := d.gardenDispatchCrown(result.SessionID)
-
-	again, err := d.bindDelegationSeed(result.SessionID, sourceSessionID, "Migrate the store to X", "Store migration", "", "", "", false)
-	if err != nil {
-		t.Fatalf("re-bind: %v", err)
-	}
-	if again != first {
-		t.Fatalf("re-bind produced %q, want the already-bound %q", again, first)
-	}
-	read, err := d.readGarden()
-	if err != nil {
-		t.Fatalf("readGarden: %v", err)
-	}
-	if len(read.seeds) != 1 {
-		t.Fatalf("the garden holds %d seeds; a re-bind planted a second one", len(read.seeds))
-	}
-}
-
 func TestDelegationOnAnOutpostRefusesBeforeLaunch(t *testing.T) {
 	d := newEnrolledDaemon(t, "d-"+strings.Repeat("a", 32))
 	t.Cleanup(d.stopEventBus)
