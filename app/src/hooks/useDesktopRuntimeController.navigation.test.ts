@@ -2,7 +2,7 @@ import { act, renderHook } from '@testing-library/react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { useSessionStore, type Session } from '../store/sessions';
 import { useDesktopRuntimeController } from './useDesktopRuntimeController';
-import type { SessionTerminalWorkspaceHandle } from '../components/SessionTerminalWorkspace';
+import type { SessionTerminalDesktopHandle } from '../components/SessionTerminalDesktop';
 
 function session(id: string): Session {
   return {
@@ -33,16 +33,16 @@ beforeEach(() =>
 );
 
 function controller(
-  focusPane: ReturnType<typeof vi.fn<SessionTerminalWorkspaceHandle['focusPane']>>,
+  focusPane: ReturnType<typeof vi.fn<SessionTerminalDesktopHandle['focusPane']>>,
 ) {
   const hook = renderHook(() => {
     const { sessions, activeSessionId } = useSessionStore();
     return useDesktopRuntimeController(sessions, activeSessionId);
   });
   for (const session of useSessionStore.getState().sessions) {
-    const handle: Partial<SessionTerminalWorkspaceHandle> = { focusPane };
+    const handle: Partial<SessionTerminalDesktopHandle> = { focusPane };
     hook.result.current.setDesktopRef(session.desktopId)(
-      handle as SessionTerminalWorkspaceHandle,
+      handle as SessionTerminalDesktopHandle,
     );
   }
   return hook;
@@ -50,7 +50,7 @@ function controller(
 
 describe('navigation focus', () => {
   it('focuses the committed selection once, even when session metadata changes', () => {
-    const focus = vi.fn<SessionTerminalWorkspaceHandle['focusPane']>();
+    const focus = vi.fn<SessionTerminalDesktopHandle['focusPane']>();
     const { rerender } = controller(focus);
     act(() => {
       expect(useSessionStore.getState().selectAgent('b')).toBe(true);
@@ -66,7 +66,7 @@ describe('navigation focus', () => {
   });
 
   it('never focuses an intermediate selection superseded before commit', () => {
-    const focus = vi.fn<SessionTerminalWorkspaceHandle['focusPane']>();
+    const focus = vi.fn<SessionTerminalDesktopHandle['focusPane']>();
     controller(focus);
     act(() => {
       useSessionStore.getState().selectAgent('a');
@@ -76,7 +76,7 @@ describe('navigation focus', () => {
   });
 
   it('does not focus a selection cancelled by Home before commit', () => {
-    const focus = vi.fn<SessionTerminalWorkspaceHandle['focusPane']>();
+    const focus = vi.fn<SessionTerminalDesktopHandle['focusPane']>();
     controller(focus);
     act(() => {
       useSessionStore.getState().selectAgent('a');

@@ -3,9 +3,9 @@ import { useProfilesStore } from '../store/profiles';
 import { LayoutPaneKind, LayoutPaneStatus, type Desktop, type Profile } from '../types/generated';
 import {
   buildDesktopViewModels,
-  type WorkspaceViewSession,
-  type WorkspaceWithSessions,
-} from '../utils/workspaceViewModels';
+  type DesktopViewSession,
+  type DesktopWithSessions,
+} from '../utils/desktopViewModels';
 
 export const TEST_PROFILE_ID = 'profile-test';
 
@@ -104,12 +104,14 @@ export interface TestDesktopGroup {
   tree?: unknown;
 }
 
-export function desktopGroups<TSession extends WorkspaceViewSession>(
+export type PlacedTestSession = DesktopViewSession & { desktopId?: string };
+
+export function desktopGroups<TSession extends PlacedTestSession>(
   groups: TestDesktopGroup[],
   sessions: TSession[],
-): WorkspaceWithSessions<TSession>[] {
+): DesktopWithSessions<TSession>[] {
   const desktops = groups.map((group, index) => {
-    const held = sessions.filter((session) => session.workspaceId === group.id).map((session) => session.id);
+    const held = sessions.filter((session) => session.desktopId === group.id).map((session) => session.id);
     const desktop = agentDesktop(group.id, index + 1, held);
     return group.tree ? { ...desktop, tree_json: JSON.stringify(group.tree) } : desktop;
   });

@@ -14,7 +14,7 @@ import { createWindowDriver } from './platform.mjs';
 import {
   waitForPaneAttached,
   waitForPaneVisible,
-  waitForSessionWorkspace,
+  waitForSessionDesktop,
 } from './scenarioAssertions.mjs';
 import { UiAutomationClient } from './uiAutomationClient.mjs';
 import { createScenarioRunner } from './scenarioRunner.mjs';
@@ -91,10 +91,10 @@ async function waitForActiveSession(client, sessionId, description, timeoutMs = 
   throw new Error(`Timed out waiting for ${description}. Last state:\n${JSON.stringify(lastState, null, 2)}`);
 }
 
-async function closeWorkspacePanes(client, sessionId) {
+async function closeDesktopPanes(client, sessionId) {
   for (let attempt = 0; attempt < 10; attempt += 1) {
-    const workspace = await client.request('get_workspace', { sessionId }).catch(() => null);
-    const pane = workspace?.panes?.[0];
+    const desktop = await client.request('get_desktop', { sessionId }).catch(() => null);
+    const pane = desktop?.panes?.[0];
     if (!pane) {
       return;
     }
@@ -148,7 +148,7 @@ async function main() {
   runner.registerCleanup('quit_app', () => client.quitApp());
   runner.registerCleanup('close_created_sessions', async () => {
     for (const sessionId of [...createdSessionIds].reverse()) {
-      await closeWorkspacePanes(client, sessionId).catch(() => {});
+      await closeDesktopPanes(client, sessionId).catch(() => {});
     }
     await waitForNoSessionsUnderDir(client, runner.sessionDir).catch(() => {});
   });
@@ -174,7 +174,7 @@ async function main() {
       });
       createdSessionIds.push(sessionId);
       seedSessionId = sessionId;
-      const workspace = await waitForSessionWorkspace(
+      const desktop = await waitForSessionDesktop(
         client,
         sessionId,
         (entry) => (entry?.panes || []).length === 1 && (entry?.panes || []).every((pane) => pane.runtimeId),
@@ -182,8 +182,8 @@ async function main() {
         30_000,
       );
       await client.request('select_session', { sessionId });
-      await waitForPaneVisible(client, sessionId, workspace.panes[0].paneId, 20_000);
-      await waitForPaneAttached(client, sessionId, workspace.panes[0].paneId, 20_000);
+      await waitForPaneVisible(client, sessionId, desktop.panes[0].paneId, 20_000);
+      await waitForPaneAttached(client, sessionId, desktop.panes[0].paneId, 20_000);
       await waitForActiveSession(client, sessionId, 'the created session to be the selected one');
       const seed = await waitForStateSession(client, sessionId, 'the seed session in app state');
       seedDesktopId = seed.desktopId;
@@ -209,7 +209,7 @@ async function main() {
     process.exitCode = 1;
   } finally {
     for (const sessionId of [...createdSessionIds].reverse()) {
-      await closeWorkspacePanes(client, sessionId).catch(() => {});
+      await closeDesktopPanes(client, sessionId).catch(() => {});
     }
     await waitForNoSessionsUnderDir(client, runner.sessionDir).catch(() => {});
     await client.quitApp().catch(() => {});

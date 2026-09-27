@@ -1,4 +1,4 @@
-import type { SidebarProps, SidebarWorkspace } from './sidebarTypes';
+import type { SidebarProps, SidebarDesktop } from './sidebarTypes';
 import type { MouseEvent as ReactMouseEvent, PointerEvent as ReactPointerEvent } from 'react';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { useEscapeStack } from '../hooks/useEscapeStack';
@@ -13,11 +13,11 @@ function reachedDragThreshold(
 
 export function useSidebarDrag({
   reorderParticipants,
-  onWorkspaceReorder,
+  onDesktopReorder,
   onSessionDragStart,
   onSessionDragEnd,
-}: Pick<SidebarProps, 'onWorkspaceReorder' | 'onSessionDragStart' | 'onSessionDragEnd'> & {
-  reorderParticipants: SidebarWorkspace[];
+}: Pick<SidebarProps, 'onDesktopReorder' | 'onSessionDragStart' | 'onSessionDragEnd'> & {
+  reorderParticipants: SidebarDesktop[];
 }) {
   const activeGestureCleanup = useRef<(() => void) | null>(null);
   const cancelActiveGesture = useCallback(() => {
@@ -27,7 +27,7 @@ export function useSidebarDrag({
   }, []);
   useEffect(() => cancelActiveGesture, [cancelActiveGesture]);
   const REORDER_THRESHOLD = 6;
-  const [reorderDrag, setReorderDrag] = useState<{ workspaceId: string } | null>(null);
+  const [reorderDrag, setReorderDrag] = useState<{ desktopId: string } | null>(null);
   const [sessionDragGhost, setSessionDragGhost] = useState<{
     x: number;
     y: number;
@@ -43,7 +43,7 @@ export function useSidebarDrag({
   const suppressNextSessionClickRef = useRef(false);
   const [reorderSeamIndex, setReorderSeamIndex] = useState<number | null>(null);
   const reorderDragRef = useRef<{
-    workspaceId: string;
+    desktopId: string;
     pointerId: number;
     startX: number;
     startY: number;
@@ -63,7 +63,7 @@ export function useSidebarDrag({
     if (!list) {
       return null;
     }
-    const seams = Array.from(list.querySelectorAll<HTMLElement>('.workspace-reorder-seam'));
+    const seams = Array.from(list.querySelectorAll<HTMLElement>('.desktop-reorder-seam'));
     let best: number | null = null;
     let bestDist = Infinity;
     for (const seam of seams) {
@@ -89,11 +89,11 @@ export function useSidebarDrag({
   }, [updateReorderSeam]);
 
   const commitReorder = useCallback(
-    (workspaceId: string, seamIndex: number | null) => {
-      if (seamIndex == null || !onWorkspaceReorder) {
+    (desktopId: string, seamIndex: number | null) => {
+      if (seamIndex == null || !onDesktopReorder) {
         return;
       }
-      const fromIndex = reorderParticipants.findIndex((workspace) => workspace.id === workspaceId);
+      const fromIndex = reorderParticipants.findIndex((desktop) => desktop.id === desktopId);
       if (fromIndex < 0) {
         return;
       }
@@ -102,25 +102,25 @@ export function useSidebarDrag({
       if (seamIndex === fromIndex || seamIndex === fromIndex + 1) {
         return;
       }
-      const remaining = reorderParticipants.filter((workspace) => workspace.id !== workspaceId);
+      const remaining = reorderParticipants.filter((desktop) => desktop.id !== desktopId);
       const insertAt = seamIndex > fromIndex ? seamIndex - 1 : seamIndex;
-      const prevWorkspaceId = insertAt > 0 ? remaining[insertAt - 1]?.id : undefined;
-      const nextWorkspaceId = insertAt < remaining.length ? remaining[insertAt]?.id : undefined;
-      onWorkspaceReorder({ workspaceId, prevWorkspaceId, nextWorkspaceId });
+      const prevDesktopId = insertAt > 0 ? remaining[insertAt - 1]?.id : undefined;
+      const nextDesktopId = insertAt < remaining.length ? remaining[insertAt]?.id : undefined;
+      onDesktopReorder({ desktopId, prevDesktopId, nextDesktopId });
     },
-    [onWorkspaceReorder, reorderParticipants],
+    [onDesktopReorder, reorderParticipants],
   );
 
   const handleHeaderPointerDown = useCallback(
-    (workspace: SidebarWorkspace, event: ReactPointerEvent<HTMLButtonElement>) => {
+    (desktop: SidebarDesktop, event: ReactPointerEvent<HTMLButtonElement>) => {
       suppressNextHeaderClickRef.current = false;
-      if (event.button !== 0 || !onWorkspaceReorder) {
+      if (event.button !== 0 || !onDesktopReorder) {
         return;
       }
       cancelActiveGesture();
       const sourceEl = event.currentTarget;
       reorderDragRef.current = {
-        workspaceId: workspace.id,
+        desktopId: desktop.id,
         pointerId: event.pointerId,
         startX: event.clientX,
         startY: event.clientY,
@@ -144,7 +144,7 @@ export function useSidebarDrag({
           } catch {
             // setPointerCapture can throw if the pointer is already gone; ignore.
           }
-          setReorderDrag({ workspaceId: drag.workspaceId });
+          setReorderDrag({ desktopId: drag.desktopId });
         }
         updateReorderSeam(nearestSeamIndex(moveEvent.clientY));
       };
@@ -170,7 +170,7 @@ export function useSidebarDrag({
           return;
         }
         if (drag.armed) {
-          commitReorder(drag.workspaceId, reorderSeamIndexRef.current);
+          commitReorder(drag.desktopId, reorderSeamIndexRef.current);
         }
         endReorderDrag();
       };
@@ -184,7 +184,7 @@ export function useSidebarDrag({
       const removeListeners = listenForPointerGesture(onMove, onUp, onCancel);
     },
     [
-      onWorkspaceReorder,
+      onDesktopReorder,
       nearestSeamIndex,
       updateReorderSeam,
       endReorderDrag,
@@ -193,16 +193,16 @@ export function useSidebarDrag({
     ],
   );
 
-  const reorderSeamIndexByWorkspaceId = reorderDrag
-    ? new Map(reorderParticipants.map((workspace, index) => [workspace.id, index]))
+  const reorderSeamIndexByDesktopId = reorderDrag
+    ? new Map(reorderParticipants.map((desktop, index) => [desktop.id, index]))
     : null;
   const reorderTrailingSeamIndex = reorderParticipants.length;
   const lastReorderParticipantId = reorderParticipants[reorderParticipants.length - 1]?.id;
 
   const renderReorderSeam = (index: number) => (
     <div
-      className={`workspace-reorder-seam ${reorderSeamIndex === index ? 'active' : ''}`.trim()}
-      data-testid={`workspace-reorder-seam-${index}`}
+      className={`desktop-reorder-seam ${reorderSeamIndex === index ? 'active' : ''}`.trim()}
+      data-testid={`desktop-reorder-seam-${index}`}
       data-seam-index={index}
       aria-hidden="true"
       onPointerEnter={() => {
@@ -211,7 +211,7 @@ export function useSidebarDrag({
         }
       }}
     >
-      <span className="workspace-reorder-seam-line" />
+      <span className="desktop-reorder-seam-line" />
     </div>
   );
 
@@ -225,12 +225,12 @@ export function useSidebarDrag({
 
   useEffect(() => endReorderDrag, [endReorderDrag]);
 
-  // Unlike the workspace reorder, this takes NO pointer capture: the drop targets
+  // Unlike the desktop reorder, this takes NO pointer capture: the drop targets
   // rely on their own pointer handlers firing as the cursor moves over them.
   const SESSION_DRAG_THRESHOLD = 6;
   const handleSessionPointerDown = useCallback(
     (
-      workspace: SidebarWorkspace,
+      desktop: SidebarDesktop,
       paneId: string,
       sessionId: string,
       label: string,
@@ -261,7 +261,7 @@ export function useSidebarDrag({
           drag.armed = true;
           suppressNextSessionClickRef.current = true;
           setDraggingSessionId(sessionId);
-          onSessionDragStart(workspace.id, workspace.endpointId, paneId);
+          onSessionDragStart(desktop.id, desktop.endpointId, paneId);
         }
         setSessionDragGhost({ x: moveEvent.clientX, y: moveEvent.clientY, label });
       };
@@ -312,7 +312,7 @@ export function useSidebarDrag({
     reorderDrag,
     sessionDragGhost,
     draggingSessionId,
-    reorderSeamIndexByWorkspaceId,
+    reorderSeamIndexByDesktopId,
     reorderTrailingSeamIndex,
     lastReorderParticipantId,
     renderReorderSeam,

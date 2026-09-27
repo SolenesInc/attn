@@ -3,7 +3,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import { act, fireEvent, render, screen } from '@testing-library/react';
 import { setShortcutOverrides } from '../../shortcuts/resolver';
 import { buildQueueBands } from '../../utils/queueBands';
-import type { WorkspaceWithSessions } from '../../utils/workspaceViewModels';
+import type { DesktopWithSessions } from '../../utils/desktopViewModels';
 import type { PaletteSession } from './agentPaletteRows';
 import type { PaletteCommand } from './paletteCommands';
 import { switchPalette, type PaletteMode, type PaletteState } from './paletteState';
@@ -15,7 +15,7 @@ function session(id: string, fields: Partial<PaletteSession> = {}): PaletteSessi
   return { id, label: id, state: 'idle', ...fields };
 }
 
-function workspaces(sessions: PaletteSession[]): WorkspaceWithSessions<PaletteSession>[] {
+function desktops(sessions: PaletteSession[]): DesktopWithSessions<PaletteSession>[] {
   return [{
     id: 'd1',
     title: 'Desktop 1',
@@ -56,7 +56,7 @@ function renderPalette({
       if (next) setState(next);
       else handlers.onClose();
     };
-    const views = workspaces(current);
+    const views = desktops(current);
     return (
       <UnifiedPalette
         state={state}
@@ -64,7 +64,7 @@ function renderPalette({
         agents={{
           bands: buildQueueBands(views, { now: NOW }),
           crewRoster: [],
-          workspaces: views,
+          desktops: views,
           tileTitle: () => '',
           now: NOW,
         }}
@@ -210,7 +210,7 @@ describe('UnifiedPalette keyboard flow', () => {
   it('runs a command with the element that had focus before the palette opened, without moving focus to it', () => {
     let focusAtRun: Element | null = null;
     const run = vi.fn(() => { focusAtRun = document.activeElement; });
-    const views = workspaces(FIXTURE);
+    const views = desktops(FIXTURE);
     function Launcher() {
       const [open, setOpen] = useState(false);
       const [state, setState] = useState<PaletteState>({ mode: 'search', query: '>' });
@@ -221,7 +221,7 @@ describe('UnifiedPalette keyboard flow', () => {
             <UnifiedPalette
               state={state}
               onStateChange={setState}
-              agents={{ bands: buildQueueBands(views, { now: NOW }), crewRoster: [], workspaces: views, tileTitle: () => '', now: NOW }}
+              agents={{ bands: buildQueueBands(views, { now: NOW }), crewRoster: [], desktops: views, tileTitle: () => '', now: NOW }}
               desktops={[]}
               commands={[{ id: 'crew', title: 'Manage crew', run }]}
               onClose={() => setOpen(false)}

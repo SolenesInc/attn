@@ -356,7 +356,7 @@ export async function teardownInstanceState({ client, instance, wipe = true }) {
 }
 
 export async function paneIdForSession(client, sessionId) {
-  const ws = await client.request('get_workspace', { sessionId }, { timeoutMs: 10_000 });
+  const ws = await client.request('get_desktop', { sessionId }, { timeoutMs: 10_000 });
   return ws.activePaneId || ws.panes?.[0]?.paneId || null;
 }
 

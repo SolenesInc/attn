@@ -7,7 +7,7 @@ import { useProfilesStore } from '../store/profiles';
 import { SELECTED_PROFILE_STORAGE_KEY } from '../utils/selectedProfile';
 import { MigrationPhase, type Desktop, type Profile } from '../types/generated';
 import { migrationState, resetMigrationStore } from '../test/migration';
-import { tileContentKey } from '../types/workspace';
+import { tileContentKey } from '../types/desktop';
 
 class FakeWebSocket {
   static readonly CONNECTING = 0;
@@ -106,7 +106,6 @@ describe('useDaemonSocket profiles', () => {
         event: 'initial_state',
         protocol_version: PROTOCOL_VERSION,
         sessions: [],
-        workspaces: [],
         prs: [],
         repos: [],
         authors: [],

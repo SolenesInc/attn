@@ -14,7 +14,7 @@ async function injectLocalSession(
       ...(s.isWorktree !== undefined ? { isWorktree: s.isWorktree } : {}),
       ...(s.branch ? { branch: s.branch } : {}),
     });
-    window.__TEST_SET_SESSION_WORKSPACE?.(s.id, {
+    window.__TEST_SET_SESSION_DESKTOP?.(s.id, {
       agents: [{ id: paneId, runtimeId: s.id, sessionId: s.id, title: s.label }],
       layoutTree: { type: 'pane', paneId },
     }, paneId);
@@ -62,8 +62,8 @@ async function createSession(
 }
 
 test.describe('Keyboard Shortcuts', () => {
-  test.describe('Terminal Workspace', () => {
-    test('⌘N opens the new-session dialog for the current workspace', async ({ page, daemon }) => {
+  test.describe('Terminal Desktop', () => {
+    test('⌘N opens the new-session dialog for the current desktop', async ({ page, daemon }) => {
       await daemon.start();
       await page.goto('/');
       await page.waitForSelector('.dashboard');
@@ -72,14 +72,14 @@ test.describe('Keyboard Shortcuts', () => {
       await expect(page.locator('[data-testid="session-s-new"]')).toBeVisible();
 
       await page.locator('[data-testid="session-s-new"]').click();
-      await expect(page.locator('.terminal-wrapper.active [data-session-terminal-workspace]')).toBeVisible();
+      await expect(page.locator('.terminal-wrapper.active [data-session-terminal-desktop]')).toBeVisible();
 
       await page.keyboard.press('Meta+n');
 
-      const selectedWorkspaceSessions = page.locator('.workspace-group.selected .session-item');
+      const selectedDesktopSessions = page.locator('.desktop-group.selected .session-item');
       await expect(page.locator('.location-picker-overlay')).toBeVisible();
       await expect(page.locator('.picker-title')).toHaveText('New Session Location');
-      await expect(selectedWorkspaceSessions).toHaveCount(1);
+      await expect(selectedDesktopSessions).toHaveCount(1);
       await expect(page.locator('.terminal-wrapper.active [data-pane-kind="agent"]')).toHaveCount(1);
     });
 
@@ -95,10 +95,10 @@ test.describe('Keyboard Shortcuts', () => {
       await page.locator('[data-testid="sidebar-session-s-peer"]').getByRole('button', { name: 'Open Peer' }).click();
       await expect(page.locator('.terminal-wrapper.active [data-pane-session-id="s-peer"]')).toBeVisible();
 
-      const workspace = page.locator('.terminal-wrapper.active [data-session-terminal-workspace]');
-      const mainPane = workspace.locator('[data-pane-kind="agent"][data-pane-session-id="s-zoom"]');
-      const utilityPane = workspace.locator('[data-pane-kind="agent"][data-pane-session-id="s-peer"]');
-      const rootSplit = workspace.locator('[data-split-id]').first();
+      const desktop = page.locator('.terminal-wrapper.active [data-session-terminal-desktop]');
+      const mainPane = desktop.locator('[data-pane-kind="agent"][data-pane-session-id="s-zoom"]');
+      const utilityPane = desktop.locator('[data-pane-kind="agent"][data-pane-session-id="s-peer"]');
+      const rootSplit = desktop.locator('[data-split-id]').first();
       // Dock chips render their key tokens in a styled child span, so match the chip by its label.
       const zoomHint = page.locator('.shortcut-hint', { hasText: 'zoom' });
 
@@ -111,7 +111,7 @@ test.describe('Keyboard Shortcuts', () => {
 
       await utilityPane.click();
       await page.keyboard.press('Meta+Shift+z');
-      await expect(workspace).toHaveAttribute('data-zoomed-pane-id', (await utilityPane.getAttribute('data-pane-id'))!);
+      await expect(desktop).toHaveAttribute('data-zoomed-pane-id', (await utilityPane.getAttribute('data-pane-id'))!);
       await expect(rootSplit).toHaveAttribute('data-split-ratio', '0.240');
       await expect(zoomHint).toHaveAttribute('data-active', 'true');
 
@@ -130,7 +130,7 @@ test.describe('Keyboard Shortcuts', () => {
       await expect(utilityPane).toBeVisible();
 
       await mainPane.click();
-      await expect(workspace).toHaveAttribute('data-zoomed-pane-id', (await mainPane.getAttribute('data-pane-id'))!);
+      await expect(desktop).toHaveAttribute('data-zoomed-pane-id', (await mainPane.getAttribute('data-pane-id'))!);
       await expect(rootSplit).toHaveAttribute('data-split-ratio', '0.760');
       await expect(zoomHint).toHaveAttribute('data-active', 'true');
 
@@ -266,8 +266,8 @@ test.describe('Keyboard Shortcuts', () => {
     });
   });
 
-  test.describe('Workspace Selection', () => {
-    test('⌘1-9 selects workspace by index', async ({ page, daemon }) => {
+  test.describe('Desktop Selection', () => {
+    test('⌘1-9 selects desktop by index', async ({ page, daemon }) => {
       await daemon.start();
       await page.goto('/');
       await page.waitForSelector('.dashboard');
@@ -284,7 +284,7 @@ test.describe('Keyboard Shortcuts', () => {
       await firstTerminal.focus();
 
       await page.keyboard.press('Meta+2');
-      await expect(page.locator('.terminal-wrapper.active [data-session-terminal-workspace]')).toBeVisible();
+      await expect(page.locator('.terminal-wrapper.active [data-session-terminal-desktop]')).toBeVisible();
       expect(await page.evaluate(() => (
         window.__TEST_GET_SESSION_INPUT_EVENTS?.('s1') ?? []
       ).filter((event) => event.event === 'send_to_pty').length)).toBe(0);

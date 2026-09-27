@@ -4,7 +4,7 @@ import type { Session } from '../store/sessions';
 const SESSION_PANE_ID = 'pane-session';
 import { useDesktopRuntimeController } from './useDesktopRuntimeController';
 
-vi.mock('../components/SessionTerminalWorkspace/paneRuntimeEventRouter', () => ({
+vi.mock('../components/SessionTerminalDesktop/paneRuntimeEventRouter', () => ({
   usePaneRuntimeEventRouter: () => ({
     registerBinding: vi.fn(() => () => {}),
   }),

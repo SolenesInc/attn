@@ -15,7 +15,7 @@ import {
 } from './common.mjs';
 import {
   compactTerminalText,
-  waitForFirstWorkspacePane,
+  waitForFirstDesktopPane,
   waitForNewShellPane,
   waitForPaneInputFocus,
   waitForPaneState,
@@ -61,9 +61,9 @@ async function main() {
     console.log(`[RealAppHarness] session=${session.id} agent=${session.agent} state=${session.state}`);
     await captureScreenshot(driver, path.join(runDir, '02-session-opened.png'));
 
-    const workspaceBeforeSplit = await client.request('get_workspace', { sessionId });
-    const existingPaneIds = new Set((workspaceBeforeSplit.panes || []).map((pane) => pane.paneId));
-    const initialPane = await waitForFirstWorkspacePane(client, sessionId, `initial pane for session ${sessionId}`, 20_000);
+    const desktopBeforeSplit = await client.request('get_desktop', { sessionId });
+    const existingPaneIds = new Set((desktopBeforeSplit.panes || []).map((pane) => pane.paneId));
+    const initialPane = await waitForFirstDesktopPane(client, sessionId, `initial pane for session ${sessionId}`, 20_000);
     await client.request('split_pane', {
       sessionId,
       targetPaneId: initialPane.paneId,

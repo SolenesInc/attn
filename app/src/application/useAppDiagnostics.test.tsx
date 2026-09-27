@@ -50,15 +50,15 @@ describe('useAppDiagnostics', () => {
     });
 
     const input = beginDiagnosticCapture.mock.calls[0][0] as {
-      panes: Array<{ paneId: string; sessionId: string; workspaceId: string }>;
-      workspaces: Array<{ id: string; directory: string }>;
+      panes: Array<{ paneId: string; sessionId: string; desktopId: string }>;
+      desktops: Array<{ id: string; directory: string }>;
     };
-    expect(input.panes.map(({ paneId, sessionId, workspaceId }) => [paneId, sessionId, workspaceId])).toEqual([
+    expect(input.panes.map(({ paneId, sessionId, desktopId }) => [paneId, sessionId, desktopId])).toEqual([
       ['pane-s1', 's1', 'd1'],
       ['pane-s2', 's2', 'd1'],
       ['pane-s3', 's3', 'd2'],
     ]);
-    expect(input.workspaces.map((entry) => entry.id)).toEqual(['d1', 'd2']);
-    expect(input.workspaces[0].directory).toContain('s2');
+    expect(input.desktops.map((entry) => entry.id)).toEqual(['d1', 'd2']);
+    expect(input.desktops[0].directory).toContain('s2');
   });
 });

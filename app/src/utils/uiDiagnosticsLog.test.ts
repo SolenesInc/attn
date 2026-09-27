@@ -36,7 +36,7 @@ describe('UI diagnostics', () => {
       value: () => document.querySelector('.app'),
     });
 
-    probeUiAfterSwitch({ sessionId: 'chief-session', workspaceId: 'chief-workspace', view: 'session' });
+    probeUiAfterSwitch({ sessionId: 'chief-session', desktopId: 'chief-desktop', view: 'session' });
     vi.advanceTimersByTime(1500);
 
     const events = (window.__ATTN_UI_DIAG_DUMP?.() ?? [])
@@ -58,8 +58,8 @@ describe('UI diagnostics', () => {
       value: () => document.querySelector('.app'),
     });
 
-    probeUiAfterSwitch({ sessionId: 'first', workspaceId: 'one', view: 'session' });
-    probeUiAfterSwitch({ sessionId: 'second', workspaceId: 'two', view: 'session' });
+    probeUiAfterSwitch({ sessionId: 'first', desktopId: 'one', view: 'session' });
+    probeUiAfterSwitch({ sessionId: 'second', desktopId: 'two', view: 'session' });
     vi.advanceTimersByTime(1500);
 
     const events = window.__ATTN_UI_DIAG_DUMP?.() ?? [];

@@ -4,31 +4,31 @@ import { parseScenarioList, planSoak } from './plan-soak.mjs';
 const catalog = [
   { id: 'terminal-annotations' },
   { id: 'terminal-block-resize' },
-  { id: 'workspace-switching' },
+  { id: 'desktop-switching' },
   { id: 'terminal-block-copy', skipOn: { linux: 'needs the macOS menu accelerator' } },
   { id: 'remote-probe', skipOn: { linux: { reason: 'needs remote', unlessEnv: 'REMOTE' } } },
 ];
 
 describe('parseScenarioList', () => {
   it('trims ids and preserves their requested order', () => {
-    expect(parseScenarioList(' terminal-block-resize,workspace-switching ', catalog)).toEqual([
+    expect(parseScenarioList(' terminal-block-resize,desktop-switching ', catalog)).toEqual([
       'terminal-block-resize',
-      'workspace-switching',
+      'desktop-switching',
     ]);
   });
 
   it('names unknown ids and the catalog', () => {
     expect(() => parseScenarioList('terminal-annotations,missing', catalog)).toThrow(
-      'Unknown scenario id(s): missing\nKnown scenarios: terminal-annotations, terminal-block-resize, workspace-switching, terminal-block-copy, remote-probe',
+      'Unknown scenario id(s): missing\nKnown scenarios: terminal-annotations, terminal-block-resize, desktop-switching, terminal-block-copy, remote-probe',
     );
   });
 
   it('rejects empty and duplicate entries', () => {
-    expect(() => parseScenarioList('terminal-annotations,,workspace-switching', catalog)).toThrow(
+    expect(() => parseScenarioList('terminal-annotations,,desktop-switching', catalog)).toThrow(
       'Scenario ids must be a comma-separated list with no empty entries.',
     );
-    expect(() => parseScenarioList('workspace-switching,workspace-switching', catalog)).toThrow(
-      'Duplicate scenario id: workspace-switching',
+    expect(() => parseScenarioList('desktop-switching,desktop-switching', catalog)).toThrow(
+      'Duplicate scenario id: desktop-switching',
     );
   });
 
@@ -49,8 +49,8 @@ describe('parseScenarioList', () => {
 
 describe('planSoak', () => {
   it('emits a GitHub matrix and numeric repeat', () => {
-    expect(planSoak({ scenarios: 'terminal-annotations,workspace-switching', repeat: '10' }, catalog)).toEqual({
-      matrix: { scenario: ['terminal-annotations', 'workspace-switching'] },
+    expect(planSoak({ scenarios: 'terminal-annotations,desktop-switching', repeat: '10' }, catalog)).toEqual({
+      matrix: { scenario: ['terminal-annotations', 'desktop-switching'] },
       repeat: 10,
     });
   });

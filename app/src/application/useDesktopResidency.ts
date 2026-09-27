@@ -1,14 +1,14 @@
 import { useMemo } from 'react';
 import type { AppView } from '../navigation/sessionNavigation';
 import { useProfilesStore } from '../store/profiles';
-import type { WorkspaceWithSessions } from '../utils/workspaceViewModels';
+import type { DesktopWithSessions } from '../utils/desktopViewModels';
 import { useAppGrid } from './useAppGrid';
 import { useAppSessions } from './useAppSessions';
 
 type EnrichedSession = ReturnType<typeof useAppSessions>['enrichedLocalSessions'][number];
 
 interface Options {
-  desktopViews: WorkspaceWithSessions<EnrichedSession>[];
+  desktopViews: DesktopWithSessions<EnrichedSession>[];
   view: AppView;
   visibleGridTiles: ReturnType<typeof useAppGrid>['visibleGridTiles'];
   dragSourceDesktopId: string | null;

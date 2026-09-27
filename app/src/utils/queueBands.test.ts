@@ -8,10 +8,12 @@ import {
   type QueueBandSession,
 } from './queueBands';
 import { LayoutPaneKind, LayoutPaneStatus, type Desktop } from '../types/generated';
-import { buildDesktopViewModels } from './workspaceViewModels';
+import { buildDesktopViewModels } from './desktopViewModels';
 
-function desktop(id: string, slot: number, sessions: QueueBandSession[]): Desktop {
-  const holds = sessions.filter((session) => session.workspaceId === id);
+type PlacedSession = QueueBandSession & { desktopId?: string };
+
+function desktop(id: string, slot: number, sessions: PlacedSession[]): Desktop {
+  const holds = sessions.filter((session) => session.desktopId === id);
   return {
     id,
     profile_id: 'profile',
@@ -32,7 +34,7 @@ function desktop(id: string, slot: number, sessions: QueueBandSession[]): Deskto
   };
 }
 
-function views(sessions: QueueBandSession[]) {
+function views(sessions: PlacedSession[]) {
   return buildDesktopViewModels([desktop('ws-a', 1, sessions), desktop('ws-b', 2, sessions)], sessions);
 }
 
@@ -47,17 +49,17 @@ describe('sessionParticipatesInQueue', () => {
 
 describe('buildQueueBands', () => {
   it('keeps band order unchanged when sessions carry dispatcher fields', () => {
-    const sessions: QueueBandSession[] = [
-      { id: 'root', label: 'root', workspaceId: 'ws-a' },
-      { id: 'newer', label: 'newer', workspaceId: 'ws-a', turnOwed: true, turnOpenedAt: '2026-07-26T11:00:00Z' },
-      { id: 'older', label: 'older', workspaceId: 'ws-b', turnOwed: true, turnOpenedAt: '2026-07-26T09:00:00Z' },
+    const sessions: PlacedSession[] = [
+      { id: 'root', label: 'root', desktopId: 'ws-a' },
+      { id: 'newer', label: 'newer', desktopId: 'ws-a', turnOwed: true, turnOpenedAt: '2026-07-26T11:00:00Z' },
+      { id: 'older', label: 'older', desktopId: 'ws-b', turnOwed: true, turnOpenedAt: '2026-07-26T09:00:00Z' },
     ];
     const withDispatchers = sessions.map((session) => (
       session.id === 'root'
         ? session
         : { ...session, dispatcher_session_id: 'root', dispatcher_member: 'alder' }
     ));
-    const ids = (bands: ReturnType<typeof buildQueueBands<QueueBandSession>>) => ({
+    const ids = (bands: ReturnType<typeof buildQueueBands<PlacedSession>>) => ({
       chief: bands.chief?.session.id ?? null,
       turns: bands.turns.map((row) => row.session.id),
       settled: bands.settled.map((row) => row.session.id),
@@ -68,35 +70,35 @@ describe('buildQueueBands', () => {
     expect(ids(buildQueueBands(views(withDispatchers)))).toEqual(ids(buildQueueBands(views(sessions))));
   });
 
-  it('lists the oldest turn first, across workspaces', () => {
+  it('lists the oldest turn first, across desktops', () => {
     const bands = buildQueueBands(views([
-      { id: 'newest', label: 'newest', workspaceId: 'ws-a', turnOwed: true, turnOpenedAt: '2026-07-26T12:00:00Z' },
-      { id: 'oldest', label: 'oldest', workspaceId: 'ws-b', turnOwed: true, turnOpenedAt: '2026-07-26T09:00:00Z' },
-      { id: 'middle', label: 'middle', workspaceId: 'ws-a', turnOwed: true, turnOpenedAt: '2026-07-26T10:00:00Z' },
+      { id: 'newest', label: 'newest', desktopId: 'ws-a', turnOwed: true, turnOpenedAt: '2026-07-26T12:00:00Z' },
+      { id: 'oldest', label: 'oldest', desktopId: 'ws-b', turnOwed: true, turnOpenedAt: '2026-07-26T09:00:00Z' },
+      { id: 'middle', label: 'middle', desktopId: 'ws-a', turnOwed: true, turnOpenedAt: '2026-07-26T10:00:00Z' },
     ]));
 
     expect(bands.turns.map((row) => row.session.id)).toEqual(['oldest', 'middle', 'newest']);
-    expect(bands.turns.map((row) => row.workspaceTitle)).toEqual(['Desktop 2', 'Desktop 1', 'Desktop 1']);
+    expect(bands.turns.map((row) => row.desktopTitle)).toEqual(['Desktop 2', 'Desktop 1', 'Desktop 1']);
   });
 
   it('reads turn_owed rather than deriving it from state', () => {
     const bands = buildQueueBands(views([
-      { id: 'waiting-but-settled', label: 'a', workspaceId: 'ws-a', state: 'waiting_input', turnOwed: false },
-      { id: 'working-but-owed', label: 'b', workspaceId: 'ws-a', state: 'working', turnOwed: true, turnOpenedAt: '2026-07-26T09:00:00Z' },
+      { id: 'waiting-but-settled', label: 'a', desktopId: 'ws-a', state: 'waiting_input', turnOwed: false },
+      { id: 'working-but-owed', label: 'b', desktopId: 'ws-a', state: 'working', turnOwed: true, turnOpenedAt: '2026-07-26T09:00:00Z' },
     ]));
 
     expect(bands.turns.map((row) => row.session.id)).toEqual(['working-but-owed']);
   });
 
   it('puts a new arrival at the bottom and leaves the rows above untouched', () => {
-    const existing: QueueBandSession[] = [
-      { id: 'first', label: 'first', workspaceId: 'ws-a', turnOwed: true, turnOpenedAt: '2026-07-26T09:00:00Z' },
-      { id: 'second', label: 'second', workspaceId: 'ws-a', turnOwed: true, turnOpenedAt: '2026-07-26T10:00:00Z' },
+    const existing: PlacedSession[] = [
+      { id: 'first', label: 'first', desktopId: 'ws-a', turnOwed: true, turnOpenedAt: '2026-07-26T09:00:00Z' },
+      { id: 'second', label: 'second', desktopId: 'ws-a', turnOwed: true, turnOpenedAt: '2026-07-26T10:00:00Z' },
     ];
     const before = buildQueueBands(views(existing));
     const after = buildQueueBands(views([
       ...existing,
-      { id: 'arrival', label: 'arrival', workspaceId: 'ws-b', turnOwed: true, turnOpenedAt: '2026-07-26T11:00:00Z' },
+      { id: 'arrival', label: 'arrival', desktopId: 'ws-b', turnOwed: true, turnOpenedAt: '2026-07-26T11:00:00Z' },
     ]));
 
     expect(after.turns.map((row) => row.session.id))
@@ -104,12 +106,12 @@ describe('buildQueueBands', () => {
   });
 
   it('does not move a row when its state changes', () => {
-    const session = (state: string): QueueBandSession => ({
-      id: 'steered', label: 'steered', workspaceId: 'ws-a', state, turnOwed: true, turnOpenedAt: '2026-07-26T10:00:00Z',
+    const session = (state: string): PlacedSession => ({
+      id: 'steered', label: 'steered', desktopId: 'ws-a', state, turnOwed: true, turnOpenedAt: '2026-07-26T10:00:00Z',
     });
-    const others: QueueBandSession[] = [
-      { id: 'older', label: 'older', workspaceId: 'ws-a', turnOwed: true, turnOpenedAt: '2026-07-26T09:00:00Z' },
-      { id: 'newer', label: 'newer', workspaceId: 'ws-a', turnOwed: true, turnOpenedAt: '2026-07-26T11:00:00Z' },
+    const others: PlacedSession[] = [
+      { id: 'older', label: 'older', desktopId: 'ws-a', turnOwed: true, turnOpenedAt: '2026-07-26T09:00:00Z' },
+      { id: 'newer', label: 'newer', desktopId: 'ws-a', turnOwed: true, turnOpenedAt: '2026-07-26T11:00:00Z' },
     ];
 
     const waiting = buildQueueBands(views([...others, session('waiting_input')]));
@@ -120,10 +122,10 @@ describe('buildQueueBands', () => {
   });
 
   it('settling a row moves only the rows below it', () => {
-    const all: QueueBandSession[] = [
-      { id: 'a', label: 'a', workspaceId: 'ws-a', turnOwed: true, turnOpenedAt: '2026-07-26T09:00:00Z' },
-      { id: 'b', label: 'b', workspaceId: 'ws-a', turnOwed: true, turnOpenedAt: '2026-07-26T10:00:00Z' },
-      { id: 'c', label: 'c', workspaceId: 'ws-a', turnOwed: true, turnOpenedAt: '2026-07-26T11:00:00Z' },
+    const all: PlacedSession[] = [
+      { id: 'a', label: 'a', desktopId: 'ws-a', turnOwed: true, turnOpenedAt: '2026-07-26T09:00:00Z' },
+      { id: 'b', label: 'b', desktopId: 'ws-a', turnOwed: true, turnOpenedAt: '2026-07-26T10:00:00Z' },
+      { id: 'c', label: 'c', desktopId: 'ws-a', turnOwed: true, turnOpenedAt: '2026-07-26T11:00:00Z' },
     ];
     const settled = all.map((session) => (session.id === 'b' ? { ...session, turnOwed: false } : session));
 
@@ -132,8 +134,8 @@ describe('buildQueueBands', () => {
 
   it('anchors the chief and never queues it', () => {
     const bands = buildQueueBands(views([
-      { id: 'chief', label: 'chief', workspaceId: 'ws-a', chiefOfStaff: true, turnOwed: true, turnOpenedAt: '2026-07-26T09:00:00Z' },
-      { id: 'agent', label: 'agent', workspaceId: 'ws-a', turnOwed: true, turnOpenedAt: '2026-07-26T10:00:00Z' },
+      { id: 'chief', label: 'chief', desktopId: 'ws-a', chiefOfStaff: true, turnOwed: true, turnOpenedAt: '2026-07-26T09:00:00Z' },
+      { id: 'agent', label: 'agent', desktopId: 'ws-a', turnOwed: true, turnOpenedAt: '2026-07-26T10:00:00Z' },
     ]));
 
     expect(bands.chief?.session.id).toBe('chief');
@@ -145,12 +147,12 @@ describe('buildQueueBands', () => {
       {
         id: 'automation-run',
         label: 'automation-run',
-        workspaceId: 'ws-a',
+        desktopId: 'ws-a',
         turnOwed: true,
         turnOpenedAt: '2026-07-26T09:00:00Z',
         automation: { definition_id: 'review-sol' },
       },
-      { id: 'agent', label: 'agent', workspaceId: 'ws-a' },
+      { id: 'agent', label: 'agent', desktopId: 'ws-a' },
     ]));
 
     expect(bands.turns.map((row) => row.session.id)).toEqual([]);
@@ -160,7 +162,7 @@ describe('buildQueueBands', () => {
 
   it('is empty when nothing is owed', () => {
     const bands = buildQueueBands(views([
-      { id: 'a', label: 'a', workspaceId: 'ws-a', state: 'working' },
+      { id: 'a', label: 'a', desktopId: 'ws-a', state: 'working' },
     ]));
 
     expect(bands.chief).toBeNull();
@@ -169,9 +171,9 @@ describe('buildQueueBands', () => {
 
   it('puts everything not owed into settled, so no agent is in both bands', () => {
     const bands = buildQueueBands(views([
-      { id: 'owed', label: 'owed', workspaceId: 'ws-a', turnOwed: true, turnOpenedAt: '2026-07-26T09:00:00Z' },
-      { id: 'quiet', label: 'quiet', workspaceId: 'ws-a' },
-      { id: 'busy', label: 'busy', workspaceId: 'ws-b', state: 'working' },
+      { id: 'owed', label: 'owed', desktopId: 'ws-a', turnOwed: true, turnOpenedAt: '2026-07-26T09:00:00Z' },
+      { id: 'quiet', label: 'quiet', desktopId: 'ws-a' },
+      { id: 'busy', label: 'busy', desktopId: 'ws-b', state: 'working' },
     ]));
 
     expect(bands.turns.map((row) => row.session.id)).toEqual(['owed']);
@@ -179,8 +181,8 @@ describe('buildQueueBands', () => {
   });
 
   it('settling moves a row from one band to the other rather than out of the sidebar', () => {
-    const session: QueueBandSession = {
-      id: 'a', label: 'a', workspaceId: 'ws-a', turnOwed: true, turnOpenedAt: '2026-07-26T09:00:00Z',
+    const session: PlacedSession = {
+      id: 'a', label: 'a', desktopId: 'ws-a', turnOwed: true, turnOpenedAt: '2026-07-26T09:00:00Z',
     };
     const before = buildQueueBands(views([session]));
     const after = buildQueueBands(views([{ ...session, turnOwed: false }]));
@@ -191,15 +193,15 @@ describe('buildQueueBands', () => {
     expect(after.settled.map((row) => row.session.id)).toEqual(['a']);
   });
 
-  it('leaves the workspace tree untouched — it is not an output of the queue', () => {
-    const sessions: QueueBandSession[] = [
-      { id: 'a', label: 'a', workspaceId: 'ws-a', turnOwed: true, turnOpenedAt: '2026-07-26T09:00:00Z' },
-      { id: 'b', label: 'b', workspaceId: 'ws-b' },
+  it('leaves the desktop tree untouched — it is not an output of the queue', () => {
+    const sessions: PlacedSession[] = [
+      { id: 'a', label: 'a', desktopId: 'ws-a', turnOwed: true, turnOpenedAt: '2026-07-26T09:00:00Z' },
+      { id: 'b', label: 'b', desktopId: 'ws-b' },
     ];
     const tree = views(sessions);
     buildQueueBands(tree);
 
-    expect(tree.map((workspace) => workspace.sessions.map((session) => session.id))).toEqual([['a'], ['b']]);
+    expect(tree.map((desktop) => desktop.sessions.map((session) => session.id))).toEqual([['a'], ['b']]);
   });
 
   describe('snoozed', () => {
@@ -211,9 +213,9 @@ describe('buildQueueBands', () => {
 
     it('takes a deferred agent out of both bands into its own list', () => {
       const bands = buildQueueBands(views([
-        { id: 'owed', label: 'owed', workspaceId: 'ws-a', turnOwed: true, turnOpenedAt: '2026-07-26T09:00:00Z' },
-        { id: 'quiet', label: 'quiet', workspaceId: 'ws-a' },
-        { id: 'deferred', label: 'deferred', workspaceId: 'ws-b', turnSnoozedUntil: laterToday },
+        { id: 'owed', label: 'owed', desktopId: 'ws-a', turnOwed: true, turnOpenedAt: '2026-07-26T09:00:00Z' },
+        { id: 'quiet', label: 'quiet', desktopId: 'ws-a' },
+        { id: 'deferred', label: 'deferred', desktopId: 'ws-b', turnSnoozedUntil: laterToday },
       ]), now);
 
       expect(bands.turns.map((row) => row.session.id)).toEqual(['owed']);
@@ -223,8 +225,8 @@ describe('buildQueueBands', () => {
 
     it('orders by when each comes back, soonest first', () => {
       const bands = buildQueueBands(views([
-        { id: 'late', label: 'late', workspaceId: 'ws-a', turnSnoozedUntil: laterStill },
-        { id: 'soon', label: 'soon', workspaceId: 'ws-b', turnSnoozedUntil: laterToday },
+        { id: 'late', label: 'late', desktopId: 'ws-a', turnSnoozedUntil: laterStill },
+        { id: 'soon', label: 'soon', desktopId: 'ws-b', turnSnoozedUntil: laterToday },
       ]), now);
 
       expect(bands.snoozed.map((row) => row.session.id)).toEqual(['soon', 'late']);
@@ -232,7 +234,7 @@ describe('buildQueueBands', () => {
 
     it('returns a lapsed deadline to the settled band', () => {
       const bands = buildQueueBands(views([
-        { id: 'woken', label: 'woken', workspaceId: 'ws-a', turnSnoozedUntil: '2026-07-26T11:00:00Z' },
+        { id: 'woken', label: 'woken', desktopId: 'ws-a', turnSnoozedUntil: '2026-07-26T11:00:00Z' },
       ]), now);
 
       expect(bands.snoozed).toEqual([]);
@@ -241,7 +243,7 @@ describe('buildQueueBands', () => {
 
     it('keeps a snoozed agent out of the turns band even if a snapshot still says owed', () => {
       const bands = buildQueueBands(views([
-        { id: 'both', label: 'both', workspaceId: 'ws-a', turnOwed: true, turnOpenedAt: '2026-07-26T09:00:00Z', turnSnoozedUntil: laterToday },
+        { id: 'both', label: 'both', desktopId: 'ws-a', turnOwed: true, turnOpenedAt: '2026-07-26T09:00:00Z', turnSnoozedUntil: laterToday },
       ]), now);
 
       expect(bands.turns).toEqual([]);
@@ -252,13 +254,13 @@ describe('buildQueueBands', () => {
 });
 
 describe('oldestWantedTurn', () => {
-  const wantsOwed = (session: QueueBandSession) => Boolean(session.turnOwed);
+  const wantsOwed = (session: PlacedSession) => Boolean(session.turnOwed);
 
   it('lands on the turn owed longest, not the first in list order', () => {
     const target = oldestWantedTurn([
-      { id: 'newest', label: 'newest', workspaceId: 'ws-a', turnOwed: true, turnOpenedAt: '2026-07-26T12:00:00Z' },
-      { id: 'oldest', label: 'oldest', workspaceId: 'ws-b', turnOwed: true, turnOpenedAt: '2026-07-26T09:00:00Z' },
-      { id: 'middle', label: 'middle', workspaceId: 'ws-a', turnOwed: true, turnOpenedAt: '2026-07-26T10:00:00Z' },
+      { id: 'newest', label: 'newest', desktopId: 'ws-a', turnOwed: true, turnOpenedAt: '2026-07-26T12:00:00Z' },
+      { id: 'oldest', label: 'oldest', desktopId: 'ws-b', turnOwed: true, turnOpenedAt: '2026-07-26T09:00:00Z' },
+      { id: 'middle', label: 'middle', desktopId: 'ws-a', turnOwed: true, turnOpenedAt: '2026-07-26T10:00:00Z' },
     ], wantsOwed);
 
     expect(target?.id).toBe('oldest');
@@ -266,8 +268,8 @@ describe('oldestWantedTurn', () => {
 
   it('skips sessions that do not want the user, whatever their stamp says', () => {
     const target = oldestWantedTurn([
-      { id: 'settled-old', label: 'a', workspaceId: 'ws-a', turnOwed: false, turnOpenedAt: '2026-07-26T08:00:00Z' },
-      { id: 'owed', label: 'b', workspaceId: 'ws-a', turnOwed: true, turnOpenedAt: '2026-07-26T10:00:00Z' },
+      { id: 'settled-old', label: 'a', desktopId: 'ws-a', turnOwed: false, turnOpenedAt: '2026-07-26T08:00:00Z' },
+      { id: 'owed', label: 'b', desktopId: 'ws-a', turnOwed: true, turnOpenedAt: '2026-07-26T10:00:00Z' },
     ], wantsOwed);
 
     expect(target?.id).toBe('owed');
@@ -275,15 +277,15 @@ describe('oldestWantedTurn', () => {
 
   it('is null when nothing wants the user', () => {
     expect(oldestWantedTurn([
-      { id: 'quiet', label: 'quiet', workspaceId: 'ws-a' },
+      { id: 'quiet', label: 'quiet', desktopId: 'ws-a' },
     ], wantsOwed)).toBeNull();
     expect(oldestWantedTurn([], wantsOwed)).toBeNull();
   });
 });
 
 describe('advanceAfterTurnClosed', () => {
-  function owed(id: string, hour: number, workspaceId = 'ws-a'): QueueBandSession {
-    return { id, label: id, workspaceId, turnOwed: true, turnOpenedAt: `2026-07-26T0${hour}:00:00Z` };
+  function owed(id: string, hour: number, desktopId = 'ws-a'): PlacedSession {
+    return { id, label: id, desktopId, turnOwed: true, turnOpenedAt: `2026-07-26T0${hour}:00:00Z` };
   }
 
   it('moves on to the next turn in queue order when the watched turn closes', () => {
@@ -293,7 +295,7 @@ describe('advanceAfterTurnClosed', () => {
 
     const advance = advanceAfterTurnClosed(before.turns, after, 'watched');
 
-    expect(advance).toEqual({ to: 'session', row: expect.objectContaining({ workspaceTitle: 'Desktop 1' }) });
+    expect(advance).toEqual({ to: 'session', row: expect.objectContaining({ desktopTitle: 'Desktop 1' }) });
     expect(advance?.to === 'session' && advance.row.session.id).toBe('next');
   });
 
@@ -373,7 +375,7 @@ describe('advanceAfterTurnClosed', () => {
   it('stays put when the watched agent never owed the turn that closed', () => {
     const queue = [owed('elsewhere', 0)];
     const before = buildQueueBands(views(queue));
-    const after = buildQueueBands(views([{ ...queue[0], turnOwed: false }, { id: 'watched', label: 'watched', workspaceId: 'ws-a' }]));
+    const after = buildQueueBands(views([{ ...queue[0], turnOwed: false }, { id: 'watched', label: 'watched', desktopId: 'ws-a' }]));
 
     expect(advanceAfterTurnClosed(before.turns, after, 'watched')).toBeNull();
   });
@@ -420,10 +422,10 @@ describe('advanceAfterTurnClosed', () => {
 });
 
 describe('headOfQueue', () => {
-  it('is the turn owed longest, not the first one listed by the workspace tree', () => {
+  it('is the turn owed longest, not the first one listed by the desktop tree', () => {
     const bands = buildQueueBands(views([
-      { id: 'newer', label: 'newer', workspaceId: 'ws-a', turnOwed: true, turnOpenedAt: '2026-07-26T12:00:00Z' },
-      { id: 'older', label: 'older', workspaceId: 'ws-b', turnOwed: true, turnOpenedAt: '2026-07-26T09:00:00Z' },
+      { id: 'newer', label: 'newer', desktopId: 'ws-a', turnOwed: true, turnOpenedAt: '2026-07-26T12:00:00Z' },
+      { id: 'older', label: 'older', desktopId: 'ws-b', turnOwed: true, turnOpenedAt: '2026-07-26T09:00:00Z' },
     ]));
 
     expect(headOfQueue(bands)?.session.id).toBe('older');
@@ -431,7 +433,7 @@ describe('headOfQueue', () => {
 
   it('is null while nothing is owed, and with no bands at all', () => {
     const settled = buildQueueBands(views([
-      { id: 'a', label: 'a', workspaceId: 'ws-a', turnOwed: false },
+      { id: 'a', label: 'a', desktopId: 'ws-a', turnOwed: false },
     ]));
 
     expect(headOfQueue(settled)).toBeNull();
@@ -440,10 +442,10 @@ describe('headOfQueue', () => {
 });
 
 describe('satellite shells', () => {
-  it('gives no row to a shell whose agent is alive in the same workspace', () => {
+  it('gives no row to a shell whose agent is alive in the same desktop', () => {
     const bands = buildQueueBands(views([
-      { id: 'agent', label: 'agent', workspaceId: 'ws-a' },
-      { id: 'shell', label: 'shell', workspaceId: 'ws-a', parentSessionId: 'agent' },
+      { id: 'agent', label: 'agent', desktopId: 'ws-a' },
+      { id: 'shell', label: 'shell', desktopId: 'ws-a', parentSessionId: 'agent' },
     ]));
 
     expect(bands.settled.map((row) => row.session.id)).toEqual(['agent']);
@@ -451,7 +453,7 @@ describe('satellite shells', () => {
 
   it('gives an orphan its row back when the agent is gone', () => {
     const bands = buildQueueBands(views([
-      { id: 'shell', label: 'shell', workspaceId: 'ws-a', parentSessionId: 'closed-agent' },
+      { id: 'shell', label: 'shell', desktopId: 'ws-a', parentSessionId: 'closed-agent' },
     ]));
 
     expect(bands.settled.map((row) => row.session.id)).toEqual(['shell']);
@@ -459,8 +461,8 @@ describe('satellite shells', () => {
 
   it('gives a satellite its row back once it is moved away from its agent', () => {
     const bands = buildQueueBands(views([
-      { id: 'agent', label: 'agent', workspaceId: 'ws-a' },
-      { id: 'shell', label: 'shell', workspaceId: 'ws-b', parentSessionId: 'agent' },
+      { id: 'agent', label: 'agent', desktopId: 'ws-a' },
+      { id: 'shell', label: 'shell', desktopId: 'ws-b', parentSessionId: 'agent' },
     ]));
 
     expect(bands.settled.map((row) => row.session.id)).toEqual(['agent', 'shell']);
@@ -468,7 +470,7 @@ describe('satellite shells', () => {
 
   it('keeps a shell with no parent at all, as every pre-migration shell has', () => {
     const bands = buildQueueBands(views([
-      { id: 'shell', label: 'shell', workspaceId: 'ws-a' },
+      { id: 'shell', label: 'shell', desktopId: 'ws-a' },
     ]));
 
     expect(bands.settled.map((row) => row.session.id)).toEqual(['shell']);
@@ -478,9 +480,9 @@ describe('satellite shells', () => {
 describe('the crew band', () => {
   it('takes a member day out of every other band, whatever it is doing', () => {
     const bands = buildQueueBands(views([
-      { id: 'sess-trellis', label: 'trellis', workspaceId: 'ws-a', crewMember: 'trellis', turnOwed: true, turnOpenedAt: '2026-08-14T09:00:00Z' },
-      { id: 'sess-keel', label: 'keel', workspaceId: 'ws-a', crewMember: 'keel' },
-      { id: 'worker', label: 'worker', workspaceId: 'ws-b', turnOwed: true, turnOpenedAt: '2026-08-14T09:30:00Z' },
+      { id: 'sess-trellis', label: 'trellis', desktopId: 'ws-a', crewMember: 'trellis', turnOwed: true, turnOpenedAt: '2026-08-14T09:00:00Z' },
+      { id: 'sess-keel', label: 'keel', desktopId: 'ws-a', crewMember: 'keel' },
+      { id: 'worker', label: 'worker', desktopId: 'ws-b', turnOwed: true, turnOpenedAt: '2026-08-14T09:30:00Z' },
     ]));
 
     expect(bands.crew.map((row) => row.session.id)).toEqual(['sess-keel', 'sess-trellis']);
@@ -490,8 +492,8 @@ describe('the crew band', () => {
 
   it('lets awake members enter normal queue bands when enabled', () => {
     const bands = buildQueueBands(views([
-      { id: 'owed', label: 'owed', workspaceId: 'ws-a', crewMember: 'trellis', turnOwed: true, turnOpenedAt: '2026-08-14T09:00:00Z' },
-      { id: 'settled', label: 'settled', workspaceId: 'ws-a', crewMember: 'keel' },
+      { id: 'owed', label: 'owed', desktopId: 'ws-a', crewMember: 'trellis', turnOwed: true, turnOpenedAt: '2026-08-14T09:00:00Z' },
+      { id: 'settled', label: 'settled', desktopId: 'ws-a', crewMember: 'keel' },
     ]), { crewInQueue: true });
 
     expect(bands.turns.map((row) => row.session.id)).toEqual(['owed']);
@@ -501,7 +503,7 @@ describe('the crew band', () => {
 
   it('leaves the chief the chief', () => {
     const bands = buildQueueBands(views([
-      { id: 'sess-chief', label: 'chief', workspaceId: 'ws-a', chiefOfStaff: true, crewMember: 'keel' },
+      { id: 'sess-chief', label: 'chief', desktopId: 'ws-a', chiefOfStaff: true, crewMember: 'keel' },
     ]));
 
     expect(bands.chief?.session.id).toBe('sess-chief');

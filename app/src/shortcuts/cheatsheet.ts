@@ -67,7 +67,7 @@ export function buildCheatsheet(): CheatsheetCategory[] {
         {
           label: 'Move focus between panes',
           combos: [[...modifierTokens('terminal.focusLeft'), '←↑→↓']],
-          note: 'Crosses into the next workspace at an edge.',
+          note: 'Steps to the next desktop at an edge.',
         },
         { label: 'Zoom active pane', combos: [fromId('terminal.toggleZoom')] },
         { label: 'Focus active pane', combos: [fromId('terminal.toggleMaximize')] },

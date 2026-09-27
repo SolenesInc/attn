@@ -3,12 +3,12 @@ import { useAppViewTitleResolver } from '../hooks/useAppViewTitle';
 import { useAgentOnScreen } from '../hooks/useDesktopSelectionBridge';
 import { TURN_AGE_TICK_MS, useNow } from '../hooks/useNow';
 import { formatShortcut } from '../shortcuts/formatShortcut';
-import { tileContentKey, type TileLeaf } from '../types/workspace';
+import { tileContentKey, type TileLeaf } from '../types/desktop';
 import { nextRunNeedingYou, runCount, runsNeedingYouCount } from '../utils/automationRuns';
 import { slotShortcut } from '../utils/desktops';
 import { deriveTileTitle } from '../utils/tilePresentation';
 import { clampIntoViewport } from '../utils/viewportClamp';
-import { UNPLACED_GROUP_ID } from '../utils/workspaceViewModels';
+import { UNPLACED_GROUP_ID } from '../utils/desktopViewModels';
 import { CriticalNotificationStrip } from './CriticalNotificationStrip';
 import { AgentRowView, AgentSessionRow, type SlotOf } from './palette/AgentRows';
 import { agentPaletteRows, type AgentPaletteRow } from './palette/agentPaletteRows';
@@ -102,24 +102,24 @@ function WaitingPill() {
 }
 
 function useSlotOf(): SlotOf {
-  const { workspaces, visualIndexOfWorkspace } = useSidebarContext();
+  const { desktops, visualIndexOfDesktop } = useSidebarContext();
   const desktopOfSession = useMemo(() => {
     const byId = new Map<string, string>();
-    for (const workspace of workspaces) {
-      for (const session of workspace.sessions) byId.set(session.id, workspace.id);
+    for (const desktop of desktops) {
+      for (const session of desktop.sessions) byId.set(session.id, desktop.id);
     }
     return byId;
-  }, [workspaces]);
+  }, [desktops]);
   return (desktopId, sessionId) => {
     const id = sessionId ? desktopOfSession.get(sessionId) : desktopId;
     if (!id || id === UNPLACED_GROUP_ID) return '—';
-    const index = visualIndexOfWorkspace(id);
+    const index = visualIndexOfDesktop(id);
     return index >= 0 ? slotShortcut(index + 1) : '·';
   };
 }
 
 function WaitingPeek() {
-  const { queue, crew, workspaces, tileContents, onSelectSession, onWakeCrewMember, onSelectTile } =
+  const { queue, crew, desktops, tileContents, onSelectSession, onWakeCrewMember, onSelectTile } =
     useSidebarContext();
   const now = useNow(TURN_AGE_TICK_MS);
   const appViewTitle = useAppViewTitleResolver();
@@ -129,10 +129,10 @@ function WaitingPeek() {
     const tileTitle = (desktopId: string, tile: TileLeaf) =>
       deriveTileTitle(tile, tileContents[tileContentKey(desktopId, tile.tileId)], appViewTitle);
     return agentPaletteRows<LocalSession>(
-      { bands: queue, crewRoster: (crew ?? []).map((member) => member.id), workspaces, tileTitle, now },
+      { bands: queue, crewRoster: (crew ?? []).map((member) => member.id), desktops, tileTitle, now },
       '',
     ).filter((row) => row.kind !== 'runs' && !(row.kind === 'agent' && row.session.automation));
-  }, [appViewTitle, crew, now, queue, tileContents, workspaces]);
+  }, [appViewTitle, crew, now, queue, tileContents, desktops]);
 
   const shown: AgentPaletteRow<LocalSession>[] = [];
   let entries = 0;
@@ -319,34 +319,34 @@ function RunsPeek() {
 }
 
 function DesktopChips() {
-  const { workspaces, queue, selectedWorkspaceId, visualIndexOfWorkspace, onSelectWorkspace, onOpenOverview } =
+  const { desktops, queue, selectedDesktopId, visualIndexOfDesktop, onSelectDesktop, onOpenOverview } =
     useSidebarContext();
   const chipDrop = useDesktopChipDrop();
-  const desktops = workspaces.filter((workspace) => workspace.id !== UNPLACED_GROUP_ID);
-  const slotted = desktops
-    .filter((workspace) => visualIndexOfWorkspace(workspace.id) >= 0)
-    .sort((a, b) => visualIndexOfWorkspace(a.id) - visualIndexOfWorkspace(b.id));
-  const extras = desktops.filter((workspace) => visualIndexOfWorkspace(workspace.id) < 0);
+  const placed = desktops.filter((desktop) => desktop.id !== UNPLACED_GROUP_ID);
+  const slotted = placed
+    .filter((desktop) => visualIndexOfDesktop(desktop.id) >= 0)
+    .sort((a, b) => visualIndexOfDesktop(a.id) - visualIndexOfDesktop(b.id));
+  const extras = placed.filter((desktop) => visualIndexOfDesktop(desktop.id) < 0);
   const waitingOn = new Map<string, number>();
-  for (const row of queue?.turns ?? []) waitingOn.set(row.workspaceId, (waitingOn.get(row.workspaceId) ?? 0) + 1);
-  const extrasWaiting = extras.reduce((total, workspace) => total + (waitingOn.get(workspace.id) ?? 0), 0);
+  for (const row of queue?.turns ?? []) waitingOn.set(row.desktopId, (waitingOn.get(row.desktopId) ?? 0) + 1);
+  const extrasWaiting = extras.reduce((total, desktop) => total + (waitingOn.get(desktop.id) ?? 0), 0);
 
   return (
     <div className="queue-bar-desktops" data-testid="queue-bar-desktops">
-      {slotted.map((workspace) => {
-        const slot = visualIndexOfWorkspace(workspace.id) + 1;
-        const waiting = waitingOn.get(workspace.id) ?? 0;
-        const { dropClass, dropHandlers } = chipDrop(workspace);
+      {slotted.map((desktop) => {
+        const slot = visualIndexOfDesktop(desktop.id) + 1;
+        const waiting = waitingOn.get(desktop.id) ?? 0;
+        const { dropClass, dropHandlers } = chipDrop(desktop);
         return (
           <button
-            key={workspace.id}
+            key={desktop.id}
             type="button"
-            className={`queue-bar-desktop${workspace.sessions.length || workspace.children.length ? ' has-panes' : ''}${workspace.id === selectedWorkspaceId ? ' is-current' : ''}${dropClass}`}
+            className={`queue-bar-desktop${desktop.sessions.length || desktop.children.length ? ' has-panes' : ''}${desktop.id === selectedDesktopId ? ' is-current' : ''}${dropClass}`}
             data-testid={`queue-bar-desktop-${slot}`}
-            data-desktop-id={workspace.id}
+            data-desktop-id={desktop.id}
             data-waiting={waiting || undefined}
-            title={`${workspace.title} (${slotShortcut(slot)})`}
-            onClick={() => onSelectWorkspace(workspace.id)}
+            title={`${desktop.title} (${slotShortcut(slot)})`}
+            onClick={() => onSelectDesktop(desktop.id)}
             {...dropHandlers}
           >
             {slot}
@@ -357,7 +357,7 @@ function DesktopChips() {
       {extras.length > 0 && (
         <button
           type="button"
-          className={`queue-bar-desktop is-extra${extras.some((workspace) => workspace.id === selectedWorkspaceId) ? ' is-current' : ''}`}
+          className={`queue-bar-desktop is-extra${extras.some((desktop) => desktop.id === selectedDesktopId) ? ' is-current' : ''}`}
           data-testid="queue-bar-desktop-extras"
           title={`${extras.length} more desktop${extras.length === 1 ? '' : 's'} without a shortcut (${formatShortcut('desktop.overview')})`}
           onClick={onOpenOverview}

@@ -276,7 +276,7 @@ export function ShortcutEditorModal({ isOpen, onClose }: ShortcutEditorModalProp
                           {SHORTCUT_META[id].requiresTerminal && (
                             <span
                               className="shortcut-editor-badge shortcut-editor-badge--scope"
-                              title="Active only when a terminal workspace is open"
+                              title="Active only when a terminal desktop is open"
                             >
                               Needs terminal
                             </span>

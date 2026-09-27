@@ -3,7 +3,7 @@ import { invoke } from '@tauri-apps/api/core';
 import type { Session } from '../store/sessions';
 import type { Presentation } from '../types/generated';
 import type { SessionAgent } from '../types/sessionAgent';
-import type { TerminalSplitDirection } from '../types/workspace';
+import type { TerminalSplitDirection } from '../types/desktop';
 import { SHORTCUTS, type ShortcutId, type Combo, isChord } from '../shortcuts/registry';
 import { resolveBinding } from '../shortcuts/resolver';
 import { getGridAutomationHandle, INACTIVE_GRID_STATE } from '../components/grid/gridAutomation';
@@ -23,7 +23,7 @@ import { useProfilesStore } from '../store/profiles';
 import { dumpTerminalGeometry } from '../utils/terminalDiagnosticsLog';
 import { clearPtyPerfSnapshot, getPtyPerfSnapshot, recordPtyDecode, recordWsJsonParse } from '../utils/ptyPerf';
 import { buildSessionRenderHealth } from '../utils/renderHealth';
-import { collectWorkspaceLayoutDiagnostics, projectWorkspaceBounds } from '../utils/workspaceDiagnostics';
+import { collectDesktopLayoutDiagnostics, projectDesktopBounds } from '../utils/desktopDiagnostics';
 import type { TerminalVisibleContentSnapshot } from '../utils/terminalVisibleContent';
 import type { TerminalVisibleStyleSnapshot } from '../utils/terminalStyleSummary';
 import type { BlockStateSnapshot, PlacementStateSnapshot } from '../components/GhosttyTerminal';
@@ -160,7 +160,7 @@ function resolvePaneOwnerSessionId(session: Session, paneId: string): string {
   return session.desktop.agents.find((entry) => entry.id === paneId)?.sessionId || session.id;
 }
 
-function resolveWorkspaceViewSessionId(session: Session, sessions: Session[], activeSessionId: string | null): string {
+function resolveDesktopViewSessionId(session: Session, sessions: Session[], activeSessionId: string | null): string {
   const activeSession = activeSessionId ? sessions.find((entry) => entry.id === activeSessionId) : null;
   if (activeSession?.desktopId && activeSession.desktopId === session.desktopId) {
     return activeSession.id;
@@ -178,7 +178,7 @@ function paneEntries(session: Session) {
     }));
 }
 
-function serializeWorkspaceModel(
+function serializeDesktopModel(
   session: Session,
   getActivePaneIdForSession: (session: Session | undefined | null) => string,
 ) {
@@ -187,13 +187,13 @@ function serializeWorkspaceModel(
     daemonActivePaneId: session.daemonActivePaneId,
     panes: paneEntries(session),
     layoutTree: session.desktop.layoutTree,
-    layout: collectWorkspaceLayoutDiagnostics(session.desktop.layoutTree),
+    layout: collectDesktopLayoutDiagnostics(session.desktop.layoutTree),
     sessionPaneCount: session.desktop.agents.length,
   };
 }
 
 function serializeSession(session: Session, getActivePaneIdForSession: (session: Session | undefined | null) => string) {
-  const workspace = serializeWorkspaceModel(session, getActivePaneIdForSession);
+  const desktop = serializeDesktopModel(session, getActivePaneIdForSession);
   return {
     id: session.id,
     label: session.label,
@@ -201,10 +201,10 @@ function serializeSession(session: Session, getActivePaneIdForSession: (session:
     cwd: session.cwd,
     desktopId: session.desktopId,
     agent: session.agent,
-    activePaneId: workspace.activePaneId,
-    daemonActivePaneId: workspace.daemonActivePaneId,
-    panes: workspace.panes,
-    workspace,
+    activePaneId: desktop.activePaneId,
+    daemonActivePaneId: desktop.daemonActivePaneId,
+    panes: desktop.panes,
+    desktop,
   };
 }
 
@@ -213,7 +213,7 @@ function serializeArrangement() {
   const surfaceOf = (desktopId: string) =>
     typeof document === 'undefined'
       ? null
-      : document.querySelector(`[data-session-terminal-workspace="${CSS.escape(desktopId)}"]`);
+      : document.querySelector(`[data-session-terminal-desktop="${CSS.escape(desktopId)}"]`);
   return {
     profiles: profiles.map((profile) => ({ id: profile.id, name: profile.name, revision: profile.revision })),
     selectedProfileId,
@@ -288,14 +288,14 @@ function elementMetrics(element: Element | null) {
   };
 }
 
-function getSessionWorkspaceRoot(workspaceId: string) {
-  const root = document.querySelector(`[data-session-terminal-workspace="${workspaceId}"]`);
+function getSessionDesktopRoot(desktopId: string) {
+  const root = document.querySelector(`[data-session-terminal-desktop="${desktopId}"]`);
   return root instanceof HTMLElement ? root : null;
 }
 
-function collectWorkspaceShellMetrics(sessionId: string) {
-  const workspaceRoot = getSessionWorkspaceRoot(sessionId);
-  const terminalWrapper = workspaceRoot?.closest('.terminal-wrapper') ?? null;
+function collectDesktopShellMetrics(sessionId: string) {
+  const desktopRoot = getSessionDesktopRoot(sessionId);
+  const terminalWrapper = desktopRoot?.closest('.terminal-wrapper') ?? null;
   const terminalMainArea = terminalWrapper?.closest('.terminal-main-area') ?? null;
   const terminalPane = terminalMainArea?.closest('.terminal-pane') ?? null;
   const viewContainer = terminalPane?.closest('.view-container') ?? null;
@@ -305,27 +305,27 @@ function collectWorkspaceShellMetrics(sessionId: string) {
     terminalPane: elementMetrics(terminalPane),
     terminalMainArea: elementMetrics(terminalMainArea),
     terminalWrapper: elementMetrics(terminalWrapper),
-    workspaceRoot: elementMetrics(workspaceRoot),
+    desktopRoot: elementMetrics(desktopRoot),
   };
 }
 
-function collectWorkspaceViewState(sessionId: string) {
-  const workspaceRoot = getSessionWorkspaceRoot(sessionId);
+function collectDesktopViewState(sessionId: string) {
+  const desktopRoot = getSessionDesktopRoot(sessionId);
   return {
-    sessionVisible: parseDataFlag(workspaceRoot?.dataset.sessionVisible),
-    activePaneId: workspaceRoot?.dataset.activePaneId || null,
-    activeLeafId: workspaceRoot?.dataset.activeLeafId || null,
-    zoomedPaneId: workspaceRoot?.dataset.zoomedPaneId || null,
-    maximizedPaneId: workspaceRoot?.dataset.maximizedPaneId || null,
+    sessionVisible: parseDataFlag(desktopRoot?.dataset.sessionVisible),
+    activePaneId: desktopRoot?.dataset.activePaneId || null,
+    activeLeafId: desktopRoot?.dataset.activeLeafId || null,
+    zoomedPaneId: desktopRoot?.dataset.zoomedPaneId || null,
+    maximizedPaneId: desktopRoot?.dataset.maximizedPaneId || null,
   };
 }
 
 function collectSplitDomMetrics(sessionId: string) {
-  const workspaceRoot = getSessionWorkspaceRoot(sessionId);
-  if (!workspaceRoot) {
+  const desktopRoot = getSessionDesktopRoot(sessionId);
+  if (!desktopRoot) {
     return [];
   }
-  return Array.from(workspaceRoot.querySelectorAll('[data-split-id]'))
+  return Array.from(desktopRoot.querySelectorAll('[data-split-id]'))
     .filter((element): element is HTMLElement => element instanceof HTMLElement)
     .map((element) => {
       const childElements = Array.from(element.children)
@@ -354,7 +354,7 @@ function collectPaneDomMetrics(paneElement: Element | null) {
   if (!(paneElement instanceof HTMLElement)) {
     return null;
   }
-  const paneBody = paneElement.querySelector('.workspace-pane-body');
+  const paneBody = paneElement.querySelector('.desktop-pane-body');
   const terminalContainer = paneElement.querySelector('.terminal-container');
   const terminalSurface = paneElement.querySelector('.ghostty-terminal');
   const canvas = paneElement.querySelector('.ghostty-terminal canvas');
@@ -394,25 +394,25 @@ function collectVisualSnapshot(
       text: document.activeElement?.textContent?.slice(0, 120) || '',
     },
     sessions: filteredSessions.map((session) => {
-      const workspaceModel = serializeWorkspaceModel(session, getActivePaneIdForSession);
-      const activePaneId = workspaceModel.activePaneId;
-      const paneIds = workspaceModel.panes.map((pane) => pane.paneId);
+      const desktopModel = serializeDesktopModel(session, getActivePaneIdForSession);
+      const activePaneId = desktopModel.activePaneId;
+      const paneIds = desktopModel.panes.map((pane) => pane.paneId);
       const runtimeIdByPaneId = new Map(
-        workspaceModel.panes.map((pane) => [pane.paneId, pane.runtimeId] as const),
+        desktopModel.panes.map((pane) => [pane.paneId, pane.runtimeId] as const),
       );
-      const workspaceId = session.desktopId;
-      const workspaceDom = collectWorkspaceShellMetrics(workspaceId);
-      const workspaceView = collectWorkspaceViewState(workspaceId);
-      const rootBounds = workspaceDom.workspaceRoot?.bounds;
+      const desktopId = session.desktopId;
+      const desktopDom = collectDesktopShellMetrics(desktopId);
+      const desktopView = collectDesktopViewState(desktopId);
+      const rootBounds = desktopDom.desktopRoot?.bounds;
       const paneLayoutById = new Map(
-        workspaceModel.layout.panes.map((pane) => [
+        desktopModel.layout.panes.map((pane) => [
           pane.paneId,
           {
             path: pane.path,
             depth: pane.depth,
             normalizedBounds: pane.bounds,
             projectedBounds: rootBounds
-              ? projectWorkspaceBounds(pane.bounds, rootBounds.width, rootBounds.height)
+              ? projectDesktopBounds(pane.bounds, rootBounds.width, rootBounds.height)
               : null,
           },
         ]),
@@ -425,11 +425,11 @@ function collectVisualSnapshot(
         label: session.label,
         activePaneId,
         daemonActivePaneId: session.daemonActivePaneId,
-        workspace: {
-          model: workspaceModel,
-          view: workspaceView,
-          dom: workspaceDom,
-          splits: collectSplitDomMetrics(workspaceId),
+        desktop: {
+          model: desktopModel,
+          view: desktopView,
+          dom: desktopDom,
+          splits: collectSplitDomMetrics(desktopId),
         },
         sidebarItem: sidebarItem instanceof HTMLElement
           ? {
@@ -437,9 +437,9 @@ function collectVisualSnapshot(
               bounds: rectSnapshot(sidebarItem),
             }
           : null,
-        workspaceBounds: workspaceDom.workspaceRoot?.bounds ?? null,
+        desktopBounds: desktopDom.desktopRoot?.bounds ?? null,
         panes: paneIds.map((paneId) => {
-          const ownerSessionId = workspaceModel.panes.find((pane) => pane.paneId === paneId)?.sessionId || session.id;
+          const ownerSessionId = desktopModel.panes.find((pane) => pane.paneId === paneId)?.sessionId || session.id;
           const paneElement = document.querySelector(
             `[data-pane-session-id="${ownerSessionId}"][data-pane-id="${paneId}"]`
           );
@@ -493,7 +493,7 @@ function collectSessionUiState(
       exists: false,
       selected: false,
       sidebarItem: null,
-      workspaceBounds: null,
+      desktopBounds: null,
       agentPaneBounds: null,
       activePaneId: null,
       daemonActivePaneId: null,
@@ -511,10 +511,10 @@ function collectSessionUiState(
     : null;
   const settlingChip = firstAgentPane?.querySelector('[data-testid="settling-indicator"]') ?? null;
   const settlingFill = firstAgentPane?.querySelector('.settling-header-track-fill') ?? null;
-  const workspaceId = session.desktopId;
-  const workspaceDom = collectWorkspaceShellMetrics(workspaceId);
-  const workspaceView = collectWorkspaceViewState(workspaceId);
-  const workspaceModel = serializeWorkspaceModel(session, getActivePaneIdForSession);
+  const desktopId = session.desktopId;
+  const desktopDom = collectDesktopShellMetrics(desktopId);
+  const desktopView = collectDesktopViewState(desktopId);
+  const desktopModel = serializeDesktopModel(session, getActivePaneIdForSession);
 
   return {
     sessionId,
@@ -532,12 +532,12 @@ function collectSessionUiState(
           pullRequest: sidebarItem.querySelector('.sidebar-session-pr')?.textContent?.trim() || '',
         }
       : null,
-    workspaceBounds: workspaceDom.workspaceRoot?.bounds ?? null,
-    workspace: {
-      model: workspaceModel,
-      view: workspaceView,
-      dom: workspaceDom,
-      splits: collectSplitDomMetrics(workspaceId),
+    desktopBounds: desktopDom.desktopRoot?.bounds ?? null,
+    desktop: {
+      model: desktopModel,
+      view: desktopView,
+      dom: desktopDom,
+      splits: collectSplitDomMetrics(desktopId),
     },
     agentPaneBounds: rectSnapshot(firstAgentPane),
     paneAutomation: readProvenance(firstAgentPane),
@@ -776,12 +776,12 @@ function dispatchShortcutEvent(shortcutId: ShortcutId) {
 }
 
 function findActivePaneCanvas(): HTMLCanvasElement | null {
-  const workspace = document.querySelector('[data-session-terminal-workspace][data-session-visible="1"]');
-  const activePaneId = workspace?.getAttribute('data-active-pane-id');
-  if (!workspace || !activePaneId) {
+  const desktop = document.querySelector('[data-session-terminal-desktop][data-session-visible="1"]');
+  const activePaneId = desktop?.getAttribute('data-active-pane-id');
+  if (!desktop || !activePaneId) {
     return null;
   }
-  const paneElement = workspace.querySelector(`[data-pane-id="${activePaneId}"]`);
+  const paneElement = desktop.querySelector(`[data-pane-id="${activePaneId}"]`);
   const canvas = paneElement?.querySelector('canvas');
   return canvas instanceof HTMLCanvasElement ? canvas : null;
 }
@@ -794,7 +794,7 @@ function clickPaneElement(sessionId: string, paneId: string) {
     throw new Error(`Pane element not found for ${sessionId}:${paneId}`);
   }
   // A folded pane is only its expand button; that button stops mousedown.
-  const expand = element.querySelector('.workspace-suspended-leaf');
+  const expand = element.querySelector('.desktop-suspended-leaf');
   if (element.dataset.paneSuspended === 'true' && expand instanceof HTMLElement) {
     expand.click();
     return;
@@ -1043,7 +1043,7 @@ function dragPaneSelection(
 
 function dragLeafHeader(leafId: string, dropFracX: number, dropFracY: number) {
   const leaf = document.querySelector(`[data-pane-id="${leafId}"]`);
-  const header = leaf?.querySelector('.workspace-pane-header, .workspace-dock-tile-header');
+  const header = leaf?.querySelector('.desktop-pane-header, .desktop-dock-tile-header');
   if (!(header instanceof HTMLElement)) {
     throw new Error(`Draggable leaf header not found for ${leafId}`);
   }
@@ -1087,13 +1087,13 @@ function dragLeafHeader(leafId: string, dropFracX: number, dropFracY: number) {
 }
 
 async function dragSplitDivider(
-  workspaceId: string,
+  desktopId: string,
   splitId: string,
   deltaPx: number,
   steps: number,
 ) {
-  const workspaceRoot = getSessionWorkspaceRoot(workspaceId);
-  const separator = Array.from(workspaceRoot?.querySelectorAll('[role="separator"][data-split-id]') ?? [])
+  const desktopRoot = getSessionDesktopRoot(desktopId);
+  const separator = Array.from(desktopRoot?.querySelectorAll('[role="separator"][data-split-id]') ?? [])
     .find((element): element is HTMLElement => (
       element instanceof HTMLElement && element.dataset.splitId === splitId
     ));
@@ -1149,7 +1149,7 @@ async function dragSplitDivider(
     endX,
     endY,
     steps: moveCount,
-    splits: collectSplitDomMetrics(workspaceId),
+    splits: collectSplitDomMetrics(desktopId),
   };
 }
 
@@ -1374,7 +1374,7 @@ function collectSeedDocumentState(scope: string, seedId: string) {
   if (!(root instanceof HTMLElement)) {
     return { present: false };
   }
-  const tile = root.closest('.workspace-dock-tile');
+  const tile = root.closest('.desktop-dock-tile');
   const plot = root.querySelector('.seed-document__plot');
   const body = root.querySelector('.md-reader-wrap');
   const log = root.querySelector('.seed-document__ledger');
@@ -1387,7 +1387,7 @@ function collectSeedDocumentState(scope: string, seedId: string) {
     })),
     plotBeforeBody: Boolean(plot && body && (plot.compareDocumentPosition(body) & Node.DOCUMENT_POSITION_FOLLOWING)),
     logOpen: log instanceof HTMLDetailsElement && log.open,
-    parent: tile?.querySelector('.workspace-dock-tile-seed-parent span:last-child')?.textContent?.trim() ?? '',
+    parent: tile?.querySelector('.desktop-dock-tile-seed-parent span:last-child')?.textContent?.trim() ?? '',
     artifacts: Array.from(root.querySelectorAll('.seed-document__artifacts li')).map(
       (item) => item.textContent?.trim() ?? '',
     ),
@@ -2013,7 +2013,7 @@ export function useUiAutomationBridge({
           arrangement: serializeArrangement(),
         };
       case 'dismiss_whats_new': {
-        // A fresh instance's one-time What's New modal sits above the workspace and swallows native
+        // A fresh instance's one-time What's New modal sits above the desktop and swallows native
         // HID clicks. Dismiss it the way a user can: a backdrop click (persists "seen").
         const overlay = document.querySelector('.whats-new-overlay');
         if (overlay instanceof HTMLElement) {
@@ -2227,7 +2227,7 @@ export function useUiAutomationBridge({
             id: (row.getAttribute('data-testid') || '').slice(prefix.length),
             label: row.querySelector('.session-label')?.textContent?.trim() || '',
             state: row.getAttribute('data-state') || '',
-            workspaceId: row.getAttribute('data-workspace-id') || '',
+            desktopId: row.getAttribute('data-desktop-id') || '',
             age: row.querySelector('.queue-row-age')?.textContent?.trim() || '',
             wake: row.querySelector('.queue-row-wake-at')?.textContent?.trim() || '',
             selected: row.classList.contains('selected'),
@@ -2305,8 +2305,8 @@ export function useUiAutomationBridge({
           })),
           treeSessionIds: Array.from(document.querySelectorAll('.session-list [data-testid^="sidebar-session-"]'))
             .map((row) => (row.getAttribute('data-testid') || '').slice('sidebar-session-'.length)),
-          treeWorkspaceIds: Array.from(document.querySelectorAll('.session-list [data-testid^="sidebar-workspace-"]'))
-            .map((group) => (group.getAttribute('data-testid') || '').slice('sidebar-workspace-'.length)),
+          treeDesktopIds: Array.from(document.querySelectorAll('.session-list [data-testid^="sidebar-desktop-"]'))
+            .map((group) => (group.getAttribute('data-testid') || '').slice('sidebar-desktop-'.length)),
         };
       }
       case 'chief_of_staff_get_state':
@@ -2463,7 +2463,7 @@ export function useUiAutomationBridge({
         await settleUi();
         return { panelId };
       }
-      case 'get_workspace': {
+      case 'get_desktop': {
         const sessionId = typeof payload.sessionId === 'string' ? payload.sessionId : activeSessionId;
         const session = sessions.find((entry) => entry.id === sessionId);
         if (!session) {
@@ -2512,8 +2512,8 @@ export function useUiAutomationBridge({
         return { desktopId };
       }
       case 'app_view_get_state': {
-        const scope = typeof payload.workspaceId === 'string' && payload.workspaceId
-          ? document.querySelector(`[data-session-terminal-workspace="${payload.workspaceId}"]`)
+        const scope = typeof payload.desktopId === 'string' && payload.desktopId
+          ? document.querySelector(`[data-session-terminal-desktop="${payload.desktopId}"]`)
           : document;
         const hosts = Array.from(scope?.querySelectorAll('[data-app-view-host]') ?? []);
         return {
@@ -2528,12 +2528,12 @@ export function useUiAutomationBridge({
           })),
         };
       }
-      case 'get_workspace_ui_state': {
-        const workspaceId = typeof payload.workspaceId === 'string' ? payload.workspaceId : '';
-        if (!workspaceId) {
-          throw new Error('get_workspace_ui_state requires workspaceId');
+      case 'get_desktop_ui_state': {
+        const desktopId = typeof payload.desktopId === 'string' ? payload.desktopId : '';
+        if (!desktopId) {
+          throw new Error('get_desktop_ui_state requires desktopId');
         }
-        const surface = document.querySelector(`[data-session-terminal-workspace="${workspaceId}"]`);
+        const surface = document.querySelector(`[data-session-terminal-desktop="${desktopId}"]`);
         const wrapper = surface?.closest('.terminal-wrapper') ?? null;
         const tileIds = surface
           ? Array.from(surface.querySelectorAll('[data-pane-kind="tile"]'))
@@ -2544,18 +2544,18 @@ export function useUiAutomationBridge({
           ? surface.querySelectorAll('[data-pane-kind="agent"]').length
           : 0;
         const tileTitles = surface
-          ? Array.from(surface.querySelectorAll('.workspace-dock-tile-title'))
+          ? Array.from(surface.querySelectorAll('.desktop-dock-tile-title'))
             .map((node) => node.textContent?.trim() || '')
           : [];
         const activeBody = document.activeElement;
         const tileBodyFocused = Boolean(
           surface
             && activeBody instanceof HTMLElement
-            && activeBody.classList.contains('workspace-dock-tile-body')
+            && activeBody.classList.contains('desktop-dock-tile-body')
             && surface.contains(activeBody),
         );
         return {
-          workspaceId,
+          desktopId,
           rendered: Boolean(surface),
           active: Boolean(wrapper?.classList.contains('active')),
           sessionVisible: surface?.getAttribute('data-session-visible') === '1',
@@ -2806,7 +2806,7 @@ export function useUiAutomationBridge({
           throw new Error('Session not found');
         }
         const paneId = resolvePaneId(session, getActivePaneIdForSession, payload.paneId);
-        const viewSessionId = resolveWorkspaceViewSessionId(session, sessions, activeSessionId);
+        const viewSessionId = resolveDesktopViewSessionId(session, sessions, activeSessionId);
         selectSession(sessionId);
         focusPane(viewSessionId, paneId);
         await settleUi();
@@ -2820,7 +2820,7 @@ export function useUiAutomationBridge({
         }
         const paneId = resolvePaneId(session, getActivePaneIdForSession, payload.paneId);
         const ownerSessionId = resolvePaneOwnerSessionId(session, paneId);
-        const viewSessionId = resolveWorkspaceViewSessionId(session, sessions, activeSessionId);
+        const viewSessionId = resolveDesktopViewSessionId(session, sessions, activeSessionId);
         selectSession(sessionId);
         await settleUi(1);
         clickPaneElement(ownerSessionId, paneId);
@@ -2834,7 +2834,7 @@ export function useUiAutomationBridge({
           throw new Error('Session not found');
         }
         const paneId = resolvePaneId(session, getActivePaneIdForSession, payload.paneId);
-        const viewSessionId = resolveWorkspaceViewSessionId(session, sessions, activeSessionId);
+        const viewSessionId = resolveDesktopViewSessionId(session, sessions, activeSessionId);
         selectSession(sessionId);
         await settleUi(1);
         const success = scrollSessionPaneToTop(viewSessionId, paneId);
@@ -2852,7 +2852,7 @@ export function useUiAutomationBridge({
         }
         const paneId = resolvePaneId(session, getActivePaneIdForSession, payload.paneId);
         const ownerSessionId = resolvePaneOwnerSessionId(session, paneId);
-        const viewSessionId = resolveWorkspaceViewSessionId(session, sessions, activeSessionId);
+        const viewSessionId = resolveDesktopViewSessionId(session, sessions, activeSessionId);
         const deltaY = typeof payload.deltaY === 'number' ? payload.deltaY : 0;
         const deltaMode = typeof payload.deltaMode === 'number' ? payload.deltaMode : WheelEvent.DOM_DELTA_PIXEL;
         selectSession(sessionId);
@@ -2869,7 +2869,7 @@ export function useUiAutomationBridge({
         }
         const paneId = resolvePaneId(session, getActivePaneIdForSession, payload.paneId);
         const ownerSessionId = resolvePaneOwnerSessionId(session, paneId);
-        const viewSessionId = resolveWorkspaceViewSessionId(session, sessions, activeSessionId);
+        const viewSessionId = resolveDesktopViewSessionId(session, sessions, activeSessionId);
         const size = getPaneSize(viewSessionId, paneId);
         const cell = payload.cell as { col?: unknown; row?: unknown } | undefined;
         if (!size || typeof cell?.col !== 'number' || typeof cell?.row !== 'number') {
@@ -2889,7 +2889,7 @@ export function useUiAutomationBridge({
         }
         const paneId = resolvePaneId(session, getActivePaneIdForSession, payload.paneId);
         const ownerSessionId = resolvePaneOwnerSessionId(session, paneId);
-        const viewSessionId = resolveWorkspaceViewSessionId(session, sessions, activeSessionId);
+        const viewSessionId = resolveDesktopViewSessionId(session, sessions, activeSessionId);
         const size = getPaneSize(viewSessionId, paneId);
         const cell = payload.cell as { col?: unknown; row?: unknown } | undefined;
         if (!size || typeof cell?.col !== 'number' || typeof cell?.row !== 'number') {
@@ -2916,7 +2916,7 @@ export function useUiAutomationBridge({
         }
         const paneId = resolvePaneId(session, getActivePaneIdForSession, payload.paneId);
         const ownerSessionId = resolvePaneOwnerSessionId(session, paneId);
-        const viewSessionId = resolveWorkspaceViewSessionId(session, sessions, activeSessionId);
+        const viewSessionId = resolveDesktopViewSessionId(session, sessions, activeSessionId);
         const size = getPaneSize(viewSessionId, paneId);
         const cell = payload.cell as { col?: unknown; row?: unknown } | undefined;
         if (!size || typeof cell?.col !== 'number' || typeof cell?.row !== 'number') {
@@ -2944,7 +2944,7 @@ export function useUiAutomationBridge({
         }
         const paneId = resolvePaneId(session, getActivePaneIdForSession, payload.paneId);
         const ownerSessionId = resolvePaneOwnerSessionId(session, paneId);
-        const viewSessionId = resolveWorkspaceViewSessionId(session, sessions, activeSessionId);
+        const viewSessionId = resolveDesktopViewSessionId(session, sessions, activeSessionId);
         const size = getPaneSize(viewSessionId, paneId);
         const start = payload.start as { col?: unknown; row?: unknown } | undefined;
         const end = payload.end as { col?: unknown; row?: unknown } | undefined;
@@ -2979,7 +2979,7 @@ export function useUiAutomationBridge({
         }
         const dropFracX = typeof payload.dropFracX === 'number' ? payload.dropFracX : 0.5;
         const dropFracY = typeof payload.dropFracY === 'number' ? payload.dropFracY : 0.5;
-        const viewSessionId = resolveWorkspaceViewSessionId(session, sessions, activeSessionId);
+        const viewSessionId = resolveDesktopViewSessionId(session, sessions, activeSessionId);
         selectSession(sessionId);
         await settleUi(2);
         const points = dragLeafHeader(leafId, dropFracX, dropFracY);
@@ -2998,7 +2998,7 @@ export function useUiAutomationBridge({
         if (!splitId || !Number.isFinite(deltaPx) || !Number.isFinite(steps)) {
           throw new Error('drag_split requires splitId and numeric deltaPx/steps');
         }
-        const viewSessionId = resolveWorkspaceViewSessionId(session, sessions, activeSessionId);
+        const viewSessionId = resolveDesktopViewSessionId(session, sessions, activeSessionId);
         selectSession(sessionId);
         await settleUi(2);
         const result = await dragSplitDivider(session.desktopId, splitId, deltaPx, steps);
@@ -3087,7 +3087,7 @@ export function useUiAutomationBridge({
           throw new Error('type_pane_via_ui requires text');
         }
         const paneId = resolvePaneId(session, getActivePaneIdForSession, payload.paneId);
-        const viewSessionId = resolveWorkspaceViewSessionId(session, sessions, activeSessionId);
+        const viewSessionId = resolveDesktopViewSessionId(session, sessions, activeSessionId);
         const success = typeInSessionPaneViaUI(viewSessionId, paneId, text);
         if (!success) {
           throw new Error(`Failed to type into pane ${paneId} via UI input`);
@@ -3101,7 +3101,7 @@ export function useUiAutomationBridge({
           throw new Error('Session not found');
         }
         const paneId = resolvePaneId(session, getActivePaneIdForSession, payload.paneId);
-        const viewSessionId = resolveWorkspaceViewSessionId(session, sessions, activeSessionId);
+        const viewSessionId = resolveDesktopViewSessionId(session, sessions, activeSessionId);
         return {
           sessionId,
           paneId,
@@ -3117,7 +3117,7 @@ export function useUiAutomationBridge({
           throw new Error('Session not found');
         }
         const paneId = resolvePaneId(session, getActivePaneIdForSession, payload.paneId);
-        const viewSessionId = resolveWorkspaceViewSessionId(session, sessions, activeSessionId);
+        const viewSessionId = resolveDesktopViewSessionId(session, sessions, activeSessionId);
         return {
           sessionId,
           paneId,
@@ -3133,7 +3133,7 @@ export function useUiAutomationBridge({
           throw new Error('Session not found');
         }
         const paneId = resolvePaneId(session, getActivePaneIdForSession, payload.paneId);
-        const viewSessionId = resolveWorkspaceViewSessionId(session, sessions, activeSessionId);
+        const viewSessionId = resolveDesktopViewSessionId(session, sessions, activeSessionId);
         const blockState = getPaneBlockState(viewSessionId, paneId);
         // Stable response shape: available=false ("no live terminal handle") is not "no blocks".
         return {
@@ -3151,7 +3151,7 @@ export function useUiAutomationBridge({
           throw new Error('Session not found');
         }
         const paneId = resolvePaneId(session, getActivePaneIdForSession, payload.paneId);
-        const viewSessionId = resolveWorkspaceViewSessionId(session, sessions, activeSessionId);
+        const viewSessionId = resolveDesktopViewSessionId(session, sessions, activeSessionId);
         const placementState = getPanePlacementState(viewSessionId, paneId);
         return {
           sessionId,
@@ -3180,7 +3180,7 @@ export function useUiAutomationBridge({
         return {
           sessionId,
           paneId,
-          inputFocused: isSessionPaneInputFocused(resolveWorkspaceViewSessionId(session, sessions, activeSessionId), paneId),
+          inputFocused: isSessionPaneInputFocused(resolveDesktopViewSessionId(session, sessions, activeSessionId), paneId),
           activePaneId: getActivePaneIdForSession(session),
           pane: snapshot.sessions[0]?.panes.find((pane) => pane.paneId === paneId) || null,
           renderHealth: collectRenderHealthSnapshot(
@@ -3346,8 +3346,8 @@ export function useUiAutomationBridge({
       case 'seed_document_get_state': {
         const scope = typeof payload.selector === 'string' && payload.selector
           ? payload.selector
-          : '.workspace-dock-tile';
-        // A workspace can hold more than one seed tile, and an older one is
+          : '.desktop-dock-tile';
+        // A desktop can hold more than one seed tile, and an older one is
         // still mounted: name the seed rather than taking the first tile.
         const seedId = typeof payload.seedId === 'string' ? payload.seedId : '';
         return collectSeedDocumentState(scope, seedId);

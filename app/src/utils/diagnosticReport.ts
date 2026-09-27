@@ -61,8 +61,8 @@ export interface DiagnosticPaneDescriptor {
   sessionId: string;
   title: string;
   sessionLabel: string;
-  workspaceId: string;
-  workspaceLabel: string;
+  desktopId: string;
+  desktopLabel: string;
   available: boolean;
 }
 
@@ -72,13 +72,13 @@ export interface DiagnosticSessionSnapshot {
   state: string;
   agent: string;
   cwd: string;
-  workspaceId: string;
+  desktopId: string;
   endpoint: 'local' | 'remote';
   endpointId?: string;
   active: boolean;
 }
 
-export interface DiagnosticWorkspaceSnapshot {
+export interface DiagnosticDesktopSnapshot {
   id: string;
   label: string;
   directory: string;
@@ -100,7 +100,7 @@ export interface PendingDiagnosticCapture {
   context: DiagnosticCaptureContext;
   panes: DiagnosticPaneDescriptor[];
   sessions: DiagnosticSessionSnapshot[];
-  workspaces: DiagnosticWorkspaceSnapshot[];
+  desktops: DiagnosticDesktopSnapshot[];
   settings: Record<string, string>;
   frontendInput: FrontendInputTraceSnapshot;
   terminalGeometry: unknown;
@@ -223,7 +223,7 @@ export function beginDiagnosticCapture(input: {
   context: DiagnosticCaptureContext;
   panes: DiagnosticPaneDescriptor[];
   sessions: DiagnosticSessionSnapshot[];
-  workspaces: DiagnosticWorkspaceSnapshot[];
+  desktops: DiagnosticDesktopSnapshot[];
   settings: DaemonSettings;
   sendSupportSnapshot: (endpointId?: string, runtimeIds?: string[]) => Promise<DaemonSupportSnapshot>;
 }): PendingDiagnosticCapture {
@@ -245,7 +245,7 @@ export function beginDiagnosticCapture(input: {
     context: { ...input.context },
     panes: input.panes.map((pane) => ({ ...pane })),
     sessions: input.sessions.map((session) => ({ ...session })),
-    workspaces: input.workspaces.map((workspace) => ({ ...workspace })),
+    desktops: input.desktops.map((desktop) => ({ ...desktop })),
     settings: selectedSettings(input.settings),
     frontendInput: snapshotFrontendInputTrace(),
     terminalGeometry: sanitizeSupportDiagnostics(supportTerminalGeometrySnapshot()),
@@ -566,7 +566,7 @@ export async function createDiagnosticReport(
     app: {
       settings: capture.settings,
       sessions: capture.sessions,
-      workspaces: capture.workspaces,
+      desktops: capture.desktops,
       panes: capture.panes,
     },
     daemons,

@@ -24,13 +24,13 @@ import {
   assertPaneVisibleContentPreserved,
   captureSessionArtifacts,
   sleep,
-  waitForFirstWorkspacePane,
+  waitForFirstDesktopPane,
   waitForPaneShellReady,
   waitForPaneText,
   waitForNewShellPane,
   waitForPaneState,
   waitForPaneVisible,
-  waitForSessionWorkspace,
+  waitForSessionDesktop,
   tokenAnchorIgnorePatterns,
 } from './scenarioAssertions.mjs';
 import {
@@ -140,8 +140,8 @@ export function probeBannerReadyMatchers(style) {
   return [/ATTN-PROBE \d+x\d+/, probeStyleRowRegex(style)];
 }
 
-function workspaceLayoutPanes(workspace) {
-  return workspace?.workspace?.layout?.panes || workspace?.layout?.panes || [];
+function desktopLayoutPanes(desktop) {
+  return desktop?.desktop?.layout?.panes || desktop?.layout?.panes || [];
 }
 
 // `(?!\d)` guards against a grid like 31x2 matching as a prefix of 31x25.
@@ -172,7 +172,7 @@ async function waitForProbeBannerAtGrid(client, sessionId, paneId, style, timeou
 
 async function prepareRemoteProbeBaseline(client, sessionId, style) {
   await client.request('select_session', { sessionId });
-  const initialPane = await waitForFirstWorkspacePane(client, sessionId, `initial pane for probe session ${sessionId}`, 30_000);
+  const initialPane = await waitForFirstDesktopPane(client, sessionId, `initial pane for probe session ${sessionId}`, 30_000);
   const paneId = initialPane.paneId;
   await waitForPaneVisible(client, sessionId, paneId, 20_000);
   await waitForPaneShellReady(client, sessionId, paneId, {
@@ -281,17 +281,17 @@ async function closePaneAndAssertRecovery({
   await client.request('focus_pane', { sessionId, paneId });
   await waitForPaneVisible(client, sessionId, paneId, 20_000);
   await client.request('close_pane', { sessionId, paneId });
-  const recoveredWorkspace = await waitForSessionWorkspace(
+  const recoveredDesktop = await waitForSessionDesktop(
     client,
     sessionId,
-    (workspace) => {
-      const layoutPane = workspaceLayoutPanes(workspace).find((entry) => entry.paneId === initialPaneId);
+    (desktopState) => {
+      const layoutPane = desktopLayoutPanes(desktopState).find((entry) => entry.paneId === initialPaneId);
       return (
-        (workspace.panes || []).length === minPaneCountAfterClose &&
+        (desktopState.panes || []).length === minPaneCountAfterClose &&
         (layoutPane?.bounds?.width ?? 0) > previousInitialPaneLayoutWidth
       );
     },
-    `${label} workspace collapse`,
+    `${label} desktopState collapse`,
     20_000,
   );
   await client.request('focus_pane', { sessionId, paneId: initialPaneId });
@@ -337,7 +337,7 @@ async function closePaneAndAssertRecovery({
   }
   const finalMainState = await client.request('get_pane_state', { sessionId, paneId: initialPaneId });
   if (enforceNativeStability && baselineNativeMetrics && candidateNativeMetrics) {
-    const recoveredLayoutWidth = workspaceLayoutPanes(recoveredWorkspace)
+    const recoveredLayoutWidth = desktopLayoutPanes(recoveredDesktop)
       .find((entry) => entry.paneId === initialPaneId)?.bounds?.width ?? 0;
     const widenedPastPreviousWidth = recoveredLayoutWidth > previousInitialPaneLayoutWidth;
     await assertPaneNativePaintRecovered(
@@ -364,7 +364,7 @@ async function closePaneAndAssertRecovery({
     state: anchorState || finalMainState,
     nativeMetrics: candidateNativeMetrics,
     widthState: recoveredInitialPaneState,
-    layoutWidth: workspaceLayoutPanes(recoveredWorkspace)
+    layoutWidth: desktopLayoutPanes(recoveredDesktop)
       .find((entry) => entry.paneId === initialPaneId)?.bounds?.width ?? null,
   };
 }
@@ -481,7 +481,7 @@ async function main() {
       await launchFreshAppAndConnect(client, observer);
       await removeStaleHarnessEndpoints(observer, 20_000);
       const cleanupResult = await removeStaleHarnessScenarioSessions(observer, 60_000);
-      if (cleanupResult.sessions.length > 0 || cleanupResult.lingeringWorkspaceSessionIds.length > 0) {
+      if (cleanupResult.sessions.length > 0 || cleanupResult.lingeringDesktopSessionIds.length > 0) {
         runner.writeJson('stale-harness-sessions-cleaned.json', cleanupResult);
       }
     });
@@ -538,8 +538,8 @@ async function main() {
     initialShellPaneId = await runner.step('create_initial_split_before_relaunch', async () => {
       await client.request('select_session', { sessionId });
       await waitForPaneVisible(client, sessionId, initialPaneId, 20_000);
-      const workspaceBefore = await client.request('get_workspace', { sessionId });
-      const existingPaneIds = new Set((workspaceBefore.panes || []).map((pane) => pane.paneId));
+      const desktopBefore = await client.request('get_desktop', { sessionId });
+      const existingPaneIds = new Set((desktopBefore.panes || []).map((pane) => pane.paneId));
       await client.request('split_pane', {
         sessionId,
         targetPaneId: initialPaneId,
@@ -585,14 +585,14 @@ async function main() {
       await relaunchAppAndConnect(client, observer);
       await waitForEndpointConnected(observer, endpoint.name, 45_000);
       await client.request('select_session', { sessionId });
-      await waitForSessionWorkspace(
+      await waitForSessionDesktop(
         client,
         sessionId,
-        (workspace) => {
-          const paneIds = new Set((workspace.panes || []).map((pane) => pane.paneId));
+        (desktopState) => {
+          const paneIds = new Set((desktopState.panes || []).map((pane) => pane.paneId));
           return paneIds.has(initialPaneId) && paneIds.has(initialShellPaneId);
         },
-        `frontend workspace after relaunch for ${sessionId}`,
+        `frontend desktopState after relaunch for ${sessionId}`,
         45_000,
       );
       await client.request('focus_pane', { sessionId, paneId: initialPaneId });
@@ -628,8 +628,8 @@ async function main() {
     postRelaunchMainSplitPaneId = await runner.step('split_from_initial_pane_after_relaunch', async () => {
       await client.request('select_session', { sessionId });
       await waitForPaneVisible(client, sessionId, initialPaneId, 20_000);
-      const workspaceBefore = await client.request('get_workspace', { sessionId });
-      const existingPaneIds = new Set((workspaceBefore.panes || []).map((pane) => pane.paneId));
+      const desktopBefore = await client.request('get_desktop', { sessionId });
+      const existingPaneIds = new Set((desktopBefore.panes || []).map((pane) => pane.paneId));
       await client.request('split_pane', {
         sessionId,
         targetPaneId: initialPaneId,
@@ -664,8 +664,8 @@ async function main() {
       await client.request('select_session', { sessionId });
       await client.request('focus_pane', { sessionId, paneId: initialShellPaneId });
       await waitForPaneVisible(client, sessionId, initialShellPaneId, 20_000);
-      const workspaceBefore = await client.request('get_workspace', { sessionId });
-      const existingPaneIds = new Set((workspaceBefore.panes || []).map((pane) => pane.paneId));
+      const desktopBefore = await client.request('get_desktop', { sessionId });
+      const existingPaneIds = new Set((desktopBefore.panes || []).map((pane) => pane.paneId));
       await client.request('split_pane', {
         sessionId,
         targetPaneId: initialShellPaneId,
@@ -685,8 +685,8 @@ async function main() {
     await runner.step('close_relaunched_splits_and_assert_recovery', async () => {
       await client.request('select_session', { sessionId });
       await waitForPaneVisible(client, sessionId, initialPaneId, 20_000);
-      const workspaceBeforeClose = await client.request('get_workspace', { sessionId });
-      let previousInitialPaneLayoutWidth = workspaceLayoutPanes(workspaceBeforeClose)
+      const desktopBeforeClose = await client.request('get_desktop', { sessionId });
+      let previousInitialPaneLayoutWidth = desktopLayoutPanes(desktopBeforeClose)
         .find((entry) => entry.paneId === initialPaneId)?.bounds?.width ?? 0;
       const firstRecovered = await closePaneAndAssertRecovery({
         client,
@@ -742,7 +742,7 @@ async function main() {
     remoteTripwireLedger = await runner.step('verify_remote_agent_ledger', async () => (
       collectRemoteAgentTripwire({ target: options.sshTarget, fixture: remoteTripwire, runner })
     ));
-    const finalWorkspace = await client.request('get_workspace', { sessionId });
+    const finalDesktop = await client.request('get_desktop', { sessionId });
     const summary = await runner.finishSuccess({
       sessionId,
       endpointId: endpoint?.id || null,
@@ -766,10 +766,10 @@ async function main() {
         restoredMainWidth: restoredMainState?.state?.pane?.bounds?.width ?? null,
         finalMainWidth: finalMainState?.state?.pane?.bounds?.width ?? finalMainState?.widthState?.pane?.bounds?.width ?? null,
       },
-      finalWorkspace: {
-        activePaneId: finalWorkspace.activePaneId,
-        paneIds: (finalWorkspace.panes || []).map((pane) => pane.paneId),
-        otherPaneIds: (finalWorkspace.panes || [])
+      finalDesktop: {
+        activePaneId: finalDesktop.activePaneId,
+        paneIds: (finalDesktop.panes || []).map((pane) => pane.paneId),
+        otherPaneIds: (finalDesktop.panes || [])
           .map((pane) => pane.paneId)
           .filter((paneId) => paneId !== initialPaneId),
       },

@@ -1,6 +1,6 @@
 import { clearBrowserHostFocus, isBrowserHostOwnedTarget } from '../browser/host';
 import { type SessionCreationPhase } from '../components/SessionCreationProgress';
-import type { DockTarget } from '../components/SessionTerminalWorkspace/dockTarget';
+import type { DockTarget } from '../components/SessionTerminalDesktop/dockTarget';
 import {
   CriticalNotificationState,
   DaemonEndpoint,
@@ -11,7 +11,7 @@ import {
   SessionExitInfo,
 } from '../hooks/useDaemonSocket';
 import { type OpenPRProgress } from '../hooks/useOpenPR';
-import { type TerminalWorkspaceState } from '../store/sessions';
+import { type TerminalDesktopState } from '../store/sessions';
 import type { Presentation, SessionLedgerEntry, SessionReopen } from '../types/generated';
 import { type SessionAgent } from '../types/sessionAgent';
 import { crewDisplayName } from '../utils/crewName';
@@ -79,17 +79,17 @@ export interface LeafDesktopDragState {
 export const SIDEBAR_LEAF_DROP_PLACEMENT = { edge: 'left' as const, leafShare: 0.32 };
 
 
-export function activePaneIdForWorkspace(
-  workspace: TerminalWorkspaceState,
+export function activePaneIdForDesktop(
+  desktop: TerminalDesktopState,
   focusedSessionId: string | null,
 ): string {
   if (focusedSessionId) {
-    const focusedPane = workspace.agents.find((pane) => pane.sessionId === focusedSessionId);
+    const focusedPane = desktop.agents.find((pane) => pane.sessionId === focusedSessionId);
     if (focusedPane) {
       return focusedPane.id;
     }
   }
-  return workspace.agents[0]?.id || '';
+  return desktop.agents[0]?.id || '';
 }
 
 

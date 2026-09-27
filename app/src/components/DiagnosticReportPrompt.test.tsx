@@ -11,10 +11,10 @@ function capture(): PendingDiagnosticCapture {
       window: { width: 800, height: 600, devicePixelRatio: 2 },
     },
     panes: [
-      { paneId: 'pane-1', runtimeId: 'runtime-1', sessionId: 'session-1', title: 'Affected pane', sessionLabel: 'First session', workspaceId: 'workspace-1', workspaceLabel: 'Workspace', available: true },
-      { paneId: 'pane-2', runtimeId: 'runtime-2', sessionId: 'session-2', title: 'Other pane', sessionLabel: 'Second session', workspaceId: 'workspace-1', workspaceLabel: 'Workspace', available: true },
+      { paneId: 'pane-1', runtimeId: 'runtime-1', sessionId: 'session-1', title: 'Affected pane', sessionLabel: 'First session', desktopId: 'desktop-1', desktopLabel: 'Desktop', available: true },
+      { paneId: 'pane-2', runtimeId: 'runtime-2', sessionId: 'session-2', title: 'Other pane', sessionLabel: 'Second session', desktopId: 'desktop-1', desktopLabel: 'Desktop', available: true },
     ],
-    sessions: [], workspaces: [], settings: {},
+    sessions: [], desktops: [], settings: {},
     frontendInput: { capacity: 512, total: 0, capturedAtUnixMs: 1, capturedAtMonotonicMs: 1, events: [] },
     terminalGeometry: {},
     terminalDiagnostics: { capacity: 3_000, total: 0, capturedAtUnixMs: 1, events: [] },

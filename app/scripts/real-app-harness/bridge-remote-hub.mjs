@@ -747,17 +747,17 @@ Remote hub options:
       (sessionState) =>
         Boolean(
           sessionState?.selected &&
-          sessionState?.workspaceBounds &&
+          sessionState?.desktopBounds &&
           sessionState?.mainPaneBounds,
         ),
-      `new session workspace mount for ${remoteSessionId}`,
+      `new session desktop mount for ${remoteSessionId}`,
       30_000,
     );
     saveJson(path.join(runDir, 'session-ui-created.json'), createdSessionUi);
-    const createdWorkspace = await client.request('get_workspace', { sessionId: remoteSessionId });
-    remoteInitialPaneId = (createdWorkspace.panes || [])[0]?.paneId || null;
+    const createdDesktop = await client.request('get_desktop', { sessionId: remoteSessionId });
+    remoteInitialPaneId = (createdDesktop.panes || [])[0]?.paneId || null;
     if (!remoteInitialPaneId) {
-      throw new Error(`Remote initial pane not found for ${remoteSessionId}: ${JSON.stringify(createdWorkspace, null, 2)}`);
+      throw new Error(`Remote initial pane not found for ${remoteSessionId}: ${JSON.stringify(createdDesktop, null, 2)}`);
     }
 
     const registered = await observer.waitForSession({
@@ -872,15 +872,15 @@ Remote hub options:
       (sessionState) =>
         Boolean(
           sessionState?.selected &&
-          sessionState?.workspaceBounds &&
+          sessionState?.desktopBounds &&
           sessionState?.mainPaneBounds,
         ),
-      `interactive remote workspace for ${endpointName}`,
+      `interactive remote desktop for ${endpointName}`,
       60_000,
     );
-    if (!selectedSession?.workspaceBounds || !selectedSession?.mainPaneBounds) {
+    if (!selectedSession?.desktopBounds || !selectedSession?.mainPaneBounds) {
       throw new Error(
-        `Interactive remote workspace not visible for selected session. Snapshot:\n${JSON.stringify(selectedSession, null, 2)}`
+        `Interactive remote desktop not visible for selected session. Snapshot:\n${JSON.stringify(selectedSession, null, 2)}`
       );
     }
     if (!selectedSession?.sidebarItem?.text?.includes(expectedEndpointBadge)) {
@@ -1047,10 +1047,10 @@ Remote hub options:
       (sessionState) =>
         Boolean(
           sessionState?.selected &&
-          sessionState?.workspaceBounds &&
+          sessionState?.desktopBounds &&
           sessionState?.mainPaneBounds,
         ),
-      `reloaded remote workspace for ${remoteSessionId}`,
+      `reloaded remote desktop for ${remoteSessionId}`,
       30_000,
     );
     saveJson(path.join(runDir, 'session-ui-reloaded.json'), reloadedSessionUi);

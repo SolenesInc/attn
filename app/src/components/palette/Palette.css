@@ -1,6 +1,6 @@
 /* Shared ⌘P-style overlay: a dimmed backdrop with a centered box holding one
    input and a keyboard-driven list. Positioning is absolute (filling the nearest
-   positioned ancestor, e.g. one workspace tile); a caller that needs a
+   positioned ancestor, e.g. one desktop tile); a caller that needs a
    window-level overlay overrides `position` on its own variant class. */
 .palette {
   position: absolute;

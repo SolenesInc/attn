@@ -131,8 +131,8 @@ try {
     await saved(setting, '', () => click('[data-testid="settings-price-settings-check-model-remove"]'));
   });
   await runner.step('relocated_controls', async () => {
-    await section('workspace');
-    runner.assert((await text('[data-testid="settings-section-workspace"]')).includes('Editor'), 'editor belongs with file locations');
+    await section('desktop');
+    runner.assert((await text('[data-testid="settings-section-desktop"]')).includes('Editor'), 'editor belongs with file locations');
     await section('terminal');
     runner.assert((await text('[data-testid="settings-section-terminal"]')).includes('PTY Backend'), 'terminal hosting is under System');
     await section('workflows');

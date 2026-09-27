@@ -7,7 +7,7 @@ const WASM_PATH = `${APP_ROOT}/vendor/ghostty-vt/ghostty-vt.wasm`;
 
 const DEFAULT_WATCHDOG_MS = 5000;
 // Mirrors HISTORICAL_REPLAY_CHUNK_BYTES in
-// app/src/components/SessionTerminalWorkspace/useGhosttyPaneRuntime.ts.
+// app/src/components/SessionTerminalDesktop/useGhosttyPaneRuntime.ts.
 const RESTORE_CHUNK_BYTES = 16 * 1024;
 
 const ENCODER = new TextEncoder();

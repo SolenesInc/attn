@@ -9,7 +9,7 @@ import { DaemonObserver } from './daemonObserver.mjs';
 import { createScenarioRunner } from './scenarioRunner.mjs';
 import { currentHarnessInstance, instanceCliEnv, resolveHarnessResources } from './harnessInstance.mjs';
 import { writeMockAgentFixture, transcriptTurns } from './mockAgent.mjs';
-import { waitForFirstWorkspacePane } from './scenarioAssertions.mjs';
+import { waitForFirstDesktopPane } from './scenarioAssertions.mjs';
 
 async function waitFor(read, description) {
   const deadline = Date.now() + 30_000;
@@ -81,7 +81,7 @@ async function main() {
         const result = await client.request('create_session', { cwd, label: name, agent, chief_of_staff: chief });
         sessions.push(result.sessionId);
         await observer.waitForSession({ id: result.sessionId });
-        await waitForFirstWorkspacePane(client, result.sessionId, name, 20_000);
+        await waitForFirstDesktopPane(client, result.sessionId, name, 20_000);
         const captured = await waitFor(() => transcripts(cwd)[0], `${name} launch receipt`);
         const text = instructions(captured.text, agent);
         runner.writeText(`${name}-launch.jsonl`, captured.text);
@@ -110,7 +110,7 @@ async function main() {
       sessions.push(first.session_id);
       await observer.waitForSession({ id: first.session_id });
       await client.request('select_session', { sessionId: first.session_id });
-      await waitForFirstWorkspacePane(client, first.session_id, 'crew member', 20_000);
+      await waitForFirstDesktopPane(client, first.session_id, 'crew member', 20_000);
       const captured = await waitFor(() => transcripts(crewHome).find(file => file.text.includes('CREW_READY')), 'crew wake prompt');
       runner.assert(instructions(captured.text, 'codex').includes(`You are **${crewLabel}**`), 'crew identity reaches developer instructions');
       const duplicate = JSON.parse(cli(['crew', 'wake', crewName, '--json']));

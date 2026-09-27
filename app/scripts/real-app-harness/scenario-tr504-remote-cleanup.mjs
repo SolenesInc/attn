@@ -15,7 +15,7 @@ import { createScenarioRunner } from './scenarioRunner.mjs';
 import { cleanupSessionViaAppClose } from './scenarioCleanup.mjs';
 import {
   captureSessionArtifacts,
-  waitForFirstWorkspacePane,
+  waitForFirstDesktopPane,
   waitForNewShellPane,
   waitForPaneVisible,
 } from './scenarioAssertions.mjs';
@@ -104,13 +104,13 @@ async function main() {
     metadata: {
       sshTarget: options.sshTarget,
       agent: options.remoteAgent,
-      focus: 'closing every pane/session of a remote workspace tears down worker-side processes',
+      focus: 'closing every pane/session of a remote desktop tears down worker-side processes',
     },
   });
 
   const remoteHome = await getRemoteHome(options.sshTarget);
   const remoteHarnessBase = path.posix.join(remoteHome, '.attn', 'harness');
-  const remoteDirectory = options.remoteDirectory || path.posix.join(remoteHome, '.attn', 'harness', runner.runId, 'workspace');
+  const remoteDirectory = options.remoteDirectory || path.posix.join(remoteHome, '.attn', 'harness', runner.runId, 'desktop');
   const remotePaths = buildRemoteHarnessPaths(remoteHome, runner.runId);
   const remoteTripwire = buildRemoteAgentTripwire({
     remoteHome,
@@ -194,7 +194,7 @@ async function main() {
       await removeStaleHarnessScenarioSessions(observer, 30_000);
     });
 
-    await runner.step('prepare_remote_workspace', async () => {
+    await runner.step('prepare_remote_desktop', async () => {
       await writeRemoteMockAgentFixture({
         target: options.sshTarget,
         cwd: remoteDirectory,
@@ -245,10 +245,10 @@ async function main() {
 
     ({ splitPaneId, shellSessionId } = await runner.step('create_remote_split', async () => {
       await client.request('select_session', { sessionId });
-      initialPaneId = (await waitForFirstWorkspacePane(client, sessionId, 'remote cleanup initial pane', 30_000)).paneId;
+      initialPaneId = (await waitForFirstDesktopPane(client, sessionId, 'remote cleanup initial pane', 30_000)).paneId;
       await waitForPaneVisible(client, sessionId, initialPaneId, 45_000);
-      const workspaceBefore = await client.request('get_workspace', { sessionId });
-      const existingPaneIds = new Set((workspaceBefore.panes || []).map((pane) => pane.paneId));
+      const desktopBefore = await client.request('get_desktop', { sessionId });
+      const existingPaneIds = new Set((desktopBefore.panes || []).map((pane) => pane.paneId));
       await client.request('split_pane', {
         sessionId,
         targetPaneId: initialPaneId,

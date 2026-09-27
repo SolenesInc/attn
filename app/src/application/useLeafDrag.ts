@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
-import type { DockTarget } from '../components/SessionTerminalWorkspace/dockTarget';
+import type { DockTarget } from '../components/SessionTerminalDesktop/dockTarget';
 import { useDaemonApi } from '../contexts/DaemonApiContext';
 import { withFreshDesktopRevisions } from '../hooks/desktopRevisions';
 import type { useDesktopRuntimeController } from '../hooks/useDesktopRuntimeController';

@@ -5,7 +5,7 @@ import {
   NotebookSurfaceProvider,
   type NotebookSurfaceContextValue,
 } from '../../src/contexts/NotebookSurfaceContext';
-import { WorkspaceDockTile } from '../../src/components/SessionTerminalWorkspace/WorkspaceDockTile';
+import { DesktopDockTile } from '../../src/components/SessionTerminalDesktop/DesktopDockTile';
 import { setMarkdownAnnotationsTransport } from '../../src/components/MarkdownReader/annotations/transport';
 import type { MarkdownAnnotationsTransport } from '../../src/components/MarkdownReader/annotations/transport';
 import type { HarnessProps } from '../types';
@@ -62,7 +62,7 @@ function Providers({ children }: { children: ReactNode }) {
 export function TileHeaderHarness({ onReady, setTriggerRerender }: HarnessProps) {
   const [targets, setTargets] = useState({ first: 'session-alpha', second: 'session-beta' });
   const requestedWidth = Number(new URLSearchParams(window.location.search).get('width'));
-  const workspaceWidth = Number.isFinite(requestedWidth) && requestedWidth > 0 ? requestedWidth : 1816;
+  const desktopWidth = Number.isFinite(requestedWidth) && requestedWidth > 0 ? requestedWidth : 1816;
 
   useEffect(() => {
     setTriggerRerender(() => () => {});
@@ -72,16 +72,16 @@ export function TileHeaderHarness({ onReady, setTriggerRerender }: HarnessProps)
   return (
     <Providers>
       <div
-        data-testid="three-leaf-workspace"
+        data-testid="three-leaf-desktop"
         style={{
           display: 'grid',
           gridTemplateColumns: 'repeat(3, minmax(0, 1fr))',
-          width: workspaceWidth,
+          width: desktopWidth,
           height: 420,
           background: '#111318',
         }}
       >
-        <WorkspaceDockTile
+        <DesktopDockTile
           tile={{
             type: 'tile',
             tileId: 'first-document',
@@ -89,20 +89,20 @@ export function TileHeaderHarness({ onReady, setTriggerRerender }: HarnessProps)
             tileParams: '/tmp/a-long-review-document-title.md',
             tileSessionId: targets.first,
           }}
-          workspaceId="header-harness"
+          desktopId="header-harness"
           content={{
             path: '/tmp/a-long-review-document-title.md',
             content: '# First document\n\nReview this document.',
           }}
           dragging={false}
-          workspaceSessions={sessions}
+          desktopSessions={sessions}
           onClose={() => {}}
           onFocusDocument={() => {}}
           onRetargetTile={(sessionId) => setTargets((current) => ({ ...current, first: sessionId }))}
           onHeaderPointerDown={() => {}}
           onRequestContent={() => {}}
         />
-        <WorkspaceDockTile
+        <DesktopDockTile
           tile={{
             type: 'tile',
             tileId: 'second-document',
@@ -110,13 +110,13 @@ export function TileHeaderHarness({ onReady, setTriggerRerender }: HarnessProps)
             tileParams: '/tmp/another-long-review-document-title.md',
             tileSessionId: targets.second,
           }}
-          workspaceId="header-harness"
+          desktopId="header-harness"
           content={{
             path: '/tmp/another-long-review-document-title.md',
             content: '# Second document\n\nReview this one too.',
           }}
           dragging={false}
-          workspaceSessions={sessions}
+          desktopSessions={sessions}
           onClose={() => {}}
           onFocusDocument={() => {}}
           onRetargetTile={(sessionId) => setTargets((current) => ({ ...current, second: sessionId }))}

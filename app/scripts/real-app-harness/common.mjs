@@ -4,7 +4,7 @@ import net from 'node:net';
 import os from 'node:os';
 import path from 'node:path';
 import WebSocket from 'ws';
-import { waitForFirstWorkspacePane, waitForPaneVisible } from './scenarioAssertions.mjs';
+import { waitForFirstDesktopPane, waitForPaneVisible } from './scenarioAssertions.mjs';
 import { MOCK_AGENT_EXECUTABLE, mockPinnedAgents } from './mockAgent.mjs';
 import {
   assertProductionRunAllowed,
@@ -386,7 +386,7 @@ export async function createSessionAndWaitForInitialPane({
     await promptReadyFn(client, result.sessionId, promptReadyTimeoutMs);
   }
   if (shouldWaitForInitialPane) {
-    const pane = await waitForFirstWorkspacePane(client, result.sessionId, 'initial workspace pane', paneWaitMs);
+    const pane = await waitForFirstDesktopPane(client, result.sessionId, 'initial desktopState pane', paneWaitMs);
     await waitForPaneVisible(client, result.sessionId, pane.paneId, paneWaitMs);
   }
   return result.sessionId;

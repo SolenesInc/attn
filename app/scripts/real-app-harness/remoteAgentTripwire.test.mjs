@@ -104,12 +104,12 @@ describe('remote agent tripwire', () => {
     let command = '';
     const configPath = await writeRemoteMockAgentFixture({
       target: 'fixture@orb',
-      cwd: '/home/attn-remote/workspace',
+      cwd: '/home/attn-remote/desktop',
       config: { name: 'remote mock', turns: [], defaultActions: [] },
       remote: async (_target, value) => { command = value; },
     });
 
-    expect(configPath).toBe('/home/attn-remote/workspace/.attn-mock-agent.json');
+    expect(configPath).toBe('/home/attn-remote/desktop/.attn-mock-agent.json');
     expect(command).toContain('base64 -d');
     expect(command).toContain('.attn-mock-agent.json');
   });

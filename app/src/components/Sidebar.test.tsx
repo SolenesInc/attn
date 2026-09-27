@@ -3,13 +3,13 @@ import { describe, it, expect, vi } from 'vitest';
 import { Sidebar, type DockItem } from './Sidebar';
 import { BuiltinDelegationRole, type SessionDelegationRole } from '../types/generated';
 import { formatShortcut } from '../shortcuts/formatShortcut';
-import { type WorkspaceWithSessions } from '../utils/workspaceViewModels';
+import { type DesktopWithSessions } from '../utils/desktopViewModels';
 import { desktopGroups, groupIndexes } from '../test/desktops';
 import { useEscapeStack } from '../hooks/useEscapeStack';
 
-function sessionlessWorkspace(): WorkspaceWithSessions<TestSession> {
+function sessionlessDesktop(): DesktopWithSessions<TestSession> {
   return {
-    id: 'workspace-/repo/docs',
+    id: 'desktop-/repo/docs',
     title: 'docs',
     directory: '/repo/docs',
     sessions: [],
@@ -45,33 +45,33 @@ interface TestSession {
 function buildSidebarData(sessions: TestSession[]) {
   const viewSessions = sessions.map((session) => ({
     ...session,
-    workspaceId: session.cwd ? `workspace-${session.cwd}` : `workspace-${session.id}`,
+    desktopId: session.cwd ? `desktop-${session.cwd}` : `desktop-${session.id}`,
   }));
-  const workspaceIds = new Set<string>();
-  const workspaces = desktopGroups(
+  const desktopIds = new Set<string>();
+  const desktops = desktopGroups(
     viewSessions
       .filter((session) => {
-        if (workspaceIds.has(session.workspaceId)) return false;
-        workspaceIds.add(session.workspaceId);
+        if (desktopIds.has(session.desktopId)) return false;
+        desktopIds.add(session.desktopId);
         return true;
       })
-      .map((session) => ({ id: session.workspaceId, title: session.label })),
+      .map((session) => ({ id: session.desktopId, title: session.label })),
     viewSessions,
   );
-  return { workspaces, visualIndexByWorkspaceId: groupIndexes(workspaces) };
+  return { desktops, visualIndexByDesktopId: groupIndexes(desktops) };
 }
 
-function workspaceWithBrowserTile(): WorkspaceWithSessions<TestSession> {
-  const session: TestSession & { workspaceId: string } = {
+function desktopWithBrowserTile(): DesktopWithSessions<TestSession> {
+  const session: TestSession & { desktopId: string } = {
     id: 's1',
     label: 'shell',
     state: 'idle',
-    workspaceId: 'workspace-browser',
+    desktopId: 'desktop-browser',
   };
   return desktopGroups(
     [
       {
-        id: 'workspace-browser',
+        id: 'desktop-browser',
         title: 'browser',
         tree: {
           type: 'split',
@@ -96,13 +96,13 @@ function workspaceWithBrowserTile(): WorkspaceWithSessions<TestSession> {
 
 const baseProps = {
   selectedId: null,
-  selectedWorkspaceId: null,
+  selectedDesktopId: null,
   collapsed: false,
   surface: 'tree-open' as const,
   headerActions: [],
   dockItems: undefined as DockItem[] | undefined,
   onSelectSession: () => {},
-  onSelectWorkspace: () => {},
+  onSelectDesktop: () => {},
   onNewSession: () => {},
   onCloseSession: () => {},
   onReloadSession: () => {},
@@ -111,7 +111,7 @@ const baseProps = {
 };
 
 describe('Sidebar', () => {
-  it('offers delegation navigation without a dispatcher subtitle in workspace rows', () => {
+  it('offers delegation navigation without a dispatcher subtitle in desktop rows', () => {
     const onSelectSession = vi.fn();
     const sessions: TestSession[] = [
       {
@@ -327,7 +327,7 @@ describe('Sidebar', () => {
     expect(screen.queryByTestId('sidebar-runs-needing-you')).toBeNull();
     expect(screen.getByTestId('sidebar-session-manual')).toBeInTheDocument();
     expect(screen.queryByTestId('sidebar-session-run-a')).toBeNull();
-    expect(screen.queryByTestId('sidebar-workspace-workspace-/repo/a')).toBeNull();
+    expect(screen.queryByTestId('sidebar-desktop-desktop-/repo/a')).toBeNull();
     expect(screen.getByTestId('sidebar-session-manual').compareDocumentPosition(group)).toBe(
       Node.DOCUMENT_POSITION_FOLLOWING,
     );
@@ -474,22 +474,22 @@ describe('Sidebar', () => {
   });
 
   it('renders browser tiles in layout order and exposes tile actions', () => {
-    const workspace = workspaceWithBrowserTile();
+    const desktop = desktopWithBrowserTile();
     const onSelectTile = vi.fn();
     const onCloseTile = vi.fn();
     const onReloadTile = vi.fn();
     render(
       <Sidebar
         {...baseProps}
-        workspaces={[workspace]}
-        visualIndexByWorkspaceId={new Map([[workspace.id, 0]])}
+        desktops={[desktop]}
+        visualIndexByDesktopId={new Map([[desktop.id, 0]])}
         onSelectTile={onSelectTile}
         onCloseTile={onCloseTile}
         onReloadTile={onReloadTile}
       />,
     );
 
-    const tile = screen.getByTestId('sidebar-tile-workspace-browser-tile-browser');
+    const tile = screen.getByTestId('sidebar-tile-desktop-browser-tile-browser');
     expect(tile).toHaveTextContent('www.google.com');
     expect(
       screen.getByTestId('sidebar-session-s1').compareDocumentPosition(tile) &
@@ -497,93 +497,93 @@ describe('Sidebar', () => {
     ).toBeTruthy();
 
     fireEvent.click(within(tile).getByRole('button', { name: 'Open www.google.com' }));
-    expect(onSelectTile).toHaveBeenCalledWith('workspace-browser', 'tile-browser');
+    expect(onSelectTile).toHaveBeenCalledWith('desktop-browser', 'tile-browser');
 
-    fireEvent.click(screen.getByTestId('reload-tile-workspace-browser-tile-browser'));
-    expect(onReloadTile).toHaveBeenCalledWith('workspace-browser', 'tile-browser');
+    fireEvent.click(screen.getByTestId('reload-tile-desktop-browser-tile-browser'));
+    expect(onReloadTile).toHaveBeenCalledWith('desktop-browser', 'tile-browser');
 
-    fireEvent.click(screen.getByTestId('close-tile-workspace-browser-tile-browser'));
-    expect(onCloseTile).toHaveBeenCalledWith('workspace-browser', 'tile-browser');
+    fireEvent.click(screen.getByTestId('close-tile-desktop-browser-tile-browser'));
+    expect(onCloseTile).toHaveBeenCalledWith('desktop-browser', 'tile-browser');
   });
 
-  it('marks same-endpoint workspace rows as leaf drag targets', () => {
+  it('marks same-endpoint desktop rows as leaf drag targets', () => {
     const sessions: TestSession[] = [
       { id: 's1', label: 'source', state: 'idle', cwd: '/repo/source' },
       { id: 's2', label: 'target', state: 'idle', cwd: '/repo/target' },
     ];
-    const onWorkspaceDragEnter = vi.fn();
-    const onWorkspaceDragDrop = vi.fn();
+    const onDesktopDragEnter = vi.fn();
+    const onDesktopDragDrop = vi.fn();
     render(
       <Sidebar
         {...baseProps}
         {...buildSidebarData(sessions)}
-        leafDrag={{ sourceWorkspaceId: 'workspace-/repo/source' }}
-        dragHoverWorkspaceId="workspace-/repo/target"
-        onWorkspaceDragEnter={onWorkspaceDragEnter}
-        onWorkspaceDragDrop={onWorkspaceDragDrop}
+        leafDrag={{ sourceDesktopId: 'desktop-/repo/source' }}
+        dragHoverDesktopId="desktop-/repo/target"
+        onDesktopDragEnter={onDesktopDragEnter}
+        onDesktopDragDrop={onDesktopDragDrop}
       />,
     );
 
-    const source = screen.getByTestId('sidebar-workspace-workspace-/repo/source');
-    const target = screen.getByTestId('sidebar-workspace-workspace-/repo/target');
-    expect(source).toHaveClass('workspace-group--drag-disabled');
-    expect(target).toHaveClass('workspace-group--drag-entering');
+    const source = screen.getByTestId('sidebar-desktop-desktop-/repo/source');
+    const target = screen.getByTestId('sidebar-desktop-desktop-/repo/target');
+    expect(source).toHaveClass('desktop-group--drag-disabled');
+    expect(target).toHaveClass('desktop-group--drag-entering');
 
     fireEvent.pointerEnter(target);
     fireEvent.pointerUp(target);
-    expect(onWorkspaceDragEnter).toHaveBeenCalledWith(
-      expect.objectContaining({ id: 'workspace-/repo/target' }),
+    expect(onDesktopDragEnter).toHaveBeenCalledWith(
+      expect.objectContaining({ id: 'desktop-/repo/target' }),
     );
-    expect(onWorkspaceDragDrop).toHaveBeenCalledWith(
-      expect.objectContaining({ id: 'workspace-/repo/target' }),
+    expect(onDesktopDragDrop).toHaveBeenCalledWith(
+      expect.objectContaining({ id: 'desktop-/repo/target' }),
     );
   });
 
-  it('shows the new-workspace drop-zone only during a leaf drag and splits on drop', () => {
+  it('shows the new-desktop drop-zone only during a leaf drag and splits on drop', () => {
     const sessions: TestSession[] = [
       { id: 's1', label: 'source', state: 'idle', cwd: '/repo/source' },
       { id: 's2', label: 'target', state: 'idle', cwd: '/repo/target' },
     ];
-    const onNewWorkspaceDrop = vi.fn();
+    const onNewDesktopDrop = vi.fn();
     const { rerender } = render(
       <Sidebar
         {...baseProps}
         {...buildSidebarData(sessions)}
-        onNewWorkspaceDrop={onNewWorkspaceDrop}
+        onNewDesktopDrop={onNewDesktopDrop}
       />,
     );
 
-    expect(screen.queryByTestId('new-workspace-dropzone')).not.toBeInTheDocument();
+    expect(screen.queryByTestId('new-desktop-dropzone')).not.toBeInTheDocument();
 
     rerender(
       <Sidebar
         {...baseProps}
         {...buildSidebarData(sessions)}
-        leafDrag={{ sourceWorkspaceId: 'workspace-/repo/source' }}
-        onNewWorkspaceDrop={onNewWorkspaceDrop}
+        leafDrag={{ sourceDesktopId: 'desktop-/repo/source' }}
+        onNewDesktopDrop={onNewDesktopDrop}
       />,
     );
 
-    const zone = screen.getByTestId('new-workspace-dropzone');
+    const zone = screen.getByTestId('new-desktop-dropzone');
     expect(zone).toBeInTheDocument();
-    expect(zone).not.toHaveClass('new-workspace-dropzone--active');
+    expect(zone).not.toHaveClass('new-desktop-dropzone--active');
 
     fireEvent.pointerEnter(zone);
-    expect(zone).toHaveClass('new-workspace-dropzone--active');
+    expect(zone).toHaveClass('new-desktop-dropzone--active');
 
     fireEvent.pointerUp(zone);
-    expect(onNewWorkspaceDrop).toHaveBeenCalledTimes(1);
+    expect(onNewDesktopDrop).toHaveBeenCalledTimes(1);
   });
 
   it('starts a leaf drag when a session row is dragged out of the sidebar', () => {
-    const workspace = workspaceWithBrowserTile();
+    const desktop = desktopWithBrowserTile();
     const onSessionDragStart = vi.fn();
     const onSessionDragEnd = vi.fn();
     render(
       <Sidebar
         {...baseProps}
-        workspaces={[workspace]}
-        visualIndexByWorkspaceId={new Map([[workspace.id, 0]])}
+        desktops={[desktop]}
+        visualIndexByDesktopId={new Map([[desktop.id, 0]])}
         onSessionDragStart={onSessionDragStart}
         onSessionDragEnd={onSessionDragEnd}
       />,
@@ -599,7 +599,7 @@ describe('Sidebar', () => {
     expect(onSessionDragStart).not.toHaveBeenCalled();
 
     fireEvent.pointerMove(window, { pointerId: 1, clientX: 10, clientY: 40 });
-    expect(onSessionDragStart).toHaveBeenCalledWith('workspace-browser', undefined, 'pane-s1');
+    expect(onSessionDragStart).toHaveBeenCalledWith('desktop-browser', undefined, 'pane-s1');
     expect(screen.getByTestId('session-drag-ghost')).toBeInTheDocument();
     expect(screen.getByTestId('sidebar-session-s1')).toHaveClass('session-item--dragging');
 
@@ -609,14 +609,14 @@ describe('Sidebar', () => {
   });
 
   it.each([false, true])('cleans up an unmounted session drag (armed=%s)', (armed) => {
-    const workspace = workspaceWithBrowserTile();
+    const desktop = desktopWithBrowserTile();
     const onSessionDragStart = vi.fn();
     const onSessionDragEnd = vi.fn();
     const { unmount } = render(
       <Sidebar
         {...baseProps}
-        workspaces={[workspace]}
-        visualIndexByWorkspaceId={new Map([[workspace.id, 0]])}
+        desktops={[desktop]}
+        visualIndexByDesktopId={new Map([[desktop.id, 0]])}
         onSessionDragStart={onSessionDragStart}
         onSessionDragEnd={onSessionDragEnd}
       />,
@@ -635,13 +635,13 @@ describe('Sidebar', () => {
   });
 
   it('ends a session drag on Escape without dropping it', () => {
-    const workspace = workspaceWithBrowserTile();
+    const desktop = desktopWithBrowserTile();
     const onSessionDragEnd = vi.fn();
     render(
       <Sidebar
         {...baseProps}
-        workspaces={[workspace]}
-        visualIndexByWorkspaceId={new Map([[workspace.id, 0]])}
+        desktops={[desktop]}
+        visualIndexByDesktopId={new Map([[desktop.id, 0]])}
         onSessionDragStart={vi.fn()}
         onSessionDragEnd={onSessionDragEnd}
       />,
@@ -661,14 +661,14 @@ describe('Sidebar', () => {
   });
 
   it('treats a sub-threshold press on a session row as a plain selection click', () => {
-    const workspace = workspaceWithBrowserTile();
+    const desktop = desktopWithBrowserTile();
     const onSessionDragStart = vi.fn();
     const onSelectSession = vi.fn();
     render(
       <Sidebar
         {...baseProps}
-        workspaces={[workspace]}
-        visualIndexByWorkspaceId={new Map([[workspace.id, 0]])}
+        desktops={[desktop]}
+        visualIndexByDesktopId={new Map([[desktop.id, 0]])}
         onSelectSession={onSelectSession}
         onSessionDragStart={onSessionDragStart}
       />,
@@ -686,46 +686,46 @@ describe('Sidebar', () => {
     expect(onSelectSession).toHaveBeenCalledWith('s1');
   });
 
-  it('reorders a workspace by dragging its header onto an insertion seam', () => {
+  it('reorders a desktop by dragging its header onto an insertion seam', () => {
     const sidebarData = buildSidebarData([
       { id: 'a1', label: 'A1', state: 'idle', cwd: '/repo/a' },
       { id: 'b1', label: 'B1', state: 'idle', cwd: '/repo/b' },
       { id: 'c1', label: 'C1', state: 'idle', cwd: '/repo/c' },
     ]);
-    const onWorkspaceReorder = vi.fn();
-    const onSelectWorkspace = vi.fn();
+    const onDesktopReorder = vi.fn();
+    const onSelectDesktop = vi.fn();
     render(
       <Sidebar
         {...baseProps}
         {...sidebarData}
-        onSelectWorkspace={onSelectWorkspace}
-        onWorkspaceReorder={onWorkspaceReorder}
+        onSelectDesktop={onSelectDesktop}
+        onDesktopReorder={onDesktopReorder}
       />,
     );
 
-    const sourceGroup = screen.getByTestId('sidebar-workspace-workspace-/repo/a');
+    const sourceGroup = screen.getByTestId('sidebar-desktop-desktop-/repo/a');
     const header = sourceGroup.querySelector(
-      '.workspace-group-header > .sidebar-row-select',
+      '.desktop-group-header > .sidebar-row-select',
     ) as HTMLElement;
 
-    expect(screen.queryByTestId('workspace-reorder-seam-0')).not.toBeInTheDocument();
+    expect(screen.queryByTestId('desktop-reorder-seam-0')).not.toBeInTheDocument();
 
     fireEvent.pointerDown(header, { button: 0, pointerId: 1, clientX: 10, clientY: 10 });
     fireEvent.pointerMove(window, { pointerId: 1, clientX: 10, clientY: 80 });
 
-    const seam2 = screen.getByTestId('workspace-reorder-seam-2');
+    const seam2 = screen.getByTestId('desktop-reorder-seam-2');
     expect(seam2).toBeInTheDocument();
-    expect(screen.getByTestId('workspace-reorder-seam-3')).toBeInTheDocument();
+    expect(screen.getByTestId('desktop-reorder-seam-3')).toBeInTheDocument();
 
     fireEvent.pointerEnter(seam2);
     fireEvent.pointerUp(window, { pointerId: 1, clientX: 10, clientY: 120 });
 
-    expect(onWorkspaceReorder).toHaveBeenCalledWith({
-      workspaceId: 'workspace-/repo/a',
-      prevWorkspaceId: 'workspace-/repo/b',
-      nextWorkspaceId: 'workspace-/repo/c',
+    expect(onDesktopReorder).toHaveBeenCalledWith({
+      desktopId: 'desktop-/repo/a',
+      prevDesktopId: 'desktop-/repo/b',
+      nextDesktopId: 'desktop-/repo/c',
     });
-    expect(onSelectWorkspace).not.toHaveBeenCalled();
+    expect(onSelectDesktop).not.toHaveBeenCalled();
   });
 
   it('reorders a desktop whose first agent runs on a remote endpoint among every desktop', () => {
@@ -734,38 +734,38 @@ describe('Sidebar', () => {
       { id: 'b1', label: 'B1', state: 'idle', cwd: '/repo/b' },
       { id: 'c1', label: 'C1', state: 'idle', cwd: '/repo/c' },
     ]);
-    expect(sidebarData.workspaces[0].endpointId).toBe('ep-1');
-    const onWorkspaceReorder = vi.fn();
-    render(<Sidebar {...baseProps} {...sidebarData} onWorkspaceReorder={onWorkspaceReorder} />);
+    expect(sidebarData.desktops[0].endpointId).toBe('ep-1');
+    const onDesktopReorder = vi.fn();
+    render(<Sidebar {...baseProps} {...sidebarData} onDesktopReorder={onDesktopReorder} />);
 
     const header = screen
-      .getByTestId('sidebar-workspace-workspace-/repo/a')
-      .querySelector('.workspace-group-header > .sidebar-row-select') as HTMLElement;
+      .getByTestId('sidebar-desktop-desktop-/repo/a')
+      .querySelector('.desktop-group-header > .sidebar-row-select') as HTMLElement;
     fireEvent.pointerDown(header, { button: 0, pointerId: 1, clientX: 10, clientY: 10 });
     fireEvent.pointerMove(window, { pointerId: 1, clientX: 10, clientY: 80 });
-    expect(screen.getByTestId('workspace-reorder-seam-3')).toBeInTheDocument();
+    expect(screen.getByTestId('desktop-reorder-seam-3')).toBeInTheDocument();
 
-    fireEvent.pointerEnter(screen.getByTestId('workspace-reorder-seam-3'));
+    fireEvent.pointerEnter(screen.getByTestId('desktop-reorder-seam-3'));
     fireEvent.pointerUp(window, { pointerId: 1, clientX: 10, clientY: 120 });
 
-    expect(onWorkspaceReorder).toHaveBeenCalledWith({
-      workspaceId: 'workspace-/repo/a',
-      prevWorkspaceId: 'workspace-/repo/c',
-      nextWorkspaceId: undefined,
+    expect(onDesktopReorder).toHaveBeenCalledWith({
+      desktopId: 'desktop-/repo/a',
+      prevDesktopId: 'desktop-/repo/c',
+      nextDesktopId: undefined,
     });
   });
 
-  it('releases an armed workspace reorder on unmount without dropping', () => {
+  it('releases an armed desktop reorder on unmount without dropping', () => {
     const sidebarData = buildSidebarData([
       { id: 'a1', label: 'A1', state: 'idle', cwd: '/repo/a' },
       { id: 'b1', label: 'B1', state: 'idle', cwd: '/repo/b' },
     ]);
-    const onWorkspaceReorder = vi.fn();
+    const onDesktopReorder = vi.fn();
     const { unmount } = render(
-      <Sidebar {...baseProps} {...sidebarData} onWorkspaceReorder={onWorkspaceReorder} />,
+      <Sidebar {...baseProps} {...sidebarData} onDesktopReorder={onDesktopReorder} />,
     );
     const header = screen
-      .getByTestId('sidebar-workspace-workspace-/repo/a')
+      .getByTestId('sidebar-desktop-desktop-/repo/a')
       .querySelector('.sidebar-row-select') as HTMLButtonElement;
     header.setPointerCapture = vi.fn();
     header.releasePointerCapture = vi.fn();
@@ -775,7 +775,7 @@ describe('Sidebar', () => {
     unmount();
     expect(header.releasePointerCapture).toHaveBeenCalledWith(1);
     fireEvent.pointerUp(window, { pointerId: 1 });
-    expect(onWorkspaceReorder).not.toHaveBeenCalled();
+    expect(onDesktopReorder).not.toHaveBeenCalled();
   });
 
   it('drops nothing when Escape cancels a header drag', () => {
@@ -784,20 +784,20 @@ describe('Sidebar', () => {
       { id: 'b1', label: 'B1', state: 'idle', cwd: '/repo/b' },
       { id: 'c1', label: 'C1', state: 'idle', cwd: '/repo/c' },
     ]);
-    const onWorkspaceReorder = vi.fn();
-    render(<Sidebar {...baseProps} {...sidebarData} onWorkspaceReorder={onWorkspaceReorder} />);
+    const onDesktopReorder = vi.fn();
+    render(<Sidebar {...baseProps} {...sidebarData} onDesktopReorder={onDesktopReorder} />);
     const header = screen
-      .getByTestId('sidebar-workspace-workspace-/repo/a')
-      .querySelector('.workspace-group-header > .sidebar-row-select') as HTMLElement;
+      .getByTestId('sidebar-desktop-desktop-/repo/a')
+      .querySelector('.desktop-group-header > .sidebar-row-select') as HTMLElement;
 
     fireEvent.pointerDown(header, { button: 0, pointerId: 1, clientX: 10, clientY: 10 });
     fireEvent.pointerMove(window, { pointerId: 1, clientX: 10, clientY: 80 });
-    fireEvent.pointerEnter(screen.getByTestId('workspace-reorder-seam-3'));
+    fireEvent.pointerEnter(screen.getByTestId('desktop-reorder-seam-3'));
     fireEvent.keyDown(window, { key: 'Escape' });
     fireEvent.pointerUp(window, { pointerId: 1, clientX: 10, clientY: 120 });
 
-    expect(onWorkspaceReorder).not.toHaveBeenCalled();
-    expect(screen.queryByTestId('workspace-reorder-seam-0')).not.toBeInTheDocument();
+    expect(onDesktopReorder).not.toHaveBeenCalled();
+    expect(screen.queryByTestId('desktop-reorder-seam-0')).not.toBeInTheDocument();
   });
 
   it('takes Escape as the top of the escape stack, leaving the surface beneath it alone', () => {
@@ -810,27 +810,27 @@ describe('Sidebar', () => {
       useEscapeStack(underneath, true);
       return null;
     }
-    const onWorkspaceReorder = vi.fn();
+    const onDesktopReorder = vi.fn();
     render(
       <>
         <EscapeOwner />
-        <Sidebar {...baseProps} {...sidebarData} onWorkspaceReorder={onWorkspaceReorder} />
+        <Sidebar {...baseProps} {...sidebarData} onDesktopReorder={onDesktopReorder} />
       </>,
     );
     const header = screen
-      .getByTestId('sidebar-workspace-workspace-/repo/a')
-      .querySelector('.workspace-group-header > .sidebar-row-select') as HTMLElement;
+      .getByTestId('sidebar-desktop-desktop-/repo/a')
+      .querySelector('.desktop-group-header > .sidebar-row-select') as HTMLElement;
 
     fireEvent.pointerDown(header, { button: 0, pointerId: 1, clientX: 10, clientY: 10 });
     fireEvent.pointerMove(window, { pointerId: 1, clientX: 10, clientY: 80 });
     fireEvent.keyDown(window, { key: 'Escape' });
     expect(underneath).not.toHaveBeenCalled();
-    expect(screen.queryByTestId('workspace-reorder-seam-0')).not.toBeInTheDocument();
+    expect(screen.queryByTestId('desktop-reorder-seam-0')).not.toBeInTheDocument();
 
     fireEvent.pointerUp(window, { pointerId: 1 });
     fireEvent.keyDown(window, { key: 'Escape' });
     expect(underneath).toHaveBeenCalledOnce();
-    expect(onWorkspaceReorder).not.toHaveBeenCalled();
+    expect(onDesktopReorder).not.toHaveBeenCalled();
   });
 
   it('answers the next header click after Escape cancels a header drag released elsewhere', () => {
@@ -838,14 +838,14 @@ describe('Sidebar', () => {
       { id: 'a1', label: 'A1', state: 'idle', cwd: '/repo/a' },
       { id: 'b1', label: 'B1', state: 'idle', cwd: '/repo/b' },
     ]);
-    const onSelectWorkspace = vi.fn();
+    const onSelectDesktop = vi.fn();
     render(
-      <Sidebar {...baseProps} {...sidebarData} onSelectWorkspace={onSelectWorkspace} onWorkspaceReorder={vi.fn()} />,
+      <Sidebar {...baseProps} {...sidebarData} onSelectDesktop={onSelectDesktop} onDesktopReorder={vi.fn()} />,
     );
     const headerOf = (cwd: string) =>
       screen
-        .getByTestId(`sidebar-workspace-workspace-${cwd}`)
-        .querySelector('.workspace-group-header > .sidebar-row-select') as HTMLElement;
+        .getByTestId(`sidebar-desktop-desktop-${cwd}`)
+        .querySelector('.desktop-group-header > .sidebar-row-select') as HTMLElement;
 
     fireEvent.pointerDown(headerOf('/repo/a'), { button: 0, pointerId: 1, clientX: 10, clientY: 10 });
     fireEvent.pointerMove(window, { pointerId: 1, clientX: 10, clientY: 80 });
@@ -856,7 +856,7 @@ describe('Sidebar', () => {
     fireEvent.pointerUp(window, { pointerId: 2, clientX: 10, clientY: 40 });
     fireEvent.click(headerOf('/repo/b'));
 
-    expect(onSelectWorkspace).toHaveBeenCalledTimes(1);
+    expect(onSelectDesktop).toHaveBeenCalledTimes(1);
   });
 
   it('cancels the preceding pointer gesture when another header is pressed', () => {
@@ -864,12 +864,12 @@ describe('Sidebar', () => {
       { id: 'a1', label: 'A1', state: 'idle', cwd: '/repo/a' },
       { id: 'b1', label: 'B1', state: 'idle', cwd: '/repo/b' },
     ]);
-    render(<Sidebar {...baseProps} {...sidebarData} onWorkspaceReorder={vi.fn()} />);
+    render(<Sidebar {...baseProps} {...sidebarData} onDesktopReorder={vi.fn()} />);
     const first = screen
-      .getByTestId('sidebar-workspace-workspace-/repo/a')
+      .getByTestId('sidebar-desktop-desktop-/repo/a')
       .querySelector('.sidebar-row-select') as HTMLButtonElement;
     const second = screen
-      .getByTestId('sidebar-workspace-workspace-/repo/b')
+      .getByTestId('sidebar-desktop-desktop-/repo/b')
       .querySelector('.sidebar-row-select') as HTMLButtonElement;
     first.setPointerCapture = vi.fn();
     second.setPointerCapture = vi.fn();
@@ -885,29 +885,29 @@ describe('Sidebar', () => {
       { id: 'a1', label: 'A1', state: 'idle', cwd: '/repo/a' },
       { id: 'b1', label: 'B1', state: 'idle', cwd: '/repo/b' },
     ]);
-    const onWorkspaceReorder = vi.fn();
-    const onSelectWorkspace = vi.fn();
+    const onDesktopReorder = vi.fn();
+    const onSelectDesktop = vi.fn();
     render(
       <Sidebar
         {...baseProps}
         {...sidebarData}
-        onSelectWorkspace={onSelectWorkspace}
-        onWorkspaceReorder={onWorkspaceReorder}
+        onSelectDesktop={onSelectDesktop}
+        onDesktopReorder={onDesktopReorder}
       />,
     );
 
     const header = screen
-      .getByTestId('sidebar-workspace-workspace-/repo/a')
-      .querySelector('.workspace-group-header > .sidebar-row-select') as HTMLElement;
+      .getByTestId('sidebar-desktop-desktop-/repo/a')
+      .querySelector('.desktop-group-header > .sidebar-row-select') as HTMLElement;
 
     fireEvent.pointerDown(header, { button: 0, pointerId: 1, clientX: 10, clientY: 10 });
     fireEvent.pointerMove(window, { pointerId: 1, clientX: 12, clientY: 11 });
     fireEvent.pointerUp(window, { pointerId: 1, clientX: 12, clientY: 11 });
     fireEvent.click(header);
 
-    expect(onWorkspaceReorder).not.toHaveBeenCalled();
-    expect(onSelectWorkspace).toHaveBeenCalledWith('workspace-/repo/a');
-    expect(screen.queryByTestId('workspace-reorder-seam-0')).not.toBeInTheDocument();
+    expect(onDesktopReorder).not.toHaveBeenCalled();
+    expect(onSelectDesktop).toHaveBeenCalledWith('desktop-/repo/a');
+    expect(screen.queryByTestId('desktop-reorder-seam-0')).not.toBeInTheDocument();
   });
 
   it('shows the delegated-from-chief badge only on sessions delegated from the chief', () => {
@@ -923,7 +923,7 @@ describe('Sidebar', () => {
     expect(screen.getByTestId('sidebar-session-s2')).not.toContainElement(badges[0]);
   });
 
-  it('renders workspace shortcuts in workspace visual order', () => {
+  it('renders desktop shortcuts in desktop visual order', () => {
     const sessions: TestSession[] = [
       { id: 'a1', label: 'A1', state: 'idle', cwd: '/repo/a' },
       { id: 'b1', label: 'B1', state: 'idle', cwd: '/repo/b' },
@@ -931,8 +931,8 @@ describe('Sidebar', () => {
     ];
     render(<Sidebar {...baseProps} {...buildSidebarData(sessions)} />);
 
-    expect(screen.getByTestId('sidebar-workspace-workspace-/repo/a')).toHaveTextContent('⌘1');
-    expect(screen.getByTestId('sidebar-workspace-workspace-/repo/b')).toHaveTextContent('⌘2');
+    expect(screen.getByTestId('sidebar-desktop-desktop-/repo/a')).toHaveTextContent('⌘1');
+    expect(screen.getByTestId('sidebar-desktop-desktop-/repo/b')).toHaveTextContent('⌘2');
     expect(screen.getByTestId('sidebar-session-a1')).not.toHaveTextContent('⌘1');
   });
 
@@ -941,8 +941,8 @@ describe('Sidebar', () => {
       { id: 'a1', label: 'A1', state: 'idle', cwd: '/repo/a' },
       { id: 'b1', label: 'B1', state: 'idle', cwd: '/repo/b' },
     ]);
-    const emptyWorkspace: WorkspaceWithSessions<TestSession> = {
-      id: 'workspace-/repo/empty',
+    const emptyDesktop: DesktopWithSessions<TestSession> = {
+      id: 'desktop-/repo/empty',
       title: 'empty',
       directory: '/repo/empty',
       sessions: [],
@@ -951,62 +951,62 @@ describe('Sidebar', () => {
       focusedSessionId: null,
       hasUnresolvedAgentPanes: false,
     };
-    const groups = [emptyWorkspace, ...sidebarData.workspaces];
-    render(<Sidebar {...baseProps} workspaces={groups} visualIndexByWorkspaceId={groupIndexes(groups)} />);
+    const groups = [emptyDesktop, ...sidebarData.desktops];
+    render(<Sidebar {...baseProps} desktops={groups} visualIndexByDesktopId={groupIndexes(groups)} />);
 
-    expect(screen.queryByTestId('sidebar-workspace-workspace-/repo/empty')).not.toBeInTheDocument();
-    expect(screen.getByTestId('sidebar-workspace-workspace-/repo/a')).toHaveTextContent('⌘2');
-    expect(screen.getByTestId('sidebar-workspace-workspace-/repo/b')).toHaveTextContent('⌘3');
+    expect(screen.queryByTestId('sidebar-desktop-desktop-/repo/empty')).not.toBeInTheDocument();
+    expect(screen.getByTestId('sidebar-desktop-desktop-/repo/a')).toHaveTextContent('⌘2');
+    expect(screen.getByTestId('sidebar-desktop-desktop-/repo/b')).toHaveTextContent('⌘3');
   });
 
-  it('hides sessionless workspaces by default and reveals them when showSessionless is set', () => {
+  it('hides sessionless desktops by default and reveals them when showSessionless is set', () => {
     const sidebarData = buildSidebarData([
       { id: 'a1', label: 'A1', state: 'idle', cwd: '/repo/a' },
     ]);
-    const all = [...sidebarData.workspaces, sessionlessWorkspace()];
-    const indexMap = new Map(all.map((workspace, index) => [workspace.id, index]));
+    const all = [...sidebarData.desktops, sessionlessDesktop()];
+    const indexMap = new Map(all.map((desktop, index) => [desktop.id, index]));
 
     const { rerender } = render(
       <Sidebar
         {...baseProps}
-        workspaces={all}
-        visualIndexByWorkspaceId={indexMap}
+        desktops={all}
+        visualIndexByDesktopId={indexMap}
       />,
     );
-    expect(screen.queryByTestId('sidebar-workspace-workspace-/repo/docs')).not.toBeInTheDocument();
+    expect(screen.queryByTestId('sidebar-desktop-desktop-/repo/docs')).not.toBeInTheDocument();
 
     rerender(
       <Sidebar
         {...baseProps}
-        workspaces={all}
-        visualIndexByWorkspaceId={indexMap}
+        desktops={all}
+        visualIndexByDesktopId={indexMap}
         showSessionless
       />,
     );
-    expect(screen.getByTestId('sidebar-workspace-workspace-/repo/docs')).toBeInTheDocument();
+    expect(screen.getByTestId('sidebar-desktop-desktop-/repo/docs')).toBeInTheDocument();
   });
 
-  it('marks sessionless workspaces with a neutral indicator instead of a state dot', () => {
+  it('marks sessionless desktops with a neutral indicator instead of a state dot', () => {
     const sidebarData = buildSidebarData([
       { id: 'a1', label: 'A1', state: 'working', cwd: '/repo/a' },
     ]);
-    const all = [...sidebarData.workspaces, sessionlessWorkspace()];
+    const all = [...sidebarData.desktops, sessionlessDesktop()];
     render(
       <Sidebar
         {...baseProps}
-        workspaces={all}
-        visualIndexByWorkspaceId={new Map(all.map((workspace, index) => [workspace.id, index]))}
+        desktops={all}
+        visualIndexByDesktopId={new Map(all.map((desktop, index) => [desktop.id, index]))}
         showSessionless
       />,
     );
 
-    const sessionlessGroup = screen.getByTestId('sidebar-workspace-workspace-/repo/docs');
-    expect(sessionlessGroup.querySelector('.workspace-neutral-indicator')).toBeTruthy();
+    const sessionlessGroup = screen.getByTestId('sidebar-desktop-desktop-/repo/docs');
+    expect(sessionlessGroup.querySelector('.desktop-neutral-indicator')).toBeTruthy();
     expect(sessionlessGroup.querySelector('.state-indicator')).toBeFalsy();
 
-    const sessionGroup = screen.getByTestId('sidebar-workspace-workspace-/repo/a');
+    const sessionGroup = screen.getByTestId('sidebar-desktop-desktop-/repo/a');
     expect(sessionGroup.querySelector('.state-indicator')).toBeTruthy();
-    expect(sessionGroup.querySelector('.workspace-neutral-indicator')).toBeFalsy();
+    expect(sessionGroup.querySelector('.desktop-neutral-indicator')).toBeFalsy();
   });
 
   it('invokes onToggleShowSessionless when the tile-only switch is clicked', () => {
@@ -1114,14 +1114,14 @@ describe('Sidebar', () => {
     expect(screen.getByRole('dialog', { name: 'Sidebar settings' })).toBeInTheDocument();
   });
 
-  it('selects the workspace tile-focus treatment from display settings', () => {
-    const onWorkspaceSelectionStyleChange = vi.fn();
+  it('selects the desktop tile-focus treatment from display settings', () => {
+    const onDesktopSelectionStyleChange = vi.fn();
     render(
       <Sidebar
         {...baseProps}
         {...buildSidebarData([])}
-        workspaceSelectionStyle="rail"
-        onWorkspaceSelectionStyleChange={onWorkspaceSelectionStyleChange}
+        desktopSelectionStyle="rail"
+        onDesktopSelectionStyleChange={onDesktopSelectionStyleChange}
       />,
     );
 
@@ -1130,7 +1130,7 @@ describe('Sidebar', () => {
     expect(screen.getByRole('button', { name: 'rail' })).toHaveAttribute('aria-pressed', 'true');
     fireEvent.click(screen.getByRole('button', { name: 'dim' }));
 
-    expect(onWorkspaceSelectionStyleChange).toHaveBeenCalledWith('dim');
+    expect(onDesktopSelectionStyleChange).toHaveBeenCalledWith('dim');
   });
 
   it('renders config-driven dock items, marks active ones, and fires actions on click', () => {
@@ -1226,93 +1226,93 @@ describe('Sidebar', () => {
     await waitFor(() => expect(onRenameSession).toHaveBeenCalledWith('s1', 'renamed-session'));
   });
 
-  it('renames a workspace through the pencil trigger and popover', async () => {
+  it('renames a desktop through the pencil trigger and popover', async () => {
     const sessions: TestSession[] = [{ id: 's1', label: 'claude', state: 'idle', agent: 'claude' }];
-    const onRenameWorkspace = vi.fn(async () => {});
+    const onRenameDesktop = vi.fn(async () => {});
     render(
       <Sidebar
         {...baseProps}
-        onRenameWorkspace={onRenameWorkspace}
+        onRenameDesktop={onRenameDesktop}
         {...buildSidebarData(sessions)}
       />,
     );
 
-    fireEvent.click(screen.getByTestId('rename-workspace-workspace-s1'));
+    fireEvent.click(screen.getByTestId('rename-desktop-desktop-s1'));
     const input = screen.getByRole('textbox') as HTMLInputElement;
-    fireEvent.change(input, { target: { value: 'renamed-workspace' } });
+    fireEvent.change(input, { target: { value: 'renamed-desktop' } });
     fireEvent.keyDown(screen.getByRole('dialog'), { key: 'Enter' });
 
     await waitFor(() =>
-      expect(onRenameWorkspace).toHaveBeenCalledWith('workspace-s1', 'renamed-workspace'),
+      expect(onRenameDesktop).toHaveBeenCalledWith('desktop-s1', 'renamed-desktop'),
     );
   });
 
   it('renames a desktop back to its default label with an empty name', async () => {
     const sessions: TestSession[] = [{ id: 's1', label: 'claude', state: 'idle', agent: 'claude' }];
     const sidebarData = buildSidebarData(sessions);
-    const workspaces = sidebarData.workspaces.map((workspace) => ({
-      ...workspace,
+    const desktops = sidebarData.desktops.map((desktop) => ({
+      ...desktop,
       title: 'Reviews',
       desktop: { name: 'Reviews', defaultLabel: 'Desktop 1' },
     }));
-    const onRenameWorkspace = vi.fn(async () => {});
-    render(<Sidebar {...baseProps} {...sidebarData} workspaces={workspaces} onRenameWorkspace={onRenameWorkspace} />);
+    const onRenameDesktop = vi.fn(async () => {});
+    render(<Sidebar {...baseProps} {...sidebarData} desktops={desktops} onRenameDesktop={onRenameDesktop} />);
 
-    fireEvent.click(screen.getByTestId('rename-workspace-workspace-s1'));
+    fireEvent.click(screen.getByTestId('rename-desktop-desktop-s1'));
     const input = screen.getByRole('textbox') as HTMLInputElement;
     expect(input.value).toBe('Reviews');
     expect(input.placeholder).toBe('Desktop 1');
     fireEvent.change(input, { target: { value: '' } });
     fireEvent.keyDown(screen.getByRole('dialog'), { key: 'Enter' });
 
-    await waitFor(() => expect(onRenameWorkspace).toHaveBeenCalledWith('workspace-s1', ''));
+    await waitFor(() => expect(onRenameDesktop).toHaveBeenCalledWith('desktop-s1', ''));
   });
 
   it('neither renames nor reorders the agents that are not on a desktop', () => {
     const sessions = [
-      { id: 'a1', label: 'A1', state: 'idle' as const, workspaceId: 'workspace-a' },
-      { id: 'b1', label: 'B1', state: 'idle' as const, workspaceId: 'workspace-b' },
+      { id: 'a1', label: 'A1', state: 'idle' as const, desktopId: 'desktop-a' },
+      { id: 'b1', label: 'B1', state: 'idle' as const, desktopId: 'desktop-b' },
       { id: 'loose', label: 'Loose', state: 'idle' as const },
     ];
-    const workspaces = desktopGroups(
-      [{ id: 'workspace-a', title: 'A' }, { id: 'workspace-b', title: 'B' }],
+    const desktops = desktopGroups(
+      [{ id: 'desktop-a', title: 'A' }, { id: 'desktop-b', title: 'B' }],
       sessions,
     );
-    const onWorkspaceReorder = vi.fn();
+    const onDesktopReorder = vi.fn();
     render(
       <Sidebar
         {...baseProps}
-        workspaces={workspaces}
-        visualIndexByWorkspaceId={groupIndexes(workspaces)}
-        onRenameWorkspace={vi.fn(async () => {})}
-        onWorkspaceReorder={onWorkspaceReorder}
+        desktops={desktops}
+        visualIndexByDesktopId={groupIndexes(desktops)}
+        onRenameDesktop={vi.fn(async () => {})}
+        onDesktopReorder={onDesktopReorder}
       />,
     );
 
-    const loose = screen.getByTestId('sidebar-workspace-unplaced');
+    const loose = screen.getByTestId('sidebar-desktop-unplaced');
     expect(within(loose).getByText('Not on a desktop')).toBeInTheDocument();
-    expect(screen.queryByTestId('rename-workspace-unplaced')).not.toBeInTheDocument();
-    expect(screen.getByTestId('rename-workspace-workspace-a')).toBeInTheDocument();
+    expect(screen.queryByTestId('rename-desktop-unplaced')).not.toBeInTheDocument();
+    expect(screen.getByTestId('rename-desktop-desktop-a')).toBeInTheDocument();
 
-    const header = loose.querySelector('.workspace-group-header > .sidebar-row-select') as HTMLElement;
+    const header = loose.querySelector('.desktop-group-header > .sidebar-row-select') as HTMLElement;
     fireEvent.pointerDown(header, { button: 0, pointerId: 1, clientX: 10, clientY: 10 });
     fireEvent.pointerMove(window, { pointerId: 1, clientX: 10, clientY: 80 });
-    expect(screen.queryByTestId('workspace-reorder-seam-0')).not.toBeInTheDocument();
+    expect(screen.queryByTestId('desktop-reorder-seam-0')).not.toBeInTheDocument();
 
     const aHeader = screen
-      .getByTestId('sidebar-workspace-workspace-a')
-      .querySelector('.workspace-group-header > .sidebar-row-select') as HTMLElement;
+      .getByTestId('sidebar-desktop-desktop-a')
+      .querySelector('.desktop-group-header > .sidebar-row-select') as HTMLElement;
     fireEvent.pointerDown(aHeader, { button: 0, pointerId: 2, clientX: 10, clientY: 10 });
     fireEvent.pointerMove(window, { pointerId: 2, clientX: 10, clientY: 80 });
-    expect(screen.getByTestId('workspace-reorder-seam-2')).toBeInTheDocument();
-    expect(screen.queryByTestId('workspace-reorder-seam-3')).not.toBeInTheDocument();
-    fireEvent.pointerEnter(screen.getByTestId('workspace-reorder-seam-2'));
+    expect(screen.getByTestId('desktop-reorder-seam-2')).toBeInTheDocument();
+    expect(screen.queryByTestId('desktop-reorder-seam-3')).not.toBeInTheDocument();
+    fireEvent.pointerEnter(screen.getByTestId('desktop-reorder-seam-2'));
     fireEvent.pointerUp(window, { pointerId: 2, clientX: 10, clientY: 120 });
 
-    expect(onWorkspaceReorder).toHaveBeenCalledWith({
-      workspaceId: 'workspace-a',
-      prevWorkspaceId: 'workspace-b',
-      nextWorkspaceId: undefined,
+    expect(onDesktopReorder).toHaveBeenCalledWith({
+      desktopId: 'desktop-a',
+      prevDesktopId: 'desktop-b',
+      nextDesktopId: undefined,
     });
   });
 
@@ -1384,10 +1384,10 @@ describe('Sidebar home row', () => {
     expect(screen.getByTestId('sidebar-home').className).toContain('selected');
   });
 
-  it('replaces the workspaces title, so the header carries no label of its own', () => {
+  it('replaces the desktops title, so the header carries no label of its own', () => {
     render(<Sidebar {...baseProps} {...buildSidebarData(sessions)} />);
 
-    expect(screen.queryByText('Workspaces')).not.toBeInTheDocument();
+    expect(screen.queryByText('Desktops')).not.toBeInTheDocument();
     expect(screen.getByTestId('sidebar-home')).toBeInTheDocument();
   });
 

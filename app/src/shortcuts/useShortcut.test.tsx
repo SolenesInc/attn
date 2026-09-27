@@ -11,7 +11,7 @@ function ShortcutHarness(props: {
   onSessionClose: () => void;
   onTerminalClose: () => void;
   onToggleZoom?: () => void;
-  onSelectWorkspace?: () => void;
+  onSelectDesktop?: () => void;
   onTerminalFind?: () => void;
   onHistoryBack?: () => void;
   onHistoryForward?: () => void;
@@ -20,7 +20,7 @@ function ShortcutHarness(props: {
   useShortcut('session.close', props.onSessionClose, true);
   useShortcut('terminal.close', props.onTerminalClose, props.terminalEnabled ?? true);
   useShortcut('terminal.toggleZoom', props.onToggleZoom ?? (() => {}), props.onToggleZoom !== undefined);
-  useShortcut('desktop.select1', props.onSelectWorkspace ?? (() => {}), props.onSelectWorkspace !== undefined);
+  useShortcut('desktop.select1', props.onSelectDesktop ?? (() => {}), props.onSelectDesktop !== undefined);
   useShortcut('terminal.find', props.onTerminalFind ?? (() => {}), props.onTerminalFind !== undefined);
   useShortcut('session.historyBack', props.onHistoryBack ?? (() => {}), props.onHistoryBack !== undefined);
   useShortcut('session.historyForward', props.onHistoryForward ?? (() => {}), props.onHistoryForward !== undefined);
@@ -29,7 +29,7 @@ function ShortcutHarness(props: {
     <div>
       <button data-testid="plain-target" type="button">Plain</button>
       <div data-testid="terminal-target" className="terminal-container" />
-      <div className="session-terminal-workspace">
+      <div className="session-terminal-desktop">
         <input aria-label="Browser address" />
       </div>
       <div data-testid="editable-target" contentEditable={true} suppressContentEditableWarning />
@@ -187,13 +187,13 @@ describe('useShortcut close priority', () => {
   });
 
   it('keeps unrelated app shortcuts active in non-terminal editable controls', () => {
-    const onSelectWorkspace = vi.fn();
+    const onSelectDesktop = vi.fn();
 
     render(
       <ShortcutHarness
         onSessionClose={vi.fn()}
         onTerminalClose={vi.fn()}
-        onSelectWorkspace={onSelectWorkspace}
+        onSelectDesktop={onSelectDesktop}
       />,
     );
 
@@ -204,7 +204,7 @@ describe('useShortcut close priority', () => {
     });
 
     expect(allowed).toBe(false);
-    expect(onSelectWorkspace).toHaveBeenCalledTimes(1);
+    expect(onSelectDesktop).toHaveBeenCalledTimes(1);
   });
 
   it('routes Cmd+[ and Cmd+] to history handlers in a terminal', () => {
@@ -276,20 +276,20 @@ describe('useShortcut leader-key chords', () => {
   it('does not let the follow key also fire a single combo on the same keystroke', () => {
     setShortcutOverrides({ 'terminal.toggleZoom': { leader: { key: 'y', meta: true }, then: { key: '1', meta: true } } });
     const onToggleZoom = vi.fn();
-    const onSelectWorkspace = vi.fn();
+    const onSelectDesktop = vi.fn();
     render(
       <ShortcutHarness
         onSessionClose={vi.fn()}
         onTerminalClose={vi.fn()}
         onToggleZoom={onToggleZoom}
-        onSelectWorkspace={onSelectWorkspace}
+        onSelectDesktop={onSelectDesktop}
       />,
     );
 
     fireEvent.keyDown(screen.getByTestId('plain-target'), { key: 'y', metaKey: true });
     fireEvent.keyDown(screen.getByTestId('plain-target'), { key: '1', code: 'Digit1', metaKey: true });
     expect(onToggleZoom).toHaveBeenCalledTimes(1); // chord fired
-    expect(onSelectWorkspace).not.toHaveBeenCalled(); // ⌘1 combo did NOT also fire
+    expect(onSelectDesktop).not.toHaveBeenCalled(); // ⌘1 combo did NOT also fire
   });
 
   it('consumes a bound leader even when its follow action has no handler', () => {

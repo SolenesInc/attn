@@ -4,7 +4,7 @@
    positioning keeps the popup exactly where the pointer released.
 
    The popup and the notice are portalled to document.body, so their z-index is
-   read in the root stacking context and has to clear every tile and workspace
+   read in the root stacking context and has to clear every tile and desktop
    overlay in the app (the highest is ~10001). Inside the pane they were drawn
    under the chrome beside it, which is what put a popup anchored to a line's
    first column behind the sidebar. */

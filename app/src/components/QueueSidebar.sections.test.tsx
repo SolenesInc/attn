@@ -13,7 +13,7 @@ interface TestSession {
   id: string;
   label: string;
   state: 'working' | 'waiting_input' | 'idle';
-  workspaceId: string;
+  desktopId: string;
   chiefOfStaff?: boolean;
   turnOwed?: boolean;
   turnOpenedAt?: string;
@@ -27,12 +27,12 @@ interface TestSession {
 
 const baseProps = {
   selectedId: null,
-  selectedWorkspaceId: null,
+  selectedDesktopId: null,
   collapsed: false,
   surface: 'queue-open' as const,
   headerActions: [],
   onSelectSession: () => {},
-  onSelectWorkspace: () => {},
+  onSelectDesktop: () => {},
   onNewSession: () => {},
   onCloseSession: () => {},
   onReloadSession: () => {},
@@ -40,14 +40,14 @@ const baseProps = {
   onToggleCollapse: () => {},
 };
 
-const desktops = [
+const fixtureDesktops = [
   { id: 'ws-a', title: 'alpha' },
   { id: 'ws-b', title: 'beta' },
 ];
 
 function sidebarData(sessions: TestSession[]) {
-  const workspaces = desktopGroups(desktops, sessions);
-  return { workspaces, visualIndexByWorkspaceId: new Map(desktops.map((desktop, index) => [desktop.id, index])) };
+  const desktops = desktopGroups(fixtureDesktops, sessions);
+  return { desktops, visualIndexByDesktopId: new Map(fixtureDesktops.map((desktop, index) => [desktop.id, index])) };
 }
 
 function renderSidebar(
@@ -61,7 +61,7 @@ function renderSidebar(
       {...baseProps}
       {...data}
       {...overrides}
-      queue={queueMode ? buildQueueBands(data.workspaces) : null}
+      queue={queueMode ? buildQueueBands(data.desktops) : null}
     />
   );
 }
@@ -74,7 +74,7 @@ function ListToggling(props: ComponentProps<typeof Sidebar>) {
 function renderWithList(sessions: TestSession[], overrides: Partial<ComponentProps<typeof Sidebar>> = {}) {
   const { agentListOpen, ...rest } = overrides;
   const data = sidebarData(sessions);
-  const view = render(<ListToggling {...baseProps} {...data} {...rest} queue={buildQueueBands(data.workspaces)} />);
+  const view = render(<ListToggling {...baseProps} {...data} {...rest} queue={buildQueueBands(data.desktops)} />);
   if (agentListOpen) fireEvent.click(screen.getByTestId('queue-agents-toggle'));
   return view;
 }
@@ -85,18 +85,18 @@ function queueRowIds(container: HTMLElement) {
 }
 
 const sessions: TestSession[] = [
-  { id: 'chief', label: 'chief', state: 'idle', workspaceId: 'ws-a', chiefOfStaff: true },
-  { id: 'newer', label: 'newer', state: 'waiting_input', workspaceId: 'ws-a', turnOwed: true, turnOpenedAt: '2026-07-26T11:00:00Z' },
-  { id: 'older', label: 'older', state: 'working', workspaceId: 'ws-b', turnOwed: true, turnOpenedAt: '2026-07-26T09:00:00Z' },
-  { id: 'settled', label: 'settled', state: 'waiting_input', workspaceId: 'ws-b' },
+  { id: 'chief', label: 'chief', state: 'idle', desktopId: 'ws-a', chiefOfStaff: true },
+  { id: 'newer', label: 'newer', state: 'waiting_input', desktopId: 'ws-a', turnOwed: true, turnOpenedAt: '2026-07-26T11:00:00Z' },
+  { id: 'older', label: 'older', state: 'working', desktopId: 'ws-b', turnOwed: true, turnOpenedAt: '2026-07-26T09:00:00Z' },
+  { id: 'settled', label: 'settled', state: 'waiting_input', desktopId: 'ws-b' },
 ];
 
-function owed(id: string, hour: number, workspaceId = 'ws-a'): TestSession {
+function owed(id: string, hour: number, desktopId = 'ws-a'): TestSession {
   return {
     id,
     label: id,
     state: 'waiting_input',
-    workspaceId,
+    desktopId,
     turnOwed: true,
     turnOpenedAt: `2026-07-26T${String(hour).padStart(2, '0')}:00:00Z`,
   };
@@ -112,7 +112,7 @@ describe('the queue sidebar', () => {
   it('leaves the tree alone while the arrangement is off, satellites included', () => {
     const tagged: TestSession[] = [
       ...sessions,
-      { id: 'shell', label: 'shell', state: 'idle', workspaceId: 'ws-b', parentSessionId: 'older' },
+      { id: 'shell', label: 'shell', state: 'idle', desktopId: 'ws-b', parentSessionId: 'older' },
     ];
     renderSidebar(tagged, false);
 
@@ -156,10 +156,10 @@ describe('the queue sidebar', () => {
   });
 
   it('counts every agent in the profile on the list toggle, and no attached shell', () => {
-    const unplaced: TestSession = { id: 'loose', label: 'loose', state: 'idle', workspaceId: 'nowhere' };
-    const shell: TestSession = { id: 'loose-shell', label: 'shell', state: 'idle', workspaceId: 'nowhere', parentSessionId: 'loose' };
+    const unplaced: TestSession = { id: 'loose', label: 'loose', state: 'idle', desktopId: 'nowhere' };
+    const shell: TestSession = { id: 'loose-shell', label: 'shell', state: 'idle', desktopId: 'nowhere', parentSessionId: 'loose' };
     const later: TestSession = {
-      id: 'later', label: 'later', state: 'idle', workspaceId: 'ws-a',
+      id: 'later', label: 'later', state: 'idle', desktopId: 'ws-a',
       turnSnoozedUntil: new Date(Date.now() + 3600_000).toISOString(),
     };
     renderSidebar([...sessions, unplaced, shell, later], true, { crew: [{ id: 'alder' }] });
@@ -171,7 +171,7 @@ describe('the queue sidebar', () => {
 
   it('lists the working and snoozed agents under the waiting turns once opened', () => {
     const later: TestSession = {
-      id: 'later', label: 'later', state: 'idle', workspaceId: 'ws-a',
+      id: 'later', label: 'later', state: 'idle', desktopId: 'ws-a',
       turnSnoozedUntil: new Date(Date.now() + 3600_000).toISOString(),
     };
     const { container } = renderSidebar([...sessions, later], true, { agentListOpen: true });
@@ -184,7 +184,7 @@ describe('the queue sidebar', () => {
 
   it('narrows the opened list by the filter, never the lead turns', () => {
     const { container } = renderSidebar(
-      [...sessions, { id: 'other', label: 'Other thing', state: 'idle', workspaceId: 'ws-a' }],
+      [...sessions, { id: 'other', label: 'Other thing', state: 'idle', desktopId: 'ws-a' }],
       true,
       { agentListOpen: true },
     );
@@ -195,7 +195,7 @@ describe('the queue sidebar', () => {
 
   it('marks each row with the desktop slot it lives on', () => {
     renderSidebar(
-      [...sessions, { id: 'loose', label: 'loose', state: 'idle', workspaceId: 'nowhere' }],
+      [...sessions, { id: 'loose', label: 'loose', state: 'idle', desktopId: 'nowhere' }],
       true,
       { agentListOpen: true },
     );
@@ -211,12 +211,12 @@ describe('the queue sidebar', () => {
   it('offers the delegation chain without repeating the dispatcher below the title', () => {
     const onSelectSession = vi.fn();
     const linked: TestSession[] = [
-      { id: 'root', label: 'root session', state: 'idle', workspaceId: 'ws-a', delegation_role: { name: 'Orchestrator', builtin: BuiltinDelegationRole.Orchestrator } },
+      { id: 'root', label: 'root session', state: 'idle', desktopId: 'ws-a', delegation_role: { name: 'Orchestrator', builtin: BuiltinDelegationRole.Orchestrator } },
       {
         id: 'child',
         label: 'child',
         state: 'working',
-        workspaceId: 'ws-b',
+        desktopId: 'ws-b',
         dispatcher_session_id: 'root',
         dispatcher_member: 'alder',
       },
@@ -237,7 +237,7 @@ describe('the queue sidebar', () => {
       id: 'child',
       label: 'child',
       state: 'working',
-      workspaceId: 'ws-a',
+      desktopId: 'ws-a',
       dispatcher_session_id: 'ended',
       dispatcher_member: 'alder',
     }];
@@ -251,10 +251,10 @@ describe('the queue sidebar', () => {
 
   it('keeps hover local to the pointed row', () => {
     const chain: TestSession[] = [
-      { id: 'root', label: 'root', state: 'idle', workspaceId: 'ws-a' },
-      { id: 'middle', label: 'middle', state: 'idle', workspaceId: 'ws-a', dispatcher_session_id: 'root' },
-      { id: 'leaf', label: 'leaf', state: 'idle', workspaceId: 'ws-b', dispatcher_session_id: 'middle' },
-      { id: 'grandchild', label: 'grandchild', state: 'idle', workspaceId: 'ws-b', dispatcher_session_id: 'leaf' },
+      { id: 'root', label: 'root', state: 'idle', desktopId: 'ws-a' },
+      { id: 'middle', label: 'middle', state: 'idle', desktopId: 'ws-a', dispatcher_session_id: 'root' },
+      { id: 'leaf', label: 'leaf', state: 'idle', desktopId: 'ws-b', dispatcher_session_id: 'middle' },
+      { id: 'grandchild', label: 'grandchild', state: 'idle', desktopId: 'ws-b', dispatcher_session_id: 'leaf' },
     ];
     renderSidebar(chain, true, { selectedId: 'middle', agentListOpen: true });
     const root = screen.getByTestId('queue-settled-root');
@@ -302,8 +302,8 @@ describe('the queue sidebar', () => {
   it('gives a shell no row of its own while it sits beside its agent', () => {
     const withShell: TestSession[] = [
       ...sessions,
-      { id: 'shell', label: 'shell', state: 'idle', workspaceId: 'ws-b', parentSessionId: 'older' },
-      { id: 'orphan', label: 'orphan', state: 'idle', workspaceId: 'ws-b' },
+      { id: 'shell', label: 'shell', state: 'idle', desktopId: 'ws-b', parentSessionId: 'older' },
+      { id: 'orphan', label: 'orphan', state: 'idle', desktopId: 'ws-b' },
     ];
     const { container } = renderSidebar(withShell, true, { agentListOpen: true });
 
@@ -314,7 +314,7 @@ describe('the queue sidebar', () => {
 
   it('drops an open session menu when the sidebar surface changes', () => {
     const data = sidebarData(sessions);
-    const queue = buildQueueBands(data.workspaces);
+    const queue = buildQueueBands(data.desktops);
     const view = render(<Sidebar {...baseProps} {...data} queue={queue} />);
     fireEvent.click(screen.getByTestId('session-actions-older'));
     expect(screen.getByTestId('reload-session-action')).toBeInTheDocument();
@@ -340,8 +340,8 @@ describe('the queue sidebar', () => {
 
   it('badges the collapsed rail by state outside queue mode', () => {
     const owedOnly: TestSession[] = [
-      { id: 'settled', label: 'settled', state: 'waiting_input', workspaceId: 'ws-a' },
-      { id: 'owed', label: 'owed', state: 'working', workspaceId: 'ws-b', turnOwed: true, turnOpenedAt: '2026-07-26T09:00:00Z' },
+      { id: 'settled', label: 'settled', state: 'waiting_input', desktopId: 'ws-a' },
+      { id: 'owed', label: 'owed', state: 'working', desktopId: 'ws-b', turnOwed: true, turnOpenedAt: '2026-07-26T09:00:00Z' },
     ];
 
     const { container } = renderSidebar(owedOnly, false, { collapsed: true });
@@ -376,8 +376,8 @@ describe('the queue sidebar header', () => {
 
 describe('the desktop strip', () => {
   it('puts every slotted desktop on a chip, dotted where a turn waits', () => {
-    const onSelectWorkspace = vi.fn();
-    renderSidebar(sessions, true, { onSelectWorkspace, selectedWorkspaceId: 'ws-b' });
+    const onSelectDesktop = vi.fn();
+    renderSidebar(sessions, true, { onSelectDesktop, selectedDesktopId: 'ws-b' });
 
     const beta = screen.getByTestId('queue-desktop-chip-2');
     expect(beta).toHaveClass('is-current');
@@ -385,7 +385,7 @@ describe('the desktop strip', () => {
     expect(beta.getAttribute('title')).toMatch(/^beta \(/);
     expect(screen.getByTestId('queue-desktop-current')).toHaveTextContent('beta');
     fireEvent.click(screen.getByTestId('queue-desktop-chip-1'));
-    expect(onSelectWorkspace).toHaveBeenCalledWith('ws-a');
+    expect(onSelectDesktop).toHaveBeenCalledWith('ws-a');
   });
 
   it('gathers desktops without a shortcut behind the overview', () => {
@@ -395,10 +395,10 @@ describe('the desktop strip', () => {
       <Sidebar
         {...baseProps}
         {...data}
-        visualIndexByWorkspaceId={new Map([['ws-a', 0]])}
-        selectedWorkspaceId="ws-b"
+        visualIndexByDesktopId={new Map([['ws-a', 0]])}
+        selectedDesktopId="ws-b"
         onOpenOverview={onOpenOverview}
-        queue={buildQueueBands(data.workspaces)}
+        queue={buildQueueBands(data.desktops)}
       />,
     );
 
@@ -415,13 +415,13 @@ describe('the desktop strip', () => {
   });
 
   it('takes a dragged pane onto another desktop chip', () => {
-    const onWorkspaceDragEnter = vi.fn();
-    const onWorkspaceDragDrop = vi.fn();
+    const onDesktopDragEnter = vi.fn();
+    const onDesktopDragDrop = vi.fn();
     renderSidebar(sessions, true, {
-      leafDrag: { sourceWorkspaceId: 'ws-a' },
-      dragHoverWorkspaceId: 'ws-b',
-      onWorkspaceDragEnter,
-      onWorkspaceDragDrop,
+      leafDrag: { sourceDesktopId: 'ws-a' },
+      dragHoverDesktopId: 'ws-b',
+      onDesktopDragEnter,
+      onDesktopDragDrop,
     });
 
     const source = screen.getByTestId('queue-desktop-chip-1');
@@ -431,13 +431,13 @@ describe('the desktop strip', () => {
 
     fireEvent.pointerEnter(source);
     fireEvent.pointerUp(source);
-    expect(onWorkspaceDragEnter).not.toHaveBeenCalled();
-    expect(onWorkspaceDragDrop).not.toHaveBeenCalled();
+    expect(onDesktopDragEnter).not.toHaveBeenCalled();
+    expect(onDesktopDragDrop).not.toHaveBeenCalled();
 
     fireEvent.pointerEnter(target);
     fireEvent.pointerUp(target);
-    expect(onWorkspaceDragEnter).toHaveBeenCalledWith(expect.objectContaining({ id: 'ws-b' }));
-    expect(onWorkspaceDragDrop).toHaveBeenCalledWith(expect.objectContaining({ id: 'ws-b' }));
+    expect(onDesktopDragEnter).toHaveBeenCalledWith(expect.objectContaining({ id: 'ws-b' }));
+    expect(onDesktopDragDrop).toHaveBeenCalledWith(expect.objectContaining({ id: 'ws-b' }));
   });
 });
 
@@ -496,7 +496,7 @@ describe('walking the queue sidebar from the keyboard', () => {
         <>
           <textarea data-testid="terminal" />
           <button data-testid="shortcut" onClick={toggleAgentList} />
-          <Sidebar {...baseProps} {...data} queue={buildQueueBands(data.workspaces)} agentListOpen={agentListOpen} onToggleAgentList={toggleAgentList} />
+          <Sidebar {...baseProps} {...data} queue={buildQueueBands(data.desktops)} agentListOpen={agentListOpen} onToggleAgentList={toggleAgentList} />
         </>
       );
     }
@@ -524,7 +524,7 @@ describe('walking the queue sidebar from the keyboard', () => {
           <textarea data-testid="terminal-a" />
           <textarea data-testid="terminal-b" />
           <button data-testid="shortcut" onClick={toggleAgentList} />
-          <Sidebar {...baseProps} {...data} queue={buildQueueBands(data.workspaces)} agentListOpen={agentListOpen} onToggleAgentList={toggleAgentList} />
+          <Sidebar {...baseProps} {...data} queue={buildQueueBands(data.desktops)} agentListOpen={agentListOpen} onToggleAgentList={toggleAgentList} />
         </>
       );
     }
@@ -579,7 +579,7 @@ describe('snoozing from the sidebar', () => {
     const onWakeTurn = vi.fn();
     const onSelectSession = vi.fn();
     const deferred: TestSession[] = [
-      { id: 'later', label: 'later', state: 'idle', workspaceId: 'ws-a', turnSnoozedUntil: inAnHour() },
+      { id: 'later', label: 'later', state: 'idle', desktopId: 'ws-a', turnSnoozedUntil: inAnHour() },
     ];
     renderSidebar(deferred, true, { onWakeTurn, onSelectSession, agentListOpen: true });
 
@@ -627,7 +627,7 @@ describe('the crew in the sidebar', () => {
 
   it('anchors every member, awake or asleep, beside the chief', () => {
     const { container } = renderCrew([
-      { id: 'sess-keel', label: 'keel of the day', state: 'working', workspaceId: 'ws-a', crewMember: 'keel' },
+      { id: 'sess-keel', label: 'keel of the day', state: 'working', desktopId: 'ws-a', crewMember: 'keel' },
     ]);
 
     const block = container.querySelector('[data-testid="queue-crew-block"]') as HTMLElement;
@@ -656,7 +656,7 @@ describe('the crew in the sidebar', () => {
 
   it('names each focused row by what it holds: an agent, or nothing for a sleeping member', () => {
     renderCrew([
-      { id: 'sess-keel', label: 'keel of the day', state: 'working', workspaceId: 'ws-a', crewMember: 'keel' },
+      { id: 'sess-keel', label: 'keel of the day', state: 'working', desktopId: 'ws-a', crewMember: 'keel' },
     ], { onWakeCrewMember: () => {} });
 
     screen.getByTestId('queue-crew-select-alder').focus();
@@ -670,7 +670,7 @@ describe('the crew in the sidebar', () => {
   it('opens member details anchored on the row action for awake and asleep members', () => {
     const onOpenCrewMemberDetails = vi.fn();
     renderCrew(
-      [{ id: 'sess-keel', label: 'keel of the day', state: 'working', workspaceId: 'ws-a', crewMember: 'keel' }] as TestSession[],
+      [{ id: 'sess-keel', label: 'keel of the day', state: 'working', desktopId: 'ws-a', crewMember: 'keel' }] as TestSession[],
       { onOpenCrewMemberDetails },
     );
 
@@ -685,7 +685,7 @@ describe('the crew in the sidebar', () => {
 
   it('shows an awake member exactly once, under its own row', () => {
     const { container } = renderCrew([
-      { id: 'sess-keel', label: 'keel of the day', state: 'working', workspaceId: 'ws-a', crewMember: 'keel', turnOwed: true, turnOpenedAt: '2026-07-26T08:00:00Z' },
+      { id: 'sess-keel', label: 'keel of the day', state: 'working', desktopId: 'ws-a', crewMember: 'keel', turnOwed: true, turnOpenedAt: '2026-07-26T08:00:00Z' },
     ]);
 
     expect(queueRowIds(container).filter((id) => id?.includes('keel'))).toEqual(['queue-crew-keel']);
@@ -696,7 +696,7 @@ describe('the crew in the sidebar', () => {
       id: 'sess-keel',
       label: 'keel of the day',
       state: 'working',
-      workspaceId: 'ws-a',
+      desktopId: 'ws-a',
       crewMember: 'keel',
       turnOwed: true,
       turnOpenedAt: '2026-07-26T08:00:00Z',
@@ -707,7 +707,7 @@ describe('the crew in the sidebar', () => {
         {...baseProps}
         {...data}
         crew={roster}
-        queue={buildQueueBands(data.workspaces, { crewInQueue: true })}
+        queue={buildQueueBands(data.desktops, { crewInQueue: true })}
       />,
     );
 
@@ -721,7 +721,7 @@ describe('the crew in the sidebar', () => {
     const onSleepCrewMember = vi.fn();
     const onSelectSession = vi.fn();
     renderCrew(
-      [{ id: 'sess-keel', label: 'keel of the day', state: 'working', workspaceId: 'ws-a', crewMember: 'keel' }] as TestSession[],
+      [{ id: 'sess-keel', label: 'keel of the day', state: 'working', desktopId: 'ws-a', crewMember: 'keel' }] as TestSession[],
       { onWakeCrewMember, onSleepCrewMember, onSelectSession },
     );
 
@@ -758,7 +758,7 @@ describe('the crew in the sidebar', () => {
 
   it('still draws a bound session whose member left the roster', () => {
     renderCrew(
-      [{ id: 'sess-ghost', label: 'ghost', state: 'working', workspaceId: 'ws-a', crewMember: 'sable' }] as TestSession[],
+      [{ id: 'sess-ghost', label: 'ghost', state: 'working', desktopId: 'ws-a', crewMember: 'sable' }] as TestSession[],
       {},
       roster,
     );
@@ -890,7 +890,7 @@ describe('the crew in the sidebar', () => {
             {...data}
             crew={roster}
             onWakeCrewMember={onWakeCrewMember}
-            queue={buildQueueBands(data.workspaces)}
+            queue={buildQueueBands(data.desktops)}
           />
         </StrictMode>,
       );

@@ -12,7 +12,7 @@ import {
 } from './common.mjs';
 import { DaemonObserver } from './daemonObserver.mjs';
 import {
-  waitForFirstWorkspacePane,
+  waitForFirstDesktopPane,
   waitForPaneShellReady,
   waitForPaneVisible,
 } from './scenarioAssertions.mjs';
@@ -63,23 +63,23 @@ async function waitForDomSelector(client, selector, present, description, timeou
   throw new Error(`Timed out waiting for ${selector} to be ${present ? 'present' : 'absent'}: ${description}`);
 }
 
-async function waitForWorkspaceUi(client, workspaceId, predicate, description, timeoutMs = 20_000) {
+async function waitForDesktopUi(client, desktopId, predicate, description, timeoutMs = 20_000) {
   const startedAt = Date.now();
   let last = null;
   while (Date.now() - startedAt < timeoutMs) {
-    last = await client.request('get_workspace_ui_state', { workspaceId }).catch((error) => ({ error: String(error) }));
+    last = await client.request('get_desktop_ui_state', { desktopId }).catch((error) => ({ error: String(error) }));
     if (predicate(last)) {
       return last;
     }
     await new Promise((resolve) => setTimeout(resolve, 200));
   }
-  throw new Error(`Timed out waiting for ${description}. Last workspace UI state:\n${JSON.stringify(last, null, 2)}`);
+  throw new Error(`Timed out waiting for ${description}. Last desktop UI state:\n${JSON.stringify(last, null, 2)}`);
 }
 
-async function closeWorkspacePanes(client, sessionId) {
+async function closeDesktopPanes(client, sessionId) {
   for (let attempt = 0; attempt < 10; attempt += 1) {
-    const workspace = await client.request('get_workspace', { sessionId }).catch(() => null);
-    const pane = workspace?.panes?.[0];
+    const desktop = await client.request('get_desktop', { sessionId }).catch(() => null);
+    const pane = desktop?.panes?.[0];
     if (!pane) {
       return;
     }
@@ -92,20 +92,20 @@ async function closeExistingSessions(client, sessionRootDir) {
   const initial = await client.request('get_state');
   const harnessSessions = (initial.sessions || []).filter((session) => session.cwd?.startsWith(sessionRootDir));
   for (const session of harnessSessions) {
-    await closeWorkspacePanes(client, session.id).catch(() => {});
+    await closeDesktopPanes(client, session.id).catch(() => {});
   }
 }
 
 // The finder picks on mousedown, not click — see NotebookFinder.tsx.
-async function openNoteViaFinderBridge(client, workspaceId, basename, query) {
+async function openNoteViaFinderBridge(client, desktopId, basename, query) {
   await waitForDomSelector(client, FINDER_SELECTOR, true, `finder open for ${basename}`);
   await client.request('dom_type', { selector: FINDER_INPUT_SELECTOR, text: query });
   await new Promise((resolve) => setTimeout(resolve, 500));
   await waitForDomSelector(client, FINDER_OPTION_SELECTOR, true, `finder shows a result for "${query}"`);
   await client.request('dom_click', { selector: FINDER_OPTION_SELECTOR });
-  await waitForWorkspaceUi(
+  await waitForDesktopUi(
     client,
-    workspaceId,
+    desktopId,
     (state) => state?.tileTitles?.includes(`${basename}.md`),
     `finder opens ${basename}.md (tile title)`,
     15_000,
@@ -133,7 +133,7 @@ async function main() {
     await closeExistingSessions(client, options.sessionRootDir);
 
     // Names are chosen so each finder query fuzzy-matches exactly one note. They
-    // live in the workspace directory, which is what a docked tile's finder indexes.
+    // live in the desktop directory, which is what a docked tile's finder indexes.
     const noteRoot = path.join(sessionDir, 'linknav-ws');
     fs.mkdirSync(noteRoot, { recursive: true });
     const NAV = `${runId}qnav`;
@@ -185,7 +185,7 @@ async function main() {
       waitForInitialPaneVisible: false,
       sessionWaitMs: 30_000,
     });
-    const pane = await waitForFirstWorkspacePane(client, sessionId, 'initial workspace pane');
+    const pane = await waitForFirstDesktopPane(client, sessionId, 'initial desktop pane');
     await client.request('select_session', { sessionId });
     await waitForPaneVisible(client, sessionId, pane.paneId, 20_000);
     await waitForPaneShellReady(client, sessionId, pane.paneId, {
@@ -193,16 +193,16 @@ async function main() {
       description: 'shell prompt ready',
     });
 
-    const workspace = await client.request('get_workspace', { sessionId });
-    const workspaceId = workspace.desktopId;
-    if (!workspaceId) {
-      throw new Error(`Could not resolve workspace id for session ${sessionId}: ${JSON.stringify(workspace)}`);
+    const desktop = await client.request('get_desktop', { sessionId });
+    const desktopId = desktop.desktopId;
+    if (!desktopId) {
+      throw new Error(`Could not resolve desktop id for session ${sessionId}: ${JSON.stringify(desktop)}`);
     }
 
     await client.request('dispatch_shortcut', { shortcutId: 'notebook.openTile' });
-    const docked = await waitForWorkspaceUi(
+    const docked = await waitForDesktopUi(
       client,
-      workspaceId,
+      desktopId,
       // A notebook tile with no note open is titled "Editor".
       (state) => Array.isArray(state?.tileIds) && state.tileIds.length === 1
         && Array.isArray(state?.tileTitles) && state.tileTitles.includes('Editor'),
@@ -211,16 +211,16 @@ async function main() {
     );
     console.log(`[RealAppHarness] docked notebook tile=${docked.tileIds[0]}`);
 
-    await openNoteViaFinderBridge(client, workspaceId, NAV, 'qnav');
+    await openNoteViaFinderBridge(client, desktopId, NAV, 'qnav');
     console.log('[RealAppHarness] STEP 1 OK: nav-probe note open in the notebook tile.');
 
     await client.request('dom_click', {
       selector: `.terminal-wrapper.active .cm-md-link[data-href="${BAR}.md"]`,
       modifiers: { meta: true },
     });
-    await waitForWorkspaceUi(
+    await waitForDesktopUi(
       client,
-      workspaceId,
+      desktopId,
       (state) => state?.tileTitles?.includes(`${BAR}.md`),
       'mod-click relative link navigates nav-probe -> bar',
     );
@@ -230,9 +230,9 @@ async function main() {
       selector: `.terminal-wrapper.active .cm-md-link[data-href="${ANCHOR}.md"]`,
       modifiers: { meta: true },
     });
-    await waitForWorkspaceUi(
+    await waitForDesktopUi(
       client,
-      workspaceId,
+      desktopId,
       (state) => state?.tileTitles?.includes(`${ANCHOR}.md`),
       'mod-click relative link navigates bar -> anchor',
     );
@@ -252,9 +252,9 @@ async function main() {
     const IMAGE_LINK = `.terminal-wrapper.active .cm-md-link[data-href="${imgLinkHref}"]`;
     await waitForDomSelector(client, IMAGE_LINK, true, 'image-probe link rendered');
     await client.request('dom_click', { selector: IMAGE_LINK, modifiers: { meta: true } });
-    await waitForWorkspaceUi(
+    await waitForDesktopUi(
       client,
-      workspaceId,
+      desktopId,
       (state) => state?.tileTitles?.includes(`${IMG}.md`),
       'mod-click relative link navigates anchor -> nested image probe',
     );
@@ -269,7 +269,7 @@ async function main() {
     const summary = {
       ok: true,
       runId,
-      workspaceId,
+      desktopId,
       tileId: docked.tileIds[0],
       navPath,
       barPath,
@@ -285,7 +285,7 @@ async function main() {
     throw error;
   } finally {
     if (sessionId) {
-      await closeWorkspacePanes(client, sessionId).catch(() => {});
+      await closeDesktopPanes(client, sessionId).catch(() => {});
     }
     await client.quitApp().catch(() => {});
     await observer.close();

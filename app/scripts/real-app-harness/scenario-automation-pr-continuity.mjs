@@ -394,7 +394,7 @@ async function main() {
         { automation: sessionUi.paneAutomation },
       );
       await captureDOM(client, '.sidebar', path.join(runner.runDir, 'sidebar-provenance.png'));
-      await captureDOM(client, '.workspace-pane-header', path.join(runner.runDir, 'pane-provenance.png'));
+      await captureDOM(client, '.desktop-pane-header', path.join(runner.runDir, 'pane-provenance.png'));
 
       await client.request('automations_open_panel');
       const automationsUi = await client.request('automations_select_definition', { definitionId: definitionID });

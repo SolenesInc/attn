@@ -16,12 +16,12 @@ import {
 import { AppContentProps } from './appSupport';
 import { useAppSessions } from './useAppSessions';
 
-import type { WorkspaceWithSessions } from '../utils/workspaceViewModels';
+import type { DesktopWithSessions } from '../utils/desktopViewModels';
 type EnrichedSession = ReturnType<typeof useAppSessions>['enrichedLocalSessions'][number];
 
 interface Options {
   settings: AppContentProps['settings'];
-  desktopViews: WorkspaceWithSessions<EnrichedSession>[];
+  desktopViews: DesktopWithSessions<EnrichedSession>[];
   profileSessions: EnrichedSession[];
   enrichedLocalSessions: EnrichedSession[];
   activeSessionId: string | null;

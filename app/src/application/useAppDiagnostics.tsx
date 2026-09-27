@@ -10,7 +10,7 @@ import {
   type PendingDiagnosticCapture,
 } from '../utils/diagnosticReport';
 import { desktopLabel, desktopTerminalState } from '../utils/desktops';
-import { collectWorkspaceLayoutDiagnostics } from '../utils/workspaceDiagnostics';
+import { collectDesktopLayoutDiagnostics } from '../utils/desktopDiagnostics';
 import { diagnosticFocusKind, shortenDiagnosticPath } from './appSupport';
 interface Options {
   sessions: Session[];
@@ -49,8 +49,8 @@ export function useAppDiagnostics({
         sessionId: pane.sessionId,
         title: pane.title,
         sessionLabel: sessionById.get(pane.sessionId)?.label || pane.title,
-        workspaceId: desktop.id,
-        workspaceLabel: desktopLabel(desktop, desktops),
+        desktopId: desktop.id,
+        desktopLabel: desktopLabel(desktop, desktops),
         available: getPaneSize(pane.sessionId, pane.id) !== null,
       })),
     );
@@ -79,14 +79,14 @@ export function useAppDiagnostics({
     };
     const { desktops } = useProfilesStore.getState();
     const sessionById = new Map(sessions.map((session) => [session.id, session]));
-    const workspaces = desktops.map((desktop) => {
+    const desktopSnapshots = desktops.map((desktop) => {
       const state = desktopTerminalState(desktop);
       const activeSessionOnDesktop = state.agents.find((pane) => pane.id === desktop.active_pane_id)?.sessionId;
       return {
         id: desktop.id,
         label: desktopLabel(desktop, desktops),
         directory: shortenDiagnosticPath(sessionById.get(activeSessionOnDesktop ?? '')?.cwd ?? ''),
-        layout: collectWorkspaceLayoutDiagnostics(state.layoutTree),
+        layout: collectDesktopLayoutDiagnostics(state.layoutTree),
       };
     });
     const { beginDiagnosticCapture } = await import('../utils/diagnosticReport');
@@ -99,12 +99,12 @@ export function useAppDiagnostics({
         state: session.state,
         agent: session.agent,
         cwd: shortenDiagnosticPath(session.cwd),
-        workspaceId: session.desktopId,
+        desktopId: session.desktopId,
         endpoint: session.endpointId ? 'remote' : 'local',
         ...(session.endpointId ? { endpointId: session.endpointId } : {}),
         active: session.id === context.activeSessionId,
       })),
-      workspaces,
+      desktops: desktopSnapshots,
       settings,
       sendSupportSnapshot,
     });

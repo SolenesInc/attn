@@ -5,7 +5,7 @@ import { ptySpawn } from '../pty/bridge';
 import { currentDesktopIn, useProfilesStore } from '../store/profiles';
 import { useSessionStore } from '../store/sessions';
 import { normalizeSessionAgent, type SessionAgent } from '../types/sessionAgent';
-import { type TerminalSplitDirection } from '../types/workspace';
+import { type TerminalSplitDirection } from '../types/desktop';
 import {
   agentLabel,
   getAgentAvailability,

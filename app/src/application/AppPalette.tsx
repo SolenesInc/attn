@@ -5,7 +5,7 @@ import { useDaemonApi } from '../contexts/DaemonApiContext';
 import { useAppViewTitleResolver } from '../hooks/useAppViewTitle';
 import { useDaemonStore } from '../store/daemonSessions';
 import { useProfilesStore } from '../store/profiles';
-import { tileContentKey, type TileLeaf } from '../types/workspace';
+import { tileContentKey, type TileLeaf } from '../types/desktop';
 import { buildQueueBands } from '../utils/queueBands';
 import { deriveTileTitle } from '../utils/tilePresentation';
 import {
@@ -51,7 +51,7 @@ function OpenPalette({
     return {
       bands: buildQueueBands(desktopViews, { crewInQueue: crewQueueEnabled, now }),
       crewRoster: crew.filter((member) => member.profile_id === selectedProfileId).map((member) => member.id),
-      workspaces: desktopViews,
+      desktops: desktopViews,
       tileTitle,
       now,
     };

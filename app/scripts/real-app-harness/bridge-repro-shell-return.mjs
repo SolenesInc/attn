@@ -38,8 +38,8 @@ function shellPanes(observer, desktop) {
   return (desktop?.panes || []).filter((pane) => observer.getSession(pane.session_id)?.agent === 'shell');
 }
 
-function firstWorkspacePane(workspace) {
-  return (workspace?.panes || [])[0] || null;
+function firstDesktopPane(desktopState) {
+  return (desktopState?.panes || [])[0] || null;
 }
 
 async function waitForPaneText(client, sessionId, paneId, needle, timeoutMs = 8_000) {
@@ -155,24 +155,24 @@ async function main() {
 
     await tryCaptureScreenshot(client, runDir, '02-session-created.png');
 
-    const initialWorkspace = await client.request('get_workspace', { sessionId: await resolveUiSessionId() });
-    const initialPane = firstWorkspacePane(initialWorkspace);
+    const initialDesktop = await client.request('get_desktop', { sessionId: await resolveUiSessionId() });
+    const initialPane = firstDesktopPane(initialDesktop);
     if (!initialPane?.paneId) {
       throw new Error(`Initial pane not found for ${daemonSessionId}`);
     }
     await client.request('split_pane', {
       sessionId: daemonSessionId,
-      targetPaneId: initialWorkspace.activePaneId || initialPane.paneId,
+      targetPaneId: initialDesktop.activePaneId || initialPane.paneId,
       direction: 'vertical',
     });
 
-    const workspaceWithOneShell = await observer.waitForDesktopOf(
+    const desktopWithOneShell = await observer.waitForDesktopOf(
       daemonSessionId,
       (entry) => shellPanes(observer, entry).length >= 1,
       `first utility pane for session ${daemonSessionId}`,
       20_000
     );
-    const firstShell = shellPanes(observer, workspaceWithOneShell)[0];
+    const firstShell = shellPanes(observer, desktopWithOneShell)[0];
     if (!firstShell?.session_id) {
       throw new Error('First shell runtime not found');
     }
@@ -196,13 +196,13 @@ async function main() {
       direction: 'vertical',
     });
 
-    const workspaceWithTwoShells = await observer.waitForDesktopOf(
+    const desktopWithTwoShells = await observer.waitForDesktopOf(
       daemonSessionId,
       (entry) => shellPanes(observer, entry).length >= 2,
       `second utility pane for session ${daemonSessionId}`,
       20_000
     );
-    const shells = shellPanes(observer, workspaceWithTwoShells);
+    const shells = shellPanes(observer, desktopWithTwoShells);
     const secondShell = shells.find((pane) => pane.pane_id !== firstShell.pane_id);
     if (!secondShell?.session_id) {
       throw new Error('Second shell runtime not found');

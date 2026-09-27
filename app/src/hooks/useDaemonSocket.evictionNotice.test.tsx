@@ -70,7 +70,7 @@ function emitInitialState(ws: FakeWebSocket) {
       event: 'initial_state',
       protocol_version: PROTOCOL_VERSION,
       sessions: [],
-      workspaces: [],
+      desktops: [],
       prs: [],
       repos: [],
       authors: [],

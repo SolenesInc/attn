@@ -20,13 +20,13 @@ import {
   assertPaneVisibleContentPreserved,
   captureSessionArtifacts,
   sleep,
-  waitForFirstWorkspacePane,
+  waitForFirstDesktopPane,
   waitForNewShellPane,
   waitForPaneAttached,
   waitForPaneState,
   waitForPaneText,
   waitForPaneVisible,
-  waitForSessionWorkspace,
+  waitForSessionDesktop,
   tokenAnchorIgnorePatterns,
 } from './scenarioAssertions.mjs';
 import {
@@ -48,7 +48,7 @@ function parseArgs(argv) {
   };
 }
 
-// The shrunk window still has to clear the workspace's 1248px split floor (see
+// The shrunk window still has to clear the desktop's 1248px split floor (see
 // widenWindowForSplitPanes), which 1560 at 0.82 does with 31px to spare.
 const BASELINE_WINDOW = { width: 1_560, height: 900 };
 const SHRINK_RATIO = { width: 0.82, height: 0.82 };
@@ -407,7 +407,7 @@ async function main() {
         ? await ensureClaudeInitialPanePromptReady(client, leg.sessionId, 45_000)
         : await ensureCodexInitialPanePromptReady(client, leg.sessionId, 45_000);
       leg.initialPaneId = readiness.paneId
-        || (await waitForFirstWorkspacePane(client, leg.sessionId, `${agent} initial pane`, 20_000)).paneId;
+        || (await waitForFirstDesktopPane(client, leg.sessionId, `${agent} initial pane`, 20_000)).paneId;
       await waitForPaneVisible(client, leg.sessionId, leg.initialPaneId, 45_000);
 
       if (agent === 'claude') {
@@ -534,8 +534,8 @@ async function main() {
     });
 
     const closingPaneId = await runner.step(`splitting_shrinks_the_${agent}_main_pane`, async () => {
-      const workspaceBefore = await client.request('get_workspace', { sessionId: leg.sessionId });
-      const existingPaneIds = new Set((workspaceBefore.panes || []).map((pane) => pane.paneId));
+      const desktopBefore = await client.request('get_desktop', { sessionId: leg.sessionId });
+      const existingPaneIds = new Set((desktopBefore.panes || []).map((pane) => pane.paneId));
       await client.request('split_pane', {
         sessionId: leg.sessionId,
         targetPaneId: leg.initialPaneId,
@@ -571,14 +571,14 @@ async function main() {
       await client.request('focus_pane', { sessionId: leg.sessionId, paneId: closingPaneId });
       await waitForPaneVisible(client, leg.sessionId, closingPaneId, 20_000);
       await client.request('close_pane', { sessionId: leg.sessionId, paneId: closingPaneId });
-      await waitForSessionWorkspace(
+      await waitForSessionDesktop(
         client,
         leg.sessionId,
-        (workspace) => {
-          const panes = workspace.panes || [];
+        (desktop) => {
+          const panes = desktop.panes || [];
           return panes.length === 1 && panes[0].paneId === leg.initialPaneId;
         },
-        'workspace to collapse back to one pane after closing split',
+        'desktop to collapse back to one pane after closing split',
         20_000,
       );
       leg.closedMainState = await waitForPaneState(
@@ -653,8 +653,8 @@ async function main() {
 
     await runner.step(`prepare_${agent}_split_resize_baseline`, async () => {
       await client.request('select_session', { sessionId: leg.sessionId });
-      const workspaceBefore = await client.request('get_workspace', { sessionId: leg.sessionId });
-      const existingPaneIds = new Set((workspaceBefore.panes || []).map((pane) => pane.paneId));
+      const desktopBefore = await client.request('get_desktop', { sessionId: leg.sessionId });
+      const existingPaneIds = new Set((desktopBefore.panes || []).map((pane) => pane.paneId));
       await client.request('split_pane', {
         sessionId: leg.sessionId,
         targetPaneId: leg.initialPaneId,

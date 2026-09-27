@@ -9,7 +9,7 @@ import { ProfileCommandError } from './hooks/daemonProfileEvents';
 import { MigrationPhase, type CrewMember, type Desktop } from './types/generated';
 import { useKeyboardShortcuts } from './hooks/useKeyboardShortcuts';
 import { formatShortcut } from './shortcuts/formatShortcut';
-import type { TerminalLayoutNode } from './types/workspace';
+import type { TerminalLayoutNode } from './types/desktop';
 import { agentDesktop, arrangeDesktops, fakeDesktopCommands, TEST_PROFILE_ID } from './test/desktops';
 
 const mockUseDaemonStore = vi.fn();
@@ -50,34 +50,34 @@ vi.mock('./components/Sidebar', () => ({
   NotebookIcon: () => null,
   MarkdownIcon: () => null,
   Sidebar: ({
-    workspaces,
+    desktops,
     crew,
-    selectedWorkspaceId,
+    selectedDesktopId,
     selectedTile,
-    onSelectWorkspace,
+    onSelectDesktop,
     onSelectTile,
     onSelectGridLayout,
     headerActions,
   }: {
     headerActions: Array<{ id: string; disabled?: boolean }>;
-    workspaces: Array<{ id: string; title: string; sessions: Array<{ id: string }> }>;
+    desktops: Array<{ id: string; title: string; sessions: Array<{ id: string }> }>;
     crew?: Array<{ id: string }>;
-    selectedWorkspaceId: string | null;
-    selectedTile?: { workspaceId: string; tileId: string } | null;
-    onSelectWorkspace: (id: string) => void;
-    onSelectTile: (workspaceId: string, tileId: string) => void;
+    selectedDesktopId: string | null;
+    selectedTile?: { desktopId: string; tileId: string } | null;
+    onSelectDesktop: (id: string) => void;
+    onSelectTile: (desktopId: string, tileId: string) => void;
     onSelectGridLayout?: (layout: { mode: 'auto' }) => void;
   }) => (
     <div
       data-testid="sidebar"
       data-editor-enabled={String(headerActions.some((action) => action.id === 'editor' && !action.disabled))}
-      data-selected-desktop={selectedWorkspaceId ?? ''}
+      data-selected-desktop={selectedDesktopId ?? ''}
       data-crew={(crew ?? []).map((member) => member.id).join(',')}
-      data-selected-tile={selectedTile ? `${selectedTile.workspaceId}:${selectedTile.tileId}` : ''}
-      data-groups={workspaces.map((group) => `${group.title}=${group.sessions.map((entry) => entry.id).join('+')}`).join(',')}
+      data-selected-tile={selectedTile ? `${selectedTile.desktopId}:${selectedTile.tileId}` : ''}
+      data-groups={desktops.map((group) => `${group.title}=${group.sessions.map((entry) => entry.id).join('+')}`).join(',')}
     >
-      {workspaces.map((group) => (
-        <button key={group.id} data-testid={`select-${group.id}`} onClick={() => onSelectWorkspace(group.id)}>
+      {desktops.map((group) => (
+        <button key={group.id} data-testid={`select-${group.id}`} onClick={() => onSelectDesktop(group.id)}>
           {group.id}
         </button>
       ))}
@@ -100,25 +100,25 @@ vi.mock('./components/grid/GridView', () => ({
   ),
 }));
 
-vi.mock('./components/SessionTerminalWorkspace', async () => {
+vi.mock('./components/SessionTerminalDesktop', async () => {
   const React = await import('react');
-  return { SessionTerminalWorkspace: React.forwardRef(function MockWorkspace({
-    workspaceId,
-    workspace,
+  return { SessionTerminalDesktop: React.forwardRef(function MockDesktop({
+    desktopId,
+    terminalState,
     isActiveSession,
     selectedSessionId,
     activePaneId,
-    workspaceDirectory,
+    desktopDirectory,
     onFocusPane,
     onUndockTile,
     onLeafDragStart,
   }: {
-    workspaceId: string;
-    workspace: { agents: unknown[]; layoutTree: TerminalLayoutNode | null };
+    desktopId: string;
+    terminalState: { agents: unknown[]; layoutTree: TerminalLayoutNode | null };
     isActiveSession: boolean;
     selectedSessionId?: string | null;
     activePaneId: string;
-    workspaceDirectory?: string;
+    desktopDirectory?: string;
     onFocusPane?: (paneId: string) => void;
     onUndockTile?: (tileId: string) => void;
     onLeafDragStart?: (leafId: string) => void;
@@ -127,19 +127,19 @@ vi.mock('./components/SessionTerminalWorkspace', async () => {
     return (
     <div>
       <div
-        data-testid={`desktop-${workspaceId}`}
+        data-testid={`desktop-${desktopId}`}
         data-active={isActiveSession ? '1' : '0'}
         data-selected-session={selectedSessionId ?? ''}
         data-active-leaf={activePaneId}
-        data-workspace-directory={workspaceDirectory ?? ''}
-        data-agent-count={workspace.agents.length}
-        data-tile-ids={collectTileIds(workspace.layoutTree).join(',')}
+        data-desktop-directory={desktopDirectory ?? ''}
+        data-agent-count={terminalState.agents.length}
+        data-tile-ids={collectTileIds(terminalState.layoutTree).join(',')}
       />
-      <button type="button" data-testid={`drag-from-${workspaceId}`} onClick={() => onLeafDragStart?.('dragged-leaf')} />
-      {collectTileIds(workspace.layoutTree).map((tileId) => (
+      <button type="button" data-testid={`drag-from-${desktopId}`} onClick={() => onLeafDragStart?.('dragged-leaf')} />
+      {collectTileIds(terminalState.layoutTree).map((tileId) => (
         <button key={tileId} type="button" data-testid={`undock-${tileId}`} onClick={() => onUndockTile?.(tileId)} />
       ))}
-      {workspace.agents.map((agent) => {
+      {terminalState.agents.map((agent) => {
         const pane = agent as { id: string };
         return (
           <div key={pane.id}>
@@ -262,8 +262,8 @@ describe('desktop surface', () => {
     mockUseDaemonSocket.mockReturnValue({
       sendPRAction: fn, sendMutePR: fn, sendMuteRepo: fn, sendMuteAuthor: fn, sendPRVisited: fn,
       sendRefreshPRs: vi.fn(async () => ({ success: true })),
-      sendUnregisterSession: fn, sendRegisterWorkspace: fn,
-      sendUnregisterWorkspace: vi.fn(async () => {}),
+      sendUnregisterSession: fn, sendRegisterDesktop: fn,
+      sendUnregisterDesktop: vi.fn(async () => {}),
       sendSetSetting: fn,
       sendSettleTurn: vi.fn(),
       sendSetClientPresence: fn,
@@ -1216,10 +1216,10 @@ describe('desktop surface', () => {
     expect(desktopCommands.sendDesktopSetActivePane.mock.calls).toEqual([['d1', 'pane-s2']]);
   });
 
-  it('offers the focused agent\'s directory as the workspace root only when it runs on this machine', async () => {
+  it('offers the focused agent\'s directory as the desktop root only when it runs on this machine', async () => {
     render(<App />);
     await waitFor(() =>
-      expect(screen.getByTestId(desktopTestId('d1')).getAttribute('data-workspace-directory')).toBe('/tmp/repo'),
+      expect(screen.getByTestId(desktopTestId('d1')).getAttribute('data-desktop-directory')).toBe('/tmp/repo'),
     );
 
     act(() => {
@@ -1229,7 +1229,7 @@ describe('desktop surface', () => {
     });
 
     await waitFor(() =>
-      expect(screen.getByTestId(desktopTestId('d1')).getAttribute('data-workspace-directory')).toBe(''),
+      expect(screen.getByTestId(desktopTestId('d1')).getAttribute('data-desktop-directory')).toBe(''),
     );
   });
 

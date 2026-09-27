@@ -4,7 +4,7 @@ import { formatShortcut } from '../shortcuts/formatShortcut';
 import { crewRows, formatTurnAge, type QueueRow } from '../utils/queueBands';
 import { slotShortcut } from '../utils/desktops';
 import { formatWakeTime } from '../utils/snoozeDurations';
-import { UNPLACED_GROUP_ID } from '../utils/workspaceViewModels';
+import { UNPLACED_GROUP_ID } from '../utils/desktopViewModels';
 import { CriticalNotificationStrip } from './CriticalNotificationStrip';
 import { CrewRowView, QueueRowView, type QueueBandSessionView, type RowWhere } from './QueueRows';
 import './QueueSidebar.css';
@@ -12,7 +12,7 @@ import { SidebarCrewManage, SidebarPopovers } from './SidebarChrome';
 import { useSidebarContext } from './SidebarContext';
 import { useDesktopChipDrop } from './useDesktopChipDrop';
 import { CollapseIcon, HomeIcon, PlusIcon } from './SidebarIcons';
-import { SidebarAutomationGroups } from './SidebarWorkspaces';
+import { SidebarAutomationGroups } from './SidebarDesktops';
 
 const LEAD_TURNS = 3;
 const WALK_ROW_SELECTOR = '.queue-row-select, .sidebar-row-select';
@@ -173,15 +173,15 @@ function HomeRow() {
 }
 
 function useRowWhere(): (row: QueueRow<QueueBandSessionView>) => RowWhere {
-  const { visualIndexOfWorkspace } = useSidebarContext();
+  const { visualIndexOfDesktop } = useSidebarContext();
   return (row) => {
-    if (row.workspaceId === UNPLACED_GROUP_ID) {
+    if (row.desktopId === UNPLACED_GROUP_ID) {
       return { slot: '—', title: 'Not on a desktop; opening places it beside the active pane' };
     }
-    const index = visualIndexOfWorkspace(row.workspaceId);
+    const index = visualIndexOfDesktop(row.desktopId);
     return index >= 0
-      ? { slot: String(index + 1), title: row.workspaceTitle }
-      : { slot: '·', title: `${row.workspaceTitle} · no shortcut` };
+      ? { slot: String(index + 1), title: row.desktopTitle }
+      : { slot: '·', title: `${row.desktopTitle} · no shortcut` };
   };
 }
 
@@ -401,12 +401,12 @@ function agentCounts(
   queue: NonNullable<ReturnType<typeof useSidebarContext>['queue']>,
   crewMembers: ReturnType<typeof crewRows>,
 ) {
-  const agentRows = new Map<string, { workspaceId: string }>();
+  const agentRows = new Map<string, { desktopId: string }>();
   for (const row of [queue.chief, ...queue.crew, ...queue.turns, ...queue.settled, ...queue.snoozed]) {
     if (row) agentRows.set(row.session.id, row);
   }
   const asleep = crewMembers.filter((member) => !member.row).length;
-  const unplaced = [...agentRows.values()].filter((row) => row.workspaceId === UNPLACED_GROUP_ID).length;
+  const unplaced = [...agentRows.values()].filter((row) => row.desktopId === UNPLACED_GROUP_ID).length;
   return {
     all: agentRows.size + asleep,
     working: queue.settled.length,
@@ -417,40 +417,40 @@ function agentCounts(
 
 function DesktopStrip() {
   const {
-    workspaces,
+    desktops,
     queue,
-    selectedWorkspaceId,
-    visualIndexOfWorkspace,
-    onSelectWorkspace,
+    selectedDesktopId,
+    visualIndexOfDesktop,
+    onSelectDesktop,
     onOpenOverview,
   } = useSidebarContext();
   const chipDrop = useDesktopChipDrop();
-  const desktops = workspaces.filter((workspace) => workspace.id !== UNPLACED_GROUP_ID);
-  const slotted = desktops
-    .filter((workspace) => visualIndexOfWorkspace(workspace.id) >= 0)
-    .sort((a, b) => visualIndexOfWorkspace(a.id) - visualIndexOfWorkspace(b.id));
-  const extras = desktops.filter((workspace) => visualIndexOfWorkspace(workspace.id) < 0);
-  const waitingOn = new Set((queue?.turns ?? []).map((row) => row.workspaceId));
-  const current = desktops.find((workspace) => workspace.id === selectedWorkspaceId);
-  const currentIsExtra = Boolean(current && visualIndexOfWorkspace(current.id) < 0);
+  const placed = desktops.filter((desktop) => desktop.id !== UNPLACED_GROUP_ID);
+  const slotted = placed
+    .filter((desktop) => visualIndexOfDesktop(desktop.id) >= 0)
+    .sort((a, b) => visualIndexOfDesktop(a.id) - visualIndexOfDesktop(b.id));
+  const extras = placed.filter((desktop) => visualIndexOfDesktop(desktop.id) < 0);
+  const waitingOn = new Set((queue?.turns ?? []).map((row) => row.desktopId));
+  const current = placed.find((desktop) => desktop.id === selectedDesktopId);
+  const currentIsExtra = Boolean(current && visualIndexOfDesktop(current.id) < 0);
 
   return (
     <div className="queue-desktop-strip" data-testid="queue-desktop-strip">
       <div className="queue-desktop-chips">
-        {slotted.map((workspace) => {
-          const slot = visualIndexOfWorkspace(workspace.id) + 1;
-          const waiting = waitingOn.has(workspace.id);
-          const { dropClass, dropHandlers } = chipDrop(workspace);
+        {slotted.map((desktop) => {
+          const slot = visualIndexOfDesktop(desktop.id) + 1;
+          const waiting = waitingOn.has(desktop.id);
+          const { dropClass, dropHandlers } = chipDrop(desktop);
           return (
             <button
-              key={workspace.id}
+              key={desktop.id}
               type="button"
-              className={`queue-desktop-chip${workspace.sessions.length || workspace.children.length ? ' has-panes' : ''}${workspace.id === selectedWorkspaceId ? ' is-current' : ''}${dropClass}`}
+              className={`queue-desktop-chip${desktop.sessions.length || desktop.children.length ? ' has-panes' : ''}${desktop.id === selectedDesktopId ? ' is-current' : ''}${dropClass}`}
               data-testid={`queue-desktop-chip-${slot}`}
-              data-desktop-id={workspace.id}
+              data-desktop-id={desktop.id}
               data-waiting={waiting || undefined}
-              title={`${workspace.title} (${slotShortcut(slot)})`}
-              onClick={() => onSelectWorkspace(workspace.id)}
+              title={`${desktop.title} (${slotShortcut(slot)})`}
+              onClick={() => onSelectDesktop(desktop.id)}
               {...dropHandlers}
             >
               {slot}
@@ -467,7 +467,7 @@ function DesktopStrip() {
             onClick={onOpenOverview}
           >
             +{extras.length}
-            {extras.some((workspace) => waitingOn.has(workspace.id)) && (
+            {extras.some((desktop) => waitingOn.has(desktop.id)) && (
               <span className="queue-desktop-chip-waiting" aria-label="has turns waiting" />
             )}
           </button>

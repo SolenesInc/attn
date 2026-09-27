@@ -13,7 +13,7 @@ import {
   printCommonHelp,
   queryDaemonDb,
 } from './common.mjs';
-import { waitForFirstWorkspacePane } from './scenarioAssertions.mjs';
+import { waitForFirstDesktopPane } from './scenarioAssertions.mjs';
 import { ensureClaudePromptReadyViaPty, ensureCodexPromptReadyViaPty, preTrustClaudeFolder } from './scenarioAgents.mjs';
 import { UiAutomationClient } from './uiAutomationClient.mjs';
 import { DaemonObserver } from './daemonObserver.mjs';
@@ -91,7 +91,7 @@ function workerPid(sessionId) {
 // The submit is retried: right after a reload the resumed codex TUI can look
 // prompt-ready (stale replayed pane text) while still swallowing input.
 async function driveAgentToWorking(client, observer, sessionId, note) {
-  const pane = await waitForFirstWorkspacePane(client, sessionId, `pane for ${sessionId}`, 20_000);
+  const pane = await waitForFirstDesktopPane(client, sessionId, `pane for ${sessionId}`, 20_000);
   const prompt = 'Count from 1 to 40, one number per line, then say done. Do not use tools.';
   for (let attempt = 1; attempt <= 3; attempt += 1) {
     await client.request('write_pane', { sessionId, paneId: pane.paneId, text: prompt, submit: false });
@@ -237,7 +237,7 @@ async function main() {
   } catch (error) {
     if (sessionId) {
       try {
-        const pane = await waitForFirstWorkspacePane(client, sessionId, 'pane for failure dump', 5_000);
+        const pane = await waitForFirstDesktopPane(client, sessionId, 'pane for failure dump', 5_000);
         const text = await client.request('read_pane_text', { sessionId, paneId: pane.paneId });
         evidence.failurePaneText = (text?.text || '').slice(-2000);
         console.error(`[reload-not-crash] pane at failure:\n${evidence.failurePaneText}`);

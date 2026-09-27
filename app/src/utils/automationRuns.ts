@@ -56,13 +56,13 @@ function compareRuns(now: number) {
 }
 
 export function automationRunGroups<S extends AutomationRunSession>(
-  workspaces: readonly { sessions: readonly S[] }[],
+  desktops: readonly { sessions: readonly S[] }[],
   now: number,
 ): AutomationRunGroup<S>[] {
   const groups = new Map<string, AutomationRunGroup<S>>();
   const seen = new Set<string>();
-  for (const workspace of workspaces) {
-    for (const session of workspace.sessions) {
+  for (const desktop of desktops) {
+    for (const session of desktop.sessions) {
       const automation = session.automation;
       if (!automation || seen.has(session.id)) continue;
       seen.add(session.id);

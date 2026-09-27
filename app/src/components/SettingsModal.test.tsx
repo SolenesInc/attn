@@ -417,7 +417,7 @@ describe('SettingsModal', () => {
     });
 
     render(<SettingsModal {...props('false')} />);
-    fireEvent.click(screen.getByTestId('settings-nav-workspace'));
+    fireEvent.click(screen.getByTestId('settings-nav-desktop'));
     await screen.findByTestId('settings-projects-directory-input');
 
     expect(screen.queryByTestId('settings-queue-toggle')).toBeNull();
@@ -713,7 +713,7 @@ describe('SettingsModal notebook folder', () => {
       'notebook.root.effective': '/Users/me/my-notes',
     });
 
-    fireEvent.click(screen.getByTestId('settings-nav-workspace'));
+    fireEvent.click(screen.getByTestId('settings-nav-desktop'));
     const input = await screen.findByTestId('settings-notebook-root-input');
     expect(input).toHaveValue('~/my-notes');
     expect(screen.getByTestId('settings-notebook-root-effective')).toHaveTextContent(
@@ -724,7 +724,7 @@ describe('SettingsModal notebook folder', () => {
   it('falls back to the effective default as placeholder when no override is set', async () => {
     renderModal({ 'notebook.root.effective': '/Users/me/attn-notebook' });
 
-    fireEvent.click(screen.getByTestId('settings-nav-workspace'));
+    fireEvent.click(screen.getByTestId('settings-nav-desktop'));
     const input = await screen.findByTestId('settings-notebook-root-input');
     expect(input).toHaveValue('');
     expect(input).toHaveAttribute('placeholder', '/Users/me/attn-notebook');
@@ -736,7 +736,7 @@ describe('SettingsModal notebook folder', () => {
       'notebook.root.effective': '/Users/me/my-notes',
     });
 
-    fireEvent.click(screen.getByTestId('settings-nav-workspace'));
+    fireEvent.click(screen.getByTestId('settings-nav-desktop'));
     const input = await screen.findByTestId('settings-notebook-root-input');
 
     fireEvent.change(input, { target: { value: '/Users/me/elsewhere' } });
@@ -1276,7 +1276,7 @@ describe('SettingsModal sent files', () => {
 
   it('reads as on by default and toggles off', async () => {
     const onSetSetting = renderModal({});
-    fireEvent.click(screen.getByTestId('settings-nav-workspace'));
+    fireEvent.click(screen.getByTestId('settings-nav-desktop'));
 
     const toggle = await screen.findByTestId('settings-open-sent-files-toggle');
     expect(toggle).toHaveTextContent('Disable');
@@ -1286,7 +1286,7 @@ describe('SettingsModal sent files', () => {
 
   it('re-enables when off', async () => {
     const onSetSetting = renderModal({ open_sent_files_enabled: 'false' });
-    fireEvent.click(screen.getByTestId('settings-nav-workspace'));
+    fireEvent.click(screen.getByTestId('settings-nav-desktop'));
 
     const toggle = await screen.findByTestId('settings-open-sent-files-toggle');
     expect(toggle).toHaveTextContent('Enable');

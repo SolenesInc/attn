@@ -80,9 +80,9 @@ export function SectionStatusPills({
       return (
         <HygieneStatusPills autoSettleEnabled={autoSettleEnabled} mutedRepos={mutedRepos} mutedAuthors={mutedAuthors} />
       );
-    case 'workspace':
+    case 'desktop':
       return (
-        <WorkspaceStatusPills hasProjectsDirChange={hasProjectsDirChange} openSentFilesEnabled={openSentFilesEnabled} />
+        <DesktopStatusPills hasProjectsDirChange={hasProjectsDirChange} openSentFilesEnabled={openSentFilesEnabled} />
       );
     case 'general':
     default:
@@ -238,7 +238,7 @@ export function AppearanceSettings({
   );
 }
 
-export function WorkspaceSettings({
+export function DesktopSettings({
   editorDraft,
   savedFlash,
   projectsDirDraft,
@@ -401,10 +401,10 @@ export function WorkspaceSettings({
 
       <section className="settings-block">
         <div className="settings-block-intro">
-          <div className="settings-kicker">Workspace</div>
+          <div className="settings-kicker">Desktop</div>
           <h3>Sent files</h3>
           <p className="settings-description">
-            When an agent hands you a file with its send-file tool, attn opens the ones it can show as workspace tiles.
+            When an agent hands you a file with its send-file tool, attn opens the ones it can show as desktop tiles.
             On by default.
           </p>
         </div>
@@ -1749,7 +1749,7 @@ export function HygieneStatusPills({
   );
 }
 
-export function WorkspaceStatusPills({
+export function DesktopStatusPills({
   hasProjectsDirChange,
   openSentFilesEnabled,
 }: Pick<SettingsModalState, 'hasProjectsDirChange' | 'openSentFilesEnabled'>) {

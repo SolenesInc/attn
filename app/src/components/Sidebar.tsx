@@ -9,8 +9,8 @@ import { HomeIcon } from './SidebarIcons';
 import type { SidebarProps } from './sidebarTypes';
 import {
   SidebarAutomationGroups,
-  SidebarWorkspaceList,
-} from './SidebarWorkspaces';
+  SidebarDesktopList,
+} from './SidebarDesktops';
 import { useSidebarState } from './useSidebarState';
 export type { DockItem, SidebarHeaderAction } from './sidebarTypes';
 
@@ -31,12 +31,12 @@ function SidebarExpanded() {
     onOpenNotifications,
     harnessLogosEnabled,
     leafDrag,
-    onNewWorkspaceDrop,
+    onNewDesktopDrop,
     onGoToDashboard,
     homeActive,
     displayMode,
-    newWorkspaceDropActive,
-    setNewWorkspaceDropActive,
+    newDesktopDropActive,
+    setNewDesktopDropActive,
     reorderDrag,
     sessionDragGhost,
   } = useSidebarContext();
@@ -70,21 +70,21 @@ function SidebarExpanded() {
       <SidebarCrewManage />
 
       <div className={`session-list ${reorderDrag ? 'session-list--reordering' : ''}`.trim()}>
-        <SidebarWorkspaceList />
+        <SidebarDesktopList />
         <SidebarAutomationGroups />
         {leafDrag && (
           <div
-            className={`new-workspace-dropzone${newWorkspaceDropActive ? ' new-workspace-dropzone--active' : ''}`}
-            data-testid="new-workspace-dropzone"
-            onPointerEnter={() => setNewWorkspaceDropActive(true)}
-            onPointerLeave={() => setNewWorkspaceDropActive(false)}
+            className={`new-desktop-dropzone${newDesktopDropActive ? ' new-desktop-dropzone--active' : ''}`}
+            data-testid="new-desktop-dropzone"
+            onPointerEnter={() => setNewDesktopDropActive(true)}
+            onPointerLeave={() => setNewDesktopDropActive(false)}
             onPointerUp={() => {
-              setNewWorkspaceDropActive(false);
-              onNewWorkspaceDrop?.();
+              setNewDesktopDropActive(false);
+              onNewDesktopDrop?.();
             }}
           >
-            <span className="new-workspace-dropzone-plus">＋</span>
-            <span className="new-workspace-dropzone-label">New desktop</span>
+            <span className="new-desktop-dropzone-plus">＋</span>
+            <span className="new-desktop-dropzone-label">New desktop</span>
           </div>
         )}
         {sessionDragGhost && (

@@ -2,7 +2,7 @@ import { describe, it, expect, beforeEach, vi } from 'vitest';
 import { useSessionStore, isSessionReloading } from './sessions';
 import { LayoutPaneKind, LayoutPaneStatus, type Desktop } from '../types/generated';
 import { createAgentHistory } from '../navigation/agentHistory';
-import type { TerminalLayoutNode } from '../types/workspace';
+import type { TerminalLayoutNode } from '../types/desktop';
 
 const { mockPtyReload } = vi.hoisted(() => ({
   mockPtyReload: vi.fn(),
@@ -61,7 +61,7 @@ describe('sessions store', () => {
     });
   });
 
-  it('creates sessions with a default daemon-owned workspace view model', async () => {
+  it('creates sessions with a default daemon-owned desktop view model', async () => {
     const sessionId = await useSessionStore.getState().createSession('test', '/tmp/test', 'sess-test', 'codex', undefined, false);
     const session = useSessionStore.getState().sessions.find((entry) => entry.id === sessionId);
 
@@ -144,8 +144,8 @@ describe('sessions store', () => {
       },
     };
     useSessionStore.setState({
-      desktopSnapshots: { 'workspace-sess-1': { workspace: desktop, daemonActivePaneId: 'pane-a' } },
-      desktopIdBySessionId: { 'sess-1': 'workspace-sess-1' },
+      desktopSnapshots: { 'desktop-sess-1': { terminalState: desktop, daemonActivePaneId: 'pane-a' } },
+      desktopIdBySessionId: { 'sess-1': 'desktop-sess-1' },
       sessions: [
         {
           id: 'sess-1',
@@ -153,7 +153,7 @@ describe('sessions store', () => {
           state: 'working',
           cwd: '/tmp/old',
           profileId: '',
-          desktopId: 'workspace-sess-1',
+          desktopId: 'desktop-sess-1',
           agent: 'codex',
           transcriptMatched: false,
           daemonActivePaneId: 'pane-a',
@@ -182,7 +182,7 @@ describe('sessions store', () => {
         directory: '/tmp/new',
         endpoint_id: 'ep-1',
         state: 'idle',
-        branch: 'feature/workspace',
+        branch: 'feature/desktop',
         is_worktree: true,
       },
     ]);
@@ -195,7 +195,7 @@ describe('sessions store', () => {
       state: 'idle',
       agent: 'claude',
       endpointId: 'ep-1',
-      branch: 'feature/workspace',
+      branch: 'feature/desktop',
       isWorktree: true,
       daemonActivePaneId: 'pane-a',
     });
@@ -230,9 +230,8 @@ describe('sessions store', () => {
       label: 'Moved',
       state: 'working' as const,
       cwd: '/tmp/source',
-      workspaceId: 'workspace-source',
       profileId: '',
-      desktopId: 'workspace-source',
+      desktopId: 'desktop-source',
       agent: 'codex' as const,
       transcriptMatched: false,
       daemonActivePaneId: 'pane-moved',
@@ -241,9 +240,9 @@ describe('sessions store', () => {
     useSessionStore.setState({
       sessions: [movedSession],
       desktopSnapshots: {
-        'workspace-target': { workspace: targetLayout, daemonActivePaneId: 'pane-moved' },
+        'desktop-target': { terminalState: targetLayout, daemonActivePaneId: 'pane-moved' },
       },
-      desktopIdBySessionId: { 'moved-session': 'workspace-target' },
+      desktopIdBySessionId: { 'moved-session': 'desktop-target' },
     });
 
     useSessionStore.getState().syncFromDaemonSessions([
@@ -269,9 +268,9 @@ describe('sessions store', () => {
           id: 'root-session',
           label: 'Root',
           state: 'idle',
-          cwd: '/tmp/workspace',
+          cwd: '/tmp/project',
           profileId: '',
-          desktopId: 'workspace-root',
+          desktopId: 'desktop-root',
           agent: 'shell',
           transcriptMatched: true,
           daemonActivePaneId: 'pane-split',
@@ -296,9 +295,9 @@ describe('sessions store', () => {
           id: 'split-session',
           label: 'Split',
           state: 'idle',
-          cwd: '/tmp/workspace',
+          cwd: '/tmp/project',
           profileId: '',
-          desktopId: 'workspace-root',
+          desktopId: 'desktop-root',
           agent: 'shell',
           transcriptMatched: true,
           daemonActivePaneId: 'pane-split',
@@ -327,7 +326,7 @@ describe('sessions store', () => {
         id: 'root-session',
         label: 'Root',
         agent: 'shell',
-        directory: '/tmp/workspace',
+        directory: '/tmp/project',
         state: 'idle',
       },
     ]);
@@ -343,7 +342,7 @@ describe('sessions store', () => {
       id: 'blip-session',
       label: 'Blip',
       agent: 'codex',
-      directory: '/tmp/workspace',
+      directory: '/tmp/project',
       profile_id: 'profile',
       state: 'working',
     };
@@ -367,7 +366,7 @@ describe('sessions store', () => {
     ]);
   });
 
-  it('syncFromDaemonSessions retains a genuinely launching session with a pending workspace pane', () => {
+  it('syncFromDaemonSessions retains a genuinely launching session with a pending desktop pane', () => {
     useSessionStore.setState({
       activeSessionId: 'launching-session',
       sessions: [
@@ -377,7 +376,7 @@ describe('sessions store', () => {
           state: 'launching',
           cwd: '/tmp/launching',
           profileId: '',
-          desktopId: 'workspace-launching',
+          desktopId: 'desktop-launching',
           agent: 'shell',
           transcriptMatched: true,
           daemonActivePaneId: 'pane-launching',
@@ -458,7 +457,7 @@ describe('sessions store', () => {
           state: 'idle',
           cwd: '/tmp/exited',
           profileId: '',
-          desktopId: 'workspace-exited',
+          desktopId: 'desktop-exited',
           agent: 'shell',
           transcriptMatched: true,
           daemonActivePaneId: 'pane-exited',
@@ -483,7 +482,7 @@ describe('sessions store', () => {
   });
 
   it('takeSessionSpawnArgs applies launcher overrides', async () => {
-    const sessionId = await useSessionStore.getState().createSession('Spawn Test', '/tmp/workspace', 'sess-spawn', 'claude', 'ep-1', true);
+    const sessionId = await useSessionStore.getState().createSession('Spawn Test', '/tmp/project', 'sess-spawn', 'claude', 'ep-1', true);
     useSessionStore.getState().setLauncherConfig({
       executables: { claude: '/opt/bin/claude-custom' },
     });
@@ -492,7 +491,7 @@ describe('sessions store', () => {
 
     expect(first).toMatchObject({
       id: sessionId,
-      cwd: '/tmp/workspace',
+      cwd: '/tmp/project',
       endpoint_id: 'ep-1',
       label: 'Spawn Test',
       cols: 120,
@@ -506,7 +505,7 @@ describe('sessions store', () => {
   });
 
   it('syncFromArrangement gives each session the desktop it is placed on and that desktop\'s active pane', async () => {
-    const sessionId = await useSessionStore.getState().createSession('Desktop', '/tmp/workspace', 'sess-desktop', 'codex', undefined, false);
+    const sessionId = await useSessionStore.getState().createSession('Desktop', '/tmp/project', 'sess-desktop', 'codex', undefined, false);
 
     useSessionStore.getState().syncFromArrangement('profile', [
       desktopWith(
@@ -552,7 +551,7 @@ describe('sessions store', () => {
   });
 
   it('syncFromArrangement keeps defaults on an invalid tree and falls back to the first pane', async () => {
-    const sessionId = await useSessionStore.getState().createSession('Desktop', '/tmp/workspace', 'sess-desktop', 'codex', undefined, false);
+    const sessionId = await useSessionStore.getState().createSession('Desktop', '/tmp/project', 'sess-desktop', 'codex', undefined, false);
 
     useSessionStore.getState().syncFromArrangement('profile', [
       desktopWith('desktop-1', '{not-json', 'missing-pane', [
@@ -587,7 +586,7 @@ describe('sessions store', () => {
 
     const state = useSessionStore.getState();
     expect(state.sessions).toEqual([]);
-    expect(state.desktopSnapshots['desktop-failed']?.workspace.agents).toEqual([{
+    expect(state.desktopSnapshots['desktop-failed']?.terminalState.agents).toEqual([{
       id: 'pane-failed',
       runtimeId: 'closed-session',
       sessionId: 'closed-session',

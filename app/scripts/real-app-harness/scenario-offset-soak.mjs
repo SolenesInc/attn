@@ -18,7 +18,7 @@ import {
   waitForPaneShellReady,
   waitForPaneText,
   waitForPaneVisible,
-  waitForSessionWorkspace,
+  waitForSessionDesktop,
 } from './scenarioAssertions.mjs';
 import { UiAutomationClient } from './uiAutomationClient.mjs';
 
@@ -26,7 +26,7 @@ const OVERFLOW_TOLERANCE_PX = 2;
 const FONT_SCALE_MIN = 0.7;
 const FONT_SCALE_MAX = 1.5;
 const FONT_SCALE_STEP = 0.1;
-const MAX_PANES_PER_WORKSPACE = 4;
+const MAX_PANES_PER_DESKTOP = 4;
 
 function parseArgs(argv) {
   const args = [...argv];
@@ -36,7 +36,7 @@ function parseArgs(argv) {
   const options = {
     ...parseCommonArgs([]),
     iterations: 150,
-    workspaceCount: 6,
+    desktopCount: 6,
     seed: 1,
     settleMs: 400,
   };
@@ -47,7 +47,7 @@ function parseArgs(argv) {
     else if (arg === '--artifacts-dir' || arg === '--artifacts') options.artifactsDir = args[++index];
     else if (arg === '--session-root-dir') options.sessionRootDir = args[++index];
     else if (arg === '--iterations') options.iterations = Number.parseInt(args[++index], 10);
-    else if (arg === '--workspaces') options.workspaceCount = Number.parseInt(args[++index], 10);
+    else if (arg === '--desktops') options.desktopCount = Number.parseInt(args[++index], 10);
     else if (arg === '--seed') options.seed = Number.parseInt(args[++index], 10);
     else if (arg === '--settle-ms') options.settleMs = Number.parseInt(args[++index], 10);
     else if (arg === '--run-against-prod') options.runAgainstProd = true;
@@ -100,7 +100,7 @@ function fullScreenTuiCommand(markerLabel) {
   );
 }
 
-async function createTuiWorkspace(client, observer, cwd, sessionLabel, markerLabel) {
+async function createTuiDesktop(client, observer, cwd, sessionLabel, markerLabel) {
   fs.mkdirSync(cwd, { recursive: true });
   const sessionId = await createSessionAndWaitForInitialPane({
     client,
@@ -111,13 +111,13 @@ async function createTuiWorkspace(client, observer, cwd, sessionLabel, markerLab
     waitForInitialPaneVisible: false,
     sessionWaitMs: 30_000,
   });
-  const workspace = await waitForSessionWorkspace(
+  const desktop = await waitForSessionDesktop(
     client,
     sessionId,
     (ws) => (ws?.panes || []).length === 1 && ws.panes[0].runtimeId,
     `initial pane for ${sessionLabel}`,
   );
-  const pane = workspace.panes[0];
+  const pane = desktop.panes[0];
   await client.request('select_session', { sessionId });
   await waitForPaneVisible(client, sessionId, pane.paneId, 20_000);
   await waitForPaneAttached(client, sessionId, pane.paneId, 20_000);
@@ -136,25 +136,25 @@ async function createTuiWorkspace(client, observer, cwd, sessionLabel, markerLab
   );
   return {
     sessionId,
-    workspaceId: workspace.desktopId,
+    desktopId: desktop.desktopId,
     label: sessionLabel,
     panes: [{ paneId: pane.paneId, markerLabel }],
     nextPaneMarker: 1,
   };
 }
 
-// These workspaces' panes are kind 'agent', so scenarioAssertions'
+// These desktops' panes are kind 'agent', so scenarioAssertions'
 // waitForNewShellPane (kind === 'shell') never matches and times out.
 async function waitForNewPane(client, sessionId, existingPaneIds, description, timeoutMs = 20_000) {
-  const workspace = await waitForSessionWorkspace(
+  const desktop = await waitForSessionDesktop(
     client,
     sessionId,
     (ws) => (ws?.panes || []).some((pane) => !existingPaneIds.has(pane.paneId)),
     description,
     timeoutMs,
   );
-  const newPanes = (workspace.panes || []).filter((pane) => !existingPaneIds.has(pane.paneId));
-  return newPanes.find((pane) => pane.paneId === workspace.activePaneId) || newPanes[0];
+  const newPanes = (desktop.panes || []).filter((pane) => !existingPaneIds.has(pane.paneId));
+  return newPanes.find((pane) => pane.paneId === desktop.activePaneId) || newPanes[0];
 }
 
 async function seedTuiIntoPane(client, sessionId, paneId, markerLabel, description) {
@@ -169,10 +169,10 @@ async function seedTuiIntoPane(client, sessionId, paneId, markerLabel, descripti
   );
 }
 
-async function closeWorkspacePanes(client, sessionId) {
+async function closeDesktopPanes(client, sessionId) {
   for (let attempt = 0; attempt < 10; attempt += 1) {
-    const workspace = await client.request('get_workspace', { sessionId }).catch(() => null);
-    const pane = workspace?.panes?.[0];
+    const desktop = await client.request('get_desktop', { sessionId }).catch(() => null);
+    const pane = desktop?.panes?.[0];
     if (!pane) {
       return;
     }
@@ -185,7 +185,7 @@ async function closeExistingSessions(client, sessionRootDir) {
   const initial = await client.request('get_state');
   const harnessSessions = (initial.sessions || []).filter((session) => session.cwd?.startsWith(sessionRootDir));
   for (const session of harnessSessions) {
-    await closeWorkspacePanes(client, session.id).catch(() => {});
+    await closeDesktopPanes(client, session.id).catch(() => {});
   }
 }
 
@@ -197,11 +197,11 @@ function boundsOf(dom, key) {
   return bounds;
 }
 
-async function measureActiveWorkspacePanes(client, sessionId) {
-  const workspace = await client.request('get_workspace', { sessionId });
+async function measureActiveDesktopPanes(client, sessionId) {
+  const desktop = await client.request('get_desktop', { sessionId });
   const measurements = [];
   const violations = [];
-  for (const pane of workspace.panes || []) {
+  for (const pane of desktop.panes || []) {
     const state = await client.request('get_pane_state', { sessionId, paneId: pane.paneId });
     const dom = state?.pane?.dom;
     const canvas = boundsOf(dom, 'canvas');
@@ -244,7 +244,7 @@ async function main() {
     printCommonHelp('scripts/real-app-harness/scenario-offset-soak.mjs');
     console.log(`Additional options:
   --iterations <n>     Number of random action steps to run (default: 150)
-  --workspaces <n>     Number of shell workspaces to create (default: 6)
+  --desktops <n>     Number of shell desktops to create (default: 6)
   --seed <n>           PRNG seed for deterministic action sequence (default: 1)
   --settle-ms <n>      Settle delay before each post-step assertion (default: 400)
 `);
@@ -253,8 +253,8 @@ async function main() {
   if (!Number.isInteger(options.iterations) || options.iterations <= 0) {
     throw new Error(`--iterations must be a positive integer, got: ${options.iterations}`);
   }
-  if (!Number.isInteger(options.workspaceCount) || options.workspaceCount < 2) {
-    throw new Error(`--workspaces must be an integer >= 2, got: ${options.workspaceCount}`);
+  if (!Number.isInteger(options.desktopCount) || options.desktopCount < 2) {
+    throw new Error(`--desktops must be an integer >= 2, got: ${options.desktopCount}`);
   }
 
   const { runId, runDir, sessionDir } = createRunContext(options, 'offset-soak');
@@ -262,7 +262,7 @@ async function main() {
   const observer = new DaemonObserver({ wsUrl: options.wsUrl });
   const rand = mulberry32(options.seed);
 
-  const workspaces = [];
+  const desktops = [];
   const trace = [];
   let maxOverflowSeen = 0;
   let transientCount = 0;
@@ -274,7 +274,7 @@ async function main() {
   console.log(`[RealAppHarness] runDir=${runDir}`);
   console.log(`[RealAppHarness] sessionDir=${sessionDir}`);
   console.log(`[RealAppHarness] wsUrl=${options.wsUrl}`);
-  console.log(`[RealAppHarness] seed=${options.seed} iterations=${options.iterations} workspaces=${options.workspaceCount}`);
+  console.log(`[RealAppHarness] seed=${options.seed} iterations=${options.iterations} desktops=${options.desktopCount}`);
 
   try {
     process.env.ATTN_HARNESS_PARK_VISIBLE_PX ??= '0';
@@ -287,17 +287,17 @@ async function main() {
       await observer.waitFor(() => observer.getSetting('uiScale') === '1', 'default UI scale persisted');
     }
 
-    for (let index = 0; index < options.workspaceCount; index += 1) {
+    for (let index = 0; index < options.desktopCount; index += 1) {
       const sessionLabel = `offsetsoak-${runId}-${index}`;
       const markerLabel = `s${index}`;
-      const workspace = await createTuiWorkspace(client, observer, path.join(sessionDir, `ws${index}`), sessionLabel, markerLabel);
-      workspaces.push(workspace);
-      console.log(`[RealAppHarness] created workspace ${index}: sessionId=${workspace.sessionId} workspaceId=${workspace.desktopId} marker=${markerLabel}`);
+      const desktop = await createTuiDesktop(client, observer, path.join(sessionDir, `ws${index}`), sessionLabel, markerLabel);
+      desktops.push(desktop);
+      console.log(`[RealAppHarness] created desktop ${index}: sessionId=${desktop.sessionId} desktopId=${desktop.desktopId} marker=${markerLabel}`);
     }
 
-    let activeIndex = workspaces.length - 1;
+    let activeIndex = desktops.length - 1;
 
-    const recency = workspaces.map((_, index) => index);
+    const recency = desktops.map((_, index) => index);
     const markActive = (index) => {
       const position = recency.indexOf(index);
       if (position !== -1) {
@@ -307,7 +307,7 @@ async function main() {
     };
 
     const switchTo = async (index) => {
-      const target = workspaces[index];
+      const target = desktops[index];
       await client.request('select_session', { sessionId: target.sessionId });
       activeIndex = index;
       markActive(index);
@@ -316,7 +316,7 @@ async function main() {
     const otherIndex = (excludeIndex) => {
       let candidate = excludeIndex;
       while (candidate === excludeIndex) {
-        candidate = pickInt(rand, 0, workspaces.length - 1);
+        candidate = pickInt(rand, 0, desktops.length - 1);
       }
       return candidate;
     };
@@ -406,68 +406,68 @@ async function main() {
         await switchTo(coldTarget);
       } else if (roll < 0.95) {
         action = 'split';
-        const activeWorkspace = workspaces[activeIndex];
-        const workspaceState = await client.request('get_workspace', { sessionId: activeWorkspace.sessionId });
-        const existingPanes = workspaceState.panes || [];
-        if (existingPanes.length >= MAX_PANES_PER_WORKSPACE) {
+        const activeDesktop = desktops[activeIndex];
+        const desktopState = await client.request('get_desktop', { sessionId: activeDesktop.sessionId });
+        const existingPanes = desktopState.panes || [];
+        if (existingPanes.length >= MAX_PANES_PER_DESKTOP) {
           action = 'split_fallback_switch';
-          params.reason = `pane cap reached (${existingPanes.length}/${MAX_PANES_PER_WORKSPACE})`;
+          params.reason = `pane cap reached (${existingPanes.length}/${MAX_PANES_PER_DESKTOP})`;
           params.switchToIndex = otherIndex(activeIndex);
           await switchTo(params.switchToIndex);
         } else {
           const direction = pickFrom(rand, ['vertical', 'horizontal']);
           params.direction = direction;
           const existingPaneIds = new Set(existingPanes.map((pane) => pane.paneId));
-          await client.request('split_pane', { sessionId: activeWorkspace.sessionId, direction });
+          await client.request('split_pane', { sessionId: activeDesktop.sessionId, direction });
           const newPane = await waitForNewPane(
             client,
-            activeWorkspace.sessionId,
+            activeDesktop.sessionId,
             existingPaneIds,
-            `new split pane for ${activeWorkspace.label}`,
+            `new split pane for ${activeDesktop.label}`,
             20_000,
           );
-          await waitForPaneVisible(client, activeWorkspace.sessionId, newPane.paneId, 20_000);
-          await waitForPaneAttached(client, activeWorkspace.sessionId, newPane.paneId, 20_000);
-          await waitForPaneShellReady(client, activeWorkspace.sessionId, newPane.paneId, {
+          await waitForPaneVisible(client, activeDesktop.sessionId, newPane.paneId, 20_000);
+          await waitForPaneAttached(client, activeDesktop.sessionId, newPane.paneId, 20_000);
+          await waitForPaneShellReady(client, activeDesktop.sessionId, newPane.paneId, {
             timeoutMs: 20_000,
-            description: `split pane ready for ${activeWorkspace.label}`,
+            description: `split pane ready for ${activeDesktop.label}`,
           });
-          const markerLabel = `s${activeIndex}p${activeWorkspace.nextPaneMarker}`;
-          activeWorkspace.nextPaneMarker += 1;
+          const markerLabel = `s${activeIndex}p${activeDesktop.nextPaneMarker}`;
+          activeDesktop.nextPaneMarker += 1;
           await seedTuiIntoPane(
             client,
-            activeWorkspace.sessionId,
+            activeDesktop.sessionId,
             newPane.paneId,
             markerLabel,
             `full-screen TUI painted for split pane ${markerLabel}`,
           );
-          activeWorkspace.panes.push({ paneId: newPane.paneId, markerLabel });
+          activeDesktop.panes.push({ paneId: newPane.paneId, markerLabel });
           params.paneId = newPane.paneId;
           params.markerLabel = markerLabel;
         }
       } else {
         action = 'close_split';
-        const activeWorkspace = workspaces[activeIndex];
-        const workspaceState = await client.request('get_workspace', { sessionId: activeWorkspace.sessionId });
-        const existingPanes = workspaceState.panes || [];
+        const activeDesktop = desktops[activeIndex];
+        const desktopState = await client.request('get_desktop', { sessionId: activeDesktop.sessionId });
+        const existingPanes = desktopState.panes || [];
         if (existingPanes.length <= 1) {
           action = 'close_split_fallback_switch';
-          params.reason = 'workspace has only one pane';
+          params.reason = 'desktop has only one pane';
           params.switchToIndex = otherIndex(activeIndex);
           await switchTo(params.switchToIndex);
         } else {
           const closeIndex = 1 + pickInt(rand, 0, existingPanes.length - 2);
           const paneToClose = existingPanes[closeIndex];
           params.paneId = paneToClose.paneId;
-          await client.request('close_pane', { sessionId: activeWorkspace.sessionId, paneId: paneToClose.paneId });
-          activeWorkspace.panes = activeWorkspace.panes.filter((pane) => pane.paneId !== paneToClose.paneId);
+          await client.request('close_pane', { sessionId: activeDesktop.sessionId, paneId: paneToClose.paneId });
+          activeDesktop.panes = activeDesktop.panes.filter((pane) => pane.paneId !== paneToClose.paneId);
         }
       }
 
       await delay(options.settleMs);
 
-      const activeWorkspace = workspaces[activeIndex];
-      const { measurements, violations } = await measureActiveWorkspacePanes(client, activeWorkspace.sessionId);
+      const activeDesktop = desktops[activeIndex];
+      const { measurements, violations } = await measureActiveDesktopPanes(client, activeDesktop.sessionId);
       const stepMaxOverflow = measurements.reduce(
         (max, measurement) => Math.max(max, measurement.domOffsetTop, measurement.domOverflowBottom, measurement.domOverflowRight),
         0,
@@ -478,8 +478,8 @@ async function main() {
         step,
         action,
         params,
-        activeWorkspaceIndex: activeIndex,
-        activeSessionId: activeWorkspace.sessionId,
+        activeDesktopIndex: activeIndex,
+        activeSessionId: activeDesktop.sessionId,
         maxOverflowPx: stepMaxOverflow,
       };
       trace.push(traceEntry);
@@ -498,7 +498,7 @@ async function main() {
         while (elapsedMs < TRANSIENT_RECHECK_DEADLINE_MS) {
           await delay(TRANSIENT_RECHECK_POLL_MS);
           elapsedMs = Date.now() - suspectAt;
-          const recheck = await measureActiveWorkspacePanes(client, activeWorkspace.sessionId);
+          const recheck = await measureActiveDesktopPanes(client, activeDesktop.sessionId);
           rechecks.push({ elapsedMs, violations: recheck.violations, measurements: recheck.measurements });
           if (recheck.violations.length === 0) {
             healed = { elapsedMs, measurements: recheck.measurements };
@@ -526,7 +526,7 @@ async function main() {
               step,
               action,
               params,
-              activeWorkspaceIndex: activeIndex,
+              activeDesktopIndex: activeIndex,
               first: { violations, measurements },
               rechecks,
             },
@@ -535,11 +535,11 @@ async function main() {
           )}\n`,
           'utf8',
         );
-        const workspace = await client.request('get_workspace', { sessionId: activeWorkspace.sessionId }).catch(() => null);
+        const desktop = await client.request('get_desktop', { sessionId: activeDesktop.sessionId }).catch(() => null);
         const allPaneStates = {};
-        for (const pane of workspace?.panes || []) {
+        for (const pane of desktop?.panes || []) {
           allPaneStates[pane.paneId] = await client
-            .request('get_pane_state', { sessionId: activeWorkspace.sessionId, paneId: pane.paneId })
+            .request('get_pane_state', { sessionId: activeDesktop.sessionId, paneId: pane.paneId })
             .catch((error) => ({ error: error instanceof Error ? error.message : String(error) }));
         }
         fs.writeFileSync(
@@ -547,11 +547,11 @@ async function main() {
           `${JSON.stringify(allPaneStates, null, 2)}\n`,
           'utf8',
         );
-        await captureSessionArtifacts(client, runDir, 'violation', activeWorkspace.sessionId).catch(() => {});
+        await captureSessionArtifacts(client, runDir, 'violation', activeDesktop.sessionId).catch(() => {});
         const lastRecheck = rechecks[rechecks.length - 1];
         for (const violation of lastRecheck.violations) {
           const paneText = await client.request('read_pane_text', {
-            sessionId: activeWorkspace.sessionId,
+            sessionId: activeDesktop.sessionId,
             paneId: violation.paneId,
           }).catch((error) => ({ error: error instanceof Error ? error.message : String(error) }));
           fs.writeFileSync(
@@ -564,7 +564,7 @@ async function main() {
         const historyTail = trace.slice(-15);
         console.error('[RealAppHarness] Last 15 steps before violation:');
         for (const entry of historyTail) {
-          console.error(`  step=${entry.step} action=${entry.action} active=${entry.activeWorkspaceIndex} maxOverflowPx=${entry.maxOverflowPx.toFixed(1)}${entry.transient ? ' (transient)' : ''}`);
+          console.error(`  step=${entry.step} action=${entry.action} active=${entry.activeDesktopIndex} maxOverflowPx=${entry.maxOverflowPx.toFixed(1)}${entry.transient ? ' (transient)' : ''}`);
         }
         console.error(`[RealAppHarness] seed=${options.seed} failing step=${step}. Evidence written to ${runDir}`);
         process.exitCode = 1;
@@ -578,7 +578,7 @@ async function main() {
       runId,
       seed: options.seed,
       iterations: options.iterations,
-      workspaceCount: options.workspaceCount,
+      desktopCount: options.desktopCount,
       maxOverflowPxSeen: maxOverflowSeen,
       transientCount,
       transientSteps,
@@ -587,8 +587,8 @@ async function main() {
     console.log(`[RealAppHarness] Offset soak passed: ${options.iterations} steps, no persistent violation, maxOverflowPxSeen=${maxOverflowSeen.toFixed(1)}, transientCount=${transientCount}.`);
     console.log(JSON.stringify(summary, null, 2));
   } finally {
-    for (const workspace of workspaces.reverse()) {
-      await closeWorkspacePanes(client, workspace.sessionId).catch(() => {});
+    for (const desktop of desktops.reverse()) {
+      await closeDesktopPanes(client, desktop.sessionId).catch(() => {});
     }
     try {
       if (initialUiScale !== null) {
