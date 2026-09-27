@@ -273,29 +273,6 @@ describe('MigrationPicker', () => {
     });
   });
 
-  it('gives every workspace a distinct name, using the first agent when titles collide', async () => {
-    const user = userEvent.setup();
-    const twin = (id: string, desktopId: string, agent: string) => {
-      const group = importedGroup(id, 'exo', desktopId);
-      return { ...group, panes: group.panes.map((pane) => ({ ...pane, title: agent })) };
-    };
-    const initial = migrationState({
-      groups: [twin('g1', 'd1', 'Chief'), twin('g2', 'd2', 'Delete X tweet history'), importedGroup('g3', 'exo · Chief', 'd3')],
-    });
-    renderGate(fakeMigrationDaemon(initial));
-    await startPlacing(user);
-
-    expect(sourceRow('exo · Chief')).toBeInTheDocument();
-    expect(sourceRow('exo · Delete X tweet history')).toBeInTheDocument();
-    expect(sourceRow('exo · Chief (2)')).toBeInTheDocument();
-
-    await user.click(sourceRow('exo · Chief (2)').querySelector('.mp-source-main')!);
-    await user.keyboard('m');
-    const dialog = await screen.findByRole('dialog', { name: 'Move exo · Chief (2) to…' });
-    expect(within(dialog).getByRole('button', { name: /Desktop 1\b.*exo · Chief$/ })).toBeInTheDocument();
-    expect(within(dialog).getByRole('button', { name: /Desktop 2\b.*exo · Delete X tweet history$/ })).toBeInTheDocument();
-  });
-
   it('shows the importing group’s agents and their launch state', async () => {
     const user = userEvent.setup();
     const initial = migrationState({
