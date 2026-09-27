@@ -81,7 +81,7 @@ func (w *World) App() *Peer {
 		Cmd:          protocol.CmdClientHello,
 		ClientKind:   "tauri-app",
 		Version:      "protocol-" + protocol.ProtocolVersion,
-		Capabilities: []string{protocol.CapabilityWorkspaceSessions, protocol.CapabilityBinaryPtyOutput},
+		Capabilities: []string{protocol.CapabilityWorkspaceSessions, protocol.CapabilityBinaryPtyOutput, protocol.CapabilityKittyImages},
 		ClientToken:  protocol.Ptr(strings.TrimSpace(string(token))),
 	}, nil)
 	p.Initial = Await[protocol.InitialStateMessage](p, protocol.EventInitialState, nil)
