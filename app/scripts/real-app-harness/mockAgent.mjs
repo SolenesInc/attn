@@ -388,6 +388,48 @@ export function findMockTranscript({ agent, cwd, id, env = process.env }) {
     || firstFileEndingWith(roots.codexSessions, `${id}.jsonl`);
 }
 
+function realPath(value) {
+  try {
+    return fs.realpathSync.native(path.resolve(String(value || '')));
+  } catch {
+    return path.resolve(String(value || ''));
+  }
+}
+
+export function latestMockCodexRollout(cwd, env = process.env) {
+  const want = realPath(cwd);
+  const stack = [agentHomeRoots(env).codexSessions];
+  let latest = null;
+  while (stack.length > 0) {
+    const dir = stack.pop();
+    let entries = [];
+    try {
+      entries = fs.readdirSync(dir, { withFileTypes: true });
+    } catch {
+      continue;
+    }
+    for (const entry of entries) {
+      const full = path.join(dir, entry.name);
+      if (entry.isDirectory()) {
+        stack.push(full);
+        continue;
+      }
+      if (!entry.name.startsWith('rollout-') || !entry.name.includes('-mock-') || !entry.name.endsWith('.jsonl')) continue;
+      let meta = null;
+      let mtimeMs = 0;
+      try {
+        meta = JSON.parse(fs.readFileSync(full, 'utf8').split('\n', 1)[0] || 'null')?.payload;
+        mtimeMs = fs.statSync(full).mtimeMs;
+      } catch {
+        continue;
+      }
+      if (!meta?.id || realPath(meta.cwd) !== want) continue;
+      if (!latest || mtimeMs > latest.mtimeMs) latest = { file: full, id: meta.id, mtimeMs };
+    }
+  }
+  return latest && { file: latest.file, id: latest.id };
+}
+
 // Every scenario launches the mock, most without a fixture: an absent one is a
 // silent agent, not a crashed session.
 export function readMockAgentConfig(cwd) {

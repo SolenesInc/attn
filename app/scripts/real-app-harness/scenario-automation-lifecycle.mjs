@@ -405,11 +405,9 @@ async function main() {
       runner.log('schedule_delivery_receipt', { which: 'P1 initial', waitedMs: Date.now() - anchorSeenAt });
       runner.assert(Boolean(run1.seed_id) && Boolean(run1.session_id), 'P1 delivery reserves a seed and session', run1);
       runner.assert(!run1.last_error, 'P1 delivery has no error', run1);
-      const [legacyTicketCount] = sqliteRow(
-        dbPath,
-        `SELECT COUNT(*) FROM tickets WHERE automation_run_id IN (SELECT id FROM automation_runs WHERE definition_id='${sqlEscape(editID)}');`,
-      );
-      runner.assert(legacyTicketCount === '0', 'automation delivery creates no legacy tickets', { legacyTicketCount });
+      const legacyTickets = (runJSON(binary, ['ticket', 'list', '--all', '--json'], daemonEnv) || [])
+        .filter((ticket) => ticket.automation?.definition_id === editID);
+      runner.assert(legacyTickets.length === 0, 'automation delivery creates no legacy tickets', { legacyTickets });
 
       fs.writeFileSync(editDefinitionFile, editRebindDefinitionYAML({ id: editID, locationPath: editFixture, executable: probe.executable, prompt: PROMPT_P2 }));
       const editedAt = Date.now();
@@ -485,10 +483,8 @@ async function main() {
         'runs remain queryable via the CLI after delete',
         runsAfterDelete,
       );
-      // sqlite3 prints a lone empty string as an empty line, which sqliteRow cannot
-      // tell apart from "no row" — so select id alongside it.
-      const deletedRow = sqliteRow(dbPath, `SELECT id, deleted_at FROM automation_definitions WHERE id='${sqlEscape(deleteID)}';`);
-      runner.assert(deletedRow && deletedRow[1] !== '' && deletedRow[1] !== undefined, 'the definition row is soft-deleted (deleted_at set) in the DB', { deletedRow });
+      const listedAfterDelete = runJSON(binary, ['automation', 'list'], daemonEnv) || [];
+      runner.assert(!listedAfterDelete.some((definition) => definition.id === deleteID), 'the CLI no longer lists the deleted definition', { listedAfterDelete });
 
       fs.writeFileSync(deleteDefinitionFile, deleteResurrectDefinitionYAML({ id: deleteID, locationPath: deleteFixture, executable: probe.executable }));
       runJSON(binary, ['automation', 'apply', '--file', deleteDefinitionFile], daemonEnv);
@@ -504,8 +500,8 @@ async function main() {
         'old run history survives resurrection',
         runsAfterResurrect,
       );
-      const resurrectedRow = sqliteRow(dbPath, `SELECT id, deleted_at FROM automation_definitions WHERE id='${sqlEscape(deleteID)}';`);
-      runner.assert(resurrectedRow && (resurrectedRow[1] ?? '') === '', 'the definition row is live again (deleted_at cleared) in the DB', { resurrectedRow });
+      const listedAfterResurrect = runJSON(binary, ['automation', 'list'], daemonEnv) || [];
+      runner.assert(listedAfterResurrect.some((definition) => definition.id === deleteID), 'the CLI lists the resurrected definition again', { listedAfterResurrect });
 
       disableDefinition(binary, deleteID, daemonEnv);
     });
