@@ -2,7 +2,6 @@ package daemon
 
 import (
 	"context"
-	"encoding/json"
 	"path/filepath"
 	"strings"
 	"sync"
@@ -12,21 +11,6 @@ import (
 
 	"github.com/victorarias/attn/internal/protocol"
 )
-
-func readChiefOfStaffResult(t *testing.T, client *wsClient) protocol.ChiefOfStaffResultMessage {
-	t.Helper()
-	select {
-	case raw := <-client.send:
-		var result protocol.ChiefOfStaffResultMessage
-		if err := json.Unmarshal(raw.payload, &result); err != nil {
-			t.Fatalf("decode chief_of_staff_result: %v", err)
-		}
-		return result
-	case <-time.After(time.Second):
-		t.Fatal("timed out waiting for chief_of_staff_result")
-		return protocol.ChiefOfStaffResultMessage{}
-	}
-}
 
 func newChiefOfStaffTestDaemon(t *testing.T) (*Daemon, *wsClient) {
 	t.Helper()

@@ -36,18 +36,6 @@ func requireDone(t *testing.T, done <-chan struct{}, what string) {
 	}
 }
 
-func requireOutbound(t *testing.T, client *wsClient, what string) outboundMessage {
-	t.Helper()
-	synctest.Wait()
-	select {
-	case outbound := <-client.send:
-		return outbound
-	default:
-		t.Fatal(what)
-		return outboundMessage{}
-	}
-}
-
 func settleStopClassification(t *testing.T) {
 	t.Helper()
 	time.Sleep(4 * time.Second)
