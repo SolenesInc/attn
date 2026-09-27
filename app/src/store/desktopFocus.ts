@@ -17,9 +17,9 @@ export const useDesktopFocus = create<DesktopFocusState>((set) => ({
 }));
 
 useProfilesStore.subscribe((state, previous) => {
-  if (state.desktops === previous.desktops || state.selectedProfileId !== previous.selectedProfileId) return;
-  const remaining = new Set(state.desktops.map((desktop) => desktop.id));
-  for (const desktop of previous.desktops) {
-    if (!remaining.has(desktop.id)) useDesktopFocus.getState().setFocusedLeaf(desktop.id, null);
+  if (state.desktops === previous.desktops) return;
+  const current = new Set(state.desktops.map((desktop) => desktop.id));
+  for (const desktopId of Object.keys(useDesktopFocus.getState().focusedLeafByDesktop)) {
+    if (!current.has(desktopId)) useDesktopFocus.getState().setFocusedLeaf(desktopId, null);
   }
 });

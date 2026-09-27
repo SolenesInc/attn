@@ -17,7 +17,7 @@ describe('desktop focus after desktops change', () => {
     expect(focused()).toEqual({ d2: 'pane-s2' });
   });
 
-  it('keeps focus mode of a profile the user switches away from', () => {
+  it('starts a profile the user switches to unmaximized, forgetting the one left', () => {
     arrangeDesktops([agentDesktop('d1', 1, ['s1'])]);
     useDesktopFocus.getState().setFocusedLeaf('d1', 'pane-s1');
 
@@ -25,6 +25,6 @@ describe('desktop focus after desktops change', () => {
     useProfilesStore.getState().profilesChanged([other]);
     useProfilesStore.getState().arrangementArrived(other, [{ ...agentDesktop('e1', 1, ['s9']), profile_id: 'other' }]);
 
-    expect(focused()).toEqual({ d1: 'pane-s1' });
+    expect(focused()).toEqual({});
   });
 });
