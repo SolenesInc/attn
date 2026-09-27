@@ -262,7 +262,6 @@ export function useAppController({
   });
   const {
     markdownOpenerOpen,
-    appViewParamsPrompt,
     handleOpenMarkdownFile,
     handleOpenNotebookTile,
   } = workspaceTiles;
@@ -341,7 +340,6 @@ export function useAppController({
     gardenHoldsWindow,
     chiefTransferOpen: Boolean(chiefTransferTarget),
     contextCapOpen: Boolean(contextCapPromptSession),
-    appViewParamsOpen: Boolean(appViewParamsPrompt),
     sessionCreationOpen: Boolean(sessionCreationJob),
     prLauncherOpen: Boolean(openPRLauncherJob),
     diagnosticCaptureOpen: Boolean(diagnosticCapture),

@@ -2,7 +2,6 @@ import type { PointerEvent as ReactPointerEvent, Ref, RefObject } from 'react';
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef } from 'react';
 import { browserHostLabel, claimBrowserHostFocus, controlBrowserHost } from '../../browser/host';
 import { useDaemonApi } from '../../contexts/DaemonApiContext';
-import { useAppViewTitleResolver } from '../../hooks/useAppViewTitle';
 import type { Seed } from '../../hooks/useDaemonSocket';
 import { useEscapeStack } from '../../hooks/useEscapeStack';
 import { formatShortcut } from '../../shortcuts/formatShortcut';
@@ -12,9 +11,7 @@ import {
   type TileContentState,
   type TileLeaf,
 } from '../../types/workspace';
-import { parseAppViewTileKind } from '../../utils/appBundle';
 import { deriveTileTitle } from '../../utils/tilePresentation';
-import { AppTileHost } from '../appViews/AppTileHost';
 import { GardenIcon } from '../GardenIcon';
 import type { MarkdownAnnotationsSendHandle } from '../MarkdownReader';
 import { MarkdownReader } from '../MarkdownReader';
@@ -35,7 +32,6 @@ import { useTileAnnotations } from './useTileAnnotations';
 import './WorkspaceDockTile.css';
 
 function bodyKindModifier(tileKind: string): string {
-  if (parseAppViewTileKind(tileKind)) return 'workspace-dock-tile-body--app';
   if (tileKind === 'browser') return 'workspace-dock-tile-body--browser';
   if (tileKind === 'notebook') return 'workspace-dock-tile-body--notebook';
   if (tileKind === 'markdown') return 'workspace-dock-tile-body--markdown';
@@ -59,7 +55,6 @@ interface WorkspaceDockTileProps {
   visible?: boolean;
   workspaceSessions?: WorkspaceTileSessionOption[];
   gardenSeeds?: Seed[];
-  workspaceSessionId?: string | null;
   workspaceDirectory?: string;
   onClose: () => void;
   onFocusDocument?: () => void;
@@ -84,7 +79,6 @@ export function WorkspaceDockTile({
   visible = true,
   workspaceSessions = NO_WORKSPACE_SESSIONS,
   gardenSeeds = NO_GARDEN_SEEDS,
-  workspaceSessionId = null,
   workspaceDirectory,
   onClose,
   onFocusDocument,
@@ -105,9 +99,7 @@ export function WorkspaceDockTile({
   const persistedPath = persistedTilePath(tile, content);
   const isMarkdown = tile.tileKind === 'markdown';
   const isSeed = tile.tileKind === 'seed';
-  const appView = parseAppViewTileKind(tile.tileKind);
-  const appViewTitle = useAppViewTitleResolver();
-  const baseTitle = deriveTileTitle(tile, content, appViewTitle);
+  const baseTitle = deriveTileTitle(tile, content);
   const browserLabel = browserHostLabel(workspaceId, tile.tileId);
   // Lets the root switcher below flush a dirty buffer to the OLD root before swapping
   // params: the 700ms autosave debounce would otherwise lose an in-flight edit.
@@ -259,8 +251,6 @@ export function WorkspaceDockTile({
           visible={visible}
           onClose={onClose}
           notebookSurfaceRef={notebookSurfaceRef}
-          appView={appView}
-          workspaceSessionId={workspaceSessionId}
           documentSource={documentSource}
         />
       </div>
@@ -378,8 +368,6 @@ interface ContentProps {
   visible: boolean;
   onClose: () => void;
   notebookSurfaceRef: RefObject<NotebookSurfaceHandle | null>;
-  appView: ReturnType<typeof parseAppViewTileKind>;
-  workspaceSessionId: string | null;
   documentSource: MarkdownDocumentSource;
 }
 function WorkspaceTileContent({
@@ -398,8 +386,6 @@ function WorkspaceTileContent({
   visible,
   onClose,
   notebookSurfaceRef,
-  appView,
-  workspaceSessionId,
   documentSource,
 }: ContentProps) {
   if (tile.tileKind === 'markdown')
@@ -450,17 +436,6 @@ function WorkspaceTileContent({
       />
     );
   }
-  if (appView)
-    return (
-      <AppTileHost
-        app={appView.app}
-        view={appView.view}
-        workspaceId={workspaceId}
-        sessionId={workspaceSessionId}
-        tileId={tile.tileId}
-        params={tile.tileParams || ''}
-      />
-    );
   return <div className="workspace-dock-tile-message">Unsupported tile: {tile.tileKind}</div>;
 }
 

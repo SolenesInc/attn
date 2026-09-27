@@ -11,7 +11,6 @@ interface Overlays {
   gardenHoldsWindow: boolean;
   chiefTransferOpen: boolean;
   contextCapOpen: boolean;
-  appViewParamsOpen: boolean;
   sessionCreationOpen: boolean;
   prLauncherOpen: boolean;
   diagnosticCaptureOpen: boolean;
@@ -22,7 +21,6 @@ export function appOverlayPolicy(overlays: Overlays) {
   const promptOpen = [
     overlays.chiefTransferOpen,
     overlays.contextCapOpen,
-    overlays.appViewParamsOpen,
     overlays.sessionCreationOpen,
     overlays.prLauncherOpen,
     overlays.diagnosticCaptureOpen,

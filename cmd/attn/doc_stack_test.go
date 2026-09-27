@@ -23,7 +23,7 @@ func queriedIDs(t *testing.T, s *testworld.Stack, args ...string) []string {
 	var docs []struct {
 		ID string `json:"id"`
 	}
-	result := s.Attn(append([]string{"doc", "query", "app/test", "requests"}, append(args, "--json")...)...)
+	result := s.Attn(append([]string{"doc", "query", "test/test", "requests"}, append(args, "--json")...)...)
 	if result.Code != 0 {
 		t.Fatalf("doc query %q exited %d: %s", args, result.Code, result.Stderr)
 	}
@@ -37,7 +37,7 @@ func queriedIDs(t *testing.T, s *testworld.Stack, args ...string) []string {
 
 func putRequest(t *testing.T, s *testworld.Stack, id, body string, flags ...string) testworld.Result {
 	t.Helper()
-	return s.Attn(append([]string{"doc", "put", "app/test", "requests", id, body}, flags...)...)
+	return s.Attn(append([]string{"doc", "put", "test/test", "requests", id, body}, flags...)...)
 }
 
 func TestDocQueryPutAndWatchHonourTheirFlags(t *testing.T) {
@@ -48,11 +48,11 @@ func TestDocQueryPutAndWatchHonourTheirFlags(t *testing.T) {
 		args []string
 		want string
 	}{
-		{args: []string{"query", "app/test", "requests", "--resume"}, want: "--resume is only for watch"},
-		{args: []string{"query", "app/test", "requests", "--desc"}, want: "--desc needs --sort <field>"},
-		{args: []string{"count", "app/test", "requests", "--where", "status"}, want: "needs one of = < <= > >="},
-		{args: []string{"count", "app/test", "requests", "--where", "=pending"}, want: "has no field name"},
-		{args: []string{"count", "app/test", "requests", "--where", ">=5"}, want: "has no field name"},
+		{args: []string{"query", "test/test", "requests", "--resume"}, want: "--resume is only for watch"},
+		{args: []string{"query", "test/test", "requests", "--desc"}, want: "--desc needs --sort <field>"},
+		{args: []string{"count", "test/test", "requests", "--where", "status"}, want: "needs one of = < <= > >="},
+		{args: []string{"count", "test/test", "requests", "--where", "=pending"}, want: "has no field name"},
+		{args: []string{"count", "test/test", "requests", "--where", ">=5"}, want: "has no field name"},
 	} {
 		if refused := s.Attn(append([]string{"doc"}, tc.args...)...); refused.Code == 0 || !strings.Contains(refused.Stderr, tc.want) {
 			t.Errorf("doc %q exited %d with %q, want a refusal saying %q", tc.args, refused.Code, refused.Stderr, tc.want)
@@ -60,7 +60,7 @@ func TestDocQueryPutAndWatchHonourTheirFlags(t *testing.T) {
 	}
 
 	s.Start()
-	if defined := s.Attn("doc", "define", "app/test", "requests", "status:string", "attempts:number"); defined.Code != 0 {
+	if defined := s.Attn("doc", "define", "test/test", "requests", "status:string", "attempts:number"); defined.Code != 0 {
 		t.Fatalf("doc define exited %d: %s", defined.Code, defined.Stderr)
 	}
 	for _, doc := range []struct {
@@ -107,11 +107,11 @@ func TestDocQueryPutAndWatchHonourTheirFlags(t *testing.T) {
 	if forced := putRequest(t, s, "a", `{"status":"forced","attempts":1}`); forced.Code != 0 || !strings.Contains(forced.Stdout, "rev 3") {
 		t.Errorf("a put without --expect exited %d with %q, want it to win at rev 3", forced.Code, forced.Stdout+forced.Stderr)
 	}
-	if got := s.Attn("doc", "get", "app/test", "requests", "a").Stdout; !strings.Contains(got, "forced") {
+	if got := s.Attn("doc", "get", "test/test", "requests", "a").Stdout; !strings.Contains(got, "forced") {
 		t.Errorf("doc get a = %q, want the unconditional write", got)
 	}
 
-	watch := s.Launch(testworld.Invocation{Args: []string{"doc", "watch", "app/test", "requests", "--where", "status=pending", "--json", "--resume"}})
+	watch := s.Launch(testworld.Invocation{Args: []string{"doc", "watch", "test/test", "requests", "--where", "status=pending", "--json", "--resume"}})
 	watch.AwaitStdout(`"e"`)
 	s.Stop()
 	s.Start()
@@ -119,7 +119,7 @@ func TestDocQueryPutAndWatchHonourTheirFlags(t *testing.T) {
 		t.Fatalf("doc put f after the restart exited %d: %s", put.Code, put.Stderr)
 	}
 	watch.AwaitStdout(`"f"`)
-	if undefined := s.Attn("doc", "undefine", "app/test", "requests"); undefined.Code != 0 {
+	if undefined := s.Attn("doc", "undefine", "test/test", "requests"); undefined.Code != 0 {
 		t.Fatalf("doc undefine exited %d: %s", undefined.Code, undefined.Stderr)
 	}
 	ended := watch.Wait()

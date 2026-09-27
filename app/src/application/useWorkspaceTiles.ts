@@ -11,7 +11,6 @@ import {
   serializeNotebookTileParams,
   soleWorkspaceForId,
 } from '../types/workspace';
-import { appViewTileKind } from '../utils/appBundle';
 import { AppContentProps } from './appSupport';
 
 interface Options {
@@ -30,13 +29,6 @@ export function useWorkspaceTiles({
 }: Options) {
   const { sendRecentFiles, sendFsIndex, sendWorkspaceDockTile } = useDaemonApi();
   const [markdownOpenerOpen, setMarkdownOpenerOpen] = useState(false);
-  const [appViewParamsPrompt, setAppViewParamsPrompt] = useState<{
-    app: string;
-    view: string;
-    viewTitle: string;
-    label: string;
-    placeholder?: string;
-  } | null>(null);
 
   const daemonWorkspacesRef = useRef<DaemonWorkspace[]>([]);
   useEffect(() => {
@@ -88,33 +80,13 @@ export function useWorkspaceTiles({
     });
   }, [sendWorkspaceDockTile, settings, activeWorkspaceIdRef]);
 
-  // A fresh tile id every time: the daemon reads a duplicate id as a move.
-  const dockAppViewTile = useCallback(
-    (app: string, view: string, params: string) => {
-      const workspaceId = activeWorkspaceIdRef.current;
-      if (!workspaceId) return;
-      void sendWorkspaceDockTile(
-        workspaceId,
-        `app-view-tile-${crypto.randomUUID()}`,
-        appViewTileKind(app, view),
-        { edge: 'right', ratio: 0.4, ...(params ? { tileParams: params } : {}) },
-      ).catch((error) => {
-        console.warn('[App] Failed to dock app view tile:', error);
-      });
-    },
-    [sendWorkspaceDockTile, activeWorkspaceIdRef],
-  );
-
   return {
     markdownOpenerOpen,
     setMarkdownOpenerOpen,
-    appViewParamsPrompt,
-    setAppViewParamsPrompt,
     handleOpenMarkdownFile,
     markdownOpenerTarget,
     loadOpenerRecents,
     loadOpenerIndex,
     handleOpenNotebookTile,
-    dockAppViewTile,
   };
 }

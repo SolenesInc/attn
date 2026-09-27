@@ -98,7 +98,7 @@ software. Nothing wrong with IKEA; it just doesn't spark passion in me.
 Follow [Testing](docs/testing.md). In short:
 
 - Commit tests that guard a promise attn makes: behavior that users, the
-  agents attn runs, clients, app authors, or later versions rely on. Check
+  agents attn runs, clients, or later versions rely on. Check
   your own work by running it; keep scratch tests out of commits.
 - A committed test depends only on promises, never on internals. When a
   promise cannot be reached that way, extend the harness.
@@ -142,8 +142,6 @@ Follow [Testing](docs/testing.md). In short:
   binding per member (`internal/daemon/crew.go`).
 - `internal/docstore` compiles SQL; `internal/store/documents.go` executes it.
   SQL identifiers come from integers or validated field names, never caller text.
-- App consumer/namespace names derive from `internal/apps`; enabled state is
-  the consumer's enabled bit.
 - Auto-mode pattern/model writes go only through `PromoteAutoModeProposal`
   in `internal/store/automode.go`. Agents propose; only the user promotes.
 
@@ -157,13 +155,6 @@ For command/event/message-shape changes:
 
 Never hand-edit `internal/protocol/generated.go` or `app/src/types/generated.ts`.
 
-## The app SDK
-
-After editing `sdk/attn-app/src`, run `make generate-sdk` and commit
-`internal/appbuild/sdkdist/`. CI checks freshness, as does `make check-sdk`.
-Keep `appbuild.ReactTypesVersion` aligned with the frontend lockfile.
-Views import React through `@victorarias/attn-app` to share attn's instance.
-
 ## Event bus
 
 - Publish entity ids as fact subjects; omit byte streams.
@@ -173,9 +164,9 @@ Views import React through `@victorarias/attn-app` to share attn's instance.
 - Projections only write to the wire. A state change or nested publish inside
   one can deadlock.
 - Bulk changes publish one fact per entity inside `coalesceSnapshots`.
-- Durable handlers must be idempotent; unregister consumers on uninstall.
-- Enabled durable consumers and all installed apps pin retention. Disabled
-  ordinary consumers release it. Pin alarms never discard unread facts.
+- Durable handlers must be idempotent; unregister consumers when their owner is removed.
+- Enabled durable consumers pin retention. Disabled consumers release it.
+  Pin alarms never discard unread facts.
 - Inspect with `attn bus status`; control delivery with `attn bus disable|enable`.
   Tests can shorten `ATTN_BUS_RETENTION` and `ATTN_BUS_PIN_ALARM_AGE`.
 

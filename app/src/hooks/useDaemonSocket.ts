@@ -20,8 +20,6 @@ import type {
   WorktreeListResult,
   WorktreeSweepLogResult,
   PluginInfo as GeneratedPluginInfo,
-  AppRegistryEntry as GeneratedAppRegistryEntry,
-  ViewElement as GeneratedAppViewInfo,
   PluginIssue as GeneratedPluginIssue,
   GitOperation as GeneratedGitOperation,
   Endpoint as GeneratedEndpoint,
@@ -93,7 +91,6 @@ import { completeTerminalInputProbe, maybeStartTerminalInputProbe } from '../uti
 import { decodeBinaryFrame } from '../pty/binaryPtyFrame';
 import { kittyImageBlobFromResult, kittyImageCache } from '../utils/kittyImageCache';
 import { resolveDaemonWebSocketURL, type DaemonEndpointInstance } from '../utils/daemonEndpoint';
-import { handleAppDaemonEvent, type AppCommandResult } from './daemonAppEvents';
 import { handleBusDaemonEvent, type BusStatus } from './daemonBusEvents';
 import {
   handleAutoModeDaemonEvent,
@@ -212,8 +209,6 @@ export type DaemonWorkspace = GeneratedWorkspaceSnapshot;
 export type DaemonPR = GeneratedPR;
 export type DaemonWorktree = GeneratedWorktree;
 export type DaemonPlugin = GeneratedPluginInfo;
-export type AppRegistryEntry = GeneratedAppRegistryEntry;
-export type AppViewInfo = GeneratedAppViewInfo;
 export type DaemonPluginIssue = GeneratedPluginIssue;
 export type DaemonGitOperation = GeneratedGitOperation;
 export type DaemonEndpoint = GeneratedEndpoint;
@@ -581,7 +576,6 @@ interface UseDaemonSocketOptions {
   onNotificationsUpdated?: (unreadCount: number, critical: CriticalNotificationState) => void;
   onFsChanged?: (origin: string, paths: string[], root: string) => void;
   onSeedsUpdate?: (seeds: Seed[], total: number) => void;
-  onAppsUpdate?: (apps: AppRegistryEntry[]) => void;
   onCrewUpdate?: (members: CrewMember[]) => void;
   onPresentationAdded?: (presentation: Presentation) => void;
   onPresentationUpdated?: (presentation: Presentation) => void;
@@ -760,9 +754,6 @@ const SESSION_REOPEN_TIMEOUT_MS = 120_000;
 // Bus status is one aggregate pass over the whole event log. Measured on a copy of production, 209ms
 // at 945k rows — so 30s is roughly a hundred times the worst real log.
 const BUS_STATUS_TIMEOUT_MS = 30_000;
-// An app command is bounded by the daemon, which abandons a handler at 60s and answers with a refusal.
-// This sits past it so that refusal is what a view shows, not "timed out".
-const APP_COMMAND_TIMEOUT_MS = 75_000;
 const GIT_METADATA_TIMEOUT_MS = 30 * 60_000;
 const GIT_DIFF_TIMEOUT_MS = 10 * 60_000;
 const GIT_WORKTREE_TIMEOUT_MS = 30 * 60_000;
@@ -827,7 +818,6 @@ export function useDaemonSocket({
   onNotificationsUpdated,
   onFsChanged,
   onSeedsUpdate,
-  onAppsUpdate,
   onCrewUpdate,
   onPresentationAdded,
   onPresentationUpdated,
@@ -862,7 +852,6 @@ export function useDaemonSocket({
     onNotificationsUpdated,
     onFsChanged,
     onSeedsUpdate,
-    onAppsUpdate,
     onCrewUpdate,
     onPresentationAdded,
     onPresentationUpdated,
@@ -886,7 +875,6 @@ export function useDaemonSocket({
     onNotificationsUpdated,
     onFsChanged,
     onSeedsUpdate,
-    onAppsUpdate,
     onCrewUpdate,
     onPresentationAdded,
     onPresentationUpdated,
@@ -1392,7 +1380,6 @@ export function useDaemonSocket({
               data.seeds || [],
               data.seeds_total ?? (data.seeds || []).length,
             );
-            callbacksRef.current.onAppsUpdate?.(data.apps || []);
             callbacksRef.current.onCrewUpdate?.(data.crew || []);
             const nextWorkspaces = data.workspaces || [];
             workspacesRef.current = nextWorkspaces;
@@ -1607,9 +1594,6 @@ export function useDaemonSocket({
             break;
           }
 
-          case 'apps_updated':
-            callbacksRef.current.onAppsUpdate?.(data.apps || []);
-            break;
 
           case 'presentation_added':
             if (data.presentation) {
@@ -2832,7 +2816,6 @@ export function useDaemonSocket({
               }
             })) break;
             if (handleBusDaemonEvent(data, pending)) break;
-            if (handleAppDaemonEvent(data, pending)) break;
             if (docSubscriptions.handleEvent(data)) break;
             if (handleDelegationDaemonEvent(data, pending)) break;
             if (handleCrewDaemonEvent(data, pending)) break;
@@ -3308,35 +3291,6 @@ export function useDaemonSocket({
     };
   }, []);
 
-  const sendAppViewCrash = useCallback((report: {
-    app: string;
-    view: string;
-    versionId: number;
-    tileId: string;
-    error: string;
-  }) => {
-    sendOrQueueCommand({
-      cmd: 'app_view_crash',
-      app: report.app,
-      view: report.view,
-      version_id: report.versionId,
-      tile_id: report.tileId,
-      error: report.error,
-    });
-  }, [sendOrQueueCommand]);
-
-  const sendAppCommand = useCallback((app: string, command: string, payload?: unknown): Promise<unknown> => {
-    return sendRequest<AppCommandResult>(
-      'app_command',
-      {
-        app,
-        command,
-        ...(payload === undefined ? {} : { payload: JSON.stringify(payload) }),
-      },
-      `${app} did not answer the command “${command}”`,
-      APP_COMMAND_TIMEOUT_MS,
-    ).then((result) => result.value);
-  }, [sendRequest]);
 
   const sendPtyResize = useCallback((
     id: string,
@@ -5517,8 +5471,6 @@ export function useDaemonSocket({
     sendTerminalPointerActivity,
     sendSetClientPresence,
     sendSetTerminalTheme,
-    sendAppViewCrash,
-    sendAppCommand,
     subscribeDocuments,
     isRuntimeAttached,
     sendGetFileDiff,

@@ -197,9 +197,6 @@ func main() {
 	case "doc":
 		maybePrintInstanceBanner()
 		runDoc()
-	case "app":
-		maybePrintInstanceBanner()
-		runApp()
 	case "automode":
 		maybePrintInstanceBanner()
 		runAutoMode()
@@ -666,7 +663,6 @@ commands:
   crew <command>                    the crew roster: who exists, who is awake
   handoff -m "<letter>"             file this crew member's letter; the day turns over
   doc <command>                     document store: collections, documents, live queries
-  app <command>                     apps: list, status, enable, disable, remove
   vision-check <image> <question>   answer a question about an image (single LLM call)
   daemon <command>                  manage the daemon
 	  daemon ensure|stop                ensure the daemon is running, or stop it

@@ -104,14 +104,6 @@ func (d *Daemon) startJobQueueWithStore(queueStore jobs.Store) error {
 		); err != nil {
 			d.logf("session activity: register scan tick: %v", err)
 		}
-		if err := runner.RegisterCron(
-			appInvocationRetentionKind,
-			appInvocationRetentionInterval,
-			d.appInvocationRetentionHandler,
-			jobs.HandlerConfig{Timeout: appInvocationRetentionTimeout},
-		); err != nil {
-			d.logf("apps: register invocation retention tick: %v", err)
-		}
 		if age := d.busPinAlarmAge(); age > 0 {
 			if err := runner.RegisterCron(
 				busPinAlarmKind,

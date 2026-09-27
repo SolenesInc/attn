@@ -80,11 +80,6 @@ jobs:
               - '.oxlintrc.json'
               - 'plugins/**'
               - 'app/pnpm-workspace.yaml'
-              # The app SDK is a workspace package of the frontend and the source
-              # its committed declarations are emitted from, so an edit to either
-              # has to reach the typecheck and the drift check.
-              - 'sdk/attn-app/**'
-              - 'internal/appbuild/sdkdist/**'
               - 'internal/protocol/schema/**'
               - '.github/workflows/ci.yml'
               - '.tool-versions'
@@ -128,7 +123,6 @@ jobs:
               - 'internal/daemon/plugin_*'
             app_acceptance:
               - 'app/**'
-              - 'apphost/**'
               - 'cmd/**'
               - 'internal/**'
               - 'plugins/**'
@@ -158,13 +152,11 @@ jobs:
               - 'go.sum'
               - 'cmd/**'
               - 'internal/**'
-              - 'apphost/**'
               - 'pty-host/**'
               - 'ghostty-vt.pin'
               - 'ghostty-vt-native.lock'
               - 'scripts/rust-zig-linker.sh'
               - 'scripts/rust-zig-ar.sh'
-              - 'scripts/build-app-runtime-host.sh'
               - '.github/actions/setup-toolchains/**'
   changelog:
     name: Changelog
@@ -302,9 +294,7 @@ jobs:
         id: bun
         run: echo "version=$(awk '/^bun / { print $2 }' .tool-versions)" >> "$GITHUB_OUTPUT"
 
-      # internal/appbuild typechecks and bundles an app with the real toolchain.
-      # Without bun those tests skip themselves, so CI would go green on a
-      # pipeline it never ran.
+      # Bundled Pi and plugin runtime checks need the pinned Bun toolchain.
       - name: Set up bun
         uses: oven-sh/setup-bun@v2
         with:
@@ -441,13 +431,6 @@ jobs:
 
       - name: Lint
         run: pnpm run lint
-
-      # The declarations the attn binary embeds are emitted from sdk/attn-app by
-      # the same TypeScript this job just installed. Committed, so //go:embed can
-      # read them — and therefore able to go stale.
-      - name: Check app SDK declarations
-        working-directory: .
-        run: make check-sdk
 
       - name: Test
         run: pnpm test

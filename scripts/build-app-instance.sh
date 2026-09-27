@@ -77,10 +77,6 @@ cp "$pty_host" "app/src-tauri/binaries/attn-pty-host-${host_triple}"
 # available in the catalog; the daemon still requires a per-instance opt-in.
 bash ./scripts/build-bundled-plugins.sh
 
-# The shared app runtime, compiled the same way and for the same reason: a
-# GUI-spawned daemon cannot resolve bun on a developer PATH.
-bash ./scripts/build-app-runtime-host.sh
-
 cd app
 pnpm install
 
@@ -149,7 +145,6 @@ if [ "$(uname -s)" != "Darwin" ]; then
   cp "$attn" "${tree_dir}/bin/attn"
   cp "$pty_host" "${tree_dir}/bin/attn-pty-host"
   cp -R app/src-tauri/bundled-plugins "${tree_dir}/resources/plugins"
-  cp -R app/src-tauri/app-runtime "${tree_dir}/resources/app-runtime"
   write_build_identity "${tree_dir}/resources/build-identity.json"
   echo ">>> Built $tree_dir"
   exit 0
@@ -171,7 +166,7 @@ if [ "$(uname -s)" = "Darwin" ]; then
   if [ -z "$identity" ]; then identity="-"; fi
   while IFS= read -r executable; do
     codesign --force --sign "$identity" "$executable"
-  done < <(find "${bundle_dir}/Contents/Resources/plugins" "${bundle_dir}/Contents/Resources/app-runtime" -type f -perm -111 2>/dev/null | sort)
+  done < <(find "${bundle_dir}/Contents/Resources/plugins" -type f -perm -111 2>/dev/null | sort)
   codesign --force --sign "$identity" "${bundle_dir}/Contents/MacOS/attn"
   codesign --force --sign "$identity" "${bundle_dir}/Contents/MacOS/attn-pty-host"
   codesign --force --sign "$identity" "${bundle_dir}"

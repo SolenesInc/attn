@@ -1,4 +1,4 @@
-.PHONY: git-hooks lint lint-go lint-frontend run build build-linux-amd64 build-linux-arm64 build-pty-host build-pty-host-linux-amd64 build-pty-host-linux-arm64 build-app-runtime-host build-app-runtime-host-linux-amd64 build-app-runtime-host-linux-arm64 publish-native-vt publish-ghostty-vt-wasm install install-staged install-daemon install-dev install-daemon-dev install-window-recorder dev build-default-instance-harness verify-ghostty-vt-wasm test test-scripts test-v test-watch test-frontend test-e2e clean generate-types ensure-go-jsonschema check-types generate-sdk check-sdk build-app ensure-codesign-identity sign-app app-screenshot dist release release-hotfix
+.PHONY: git-hooks lint lint-go lint-frontend run build build-linux-amd64 build-linux-arm64 build-pty-host build-pty-host-linux-amd64 build-pty-host-linux-arm64 publish-native-vt publish-ghostty-vt-wasm install install-staged install-daemon install-dev install-daemon-dev install-window-recorder dev build-default-instance-harness verify-ghostty-vt-wasm test test-scripts test-v test-watch test-frontend test-e2e clean generate-types ensure-go-jsonschema check-types build-app ensure-codesign-identity sign-app app-screenshot dist release release-hotfix
 
 # Bare `make` does the full prod inner loop: install + open the app.
 # `make install` is install-only (for scripts/CI that drive the launch
@@ -142,32 +142,15 @@ build-pty-host: pty-host/Cargo.toml pty-host/Cargo.lock pty-host/build.rs $(wild
 # the target GOOS/GOARCH + zig as the cgo cross-compiler: passing them on the
 # sub-make command line exports them, so the sub-make's `go env` resolves the
 # Linux archive dependency (download-first) before the cross cgo link.
-# The daemon's Linux targets carry the app runtime host with them. A daemon that
-# runs on a Linux remote and cannot start its runtime there is a silently
-# darwin-only platform, so the two travel together rather than by convention.
-build-linux-amd64: build-app-runtime-host-linux-amd64 build-pty-host-linux-amd64
+build-linux-amd64: build-pty-host-linux-amd64
 	$(MAKE) build GOOS=linux GOARCH=amd64 CGO_ENABLED=1 \
 		CC='$(ZIG) cc -target x86_64-linux-gnu' \
 		CXX='$(ZIG) c++ -target x86_64-linux-gnu'
 
-build-linux-arm64: build-app-runtime-host-linux-arm64 build-pty-host-linux-arm64
+build-linux-arm64: build-pty-host-linux-arm64
 	$(MAKE) build GOOS=linux GOARCH=arm64 CGO_ENABLED=1 \
 		CC='$(ZIG) cc -target aarch64-linux-gnu' \
 		CXX='$(ZIG) c++ -target aarch64-linux-gnu'
-
-# attn's shared app runtime: a bun --compile standalone binary, per platform. The
-# native build stages into the Tauri resource dir so the next app build collects
-# it; the cross builds stage under dist/ for a remote install to pick up.
-APP_RUNTIME_HOST_DIR ?= app/src-tauri/app-runtime
-
-build-app-runtime-host:
-	bash ./scripts/build-app-runtime-host.sh $(APP_RUNTIME_HOST_DIR)
-
-build-app-runtime-host-linux-amd64:
-	bash ./scripts/build-app-runtime-host.sh dist/app-runtime/linux_amd64 bun-linux-x64
-
-build-app-runtime-host-linux-arm64:
-	bash ./scripts/build-app-runtime-host.sh dist/app-runtime/linux_arm64 bun-linux-arm64
 
 build-pty-host-linux-amd64: third_party/ghostty-vt/linux_amd64/lib/libghostty-vt.a
 	@mkdir -p dist/pty-host/linux_amd64
@@ -445,25 +428,6 @@ generate-types: ensure-go-jsonschema
 # reproduce a drift failure locally.
 check-types: generate-types
 	git diff --exit-code internal/protocol/generated.go app/src/types/generated.ts
-
-# The app SDK's declarations. sdk/attn-app is the one TypeScript source; the
-# binary carries its .d.ts so `attn app apply` can materialize a types-only
-# package with no npm. `//go:embed` reads files from the Go tree, which is why
-# the emit lands in internal/appbuild/sdkdist and is committed.
-generate-sdk:
-	pnpm --dir app exec tsc -p ../sdk/attn-app/tsconfig.json
-
-# Same caveat as check-types: it flags *committed* drift, so commit a hand-edit
-# before trying to reproduce a failure locally. `git status` rather than
-# `git diff`, so a declaration the emit newly produces fails here instead of
-# passing as an untracked file nobody embeds.
-check-sdk: generate-sdk
-	@out=$$(git status --porcelain -- internal/appbuild/sdkdist); \
-	if [ -n "$$out" ]; then \
-		echo "internal/appbuild/sdkdist is stale — run make generate-sdk and commit:"; \
-		echo "$$out"; \
-		exit 1; \
-	fi
 
 # Build the packaged app for $(INSTANCE) (empty = prod). All bundle metadata is
 # derived from `attn instance resolve` by scripts/build-app-instance.sh: the

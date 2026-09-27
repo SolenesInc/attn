@@ -177,13 +177,13 @@ describe('App event bus settings', () => {
       pin_alarm_seconds: 90,
       consumers: [
         consumer({ name: 'ordinary', holds_retention_floor: true, lag: 12 }),
-        consumer({ name: 'app:ticketwatch', holds_retention_floor: true, pin_alarm: true, pinned_bytes: 31_000, lag: 41000 }),
+        consumer({ name: 'ticketwatch', holds_retention_floor: true, pin_alarm: true, pinned_bytes: 31_000, lag: 41000 }),
       ],
     });
 
     expect(screen.getByTestId('bus-consumer-ordinary')).toHaveTextContent('Retention floor');
     expect(screen.getByTestId('bus-consumer-ordinary')).not.toHaveTextContent('Pinning');
-    const alarming = screen.getByTestId('bus-consumer-app:ticketwatch');
+    const alarming = screen.getByTestId('bus-consumer-ticketwatch');
     expect(alarming).toHaveTextContent('Pinning 30.3 KB');
     expect(alarming).not.toHaveTextContent('Retention floor');
     expect(alarming.querySelector('.settings-pill.bad')?.getAttribute('title')).toContain('longer than 1m30s');
@@ -232,4 +232,3 @@ describe('App event bus settings', () => {
     expect(screen.getByTestId('bus-producers')).toBeInTheDocument();
   });
 });
-

@@ -18,7 +18,7 @@ import (
 )
 
 const (
-	gateNS   = "app/approval-gate"
+	gateNS   = "test/approval-gate"
 	requests = "requests"
 )
 

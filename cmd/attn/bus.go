@@ -47,8 +47,7 @@ commands:
         filter, enabled bit, and lag (head - cursor, plus how long its oldest
         unread event has waited); and what is wrong with any of it.
 
-        Whichever enabled consumer or installed app consumer sits lowest is
-        tagged "(retention floor)".
+        Whichever enabled consumer sits lowest is tagged "(retention floor)".
         Once it has held that position past the alarm's tripwire it is tagged
         "(PINNING <size>)" instead, and the same crossing writes a warning
         notification — the log is growing for as long as that lasts.
@@ -62,7 +61,7 @@ commands:
         run one retention pass now instead of waiting for the daemon's hourly
         tick: drop events past the age window, and reduce the compactable fact
         classes to the newest event per subject. Both stop at the cursor floor,
-        so nothing an enabled consumer or installed app has yet to read is
+        so nothing an enabled consumer has yet to read is
         removed — a lagging consumer pins the log, and bus status shows the lag.
 
         ATTN_BUS_RETENTION moves the age window (a duration). It is thirty days
@@ -73,9 +72,7 @@ commands:
 
   disable <consumer>
         stop delivering to a consumer. Its cursor is preserved, but a disabled
-        ordinary consumer no longer holds the retention window open. An
-        installed app consumer retains its unread facts until the app is enabled
-        or uninstalled.
+        consumer no longer holds the retention window open.
 
   enable <consumer>
         resume delivery from wherever the consumer's cursor stands.

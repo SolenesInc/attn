@@ -40,8 +40,7 @@
     },
     "externalBin": ["binaries/attn", "binaries/attn-pty-host"],
     "resources": {
-      "bundled-plugins/": "plugins/",
-      "app-runtime/": "app-runtime/"
+      "bundled-plugins/": "plugins/"
     },
     "icon": [
       "icons/32x32.png",

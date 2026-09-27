@@ -8,7 +8,7 @@ stage_root="${1:-${repo_root}/app/src-tauri/bundled-plugins}"
 
 # Set, not inherited: a work machine commonly exports NPM_CONFIG_REGISTRY for a
 # corporate mirror, and every public package a bundled plugin pins then comes
-# back 401. ATTN_NPM_REGISTRY overrides it, matching internal/appbuild.
+# back 401. ATTN_NPM_REGISTRY overrides it.
 export NPM_CONFIG_REGISTRY="${ATTN_NPM_REGISTRY:-https://registry.npmjs.org/}"
 unset npm_config_registry
 

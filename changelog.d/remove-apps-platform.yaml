@@ -1,0 +1,4 @@
+kind: changed
+area: platform
+change: Retired the unused apps platform, including its runtime, SDK, CLI commands, and custom views.
+symptom: The unused extension machinery increased install size and maintenance cost without serving an active workflow.

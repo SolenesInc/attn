@@ -1,57 +1,6 @@
 package daemon
 
-import (
-	"time"
-
-	"github.com/victorarias/attn/internal/protocol"
-	"github.com/victorarias/attn/internal/store"
-)
-
-type appTicketRow struct {
-	ID           string `json:"id"`
-	Title        string `json:"title"`
-	Status       string `json:"status"`
-	Assignee     string `json:"assignee"`
-	Cwd          string `json:"cwd"`
-	LastAgentID  string `json:"last_agent_id"`
-	UpdatedAt    string `json:"updated_at"`
-	ClosedAt     string `json:"closed_at,omitempty"`
-	ReconciledAt string `json:"reconciled_at,omitempty"`
-}
-
-func (d *Daemon) appTicketRows() []appTicketRow {
-	if d.store == nil {
-		return nil
-	}
-	rows, err := d.store.ListTickets(store.TicketListFilter{})
-	if err != nil {
-		d.logf("list tickets: %v", err)
-		return nil
-	}
-	out := make([]appTicketRow, 0, len(rows))
-	for _, t := range rows {
-		if t == nil {
-			continue
-		}
-		row := appTicketRow{
-			ID:          t.ID,
-			Title:       t.Title,
-			Status:      string(t.Status),
-			Assignee:    t.Assignee,
-			Cwd:         t.Cwd,
-			LastAgentID: t.LastAgentID,
-			UpdatedAt:   t.UpdatedAt.Format(time.RFC3339),
-		}
-		if t.ClosedAt != nil {
-			row.ClosedAt = t.ClosedAt.Format(time.RFC3339)
-		}
-		if t.ReconciledAt != nil {
-			row.ReconciledAt = t.ReconciledAt.Format(time.RFC3339)
-		}
-		out = append(out, row)
-	}
-	return out
-}
+import "github.com/victorarias/attn/internal/protocol"
 
 type currentStateProjection struct {
 	Sessions    []protocol.Session
@@ -61,10 +10,8 @@ type currentStateProjection struct {
 	Repos       []protocol.RepoState
 	Authors     []protocol.AuthorState
 	GithubHosts []string
-	Tickets     []appTicketRow
 	Seeds       []protocol.Seed
 	Crew        []protocol.CrewMember
-	Apps        []protocol.AppRegistryEntry
 }
 
 func (d *Daemon) currentStateProjection() currentStateProjection {
@@ -76,53 +23,7 @@ func (d *Daemon) currentStateProjection() currentStateProjection {
 		Repos:       protocol.RepoStatesToValues(d.store.ListRepoStates()),
 		Authors:     protocol.AuthorStatesToValues(d.store.ListAuthorStates()),
 		GithubHosts: d.gitHubHosts(),
-		Tickets:     d.appTicketRows(),
 		Seeds:       d.seedsForBroadcast(),
 		Crew:        d.crewForBroadcast(),
-		Apps:        d.appRegistryForWire(),
 	}
-}
-
-type appCurrentStateSnapshot struct {
-	AsOfSeq     int64                       `json:"asOfSeq"`
-	Sessions    []protocol.Session          `json:"sessions"`
-	Endpoints   []protocol.EndpointInfo     `json:"endpoints"`
-	Workspaces  []protocol.Workspace        `json:"workspaces"`
-	Prs         []protocol.PR               `json:"prs"`
-	Repos       []protocol.RepoState        `json:"repos"`
-	Authors     []protocol.AuthorState      `json:"authors"`
-	GithubHosts []string                    `json:"githubHosts"`
-	Tickets     []appTicketRow              `json:"tickets"`
-	Seeds       []protocol.Seed             `json:"seeds"`
-	Crew        []protocol.CrewMember       `json:"crew"`
-	Apps        []protocol.AppRegistryEntry `json:"apps"`
-}
-
-func (d *Daemon) appCurrentStateSnapshot() (appCurrentStateSnapshot, error) {
-	_, head, err := d.store.BusBounds()
-	if err != nil {
-		return appCurrentStateSnapshot{}, err
-	}
-	state := d.currentStateProjection()
-	return appCurrentStateSnapshot{
-		AsOfSeq:     head,
-		Sessions:    snapshotSlice(state.Sessions),
-		Endpoints:   snapshotSlice(state.Endpoints),
-		Workspaces:  snapshotSlice(state.Workspaces),
-		Prs:         snapshotSlice(state.Prs),
-		Repos:       snapshotSlice(state.Repos),
-		Authors:     snapshotSlice(state.Authors),
-		GithubHosts: snapshotSlice(state.GithubHosts),
-		Tickets:     snapshotSlice(state.Tickets),
-		Seeds:       snapshotSlice(state.Seeds),
-		Crew:        snapshotSlice(state.Crew),
-		Apps:        snapshotSlice(state.Apps),
-	}, nil
-}
-
-func snapshotSlice[T any](values []T) []T {
-	if values == nil {
-		return []T{}
-	}
-	return values
 }
