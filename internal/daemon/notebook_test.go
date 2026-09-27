@@ -37,9 +37,6 @@ func TestNotebookWatcherFollowsRootChange(t *testing.T) {
 	rootB := t.TempDir()
 	client := &wsClient{send: make(chan outboundMessage, 64)}
 	d.wsHub.clients[client] = true
-	hubStopped := make(chan struct{})
-	t.Cleanup(func() { close(hubStopped) })
-	go d.wsHub.runUntil(hubStopped)
 
 	listNotebook(t, d)
 	d.store.SetSetting(SettingNotebookRoot, rootB)

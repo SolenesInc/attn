@@ -24,17 +24,18 @@ import (
 )
 
 type wsClient struct {
-	conn        *websocket.Conn
-	rawConn     net.Conn
-	send        chan outboundMessage
-	recv        chan []byte
-	slowCount   int
-	writing     atomic.Bool
-	sendMu      sync.RWMutex
-	sendClosed  bool
-	closeCode   websocket.StatusCode
-	closeReason string
-	connectedAt time.Time
+	conn         *websocket.Conn
+	rawConn      net.Conn
+	send         chan outboundMessage
+	streamSlots  chan struct{}
+	controlSlots chan struct{}
+	recv         chan []byte
+	writing      atomic.Bool
+	sendMu       sync.RWMutex
+	sendClosed   bool
+	closeCode    websocket.StatusCode
+	closeReason  string
+	connectedAt  time.Time
 
 	trustedTauriOrigin       bool
 	browserHostAuthenticated bool
@@ -150,7 +151,7 @@ func (c *wsClient) closeSendChannel() {
 	c.closeSendChannelWithStatus(websocket.StatusNormalClosure, "")
 }
 
-func (c *wsClient) closeSendChannelWithStatus(code websocket.StatusCode, reason string) {
+func (c *wsClient) closeSendChannelWithStatus(code websocket.StatusCode, reason string) bool {
 	c.sendMu.Lock()
 	defer c.sendMu.Unlock()
 	if c.closeCode == 0 {
@@ -158,10 +159,11 @@ func (c *wsClient) closeSendChannelWithStatus(code websocket.StatusCode, reason 
 		c.closeReason = reason
 	}
 	if c.sendClosed {
-		return
+		return false
 	}
 	c.sendClosed = true
 	close(c.send)
+	return true
 }
 
 func (c *wsClient) closeStatus() (websocket.StatusCode, string) {
@@ -173,42 +175,55 @@ func (c *wsClient) closeStatus() (websocket.StatusCode, string) {
 	return c.closeCode, c.closeReason
 }
 
-func (c *wsClient) trySend(message outboundMessage) bool {
-	c.sendMu.RLock()
-	defer c.sendMu.RUnlock()
-	if c.sendClosed {
-		return false
+func (c *wsClient) lane(message outboundMessage) chan struct{} {
+	if message.stream {
+		return c.streamSlots
 	}
-	select {
-	case c.send <- message:
-		return true
-	default:
-		return false
-	}
+	return c.controlSlots
 }
 
-func (c *wsClient) sendWithWait(message outboundMessage, wait time.Duration) bool {
-	c.sendMu.RLock()
-	defer c.sendMu.RUnlock()
-	if c.sendClosed {
-		return false
-	}
-	if wait <= 0 {
+func (c *wsClient) offer(message outboundMessage) (queued, full bool) {
+	slots := c.lane(message)
+	if slots != nil {
 		select {
-		case c.send <- message:
-			return true
+		case slots <- struct{}{}:
 		default:
+			return false, !c.sendChannelClosed()
+		}
+	}
+	return c.push(message, slots)
+}
+
+func (c *wsClient) sendStream(message outboundMessage, wait time.Duration) bool {
+	message.stream = true
+	if c.streamSlots != nil {
+		timer := time.NewTimer(wait)
+		defer timer.Stop()
+		select {
+		case c.streamSlots <- struct{}{}:
+		case <-timer.C:
 			return false
 		}
 	}
-	timer := time.NewTimer(wait)
-	defer timer.Stop()
-	select {
-	case c.send <- message:
-		return true
-	case <-timer.C:
-		return false
+	queued, _ := c.push(message, c.streamSlots)
+	return queued
+}
+
+func (c *wsClient) push(message outboundMessage, slots chan struct{}) (queued, full bool) {
+	c.sendMu.RLock()
+	defer c.sendMu.RUnlock()
+	if !c.sendClosed {
+		select {
+		case c.send <- message:
+			return true, false
+		default:
+			full = true
+		}
 	}
+	if slots != nil {
+		<-slots
+	}
+	return false, full
 }
 
 func (c *wsClient) stopGitStatusPoll() {
@@ -347,12 +362,12 @@ const (
 type outboundMessage struct {
 	kind    messageKind
 	payload []byte
+	stream  bool
 }
 
 type wsHub struct {
 	clients           map[*wsClient]bool
 	connections       map[*wsClient]struct{}
-	broadcast         chan outboundMessage
 	mu                sync.RWMutex
 	stopped           bool
 	evictions         map[string]evictionRecord
@@ -363,7 +378,8 @@ type wsHub struct {
 }
 
 const (
-	maxSlowCount                     = 3
+	streamQueueSlots                 = 256
+	controlQueueSlots                = 256
 	slowClientCloseReason            = "client too slow"
 	maxPTYDimValue                   = 65535
 	maxPTYPixelValue                 = 65535
@@ -376,7 +392,6 @@ func newWSHub() *wsHub {
 	return &wsHub{
 		clients:     make(map[*wsClient]bool),
 		connections: make(map[*wsClient]struct{}),
-		broadcast:   make(chan outboundMessage, 256),
 		logf:        func(format string, args ...interface{}) {},
 	}
 }
@@ -394,36 +409,6 @@ func previewBinaryForLog(data []byte) string {
 	preview = strings.ReplaceAll(preview, "\r", "\\r")
 	preview = strings.ReplaceAll(preview, "\t", "\\t")
 	return preview
-}
-
-func (h *wsHub) runUntil(done <-chan struct{}) {
-	for {
-		select {
-		case <-done:
-			return
-		case message := <-h.broadcast:
-			h.mu.Lock()
-			var toRemove []*wsClient
-			for client := range h.clients {
-				if client.trySend(message) {
-					client.slowCount = 0
-				} else {
-					client.slowCount++
-					if client.slowCount >= maxSlowCount {
-						h.logf("WebSocket client too slow (%d missed), disconnecting", client.slowCount)
-						toRemove = append(toRemove, client)
-					} else {
-						h.logf("WebSocket client slow (%d/%d missed)", client.slowCount, maxSlowCount)
-					}
-				}
-			}
-			for _, client := range toRemove {
-				delete(h.clients, client)
-				h.evict(client, slowClientCloseReason)
-			}
-			h.mu.Unlock()
-		}
-	}
 }
 
 func (h *wsHub) closeAll() {
@@ -497,35 +482,30 @@ func (h *wsHub) SendValueToMatchingClients(message interface{}, match func(*wsCl
 }
 
 func (h *wsHub) SendRawTextToMatchingClients(payload []byte, match func(*wsClient) bool) {
-	if len(payload) == 0 {
+	h.sendToMatchingClients(outboundMessage{kind: messageKindText, payload: payload}, match)
+}
+
+func (h *wsHub) sendToMatchingClients(message outboundMessage, match func(*wsClient) bool) {
+	if len(message.payload) == 0 {
 		return
 	}
-	cloned := append([]byte(nil), payload...)
-	message := outboundMessage{kind: messageKindText, payload: cloned}
-
+	message.payload = append([]byte(nil), message.payload...)
 	h.mu.Lock()
-	var toRemove []*wsClient
+	defer h.mu.Unlock()
 	for client := range h.clients {
-		if match != nil && !match(client) {
-			continue
-		}
-		if client.trySend(message) {
-			client.slowCount = 0
-			continue
-		}
-		client.slowCount++
-		if client.slowCount >= maxSlowCount {
-			h.logf("WebSocket client too slow (%d missed), disconnecting", client.slowCount)
-			toRemove = append(toRemove, client)
-		} else {
-			h.logf("WebSocket client slow (%d/%d missed)", client.slowCount, maxSlowCount)
+		if match == nil || match(client) {
+			h.deliver(client, message)
 		}
 	}
-	for _, client := range toRemove {
-		delete(h.clients, client)
+}
+
+func (h *wsHub) deliver(client *wsClient, message outboundMessage) bool {
+	queued, full := client.offer(message)
+	if full && client.conn != nil {
+		h.logf("WebSocket client stopped draining its %d queued messages, disconnecting", len(client.send))
 		h.evict(client, slowClientCloseReason)
 	}
-	h.mu.Unlock()
+	return queued
 }
 
 func (h *wsHub) ForEachClient(fn func(*wsClient)) {
@@ -577,12 +557,7 @@ func (h *wsHub) broadcastValue(message interface{}) {
 		h.logf("WebSocket broadcast marshal error: %v", err)
 		return
 	}
-	out := outboundMessage{kind: messageKindText, payload: data}
-	select {
-	case h.broadcast <- out:
-	default:
-		h.logf("WebSocket broadcast channel full, dropping outbound message")
-	}
+	h.sendToMatchingClients(outboundMessage{kind: messageKindText, payload: data}, nil)
 }
 
 func (h *wsHub) ClientCount() int {
@@ -700,7 +675,9 @@ func (d *Daemon) handleWS(w http.ResponseWriter, r *http.Request) {
 	client := &wsClient{
 		conn:               conn,
 		rawConn:            rawConnFrom(r.Context()),
-		send:               make(chan outboundMessage, 256),
+		send:               make(chan outboundMessage, streamQueueSlots+controlQueueSlots),
+		streamSlots:        make(chan struct{}, streamQueueSlots),
+		controlSlots:       make(chan struct{}, controlQueueSlots),
 		recv:               make(chan []byte, 256),
 		connectedAt:        time.Now(),
 		trustedTauriOrigin: isTrustedTauriOrigin(origin),
@@ -788,6 +765,9 @@ func (d *Daemon) wsWritePump(client *wsClient) {
 	}()
 
 	for message := range client.send {
+		if slots := client.lane(message); slots != nil {
+			<-slots
+		}
 		ctx, cancel := context.WithTimeout(context.Background(), writeTimeout)
 		wsType := websocket.MessageText
 		if message.kind != messageKindText {
@@ -809,11 +789,15 @@ func (d *Daemon) wsWritePump(client *wsClient) {
 }
 
 func (d *Daemon) sendOutbound(client *wsClient, message outboundMessage) bool {
-	return client.trySend(message)
+	if d.wsHub == nil {
+		queued, _ := client.offer(message)
+		return queued
+	}
+	return d.wsHub.deliver(client, message)
 }
 
-func (d *Daemon) sendOutboundBlocking(client *wsClient, message outboundMessage, wait time.Duration) bool {
-	return client.sendWithWait(message, wait)
+func (d *Daemon) sendStream(client *wsClient, message outboundMessage) bool {
+	return client.sendStream(message, ptyOutputSendWait)
 }
 
 func (d *Daemon) wsMsgPump(client *wsClient) {
@@ -1864,7 +1848,7 @@ func (d *Daemon) broadcastRawWSMessage(payload []byte) {
 			d.wsHub.BroadcastRawText(payload)
 			return
 		}
-		d.wsHub.SendRawTextToMatchingClients(payload, func(client *wsClient) bool {
+		d.wsHub.sendToMatchingClients(outboundMessage{kind: messageKindText, payload: payload, stream: true}, func(client *wsClient) bool {
 			return client.wantsRemoteAttachTraffic(envelope.ID)
 		})
 		return
