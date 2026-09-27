@@ -35,8 +35,7 @@ type Kit struct {
 	nextBoot chan struct{}
 	fakes    []*fake
 	failures []string
-
-	headlessTasks int
+	headless chan *HeadlessTask
 }
 
 type fake struct {
@@ -81,7 +80,11 @@ func Install(t testing.TB, dir string, harnesses []Harness, wrapper string) *Kit
 	if err != nil {
 		t.Fatal(err)
 	}
-	k := &Kit{t: t, cfg: cfg, control: listener, launches: map[string]chan *Run{}}
+	k := &Kit{
+		t: t, cfg: cfg, control: listener,
+		launches: map[string]chan *Run{},
+		headless: make(chan *HeadlessTask, headlessTaskBacklog),
+	}
 	go k.accept()
 	t.Cleanup(k.verify)
 	return k
@@ -172,6 +175,9 @@ func (k *Kit) accept() {
 		}
 		f := &fake{}
 		f.peer = newRPCPeer(conn, func(_ *rpcPeer, method string, params json.RawMessage) (any, error) {
+			if method == methodHeadless {
+				return k.receiveHeadlessTask(f, params)
+			}
 			return struct{}{}, k.handle(f, method, params)
 		})
 		f.peer.start()
@@ -216,10 +222,6 @@ func (k *Kit) handle(f *fake, method string, params json.RawMessage) error {
 			return err
 		}
 		k.fail(fmt.Sprintf("%s (argv %q)", unexpected.Reason, unexpected.Argv))
-	case methodHeadless:
-		k.mu.Lock()
-		k.headlessTasks++
-		k.mu.Unlock()
 	case methodExiting:
 		var exit exitParams
 		if err := json.Unmarshal(params, &exit); err != nil {
@@ -272,6 +274,7 @@ func (k *Kit) verify() {
 			_ = syscall.Kill(f.Pid, syscall.SIGKILL)
 		}
 	}
+	k.failUnansweredHeadlessTasks()
 	_ = k.control.Close()
 	for _, f := range fakes {
 		f.peer.close()

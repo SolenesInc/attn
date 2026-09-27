@@ -2,6 +2,7 @@ package daemon
 
 import (
 	"context"
+	"encoding/json"
 	"os"
 	"path/filepath"
 	"strings"
@@ -11,6 +12,7 @@ import (
 	agentdriver "github.com/victorarias/attn/internal/agent"
 
 	"github.com/victorarias/attn/internal/garden"
+	"github.com/victorarias/attn/internal/jobs"
 	"github.com/victorarias/attn/internal/store"
 )
 
@@ -139,5 +141,18 @@ func TestReconcilingADeathReplantsTheTicketIntoTheGarden(t *testing.T) {
 	ticket, err := d.store.GetTicket("wire-the-thing")
 	if err != nil || ticket == nil || ticket.ArchivedAt != nil || ticket.Status != store.TicketStatusCrashed {
 		t.Fatalf("recovery rewrote the reconciled legacy ticket: %+v (%v)", ticket, err)
+	}
+}
+
+func reconcileTask(in ticketReconcileInputs) *jobs.Job {
+	payload, err := json.Marshal(in)
+	if err != nil {
+		panic("marshal reconcile inputs: " + err.Error())
+	}
+	return &jobs.Job{
+		ID:        "job-" + in.TicketID,
+		Kind:      reconcileKind,
+		UniqueKey: in.TicketID,
+		Payload:   payload,
 	}
 }

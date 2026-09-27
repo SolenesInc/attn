@@ -48,6 +48,7 @@ const (
 	methodHalt       = "halt"
 	methodDeny       = "deny"
 	methodExit       = "exit"
+	methodStopRead   = "stop_reading_terminal"
 	signalExitBase   = 128
 )
 
@@ -304,6 +305,8 @@ func (a *agent) handle(_ *rpcPeer, method string, params json.RawMessage) (any, 
 		a.turn.Lock()
 		defer a.turn.Unlock()
 		return struct{}{}, guard.deny(denial)
+	case methodStopRead:
+		return struct{}{}, a.term.stopReading()
 	case methodExit:
 		var p exitParams
 		if err := json.Unmarshal(params, &p); err != nil {

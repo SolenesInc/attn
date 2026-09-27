@@ -32,15 +32,6 @@ func readNotebookWSEvent(t *testing.T, ch chan outboundMessage, target any) {
 	}
 }
 
-func addIdleNotebookSession(d *Daemon, id string, state protocol.SessionState) {
-	now := string(protocol.TimestampNow())
-	d.store.Add(&protocol.Session{
-		ID: id, Label: id, Agent: protocol.SessionAgentClaude,
-		Directory: "/tmp/" + id, WorkspaceID: "workspace-" + id,
-		State: state, StateSince: now, StateUpdatedAt: now, LastSeen: now,
-	})
-}
-
 func TestNotebookRootFollowsTheSettingAndFallsBackToTheDefault(t *testing.T) {
 	home, err := os.UserHomeDir()
 	if err != nil {

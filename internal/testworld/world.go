@@ -180,6 +180,11 @@ func (w *World) Launched(sessionID string) *fakeagent.Run {
 	return w.kit.Launched(sessionID)
 }
 
+func (w *World) HeadlessTask() *fakeagent.HeadlessTask {
+	w.T.Helper()
+	return w.kit.HeadlessTask()
+}
+
 func (w *World) HoldNextBoot() (boot func()) {
 	return w.kit.HoldNextBoot()
 }

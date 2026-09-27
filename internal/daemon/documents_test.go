@@ -69,7 +69,3 @@ func deleteDoc(t *testing.T, d *Daemon, id string) bool {
 	}
 	return resp.DocDeleteResult.Existed
 }
-
-func testQuery() protocol.DocumentQuery {
-	return protocol.DocumentQuery{Namespace: testDocNS, Collection: testDocColl}
-}

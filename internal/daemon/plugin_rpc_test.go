@@ -80,14 +80,6 @@ func startPluginPipeGeneration(t *testing.T, d *Daemon, name string, surfaces []
 	return clientConn, done
 }
 
-func sendPluginHello(t *testing.T, conn net.Conn, name string) {
-	sendPluginHelloWithSurfaces(t, conn, name, nil)
-}
-
-func sendPluginHelloWithSurfaces(t *testing.T, conn net.Conn, name string, surfaces []string) {
-	sendPluginHelloWithGeneration(t, conn, name, surfaces, 1)
-}
-
 func sendPluginHelloWithGeneration(t *testing.T, conn net.Conn, name string, surfaces []string, generation uint64) {
 	t.Helper()
 	params, err := json.Marshal(pluginHelloParams{

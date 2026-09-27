@@ -1,6 +1,9 @@
 package main_test
 
 import (
+	"os/exec"
+	"path/filepath"
+	"regexp"
 	"strings"
 	"testing"
 
@@ -93,6 +96,18 @@ func TestAutoModeRecordsRuleProposalsFromTheirTokensAndListsDenials(t *testing.T
 	requireStdout(t, shown, "pending proposals (promote them in the attn app):\n",
 		"allow, bypass sandbox: git push origin", "allow, bypass sandbox: git fetch origin",
 		"prompt, inherit sandbox: git rebase", "allow, inherit sandbox: cargo test", "allow, inherit sandbox: go vet")
+	if !regexp.MustCompile(`(?m)^  trusted_repo +\(unset: `).MatchString(shown.Stdout) {
+		t.Errorf("outside a repository automode show offers a trusted_repo:\n%s", shown.Stdout)
+	}
+	widgets := s.Path("widgets")
+	gitRepo(t, widgets)
+	for _, remote := range [][]string{{"origin", "git@github.com:acme/widgets.git"}, {"upstream", "https://github.com/upstream-org/widgets"}} {
+		if out, err := exec.Command("git", "-C", widgets, "remote", "add", remote[0], remote[1]).CombinedOutput(); err != nil {
+			t.Fatalf("git remote add %s: %v: %s", remote[0], err, out)
+		}
+	}
+	inRepo := s.Run(testworld.Invocation{Args: []string{"automode", "show"}, Dir: widgets})
+	requireStdout(t, inRepo, "(detected here: ", filepath.Base(widgets)+", github.com/acme/widgets, github.com/upstream-org/widgets)")
 
 	app := s.App()
 	awaitAgentAvailable(app, fakeagent.Pi)

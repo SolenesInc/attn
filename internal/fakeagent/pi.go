@@ -22,6 +22,7 @@ const (
 	piRelayTokenEnv    = "ATTN_PI_TOKEN"
 	piAutoModeEnv      = "ATTN_PI_AUTOMODE_CONFIG"
 	piYoloEnv          = "ATTN_PI_YOLO"
+	PiWithoutResumeEnv = "ATTN_FAKE_PI_NO_RESUME"
 )
 
 var piComposer = composer{prompt: "> "}
@@ -31,9 +32,11 @@ var piFlags = flagSpec{
 }
 
 type piTerminal struct {
+	cfg          config
 	term         *terminal
 	relay        *rpcPeer
 	conversation string
+	resumed      bool
 	prompt       string
 	autoMode     json.RawMessage
 	yolo         bool
@@ -53,7 +56,7 @@ type relayStop struct {
 }
 
 func runPiTerminal(cfg config) int {
-	return serve(cfg, piComposer, &piTerminal{})
+	return serve(cfg, piComposer, &piTerminal{cfg: cfg})
 }
 
 func (p *piTerminal) begin(term *terminal) error {
@@ -63,6 +66,9 @@ func (p *piTerminal) begin(term *terminal) error {
 		return errors.New("pi launched without --session-id")
 	}
 	p.prompt = strings.Join(args.positionals, " ")
+	if err := p.openSession(); err != nil {
+		return err
+	}
 	if config := os.Getenv(piAutoModeEnv); config != "" {
 		p.autoMode = json.RawMessage(config)
 	}
@@ -82,8 +88,21 @@ func (p *piTerminal) begin(term *terminal) error {
 	return nil
 }
 
+func (p *piTerminal) openSession() error {
+	file := filepath.Join(p.cfg.ToolHome, ".pi", "agent", "sessions", p.conversation+".jsonl")
+	if _, err := os.Stat(file); err == nil {
+		p.resumed = true
+		return nil
+	}
+	cwd, err := os.Getwd()
+	if err != nil {
+		return err
+	}
+	return appendLines(file, map[string]any{"type": "session", "version": 3, "id": p.conversation, "timestamp": now(), "cwd": cwd})
+}
+
 func (p *piTerminal) launch() launch {
-	return launch{Harness: Pi, ConversationID: p.conversation, AutoMode: p.autoMode, Yolo: p.yolo}
+	return launch{Harness: Pi, ConversationID: p.conversation, Resumed: p.resumed, AutoMode: p.autoMode, Yolo: p.yolo}
 }
 
 func (p *piTerminal) initialPrompt() string { return p.prompt }
@@ -111,6 +130,7 @@ func (p *piTerminal) deny(denial Denial) error {
 
 type piPlugin struct {
 	cfg       config
+	resume    bool
 	relayPath string
 	daemon    *rpcPeer
 	mu        sync.Mutex
@@ -126,12 +146,14 @@ type piRun struct {
 }
 
 type piSpawn struct {
-	SessionID     string          `json:"session_id"`
-	RunID         string          `json:"run_id"`
-	CWD           string          `json:"cwd"`
-	InitialPrompt string          `json:"initial_prompt"`
-	AutoMode      json.RawMessage `json:"auto_mode"`
-	Yolo          bool            `json:"yolo"`
+	SessionID       string          `json:"session_id"`
+	RunID           string          `json:"run_id"`
+	CWD             string          `json:"cwd"`
+	InitialPrompt   string          `json:"initial_prompt"`
+	Metadata        json.RawMessage `json:"metadata"`
+	ResumeSessionID string          `json:"resume_session_id"`
+	AutoMode        json.RawMessage `json:"auto_mode"`
+	Yolo            bool            `json:"yolo"`
 }
 
 type piMetadata struct {
@@ -155,7 +177,7 @@ func runPiPlugin(cfg config) int {
 	if err == nil {
 		err = control.start().call(context.Background(), methodLaunched, launch{Role: rolePlugin, Harness: Pi, Pid: os.Getpid(), Argv: os.Args}, nil)
 	}
-	p := &piPlugin{cfg: cfg, runs: map[string]*piRun{}}
+	p := &piPlugin{cfg: cfg, resume: os.Getenv(PiWithoutResumeEnv) == "", runs: map[string]*piRun{}}
 	if err == nil {
 		err = p.connect()
 	}
@@ -203,7 +225,7 @@ func (p *piPlugin) connect() error {
 	err = p.daemon.call(context.Background(), "driver.register", map[string]any{
 		"agent": "pi",
 		"capabilities": map[string]bool{
-			"resume":           false,
+			"resume":           p.resume,
 			"initial_prompt":   true,
 			"state_reporting":  true,
 			"message_delivery": false,
@@ -231,7 +253,12 @@ func (p *piPlugin) handleDaemon(_ *rpcPeer, method string, params json.RawMessag
 	case "attn.health":
 		return okResult{OK: true, Message: "fake pi " + piVersion + " is ready"}, nil
 	case "driver.spawn":
-		return p.launchRun(params)
+		return p.launchRun(params, false)
+	case "driver.resume":
+		if !p.resume {
+			return nil, fmt.Errorf("unknown method %q", method)
+		}
+		return p.launchRun(params, true)
 	case "driver.session_closed":
 		var closed piRunParams
 		if err := json.Unmarshal(params, &closed); err != nil {
@@ -248,24 +275,32 @@ func (p *piPlugin) handleDaemon(_ *rpcPeer, method string, params json.RawMessag
 	}
 }
 
-func (p *piPlugin) launchRun(raw json.RawMessage) (any, error) {
+func (p *piPlugin) launchRun(raw json.RawMessage, resume bool) (any, error) {
 	var spawn piSpawn
 	if err := json.Unmarshal(raw, &spawn); err != nil {
 		return nil, err
 	}
 	run := &piRun{sessionID: spawn.SessionID, runID: spawn.RunID, piSessionID: uuid.NewString()}
+	if resume {
+		piSessionID, err := resumedPiSession(spawn)
+		if err != nil {
+			return nil, err
+		}
+		run.piSessionID = piSessionID
+	}
 	argv := []string{filepath.Join(p.cfg.Bin, string(Pi)), "--session-id", run.piSessionID}
-	if strings.TrimSpace(spawn.InitialPrompt) != "" {
+	if !resume && strings.TrimSpace(spawn.InitialPrompt) != "" {
 		argv = append(argv, spawn.InitialPrompt)
 	}
 	p.mu.Lock()
 	p.runs[run.sessionID] = run
 	p.mu.Unlock()
 	err := p.daemon.call(context.Background(), "session.report_metadata", map[string]any{
-		"session_id": run.sessionID,
-		"run_id":     run.runID,
-		"seq":        p.nextSeq(run),
-		"metadata":   piMetadata{Schema: 1, PiSessionID: run.piSessionID, PiVersion: piVersion},
+		"session_id":        run.sessionID,
+		"run_id":            run.runID,
+		"seq":               p.nextSeq(run),
+		"metadata":          piMetadata{Schema: 1, PiSessionID: run.piSessionID, PiVersion: piVersion},
+		"resume_session_id": run.piSessionID,
 	}, nil)
 	if err != nil {
 		return nil, err
@@ -282,6 +317,30 @@ func (p *piPlugin) launchRun(raw json.RawMessage) (any, error) {
 		"cwd":  spawn.CWD,
 		"env":  env,
 	}, nil
+}
+
+func resumedPiSession(spawn piSpawn) (string, error) {
+	requested := strings.TrimSpace(spawn.ResumeSessionID)
+	if len(spawn.Metadata) == 0 || string(spawn.Metadata) == "null" {
+		if requested == "" {
+			return "", errors.New("resume needs the session's pi metadata or a resume_session_id naming the pi session to pick up")
+		}
+		return requested, nil
+	}
+	var previous piMetadata
+	if err := json.Unmarshal(spawn.Metadata, &previous); err != nil {
+		return "", fmt.Errorf("pi session metadata: %w", err)
+	}
+	if previous.Schema != 1 {
+		return "", fmt.Errorf("unsupported pi session metadata schema %d", previous.Schema)
+	}
+	if strings.TrimSpace(previous.PiSessionID) == "" || strings.TrimSpace(previous.PiVersion) == "" {
+		return "", errors.New("pi session metadata is missing pi_session_id or pi_version")
+	}
+	if requested != "" {
+		return requested, nil
+	}
+	return strings.TrimSpace(previous.PiSessionID), nil
 }
 
 func (p *piPlugin) handleRelay(relay *rpcPeer, method string, params json.RawMessage) (any, error) {

@@ -8,6 +8,7 @@ import (
 
 	"github.com/victorarias/attn/internal/protocol"
 	"github.com/victorarias/attn/internal/pty"
+	"github.com/victorarias/attn/internal/statetrace"
 )
 
 func seedDriverRun(t *testing.T, d *Daemon, sessionID, pluginName, runID string, state protocol.SessionState) {
@@ -180,4 +181,13 @@ func TestPluginReportedState_OnlyIfUnknownStillDisarmsTheAlarm(t *testing.T) {
 			t.Fatalf("state=%q, want the declaration the driver is still backing", got)
 		}
 	})
+}
+
+func onlyObservation(t *testing.T, d *Daemon, sessionID string) statetrace.Observation {
+	t.Helper()
+	got := d.stateTraceRecorder().Observations(sessionID)
+	if len(got) != 1 {
+		t.Fatalf("want exactly 1 observation, got %d: %+v", len(got), got)
+	}
+	return got[0]
 }

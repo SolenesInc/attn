@@ -288,3 +288,13 @@ func TestForcedSeedMoveRollsBackWhenItsAuditNoteCannotLand(t *testing.T) {
 		t.Fatalf("failed batch announced facts: before=%d after=%d", len(beforeFacts), len(afterFacts))
 	}
 }
+
+func mustLink(t *testing.T, d *Daemon, from, kind, to string) protocol.SeedLinkResult {
+	t.Helper()
+	msg := protocol.SeedLinkMessage{Cmd: protocol.CmdSeedLink, SeedID: from, Kind: kind, ToSeedID: to}
+	resp := gardenCall(t, func(c net.Conn) { d.handleSeedLink(c, &msg) })
+	if !resp.Ok {
+		t.Fatalf("link %s %s %s: %v", from, kind, to, protocol.Deref(resp.Error))
+	}
+	return *resp.SeedLinkResult
+}

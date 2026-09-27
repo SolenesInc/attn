@@ -1,6 +1,7 @@
 package pty
 
 import (
+	"context"
 	"os"
 	"strings"
 	"sync"
@@ -230,7 +231,7 @@ func TestManagerKill_InteractiveShellExitsBeforeTERMGrace(t *testing.T) {
 			}, nil); err != nil {
 				t.Fatalf("Subscribe() error: %v", err)
 			}
-			if err := m.Input(id, []byte("printf '__INTERACTIVE_SHELL_%s__\\n' READY\r")); err != nil {
+			if err := m.Input(context.Background(), id, []byte("printf '__INTERACTIVE_SHELL_%s__\\n' READY\r")); err != nil {
 				t.Fatalf("Input() error: %v", err)
 			}
 			select {

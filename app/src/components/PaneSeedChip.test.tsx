@@ -208,3 +208,56 @@ describe('seed lifecycle and context', () => {
     expect(daemon.sentOf('seed_document_get')).toHaveLength(2);
   });
 });
+
+describe('what the chip shows', () => {
+  const memberClaim = daemonSeed('s-member', { title: 'Member work', tender_member: 'fern' });
+  const sessionClaim = daemonSeed('s-session', { title: 'Session work', tender_session: 's1', tender_member: 'fern' });
+  const oldDayClaim = daemonSeed('s-oldday', { title: 'Old day work', tender_session: 'sess-old', tender_member: 'fern' });
+  const otherMember = daemonSeed('s-other', { title: 'Other work', tender_member: 'oak' });
+
+  it.each<[string, DaemonSeed[], Partial<DaemonSession>, string, string]>([
+    ['a crew day, its own claims and its member’s', [memberClaim, sessionClaim, otherMember], { crew_member: 'fern' }, 'multi', 'tending 2'],
+    ['a new crew day, its member’s claims but not the last day’s', [memberClaim, oldDayClaim], { crew_member: 'fern' }, 'seed', 'Member work'],
+    ['an ordinary session, never a member’s claims', [memberClaim, sessionClaim], {}, 'seed', 'Session work'],
+    ['a tended seed as the plot when the rest sit under it', [
+      daemonSeed('s-plot11', { title: 'the arc', tender_session: 's1' }),
+      daemonSeed('s-a', { title: 'a', tender_session: 's1', edges: [{ kind: 'part-of', to: 's-plot11' }] }),
+    ], {}, 'plot', 'the arc'],
+    ['a part-of cycle as a plot', [
+      daemonSeed('s-a', { title: 'a', tender_session: 's1', edges: [{ kind: 'part-of', to: 's-b' }] }),
+      daemonSeed('s-b', { title: 'b', tender_session: 's1', edges: [{ kind: 'part-of', to: 's-a' }] }),
+    ], {}, 'plot', 'a'],
+  ])('shows for %s', async (_, seeds, session, kind, text) => {
+    await openAgent(seeds, session);
+
+    expect(chip()).toHaveAttribute('data-kind', kind);
+    expect(chip()).toHaveTextContent(text);
+  });
+
+  it('drops a crew claim once its tender is cleared on release', async () => {
+    const daemon = await openAgent([memberClaim], { crew_member: 'fern' });
+    expect(chip()).toHaveTextContent('Member work');
+
+    pushSeeds(daemon, [{ ...memberClaim, status: 'harvested', tender_member: '' }]);
+    await daemon.idle();
+
+    expect(screen.queryByTestId('seed-chip-s1')).toBeNull();
+  });
+
+  it.each<[string, string, string[]]>([
+    ['after what it tends', 's-crown1', ['first', 'second', 'the plan']],
+    ['once, when it also tends it', 's-first', ['first', 'second']],
+  ])('lists the seed the agent reports to %s', async (_, reportsTo, titles) => {
+    const daemon = await openAgent([
+      daemonSeed('s-first', { title: 'first', tender_member: 'fern' }),
+      daemonSeed('s-second', { title: 'second', tender_member: 'fern' }),
+      daemonSeed('s-crown1', { title: 'the plan', status: 'dormant' }),
+    ], { crew_member: 'fern', seed_id: reportsTo });
+
+    await showSeeds(daemon);
+
+    const rows = screen.getAllByRole('option');
+    expect(rows.map((option) => option.textContent)).toEqual(titles.map((title) => expect.stringContaining(title)));
+    expect(rows.filter((option) => option.classList.contains('tended-seeds-row--crown'))).toHaveLength(reportsTo === 's-crown1' ? 1 : 0);
+  });
+});

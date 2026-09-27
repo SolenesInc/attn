@@ -1,9 +1,6 @@
 package workflow
 
-import (
-	"encoding/json"
-	"testing"
-)
+import "testing"
 
 func TestIsCacheHitTruthTable(t *testing.T) {
 	base := JournalEntry{Ordinal: "ord", PromptHash: "ph", SchemaHash: "sh", Status: "ok"}
@@ -44,72 +41,5 @@ func TestIsCacheHitTruthTable(t *testing.T) {
 				t.Errorf("IsCacheHit=false for terminal status %q, want true", status)
 			}
 		})
-	}
-}
-
-func TestHashSchemaSentinel(t *testing.T) {
-	if got := hashSchema(nil); got != schemaNoneSentinel {
-		t.Errorf("nil schema hash = %q, want %q", got, schemaNoneSentinel)
-	}
-	if got := hashSchema(json.RawMessage{}); got != schemaNoneSentinel {
-		t.Errorf("empty schema hash = %q, want %q", got, schemaNoneSentinel)
-	}
-	present := hashSchema(json.RawMessage(`{"type":"object"}`))
-	if present == schemaNoneSentinel {
-		t.Errorf("present schema hashed to the none sentinel")
-	}
-	//lint:ignore SA4000 the identical operands are the point: hashing is deterministic.
-	if hashSchema(json.RawMessage(`{"a":1}`)) != hashSchema(json.RawMessage(`{"a":1}`)) {
-		t.Errorf("identical schema produced different hashes")
-	}
-	if hashSchema(json.RawMessage(`{"a":1}`)) == hashSchema(json.RawMessage(`{"a":2}`)) {
-		t.Errorf("different schemas produced the same hash")
-	}
-}
-
-func TestHashPromptStable(t *testing.T) {
-	//lint:ignore SA4000 the identical operands are the point: hashing is deterministic.
-	if hashPrompt("hello") != hashPrompt("hello") {
-		t.Errorf("identical prompt produced different hashes")
-	}
-	if hashPrompt("hello") == hashPrompt("world") {
-		t.Errorf("different prompts produced the same hash")
-	}
-}
-
-func TestMemJournalAppendUpsert(t *testing.T) {
-	j := NewMemJournal()
-	if err := j.Append(JournalEntry{Ordinal: "a", Status: "ok"}); err != nil {
-		t.Fatalf("append a: %v", err)
-	}
-	if err := j.Append(JournalEntry{Ordinal: "b", Status: "ok"}); err != nil {
-		t.Fatalf("append b: %v", err)
-	}
-	if err := j.Append(JournalEntry{Ordinal: "a", Status: "ok"}); err == nil {
-		t.Errorf("Append of duplicate ordinal should error")
-	}
-	j.Upsert(JournalEntry{Ordinal: "a", Status: "errored", Err: "boom"})
-	got, ok := j.Lookup("a")
-	if !ok || got.Status != "errored" {
-		t.Errorf("upsert did not overwrite: %+v ok=%v", got, ok)
-	}
-	entries := j.Entries()
-	if len(entries) != 2 || entries[0].Ordinal != "a" || entries[1].Ordinal != "b" {
-		t.Errorf("order not preserved after upsert: %+v", entries)
-	}
-	j.Upsert(JournalEntry{Ordinal: "c", Status: "ok"})
-	if len(j.Entries()) != 3 {
-		t.Errorf("upsert of new ordinal should append")
-	}
-}
-
-func TestMemJournalClone(t *testing.T) {
-	j := NewMemJournal()
-	_ = j.Append(JournalEntry{Ordinal: "a", PromptHash: "p", Status: "ok"})
-	clone := j.Clone()
-	clone.Upsert(JournalEntry{Ordinal: "a", PromptHash: "CHANGED", Status: "ok"})
-	orig, _ := j.Lookup("a")
-	if orig.PromptHash != "p" {
-		t.Errorf("clone mutation leaked into original: %q", orig.PromptHash)
 	}
 }

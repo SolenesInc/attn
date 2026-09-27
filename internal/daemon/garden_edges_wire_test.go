@@ -109,7 +109,15 @@ func TestSeedLinkRefusalsNameTheSeedsAndTheWayOut(t *testing.T) {
 	cli := w.Client()
 	first := plantSeedAs(t, cli, "", "first")
 	second := plantSeedAs(t, cli, "", "second")
+	third := plantSeedAs(t, cli, "", "third")
+	plot := plantSeedAs(t, cli, "", "the plot")
+	otherPlot := plantSeedAs(t, cli, "", "another plot")
 	edgeLink(t, cli, first, "blocks", second)
+	edgeLink(t, cli, second, "blocks", third)
+	edgeLink(t, cli, third, "part-of", plot)
+	if again := edgeLink(t, cli, first, "blocks", second); again.Changed {
+		t.Error("linking the same edge twice reported a change")
+	}
 
 	for _, refusal := range []struct {
 		name       string
@@ -119,16 +127,21 @@ func TestSeedLinkRefusalsNameTheSeedsAndTheWayOut(t *testing.T) {
 		wants      []string
 	}{
 		{"a blocks cycle", second, "blocks", first, false, []string{first, second, "deadlock", "attn seed unlink"}},
+		{"an indirect blocks cycle", third, "blocks", first, false, []string{first + " → " + second + " → " + third, "attn seed unlink " + first + " blocks " + second}},
+		{"a seed blocking itself", first, "blocks", first, false, []string{first, "cannot"}},
+		{"a plot inside itself", plot, "part-of", third, false, []string{"plot inside itself", "attn seed unlink " + third + " part-of " + plot}},
+		{"a second plot", third, "part-of", otherPlot, false, []string{"already part of " + plot, "attn seed unlink " + third + " part-of " + plot, otherPlot}},
+		{"a derived kind", first, "relates-to", second, false, []string{"real edge kind"}},
 		{"an unknown kind", first, "sort-of", second, false, []string{"blocks and part-of"}},
-		{"an unknown seed", first, "blocks", "s-zzzzzz", false, []string{"s-zzzzzz"}},
+		{"an unknown seed", first, "blocks", "s-zzzzzz", false, []string{"s-zzzzzz", "attn seed ls"}},
 		{"a malformed id", first, "blocks", "nope", false, []string{"seed id"}},
 		{"unlinking an edge that is not there", first, "part-of", second, true, []string{"does not part-of"}},
 	} {
 		_, err := cli.SeedLink(refusal.from, refusal.kind, refusal.to, refusal.unlink)
 		lifeRefusal(t, refusal.name, err, refusal.wants...)
 	}
-	if got := lifeSeedIDs(edgeReady(t, cli, "", "", true).Seeds); !slices.Equal(got, []string{first}) {
-		t.Errorf("after the refusals ready = %v, want the blocker alone as before", got)
+	if got := lifeSeedIDs(edgeReady(t, cli, "", "", true).Seeds); !slices.Contains(got, first) || slices.Contains(got, second) || slices.Contains(got, third) {
+		t.Errorf("after the refusals ready = %v, want the chain still gated behind %s", got, first)
 	}
 }
 
@@ -201,6 +214,10 @@ func TestReadyScopesToAPlotAndListsPlotsBeforeLooseSeeds(t *testing.T) {
 	deeper, err := cli.SeedPlant("", "deeper", "", firstPlot.Children[0].ID, "", "")
 	if err != nil {
 		t.Fatal(err)
+	}
+	nested := edgeReady(t, cli, "", "", true)
+	if got, want := lifeSeedIDs(nested.Plots), []string{firstPlot.Crown.ID, firstPlot.Children[0].ID, secondPlot.Crown.ID}; !slices.Equal(got, want) {
+		t.Errorf("ready --all plot headers with a nested plot = %v, want every ancestor of a ready seed %v", got, want)
 	}
 	scoped := edgeReady(t, cli, "", firstPlot.Crown.ID, false)
 	if got := lifeSeedIDs(scoped.Seeds); !slices.Equal(got, []string{deeper.Seed.ID}) || scoped.Scope != "plot" || scoped.ScopeID != firstPlot.Crown.ID {

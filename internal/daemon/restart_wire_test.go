@@ -1,6 +1,8 @@
 package daemon_test
 
 import (
+	"os"
+	"path/filepath"
 	"slices"
 	"testing"
 
@@ -10,8 +12,20 @@ import (
 )
 
 func TestRestartKeepsConversationsThatCanResumeAndPrunesTheRest(t *testing.T) {
-	w := newWorld(t, fakeagent.Claude)
+	w := newWorld(t, fakeagent.Claude, fakeagent.Codex)
 	app := w.App()
+
+	codexKept := w.Spawn(app, fakeagent.Codex, w.Path("api"))
+	w.Launched(codexKept)
+	codexGone := w.Spawn(app, fakeagent.Codex, w.Path("web"))
+	goneRun := w.Launched(codexGone)
+	rollouts, err := filepath.Glob(filepath.Join(w.Dir, "toolhome", ".codex", "sessions", "*", "*", "*", "rollout-*-"+goneRun.ConversationID+".jsonl"))
+	if err != nil || len(rollouts) != 1 {
+		t.Fatalf("rollout of %s = %v (%v), want exactly one", goneRun.ConversationID, rollouts, err)
+	}
+	if err := os.Remove(rollouts[0]); err != nil {
+		t.Fatal(err)
+	}
 
 	talked := w.Spawn(app, fakeagent.Claude, w.Path("shop"))
 	first := w.Launched(talked)
@@ -37,6 +51,12 @@ func TestRestartKeepsConversationsThatCanResumeAndPrunesTheRest(t *testing.T) {
 	}
 	if _, ok := states[untouched]; ok {
 		t.Fatal("a session that never started a conversation survived the restart")
+	}
+	if states[codexKept] != protocol.SessionStateRecoverable {
+		t.Errorf("a codex session whose rollout exists came back %q, want recoverable", states[codexKept])
+	}
+	if _, ok := states[codexGone]; ok {
+		t.Error("a codex session whose rollout is gone survived the restart")
 	}
 	if !slices.ContainsFunc(initial.Warnings, func(w protocol.DaemonWarning) bool { return w.Code == "stale_sessions_pruned" }) {
 		t.Fatalf("warnings = %+v, want stale_sessions_pruned", initial.Warnings)

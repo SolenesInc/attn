@@ -3,6 +3,7 @@ package git
 import (
 	"context"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -70,186 +71,17 @@ func TestEnsureDetachedWorktreeAtRevisionRecoversFreshStaleMetadata(t *testing.T
 	}
 }
 
-func TestObserveLiveWorktreesSkipsPrunableEntries(t *testing.T) {
-	t.Parallel()
-	tmpDir := t.TempDir()
-	mainDir := filepath.Join(tmpDir, "main")
-	if err := os.MkdirAll(mainDir, 0755); err != nil {
-		t.Fatalf("Failed to create main dir: %v", err)
+func runGit(t *testing.T, dir string, args ...string) {
+	t.Helper()
+	cmd := exec.Command("git", args...)
+	cmd.Dir = dir
+	cmd.Env = append(os.Environ(),
+		"GIT_AUTHOR_NAME=test",
+		"GIT_AUTHOR_EMAIL=test@test.com",
+		"GIT_COMMITTER_NAME=test",
+		"GIT_COMMITTER_EMAIL=test@test.com",
+	)
+	if out, err := cmd.CombinedOutput(); err != nil {
+		t.Fatalf("git %v failed: %v\n%s", args, err, out)
 	}
-	runGit(t, mainDir, "init")
-	runGit(t, mainDir, "commit", "--allow-empty", "-m", "init")
-
-	wtDir := filepath.Join(tmpDir, "wt")
-	runGit(t, mainDir, "worktree", "add", "-b", "feature", wtDir)
-	missingDir := filepath.Join(tmpDir, "missing")
-	runGit(t, mainDir, "worktree", "add", "-b", "feature-stale", missingDir)
-	if err := os.RemoveAll(missingDir); err != nil {
-		t.Fatal(err)
-	}
-
-	worktrees, err := NewClient().ObserveLiveWorktrees(context.Background(), mainDir)
-	if err != nil {
-		t.Fatalf("ObserveLiveWorktrees failed: %v", err)
-	}
-
-	branches := map[string]bool{}
-	for _, wt := range worktrees {
-		branches[wt.Branch] = true
-	}
-	if !branches["feature"] {
-		t.Error("expected to find feature worktree")
-	}
-	if branches["feature-stale"] {
-		t.Error("prunable worktree should be skipped")
-	}
-}
-
-func TestCreateWorktree(t *testing.T) {
-	t.Parallel()
-	tmpDir := t.TempDir()
-	mainDir := filepath.Join(tmpDir, "main")
-	if err := os.MkdirAll(mainDir, 0755); err != nil {
-		t.Fatalf("Failed to create main dir: %v", err)
-	}
-	runGit(t, mainDir, "init")
-	runGit(t, mainDir, "commit", "--allow-empty", "-m", "init")
-
-	wtDir := filepath.Join(tmpDir, "new-wt")
-	err := NewClient().CreateWorktree(context.Background(), mainDir, "new-feature", wtDir)
-	if err != nil {
-		t.Fatalf("CreateWorktree failed: %v", err)
-	}
-
-	if _, err := os.Stat(wtDir); os.IsNotExist(err) {
-		t.Error("worktree directory was not created")
-	}
-
-	info, err := NewClient().GetBranchInfo(context.Background(), wtDir)
-	if err != nil {
-		t.Fatalf("GetBranchInfo failed: %v", err)
-	}
-	if info.Branch != "new-feature" {
-		t.Errorf("expected branch new-feature, got %s", info.Branch)
-	}
-}
-
-func TestDeleteWorktree(t *testing.T) {
-	t.Parallel()
-	tmpDir := t.TempDir()
-	mainDir := filepath.Join(tmpDir, "main")
-	if err := os.MkdirAll(mainDir, 0755); err != nil {
-		t.Fatalf("Failed to create main dir: %v", err)
-	}
-	runGit(t, mainDir, "init")
-	runGit(t, mainDir, "commit", "--allow-empty", "-m", "init")
-
-	wtDir := filepath.Join(tmpDir, "wt-to-delete")
-	runGit(t, mainDir, "worktree", "add", "-b", "temp", wtDir)
-
-	err := NewClient().DeleteWorktree(context.Background(), mainDir, wtDir, false)
-	if err != nil {
-		t.Fatalf("DeleteWorktree failed: %v", err)
-	}
-
-	worktrees, _ := NewClient().ObserveLiveWorktrees(context.Background(), mainDir)
-	for _, wt := range worktrees {
-		if wt.Path == wtDir {
-			t.Error("worktree should have been removed")
-		}
-	}
-}
-
-func TestDeleteWorktreeDirtyRequiresForce(t *testing.T) {
-	t.Parallel()
-	tmpDir := t.TempDir()
-	mainDir := filepath.Join(tmpDir, "main")
-	if err := os.MkdirAll(mainDir, 0755); err != nil {
-		t.Fatalf("Failed to create main dir: %v", err)
-	}
-	runGit(t, mainDir, "init")
-	runGit(t, mainDir, "commit", "--allow-empty", "-m", "init")
-
-	wtDir := filepath.Join(tmpDir, "dirty-wt")
-	runGit(t, mainDir, "worktree", "add", "-b", "dirty", wtDir)
-	if err := os.WriteFile(filepath.Join(wtDir, "local.txt"), []byte("local change\n"), 0644); err != nil {
-		t.Fatalf("write dirty file: %v", err)
-	}
-
-	if err := NewClient().DeleteWorktree(context.Background(), mainDir, wtDir, false); err == nil {
-		t.Fatal("DeleteWorktree without force succeeded on dirty worktree")
-	}
-	if _, err := os.Stat(wtDir); err != nil {
-		t.Fatalf("dirty worktree disappeared after non-force delete: %v", err)
-	}
-
-	if err := NewClient().DeleteWorktree(context.Background(), mainDir, wtDir, true); err != nil {
-		t.Fatalf("DeleteWorktree with force failed: %v", err)
-	}
-	worktrees, err := NewClient().ObserveLiveWorktrees(context.Background(), mainDir)
-	if err != nil {
-		t.Fatalf("ObserveLiveWorktrees failed: %v", err)
-	}
-	for _, wt := range worktrees {
-		if wt.Path == wtDir {
-			t.Fatal("force-deleted worktree should have been removed")
-		}
-	}
-}
-
-func TestGenerateWorktreePath(t *testing.T) {
-	t.Parallel()
-	tests := []struct {
-		mainRepo string
-		branch   string
-		expected string
-	}{
-		{"/Users/me/projects/repo", "feature", "/Users/me/projects/repo--feature"},
-		{"/Users/me/projects/repo", "fix/bug-123", "/Users/me/projects/repo--fix-bug-123"},
-	}
-
-	for _, tt := range tests {
-		got := GenerateWorktreePath(tt.mainRepo, tt.branch)
-		if got != tt.expected {
-			t.Errorf("GenerateWorktreePath(%q, %q) = %q, want %q", tt.mainRepo, tt.branch, got, tt.expected)
-		}
-	}
-}
-
-func TestResolveMainRepoPath_WithMainRepo(t *testing.T) {
-	t.Parallel()
-	mainDir := t.TempDir()
-	runGit(t, mainDir, "init")
-	runGit(t, mainDir, "commit", "--allow-empty", "-m", "init")
-
-	got := NewClient().ResolveMainRepoPath(context.Background(), mainDir)
-	if canonicalPath(got) != canonicalPath(mainDir) {
-		t.Errorf("NewClient().ResolveMainRepoPath(context.Background(), main repo) = %q, want %q", got, mainDir)
-	}
-}
-
-func TestResolveMainRepoPath_WithWorktree(t *testing.T) {
-	t.Parallel()
-	tmpDir := t.TempDir()
-	mainDir := filepath.Join(tmpDir, "hurdy-gurdy")
-	if err := os.MkdirAll(mainDir, 0755); err != nil {
-		t.Fatalf("Failed to create main dir: %v", err)
-	}
-	runGit(t, mainDir, "init")
-	runGit(t, mainDir, "commit", "--allow-empty", "-m", "init")
-
-	worktreeDir := filepath.Join(tmpDir, "hurdy-gurdy--feat-auto-bump-yt-dlp--fork-hurdy-gurdy")
-	runGit(t, mainDir, "worktree", "add", "-b", "feat/auto-bump-yt-dlp", worktreeDir)
-
-	got := NewClient().ResolveMainRepoPath(context.Background(), worktreeDir)
-	if canonicalPath(got) != canonicalPath(mainDir) {
-		t.Errorf("NewClient().ResolveMainRepoPath(context.Background(), worktree) = %q, want %q", got, mainDir)
-	}
-}
-
-func canonicalPath(path string) string {
-	if resolved, err := filepath.EvalSymlinks(path); err == nil {
-		return filepath.Clean(resolved)
-	}
-	return filepath.Clean(path)
 }

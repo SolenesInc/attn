@@ -103,7 +103,7 @@ func (c *blockingClassifier) CallCount() int {
 
 func TestMain(m *testing.M) {
 	fakeagent.Main()
-	if os.Getenv("ATTN_PLUGIN_HELPER") == "1" || os.Getenv("ATTN_PLUGIN_DRIVER_HELPER") == "1" {
+	if os.Getenv("ATTN_PLUGIN_HELPER") == "1" {
 		os.Exit(m.Run())
 	}
 	sessionInputSubmitDelay = 0
@@ -3979,32 +3979,6 @@ func TestDaemon_SettingsWithAgentAvailability(t *testing.T) {
 	}
 	if got := settings["tailscale_auth_url"]; got != "https://login.tailscale.example/auth" {
 		t.Fatalf("settings[tailscale_auth_url] = %v, want auth url", got)
-	}
-}
-
-func TestDaemon_AdvertisesClaudeHeadlessTaskWithManagedAuthentication(t *testing.T) {
-	tempDir := t.TempDir()
-	executable := filepath.Join(tempDir, "claude")
-	if err := os.WriteFile(executable, []byte("#!/bin/sh\nexit 0\n"), 0o755); err != nil {
-		t.Fatalf("write fake claude: %v", err)
-	}
-	t.Setenv("PATH", tempDir)
-	for _, name := range []string{
-		"ANTHROPIC_API_KEY",
-		"CLAUDE_CODE_USE_BEDROCK",
-		"CLAUDE_CODE_USE_VERTEX",
-		"CLAUDE_CODE_USE_FOUNDRY",
-	} {
-		t.Setenv(name, "")
-	}
-
-	d := &Daemon{store: store.New()}
-	settings := d.settingsWithAgentAvailability()
-	if got := settings[SettingClaudeAvailable]; got != "true" {
-		t.Fatalf("settings[%s] = %v, want true", SettingClaudeAvailable, got)
-	}
-	if got := settings["claude_cap_headless_task"]; got != "true" {
-		t.Fatalf("settings[claude_cap_headless_task] = %v, want true", got)
 	}
 }
 

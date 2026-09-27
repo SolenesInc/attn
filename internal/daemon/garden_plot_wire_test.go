@@ -97,19 +97,27 @@ func TestTheCrownCarriesItsPlotProgress(t *testing.T) {
 	app, cli := w.App(), w.Client()
 	planter := spawnPanes(w, app, w.Path("planter"))[0].session
 	planted, err := cli.SeedPlot(planter, "", protocol.SeedPlotMessage{
-		Title: "ship it", Children: []protocol.SeedPlotChild{{Title: "a"}, {Title: "b", Blocks: []string{"a"}}},
+		Title: "ship it", Children: []protocol.SeedPlotChild{
+			{Title: "a"}, {Title: "b", Blocks: []string{"a"}},
+			{Title: "c"}, {Title: "d", Blocks: []string{"c"}}, {Title: "e"}, {Title: "f"},
+		},
 	})
 	if err != nil {
 		t.Fatalf("plot: %v", err)
 	}
-	unblocked := planted.Children[1].ID
-	for _, move := range []struct{ verb, reason string }{{"tend", ""}, {"harvest", "done"}} {
-		if _, err := cli.SeedTransition(planter, unblocked, move.verb, move.reason, "", false, client.SeedTransitionOptions{}); err != nil {
-			t.Fatalf("%s b: %v", move.verb, err)
+	for _, move := range []struct {
+		child        int
+		verb, reason string
+	}{{1, "tend", ""}, {1, "harvest", "done"}, {3, "tend", ""}, {4, "park", ""}, {5, "wither", ""}} {
+		if _, err := cli.SeedTransition(planter, planted.Children[move.child].ID, move.verb, move.reason, "", false, client.SeedTransitionOptions{}); err != nil {
+			t.Fatalf("%s child %d: %v", move.verb, move.child, err)
 		}
 	}
+	if _, err := cli.SeedPlant(planter, "g", "", planted.Children[4].ID, "", ""); err != nil {
+		t.Fatal(err)
+	}
 
-	want := protocol.SeedPlotProgress{Total: 2, Done: 1, Ready: 1}
+	want := protocol.SeedPlotProgress{Total: 7, Done: 1, Withered: 1, Growing: 1, Dormant: 1, Ready: 2, Blocked: 1}
 	shown, err := cli.SeedShow(planter, planted.Crown.ID)
 	if err != nil {
 		t.Fatal(err)
@@ -121,7 +129,9 @@ func TestTheCrownCarriesItsPlotProgress(t *testing.T) {
 		switch {
 		case seed.ID == planted.Crown.ID && (seed.PlotProgress == nil || *seed.PlotProgress != want):
 			t.Errorf("listed crown progress = %+v, want %+v", seed.PlotProgress, want)
-		case seed.ID != planted.Crown.ID && seed.PlotProgress != nil:
+		case seed.ID == planted.Children[4].ID && (seed.PlotProgress == nil || *seed.PlotProgress != protocol.SeedPlotProgress{Total: 1, Ready: 1}):
+			t.Errorf("the nested plot's progress = %+v, want its one ready child", seed.PlotProgress)
+		case seed.ID != planted.Crown.ID && seed.ID != planted.Children[4].ID && seed.PlotProgress != nil:
 			t.Errorf("%s carries a plot it does not have: %+v", seed.ID, seed.PlotProgress)
 		}
 	}

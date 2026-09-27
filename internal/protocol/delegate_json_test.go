@@ -16,11 +16,3 @@ func TestDelegateMessageRejectsRetiredWireFields(t *testing.T) {
 		}
 	}
 }
-
-func TestDelegateMessageDecodesExplicitRequest(t *testing.T) {
-	var msg DelegateMessage
-	err := json.Unmarshal([]byte(`{"cmd":"delegate","request_id":"new","assignment":{"kind":"seed","seed_id":"s-example","handover":{"note":"continue"}},"cwd":"/repo","checkout":{"kind":"reuse","branch":"feature"}}`), &msg)
-	if err != nil || msg.Assignment.Kind != DelegateAssignmentKindSeed || msg.Checkout == nil || msg.Checkout.Kind != DelegateCheckoutKindReuse {
-		t.Fatalf("message=%+v error=%v", msg, err)
-	}
-}

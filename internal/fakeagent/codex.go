@@ -33,11 +33,56 @@ type codex struct {
 	turnID       string
 }
 
+var codexExecFlags = flagSpec{
+	values: map[string]bool{
+		"-c": true, "-m": true, "--model": true, "--sandbox": true, "--add-dir": true,
+		"--output-last-message": true, "--output-schema": true,
+	},
+}
+
 func runCodex(cfg config) int {
 	if len(os.Args) > 1 && os.Args[1] == "exec" {
-		return answerNoHeadlessTask(cfg, Codex)
+		return codexExec(codexExecFlags.parse(os.Args[2:])).serve(cfg)
 	}
 	return serve(cfg, codexComposer, &codex{cfg: cfg})
+}
+
+func codexExec(args parsedArgs) headlessRun {
+	run := headlessRun{harness: Codex, model: args.value("-m", "--model")}
+	if len(args.positionals) > 0 {
+		run.prompt = args.positionals[len(args.positionals)-1]
+	}
+	for _, override := range args.values["-c"] {
+		if strings.HasPrefix(override, "mcp_servers.") {
+			run.refusal = "codex exec with MCP tool servers"
+		}
+		if effort, ok := strings.CutPrefix(override, "model_reasoning_effort="); ok {
+			run.effort = strings.Trim(effort, `"`)
+		}
+	}
+	thread := uuid.NewString()
+	run.answer = func(text string) error {
+		if path := args.value("--output-last-message"); path != "" {
+			if err := os.WriteFile(path, []byte(text), 0o600); err != nil {
+				return err
+			}
+		}
+		return printJSONLines(
+			map[string]any{"type": "thread.started", "thread_id": thread},
+			map[string]any{"type": "turn.started"},
+			map[string]any{"type": "item.completed", "item": map[string]any{"id": "item_0", "type": "agent_message", "text": text}},
+			map[string]any{"type": "turn.completed", "usage": map[string]any{"input_tokens": 0, "cached_input_tokens": 0, "output_tokens": 0}},
+		)
+	}
+	run.fail = func(message string) {
+		_ = printJSONLines(
+			map[string]any{"type": "thread.started", "thread_id": thread},
+			map[string]any{"type": "turn.started"},
+			map[string]any{"type": "error", "message": message},
+			map[string]any{"type": "turn.failed", "error": map[string]any{"message": message}},
+		)
+	}
+	return run
 }
 
 func (c *codex) begin(term *terminal) error {
@@ -142,6 +187,10 @@ func (c *codex) hookInput(event string, extra map[string]any) map[string]any {
 }
 
 func (c *codex) submit(prompt string) error {
+	if strings.TrimSpace(prompt) == "/new" {
+		c.resumed = false
+		return c.startRollout()
+	}
 	c.turnID = uuid.NewString()
 	c.term.title(codexBusyGlyph + c.restingTitle())
 	if err := c.hooks.run("UserPromptSubmit", "", c.hookInput("UserPromptSubmit", map[string]any{"prompt": prompt})); err != nil {

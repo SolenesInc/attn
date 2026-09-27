@@ -291,3 +291,19 @@ func TestGroundTruthUntrackedLines(t *testing.T) {
 		})
 	}
 }
+
+func reconcileComments(t *testing.T, d *Daemon, ticketID string) []string {
+	t.Helper()
+	full, err := d.store.GetTicket(ticketID)
+	if err != nil || full == nil {
+		t.Fatalf("GetTicket %s: %v, %v", ticketID, full, err)
+	}
+	var out []string
+	for _, a := range full.Activity {
+		if a.Kind == store.TicketActivityComment && a.Author == store.TicketAuthorAttn &&
+			strings.HasPrefix(a.Comment, ticketReconcileCommentPrefix) {
+			out = append(out, a.Comment)
+		}
+	}
+	return out
+}

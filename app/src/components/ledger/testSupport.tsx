@@ -1,6 +1,4 @@
-import { useRef, useState } from 'react';
-import type { ReactNode } from 'react';
-import { render, screen, within } from '@testing-library/react';
+import { screen, within } from '@testing-library/react';
 import { vi } from 'vitest';
 import type { SessionLedgerPage, SessionLedgerQuery } from '../../hooks/daemonSessionLedgerEvents';
 import type { SessionLedgerEntry } from '../../types/generated';
@@ -8,11 +6,7 @@ import { pressShortcut, renderApp } from '../../test/renderApp';
 import type { CommandMessage } from '../../test/protocol';
 import type { ScriptedDaemon, ScriptedDaemonOptions } from '../../test/scriptedDaemon';
 import { daemonWorkspace } from '../../test/daemonFixtures';
-import { NOW, now } from '../../test/sessionLedgerFixtures';
-import { WorktreesTab } from './WorktreesTab';
-import type { WorktreesTabProps } from './WorktreesTab';
-
-type TabOnly<T> = Omit<T, 'queryRef' | 'now' | 'onStatus'>;
+import { NOW } from '../../test/sessionLedgerFixtures';
 
 export type LedgerAnswer = (query: SessionLedgerQuery, index: number) => SessionLedgerPage | Error | 'hold';
 
@@ -62,37 +56,6 @@ export async function openSessionsLedger(answer: LedgerAnswer, options: Scripted
   pressShortcut('sessions.open');
   await view.daemon.idle();
   return { ...view, ...ledger };
-}
-
-function Host({ children }: { children: (host: { queryRef: React.RefObject<HTMLInputElement | null>; onStatus: (status: ReactNode) => void }) => ReactNode }) {
-  const queryRef = useRef<HTMLInputElement | null>(null);
-  const [status, setStatus] = useState<ReactNode>(null);
-  return (
-    <>
-      {children({ queryRef, onStatus: setStatus })}
-      <div data-testid="status">{status}</div>
-    </>
-  );
-}
-
-export function renderWorktreesTab(props: Partial<TabOnly<WorktreesTabProps>> = {}) {
-  const full: TabOnly<WorktreesTabProps> = {
-    listWorktrees: vi.fn().mockResolvedValue({ worktrees: [], repositories: [], omitted: 0 }),
-    getSweepLog: vi.fn().mockResolvedValue({ entries: [], omitted: 0 }),
-    setKeep: vi.fn(),
-    refreshWorktrees: vi.fn().mockResolvedValue(true),
-    deleteWorktree: vi.fn().mockResolvedValue(undefined),
-    sessions: [],
-    gitOperations: {},
-    onSelectSession: vi.fn(),
-    onShowSessions: vi.fn(),
-    ...props,
-  };
-  return render(
-    <Host>
-      {(host) => <WorktreesTab {...full} queryRef={host.queryRef} now={now} onStatus={host.onStatus} />}
-    </Host>,
-  );
 }
 
 export function namedWorkspaces(names: Record<string, string>) {

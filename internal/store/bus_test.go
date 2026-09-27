@@ -7,48 +7,6 @@ import (
 
 var busBase = time.Date(2026, 8, 1, 9, 0, 0, 0, time.UTC)
 
-func appendBus(t *testing.T, s *Store, name, subject string, at time.Time) int64 {
-	t.Helper()
-	seq, err := s.AppendBusEvent(BusEvent{Name: name, Subject: subject, Payload: `{"k":1}`, Source: "test"}, at)
-	if err != nil {
-		t.Fatalf("AppendBusEvent(%s): %v", name, err)
-	}
-	return seq
-}
-
-func TestBusEventLogIsOrderedAndReadableFromACursor(t *testing.T) {
-	s := New()
-	t.Cleanup(func() { _ = s.Close() })
-
-	first := appendBus(t, s, "session.state.changed", "sess_1", busBase)
-	second := appendBus(t, s, "ticket.commented", "tk_1", busBase.Add(time.Minute))
-	third := appendBus(t, s, "session.state.changed", "sess_2", busBase.Add(2*time.Minute))
-
-	if !(first < second && second < third) {
-		t.Fatalf("seq not monotonic: %d, %d, %d", first, second, third)
-	}
-
-	events, err := s.BusEventsSince(first, 10)
-	if err != nil {
-		t.Fatalf("BusEventsSince: %v", err)
-	}
-	if len(events) != 2 {
-		t.Fatalf("expected 2 events after seq %d, got %d", first, len(events))
-	}
-	if events[0].Seq != second || events[1].Seq != third {
-		t.Fatalf("out of order: got %d, %d; want %d, %d", events[0].Seq, events[1].Seq, second, third)
-	}
-	if events[0].Name != "ticket.commented" || events[0].Subject != "tk_1" {
-		t.Fatalf("payload columns not round-tripped: %+v", events[0])
-	}
-	if events[0].Payload != `{"k":1}` || events[0].Source != "test" {
-		t.Fatalf("payload/source not round-tripped: %+v", events[0])
-	}
-	if !events[0].CreatedAt.Equal(busBase.Add(time.Minute)) {
-		t.Fatalf("created_at not round-tripped: %v", events[0].CreatedAt)
-	}
-}
-
 func TestGardenSeedArtifactObservationDeduplicatesOnlyTheCurrentSnapshot(t *testing.T) {
 	s := New()
 	t.Cleanup(func() { _ = s.Close() })

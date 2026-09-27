@@ -171,7 +171,6 @@ type Daemon struct {
 	pendingConversation               map[string]agentConversationObservation
 	ticketReconcileMu                 sync.Mutex
 	ticketReconcileExec               func(ctx context.Context, in ticketReconcileInputs) (agentdriver.HeadlessTaskResult, error)
-	ticketReconcileDone               func(ticketID string)
 	ticketOrphanFirstSeen             map[string]time.Time
 	sessionTitleMu                    sync.Mutex
 	sessionTitleExec                  func(ctx context.Context, session *protocol.Session, conversation string) (string, error)
@@ -199,6 +198,9 @@ type Daemon struct {
 	spawnLocks                        map[string]*spawnLock
 	sessionInputOnce                  sync.Once
 	sessionInputState                 *sessionInputModule
+	lifetimeOnce                      sync.Once
+	lifetimeCtx                       context.Context
+	endLifetime                       context.CancelFunc
 	agentMailboxMu                    sync.Mutex
 	agentMailboxDoorbells             map[string]*agentMailboxDoorbellState
 	agentMailboxCooldownOverride      time.Duration
@@ -330,26 +332,23 @@ type Daemon struct {
 	lastBackupMu sync.Mutex
 	lastBackupAt time.Time
 
-	workflowBroadcastMu       sync.Mutex
-	workflowDirty             map[string]bool
-	workflowEngineMu          sync.Mutex
-	workflowEngineConn        map[string]workflowEngineSink
-	gardenBroadcastHook       func([]protocol.Seed, int)
-	appsBroadcastHook         func([]protocol.AppRegistryEntry)
-	gardenMintID              func() (string, error)
-	gardenMintNoteID          func() (string, error)
-	gardenNow                 func() time.Time
-	gardenDispatchBeforeWrite func(string)
-	gardenDispatchAfterWrite  func(string)
-	gitHubPollingOffLogged    bool
-	gardenWatchMu             sync.Mutex
-	gardenReviewMu            sync.Mutex
-	dispatchSeedsMu           sync.Mutex
-	dispatchSeeds             map[string]string
-	dispatchersBySession      map[string]garden.Tender
-	dispatchFromChief         map[string]bool
-	dispatchProjectionRevs    map[string]int64
-	dispatchSeedsLoaded       bool
+	workflowBroadcastMu    sync.Mutex
+	workflowDirty          map[string]bool
+	workflowEngineMu       sync.Mutex
+	workflowEngineConn     map[string]workflowEngineSink
+	appsBroadcastHook      func([]protocol.AppRegistryEntry)
+	gardenMintID           func() (string, error)
+	gardenMintNoteID       func() (string, error)
+	gardenNow              func() time.Time
+	gitHubPollingOffLogged bool
+	gardenWatchMu          sync.Mutex
+	gardenReviewMu         sync.Mutex
+	dispatchSeedsMu        sync.Mutex
+	dispatchSeeds          map[string]string
+	dispatchersBySession   map[string]garden.Tender
+	dispatchFromChief      map[string]bool
+	dispatchProjectionRevs map[string]int64
+	dispatchSeedsLoaded    bool
 
 	gardenNotePageSize int
 
@@ -381,17 +380,9 @@ type Daemon struct {
 	pendingSnapshots     map[string]func()
 	pendingSnapshotOrder []string
 
-	jobQueueMu               sync.RWMutex
-	jobQueue                 *jobs.Runner
-	taskFailureRenderers     map[string]taskFailureRenderer
-	sessionActivityExecution func(
-		ctx context.Context,
-		provider agentdriver.HeadlessTaskProvider,
-		request agentdriver.HeadlessTaskRequest,
-	) (agentdriver.HeadlessTaskResult, error)
-	gardenAdvisorResolve func(
-		config gardenAdvisorConfig,
-	) (agentdriver.HeadlessTaskProvider, string, error)
+	jobQueueMu           sync.RWMutex
+	jobQueue             *jobs.Runner
+	taskFailureRenderers map[string]taskFailureRenderer
 
 	sessionActivityRunsMu sync.Mutex
 	sessionActivityRuns   map[string]sessionActivityRun
@@ -1600,9 +1591,23 @@ func (d *Daemon) Stop() {
 	d.stopOnce.Do(d.stop)
 }
 
+func (d *Daemon) lifetime() context.Context {
+	d.lifetimeOnce.Do(func() {
+		d.lifetimeCtx, d.endLifetime = context.WithCancel(context.Background())
+		select {
+		case <-d.done:
+			d.endLifetime()
+		default:
+		}
+	})
+	return d.lifetimeCtx
+}
+
 func (d *Daemon) stop() {
 	d.log("daemon stopping")
 	close(d.done)
+	d.lifetime()
+	d.endLifetime()
 	if d.listener != nil {
 		d.listener.Close()
 		d.listener = nil
@@ -2146,7 +2151,7 @@ func (d *Daemon) maybeStartDiagServer() {
 }
 
 func (d *Daemon) diagStats() diag.Stats {
-	stats := diag.Stats{PtyBackend: d.ptyBackendMode()}
+	stats := diag.Stats{PtyBackend: d.ptyBackendMode(), DocSubscriptions: d.documentSubscriptionCount()}
 	if d.ptyBackend == nil {
 		stats.PtyBackend = "embedded"
 		return stats

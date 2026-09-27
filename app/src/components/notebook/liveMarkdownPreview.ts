@@ -122,7 +122,7 @@ interface DecorationRange {
   to: number;
 }
 
-export function buildDecorations(
+function buildDecorations(
   state: EditorState,
   focused = true,
   parsedTree?: Tree,

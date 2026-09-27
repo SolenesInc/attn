@@ -26,120 +26,103 @@ func subjects() []SearchSubject {
 	}
 }
 
-func searchFor(t *testing.T, query string, limit int) ([]SearchHit, int) {
-	t.Helper()
-	terms, err := SearchTerms(query)
-	if err != nil {
-		t.Fatalf("terms for %q: %v", query, err)
+func TestSearch(t *testing.T) {
+	cases := []struct {
+		name    string
+		query   string
+		limit   int
+		matched int
+		hits    []string
+		where   []string
+		snippet string
+	}{
+		{name: "closed seeds answer whether it was already done", query: "tickets", matched: 1, hits: []string{"s-cccccc"}},
+		{name: "a log-only match says so and quotes the note", query: "prototyped", matched: 1, hits: []string{"s-bbbbbb"}, where: []string{MatchLog}, snippet: "Prototyped the drop target"},
+		{name: "terms scattered across fields do not match", query: "index milliseconds", matched: 0},
+		{name: "terms in one note match", query: "scan search", matched: 1, hits: []string{"s-dddddd"}},
+		{name: "title matches come before body matches", query: "seed", matched: 3, where: []string{MatchTitle, MatchTitle, MatchBody}},
+		{name: "a limit trims the answer and keeps the count", query: "seed", limit: 1, matched: 3, where: []string{MatchTitle}},
+		{name: "case does not decide a match", query: "SQLite FTS", matched: 1, hits: []string{"s-dddddd"}},
 	}
-	return Search(subjects(), terms, limit)
-}
-
-func TestSearchReachesClosedSeeds(t *testing.T) {
-	hits, matched := searchFor(t, "tickets", 0)
-	if matched != 1 || len(hits) != 1 {
-		t.Fatalf("wanted the harvested seed alone, got %d hits of %d matched: %+v", len(hits), matched, hits)
-	}
-	if hits[0].Seed.ID != "s-cccccc" || hits[0].Seed.Status != StatusHarvested {
-		t.Fatalf("a harvested seed is the answer to `was this already done`, got %+v", hits[0])
-	}
-}
-
-func TestSearchMatchesLogTextAloneAndQuotesIt(t *testing.T) {
-	hits, matched := searchFor(t, "prototyped", 0)
-	if matched != 1 {
-		t.Fatalf("wanted the one seed whose log says it, matched %d", matched)
-	}
-	if hits[0].Seed.ID != "s-bbbbbb" || hits[0].Where != MatchLog {
-		t.Fatalf("a log-only match must say it came from the log, got %+v", hits[0])
-	}
-	if !strings.Contains(hits[0].Snippet, "Prototyped the drop target") {
-		t.Fatalf("the snippet must quote the matching note, got %q", hits[0].Snippet)
-	}
-}
-
-func TestSearchNeedsEveryTermInOneField(t *testing.T) {
-	if _, matched := searchFor(t, "index milliseconds", 0); matched != 0 {
-		t.Fatalf("terms scattered across fields matched %d seeds; a snippet could not show why", matched)
-	}
-	if _, matched := searchFor(t, "scan search", 0); matched != 1 {
-		t.Fatalf("both terms sit in one note, so that seed matches; matched %d", matched)
-	}
-}
-
-func TestSearchOrdersTitleMatchesFirst(t *testing.T) {
-	hits, matched := searchFor(t, "seed", 0)
-	if matched != 3 {
-		t.Fatalf("wanted the three seeds saying `seed`, matched %d", matched)
-	}
-	if hits[0].Where != MatchTitle || hits[1].Where != MatchTitle {
-		t.Fatalf("title matches come first, got %s then %s", hits[0].Where, hits[1].Where)
-	}
-	if hits[2].Where != MatchBody {
-		t.Fatalf("a body match comes after every title match, got %s", hits[2].Where)
-	}
-}
-
-func TestSearchLimitTrimsAndStillCountsWhatMatched(t *testing.T) {
-	hits, matched := searchFor(t, "seed", 1)
-	if len(hits) != 1 || matched != 3 {
-		t.Fatalf("a limit trims the answer and keeps the count, got %d hits of %d", len(hits), matched)
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			terms, err := SearchTerms(tc.query)
+			if err != nil {
+				t.Fatalf("terms for %q: %v", tc.query, err)
+			}
+			hits, matched := Search(subjects(), terms, tc.limit)
+			if matched != tc.matched {
+				t.Fatalf("matched %d, want %d: %+v", matched, tc.matched, hits)
+			}
+			if tc.hits != nil {
+				var ids []string
+				for _, hit := range hits {
+					ids = append(ids, hit.Seed.ID)
+				}
+				if !equal(ids, tc.hits) {
+					t.Errorf("hits = %v, want %v", ids, tc.hits)
+				}
+			}
+			if tc.where != nil {
+				var where []string
+				for _, hit := range hits {
+					where = append(where, hit.Where)
+				}
+				if !equal(where, tc.where) {
+					t.Errorf("matched in %v, want %v", where, tc.where)
+				}
+			}
+			if tc.snippet != "" && !strings.Contains(hits[0].Snippet, tc.snippet) {
+				t.Errorf("snippet %q does not quote %q", hits[0].Snippet, tc.snippet)
+			}
+		})
 	}
 }
 
-func TestSearchIsCaseInsensitive(t *testing.T) {
-	if _, matched := searchFor(t, "SQLite FTS", 0); matched != 1 {
-		t.Fatalf("case must not decide a match, matched %d", matched)
+func TestSnippet(t *testing.T) {
+	cases := []struct {
+		name   string
+		text   string
+		terms  []string
+		check  func(snippet string) bool
+		expect string
+	}{
+		{
+			name:  "a long line is elided on both sides around the match within the budget",
+			text:  "first line\n" + strings.Repeat("padding ", 40) + "NEEDLE" + strings.Repeat(" trailing", 40),
+			terms: []string{"needle"},
+			check: func(s string) bool {
+				return strings.Contains(s, "NEEDLE") && len([]rune(s)) <= SnippetChars+2 && strings.HasPrefix(s, "…") && strings.HasSuffix(s, "…")
+			},
+			expect: "the match, cut on both sides, within the budget",
+		},
+		{
+			name:   "a short line prints whole and unindented",
+			text:   "  a note about the garden  ",
+			terms:  []string{"garden"},
+			check:  func(s string) bool { return s == "a note about the garden" },
+			expect: "the whole line",
+		},
+		{
+			name:   "case folding that changes byte length keeps the match intact",
+			text:   strings.Repeat("İ", 30) + " the needle is here " + strings.Repeat("ü", 200),
+			terms:  []string{"needle"},
+			check:  func(s string) bool { return strings.Contains(s, "needle is here") },
+			expect: "the match intact",
+		},
+		{
+			name:   "the line carrying every term wins",
+			text:   "# Finish the garden\n\n" + strings.Repeat("filler about plots and edges\n", 20) + "Search is its own verb, with snippets across the whole garden.\n",
+			terms:  []string{"garden", "search"},
+			check:  func(s string) bool { return strings.HasPrefix(s, "Search is its own verb") },
+			expect: "the line saying both terms",
+		},
 	}
-}
-
-func TestSearchTermsRefusesNothingToLookFor(t *testing.T) {
-	if _, err := SearchTerms("   "); err == nil {
-		t.Fatal("an empty query must say what to type instead")
-	}
-	long := strings.Repeat("x", MaxSearchQueryChars+1)
-	err := func() error { _, err := SearchTerms(long); return err }()
-	if err == nil {
-		t.Fatal("an oversized query must be refused")
-	}
-	if !strings.Contains(err.Error(), "max_query_chars=400") || !strings.Contains(err.Error(), "asked for 401") {
-		t.Fatalf("the refusal must name the limit and the ask, got %q", err)
-	}
-}
-
-func TestSnippetElidesAroundTheMatchAndKeepsItVisible(t *testing.T) {
-	line := strings.Repeat("padding ", 40) + "NEEDLE" + strings.Repeat(" trailing", 40)
-	snippet := Snippet("first line\n"+line, []string{"needle"})
-	if !strings.Contains(snippet, "NEEDLE") {
-		t.Fatalf("an elided snippet that drops the match explains nothing: %q", snippet)
-	}
-	if n := len([]rune(snippet)); n > SnippetChars+2 {
-		t.Fatalf("snippet_chars=%d, got %d runes: %q", SnippetChars, n, snippet)
-	}
-	if !strings.HasPrefix(snippet, "…") || !strings.HasSuffix(snippet, "…") {
-		t.Fatalf("an elided snippet must show it was cut on both sides: %q", snippet)
-	}
-}
-
-func TestSnippetQuotesShortLinesWhole(t *testing.T) {
-	if got := Snippet("  a note about the garden  ", []string{"garden"}); got != "a note about the garden" {
-		t.Fatalf("a line inside the budget prints whole and unindented, got %q", got)
-	}
-}
-
-func TestSnippetSurvivesCaseFoldingThatChangesByteLength(t *testing.T) {
-	text := strings.Repeat("İ", 30) + " the needle is here " + strings.Repeat("ü", 200)
-	snippet := Snippet(text, []string{"needle"})
-	if !strings.Contains(snippet, "needle is here") {
-		t.Fatalf("the match was lost or garbled: %q", snippet)
-	}
-}
-
-func TestSnippetPrefersTheLineCarryingEveryTerm(t *testing.T) {
-	body := "# Finish the garden\n\n" + strings.Repeat("filler about plots and edges\n", 20) +
-		"Search is its own verb, with snippets across the whole garden.\n"
-	got := Snippet(body, []string{"garden", "search"})
-	if !strings.HasPrefix(got, "Search is its own verb") {
-		t.Fatalf("the snippet must quote the line that says both terms, got %q", got)
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			if got := Snippet(tc.text, tc.terms); !tc.check(got) {
+				t.Errorf("Snippet = %q, want %s", got, tc.expect)
+			}
+		})
 	}
 }

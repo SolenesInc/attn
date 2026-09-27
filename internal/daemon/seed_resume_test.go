@@ -3,6 +3,8 @@ package daemon
 import (
 	"encoding/json"
 	"errors"
+	"io"
+	"net"
 	"reflect"
 	"strings"
 	"syscall"
@@ -221,4 +223,15 @@ func TestSeedResumeRollsBackPaneWhenSpawnFails(t *testing.T) {
 	if ws := d.store.GetWorkspace("workspace-ghost-session"); ws != nil {
 		t.Fatalf("workspace survived a failed resume: %+v", ws)
 	}
+}
+
+func drainedConn(t *testing.T) net.Conn {
+	t.Helper()
+	server, client := net.Pipe()
+	go func() { _, _ = io.Copy(io.Discard, client) }()
+	t.Cleanup(func() {
+		_ = server.Close()
+		_ = client.Close()
+	})
+	return server
 }

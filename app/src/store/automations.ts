@@ -22,8 +22,6 @@ interface AutomationsStore {
 
   // Never overwrites a stored key: one already in flight is more current than a later fetch.
   adoptRunRequest: (definitionId: string, requestId: string) => void;
-
-  reset: () => void;
 }
 
 export const useAutomationsStore = create<AutomationsStore>((set, get) => ({
@@ -63,8 +61,6 @@ export const useAutomationsStore = create<AutomationsStore>((set, get) => ({
       if (state.pendingRunRequests[definitionId]) return state;
       return { pendingRunRequests: { ...state.pendingRunRequests, [definitionId]: requestId } };
     }),
-
-  reset: () => set({ definitions: [], runsByDefinition: {}, changedTick: 0, pendingRunRequests: {} }),
 }));
 
 export function selectDefinitionById(
