@@ -13,7 +13,6 @@ import { CriticalNotificationStrip } from './CriticalNotificationStrip';
 import { AgentRowView, AgentSessionRow, type SlotOf } from './palette/AgentRows';
 import { agentPaletteRows, type AgentPaletteRow } from './palette/agentPaletteRows';
 import './QueueBar.css';
-import { SidebarPopovers } from './SidebarChrome';
 import { useSidebarContext } from './SidebarContext';
 import { ExpandIcon } from './SidebarIcons';
 import type { LocalSession } from './sidebarTypes';
@@ -76,7 +75,6 @@ export function QueueBar() {
       <span className="queue-bar-spacer" />
       <RunsChip peekHandlers={peekHandlers('runs')} peekOpen={shown === 'runs'} onPicked={() => setPeek(null)} />
       <DesktopChips />
-      <SidebarPopovers />
     </div>
   );
 }
