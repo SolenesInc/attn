@@ -263,12 +263,6 @@ func printAgentPeek(w io.Writer, result *protocol.AgentPeekResult) {
 	if protocol.Deref(result.TurnOwed) {
 		fmt.Fprintln(w, "turn: owed to this session")
 	}
-	if len(result.Todos) > 0 {
-		fmt.Fprintln(w, "\ntodos:")
-		for _, todo := range result.Todos {
-			fmt.Fprintf(w, "  %s\n", todo)
-		}
-	}
 	if message := strings.TrimSpace(protocol.Deref(result.LastAssistantMessage)); message != "" {
 		fmt.Fprintln(w, "\nlast assistant message:")
 		for _, line := range strings.Split(message, "\n") {
@@ -704,7 +698,7 @@ commands:
         the address book: every session on this daemon with its short id,
         name, workspace, state, and whether a turn is owed. Read-only.
   peek <session-or-member> [--json]
-        observe a session without interrupting it: state, todos, last
+        observe a session without interrupting it: state, last
         assistant message, and the rendered screen. Passive — the observed
         agent never notices. The target is a crew name, full session id, or
         unique session id prefix. A sleeping crew member stays asleep.

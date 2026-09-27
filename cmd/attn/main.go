@@ -71,13 +71,6 @@ type sessionCron struct {
 	Prompt    string `json:"prompt"`
 }
 
-type todoWriteInput struct {
-	Todos []struct {
-		Content string `json:"content"`
-		Status  string `json:"status"`
-	} `json:"todos"`
-}
-
 func main() {
 	if len(os.Args) >= 2 && os.Args[1] == "_workflow-result-mcp" {
 		runWorkflowResultMCP(os.Args[2:])
@@ -244,7 +237,8 @@ func main() {
 	case "_hook-state":
 		runHookState()
 	case "_hook-todo":
-		runHookTodo()
+		// Claude sessions launched before todo tracking was removed still call
+		// this hook until they restart; exiting 0 keeps it from showing an error.
 	case "_hook-tool-use":
 		runHookToolUse()
 	case "_probe-tui":
@@ -2760,43 +2754,6 @@ func runHookToolUse() {
 		if err := c.RecordPullRequestCreated(sessionID, url); err != nil {
 			fmt.Fprintf(os.Stderr, "warning: could not record pull request %s: %v\n", url, err)
 		}
-	}
-}
-
-func runHookTodo() {
-	sessionID := hookSessionIDFromArgOrEnv(2)
-	if sessionID == "" {
-		fmt.Fprintf(os.Stderr, "usage: attn _hook-todo [session_id]\n")
-		os.Exit(1)
-	}
-
-	var input hookInput
-	if err := json.NewDecoder(os.Stdin).Decode(&input); err != nil {
-		return
-	}
-	c := client.New(strings.TrimSpace(os.Getenv("ATTN_SOCKET_PATH")))
-	var todoInput todoWriteInput
-	if err := json.Unmarshal(input.ToolInput, &todoInput); err != nil {
-		return
-	}
-
-	var todos []string
-	for _, t := range todoInput.Todos {
-		var marker string
-		switch t.Status {
-		case "completed":
-			marker = "[✓]"
-		case "in_progress":
-			marker = "[→]"
-		default:
-			marker = "[ ]"
-		}
-		todos = append(todos, fmt.Sprintf("%s %s", marker, t.Content))
-	}
-
-	if err := c.UpdateTodos(sessionID, todos); err != nil {
-		fmt.Fprintf(os.Stderr, "error updating todos: %v\n", err)
-		os.Exit(1)
 	}
 }
 

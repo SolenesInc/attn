@@ -1252,6 +1252,7 @@ CREATE TABLE IF NOT EXISTS app_reconcile_progress (
 	{153, "keep every delegation preferences revision", ``},
 	{154, "record when a session's agent process launched", ""},
 	{155, "session last-seen stamps move to UTC so the ledger window compares instants", ""},
+	{156, "drop session todos", ""},
 }
 
 const migration99SQL = `
@@ -1470,7 +1471,12 @@ func migrateDB(db *sql.DB, dbPath string) error {
 			return fmt.Errorf("starting transaction for migration %d: %w", m.version, err)
 		}
 
-		if m.version == 141 {
+		if m.version == 156 {
+			if err := applyMigration156(tx); err != nil {
+				tx.Rollback()
+				return fmt.Errorf("migration %d (%s): %w", m.version, m.desc, err)
+			}
+		} else if m.version == 141 {
 			if err := applyMigration141(tx); err != nil {
 				tx.Rollback()
 				return fmt.Errorf("migration %d (%s): %w", m.version, m.desc, err)
@@ -2337,6 +2343,15 @@ func applyMigration136(tx *sql.Tx, schema string) error {
 		}
 	}
 	_, err := tx.Exec(schema)
+	return err
+}
+
+func applyMigration156(tx *sql.Tx) error {
+	has, err := columnExists(tx, "sessions", "todos")
+	if err != nil || !has {
+		return err
+	}
+	_, err = tx.Exec("ALTER TABLE sessions DROP COLUMN todos")
 	return err
 }
 

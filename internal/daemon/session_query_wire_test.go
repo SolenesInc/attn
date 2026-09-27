@@ -45,20 +45,13 @@ func TestQueryFiltersByStateAndOrdersByLabelThenID(t *testing.T) {
 	}
 }
 
-func TestReportedTodosAndARenameReachTheSession(t *testing.T) {
+func TestARenameReachesTheSession(t *testing.T) {
 	w := newWorld(t, fakeagent.Claude)
 	app := w.App()
 	cli := w.Client()
 	session := w.Spawn(app, fakeagent.Claude, w.Path("shop"))
 	w.Launched(session)
 	before := queriedSession(t, cli, session)
-
-	if err := cli.UpdateTodos(session, []string{"write the migration", "run the suite"}); err != nil {
-		t.Fatalf("report todos: %v", err)
-	}
-	testworld.AwaitSession(app, session, func(s protocol.Session) bool {
-		return slices.Equal(s.Todos, []string{"write the migration", "run the suite"})
-	})
 
 	if err := cli.RenameSession(session, "checkout"); err != nil {
 		t.Fatalf("rename: %v", err)

@@ -314,7 +314,7 @@ export interface RateLimitState {
 }
 
 // Protocol version - must match daemon's ProtocolVersion
-export const PROTOCOL_VERSION = '321';
+export const PROTOCOL_VERSION = '322';
 const MAX_PENDING_ATTACH_OUTPUTS = 512;
 
 const CLIENT_INSTANCE_ID =
@@ -2341,7 +2341,6 @@ export function useDaemonSocket({
             break;
 
           case 'session_state_changed':
-          case 'session_todos_updated':
             if (data.session) {
               sessionsRef.current = upsertSessionByID(sessionsRef.current, data.session);
               callbacksRef.current.onSessionsUpdate(sessionsRef.current);
