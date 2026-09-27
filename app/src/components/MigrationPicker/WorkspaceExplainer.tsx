@@ -1,4 +1,5 @@
 import { useId, useState } from 'react';
+import { useEscapeStack } from '../../hooks/useEscapeStack';
 
 function WorkspaceDiagram() {
   return (
@@ -43,35 +44,27 @@ function WorkspaceDiagram() {
 export function WorkspaceExplainer() {
   const [open, setOpen] = useState(false);
   const popupId = useId();
+  useEscapeStack(() => setOpen(false), open);
   return (
     <span className="mp-explainer" onMouseEnter={() => setOpen(true)} onMouseLeave={() => setOpen(false)}>
       <button
         type="button"
         className="mp-explainer-trigger"
-        aria-describedby={open ? popupId : undefined}
-        aria-expanded={open}
+        aria-describedby={popupId}
         onFocus={() => setOpen(true)}
         onBlur={() => setOpen(false)}
         onClick={() => setOpen(true)}
-        onKeyDown={(event) => {
-          if (event.key === 'Escape' && open) {
-            event.stopPropagation();
-            setOpen(false);
-          }
-        }}
       >
         What is a workspace?
       </button>
-      {open && (
-        <span id={popupId} role="tooltip" className="mp-explainer-popup">
-          <WorkspaceDiagram />
-          <span className="mp-explainer-key">
-            <span><b>1</b>A group in the sidebar: a folder name with its sessions listed under it.</span>
-            <span><b>2</b>Everything you see together after clicking it: its sessions, splits and tiles, on one screen.</span>
-          </span>
-          <span className="mp-explainer-foot">Each workspace is now one desktop.</span>
+      <span id={popupId} role="tooltip" className="mp-explainer-popup" hidden={!open}>
+        <WorkspaceDiagram />
+        <span className="mp-explainer-key">
+          <span><b aria-hidden="true">1</b>A group in the sidebar: a folder name with its sessions listed under it.</span>
+          <span><b aria-hidden="true">2</b>Everything you see together after clicking it: its sessions, splits and tiles, on one screen.</span>
         </span>
-      )}
+        <span className="mp-explainer-foot">Each workspace with sessions is now one desktop.</span>
+      </span>
     </span>
   );
 }

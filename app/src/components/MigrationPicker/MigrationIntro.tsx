@@ -2,7 +2,7 @@ import { useEffect, useRef } from 'react';
 import { slotShortcut } from '../../utils/desktops';
 import { WorkspaceExplainer } from './WorkspaceExplainer';
 
-export const INTRO_SENTENCE = 'Each workspace you had is already its own desktop. Before you continue, confirm each one is where you want it.';
+export const INTRO_SENTENCE = 'Each workspace with sessions is already its own desktop. Before you continue, confirm each one is where you want it.';
 
 export type Step = 'intro' | 'place';
 
@@ -44,7 +44,7 @@ export function Intro({ onStart }: { onStart: () => void }) {
           <span className="mp-change-icon" aria-hidden="true">▦</span>
           <div>
             <h2>Nothing to set up</h2>
-            <p>Every workspace already has its desktop. The first nine open with <kbd>{slotShortcut(1)}</kbd>–<kbd>{slotShortcut(9)}</kbd>.</p>
+            <p>Your workspaces with sessions already have their desktops. The first nine open with <kbd>{slotShortcut(1)}</kbd>–<kbd>{slotShortcut(9)}</kbd>.</p>
           </div>
         </div>
         <div>

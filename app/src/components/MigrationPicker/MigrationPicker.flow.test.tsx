@@ -77,8 +77,9 @@ describe('MigrationPicker', () => {
 
     await user.hover(trigger);
     expect(screen.getByRole('tooltip')).toHaveTextContent('A group in the sidebar');
-    await user.unhover(trigger);
+    await user.keyboard('{Escape}');
     expect(screen.queryByRole('tooltip')).not.toBeInTheDocument();
+    await user.unhover(trigger);
 
     await user.keyboard('{Shift>}{Tab}{/Shift}');
     expect(trigger).toHaveFocus();

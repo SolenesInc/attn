@@ -261,12 +261,6 @@
   cursor: help;
 }
 
-.mp-explainer-trigger:focus-visible {
-  outline: 2px solid var(--accent);
-  outline-offset: 3px;
-  border-radius: 2px;
-}
-
 .mp-explainer-popup {
   position: absolute;
   top: calc(100% + 10px);
@@ -280,6 +274,18 @@
   border-radius: 12px;
   background: var(--color-bg-elevated);
   box-shadow: 0 18px 50px rgba(0, 0, 0, 0.35);
+}
+
+.mp-explainer-popup[hidden] {
+  display: none;
+}
+
+/* Bridges the gap under the link, so the pointer can reach the popup without closing it. */
+.mp-explainer-popup::before {
+  content: '';
+  position: absolute;
+  inset: -12px 0 auto;
+  height: 12px;
 }
 
 .mp-explainer-art {
@@ -305,11 +311,11 @@
 }
 
 .mp-explainer-art .row {
-  fill: var(--color-bg-panel);
+  fill: color-mix(in srgb, var(--color-text-primary) 7%, transparent);
 }
 
 .mp-explainer-art .row.selected {
-  fill: var(--color-bg-selected);
+  fill: color-mix(in srgb, var(--color-text-primary) 16%, transparent);
 }
 
 .mp-explainer-art .pane {
@@ -342,7 +348,7 @@
 }
 
 .mp-explainer-art .marker-text {
-  fill: var(--color-bg-app);
+  fill: #1b100a;
   font-size: 12px;
   font-weight: 700;
   text-anchor: middle;
@@ -367,7 +373,7 @@
   height: 20px;
   border-radius: 50%;
   background: var(--accent);
-  color: var(--color-bg-app);
+  color: #1b100a;
   font-size: var(--font-size-sm);
   line-height: 20px;
   text-align: center;
