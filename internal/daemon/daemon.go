@@ -40,6 +40,7 @@ import (
 	"github.com/victorarias/attn/internal/logging"
 	"github.com/victorarias/attn/internal/notebook"
 	"github.com/victorarias/attn/internal/pathutil"
+	"github.com/victorarias/attn/internal/pausepoint"
 	"github.com/victorarias/attn/internal/protocol"
 	"github.com/victorarias/attn/internal/pty"
 	"github.com/victorarias/attn/internal/ptybackend"
@@ -935,6 +936,7 @@ func (d *Daemon) Start() error {
 
 	d.watchRecoveredLaunches()
 	go func() {
+		pausepoint.At(pausepoint.DaemonStartupRecovery)
 		d.performStartupPTYRecovery(previousRunSessions, recoveryStartedAt)
 		d.resolveDue(time.Now())
 		go d.runSessionResolver()

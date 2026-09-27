@@ -19,6 +19,8 @@ const (
 	PtyAttachSnapshot  = "pty-attach-snapshot"
 	PtyOutputSequenced = "pty-output-sequenced"
 	PtyOutputHeld      = "pty-output-held"
+
+	DaemonStartupRecovery = "daemon-startup-recovery"
 )
 
 type armed struct {

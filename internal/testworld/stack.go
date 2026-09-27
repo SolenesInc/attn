@@ -108,7 +108,25 @@ func (s *Stack) AwaitCrash() {
 	s.T.Fatalf("attn daemon (pid %d) exited with %v, want it killed by SIGKILL at its crash point", pid, err)
 }
 
+func (s *Stack) StartHeldAt(p *Pause) {
+	s.T.Helper()
+	s.launch()
+	p.Await()
+}
+
 func (s *Stack) start(vars ...string) {
+	s.T.Helper()
+	s.launch(vars...)
+	probe := s.App()
+	for _, warning := range probe.Initial.Warnings {
+		if strings.HasPrefix(warning.Code, "pty_backend_") && !s.allowFallback {
+			s.T.Fatalf("the daemon started on a fallback PTY backend: %s: %s", warning.Code, warning.Message)
+		}
+	}
+	probe.Close()
+}
+
+func (s *Stack) launch(vars ...string) {
 	s.T.Helper()
 	if s.daemon != nil {
 		s.T.Fatal("Start: the stack's daemon is already running")
@@ -150,14 +168,6 @@ func (s *Stack) start(vars ...string) {
 	case <-time.After(fakeagent.HangGuard):
 		s.failStart(fmt.Sprintf("was not ready within %s", fakeagent.HangGuard))
 	}
-
-	probe := s.App()
-	for _, warning := range probe.Initial.Warnings {
-		if strings.HasPrefix(warning.Code, "pty_backend_") && !s.allowFallback {
-			s.T.Fatalf("the daemon started on a fallback PTY backend: %s: %s", warning.Code, warning.Message)
-		}
-	}
-	probe.Close()
 }
 
 func (s *Stack) failStart(reason string) {
