@@ -150,6 +150,28 @@ test.describe('Workspace Sessions', () => {
     expect((await canvas.screenshot()).equals(before)).toBe(true);
   });
 
+  test('draws terminal cells larger after the user increases the font size', async ({ page, daemon }) => {
+    await daemon.start();
+    await page.goto('/');
+    await page.waitForSelector('.dashboard');
+    await injectWorkspace(page, daemon, 'workspace-font', [
+      { id: 'font-agent', label: 'font-agent', paneId: 'pane-font-agent', cwd: '/tmp/workspace-font' },
+    ]);
+    await page.getByTestId('session-font-agent').click();
+    await waitForMockPtyBanner(page, 'font-agent');
+    const canvas = page.locator('[data-pane-id="pane-font-agent"] canvas').first();
+    const cellWidth = () => canvas.evaluate((element: HTMLCanvasElement) => {
+      const size = window.__TEST_GET_SESSION_PANE_SIZE?.('font-agent');
+      return size ? element.width / size.cols : 0;
+    });
+    const before = await cellWidth();
+    expect(before).toBeGreaterThan(0);
+
+    await page.keyboard.press('Meta+Equal');
+
+    await expect.poll(cellWidth).toBeGreaterThan(before);
+  });
+
   test('sidebar selection, row actions, and settings have independent keyboard targets', async ({ page, daemon }) => {
     await daemon.start();
     await page.goto('/');

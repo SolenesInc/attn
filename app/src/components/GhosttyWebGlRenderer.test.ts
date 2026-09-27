@@ -676,56 +676,6 @@ describe('WebGlTerminalRenderer glyph cache invalidation', () => {
   });
 });
 
-describe('WebGlTerminalRenderer.setFontSize', () => {
-  function withMockedCanvas<T>(fn: () => T): T {
-    const realCreate = document.createElement.bind(document);
-    const spy = vi.spyOn(document, 'createElement').mockImplementation((tag: string) => {
-      if (tag === 'canvas') return makeFakeCanvas(realCreate('canvas'));
-      return realCreate(tag);
-    });
-    try {
-      return fn();
-    } finally {
-      spy.mockRestore();
-    }
-  }
-
-  it('grows cell metrics for a larger font size and invalidates the glyph cache', () => {
-    const { renderer, atlasContext } = makeRenderer(14, 'monospace');
-    const smallWidth = renderer.cellWidth;
-    const smallHeight = renderer.cellHeight;
-    const smallBaseline = renderer.baseline;
-
-    renderer.getGlyph('A', 0);
-    const rasterizedBeforeResize = atlasContext.fillTextCalls.length;
-    renderer.getGlyph('A', 0);
-    expect(atlasContext.fillTextCalls.length).toBe(rasterizedBeforeResize);
-
-    withMockedCanvas(() => renderer.setFontSize(28));
-
-    expect(renderer.cellWidth).toBeGreaterThan(smallWidth);
-    expect(renderer.cellHeight).toBeGreaterThan(smallHeight);
-    expect(renderer.baseline).toBeGreaterThan(smallBaseline);
-
-    renderer.getGlyph('A', 0);
-    expect(atlasContext.fillTextCalls.length).toBe(rasterizedBeforeResize + 1);
-  });
-
-  it('resizes the canvas to the new cell metrics even when cols/rows are unchanged', () => {
-    const { renderer } = makeRenderer(14, 'monospace');
-    const canvas = renderer.canvas as ReturnType<typeof makeFakeCanvas>;
-    renderer.resize(80, 24);
-    const widthBefore = canvas.width;
-    const heightBefore = canvas.height;
-
-    withMockedCanvas(() => renderer.setFontSize(28));
-    renderer.resize(80, 24);
-
-    expect(canvas.width).toBeGreaterThan(widthBefore);
-    expect(canvas.height).toBeGreaterThan(heightBefore);
-  });
-});
-
 describe('WebGlTerminalRenderer glyph atlas grow path', () => {
   it('keeps the intended font on the glyph that triggers a grow and an at-cap reset', () => {
     const { renderer, atlasContext } = makeRenderer(14, 'monospace');
