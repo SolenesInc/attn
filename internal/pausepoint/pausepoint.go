@@ -19,6 +19,7 @@ const (
 	PtyAttachSnapshot  = "pty-attach-snapshot"
 	PtyOutputSequenced = "pty-output-sequenced"
 	PtyOutputHeld      = "pty-output-held"
+	BusAnnounce        = "bus-announce"
 )
 
 type armed struct {

@@ -268,14 +268,6 @@ func (m *memStore) PendingBytes(above int64) (int64, error) {
 	return bytes, nil
 }
 
-func (m *memStore) appendOutOfBand(name, subject string, now time.Time) int64 {
-	seq, err := m.Append(Event{Name: name, Subject: subject}, now)
-	if err != nil {
-		panic(err)
-	}
-	return seq
-}
-
 func (m *memStore) dropEventsBelow(seq int64) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
