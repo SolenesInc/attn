@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"testing"
 
+	"github.com/victorarias/attn/internal/fakeagent"
 	"github.com/victorarias/attn/internal/protocol"
 )
 
@@ -59,4 +60,15 @@ func TestAPtyResizeIsEchoedOnceInStreamOrderKeepingTheCellSizeWhenPixelsAreUnusa
 			t.Errorf("%s: stty in the session does not report %d rows and %d cols", tc.name, rows, cols)
 		}
 	}
+}
+
+func TestAProgramReadsThePixelGeometryOfItsLastResize(t *testing.T) {
+	w := newWorld(t)
+	app := w.App()
+	session := w.Spawn(app, workspaceShell, w.Path("shop"))
+	winsize := fakeagent.InstallWinsize(t, w.Dir)
+
+	app.Send(protocol.PtyResizeMessage{Cmd: protocol.CmdPtyResize, ID: session, Cols: 40, Rows: 12, Xpixel: protocol.Ptr(40 * 18), Ypixel: protocol.Ptr(12 * 45)})
+	app.TypeLine(session, winsize)
+	app.AwaitScreen(session, "winsize cols=40 rows=12 xpixel=720 ypixel=540")
 }

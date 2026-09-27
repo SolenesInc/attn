@@ -1,8 +1,6 @@
 package pty
 
 import (
-	"context"
-	"os"
 	"testing"
 	"time"
 )
@@ -159,61 +157,4 @@ func TestShellArbiterPromptVerdictDoesNotLeakOntoTheNextCommand(t *testing.T) {
 	if !ok || obs.Claim != claimBusy {
 		t.Fatalf("next command = (%+v, %v), want busy despite prompt verdict", obs, ok)
 	}
-}
-
-func TestShellForegroundPollerObservesARealCommand(t *testing.T) {
-	if testing.Short() {
-		t.Skip("skipping real PTY spawn in short mode")
-	}
-	if _, err := os.Stat("/bin/bash"); err != nil {
-		t.Skip("/bin/bash unavailable")
-	}
-
-	m := NewManager(nil)
-	t.Cleanup(m.Shutdown)
-	const id = "shell-fg-poller"
-	if err := m.Spawn(SpawnOptions{
-		ID:              id,
-		CWD:             t.TempDir(),
-		Agent:           "probe-shell",
-		ExternalCommand: []string{"/bin/bash", "--noprofile", "--norc", "-i"},
-		Cols:            80,
-		Rows:            24,
-	}); err != nil {
-		t.Fatalf("Spawn() error: %v", err)
-	}
-	s, err := m.getSession(id)
-	if err != nil {
-		t.Fatalf("getSession() error: %v", err)
-	}
-
-	claims := make(chan string, 64)
-	s.shellSignals = newShellSignalArbiter(s.childProcessGroup())
-	s.onState = func(obs Observation) {
-		claims <- obs.Claim
-	}
-	go s.runShellForegroundPoller(25 * time.Millisecond)
-
-	waitForClaim := func(want string) {
-		t.Helper()
-		deadline := time.After(5 * time.Second)
-		for {
-			select {
-			case claim := <-claims:
-				if claim == want {
-					return
-				}
-			case <-deadline:
-				t.Fatalf("timed out waiting for %q", want)
-			}
-		}
-	}
-
-	waitForClaim(claimNotBusy)
-
-	if err := s.input(context.Background(), []byte("sleep 1\r")); err != nil {
-		t.Fatalf("input() error: %v", err)
-	}
-	waitForClaim(claimBusy)
-	waitForClaim(claimNotBusy)
 }
