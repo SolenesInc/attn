@@ -11,6 +11,8 @@ func isUserPresenceCommand(cmd string) bool {
 	case protocol.CmdProfileSelect,
 		protocol.CmdDesktopSetCurrent,
 		protocol.CmdDesktopSetActivePane,
+		protocol.CmdDesktopShowSession,
+		protocol.CmdDesktopShowLeaf,
 		protocol.CmdPRVisited,
 		protocol.CmdPtyInput,
 		protocol.CmdPtyResize:

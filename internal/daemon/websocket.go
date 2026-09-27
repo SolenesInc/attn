@@ -1018,6 +1018,10 @@ func (d *Daemon) handleClientMessage(client *wsClient, data []byte) {
 		d.handleDesktopSetActivePane(client, msg.(*protocol.DesktopSetActivePaneMessage))
 	case protocol.CmdDesktopPlaceSession:
 		d.handleDesktopPlaceSession(client, msg.(*protocol.DesktopPlaceSessionMessage))
+	case protocol.CmdDesktopShowSession:
+		d.handleDesktopShowSession(client, msg.(*protocol.DesktopShowSessionMessage))
+	case protocol.CmdDesktopShowLeaf:
+		d.handleDesktopShowLeaf(client, msg.(*protocol.DesktopShowLeafMessage))
 	case protocol.CmdDesktopMoveLeaf:
 		d.handleDesktopMoveLeaf(client, msg.(*protocol.DesktopMoveLeafMessage))
 	case protocol.CmdDesktopRemoveLeaf:
