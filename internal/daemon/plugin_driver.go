@@ -723,6 +723,7 @@ func (d *Daemon) closePluginDriverSession(sessionID, reason string, exitCode *in
 		d.logf("plugin session close skipped: session=%s reason=%s has no active driver run", sessionID, reason)
 		return
 	}
+	d.resolveSoon(sessionID)
 	d.notifyPluginDriverSessionClosed(run.PluginName, sessionID, run.RunID, reason, exitCode, signal)
 }
 

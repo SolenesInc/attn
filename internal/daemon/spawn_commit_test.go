@@ -5,8 +5,6 @@ import (
 	"testing"
 
 	"github.com/victorarias/attn/internal/protocol"
-	"github.com/victorarias/attn/internal/ptybackend"
-	"github.com/victorarias/attn/internal/store"
 )
 
 func newSpawnCommitTestDaemon(t *testing.T) (*Daemon, *fakeSpawnBackend, string) {
@@ -28,23 +26,6 @@ func spawnCommitMessage(id, profileID, cwd string) *protocol.SpawnSessionMessage
 		ProfileID: profileID,
 		Cols:      80,
 		Rows:      24,
-	}
-}
-
-func TestSpawnCommitPreservesStateTransitionDuringSpawn(t *testing.T) {
-	d, backend, cwd := newSpawnCommitTestDaemon(t)
-	msg := spawnCommitMessage("mid-spawn-state", defaultProfileID(t, d.store), cwd)
-	backend.onSpawn = func(ptybackend.SpawnOptions) {
-		if updated := d.store.UpdateState(msg.ID, protocol.StateWorking); !updated {
-			t.Fatalf("UpdateState(%q) = false, want true", msg.ID)
-		}
-	}
-
-	if rejection := d.runSpawnPipeline(msg, internalSpawnPolicy{}); rejection != nil {
-		t.Fatalf("runSpawnPipeline() rejection = %+v", rejection)
-	}
-	if session := d.store.Get(msg.ID); session == nil || session.State != protocol.SessionStateWorking {
-		t.Fatalf("stored session = %+v, want state working", session)
 	}
 }
 
@@ -83,124 +64,5 @@ func TestSpawnCommitPreservesExistingEndpointID(t *testing.T) {
 	}
 	if session := d.store.Get(msg.ID); session == nil || protocol.Deref(session.EndpointID) != "ep-1" {
 		t.Fatalf("stored session = %+v, want endpoint ep-1", session)
-	}
-}
-
-func TestSpawnCostTrackingStartsFreshButNotFromResumedHistory(t *testing.T) {
-	d, _, cwd := newSpawnCommitTestDaemon(t)
-
-	fresh := spawnCommitMessage("fresh-cost", defaultProfileID(t, d.store), cwd)
-	fresh.Agent = string(protocol.SessionAgentClaude)
-	if rejection := d.runSpawnPipeline(fresh, internalSpawnPolicy{}); rejection != nil {
-		t.Fatalf("fresh runSpawnPipeline() rejection = %+v", rejection)
-	}
-	freshCost, err := d.store.SessionCost(fresh.ID)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if !freshCost.Initialized || freshCost.Cursor != "" {
-		t.Fatalf("fresh session cost state = %+v, want initialized at byte zero", freshCost)
-	}
-
-	resumed := spawnCommitMessage("resumed-cost", defaultProfileID(t, d.store), cwd)
-	resumed.Agent = string(protocol.SessionAgentClaude)
-	resumed.ResumeSessionID = protocol.Ptr("provider-conversation-with-history")
-	if rejection := d.runSpawnPipeline(resumed, internalSpawnPolicy{}); rejection != nil {
-		t.Fatalf("resumed runSpawnPipeline() rejection = %+v", rejection)
-	}
-	resumedCost, err := d.store.SessionCost(resumed.ID)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if resumedCost.Initialized {
-		t.Fatalf("resumed session cost state = %+v, want uninitialized so discovery seeds at head", resumedCost)
-	}
-}
-
-func TestSpawnPersistsLaunchIntentBeforeWorkerStart(t *testing.T) {
-	d, backend, cwd := newSpawnCommitTestDaemon(t)
-	msg := spawnCommitMessage("intent-before-worker", defaultProfileID(t, d.store), cwd)
-	backend.onSpawn = func(ptybackend.SpawnOptions) {
-		if _, ok := d.store.LaunchIntent(msg.ID); !ok {
-			t.Fatal("LaunchIntent() = ok false at worker start, want true")
-		}
-	}
-
-	if rejection := d.runSpawnPipeline(msg, internalSpawnPolicy{}); rejection != nil {
-		t.Fatalf("runSpawnPipeline() rejection = %+v", rejection)
-	}
-}
-
-func TestSpawnFailureRestoresPriorLaunchIntent(t *testing.T) {
-	d, _, cwd := newSpawnCommitTestDaemon(t)
-	d.ptyBackend = &failingLaunchIntentBackend{}
-	msg := spawnCommitMessage("restore-prior-intent", defaultProfileID(t, d.store), cwd)
-	now := string(protocol.TimestampNow())
-	d.store.Add(&protocol.Session{
-		ID:             msg.ID,
-		Label:          msg.ID,
-		Agent:          protocol.SessionAgentShell,
-		Directory:      cwd,
-		ProfileID:      msg.ProfileID,
-		State:          protocol.SessionStateIdle,
-		StateSince:     now,
-		StateUpdatedAt: now,
-		LastSeen:       now,
-	})
-	d.store.SetLaunchIntent(msg.ID, store.LaunchIntent{Model: "prior-model"})
-
-	if rejection := d.runSpawnPipeline(msg, internalSpawnPolicy{}); rejection == nil {
-		t.Fatal("runSpawnPipeline() rejection = nil, want spawn failure")
-	}
-	intent, ok := d.store.LaunchIntent(msg.ID)
-	if !ok {
-		t.Fatal("LaunchIntent() = ok false, want restored prior intent")
-	}
-	if intent.Model != "prior-model" {
-		t.Fatalf("LaunchIntent().Model = %q, want prior-model", intent.Model)
-	}
-}
-
-func TestSpawnFailureClearsIntentWhenNoPrior(t *testing.T) {
-	d, _, cwd := newSpawnCommitTestDaemon(t)
-	d.ptyBackend = &failingLaunchIntentBackend{}
-	msg := spawnCommitMessage("clear-no-prior-intent", defaultProfileID(t, d.store), cwd)
-	now := string(protocol.TimestampNow())
-	d.store.Add(&protocol.Session{
-		ID:             msg.ID,
-		Label:          msg.ID,
-		Agent:          protocol.SessionAgentShell,
-		Directory:      cwd,
-		ProfileID:      msg.ProfileID,
-		State:          protocol.SessionStateIdle,
-		StateSince:     now,
-		StateUpdatedAt: now,
-		LastSeen:       now,
-	})
-
-	if rejection := d.runSpawnPipeline(msg, internalSpawnPolicy{}); rejection == nil {
-		t.Fatal("runSpawnPipeline() rejection = nil, want spawn failure")
-	}
-	if _, ok := d.store.LaunchIntent(msg.ID); ok {
-		t.Fatal("LaunchIntent() = ok true, want false after failed spawn")
-	}
-	if session := d.store.Get(msg.ID); session == nil {
-		t.Fatal("stored session = nil, want existing session restored")
-	}
-}
-
-func TestSpawnFailureFreshSessionLeavesNoLaunchIntent(t *testing.T) {
-	d, _, cwd := newSpawnCommitTestDaemon(t)
-	d.ptyBackend = &failingLaunchIntentBackend{}
-	msg := spawnCommitMessage("failed-fresh-intent", defaultProfileID(t, d.store), cwd)
-
-	if rejection := d.runSpawnPipeline(msg, internalSpawnPolicy{}); rejection == nil {
-		t.Fatal("runSpawnPipeline() rejection = nil, want spawn failure")
-	}
-	if _, ok := d.store.LaunchIntent(msg.ID); ok {
-		t.Fatal("LaunchIntent() = ok true, want false after failed fresh spawn")
-	}
-	if session := d.store.Get(msg.ID); session != nil {
-		t.Fatalf("stored session = %+v, want nil", session)
 	}
 }

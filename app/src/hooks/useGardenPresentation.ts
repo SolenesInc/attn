@@ -4,8 +4,8 @@ export type GardenMode = 'closed' | 'dock' | 'full';
 export type GardenOpenMode = Exclude<GardenMode, 'closed'>;
 export type GardenView = 'list' | 'board';
 
-export const GARDEN_FRAME_MODE_STORAGE_KEY = 'attn.garden.frame';
-export const GARDEN_FULLSCREEN_VIEW_STORAGE_KEY = 'attn.garden.fullscreenView';
+const GARDEN_FRAME_MODE_STORAGE_KEY = 'attn.garden.frame';
+const GARDEN_FULLSCREEN_VIEW_STORAGE_KEY = 'attn.garden.fullscreenView';
 
 function readChoice<T extends string>(key: string, choices: readonly T[], fallback: T): T {
   try {
@@ -24,11 +24,11 @@ function writeChoice(key: string, value: string): void {
   }
 }
 
-export function readGardenFrameMode(): GardenOpenMode {
+function readGardenFrameMode(): GardenOpenMode {
   return readChoice(GARDEN_FRAME_MODE_STORAGE_KEY, ['dock', 'full'], 'dock');
 }
 
-export function readGardenFullscreenView(): GardenView {
+function readGardenFullscreenView(): GardenView {
   return readChoice(GARDEN_FULLSCREEN_VIEW_STORAGE_KEY, ['list', 'board'], 'list');
 }
 
@@ -96,8 +96,6 @@ export function useGardenPresentation({ dockOpen, openDock, closeDock }: GardenP
   return {
     mode,
     holdsWindow,
-    lastMode,
-    open,
     toggleFrame,
     toggleFromIcon,
     close,

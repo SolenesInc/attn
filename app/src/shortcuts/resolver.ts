@@ -72,10 +72,6 @@ function userClaimsCombo(binding: Binding, forId: ShortcutId): boolean {
   );
 }
 
-export function isUnbound(id: ShortcutId): boolean {
-  return resolveBinding(id) === null;
-}
-
 export function isCustomized(id: ShortcutId): boolean {
   return Object.prototype.hasOwnProperty.call(overrides, id);
 }

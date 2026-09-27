@@ -45,7 +45,3 @@ export async function loadGhostty(): Promise<Ghostty> {
   instance = instantiated;
   return new Ghostty(instance);
 }
-
-export function resetGhosttyModuleCacheForTests(): void {
-  compiledGhosttyModule = null;
-}

@@ -1,0 +1,3 @@
+kind: internal
+area: testing
+change: Annotation, browser and presentation promises are now guarded by daemon wire tests instead of in-package tests of daemon internals.

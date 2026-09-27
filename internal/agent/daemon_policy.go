@@ -19,7 +19,7 @@ type RecoveredStatePolicyProvider interface {
 type ResumePolicyProvider interface {
 	ResolveSpawnResumeSessionID(existingSessionID, requestedResumeID, storedResumeID string) string
 	SpawnResumeSessionID(sessionID, resolvedResumeID string, resumePicker bool) string
-	ResumeSessionIDFromStopTranscriptPath(transcriptPath string) string
+	ResumeSessionIDFromTranscriptPath(transcriptPath string) string
 }
 
 type ResumeAvailabilityProvider interface {
@@ -66,6 +66,15 @@ func ResolveSpawnResumeSessionID(d Driver, existingSessionID, requestedResumeID,
 	return requested
 }
 
+func preferStoredResumeSessionID(existingSessionID, requestedResumeID, storedResumeID string) string {
+	requested := strings.TrimSpace(requestedResumeID)
+	stored := strings.TrimSpace(storedResumeID)
+	if stored != "" && (requested == "" || requested == strings.TrimSpace(existingSessionID)) {
+		return stored
+	}
+	return requested
+}
+
 func ResumeAvailable(d Driver, resumeID string) bool {
 	if strings.TrimSpace(resumeID) == "" {
 		return false
@@ -83,9 +92,9 @@ func SpawnResumeSessionID(d Driver, sessionID, resolvedResumeID string, resumePi
 	return ""
 }
 
-func ResumeSessionIDFromStopTranscriptPath(d Driver, transcriptPath string) string {
+func ResumeSessionIDFromTranscriptPath(d Driver, transcriptPath string) string {
 	if p, ok := d.(ResumePolicyProvider); ok {
-		return strings.TrimSpace(p.ResumeSessionIDFromStopTranscriptPath(transcriptPath))
+		return strings.TrimSpace(p.ResumeSessionIDFromTranscriptPath(transcriptPath))
 	}
 	return ""
 }

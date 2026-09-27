@@ -17,10 +17,16 @@ func (d *Daemon) convertBacklogTicketsToSeeds() {
 	if err := d.requireHome(garden.Surface); err != nil {
 		return
 	}
-	pending, err := d.unboundBacklogTickets()
+	unbound, err := d.unboundBacklogTickets()
 	if err != nil {
 		d.logf("garden: reading the backlog to convert: %v", err)
 		return
+	}
+	pending := make([]*store.Ticket, 0, len(unbound))
+	for _, ticket := range unbound {
+		if _, ok := d.backlogAtStart[ticket.ID]; ok {
+			pending = append(pending, ticket)
+		}
 	}
 	if len(pending) == 0 {
 		return
@@ -36,6 +42,22 @@ func (d *Daemon) convertBacklogTicketsToSeeds() {
 		d.logf("garden: converted backlog ticket %s to seed %s (%q)", ticket.ID, seedID, ticket.Title)
 	}
 	d.logf("garden: backlog conversion done: %d of %d unbound todo ticket(s) are seeds now", converted, len(pending))
+}
+
+func (d *Daemon) snapshotBacklogAtStart() map[string]struct{} {
+	if d.store == nil || d.requireHome(garden.Surface) != nil {
+		return nil
+	}
+	tickets, err := d.unboundBacklogTickets()
+	if err != nil {
+		d.logf("garden: reading the backlog to convert: %v", err)
+		return nil
+	}
+	ids := make(map[string]struct{}, len(tickets))
+	for _, ticket := range tickets {
+		ids[ticket.ID] = struct{}{}
+	}
+	return ids
 }
 
 func (d *Daemon) unboundBacklogTickets() ([]*store.Ticket, error) {

@@ -2,146 +2,92 @@ package workflow
 
 import (
 	"context"
+	"encoding/json"
 	"strings"
+	"sync/atomic"
 	"testing"
+	"testing/synctest"
 	"time"
 )
 
-func TestLinearThreeAgents(t *testing.T) {
-	eng := newTestEngine()
-	script := `
-		const a = await agent("one");
-		const b = await agent("two");
-		const c = await agent("three");
-		return [a, b, c];
-	`
-	res := runScript(t, eng, script, nil)
-	if res.Status != StatusCompleted {
-		t.Fatalf("status=%s err=%v", res.Status, res.Err)
-	}
-	if res.LiveCalls != 3 {
-		t.Fatalf("LiveCalls = %d, want 3", res.LiveCalls)
-	}
-	entries := res.Journal.Entries()
-	if len(entries) != 3 {
-		t.Fatalf("journal has %d entries, want 3", len(entries))
-	}
-	seen := map[string]bool{}
-	for _, e := range entries {
-		if seen[e.Ordinal] {
-			t.Errorf("duplicate ordinal %q", e.Ordinal)
-		}
-		seen[e.Ordinal] = true
-		if e.Status != "ok" {
-			t.Errorf("entry %s status=%s", e.Ordinal, e.Status)
-		}
-	}
-	vals, ok := res.Value.([]interface{})
-	if !ok || len(vals) != 3 {
-		t.Fatalf("value = %#v, want 3-element slice", res.Value)
-	}
+type cancellingStub struct {
+	cancel   context.CancelFunc
+	hold     bool
+	released atomic.Bool
 }
 
-func TestWatchdogKillsInfiniteLoop(t *testing.T) {
-	eng := newTestEngine(func(c *Config) { c.WatchdogTimeout = 150 * time.Millisecond })
-	start := time.Now()
-	res := runScript(t, eng, `while(true){}`, nil)
-	elapsed := time.Since(start)
-	if res.Status != StatusInterrupted {
-		t.Fatalf("status=%s err=%v (should be interrupted, not a hang)", res.Status, res.Err)
+func (s *cancellingStub) Run(ctx context.Context, call AgentCall) (json.RawMessage, error) {
+	s.cancel()
+	if s.hold {
+		<-ctx.Done()
+		s.released.Store(true)
+		return nil, ctx.Err()
 	}
-	if !strings.Contains(res.Err.Error(), "watchdog") {
-		t.Errorf("interrupt error %q should mention the watchdog", res.Err.Error())
-	}
-	if elapsed > 3*time.Second {
-		t.Errorf("watchdog took %v, expected near the 150ms timeout", elapsed)
-	}
+	return json.RawMessage(`"ok"`), nil
 }
 
-func TestWatchdogKillsBusyLoopAfterAwait(t *testing.T) {
-	eng := newTestEngine(func(c *Config) { c.WatchdogTimeout = 150 * time.Millisecond })
-	script := `
-		await agent("warmup");
-		while(true){}
-	`
-	res := runScript(t, eng, script, nil)
-	if res.Status != StatusInterrupted {
-		t.Fatalf("status=%s err=%v", res.Status, res.Err)
+func TestRunawayScriptsEndWithAnErrorNamingTheLimit(t *testing.T) {
+	overCap := func(each string) string {
+		return `const items = []; for (let i = 0; i < 5; i++) items.push(i); return await ` + each + `;`
 	}
-}
-
-func TestContextCancelInterrupts(t *testing.T) {
-	eng := newTestEngine(func(c *Config) { c.WatchdogTimeout = 30 * time.Second })
-	ctx, cancel := context.WithCancel(context.Background())
-	go func() {
-		time.Sleep(100 * time.Millisecond)
-		cancel()
-	}()
-	res, _ := eng.Run(ctx, `while(true){}`, nil)
-	if res.Status != StatusInterrupted {
-		t.Fatalf("status=%s err=%v", res.Status, res.Err)
-	}
-	if !strings.Contains(res.Err.Error(), "cancel") {
-		t.Errorf("cancel error %q should mention cancellation", res.Err.Error())
-	}
-}
-
-func TestAgentLifetimeCapTrips(t *testing.T) {
-	eng := newTestEngine(func(c *Config) {
-		c.AgentLifetimeCap = 5
-		c.WatchdogTimeout = 5 * time.Second
-	})
-	script := `
-		let n = 0;
-		while (true) {
-			await agent("call " + n);
-			n++;
-		}
-	`
-	res := runScript(t, eng, script, nil)
-	if res.Status != StatusErrored {
-		t.Fatalf("status=%s err=%v, want errored", res.Status, res.Err)
-	}
-	if !strings.Contains(res.Err.Error(), "lifetime cap") {
-		t.Errorf("error %q should mention the lifetime cap", res.Err.Error())
-	}
-	if res.LiveCalls != 5 {
-		t.Errorf("LiveCalls = %d, want 5 (the cap)", res.LiveCalls)
-	}
-}
-
-func TestTooManyItemsRejected(t *testing.T) {
 	cases := []struct {
-		name   string
-		script string
+		name      string
+		script    string
+		configure func(*Config)
+		cancels   bool
+		holds     bool
+		status    RunStatus
+		err       string
+		liveCalls int
 	}{
-		{
-			name: "parallel over cap",
-			script: `
-				const thunks = [];
-				for (let i = 0; i < 5; i++) thunks.push(() => agent("x" + i));
-				return await parallel(thunks);
-			`,
-		},
-		{
-			name: "pipeline over cap",
-			script: `
-				const items = [];
-				for (let i = 0; i < 5; i++) items.push(i);
-				return await pipeline(items, (v, item, i) => agent("x" + item));
-			`,
-		},
+		{name: "an infinite loop trips the watchdog", script: `while(true){}`,
+			configure: func(c *Config) { c.WatchdogTimeout = 150 * time.Millisecond }, status: StatusInterrupted, err: "watchdog"},
+		{name: "a busy loop after an await trips the watchdog", script: `await agent("warmup"); while(true){}`,
+			configure: func(c *Config) { c.WatchdogTimeout = 150 * time.Millisecond }, status: StatusInterrupted, err: "watchdog", liveCalls: 1},
+		{name: "cancelling a busy loop interrupts it", script: `await agent("warmup"); while(true){}`, cancels: true,
+			status: StatusInterrupted, err: "cancel"},
+		{name: "cancelling while an agent runs interrupts the run and releases the agent", script: `return await agent("x");`, cancels: true, holds: true,
+			status: StatusInterrupted, err: "cancel"},
+		{name: "the agent lifetime cap ends an endless run", script: `let n = 0; while (true) { await agent("call " + n); n++; }`,
+			configure: func(c *Config) { c.AgentLifetimeCap = 5 }, status: StatusErrored, err: "lifetime cap", liveCalls: 5},
+		{name: "parallel over the per-call cap is refused", script: overCap(`parallel(items.map((i) => () => agent("x" + i)))`),
+			configure: func(c *Config) { c.MaxItemsPerCall = 4 }, status: StatusErrored, err: "per-call cap"},
+		{name: "pipeline over the per-call cap is refused", script: overCap(`pipeline(items, (v, item) => agent("x" + item))`),
+			configure: func(c *Config) { c.MaxItemsPerCall = 4 }, status: StatusErrored, err: "per-call cap"},
 	}
 	for _, tc := range cases {
+		run := func(t *testing.T, check func(func())) {
+			ctx, cancel := context.WithCancel(context.Background())
+			defer cancel()
+			cfg := Config{WatchdogTimeout: 30 * time.Second}
+			if tc.configure != nil {
+				tc.configure(&cfg)
+			}
+			stub := &cancellingStub{cancel: func() {}, hold: tc.holds}
+			if tc.cancels {
+				stub.cancel = cancel
+				cfg.Stub = stub
+			}
+			var res RunResult
+			check(func() { res, _ = New(cfg).Run(ctx, tc.script, nil) })
+			if res.Status != tc.status || res.Err == nil || !strings.Contains(res.Err.Error(), tc.err) {
+				t.Fatalf("the run ended %s with %v, want %s naming %q", res.Status, res.Err, tc.status, tc.err)
+			}
+			if tc.liveCalls != 0 && res.LiveCalls != tc.liveCalls {
+				t.Errorf("the run made %d agent calls, want %d", res.LiveCalls, tc.liveCalls)
+			}
+			if tc.holds && !stub.released.Load() {
+				t.Error("the agent in flight when the run was cancelled was never released")
+			}
+		}
 		t.Run(tc.name, func(t *testing.T) {
-			eng := newTestEngine(func(c *Config) { c.MaxItemsPerCall = 4 })
-			res := runScript(t, eng, tc.script, nil)
-			if res.Status != StatusErrored {
-				t.Fatalf("status=%s, want errored", res.Status)
+			if !tc.holds {
+				run(t, func(runIt func()) { runIt() })
+				return
 			}
-			if !strings.Contains(res.Err.Error(), "per-call cap") {
-				t.Errorf("error %q should mention the per-call cap", res.Err.Error())
-			}
+			synctest.Test(t, func(t *testing.T) {
+				run(t, func(runIt func()) { runIt(); synctest.Wait() })
+			})
 		})
 	}
 }

@@ -13,11 +13,6 @@ import (
 )
 
 const (
-	pluginDesiredRunning = supervise.DesiredRunning
-	pluginDesiredStopped = supervise.DesiredStopped
-)
-
-const (
 	pluginPhaseStarting  = supervise.PhaseStarting
 	pluginPhaseConnected = supervise.PhaseConnected
 	pluginPhaseBackoff   = supervise.PhaseBackoff
@@ -25,14 +20,9 @@ const (
 	pluginPhaseParked    = supervise.PhaseParked
 )
 
-var pluginRestartBackoff = supervise.RestartBackoff
-
-const pluginDisconnectGrace = supervise.DisconnectGrace
-
 type pluginExit = supervise.Exit
 type pluginRuntimeSnapshot = supervise.Snapshot
 type pluginProcessHandle = supervise.Process
-type pluginSupervisorTimer = supervise.Timer
 type pluginSupervisorClock = supervise.Clock
 
 type pluginProcessLauncher interface {

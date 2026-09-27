@@ -55,6 +55,7 @@ const testSurfaceValue: NotebookSurfaceContextValue = {
     listFiles: vi.fn(),
     changeSignal: 0,
   }),
+  changeSignalFor: () => 0,
   effectiveNotebookRoot: '/notebook-root',
   sendFsWatch: vi.fn().mockResolvedValue({ root: '' }),
   sendFsUnwatch: vi.fn().mockResolvedValue({ root: '' }),
@@ -543,48 +544,6 @@ describe('DesktopDockTile notebook root switcher', () => {
     expect(onUpdateParams).not.toHaveBeenCalled();
   });
 
-  it('flushes the dirty buffer, then updates params, in that order, when flushPendingSave resolves "saved"', async () => {
-    const callOrder: string[] = [];
-    notebookSurfaceStub.flushPendingSave.mockImplementation(async () => {
-      callOrder.push('flush');
-      return 'saved';
-    });
-    const onUpdateParams = vi.fn(async (params: string) => {
-      callOrder.push(`params:${params}`);
-    });
-    renderNotebookTile({ desktopDirectory: '/Users/victor/code/attn', onUpdateParams });
-
-    fireEvent.change(picker(), { target: { value: '/Users/victor/code/attn' } });
-
-    await waitFor(() => expect(onUpdateParams).toHaveBeenCalled());
-    expect(callOrder).toEqual([
-      'flush',
-      `params:${serializeNotebookTileParams({ root: '/Users/victor/code/attn' })}`,
-    ]);
-  });
-
-  it('never calls onUpdateParams when flushPendingSave resolves "conflict"', async () => {
-    notebookSurfaceStub.flushPendingSave.mockResolvedValue('conflict');
-    const { onUpdateParams } = renderNotebookTile({ desktopDirectory: '/Users/victor/code/attn' });
-
-    fireEvent.change(picker(), { target: { value: '/Users/victor/code/attn' } });
-
-    await waitFor(() => expect(notebookSurfaceStub.flushPendingSave).toHaveBeenCalled());
-    await act(async () => { await Promise.resolve(); });
-    expect(onUpdateParams).not.toHaveBeenCalled();
-  });
-
-  it('never calls onUpdateParams via Browse… when flushPendingSave resolves "error"', async () => {
-    notebookSurfaceStub.flushPendingSave.mockResolvedValue('error');
-    vi.mocked(open).mockResolvedValue('/tmp/chosen-root');
-    const { onUpdateParams } = renderNotebookTile({ desktopDirectory: '/Users/victor/code/attn' });
-
-    fireEvent.change(picker(), { target: { value: '__browse__' } });
-
-    await waitFor(() => expect(notebookSurfaceStub.flushPendingSave).toHaveBeenCalled());
-    await act(async () => { await Promise.resolve(); });
-    expect(onUpdateParams).not.toHaveBeenCalled();
-  });
 });
 
 const SEND_PATH = '/tmp/project/README.md';
@@ -984,36 +943,6 @@ describe('DesktopDockTile markdown send flow', () => {
     });
   });
 
-  it('⌘Enter never fires from a textarea, without tile focus, or at zero annotations (E18)', async () => {
-    const { transport, submitSpy } = makeSendTransport();
-    setMarkdownAnnotationsTransport(transport);
-    const { container, unmount } = renderSendTile();
-    await waitFor(() => {
-      expect(sendButton()).toBeEnabled();
-    });
-
-    let event = pressCmdEnter();
-    expect(event.defaultPrevented).toBe(false);
-    expect(submitSpy).not.toHaveBeenCalled();
-
-    const body = container.querySelector<HTMLElement>('.desktop-dock-tile-body')!;
-    const textarea = document.createElement('textarea');
-    body.appendChild(textarea);
-    fireEvent.focusIn(textarea);
-    event = pressCmdEnter(textarea);
-    expect(event.defaultPrevented).toBe(false);
-    expect(submitSpy).not.toHaveBeenCalled();
-    unmount();
-
-    setMarkdownAnnotationsTransport(makeSendTransport([]).transport);
-    const zero = renderSendTile();
-    await screen.findByRole('button', { name: 'Annotation destination: alpha' });
-    const zeroBody = zero.container.querySelector<HTMLElement>('.desktop-dock-tile-body')!;
-    fireEvent.focusIn(zeroBody);
-    event = pressCmdEnter();
-    expect(event.defaultPrevented).toBe(false);
-    expect(submitSpy).not.toHaveBeenCalled();
-  });
 });
 
 function seedFixture(overrides: Partial<Seed> = {}): Seed {

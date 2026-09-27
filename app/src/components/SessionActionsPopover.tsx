@@ -84,7 +84,7 @@ export function SessionActionsPopover({
       )}
       {onMemberDetails && <div className="session-actions-divider" />}
       {canRename && (
-        <button type="button" role="menuitem" data-testid="rename-session-action" onClick={() => run(onRename)}>
+        <button type="button" role="menuitem" onClick={() => run(onRename)}>
           <span aria-hidden="true">✎</span>
           Rename session
         </button>
@@ -100,11 +100,11 @@ export function SessionActionsPopover({
         {chiefOfStaff ? 'Remove chief role' : 'Make chief of staff'}
       </button>
       <div className="session-actions-divider" />
-      <button type="button" role="menuitem" data-testid="reload-session-action" onClick={() => run(onReloadSession)}>
+      <button type="button" role="menuitem" onClick={() => run(onReloadSession)}>
         <span aria-hidden="true">↻</span>
         Reload session
       </button>
-      <button type="button" role="menuitem" data-testid="close-session-action" onClick={() => run(onCloseSession)}>
+      <button type="button" role="menuitem" onClick={() => run(onCloseSession)}>
         <span aria-hidden="true">×</span>
         Close session
       </button>

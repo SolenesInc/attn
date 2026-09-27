@@ -1,0 +1,4 @@
+kind: fixed
+area: crew
+change: A daemon started on an attn.db copied from another instance fences that instance's crew members instead of refusing to start.
+symptom: Every session and terminal became unreachable because the daemon aborted startup while carrying crew ticket identities.

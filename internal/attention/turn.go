@@ -1,8 +1,6 @@
 package attention
 
 import (
-	"time"
-
 	"github.com/victorarias/attn/internal/protocol"
 	"github.com/victorarias/attn/internal/sessionstate"
 )
@@ -31,19 +29,9 @@ func BreaksSnooze(state protocol.SessionState, reason string) bool {
 }
 
 type Input struct {
-	OpenedAt  time.Time
-	SettledAt time.Time
-
 	IsShell bool
 
 	ChiefOfStaff bool
-}
-
-func Owed(in Input) bool {
-	if Excluded(in) {
-		return false
-	}
-	return in.OpenedAt.After(in.SettledAt)
 }
 
 func Excluded(in Input) bool {

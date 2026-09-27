@@ -83,7 +83,7 @@ func TestDeletingAProfileDemotesItsChiefInTheSameTransaction(t *testing.T) {
 	}
 }
 
-func TestMigration155MovesTheChiefIntoItsProfile(t *testing.T) {
+func TestMigration159MovesTheChiefIntoItsProfile(t *testing.T) {
 	s, _ := openProfileStore(t)
 	work, _ := mustCreateProfile(t, s, "Work")
 	addProfileSession(t, s, "old-chief", work.ID)
@@ -91,7 +91,7 @@ func TestMigration155MovesTheChiefIntoItsProfile(t *testing.T) {
 		ALTER TABLE profiles DROP COLUMN chief_session_id;
 		CREATE TABLE instance_roles (role TEXT PRIMARY KEY, session_id TEXT NOT NULL);
 		INSERT INTO instance_roles (role, session_id) VALUES ('chief_of_staff', 'old-chief');
-		DELETE FROM schema_migrations WHERE version >= 155;
+		DELETE FROM schema_migrations WHERE version >= 159;
 	`); err != nil {
 		t.Fatal(err)
 	}

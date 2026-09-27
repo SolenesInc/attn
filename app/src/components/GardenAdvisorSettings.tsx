@@ -5,6 +5,7 @@ import { agentLabel } from '../utils/agentAvailability';
 import {
   defaultGardenAdvisorConfig,
   GARDEN_ADVISOR_SETTING,
+  type GardenAdvisorConfig,
   parseGardenAdvisorSetting,
   serializeGardenAdvisorConfig,
 } from '../utils/gardenAdvisorSettings';
@@ -21,6 +22,10 @@ const EFFORT_LEVELS: Record<string, string[]> = {
   copilot: ['none', 'minimal', 'low', 'medium', 'high', 'xhigh', 'max'],
 };
 
+function serializeAdvisorDraft(draft: string): string {
+  return serializeGardenAdvisorConfig(JSON.parse(draft) as GardenAdvisorConfig);
+}
+
 interface GardenAdvisorSettingsProps {
   settings: Record<string, string>;
   agents: SessionAgent[];
@@ -36,7 +41,7 @@ export function GardenAdvisorSettings({
     () => parseGardenAdvisorSetting(settings[GARDEN_ADVISOR_SETTING]),
     [settings],
   );
-  const draft = useAutosaveSetting(GARDEN_ADVISOR_SETTING, serializeGardenAdvisorConfig(saved), onSetSetting);
+  const draft = useAutosaveSetting(GARDEN_ADVISOR_SETTING, JSON.stringify(saved), onSetSetting, serializeAdvisorDraft);
   const { agent, model, effort } = JSON.parse(draft.value) as typeof saved;
   const update = (updates: Partial<typeof saved>, commit = true) => {
     const next = JSON.stringify({ agent, model, effort, ...updates });
@@ -68,7 +73,7 @@ export function GardenAdvisorSettings({
       </div>
       <div className="settings-block-body">
         {!available && (
-          <div className="settings-warning" data-testid="settings-garden-advisor-unavailable">
+          <div className="settings-warning">
             {agentLabel(agent)} is saved for Garden review but cannot run headless tasks here.
           </div>
         )}
@@ -92,7 +97,6 @@ export function GardenAdvisorSettings({
             <label className="settings-label" htmlFor="settings-garden-advisor-model">Model</label>
             <select
               id="settings-garden-advisor-model"
-              data-testid="settings-garden-advisor-model"
               className="settings-input"
               value={customModel ? 'custom' : model}
               onChange={(event) => {
@@ -116,7 +120,6 @@ export function GardenAdvisorSettings({
             </label>
             <input
               id="settings-garden-advisor-model-custom"
-              data-testid="settings-garden-advisor-model-custom"
               type="text"
               className="settings-input"
               value={model}
@@ -137,7 +140,6 @@ export function GardenAdvisorSettings({
             </label>
             <select
               id="settings-garden-advisor-effort"
-              data-testid="settings-garden-advisor-effort"
               className="settings-input"
               value={effort}
               onChange={(event) => update({ effort: event.target.value })}

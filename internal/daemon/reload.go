@@ -248,6 +248,7 @@ func (d *Daemon) executePreparedSessionReload(sessionID string, opts ptybackend.
 		}
 	}
 	d.sessionInputs().forgetSession(sessionID)
+	d.recordPlacedInputOwed(sessionID, false)
 
 	time.AfterFunc(reloadStuckFlagGrace, func() { d.clearReloading(sessionID) })
 	intent := launchIntentFromSpawnOptions(opts, d.isChiefOfStaffSession(sessionID))

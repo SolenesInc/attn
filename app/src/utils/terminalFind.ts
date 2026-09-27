@@ -6,7 +6,7 @@ export interface FindMatch {
   endCol: number;
 }
 
-export interface FindRowAccess {
+interface FindRowAccess {
   totalRows(): number;
   rowText(bufferRow: number): string;
 }

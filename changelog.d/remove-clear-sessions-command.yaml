@@ -1,0 +1,5 @@
+kind: removed
+area: daemon
+change: >
+  Remove the unused `clear_sessions` protocol command, which ended every
+  session at once. No app, CLI, or agent path sent it.

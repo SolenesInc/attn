@@ -13,7 +13,7 @@ export const NotebookTile = forwardRef<NotebookSurfaceHandle, {
   root,
   onOpenFile,
 }, ref) {
-  const { makeDaemon, effectiveNotebookRoot, sendFsWatch, sendFsUnwatch, connectionGeneration } = useNotebookSurfaceContext();
+  const { makeDaemon, changeSignalFor, effectiveNotebookRoot, sendFsWatch, sendFsUnwatch, connectionGeneration } = useNotebookSurfaceContext();
 
   const offRoot = !!root && root !== effectiveNotebookRoot;
 
@@ -79,7 +79,7 @@ export const NotebookTile = forwardRef<NotebookSurfaceHandle, {
       readAsset={daemon.readAsset}
       backlinksNotebook={offRoot ? undefined : daemon.backlinksNotebook}
       sendToChief={offRoot ? undefined : daemon.sendToChief}
-      changeSignal={daemon.changeSignal}
+      changeSignal={changeSignalFor(effectiveRoot)}
       listFiles={daemon.listFiles}
     />
   );

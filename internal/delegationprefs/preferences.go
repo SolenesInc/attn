@@ -159,28 +159,31 @@ func Resolve(c Config, r Request) (Resolved, error) {
 		out.Builtin = role.Builtin
 		out.RoleIcon = role.Icon
 	}
-	s := &out.Selection
-	if r.Harness != nil && *r.Harness != s.Harness {
-		*s = Selection{Harness: *r.Harness}
+	ApplyOverrides(&out.Selection, r.Harness, r.Provider, r.Model, r.Effort)
+	if err := ValidateSelection(out.Selection, true); err != nil {
+		return out, err
 	}
-	if r.Model != nil && *r.Model != s.Model {
-		s.Model = *r.Model
+	return out, nil
+}
+
+func ApplyOverrides(s *Selection, harness, provider, model, effort *string) {
+	if harness != nil && *harness != s.Harness {
+		*s = Selection{Harness: *harness}
+	}
+	if model != nil && *model != s.Model {
+		s.Model = *model
 		s.Effort = ""
 	}
-	if r.Provider != nil && *r.Provider != s.Provider {
-		s.Provider = *r.Provider
+	if provider != nil && *provider != s.Provider {
+		s.Provider = *provider
 		s.Effort = ""
 	}
 	if s.Model == "" {
 		s.Provider = ""
 	}
-	if r.Effort != nil {
-		s.Effort = *r.Effort
+	if effort != nil {
+		s.Effort = *effort
 	}
-	if err := ValidateSelection(*s, true); err != nil {
-		return out, err
-	}
-	return out, nil
 }
 
 func Active(c Config) protocol.DelegationRolesResult {

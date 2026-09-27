@@ -2,87 +2,12 @@ import { describe, expect, it, vi } from 'vitest';
 import { CellFlags, type GhosttyCell } from '../ghostty';
 import { TERMINAL_FLOATS_PER_QUAD } from './terminalVertexBuffer';
 import {
-  graphemeAtViewportCell,
-  nextAtlasSize,
-  visibleOutlineEdges,
   INITIAL_ATLAS_SIZE,
   KITTY_Z_UNDER_BACKGROUND,
   MAX_ATLAS_SIZE,
   WebGlTerminalRenderer,
   type WebGlImageQuad,
 } from './GhosttyWebGlRenderer';
-
-function terminalWithHistory(history: number) {
-  return {
-    getScrollbackLength: () => history,
-    getScrollbackGraphemeString: vi.fn((row: number, col: number) => `history:${row}:${col}`),
-    getGraphemeString: vi.fn((row: number, col: number) => `live:${row}:${col}`),
-  };
-}
-
-describe('graphemeAtViewportCell', () => {
-  it('reads graphemes from scrollback rows in a scrolled viewport', () => {
-    const terminal = terminalWithHistory(5);
-
-    expect(graphemeAtViewportCell(terminal, 0, 2, 2)).toBe('history:3:2');
-    expect(terminal.getScrollbackGraphemeString).toHaveBeenCalledWith(3, 2);
-  });
-
-  it('reads live graphemes after a mixed scrolled viewport reaches the active screen', () => {
-    const terminal = terminalWithHistory(5);
-
-    expect(graphemeAtViewportCell(terminal, 2, 4, 1)).toBe('live:1:4');
-    expect(terminal.getGraphemeString).toHaveBeenCalledWith(1, 4);
-  });
-});
-
-describe('visibleOutlineEdges', () => {
-  const ROWS = 24;
-
-  it('draws both edges for a block fully inside the viewport', () => {
-    expect(visibleOutlineEdges(3, 10, ROWS)).toEqual({ drawTop: true, drawBottom: true });
-  });
-
-  it('omits the top edge when the block starts above the viewport', () => {
-    expect(visibleOutlineEdges(-5, 10, ROWS)).toEqual({ drawTop: false, drawBottom: true });
-  });
-
-  it('omits the bottom edge when the block ends below the viewport', () => {
-    expect(visibleOutlineEdges(3, 40, ROWS)).toEqual({ drawTop: true, drawBottom: false });
-  });
-
-  it('omits both edges for a block taller than the viewport (no full-screen box)', () => {
-    expect(visibleOutlineEdges(-8, 40, ROWS)).toEqual({ drawTop: false, drawBottom: false });
-  });
-
-  it('treats the last visible row as inside the viewport', () => {
-    expect(visibleOutlineEdges(0, ROWS - 1, ROWS)).toEqual({ drawTop: true, drawBottom: true });
-  });
-});
-
-describe('nextAtlasSize (grow-on-demand policy)', () => {
-  it('starts at 1024² and doubles to the 2048² cap', () => {
-    expect(INITIAL_ATLAS_SIZE).toBe(1024);
-    expect(MAX_ATLAS_SIZE).toBe(2048);
-    expect(nextAtlasSize(INITIAL_ATLAS_SIZE)).toBe(2048);
-  });
-
-  it('is idempotent at the cap (never grows unbounded)', () => {
-    expect(nextAtlasSize(MAX_ATLAS_SIZE)).toBe(MAX_ATLAS_SIZE);
-  });
-
-  it('always converges to the cap and never exceeds it under repeated growth', () => {
-    let size = INITIAL_ATLAS_SIZE;
-    for (let i = 0; i < 16; i += 1) {
-      const grown = nextAtlasSize(size);
-      expect(grown).toBeLessThanOrEqual(MAX_ATLAS_SIZE);
-      expect(grown).toBeGreaterThanOrEqual(size);
-      size = grown;
-    }
-    expect(size).toBe(MAX_ATLAS_SIZE);
-  });
-});
-
 
 interface FillTextCall {
   text: string;
@@ -461,66 +386,6 @@ function makeControllableTerminal(cols: number, rows: number) {
   return { terminal, cells, state, markClean };
 }
 
-describe('WebGlTerminalRenderer off-screen drawing buffer', () => {
-  it('hands the drawing buffer back and takes it again at the same geometry', () => {
-    const { renderer, canvas } = makeRenderer();
-    renderer.resize(50, 40);
-    const { width, height } = canvas;
-    expect(width).toBeGreaterThan(1);
-
-    renderer.releaseDrawingBuffer();
-    expect({ width: canvas.width, height: canvas.height }).toEqual({ width: 1, height: 1 });
-
-    renderer.restoreDrawingBuffer();
-    expect({ width: canvas.width, height: canvas.height }).toEqual({ width, height });
-  });
-
-  it('records a resize that lands while released and allocates at that geometry on restore', () => {
-    const { renderer, canvas } = makeRenderer();
-    renderer.resize(50, 40);
-    renderer.releaseDrawingBuffer();
-
-    renderer.resize(20, 10);
-    expect({ width: canvas.width, height: canvas.height }).toEqual({ width: 1, height: 1 });
-
-    renderer.restoreDrawingBuffer();
-    expect(canvas.width).toBe(20 * renderer.cellWidth * renderer.dpr);
-    expect(canvas.height).toBe(10 * renderer.cellHeight * renderer.dpr);
-  });
-
-  it('repaints the whole grid on the first frame after a restore', () => {
-    const { renderer } = makeRenderer();
-    const { terminal, state } = makeControllableTerminal(50, 50);
-    renderer.resize(50, 50);
-    renderer.render(terminal);
-
-    state.dirty = 1;
-    state.rows = new Set([25]);
-    expect(renderer.render(terminal)).toMatchObject({ fullPaint: false });
-
-    renderer.releaseDrawingBuffer();
-    renderer.restoreDrawingBuffer();
-
-    state.dirty = 1;
-    state.rows = new Set([25]);
-    expect(renderer.render(terminal)).toMatchObject({ fullPaint: true, paintedRows: 50 });
-  });
-
-  it('ignores a repeated release and a restore that was never released', () => {
-    const { renderer, canvas } = makeRenderer();
-    renderer.resize(50, 40);
-    const { width, height } = canvas;
-
-    renderer.restoreDrawingBuffer();
-    expect({ width: canvas.width, height: canvas.height }).toEqual({ width, height });
-
-    renderer.releaseDrawingBuffer();
-    renderer.releaseDrawingBuffer();
-    renderer.restoreDrawingBuffer();
-    expect({ width: canvas.width, height: canvas.height }).toEqual({ width, height });
-  });
-});
-
 describe('WebGlTerminalRenderer dirty rows', () => {
   it('rebuilds small grids directly instead of paying to copy a row cache', () => {
     const { renderer } = makeRenderer();
@@ -808,56 +673,6 @@ describe('WebGlTerminalRenderer glyph cache invalidation', () => {
     renderer.invalidateGlyphCache();
     renderer.getGlyph('', 0);
     expect(atlasContext.fillTextCalls.length).toBe(afterFirst + 1);
-  });
-});
-
-describe('WebGlTerminalRenderer.setFontSize', () => {
-  function withMockedCanvas<T>(fn: () => T): T {
-    const realCreate = document.createElement.bind(document);
-    const spy = vi.spyOn(document, 'createElement').mockImplementation((tag: string) => {
-      if (tag === 'canvas') return makeFakeCanvas(realCreate('canvas'));
-      return realCreate(tag);
-    });
-    try {
-      return fn();
-    } finally {
-      spy.mockRestore();
-    }
-  }
-
-  it('grows cell metrics for a larger font size and invalidates the glyph cache', () => {
-    const { renderer, atlasContext } = makeRenderer(14, 'monospace');
-    const smallWidth = renderer.cellWidth;
-    const smallHeight = renderer.cellHeight;
-    const smallBaseline = renderer.baseline;
-
-    renderer.getGlyph('A', 0);
-    const rasterizedBeforeResize = atlasContext.fillTextCalls.length;
-    renderer.getGlyph('A', 0);
-    expect(atlasContext.fillTextCalls.length).toBe(rasterizedBeforeResize);
-
-    withMockedCanvas(() => renderer.setFontSize(28));
-
-    expect(renderer.cellWidth).toBeGreaterThan(smallWidth);
-    expect(renderer.cellHeight).toBeGreaterThan(smallHeight);
-    expect(renderer.baseline).toBeGreaterThan(smallBaseline);
-
-    renderer.getGlyph('A', 0);
-    expect(atlasContext.fillTextCalls.length).toBe(rasterizedBeforeResize + 1);
-  });
-
-  it('resizes the canvas to the new cell metrics even when cols/rows are unchanged', () => {
-    const { renderer } = makeRenderer(14, 'monospace');
-    const canvas = renderer.canvas as ReturnType<typeof makeFakeCanvas>;
-    renderer.resize(80, 24);
-    const widthBefore = canvas.width;
-    const heightBefore = canvas.height;
-
-    withMockedCanvas(() => renderer.setFontSize(28));
-    renderer.resize(80, 24);
-
-    expect(canvas.width).toBeGreaterThan(widthBefore);
-    expect(canvas.height).toBeGreaterThan(heightBefore);
   });
 });
 

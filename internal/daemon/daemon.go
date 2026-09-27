@@ -104,7 +104,6 @@ type Daemon struct {
 	clientToken                       string
 	store                             *store.Store
 	automationMu                      sync.Mutex
-	wsAutomationMutationTimeout       time.Duration
 	automationObservationMu           sync.Mutex
 	automationObservationLocks        map[string]*sync.Mutex
 	automationRepoMu                  sync.Mutex
@@ -124,7 +123,6 @@ type Daemon struct {
 	crewLifecycleState                *crewLifecycleMemo
 	crewMemoOnce                      sync.Once
 	crewCharterMu                     sync.Mutex
-	crewCharterBeforeWriteHook        func()
 	done                              chan struct{}
 	stopOnce                          sync.Once
 	logger                            *logging.Logger
@@ -135,18 +133,18 @@ type Daemon struct {
 	repoVisibilityKnown               map[string]string
 	repoVisibilityPending             map[string]bool
 	repoVisibilityMu                  sync.Mutex
-	branchInspections                 map[string]branchInspection
-	branchInspectionsRunning          map[string]chan struct{}
-	branchInspectionsMu               sync.Mutex
-	gitCoordMu                        sync.Mutex
-	gitCoord                          *gitCoordinator
+	reopenGitMu                       sync.Mutex
+	reopenBranches                    *sharedCalls[reopenBranchKey, branchInspection]
+	reopenInspect                     func(context.Context, *git.Client, string, string) (branchInspection, error)
+	gitReaderMu                       sync.Mutex
+	gitStatus                         *gitStatusReader
+	fileDiff                          *fileDiffReader
+	gitExec                           gitExecutor
 	worktreeMaintenance               worktreeMaintenanceCoordinator
-	worktreeListStates                func(context.Context, string) ([]git.WorktreeState, error)
-	worktreeRepositoryFacts           func(context.Context, string, time.Time) (*repositoryFacts, error)
-	worktreeObserveCandidate          func(context.Context, *repositoryFacts, git.WorktreeState, time.Time) (store.WorktreeObservation, error)
 	warnings                          []protocol.DaemonWarning
 	warningsMu                        sync.RWMutex
 	legacyTicketRecoveryFinishOnce    sync.Once
+	backlogAtStart                    map[string]struct{}
 	legacyTicketSnapshotIdentity      func(string) (store.LegacyTicketRecoverySource, error)
 	legacyTicketSnapshotRead          func(string) (store.LegacyTicketSnapshotRead, error)
 	legacyRecoveryArtifactWrite       func(string, []byte) error
@@ -171,9 +169,7 @@ type Daemon struct {
 	pendingConversation               map[string]agentConversationObservation
 	ticketReconcileMu                 sync.Mutex
 	ticketReconcileExec               func(ctx context.Context, in ticketReconcileInputs) (agentdriver.HeadlessTaskResult, error)
-	ticketReconcileDone               func(ticketID string)
 	ticketOrphanFirstSeen             map[string]time.Time
-	ticketReconcilePRFetch            prStateFetcher
 	sessionTitleMu                    sync.Mutex
 	sessionTitleExec                  func(ctx context.Context, session *protocol.Session, conversation string) (string, error)
 	sessionTitleAttempted             map[string]struct{}
@@ -184,11 +180,10 @@ type Daemon struct {
 	delegationMu                      sync.Mutex
 	delegationRunning                 map[string]bool
 	delegationCheckoutMu              sync.Mutex
-	delegationWorktreePrepareHook     func(path string)
-	delegationFinalizeHook            func() error
 	delegationWaitsForFirstTurn       bool
 	launchWatchMu                     sync.Mutex
 	launchWatches                     map[string]*launchWatch
+	recoveredLaunches                 map[string]*launchWatch
 	reloadingMu                       sync.Mutex
 	reloadingSessions                 map[string]bool
 	prepareSessionTeardownHook        func(string) error
@@ -200,23 +195,24 @@ type Daemon struct {
 	spawnLocks                        map[string]*spawnLock
 	sessionInputOnce                  sync.Once
 	sessionInputState                 *sessionInputModule
+	lifetimeOnce                      sync.Once
+	lifetimeCtx                       context.Context
+	endLifetime                       context.CancelFunc
 	agentMailboxMu                    sync.Mutex
 	agentMailboxDoorbells             map[string]*agentMailboxDoorbellState
 	agentMailboxCooldownOverride      time.Duration
-	postInitialPrompt                 map[string]struct{}
-	agentMailboxDrainScheduledHook    func(sessionID string)
 	agentMailboxDrainHook             func(sessionID string, delivered int)
 	crewWakeMu                        sync.Mutex
 	crewExitedMu                      sync.Mutex
 	crewExitedSessions                map[string]string
-	crewWakeStartHook                 func(memberID string)
-	crewWakeAfterClaimHook            func(memberID, sessionID string)
 	stateTraceOnce                    sync.Once
 	stateTrace                        *statetrace.Recorder
 	sessionEvidenceOnce               sync.Once
 	sessionEvidence                   *sessionEvidenceTable
 	sessionDwellOnce                  sync.Once
 	sessionDwell                      *dwellGate
+	sessionResolverOnce               sync.Once
+	sessionResolverState              *sessionResolver
 	pluginDriverSilenceOnce           sync.Once
 	pluginDriverSilenceWatch          *pluginDriverSilenceWatch
 	pluginDriverSilenceGraceOverride  time.Duration
@@ -233,17 +229,14 @@ type Daemon struct {
 	nudgeWindowOverride               time.Duration
 	ticketBundleWindowOverride        time.Duration
 	nudgeFireHook                     func(sessionID, action string)
-	ticketRebuildBeforeArmHook        func(sessionID string, deadline time.Time)
 	lastInputMu                       sync.Mutex
 	lastUserInputAt                   map[string]time.Time
 	lastAutoSettleActivityAt          map[string]time.Time
 	autoSettleFireMu                  sync.Mutex
 
-	autoSettleMu            sync.Mutex
-	autoSettleTimers        map[string]*autoSettleTimer
-	autoSettleDismissals    map[string]bool
-	autoSettleFireHook      func(sessionID, outcome string)
-	autoSettlePreSettleHook func()
+	autoSettleMu         sync.Mutex
+	autoSettleTimers     map[string]*autoSettleTimer
+	autoSettleDismissals map[string]bool
 
 	snoozeMu sync.Mutex
 
@@ -332,30 +325,22 @@ type Daemon struct {
 	lastBackupMu sync.Mutex
 	lastBackupAt time.Time
 
-	workflowBroadcastMu       sync.Mutex
-	workflowDirty             map[string]bool
-	workflowEngineMu          sync.Mutex
-	workflowEngineConn        map[string]workflowEngineSink
-	workflowBroadcastHook     func(*protocol.WorkflowRunUpdatedMessage)
-	gardenBroadcastHook       func([]protocol.Seed, int)
-	appsBroadcastHook         func([]protocol.AppRegistryEntry)
-	gardenMintID              func() (string, error)
-	gardenMintNoteID          func() (string, error)
-	gardenNow                 func() time.Time
-	gardenDispatchBeforeWrite func(string)
-	gardenDispatchAfterWrite  func(string)
-	seedHandoverBeforeCommit  func()
-	gitHubPollingOffLogged    bool
-	gardenWatchMu             sync.Mutex
-	gardenReviewMu            sync.Mutex
-	dispatchSeedsMu           sync.Mutex
-	dispatchSeeds             map[string]string
-	dispatchersBySession      map[string]garden.Tender
-	dispatchFromChief         map[string]bool
-	dispatchProjectionRevs    map[string]int64
-	dispatchSeedsLoaded       bool
-
-	gardenNotePageSize int
+	workflowBroadcastMu    sync.Mutex
+	workflowDirty          map[string]bool
+	workflowEngineMu       sync.Mutex
+	workflowEngineConn     map[string]workflowEngineSink
+	appsBroadcastHook      func([]protocol.AppRegistryEntry)
+	gardenMintNoteID       func() (string, error)
+	gardenNow              func() time.Time
+	gitHubPollingOffLogged bool
+	gardenWatchMu          sync.Mutex
+	gardenReviewMu         sync.Mutex
+	dispatchSeedsMu        sync.Mutex
+	dispatchSeeds          map[string]string
+	dispatchersBySession   map[string]garden.Tender
+	dispatchFromChief      map[string]bool
+	dispatchProjectionRevs map[string]int64
+	dispatchSeedsLoaded    bool
 
 	automationsBroadcastHook func(*protocol.AutomationsChangedMessage)
 
@@ -385,17 +370,9 @@ type Daemon struct {
 	pendingSnapshots     map[string]func()
 	pendingSnapshotOrder []string
 
-	jobQueueMu               sync.RWMutex
-	jobQueue                 *jobs.Runner
-	taskFailureRenderers     map[string]taskFailureRenderer
-	sessionActivityExecution func(
-		ctx context.Context,
-		provider agentdriver.HeadlessTaskProvider,
-		request agentdriver.HeadlessTaskRequest,
-	) (agentdriver.HeadlessTaskResult, error)
-	gardenAdvisorResolve func(
-		config gardenAdvisorConfig,
-	) (agentdriver.HeadlessTaskProvider, string, error)
+	jobQueueMu           sync.RWMutex
+	jobQueue             *jobs.Runner
+	taskFailureRenderers map[string]taskFailureRenderer
 
 	sessionActivityRunsMu sync.Mutex
 	sessionActivityRuns   map[string]sessionActivityRun
@@ -538,6 +515,19 @@ func (d *Daemon) setCurrentTerminalTheme(theme pty.TerminalTheme) {
 	d.terminalThemeMu.Unlock()
 }
 
+func (d *Daemon) RecoverGUIPath() {
+	if err := pathutil.EnsureGUIPath(); err != nil {
+		d.logf("PATH recovery failed: %v", err)
+	}
+}
+
+func (d *Daemon) RemoveLegacyStateFile() {
+	legacyPath := config.StatePath()
+	if os.Remove(legacyPath) == nil {
+		d.logf("Removed legacy state file: %s", legacyPath)
+	}
+}
+
 func (d *Daemon) ScrubInheritedAgentSessionEnv() {
 	if scrubbed := config.ScrubInheritedAgentSessionEnv(); len(scrubbed) > 0 {
 		d.logf("scrubbed inherited agent session env before startup: %v", scrubbed)
@@ -553,28 +543,12 @@ func (d *Daemon) signalStarted() {
 	})
 }
 
-func (d *Daemon) waitStarted(timeout time.Duration) bool {
-	if d.startedCh == nil {
-		return false
-	}
-	select {
-	case <-d.startedCh:
-		return true
-	case <-time.After(timeout):
-		return false
-	}
-}
-
 func (d *Daemon) Started() <-chan struct{} {
 	return d.startedCh
 }
 
 func New(socketPath string) *Daemon {
 	logger, _ := logging.New(logging.DefaultLogPath())
-
-	if err := pathutil.EnsureGUIPath(); err != nil {
-		logger.Infof("PATH recovery failed: %v", err)
-	}
 
 	classifier.SetLogger(func(format string, args ...interface{}) {
 		logger.Infof(format, args...)
@@ -599,7 +573,6 @@ func New(socketPath string) *Daemon {
 		debugLogging:        logger != nil && logger.DebugEnabled(),
 		ghRegistry:          github.NewClientRegistry(),
 		hubManager:          nil,
-		gitCoord:            newGitCoordinator(),
 		workflowDirty:       make(map[string]bool),
 		workflowEngineConn:  make(map[string]workflowEngineSink),
 		ptyBackend:          ptybackend.NewEmbedded(manager),
@@ -618,6 +591,7 @@ func New(socketPath string) *Daemon {
 		appsDir:             config.AppsDir(),
 		spawnLocks:          make(map[string]*spawnLock),
 	}
+	d.wireGitExecution(productionGitExecutorConfig)
 	d.delegationWaitsForFirstTurn = true
 	d.ticketReconcileExec = d.execTicketReconcileClassifier
 	d.sessionTitleExec = d.execSessionTitle
@@ -640,7 +614,6 @@ func NewForTesting(socketPath string) *Daemon {
 		logger:              nil,
 		ghRegistry:          github.NewClientRegistry(),
 		hubManager:          nil,
-		gitCoord:            newGitCoordinator(),
 		ptyBackend:          ptybackend.NewEmbedded(manager),
 		transcriptWatch:     make(map[string]*transcriptWatcher),
 		pendingInitialWS:    make(map[*wsClient]struct{}),
@@ -659,49 +632,7 @@ func NewForTesting(socketPath string) *Daemon {
 		spawnLocks:          make(map[string]*spawnLock),
 		jobQueue:            jobs.New(jobs.Options{}),
 	}
-	d.ensureEventBus()
-	return d
-}
-
-func NewWithGitHubClient(socketPath string, ghClient github.GitHubClient) *Daemon {
-	dataRoot := filepath.Dir(socketPath)
-	pidPath := filepath.Join(dataRoot, "attn.pid")
-	registry := github.NewClientRegistry()
-	if client, ok := ghClient.(*github.Client); ok {
-		registry.Register(client.Host(), client)
-	}
-	manager := pty.NewManager(nil)
-	d := &Daemon{
-		socketPath:          socketPath,
-		pidPath:             pidPath,
-		dataRoot:            dataRoot,
-		store:               store.New(),
-		wsHub:               newWSHub(),
-		presentSince:        time.Now(),
-		done:                make(chan struct{}),
-		desktopTiles:        newDesktopTileDelivery(),
-		logger:              nil,
-		ghRegistry:          registry,
-		hubManager:          nil,
-		gitCoord:            newGitCoordinator(),
-		ptyBackend:          ptybackend.NewEmbedded(manager),
-		transcriptWatch:     make(map[string]*transcriptWatcher),
-		pendingInitialWS:    make(map[*wsClient]struct{}),
-		startedCh:           make(chan struct{}),
-		classifiedTurn:      make(map[string]string),
-		classifyingTurn:     make(map[string]string),
-		forcedStop:          make(map[string]time.Time),
-		pendingConversation: make(map[string]agentConversationObservation),
-		tailscale:           newTailscaleRuntime(),
-		plugins:             newPluginRegistry(),
-		pluginDir:           pluginDirForSocket(socketPath),
-		bundledPluginDir:    bundledPluginDirForExecutable(),
-		appsDir:             config.AppsDir(),
-		workflowDirty:       make(map[string]bool),
-		workflowEngineConn:  make(map[string]workflowEngineSink),
-		spawnLocks:          make(map[string]*spawnLock),
-		jobQueue:            jobs.New(jobs.Options{}),
-	}
+	d.wireGitExecution(productionGitExecutorConfig)
 	d.ensureEventBus()
 	return d
 }
@@ -793,6 +724,7 @@ func (d *Daemon) Start() error {
 	if err != nil {
 		return fmt.Errorf("prepare legacy ticket recovery: %w", err)
 	}
+	d.backlogAtStart = d.snapshotBacklogAtStart()
 	d.ensureCrewCollections()
 	d.importCrewHomes()
 	d.refreshCurrentAgent()
@@ -919,11 +851,15 @@ func (d *Daemon) Start() error {
 		}
 	}()
 
-	listener, err := listenUnixAtomically(d.socketPath)
-	if err != nil {
-		return err
+	previousRunSessions := d.storedSessionIDs()
+	if d.listener == nil {
+		unixListener, err := listenUnixAtomically(d.socketPath)
+		if err != nil {
+			return err
+		}
+		d.listener = unixListener
 	}
-	d.listener = listener
+	listener := d.listener
 	d.log("daemon started")
 	d.startInstalledPlugins()
 	d.restoreAppRuntimePark()
@@ -970,7 +906,6 @@ func (d *Daemon) Start() error {
 
 	go d.runTicketReconcileSweep()
 
-	go d.runEvidenceResolveLoop()
 	go d.runModelCaptureLoop()
 
 	if err := d.startJobQueue(); err != nil {
@@ -985,8 +920,11 @@ func (d *Daemon) Start() error {
 	}
 	d.startPermanentMaintenance()
 
+	d.watchRecoveredLaunches()
 	go func() {
-		d.performStartupPTYRecovery(recoveryStartedAt)
+		d.performStartupPTYRecovery(previousRunSessions, recoveryStartedAt)
+		d.resolveDue(time.Now())
+		go d.runSessionResolver()
 		if _, routed := d.ptyBackend.(*ptybackend.MigratingBackend); routed {
 			go d.validateSharedPTYHostAfterRecovery()
 		} else {
@@ -1036,7 +974,15 @@ func (d *Daemon) Start() error {
 	}
 }
 
-func (d *Daemon) pruneSessionsWithoutPTY(cutoff time.Time) int {
+func (d *Daemon) storedSessionIDs() map[string]struct{} {
+	ids := make(map[string]struct{})
+	for _, session := range d.store.List("") {
+		ids[session.ID] = struct{}{}
+	}
+	return ids
+}
+
+func (d *Daemon) pruneSessionsWithoutPTY(previousRunSessions map[string]struct{}, recoveryStartedAt time.Time) int {
 	if d.store == nil {
 		return 0
 	}
@@ -1050,10 +996,13 @@ func (d *Daemon) pruneSessionsWithoutPTY(cutoff time.Time) int {
 	removed := 0
 	recoverable := 0
 	for _, session := range sessions {
+		if _, fromPreviousRun := previousRunSessions[session.ID]; !fromPreviousRun {
+			continue
+		}
 		if _, ok := liveIDs[session.ID]; ok {
 			continue
 		}
-		if sessionUpdatedAfter(session, cutoff) {
+		if sessionUpdatedAfter(session, recoveryStartedAt) {
 			continue
 		}
 		d.releaseExitedCrewBinding(session.ID)
@@ -1120,7 +1069,7 @@ func (d *Daemon) pluginDriverReportsState(agent protocol.SessionAgent) bool {
 	return ok && driver.Capabilities["state_reporting"]
 }
 
-func (d *Daemon) performStartupPTYRecovery(recoveryStartedAt time.Time) {
+func (d *Daemon) performStartupPTYRecovery(previousRunSessions map[string]struct{}, recoveryStartedAt time.Time) {
 	defer d.rebuildTicketDeliverySchedules()
 	recoveryReport, recoverErr := d.recoverPTYBackend(10 * time.Second)
 	if recoverErr != nil {
@@ -1143,13 +1092,13 @@ func (d *Daemon) performStartupPTYRecovery(recoveryStartedAt time.Time) {
 	}
 
 	if _, ok := d.ptyBackend.(ptybackend.RecoverableRuntime); ok {
-		d.reconcileStartupWorkerSessions(recoveryReport, recoverErr, recoveryStartedAt)
+		d.reconcileStartupWorkerSessions(recoveryReport, recoverErr, previousRunSessions, recoveryStartedAt)
 		d.restoreTranscriptWatchers()
 		d.pruneRuntimesWithoutSession(context.Background())
 		return
 	}
 
-	removedSessions := d.pruneSessionsWithoutPTY(recoveryStartedAt)
+	removedSessions := d.pruneSessionsWithoutPTY(previousRunSessions, recoveryStartedAt)
 	if removedSessions > 0 {
 		d.logf("pruned %d stale sessions without live PTY on startup", removedSessions)
 		d.addWarning(
@@ -1193,7 +1142,7 @@ func (d *Daemon) recoverPTYBackend(timeout time.Duration) (ptybackend.RecoveryRe
 	return d.ptyBackend.Recover(recoveryCtx)
 }
 
-func (d *Daemon) reconcileStartupWorkerSessions(recoveryReport ptybackend.RecoveryReport, recoverErr error, recoveryStartedAt time.Time) {
+func (d *Daemon) reconcileStartupWorkerSessions(recoveryReport ptybackend.RecoveryReport, recoverErr error, previousRunSessions map[string]struct{}, recoveryStartedAt time.Time) {
 	allowIdleDemotion := recoverErr == nil && recoveryReport.Missing == 0 && recoveryReport.Failed == 0
 	if !allowIdleDemotion {
 		for attempt := 1; attempt <= startupRecoveryRetryMax; attempt++ {
@@ -1219,7 +1168,7 @@ func (d *Daemon) reconcileStartupWorkerSessions(recoveryReport ptybackend.Recove
 		}
 	}
 
-	reconcile := d.reconcileSessionsWithWorkerBackend(context.Background(), allowIdleDemotion, recoveryStartedAt)
+	reconcile := d.reconcileSessionsWithWorkerBackend(context.Background(), allowIdleDemotion, previousRunSessions, recoveryStartedAt)
 	if reconcile.Created > 0 || reconcile.StateUpdated > 0 || reconcile.MarkedIdle > 0 || reconcile.MarkedRecoverable > 0 || reconcile.Reaped > 0 || reconcile.SkippedIdle > 0 || reconcile.SkippedRecent > 0 || reconcile.SkippedShell > 0 || reconcile.LikelyAlive > 0 || reconcile.LivenessUnknown > 0 || reconcile.MissingMetadata > 0 {
 		d.logf(
 			"worker session reconciliation summary: created=%d state_updated=%d marked_idle=%d marked_recoverable=%d reaped=%d skipped_idle=%d skipped_recent=%d skipped_shell=%d likely_alive=%d liveness_unknown=%d missing_metadata=%d",
@@ -1285,15 +1234,15 @@ func (d *Daemon) reconcileStartupWorkerSessions(recoveryReport ptybackend.Recove
 		)
 	}
 	if reconcile.SkippedIdle > 0 || reconcile.SkippedRecent > 0 || reconcile.LivenessUnknown > 0 || reconcile.MissingMetadata > 0 {
-		d.scheduleDeferredWorkerReconciliation(recoveryStartedAt)
+		d.scheduleDeferredWorkerReconciliation(previousRunSessions, recoveryStartedAt)
 	}
 }
 
-func (d *Daemon) reconcileSessionsWithWorkerBackend(ctx context.Context, allowIdleDemotion bool, demotionCutoff time.Time) workerReconcileReport {
-	return d.reconcileSessionsWithWorkerBackendState(ctx, allowIdleDemotion, allowIdleDemotion, demotionCutoff)
+func (d *Daemon) reconcileSessionsWithWorkerBackend(ctx context.Context, allowIdleDemotion bool, previousRunSessions map[string]struct{}, recoveryStartedAt time.Time) workerReconcileReport {
+	return d.reconcileSessionsWithWorkerBackendState(ctx, allowIdleDemotion, allowIdleDemotion, previousRunSessions, recoveryStartedAt)
 }
 
-func (d *Daemon) reconcileSessionsWithWorkerBackendState(ctx context.Context, allowIdleDemotion, allowTombstoneCleanup bool, demotionCutoff time.Time) workerReconcileReport {
+func (d *Daemon) reconcileSessionsWithWorkerBackendState(ctx context.Context, allowIdleDemotion, allowTombstoneCleanup bool, previousRunSessions map[string]struct{}, recoveryStartedAt time.Time) workerReconcileReport {
 	report := workerReconcileReport{}
 	if d.store == nil || d.ptyBackend == nil {
 		return report
@@ -1385,7 +1334,7 @@ func (d *Daemon) reconcileSessionsWithWorkerBackendState(ctx context.Context, al
 				StateUpdatedAt: now,
 				LastSeen:       now,
 			}
-			_ = d.worktreeMaintenance.RunForeground(context.Background(), "register recovered session", func(context.Context) error {
+			_ = d.worktreeMaintenance.ProtectFromAutomaticCleanup(context.Background(), func(foregroundCleanupProtection) error {
 				d.store.Add(recoveredSession)
 				return nil
 			})
@@ -1407,7 +1356,6 @@ func (d *Daemon) reconcileSessionsWithWorkerBackendState(ctx context.Context, al
 					existing.State == protocol.SessionStatePendingApproval) {
 				continue
 			}
-			d.seedRecoveredEvidence(sessionID, existing, info)
 			nextState, ok := sessionStateFromRecoveredInfo(info)
 			if !ok && !resolverOwnedStates[existing.State] {
 				nextState, ok = protocol.SessionStateLaunching, true
@@ -1421,6 +1369,7 @@ func (d *Daemon) reconcileSessionsWithWorkerBackendState(ctx context.Context, al
 				report.StateUpdated++
 				report.markChanged(sessionID)
 			}
+			d.seedRecoveredEvidence(sessionID, existing, info)
 			continue
 		}
 	}
@@ -1448,10 +1397,13 @@ func (d *Daemon) reconcileSessionsWithWorkerBackendState(ctx context.Context, al
 	}
 
 	for _, session := range d.store.List("") {
+		if _, fromPreviousRun := previousRunSessions[session.ID]; !fromPreviousRun {
+			continue
+		}
 		if _, ok := liveIDs[session.ID]; ok {
 			continue
 		}
-		if sessionUpdatedAfter(session, demotionCutoff) {
+		if sessionUpdatedAfter(session, recoveryStartedAt) {
 			report.SkippedRecent++
 			continue
 		}
@@ -1494,11 +1446,11 @@ func (d *Daemon) reconcileSessionsWithWorkerBackendState(ctx context.Context, al
 	return report
 }
 
-func (d *Daemon) scheduleDeferredWorkerReconciliation(recoveryStartedAt time.Time) {
-	go d.runDeferredWorkerReconciliation(deferredRecoveryMaxAttempts, deferredRecoveryRetryInterval, recoveryStartedAt)
+func (d *Daemon) scheduleDeferredWorkerReconciliation(previousRunSessions map[string]struct{}, recoveryStartedAt time.Time) {
+	go d.runDeferredWorkerReconciliation(deferredRecoveryMaxAttempts, deferredRecoveryRetryInterval, previousRunSessions, recoveryStartedAt)
 }
 
-func (d *Daemon) runDeferredWorkerReconciliation(maxAttempts int, retryInterval time.Duration, recoveryStartedAt time.Time) {
+func (d *Daemon) runDeferredWorkerReconciliation(maxAttempts int, retryInterval time.Duration, previousRunSessions map[string]struct{}, recoveryStartedAt time.Time) {
 	if d.ptyBackend == nil || maxAttempts <= 0 {
 		return
 	}
@@ -1531,7 +1483,7 @@ func (d *Daemon) runDeferredWorkerReconciliation(maxAttempts int, retryInterval 
 			continue
 		}
 
-		reconcile := d.reconcileSessionsWithWorkerBackendState(context.Background(), true, fullyRecovered, recoveryStartedAt)
+		reconcile := d.reconcileSessionsWithWorkerBackendState(context.Background(), true, fullyRecovered, previousRunSessions, recoveryStartedAt)
 		d.publishSessionsReconciled(reconcile)
 		if reconcile.MarkedRecoverable > 0 {
 			d.addWarning(
@@ -1632,9 +1584,29 @@ func (d *Daemon) Stop() {
 	d.stopOnce.Do(d.stop)
 }
 
+func (d *Daemon) lifetime() context.Context {
+	d.lifetimeOnce.Do(func() {
+		d.lifetimeCtx, d.endLifetime = context.WithCancel(context.Background())
+		select {
+		case <-d.done:
+			d.endLifetime()
+		default:
+		}
+	})
+	return d.lifetimeCtx
+}
+
 func (d *Daemon) stop() {
 	d.log("daemon stopping")
 	close(d.done)
+	d.lifetime()
+	d.endLifetime()
+	if d.listener != nil {
+		d.listener.Close()
+		d.listener = nil
+		os.Remove(d.socketPath)
+	}
+	d.closeGitExecution(ErrGitExecutorClosed)
 	d.wsHub.closeAll()
 	d.sessionInputs().stopRetries()
 	d.stopNotebookWatcher()
@@ -1666,11 +1638,6 @@ func (d *Daemon) stop() {
 	}
 	if d.diagServer != nil {
 		_ = d.diagServer.Close()
-	}
-	if d.listener != nil {
-		d.listener.Close()
-		d.listener = nil
-		os.Remove(d.socketPath)
 	}
 	d.releasePIDLock()
 	if d.logger != nil {
@@ -1711,6 +1678,7 @@ func (d *Daemon) handlePTYExit(info ptybackend.ExitInfo) bool {
 			return false
 		}
 	}
+	sessionAtExit := d.store.Get(info.ID)
 	d.sessionInputs().forgetSession(info.ID)
 	d.stopTranscriptWatcher(info.ID)
 	d.closePluginDriverSession(info.ID, "exited", &info.ExitCode, info.Signal)
@@ -1723,9 +1691,8 @@ func (d *Daemon) handlePTYExit(info ptybackend.ExitInfo) bool {
 		}
 	}
 
-	d.recordProcessEvidence(info.ID, true)
-	if session := d.store.Get(info.ID); session != nil {
-		d.reconcileTicketsOnSessionEnd(info.ID, string(session.State))
+	if sessionAtExit != nil {
+		d.reconcileTicketsOnSessionEnd(info.ID, string(sessionAtExit.State))
 	}
 	d.releaseExitedCrewBinding(info.ID)
 
@@ -1733,6 +1700,7 @@ func (d *Daemon) handlePTYExit(info ptybackend.ExitInfo) bool {
 		ExitCode: info.ExitCode,
 		Signal:   info.Signal,
 	})
+	d.recordProcessEvidence(info.ID, true)
 	return true
 }
 
@@ -2018,7 +1986,8 @@ func (d *Daemon) recordSessionClose(sessionID string, commit func() (bool, error
 	d.forgetSessionTrace(sessionID)
 	if recorded {
 		d.invalidateGardenSeedParties("session close")
-		d.publishFact(FactSessionClosed, sessionID, d.store.SessionLedgerEntry(sessionID))
+		entry := d.store.SessionLedgerEntry(sessionID)
+		d.publishFact(FactSessionClosed, sessionID, entry)
 	}
 	d.clearChiefOfStaffIfSession(sessionID)
 	d.releaseCrewBindingIfSession(sessionID)
@@ -2050,7 +2019,6 @@ func (d *Daemon) forgetSessionRuntime(sessionID string) {
 		d.reconcileTicketsOnSessionEnd(sessionID, string(session.State))
 	}
 	d.clearNudgeState(sessionID)
-	d.forgetPostInitialPrompt(sessionID)
 	d.forgetAgentMailboxDoorbell(sessionID)
 	d.forgetSessionTitleInitialPrompt(sessionID)
 	d.clearAutoSettleState(sessionID)
@@ -2062,6 +2030,7 @@ func (d *Daemon) forgetSessionRuntime(sessionID string) {
 func (d *Daemon) forgetSessionTrace(sessionID string) {
 	d.forgetStateTrace(sessionID)
 	d.evidenceTable().forget(sessionID)
+	d.sessionResolver().forget(sessionID)
 	d.stateReasons().forget(sessionID)
 	d.dwellGate().clear(sessionID)
 }
@@ -2133,6 +2102,9 @@ func (d *Daemon) initHTTPServer() {
 }
 
 func (d *Daemon) listenHTTP() error {
+	if d.httpListener != nil {
+		return nil
+	}
 	addr := d.httpServer.Addr
 	listener, err := net.Listen("tcp", addr)
 	if err != nil {
@@ -2172,7 +2144,7 @@ func (d *Daemon) maybeStartDiagServer() {
 }
 
 func (d *Daemon) diagStats() diag.Stats {
-	stats := diag.Stats{PtyBackend: d.ptyBackendMode()}
+	stats := diag.Stats{PtyBackend: d.ptyBackendMode(), DocSubscriptions: d.documentSubscriptionCount()}
 	if d.ptyBackend == nil {
 		stats.PtyBackend = "embedded"
 		return stats
@@ -2496,6 +2468,14 @@ func (d *Daemon) handleConnection(conn net.Conn) {
 		d.handleAutomationCommand(conn, cmd, msg)
 	case protocol.CmdDelegationRoles:
 		d.handleDelegationRoles(conn)
+	case protocol.CmdDelegationPreferencesShow:
+		d.handleDelegationPreferencesShow(conn)
+	case protocol.CmdDelegationPreferencesCommit:
+		d.handleDelegationPreferencesCommit(conn, msg.(*protocol.DelegationPreferencesCommitMessage))
+	case protocol.CmdDelegationPreferencesHistory:
+		d.handleDelegationPreferencesHistory(conn, msg.(*protocol.DelegationPreferencesHistoryMessage))
+	case protocol.CmdDelegationPreferencesRollback:
+		d.handleDelegationPreferencesRollback(conn, msg.(*protocol.DelegationPreferencesRollbackMessage))
 	case protocol.CmdDelegateStatus:
 		d.handleDelegateStatus(conn, msg.(*protocol.DelegateStatusMessage))
 	case protocol.CmdSetTicketStatus:
@@ -2806,6 +2786,10 @@ func (d *Daemon) handleUnregister(conn net.Conn, msg *protocol.UnregisterMessage
 
 func (d *Daemon) handleState(conn net.Conn, msg *protocol.StateMessage) {
 	d.logf("hook evidence: id=%s state=%s", msg.ID, msg.State)
+	d.tracePermissionMode(msg.ID, protocol.Deref(msg.PermissionMode))
+	d.recordReviewerEvidenceFromPermissionMode(msg.ID, protocol.Deref(msg.PermissionMode))
+	d.traceStateEvidence(msg.ID, stateOrigin{source: stateSourceHook}, msg.State)
+	d.recordBracketEvidence(msg.ID, msg.State)
 	if strings.EqualFold(strings.TrimSpace(protocol.Deref(msg.HookEvent)), "user_prompt_submit") &&
 		strings.TrimSpace(protocol.Deref(msg.Prompt)) != "" {
 		effects := d.observePromptTaken(msg.ID, protocol.Deref(msg.Prompt), time.Now())
@@ -2815,12 +2799,7 @@ func (d *Daemon) handleState(conn net.Conn, msg *protocol.StateMessage) {
 		}
 		go d.maybeGenerateSessionTitleFromPrompt(msg.ID, protocol.Deref(msg.Prompt), origin)
 	}
-	d.runPostInitialPrompt(msg.ID, msg.State)
-	d.tracePermissionMode(msg.ID, protocol.Deref(msg.PermissionMode))
-	d.recordReviewerEvidenceFromPermissionMode(msg.ID, protocol.Deref(msg.PermissionMode))
-	d.recordBracketEvidence(msg.ID, msg.State)
 	d.store.Touch(msg.ID)
-	d.traceStateEvidence(msg.ID, stateOrigin{source: stateSourceHook}, msg.State)
 	d.sendOK(conn)
 }
 
@@ -2840,6 +2819,10 @@ func (d *Daemon) handleStop(conn net.Conn, msg *protocol.StopMessage) {
 	d.logf("handleStop: session=%s, transcript_path=%s", msg.ID, msg.TranscriptPath)
 
 	relaxBackgroundWork := d.isChiefOfStaffSession(msg.ID)
+	classifies := !d.consumeForcedStopClassification(msg.ID)
+	if classifies {
+		d.cancelAutoSettle(msg.ID, "stop judged")
+	}
 	d.recordStopFacts(
 		msg.ID,
 		!relaxBackgroundWork && hasActiveBackgroundTask(msg),
@@ -2857,7 +2840,7 @@ func (d *Daemon) handleStop(conn net.Conn, msg *protocol.StopMessage) {
 			"",
 		)
 		d.sendOK(conn)
-		if d.consumeForcedStopClassification(msg.ID) {
+		if !classifies {
 			d.logf("handleStop: skipping yield classification for daemon-terminated session=%s", msg.ID)
 			return
 		}
@@ -2868,25 +2851,25 @@ func (d *Daemon) handleStop(conn net.Conn, msg *protocol.StopMessage) {
 		return
 	}
 
-	d.recordBracketEvidence(msg.ID, protocol.StateIdle)
+	d.recordTurnEndedEvidence(msg.ID, classifies)
 
 	if session := d.store.Get(msg.ID); session != nil {
-		if resumeSessionID := agentdriver.ResumeSessionIDFromStopTranscriptPath(
-			agentdriver.Get(string(session.Agent)),
-			msg.TranscriptPath,
-		); resumeSessionID != "" {
-			d.observeAgentConversation(agentConversationObservation{
-				SessionID:      msg.ID,
-				NativeID:       resumeSessionID,
-				TranscriptPath: msg.TranscriptPath,
-			})
+		driver := agentdriver.Get(string(session.Agent))
+		resumeSessionID := agentdriver.ResumeSessionIDFromTranscriptPath(driver, msg.TranscriptPath)
+		observation := agentConversationObservation{SessionID: msg.ID, NativeID: resumeSessionID, TranscriptPath: msg.TranscriptPath}
+		switch {
+		case resumeSessionID == "":
+		case agentdriver.EffectiveCapabilities(driver).HasHooks:
+			d.observeAgentConversation(observation)
+			d.rememberDispatchResume(msg.ID, resumeSessionID)
+		case d.claimAgentConversation(observation):
 			d.rememberDispatchResume(msg.ID, resumeSessionID)
 		}
 	}
 	d.store.Touch(msg.ID)
 	d.sendOK(conn)
 
-	if d.consumeForcedStopClassification(msg.ID) {
+	if !classifies {
 		d.logf("handleStop: skipping classification for daemon-terminated session=%s", msg.ID)
 		return
 	}
@@ -3700,7 +3683,14 @@ func (d *Daemon) handleInjectTestSession(conn net.Conn, msg *protocol.InjectTest
 		return
 	}
 	msg.Session.ProfileID = profile.ID
+	if member := strings.TrimSpace(protocol.Deref(msg.Session.CrewMember)); member != "" {
+		if _, err := d.claimCrewBinding(member, msg.Session.ID); err != nil {
+			d.sendError(conn, fmt.Sprintf("crew bind %q: %v", member, err))
+			return
+		}
+	}
 	if err := d.store.AddChecked(&msg.Session); err != nil {
+		d.releaseCrewBindingIfSession(msg.Session.ID)
 		d.sendError(conn, err.Error())
 		return
 	}
@@ -3864,7 +3854,7 @@ func (d *Daemon) checkAllBranches() {
 
 	d.coalesceSnapshots(func() {
 		for _, session := range sessions {
-			info, err := git.GetBranchInfo(session.Directory)
+			info, err := d.readBranchInfo(context.Background(), gitTask{Kind: gitTaskSessionIdentity, Lane: gitDeferred}, session.Directory)
 			if err != nil {
 				continue
 			}

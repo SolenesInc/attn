@@ -1,0 +1,3 @@
+kind: internal
+area: testing
+change: File, watch, notebook and document promises are guarded by daemon wire tests instead of in-package tests.

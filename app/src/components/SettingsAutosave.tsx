@@ -13,7 +13,7 @@ type Field = {
   confirmed: boolean;
 };
 
-export function createSettingsAutosave(save: SaveSetting) {
+function createSettingsAutosave(save: SaveSetting) {
   const fields = new Map<string, Field>();
   const listeners = new Set<() => void>();
   let revision = 0;

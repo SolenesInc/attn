@@ -1,664 +1,514 @@
-import { describe, expect, it, beforeEach, vi } from 'vitest';
-import { act, fireEvent, render, screen } from '@testing-library/react';
-import App from './App';
-import { useProfilesStore } from './store/profiles';
-import { useSessionStore } from './store/sessions';
-import { agentDesktop, arrangeDesktops, fakeDesktopCommands, paneIdOf, TEST_PROFILE_ID } from './test/desktops';
-import { useDesktopFocus } from './store/desktopFocus';
-import { WHATS_NEW_ID, WHATS_NEW_STORAGE_KEY } from './hooks/useWhatsNew';
+import { act, fireEvent, screen, within } from '@testing-library/react';
+import { onOpenUrl } from '@tauri-apps/plugin-deep-link';
+import { describe, expect, it, vi } from 'vitest';
+import { soloDesktop, daemonSession, daemonDesktop, type DaemonSession } from './test/daemonFixtures';
+import { gesture, pressShortcut, renderApp } from './test/renderApp';
+import type { ScriptedDaemon } from './test/scriptedDaemon';
 
+const S1_TURN_OPENED = '2026-08-03T09:00:00Z';
+const S2_TURN_OPENED = '2026-08-03T10:00:00Z';
 
-const mockUseDaemonStore = vi.fn();
-const mockUseDaemonSocket = vi.fn();
-const mockUseKeyboardShortcuts = vi.fn();
-const mockUseUiAutomationBridge = vi.fn();
-const mockSidebarProps = vi.fn();
-const mockSendSettleTurn = vi.fn();
-
-const { mockSetActiveSession } = vi.hoisted(() => ({
-  mockSetActiveSession: vi.fn(),
-}));
-
-let turnOwed: Record<string, boolean>;
-let sessionIds: string[];
-let chiefId: string | null;
-
-vi.mock('@tauri-apps/plugin-deep-link', () => ({
-  onOpenUrl: vi.fn(async () => () => {}),
-  getCurrent: vi.fn(async () => []),
-}));
-vi.mock('@tauri-apps/plugin-opener', () => ({ openUrl: vi.fn(async () => {}) }));
-
-vi.mock('./components/GhosttyTerminal', async () => {
-  const React = await import('react');
-  return { GhosttyTerminal: React.forwardRef(function MockTerminal() { return null; }) };
-});
-
-vi.mock('./components/Sidebar', async () => {
-  const { DelegationChainTrigger } = await import('./components/DelegationChain');
-  return {
-    EditorIcon: () => null,
-    WorkflowIcon: () => null,
-    DiffIcon: () => null,
-    PRsIcon: () => null,
-    NotebookIcon: () => null,
-    MarkdownIcon: () => null,
-    Sidebar: (props: unknown) => {
-      mockSidebarProps(props);
-      return (
-        <div className="sidebar">
-          <DelegationChainTrigger session={{ id: 's1', label: 's1', delegation_role: { name: 'Builder' } }} />
-        </div>
-      );
-    },
-  };
-});
-
-vi.mock('./components/Dashboard', () => ({ Dashboard: () => null }));
-vi.mock('./components/grid/GridView', () => ({ GridView: () => null }));
-vi.mock('./components/AttentionDrawer', () => ({ AttentionDrawer: () => null }));
-vi.mock('./components/LocationPicker', () => ({ LocationPicker: () => null }));
-vi.mock('./components/UndoToast', () => ({ UndoToast: () => null }));
-vi.mock('./components/SessionTerminalDesktop', () => ({ SessionTerminalDesktop: () => null }));
-vi.mock('./components/Toast', () => ({
-  Toast: () => null,
-  useToast: () => ({ toast: null, showError: vi.fn(), showNotice: vi.fn(), clearToast: vi.fn() }),
-}));
-vi.mock('./hooks/useKeyboardShortcuts', () => ({
-  useKeyboardShortcuts: (args: unknown) => mockUseKeyboardShortcuts(args),
-}));
-vi.mock('./hooks/useUiAutomationBridge', () => ({
-  useUiAutomationBridge: (args: unknown) => mockUseUiAutomationBridge(args),
-}));
-vi.mock('./hooks/useUIScale', () => ({
-  useUIScale: () => ({ scale: 1, increaseScale: vi.fn(), decreaseScale: vi.fn(), resetScale: vi.fn() }),
-}));
-vi.mock('./hooks/useOpenPR', () => ({ useOpenPR: () => vi.fn() }));
-vi.mock('./hooks/usePRsNeedingAttention', () => ({ usePRsNeedingAttention: () => ({ needsAttention: [] }) }));
-vi.mock('./store/daemonSessions', async () => {
-  const { selectorStoreMock } = await import('./test/mocks/selectorStore');
-  return { useDaemonStore: selectorStoreMock(() => mockUseDaemonStore()) };
-});
-vi.mock('./hooks/useDaemonSocket', () => ({
-  useDaemonSocket: (args: unknown) => mockUseDaemonSocket(args),
-}));
-vi.mock('./pty/bridge', async () => {
-  const actual = await vi.importActual<typeof import('./pty/bridge')>('./pty/bridge');
-  return { ...actual, ptySpawn: vi.fn(async () => {}) };
-});
-
-type SocketArgs = {
-  onSessionsUpdate?: (sessions: unknown[]) => void;
-  onSettingsUpdate?: (settings: Record<string, string>) => void;
-};
-
-function socketArgs(): SocketArgs {
-  const calls = mockUseDaemonSocket.mock.calls;
-  return calls[calls.length - 1]?.[0] as SocketArgs;
-}
-
-/** The shortcut handlers App registered on its last render. */
-function shortcutHandlers<T>(): T {
-  const calls = mockUseKeyboardShortcuts.mock.calls;
-  return calls[calls.length - 1]?.[0] as T;
-}
-
-function selectSession(): (id: string) => void {
-  return mockUseUiAutomationBridge.mock.lastCall![0].selectSession;
-}
-
-function desktopsPayload() {
-  return sessionIds.map((id, index) => agentDesktop(`desktop-${id}`, index + 1, [id]));
-}
-
-function broadcast() {
-  act(() => {
-    socketArgs().onSettingsUpdate?.({ queue_mode_enabled: 'true' });
-    const desktops = desktopsPayload();
-    const current = useProfilesStore.getState().currentDesktopId;
-    arrangeDesktops(desktops, desktops.some((desktop) => desktop.id === current) ? current! : desktops[0].id);
-    socketArgs().onSessionsUpdate?.(mockUseDaemonStore().daemonSessions);
+function agent(id: 's1' | 's2', overrides: Partial<DaemonSession> = {}): DaemonSession {
+  return daemonSession(id, {
+    turn_opened_at: id === 's1' ? S1_TURN_OPENED : S2_TURN_OPENED,
+    ...overrides,
   });
 }
 
-function selections(): string[] {
-  return useSessionStore.getState().agentHistory.entries;
+async function renderQueue({
+  owed = [] as string[],
+  laidOut = ['s1', 's2'],
+  s1 = {} as Partial<DaemonSession>,
+} = {}) {
+  return renderApp({
+    initialState: {
+      sessions: [
+        agent('s1', { turn_owed: owed.includes('s1'), ...s1 }),
+        agent('s2', { turn_owed: owed.includes('s2') }),
+      ],
+      desktops: laidOut.map((id) => soloDesktop(id)),
+      settings: { queue_mode_enabled: 'true' },
+    },
+  });
 }
 
-/** Selecting the last owed agent and settling it: home, with the wait armed. */
-function workTheQueueDownToHome() {
-  render(<App />);
-  broadcast();
+function press(key: string, modifiers: { shift?: boolean } = {}) {
+  fireEvent.keyDown(window, { key, metaKey: true, shiftKey: modifiers.shift ?? false });
+}
 
-  act(() => { mockSetActiveSession('s1'); });
-  broadcast();
-  expect(useSessionStore.getState().activeSessionId).toBe('s1');
+const keys = {
+  home: () => press('H', { shift: true }),
+  back: () => press('['),
+  forward: () => press(']'),
+  grid: () => pressShortcut('view.toggleGrid'),
+  sidebar: () => press('B', { shift: true }),
+  settings: () => press(','),
+  shortcuts: () => press('/'),
+  sessions: () => press('L', { shift: true }),
+};
 
-  turnOwed.s1 = false;
-  broadcast();
-  expect(useSessionStore.getState().activeSessionId).toBeNull();
+function open(label: string) {
+  if (!screen.queryByRole('button', { name: `Open ${label}` })) {
+    fireEvent.click(screen.getByRole('button', { name: /All agents/ }));
+  }
+  fireEvent.click(screen.getByRole('button', { name: `Open ${label}` }));
+}
+
+function selectedAgent(): string | null {
+  const row = document.querySelector('.session-item.selected .session-label')?.textContent;
+  if (row) return row;
+  const pane = document.querySelector('[data-session-visible="1"]')?.getAttribute('data-active-pane-id');
+  return pane ? pane.replace(/^pane-/, '') : null;
+}
+
+function isHome(): boolean {
+  return screen.getByTestId('sidebar-home').getAttribute('aria-current') === 'page';
+}
+
+function isGrid(): boolean {
+  return screen.queryByRole('region', { name: 'Session grid' }) !== null;
+}
+
+function setTurn(daemon: ScriptedDaemon, id: 's1' | 's2', owed: boolean) {
+  daemon.emit({ event: 'session_state_changed', session: agent(id, { turn_owed: owed }) });
+}
+
+function layOut(daemon: ScriptedDaemon, id: string) {
+  daemon.arrange((desktops) => [...desktops, soloDesktop(id)]);
+}
+
+function deepLinkTo(id: string) {
+  act(() => vi.mocked(onOpenUrl).mock.lastCall![0]([`attn://spawn?cwd=%2Ftmp%2F${id}`]));
+}
+
+function selectionsOf(daemon: ScriptedDaemon, desktopId: string) {
+  return daemon.sent.filter(
+    (command) => command.cmd === 'desktop_set_current' && command.desktop_id === desktopId,
+  );
+}
+
+async function workTheQueueDownToHome() {
+  const rendered = await renderQueue({ owed: ['s1'] });
+  open('s1');
+  expect(selectedAgent()).toBe('s1');
+
+  setTurn(rendered.daemon, 's1', false);
+  expect(isHome()).toBe(true);
+  return rendered;
+}
+
+
+const LATER = '2100-01-01T00:00:00Z';
+
+type Turns = Record<string, Partial<DaemonSession>>;
+
+function queueSession(id: string, hour: number, overrides: Partial<DaemonSession> = {}): DaemonSession {
+  return daemonSession(id, { turn_opened_at: `2026-08-03T${String(hour).padStart(2, '0')}:00:00Z`, ...overrides });
+}
+
+function queueOf(turns: Turns) {
+  return Object.entries(turns).map(([id, overrides], index) => queueSession(id, 9 + index, overrides));
+}
+
+async function renderAgents(turns: Turns, settings: Record<string, string> = { queue_mode_enabled: 'true' }) {
+  const sessions = queueOf(turns);
+  const view = await renderApp({ initialState: { sessions, desktops: sessions.map((session) => soloDesktop(session.id)), settings } });
+  const update = (next: Turns) => view.daemon.emit({ event: 'sessions_updated', sessions: queueOf(next) });
+  return { ...view, update };
+}
+
+function notesDesktop() {
+  return daemonDesktop('notes', { root: { type: 'tile', tile_id: 'tile-notes', tile_kind: 'markdown', tile_params: '/tmp/notes.md' } }, { name: 'notes', shortcut_slot: 9 });
+}
+
+function focusedPane(): string | null {
+  return document.activeElement?.closest('[data-pane-id]')?.getAttribute('data-pane-id') ?? null;
+}
+
+async function settleFocus(daemon: ScriptedDaemon) {
+  await act(() => vi.advanceTimersByTimeAsync(1000));
+  await daemon.idle();
+}
+
+function sidebarBadges() {
+  return Array.from(document.querySelectorAll<HTMLElement>('.sidebar-collapsed .session-icon, .icon-btn.session-icon'))
+    .filter((icon) => icon.querySelector('.mini-badge'))
+    .map((icon) => icon.title);
 }
 
 describe('agent navigation', () => {
-  beforeEach(() => {
-    vi.clearAllMocks();
-    useSessionStore.setState(useSessionStore.getInitialState(), true);
-    useProfilesStore.setState(useProfilesStore.getInitialState(), true);
-    localStorage.clear();
-    localStorage.setItem(WHATS_NEW_STORAGE_KEY, WHATS_NEW_ID);
-    turnOwed = { s1: true, s2: false };
-    sessionIds = ['s1', 's2'];
-    chiefId = null;
+  it('selects a deferred session when its pane becomes available', async () => {
+    const { daemon } = await renderQueue({ laidOut: ['s1'] });
 
-    mockSetActiveSession.mockImplementation((id: string | null) => useSessionStore.getState().setActiveSession(id));
+    deepLinkTo('s2');
+    expect(isHome()).toBe(true);
 
-    useSessionStore.setState({
-      sessions: sessionIds.map((id) => ({
-        id,
-        label: id,
-        state: 'working',
-        cwd: `/tmp/${id}`,
-        profileId: TEST_PROFILE_ID,
-        desktopId: `desktop-${id}`,
-        agent: 'claude',
-        transcriptMatched: true,
-        daemonActivePaneId: `pane-${id}`,
-        desktop: {
-          agents: [{ id: `pane-${id}`, runtimeId: id, sessionId: id, title: id }],
-          layoutTree: { type: 'pane', paneId: `pane-${id}` },
+    layOut(daemon, 's2');
+
+    expect(selectedAgent()).toBe('s2');
+  });
+
+  it('keeps a newer selection when a deferred one becomes ready', async () => {
+    const { daemon } = await renderQueue({ laidOut: ['s1'] });
+
+    deepLinkTo('s2');
+    open('s1');
+    layOut(daemon, 's2');
+
+    expect(selectedAgent()).toBe('s1');
+  });
+
+  it('does not leave home when an older deferred selection becomes ready', async () => {
+    const { daemon } = await renderQueue({ laidOut: ['s1'] });
+
+    deepLinkTo('s2');
+    keys.home();
+    layOut(daemon, 's2');
+
+    expect(isHome()).toBe(true);
+    expect(selectionsOf(daemon, 'desktop-s2')).toEqual([]);
+  });
+
+  it.each([
+    ['going home', keys.home],
+    ['going back', keys.back],
+    ['toggling the sidebar', keys.sidebar],
+    ['opening settings', keys.settings],
+    ['opening the shortcuts', keys.shortcuts],
+    ['opening the sessions list', keys.sessions],
+  ])('dismisses the delegation chain when %s', async (_, shortcut) => {
+    await renderQueue({ s1: { delegation_role: { name: 'Builder' } } });
+    open('s2');
+    open('s1');
+    fireEvent.click(within(screen.getByTestId('sidebar-queue')).getByTestId('delegation-chain-trigger-s1'));
+    expect(screen.getByRole('dialog', { name: 'Delegation chain' })).toBeInTheDocument();
+
+    shortcut();
+
+    expect(screen.queryByRole('dialog', { name: 'Delegation chain' })).toBeNull();
+  });
+
+  it('takes the user to the next turn that opens after the queue ran dry', async () => {
+    const { daemon } = await workTheQueueDownToHome();
+
+    setTurn(daemon, 's2', true);
+
+    expect(selectedAgent()).toBe('s2');
+  });
+
+  it('leaves the user alone at a home they walked to', async () => {
+    const { daemon } = await renderQueue({ owed: ['s1'] });
+    open('s1');
+    keys.home();
+    expect(isHome()).toBe(true);
+
+    setTurn(daemon, 's2', true);
+
+    expect(isHome()).toBe(true);
+    expect(selectionsOf(daemon, 'desktop-s2')).toEqual([]);
+  });
+
+  it('ends the wait when the user leaves home, however they come back', async () => {
+    const { daemon } = await workTheQueueDownToHome();
+    keys.grid();
+    keys.grid();
+    expect(isHome()).toBe(true);
+
+    setTurn(daemon, 's2', true);
+
+    expect(isHome()).toBe(true);
+    expect(selectionsOf(daemon, 'desktop-s2')).toEqual([]);
+  });
+
+  it('hands over the oldest owed turn when several opened while home waited', async () => {
+    const { daemon } = await workTheQueueDownToHome();
+
+    daemon.emit({
+      event: 'sessions_updated',
+      sessions: [agent('s1', { turn_owed: true }), agent('s2', { turn_owed: true })],
+    });
+
+    expect(selectedAgent()).toBe('s1');
+  });
+
+  it('resumes history from home and grid, then traverses normally in the session view', async () => {
+    const { daemon } = await renderQueue();
+    await gesture(daemon, () => open('s1'));
+    await gesture(daemon, () => open('s2'));
+    await gesture(daemon, keys.home);
+
+    await gesture(daemon, keys.back);
+    expect(selectedAgent()).toBe('s2');
+    expect(isGrid()).toBe(false);
+
+    await gesture(daemon, keys.grid);
+    await gesture(daemon, keys.forward);
+    expect(isGrid()).toBe(true);
+
+    await gesture(daemon, keys.back);
+    expect(selectedAgent()).toBe('s2');
+    expect(isGrid()).toBe(false);
+
+    await gesture(daemon, keys.back);
+    expect(selectedAgent()).toBe('s1');
+
+    await gesture(daemon, keys.forward);
+    expect(selectedAgent()).toBe('s2');
+    await gesture(daemon, keys.forward);
+    expect(selectedAgent()).toBe('s2');
+  });
+
+  it('forgets the agents ahead in history once the user opens another after going back', async () => {
+    await renderAgents({ s1: {}, s2: {}, s3: {} }, {});
+    open('s1');
+    open('s2');
+    open('s3');
+
+    keys.back();
+    open('s1');
+    keys.forward();
+    expect(selectedAgent()).toBe('s1');
+
+    keys.back();
+    expect(selectedAgent()).toBe('s2');
+  });
+
+  it('steps over a closed agent when going back through history', async () => {
+    const view = await renderAgents({ s1: {}, s2: {}, s3: {} }, {});
+    open('s1');
+    open('s2');
+    open('s3');
+
+    view.daemon.emit({ event: 'session_unregistered', session: queueSession('s2', 10) });
+    await view.daemon.idle();
+    keys.back();
+
+    expect(selectedAgent()).toBe('s1');
+  });
+
+  const OWED = { turn_owed: true };
+  const SETTLED = { turn_owed: false };
+  const SNOOZED = { turn_owed: false, turn_snoozed_until: LATER };
+
+  it.each<[string, Turns, string, Turns, string | null]>([
+    ['moves on to the next owed turn', { s1: OWED, s2: OWED, s3: OWED }, 's1', { s1: SETTLED, s2: OWED, s3: OWED }, 's2'],
+    ['moves on from the middle of the queue', { s1: OWED, s2: OWED, s3: OWED }, 's2', { s1: OWED, s2: SETTLED, s3: OWED }, 's3'],
+    ['wraps to the top from the bottom row', { s1: OWED, s2: OWED, s3: OWED }, 's3', { s1: OWED, s2: OWED, s3: SETTLED }, 's1'],
+    ['skips a successor that settled in the same update', { s1: OWED, s2: OWED, s3: OWED }, 's1', { s1: SETTLED, s2: SETTLED, s3: OWED }, 's3'],
+    ['wraps past a successor that settled in the same update', { s1: OWED, s2: OWED, s3: OWED }, 's2', { s1: OWED, s2: SETTLED, s3: SETTLED }, 's1'],
+    ['lands on a turn that opened in the update that closed this one', { s1: OWED, s2: SETTLED }, 's1', { s1: SETTLED, s2: OWED }, 's2'],
+    ['moves on when the watched turn is snoozed', { s1: OWED, s2: OWED }, 's1', { s1: SNOOZED, s2: OWED }, 's2'],
+    ['goes home when the last owed turn closes', { s1: OWED, s2: SETTLED }, 's1', { s1: SETTLED, s2: SETTLED }, null],
+    ['goes home when the last owed turn is snoozed', { s1: OWED, s2: SETTLED }, 's1', { s1: SNOOZED, s2: SETTLED }, null],
+    ['stays while the watched turn is still owed', { s1: OWED, s2: OWED }, 's1', { s1: { ...OWED, state: 'waiting_input' }, s2: OWED }, 's1'],
+    ['stays when the turn that closed was not the watched agent’s', { s1: SETTLED, s2: OWED }, 's1', { s1: SETTLED, s2: SETTLED }, 's1'],
+    ['stays on an agent that left the queue for the crew', { s1: OWED, s2: OWED }, 's1', { s1: { turn_owed: false, crew_member: 'fern' }, s2: OWED }, 's1'],
+  ])('%s', async (_, turns, watched, update, landing) => {
+    const view = await renderAgents(turns);
+    open(watched);
+
+    view.update(update);
+
+    if (landing) expect(selectedAgent()).toBe(landing);
+    else expect(isHome()).toBe(true);
+  });
+
+  it('leaves history and keyboard focus consistent when it moves on', async () => {
+    const view = await renderAgents({ s1: OWED, s2: OWED });
+    open('s1');
+    await view.daemon.idle();
+
+    view.update({ s1: SETTLED, s2: OWED });
+    await settleFocus(view.daemon);
+    expect(selectedAgent()).toBe('s2');
+    expect(focusedPane()).toBe('pane-s2');
+
+    keys.back();
+    await view.daemon.idle();
+    expect(selectedAgent()).toBe('s1');
+  });
+
+  it('keeps a settled agent the user chose while other turns are owed', async () => {
+    const view = await renderAgents({ s1: SETTLED, s2: OWED });
+    open('s1');
+
+    view.update({ s1: SETTLED, s2: OWED });
+
+    expect(selectedAgent()).toBe('s1');
+  });
+
+  it.each([
+    ['⌘J', () => press('j')],
+  ])('jumps with %s to the turn owed longest, not the first row', async (_, jump) => {
+    const view = await renderAgents({ s1: { ...OWED, turn_opened_at: '2026-08-03T11:00:00Z' }, s2: { ...OWED, turn_opened_at: '2026-08-03T09:00:00Z' } });
+
+    jump();
+    await view.daemon.idle();
+
+    expect(selectedAgent()).toBe('s2');
+  });
+
+  it('stays home on ⌘J when no turn is owed', async () => {
+    const view = await renderAgents({ s1: SETTLED, s2: SETTLED });
+
+    press('j');
+    await view.daemon.idle();
+
+    expect(isHome()).toBe(true);
+  });
+
+  it('takes the user to the next turn after they ask to follow from an all-settled home', async () => {
+    const view = await renderAgents({ s1: SETTLED, s2: SETTLED });
+    fireEvent.click(within(screen.getByTestId('follow-next-turn')).getByRole('checkbox'));
+
+    view.update({ s1: SETTLED, s2: OWED });
+
+    expect(selectedAgent()).toBe('s2');
+  });
+
+  it.each([
+    ['opening a tile-only desktop', () => pressShortcut('desktop.select9')],
+    ['going back through history', () => keys.back()],
+  ])('stops waiting for the next turn after %s', async (_, navigate) => {
+    const view = await renderAgents({ s1: OWED, s2: SETTLED });
+    view.daemon.arrange((desktops) => [...desktops, notesDesktop()]);
+    open('s1');
+    view.update({ s1: SETTLED, s2: SETTLED });
+    expect(isHome()).toBe(true);
+
+    navigate();
+    await view.daemon.idle();
+    const settledOn = selectedAgent();
+    view.update({ s1: SETTLED, s2: OWED });
+
+    expect(selectedAgent()).toBe(settledOn);
+  });
+
+  it('keeps a tile-only desktop open when another session closes', async () => {
+    const view = await renderAgents({ s1: SETTLED, s2: SETTLED });
+    view.daemon.arrange((desktops) => [...desktops, notesDesktop()]);
+    pressShortcut('desktop.select9');
+    await view.daemon.idle();
+
+    view.daemon.emit({ event: 'session_unregistered', session: queueSession('s2', 10) });
+    await view.daemon.idle();
+
+    expect(isHome()).toBe(false);
+    expect(document.querySelector('[data-pane-id="tile-notes"]')).not.toBeNull();
+  });
+
+  it.each([
+    ['grid', () => keys.grid()],
+    ['back', () => keys.back()],
+  ])('drops a deep-linked selection that is still waiting for its pane after %s', async (_, navigate) => {
+    const { daemon } = await renderQueue({ laidOut: ['s1'] });
+    open('s1');
+
+    deepLinkTo('s2');
+    navigate();
+    layOut(daemon, 's2');
+
+    expect(selectedAgent()).not.toBe('s2');
+  });
+
+  it('forgets a deep-linked selection once the daemon drops its session', async () => {
+    const { daemon } = await renderQueue({ laidOut: ['s1'] });
+    open('s1');
+    deepLinkTo('s2');
+
+    daemon.emit({ event: 'sessions_updated', sessions: [agent('s1')] });
+    layOut(daemon, 's2');
+    daemon.emit({ event: 'sessions_updated', sessions: [agent('s1'), agent('s2')] });
+
+    expect(selectedAgent()).toBe('s1');
+  });
+
+  it('finishes a deep-linked selection even when the queue would move elsewhere', async () => {
+    const { daemon } = await renderQueue({ owed: ['s1', 's2'], laidOut: ['s1'] });
+    open('s1');
+    deepLinkTo('s2');
+
+    daemon.emit({ event: 'sessions_updated', sessions: [agent('s1', { turn_owed: false }), agent('s2', { turn_owed: true })] });
+    layOut(daemon, 's2');
+
+    expect(selectedAgent()).toBe('s2');
+  });
+
+  it('keeps the grid through unrelated updates, and leaves it for the agent the user picks', async () => {
+    const { daemon } = await renderQueue();
+    keys.grid();
+    expect(isGrid()).toBe(true);
+
+    daemon.emit({ event: 'settings_updated', settings: { queue_mode_enabled: 'true', unrelated: 'x' } });
+    daemon.emit({ event: 'sessions_updated', sessions: [agent('s1'), agent('s2', { state: 'idle' })] });
+    expect(isGrid()).toBe(true);
+
+    await gesture(daemon, () => open('s1'));
+    expect(isGrid()).toBe(false);
+    expect(selectedAgent()).toBe('s1');
+
+    keys.home();
+    expect(isHome()).toBe(true);
+  });
+
+  describe('keyboard focus', () => {
+    it('lands in the opened agent’s terminal once, and later updates do not pull it back', async () => {
+      const { daemon } = await renderQueue();
+      open('s2');
+      await settleFocus(daemon);
+      expect(focusedPane()).toBe('pane-s2');
+
+      screen.getByRole('button', { name: 'Open s1' }).focus();
+      daemon.emit({ event: 'session_state_changed', session: agent('s2', { label: 'renamed' }) });
+      await settleFocus(daemon);
+
+      expect(focusedPane()).toBeNull();
+    });
+
+    it('lands only in the last of several quick selections', async () => {
+      const ids = ['s1', 's2', 's3'];
+      const { daemon } = await renderApp({
+        initialState: {
+          sessions: ids.map((id) => daemonSession(id, { state: 'idle' })),
+          desktops: ids.map((id) => soloDesktop(id)),
         },
-      })),
-      activeSessionId: null,
-      connect: vi.fn(async () => {}),
-      connected: true,
-      launcherConfig: { executables: {} },
-      createSession: vi.fn(async () => 's1'),
-      closeSession: vi.fn(),
-      takeSessionSpawnArgs: vi.fn(() => null),
-      reloadSession: vi.fn(async () => {}),
-    });
-
-    mockUseDaemonStore.mockImplementation(() => ({
-      daemonSessions: sessionIds.map((id) => ({
-        id,
-        label: id,
-        directory: `/tmp/${id}`,
-        profile_id: TEST_PROFILE_ID,
-        agent: 'claude',
-        state: 'working',
-        turn_owed: turnOwed[id],
-        chief_of_staff: id === chiefId,
-        turn_opened_at: id === 's1' ? '2026-08-03T09:00:00Z' : '2026-08-03T10:00:00Z',
-      })),
-      crew: [],
-      setDaemonSessions: vi.fn(),
-      prs: [], setPRs: vi.fn(),
-      repoStates: [], setRepoStates: vi.fn(),
-      authorStates: [], setAuthorStates: vi.fn(),
-      seeds: [], setSeeds: vi.fn(),
-    }));
-
-    const fn = vi.fn();
-    mockUseDaemonSocket.mockReturnValue({
-      sendPRAction: fn, sendMutePR: fn, sendMuteRepo: fn, sendMuteAuthor: fn, sendPRVisited: fn,
-      sendRefreshPRs: vi.fn(async () => ({ success: true })),
-      sendUnregisterSession: vi.fn(async () => {}),
-      sendRegisterDesktop: fn,
-      sendUnregisterDesktop: vi.fn(async () => {}),
-      sendMuteDesktop: vi.fn(async () => ({ success: true })),
-      sendSetSetting: fn,
-      sendSetClientPresence: fn,
-      sendCreateWorktree: vi.fn(async () => ({ success: true, path: '/tmp/new' })),
-      sendDeleteWorktree: vi.fn(async () => ({ success: true })),
-      sendGetRecentLocations: vi.fn(async () => ({ success: true, locations: [] })),
-      sendCreateWorktreeFromBranch: vi.fn(async () => ({ success: true, path: '/tmp/new' })),
-      sendFetchRemotes: vi.fn(async () => ({ success: true })),
-      sendFetchPRDetails: vi.fn(async () => ({ success: true })),
-      sendEnsureRepo: vi.fn(async () => ({ success: true, path: '/tmp/repo' })),
-      sendSubscribeGitStatus: fn, sendUnsubscribeGitStatus: fn,
-      ...fakeDesktopCommands(),
-      sendSessionList: vi.fn(async () => ({ entries: [], omitted: 0 })),
-      sendDesktopClosePane: vi.fn(async () => ({ success: true })),
-      sendDesktopAddSessionPane: vi.fn(async () => ({ success: true })),
-      sendGetFileDiff: vi.fn(async () => ({ success: true, original: '', modified: '' })),
-      getRepoInfo: vi.fn(async () => ({ success: true, is_git_repo: true, branch: 'main' })),
-      listWorkflowRuns: vi.fn(async () => ({ success: true, runs: [] })),
-      getPresentations: vi.fn(async () => []),
-      connectionError: null,
-      hasReceivedInitialState: true,
-      sendNotificationList: vi.fn(async () => ({ notifications: [], unreadCount: 0, critical: { count: 0, title: '' } })),
-      sendNotificationMarkRead: vi.fn(async () => 0),
-      rateLimit: null,
-      warnings: [],
-      clearWarnings: fn,
-      sendSetTerminalTheme: fn,
-      sendSettleTurn: mockSendSettleTurn,
-      sendRecentFiles: vi.fn(async () => []),
-      sendFsIndex: vi.fn(async () => ({ entries: [] })),
-    });
-  });
-
-  it('keeps a newer selection when an old callback queues a now-ready session', () => {
-    sessionIds = ['s1'];
-    useSessionStore.setState({ sessions: useSessionStore.getState().sessions.filter(s => s.id === 's1') });
-    const app = render(<App />);
-    broadcast();
-    const beforeCreation = selectSession();
-
-    sessionIds = ['s1', 's2'];
-    broadcast();
-    app.rerender(<App />);
-    act(() => { beforeCreation('s2'); });
-    act(() => { selectSession()('s1'); });
-
-    expect(useSessionStore.getState().activeSessionId).toBe('s1');
-  });
-
-  it.each(['onGoToDashboard', 'onHistoryBack', 'onToggleSidebar'] as const)('dismisses the chain when %s changes navigation', (shortcut) => {
-    useSessionStore.getState().selectAgent('s2');
-    useSessionStore.getState().selectAgent('s1');
-    const app = render(<App />);
-    broadcast();
-    fireEvent.click(screen.getByTestId('delegation-chain-trigger-s1'));
-    expect(screen.getByRole('dialog', { name: 'Delegation chain' })).toBeInTheDocument();
-    act(() => { shortcutHandlers<Record<typeof shortcut, () => void>>()[shortcut](); });
-    app.rerender(<App />);
-    expect(screen.queryByRole('dialog', { name: 'Delegation chain' })).toBeNull();
-  });
-
-  it.each(['onOpenSettings', 'onShowShortcuts', 'onOpenSessions'] as const)('dismisses the chain when %s opens another surface', (shortcut) => {
-    useSessionStore.getState().selectAgent('s2');
-    useSessionStore.getState().selectAgent('s1');
-    render(<App />);
-    broadcast();
-    fireEvent.click(screen.getByTestId('delegation-chain-trigger-s1'));
-    expect(screen.getByRole('dialog', { name: 'Delegation chain' })).toBeInTheDocument();
-    act(() => { shortcutHandlers<Record<typeof shortcut, () => void>>()[shortcut](); });
-    expect(screen.queryByRole('dialog', { name: 'Delegation chain' })).toBeNull();
-  });
-
-  it('selects a deferred session when its pane becomes available', () => {
-    sessionIds = ['s1'];
-    useSessionStore.setState({ sessions: useSessionStore.getState().sessions.filter(s => s.id === 's1') });
-    const app = render(<App />);
-    broadcast();
-    act(() => { selectSession()('s2'); });
-
-    sessionIds = ['s1', 's2'];
-    broadcast();
-    app.rerender(<App />);
-
-    expect(useSessionStore.getState().activeSessionId).toBe('s2');
-  });
-
-  it('does not leave home when an older deferred selection becomes ready', () => {
-    sessionIds = ['s1'];
-    useSessionStore.setState({ sessions: useSessionStore.getState().sessions.filter(s => s.id === 's1') });
-    const app = render(<App />);
-    broadcast();
-    const beforeCreation = selectSession();
-    sessionIds = ['s1', 's2'];
-    broadcast();
-    app.rerender(<App />);
-    act(() => { beforeCreation('s2'); });
-
-    act(() => { shortcutHandlers<{ onGoToDashboard: () => void }>().onGoToDashboard(); });
-    broadcast();
-
-    expect(useSessionStore.getState().activeSessionId).toBeNull();
-  });
-
-  it('takes the user to the next turn that opens after the queue ran dry', () => {
-    workTheQueueDownToHome();
-
-    turnOwed.s2 = true;
-    broadcast();
-
-    expect(useSessionStore.getState().activeSessionId).toBe('s2');
-  });
-
-  it('leaves the user alone at a home they walked to', () => {
-    render(<App />);
-    broadcast();
-    act(() => { mockSetActiveSession('s1'); });
-    broadcast();
-
-    const shortcuts = shortcutHandlers<{ onGoToDashboard: () => void }>();
-    act(() => { shortcuts.onGoToDashboard(); });
-    broadcast();
-    expect(useSessionStore.getState().activeSessionId).toBeNull();
-
-    const before = selections().length;
-    turnOwed.s2 = true;
-    broadcast();
-
-    expect(useSessionStore.getState().activeSessionId).toBeNull();
-    expect(selections()).toHaveLength(before);
-  });
-
-  it('ends the wait when the user leaves home, however they come back', () => {
-    workTheQueueDownToHome();
-
-    const shortcuts = shortcutHandlers<{ onToggleGridMode?: () => void }>();
-    act(() => { shortcuts.onToggleGridMode?.(); });
-    broadcast();
-    act(() => { shortcuts.onToggleGridMode?.(); });
-    broadcast();
-
-    const before = selections().length;
-    turnOwed.s2 = true;
-    broadcast();
-
-    expect(useSessionStore.getState().activeSessionId).toBeNull();
-    expect(selections()).toHaveLength(before);
-  });
-
-  it('hands over the oldest owed turn when several opened while home waited', () => {
-    workTheQueueDownToHome();
-
-    turnOwed.s1 = true;
-    turnOwed.s2 = true;
-    broadcast();
-
-    expect(useSessionStore.getState().activeSessionId).toBe('s1');
-  });
-
-  describe('acting on the queue sidebar row that holds focus', () => {
-    function focusQueueRow(sessionId: string | null) {
-      const sidebar = document.createElement('div');
-      sidebar.className = 'queue-sidebar-body';
-      const holds = sessionId ? ` data-session-id="${sessionId}"` : '';
-      sidebar.innerHTML = `<div class="session-item queue-row"${holds}><button class="queue-row-select"></button></div>`;
-      document.body.append(sidebar);
-      sidebar.querySelector('button')!.focus();
-      return () => sidebar.remove();
-    }
-
-    function activeOnS2() {
-      render(<App />);
-      broadcast();
-      act(() => { mockSetActiveSession('s2'); });
-      broadcast();
-    }
-
-    it('settles the focused row rather than the active agent', () => {
-      turnOwed.s2 = true;
-      activeOnS2();
-      const unfocus = focusQueueRow('s1');
-      try {
-        act(() => { shortcutHandlers<{ onSettleTurn?: () => void }>().onSettleTurn?.(); });
-        expect(mockSendSettleTurn.mock.calls).toEqual([['s1']]);
-      } finally {
-        unfocus();
-      }
-    });
-
-    it('settles nothing when the focused row owes no turn', () => {
-      turnOwed.s2 = true;
-      turnOwed.s1 = false;
-      activeOnS2();
-      const unfocus = focusQueueRow('s1');
-      try {
-        act(() => { shortcutHandlers<{ onSettleTurn?: () => void }>().onSettleTurn?.(); });
-        expect(mockSendSettleTurn).not.toHaveBeenCalled();
-      } finally {
-        unfocus();
-      }
-    });
-
-    it('settles the active agent when no row holds focus', () => {
-      turnOwed.s2 = true;
-      activeOnS2();
-      act(() => { shortcutHandlers<{ onSettleTurn?: () => void }>().onSettleTurn?.(); });
-      expect(mockSendSettleTurn.mock.calls).toEqual([['s2']]);
-    });
-
-    it('acts on no agent while a tile holds the surface and no row holds focus', () => {
-      turnOwed.s2 = true;
-      activeOnS2();
-      act(() => {
-        const { desktops, currentDesktopId } = useProfilesStore.getState();
-        arrangeDesktops(
-          desktops.map((desktop) => (desktop.id === currentDesktopId ? { ...desktop, active_pane_id: 'tile-notes' } : desktop)),
-          currentDesktopId!,
-        );
       });
-      expect(useSessionStore.getState().activeSessionId).toBe('s2');
+      open('s1');
+      await settleFocus(daemon);
 
-      const shortcuts = shortcutHandlers<{ onSettleTurn?: () => void; onSnoozeTurn?: () => void }>();
-      act(() => { shortcuts.onSettleTurn?.(); });
-      act(() => { shortcuts.onSnoozeTurn?.(); });
-      expect(mockSendSettleTurn).not.toHaveBeenCalled();
-      expect(screen.queryByRole('menu', { name: /^Snooze/ })).toBeNull();
+      pressShortcut('session.next');
+      pressShortcut('session.next');
+      await settleFocus(daemon);
+
+      expect(selectedAgent()).toBe('s3');
+      expect(focusedPane()).toBe('pane-s3');
     });
 
-    it('snoozes the focused row rather than the active agent', () => {
-      activeOnS2();
-      const unfocus = focusQueueRow('s1');
-      try {
-        act(() => { shortcutHandlers<{ onSnoozeTurn?: () => void }>().onSnoozeTurn?.(); });
-        expect(screen.getByRole('menu', { name: 'Snooze s1' })).toBeInTheDocument();
-      } finally {
-        unfocus();
-      }
-    });
+    it('stays out of the terminal when Home follows the selection in the same moment', async () => {
+      const { daemon } = await renderQueue();
 
-    it('opens the snooze menu beside the focused copy of an agent listed twice', () => {
-      activeOnS2();
-      const sidebar = document.createElement('div');
-      sidebar.className = 'queue-sidebar-body';
-      sidebar.innerHTML = [0, 1]
-        .map(() => '<div class="session-item queue-row" data-session-id="s1"><button class="queue-row-select"></button></div>')
-        .join('');
-      document.body.append(sidebar);
-      const waitingCopy = sidebar.querySelectorAll<HTMLElement>('.queue-row')[1];
-      waitingCopy.getBoundingClientRect = () => DOMRect.fromRect({ x: 40, y: 280, width: 180, height: 20 });
-      waitingCopy.querySelector('button')!.focus();
-      try {
-        act(() => { shortcutHandlers<{ onSnoozeTurn?: () => void }>().onSnoozeTurn?.(); });
-        const menu = screen.getByRole('menu', { name: 'Snooze s1' });
-        expect(menu.style.top).toBe('304px');
-        expect(menu.style.left).toBe('40px');
-      } finally {
-        sidebar.remove();
-      }
-    });
+      act(() => {
+        open('s1');
+        keys.home();
+      });
+      await settleFocus(daemon);
 
-    it('acts on no agent from a focused row that holds none, like a sleeping crew member', () => {
-      turnOwed.s2 = true;
-      activeOnS2();
-      const unfocus = focusQueueRow(null);
-      try {
-        const shortcuts = shortcutHandlers<{ onSettleTurn?: () => void; onSnoozeTurn?: () => void }>();
-        act(() => { shortcuts.onSettleTurn?.(); });
-        act(() => { shortcuts.onSnoozeTurn?.(); });
-        expect(mockSendSettleTurn).not.toHaveBeenCalled();
-        expect(screen.queryByRole('menu', { name: /^Snooze/ })).toBeNull();
-      } finally {
-        unfocus();
-      }
-    });
-
-    it('never snoozes the chief, focused or active', () => {
-      chiefId = 's1';
-      activeOnS2();
-      const unfocus = focusQueueRow('s1');
-      try {
-        act(() => { shortcutHandlers<{ onSnoozeTurn?: () => void }>().onSnoozeTurn?.(); });
-        expect(screen.queryByRole('menu', { name: /^Snooze/ })).toBeNull();
-      } finally {
-        unfocus();
-      }
-
-      chiefId = 's2';
-      broadcast();
-      act(() => { shortcutHandlers<{ onSnoozeTurn?: () => void }>().onSnoozeTurn?.(); });
-      expect(screen.queryByRole('menu', { name: /^Snooze/ })).toBeNull();
+      expect(isHome()).toBe(true);
+      expect(focusedPane()).toBeNull();
     });
   });
 
-  it('toggles the agent list in the open queue sidebar, and opens the palette on agents otherwise', () => {
-    render(<App />);
-    broadcast();
-    const listOpen = () => (mockSidebarProps.mock.lastCall![0] as { agentListOpen: boolean }).agentListOpen;
-    const showAgentList = () => act(() => { shortcutHandlers<{ onShowAgentList: () => void }>().onShowAgentList(); });
+  it('asks for attention from sessions waiting on the user or in an unknown state, and not from the others', async () => {
+    const states = ['waiting_input', 'pending_approval', 'unknown', 'stopped', 'waiting', 'working', 'idle', 'launching', 'scheduled', 'recoverable'] as DaemonSession['state'][];
+    const { daemon } = await renderApp({
+      initialState: {
+        sessions: states.map((state) => daemonSession(state, { state })),
+        desktops: states.map((state) => soloDesktop(state, { name: state })),
+      },
+    });
 
-    expect(listOpen()).toBe(false);
-    showAgentList();
-    expect(listOpen()).toBe(true);
-    showAgentList();
-    expect(listOpen()).toBe(false);
-    expect(screen.queryByTestId('palette-agent-s1')).toBeNull();
+    await gesture(daemon, () => pressShortcut('session.toggleSidebar'));
 
-    act(() => { socketArgs().onSettingsUpdate?.({ queue_mode_enabled: 'false' }); });
-    showAgentList();
-    expect(listOpen()).toBe(false);
-    expect(screen.getByTestId('palette-agent-s1')).toBeInTheDocument();
-  });
-
-  it('hands focus to the terminal when the sidebar hides with focus inside it', () => {
-    const { container } = render(<App />);
-    broadcast();
-    act(() => { mockSetActiveSession('s1'); });
-    const focusRequests = () => useSessionStore.getState().utilityFocusRequestToken;
-    const inSidebar = () => container.querySelector<HTMLElement>('.sidebar button')!;
-
-    const listOpen = () => (mockSidebarProps.mock.lastCall![0] as { agentListOpen: boolean }).agentListOpen;
-    act(() => { shortcutHandlers<{ onShowAgentList: () => void }>().onShowAgentList(); });
-    expect(listOpen()).toBe(true);
-    inSidebar().focus();
-    let before = focusRequests();
-    act(() => { useDesktopFocus.getState().setFocusedLeaf(useProfilesStore.getState().currentDesktopId!, paneIdOf('s1')); });
-    expect(listOpen()).toBe(false);
-    expect(focusRequests()).toBe(before + 1);
-
-    act(() => { useDesktopFocus.getState().setFocusedLeaf(useProfilesStore.getState().currentDesktopId!, null); });
-    inSidebar().focus();
-    before = focusRequests();
-    act(() => { shortcutHandlers<{ onToggleSidebar: () => void }>().onToggleSidebar(); });
-    expect(focusRequests()).toBe(before + 1);
-  });
-
-  it('hands focus to the terminal when the queue switch swaps the sidebar under focus', () => {
-    const { container } = render(<App />);
-    broadcast();
-    act(() => { mockSetActiveSession('s1'); });
-    const focusRequests = () => useSessionStore.getState().utilityFocusRequestToken;
-    container.querySelector<HTMLElement>('.sidebar button')!.focus();
-    const before = focusRequests();
-
-    act(() => { socketArgs().onSettingsUpdate?.({ queue_mode_enabled: 'false' }); });
-    expect(focusRequests()).toBe(before + 1);
-
-    act(() => { shortcutHandlers<{ onToggleSidebar: () => void }>().onToggleSidebar(); });
-    container.querySelector<HTMLElement>('.sidebar button')!.focus();
-    const collapsed = focusRequests();
-    act(() => { socketArgs().onSettingsUpdate?.({ queue_mode_enabled: 'true' }); });
-    expect(focusRequests()).toBe(collapsed + 1);
-  });
-
-  it('hides the sidebar while an agent is focused and opens the palette on agents instead', () => {
-    const { container } = render(<App />);
-    broadcast();
-    act(() => { mockSetActiveSession('s1'); });
-    const listOpen = () => (mockSidebarProps.mock.lastCall![0] as { agentListOpen: boolean }).agentListOpen;
-    const app = () => container.querySelector('.app')!;
-
-    act(() => { useDesktopFocus.getState().setFocusedLeaf(useProfilesStore.getState().currentDesktopId!, paneIdOf('s1')); });
-    expect(app()).toHaveClass('is-agent-focused');
-    act(() => { shortcutHandlers<{ onShowAgentList: () => void }>().onShowAgentList(); });
-    expect(listOpen()).toBe(false);
-    expect(screen.getByTestId('palette-agent-s1')).toBeInTheDocument();
-
-    act(() => { useDesktopFocus.getState().setFocusedLeaf(useProfilesStore.getState().currentDesktopId!, null); });
-    expect(app()).not.toHaveClass('is-agent-focused');
-  });
-
-  it('opens the palette on agents from the bar, and silences the bar peeks while it is open', () => {
-    render(<App />);
-    broadcast();
-    const sidebar = () =>
-      mockSidebarProps.mock.lastCall![0] as { collapsed: boolean; agentListOpen: boolean; peeksSilenced: boolean; onOpenAgents: () => void };
-    act(() => { shortcutHandlers<{ onToggleSidebar: () => void }>().onToggleSidebar(); });
-    expect(sidebar().collapsed).toBe(true);
-    expect(sidebar().peeksSilenced).toBe(false);
-
-    act(() => { shortcutHandlers<{ onShowAgentList: () => void }>().onShowAgentList(); });
-    expect(sidebar().agentListOpen).toBe(false);
-    expect(screen.getByTestId('palette-agent-s1')).toBeInTheDocument();
-    expect(sidebar().peeksSilenced).toBe(true);
-
-    fireEvent.keyDown(screen.getByRole('combobox'), { key: 'Escape' });
-    expect(screen.queryByTestId('palette-agent-s1')).toBeNull();
-    expect(sidebar().peeksSilenced).toBe(false);
-
-    act(() => { sidebar().onOpenAgents(); });
-    expect(screen.getByTestId('palette-agent-s1')).toBeInTheDocument();
-  });
-
-  it('silences the bar peeks while the Markdown opener covers the window', () => {
-    render(<App />);
-    broadcast();
-    const sidebar = () => mockSidebarProps.mock.lastCall![0] as { peeksSilenced: boolean };
-    act(() => { shortcutHandlers<{ onToggleSidebar: () => void }>().onToggleSidebar(); });
-    expect(sidebar().peeksSilenced).toBe(false);
-
-    act(() => { shortcutHandlers<{ onOpenFile: () => void }>().onOpenFile(); });
-    expect(sidebar().peeksSilenced).toBe(true);
-  });
-
-  it('silences the bar peeks while the grid hides the bar', () => {
-    render(<App />);
-    broadcast();
-    const sidebar = () => mockSidebarProps.mock.lastCall![0] as { peeksSilenced: boolean };
-    act(() => { shortcutHandlers<{ onToggleSidebar: () => void }>().onToggleSidebar(); });
-    expect(sidebar().peeksSilenced).toBe(false);
-
-    act(() => { useSessionStore.getState().setView('grid'); });
-    expect(sidebar().peeksSilenced).toBe(true);
-  });
-
-  it('opens the palette on agents in grid view, where the grid covers the queue sidebar', () => {
-    const { container } = render(<App />);
-    broadcast();
-    const listOpen = () => (mockSidebarProps.mock.lastCall![0] as { agentListOpen: boolean }).agentListOpen;
-
-    act(() => { shortcutHandlers<{ onToggleGridMode: () => void }>().onToggleGridMode(); });
-    expect(useSessionStore.getState().view).toBe('grid');
-    expect(container.querySelector('.app')).toHaveClass('is-grid');
-    act(() => { shortcutHandlers<{ onShowAgentList: () => void }>().onShowAgentList(); });
-
-    expect(listOpen()).toBe(false);
-    expect(screen.getByTestId('palette-agent-s1')).toBeInTheDocument();
-  });
-
-  it('resumes history from dashboard and grid, then traverses normally in the session view', () => {
-    useSessionStore.getState().selectAgent('s1');
-    useSessionStore.getState().selectAgent('s2');
-    useSessionStore.getState().goToDashboard();
-    render(<App />);
-
-    let shortcuts = shortcutHandlers<{
-      onHistoryBack: () => void;
-      onHistoryForward: () => void;
-      onToggleGridMode: () => void;
-    }>();
-    act(() => { shortcuts.onHistoryBack(); });
-    expect(useSessionStore.getState().activeSessionId).toBe('s2');
-    expect(useSessionStore.getState().agentHistory.cursor).toBe(1);
-
-    shortcuts = shortcutHandlers();
-    act(() => { shortcuts.onToggleGridMode(); });
-    shortcuts = shortcutHandlers();
-    act(() => { shortcuts.onHistoryForward(); });
-    expect(useSessionStore.getState().activeSessionId).toBe('s2');
-    expect(useSessionStore.getState().view).toBe('grid');
-    act(() => { shortcutHandlers<{ onHistoryBack: () => void }>().onHistoryBack(); });
-    expect(useSessionStore.getState().view).toBe('session');
-
-    shortcuts = shortcutHandlers();
-    act(() => { shortcuts.onHistoryBack(); });
-    expect(useSessionStore.getState().activeSessionId).toBe('s1');
-    expect(useSessionStore.getState().agentHistory.entries).toEqual(['s1', 's2']);
+    expect(sidebarBadges().map((title) => title.replace(/ \(.*\)$/, '')).sort()).toEqual(['pending_approval', 'stopped', 'unknown', 'waiting', 'waiting_input']);
   });
 });

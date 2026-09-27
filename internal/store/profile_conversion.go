@@ -13,7 +13,7 @@ import (
 	"github.com/victorarias/attn/internal/rankkey"
 )
 
-const ProfileConversionSchemaVersion = 153
+const ProfileConversionSchemaVersion = 157
 
 const DefaultProfileName = "Default"
 

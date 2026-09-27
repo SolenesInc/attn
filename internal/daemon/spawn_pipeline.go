@@ -17,6 +17,7 @@ import (
 	"github.com/victorarias/attn/internal/profiles"
 	"github.com/victorarias/attn/internal/protocol"
 	"github.com/victorarias/attn/internal/ptybackend"
+	"github.com/victorarias/attn/internal/sessionstate"
 	"github.com/victorarias/attn/internal/store"
 )
 
@@ -368,7 +369,8 @@ func (d *Daemon) executeSpawn(req *spawnRequest, plan *spawnPlan) *spawnOutcome 
 		}
 	}
 
-	plan.launchSession = buildSpawnSessionRecord(msg, req.agent, req.cwd, req.label, req.profile.ID, req.existingSession, req.isShell, req.hasPluginDriver && !req.pluginDriver.Capabilities["state_reporting"], req.parentSessionID)
+	branchInfo, _ := d.readBranchInfo(context.Background(), gitTask{Kind: gitTaskSessionIdentity, Lane: gitInteractive}, req.cwd)
+	plan.launchSession = buildSpawnSessionRecord(msg, req.agent, req.cwd, req.label, req.profile.ID, req.existingSession, req.isShell, req.hasPluginDriver && !req.pluginDriver.Capabilities["state_reporting"], req.parentSessionID, branchInfo)
 	session := plan.launchSession
 	if err := d.store.AddCheckedUnlessTeardown(session); err != nil {
 		if req.hasPluginDriver {
@@ -392,15 +394,23 @@ func (d *Daemon) executeSpawn(req *spawnRequest, plan *spawnPlan) *spawnOutcome 
 	if err := d.store.DeleteSessionExitScreen(msg.ID); err != nil {
 		d.logf("exit screen of the previous process not cleared: session=%s err=%v", msg.ID, err)
 	}
+	hasInitialPrompt := strings.TrimSpace(req.initialPrompt) != ""
+	priorEvidence, _ := d.evidenceTable().snapshot(msg.ID)
+	d.startEvidence(msg.ID, sessionstate.Evidence{
+		InitialPromptOwed: hasInitialPrompt && reportsPromptsTaken(req.agent),
+		ReviewerInLoop:    plan.spawnOpts.ApprovalRoute.ReviewerInLoop(),
+	})
 	if err := d.spawnSessionRuntime(req, plan.spawnOpts); err != nil {
 		d.forgetSessionTitleInitialPrompt(msg.ID)
 		d.restoreExitScreen(msg.ID, priorExit)
 		if req.existingSession == nil {
 			d.store.Remove(msg.ID)
+			d.forgetSessionTrace(msg.ID)
 		} else if restoreErr := d.store.AddCheckedUnlessTeardown(req.existingSession); restoreErr != nil {
 			err = errors.Join(err, fmt.Errorf("restore prior session after spawn failure: %w", restoreErr))
 		}
 		if req.existingSession != nil {
+			d.startEvidence(msg.ID, priorEvidence)
 			plan.restoreLaunchIntent(d, msg.ID)
 		}
 		if req.hasPluginDriver {
@@ -412,8 +422,7 @@ func (d *Daemon) executeSpawn(req *spawnRequest, plan *spawnPlan) *spawnOutcome 
 		plan.rollback(d, msg.ID)
 		return &spawnOutcome{err: err}
 	}
-	d.recordReviewerEvidence(msg.ID, plan.spawnOpts.ApprovalRoute.ReviewerInLoop())
-	if strings.TrimSpace(req.initialPrompt) != "" {
+	if hasInitialPrompt {
 		d.maybeGenerateSessionTitleFromPrompt(msg.ID, req.initialPrompt, sessionInputOrigin{})
 	}
 	if plan.spawnOpts.InitialPromptFile != "" {
@@ -486,6 +495,7 @@ func (d *Daemon) commitSpawn(req *spawnRequest, plan *spawnPlan) *spawnOutcome {
 		removeErr := d.removeSessionRuntime(msg.ID)
 		if req.existingSession == nil {
 			d.store.Remove(session.ID)
+			d.forgetSessionTrace(session.ID)
 		} else {
 			plan.restoreLaunchIntent(d, msg.ID)
 		}
@@ -506,6 +516,7 @@ func (d *Daemon) commitSpawn(req *spawnRequest, plan *spawnPlan) *spawnOutcome {
 		d.logf("clear ticket reconciliation on spawn for %s: %v", session.ID, err)
 	}
 	d.reviveCrashedTicketsForSession(session.ID)
+	d.store.SetSessionLaunchedAt(session.ID, req.spawnStartedAt)
 	if !req.isShell {
 		d.startTranscriptWatcher(session.ID, session.Agent, session.Directory, req.spawnStartedAt)
 	}
@@ -536,14 +547,14 @@ func (d *Daemon) runSpawnPipeline(msg *protocol.SpawnSessionMessage, policy inte
 func (d *Daemon) runSpawnPipelineReporting(msg *protocol.SpawnSessionMessage, policy internalSpawnPolicy) (placementOutcome, *spawnRejection) {
 	var placed placementOutcome
 	var rejection *spawnRejection
-	_ = d.worktreeMaintenance.RunForeground(context.Background(), "spawn session", func(context.Context) error {
-		placed, rejection = d.runSpawnPipelineForeground(msg, policy)
+	_ = d.worktreeMaintenance.ProtectFromAutomaticCleanup(context.Background(), func(protection foregroundCleanupProtection) error {
+		placed, rejection = d.runSpawnPipelineProtected(protection, msg, policy)
 		return nil
 	})
 	return placed, rejection
 }
 
-func (d *Daemon) runSpawnPipelineForeground(msg *protocol.SpawnSessionMessage, policy internalSpawnPolicy) (placementOutcome, *spawnRejection) {
+func (d *Daemon) runSpawnPipelineProtected(_ foregroundCleanupProtection, msg *protocol.SpawnSessionMessage, policy internalSpawnPolicy) (placementOutcome, *spawnRejection) {
 	req, rejection := d.validateSpawnPrelock(msg, policy)
 	if rejection != nil {
 		return placementOutcome{}, rejection

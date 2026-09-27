@@ -1,6 +1,7 @@
 package git
 
 import (
+	"context"
 	"os"
 	"path/filepath"
 	"strings"
@@ -21,47 +22,47 @@ type BranchInfo struct {
 	Repository string
 }
 
-func GetBranchInfo(dir string) (*BranchInfo, error) {
+func (c *Client) GetBranchInfo(ctx context.Context, dir string) (*BranchInfo, error) {
 	info := &BranchInfo{}
 
-	if !isGitRepo(dir) {
+	if !c.isGitRepo(ctx, dir) {
 		return info, nil
 	}
 
-	branch, err := getCurrentBranch(dir)
+	branch, err := c.getCurrentBranch(ctx, dir)
 	if err != nil {
 		return info, nil
 	}
 	info.Branch = branch
 
-	mainRepo, isWT := getWorktreeInfo(dir)
+	mainRepo, isWT := c.getWorktreeInfo(ctx, dir)
 	info.IsWorktree = isWT
 	info.MainRepo = mainRepo
-	info.Repository = RepositoryRoot(dir)
+	info.Repository, _ = c.RepositoryRoot(ctx, dir)
 
 	return info, nil
 }
 
-func isGitRepo(dir string) bool {
-	out, err := runGitOutput(OpMetadata, dir, "rev-parse", "--is-inside-work-tree")
+func (c *Client) isGitRepo(ctx context.Context, dir string) bool {
+	out, err := c.Output(ctx, OpMetadata, dir, "rev-parse", "--is-inside-work-tree")
 	return err == nil && strings.TrimSpace(string(out)) == "true"
 }
 
-func getCurrentBranch(dir string) (string, error) {
-	out, err := runGitOutput(OpMetadata, dir, "symbolic-ref", "--short", "HEAD")
+func (c *Client) getCurrentBranch(ctx context.Context, dir string) (string, error) {
+	out, err := c.Output(ctx, OpMetadata, dir, "symbolic-ref", "--short", "HEAD")
 	if err == nil {
 		return strings.TrimSpace(string(out)), nil
 	}
 
-	out, err = runGitOutput(OpMetadata, dir, "rev-parse", "--short", "HEAD")
+	out, err = c.Output(ctx, OpMetadata, dir, "rev-parse", "--short", "HEAD")
 	if err != nil {
 		return "", err
 	}
 	return strings.TrimSpace(string(out)), nil
 }
 
-func GetRepoRoot(dir string) (string, error) {
-	out, err := runGitOutput(OpMetadata, dir, "rev-parse", "--show-toplevel")
+func (c *Client) GetRepoRoot(ctx context.Context, dir string) (string, error) {
+	out, err := c.Output(ctx, OpMetadata, dir, "rev-parse", "--show-toplevel")
 	if err != nil {
 		return "", err
 	}
@@ -77,9 +78,9 @@ func sameDirectory(left string, right string) bool {
 	return os.SameFile(leftInfo, rightInfo)
 }
 
-func ResolvePickerRepoTarget(dir string) (repoRoot string, ok bool, err error) {
+func (c *Client) ResolvePickerRepoTarget(ctx context.Context, dir string) (repoRoot string, ok bool, err error) {
 	resolvedDir := CanonicalizePath(dir)
-	worktreeRoot, err := GetRepoRoot(resolvedDir)
+	worktreeRoot, err := c.GetRepoRoot(ctx, resolvedDir)
 	if err != nil || worktreeRoot == "" {
 		return "", false, nil
 	}
@@ -92,16 +93,16 @@ func ResolvePickerRepoTarget(dir string) (repoRoot string, ok bool, err error) {
 	return resolvedDir, true, nil
 }
 
-func GetHeadCommit(dir string) (string, error) {
-	out, err := runGitOutput(OpMetadata, dir, "rev-parse", "HEAD")
+func (c *Client) GetHeadCommit(ctx context.Context, dir string) (string, error) {
+	out, err := c.Output(ctx, OpMetadata, dir, "rev-parse", "HEAD")
 	if err != nil {
 		return "", err
 	}
 	return strings.TrimSpace(string(out)), nil
 }
 
-func getWorktreeInfo(dir string) (mainRepo string, isWorktree bool) {
-	out, err := runGitOutput(OpMetadata, dir, "rev-parse", "--git-dir")
+func (c *Client) getWorktreeInfo(ctx context.Context, dir string) (mainRepo string, isWorktree bool) {
+	out, err := c.Output(ctx, OpMetadata, dir, "rev-parse", "--git-dir")
 	if err != nil {
 		return "", false
 	}

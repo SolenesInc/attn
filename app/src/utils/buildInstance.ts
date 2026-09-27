@@ -11,7 +11,7 @@ export function daemonInstanceMatches(reportedInstance: string | null | undefine
 }
 
 /** ws://127.0.0.1:29849/ws → http://127.0.0.1:29849/health */
-export function healthURLFromWS(wsUrl: string): string {
+function healthURLFromWS(wsUrl: string): string {
   try {
     const u = new URL(wsUrl);
     u.protocol = u.protocol === 'wss:' ? 'https:' : 'http:';

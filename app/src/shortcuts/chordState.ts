@@ -1,7 +1,7 @@
 
 import { Combo, ShortcutId, matchesShortcut } from './registry';
 
-export const LEADER_TIMEOUT_MS = 600;
+const LEADER_TIMEOUT_MS = 600;
 
 export interface ChordCandidate {
   id: ShortcutId;

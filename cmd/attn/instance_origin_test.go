@@ -5,20 +5,8 @@ import (
 	"path/filepath"
 	"testing"
 
-	"github.com/victorarias/attn/internal/config"
 	"github.com/victorarias/attn/internal/ptyworker"
 )
-
-func TestMain(m *testing.M) {
-	dir, err := os.MkdirTemp("", "attn-cmd-test")
-	if err != nil {
-		panic(err)
-	}
-	config.ScopeTestEnvironment(dir)
-	code := m.Run()
-	_ = os.RemoveAll(dir)
-	os.Exit(code)
-}
 
 func TestInstanceOriginRoundTrip(t *testing.T) {
 	dataDir := filepath.Join(t.TempDir(), "not-yet-created")

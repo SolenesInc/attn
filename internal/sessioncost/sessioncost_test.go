@@ -197,6 +197,12 @@ func TestPriceBuiltInCacheRates(t *testing.T) {
 			want:  92.75,
 		},
 		{
+			name:  "Opus 5.5 discounted cache read",
+			model: "claude-opus-5-5",
+			usage: Usage{InputTokens: 1_000_000, OutputTokens: 1_000_000, CacheReadInputTokens: 1_000_000, CacheWrite5mInputTokens: 1_000_000, CacheWrite1hInputTokens: 1_000_000},
+			want:  37.2,
+		},
+		{
 			name:  "Astra standard input output and cache rates",
 			model: "gpt-6-astra",
 			usage: Usage{InputTokens: 1_000_000, OutputTokens: 2_000_000, CacheReadInputTokens: 3_000_000, CacheWrite5mInputTokens: 4_000_000, CacheWrite1hInputTokens: 5_000_000},
@@ -227,6 +233,7 @@ func TestBuiltInCoverageForObservedModelIDs(t *testing.T) {
 		"claude-opus-4-6",
 		"claude-opus-4-8",
 		"claude-opus-5",
+		"claude-opus-5-5",
 		"claude-sonnet-5",
 		"gpt-5-codex",
 		"gpt-5.4-mini",
@@ -235,6 +242,8 @@ func TestBuiltInCoverageForObservedModelIDs(t *testing.T) {
 		"gpt-5.6-sol",
 		"gpt-5.6-terra",
 		"gpt-6-astra",
+		"gpt-6-luna",
+		"gpt-6-sol",
 	}
 	for _, model := range priced {
 		t.Run(model, func(t *testing.T) {
@@ -393,5 +402,65 @@ func TestInvalidPriceOverrideIsReportedRatherThanBilledAtTheHarnessPrice(t *test
 	}
 	if !row.HasUnpricedUsage || row.UnpricedReason != "Price override is invalid." {
 		t.Fatalf("row = %+v, want the broken override surfaced", row)
+	}
+}
+
+func TestOpenAIRequestsPastTheLongContextThresholdArePricedAtTheLongContextRate(t *testing.T) {
+	for _, c := range []struct {
+		name     string
+		model    string
+		requests []Usage
+		wantUSD  float64
+	}{
+		{
+			name: "a prompt at the threshold", model: "gpt-6-sol",
+			requests: []Usage{{InputTokens: 72_000, CacheReadInputTokens: 200_000, OutputTokens: 10_000}},
+			wantUSD:  (72_000*2 + 200_000*0.2 + 10_000*10) / 1e6,
+		},
+		{
+			name: "a prompt one token past the threshold", model: "gpt-6-sol",
+			requests: []Usage{{InputTokens: 72_001, CacheReadInputTokens: 200_000, OutputTokens: 10_000}},
+			wantUSD:  (72_001*4 + 200_000*0.4 + 10_000*15) / 1e6,
+		},
+		{
+			name: "cache writes count toward the prompt", model: "gpt-6-sol",
+			requests: []Usage{{InputTokens: 1, CacheWrite5mInputTokens: 272_000, OutputTokens: 10}},
+			wantUSD:  (1*4 + 272_000*5 + 10*15) / 1e6,
+		},
+		{
+			name: "each request is judged on its own", model: "gpt-6-luna",
+			requests: []Usage{
+				{InputTokens: 200_000, OutputTokens: 1_000},
+				{InputTokens: 200_000, OutputTokens: 1_000},
+				{InputTokens: 300_000, OutputTokens: 1_000},
+			},
+			wantUSD: (400_000*0.1+2_000*0.5)/1e6 + (300_000*0.2+1_000*0.75)/1e6,
+		},
+		{
+			name: "a model without a long-context tier", model: "gpt-5-codex",
+			requests: []Usage{{InputTokens: 300_000, OutputTokens: 1_000}},
+			wantUSD:  (300_000*1.25 + 1_000*10) / 1e6,
+		},
+		{
+			name: "an Anthropic model", model: "claude-opus-5",
+			requests: []Usage{{InputTokens: 300_000, OutputTokens: 1_000}},
+			wantUSD:  (300_000*5 + 1_000*25) / 1e6,
+		},
+	} {
+		t.Run(c.name, func(t *testing.T) {
+			ledger := Ledger{}
+			var tokens int64
+			for _, request := range c.requests {
+				ledger.Add(RequestLedgerKey(c.model, PurposeAgent, request), request)
+				tokens += request.InputTokens + request.OutputTokens + request.CacheReadInputTokens + request.CacheWrite5mInputTokens
+			}
+			summary := Summarize(ledger, nil)
+			if !summary.Valid || summary.HasUnpricedUsage || len(summary.Models) != 1 || summary.TotalTokens != tokens {
+				t.Fatalf("summary = %+v, want one fully priced row of %d tokens", summary, tokens)
+			}
+			if summary.CostUSD == nil || math.Abs(*summary.CostUSD-c.wantUSD) > 1e-12 {
+				t.Fatalf("cost = %v, want %.6f", summary.CostUSD, c.wantUSD)
+			}
+		})
 	}
 }

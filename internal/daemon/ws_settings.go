@@ -490,7 +490,7 @@ func (d *Daemon) validateSetting(key, value string) error {
 		return validateTheme(value)
 	case SettingSharedPTYHostEnabled:
 		return validateBooleanSetting(value)
-	case SettingTailscaleEnabled, SettingWorkflowsEnabled, SettingAutoApproveEnabled, SettingQueueModeEnabled, SettingQueueCrewEnabled, SettingSidebarHarnessLogosEnabled, SettingAutoSettleEnabled, SettingModelCaptureEnabled, SettingActivityEnabled, SettingOpenSentFilesEnabled, SettingHeadlessTasksEnabled:
+	case SettingTailscaleEnabled, SettingWorkflowsEnabled, SettingAutoApproveEnabled, SettingQueueModeEnabled, SettingQueueCrewEnabled, SettingSidebarHarnessLogosEnabled, SettingAutoSettleEnabled, SettingModelCaptureEnabled, SettingActivityEnabled, SettingOpenSentFilesEnabled, SettingHeadlessTasksEnabled, settingWorktreeSweepEnabled:
 		return validateBooleanSetting(value)
 	case SettingModelCaptureIntervalSeconds:
 		return validateModelCaptureInterval(value)

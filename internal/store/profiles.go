@@ -602,13 +602,6 @@ func (s *Store) ClearProfileChief(sessionID string) (string, error) {
 	return profileID, err
 }
 
-func (s *Store) ClearAllProfileChiefs() error {
-	return s.profilesTx(func(tx *sql.Tx, _ string) error {
-		_, err := tx.Exec(`UPDATE profiles SET chief_session_id = ''`)
-		return err
-	})
-}
-
 func (s *Store) ProfileChiefs() (map[string]string, error) {
 	chiefs := map[string]string{}
 	err := s.profilesTx(func(tx *sql.Tx, _ string) error {

@@ -340,8 +340,6 @@ func (c *wsClient) clearRemoteAttach(sessionID string) {
 
 type BroadcastListener func(event *protocol.WebSocketEvent)
 
-type WireTap func(payload []byte)
-
 type messageKind int
 
 const (
@@ -364,7 +362,6 @@ type wsHub struct {
 	evictionMu        sync.Mutex
 	logf              func(format string, args ...interface{})
 	broadcastListener BroadcastListener
-	wireTap           WireTap
 	evictionListener  func(string, evictionRecord)
 }
 
@@ -400,10 +397,6 @@ func previewBinaryForLog(data []byte) string {
 	preview = strings.ReplaceAll(preview, "\r", "\\r")
 	preview = strings.ReplaceAll(preview, "\t", "\\t")
 	return preview
-}
-
-func (h *wsHub) run() {
-	h.runUntil(nil)
 }
 
 func (h *wsHub) runUntil(done <-chan struct{}) {
@@ -523,9 +516,6 @@ func (h *wsHub) sendRawTextToMatchingClients(payload []byte, match func(*wsClien
 	if len(payload) == 0 {
 		return
 	}
-	if h.wireTap != nil {
-		h.wireTap(payload)
-	}
 	cloned := append([]byte(nil), payload...)
 	message := outboundMessage{kind: messageKindText, payload: cloned}
 
@@ -602,9 +592,6 @@ func (h *wsHub) broadcastValue(message interface{}) {
 	if err != nil {
 		h.logf("WebSocket broadcast marshal error: %v", err)
 		return
-	}
-	if h.wireTap != nil {
-		h.wireTap(data)
 	}
 	out := outboundMessage{kind: messageKindText, payload: data}
 	select {
@@ -1172,8 +1159,6 @@ func (d *Daemon) handleClientMessage(client *wsClient, data []byte) {
 		d.handleRefreshPRsWS(client)
 	case protocol.CmdFetchPRDetails:
 		d.handleFetchPRDetailsWS(client, msg.(*protocol.FetchPRDetailsMessage))
-	case protocol.CmdClearSessions:
-		d.handleClearSessionsWS()
 	case protocol.CmdClearWarnings:
 		d.handleClearWarningsWS()
 	case protocol.CmdSettleTurn:

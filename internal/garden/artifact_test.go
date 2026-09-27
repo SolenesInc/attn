@@ -148,39 +148,3 @@ func TestCurrentArtifactsProjectsAttachMinusDetach(t *testing.T) {
 		})
 	}
 }
-
-func TestDefaultNoteBodyRendersTheReference(t *testing.T) {
-	cases := []struct {
-		kind string
-		in   ArtifactReference
-		want string
-	}{
-		{NoteKindAttach, ArtifactReference{Kind: ArtifactMarkdownFile, Path: "plan.md"}, "attached plan.md"},
-		{NoteKindDetach, ArtifactReference{Kind: ArtifactMarkdownFile, Path: "plan.md"}, "detached plan.md"},
-		{NoteKindAttach, ArtifactReference{Kind: ArtifactNotebook, NotebookDocumentID: "nb-7"}, "attached nb-7"},
-		{NoteKindAttach, ArtifactReference{Kind: ArtifactURL, URL: "https://x.test"}, "attached https://x.test"},
-		{NoteKindAttach, ArtifactReference{Kind: ArtifactRepository, Repository: "attn", Path: "internal/garden"}, "attached internal/garden (attn)"},
-	}
-	for _, tc := range cases {
-		if got := DefaultNoteBody(tc.kind, tc.in); got != tc.want {
-			t.Fatalf("DefaultNoteBody(%s, %+v) = %q, want %q", tc.kind, tc.in, got, tc.want)
-		}
-	}
-}
-
-func TestParseNoteKindAcceptsTheArtifactKinds(t *testing.T) {
-	for _, kind := range []string{NoteKindAttach, NoteKindDetach} {
-		got, err := ParseNoteKind(kind)
-		if err != nil || got != kind {
-			t.Fatalf("ParseNoteKind(%q) = %q, %v", kind, got, err)
-		}
-		if !CarriesArtifact(kind) {
-			t.Fatalf("%q must carry an artifact", kind)
-		}
-	}
-	for _, kind := range []string{NoteKindNote, NoteKindHandoff} {
-		if CarriesArtifact(kind) {
-			t.Fatalf("%q must not carry an artifact", kind)
-		}
-	}
-}

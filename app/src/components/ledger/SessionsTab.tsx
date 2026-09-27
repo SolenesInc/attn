@@ -1,9 +1,9 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type { Dispatch, ReactNode, SetStateAction } from 'react';
-import type { SessionLedgerEntry, SessionLedgerFacets, SessionReopen } from '../../types/generated';
-import type { SessionLedgerPage, SessionLedgerQuery } from '../../hooks/daemonSessionLedgerEvents';
+import type { SessionLedgerEntry, SessionLedgerFacets } from '../../types/generated';
 import { useSessionLedger } from '../../hooks/useSessionLedger';
-import type { SessionLedgerFilters, SessionLedgerView } from '../../hooks/useSessionLedger';
+import type { SessionLedgerConnection, SessionLedgerFilters, SessionLedgerView } from '../../hooks/useSessionLedger';
+import { SessionReopenRefusal } from '../../hooks/daemonSessionLedgerEvents';
 import {
   SESSION_FILTERS_SETTING_KEY,
   parseSessionFilters,
@@ -13,14 +13,14 @@ import { useSettings } from '../../contexts/SettingsContext';
 import {
   branchStateLabel,
   closedBySomeone,
-  compactRefusalText,
   compactVerdictText,
   directoryStateLabel,
   isClosed,
   ledgerInstant,
+  refusalNote,
   reopenPlacement,
 } from '../sessionsLedger';
-import type { ReopenVerdictView, SessionScope } from '../sessionsLedger';
+import type { ReopenActionView, ReopenVerdictView, SessionScope } from '../sessionsLedger';
 import { fullStamp, nameIds, relativeStamp, shortPath, tildePath } from './ledgerTime';
 import { formatQuery, matchesDir, matchesWords, parseQuery, profileChoices, removeToken, renameProfileTokens } from './ledgerQuery';
 import type { ParsedQuery, ProfileChoice } from './ledgerQuery';
@@ -33,7 +33,7 @@ export interface SessionSeedLink {
 }
 
 export interface SessionsTabProps {
-  listSessions: (query: SessionLedgerQuery) => Promise<SessionLedgerPage>;
+  connection: SessionLedgerConnection;
   profileNames: Record<string, string>;
   currentProfileId?: string | null;
   profileMembership: string;
@@ -44,8 +44,6 @@ export interface SessionsTabProps {
   onReopen?: (sessionId: string, actionId: string, profileId?: string) => Promise<boolean | void> | boolean | void;
   onMoveSession?: (sessionId: string, expectedProfileId: string, destinationProfileId: string) => Promise<unknown>;
   onShowWorktree?: (path: string) => void;
-  closeNotice?: { entry: SessionLedgerEntry; reopen?: SessionReopen; nonce: number };
-  verdictNotice?: { verdicts: Record<string, SessionReopen>; nonce: number };
   requestedDir?: { path: string; nonce: number } | null;
   queryRef: React.RefObject<HTMLInputElement | null>;
   now: () => Date;
@@ -62,7 +60,7 @@ const WORKING_STATES = new Set(['working', 'running', 'busy']);
 const WAITING_STATES = new Set(['waiting', 'attention', 'needs_attention', 'idle']);
 
 export function SessionsTab({
-  listSessions,
+  connection,
   profileNames,
   currentProfileId,
   profileMembership,
@@ -73,8 +71,6 @@ export function SessionsTab({
   onReopen,
   onMoveSession,
   onShowWorktree,
-  closeNotice,
-  verdictNotice,
   requestedDir,
   queryRef,
   now,
@@ -88,28 +84,18 @@ export function SessionsTab({
   }, [setSetting]);
   const ledger = useSessionLedger({
     enabled: true,
-    list: listSessions,
+    connection,
     now,
     initialFilters: restoredFilters,
     onFiltersChange: rememberFilters,
   });
-  const { filters, setFilters, entries, verdicts, recordClose, recordVerdict, reload } = ledger;
+  const { filters, setFilters, entries, reload } = ledger;
 
   const { text, setText, parsed } = useLedgerQueryText({
     restoredFilters, profileNames, facets: ledger.facets, repository: filters.repository, setFilters, requestedDir,
   });
 
   useReloadWhenChanged(profileMembership, reload);
-
-  useEffect(() => {
-    if (!closeNotice) return;
-    recordClose(closeNotice.entry, closeNotice.reopen);
-  }, [closeNotice, recordClose]);
-
-  useEffect(() => {
-    if (!verdictNotice) return;
-    for (const [sessionId, reopen] of Object.entries(verdictNotice.verdicts)) recordVerdict(sessionId, reopen);
-  }, [verdictNotice, recordVerdict]);
 
   const visible = useMemo(() => entries.filter((entry) => {
     if (!matchesDir(entry.directory, parsed.dir)) return false;
@@ -122,39 +108,43 @@ export function SessionsTab({
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const selected = visible.find((entry) => entry.id === selectedId) ?? visible[0] ?? null;
   const [menu, setMenu] = useState<LedgerMenu | null>(null);
-  const [notices, setNotices] = useState<Record<string, RowNote>>({});
+  const [attempts, setAttempts] = useState<Record<string, ReopenAttempt>>({});
+  const attemptFor = useCallback((entry: SessionLedgerEntry): ReopenAttempt | undefined => {
+    const attempt = attempts[entry.id];
+    return attempt && attempt.closedAt === (entry.closed_at ?? '') ? attempt : undefined;
+  }, [attempts]);
   const profileOptions = useMemo(() => liveProfileOptions(profileNames, currentProfileId), [profileNames, currentProfileId]);
   const [copied, copy] = useCopied();
 
-  const setNotice = useCallback((sessionId: string, note: RowNote | null) => {
-    setNotices((current) => {
-      if (!note) {
-        if (!(sessionId in current)) return current;
-        const next = { ...current };
-        delete next[sessionId];
-        return next;
-      }
-      return { ...current, [sessionId]: note };
+  const recordAttempt = useCallback((entry: SessionLedgerEntry, change: Partial<Omit<ReopenAttempt, 'closedAt'>>) => {
+    const closedAt = entry.closed_at ?? '';
+    setAttempts((current) => {
+      const previous = current[entry.id]?.closedAt === closedAt ? current[entry.id] : { closedAt };
+      return { ...current, [entry.id]: { ...previous, ...change } };
     });
   }, []);
 
-  const fire = useCallback((sessionId: string, actionId: string, profileId?: string) => {
+  const fire = useCallback((entry: SessionLedgerEntry, actionId: string, profileId?: string) => {
     if (!onReopen) return;
     setMenu(null);
     const refuse = (failure: unknown) => {
-      setNotice(sessionId, { kind: 'refused', text: compactRefusalText(failureText(failure)) });
+      if (failure instanceof SessionReopenRefusal) {
+        recordAttempt(entry, { note: { kind: 'refused', text: refusalNote(actionId, failure.verdict) }, verdict: failure.verdict });
+      } else {
+        recordAttempt(entry, { note: { kind: 'refused', text: compactVerdictText(failureText(failure)) } });
+      }
       reload();
     };
-    setNotice(sessionId, { kind: 'busy', text: 'reopening…' });
+    recordAttempt(entry, { note: { kind: 'busy', text: 'reopening…' } });
     let outcome: ReturnType<typeof onReopen>;
     try {
-      outcome = onReopen(sessionId, actionId, profileId);
+      outcome = onReopen(entry.id, actionId, profileId);
     } catch (failure) {
       refuse(failure);
       return;
     }
-    Promise.resolve(outcome).then(() => setNotice(sessionId, null)).catch(refuse);
-  }, [onReopen, setNotice, reload]);
+    Promise.resolve(outcome).then(() => recordAttempt(entry, { note: undefined })).catch(refuse);
+  }, [onReopen, recordAttempt, reload]);
 
   const isLive = useCallback(
     (entry: SessionLedgerEntry) => !isClosed(entry) && (liveSessionIds?.has(entry.id) ?? true),
@@ -166,43 +156,42 @@ export function SessionsTab({
   const nameText = useCallback((text: string) => nameIds(text, (id) => labelsBySession.get(id) || undefined), [labelsBySession]);
   const moveSession = useCallback((entry: SessionLedgerEntry, destinationProfileId: string) => {
     if (!onMoveSession) return;
-    setNotice(entry.id, { kind: 'busy', text: 'moving…' });
+    recordAttempt(entry, { note: { kind: 'busy', text: 'moving…' } });
     onMoveSession(entry.id, entry.profile_id, destinationProfileId)
-      .then(() => setNotice(entry.id, null))
-      .catch((failure) => setNotice(entry.id, { kind: 'refused', text: compactRefusalText(failureText(failure)) }));
-  }, [onMoveSession, setNotice]);
+      .then(() => recordAttempt(entry, { note: undefined }))
+      .catch((failure) => recordAttempt(entry, { note: { kind: 'refused', text: compactVerdictText(failureText(failure)) } }));
+  }, [onMoveSession, recordAttempt]);
 
   const runVerb = useCallback((key: string, verbId: string, choiceId?: string) => {
     const entry = visible.find((row) => row.id === key);
     if (!entry) return;
     setSelectedId(entry.id);
-    const verdict = verdicts[entry.id];
-    const needsDestination = verbId === 'move' || (verbId.startsWith('act:') && !!verdict?.profileDeleted);
+    const needsDestination = verbId === 'move' || (verbId.startsWith('act:') && !!entry.profile_deleted);
     if (needsDestination && !choiceId) { setMenu({ key: entry.id, choosing: verbId }); return; }
     setMenu(null);
     if (verbId === 'focus') { onFocusSession?.(entry.id); return; }
     if (verbId === 'seed') { const seed = seedForSession?.(entry.id); if (seed) onOpenSeed?.(seed.id); return; }
     if (verbId === 'worktree') { onShowWorktree?.(entry.directory); return; }
     if (verbId === 'move' && choiceId) { moveSession(entry, choiceId); return; }
-    fire(entry.id, verdictId(verbId), choiceId);
-  }, [visible, onFocusSession, seedForSession, onOpenSeed, onShowWorktree, moveSession, verdicts, fire]);
+    fire(entry, verdictId(verbId), choiceId);
+  }, [visible, onFocusSession, seedForSession, onOpenSeed, onShowWorktree, moveSession, fire]);
 
   const items = useMemo<ListItem[]>(() => visible.map((entry) => ({
     kind: 'row',
     row: sessionRow(entry, {
-      verdict: isClosed(entry) ? verdicts[entry.id] : undefined,
-      note: notices[entry.id],
+      verdict: attemptFor(entry)?.verdict,
+      note: attemptFor(entry)?.note,
       live: isLive(entry),
       seed: seedForSession?.(entry.id) ?? null,
       sessionLabel,
       nameText,
       actionsAvailable: !!onReopen,
-      canShowWorktree: !!onShowWorktree && !!entry.is_worktree && verdicts[entry.id]?.directoryState !== 'missing',
+      canShowWorktree: !!onShowWorktree && !!entry.is_worktree && attemptFor(entry)?.verdict?.directoryState !== 'missing',
       moveTargets: onMoveSession ? profileOptions.filter((option) => option.id !== entry.profile_id) : [],
       reopenTargets: profileOptions,
       now: now(),
     }),
-  })), [visible, verdicts, notices, isLive, seedForSession, sessionLabel, nameText, onReopen, onMoveSession, onShowWorktree, profileOptions, now]);
+  })), [visible, attemptFor, isLive, seedForSession, sessionLabel, nameText, onReopen, onMoveSession, onShowWorktree, profileOptions, now]);
 
   // Counts, not arrays, drive the status line: a parent that rerenders on status must not loop it.
   const shown = visible.length;
@@ -216,14 +205,14 @@ export function SessionsTab({
         {closed > 0 && <span>{closed} closed</span>}
         {shown !== entries.length && <span>{entries.length - shown} hidden by the query</span>}
         {ledger.omitted > 0 && (
-          <button type="button" className="ledger-status-link" onClick={ledger.loadMore} disabled={ledger.loadingMore}>
+          <button type="button" className="ledger-status-link" onClick={ledger.loadMore} disabled={ledger.loading || ledger.loadingMore}>
             {ledger.loadingMore ? 'loading…' : `${ledger.omitted} older ↓`}
           </button>
         )}
         {copied && <span className="ledger-status-flash">copied</span>}
       </>,
     );
-  }, [shown, live, entries.length, ledger.omitted, ledger.loadMore, ledger.loadingMore, copied, onStatus]);
+  }, [shown, live, entries.length, ledger.omitted, ledger.loadMore, ledger.loading, ledger.loadingMore, copied, onStatus]);
 
   const chips = useMemo<Chip[]>(() => {
     const tokens = text.trim().split(/\s+/).filter(Boolean);
@@ -275,8 +264,8 @@ export function SessionsTab({
           ? (
             <SessionInspector
               entry={selected}
-              verdict={isClosed(selected) ? verdicts[selected.id] : undefined}
-              note={notices[selected.id]}
+              verdict={attemptFor(selected)?.verdict}
+              note={attemptFor(selected)?.note}
               live={isLive(selected)}
               seed={seedForSession?.(selected.id) ?? null}
               sessionLabel={sessionLabel}
@@ -389,6 +378,14 @@ function liveProfileOptions(profileNames: Record<string, string>, currentProfile
     .sort((a, b) => Number(b.id === currentProfileId) - Number(a.id === currentProfileId) || a.label.localeCompare(b.label));
 }
 
+interface ReopenAttempt {
+  closedAt: string;
+  note?: RowNote;
+  verdict?: ReopenVerdictView;
+}
+
+const PLAIN_REOPEN: ReopenActionView = { id: 'reopen', label: 'Reopen' };
+
 function verdictId(verbId: string): string {
   return verbId.startsWith('act:') ? verbId.slice(4) : verbId;
 }
@@ -415,12 +412,12 @@ function sessionRow(entry: SessionLedgerEntry, context: RowContext): RowModel {
   if (context.live && context.moveTargets.length > 0) {
     verbs.push({ id: 'move', label: 'Move to…', choices: { title: 'Move to', options: context.moveTargets } });
   }
-  if (closed && context.actionsAvailable && verdict) {
-    for (const action of verdict.actions) {
+  if (closed && context.actionsAvailable) {
+    for (const action of verdict?.actions ?? [PLAIN_REOPEN]) {
       verbs.push({
         id: `act:${action.id}`,
         label: action.label,
-        choices: verdict.profileDeleted ? { title: `${action.label} into`, options: context.reopenTargets } : undefined,
+        choices: entry.profile_deleted ? { title: `${action.label} into`, options: context.reopenTargets } : undefined,
       });
     }
   }
@@ -444,7 +441,7 @@ function sessionRow(entry: SessionLedgerEntry, context: RowContext): RowModel {
   const stampAt = ledgerInstant(entry);
   return {
     key: entry.id,
-    glyph: sessionGlyph(entry, context.live, verdict),
+    glyph: sessionGlyph(entry, context.live),
     title: entry.label || 'untitled session',
     meta,
     stamp: { text: relativeStamp(stampAt, context.now), hint: fullStamp(stampAt) },
@@ -466,9 +463,8 @@ function profileText(entry: SessionLedgerEntry): string {
   return entry.profile_deleted ? `${entry.profile_name} (deleted)` : entry.profile_name;
 }
 
-function sessionGlyph(entry: SessionLedgerEntry, live: boolean, verdict: ReopenVerdictView | undefined): RowGlyph {
-  if (isClosed(entry)) return verdict?.refreshing ? 'refreshing' : 'closed';
-  if (!live) return 'closed';
+function sessionGlyph(entry: SessionLedgerEntry, live: boolean): RowGlyph {
+  if (isClosed(entry) || !live) return 'closed';
   if (WORKING_STATES.has(entry.state)) return 'working';
   if (WAITING_STATES.has(entry.state)) return 'waiting';
   return 'live';
@@ -484,38 +480,37 @@ interface ReopenVerdictProps {
 
 function ReopenVerdict({ verdict, note, nameText, onVerb, actionsAvailable }: ReopenVerdictProps) {
   const busy = note?.kind === 'busy';
+  const actions = verdict?.actions ?? [PLAIN_REOPEN];
   return (
     <div className={`ledger-verdict${verdict ? (verdict.reopenable ? ' is-ok' : ' is-no') : ''}`}>
       <div className="ledger-field-label">Reopen</div>
-      {!verdict && <div className="ledger-muted">No verdict yet.</div>}
       {verdict && (
         <>
           <div className="ledger-verdict-text" title={verdict.reason ?? verdict.summary}>
             {nameText(compactVerdictText(verdict.reason ?? 'It can be reopened where it ran.'))}
-            {verdict.refreshing && <em className="ledger-checking"> checking the branch…</em>}
           </div>
           {verdict.warning && <div className="ledger-muted" title={verdict.warning}>{nameText(compactVerdictText(verdict.warning))}</div>}
           <div className="ledger-muted">{reopenPlacement(verdict)}</div>
-          {note && note.kind !== 'busy' && (
-            <div className={`ledger-row-note is-${note.kind}`} role="status">{note.text}</div>
-          )}
-          {actionsAvailable && (
-            <div className="ledger-verdict-actions">
-              {verdict.actions.map((action, index) => (
-                <button
-                  key={action.id}
-                  type="button"
-                  className={index === 0 ? 'ledger-verb is-primary' : 'ledger-verb'}
-                  disabled={busy}
-                  onClick={() => onVerb(`act:${action.id}`)}
-                >
-                  <kbd>{index === 0 ? '⏎' : index + 1}</kbd>{busy && index === 0 ? note?.text : action.label}
-                </button>
-              ))}
-              {verdict.actions.length === 0 && <span className="ledger-muted">Nothing here brings it back.</span>}
-            </div>
-          )}
         </>
+      )}
+      {note && note.kind !== 'busy' && (
+        <div className={`ledger-row-note is-${note.kind}`} role="status">{note.text}</div>
+      )}
+      {actionsAvailable && (
+        <div className="ledger-verdict-actions">
+          {actions.map((action, index) => (
+            <button
+              key={action.id}
+              type="button"
+              className={index === 0 ? 'ledger-verb is-primary' : 'ledger-verb'}
+              disabled={busy}
+              onClick={() => onVerb(`act:${action.id}`)}
+            >
+              <kbd>{index === 0 ? '⏎' : index + 1}</kbd>{busy && index === 0 ? note?.text : action.label}
+            </button>
+          ))}
+          {actions.length === 0 && <span className="ledger-muted">Nothing here brings it back.</span>}
+        </div>
       )}
     </div>
   );
@@ -537,10 +532,10 @@ interface SessionInspectorProps {
   canMove: boolean;
 }
 
-function SessionKicker({ entry, live, verdict }: { entry: SessionLedgerEntry; live: boolean; verdict: ReopenVerdictView | undefined }) {
+function SessionKicker({ entry, live }: { entry: SessionLedgerEntry; live: boolean }) {
   return (
     <>
-      <span className={`ledger-glyph is-${sessionGlyph(entry, live, verdict)}`} aria-hidden="true" />
+      <span className={`ledger-glyph is-${sessionGlyph(entry, live)}`} aria-hidden="true" />
       <span>{isClosed(entry) ? 'closed' : entry.state}</span>
       <span>·</span>
       <span>{entry.agent}</span>
@@ -592,7 +587,7 @@ function SessionInspector({
   entry, verdict, note, live, seed, sessionLabel, nameText, now, copied, onCopy, onVerb, actionsAvailable, canMove,
 }: SessionInspectorProps) {
   return (
-    <Inspector title={entry.label || 'untitled session'} kicker={<SessionKicker entry={entry} live={live} verdict={verdict} />}>
+    <Inspector title={entry.label || 'untitled session'} kicker={<SessionKicker entry={entry} live={live} />}>
       <Field label="Profile">{profileText(entry) || '—'}</Field>
       <DirectoryField entry={entry} verdict={verdict} copied={copied} onCopy={onCopy} />
       <BranchField entry={entry} verdict={verdict} />

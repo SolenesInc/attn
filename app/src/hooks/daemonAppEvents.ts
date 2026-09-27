@@ -10,7 +10,7 @@ interface AppDaemonEvent {
   payload?: unknown;
 }
 
-export class AppCommandError extends Error {
+class AppCommandError extends Error {
   readonly code: string;
   readonly reconcile: unknown;
 

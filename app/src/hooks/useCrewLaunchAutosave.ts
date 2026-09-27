@@ -59,10 +59,7 @@ export function useCrewLaunchAutosave(
       const outcome = await send({ member: memberId, expectedRevision: acknowledged.revision, ...merge(pending, acknowledged) });
       if (outcome.success && outcome.member) return { ack: outcome.member };
       if (outcome.success) throw new Error('The daemon did not return the saved launch settings.');
-      const fallback = outcome.conflict
-        ? 'Launch settings changed elsewhere. Review the saved values and retry.'
-        : 'The launch settings were not saved.';
-      return { ack: outcome.member, error: outcome.error || fallback };
+      return { ack: outcome.member, error: outcome.error || 'The launch settings were not saved.' };
     },
   }), [send]);
   const autosave = useAutosave(spec, connectionGeneration);

@@ -1,0 +1,4 @@
+kind: fixed
+area: crew
+change: A crew restart that resumes after its day's session exits now wakes the successor in the crew member's workspace every time.
+symptom: When a crew day's session exited with a restart pending, such as after deleting its worktree, the restart could fail with `unknown workspace` and leave the member asleep.

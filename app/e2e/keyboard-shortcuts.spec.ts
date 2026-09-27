@@ -148,61 +148,6 @@ test.describe('Keyboard Shortcuts', () => {
     });
   });
 
-  test.describe('Leader-key chords', () => {
-    test('records a chord in the editor, then fires it globally', async ({ page, daemon }) => {
-      await daemon.start();
-      await page.goto('/');
-      await page.waitForSelector('.dashboard');
-
-      await page.keyboard.press('Meta+Shift+k');
-      await expect(page.getByRole('dialog', { name: 'Commands' })).toBeVisible();
-      await page.getByText('Customize keyboard shortcuts').click();
-      const editor = page.getByRole('dialog', { name: 'Customize Shortcuts' });
-      await expect(editor).toBeVisible();
-
-      const unboundLeader = 'Meta+e';
-      const row = editor.locator('.shortcut-editor-row', { hasText: 'Agent palette' });
-      await row.getByLabel('Record a chord').click();
-      await page.keyboard.press(unboundLeader);
-      await expect(row).toContainText('then');
-      await page.keyboard.press('a');
-      await expect(row).toContainText('then');
-
-      await editor.getByRole('button', { name: 'Done' }).click();
-      await expect(editor).not.toBeVisible();
-
-      await page.keyboard.press(unboundLeader);
-      await expect(page.getByTestId('chord-leader-hud')).toBeVisible();
-
-      await page.keyboard.press('a');
-      await expect(page.getByRole('dialog', { name: 'Agents' })).toBeVisible();
-      await expect(page.getByTestId('chord-leader-hud')).not.toBeVisible();
-    });
-
-    test('the leader times out and clears the HUD if no follow key arrives', async ({ page, daemon }) => {
-      await daemon.start();
-      await page.goto('/');
-      await page.waitForSelector('.dashboard');
-
-      await page.keyboard.press('Meta+Shift+k');
-      await page.getByText('Customize keyboard shortcuts').click();
-      const editor = page.getByRole('dialog', { name: 'Customize Shortcuts' });
-      await expect(editor).toBeVisible();
-
-      const row = editor.locator('.shortcut-editor-row', { hasText: 'Agent palette' });
-      await row.getByLabel('Record a chord').click();
-      await page.keyboard.press('Meta+e');
-      await page.keyboard.press('a');
-      await editor.getByRole('button', { name: 'Done' }).click();
-      await expect(editor).not.toBeVisible();
-
-      await page.keyboard.press('Meta+e');
-      await expect(page.getByTestId('chord-leader-hud')).toBeVisible();
-      await expect(page.getByTestId('chord-leader-hud')).not.toBeVisible();
-      await expect(page.getByRole('dialog', { name: 'Agents' })).not.toBeVisible();
-    });
-  });
-
   test.describe('Palette', () => {
     test('⌘K opens agents, > switches to commands, ⌘⇧K toggles commands and keeps attention drawer access', async ({ page, daemon }) => {
       await daemon.start();
@@ -229,40 +174,6 @@ test.describe('Keyboard Shortcuts', () => {
 
       await page.getByText('Open attention drawer').click();
       await expect(page.locator('.side-panel-shell.is-open .attention-drawer .attention-drawer-panel')).toBeVisible();
-    });
-  });
-
-  test.describe('Dashboard Navigation', () => {
-    test('⌘G goes to dashboard from terminal', async ({ page, daemon }) => {
-      await daemon.start();
-      await page.goto('/');
-      await page.waitForSelector('.dashboard');
-
-      await createSession(page, daemon, { id: 's1', label: 'Test', state: 'working', cwd: '/tmp/test/s1' });
-      await expect(page.locator('[data-testid="session-s1"]')).toBeVisible();
-
-      await page.locator('[data-testid="session-s1"]').click();
-
-      await expect(page.locator('.terminal-wrapper.active')).toBeVisible();
-
-      await page.keyboard.press('Meta+g');
-
-      await expect(page.locator('.dashboard')).toBeVisible();
-    });
-
-    test('Escape goes to dashboard', async ({ page, daemon }) => {
-      await daemon.start();
-      await page.goto('/');
-      await page.waitForSelector('.dashboard');
-
-      await createSession(page, daemon, { id: 's1', label: 'Test', state: 'working', cwd: '/tmp/test/s1' });
-      await expect(page.locator('[data-testid="session-s1"]')).toBeVisible();
-
-      await page.locator('[data-testid="session-s1"]').click();
-      await expect(page.locator('.terminal-wrapper.active')).toBeVisible();
-
-      await page.keyboard.press('Escape');
-      await expect(page.locator('.dashboard')).toBeVisible();
     });
   });
 
@@ -295,70 +206,6 @@ test.describe('Keyboard Shortcuts', () => {
       await expect(page.locator('.terminal-wrapper.active')).toBeVisible();
     });
 
-    test('⌘↑/⌘↓ navigates between sessions', async ({ page, daemon }) => {
-      await daemon.start();
-      await page.goto('/');
-      await page.waitForSelector('.dashboard');
-
-      await createSession(page, daemon, { id: 's1', label: 'First', state: 'working', cwd: '/tmp/test/s1' });
-      await createSession(page, daemon, { id: 's2', label: 'Second', state: 'working', cwd: '/tmp/test/s2' });
-
-      await expect(page.locator('[data-testid="session-s1"]')).toBeVisible();
-
-      await page.keyboard.press('Meta+1');
-      await expect(page.locator('.terminal-wrapper.active')).toBeVisible();
-
-      await page.keyboard.press('Meta+ArrowDown');
-
-      await page.keyboard.press('Meta+ArrowUp');
-    });
-  });
-
-  test.describe('Session Management', () => {
-    test('⌘J jumps to next waiting session', async ({ page, daemon }) => {
-      await daemon.start();
-      await page.goto('/');
-      await page.waitForSelector('.dashboard');
-
-      await createSession(page, daemon, { id: 's1', label: 'Working', state: 'working', cwd: '/tmp/test/s1' });
-      await createSession(page, daemon, { id: 's2', label: 'Waiting', state: 'waiting_input', cwd: '/tmp/test/s2' });
-
-      await expect(page.locator('[data-testid="session-s1"]')).toBeVisible();
-
-      // Dispatch directly so the browser does not consume Cmd+J as its own shortcut first.
-      await page.evaluate(() => {
-        window.dispatchEvent(new KeyboardEvent('keydown', {
-          key: 'j',
-          metaKey: true,
-          bubbles: true,
-          cancelable: true,
-        }));
-      });
-
-      await expect(page.locator('.terminal-wrapper.active')).toBeVisible();
-    });
-  });
-
-  test.describe('Sidebar', () => {
-    test('⌘⇧B toggles sidebar', async ({ page, daemon }) => {
-      await daemon.start();
-      await page.goto('/');
-      await page.waitForSelector('.dashboard');
-
-      await createSession(page, daemon, { id: 's1', label: 'Test', state: 'working', cwd: '/tmp/test/s1' });
-      await expect(page.locator('[data-testid="session-s1"]')).toBeVisible();
-
-      await page.locator('[data-testid="session-s1"]').click();
-      await expect(page.locator('.terminal-wrapper.active')).toBeVisible();
-
-      await expect(page.locator('.sidebar:not(.collapsed)')).toBeVisible();
-
-      await page.keyboard.press('Meta+Shift+B');
-      await expect(page.locator('.sidebar.collapsed')).toBeVisible();
-
-      await page.keyboard.press('Meta+Shift+B');
-      await expect(page.locator('.sidebar:not(.collapsed)')).toBeVisible();
-    });
   });
 
 });

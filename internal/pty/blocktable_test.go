@@ -5,6 +5,8 @@ import (
 	"fmt"
 	"os"
 	"testing"
+
+	"pgregory.net/rapid"
 )
 
 type fakeBlockRef struct {
@@ -263,4 +265,39 @@ func TestBlockTableCorpus(t *testing.T) {
 			}
 		})
 	}
+}
+
+type countedBlockRef struct {
+	row   int
+	frees int
+}
+
+func (r *countedBlockRef) ScreenPoint() (int, int, bool) { return 0, r.row, true }
+func (r *countedBlockRef) Free()                         { r.frees++ }
+
+func TestBlockTableFreesEveryPinnedRefExactlyOnceWhateverTheMarkers(t *testing.T) {
+	rapid.Check(t, func(t *rapid.T) {
+		cmd := "echo hi"
+		exit := int32(rapid.IntRange(0, 2).Draw(t, "exit"))
+		markers := []osc133Marker{
+			{Kind: osc133PromptStart},
+			{Kind: osc133InputStart},
+			{Kind: osc133PreExec, Cmdline: &cmd},
+			{Kind: osc133CommandEnd, ExitCode: &exit},
+			{Kind: osc133CommandEnd},
+		}
+		steps := rapid.SliceOfN(rapid.IntRange(0, len(markers)-1), 0, 40).Draw(t, "markers")
+		bt := newBlockTable()
+		refs := make([]*countedBlockRef, len(steps))
+		for i, step := range steps {
+			refs[i] = &countedBlockRef{row: i}
+			bt.ApplyMarker(markers[step], refs[i], false)
+		}
+		bt.Close()
+		for i, ref := range refs {
+			if ref.frees != 1 {
+				t.Fatalf("the ref pinned by marker %d of %v was freed %d times, want once", i, steps, ref.frees)
+			}
+		}
+	})
 }

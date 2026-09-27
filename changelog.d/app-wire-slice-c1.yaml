@@ -1,0 +1,3 @@
+kind: internal
+area: testing
+change: Guard terminal, host, action menu, settings, close prompt and toast promises through App wire tests instead of component and helper tests.

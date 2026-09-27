@@ -1248,7 +1248,11 @@ CREATE TABLE IF NOT EXISTS app_reconcile_progress (
 	{149, "index delegation session identity", `CREATE INDEX IF NOT EXISTS idx_delegation_operations_session ON delegation_operations(session_id)`},
 	{150, "durable pull request readiness watches", ``},
 	{151, "rename install profiles to instances", ``},
-	{152, "create profiles, desktops and their panes beside the workspace tables", `
+	{152, "file long-context session cost observations under their tier", ``},
+	{153, "keep every delegation preferences revision", ``},
+	{154, "record when a session's agent process launched", ""},
+	{155, "session last-seen stamps move to UTC so the ledger window compares instants", ""},
+	{156, "create profiles, desktops and their panes beside the workspace tables", `
 		CREATE TABLE IF NOT EXISTS profiles (
 			id TEXT PRIMARY KEY,
 			name TEXT NOT NULL,
@@ -1296,14 +1300,14 @@ CREATE TABLE IF NOT EXISTS app_reconcile_progress (
 		);
 	`},
 	{ProfileConversionSchemaVersion, "convert legacy workspaces into the Default profile and its desktops", ""},
-	{154, "record the profile each crew member belongs to", `
+	{158, "record the profile each crew member belongs to", `
 		CREATE TABLE IF NOT EXISTS crew_profiles (
 			member_id TEXT PRIMARY KEY,
 			profile_id TEXT NOT NULL
 		);
 		CREATE INDEX IF NOT EXISTS idx_crew_profiles_profile ON crew_profiles(profile_id);
 	`},
-	{155, "give each profile its own chief of staff", `
+	{159, "give each profile its own chief of staff", `
 		UPDATE profiles SET chief_session_id = (
 			SELECT r.session_id FROM instance_roles r WHERE r.role = 'chief_of_staff'
 		)
@@ -1313,7 +1317,7 @@ CREATE TABLE IF NOT EXISTS app_reconcile_progress (
 		);
 		DROP TABLE IF EXISTS instance_roles;
 	`},
-	{156, "drop the retired workspace tables and columns", `
+	{160, "drop the retired workspace tables and columns", `
 		DROP INDEX IF EXISTS idx_sessions_workspace_id;
 		DROP TABLE IF EXISTS workspace_layout_panes;
 		DROP TABLE IF EXISTS workspace_layouts;
@@ -1375,6 +1379,9 @@ func applyMigration99(tx *sql.Tx) error {
 func sqliteDSN(dbPath string) string {
 	if dbPath == ":memory:" {
 		return dbPath
+	}
+	if absolute, err := filepath.Abs(dbPath); err == nil {
+		dbPath = absolute
 	}
 	u := &url.URL{Scheme: "file", Path: dbPath}
 	query := u.Query()
@@ -1577,6 +1584,9 @@ func upgradeSchema(db *sql.DB, dbPath string) (SchemaUpgrade, error) {
 	if currentVersion >= upgrade.To {
 		return upgrade, nil
 	}
+	if err := refuseEarlyProfileLadder(db, dbPath, currentVersion); err != nil {
+		return upgrade, err
+	}
 
 	if currentVersion > 0 && dbPath != "" && dbPath != ":memory:" {
 		path, err := backupPreMigration(db, dbPath, currentVersion)
@@ -1591,6 +1601,25 @@ func upgradeSchema(db *sql.DB, dbPath string) (SchemaUpgrade, error) {
 		return upgrade, err
 	}
 	return upgrade, nil
+}
+
+// Development builds of the desktops branch recorded their profile migrations as 152–156, before
+// next's 152–155 existed; such a database has profiles but no sessions.launched_at.
+func refuseEarlyProfileLadder(db *sql.DB, dbPath string, current int) error {
+	if current < 152 {
+		return nil
+	}
+	var profiles, launchedAt int
+	if err := db.QueryRow(`SELECT count(*) FROM sqlite_master WHERE type = 'table' AND name = 'profiles'`).Scan(&profiles); err != nil {
+		return err
+	}
+	if err := db.QueryRow(`SELECT count(*) FROM pragma_table_info('sessions') WHERE name = 'launched_at'`).Scan(&launchedAt); err != nil {
+		return err
+	}
+	if profiles == 0 || launchedAt > 0 {
+		return nil
+	}
+	return fmt.Errorf("database %s (schema v%d) was upgraded by a development build of the desktops branch whose profile migrations used versions 152–156, before next's migrations 152–155 existed; this build cannot upgrade it. Reset this instance's database by moving %s aside; production databases never ran that build and are not affected", dbPath, current, dbPath)
 }
 
 func applyPendingMigrations(db *sql.DB, recorded, currentVersion, through int) error {
@@ -1978,8 +2007,28 @@ func applyPendingMigrations(db *sql.DB, recorded, currentVersion, through int) e
 				tx.Rollback()
 				return fmt.Errorf("migration %d (%s): %w", m.version, m.desc, err)
 			}
+		} else if m.version == 152 {
+			if err := applyMigration152(tx); err != nil {
+				tx.Rollback()
+				return fmt.Errorf("migration %d (%s): %w", m.version, m.desc, err)
+			}
+		} else if m.version == 153 {
+			if err := applyMigration153(tx); err != nil {
+				tx.Rollback()
+				return fmt.Errorf("migration %d (%s): %w", m.version, m.desc, err)
+			}
 		} else if m.version == 151 {
 			if err := applyMigration151(tx); err != nil {
+				tx.Rollback()
+				return fmt.Errorf("migration %d (%s): %w", m.version, m.desc, err)
+			}
+		} else if m.version == 154 {
+			if err := applyMigration154(tx); err != nil {
+				tx.Rollback()
+				return fmt.Errorf("migration %d (%s): %w", m.version, m.desc, err)
+			}
+		} else if m.version == 155 {
+			if err := applyMigration155(tx); err != nil {
 				tx.Rollback()
 				return fmt.Errorf("migration %d (%s): %w", m.version, m.desc, err)
 			}
@@ -1988,18 +2037,18 @@ func applyPendingMigrations(db *sql.DB, recorded, currentVersion, through int) e
 				tx.Rollback()
 				return fmt.Errorf("migration %d (%s): %w", m.version, m.desc, err)
 			}
+		} else if m.version == 160 {
+			if err := applyMigration160(tx, m.sql); err != nil {
+				tx.Rollback()
+				return fmt.Errorf("migration %d (%s): %w", m.version, m.desc, err)
+			}
+		} else if m.version == 159 {
+			if err := applyMigration159(tx, m.sql); err != nil {
+				tx.Rollback()
+				return fmt.Errorf("migration %d (%s): %w", m.version, m.desc, err)
+			}
 		} else if m.version == 156 {
 			if err := applyMigration156(tx, m.sql); err != nil {
-				tx.Rollback()
-				return fmt.Errorf("migration %d (%s): %w", m.version, m.desc, err)
-			}
-		} else if m.version == 155 {
-			if err := applyMigration155(tx, m.sql); err != nil {
-				tx.Rollback()
-				return fmt.Errorf("migration %d (%s): %w", m.version, m.desc, err)
-			}
-		} else if m.version == 152 {
-			if err := applyMigration152(tx, m.sql); err != nil {
 				tx.Rollback()
 				return fmt.Errorf("migration %d (%s): %w", m.version, m.desc, err)
 			}
@@ -2054,6 +2103,43 @@ func applyPendingMigrations(db *sql.DB, recorded, currentVersion, through int) e
 
 	if err := tx.Commit(); err != nil {
 		return fmt.Errorf("committing the schema upgrade: %w", err)
+	}
+	return nil
+}
+
+func applyMigration152(tx *sql.Tx) error {
+	rows, err := tx.Query("SELECT id, session_cost_json FROM sessions WHERE session_cost_json != ''")
+	if err != nil {
+		return err
+	}
+	costs := make(map[string]string)
+	for rows.Next() {
+		var id, raw string
+		if err := rows.Scan(&id, &raw); err != nil {
+			rows.Close()
+			return err
+		}
+		costs[id] = raw
+	}
+	if err := rows.Close(); err != nil {
+		return err
+	}
+	for id, raw := range costs {
+		state, err := decodeSessionCostState(raw)
+		if err != nil {
+			log.Printf("[store] migration 152: skipped unreadable session cost for %s: %v", id, err)
+			continue
+		}
+		if !rekeyLongContextObservations(&state) {
+			continue
+		}
+		encoded, err := json.Marshal(state)
+		if err != nil {
+			return fmt.Errorf("encode session cost for %s: %w", id, err)
+		}
+		if _, err := tx.Exec("UPDATE sessions SET session_cost_json = ? WHERE id = ?", string(encoded), id); err != nil {
+			return err
+		}
 	}
 	return nil
 }
@@ -2478,7 +2564,7 @@ func applyMigration131(tx *sql.Tx) error {
 	return nil
 }
 
-func applyMigration155(tx *sql.Tx, migrationSQL string) error {
+func applyMigration159(tx *sql.Tx, migrationSQL string) error {
 	hasChief, err := columnExists(tx, "profiles", "chief_session_id")
 	if err != nil {
 		return err
@@ -2508,7 +2594,7 @@ var retiredWorkspaceColumns = []struct{ table, column string }{
 	{"automation_continuity_bindings", "pane_id"},
 }
 
-func applyMigration156(tx *sql.Tx, migrationSQL string) error {
+func applyMigration160(tx *sql.Tx, migrationSQL string) error {
 	if _, err := tx.Exec(migrationSQL); err != nil {
 		return err
 	}
@@ -2527,7 +2613,7 @@ func applyMigration156(tx *sql.Tx, migrationSQL string) error {
 	return nil
 }
 
-func applyMigration152(tx *sql.Tx, migrationSQL string) error {
+func applyMigration156(tx *sql.Tx, migrationSQL string) error {
 	if _, err := tx.Exec(migrationSQL); err != nil {
 		return err
 	}
@@ -3956,6 +4042,50 @@ func foldModelLists(lists ...string) ([]string, error) {
 		}
 	}
 	return folded, nil
+}
+
+func applyMigration154(tx *sql.Tx) error {
+	has, err := columnExists(tx, "sessions", "launched_at")
+	if err != nil || has {
+		return err
+	}
+	if _, err := tx.Exec("ALTER TABLE sessions ADD COLUMN launched_at TEXT NOT NULL DEFAULT ''"); err != nil {
+		return err
+	}
+	_, err = tx.Exec("UPDATE sessions SET launched_at = state_since WHERE state = 'launching' AND closed_at = ''")
+	return err
+}
+
+func applyMigration155(tx *sql.Tx) error {
+	rows, err := tx.Query("SELECT id, last_seen FROM sessions WHERE last_seen <> ''")
+	if err != nil {
+		return err
+	}
+	inUTC := map[string]string{}
+	for rows.Next() {
+		var id, lastSeen string
+		if err := rows.Scan(&id, &lastSeen); err != nil {
+			rows.Close()
+			return err
+		}
+		at, err := time.Parse(time.RFC3339Nano, lastSeen)
+		if err != nil {
+			continue
+		}
+		if stamp := at.UTC().Format(time.RFC3339Nano); stamp != lastSeen {
+			inUTC[id] = stamp
+		}
+	}
+	rows.Close()
+	if err := rows.Err(); err != nil {
+		return err
+	}
+	for id, stamp := range inUTC {
+		if _, err := tx.Exec("UPDATE sessions SET last_seen = ? WHERE id = ?", stamp, id); err != nil {
+			return err
+		}
+	}
+	return nil
 }
 
 func applyMigration106(tx *sql.Tx) error {

@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect } from 'react';
 import { useToast } from '../components/Toast';
 import { useDaemonApi } from '../contexts/DaemonApiContext';
 import { SessionExitInfo } from '../hooks/useDaemonSocket';
@@ -36,12 +36,6 @@ export function useSessionLifecycle({
 }: Options) {
   const { sendUnregisterSession, sendSessionReopen } = useDaemonApi();
   const { closeSession, reloadSession } = useSessionStore();
-  const [pendingSessionClose, setPendingSessionClose] = useState<{
-    id: string;
-    label: string;
-    splitCount: number;
-  } | null>(null);
-
   const handleCloseSession = useCallback(
     async (id: string) => {
       const closeProtection = sessionCloseProtectionHint(daemonSessions, id);
@@ -87,19 +81,6 @@ export function useSessionLifecycle({
     registerSessionExitHandler(handleSessionProcessExit);
     return () => registerSessionExitHandler(null);
   }, [registerSessionExitHandler, handleSessionProcessExit]);
-
-  const handleCancelSessionClose = useCallback(() => {
-    setPendingSessionClose(null);
-  }, []);
-
-  const handleConfirmSessionClose = useCallback(() => {
-    if (!pendingSessionClose) {
-      return;
-    }
-    const sessionID = pendingSessionClose.id;
-    setPendingSessionClose(null);
-    void handleCloseSession(sessionID);
-  }, [handleCloseSession, pendingSessionClose]);
 
   const handleReloadSession = useCallback(
     (id: string) => {
@@ -152,11 +133,8 @@ export function useSessionLifecycle({
 
   return {
     handleCloseCurrentSessionShortcut,
-    pendingSessionClose,
     handleCloseSession,
     handleRequestCloseSession,
-    handleCancelSessionClose,
-    handleConfirmSessionClose,
     handleReloadSession,
     handleReopenSession,
   };

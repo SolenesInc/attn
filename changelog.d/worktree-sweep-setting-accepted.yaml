@@ -1,0 +1,4 @@
+kind: fixed
+area: worktrees
+change: Turning the worktree sweep off in Settings takes effect.
+symptom: The daemon refused the Worktree sweep toggle as an unknown setting, so the sweep kept removing merged worktrees.

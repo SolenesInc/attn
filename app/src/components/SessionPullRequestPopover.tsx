@@ -133,7 +133,6 @@ export function SessionPullRequestPopover({
     <div
       ref={cardRef}
       className="session-pr-popover"
-      data-testid="session-pr-popover"
       style={{ top: position.top, left: position.left }}
       role="dialog"
       aria-label={`Pull request ${identity}`}

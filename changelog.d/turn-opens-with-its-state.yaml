@@ -1,0 +1,4 @@
+kind: fixed
+area: queue
+change: A session's turn opens in the same instant as the state that opens it, and every session update pairs a state with its own turn, so the app never sees a working session owing a turn or a finished one that owes none.
+symptom: For a moment around a verdict, the app could show a still-working session as owing a turn, or an idle one as not owing it, until the next update.

@@ -206,14 +206,6 @@ func scanWorktree(row rowScanner) (*Worktree, error) {
 	return &wt, nil
 }
 
-func (s *Store) UpdateWorktreeObservation(path string, obs WorktreeObservation, now time.Time) {
-	if obs.Error != "" {
-		s.RecordWorktreeRefreshError(path, obs.Error)
-		return
-	}
-	s.RecordWorktreeObservation(path, obs, now)
-}
-
 func (s *Store) ApplyWorktreeInventory(path, branch, head string, detached, prunable bool) {
 	s.mu.Lock()
 	defer s.mu.Unlock()

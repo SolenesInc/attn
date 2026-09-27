@@ -147,12 +147,8 @@ func restoreDatabase(dbPath, backupsDir, source, pidPath string) (restoredFrom, 
 	return srcPath, preservedAs, nil
 }
 
-func preserveExistingDB(dbPath string) (string, error) {
-	return preserveExistingDBAt(dbPath, time.Now, os.Rename)
-}
-
-func preserveExistingDBAt(dbPath string, now func() time.Time, rename func(oldpath, newpath string) error) (preservedAs string, err error) {
-	base := dbPath + ".pre-restore-" + now().UTC().Format("20060102-150405")
+func preserveExistingDB(dbPath string) (preservedAs string, err error) {
+	base := dbPath + ".pre-restore-" + time.Now().UTC().Format("20060102-150405")
 	preservedAs = base
 	for n := 2; ; n++ {
 		free, err := preserveTargetFree(preservedAs)
@@ -177,14 +173,14 @@ func preserveExistingDBAt(dbPath string, now func() time.Time, rename func(oldpa
 		return rbErr
 	}
 
-	if err := rename(dbPath, preservedAs); err != nil {
+	if err := os.Rename(dbPath, preservedAs); err != nil {
 		return "", fmt.Errorf("preserve existing db %s: %w", dbPath, err)
 	}
 	moved = append(moved, move{from: dbPath, to: preservedAs})
 
 	for _, suffix := range []string{"-wal", "-shm"} {
 		from, to := dbPath+suffix, preservedAs+suffix
-		if err := rename(from, to); err != nil {
+		if err := os.Rename(from, to); err != nil {
 			if os.IsNotExist(err) {
 				continue
 			}
@@ -277,14 +273,12 @@ func stageBackupCopy(src, dstPath string) (stagedPath string, err error) {
 	return tmpPath, nil
 }
 
-var flockFn = syscall.Flock
-
 func acquireDaemonLock(pidPath string) (release func(), err error) {
 	lockFile, err := os.OpenFile(pidPath, os.O_RDWR|os.O_CREATE, 0644)
 	if err != nil {
 		return nil, fmt.Errorf("open pid file %s: %w", pidPath, err)
 	}
-	if flockErr := flockFn(int(lockFile.Fd()), syscall.LOCK_EX|syscall.LOCK_NB); flockErr != nil {
+	if flockErr := syscall.Flock(int(lockFile.Fd()), syscall.LOCK_EX|syscall.LOCK_NB); flockErr != nil {
 		lockFile.Close()
 		if errors.Is(flockErr, syscall.EWOULDBLOCK) {
 			return nil, fmt.Errorf("the attn daemon is running; stop it first (quit the app, or `attn daemon stop`) before restoring the database")

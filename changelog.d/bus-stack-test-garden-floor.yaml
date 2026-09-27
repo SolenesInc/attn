@@ -1,0 +1,3 @@
+kind: internal
+area: testing
+change: The bus CLI stack test disables the garden bell consumer so the retention floor it asserts is held only by the apps it installs, not by how far that idle consumer drained before the daemon stopped.

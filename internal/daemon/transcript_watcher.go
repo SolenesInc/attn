@@ -18,6 +18,7 @@ const (
 	transcriptQuietWindow    = 1500 * time.Millisecond
 	assistantDedupWindow     = 2 * time.Second
 	transcriptDiscoveryGrace = 2 * time.Second
+	launchConversationWindow = 2 * time.Minute
 )
 
 type transcriptWatcher struct {
@@ -185,6 +186,39 @@ func (d *Daemon) discoverTranscriptForWatcher(w *transcriptWatcher) string {
 	return path
 }
 
+func findsLaunchConversation(agent protocol.SessionAgent) bool {
+	_, ok := agentdriver.GetLaunchTranscriptFinder(agentdriver.Get(string(agent)))
+	return ok
+}
+
+func (d *Daemon) awaitsLaunchConversation(w *transcriptWatcher) bool {
+	return findsLaunchConversation(w.agent) && d.store.GetSessionConversation(w.sessionID).NativeID == ""
+}
+
+func (d *Daemon) conversationClaimedByOtherSession(sessionID string) func(nativeID string) bool {
+	return func(nativeID string) bool {
+		return d.store.ConversationBoundToOtherSession(sessionID, nativeID)
+	}
+}
+
+func (d *Daemon) bindLaunchConversation(w *transcriptWatcher) bool {
+	driver := agentdriver.Get(string(w.agent))
+	finder, ok := agentdriver.GetLaunchTranscriptFinder(driver)
+	if !ok {
+		return false
+	}
+	path := strings.TrimSpace(finder.FindLaunchTranscript(w.cwd, w.startedAt, d.conversationClaimedByOtherSession(w.sessionID)))
+	nativeID := agentdriver.ResumeSessionIDFromTranscriptPath(driver, path)
+	if nativeID == "" {
+		return false
+	}
+	if !d.claimAgentConversation(agentConversationObservation{SessionID: w.sessionID, NativeID: nativeID, TranscriptPath: path}) {
+		return false
+	}
+	d.logf("transcript watcher: bound launch conversation session=%s native=%s path=%s", w.sessionID, nativeID, path)
+	return true
+}
+
 func (d *Daemon) sessionHasBoundTranscriptPath(sessionID string) bool {
 	return strings.TrimSpace(d.store.GetSessionTranscriptPath(sessionID)) != ""
 }
@@ -219,7 +253,14 @@ func (d *Daemon) ensureTranscriptWatcherAtPath(sessionID string, transcriptPath 
 	if current {
 		return
 	}
-	d.startTranscriptWatcherAtPath(session.ID, session.Agent, session.Directory, time.Now(), transcriptPath)
+	d.startTranscriptWatcherAtPath(session.ID, session.Agent, session.Directory, d.sessionStartedAt(session.ID), transcriptPath)
+}
+
+func (d *Daemon) sessionStartedAt(sessionID string) time.Time {
+	if launchedAt := d.store.SessionLaunchedAt(sessionID); !launchedAt.IsZero() {
+		return launchedAt
+	}
+	return time.Now()
 }
 
 func (d *Daemon) transcriptBootstrapBytesForAgent(agent protocol.SessionAgent) int64 {
@@ -303,10 +344,10 @@ func (d *Daemon) restoreTranscriptWatchers() {
 			continue
 		}
 		binding := d.store.GetSessionConversation(session.ID)
-		if binding.NativeID == "" {
+		if binding.NativeID == "" && (!findsLaunchConversation(session.Agent) || d.store.SessionLaunchedAt(session.ID).IsZero()) {
 			continue
 		}
-		d.startTranscriptWatcherAtPath(session.ID, session.Agent, session.Directory, time.Now(), binding.TranscriptPath)
+		d.startTranscriptWatcherAtPath(session.ID, session.Agent, session.Directory, d.sessionStartedAt(session.ID), binding.TranscriptPath)
 	}
 	d.restorePluginUsageWatchers()
 }
@@ -410,13 +451,15 @@ func (d *Daemon) runTranscriptWatcher(w *transcriptWatcher) {
 		fallbackAttempted bool
 		usageState        = w.state()
 	)
+	defer func() {
+		if usageTracker != nil {
+			usageTracker.Reconcile()
+		}
+	}()
 
 	for {
 		select {
 		case <-w.stopCh:
-			if usageTracker != nil {
-				usageTracker.Reconcile()
-			}
 			d.logf("transcript watcher: stopped session=%s", w.sessionID)
 			return
 		case <-ticker.C:
@@ -430,6 +473,17 @@ func (d *Daemon) runTranscriptWatcher(w *transcriptWatcher) {
 		if transcriptPath == "" {
 			transcriptPath = d.resolveExactTranscriptPathForWatcher(w)
 			if transcriptPath == "" && time.Now().Before(discoveryDeadline) {
+				continue
+			}
+			if transcriptPath == "" && d.awaitsLaunchConversation(w) {
+				if d.bindLaunchConversation(w) {
+					return
+				}
+				if time.Now().Before(w.startedAt.Add(launchConversationWindow)) {
+					continue
+				}
+			}
+			if transcriptPath == "" && sessionState == protocol.SessionStateLaunching {
 				continue
 			}
 			if transcriptPath == "" && !fallbackAttempted {

@@ -14,7 +14,7 @@ const TEXT_FILENAMES = new Set(['readme', 'license', 'makefile', 'dockerfile', '
 
 export type FileKind = 'markdown' | 'text' | 'binary';
 
-export function extensionOf(path: string): string {
+function extensionOf(path: string): string {
   const name = path.slice(path.lastIndexOf('/') + 1);
   const dot = name.lastIndexOf('.');
   if (dot <= 0) return '';

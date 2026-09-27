@@ -6,6 +6,7 @@ import (
 	"net"
 	"path/filepath"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
@@ -196,25 +197,25 @@ func TestDeletingAProfileAnnouncesEveryMovedAgent(t *testing.T) {
 	doomed := w.mustSend(client, map[string]any{"cmd": protocol.CmdProfileCreate, "name": "doomed"}).Profile
 	kept := w.mustSend(client, map[string]any{"cmd": protocol.CmdProfileCreate, "name": "kept"}).Profile
 	w.agent("mover", doomed.ID)
-	drainClientPayloads(t, client)
-	trace := wireRecorder(w.d)
+	var mu sync.Mutex
+	var seen []string
+	found := false
+	w.d.wsHub.broadcastListener = func(event *protocol.WebSocketEvent) {
+		mu.Lock()
+		defer mu.Unlock()
+		seen = append(seen, event.Event)
+		if event.Event == protocol.EventSessionStateChanged && event.Session != nil && event.Session.ID == "mover" && event.Session.ProfileID == kept.ID {
+			found = true
+		}
+	}
 
 	w.mustSend(client, map[string]any{
 		"cmd": protocol.CmdProfileDelete, "profile_id": doomed.ID, "expected_revision": doomed.Revision, "destination_profile_id": kept.ID,
 	})
-	found := false
-	for i, name := range trace.EventNames() {
-		if name != protocol.EventSessionStateChanged {
-			continue
-		}
-		var event protocol.WebSocketEvent
-		decodeInto(t, trace.Payloads()[i], &event)
-		if event.Session != nil && event.Session.ID == "mover" && event.Session.ProfileID == kept.ID {
-			found = true
-		}
-	}
+	mu.Lock()
+	defer mu.Unlock()
 	if !found {
-		t.Fatalf("no session_state_changed carried mover into %s; events=%v", kept.ID, trace.EventNames())
+		t.Fatalf("no session_state_changed carried mover into %s; events=%v", kept.ID, seen)
 	}
 }
 

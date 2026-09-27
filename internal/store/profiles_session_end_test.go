@@ -63,34 +63,6 @@ func TestEndingASessionTakesItsPaneOffTheDesktop(t *testing.T) {
 	}
 }
 
-func TestClearingSessionsEmptiesEveryDesktop(t *testing.T) {
-	s, profile, desktop, _, _ := placedPair(t)
-	s.ClearSessions()
-
-	emptied, err := s.GetDesktop(desktop.ID)
-	if err != nil {
-		t.Fatalf("GetDesktop: %v", err)
-	}
-	if len(emptied.Panes) != 0 || emptied.ActivePaneID != "" || !layouttree.LayoutEmpty(emptied.Tree) {
-		t.Fatalf("after clearing sessions the desktop still holds %+v", emptied)
-	}
-	addProfileSession(t, s, "agent-c", profile.ID)
-	mustPlace(t, s, desktop.ID, "agent-c")
-}
-
-func TestRemovingADirectorysSessionsTakesTheirPanesOffTheDesktop(t *testing.T) {
-	s, _, desktop, _, _ := placedPair(t)
-	s.RemoveSessionsInDirectory("/tmp/project")
-
-	emptied, err := s.GetDesktop(desktop.ID)
-	if err != nil {
-		t.Fatalf("GetDesktop: %v", err)
-	}
-	if len(emptied.Panes) != 0 {
-		t.Fatalf("desktop still holds %+v", emptied.Panes)
-	}
-}
-
 func TestAPaneWhoseSessionVanishedNeverBlocksItsDesktop(t *testing.T) {
 	s, profile, desktop, paneA, paneB := placedPair(t)
 	for _, id := range []string{"agent-a", "agent-b"} {

@@ -111,44 +111,6 @@ func TestModelCapturePassIsOptInAndCapturesOnlyAgentViewports(t *testing.T) {
 	}
 }
 
-func TestModelCaptureSettingValidationAndDefaults(t *testing.T) {
-	d := NewForTesting(t.TempDir())
-	if d.modelCaptureEnabled() {
-		t.Fatal("model capture should default off")
-	}
-	if got := d.modelCaptureInterval(); got != 10*time.Second {
-		t.Fatalf("default interval = %v, want 10s", got)
-	}
-	if got := d.modelCaptureMaxBytes(); got != int64(5)<<30 {
-		t.Fatalf("default max bytes = %d, want 5 GiB", got)
-	}
-	settings := d.settingsWithAgentAvailability()
-	if got := settings[SettingModelCaptureEnabled]; got != "false" {
-		t.Fatalf("effective enabled setting = %#v, want false", got)
-	}
-	if got := settings[SettingModelCaptureIntervalSeconds]; got != "10" {
-		t.Fatalf("effective interval setting = %#v, want 10", got)
-	}
-	if got := settings[SettingModelCaptureMaxGB]; got != "5" {
-		t.Fatalf("effective max GB setting = %#v, want 5", got)
-	}
-	if got := settings[SettingModelCapturePath]; got != d.modelCaptureDir() {
-		t.Fatalf("effective capture path = %#v, want %q", got, d.modelCaptureDir())
-	}
-	if err := d.validateSetting(SettingModelCaptureEnabled, "true"); err != nil {
-		t.Fatalf("validate enabled: %v", err)
-	}
-	if err := d.validateSetting(SettingModelCaptureIntervalSeconds, "4"); err == nil {
-		t.Fatal("interval below minimum should fail")
-	}
-	if err := d.validateSetting(SettingModelCaptureMaxGB, "101"); err == nil {
-		t.Fatal("storage cap above maximum should fail")
-	}
-	if err := d.validateSetting(SettingModelCapturePath, "/tmp/elsewhere"); err == nil {
-		t.Fatal("read-only capture path should not be accepted")
-	}
-}
-
 func readCaptureJSONL(t *testing.T, path string) []map[string]any {
 	t.Helper()
 	f, err := os.Open(path)

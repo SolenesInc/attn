@@ -138,10 +138,6 @@ func (s *Store) TicketEventsSince(cursor int64) ([]TicketEvent, error) {
 	return scanTicketEventRows(rows)
 }
 
-func (s *Store) UnreadTicketEvents(identity string) ([]TicketEvent, error) {
-	return s.UnreadTicketEventsFor(identity, identity)
-}
-
 func (s *Store) UnreadTicketEventsFor(cursorIdentity, authorIdentity string) ([]TicketEvent, error) {
 	s.mu.RLock()
 	defer s.mu.RUnlock()

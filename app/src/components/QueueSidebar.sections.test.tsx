@@ -317,11 +317,11 @@ describe('the queue sidebar', () => {
     const queue = buildQueueBands(data.desktops);
     const view = render(<Sidebar {...baseProps} {...data} queue={queue} />);
     fireEvent.click(screen.getByTestId('session-actions-older'));
-    expect(screen.getByTestId('reload-session-action')).toBeInTheDocument();
+    expect(screen.getByRole('menuitem', { name: /Reload session/ })).toBeInTheDocument();
 
     view.rerender(<Sidebar {...baseProps} {...data} queue={queue} surface="hidden" />);
     view.rerender(<Sidebar {...baseProps} {...data} queue={queue} surface="queue-open" />);
-    expect(screen.queryByTestId('reload-session-action')).toBeNull();
+    expect(screen.queryByRole('menuitem', { name: /Reload session/ })).toBeNull();
   });
 
   it('keeps the per-session menu reachable from every band', () => {

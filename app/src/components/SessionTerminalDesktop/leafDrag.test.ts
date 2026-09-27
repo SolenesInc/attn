@@ -1,5 +1,7 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
-import { startLeafDrag, type LeafDragHandlers } from './leafDrag';
+import { startLeafDrag } from './leafDrag';
+
+type LeafDragHandlers = Parameters<typeof startLeafDrag>[5];
 import type { DockTarget } from './dockTarget';
 import type { NormalizedPaneBounds } from '../../types/desktop';
 

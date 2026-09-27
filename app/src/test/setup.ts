@@ -1,8 +1,9 @@
 import '@testing-library/jest-dom/vitest';
 import { beforeEach, vi } from 'vitest';
-import { useDesktopFocus } from '../store/desktopFocus';
-import { gardenScrollMemory, useGardenWalk } from '../store/gardenWalk';
+import type * as Zustand from 'zustand';
+import { invoke, isTauri } from '@tauri-apps/api/core';
 import { WHATS_NEW_ID, WHATS_NEW_STORAGE_KEY } from '../hooks/useWhatsNew';
+import { forgetAppMemory } from './appMemory';
 
 vi.mock('@tauri-apps/api/core', () => ({
   invoke: vi.fn(),
@@ -13,6 +14,64 @@ vi.mock('@tauri-apps/api/core', () => ({
 vi.mock('@tauri-apps/api/app', () => ({
   getVersion: vi.fn(async () => '0.0.0'),
 }));
+
+vi.mock('@tauri-apps/api/event', () => ({
+  emit: vi.fn(async () => {}),
+  listen: vi.fn(async () => () => {}),
+}));
+
+vi.mock('@tauri-apps/api/window', () => ({
+  getCurrentWindow: vi.fn(() => ({
+    hide: vi.fn(async () => {}),
+    isVisible: vi.fn(async () => true),
+  })),
+}));
+
+vi.mock('@tauri-apps/api/path', () => ({
+  downloadDir: vi.fn(async () => '/Users/me/Downloads'),
+  homeDir: vi.fn(async () => '/Users/me'),
+  join: vi.fn(async (...parts: string[]) => parts.join('/')),
+}));
+
+vi.mock('@tauri-apps/plugin-deep-link', () => ({
+  onOpenUrl: vi.fn(async () => () => {}),
+  getCurrent: vi.fn(async () => []),
+}));
+
+vi.mock('@tauri-apps/plugin-opener', () => ({
+  openUrl: vi.fn(async () => {}),
+  openPath: vi.fn(async () => {}),
+  revealItemInDir: vi.fn(async () => {}),
+}));
+
+vi.mock('@tauri-apps/plugin-dialog', () => ({
+  open: vi.fn(async () => null),
+  save: vi.fn(async () => null),
+}));
+
+vi.mock('@tauri-apps/plugin-fs', () => ({
+  BaseDirectory: { AppLocalData: 'AppLocalData' },
+  exists: vi.fn(async () => false),
+  mkdir: vi.fn(async () => {}),
+  readTextFile: vi.fn(async () => ''),
+  stat: vi.fn(async () => ({ size: 0 })),
+  writeTextFile: vi.fn(async () => {}),
+}));
+
+vi.mock('zustand', async (importOriginal) => {
+  const actual = await importOriginal<typeof Zustand>();
+  const { storeResets } = await import('./storeResets');
+  const create = ((initializer?: Zustand.StateCreator<unknown>) => {
+    const track = (stateCreator: Zustand.StateCreator<unknown>) => {
+      const store = actual.create(stateCreator);
+      const initialState = store.getInitialState();
+      storeResets.add(() => store.setState(initialState, true));
+      return store;
+    };
+    return initializer ? track(initializer) : track;
+  }) as typeof Zustand.create;
+  return { ...actual, create };
+});
 
 // happy-dom derives navigator.platform from an X11 user agent. attn ships as a macOS app, so
 // the suite defaults to Mac glyphs and Cmd matching; non-mac tests override this per test.
@@ -71,16 +130,14 @@ if (typeof window !== 'undefined') {
     });
   };
   ensureLocalStorage();
-
-  // Counts the one-time "what's new" announcement as seen so it never renders
-  // over unrelated tests.
-  window.localStorage.setItem(WHATS_NEW_STORAGE_KEY, WHATS_NEW_ID);
 }
 
-// The garden walk is module state, so a test that drilled somewhere would hand
-// its depth to the next one.
 beforeEach(() => {
-  useGardenWalk.setState({ trail: [] });
-  useDesktopFocus.setState({ focusedLeafByDesktop: {} });
-  gardenScrollMemory.clear();
+  if (typeof window !== 'undefined') {
+    window.localStorage.clear();
+    window.localStorage.setItem(WHATS_NEW_STORAGE_KEY, WHATS_NEW_ID);
+  }
+  forgetAppMemory();
+  vi.mocked(isTauri).mockReset();
+  vi.mocked(invoke).mockReset();
 });

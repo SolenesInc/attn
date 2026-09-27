@@ -1,6 +1,7 @@
 package daemon
 
 import (
+	"context"
 	"os"
 	"path/filepath"
 	"sort"
@@ -109,7 +110,7 @@ func listDirectoryEntries(dirToQuery string, prefix string, extensions []string)
 	return listed, nil
 }
 
-func inspectPickerPath(input string) (*protocol.PathInspection, error) {
+func inspectPickerPath(ctx context.Context, client *git.Client, input string) (*protocol.PathInspection, error) {
 	resolved, homePath, err := expandPickerPath(input)
 	if err != nil {
 		return nil, err
@@ -138,7 +139,7 @@ func inspectPickerPath(input string) (*protocol.PathInspection, error) {
 		return inspection, nil
 	}
 
-	repoRoot, isRepoTarget, err := git.ResolvePickerRepoTarget(resolved)
+	repoRoot, isRepoTarget, err := client.ResolvePickerRepoTarget(ctx, resolved)
 	if err != nil || !isRepoTarget || repoRoot == "" {
 		return inspection, nil
 	}
@@ -216,7 +217,9 @@ func (d *Daemon) handleBrowseDirectoryWS(client *wsClient, msg *protocol.BrowseD
 
 func (d *Daemon) handleInspectPathWS(client *wsClient, msg *protocol.InspectPathMessage) {
 	go func() {
-		inspection, err := inspectPickerPath(msg.Path)
+		inspection, err := gitValue(context.Background(), d.gitExecution(), gitTask{Kind: gitTaskPicker, Lane: gitInteractive}, func(ctx context.Context, gitClient *git.Client) (*protocol.PathInspection, error) {
+			return inspectPickerPath(ctx, gitClient, msg.Path)
+		})
 		if err != nil {
 			d.sendToClient(client, &protocol.InspectPathResultMessage{
 				Event:      protocol.EventInspectPathResult,

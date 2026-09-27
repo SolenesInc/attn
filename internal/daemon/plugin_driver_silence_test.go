@@ -1,14 +1,13 @@
 package daemon
 
 import (
-	"path/filepath"
 	"testing"
 	"testing/synctest"
 	"time"
 
 	"github.com/victorarias/attn/internal/protocol"
 	"github.com/victorarias/attn/internal/pty"
-	"github.com/victorarias/attn/internal/store"
+	"github.com/victorarias/attn/internal/statetrace"
 )
 
 func seedDriverRun(t *testing.T, d *Daemon, sessionID, pluginName, runID string, state protocol.SessionState) {
@@ -142,45 +141,6 @@ func TestPluginDriverSilence_ARelaunchedRunOutranksTheOldAlarm(t *testing.T) {
 	})
 }
 
-func TestPluginDriverSilence_ClosedSessionCancelsTheAlarm(t *testing.T) {
-	d := newBubbleDaemon(t)
-	synctest.Test(t, func(t *testing.T) {
-		stopDaemonBackground(t, d)
-		d.pluginDriverSilenceGraceOverride = time.Minute
-		seedDriverRun(t, d, "closed-driver", "snipe-plugin", "run-1", protocol.SessionStateWorking)
-
-		d.armPluginDriverSilenceWatch("snipe-plugin")
-		d.closeSession("closed-driver", store.SessionClose{By: store.SessionClosedByUser})
-		if d.pluginDriverSilence().disarm("closed-driver") {
-			t.Fatal("alarm still pending for a session that is gone")
-		}
-
-		time.Sleep(5 * time.Minute)
-		synctest.Wait()
-	})
-}
-
-func TestPluginReportedState_OnlyIfUnknownRestatesNothingElse(t *testing.T) {
-	d := NewForTesting(filepath.Join(t.TempDir(), "test.sock"))
-	seedDriverRun(t, d, "restated", "snipe-plugin", "run-1", protocol.SessionStateUnknown)
-	seedDriverRun(t, d, "settled", "snipe-plugin", "run-2", protocol.SessionStateIdle)
-	settledBefore := d.store.Get("settled").StateSince
-
-	d.applyPluginReportedState(pluginReportStateParams{
-		SessionID: "restated", RunID: "run-1", Seq: 1, State: protocol.StateWorking, OnlyIfUnknown: true,
-	})
-	d.applyPluginReportedState(pluginReportStateParams{
-		SessionID: "settled", RunID: "run-2", Seq: 1, State: protocol.StateIdle, OnlyIfUnknown: true,
-	})
-
-	if got := d.store.Get("restated").State; got != protocol.SessionStateWorking {
-		t.Fatalf("state=%q for the session attn could not tell about, want working", got)
-	}
-	if got := d.store.Get("settled").StateSince; got != settledBefore {
-		t.Fatalf("state_since moved to %q on a session attn already knew about", got)
-	}
-}
-
 func TestPluginReportedState_OnlyIfUnknownStillDisarmsTheAlarm(t *testing.T) {
 	d := newBubbleDaemon(t)
 	synctest.Test(t, func(t *testing.T) {
@@ -199,4 +159,13 @@ func TestPluginReportedState_OnlyIfUnknownStillDisarmsTheAlarm(t *testing.T) {
 			t.Fatalf("state=%q, want the declaration the driver is still backing", got)
 		}
 	})
+}
+
+func onlyObservation(t *testing.T, d *Daemon, sessionID string) statetrace.Observation {
+	t.Helper()
+	got := d.stateTraceRecorder().Observations(sessionID)
+	if len(got) != 1 {
+		t.Fatalf("want exactly 1 observation, got %d: %+v", len(got), got)
+	}
+	return got[0]
 }

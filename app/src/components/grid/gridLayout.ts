@@ -10,7 +10,7 @@ export const AUTO_LAYOUT: GridLayout = { mode: 'auto' };
 export const MAX_GRID_ROWS = 5;
 export const MAX_GRID_COLS = 5;
 
-export function autoGrid(n: number): { rows: number; cols: number } {
+function autoGrid(n: number): { rows: number; cols: number } {
   if (n <= 1) return { rows: 1, cols: 1 };
   const cols = Math.ceil(Math.sqrt(n));
   const rows = Math.ceil(n / cols);

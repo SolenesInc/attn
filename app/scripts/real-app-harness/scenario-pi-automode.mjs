@@ -8,13 +8,12 @@ import {
   launchFreshAppAndConnect,
   parseCommonArgs,
   printCommonHelp,
-  queryDaemonDb,
 } from './common.mjs';
 import { waitForFirstDesktopPane, waitForPaneText } from './scenarioAssertions.mjs';
 import { UiAutomationClient } from './uiAutomationClient.mjs';
 import { DaemonObserver } from './daemonObserver.mjs';
 import { createScenarioRunner } from './scenarioRunner.mjs';
-import { currentHarnessInstance, dataDirForInstance, instanceCliEnv, socketPathForInstance } from './harnessInstance.mjs';
+import { currentHarnessInstance, instanceCliEnv, socketPathForInstance } from './harnessInstance.mjs';
 import {
   resolveAttnBinary,
   restartDaemonWithStubEnv,
@@ -90,12 +89,11 @@ async function submitPrompt(client, sessionId, paneId, text) {
   await client.request('write_pane', { sessionId, paneId, text: '\r', submit: false });
 }
 
-function countNotifications(dbPath) {
-  const stdout = queryDaemonDb(
-    dbPath,
-    `SELECT id || '|' || title || '|' || detail FROM notifications WHERE kind = 'automode_denied' ORDER BY created_at;`,
-  );
-  return stdout.split('\n').map((line) => line.trim()).filter((line) => line !== '');
+async function automodeDeniedNotifications(observer) {
+  const { notifications = [] } = await observer.requestResult({ cmd: 'notification_list' }, 'notification_list_result');
+  return notifications
+    .filter((notification) => notification.kind === 'automode_denied')
+    .map((notification) => `${notification.id}|${notification.title}|${notification.detail}`);
 }
 
 async function main() {
@@ -111,7 +109,6 @@ async function main() {
   }
   const attnBin = resolveAttnBinary(options.appPath);
   const runAttn = makeAttnRunner(attnBin, instance);
-  const dbPath = path.join(dataDirForInstance(instance), 'attn.db');
 
   const judgeQueue = [];
   const stub = await startPiStubProvider({
@@ -138,13 +135,13 @@ async function main() {
   const launchEnv = { PI_CODING_AGENT_DIR: agentDir };
 
   try {
-    await drive({ options, instance, runAttn, dbPath, stub, judgeQueue, launchEnv, agentDir });
+    await drive({ options, instance, runAttn, stub, judgeQueue, launchEnv, agentDir });
   } finally {
     await stub.close().catch(() => {});
   }
 }
 
-async function drive({ options, instance, runAttn, dbPath, stub, judgeQueue, launchEnv, agentDir }) {
+async function drive({ options, instance, runAttn, stub, judgeQueue, launchEnv, agentDir }) {
   const runner = createScenarioRunner(options, {
     scenarioId: 'PI-AUTOMODE',
     tier: 'tier2-local-real-agent',
@@ -282,8 +279,8 @@ async function drive({ options, instance, runAttn, dbPath, stub, judgeQueue, lau
         throw new Error(`the denial reason is ${JSON.stringify(latest.reason)}, want the scripted one`);
       }
       const notifications = await pollFor(
-        () => {
-          const rows = countNotifications(dbPath);
+        async () => {
+          const rows = await automodeDeniedNotifications(observer);
           return rows.length > 0 ? rows : null;
         },
         'an automode_denied notification',

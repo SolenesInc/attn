@@ -1,0 +1,4 @@
+kind: fixed
+area: sessions
+change: The session ledger's time window (`attn session list --since/--until/--last` and the app's ledger window) compares instants whatever time zone the daemon runs in; the daemon now records when it last saw a session in UTC and converts the stamps an earlier version wrote in local time.
+symptom: Outside UTC, a live session seen inside the window dropped out of it, or one seen after the window's end stayed in.

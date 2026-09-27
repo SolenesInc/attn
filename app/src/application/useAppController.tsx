@@ -60,8 +60,6 @@ export function useAppController({
   notificationsChangeSignal,
   fsChangeSignals,
   notebookTaskChangeSignal,
-  sessionCloseNotice,
-  sessionVerdictNotice,
   registerSessionExitHandler,
 }: AppContentProps) {
   const hasCriticalNotification = criticalNotifications.count > 0;
@@ -285,7 +283,6 @@ export function useAppController({
     onReopened,
   });
   const {
-    pendingSessionClose,
     handleCloseSession,
     handleCloseCurrentSessionShortcut,
   } = sessionLifecycle;
@@ -337,7 +334,6 @@ export function useAppController({
     chiefTransferOpen: Boolean(chiefTransferTarget),
     contextCapOpen: Boolean(contextCapPromptSession),
     appViewParamsOpen: Boolean(appViewParamsPrompt),
-    sessionCloseOpen: Boolean(pendingSessionClose),
     sessionCreationOpen: Boolean(sessionCreationJob),
     prLauncherOpen: Boolean(openPRLauncherJob),
     diagnosticCaptureOpen: Boolean(diagnosticCapture),
@@ -667,8 +663,6 @@ export function useAppController({
       notificationsChangeSignal,
       fsChangeSignals,
       notebookTaskChangeSignal,
-      sessionCloseNotice,
-      sessionVerdictNotice,
       registerSessionExitHandler,
     },
     desktops: {

@@ -1,0 +1,3 @@
+kind: internal
+area: testing
+change: Daemon wire tests now guard session close, ledger, snooze, pull request, exit screen and dashboard promises, replacing store tests that called the store directly.

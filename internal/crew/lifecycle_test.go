@@ -112,69 +112,70 @@ func TestDecide(t *testing.T) {
 	}
 }
 
-func TestCacheStateRemaining(t *testing.T) {
-	fresh := CacheState{Age: time.Minute, TTL: time.Hour}
-	if got := fresh.Remaining(); got != 59*time.Minute {
-		t.Fatalf("Remaining() = %s, want 59m", got)
-	}
-	stale := CacheState{Age: 2 * time.Hour, TTL: time.Hour}
-	if got := stale.Remaining(); got != -time.Hour {
-		t.Fatalf("Remaining() = %s, want -1h", got)
-	}
-}
-
-func TestWakeLedger_CountsOnlyWakesInsideTheWindow(t *testing.T) {
+func TestWakeLedger(t *testing.T) {
 	now := time.Date(2026, 8, 14, 22, 0, 0, 0, time.UTC)
-	ledger := WakeLedger{
-		Limit:  2,
-		Window: 12 * time.Hour,
-		Stamps: []time.Time{
-			now.Add(-30 * time.Hour),
-			now.Add(-11 * time.Hour),
+	window := 12 * time.Hour
+	cases := []struct {
+		name    string
+		limit   int
+		stamps  []time.Time
+		kept    int
+		refusal []string
+	}{
+		{
+			name:   "wakes outside the window no longer count",
+			limit:  2,
+			stamps: []time.Time{now.Add(-30 * time.Hour), now.Add(-11 * time.Hour)},
+			kept:   2,
+		},
+		{
+			name:   "a wake exactly one window ago has aged out",
+			limit:  1,
+			stamps: []time.Time{now.Add(-window)},
+			kept:   1,
+		},
+		{
+			name:    "the limit reached inside the window refuses and names the settings",
+			limit:   2,
+			stamps:  []time.Time{now.Add(-2 * time.Hour), now.Add(-time.Hour)},
+			kept:    2,
+			refusal: []string{"Trellis", "crew.wake_limit=2", "crew.wake_limit_window_seconds=43200", "nothing was woken"},
+		},
+		{
+			name:    "a zero limit turns autonomous wakes off",
+			limit:   0,
+			kept:    0,
+			refusal: []string{"turned off", "crew.wake_limit=0"},
 		},
 	}
-	kept, err := ledger.Allows("trellis", now)
-	if err != nil {
-		t.Fatalf("Allows() refused a wake with one stamp inside the window: %v", err)
-	}
-	if len(kept) != 2 {
-		t.Fatalf("Allows() kept %d stamps, want the in-window one plus this wake", len(kept))
-	}
-	if !kept[len(kept)-1].Equal(now) {
-		t.Fatalf("the newest kept stamp is %s, want this wake at %s", kept[len(kept)-1], now)
-	}
-	for _, at := range kept {
-		if at.Before(now.Add(-ledger.Window)) {
-			t.Fatalf("a stamp from %s survived a %s window", at, ledger.Window)
-		}
-	}
-}
-
-func TestWakeLedger_RefusalNamesTheLimitAndTheAsk(t *testing.T) {
-	now := time.Date(2026, 8, 14, 22, 0, 0, 0, time.UTC)
-	ledger := WakeLedger{
-		Limit:  2,
-		Window: 12 * time.Hour,
-		Stamps: []time.Time{now.Add(-2 * time.Hour), now.Add(-time.Hour)},
-	}
-	_, err := ledger.Allows("trellis", now)
-	if err == nil {
-		t.Fatal("Allows() let a third wake through a limit of 2")
-	}
-	for _, want := range []string{"Trellis", "crew.wake_limit=2", "crew.wake_limit_window_seconds=43200", "nothing was woken"} {
-		if !strings.Contains(err.Error(), want) {
-			t.Errorf("the refusal %q does not name %q", err, want)
-		}
-	}
-}
-
-func TestWakeLedger_ZeroTurnsAutonomousWakesOff(t *testing.T) {
-	now := time.Date(2026, 8, 14, 22, 0, 0, 0, time.UTC)
-	_, err := WakeLedger{Limit: 0, Window: 12 * time.Hour}.Allows("trellis", now)
-	if err == nil {
-		t.Fatal("Allows() woke a member with the limit set to 0")
-	}
-	if !strings.Contains(err.Error(), "turned off") || !strings.Contains(err.Error(), "crew.wake_limit=0") {
-		t.Fatalf("the refusal %q does not say autonomous wakes are off", err)
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			kept, err := WakeLedger{Limit: tc.limit, Window: window, Stamps: tc.stamps}.Allows("trellis", now)
+			if len(kept) != tc.kept {
+				t.Fatalf("kept %d stamps (%v), want %d", len(kept), kept, tc.kept)
+			}
+			for _, at := range kept {
+				if !at.After(now.Add(-window)) {
+					t.Errorf("a stamp from %s survived a %s window", at, window)
+				}
+			}
+			if tc.refusal == nil {
+				if err != nil {
+					t.Fatalf("Allows() refused: %v", err)
+				}
+				if !kept[len(kept)-1].Equal(now) {
+					t.Fatalf("the newest kept stamp is %s, want this wake at %s", kept[len(kept)-1], now)
+				}
+				return
+			}
+			if err == nil {
+				t.Fatal("Allows() let the wake through")
+			}
+			for _, want := range tc.refusal {
+				if !strings.Contains(err.Error(), want) {
+					t.Errorf("the refusal %q does not name %q", err, want)
+				}
+			}
+		})
 	}
 }

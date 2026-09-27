@@ -1,13 +1,12 @@
 import type { HarnessProps } from '../types';
-import { BridgeSettledReadHarness } from './BridgeSettledReadHarness';
 import { BrokenLinksHarness } from './BrokenLinksHarness';
-import { DashboardPRsHarness } from './DashboardPRsHarness';
 import { DiffViewHarness } from './DiffViewHarness';
 import { FileTreeHarness } from './FileTreeHarness';
 import { FrontmatterCardHarness } from './FrontmatterCardHarness';
 import { GridLayoutControlHarness } from './GridLayoutControlHarness';
 import { GridViewHarness } from './GridViewHarness';
 import { LiveMarkdownEditorHarness } from './LiveMarkdownEditorHarness';
+import { MarkdownAnnotationTilesHarness } from './MarkdownAnnotationTilesHarness';
 import { MermaidDiagramHarness } from './MermaidDiagramHarness';
 import { NotebookBrowserHarness } from './NotebookBrowserHarness';
 import { NotebookTileHarness } from './NotebookTileHarness';
@@ -22,15 +21,14 @@ import { AgentHeaderHarness } from './AgentHeaderHarness';
 
 export const harnesses: Record<string, React.ComponentType<HarnessProps>> = {
   AgentHeader: AgentHeaderHarness,
-  BridgeSettledRead: BridgeSettledReadHarness,
   BrokenLinks: BrokenLinksHarness,
-  DashboardPRs: DashboardPRsHarness,
   DiffView: DiffViewHarness,
   FileTree: FileTreeHarness,
   FrontmatterCard: FrontmatterCardHarness,
   GridLayoutControl: GridLayoutControlHarness,
   GridView: GridViewHarness,
   LiveMarkdownEditor: LiveMarkdownEditorHarness,
+  MarkdownAnnotationTiles: MarkdownAnnotationTilesHarness,
   MermaidDiagram: MermaidDiagramHarness,
   NotebookBrowser: NotebookBrowserHarness,
   NotebookTile: NotebookTileHarness,

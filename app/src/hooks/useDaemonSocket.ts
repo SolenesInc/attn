@@ -54,7 +54,6 @@ import type {
   GardenReview as GeneratedGardenReview,
   SeedSendToChiefResult as GeneratedSeedSendToChiefResult,
   SessionLedgerEntry,
-  SessionReopen,
   SessionReopenResult,
   SupportSnapshotResultMessage,
 } from '../types/generated';
@@ -108,7 +107,12 @@ import {
 import { handleFsDaemonEvent } from './daemonFsEvents';
 import { handleSeedArtifactDaemonEvent } from './daemonSeedArtifactEvents';
 import { handleSessionLedgerDaemonEvent } from './daemonSessionLedgerEvents';
-import type { SessionLedgerPage, SessionLedgerQuery } from './daemonSessionLedgerEvents';
+import type {
+  SessionLedgerConnectionEvent,
+  SessionLedgerPage,
+  SessionLedgerQuery,
+  SessionLedgerUpdate,
+} from './daemonSessionLedgerEvents';
 import { handleNotebookDaemonEvent } from './daemonNotebookEvents';
 import {
   DocumentSubscriptions,
@@ -190,8 +194,6 @@ export type CrewMember = GeneratedCrewMember;
 export interface CrewSleepResult {
   member: string;
   sessionId?: string;
-  alreadyAsleep: boolean;
-  deliveryStatus?: string;
   detail?: string;
 }
 export interface CrewSetOptions {
@@ -310,7 +312,7 @@ export interface RateLimitState {
 }
 
 // Protocol version - must match daemon's ProtocolVersion
-export const PROTOCOL_VERSION = '330';
+export const PROTOCOL_VERSION = '331';
 const MAX_PENDING_ATTACH_OUTPUTS = 512;
 
 const CLIENT_INSTANCE_ID =
@@ -496,12 +498,6 @@ export interface NotebookEntry {
   size: number;
 }
 
-export interface NotebookReadResult {
-  path: string;
-  content: string;
-  hash: string;
-}
-
 export type Task = GeneratedTask;
 export type DaemonNotification = GeneratedNotification;
 
@@ -514,13 +510,6 @@ function readCriticalState(data: Record<string, unknown>): CriticalNotificationS
   const count = typeof data.unread_critical_count === 'number' ? data.unread_critical_count : 0;
   const title = typeof data.critical_title === 'string' ? data.critical_title : '';
   return { count, title };
-}
-
-export interface NotebookWriteResult {
-  path: string;
-  hash?: string;
-  conflict: boolean;
-  currentHash?: string;
 }
 
 export interface NotebookSendToChiefResult {
@@ -555,15 +544,6 @@ export interface FsWriteResult {
   currentHash?: string;
 }
 
-export interface FsRenameResult {
-  path: string;
-  new_path: string;
-}
-
-export interface FsDeleteResult {
-  path: string;
-}
-
 export interface FsExistsResult {
   path: string;
   exists: boolean;
@@ -590,8 +570,6 @@ export interface RecentFile {
 interface UseDaemonSocketOptions {
   onSessionsUpdate: (sessions: DaemonSession[]) => void;
   onNotebookChanged?: (origin: string, paths: string[]) => void;
-  onSessionClosed?: (entry: SessionLedgerEntry, reopen?: SessionReopen) => void;
-  onSessionReopenRefreshed?: (sessionId: string, reopen: SessionReopen) => void;
   onTasksChanged?: () => void;
   onNotificationsUpdated?: (unreadCount: number, critical: CriticalNotificationState) => void;
   onFsChanged?: (origin: string, paths: string[], root: string) => void;
@@ -689,7 +667,7 @@ const BINARY_PTY_OUTPUT_CAPABILITY = 'binary_pty_output';
 // binary_pty_output, which decides only how a blob TRAVELS — the hub relay takes its pixels as base64.
 const KITTY_IMAGES_CAPABILITY = 'kitty_images';
 
-export function isTransientAttachError(error: unknown): boolean {
+function isTransientAttachError(error: unknown): boolean {
   const message = error instanceof Error ? error.message.toLowerCase() : String(error).toLowerCase();
   if (message.includes('websocket not connected') || message.includes('daemon is recovering')) {
     return false;
@@ -711,18 +689,10 @@ function waitForAttachRetry(delayMs: number): Promise<void> {
   });
 }
 
-export async function retryTransientAttachRequest<T>(
+async function retryTransientAttachRequest<T>(
   request: () => Promise<T>,
-  options?: {
-    timeoutMs?: number;
-    delayMs?: number;
-    wait?: (delayMs: number) => Promise<void>;
-    onRetry?: (attempt: number, error: unknown, elapsedMs: number) => void;
-  },
+  onRetry: (attempt: number, error: unknown, elapsedMs: number) => void,
 ): Promise<T> {
-  const timeoutMs = options?.timeoutMs ?? ATTACH_RETRY_TIMEOUT_MS;
-  const delayMs = options?.delayMs ?? ATTACH_RETRY_DELAY_MS;
-  const wait = options?.wait ?? waitForAttachRetry;
   const startedAt = Date.now();
   let attempt = 0;
 
@@ -732,11 +702,11 @@ export async function retryTransientAttachRequest<T>(
       return await request();
     } catch (error) {
       const elapsedMs = Date.now() - startedAt;
-      if (!isTransientAttachError(error) || elapsedMs >= timeoutMs) {
+      if (!isTransientAttachError(error) || elapsedMs >= ATTACH_RETRY_TIMEOUT_MS) {
         throw error;
       }
-      options?.onRetry?.(attempt, error, elapsedMs);
-      await wait(delayMs);
+      onRetry(attempt, error, elapsedMs);
+      await waitForAttachRetry(ATTACH_RETRY_DELAY_MS);
     }
   }
 }
@@ -744,8 +714,6 @@ export async function retryTransientAttachRequest<T>(
 export function useDaemonSocket({
   onSessionsUpdate,
   onNotebookChanged,
-  onSessionClosed,
-  onSessionReopenRefreshed,
   onTasksChanged,
   onNotificationsUpdated,
   onFsChanged,
@@ -779,8 +747,6 @@ export function useDaemonSocket({
   const callbacksRef = useRef({
     onSessionsUpdate,
     onNotebookChanged,
-    onSessionClosed,
-    onSessionReopenRefreshed,
     onTasksChanged,
     onNotificationsUpdated,
     onFsChanged,
@@ -804,8 +770,6 @@ export function useDaemonSocket({
   callbacksRef.current = {
     onSessionsUpdate,
     onNotebookChanged,
-    onSessionClosed,
-    onSessionReopenRefreshed,
     onTasksChanged,
     onNotificationsUpdated,
     onFsChanged,
@@ -831,6 +795,7 @@ export function useDaemonSocket({
   const pendingActionsRef = useRef<PendingRequests>(new Map());
   const mdAnnotationsPendingRef = useRef<PendingKeyedRequests>(new Map());
   const sessionMessageListenersRef = useRef<Map<string, Set<() => void>>>(new Map());
+  const sessionLedgerListenersRef = useRef<Set<(event: SessionLedgerConnectionEvent) => void>>(new Set());
   const mdAnnotationsGetInflightRef = useRef<Map<string, Promise<{
     annotations: MarkdownAnnotation[];
     generation: number;
@@ -858,6 +823,11 @@ export function useDaemonSocket({
   const [migrationFailure, setMigrationFailure] = useState<MigrationFailure | null>(null);
   const [disconnectExplanation, setDisconnectExplanation] = useState<string | null>(null);
   const [connectionGeneration, setConnectionGeneration] = useState(0);
+  const connectionGenerationRef = useRef(0);
+  const emitSessionLedger = useCallback((event: SessionLedgerUpdate | { type: 'connection'; connected: boolean }) => {
+    const stamped: SessionLedgerConnectionEvent = { ...event, connectionGeneration: connectionGenerationRef.current };
+    for (const listener of sessionLedgerListenersRef.current) listener(stamped);
+  }, []);
   const [hasReceivedInitialState, setHasReceivedInitialState] = useState(false);
   const [rateLimit, setRateLimit] = useState<RateLimitState | null>(null);
   const [warnings, setWarnings] = useState<DaemonWarning[]>([]);
@@ -889,7 +859,6 @@ export function useDaemonSocket({
       'pty_input',
       'pty_resize',
       'kill_session',
-      'clear_sessions',
       'unregister',
     ]);
     if (!needsNotice.has(cmd)) {
@@ -932,9 +901,6 @@ export function useDaemonSocket({
         return;
       case 'attach_session':
         rejectPendingByPredicate((key) => key.startsWith('pty_attach_'), error);
-        return;
-      case 'kill_session':
-        rejectPendingByPredicate((key) => key.startsWith('pty_kill_'), error);
         return;
       case 'unregister':
         rejectPendingByPredicate((key) => key.startsWith('unregister:'), error);
@@ -1155,7 +1121,9 @@ export function useDaemonSocket({
       daemonRestartInProgressRef.current = false;
       setConnectionError(null);
       useProfilesStore.getState().connectionOpened();
-      setConnectionGeneration((prev) => prev + 1);
+      connectionGenerationRef.current += 1;
+      setConnectionGeneration(connectionGenerationRef.current);
+      emitSessionLedger({ type: 'connection', connected: true });
       reconnectDelayRef.current = 1000;
       reconnectAttemptsRef.current = 0;
       circuitOpenRef.current = false;
@@ -1717,7 +1685,6 @@ export function useDaemonSocket({
             if (data.success && typeof data.session_id === 'string') {
               pending.resolve({
                 sessionId: data.session_id,
-                alreadyAwake: data.already_awake === true,
               });
             } else {
               pending.reject(new Error(data.error || 'Waking the member failed'));
@@ -1735,8 +1702,6 @@ export function useDaemonSocket({
                 return {
                   member: event.member,
                   ...(typeof event.session_id === 'string' ? { sessionId: event.session_id } : {}),
-                  alreadyAsleep: event.already_asleep === true,
-                  ...(typeof event.delivery_status === 'string' ? { deliveryStatus: event.delivery_status } : {}),
                   ...(typeof event.detail === 'string' ? { detail: event.detail } : {}),
                 };
               },
@@ -1957,13 +1922,6 @@ export function useDaemonSocket({
                     source: 'attach_restore',
                   });
                 }
-                if (attachEffects.shouldReset && attachEffects.resetReason) {
-                  emitPtyEvent({
-                    event: 'reset',
-                    id: data.id,
-                    reason: attachEffects.resetReason,
-                  });
-                }
                 ptyTransportRef.current.setLastSeq(data.id, attachEffects.nextSeq);
                 const restoreWasEmitted = attachEffects.restoreAction.kind === 'ghostty_snapshot';
                 if (attachEffects.restoreAction.kind === 'ghostty_snapshot') {
@@ -1998,7 +1956,10 @@ export function useDaemonSocket({
                     placements: data.snapshot?.placements ?? [],
                   });
                 }
-                if (attachEffects.queuedOutputsToEmit.length > 0) {
+                for (const chunk of attachEffects.restoreFallbackOutputs) {
+                  emitPtyEvent({ event: 'restore_fallback', id: data.id, data: chunk.data });
+                }
+                if (attachEffects.queuedOutputsToEmit.length > 0 || attachEffects.restoreFallbackOutputs.length > 0) {
                   ptyTransportRef.current.clearQueuedAttachOutputs(data.id);
                   for (const chunk of attachEffects.queuedOutputsToEmit) {
                     emitPtyEvent({ event: 'data', id: data.id, data: chunk.data, seq: chunk.seq });
@@ -2097,12 +2058,6 @@ export function useDaemonSocket({
 
           case 'session_exited':
             if (data.id) {
-              const killKey = `pty_kill_${data.id}`;
-              const pendingKill = pendingActionsRef.current.get(killKey);
-              if (pendingKill) {
-                pendingActionsRef.current.delete(killKey);
-                pendingKill.resolve({ success: true });
-              }
               ptyTransportRef.current.clearRuntime(data.id);
               emitPtyEvent({
                 event: 'exit',
@@ -2598,7 +2553,7 @@ export function useDaemonSocket({
             if ((data as any).success) {
               pending.resolve(data);
             } else {
-              const errorCode = (data as any).error_code;
+              const errorCode = data.error_code;
               pending.reject(
                 new AutomationActionError(
                   (data as any).error || 'Automation action failed',
@@ -2645,11 +2600,7 @@ export function useDaemonSocket({
           default: {
             const pending = pendingActionsRef.current;
             if (handleSeedArtifactDaemonEvent(data, pending)) break;
-            if (handleSessionLedgerDaemonEvent(data, {
-              pending,
-              onSessionClosed: callbacksRef.current.onSessionClosed,
-              onSessionReopenRefreshed: callbacksRef.current.onSessionReopenRefreshed,
-            })) break;
+            if (handleSessionLedgerDaemonEvent(data, { pending, onUpdate: emitSessionLedger })) break;
             if (handleFsDaemonEvent(data, { pending, onFsChanged: callbacksRef.current.onFsChanged })) break;
             if (handleNotebookDaemonEvent(data, { pending, onNotebookChanged: callbacksRef.current.onNotebookChanged })) break;
             if (handleMarkdownAnnotationDaemonEvent(data, mdAnnotationsPendingRef.current)) break;
@@ -2679,6 +2630,7 @@ export function useDaemonSocket({
 
     ws.onclose = () => {
       wsRef.current = null;
+      emitSessionLedger({ type: 'connection', connected: false });
       hasReceivedInitialStateRef.current = false;
       canceledAttachIdsRef.current.clear();
       docSubscriptions.markDisconnected();
@@ -2714,7 +2666,7 @@ export function useDaemonSocket({
     };
 
     wsRef.current = ws;
-  }, [resolvedWsUrl, rejectPendingForCommand, ensureDaemonRunning, showRecoveringNoticeForCommand, flushQueuedCommands, pruneAttachedPtySessions]);
+  }, [resolvedWsUrl, rejectPendingForCommand, ensureDaemonRunning, showRecoveringNoticeForCommand, flushQueuedCommands, pruneAttachedPtySessions, emitSessionLedger]);
 
   useEffect(() => {
     void connect();
@@ -2832,15 +2784,13 @@ export function useDaemonSocket({
   const sendAttachSessionWithRetry = useCallback(async (id: string, context?: AttachRequestContext): Promise<AttachResult> => {
     return retryTransientAttachRequest(
       () => sendAttachSession(id, context),
-      {
-        onRetry: (attempt, error, elapsedMs) => {
+      (attempt, error, elapsedMs) => {
         console.warn('[DaemonSocket] Retrying transient attach failure', {
           id,
           attempt,
           elapsedMs,
           error: error instanceof Error ? error.message : String(error),
         });
-        },
       },
     );
   }, [sendAttachSession]);
@@ -3236,47 +3186,6 @@ export function useDaemonSocket({
     });
   }, [reconcileAttachedRuntimeGeometry, sendAttachSessionWithRetry, sendPtyResize]);
 
-  const sendKillSession = useCallback((id: string, signal?: string): Promise<void> => {
-    return new Promise((resolve, reject) => {
-      const ws = wsRef.current;
-      if (!ws || ws.readyState !== WebSocket.OPEN) {
-        reject(new Error('WebSocket not connected'));
-        return;
-      }
-
-      const key = `pty_kill_${id}`;
-      pendingActionsRef.current.set(key, {
-        resolve: () => resolve(),
-        reject,
-      });
-
-      ws.send(JSON.stringify({
-        cmd: 'kill_session',
-        id,
-        ...(signal && { signal }),
-      }));
-
-      setTimeout(() => {
-        if (pendingActionsRef.current.has(key)) {
-          pendingActionsRef.current.delete(key);
-          reject(new Error('Kill session timed out'));
-        }
-      }, 3000);
-    });
-  }, []);
-
-
-
-
-
-
-
-
-
-
-
-
-
   const sendOpenMarkdown = useCallback((path: string, sessionId: string): Promise<{ desktopId?: string; tileId?: string }> => {
     return new Promise((resolve, reject) => {
       const ws = wsRef.current;
@@ -3478,10 +3387,6 @@ export function useDaemonSocket({
       detach: async (id: string) => {
         sendDetachSession(id);
       },
-      kill: async (id: string) => {
-        sendDetachSession(id);
-        await sendKillSession(id);
-      },
       reload: async (id: string, cols: number, rows: number) => {
         await sendReloadSession(id, cols, rows);
       },
@@ -3490,7 +3395,7 @@ export function useDaemonSocket({
     return () => {
       setPtyBackend(null);
     };
-  }, [attachExistingRuntime, sendAttachSessionWithRetry, sendDetachSession, sendKillSession, sendPtyInput, sendPtyResize, sendReloadSession, sendSpawnSession]);
+  }, [attachExistingRuntime, sendDetachSession, sendPtyInput, sendPtyResize, sendReloadSession, sendSpawnSession]);
 
   const sendPRAction = useCallback((
     action: 'approve' | 'merge',
@@ -3682,13 +3587,6 @@ export function useDaemonSocket({
     const key = 'fetch_pr_details';
     return sendKeyedRequest<FetchPRDetailsResult>(key, { cmd: 'fetch_pr_details', id }, 'Fetch PR details timed out', GITHUB_REFRESH_TIMEOUT_MS);
   }, [sendKeyedRequest]);
-
-  const sendClearSessions = useCallback(() => {
-    const ws = wsRef.current;
-    if (!ws || ws.readyState !== WebSocket.OPEN) return;
-
-    ws.send(JSON.stringify({ cmd: 'clear_sessions' }));
-  }, []);
 
 
   const sendRenameSession = useCallback((sessionId: string, label: string): Promise<void> => {
@@ -3961,12 +3859,6 @@ export function useDaemonSocket({
     return sendKeyedRequest<DaemonEndpoint[]>(key, { cmd: 'list_endpoints' }, 'List endpoints timed out');
   }, [sendKeyedRequest]);
 
-  const sendNotebookList = useCallback((prefix?: string): Promise<NotebookEntry[]> =>
-    sendRequest<NotebookEntry[]>('notebook_list', prefix ? { prefix } : {}, 'Notebook list timed out'), [sendRequest]);
-
-  const sendNotebookRead = useCallback((path: string): Promise<NotebookReadResult> =>
-    sendRequest<NotebookReadResult>('notebook_read', { path }, 'Notebook read timed out'), [sendRequest]);
-
   const sendSessionMessagesGet = useCallback((sessionId: string): Promise<SessionMessageWindow> => {
     return sendRequest('session_messages_get', { session_id: sessionId }, 'Session message fetch timed out');
   }, [sendRequest]);
@@ -3981,6 +3873,18 @@ export function useDaemonSocket({
     return () => {
       listeners?.delete(listener);
       if (listeners?.size === 0) sessionMessageListenersRef.current.delete(sessionId);
+    };
+  }, []);
+
+  const subscribeSessionLedger = useCallback((listener: (event: SessionLedgerConnectionEvent) => void) => {
+    sessionLedgerListenersRef.current.add(listener);
+    listener({
+      type: 'connection',
+      connected: wsRef.current?.readyState === WebSocket.OPEN,
+      connectionGeneration: connectionGenerationRef.current,
+    });
+    return () => {
+      sessionLedgerListenersRef.current.delete(listener);
     };
   }, []);
 
@@ -4148,7 +4052,7 @@ export function useDaemonSocket({
   ), [sendRequest]);
 
   const sendCrewWake = useCallback(
-    (member: string): Promise<{ sessionId: string; alreadyAwake: boolean }> => {
+    (member: string): Promise<{ sessionId: string }> => {
       return new Promise((resolve, reject) => {
         const ws = wsRef.current;
         if (!ws || ws.readyState !== WebSocket.OPEN) {
@@ -4305,9 +4209,6 @@ export function useDaemonSocket({
   const sendNotebookBacklinks = useCallback((path: string): Promise<NotebookEntry[]> =>
     sendRequest<NotebookEntry[]>('notebook_backlinks', { path }, 'Notebook backlinks timed out'), [sendRequest]);
 
-  const sendNotebookWrite = useCallback((path: string, content: string, baseHash?: string): Promise<NotebookWriteResult> =>
-    sendRequest<NotebookWriteResult>('notebook_write', { path, content, ...(baseHash ? { base_hash: baseHash } : {}) }, 'Notebook save timed out'), [sendRequest]);
-
   const sendNotebookToChief = useCallback((selection: string, sourcePath?: string): Promise<NotebookSendToChiefResult> =>
     sendRequest<NotebookSendToChiefResult>('notebook_send_to_chief', { selection, ...(sourcePath ? { source_path: sourcePath } : {}) }, 'Send to chief timed out'), [sendRequest]);
 
@@ -4322,12 +4223,6 @@ export function useDaemonSocket({
 
   const sendFsWrite = useCallback((path: string, content: string, baseHash?: string, root?: string): Promise<FsWriteResult> =>
     sendRequest<FsWriteResult>('fs_write', { path, content, ...(baseHash ? { base_hash: baseHash } : {}), ...(root ? { root } : {}) }, 'Filesystem save timed out'), [sendRequest]);
-
-  const sendFsRename = useCallback((path: string, newPath: string, root?: string): Promise<FsRenameResult> =>
-    sendRequest<FsRenameResult>('fs_rename', { path, new_path: newPath, ...(root ? { root } : {}) }, 'Filesystem rename timed out'), [sendRequest]);
-
-  const sendFsDelete = useCallback((path: string, root?: string): Promise<FsDeleteResult> =>
-    sendRequest<FsDeleteResult>('fs_delete', { path, ...(root ? { root } : {}) }, 'Filesystem delete timed out'), [sendRequest]);
 
   const sendFsExists = useCallback((path: string, root?: string): Promise<FsExistsResult> =>
     sendRequest<FsExistsResult>('fs_exists', { path, ...(root ? { root } : {}) }, 'Filesystem exists check timed out'), [sendRequest]);
@@ -5095,7 +4990,6 @@ export function useDaemonSocket({
     sendMuteAuthor,
     sendRefreshPRs,
     sendFetchPRDetails,
-    sendClearSessions,
     sendUnregisterSession,
     sendRenameSession,
     sendSetChiefOfStaff,
@@ -5116,8 +5010,6 @@ export function useDaemonSocket({
     sendRemoveEndpoint,
     sendBootstrapEndpoint,
     sendListEndpoints,
-    sendNotebookList,
-    sendNotebookRead,
     sendSessionMessagesGet,
     subscribeSessionMessagesChanged,
     sendSessionAnnotationsGet,
@@ -5146,14 +5038,11 @@ export function useDaemonSocket({
     sendNotificationList,
     sendNotificationMarkRead,
     sendNotebookBacklinks,
-    sendNotebookWrite,
     sendNotebookToChief,
     sendFsList,
     sendFsRead,
     sendFsReadAsset,
     sendFsWrite,
-    sendFsRename,
-    sendFsDelete,
     sendFsExists,
     sendFsWatch,
     sendFsUnwatch,
@@ -5168,6 +5057,7 @@ export function useDaemonSocket({
     sendSubscribeGitStatus,
     sendUnsubscribeGitStatus,
     sendSessionList,
+    subscribeSessionLedger,
     sendSessionShow,
     sendSessionReopen,
     sendBusStatusGet,

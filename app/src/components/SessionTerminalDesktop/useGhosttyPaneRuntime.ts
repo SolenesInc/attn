@@ -95,7 +95,8 @@ export function useGhosttyPaneRuntime(
     );
     attachedRuntimesRef.current.delete(runtimeId);
     pendingResizeRef.current.delete(runtimeId);
-    if (runtimeAttachHolds.release(runtimeId, attachHolderRef.current) > 0) {
+    const heldByThisWorkspace = runtimeAttachHolds.holds(runtimeId, attachHolderRef.current);
+    if (runtimeAttachHolds.release(runtimeId, attachHolderRef.current) > 0 || !heldByThisWorkspace) {
       return;
     }
     void ptyDetach({ id: runtimeId });
@@ -116,6 +117,12 @@ export function useGhosttyPaneRuntime(
         break;
       case 'restore_snapshot':
         void terminal.restoreSnapshot(decodePtyBytes(event.data));
+        break;
+      case 'restore_fallback':
+        void terminal.write(decodePtyBytes(event.data), {
+          onlyIfRestoreRejected: true,
+          suppressResponses: event.suppressResponses,
+        });
         break;
       case 'local_resize':
         void terminal.resizeLocal(
@@ -256,9 +263,9 @@ export function useGhosttyPaneRuntime(
     // default size must not claim PTY geometry authority until a real fit.
     const geometryMeasured = terminal.hasMeasuredSize();
     const forceResizeBeforeAttach = attachPolicy !== 'revive' && geometryMeasured;
-    const measuredResize = pendingResizeRef.current.get(pane.runtimeId);
+    const measuredResize = geometryMeasured ? pendingResizeRef.current.get(pane.runtimeId) : undefined;
     const attachResize = forceResizeBeforeAttach ? measuredResize : undefined;
-    const size = attachResize ?? modelSize;
+    const size = measuredResize ?? modelSize;
     if (forceResizeBeforeAttach && attachResize) {
       pendingResizeRef.current.delete(pane.runtimeId);
     }

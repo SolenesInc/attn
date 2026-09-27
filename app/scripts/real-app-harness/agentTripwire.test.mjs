@@ -11,7 +11,6 @@ import {
   ensureDaemonCarriesTripwire,
   HEADLESS_TASKS_VAR,
   readDaemonHeadlessSwitch,
-  readDaemonMockGitHubURL,
   readDaemonTripwireReceipt,
   readTripwireLedger,
   TRIPWIRE_BINARIES,
@@ -19,7 +18,6 @@ import {
   TRIPWIRE_MARKER_VAR,
   tripwireDir,
   tripwireMarker,
-  writeTripwireShims,
 } from './agentTripwire.mjs';
 import { MOCK_AGENT_EXECUTABLE } from './mockAgent.mjs';
 
@@ -53,27 +51,6 @@ describe('the shim a real agent exec lands in', () => {
     expect(result.stderr).toContain('NUDGE-TRIGGER');
     expect(result.stderr).toContain(tripwire.ledgerPath);
     expect(tripwire.read()).toEqual(['NUDGE-TRIGGER\tclaude --print hello world']);
-  });
-
-  it('keeps one line per exec when the argv carries newlines and tabs', () => {
-    const env = freshEnv();
-    const tripwire = armAgentTripwire({ scenarioId: 'AGENT-QUEUE', runDir, env, log: () => {} });
-
-    spawnSync(path.join(tripwire.dir, 'codex'), ['exec', 'first\nsecond\tthird'], { encoding: 'utf8' });
-
-    expect(tripwire.read()).toEqual(['AGENT-QUEUE\tcodex exec first second third']);
-  });
-
-  it('names a huge argv without archiving it', () => {
-    const env = freshEnv();
-    const tripwire = armAgentTripwire({ scenarioId: 'TR-401', runDir, env, log: () => {} });
-
-    spawnSync(path.join(tripwire.dir, 'claude'), ['--append-system-prompt', 'x'.repeat(9000)], { encoding: 'utf8' });
-
-    const [line] = tripwire.read();
-    expect(line.startsWith('TR-401\tclaude --append-system-prompt xxx')).toBe(true);
-    expect(line).toMatch(/\.\.\. \(\+\d+ chars\)$/);
-    expect(line.length).toBeLessThan(600);
   });
 
   it('records an exec that lands between scenarios in the unattributed ledger', () => {
@@ -144,27 +121,12 @@ describe('what a scenario arms', () => {
     expect(armedBinaries(undefined)).toEqual(TRIPWIRE_BINARIES);
   });
 
-  it('arms nothing when a scenario allows real agents outright', () => {
-    expect(armedBinaries(true)).toEqual([]);
-  });
-
   it('arms the binaries a scenario did not name', () => {
     expect(armedBinaries(['pi'])).toEqual(['claude', 'codex', 'copilot']);
   });
 
   it('refuses a binary name it does not shim', () => {
     expect(() => armedBinaries(['gemini'])).toThrow('unknown agent binary "gemini"');
-  });
-
-  it('removes the shim of a binary a scenario allows', () => {
-    const dir = tripwireDir();
-    writeTripwireShims({ dir, binaries: TRIPWIRE_BINARIES });
-    expect(fs.existsSync(path.join(dir, 'pi'))).toBe(true);
-
-    writeTripwireShims({ dir, binaries: ['claude', 'codex', 'copilot'] });
-
-    expect(fs.existsSync(path.join(dir, 'pi'))).toBe(false);
-    expect(fs.existsSync(path.join(dir, 'claude'))).toBe(true);
   });
 });
 
@@ -185,28 +147,6 @@ describe('how the tripwire reaches the app, the daemon and the CLI', () => {
     expect(env[TRIPWIRE_MARKER_VAR]).toBe(tripwireMarker({ dir, binaries: ['claude', 'codex', 'copilot'] }));
   });
 
-  it('drops an executable pin left by a scenario that armed more', () => {
-    const env = { ...freshEnv(), ATTN_PI_EXECUTABLE: '/gone/pi' };
-
-    applyTripwireEnv(env, { dir: tripwireDir(), binaries: ['claude'] });
-
-    expect(env.ATTN_PI_EXECUTABLE).toBeUndefined();
-  });
-
-  it('adds the shim dir once however many scenarios arm in one process', () => {
-    const env = freshEnv();
-    const dir = tripwireDir();
-
-    applyTripwireEnv(env, { dir, binaries: TRIPWIRE_BINARIES });
-    applyTripwireEnv(env, { dir, binaries: TRIPWIRE_BINARIES });
-
-    expect(env.PATH.split(path.delimiter).filter((entry) => entry === dir)).toHaveLength(1);
-  });
-
-  it('hands the app launch nothing until a scenario arms', () => {
-    expect(agentTripwireLaunchEnv({ PATH: '/usr/bin' })).toEqual({});
-  });
-
   it('hands the app launch the PATH and pins the daemon must inherit', () => {
     const env = freshEnv();
     const tripwire = armAgentTripwire({ scenarioId: 'TR-401', runDir, env, log: () => {} });
@@ -220,24 +160,6 @@ describe('how the tripwire reaches the app, the daemon and the CLI', () => {
       ATTN_COPILOT_EXECUTABLE: path.join(tripwire.dir, 'copilot'),
       ATTN_PI_EXECUTABLE: path.join(tripwire.dir, 'pi'),
     });
-  });
-
-  it('leaves headless tasks on for a scenario the catalog lets run a real agent', () => {
-    const env = freshEnv();
-
-    armAgentTripwire({ scenarioId: 'PI-AUTOMODE', runDir, allowRealAgents: true, env, log: () => {} });
-
-    expect(env[HEADLESS_TASKS_VAR]).toBeUndefined();
-    expect(agentTripwireLaunchEnv(env)[HEADLESS_TASKS_VAR]).toBeUndefined();
-  });
-
-  it('clears the switch an earlier armed scenario set in the same shell', () => {
-    const env = freshEnv();
-    armAgentTripwire({ scenarioId: 'TR-401', runDir, env, log: () => {} });
-
-    armAgentTripwire({ scenarioId: 'PI-AUTOMODE', runDir, allowRealAgents: true, env, log: () => {} });
-
-    expect(env[HEADLESS_TASKS_VAR]).toBeUndefined();
   });
 });
 
@@ -285,46 +207,6 @@ describe('the receipt that the switch was in force', () => {
       readEnvironment: () => 'unused',
     })).toBe('no daemon');
   });
-
-  it('reads the mock GitHub the daemon actually carries', () => {
-    expect(readDaemonMockGitHubURL({
-      pidPath: pidPath(),
-      readEnvironment: () => `PATH=/usr/bin ATTN_MOCK_GH_URL=http://127.0.0.1:32876 ${HEADLESS_TASKS_VAR}=off`,
-    })).toBe('http://127.0.0.1:32876');
-  });
-
-  it('says missing when the daemon never got the mock GitHub', () => {
-    expect(readDaemonMockGitHubURL({
-      pidPath: pidPath(),
-      readEnvironment: () => 'PATH=/usr/bin ATTN_MOCK_GH_TOKEN=test-token',
-    })).toBe('missing');
-  });
-
-  it('reports the daemon\'s own value when it points at another mock', () => {
-    expect(readDaemonMockGitHubURL({
-      pidPath: pidPath(),
-      readEnvironment: () => 'ATTN_MOCK_GH_URL=http://127.0.0.1:19850 PATH=/usr/bin',
-    })).toBe('http://127.0.0.1:19850');
-  });
-
-  it('says so rather than guessing about the mock when no daemon is running', () => {
-    expect(readDaemonMockGitHubURL({
-      pidPath: path.join(tmpDir, 'missing.pid'),
-      readEnvironment: () => 'unused',
-    })).toBe('no daemon');
-  });
-
-  it('reports nothing for a scenario that may run a real agent', () => {
-    const tripwire = armAgentTripwire({
-      scenarioId: 'PI-AUTOMODE',
-      runDir,
-      allowRealAgents: true,
-      env: freshEnv(),
-      log: () => {},
-    });
-
-    expect(tripwire.readReceipt()).toBeNull();
-  });
 });
 
 describe('the daemon a scenario inherits', () => {
@@ -367,22 +249,6 @@ describe('the daemon a scenario inherits', () => {
     expect(run).toHaveBeenCalled();
   });
 
-  it('leaves an armed daemon alone once it also carries the headless switch', () => {
-    const run = vi.fn();
-    const result = ensureDaemonCarriesTripwire({
-      ...target,
-      marker: 'shims|claude',
-      armed: true,
-      pidPath: pidFileFor(process.pid),
-      readEnvironment: () => `PATH=/usr/bin ${TRIPWIRE_MARKER_VAR}=shims|claude ${HEADLESS_TASKS_VAR}=off`,
-      run,
-      log: () => {},
-    });
-
-    expect(result).toEqual({ restarted: false, reason: 'daemon already armed' });
-    expect(run).not.toHaveBeenCalled();
-  });
-
   it('stops a daemon that predates the tripwire so the app brings up an armed one', () => {
     const run = vi.fn();
     const result = ensureDaemonCarriesTripwire({
@@ -397,38 +263,6 @@ describe('the daemon a scenario inherits', () => {
     expect(result).toEqual({ restarted: true, reason: 'daemon stopped' });
     expect(run).toHaveBeenCalledTimes(1);
     expect(run.mock.calls[0][1]).toEqual(['daemon', 'stop']);
-  });
-
-  it('stops a daemon that carries the marker but points at another GitHub', () => {
-    const run = vi.fn();
-    const result = ensureDaemonCarriesTripwire({
-      ...target,
-      marker: 'shims|claude',
-      mockGitHubURL: 'http://127.0.0.1:32556',
-      pidPath: pidFileFor(process.pid),
-      readEnvironment: () => `PATH=/usr/bin ${TRIPWIRE_MARKER_VAR}=shims|claude`,
-      run,
-      log: () => {},
-    });
-
-    expect(result).toEqual({ restarted: true, reason: 'daemon stopped' });
-    expect(run).toHaveBeenCalledTimes(1);
-  });
-
-  it('leaves a daemon alone once it carries this run mock GitHub', () => {
-    const run = vi.fn();
-    const result = ensureDaemonCarriesTripwire({
-      ...target,
-      marker: 'shims|claude',
-      mockGitHubURL: 'http://127.0.0.1:32556',
-      pidPath: pidFileFor(process.pid),
-      readEnvironment: () => `PATH=/usr/bin ${TRIPWIRE_MARKER_VAR}=shims|claude ATTN_MOCK_GH_URL=http://127.0.0.1:32556`,
-      run,
-      log: () => {},
-    });
-
-    expect(result).toEqual({ restarted: false, reason: 'daemon already armed' });
-    expect(run).not.toHaveBeenCalled();
   });
 
   it('never stops a production daemon', () => {
@@ -477,38 +311,6 @@ describe('the daemon a scenario inherits', () => {
       run,
       log: () => {},
     })).toThrow(/a production daemon is never restarted/);
-    expect(run).not.toHaveBeenCalled();
-  });
-
-  it('still only warns for a scenario that may run a real agent', () => {
-    const run = vi.fn();
-    const logged = [];
-    const result = ensureDaemonCarriesTripwire({
-      instance: '',
-      appPath: '/Applications/attn.app',
-      marker: 'shims|',
-      pidPath: pidFileFor(process.pid),
-      readEnvironment: () => 'PATH=/usr/bin',
-      run,
-      log: (message) => logged.push(message),
-    });
-
-    expect(result).toEqual({ restarted: false, reason: 'target refuses a daemon restart' });
-    expect(logged.join('\n')).toContain('WARNING');
-    expect(run).not.toHaveBeenCalled();
-  });
-
-  it('does nothing when no daemon is running', () => {
-    const run = vi.fn();
-    const result = ensureDaemonCarriesTripwire({
-      ...target,
-      marker: 'shims|claude',
-      pidPath: path.join(tmpDir, 'missing.pid'),
-      run,
-      log: () => {},
-    });
-
-    expect(result).toEqual({ restarted: false, reason: 'no daemon running' });
     expect(run).not.toHaveBeenCalled();
   });
 });

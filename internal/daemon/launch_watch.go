@@ -1,6 +1,7 @@
 package daemon
 
 import (
+	"errors"
 	"fmt"
 	"strings"
 	"time"
@@ -14,10 +15,13 @@ const delegationFirstTurnTimeout = 90 * time.Second
 
 const seedNoteExitScreenMaxBytes = garden.MaxNoteBytes / 2
 
+var errDelegationInterrupted = errors.New("the daemon stopped before the delegate's first turn")
+
 type launchOutcome struct {
 	startedAt   time.Time
 	exit        *store.SessionExitScreen
 	unconfirmed string
+	interrupted bool
 }
 
 type launchWatch struct {
@@ -97,7 +101,11 @@ func (d *Daemon) awaitDelegatedLaunch(sessionID string, watch *launchWatch) laun
 	if !d.delegationWaitsForFirstTurn {
 		return launchOutcome{}
 	}
-	timer := time.NewTimer(delegationFirstTurnTimeout)
+	wait := delegationFirstTurnTimeout
+	if launched := d.store.SessionLaunchedAt(sessionID); !launched.IsZero() {
+		wait = min(wait, max(0, wait-time.Since(launched)))
+	}
+	timer := time.NewTimer(wait)
 	defer timer.Stop()
 	select {
 	case <-watch.done:
@@ -108,7 +116,7 @@ func (d *Daemon) awaitDelegatedLaunch(sessionID string, watch *launchWatch) laun
 			"no turn reported by the agent within %s; the session is up, `attn agent peek %s` shows its pane",
 			delegationFirstTurnTimeout, shortSessionID(sessionID))}
 	case <-d.done:
-		return launchOutcome{}
+		return launchOutcome{interrupted: true}
 	}
 }
 
@@ -151,5 +159,43 @@ func (d *Daemon) noteDelegatedExitOnSeed(seedID, agent, sessionID string, exit *
 	if _, err := d.appendSeedNote(seedID, strings.TrimRight(b.String(), "\n"), sessionID, "", garden.NoteKindNote, nil, true, sessionID); err != nil {
 		d.logf("delegation exit not noted on %s: %v", seedID, err)
 		return
+	}
+}
+
+func (d *Daemon) watchRecoveredLaunches() {
+	records, err := d.store.PendingDelegationOperations()
+	if err != nil {
+		d.logf("load pending delegation launches: %v", err)
+		return
+	}
+	for i := range records {
+		sessionID := records[i].Operation.SessionID
+		if d.store.Get(sessionID) == nil {
+			continue
+		}
+		watch := d.watchLaunch(sessionID)
+		d.launchWatchMu.Lock()
+		if d.recoveredLaunches == nil {
+			d.recoveredLaunches = make(map[string]*launchWatch)
+		}
+		d.recoveredLaunches[sessionID] = watch
+		d.launchWatchMu.Unlock()
+	}
+}
+
+func (d *Daemon) takeRecoveredLaunch(sessionID string) *launchWatch {
+	d.launchWatchMu.Lock()
+	defer d.launchWatchMu.Unlock()
+	watch := d.recoveredLaunches[sessionID]
+	delete(d.recoveredLaunches, sessionID)
+	return watch
+}
+
+func (w *launchWatch) settled() bool {
+	select {
+	case <-w.done:
+		return true
+	default:
+		return false
 	}
 }

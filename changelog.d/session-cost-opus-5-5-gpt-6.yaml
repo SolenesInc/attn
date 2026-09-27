@@ -1,0 +1,15 @@
+kind: added
+area: sessions
+change: >
+  Session cost knows Claude Opus 5.5 (claude-opus-5-5), GPT-6 Sol (gpt-6-sol),
+  and GPT-6 Luna (gpt-6-luna). Opus 5.5 bills $4 input and $20 output per
+  million tokens, with cache reads at $0.20, which is 5% of input instead of the
+  usual 10%. Sol bills $2 input, $10 output, $0.20 cached input, and $2.50 cache
+  writes. Luna bills $0.10 input, $0.50 output, $0.01 cached input, and $0.125
+  cache writes. GPT-5.6 Sol (gpt-5.6-sol) follows OpenAI's lower price of $4
+  input, $20 output, $0.40 cached input, and $5 cache writes. OpenAI requests whose prompt exceeds 272K tokens on GPT-5.5,
+  GPT-5.6, and GPT-6 now bill at OpenAI's long-context rates: double the input
+  and cache rates and 1.5 times the output rate for the whole request.
+symptom: >
+  Sessions on these models showed no price, and long-context OpenAI requests
+  were billed at the standard rate, understating their cost.

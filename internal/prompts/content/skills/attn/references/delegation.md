@@ -84,7 +84,7 @@ attn delegate --brief-file question.md --cwd /notes \
 attn delegate --brief-file task.md --cwd /notes --fallback
 ```
 
-Use Attn's configured roles and choices by default. Honor an explicit user model/role request for that delegation without saving it as a preference. If standing instructions in AGENTS.md, skills or other files actually conflict with the configuration, explain that conflict and ask which should govern.
+Use Attn's configured roles and choices by default. Honor an explicit user model/role request for that delegation without saving it as a preference; when the user asks to change the saved roles themselves, read [delegation-roles.md](delegation-roles.md). If standing instructions in AGENTS.md, skills or other files actually conflict with the configuration, explain that conflict and ask which should govern.
 
 Use the configured Reviewer role only when the user explicitly requests a separate Reviewer delegation; semantically equivalent wording counts even when they do not name the role. A request to review the current work assigns that review to the current agent, and a general requirement that implementation be reviewed remains the Orchestrator's responsibility. A Pathfinder or Orchestrator must not add a Reviewer to a plan proactively and treat later plan approval as authorization for that delegation.
 

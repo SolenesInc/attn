@@ -1,0 +1,193 @@
+import { act, fireEvent, screen, within } from '@testing-library/react';
+import { describe, expect, it, vi } from 'vitest';
+import { soloDesktop, daemonSession, type DaemonSession, type DaemonDesktop } from './test/daemonFixtures';
+import { gesture, pressShortcut, renderApp } from './test/renderApp';
+import type { ScriptedDaemon } from './test/scriptedDaemon';
+
+const HOUR = 60 * 60 * 1000;
+const QUEUE = { queue_mode_enabled: 'true' };
+
+const ago = (ms: number) => new Date(Date.now() - ms).toISOString();
+const fromNow = (ms: number) => new Date(Date.now() + ms).toISOString();
+
+function agent(id: string, overrides: Partial<DaemonSession> = {}): DaemonSession {
+  return daemonSession(id, { state: 'idle', ...overrides });
+}
+
+function team(): DaemonSession[] {
+  return [
+    agent('chief', { chief_of_staff: true }),
+    agent('newer', { state: 'waiting_input', turn_owed: true, turn_opened_at: ago(HOUR) }),
+    agent('older', { state: 'working', turn_owed: true, turn_opened_at: ago(3 * HOUR) }),
+    agent('settled', { state: 'waiting_input' }),
+  ];
+}
+
+interface Launch {
+  sessions?: DaemonSession[];
+  queue?: boolean;
+  desktop?: (session: DaemonSession) => Partial<DaemonDesktop>;
+}
+
+function launch({ sessions = team(), queue = true, desktop = () => ({}) }: Launch = {}) {
+  return renderApp({
+    initialState: {
+      settings: queue ? QUEUE : {},
+      sessions,
+      desktops: sessions.map((session) => ({ ...soloDesktop(session.id), ...desktop(session) })),
+    },
+  });
+}
+
+async function openAgentList(daemon: ScriptedDaemon) {
+  await gesture(daemon, () => fireEvent.click(screen.getByRole('button', { name: /All agents/ })));
+}
+
+const queue = () => within(screen.getByTestId('sidebar-queue'));
+
+function bandRows(): string[] {
+  return Array.from(screen.getByTestId('sidebar-queue').querySelectorAll('.queue-row'))
+    .map((row) => row.getAttribute('data-testid')!);
+}
+
+function treeRows(): string[] {
+  return Array.from(document.querySelectorAll('[data-testid^="sidebar-session-"]'))
+    .map((row) => row.getAttribute('data-testid')!.replace('sidebar-session-', ''));
+}
+
+function shownDesktops() {
+  return Array.from(document.querySelectorAll('.session-terminal-desktop[data-session-visible="1"]'))
+    .map((desktop) => desktop.getAttribute('data-desktop-id'));
+}
+
+async function press(daemon: ScriptedDaemon, name: string) {
+  await gesture(daemon, () => fireEvent.click(screen.getByRole('button', { name })));
+}
+
+describe('App queue', () => {
+  it('replaces the desktop tree with the chief and the owed turns oldest first, and keeps the settled rest in the agent list', async () => {
+    const { daemon } = await launch();
+
+    expect(bandRows()).toEqual(['queue-chief-chief', 'queue-turn-older', 'queue-turn-newer']);
+    expect(treeRows()).toEqual([]);
+
+    await openAgentList(daemon);
+    expect(bandRows()).toContain('queue-settled-settled');
+  });
+
+  it('leaves the desktop tree alone while the queue is off', async () => {
+    await launch({ queue: false });
+
+    expect(screen.queryByTestId('sidebar-queue')).toBeNull();
+    expect(treeRows().sort()).toEqual(['chief', 'newer', 'older', 'settled']);
+  });
+
+  it('shows what an owed agent is doing and how long its turn has waited', async () => {
+    const { daemon } = await launch();
+    const older = () => screen.getByTestId('queue-turn-older');
+
+    expect(older()).toHaveAttribute('data-state', 'working');
+    expect(within(older()).getByText('3h')).toBeInTheDocument();
+
+    await act(() => vi.advanceTimersByTimeAsync(HOUR));
+    await daemon.idle();
+
+    expect(within(older()).getByText('4h')).toBeInTheDocument();
+  });
+
+  it('says so when nothing is owed', async () => {
+    await launch({ sessions: [agent('chief', { chief_of_staff: true }), agent('settled', { state: 'waiting_input' })] });
+
+    expect(queue().getByText('Nothing owed')).toBeInTheDocument();
+  });
+
+  it('opens an agent from its row', async () => {
+    const { daemon } = await launch();
+
+    await press(daemon, 'Open older');
+
+    expect(daemon.sentOf('desktop_set_current')).toEqual([expect.objectContaining({ desktop_id: 'desktop-older' })]);
+    expect(shownDesktops()).toEqual(['desktop-older']);
+  });
+
+  it('keeps the session menu reachable from every band', async () => {
+    const { daemon } = await launch();
+    await openAgentList(daemon);
+
+    for (const id of ['chief', 'older', 'settled']) {
+      expect(queue().getByRole('button', { name: `Actions for ${id}` })).toBeInTheDocument();
+    }
+  });
+
+  it('settles an owed turn without opening it, and offers nothing to settle on a settled row or the chief', async () => {
+    const { daemon } = await launch();
+
+    await press(daemon, 'Settle older');
+
+    expect(daemon.sentOf('settle_turn')).toEqual([{ cmd: 'settle_turn', session_id: 'older' }]);
+    expect(daemon.sentOf('desktop_set_current')).toEqual([]);
+    expect(queue().queryByRole('button', { name: 'Settle settled' })).toBeNull();
+    expect(queue().queryByRole('button', { name: 'Settle chief' })).toBeNull();
+  });
+
+  it('snoozes an owed or settled agent until the instant the user picks, and never the chief', async () => {
+    const { daemon } = await launch();
+    await openAgentList(daemon);
+    expect(queue().queryByRole('button', { name: 'Snooze chief' })).toBeNull();
+
+    await press(daemon, 'Snooze older');
+    const inAnHour = new Date(Date.now() + HOUR).toISOString();
+    await gesture(daemon, () => fireEvent.click(within(screen.getByRole('menu', { name: 'Snooze older' })).getByTestId('snooze-choice-1h')));
+    await press(daemon, 'Snooze settled');
+    expect(screen.getByRole('menu', { name: 'Snooze settled' })).toBeInTheDocument();
+
+    expect(daemon.sentOf('snooze_turn')).toEqual([{ cmd: 'snooze_turn', session_id: 'older', until: inAnHour }]);
+    expect(daemon.sentOf('desktop_set_current')).toEqual([]);
+  });
+
+  it('collects deferred agents under Snoozed in the agent list, and wakes one without opening it', async () => {
+    const { daemon } = await launch({ sessions: [...team(), agent('later', { turn_snoozed_until: fromNow(HOUR) })] });
+
+    expect(bandRows()).not.toContain('queue-settled-later');
+    await openAgentList(daemon);
+    const later = within(screen.getByTestId('queue-snoozed-later'));
+    expect(later.queryByRole('button', { name: 'Settle later' })).toBeNull();
+
+    await gesture(daemon, () => fireEvent.click(later.getByRole('button', { name: 'Wake later' })));
+
+    expect(daemon.sentOf('wake_turn')).toEqual([{ cmd: 'wake_turn', session_id: 'later' }]);
+    expect(daemon.sentOf('desktop_set_current')).toEqual([]);
+  });
+
+  it('draws no Snoozed section while nothing is deferred', async () => {
+    await launch();
+
+    expect(screen.queryByTestId('sidebar-snoozed')).toBeNull();
+  });
+
+  const collapsedRailTeam = [
+    agent('settled', { state: 'waiting_input' }),
+    agent('owed', { state: 'working', turn_owed: true, turn_opened_at: ago(HOUR) }),
+  ];
+
+  it('badges the collapsed rail by state while the queue is off', async () => {
+    const { daemon } = await launch({ queue: false, sessions: collapsedRailTeam, desktop: (session) => ({ name: session.id }) });
+
+    await gesture(daemon, () => pressShortcut('session.toggleSidebar'));
+
+    const badges = Array.from(document.querySelectorAll('.session-icon'))
+      .filter((icon) => icon.querySelector('.mini-badge'))
+      .map((icon) => icon.getAttribute('title'));
+    expect(badges).toHaveLength(1);
+    expect(badges[0]).toMatch(/^settled/);
+  });
+
+  it('names what the queue owes on the collapsed queue bar', async () => {
+    const { daemon } = await launch({ sessions: collapsedRailTeam });
+
+    await gesture(daemon, () => pressShortcut('session.toggleSidebar'));
+
+    expect(screen.getByTestId('queue-bar-pill')).toHaveAttribute('data-waiting', '1');
+    expect(screen.getByTestId('queue-bar-pill')).toHaveTextContent('1 waiting·owed');
+  });
+});

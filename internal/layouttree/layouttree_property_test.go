@@ -2,6 +2,7 @@ package layouttree
 
 import (
 	"fmt"
+	"math"
 	"reflect"
 	"sort"
 	"strings"
@@ -101,6 +102,30 @@ func checkWellFormed(t *rapid.T, node Node, path string) {
 	default:
 		t.Fatalf("%s: node type %q is not a pane, tile or split", path, node.Type)
 	}
+}
+
+func checkChainsShareEqually(t *rapid.T, node Node) {
+	if node.Type != "split" {
+		return
+	}
+	if !node.RatioLocked {
+		shares := chainShares(node, node.Direction, 1)
+		for _, share := range shares {
+			if math.Abs(share-shares[0]) > 1e-9 {
+				t.Fatalf("split %q lays out a %s chain with shares %v; an automatic chain shares its space equally", node.SplitID, node.Direction, shares)
+			}
+		}
+	}
+	for _, child := range node.Children {
+		checkChainsShareEqually(t, child)
+	}
+}
+
+func chainShares(node Node, direction Direction, share float64) []float64 {
+	if node.Type != "split" || node.Direction != direction || node.RatioLocked {
+		return []float64{share}
+	}
+	return append(chainShares(node.Children[0], direction, share*node.Ratio), chainShares(node.Children[1], direction, share*(1-node.Ratio))...)
 }
 
 func splitIDs(node Node) []string {
@@ -331,6 +356,7 @@ func TestLayoutStaysAWellFormedTreeUnderRandomOperations(t *testing.T) {
 				if !reflect.DeepEqual(normalized, again) {
 					t.Fatalf("normalization is not idempotent:\nonce: %+v\ntwice: %+v", normalized, again)
 				}
+				checkChainsShareEqually(t, normalized)
 				m.tree = normalized
 			},
 

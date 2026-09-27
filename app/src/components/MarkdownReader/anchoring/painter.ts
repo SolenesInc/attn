@@ -20,7 +20,7 @@ const HIGHLIGHT_NAMES: Record<HighlightKind, string> = {
 
 const KINDS: HighlightKind[] = ['comment', 'deletion', 'focus'];
 
-export function supportsCustomHighlights(): boolean {
+function supportsCustomHighlights(): boolean {
   return typeof CSS !== 'undefined' && 'highlights' in CSS && CSS.highlights != null;
 }
 
@@ -31,11 +31,6 @@ export function createHighlightPainter(root: HTMLElement): HighlightPainter {
 /** CSS.highlights is per-DOCUMENT while painters are per-reader-root: every
  * mutation rebuilds the shared entries from the union of live painters. */
 const livePainters = new Set<CustomHighlightPainter>();
-
-/** Test hook: drop painters leaked by previous tests from the shared union. */
-export function __resetCustomHighlightPaintersForTests(): void {
-  livePainters.clear();
-}
 
 function rebuildSharedRegistry(): void {
   for (const kind of KINDS) {
@@ -52,7 +47,7 @@ function rebuildSharedRegistry(): void {
   }
 }
 
-export class CustomHighlightPainter implements HighlightPainter {
+class CustomHighlightPainter implements HighlightPainter {
   readonly mode = 'custom-highlight' as const;
   private readonly entries = new Map<string, { range: Range; kind: HighlightKind }>();
 
@@ -90,7 +85,7 @@ export class CustomHighlightPainter implements HighlightPainter {
 
 const MARK_ATTR = 'data-md-mark';
 
-export class MarkPainter implements HighlightPainter {
+class MarkPainter implements HighlightPainter {
   readonly mode = 'mark' as const;
 
   constructor(private readonly root: HTMLElement) {}

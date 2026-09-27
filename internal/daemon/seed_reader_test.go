@@ -2,10 +2,6 @@ package daemon
 
 import (
 	"encoding/json"
-	"os"
-	"path/filepath"
-	"strings"
-	"sync"
 	"testing"
 	"time"
 
@@ -15,81 +11,6 @@ import (
 	"github.com/victorarias/attn/internal/protocol"
 	"github.com/victorarias/attn/internal/store"
 )
-
-func readSeedDocumentResult(t *testing.T, client *wsClient) protocol.SeedDocumentGetResultMessage {
-	t.Helper()
-	var result protocol.SeedDocumentGetResultMessage
-	message := <-client.send
-	if err := json.Unmarshal(message.payload, &result); err != nil {
-		t.Fatalf("decode seed document result: %v", err)
-	}
-	return result
-}
-
-func TestSeedDocumentGetReturnsBodyImmediateChildrenAndLog(t *testing.T) {
-	d := newGardenDaemon(t)
-	body := "# Crown\n\nRead this."
-	crown := plant(t, d, protocol.SeedPlantMessage{SourceSessionID: protocol.Ptr("sess-a"), Title: "Crown", Body: &body})
-	child := plant(t, d, protocol.SeedPlantMessage{SourceSessionID: protocol.Ptr("sess-a"), Title: "Child", PartOf: &crown.ID})
-	plant(t, d, protocol.SeedPlantMessage{SourceSessionID: protocol.Ptr("sess-a"), Title: "Grandchild", PartOf: &child.ID})
-	note(t, d, "sess-a", crown.ID, "reader log entry", "trellis")
-
-	client := newProtocolTestClient()
-	d.handleSeedDocumentGet(client, &protocol.SeedDocumentGetMessage{
-		Cmd: protocol.CmdSeedDocumentGet, SeedID: crown.ID, RequestID: "seed-doc-1",
-	})
-	result := readSeedDocumentResult(t, client)
-	if !result.Success || result.RequestID != "seed-doc-1" || result.Document == nil {
-		t.Fatalf("result = %+v, want successful correlated document", result)
-	}
-	if result.Document.Seed.Body != body {
-		t.Fatalf("body = %q, want %q", result.Document.Seed.Body, body)
-	}
-	if len(result.Document.Children) != 1 || result.Document.Children[0].ID != child.ID {
-		t.Fatalf("children = %+v, want only immediate child %s", result.Document.Children, child.ID)
-	}
-	if result.Document.NotesTotal != 1 || len(result.Document.Notes) != 1 || result.Document.Notes[0].Body != "reader log entry" {
-		t.Fatalf("notes = %+v total=%d", result.Document.Notes, result.Document.NotesTotal)
-	}
-}
-
-func TestSeedDocumentGetNamesUnknownID(t *testing.T) {
-	d := newGardenDaemon(t)
-	client := newProtocolTestClient()
-	d.handleSeedDocumentGet(client, &protocol.SeedDocumentGetMessage{
-		Cmd: protocol.CmdSeedDocumentGet, SeedID: "s-ffffff", RequestID: "missing",
-	})
-	result := readSeedDocumentResult(t, client)
-	if result.Success || result.Error == nil || !strings.Contains(*result.Error, "s-ffffff") {
-		t.Fatalf("result = %+v, want loud error naming s-ffffff", result)
-	}
-}
-
-func TestSeedDocumentGetReportsWhetherTheStoredTenderStillHolds(t *testing.T) {
-	d := newGardenDaemon(t)
-	seed := plant(t, d, protocol.SeedPlantMessage{Title: "Held only while live"})
-	move(t, d, "sess-a", seed.ID, garden.VerbTend, "", "")
-
-	read := func(requestID string) protocol.SeedDocumentGetResultMessage {
-		client := newProtocolTestClient()
-		d.handleSeedDocumentGet(client, &protocol.SeedDocumentGetMessage{
-			Cmd: protocol.CmdSeedDocumentGet, SeedID: seed.ID, RequestID: requestID,
-		})
-		return readSeedDocumentResult(t, client)
-	}
-	if result := read("live"); !result.Success || result.Document == nil || !result.Document.TenderHolds {
-		t.Fatalf("live tender document = %+v, want tender_holds", result)
-	}
-
-	d.store.Remove("sess-a")
-	result := read("gone")
-	if !result.Success || result.Document == nil || result.Document.TenderHolds {
-		t.Fatalf("ended tender document = %+v, want stored identity without a live hold", result)
-	}
-	if result.Document.Seed.TenderSession != "sess-a" {
-		t.Fatalf("read model erased stored tender identity: %+v", result.Document.Seed)
-	}
-}
 
 func TestOpenSeedDocksBesideTheCallerAndBindsItsTender(t *testing.T) {
 	d := newGardenDaemon(t)
@@ -177,33 +98,6 @@ func TestReopeningASeedResetsItsTileNavigatedToAnotherSeed(t *testing.T) {
 	}
 }
 
-func TestOpenSeedNamesUnknownID(t *testing.T) {
-	d := newGardenDaemon(t)
-	setupAgentDesktopOn(t, d)
-	_, _, err := d.openSeedTile("s-ffffff", "session-1", false)
-	if err == nil || !strings.Contains(err.Error(), "s-ffffff") {
-		t.Fatalf("error = %v, want unknown id named", err)
-	}
-}
-
-func TestOpenSeedWSReturnsCorrelatedTile(t *testing.T) {
-	d := newGardenDaemon(t)
-	_, desktop := setupAgentDesktopOn(t, d)
-	seed := plant(t, d, protocol.SeedPlantMessage{Title: "Open from panel"})
-	client := &wsClient{send: make(chan outboundMessage, 1)}
-	d.handleOpenSeedWS(client, &protocol.OpenSeedMessage{
-		Cmd: protocol.CmdOpenSeed, SeedID: seed.ID, SessionID: protocol.Ptr("session-1"), RequestID: protocol.Ptr("open-1"),
-	})
-	var result protocol.OpenSeedResultMessage
-	message := <-client.send
-	if err := json.Unmarshal(message.payload, &result); err != nil {
-		t.Fatal(err)
-	}
-	if !result.Success || protocol.Deref(result.RequestID) != "open-1" || protocol.Deref(result.DesktopID) != desktop.ID || protocol.Deref(result.TileID) != seedTileIDForID(seed.ID) {
-		t.Fatalf("open_seed_result = %+v", result)
-	}
-}
-
 func TestOpenSeedWSStandaloneDoesNotBindTheFocusedAgent(t *testing.T) {
 	d := newGardenDaemon(t)
 	_, desktop := setupAgentDesktopOn(t, d)
@@ -222,90 +116,6 @@ func TestOpenSeedWSStandaloneDoesNotBindTheFocusedAgent(t *testing.T) {
 	}
 	if tile := desktopTile(t, d, desktop.ID, protocol.Deref(result.TileID)); tile.TileSessionID != "" {
 		t.Fatalf("standalone seed tile bound %q, want no agent", tile.TileSessionID)
-	}
-}
-
-func TestConcurrentMarkdownAndSeedOpenPreservesBothTiles(t *testing.T) {
-	d := newGardenDaemon(t)
-	_, desktop := setupAgentDesktopOn(t, d)
-	seed := plant(t, d, protocol.SeedPlantMessage{Title: "Concurrent seed"})
-	path := filepath.Join(t.TempDir(), "concurrent.md")
-	if err := os.WriteFile(path, []byte("# Concurrent"), 0o644); err != nil {
-		t.Fatal(err)
-	}
-
-	var wg sync.WaitGroup
-	errs := make(chan error, 2)
-	wg.Add(2)
-	go func() {
-		defer wg.Done()
-		_, _, err := d.openMarkdownTile(path, "session-1")
-		errs <- err
-	}()
-	go func() {
-		defer wg.Done()
-		_, _, err := d.openSeedTile(seed.ID, "session-1", false)
-		errs <- err
-	}()
-	wg.Wait()
-	close(errs)
-	for err := range errs {
-		if err != nil {
-			t.Fatalf("concurrent open: %v", err)
-		}
-	}
-	after, err := d.store.GetDesktop(desktop.ID)
-	if err != nil {
-		t.Fatal(err)
-	}
-	leaves := layouttree.TileLeaves(after.Tree)
-	if len(leaves) != 2 || !layouttree.HasTile(after.Tree, markdownTileIDForPath(path)) || !layouttree.HasTile(after.Tree, seedTileIDForID(seed.ID)) {
-		t.Fatalf("tiles after concurrent opens = %+v, want markdown and seed", leaves)
-	}
-}
-
-func TestSeedAnnotationDraftUsesCanonicalSeedKey(t *testing.T) {
-	d := newGardenDaemon(t)
-	seed := plant(t, d, protocol.SeedPlantMessage{SourceSessionID: protocol.Ptr("sess-a"), Title: "Annotated seed"})
-	client := newProtocolTestClient()
-	d.handleMarkdownAnnotationsSave(client, &protocol.MarkdownAnnotationsSaveMessage{
-		Cmd: protocol.CmdMarkdownAnnotationsSave, RequestID: "save-seed", Generation: 1,
-		DocumentUri: seedDocumentURI(seed.ID), SourceKind: annotationSourceSeed, SeedID: &seed.ID,
-	})
-	var result protocol.MarkdownAnnotationsSaveResultMessage
-	readNotebookWSEvent(t, client.send, &result)
-	if !result.Success || protocol.Deref(result.SeedID) != seed.ID {
-		t.Fatalf("save result = %+v", result)
-	}
-	draft, err := d.store.GetMarkdownAnnotationDraft(seedDocumentURI(seed.ID))
-	if err != nil || draft.Generation != 1 {
-		t.Fatalf("seed draft = %+v, err=%v", draft, err)
-	}
-}
-
-func TestAnnotationSourceRejectsMismatchedDocumentURI(t *testing.T) {
-	d := newMarkdownAnnotationsDaemon(t)
-	_, err := d.resolveAnnotationDocumentSource("attn://seed/s-wrong", annotationSourceFile,
-		protocol.Ptr("/tmp/a b.md"), nil)
-	if err == nil || !strings.Contains(err.Error(), "does not match typed file source") {
-		t.Fatalf("error = %v, want URI mismatch", err)
-	}
-	want := "attn://file/%2Ftmp%2Fa%20b.md"
-	if got := fileDocumentURI("/tmp/a b.md"); got != want {
-		t.Fatalf("fileDocumentURI = %q, want %q", got, want)
-	}
-	want = "attn://file/%2Ftmp%2Fcaf%C3%A9%20!(x).md"
-	if got := fileDocumentURI("/tmp/café !(x).md"); got != want {
-		t.Fatalf("unicode fileDocumentURI = %q, want %q", got, want)
-	}
-}
-
-func TestFormatMarkdownAnnotationPayloadNamesSeed(t *testing.T) {
-	payload := formatMarkdownAnnotationPayload(annotationDocumentSource{
-		kind: annotationSourceSeed, seedID: "s-abc123", seedTitle: "Reader",
-	}, []protocol.MarkdownAnnotation{{ID: "g", Type: markdownAnnotationTypeGlobal, Text: protocol.Ptr("note")}}, nil)
-	if !strings.Contains(payload, "Seed: s-abc123 — Reader") {
-		t.Fatalf("payload does not identify seed:\n%s", payload)
 	}
 }
 

@@ -26,15 +26,6 @@ func (m *Mark) Reached() {
 	m.hit.Store(true)
 }
 
-func (m *Mark) WasReached() bool { return m != nil && m.hit.Load() }
-
-func (m *Mark) String() string {
-	if m == nil {
-		return "<nil mark>"
-	}
-	return m.what
-}
-
 type catalog struct {
 	mu      sync.Mutex
 	entries []*Mark

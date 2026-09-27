@@ -4,457 +4,74 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
-	"sync"
 	"testing"
 )
 
-func TestInstallPathDiscoverAndRemove(t *testing.T) {
-	installMarker := installFakeBun(t)
-	sourceDir := filepath.Join(t.TempDir(), "source")
-	writeTestPlugin(t, sourceDir, "worktree-provider")
-
-	pluginDir := filepath.Join(t.TempDir(), "plugins")
-	manifest, err := InstallPath(sourceDir, pluginDir)
-	if err != nil {
-		t.Fatalf("InstallPath failed: %v", err)
-	}
-	if manifest.Name != "worktree-provider" {
-		t.Fatalf("installed name=%q, want worktree-provider", manifest.Name)
-	}
-	if manifest.Dir != filepath.Join(pluginDir, "worktree-provider") {
-		t.Fatalf("installed dir=%q", manifest.Dir)
-	}
-	if _, err := os.Stat(filepath.Join(manifest.Dir, installMarker)); err != nil {
-		t.Fatalf("bun install marker stat failed: %v", err)
-	}
-
-	manifests, issues := Discover(pluginDir)
-	if len(issues) != 0 {
-		t.Fatalf("discover issues=%v, want none", issues)
-	}
-	if len(manifests) != 1 || manifests[0].Name != "worktree-provider" {
-		t.Fatalf("discover manifests=%v, want worktree-provider", manifests)
-	}
-
-	if err := Remove(pluginDir, "worktree-provider"); err != nil {
-		t.Fatalf("Remove failed: %v", err)
-	}
-	if _, err := os.Stat(filepath.Join(pluginDir, "worktree-provider")); !os.IsNotExist(err) {
-		t.Fatalf("installed directory still exists, stat err=%v", err)
-	}
-}
-
-func TestInstallPathWithOptionsUsesProvidedEnvironment(t *testing.T) {
-	installMarker, env := fakeBunEnvironment(t)
-	sourceDir := filepath.Join(t.TempDir(), "source")
-	writeTestPlugin(t, sourceDir, "worktree-provider")
-
-	pluginDir := filepath.Join(t.TempDir(), "plugins")
-	manifest, err := InstallPathWithOptions(sourceDir, pluginDir, InstallOptions{Env: env})
-	if err != nil {
-		t.Fatalf("InstallPathWithOptions failed: %v", err)
-	}
-	if _, err := os.Stat(filepath.Join(manifest.Dir, installMarker)); err != nil {
-		t.Fatalf("provided-env bun install marker stat failed: %v", err)
-	}
-}
-
-func TestInstallSourceWithOptionsUsesLocalDirectory(t *testing.T) {
-	installMarker, env := fakeBunEnvironment(t)
-	sourceDir := filepath.Join(t.TempDir(), "source")
-	writeTestPlugin(t, sourceDir, "worktree-provider")
-
-	manifest, err := InstallSourceWithOptions(sourceDir, filepath.Join(t.TempDir(), "plugins"), InstallOptions{Env: env})
-	if err != nil {
-		t.Fatalf("InstallSourceWithOptions failed: %v", err)
-	}
-	if _, err := os.Stat(filepath.Join(manifest.Dir, installMarker)); err != nil {
-		t.Fatalf("local source dependency marker stat failed: %v", err)
-	}
-}
-
-func TestInstallSourceWithOptionsClonesGitRepositoryUsingProvidedEnvironment(t *testing.T) {
-	installMarker, env := fakeBunEnvironment(t)
-	binDir := strings.SplitN(strings.TrimPrefix(env[0], "PATH="), string(os.PathListSeparator), 2)[0]
-	gitScript := `#!/bin/sh
-set -eu
-test "$PLUGIN_CLONE_TEST" = "expected"
-test "$1" = "clone"
-test "$2" = "--depth"
-test "$3" = "1"
-test "$4" = "git@ghe.spotify.net:victora/attn-snipe.git"
-mkdir -p "$5/src"
-cat > "$5/attn-plugin.toml" <<'EOF'
-name = "attn-snipe"
-version = "0.1.0"
-attn_api_version = 6
-
-[plugin]
-entrypoint = "src/index.ts"
-EOF
-: > "$5/src/index.ts"
-`
-	if err := os.WriteFile(filepath.Join(binDir, "git"), []byte(gitScript), 0o755); err != nil {
-		t.Fatalf("write fake git: %v", err)
-	}
-	env = append(env, "PLUGIN_CLONE_TEST=expected")
-
-	manifest, err := InstallSourceWithOptions(
-		"git@ghe.spotify.net:victora/attn-snipe.git",
-		filepath.Join(t.TempDir(), "plugins"),
-		InstallOptions{Env: env},
-	)
-	if err != nil {
-		t.Fatalf("InstallSourceWithOptions failed: %v", err)
-	}
-	if manifest.Name != "attn-snipe" {
-		t.Fatalf("installed name=%q, want attn-snipe", manifest.Name)
-	}
-	if _, err := os.Stat(filepath.Join(manifest.Dir, installMarker)); err != nil {
-		t.Fatalf("git source dependency marker stat failed: %v", err)
-	}
-}
-
-func TestInstallSourceWithOptionsRedactsCredentialsFromCloneFailure(t *testing.T) {
-	_, env := fakeBunEnvironment(t)
-	binDir := strings.SplitN(strings.TrimPrefix(env[0], "PATH="), string(os.PathListSeparator), 2)[0]
-	script := "#!/bin/sh\necho \"$4\" >&2\nexit 1\n"
-	if err := os.WriteFile(filepath.Join(binDir, "git"), []byte(script), 0o755); err != nil {
-		t.Fatalf("write failing git: %v", err)
-	}
-	source := "https://user:token@example.com/team/plugin.git?secret=value"
-
-	_, err := InstallSourceWithOptions(source, filepath.Join(t.TempDir(), "plugins"), InstallOptions{Env: env})
-	if err == nil {
-		t.Fatal("InstallSourceWithOptions error=nil, want clone failure")
-	}
-	for _, secret := range []string{"user:token", "secret=value"} {
-		if strings.Contains(err.Error(), secret) {
-			t.Fatalf("clone error leaked %q: %v", secret, err)
-		}
-	}
-	if !strings.Contains(err.Error(), "REDACTED") {
-		t.Fatalf("clone error=%v, want redacted source detail", err)
-	}
-}
-
-func TestInstallPathRejectsDuplicatePlugin(t *testing.T) {
-	installFakeBun(t)
-	sourceDir := filepath.Join(t.TempDir(), "source")
-	writeTestPlugin(t, sourceDir, "worktree-provider")
-	pluginDir := filepath.Join(t.TempDir(), "plugins")
-	if _, err := InstallPath(sourceDir, pluginDir); err != nil {
-		t.Fatalf("first InstallPath failed: %v", err)
-	}
-	if _, err := InstallPath(sourceDir, pluginDir); err == nil {
-		t.Fatal("second InstallPath error=nil, want duplicate install error")
-	}
-}
-
-func TestInstallPathConcurrentDuplicateInstallsPublishExactlyOnePlugin(t *testing.T) {
-	installFakeBun(t)
-	sourceDir := filepath.Join(t.TempDir(), "source")
-	writeTestPlugin(t, sourceDir, "worktree-provider")
-	pluginDir := filepath.Join(t.TempDir(), "plugins")
-
-	const installs = 8
-	results := make([]error, installs)
-	var wg sync.WaitGroup
-	start := make(chan struct{})
-	for i := range installs {
-		wg.Add(1)
-		go func(index int) {
-			defer wg.Done()
-			<-start
-			_, results[index] = InstallPath(sourceDir, pluginDir)
-		}(i)
-	}
-	close(start)
-	wg.Wait()
-
-	successes := 0
-	for _, err := range results {
-		if err == nil {
-			successes++
-		}
-	}
-	if successes != 1 {
-		t.Fatalf("successful installs=%d, want exactly 1; errors=%v", successes, results)
-	}
-
-	installedManifest := filepath.Join(pluginDir, "worktree-provider", ManifestName)
-	if _, err := LoadManifest(installedManifest); err != nil {
-		t.Fatalf("installed manifest missing or invalid after concurrent install: %v", err)
-	}
-}
-
-func TestInstallPathRemovesCopiedPluginWhenDependencyInstallFails(t *testing.T) {
-	installFailingBun(t)
-	sourceDir := filepath.Join(t.TempDir(), "source")
-	writeTestPlugin(t, sourceDir, "worktree-provider")
-	pluginDir := filepath.Join(t.TempDir(), "plugins")
-
-	if _, err := InstallPath(sourceDir, pluginDir); err == nil {
-		t.Fatal("InstallPath error=nil, want bun install failure")
-	}
-	if _, err := os.Stat(filepath.Join(pluginDir, "worktree-provider")); !os.IsNotExist(err) {
-		t.Fatalf("failed install directory still exists, stat err=%v", err)
-	}
-}
-
-func TestInstallPathRejectsTraversalName(t *testing.T) {
-	installFakeBun(t)
-	sourceDir := filepath.Join(t.TempDir(), "source")
-	writeTestPlugin(t, sourceDir, "../bad")
-	if _, err := InstallPath(sourceDir, filepath.Join(t.TempDir(), "plugins")); err == nil {
-		t.Fatal("InstallPath error=nil, want invalid install name")
-	}
-}
-
-func TestLoadManifestAllowsRuntimeOnlyNames(t *testing.T) {
-	sourceDir := filepath.Join(t.TempDir(), "source")
-	writeTestPlugin(t, sourceDir, "team/worktree-provider")
-	manifest, err := LoadManifest(filepath.Join(sourceDir, ManifestName))
-	if err != nil {
-		t.Fatalf("LoadManifest failed: %v", err)
-	}
-	if manifest.Name != "team/worktree-provider" {
-		t.Fatalf("manifest name=%q, want team/worktree-provider", manifest.Name)
-	}
-}
-
-func TestLoadManifestRejectsEntrypointTraversal(t *testing.T) {
-	root := t.TempDir()
-	sourceDir := filepath.Join(root, "source")
-	if err := os.MkdirAll(sourceDir, 0o755); err != nil {
-		t.Fatalf("mkdir plugin source: %v", err)
-	}
-	if err := os.WriteFile(filepath.Join(root, "outside.ts"), []byte("// outside\n"), 0o644); err != nil {
-		t.Fatalf("write outside entrypoint: %v", err)
-	}
-	manifest := []byte(`
-name = "worktree-provider"
-version = "0.1.0"
-attn_api_version = 6
-
-[plugin]
-entrypoint = "../outside.ts"
-`)
-	if err := os.WriteFile(filepath.Join(sourceDir, ManifestName), manifest, 0o644); err != nil {
-		t.Fatalf("write manifest: %v", err)
-	}
-	if _, err := LoadManifest(filepath.Join(sourceDir, ManifestName)); err == nil {
-		t.Fatal("LoadManifest error=nil, want traversal entrypoint rejection")
-	}
-}
-
-func TestLoadManifestNormalizesLegacyBunEntrypoint(t *testing.T) {
-	sourceDir := filepath.Join(t.TempDir(), "source")
-	writeTestPlugin(t, sourceDir, "worktree-provider")
-	manifest, err := LoadManifest(filepath.Join(sourceDir, ManifestName))
-	if err != nil {
-		t.Fatalf("LoadManifest failed: %v", err)
-	}
-	if manifest.Plugin.Kind != EntrypointBun || manifest.Plugin.Path != "src/index.ts" {
-		t.Fatalf("entrypoint=%+v, want normalized bun path", manifest.Plugin)
-	}
-}
-
-func TestLoadManifestAcceptsExecutableEntrypoint(t *testing.T) {
-	root := t.TempDir()
-	if err := os.MkdirAll(filepath.Join(root, "bin"), 0o755); err != nil {
-		t.Fatalf("mkdir bin: %v", err)
-	}
-	if err := os.WriteFile(filepath.Join(root, "bin", "provider"), []byte("#!/bin/sh\n"), 0o755); err != nil {
-		t.Fatalf("write executable: %v", err)
-	}
-	manifestData := []byte("name = \"provider\"\nversion = \"0.1.0\"\nattn_api_version = 6\n\n[plugin]\nkind = \"executable\"\npath = \"bin/provider\"\n")
-	if err := os.WriteFile(filepath.Join(root, ManifestName), manifestData, 0o644); err != nil {
-		t.Fatalf("write manifest: %v", err)
-	}
-	manifest, err := LoadManifest(filepath.Join(root, ManifestName))
-	if err != nil {
-		t.Fatalf("LoadManifest failed: %v", err)
-	}
-	if manifest.Plugin.Kind != EntrypointExecutable || manifest.Plugin.Path != "bin/provider" {
-		t.Fatalf("entrypoint=%+v", manifest.Plugin)
-	}
-}
-
-func TestLoadManifestRejectsNonExecutableEntrypoint(t *testing.T) {
-	root := t.TempDir()
-	if err := os.MkdirAll(filepath.Join(root, "bin"), 0o755); err != nil {
-		t.Fatalf("mkdir bin: %v", err)
-	}
-	if err := os.WriteFile(filepath.Join(root, "bin", "provider"), []byte("binary"), 0o644); err != nil {
-		t.Fatalf("write executable: %v", err)
-	}
-	manifestData := []byte("name = \"provider\"\nversion = \"0.1.0\"\nattn_api_version = 6\n\n[plugin]\nkind = \"executable\"\npath = \"bin/provider\"\n")
-	if err := os.WriteFile(filepath.Join(root, ManifestName), manifestData, 0o644); err != nil {
-		t.Fatalf("write manifest: %v", err)
-	}
-	if _, err := LoadManifest(filepath.Join(root, ManifestName)); err == nil || !strings.Contains(err.Error(), "must be executable") {
-		t.Fatalf("LoadManifest error=%v, want executable-bit rejection", err)
-	}
-}
-
-func TestLoadManifestRejectsUnsupportedAPIVersion(t *testing.T) {
-	root := t.TempDir()
-	if err := os.WriteFile(filepath.Join(root, "entry.ts"), []byte("// entrypoint\n"), 0o644); err != nil {
-		t.Fatalf("write entrypoint: %v", err)
-	}
-	manifestData := []byte("name = \"provider\"\nversion = \"0.1.0\"\nattn_api_version = 3\n\n[plugin]\nentrypoint = \"entry.ts\"\n")
-	if err := os.WriteFile(filepath.Join(root, ManifestName), manifestData, 0o644); err != nil {
-		t.Fatalf("write manifest: %v", err)
-	}
-	if _, err := LoadManifest(filepath.Join(root, ManifestName)); err == nil || !strings.Contains(err.Error(), "unsupported attn_api_version") {
-		t.Fatalf("LoadManifest error=%v, want API-version rejection", err)
-	}
-}
-
-func writeTestPlugin(t *testing.T, root, name string) {
-	t.Helper()
-	if err := os.MkdirAll(filepath.Join(root, "src"), 0o755); err != nil {
-		t.Fatalf("mkdir plugin source: %v", err)
-	}
-	if err := os.WriteFile(filepath.Join(root, "src", "index.ts"), []byte("// entrypoint\n"), 0o644); err != nil {
-		t.Fatalf("write entrypoint: %v", err)
-	}
-	manifest := []byte(`
-name = "` + name + `"
-version = "0.1.0"
-attn_api_version = 6
-
-[plugin]
-entrypoint = "src/index.ts"
-`)
-	if err := os.WriteFile(filepath.Join(root, ManifestName), manifest, 0o644); err != nil {
-		t.Fatalf("write manifest: %v", err)
-	}
-}
-
-func installFakeBun(t *testing.T) string {
-	t.Helper()
-	installMarker, env := fakeBunEnvironment(t)
-	t.Setenv("PATH", envPath(env))
-	return installMarker
-}
-
-func fakeBunEnvironment(t *testing.T) (string, []string) {
-	t.Helper()
-	binDir := filepath.Join(t.TempDir(), "bin")
-	if err := os.MkdirAll(binDir, 0o755); err != nil {
-		t.Fatalf("mkdir fake bun dir: %v", err)
-	}
-	const installMarker = "node_modules/.bun-install-ran"
-	script := "#!/bin/sh\nmkdir -p node_modules\n: > " + installMarker + "\n"
-	if err := os.WriteFile(filepath.Join(binDir, "bun"), []byte(script), 0o755); err != nil {
-		t.Fatalf("write fake bun: %v", err)
-	}
-	path := binDir + string(os.PathListSeparator) + os.Getenv("PATH")
-	return installMarker, []string{"PATH=" + path}
-}
-
-func envPath(env []string) string {
-	for _, entry := range env {
-		if strings.HasPrefix(entry, "PATH=") {
-			return strings.TrimPrefix(entry, "PATH=")
-		}
-	}
-	return ""
-}
-
-func installFailingBun(t *testing.T) {
-	t.Helper()
-	binDir := filepath.Join(t.TempDir(), "bin")
-	if err := os.MkdirAll(binDir, 0o755); err != nil {
-		t.Fatalf("mkdir failing bun dir: %v", err)
-	}
-	script := "#!/bin/sh\necho dependency install failed >&2\nexit 1\n"
-	if err := os.WriteFile(filepath.Join(binDir, "bun"), []byte(script), 0o755); err != nil {
-		t.Fatalf("write failing bun: %v", err)
-	}
-	t.Setenv("PATH", binDir+string(os.PathListSeparator)+os.Getenv("PATH"))
-}
-
-func TestLinkPathDiscoverAndRemoveKeepsCheckout(t *testing.T) {
-	installMarker := installFakeBun(t)
-	sourceDir := filepath.Join(t.TempDir(), "checkout")
-	writeTestPlugin(t, sourceDir, "linked-provider")
-	pluginDir := filepath.Join(t.TempDir(), "plugins")
-
-	manifest, err := LinkPath(sourceDir, pluginDir, InstallOptions{})
-	if err != nil {
-		t.Fatalf("LinkPath failed: %v", err)
-	}
-	if manifest.Dir != filepath.Join(pluginDir, "linked-provider") || manifest.LinkTarget != sourceDir {
-		t.Fatalf("linked manifest dir=%q target=%q", manifest.Dir, manifest.LinkTarget)
-	}
-	if _, err := os.Stat(filepath.Join(sourceDir, installMarker)); err != nil {
-		t.Fatalf("bun install did not run in the checkout: %v", err)
-	}
-
-	if err := os.WriteFile(filepath.Join(sourceDir, "src", "index.ts"), []byte("// edited\n"), 0o644); err != nil {
-		t.Fatalf("edit checkout: %v", err)
-	}
-	seen, err := os.ReadFile(filepath.Join(manifest.Dir, "src", "index.ts"))
-	if err != nil || string(seen) != "// edited\n" {
-		t.Fatalf("read through link=%q err=%v, want the edit", seen, err)
-	}
-
-	manifests, issues := Discover(pluginDir)
-	if len(issues) != 0 {
-		t.Fatalf("discover issues=%v, want none", issues)
-	}
-	if len(manifests) != 1 || manifests[0].Name != "linked-provider" || manifests[0].LinkTarget != sourceDir {
-		t.Fatalf("discover manifests=%+v, want linked-provider pointing at the checkout", manifests)
-	}
-
-	if _, err := LinkPath(sourceDir, pluginDir, InstallOptions{}); err == nil || !strings.Contains(err.Error(), "already installed") {
-		t.Fatalf("second LinkPath err=%v, want already installed", err)
-	}
-	if _, err := InstallPath(sourceDir, pluginDir); err == nil || !strings.Contains(err.Error(), "already installed") {
-		t.Fatalf("InstallPath over a link err=%v, want already installed", err)
-	}
-
-	if err := Remove(pluginDir, "linked-provider"); err != nil {
-		t.Fatalf("Remove failed: %v", err)
-	}
-	if _, err := os.Lstat(filepath.Join(pluginDir, "linked-provider")); !os.IsNotExist(err) {
-		t.Fatalf("link still exists, lstat err=%v", err)
-	}
-	if _, err := os.Stat(filepath.Join(sourceDir, ManifestName)); err != nil {
-		t.Fatalf("checkout was touched by Remove: %v", err)
-	}
-}
-
-func TestLinkPathRejectsMissingManifestAndSourceInsidePluginDir(t *testing.T) {
-	installFakeBun(t)
-	pluginDir := filepath.Join(t.TempDir(), "plugins")
-	if _, err := LinkPath(t.TempDir(), pluginDir, InstallOptions{}); err == nil || !strings.Contains(err.Error(), "load source manifest") {
-		t.Fatalf("LinkPath without manifest err=%v, want manifest error", err)
-	}
-	inside := filepath.Join(pluginDir, "staged")
-	writeTestPlugin(t, inside, "staged")
-	if _, err := LinkPath(inside, pluginDir, InstallOptions{}); err == nil || !strings.Contains(err.Error(), "inside the plugin directory") {
-		t.Fatalf("LinkPath from inside plugin dir err=%v, want refusal", err)
-	}
-}
-
-func TestDiscoverReportsDanglingLink(t *testing.T) {
-	pluginDir := filepath.Join(t.TempDir(), "plugins")
-	if err := os.MkdirAll(pluginDir, 0o755); err != nil {
-		t.Fatal(err)
-	}
-	gone := filepath.Join(t.TempDir(), "gone")
-	if err := os.Symlink(gone, filepath.Join(pluginDir, "dangling")); err != nil {
-		t.Fatal(err)
-	}
-	manifests, issues := Discover(pluginDir)
-	if len(manifests) != 0 || len(issues) != 1 || !strings.Contains(issues[0].Err.Error(), gone) {
-		t.Fatalf("manifests=%v issues=%v, want one issue naming the missing target", manifests, issues)
-	}
-	if err := Remove(pluginDir, "dangling"); err != nil {
-		t.Fatalf("Remove dangling link: %v", err)
+func TestLoadManifestAcceptsWhatARuntimeCanStartAndNamesWhatItRefuses(t *testing.T) {
+	type file struct {
+		body string
+		mode os.FileMode
+	}
+	bunEntry := map[string]file{"src/index.ts": {"// entrypoint\n", 0o644}}
+	cases := []struct {
+		name     string
+		manifest string
+		files    map[string]file
+		wantName string
+		wantKind EntrypointKind
+		wantPath string
+		refusal  string
+	}{
+		{name: "a legacy entrypoint runs under bun",
+			manifest: "name = \"worktree-provider\"\nversion = \"0.1.0\"\nattn_api_version = 6\n\n[plugin]\nentrypoint = \"src/index.ts\"\n",
+			files:    bunEntry, wantName: "worktree-provider", wantKind: EntrypointBun, wantPath: "src/index.ts"},
+		{name: "a runtime-only name may hold a slash",
+			manifest: "name = \"team/worktree-provider\"\nversion = \"0.1.0\"\nattn_api_version = 6\n\n[plugin]\nentrypoint = \"src/index.ts\"\n",
+			files:    bunEntry, wantName: "team/worktree-provider", wantKind: EntrypointBun, wantPath: "src/index.ts"},
+		{name: "an executable entrypoint runs as itself",
+			manifest: "name = \"provider\"\nversion = \"0.1.0\"\nattn_api_version = 6\n\n[plugin]\nkind = \"executable\"\npath = \"bin/provider\"\n",
+			files:    map[string]file{"bin/provider": {"#!/bin/sh\n", 0o755}}, wantName: "provider", wantKind: EntrypointExecutable, wantPath: "bin/provider"},
+		{name: "an executable entrypoint without the executable bit is refused",
+			manifest: "name = \"provider\"\nversion = \"0.1.0\"\nattn_api_version = 6\n\n[plugin]\nkind = \"executable\"\npath = \"bin/provider\"\n",
+			files:    map[string]file{"bin/provider": {"binary", 0o644}}, refusal: "must be executable"},
+		{name: "an entrypoint outside the plugin is refused",
+			manifest: "name = \"worktree-provider\"\nversion = \"0.1.0\"\nattn_api_version = 6\n\n[plugin]\nentrypoint = \"../outside.ts\"\n",
+			files:    map[string]file{"../outside.ts": {"// outside\n", 0o644}}, refusal: "must stay within the plugin directory"},
+		{name: "an older plugin API is refused",
+			manifest: "name = \"provider\"\nversion = \"0.1.0\"\nattn_api_version = 3\n\n[plugin]\nentrypoint = \"entry.ts\"\n",
+			files:    map[string]file{"entry.ts": {"// entrypoint\n", 0o644}}, refusal: "unsupported attn_api_version"},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			root := filepath.Join(t.TempDir(), "plugin")
+			if err := os.MkdirAll(root, 0o755); err != nil {
+				t.Fatal(err)
+			}
+			for rel, f := range tc.files {
+				path := filepath.Join(root, filepath.FromSlash(rel))
+				if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
+					t.Fatal(err)
+				}
+				if err := os.WriteFile(path, []byte(f.body), f.mode); err != nil {
+					t.Fatal(err)
+				}
+			}
+			if err := os.WriteFile(filepath.Join(root, ManifestName), []byte(tc.manifest), 0o644); err != nil {
+				t.Fatal(err)
+			}
+			manifest, err := LoadManifest(filepath.Join(root, ManifestName))
+			if tc.refusal != "" {
+				if err == nil || !strings.Contains(err.Error(), tc.refusal) {
+					t.Fatalf("LoadManifest = %+v, %v; want a refusal naming %q", manifest, err, tc.refusal)
+				}
+				return
+			}
+			if err != nil {
+				t.Fatal(err)
+			}
+			if manifest.Name != tc.wantName || manifest.Plugin.Kind != tc.wantKind || manifest.Plugin.Path != tc.wantPath {
+				t.Fatalf("LoadManifest = %q %+v, want %q running %s %s", manifest.Name, manifest.Plugin, tc.wantName, tc.wantKind, tc.wantPath)
+			}
+		})
 	}
 }

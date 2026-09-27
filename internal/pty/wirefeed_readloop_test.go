@@ -97,31 +97,6 @@ func (c *collectingSubscriber) waitFor(t *testing.T, what string, want func([]by
 	}
 }
 
-func TestReadLoopFansOutTheRewrittenStream(t *testing.T) {
-	sub := newCollectingSubscriber()
-	peer := wireSession(t, "wire-out", 20, 8, sub)
-
-	const before, after = "\x1b[6;3Hhead", "tail"
-	stripped := before + after
-	if _, err := peer.Write([]byte(before + kittyPlaceRGB(20, 16, 96, "") + after)); err != nil {
-		t.Fatalf("peer write: %v", err)
-	}
-
-	got := sub.waitFor(t, "the text after the image", func(b []byte) bool {
-		return bytes.Contains(b, []byte(after))
-	})
-
-	if bytes.Contains(got, []byte("\x1b_G")) {
-		t.Errorf("a kitty APC reached the client: %q", got)
-	}
-	if !bytes.Contains(got, []byte("head")) {
-		t.Errorf("the text before the image was lost: %q", got)
-	}
-	if string(got) == stripped {
-		t.Errorf("nothing was substituted for the image; the client received the stripped stream %q", got)
-	}
-}
-
 func TestReadLoopSkipsTheFanOutForAHeldEscape(t *testing.T) {
 	taken := make(chan struct{}, 8)
 	readLoopSeqGapHook = func() {
@@ -158,60 +133,5 @@ func TestReadLoopSkipsTheFanOutForAHeldEscape(t *testing.T) {
 	sub.mu.Unlock()
 	if empties != 0 {
 		t.Errorf("%d empty payloads were fanned out; a chunk with nothing to carry should skip the fan-out", empties)
-	}
-}
-
-func TestReadLoopDropsSubscribersWhenLayoutCannotBeExpressed(t *testing.T) {
-	sub := newCollectingSubscriber()
-	peer := wireSession(t, "wire-resync", 20, 6, sub)
-
-	if _, err := peer.Write([]byte("\x1b[?1049h alt0\r\nalt1\r\nalt2\r\nalt3\r\nalt4\r\n\x1b[6;1Halt5")); err != nil {
-		t.Fatalf("peer write: %v", err)
-	}
-	sub.waitFor(t, "the alternate screen to fill", func(b []byte) bool {
-		return bytes.Contains(b, []byte("alt5"))
-	})
-
-	if _, err := peer.Write([]byte(kittyPlaceRGB(21, 16, 16*8, ""))); err != nil {
-		t.Fatalf("peer write: %v", err)
-	}
-
-	select {
-	case reason := <-sub.dropped:
-		if reason != kittyResyncAnchorClamped {
-			t.Fatalf("dropped with reason %q, want %q", reason, kittyResyncAnchorClamped)
-		}
-	case <-time.After(5 * time.Second):
-		t.Fatal("the client was never dropped; the snapshot re-push is the only thing that resyncs it")
-	}
-}
-
-func TestForceResyncDropsEverySubscriber(t *testing.T) {
-	s := &Session{id: "resync", subscribers: make(map[string]*sessionSubscriber)}
-	var mu sync.Mutex
-	reasons := map[string]int{}
-	for _, id := range []string{"a", "b"} {
-		s.addSubscriber(id, func([]byte, uint32) bool { return true }, func(reason string) {
-			mu.Lock()
-			defer mu.Unlock()
-			reasons[id+":"+reason]++
-		})
-	}
-
-	s.forceResync("kitty_layout_anchor_clamped")
-
-	if len(reasons) != 2 || reasons["a:kitty_layout_anchor_clamped"] != 1 || reasons["b:kitty_layout_anchor_clamped"] != 1 {
-		t.Errorf("onDrop calls = %v, want each subscriber told once with the reason", reasons)
-	}
-	s.subMu.RLock()
-	left := len(s.subscribers)
-	s.subMu.RUnlock()
-	if left != 0 {
-		t.Errorf("%d subscribers still attached after a resync", left)
-	}
-
-	s.forceResync("kitty_layout_anchor_clamped")
-	if len(reasons) != 2 {
-		t.Errorf("onDrop calls after a second resync = %v, want the same two", reasons)
 	}
 }

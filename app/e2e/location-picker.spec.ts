@@ -51,173 +51,36 @@ test.describe('LocationPicker', () => {
       await expect(page.locator('.picker-title')).toHaveText('New Session Location');
     });
 
-    test('closes dialog with Escape', async ({ page, daemon }) => {
-      await daemon.start();
-      await page.goto('/');
-      await page.waitForSelector('.dashboard');
-
-      await page.keyboard.press('Meta+n');
-      await expect(page.locator('.location-picker-overlay')).toBeVisible();
-
-      await page.keyboard.press('Escape');
-      await expect(page.locator('.location-picker-overlay')).not.toBeVisible();
-    });
-
-    test('remembers selected agent between openings', async ({ page, daemon }) => {
-      await daemon.start();
-      await page.goto('/');
-      await page.waitForSelector('.dashboard');
-
-      await page.keyboard.press('Meta+n');
-      await expect(page.locator('.location-picker-overlay')).toBeVisible();
-      const enabledAgents = page.locator('.agent-option:not(:disabled)');
-      const enabledCount = await enabledAgents.count();
-      if (enabledCount === 0) {
-        await expect(page.locator('.picker-agent-warning')).toBeVisible();
-        return;
-      }
-      const targetAgent = enabledAgents.nth(Math.min(1, enabledCount - 1));
-      const agentName = ((await targetAgent.locator('.agent-option-name').textContent()) || '').trim();
-      await targetAgent.click();
-      await expect(page.locator('.agent-option', { hasText: agentName })).toHaveClass(/active/);
-
-      await page.keyboard.press('Escape');
-      await expect(page.locator('.location-picker-overlay')).not.toBeVisible();
-      await page.keyboard.press('Meta+n');
-      await expect(page.locator('.location-picker-overlay')).toBeVisible();
-      await expect(page.locator('.agent-option', { hasText: agentName })).toHaveClass(/active/);
-    });
-  });
-
-  test.describe('Recent Locations', () => {
-    test('filters recent locations based on input', async ({ page, daemon }) => {
-      await daemon.start();
-      await page.goto('/');
-      await page.waitForSelector('.dashboard');
-
-      await page.keyboard.press('Meta+n');
-      await expect(page.locator('.location-picker-overlay')).toBeVisible();
-
-      const recentSection = page.locator('.picker-section-title').filter({ hasText: 'RECENT' });
-      if (await recentSection.isVisible({ timeout: 1000 }).catch(() => false)) {
-        const initialCount = await page.locator('.picker-section:has(.picker-section-title:text("RECENT")) .picker-item').count();
-
-        if (initialCount > 0) {
-          await page.keyboard.type('xyz_nonexistent_filter');
-
-          const filteredCount = await page.locator('.picker-section:has(.picker-section-title:text("RECENT")) .picker-item').count();
-          expect(filteredCount).toBeLessThanOrEqual(initialCount);
-        }
-      }
-    });
-  });
-
-  test.describe('Path Input', () => {
-    test('shows filesystem suggestions', async ({ page, daemon }) => {
-      await daemon.start();
-      await page.goto('/');
-      await page.waitForSelector('.dashboard');
-
-      await page.keyboard.press('Meta+n');
-      await expect(page.locator('.location-picker-overlay')).toBeVisible();
-
-      await page.keyboard.type('~/');
-
-      await page.waitForTimeout(500);
-
-      const directoriesSection = page.locator('.picker-section-title').filter({ hasText: 'DIRECTORIES' });
-      const hasSuggestions = await directoriesSection.isVisible({ timeout: 2000 }).catch(() => false);
-
-      if (hasSuggestions) {
-        const directoryItems = page.locator('.picker-section:has(.picker-section-title:text("DIRECTORIES")) .picker-item');
-        const count = await directoryItems.count();
-        expect(count).toBeGreaterThan(0);
-      }
-    });
-  });
-
-  test.describe('Contains Search', () => {
-    test('matches directories containing search term (not just starting with)', async ({ page, daemon }) => {
-      await daemon.start();
-      await page.goto('/');
-      await page.waitForSelector('.dashboard');
-
-      await page.keyboard.press('Meta+n');
-      await expect(page.locator('.location-picker-overlay')).toBeVisible();
-
-      // ~/Library gives a predictable set: most Macs have "Application Support".
-      await page.keyboard.type('~/Library/');
-      await page.waitForTimeout(500);
-
-      const directoriesSection = page.locator('.picker-section-title').filter({ hasText: 'DIRECTORIES' });
-      const hasSuggestions = await directoriesSection.isVisible({ timeout: 2000 }).catch(() => false);
-
-      if (hasSuggestions) {
-        const directoryItems = page.locator('.picker-section:has(.picker-section-title:text("DIRECTORIES")) .picker-name');
-        const count = await directoryItems.count();
-
-        if (count > 0) {
-          await page.keyboard.press('Meta+a');
-          await page.keyboard.type('~/Library/Support');
-          await page.waitForTimeout(500);
-
-          const matchingItems = page.locator('.picker-section:has(.picker-section-title:text("DIRECTORIES")) .picker-name');
-          const matchCount = await matchingItems.count();
-
-          if (matchCount > 0) {
-            const firstName = await matchingItems.first().textContent();
-            expect(firstName?.toLowerCase()).toContain('support');
-          }
-        }
-      }
-    });
   });
 
   test.describe('Keyboard Navigation', () => {
-    test('arrow keys navigate and scroll selected item into view', async ({ page, daemon }) => {
+    test('arrow keys scroll the selected directory into view', async ({ page, daemon }) => {
       await daemon.start();
-      await page.goto('/');
-      await page.waitForSelector('.dashboard');
-
-      await page.keyboard.press('Meta+n');
-      await expect(page.locator('.location-picker-overlay')).toBeVisible();
-
-      await page.keyboard.type('~/');
-      await page.waitForTimeout(500);
-
-      const directoryItems = page.locator('.picker-section:has(.picker-section-title:text("DIRECTORIES")) .picker-item');
-      const count = await directoryItems.count();
-
-      if (count > 3) {
-        await page.keyboard.press('ArrowDown');
-        await page.keyboard.press('ArrowDown');
-        await page.keyboard.press('ArrowDown');
-
-        const selectedItem = page.locator('.picker-item.selected');
-        await expect(selectedItem).toBeVisible();
-
-        const dataIndex = await selectedItem.getAttribute('data-index');
-        expect(dataIndex).toBe('2');
+      const parentDir = fs.mkdtempSync(path.join(os.tmpdir(), 'attn-location-picker-scroll-'));
+      for (let index = 0; index < 40; index += 1) {
+        fs.mkdirSync(path.join(parentDir, `dir-${String(index).padStart(2, '0')}`));
       }
-    });
-  });
 
-  test.describe('Empty State', () => {
-    test('shows empty state when no matches', async ({ page, daemon }) => {
-      await daemon.start();
-      await page.goto('/');
-      await page.waitForSelector('.dashboard');
+      try {
+        await page.goto('/');
+        await page.waitForSelector('.dashboard');
+        await page.keyboard.press('Meta+n');
+        await expect(page.locator('.location-picker-overlay')).toBeVisible();
 
-      await page.keyboard.press('Meta+n');
-      await expect(page.locator('.location-picker-overlay')).toBeVisible();
+        await page.locator('[data-testid="location-picker-path-input"]').focus();
+        await page.keyboard.type(`${parentDir}/`);
+        const last = page.locator('.picker-item', { hasText: 'dir-39' });
+        await expect(last).toBeAttached();
+        await expect(last).not.toBeInViewport();
 
-      await page.keyboard.type('/xyz_nonexistent_path_12345');
+        for (let index = 0; index < 40; index += 1) await page.keyboard.press('ArrowDown');
 
-      await page.waitForTimeout(500);
-
-      const emptyState = page.locator('.picker-empty');
-      await expect(emptyState).toBeVisible();
-      await expect(emptyState).toContainText('No matches');
+        const selected = page.locator('.picker-item.selected');
+        await expect(selected).toContainText('dir-39');
+        await expect(selected).toBeInViewport();
+      } finally {
+        fs.rmSync(parentDir, { recursive: true, force: true });
+      }
     });
   });
 

@@ -1,16 +1,18 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type { Dispatch, SetStateAction } from 'react';
-import type { SessionLedgerEntry, SessionLedgerFacets, SessionReopen } from '../types/generated';
-import type { SessionLedgerPage, SessionLedgerQuery } from './daemonSessionLedgerEvents';
+import type { SessionLedgerEntry, SessionLedgerFacets } from '../types/generated';
+import type {
+  SessionLedgerConnectionEvent,
+  SessionLedgerPage,
+  SessionLedgerQuery,
+} from './daemonSessionLedgerEvents';
 import {
   customSessionRange,
   isRangeError,
   ledgerInstant,
-  reopenVerdictView,
-  reopenVerdictsById,
   sessionRangeWindow,
 } from '../components/sessionsLedger';
-import type { ReopenVerdictView, SessionRangeId, SessionScope } from '../components/sessionsLedger';
+import type { SessionRangeId, SessionScope } from '../components/sessionsLedger';
 
 export interface SessionLedgerFilters {
   scope: SessionScope;
@@ -34,22 +36,24 @@ export const SESSION_PAGE_SIZE = 50;
 
 const systemNow = () => new Date();
 
-const NO_VERDICTS: Record<string, ReopenVerdictView> = {};
-
 export interface UseSessionLedgerOptions {
   enabled: boolean;
-  list: (query: SessionLedgerQuery) => Promise<SessionLedgerPage>;
+  connection: SessionLedgerConnection;
   pageSize?: number;
   now?: () => Date;
   initialFilters?: SessionLedgerFilters;
   onFiltersChange?: (filters: SessionLedgerFilters) => void;
 }
 
+export interface SessionLedgerConnection {
+  list: (query: SessionLedgerQuery) => Promise<SessionLedgerPage>;
+  subscribe: (listener: (event: SessionLedgerConnectionEvent) => void) => () => void;
+}
+
 export interface SessionLedgerView {
   filters: SessionLedgerFilters;
   setFilters: Dispatch<SetStateAction<SessionLedgerFilters>>;
   entries: SessionLedgerEntry[];
-  verdicts: Record<string, ReopenVerdictView>;
   facets: SessionLedgerFacets | null;
   omitted: number;
   loading: boolean;
@@ -58,8 +62,6 @@ export interface SessionLedgerView {
   filterError: string | null;
   reload: () => void;
   loadMore: () => void;
-  recordClose: (entry: SessionLedgerEntry, reopen?: SessionReopen) => void;
-  recordVerdict: (sessionId: string, reopen: SessionReopen) => void;
 }
 
 export function sameFilters(a: SessionLedgerFilters, b: SessionLedgerFilters): boolean {
@@ -109,44 +111,80 @@ export function closeBelongsInView(
   return true;
 }
 
+function applyClose(
+  entries: SessionLedgerEntry[],
+  entry: SessionLedgerEntry,
+  filters: SessionLedgerFilters,
+  at: Date,
+): SessionLedgerEntry[] {
+  if (!entries.some((row) => row.id === entry.id)) {
+    return closeBelongsInView(entry, filters, at) ? [entry, ...entries] : entries;
+  }
+  return filters.scope === 'live'
+    ? entries.filter((row) => row.id !== entry.id)
+    : entries.map((row) => (row.id === entry.id ? entry : row));
+}
+
+interface LedgerRead {
+  query: string | null;
+  entries: SessionLedgerEntry[];
+  facets: SessionLedgerFacets | null;
+  error: string | null;
+}
+
+const NO_READ: LedgerRead = { query: null, entries: [], facets: null, error: null };
+
 export function useSessionLedger({
   enabled,
-  list,
+  connection,
   pageSize = SESSION_PAGE_SIZE,
   now = systemNow,
   initialFilters = EMPTY_SESSION_FILTERS,
   onFiltersChange,
 }: UseSessionLedgerOptions): SessionLedgerView {
   const [filters, setFilters] = useState<SessionLedgerFilters>(initialFilters);
-  const [entries, setEntries] = useState<SessionLedgerEntry[]>([]);
-  const [verdicts, setVerdicts] = useState<Record<string, ReopenVerdictView>>(NO_VERDICTS);
-  const [facets, setFacets] = useState<SessionLedgerFacets | null>(null);
+  const [read, setRead] = useState<LedgerRead>(NO_READ);
   const [omitted, setOmitted] = useState(0);
   const [nextBefore, setNextBefore] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
-  const [loadingMore, setLoadingMore] = useState(false);
-  const [error, setError] = useState<string | null>(null);
+  const [loadingMoreRead, setLoadingMoreRead] = useState<SessionLedgerEntry[] | null>(null);
   const [reloadNonce, setReloadNonce] = useState(0);
-  const readSeq = useRef(0);
-  // A branch check can land before the page that asked for it; the page then
-  // still says checking, so the sharper verdict waits here for it.
-  const sharpened = useRef<Record<string, SessionReopen>>({});
-  useEffect(() => {
-    if (!enabled) sharpened.current = {};
-  }, [enabled]);
-  const pageVerdicts = useCallback((reopen: SessionLedgerPage['reopen']) => {
-    const byId = reopenVerdictsById(reopen);
-    for (const id of Object.keys(byId)) {
-      const early = sharpened.current[id];
-      if (byId[id].refreshing && early) byId[id] = reopenVerdictView(early);
-    }
-    return byId;
-  }, []);
-  // Written after commit: a render React discards must not steer the committed surface.
+  const [lifecycle, setLifecycle] = useState({ connected: false, generation: 0 });
+  const lifecycleRef = useRef(lifecycle);
+  const readEpoch = useRef(0);
+  const closesDuringReads = useRef(new Set<SessionLedgerEntry[]>());
+  const loadingMore = loadingMoreRead !== null;
+
   const filtersRef = useRef(filters);
   useEffect(() => {
     filtersRef.current = filters;
   }, [filters]);
+
+  useEffect(() => {
+    if (!enabled) return;
+    return connection.subscribe((event) => {
+      if (event.type === 'connection') {
+        const next = { connected: event.connected, generation: event.connectionGeneration };
+        lifecycleRef.current = next;
+        setLifecycle((current) => current.connected === next.connected && current.generation === next.generation
+          ? current
+          : next);
+        if (!event.connected) {
+          readEpoch.current += 1;
+          closesDuringReads.current.clear();
+          setLoading(false);
+          setLoadingMoreRead(null);
+        }
+        return;
+      }
+      if (!lifecycleRef.current.connected
+        || event.connectionGeneration !== lifecycleRef.current.generation) return;
+      const entry = event.entry;
+      for (const closes of closesDuringReads.current) closes.push(entry);
+      const at = now();
+      setRead((current) => ({ ...current, entries: applyClose(current.entries, entry, filtersRef.current, at) }));
+    });
+  }, [connection.subscribe, enabled, now]);
 
   const reportedRef = useRef(filters);
   useEffect(() => {
@@ -157,89 +195,90 @@ export function useSessionLedger({
 
   const query = useMemo(() => sessionLedgerQuery(filters, now()), [filters, now]);
   const filterError = 'error' in query ? query.error : null;
+  const queryKey = useMemo(() => JSON.stringify(query), [query]);
 
   useEffect(() => {
-    if (!enabled || filterError) return;
-    const seq = ++readSeq.current;
+    const epoch = ++readEpoch.current;
+    closesDuringReads.current.clear();
+    setLoadingMoreRead(null);
+    setNextBefore(null);
+    setOmitted(0);
+    if (!enabled || filterError) {
+      setLoading(false);
+      return;
+    }
+    if (!lifecycle.connected) {
+      setLoading(false);
+      return;
+    }
+    const generation = lifecycle.generation;
+    const closes: SessionLedgerEntry[] = [];
+    closesDuringReads.current.add(closes);
+    const superseded = () => epoch !== readEpoch.current || generation !== lifecycleRef.current.generation;
     setLoading(true);
-    setError(null);
-    list({ ...(query as SessionLedgerQuery), limit: pageSize, reopen: true })
+    setRead((current) => (current.query === queryKey ? { ...current, error: null } : current));
+    connection.list({ ...(query as SessionLedgerQuery), limit: pageSize })
       .then((page) => {
-        if (seq !== readSeq.current) return;
-        setEntries(page.entries ?? []);
-        setVerdicts(pageVerdicts(page.reopen));
-        setFacets(page.facets ?? null);
+        if (superseded()) return;
+        const at = now();
+        const listed = closes.reduce((next, entry) => applyClose(next, entry, filters, at), page.entries ?? []);
+        setRead({ query: queryKey, entries: listed, facets: page.facets ?? null, error: null });
         setOmitted(page.omitted ?? 0);
         setNextBefore(page.next_before ?? null);
       })
       .catch((failure: Error) => {
-        if (seq !== readSeq.current) return;
-        setEntries([]);
-        setVerdicts(NO_VERDICTS);
-        setFacets(null);
-        setOmitted(0);
-        setNextBefore(null);
-        setError(failure.message);
+        if (superseded()) return;
+        setRead((current) => (current.query === queryKey
+          ? { ...current, error: failure.message }
+          : { ...NO_READ, query: queryKey, error: failure.message }));
       })
       .finally(() => {
-        if (seq === readSeq.current) setLoading(false);
+        closesDuringReads.current.delete(closes);
+        if (epoch === readEpoch.current) setLoading(false);
       });
-    // `query` holds a fresh `now`, so depending on it would refetch every render.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [enabled, filters, filterError, list, pageSize, pageVerdicts, reloadNonce]);
+    return () => {
+      if (readEpoch.current === epoch) readEpoch.current += 1;
+      closesDuringReads.current.clear();
+    };
+  }, [enabled, filters, query, queryKey, filterError, connection.list, lifecycle, pageSize, reloadNonce, now]);
 
   const reload = useCallback(() => setReloadNonce((n) => n + 1), []);
 
   const loadMore = useCallback(() => {
-    if (!nextBefore || loadingMore || filterError) return;
-    const seq = readSeq.current;
-    setLoadingMore(true);
-    list({ ...(sessionLedgerQuery(filtersRef.current, now()) as SessionLedgerQuery), limit: pageSize, before: nextBefore, reopen: true })
+    if (!nextBefore || loading || loadingMore || filterError || !lifecycleRef.current.connected) return;
+    const epoch = readEpoch.current;
+    const generation = lifecycleRef.current.generation;
+    const closes: SessionLedgerEntry[] = [];
+    closesDuringReads.current.add(closes);
+    const superseded = () => epoch !== readEpoch.current || generation !== lifecycleRef.current.generation;
+    setLoadingMoreRead(closes);
+    connection.list({ ...(sessionLedgerQuery(filtersRef.current, now()) as SessionLedgerQuery), limit: pageSize, before: nextBefore })
       .then((page) => {
-        if (seq !== readSeq.current) return;
-        setEntries((current) => [...current, ...(page.entries ?? [])]);
-        setVerdicts((current) => ({ ...current, ...pageVerdicts(page.reopen) }));
+        if (superseded()) return;
+        const at = now();
+        setRead((current) => {
+          const present = new Set(current.entries.map((entry) => entry.id));
+          const appended = [...current.entries, ...(page.entries ?? []).filter((entry) => !present.has(entry.id))];
+          return { ...current, entries: closes.reduce((next, entry) => applyClose(next, entry, filtersRef.current, at), appended) };
+        });
         setOmitted(page.omitted ?? 0);
         setNextBefore(page.next_before ?? null);
       })
       .catch((failure: Error) => {
-        if (seq === readSeq.current) setError(failure.message);
+        if (epoch === readEpoch.current) setRead((current) => ({ ...current, error: failure.message }));
       })
       .finally(() => {
-        if (seq === readSeq.current) setLoadingMore(false);
+        closesDuringReads.current.delete(closes);
+        setLoadingMoreRead((current) => current === closes ? null : current);
       });
-  }, [nextBefore, loadingMore, filterError, list, pageSize, pageVerdicts, now]);
+  }, [nextBefore, loading, loadingMore, filterError, connection.list, pageSize, now]);
 
-  const recordClose = useCallback((entry: SessionLedgerEntry, reopen?: SessionReopen) => {
-    // Read outside the updater: React may replay one, and the clock would move under it.
-    const dropsFromView = filtersRef.current.scope === 'live';
-    const belongs = closeBelongsInView(entry, filtersRef.current, now());
-    setEntries((current) => {
-      const at = current.findIndex((row) => row.id === entry.id);
-      if (at >= 0) {
-        const next = current.slice();
-        next[at] = entry;
-        return dropsFromView ? next.filter((row) => row.id !== entry.id) : next;
-      }
-      if (!belongs) return current;
-      return [entry, ...current];
-    });
-    if (reopen) setVerdicts((current) => ({ ...current, [entry.id]: reopenVerdictView(reopen) }));
-  }, [now]);
-
-  const recordVerdict = useCallback((sessionId: string, reopen: SessionReopen) => {
-    sharpened.current[sessionId] = reopen;
-    setVerdicts((current) => {
-      if (!(sessionId in current)) return current;
-      return { ...current, [sessionId]: reopenVerdictView(reopen) };
-    });
-  }, []);
+  const { entries, facets, error } = read.query === queryKey ? read : NO_READ;
 
   return {
     filters,
     setFilters,
     entries,
-    verdicts,
     facets,
     omitted,
     loading,
@@ -248,7 +287,5 @@ export function useSessionLedger({
     filterError,
     reload,
     loadMore,
-    recordClose,
-    recordVerdict,
   };
 }

@@ -1,6 +1,7 @@
 package daemon
 
 import (
+	"errors"
 	"fmt"
 	"sync"
 
@@ -8,14 +9,21 @@ import (
 	"github.com/victorarias/attn/internal/protocol"
 )
 
+var errDocConnectionEnded = errors.New("connection ended")
+
 type clientDocSubscriptions struct {
-	mu   sync.Mutex
-	subs map[string]chan struct{}
+	mu      sync.Mutex
+	subs    map[string]chan struct{}
+	running sync.WaitGroup
+	ended   bool
 }
 
 func (s *clientDocSubscriptions) open(id string) (done chan struct{}, held int, err error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
+	if s.ended {
+		return nil, len(s.subs), errDocConnectionEnded
+	}
 	if s.subs == nil {
 		s.subs = map[string]chan struct{}{}
 	}
@@ -27,6 +35,7 @@ func (s *clientDocSubscriptions) open(id string) (done chan struct{}, held int, 
 	}
 	done = make(chan struct{})
 	s.subs[id] = done
+	s.running.Add(1)
 	return done, len(s.subs), nil
 }
 
@@ -42,19 +51,15 @@ func (s *clientDocSubscriptions) close(id string) bool {
 	return true
 }
 
-func (s *clientDocSubscriptions) closeAll() {
+func (s *clientDocSubscriptions) endAll() {
 	s.mu.Lock()
-	defer s.mu.Unlock()
+	s.ended = true
 	for id, done := range s.subs {
 		delete(s.subs, id)
 		close(done)
 	}
-}
-
-func (s *clientDocSubscriptions) count() int {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	return len(s.subs)
+	s.mu.Unlock()
+	s.running.Wait()
 }
 
 func (d *Daemon) handleDocSubscribeWS(client *wsClient, msg *protocol.DocSubscribeMessage) {
@@ -71,6 +76,9 @@ func (d *Daemon) handleDocSubscribeWS(client *wsClient, msg *protocol.DocSubscri
 	}
 
 	done, held, err := client.docSubscriptions.open(id)
+	if errors.Is(err, errDocConnectionEnded) {
+		return
+	}
 	if err != nil {
 		if held >= protocol.DocSubscriptionsPerClient {
 			d.endDocSubscriptionWS(client, id, fmt.Errorf(
@@ -85,6 +93,7 @@ func (d *Daemon) handleDocSubscribeWS(client *wsClient, msg *protocol.DocSubscri
 	}
 
 	go func() {
+		defer client.docSubscriptions.running.Done()
 		defer client.docSubscriptions.close(id)
 		d.runDocSubscription(q, msg.Have, docSink{
 			deliver: func(window *protocol.DocSubscribeResult) error {
@@ -125,5 +134,5 @@ func (d *Daemon) dropDocSubscriptions(client *wsClient) {
 	if client == nil {
 		return
 	}
-	client.docSubscriptions.closeAll()
+	client.docSubscriptions.endAll()
 }

@@ -69,10 +69,6 @@ func loadConfig() {
 	json.Unmarshal(data, &loadedConfig)
 }
 
-func reloadConfig() {
-	loadConfig()
-}
-
 func ReloadForTesting() {
 	loadConfig()
 }

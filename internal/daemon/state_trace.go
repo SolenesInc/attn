@@ -23,8 +23,6 @@ const (
 	stateSourceResolver        = "resolver"
 )
 
-var stateTraceRecordGateHook func(sessionID string)
-
 func (d *Daemon) stateTraceRecorder() *statetrace.Recorder {
 	d.stateTraceOnce.Do(func() {
 		d.stateTrace = statetrace.New(statetrace.DefaultCapacity)
@@ -43,11 +41,7 @@ func (d *Daemon) recordStateObservation(sessionID string, obs statetrace.Observa
 		obs.ObservedAt = obs.RecordedAt
 	}
 	d.stateTraceRecorder().RecordIf(sessionID, obs, func() bool {
-		live := d.store != nil && d.store.Get(sessionID) != nil
-		if hook := stateTraceRecordGateHook; hook != nil {
-			hook(sessionID)
-		}
-		return live
+		return d.store != nil && d.store.Get(sessionID) != nil
 	})
 	d.logf("%s", obs.LogLine(sessionID))
 	if harnessReportedState(obs.Source) {
