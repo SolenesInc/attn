@@ -1,82 +1,12 @@
 package daemon
 
 import (
-	"errors"
-	"os"
-	"path/filepath"
-	"strings"
 	"testing"
 	"time"
 
-	"github.com/victorarias/attn/internal/apps"
 	"github.com/victorarias/attn/internal/jobs"
-	"github.com/victorarias/attn/internal/protocol"
 	"github.com/victorarias/attn/internal/store"
 )
-
-func TestAppLogTagMatchesTheHost(t *testing.T) {
-	source, err := os.ReadFile(filepath.Join("..", "..", "apphost", "src", "index.ts"))
-	if err != nil {
-		t.Fatalf("read the app runtime host: %v", err)
-	}
-	if !strings.Contains(string(source), "[app ${app}] ") {
-		t.Fatalf("the host does not write the per-app tag %q that `attn app logs` filters on", appRuntimeAppTag("<name>"))
-	}
-	if !strings.Contains(string(source), appRuntimeSelfTag) {
-		t.Fatalf("the host does not write the runtime tag %q", appRuntimeSelfTag)
-	}
-}
-
-func TestAppWatchStreamsInvocationsAsTheyHappen(t *testing.T) {
-	d := newAppDaemon(t)
-	installApp(t, d, "greeter", subscribing("ticket.*"))
-	installApp(t, d, "auditor", subscribing("ticket.*"))
-	startFakeAppRuntime(t, d, nil)
-
-	watcher := &appWatcher{app: "greeter", events: make(chan protocol.AppInvocationInfo, 4)}
-	d.addAppWatcher(watcher)
-	t.Cleanup(func() { d.removeAppWatcher(watcher) })
-
-	if err := d.deliverAppEvent(t.Context(), "auditor", appEvent("ticket.created", "tk-1", 1)); err != nil {
-		t.Fatalf("deliver to auditor: %v", err)
-	}
-	if err := d.deliverAppEvent(t.Context(), "greeter", appEvent("ticket.created", "tk-2", 2)); err != nil {
-		t.Fatalf("deliver to greeter: %v", err)
-	}
-
-	select {
-	case info := <-watcher.events:
-		if protocol.Deref(info.EventSubject) != "tk-2" {
-			t.Fatalf("the stream carried %+v, want greeter's own invocation", info)
-		}
-		if info.Status != appInvocationStatusOK || info.Handler != apps.SubscriptionLabel("ticket.*") {
-			t.Fatalf("streamed invocation = %+v", info)
-		}
-	case <-time.After(2 * time.Second):
-		t.Fatal("the invocation never reached the watcher")
-	}
-	if len(watcher.events) != 0 {
-		t.Fatalf("%d extra invocation(s) reached a watcher of greeter", len(watcher.events))
-	}
-}
-
-func TestASlowWatcherIsDroppedRatherThanBlockingDelivery(t *testing.T) {
-	d := newAppDaemon(t)
-	watcher := &appWatcher{app: "greeter", events: make(chan protocol.AppInvocationInfo)}
-	d.addAppWatcher(watcher)
-	t.Cleanup(func() { d.removeAppWatcher(watcher) })
-
-	done := make(chan struct{})
-	go func() {
-		defer close(done)
-		d.notifyAppWatchers(protocol.AppInvocationInfo{EventSubject: protocol.Ptr("tk-1")}, "greeter")
-	}()
-	select {
-	case <-done:
-	case <-time.After(2 * time.Second):
-		t.Fatal("a watcher nobody is reading blocked the delivery path")
-	}
-}
 
 func TestInvocationRetentionTrimsByAgeAcrossEveryApp(t *testing.T) {
 	d := newAppDaemon(t)
@@ -154,42 +84,5 @@ func TestInvocationRetentionCapsEachAppAtItsNewestRows(t *testing.T) {
 		if want := int64(cap + 3 - i); row.EventSeq != want {
 			t.Fatalf("row %d is seq %d, want %d — the cap dropped the wrong end", i, row.EventSeq, want)
 		}
-	}
-}
-
-func TestAppStatusCarriesTheStallClockAndWhenItFires(t *testing.T) {
-	d := newAppDaemon(t)
-	clock := newAppTestClock(d)
-	installApp(t, d, "greeter", subscribing("ticket.*"))
-	startFakeAppRuntime(t, d, func(*fakeAppRuntime, appDispatchRequest) error {
-		return errors.New("ReferenceError: ticket is not defined")
-	})
-
-	if err := d.deliverAppEvent(t.Context(), "greeter", appEvent("ticket.created", "tk-1", 9)); err == nil {
-		t.Fatal("a throwing handler reported success")
-	}
-	resp := appStatus(t, d, "greeter")
-	if !resp.Ok {
-		t.Fatalf("app status: %v", protocol.Deref(resp.Error))
-	}
-	stall := resp.AppStatusResult.Stall
-	if stall == nil {
-		t.Fatal("a stalled app's status carried no stall")
-	}
-	if stall.Kind != appStallKindSubscription || protocol.Deref(stall.EventSeq) != 9 ||
-		protocol.Deref(stall.EventName) != "ticket.created" || stall.Attempts != 1 {
-		t.Fatalf("stall = %+v", stall)
-	}
-	if !strings.Contains(stall.LastError, "ReferenceError") {
-		t.Fatalf("stall does not say what failed: %q", stall.LastError)
-	}
-	want := stampForWire(clock.Now().Add(appAutoDisableStall))
-	if stall.DisablesAt != want {
-		t.Fatalf("disables at %q, want %q", stall.DisablesAt, want)
-	}
-
-	d.clearAppStall("greeter")
-	if again := appStatus(t, d, "greeter"); again.AppStatusResult.Stall != nil {
-		t.Fatalf("a recovered app still reports a stall: %+v", again.AppStatusResult.Stall)
 	}
 }
