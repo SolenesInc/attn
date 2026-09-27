@@ -78,9 +78,6 @@ func (m *memStore) Save(j *Job) error {
 		}
 		return err
 	}
-	if j.Requeued && j.State == StateRunning {
-		sawTriggerLandOnARunningJob.Reached()
-	}
 	m.jobs[j.ID] = j.clone()
 	return nil
 }

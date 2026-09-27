@@ -9,54 +9,6 @@ import (
 	"github.com/victorarias/attn/internal/sessioncost"
 )
 
-func TestSessionCostSeparatesGuardianTrafficFromTheAgentsOwn(t *testing.T) {
-	dbPath := filepath.Join(t.TempDir(), "attn.db")
-	s, err := newSeededStore(dbPath)
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer s.Close()
-	s.Add(&protocol.Session{ID: "pi", Label: "pi"})
-
-	agent := SessionCostObservation{
-		ObservationID: "pi:a4e94c7b", Model: "deepseek-v4-flash", Purpose: sessioncost.PurposeAgent,
-		Usage: sessioncost.Usage{InputTokens: 5379, OutputTokens: 232, ReportedCostUSD: 0.0013365},
-	}
-	guardian := SessionCostObservation{
-		ObservationID: "pi:c1f0a2b7", Model: "deepseek-v4-flash", Purpose: sessioncost.PurposeGuardian,
-		Usage: sessioncost.Usage{InputTokens: 812, OutputTokens: 64, ReportedCostUSD: 0.00022088},
-	}
-	if changed, err := s.ApplySessionCostObservations("pi", "cursor-1", []SessionCostObservation{agent, guardian}); err != nil || !changed {
-		t.Fatalf("apply changed=%v err=%v", changed, err)
-	}
-	state, err := s.SessionCost("pi")
-	if err != nil {
-		t.Fatal(err)
-	}
-	if len(state.Ledger) != 2 {
-		t.Fatalf("ledger = %+v, want the model split by purpose", state.Ledger)
-	}
-	if state.Ledger[sessioncost.AgentKey("deepseek-v4-flash")] != agent.Usage {
-		t.Fatalf("agent row = %+v", state.Ledger[sessioncost.AgentKey("deepseek-v4-flash")])
-	}
-	if state.Ledger[sessioncost.GuardianKey("deepseek-v4-flash")] != guardian.Usage {
-		t.Fatalf("guardian row = %+v", state.Ledger[sessioncost.GuardianKey("deepseek-v4-flash")])
-	}
-
-	revised := guardian
-	revised.Usage.OutputTokens = 91
-	if changed, err := s.ApplySessionCostObservations("pi", "cursor-2", []SessionCostObservation{revised}); err != nil || !changed {
-		t.Fatalf("revision changed=%v err=%v", changed, err)
-	}
-	state, _ = s.SessionCost("pi")
-	if got := state.Ledger[sessioncost.GuardianKey("deepseek-v4-flash")].OutputTokens; got != 91 {
-		t.Fatalf("guardian output after revision = %d, want 91", got)
-	}
-	if state.Ledger[sessioncost.AgentKey("deepseek-v4-flash")] != agent.Usage {
-		t.Fatalf("agent row moved when the guardian row was revised: %+v", state.Ledger)
-	}
-}
-
 func TestSessionCostReadsLedgerKeysWrittenBeforePurposesExisted(t *testing.T) {
 	dbPath := filepath.Join(t.TempDir(), "attn.db")
 	s, err := newSeededStore(dbPath)

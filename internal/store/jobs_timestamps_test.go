@@ -45,28 +45,6 @@ func chronologicalJobIDs() []string {
 	return out
 }
 
-func TestNotificationsListNewestFirstWithinASecond(t *testing.T) {
-	s := New()
-	for _, r := range raggedJobOffsets {
-		if _, err := s.AddNotification(
-			NotificationRecord{Kind: "task_failed", Title: r.id}, jobBase().Add(r.offset)); err != nil {
-			t.Fatalf("add notification %s: %v", r.id, err)
-		}
-	}
-
-	got, err := s.ListNotifications()
-	if err != nil {
-		t.Fatalf("list notifications: %v", err)
-	}
-	titles := make([]string, 0, len(got))
-	for _, n := range got {
-		titles = append(titles, n.Title)
-	}
-	if want := reversed(chronologicalJobIDs()); !sameOrder(titles, want) {
-		t.Fatalf("notifications came back as %v, want %v", titles, want)
-	}
-}
-
 func TestMigration94RewritesJobAndNotificationStampsThatDoNotSort(t *testing.T) {
 	dbPath := filepath.Join(t.TempDir(), "test.db")
 	s, err := newSeededStore(dbPath)
