@@ -102,6 +102,7 @@ export function useSessionLaunch({
     }) => {
       const desktop = localDesktopForLaunch(spawn.endpointId);
       const target = launchTarget(desktop, spawn.direction, spawn.anchorPaneId);
+      let placementError: string | undefined;
       try {
         await createSession(
           spawn.label,
@@ -117,20 +118,23 @@ export function useSessionLaunch({
         if (!spawnArgs) {
           throw new Error('Session spawn arguments were not prepared.');
         }
-        await ptySpawn({
+        ({ placementError } = await ptySpawn({
           args: {
             ...spawnArgs,
             placement: target.placement,
             ...(spawn.spawnedFrom ? { spawned_from: spawn.spawnedFrom } : {}),
           },
-        });
+        }));
       } catch (error) {
         closeSession(spawn.sessionId);
         throw error;
       }
+      if (placementError) {
+        showError(`${spawn.label} started without a pane on this desktop: ${placementError}`);
+      }
       return spawn.sessionId;
     },
-    [closeSession, createSession, takeSessionSpawnArgs],
+    [closeSession, createSession, showError, takeSessionSpawnArgs],
   );
 
   const launchAgent = useCallback(

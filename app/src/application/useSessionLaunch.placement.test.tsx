@@ -11,7 +11,7 @@ import { useSessionLaunch } from './useSessionLaunch';
 
 vi.mock('../pty/bridge', async (importOriginal) => ({
   ...(await importOriginal<typeof import('../pty/bridge')>()),
-  ptySpawn: vi.fn(async () => undefined),
+  ptySpawn: vi.fn(async () => ({})),
 }));
 
 function currentDesktop(panes: Array<[string, string]>, activePaneId: string): Desktop {
@@ -147,6 +147,34 @@ describe('useSessionLaunch from the new-session picker', () => {
 
     const { args } = vi.mocked(ptySpawn).mock.calls[0][0];
     expect(args).toMatchObject({ cwd: '/repo/chief', chief_of_staff: true, placement: { desktop_id: 'desktop-1' } });
+  });
+});
+
+describe('useSessionLaunch when the daemon cannot place the agent', () => {
+  beforeEach(() => {
+    vi.mocked(ptySpawn).mockClear();
+    useSessionStore.setState({ sessions: [], activeSessionId: null });
+    useProfilesStore.setState({
+      selectedProfileId: 'profile-1',
+      currentDesktopId: 'desktop-1',
+      desktops: [currentDesktop([], '')],
+    });
+  });
+
+  it('keeps the running agent and says once why it has no pane', async () => {
+    vi.mocked(ptySpawn).mockResolvedValueOnce({ placementError: 'desktop desktop-1 is gone' });
+    const showError = vi.fn();
+    const { result } = renderLaunch(null, {}, showError);
+
+    let sessionId: string | undefined;
+    await act(async () => {
+      sessionId = await result.current.launchAgent('plan', '/repo/plan', 'agent-plan', 'shell');
+    });
+
+    expect(sessionId).toBe('agent-plan');
+    expect(useSessionStore.getState().sessions.map((session) => session.id)).toEqual(['agent-plan']);
+    expect(showError).toHaveBeenCalledTimes(1);
+    expect(showError).toHaveBeenCalledWith('plan started without a pane on this desktop: desktop desktop-1 is gone');
   });
 });
 

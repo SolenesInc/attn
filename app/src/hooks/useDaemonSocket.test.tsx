@@ -1074,7 +1074,7 @@ describe('useDaemonSocket PTY kill sequencing', () => {
       ws.emit({ event: 'spawn_result', id: 'runtime-shell-1', success: true });
     });
 
-    await expect(spawnPromise).resolves.toBeUndefined();
+    await expect(spawnPromise).resolves.toEqual({ placementError: undefined });
     expect(ws.sent.map((entry) => JSON.parse(entry)).filter((message) =>
       message.cmd === 'attach_session' || message.cmd === 'pty_resize',
     )).toEqual([]);
@@ -1249,9 +1249,9 @@ describe('useDaemonSocket PTY kill sequencing', () => {
     });
 
     act(() => {
-      ws.emit({ event: 'spawn_result', id: 'sess-new', success: true });
+      ws.emit({ event: 'spawn_result', id: 'sess-new', success: true, placement_error: 'desktop desktop-1 is gone' });
     });
-    await expect(spawnPromise).resolves.toBeUndefined();
+    await expect(spawnPromise).resolves.toEqual({ placementError: 'desktop desktop-1 is gone' });
     expect(ws.sent.map((entry) => JSON.parse(entry)).filter((message) =>
       message.cmd === 'attach_session' || message.cmd === 'pty_resize',
     )).toEqual([]);

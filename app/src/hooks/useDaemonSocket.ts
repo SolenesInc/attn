@@ -428,6 +428,7 @@ interface EndpointActionResult {
 interface SpawnResult {
   success: boolean;
   error?: string;
+  placementError?: string;
 }
 
 type AttachResult = AttachResultData & {
@@ -1885,7 +1886,7 @@ export function useDaemonSocket({
               if (pending) {
                 pendingActionsRef.current.delete(key);
                 if (data.success) {
-                  pending.resolve({ success: true });
+                  pending.resolve({ success: true, placementError: data.placement_error });
                 } else {
                   pending.reject(new Error(data.error || 'Failed to spawn session'));
                 }
@@ -3450,13 +3451,15 @@ export function useDaemonSocket({
   useEffect(() => {
     setPtyBackend({
       spawn: async (args: PtySpawnArgs) => {
-        if (ptyTransportRef.current.hasAttachedRuntime(args.id)) return;
+        // The mounted pane owns attachment, including replay of startup output.
+        if (ptyTransportRef.current.hasAttachedRuntime(args.id)) return {};
         try {
-          await sendSpawnSession(args);
+          const { placementError } = await sendSpawnSession(args);
+          return { placementError };
         } catch (error) {
           if (!isAlreadyExistsError(error)) throw error;
+          return {};
         }
-        // The mounted pane owns attachment, including replay of startup output.
       },
       attach: async (args: PtyAttachArgs, options?: { forceResizeBeforeAttach?: boolean }) => {
         await attachExistingRuntime({
