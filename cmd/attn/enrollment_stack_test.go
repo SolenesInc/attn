@@ -1,6 +1,8 @@
 package main_test
 
 import (
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 
@@ -69,5 +71,33 @@ func TestEnrollmentNamesTheHomeAndRefusesToBeRehomedSilently(t *testing.T) {
 	s.Attn("enrollment", "status", "--json").JSON(t, &back)
 	if !back.IsHome || back.HomeDaemonID != own.DaemonID {
 		t.Fatalf("after leave the status = %+v, want its own home again", back)
+	}
+}
+
+func TestADaemonKeepsItsIDAcrossRestartsAndReplacesAnUnreadableOne(t *testing.T) {
+	t.Parallel()
+	s := testworld.NewStack(t)
+	daemonID := func() string {
+		t.Helper()
+		var status enrollmentJSON
+		s.Attn("enrollment", "status", "--json").JSON(t, &status)
+		return status.DaemonID
+	}
+	s.Start()
+	s.Stop()
+	first := daemonID()
+	s.Start()
+	s.Stop()
+	if again := daemonID(); again != first || !enrollment.ValidDaemonID(first) {
+		t.Fatalf("the daemon ID went from %q to %q across a restart, want one valid ID kept", first, again)
+	}
+
+	if err := os.WriteFile(filepath.Join(s.Dir, enrollment.DaemonIDFileName), []byte("corrupt\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	s.Start()
+	s.Stop()
+	if replaced := daemonID(); !enrollment.ValidDaemonID(replaced) || replaced == first {
+		t.Fatalf("after its ID file was garbled the daemon reports %q, want a fresh valid ID", replaced)
 	}
 }
