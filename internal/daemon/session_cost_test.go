@@ -21,7 +21,7 @@ func addCostSession(t *testing.T, d *Daemon, id string, agent protocol.SessionAg
 }
 
 func TestSessionUsageTrackerKeepsTheUnreadUsageBehindALegacySingleCursor(t *testing.T) {
-	d := newTurnDaemon(t)
+	d := NewForTesting(filepath.Join(t.TempDir(), "test.sock"))
 	addCostSession(t, d, "resumed", protocol.SessionAgentClaude)
 	root := filepath.Join(t.TempDir(), "resume.jsonl")
 	childDir := filepath.Join(root[:len(root)-len(".jsonl")], "subagents")
