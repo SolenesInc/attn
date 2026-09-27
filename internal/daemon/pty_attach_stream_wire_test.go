@@ -107,6 +107,9 @@ func floodAwaitEnd(t *testing.T, p *testworld.Peer, session string, result proto
 	t.Helper()
 	for {
 		seen := []byte(floodSnapshot(t, result))
+		if bytes.Contains(seen, []byte("-lines")) {
+			return result
+		}
 		e := testworld.AwaitEvent(p, "the flood's end or a desync", func(e protocol.WebSocketEvent) bool {
 			if protocol.Deref(e.ID) != session {
 				return false
