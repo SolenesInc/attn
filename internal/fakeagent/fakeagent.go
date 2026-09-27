@@ -291,6 +291,10 @@ func (a *agent) handle(_ *rpcPeer, method string, params json.RawMessage) (any, 
 		default:
 			return struct{}{}, author.deleteSubagentTranscripts()
 		}
+	case methodGuardian:
+		return a.handleGuardian(params)
+	case methodReplyUnheard:
+		return a.replyUnheard(params)
 	case methodHalt:
 		halting, ok := a.conv.(halter)
 		if !ok {
@@ -311,6 +315,8 @@ func (a *agent) handle(_ *rpcPeer, method string, params json.RawMessage) (any, 
 		a.turn.Lock()
 		defer a.turn.Unlock()
 		return struct{}{}, guard.deny(denial)
+	case methodShowSelector, methodAskApproval, methodDismiss:
+		return a.handleModal(method)
 	case methodStopRead:
 		return struct{}{}, a.term.stopReading()
 	case methodExit:

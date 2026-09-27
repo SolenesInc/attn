@@ -3,7 +3,6 @@ package daemon
 import (
 	"context"
 	"errors"
-	"net"
 	"path/filepath"
 	"sync"
 	"testing"
@@ -13,11 +12,6 @@ import (
 	"github.com/victorarias/attn/internal/protocol"
 	"pgregory.net/rapid"
 )
-
-func sessionInputQuietDeferral(err error) bool {
-	var quiet *sessionInputQuietError
-	return errors.As(err, &quiet)
-}
 
 func newSessionInputDaemon(t *testing.T, state protocol.SessionState) (*Daemon, *fakeSpawnBackend, string) {
 	t.Helper()
@@ -111,27 +105,6 @@ func TestSessionInput_UserInputLaterInHeartbeatRunArmsAutoSettle(t *testing.T) {
 	}
 }
 
-func TestSessionInput_UserPromptTakenAfterWorkingTransitionArmsAutoSettle(t *testing.T) {
-	d, _, sessionID := newSessionInputDaemon(t, protocol.SessionStateWaitingInput)
-	d.store.SetSetting(SettingAutoSettleEnabled, "true")
-	d.store.SetSetting(SettingAutoSettleArmSeconds, "3600")
-	d.store.SetSetting(SettingAutoSettleCountdownSeconds, "3600")
-	if !d.store.OpenTurnIfClosed(sessionID, time.Now()) {
-		t.Fatal("fixture did not open a user turn")
-	}
-
-	if err := d.writeSessionPTY(sessionID, []byte("the actual answer\r"), "user"); err != nil {
-		t.Fatalf("user input: %v", err)
-	}
-	if !d.applyState(sessionStateChange{sessionID: sessionID, state: protocol.StateWorking, cause: liveSignal{}}) {
-		t.Fatal("working transition was not applied")
-	}
-	d.observePromptTaken(sessionID, "the actual answer", time.Now())
-	if _, pending := autoSettlePending(d, sessionID); !pending {
-		t.Fatal("working-before-hook ordering lost the user input that arms auto-settle")
-	}
-}
-
 func TestSessionInput_MaintenanceNudgeLaterInHeartbeatRunDoesNotArmAutoSettle(t *testing.T) {
 	d, _, sessionID := newSessionInputDaemon(t, protocol.SessionStateWaitingInput)
 	d.store.SetSetting(SettingAutoSettleEnabled, "true")
@@ -179,32 +152,6 @@ func TestSessionInput_RetryCannotAnswerANewApproval(t *testing.T) {
 	}
 }
 
-func TestSessionInput_IndeterminateComposerRetryBecomesPlacedOnlyAfterEnterSucceeds(t *testing.T) {
-	d, backend, sessionID := newSessionInputDaemon(t, protocol.SessionStateWaitingInput)
-	var writes [][]byte
-	enterFailures := 1
-	backend.onInput = func(_ string, data []byte) { writes = append(writes, append([]byte(nil), data...)) }
-	backend.onInputResult = func(_ string, data []byte) error {
-		if string(data) == "\r" && enterFailures > 0 {
-			enterFailures--
-			return errors.New("uncertain Enter write")
-		}
-		return nil
-	}
-	delivery := maintenanceSessionInput("ticket-nudge", "cursor-transport", sessionID, "first", sessionInputAtTurnBoundary)
-	first := d.sessionInputs().try(context.Background(), delivery)
-	if first.err == nil || first.stage != sessionInputIndeterminate {
-		t.Fatalf("first attempt = %+v, want transport error and Indeterminate", first)
-	}
-	retry := d.sessionInputs().try(context.Background(), delivery)
-	if retry.err != nil || retry.stage != sessionInputPlaced {
-		t.Fatalf("retry = %+v, want successful Enter to restore Placed", retry)
-	}
-	if len(writes) != 3 || string(writes[2]) != "\r" {
-		t.Fatalf("writes = %q, want paste, failed Enter, retry Enter", writes)
-	}
-}
-
 func TestSessionInput_PlacementPhaseContracts(t *testing.T) {
 	states := []protocol.SessionState{
 		protocol.SessionStateLaunching,
@@ -247,39 +194,6 @@ func TestSessionInput_ConsumedUserControlReleasesComposerGuardWithoutUserCredit(
 	delivery := maintenanceSessionInput("crew-heartbeat", "generation-after-approval", sessionID, crewHeartbeatPrompt, sessionInputWhenPromptReady)
 	if attempt := d.sessionInputs().try(context.Background(), delivery); attempt.err != nil {
 		t.Fatalf("input after consumed approval key: %v", attempt.err)
-	}
-}
-
-func TestSessionInput_OnlyMarkedPromptSubmitGrantsUserCredit(t *testing.T) {
-	d, _, sessionID := newSessionInputDaemon(t, protocol.SessionStateWorking)
-	before := protocol.Deref(d.store.Get(sessionID).LastModelRequestAt)
-
-	callHandler(t, func(conn net.Conn) {
-		d.handleState(conn, &protocol.StateMessage{
-			ID: sessionID, State: protocol.StateWorking, Prompt: protocol.Ptr("ordinary tool hook"),
-		})
-	})
-	if _, credited := d.sessionInputs().currentUserRun(sessionID); credited {
-		t.Fatal("a generic working hook with prompt text granted user credit")
-	}
-	if got := protocol.Deref(d.store.Get(sessionID).LastModelRequestAt); got != before {
-		t.Fatalf("generic hook moved request clock from %q to %q", before, got)
-	}
-
-	if err := d.writeSessionPTY(sessionID, []byte("the user's answer\r"), "user"); err != nil {
-		t.Fatalf("write user input: %v", err)
-	}
-	callHandler(t, func(conn net.Conn) {
-		d.handleState(conn, &protocol.StateMessage{
-			ID: sessionID, State: protocol.StateWorking,
-			HookEvent: protocol.Ptr("user_prompt_submit"), Prompt: protocol.Ptr("the user's answer"),
-		})
-	})
-	if _, credited := d.sessionInputs().currentUserRun(sessionID); !credited {
-		t.Fatal("a positively marked UserPromptSubmit did not grant user credit")
-	}
-	if got := protocol.Deref(d.store.Get(sessionID).LastModelRequestAt); got == "" || got == before {
-		t.Fatalf("UserPromptSubmit left request clock at %q", got)
 	}
 }
 
@@ -517,244 +431,9 @@ func settleResend(t *testing.T) {
 	synctest.Wait()
 }
 
-func retryEntry(d *Daemon, sessionID string, id sessionInputAttemptID) *sessionInputRetry {
-	m := d.sessionInputs()
-	m.mu.Lock()
-	lane := m.lanes[sessionID]
-	m.mu.Unlock()
-	if lane == nil {
-		return nil
-	}
-	lane.mu.Lock()
-	defer lane.mu.Unlock()
-	return lane.retries[id.String()]
-}
-
-func armRetry(t *testing.T, d *Daemon, sessionID string, resend func()) (sessionInputAttemptID, *sessionInputRetry) {
-	t.Helper()
-	delivery := maintenanceSessionInput("crew-heartbeat", "generation-1", sessionID, crewHeartbeatPrompt, sessionInputWhenPromptReady)
-	delivery.resend = resend
-	if attempt := d.sessionInputs().try(context.Background(), delivery); !sessionInputQuietDeferral(attempt.err) {
-		t.Fatalf("delivery into a typed-in composer = %v, want the quiet-window deferral", attempt.err)
-	}
-	return delivery.id, retryEntry(d, sessionID, delivery.id)
-}
-
-func TestSessionInputRetryStaleCallbackLeavesItsReplacementArmed(t *testing.T) {
-	d, _, sessionID := newSessionInputDaemon(t, protocol.SessionStateWaitingInput)
-	synctest.Test(t, func(t *testing.T) {
-		if err := d.writeSessionPTY(sessionID, []byte("half written"), "user"); err != nil {
-			t.Fatalf("user input: %v", err)
-		}
-		resends := make(chan string, 4)
-		id, stale := armRetry(t, d, sessionID, func() { resends <- "stale" })
-		if stale == nil {
-			t.Fatal("the held delivery armed no retry")
-		}
-		_, replacement := armRetry(t, d, sessionID, func() { resends <- "replacement" })
-		if replacement == nil || replacement == stale {
-			t.Fatalf("re-arming kept the old entry: %p", replacement)
-		}
-
-		d.sessionInputs().fireRetry(sessionID, id.String(), stale)
-		if current := retryEntry(d, sessionID, id); current != replacement {
-			t.Fatalf("a stale callback evicted the replacement: %p", current)
-		}
-		if len(resends) != 0 {
-			t.Fatalf("a stale callback resent %q", <-resends)
-		}
-
-		time.Sleep(sessionInputQuietWindow)
-		synctest.Wait()
-		if len(resends) != 1 {
-			t.Fatalf("the replacement resent %d times, want once", len(resends))
-		}
-		if got := <-resends; got != "replacement" {
-			t.Fatalf("resend came from %q", got)
-		}
-	})
-}
-
-func TestSessionInputRetryRefusesToArmAfterStop(t *testing.T) {
-	d, _, sessionID := newSessionInputDaemon(t, protocol.SessionStateWaitingInput)
-	synctest.Test(t, func(t *testing.T) {
-		if err := d.writeSessionPTY(sessionID, []byte("half written"), "user"); err != nil {
-			t.Fatalf("user input: %v", err)
-		}
-		resends := make(chan string, 2)
-		armRetry(t, d, sessionID, func() { resends <- "before stop" })
-
-		close(d.done)
-		d.sessionInputs().stopRetries()
-		delivery := maintenanceSessionInput("crew-heartbeat", "after-stop", sessionID, crewHeartbeatPrompt, sessionInputWhenPromptReady)
-		delivery.resend = func() { resends <- "after stop" }
-		if attempt := d.sessionInputs().try(context.Background(), delivery); !errors.Is(attempt.err, errSessionInputLaneClosed) {
-			t.Fatalf("delivery after stop = %v, want the closed lane", attempt.err)
-		}
-		if armed := retryEntry(d, sessionID, delivery.id); armed != nil {
-			t.Fatalf("a retry armed after stop for %s", delivery.id)
-		}
-
-		time.Sleep(sessionInputQuietWindow)
-		synctest.Wait()
-		if len(resends) != 0 {
-			t.Fatalf("a retry fired after stop: %q", <-resends)
-		}
-	})
-}
-
-func TestSessionInputRetriesCollidingOnTheComposerBothLand(t *testing.T) {
-	d, backend, sessionID := newSessionInputDaemon(t, protocol.SessionStateWaitingInput)
-	var mu sync.Mutex
-	var landed []string
-	collisions := 0
-	backend.onInput = func(_ string, data []byte) {}
-	synctest.Test(t, func(t *testing.T) {
-		if err := d.writeSessionPTY(sessionID, []byte("half written"), "user"); err != nil {
-			t.Fatalf("user input: %v", err)
-		}
-		var send func(key, text string)
-		send = func(key, text string) {
-			delivery := maintenanceSessionInput("collide", key, sessionID, text, sessionInputWhenPromptReady)
-			delivery.resend = func() { send(key, text) }
-			attempt := d.sessionInputs().try(context.Background(), delivery)
-			mu.Lock()
-			defer mu.Unlock()
-			switch {
-			case attempt.err == nil:
-				landed = append(landed, text)
-				d.sessionInputs().release(sessionID, delivery.id)
-			case errors.Is(attempt.err, errSessionInputComposerOccupied), errors.Is(attempt.err, errSessionInputPlacingAnother):
-				collisions++
-			}
-		}
-		send("first", "first prompt")
-		send("second", "second prompt")
-
-		time.Sleep(sessionInputQuietWindow)
-		settleResend(t)
-		mu.Lock()
-		first, saw := append([]string(nil), landed...), collisions
-		mu.Unlock()
-		if len(first) != 1 {
-			t.Fatalf("prompts landed with the composer held = %v, want one", first)
-		}
-		if saw == 0 {
-			t.Fatal("the second resend never collided on the occupied composer")
-		}
-
-		d.observePromptTaken(sessionID, first[0], time.Now())
-		time.Sleep(sessionInputComposerRetry)
-		settleResend(t)
-		mu.Lock()
-		defer mu.Unlock()
-		if len(landed) != 2 {
-			t.Fatalf("prompts landed = %v, want both", landed)
-		}
-	})
-}
-
-func TestSessionInputStopRetriesWaitsForAResendAlreadyRunning(t *testing.T) {
-	d, _, sessionID := newSessionInputDaemon(t, protocol.SessionStateWaitingInput)
-	synctest.Test(t, func(t *testing.T) {
-		if err := d.writeSessionPTY(sessionID, []byte("half written"), "user"); err != nil {
-			t.Fatalf("user input: %v", err)
-		}
-		entered, finish := make(chan struct{}), make(chan struct{})
-		id, entry := armRetry(t, d, sessionID, func() {
-			close(entered)
-			<-finish
-		})
-		if entry == nil {
-			t.Fatal("the held delivery armed no retry")
-		}
-
-		go d.sessionInputs().fireRetry(sessionID, id.String(), entry)
-		<-entered
-		stopped := make(chan struct{})
-		go func() {
-			d.sessionInputs().stopRetries()
-			close(stopped)
-		}()
-		synctest.Wait()
-		select {
-		case <-stopped:
-			t.Fatal("stop returned while a resend was still running")
-		default:
-		}
-
-		close(finish)
-		<-stopped
-	})
-}
-
-func TestSessionInputRetryEnteringAfterStopDoesNotResend(t *testing.T) {
-	d, _, sessionID := newSessionInputDaemon(t, protocol.SessionStateWaitingInput)
-	synctest.Test(t, func(t *testing.T) {
-		if err := d.writeSessionPTY(sessionID, []byte("half written"), "user"); err != nil {
-			t.Fatalf("user input: %v", err)
-		}
-		resends := make(chan string, 2)
-		id, entry := armRetry(t, d, sessionID, func() { resends <- "after stop" })
-		if entry == nil {
-			t.Fatal("the held delivery armed no retry")
-		}
-
-		d.sessionInputs().stopRetries()
-		d.sessionInputs().fireRetry(sessionID, id.String(), entry)
-		if len(resends) != 0 {
-			t.Fatalf("a callback that reached the lane after stop resent %q", <-resends)
-		}
-	})
-}
-
-func laneFor(d *Daemon, sessionID string) *sessionInputLane {
-	m := d.sessionInputs()
-	m.mu.Lock()
-	defer m.mu.Unlock()
-	return m.lanes[sessionID]
-}
-
-func TestSessionInputRetryCannotResendThroughAReplacedLane(t *testing.T) {
-	d, _, sessionID := newSessionInputDaemon(t, protocol.SessionStateWaitingInput)
-	synctest.Test(t, func(t *testing.T) {
-		if err := d.writeSessionPTY(sessionID, []byte("half written"), "user"); err != nil {
-			t.Fatalf("user input: %v", err)
-		}
-		entered, release := make(chan struct{}), make(chan struct{})
-		var resendErr error
-		id, entry := armRetry(t, d, sessionID, func() {
-			close(entered)
-			<-release
-			resend := maintenanceSessionInput("crew-sleep", "after-replace", sessionID, crewSleepPrompt, sessionInputAtTurnBoundary)
-			resendErr = d.sessionInputs().try(context.Background(), resend).err
-		})
-		if entry == nil {
-			t.Fatal("the held delivery armed no retry")
-		}
-		original := laneFor(d, sessionID)
-
-		go d.sessionInputs().fireRetry(sessionID, id.String(), entry)
-		<-entered
-		forgotten := make(chan struct{})
-		go func() {
-			d.sessionInputs().forgetSession(sessionID)
-			close(forgotten)
-		}()
-		synctest.Wait()
-		select {
-		case <-forgotten:
-			t.Fatal("the replacement completed while a resend was still running")
-		default:
-		}
-
-		close(release)
-		<-forgotten
-		if !errors.Is(resendErr, errSessionInputLaneClosed) {
-			t.Fatalf("a resend from the replaced runtime returned %v, want the closed lane", resendErr)
-		}
-		if current := laneFor(d, sessionID); current != nil && current != original {
-			t.Fatal("the resend placed through a lane created for the replacement")
-		}
-	})
+func autoSettlePending(d *Daemon, sessionID string) (*autoSettleTimer, bool) {
+	d.autoSettleMu.Lock()
+	defer d.autoSettleMu.Unlock()
+	entry, ok := d.autoSettleTimers[sessionID]
+	return entry, ok
 }

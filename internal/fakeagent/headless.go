@@ -64,6 +64,10 @@ func (k *Kit) receiveHeadlessTask(f *fake, params json.RawMessage) (headlessAnsw
 		return headlessAnswer{Failure: asked.Refusal}, nil
 	}
 	task := &HeadlessTask{Harness: asked.Harness, Prompt: asked.Prompt, Model: asked.Model, Effort: asked.Effort, answer: make(chan headlessAnswer, 1)}
+	if answerer := k.headlessAnswerer(); answerer != nil {
+		answerer(task)
+		return <-task.answer, nil
+	}
 	select {
 	case k.headless <- task:
 	case <-f.peer.done:

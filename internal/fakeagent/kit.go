@@ -37,6 +37,7 @@ type Kit struct {
 	failures []string
 	headless chan *HeadlessTask
 	nextExit *bootingResult
+	answerer func(*HeadlessTask)
 }
 
 type fake struct {

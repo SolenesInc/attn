@@ -136,12 +136,6 @@ func (d *Daemon) dropEndedSnoozeWake(sessionID, state string, ended time.Time) {
 	}
 }
 
-func (d *Daemon) registerSnoozeWakeHandler(runner *jobs.Runner) error {
-	return d.registerTaskWithFailureRenderer(
-		runner, snoozeWakeKind, d.snoozeWakeHandler, jobs.HandlerConfig{}, d.renderSnoozeWakeFailure,
-	)
-}
-
 func (d *Daemon) enqueueSnoozeWake(sessionID string, deadline time.Time) error {
 	runner := d.jobQueueRef()
 	if runner == nil || runner.Disabled() {

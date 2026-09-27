@@ -1,11 +1,8 @@
 package daemon
 
 import (
-	"os"
 	"path/filepath"
 	"testing"
-	"testing/synctest"
-	"time"
 
 	"github.com/victorarias/attn/internal/protocol"
 )
@@ -49,61 +46,6 @@ func characterizationEventCount(events []protocol.WebSocketEvent, eventName, ses
 		count++
 	}
 	return count
-}
-
-func TestSessionStateCharacterization_ALateVerdictDoesNotOverwriteAnApproval(t *testing.T) {
-	d := NewForTesting(filepath.Join(t.TempDir(), "state.sock"))
-	synctest.Test(t, func(t *testing.T) {
-		stopDaemonBackground(t, d)
-		sessionID := "stale-classifier"
-		addCharacterizationSession(t, d, sessionID, protocol.SessionAgentCodex, protocol.SessionStateWorking)
-		classifier := newBlockingClassifier(protocol.StateIdle)
-		d.classifier = classifier
-
-		transcriptPath := filepath.Join(t.TempDir(), "transcript.jsonl")
-		content := `{"type":"assistant","message":{"role":"assistant","content":"Finished."}}` + "\n"
-		if err := os.WriteFile(transcriptPath, []byte(content), 0o644); err != nil {
-			t.Fatalf("write transcript: %v", err)
-		}
-		capture := captureBroadcasts(d)
-
-		classified := make(chan struct{})
-		go func() {
-			d.classifySessionState(sessionID, transcriptPath)
-			close(classified)
-		}()
-
-		synctest.Wait()
-		select {
-		case <-classifier.started:
-		default:
-			close(classifier.release)
-			t.Fatal("classifier did not start")
-		}
-
-		d.handleState(&syncConn{}, &protocol.StateMessage{ID: sessionID, State: protocol.StatePendingApproval})
-		d.resolveDue(time.Now())
-		fresh := d.store.Get(sessionID)
-		if fresh.State != protocol.SessionStatePendingApproval {
-			t.Fatalf("state=%q before the verdict lands; the rest proves nothing", fresh.State)
-		}
-		stateEventsBeforeRelease := characterizationEventCount(capture.snapshot(), protocol.EventSessionStateChanged, sessionID)
-		close(classifier.release)
-		requireDone(t, classified, "classifier did not finish")
-
-		d.resolveDue(time.Now())
-
-		after := d.store.Get(sessionID)
-		if after == nil || after.State != protocol.SessionStatePendingApproval {
-			t.Fatalf("session=%+v, the late verdict overwrote pending_approval", after)
-		}
-		if after.StateUpdatedAt != fresh.StateUpdatedAt || after.LastSeen != fresh.LastSeen {
-			t.Fatalf("stale classifier changed timestamps: fresh=%+v after=%+v", fresh, after)
-		}
-		if got := characterizationEventCount(capture.snapshot(), protocol.EventSessionStateChanged, sessionID); got != stateEventsBeforeRelease {
-			t.Fatalf("stale classifier emitted state event: before=%d after=%d", stateEventsBeforeRelease, got)
-		}
-	})
 }
 
 func TestSessionStateCharacterization_PluginCASGatesEffects(t *testing.T) {

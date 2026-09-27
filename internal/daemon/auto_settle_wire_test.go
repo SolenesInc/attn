@@ -134,6 +134,9 @@ func TestAnInterruptedCountdownVanishesAndOnlyASettleClosesTheTurn(t *testing.T)
 		{"the user settles the turn", func(_ *testing.T, app *testworld.Peer, _ *client.Client) {
 			app.Send(protocol.SettleTurnMessage{Cmd: protocol.CmdSettleTurn, SessionID: "s1"})
 		}, protocol.SessionStateWorking, false},
+		{"the user snoozes the turn", func(_ *testing.T, app *testworld.Peer, _ *client.Client) {
+			snoozeUntil(app, "s1", time.Now().Add(time.Hour))
+		}, protocol.SessionStateWorking, false},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			inBubble(t, func(t *testing.T, w *world) {
