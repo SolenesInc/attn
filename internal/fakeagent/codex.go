@@ -48,13 +48,16 @@ func runCodex(cfg config) int {
 }
 
 func codexExec(args parsedArgs) headlessRun {
-	run := headlessRun{harness: Codex}
+	run := headlessRun{harness: Codex, model: args.value("-m", "--model")}
 	if len(args.positionals) > 0 {
 		run.prompt = args.positionals[len(args.positionals)-1]
 	}
 	for _, override := range args.values["-c"] {
 		if strings.HasPrefix(override, "mcp_servers.") {
 			run.refusal = "codex exec with MCP tool servers"
+		}
+		if effort, ok := strings.CutPrefix(override, "model_reasoning_effort="); ok {
+			run.effort = strings.Trim(effort, `"`)
 		}
 	}
 	thread := uuid.NewString()

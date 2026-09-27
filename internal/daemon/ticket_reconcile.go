@@ -267,9 +267,6 @@ func (d *Daemon) resolveReconcileTranscript(agentID, sessionID, cwd string, anch
 }
 
 func (d *Daemon) reconcileJobHandler(ctx context.Context, job *jobs.Job) (_ any, retErr error) {
-	if d.ticketReconcileDone != nil {
-		defer d.ticketReconcileDone(jobSubject(job))
-	}
 	in, err := reconcileInputsFromJob(job)
 	if err != nil {
 		d.logf("ticket reconcile %s: %v", jobSubject(job), err)
