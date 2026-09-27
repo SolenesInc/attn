@@ -44,6 +44,16 @@ func awaitWorkflowRun(app *testworld.Peer, match func(protocol.WorkflowRun) bool
 	}).Run
 }
 
+func enableWorkflows(t *testing.T, app *testworld.Peer) {
+	t.Helper()
+	requestID := uuid.NewString()
+	enabled := testworld.Request(app, protocol.SetSettingMessage{Cmd: protocol.CmdSetSetting, Key: "workflows_enabled", Value: "true", RequestID: protocol.Ptr(requestID)},
+		protocol.EventSettingsUpdated, func(m protocol.SettingsUpdatedMessage) bool { return protocol.Deref(m.RequestID) == requestID })
+	if !protocol.Deref(enabled.Success) {
+		t.Fatalf("enable workflows: %s", protocol.Deref(enabled.Error))
+	}
+}
+
 func finishedWorkflow(t *testing.T, r testworld.Result) workflowResult {
 	t.Helper()
 	var out workflowResult
@@ -86,12 +96,7 @@ func TestWorkflowRunRecordsEachRunWithTheDaemonAndReportsHowItEnded(t *testing.T
 	if r := s.Attn("workflow", "run", echo, "--wait"); r.Code != 1 || !strings.Contains(r.Stderr, "workflows are disabled") {
 		t.Errorf("a run with workflows disabled exited %d: %s", r.Code, r.Stderr)
 	}
-	requestID := uuid.NewString()
-	enabled := testworld.Request(app, protocol.SetSettingMessage{Cmd: protocol.CmdSetSetting, Key: "workflows_enabled", Value: "true", RequestID: protocol.Ptr(requestID)},
-		protocol.EventSettingsUpdated, func(m protocol.SettingsUpdatedMessage) bool { return protocol.Deref(m.RequestID) == requestID })
-	if !protocol.Deref(enabled.Success) {
-		t.Fatalf("enable workflows: %s", protocol.Deref(enabled.Error))
-	}
+	enableWorkflows(t, app)
 
 	inline := s.Run(testworld.Invocation{Args: []string{"workflow", "run", echo, "--wait", "--args", `{"a":1}`}, Session: "sess-env"})
 	if out := finishedWorkflow(t, inline); inline.Code != 0 || out.Status != "completed" || string(out.Result) != `{"a":1}` || *out.CallsTotal != 0 {
@@ -216,5 +221,73 @@ func TestWorkflowRunRecordsEachRunWithTheDaemonAndReportsHowItEnded(t *testing.T
 	}
 	if r := s.Attn("workflow", "result", spinning.RunID); r.Code != 1 || finishedWorkflow(t, r).Status != "canceled" {
 		t.Errorf("workflow result of the canceled run exited %d and printed:\n%s", r.Code, r.Stdout)
+	}
+}
+
+func TestWorkflowShowResultAndListReportTheRunsPhaseAndCallProgress(t *testing.T) {
+	t.Parallel()
+	s := testworld.NewStack(t)
+	s.Start()
+	enableWorkflows(t, s.App())
+	engine := s.Client()
+	if _, err := engine.WorkflowRunUpsert(&protocol.WorkflowRun{
+		RunID: "wf-9", ScriptPath: "pipeline.js", ScriptHash: "h", Status: protocol.WorkflowRunStatusRunning,
+		Phase: protocol.Ptr("review"), Resumable: true, CreatedAt: "2026-06-16T22:00:00Z", UpdatedAt: "2026-06-16T22:05:00Z",
+	}); err != nil {
+		t.Fatal(err)
+	}
+	for _, call := range []protocol.WorkflowAgentCall{
+		{RunID: "wf-9", Ordinal: "0", Label: protocol.Ptr("plan"), Phase: protocol.Ptr("plan"), ResolvedModel: protocol.Ptr("gpt-5-codex"),
+			Status: protocol.WorkflowAgentCallStatusOk, StartedAt: protocol.Ptr("2026-06-16T22:00:00Z"), CompletedAt: protocol.Ptr("2026-06-16T22:00:41Z")},
+		{RunID: "wf-9", Ordinal: "1", Label: protocol.Ptr("lint"), Phase: protocol.Ptr("plan"), Status: protocol.WorkflowAgentCallStatusSkipped},
+		{RunID: "wf-9", Ordinal: "2", Label: protocol.Ptr("review changes"), Phase: protocol.Ptr("review"),
+			Status: protocol.WorkflowAgentCallStatusRunning, StartedAt: protocol.Ptr("2026-06-16T22:04:00Z")},
+	} {
+		if _, err := engine.WorkflowCallUpsert("wf-9", &call); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	var shown struct {
+		Status   string `json:"status"`
+		Phase    string `json:"phase"`
+		Progress struct {
+			CallsTotal   int    `json:"calls_total"`
+			CallsDone    int    `json:"calls_done"`
+			CallsRunning int    `json:"calls_running"`
+			Summary      string `json:"summary"`
+		} `json:"progress"`
+		Calls []struct {
+			Status         string `json:"status"`
+			Label          string `json:"label"`
+			Phase          string `json:"phase"`
+			Model          string `json:"model"`
+			ElapsedSeconds *int   `json:"elapsed_seconds"`
+		} `json:"calls"`
+	}
+	s.Attn("workflow", "show", "wf-9").JSON(t, &shown)
+	if shown.Status != "running" || shown.Phase != "review" || shown.Progress.CallsTotal != 3 || shown.Progress.CallsDone != 2 || shown.Progress.CallsRunning != 1 ||
+		!strings.Contains(shown.Progress.Summary, "running") || !strings.Contains(shown.Progress.Summary, "review") || len(shown.Calls) != 3 {
+		t.Fatalf("workflow show = %+v, want the review phase with 2 of 3 calls done and 1 running", shown)
+	}
+	if done := shown.Calls[0]; done.Label != "plan" || done.Model != "gpt-5-codex" || done.ElapsedSeconds == nil || *done.ElapsedSeconds != 41 {
+		t.Errorf("the finished call shows %+v, want its label, model and 41 seconds", done)
+	}
+	if running := shown.Calls[2]; running.Status != "running" || running.Label != "review changes" || running.Phase != "review" || running.ElapsedSeconds == nil {
+		t.Errorf("the running call shows %+v, want its label, phase and time so far", running)
+	}
+
+	var result struct {
+		Phase        string `json:"phase"`
+		CallsRunning int    `json:"calls_running"`
+	}
+	s.Attn("workflow", "result", "wf-9").JSON(t, &result)
+	var listed []struct {
+		RunID string `json:"run_id"`
+		Phase string `json:"phase"`
+	}
+	s.Attn("workflow", "list").JSON(t, &listed)
+	if result.Phase != "review" || result.CallsRunning != 1 || len(listed) != 1 || listed[0].Phase != "review" {
+		t.Errorf("workflow result = %+v and list = %+v, want both to carry the review phase", result, listed)
 	}
 }
