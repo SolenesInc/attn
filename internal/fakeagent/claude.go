@@ -54,6 +54,9 @@ var claudePrintFlags = flagSpec{
 }
 
 func runClaude(cfg config) int {
+	if slices.Contains(os.Args[1:], "--print") && slices.Contains(os.Args[1:], "--input-format") {
+		return claudeModelDiscovery()
+	}
 	if slices.Contains(os.Args[1:], "--print") || slices.Contains(os.Args[1:], "-p") {
 		return claudePrint(claudePrintFlags.parse(os.Args[1:])).serve(cfg)
 	}
