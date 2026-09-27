@@ -101,7 +101,7 @@ test.describe('Desktop Sessions', () => {
     await page.locator('[data-testid="session-arranged"]').click();
     await expect(currentDesktop(page).locator(paneOf('arranged'))).toBeVisible();
     for (let created = 0; created < 2; created++) {
-      await page.keyboard.press(process.platform === 'darwin' ? 'Meta+g' : 'Control+Shift+g');
+      await page.keyboard.press('Meta+g');
       await page.getByRole('button', { name: '+ New desktop' }).click();
     }
     const headerLabels = page.locator('.workspace-group-header .workspace-label');
