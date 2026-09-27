@@ -102,6 +102,17 @@ describe('App pane header', () => {
     expect(screen.queryByRole('button', { name: 'Return to split' })).toBeNull();
   });
 
+  it('leaves the focused agent when the user goes to another workspace and back', async () => {
+    const { daemon } = await openPane({}, { sessions: [daemonSession('s2', { label: 'other', state: 'idle' })] });
+    await gesture(daemon, () => fireEvent.click(inHeader().getByRole('button', { name: 'Focus agent ledger sweep' })));
+
+    await gesture(daemon, () => fireEvent.keyDown(window, { key: '2', code: 'Digit2', metaKey: true }));
+    await gesture(daemon, () => fireEvent.keyDown(window, { key: '1', code: 'Digit1', metaKey: true }));
+
+    expect(screen.queryByRole('button', { name: 'Return to split' })).toBeNull();
+    expect(inHeader().getByRole('button', { name: 'Focus agent ledger sweep' })).toBeInTheDocument();
+  });
+
   it.each([
     ['a priced session in dollars rounded to cents', usage(1.234), 'Session usage $1.23', '$1.23'],
     ['real sub-cent usage as less than a cent', usage(0.004), 'Session usage <$0.01', '<$0.01'],

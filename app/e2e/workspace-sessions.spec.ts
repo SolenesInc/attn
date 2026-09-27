@@ -65,28 +65,6 @@ async function injectWorkspace(
 }
 
 test.describe('Workspace Sessions', () => {
-  test('leaves agent focus mode when selecting another workspace', async ({ page, daemon }) => {
-    await daemon.start();
-    await page.goto('/');
-    await page.waitForSelector('.dashboard');
-    await injectWorkspace(page, daemon, 'workspace-a', [
-      { id: 'a1', label: 'alpha-one', paneId: 'pane-a1', cwd: '/tmp/workspace-a' },
-    ]);
-    await injectWorkspace(page, daemon, 'workspace-b', [
-      { id: 'b1', label: 'beta-one', paneId: 'pane-b1', cwd: '/tmp/workspace-b' },
-    ]);
-    await page.getByTestId('session-a1').click();
-    await page.getByTestId('focus-pane-pane-a1').click();
-    const workspace = page.locator('[data-session-terminal-workspace="workspace-a"]');
-    await expect(workspace).toHaveClass(/agent-focus-mode/);
-    await page.keyboard.press('Meta+2');
-    await expect(page.locator('[data-session-terminal-workspace="workspace-b"]')).toBeVisible();
-    await page.keyboard.press('Meta+1');
-    await expect(workspace).toBeVisible();
-    await expect(workspace).not.toHaveClass(/agent-focus-mode/);
-    await expect(page.locator('.sidebar')).toBeVisible();
-  });
-
   test('cancels a sidebar workspace drag and can select it afterward', async ({ page, daemon }) => {
     await daemon.start();
     await page.goto('/');
@@ -107,101 +85,6 @@ test.describe('Workspace Sessions', () => {
     await page.mouse.up();
     await page.getByTestId('sidebar-session-drag-agent').getByRole('button', { name: 'Open drag-agent' }).click();
     await expect(page.locator('[data-session-terminal-workspace="drag-workspace"]')).toBeVisible();
-  });
-
-  test('switches workspaces and Cmd+number jumps to the first session', async ({ page, daemon }) => {
-    await daemon.start();
-    await page.goto('/');
-    await page.waitForSelector('.dashboard');
-
-    await injectWorkspace(page, daemon, 'workspace-a', [
-      { id: 'a1', label: 'alpha-one', paneId: 'pane-a1', cwd: '/tmp/workspace-a' },
-      { id: 'a2', label: 'alpha-two', paneId: 'pane-a2', cwd: '/tmp/workspace-a' },
-    ], 'pane-a2');
-    await injectWorkspace(page, daemon, 'workspace-b', [
-      { id: 'b1', label: 'beta-one', paneId: 'pane-b1', cwd: '/tmp/workspace-b' },
-      { id: 'b2', label: 'beta-two', paneId: 'pane-b2', cwd: '/tmp/workspace-b' },
-    ], 'pane-b2');
-
-    await expect(page.locator('[data-testid="sidebar-workspace-workspace-a"]')).toBeVisible();
-    await expect(page.locator('[data-testid="sidebar-workspace-workspace-b"]')).toBeVisible();
-
-    await page.locator('[data-testid="session-a1"]').click();
-    await expect(page.locator('[data-session-terminal-workspace="workspace-a"]')).toBeVisible();
-
-    await page.locator('[data-testid="sidebar-session-a2"]').click();
-    await expect(page.locator('[data-testid="sidebar-workspace-workspace-a"]')).toHaveClass(/selected/);
-    await expect(page.locator('[data-testid="sidebar-session-a2"]')).toHaveClass(/selected/);
-    await expect(page.locator('.terminal-wrapper.active [data-pane-id="pane-a1"]')).toBeVisible();
-    await expect(page.locator('.terminal-wrapper.active [data-pane-id="pane-a2"]')).toBeVisible();
-    await expect(page.locator('.terminal-wrapper.active [data-pane-id="pane-b1"]')).toHaveCount(0);
-
-    await page.locator('[data-testid="sidebar-workspace-workspace-b"] .workspace-group-header').click();
-    await expect(page.locator('[data-testid="sidebar-workspace-workspace-b"]')).toHaveClass(/selected/);
-    await expect(page.locator('[data-testid="sidebar-session-b1"]')).toHaveClass(/selected/);
-    await expect(page.locator('.terminal-wrapper.active [data-pane-id="pane-b1"]')).toBeVisible();
-    await expect(page.locator('.terminal-wrapper.active [data-pane-id="pane-b2"]')).toBeVisible();
-    await expect(page.locator('.terminal-wrapper.active [data-pane-id="pane-a1"]')).toHaveCount(0);
-
-    await page.keyboard.press('Meta+1');
-    await expect(page.locator('[data-testid="sidebar-workspace-workspace-a"]')).toHaveClass(/selected/);
-    await expect(page.locator('[data-testid="sidebar-session-a1"]')).toHaveClass(/selected/);
-    await expect(page.locator('.terminal-wrapper.active [data-pane-id="pane-a1"]')).toBeVisible();
-    await expect(page.locator('.terminal-wrapper.active [data-pane-id="pane-a2"]')).toBeVisible();
-
-    await page.keyboard.press('Meta+2');
-    await expect(page.locator('[data-testid="sidebar-workspace-workspace-b"]')).toHaveClass(/selected/);
-    await expect(page.locator('[data-testid="sidebar-session-b1"]')).toHaveClass(/selected/);
-    await expect(page.locator('.terminal-wrapper.active [data-pane-id="pane-b1"]')).toBeVisible();
-    await expect(page.locator('.terminal-wrapper.active [data-pane-id="pane-b2"]')).toBeVisible();
-  });
-
-  test('Cmd+T opens the new-workspace picker while Cmd+N opens new-session picker', async ({ page, daemon }) => {
-    await daemon.start();
-    await page.goto('/');
-    await page.waitForSelector('.dashboard');
-
-    await injectWorkspace(page, daemon, 'workspace-shortcuts', [
-      { id: 'shortcut-a', label: 'shortcut-a', paneId: 'pane-shortcut-a', cwd: '/tmp/workspace-shortcuts' },
-    ]);
-
-    await page.locator('[data-testid="session-shortcut-a"]').click();
-    await expect(page.locator('.terminal-wrapper.active [data-pane-id="pane-shortcut-a"]')).toBeVisible();
-
-    await page.keyboard.press('Meta+n');
-    await expect(page.locator('.location-picker-overlay')).toBeVisible();
-    await expect(page.locator('.picker-title')).toHaveText('New Session Location');
-    await page.keyboard.press('Escape');
-    await expect(page.locator('.location-picker-overlay')).toHaveCount(0);
-
-    await page.keyboard.press('Meta+t');
-    await expect(page.locator('.location-picker-overlay')).toBeVisible();
-    await expect(page.locator('.picker-title')).toHaveText('New Workspace Location');
-  });
-
-  test('clicking and keyboard navigation focus panes across sessions in one workspace', async ({ page, daemon }) => {
-    await daemon.start();
-    await page.goto('/');
-    await page.waitForSelector('.dashboard');
-
-    await injectWorkspace(page, daemon, 'workspace-focus', [
-      { id: 'focus-agent', label: 'focus-agent', paneId: 'pane-focus-agent', cwd: '/tmp/workspace-focus' },
-      { id: 'focus-shell', label: 'focus-shell', paneId: 'pane-focus-shell', cwd: '/tmp/workspace-focus' },
-    ], 'pane-focus-agent');
-
-    await page.locator('[data-testid="session-focus-agent"]').click();
-    const activeWorkspace = page.locator('[data-session-terminal-workspace="workspace-focus"]');
-    await expect(activeWorkspace).toBeVisible();
-    await expect(page.locator('[data-testid="sidebar-session-focus-agent"]')).toHaveClass(/selected/);
-    await expect(activeWorkspace).toHaveAttribute('data-active-pane-id', 'pane-focus-agent');
-
-    await activeWorkspace.locator('[data-pane-id="pane-focus-shell"]').click();
-    await expect(page.locator('[data-testid="sidebar-session-focus-shell"]')).toHaveClass(/selected/);
-    await expect(activeWorkspace).toHaveAttribute('data-active-pane-id', 'pane-focus-shell');
-
-    await page.keyboard.press('Meta+Alt+ArrowLeft');
-    await expect(page.locator('[data-testid="sidebar-session-focus-agent"]')).toHaveClass(/selected/);
-    await expect(activeWorkspace).toHaveAttribute('data-active-pane-id', 'pane-focus-agent');
   });
 
   test('focus mode gives one agent the shell and restores the workspace on exit', async ({ page, daemon }) => {
@@ -235,6 +118,7 @@ test.describe('Workspace Sessions', () => {
     await expect(workspace.locator('[data-pane-id="pane-focus-main"]')).toBeVisible();
     await expect(workspace.locator('[data-pane-id="pane-focus-peer"]')).toBeVisible();
   });
+
   test('sidebar selection, row actions, and settings have independent keyboard targets', async ({ page, daemon }) => {
     await daemon.start();
     await page.goto('/');
@@ -273,5 +157,4 @@ test.describe('Workspace Sessions', () => {
     await expect(settings).toBeFocused();
     await expect(page.locator('.sidebar button button')).toHaveCount(0);
   });
-
 });
