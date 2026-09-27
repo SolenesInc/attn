@@ -33,6 +33,7 @@ type Kit struct {
 	mu       sync.Mutex
 	launches map[string]chan *Run
 	nextBoot chan struct{}
+	bootAsk  chan struct{}
 	fakes    []*fake
 	failures []string
 	headless chan *HeadlessTask
@@ -139,17 +140,19 @@ func (k *Kit) HoldNextBoot() (boot func()) {
 	k.mu.Lock()
 	defer k.mu.Unlock()
 	k.nextBoot = cue
+	k.bootAsk = make(chan struct{})
 	return sync.OnceFunc(func() { close(cue) })
 }
 
 func (k *Kit) awaitBoot(sessionID string) {
 	k.mu.Lock()
-	cue := k.nextBoot
+	cue, ask := k.nextBoot, k.bootAsk
 	k.nextBoot = nil
 	k.mu.Unlock()
 	if cue == nil {
 		return
 	}
+	close(ask)
 	select {
 	case <-cue:
 	case <-time.After(HangGuard):
