@@ -69,6 +69,7 @@ describe('App pane attach', () => {
     expect(notice('bare-failure')).toBe('Session failed to start');
     expect(notice('booting')).toBe('Starting codex...');
     expect(notice('late')).toBe('Waiting for copilot...');
+    expect(document.querySelector('[data-pane-id="pane-refused"] [aria-label^="Rename session"]')).toBeNull();
 
     daemon.emit({ event: 'session_registered', session: daemonSession('late', { workspace_id: 'ws' }) });
     await daemon.idle();
