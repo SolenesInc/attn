@@ -1,7 +1,6 @@
 package notebook
 
 import (
-	"bytes"
 	"fmt"
 	"io"
 	"io/fs"
@@ -130,21 +129,6 @@ func (s *Store) AppendJournal(dateISO, entry string) (relPath string, hash strin
 	return rel, hash, err
 }
 
-func (s *Store) AppendJournalEntryOnce(dateISO, dedupeMarker, entry string) (relPath string, written bool, hash string, err error) {
-	if !journalDateRE.MatchString(dateISO) {
-		return "", false, "", fmt.Errorf("notebook: invalid journal date %q (want YYYY-MM-DD)", dateISO)
-	}
-	if strings.TrimSpace(entry) == "" {
-		return "", false, "", fmt.Errorf("notebook: empty journal entry")
-	}
-	if strings.TrimSpace(dedupeMarker) == "" {
-		return "", false, "", fmt.Errorf("notebook: empty journal dedupe marker")
-	}
-	rel := path.Join(DirJournal, dateISO+".md")
-	written, hash, err = s.appendToNoteOnce(rel, dedupeMarker, entry, newJournalDoc(dateISO))
-	return rel, written, hash, err
-}
-
 func newJournalDoc(dateISO string) func() Document {
 	return func() Document {
 		return Document{
@@ -165,14 +149,9 @@ func (s *Store) AppendInbox(entry string) (relPath string, hash string, err erro
 }
 
 func (s *Store) appendToNote(rel, entry string, newDoc func() Document) (hash string, err error) {
-	_, hash, err = s.appendToNoteOnce(rel, "", entry, newDoc)
-	return hash, err
-}
-
-func (s *Store) appendToNoteOnce(rel, dedupeMarker, entry string, newDoc func() Document) (written bool, hash string, err error) {
 	abs, err := s.abs(rel)
 	if err != nil {
-		return false, "", err
+		return "", err
 	}
 
 	s.mu.Lock()
@@ -180,10 +159,7 @@ func (s *Store) appendToNoteOnce(rel, dedupeMarker, entry string, newDoc func() 
 
 	existing, statErr := os.ReadFile(abs)
 	if statErr != nil && !os.IsNotExist(statErr) {
-		return false, "", statErr
-	}
-	if dedupeMarker != "" && statErr == nil && bytes.Contains(existing, []byte(dedupeMarker)) {
-		return false, Hash(existing), nil
+		return "", statErr
 	}
 	var doc Document
 	if statErr == nil {
@@ -194,12 +170,12 @@ func (s *Store) appendToNoteOnce(rel, dedupeMarker, entry string, newDoc func() 
 	doc.Body = strings.TrimRight(doc.Body, "\n") + "\n\n" + strings.TrimRight(entry, "\n") + "\n"
 	out := doc.Bytes()
 	if int64(len(out)) > MaxFileSize {
-		return false, "", fmt.Errorf("notebook: %s exceeds %d bytes", rel, MaxFileSize)
+		return "", fmt.Errorf("notebook: %s exceeds %d bytes", rel, MaxFileSize)
 	}
 	if err := writeAtomic(abs, out); err != nil {
-		return false, "", err
+		return "", err
 	}
-	return true, Hash(out), nil
+	return Hash(out), nil
 }
 
 const listFrontmatterScanLimit = 64 << 10
@@ -207,10 +183,14 @@ const listFrontmatterScanLimit = 64 << 10
 func (s *Store) List(prefix string) ([]Entry, error) {
 	want := strings.Trim(strings.TrimSpace(prefix), "/")
 	var entries []Entry
-	walkErr := filepath.WalkDir(s.root, func(p string, dirent fs.DirEntry, err error) error {
+	walkRoot := s.root
+	if resolved, err := filepath.EvalSymlinks(s.root); err == nil {
+		walkRoot = resolved
+	}
+	walkErr := filepath.WalkDir(walkRoot, func(p string, dirent fs.DirEntry, err error) error {
 		if err != nil {
 			if os.IsNotExist(err) {
-				if p == s.root {
+				if p == walkRoot {
 					return fs.SkipAll
 				}
 				return nil
@@ -218,7 +198,7 @@ func (s *Store) List(prefix string) ([]Entry, error) {
 			return err
 		}
 		if dirent.IsDir() {
-			if p != s.root && strings.HasPrefix(dirent.Name(), ".") {
+			if p != walkRoot && strings.HasPrefix(dirent.Name(), ".") {
 				return fs.SkipDir
 			}
 			return nil
@@ -227,7 +207,7 @@ func (s *Store) List(prefix string) ([]Entry, error) {
 		if strings.HasPrefix(name, ".") || !strings.HasSuffix(name, ".md") {
 			return nil
 		}
-		relAbs, rerr := filepath.Rel(s.root, p)
+		relAbs, rerr := filepath.Rel(walkRoot, p)
 		if rerr != nil {
 			return nil
 		}
