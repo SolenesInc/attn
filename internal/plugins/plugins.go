@@ -329,7 +329,7 @@ func cloneGitSource(ctx context.Context, source, targetDir string, opts InstallO
 	if err == nil {
 		return nil
 	}
-	details := strings.TrimSpace(strings.ReplaceAll(string(output), source, redactGitSource(source)))
+	details := strings.TrimSpace(redactGitOutput(string(output), source))
 	if details == "" {
 		return fmt.Errorf("clone plugin repository: %w", err)
 	}
@@ -340,6 +340,20 @@ func directGitClone(ctx context.Context, source, targetDir string, env []string)
 	cmd := exec.CommandContext(ctx, "/usr/bin/env", "git", "clone", "--depth", "1", source, targetDir)
 	cmd.Env = env
 	return cmd.CombinedOutput()
+}
+
+func redactGitOutput(output, source string) string {
+	output = strings.ReplaceAll(output, source, redactGitSource(source))
+	parsed, err := url.Parse(source)
+	if err != nil || parsed.Scheme == "" || parsed.Host == "" {
+		return output
+	}
+	for _, secret := range []string{parsed.User.String(), parsed.RawQuery, parsed.Fragment} {
+		if secret != "" {
+			output = strings.ReplaceAll(output, secret, "REDACTED")
+		}
+	}
+	return output
 }
 
 func redactGitSource(source string) string {
