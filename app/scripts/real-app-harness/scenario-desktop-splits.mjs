@@ -94,7 +94,7 @@ async function createShellDesktop(client, observer, cwd, label) {
   await waitForShellPaneReady(client, sessionId, desktopState.panes[0].paneId, `initial shell pane ready for ${label}`);
   return {
     sessionId,
-    desktopState,
+    desktop: desktopState,
     firstPane: desktopState.panes[0],
   };
 }
