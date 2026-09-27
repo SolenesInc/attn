@@ -23,12 +23,12 @@
         "note": "Green focus-free run with the seeds tab, handoff history, charter editing, reconnect recovery and the restart lifecycle; earlier green runs the same day took 48.6s and 54.2s. Remeasure on Linux CI."
       },
       "desktop-splits": {
-        "run": "desktop-switching-2026-09-15T21-17-34-309Z",
+        "run": "workspace-switching-2026-09-15T21-17-34-309Z",
         "job": "Local serial matrix, rugged-doctor instance",
         "recordedAt": "2026-09-15",
         "seconds": 45.7,
         "runnerClass": "local macOS",
-        "note": "Green matrix-digest.txt, including focus exit and cross-desktop focus reset, with recording. Remeasure on Linux CI."
+        "note": "Green matrix-digest.txt, including focus exit and cross-workspace focus reset, with recording. Remeasure on Linux CI."
       },
       "delegation-chain": {
         "run": "delegation-chain-2026-09-13T23-06-51-792Z",
