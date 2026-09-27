@@ -43,6 +43,10 @@ export function reconcileSessionNavigation(
   update: Partial<SessionStore>,
 ): Partial<SessionStore> {
   const next = { ...state, ...update };
+  const requestedSessionId = next.focusRequest?.sessionId;
+  if (requestedSessionId && !next.sessions.some((session) => session.id === requestedSessionId)) {
+    next.focusRequest = null;
+  }
   next.navigationQueue = navigationQueue(
     next.navigationSessions,
     next.navigationProfileId,

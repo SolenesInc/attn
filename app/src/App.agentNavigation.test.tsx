@@ -1,9 +1,10 @@
 import { act, fireEvent, screen, within } from '@testing-library/react';
 import { onOpenUrl } from '@tauri-apps/plugin-deep-link';
 import { describe, expect, it, vi } from 'vitest';
-import { soloDesktop, daemonSession, daemonDesktop, type DaemonSession } from './test/daemonFixtures';
+import { agentPane, defaultProfile, dockTiles, soloDesktop, daemonSession, daemonDesktop, type DaemonSession } from './test/daemonFixtures';
 import { gesture, pressShortcut, renderApp } from './test/renderApp';
 import type { ScriptedDaemon } from './test/scriptedDaemon';
+import { useSessionStore } from './store/sessions';
 
 const S1_TURN_OPENED = '2026-08-03T09:00:00Z';
 const S2_TURN_OPENED = '2026-08-03T10:00:00Z';
@@ -395,6 +396,36 @@ describe('agent navigation', () => {
 
     expect(isHome()).toBe(false);
     expect(document.querySelector('[data-pane-id="tile-notes"]')).not.toBeNull();
+  });
+
+  it('keeps a tile agent when the requested agent closes before focus changes', async () => {
+    const tile = { tile_id: 'tile-notes', tile_kind: 'markdown', tile_params: '/tmp/notes.md' };
+    const desktop = daemonDesktop('d1', {
+      root: dockTiles({ type: 'split', split_id: 'agents', direction: 'vertical', ratio: 0.5, children: [
+        { type: 'pane', pane_id: 'pane-s1' }, { type: 'pane', pane_id: 'pane-s2' },
+      ] }, [tile]),
+      panes: [agentPane('s1', 'd1'), agentPane('s2', 'd1')],
+    }, { active_pane_id: tile.tile_id });
+    const { daemon } = await renderApp({ initialState: {
+      sessions: [agent('s1'), agent('s2')],
+      profiles: [defaultProfile('d1')],
+      desktops: [desktop],
+    } });
+    daemon.on('desktop_set_active_pane', () => undefined);
+
+    open('s2');
+    await daemon.received('desktop_set_active_pane', (command) => command.pane_id === 'pane-s2');
+    daemon.emit({ event: 'session_unregistered', session: agent('s2') });
+    daemon.arrange((desktops) => desktops.map((entry) => entry.id === 'd1' ? {
+      ...entry,
+      tree_json: JSON.stringify(dockTiles({ type: 'pane', pane_id: 'pane-s1' }, [tile])),
+      panes: [agentPane('s1', 'd1')],
+      revision: entry.revision + 1,
+    } : entry));
+    await daemon.idle();
+
+    expect(document.querySelector('[data-pane-id="tile-notes"]')).not.toBeNull();
+    expect(useSessionStore.getState().activeSessionId).toBe('s1');
   });
 
   it.each([
