@@ -26,6 +26,7 @@ import (
 	"github.com/victorarias/attn/internal/buildinfo"
 	"github.com/victorarias/attn/internal/config"
 	"github.com/victorarias/attn/internal/launchcontract"
+	"github.com/victorarias/attn/internal/pausepoint"
 	"github.com/victorarias/attn/internal/pty"
 	"github.com/victorarias/attn/internal/ptyhost"
 	"github.com/victorarias/attn/internal/ptyworker"
@@ -2798,6 +2799,9 @@ func (s *workerStream) readLoop(pre []OutputEvent) {
 		converted, ok := convertWorkerEvent(evt)
 		if !ok {
 			continue
+		}
+		if converted.Kind == OutputEventKindOutput {
+			pausepoint.At(pausepoint.PtyStreamRead)
 		}
 		if !s.publish(converted) {
 			return

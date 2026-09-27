@@ -19,6 +19,8 @@ const (
 	PtyAttachSnapshot  = "pty-attach-snapshot"
 	PtyOutputSequenced = "pty-output-sequenced"
 	PtyOutputHeld      = "pty-output-held"
+	PtyStreamRead      = "pty-stream-read"
+	PtySubscriberDrop  = "pty-subscriber-drop"
 	BusAnnounce        = "bus-announce"
 
 	DaemonStartupRecovery     = "daemon-startup-recovery"
