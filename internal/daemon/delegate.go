@@ -839,11 +839,6 @@ func (d *Daemon) delegateOperationProtected(protection foregroundCleanupProtecti
 	rollback.onSessionSpawned(sessionID)
 	d.delegationCheckoutMu.Unlock()
 	checkoutLocked = false
-	if d.delegationFinalizeHook != nil {
-		if err := d.delegationFinalizeHook(); err != nil {
-			return nil, rollback.fail(protection, err)
-		}
-	}
 	if delegatedByChief {
 		if _, errMsg := d.setWorkspaceMuted(workspaceID, false); errMsg != "" {
 			return nil, rollback.fail(protection, fmt.Errorf("make delegated workspace visible: %s", errMsg))
