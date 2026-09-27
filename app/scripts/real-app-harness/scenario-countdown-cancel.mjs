@@ -27,10 +27,10 @@ import {
   writeQueueAgentFixture,
 } from './scenarioAgents.mjs';
 import {
-  waitForFirstWorkspacePane,
+  waitForFirstDesktopPane,
   waitForPaneAttached,
   waitForPaneVisible,
-  waitForSessionWorkspace,
+  waitForSessionDesktop,
 } from './scenarioAssertions.mjs';
 
 const delay = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
@@ -97,14 +97,14 @@ async function pressCancelCountdown(client, driver) {
 }
 
 async function splitIntoShellPane(client, sessionId) {
-  const before = await client.request('get_workspace', { sessionId });
+  const before = await client.request('get_desktop', { sessionId });
   const beforeIds = new Set((before.panes || []).map((pane) => pane.paneId));
   await client.request('dispatch_shortcut', { shortcutId: 'terminal.splitVertical' });
-  const after = await waitForSessionWorkspace(
+  const after = await waitForSessionDesktop(
     client,
     sessionId,
-    (workspace) => (workspace?.panes || []).length === beforeIds.size + 1
-      && (workspace?.panes || []).every((pane) => pane.runtimeId),
+    (desktop) => (desktop?.panes || []).length === beforeIds.size + 1
+      && (desktop?.panes || []).every((pane) => pane.runtimeId),
     'the split pane to register a session',
     30_000,
   );
@@ -137,7 +137,7 @@ function inboxBatches(transcript) {
 }
 
 async function readPaneText(client, sessionId) {
-  const pane = await waitForFirstWorkspacePane(client, sessionId, `pane for ${sessionId}`, 20_000);
+  const pane = await waitForFirstDesktopPane(client, sessionId, `pane for ${sessionId}`, 20_000);
   const res = await client
     .request('read_pane_text', { sessionId, paneId: pane.paneId }, { timeoutMs: 20_000 })
     .catch(() => null);
@@ -147,7 +147,7 @@ async function readPaneText(client, sessionId) {
 // The automation write path on purpose: a real keystroke here would arm the
 // nudge keystroke guard and defer the doorbell this scenario waits for.
 async function driveAgentToIdle(client, observer, sessionId, note) {
-  const pane = await waitForFirstWorkspacePane(client, sessionId, `pane for ${sessionId}`, 20_000);
+  const pane = await waitForFirstDesktopPane(client, sessionId, `pane for ${sessionId}`, 20_000);
   const reply = 'initial turn ready';
   const prompt = `Reply with the exact words: ${reply}`;
   await submitPromptViaAutomation(client, sessionId, pane.paneId, prompt);
@@ -235,7 +235,7 @@ async function main() {
         promptReadyTimeoutMs: 90_000,
       });
       runner.registerCleanup('close_agent_session', () => client.request('close_session', { sessionId: agentId }));
-      const pane = await waitForFirstWorkspacePane(client, agentId, `pane for ${agentId}`, 20_000);
+      const pane = await waitForFirstDesktopPane(client, agentId, `pane for ${agentId}`, 20_000);
       agentPaneId = pane.paneId;
       await client.request('select_session', { sessionId: agentId });
 

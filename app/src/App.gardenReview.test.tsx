@@ -1,6 +1,6 @@
 import { fireEvent, screen, within } from '@testing-library/react';
 import { describe, expect, it } from 'vitest';
-import { daemonSeed, type DaemonSeed, type DaemonSeedDocument } from './test/daemonFixtures';
+import { daemonSeed, daemonSession, type DaemonSeed, type DaemonSeedDocument } from './test/daemonFixtures';
 import { renderGarden } from './test/garden';
 import { gesture, pressShortcut } from './test/renderApp';
 import type { EventMessage } from './test/protocol';
@@ -69,10 +69,12 @@ interface GardenScript {
   seeds?: DaemonSeed[];
   documents?: Record<string, Partial<DaemonSeedDocument>>;
   candidates?: number;
+  chief?: boolean;
 }
 
-async function openGarden(shown: Review | undefined, { seeds = [reviewedSeed], documents = {}, candidates }: GardenScript = {}) {
-  const garden = await renderGarden(seeds);
+async function openGarden(shown: Review | undefined, { seeds = [reviewedSeed], documents = {}, candidates, chief = true }: GardenScript = {}) {
+  const sessions = [daemonSession('s1'), ...(chief ? [daemonSession('chief', { chief_of_staff: true })] : [])];
+  const garden = await renderGarden(seeds, { sessions });
   garden.documents = documents;
   const { daemon } = garden;
   daemon.on('seed_review_show', () => ({
@@ -386,6 +388,13 @@ describe('App garden review', () => {
       allow_worktree_reuse: true,
       review: receipt,
     })]);
+  });
+
+  it('offers Send to Chief only while the selected profile has a chief', async () => {
+    await openReview({}, { chief: false });
+
+    expect(screen.getByRole('button', { name: 'Park' })).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Send to Chief' })).toBeNull();
   });
 
   it('sends a guarded seed to Chief from the active session with optional guidance', async () => {

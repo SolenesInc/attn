@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { fireEvent, screen, within } from '@testing-library/react';
 import {
-  agentWorkspace,
+  soloDesktop,
   daemonSeed,
   daemonSession,
   seedDocument,
@@ -9,12 +9,13 @@ import {
   type DaemonSeedDocument,
   type DaemonSession,
 } from '../test/daemonFixtures';
-import { gesture, pressShortcut, renderApp } from '../test/renderApp';
+import { openActionMenu } from '../test/appFixtures';
+import { gesture, renderApp } from '../test/renderApp';
 import type { Reply, ScriptedDaemon } from '../test/scriptedDaemon';
 
 async function openAgent(seeds: DaemonSeed[], session: Partial<DaemonSession> = {}) {
   const { daemon } = await renderApp({
-    initialState: { sessions: [daemonSession('s1', session)], workspaces: [agentWorkspace('s1')], seeds },
+    initialState: { sessions: [daemonSession('s1', session)], desktops: [soloDesktop('s1')], seeds },
   });
   await gesture(daemon, () => fireEvent.click(screen.getByRole('button', { name: 'Open s1' })));
   return daemon;
@@ -23,8 +24,9 @@ async function openAgent(seeds: DaemonSeed[], session: Partial<DaemonSession> = 
 const chip = () => screen.getByTestId('seed-chip-s1');
 
 async function showSeeds(daemon: ScriptedDaemon) {
-  pressShortcut('ui.actionMenu');
-  await gesture(daemon, () => fireEvent.click(screen.getByRole('option', { name: /Show s1's seeds/ })));
+  const search = await openActionMenu(daemon);
+  fireEvent.change(search, { target: { value: ">show s1's seeds" } });
+  await gesture(daemon, () => fireEvent.keyDown(search, { key: 'Enter' }));
 }
 
 const openedSeeds = (daemon: ScriptedDaemon) =>

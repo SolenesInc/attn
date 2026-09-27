@@ -191,8 +191,8 @@ async function main() {
 
   const closeSessionPanes = async (id) => {
     if (!id) return;
-    const workspace = await client.request('get_workspace', { sessionId: id }).catch(() => null);
-    for (const pane of workspace?.panes || []) {
+    const desktop = await client.request('get_desktop', { sessionId: id }).catch(() => null);
+    for (const pane of desktop?.panes || []) {
       await client.request('close_pane', { sessionId: id, paneId: pane.paneId }).catch(() => {});
     }
   };
@@ -221,9 +221,9 @@ async function main() {
       sessionWaitMs: 30_000,
     });
     await client.request('select_session', { sessionId: id });
-    const workspace = await client.request('get_workspace', { sessionId: id });
-    const pane = workspace?.panes?.[0];
-    runner.assert(Boolean(pane), `No pane in workspace: ${JSON.stringify(workspace)}`);
+    const desktop = await client.request('get_desktop', { sessionId: id });
+    const pane = desktop?.panes?.[0];
+    runner.assert(Boolean(pane), `No pane in desktop: ${JSON.stringify(desktop)}`);
     await waitForPaneVisible(client, id, pane.paneId, 20_000);
     await waitForPaneAttached(client, id, pane.paneId, 20_000);
     await waitForPaneShellReady(client, id, pane.paneId, {

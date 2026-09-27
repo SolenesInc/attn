@@ -15,7 +15,7 @@ func TestASessionContextWindowCapRelaunchesTheAgentAndIsRefusedForAShellOrOutOfB
 	app := w.App()
 	agent := w.Spawn(app, fakeagent.Claude, w.Path("shop"))
 	w.Launched(agent)
-	shell := w.Spawn(app, workspaceShell, w.Path("docs"))
+	shell := w.Spawn(app, shellHarness, w.Path("docs"))
 	pin := func(session string, tokens int) protocol.SessionContextWindowCapResultMessage {
 		t.Helper()
 		return testworld.Request(app, protocol.SetSessionContextWindowCapMessage{Cmd: protocol.CmdSetSessionContextWindowCap, SessionID: session, Cap: tokens},

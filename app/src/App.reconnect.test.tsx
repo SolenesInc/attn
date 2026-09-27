@@ -1,6 +1,6 @@
 import { fireEvent, screen } from '@testing-library/react';
 import { describe, expect, it } from 'vitest';
-import { agentPane, daemonSession, daemonWorkspace } from './test/daemonFixtures';
+import { agentPane, daemonSession, daemonDesktop, DEFAULT_PROFILE_ID } from './test/daemonFixtures';
 import { renderApp } from './test/renderApp';
 import { initialState } from './test/scriptedDaemon';
 
@@ -29,8 +29,8 @@ describe('App daemon reconnect', () => {
     expect(daemon.sentOf('set_terminal_theme')).toEqual([THEME]);
   });
 
-  it('tells a reconnected daemon its selection and theme, and asks again for what it shows', async () => {
-    const workspace = daemonWorkspace('ws', {
+  it('tells a reconnected daemon its profile and theme, and asks again for what it shows', async () => {
+    const desktop = daemonDesktop('ws', {
       root: {
         type: 'split',
         split_id: 'split-a',
@@ -42,9 +42,9 @@ describe('App daemon reconnect', () => {
         ],
       },
       panes: [agentPane('s1', 'ws')],
-    }, { title: 's1' });
+    }, { name: 'notes desk' });
     const { daemon } = await renderApp({
-      initialState: { sessions: [daemonSession('s1', { workspace_id: 'ws' })], workspaces: [workspace] },
+      initialState: { sessions: [daemonSession('s1')], desktops: [desktop] },
     });
     fireEvent.click(screen.getByRole('button', { name: 'Open s1' }));
     await daemon.idle();
@@ -53,10 +53,8 @@ describe('App daemon reconnect', () => {
     await daemon.idle();
 
     expect(reconnected.sent).toEqual(expect.arrayContaining([
-      { cmd: 'session_selected', id: 's1' },
-      { cmd: 'workspace_selected', workspace_id: 'ws' },
+      expect.objectContaining({ cmd: 'client_hello', profile_id: DEFAULT_PROFILE_ID }),
       THEME,
-      { cmd: 'workspace_tile_content_get', workspace_id: 'ws', tile_id: 'tile-md' },
       expect.objectContaining({ cmd: 'session_messages_get', session_id: 's1' }),
     ]));
   });

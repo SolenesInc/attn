@@ -50,7 +50,7 @@ func transportHello(clientID string, capabilities ...string) protocol.ClientHell
 		Cmd:          protocol.CmdClientHello,
 		ClientKind:   "tauri-app",
 		Version:      "protocol-" + protocol.ProtocolVersion,
-		Capabilities: append([]string{protocol.CapabilityWorkspaceSessions}, capabilities...),
+		Capabilities: append([]string{}, capabilities...),
 		ClientToken:  protocol.Ptr(config.ClientToken()),
 	}
 	if clientID != "" {

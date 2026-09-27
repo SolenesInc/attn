@@ -1,14 +1,14 @@
 import { act, createEvent, fireEvent } from '@testing-library/react';
 import { describe, expect, it, vi } from 'vitest';
 import { openAttachedTerminals } from './test/appFixtures';
-import { agentWorkspace, daemonSession } from './test/daemonFixtures';
+import { soloDesktop, daemonSession } from './test/daemonFixtures';
 
 const HISTORY = Array.from({ length: 40 }, (_, line) => `line-${line}`);
 
 async function openScrolledTerminal() {
   const view = await openAttachedTerminals({
     sessions: [daemonSession('s1', { state: 'idle' })],
-    workspaces: [agentWorkspace('s1')],
+    desktops: [soloDesktop('s1')],
     output: { s1: HISTORY.join('\r\n') },
   });
   await act(() => vi.advanceTimersToNextFrame());

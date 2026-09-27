@@ -6,7 +6,7 @@ import { assertValidSettingsSectionID } from './settingsAutomation';
 
 const SECTION_IDS = [
   'general',
-  'workspace',
+  'desktop',
   'hygiene',
   'agents',
   'backgroundAgents',
@@ -26,7 +26,7 @@ describe('SettingsModal sections', () => {
     const daemon = await openSection('general', { settings: { theme: 'system' } });
     expect(screen.getByRole('button', { name: 'System', pressed: true })).toBeInTheDocument();
     expect(screen.getByRole('group', { name: 'Theme preference' })).toBeInTheDocument();
-    await gesture(daemon, () => fireEvent.click(screen.getByTestId('settings-nav-workspace')));
+    await gesture(daemon, () => fireEvent.click(screen.getByTestId('settings-nav-desktop')));
     expect(screen.getByLabelText('Projects directory')).toBe(screen.getByTestId('settings-projects-directory-input'));
   });
 
@@ -110,7 +110,7 @@ describe('SettingsModal sections', () => {
   });
 
   it('raises a saved mark when a blur-committed field lands, and takes it away', async () => {
-    const daemon = await openSection('workspace');
+    const daemon = await openSection('desktop');
 
     const input = screen.getByTestId('settings-projects-directory-input');
     fireEvent.change(input, { target: { value: '/Users/you/code' } });
@@ -124,7 +124,7 @@ describe('SettingsModal sections', () => {
   });
 
   it('says nothing when a blur-committed field has not changed', async () => {
-    const daemon = await openSection('workspace', { settings: { projects_directory: '/Users/you/code' } });
+    const daemon = await openSection('desktop', { settings: { projects_directory: '/Users/you/code' } });
 
     await gesture(daemon, () => fireEvent.blur(screen.getByTestId('settings-projects-directory-input')));
 

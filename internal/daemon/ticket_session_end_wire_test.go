@@ -75,7 +75,7 @@ func TestARespawnedSessionRevivesItsCrashedTickets(t *testing.T) {
 func TestASessionThatEndsByTheUsersHandOrAtRestLeavesItsTicketsWhereTheyWere(t *testing.T) {
 	w := newWorld(t, fakeagent.Claude)
 	app, cli := w.App(), w.Client()
-	spawned, workspaceID, paneID := w.RequestSpawn(app, fakeagent.Claude, w.Path("closed"))
+	spawned, _, _ := w.RequestSpawn(app, fakeagent.Claude, w.Path("closed"))
 	closed := spawned.ID
 	ticketSessionEndAtWork(t, app, w.Launched(closed), closed, "open the pull request")
 	ticketReportTake(t, cli, closed, "reviewed")
@@ -91,11 +91,7 @@ func TestASessionThatEndsByTheUsersHandOrAtRestLeavesItsTicketsWhereTheyWere(t *
 	agent.Reply("Done for now. <!-- attn:state=waiting_input -->")
 	testworld.AwaitSession(app, resting, func(s protocol.Session) bool { return s.State == protocol.SessionStateWaitingInput })
 
-	testworld.Request(app, protocol.WorkspaceLayoutClosePaneMessage{
-		Cmd: protocol.CmdWorkspaceLayoutClosePane, WorkspaceID: workspaceID, PaneID: paneID,
-	}, protocol.EventWorkspaceLayoutActionResult, func(r protocol.WorkspaceLayoutActionResultMessage) bool {
-		return r.Action == protocol.CmdWorkspaceLayoutClosePane && protocol.Deref(r.PaneID) == paneID
-	})
+	closeFromApp(app, closed)
 	testworld.Await(app, protocol.EventSessionExited, func(e protocol.SessionExitedMessage) bool { return e.ID == closed })
 	agent.Exit(0)
 	testworld.Await(app, protocol.EventSessionExited, func(e protocol.SessionExitedMessage) bool { return e.ID == resting })

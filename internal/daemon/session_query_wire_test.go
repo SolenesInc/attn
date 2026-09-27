@@ -57,7 +57,7 @@ func TestARenameReachesTheSession(t *testing.T) {
 		t.Fatalf("rename: %v", err)
 	}
 	renamed := testworld.AwaitSession(app, session, func(s protocol.Session) bool { return s.Label == "checkout" })
-	if renamed.Directory != before.Directory || renamed.WorkspaceID != before.WorkspaceID || renamed.Agent != before.Agent {
+	if renamed.Directory != before.Directory || renamed.ProfileID != before.ProfileID || renamed.Agent != before.Agent {
 		t.Errorf("rename changed more than the label: before=%+v after=%+v", before, renamed)
 	}
 }

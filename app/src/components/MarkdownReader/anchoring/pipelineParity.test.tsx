@@ -33,7 +33,7 @@ function renderReader(content: string) {
   return render(
     <MarkdownReader
       content={content}
-      source={fileMarkdownSource('workspace-1', '/tmp/project/README.md')}
+      source={fileMarkdownSource('/tmp/project/README.md')}
       allowLocalTargets={true}
     />,
   );

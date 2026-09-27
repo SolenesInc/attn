@@ -183,7 +183,7 @@ async function waitForZoom(client, sessionId, expectedPaneId, description, timeo
   let last = null;
   while (Date.now() < deadline) {
     const state = await client.request('get_session_ui_state', { sessionId });
-    last = state?.workspace?.view?.zoomedPaneId ?? null;
+    last = state?.desktop?.view?.zoomedPaneId ?? null;
     if (last === expectedPaneId) return;
     await delay(120);
   }
@@ -219,8 +219,8 @@ async function main() {
   runner.registerCleanup('quit_app', () => client.quitApp());
   runner.registerCleanup('close_session_panes', async () => {
     if (!sessionId) return;
-    const workspace = await client.request('get_workspace', { sessionId }).catch(() => null);
-    for (const current of workspace?.panes || []) {
+    const desktop = await client.request('get_desktop', { sessionId }).catch(() => null);
+    for (const current of desktop?.panes || []) {
       await client.request('close_pane', { sessionId, paneId: current.paneId }).catch(() => {});
     }
   });
@@ -352,9 +352,9 @@ async function main() {
         sessionWaitMs: 30_000,
       });
       await client.request('select_session', { sessionId });
-      const workspace = await client.request('get_workspace', { sessionId });
-      pane = workspace?.panes?.[0] ?? null;
-      runner.assert(Boolean(pane?.paneId && pane?.runtimeId), `No live shell pane: ${JSON.stringify(workspace)}`);
+      const desktop = await client.request('get_desktop', { sessionId });
+      pane = desktop?.panes?.[0] ?? null;
+      runner.assert(Boolean(pane?.paneId && pane?.runtimeId), `No live shell pane: ${JSON.stringify(desktop)}`);
       await waitForPaneVisible(client, sessionId, pane.paneId, 20_000);
       await waitForPaneAttached(client, sessionId, pane.paneId, 20_000);
       await waitForPaneShellReady(client, sessionId, pane.paneId, {
@@ -451,15 +451,15 @@ async function main() {
         }
         if (!found) throw new Error('CLI input dump did not capture the suppressed key');
 
-        await pressShortcut('ui.actionMenu');
+        await pressShortcut('ui.commandPalette');
         await client.request('dom_type', {
-          selector: '.action-menu input', text: 'diagnostic report',
+          selector: '.unified-palette-input', text: '>diagnostic report',
         });
-        const menu = await client.request('dom_text', { selector: '.action-menu' });
+        const menu = await client.request('dom_text', { selector: '.unified-palette' });
         runner.assert(menu.text.includes('Create diagnostic report'), 'Diagnostic report action is searchable');
         const reportsBefore = diagnosticReports(downloadsDir);
         fs.mkdirSync(downloadsDir, { recursive: true });
-        await pressKey(KEY.ENTER, {}, '.action-menu input');
+        await pressKey(KEY.ENTER, {}, '.unified-palette-input');
         const prompt = await client.request('dom_text', { selector: '.diagnostic-report-sheet' });
         runner.assert(prompt.text.includes('Included automatically'), 'Report explains its automatic metadata');
         runner.assert(prompt.text.includes('Optional. Output may contain private text or secrets.'), 'Report warns before including pane output');

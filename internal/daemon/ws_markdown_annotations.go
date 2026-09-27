@@ -18,7 +18,6 @@ const (
 type annotationDocumentSource struct {
 	documentURI string
 	kind        string
-	workspaceID string
 	path        string
 	seedID      string
 	draftKey    string
@@ -44,15 +43,14 @@ func seedDocumentURI(seedID string) string {
 	return "attn://seed/" + encodeURIComponent(seedID)
 }
 
-func fileDocumentURI(workspaceID, path string) string {
-	return "attn://file/" + encodeURIComponent(workspaceID) + "/" + encodeURIComponent(filepath.Clean(path))
+func fileDocumentURI(path string) string {
+	return "attn://file/" + encodeURIComponent(filepath.Clean(path))
 }
 
-func (d *Daemon) resolveAnnotationDocumentSource(documentURI, kind string, workspaceID, path, seedID *string) (annotationDocumentSource, error) {
+func (d *Daemon) resolveAnnotationDocumentSource(documentURI, kind string, path, seedID *string) (annotationDocumentSource, error) {
 	source := annotationDocumentSource{
 		documentURI: documentURI,
 		kind:        strings.TrimSpace(kind),
-		workspaceID: strings.TrimSpace(protocol.Deref(workspaceID)),
 		path:        strings.TrimSpace(protocol.Deref(path)),
 		seedID:      strings.TrimSpace(protocol.Deref(seedID)),
 	}
@@ -61,9 +59,6 @@ func (d *Daemon) resolveAnnotationDocumentSource(documentURI, kind string, works
 	}
 	switch source.kind {
 	case annotationSourceFile:
-		if source.workspaceID == "" {
-			return source, fmt.Errorf("workspace_id is required for file source")
-		}
 		if source.path == "" {
 			return source, fmt.Errorf("path is required for file source")
 		}
@@ -75,15 +70,15 @@ func (d *Daemon) resolveAnnotationDocumentSource(documentURI, kind string, works
 		}
 		source.path = filepath.Clean(source.path)
 		source.draftKey = source.path
-		if canonical := fileDocumentURI(source.workspaceID, source.path); source.documentURI != canonical {
+		if canonical := fileDocumentURI(source.path); source.documentURI != canonical {
 			return source, fmt.Errorf("document_uri does not match typed file source: want %s", canonical)
 		}
 	case annotationSourceSeed:
 		if source.seedID == "" {
 			return source, fmt.Errorf("seed_id is required for seed source")
 		}
-		if source.workspaceID != "" || source.path != "" {
-			return source, fmt.Errorf("workspace_id and path are not valid for seed source")
+		if source.path != "" {
+			return source, fmt.Errorf("path is not valid for seed source")
 		}
 		if err := d.requireHome(garden.Surface); err != nil {
 			return source, err
@@ -104,10 +99,7 @@ func (d *Daemon) resolveAnnotationDocumentSource(documentURI, kind string, works
 	return source, nil
 }
 
-func annotationSourcePointers(source annotationDocumentSource) (workspaceID, path, seedID *string) {
-	if source.workspaceID != "" {
-		workspaceID = protocol.Ptr(source.workspaceID)
-	}
+func annotationSourcePointers(source annotationDocumentSource) (path, seedID *string) {
 	if source.path != "" {
 		path = protocol.Ptr(source.path)
 	}
@@ -118,8 +110,8 @@ func annotationSourcePointers(source annotationDocumentSource) (workspaceID, pat
 }
 
 func (d *Daemon) handleMarkdownAnnotationsGet(client *wsClient, msg *protocol.MarkdownAnnotationsGetMessage) {
-	source, sourceErr := d.resolveAnnotationDocumentSource(msg.DocumentUri, msg.SourceKind, msg.WorkspaceID, msg.Path, msg.SeedID)
-	workspaceID, path, seedID := annotationSourcePointers(source)
+	source, sourceErr := d.resolveAnnotationDocumentSource(msg.DocumentUri, msg.SourceKind, msg.Path, msg.SeedID)
+	path, seedID := annotationSourcePointers(source)
 	handler := newAnnotationDraftHandler(d, client, markdownAnnotationDraftAccessors(d.store), "document source",
 		func(result annotationDraftResult[protocol.MarkdownAnnotation]) protocol.MarkdownAnnotationsGetResultMessage {
 			if sourceErr != nil {
@@ -128,7 +120,7 @@ func (d *Daemon) handleMarkdownAnnotationsGet(client *wsClient, msg *protocol.Ma
 			}
 			return protocol.MarkdownAnnotationsGetResultMessage{
 				Event: protocol.EventMarkdownAnnotationsGetResult, RequestID: msg.RequestID,
-				DocumentUri: source.documentURI, SourceKind: source.kind, WorkspaceID: workspaceID, Path: path, SeedID: seedID,
+				DocumentUri: source.documentURI, SourceKind: source.kind, Path: path, SeedID: seedID,
 				Annotations: result.annotations, Generation: result.generation, Success: result.success, Error: result.err,
 			}
 		})
@@ -140,8 +132,8 @@ func (d *Daemon) handleMarkdownAnnotationsGet(client *wsClient, msg *protocol.Ma
 }
 
 func (d *Daemon) handleMarkdownAnnotationsSave(client *wsClient, msg *protocol.MarkdownAnnotationsSaveMessage) {
-	source, sourceErr := d.resolveAnnotationDocumentSource(msg.DocumentUri, msg.SourceKind, msg.WorkspaceID, msg.Path, msg.SeedID)
-	workspaceID, path, seedID := annotationSourcePointers(source)
+	source, sourceErr := d.resolveAnnotationDocumentSource(msg.DocumentUri, msg.SourceKind, msg.Path, msg.SeedID)
+	path, seedID := annotationSourcePointers(source)
 	handler := newAnnotationDraftHandler(d, client, markdownAnnotationDraftAccessors(d.store), "document source",
 		func(result annotationDraftResult[protocol.MarkdownAnnotation]) protocol.MarkdownAnnotationsSaveResultMessage {
 			if sourceErr != nil {
@@ -150,7 +142,7 @@ func (d *Daemon) handleMarkdownAnnotationsSave(client *wsClient, msg *protocol.M
 			}
 			return protocol.MarkdownAnnotationsSaveResultMessage{
 				Event: protocol.EventMarkdownAnnotationsSaveResult, RequestID: msg.RequestID,
-				DocumentUri: source.documentURI, SourceKind: source.kind, WorkspaceID: workspaceID, Path: path, SeedID: seedID,
+				DocumentUri: source.documentURI, SourceKind: source.kind, Path: path, SeedID: seedID,
 				Generation: result.generation, Success: result.success, Stale: result.stale, Error: result.err,
 			}
 		})
@@ -162,8 +154,8 @@ func (d *Daemon) handleMarkdownAnnotationsSave(client *wsClient, msg *protocol.M
 }
 
 func (d *Daemon) handleMarkdownAnnotationsClear(client *wsClient, msg *protocol.MarkdownAnnotationsClearMessage) {
-	source, sourceErr := d.resolveAnnotationDocumentSource(msg.DocumentUri, msg.SourceKind, msg.WorkspaceID, msg.Path, msg.SeedID)
-	workspaceID, path, seedID := annotationSourcePointers(source)
+	source, sourceErr := d.resolveAnnotationDocumentSource(msg.DocumentUri, msg.SourceKind, msg.Path, msg.SeedID)
+	path, seedID := annotationSourcePointers(source)
 	handler := newAnnotationDraftHandler(d, client, markdownAnnotationDraftAccessors(d.store), "document source",
 		func(result annotationDraftResult[protocol.MarkdownAnnotation]) protocol.MarkdownAnnotationsClearResultMessage {
 			if sourceErr != nil {
@@ -172,7 +164,7 @@ func (d *Daemon) handleMarkdownAnnotationsClear(client *wsClient, msg *protocol.
 			}
 			return protocol.MarkdownAnnotationsClearResultMessage{
 				Event: protocol.EventMarkdownAnnotationsClearResult, RequestID: msg.RequestID,
-				DocumentUri: source.documentURI, SourceKind: source.kind, WorkspaceID: workspaceID, Path: path, SeedID: seedID,
+				DocumentUri: source.documentURI, SourceKind: source.kind, Path: path, SeedID: seedID,
 				Generation: result.generation, Success: result.success, Error: result.err,
 			}
 		})

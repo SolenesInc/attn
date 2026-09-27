@@ -352,10 +352,10 @@ async function main() {
       timeoutMs: 30_000,
     });
 
-    const initialWorkspace = await client.request('get_workspace', { sessionId }, { timeoutMs: 10_000 });
-    const targetPaneId = initialWorkspace.activePaneId || initialWorkspace.panes?.[0]?.paneId;
+    const initialDesktop = await client.request('get_desktop', { sessionId }, { timeoutMs: 10_000 });
+    const targetPaneId = initialDesktop.activePaneId || initialDesktop.panes?.[0]?.paneId;
     if (!targetPaneId) {
-      throw new Error(`No pane available to split in workspace ${sessionId}`);
+      throw new Error(`No pane available to split in desktop ${sessionId}`);
     }
     await client.request('split_pane', {
       sessionId,
@@ -368,7 +368,7 @@ async function main() {
       20_000,
       new Set([targetPaneId]),
     );
-    if (!utilityPane?.runtime_id) {
+    if (!utilityPane?.session_id) {
       throw new Error('Utility pane not found');
     }
 
@@ -424,7 +424,7 @@ async function main() {
       runId,
       sessionId,
       paneId: utilityPane.pane_id,
-      runtimeId: utilityPane.runtime_id,
+      runtimeId: utilityPane.session_id,
       chunkBytes: options.chunkBytes,
       chunkCount: options.chunkCount,
       chunkDelayMs: options.chunkDelayMs,

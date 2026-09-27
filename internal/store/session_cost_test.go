@@ -91,7 +91,7 @@ func TestMigration152FilesStoredLongContextObservationsUnderTheirTier(t *testing
 	}
 }
 
-func TestMigration158FilesGPT61SolObservationsUnderTheirTier(t *testing.T) {
+func TestMigration163FilesGPT61SolObservationsUnderTheirTier(t *testing.T) {
 	dbPath := filepath.Join(t.TempDir(), "attn.db")
 	s, err := newSeededStore(dbPath)
 	if err != nil {
@@ -107,7 +107,7 @@ func TestMigration158FilesGPT61SolObservationsUnderTheirTier(t *testing.T) {
 	if _, err := s.db.Exec("UPDATE sessions SET session_cost_json = ? WHERE id = ?", legacy, "sol"); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := s.db.Exec("DELETE FROM schema_migrations WHERE version >= 158"); err != nil {
+	if _, err := s.db.Exec("DELETE FROM schema_migrations WHERE version >= 163"); err != nil {
 		t.Fatal(err)
 	}
 	if err := migrateDB(s.db, dbPath); err != nil {

@@ -43,8 +43,9 @@ function terminalTextIncludes(text, needle, { allowWrapped = false } = {}) {
   return compactTerminalText(source).includes(compactTerminalText(needle));
 }
 
-export function firstWorkspacePane(workspace) {
-  return (workspace?.panes || [])[0] || null;
+export function firstDesktopPane(desktop) {
+  const panes = desktop?.panes || [];
+  return panes.find((pane) => pane.sessionId === desktop?.id) || null;
 }
 
 function isRetryableAutomationAbsence(error) {
@@ -325,14 +326,14 @@ export async function waitForPaneTextChange(
   );
 }
 
-export async function waitForSessionWorkspace(client, sessionId, predicate, description, timeoutMs = 20_000) {
+export async function waitForSessionDesktop(client, sessionId, predicate, description, timeoutMs = 20_000) {
   const startedAt = Date.now();
-  let lastWorkspace = null;
+  let lastDesktop = null;
   let lastError = null;
 
   while (Date.now() - startedAt < timeoutMs) {
     try {
-      lastWorkspace = await client.request('get_workspace', { sessionId }, { timeoutMs: 20_000 });
+      lastDesktop = await client.request('get_desktop', { sessionId }, { timeoutMs: 20_000 });
       lastError = null;
     } catch (error) {
       if (!isRetryableAutomationAbsence(error)) {
@@ -342,44 +343,44 @@ export async function waitForSessionWorkspace(client, sessionId, predicate, desc
       await sleep(200);
       continue;
     }
-    if (predicate(lastWorkspace)) {
-      return lastWorkspace;
+    if (predicate(lastDesktop)) {
+      return lastDesktop;
     }
     await sleep(200);
   }
 
   throw new Error(
-    `Timed out waiting for ${description}. Last request error: ${lastError instanceof Error ? lastError.message : 'none'}\nLast workspace:\n${JSON.stringify(lastWorkspace, null, 2)}`
+    `Timed out waiting for ${description}. Last request error: ${lastError instanceof Error ? lastError.message : 'none'}\nLast desktop:\n${JSON.stringify(lastDesktop, null, 2)}`
   );
 }
 
-export async function waitForFirstWorkspacePane(client, sessionId, description, timeoutMs = 20_000) {
-  const workspace = await waitForSessionWorkspace(
+export async function waitForFirstDesktopPane(client, sessionId, description, timeoutMs = 20_000) {
+  const desktop = await waitForSessionDesktop(
     client,
     sessionId,
-    (entry) => Boolean(firstWorkspacePane(entry)?.paneId),
+    (entry) => Boolean(firstDesktopPane(entry)?.paneId),
     description || `first pane for session ${sessionId}`,
     timeoutMs,
   );
-  return firstWorkspacePane(workspace);
+  return firstDesktopPane(desktop);
 }
 
-function newRuntimePanes(workspace, existingPaneIds) {
-  return (workspace?.panes || []).filter(
+function newRuntimePanes(desktop, existingPaneIds) {
+  return (desktop?.panes || []).filter(
     (pane) => !existingPaneIds.has(pane.paneId) && Boolean(pane.runtimeId),
   );
 }
 
 export async function waitForNewShellPane(client, sessionId, existingPaneIds, description, timeoutMs = 20_000) {
-  return waitForSessionWorkspace(
+  return waitForSessionDesktop(
     client,
     sessionId,
-    (workspace) => newRuntimePanes(workspace, existingPaneIds).length > 0,
+    (desktop) => newRuntimePanes(desktop, existingPaneIds).length > 0,
     description,
     timeoutMs,
-  ).then((workspace) => {
-    const newPanes = newRuntimePanes(workspace, existingPaneIds);
-    const activePane = newPanes.find((pane) => pane.paneId === workspace.activePaneId);
+  ).then((desktop) => {
+    const newPanes = newRuntimePanes(desktop, existingPaneIds);
+    const activePane = newPanes.find((pane) => pane.paneId === desktop.activePaneId);
     return activePane || newPanes[0];
   });
 }
@@ -939,7 +940,7 @@ export async function captureSessionArtifacts(client, runDir, prefix, sessionId)
   await writeJson(`${prefix}-native-window.json`, 'capture_native_window_screenshot', {
     path: `${runDir}/${prefix}-native-window.png`,
   });
-  await writeJson(`${prefix}-workspace.json`, 'get_workspace', { sessionId });
+  await writeJson(`${prefix}-desktop.json`, 'get_desktop', { sessionId });
   await writeJson(`${prefix}-session-ui-state.json`, 'get_session_ui_state', { sessionId });
   await writeJson(`${prefix}-structured-snapshot.json`, 'capture_structured_snapshot', {
     sessionIds: [sessionId],

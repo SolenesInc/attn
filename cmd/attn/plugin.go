@@ -228,7 +228,7 @@ func pluginDaemonRequest(payload map[string]any, expectedEvent, expectedAction s
 		"cmd":          protocol.CmdClientHello,
 		"client_kind":  "attn-cli",
 		"version":      "protocol-" + protocol.ProtocolVersion,
-		"capabilities": []string{protocol.CapabilityWorkspaceSessions},
+		"capabilities": []string{},
 		"client_token": config.ClientToken(),
 	}
 	if err := writePluginDaemonMessage(ctx, conn, hello); err != nil {

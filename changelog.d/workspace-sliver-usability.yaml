@@ -1,7 +1,7 @@
 kind: fixed
 area: app
 change: >
-  Workspace slivers stopped being one-way doors. A tile collapsed for lack of
+  Pane slivers stopped being one-way doors. A tile collapsed for lack of
   room expands again the moment room returns, instead of staying stuck when a
   window lands in a narrow band. Dragging a divider no longer locks at a
   pane's minimum size: pushing past it folds the pane into a sliver, with a

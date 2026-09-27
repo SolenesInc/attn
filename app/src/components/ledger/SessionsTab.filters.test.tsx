@@ -4,7 +4,7 @@ import { SESSION_FILTERS_SETTING_KEY } from '../../hooks/sessionFiltersSetting';
 import { NOW, entry } from '../../test/sessionLedgerFixtures';
 import { savedSettings, serveSettings } from '../../test/settings';
 import type { ScriptedDaemon } from '../../test/scriptedDaemon';
-import { namedWorkspaces, openSessionsLedger, page, pages, rows, type LedgerAnswer } from './testSupport';
+import { namedProfiles, openSessionsLedger, page, pages, rows, type LedgerAnswer } from './testSupport';
 
 const query = () => screen.getByLabelText('Filter') as HTMLInputElement;
 const type = (text: string) => fireEvent.change(query(), { target: { value: text } });
@@ -13,10 +13,10 @@ const rememberedFilters = (daemon: ScriptedDaemon) =>
   savedSettings(daemon).filter(([key]) => key === SESSION_FILTERS_SETTING_KEY).map(([, value]) => JSON.parse(value));
 
 async function openLedger(
-  { answer, workspaceNames = {} }: { answer: LedgerAnswer; workspaceNames?: Record<string, string> },
+  { answer, profileNames = {} }: { answer: LedgerAnswer; profileNames?: Record<string, string> },
   { values = {} }: { values?: Record<string, string> } = {},
 ) {
-  const view = await openSessionsLedger(answer, { initialState: { workspaces: namedWorkspaces(workspaceNames), settings: values } });
+  const view = await openSessionsLedger(answer, { initialState: { profiles: namedProfiles(profileNames), settings: values } });
   serveSettings(view.daemon, values);
   return view;
 }
@@ -89,20 +89,21 @@ describe('SessionsTab query', () => {
     expect(last.since).toBeTruthy();
   });
 
-  it('resolves repo: and ws: through the facets and flags a token nothing matches', async () => {
+  it('resolves repo: and profile: through the facets and flags a token nothing matches', async () => {
     const view = await openLedger({
       answer: pages([page({
         entries: [entry({ id: 's1' })],
         facets: {
-          workspaces: [{ value: 'ws-1', count: 4 }],
+          desktops: [],
+          profiles: [{ profile_id: 'profile-1', name: 'attn work', count: 4 }],
           repositories: [{ value: '/Users/victor/projects/attn', count: 7 }],
         },
       })]),
-      workspaceNames: { 'ws-1': 'attn work' },
+      profileNames: { 'profile-1': 'attn work' },
     });
 
-    await typeAndPause(view, 'repo:attn ws:attn-work');
-    expect(view.queries()[1]).toEqual({ all: true, limit: 50, repository: '/Users/victor/projects/attn', workspace_id: 'ws-1' });
+    await typeAndPause(view, 'repo:attn profile:attn-work');
+    expect(view.queries()[1]).toEqual({ all: true, limit: 50, repository: '/Users/victor/projects/attn', profile_id: 'profile-1' });
 
     await typeAndPause(view, 'repo:nope');
     const chip = screen.getByRole('button', { name: /repo:nope/ });
@@ -148,20 +149,76 @@ describe('SessionsTab pagination', () => {
   });
 });
 
+describe('SessionsTab profiles in the query', () => {
+  const renamed = (daemon: ScriptedDaemon, name: string) => {
+    daemon.emit({ event: 'profiles_changed', profiles: namedProfiles({ 'profile-1': name }) });
+  };
+
+  it('reads the page again when a profile is renamed, and only then', async () => {
+    const view = await openLedger({
+      answer: pages([page({ entries: [entry({ id: 's1', profile_name: 'Work' })] })]),
+      profileNames: { 'profile-1': 'Work' },
+    });
+    expect(view.queries()).toHaveLength(1);
+
+    renamed(view.daemon, 'Work');
+    await view.daemon.idle();
+    expect(view.queries()).toHaveLength(1);
+
+    renamed(view.daemon, 'Office');
+    await view.daemon.idle();
+    expect(view.queries()).toHaveLength(2);
+  });
+
+  it('keeps a profile filter through a rename and when the profile has no rows', async () => {
+    const view = await openLedger({
+      answer: pages([page({ facets: { desktops: [], profiles: [], repositories: [] } })]),
+      profileNames: { 'profile-1': 'attn work' },
+    });
+
+    await typeAndPause(view, 'profile:attn-work');
+    expect(view.queries()[1]).toEqual({ all: true, limit: 50, profile_id: 'profile-1' });
+
+    renamed(view.daemon, 'Office');
+    await view.daemon.idle();
+    expect(query().value).toBe('profile:office');
+    expect(view.queries().slice(1).every((sent) => sent.profile_id === 'profile-1')).toBe(true);
+  });
+
+  it('keeps a chosen profile when a later page’s facets leave it out', async () => {
+    const deleted = { profile_id: 'profile-old', name: 'Old Side', deleted: true, count: 2 };
+    const view = await openLedger({
+      answer: pages([
+        page({ facets: { desktops: [], profiles: [deleted], repositories: [] } }),
+        page({ facets: { desktops: [], profiles: [deleted], repositories: [] } }),
+        page({ facets: { desktops: [], profiles: [], repositories: [] } }),
+      ]),
+    });
+
+    await typeAndPause(view, 'profile:old-side');
+    expect(view.queries()[1].profile_id).toBe('profile-old');
+
+    fireEvent.click(screen.getByRole('button', { name: 'Live' }));
+    await typeAndPause(view, 'profile:old-side');
+    expect(view.queries().slice(1).every((sent) => sent.profile_id === 'profile-old')).toBe(true);
+    expect(query().value).toBe('profile:old-side');
+  });
+});
+
 describe('SessionsTab filter memory', () => {
   const stored = JSON.stringify({
-    scope: 'closed', range: '7d', customFrom: '', customTo: '', workspaceId: 'ws-2', repository: '/Users/victor/projects/attn',
+    scope: 'closed', range: '7d', customFrom: '', customTo: '', profileId: 'profile-2', repository: '/Users/victor/projects/attn',
   });
 
   it('queries with the remembered filters on the first read and shows them as tokens', async () => {
     const view = await openLedger(
-      { answer: pages([page()]), workspaceNames: { 'ws-2': 'attn' } },
+      { answer: pages([page()]), profileNames: { 'profile-2': 'attn' } },
       { values: { [SESSION_FILTERS_SETTING_KEY]: stored } },
     );
 
     const since = new Date(NOW.getFullYear(), NOW.getMonth(), NOW.getDate() - 6).toISOString();
-    expect(view.queries()).toEqual([{ closed: true, since, workspace_id: 'ws-2', repository: '/Users/victor/projects/attn', limit: 50 }]);
-    expect(query().value).toBe('repo:attn ws:attn 7d');
+    expect(view.queries()).toEqual([{ closed: true, since, repository: '/Users/victor/projects/attn', profile_id: 'profile-2', limit: 50 }]);
+    expect(query().value).toBe('repo:attn profile:attn 7d');
     expect(rememberedFilters(view.daemon)).toEqual([]);
   });
 
@@ -169,7 +226,8 @@ describe('SessionsTab filter memory', () => {
     const view = await openLedger(
       { answer: pages([page({
         facets: {
-          workspaces: [],
+          desktops: [],
+          profiles: [],
           repositories: [
             { value: '/tmp/earlier/attn', count: 4 },
             { value: '/Users/victor/projects/attn', count: 3 },
@@ -187,17 +245,17 @@ describe('SessionsTab filter memory', () => {
 
   it('keeps remembered facet filters while the first page is loading', async () => {
     const view = await openLedger(
-      { answer: () => 'hold', workspaceNames: { 'ws-2': 'attn' } },
+      { answer: () => 'hold', profileNames: { 'profile-2': 'attn' } },
       { values: { [SESSION_FILTERS_SETTING_KEY]: stored } },
     );
 
-    expect(query().value).toBe('repo:attn ws:attn 7d');
+    expect(query().value).toBe('repo:attn profile:attn 7d');
     expect(rememberedFilters(view.daemon)).toEqual([]);
   });
 
   it('restores a custom range exactly as it was left', async () => {
     const view = await openLedger({ answer: pages([page()]) }, { values: { [SESSION_FILTERS_SETTING_KEY]: JSON.stringify({
-      scope: 'all', range: 'custom', customFrom: '2026-08-01', customTo: '2026-08-03', workspaceId: '', repository: '',
+      scope: 'all', range: 'custom', customFrom: '2026-08-01', customTo: '2026-08-03', profileId: '', repository: '',
     }) } });
 
     expect(view.queries()).toHaveLength(1);
@@ -212,7 +270,7 @@ describe('SessionsTab filter memory', () => {
 
     fireEvent.click(screen.getByRole('button', { name: 'Closed' }));
     await view.daemon.idle();
-    expect(written()).toEqual([{ scope: 'closed', range: 'any', customFrom: '', customTo: '', workspaceId: '', repository: '' }]);
+    expect(written()).toEqual([{ scope: 'closed', range: 'any', customFrom: '', customTo: '', profileId: '', repository: '' }]);
 
     await typeAndPause(view, '30d');
     expect(written()).toHaveLength(2);

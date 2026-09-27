@@ -15,7 +15,7 @@ import {
 import { DaemonObserver } from './daemonObserver.mjs';
 import { createWindowDriver } from './platform.mjs';
 import {
-  waitForFirstWorkspacePane,
+  waitForFirstDesktopPane,
   waitForPaneShellReady,
   waitForPaneVisible,
 } from './scenarioAssertions.mjs';
@@ -32,8 +32,8 @@ function parseArgs(argv) {
   };
 }
 
-// Scoped to the ACTIVE workspace's wrapper: a tile docked in an inactive
-// workspace is still mounted, and a bare `.notebook-finder` would match it.
+// Scoped to the ACTIVE desktop's wrapper: a tile docked in an inactive
+// desktop is still mounted, and a bare `.notebook-finder` would match it.
 const FINDER_SELECTOR = '.terminal-wrapper.active .notebook-finder';
 
 // Presence via the screenshot bridge: only "not found" proves absence. Any
@@ -58,23 +58,23 @@ async function waitForFinder(client, present, description, timeoutMs = 10_000) {
   throw new Error(`Timed out waiting for finder to be ${present ? 'present' : 'absent'}: ${description}`);
 }
 
-async function waitForWorkspaceUi(client, workspaceId, predicate, description, timeoutMs = 20_000) {
+async function waitForDesktopUi(client, desktopId, predicate, description, timeoutMs = 20_000) {
   const startedAt = Date.now();
   let last = null;
   while (Date.now() - startedAt < timeoutMs) {
-    last = await client.request('get_workspace_ui_state', { workspaceId }).catch((error) => ({ error: String(error) }));
+    last = await client.request('get_desktop_ui_state', { desktopId }).catch((error) => ({ error: String(error) }));
     if (predicate(last)) {
       return last;
     }
     await new Promise((resolve) => setTimeout(resolve, 200));
   }
-  throw new Error(`Timed out waiting for ${description}. Last workspace UI state:\n${JSON.stringify(last, null, 2)}`);
+  throw new Error(`Timed out waiting for ${description}. Last desktop UI state:\n${JSON.stringify(last, null, 2)}`);
 }
 
-async function closeWorkspacePanes(client, sessionId) {
+async function closeDesktopPanes(client, sessionId) {
   for (let attempt = 0; attempt < 10; attempt += 1) {
-    const workspace = await client.request('get_workspace', { sessionId }).catch(() => null);
-    const pane = workspace?.panes?.[0];
+    const desktop = await client.request('get_desktop', { sessionId }).catch(() => null);
+    const pane = desktop?.panes?.[0];
     if (!pane) {
       return;
     }
@@ -87,7 +87,7 @@ async function closeExistingSessions(client, sessionRootDir) {
   const initial = await client.request('get_state');
   const harnessSessions = (initial.sessions || []).filter((session) => session.cwd?.startsWith(sessionRootDir));
   for (const session of harnessSessions) {
-    await closeWorkspacePanes(client, session.id).catch(() => {});
+    await closeDesktopPanes(client, session.id).catch(() => {});
   }
 }
 
@@ -123,7 +123,7 @@ async function main() {
       waitForInitialPaneVisible: false,
       sessionWaitMs: 30_000,
     });
-    const pane = await waitForFirstWorkspacePane(client, sessionId, 'initial workspace pane');
+    const pane = await waitForFirstDesktopPane(client, sessionId, 'initial desktop pane');
     await client.request('select_session', { sessionId });
     await waitForPaneVisible(client, sessionId, pane.paneId, 20_000);
     await waitForPaneShellReady(client, sessionId, pane.paneId, {
@@ -131,16 +131,16 @@ async function main() {
       description: 'shell prompt ready',
     });
 
-    const workspace = await client.request('get_workspace', { sessionId });
-    const workspaceId = workspace.workspaceId;
-    if (!workspaceId) {
-      throw new Error(`Could not resolve workspace id for session ${sessionId}: ${JSON.stringify(workspace)}`);
+    const desktop = await client.request('get_desktop', { sessionId });
+    const desktopId = desktop.desktopId;
+    if (!desktopId) {
+      throw new Error(`Could not resolve desktop id for session ${sessionId}: ${JSON.stringify(desktop)}`);
     }
     const terminalPaneId = pane.paneId;
     await driver.pressKey('n', { command: true, option: true });
-    const docked = await waitForWorkspaceUi(
+    const docked = await waitForDesktopUi(
       client,
-      workspaceId,
+      desktopId,
       (state) => Array.isArray(state?.tileIds) && state.tileIds.length === 1,
       'native Cmd+Opt+N to dock a fresh notebook tile',
       15_000,
@@ -153,16 +153,16 @@ async function main() {
     await waitForFinder(client, false, 'Esc dismisses the finder, leaving focus in the tile');
     await driver.pressKey('w', { command: true });
 
-    const afterClose = await waitForWorkspaceUi(
+    const afterClose = await waitForDesktopUi(
       client,
-      workspaceId,
+      desktopId,
       (state) => Array.isArray(state?.tileIds) && state.tileIds.length === 0,
       'native Cmd+W to undock the focused notebook tile',
       15_000,
     );
 
-    const workspaceAfter = await client.request('get_workspace', { sessionId });
-    const panesAfter = workspaceAfter?.panes ?? [];
+    const desktopAfter = await client.request('get_desktop', { sessionId });
+    const panesAfter = desktopAfter?.panes ?? [];
     const terminalSurvived = panesAfter.some((p) => p.paneId === terminalPaneId);
     if (!terminalSurvived) {
       throw new Error(
@@ -179,7 +179,7 @@ async function main() {
     const summary = {
       ok: true,
       runId,
-      workspaceId,
+      desktopId,
       tileId,
       terminalPaneId,
       tileIdsAfter: afterClose.tileIds,
@@ -190,7 +190,7 @@ async function main() {
     console.log(JSON.stringify(summary, null, 2));
   } finally {
     if (sessionId) {
-      await closeWorkspacePanes(client, sessionId).catch(() => {});
+      await closeDesktopPanes(client, sessionId).catch(() => {});
     }
     await client.quitApp().catch(() => {});
     await observer.close();

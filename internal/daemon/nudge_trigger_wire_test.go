@@ -63,6 +63,7 @@ func TestATriggeredNudgeReachesAReadyAgentWithoutWaitingOutTheCountdown(t *testi
 	run.Prompted()
 	run.Reply("Fixed. <!-- attn:state=idle -->")
 	testworld.AwaitSession(app, ready, func(s protocol.Session) bool { return s.State == protocol.SessionStateIdle })
+	lookAway(t, w, app)
 
 	createTicket(t, cli, ready, "fix the build", "ticket-ready")
 	commentOnTicket(t, cli, author, "ticket-ready", "take a look")

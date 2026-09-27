@@ -9,7 +9,7 @@ import {
   parseCommonArgs,
   printCommonHelp,
 } from './common.mjs';
-import { waitForFirstWorkspacePane, waitForPaneText } from './scenarioAssertions.mjs';
+import { waitForFirstDesktopPane, waitForPaneText } from './scenarioAssertions.mjs';
 import { UiAutomationClient } from './uiAutomationClient.mjs';
 import { DaemonObserver } from './daemonObserver.mjs';
 import { createScenarioRunner } from './scenarioRunner.mjs';
@@ -219,7 +219,7 @@ async function drive({ options, instance, runAttn, stub, judgeQueue, launchEnv, 
       runner.registerCleanup('close_session', () => client
         .request('close_session', { sessionId })
         .catch(() => {}));
-      const pane = await waitForFirstWorkspacePane(client, sessionId, `pane for ${sessionId}`, 30_000);
+      const pane = await waitForFirstDesktopPane(client, sessionId, `pane for ${sessionId}`, 30_000);
       paneId = pane.paneId;
       await waitForPaneText(
         client, sessionId, paneId,

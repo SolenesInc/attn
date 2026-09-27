@@ -1,6 +1,6 @@
 import { act, fireEvent, screen, within } from '@testing-library/react';
 import { describe, expect, it, vi } from 'vitest';
-import { agentPane, agentWorkspace, daemonSeed, daemonSession, daemonWorkspace, type DaemonSession } from './test/daemonFixtures';
+import { agentPane, soloDesktop, daemonSeed, daemonSession, daemonDesktop, type DaemonSession } from './test/daemonFixtures';
 import type { EventMessage } from './test/protocol';
 import { openActionMenu, openSession } from './test/appFixtures';
 import { gesture, renderApp } from './test/renderApp';
@@ -37,13 +37,13 @@ function usage(costUsd: number | undefined, hasUnpricedUsage = false, totalToken
 async function openPane(session: Partial<DaemonSession> = {}, initialState: InitialState = {}) {
   const sessions = [daemonSession('s1', { label: 'ledger sweep', state: 'idle', ...session }), ...(initialState.sessions ?? [])];
   const view = await renderApp({
-    initialState: { workspaces: sessions.map((entry) => agentWorkspace(entry.id)), ...initialState, sessions },
+    initialState: { desktops: sessions.map((entry, index) => soloDesktop(entry.id, { shortcut_slot: index + 1 })), ...initialState, sessions },
   });
   await openSession(view.daemon, sessions[0].label);
   return view;
 }
 
-const header = () => document.querySelector<HTMLElement>('[data-pane-id="pane-s1"] .workspace-pane-header')!;
+const header = () => document.querySelector<HTMLElement>('[data-pane-id="pane-s1"] .desktop-pane-header')!;
 const inHeader = () => within(header());
 const usageBadge = () => inHeader().queryByLabelText(/^Session usage/);
 const breakdown = () => screen.queryByRole('dialog', { name: 'Session usage breakdown' });
@@ -59,11 +59,11 @@ describe('App pane header', () => {
   });
 
   it('falls back to the pane title when the session carries no label', async () => {
-    const workspace = daemonWorkspace('workspace-s1', {
+    const workspace = daemonDesktop('desktop-s1', {
       root: { type: 'pane', pane_id: 'pane-s1' },
-      panes: [{ ...agentPane('s1', 'workspace-s1'), title: 'shell' }],
+      panes: [{ ...agentPane('s1', 'desktop-s1'), title: 'shell' }],
     });
-    const { daemon } = await openPane({}, { workspaces: [workspace] });
+    const { daemon } = await openPane({}, { desktops: [workspace] });
 
     await update(daemon, daemonSession('s1', { label: '', state: 'idle' }));
 
@@ -127,7 +127,7 @@ describe('App pane header', () => {
     expect(screen.queryByRole('button', { name: 'Return to split' })).toBeNull();
   });
 
-  it('leaves the focused agent when the user goes to another workspace and back', async () => {
+  it('leaves the focused agent when the user goes to another desktop and back', async () => {
     const { daemon } = await openPane({}, { sessions: [daemonSession('s2', { label: 'other', state: 'idle' })] });
     await gesture(daemon, () => fireEvent.click(inHeader().getByRole('button', { name: 'Focus agent ledger sweep' })));
 
@@ -217,7 +217,7 @@ describe('App pane header', () => {
     });
     const pinUsage = async (label: string) => {
       const search = await openActionMenu(daemon);
-      fireEvent.change(search, { target: { value: `${label} usage` } });
+      fireEvent.change(search, { target: { value: `>${label} usage` } });
       await gesture(daemon, () => fireEvent.keyDown(search, { key: 'Enter' }));
     };
     const dismiss = () => gesture(daemon, () => fireEvent.keyDown(window, { key: 'Escape' }));
@@ -279,7 +279,7 @@ describe('App pane header', () => {
 
     await gesture(daemon, () => fireEvent.click(role()));
     await gesture(daemon, () => fireEvent.click(within(screen.getByRole('dialog', { name: 'Delegation chain' })).getByRole('button', { name: /docs sweep/ })));
-    expect(daemon.sentOf('session_selected').slice(-1)[0]).toEqual({ cmd: 'session_selected', id: 'dispatcher' });
+    expect(daemon.sentOf('desktop_set_current').slice(-1)[0]).toMatchObject({ desktop_id: 'desktop-dispatcher' });
   });
 
   it('hands the open popover between the delegation chain and the pull request details', async () => {

@@ -298,14 +298,14 @@ func TestSeedAnnotationsBecomeANoteOnThatSeedOnly(t *testing.T) {
 }
 
 type annotatedDocument struct {
-	uri, kind         string
-	workspaceID, path *string
-	seedID            *string
+	uri, kind string
+	path      *string
+	seedID    *string
 }
 
 func fileAnnotatedDocument(path string) annotatedDocument {
-	uri, workspaceID, filePath := annotationSource(path)
-	return annotatedDocument{uri: uri, kind: "file", workspaceID: workspaceID, path: filePath}
+	uri, filePath := annotationSource(path)
+	return annotatedDocument{uri: uri, kind: "file", path: filePath}
 }
 
 func seedAnnotatedDocument(seedID string) annotatedDocument {
@@ -317,7 +317,7 @@ func saveDocumentAnnotations(app *testworld.Peer, doc annotatedDocument, generat
 	requestID := uuid.NewString()
 	return testworld.Request(app, protocol.MarkdownAnnotationsSaveMessage{
 		Cmd: protocol.CmdMarkdownAnnotationsSave, RequestID: requestID, DocumentUri: doc.uri, SourceKind: doc.kind,
-		WorkspaceID: doc.workspaceID, Path: doc.path, SeedID: doc.seedID, Generation: generation, Annotations: marks,
+		Path: doc.path, SeedID: doc.seedID, Generation: generation, Annotations: marks,
 	}, protocol.EventMarkdownAnnotationsSaveResult, func(r protocol.MarkdownAnnotationsSaveResultMessage) bool { return r.RequestID == requestID })
 }
 
@@ -326,7 +326,7 @@ func getDocumentAnnotations(app *testworld.Peer, doc annotatedDocument) protocol
 	requestID := uuid.NewString()
 	return testworld.Request(app, protocol.MarkdownAnnotationsGetMessage{
 		Cmd: protocol.CmdMarkdownAnnotationsGet, RequestID: requestID, DocumentUri: doc.uri, SourceKind: doc.kind,
-		WorkspaceID: doc.workspaceID, Path: doc.path, SeedID: doc.seedID,
+		Path: doc.path, SeedID: doc.seedID,
 	}, protocol.EventMarkdownAnnotationsGetResult, func(r protocol.MarkdownAnnotationsGetResultMessage) bool { return r.RequestID == requestID })
 }
 
@@ -341,7 +341,7 @@ func submitDocumentAnnotations(app *testworld.Peer, doc annotatedDocument, targe
 	app.T.Helper()
 	msg := protocol.MarkdownAnnotationsSubmitMessage{
 		Cmd: protocol.CmdMarkdownAnnotationsSubmit, RequestID: uuid.NewString(), DocumentUri: doc.uri, SourceKind: doc.kind,
-		WorkspaceID: doc.workspaceID, Path: doc.path, SeedID: doc.seedID, OrphanedIds: orphaned,
+		Path: doc.path, SeedID: doc.seedID, OrphanedIds: orphaned,
 	}
 	if targetSession != "" {
 		msg.TargetSessionID = protocol.Ptr(targetSession)

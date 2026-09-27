@@ -544,7 +544,7 @@
   cursor: zoom-in;
 }
 
-/* ---- Blocked/local media affordances (moved from WorkspaceDockTile) ---- */
+/* ---- Blocked/local media affordances (moved from DesktopDockTile) ---- */
 
 .md-reader-local-image {
   display: inline-flex;
@@ -567,7 +567,7 @@
 }
 
 /* Lightbox portals to document.body — NOT nested under .md-reader. It must
-   sit above all tile/workspace chrome (max app z-index is ~10001). No
+   sit above all tile/desktop chrome (max app z-index is ~10001). No
    enter/exit motion (mount/unmount is instant), so it is reduced-motion-safe
    by construction. */
 .md-lightbox {

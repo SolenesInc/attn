@@ -2,7 +2,7 @@
 // Must match SettingsModal's SettingsSectionID union.
 const SETTINGS_SECTION_IDS = [
   'general',
-  'workspace',
+  'desktop',
   'hygiene',
   'agents',
   'backgroundAgents',

@@ -62,7 +62,7 @@
   --color-scrollbar-thumb: #2a2a2d;
   --color-scrollbar-hover: #3a3a3d;
 
-  /* A docked tile sits in the same workspace frame as a terminal pane, so it
+  /* A docked tile sits in the same desktop frame as a terminal pane, so it
      shares the editor surface. Declared once: every theme override below rewrites
      --color-bg-editor on this same element, so the alias follows them. */
   --color-bg-tile: var(--color-bg-editor);
@@ -275,12 +275,13 @@ html, body, #root {
   position: relative;
 }
 
-.app:has(.session-terminal-workspace.agent-focus-mode[data-session-visible="1"]) .sidebar,
-.app:has(.session-terminal-workspace.agent-focus-mode[data-session-visible="1"]) .side-panel-shell,
-.app:has(.session-terminal-workspace.agent-focus-mode[data-session-visible="1"]) .garden-frame,
-.app:has(.session-terminal-workspace.agent-focus-mode[data-session-visible="1"]) .garden-frame-backdrop,
-.app:has(.session-terminal-workspace.agent-focus-mode[data-session-visible="1"]) .notifications-panel,
-.app:has(.session-terminal-workspace.agent-focus-mode[data-session-visible="1"]) .notifications-panel-backdrop {
+.app.is-agent-focused .sidebar,
+.app.is-agent-focused .queue-bar,
+.app.is-agent-focused .side-panel-shell,
+.app.is-agent-focused .garden-frame,
+.app.is-agent-focused .garden-frame-backdrop,
+.app.is-agent-focused .notifications-panel,
+.app.is-agent-focused .notifications-panel-backdrop {
   display: none;
 }
 

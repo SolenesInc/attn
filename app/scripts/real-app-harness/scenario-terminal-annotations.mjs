@@ -19,7 +19,7 @@ import { DaemonObserver } from './daemonObserver.mjs';
 import {
   captureSessionArtifacts,
   sleep,
-  waitForFirstWorkspacePane,
+  waitForFirstDesktopPane,
 } from './scenarioAssertions.mjs';
 import { ensureCodexPromptReadyViaPty } from './scenarioAgents.mjs';
 import { harnessClientHello } from './harnessInstance.mjs';
@@ -343,7 +343,7 @@ async function main() {
         promptReadyTimeoutMs: 90_000,
       });
       await client.request('select_session', { sessionId });
-      const pane = await waitForFirstWorkspacePane(client, sessionId, 'agent pane', 20_000);
+      const pane = await waitForFirstDesktopPane(client, sessionId, 'agent pane', 20_000);
       paneId = pane.paneId;
     });
 
@@ -449,8 +449,8 @@ async function main() {
         state.annotations[0].quote === quote,
         `Hydrated a different annotation than was stored: ${JSON.stringify(state.annotations)}`,
       );
-      const workspace = await client.request('get_workspace', { sessionId });
-      paneId = workspace?.panes?.[0]?.paneId ?? paneId;
+      const desktop = await client.request('get_desktop', { sessionId });
+      paneId = desktop?.panes?.[0]?.paneId ?? paneId;
     });
 
     await runner.step('still_projects_onto_the_grid', async () => {

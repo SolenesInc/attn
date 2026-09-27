@@ -272,9 +272,9 @@ try {
   const dashboardSessions = await client.request('list_sessions');
   runner.assert(dashboardSessions.activeSessionId === null,
     'Crew opens from the dashboard without a placement session', dashboardSessions);
-  const workspaceIdle = await sampleIdle(webkitBaseline);
+  const desktopIdle = await sampleIdle(webkitBaseline);
 
-  const plot = plant([`Crew verification plot ${memberSuffix}`, '-m', 'The planted list opens this plot in the native workspace tile.', '--member', awake, '--session', firstSession]);
+  const plot = plant([`Crew verification plot ${memberSuffix}`, '-m', 'The planted list opens this plot in the native desktop tile.', '--member', awake, '--session', firstSession]);
   crewPlot = plot.id;
   const child = plant([`Crew planted navigation ${memberSuffix}`, '-m', 'The plot link navigates this same native tile.', '--part-of', crewPlot, '--member', awake, '--session', firstSession]);
   crewChild = child.id;
@@ -292,7 +292,7 @@ try {
 
     await click(`[data-testid="crew-seed-${asleepHeld}"]`);
     await waitForDom(`.seed-document[data-seed-id="${asleepHeld}"]`);
-    await waitForDom(`[data-pane-id="tile-seed-${asleepHeld}"] .workspace-dock-tile-body--seed`, { focused: true });
+    await waitForDom(`[data-pane-id="tile-seed-${asleepHeld}"] .desktop-dock-tile-body--seed`, { focused: true });
     await screenshot('00-asleep-dashboard-seed.png');
     await click('[data-testid="crew-seed-back"]');
     await waitForDom(`[data-testid="crew-seed-${asleepHeld}"]`);
@@ -333,7 +333,7 @@ try {
     const activation = await client.request('dom_key', { selector: `[data-testid="crew-seed-${crewPlot}"]`, key: 'Enter' });
     runner.assert(activation.handled, 'the focused seed row handles Return', activation);
     await waitForDom(`.seed-document[data-seed-id="${crewPlot}"]`);
-    await waitForDom(`[data-pane-id="tile-seed-${crewPlot}"] .workspace-dock-tile-body--seed`, { focused: true });
+    await waitForDom(`[data-pane-id="tile-seed-${crewPlot}"] .desktop-dock-tile-body--seed`, { focused: true });
     await waitForDom('[data-testid="crew-seed-back"]');
     await click(`.seed-document[data-seed-id="${crewPlot}"] [data-seed-target="${crewChild}"]`);
     await waitForDom(`.seed-document[data-seed-id="${crewChild}"]`);
@@ -349,11 +349,21 @@ try {
       { returnedText },
     );
     await pressEscapeAndWaitFor('crew-seed-back');
-    await click(`.workspace-dock-tile:has(.seed-document[data-seed-id="${crewChild}"]) [aria-label="Close tile"]`);
+    await click(`.desktop-dock-tile:has(.seed-document[data-seed-id="${crewChild}"]) [aria-label="Close tile"]`);
     await waitForDom(`.seed-document[data-seed-id="${crewChild}"]`, { absent: true });
-    await waitForDom(`[data-pane-session-id="${firstSession}"] .terminal-container`, { focused: true });
     const closed = await client.request('seed_document_get_state', { seedId: crewChild });
-    runner.assert(!closed.present, 'closing the Crew seed tile restores the terminal workspace', closed);
+    runner.assert(!closed.present, 'closing the Crew seed tile closes its reader', closed);
+    const shown = await observer.waitFor(() => {
+      const desktop = observer.desktop(observer.currentDesktopId());
+      return desktop && !desktop.tree_json.includes(crewPlot) && !desktop.tree_json.includes(crewChild) ? desktop : null;
+    }, 'the current desktop without the closed Crew seed tile');
+    if (shown.active_pane_id) {
+      const agentPane = shown.panes.some((pane) => pane.pane_id === shown.active_pane_id);
+      await waitForDom(
+        `[data-pane-id="${shown.active_pane_id}"] ${agentPane ? '.terminal-container' : '.desktop-dock-tile-body'}`,
+        { focused: true },
+      );
+    }
   });
 
   await runner.step('manage_entry_retains_the_sidebar_and_returns_keyboard_focus', async () => {
@@ -455,11 +465,11 @@ try {
     await client.request('dom_focus', { selector: `[data-seed-target="${linkedSeed}"]` });
     await driver.pressEnter();
     await waitForDom(`.seed-document[data-seed-id="${linkedSeed}"]`);
-    await waitForDom(`[data-pane-id="tile-seed-${linkedSeed}"] .workspace-dock-tile-body--seed`, { focused: true });
+    await waitForDom(`[data-pane-id="tile-seed-${linkedSeed}"] .desktop-dock-tile-body--seed`, { focused: true });
     await waitForDom('[data-testid="crew-seed-back"]');
     const hiddenPanel = await client.request('dom_bounds', { selector: '[data-testid="crew-panel"]' });
     runner.assert(hiddenPanel.bounds.width === 0 && hiddenPanel.bounds.height === 0,
-      'the crew panel yields to the existing workspace seed tile', hiddenPanel);
+      'the crew panel yields to the existing desktop seed tile', hiddenPanel);
     await screenshot('06-handoff-seed-tile.png');
     await click('[data-testid="crew-seed-back"]');
     await waitForDom('[data-testid="crew-panel"]', { textIncludes: 'Linked handoff' });
@@ -554,7 +564,7 @@ try {
   });
 
   await runner.step('open_panel_is_idle_after_the_lifecycle_settles', async () => {
-    runner.writeJson('idle.json', { workspace: workspaceIdle, crewPanel: await sampleIdle(webkitBaseline) });
+    runner.writeJson('idle.json', { desktop: desktopIdle, crewPanel: await sampleIdle(webkitBaseline) });
   });
 
   console.log(JSON.stringify(await runner.finishSuccess({ awake, asleep, history, linkedSeed, firstSession, successor, crewPlot, crewChild, asleepHeld }), null, 2));

@@ -1,13 +1,13 @@
 import { act, fireEvent, screen } from '@testing-library/react';
 import { describe, expect, it, onTestFinished, vi } from 'vitest';
-import { agentWorkspace, daemonSession } from './test/daemonFixtures';
+import { soloDesktop, daemonSession } from './test/daemonFixtures';
 import { gesture, renderApp } from './test/renderApp';
 import type { ScriptedDaemon } from './test/scriptedDaemon';
 
 const HEARTBEAT_MS = 30_000;
 
 function launch() {
-  return renderApp({ initialState: { sessions: [daemonSession('s1')], workspaces: [agentWorkspace('s1')] } });
+  return renderApp({ initialState: { sessions: [daemonSession('s1')], desktops: [soloDesktop('s1')] } });
 }
 
 const reports = (daemon: ScriptedDaemon) => daemon.sentOf('set_client_presence');

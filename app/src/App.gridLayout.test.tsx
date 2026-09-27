@@ -1,6 +1,6 @@
 import { fireEvent, screen } from '@testing-library/react';
 import { describe, expect, it, onTestFinished } from 'vitest';
-import { agentWorkspace, daemonSession } from './test/daemonFixtures';
+import { soloDesktop, daemonSession } from './test/daemonFixtures';
 import { gesture, pressShortcut, renderApp, restartApp, type AppRender } from './test/renderApp';
 import type { ScriptedDaemon } from './test/scriptedDaemon';
 
@@ -24,7 +24,7 @@ function layOutGridStage(width: number, height: number) {
 const LAUNCH = {
   initialState: {
     sessions: SESSIONS.map((id) => daemonSession(id, { state: 'idle' })),
-    workspaces: SESSIONS.map(agentWorkspace),
+    desktops: SESSIONS.map((id) => soloDesktop(id)),
   },
 };
 

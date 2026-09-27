@@ -15,7 +15,7 @@ import { getFrontWindowBounds, setFrontWindowBounds } from './nativeWindowCaptur
 import {
   captureSessionArtifacts,
   sleep,
-  waitForFirstWorkspacePane,
+  waitForFirstDesktopPane,
   waitForPaneAttached,
   waitForPaneShellReady,
   waitForPaneVisible,
@@ -54,7 +54,7 @@ function parseArgs(argv) {
   };
 }
 
-async function createShellWorkspace(client, observer, cwd, label) {
+async function createShellDesktop(client, observer, cwd, label) {
   fs.mkdirSync(cwd, { recursive: true });
   const sessionId = await createSessionAndWaitForInitialPane({
     client,
@@ -65,7 +65,7 @@ async function createShellWorkspace(client, observer, cwd, label) {
     waitForInitialPaneVisible: false,
     sessionWaitMs: 30_000,
   });
-  const pane = await waitForFirstWorkspacePane(client, sessionId, `initial pane for ${label}`);
+  const pane = await waitForFirstDesktopPane(client, sessionId, `initial pane for ${label}`);
   await client.request('select_session', { sessionId });
   await waitForPaneVisible(client, sessionId, pane.paneId, 20_000);
   await waitForPaneAttached(client, sessionId, pane.paneId, 20_000);
@@ -139,10 +139,10 @@ function assertHeightChanged(beforeHeight, afterHeight, label) {
   }
 }
 
-async function closeWorkspacePanes(client, sessionId) {
+async function closeDesktopPanes(client, sessionId) {
   for (let attempt = 0; attempt < 10; attempt += 1) {
-    const workspace = await client.request('get_workspace', { sessionId }).catch(() => null);
-    const pane = workspace?.panes?.[0];
+    const desktop = await client.request('get_desktop', { sessionId }).catch(() => null);
+    const pane = desktop?.panes?.[0];
     if (!pane) {
       return;
     }
@@ -166,17 +166,17 @@ async function main() {
   console.log(`[RealAppHarness] sessionDir=${sessionDir}`);
   console.log(`[RealAppHarness] wsUrl=${options.wsUrl}`);
 
-  let workspaceA;
-  let workspaceB;
+  let desktopA;
+  let desktopB;
 
   try {
     await launchFreshAppAndConnect(client, observer);
 
-    workspaceA = await createShellWorkspace(client, observer, path.join(sessionDir, 'ws-a'), `revealoverflow-${runId}-a`);
-    console.log(`[RealAppHarness] created workspace A: sessionId=${workspaceA.sessionId}`);
+    desktopA = await createShellDesktop(client, observer, path.join(sessionDir, 'ws-a'), `revealoverflow-${runId}-a`);
+    console.log(`[RealAppHarness] created desktop A: sessionId=${desktopA.sessionId}`);
 
     const originalBounds = await getFrontWindowBounds(client.bundleId, { client });
-    const baselineMeasurement = await measurePane(client, workspaceA.sessionId, workspaceA.paneId);
+    const baselineMeasurement = await measurePane(client, desktopA.sessionId, desktopA.paneId);
     const baselineContainerHeight = baselineMeasurement.container?.height ?? 0;
 
     const enlargedBounds = {
@@ -185,21 +185,21 @@ async function main() {
       width: originalBounds.width,
       height: originalBounds.height + WINDOW_ENLARGE_HEIGHT_PX,
     };
-    console.log(`[RealAppHarness] enlarging window from height=${originalBounds.height} to height=${enlargedBounds.height} (workspace A active)`);
+    console.log(`[RealAppHarness] enlarging window from height=${originalBounds.height} to height=${enlargedBounds.height} (desktop A active)`);
     const appliedEnlargedBounds = await setFrontWindowBounds(enlargedBounds, { client });
     assertHeightChanged(originalBounds.height, appliedEnlargedBounds.height, 'enlarge');
 
     await waitForContainerHeightAtLeast(
       client,
-      workspaceA.sessionId,
-      workspaceA.paneId,
+      desktopA.sessionId,
+      desktopA.paneId,
       baselineContainerHeight + ENLARGE_REFIT_MIN_GROWTH_PX,
-      'workspace A pane to refit to the enlarged window',
+      'desktop A pane to refit to the enlarged window',
     );
-    console.log('[RealAppHarness] confirmed workspace A refit to a taller grid at the enlarged window size');
+    console.log('[RealAppHarness] confirmed desktop A refit to a taller grid at the enlarged window size');
 
-    workspaceB = await createShellWorkspace(client, observer, path.join(sessionDir, 'ws-b'), `revealoverflow-${runId}-b`);
-    console.log(`[RealAppHarness] created workspace B: sessionId=${workspaceB.sessionId} (workspace A now hidden)`);
+    desktopB = await createShellDesktop(client, observer, path.join(sessionDir, 'ws-b'), `revealoverflow-${runId}-b`);
+    console.log(`[RealAppHarness] created desktop B: sessionId=${desktopB.sessionId} (desktop A now hidden)`);
 
     const shrunkBounds = {
       x: originalBounds.x,
@@ -207,15 +207,15 @@ async function main() {
       width: originalBounds.width,
       height: originalBounds.height,
     };
-    console.log(`[RealAppHarness] shrinking window back from height=${appliedEnlargedBounds.height} to height=${shrunkBounds.height} (workspace A hidden)`);
+    console.log(`[RealAppHarness] shrinking window back from height=${appliedEnlargedBounds.height} to height=${shrunkBounds.height} (desktop A hidden)`);
     const appliedShrunkBounds = await setFrontWindowBounds(shrunkBounds, { client });
     assertHeightChanged(appliedEnlargedBounds.height, appliedShrunkBounds.height, 'shrink');
 
-    console.log(`[RealAppHarness] revealing workspace A (sessionId=${workspaceA.sessionId})`);
-    await client.request('select_session', { sessionId: workspaceA.sessionId });
-    await waitForPaneVisible(client, workspaceA.sessionId, workspaceA.paneId, 20_000);
+    console.log(`[RealAppHarness] revealing desktop A (sessionId=${desktopA.sessionId})`);
+    await client.request('select_session', { sessionId: desktopA.sessionId });
+    await waitForPaneVisible(client, desktopA.sessionId, desktopA.paneId, 20_000);
 
-    const { converged, measurements } = await waitForRevealConvergence(client, workspaceA.sessionId, workspaceA.paneId);
+    const { converged, measurements } = await waitForRevealConvergence(client, desktopA.sessionId, desktopA.paneId);
 
     fs.writeFileSync(path.join(runDir, 'measurements.json'), `${JSON.stringify(measurements, null, 2)}\n`, 'utf8');
 
@@ -223,7 +223,7 @@ async function main() {
       console.error(
         `[RealAppHarness] VIOLATION: revealed pane did not converge within ${REVEAL_CONVERGENCE_DEADLINE_MS}ms.`,
       );
-      await captureSessionArtifacts(client, runDir, 'violation', workspaceA.sessionId).catch(() => {});
+      await captureSessionArtifacts(client, runDir, 'violation', desktopA.sessionId).catch(() => {});
       console.error(`[RealAppHarness] Evidence written to ${runDir}`);
       process.exitCode = 1;
       return;
@@ -242,9 +242,9 @@ async function main() {
     console.log(`[RealAppHarness] Reveal-overflow scenario passed after ${measurements.length} measurement(s).`);
     console.log(JSON.stringify(summary, null, 2));
   } finally {
-    for (const workspace of [workspaceB, workspaceA]) {
-      if (workspace) {
-        await closeWorkspacePanes(client, workspace.sessionId).catch(() => {});
+    for (const desktop of [desktopB, desktopA]) {
+      if (desktop) {
+        await closeDesktopPanes(client, desktop.sessionId).catch(() => {});
       }
     }
     await client.quitApp().catch(() => {});

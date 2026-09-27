@@ -31,7 +31,7 @@ type driverLaunch struct {
 	Instructions    *struct {
 		Kind         string `json:"kind"`
 		Content      string `json:"content"`
-		WorkspaceID  string `json:"workspace_id"`
+		ProfileID    string `json:"profile_id"`
 		NotebookRoot string `json:"notebook_root"`
 	} `json:"instructions"`
 }

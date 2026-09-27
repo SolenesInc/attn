@@ -62,7 +62,7 @@ func TestTheSeedDocumentShowsBodyChildrenLogAndWhetherItsTenderHolds(t *testing.
 	}
 }
 
-func TestOpeningASeedDocksBesideItsPlacementOrInAStandaloneReader(t *testing.T) {
+func TestOpeningASeedDocksBesideItsCallerOrOnTheCurrentDesktop(t *testing.T) {
 	w := newWorld(t, fakeagent.Claude)
 	app, cli := w.App(), w.Client()
 	panes := spawnPanes(w, app, w.Path("opener"), w.Path("tender"))
@@ -73,80 +73,43 @@ func TestOpeningASeedDocksBesideItsPlacementOrInAStandaloneReader(t *testing.T) 
 		lifeMove(t, cli, tender.session, seed, "tend", "", "")
 		opened := seedReaderOpen(app, protocol.OpenSeedMessage{SeedID: seed, SessionID: protocol.Ptr(opener.session)})
 		tileID := protocol.Deref(opened.TileID)
-		if !opened.Success || protocol.Deref(opened.WorkspaceID) != opener.workspace || tileID == "" {
+		if !opened.Success || protocol.Deref(opened.DesktopID) != opener.desktop || tileID == "" {
 			t.Fatalf("opening beside %s = %+v", opener.session, opened)
 		}
-		seedReaderTileIs(t, w, opener.workspace, tileID, seed, tender.session)
+		seedReaderTileIs(t, w, opener.desktop, tileID, seed, tender.session)
 
 		lifeMove(t, cli, tender.session, seed, "park", "", "")
 		reopened := seedReaderOpen(app, protocol.OpenSeedMessage{SeedID: seed, SessionID: protocol.Ptr(opener.session)})
 		if !reopened.Success || protocol.Deref(reopened.TileID) != tileID {
 			t.Fatalf("reopening = %+v, want tile %s again", reopened, tileID)
 		}
-		seedReaderTileIs(t, w, opener.workspace, tileID, seed, opener.session)
+		seedReaderTileIs(t, w, opener.desktop, tileID, seed, opener.session)
 	})
 
-	t.Run("a standalone open gets its own reader whatever is selected", func(t *testing.T) {
-		app.Send(protocol.SessionSelectedMessage{Cmd: protocol.CmdSessionSelected, ID: opener.session})
-		before := workspaceLayoutTree(t, workspaceLayoutNow(t, w, opener.workspace)).tiles()
+	t.Run("a standalone open lands on the current desktop bound to no agent", func(t *testing.T) {
+		focusAgent(t, w, app, opener.session)
 		first, second := plantSeedAs(t, cli, "", "Read from Crew"), plantSeedAs(t, cli, "", "Another seed")
 
 		opened := seedReaderOpen(app, protocol.OpenSeedMessage{SeedID: first, Standalone: protocol.Ptr(true)})
-		reader, tileID := protocol.Deref(opened.WorkspaceID), protocol.Deref(opened.TileID)
-		if !opened.Success || reader == "" || reader == opener.workspace {
-			t.Fatalf("a standalone open = %+v, want a reader apart from the selected session's workspace", opened)
+		desktopID, tileID := protocol.Deref(opened.DesktopID), protocol.Deref(opened.TileID)
+		if !opened.Success || desktopID != currentDesktop(t, w).ID {
+			t.Fatalf("a standalone open = %+v, want it on the current desktop", opened)
 		}
-		testworld.Await(app, protocol.EventWorkspaceLayoutUpdated, func(m protocol.WorkspaceLayoutUpdatedMessage) bool {
-			return m.WorkspaceLayout.WorkspaceID == reader
-		})
-		seedReaderAnnouncedBeforeItsLayout(t, app, reader)
-		if listed, _ := workspaceView(w, reader); listed.Title != "Read from Crew" || listed.Directory != "" {
-			t.Errorf("the reader workspace = %+v, want it titled after the seed and unrooted", listed)
-		}
-		seedReaderIsStandalone(t, w, reader, tileID, first)
-		if after := workspaceLayoutTree(t, workspaceLayoutNow(t, w, opener.workspace)).tiles(); len(after) != len(before) {
-			t.Errorf("the selected session's workspace went from %d to %d tiles", len(before), len(after))
-		}
+		seedReaderTileIs(t, w, desktopID, tileID, first, "")
 
-		if again := seedReaderOpen(app, protocol.OpenSeedMessage{SeedID: first, Standalone: protocol.Ptr(true)}); protocol.Deref(again.WorkspaceID) != reader || protocol.Deref(again.TileID) != tileID {
-			t.Errorf("reopening = %+v, want reader %s again", again, reader)
+		if again := seedReaderOpen(app, protocol.OpenSeedMessage{SeedID: first, Standalone: protocol.Ptr(true)}); protocol.Deref(again.TileID) != tileID {
+			t.Errorf("reopening = %+v, want tile %s again", again, tileID)
 		}
-		navigated := workspaceLayoutAction(app, protocol.WorkspaceLayoutUpdateTileMessage{
-			Cmd: protocol.CmdWorkspaceLayoutUpdateTile, RequestID: uuid.NewString(), WorkspaceID: reader, TileID: tileID, TileParams: second,
-		}, protocol.CmdWorkspaceLayoutUpdateTile, reader)
-		if !navigated.Success {
+		desktop := desktopOfDelegate(t, w, desktopID)
+		if navigated := desktopAction(app, protocol.DesktopUpdateTileMessage{
+			Cmd: protocol.CmdDesktopUpdateTile, DesktopID: desktopID, TileID: tileID, TileParams: protocol.Ptr(second), ExpectedRevision: desktop.Revision,
+		}); !navigated.Success {
 			t.Fatalf("navigating the reader to %s: %s", second, protocol.Deref(navigated.Error))
 		}
-		if again := seedReaderOpen(app, protocol.OpenSeedMessage{SeedID: first, Standalone: protocol.Ptr(true)}); protocol.Deref(again.WorkspaceID) != reader {
-			t.Errorf("reopening after navigating away = %+v, want reader %s", again, reader)
+		if again := seedReaderOpen(app, protocol.OpenSeedMessage{SeedID: first, Standalone: protocol.Ptr(true)}); !again.Success {
+			t.Errorf("reopening after navigating away = %+v", again)
 		}
-		seedReaderIsStandalone(t, w, reader, tileID, first)
-
-		undocked := workspaceLayoutAction(app, protocol.WorkspaceLayoutUndockTileMessage{
-			Cmd: protocol.CmdWorkspaceLayoutUndockTile, WorkspaceID: reader, TileID: tileID,
-		}, protocol.CmdWorkspaceLayoutUndockTile, reader)
-		if !undocked.Success {
-			t.Fatalf("closing the reader: %s", protocol.Deref(undocked.Error))
-		}
-		testworld.Await(app, protocol.EventWorkspaceUnregistered, func(e protocol.WorkspaceUnregisteredMessage) bool { return e.Workspace.ID == reader })
-		if _, listed := workspaceView(w, reader); listed {
-			t.Errorf("the reader workspace %s outlived its reader", reader)
-		}
-	})
-
-	t.Run("a standalone open leaves a docked copy alone", func(t *testing.T) {
-		seed := plantSeedAs(t, cli, opener.session, "Docked and read")
-		docked := seedReaderOpen(app, protocol.OpenSeedMessage{SeedID: seed, SessionID: protocol.Ptr(opener.session)})
-		tileID := protocol.Deref(docked.TileID)
-		opened := seedReaderOpen(app, protocol.OpenSeedMessage{SeedID: seed, Standalone: protocol.Ptr(true)})
-		reader := protocol.Deref(opened.WorkspaceID)
-		if !opened.Success || reader == opener.workspace {
-			t.Fatalf("a standalone open of a docked seed = %+v, want its own reader", opened)
-		}
-		seedReaderTileIs(t, w, opener.workspace, tileID, seed, opener.session)
-		if again := seedReaderOpen(app, protocol.OpenSeedMessage{SeedID: seed, Standalone: protocol.Ptr(true)}); protocol.Deref(again.WorkspaceID) != reader {
-			t.Errorf("a second standalone open = %+v, want reader %s", again, reader)
-		}
+		seedReaderTileIs(t, w, desktopID, protocol.Deref(opened.TileID), first, "")
 	})
 
 	t.Run("an unplanted seed is named", func(t *testing.T) {
@@ -167,12 +130,12 @@ func TestOpeningASeedDocksBesideItsPlacementOrInAStandaloneReader(t *testing.T) 
 		if !markdown.Success || !opened.Success {
 			t.Fatalf("the simultaneous opens = %+v and %+v", markdown, opened)
 		}
-		tiles := workspaceLayoutTree(t, workspaceLayoutNow(t, w, tender.workspace)).tiles()
-		if _, ok := tiles[protocol.Deref(markdown.TileID)]; !ok || len(tiles) != 2 {
-			t.Errorf("the workspace holds tiles %+v, want the markdown tile and the seed tile", tiles)
+		tiles := desktopTree(t, desktopOfDelegate(t, w, tender.desktop)).tiles()
+		if _, ok := tiles[protocol.Deref(markdown.TileID)]; !ok {
+			t.Errorf("the desktop lost the markdown tile %s: %+v", protocol.Deref(markdown.TileID), tiles)
 		}
 		if _, ok := tiles[protocol.Deref(opened.TileID)]; !ok {
-			t.Errorf("the workspace lost the seed tile %s: %+v", protocol.Deref(opened.TileID), tiles)
+			t.Errorf("the desktop lost the seed tile %s: %+v", protocol.Deref(opened.TileID), tiles)
 		}
 	})
 }
@@ -212,23 +175,23 @@ func TestAnnotationDraftsFollowTheirTypedDocumentSource(t *testing.T) {
 	}
 
 	for _, source := range []struct {
-		uri, workspace, path string
-		accepted             bool
+		uri, path string
+		accepted  bool
 	}{
-		{"attn://seed/s-wrong", "workspace a", "/tmp/a b.md", false},
-		{"attn://file/workspace%20a/%2Ftmp%2Fa%20b.md", "workspace a", "/tmp/a b.md", true},
-		{"attn://file/work%2F%C3%A9/%2Ftmp%2Fcaf%C3%A9%20!(x).md", "work/é", "/tmp/café !(x).md", true},
+		{"attn://seed/s-wrong", "/tmp/a b.md", false},
+		{"attn://file/%2Ftmp%2Fa%20b.md", "/tmp/a b.md", true},
+		{"attn://file/%2Ftmp%2Fcaf%C3%A9%20!(x).md", "/tmp/café !(x).md", true},
 	} {
 		result := testworld.Request(app, protocol.MarkdownAnnotationsSaveMessage{
 			Cmd: protocol.CmdMarkdownAnnotationsSave, RequestID: uuid.NewString(), DocumentUri: source.uri, SourceKind: "file",
-			WorkspaceID: protocol.Ptr(source.workspace), Path: protocol.Ptr(source.path), Generation: 1,
+			Path: protocol.Ptr(source.path), Generation: 1,
 			Annotations: []protocol.MarkdownAnnotation{{ID: "g", Type: "global", Text: protocol.Ptr("note"), CreatedAt: 1}},
 		}, protocol.EventMarkdownAnnotationsSaveResult, func(r protocol.MarkdownAnnotationsSaveResultMessage) bool { return r.DocumentUri == source.uri })
 		if source.accepted && !result.Success {
-			t.Errorf("saving %s as %s in %q = %s, want it accepted", source.uri, source.path, source.workspace, protocol.Deref(result.Error))
+			t.Errorf("saving %s as %s = %s, want it accepted", source.uri, source.path, protocol.Deref(result.Error))
 		}
 		if !source.accepted && (result.Success || !strings.Contains(protocol.Deref(result.Error), "does not match typed file source")) {
-			t.Errorf("saving %s as %s in %q = %+v, want the mismatch refused", source.uri, source.path, source.workspace, result)
+			t.Errorf("saving %s as %s = %+v, want the mismatch refused", source.uri, source.path, result)
 		}
 	}
 }
@@ -249,12 +212,12 @@ func seedReaderOpen(app *testworld.Peer, msg protocol.OpenSeedMessage) protocol.
 	})
 }
 
-func seedReaderTileIs(t *testing.T, w *world, workspaceID, tileID, seedID, boundTo string) {
+func seedReaderTileIs(t *testing.T, w *world, desktopID, tileID, seedID, boundTo string) {
 	t.Helper()
-	tiles := workspaceLayoutTree(t, workspaceLayoutNow(t, w, workspaceID)).tiles()
+	tiles := desktopTree(t, desktopOfDelegate(t, w, desktopID)).tiles()
 	tile, ok := tiles[tileID]
 	if !ok || tile.TileKind != "seed" || tile.TileParams != seedID || tile.TileSessionID != boundTo {
-		t.Errorf("workspace %s holds tiles %+v, want seed tile %s showing %s bound to %s", workspaceID, tiles, tileID, seedID, boundTo)
+		t.Errorf("desktop %s holds tiles %+v, want seed tile %s showing %s bound to %q", desktopID, tiles, tileID, seedID, boundTo)
 	}
 	seeds := 0
 	for _, tile := range tiles {
@@ -263,31 +226,6 @@ func seedReaderTileIs(t *testing.T, w *world, workspaceID, tileID, seedID, bound
 		}
 	}
 	if seeds != 1 {
-		t.Errorf("workspace %s shows %s in %d tiles, want one", workspaceID, seedID, seeds)
-	}
-}
-
-func seedReaderIsStandalone(t *testing.T, w *world, workspaceID, tileID, seedID string) {
-	t.Helper()
-	layout := workspaceLayoutNow(t, w, workspaceID)
-	root := workspaceLayoutTree(t, layout)
-	if len(layout.Panes) != 0 || root.Type != "tile" || root.TileID != tileID || root.TileKind != "seed" || root.TileParams != seedID {
-		t.Errorf("reader %s = panes %v around %+v, want only seed tile %s showing %s", workspaceID, workspacePaneIDs(layout), root, tileID, seedID)
-	}
-}
-
-func seedReaderAnnouncedBeforeItsLayout(t *testing.T, app *testworld.Peer, workspaceID string) {
-	t.Helper()
-	registered, laidOut := -1, -1
-	for i, e := range app.Received() {
-		if e.Event == protocol.EventWorkspaceRegistered && e.Workspace != nil && e.Workspace.ID == workspaceID && registered < 0 {
-			registered = i
-		}
-		if e.Event == protocol.EventWorkspaceLayoutUpdated && e.WorkspaceLayout != nil && e.WorkspaceLayout.WorkspaceID == workspaceID && laidOut < 0 {
-			laidOut = i
-		}
-	}
-	if registered < 0 || laidOut < registered {
-		t.Errorf("the reader %s was announced at %d and laid out at %d, want it announced first", workspaceID, registered, laidOut)
+		t.Errorf("desktop %s shows %s in %d tiles, want one", desktopID, seedID, seeds)
 	}
 }

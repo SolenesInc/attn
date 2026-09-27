@@ -23,7 +23,7 @@ import { UiAutomationClient } from './uiAutomationClient.mjs';
 import { createScenarioRunner } from './scenarioRunner.mjs';
 import { currentHarnessInstance, dataDirForInstance, instanceCliEnv } from './harnessInstance.mjs';
 import { ensureClaudePromptReadyViaPty, writeQueueAgentFixture } from './scenarioAgents.mjs';
-import { waitForFirstWorkspacePane, waitForPaneInputFocus } from './scenarioAssertions.mjs';
+import { waitForFirstDesktopPane, waitForPaneInputFocus } from './scenarioAssertions.mjs';
 import { registeredAgentPid } from './workerRegistry.mjs';
 
 const HARNESS_DIR = path.dirname(fileURLToPath(import.meta.url));
@@ -59,8 +59,23 @@ function resolveAttnBin() {
   throw new Error('attn binary not found (build ./attn or set ATTN_HARNESS_BIN)');
 }
 
+const AGENT_LIST_TOGGLE = '[data-testid="queue-agents-toggle"]';
+
+async function clickUnlessGone(client, selector) {
+  try {
+    await client.request('dom_click', { selector });
+  } catch (error) {
+    if (!String(error?.message).includes(`selector not found in DOM: ${selector}`)) throw error;
+  }
+}
+
 async function queueState(client) {
-  return client.request('queue_get_state');
+  return pollFor(async () => {
+    const queue = await client.request('queue_get_state');
+    if (!queue.agentList?.present || queue.agentList.expanded) return queue;
+    await clickUnlessGone(client, AGENT_LIST_TOGGLE);
+    return null;
+  }, 'the queue state with the agent list open wherever it is shown', 10_000);
 }
 
 function turnIds(queue) {
@@ -75,12 +90,12 @@ function snoozedIds(queue) {
   return (queue.snoozed?.rows || []).map((row) => row.id);
 }
 
-async function paneIdFor(client, workspaceSessionId, sessionId) {
-  const workspace = await client.request('get_workspace', { sessionId: workspaceSessionId });
-  const pane = (workspace.panes || []).find((entry) => entry.sessionId === sessionId);
+async function paneIdFor(client, desktopSessionId, sessionId) {
+  const desktopState = await client.request('get_desktop', { sessionId: desktopSessionId });
+  const pane = (desktopState.panes || []).find((entry) => entry.sessionId === sessionId);
   if (!pane) {
     throw new Error(
-      `no pane for session ${sessionId} in ${workspaceSessionId}: ${JSON.stringify((workspace.panes || []).map((entry) => entry.sessionId))}`,
+      `no pane for session ${sessionId} in ${desktopSessionId}: ${JSON.stringify((desktopState.panes || []).map((entry) => entry.sessionId))}`,
     );
   }
   return pane.paneId;
@@ -107,7 +122,7 @@ async function createAgent(client, observer, runner, dirName, label) {
     promptReadyFn: ensureClaudePromptReadyViaPty,
     promptReadyTimeoutMs: 90_000,
   });
-  const pane = await waitForFirstWorkspacePane(client, sessionId, `pane for ${label}`, 20_000);
+  const pane = await waitForFirstDesktopPane(client, sessionId, `pane for ${label}`, 20_000);
   return { sessionId, paneId: pane.paneId, cwd };
 }
 
@@ -259,8 +274,8 @@ async function main() {
     await runner.step('band_is_oldest_first_and_each_agent_appears_once', async () => {
       const queue = await waitForTurns(client, [alpha.sessionId, beta.sessionId], 'both turns, oldest first');
       runner.assert(
-        queue.turns[0].workspaceId !== queue.turns[1].workspaceId,
-        `the two turns come from different workspaces: ${JSON.stringify(queue.turns.map((row) => row.workspaceId))}`,
+        queue.turns[0].desktopId !== queue.turns[1].desktopId,
+        `the two turns come from different desktops: ${JSON.stringify(queue.turns.map((row) => row.desktopId))}`,
       );
       for (const sessionId of [alpha.sessionId, beta.sessionId]) {
         runner.assert(
@@ -274,6 +289,55 @@ async function main() {
       }
     });
 
+    await runner.step('the_bar_carries_the_queue_when_collapsed', async () => {
+      const open = await queueState(client);
+      const activeBefore = (await client.request('get_state')).activeSessionId;
+      const alphaTextBefore = (await client.request('read_pane_text', { sessionId: alpha.sessionId, paneId: alpha.paneId })).text || '';
+
+      await client.request('dispatch_shortcut', { shortcutId: 'session.toggleSidebar' });
+      const collapsed = await pollFor(async () => {
+        const state = await client.request('queue_get_state');
+        return state.bar.present && !state.present ? state : null;
+      }, 'the bar to replace the open sidebar', 15_000);
+      runner.assert(collapsed.bar.waiting === 2, `the pill counts both turns: ${JSON.stringify(collapsed.bar)}`);
+      runner.assert(
+        JSON.stringify(collapsed.bar.crumbs) === JSON.stringify(open.turns.map((row) => row.label)),
+        `the pill crumbs the turns oldest first: ${JSON.stringify(collapsed.bar.crumbs)}`,
+      );
+      const badged = open.turns.map((row) => collapsed.bar.desktops.find((chip) => chip.desktopId === row.desktopId));
+      runner.assert(
+        badged.every((chip) => chip && chip.waiting === 1),
+        `each turn's desktop chip carries its waiting count: ${JSON.stringify(collapsed.bar.desktops)}`,
+      );
+
+      await client.request('dom_hover', { selector: '[data-testid="queue-bar-waiting"]' });
+      const peeked = await client.request('queue_get_state');
+      runner.assert(
+        [alpha.sessionId, beta.sessionId].every((id) => peeked.bar.waitingPeek?.includes(`agent:${id}`)),
+        `hovering the pill peeks both turns: ${JSON.stringify(peeked.bar.waitingPeek)}`,
+      );
+      await client.request('dom_hover', { selector: '[data-testid="queue-bar-waiting"]', leave: true });
+
+      await client.request('dom_click', { selector: '[data-testid="queue-bar-pill"]' });
+      const palette = await client.request('dom_wait', { selector: `[data-testid="palette-agent-${alpha.sessionId}"]`, timeoutMs: 10_000 });
+      runner.assert(palette.matched, 'clicking the pill opens the palette on agents');
+      await client.request('dom_key', { selector: '[role="combobox"]', key: 'Escape' });
+
+      const state = await client.request('get_state');
+      runner.assert(state.activeSessionId === activeBefore, `collapsing kept the selection: ${activeBefore} -> ${state.activeSessionId}`);
+      const alphaTextAfter = (await client.request('read_pane_text', { sessionId: alpha.sessionId, paneId: alpha.paneId })).text || '';
+      runner.assert(
+        alphaTextBefore.includes('QUEUE_ALPHA') && alphaTextAfter.includes('QUEUE_ALPHA'),
+        'alpha keeps its terminal through the layout change',
+      );
+
+      await client.request('dom_click', { selector: '[data-testid="queue-bar-show-sidebar"]' });
+      await pollFor(async () => {
+        const reopened = await queueState(client);
+        return reopened.present && !reopened.bar.present ? reopened : null;
+      }, 'the open sidebar to come back from the bar', 15_000);
+    });
+
     await runner.step('clicking_a_row_hands_the_agent_over', async () => {
       await client.request('dom_click', { selector: `[data-testid="queue-select-${alpha.sessionId}"]` });
       await pollFor(async () => {
@@ -285,6 +349,7 @@ async function main() {
 
     await runner.step('a_row_opens_from_the_keyboard', async () => {
       await client.request('select_session', { sessionId: beta.sessionId });
+      await waitForPaneInputFocus(client, beta.sessionId, beta.paneId, 15_000);
 
       const focused = await client.request('dom_focus', {
         selector: `[data-testid="queue-select-${alpha.sessionId}"]`,
@@ -399,7 +464,7 @@ async function main() {
       await client.request('set_setting', { key: 'auto_settle_enabled', value: 'true' });
       try {
         await client.request('select_session', { sessionId: alpha.sessionId });
-        const pane = await waitForFirstWorkspacePane(client, alpha.sessionId, `current pane for ${alpha.sessionId}`, 20_000);
+        const pane = await waitForFirstDesktopPane(client, alpha.sessionId, `current pane for ${alpha.sessionId}`, 20_000);
         await typePromptAsUser(
           client,
           alpha.sessionId,
@@ -459,7 +524,7 @@ async function main() {
 
         // A pane can be replaced under a session, and writing to an id it no longer
         // has goes nowhere silently.
-        const pane = await waitForFirstWorkspacePane(client, watched.sessionId, `current pane for ${watched.sessionId}`, 20_000);
+        const pane = await waitForFirstDesktopPane(client, watched.sessionId, `current pane for ${watched.sessionId}`, 20_000);
 
         await typePromptAsUser(
           client,
@@ -508,8 +573,14 @@ async function main() {
 
     await runner.step('a_shell_pane_never_queues', async () => {
       const before = turnIds(await queueState(client));
-      const workspace = await client.request('get_workspace', { sessionId: alpha.sessionId });
-      const targetPaneId = workspace.activePaneId || workspace.panes?.[0]?.paneId;
+      await client.request('select_session', { sessionId: alpha.sessionId });
+      await pollFor(async () => {
+        const state = await client.request('get_state');
+        const shown = state.arrangement.desktops.find((desktop) => desktop.id === state.arrangement.currentDesktopId);
+        return shown?.panes.some((pane) => pane.sessionId === alpha.sessionId) ? shown : null;
+      }, 'alpha on the shown desktop before splitting it', 15_000);
+      const desktop = await client.request('get_desktop', { sessionId: alpha.sessionId });
+      const targetPaneId = desktop.activePaneId || desktop.panes?.[0]?.paneId;
       await client.request('split_pane', { sessionId: alpha.sessionId, targetPaneId, direction: 'vertical' });
       // A pane is registered in the spawn-time `working` color and settles a beat
       // later, so asserting on first sight reads the wrong state.
@@ -565,48 +636,12 @@ async function main() {
         });
       }
       const cleaned = await pollFor(async () => {
-        const workspace = await client.request('get_workspace', { sessionId: alpha.sessionId });
-        return (workspace.panes || []).length === 1 ? workspace : null;
-      }, 'the shell panes to close, leaving the agent alone in its workspace', 15_000);
+        const desktop = await client.request('get_desktop', { sessionId: alpha.sessionId });
+        return (desktop.panes || []).length === 1 ? desktop : null;
+      }, 'the shell panes to close, leaving the agent alone in its desktop', 15_000);
       runner.assert(
         cleaned.panes[0].sessionId === alpha.sessionId,
         `the agent is the only pane left: ${JSON.stringify(cleaned.panes.map((pane) => pane.sessionId))}`,
-      );
-    });
-
-    await runner.step('pinning_from_a_row_takes_that_agent_out_of_the_queue', async () => {
-      const before = await queueState(client);
-      const alphaWorkspaceId = (before.turns.find((row) => row.id === alpha.sessionId) || {}).workspaceId;
-      runner.assert(Boolean(alphaWorkspaceId), 'the row carries the workspace it belongs to');
-      const openedAt = observer.getSession(alpha.sessionId)?.turn_opened_at;
-      runner.assert(Boolean(openedAt), 'alpha has an open turn to pin over');
-
-      await client.request('dom_click', { selector: `[data-testid="queue-pin-${alpha.sessionId}"]` });
-      const pinned = await waitForTurns(client, [beta.sessionId], 'alpha out of the turns band once pinned', 20_000);
-      runner.assert(
-        !settledIds(pinned).includes(alpha.sessionId),
-        `a pinned agent is not in the settled band: ${JSON.stringify(settledIds(pinned))}`,
-      );
-      runner.assert(
-        (pinned.pinned || []).map((row) => row.id).includes(alpha.sessionId),
-        `a pinned agent lands in the Pinned band: ${JSON.stringify(pinned.pinned)}`,
-      );
-      runner.assert(
-        !pinned.treeSessionIds.includes(alpha.sessionId),
-        `pinning one agent did not pin its workspace: ${JSON.stringify(pinned.treeSessionIds)}`,
-      );
-
-      await client.request('dom_click', { selector: `[data-testid="queue-unpin-${alpha.sessionId}"]` });
-      await waitForTurns(
-        client,
-        [beta.sessionId, alpha.sessionId],
-        'alpha back in the turns band once unpinned',
-        20_000,
-      );
-      const restoredOpenedAt = observer.getSession(alpha.sessionId)?.turn_opened_at;
-      runner.assert(
-        restoredOpenedAt === openedAt,
-        `the restored turn keeps the instant it opened rather than restarting its clock: ${JSON.stringify({ openedAt, restoredOpenedAt })}`,
       );
     });
 
@@ -615,28 +650,6 @@ async function main() {
       await client.request('chief_of_staff_toggle');
       const promoted = await waitForTurns(client, [alpha.sessionId], 'beta out of the band once it is chief', 20_000);
       runner.assert(promoted.chief?.id === beta.sessionId, `beta occupies the chief slot: ${JSON.stringify(promoted.chief)}`);
-
-      const chiefWorkspaceId = promoted.chief.workspaceId;
-      await client.request('set_setting', { key: 'queue_mode_enabled', value: 'false' });
-      await pollFor(async () => {
-        const state = await queueState(client);
-        return state.present ? null : state;
-      }, 'the tree back before pinning the chief workspace', 15_000);
-      await client.request('dom_click', { selector: `[data-testid="pin-workspace-${chiefWorkspaceId}"]` });
-      await client.request('set_setting', { key: 'queue_mode_enabled', value: 'true' });
-      const chiefPinned = await pollFor(async () => {
-        const state = await queueState(client);
-        return state.present && state.chief && state.treeWorkspaceIds.includes(chiefWorkspaceId) ? state : null;
-      }, 'the band back with the chief workspace pinned and its group drawn', 15_000);
-      runner.assert(
-        chiefPinned.chief.id === beta.sessionId,
-        `the chief keeps its slot while its workspace is pinned: ${JSON.stringify(chiefPinned.chief)}`,
-      );
-      runner.assert(
-        !chiefPinned.treeSessionIds.includes(beta.sessionId),
-        `the pinned group does not draw the chief again: ${JSON.stringify(chiefPinned.treeSessionIds)}`,
-      );
-      await client.request('dom_click', { selector: `[data-testid="pin-workspace-${chiefWorkspaceId}"]` });
 
       await client.request('chief_of_staff_open_actions', { sessionId: beta.sessionId });
       await client.request('chief_of_staff_toggle');
@@ -660,7 +673,7 @@ async function main() {
       }, 'the band to disappear with the arrangement off', 15_000);
       runner.assert(
         off.treeSessionIds.includes(alpha.sessionId) && off.treeSessionIds.includes(beta.sessionId),
-        `turning the arrangement off restores the whole workspace tree: ${JSON.stringify(off.treeSessionIds)}`,
+        `turning the arrangement off restores the whole desktopState tree: ${JSON.stringify(off.treeSessionIds)}`,
       );
 
       await client.request('set_setting', { key: 'queue_mode_enabled', value: 'true' });
@@ -832,23 +845,10 @@ async function main() {
         !settledIds(queue).includes(alpha.sessionId),
         `a deferred agent is not in Settled either: ${JSON.stringify(settledIds(queue))}`,
       );
-      runner.assert(queue.snoozed.present, 'the Snoozed section is drawn once something is deferred');
-      runner.assert(
-        queue.snoozed.header.includes('(1)'),
-        `the section counts what is in it: ${queue.snoozed.header}`,
-      );
-      runner.assert(
-        !queue.snoozed.expanded && queue.snoozed.rows.length === 0,
-        'the section ships collapsed — a snooze surfaces itself when it wakes',
-      );
-
-      await client.request('dom_click', { selector: '[data-testid="snoozed-section-header"]' });
-      const expanded = await pollFor(async () => {
-        const current = await queueState(client);
-        return current.snoozed.expanded ? current : null;
-      }, 'the Snoozed section to expand', 10_000);
-      const row = expanded.snoozed.rows.find((entry) => entry.id === alpha.sessionId);
-      runner.assert(row, `alpha is the deferred row: ${JSON.stringify(snoozedIds(expanded))}`);
+      runner.assert(queue.snoozed.present, 'the Snoozed band is drawn once something is deferred');
+      runner.assert(queue.snoozed.count === 1, `the band counts what is in it: ${JSON.stringify(queue.snoozed)}`);
+      const row = queue.snoozed.rows.find((entry) => entry.id === alpha.sessionId);
+      runner.assert(row, `alpha is the deferred row: ${JSON.stringify(snoozedIds(queue))}`);
       runner.assert(row.wake, `the row says when it comes back: ${JSON.stringify(row)}`);
       runner.log('deferred row', row);
 
@@ -951,7 +951,7 @@ async function main() {
         60_000,
       );
       runner.assert(
-        snoozedIds(queue).includes(alpha.sessionId) || queue.snoozed.header.includes('(1)'),
+        snoozedIds(queue).includes(alpha.sessionId),
         `alpha is still parked after the restart: ${JSON.stringify(queue.snoozed)}`,
       );
       runner.assert(

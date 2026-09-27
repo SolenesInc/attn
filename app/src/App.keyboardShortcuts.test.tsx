@@ -1,7 +1,7 @@
 import { act, fireEvent, screen } from '@testing-library/react';
 import { describe, expect, it, onTestFinished, vi } from 'vitest';
 import { openAttachedTerminals } from './test/appFixtures';
-import { agentWorkspace, daemonSession, splitWorkspace, workspaceWithTiles, type DaemonSession, type DaemonWorkspace } from './test/daemonFixtures';
+import { soloDesktop, daemonSession, splitDesktop, desktopWithTiles, type DaemonSession, type DaemonDesktop } from './test/daemonFixtures';
 import { stubNavigatorPlatform } from './test/platformStub';
 
 const LINUX = 'Linux x86_64';
@@ -15,8 +15,8 @@ const BROWSER_TILE = { tile_id: 'tile-browser', tile_kind: 'browser', tile_param
 async function openBrowserBesideAgent(settings: Record<string, string> = {}) {
   const view = await openWorkspace({
     settings,
-    sessions: [daemonSession('s1', { state: 'idle', workspace_id: 'ws' }), daemonSession('s2', { state: 'idle' })],
-    workspaces: [workspaceWithTiles([BROWSER_TILE]), agentWorkspace('s2')],
+    sessions: [daemonSession('s1', { state: 'idle' }), daemonSession('s2', { state: 'idle' })],
+    desktops: [desktopWithTiles([BROWSER_TILE]), soloDesktop('s2', { shortcut_slot: 1 })],
   });
   return { ...view, address: screen.getByRole('textbox', { name: 'Browser address' }) };
 }
@@ -25,10 +25,10 @@ async function openWorkspace({
   platform,
   settings = {},
   sessions = [daemonSession('s1', { state: 'idle' })],
-  workspaces = [agentWorkspace('s1')],
-}: { platform?: string; settings?: Record<string, string>; sessions?: DaemonSession[]; workspaces?: DaemonWorkspace[] } = {}) {
+  desktops = [soloDesktop('s1')],
+}: { platform?: string; settings?: Record<string, string>; sessions?: DaemonSession[]; desktops?: DaemonDesktop[] } = {}) {
   if (platform) onTestFinished(stubNavigatorPlatform(platform));
-  const view = await openAttachedTerminals({ sessions, workspaces, initialState: { settings } });
+  const view = await openAttachedTerminals({ sessions, desktops, initialState: { settings } });
   const terminal = (paneId = 'pane-s1') => document.querySelector<HTMLElement>(`[data-pane-id="${paneId}"] .terminal-container`)!;
   const press = async (target: Element, init: KeyboardEventInit) => {
     const delivered = fireEvent.keyDown(target, init);
@@ -39,14 +39,18 @@ async function openWorkspace({
 }
 
 function closedPanes(daemon: Awaited<ReturnType<typeof openWorkspace>>['daemon']) {
-  return daemon.sentOf('workspace_layout_close_pane').map(({ pane_id }) => pane_id);
+  return daemon.sent.flatMap((command) => {
+    if (command.cmd === 'unregister') return [`pane-${command.id}`];
+    if (command.cmd === 'desktop_remove_leaf') return [command.leaf_id];
+    return [];
+  });
 }
 
 function ptyInput(daemon: Awaited<ReturnType<typeof openWorkspace>>['daemon']) {
   return daemon.sentOf('pty_input').map(({ data }) => data);
 }
 
-const zoomedPane = () => document.querySelector('.session-terminal-workspace[data-zoomed-pane-id]:not([data-zoomed-pane-id=""])')?.getAttribute('data-zoomed-pane-id') ?? null;
+const zoomedPane = () => document.querySelector('.session-terminal-desktop[data-zoomed-pane-id]:not([data-zoomed-pane-id=""])')?.getAttribute('data-zoomed-pane-id') ?? null;
 const chordHud = () => screen.queryByTestId('chord-leader-hud');
 
 const ZOOM_CHORD = keybindings({ 'terminal.toggleZoom': { leader: { key: 'y', meta: true }, then: { key: 'z' } } });
@@ -67,8 +71,8 @@ describe('App keyboard shortcuts', () => {
   it('closes the focused pane with Ctrl+Shift+W in a Linux terminal', async () => {
     const { daemon, terminal, press } = await openWorkspace({
       platform: LINUX,
-      sessions: [daemonSession('s1', { state: 'idle', workspace_id: 'ws' }), daemonSession('s2', { state: 'idle', workspace_id: 'ws' })],
-      workspaces: [splitWorkspace('ws', ['s1', 's2'])],
+      sessions: [daemonSession('s1', { state: 'idle' }), daemonSession('s2', { state: 'idle' })],
+      desktops: [splitDesktop('ws', ['s1', 's2'])],
     });
 
     fireEvent.mouseDown(terminal('pane-s2'));
@@ -80,8 +84,8 @@ describe('App keyboard shortcuts', () => {
 
   it('closes the focused pane of a split with ⌘W, not the selected session', async () => {
     const { daemon, terminal, press } = await openWorkspace({
-      sessions: [daemonSession('s1', { state: 'idle', workspace_id: 'ws' }), daemonSession('s2', { state: 'idle', workspace_id: 'ws' })],
-      workspaces: [splitWorkspace('ws', ['s1', 's2'])],
+      sessions: [daemonSession('s1', { state: 'idle' }), daemonSession('s2', { state: 'idle' })],
+      desktops: [splitDesktop('ws', ['s1', 's2'])],
     });
 
     fireEvent.mouseDown(terminal('pane-s2'));
@@ -118,9 +122,9 @@ describe('App keyboard shortcuts', () => {
     expect(zoomedPane()).toBeNull();
     expect(screen.queryByTestId('ghostty-find-input')).toBeNull();
 
-    const selections = daemon.sentOf('workspace_selected').length;
+    const selections = daemon.sentOf('desktop_set_current').length;
     expect(await press(address, { key: '1', code: 'Digit1', metaKey: true })).toBe(false);
-    expect(daemon.sentOf('workspace_selected').slice(selections)).toEqual([{ cmd: 'workspace_selected', workspace_id: 'workspace-s2' }]);
+    expect(daemon.sentOf('desktop_set_current').slice(selections)).toEqual([expect.objectContaining({ desktop_id: 'desktop-s2' })]);
   });
 
   it('opens terminal find with ⌘F from the terminal', async () => {
@@ -138,7 +142,7 @@ describe('App keyboard shortcuts', () => {
     const { daemon, terminal, press } = await openWorkspace({
       platform,
       sessions: [daemonSession('s1', { state: 'idle' }), daemonSession('s2', { state: 'idle' })],
-      workspaces: [agentWorkspace('s1'), agentWorkspace('s2')],
+      desktops: [soloDesktop('s1'), soloDesktop('s2')],
     });
     fireEvent.click(screen.getByRole('button', { name: 'Open s2' }));
     await daemon.idle();
@@ -223,7 +227,7 @@ describe('App keyboard shortcuts', () => {
     it('matches a follow key with modifiers exactly, and fires only the chord', async () => {
       const chord = keybindings({ 'terminal.toggleZoom': { leader: { key: 'y', meta: true }, then: { key: '1', code: 'Digit1', meta: true } } });
       const { daemon, terminal, press } = await openWorkspace({ settings: chord });
-      const selections = daemon.sentOf('workspace_selected').length;
+      const selections = daemon.sentOf('desktop_set_current').length;
 
       await press(terminal(), { key: 'y', metaKey: true });
       await press(terminal(), { key: '1', code: 'Digit1' });
@@ -232,7 +236,7 @@ describe('App keyboard shortcuts', () => {
       await press(terminal(), { key: 'y', metaKey: true });
       await press(terminal(), { key: '1', code: 'Digit1', metaKey: true });
       expect(zoomedPane()).toBe('pane-s1');
-      expect(daemon.sentOf('workspace_selected').slice(selections)).toEqual([]);
+      expect(daemon.sentOf('desktop_set_current').slice(selections)).toEqual([]);
       expect(ptyInput(daemon)).toEqual([]);
     });
 

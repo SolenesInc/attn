@@ -17,6 +17,9 @@ import (
 const automationReviewWithdrawnMessage = "GitHub review request withdrawn before delivery"
 
 func (d *Daemon) automationRunPullRequest(ctx context.Context, definitionID, requestID, rawURL string) (*store.AutomationRun, error) {
+	if err := d.requireHome(automation.Surface); err != nil {
+		return nil, err
+	}
 	if strings.TrimSpace(requestID) == "" {
 		return nil, errors.New("request_id is required")
 	}
@@ -211,7 +214,7 @@ func (d *Daemon) claimReviewRequest(host string, client *github.Client, definiti
 	if err != nil {
 		return nil, fmt.Errorf("marshal effective definition: %w", err)
 	}
-	reservation, err := d.newAutomationRunReservation()
+	reservation, err := d.newAutomationRunReservation(&definition)
 	if err != nil {
 		return nil, fmt.Errorf("reserve run: %w", err)
 	}

@@ -6,7 +6,7 @@ import { launchFreshAppAndConnect, parseCommonArgs } from './common.mjs';
 import { UiAutomationClient } from './uiAutomationClient.mjs';
 import { DaemonObserver } from './daemonObserver.mjs';
 import { createScenarioRunner } from './scenarioRunner.mjs';
-import { waitForFirstWorkspacePane, waitForPaneText } from './scenarioAssertions.mjs';
+import { waitForFirstDesktopPane, waitForPaneText } from './scenarioAssertions.mjs';
 import { currentHarnessInstance, instanceCliEnv } from './harnessInstance.mjs';
 import { readProcessTable, collectDescendantPids, readLiveDaemonPid } from './perfMeasure.mjs';
 import { startStubWorld, scriptedAgent, stubAgentModel, stubJudgeModel, resolveAttnBinary, waitForPiPreflight } from './piStubProvider.mjs';
@@ -154,7 +154,7 @@ try {
   const created = await client.request('create_session', { cwd: repoDir, label: 'Pi security verification', agent: 'pi' });
   sessionId = created.sessionId;
   await observer.waitForSession({ id: sessionId, timeoutMs: 30_000 });
-  paneId = (await waitForFirstWorkspacePane(client, sessionId, 'Pi pane', 30_000)).paneId;
+  paneId = (await waitForFirstDesktopPane(client, sessionId, 'Pi pane', 30_000)).paneId;
   await expectPane('sandbox: on');
   await runner.step('security_panel_edits_paths_and_explains_protections', async () => {
     await openSecurity();

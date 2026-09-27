@@ -1,5 +1,5 @@
 import { useCallback, useEffect } from 'react';
-import { useErrorToast } from '../components/ErrorToast';
+import { useToast } from '../components/Toast';
 import { useDaemonApi } from '../contexts/DaemonApiContext';
 import { UI_DIAGNOSTICS_FILE_DISPLAY } from '../utils/uiDiagnosticsLog';
 import { AppContentProps } from './appSupport';
@@ -11,12 +11,7 @@ interface Options {
 export function useAppErrors({ settingError, clearSettingError }: Options) {
   const { disconnectExplanation, clearDisconnectExplanation, sendBootstrapEndpoint } =
     useDaemonApi();
-  const {
-    message: errorMessage,
-    durationMs: errorDurationMs,
-    showError,
-    clearError,
-  } = useErrorToast();
+  const { toast, showError, showNotice, clearToast } = useToast();
   const handleTerminalModelRecovered = useCallback(() => {
     showError(
       `Terminal issue recovered. We reloaded it for you. Diagnostics were saved to ${UI_DIAGNOSTICS_FILE_DISPLAY}; please send this file to Victor so he can troubleshoot it.`,
@@ -51,10 +46,10 @@ export function useAppErrors({ settingError, clearSettingError }: Options) {
   }, [clearDisconnectExplanation, disconnectExplanation, showError]);
 
   return {
-    errorMessage,
-    errorDurationMs,
+    toast,
     showError,
-    clearError,
+    showNotice,
+    clearToast,
     handleTerminalModelRecovered,
     handleRebootstrapEndpoint,
   };

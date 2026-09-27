@@ -11,14 +11,13 @@ import (
 func (d *Daemon) handleMarkdownAnnotationsSubmit(client *wsClient, msg *protocol.MarkdownAnnotationsSubmitMessage) {
 	targetSession := strings.TrimSpace(protocol.Deref(msg.TargetSessionID))
 	targetSeed := strings.TrimSpace(protocol.Deref(msg.TargetSeedID))
-	source, sourceErr := d.resolveAnnotationDocumentSource(msg.DocumentUri, msg.SourceKind, msg.WorkspaceID, msg.Path, msg.SeedID)
-	workspaceID, path, seedID := annotationSourcePointers(source)
+	source, sourceErr := d.resolveAnnotationDocumentSource(msg.DocumentUri, msg.SourceKind, msg.Path, msg.SeedID)
+	path, seedID := annotationSourcePointers(source)
 	result := protocol.MarkdownAnnotationsSubmitResultMessage{
 		Event:       protocol.EventMarkdownAnnotationsSubmitResult,
 		RequestID:   msg.RequestID,
 		DocumentUri: source.documentURI,
 		SourceKind:  source.kind,
-		WorkspaceID: workspaceID,
 		Path:        path,
 		SeedID:      seedID,
 		Status:      annotationSubmitStatusError,

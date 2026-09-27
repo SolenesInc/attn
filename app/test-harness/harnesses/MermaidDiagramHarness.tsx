@@ -3,7 +3,7 @@ import { MarkdownReader } from '../../src/components/MarkdownReader';
 import { fileMarkdownSource } from '../../src/components/MarkdownReader/documentSource';
 import type { HarnessProps } from '../types';
 
-const DOCUMENT_SOURCE = fileMarkdownSource('test-harness', '/tmp/mermaid-diagram-harness.md');
+const DOCUMENT_SOURCE = fileMarkdownSource('/tmp/mermaid-diagram-harness.md');
 
 const DOCUMENT = `# Large Mermaid diagrams
 

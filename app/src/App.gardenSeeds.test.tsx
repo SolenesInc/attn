@@ -3,10 +3,10 @@ import { openUrl } from '@tauri-apps/plugin-opener';
 import { describe, expect, it } from 'vitest';
 import {
   agentPane,
-  agentWorkspace,
+  soloDesktop,
   daemonSeed,
   daemonSession,
-  daemonWorkspace,
+  daemonDesktop,
   dockTiles,
   seedDocument,
   type DaemonSeed,
@@ -16,24 +16,23 @@ import { openGarden } from './test/garden';
 import { gesture, renderApp } from './test/renderApp';
 import { initialState } from './test/scriptedDaemon';
 
-const layout = { sessions: [daemonSession('s1')], workspaces: [agentWorkspace('s1')] };
+const layout = { sessions: [daemonSession('s1')], desktops: [soloDesktop('s1')] };
 
 const PLAN = daemonSeed('s-plan11', { title: 'The plan', body: '## Rendered plan\n\nRead **this**.', tender_member: 'trellis' });
 
-function tiledWorkspace(tiles: Parameters<typeof dockTiles>[1]) {
-  return daemonWorkspace('ws', { root: dockTiles({ type: 'pane', pane_id: 'pane-s1' }, tiles), panes: [agentPane('s1', 'ws')] }, { title: 'ws' });
+function tiledDesktop(tiles: Parameters<typeof dockTiles>[1]) {
+  return daemonDesktop('ws', { root: dockTiles({ type: 'pane', pane_id: 'pane-s1' }, tiles), panes: [agentPane('s1', 'ws')] }, { name: 'ws' });
 }
 
 async function openSeedTile(seed: DaemonSeed, document: Partial<DaemonSeedDocument> = {}) {
   const view = await renderApp({
-    initialState: { sessions: [daemonSession('s1', { workspace_id: 'ws' })], workspaces: [tiledWorkspace([])], seeds: [seed] },
+    initialState: { sessions: [daemonSession('s1')], desktops: [tiledDesktop([])], seeds: [seed] },
   });
   view.daemon.on('seed_document_get', () => ({ event: 'seed_document_get_result', success: true, document: seedDocument(seed, document) }));
   await gesture(view.daemon, () => fireEvent.click(screen.getByRole('button', { name: 'Open s1' })));
-  await gesture(view.daemon, () => view.daemon.emit({
-    event: 'workspace_layout_updated',
-    workspace_layout: tiledWorkspace([{ tile_id: 'tile-seed', tile_kind: 'seed', tile_params: seed.id }]).layout!,
-  }));
+  await gesture(view.daemon, () => view.daemon.arrange((desktops) => desktops.map((desktop) => (
+    desktop.id === 'ws' ? { ...tiledDesktop([{ tile_id: 'tile-seed', tile_kind: 'seed', tile_params: seed.id }]), revision: desktop.revision + 1 } : desktop
+  ))));
   return view.daemon;
 }
 

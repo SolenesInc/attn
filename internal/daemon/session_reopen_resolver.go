@@ -32,7 +32,7 @@ func (d *Daemon) resolveReopen(
 		Live:      protocol.Deref(entry.ClosedAt) == "",
 	}
 	verdict.DirectoryState = inspectContinuationDirectory(verdict.Execution)
-	d.planReopenPlacement(&verdict)
+	d.planReopenProfile(&verdict)
 
 	if verdict.Live {
 		verdict.Reason = fmt.Sprintf("session %s is running; focus it instead of reopening it", entry.ID)

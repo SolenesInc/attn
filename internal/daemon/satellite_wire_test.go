@@ -8,16 +8,19 @@ import (
 	"github.com/victorarias/attn/internal/testworld"
 )
 
-func TestAShellSplitFromAnAgentInItsWorkspaceBecomesItsSatellite(t *testing.T) {
+func TestAShellSplitFromAnAgentOnItsDesktopBecomesItsSatellite(t *testing.T) {
 	w := newWorld(t, fakeagent.Claude)
 	app, cli := w.App(), w.Client()
 	cwd := w.Path("api")
 	shell := fakeagent.Harness(protocol.SessionAgentShell)
 	var shells []string
-	spawnFrom := func(h fakeagent.Harness, dir, base string) string {
+	spawnOn := func(h fakeagent.Harness, dir, base, desktop string) string {
 		id := w.Spawn(app, h, dir, func(m *protocol.SpawnSessionMessage) {
 			if base != "" {
 				m.SpawnedFrom = protocol.Ptr(base)
+			}
+			if desktop != "" {
+				m.Placement = &protocol.SessionPlacement{DesktopID: protocol.Ptr(desktop)}
 			}
 		})
 		if h == shell {
@@ -27,6 +30,13 @@ func TestAShellSplitFromAnAgentInItsWorkspaceBecomesItsSatellite(t *testing.T) {
 		}
 		return id
 	}
+	spawnFrom := func(h fakeagent.Harness, dir, base string) string { return spawnOn(h, dir, base, "") }
+	created := testworld.Request(app, protocol.DesktopCreateMessage{Cmd: protocol.CmdDesktopCreate, ProfileID: app.SelectedProfile(), RequestID: "other-desktop"},
+		protocol.EventProfileActionResult, func(r protocol.ProfileActionResultMessage) bool { return r.RequestID == "other-desktop" })
+	if !created.Success || len(created.Desktops) == 0 {
+		t.Fatalf("create another desktop: %+v", created)
+	}
+	otherDesktop := created.Desktops[len(created.Desktops)-1].ID
 	agent := spawnFrom(fakeagent.Claude, cwd, "")
 	satellite := spawnFrom(shell, cwd, agent)
 	loneShell := spawnFrom(shell, cwd, "")
@@ -42,7 +52,7 @@ func TestAShellSplitFromAnAgentInItsWorkspaceBecomesItsSatellite(t *testing.T) {
 		{"a shell split from a shell that has no agent", spawnFrom(shell, cwd, loneShell), ""},
 		{"a shell split from a session that is gone", spawnFrom(shell, cwd, "session-long-gone"), ""},
 		{"an agent split from an agent", spawnFrom(fakeagent.Claude, cwd, agent), ""},
-		{"a shell split from an agent into another workspace", spawnFrom(shell, w.Path("web"), agent), ""},
+		{"a shell split from an agent onto another desktop", spawnOn(shell, w.Path("web"), agent, otherDesktop), ""},
 	}
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {

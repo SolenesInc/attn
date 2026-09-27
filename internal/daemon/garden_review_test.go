@@ -44,7 +44,7 @@ func TestGardenReviewOffersResumeOnlyWithUsableContinuation(t *testing.T) {
 		t.Fatalf("captureGardenReview: %v", err)
 	}
 	item := capture.items[seed.ID]
-	if !slices.Equal(item.Actions, []string{"resume", "handover", "keep_growing", "park", "harvest", "wither"}) {
+	if !slices.Equal(item.Actions, []string{"resume", "handover", "send_to_chief", "keep_growing", "park", "harvest", "wither"}) {
 		t.Fatalf("resumable actions = %v", item.Actions)
 	}
 }

@@ -89,7 +89,7 @@ type agentListRow struct {
 	ID        string `json:"id"`
 	Label     string `json:"label"`
 	Agent     string `json:"agent"`
-	Workspace string `json:"workspace"`
+	Profile   string `json:"profile"`
 	Directory string `json:"directory"`
 	State     string `json:"state"`
 	TurnOwed  bool   `json:"turn_owed"`
@@ -117,9 +117,9 @@ func runAgentList(args []string) {
 }
 
 func agentListRows(result *client.ListResult) []agentListRow {
-	workspaceTitles := make(map[string]string, len(result.Workspaces))
-	for _, workspace := range result.Workspaces {
-		workspaceTitles[workspace.ID] = workspace.Title
+	profileNames := make(map[string]string, len(result.Profiles))
+	for _, profile := range result.Profiles {
+		profileNames[profile.ID] = profile.Name
 	}
 	rows := make([]agentListRow, 0, len(result.Sessions))
 	for _, session := range result.Sessions {
@@ -127,7 +127,7 @@ func agentListRows(result *client.ListResult) []agentListRow {
 			ID:        session.ID,
 			Label:     session.Label,
 			Agent:     string(session.Agent),
-			Workspace: workspaceTitles[session.WorkspaceID],
+			Profile:   profileNames[session.ProfileID],
 			Directory: session.Directory,
 			State:     string(session.State),
 			TurnOwed:  protocol.Deref(session.TurnOwed),
@@ -135,8 +135,8 @@ func agentListRows(result *client.ListResult) []agentListRow {
 		})
 	}
 	sort.Slice(rows, func(i, j int) bool {
-		if rows[i].Workspace != rows[j].Workspace {
-			return rows[i].Workspace < rows[j].Workspace
+		if rows[i].Profile != rows[j].Profile {
+			return rows[i].Profile < rows[j].Profile
 		}
 		return rows[i].Label < rows[j].Label
 	})
@@ -148,7 +148,7 @@ func printAgentList(w io.Writer, rows []agentListRow) {
 		fmt.Fprintln(w, "No sessions on this daemon.")
 		return
 	}
-	fmt.Fprintf(w, "%-*s  %-18s  %-8s  %-10s  %-20s  %-16s  %s\n", agentShortIDLength, "ID", "NAME", "AGENT", "MEMBER", "WORKSPACE", "STATE", "TURN")
+	fmt.Fprintf(w, "%-*s  %-18s  %-8s  %-10s  %-20s  %-16s  %s\n", agentShortIDLength, "ID", "NAME", "AGENT", "MEMBER", "PROFILE", "STATE", "TURN")
 	for _, row := range rows {
 		turn := "-"
 		if row.TurnOwed {
@@ -161,7 +161,7 @@ func printAgentList(w io.Writer, rows []agentListRow) {
 			agentListCell(row.Label, 18),
 			agentListCell(row.Agent, 8),
 			agentListCell(crew.DisplayName(row.Member), 10),
-			agentListCell(row.Workspace, 20),
+			agentListCell(row.Profile, 20),
 			agentListCell(row.State, 16),
 			turn,
 		)
@@ -248,9 +248,8 @@ func printAgentPeek(w io.Writer, result *protocol.AgentPeekResult) {
 	if member := strings.TrimSpace(protocol.Deref(result.CrewMember)); member != "" {
 		fmt.Fprintf(w, "crew member: this session is %s today\n", crew.DisplayName(member))
 	}
-	workspace := strings.TrimSpace(protocol.Deref(result.WorkspaceTitle))
-	if workspace != "" {
-		fmt.Fprintf(w, "workspace: %s\n", workspace)
+	if profile := strings.TrimSpace(protocol.Deref(result.ProfileName)); profile != "" {
+		fmt.Fprintf(w, "profile: %s\n", profile)
 	}
 	fmt.Fprintf(w, "state: %s", result.State)
 	if reason := strings.TrimSpace(protocol.Deref(result.StateReason)); reason != "" {
@@ -696,7 +695,7 @@ func writeAgentHelp(w io.Writer) {
 commands:
   list [--json]
         the address book: every session on this daemon with its short id,
-        name, workspace, state, and whether a turn is owed. Read-only.
+        name, profile, state, and whether a turn is owed. Read-only.
   peek <session-or-member> [--json]
         observe a session without interrupting it: state, last
         assistant message, and the rendered screen. Passive — the observed
@@ -712,10 +711,11 @@ commands:
         A message that starts with - goes after --, as: agent msg -- <target> "-text"
   close <session-or-seed> -m "reason" [--source-session <id>] [--json]
         close a session for good. A session may close itself and the sessions it
-        dispatched; the chief of staff may close any. The reason is required: the
-        session row stays in the ledger, and the reason is what the next reader
-        gets. It is immediate, so say what you have to say first. A seed id closes
-        whoever tends it, and the seed keeps its tender with a note about the close.
+        dispatched; a profile's chief of staff may close any agent of that
+        profile. The reason is required: the session row stays in the ledger,
+        and the reason is what the next reader gets. It is immediate, so say
+        what you have to say first. A seed id closes whoever tends it, and the
+        seed keeps its tender with a note about the close.
         The caller defaults to this session (ATTN_SESSION_ID).
   inbox [message-id] [--limit <count>] [--session <id>] [--json]
         read up to 20 unread notifications in FIFO order, or one notified peer

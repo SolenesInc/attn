@@ -24,7 +24,6 @@ import (
 	"github.com/victorarias/attn/internal/buildinfo"
 	"github.com/victorarias/attn/internal/client"
 	"github.com/victorarias/attn/internal/config"
-	"github.com/victorarias/attn/internal/crew"
 	"github.com/victorarias/attn/internal/daemon"
 	"github.com/victorarias/attn/internal/daemonctl"
 	"github.com/victorarias/attn/internal/hooks"
@@ -651,7 +650,7 @@ commands:
   automation <command>              manage and run durable automations
   preflight                         diagnose tools, paths, routing, and launch settings
   pr <command>                      watch or inspect pull request readiness
-  list                              list sessions and workspaces
+  list                              list sessions and profiles
   activity [clear <id>]             what each agent is doing right now
   worktree <command>                every tracked worktree, the sweep and the keep pin
   present <command>                 open a review presentation and read feedback
@@ -718,6 +717,9 @@ func runDelegate() {
 	}
 	if operation.Result != nil && operation.Result.FirstTurnUnconfirmed != nil {
 		fmt.Fprintf(os.Stderr, "delegate: %s\n", *operation.Result.FirstTurnUnconfirmed)
+	}
+	if operation.Result != nil && operation.Result.PlacementError != nil {
+		fmt.Fprintf(os.Stderr, "delegate: %s\n", *operation.Result.PlacementError)
 	}
 	printJSON(operation.Result)
 }
@@ -1603,7 +1605,7 @@ func parseDelegateArgs(args []string) (delegateCLIArgs, error) {
 	provider := fs.String("provider", "", "plugin model provider")
 	model := fs.String("model", "", "pin the delegated agent's model (alias or full id)")
 	effort := fs.String("effort", "", "pin the delegated agent's reasoning effort")
-	name := fs.String("name", "", "name for the agent and, when a new workspace is created, the workspace")
+	name := fs.String("name", "", "name for the agent")
 	sourceSessionID := fs.String("source-session", "", "source session id (defaults to ATTN_SESSION_ID)")
 	yolo := fs.Bool("yolo", false, "launch the target agent in yolo mode")
 	cwd := fs.String("cwd", "", "working folder or repository")
@@ -2221,7 +2223,7 @@ func fprintJSON(w io.Writer, v interface{}) error {
 }
 
 func runWrapper() {
-	if os.Getenv("ATTN_INSIDE_APP") == "1" {
+	if os.Getenv("ATTN_DAEMON_MANAGED") == "1" {
 		agentName := strings.TrimSpace(strings.ToLower(os.Getenv("ATTN_AGENT")))
 		if agentName == "" {
 			agentName = "codex"
@@ -2239,7 +2241,6 @@ type directLaunchArgs struct {
 	resumePicker      bool
 	yoloMode          bool
 	initialPromptFile string
-	member            string
 }
 
 func readInitialPromptFile(path string) (string, error) {
@@ -2272,12 +2273,6 @@ func parseDirectLaunchArgs(args []string) (directLaunchArgs, error) {
 			}
 		case "--yolo":
 			parsed.yoloMode = true
-		case "--member":
-			if i+1 >= len(args) {
-				return directLaunchArgs{}, fmt.Errorf("flag --member needs a value: the crew member this session launches as (`attn crew list` names the roster)")
-			}
-			parsed.member = args[i+1]
-			i++
 		case "--initial-prompt-file":
 			if i+1 >= len(args) {
 				return directLaunchArgs{}, fmt.Errorf("flag --initial-prompt-file needs a value")
@@ -2289,11 +2284,7 @@ func parseDirectLaunchArgs(args []string) (directLaunchArgs, error) {
 		}
 	}
 	if label == "" {
-		if parsed.member != "" {
-			label = crew.DisplayName(parsed.member)
-		} else {
-			label = wrapper.DefaultLabel()
-		}
+		label = wrapper.DefaultLabel()
 	}
 	parsed.label = label
 	return parsed, nil
@@ -2364,30 +2355,10 @@ func runAgentDirectly(requestedAgent string) {
 	}
 
 	c := client.New("")
-	managedMode := os.Getenv("ATTN_DAEMON_MANAGED") == "1"
-	if !managedMode && !c.IsRunning() {
-		if err := startDaemonBackground(); err != nil {
-			fmt.Fprintf(os.Stderr, "warning: could not start daemon: %v\n", err)
-		}
-	}
-
-	sessionID := os.Getenv("ATTN_SESSION_ID")
+	sessionID := strings.TrimSpace(os.Getenv("ATTN_SESSION_ID"))
 	if sessionID == "" {
-		sessionID = wrapper.GenerateSessionID()
-	}
-	if managedMode && parsed.member != "" {
-		fmt.Fprintf(os.Stderr, "attn: --member names a member to launch as; a daemon-managed launch is already bound by `attn crew wake`\n")
+		fmt.Fprintf(os.Stderr, "attn: a daemon-managed launch needs ATTN_SESSION_ID; the daemon sets it for every agent it starts\n")
 		os.Exit(1)
-	}
-	if !managedMode {
-		err := c.RegisterAsMember(sessionID, parsed.label, cwd, driver.Name(), parsed.member)
-		switch {
-		case err != nil && parsed.member != "":
-			fmt.Fprintf(os.Stderr, "attn: %v\n", err)
-			os.Exit(1)
-		case err != nil:
-			fmt.Fprintf(os.Stderr, "warning: could not register session: %v\n", err)
-		}
 	}
 
 	opts := agentdriver.SpawnOpts{
@@ -2413,9 +2384,6 @@ func runAgentDirectly(requestedAgent string) {
 	cleanup := func() {
 		for i := len(cleanupFns) - 1; i >= 0; i-- {
 			cleanupFns[i]()
-		}
-		if !managedMode {
-			c.Unregister(sessionID)
 		}
 	}
 
@@ -2573,24 +2541,6 @@ func openAppWithDeepLink() {
 		fmt.Fprintf(os.Stderr, "error opening app: %v\n", err)
 		os.Exit(1)
 	}
-}
-
-func startDaemonBackground() error {
-	executable, err := os.Executable()
-	if err != nil {
-		return err
-	}
-
-	cmd := exec.Command(executable, "daemon")
-	cmd.Stdout = nil
-	cmd.Stderr = nil
-	cmd.Stdin = nil
-
-	cmd.SysProcAttr = &syscall.SysProcAttr{
-		Setsid: true,
-	}
-
-	return cmd.Start()
 }
 
 func runHookStop() {

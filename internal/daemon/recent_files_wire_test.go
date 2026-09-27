@@ -108,16 +108,10 @@ func placeSessions(t *testing.T, w *world, app *testworld.Peer, cli *client.Clie
 	if err := os.MkdirAll(dir, 0o755); err != nil {
 		t.Fatal(err)
 	}
-	testworld.Request(app, protocol.RegisterWorkspaceMessage{
-		Cmd: protocol.CmdRegisterWorkspace, ID: "workspace-docs", Title: "docs", Directory: dir,
-	}, protocol.EventWorkspaceRegistered, func(protocol.WebSocketEvent) bool { return true })
 	for _, id := range ids {
-		if err := cli.Register(id, id, dir); err != nil {
+		if err := w.InjectSession(id, id, dir, protocol.SessionAgentClaude); err != nil {
 			t.Fatalf("register %s: %v", id, err)
 		}
-		testworld.Request(app, protocol.WorkspaceLayoutAddSessionPaneMessage{
-			Cmd: protocol.CmdWorkspaceLayoutAddSessionPane, WorkspaceID: "workspace-docs", SessionID: id, PaneID: protocol.Ptr("pane-" + id),
-		}, protocol.EventWorkspaceLayoutActionResult, func(protocol.WorkspaceLayoutActionResultMessage) bool { return true })
 	}
 }
 

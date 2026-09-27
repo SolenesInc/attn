@@ -1,0 +1,635 @@
+/* A docked tile fills its desktop-pane frame (positioned by the layout) and
+   stacks a header over a scrolling body, mirroring a terminal pane's chrome. */
+.desktop-dock-tile {
+  container-type: inline-size;
+  display: flex;
+  flex-direction: column;
+  width: 100%;
+  height: 100%;
+  background: var(--color-bg-tile);
+  color: var(--color-text-primary);
+  overflow: hidden;
+}
+
+.desktop-dock-tile--dragging {
+  opacity: 0.5;
+}
+
+.desktop-dock-tile-header {
+  display: flex;
+  align-items: center;
+  justify-content: flex-start;
+  gap: 8px;
+  padding: 6px 8px 6px 12px;
+  border-bottom: 1px solid var(--color-border);
+  background: var(--color-bg-elevated);
+  user-select: none;
+  flex: 0 0 auto;
+  cursor: grab;
+  touch-action: none;
+}
+
+.desktop-dock-tile-header:active {
+  cursor: grabbing;
+}
+
+.desktop-dock-tile-title {
+  flex: 1 1 auto;
+  min-width: 140px;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--color-text-secondary);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.desktop-dock-tile-seed-location {
+  align-items: center;
+  display: flex;
+  flex: 1 1 auto;
+  gap: 5px;
+  min-width: 0;
+  overflow: hidden;
+}
+
+.desktop-dock-tile-seed-parent {
+  align-items: center;
+  background: transparent;
+  border: 0;
+  border-radius: 4px;
+  color: var(--color-text-tertiary);
+  cursor: pointer;
+  display: inline-flex;
+  flex: 0 1 auto;
+  font-size: 11px;
+  gap: 3px;
+  min-width: 20px;
+  overflow: hidden;
+  padding: 2px 3px;
+}
+
+.desktop-dock-tile-seed-parent > span:last-child {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.desktop-dock-tile-seed-parent:hover {
+  background: var(--color-bg-button);
+  color: var(--color-text-primary);
+}
+
+.desktop-dock-tile-seed-parent:focus-visible {
+  outline: 1px solid var(--accent);
+  outline-offset: 1px;
+}
+
+.desktop-dock-tile-seed-separator {
+  color: var(--color-text-dimmed);
+  flex: none;
+  font-size: 11px;
+}
+
+.desktop-dock-tile-address-form {
+  flex: 1;
+  min-width: 0;
+}
+
+.desktop-dock-tile-address {
+  display: block;
+  width: 100%;
+  height: 24px;
+  box-sizing: border-box;
+  padding: 2px 8px;
+  border: 1px solid var(--color-border);
+  border-radius: 5px;
+  background: var(--color-bg-editor);
+  color: var(--color-text-primary);
+  font: 11px/1.2 'SF Mono', 'Monaco', 'Menlo', monospace;
+  outline: none;
+  user-select: text;
+}
+
+.desktop-dock-tile-address:focus {
+  border-color: var(--color-border-focus);
+}
+
+.desktop-dock-tile-send {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  flex: 0 0 auto;
+  min-width: 0;
+  cursor: default;
+}
+
+.desktop-dock-tile-review-button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 3px;
+  height: 24px;
+  padding: 2px 8px;
+  border: 1px solid transparent;
+  border-radius: 5px;
+  background: transparent;
+  color: var(--color-text-secondary);
+  font-size: 11px;
+  white-space: nowrap;
+  cursor: pointer;
+}
+
+.desktop-dock-tile-review-icon {
+  display: none;
+  width: 14px;
+  height: 14px;
+  flex: 0 0 auto;
+}
+
+.desktop-dock-tile-review-count {
+  min-width: 1ch;
+  font-variant-numeric: tabular-nums;
+}
+
+.desktop-dock-tile-review-button:hover {
+  border-color: var(--color-border);
+  background: var(--color-bg-button);
+  color: var(--color-text-primary);
+}
+
+.desktop-dock-tile-send-status {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+}
+
+.desktop-dock-tile-root-picker {
+  height: 24px;
+  max-width: 140px;
+  padding: 2px 4px;
+  border: 1px solid var(--color-border);
+  border-radius: 5px;
+  background: var(--color-bg-editor);
+  color: var(--color-text-secondary);
+  font-size: 11px;
+  outline: none;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.desktop-dock-tile-root-picker:focus {
+  border-color: var(--color-border-focus);
+}
+
+.desktop-dock-tile-send-button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  min-width: 0;
+  max-width: 184px;
+  height: 24px;
+  padding: 2px 10px;
+  border: 1px solid var(--color-border);
+  border-radius: 5px;
+  background: var(--color-bg-button);
+  color: var(--color-text-primary);
+  font-size: 11px;
+  font-weight: 600;
+  white-space: nowrap;
+  cursor: pointer;
+}
+
+.desktop-dock-tile-send-button:hover:not(:disabled) {
+  border-color: var(--color-border-focus);
+}
+
+.desktop-dock-tile-send-button:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+
+.desktop-dock-tile-send-button--ok {
+  color: var(--color-status-success, #4ade80);
+}
+
+.desktop-dock-tile-send-button--skipped,
+.desktop-dock-tile-send-button--warning {
+  border-color: color-mix(in srgb, var(--color-status-warning, #facc15) 48%, var(--color-border));
+}
+
+.desktop-dock-tile-send-button--error {
+  border-color: color-mix(in srgb, var(--color-status-error, #f87171) 52%, var(--color-border));
+}
+
+.desktop-dock-tile-send-alert {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 13px;
+  height: 13px;
+  border-radius: 50%;
+  background: var(--color-status-warning, #facc15);
+  color: #171717;
+  font-size: 9px;
+  font-weight: 800;
+  line-height: 1;
+}
+
+.desktop-dock-tile-send-button--error .desktop-dock-tile-send-alert {
+  background: var(--color-status-error, #f87171);
+}
+
+.desktop-dock-tile-send-action {
+  flex: 0 0 auto;
+}
+
+.desktop-dock-tile-send-target {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  min-width: 0;
+  color: var(--color-text-secondary);
+  font-weight: 500;
+}
+
+.desktop-dock-tile-send-target-name {
+  display: block;
+  min-width: 0;
+  max-width: 82px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.desktop-dock-tile-target-button {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  min-width: 0;
+  height: 24px;
+  padding: 2px 7px;
+  border: 1px solid var(--color-border);
+  border-radius: 5px;
+  background: transparent;
+  color: var(--color-text-secondary);
+  font-size: 11px;
+  cursor: pointer;
+}
+
+.desktop-dock-tile-target-button:hover:not(:disabled) {
+  border-color: var(--color-border-focus);
+  background: var(--color-bg-button);
+  color: var(--color-text-primary);
+}
+
+.desktop-dock-tile-target-button:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+
+.desktop-dock-tile-destination-submit {
+  position: relative;
+  display: inline-flex;
+  min-width: 0;
+}
+
+.desktop-dock-tile-send-button--split-primary {
+  border-radius: 5px 0 0 5px;
+}
+
+.desktop-dock-tile-send-button--split-caret {
+  width: 24px;
+  padding: 2px 4px;
+  margin-left: -1px;
+  border-radius: 0 5px 5px 0;
+}
+
+.desktop-dock-tile-destination-menu {
+  position: absolute;
+  z-index: 20;
+  top: calc(100% + 4px);
+  right: 0;
+  min-width: 164px;
+  padding: 4px;
+  border: 1px solid var(--color-border);
+  border-radius: 6px;
+  background: var(--color-bg-elevated, var(--color-bg-editor));
+  box-shadow: 0 8px 24px rgb(0 0 0 / 35%);
+}
+
+.desktop-dock-tile-destination-menu button {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  width: 100%;
+  padding: 6px 8px;
+  border: 0;
+  border-radius: 4px;
+  background: transparent;
+  color: var(--color-text-primary);
+  font-size: 11px;
+  text-align: left;
+  white-space: nowrap;
+  cursor: pointer;
+}
+
+.desktop-dock-tile-destination-menu button:hover,
+.desktop-dock-tile-destination-menu button:focus-visible {
+  background: var(--color-bg-hover);
+  outline: none;
+}
+
+.desktop-dock-tile-destination-check {
+  width: 12px;
+  color: var(--accent);
+  text-align: center;
+}
+
+.desktop-dock-tile-destination-label {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.desktop-dock-tile-destination-state {
+  color: var(--color-status-warning, #facc15);
+  font-size: 10px;
+}
+
+.desktop-dock-tile-actions {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  flex: 0 0 auto;
+}
+
+.desktop-dock-tile-back-crew {
+  height: 24px;
+  padding: 2px 8px;
+  border: 1px solid var(--color-border);
+  border-radius: 5px;
+  background: transparent;
+  color: var(--color-text-secondary);
+  font-size: 11px;
+  white-space: nowrap;
+  cursor: pointer;
+}
+
+.desktop-dock-tile-back-crew:hover {
+  border-color: var(--color-border-hover);
+  background: var(--color-bg-button);
+  color: var(--color-text-primary);
+}
+
+.desktop-dock-tile-back-crew-icon {
+  display: none;
+}
+
+.desktop-dock-tile-focus-action {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  height: 24px;
+  padding: 2px 9px;
+  border: 1px solid color-mix(in srgb, var(--accent) 36%, transparent);
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--accent) 8%, transparent);
+  color: var(--color-text-secondary);
+  font-size: 11px;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.desktop-dock-tile-focus-icon {
+  display: none;
+  width: 14px;
+  height: 14px;
+}
+
+.desktop-dock-tile-focus-action:hover {
+  border-color: color-mix(in srgb, var(--accent) 58%, transparent);
+  background: color-mix(in srgb, var(--accent) 15%, transparent);
+  color: var(--color-text-primary);
+}
+
+@container (max-width: 720px) {
+  .desktop-dock-tile-header {
+    gap: 4px;
+    padding-left: 8px;
+  }
+
+  .desktop-dock-tile-title {
+    min-width: 96px;
+  }
+
+  .desktop-dock-tile-review-button--overall {
+    display: none;
+  }
+
+  .desktop-dock-tile-send {
+    gap: 3px;
+  }
+
+  .desktop-dock-tile-send-button {
+    padding-inline: 7px;
+    max-width: 144px;
+  }
+
+  .desktop-dock-tile-send-target-name {
+    max-width: 64px;
+  }
+
+  .desktop-dock-tile-focus-action {
+    width: 24px;
+    padding: 0;
+    border-radius: 5px;
+  }
+
+  .desktop-dock-tile-focus-icon {
+    display: block;
+  }
+
+  .desktop-dock-tile-focus-label {
+    display: none;
+  }
+}
+
+@container (max-width: 480px) {
+  .desktop-dock-tile-back-crew {
+    width: 28px;
+    padding: 0;
+  }
+
+  .desktop-dock-tile-back-crew-icon {
+    display: inline;
+    font-size: 15px;
+  }
+
+  .desktop-dock-tile-back-crew-label {
+    display: none;
+  }
+
+  .desktop-dock-tile-title {
+    min-width: 72px;
+  }
+
+  .desktop-dock-tile-review-button {
+    width: 30px;
+    padding-inline: 4px;
+  }
+
+  .desktop-dock-tile-review-icon {
+    display: block;
+  }
+
+  .desktop-dock-tile-review-label {
+    display: none;
+  }
+
+  .desktop-dock-tile-target-button .desktop-dock-tile-send-target-prefix {
+    display: none;
+  }
+
+  .desktop-dock-tile-send-button .desktop-dock-tile-send-target-prefix {
+    font-size: 0;
+  }
+
+  .desktop-dock-tile-send-button .desktop-dock-tile-send-target-prefix::after {
+    content: '·';
+    font-size: 11px;
+  }
+
+  .desktop-dock-tile-send-target-name {
+    max-width: 48px;
+  }
+}
+
+@container (max-width: 340px) {
+  .desktop-dock-tile-title {
+    display: none;
+  }
+}
+
+.desktop-dock-tile-action {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 24px;
+  height: 24px;
+  padding: 0;
+  border: none;
+  border-radius: 4px;
+  background: transparent;
+  color: var(--color-text-muted);
+  font-size: 15px;
+  line-height: 1;
+  cursor: pointer;
+}
+
+.desktop-dock-tile-action svg {
+  height: 16px;
+  width: 16px;
+}
+
+.desktop-dock-tile-action:hover {
+  background: var(--color-bg-button);
+  color: var(--color-text-primary);
+}
+
+.desktop-dock-tile-body {
+  flex: 1;
+  min-height: 0;
+  overflow: auto;
+  padding: 16px 18px;
+  font-size: 13px;
+  line-height: 1.55;
+}
+
+.desktop-dock-tile-body--browser,
+.desktop-dock-tile-body--notebook {
+  position: relative;
+  overflow: hidden;
+  padding: 0;
+}
+
+/* The markdown reader draws its own centered card (see MarkdownReader.css);
+   the body keeps scrolling plus a slim gutter around the card. */
+.desktop-dock-tile-body--markdown {
+  padding: 12px;
+}
+
+.desktop-dock-tile-body--seed {
+  container-type: inline-size;
+  padding: 8px;
+}
+
+.browser-tile-host {
+  width: 100%;
+  height: 100%;
+}
+
+.browser-tile-host > .desktop-dock-tile-message {
+  padding: 16px 18px;
+}
+
+/* The body is focused programmatically (tabIndex=-1) so a tile-only desktop
+   can scroll by keyboard on select; it is not a tab stop, so suppress the ring. */
+.desktop-dock-tile-body:focus {
+  outline: none;
+}
+
+/* Non-content states (loading, empty file, unsupported kind, read error). */
+.desktop-dock-tile-message {
+  color: var(--color-text-tertiary);
+  font-style: italic;
+}
+
+.desktop-dock-tile-error {
+  color: var(--color-status-error, #f87171);
+  font-style: normal;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+/* Markdown prose styling lives in MarkdownReader.css (.md-reader scope) —
+   the markdown tile body no longer styles rendered elements itself. */
+
+/* Highlight showing where a dragged tile will dock (a half-band of the target
+   pane on the chosen edge). Positioned as a % overlay inside the panes area. */
+.desktop-dock-target {
+  position: absolute;
+  z-index: 6;
+  pointer-events: none;
+  background: rgba(255, 107, 53, 0.14);
+  border: 1.5px dashed var(--color-border-focus, rgba(255, 107, 53, 0.7));
+  border-radius: 6px;
+  box-shadow: inset 0 0 0 1px rgba(255, 107, 53, 0.12);
+}
+
+/* Ghost of the tile following the cursor during a re-dock drag. */
+.desktop-dock-ghost {
+  position: fixed;
+  z-index: 41;
+  pointer-events: none;
+  display: flex;
+  align-items: center;
+  padding: 6px 12px;
+  border: 1px solid var(--color-border);
+  border-radius: 6px;
+  background: var(--color-bg-elevated);
+  color: var(--color-text-secondary);
+  font-size: 12px;
+  font-weight: 600;
+  box-shadow: 0 12px 40px rgba(0, 0, 0, 0.45);
+  opacity: 0.92;
+}
