@@ -1,0 +1,146 @@
+package daemon
+
+import (
+	"encoding/json"
+	"fmt"
+	"io"
+	"net"
+	"os"
+	"path/filepath"
+	"sync"
+	"testing"
+	"time"
+
+	"github.com/victorarias/attn/internal/enrollment"
+	"github.com/victorarias/attn/internal/protocol"
+)
+
+func writeCodexInteractiveRollout(t *testing.T, codexHome, nativeID, cwd string, at time.Time) string {
+	t.Helper()
+	dir := filepath.Join(codexHome, "sessions", "2026", "05", "17")
+	if err := os.MkdirAll(dir, 0o755); err != nil {
+		t.Fatalf("mkdir rollout dir: %v", err)
+	}
+	path := filepath.Join(dir, fmt.Sprintf("rollout-%s-%s.jsonl", at.UTC().Format("2006-01-02T15-04-05"), nativeID))
+	line := fmt.Sprintf(
+		`{"timestamp":"%s","type":"session_meta","payload":{"id":"%s","timestamp":"%s","cwd":"%s","source":"cli"}}`+"\n",
+		at.UTC().Format(time.RFC3339Nano), nativeID, at.UTC().Format(time.RFC3339Nano), cwd,
+	)
+	if err := os.WriteFile(path, []byte(line), 0o644); err != nil {
+		t.Fatalf("write rollout: %v", err)
+	}
+	if err := os.Chtimes(path, at, at); err != nil {
+		t.Fatalf("chtimes rollout: %v", err)
+	}
+	return path
+}
+
+func newEnrolledDaemon(t *testing.T, homeDaemonID string) *Daemon {
+	t.Helper()
+	d := NewForTesting(filepath.Join(t.TempDir(), "test.sock"))
+	id, err := enrollment.EnsureDaemonID(d.dataRoot)
+	if err != nil {
+		t.Fatalf("EnsureDaemonID: %v", err)
+	}
+	d.daemonInstanceID = id
+	if err := d.ensureEnrollment(); err != nil {
+		t.Fatalf("ensureEnrollment: %v", err)
+	}
+	if homeDaemonID != "" {
+		if _, err := enrollment.Enroll(d.dataRoot, homeDaemonID); err != nil {
+			t.Fatalf("Enroll: %v", err)
+		}
+	}
+	return d
+}
+
+func startPluginPipe(t *testing.T, d *Daemon, name string, surfaces []string) (net.Conn, <-chan struct{}) {
+	return startPluginPipeGeneration(t, d, name, surfaces, 1)
+}
+
+func startPluginPipeGeneration(t *testing.T, d *Daemon, name string, surfaces []string, generation uint64) (net.Conn, <-chan struct{}) {
+	t.Helper()
+	serverConn, clientConn := net.Pipe()
+	done := make(chan struct{})
+	go func() {
+		defer close(done)
+		d.handleConnection(serverConn)
+	}()
+
+	sendPluginHelloWithGeneration(t, clientConn, name, surfaces, generation)
+	helloResp := decodeJSONRPCMessage(t, clientConn)
+	if helloResp.Error != nil {
+		t.Fatalf("hello error = %#v, want nil", helloResp.Error)
+	}
+	return clientConn, done
+}
+
+func sendPluginHelloWithGeneration(t *testing.T, conn net.Conn, name string, surfaces []string, generation uint64) {
+	t.Helper()
+	params, err := json.Marshal(pluginHelloParams{
+		Name:           name,
+		Version:        "0.1.0",
+		AttnAPIVersion: pluginAPIVersion,
+		Generation:     generation,
+		Surfaces:       surfaces,
+	})
+	if err != nil {
+		t.Fatalf("marshal hello params: %v", err)
+	}
+	if err := json.NewEncoder(conn).Encode(jsonRPCMessage{
+		JSONRPC: "2.0",
+		ID:      json.RawMessage("1"),
+		Method:  "hello",
+		Params:  params,
+	}); err != nil {
+		t.Fatalf("encode hello: %v", err)
+	}
+}
+
+func decodeJSONRPCMessage(t *testing.T, conn net.Conn) jsonRPCMessage {
+	t.Helper()
+	var frame []byte
+	var b [1]byte
+	for b[0] != '\n' {
+		if _, err := io.ReadFull(conn, b[:]); err != nil {
+			t.Fatalf("read JSON-RPC frame: %v", err)
+		}
+		frame = append(frame, b[0])
+	}
+	var msg jsonRPCMessage
+	if err := json.Unmarshal(frame, &msg); err != nil {
+		t.Fatalf("decode JSON-RPC message: %v", err)
+	}
+	return msg
+}
+
+func newDaemonForTest(t *testing.T) *Daemon {
+	t.Helper()
+	return NewForTesting(filepath.Join(t.TempDir(), "test.sock"))
+}
+
+type broadcastCapture struct {
+	mu     sync.Mutex
+	events []protocol.WebSocketEvent
+}
+
+func (c *broadcastCapture) snapshot() []protocol.WebSocketEvent {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	out := make([]protocol.WebSocketEvent, len(c.events))
+	copy(out, c.events)
+	return out
+}
+
+func captureBroadcasts(d *Daemon) *broadcastCapture {
+	c := &broadcastCapture{}
+	d.wsHub.broadcastListener = func(event *protocol.WebSocketEvent) {
+		if event == nil {
+			return
+		}
+		c.mu.Lock()
+		c.events = append(c.events, *event)
+		c.mu.Unlock()
+	}
+	return c
+}
