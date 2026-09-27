@@ -2,7 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useToast } from '../components/Toast';
 import { useDaemonApi } from '../contexts/DaemonApiContext';
 import { ptySpawn } from '../pty/bridge';
-import { useProfilesStore } from '../store/profiles';
+import { currentDesktopIn, useProfilesStore } from '../store/profiles';
 import { useSessionStore } from '../store/sessions';
 import { normalizeSessionAgent, type SessionAgent } from '../types/sessionAgent';
 import { type TerminalSplitDirection } from '../types/workspace';
@@ -23,7 +23,6 @@ import {
 
 interface Options {
   settings: AppContentProps['settings'];
-  daemonSessions: AppContentProps['daemonSessions'];
   daemonEndpoints: AppContentProps['daemonEndpoints'];
   sessions: ReturnType<typeof useSessionStore.getState>['sessions'];
   activeSessionId: string | null;
@@ -32,7 +31,6 @@ interface Options {
 }
 export function useSessionLaunch({
   settings,
-  daemonSessions,
   daemonEndpoints,
   sessions,
   activeSessionId,
@@ -91,10 +89,14 @@ export function useSessionLaunch({
       anchorPaneId?: string;
       spawnedFrom?: string;
     }) => {
-      if (!currentDesktop) {
+      if (spawn.endpointId) {
+        throw new Error('Agents on remote endpoints cannot be started or split in this release: remote endpoints are off.');
+      }
+      const desktop = currentDesktopIn(useProfilesStore.getState());
+      if (!desktop) {
         throw new Error('No desktop is open yet; choose a profile before starting an agent.');
       }
-      const target = launchTarget(currentDesktop, spawn.direction, spawn.anchorPaneId);
+      const target = launchTarget(desktop, spawn.direction, spawn.anchorPaneId);
       try {
         await createSession(
           spawn.label,
@@ -113,7 +115,7 @@ export function useSessionLaunch({
         await ptySpawn({
           args: {
             ...spawnArgs,
-            ...(spawn.endpointId ? {} : { placement: target.placement }),
+            placement: target.placement,
             ...(spawn.spawnedFrom ? { spawned_from: spawn.spawnedFrom } : {}),
           },
         });
@@ -123,7 +125,7 @@ export function useSessionLaunch({
       }
       return spawn.sessionId;
     },
-    [closeSession, createSession, currentDesktop, takeSessionSpawnArgs],
+    [closeSession, createSession, takeSessionSpawnArgs],
   );
 
   const launchAgent = useCallback(
@@ -299,10 +301,8 @@ export function useSessionLaunch({
         error: null,
       });
       try {
-        const sessionId = await launchPicked(pick);
-        setSessionCreationJob((current) =>
-          current?.id === jobId && sessionId ? { ...current, sessionId, phase: 'starting_session' } : current,
-        );
+        await launchPicked(pick);
+        setSessionCreationJob((current) => (current?.id === jobId ? null : current));
       } catch (err) {
         setSessionCreationJob((current) =>
           current?.id === jobId
@@ -367,7 +367,7 @@ export function useSessionLaunch({
               : current,
           );
           const folderName = worktreePath.split('/').pop() || branchName || 'session';
-          const sessionId = await launchPicked({
+          await launchPicked({
             label: folderName,
             cwd: worktreePath,
             agent,
@@ -376,10 +376,7 @@ export function useSessionLaunch({
             autoMode,
             chiefOfStaff,
           });
-          setSessionCreationJob((current) => {
-            if (current?.id !== jobId) return current;
-            return sessionId ? { ...current, label: folderName, phase: 'starting_session', sessionId } : null;
-          });
+          setSessionCreationJob((current) => (current?.id === jobId ? null : current));
         } catch (err) {
           setSessionCreationJob((current) =>
             current?.id === jobId
@@ -420,24 +417,6 @@ export function useSessionLaunch({
     [],
   );
 
-  useEffect(() => {
-    if (!sessionCreationJob?.sessionId || sessionCreationJob.error) {
-      return;
-    }
-    if (daemonSessions.some((session) => session.id === sessionCreationJob.sessionId)) {
-      selectCreatedSession(sessionCreationJob.sessionId);
-      setSessionCreationJob((current) => (current?.id === sessionCreationJob.id ? null : current));
-      return;
-    }
-    const timeoutId = window.setTimeout(() => {
-      setSessionCreationJob((current) =>
-        current?.id === sessionCreationJob.id
-          ? { ...current, error: 'Session startup timed out.' }
-          : current,
-      );
-    }, 35_000);
-    return () => window.clearTimeout(timeoutId);
-  }, [daemonSessions, selectCreatedSession, sessionCreationJob]);
 
   return {
     sessionCreationJob,

@@ -58,10 +58,6 @@ export interface SplitSessionOptions {
   autoMode?: boolean;
 }
 
-export function paneIdForSession(sessionId: string): string {
-  return `pane-${sessionId}`;
-}
-
 export interface GitHubReleaseResponse {
   tag_name?: string;
   html_url?: string;
@@ -172,7 +168,6 @@ export type SessionCreationJob = {
   label: string;
   path: string;
   phase: SessionCreationPhase;
-  sessionId?: string;
   error?: string | null;
 };
 

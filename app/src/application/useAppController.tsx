@@ -196,7 +196,6 @@ export function useAppController({
 
   const sessionLaunch = useSessionLaunch({
     settings,
-    daemonSessions,
     daemonEndpoints,
     sessions,
     activeSessionId,
