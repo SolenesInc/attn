@@ -19,6 +19,9 @@ func (d *Daemon) handleDesktopMoveSession(conn net.Conn, msg *protocol.DesktopMo
 }
 
 func (d *Daemon) moveSessionToDesktop(callerID, sessionID, ref string) (*protocol.DesktopMoveSessionResult, error) {
+	if err := d.requireHome("profiles and desktops"); err != nil {
+		return nil, err
+	}
 	if sessionID == "" {
 		return nil, fmt.Errorf("no session to move; pass --session or run inside attn")
 	}

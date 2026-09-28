@@ -130,4 +130,19 @@ func TestASessionMovesItselfAndItsDelegatesBetweenDesktops(t *testing.T) {
 	if err == nil || !strings.Contains(err.Error(), `unknown desktop "nope"`) || !strings.Contains(err.Error(), "2 Ops") {
 		t.Errorf("an unknown desktop was answered %v; want a refusal listing the desktops", err)
 	}
+
+	sessions := []string{s.ID, tt.ID, delegate.SessionID, loose.SessionID, residentSession.ID}
+	for _, id := range sessions {
+		closeSessionPane(app, id)
+	}
+	arrangement("every moved session closed", func(d map[string]protocol.Desktop) bool {
+		for _, desktop := range d {
+			for _, id := range sessions {
+				if holding(desktop, id) {
+					return false
+				}
+			}
+		}
+		return true
+	})
 }
