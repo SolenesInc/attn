@@ -1,4 +1,5 @@
 import type { Seed } from '../../hooks/useDaemonSocket';
+import type { FocusClaim } from '../../navigation/sessionNavigation';
 import type {
   AutomationProvenance as AutomationProvenanceValue,
   Presentation,
@@ -89,7 +90,7 @@ export interface SessionTerminalDesktopProps {
   fontSize: number;
   resolvedTheme?: ResolvedTheme;
   focusRequestToken?: number;
-  focusClaim?: { id: number; desktopId: string; leafId: string; focusOwner: Element | null } | null;
+  focusClaim?: FocusClaim | null;
   enabled: boolean;
   shortcutsEnabled?: boolean;
   isActiveSession: boolean;

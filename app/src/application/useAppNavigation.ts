@@ -68,7 +68,8 @@ export function useAppNavigation({
   } = useAgentNavigation();
 
   const handleSelectSession = selectAgent;
-  const selectCreatedSession = selectAgent;
+  const selectCreatedSession = useCallback((id: string, owner?: Element | null) =>
+    selectAgent(id, owner, false), [selectAgent]);
 
   const { wantsAttention } = attentionQueue;
 
