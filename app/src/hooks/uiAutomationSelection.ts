@@ -5,7 +5,7 @@ import { currentActiveLeaf } from './useDesktopSelectionBridge';
 
 // Resolves once the current desktop's active leaf is the target, rejects when the app drops the request.
 export function selectionShown(target: ShowTarget): Promise<void> {
-  const requestId = useSessionStore.getState().pendingSelection?.id ?? null;
+  const requestId = useSessionStore.getState().intent?.id ?? null;
   return new Promise((resolve, reject) => {
     const stops: Array<() => void> = [];
     const settle = (error?: Error) => {
@@ -18,7 +18,7 @@ export function selectionShown(target: ShowTarget): Promise<void> {
         settle();
         return;
       }
-      if (useSessionStore.getState().pendingSelection?.id !== requestId || requestId === null) {
+      if (useSessionStore.getState().intent?.id !== requestId || requestId === null) {
         const shown = currentActiveLeaf();
         settle(new Error(`select ${JSON.stringify(target)}: the app dropped the request before the daemon showed it (shown is ${shown ? `${shown.desktopId}/${shown.leafId}` : 'none'})`));
       }

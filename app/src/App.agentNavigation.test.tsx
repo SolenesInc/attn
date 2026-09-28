@@ -125,6 +125,7 @@ function holdShows(daemon: ScriptedDaemon) {
         ? daemon.arrangement.placementOf(command.session_id)
         : { desktopId: command.desktop_id, paneId: command.leaf_id };
       if (success && target) daemon.arrangement.show(target.desktopId, target.paneId);
+      if (success) daemon.emit(daemon.arrangement.answer(command));
       daemon.replyTo(command, {
         event: 'profile_action_result',
         action: command.cmd,
@@ -436,12 +437,12 @@ describe('queue', () => {
     await open(daemon, 's1');
     const hold = holdShows(daemon);
     await open(daemon, 's2');
-    expect(useSessionStore.getState().pendingSelection).not.toBeNull();
+    expect(useSessionStore.getState().intent).not.toBeNull();
 
     const search = await openActionMenu(daemon);
     fireEvent.change(search, { target: { value: '>Switch to Work' } });
     await gesture(daemon, () => fireEvent.keyDown(search, { key: 'Enter' }));
-    expect(useSessionStore.getState().pendingSelection).toBeNull();
+    expect(useSessionStore.getState().intent).toBeNull();
     expect(selectedAgent()).toBe('w1');
 
     hold.held.splice(0);
@@ -783,11 +784,10 @@ describe('leaf history', () => {
         }, { name: 'd2', active_pane_id: 'tile-notes-moved' });
       });
       daemon.emit({
-        event: 'profile_arrangement_changed',
-        profile: daemon.arrangement.profile,
+        ...daemon.arrangement.changed(),
         desktops: daemon.arrangement.desktops,
         moved_leaf: { from_desktop_id: 'd1', from_leaf_id: 'tile-notes', to_desktop_id: 'd2', to_leaf_id: 'tile-notes-moved' },
-      });
+      } as Reply);
     });
     await gesture(daemon, keys.back);
 
@@ -814,11 +814,11 @@ describe('leaf history', () => {
     const home = daemon.arrangement.profile;
 
     await gesture(daemon, () => daemon.emit({
-      event: 'profile_arrangement_changed',
+      ...daemon.arrangement.changed(),
       profile: { id: 'profile-other', name: 'Other', current_desktop_id: 'desktop-other', revision: 1 },
       desktops: [soloDesktop('s9', { id: 'desktop-other', profile_id: 'profile-other' })],
-    }));
-    await gesture(daemon, () => daemon.emit({ event: 'profile_arrangement_changed', profile: home, desktops: daemon.arrangement.desktops }));
+    } as Reply));
+    await gesture(daemon, () => daemon.emit({ ...daemon.arrangement.changed(), profile: home, desktops: daemon.arrangement.desktops } as Reply));
     await gesture(daemon, keys.back);
 
     expect(shows(daemon).pop()).toBe('leaf:desktop-s1/pane-s1');
@@ -977,7 +977,7 @@ describe('keyboard focus', () => {
     const land = (command: (typeof held)[number]) => gesture(daemon, () => {
       daemon.arrangement.profiles = daemon.arrangement.profiles.map((profile) =>
         profile.id === command.profile_id ? { ...profile, current_desktop_id: command.desktop_id, revision: profile.revision + 1 } : profile);
-      daemon.emit(daemon.arrangement.changed());
+      daemon.emit(daemon.arrangement.answer(command));
       daemon.replyTo(command as never, { event: 'profile_action_result', action: command.cmd, request_id: command.request_id ?? '', success: true });
     });
 

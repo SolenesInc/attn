@@ -20,7 +20,6 @@ import {
 import { AppContentProps } from './appSupport';
 import { useAppSessions } from './useAppSessions';
 import type { useAttentionQueue } from './useAttentionQueue';
-import { showDesktop } from './trackOpen';
 
 interface Options {
   shownAgentId: string | null;
@@ -63,7 +62,7 @@ export function useAppNavigation({
   const {
     selectAgent,
     selectLeaf,
-    cancelPendingSelection,
+    cancelIntent,
     back: navigateLeafHistoryBack,
     forward: navigateLeafHistoryForward,
   } = useAgentNavigation();
@@ -124,7 +123,7 @@ export function useAppNavigation({
       const { selectedProfileId, desktops } = useProfilesStore.getState();
       if (!selectedProfileId || !desktops.some((desktop) => desktop.id === desktopId)) return;
       setView('session');
-      void showDesktop(desktopId, () => sendDesktopSetCurrent(selectedProfileId, desktopId)).catch(() => {});
+      void sendDesktopSetCurrent(selectedProfileId, desktopId).catch(() => {});
     },
     [sendDesktopSetCurrent, setView],
   );
@@ -206,7 +205,7 @@ export function useAppNavigation({
     requestTerminalFocus,
     selectAgent,
     selectLeaf,
-    cancelPendingSelection,
+    cancelIntent,
     navigateLeafHistoryBack,
     navigateLeafHistoryForward,
     handleSelectSession,

@@ -1,4 +1,5 @@
 import { vi } from 'vitest';
+import { syncNavigationFromProfiles } from '../hooks/daemonProfileEvents';
 import { useProfilesStore } from '../store/profiles';
 import { LayoutPaneKind, LayoutPaneStatus, type Desktop, type Profile } from '../types/generated';
 import {
@@ -51,6 +52,7 @@ export function arrangeDesktops(desktops: Desktop[], currentDesktopId = desktops
   const profile: Profile = { id: TEST_PROFILE_ID, name: 'Test', current_desktop_id: currentDesktopId, revision: 1 };
   useProfilesStore.getState().profilesChanged([profile]);
   useProfilesStore.getState().arrangementArrived(profile, desktops);
+  syncNavigationFromProfiles({ kind: 'scope' });
 }
 
 function sessionIdsOn(desktop: Desktop): string[] {

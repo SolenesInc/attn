@@ -1,6 +1,6 @@
 import type { DaemonSessionSnapshot } from '../store/sessions';
 import type { Desktop, LeafMoved } from '../types/generated';
-import { activeLeafOf, leafShows, type Arrangement, type ShowTarget } from './activeLeaf';
+import { activeLeafOf, leafShows, sameLeaf, type ActiveLeaf, type Arrangement, type ShowTarget } from './activeLeaf';
 import {
   createLeafHistory,
   moveLeafHistory,
@@ -9,6 +9,7 @@ import {
   remapLeafHistory,
   type LeafHistoryDirection,
   type LeafHistoryState,
+  type LeafRef,
 } from './leafHistory';
 import {
   advanceAfterTurnClosed,
@@ -24,13 +25,27 @@ import { buildDesktopViewModels } from '../utils/desktopViewModels';
 export type AppView = 'dashboard' | 'session' | 'grid';
 export type StateUpdate<T> = T | ((previous: T) => T);
 
-export interface PendingShow {
+export type IntentTarget =
+  | ShowTarget
+  | { kind: 'desktop'; desktopId: string }
+  | { kind: 'profile'; profileId: string }
+  | { kind: 'open' };
+
+// The user's latest gesture that changes what is shown, until an arrival shows its target.
+export interface Intent {
   id: number;
   profileId: string;
-  target: ShowTarget;
+  target: IntentTarget;
+  // The selection bridge sends the show; other intents send their own commands.
+  sendsShow: boolean;
   historyCursor: number | null;
   focusOwner: Element | null;
 }
+
+export type Arrival =
+  | { kind: 'own' }
+  | { kind: 'broadcast' }
+  | { kind: 'scope' };
 
 export interface FocusClaim {
   id: number;
@@ -44,13 +59,10 @@ export interface SessionNavigationState {
   view: AppView;
   viewBeforeGrid: AppView;
   followNextTurn: boolean;
-  pendingSelection: PendingShow | null;
+  intent: Intent | null;
   focusRequest: FocusClaim | null;
   leafHistoryByProfile: Record<string, LeafHistoryState>;
-  selectionSequence: number;
-  navigationEpoch: number;
-  expectedArrivals: ExpectedArrival[];
-  arrivalSequence: number;
+  intentSequence: number;
   focusSequence: number;
   utilityFocusRequestToken: number;
 }
@@ -60,13 +72,10 @@ export function initialSessionNavigation(): SessionNavigationState {
     view: 'dashboard',
     viewBeforeGrid: 'dashboard',
     followNextTurn: false,
-    pendingSelection: null,
+    intent: null,
     focusRequest: null,
     leafHistoryByProfile: {},
-    selectionSequence: 0,
-    navigationEpoch: 0,
-    expectedArrivals: [],
-    arrivalSequence: 0,
+    intentSequence: 0,
     focusSequence: 0,
     utilityFocusRequestToken: 0,
   };
@@ -81,6 +90,23 @@ function withHistory(state: SessionNavigationState, profileId: string, history: 
   return { ...state, leafHistoryByProfile: { ...state.leafHistoryByProfile, [profileId]: history } };
 }
 
+export function beginIntent(
+  state: SessionNavigationState,
+  profileId: string,
+  target: IntentTarget,
+  focusOwner: Element | null,
+  { sendsShow = false, historyCursor = null }: { sendsShow?: boolean; historyCursor?: number | null } = {},
+): SessionNavigationState {
+  const id = state.intentSequence + 1;
+  return {
+    ...state,
+    followNextTurn: false,
+    intent: { id, profileId, target, sendsShow, historyCursor, focusOwner },
+    focusRequest: null,
+    intentSequence: id,
+  };
+}
+
 export function requestShow(
   state: SessionNavigationState,
   profileId: string,
@@ -88,15 +114,7 @@ export function requestShow(
   focusOwner: Element | null,
   historyCursor: number | null = null,
 ): SessionNavigationState {
-  const id = state.selectionSequence + 1;
-  return {
-    ...state,
-    followNextTurn: false,
-    pendingSelection: { id, profileId, target, historyCursor, focusOwner },
-    focusRequest: null,
-    selectionSequence: id,
-    navigationEpoch: state.navigationEpoch + 1,
-  };
+  return beginIntent(state, profileId, target, focusOwner, { sendsShow: true, historyCursor });
 }
 
 export function selectAgent(
@@ -108,27 +126,21 @@ export function selectAgent(
   return requestShow(state, profileId, { kind: 'session', sessionId }, focusOwner);
 }
 
-export function cancelSelection(state: SessionNavigationState): SessionNavigationState {
-  if (!state.pendingSelection && !state.focusRequest) return state;
-  return { ...state, pendingSelection: null, focusRequest: null };
+export function endIntent(state: SessionNavigationState): SessionNavigationState {
+  if (!state.intent && !state.focusRequest) return state;
+  return { ...state, intent: null, focusRequest: null };
 }
 
-// A refused history move leaves the cursor on the shown leaf when the move had already passed it.
-export function selectionFailed(state: SessionNavigationState, id: number, arrangement: Arrangement): SessionNavigationState {
-  const pending = state.pendingSelection;
-  if (pending?.id !== id) return state;
-  const next = cancelSelection(state);
-  const leaf = activeLeafOf(arrangement);
-  if (pending.historyCursor === null || pending.profileId !== arrangement.profileId || !leaf) return next;
-  const history = historyOf(next, arrangement.profileId);
-  const step = pending.historyCursor < history.cursor ? -1 : 1;
-  for (let index = pending.historyCursor; index !== history.cursor; index -= step) {
-    const entry = history.entries[index];
-    if (entry?.leafId === leaf.leafId && entry.lastKnownDesktopId === leaf.desktopId) {
-      return withHistory(next, arrangement.profileId, { entries: history.entries, cursor: index });
-    }
-  }
-  return next;
+export function intentFailed(state: SessionNavigationState, id: number): SessionNavigationState {
+  return state.intent?.id === id ? endIntent(state) : state;
+}
+
+// A history step that landed moves the cursor even when a later step superseded it.
+export function historyLanded(state: SessionNavigationState, profileId: string, cursor: number, leaf: LeafRef): SessionNavigationState {
+  const history = historyOf(state, profileId);
+  const entry = history.entries[cursor];
+  if (entry?.leafId !== leaf.leafId || entry.lastKnownDesktopId !== leaf.lastKnownDesktopId) return state;
+  return withHistory(state, profileId, { entries: history.entries, cursor });
 }
 
 export function focusClaimDelivered(state: SessionNavigationState, id: number): SessionNavigationState {
@@ -140,41 +152,19 @@ export function claimFocus(state: SessionNavigationState, leaf: { desktopId: str
   return { ...state, focusSequence: id, focusRequest: { id, desktopId: leaf.desktopId, leafId: leaf.leafId, focusOwner } };
 }
 
-export interface ArrivalTarget {
-  profileId: string;
-  desktopId: string | null;
-}
-
-export interface ExpectedArrival extends ArrivalTarget {
-  key: number;
-}
-
-export function navigated(state: SessionNavigationState, expect: ArrivalTarget | null = null): SessionNavigationState {
-  const next = { ...state, navigationEpoch: state.navigationEpoch + 1 };
-  if (!expect) return next;
-  const key = state.arrivalSequence + 1;
-  return { ...next, arrivalSequence: key, expectedArrivals: [...state.expectedArrivals, { key, ...expect }] };
-}
-
-export function forgetArrival(state: SessionNavigationState, key: number): SessionNavigationState {
-  const expectedArrivals = state.expectedArrivals.filter((arrival) => arrival.key !== key);
-  return expectedArrivals.length === state.expectedArrivals.length ? state : { ...state, expectedArrivals };
-}
-
 export function toggleGrid(state: SessionNavigationState): SessionNavigationState {
   return changeView(state, state.view === 'grid' ? state.viewBeforeGrid : 'grid');
 }
 
 export function enterHome(state: SessionNavigationState, followNextTurn: boolean): SessionNavigationState {
-  return { ...cancelSelection(state), view: 'dashboard', followNextTurn, navigationEpoch: state.navigationEpoch + 1 };
+  return { ...endIntent(state), view: 'dashboard', followNextTurn };
 }
 
 export function changeView(state: SessionNavigationState, update: StateUpdate<AppView>): SessionNavigationState {
   const view = typeof update === 'function' ? update(state.view) : update;
   return {
-    ...cancelSelection(state),
+    ...endIntent(state),
     view,
-    navigationEpoch: view === state.view ? state.navigationEpoch : state.navigationEpoch + 1,
     viewBeforeGrid: view === 'grid' && state.view !== 'grid' ? state.view : state.viewBeforeGrid,
     followNextTurn: view === 'dashboard' && state.followNextTurn,
   };
@@ -188,12 +178,12 @@ export function navigateHistory(
   focusOwner: Element | null,
 ): SessionNavigationState {
   const committed = historyOf(state, arrangement.profileId);
-  const pending = state.pendingSelection;
-  const from = pending?.historyCursor != null && pending.profileId === arrangement.profileId
-    ? { entries: committed.entries, cursor: pending.historyCursor }
+  const intent = state.intent;
+  const from = intent?.historyCursor != null && intent.profileId === arrangement.profileId
+    ? { entries: committed.entries, cursor: intent.historyCursor }
     : committed;
   const move = moveLeafHistory(from, direction, arrangement.desktops, resumeCurrent);
-  const next = from === committed ? withHistory(cancelSelection(state), arrangement.profileId, move.state) : cancelSelection(state);
+  const next = from === committed ? withHistory(endIntent(state), arrangement.profileId, move.state) : endIntent(state);
   if (!move.target) return { ...next, followNextTurn: false };
   const target: ShowTarget = { kind: 'leaf', desktopId: move.target.lastKnownDesktopId, leafId: move.target.leafId };
   return requestShow(next, arrangement.profileId, target, focusOwner, move.cursor);
@@ -203,25 +193,54 @@ export function leafMoved(state: SessionNavigationState, profileId: string, move
   return withHistory(state, profileId, remapLeafHistory(historyOf(state, profileId), moved));
 }
 
+function intentShown(arrangement: Arrangement, leaf: ActiveLeaf | null, target: IntentTarget): boolean {
+  switch (target.kind) {
+    case 'desktop':
+      return arrangement.currentDesktopId === target.desktopId;
+    case 'profile':
+      return arrangement.profileId === target.profileId;
+    case 'open':
+      return false;
+    default:
+      return leafShows(leaf, target);
+  }
+}
+
+export function recordVisit(state: SessionNavigationState, arrangement: Arrangement): SessionNavigationState {
+  const leaf = activeLeafOf(arrangement);
+  if (state.view !== 'session' || !leaf) return state;
+  const history = recordLeafVisit(historyOf(state, arrangement.profileId), { leafId: leaf.leafId, lastKnownDesktopId: leaf.desktopId });
+  return withHistory(state, arrangement.profileId, history);
+}
+
+// An arrival confirms the intent it shows; another client's change supersedes it; an own answer never does.
 export function reconcileArrangement(
   state: SessionNavigationState,
   arrangement: Arrangement,
+  previous: Arrangement,
+  arrival: Arrival,
 ): SessionNavigationState {
   const leaf = activeLeafOf(arrangement);
-  let history = reconcileLeafHistory(historyOf(state, arrangement.profileId), arrangement.desktops);
-  let next = state;
-  const pending = state.pendingSelection;
-  const historyCursor = pending?.profileId === arrangement.profileId ? pending.historyCursor : null;
-  if (pending && leafShows(leaf, pending.target) && leaf) {
-    if (historyCursor !== null) {
-      history = { entries: history.entries, cursor: Math.min(historyCursor, history.entries.length - 1) };
+  let next = withHistory(state, arrangement.profileId, reconcileLeafHistory(historyOf(state, arrangement.profileId), arrangement.desktops));
+  const intent = state.intent;
+  if (intent && intentShown(arrangement, leaf, intent.target)) {
+    const shows = intent.target.kind === 'session' || intent.target.kind === 'leaf';
+    next = { ...next, intent: null, view: shows ? 'session' : next.view };
+    if (intent.historyCursor !== null && intent.profileId === arrangement.profileId) {
+      const history = historyOf(next, arrangement.profileId);
+      next = withHistory(next, arrangement.profileId, { entries: history.entries, cursor: Math.min(intent.historyCursor, history.entries.length - 1) });
+    } else {
+      next = recordVisit(next, arrangement);
     }
-    next = claimFocus({ ...next, view: 'session', pendingSelection: null }, leaf, pending.focusOwner);
+    if (next.view === 'session' && arrangement.currentDesktopId) {
+      next = claimFocus(next, { desktopId: arrangement.currentDesktopId, leafId: leaf?.leafId ?? null }, intent.focusOwner);
+    }
+    return next;
   }
-  if (next.view === 'session' && leaf && (historyCursor === null || next.pendingSelection === null)) {
-    history = recordLeafVisit(history, { leafId: leaf.leafId, lastKnownDesktopId: leaf.desktopId });
+  if (arrival.kind === 'broadcast') {
+    return sameLeaf(leaf, activeLeafOf(previous)) ? next : recordVisit(endIntent(next), arrangement);
   }
-  return withHistory(next, arrangement.profileId, history);
+  return intent ? next : recordVisit(next, arrangement);
 }
 
 export function sessionAttentionFields(session: DaemonSessionSnapshot | undefined) {
@@ -260,7 +279,7 @@ export function advanceQueue(
   next: QueueBands<QueueBandSession> | null,
   focusOwner: Element | null,
 ): SessionNavigationState {
-  if (!next || state.pendingSelection) return state;
+  if (!next || state.intent?.sendsShow) return state;
   if (state.view === 'dashboard' && state.followNextTurn) {
     const target = headOfQueue(next);
     return target ? selectAgent(state, arrangement.profileId, target.session.id, focusOwner) : state;

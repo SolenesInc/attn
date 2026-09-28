@@ -1,5 +1,5 @@
 import { create } from 'zustand';
-import { initialSessionNavigation, type SessionNavigationState } from '../navigation/sessionNavigation';
+import { initialSessionNavigation, type Arrival, type SessionNavigationState } from '../navigation/sessionNavigation';
 import { createSessionNavigationActions, reconcileSessionNavigation, type SessionNavigationActions } from './sessionNavigationSlice';
 import type { QueueBands, QueueBandSession } from '../utils/queueBands';
 import type { UISessionState } from '../types/sessionState';
@@ -102,7 +102,7 @@ export interface SessionStore extends SessionNavigationState, SessionNavigationA
   reloadSession: (id: string, size?: { cols: number; rows: number }) => Promise<void>;
   setLauncherConfig: (config: LauncherConfig) => void;
   syncFromDaemonSessions: (daemonSessions: DaemonSessionSnapshot[]) => void;
-  syncFromArrangement: (profileId: string, currentDesktopId: string | null, desktops: Desktop[]) => void;
+  syncFromArrangement: (profileId: string, currentDesktopId: string | null, desktops: Desktop[], arrival: Arrival) => void;
 }
 
 const MIN_STABLE_COLS = 20;
@@ -368,7 +368,7 @@ export const useSessionStore = create<SessionStore>((set, get) => ({
     });
   },
 
-  syncFromArrangement: (profileId: string, currentDesktopId: string | null, desktops: Desktop[]) => {
+  syncFromArrangement: (profileId: string, currentDesktopId: string | null, desktops: Desktop[], arrival: Arrival) => {
     const desktopSnapshots = Object.fromEntries(desktops.map((desktop) => [desktop.id, desktopSnapshot(desktop)]));
     const desktopIdBySessionId = Object.fromEntries(
       desktops.flatMap((desktop) => desktop.panes.map((pane) => [pane.session_id, desktop.id] as const)),
@@ -391,7 +391,7 @@ export const useSessionStore = create<SessionStore>((set, get) => ({
         navigationProfileId: profileId,
         navigationCurrentDesktopId: currentDesktopId,
         navigationDesktops: desktops,
-      });
+      }, arrival);
     });
   },
 }));

@@ -4,7 +4,6 @@ import { useProfilesStore } from '../store/profiles';
 import type { Desktop } from '../types/generated';
 import { withFreshDesktopRevisions } from './desktopRevisions';
 import { desktopInSlot, desktopLabel, firstFreeSlot, isEmptyDesktop, slotShortcut } from '../utils/desktops';
-import { showDesktop } from '../application/trackOpen';
 
 type ShowNotice = (message: string) => void;
 
@@ -55,7 +54,7 @@ export function useDesktopNavigation(showNotice: ShowNotice) {
       const state = useProfilesStore.getState();
       if (!state.selectedProfileId) return;
       const profileId = state.selectedProfileId;
-      report(showDesktop(desktopId, () => sendDesktopSetCurrent(profileId, desktopId)));
+      report(sendDesktopSetCurrent(profileId, desktopId));
     },
     [report, sendDesktopSetCurrent],
   );

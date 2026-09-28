@@ -7,8 +7,7 @@ import {
   useAttentionQueueContext,
   useDesktopTilesContext,
 } from './AppContexts';
-import { useSessionStore } from '../store/sessions';
-import { trackOpen } from './trackOpen';
+import { openThenShow } from './openThenShow';
 
 export function AppNavigationMenus() {
   const {
@@ -39,10 +38,7 @@ export function AppNavigationMenus() {
               });
               return;
             }
-            void trackOpen(() => sendOpenMarkdown(path, bindTo))
-              .then(({ result: { desktopId, tileId }, moved, focusOwner }) => {
-                if (desktopId && tileId && !moved) useSessionStore.getState().selectLeaf(desktopId, tileId, focusOwner);
-              })
+            void openThenShow(() => sendOpenMarkdown(path, bindTo))
               .catch((error) => {
                 console.error(
                   '[MarkdownOpener] in-app open failed, falling back to OS open:',

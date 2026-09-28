@@ -93,7 +93,8 @@ import { decodeBinaryFrame } from '../pty/binaryPtyFrame';
 import { kittyImageBlobFromResult, kittyImageCache } from '../utils/kittyImageCache';
 import { resolveDaemonWebSocketURL, type DaemonEndpointInstance } from '../utils/daemonEndpoint';
 import { handleAppDaemonEvent, type AppCommandResult } from './daemonAppEvents';
-import { handleProfileDaemonEvent, type MigrationResult, type ProfileActionResult } from './daemonProfileEvents';
+import type { IntentTarget } from '../navigation/sessionNavigation';
+import { handleProfileDaemonEvent, syncNavigationFromProfiles, type MigrationResult, type ProfileActionResult } from './daemonProfileEvents';
 import { useProfilesStore } from '../store/profiles';
 import { useSessionStore } from '../store/sessions';
 import type { Desktop } from '../types/generated';
@@ -312,7 +313,7 @@ export interface RateLimitState {
 }
 
 // Protocol version - must match daemon's ProtocolVersion
-export const PROTOCOL_VERSION = '332';
+export const PROTOCOL_VERSION = '333';
 const MAX_PENDING_ATTACH_OUTPUTS = 512;
 
 const CLIENT_INSTANCE_ID =
@@ -1264,6 +1265,7 @@ export function useDaemonSocket({
             callbacksRef.current.onAppsUpdate?.(data.apps || []);
             callbacksRef.current.onCrewUpdate?.(data.crew || []);
             useProfilesStore.getState().enterScope(data.profiles, data.selected_profile_id, data.desktops);
+            syncNavigationFromProfiles({ kind: 'scope' });
             useProfilesStore.getState().migrationPhaseChanged(data.migration_phase ?? null);
             pruneAttachedPtySessions(nextSessions);
             const nextPRs = data.prs || [];
@@ -2637,7 +2639,7 @@ export function useDaemonSocket({
       useAutoModePushStore.getState().clear();
       useWorktreeStore.getState().clear();
       useDelegationPreferencesPush.getState().clear();
-      useSessionStore.getState().cancelPendingSelection();
+      useSessionStore.getState().cancelIntent();
 
       if (circuitOpenRef.current) {
         console.error('[Daemon] Circuit open, not retrying');
@@ -4709,18 +4711,15 @@ export function useDaemonSocket({
 
   const sendProfileCommand = useCallback(
     (cmd: string, body: Record<string, unknown>) => {
-      if (cmd === 'profile_select' || cmd.startsWith('desktop_')) {
-        const profileId = typeof body.profile_id === 'string' ? body.profile_id : null;
-        const desktopId = cmd === 'desktop_set_current' && typeof body.desktop_id === 'string' ? body.desktop_id : null;
-        const explicit = cmd === 'profile_select' || cmd === 'desktop_set_current';
-        const navigation = useSessionStore.getState();
-        if (explicit) navigation.cancelPendingSelection();
-        const arrival = navigation.navigated(explicit && profileId !== null && (cmd === 'profile_select' || desktopId !== null) ? { profileId, desktopId } : null);
-        const request = sendRequest<ProfileActionResult>(cmd, body, `The daemon did not answer ${cmd}`);
-        if (arrival !== null) request.catch(() => useSessionStore.getState().forgetArrival(arrival));
-        return request;
-      }
-      return sendRequest<ProfileActionResult>(cmd, body, `The daemon did not answer ${cmd}`);
+      const target: IntentTarget | null = cmd === 'profile_select' && typeof body.profile_id === 'string'
+        ? { kind: 'profile', profileId: body.profile_id }
+        : cmd === 'desktop_set_current' && typeof body.desktop_id === 'string'
+          ? { kind: 'desktop', desktopId: body.desktop_id }
+          : null;
+      const intent = target ? useSessionStore.getState().beginIntent(target) : null;
+      const request = sendRequest<ProfileActionResult>(cmd, body, `The daemon did not answer ${cmd}`);
+      if (intent !== null) request.catch(() => useSessionStore.getState().intentFailed(intent));
+      return request;
     },
     [sendRequest],
   );

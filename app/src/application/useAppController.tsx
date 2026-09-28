@@ -176,7 +176,7 @@ export function useAppController({
     view,
     setView,
     selectAgent,
-    cancelPendingSelection,
+    cancelIntent,
     navigateLeafHistoryBack,
     navigateLeafHistoryForward,
     handleSelectSession,
@@ -494,7 +494,7 @@ export function useAppController({
   const appGrid = useAppGrid({
     profileSessions,
     wantsAttention,
-    cancelPendingSelection,
+    cancelIntent,
     setView,
   });
   const { visibleGridTiles } = appGrid;

@@ -75,7 +75,7 @@ function focusBelongsTo(leaf: ActiveLeaf | null): boolean {
 
 export function useDesktopSelectionBridge(reportFailure: (message: string) => void) {
   const { sendDesktopShowSession, sendDesktopShowLeaf } = useDaemonApi();
-  const pending = useSessionStore((state) => state.pendingSelection);
+  const intent = useSessionStore((state) => state.intent);
   const sent = useRef(0);
   const reportFailureRef = useRef(reportFailure);
   useEffect(() => {
@@ -83,19 +83,26 @@ export function useDesktopSelectionBridge(reportFailure: (message: string) => vo
   }, [reportFailure]);
 
   useEffect(() => {
-    if (!pending || pending.id === sent.current) return;
-    sent.current = pending.id;
-    const { id, target } = pending;
+    if (!intent?.sendsShow || intent.id === sent.current) return;
+    const { id, target, profileId, historyCursor } = intent;
+    if (target.kind !== 'session' && target.kind !== 'leaf') return;
+    sent.current = id;
     const request = target.kind === 'session'
       ? sendDesktopShowSession(target.sessionId)
       : sendDesktopShowLeaf(target.desktopId, target.leafId);
-    request.catch((error: unknown) => {
-      const store = useSessionStore.getState();
-      if (store.pendingSelection?.id !== id) return;
-      store.selectionFailed(id);
-      reportFailureRef.current(`Could not show that ${target.kind === 'session' ? 'agent' : 'leaf'}: ${error instanceof Error ? error.message : String(error)}`);
-    });
-  }, [pending, sendDesktopShowSession, sendDesktopShowLeaf]);
+    request.then(
+      () => {
+        if (historyCursor === null || target.kind !== 'leaf') return;
+        useSessionStore.getState().historyLanded(profileId, historyCursor, { leafId: target.leafId, lastKnownDesktopId: target.desktopId });
+      },
+      (error: unknown) => {
+        const store = useSessionStore.getState();
+        if (store.intent?.id !== id) return;
+        store.intentFailed(id);
+        reportFailureRef.current(`Could not show that ${target.kind === 'session' ? 'agent' : 'leaf'}: ${error instanceof Error ? error.message : String(error)}`);
+      },
+    );
+  }, [intent, sendDesktopShowSession, sendDesktopShowLeaf]);
 
   useEffect(
     () =>
@@ -104,7 +111,7 @@ export function useDesktopSelectionBridge(reportFailure: (message: string) => vo
         const before = activeLeafIn(previous);
         if (!leaf || sameLeaf(leaf, before)) return;
         const sessions = useSessionStore.getState();
-        if (sessions.view !== 'session' || sessions.pendingSelection) return;
+        if (sessions.view !== 'session' || sessions.intent) return;
         if (focusBelongsTo(before)) sessions.transferFocus(leaf);
       }),
     [],

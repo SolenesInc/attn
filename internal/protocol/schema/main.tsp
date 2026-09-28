@@ -3337,6 +3337,7 @@ model ProfileArrangementChangedMessage {
   profile: Profile;
   desktops: Desktop[];
   moved_leaf?: LeafMoved;       // Present only on the arrangement a move produced
+  request_id?: string;          // Only on the copy answering the receiving client's own request (a spawn's session id), sent before its result
 }
 
 // ============================================================================

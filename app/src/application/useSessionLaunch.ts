@@ -26,12 +26,8 @@ interface Options {
   daemonEndpoints: AppContentProps['daemonEndpoints'];
   sessions: ReturnType<typeof useSessionStore.getState>['sessions'];
   shownAgentId: string | null;
-  selectCreatedSession: (id: string) => boolean;
+  selectCreatedSession: (id: string, focusOwner?: Element | null) => boolean;
   showError: ReturnType<typeof useToast>['showError'];
-}
-
-function navigationMark(): number {
-  return useSessionStore.getState().navigationEpoch;
 }
 
 function localDesktopForLaunch(endpointId: string | undefined) {
@@ -106,7 +102,7 @@ export function useSessionLaunch({
     }) => {
       const desktop = localDesktopForLaunch(spawn.endpointId);
       const target = launchTarget(desktop, spawn.direction, spawn.anchorPaneId);
-      const launchedFrom = navigationMark();
+      const launch = useSessionStore.getState().beginIntent({ kind: 'session', sessionId: spawn.sessionId });
       let placementError: string | undefined;
       try {
         await createSession(
@@ -131,11 +127,13 @@ export function useSessionLaunch({
           },
         }));
       } catch (error) {
+        useSessionStore.getState().intentFailed(launch);
         closeSession(spawn.sessionId);
         throw error;
       }
-      if (navigationMark() === launchedFrom) {
-        selectCreatedSession(spawn.sessionId);
+      const { intent } = useSessionStore.getState();
+      if (intent?.id === launch) {
+        selectCreatedSession(spawn.sessionId, intent.focusOwner);
       } else if (placementError) {
         showError(`${spawn.label} started without a pane on this desktop: ${placementError}`);
       }

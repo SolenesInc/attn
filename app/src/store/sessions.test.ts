@@ -67,7 +67,7 @@ describe('sessions store', () => {
       layoutTree: null,
     });
     expect(session?.daemonActivePaneId).toBe('');
-    expect(useSessionStore.getState().pendingSelection).toBeNull();
+    expect(useSessionStore.getState().intent).toBeNull();
   });
 
   it('syncFromDaemonSessions hydrates canonical session data and keeps the session on its desktop', () => {
@@ -288,7 +288,7 @@ describe('sessions store', () => {
     ]);
 
     useSessionStore.getState().syncFromDaemonSessions([daemonSession]);
-    useSessionStore.getState().syncFromArrangement('profile', null, [desktop]);
+    useSessionStore.getState().syncFromArrangement('profile', null, [desktop], { kind: 'scope' });
     expect(
       useSessionStore.getState().sessions.find((entry) => entry.id === 'blip-session')?.desktop.agents,
     ).toHaveLength(1);
@@ -455,7 +455,7 @@ describe('sessions store', () => {
           { pane_id: 'pane-shell', session_id: 'sess-shell', title: 'Shell 1' },
         ],
       ),
-    ]);
+    ], { kind: 'scope' });
 
     const session = useSessionStore.getState().sessions.find((entry) => entry.id === sessionId);
     expect(session?.desktopId).toBe('desktop-1');
@@ -487,7 +487,7 @@ describe('sessions store', () => {
         { pane_id: 'pane-session', session_id: sessionId, title: 'Agent' },
       ]),
       desktopWith('desktop-2', '', 'pane-x', [{ pane_id: 'pane-x', session_id: 'unknown-session', title: 'Shell X' }]),
-    ]);
+    ], { kind: 'scope' });
 
     const session = useSessionStore.getState().sessions.find((entry) => entry.id === sessionId);
     expect(session?.desktop).toEqual({
@@ -509,9 +509,9 @@ describe('sessions store', () => {
       },
     ]);
 
-    useSessionStore.getState().syncFromArrangement('profile', null, [failed]);
+    useSessionStore.getState().syncFromArrangement('profile', null, [failed], { kind: 'scope' });
     useSessionStore.getState().syncFromDaemonSessions([]);
-    useSessionStore.getState().syncFromArrangement('profile', null, [failed]);
+    useSessionStore.getState().syncFromArrangement('profile', null, [failed], { kind: 'scope' });
 
     const state = useSessionStore.getState();
     expect(state.sessions).toEqual([]);

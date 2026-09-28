@@ -18,7 +18,6 @@ import {
   useDaemonSocket,
 } from './hooks/useDaemonSocket';
 import { useReleaseUpdates } from './hooks/useReleaseUpdates';
-import { useProfilesStore } from './store/profiles';
 import { useSessionStore } from './store/sessions';
 import { useDaemonStore } from './store/daemonSessions';
 import type { Presentation } from './types/generated';
@@ -71,13 +70,6 @@ function App() {
   useEffect(() => {
     hideBootSplash();
   }, []);
-
-  const selectedProfileId = useProfilesStore((state) => state.selectedProfileId);
-  const currentDesktopId = useProfilesStore((state) => state.currentDesktopId);
-  const desktops = useProfilesStore((state) => state.desktops);
-  useEffect(() => {
-    useSessionStore.getState().syncFromArrangement(selectedProfileId ?? '', currentDesktopId, desktops);
-  }, [selectedProfileId, currentDesktopId, desktops]);
 
   useEffect(() => {
     async function ensureDaemon() {

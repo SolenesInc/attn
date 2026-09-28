@@ -236,12 +236,12 @@ describe('desktop surface', () => {
     localStorage.setItem(WHATS_NEW_STORAGE_KEY, WHATS_NEW_ID);
     desktopCommands = fakeDesktopCommands();
 
+    seedSessions(['s1', 's2', 's3', 's4']);
     arrangeDesktops([
       agentDesktop('d1', 1, ['s1', 's2']),
       tileDesktop('d2', 2, 'tile-readme', 'markdown', '/tmp/project/README.md'),
       agentDesktop('d3', 3, ['s3']),
     ]);
-    seedSessions(['s1', 's2', 's3', 's4']);
 
     const fn = vi.fn();
     mockUseDaemonSocket.mockReturnValue({
