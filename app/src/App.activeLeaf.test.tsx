@@ -7,6 +7,7 @@ import {
   agentPane,
   daemonDesktop,
   daemonSession,
+  daemonSeed,
   defaultProfile,
   dockTiles,
   soloDesktop,
@@ -65,6 +66,58 @@ function shows(daemon: ScriptedDaemon): string[] {
 }
 
 describe('what the active leaf offers', () => {
+  it('uses the garden title for a seed tile in the desktop sidebar', async () => {
+    const seed = { tile_id: 'tile-seed', tile_kind: 'seed', tile_params: 's-named' };
+    await renderApp({ initialState: {
+      sessions: [daemonSession('s1')],
+      profiles: [defaultProfile('d1')],
+      desktops: [daemonDesktop('d1', {
+        root: dockTiles({ type: 'pane', pane_id: 'pane-s1' }, [seed]),
+        panes: [agentPane('s1', 'd1')],
+      }, { active_pane_id: 'pane-s1', shortcut_slot: 1 })],
+      seeds: [daemonSeed('s-named', { title: 'Native client plan' })],
+    } });
+
+    expect(screen.getByTestId('sidebar-tile-d1-tile-seed')).toHaveTextContent('Native client plan');
+  });
+
+  it('names tile kinds and seed titles in the palette and bar peek, then shows a picked seed once', async () => {
+    const named = { tile_id: 'tile-seed', tile_kind: 'seed', tile_params: 's-named', tile_session_id: 's1' };
+    const missing = { tile_id: 'tile-missing', tile_kind: 'seed', tile_params: 's-missing' };
+    const markdown = { tile_id: 'tile-doc', tile_kind: 'markdown', tile_params: '/tmp/notes.md' };
+    const browser = { tile_id: 'tile-web', tile_kind: 'browser', tile_params: 'https://example.com/path' };
+    const desktop = daemonDesktop('d1', {
+      root: dockTiles({ type: 'pane', pane_id: 'pane-s1' }, [named, missing, markdown, browser]),
+      panes: [agentPane('s1', 'd1')],
+    }, { active_pane_id: 'pane-s1', shortcut_slot: 1 });
+    const { daemon } = await renderApp({ initialState: {
+      settings: { queue_mode_enabled: 'true' },
+      sessions: [daemonSession('s1', { turn_owed: true, turn_opened_at: '2026-09-28T10:00:00Z' })],
+      profiles: [defaultProfile('d1')],
+      desktops: [desktop],
+      seeds: [daemonSeed('s-named', { title: 'Native client plan' })],
+    } });
+
+    await gesture(daemon, () => fireEvent.click(screen.getByRole('button', { name: 'Collapse sidebar' })));
+    await gesture(daemon, () => fireEvent.pointerEnter(screen.getByTestId('queue-bar-waiting')));
+    const peek = screen.getByTestId('queue-bar-waiting-peek');
+    expect(within(peek).getByTestId('queue-bar-peek-tile:d1:tile-seed')).toHaveTextContent('SEEDNative client plan⌘1');
+    expect(within(peek).getByTestId('queue-bar-peek-tile:d1:tile-missing')).toHaveTextContent('SEEDs-missing⌘1');
+
+    await gesture(daemon, () => pressShortcut('ui.actionMenu'));
+    const palette = screen.getByRole('dialog', { name: 'Agents' });
+    expect(within(palette).getByTestId('palette-tile-tile-seed')).toHaveTextContent('SEEDNative client plan⌘1');
+    expect(within(palette).getByTestId('palette-tile-tile-missing')).toHaveTextContent('SEEDs-missing⌘1');
+    expect(within(palette).getByTestId('palette-tile-tile-doc')).toHaveTextContent('DOCnotes.md⌘1');
+    expect(within(palette).getByTestId('palette-tile-tile-web')).toHaveTextContent('WEBexample.com⌘1');
+
+    const search = within(palette).getByRole('combobox');
+    fireEvent.change(search, { target: { value: 'seed Native' } });
+    expect(within(palette).getAllByRole('option')).toHaveLength(1);
+    await gesture(daemon, () => fireEvent.mouseDown(within(palette).getByTestId('palette-tile-tile-seed').closest('[role="option"]')!));
+    expect(shows(daemon)).toEqual(['leaf:d1/tile-seed']);
+  });
+
   it('lists this profile’s agents and tiles in the agents palette and shows a picked tile with one request', async () => {
     const { daemon } = await renderDesktops();
 
