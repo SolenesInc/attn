@@ -266,15 +266,15 @@ try {
   const longOld = Array.from({ length: 2100 }, (_, i) => `old${i}`).join(" ") + " common";
   const longNew = Array.from({ length: 2100 }, (_, i) => `new${i}`).join(" ") + " common";
   const longLine = await renderCase(`@@ -1 +1 @@\n-${longOld}\n+${longNew}\n`);
-  assert.match(longLine.limits[0], /word comparison limit 4,000,000 cells, requested 4,410,000/);
+  assert.match(longLine.limits[0], /word comparison limit 4,000,000 cells, requested 4,414,201/);
   assert.deepEqual(longLine.added, []);
   const manyOld = Array.from({ length: 500 }, (_, i) => `Old row ${i}`).join("\n");
   const manyNew = Array.from({ length: 500 }, (_, i) => `New row ${i}`).join("\n");
   const manyLines = await renderCase(`@@ -1,500 +1,500 @@\n${manyOld.split("\n").map((line) => `-${line}`).join("\n")}\n${manyNew.split("\n").map((line) => `+${line}`).join("\n")}\n`);
-  assert.match(manyLines.limits[0], /line pairing work limit 1,000,000, requested 1,750,000/);
+  assert.match(manyLines.limits[0], /line pairing work limit 1,000,000, requested 1,751,001/);
   assert.deepEqual(manyLines.added, []);
   const whitespaceLines = await renderCase(`@@ -1,1100 +1,1100 @@\n${Array.from({ length: 1100 }, () => "-  ").join("\n")}\n${Array.from({ length: 1100 }, () => "+\t").join("\n")}\n`);
-  assert.match(whitespaceLines.limits[0], /line pairing work limit 1,000,000, requested 1,210,000/);
+  assert.match(whitespaceLines.limits[0], /line pairing work limit 1,000,000, requested 1,212,201/);
   console.log(JSON.stringify({ status: "passed", ancestor, head, tip, legacy, consoleErrors, idleRequests: requests - settled, idleBefore, idleAfter, artifacts }, null, 2));
 } finally {
   if (context) await context.close();

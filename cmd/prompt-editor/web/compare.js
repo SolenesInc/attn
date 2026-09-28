@@ -66,14 +66,16 @@ function changedParts(before, after, remainingWork) {
     newEnd--;
   }
   const oldLength = oldEnd - prefix, newLength = newEnd - prefix;
-  const work = oldLength * newLength;
+  const width = newLength + 1;
+  const work = (oldLength + 1) * width;
   if (work > remainingWork) return { work };
-  const matches = Array.from({ length: oldLength + 1 }, () => new Uint32Array(newLength + 1));
+  const matches = new Uint32Array(work);
   for (let old = oldLength - 1; old >= 0; old--) {
+    const row = old * width, below = (old + 1) * width;
     for (let next = newLength - 1; next >= 0; next--) {
-      matches[old][next] = oldTokens[prefix + old] === newTokens[prefix + next]
-        ? matches[old + 1][next + 1] + 1
-        : Math.max(matches[old + 1][next], matches[old][next + 1]);
+      matches[row + next] = oldTokens[prefix + old] === newTokens[prefix + next]
+        ? matches[below + next + 1] + 1
+        : Math.max(matches[below + next], matches[row + next + 1]);
     }
   }
 
@@ -88,7 +90,7 @@ function changedParts(before, after, remainingWork) {
     if (old < oldEnd && next < newEnd && oldTokens[old] === newTokens[next]) {
       append(removed, oldTokens[old++], false);
       append(added, newTokens[next++], false);
-    } else if (old < oldEnd && (next === newEnd || matches[old - prefix + 1][next - prefix] >= matches[old - prefix][next - prefix + 1])) {
+    } else if (old < oldEnd && (next === newEnd || matches[(old - prefix + 1) * width + next - prefix] >= matches[(old - prefix) * width + next - prefix + 1])) {
       append(removed, oldTokens[old++], true);
     } else {
       append(added, newTokens[next++], true);
@@ -124,9 +126,10 @@ function highlightChangedRows(rows) {
     while (["removed", "added", "notice"].includes(rows[end]?.kind)) end++;
     const removed = rows.slice(start, end).filter((row) => row.kind === "removed");
     const added = rows.slice(start, end).filter((row) => row.kind === "added");
+    if (!added.length) { start = end; continue; }
     const oldWords = removed.map((row) => row.text.match(/\S+/g) || []);
     const newWords = added.map((row) => row.text.match(/\S+/g) || []);
-    const requested = removed.length * added.length
+    const requested = (removed.length + 1) * (added.length + 1)
       + added.length * oldWords.reduce((total, words) => total + words.length, 0)
       + removed.length * newWords.reduce((total, words) => total + words.length, 0);
     if (rowWork + requested > ROW_WORK_LIMIT) {
