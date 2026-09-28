@@ -5,6 +5,7 @@ import { crewDisplayName } from '../../utils/crewName';
 import { isSnoozed } from '../../utils/snoozeDurations';
 import type { DesktopWithSessions } from '../../utils/desktopViewModels';
 import { automationRunGroups, type AutomationRunSession } from '../../utils/automationRuns';
+import { tileKindLabel } from '../../utils/tilePresentation';
 
 export interface PaletteSession extends Omit<QueueBandSession, 'automation'>, AutomationRunSession {
   state: UISessionState;
@@ -92,7 +93,7 @@ export function agentPaletteRows<S extends PaletteSession>(
     for (const child of desktop.children) {
       if (child.kind !== 'tile') continue;
       const title = tileTitle(desktop.id, child.tile);
-      if (!matches(terms, title)) continue;
+      if (!matches(terms, title, tileKindLabel(child.tile.tileKind).word)) continue;
       tiles.push({ kind: 'tile', key: `tile:${desktop.id}:${child.tile.tileId}`, desktopId: desktop.id, tile: child.tile, title });
     }
   }

@@ -193,6 +193,20 @@ export function PRsIcon() {
   );
 }
 
+export function BrowserIcon() {
+  return (
+    <svg viewBox="0 0 16 16" aria-hidden="true">
+      <circle cx="8" cy="8" r="6" fill="none" stroke="currentColor" strokeWidth="1.3" />
+      <path
+        d="M2 8h12M8 2c-2 2-2 10 0 12M8 2c2 2 2 10 0 12"
+        fill="none"
+        stroke="currentColor"
+        strokeWidth="1.3"
+      />
+    </svg>
+  );
+}
+
 export function NotebookIcon() {
   return (
     <svg viewBox="0 0 16 16" aria-hidden="true">

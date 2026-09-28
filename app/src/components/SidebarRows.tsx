@@ -4,6 +4,7 @@ import type { SessionPullRequest } from '../types/generated';
 import { type TileContentState, type TileLeaf } from '../types/desktop';
 import { describeSessionPullRequest, pickSessionPullRequest } from '../utils/sessionPullRequest';
 import { deriveTileTitle } from '../utils/tilePresentation';
+import { useDaemonStore } from '../store/daemonSessions';
 import { ChiefOfStaffBadge } from './ChiefOfStaffBadge';
 import { DelegatedFromChiefBadge } from './DelegatedFromChiefBadge';
 import { DelegationChainTrigger } from './DelegationChain';
@@ -75,7 +76,8 @@ export function TileSidebarRow({
   onClose: () => void;
   onReload: () => void;
 }) {
-  const title = deriveTileTitle(tile, content);
+  const seeds = useDaemonStore((state) => state.seeds);
+  const title = deriveTileTitle(tile, content, (id) => seeds.find((seed) => seed.id === id)?.title);
   return (
     <div
       className={`session-item desktop-tile-item grouped ${selected ? 'selected' : ''}`.trim()}
