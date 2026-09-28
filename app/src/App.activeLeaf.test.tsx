@@ -1,4 +1,5 @@
 import { fireEvent, screen, within } from '@testing-library/react';
+import { invoke } from '@tauri-apps/api/core';
 import { onOpenUrl } from '@tauri-apps/plugin-deep-link';
 import { act } from 'react';
 import { describe, expect, it, vi } from 'vitest';
@@ -99,6 +100,45 @@ describe('what the active leaf offers', () => {
     const atHome = await commandTitles(daemon);
     expect(atHome.some((text) => text.includes('workflow runs'))).toBe(false);
     expect(atHome.some((text) => text.includes('Open in editor'))).toBe(false);
+  });
+
+  it('opens the remote folder of the agent a shown tile is bound to in the editor', async () => {
+    const { daemon } = await renderApp({ initialState: {
+      settings: { editor_executable: 'zed' },
+      endpoints: [{ id: 'ep-1', name: 'gpu-box', ssh_target: 'user@gpu-box', status: 'connected', enabled: true }],
+      sessions: [daemonSession('r1', { directory: '/srv/project', endpoint_id: 'ep-1' })],
+      profiles: [defaultProfile('d1')],
+      desktops: [daemonDesktop('d1', {
+        root: dockTiles({ type: 'pane', pane_id: 'pane-r1' }, [{ ...README, tile_session_id: 'r1' }]),
+        panes: [agentPane('r1', 'd1')],
+      }, { active_pane_id: README.tile_id, shortcut_slot: 1, name: 'd1' })],
+    } });
+    await gesture(daemon, () => pressShortcut('desktop.select1'));
+    expect(shownLeaf()).toBe(README.tile_id);
+
+    await gesture(daemon, () => pressShortcut('ui.commandPalette'));
+    const search = within(screen.getByRole('dialog')).getByRole('combobox');
+    fireEvent.change(search, { target: { value: '>Open in editor' } });
+    await gesture(daemon, () => fireEvent.keyDown(search, { key: 'Enter' }));
+
+    expect(vi.mocked(invoke)).toHaveBeenCalledWith('open_in_editor', expect.objectContaining({ cwd: '/srv/project', remoteTarget: 'user@gpu-box' }));
+  });
+
+  it('offers the folder of the agent a shown notebook tile is bound to as its root', async () => {
+    const { daemon } = await renderApp({ initialState: {
+      settings: { 'notebook.root.effective': '/notebook' },
+      sessions: [daemonSession('s1', { directory: '/tmp/repo' })],
+      profiles: [defaultProfile('d1')],
+      desktops: [daemonDesktop('d1', {
+        root: dockTiles({ type: 'pane', pane_id: 'pane-s1' }, [{ tile_id: 'tile-notebook', tile_kind: 'notebook', tile_params: '', tile_session_id: 's1' }]),
+        panes: [agentPane('s1', 'd1')],
+      }, { active_pane_id: 'tile-notebook', shortcut_slot: 1, name: 'd1' })],
+    } });
+    await gesture(daemon, () => pressShortcut('desktop.select1'));
+    expect(shownLeaf()).toBe('tile-notebook');
+
+    const options = Array.from(screen.getByRole('combobox', { name: 'Editor root' }).querySelectorAll('option'), (option) => option.textContent);
+    expect(options).toContain('Desktop — repo');
   });
 
   it('walks the automation runs that need the user and settles the one shown, but nothing on a tile', async () => {

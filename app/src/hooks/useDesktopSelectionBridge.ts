@@ -3,7 +3,7 @@ import { useShallow } from 'zustand/react/shallow';
 import { useDaemonApi } from '../contexts/DaemonApiContext';
 import { useProfilesStore, type ProfilesState } from '../store/profiles';
 import { useSessionStore } from '../store/sessions';
-import { activeLeafOf, sameLeaf, type ActiveLeaf } from '../navigation/activeLeaf';
+import { activeLeafOf, sameLeaf, sessionOfLeaf, type ActiveLeaf } from '../navigation/activeLeaf';
 
 export function activeLeafIn(state: Pick<ProfilesState, 'selectedProfileId' | 'currentDesktopId' | 'desktops'>): ActiveLeaf | null {
   return activeLeafOf({
@@ -61,12 +61,11 @@ export function useSurface(): Surface {
   }, [view, leaf]);
 }
 
-// The session behind what is on screen: an agent pane's own session, or the agent a tile is bound to.
+// The session behind what is on screen, while the session view shows it.
 export function useSessionBehindScreen(): string | null {
   const view = useSessionStore((state) => state.view);
   const leaf = useActiveLeaf();
-  if (view !== 'session' || !leaf) return null;
-  return leaf.kind === 'agent' ? leaf.sessionId : leaf.tileSessionId;
+  return view === 'session' ? sessionOfLeaf(leaf) : null;
 }
 
 export function useAgentOnScreen(): string | null {

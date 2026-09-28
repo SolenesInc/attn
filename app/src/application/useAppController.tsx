@@ -141,7 +141,6 @@ export function useAppController({
   useDesktopSelectionBridge(showError);
 
   const appSessions = useAppSessions({
-    shownAgentId,
     daemonEndpoints,
     sessions,
     daemonSessions,

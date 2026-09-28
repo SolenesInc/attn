@@ -24,6 +24,8 @@ import {
   useSessionLifecycleContext,
 } from './AppContexts';
 import { openThenShow } from './openThenShow';
+import { localDirectoryOf } from './useScreenSession';
+import { leafOn, sessionOfLeaf } from '../navigation/activeLeaf';
 
 export function AppDesktops() {
   const desktops = useProfilesStore((state) => state.desktops);
@@ -87,10 +89,9 @@ export function AppDesktops() {
     const desktopSessions = group?.sessions ?? [];
     const terminalState = desktopTerminalState(desktop);
     const isCurrent = desktop.id === currentDesktopId;
-    const activePane = terminalState.agents.find((pane) => pane.id === desktop.active_pane_id);
-    const shownSessionId = activePane?.sessionId ?? null;
-    const shownSession = desktopSessions.find((session) => session.id === shownSessionId);
-    const desktopDirectory = shownSession && !shownSession.endpointId ? shownSession.cwd : undefined;
+    const shownSessionId = terminalState.agents.find((pane) => pane.id === desktop.active_pane_id)?.sessionId ?? null;
+    const leafSessionId = sessionOfLeaf(leafOn(desktop.profile_id, desktop, desktop.active_pane_id));
+    const desktopDirectory = localDirectoryOf(desktopSessions.find((session) => session.id === leafSessionId));
     return (
       <div key={desktop.id} className={`terminal-wrapper ${isCurrent ? 'active' : ''}`}>
         <SessionTerminalDesktop

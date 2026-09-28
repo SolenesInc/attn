@@ -40,6 +40,12 @@ export function activeLeafOf(arrangement: Arrangement): ActiveLeaf | null {
   return leafOn(arrangement.profileId, desktop, desktop.active_pane_id);
 }
 
+// The session behind a leaf: an agent pane's own session, or the agent a tile is bound to.
+export function sessionOfLeaf(leaf: ActiveLeaf | null): string | null {
+  if (!leaf) return null;
+  return leaf.kind === 'agent' ? leaf.sessionId : leaf.tileSessionId;
+}
+
 export function sameLeaf(a: ActiveLeaf | null, b: ActiveLeaf | null): boolean {
   return a?.desktopId === b?.desktopId && a?.leafId === b?.leafId;
 }
