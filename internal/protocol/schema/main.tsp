@@ -3192,6 +3192,25 @@ model DesktopSetActivePaneMessage {
   pane_id: string;
 }
 
+// Shows an open agent of any live profile in one transaction: an unplaced
+// agent is placed beside the active leaf of its profile's current desktop.
+// Its pane becomes the active leaf, its desktop current, its profile the
+// requesting client's. Every client on that profile gets one arrangement.
+model DesktopShowSessionMessage {
+  cmd: "desktop_show_session";
+  request_id: string;
+  session_id: string;
+}
+
+// Shows an existing leaf, an agent pane or a tile, like desktop_show_session.
+// It never creates or moves a leaf.
+model DesktopShowLeafMessage {
+  cmd: "desktop_show_leaf";
+  request_id: string;
+  desktop_id: string;
+  leaf_id: string;
+}
+
 // Gives an unplaced agent of the desktop's profile a pane, split beside
 // anchor_pane_id or, absent, beside the active leaf. The new pane becomes active.
 model DesktopPlaceSessionMessage {
@@ -3284,7 +3303,7 @@ model ProfileActionResultMessage {
   error_code?: ProfileErrorCode;
   profile?: Profile;
   desktops?: Desktop[];
-  pane_id?: string;             // The pane desktop_place_session created
+  pane_id?: string;             // Resolved leaf: placed, shown, or moved (after any rename)
 }
 
 // Every live profile, sent to every client when one is created, renamed or deleted.
@@ -3293,10 +3312,20 @@ model ProfilesChangedMessage {
   profiles: Profile[];
 }
 
+// A leaf that desktop_move_leaf moved. A move between desktops renames the
+// leaf when the target already holds its id; the to_ ids are authoritative.
+model LeafMoved {
+  from_desktop_id: string;
+  from_leaf_id: string;
+  to_desktop_id: string;
+  to_leaf_id: string;
+}
+
 model ProfileArrangementChangedMessage {
   event: "profile_arrangement_changed";
   profile: Profile;
   desktops: Desktop[];
+  moved_leaf?: LeafMoved;       // Present only on the arrangement a move produced
 }
 
 // ============================================================================

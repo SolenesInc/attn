@@ -247,7 +247,11 @@ func (d *Daemon) runProfileAction(client *wsClient, action, requestID string, ru
 }
 
 func (d *Daemon) publishArrangementChanged(profileID string) {
-	d.publishFact(FactProfileArrangementChanged, profileID, nil)
+	d.publishArrangement(profileID, nil)
+}
+
+func (d *Daemon) publishArrangement(profileID string, payload any) {
+	d.publishFact(FactProfileArrangementChanged, profileID, payload)
 	d.nudgeDesktopTileContent()
 	d.refreshCurrentAgent()
 }
@@ -427,6 +431,31 @@ func (d *Daemon) handleDesktopSetActivePane(client *wsClient, msg *protocol.Desk
 	})
 }
 
+func (d *Daemon) leafShown(client *wsClient, profile profiles.Profile, desktop profiles.Desktop, leafID string) profileActionOutcome {
+	client.selectProfile(profile.ID)
+	return d.desktopChanged(desktop).withProfile(profile).withPaneID(leafID)
+}
+
+func (d *Daemon) handleDesktopShowSession(client *wsClient, msg *protocol.DesktopShowSessionMessage) {
+	d.runProfileAction(client, msg.Cmd, msg.RequestID, func() (profileActionOutcome, error) {
+		profile, desktop, leafID, err := d.store.ShowSession(msg.SessionID)
+		if err != nil {
+			return profileActionOutcome{}, err
+		}
+		return d.leafShown(client, profile, desktop, leafID), nil
+	})
+}
+
+func (d *Daemon) handleDesktopShowLeaf(client *wsClient, msg *protocol.DesktopShowLeafMessage) {
+	d.runProfileAction(client, msg.Cmd, msg.RequestID, func() (profileActionOutcome, error) {
+		profile, desktop, leafID, err := d.store.ShowLeaf(msg.DesktopID, msg.LeafID)
+		if err != nil {
+			return profileActionOutcome{}, err
+		}
+		return d.leafShown(client, profile, desktop, leafID), nil
+	})
+}
+
 func layoutDirection(direction *protocol.LayoutSplitDirection) layouttree.Direction {
 	if direction != nil && *direction == protocol.LayoutSplitDirectionHorizontal {
 		return layouttree.DirectionHorizontal
@@ -473,8 +502,9 @@ func (d *Daemon) handleDesktopMoveLeaf(client *wsClient, msg *protocol.DesktopMo
 		if move.Target.ID != move.Source.ID {
 			changed = append(changed, move.Target)
 		}
-		return profileActionOutcome{desktops: changed, publish: func() {
-			d.publishArrangementChanged(move.Source.ProfileID)
+		moved := &protocol.LeafMoved{FromDesktopID: move.Source.ID, FromLeafID: msg.LeafID, ToDesktopID: move.Target.ID, ToLeafID: move.FinalLeafID}
+		return profileActionOutcome{desktops: changed, paneID: move.FinalLeafID, publish: func() {
+			d.publishArrangement(move.Source.ProfileID, moved)
 		}}, err
 	})
 }
@@ -532,6 +562,14 @@ func (d *Daemon) projectProfileArrangementChanged(ev bus.Event) {
 		Event:    protocol.EventProfileArrangementChanged,
 		Profile:  protocolProfile(profile),
 		Desktops: wire,
+	}
+	if len(ev.Payload) > 0 {
+		var moved protocol.LeafMoved
+		if err := ev.Decode(&moved); err != nil {
+			d.logf("arrangement projection: decoding the moved leaf of profile %s: %v", ev.Subject, err)
+		} else {
+			message.MovedLeaf = &moved
+		}
 	}
 	shown := markdownTilesOnCurrentDesktop(profile, desktops)
 	d.wsHub.SendArrangementToMatchingClients(message, func(client *wsClient) bool {
