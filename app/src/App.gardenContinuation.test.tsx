@@ -89,6 +89,16 @@ function selectedSessions(daemon: ScriptedDaemon) {
 }
 
 describe('App garden continuation', () => {
+  it('shows a resumed agent the app has not heard of yet, with one request the daemon validates', async () => {
+    const { daemon } = await openSeedInGarden();
+    daemon.on('seed_resume', () => ({ event: 'seed_resume_result', success: true, session_id: 'reopened-late' }));
+
+    await gesture(daemon, () => fireEvent.click(screen.getByRole('button', { name: 'Resume' })));
+
+    expect(selectedSessions(daemon).slice(-1)).toEqual(['reopened-late']);
+    expect(document.querySelector('[data-session-visible="1"]')?.getAttribute('data-active-leaf-id')).toBe('pane-reopened-late');
+  });
+
   it('resumes a seed’s agent and goes to the session the daemon reopened', async () => {
     const { daemon } = await openSeedInGarden();
     daemon.on('seed_resume', () => ({

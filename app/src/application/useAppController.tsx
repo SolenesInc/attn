@@ -39,6 +39,7 @@ import { useDesktopResidency } from './useDesktopResidency';
 import { useLeafDrag } from './useLeafDrag';
 import { useDesktopTiles } from './useDesktopTiles';
 import { openPalette, switchPalette, type PaletteMode } from '../components/palette/paletteState';
+import { selectionShown } from '../hooks/uiAutomationSelection';
 
 export function useAppController({
   daemonSessions,
@@ -456,13 +457,15 @@ export function useAppController({
       return createSplitSession('shell', direction, paneId, { baseSessionId: sessionId });
     },
     closePaneSession: handleCloseSession,
-    focusPane: (sessionId: string, paneId: string) => {
+    focusPane: async (sessionId: string, paneId: string) => {
       const owner = sessions.find((session) =>
         session.desktop.agents.some(
           (pane) => pane.id === paneId && pane.sessionId === session.id,
         ),
       ) ?? sessions.find((session) => session.id === sessionId);
-      if (owner?.desktopId) selectLeaf(owner.desktopId, paneId);
+      if (!owner?.desktopId) throw new Error(`focus_pane: pane ${paneId} of session ${sessionId} is on no desktop`);
+      selectLeaf(owner.desktopId, paneId);
+      await selectionShown({ kind: 'leaf', desktopId: owner.desktopId, leafId: paneId });
     },
     typeInSessionPaneViaUI,
     isSessionPaneInputFocused,
@@ -541,7 +544,6 @@ export function useAppController({
     sendSeedToChief,
     sendCrewWake,
     sendCrewSleep,
-    handleSelectDesktop,
     setCrewSeedTile,
     closeCrewPanel,
   });

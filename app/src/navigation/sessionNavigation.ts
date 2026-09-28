@@ -1,6 +1,6 @@
-import type { DaemonSessionSnapshot, Session } from '../store/sessions';
+import type { DaemonSessionSnapshot } from '../store/sessions';
 import type { Desktop, LeafMoved } from '../types/generated';
-import { activeLeafOf, leafOn, leafShows, type ActiveLeaf, type Arrangement, type ShowTarget } from './activeLeaf';
+import { activeLeafOf, leafShows, type ActiveLeaf, type Arrangement, type ShowTarget } from './activeLeaf';
 import {
   createLeafHistory,
   moveLeafHistory,
@@ -93,12 +93,10 @@ export function requestShow(
 
 export function selectAgent(
   state: SessionNavigationState,
-  sessions: Session[],
   profileId: string,
   sessionId: string,
   focusOwner: Element | null,
 ): SessionNavigationState {
-  if (!sessions.some((session) => session.id === sessionId)) return state;
   return requestShow(state, profileId, { kind: 'session', sessionId }, focusOwner);
 }
 
@@ -115,7 +113,7 @@ export function focusClaimDelivered(state: SessionNavigationState, id: number): 
   return state.focusRequest?.id === id ? { ...state, focusRequest: null } : state;
 }
 
-export function claimFocus(state: SessionNavigationState, leaf: ActiveLeaf, focusOwner: Element | null): SessionNavigationState {
+export function claimFocus(state: SessionNavigationState, leaf: Pick<ActiveLeaf, 'desktopId' | 'leafId'>, focusOwner: Element | null): SessionNavigationState {
   const id = state.focusSequence + 1;
   return { ...state, focusSequence: id, focusRequest: { id, desktopId: leaf.desktopId, leafId: leaf.leafId, focusOwner } };
 }
@@ -156,20 +154,8 @@ export function leafMoved(state: SessionNavigationState, profileId: string, move
   return withHistory(state, profileId, remapLeafHistory(historyOf(state, profileId), moved));
 }
 
-function pendingTargetGone(pending: PendingShow, sessions: Session[], arrangement: Arrangement): boolean {
-  if (pending.target.kind === 'session') {
-    const sessionId = pending.target.sessionId;
-    return !sessions.some((session) => session.id === sessionId);
-  }
-  if (arrangement.profileId !== pending.profileId) return false;
-  const { desktopId, leafId } = pending.target;
-  const desktop = arrangement.desktops.find((entry) => entry.id === desktopId);
-  return !desktop || !leafOn(arrangement.profileId, desktop, leafId);
-}
-
 export function reconcileArrangement(
   state: SessionNavigationState,
-  sessions: Session[],
   arrangement: Arrangement,
 ): SessionNavigationState {
   const leaf = activeLeafOf(arrangement);
@@ -181,8 +167,6 @@ export function reconcileArrangement(
       history = { entries: history.entries, cursor: Math.min(pending.historyCursor, history.entries.length - 1) };
     }
     next = claimFocus({ ...next, view: 'session', pendingSelection: null }, leaf, pending.focusOwner);
-  } else if (pending && pendingTargetGone(pending, sessions, arrangement)) {
-    next = cancelSelection(next);
   }
   if (next.view === 'session' && leaf) {
     history = recordLeafVisit(history, { leafId: leaf.leafId, lastKnownDesktopId: leaf.desktopId });
@@ -221,7 +205,6 @@ export function navigationQueue(
 
 export function advanceQueue(
   state: SessionNavigationState,
-  sessions: Session[],
   arrangement: Arrangement,
   previous: QueueBands<QueueBandSession> | null,
   next: QueueBands<QueueBandSession> | null,
@@ -230,7 +213,7 @@ export function advanceQueue(
   if (!next || state.pendingSelection) return state;
   if (state.view === 'dashboard' && state.followNextTurn) {
     const target = headOfQueue(next);
-    return target ? selectAgent(state, sessions, arrangement.profileId, target.session.id, focusOwner) : state;
+    return target ? selectAgent(state, arrangement.profileId, target.session.id, focusOwner) : state;
   }
   if (state.view !== 'session') return state;
   const leaf = activeLeafOf(arrangement);
@@ -238,6 +221,6 @@ export function advanceQueue(
   const advance = advanceAfterTurnClosed(previous?.turns ?? [], next, leaf.sessionId);
   if (!advance) return state;
   return advance.to === 'session'
-    ? selectAgent(state, sessions, arrangement.profileId, advance.row.session.id, focusOwner)
+    ? selectAgent(state, arrangement.profileId, advance.row.session.id, focusOwner)
     : enterHome(state, true);
 }

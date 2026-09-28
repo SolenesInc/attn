@@ -6,8 +6,8 @@ import { AppPalette } from './AppPalette';
 import {
   useAttentionQueueContext,
   useDesktopTilesContext,
-  useNavigationContext,
 } from './AppContexts';
+import { useSessionStore } from '../store/sessions';
 
 export function AppNavigationMenus() {
   const {
@@ -18,7 +18,6 @@ export function AppNavigationMenus() {
     setMarkdownOpenerOpen,
   } = useDesktopTilesContext();
   const { sendBrowseDirectory, sendOpenMarkdown, sendSnoozeTurn } = useDaemonApi();
-  const { handleSelectDesktop } = useNavigationContext();
   const { snoozeMenu, setSnoozeMenu } = useAttentionQueueContext();
   return (
     <>
@@ -41,7 +40,7 @@ export function AppNavigationMenus() {
             }
             void sendOpenMarkdown(path, bindTo)
               .then(({ desktopId, tileId }) => {
-                if (desktopId && tileId) handleSelectDesktop(desktopId);
+                if (desktopId && tileId) useSessionStore.getState().selectLeaf(desktopId, tileId);
               })
               .catch((error) => {
                 console.error(

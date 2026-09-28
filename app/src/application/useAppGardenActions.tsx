@@ -6,6 +6,7 @@ import { useDockPanels } from '../hooks/useDockPanels';
 import { useDaemonStore } from '../store/daemonSessions';
 import { gardenPathToSeed, useGardenWalk } from '../store/gardenWalk';
 import { crewDisplayName } from '../utils/crewName';
+import { useSessionStore } from '../store/sessions';
 interface Options {
   sendOpenSeed: ReturnType<typeof useDaemonApi>['sendOpenSeed'];
   shownAgentId: string | null;
@@ -20,7 +21,6 @@ interface Options {
   sendSeedToChief: ReturnType<typeof useDaemonApi>['sendSeedToChief'];
   sendCrewWake: ReturnType<typeof useDaemonApi>['sendCrewWake'];
   sendCrewSleep: ReturnType<typeof useDaemonApi>['sendCrewSleep'];
-  handleSelectDesktop: (desktopId: string) => void;
   setCrewSeedTile: (tile: { desktopId: string; tileId: string } | null) => void;
   closeCrewPanel: () => void;
 }
@@ -38,7 +38,6 @@ export function useAppGardenActions({
   sendSeedToChief,
   sendCrewWake,
   sendCrewSleep,
-  handleSelectDesktop,
   setCrewSeedTile,
   closeCrewPanel,
 }: Options) {
@@ -54,10 +53,10 @@ export function useAppGardenActions({
       }
       const { desktopId, tileId } = opened;
       beforeFocus?.({ desktopId, tileId });
-      handleSelectDesktop(desktopId);
+      useSessionStore.getState().selectLeaf(desktopId, tileId);
       return opened;
     },
-    [sendOpenSeed, handleSelectDesktop],
+    [sendOpenSeed],
   );
 
   const handleOpenSeedTile = useCallback(
@@ -113,13 +112,13 @@ export function useAppGardenActions({
     (path: string) => {
       void sendOpenMarkdown(path, '')
         .then(({ desktopId, tileId }) => {
-          if (desktopId && tileId) handleSelectDesktop(desktopId);
+          if (desktopId && tileId) useSessionStore.getState().selectLeaf(desktopId, tileId);
         })
         .catch((error) => {
           showError(error instanceof Error ? error.message : 'Could not open the document');
         });
     },
-    [handleSelectDesktop, sendOpenMarkdown, showError],
+    [sendOpenMarkdown, showError],
   );
 
   const handleResumeSeed = useCallback(

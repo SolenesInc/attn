@@ -18,6 +18,7 @@ import {
   selectAgent,
   selectionFailed,
   type AppView,
+  type SessionNavigationState,
   type StateUpdate,
 } from '../navigation/sessionNavigation';
 import { getAgentExecutableSettings } from '../utils/agentAvailability';
@@ -29,6 +30,7 @@ export interface SessionNavigationActions {
   selectionFailed: (id: number) => void;
   toggleGrid: () => void;
   focusClaimDelivered: (id: number) => void;
+  claimLeafFocus: (desktopId: string, leafId: string) => void;
   transferFocus: (leaf: ActiveLeaf) => void;
   leafMoved: (profileId: string, moved: LeafMoved) => void;
   navigateLeafHistory: (direction: LeafHistoryDirection, resumeCurrent?: boolean) => boolean;
@@ -56,6 +58,10 @@ export function arrangementOf(state: Pick<SessionStore, 'navigationProfileId' | 
   };
 }
 
+function withVisit(state: SessionStore, next: SessionNavigationState): SessionNavigationState {
+  return next.view === 'session' && state.view !== 'session' ? reconcileArrangement(next, arrangementOf(state)) : next;
+}
+
 export function reconcileSessionNavigation(
   state: SessionStore,
   update: Partial<SessionStore>,
@@ -68,10 +74,10 @@ export function reconcileSessionNavigation(
     next.navigationSettings,
   );
   const arrangement = arrangementOf(next);
-  const reconciled = reconcileArrangement(next, next.sessions, arrangement);
+  const reconciled = reconcileArrangement(next, arrangement);
   const advanced = state.pendingSelection
     ? reconciled
-    : advanceQueue(reconciled, next.sessions, arrangement, state.navigationQueue, next.navigationQueue, focusOwner());
+    : advanceQueue(reconciled, arrangement, state.navigationQueue, next.navigationQueue, focusOwner());
   return { ...next, ...advanced };
 }
 
@@ -81,28 +87,28 @@ export function createSessionNavigationActions(
 ): SessionNavigationActions {
   return {
     selectAgent: (sessionId) => {
-      const before = get().pendingSelection;
-      set((state) => selectAgent(state, state.sessions, state.navigationProfileId, sessionId, focusOwner()));
-      return get().pendingSelection !== before;
+      set((state) => selectAgent(state, state.navigationProfileId, sessionId, focusOwner()));
+      return true;
     },
     selectLeaf: (desktopId, leafId) =>
       set((state) => requestShow(state, state.navigationProfileId, { kind: 'leaf', desktopId, leafId }, focusOwner())),
     cancelPendingSelection: () => set((state) => cancelSelection(state)),
     selectionFailed: (id) => set((state) => selectionFailed(state, id)),
-    toggleGrid: () => set((state) => toggleGrid(state)),
+    toggleGrid: () => set((state) => withVisit(state, toggleGrid(state))),
     focusClaimDelivered: (id) => set((state) => focusClaimDelivered(state, id)),
+    claimLeafFocus: (desktopId, leafId) => set((state) => claimFocus(state, { desktopId, leafId }, focusOwner())),
     transferFocus: (leaf) => set((state) => claimFocus(state, leaf, focusOwner())),
     leafMoved: (profileId, moved) => set((state) => leafMoved(state, profileId, moved)),
     navigateLeafHistory: (direction, resumeCurrent = false) => {
       set((state) => navigateHistory(state, arrangementOf(state), direction, resumeCurrent, focusOwner()));
       return get().pendingSelection !== null;
     },
-    setView: (view) => set((state) => changeView(state, view)),
+    setView: (view) => set((state) => withVisit(state, changeView(state, view))),
     setFollowNextTurn: (update) =>
       set((state) => {
         const followNextTurn = typeof update === 'function' ? update(state.followNextTurn) : update;
         const next = { ...cancelSelection(state), followNextTurn };
-        return advanceQueue(next, state.sessions, arrangementOf(state), state.navigationQueue, state.navigationQueue, focusOwner());
+        return advanceQueue(next, arrangementOf(state), state.navigationQueue, state.navigationQueue, focusOwner());
       }),
     goToDashboard: () => set((state) => enterHome(state, false)),
     goHomeAwaitingNextTurn: () => set((state) => enterHome(state, true)),

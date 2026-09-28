@@ -9,6 +9,7 @@ import { useSessionStore } from '../store/sessions';
 import { resolveEditorTileRoot, serializeNotebookTileParams } from '../types/desktop';
 import { appViewTileKind } from '../utils/appBundle';
 import { AppContentProps } from './appSupport';
+import { useActiveLeaf } from '../hooks/useDesktopSelectionBridge';
 
 interface Options {
   settings: AppContentProps['settings'];
@@ -27,6 +28,7 @@ function currentDesktop() {
 }
 
 export function useDesktopTiles({ settings, sessions, shownAgentId, showError }: Options) {
+  const leaf = useActiveLeaf();
   const { sendRecentFiles, sendFsIndex, sendDesktopDockTile } = useDaemonApi();
   const [markdownOpenerOpen, setMarkdownOpenerOpen] = useState(false);
   const [appViewParamsPrompt, setAppViewParamsPrompt] = useState<{
@@ -46,10 +48,10 @@ export function useDesktopTiles({ settings, sessions, shownAgentId, showError }:
   const markdownOpenerTarget = useMemo(
     () =>
       resolveMarkdownOpenerTarget(
-        sessions.find((session) => session.id === shownAgentId),
+        sessions.find((session) => session.id === (shownAgentId ?? (leaf?.kind === 'tile' ? leaf.tileSessionId : null))),
         settings['notebook.root.effective'],
       ),
-    [sessions, shownAgentId, settings],
+    [leaf, sessions, shownAgentId, settings],
   );
   const loadOpenerRecents = useCallback(
     () =>
@@ -80,7 +82,9 @@ export function useDesktopTiles({ settings, sessions, shownAgentId, showError }:
         edge: 'right',
         tileShare: 0.4,
       }),
-    ).catch((error) => showError(`Could not open the notebook: ${failureMessage(error)}`));
+    )
+      .then(() => useSessionStore.getState().claimLeafFocus(desktop.id, tileId))
+      .catch((error) => showError(`Could not open the notebook: ${failureMessage(error)}`));
   }, [sendDesktopDockTile, settings, sessions, shownAgentId, showError]);
 
   // A fresh tile id every time: the daemon reads a duplicate id as a move.
@@ -99,7 +103,9 @@ export function useDesktopTiles({ settings, sessions, shownAgentId, showError }:
           edge: 'right',
           tileShare: 0.4,
         }),
-      ).catch((error) => showError(`Could not open that view: ${failureMessage(error)}`));
+      )
+        .then(() => useSessionStore.getState().claimLeafFocus(desktop.id, tileId))
+        .catch((error) => showError(`Could not open that view: ${failureMessage(error)}`));
     },
     [sendDesktopDockTile, showError],
   );

@@ -76,7 +76,7 @@ interface UseUiAutomationBridgeArgs {
   openShortcutEditor?: () => void;
   splitPane: (sessionId: string, targetPaneId: string, direction: TerminalSplitDirection) => Promise<unknown>;
   closePaneSession: (sessionId: string) => Promise<unknown>;
-  focusPane: (sessionId: string, paneId: string) => void;
+  focusPane: (sessionId: string, paneId: string) => Promise<void>;
   typeInSessionPaneViaUI: (sessionId: string, paneId: string, text: string) => boolean;
   isSessionPaneInputFocused: (sessionId: string, paneId: string) => boolean;
   scrollSessionPaneToTop: (sessionId: string, paneId: string) => boolean;
@@ -2821,7 +2821,7 @@ export function useUiAutomationBridge({
         const viewSessionId = resolveDesktopViewSessionId(session, sessions, shownAgentId);
         selectSession(sessionId);
         await selectionShown({ kind: 'session', sessionId });
-        focusPane(viewSessionId, paneId);
+        await focusPane(viewSessionId, paneId);
         await settleUi();
         return { sessionId, paneId, viewSessionId };
       }
@@ -3624,7 +3624,7 @@ export function useUiAutomationBridge({
         selectSession(sessionId);
 
         await selectionShown({ kind: 'session', sessionId });
-        focusPane(sessionId, paneId);
+        await focusPane(sessionId, paneId);
         await settleUi(2);
         if (!resetSessionPaneTerminal(sessionId, paneId)) {
           throw new Error(`Pane terminal not ready for ${paneId}`);

@@ -300,6 +300,23 @@ describe('agent selection', () => {
     cameFrom();
   });
 
+  it('records the leaf a desktop showed when the user entered it from Home', async () => {
+    const { daemon } = await renderApp({ initialState: {
+      sessions: [queueSession('s1', 9), queueSession('s2', 10)],
+      profiles: [defaultProfile('desktop-s1')],
+      desktops: [soloDesktop('s1', { shortcut_slot: 1 }), soloDesktop('s2', { shortcut_slot: 2 })],
+    } });
+    expect(isHome()).toBe(true);
+
+    await gesture(daemon, () => pressShortcut('desktop.select1'));
+    expect(selectedAgent()).toBe('s1');
+    await open(daemon, 's2');
+    await gesture(daemon, keys.back);
+
+    expect(shows(daemon).pop()).toBe('leaf:desktop-s1/pane-s1');
+    expect(selectedAgent()).toBe('s1');
+  });
+
   it('drops a pending show when its agent ends and never places it again', async () => {
     const { daemon } = await renderAgents({ s1: {}, s2: {} }, { laidOut: ['s1'] });
     await open(daemon, 's1');
@@ -307,8 +324,7 @@ describe('agent selection', () => {
 
     await open(daemon, 's2');
     await gesture(daemon, () => daemon.emit({ event: 'session_unregistered', session: queueSession('s2', 10) }));
-    hold.held.splice(0);
-    await daemon.idle();
+    await hold.refuse();
 
     expect(shows(daemon)).toEqual(['session:s1', 'session:s2']);
     expect(daemon.sentOf('desktop_place_session')).toEqual([]);

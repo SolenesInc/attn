@@ -3,7 +3,7 @@ import type { Desktop } from '../types/generated';
 
 export type ActiveLeaf =
   | { kind: 'agent'; profileId: string; desktopId: string; leafId: string; sessionId: string }
-  | { kind: 'tile'; profileId: string; desktopId: string; leafId: string };
+  | { kind: 'tile'; profileId: string; desktopId: string; leafId: string; tileSessionId: string | null };
 
 export type ShowTarget =
   | { kind: 'session'; sessionId: string }
@@ -29,7 +29,7 @@ export function desktopLeaves(desktop: Desktop): TerminalLeaf[] {
 export function leafOn(profileId: string, desktop: Desktop, leafId: string): ActiveLeaf | null {
   const leaf = desktopLeaves(desktop).find((entry) => leafSlotId(entry) === leafId);
   if (!leaf) return null;
-  if (leaf.type === 'tile') return { kind: 'tile', profileId, desktopId: desktop.id, leafId };
+  if (leaf.type === 'tile') return { kind: 'tile', profileId, desktopId: desktop.id, leafId, tileSessionId: leaf.tileSessionId || null };
   const sessionId = desktop.panes.find((pane) => pane.pane_id === leafId)?.session_id;
   return sessionId ? { kind: 'agent', profileId, desktopId: desktop.id, leafId, sessionId } : null;
 }

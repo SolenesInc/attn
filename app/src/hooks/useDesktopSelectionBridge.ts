@@ -33,13 +33,14 @@ export function useActiveLeaf(): ActiveLeaf | null {
         desktopId: leaf?.desktopId ?? '',
         leafId: leaf?.leafId ?? '',
         sessionId: leaf?.kind === 'agent' ? leaf.sessionId : '',
+        tileSessionId: leaf?.kind === 'tile' ? leaf.tileSessionId : null,
       };
     }),
   );
   return useMemo<ActiveLeaf | null>(() => {
-    const { kind, profileId, desktopId, leafId, sessionId } = fields;
+    const { kind, profileId, desktopId, leafId, sessionId, tileSessionId } = fields;
     if (kind === 'agent') return { kind, profileId, desktopId, leafId, sessionId };
-    if (kind === 'tile') return { kind, profileId, desktopId, leafId };
+    if (kind === 'tile') return { kind, profileId, desktopId, leafId, tileSessionId };
     return null;
   }, [fields]);
 }
