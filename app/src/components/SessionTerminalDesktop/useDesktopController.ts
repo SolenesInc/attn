@@ -505,7 +505,9 @@ export function useDesktopController(
     const active = document.activeElement;
     const userMovedOn = active && active !== focusClaim.focusOwner && !focusIsFree(panesContainerRef.current);
     if (!userMovedOn) focusShownLeaf(activeLeafId);
-    const landed = document.activeElement?.closest('[data-pane-id]')?.getAttribute('data-pane-id') === activeLeafId;
+    const focused = document.activeElement;
+    const landed = focused?.closest('[data-pane-id]')?.getAttribute('data-pane-id') === activeLeafId
+      && focused.closest('[data-desktop-id]')?.getAttribute('data-desktop-id') === focusClaim.desktopId;
     if (userMovedOn || landed) useSessionStore.getState().focusClaimDelivered(focusClaim.id);
   }, [activeLeafId, focusClaim, focusShownLeaf, paneReadyFocusRequest, sessionVisible]);
 

@@ -81,4 +81,36 @@ describe('App terminal seed ids', () => {
     expect(daemon.sentOf('desktop_set_current')).toEqual([]);
     expect(document.activeElement?.closest('[data-pane-id]')?.getAttribute('data-pane-id')).toBe('tile-seed-s-7k3f9m');
   });
+
+  it('opens the seed tile but leaves the keyboard on a control the user moved to while it opened', async () => {
+    const { daemon } = await openTerminalShowing('known s-7k3f9m');
+    const held: Array<Extract<(typeof daemon.sent)[number], { cmd: 'open_seed' }>> = [];
+    daemon.on('open_seed', (command) => {
+      held.push(command);
+      return undefined;
+    });
+    fireEvent.mouseMove(document.querySelector('[data-pane-id="pane-s1"] canvas')!, { clientX: 70, clientY: 10 });
+    await act(() => vi.advanceTimersByTimeAsync(200));
+    fireEvent.click(within(screen.getByRole('dialog')).getByRole('button', { name: 'Open as tile' }));
+    await daemon.idle();
+
+    const home = screen.getByTestId('sidebar-home');
+    act(() => home.focus());
+    await act(async () => {
+      for (const { request_id, seed_id } of held.splice(0)) {
+        daemon.arrangement.desktops = daemon.arrangement.desktops.map((desktop) => desktop.id !== 'desktop-s1' ? desktop : {
+          ...desktop,
+          tree_json: JSON.stringify(dockTiles({ type: 'pane', pane_id: 'pane-s1' }, [{ tile_id: 'tile-seed-s-7k3f9m', tile_kind: 'seed', tile_params: seed_id }])),
+          revision: desktop.revision + 1,
+        });
+        daemon.emit({ event: 'open_seed_result', request_id, success: true, seed_id, desktop_id: 'desktop-s1', tile_id: 'tile-seed-s-7k3f9m' });
+        daemon.emit(daemon.arrangement.changed());
+      }
+    });
+    await daemon.idle();
+    await act(() => vi.advanceTimersByTimeAsync(100));
+
+    expect(daemon.sentOf('desktop_show_leaf')).toEqual([expect.objectContaining({ leaf_id: 'tile-seed-s-7k3f9m' })]);
+    expect(document.activeElement).toBe(home);
+  });
 });

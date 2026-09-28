@@ -90,7 +90,6 @@ export function requestShow(
     pendingSelection: { id, profileId, target, historyCursor, focusOwner },
     focusRequest: null,
     selectionSequence: id,
-    navigationEpoch: state.navigationEpoch + 1,
   };
 }
 

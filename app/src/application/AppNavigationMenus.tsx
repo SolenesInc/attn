@@ -8,6 +8,7 @@ import {
   useDesktopTilesContext,
 } from './AppContexts';
 import { useSessionStore } from '../store/sessions';
+import { trackOpen } from './trackOpen';
 
 export function AppNavigationMenus() {
   const {
@@ -38,9 +39,9 @@ export function AppNavigationMenus() {
               });
               return;
             }
-            void sendOpenMarkdown(path, bindTo)
-              .then(({ desktopId, tileId }) => {
-                if (desktopId && tileId) useSessionStore.getState().selectLeaf(desktopId, tileId);
+            void trackOpen(() => sendOpenMarkdown(path, bindTo))
+              .then(({ result: { desktopId, tileId }, moved, focusOwner }) => {
+                if (desktopId && tileId && !moved) useSessionStore.getState().selectLeaf(desktopId, tileId, focusOwner);
               })
               .catch((error) => {
                 console.error(

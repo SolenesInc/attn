@@ -89,7 +89,7 @@ export interface SessionTerminalDesktopProps {
   fontSize: number;
   resolvedTheme?: ResolvedTheme;
   focusRequestToken?: number;
-  focusClaim?: { id: number; leafId: string; focusOwner: Element | null } | null;
+  focusClaim?: { id: number; desktopId: string; leafId: string; focusOwner: Element | null } | null;
   enabled: boolean;
   isActiveSession: boolean;
   isSessionViewVisible?: boolean;

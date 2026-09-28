@@ -23,6 +23,7 @@ import {
   useSessionLaunchContext,
   useSessionLifecycleContext,
 } from './AppContexts';
+import { trackOpen } from './trackOpen';
 
 export function AppDesktops() {
   const desktops = useProfilesStore((state) => state.desktops);
@@ -137,9 +138,9 @@ export function AppDesktops() {
           onTerminalPointerActivity={sendTerminalPointerActivity}
           onOpenPresentation={handleOpenPresentationWindow}
           onOpenMarkdown={(path, sessionId) => {
-            void sendOpenMarkdown(path, sessionId)
-              .then(({ desktopId, tileId }) => {
-                if (desktopId && tileId) selectLeaf(desktopId, tileId);
+            void trackOpen(() => sendOpenMarkdown(path, sessionId))
+              .then(({ result: { desktopId, tileId }, moved, focusOwner }) => {
+                if (desktopId && tileId && !moved) selectLeaf(desktopId, tileId, focusOwner);
               })
               .catch((error) => {
                 console.error('[Markdown] in-app open failed, falling back to OS open:', error);

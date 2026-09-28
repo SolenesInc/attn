@@ -26,13 +26,13 @@ import { getAgentExecutableSettings } from '../utils/agentAvailability';
 
 export interface SessionNavigationActions {
   selectAgent: (sessionId: string) => boolean;
-  selectLeaf: (desktopId: string, leafId: string) => void;
+  selectLeaf: (desktopId: string, leafId: string, focusOwner?: Element | null) => void;
   cancelPendingSelection: () => void;
   selectionFailed: (id: number) => void;
   toggleGrid: () => void;
   navigated: () => void;
   focusClaimDelivered: (id: number) => void;
-  claimLeafFocus: (desktopId: string, leafId: string) => void;
+  claimLeafFocus: (desktopId: string, leafId: string, focusOwner?: Element | null) => void;
   transferFocus: (leaf: ActiveLeaf) => void;
   leafMoved: (profileId: string, moved: LeafMoved) => void;
   navigateLeafHistory: (direction: LeafHistoryDirection, resumeCurrent?: boolean) => boolean;
@@ -95,14 +95,14 @@ export function createSessionNavigationActions(
       set((state) => selectAgent(state, state.navigationProfileId, sessionId, focusOwner()));
       return true;
     },
-    selectLeaf: (desktopId, leafId) =>
-      set((state) => requestShow(state, state.navigationProfileId, { kind: 'leaf', desktopId, leafId }, focusOwner())),
+    selectLeaf: (desktopId, leafId, owner = focusOwner()) =>
+      set((state) => requestShow(state, state.navigationProfileId, { kind: 'leaf', desktopId, leafId }, owner)),
     cancelPendingSelection: () => set((state) => cancelSelection(state)),
     selectionFailed: (id) => set((state) => selectionFailed(state, id)),
     toggleGrid: () => set((state) => withVisit(state, toggleGrid(state))),
     navigated: () => set((state) => navigated(state)),
     focusClaimDelivered: (id) => set((state) => focusClaimDelivered(state, id)),
-    claimLeafFocus: (desktopId, leafId) => set((state) => claimFocus(state, { desktopId, leafId }, focusOwner())),
+    claimLeafFocus: (desktopId, leafId, owner = focusOwner()) => set((state) => claimFocus(state, { desktopId, leafId }, owner)),
     transferFocus: (leaf) => set((state) => claimFocus(state, leaf, focusOwner())),
     leafMoved: (profileId, moved) => set((state) => leafMoved(state, profileId, moved)),
     navigateLeafHistory: (direction, resumeCurrent = false) => {

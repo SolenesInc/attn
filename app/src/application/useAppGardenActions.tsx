@@ -7,6 +7,7 @@ import { useDaemonStore } from '../store/daemonSessions';
 import { gardenPathToSeed, useGardenWalk } from '../store/gardenWalk';
 import { crewDisplayName } from '../utils/crewName';
 import { useSessionStore } from '../store/sessions';
+import { trackOpen } from './trackOpen';
 interface Options {
   sendOpenSeed: ReturnType<typeof useDaemonApi>['sendOpenSeed'];
   shownAgentId: string | null;
@@ -47,13 +48,13 @@ export function useAppGardenActions({
       placement: SeedPlacement,
       beforeFocus?: (opened: { desktopId: string; tileId: string }) => void,
     ) => {
-      const opened = await sendOpenSeed(seedId, placement);
+      const { result: opened, moved, focusOwner } = await trackOpen(() => sendOpenSeed(seedId, placement));
       if (!opened.desktopId || !opened.tileId) {
         throw new Error(`The daemon opened ${seedId} without a desktop tile`);
       }
       const { desktopId, tileId } = opened;
       beforeFocus?.({ desktopId, tileId });
-      useSessionStore.getState().selectLeaf(desktopId, tileId);
+      if (!moved) useSessionStore.getState().selectLeaf(desktopId, tileId, focusOwner);
       return opened;
     },
     [sendOpenSeed],
@@ -110,9 +111,9 @@ export function useAppGardenActions({
 
   const handleOpenMarkdownArtifact = useCallback(
     (path: string) => {
-      void sendOpenMarkdown(path, '')
-        .then(({ desktopId, tileId }) => {
-          if (desktopId && tileId) useSessionStore.getState().selectLeaf(desktopId, tileId);
+      void trackOpen(() => sendOpenMarkdown(path, ''))
+        .then(({ result: { desktopId, tileId }, moved, focusOwner }) => {
+          if (desktopId && tileId && !moved) useSessionStore.getState().selectLeaf(desktopId, tileId, focusOwner);
         })
         .catch((error) => {
           showError(error instanceof Error ? error.message : 'Could not open the document');

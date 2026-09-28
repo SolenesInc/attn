@@ -10,6 +10,7 @@ import { resolveEditorTileRoot, serializeNotebookTileParams } from '../types/des
 import { appViewTileKind } from '../utils/appBundle';
 import { AppContentProps } from './appSupport';
 import { useActiveLeaf } from '../hooks/useDesktopSelectionBridge';
+import { trackOpen } from './trackOpen';
 
 interface Options {
   settings: AppContentProps['settings'];
@@ -72,18 +73,22 @@ export function useDesktopTiles({ settings, sessions, shownAgentId, showError }:
     const localDirectory = activeSession && !activeSession.endpointId ? activeSession.cwd : '';
     const root = resolveEditorTileRoot(localDirectory, settings['notebook.root.effective'] || '');
     const tileId = `notebook-tile-${crypto.randomUUID()}`;
-    void withFreshDesktopRevisions([desktop.id], (revisionOf) =>
-      sendDesktopDockTile({
-        desktopId: desktop.id,
-        expectedRevision: revisionOf(desktop.id),
-        tileId,
-        tileKind: 'notebook',
-        tileParams: root ? serializeNotebookTileParams({ root }) : undefined,
-        edge: 'right',
-        tileShare: 0.4,
-      }),
+    void trackOpen(() =>
+      withFreshDesktopRevisions([desktop.id], (revisionOf) =>
+        sendDesktopDockTile({
+          desktopId: desktop.id,
+          expectedRevision: revisionOf(desktop.id),
+          tileId,
+          tileKind: 'notebook',
+          tileParams: root ? serializeNotebookTileParams({ root }) : undefined,
+          edge: 'right',
+          tileShare: 0.4,
+        }),
+      ),
     )
-      .then(() => useSessionStore.getState().claimLeafFocus(desktop.id, tileId))
+      .then(({ moved, focusOwner }) => {
+        if (!moved) useSessionStore.getState().claimLeafFocus(desktop.id, tileId, focusOwner);
+      })
       .catch((error) => showError(`Could not open the notebook: ${failureMessage(error)}`));
   }, [sendDesktopDockTile, settings, sessions, shownAgentId, showError]);
 
@@ -93,18 +98,22 @@ export function useDesktopTiles({ settings, sessions, shownAgentId, showError }:
       const desktop = currentDesktop();
       if (!desktop) return;
       const tileId = `app-view-tile-${crypto.randomUUID()}`;
-      void withFreshDesktopRevisions([desktop.id], (revisionOf) =>
-        sendDesktopDockTile({
-          desktopId: desktop.id,
-          expectedRevision: revisionOf(desktop.id),
-          tileId,
-          tileKind: appViewTileKind(app, view),
-          tileParams: params || undefined,
-          edge: 'right',
-          tileShare: 0.4,
-        }),
+      void trackOpen(() =>
+        withFreshDesktopRevisions([desktop.id], (revisionOf) =>
+          sendDesktopDockTile({
+            desktopId: desktop.id,
+            expectedRevision: revisionOf(desktop.id),
+            tileId,
+            tileKind: appViewTileKind(app, view),
+            tileParams: params || undefined,
+            edge: 'right',
+            tileShare: 0.4,
+          }),
+        ),
       )
-        .then(() => useSessionStore.getState().claimLeafFocus(desktop.id, tileId))
+        .then(({ moved, focusOwner }) => {
+          if (!moved) useSessionStore.getState().claimLeafFocus(desktop.id, tileId, focusOwner);
+        })
         .catch((error) => showError(`Could not open that view: ${failureMessage(error)}`));
     },
     [sendDesktopDockTile, showError],

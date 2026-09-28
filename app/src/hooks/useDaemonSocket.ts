@@ -4708,16 +4708,15 @@ export function useDaemonSocket({
   }, []);
 
   const sendProfileCommand = useCallback(
-    (cmd: string, body: Record<string, unknown>) =>
-      sendRequest<ProfileActionResult>(cmd, body, `The daemon did not answer ${cmd}`),
+    (cmd: string, body: Record<string, unknown>) => {
+      if (cmd === 'profile_select' || cmd.startsWith('desktop_')) useSessionStore.getState().navigated();
+      return sendRequest<ProfileActionResult>(cmd, body, `The daemon did not answer ${cmd}`);
+    },
     [sendRequest],
   );
 
   const sendProfileSelect = useCallback(
-    (profileId: string) => {
-      useSessionStore.getState().navigated();
-      return sendProfileCommand('profile_select', { profile_id: profileId });
-    },
+    (profileId: string) => sendProfileCommand('profile_select', { profile_id: profileId }),
     [sendProfileCommand],
   );
 
@@ -4791,18 +4790,14 @@ export function useDaemonSocket({
   );
 
   const sendDesktopSetCurrent = useCallback(
-    (profileId: string, desktopId: string) => {
-      useSessionStore.getState().navigated();
-      return sendProfileCommand('desktop_set_current', { profile_id: profileId, desktop_id: desktopId });
-    },
+    (profileId: string, desktopId: string) =>
+      sendProfileCommand('desktop_set_current', { profile_id: profileId, desktop_id: desktopId }),
     [sendProfileCommand],
   );
 
   const sendDesktopSetActivePane = useCallback(
-    (desktopId: string, paneId: string) => {
-      useSessionStore.getState().navigated();
-      return sendProfileCommand('desktop_set_active_pane', { desktop_id: desktopId, pane_id: paneId });
-    },
+    (desktopId: string, paneId: string) =>
+      sendProfileCommand('desktop_set_active_pane', { desktop_id: desktopId, pane_id: paneId }),
     [sendProfileCommand],
   );
 
@@ -4863,9 +4858,8 @@ export function useDaemonSocket({
       anchorId?: string;
       edge: 'left' | 'right' | 'top' | 'bottom';
       tileShare?: number;
-    }) => {
-      useSessionStore.getState().navigated();
-      return sendProfileCommand('desktop_dock_tile', {
+    }) =>
+      sendProfileCommand('desktop_dock_tile', {
         desktop_id: dock.desktopId,
         expected_revision: dock.expectedRevision,
         tile_id: dock.tileId,
@@ -4875,8 +4869,7 @@ export function useDaemonSocket({
         ...(dock.tileSessionId ? { tile_session_id: dock.tileSessionId } : {}),
         ...(dock.anchorId ? { anchor_id: dock.anchorId } : {}),
         ...(dock.tileShare ? { tile_share: dock.tileShare } : {}),
-      });
-    },
+      }),
     [sendProfileCommand],
   );
 
