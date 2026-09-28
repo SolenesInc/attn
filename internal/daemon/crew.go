@@ -351,6 +351,10 @@ func (d *Daemon) releaseExitedCrewBinding(sessionID string) {
 	if !pending || restart.LetterPath != "" || member.LetterSession == sessionID {
 		return
 	}
+	if d.lifetime().Err() != nil {
+		// A stopping daemon cannot run the successor; the next daemon completes the queued restart.
+		return
+	}
 	if _, err := d.crewRestart(member.ID, restart.RequestID, nil, nil); err != nil {
 		d.logf("crew: restarting %s after session %s exited: %v", crew.DisplayName(member.ID), sessionID, err)
 	}
