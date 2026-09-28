@@ -307,7 +307,7 @@ export function advanceQueue(
   next: QueueBands<QueueBandSession> | null,
   focusOwner: Element | null,
 ): SessionNavigationState {
-  if (!next || state.intent?.sendsShow) return state;
+  if (!next || state.intent) return state;
   if (state.view === 'dashboard' && state.followNextTurn) {
     const target = headOfQueue(next);
     return target ? selectAgent(state, arrangement.profileId, target.session.id, focusOwner) : state;

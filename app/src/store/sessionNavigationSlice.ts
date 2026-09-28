@@ -85,9 +85,7 @@ export function reconcileSessionNavigation(
   );
   const arrangement = arrangementOf(next);
   const reconciled = arrival ? reconcileArrangement(next, arrangement, arrangementOf(state), arrival) : next;
-  const advanced = state.intent?.sendsShow
-    ? reconciled
-    : advanceQueue(reconciled, arrangement, state.navigationQueue, next.navigationQueue, focusOwner());
+  const advanced = advanceQueue(reconciled, arrangement, state.navigationQueue, next.navigationQueue, focusOwner());
   return { ...next, ...advanced };
 }
 

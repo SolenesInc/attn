@@ -483,6 +483,37 @@ describe('queue', () => {
     else expect(isHome()).toBe(true);
   });
 
+  it('lets a pending launch finish before the queue moves on, and moves on after it', async () => {
+    const view = await renderAgents({ s1: OWED, s2: OWED });
+    await open(view.daemon, 's1');
+    const held: Array<Extract<(typeof view.daemon.sent)[number], { cmd: 'spawn_session' }>> = [];
+    view.daemon.on('spawn_session', (command) => {
+      held.push(command);
+      return undefined;
+    });
+    pressShortcut('terminal.splitVertical');
+    await view.daemon.idle();
+    const [spawn] = held.splice(0);
+
+    await view.update({ s1: SETTLED, s2: OWED });
+    expect(shows(view.daemon)).toEqual(['session:s1']);
+
+    await gesture(view.daemon, () => {
+      view.daemon.arrangement.place(spawn.id, `pane-${spawn.id}`, 'desktop-s1');
+      view.daemon.emit(view.daemon.arrangement.answer({ request_id: spawn.id }));
+      view.daemon.replyTo(spawn, { event: 'spawn_result', id: spawn.id, success: true, desktop_id: 'desktop-s1', pane_id: `pane-${spawn.id}` });
+    });
+    expect(shownLeaf()).toBe(`pane-${spawn.id}`);
+
+    await gesture(view.daemon, () => view.daemon.emit({ event: 'sessions_updated', sessions: [
+      ...queueOf({ s1: SETTLED, s2: OWED }), queueSession(spawn.id, 12, OWED),
+    ] }));
+    await gesture(view.daemon, () => view.daemon.emit({ event: 'sessions_updated', sessions: [
+      ...queueOf({ s1: SETTLED, s2: OWED }), queueSession(spawn.id, 12, SETTLED),
+    ] }));
+    expect(selectedAgent()).toBe('s2');
+  });
+
   it('moves on only from the active leaf, not from a tile beside the agent whose turn closed', async () => {
     const { daemon } = await renderApp({ initialState: {
       sessions: [queueSession('s1', 9, OWED), queueSession('s2', 10, OWED)],
