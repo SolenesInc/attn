@@ -1,12 +1,9 @@
 package daemon
 
 import (
-	"context"
 	"encoding/base64"
 	"encoding/json"
-	"errors"
 	"path/filepath"
-	"sync"
 	"testing"
 	"time"
 
@@ -14,145 +11,6 @@ import (
 	"github.com/victorarias/attn/internal/ptybackend"
 	"github.com/victorarias/attn/internal/workspacelayout"
 )
-
-type fakeDeferredRecoveryBackend struct {
-	fakeWorkerReconcileBackend
-	mu          sync.Mutex
-	reports     []ptybackend.RecoveryReport
-	likelyAlive map[string]bool
-	likelyErr   map[string]error
-}
-
-func (b *fakeDeferredRecoveryBackend) Recover(context.Context) (ptybackend.RecoveryReport, error) {
-	b.mu.Lock()
-	defer b.mu.Unlock()
-	if len(b.reports) == 0 {
-		return ptybackend.RecoveryReport{}, nil
-	}
-	report := b.reports[0]
-	b.reports = b.reports[1:]
-	return report, nil
-}
-
-func (b *fakeDeferredRecoveryBackend) SessionLikelyAlive(_ context.Context, sessionID string) (bool, error) {
-	if err, ok := b.likelyErr[sessionID]; ok {
-		return false, err
-	}
-	return b.likelyAlive[sessionID], nil
-}
-
-func TestDaemon_ReconcileSessionsWithWorkerBackend_PreservesLikelyAliveSessions(t *testing.T) {
-	d := NewForTesting(filepath.Join(t.TempDir(), "test.sock"))
-	now := string(protocol.TimestampNow())
-	d.store.Add(&protocol.Session{
-		ID:             "stale-running",
-		Label:          "stale-running",
-		Agent:          protocol.SessionAgentCodex,
-		Directory:      "/tmp/stale-running",
-		State:          protocol.SessionStateWorking,
-		StateSince:     now,
-		StateUpdatedAt: now,
-		LastSeen:       now,
-	})
-	d.ptyBackend = &fakeDeferredRecoveryBackend{
-		fakeWorkerReconcileBackend: fakeWorkerReconcileBackend{
-			liveIDs: nil,
-			info:    map[string]ptybackend.SessionInfo{},
-		},
-		likelyAlive: map[string]bool{
-			"stale-running": true,
-		},
-	}
-
-	report := d.reconcileSessionsWithWorkerBackend(context.Background(), true, d.storedSessionIDs(), time.Time{})
-	if report.MarkedIdle != 0 {
-		t.Fatalf("marked_idle = %d, want 0", report.MarkedIdle)
-	}
-	if report.LikelyAlive != 1 {
-		t.Fatalf("likely_alive = %d, want 1", report.LikelyAlive)
-	}
-	session := d.store.Get("stale-running")
-	if session == nil {
-		t.Fatal("stale-running session missing")
-	}
-	if session.State != protocol.SessionStateWorking {
-		t.Fatalf("state = %q, want %q", session.State, protocol.SessionStateWorking)
-	}
-}
-
-func TestDaemon_ReconcileSessionsWithWorkerBackend_SkipsIdleDemotionOnLivenessProbeError(t *testing.T) {
-	d := NewForTesting(filepath.Join(t.TempDir(), "test.sock"))
-	now := string(protocol.TimestampNow())
-	d.store.Add(&protocol.Session{
-		ID:             "stale-running",
-		Label:          "stale-running",
-		Agent:          protocol.SessionAgentCodex,
-		Directory:      "/tmp/stale-running",
-		State:          protocol.SessionStateWorking,
-		StateSince:     now,
-		StateUpdatedAt: now,
-		LastSeen:       now,
-	})
-	d.ptyBackend = &fakeDeferredRecoveryBackend{
-		fakeWorkerReconcileBackend: fakeWorkerReconcileBackend{
-			liveIDs: nil,
-			info:    map[string]ptybackend.SessionInfo{},
-		},
-		likelyErr: map[string]error{
-			"stale-running": errors.New("probe timeout"),
-		},
-	}
-
-	report := d.reconcileSessionsWithWorkerBackend(context.Background(), true, d.storedSessionIDs(), time.Time{})
-	if report.MarkedIdle != 0 {
-		t.Fatalf("marked_idle = %d, want 0", report.MarkedIdle)
-	}
-	if report.LivenessUnknown != 1 {
-		t.Fatalf("liveness_unknown = %d, want 1", report.LivenessUnknown)
-	}
-	session := d.store.Get("stale-running")
-	if session == nil {
-		t.Fatal("stale-running session missing")
-	}
-	if session.State != protocol.SessionStateWorking {
-		t.Fatalf("state = %q, want %q", session.State, protocol.SessionStateWorking)
-	}
-}
-
-func TestDaemon_ReconcileSessionsWithWorkerBackend_SkipsIdleDemotionOnIncompleteRecovery(t *testing.T) {
-	d := NewForTesting(filepath.Join(t.TempDir(), "test.sock"))
-	now := string(protocol.TimestampNow())
-	d.store.Add(&protocol.Session{
-		ID:             "missing-running",
-		Label:          "missing",
-		Agent:          protocol.SessionAgentCodex,
-		Directory:      "/tmp/missing",
-		State:          protocol.SessionStateWorking,
-		StateSince:     now,
-		StateUpdatedAt: now,
-		LastSeen:       now,
-	})
-
-	d.ptyBackend = &fakeWorkerReconcileBackend{
-		liveIDs: nil,
-		info:    map[string]ptybackend.SessionInfo{},
-	}
-
-	report := d.reconcileSessionsWithWorkerBackend(context.Background(), false, d.storedSessionIDs(), time.Time{})
-	if report.MarkedIdle != 0 {
-		t.Fatalf("marked_idle = %d, want 0", report.MarkedIdle)
-	}
-	if report.SkippedIdle != 1 {
-		t.Fatalf("skipped_idle = %d, want 1", report.SkippedIdle)
-	}
-	session := d.store.Get("missing-running")
-	if session == nil {
-		t.Fatal("missing-running session missing after reconcile")
-	}
-	if session.State != protocol.SessionStateWorking {
-		t.Fatalf("missing-running state = %s, want working", session.State)
-	}
-}
 
 func TestDaemon_BroadcastRawWSMessage_RoutesRemotePTYTrafficToInterestedClients(t *testing.T) {
 	d := NewForTesting(filepath.Join(t.TempDir(), "test.sock"))

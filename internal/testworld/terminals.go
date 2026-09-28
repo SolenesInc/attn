@@ -43,6 +43,12 @@ type Terminal struct {
 	screen    []string
 	streams   []chan ptybackend.OutputEvent
 	onSubmit  func(string)
+	stall     *terminalStall
+}
+
+type terminalStall struct {
+	alive bool
+	err   error
 }
 
 func NewTerminals() *Terminals {
@@ -188,15 +194,35 @@ func (b *Terminals) SessionIDs(context.Context) []string {
 	defer b.mu.Unlock()
 	ids := make([]string, 0, len(b.terminals))
 	for id, term := range b.terminals {
-		if term.running {
+		if term.running && term.stall == nil {
 			ids = append(ids, id)
 		}
 	}
 	return ids
 }
 
-func (b *Terminals) Recover(context.Context) (ptybackend.RecoveryReport, error) {
-	return ptybackend.RecoveryReport{}, nil
+func (b *Terminals) Recover(ctx context.Context) (ptybackend.RecoveryReport, error) {
+	b.mu.Lock()
+	var report ptybackend.RecoveryReport
+	for _, term := range b.terminals {
+		if term.stall != nil {
+			report.Missing++
+		}
+	}
+	b.mu.Unlock()
+	if report.Missing > 0 {
+		<-ctx.Done()
+	}
+	return report, nil
+}
+
+func (b *Terminals) SessionLikelyAlive(_ context.Context, sessionID string) (bool, error) {
+	b.mu.Lock()
+	defer b.mu.Unlock()
+	if term := b.terminals[sessionID]; term != nil && term.stall != nil {
+		return term.stall.alive, term.stall.err
+	}
+	return false, nil
 }
 
 func (b *Terminals) Shutdown(context.Context) error { return nil }
@@ -244,6 +270,17 @@ func (t *Terminal) OnSubmit(fn func(prompt string)) {
 	t.owner.mu.Lock()
 	defer t.owner.mu.Unlock()
 	t.onSubmit = fn
+}
+
+func (t *Terminal) Stall(alive bool, probeErr error) (answer func()) {
+	t.owner.mu.Lock()
+	defer t.owner.mu.Unlock()
+	t.stall = &terminalStall{alive: alive, err: probeErr}
+	return func() {
+		t.owner.mu.Lock()
+		defer t.owner.mu.Unlock()
+		t.stall = nil
+	}
 }
 
 func (t *Terminal) Submitted() []string {

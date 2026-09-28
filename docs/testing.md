@@ -165,6 +165,10 @@ Timers:
   under `synctest`, and move the clock with `w.advance(d)`.
 - A bubbled world cannot run agents or watch folders. Its notebook at
   `<w.Dir>/notebook` exists only if a test outside a bubble creates it.
+- `inBubbleWithAgents` gives the world fake terminals, `w.terms`. A
+  terminal's `Stall(alive, err)` makes its worker stop answering until the
+  test calls the returned function: recovery waits out its deadline and counts
+  it missing, and the liveness probe answers `alive, err`.
 
 ### Stack
 
