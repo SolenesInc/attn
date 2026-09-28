@@ -146,6 +146,20 @@ func (s *Store) EligibleJobs(now time.Time, limit int) ([]JobRecord, error) {
 	return collectJobRows(rows, "eligible jobs")
 }
 
+func (s *Store) NextScheduledJob() (time.Time, bool, error) {
+	if s.db == nil {
+		return time.Time{}, false, fmt.Errorf("store: no database")
+	}
+	var next sql.NullString
+	if err := s.db.QueryRow(`SELECT MIN(scheduled_at) FROM jobs WHERE state IN ('queued', 'failed')`).Scan(&next); err != nil {
+		return time.Time{}, false, fmt.Errorf("store: next scheduled job: %w", err)
+	}
+	if !next.Valid {
+		return time.Time{}, false, nil
+	}
+	return parseStoreTime(next.String), true, nil
+}
+
 func (s *Store) RecoverRunningJobs(now time.Time) (int, error) {
 	if s.db == nil {
 		return 0, fmt.Errorf("store: no database")

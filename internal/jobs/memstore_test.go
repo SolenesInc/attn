@@ -99,6 +99,22 @@ func (m *memStore) List() ([]*Job, error) {
 	return out, nil
 }
 
+func (m *memStore) NextScheduled() (time.Time, bool, error) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	var next time.Time
+	found := false
+	for _, j := range m.jobs {
+		if j.State != StateQueued && j.State != StateFailed {
+			continue
+		}
+		if !found || j.ScheduledAt.Before(next) {
+			next, found = j.ScheduledAt, true
+		}
+	}
+	return next, found, nil
+}
+
 func (m *memStore) Eligible(now time.Time, limit int) ([]*Job, error) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
