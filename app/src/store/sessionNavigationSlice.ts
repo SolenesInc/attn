@@ -67,6 +67,9 @@ export function reconcileSessionNavigation(
   update: Partial<SessionStore>,
 ): Partial<SessionStore> {
   const next = { ...state, ...update };
+  if (next.navigationProfileId !== state.navigationProfileId || next.navigationCurrentDesktopId !== state.navigationCurrentDesktopId) {
+    next.navigationEpoch = state.navigationEpoch + 1;
+  }
   next.navigationQueue = navigationQueue(
     next.navigationSessions,
     next.navigationProfileId,

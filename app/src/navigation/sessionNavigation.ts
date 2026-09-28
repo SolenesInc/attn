@@ -47,6 +47,7 @@ export interface SessionNavigationState {
   focusRequest: FocusClaim | null;
   leafHistoryByProfile: Record<string, LeafHistoryState>;
   selectionSequence: number;
+  navigationEpoch: number;
   focusSequence: number;
   utilityFocusRequestToken: number;
 }
@@ -60,6 +61,7 @@ export function initialSessionNavigation(): SessionNavigationState {
     focusRequest: null,
     leafHistoryByProfile: {},
     selectionSequence: 0,
+    navigationEpoch: 0,
     focusSequence: 0,
     utilityFocusRequestToken: 0,
   };
@@ -88,6 +90,7 @@ export function requestShow(
     pendingSelection: { id, profileId, target, historyCursor, focusOwner },
     focusRequest: null,
     selectionSequence: id,
+    navigationEpoch: state.navigationEpoch + 1,
   };
 }
 
@@ -123,7 +126,7 @@ export function toggleGrid(state: SessionNavigationState): SessionNavigationStat
 }
 
 export function enterHome(state: SessionNavigationState, followNextTurn: boolean): SessionNavigationState {
-  return { ...cancelSelection(state), view: 'dashboard', followNextTurn };
+  return { ...cancelSelection(state), view: 'dashboard', followNextTurn, navigationEpoch: state.navigationEpoch + 1 };
 }
 
 export function changeView(state: SessionNavigationState, update: StateUpdate<AppView>): SessionNavigationState {
@@ -131,6 +134,7 @@ export function changeView(state: SessionNavigationState, update: StateUpdate<Ap
   return {
     ...cancelSelection(state),
     view,
+    navigationEpoch: view === state.view ? state.navigationEpoch : state.navigationEpoch + 1,
     viewBeforeGrid: view === 'grid' && state.view !== 'grid' ? state.view : state.viewBeforeGrid,
     followNextTurn: view === 'dashboard' && state.followNextTurn,
   };

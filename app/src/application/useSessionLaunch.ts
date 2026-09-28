@@ -30,9 +30,8 @@ interface Options {
   showError: ReturnType<typeof useToast>['showError'];
 }
 
-function navigationMark(): string {
-  const { selectionSequence, view } = useSessionStore.getState();
-  return `${selectionSequence}:${view}`;
+function navigationMark(): number {
+  return useSessionStore.getState().navigationEpoch;
 }
 
 function localDesktopForLaunch(endpointId: string | undefined) {

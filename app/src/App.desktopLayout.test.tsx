@@ -63,6 +63,37 @@ describe('App desktop layout', () => {
     expect(daemon.sent.slice(before).filter((command) => command.cmd.startsWith('desktop_'))).toEqual([]);
   });
 
+  it('leaves the user on the desktop they switched to while a launch was spawning', async () => {
+    const { daemon } = await renderApp({ initialState: {
+      sessions: [daemonSession('s1', { state: 'idle', directory: '/tmp/s1' })],
+      desktops: [soloDesktop('s1', { shortcut_slot: 1 }), emptyDesktop('other', { shortcut_slot: 2 })],
+    } });
+    await openSession(daemon, 's1');
+    const held: Array<(typeof daemon.sent)[number]> = [];
+    daemon.on('spawn_session', (command) => {
+      held.push(command);
+      return undefined;
+    });
+
+    pressShortcut('terminal.splitVertical');
+    await daemon.idle();
+    expect(held).toHaveLength(1);
+    pressShortcut('desktop.select2');
+    await daemon.idle();
+    serveLaunches(daemon);
+    const [spawn] = held.splice(0) as Array<Extract<(typeof daemon.sent)[number], { cmd: 'spawn_session' }>>;
+    await act(async () => {
+      daemon.arrangement.place(spawn.id, `pane-${spawn.id}`, 'desktop-s1');
+      daemon.replyTo(spawn, { event: 'spawn_result', id: spawn.id, success: true, desktop_id: 'desktop-s1', pane_id: `pane-${spawn.id}` });
+      daemon.emit({ event: 'session_registered', session: daemonSession(spawn.id, { directory: '/tmp/s1', agent: 'shell', state: 'launching' }) });
+      daemon.emit(daemon.arrangement.changed());
+    });
+    await daemon.idle();
+
+    expect(daemon.sentOf('desktop_show_session').filter((command) => command.session_id === spawn.id)).toEqual([]);
+    expect(document.querySelector('[data-session-visible="1"]')?.getAttribute('data-session-terminal-desktop')).toBe('other');
+  });
+
   it('places a split only through its spawn, then shows it once', async () => {
     const { daemon } = await openDesktop(pane('s1'), ['s1']);
     serveLaunches(daemon);
