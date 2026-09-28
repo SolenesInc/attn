@@ -2850,6 +2850,7 @@ export function useUiAutomationBridge({
         const paneId = resolvePaneId(session, getActivePaneIdForSession, payload.paneId);
         const viewSessionId = resolveDesktopViewSessionId(session, sessions, shownAgentId);
         selectSession(sessionId);
+        await selectionShown({ kind: 'session', sessionId });
         await settleUi(1);
         const success = scrollSessionPaneToTop(viewSessionId, paneId);
         if (!success) {
@@ -2870,6 +2871,7 @@ export function useUiAutomationBridge({
         const deltaY = typeof payload.deltaY === 'number' ? payload.deltaY : 0;
         const deltaMode = typeof payload.deltaMode === 'number' ? payload.deltaMode : WheelEvent.DOM_DELTA_PIXEL;
         selectSession(sessionId);
+        await selectionShown({ kind: 'session', sessionId });
         await settleUi(1);
         wheelPaneElement(ownerSessionId, paneId, deltaY, deltaMode);
         await settleUi(2);
@@ -2890,6 +2892,7 @@ export function useUiAutomationBridge({
           throw new Error('click_pane_cell requires pane size and a numeric cell');
         }
         selectSession(sessionId);
+        await selectionShown({ kind: 'session', sessionId });
         await settleUi(1);
         clickPaneCell(ownerSessionId, paneId, size, { col: cell.col, row: cell.row });
         await settleUi(2);
@@ -2910,6 +2913,7 @@ export function useUiAutomationBridge({
           throw new Error('hover_pane_cell requires pane size and a numeric cell');
         }
         selectSession(sessionId);
+        await selectionShown({ kind: 'session', sessionId });
         await settleUi(1);
         const hovered = hoverPaneCell(
           ownerSessionId,
@@ -2968,6 +2972,7 @@ export function useUiAutomationBridge({
           throw new Error('drag_pane_selection requires pane size and numeric start/end cells');
         }
         selectSession(sessionId);
+        await selectionShown({ kind: 'session', sessionId });
         await settleUi(1);
         const altKey = payload.altKey === true;
         dragPaneSelection(
@@ -2995,6 +3000,7 @@ export function useUiAutomationBridge({
         const dropFracY = typeof payload.dropFracY === 'number' ? payload.dropFracY : 0.5;
         const viewSessionId = resolveDesktopViewSessionId(session, sessions, shownAgentId);
         selectSession(sessionId);
+        await selectionShown({ kind: 'session', sessionId });
         await settleUi(2);
         const points = dragLeafHeader(leafId, dropFracX, dropFracY);
         await settleUi(2);
@@ -3014,6 +3020,7 @@ export function useUiAutomationBridge({
         }
         const viewSessionId = resolveDesktopViewSessionId(session, sessions, shownAgentId);
         selectSession(sessionId);
+        await selectionShown({ kind: 'session', sessionId });
         await settleUi(2);
         const result = await dragSplitDivider(session.desktopId, splitId, deltaPx, steps);
         return { sessionId, viewSessionId, desktopId: session.desktopId, ...result };
@@ -3615,6 +3622,8 @@ export function useUiAutomationBridge({
         const base64Payload = encodeBytesToBase64(bytes);
 
         selectSession(sessionId);
+
+        await selectionShown({ kind: 'session', sessionId });
         focusPane(sessionId, paneId);
         await settleUi(2);
         if (!resetSessionPaneTerminal(sessionId, paneId)) {
