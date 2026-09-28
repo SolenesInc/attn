@@ -39,6 +39,7 @@ export interface Intent {
   target: IntentTarget;
   // The selection bridge sends the show; other intents send their own commands.
   sendsShow: boolean;
+  announce: boolean;
   historyCursor: number | null;
   focusOwner: Element | null;
 }
@@ -96,13 +97,13 @@ export function beginIntent(
   profileId: string,
   target: IntentTarget,
   focusOwner: Element | null,
-  { sendsShow = false, historyCursor = null }: { sendsShow?: boolean; historyCursor?: number | null } = {},
+  { sendsShow = false, announce = false, historyCursor = null }: { sendsShow?: boolean; announce?: boolean; historyCursor?: number | null } = {},
 ): SessionNavigationState {
   const id = state.intentSequence + 1;
   return {
     ...state,
     followNextTurn: false,
-    intent: { id, profileId, target, sendsShow, historyCursor, focusOwner },
+    intent: { id, profileId, target, sendsShow, announce, historyCursor, focusOwner },
     focusRequest: null,
     intentSequence: id,
   };
@@ -114,8 +115,9 @@ export function requestShow(
   target: ShowTarget,
   focusOwner: Element | null,
   historyCursor: number | null = null,
+  announce = true,
 ): SessionNavigationState {
-  return beginIntent(state, profileId, target, focusOwner, { sendsShow: true, historyCursor });
+  return beginIntent(state, profileId, target, focusOwner, { sendsShow: true, announce, historyCursor });
 }
 
 export function selectAgent(
@@ -123,8 +125,9 @@ export function selectAgent(
   profileId: string,
   sessionId: string,
   focusOwner: Element | null,
+  announce = true,
 ): SessionNavigationState {
-  return requestShow(state, profileId, { kind: 'session', sessionId }, focusOwner);
+  return requestShow(state, profileId, { kind: 'session', sessionId }, focusOwner, null, announce);
 }
 
 // Commands that never change what a window shows; everything else the user sends does.
@@ -284,7 +287,7 @@ export function reconcileArrangement(
       next = recordVisit(next, arrangement);
     }
     if (next.view === 'session' && leaf) {
-      next = claimFocus(next, { desktopId: leaf.desktopId, leafId: leaf.leafId }, intent.focusOwner, true);
+      next = claimFocus(next, { desktopId: leaf.desktopId, leafId: leaf.leafId }, intent.focusOwner, intent.announce);
     }
     return next;
   }

@@ -272,6 +272,11 @@ export function useDesktopController(
     agentPaneById,
     selectedSessionId === undefined ? selectedDesktopSessionId : selectedSessionId,
   );
+  useLayoutEffect(() => {
+    if (focusClaim?.announce && focusClaim.desktopId === desktopId
+      && effectivePaneId && tileLeafById.has(effectivePaneId)
+      && focusClaim.leafId !== effectivePaneId) setMaximizedLeafId(null);
+  }, [desktopId, effectivePaneId, focusClaim, setMaximizedLeafId, tileLeafById]);
   const effectiveZoomedPaneId = zoomActive && leafIdSet.has(activeLeafId) ? activeLeafId : null;
 
   const hasLayout = terminalState.layoutTree != null;
@@ -511,7 +516,7 @@ export function useDesktopController(
     pane.classList.remove('leaf-arrival');
     void pane.offsetWidth;
     pane.classList.add('leaf-arrival');
-  }, [activeLeafId, desktopId, focusClaim, paneReadyFocusRequest, sessionVisible]);
+  }, [activeLeafId, desktopId, focusClaim, paneReadyFocusRequest, renderedPaneIdsKey, sessionVisible]);
 
   useEffect(() => {
     const container = panesContainerRef.current;

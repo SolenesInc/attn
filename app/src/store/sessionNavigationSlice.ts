@@ -32,7 +32,7 @@ import type { LeafRef } from '../navigation/leafHistory';
 import { getAgentExecutableSettings } from '../utils/agentAvailability';
 
 export interface SessionNavigationActions {
-  selectAgent: (sessionId: string, focusOwner?: Element | null) => boolean;
+  selectAgent: (sessionId: string, focusOwner?: Element | null, announce?: boolean) => boolean;
   selectLeaf: (desktopId: string, leafId: string, focusOwner?: Element | null) => void;
   beginIntent: (target: IntentTarget) => number;
   commandSent: (cmd: string, body: Record<string, unknown>, requestId: string) => number | null;
@@ -96,8 +96,8 @@ export function createSessionNavigationActions(
   get: () => SessionStore,
 ): SessionNavigationActions {
   return {
-    selectAgent: (sessionId, owner = focusOwner()) => {
-      set((state) => selectAgent(state, state.navigationProfileId, sessionId, owner));
+    selectAgent: (sessionId, owner = focusOwner(), announce = true) => {
+      set((state) => selectAgent(state, state.navigationProfileId, sessionId, owner, announce));
       return true;
     },
     selectLeaf: (desktopId, leafId, owner = focusOwner()) =>
