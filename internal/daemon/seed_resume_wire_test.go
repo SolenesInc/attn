@@ -285,28 +285,18 @@ func TestResumingASeedWhoseTendersProfileWasDeletedResumesInTheAppsProfile(t *te
 	first := w.Launched(delegated.SessionID)
 	closePane(app, sessionPane{session: delegated.SessionID})
 
-	kept := profileRequest(app, "create-kept", protocol.ProfileCreateMessage{Cmd: protocol.CmdProfileCreate, Name: "Kept", RequestID: "create-kept"})
+	kept := protocol.Deref(mustProfileRequest(app, protocol.ProfileCreateMessage{Cmd: protocol.CmdProfileCreate, Name: "Kept", RequestID: "create-kept"}, "create-kept").Profile)
 	var deleted protocol.Profile
 	for _, profile := range app.Initial.Profiles {
 		if profile.ID == protocol.Deref(delegated.ProfileID) {
 			deleted = profile
 		}
 	}
-	profileRequest(app, "delete-tenders", protocol.ProfileDeleteMessage{Cmd: protocol.CmdProfileDelete, ProfileID: deleted.ID, ExpectedRevision: deleted.Revision, DestinationProfileID: kept.ID, RequestID: "delete-tenders"})
+	mustProfileRequest(app, protocol.ProfileDeleteMessage{Cmd: protocol.CmdProfileDelete, ProfileID: deleted.ID, ExpectedRevision: deleted.Revision, DestinationProfileID: kept.ID, RequestID: "delete-tenders"}, "delete-tenders")
 
 	resumed := seedResumeRequest(app, delegated.SeedID)
 	if !resumed.Success || protocol.Deref(resumed.ProfileID) != kept.ID {
 		t.Fatalf("resuming a seed whose tender's profile %s was deleted = %+v, want it resumed in %s", deleted.ID, resumed, kept.ID)
 	}
 	seedResumeContinues(t, w, first, delegated.SessionID)
-}
-
-func profileRequest(app *testworld.Peer, requestID string, cmd any) protocol.Profile {
-	app.T.Helper()
-	result := testworld.Request(app, cmd, protocol.EventProfileActionResult,
-		func(r protocol.ProfileActionResultMessage) bool { return r.RequestID == requestID })
-	if !result.Success {
-		app.T.Fatalf("%+v = %+v", cmd, result)
-	}
-	return protocol.Deref(result.Profile)
 }

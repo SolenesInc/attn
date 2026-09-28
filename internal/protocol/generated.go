@@ -3370,6 +3370,31 @@ type DesktopSetSplitRatioMessage struct {
 	SplitID string `json:"split_id"`
 }
 
+type DesktopShowLeafMessage struct {
+	// Cmd corresponds to the JSON schema field "cmd".
+	Cmd string `json:"cmd"`
+
+	// DesktopID corresponds to the JSON schema field "desktop_id".
+	DesktopID string `json:"desktop_id"`
+
+	// LeafID corresponds to the JSON schema field "leaf_id".
+	LeafID string `json:"leaf_id"`
+
+	// RequestID corresponds to the JSON schema field "request_id".
+	RequestID string `json:"request_id"`
+}
+
+type DesktopShowSessionMessage struct {
+	// Cmd corresponds to the JSON schema field "cmd".
+	Cmd string `json:"cmd"`
+
+	// RequestID corresponds to the JSON schema field "request_id".
+	RequestID string `json:"request_id"`
+
+	// SessionID corresponds to the JSON schema field "session_id".
+	SessionID string `json:"session_id"`
+}
+
 type DesktopTileContentMessage struct {
 	// Content corresponds to the JSON schema field "content".
 	Content string `json:"content"`
@@ -5393,6 +5418,20 @@ type LayoutSplitDirection string
 const LayoutSplitDirectionHorizontal LayoutSplitDirection = "horizontal"
 const LayoutSplitDirectionVertical LayoutSplitDirection = "vertical"
 
+type LeafMoved struct {
+	// FromDesktopID corresponds to the JSON schema field "from_desktop_id".
+	FromDesktopID string `json:"from_desktop_id"`
+
+	// FromLeafID corresponds to the JSON schema field "from_leaf_id".
+	FromLeafID string `json:"from_leaf_id"`
+
+	// ToDesktopID corresponds to the JSON schema field "to_desktop_id".
+	ToDesktopID string `json:"to_desktop_id"`
+
+	// ToLeafID corresponds to the JSON schema field "to_leaf_id".
+	ToLeafID string `json:"to_leaf_id"`
+}
+
 type ListBranchesMessage struct {
 	// Cmd corresponds to the JSON schema field "cmd".
 	Cmd string `json:"cmd"`
@@ -6990,6 +7029,9 @@ type ProfileArrangementChangedMessage struct {
 
 	// Event corresponds to the JSON schema field "event".
 	Event string `json:"event"`
+
+	// MovedLeaf corresponds to the JSON schema field "moved_leaf".
+	MovedLeaf *LeafMoved `json:"moved_leaf,omitempty,omitzero"`
 
 	// Profile corresponds to the JSON schema field "profile".
 	Profile Profile `json:"profile"`
