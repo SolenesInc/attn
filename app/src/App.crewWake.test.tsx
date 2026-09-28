@@ -112,12 +112,12 @@ async function rosterWithWake() {
 }
 
 describe('App crew in the queue', () => {
-  it('draws every member in the crew block by name, awake or asleep, with the roster count on Manage crew', async () => {
+  it('draws every member in the crew block by name, awake or asleep, with crew management above them', async () => {
     await renderRoster({ days: [keelDay()] });
 
     expect(queueRows().filter((id) => id.startsWith('queue-crew-')))
       .toEqual(['queue-crew-alder', 'queue-crew-keel', 'queue-crew-trellis']);
-    expect(screen.getByTestId('manage-crew')).toHaveTextContent('Manage crew3');
+    expect(screen.getByTestId('manage-crew')).toHaveTextContent('manage');
     expect(crewRow('keel')).toHaveAttribute('data-crew-state', 'awake');
     expect(crewRow('alder')).toHaveAttribute('data-crew-state', 'asleep');
     expect(crewRow('trellis')).toHaveTextContent('Trellis');

@@ -32,7 +32,7 @@ async function showTargetBesideOther(target: Partial<DaemonSession>) {
       desktops: [splitDesktop],
     },
   });
-  const agentList = screen.queryByRole('button', { name: /All agents/ });
+  const agentList = screen.queryByRole('button', { name: /more agents/i });
   if (agentList) await gesture(daemon, () => fireEvent.click(agentList));
   await gesture(daemon, () => fireEvent.click(screen.getByRole('button', { name: 'Open other' })));
   return daemon;
@@ -49,7 +49,7 @@ async function queueTargetOffScreen(target: Partial<DaemonSession>) {
       desktops: [soloDesktop('target'), soloDesktop('other')],
     },
   });
-  const agentList = screen.queryByRole('button', { name: /All agents/ });
+  const agentList = screen.queryByRole('button', { name: /more agents/i });
   if (agentList) await gesture(daemon, () => fireEvent.click(agentList));
   await gesture(daemon, () => fireEvent.click(screen.getByRole('button', { name: 'Open other' })));
   return daemon;
