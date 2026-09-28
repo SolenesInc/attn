@@ -156,6 +156,8 @@ func docFacts(t *testing.T, d *Daemon, name string) []store.BusEvent {
 	return out
 }
 
+var shippedSessionInputSubmitDelay = sessionInputSubmitDelay
+
 func TestMain(m *testing.M) {
 	fakeagent.Main()
 	if os.Getenv("ATTN_PLUGIN_HELPER") == "1" {

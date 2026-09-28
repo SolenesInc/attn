@@ -2,7 +2,6 @@ package daemon
 
 import (
 	"fmt"
-	"net"
 	"os"
 	"path/filepath"
 	"strings"
@@ -13,7 +12,6 @@ import (
 	"github.com/victorarias/attn/internal/docstore"
 	"github.com/victorarias/attn/internal/garden"
 	"github.com/victorarias/attn/internal/logging"
-	"github.com/victorarias/attn/internal/protocol"
 )
 
 func newWakeableDaemon(t *testing.T) (*Daemon, *fakeSpawnBackend, func() string) {
@@ -204,26 +202,4 @@ func newCrewDaemon(t *testing.T) *Daemon {
 	d.ensureCrewCollections()
 	d.importCrewHomes()
 	return d
-}
-
-func crewList(t *testing.T, d *Daemon) []protocol.CrewMember {
-	t.Helper()
-	resp := gardenCall(t, func(c net.Conn) {
-		d.handleCrewList(c, &protocol.CrewListMessage{Cmd: protocol.CmdCrewList})
-	})
-	if !resp.Ok {
-		t.Fatalf("crew list: %v", protocol.Deref(resp.Error))
-	}
-	return resp.CrewListResult.Members
-}
-
-func memberByID(t *testing.T, members []protocol.CrewMember, id string) protocol.CrewMember {
-	t.Helper()
-	for _, m := range members {
-		if m.ID == id {
-			return m
-		}
-	}
-	t.Fatalf("no member %q in the roster", id)
-	return protocol.CrewMember{}
 }

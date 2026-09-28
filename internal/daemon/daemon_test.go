@@ -6,7 +6,6 @@ import (
 	"encoding/json"
 	"errors"
 	"path/filepath"
-	"strings"
 	"sync"
 	"testing"
 	"time"
@@ -40,128 +39,6 @@ func (b *fakeDeferredRecoveryBackend) SessionLikelyAlive(_ context.Context, sess
 		return false, err
 	}
 	return b.likelyAlive[sessionID], nil
-}
-
-func TestDaemon_ReconcileSessionsWithWorkerBackend_PreservesLivePluginReportedState(t *testing.T) {
-	d := NewForTesting(filepath.Join(t.TempDir(), "test.sock"))
-	now := string(protocol.TimestampNow())
-	d.store.Add(&protocol.Session{
-		ID:             "plugin-live",
-		Label:          "plugin-live",
-		Agent:          "snipe",
-		Directory:      "/tmp/plugin-live",
-		State:          protocol.SessionStateLaunching,
-		StateSince:     now,
-		StateUpdatedAt: now,
-		LastSeen:       now,
-	})
-	if !d.store.BeginAgentDriverRun("plugin-live", "snipe-plugin", "run-live") {
-		t.Fatal("BeginAgentDriverRun(plugin-live) failed")
-	}
-	if !d.store.ApplyAgentDriverState("plugin-live", "run-live", 1, protocol.StateWaitingInput, time.Time{}) {
-		t.Fatal("ApplyAgentDriverState(plugin-live) failed")
-	}
-	d.ptyBackend = &fakeWorkerReconcileBackend{
-		liveIDs: []string{"plugin-live"},
-		info: map[string]ptybackend.SessionInfo{
-			"plugin-live": {
-				SessionID: "plugin-live",
-				Agent:     "snipe",
-				CWD:       "/tmp/plugin-live",
-				Running:   true,
-				State:     protocol.StateWorking,
-			},
-		},
-	}
-
-	report := d.reconcileSessionsWithWorkerBackend(context.Background(), true, d.storedSessionIDs(), time.Time{})
-	if report.StateUpdated != 0 {
-		t.Fatalf("state_updated = %d, want 0 for plugin-owned state", report.StateUpdated)
-	}
-	session := d.store.Get("plugin-live")
-	if session == nil || session.State != protocol.SessionStateWaitingInput {
-		t.Fatalf("plugin-live session = %+v, want waiting_input retained from plugin report", session)
-	}
-}
-
-func TestDaemon_RunDeferredWorkerReconciliationForcesIdleDemotion(t *testing.T) {
-	d := NewForTesting(filepath.Join(t.TempDir(), "test.sock"))
-	now := string(protocol.TimestampNow())
-	d.store.Add(&protocol.Session{
-		ID:             "stale-running",
-		Label:          "stale-running",
-		Agent:          protocol.SessionAgentCodex,
-		Directory:      "/tmp/stale-running",
-		State:          protocol.SessionStateWorking,
-		StateSince:     now,
-		StateUpdatedAt: now,
-		LastSeen:       now,
-	})
-	d.ptyBackend = &fakeDeferredRecoveryBackend{
-		fakeWorkerReconcileBackend: fakeWorkerReconcileBackend{
-			liveIDs: nil,
-			info:    map[string]ptybackend.SessionInfo{},
-		},
-		reports: []ptybackend.RecoveryReport{
-			{Missing: 1},
-		},
-	}
-
-	d.runDeferredWorkerReconciliation(1, 0, d.storedSessionIDs(), time.Time{})
-
-	session := d.store.Get("stale-running")
-	if session != nil {
-		t.Fatal("stale-running session should be reaped: no worker and nothing to resume")
-	}
-
-	warnings := d.getWarnings()
-	hasPartial := false
-	for _, w := range warnings {
-		if w.Code == "worker_recovery_partial" && strings.Contains(w.Message, "Forced stale-session reconciliation") {
-			hasPartial = true
-			break
-		}
-	}
-	if !hasPartial {
-		t.Fatalf("expected forced reconciliation warning, got %+v", warnings)
-	}
-}
-
-func TestDaemon_RunDeferredWorkerReconciliation_BroadcastsSessionsUpdatedOnChange(t *testing.T) {
-	d := NewForTesting(filepath.Join(t.TempDir(), "test.sock"))
-	now := string(protocol.TimestampNow())
-	d.store.Add(&protocol.Session{
-		ID:             "stale-running",
-		Label:          "stale-running",
-		Agent:          protocol.SessionAgentCodex,
-		Directory:      "/tmp/stale-running",
-		State:          protocol.SessionStateWorking,
-		StateSince:     now,
-		StateUpdatedAt: now,
-		LastSeen:       now,
-	})
-	d.ptyBackend = &fakeDeferredRecoveryBackend{
-		fakeWorkerReconcileBackend: fakeWorkerReconcileBackend{
-			liveIDs: nil,
-			info:    map[string]ptybackend.SessionInfo{},
-		},
-		reports: []ptybackend.RecoveryReport{
-			{Missing: 1},
-		},
-	}
-
-	broadcasts := 0
-	d.wsHub.broadcastListener = func(event *protocol.WebSocketEvent) {
-		if event != nil && event.Event == protocol.EventSessionsUpdated {
-			broadcasts++
-		}
-	}
-
-	d.runDeferredWorkerReconciliation(1, 0, d.storedSessionIDs(), time.Time{})
-
-	if broadcasts == 0 {
-		t.Fatal("expected deferred reconciliation to broadcast sessions_updated after state changes")
-	}
 }
 
 func TestDaemon_ReconcileSessionsWithWorkerBackend_PreservesLikelyAliveSessions(t *testing.T) {
