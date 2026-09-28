@@ -242,14 +242,30 @@ describe('agent selection', () => {
     ['opening the grid', keys.grid, () => expect(isGrid()).toBe(true)],
   ])('stays where the user went after %s while a show was on its way', async (_, leave, stayed) => {
     const { daemon } = await renderAgents();
+    await open(daemon, 's1');
     const hold = holdShows(daemon);
 
     await open(daemon, 's2');
+    expect(selectedAgent()).toBe('s1');
     await gesture(daemon, leave);
     await hold.release();
 
     stayed();
-    expect(focusedPane()).toBeNull();
+    expect(focusedPane()).not.toBe('pane-s2');
+  });
+
+  it('keeps Home until the daemon shows the agent picked there, then shows it with the keyboard in it', async () => {
+    const { daemon } = await renderAgents();
+    const hold = holdShows(daemon);
+
+    await open(daemon, 's2');
+    expect(isHome()).toBe(true);
+    await hold.release();
+    await settleFocus(daemon);
+
+    expect(isHome()).toBe(false);
+    expect(selectedAgent()).toBe('s2');
+    expect(focusedPane()).toBe('pane-s2');
   });
 
   it.each([
