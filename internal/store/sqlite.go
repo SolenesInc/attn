@@ -1254,6 +1254,10 @@ func sqliteDSN(dbPath string) string {
 	u := &url.URL{Scheme: "file", Path: dbPath}
 	query := u.Query()
 	query.Set("_txlock", "immediate")
+	// WAL with NORMAL sync commits without an fsync; a daemon or app crash loses nothing,
+	// only a power loss can drop the last commits before a checkpoint.
+	query.Set("_journal_mode", "WAL")
+	query.Set("_synchronous", "NORMAL")
 	u.RawQuery = query.Encode()
 	return u.String()
 }

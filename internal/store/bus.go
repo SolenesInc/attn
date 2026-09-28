@@ -262,7 +262,8 @@ func (s *Store) BusBounds() (earliest, head int64, err error) {
 		return 0, 0, nil
 	}
 	var lo, hi sql.NullInt64
-	if err := s.db.QueryRow(`SELECT MIN(seq), MAX(seq) FROM bus_events`).Scan(&lo, &hi); err != nil {
+	// One subquery per bound reads each end of the primary key; MIN and MAX in one SELECT scan every row.
+	if err := s.db.QueryRow(`SELECT (SELECT MIN(seq) FROM bus_events), (SELECT MAX(seq) FROM bus_events)`).Scan(&lo, &hi); err != nil {
 		return 0, 0, err
 	}
 	return lo.Int64, hi.Int64, nil

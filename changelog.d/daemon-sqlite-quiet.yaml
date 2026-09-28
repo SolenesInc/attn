@@ -1,0 +1,17 @@
+kind: changed
+area: daemon
+change: >
+  The idle daemon runs about 85% fewer database statements and no longer
+  fsyncs on every write. The database runs in WAL mode, the markdown tile
+  watcher reads only the workspaces a client is subscribed to, settings are
+  read from memory, and the event-log bounds read no longer scans the log.
+symptom: >
+  An idle daemon with five sessions ran about 1,100 SQLite statements a
+  minute, and every write commit cost three fsyncs plus creating and deleting
+  a rollback journal.
+notes: >
+  Measured in a wire world with five idle Claude sessions: 1,095 to 148
+  statements a minute, and 36 to 0 fsyncs a minute. An active turn went from
+  about 1,080 statements to about 480, and from about 106 fsyncs to 0. A
+  power loss can now drop the last commits before a checkpoint; a daemon or
+  app crash still loses nothing.

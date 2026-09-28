@@ -215,7 +215,7 @@ func (b *Bus) publish(ev Event, payload any) (int64, error) {
 	ev.Seq = seq
 
 	b.announceLocked(&ev)
-	b.wakeDurables()
+	b.wakeDurables(ev.Name)
 	return seq, nil
 }
 
@@ -227,7 +227,7 @@ func (b *Bus) Announce() {
 	b.publishMu.Lock()
 	defer b.publishMu.Unlock()
 	b.announceLocked(nil)
-	b.wakeDurables()
+	b.wakeDurables("")
 }
 
 func (b *Bus) markHead() bool {
@@ -286,12 +286,17 @@ func (b *Bus) fanoutEphemeral(ev Event) {
 	}
 }
 
-func (b *Bus) wakeDurables() {
+// wakeDurables wakes the consumers whose filter matches name, or every consumer when name is
+// empty; a consumer skipped here still advances past the event on its next poll.
+func (b *Bus) wakeDurables(name string) {
 	b.mu.Lock()
 	ds := append([]*durable(nil), b.durables...)
 	b.mu.Unlock()
 
 	for _, d := range ds {
+		if name != "" && !d.matches(name) {
+			continue
+		}
 		select {
 		case d.wake <- struct{}{}:
 		default:
