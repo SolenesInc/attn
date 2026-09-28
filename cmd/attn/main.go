@@ -799,7 +799,8 @@ session options:
                              shortcut digit (1-9), its name as shown
                              (case-insensitive) or its id; the agent opens
                              beside that desktop's active pane without changing
-                             what you see. Defaults to beside you.
+                             what you see. Defaults to beside the source
+                             session.
   --source-session <id>      source session (defaults to ATTN_SESSION_ID)
   --yolo                     bypass agent approval prompts
 
