@@ -67,7 +67,8 @@ const EMPTY_GARDEN_SEEDS: Seed[] = [];
 function focusIsFree(desktop: HTMLElement | null): boolean {
   const active = document.activeElement;
   if (!active || active === document.body) return true;
-  return Boolean(desktop?.contains(active)) && !active.closest('.desktop-dock-tile-body');
+  if (desktop?.contains(active)) return !active.closest('.desktop-dock-tile-body');
+  return Boolean(active.closest('[data-session-terminal-desktop], .anno-popup, .anno-panel'));
 }
 
 const EMPTY_DELEGATION_SESSIONS: NonNullable<SessionTerminalDesktopProps['delegationSessions']> =
