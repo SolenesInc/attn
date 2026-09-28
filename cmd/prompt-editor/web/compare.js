@@ -70,11 +70,12 @@ function changedParts(before, after, remainingWork) {
   const work = (oldLength + 1) * width;
   if (work > remainingWork) return { work };
   const matches = new Uint32Array(work);
+  const wordWeight = oldLength + newLength + 1;
   for (let old = oldLength - 1; old >= 0; old--) {
     const row = old * width, below = (old + 1) * width;
     for (let next = newLength - 1; next >= 0; next--) {
       matches[row + next] = oldTokens[prefix + old] === newTokens[prefix + next]
-        ? matches[below + next + 1] + 1
+        ? matches[below + next + 1] + (/^\s+$/.test(oldTokens[prefix + old]) ? 1 : wordWeight)
         : Math.max(matches[below + next], matches[row + next + 1]);
     }
   }
