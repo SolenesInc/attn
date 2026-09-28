@@ -94,20 +94,28 @@ func newProfileEntityID(prefix string) string {
 }
 
 func (s *Store) profilesTx(fn func(tx *sql.Tx, now string) error) error {
+	_, err := s.profilesTxSeq(fn)
+	return err
+}
+
+// Every profiles transaction takes the next seq: a read with a higher one never shows less.
+func (s *Store) profilesTxSeq(fn func(tx *sql.Tx, now string) error) (int64, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	if s.db == nil {
-		return profiles.Errorf(profiles.CodeUnavailable, "profiles need the SQLite store")
+		return 0, profiles.Errorf(profiles.CodeUnavailable, "profiles need the SQLite store")
 	}
+	s.profilesSeq++
+	seq := s.profilesSeq
 	tx, err := s.db.Begin()
 	if err != nil {
-		return err
+		return 0, err
 	}
 	defer tx.Rollback()
 	if err := fn(tx, time.Now().UTC().Format(sortableTimeFormat)); err != nil {
-		return err
+		return 0, err
 	}
-	return tx.Commit()
+	return seq, tx.Commit()
 }
 
 const profileColumns = `id, name, current_desktop_id, last_used_at, revision, deleted_at, chief_session_id`
@@ -457,9 +465,14 @@ func (s *Store) SelectProfile(id string) (profiles.Profile, error) {
 }
 
 func (s *Store) ProfileArrangement(id string) (profiles.Profile, []profiles.Desktop, error) {
+	profile, desktops, _, err := s.ProfileArrangementSeq(id)
+	return profile, desktops, err
+}
+
+func (s *Store) ProfileArrangementSeq(id string) (profiles.Profile, []profiles.Desktop, int64, error) {
 	var profile profiles.Profile
 	var desktops []profiles.Desktop
-	err := s.profilesTx(func(tx *sql.Tx, _ string) error {
+	seq, err := s.profilesTxSeq(func(tx *sql.Tx, _ string) error {
 		var err error
 		if profile, err = loadProfile(tx, id); err != nil {
 			return err
@@ -467,7 +480,7 @@ func (s *Store) ProfileArrangement(id string) (profiles.Profile, []profiles.Desk
 		desktops, err = listDesktops(tx, id)
 		return err
 	})
-	return profile, desktops, err
+	return profile, desktops, seq, err
 }
 
 func ensureNotLastProfile(tx *sql.Tx, profile profiles.Profile) error {

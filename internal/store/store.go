@@ -36,6 +36,7 @@ type Store struct {
 	sessionCloses          map[string]sessionCloseMark
 	agentMetadata          map[string]string
 	recentLocations        map[string]*protocol.RecentLocation
+	profilesSeq            int64
 }
 
 type AgentDriverReportCursor struct {

@@ -12,7 +12,7 @@ import { AppContentProps } from './appSupport';
 interface Options {
   settings: AppContentProps['settings'];
   sessions: ReturnType<typeof useSessionStore.getState>['sessions'];
-  activeSessionId: string | null;
+  contextSessionId: string | null;
   showError: (message: string) => void;
 }
 
@@ -25,7 +25,7 @@ function currentDesktop() {
   return desktops.find((desktop) => desktop.id === currentDesktopId);
 }
 
-export function useDesktopTiles({ settings, sessions, activeSessionId, showError }: Options) {
+export function useDesktopTiles({ settings, sessions, contextSessionId, showError }: Options) {
   const { sendRecentFiles, sendFsIndex, sendDesktopDockTile } = useDaemonApi();
   const [markdownOpenerOpen, setMarkdownOpenerOpen] = useState(false);
 
@@ -38,10 +38,10 @@ export function useDesktopTiles({ settings, sessions, activeSessionId, showError
   const markdownOpenerTarget = useMemo(
     () =>
       resolveMarkdownOpenerTarget(
-        sessions.find((session) => session.id === activeSessionId),
+        sessions.find((session) => session.id === contextSessionId),
         settings['notebook.root.effective'],
       ),
-    [sessions, activeSessionId, settings],
+    [contextSessionId, sessions, settings],
   );
   const loadOpenerRecents = useCallback(
     () =>
@@ -58,10 +58,11 @@ export function useDesktopTiles({ settings, sessions, activeSessionId, showError
   const handleOpenNotebookTile = useCallback(() => {
     const desktop = currentDesktop();
     if (!desktop) return;
-    const activeSession = sessions.find((session) => session.id === activeSessionId);
+    const activeSession = sessions.find((session) => session.id === contextSessionId);
     const localDirectory = activeSession && !activeSession.endpointId ? activeSession.cwd : '';
     const root = resolveEditorTileRoot(localDirectory, settings['notebook.root.effective'] || '');
     const tileId = `notebook-tile-${crypto.randomUUID()}`;
+    const intent = useSessionStore.getState().beginIntent({ kind: 'leaf', desktopId: desktop.id, leafId: tileId });
     void withFreshDesktopRevisions([desktop.id], (revisionOf) =>
       sendDesktopDockTile({
         desktopId: desktop.id,
@@ -72,8 +73,11 @@ export function useDesktopTiles({ settings, sessions, activeSessionId, showError
         edge: 'right',
         tileShare: 0.4,
       }),
-    ).catch((error) => showError(`Could not open the notebook: ${failureMessage(error)}`));
-  }, [sendDesktopDockTile, settings, sessions, activeSessionId, showError]);
+    ).catch((error) => {
+      useSessionStore.getState().intentFailed(intent);
+      showError(`Could not open the notebook: ${failureMessage(error)}`);
+    });
+  }, [contextSessionId, sendDesktopDockTile, settings, sessions, showError]);
 
   return {
     markdownOpenerOpen,

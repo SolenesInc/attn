@@ -3,6 +3,7 @@ package daemon
 import (
 	"errors"
 	"net"
+	"sync"
 
 	"github.com/victorarias/attn/internal/ptybackend"
 )
@@ -39,4 +40,16 @@ func StartWireDaemonWithTerminals(socketPath string, unix, ws net.Listener, term
 func (w *WireDaemon) Stop() error {
 	w.d.Stop()
 	return errors.Join(<-w.stopped, w.d.store.Close())
+}
+
+// PauseNextHeldAction blocks the next profile action after it ran, while its client's broadcasts are held.
+func (w *WireDaemon) PauseNextHeldAction(paused chan<- struct{}, resume <-chan struct{}) {
+	var once sync.Once
+	pause := func() {
+		once.Do(func() {
+			paused <- struct{}{}
+			<-resume
+		})
+	}
+	w.d.heldActionRan.Store(&pause)
 }

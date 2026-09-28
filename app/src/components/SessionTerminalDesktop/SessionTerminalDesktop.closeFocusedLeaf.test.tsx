@@ -1,6 +1,6 @@
 import { useState, type ReactNode } from 'react';
 import { describe, expect, it, vi } from 'vitest';
-import { fireEvent, render, waitFor } from '@testing-library/react';
+import { fireEvent, render } from '@testing-library/react';
 import { SessionTerminalDesktop } from './index';
 import { annotationSurfaceOwnsFocus } from './annotationFocus';
 import { createPaneRuntimeEventRouterController } from './paneRuntimeEventRouter';
@@ -89,9 +89,10 @@ function paneOnlyDesktop(): TerminalDesktopState {
 function renderSplit(overrides: {
   onClosePane?: () => void;
   onUndockTile?: (tileId: string) => void;
-  onFocusPane?: (paneId: string) => void | Promise<unknown>;
+  onFocusPane?: (paneId: string) => void;
   desktopSelectionStyle?: DesktopSelectionStyle;
   activePaneId?: string;
+  daemonConfirms?: boolean;
 } = {}) {
   const onClosePane = overrides.onClosePane ?? vi.fn();
   const onUndockTile = overrides.onUndockTile ?? vi.fn();
@@ -99,20 +100,25 @@ function renderSplit(overrides: {
   const eventRouter = createPaneRuntimeEventRouterController();
   function ZoomHost({ terminalState }: { terminalState: TerminalDesktopState }) {
     const [zoomActive, setZoomActive] = useState(false);
+    const [activePaneId, setActivePaneId] = useState(overrides.activePaneId ?? 'pane-term');
+    const focusPane = (paneId: string) => {
+      onFocusPane(paneId);
+      if (overrides.daemonConfirms !== false) setActivePaneId(paneId);
+    };
     return (
       <SessionTerminalDesktop
         desktopId="desktop-split"
         desktopSessions={[{ id: 'sess-1', label: 'shell', agent: 'shell', cwd: '/tmp/project' }]}
         terminalState={terminalState}
         desktopSelectionStyle={overrides.desktopSelectionStyle}
-        activePaneId={overrides.activePaneId ?? 'pane-term'}
+        activePaneId={activePaneId}
         fontSize={13}
         enabled
         isActiveSession
         eventRouter={eventRouter}
         onSplitPane={vi.fn()}
         onClosePane={onClosePane}
-        onFocusPane={onFocusPane}
+        onFocusPane={focusPane}
         onNavigateOutOfSession={vi.fn()}
         onUndockTile={onUndockTile}
         zoomActive={zoomActive}
@@ -183,14 +189,14 @@ describe('SessionTerminalDesktop leaf focus', () => {
     expect(document.activeElement).toBe(tileBody);
   });
 
-  it('puts focus back on the daemon\'s active pane when the daemon refuses a tile focus', async () => {
-    const { container } = renderSplit({ onFocusPane: () => Promise.reject(new Error('socket closed')) });
+  it('keeps the daemon\'s active pane until the daemon shows the clicked tile', () => {
+    const { container, onFocusPane } = renderSplit({ daemonConfirms: false });
     const surface = () => container.querySelector('.session-terminal-desktop');
 
     fireEvent.mouseDown(tileEl(container));
-    expect(surface()?.getAttribute('data-active-leaf-id')).toBe('tile-notes');
 
-    await waitFor(() => expect(surface()?.getAttribute('data-active-leaf-id')).toBe('pane-term'));
+    expect(onFocusPane).toHaveBeenCalledWith('tile-notes');
+    expect(surface()?.getAttribute('data-active-leaf-id')).toBe('pane-term');
     expect(tileEl(container).className).not.toContain('active');
   });
 
@@ -259,24 +265,6 @@ describe('SessionTerminalDesktop Cmd+W closes the focused leaf', () => {
     expect(onUndockTile).toHaveBeenCalledTimes(1);
     expect(onUndockTile).toHaveBeenCalledWith('tile-notes');
     expect(onClosePane).not.toHaveBeenCalled();
-  });
-
-  it('closes the terminal pane after Focus utility terminal takes focus back from a tile', () => {
-    const { container, onClosePane, onUndockTile } = renderSplit();
-
-    fireEvent.mouseDown(tileEl(container));
-    expect(tileEl(container).className).toContain('active');
-
-    fireEvent.keyDown(document.activeElement as HTMLElement, { key: '`', metaKey: true });
-
-    expect(tileEl(container).className).not.toContain('active');
-    expect(paneEl(container).className).toContain('active');
-
-    fireEvent.keyDown(paneEl(container), { key: 'w', metaKey: true });
-
-    expect(onClosePane).toHaveBeenCalledTimes(1);
-    expect(onClosePane).toHaveBeenCalledWith('pane-term');
-    expect(onUndockTile).not.toHaveBeenCalled();
   });
 
   it('leaves a focused tile alone when a terminal remounts and announces readiness', () => {

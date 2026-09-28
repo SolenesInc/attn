@@ -97,13 +97,13 @@ describe('useDesktopNavigation', () => {
     expect(api.sendDesktopSetCurrent.mock.calls).toEqual([['set-default', 'd10']]);
   });
 
-  it('stays put on the current slot with nowhere to bounce', () => {
+  it('shows the current slot again when there is nowhere to bounce, so its leaf takes the keyboard', () => {
     seedStore([desktop('d1', { shortcut_slot: 1 })]);
     const { api, showNotice, result } = renderNavigation();
 
     act(() => result.current.switchToSlot(1));
 
-    expect(api.sendDesktopSetCurrent).not.toHaveBeenCalled();
+    expect(vi.mocked(api.sendDesktopSetCurrent).mock.calls.map((call) => call[1])).toEqual(['d1']);
     expect(showNotice).not.toHaveBeenCalled();
   });
 

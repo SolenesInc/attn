@@ -23,10 +23,9 @@ import {
   useSessionLaunchContext,
   useSessionLifecycleContext,
 } from './AppContexts';
-
-function failureMessage(error: unknown): string {
-  return error instanceof Error ? error.message : String(error);
-}
+import { openThenShow } from './openThenShow';
+import { localDirectoryOf } from './useScreenSession';
+import { leafOn, sessionOfLeaf } from '../navigation/activeLeaf';
 
 export function AppDesktops() {
   const desktops = useProfilesStore((state) => state.desktops);
@@ -39,13 +38,13 @@ export function AppDesktops() {
     handleSelectSession,
     handleNavigateOutOfSession,
     handleCloseTile,
-    handleSelectDesktop,
     crewSeedTile,
   } = useNavigationContext();
   const { handleBackToCrew } = useCrewPanelContext();
   const { setDesktopRef, eventRouter } = useDesktopRuntimeContext();
   const { mountedDesktopIds } = useDesktopResidencyContext();
-  const activeSessionId = useSessionStore((state) => state.activeSessionId);
+  const focusRequest = useSessionStore((state) => state.focusRequest);
+  const { selectLeaf } = useSessionStore.getState();
   const {
     presentationBySessionId,
     annotationApi,
@@ -54,11 +53,12 @@ export function AppDesktops() {
     zoomModeBySessionId,
     setZoomModeBySessionId,
   } = useAppShell();
-  const { handleTerminalModelRecovered, showError } = useAppErrorsContext();
+  const { handleTerminalModelRecovered } = useAppErrorsContext();
   const { seedPopoverRequest, usagePopoverRequest } = useAppPanelsContext();
   const { terminalFontSize, resolvedTheme } = useAppAppearanceContext();
   const { delegationSessions } = useAppSessionsContext();
   const { daemonSessions } = useAppInputs();
+  const allSessions = useSessionStore((state) => state.sessions);
   const seeds = useDaemonStore((state) => state.seeds);
   const { handleOpenSeedTile, handleRevealSeedInGarden } = useAppGardenActionsContext();
   const {
@@ -67,7 +67,6 @@ export function AppDesktops() {
     sendTerminalPointerActivity,
     sendOpenMarkdown,
     sendRenameSession,
-    sendDesktopSetActivePane,
     sendDesktopSetSplitRatio,
     sendDesktopUpdateTile,
     desktopTileContents,
@@ -91,10 +90,9 @@ export function AppDesktops() {
     const desktopSessions = group?.sessions ?? [];
     const terminalState = desktopTerminalState(desktop);
     const isCurrent = desktop.id === currentDesktopId;
-    const activePane = terminalState.agents.find((pane) => pane.id === desktop.active_pane_id);
-    const contextSessionId = activePane?.sessionId ?? (isCurrent ? activeSessionId : null);
-    const contextSession = desktopSessions.find((session) => session.id === contextSessionId);
-    const desktopDirectory = contextSession && !contextSession.endpointId ? contextSession.cwd : undefined;
+    const shownSessionId = terminalState.agents.find((pane) => pane.id === desktop.active_pane_id)?.sessionId ?? null;
+    const leafSessionId = sessionOfLeaf(leafOn(desktop.profile_id, desktop, desktop.active_pane_id));
+    const desktopDirectory = localDirectoryOf(allSessions.find((session) => session.id === leafSessionId));
     return (
       <div key={desktop.id} className={`terminal-wrapper ${isCurrent ? 'active' : ''}`}>
         <SessionTerminalDesktop
@@ -115,7 +113,7 @@ export function AppDesktops() {
             autoSettleDismissArmed: entry.autoSettleDismissArmed,
             terminalBuildStale: entry.terminalBuildStale,
             usage: entry.usage,
-            isActive: entry.id === activeSessionId,
+            isActive: isCurrent && entry.id === shownSessionId,
             presentation: presentationBySessionId.get(entry.id),
             seedId: entry.seedId,
             crewMember: entry.crewMember,
@@ -123,7 +121,7 @@ export function AppDesktops() {
             pullRequests: entry.pullRequests,
           }))}
           delegationSessions={delegationSessions}
-          selectedSessionId={isCurrent ? (activePane?.sessionId ?? null) : null}
+          selectedSessionId={isCurrent ? shownSessionId : null}
           seedTargetSessions={daemonSessions.map((session) => ({
             sessionId: session.id,
             label: session.label || session.id,
@@ -142,10 +140,7 @@ export function AppDesktops() {
           onTerminalPointerActivity={sendTerminalPointerActivity}
           onOpenPresentation={handleOpenPresentationWindow}
           onOpenMarkdown={(path, sessionId) => {
-            void sendOpenMarkdown(path, sessionId)
-              .then(({ desktopId, tileId }) => {
-                if (desktopId && tileId) handleSelectDesktop(desktopId);
-              })
+            void openThenShow(() => sendOpenMarkdown(path, sessionId))
               .catch((error) => {
                 console.error('[Markdown] in-app open failed, falling back to OS open:', error);
                 void openPath(path).catch((openError) => {
@@ -160,6 +155,7 @@ export function AppDesktops() {
           fontSize={terminalFontSize}
           resolvedTheme={resolvedTheme}
           focusRequestToken={utilityFocusRequestToken}
+          focusClaim={focusRequest?.desktopId === desktop.id ? focusRequest : null}
           enabled={!blockingOverlayOpen}
           isActiveSession={isCurrent && view !== 'dashboard'}
           isSessionViewVisible={view === 'session'}
@@ -182,11 +178,7 @@ export function AppDesktops() {
             )
           }
           onFocusPane={(paneId) => {
-            if (paneId === desktop.active_pane_id) return undefined;
-            return sendDesktopSetActivePane(desktop.id, paneId).catch((error) => {
-              showError(`Could not focus that pane: ${failureMessage(error)}`);
-              throw error;
-            });
+            if (paneId !== desktop.active_pane_id || !isCurrent) selectLeaf(desktop.id, paneId);
           }}
           zoomActive={Boolean(zoomModeBySessionId[desktop.id])}
           onSetZoomActive={(active) => {

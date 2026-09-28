@@ -86,27 +86,53 @@ export class Arrangement {
     const pane = { type: 'pane', pane_id: paneId };
     const current = parse(desktop);
     const tree = current ? { type: 'split', split_id: `split-${paneId}`, direction: 'vertical', ratio: 0.5, children: [current, pane] } : pane;
-    this.replace({
-      ...this.withTree(desktop, tree, [
-        ...desktop.panes,
-        { pane_id: paneId, session_id: sessionId, desktop_id: desktop.id, kind: 'agent', status: 'ready', title: sessionId } as DaemonDesktop['panes'][number],
-      ]),
-      active_pane_id: paneId,
-    });
+    const placed = this.withTree(desktop, tree, [
+      ...desktop.panes,
+      { pane_id: paneId, session_id: sessionId, desktop_id: desktop.id, kind: 'agent', status: 'ready', title: sessionId } as DaemonDesktop['panes'][number],
+    ]);
+    this.replace({ ...placed, active_pane_id: paneId });
+  }
+
+  show(desktopId: string, leafId: string): boolean {
+    const desktop = this.desktop(desktopId);
+    if (!desktop || !hasLeaf(parse(desktop), leafId)) return false;
+    this.desktops = this.desktops.map((existing) => (existing.id === desktopId ? { ...existing, active_pane_id: leafId } : existing));
+    this.selectedProfileId = desktop.profile_id;
+    this.profiles = this.profiles.map((profile) =>
+      profile.id === desktop.profile_id ? { ...profile, current_desktop_id: desktopId } : profile,
+    );
+    return true;
+  }
+
+  placementOf(sessionId: string): { desktopId: string; paneId: string } | null {
+    for (const desktop of this.desktops) {
+      const pane = desktop.panes.find((entry) => entry.session_id === sessionId);
+      if (pane) return { desktopId: desktop.id, paneId: pane.pane_id };
+    }
+    return null;
   }
 
   changed(): Reply {
     return { event: 'profile_arrangement_changed', profile: this.profile, desktops: this.desktops.filter((desktop) => desktop.profile_id === this.profile.id) };
   }
+
+  // The requester's own copy, sent before its result like the daemon does.
+  answer(command: { request_id?: string }): Reply {
+    return { ...(this.changed() as object), request_id: command.request_id ?? '' } as Reply;
+  }
 }
 
 type ProfileCommand = CommandMessage & { request_id?: string };
 
-function accepted(command: ProfileCommand, arrangement: Arrangement): Reply[] {
+function accepted(command: ProfileCommand, arrangement: Arrangement, paneId?: string): Reply[] {
   return [
-    { event: 'profile_action_result', action: command.cmd, success: true, request_id: command.request_id ?? '' } as Reply,
-    arrangement.changed(),
+    arrangement.answer(command),
+    { event: 'profile_action_result', action: command.cmd, success: true, request_id: command.request_id ?? '', ...(paneId ? { pane_id: paneId } : {}) } as Reply,
   ];
+}
+
+function refused(command: ProfileCommand, code: string, error: string): Reply[] {
+  return [{ event: 'profile_action_result', action: command.cmd, success: false, error_code: code, error, request_id: command.request_id ?? '' } as Reply];
 }
 
 export function serveArrangement(daemon: ScriptedDaemon, arrangement: Arrangement) {
@@ -124,6 +150,24 @@ export function serveArrangement(daemon: ScriptedDaemon, arrangement: Arrangemen
     const desktop = arrangement.desktop(command.desktop_id);
     if (desktop) arrangement.replace({ ...desktop, active_pane_id: command.pane_id });
     return accepted(command, arrangement);
+  });
+  daemon.on('desktop_show_session', (command) => {
+    let placed = arrangement.placementOf(command.session_id);
+    if (!placed) {
+      const paneId = `pane-${command.session_id}`;
+      arrangement.place(command.session_id, paneId);
+      placed = arrangement.placementOf(command.session_id);
+    }
+    if (!placed || !arrangement.show(placed.desktopId, placed.paneId)) {
+      return refused(command, 'not_found', `session ${command.session_id} could not be shown`);
+    }
+    return accepted(command, arrangement, placed.paneId);
+  });
+  daemon.on('desktop_show_leaf', (command) => {
+    if (!arrangement.show(command.desktop_id, command.leaf_id)) {
+      return refused(command, 'not_found', `leaf ${command.leaf_id} does not belong to desktop ${command.desktop_id}`);
+    }
+    return accepted(command, arrangement, command.leaf_id);
   });
   daemon.on('desktop_remove_leaf', (command) => {
     const desktop = arrangement.desktop(command.desktop_id);
@@ -154,7 +198,7 @@ export function serveArrangement(daemon: ScriptedDaemon, arrangement: Arrangemen
         ...(command.tile_session_id !== undefined ? { tile_session_id: command.tile_session_id } : {}),
       };
       const tree = current ? { type: 'split', split_id: `split-${command.tile_id}`, direction: 'vertical', ratio: 0.5, children: [current, tile] } : tile;
-      arrangement.replace(arrangement.withTree(desktop, tree));
+      arrangement.replace({ ...arrangement.withTree(desktop, tree), active_pane_id: command.tile_id });
     }
     return accepted(command, arrangement);
   });

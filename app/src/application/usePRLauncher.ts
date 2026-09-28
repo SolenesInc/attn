@@ -15,9 +15,8 @@ import type { useSessionLaunch } from './useSessionLaunch';
 interface Options {
   settings: AppContentProps['settings'];
   launchAgent: ReturnType<typeof useSessionLaunch>['launchAgent'];
-  selectCreatedSession: (id: string) => boolean;
 }
-export function usePRLauncher({ settings, launchAgent, selectCreatedSession }: Options) {
+export function usePRLauncher({ settings, launchAgent }: Options) {
   const { sendRefreshPRs, sendFetchPRDetails, sendEnsureRepo, sendCreateWorktreeFromBranch } =
     useDaemonApi();
   const agentAvailability = useMemo(() => getAgentAvailability(settings), [settings]);
@@ -71,7 +70,6 @@ export function usePRLauncher({ settings, launchAgent, selectCreatedSession }: O
         return;
       }
       if (result.success) {
-        selectCreatedSession(result.sessionId);
         console.log(`[App] Worktree created at ${result.worktreePath}`);
         return;
       }
@@ -114,7 +112,6 @@ export function usePRLauncher({ settings, launchAgent, selectCreatedSession }: O
       agentAvailability,
       hasAvailableAgents,
       openPR,
-      selectCreatedSession,
       settings.new_session_agent,
     ],
   );

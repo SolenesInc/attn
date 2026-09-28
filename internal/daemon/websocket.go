@@ -2,6 +2,7 @@ package daemon
 
 import (
 	"context"
+	"crypto/sha256"
 	"crypto/subtle"
 	"encoding/json"
 	"errors"
@@ -56,8 +57,12 @@ type wsClient struct {
 	capabilities      map[string]struct{}
 	identityMu        sync.RWMutex
 
-	arrangementMu sync.Mutex
-	shownTiles    []desktopMarkdownTile
+	arrangementMu      sync.Mutex
+	shownTiles         []desktopMarkdownTile
+	arrangementsHeld   int
+	arrangementsMissed bool
+	arrangementPrint   [sha256.Size]byte
+	arrangementSeq     int64
 
 	presence   clientPresence
 	presenceMu sync.RWMutex
@@ -504,12 +509,7 @@ func (h *wsHub) sendToMatchingClients(message outboundMessage, match func(*wsCli
 	}
 }
 
-func (h *wsHub) SendArrangementToMatchingClients(message interface{}, match func(*wsClient) bool, shown func(*wsClient) []desktopMarkdownTile) {
-	data, err := json.Marshal(message)
-	if err != nil {
-		h.logf("WebSocket arrangement send marshal error: %v", err)
-		return
-	}
+func (h *wsHub) SendArrangementToMatchingClients(data []byte, match func(*wsClient) bool, delivery *arrangementDelivery) {
 	var targets []*wsClient
 	h.ForEachClient(func(client *wsClient) {
 		if match(client) {
@@ -517,7 +517,7 @@ func (h *wsHub) SendArrangementToMatchingClients(message interface{}, match func
 		}
 	})
 	for _, client := range targets {
-		if h.deliverArrangement(client, outboundMessage{kind: messageKindText, payload: data}, shown) {
+		if h.deliverArrangement(client, outboundMessage{kind: messageKindText, payload: data}, delivery) {
 			h.forget(client)
 		}
 	}

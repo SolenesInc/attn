@@ -214,7 +214,7 @@ func TestShowingAPlacedLeafSelectsItForEveryClientOfItsProfileAndSurvivesARestar
 		if again.Revision != first.Revision || again.TreeJson != first.TreeJson || len(again.Panes) != len(first.Panes) {
 			t.Fatalf("showing the shown agent again changed its desktop: %+v, was %+v", again, first)
 		}
-		counter.want(t, "showing the shown agent again", 1, 1, 0)
+		counter.want(t, "showing the shown agent again answers only its requester", 0, 1, 0)
 
 		shownIn(t, requestShowLeaf(app, second.ID, paneB), second.ID, paneB)
 		counter.want(t, "showing an agent pane on another desktop", 1, 1, 0)
@@ -342,7 +342,7 @@ func TestShowingAnAgentOfAnotherProfileMovesOnlyTheRequester(t *testing.T) {
 		awaitShown(app, away.ID, desktop.ID, paneX)
 
 		shownIn(t, requestShowSession(destination, "x"), desktop.ID, paneX)
-		counter.want(t, "a later selection on the destination profile", 1, 1, 0)
+		counter.want(t, "showing the shown agent again answers only its requester", 0, 1, 0)
 	})
 }
 

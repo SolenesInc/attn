@@ -18,6 +18,10 @@ import {
 export const DEFAULT_REMOTE_SSH_TARGET =
   process.env.ATTN_HARNESS_REMOTE_SSH_TARGET || 'attn-remote@orb';
 
+export function shownAgentId(state) {
+  return state?.view === 'session' && state.activeLeaf?.kind === 'agent' ? state.activeLeaf.sessionId : null;
+}
+
 export function parseCommonArgs(argv) {
   const options = {
     wsUrl: process.env.ATTN_REAL_APP_WS_URL || null,

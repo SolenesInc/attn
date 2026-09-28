@@ -25,8 +25,8 @@ interface Options {
   settings: AppContentProps['settings'];
   daemonEndpoints: AppContentProps['daemonEndpoints'];
   sessions: ReturnType<typeof useSessionStore.getState>['sessions'];
-  activeSessionId: string | null;
-  selectCreatedSession: (id: string) => boolean;
+  shownAgentId: string | null;
+  selectCreatedSession: (id: string, focusOwner?: Element | null) => boolean;
   showError: ReturnType<typeof useToast>['showError'];
 }
 
@@ -44,13 +44,13 @@ export function useSessionLaunch({
   settings,
   daemonEndpoints,
   sessions,
-  activeSessionId,
+  shownAgentId,
   selectCreatedSession,
   showError,
 }: Options) {
   const { sendCreateWorktree } = useDaemonApi();
   const { closeSession, createSession, takeSessionSpawnArgs } = useSessionStore();
-  const activeLocalSession = sessions.find((session) => session.id === activeSessionId) ?? null;
+  const activeLocalSession = sessions.find((session) => session.id === shownAgentId) ?? null;
   const currentDesktop = useProfilesStore(
     (state) => state.desktops.find((desktop) => desktop.id === state.currentDesktopId) ?? null,
   );
@@ -102,6 +102,7 @@ export function useSessionLaunch({
     }) => {
       const desktop = localDesktopForLaunch(spawn.endpointId);
       const target = launchTarget(desktop, spawn.direction, spawn.anchorPaneId);
+      const launch = useSessionStore.getState().beginIntent({ kind: 'session', sessionId: spawn.sessionId });
       let placementError: string | undefined;
       try {
         await createSession(
@@ -126,15 +127,19 @@ export function useSessionLaunch({
           },
         }));
       } catch (error) {
+        useSessionStore.getState().intentFailed(launch);
         closeSession(spawn.sessionId);
         throw error;
       }
-      if (placementError) {
+      const { intent } = useSessionStore.getState();
+      if (intent?.id === launch) {
+        selectCreatedSession(spawn.sessionId, intent.focusOwner);
+      } else if (placementError) {
         showError(`${spawn.label} started without a pane on this desktop: ${placementError}`);
       }
       return spawn.sessionId;
     },
-    [closeSession, createSession, showError, takeSessionSpawnArgs],
+    [closeSession, createSession, selectCreatedSession, showError, takeSessionSpawnArgs],
   );
 
   const launchAgent = useCallback(
@@ -161,14 +166,7 @@ export function useSessionLaunch({
     [spawnOnCurrentDesktop],
   );
 
-  const createSessionForUiAutomation = useCallback(
-    async (...args: Parameters<typeof launchAgent>) => {
-      const sessionId = await launchAgent(...args);
-      selectCreatedSession(sessionId);
-      return sessionId;
-    },
-    [launchAgent, selectCreatedSession],
-  );
+  const createSessionForUiAutomation = launchAgent;
 
   const createSplitSession = useCallback(
     async (
@@ -190,7 +188,7 @@ export function useSessionLaunch({
         return;
       }
       try {
-        const sessionId = await spawnOnCurrentDesktop({
+        await spawnOnCurrentDesktop({
           sessionId: crypto.randomUUID(),
           label: options.label || nextSplitSessionLabel(agent),
           cwd,
@@ -202,7 +200,6 @@ export function useSessionLaunch({
           anchorPaneId: targetPaneId,
           spawnedFrom: base?.id,
         });
-        selectCreatedSession(sessionId);
       } catch (error) {
         showError(error instanceof Error ? error.message : 'Failed to start the agent');
       }
@@ -213,7 +210,6 @@ export function useSessionLaunch({
       handleNewSession,
       nextSplitSessionLabel,
       sessions,
-      selectCreatedSession,
       showError,
       spawnOnCurrentDesktop,
     ],
@@ -248,10 +244,9 @@ export function useSessionLaunch({
         pick.yoloMode,
         { chiefOfStaff: true, autoMode: pick.autoMode },
       );
-      selectCreatedSession(sessionId);
       return sessionId;
     },
-    [createSplitSession, launchAgent, selectCreatedSession],
+    [createSplitSession, launchAgent],
   );
 
   const handleLocationSelect = useCallback(

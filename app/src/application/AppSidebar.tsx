@@ -24,6 +24,7 @@ import {
   useSessionLifecycleContext,
 } from './AppContexts';
 import { useAppSidebarActions } from './useAppSidebarActions';
+import { useAgentOnScreen } from '../hooks/useDesktopSelectionBridge';
 
 export function AppSidebar() {
   const {
@@ -50,7 +51,7 @@ export function AppSidebar() {
       ),
     [desktops],
   );
-  const activeSessionId = useSessionStore((state) => state.activeSessionId);
+  const shownAgentId = useAgentOnScreen();
   const focusRequest = useSessionStore((state) => state.focusRequest);
   const {
     desktopTileContents,
@@ -105,7 +106,7 @@ export function AppSidebar() {
     <Sidebar
       desktops={desktopViews}
       visualIndexByDesktopId={slotIndexByDesktopId}
-      selectedId={activeSessionId}
+      selectedId={shownAgentId}
       selectionRequest={focusRequest}
       selectedDesktopId={currentDesktopId}
       selectedTile={selectedTile}
@@ -131,7 +132,6 @@ export function AppSidebar() {
         })
       }
       onChangeChiefOfStaff={handleChangeChiefOfStaff}
-      showSessionless
       crew={crew}
       onWakeCrewMember={handleWakeCrewMember}
       onSleepCrewMember={handleSleepCrewMember}

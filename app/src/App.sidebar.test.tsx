@@ -259,9 +259,9 @@ describe('App sidebar', () => {
       expect(screen.getByTestId('sidebar-session-a1')).not.toHaveTextContent('⌘1');
     });
 
-    it('lists a tile-only desktop without a session state', async () => {
-      const tileOnly = daemonDesktop('docs', { root: { type: 'tile', tile_id: 'tile-notes', tile_kind: 'markdown', tile_params: '/repo/docs/notes.md' } }, { name: 'docs' });
-      await launch({ sessions: [daemonSession('a1')], desktops: [soloDesktop('a1'), tileOnly] });
+    it('lists a desktop without agents and without a session state', async () => {
+      const docs = daemonDesktop('docs', { root: { type: 'tile', tile_id: 'tile-notes', tile_kind: 'markdown', tile_params: '/repo/docs/notes.md' } }, { name: 'docs' });
+      await launch({ sessions: [daemonSession('a1')], desktops: [soloDesktop('a1'), docs] });
 
       expect(within(desktopGroup('docs')).getByTestId('desktop-neutral-indicator')).toBeInTheDocument();
       expect(desktopGroup('docs').querySelector('.state-indicator')).toBeNull();
@@ -278,7 +278,7 @@ describe('App sidebar', () => {
       expect(screen.getByTestId('sidebar-session-s1').compareDocumentPosition(tile) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
 
       await gesture(daemon, () => fireEvent.click(within(tile).getByRole('button', { name: 'Open www.example.test' })));
-      expect(daemon.sentOf('desktop_set_current').slice(-1)).toEqual([expect.objectContaining({ desktop_id: 'ws' })]);
+      expect(daemon.sentOf('desktop_show_leaf').slice(-1)).toEqual([expect.objectContaining({ desktop_id: 'ws', leaf_id: 'tile-browser' })]);
 
       await gesture(daemon, () => fireEvent.click(within(tile).getByRole('button', { name: 'Reload www.example.test' })));
       expect(vi.mocked(invoke)).toHaveBeenCalledWith('browser_host_control', expect.objectContaining({ label: 'browser-ws-tile-browser', action: 'reload' }));

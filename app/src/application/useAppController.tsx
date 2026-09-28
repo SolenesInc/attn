@@ -7,7 +7,7 @@ import { useKeyboardShortcuts } from '../hooks/useKeyboardShortcuts';
 import { usePRsNeedingAttention } from '../hooks/usePRsNeedingAttention';
 import { useDesktopNavigation } from '../hooks/useDesktopNavigation';
 import { useDesktopRuntimeController } from '../hooks/useDesktopRuntimeController';
-import { useDesktopSelectionBridge, useSurface } from '../hooks/useDesktopSelectionBridge';
+import { useAgentOnScreen, useSessionBehindScreen, useDesktopSelectionBridge, useSurface } from '../hooks/useDesktopSelectionBridge';
 import { useUiAutomationBridge } from '../hooks/useUiAutomationBridge';
 import { useDaemonStore } from '../store/daemonSessions';
 import { useDesktopFocus } from '../store/desktopFocus';
@@ -39,6 +39,7 @@ import { useDesktopResidency } from './useDesktopResidency';
 import { useLeafDrag } from './useLeafDrag';
 import { useDesktopTiles } from './useDesktopTiles';
 import { openPalette, switchPalette, type PaletteMode } from '../components/palette/paletteState';
+import { focusLanded, selectionShown } from '../hooks/uiAutomationSelection';
 
 export function useAppController({
   daemonSessions,
@@ -111,12 +112,14 @@ export function useAppController({
     });
   }, []);
 
-  const { connect, sessions, activeSessionId, reloadSession } = useSessionStore();
+  const { connect, sessions, reloadSession, selectLeaf } = useSessionStore();
+  const shownAgentId = useAgentOnScreen();
+  const contextSessionId = useSessionBehindScreen();
 
   const appErrors = useAppErrors({ settingError, clearSettingError });
   const { showError, showNotice } = appErrors;
 
-  const desktopRuntime = useDesktopRuntimeController(sessions, activeSessionId);
+  const desktopRuntime = useDesktopRuntimeController(sessions, shownAgentId);
   const {
     getActivePaneIdForSession,
     getDesktopLeafDropSnapshot,
@@ -135,10 +138,9 @@ export function useAppController({
     injectSessionPaneBase64,
     drainSessionPaneTerminal,
   } = desktopRuntime;
-  useDesktopSelectionBridge(desktopRuntime.focusSessionPane, showError);
+  useDesktopSelectionBridge(showError);
 
   const appSessions = useAppSessions({
-    activeSessionId,
     daemonEndpoints,
     sessions,
     daemonSessions,
@@ -151,7 +153,7 @@ export function useAppController({
     desktopViews,
     profileSessions,
     enrichedLocalSessions,
-    activeSessionId,
+    shownAgentId,
   });
   const {
     wantsAttention,
@@ -162,7 +164,7 @@ export function useAppController({
   } = attentionQueue;
 
   const navigation = useAppNavigation({
-    activeSessionId,
+    shownAgentId,
     daemonSessions,
     desktopViews,
     profileSessions,
@@ -174,10 +176,9 @@ export function useAppController({
     view,
     setView,
     selectAgent,
-    selectAgentPane,
-    cancelPendingSelection,
-    navigateAgentHistoryBack,
-    navigateAgentHistoryForward,
+    cancelIntent,
+    navigateLeafHistoryBack,
+    navigateLeafHistoryForward,
     handleSelectSession,
     selectCreatedSession,
     goToDashboard,
@@ -196,7 +197,7 @@ export function useAppController({
     settings,
     daemonEndpoints,
     sessions,
-    activeSessionId,
+    shownAgentId,
     selectCreatedSession,
     showError,
   });
@@ -210,7 +211,7 @@ export function useAppController({
     chooseReopenDirectory,
   } = sessionLaunch;
 
-  const prLauncher = usePRLauncher({ settings, launchAgent, selectCreatedSession });
+  const prLauncher = usePRLauncher({ settings, launchAgent });
   const { openPRLauncherJob, handleRefreshPRs } = prLauncher;
 
   const appAppearance = useAppAppearance({ settings });
@@ -253,7 +254,7 @@ export function useAppController({
   const desktopTiles = useDesktopTiles({
     settings,
     sessions,
-    activeSessionId,
+    contextSessionId,
     showError,
   });
   const {
@@ -265,11 +266,11 @@ export function useAppController({
   const { seeds } = useDaemonStore();
   const agentAvailability = useMemo(() => getAgentAvailability(settings), [settings]);
 
-  useAppDeepLinks({ selectAgent, launchAgent, selectCreatedSession });
+  useAppDeepLinks({ selectAgent, launchAgent });
 
   const onReopened = useCallback(() => setSessionsOpen(false), [setSessionsOpen]);
   const sessionLifecycle = useSessionLifecycle({
-    activeSessionId,
+    shownAgentId,
     handleCloseTile,
     sessions,
     daemonSessions,
@@ -295,7 +296,7 @@ export function useAppController({
   const appDiagnostics = useAppDiagnostics({
     sessions,
     getPaneSize,
-    activeSessionId,
+    contextSessionId,
     getActivePaneIdForSession,
     view,
     settings,
@@ -313,7 +314,7 @@ export function useAppController({
     currentCap?: number;
   } | null>(null);
 
-  const workflowPanel = useWorkflowPanel({ activeSessionId, workflowRunPanelOpen });
+  const workflowPanel = useWorkflowPanel({ contextSessionId, workflowRunPanelOpen });
 
   const [desktopOverviewOpen, setDesktopOverviewOpen] = useState(false);
   const [profileSwitcherOpen, setProfileSwitcherOpen] = useState(false);
@@ -341,7 +342,7 @@ export function useAppController({
   // Views with nothing focusable (dashboard, empty desktops) can leave the WebView off first responder, killing EVERY shortcut until the user clicks the window.
   useEffect(() => {
     const claimShellFocus = () => {
-      if (activeSessionId) return;
+      if (shownAgentId) return;
       if (blockingOverlayOpen) return;
       const shell = appShellRef.current;
       if (!shell) return;
@@ -352,7 +353,7 @@ export function useAppController({
     claimShellFocus();
     window.addEventListener('focus', claimShellFocus);
     return () => window.removeEventListener('focus', claimShellFocus);
-  }, [activeSessionId, blockingOverlayOpen, view]);
+  }, [shownAgentId, blockingOverlayOpen, view]);
 
   const seedForSession = useCallback(
     (sessionId: string) => {
@@ -405,13 +406,13 @@ export function useAppController({
     if (paletteBlocked) {
       return;
     }
-    const activeSession = activeSessionId
-      ? sessions.find((session) => session.id === activeSessionId)
+    const activeSession = contextSessionId
+      ? sessions.find((session) => session.id === contextSessionId)
       : null;
     paletteOriginRef.current = {
       capturedAtUnixMs: Date.now(),
       view,
-      activeSessionId,
+      activeSessionId: contextSessionId,
       activePaneId: activeSession ? getActivePaneIdForSession(activeSession) || null : null,
       activeElement: diagnosticFocusKind(document.activeElement),
       documentFocused: document.hasFocus(),
@@ -430,14 +431,14 @@ export function useAppController({
     paletteOriginRef,
     setPalette,
     delegationChainRef,
-    activeSessionId,
+    contextSessionId,
     sessions,
     getActivePaneIdForSession,
     view,
   ]);
   useUiAutomationBridge({
     sessions,
-    activeSessionId,
+    shownAgentId,
     daemonReady: hasReceivedInitialState && !connectionError,
     connectionError,
     getActivePaneIdForSession,
@@ -454,13 +455,16 @@ export function useAppController({
       return createSplitSession('shell', direction, paneId, { baseSessionId: sessionId });
     },
     closePaneSession: handleCloseSession,
-    focusPane: (sessionId: string, paneId: string) => {
-      const ownerSessionId = sessions.find((session) =>
+    focusPane: async (sessionId: string, paneId: string) => {
+      const owner = sessions.find((session) =>
         session.desktop.agents.some(
           (pane) => pane.id === paneId && pane.sessionId === session.id,
         ),
-      )?.id;
-      selectAgentPane(ownerSessionId ?? sessionId, paneId);
+      ) ?? sessions.find((session) => session.id === sessionId);
+      if (!owner?.desktopId) throw new Error(`focus_pane: pane ${paneId} of session ${sessionId} is on no desktop`);
+      selectLeaf(owner.desktopId, paneId);
+      await selectionShown({ kind: 'leaf', desktopId: owner.desktopId, leafId: paneId });
+      await focusLanded(owner.desktopId, paneId);
     },
     typeInSessionPaneViaUI,
     isSessionPaneInputFocused,
@@ -489,7 +493,7 @@ export function useAppController({
   const appGrid = useAppGrid({
     profileSessions,
     wantsAttention,
-    cancelPendingSelection,
+    cancelIntent,
     setView,
   });
   const { visibleGridTiles } = appGrid;
@@ -514,8 +518,8 @@ export function useAppController({
   }, [enrichedLocalSessions, onScreenSessionIds]);
   const armDismissSessionId = useMemo(
     () =>
-      activeSessionId && onScreenSessionIds.has(activeSessionId) ? activeSessionId : undefined,
-    [activeSessionId, onScreenSessionIds],
+      shownAgentId && onScreenSessionIds.has(shownAgentId) ? shownAgentId : undefined,
+    [shownAgentId, onScreenSessionIds],
   );
   const handleCancelCountdown = useMemo(() => {
     if (visibleCountdownSessionIds.length > 0) {
@@ -527,7 +531,7 @@ export function useAppController({
 
   const appGardenActions = useAppGardenActions({
     sendOpenSeed,
-    activeSessionId,
+    contextSessionId,
     showError,
     seeds,
     openDockPanel,
@@ -539,7 +543,6 @@ export function useAppController({
     sendSeedToChief,
     sendCrewWake,
     sendCrewSleep,
-    handleSelectDesktop,
     setCrewSeedTile,
     closeCrewPanel,
   });
@@ -588,16 +591,17 @@ export function useAppController({
     onSnoozeTurn: handleSnoozeShortcut,
     onCancelCountdown: handleCancelCountdown,
     onSwitchToDesktopSlot: (slot) => {
+      const looking = useSessionStore.getState().view === 'session';
       setView('session');
-      desktopNavigation.switchToSlot(slot);
+      desktopNavigation.switchToSlot(slot, looking);
     },
     onSendToDesktopSlot: desktopNavigation.sendActivePaneToSlot,
     onOpenDesktopOverview: () => setDesktopOverviewOpen(true),
     onSwitchProfile: () => setProfileSwitcherOpen(true),
     onPrevSession: () => handleNavigateOutOfSession('left'),
     onNextSession: () => handleNavigateOutOfSession('right'),
-    onHistoryBack: () => navigateAgentHistoryBack(view !== 'session'),
-    onHistoryForward: () => navigateAgentHistoryForward(view !== 'session'),
+    onHistoryBack: () => navigateLeafHistoryBack(view !== 'session'),
+    onHistoryForward: () => navigateLeafHistoryForward(view !== 'session'),
     onSelectOrchestrator: handleSelectOrchestrator,
     onToggleSidebar: toggleSidebarCollapse,
     onShowAgentList: queueSidebarShown ? toggleAgentList : () => handleOpenPalette('agents'),

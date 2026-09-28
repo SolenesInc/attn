@@ -1,6 +1,7 @@
 package daemon
 
 import (
+	"crypto/sha256"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -23,6 +24,9 @@ type profileActionOutcome struct {
 	profile  *profiles.Profile
 	desktops []profiles.Desktop
 	paneID   string
+	moved    *protocol.LeafMoved
+	// The action may change what the requester shows, so it gets its own answer.
+	arranges bool
 	publish  func()
 }
 
@@ -152,7 +156,7 @@ func (d *Daemon) scopeClientToProfile(client *wsClient, requestedProfileID strin
 func (d *Daemon) sendInitialArrangement(client *wsClient, event *protocol.InitialStateMessage) {
 	client.arrangementMu.Lock()
 	defer client.arrangementMu.Unlock()
-	shown := d.fillInitialProfileState(client, event)
+	shown, seq := d.fillInitialProfileState(client, event)
 	data, err := json.Marshal(event)
 	if err != nil {
 		d.logf("initial state: encoding: %v", err)
@@ -160,41 +164,42 @@ func (d *Daemon) sendInitialArrangement(client *wsClient, event *protocol.Initia
 	}
 	if d.sendOutbound(client, outboundMessage{kind: messageKindText, payload: data}) {
 		client.shownTiles = shown
+		client.arrangementSeq = seq
 	}
 }
 
-func (d *Daemon) fillInitialProfileState(client *wsClient, event *protocol.InitialStateMessage) []desktopMarkdownTile {
+func (d *Daemon) fillInitialProfileState(client *wsClient, event *protocol.InitialStateMessage) ([]desktopMarkdownTile, int64) {
 	live, err := d.liveProtocolProfiles()
 	if err != nil {
 		var profileErr *profiles.Error
 		if !errors.As(err, &profileErr) || profileErr.Code != profiles.CodeUnavailable {
 			d.logf("initial state: listing profiles: %v", err)
 		}
-		return nil
+		return nil, 0
 	}
 	event.Profiles = live
 	selected := client.selectedProfile()
 	if selected == "" {
-		return nil
+		return nil, 0
 	}
-	profile, desktops, err := d.store.ProfileArrangement(selected)
+	profile, desktops, seq, err := d.store.ProfileArrangementSeq(selected)
 	if err != nil {
 		d.logf("initial state: reading the arrangement of profile %s: %v, so the client starts on no profile", selected, err)
 		client.selectProfile("")
-		return nil
+		return nil, 0
 	}
 	wire, err := protocolDesktops(desktops)
 	if err != nil {
 		d.logf("initial state: encoding the arrangement of profile %s: %v, so the client starts on no profile", selected, err)
 		client.selectProfile("")
-		return nil
+		return nil, 0
 	}
 	event.SelectedProfileID = protocol.Ptr(selected)
 	event.Desktops = wire
 	if d.requireHome("profiles and desktops") != nil {
-		return nil
+		return nil, 0
 	}
-	return markdownTilesOnCurrentDesktop(profile, desktops)
+	return markdownTilesOnCurrentDesktop(profile, desktops), seq
 }
 
 func (d *Daemon) runProfileAction(client *wsClient, action, requestID string, run func() (profileActionOutcome, error)) {
@@ -223,27 +228,109 @@ func (d *Daemon) runProfileAction(client *wsClient, action, requestID string, ru
 		fail(err)
 		return
 	}
+	client.holdArrangements()
 	outcome, err := run()
-	if err != nil {
-		fail(err)
-		return
+	if pause := d.heldActionRan.Load(); pause != nil {
+		(*pause)()
 	}
-	if outcome.profile != nil {
+	if err == nil && outcome.profile != nil {
 		wire := protocolProfile(*outcome.profile)
 		result.Profile = &wire
 	}
-	if result.Desktops, err = protocolDesktops(outcome.desktops); err != nil {
+	if err == nil {
+		result.Desktops, err = protocolDesktops(outcome.desktops)
+	}
+	if err != nil {
 		fail(err)
+		d.releaseArrangements(client)
 		return
 	}
 	if outcome.paneID != "" {
 		result.PaneID = protocol.Ptr(outcome.paneID)
 	}
 	result.Success = true
+	if outcome.arranges {
+		d.sendArrangement(client, requestID, outcome.moved)
+	}
 	d.sendToClient(client, result)
+	d.releaseArrangements(client)
 	if outcome.publish != nil {
 		outcome.publish()
 	}
+}
+
+// While a client's own request runs, broadcasts to it wait, so its change reaches it first as its own answer.
+func (c *wsClient) holdArrangements() {
+	c.arrangementMu.Lock()
+	defer c.arrangementMu.Unlock()
+	c.arrangementsHeld++
+}
+
+func (d *Daemon) releaseArrangements(client *wsClient) {
+	client.arrangementMu.Lock()
+	client.arrangementsHeld--
+	missed := client.arrangementsHeld == 0 && client.arrangementsMissed
+	if missed {
+		client.arrangementsMissed = false
+	}
+	client.arrangementMu.Unlock()
+	if missed {
+		d.sendArrangement(client, "", nil)
+	}
+}
+
+// sendArrangement sends the client its selected profile's arrangement now; a request id marks it as that request's answer.
+func (d *Daemon) sendArrangement(client *wsClient, requestID string, moved *protocol.LeafMoved) {
+	profileID := client.selectedProfile()
+	if profileID == "" {
+		return
+	}
+	message, data, delivery, ok := d.arrangementMessage(profileID, moved)
+	if !ok {
+		return
+	}
+	if requestID != "" {
+		message.RequestID = protocol.Ptr(requestID)
+		var err error
+		if data, err = json.Marshal(message); err != nil {
+			d.logf("arrangement answer: encoding profile %s: %v", profileID, err)
+			return
+		}
+	}
+	client.arrangementMu.Lock()
+	defer client.arrangementMu.Unlock()
+	if delivery.seq <= client.arrangementSeq || (requestID == "" && delivery.print == client.arrangementPrint) {
+		return
+	}
+	if d.wsHub.deliverArrangementLocked(client, outboundMessage{kind: messageKindText, payload: data}, delivery) {
+		d.wsHub.forget(client)
+	}
+}
+
+// arrangementMessage reads a profile's arrangement once and encodes it once for every client it goes to.
+func (d *Daemon) arrangementMessage(profileID string, moved *protocol.LeafMoved) (protocol.ProfileArrangementChangedMessage, []byte, *arrangementDelivery, bool) {
+	profile, desktops, seq, err := d.store.ProfileArrangementSeq(profileID)
+	if err != nil {
+		d.logf("arrangement: reading profile %s: %v", profileID, err)
+		return protocol.ProfileArrangementChangedMessage{}, nil, nil, false
+	}
+	wire, err := protocolDesktops(desktops)
+	if err != nil {
+		d.logf("arrangement: encoding profile %s: %v", profileID, err)
+		return protocol.ProfileArrangementChangedMessage{}, nil, nil, false
+	}
+	message := protocol.ProfileArrangementChangedMessage{
+		Event:     protocol.EventProfileArrangementChanged,
+		Profile:   protocolProfile(profile),
+		Desktops:  wire,
+		MovedLeaf: moved,
+	}
+	data, err := json.Marshal(message)
+	if err != nil {
+		d.logf("arrangement: encoding profile %s: %v", profileID, err)
+		return protocol.ProfileArrangementChangedMessage{}, nil, nil, false
+	}
+	return message, data, &arrangementDelivery{shown: markdownTilesOnCurrentDesktop(profile, desktops), seq: seq, print: sha256.Sum256(data)}, true
 }
 
 func (d *Daemon) publishArrangementChanged(profileID string) {
@@ -259,6 +346,7 @@ func (d *Daemon) publishArrangement(profileID string, payload any) {
 func (d *Daemon) desktopChanged(desktop profiles.Desktop) profileActionOutcome {
 	return profileActionOutcome{
 		desktops: []profiles.Desktop{desktop},
+		arranges: true,
 		publish: func() {
 			d.publishArrangementChanged(desktop.ProfileID)
 		},
@@ -296,7 +384,7 @@ func (d *Daemon) handleProfileDelete(client *wsClient, msg *protocol.ProfileDele
 				scoped.selectProfile(deletion.Destination.ID)
 			}
 		})
-		return profileActionOutcome{publish: func() {
+		return profileActionOutcome{arranges: true, publish: func() {
 			d.coalesceSnapshots(func() {
 				d.publishFact(FactProfileDeleted, deletion.Deleted.ID, nil)
 				d.publishArrangementChanged(deletion.Destination.ID)
@@ -326,7 +414,7 @@ func (d *Daemon) handleProfileSelect(client *wsClient, msg *protocol.ProfileSele
 			return profileActionOutcome{}, err
 		}
 		client.selectProfile(profile.ID)
-		return profileActionOutcome{publish: func() {
+		return profileActionOutcome{arranges: true, publish: func() {
 			d.publishArrangementChanged(profile.ID)
 		}}, nil
 	})
@@ -338,7 +426,7 @@ func (d *Daemon) handleSessionMove(client *wsClient, msg *protocol.SessionMoveMe
 		if err != nil || !move.Changed() {
 			return profileActionOutcome{}, err
 		}
-		outcome := profileActionOutcome{publish: func() { d.publishSessionMoved(move) }}
+		outcome := profileActionOutcome{arranges: true, publish: func() { d.publishSessionMoved(move) }}
 		if move.SourceDesktop != nil {
 			outcome.desktops = []profiles.Desktop{*move.SourceDesktop}
 		}
@@ -409,7 +497,7 @@ func (d *Daemon) handleDesktopReorder(client *wsClient, msg *protocol.DesktopReo
 func (d *Daemon) handleDesktopDelete(client *wsClient, msg *protocol.DesktopDeleteMessage) {
 	d.runProfileAction(client, msg.Cmd, msg.RequestID, func() (profileActionOutcome, error) {
 		deletion, err := d.store.DeleteDesktop(msg.DesktopID, int64(msg.ExpectedRevision))
-		return profileActionOutcome{profile: &deletion.Profile, publish: func() {
+		return profileActionOutcome{profile: &deletion.Profile, arranges: true, publish: func() {
 			d.publishArrangementChanged(deletion.Profile.ID)
 		}}, err
 	})
@@ -418,7 +506,7 @@ func (d *Daemon) handleDesktopDelete(client *wsClient, msg *protocol.DesktopDele
 func (d *Daemon) handleDesktopSetCurrent(client *wsClient, msg *protocol.DesktopSetCurrentMessage) {
 	d.runProfileAction(client, msg.Cmd, msg.RequestID, func() (profileActionOutcome, error) {
 		profile, err := d.store.SetCurrentDesktop(msg.ProfileID, msg.DesktopID)
-		return profileActionOutcome{profile: &profile, publish: func() {
+		return profileActionOutcome{profile: &profile, arranges: true, publish: func() {
 			d.publishArrangementChanged(profile.ID)
 		}}, err
 	})
@@ -503,7 +591,7 @@ func (d *Daemon) handleDesktopMoveLeaf(client *wsClient, msg *protocol.DesktopMo
 			changed = append(changed, move.Target)
 		}
 		moved := &protocol.LeafMoved{FromDesktopID: move.Source.ID, FromLeafID: msg.LeafID, ToDesktopID: move.Target.ID, ToLeafID: move.FinalLeafID}
-		return profileActionOutcome{desktops: changed, paneID: move.FinalLeafID, publish: func() {
+		return profileActionOutcome{desktops: changed, paneID: move.FinalLeafID, moved: moved, arranges: true, publish: func() {
 			d.publishArrangement(move.Source.ProfileID, moved)
 		}}, err
 	})
@@ -548,31 +636,20 @@ func (d *Daemon) projectProfilesChanged() {
 }
 
 func (d *Daemon) projectProfileArrangementChanged(ev bus.Event) {
-	profile, desktops, err := d.store.ProfileArrangement(ev.Subject)
-	if err != nil {
-		d.logf("arrangement projection: reading profile %s: %v", ev.Subject, err)
-		return
-	}
-	wire, err := protocolDesktops(desktops)
-	if err != nil {
-		d.logf("arrangement projection: encoding profile %s: %v", ev.Subject, err)
-		return
-	}
-	message := protocol.ProfileArrangementChangedMessage{
-		Event:    protocol.EventProfileArrangementChanged,
-		Profile:  protocolProfile(profile),
-		Desktops: wire,
-	}
+	var moved *protocol.LeafMoved
 	if len(ev.Payload) > 0 {
-		var moved protocol.LeafMoved
-		if err := ev.Decode(&moved); err != nil {
+		var decoded protocol.LeafMoved
+		if err := ev.Decode(&decoded); err != nil {
 			d.logf("arrangement projection: decoding the moved leaf of profile %s: %v", ev.Subject, err)
 		} else {
-			message.MovedLeaf = &moved
+			moved = &decoded
 		}
 	}
-	shown := markdownTilesOnCurrentDesktop(profile, desktops)
-	d.wsHub.SendArrangementToMatchingClients(message, func(client *wsClient) bool {
-		return client.selectedProfile() == profile.ID
-	}, func(*wsClient) []desktopMarkdownTile { return shown })
+	_, data, delivery, ok := d.arrangementMessage(ev.Subject, moved)
+	if !ok {
+		return
+	}
+	d.wsHub.SendArrangementToMatchingClients(data, func(client *wsClient) bool {
+		return client.selectedProfile() == ev.Subject
+	}, delivery)
 }
