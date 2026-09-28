@@ -17,10 +17,6 @@ type seedResumeOutcome struct {
 	AlreadyRunning bool
 }
 
-func (d *Daemon) resumeSeed(seedID string) (*seedResumeOutcome, error) {
-	return d.resumeSeedFromReview(seedID, nil)
-}
-
 func (d *Daemon) resumeSeedFromReview(
 	seedID string,
 	review *protocol.SeedReviewActionContext,

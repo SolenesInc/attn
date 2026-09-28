@@ -326,3 +326,42 @@ func mailIdleAgent(w *world, app *testworld.Peer, dir string) (string, *fakeagen
 	testworld.AwaitStateAfter(app, working, func(s protocol.Session) bool { return s.State == protocol.SessionStateIdle })
 	return session, agent
 }
+
+func TestMailForAMemberWhoCannotWakeFailsAndLeavesNoDayBehind(t *testing.T) {
+	w := newCrewWorld(t, fakeagent.Claude, fakeagent.Pi)
+	app, cli := w.App(), w.Client()
+	pluginDriverSettings(app, "pi")
+	sender := spawnPanes(w, app, w.Path("sender"))[0].session
+	setCrew(t, cli, "keel", protocol.CrewSetMessage{Agent: protocol.Ptr("pi")})
+	before := paneSessions(w)
+
+	allow := w.RefusePiLaunches("pi could not start: the model provider is unreachable")
+	if result, err := cli.AgentMsg("keel", sender, "please wake"); err == nil || !strings.Contains(err.Error(), "provider is unreachable") {
+		t.Fatalf("mail for a Keel that cannot wake = %+v, %v; want the launch failure", result, err)
+	}
+	if bound := crewRosterMember(t, cli, "keel").BindingSession; bound != nil {
+		t.Errorf("after its failed wake Keel is bound to %s, want no day", *bound)
+	}
+	if after := paneSessions(w); !slices.Equal(after, before) {
+		t.Errorf("the failed wake left panes for %q, want only %q", after, before)
+	}
+
+	allow()
+	woke := sendAgentMessage(t, cli, sender, "keel", "the build is green")
+	day := w.Launched(woke.TargetSessionID)
+	day.Prompted()
+	day.Reply("Morning. <!-- attn:state=idle -->")
+	day.Prompted()
+	if got := inboxContents(readInbox(t, cli, woke.TargetSessionID, 0).Items); got != "the build is green" {
+		t.Errorf("Keel's next day reads %q, want only the mail sent once it could wake", got)
+	}
+}
+
+func paneSessions(w *world) []string {
+	var sessions []string
+	for _, workspace := range w.App().Initial.Workspaces {
+		sessions = append(sessions, delegatePaneSessions(workspace)...)
+	}
+	slices.Sort(sessions)
+	return sessions
+}

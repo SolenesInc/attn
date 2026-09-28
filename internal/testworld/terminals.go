@@ -25,6 +25,11 @@ type Terminals struct {
 	onState   func(string, pty.Observation)
 }
 
+type TerminalInput struct {
+	Data string
+	At   time.Time
+}
+
 type Terminal struct {
 	owner     *Terminals
 	Options   ptybackend.SpawnOptions
@@ -34,6 +39,7 @@ type Terminal struct {
 	pasteAt   int
 	pasted    []string
 	submitted []string
+	inputs    []TerminalInput
 	screen    []string
 	streams   []chan ptybackend.OutputEvent
 	onSubmit  func(string)
@@ -92,6 +98,7 @@ func (b *Terminals) Input(_ context.Context, sessionID string, data []byte) erro
 		}
 		return err
 	}
+	term.inputs = append(term.inputs, TerminalInput{Data: string(data), At: time.Now()})
 	submitted := term.consume(string(data))
 	notify := term.onSubmit
 	b.mu.Unlock()
@@ -243,6 +250,12 @@ func (t *Terminal) Submitted() []string {
 	t.owner.mu.Lock()
 	defer t.owner.mu.Unlock()
 	return append([]string(nil), t.submitted...)
+}
+
+func (t *Terminal) Inputs() []TerminalInput {
+	t.owner.mu.Lock()
+	defer t.owner.mu.Unlock()
+	return append([]TerminalInput(nil), t.inputs...)
 }
 
 func (t *Terminal) Pasted() []string {

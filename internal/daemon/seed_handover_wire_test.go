@@ -215,3 +215,40 @@ func seedHandoverHeldBy(t *testing.T, cli *client.Client, seedID, sessionID stri
 		t.Errorf("%s holds %d handoff notes, want %d", seedID, found, handoffs)
 	}
 }
+
+func TestAHandoverWhoseSuccessorCannotStartKeepsTheSeedWithItsSuccessor(t *testing.T) {
+	w := newWorld(t, fakeagent.Codex, fakeagent.Pi)
+	app, cli := w.App(), w.Client()
+	pluginDriverSettings(app, "pi")
+	predecessor := seedResumeDelegate(t, w, fakeagent.Codex, "api")
+	w.Launched(predecessor.SessionID)
+
+	allow := w.RefusePiLaunches("pi could not start: the model provider is unreachable")
+	request := seedHandoverRequest("", predecessor.Directory, predecessor.SeedID, "Continue from the failing test.")
+	request.Agent = protocol.Ptr(string(fakeagent.Pi))
+	accepted, err := cli.StartDelegation(request)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if result, err := cli.Delegate(request); err == nil || !strings.Contains(err.Error(), "provider is unreachable") {
+		t.Fatalf("handing over to a pi that cannot start = %+v, %v; want the launch failure", result, err)
+	}
+	seedHandoverHeldBy(t, cli, predecessor.SeedID, accepted.SessionID, 1)
+	for _, session := range w.App().Initial.Sessions {
+		if session.ID == accepted.SessionID {
+			t.Errorf("the successor that could not start is still listed: %+v", session)
+		}
+	}
+
+	allow()
+	retry := seedHandoverRequest("", predecessor.Directory, predecessor.SeedID, "")
+	retry.RequestID, retry.Agent = "handover-retry", protocol.Ptr(string(fakeagent.Pi))
+	successor, err := cli.Delegate(retry)
+	if err != nil {
+		t.Fatalf("handing the seed over again once pi can start: %v", err)
+	}
+	if prompt := w.Launched(successor.SessionID).Prompted(); !strings.Contains(prompt, "attn seed show "+predecessor.SeedID) {
+		t.Errorf("the successor was prompted %q, want a pointer to its seed", prompt)
+	}
+	seedHandoverHeldBy(t, cli, predecessor.SeedID, successor.SessionID, 1)
+}
