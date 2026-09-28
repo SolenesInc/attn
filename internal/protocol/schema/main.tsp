@@ -1263,6 +1263,7 @@ model DelegateMessage {
   fallback?: boolean;
   provider?: string;
   review?: SeedReviewActionContext;
+  desktop?: string; // Desktop of the caller's profile for the delegate: shortcut digit, name or id; empty = beside the caller
 }
 
 model SeedHandoverRequest {

@@ -41,6 +41,7 @@
 
 - Profile: the user's named grouping of agents, crew, automation definitions and the desktops that arrange them. It belongs to the daemon. Every agent belongs to one profile. Renaming keeps its identity.
 - Desktop: one arrangement of panes and tiles inside a profile. A profile always has at least one, and up to nine hold a shortcut slot.
+- Desktop ref: how the CLI names a desktop of the caller's profile: its shortcut digit (1-9), its label as shown (the name, or "Desktop N" when unnamed; case-insensitive), or its id. `attn delegate --desktop` takes one.
 - Pane: an agent's place on a desktop. An agent has at most one pane.
 - Unplaced agent: an agent of a profile with no pane. Crew wakes, automation runs and reopened sessions start unplaced; the queue (or, for runs, the automations section) surfaces them and opening one places it.
 - Current desktop: the desktop a profile shows. Every client on that profile shares it.

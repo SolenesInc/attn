@@ -2521,6 +2521,9 @@ type DelegateMessage struct {
 	// Cwd corresponds to the JSON schema field "cwd".
 	Cwd string `json:"cwd"`
 
+	// Desktop corresponds to the JSON schema field "desktop".
+	Desktop *string `json:"desktop,omitempty,omitzero"`
+
 	// Effort corresponds to the JSON schema field "effort".
 	Effort *string `json:"effort,omitempty,omitzero"`
 

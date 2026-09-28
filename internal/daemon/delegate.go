@@ -16,6 +16,7 @@ import (
 	agentdriver "github.com/victorarias/attn/internal/agent"
 	"github.com/victorarias/attn/internal/delegationprefs"
 	"github.com/victorarias/attn/internal/git"
+	"github.com/victorarias/attn/internal/layouttree"
 	"github.com/victorarias/attn/internal/profiles"
 	"github.com/victorarias/attn/internal/prompts"
 	"github.com/victorarias/attn/internal/protocol"
@@ -591,7 +592,7 @@ func (d *Daemon) delegateOperationProtected(protection foregroundCleanupProtecti
 		return result, nil
 	}
 
-	profile, placement, err := d.delegationDestination(source)
+	profile, placement, err := d.delegationDestination(source, protocol.Deref(msg.Desktop))
 	if err != nil {
 		return nil, err
 	}
@@ -774,19 +775,31 @@ func (d *Daemon) delegateOperationProtected(protection foregroundCleanupProtecti
 	return result, nil
 }
 
-func (d *Daemon) delegationDestination(source *protocol.Session) (profiles.Profile, *launchPlacement, error) {
+func (d *Daemon) delegationDestination(source *protocol.Session, desktopRef string) (profiles.Profile, *launchPlacement, error) {
+	var profile profiles.Profile
+	var beside *launchPlacement
+	var err error
 	if source == nil {
-		profile, err := d.callerProfile("")
-		if err != nil {
+		if profile, err = d.callerProfile(""); err != nil {
 			return profiles.Profile{}, nil, fmt.Errorf("resolve the profile for a delegation without a source session: %w", err)
 		}
-		return profile, nil, nil
+	} else {
+		if profile, err = d.liveLaunchProfile(source.ProfileID); err != nil {
+			return profiles.Profile{}, nil, fmt.Errorf("source session %s: %w", source.ID, err)
+		}
+		beside = d.placementBeside(source.ID)
 	}
-	profile, err := d.liveLaunchProfile(source.ProfileID)
+	if strings.TrimSpace(desktopRef) == "" {
+		return profile, beside, nil
+	}
+	desktop, err := d.resolveDesktopRef(profile, desktopRef)
 	if err != nil {
-		return profiles.Profile{}, nil, fmt.Errorf("source session %s: %w", source.ID, err)
+		return profiles.Profile{}, nil, fmt.Errorf("--desktop: %w", err)
 	}
-	return profile, d.placementBeside(source.ID), nil
+	if beside != nil && beside.desktopID == desktop.ID {
+		return profile, beside, nil
+	}
+	return profile, &launchPlacement{desktopID: desktop.ID, direction: layouttree.DirectionVertical}, nil
 }
 
 func (d *Daemon) confirmDelegatedLaunch(operationID, sessionID, agent string, watch *launchWatch, result *protocol.DelegateResult) error {

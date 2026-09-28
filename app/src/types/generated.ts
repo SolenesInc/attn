@@ -2893,6 +2893,7 @@ export interface DelegateMessage {
     choice?:               string;
     cmd:                   DelegateMessageCmd;
     cwd:                   string;
+    desktop?:              string;
     effort?:               string;
     fallback?:             boolean;
     label?:                string;
@@ -17787,6 +17788,7 @@ const typeMap: any = {
         { json: "choice", js: "choice", typ: u(undefined, "") },
         { json: "cmd", js: "cmd", typ: r("DelegateMessageCmd") },
         { json: "cwd", js: "cwd", typ: "" },
+        { json: "desktop", js: "desktop", typ: u(undefined, "") },
         { json: "effort", js: "effort", typ: u(undefined, "") },
         { json: "fallback", js: "fallback", typ: u(undefined, true) },
         { json: "label", js: "label", typ: u(undefined, "") },
