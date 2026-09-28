@@ -1427,12 +1427,6 @@
   padding: 8px 12px 4px;
 }
 
-.queue-band-count {
-  color: var(--color-text-dimmed);
-  font-weight: 500;
-  letter-spacing: 0;
-}
-
 .queue-band-empty {
   color: var(--color-text-dimmed);
   font-size: var(--font-size-sm);

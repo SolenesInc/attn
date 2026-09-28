@@ -386,7 +386,7 @@ function WaitingCard({ leadRef, leadCount }: { leadRef: RefObject<HTMLDivElement
           )}
           {snoozed.length > 0 && (
             <>
-              <div className="queue-section-rule queue-band-header" data-testid="queue-snoozed-header">
+              <div className="queue-section-rule queue-band-header" data-testid="queue-snoozed-header" data-count={snoozed.length}>
                 <span>Snoozed {snoozed.length}</span>
                 <span className="queue-rule-line" aria-hidden="true" />
               </div>
