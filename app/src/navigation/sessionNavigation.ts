@@ -111,8 +111,22 @@ export function cancelSelection(state: SessionNavigationState): SessionNavigatio
   return { ...state, pendingSelection: null, focusRequest: null };
 }
 
-export function selectionFailed(state: SessionNavigationState, id: number): SessionNavigationState {
-  return state.pendingSelection?.id === id ? cancelSelection(state) : state;
+// A refused history move leaves the cursor on the shown leaf when the move had already passed it.
+export function selectionFailed(state: SessionNavigationState, id: number, arrangement: Arrangement): SessionNavigationState {
+  const pending = state.pendingSelection;
+  if (pending?.id !== id) return state;
+  const next = cancelSelection(state);
+  const leaf = activeLeafOf(arrangement);
+  if (pending.historyCursor === null || pending.profileId !== arrangement.profileId || !leaf) return next;
+  const history = historyOf(next, arrangement.profileId);
+  const step = pending.historyCursor < history.cursor ? -1 : 1;
+  for (let index = pending.historyCursor; index !== history.cursor; index -= step) {
+    const entry = history.entries[index];
+    if (entry?.leafId === leaf.leafId && entry.lastKnownDesktopId === leaf.desktopId) {
+      return withHistory(next, arrangement.profileId, { entries: history.entries, cursor: index });
+    }
+  }
+  return next;
 }
 
 export function focusClaimDelivered(state: SessionNavigationState, id: number): SessionNavigationState {

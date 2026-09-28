@@ -109,7 +109,7 @@ export function createSessionNavigationActions(
     selectLeaf: (desktopId, leafId, owner = focusOwner()) =>
       set((state) => requestShow(state, state.navigationProfileId, { kind: 'leaf', desktopId, leafId }, owner)),
     cancelPendingSelection: () => set((state) => cancelSelection(state)),
-    selectionFailed: (id) => set((state) => selectionFailed(state, id)),
+    selectionFailed: (id) => set((state) => selectionFailed(state, id, arrangementOf(state))),
     toggleGrid: () => set((state) => withVisit(state, toggleGrid(state))),
     navigated: (expect) => set((state) => navigated(state, expect && !arrivedAt(state, expect) ? expect : null)),
     focusClaimDelivered: (id) => set((state) => focusClaimDelivered(state, id)),

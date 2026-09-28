@@ -16,6 +16,7 @@ import { gesture, pressShortcut, renderApp } from './test/renderApp';
 import type { Reply, ScriptedDaemon } from './test/scriptedDaemon';
 import type { CommandMessage } from './test/protocol';
 import { useSessionStore } from './store/sessions';
+import { openActionMenu } from './test/appFixtures';
 
 const LADDER = ['profile_select', 'desktop_place_session', 'desktop_set_active_pane', 'desktop_set_current'] as const;
 const LATER = '2100-01-01T00:00:00Z';
@@ -424,6 +425,32 @@ describe('queue', () => {
   const SETTLED = { turn_owed: false };
   const SNOOZED = { turn_owed: false, turn_snoozed_until: LATER };
 
+  it('drops a show still in flight when the user switches profile from the command palette, and the queue moves on there', async () => {
+    const work = (id: string, hour: number, overrides: Partial<DaemonSession> = {}) => queueSession(id, hour, { profile_id: 'profile-work', ...overrides });
+    const { daemon } = await renderApp({ initialState: {
+      sessions: [queueSession('s1', 9, OWED), queueSession('s2', 10, OWED), work('w1', 11, OWED), work('w2', 12, OWED)],
+      profiles: [defaultProfile('desktop-s1'), { id: 'profile-work', name: 'Work', current_desktop_id: 'desktop-w1', revision: 1 }],
+      desktops: [soloDesktop('s1'), soloDesktop('s2'), soloDesktop('w1', { profile_id: 'profile-work' }), soloDesktop('w2', { profile_id: 'profile-work' })],
+      settings: { queue_mode_enabled: 'true' },
+    } });
+    await open(daemon, 's1');
+    const hold = holdShows(daemon);
+    await open(daemon, 's2');
+    expect(useSessionStore.getState().pendingSelection).not.toBeNull();
+
+    const search = await openActionMenu(daemon);
+    fireEvent.change(search, { target: { value: '>Switch to Work' } });
+    await gesture(daemon, () => fireEvent.keyDown(search, { key: 'Enter' }));
+    expect(useSessionStore.getState().pendingSelection).toBeNull();
+    expect(selectedAgent()).toBe('w1');
+
+    hold.held.splice(0);
+    await gesture(daemon, () => daemon.emit({ event: 'sessions_updated', sessions: [
+      queueSession('s1', 9, OWED), queueSession('s2', 10, OWED), work('w1', 11, SETTLED), work('w2', 12, OWED),
+    ] }));
+    expect(hold.held.map((command) => command.cmd === 'desktop_show_session' && command.session_id)).toEqual(['w2']);
+  });
+
   async function workTheQueueDownToHome() {
     const view = await renderAgents({ s1: OWED, s2: SETTLED });
     await open(view.daemon, 's1');
@@ -699,6 +726,25 @@ describe('leaf history', () => {
     await gesture(daemon, keys.forward);
     expect(hold.held).toEqual([]);
     expect(selectedAgent()).toBe('s3');
+  });
+
+  it('continues backwards from the leaf that landed when a later step back is refused', async () => {
+    const { daemon } = await renderAgents({ s1: {}, s2: {}, s3: {} }, { settings: {} });
+    await open(daemon, 's1');
+    await open(daemon, 's2');
+    await open(daemon, 's3');
+    const hold = holdShows(daemon);
+
+    await gesture(daemon, keys.back);
+    await gesture(daemon, keys.back);
+    const second = hold.held.splice(1);
+    await hold.release();
+    hold.held.push(...second);
+    await hold.refuse();
+    expect(selectedAgent()).toBe('s2');
+
+    await gesture(daemon, keys.back);
+    expect(hold.held.map((command) => command.cmd === 'desktop_show_leaf' && command.leaf_id)).toEqual(['pane-s1']);
   });
 
   it('keeps the cursor where it was when the daemon refuses a step back', async () => {
