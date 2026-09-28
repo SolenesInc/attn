@@ -496,6 +496,11 @@ export function useDesktopController(
 
   useEffect(() => {
     if (!focusClaim || !sessionVisible || focusClaim.leafId !== activeLeafId) return;
+    const active = document.activeElement;
+    if (active && active !== focusClaim.focusOwner && !focusIsFree(panesContainerRef.current)) {
+      onFocusClaimDelivered?.(focusClaim.id);
+      return;
+    }
     if (focusShownLeaf(activeLeafId)) onFocusClaimDelivered?.(focusClaim.id);
   }, [activeLeafId, focusClaim, focusShownLeaf, onFocusClaimDelivered, paneReadyFocusRequest, sessionVisible]);
 

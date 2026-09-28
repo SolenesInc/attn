@@ -683,6 +683,22 @@ describe('keyboard focus', () => {
     expect(focusedPane()).toBeNull();
   });
 
+  it('leaves the keyboard on a control the user moved to before the show landed', async () => {
+    const { daemon } = await renderAgents();
+    await open(daemon, 's1');
+    await settleFocus(daemon);
+    const hold = holdShows(daemon);
+
+    await open(daemon, 's2');
+    screen.getByRole('button', { name: 'Open s1' }).focus();
+    await hold.release();
+    await settleFocus(daemon);
+
+    expect(selectedAgent()).toBe('s2');
+    expect(focusedPane()).toBeNull();
+    expect(document.activeElement).toBe(screen.getByRole('button', { name: 'Open s1' }));
+  });
+
   it('puts the keyboard in a tile the user reached through history', async () => {
     const { daemon } = await renderApp({ initialState: {
       sessions: [daemonSession('s1'), daemonSession('s2')],

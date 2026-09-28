@@ -42,6 +42,10 @@ type SetState = (
   update: Partial<SessionStore> | ((state: SessionStore) => Partial<SessionStore>),
 ) => void;
 
+function focusOwner(): Element | null {
+  return typeof document === 'undefined' ? null : document.activeElement;
+}
+
 export function arrangementOf(state: Pick<SessionStore, 'navigationProfileId' | 'navigationCurrentDesktopId' | 'navigationDesktops'>): Arrangement {
   return {
     profileId: state.navigationProfileId,
@@ -65,7 +69,7 @@ export function reconcileSessionNavigation(
   const reconciled = reconcileArrangement(next, next.sessions, arrangement);
   const advanced = state.pendingSelection
     ? reconciled
-    : advanceQueue(reconciled, next.sessions, arrangement, state.navigationQueue, next.navigationQueue);
+    : advanceQueue(reconciled, next.sessions, arrangement, state.navigationQueue, next.navigationQueue, focusOwner());
   return { ...next, ...advanced };
 }
 
@@ -76,18 +80,18 @@ export function createSessionNavigationActions(
   return {
     selectAgent: (sessionId) => {
       const before = get().pendingSelection;
-      set((state) => selectAgent(state, state.sessions, state.navigationProfileId, sessionId));
+      set((state) => selectAgent(state, state.sessions, state.navigationProfileId, sessionId, focusOwner()));
       return get().pendingSelection !== before;
     },
     selectLeaf: (desktopId, leafId) =>
-      set((state) => requestShow(state, state.navigationProfileId, { kind: 'leaf', desktopId, leafId })),
+      set((state) => requestShow(state, state.navigationProfileId, { kind: 'leaf', desktopId, leafId }, focusOwner())),
     cancelPendingSelection: () => set((state) => cancelSelection(state)),
     selectionFailed: (id) => set((state) => selectionFailed(state, id)),
     focusDelivered: (id) => set((state) => focusDelivered(state, id)),
-    transferFocus: (leaf) => set((state) => claimFocus(state, leaf)),
+    transferFocus: (leaf) => set((state) => claimFocus(state, leaf, focusOwner())),
     leafMoved: (profileId, moved) => set((state) => leafMoved(state, profileId, moved)),
     navigateLeafHistory: (direction, resumeCurrent = false) => {
-      set((state) => navigateHistory(state, arrangementOf(state), direction, resumeCurrent));
+      set((state) => navigateHistory(state, arrangementOf(state), direction, resumeCurrent, focusOwner()));
       return get().pendingSelection !== null;
     },
     setView: (view) => set((state) => changeView(state, view)),
@@ -95,7 +99,7 @@ export function createSessionNavigationActions(
       set((state) => {
         const followNextTurn = typeof update === 'function' ? update(state.followNextTurn) : update;
         const next = { ...cancelSelection(state), followNextTurn };
-        return advanceQueue(next, state.sessions, arrangementOf(state), state.navigationQueue, state.navigationQueue);
+        return advanceQueue(next, state.sessions, arrangementOf(state), state.navigationQueue, state.navigationQueue, focusOwner());
       }),
     goToDashboard: () => set((state) => enterHome(state, false)),
     goHomeAwaitingNextTurn: () => set((state) => enterHome(state, true)),
