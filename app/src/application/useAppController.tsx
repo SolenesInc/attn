@@ -7,7 +7,7 @@ import { useKeyboardShortcuts } from '../hooks/useKeyboardShortcuts';
 import { usePRsNeedingAttention } from '../hooks/usePRsNeedingAttention';
 import { useDesktopNavigation } from '../hooks/useDesktopNavigation';
 import { useDesktopRuntimeController } from '../hooks/useDesktopRuntimeController';
-import { useAgentOnScreen, useDesktopSelectionBridge, useSurface } from '../hooks/useDesktopSelectionBridge';
+import { useAgentOnScreen, useSessionBehindScreen, useDesktopSelectionBridge, useSurface } from '../hooks/useDesktopSelectionBridge';
 import { useUiAutomationBridge } from '../hooks/useUiAutomationBridge';
 import { useDaemonStore } from '../store/daemonSessions';
 import { useDesktopFocus } from '../store/desktopFocus';
@@ -114,6 +114,7 @@ export function useAppController({
 
   const { connect, sessions, reloadSession, selectLeaf } = useSessionStore();
   const shownAgentId = useAgentOnScreen();
+  const contextSessionId = useSessionBehindScreen();
 
   const appErrors = useAppErrors({ settingError, clearSettingError });
   const { showError, showNotice } = appErrors;
@@ -254,7 +255,7 @@ export function useAppController({
   const desktopTiles = useDesktopTiles({
     settings,
     sessions,
-    shownAgentId,
+    contextSessionId,
     showError,
   });
   const {
@@ -297,7 +298,7 @@ export function useAppController({
   const appDiagnostics = useAppDiagnostics({
     sessions,
     getPaneSize,
-    shownAgentId,
+    contextSessionId,
     getActivePaneIdForSession,
     view,
     settings,
@@ -315,7 +316,7 @@ export function useAppController({
     currentCap?: number;
   } | null>(null);
 
-  const workflowPanel = useWorkflowPanel({ shownAgentId, workflowRunPanelOpen });
+  const workflowPanel = useWorkflowPanel({ contextSessionId, workflowRunPanelOpen });
 
   const [desktopOverviewOpen, setDesktopOverviewOpen] = useState(false);
   const [profileSwitcherOpen, setProfileSwitcherOpen] = useState(false);
@@ -408,13 +409,13 @@ export function useAppController({
     if (paletteBlocked) {
       return;
     }
-    const activeSession = shownAgentId
-      ? sessions.find((session) => session.id === shownAgentId)
+    const activeSession = contextSessionId
+      ? sessions.find((session) => session.id === contextSessionId)
       : null;
     paletteOriginRef.current = {
       capturedAtUnixMs: Date.now(),
       view,
-      activeSessionId: shownAgentId,
+      activeSessionId: contextSessionId,
       activePaneId: activeSession ? getActivePaneIdForSession(activeSession) || null : null,
       activeElement: diagnosticFocusKind(document.activeElement),
       documentFocused: document.hasFocus(),
@@ -433,7 +434,7 @@ export function useAppController({
     paletteOriginRef,
     setPalette,
     delegationChainRef,
-    shownAgentId,
+    contextSessionId,
     sessions,
     getActivePaneIdForSession,
     view,
@@ -533,7 +534,7 @@ export function useAppController({
 
   const appGardenActions = useAppGardenActions({
     sendOpenSeed,
-    shownAgentId,
+    contextSessionId,
     showError,
     seeds,
     openDockPanel,

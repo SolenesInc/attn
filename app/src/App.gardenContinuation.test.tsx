@@ -1,6 +1,6 @@
 import { act, fireEvent, screen } from '@testing-library/react';
 import { describe, expect, it, vi } from 'vitest';
-import { soloDesktop, crewMember, daemonSeed, daemonSession } from './test/daemonFixtures';
+import { agentPane, soloDesktop, crewMember, daemonDesktop, daemonSeed, daemonSession, dockTiles } from './test/daemonFixtures';
 import { openRow, renderGarden } from './test/garden';
 import type { CommandMessage } from './test/protocol';
 import { gesture, pressShortcut, renderApp } from './test/renderApp';
@@ -168,6 +168,23 @@ describe('App garden continuation', () => {
     const [open] = daemon.sentOf('open_seed');
     expect(open).toMatchObject({ seed_id: 's-1', session_id: 's1' });
     expect(open).not.toHaveProperty('standalone');
+  });
+
+  it('opens a seed from a session-bound seed tile beside the session that tile is bound to', async () => {
+    const sessions = [daemonSession('s1', { state: 'idle' }), daemonSession('tender', { state: 'idle' })];
+    const { daemon } = await renderGarden([PARSER], { sessions, initial: { desktops: [
+      daemonDesktop('ws', {
+        root: dockTiles({ type: 'pane', pane_id: 'pane-s1' }, [{ tile_id: 'tile-seed', tile_kind: 'seed', tile_params: PARSER.id, tile_session_id: 'tender' }]),
+        panes: [agentPane('s1', 'ws')],
+      }, { name: 'ws', active_pane_id: 'tile-seed' }),
+    ] } });
+    await gesture(daemon, () => fireEvent.click(screen.getByRole('button', { name: 'Open ws' })));
+    await gesture(daemon, () => pressShortcut('board.open'));
+    await openRow(daemon, PARSER.title);
+
+    await gesture(daemon, () => fireEvent.click(screen.getByRole('button', { name: 'Open as tile' })));
+
+    expect(daemon.sentOf('open_seed')).toEqual([expect.objectContaining({ seed_id: PARSER.id, session_id: 'tender' })]);
   });
 
   it('opens a crew member’s seed as a standalone reader when no session is bound to it', async () => {

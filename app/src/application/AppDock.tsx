@@ -11,7 +11,7 @@ import {
   useWorkflowPanelContext,
 } from './AppContexts';
 import { toneForDockPanel } from './appSupport';
-import { useAgentOnScreen } from '../hooks/useDesktopSelectionBridge';
+import { useSessionBehindScreen } from '../hooks/useDesktopSelectionBridge';
 
 export function AppDock() {
   const {
@@ -24,7 +24,7 @@ export function AppDock() {
     gardenHoldsWindow,
     gardenSlotRef,
   } = useAppPanelsContext();
-  const shownAgentId = useAgentOnScreen();
+  const contextSessionId = useSessionBehindScreen();
   const { activeWorkflowRun } = useWorkflowPanelContext();
   const { waitingLocalSessions } = useAttentionQueueContext();
   const { prs } = useAppInputs();
@@ -45,11 +45,11 @@ export function AppDock() {
         panels={[
           {
             id: 'workflowRun',
-            isOpen: workflowRunPanelOpen && Boolean(shownAgentId),
+            isOpen: workflowRunPanelOpen && Boolean(contextSessionId),
             width: 'clamp(420px, 50vw, 680px)',
             tone: activeWorkflowRun ? toneForDockPanel(activeWorkflowRun.status) : 'default',
             className: 'dock-panel dock-panel--workflow-run',
-            children: shownAgentId ? (
+            children: contextSessionId ? (
               <WorkflowRunView
                 run={activeWorkflowRun}
                 onClose={() => closeDockPanel('workflowRun')}

@@ -2,14 +2,14 @@ import { invoke } from '@tauri-apps/api/core';
 import { useCallback, useMemo } from 'react';
 import { useSessionStore } from '../store/sessions';
 import { useAppErrorsContext, useAppInputs, useAppSessionsContext } from './AppContexts';
-import { useAgentOnScreen } from '../hooks/useDesktopSelectionBridge';
+import { useSessionBehindScreen } from '../hooks/useDesktopSelectionBridge';
 
 export function useOpenInEditor() {
   const { settings } = useAppInputs();
   const { activeEndpoint } = useAppSessionsContext();
   const { showError } = useAppErrorsContext();
   const sessions = useSessionStore((state) => state.sessions);
-  const shownAgentId = useAgentOnScreen();
+  const contextSessionId = useSessionBehindScreen();
 
   const isZedEditorConfigured = useMemo(() => {
     const editor = (settings.editor_executable || '').trim().toLowerCase();
@@ -36,7 +36,7 @@ export function useOpenInEditor() {
     [settings.editor_executable, showError],
   );
 
-  const activeSession = sessions.find((s) => s.id === shownAgentId);
+  const activeSession = sessions.find((s) => s.id === contextSessionId);
   const activeSessionIsRemote = Boolean(activeSession?.endpointId);
   const editorTarget = useMemo(
     () => resolveEditorTarget(activeSession, activeEndpoint?.ssh_target, isZedEditorConfigured),

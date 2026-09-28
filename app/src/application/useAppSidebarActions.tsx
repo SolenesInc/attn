@@ -25,7 +25,7 @@ import {
   WorktreesIcon,
 } from './AppIcons';
 import { useOpenInEditor } from './useOpenInEditor';
-import { useAgentOnScreen } from '../hooks/useDesktopSelectionBridge';
+import { useAgentOnScreen, useSessionBehindScreen } from '../hooks/useDesktopSelectionBridge';
 export function useAppSidebarActions() {
   const { notificationsUnread } = useAppInputs();
   const { attentionCount, hasCriticalNotification, zoomModeBySessionId } = useAppShell();
@@ -47,6 +47,7 @@ export function useAppSidebarActions() {
   } = useAppPanelsContext();
   const { keybindings } = useAppAppearanceContext();
   const shownAgentId = useAgentOnScreen();
+  const contextSessionId = useSessionBehindScreen();
   const { currentDesktopId } = useNavigationContext();
   const { openActiveSessionInEditor, activeSessionIsRemote, editorUnavailableReason } = useOpenInEditor();
 
@@ -65,10 +66,10 @@ export function useAppSidebarActions() {
       },
       {
         id: 'workflowRun',
-        title: shownAgentId ? 'Workflow Runs' : 'Workflow Runs (No active session)',
+        title: contextSessionId ? 'Workflow Runs' : 'Workflow Runs (No active session)',
         icon: <WorkflowIcon />,
         active: workflowRunPanelOpen,
-        disabled: !shownAgentId,
+        disabled: !contextSessionId,
         onClick: () => toggleDockPanel('workflowRun'),
       },
       {
@@ -125,7 +126,7 @@ export function useAppSidebarActions() {
       },
     ],
     [
-      shownAgentId,
+      contextSessionId,
       activeSessionIsRemote,
       editorUnavailableReason,
       attentionCount,

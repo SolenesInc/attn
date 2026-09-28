@@ -61,6 +61,14 @@ export function useSurface(): Surface {
   }, [view, leaf]);
 }
 
+// The session behind what is on screen: an agent pane's own session, or the agent a tile is bound to.
+export function useSessionBehindScreen(): string | null {
+  const view = useSessionStore((state) => state.view);
+  const leaf = useActiveLeaf();
+  if (view !== 'session' || !leaf) return null;
+  return leaf.kind === 'agent' ? leaf.sessionId : leaf.tileSessionId;
+}
+
 export function useAgentOnScreen(): string | null {
   const surface = useSurface();
   return surface.kind === 'agent' ? surface.sessionId : null;
