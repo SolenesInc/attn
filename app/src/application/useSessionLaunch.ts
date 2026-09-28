@@ -134,10 +134,11 @@ export function useSessionLaunch({
         closeSession(spawn.sessionId);
         throw error;
       }
-      if (placementError) {
+      if (navigationMark() === launchedFrom) {
+        selectCreatedSession(spawn.sessionId);
+      } else if (placementError) {
         showError(`${spawn.label} started without a pane on this desktop: ${placementError}`);
       }
-      if (navigationMark() === launchedFrom) selectCreatedSession(spawn.sessionId);
       return spawn.sessionId;
     },
     [closeSession, createSession, selectCreatedSession, showError, takeSessionSpawnArgs],

@@ -161,8 +161,11 @@ describe('useSessionLaunch when the daemon cannot place the agent', () => {
     });
   });
 
-  it('keeps the running agent and says once why it has no pane', async () => {
-    vi.mocked(ptySpawn).mockResolvedValueOnce({ placementError: 'desktop desktop-1 is gone' });
+  it('keeps the running agent and says once why it has no pane when the user moved on during the spawn', async () => {
+    vi.mocked(ptySpawn).mockImplementationOnce(async () => {
+      useSessionStore.getState().navigated();
+      return { placementError: 'desktop desktop-1 is gone' };
+    });
     const showError = vi.fn();
     const { result } = renderLaunch(null, {}, showError);
 

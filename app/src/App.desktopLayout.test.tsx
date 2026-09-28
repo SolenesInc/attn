@@ -111,6 +111,22 @@ describe('App desktop layout', () => {
     expect(document.querySelector('[data-session-visible="1"]')?.getAttribute('data-session-terminal-desktop')).toBe('other');
   });
 
+  it('shows a launched agent whose placement failed, without saying it has no pane', async () => {
+    const { daemon } = await openDesktop(pane('s1'), ['s1']);
+    daemon.on('spawn_session', ({ id }) => [
+      { event: 'spawn_result', id, success: true, placement_error: 'desktop ws is gone' },
+      { event: 'session_registered', session: daemonSession(id, { directory: '/tmp/s1', agent: 'shell', state: 'launching' }) },
+    ]);
+    const before = daemon.sent.length;
+
+    pressShortcut('terminal.splitVertical');
+    await daemon.idle();
+
+    const [spawn] = daemon.sentOf('spawn_session');
+    expect(daemon.sent.slice(before).filter((command) => command.cmd === 'desktop_show_session')).toEqual([expect.objectContaining({ session_id: spawn.id })]);
+    expect(screen.queryByText(/started without a pane/)).toBeNull();
+  });
+
   it('places a split only through its spawn, then shows it once', async () => {
     const { daemon } = await openDesktop(pane('s1'), ['s1']);
     serveLaunches(daemon);
