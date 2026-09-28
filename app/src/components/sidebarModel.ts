@@ -2,7 +2,7 @@ import { formatShortcut } from '../shortcuts/formatShortcut';
 import type { ShortcutId } from '../shortcuts/registry';
 import type { SidebarDesktop } from './sidebarTypes';
 
-export function isSessionless(desktop: SidebarDesktop): boolean {
+export function hasNoAgentRows(desktop: SidebarDesktop): boolean {
   return desktop.sessions.length === 0;
 }
 

@@ -40,6 +40,7 @@ type Store struct {
 	writes                 *tableWrites
 	sessionRows            sessionRows
 	touchedAt              map[string]time.Time
+	profilesSeq            int64
 }
 
 // touchResolution bounds how stale last_seen may be; its tightest reader, the Claude

@@ -14,12 +14,10 @@ interface Options {
     yoloMode?: boolean,
     options?: { chiefOfStaff?: boolean; autoMode?: boolean },
   ) => Promise<string>;
-  selectCreatedSession: (sessionId: string) => boolean;
 }
 export function useAppDeepLinks({
   selectAgent,
   launchAgent,
-  selectCreatedSession,
 }: Options) {
   const handledDeepLinks = useRef(new Set<string>());
 
@@ -44,7 +42,6 @@ export function useAppDeepLinks({
               handledDeepLinks.current.add(urlStr);
               void currentDesktopArrived()
                 .then(() => launchAgent(label, cwd))
-                .then(selectCreatedSession)
                 .catch((error) => {
                   handledDeepLinks.current.delete(urlStr);
                   console.error('[DeepLink] spawn failed:', error);
@@ -56,7 +53,7 @@ export function useAppDeepLinks({
         console.error('Failed to parse deep-link URL:', e);
       }
     },
-    [launchAgent, selectAgent, selectCreatedSession],
+    [launchAgent, selectAgent],
   );
 
   useEffect(() => {

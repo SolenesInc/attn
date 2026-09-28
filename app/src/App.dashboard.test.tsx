@@ -92,7 +92,7 @@ describe('App dashboard', () => {
 
     await gesture(daemon, () => fireEvent.click(within(summary).getByRole('button', { name: /planner/ })));
 
-    expect(daemon.sentOf('desktop_set_current').pop()).toMatchObject({ desktop_id: 'desktop-chief-1' });
+    expect(daemon.sentOf('desktop_show_session').pop()).toMatchObject({ session_id: 'chief-1' });
   });
 
   it('asks for a chief when none is set', async () => {

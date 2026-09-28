@@ -55,7 +55,7 @@ export interface SidebarProps {
   desktops: SidebarDesktop[];
   visualIndexByDesktopId: Map<string, number>;
   selectedId: string | null;
-  selectionRequest?: { sessionId: string } | null;
+  selectionRequest?: { id: number } | null;
   selectedDesktopId: string | null;
   selectedTile?: SelectedTile | null;
   tileContents?: Record<string, TileContentState>;
@@ -96,8 +96,6 @@ export interface SidebarProps {
   onRenameSession?: (sessionId: string, label: string) => Promise<void>;
   onRenameDesktop?: (desktopId: string, title: string) => Promise<void>;
   onChangeChiefOfStaff?: (sessionId: string, enabled: boolean) => void;
-  showSessionless?: boolean;
-  onToggleShowSessionless?: () => void;
   queueModeEnabled?: boolean;
   onToggleQueueMode?: () => void;
   crewQueueEnabled?: boolean;

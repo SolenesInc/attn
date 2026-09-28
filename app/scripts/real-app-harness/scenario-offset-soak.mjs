@@ -479,7 +479,7 @@ async function main() {
         action,
         params,
         activeDesktopIndex: activeIndex,
-        activeSessionId: activeDesktop.sessionId,
+        shownAgentId: activeDesktop.sessionId,
         maxOverflowPx: stepMaxOverflow,
       };
       trace.push(traceEntry);

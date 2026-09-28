@@ -48,7 +48,7 @@ vi.mock('./BrowserTileBody', () => ({
   },
 }));
 
-function tileOnlyDesktop(): TerminalDesktopState {
+function tileDesktop(): TerminalDesktopState {
   return {
     agents: [],
     layoutTree: {
@@ -60,12 +60,12 @@ function tileOnlyDesktop(): TerminalDesktopState {
   };
 }
 
-function renderTileOnly() {
+function renderTileDesktop() {
   return render(
     <SessionTerminalDesktop
       desktopId="desktop-tiles"
-      terminalState={tileOnlyDesktop()}
-      activePaneId=""
+      terminalState={tileDesktop()}
+      activePaneId="tile-readme"
       fontSize={13}
       enabled
       isActiveSession
@@ -86,9 +86,9 @@ function renderTileOnly() {
   );
 }
 
-describe('SessionTerminalDesktop tile-only (sessionless) rendering', () => {
+describe('SessionTerminalDesktop with only tile leaves', () => {
   it('renders the docked tile when the terminalState has no agent panes', () => {
-    const { container } = renderTileOnly();
+    const { container } = renderTileDesktop();
 
     const tileSurface = container.querySelector('[data-pane-kind="tile"]');
     expect(tileSurface).not.toBeNull();
@@ -99,15 +99,15 @@ describe('SessionTerminalDesktop tile-only (sessionless) rendering', () => {
   });
 
   it('does not fall back to the empty terminalState placeholder', () => {
-    const { container } = renderTileOnly();
+    const { container } = renderTileDesktop();
 
     const desktopRoot = container.querySelector('[data-session-terminal-desktop="desktop-tiles"]');
     expect(desktopRoot).not.toBeNull();
     expect(desktopRoot?.querySelector('.session-terminal-panes')).not.toBeNull();
   });
 
-  it('focuses the tile body so the tile-only terminalState is keyboard-scrollable', () => {
-    const { container } = renderTileOnly();
+  it('focuses the body of the active tile so it scrolls by keyboard', () => {
+    const { container } = renderTileDesktop();
 
     const body = container.querySelector('.desktop-dock-tile-body');
     expect(body).not.toBeNull();

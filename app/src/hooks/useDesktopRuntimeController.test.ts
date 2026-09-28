@@ -182,7 +182,7 @@ describe('useDesktopRuntimeController', () => {
   });
 
   it('does not treat a session id as a desktop id for stale session helpers', () => {
-    const focusPane = vi.fn();
+    const typePaneTextViaUI = vi.fn(() => true);
     const getPaneText = vi.fn(() => 'stale text');
     const { result } = renderHook(() => useDesktopRuntimeController([], null));
 
@@ -190,9 +190,9 @@ describe('useDesktopRuntimeController', () => {
       result.current.setDesktopRef('session-1')({
         fitPane: vi.fn(),
         fitActivePane: vi.fn(),
-        focusPane,
+        focusPane: vi.fn(),
         focusActivePane: vi.fn(),
-        typePaneTextViaUI: vi.fn(() => true),
+        typePaneTextViaUI,
         isPaneInputFocused: vi.fn(() => true),
         scrollPaneToTop: vi.fn(() => true),
         getPaneText,
@@ -207,10 +207,10 @@ describe('useDesktopRuntimeController', () => {
         drainPaneTerminal: vi.fn(async () => true),
         getLeafDropSnapshot: vi.fn(() => null),
       });
-      result.current.focusSessionPane('session-1', SESSION_PANE_ID);
+      result.current.typeInSessionPaneViaUI('session-1', SESSION_PANE_ID, 'x');
     });
 
-    expect(focusPane).not.toHaveBeenCalled();
+    expect(typePaneTextViaUI).not.toHaveBeenCalled();
     expect(result.current.getPaneText('session-1', SESSION_PANE_ID)).toBe('');
   });
 });

@@ -10,7 +10,6 @@ import {
 import { formatShortcut } from '../shortcuts/formatShortcut';
 import { dockShortcutLabel } from '../shortcuts/metadata';
 import type { ShortcutId } from '../shortcuts/registry';
-import { useSessionStore } from '../store/sessions';
 import {
   useAppAppearanceContext,
   useAppInputs,
@@ -26,6 +25,7 @@ import {
   WorktreesIcon,
 } from './AppIcons';
 import { useOpenInEditor } from './useOpenInEditor';
+import { useAgentOnScreen, useSessionBehindScreen } from '../hooks/useDesktopSelectionBridge';
 export function useAppSidebarActions() {
   const { notificationsUnread } = useAppInputs();
   const { attentionCount, hasCriticalNotification, zoomModeBySessionId } = useAppShell();
@@ -46,7 +46,8 @@ export function useAppSidebarActions() {
     gardenPanelOpen,
   } = useAppPanelsContext();
   const { keybindings } = useAppAppearanceContext();
-  const activeSessionId = useSessionStore((state) => state.activeSessionId);
+  const shownAgentId = useAgentOnScreen();
+  const contextSessionId = useSessionBehindScreen();
   const { currentDesktopId } = useNavigationContext();
   const { openActiveSessionInEditor, activeSessionIsRemote, editorUnavailableReason } = useOpenInEditor();
 
@@ -65,10 +66,10 @@ export function useAppSidebarActions() {
       },
       {
         id: 'workflowRun',
-        title: activeSessionId ? 'Workflow Runs' : 'Workflow Runs (No active session)',
+        title: contextSessionId ? 'Workflow Runs' : 'Workflow Runs (No active session)',
         icon: <WorkflowIcon />,
         active: workflowRunPanelOpen,
-        disabled: !activeSessionId,
+        disabled: !contextSessionId,
         onClick: () => toggleDockPanel('workflowRun'),
       },
       {
@@ -125,7 +126,7 @@ export function useAppSidebarActions() {
       },
     ],
     [
-      activeSessionId,
+      contextSessionId,
       activeSessionIsRemote,
       editorUnavailableReason,
       attentionCount,
@@ -170,12 +171,12 @@ export function useAppSidebarActions() {
         run: () => toggleDockPanel('attention'),
         isActive: attentionPanelOpen,
       },
-      'terminal.splitVertical': { available: Boolean(activeSessionId) },
-      'terminal.splitHorizontal': { available: Boolean(activeSessionId) },
-      'session.newHorizontal': { available: Boolean(activeSessionId) },
-      'terminal.toggleZoom': { isActive: activeSessionZoomed, available: Boolean(activeSessionId) },
+      'terminal.splitVertical': { available: Boolean(shownAgentId) },
+      'terminal.splitHorizontal': { available: Boolean(shownAgentId) },
+      'session.newHorizontal': { available: Boolean(shownAgentId) },
+      'terminal.toggleZoom': { isActive: activeSessionZoomed, available: Boolean(shownAgentId) },
     }),
-    [activeSessionId, attentionPanelOpen, activeSessionZoomed, toggleDockPanel],
+    [shownAgentId, attentionPanelOpen, activeSessionZoomed, toggleDockPanel],
   );
 
   const dockItems = useMemo<DockItem[]>(
