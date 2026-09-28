@@ -1348,7 +1348,13 @@ describe('SessionTerminalDesktop', () => {
           documentIds[index],
         );
       });
-      fireEvent.mouseDown(container.querySelector(`[data-pane-id="${SESSION_PANE_ID}"]`)!);
+      rerender(
+        <SessionTerminalDesktop
+          {...commonProps}
+          activePaneId={SESSION_PANE_ID}
+          terminalState={createDesktopWithDocuments(documentIds.slice(0, index + 1))}
+        />,
+      );
       await waitFor(() => {
         expect(container.querySelector('.session-terminal-desktop')).toHaveAttribute(
           'data-active-leaf-id',

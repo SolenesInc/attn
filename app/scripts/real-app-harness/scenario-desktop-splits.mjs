@@ -8,6 +8,7 @@ import {
   parseCommonArgs,
   printCommonHelp,
   pressShortcutKeys,
+  shownAgentId,
 } from './common.mjs';
 import { DaemonObserver } from './daemonObserver.mjs';
 import { createWindowDriver } from './platform.mjs';
@@ -52,7 +53,7 @@ async function waitForActiveSession(client, sessionId, description, timeoutMs = 
   let lastState = null;
   while (Date.now() - startedAt < timeoutMs) {
     lastState = await client.request('get_state');
-    if (lastState.activeSessionId === sessionId) {
+    if (shownAgentId(lastState) === sessionId) {
       return lastState;
     }
     await new Promise((resolve) => setTimeout(resolve, 200));

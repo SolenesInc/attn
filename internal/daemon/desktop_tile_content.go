@@ -1,6 +1,7 @@
 package daemon
 
 import (
+	"crypto/sha256"
 	"strings"
 	"sync"
 	"time"
@@ -65,12 +66,38 @@ func markdownTilesOnCurrentDesktop(profile profiles.Profile, desktops []profiles
 	return tiles
 }
 
-func (h *wsHub) deliverArrangement(client *wsClient, message outboundMessage, shown func(*wsClient) []desktopMarkdownTile) (evicted bool) {
+// arrangementDelivery is what an arrangement carries besides its bytes.
+type arrangementDelivery struct {
+	shown []desktopMarkdownTile
+	// The store read it came from: a client is never sent one older than it already has.
+	seq int64
+	// Its content without request id: a client already holding it is not sent it again.
+	print [sha256.Size]byte
+}
+
+func (h *wsHub) deliverArrangement(client *wsClient, message outboundMessage, delivery *arrangementDelivery) (evicted bool) {
 	client.arrangementMu.Lock()
 	defer client.arrangementMu.Unlock()
+	if client.arrangementsHeld > 0 {
+		client.arrangementsMissed = true
+		return false
+	}
+	if delivery.seq <= client.arrangementSeq {
+		return false
+	}
+	if delivery.print == client.arrangementPrint {
+		client.arrangementSeq = delivery.seq
+		return false
+	}
+	return h.deliverArrangementLocked(client, message, delivery)
+}
+
+func (h *wsHub) deliverArrangementLocked(client *wsClient, message outboundMessage, delivery *arrangementDelivery) (evicted bool) {
 	queued, evicted := h.deliver(client, message)
 	if queued {
-		client.shownTiles = shown(client)
+		client.shownTiles = delivery.shown
+		client.arrangementPrint = delivery.print
+		client.arrangementSeq = delivery.seq
 	}
 	return evicted
 }

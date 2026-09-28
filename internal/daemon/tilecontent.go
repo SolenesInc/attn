@@ -235,6 +235,8 @@ func (d *Daemon) handleOpenMarkdownWS(client *wsClient, msg *protocol.OpenMarkdo
 	if requestID := strings.TrimSpace(protocol.Deref(msg.RequestID)); requestID != "" {
 		result.RequestID = protocol.Ptr(requestID)
 	}
+	client.holdArrangements()
+	defer d.releaseArrangements(client)
 	desktopID, tileID, err := d.openMarkdownTile(msg.Path, protocol.Deref(msg.SessionID))
 	if err != nil {
 		result.Success = false
@@ -245,6 +247,7 @@ func (d *Daemon) handleOpenMarkdownWS(client *wsClient, msg *protocol.OpenMarkdo
 	result.DesktopID = protocol.Ptr(desktopID)
 	result.TileID = protocol.Ptr(tileID)
 	d.logf("open_markdown(ws): %s as %s on desktop %s", result.Path, tileID, desktopID)
+	d.sendArrangement(client, protocol.Deref(result.RequestID), nil)
 	d.sendToClient(client, result)
 }
 
@@ -255,6 +258,8 @@ func (d *Daemon) handleOpenSeedWS(client *wsClient, msg *protocol.OpenSeedMessag
 		SeedID:    strings.TrimSpace(msg.SeedID),
 		Success:   true,
 	}
+	client.holdArrangements()
+	defer d.releaseArrangements(client)
 	desktopID, tileID, err := d.openSeedTile(msg.SeedID, protocol.Deref(msg.SessionID), protocol.Deref(msg.Standalone))
 	if err != nil {
 		result.Success = false
@@ -265,6 +270,7 @@ func (d *Daemon) handleOpenSeedWS(client *wsClient, msg *protocol.OpenSeedMessag
 	result.DesktopID = protocol.Ptr(desktopID)
 	result.TileID = protocol.Ptr(tileID)
 	d.logf("open_seed(ws): %s as %s on desktop %s", result.SeedID, tileID, desktopID)
+	d.sendArrangement(client, protocol.Deref(msg.RequestID), nil)
 	d.sendToClient(client, result)
 }
 

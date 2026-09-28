@@ -90,8 +90,9 @@ import { completeTerminalInputProbe, maybeStartTerminalInputProbe } from '../uti
 import { decodeBinaryFrame } from '../pty/binaryPtyFrame';
 import { kittyImageBlobFromResult, kittyImageCache } from '../utils/kittyImageCache';
 import { resolveDaemonWebSocketURL, type DaemonEndpointInstance } from '../utils/daemonEndpoint';
-import { handleProfileDaemonEvent, type MigrationResult, type ProfileActionResult } from './daemonProfileEvents';
+import { handleProfileDaemonEvent, syncNavigationFromProfiles, type MigrationResult, type ProfileActionResult } from './daemonProfileEvents';
 import { useProfilesStore } from '../store/profiles';
+import { useSessionStore } from '../store/sessions';
 import type { Desktop } from '../types/generated';
 import { handleBusDaemonEvent, type BusStatus } from './daemonBusEvents';
 import {
@@ -306,7 +307,7 @@ export interface RateLimitState {
 }
 
 // Protocol version - must match daemon's ProtocolVersion
-export const PROTOCOL_VERSION = '333';
+export const PROTOCOL_VERSION = '334';
 const MAX_PENDING_ATTACH_OUTPUTS = 512;
 
 const CLIENT_INSTANCE_ID =
@@ -1250,6 +1251,7 @@ export function useDaemonSocket({
             );
             callbacksRef.current.onCrewUpdate?.(data.crew || []);
             useProfilesStore.getState().enterScope(data.profiles, data.selected_profile_id, data.desktops);
+            syncNavigationFromProfiles({ kind: 'scope' });
             useProfilesStore.getState().migrationPhaseChanged(data.migration_phase ?? null);
             pruneAttachedPtySessions(nextSessions);
             const nextPRs = data.prs || [];
@@ -2618,6 +2620,7 @@ export function useDaemonSocket({
       useAutoModePushStore.getState().clear();
       useWorktreeStore.getState().clear();
       useDelegationPreferencesPush.getState().push();
+      useSessionStore.getState().cancelIntent();
 
       if (circuitOpenRef.current) {
         console.error('[Daemon] Circuit open, not retrying');
@@ -4659,9 +4662,23 @@ export function useDaemonSocket({
   }, []);
 
   const sendProfileCommand = useCallback(
-    (cmd: string, body: Record<string, unknown>) =>
-      sendRequest<ProfileActionResult>(cmd, body, `The daemon did not answer ${cmd}`),
-    [sendRequest],
+    (cmd: string, body: Record<string, unknown>) => {
+      const requestId = nextRequestID(cmd);
+      const intent = useSessionStore.getState().commandSent(cmd, body, requestId);
+      const request = sendKeyedRequest<ProfileActionResult>(
+        pendingRequestKey(cmd, requestId),
+        { cmd, request_id: requestId, ...body },
+        `The daemon did not answer ${cmd}`,
+      );
+      if (intent !== null) {
+        request.then(
+          () => useSessionStore.getState().commandSettled(requestId),
+          () => useSessionStore.getState().intentFailed(intent),
+        );
+      }
+      return request;
+    },
+    [nextRequestID, sendKeyedRequest],
   );
 
   const sendProfileSelect = useCallback(
@@ -4747,6 +4764,17 @@ export function useDaemonSocket({
   const sendDesktopSetActivePane = useCallback(
     (desktopId: string, paneId: string) =>
       sendProfileCommand('desktop_set_active_pane', { desktop_id: desktopId, pane_id: paneId }),
+    [sendProfileCommand],
+  );
+
+  const sendDesktopShowSession = useCallback(
+    (sessionId: string) => sendProfileCommand('desktop_show_session', { session_id: sessionId }),
+    [sendProfileCommand],
+  );
+
+  const sendDesktopShowLeaf = useCallback(
+    (desktopId: string, leafId: string) =>
+      sendProfileCommand('desktop_show_leaf', { desktop_id: desktopId, leaf_id: leafId }),
     [sendProfileCommand],
   );
 
@@ -4909,6 +4937,8 @@ export function useDaemonSocket({
     sendDesktopSetShortcutSlot,
     sendDesktopSetCurrent,
     sendDesktopSetActivePane,
+    sendDesktopShowSession,
+    sendDesktopShowLeaf,
     sendDesktopMoveLeaf,
     sendDesktopPlaceSession,
     sendDesktopDockTile,

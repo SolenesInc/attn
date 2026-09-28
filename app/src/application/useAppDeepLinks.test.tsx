@@ -32,9 +32,7 @@ const desktop: Desktop = {
 };
 
 function renderDeepLinks(launchAgent: (label: string, cwd: string) => Promise<string>) {
-  const selectCreatedSession = vi.fn(() => true);
-  renderHook(() => useAppDeepLinks({ selectAgent: vi.fn(() => true), launchAgent, selectCreatedSession }));
-  return { selectCreatedSession };
+  renderHook(() => useAppDeepLinks({ selectAgent: vi.fn(() => true), launchAgent }));
 }
 
 describe('useAppDeepLinks', () => {
@@ -48,7 +46,7 @@ describe('useAppDeepLinks', () => {
   it('holds a cold-start spawn link until the current desktop arrives, then launches it once', async () => {
     deepLink.coldStart = [SPAWN_URL];
     const launchAgent = vi.fn(async () => 'session-plan');
-    const { selectCreatedSession } = renderDeepLinks(launchAgent);
+    renderDeepLinks(launchAgent);
 
     await waitFor(() => expect(deepLink.listener).not.toBeNull());
     deepLink.listener?.([SPAWN_URL]);
@@ -56,8 +54,7 @@ describe('useAppDeepLinks', () => {
 
     useProfilesStore.setState({ selectedProfileId: 'profile-1', currentDesktopId: 'desktop-1', desktops: [desktop] });
 
-    await waitFor(() => expect(selectCreatedSession).toHaveBeenCalledWith('session-plan'));
-    expect(launchAgent).toHaveBeenCalledTimes(1);
+    await waitFor(() => expect(launchAgent).toHaveBeenCalledTimes(1));
     expect(launchAgent).toHaveBeenCalledWith('plan', '/repo/plan');
   });
 
@@ -66,7 +63,7 @@ describe('useAppDeepLinks', () => {
     const launchAgent = vi.fn()
       .mockRejectedValueOnce(new Error('spawn failed'))
       .mockResolvedValueOnce('session-plan');
-    const { selectCreatedSession } = renderDeepLinks(launchAgent);
+    renderDeepLinks(launchAgent);
     vi.spyOn(console, 'error').mockImplementation(() => {});
 
     await waitFor(() => expect(deepLink.listener).not.toBeNull());
@@ -75,7 +72,6 @@ describe('useAppDeepLinks', () => {
     await waitFor(() => expect(console.error).toHaveBeenCalled());
 
     deepLink.listener?.([SPAWN_URL]);
-    await waitFor(() => expect(selectCreatedSession).toHaveBeenCalledWith('session-plan'));
-    expect(launchAgent).toHaveBeenCalledTimes(2);
+    await waitFor(() => expect(launchAgent).toHaveBeenCalledTimes(2));
   });
 });

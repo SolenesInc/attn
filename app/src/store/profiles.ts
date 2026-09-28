@@ -3,6 +3,7 @@ import { useShallow } from 'zustand/react/shallow';
 import type { Desktop, MigrationPhase, MigrationState, Profile } from '../types/generated';
 import { groupNames } from '../components/MigrationPicker/migrationDraft';
 import { persistSelectedProfileId } from '../utils/selectedProfile';
+import { activeLeafOf } from '../navigation/activeLeaf';
 
 export interface ProfilesState {
   profiles: Profile[];
@@ -44,12 +45,9 @@ export function currentDesktopArrived(): Promise<Desktop> {
   });
 }
 
-export function selectedTile(state: Pick<ProfilesState, 'desktops' | 'currentDesktopId'>): TileSelection | null {
-  const desktop = state.desktops.find((entry) => entry.id === state.currentDesktopId);
-  const leafId = desktop?.active_pane_id;
-  if (!desktop || !leafId) return null;
-  if (desktop.panes.some((pane) => pane.pane_id === leafId && pane.session_id)) return null;
-  return { desktopId: desktop.id, tileId: leafId };
+export function selectedTile(state: Pick<ProfilesState, 'selectedProfileId' | 'desktops' | 'currentDesktopId'>): TileSelection | null {
+  const leaf = activeLeafOf({ profileId: state.selectedProfileId ?? '', currentDesktopId: state.currentDesktopId, desktops: state.desktops });
+  return leaf?.kind === 'tile' ? { desktopId: leaf.desktopId, tileId: leaf.leafId } : null;
 }
 
 type Arrangement = Pick<ProfilesState, 'selectedProfileId' | 'currentDesktopId' | 'desktops' | 'previousDesktopId'>;

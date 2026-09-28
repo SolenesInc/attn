@@ -76,6 +76,7 @@ describe('App keyboard shortcuts', () => {
     });
 
     fireEvent.mouseDown(terminal('pane-s2'));
+    await daemon.idle();
     expect(await press(terminal('pane-s2'), { key: 'W', code: 'KeyW', ctrlKey: true, shiftKey: true })).toBe(false);
 
     expect(closedPanes(daemon)).toEqual(['pane-s2']);
@@ -89,6 +90,7 @@ describe('App keyboard shortcuts', () => {
     });
 
     fireEvent.mouseDown(terminal('pane-s2'));
+    await daemon.idle();
     await press(terminal('pane-s2'), { key: 'w', metaKey: true });
 
     expect(closedPanes(daemon)).toEqual(['pane-s2']);
