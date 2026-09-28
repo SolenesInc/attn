@@ -13,6 +13,7 @@ import { SessionLead } from './SessionLead';
 import { SessionLabel } from './SessionLabel';
 import { SessionProvenance } from './SessionProvenance';
 import { SidebarSettlingBar } from './SettlingIndicator';
+import { describeUnknownReason } from './stateReason';
 import './Sidebar.css';
 import './SidebarRow.css';
 import type { LocalSession } from './sidebarTypes';
@@ -219,6 +220,7 @@ export function SidebarSessionRow({
         type="button"
         className="sidebar-row-select"
         aria-label={`Open ${session.label}`}
+        title={session.state === 'unknown' ? describeUnknownReason(session.state_reason) : undefined}
         onClick={onSelect}
         onClickCapture={onClickCapture}
         onPointerDown={onPointerDown}

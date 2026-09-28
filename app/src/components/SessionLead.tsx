@@ -15,12 +15,17 @@ export function SessionLead({ agent, state, reason, seed, badge }: {
   badge?: ReactNode;
 }) {
   const explanation = state === 'unknown' ? describeUnknownReason(reason) : undefined;
+  const name = harnessLabel(agent);
   return (
     <span className="session-lead" data-state={state} title={explanation}>
       {state === 'launching' ? (
         <span className="session-lead-emoji" aria-label="launching">{pickSessionEmoji(seed)}</span>
       ) : (
-        <HarnessIcon agent={agent} title={explanation ? `${harnessLabel(agent)} · ${explanation}` : undefined} />
+        <HarnessIcon
+          agent={agent}
+          ariaLabel={`${name} · ${explanation ?? state.replace('_', ' ')}`}
+          title={explanation ? `${name} · ${explanation}` : undefined}
+        />
       )}
       <StateIndicator state={state} seed={seed} reason={reason} />
       {badge && <span className="session-lead-badge">{badge}</span>}

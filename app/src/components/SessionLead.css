@@ -1,5 +1,6 @@
 .session-lead {
   position: relative;
+  pointer-events: none;
   display: inline-grid;
   place-items: center;
   width: 14px;

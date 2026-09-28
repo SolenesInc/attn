@@ -24,7 +24,7 @@ const sessions: Array<{
   id: string;
   agent?: string;
   label: string;
-  state: 'idle' | 'working' | 'unknown';
+  state: 'idle' | 'working' | 'scheduled' | 'unknown';
   desktopId: string;
   state_reason?: string;
   isWorktree?: boolean;
@@ -61,7 +61,7 @@ describe('sidebar harness identity', () => {
       ['shell', 'Shell'], ['plugin', 'Custom Driver'], ['missing', 'Unknown harness'],
     ]) {
       const row = screen.getByTestId(`sidebar-session-${id}`);
-      const icon = within(row).getByRole('img', { name });
+      const icon = within(row).getByRole('img', { name: `${name} · idle` });
       expect(icon).toHaveAttribute('title', name);
       expect(row.querySelector('.session-lead')).toHaveAttribute('data-state', 'idle');
       fireEvent.click(within(row).getByRole('button', { name: /^Open / }));
@@ -78,7 +78,7 @@ describe('sidebar harness identity', () => {
 
     const row = screen.getByTestId('sidebar-session-claude');
     expect(row.querySelector('.session-lead')).toHaveAttribute('data-state', 'working');
-    expect(within(row).getByRole('img', { name: 'Claude' })).toBeInTheDocument();
+    expect(within(row).getByRole('img', { name: 'Claude · working' })).toBeInTheDocument();
     expect(within(row).getByTestId('delegation-chain-trigger-claude')).toBeInTheDocument();
     expect(row).not.toHaveTextContent('⎇');
   });
@@ -90,13 +90,21 @@ describe('sidebar harness identity', () => {
     expect(row.querySelector('.session-lead')).toHaveAttribute('data-state', 'idle');
   });
 
+  it('names the scheduled state with harness logos on', () => {
+    const data = sidebarData();
+    data.desktops[0].sessions[0].state = 'scheduled';
+    render(<Sidebar {...baseProps} {...data} />);
+    const row = screen.getByTestId('sidebar-session-claude');
+    expect(within(row).getByRole('img', { name: 'Claude · scheduled' })).toBeInTheDocument();
+  });
+
   it('explains an unknown state when hovering the visible logo', () => {
     const data = sidebarData();
     data.desktops[0].sessions[0].state = 'unknown';
     data.desktops[0].sessions[0].state_reason = 'stuck';
     render(<Sidebar {...baseProps} {...data} />);
     const row = screen.getByTestId('sidebar-session-claude');
-    expect(within(row).getByRole('img', { name: 'Claude' })).toHaveAttribute(
+    expect(within(row).getByRole('img', { name: 'Claude · Stuck — the agent has stopped reporting anything at all' })).toHaveAttribute(
       'title', 'Claude · Stuck — the agent has stopped reporting anything at all',
     );
   });
@@ -111,8 +119,8 @@ describe('sidebar harness identity', () => {
     expect(screen.getByRole('img', { name: 'Claude' })).toBeInTheDocument();
     expect(screen.getByRole('img', { name: 'Custom Driver' })).toBeInTheDocument();
     rerender(<Sidebar {...props} queue={null} />);
-    expect(within(screen.getByTestId('sidebar-session-pi')).getByRole('img', { name: 'Pi' })).toBeInTheDocument();
-    expect(within(screen.getByTestId('sidebar-session-codex')).getByRole('img', { name: 'Codex' })).toBeInTheDocument();
+    expect(within(screen.getByTestId('sidebar-session-pi')).getByRole('img', { name: 'Pi · idle' })).toBeInTheDocument();
+    expect(within(screen.getByTestId('sidebar-session-codex')).getByRole('img', { name: 'Codex · idle' })).toBeInTheDocument();
   });
 
   it.each([false, true])('keeps crew management reachable when queue mode is %s', (queueMode) => {
