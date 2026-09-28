@@ -189,7 +189,6 @@ export function useDesktopController(
   const activeLeafId = activePaneId && leafIds.includes(activePaneId) ? activePaneId : '';
   const activeLeafIsTile = tileLeafById.has(activeLeafId);
   const activeAgentPaneId = agentPaneById.has(activeLeafId) ? activeLeafId : '';
-  const activePaneSessionId = agentPaneById.get(activeAgentPaneId)?.sessionId ?? null;
   useLayoutEffect(() => {
     layoutTreeRef.current = terminalState.layoutTree ?? null;
     activeLeafIdRef.current = activeLeafId;
@@ -1113,7 +1112,6 @@ export function useDesktopController(
     delegationSessionById,
     delegatesByDispatcherId,
     tileSessionOptions,
-    activePaneSessionId,
     runtime,
     terminalRefForPane,
     showPaneHeader,
