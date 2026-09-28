@@ -26,14 +26,15 @@ function team(): DaemonSession[] {
 interface Launch {
   sessions?: DaemonSession[];
   queue?: boolean;
+  crewInQueue?: boolean;
   desktop?: (session: DaemonSession) => Partial<DaemonDesktop>;
   crew?: ReturnType<typeof crewMember>[];
 }
 
-function launch({ sessions = team(), queue = true, desktop = () => ({}), crew = [] }: Launch = {}) {
+function launch({ sessions = team(), queue = true, crewInQueue = false, desktop = () => ({}), crew = [] }: Launch = {}) {
   return renderApp({
     initialState: {
-      settings: queue ? QUEUE : {},
+      settings: queue ? { ...QUEUE, ...(crewInQueue ? { queue_crew_enabled: 'true' } : {}) } : {},
       sessions,
       crew,
       desktops: sessions.map((session) => ({ ...soloDesktop(session.id), ...desktop(session) })),
@@ -67,24 +68,64 @@ async function press(daemon: ScriptedDaemon, name: string) {
 }
 
 describe('App queue', () => {
+  it('keeps pinned crew out of the hidden count when crew also joins the queue', async () => {
+    const sessions = [
+      agent('chief', { chief_of_staff: true }),
+      ...[4, 3, 2].map((n) => agent(`owed-${n}`, { turn_owed: true, turn_opened_at: ago(n * HOUR) })),
+      agent('crew-owed', { crew_member: 'alder', turn_owed: true, turn_opened_at: ago(HOUR) }),
+      agent('working'),
+    ];
+    const { daemon } = await launch({ sessions, crewInQueue: true, crew: [crewMember('alder')] });
+
+    expect(screen.getByTestId('queue-crew-alder')).toBeInTheDocument();
+    expect(screen.getAllByTestId(/queue-turn-owed-/)).toHaveLength(3);
+    expect(screen.getByTestId('queue-agents-toggle')).toHaveTextContent('1 more agents');
+    expect(screen.getByTestId('queue-agents-counts')).toHaveTextContent('1 working');
+    await openAgentList(daemon);
+    expect(screen.getByTestId('queue-also-waiting-header')).toHaveTextContent('Also waiting 1');
+  });
+
   it('fits owed turns to the sidebar height and counts only rows below the toggle', async () => {
     let height = 500;
     const observers: Array<{ trigger: (node?: Element) => void }> = [];
-    let signalAutomationObserved: (() => void) | undefined;
-    const automationObserved = new Promise<void>((resolve) => { signalAutomationObserved = resolve; });
     class FitObserver implements ResizeObserver {
       private connected = true;
       private readonly nodes = new Set<Element>();
       constructor(private readonly callback: ResizeObserverCallback) { observers.push(this); }
-      observe(node: Element) {
-        this.nodes.add(node);
-        if (node instanceof HTMLElement && node.classList.contains('automation-runs')) signalAutomationObserved?.();
-      }
+      observe(node: Element) { this.nodes.add(node); }
       unobserve(node: Element) { this.nodes.delete(node); }
       disconnect() { this.connected = false; }
       trigger(node?: Element) { if (this.connected && (!node || this.nodes.has(node))) this.callback([], this); }
     }
+    const NativeMutationObserver = MutationObserver;
+    const mutations: Array<{ trigger: (node: Node) => void }> = [];
+    class FitMutationObserver implements MutationObserver {
+      private readonly native: MutationObserver;
+      private body = false;
+      constructor(private readonly callback: MutationCallback) {
+        this.native = new NativeMutationObserver(callback);
+      }
+      observe(target: Node, options?: MutationObserverInit) {
+        this.native.observe(target, options);
+        if (target instanceof HTMLElement && target.classList.contains('queue-sidebar-body')) {
+          this.body = true;
+          mutations.push(this);
+        }
+      }
+      disconnect() { this.native.disconnect(); }
+      takeRecords() { return this.native.takeRecords(); }
+      trigger(node: Node) {
+        if (!this.body) return;
+        this.callback([{
+          type: 'childList', target: node.parentNode ?? node,
+          addedNodes: document.querySelectorAll('[data-testid="sidebar-automation-runs"]'),
+          removedNodes: document.querySelectorAll('.no-removed-sidebar-block'),
+          attributeName: null, attributeNamespace: null, nextSibling: null, oldValue: null, previousSibling: null,
+        }], this);
+      }
+    }
     vi.stubGlobal('ResizeObserver', FitObserver);
+    vi.stubGlobal('MutationObserver', FitMutationObserver);
     vi.spyOn(HTMLElement.prototype, 'clientHeight', 'get').mockImplementation(function (this: HTMLElement) {
       return this.classList.contains('queue-sidebar-body') ? height : 0;
     });
@@ -137,9 +178,9 @@ describe('App queue', () => {
           definition_id: 'review', definition_name: 'Review', run_id: 'run-1', trigger_type: 'manual',
         } }),
       }));
+      const automationBlock = screen.getByTestId('sidebar-automation-runs');
       await act(async () => {
-        await automationObserved;
-        const automationBlock = screen.getByTestId('sidebar-automation-runs');
+        mutations.forEach((observer) => observer.trigger(automationBlock));
         observers.forEach((observer) => observer.trigger(automationBlock));
       });
       expect(screen.getAllByTestId(/queue-turn-owed-/)).toHaveLength(4);

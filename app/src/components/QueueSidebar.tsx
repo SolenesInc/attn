@@ -267,13 +267,17 @@ function WaitingCard({ leadRef, leadCount }: { leadRef: RefObject<HTMLDivElement
   const turns = queue.turns;
   const lead = turns.slice(0, leadCount);
   const hidden = turns.length - lead.length;
+  const pinnedCrew = new Set(queue.crew.map((row) => row.session.id));
   const matches = (row: QueueRow<QueueBandSessionView>) =>
     !agentFilter || row.session.label.toLowerCase().includes(agentFilter.toLowerCase());
-  const more = hidden + queue.settled.length + queue.snoozed.length;
+  const hiddenWaiting = turns.slice(leadCount).filter((row) => !pinnedCrew.has(row.session.id)).length;
+  const hiddenWorking = queue.settled.filter((row) => !pinnedCrew.has(row.session.id)).length;
+  const hiddenSnoozed = queue.snoozed.filter((row) => !pinnedCrew.has(row.session.id)).length;
+  const more = hiddenWaiting + hiddenWorking + hiddenSnoozed;
   const parts = [
-    [hidden, 'waiting'],
-    [queue.settled.length, 'working'],
-    [queue.snoozed.length, 'snoozed'],
+    [hiddenWaiting, 'waiting'],
+    [hiddenWorking, 'working'],
+    [hiddenSnoozed, 'snoozed'],
   ] as const;
 
   const turnRow = (row: QueueRow<QueueBandSessionView>) => (
