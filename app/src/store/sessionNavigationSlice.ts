@@ -118,7 +118,7 @@ export function createSessionNavigationActions(
     historyLanded: (profileId, cursor, leaf) => set((state) => historyLanded(state, profileId, cursor, leaf)),
     toggleGrid: () => set((state) => withVisit(state, toggleGrid(state))),
     focusClaimDelivered: (id) => set((state) => focusClaimDelivered(state, id)),
-    transferFocus: (leaf) => set((state) => claimFocus(state, leaf, focusOwner())),
+    transferFocus: (leaf) => set((state) => claimFocus(state, leaf, focusOwner(), false)),
     leafMoved: (profileId, moved) => set((state) => leafMoved(state, profileId, moved)),
     navigateLeafHistory: (direction, resumeCurrent = false) => {
       set((state) => navigateHistory(state, arrangementOf(state), direction, resumeCurrent, focusOwner()));

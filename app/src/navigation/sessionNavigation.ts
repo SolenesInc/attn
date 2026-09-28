@@ -53,6 +53,7 @@ export interface FocusClaim {
   desktopId: string;
   leafId: string;
   focusOwner: Element | null;
+  announce: boolean;
 }
 
 export interface SessionNavigationState {
@@ -195,9 +196,9 @@ export function focusClaimDelivered(state: SessionNavigationState, id: number): 
   return state.focusRequest?.id === id ? { ...state, focusRequest: null } : state;
 }
 
-export function claimFocus(state: SessionNavigationState, leaf: { desktopId: string; leafId: string }, focusOwner: Element | null): SessionNavigationState {
+export function claimFocus(state: SessionNavigationState, leaf: { desktopId: string; leafId: string }, focusOwner: Element | null, announce: boolean): SessionNavigationState {
   const id = state.focusSequence + 1;
-  return { ...state, focusSequence: id, focusRequest: { id, desktopId: leaf.desktopId, leafId: leaf.leafId, focusOwner } };
+  return { ...state, focusSequence: id, focusRequest: { id, desktopId: leaf.desktopId, leafId: leaf.leafId, focusOwner, announce } };
 }
 
 export function toggleGrid(state: SessionNavigationState): SessionNavigationState {
@@ -283,7 +284,7 @@ export function reconcileArrangement(
       next = recordVisit(next, arrangement);
     }
     if (next.view === 'session' && leaf) {
-      next = claimFocus(next, { desktopId: leaf.desktopId, leafId: leaf.leafId }, intent.focusOwner);
+      next = claimFocus(next, { desktopId: leaf.desktopId, leafId: leaf.leafId }, intent.focusOwner, true);
     }
     return next;
   }

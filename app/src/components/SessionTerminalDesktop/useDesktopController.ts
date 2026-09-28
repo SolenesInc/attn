@@ -499,6 +499,31 @@ export function useDesktopController(
     focusClaimRef.current = focusClaim;
   }, [focusClaim]);
 
+  const lastAnnouncedClaim = useRef(0);
+  useLayoutEffect(() => {
+    if (!focusClaim?.announce || !sessionVisible || focusClaim.desktopId !== desktopId
+      || focusClaim.leafId !== activeLeafId || lastAnnouncedClaim.current === focusClaim.id) return;
+    const pane = Array.from(panesContainerRef.current?.querySelectorAll<HTMLElement>('[data-pane-id]') ?? [])
+      .find((element) => element.dataset.paneId === focusClaim.leafId);
+    if (!pane) return;
+
+    lastAnnouncedClaim.current = focusClaim.id;
+    pane.classList.remove('leaf-arrival');
+    void pane.offsetWidth;
+    pane.classList.add('leaf-arrival');
+  }, [activeLeafId, desktopId, focusClaim, paneReadyFocusRequest, sessionVisible]);
+
+  useEffect(() => {
+    const container = panesContainerRef.current;
+    if (!container) return;
+    const onAnimationEnd = (event: AnimationEvent) => {
+      if ((event.animationName === 'leaf-arrival-pulse' || event.animationName === 'leaf-arrival-outline')
+        && event.target instanceof HTMLElement) event.target.classList.remove('leaf-arrival');
+    };
+    container.addEventListener('animationend', onAnimationEnd);
+    return () => container.removeEventListener('animationend', onAnimationEnd);
+  }, [renderedPaneIdsKey]);
+
   useEffect(() => {
     if (!focusClaim || !sessionVisible || focusClaim.leafId !== activeLeafId) return;
     const active = document.activeElement;
