@@ -7,6 +7,7 @@ import {
   daemonSession,
   defaultProfile,
   dockTiles,
+  emptyDesktop,
   soloDesktop,
   splitDesktop,
   type DaemonDesktop,
@@ -1041,6 +1042,28 @@ describe('keyboard focus', () => {
     await settleFocus(daemon);
 
     expect(focusedPane()).toBe('pane-s2');
+  });
+
+  it('leaves the keyboard alone when a pane lands later on an empty desktop the user switched to', async () => {
+    const { daemon } = await renderApp({ initialState: {
+      sessions: [queueSession('s1', 9), queueSession('s2', 10)],
+      desktops: [soloDesktop('s1', { name: 'alpha' }), emptyDesktop('beta', { name: 'beta' })],
+    } });
+    await open(daemon, 's1');
+    await settleFocus(daemon);
+    const row = screen.getByRole('button', { name: 'Open beta' });
+    row.focus();
+    await gesture(daemon, () => fireEvent.click(row));
+    await settleFocus(daemon);
+
+    await gesture(daemon, () => {
+      daemon.arrangement.place('s2', 'pane-s2', 'beta');
+      daemon.emit(daemon.arrangement.changed());
+    });
+    await settleFocus(daemon);
+
+    expect(shownLeaf()).toBe('pane-s2');
+    expect(document.activeElement).toBe(row);
   });
 
   it('puts the keyboard in a tile the user reached through history', async () => {

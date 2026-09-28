@@ -2394,6 +2394,7 @@ export function useUiAutomationBridge({
         const sessionId = await createSession(label, cwd, providedSessionId, agent, endpointId, undefined, {
           chiefOfStaff,
         });
+        await selectionShown({ kind: 'session', sessionId });
         await settleUi();
         window.setTimeout(() => {
           fitSessionActivePane(sessionId);

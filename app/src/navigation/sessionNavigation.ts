@@ -50,8 +50,7 @@ export type Arrival =
 export interface FocusClaim {
   id: number;
   desktopId: string;
-  // Null claims whichever leaf the daemon shows on that desktop when it lands.
-  leafId: string | null;
+  leafId: string;
   focusOwner: Element | null;
 }
 
@@ -175,7 +174,7 @@ export function focusClaimDelivered(state: SessionNavigationState, id: number): 
   return state.focusRequest?.id === id ? { ...state, focusRequest: null } : state;
 }
 
-export function claimFocus(state: SessionNavigationState, leaf: { desktopId: string; leafId: string | null }, focusOwner: Element | null): SessionNavigationState {
+export function claimFocus(state: SessionNavigationState, leaf: { desktopId: string; leafId: string }, focusOwner: Element | null): SessionNavigationState {
   const id = state.focusSequence + 1;
   return { ...state, focusSequence: id, focusRequest: { id, desktopId: leaf.desktopId, leafId: leaf.leafId, focusOwner } };
 }
@@ -260,8 +259,8 @@ export function reconcileArrangement(
     } else {
       next = recordVisit(next, arrangement);
     }
-    if (next.view === 'session' && arrangement.currentDesktopId) {
-      next = claimFocus(next, { desktopId: arrangement.currentDesktopId, leafId: leaf?.leafId ?? null }, intent.focusOwner);
+    if (next.view === 'session' && leaf) {
+      next = claimFocus(next, { desktopId: leaf.desktopId, leafId: leaf.leafId }, intent.focusOwner);
     }
     return next;
   }
