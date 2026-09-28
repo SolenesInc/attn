@@ -583,8 +583,8 @@
   padding: 16px 18px;
 }
 
-/* The body is focused programmatically (tabIndex=-1) so a tile-only desktop
-   can scroll by keyboard on select; it is not a tab stop, so suppress the ring. */
+/* The body is focused programmatically (tabIndex=-1) so a shown tile scrolls
+   by keyboard; it is not a tab stop, so suppress the ring. */
 .desktop-dock-tile-body:focus {
   outline: none;
 }

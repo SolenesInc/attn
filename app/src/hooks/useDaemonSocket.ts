@@ -4797,6 +4797,17 @@ export function useDaemonSocket({
     [sendProfileCommand],
   );
 
+  const sendDesktopShowSession = useCallback(
+    (sessionId: string) => sendProfileCommand('desktop_show_session', { session_id: sessionId }),
+    [sendProfileCommand],
+  );
+
+  const sendDesktopShowLeaf = useCallback(
+    (desktopId: string, leafId: string) =>
+      sendProfileCommand('desktop_show_leaf', { desktop_id: desktopId, leaf_id: leafId }),
+    [sendProfileCommand],
+  );
+
   const sendDesktopMoveLeaf = useCallback(
     (move: {
       sourceDesktopId: string;
@@ -4956,6 +4967,8 @@ export function useDaemonSocket({
     sendDesktopSetShortcutSlot,
     sendDesktopSetCurrent,
     sendDesktopSetActivePane,
+    sendDesktopShowSession,
+    sendDesktopShowLeaf,
     sendDesktopMoveLeaf,
     sendDesktopPlaceSession,
     sendDesktopDockTile,

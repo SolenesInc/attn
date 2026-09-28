@@ -7,6 +7,7 @@ import type {
   ProfilesChangedMessage,
 } from '../types/generated';
 import { useProfilesStore } from '../store/profiles';
+import { useSessionStore } from '../store/sessions';
 import { parseLayoutJSON } from '../types/desktop';
 import { recordLayout } from '../utils/terminalDiagnosticsLog';
 import { collectDesktopLayoutDiagnostics } from '../utils/desktopDiagnostics';
@@ -63,6 +64,7 @@ export function handleProfileDaemonEvent(data: ProfileEvent, pending: PendingReq
         const layout = collectDesktopLayoutDiagnostics(parseLayoutJSON(desktop.tree_json));
         recordLayout(desktop.id, layout.panes.map((pane) => pane.paneId), layout.splitCount);
       }
+      if (message.moved_leaf) useSessionStore.getState().leafMoved(message.profile.id, message.moved_leaf);
       useProfilesStore.getState().arrangementArrived(message.profile, message.desktops ?? []);
       return true;
     }

@@ -14,10 +14,6 @@ import {
   type TerminalDesktopState,
 } from '../types/desktop';
 import { desktopSnapshot } from '../utils/desktops';
-import {
-  recordAgentVisit,
-  reconcileAgentHistory,
-} from '../navigation/agentHistory';
 
 export type { TerminalDesktopState };
 
@@ -81,6 +77,7 @@ export interface SessionStore extends SessionNavigationState, SessionNavigationA
   navigationSessions: DaemonSessionSnapshot[];
   navigationProfileId: string;
   navigationDesktops: Desktop[];
+  navigationCurrentDesktopId: string | null;
   navigationSettings: Record<string, string>;
   navigationQueue: QueueBands<QueueBandSession> | null;
   connected: boolean;
@@ -105,7 +102,7 @@ export interface SessionStore extends SessionNavigationState, SessionNavigationA
   reloadSession: (id: string, size?: { cols: number; rows: number }) => Promise<void>;
   setLauncherConfig: (config: LauncherConfig) => void;
   syncFromDaemonSessions: (daemonSessions: DaemonSessionSnapshot[]) => void;
-  syncFromArrangement: (profileId: string, desktops: Desktop[]) => void;
+  syncFromArrangement: (profileId: string, currentDesktopId: string | null, desktops: Desktop[]) => void;
 }
 
 const MIN_STABLE_COLS = 20;
@@ -156,6 +153,7 @@ export const useSessionStore = create<SessionStore>((set, get) => ({
   navigationSessions: [],
   navigationProfileId: '',
   navigationDesktops: [],
+  navigationCurrentDesktopId: null,
   navigationSettings: {},
   navigationQueue: null,
   connected: false,
@@ -220,12 +218,7 @@ export const useSessionStore = create<SessionStore>((set, get) => ({
       daemonActivePaneId: '',
     };
 
-    set((state) => ({
-      view: 'session', followNextTurn: false, pendingSelection: null, focusRequest: null,
-      sessions: [...state.sessions, session],
-      activeSessionId: id,
-      agentHistory: recordAgentVisit(state.agentHistory, id),
-    }));
+    set((state) => ({ sessions: [...state.sessions, session] }));
 
     return id;
   },
@@ -233,13 +226,7 @@ export const useSessionStore = create<SessionStore>((set, get) => ({
   removeSessionLocalState: (id: string) => {
     set((state) => {
       const sessions = state.sessions.filter((session) => session.id !== id);
-      const liveSessionIds = new Set(sessions.map((session) => session.id));
-      const agentHistory = reconcileAgentHistory(state.agentHistory, liveSessionIds);
-      return reconcileSessionNavigation(state, {
-        sessions,
-        agentHistory,
-        activeSessionId: state.activeSessionId === id ? null : state.activeSessionId,
-      });
+      return reconcileSessionNavigation(state, { sessions });
     });
   },
 
@@ -374,20 +361,14 @@ export const useSessionStore = create<SessionStore>((set, get) => ({
           )
         )
       ));
-      const allSessions = [...syncedSessions, ...pendingSessions];
-      const syncedIds = new Set(allSessions.map((session) => session.id));
-      const activeSessionId =
-        state.activeSessionId && syncedIds.has(state.activeSessionId) ? state.activeSessionId : null;
       return reconcileSessionNavigation(state, {
         navigationSessions: daemonSessions,
-        sessions: allSessions,
-        activeSessionId,
-        agentHistory: reconcileAgentHistory(state.agentHistory, syncedIds),
+        sessions: [...syncedSessions, ...pendingSessions],
       });
     });
   },
 
-  syncFromArrangement: (profileId: string, desktops: Desktop[]) => {
+  syncFromArrangement: (profileId: string, currentDesktopId: string | null, desktops: Desktop[]) => {
     const desktopSnapshots = Object.fromEntries(desktops.map((desktop) => [desktop.id, desktopSnapshot(desktop)]));
     const desktopIdBySessionId = Object.fromEntries(
       desktops.flatMap((desktop) => desktop.panes.map((pane) => [pane.session_id, desktop.id] as const)),
@@ -408,6 +389,7 @@ export const useSessionStore = create<SessionStore>((set, get) => ({
         desktopSnapshots,
         desktopIdBySessionId,
         navigationProfileId: profileId,
+        navigationCurrentDesktopId: currentDesktopId,
         navigationDesktops: desktops,
       });
     });

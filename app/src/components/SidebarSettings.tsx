@@ -11,8 +11,6 @@ export function SidebarSettings({
   onToggleHarnessLogos,
   desktopSelectionStyle,
   onDesktopSelectionStyleChange,
-  showSessionless,
-  onToggleShowSessionless,
   displayMode,
   setDisplayMode,
 }: Pick<
@@ -25,8 +23,6 @@ export function SidebarSettings({
   | 'onToggleHarnessLogos'
   | 'desktopSelectionStyle'
   | 'onDesktopSelectionStyleChange'
-  | 'showSessionless'
-  | 'onToggleShowSessionless'
 > & {
   displayMode: 'open' | 'tight' | 'boxed';
   setDisplayMode: (mode: 'open' | 'tight' | 'boxed') => void;
@@ -143,20 +139,6 @@ export function SidebarSettings({
               </button>
             ))}
           </div>
-          <button
-            type="button"
-            className="sidebar-settings-switch-row"
-            role="switch"
-            aria-checked={showSessionless}
-            data-testid="toggle-show-sessionless"
-            onClick={() => onToggleShowSessionless?.()}
-          >
-            <span className="sidebar-settings-switch-label">Tile-only desktops</span>
-            <span
-              className={`sidebar-settings-switch ${showSessionless ? 'on' : ''}`}
-              aria-hidden="true"
-            />
-          </button>
         </dialog>
       )}
     </div>

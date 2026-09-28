@@ -73,10 +73,11 @@ function App() {
   }, []);
 
   const selectedProfileId = useProfilesStore((state) => state.selectedProfileId);
+  const currentDesktopId = useProfilesStore((state) => state.currentDesktopId);
   const desktops = useProfilesStore((state) => state.desktops);
   useEffect(() => {
-    useSessionStore.getState().syncFromArrangement(selectedProfileId ?? '', desktops);
-  }, [selectedProfileId, desktops]);
+    useSessionStore.getState().syncFromArrangement(selectedProfileId ?? '', currentDesktopId, desktops);
+  }, [selectedProfileId, currentDesktopId, desktops]);
 
   useEffect(() => {
     async function ensureDaemon() {

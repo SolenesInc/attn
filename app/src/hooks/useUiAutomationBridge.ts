@@ -2448,7 +2448,7 @@ export function useUiAutomationBridge({
           throw new Error('select_session requires sessionId');
         }
         selectSession(sessionId);
-        await selectionShown(sessionId);
+        await selectionShown({ kind: 'session', sessionId });
         await settleUi();
         return { sessionId };
       }
@@ -2809,7 +2809,7 @@ export function useUiAutomationBridge({
         const paneId = resolvePaneId(session, getActivePaneIdForSession, payload.paneId);
         const viewSessionId = resolveDesktopViewSessionId(session, sessions, activeSessionId);
         selectSession(sessionId);
-        await selectionShown(sessionId);
+        await selectionShown({ kind: 'session', sessionId });
         focusPane(viewSessionId, paneId);
         await settleUi();
         return { sessionId, paneId, viewSessionId };
@@ -2824,7 +2824,7 @@ export function useUiAutomationBridge({
         const ownerSessionId = resolvePaneOwnerSessionId(session, paneId);
         const viewSessionId = resolveDesktopViewSessionId(session, sessions, activeSessionId);
         selectSession(sessionId);
-        await selectionShown(sessionId);
+        await selectionShown({ kind: 'session', sessionId });
         await settleUi(1);
         clickPaneElement(ownerSessionId, paneId);
         await settleUi(2);

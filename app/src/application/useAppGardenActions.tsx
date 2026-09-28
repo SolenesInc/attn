@@ -5,11 +5,10 @@ import { type SeedPlacement, type SeedReviewActionContext } from '../hooks/useDa
 import { useDockPanels } from '../hooks/useDockPanels';
 import { useDaemonStore } from '../store/daemonSessions';
 import { gardenPathToSeed, useGardenWalk } from '../store/gardenWalk';
-import { useSessionStore } from '../store/sessions';
 import { crewDisplayName } from '../utils/crewName';
 interface Options {
   sendOpenSeed: ReturnType<typeof useDaemonApi>['sendOpenSeed'];
-  activeSessionId: ReturnType<typeof useSessionStore.getState>['activeSessionId'];
+  activeSessionId: string | null;
   showError: ReturnType<typeof useToast>['showError'];
   seeds: ReturnType<typeof useDaemonStore.getState>['seeds'];
   openDockPanel: ReturnType<typeof useDockPanels>['openDockPanel'];

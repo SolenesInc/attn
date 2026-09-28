@@ -173,7 +173,7 @@ describe('Sidebar', () => {
     rerender(<Sidebar {...baseProps} {...data} selectedId="run-a" />);
     expect(header).toHaveAttribute('aria-expanded', 'false');
 
-    rerender(<Sidebar {...baseProps} {...data} selectedId="run-a" selectionRequest={{ sessionId: 'run-a' }} />);
+    rerender(<Sidebar {...baseProps} {...data} selectedId="run-a" selectionRequest={{ id: 1 }} />);
     expect(header).toHaveAttribute('aria-expanded', 'true');
   });
 

@@ -7,7 +7,7 @@ import { useKeyboardShortcuts } from '../hooks/useKeyboardShortcuts';
 import { usePRsNeedingAttention } from '../hooks/usePRsNeedingAttention';
 import { useDesktopNavigation } from '../hooks/useDesktopNavigation';
 import { useDesktopRuntimeController } from '../hooks/useDesktopRuntimeController';
-import { useDesktopSelectionBridge, useSurface } from '../hooks/useDesktopSelectionBridge';
+import { useAgentOnScreen, useDesktopSelectionBridge, useSurface } from '../hooks/useDesktopSelectionBridge';
 import { useUiAutomationBridge } from '../hooks/useUiAutomationBridge';
 import { useDaemonStore } from '../store/daemonSessions';
 import { useDesktopFocus } from '../store/desktopFocus';
@@ -111,7 +111,8 @@ export function useAppController({
     });
   }, []);
 
-  const { connect, sessions, activeSessionId, reloadSession } = useSessionStore();
+  const { connect, sessions, reloadSession, selectLeaf } = useSessionStore();
+  const activeSessionId = useAgentOnScreen();
 
   const appErrors = useAppErrors({ settingError, clearSettingError });
   const { showError, showNotice } = appErrors;
@@ -135,7 +136,7 @@ export function useAppController({
     injectSessionPaneBase64,
     drainSessionPaneTerminal,
   } = desktopRuntime;
-  useDesktopSelectionBridge(desktopRuntime.focusSessionPane, showError);
+  useDesktopSelectionBridge(showError);
 
   const appSessions = useAppSessions({
     activeSessionId,
@@ -174,7 +175,6 @@ export function useAppController({
     view,
     setView,
     selectAgent,
-    selectAgentPane,
     cancelPendingSelection,
     navigateAgentHistoryBack,
     navigateAgentHistoryForward,
@@ -210,7 +210,7 @@ export function useAppController({
     chooseReopenDirectory,
   } = sessionLaunch;
 
-  const prLauncher = usePRLauncher({ settings, launchAgent, selectCreatedSession });
+  const prLauncher = usePRLauncher({ settings, launchAgent });
   const { openPRLauncherJob, handleRefreshPRs } = prLauncher;
 
   const appAppearance = useAppAppearance({ settings });
@@ -266,7 +266,7 @@ export function useAppController({
   const { seeds } = useDaemonStore();
   const agentAvailability = useMemo(() => getAgentAvailability(settings), [settings]);
 
-  useAppDeepLinks({ selectAgent, launchAgent, selectCreatedSession });
+  useAppDeepLinks({ selectAgent, launchAgent });
 
   const onReopened = useCallback(() => setSessionsOpen(false), [setSessionsOpen]);
   const sessionLifecycle = useSessionLifecycle({
@@ -457,12 +457,12 @@ export function useAppController({
     },
     closePaneSession: handleCloseSession,
     focusPane: (sessionId: string, paneId: string) => {
-      const ownerSessionId = sessions.find((session) =>
+      const owner = sessions.find((session) =>
         session.desktop.agents.some(
           (pane) => pane.id === paneId && pane.sessionId === session.id,
         ),
-      )?.id;
-      selectAgentPane(ownerSessionId ?? sessionId, paneId);
+      ) ?? sessions.find((session) => session.id === sessionId);
+      if (owner?.desktopId) selectLeaf(owner.desktopId, paneId);
     },
     typeInSessionPaneViaUI,
     isSessionPaneInputFocused,

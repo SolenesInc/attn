@@ -35,7 +35,6 @@ import {
   resolveDesktopLayout,
   type AttentionViewport,
 } from './attentionLayout';
-import { focusedLeafId, type PendingLeafFocus } from './leafSelection';
 import { useFocusedLeaf } from './useFocusedLeaf';
 import { useGhosttyPaneRuntime } from './useGhosttyPaneRuntime';
 import { useSessionPopoverRequest } from './useSessionPopoverRequest';
@@ -65,6 +64,11 @@ const EMPTY_SEED_TARGET_SESSIONS: DesktopTileSessionOption[] = [];
 
 const EMPTY_GARDEN_SEEDS: Seed[] = [];
 
+function focusIsFree(desktop: HTMLElement | null): boolean {
+  const active = document.activeElement;
+  return !active || active === document.body || Boolean(desktop?.contains(active));
+}
+
 const EMPTY_DELEGATION_SESSIONS: NonNullable<SessionTerminalDesktopProps['delegationSessions']> =
   [];
 
@@ -90,6 +94,8 @@ export function useDesktopController(
     fontSize,
     resolvedTheme,
     focusRequestToken,
+    focusClaim,
+    onFocusClaimDelivered,
     enabled,
     isActiveSession,
     isSessionViewVisible = true,
@@ -150,8 +156,6 @@ export function useDesktopController(
   const [attentionRevision, setAttentionRevision] = useState(0);
   const attentionFocusOrderRef = useRef<string[]>([]);
   const suspendedLeafIdsRef = useRef<ReadonlySet<string>>(EMPTY_SUSPENDED_LEAF_IDS);
-  const pendingLeafFocusRef = useRef<PendingLeafFocus | null>(null);
-  const lastAgentPaneIdRef = useRef('');
   const tileBodyRefs = useRef(new Map<string, HTMLDivElement>());
   const tileBodyRefCallbacks = useRef(new Map<string, (node: HTMLDivElement | null) => void>());
   const panesContainerRef = useRef<HTMLDivElement | null>(null);
@@ -180,32 +184,15 @@ export function useDesktopController(
   } = useDesktopPanes({ terminalState, desktopSessions, delegationSessions });
 
   const leafIds = useMemo(() => [...paneIds, ...tileLeafById.keys()], [paneIds, tileLeafById]);
-  const activeLeafId = focusedLeafId(activePaneId, leafIds, pendingLeafFocusRef.current);
+  const activeLeafId = activePaneId && leafIds.includes(activePaneId) ? activePaneId : '';
   const activeLeafIsTile = tileLeafById.has(activeLeafId);
-  const activeAgentPaneId = agentPaneById.has(activeLeafId)
-    ? activeLeafId
-    : agentPaneById.has(lastAgentPaneIdRef.current)
-      ? lastAgentPaneIdRef.current
-      : (paneIds[0] ?? '');
+  const activeAgentPaneId = agentPaneById.has(activeLeafId) ? activeLeafId : '';
   const activePaneSessionId = agentPaneById.get(activeAgentPaneId)?.sessionId ?? null;
   useLayoutEffect(() => {
     layoutTreeRef.current = terminalState.layoutTree ?? null;
     activeLeafIdRef.current = activeLeafId;
     activeAgentPaneIdRef.current = activeAgentPaneId;
-    lastAgentPaneIdRef.current = activeAgentPaneId;
   }, [terminalState.layoutTree, activeLeafId, activeAgentPaneId]);
-
-  useLayoutEffect(() => {
-    const pending = pendingLeafFocusRef.current;
-    if (
-      pending &&
-      (activePaneId === pending.leafId ||
-        activePaneId !== pending.fromActiveLeafId ||
-        !leafIds.includes(pending.leafId))
-    ) {
-      pendingLeafFocusRef.current = null;
-    }
-  }, [activePaneId, leafIds]);
 
   const runtimePanes = useMemo(() => {
     const panes = [];
@@ -486,32 +473,25 @@ export function useDesktopController(
     return callback;
   }, []);
 
+  const focusShownLeaf = useCallback((leafId: string) => {
+    if (tileLeafById.has(leafId)) {
+      focusTile(leafId);
+      return true;
+    }
+    if (!agentPaneById.has(leafId) || annotationSurfaceOwnsFocus(desktopId)) return false;
+    runtime.focusPane(leafId, 0);
+    return true;
+  }, [agentPaneById, desktopId, focusTile, runtime, tileLeafById]);
+
   useEffect(() => {
-    if (!sessionVisible) {
-      return;
-    }
-    if (activeLeafIsTile) {
-      focusTile(activeLeafId);
-      return;
-    }
-    if (activeAgentPaneId) {
-      if (annotationSurfaceOwnsFocus(desktopId)) return;
-      focusActivePaneSurface();
-    }
-  }, [
-    activeLeafId,
-    activeLeafIsTile,
-    activeAgentPaneId,
-    focusActivePaneSurface,
-    focusTile,
-    focusRequestToken,
-    isActiveSession,
-    isSessionViewVisible,
-    paneReadyFocusRequest,
-    suspendedLeafIdsKey,
-    desktopId,
-    sessionVisible,
-  ]);
+    if (!sessionVisible || !focusIsFree(panesContainerRef.current)) return;
+    focusShownLeaf(activeLeafIdRef.current);
+  }, [focusRequestToken, focusShownLeaf, paneReadyFocusRequest, sessionVisible]);
+
+  useEffect(() => {
+    if (!focusClaim || !sessionVisible || focusClaim.leafId !== activeLeafId) return;
+    if (focusShownLeaf(activeLeafId)) onFocusClaimDelivered?.(focusClaim.id);
+  }, [activeLeafId, focusClaim, focusShownLeaf, onFocusClaimDelivered, paneReadyFocusRequest, sessionVisible]);
 
   // A pane whose grid overflows its container is not retried by fit()'s reveal
   // path — it stays clipped until something unrelated refits it.
@@ -699,30 +679,24 @@ export function useDesktopController(
           [...pinnedLeafIdsRef.current].filter((id) => id !== leafId),
         );
       }
-      const pending = { leafId, fromActiveLeafId: activePaneId };
-      pendingLeafFocusRef.current = pending;
       setAttentionRevision((current) => current + 1);
-      void Promise.resolve(onFocusPane(leafId)).catch(() => {
-        if (pendingLeafFocusRef.current !== pending) return;
-        pendingLeafFocusRef.current = null;
-        setAttentionRevision((current) => current + 1);
-      });
+      onFocusPane(leafId);
       if (tileLeafById.has(leafId)) {
         focusTile(leafId);
         return;
       }
       runtime.focusPane(leafId);
     },
-    [activePaneId, focusTile, onFocusPane, runtime, tileLeafById],
+    [focusTile, onFocusPane, runtime, tileLeafById],
   );
 
   const focusActivePane = useCallback(() => {
-    if (activeLeafIsTile && activeAgentPaneId) {
-      focusLeaf(activeAgentPaneId);
+    if (activeLeafIsTile) {
+      focusTile(activeLeafId);
       return;
     }
     focusActivePaneSurface();
-  }, [activeAgentPaneId, activeLeafIsTile, focusActivePaneSurface, focusLeaf]);
+  }, [activeLeafId, activeLeafIsTile, focusActivePaneSurface, focusTile]);
 
   const focusDocument = useCallback(
     (tileId: string) => {

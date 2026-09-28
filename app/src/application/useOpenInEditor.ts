@@ -2,13 +2,14 @@ import { invoke } from '@tauri-apps/api/core';
 import { useCallback, useMemo } from 'react';
 import { useSessionStore } from '../store/sessions';
 import { useAppErrorsContext, useAppInputs, useAppSessionsContext } from './AppContexts';
+import { useAgentOnScreen } from '../hooks/useDesktopSelectionBridge';
 
 export function useOpenInEditor() {
   const { settings } = useAppInputs();
   const { activeEndpoint } = useAppSessionsContext();
   const { showError } = useAppErrorsContext();
   const sessions = useSessionStore((state) => state.sessions);
-  const activeSessionId = useSessionStore((state) => state.activeSessionId);
+  const activeSessionId = useAgentOnScreen();
 
   const isZedEditorConfigured = useMemo(() => {
     const editor = (settings.editor_executable || '').trim().toLowerCase();

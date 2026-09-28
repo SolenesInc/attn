@@ -10,7 +10,6 @@ import {
 import { formatShortcut } from '../shortcuts/formatShortcut';
 import { dockShortcutLabel } from '../shortcuts/metadata';
 import type { ShortcutId } from '../shortcuts/registry';
-import { useSessionStore } from '../store/sessions';
 import {
   useAppAppearanceContext,
   useAppInputs,
@@ -26,6 +25,7 @@ import {
   WorktreesIcon,
 } from './AppIcons';
 import { useOpenInEditor } from './useOpenInEditor';
+import { useAgentOnScreen } from '../hooks/useDesktopSelectionBridge';
 export function useAppSidebarActions() {
   const { notificationsUnread } = useAppInputs();
   const { attentionCount, hasCriticalNotification, zoomModeBySessionId } = useAppShell();
@@ -46,7 +46,7 @@ export function useAppSidebarActions() {
     gardenPanelOpen,
   } = useAppPanelsContext();
   const { keybindings } = useAppAppearanceContext();
-  const activeSessionId = useSessionStore((state) => state.activeSessionId);
+  const activeSessionId = useAgentOnScreen();
   const { currentDesktopId } = useNavigationContext();
   const { openActiveSessionInEditor, activeSessionIsRemote, editorUnavailableReason } = useOpenInEditor();
 

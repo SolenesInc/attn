@@ -30,6 +30,11 @@ interface Options {
   showError: ReturnType<typeof useToast>['showError'];
 }
 
+function navigationMark(): string {
+  const { selectionSequence, view } = useSessionStore.getState();
+  return `${selectionSequence}:${view}`;
+}
+
 function localDesktopForLaunch(endpointId: string | undefined) {
   if (endpointId) {
     throw new Error('Agents on remote endpoints cannot be started or split in this release: remote endpoints are off.');
@@ -102,6 +107,7 @@ export function useSessionLaunch({
     }) => {
       const desktop = localDesktopForLaunch(spawn.endpointId);
       const target = launchTarget(desktop, spawn.direction, spawn.anchorPaneId);
+      const launchedFrom = navigationMark();
       let placementError: string | undefined;
       try {
         await createSession(
@@ -132,9 +138,10 @@ export function useSessionLaunch({
       if (placementError) {
         showError(`${spawn.label} started without a pane on this desktop: ${placementError}`);
       }
+      if (navigationMark() === launchedFrom) selectCreatedSession(spawn.sessionId);
       return spawn.sessionId;
     },
-    [closeSession, createSession, showError, takeSessionSpawnArgs],
+    [closeSession, createSession, selectCreatedSession, showError, takeSessionSpawnArgs],
   );
 
   const launchAgent = useCallback(
@@ -161,14 +168,7 @@ export function useSessionLaunch({
     [spawnOnCurrentDesktop],
   );
 
-  const createSessionForUiAutomation = useCallback(
-    async (...args: Parameters<typeof launchAgent>) => {
-      const sessionId = await launchAgent(...args);
-      selectCreatedSession(sessionId);
-      return sessionId;
-    },
-    [launchAgent, selectCreatedSession],
-  );
+  const createSessionForUiAutomation = launchAgent;
 
   const createSplitSession = useCallback(
     async (
@@ -190,7 +190,7 @@ export function useSessionLaunch({
         return;
       }
       try {
-        const sessionId = await spawnOnCurrentDesktop({
+        await spawnOnCurrentDesktop({
           sessionId: crypto.randomUUID(),
           label: options.label || nextSplitSessionLabel(agent),
           cwd,
@@ -202,7 +202,6 @@ export function useSessionLaunch({
           anchorPaneId: targetPaneId,
           spawnedFrom: base?.id,
         });
-        selectCreatedSession(sessionId);
       } catch (error) {
         showError(error instanceof Error ? error.message : 'Failed to start the agent');
       }
@@ -213,7 +212,6 @@ export function useSessionLaunch({
       handleNewSession,
       nextSplitSessionLabel,
       sessions,
-      selectCreatedSession,
       showError,
       spawnOnCurrentDesktop,
     ],
@@ -248,10 +246,9 @@ export function useSessionLaunch({
         pick.yoloMode,
         { chiefOfStaff: true, autoMode: pick.autoMode },
       );
-      selectCreatedSession(sessionId);
       return sessionId;
     },
-    [createSplitSession, launchAgent, selectCreatedSession],
+    [createSplitSession, launchAgent],
   );
 
   const handleLocationSelect = useCallback(

@@ -3,7 +3,7 @@ import { controlBrowserHost } from '../browser/host';
 import { useDaemonApi } from '../contexts/DaemonApiContext';
 import { useAgentNavigation } from '../hooks/useAgentNavigation';
 import { withFreshDesktopRevisions } from '../hooks/desktopRevisions';
-import { useAgentOnScreen } from '../hooks/useDesktopSelectionBridge';
+import { currentActiveLeaf, useAgentOnScreen } from '../hooks/useDesktopSelectionBridge';
 import { useProfilesStore, useSelectedTile } from '../store/profiles';
 import { useSessionStore } from '../store/sessions';
 import { dispatcherOf } from '../utils/delegationLinks';
@@ -49,7 +49,7 @@ export function useAppNavigation({
     goToDashboard,
     goHomeAwaitingNextTurn,
   } = useSessionStore();
-  const { sendDesktopSetCurrent, sendDesktopSetActivePane, sendDesktopRemoveLeaf } = useDaemonApi();
+  const { sendDesktopSetCurrent, sendDesktopRemoveLeaf } = useDaemonApi();
   const currentDesktopId = useProfilesStore((state) => state.currentDesktopId);
   const desktops = useProfilesStore((state) => state.desktops);
   const shownTile = useSelectedTile();
@@ -61,7 +61,7 @@ export function useAppNavigation({
 
   const {
     selectAgent,
-    selectAgentPane,
+    selectLeaf,
     cancelPendingSelection,
     back: navigateAgentHistoryBack,
     forward: navigateAgentHistoryForward,
@@ -101,8 +101,8 @@ export function useAppNavigation({
   }, [desktopViews, agentOnScreenId, handleSelectSession, showNotice]);
 
   const toggleGridMode = useCallback(() => {
-    setView((prev) => (prev === 'grid' ? (activeSessionId ? 'session' : 'dashboard') : 'grid'));
-  }, [activeSessionId, setView]);
+    setView((prev) => (prev === 'grid' ? (currentActiveLeaf() ? 'session' : 'dashboard') : 'grid'));
+  }, [setView]);
 
   const [desktopSelectionStyle, setDesktopSelectionStyle] = useState<DesktopSelectionStyle>(
     readDesktopSelectionStyle,
@@ -137,18 +137,11 @@ export function useAppNavigation({
 
   const handleSelectTile = useCallback(
     (desktopId: string, tileId: string) => {
-      const { selectedProfileId, desktops } = useProfilesStore.getState();
-      if (!selectedProfileId || !desktops.some((desktop) => desktop.id === desktopId)) return;
-      setView('session');
-      void sendDesktopSetActivePane(desktopId, tileId)
-        .then(() => {
-          if (desktopId !== currentDesktopIdRef.current) return sendDesktopSetCurrent(selectedProfileId, desktopId);
-        })
-        .catch((error) => {
-          showError(`Could not focus that tile: ${error instanceof Error ? error.message : String(error)}`);
-        });
+      const { desktops } = useProfilesStore.getState();
+      if (!desktops.some((desktop) => desktop.id === desktopId)) return;
+      selectLeaf(desktopId, tileId);
     },
-    [sendDesktopSetActivePane, sendDesktopSetCurrent, setView, showError],
+    [selectLeaf],
   );
 
   const handleCloseTile = useCallback(
@@ -214,7 +207,7 @@ export function useAppNavigation({
     utilityFocusRequestToken,
     requestTerminalFocus,
     selectAgent,
-    selectAgentPane,
+    selectLeaf,
     cancelPendingSelection,
     navigateAgentHistoryBack,
     navigateAgentHistoryForward,

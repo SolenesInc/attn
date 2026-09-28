@@ -1,12 +1,15 @@
 import type { DaemonSessionSnapshot, Session } from '../store/sessions';
-import type { Desktop } from '../types/generated';
+import type { Desktop, LeafMoved } from '../types/generated';
+import { activeLeafOf, leafOn, leafShows, type ActiveLeaf, type Arrangement, type ShowTarget } from './activeLeaf';
 import {
-  createAgentHistory,
-  moveAgentHistory,
-  recordAgentVisit,
-  type AgentHistoryDirection,
-  type AgentHistoryState,
-} from './agentHistory';
+  createLeafHistory,
+  moveLeafHistory,
+  reconcileLeafHistory,
+  recordLeafVisit,
+  remapLeafHistory,
+  type LeafHistoryDirection,
+  type LeafHistoryState,
+} from './leafHistory';
 import {
   advanceAfterTurnClosed,
   buildQueueBands,
@@ -20,131 +23,159 @@ import { buildDesktopViewModels } from '../utils/desktopViewModels';
 
 export type AppView = 'dashboard' | 'session' | 'grid';
 export type StateUpdate<T> = T | ((previous: T) => T);
+
+export interface PendingShow {
+  id: number;
+  profileId: string;
+  target: ShowTarget;
+  historyCursor: number | null;
+}
+
+export interface FocusClaim {
+  id: number;
+  desktopId: string;
+  leafId: string;
+}
+
 export interface SessionNavigationState {
-  activeSessionId: string | null;
-  agentHistory: AgentHistoryState;
   view: AppView;
   followNextTurn: boolean;
-  pendingSelection: { sessionId: string; seen: boolean } | null;
-  focusRequest: { sessionId: string; paneId: string } | null;
+  pendingSelection: PendingShow | null;
+  focusRequest: FocusClaim | null;
+  leafHistoryByProfile: Record<string, LeafHistoryState>;
+  selectionSequence: number;
   utilityFocusRequestToken: number;
 }
 
 export function initialSessionNavigation(): SessionNavigationState {
   return {
-    activeSessionId: null,
-    agentHistory: createAgentHistory(),
     view: 'dashboard',
     followNextTurn: false,
     pendingSelection: null,
     focusRequest: null,
+    leafHistoryByProfile: {},
+    selectionSequence: 0,
     utilityFocusRequestToken: 0,
   };
 }
 
-export function activateSession(
+function historyOf(state: SessionNavigationState, profileId: string): LeafHistoryState {
+  return state.leafHistoryByProfile[profileId] ?? createLeafHistory();
+}
+
+function withHistory(state: SessionNavigationState, profileId: string, history: LeafHistoryState): SessionNavigationState {
+  if (!profileId || state.leafHistoryByProfile[profileId] === history) return state;
+  return { ...state, leafHistoryByProfile: { ...state.leafHistoryByProfile, [profileId]: history } };
+}
+
+export function requestShow(
   state: SessionNavigationState,
-  id: string | null,
+  profileId: string,
+  target: ShowTarget,
+  historyCursor: number | null = null,
 ): SessionNavigationState {
+  const id = state.selectionSequence + 1;
   return {
     ...state,
-    activeSessionId: id,
-    pendingSelection: null,
+    view: 'session',
+    followNextTurn: false,
+    pendingSelection: { id, profileId, target, historyCursor },
     focusRequest: null,
-    view: id ? 'session' : state.view,
-    followNextTurn: id ? false : state.followNextTurn,
-    agentHistory:
-      id && id !== state.activeSessionId
-        ? recordAgentVisit(state.agentHistory, id)
-        : state.agentHistory,
+    selectionSequence: id,
+    utilityFocusRequestToken: state.utilityFocusRequestToken + 1,
   };
 }
 
 export function selectAgent(
   state: SessionNavigationState,
   sessions: Session[],
+  profileId: string,
   sessionId: string,
-  paneId?: string,
 ): SessionNavigationState {
-  const session = sessions.find((entry) => entry.id === sessionId);
-  const pane = session?.desktop.agents.find(
-    (entry) => entry.sessionId === sessionId && (!paneId || entry.id === paneId),
-  );
-  if (!session || !pane)
-    return {
-      ...state,
-      focusRequest: null,
-      pendingSelection: paneId ? null : { sessionId, seen: Boolean(session) },
-      followNextTurn: false,
-    };
-  return {
-    ...activateSession(state, sessionId),
-    focusRequest: { sessionId, paneId: pane.id },
-    utilityFocusRequestToken: state.utilityFocusRequestToken + 1,
-  };
+  if (!sessions.some((session) => session.id === sessionId)) return state;
+  return requestShow(state, profileId, { kind: 'session', sessionId });
 }
 
-export function enterHome(
-  state: SessionNavigationState,
-  followNextTurn: boolean,
-): SessionNavigationState {
-  return {
-    ...activateSession(state, null),
-    view: 'dashboard',
-    followNextTurn,
-  };
+export function cancelSelection(state: SessionNavigationState): SessionNavigationState {
+  if (!state.pendingSelection && !state.focusRequest) return state;
+  return { ...state, pendingSelection: null, focusRequest: null };
 }
 
-export function changeView(
-  state: SessionNavigationState,
-  update: StateUpdate<AppView>,
-): SessionNavigationState {
+export function selectionFailed(state: SessionNavigationState, id: number): SessionNavigationState {
+  return state.pendingSelection?.id === id ? cancelSelection(state) : state;
+}
+
+export function focusDelivered(state: SessionNavigationState, id: number): SessionNavigationState {
+  return state.focusRequest?.id === id ? { ...state, focusRequest: null } : state;
+}
+
+export function claimFocus(state: SessionNavigationState, leaf: ActiveLeaf): SessionNavigationState {
+  const id = state.selectionSequence + 1;
+  return { ...state, selectionSequence: id, focusRequest: { id, desktopId: leaf.desktopId, leafId: leaf.leafId } };
+}
+
+export function enterHome(state: SessionNavigationState, followNextTurn: boolean): SessionNavigationState {
+  return { ...cancelSelection(state), view: 'dashboard', followNextTurn };
+}
+
+export function changeView(state: SessionNavigationState, update: StateUpdate<AppView>): SessionNavigationState {
   const view = typeof update === 'function' ? update(state.view) : update;
   return {
-    ...state,
+    ...cancelSelection(state),
     view,
-    pendingSelection: null,
-    focusRequest: null,
     followNextTurn: view === 'dashboard' && state.followNextTurn,
   };
 }
 
 export function navigateHistory(
   state: SessionNavigationState,
-  sessions: Session[],
-  direction: AgentHistoryDirection,
+  arrangement: Arrangement,
+  direction: LeafHistoryDirection,
   resumeCurrent: boolean,
 ): SessionNavigationState {
-  const move = moveAgentHistory(
-    state.agentHistory,
-    direction,
-    new Set(sessions.map((session) => session.id)),
-    resumeCurrent,
-  );
-  const next = {
-    ...state,
-    agentHistory: move.state,
-    pendingSelection: null,
-    focusRequest: null,
-    followNextTurn: false,
-  };
-  return move.targetSessionId
-    ? {
-        ...selectAgent(activateSession(next, move.targetSessionId), sessions, move.targetSessionId),
-        agentHistory: move.state,
-      }
-    : next;
+  const move = moveLeafHistory(historyOf(state, arrangement.profileId), direction, arrangement.desktops, resumeCurrent);
+  const next = withHistory(cancelSelection(state), arrangement.profileId, move.state);
+  if (!move.target) return { ...next, followNextTurn: false };
+  const target: ShowTarget = { kind: 'leaf', desktopId: move.target.lastKnownDesktopId, leafId: move.target.leafId };
+  return requestShow(next, arrangement.profileId, target, move.cursor);
 }
 
-export function reconcilePendingSelection(
+export function leafMoved(state: SessionNavigationState, profileId: string, moved: LeafMoved): SessionNavigationState {
+  return withHistory(state, profileId, remapLeafHistory(historyOf(state, profileId), moved));
+}
+
+function pendingTargetGone(pending: PendingShow, sessions: Session[], arrangement: Arrangement): boolean {
+  if (pending.target.kind === 'session') {
+    const sessionId = pending.target.sessionId;
+    return !sessions.some((session) => session.id === sessionId);
+  }
+  if (arrangement.profileId !== pending.profileId) return false;
+  const { desktopId, leafId } = pending.target;
+  const desktop = arrangement.desktops.find((entry) => entry.id === desktopId);
+  return !desktop || !leafOn(arrangement.profileId, desktop, leafId);
+}
+
+export function reconcileArrangement(
   state: SessionNavigationState,
   sessions: Session[],
+  arrangement: Arrangement,
 ): SessionNavigationState {
+  const leaf = activeLeafOf(arrangement);
+  let history = reconcileLeafHistory(historyOf(state, arrangement.profileId), arrangement.desktops);
+  let next = state;
   const pending = state.pendingSelection;
-  if (!pending) return state;
-  const exists = sessions.some((session) => session.id === pending.sessionId);
-  if (!exists) return pending.seen ? { ...state, pendingSelection: null } : state;
-  return selectAgent(state, sessions, pending.sessionId);
+  if (pending && leafShows(leaf, pending.target) && leaf) {
+    if (pending.historyCursor !== null && pending.profileId === arrangement.profileId) {
+      history = { entries: history.entries, cursor: Math.min(pending.historyCursor, history.entries.length - 1) };
+    }
+    next = claimFocus({ ...next, pendingSelection: null }, leaf);
+  } else if (pending && pendingTargetGone(pending, sessions, arrangement)) {
+    next = cancelSelection(next);
+  }
+  if (next.view === 'session' && leaf) {
+    history = recordLeafVisit(history, { leafId: leaf.leafId, lastKnownDesktopId: leaf.desktopId });
+  }
+  return withHistory(next, arrangement.profileId, history);
 }
 
 export function sessionAttentionFields(session: DaemonSessionSnapshot | undefined) {
@@ -179,19 +210,21 @@ export function navigationQueue(
 export function advanceQueue(
   state: SessionNavigationState,
   sessions: Session[],
+  arrangement: Arrangement,
   previous: QueueBands<QueueBandSession> | null,
   next: QueueBands<QueueBandSession> | null,
-  tileSelected: boolean,
 ): SessionNavigationState {
   if (!next || state.pendingSelection) return state;
   if (state.view === 'dashboard' && state.followNextTurn) {
     const target = headOfQueue(next);
-    return target ? selectAgent(state, sessions, target.session.id) : state;
+    return target ? selectAgent(state, sessions, arrangement.profileId, target.session.id) : state;
   }
-  if (state.view !== 'session' || tileSelected) return state;
-  const advance = advanceAfterTurnClosed(previous?.turns ?? [], next, state.activeSessionId);
+  if (state.view !== 'session') return state;
+  const leaf = activeLeafOf(arrangement);
+  if (leaf?.kind !== 'agent') return state;
+  const advance = advanceAfterTurnClosed(previous?.turns ?? [], next, leaf.sessionId);
   if (!advance) return state;
   return advance.to === 'session'
-    ? selectAgent(state, sessions, advance.row.session.id)
+    ? selectAgent(state, sessions, arrangement.profileId, advance.row.session.id)
     : enterHome(state, true);
 }

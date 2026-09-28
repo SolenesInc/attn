@@ -1,5 +1,5 @@
-import { useCallback, useEffect, useRef } from 'react';
-import { useSessionStore, type Session } from '../store/sessions';
+import { useCallback, useRef } from 'react';
+import type { Session } from '../store/sessions';
 import type { BlockStateSnapshot, PlacementStateSnapshot } from '../components/GhosttyTerminal';
 import type { SessionTerminalDesktopHandle } from '../components/SessionTerminalDesktop';
 import type { LeafDropSnapshot } from '../components/SessionTerminalDesktop/leafDrag';
@@ -19,7 +19,6 @@ interface DesktopRuntimeController {
   getActivePaneIdForSession: (session: Session | undefined | null) => string;
   setDesktopRef: (desktopId: string) => (ref: SessionTerminalDesktopHandle | null) => void;
   getDesktopLeafDropSnapshot: (desktopId: string | null | undefined) => LeafDropSnapshot | null;
-  focusSessionPane: (sessionId: string, paneId: string, retries?: number) => void;
   typeInSessionPaneViaUI: (sessionId: string, paneId: string, text: string) => boolean;
   isSessionPaneInputFocused: (sessionId: string, paneId: string) => boolean;
   scrollSessionPaneToTop: (sessionId: string, paneId: string) => boolean;
@@ -45,16 +44,6 @@ export function useDesktopRuntimeController(
   activeSessionId: string | null
 ): DesktopRuntimeController {
   const desktopRefs = useRef<Map<string, SessionTerminalDesktopHandle>>(new Map());
-  const focusRequest = useSessionStore(state => state.focusRequest);
-  const focusedRequest = useRef<typeof focusRequest>(null);
-  useEffect(() => {
-    if (!focusRequest || focusedRequest.current === focusRequest) return;
-    const desktopId = sessions.find(session => session.id === focusRequest.sessionId)?.desktopId;
-    const desktop = desktopId ? desktopRefs.current.get(desktopId) : undefined;
-    if (!desktop) return;
-    focusedRequest.current = focusRequest;
-    desktop.focusPane(focusRequest.paneId, 40);
-  }, [focusRequest, sessions]);
   const eventRouter = usePaneRuntimeEventRouter();
   const getActivePaneIdForSession = sessionPaneId;
 
@@ -83,12 +72,6 @@ export function useDesktopRuntimeController(
   const getDesktopLeafDropSnapshot = useCallback((desktopId: string | null | undefined) => (
     desktopId ? desktopRefs.current.get(desktopId)?.getLeafDropSnapshot() ?? null : null
   ), []);
-
-  const focusSessionPane = useCallback((sessionId: string, paneId: string, retries = 20) => {
-    const desktopId = desktopIdForSession(sessionId);
-    if (!desktopId) return;
-    desktopRefs.current.get(desktopId)?.focusPane(paneId, retries);
-  }, [desktopIdForSession]);
 
   const typeInSessionPaneViaUI = useCallback((sessionId: string, paneId: string, text: string) => {
     const desktopId = desktopIdForSession(sessionId);
@@ -168,7 +151,6 @@ export function useDesktopRuntimeController(
     getActivePaneIdForSession,
     setDesktopRef,
     getDesktopLeafDropSnapshot,
-    focusSessionPane,
     typeInSessionPaneViaUI,
     isSessionPaneInputFocused,
     scrollSessionPaneToTop,
