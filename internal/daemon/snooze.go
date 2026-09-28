@@ -185,6 +185,7 @@ func (d *Daemon) snoozeWakeHandler(ctx context.Context, job *jobs.Job) (any, err
 	if err := ctx.Err(); err != nil {
 		return nil, err
 	}
+	crashAt(crashWhileWakingASnooze)
 	if !d.applySnoozeWakeAt(sessionID, payload.Deadline, payload.Deadline) {
 		if d.debugLogging {
 			d.logf("snooze wake superseded: session=%s deadline=%s", sessionID,

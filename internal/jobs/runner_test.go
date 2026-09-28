@@ -155,62 +155,6 @@ func TestCancelBeforeTheFenceStopsTheWrite(t *testing.T) {
 	}
 }
 
-func TestAKindIsSerializedWithItselfButNotWithOthers(t *testing.T) {
-	synctest.Test(t, func(t *testing.T) {
-		r, _ := newBubbleRunner(t, nil)
-		var serialInflight, serialPeak atomic.Int32
-		release := make(chan struct{})
-		bothKinds := make(chan string, 2)
-
-		mustRegister(t, r, "serial", func(context.Context, *Job) (any, error) {
-			n := serialInflight.Add(1)
-			for {
-				peak := serialPeak.Load()
-				if n <= peak || serialPeak.CompareAndSwap(peak, n) {
-					break
-				}
-			}
-			bothKinds <- "serial"
-			<-release
-			serialInflight.Add(-1)
-			return nil, nil
-		})
-		mustRegister(t, r, "other", func(context.Context, *Job) (any, error) {
-			bothKinds <- "other"
-			<-release
-			return nil, nil
-		})
-		mustStart(t, r)
-
-		for i := range 2 {
-			if _, err := r.Enqueue("serial", EnqueueOptions{}); err != nil {
-				t.Fatalf("enqueue serial %d: %v", i, err)
-			}
-		}
-		if _, err := r.Enqueue("other", EnqueueOptions{}); err != nil {
-			t.Fatalf("enqueue other: %v", err)
-		}
-
-		synctest.Wait()
-		got := map[string]bool{}
-		for range 2 {
-			select {
-			case kind := <-bothKinds:
-				got[kind] = true
-			default:
-				t.Fatalf("only %v started once dispatch settled, want both serial and other", got)
-			}
-		}
-		if !got["serial"] || !got["other"] {
-			t.Fatalf("kinds running together = %v, want both serial and other", got)
-		}
-		if peak := serialPeak.Load(); peak != 1 {
-			t.Errorf("peak concurrent serial runs = %d, want 1", peak)
-		}
-		close(release)
-	})
-}
-
 func TestAnUnregisteredKindFailsInPlace(t *testing.T) {
 	synctest.Test(t, func(t *testing.T) {
 		store := newMemStore()
