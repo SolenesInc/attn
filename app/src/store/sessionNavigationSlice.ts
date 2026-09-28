@@ -10,6 +10,7 @@ import {
   enterHome,
   toggleGrid,
   navigated,
+  forgetArrival,
   focusClaimDelivered,
   leafMoved,
   navigateHistory,
@@ -19,7 +20,7 @@ import {
   selectAgent,
   selectionFailed,
   type AppView,
-  type ExpectedArrival,
+  type ArrivalTarget,
   type SessionNavigationState,
   type StateUpdate,
 } from '../navigation/sessionNavigation';
@@ -31,7 +32,8 @@ export interface SessionNavigationActions {
   cancelPendingSelection: () => void;
   selectionFailed: (id: number) => void;
   toggleGrid: () => void;
-  navigated: (expect?: ExpectedArrival | null) => void;
+  navigated: (expect?: ArrivalTarget | null) => number | null;
+  forgetArrival: (key: number) => void;
   focusClaimDelivered: (id: number) => void;
   claimLeafFocus: (desktopId: string, leafId: string, focusOwner?: Element | null) => void;
   claimDesktopFocus: (desktopId: string, focusOwner?: Element | null) => void;
@@ -68,9 +70,9 @@ function withVisit(state: SessionStore, next: SessionNavigationState): SessionNa
 
 function arrivedAt(
   state: Pick<SessionStore, 'navigationProfileId' | 'navigationCurrentDesktopId'>,
-  expected: ExpectedArrival | null,
+  expected: ArrivalTarget,
 ): boolean {
-  return expected !== null && expected.profileId === state.navigationProfileId
+  return expected.profileId === state.navigationProfileId
     && (expected.desktopId === null || expected.desktopId === state.navigationCurrentDesktopId);
 }
 
@@ -80,7 +82,9 @@ export function reconcileSessionNavigation(
 ): Partial<SessionStore> {
   const next = { ...state, ...update };
   if (next.navigationProfileId !== state.navigationProfileId || next.navigationCurrentDesktopId !== state.navigationCurrentDesktopId) {
-    if (arrivedAt(next, next.expectedArrival)) next.expectedArrival = null;
+    // The daemon applies requests in order, so an arrival also settles every one sent before it.
+    const arrival = next.expectedArrivals.findIndex((expected) => arrivedAt(next, expected));
+    if (arrival >= 0) next.expectedArrivals = next.expectedArrivals.slice(arrival + 1);
     else next.navigationEpoch = state.navigationEpoch + 1;
   }
   next.navigationQueue = navigationQueue(
@@ -111,7 +115,13 @@ export function createSessionNavigationActions(
     cancelPendingSelection: () => set((state) => cancelSelection(state)),
     selectionFailed: (id) => set((state) => selectionFailed(state, id, arrangementOf(state))),
     toggleGrid: () => set((state) => withVisit(state, toggleGrid(state))),
-    navigated: (expect) => set((state) => navigated(state, expect && !arrivedAt(state, expect) ? expect : null)),
+    navigated: (expect) => {
+      const state = get();
+      const expects = expect && (state.expectedArrivals.length > 0 || !arrivedAt(state, expect)) ? expect : null;
+      set(navigated(state, expects));
+      return expects ? get().arrivalSequence : null;
+    },
+    forgetArrival: (key) => set((state) => forgetArrival(state, key)),
     focusClaimDelivered: (id) => set((state) => focusClaimDelivered(state, id)),
     claimLeafFocus: (desktopId, leafId, owner = focusOwner()) => set((state) => claimFocus(state, { desktopId, leafId }, owner)),
     claimDesktopFocus: (desktopId, owner = focusOwner()) => set((state) => claimFocus(state, { desktopId, leafId: null }, owner)),

@@ -4715,7 +4715,10 @@ export function useDaemonSocket({
         const explicit = cmd === 'profile_select' || cmd === 'desktop_set_current';
         const navigation = useSessionStore.getState();
         if (explicit) navigation.cancelPendingSelection();
-        navigation.navigated(explicit && profileId !== null && (cmd === 'profile_select' || desktopId !== null) ? { profileId, desktopId } : null);
+        const arrival = navigation.navigated(explicit && profileId !== null && (cmd === 'profile_select' || desktopId !== null) ? { profileId, desktopId } : null);
+        const request = sendRequest<ProfileActionResult>(cmd, body, `The daemon did not answer ${cmd}`);
+        if (arrival !== null) request.catch(() => useSessionStore.getState().forgetArrival(arrival));
+        return request;
       }
       return sendRequest<ProfileActionResult>(cmd, body, `The daemon did not answer ${cmd}`);
     },

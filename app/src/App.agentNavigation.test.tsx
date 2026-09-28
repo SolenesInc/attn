@@ -962,6 +962,38 @@ describe('keyboard focus', () => {
     expect(focusedPane()).toBe('pane-s1');
   });
 
+  it('puts the keyboard in the last desktop the user clicked when an earlier click lands first', async () => {
+    const { daemon } = await renderApp({ initialState: {
+      sessions: [queueSession('s1', 9), queueSession('s2', 10), queueSession('s3', 11)],
+      desktops: [soloDesktop('s1', { name: 'alpha' }), soloDesktop('s2', { name: 'beta' }), soloDesktop('s3', { name: 'gamma' })],
+    } });
+    await open(daemon, 's1');
+    await settleFocus(daemon);
+    const held: Array<{ request_id?: string; cmd: 'desktop_set_current'; profile_id: string; desktop_id: string }> = [];
+    daemon.on('desktop_set_current', (command) => {
+      held.push(command);
+      return undefined;
+    });
+    const land = (command: (typeof held)[number]) => gesture(daemon, () => {
+      daemon.arrangement.profiles = daemon.arrangement.profiles.map((profile) =>
+        profile.id === command.profile_id ? { ...profile, current_desktop_id: command.desktop_id, revision: profile.revision + 1 } : profile);
+      daemon.emit(daemon.arrangement.changed());
+      daemon.replyTo(command as never, { event: 'profile_action_result', action: command.cmd, request_id: command.request_id ?? '', success: true });
+    });
+
+    for (const name of ['beta', 'gamma']) {
+      const row = screen.getByRole('button', { name: `Open ${name}` });
+      row.focus();
+      await gesture(daemon, () => fireEvent.click(row));
+    }
+    const [beta, gamma] = held.splice(0);
+    await land(beta);
+    await land(gamma);
+    await settleFocus(daemon);
+
+    expect(focusedPane()).toBe('pane-s3');
+  });
+
   it('puts the keyboard in a tile the user reached through history', async () => {
     const { daemon } = await renderApp({ initialState: {
       sessions: [daemonSession('s1'), daemonSession('s2')],

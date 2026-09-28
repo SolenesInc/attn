@@ -49,7 +49,8 @@ export interface SessionNavigationState {
   leafHistoryByProfile: Record<string, LeafHistoryState>;
   selectionSequence: number;
   navigationEpoch: number;
-  expectedArrival: ExpectedArrival | null;
+  expectedArrivals: ExpectedArrival[];
+  arrivalSequence: number;
   focusSequence: number;
   utilityFocusRequestToken: number;
 }
@@ -64,7 +65,8 @@ export function initialSessionNavigation(): SessionNavigationState {
     leafHistoryByProfile: {},
     selectionSequence: 0,
     navigationEpoch: 0,
-    expectedArrival: null,
+    expectedArrivals: [],
+    arrivalSequence: 0,
     focusSequence: 0,
     utilityFocusRequestToken: 0,
   };
@@ -138,13 +140,25 @@ export function claimFocus(state: SessionNavigationState, leaf: { desktopId: str
   return { ...state, focusSequence: id, focusRequest: { id, desktopId: leaf.desktopId, leafId: leaf.leafId, focusOwner } };
 }
 
-export interface ExpectedArrival {
+export interface ArrivalTarget {
   profileId: string;
   desktopId: string | null;
 }
 
-export function navigated(state: SessionNavigationState, expect: ExpectedArrival | null = null): SessionNavigationState {
-  return { ...state, navigationEpoch: state.navigationEpoch + 1, expectedArrival: expect ?? state.expectedArrival };
+export interface ExpectedArrival extends ArrivalTarget {
+  key: number;
+}
+
+export function navigated(state: SessionNavigationState, expect: ArrivalTarget | null = null): SessionNavigationState {
+  const next = { ...state, navigationEpoch: state.navigationEpoch + 1 };
+  if (!expect) return next;
+  const key = state.arrivalSequence + 1;
+  return { ...next, arrivalSequence: key, expectedArrivals: [...state.expectedArrivals, { key, ...expect }] };
+}
+
+export function forgetArrival(state: SessionNavigationState, key: number): SessionNavigationState {
+  const expectedArrivals = state.expectedArrivals.filter((arrival) => arrival.key !== key);
+  return expectedArrivals.length === state.expectedArrivals.length ? state : { ...state, expectedArrivals };
 }
 
 export function toggleGrid(state: SessionNavigationState): SessionNavigationState {
