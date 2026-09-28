@@ -58,6 +58,7 @@ export function AppDesktops() {
   const { terminalFontSize, resolvedTheme } = useAppAppearanceContext();
   const { delegationSessions } = useAppSessionsContext();
   const { daemonSessions } = useAppInputs();
+  const allSessions = useSessionStore((state) => state.sessions);
   const seeds = useDaemonStore((state) => state.seeds);
   const { handleOpenSeedTile, handleRevealSeedInGarden } = useAppGardenActionsContext();
   const {
@@ -91,7 +92,7 @@ export function AppDesktops() {
     const isCurrent = desktop.id === currentDesktopId;
     const shownSessionId = terminalState.agents.find((pane) => pane.id === desktop.active_pane_id)?.sessionId ?? null;
     const leafSessionId = sessionOfLeaf(leafOn(desktop.profile_id, desktop, desktop.active_pane_id));
-    const desktopDirectory = localDirectoryOf(desktopSessions.find((session) => session.id === leafSessionId));
+    const desktopDirectory = localDirectoryOf(allSessions.find((session) => session.id === leafSessionId));
     return (
       <div key={desktop.id} className={`terminal-wrapper ${isCurrent ? 'active' : ''}`}>
         <SessionTerminalDesktop

@@ -780,6 +780,29 @@ describe('leaf history', () => {
     expect(hold.held.map((command) => command.cmd === 'desktop_show_leaf' && command.leaf_id)).toEqual(['pane-s1']);
   });
 
+  it('keeps a pending step back when another Back finds nowhere further to go', async () => {
+    const { daemon } = await renderAgents({ s1: {}, s2: {}, s3: {} }, { settings: {} });
+    await open(daemon, 's1');
+    await open(daemon, 's2');
+    await open(daemon, 's3');
+    const hold = holdShows(daemon);
+
+    await gesture(daemon, keys.back);
+    await gesture(daemon, keys.back);
+    await gesture(daemon, keys.back);
+    expect(hold.held.map((command) => command.cmd === 'desktop_show_leaf' && command.leaf_id)).toEqual(['pane-s2', 'pane-s1']);
+    await hold.release();
+    expect(selectedAgent()).toBe('s1');
+
+    for (const expected of ['s2', 's3']) {
+      await gesture(daemon, keys.forward);
+      await hold.release();
+      expect(selectedAgent()).toBe(expected);
+    }
+    await gesture(daemon, keys.forward);
+    expect(hold.held).toEqual([]);
+  });
+
   it('keeps the cursor where it was when the daemon refuses a step back', async () => {
     const { daemon } = await renderAgents();
     await open(daemon, 's1');

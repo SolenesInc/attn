@@ -141,6 +141,26 @@ describe('what the active leaf offers', () => {
     expect(options).toContain('Desktop — repo');
   });
 
+  it('offers the folder of the agent a notebook tile is bound to even when that agent sits on another desktop', async () => {
+    const { daemon } = await renderApp({ initialState: {
+      settings: { 'notebook.root.effective': '/notebook' },
+      sessions: [daemonSession('s1', { directory: '/tmp/repo' }), daemonSession('s2', { directory: '/tmp/elsewhere' })],
+      profiles: [defaultProfile('d1')],
+      desktops: [
+        daemonDesktop('d1', {
+          root: dockTiles({ type: 'pane', pane_id: 'pane-s2' }, [{ tile_id: 'tile-notebook', tile_kind: 'notebook', tile_params: '', tile_session_id: 's1' }]),
+          panes: [agentPane('s2', 'd1')],
+        }, { active_pane_id: 'tile-notebook', shortcut_slot: 1, name: 'd1' }),
+        soloDesktop('s1', { id: 'd2', shortcut_slot: 2 }),
+      ],
+    } });
+    await gesture(daemon, () => pressShortcut('desktop.select1'));
+    expect(shownLeaf()).toBe('tile-notebook');
+
+    const options = Array.from(screen.getByRole('combobox', { name: 'Editor root' }).querySelectorAll('option'), (option) => option.textContent);
+    expect(options).toContain('Desktop — repo');
+  });
+
   it('walks the automation runs that need the user and settles the one shown, but nothing on a tile', async () => {
     const docs = { run_id: 'r', definition_id: 'docs', definition_name: 'nightly docs', trigger_type: 'schedule' };
     const run = (id: string, hour: number, owed: boolean) =>

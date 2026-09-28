@@ -210,8 +210,8 @@ export function navigateHistory(
     ? { entries: committed.entries, cursor: intent.historyCursor }
     : committed;
   const move = moveLeafHistory(from, direction, arrangement.desktops, resumeCurrent);
+  if (!move.target) return state;
   const next = from === committed ? withHistory(endIntent(state), arrangement.profileId, move.state) : endIntent(state);
-  if (!move.target) return { ...next, followNextTurn: false };
   const target: ShowTarget = { kind: 'leaf', desktopId: move.target.lastKnownDesktopId, leafId: move.target.leafId };
   return requestShow(next, arrangement.profileId, target, focusOwner, move.cursor);
 }
