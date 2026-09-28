@@ -79,7 +79,16 @@ func (w *World) Client() *client.Client {
 
 func (w *World) App() *Peer {
 	w.T.Helper()
-	p := w.ConnectApp()
+	return w.AppOn("")
+}
+
+func (w *World) AppOn(profileID string) *Peer {
+	w.T.Helper()
+	hello := w.appHello()
+	if profileID != "" {
+		hello.ProfileID = protocol.Ptr(profileID)
+	}
+	p := w.Connect(hello, nil)
 	p.Initial = Await[protocol.InitialStateMessage](p, protocol.EventInitialState, nil)
 	if got := protocol.Deref(p.Initial.ProtocolVersion); got != protocol.ProtocolVersion {
 		w.T.Fatalf("daemon speaks protocol %q, want %q", got, protocol.ProtocolVersion)
@@ -89,17 +98,22 @@ func (w *World) App() *Peer {
 
 func (w *World) ConnectApp() *Peer {
 	w.T.Helper()
+	return w.Connect(w.appHello(), nil)
+}
+
+func (w *World) appHello() protocol.ClientHelloMessage {
+	w.T.Helper()
 	token, err := os.ReadFile(filepath.Join(w.Dir, config.ClientTokenFile))
 	if err != nil {
 		w.T.Fatalf("read the client token the daemon minted: %v", err)
 	}
-	return w.Connect(protocol.ClientHelloMessage{
+	return protocol.ClientHelloMessage{
 		Cmd:          protocol.CmdClientHello,
 		ClientKind:   "tauri-app",
 		Version:      "protocol-" + protocol.ProtocolVersion,
 		Capabilities: []string{protocol.CapabilityBinaryPtyOutput, protocol.CapabilityKittyImages},
 		ClientToken:  protocol.Ptr(strings.TrimSpace(string(token))),
-	}, nil)
+	}
 }
 
 func (w *World) Connect(hello protocol.ClientHelloMessage, header http.Header) *Peer {
