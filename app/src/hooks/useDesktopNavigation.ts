@@ -67,11 +67,8 @@ export function useDesktopNavigation(showNotice: ShowNotice) {
         showNotice(`No desktop on ${slotShortcut(slot)}. Give one a shortcut from the overview.`);
         return;
       }
-      if (target.id !== currentDesktopOf(state)?.id) {
-        switchToDesktop(target.id);
-        return;
-      }
-      if (state.previousDesktopId) switchToDesktop(state.previousDesktopId);
+      const toggleBack = target.id === currentDesktopOf(state)?.id && state.previousDesktopId;
+      switchToDesktop(toggleBack || target.id);
     },
     [showNotice, switchToDesktop],
   );

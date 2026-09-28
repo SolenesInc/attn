@@ -1066,6 +1066,22 @@ describe('keyboard focus', () => {
     expect(document.activeElement).toBe(row);
   });
 
+  it('puts the keyboard in the current desktop’s leaf when its digit reopens it from home', async () => {
+    const { daemon } = await renderApp({ initialState: {
+      sessions: [queueSession('s1', 9)],
+      profiles: [defaultProfile('desktop-s1')],
+      desktops: [soloDesktop('s1', { name: 'alpha', shortcut_slot: 5 })],
+    } });
+    expect(isHome()).toBe(true);
+    act(() => screen.getByTestId('sidebar-home').focus());
+
+    await gesture(daemon, () => pressShortcut('desktop.select5'));
+    await settleFocus(daemon);
+
+    expect(daemon.sentOf('desktop_set_current').slice(-1)).toEqual([expect.objectContaining({ desktop_id: 'desktop-s1' })]);
+    expect(focusedPane()).toBe('pane-s1');
+  });
+
   it('puts the keyboard in a tile the user reached through history', async () => {
     const { daemon } = await renderApp({ initialState: {
       sessions: [daemonSession('s1'), daemonSession('s2')],
