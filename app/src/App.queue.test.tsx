@@ -69,14 +69,20 @@ async function press(daemon: ScriptedDaemon, name: string) {
 describe('App queue', () => {
   it('fits owed turns to the sidebar height and counts only rows below the toggle', async () => {
     let height = 500;
-    const observers: Array<{ trigger: () => void }> = [];
+    const observers: Array<{ trigger: (node?: Element) => void }> = [];
+    let signalAutomationObserved: (() => void) | undefined;
+    const automationObserved = new Promise<void>((resolve) => { signalAutomationObserved = resolve; });
     class FitObserver implements ResizeObserver {
       private connected = true;
+      private readonly nodes = new Set<Element>();
       constructor(private readonly callback: ResizeObserverCallback) { observers.push(this); }
-      observe() {}
-      unobserve() {}
+      observe(node: Element) {
+        this.nodes.add(node);
+        if (node instanceof HTMLElement && node.classList.contains('automation-runs')) signalAutomationObserved?.();
+      }
+      unobserve(node: Element) { this.nodes.delete(node); }
       disconnect() { this.connected = false; }
-      trigger() { if (this.connected) this.callback([], this); }
+      trigger(node?: Element) { if (this.connected && (!node || this.nodes.has(node))) this.callback([], this); }
     }
     vi.stubGlobal('ResizeObserver', FitObserver);
     vi.spyOn(HTMLElement.prototype, 'clientHeight', 'get').mockImplementation(function (this: HTMLElement) {
@@ -125,22 +131,17 @@ describe('App queue', () => {
 
       await gesture(daemon, () => fireEvent.click(screen.getByTestId('queue-agents-toggle')));
       expect(screen.getAllByTestId(/queue-turn-owed-/)).toHaveLength(5);
-      const automationAdded = new Promise<void>((resolve) => {
-        const observer = new MutationObserver(() => {
-          if (!screen.queryByTestId('sidebar-automation-runs')) return;
-          observer.disconnect();
-          resolve();
-        });
-        observer.observe(screen.getByTestId('sidebar-queue'), { childList: true });
-      });
       await gesture(daemon, () => daemon.emit({
         event: 'session_state_changed',
         session: agent('working', { automation: {
           definition_id: 'review', definition_name: 'Review', run_id: 'run-1', trigger_type: 'manual',
         } }),
       }));
-      await act(async () => { await automationAdded; });
-      expect(screen.getByTestId('sidebar-automation-runs')).toBeInTheDocument();
+      await act(async () => {
+        await automationObserved;
+        const automationBlock = screen.getByTestId('sidebar-automation-runs');
+        observers.forEach((observer) => observer.trigger(automationBlock));
+      });
       expect(screen.getAllByTestId(/queue-turn-owed-/)).toHaveLength(4);
       expect(screen.getByTestId('queue-agents-toggle')).toHaveTextContent('3 more agents');
     } finally {
