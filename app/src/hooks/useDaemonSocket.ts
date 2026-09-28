@@ -4716,7 +4716,10 @@ export function useDaemonSocket({
         : cmd === 'desktop_set_current' && typeof body.desktop_id === 'string'
           ? { kind: 'desktop', desktopId: body.desktop_id }
           : null;
-      const intent = target ? useSessionStore.getState().beginIntent(target) : null;
+      const navigation = useSessionStore.getState();
+      navigation.commandSent(cmd, body);
+      const serving = useSessionStore.getState().intent;
+      const intent = target ? (serving?.id ?? navigation.beginIntent(target)) : null;
       const request = sendRequest<ProfileActionResult>(cmd, body, `The daemon did not answer ${cmd}`);
       if (intent !== null) request.catch(() => useSessionStore.getState().intentFailed(intent));
       return request;

@@ -176,6 +176,7 @@ describe('App desktop layout', () => {
       return undefined;
     });
     daemon.on('desktop_move_leaf', (command) => [
+      daemon.arrangement.answer(command),
       { event: 'profile_action_result', action: command.cmd, request_id: command.request_id ?? '', success: true },
     ]);
 
@@ -186,13 +187,10 @@ describe('App desktop layout', () => {
     expect(daemon.sentOf('desktop_move_leaf')).toHaveLength(1);
 
     const [spawn] = held.splice(0);
-    await act(async () => {
-      daemon.arrangement.place(spawn.id, `pane-${spawn.id}`, 'desktop-s1');
-      daemon.replyTo(spawn, { event: 'spawn_result', id: spawn.id, success: true, desktop_id: 'desktop-s1', pane_id: `pane-${spawn.id}` });
+    await gesture(daemon, () => {
       daemon.emit({ event: 'session_registered', session: daemonSession(spawn.id, { directory: '/tmp/s1', agent: 'shell', state: 'launching' }) });
-      daemon.emit(daemon.arrangement.changed());
+      daemon.replyTo(spawn, { event: 'spawn_result', id: spawn.id, success: true, placement_error: 'desktop desktop-s1 moved on' });
     });
-    await daemon.idle();
 
     expect(daemon.sentOf('desktop_show_session').filter((command) => command.session_id === spawn.id)).toEqual([]);
   });

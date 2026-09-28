@@ -5,6 +5,7 @@ import type { LeafMoved } from '../types/generated';
 import {
   advanceQueue,
   beginIntent,
+  commandSent,
   changeView,
   claimFocus,
   endIntent,
@@ -33,6 +34,7 @@ export interface SessionNavigationActions {
   selectAgent: (sessionId: string, focusOwner?: Element | null) => boolean;
   selectLeaf: (desktopId: string, leafId: string, focusOwner?: Element | null) => void;
   beginIntent: (target: IntentTarget) => number;
+  commandSent: (cmd: string, body: Record<string, unknown>) => void;
   cancelIntent: () => void;
   intentFailed: (id: number) => void;
   historyLanded: (profileId: string, cursor: number, leaf: LeafRef) => void;
@@ -104,6 +106,7 @@ export function createSessionNavigationActions(
       set((state) => beginIntent(state, target.kind === 'profile' ? target.profileId : state.navigationProfileId, target, focusOwner()));
       return get().intentSequence;
     },
+    commandSent: (cmd, body) => set((state) => commandSent(state, cmd, body)),
     cancelIntent: () => set((state) => endIntent(state)),
     intentFailed: (id) => set((state) => intentFailed(state, id)),
     historyLanded: (profileId, cursor, leaf) => set((state) => historyLanded(state, profileId, cursor, leaf)),

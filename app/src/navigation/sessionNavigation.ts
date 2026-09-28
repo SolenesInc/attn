@@ -126,6 +126,34 @@ export function selectAgent(
   return requestShow(state, profileId, { kind: 'session', sessionId }, focusOwner);
 }
 
+// Commands that never change what a window shows; everything else the user sends does.
+const LAYOUT_ONLY_COMMANDS = new Set([
+  'desktop_create', 'desktop_rename', 'desktop_reorder', 'desktop_set_shortcut_slot', 'desktop_set_split_ratio',
+  'desktop_update_tile', 'profile_create', 'profile_rename',
+]);
+
+function commandServes(target: IntentTarget, cmd: string, body: Record<string, unknown>): boolean {
+  switch (target.kind) {
+    case 'session':
+      return cmd === 'desktop_show_session' && body.session_id === target.sessionId;
+    case 'leaf':
+      return (cmd === 'desktop_show_leaf' && body.leaf_id === target.leafId && body.desktop_id === target.desktopId)
+        || (cmd === 'desktop_dock_tile' && body.tile_id === target.leafId && body.desktop_id === target.desktopId);
+    case 'desktop':
+      return cmd === 'desktop_set_current' && body.desktop_id === target.desktopId;
+    case 'profile':
+      return cmd === 'profile_select' && body.profile_id === target.profileId;
+    default:
+      return false;
+  }
+}
+
+// Rule 1: a command that can change what is shown and does not act on the current intent's target supersedes it.
+export function commandSent(state: SessionNavigationState, cmd: string, body: Record<string, unknown>): SessionNavigationState {
+  if (!state.intent || LAYOUT_ONLY_COMMANDS.has(cmd) || commandServes(state.intent.target, cmd, body)) return state;
+  return { ...state, intent: null };
+}
+
 export function endIntent(state: SessionNavigationState): SessionNavigationState {
   if (!state.intent && !state.focusRequest) return state;
   return { ...state, intent: null, focusRequest: null };
