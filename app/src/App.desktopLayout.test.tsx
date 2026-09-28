@@ -7,6 +7,7 @@ import { fakeRects } from './test/layout';
 import { pressShortcut, renderApp } from './test/renderApp';
 import type { ScriptedDaemon } from './test/scriptedDaemon';
 import { pane, relayOut, renderDesktop, split } from './test/desktopLayouts';
+import { serveLaunches } from './test/locations';
 
 const PANES_WIDTH = 4000;
 const SIDE_BY_SIDE = split('split-a', 'vertical', [pane('s1'), pane('s2')]);
@@ -52,12 +53,28 @@ describe('App desktop layout', () => {
   it('reports a split whose shell failed to spawn', async () => {
     const { daemon } = await openDesktop(pane('s1'), ['s1']);
     daemon.on('spawn_session', ({ id }) => ({ event: 'spawn_result', id, success: false, error: 'shell exited during startup' }));
+    const before = daemon.sent.length;
 
     pressShortcut('terminal.splitVertical');
     await daemon.idle();
 
     expect(daemon.sentOf('spawn_session')).toEqual([expect.objectContaining({ agent: 'shell', placement: expect.objectContaining({ desktop_id: 'ws', anchor_pane_id: 'pane-s1' }) })]);
     expect(screen.getByText(/shell exited during startup/)).toBeInTheDocument();
+    expect(daemon.sent.slice(before).filter((command) => command.cmd.startsWith('desktop_'))).toEqual([]);
+  });
+
+  it('places a split only through its spawn, then shows it once', async () => {
+    const { daemon } = await openDesktop(pane('s1'), ['s1']);
+    serveLaunches(daemon);
+    const before = daemon.sent.length;
+
+    pressShortcut('terminal.splitVertical');
+    await daemon.idle();
+
+    const [spawn] = daemon.sentOf('spawn_session');
+    const traffic = daemon.sent.slice(before).map((command) => command.cmd).filter((cmd) => cmd === 'spawn_session' || cmd.startsWith('desktop_'));
+    expect(traffic).toEqual(['spawn_session', 'desktop_show_session']);
+    expect(daemon.sentOf('desktop_show_session').slice(-1)).toEqual([expect.objectContaining({ session_id: spawn.id })]);
   });
 
   it('reorders a desktop dragged in the sidebar between its new neighbours', async () => {

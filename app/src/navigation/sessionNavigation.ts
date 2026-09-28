@@ -44,6 +44,7 @@ export interface SessionNavigationState {
   focusRequest: FocusClaim | null;
   leafHistoryByProfile: Record<string, LeafHistoryState>;
   selectionSequence: number;
+  focusSequence: number;
   utilityFocusRequestToken: number;
 }
 
@@ -55,6 +56,7 @@ export function initialSessionNavigation(): SessionNavigationState {
     focusRequest: null,
     leafHistoryByProfile: {},
     selectionSequence: 0,
+    focusSequence: 0,
     utilityFocusRequestToken: 0,
   };
 }
@@ -109,8 +111,8 @@ export function focusDelivered(state: SessionNavigationState, id: number): Sessi
 }
 
 export function claimFocus(state: SessionNavigationState, leaf: ActiveLeaf): SessionNavigationState {
-  const id = state.selectionSequence + 1;
-  return { ...state, selectionSequence: id, focusRequest: { id, desktopId: leaf.desktopId, leafId: leaf.leafId } };
+  const id = state.focusSequence + 1;
+  return { ...state, focusSequence: id, focusRequest: { id, desktopId: leaf.desktopId, leafId: leaf.leafId } };
 }
 
 export function enterHome(state: SessionNavigationState, followNextTurn: boolean): SessionNavigationState {
