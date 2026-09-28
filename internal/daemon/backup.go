@@ -29,9 +29,13 @@ func (d *Daemon) runDatabaseBackupLoop() {
 }
 
 func (d *Daemon) startPermanentMaintenance() {
-	go d.runDatabaseBackupLoop()
-	go d.runAutomationRetentionSweep()
-	go d.runAutomationTicketRetentionSweep()
+	for _, run := range []func(){d.runDatabaseBackupLoop, d.runAutomationRetentionSweep, d.runAutomationTicketRetentionSweep} {
+		d.maintenance.Add(1)
+		go func() {
+			defer d.maintenance.Done()
+			run()
+		}()
+	}
 }
 
 func (d *Daemon) performDatabaseBackup() {
@@ -45,7 +49,7 @@ func (d *Daemon) performDatabaseBackup() {
 		return
 	}
 
-	path, err := d.store.BackupNow(d.backupDir())
+	path, err := d.store.BackupNow(d.lifetime(), d.backupDir())
 	if err != nil {
 		d.logf("database backup failed: %v", err)
 		return

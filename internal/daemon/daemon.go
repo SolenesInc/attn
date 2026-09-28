@@ -304,6 +304,7 @@ type Daemon struct {
 	browserControl   map[string]browserControlPending
 
 	lastBackupMu sync.Mutex
+	maintenance  sync.WaitGroup
 	lastBackupAt time.Time
 
 	workflowBroadcastMu    sync.Mutex
@@ -1595,6 +1596,13 @@ func (d *Daemon) stop() {
 	}
 	if d.diagServer != nil {
 		_ = d.diagServer.Close()
+	}
+	d.maintenance.Wait()
+	// Closing the last connection checkpoints the WAL, so attn.db alone holds every commit.
+	if d.store != nil {
+		if err := d.store.Close(); err != nil {
+			d.logf("close database: %v", err)
+		}
 	}
 	d.releasePIDLock()
 	if d.logger != nil {

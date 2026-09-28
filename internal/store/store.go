@@ -39,6 +39,7 @@ type Store struct {
 	instanceRoles          map[string]string
 	workspaces             map[string]workspacelayout.WorkspaceLayout
 	recentLocations        map[string]*protocol.RecentLocation
+	settings               map[string]string
 }
 
 type AgentDriverReportCursor struct {
@@ -79,7 +80,20 @@ func New() *Store {
 	if err != nil {
 		return newMapBackedStore()
 	}
-	return &Store{db: db}
+	s, err := newDBStore(db, "", false)
+	if err != nil {
+		return newMapBackedStore()
+	}
+	return s
+}
+
+func newDBStore(db *sql.DB, dbPath string, durable bool) (*Store, error) {
+	settings, err := readSettings(db)
+	if err != nil {
+		db.Close()
+		return nil, err
+	}
+	return &Store{db: db, dbPath: dbPath, durable: durable, settings: settings}, nil
 }
 
 func newMapBackedStore() *Store {
@@ -137,7 +151,7 @@ func NewWithDB(dbPath string) (*Store, error) {
 	if err != nil {
 		return nil, err
 	}
-	return &Store{db: db, dbPath: dbPath, durable: true}, nil
+	return newDBStore(db, dbPath, true)
 }
 
 func (s *Store) DatabasePath() string {
@@ -1989,13 +2003,7 @@ func (s *Store) GetSetting(key string) string {
 	if s.db == nil {
 		return ""
 	}
-
-	var value sql.NullString
-	err := s.db.QueryRow("SELECT value FROM settings WHERE key = ?", key).Scan(&value)
-	if err != nil {
-		return ""
-	}
-	return value.String
+	return s.settings[key]
 }
 
 func (s *Store) SetSetting(key, value string) {
@@ -2019,6 +2027,7 @@ func (s *Store) SetSettingChecked(key, value string) error {
 	if err != nil {
 		return fmt.Errorf("set setting %q: %w", key, err)
 	}
+	s.settings[key] = value
 	return nil
 }
 
@@ -2030,32 +2039,40 @@ func (s *Store) DeleteSetting(key string) {
 		return
 	}
 
-	s.execLog(`DELETE FROM settings WHERE key = ?`, key)
+	if _, err := s.db.Exec(`DELETE FROM settings WHERE key = ?`, key); err != nil {
+		log.Printf("[store] DeleteSetting %q: %v", key, err)
+		return
+	}
+	delete(s.settings, key)
 }
 
 func (s *Store) GetAllSettings() map[string]string {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 
-	result := make(map[string]string)
-	if s.db == nil {
-		return result
+	result := make(map[string]string, len(s.settings))
+	for key, value := range s.settings {
+		result[key] = value
 	}
+	return result
+}
 
-	rows, err := s.db.Query("SELECT key, value FROM settings")
+func readSettings(db *sql.DB) (map[string]string, error) {
+	rows, err := db.Query("SELECT key, value FROM settings")
 	if err != nil {
-		return result
+		return nil, fmt.Errorf("read settings: %w", err)
 	}
 	defer rows.Close()
-
+	settings := make(map[string]string)
 	for rows.Next() {
 		var key string
 		var value sql.NullString
-		if err := rows.Scan(&key, &value); err == nil {
-			result[key] = value.String
+		if err := rows.Scan(&key, &value); err != nil {
+			return nil, fmt.Errorf("read settings: %w", err)
 		}
+		settings[key] = value.String
 	}
-	return result
+	return settings, rows.Err()
 }
 
 func (s *Store) GetInstanceRole(role string) string {
