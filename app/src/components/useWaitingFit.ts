@@ -39,13 +39,27 @@ export function useWaitingFit(
     };
 
     measure();
-    if (typeof ResizeObserver === 'undefined') return;
-    const observer = new ResizeObserver(measure);
-    observer.observe(body);
+    const observer = typeof ResizeObserver === 'undefined' ? null : new ResizeObserver(measure);
+    observer?.observe(body);
     for (const child of body.children) {
-      observer.observe(child);
+      observer?.observe(child);
     }
-    return () => observer.disconnect();
+    const mutations = typeof MutationObserver === 'undefined' ? null : new MutationObserver((records) => {
+      for (const record of records) {
+        for (const node of record.removedNodes) {
+          if (node instanceof Element) observer?.unobserve(node);
+        }
+        for (const node of record.addedNodes) {
+          if (node instanceof Element) observer?.observe(node);
+        }
+      }
+      measure();
+    });
+    mutations?.observe(body, { childList: true });
+    return () => {
+      mutations?.disconnect();
+      observer?.disconnect();
+    };
   }, [bodyRef, leadRef, waiting, frozen, minimum]);
 
   return Math.min(waiting, Math.max(minimum, count));

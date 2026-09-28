@@ -86,6 +86,7 @@ describe('App queue', () => {
       if (this.classList.contains('queue-waiting-lead')) return this.children.length * 33 - 1;
       if (this.classList.contains('queue-waiting-card')) return 90 + (this.querySelector('.queue-waiting-lead')?.children.length ?? 0) * 33;
       if (this.classList.contains('queue-crew-block')) return 120;
+      if (this.classList.contains('automation-runs')) return 130;
       if (this.classList.contains('sidebar-home-row')) return 30;
       if (this.classList.contains('queue-row')) return 32;
       return 0;
@@ -121,6 +122,27 @@ describe('App queue', () => {
       await act(async () => { height = 500; observers.forEach((observer) => observer.trigger()); });
       expect(screen.getByTestId('queue-also-waiting-header')).toHaveTextContent('Also waiting 2');
       expect(daemon.sent).toEqual(sent);
+
+      await gesture(daemon, () => fireEvent.click(screen.getByTestId('queue-agents-toggle')));
+      expect(screen.getAllByTestId(/queue-turn-owed-/)).toHaveLength(5);
+      const automationAdded = new Promise<void>((resolve) => {
+        const observer = new MutationObserver(() => {
+          if (!screen.queryByTestId('sidebar-automation-runs')) return;
+          observer.disconnect();
+          resolve();
+        });
+        observer.observe(screen.getByTestId('sidebar-queue'), { childList: true });
+      });
+      await gesture(daemon, () => daemon.emit({
+        event: 'session_state_changed',
+        session: agent('working', { automation: {
+          definition_id: 'review', definition_name: 'Review', run_id: 'run-1', trigger_type: 'manual',
+        } }),
+      }));
+      await act(async () => { await automationAdded; });
+      expect(screen.getByTestId('sidebar-automation-runs')).toBeInTheDocument();
+      expect(screen.getAllByTestId(/queue-turn-owed-/)).toHaveLength(4);
+      expect(screen.getByTestId('queue-agents-toggle')).toHaveTextContent('3 more agents');
     } finally {
       vi.restoreAllMocks();
       vi.unstubAllGlobals();
