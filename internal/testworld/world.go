@@ -74,17 +74,26 @@ func (w *World) Client() *client.Client {
 
 func (w *World) App() *Peer {
 	w.T.Helper()
+	return w.AppOn("")
+}
+
+func (w *World) AppOn(profileID string) *Peer {
+	w.T.Helper()
 	token, err := os.ReadFile(filepath.Join(w.Dir, config.ClientTokenFile))
 	if err != nil {
 		w.T.Fatalf("read the client token the daemon minted: %v", err)
 	}
-	p := w.Connect(protocol.ClientHelloMessage{
+	hello := protocol.ClientHelloMessage{
 		Cmd:          protocol.CmdClientHello,
 		ClientKind:   "tauri-app",
 		Version:      "protocol-" + protocol.ProtocolVersion,
 		Capabilities: []string{protocol.CapabilityBinaryPtyOutput},
 		ClientToken:  protocol.Ptr(strings.TrimSpace(string(token))),
-	}, nil)
+	}
+	if profileID != "" {
+		hello.ProfileID = protocol.Ptr(profileID)
+	}
+	p := w.Connect(hello, nil)
 	p.Initial = Await[protocol.InitialStateMessage](p, protocol.EventInitialState, nil)
 	if got := protocol.Deref(p.Initial.ProtocolVersion); got != protocol.ProtocolVersion {
 		w.T.Fatalf("daemon speaks protocol %q, want %q", got, protocol.ProtocolVersion)
