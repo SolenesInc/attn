@@ -73,6 +73,12 @@ func runSession() {
 			return
 		}
 		runSessionRename(os.Args[3:])
+	case "move":
+		if hasHelpFlag(os.Args[3:]) {
+			writeSessionHelp(os.Stdout)
+			return
+		}
+		runSessionMove(os.Args[3:])
 	default:
 		fmt.Fprintf(os.Stderr, "session: unknown command %q\n", os.Args[2])
 		writeSessionHelp(os.Stderr)
@@ -316,6 +322,13 @@ commands:
         a few plain words about the work, up to 48 characters. Defaults to the
         session running this command. Rename when the main work drifts from
         the name it started with.
+  move <desktop> [--session <id>] [--json]
+        move a session's pane to another desktop of its profile, beside that
+        desktop's active pane (its first pane when empty). <desktop> is the
+        shortcut digit (1-9), the name as shown (case-insensitive) or the id.
+        Defaults to the session running this command; a session may also move
+        the sessions it dispatched, and the chief any. What the user sees
+        stays put unless the moved pane was the one shown on its desktop.
   reopen <id> [--action <name>] [--cwd <path>] [--profile <id>] [--json]
         bring a closed session back under its own id, unplaced in its
         profile. Without --action it performs the plain reopen and refuses,

@@ -190,6 +190,7 @@ var CommandMeta = map[string]CommandMetadata{
 	protocol.CmdDesktopShowSession:            commandMetadata(ScopeHubLocal, false, true),
 	protocol.CmdDesktopShowLeaf:               commandMetadata(ScopeHubLocal, false, true),
 	protocol.CmdDesktopMoveLeaf:               commandMetadata(ScopeHubLocal, false, true),
+	protocol.CmdDesktopMoveSession:            commandMetadata(ScopeHubLocal, false, true),
 	protocol.CmdDesktopRemoveLeaf:             commandMetadata(ScopeHubLocal, false, true),
 	protocol.CmdDesktopSetSplitRatio:          commandMetadata(ScopeHubLocal, false, true),
 	protocol.CmdDesktopDockTile:               commandMetadata(ScopeHubLocal, false, true),

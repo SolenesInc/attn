@@ -1,0 +1,3 @@
+kind: added
+area: desktops
+change: "`attn session move <desktop>` moves an agent's pane, or a delegate it dispatched, to another desktop of its profile, named by shortcut digit, name or id; what the user sees stays put unless the moved pane was the one shown."

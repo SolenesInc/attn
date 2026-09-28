@@ -373,6 +373,21 @@ func (c *Client) RenameSession(sessionID, name string) error {
 	return err
 }
 
+func (c *Client) MoveSessionToDesktop(callerSessionID, sessionID, desktop string) (*protocol.DesktopMoveSessionResult, error) {
+	msg := protocol.DesktopMoveSessionMessage{Cmd: protocol.CmdDesktopMoveSession, SessionID: strings.TrimSpace(sessionID), Desktop: strings.TrimSpace(desktop)}
+	if caller := strings.TrimSpace(callerSessionID); caller != "" {
+		msg.CallerSessionID = protocol.Ptr(caller)
+	}
+	resp, err := c.send(msg)
+	if err != nil {
+		return nil, err
+	}
+	if resp.DesktopMoveSessionResult == nil {
+		return nil, errors.New("daemon returned no desktop move result")
+	}
+	return resp.DesktopMoveSessionResult, nil
+}
+
 type SessionReopenOptions struct {
 	SessionID string
 	Action    string
