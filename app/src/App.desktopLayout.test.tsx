@@ -111,6 +111,35 @@ describe('App desktop layout', () => {
     expect(document.querySelector('[data-session-visible="1"]')?.getAttribute('data-session-terminal-desktop')).toBe('other');
   });
 
+  it('leaves the user on the tile they docked while a launch was spawning', async () => {
+    const { daemon } = await openDesktop(pane('s1'), ['s1']);
+    const held: Array<Extract<(typeof daemon.sent)[number], { cmd: 'spawn_session' }>> = [];
+    daemon.on('spawn_session', (command) => {
+      held.push(command);
+      return undefined;
+    });
+
+    pressShortcut('terminal.splitVertical');
+    await daemon.idle();
+    pressShortcut('notebook.openTile');
+    await daemon.idle();
+    const [dock] = daemon.sentOf('desktop_dock_tile');
+    expect(dock).toBeDefined();
+
+    const [spawn] = held.splice(0);
+    await act(async () => {
+      daemon.arrangement.place(spawn.id, `pane-${spawn.id}`);
+      daemon.arrangement.show('ws', dock.tile_id);
+      daemon.replyTo(spawn, { event: 'spawn_result', id: spawn.id, success: true, desktop_id: 'ws', pane_id: `pane-${spawn.id}` });
+      daemon.emit({ event: 'session_registered', session: daemonSession(spawn.id, { directory: '/tmp/s1', agent: 'shell', state: 'launching' }) });
+      daemon.emit(daemon.arrangement.changed());
+    });
+    await daemon.idle();
+
+    expect(daemon.sentOf('desktop_show_session').filter((command) => command.session_id === spawn.id)).toEqual([]);
+    expect(document.querySelector('[data-session-visible="1"]')?.getAttribute('data-active-leaf-id')).toBe(dock.tile_id);
+  });
+
   it('shows a launched agent whose placement failed, without saying it has no pane', async () => {
     const { daemon } = await openDesktop(pane('s1'), ['s1']);
     daemon.on('spawn_session', ({ id }) => [

@@ -4799,8 +4799,10 @@ export function useDaemonSocket({
   );
 
   const sendDesktopSetActivePane = useCallback(
-    (desktopId: string, paneId: string) =>
-      sendProfileCommand('desktop_set_active_pane', { desktop_id: desktopId, pane_id: paneId }),
+    (desktopId: string, paneId: string) => {
+      useSessionStore.getState().navigated();
+      return sendProfileCommand('desktop_set_active_pane', { desktop_id: desktopId, pane_id: paneId });
+    },
     [sendProfileCommand],
   );
 
@@ -4861,8 +4863,9 @@ export function useDaemonSocket({
       anchorId?: string;
       edge: 'left' | 'right' | 'top' | 'bottom';
       tileShare?: number;
-    }) =>
-      sendProfileCommand('desktop_dock_tile', {
+    }) => {
+      useSessionStore.getState().navigated();
+      return sendProfileCommand('desktop_dock_tile', {
         desktop_id: dock.desktopId,
         expected_revision: dock.expectedRevision,
         tile_id: dock.tileId,
@@ -4872,7 +4875,8 @@ export function useDaemonSocket({
         ...(dock.tileSessionId ? { tile_session_id: dock.tileSessionId } : {}),
         ...(dock.anchorId ? { anchor_id: dock.anchorId } : {}),
         ...(dock.tileShare ? { tile_share: dock.tileShare } : {}),
-      }),
+      });
+    },
     [sendProfileCommand],
   );
 
