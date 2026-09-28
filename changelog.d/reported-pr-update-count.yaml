@@ -1,0 +1,3 @@
+kind: internal
+area: testing
+change: The reported-pull-request wire test checks how a session's pull requests change instead of counting every update the session sends.

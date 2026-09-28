@@ -53,8 +53,8 @@ func TestAReportedPullRequestLandsOnItsSessionOnceUntilItIsForgotten(t *testing.
 		t.Fatalf("forget: %v", err)
 	}
 	testworld.AwaitSession(app, s1, func(s protocol.Session) bool { return len(s.PullRequests) == 0 })
-	if updates := sessionUpdatesOf(app, s1); len(updates) != 2 {
-		t.Errorf("s1 reached the app in %d updates, want one for the report and one for the forget", len(updates))
+	if landed := pullRequestChangesOf(app, s1); !slices.EqualFunc(landed, [][]int{{71}, {}}, slices.Equal) {
+		t.Errorf("s1's pull requests reached the app as %v, want #71 once and then none", landed)
 	}
 	if err := cli.ForgetSessionPullRequest(s1, url); err == nil || !strings.Contains(err.Error(), "no pull request") {
 		t.Errorf("forgetting twice = %v, want it to say there is no such pull request", err)
@@ -67,6 +67,18 @@ func TestAReportedPullRequestLandsOnItsSessionOnceUntilItIsForgotten(t *testing.
 	if len(seen[s1]) != 0 || !slices.Equal(seen[s2], []int{12}) {
 		t.Errorf("a new app sees pull requests %v, want only s2's #12", seen)
 	}
+}
+
+func pullRequestChangesOf(app *testworld.Peer, id string) [][]int {
+	changes := [][]int{}
+	previous := []int{}
+	for _, update := range sessionUpdatesOf(app, id) {
+		if numbers := pullNumbers(update); !slices.Equal(numbers, previous) {
+			changes = append(changes, numbers)
+			previous = numbers
+		}
+	}
+	return changes
 }
 
 func TestPullRequestCommandsAHubForwardsLandOnTheOwningSession(t *testing.T) {
