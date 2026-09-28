@@ -917,6 +917,100 @@ func (s *Store) SetActivePane(desktopID, paneID string) (profiles.Profile, profi
 	return profile, desktop, err
 }
 
+func showDesktopLeaf(tx *sql.Tx, now string, profile *profiles.Profile, desktop *profiles.Desktop, leafID string) error {
+	if !layouttree.HasLeaf(desktop.Tree, leafID) {
+		return profiles.Errorf(profiles.CodeNotFound, "leaf %q does not belong to desktop %s", leafID, desktop.ID)
+	}
+	desktop.ActivePaneID = leafID
+	if _, err := tx.Exec(`UPDATE desktops SET active_pane_id = ?, updated_at = ? WHERE id = ?`, leafID, now, desktop.ID); err != nil {
+		return err
+	}
+	profile.CurrentDesktopID = desktop.ID
+	profile.LastUsedAt = now
+	_, err := tx.Exec(`UPDATE profiles SET current_desktop_id = ?, last_used_at = ? WHERE id = ?`, desktop.ID, now, profile.ID)
+	return err
+}
+
+func (s *Store) ShowLeaf(desktopID, leafID string) (profiles.Profile, profiles.Desktop, string, error) {
+	desktopID, leafID = strings.TrimSpace(desktopID), strings.TrimSpace(leafID)
+	var profile profiles.Profile
+	var desktop profiles.Desktop
+	err := s.profilesTx(func(tx *sql.Tx, now string) error {
+		if desktopID == "" || leafID == "" {
+			return profiles.Errorf(profiles.CodeInvalid, "showing a leaf needs desktop_id and leaf_id")
+		}
+		var err error
+		if desktop, err = loadDesktop(tx, desktopID); err != nil {
+			return err
+		}
+		if profile, err = loadLiveProfile(tx, desktop.ProfileID); err != nil {
+			return err
+		}
+		return showDesktopLeaf(tx, now, &profile, &desktop, leafID)
+	})
+	return profile, desktop, leafID, err
+}
+
+func (s *Store) ShowSession(sessionID string) (profiles.Profile, profiles.Desktop, string, error) {
+	sessionID = strings.TrimSpace(sessionID)
+	var profile profiles.Profile
+	var desktop profiles.Desktop
+	var leafID string
+	err := s.profilesTx(func(tx *sql.Tx, now string) error {
+		if sessionID == "" {
+			return profiles.Errorf(profiles.CodeInvalid, "showing a session needs session_id")
+		}
+		profileID, err := openSessionProfileID(tx, sessionID)
+		if err != nil {
+			return err
+		}
+		if profileID == "" {
+			return profiles.Errorf(profiles.CodeNotFound, "session %s belongs to no profile yet", sessionID)
+		}
+		if profile, err = loadLiveProfile(tx, profileID); err != nil {
+			return err
+		}
+		var desktopID string
+		placed, err := rowFound(tx.QueryRow(`SELECT desktop_id, pane_id FROM desktop_panes WHERE session_id = ?`, sessionID), &desktopID, &leafID)
+		if err != nil {
+			return err
+		}
+		if placed {
+			if desktop, err = loadDesktop(tx, desktopID); err != nil {
+				return err
+			}
+			return showDesktopLeaf(tx, now, &profile, &desktop, leafID)
+		}
+		if desktop, leafID, err = placeShownSession(tx, now, profile, sessionID); err != nil {
+			return err
+		}
+		return showDesktopLeaf(tx, now, &profile, &desktop, leafID)
+	})
+	return profile, desktop, leafID, err
+}
+
+func placeShownSession(tx *sql.Tx, now string, profile profiles.Profile, sessionID string) (profiles.Desktop, string, error) {
+	var title string
+	if err := tx.QueryRow(`SELECT label FROM sessions WHERE id = ?`, sessionID).Scan(&title); err != nil {
+		return profiles.Desktop{}, "", err
+	}
+	current, err := loadLaunchDesktop(tx, profile, "")
+	if err != nil {
+		return profiles.Desktop{}, "", err
+	}
+	paneID := newProfileEntityID("pane")
+	desktop, err := placeSessionInTree(current, SessionPlacementRequest{
+		SessionID: sessionID,
+		Title:     title,
+		Status:    profiles.PaneStatusReady,
+		Focus:     true,
+	}, paneID)
+	if err != nil {
+		return profiles.Desktop{}, "", err
+	}
+	return desktop, paneID, writeDesktopArrangement(tx, now, &desktop)
+}
+
 func panePersisted(tx *sql.Tx, desktopID string, pane profiles.Pane) (bool, error) {
 	var count int
 	if err := tx.QueryRow(`SELECT count(*) FROM desktop_panes WHERE pane_id = ? AND session_id = ? AND desktop_id = ?`,
