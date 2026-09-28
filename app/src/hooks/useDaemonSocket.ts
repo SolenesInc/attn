@@ -4714,7 +4714,10 @@ export function useDaemonSocket({
   );
 
   const sendProfileSelect = useCallback(
-    (profileId: string) => sendProfileCommand('profile_select', { profile_id: profileId }),
+    (profileId: string) => {
+      useSessionStore.getState().navigated();
+      return sendProfileCommand('profile_select', { profile_id: profileId });
+    },
     [sendProfileCommand],
   );
 
@@ -4788,8 +4791,10 @@ export function useDaemonSocket({
   );
 
   const sendDesktopSetCurrent = useCallback(
-    (profileId: string, desktopId: string) =>
-      sendProfileCommand('desktop_set_current', { profile_id: profileId, desktop_id: desktopId }),
+    (profileId: string, desktopId: string) => {
+      useSessionStore.getState().navigated();
+      return sendProfileCommand('desktop_set_current', { profile_id: profileId, desktop_id: desktopId });
+    },
     [sendProfileCommand],
   );
 

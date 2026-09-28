@@ -121,6 +121,10 @@ export function claimFocus(state: SessionNavigationState, leaf: Pick<ActiveLeaf,
   return { ...state, focusSequence: id, focusRequest: { id, desktopId: leaf.desktopId, leafId: leaf.leafId, focusOwner } };
 }
 
+export function navigated(state: SessionNavigationState): SessionNavigationState {
+  return { ...state, navigationEpoch: state.navigationEpoch + 1 };
+}
+
 export function toggleGrid(state: SessionNavigationState): SessionNavigationState {
   return changeView(state, state.view === 'grid' ? state.viewBeforeGrid : 'grid');
 }

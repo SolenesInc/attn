@@ -78,8 +78,15 @@ describe('App desktop layout', () => {
     pressShortcut('terminal.splitVertical');
     await daemon.idle();
     expect(held).toHaveLength(1);
+    const switches: Array<Extract<(typeof daemon.sent)[number], { cmd: 'desktop_set_current' }>> = [];
+    daemon.on('desktop_set_current', (command) => {
+      switches.push(command);
+      return undefined;
+    });
     pressShortcut('desktop.select2');
     await daemon.idle();
+    expect(switches).toHaveLength(1);
+
     serveLaunches(daemon);
     const [spawn] = held.splice(0) as Array<Extract<(typeof daemon.sent)[number], { cmd: 'spawn_session' }>>;
     await act(async () => {
@@ -87,6 +94,16 @@ describe('App desktop layout', () => {
       daemon.replyTo(spawn, { event: 'spawn_result', id: spawn.id, success: true, desktop_id: 'desktop-s1', pane_id: `pane-${spawn.id}` });
       daemon.emit({ event: 'session_registered', session: daemonSession(spawn.id, { directory: '/tmp/s1', agent: 'shell', state: 'launching' }) });
       daemon.emit(daemon.arrangement.changed());
+    });
+    await daemon.idle();
+    expect(daemon.sentOf('desktop_show_session').filter((command) => command.session_id === spawn.id)).toEqual([]);
+
+    await act(async () => {
+      for (const command of switches.splice(0)) {
+        daemon.arrangement.profiles = daemon.arrangement.profiles.map((profile) => ({ ...profile, current_desktop_id: command.desktop_id }));
+        daemon.replyTo(command, { event: 'profile_action_result', action: command.cmd, request_id: command.request_id ?? '', success: true });
+        daemon.emit(daemon.arrangement.changed());
+      }
     });
     await daemon.idle();
 
