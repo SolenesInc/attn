@@ -24,7 +24,7 @@ const sessions: Array<{
   id: string;
   agent?: string;
   label: string;
-  state: 'idle' | 'working' | 'scheduled' | 'unknown';
+  state: 'idle' | 'working' | 'scheduled' | 'unknown' | 'recoverable';
   desktopId: string;
   state_reason?: string;
   isWorktree?: boolean;
@@ -112,6 +112,18 @@ describe('sidebar harness identity', () => {
     expect(within(row).getByRole('button', { name: 'Open Investigate logs' })).toHaveAttribute(
       'title', 'Claude · Stuck — the agent has stopped reporting anything at all',
     );
+  });
+
+  it.each([
+    ['recoverable', undefined, 'Claude · Session will be recovered when opened'],
+    ['unknown', 'some_future_clause', 'Claude'],
+  ] as const)('keeps the %s row tooltip without inventing a reason', (state, reason, title) => {
+    const data = sidebarData();
+    data.desktops[0].sessions[0].state = state;
+    data.desktops[0].sessions[0].state_reason = reason;
+    render(<Sidebar {...baseProps} {...data} />);
+    const row = screen.getByTestId('sidebar-session-claude');
+    expect(within(row).getByRole('button', { name: 'Open Investigate logs' })).toHaveAttribute('title', title);
   });
 
   it('keeps harness identity when switching between desktop and queue arrangements', () => {

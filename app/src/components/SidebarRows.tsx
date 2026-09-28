@@ -208,6 +208,10 @@ export function SidebarSessionRow({
   delegates: readonly LocalSession[];
 }) {
   const harnessTitle = harnessLabel(session.agent);
+  const stateTitle = session.state === 'recoverable'
+    ? 'Session will be recovered when opened'
+    : session.state === 'unknown' ? describeUnknownReason(session.state_reason) : undefined;
+  const hoverTitle = stateTitle ? `${harnessTitle} · ${stateTitle}` : harnessTitle;
   return (
     <div
       className={`session-item sidebar-leaf-row grouped ${selected ? 'selected' : ''} ${session.state === 'recoverable' ? 'recoverable' : ''} ${draggable ? 'session-item--draggable' : ''} ${dragging ? 'session-item--dragging' : ''}`
@@ -222,7 +226,7 @@ export function SidebarSessionRow({
         type="button"
         className="sidebar-row-select"
         aria-label={`Open ${session.label}`}
-        title={session.state === 'unknown' ? `${harnessTitle} · ${describeUnknownReason(session.state_reason)}` : harnessTitle}
+        title={hoverTitle}
         onClick={onSelect}
         onClickCapture={onClickCapture}
         onPointerDown={onPointerDown}
