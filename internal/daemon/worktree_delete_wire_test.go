@@ -18,6 +18,7 @@ func TestDeletingADirtyWorktreeNeedsForceAndThenTakesItsSessionsAlong(t *testing
 	repo := newRepo(t, "shop")
 	path := createWorktree(t, app, repo, "feat-dirty")
 	session := w.Spawn(app, fakeagent.Codex, path)
+	w.Launched(session)
 	if err := os.WriteFile(filepath.Join(path, "local.txt"), []byte("local change\n"), 0o644); err != nil {
 		t.Fatal(err)
 	}
