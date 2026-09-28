@@ -90,6 +90,7 @@ export function requestShow(
     pendingSelection: { id, profileId, target, historyCursor, focusOwner },
     focusRequest: null,
     selectionSequence: id,
+    navigationEpoch: state.navigationEpoch + 1,
   };
 }
 
@@ -150,8 +151,13 @@ export function navigateHistory(
   resumeCurrent: boolean,
   focusOwner: Element | null,
 ): SessionNavigationState {
-  const move = moveLeafHistory(historyOf(state, arrangement.profileId), direction, arrangement.desktops, resumeCurrent);
-  const next = withHistory(cancelSelection(state), arrangement.profileId, move.state);
+  const committed = historyOf(state, arrangement.profileId);
+  const pending = state.pendingSelection;
+  const from = pending?.historyCursor != null && pending.profileId === arrangement.profileId
+    ? { entries: committed.entries, cursor: pending.historyCursor }
+    : committed;
+  const move = moveLeafHistory(from, direction, arrangement.desktops, resumeCurrent);
+  const next = from === committed ? withHistory(cancelSelection(state), arrangement.profileId, move.state) : cancelSelection(state);
   if (!move.target) return { ...next, followNextTurn: false };
   const target: ShowTarget = { kind: 'leaf', desktopId: move.target.lastKnownDesktopId, leafId: move.target.leafId };
   return requestShow(next, arrangement.profileId, target, focusOwner, move.cursor);

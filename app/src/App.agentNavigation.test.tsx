@@ -318,6 +318,33 @@ describe('agent selection', () => {
     expect(selectedAgent()).toBe('s1');
   });
 
+  it('lets a selection made while a launch spawns win over showing the launched agent', async () => {
+    const { daemon } = await renderApp({ initialState: {
+      sessions: [queueSession('s1', 9), queueSession('s2', 10)],
+      desktops: [soloDesktop('s1'), soloDesktop('s2')],
+    } });
+    await open(daemon, 's1');
+    const spawns: Array<Extract<(typeof daemon.sent)[number], { cmd: 'spawn_session' }>> = [];
+    daemon.on('spawn_session', (command) => {
+      spawns.push(command);
+      return undefined;
+    });
+    pressShortcut('terminal.splitVertical');
+    await daemon.idle();
+    const [spawn] = spawns.splice(0);
+
+    await act(async () => {
+      daemon.arrangement.place(spawn.id, `pane-${spawn.id}`, 'desktop-s1');
+      daemon.replyTo(spawn, { event: 'spawn_result', id: spawn.id, success: true, desktop_id: 'desktop-s1', pane_id: `pane-${spawn.id}` });
+      clickOpen('s2');
+      for (let turn = 0; turn < 20; turn += 1) await Promise.resolve();
+    });
+    await daemon.idle();
+
+    expect(shows(daemon).filter((show) => show === `session:${spawn.id}`)).toEqual([]);
+    expect(selectedAgent()).toBe('s2');
+  });
+
   it('drops a pending show when its agent ends and never places it again', async () => {
     const { daemon } = await renderAgents({ s1: {}, s2: {} }, { laidOut: ['s1'] });
     await open(daemon, 's1');
@@ -628,6 +655,27 @@ describe('leaf history', () => {
     await gesture(view.daemon, keys.back);
 
     expect(selectedAgent()).toBe('s1');
+  });
+
+  it('takes two quick steps back before the first one lands, and a refusal restores the committed cursor', async () => {
+    const { daemon } = await renderAgents({ s1: {}, s2: {}, s3: {} }, { settings: {} });
+    await open(daemon, 's1');
+    await open(daemon, 's2');
+    await open(daemon, 's3');
+    const hold = holdShows(daemon);
+
+    await gesture(daemon, keys.back);
+    await gesture(daemon, keys.back);
+    expect(hold.held.map((command) => command.cmd === 'desktop_show_leaf' && command.leaf_id)).toEqual(['pane-s2', 'pane-s1']);
+    await hold.release();
+    expect(selectedAgent()).toBe('s1');
+
+    await gesture(daemon, keys.forward);
+    await hold.refuse();
+    expect(selectedAgent()).toBe('s1');
+    await gesture(daemon, keys.forward);
+    await hold.release();
+    expect(selectedAgent()).toBe('s2');
   });
 
   it('keeps the cursor where it was when the daemon refuses a step back', async () => {
