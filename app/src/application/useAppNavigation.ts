@@ -124,7 +124,6 @@ export function useAppNavigation({
       const { selectedProfileId, desktops } = useProfilesStore.getState();
       if (!selectedProfileId || !desktops.some((desktop) => desktop.id === desktopId)) return;
       setView('session');
-      if (desktopId === currentDesktopIdRef.current) return;
       void showDesktop(desktopId, () => sendDesktopSetCurrent(selectedProfileId, desktopId)).catch(() => {});
     },
     [sendDesktopSetCurrent, setView],

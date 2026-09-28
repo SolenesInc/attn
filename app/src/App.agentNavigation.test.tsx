@@ -679,6 +679,28 @@ describe('leaf history', () => {
     expect(selectedAgent()).toBe('s2');
   });
 
+  it('records only where two quick steps back were headed, not the leaf they passed on the way', async () => {
+    const { daemon } = await renderAgents({ s1: {}, s2: {}, s3: {} }, { settings: {} });
+    await open(daemon, 's1');
+    await open(daemon, 's2');
+    await open(daemon, 's3');
+    const hold = holdShows(daemon);
+
+    await gesture(daemon, keys.back);
+    await gesture(daemon, keys.back);
+    await hold.release();
+    expect(selectedAgent()).toBe('s1');
+
+    for (const expected of ['s2', 's3']) {
+      await gesture(daemon, keys.forward);
+      await hold.release();
+      expect(selectedAgent()).toBe(expected);
+    }
+    await gesture(daemon, keys.forward);
+    expect(hold.held).toEqual([]);
+    expect(selectedAgent()).toBe('s3');
+  });
+
   it('keeps the cursor where it was when the daemon refuses a step back', async () => {
     const { daemon } = await renderAgents();
     await open(daemon, 's1');
@@ -875,6 +897,23 @@ describe('keyboard focus', () => {
     await settleFocus(daemon);
 
     expect(focusedPane()).toBe('pane-s3');
+  });
+
+  it('puts the keyboard in the current desktop’s leaf when the user opens it from home', async () => {
+    const { daemon } = await renderApp({ initialState: {
+      sessions: [queueSession('s1', 9), queueSession('s2', 10)],
+      desktops: [soloDesktop('s1', { name: 'alpha' }), soloDesktop('s2', { name: 'beta' })],
+    } });
+    await open(daemon, 's1');
+    await gesture(daemon, keys.home);
+    expect(isHome()).toBe(true);
+    const row = screen.getByRole('button', { name: 'Open alpha' });
+    row.focus();
+
+    await gesture(daemon, () => fireEvent.click(row));
+    await settleFocus(daemon);
+
+    expect(focusedPane()).toBe('pane-s1');
   });
 
   it('puts the keyboard in a tile the user reached through history', async () => {

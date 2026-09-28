@@ -53,7 +53,7 @@ export function useDesktopNavigation(showNotice: ShowNotice) {
   const switchToDesktop = useCallback(
     (desktopId: string) => {
       const state = useProfilesStore.getState();
-      if (!state.selectedProfileId || currentDesktopOf(state)?.id === desktopId) return;
+      if (!state.selectedProfileId) return;
       const profileId = state.selectedProfileId;
       report(showDesktop(desktopId, () => sendDesktopSetCurrent(profileId, desktopId)));
     },

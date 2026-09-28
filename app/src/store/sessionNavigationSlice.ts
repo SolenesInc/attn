@@ -66,16 +66,21 @@ function withVisit(state: SessionStore, next: SessionNavigationState): SessionNa
   return next.view === 'session' && state.view !== 'session' ? reconcileArrangement(next, arrangementOf(state)) : next;
 }
 
+function arrivedAt(
+  state: Pick<SessionStore, 'navigationProfileId' | 'navigationCurrentDesktopId'>,
+  expected: ExpectedArrival | null,
+): boolean {
+  return expected !== null && expected.profileId === state.navigationProfileId
+    && (expected.desktopId === null || expected.desktopId === state.navigationCurrentDesktopId);
+}
+
 export function reconcileSessionNavigation(
   state: SessionStore,
   update: Partial<SessionStore>,
 ): Partial<SessionStore> {
   const next = { ...state, ...update };
   if (next.navigationProfileId !== state.navigationProfileId || next.navigationCurrentDesktopId !== state.navigationCurrentDesktopId) {
-    const expected = next.expectedArrival;
-    const requestedHere = expected !== null && expected.profileId === next.navigationProfileId
-      && (expected.desktopId === null || expected.desktopId === next.navigationCurrentDesktopId);
-    if (requestedHere) next.expectedArrival = null;
+    if (arrivedAt(next, next.expectedArrival)) next.expectedArrival = null;
     else next.navigationEpoch = state.navigationEpoch + 1;
   }
   next.navigationQueue = navigationQueue(
@@ -106,7 +111,7 @@ export function createSessionNavigationActions(
     cancelPendingSelection: () => set((state) => cancelSelection(state)),
     selectionFailed: (id) => set((state) => selectionFailed(state, id)),
     toggleGrid: () => set((state) => withVisit(state, toggleGrid(state))),
-    navigated: (expect) => set((state) => navigated(state, expect)),
+    navigated: (expect) => set((state) => navigated(state, expect && !arrivedAt(state, expect) ? expect : null)),
     focusClaimDelivered: (id) => set((state) => focusClaimDelivered(state, id)),
     claimLeafFocus: (desktopId, leafId, owner = focusOwner()) => set((state) => claimFocus(state, { desktopId, leafId }, owner)),
     claimDesktopFocus: (desktopId, owner = focusOwner()) => set((state) => claimFocus(state, { desktopId, leafId: null }, owner)),

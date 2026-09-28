@@ -183,13 +183,14 @@ export function reconcileArrangement(
   let history = reconcileLeafHistory(historyOf(state, arrangement.profileId), arrangement.desktops);
   let next = state;
   const pending = state.pendingSelection;
+  const historyCursor = pending?.profileId === arrangement.profileId ? pending.historyCursor : null;
   if (pending && leafShows(leaf, pending.target) && leaf) {
-    if (pending.historyCursor !== null && pending.profileId === arrangement.profileId) {
-      history = { entries: history.entries, cursor: Math.min(pending.historyCursor, history.entries.length - 1) };
+    if (historyCursor !== null) {
+      history = { entries: history.entries, cursor: Math.min(historyCursor, history.entries.length - 1) };
     }
     next = claimFocus({ ...next, view: 'session', pendingSelection: null }, leaf, pending.focusOwner);
   }
-  if (next.view === 'session' && leaf) {
+  if (next.view === 'session' && leaf && (historyCursor === null || next.pendingSelection === null)) {
     history = recordLeafVisit(history, { leafId: leaf.leafId, lastKnownDesktopId: leaf.desktopId });
   }
   return withHistory(next, arrangement.profileId, history);
