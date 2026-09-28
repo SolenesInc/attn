@@ -124,6 +124,9 @@ func (w *World) Connect(hello protocol.ClientHelloMessage, header http.Header) *
 
 func (w *World) ClosePeers() {
 	for _, p := range w.peers {
+		if w.T.Failed() {
+			p.LogScreens()
+		}
 		p.Close()
 	}
 	w.peers = nil

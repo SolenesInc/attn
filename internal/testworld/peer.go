@@ -7,6 +7,8 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"maps"
+	"slices"
 	"strconv"
 	"sync"
 	"testing"
@@ -237,6 +239,18 @@ func (p *Peer) Screen(sessionID string) []byte {
 	p.mu.Lock()
 	defer p.mu.Unlock()
 	return append([]byte(nil), p.screens[sessionID]...)
+}
+
+const screenLogTailBytes = 4096
+
+func (p *Peer) LogScreens() {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	for _, id := range slices.Sorted(maps.Keys(p.screens)) {
+		screen := p.screens[id]
+		tail := screen[max(0, len(screen)-screenLogTailBytes):]
+		p.T.Logf("output this peer received for session %s (last %d of %d bytes): %q", id, len(tail), len(screen), tail)
+	}
 }
 
 func (p *Peer) EmptyOutputs(sessionID string) int {
