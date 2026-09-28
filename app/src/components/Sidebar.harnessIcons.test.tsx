@@ -86,8 +86,7 @@ describe('sidebar harness identity', () => {
       />,
     );
 
-    expect(screen.getByTestId('manage-crew')).toHaveTextContent('Manage crew');
-    expect(screen.getByTestId('manage-crew')).toHaveTextContent('2');
+    expect(screen.getByTestId('manage-crew')).toHaveTextContent(queueMode ? 'manage' : 'Manage crew2');
     fireEvent.click(screen.getByTestId('manage-crew'));
     expect(onManageCrew).toHaveBeenCalledOnce();
   });

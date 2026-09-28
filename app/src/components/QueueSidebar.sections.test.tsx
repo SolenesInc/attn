@@ -129,18 +129,19 @@ describe('the queue sidebar', () => {
     expect(screen.getByTestId('queue-waiting-head')).toHaveTextContent('2 waiting');
   });
 
-  it('leads with three turns and counts the rest until the list opens', () => {
+  it('starts with three turns and names the overflow in the list', () => {
     const many = [owed('t1', 1), owed('t2', 2), owed('t3', 3), owed('t4', 4), owed('t5', 5)];
     const closed = renderSidebar(many, true);
     expect(queueRowIds(closed.container)).toEqual(['queue-turn-t1', 'queue-turn-t2', 'queue-turn-t3']);
-    expect(screen.getByTestId('queue-waiting-more')).toHaveTextContent('+2 more waiting');
+    expect(screen.getByTestId('queue-agents-toggle')).toHaveTextContent('2 more agents');
+    expect(screen.getByTestId('queue-agents-counts')).toHaveTextContent('2 waiting');
     closed.unmount();
 
     const open = renderSidebar(many, true, { agentListOpen: true });
     expect(queueRowIds(open.container)).toEqual(
       ['queue-turn-t1', 'queue-turn-t2', 'queue-turn-t3', 'queue-turn-t4', 'queue-turn-t5'],
     );
-    expect(screen.queryByTestId('queue-waiting-more')).toBeNull();
+    expect(screen.getByTestId('queue-also-waiting-header')).toHaveTextContent('Also waiting 2');
   });
 
   it('opens the oldest turn from the waiting head, and says so when nothing is owed', () => {
@@ -155,7 +156,7 @@ describe('the queue sidebar', () => {
     expect(screen.getByTestId('queue-waiting-head')).toBeDisabled();
   });
 
-  it('counts every agent in the profile on the list toggle, and no attached shell', () => {
+  it('counts only the rows hidden below the list toggle', () => {
     const unplaced: TestSession = { id: 'loose', label: 'loose', state: 'idle', desktopId: 'nowhere' };
     const shell: TestSession = { id: 'loose-shell', label: 'shell', state: 'idle', desktopId: 'nowhere', parentSessionId: 'loose' };
     const later: TestSession = {
@@ -164,9 +165,16 @@ describe('the queue sidebar', () => {
     };
     renderSidebar([...sessions, unplaced, shell, later], true, { crew: [{ id: 'alder' }] });
 
-    expect(screen.getByTestId('queue-agents-toggle')).toHaveTextContent('All agents 7');
+    expect(screen.getByTestId('queue-agents-toggle')).toHaveTextContent('3 more agents');
     expect(screen.getByTestId('queue-agents-toggle')).toHaveAttribute('aria-expanded', 'false');
-    expect(screen.getByTestId('queue-agents-counts')).toHaveTextContent('2 working1 snoozed1 unplaced');
+    expect(screen.getByTestId('queue-agents-counts')).toHaveTextContent('2 working1 snoozed');
+  });
+
+  it('keeps the filter reachable when no agents are hidden', () => {
+    renderWithList([owed('only', 1)]);
+    expect(screen.getByTestId('queue-agents-toggle')).toHaveTextContent('No more agents');
+    fireEvent.click(screen.getByTestId('queue-agents-toggle'));
+    expect(screen.getByTestId('queue-agent-filter')).toBeInTheDocument();
   });
 
   it('lists the working and snoozed agents under the waiting turns once opened', () => {
@@ -179,7 +187,7 @@ describe('the queue sidebar', () => {
     expect(queueRowIds(container)).toEqual([
       'queue-chief-chief', 'queue-turn-older', 'queue-turn-newer', 'queue-settled-settled', 'queue-snoozed-later',
     ]);
-    expect(screen.getByTestId('queue-snoozed-header')).toHaveTextContent('Snoozed1');
+    expect(screen.getByTestId('queue-snoozed-header')).toHaveTextContent('Snoozed 1');
   });
 
   it('narrows the opened list by the filter, never the lead turns', () => {
@@ -640,18 +648,18 @@ describe('the crew in the sidebar', () => {
     expect(screen.getByTestId('queue-crew-alder').className).toContain('queue-row--crew');
   });
 
-  it('shows a chief on the roster once, as the chief, and never counts it asleep', () => {
+  it('shows a chief on the roster once, as the chief, and excludes it from more agents', () => {
     const chiefOnRoster = sessions.map((entry) => (entry.id === 'chief' ? { ...entry, crewMember: 'alder' } : entry));
-    const allAgents = () => screen.getByTestId('queue-agents-toggle').querySelector('b')!.textContent;
+    const moreAgents = () => screen.getByTestId('queue-agents-toggle').textContent;
 
     const { unmount } = renderSidebar(chiefOnRoster, true, { crew: [{ id: 'keel' }] });
-    const withoutChiefOnRoster = allAgents();
+    const withoutChiefOnRoster = moreAgents();
     unmount();
 
     renderSidebar(chiefOnRoster, true, { crew: [{ id: 'alder' }, { id: 'keel' }] });
     expect(screen.queryByTestId('queue-crew-alder')).toBeNull();
     expect(screen.getByTestId('queue-chief-chief')).toBeInTheDocument();
-    expect(allAgents()).toBe(withoutChiefOnRoster);
+    expect(moreAgents()).toBe(withoutChiefOnRoster);
   });
 
   it('names each focused row by what it holds: an agent, or nothing for a sleeping member', () => {
