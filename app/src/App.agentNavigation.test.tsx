@@ -14,6 +14,7 @@ import {
 import { gesture, pressShortcut, renderApp } from './test/renderApp';
 import type { ScriptedDaemon } from './test/scriptedDaemon';
 import type { CommandMessage } from './test/protocol';
+import { useSessionStore } from './store/sessions';
 
 const LADDER = ['profile_select', 'desktop_place_session', 'desktop_set_active_pane', 'desktop_set_current'] as const;
 const LATER = '2100-01-01T00:00:00Z';
@@ -761,6 +762,30 @@ describe('keyboard focus', () => {
     expect(selectedAgent()).toBe('s2');
     expect(focusedPane()).toBeNull();
     expect(document.activeElement).toBe(screen.getByRole('button', { name: 'Open s1' }));
+  });
+
+  it('keeps the keyboard claim until the shown agent’s terminal is ready, then focuses it once', async () => {
+    const spawning = (status: 'spawning' | 'ready') => daemonDesktop('desktop-s2', {
+      root: { type: 'pane', pane_id: 'pane-s2' },
+      panes: [{ ...agentPane('s2', 'desktop-s2'), status }],
+    });
+    const { daemon } = await renderApp({ initialState: {
+      sessions: [queueSession('s1', 9), queueSession('s2', 10, { state: 'launching' })],
+      desktops: [soloDesktop('s1'), spawning('spawning')],
+    } });
+
+    await open(daemon, 's2');
+    await settleFocus(daemon);
+    expect(shownLeaf()).toBe('pane-s2');
+    expect(focusedPane()).not.toBe('pane-s2');
+    expect(useSessionStore.getState().focusRequest).toMatchObject({ leafId: 'pane-s2' });
+
+    await gesture(daemon, () => daemon.arrange((desktops) => desktops.map((desktop) =>
+      desktop.id === 'desktop-s2' ? { ...spawning('ready'), active_pane_id: 'pane-s2', revision: desktop.revision + 1 } : desktop)));
+    await settleFocus(daemon);
+
+    expect(focusedPane()).toBe('pane-s2');
+    expect(useSessionStore.getState().focusRequest).toBeNull();
   });
 
   it('puts the keyboard in a tile the user reached through history', async () => {

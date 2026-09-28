@@ -495,11 +495,18 @@ export function useDesktopController(
     focusShownLeafRef.current(activeLeafIdRef.current);
   }, [focusRequestToken, paneReadyFocusRequest, sessionVisible]);
 
+  const focusClaimRef = useRef(focusClaim);
+  useLayoutEffect(() => {
+    focusClaimRef.current = focusClaim;
+  }, [focusClaim]);
+
   useEffect(() => {
     if (!focusClaim || !sessionVisible || focusClaim.leafId !== activeLeafId) return;
     const active = document.activeElement;
     const userMovedOn = active && active !== focusClaim.focusOwner && !focusIsFree(panesContainerRef.current);
-    if (userMovedOn || focusShownLeaf(activeLeafId)) useSessionStore.getState().focusClaimDelivered(focusClaim.id);
+    if (!userMovedOn) focusShownLeaf(activeLeafId);
+    const landed = document.activeElement?.closest('[data-pane-id]')?.getAttribute('data-pane-id') === activeLeafId;
+    if (userMovedOn || landed) useSessionStore.getState().focusClaimDelivered(focusClaim.id);
   }, [activeLeafId, focusClaim, focusShownLeaf, paneReadyFocusRequest, sessionVisible]);
 
   // A pane whose grid overflows its container is not retried by fit()'s reveal
@@ -742,7 +749,8 @@ export function useDesktopController(
       return;
     }
     const active = document.activeElement;
-    if (active && active !== document.body) return;
+    const claimed = focusClaimRef.current?.leafId === paneId;
+    if (!claimed && active && active !== document.body) return;
     setPaneReadyFocusRequest((token) => token + 1);
   }, []);
 
