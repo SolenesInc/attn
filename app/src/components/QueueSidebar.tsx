@@ -1,20 +1,20 @@
-import { useRef, type KeyboardEvent as ReactKeyboardEvent } from 'react';
+import { useRef, type KeyboardEvent as ReactKeyboardEvent, type RefObject } from 'react';
 import { TURN_AGE_TICK_MS, useNow } from '../hooks/useNow';
 import { formatShortcut } from '../shortcuts/formatShortcut';
 import { crewRows, formatTurnAge, type QueueRow } from '../utils/queueBands';
 import { slotShortcut } from '../utils/desktops';
-import { formatWakeTime } from '../utils/snoozeDurations';
+import { formatWakeTimeShort } from '../utils/snoozeDurations';
 import { UNPLACED_GROUP_ID } from '../utils/desktopViewModels';
 import { CriticalNotificationStrip } from './CriticalNotificationStrip';
 import { CrewRowView, QueueRowView, type QueueBandSessionView, type RowWhere } from './QueueRows';
 import './QueueSidebar.css';
-import { SidebarCrewManage, SidebarPopovers } from './SidebarChrome';
+import { SidebarPopovers } from './SidebarChrome';
 import { useSidebarContext } from './SidebarContext';
 import { useDesktopChipDrop } from './useDesktopChipDrop';
 import { CollapseIcon, HomeIcon, PlusIcon } from './SidebarIcons';
 import { SidebarAutomationGroups } from './SidebarDesktops';
+import { useWaitingFit } from './useWaitingFit';
 
-const LEAD_TURNS = 3;
 const WALK_ROW_SELECTOR = '.queue-row-select, .sidebar-row-select';
 
 export function QueueSidebar() {
@@ -28,8 +28,12 @@ export function QueueSidebar() {
     setAgentFilter,
     selectedId,
     onSelectSession,
+    queue,
   } = useSidebarContext();
   const rootRef = useRef<HTMLDivElement>(null);
+  const bodyRef = useRef<HTMLDivElement>(null);
+  const leadRef = useRef<HTMLDivElement>(null);
+  const leadCount = useWaitingFit(bodyRef, leadRef, queue?.turns.length ?? 0, Boolean(agentListOpen));
 
   const onKeyDown = (event: ReactKeyboardEvent<HTMLDivElement>) => {
     if (event.metaKey || event.ctrlKey || event.altKey) return;
@@ -83,10 +87,10 @@ export function QueueSidebar() {
           onOpen={onOpenNotifications}
         />
       )}
-      <div className="queue-sidebar-body" data-testid="sidebar-queue">
+      <div ref={bodyRef} className="queue-sidebar-body" data-testid="sidebar-queue">
         <HomeRow />
         <CrewBlock />
-        <WaitingCard />
+        <WaitingCard leadRef={leadRef} leadCount={leadCount} />
         <SidebarAutomationGroups />
       </div>
       <DesktopStrip />
@@ -196,6 +200,7 @@ function CrewBlock() {
     openCrewMemberActions,
     openSessionActions,
     delegates,
+    onManageCrew,
   } = useSidebarContext();
   const where = useRowWhere();
   if (!queue) return null;
@@ -204,6 +209,11 @@ function CrewBlock() {
   const chief = queue.chief;
   return (
     <div className="queue-crew-block" data-testid="queue-crew-block">
+      <div className="queue-section-rule queue-crew-rule">
+        <span>Crew</span>
+        <span className="queue-rule-line" aria-hidden="true" />
+        {onManageCrew && <button type="button" data-testid="manage-crew" onClick={onManageCrew}>manage</button>}
+      </div>
       {chief && (
         <QueueRowView
           row={chief}
@@ -229,15 +239,13 @@ function CrewBlock() {
           onOpenMemberActions={(event) => openCrewMemberActions(member, event)}
         />
       ))}
-      <SidebarCrewManage />
     </div>
   );
 }
 
-function WaitingCard() {
+function WaitingCard({ leadRef, leadCount }: { leadRef: RefObject<HTMLDivElement | null>; leadCount: number }) {
   const {
     queue,
-    crew,
     selectedId,
     onSelectSession,
     onSettleTurn,
@@ -257,11 +265,20 @@ function WaitingCard() {
   if (!queue) return null;
 
   const turns = queue.turns;
-  const lead = turns.slice(0, LEAD_TURNS);
+  const lead = turns.slice(0, leadCount);
   const hidden = turns.length - lead.length;
+  const pinnedCrew = new Set(queue.crew.map((row) => row.session.id));
   const matches = (row: QueueRow<QueueBandSessionView>) =>
     !agentFilter || row.session.label.toLowerCase().includes(agentFilter.toLowerCase());
-  const counts = agentCounts(queue, crewRows(crew, queue));
+  const hiddenWaiting = turns.slice(leadCount).filter((row) => !pinnedCrew.has(row.session.id)).length;
+  const hiddenWorking = queue.settled.filter((row) => !pinnedCrew.has(row.session.id)).length;
+  const hiddenSnoozed = queue.snoozed.filter((row) => !pinnedCrew.has(row.session.id)).length;
+  const more = hiddenWaiting + hiddenWorking + hiddenSnoozed;
+  const parts = [
+    [hiddenWaiting, 'waiting'],
+    [hiddenWorking, 'working'],
+    [hiddenSnoozed, 'snoozed'],
+  ] as const;
 
   const turnRow = (row: QueueRow<QueueBandSessionView>) => (
     <QueueRowView
@@ -286,7 +303,7 @@ function WaitingCard() {
     <div className="queue-waiting-card" data-testid="queue-waiting-card" data-waiting={turns.length}>
       <button
         type="button"
-        className="queue-waiting-head"
+        className="queue-section-rule queue-waiting-head"
         data-testid="queue-waiting-head"
         title={`Open the oldest turn (${formatShortcut('session.jumpToWaiting')})`}
         onClick={onJumpToWaiting}
@@ -301,41 +318,30 @@ function WaitingCard() {
             Nothing owed
           </span>
         )}
+        <span className="queue-rule-line" aria-hidden="true" />
         <kbd>{formatShortcut('session.jumpToWaiting')}</kbd>
       </button>
-      {lead.length > 0 && <div className="queue-waiting-lead">{lead.map(turnRow)}</div>}
-      {hidden > 0 && !agentListOpen && (
-        <div className="queue-waiting-more" data-testid="queue-waiting-more">
-          +{hidden} more waiting
-        </div>
-      )}
+      {lead.length > 0 && <div ref={leadRef} className="queue-waiting-lead">{lead.map(turnRow)}</div>}
       <button
         type="button"
-        className="queue-agents-toggle"
+        className="queue-section-rule queue-agents-toggle"
         data-testid="queue-agents-toggle"
         aria-expanded={Boolean(agentListOpen)}
         title={`Show every agent in this profile (${formatShortcut('sidebar.agentList')})`}
         onClick={onToggleAgentList}
       >
         <span className={`queue-agents-chevron ${agentListOpen ? 'is-open' : ''}`}>▸</span>
-        All agents <b>{counts.all}</b>
+        {more === 0 ? 'No more agents' : `${more} more agents`}
+        <span className="queue-rule-line" aria-hidden="true" />
         <kbd>{formatShortcut('sidebar.agentList')}</kbd>
       </button>
-      <div className="queue-agents-counts" data-testid="queue-agents-counts">
-        <span>
-          <b>{counts.working}</b> working
-        </span>
-        {counts.snoozed > 0 && (
-          <span>
-            <b>{counts.snoozed}</b> snoozed
-          </span>
-        )}
-        {counts.unplaced > 0 && (
-          <span>
-            <b>{counts.unplaced}</b> unplaced
-          </span>
-        )}
-      </div>
+      {!agentListOpen && more > 0 && (
+        <div className="queue-agents-counts" data-testid="queue-agents-counts">
+          {parts.filter(([count]) => count > 0).map(([count, label]) => (
+            <span key={label}><b>{count}</b> {label}</span>
+          ))}
+        </div>
+      )}
       {agentListOpen && (
         <div className="queue-agent-list" data-testid="queue-agent-list">
           <label className="queue-agent-filter">
@@ -348,10 +354,18 @@ function WaitingCard() {
               onChange={(event) => setAgentFilter(event.target.value)}
             />
           </label>
-          {turns.slice(LEAD_TURNS).filter(matches).map(turnRow)}
-          <div className="queue-band-header">
-            <span>Working</span>
-            <span className="queue-band-count">{working.length}</span>
+          {hidden > 0 && (
+            <>
+              <div className="queue-section-rule queue-band-header" data-testid="queue-also-waiting-header">
+                <span>Also waiting {turns.slice(leadCount).filter(matches).length}</span>
+                <span className="queue-rule-line" aria-hidden="true" />
+              </div>
+              {turns.slice(leadCount).filter(matches).map(turnRow)}
+            </>
+          )}
+          <div className="queue-section-rule queue-band-header">
+            <span>Working {working.length}</span>
+            <span className="queue-rule-line" aria-hidden="true" />
           </div>
           {working.length === 0 ? (
             <div className="queue-band-empty">Nobody else.</div>
@@ -372,9 +386,9 @@ function WaitingCard() {
           )}
           {snoozed.length > 0 && (
             <>
-              <div className="queue-band-header" data-testid="queue-snoozed-header">
-                <span>Snoozed</span>
-                <span className="queue-band-count">{snoozed.length}</span>
+              <div className="queue-section-rule queue-band-header" data-testid="queue-snoozed-header" data-count={snoozed.length}>
+                <span>Snoozed {snoozed.length}</span>
+                <span className="queue-rule-line" aria-hidden="true" />
               </div>
               {snoozed.map((row) => (
                 <QueueRowView
@@ -382,7 +396,7 @@ function WaitingCard() {
                   row={row}
                   selected={selectedId === row.session.id}
                   where={where(row)}
-                  wake={formatWakeTime(row.session.turnSnoozedUntil, now)}
+                  wake={formatWakeTimeShort(row.session.turnSnoozedUntil, now)}
                   onSelect={() => onSelectSession(row.session.id)}
                   onWake={onWakeTurn && (() => onWakeTurn(row.session.id))}
                   delegates={delegates.get(row.session.id) ?? []}
@@ -395,24 +409,6 @@ function WaitingCard() {
       )}
     </div>
   );
-}
-
-function agentCounts(
-  queue: NonNullable<ReturnType<typeof useSidebarContext>['queue']>,
-  crewMembers: ReturnType<typeof crewRows>,
-) {
-  const agentRows = new Map<string, { desktopId: string }>();
-  for (const row of [queue.chief, ...queue.crew, ...queue.turns, ...queue.settled, ...queue.snoozed]) {
-    if (row) agentRows.set(row.session.id, row);
-  }
-  const asleep = crewMembers.filter((member) => !member.row).length;
-  const unplaced = [...agentRows.values()].filter((row) => row.desktopId === UNPLACED_GROUP_ID).length;
-  return {
-    all: agentRows.size + asleep,
-    working: queue.settled.length,
-    snoozed: queue.snoozed.length,
-    unplaced,
-  };
 }
 
 function DesktopStrip() {

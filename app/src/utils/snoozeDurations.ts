@@ -81,6 +81,20 @@ export function formatWakeTime(until: string | undefined, now: number): string {
   return `${at.toLocaleDateString(undefined, { weekday: 'short' })} ${time}`;
 }
 
+/** Compact wake time for narrow agent rows. */
+export function formatWakeTimeShort(until: string | undefined, now: number): string {
+  if (!until) return '';
+  const at = new Date(until);
+  if (Number.isNaN(at.getTime())) return '';
+  const time = at.toLocaleTimeString(undefined, { hour: 'numeric', minute: '2-digit', hour12: false }).replace(/^0(?=\d:)/, '');
+  const today = new Date(now);
+  if (at.toDateString() === today.toDateString()) return time;
+  const tomorrow = new Date(now);
+  tomorrow.setDate(tomorrow.getDate() + 1);
+  if (at.toDateString() === tomorrow.toDateString()) return `tmrw ${time}`;
+  return `${at.toLocaleDateString(undefined, { weekday: 'short' })} ${time}`;
+}
+
 export const SNOOZE_CHOICES: SnoozeChoice[] = [
   { id: '30m', label: 'For 30 minutes', detail: (now) => clockTime(snoozeInstant('30m', now)) },
   { id: '1h', label: 'For an hour', detail: (now) => clockTime(snoozeInstant('1h', now)) },

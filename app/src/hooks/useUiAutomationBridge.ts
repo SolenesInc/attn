@@ -2301,7 +2301,7 @@ export function useUiAutomationBridge({
           },
           snoozed: {
             present: Boolean(snoozedHeader),
-            count: Number(snoozedHeader?.querySelector('.queue-band-count')?.textContent || 0),
+            count: Number(snoozedHeader?.getAttribute('data-count') || 0),
             rows: Array.from(band?.querySelectorAll('[data-testid^="queue-snoozed-"]') || [])
               .filter((row) => row !== snoozedHeader)
               .map((row) => readRow(row, 'queue-snoozed-')),

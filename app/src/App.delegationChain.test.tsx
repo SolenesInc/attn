@@ -48,7 +48,7 @@ describe('App delegation chain', () => {
         desktops: ['root', 'child', 'alone'].map((id) => soloDesktop(id)),
       },
     });
-    await gesture(daemon, () => fireEvent.click(screen.getByRole('button', { name: /All agents/ })));
+    await gesture(daemon, () => fireEvent.click(screen.getByRole('button', { name: /more agents/i })));
     const queue = within(screen.getByTestId('sidebar-queue'));
 
     expect(queue.getByRole('button', { name: 'Show delegation chain for root session' })).toBeInTheDocument();
