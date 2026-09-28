@@ -44,14 +44,14 @@ export function diffRows(patch) {
   return rows;
 }
 
-// The catalog's longest line has 225 tokens; 1M LCS cells took 4ms locally.
+// The catalog's longest line has 449 tokens; 1M LCS cells took 4ms locally.
 const WORD_WORK_LIMIT = 4_000_000;
 // Catalog lines average 14 words; 1M row-word checks is roughly 60ms locally.
 const ROW_WORK_LIMIT = 1_000_000;
 
 function changedParts(before, after, remainingWork) {
-  const oldTokens = before.match(/\s+|\S+\s*/g) || [];
-  const newTokens = after.match(/\s+|\S+\s*/g) || [];
+  const oldTokens = before.match(/\s+|\S+/g) || [];
+  const newTokens = after.match(/\s+|\S+/g) || [];
   const removed = [], added = [];
   const append = (parts, text, changed) => {
     const last = parts.at(-1);
@@ -100,7 +100,15 @@ function changedParts(before, after, remainingWork) {
     append(removed, oldTokens[oldEnd + i], false);
     append(added, newTokens[newEnd + i], false);
   }
-  return { parts: [removed, added], work };
+  const groupChangedWords = (parts) => {
+    for (let i = 1; i < parts.length - 1; i++) {
+      if (!parts[i].changed && /^\s+$/.test(parts[i].text) && parts[i - 1].changed && parts[i + 1].changed) parts[i].changed = true;
+    }
+    const grouped = [];
+    for (const part of parts) append(grouped, part.text, part.changed);
+    return grouped;
+  };
+  return { parts: [groupChangedWords(removed), groupChangedWords(added)], work };
 }
 
 function sharedWords(before, after) {
@@ -139,8 +147,11 @@ function highlightChangedRows(rows) {
       continue;
     }
     rowWork += requested;
-    const scores = oldWords.map((old) => newWords.map((next) => sharedWords(old, next)));
-    const best = Array.from({ length: removed.length + 1 }, () => new Uint32Array(added.length + 1));
+    const scores = oldWords.map((old) => newWords.map((next) => {
+      const shared = sharedWords(old, next);
+      return shared ? 2 * shared / (old.length + next.length) : 0;
+    }));
+    const best = Array.from({ length: removed.length + 1 }, () => new Float64Array(added.length + 1));
     for (let old = removed.length - 1; old >= 0; old--) {
       for (let next = added.length - 1; next >= 0; next--) {
         best[old][next] = Math.max(best[old + 1][next], best[old][next + 1], scores[old][next] + best[old + 1][next + 1]);
