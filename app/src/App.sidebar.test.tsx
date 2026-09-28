@@ -111,9 +111,9 @@ describe('App sidebar', () => {
 
       expect(within(screen.getByTestId('queue-crew-fern')).getByRole('img', { name: 'Pi' })).toBeInTheDocument();
       expect(within(screen.getByTestId('queue-crew-sleeping')).queryByRole('img')).toBeNull();
-      await gesture(daemon, () => fireEvent.click(screen.getByRole('button', { name: /All agents/ })));
+      await gesture(daemon, () => fireEvent.click(screen.getByRole('button', { name: /more agents/i })));
       expect(screen.getByRole('button', { name: 'Open codex-row' })).toHaveAttribute('title', 'Codex');
-      expect(screen.getByTestId('manage-crew')).toHaveTextContent('Manage crew2');
+      expect(screen.getByTestId('manage-crew')).toHaveTextContent('manage');
 
       const search = await openActionMenu(daemon);
       fireEvent.change(search, { target: { value: '>turn off the agent queue' } });
@@ -142,7 +142,7 @@ describe('App sidebar', () => {
         settings: { queue_mode_enabled: 'true', sidebar_harness_logos_enabled: 'false' },
       });
 
-      await gesture(daemon, () => fireEvent.click(screen.getByRole('button', { name: /All agents/ })));
+      await gesture(daemon, () => fireEvent.click(screen.getByRole('button', { name: /more agents/i })));
       expect(screen.getByRole('button', { name: 'Open codex-row' })).toHaveAttribute('title', 'Codex');
     });
   });
@@ -474,4 +474,3 @@ function pr(number: number, state: string, extra: Partial<SessionPullRequest> = 
     ...extra,
   };
 }
-
