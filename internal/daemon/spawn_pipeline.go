@@ -26,6 +26,8 @@ type internalSpawnPolicy struct {
 	approvalRoute         launchcontract.ApprovalRoute
 	preserveApprovalRoute bool
 	userStarted           bool
+	// The client that asked; it gets the placement as its own answer before any broadcast of it.
+	requester *wsClient
 }
 
 type spawnRequest struct {
@@ -533,7 +535,7 @@ func (d *Daemon) commitSpawn(req *spawnRequest, plan *spawnPlan) *spawnOutcome {
 		fact = FactSessionReregistered
 	}
 	d.publishFact(fact, session.ID, nil)
-	req.placed = d.placeLaunchedSession(session, req.placement)
+	req.placed = d.placeAnsweringRequester(session, req.placement, req.policy.requester)
 	if req.hasPluginDriver {
 		if exit := d.finishPluginSessionLaunch(msg.ID, true); exit != nil {
 			d.handlePTYExit(*exit)

@@ -15,14 +15,14 @@ declare global {
 
 interface UseDesktopDebugHarnessArgs {
   sessions: Session[];
-  activeSessionId: string | null;
+  shownAgentId: string | null;
   desktopRefs: RefObject<Map<string, SessionTerminalDesktopHandle>>;
   getActivePaneIdForSession: (session: Session | undefined | null) => string;
 }
 
 export function useDesktopDebugHarness({
   sessions,
-  activeSessionId,
+  shownAgentId,
   desktopRefs,
   getActivePaneIdForSession,
 }: UseDesktopDebugHarnessArgs) {
@@ -60,10 +60,10 @@ export function useDesktopDebugHarness({
     };
 
     window.__TEST_GET_ACTIVE_SESSION_PANE_TEXT = () => {
-      if (!activeSessionId) {
+      if (!shownAgentId) {
         return '';
       }
-      const session = sessions.find((entry) => entry.id === activeSessionId);
+      const session = sessions.find((entry) => entry.id === shownAgentId);
       const activePaneId = getActivePaneIdForSession(session);
       if (!session || !activePaneId) {
         return '';
@@ -87,5 +87,5 @@ export function useDesktopDebugHarness({
       delete window.__TEST_GET_ACTIVE_SESSION_PANE_TEXT;
       delete window.__TEST_GET_ACTIVE_SESSION_PANE_RUNTIME;
     };
-  }, [activeSessionId, getActivePaneIdForSession, sessions, desktopRefs]);
+  }, [shownAgentId, getActivePaneIdForSession, sessions, desktopRefs]);
 }

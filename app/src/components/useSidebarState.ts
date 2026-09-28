@@ -6,7 +6,6 @@ import { delegatesByDispatcher } from '../utils/delegationLinks';
 import { sessionParticipatesInQueue } from '../utils/queueBands';
 import { UNPLACED_GROUP_ID } from '../utils/desktopViewModels';
 import { automationRunGroups } from '../utils/automationRuns';
-import { isSessionless } from './sidebarModel';
 import type { DockItem, LocalSession, SidebarProps, SidebarDesktop } from './sidebarTypes';
 import { useSidebarDrag } from './useSidebarDrag';
 
@@ -56,8 +55,6 @@ export function useSidebarState({
   onRenameSession,
   onRenameDesktop,
   onChangeChiefOfStaff,
-  showSessionless = false,
-  onToggleShowSessionless,
   queueModeEnabled = false,
   onToggleQueueMode,
   crewQueueEnabled = false,
@@ -209,14 +206,7 @@ export function useSidebarState({
     ),
   });
 
-  const isDesktopVisible = (desktopView: SidebarDesktop) =>
-    !isSessionless(desktopView) ||
-    desktopView.hasUnresolvedAgentPanes ||
-    showSessionless;
-  const visibleDesktops = desktops.flatMap((candidate) => {
-    const desktopView = withoutAutomationRows(candidate);
-    return isDesktopVisible(desktopView) ? [desktopView] : [];
-  });
+  const visibleDesktops = desktops.map(withoutAutomationRows);
   const canAcceptLeafDrag = (desktopView: SidebarDesktop) =>
     Boolean(
       leafDrag &&
@@ -237,7 +227,7 @@ export function useSidebarState({
     }
     return ' desktop-group--drag-target';
   };
-  const visibleVisualOrder = desktops.filter(isDesktopVisible);
+  const visibleVisualOrder = desktops;
   const reorderParticipants = visibleDesktops.filter((desktopView) => desktopView.desktop);
   const visualIndexOfDesktop = (id: string) => visualIndexByDesktopId.get(id) ?? -1;
 
@@ -303,8 +293,6 @@ export function useSidebarState({
     onRenameSession,
     onRenameDesktop,
     onChangeChiefOfStaff,
-    showSessionless,
-    onToggleShowSessionless,
     queueModeEnabled,
     onToggleQueueMode,
     crewQueueEnabled,

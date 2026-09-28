@@ -279,7 +279,7 @@ describe('App pane header', () => {
 
     await gesture(daemon, () => fireEvent.click(role()));
     await gesture(daemon, () => fireEvent.click(within(screen.getByRole('dialog', { name: 'Delegation chain' })).getByRole('button', { name: /docs sweep/ })));
-    expect(daemon.sentOf('desktop_set_current').slice(-1)[0]).toMatchObject({ desktop_id: 'desktop-dispatcher' });
+    expect(daemon.sentOf('desktop_show_session').slice(-1)[0]).toMatchObject({ session_id: 'dispatcher' });
   });
 
   it('hands the open popover between the delegation chain and the pull request details', async () => {

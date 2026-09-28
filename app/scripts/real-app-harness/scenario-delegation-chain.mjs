@@ -2,7 +2,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { execFileSync } from 'node:child_process';
-import { createSessionAndWaitForInitialPane, launchFreshAppAndConnect, parseCommonArgs, pressShortcutKeys } from './common.mjs';
+import { createSessionAndWaitForInitialPane, launchFreshAppAndConnect, parseCommonArgs, pressShortcutKeys, shownAgentId } from './common.mjs';
 import { UiAutomationClient } from './uiAutomationClient.mjs';
 import { DaemonObserver } from './daemonObserver.mjs';
 import { closeScenarioSessions, createScenarioRunner } from './scenarioRunner.mjs';
@@ -160,7 +160,7 @@ try {
     await waitForChainFocus(child, 'Down selects the roleless descendant');
     await driver.pressKey('Enter');
     await waitForSelector(popup, 'selection dismisses the chain', { absent: true });
-    runner.assert((await client.request('get_state')).activeSessionId === child, 'Enter opens the selected agent');
+    runner.assert(shownAgentId(await client.request('get_state')) === child, 'Enter opens the selected agent');
     runner.assert(!await exists(popup), 'selection closes the popup');
     await pressShortcutKeys(client, driver, 'ui.commandPalette');
     await waitForSelector('.unified-palette-input:focus', 'command palette reopens');

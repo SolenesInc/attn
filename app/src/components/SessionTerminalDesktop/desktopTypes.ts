@@ -87,6 +87,7 @@ export interface SessionTerminalDesktopProps {
   fontSize: number;
   resolvedTheme?: ResolvedTheme;
   focusRequestToken?: number;
+  focusClaim?: { id: number; desktopId: string; leafId: string; focusOwner: Element | null } | null;
   enabled: boolean;
   shortcutsEnabled?: boolean;
   isActiveSession: boolean;
@@ -95,7 +96,7 @@ export interface SessionTerminalDesktopProps {
   eventRouter: PaneRuntimeEventRouter;
   onSplitPane: (targetPaneId: string, direction: TerminalSplitDirection) => void;
   onClosePane: (paneId: string) => void;
-  onFocusPane: (paneId: string) => void | Promise<unknown>;
+  onFocusPane: (paneId: string) => void;
   onRenameSession?: (sessionId: string, label: string) => Promise<void>;
   onSelectSession?: (sessionId: string) => void;
   onCancelCountdown?: (sessionId: string) => void;

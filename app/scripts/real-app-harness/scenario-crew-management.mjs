@@ -2,7 +2,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { execFileSync } from 'node:child_process';
-import { launchFreshAppAndConnect, parseCommonArgs } from './common.mjs';
+import { launchFreshAppAndConnect, parseCommonArgs, shownAgentId } from './common.mjs';
 import { UiAutomationClient } from './uiAutomationClient.mjs';
 import { DaemonObserver } from './daemonObserver.mjs';
 import { createScenarioRunner } from './scenarioRunner.mjs';
@@ -290,7 +290,7 @@ try {
   await waitForDom(`[data-testid="queue-crew-${asleep}"]`);
   await waitForDom(`[data-testid="queue-crew-${history}"]`);
   const dashboardSessions = await client.request('list_sessions');
-  runner.assert(dashboardSessions.activeSessionId === null,
+  runner.assert(shownAgentId(dashboardSessions) === null,
     'Crew opens from the dashboard without a placement session', dashboardSessions);
   const desktopIdle = await sampleIdle(webkitBaseline);
 

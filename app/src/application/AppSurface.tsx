@@ -9,7 +9,7 @@ import { useDaemonApi } from '../contexts/DaemonApiContext';
 import { DaemonProvider } from '../contexts/DaemonContext';
 import { GitHubPollingProvider } from '../contexts/GitHubPollingContext';
 import { NotebookSurfaceProvider } from '../contexts/NotebookSurfaceContext';
-import { useSessionStore } from '../store/sessions';
+import { useActiveLeaf } from '../hooks/useDesktopSelectionBridge';
 import {
   useAppDiagnosticsContext,
   useAppErrorsContext,
@@ -58,7 +58,7 @@ export function AppSurface() {
   const { delegationChainRef } = useAppPanelsContext();
   const { requestTerminalFocus, handleSelectSession, view } = useNavigationContext();
   const { delegationSessions } = useAppSessionsContext();
-  const activeSessionId = useSessionStore((state) => state.activeSessionId);
+  const leaf = useActiveLeaf();
   const { openPRLauncherJob } = usePRLauncherContext();
   const {
     diagnosticReportSaved,
@@ -81,7 +81,7 @@ export function AppSurface() {
             ref={delegationChainRef}
             sessions={delegationSessions}
             onSelectSession={handleSelectSession}
-            navigationKey={`${view}:${activeSessionId ?? ''}`}
+            navigationKey={`${view}:${leaf?.profileId ?? ''}:${leaf?.desktopId ?? ''}:${leaf?.leafId ?? ''}`}
             blocked={windowCovered || Boolean(snoozeMenu)}
           >
             <div

@@ -58,7 +58,6 @@
     "real-app:scenario-session-reopen": "node scripts/real-app-harness/scenario-session-reopen.mjs",
     "real-app:scenario-profile-lifecycle": "node scripts/real-app-harness/scenario-profile-lifecycle.mjs",
     "real-app:scenario-sessions-surface": "node scripts/real-app-harness/scenario-sessions-surface.mjs",
-    "real-app:scenario-tile-only-desktop-select": "node scripts/real-app-harness/scenario-tile-only-desktop-select.mjs",
     "real-app:scenario-markdown-opener": "node scripts/real-app-harness/scenario-markdown-opener.mjs",
     "real-app:scenario-notebook-tile-close": "node scripts/real-app-harness/scenario-notebook-tile-close.mjs",
     "real-app:scenario-notebook-editor-undo": "node scripts/real-app-harness/scenario-notebook-editor-undo.mjs",

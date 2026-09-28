@@ -7,7 +7,7 @@ import './Sidebar.css';
 import { useSidebarContext } from './SidebarContext';
 import { formatShortcut } from '../shortcuts/formatShortcut';
 import { runCount, runsNeedingYouCount } from '../utils/automationRuns';
-import { isSessionless, desktopShortcut } from './sidebarModel';
+import { hasNoAgentRows, desktopShortcut } from './sidebarModel';
 import { SidebarSessionRow, TileSidebarRow } from './SidebarRows';
 import { StateIndicator } from './StateIndicator';
 
@@ -50,15 +50,11 @@ export function SidebarDesktopList() {
                   onClickCapture={handleHeaderClickCapture}
                   onClick={() => onSelectDesktop(desktopView.id)}
                 />
-                {isSessionless(desktopView) ? (
+                {hasNoAgentRows(desktopView) ? (
                   <span
                     className="desktop-neutral-indicator"
                     data-testid="desktop-neutral-indicator"
-                    title={
-                      desktopView.hasUnresolvedAgentPanes
-                        ? 'Desktop has a pane without an active session'
-                        : 'Tile-only desktop — no active session'
-                    }
+                    title={desktopView.hasUnresolvedAgentPanes ? 'Desktop has a pane without an active session' : 'No agent on this desktop'}
                   />
                 ) : (
                   <StateIndicator
