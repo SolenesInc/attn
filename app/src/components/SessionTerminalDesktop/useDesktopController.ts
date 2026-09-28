@@ -506,14 +506,20 @@ export function useDesktopController(
 
   const lastAnnouncedClaim = useRef(0);
   useLayoutEffect(() => {
-    if (!focusClaim?.announce || !sessionVisible || focusClaim.desktopId !== desktopId
+    const container = panesContainerRef.current;
+    if (!container) return;
+    if (!sessionVisible) {
+      container.querySelectorAll('.desktop-pane.leaf-arrival').forEach((pane) => pane.classList.remove('leaf-arrival'));
+      return;
+    }
+    if (!focusClaim?.announce || focusClaim.desktopId !== desktopId
       || focusClaim.leafId !== activeLeafId || lastAnnouncedClaim.current === focusClaim.id) return;
-    const pane = Array.from(panesContainerRef.current?.querySelectorAll<HTMLElement>('[data-pane-id]') ?? [])
+    const pane = Array.from(container.querySelectorAll<HTMLElement>('[data-pane-id]'))
       .find((element) => element.dataset.paneId === focusClaim.leafId);
     if (!pane) return;
 
     lastAnnouncedClaim.current = focusClaim.id;
-    pane.classList.remove('leaf-arrival');
+    container.querySelectorAll('.desktop-pane.leaf-arrival').forEach((arrived) => arrived.classList.remove('leaf-arrival'));
     void pane.offsetWidth;
     pane.classList.add('leaf-arrival');
   }, [activeLeafId, desktopId, focusClaim, paneReadyFocusRequest, renderedPaneIdsKey, sessionVisible]);
@@ -526,10 +532,8 @@ export function useDesktopController(
         && event.target instanceof HTMLElement) event.target.classList.remove('leaf-arrival');
     };
     container.addEventListener('animationend', onAnimationEnd);
-    container.addEventListener('animationcancel', onAnimationEnd);
     return () => {
       container.removeEventListener('animationend', onAnimationEnd);
-      container.removeEventListener('animationcancel', onAnimationEnd);
     };
   }, [renderedPaneIdsKey]);
 

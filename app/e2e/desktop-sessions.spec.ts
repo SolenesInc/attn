@@ -40,6 +40,31 @@ async function openSide(page: import('@playwright/test').Page, first: string, se
 }
 
 test.describe('Desktop Sessions', () => {
+  test('a quick repeated pick keeps the new arrival pulse', async ({ page, daemon }) => {
+    await daemon.start();
+    await page.goto('/');
+    await page.waitForSelector('.dashboard');
+    await injectSessions(page, daemon, [{ id: 'repeat-agent', label: 'repeat-agent', cwd: '/tmp/desktop-repeat' }]);
+    await page.getByTestId('session-repeat-agent').click();
+
+    const pane = currentDesktop(page).locator(paneOf('repeat-agent'));
+    const open = page.getByTestId('sidebar-session-repeat-agent').getByRole('button', { name: 'Open repeat-agent' });
+    await open.click();
+    await expect(pane).toHaveClass(/leaf-arrival/);
+    await pane.evaluate((el) => {
+      el.addEventListener('animationcancel', (event) => {
+        if ((event as AnimationEvent).animationName === 'leaf-arrival-pulse') {
+          (el as HTMLElement).dataset.arrivalCanceled = 'true';
+        }
+      });
+    });
+
+    await open.click();
+    await expect(pane).toHaveAttribute('data-arrival-canceled', 'true');
+    await expect(pane).toHaveClass(/leaf-arrival/);
+    expect(await pane.evaluate((el) => getComputedStyle(el, '::after').animationName)).toBe('leaf-arrival-pulse');
+  });
+
   test('opening an agent places it beside the active pane of the current desktop', async ({ page, daemon }) => {
     await daemon.start();
     await page.goto('/');
