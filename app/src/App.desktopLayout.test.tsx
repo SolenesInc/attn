@@ -5,7 +5,7 @@ import { openActionMenu, openSession } from './test/appFixtures';
 import { emptyDesktop, soloDesktop, daemonSession } from './test/daemonFixtures';
 import { fakeRects } from './test/layout';
 import { pressShortcut, renderApp } from './test/renderApp';
-import type { ScriptedDaemon } from './test/scriptedDaemon';
+import type { Reply, ScriptedDaemon } from './test/scriptedDaemon';
 import { pane, relayOut, renderDesktop, split } from './test/desktopLayouts';
 import { serveLaunches } from './test/locations';
 
@@ -171,6 +171,35 @@ describe('App desktop layout', () => {
     await daemon.idle();
 
     expect(daemon.sentOf('desktop_show_session').filter((command) => command.session_id === spawn.id)).toEqual([]);
+  });
+
+  it('puts the keyboard in a docked tile even when its dock had to retry a stale revision', async () => {
+    const { daemon } = await openDesktop(pane('s1'), ['s1']);
+    let refusals = 1;
+    daemon.on('desktop_dock_tile', (command) => {
+      const reply = (success: boolean) => ({
+        event: 'profile_action_result', action: command.cmd, request_id: command.request_id ?? '', success,
+        ...(success ? {} : { error: 'desktop ws moved on', error_code: 'stale_revision' }),
+      }) as Reply;
+      const desktop = daemon.arrangement.desktop('ws')!;
+      if (refusals-- > 0) {
+        daemon.arrangement.replace(desktop);
+        return [reply(false), daemon.arrangement.changed()];
+      }
+      const tree = { type: 'split', split_id: `split-${command.tile_id}`, direction: 'vertical', ratio: 0.5, children: [JSON.parse(desktop.tree_json), { type: 'tile', tile_id: command.tile_id, tile_kind: command.tile_kind, tile_params: command.tile_params }] };
+      daemon.arrangement.replace({ ...desktop, tree_json: JSON.stringify(tree), active_pane_id: command.tile_id });
+      return [reply(true), daemon.arrangement.changed()];
+    });
+
+    act(() => screen.getByTestId('sidebar-home').focus());
+    pressShortcut('notebook.openTile');
+    await daemon.idle();
+    await act(() => vi.advanceTimersByTimeAsync(100));
+    await daemon.idle();
+
+    const docks = daemon.sentOf('desktop_dock_tile');
+    expect(docks).toHaveLength(2);
+    expect(document.activeElement?.closest('[data-pane-id]')?.getAttribute('data-pane-id')).toBe(docks[1].tile_id);
   });
 
   it('shows a launched agent whose placement failed, without saying it has no pane', async () => {

@@ -19,6 +19,7 @@ import {
   selectAgent,
   selectionFailed,
   type AppView,
+  type ExpectedArrival,
   type SessionNavigationState,
   type StateUpdate,
 } from '../navigation/sessionNavigation';
@@ -30,7 +31,7 @@ export interface SessionNavigationActions {
   cancelPendingSelection: () => void;
   selectionFailed: (id: number) => void;
   toggleGrid: () => void;
-  navigated: () => void;
+  navigated: (expect?: ExpectedArrival | null) => void;
   focusClaimDelivered: (id: number) => void;
   claimLeafFocus: (desktopId: string, leafId: string, focusOwner?: Element | null) => void;
   transferFocus: (leaf: ActiveLeaf) => void;
@@ -70,7 +71,11 @@ export function reconcileSessionNavigation(
 ): Partial<SessionStore> {
   const next = { ...state, ...update };
   if (next.navigationProfileId !== state.navigationProfileId || next.navigationCurrentDesktopId !== state.navigationCurrentDesktopId) {
-    next.navigationEpoch = state.navigationEpoch + 1;
+    const expected = next.expectedArrival;
+    const requestedHere = expected !== null && expected.profileId === next.navigationProfileId
+      && (expected.desktopId === null || expected.desktopId === next.navigationCurrentDesktopId);
+    if (requestedHere) next.expectedArrival = null;
+    else next.navigationEpoch = state.navigationEpoch + 1;
   }
   next.navigationQueue = navigationQueue(
     next.navigationSessions,
@@ -100,7 +105,7 @@ export function createSessionNavigationActions(
     cancelPendingSelection: () => set((state) => cancelSelection(state)),
     selectionFailed: (id) => set((state) => selectionFailed(state, id)),
     toggleGrid: () => set((state) => withVisit(state, toggleGrid(state))),
-    navigated: () => set((state) => navigated(state)),
+    navigated: (expect) => set((state) => navigated(state, expect)),
     focusClaimDelivered: (id) => set((state) => focusClaimDelivered(state, id)),
     claimLeafFocus: (desktopId, leafId, owner = focusOwner()) => set((state) => claimFocus(state, { desktopId, leafId }, owner)),
     transferFocus: (leaf) => set((state) => claimFocus(state, leaf, focusOwner())),

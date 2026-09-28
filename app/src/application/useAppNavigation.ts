@@ -20,6 +20,7 @@ import {
 import { AppContentProps } from './appSupport';
 import { useAppSessions } from './useAppSessions';
 import type { useAttentionQueue } from './useAttentionQueue';
+import { showDesktop } from './trackOpen';
 
 interface Options {
   shownAgentId: string | null;
@@ -124,7 +125,7 @@ export function useAppNavigation({
       if (!selectedProfileId || !desktops.some((desktop) => desktop.id === desktopId)) return;
       setView('session');
       if (desktopId === currentDesktopIdRef.current) return;
-      void sendDesktopSetCurrent(selectedProfileId, desktopId).catch(() => {});
+      void showDesktop(desktopId, () => sendDesktopSetCurrent(selectedProfileId, desktopId)).catch(() => {});
     },
     [sendDesktopSetCurrent, setView],
   );

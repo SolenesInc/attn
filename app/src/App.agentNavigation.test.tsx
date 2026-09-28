@@ -836,6 +836,23 @@ describe('keyboard focus', () => {
     expect(useSessionStore.getState().focusRequest).toBeNull();
   });
 
+  it('puts the keyboard in the leaf of a desktop the user opened from its sidebar row', async () => {
+    const { daemon } = await renderApp({ initialState: {
+      sessions: [queueSession('s1', 9), queueSession('s2', 10)],
+      desktops: [soloDesktop('s1', { name: 'alpha' }), soloDesktop('s2', { name: 'beta' })],
+    } });
+    await open(daemon, 's1');
+    await settleFocus(daemon);
+    const row = screen.getByRole('button', { name: 'Open beta' });
+    row.focus();
+
+    await gesture(daemon, () => fireEvent.click(row));
+    await settleFocus(daemon);
+
+    expect(daemon.sentOf('desktop_set_current').slice(-1)).toEqual([expect.objectContaining({ desktop_id: 'desktop-s2' })]);
+    expect(focusedPane()).toBe('pane-s2');
+  });
+
   it('puts the keyboard in a tile the user reached through history', async () => {
     const { daemon } = await renderApp({ initialState: {
       sessions: [daemonSession('s1'), daemonSession('s2')],

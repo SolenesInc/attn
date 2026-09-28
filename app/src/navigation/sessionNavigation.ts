@@ -48,6 +48,7 @@ export interface SessionNavigationState {
   leafHistoryByProfile: Record<string, LeafHistoryState>;
   selectionSequence: number;
   navigationEpoch: number;
+  expectedArrival: ExpectedArrival | null;
   focusSequence: number;
   utilityFocusRequestToken: number;
 }
@@ -62,6 +63,7 @@ export function initialSessionNavigation(): SessionNavigationState {
     leafHistoryByProfile: {},
     selectionSequence: 0,
     navigationEpoch: 0,
+    expectedArrival: null,
     focusSequence: 0,
     utilityFocusRequestToken: 0,
   };
@@ -121,8 +123,13 @@ export function claimFocus(state: SessionNavigationState, leaf: Pick<ActiveLeaf,
   return { ...state, focusSequence: id, focusRequest: { id, desktopId: leaf.desktopId, leafId: leaf.leafId, focusOwner } };
 }
 
-export function navigated(state: SessionNavigationState): SessionNavigationState {
-  return { ...state, navigationEpoch: state.navigationEpoch + 1 };
+export interface ExpectedArrival {
+  profileId: string;
+  desktopId: string | null;
+}
+
+export function navigated(state: SessionNavigationState, expect: ExpectedArrival | null = null): SessionNavigationState {
+  return { ...state, navigationEpoch: state.navigationEpoch + 1, expectedArrival: expect ?? state.expectedArrival };
 }
 
 export function toggleGrid(state: SessionNavigationState): SessionNavigationState {

@@ -4709,7 +4709,12 @@ export function useDaemonSocket({
 
   const sendProfileCommand = useCallback(
     (cmd: string, body: Record<string, unknown>) => {
-      if (cmd === 'profile_select' || cmd.startsWith('desktop_')) useSessionStore.getState().navigated();
+      if (cmd === 'profile_select' || cmd.startsWith('desktop_')) {
+        const profileId = typeof body.profile_id === 'string' ? body.profile_id : null;
+        const desktopId = cmd === 'desktop_set_current' && typeof body.desktop_id === 'string' ? body.desktop_id : null;
+        const expectsArrival = profileId !== null && (cmd === 'profile_select' || desktopId !== null);
+        useSessionStore.getState().navigated(expectsArrival ? { profileId, desktopId } : null);
+      }
       return sendRequest<ProfileActionResult>(cmd, body, `The daemon did not answer ${cmd}`);
     },
     [sendRequest],

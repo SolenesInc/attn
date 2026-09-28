@@ -73,8 +73,8 @@ export function useDesktopTiles({ settings, sessions, shownAgentId, showError }:
     const localDirectory = activeSession && !activeSession.endpointId ? activeSession.cwd : '';
     const root = resolveEditorTileRoot(localDirectory, settings['notebook.root.effective'] || '');
     const tileId = `notebook-tile-${crypto.randomUUID()}`;
-    void trackOpen(() =>
-      withFreshDesktopRevisions([desktop.id], (revisionOf) =>
+    void trackOpen((own) =>
+      withFreshDesktopRevisions([desktop.id], (revisionOf) => own(() =>
         sendDesktopDockTile({
           desktopId: desktop.id,
           expectedRevision: revisionOf(desktop.id),
@@ -84,7 +84,7 @@ export function useDesktopTiles({ settings, sessions, shownAgentId, showError }:
           edge: 'right',
           tileShare: 0.4,
         }),
-      ),
+      )),
     )
       .then(({ moved, focusOwner }) => {
         if (!moved) useSessionStore.getState().claimLeafFocus(desktop.id, tileId, focusOwner);
@@ -98,8 +98,8 @@ export function useDesktopTiles({ settings, sessions, shownAgentId, showError }:
       const desktop = currentDesktop();
       if (!desktop) return;
       const tileId = `app-view-tile-${crypto.randomUUID()}`;
-      void trackOpen(() =>
-        withFreshDesktopRevisions([desktop.id], (revisionOf) =>
+      void trackOpen((own) =>
+        withFreshDesktopRevisions([desktop.id], (revisionOf) => own(() =>
           sendDesktopDockTile({
             desktopId: desktop.id,
             expectedRevision: revisionOf(desktop.id),
@@ -109,7 +109,7 @@ export function useDesktopTiles({ settings, sessions, shownAgentId, showError }:
             edge: 'right',
             tileShare: 0.4,
           }),
-        ),
+        )),
       )
         .then(({ moved, focusOwner }) => {
           if (!moved) useSessionStore.getState().claimLeafFocus(desktop.id, tileId, focusOwner);
