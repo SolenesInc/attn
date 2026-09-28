@@ -13,6 +13,7 @@ import { SessionLead } from './SessionLead';
 import { SessionLabel } from './SessionLabel';
 import { SessionProvenance } from './SessionProvenance';
 import { SidebarSettlingBar } from './SettlingIndicator';
+import { harnessLabel } from './harnessLabel';
 import { describeUnknownReason } from './stateReason';
 import './Sidebar.css';
 import './SidebarRow.css';
@@ -206,6 +207,7 @@ export function SidebarSessionRow({
   showSettling: boolean;
   delegates: readonly LocalSession[];
 }) {
+  const harnessTitle = harnessLabel(session.agent);
   return (
     <div
       className={`session-item sidebar-leaf-row grouped ${selected ? 'selected' : ''} ${session.state === 'recoverable' ? 'recoverable' : ''} ${draggable ? 'session-item--draggable' : ''} ${dragging ? 'session-item--dragging' : ''}`
@@ -220,7 +222,7 @@ export function SidebarSessionRow({
         type="button"
         className="sidebar-row-select"
         aria-label={`Open ${session.label}`}
-        title={session.state === 'unknown' ? describeUnknownReason(session.state_reason) : undefined}
+        title={session.state === 'unknown' ? `${harnessTitle} · ${describeUnknownReason(session.state_reason)}` : harnessTitle}
         onClick={onSelect}
         onClickCapture={onClickCapture}
         onPointerDown={onPointerDown}

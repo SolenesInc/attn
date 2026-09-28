@@ -234,7 +234,10 @@ test.describe('Desktop Sessions', () => {
     await expect(second).toBeVisible();
     const icon = await first.getByRole('img', { name: 'Shell · working' }).boundingBox();
     expect(icon).not.toBeNull();
-    await page.mouse.click(icon!.x + icon!.width / 2, icon!.y + icon!.height / 2);
+    const iconCenter = { x: icon!.x + icon!.width / 2, y: icon!.y + icon!.height / 2 };
+    const hoverTitle = await page.evaluate(({ x, y }) => (document.elementFromPoint(x, y) as HTMLElement | null)?.title, iconCenter);
+    expect(hoverTitle).toBe('Shell');
+    await page.mouse.click(iconCenter.x, iconCenter.y);
     await expect(first).toHaveClass(/selected/);
     await expect(page.locator(paneOf('keyboard-one')).getByRole('textbox', { name: 'Terminal input' })).toBeFocused();
     await second.getByRole('button', { name: 'Open keyboard-two' }).focus();

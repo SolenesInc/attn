@@ -64,7 +64,9 @@ describe('sidebar harness identity', () => {
       const icon = within(row).getByRole('img', { name: `${name} · idle` });
       expect(icon).toHaveAttribute('title', name);
       expect(row.querySelector('.session-lead')).toHaveAttribute('data-state', 'idle');
-      fireEvent.click(within(row).getByRole('button', { name: /^Open / }));
+      const select = within(row).getByRole('button', { name: /^Open / });
+      expect(select).toHaveAttribute('title', name);
+      fireEvent.click(select);
       expect(onSelectSession).toHaveBeenLastCalledWith(id);
     }
   });
@@ -98,13 +100,16 @@ describe('sidebar harness identity', () => {
     expect(within(row).getByRole('img', { name: 'Claude · scheduled' })).toBeInTheDocument();
   });
 
-  it('explains an unknown state when hovering the visible logo', () => {
+  it('explains an unknown state on the hit-tested row button', () => {
     const data = sidebarData();
     data.desktops[0].sessions[0].state = 'unknown';
     data.desktops[0].sessions[0].state_reason = 'stuck';
     render(<Sidebar {...baseProps} {...data} />);
     const row = screen.getByTestId('sidebar-session-claude');
     expect(within(row).getByRole('img', { name: 'Claude · Stuck — the agent has stopped reporting anything at all' })).toHaveAttribute(
+      'title', 'Claude · Stuck — the agent has stopped reporting anything at all',
+    );
+    expect(within(row).getByRole('button', { name: 'Open Investigate logs' })).toHaveAttribute(
       'title', 'Claude · Stuck — the agent has stopped reporting anything at all',
     );
   });
