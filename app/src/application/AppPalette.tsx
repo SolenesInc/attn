@@ -37,12 +37,14 @@ function OpenPalette({
   const desktops = useProfilesStore((state) => state.desktops);
   const selectedProfileId = useProfilesStore((state) => state.selectedProfileId);
   const crew = useDaemonStore((state) => state.crew);
+  const seeds = useDaemonStore((state) => state.seeds);
   const commands = useAppCommands();
 
   const tileTitle = useCallback(
     (desktopId: string, tile: TileLeaf) =>
-      deriveTileTitle(tile, desktopTileContents[tileContentKey(desktopId, tile.tileId)]),
-    [desktopTileContents],
+      deriveTileTitle(tile, desktopTileContents[tileContentKey(desktopId, tile.tileId)],
+        (id) => seeds.find((seed) => seed.id === id)?.title),
+    [desktopTileContents, seeds],
   );
   const agents = useMemo(() => {
     const now = Date.now();
