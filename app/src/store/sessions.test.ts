@@ -1,7 +1,6 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest';
 import { useSessionStore, isSessionReloading } from './sessions';
 import { LayoutPaneKind, LayoutPaneStatus, type Desktop } from '../types/generated';
-import { createAgentHistory } from '../navigation/agentHistory';
 import type { TerminalLayoutNode } from '../types/desktop';
 
 const { mockPtyReload } = vi.hoisted(() => ({
@@ -52,8 +51,6 @@ describe('sessions store', () => {
     mockPtyReload.mockReset();
     useSessionStore.setState({
       sessions: [],
-      activeSessionId: null,
-      agentHistory: createAgentHistory(),
       connected: false,
       launcherConfig: { executables: {} },
       desktopSnapshots: {},
@@ -70,63 +67,7 @@ describe('sessions store', () => {
       layoutTree: null,
     });
     expect(session?.daemonActivePaneId).toBe('');
-    expect(useSessionStore.getState().agentHistory).toEqual({
-      entries: [sessionId],
-      cursor: 0,
-    });
-  });
-
-  it('records explicit activations, preserves history when leaving for the dashboard, and traverses without visits', async () => {
-    for (const id of ['sess-a', 'sess-b', 'sess-c']) {
-      await useSessionStore.getState().createSession(
-        id,
-        `/tmp/${id}`,
-        id,
-        'shell',
-        undefined,
-        false,
-      );
-    }
-
-    useSessionStore.setState({ activeSessionId: null, agentHistory: createAgentHistory() });
-    useSessionStore.getState().setActiveSession('sess-b');
-    useSessionStore.getState().setActiveSession('sess-c');
-    expect(useSessionStore.getState().agentHistory).toEqual({
-      entries: ['sess-b', 'sess-c'],
-      cursor: 1,
-    });
-
-    expect(useSessionStore.getState().navigateAgentHistory('back')).toBe('sess-b');
-    expect(useSessionStore.getState().agentHistory).toEqual({
-      entries: ['sess-b', 'sess-c'],
-      cursor: 0,
-    });
-
-    useSessionStore.getState().setActiveSession(null);
-    expect(useSessionStore.getState().agentHistory).toEqual({
-      entries: ['sess-b', 'sess-c'],
-      cursor: 0,
-    });
-  });
-
-  it('reconciles history and leaves the next agent to the arrangement when the active session closes', async () => {
-    for (const id of ['sess-a', 'sess-b', 'sess-c']) {
-      await useSessionStore.getState().createSession(
-        id,
-        `/tmp/${id}`,
-        id,
-        'shell',
-        undefined,
-        false,
-      );
-    }
-    expect(useSessionStore.getState().navigateAgentHistory('back')).toBe('sess-b');
-
-    useSessionStore.getState().removeSessionLocalState('sess-b');
-
-    const state = useSessionStore.getState();
-    expect(state.activeSessionId).toBeNull();
-    expect(state.agentHistory.entries).toEqual(['sess-a', 'sess-c']);
+    expect(useSessionStore.getState().pendingSelection).toBeNull();
   });
 
   it('syncFromDaemonSessions hydrates canonical session data and keeps the session on its desktop', () => {
@@ -259,10 +200,8 @@ describe('sessions store', () => {
     expect(useSessionStore.getState().sessions[0].daemonActivePaneId).toBe('');
   });
 
-  it('syncFromDaemonSessions removes a closed active session and leaves the next agent to the arrangement', () => {
+  it('syncFromDaemonSessions removes a closed session', () => {
     useSessionStore.setState({
-      activeSessionId: 'split-session',
-      agentHistory: { entries: ['root-session', 'split-session'], cursor: 1 },
       sessions: [
         {
           id: 'root-session',
@@ -333,8 +272,6 @@ describe('sessions store', () => {
 
     const state = useSessionStore.getState();
     expect(state.sessions.map((session) => session.id)).toEqual(['root-session']);
-    expect(state.activeSessionId).toBeNull();
-    expect(state.agentHistory.entries).toEqual(['root-session']);
   });
 
   it('syncFromDaemonSessions puts a session that comes back on the desktop it is placed on', () => {
@@ -351,7 +288,7 @@ describe('sessions store', () => {
     ]);
 
     useSessionStore.getState().syncFromDaemonSessions([daemonSession]);
-    useSessionStore.getState().syncFromArrangement('profile', [desktop]);
+    useSessionStore.getState().syncFromArrangement('profile', null, [desktop]);
     expect(
       useSessionStore.getState().sessions.find((entry) => entry.id === 'blip-session')?.desktop.agents,
     ).toHaveLength(1);
@@ -368,7 +305,6 @@ describe('sessions store', () => {
 
   it('syncFromDaemonSessions retains a genuinely launching session with a pending desktop pane', () => {
     useSessionStore.setState({
-      activeSessionId: 'launching-session',
       sessions: [
         {
           id: 'launching-session',
@@ -397,10 +333,9 @@ describe('sessions store', () => {
     useSessionStore.getState().syncFromDaemonSessions([]);
 
     expect(useSessionStore.getState().sessions.map((session) => session.id)).toEqual(['launching-session']);
-    expect(useSessionStore.getState().activeSessionId).toBe('launching-session');
   });
 
-  it('syncFromDaemonSessions keeps the session being created and the selection on it', async () => {
+  it('syncFromDaemonSessions keeps the session being created', async () => {
     const neighbour = {
       id: 'sess-neighbour',
       label: 'Neighbour',
@@ -409,18 +344,15 @@ describe('sessions store', () => {
       state: 'idle',
     };
     useSessionStore.getState().syncFromDaemonSessions([neighbour]);
-    useSessionStore.getState().setActiveSession('sess-neighbour');
 
     const sessionId = await useSessionStore.getState().createSession(
       'Racey', '/tmp/racey', 'sess-racey', 'claude', undefined, false,
     );
-    expect(useSessionStore.getState().activeSessionId).toBe(sessionId);
 
     useSessionStore.getState().syncFromDaemonSessions([neighbour]);
 
     const kept = useSessionStore.getState().sessions.find((s) => s.id === sessionId);
     expect(kept?.state).toBe('launching');
-    expect(useSessionStore.getState().activeSessionId).toBe(sessionId);
 
     const args = useSessionStore.getState().takeSessionSpawnArgs(sessionId, 80, 24);
     expect(args?.id).toBe(sessionId);
@@ -444,12 +376,10 @@ describe('sessions store', () => {
     useSessionStore.getState().syncFromDaemonSessions([]);
 
     expect(useSessionStore.getState().sessions).toEqual([]);
-    expect(useSessionStore.getState().activeSessionId).toBeNull();
   });
 
   it('syncFromDaemonSessions removes an exited session with a stale spawning pane', () => {
     useSessionStore.setState({
-      activeSessionId: 'exited-session',
       sessions: [
         {
           id: 'exited-session',
@@ -478,7 +408,6 @@ describe('sessions store', () => {
     useSessionStore.getState().syncFromDaemonSessions([]);
 
     expect(useSessionStore.getState().sessions).toEqual([]);
-    expect(useSessionStore.getState().activeSessionId).toBeNull();
   });
 
   it('takeSessionSpawnArgs applies launcher overrides', async () => {
@@ -507,7 +436,7 @@ describe('sessions store', () => {
   it('syncFromArrangement gives each session the desktop it is placed on and that desktop\'s active pane', async () => {
     const sessionId = await useSessionStore.getState().createSession('Desktop', '/tmp/project', 'sess-desktop', 'codex', undefined, false);
 
-    useSessionStore.getState().syncFromArrangement('profile', [
+    useSessionStore.getState().syncFromArrangement('profile', null, [
       desktopWith(
         'desktop-1',
         JSON.stringify({
@@ -553,7 +482,7 @@ describe('sessions store', () => {
   it('syncFromArrangement keeps defaults on an invalid tree and falls back to the first pane', async () => {
     const sessionId = await useSessionStore.getState().createSession('Desktop', '/tmp/project', 'sess-desktop', 'codex', undefined, false);
 
-    useSessionStore.getState().syncFromArrangement('profile', [
+    useSessionStore.getState().syncFromArrangement('profile', null, [
       desktopWith('desktop-1', '{not-json', 'missing-pane', [
         { pane_id: 'pane-session', session_id: sessionId, title: 'Agent' },
       ]),
@@ -580,9 +509,9 @@ describe('sessions store', () => {
       },
     ]);
 
-    useSessionStore.getState().syncFromArrangement('profile', [failed]);
+    useSessionStore.getState().syncFromArrangement('profile', null, [failed]);
     useSessionStore.getState().syncFromDaemonSessions([]);
-    useSessionStore.getState().syncFromArrangement('profile', [failed]);
+    useSessionStore.getState().syncFromArrangement('profile', null, [failed]);
 
     const state = useSessionStore.getState();
     expect(state.sessions).toEqual([]);

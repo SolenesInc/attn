@@ -60,17 +60,6 @@ describe('App desktop leaf focus', () => {
     expect(closed(daemon).slice(1)).toEqual(['pane-s1']);
   });
 
-  it('closes the pane on ⌘W after Focus utility terminal took the keyboard back from a tile', async () => {
-    const { daemon, perform, press, tile } = await openPaneBesideNotes();
-
-    await perform(() => fireEvent.mouseDown(tile()));
-    await press('terminal.open');
-    expect(surface()).toHaveAttribute('data-active-leaf-id', 'pane-s1');
-    await press('terminal.close');
-
-    expect(closed(daemon)).toEqual(['pane-s1']);
-  });
-
   it('zooms then maximizes the focused tile, and keeps the keyboard in it when the terminal comes back', async () => {
     const { perform, press, tile } = await openPaneBesideNotes();
     await perform(() => fireEvent.mouseDown(tile()));

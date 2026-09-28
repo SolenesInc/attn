@@ -58,7 +58,7 @@ function renderLaunch(
 describe('useSessionLaunch placement', () => {
   beforeEach(() => {
     vi.mocked(ptySpawn).mockClear();
-    useSessionStore.setState({ sessions: [], activeSessionId: null });
+    useSessionStore.setState({ sessions: [] });
   });
 
   it('starts a split beside the focused agent on the current desktop, in its directory', async () => {
@@ -104,7 +104,7 @@ describe('useSessionLaunch placement', () => {
 describe('useSessionLaunch from the new-session picker', () => {
   beforeEach(() => {
     vi.mocked(ptySpawn).mockClear();
-    useSessionStore.setState({ sessions: [], activeSessionId: null });
+    useSessionStore.setState({ sessions: [] });
     useProfilesStore.setState({
       selectedProfileId: 'profile-1',
       currentDesktopId: 'desktop-1',
@@ -153,7 +153,7 @@ describe('useSessionLaunch from the new-session picker', () => {
 describe('useSessionLaunch when the daemon cannot place the agent', () => {
   beforeEach(() => {
     vi.mocked(ptySpawn).mockClear();
-    useSessionStore.setState({ sessions: [], activeSessionId: null });
+    useSessionStore.setState({ sessions: [] });
     useProfilesStore.setState({
       selectedProfileId: 'profile-1',
       currentDesktopId: 'desktop-1',
@@ -181,7 +181,7 @@ describe('useSessionLaunch when the daemon cannot place the agent', () => {
 describe('useSessionLaunch on a remote endpoint', () => {
   beforeEach(() => {
     vi.mocked(ptySpawn).mockClear();
-    useSessionStore.setState({ sessions: [], activeSessionId: null });
+    useSessionStore.setState({ sessions: [] });
   });
 
   it('refuses an agent on another daemon before spawning, naming the fence', async () => {
@@ -226,7 +226,7 @@ describe('useSessionLaunch on a remote endpoint', () => {
 describe('useSessionLaunch from a remote agent', () => {
   beforeEach(() => {
     vi.mocked(ptySpawn).mockClear();
-    useSessionStore.setState({ sessions: [], activeSessionId: null });
+    useSessionStore.setState({ sessions: [] });
   });
 
   it('refuses to split a remote agent instead of leaving an unplaced session behind', async () => {

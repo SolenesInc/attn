@@ -99,7 +99,7 @@ describe('App notifications', () => {
 
     await click(daemon, 'Open session');
     expect(screen.queryByRole('dialog', { name: 'Notifications' })).toBeNull();
-    expect(daemon.sentOf('desktop_set_current').pop()).toMatchObject({ desktop_id: 'desktop-session-1' });
+    expect(daemon.sentOf('desktop_show_session').pop()).toMatchObject({ session_id: 'session-1' });
   });
 
   it('offers no Retry the daemon did not supply, even for a task’s notification', async () => {

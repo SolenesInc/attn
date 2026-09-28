@@ -54,7 +54,7 @@ export function SidebarDesktopList() {
                   <span
                     className="desktop-neutral-indicator"
                     data-testid="desktop-neutral-indicator"
-                    title={desktopView.hasUnresolvedAgentPanes ? 'Desktop has a pane without an active session' : undefined}
+                    title={desktopView.hasUnresolvedAgentPanes ? 'Desktop has a pane without an active session' : 'No agent on this desktop'}
                   />
                 ) : (
                   <StateIndicator

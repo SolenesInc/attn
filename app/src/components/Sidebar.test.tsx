@@ -311,7 +311,7 @@ describe('Sidebar', () => {
     expect(onSelectDesktop).toHaveBeenCalledTimes(1);
   });
 
-  it('hides empty desktops without renumbering the slots of the others', () => {
+  it('lists a desktop without agents in its slot beside the others', () => {
     const sidebarData = buildSidebarData([
       { id: 'a1', label: 'A1', state: 'idle', cwd: '/repo/a' },
       { id: 'b1', label: 'B1', state: 'idle', cwd: '/repo/b' },
@@ -329,7 +329,7 @@ describe('Sidebar', () => {
     const groups = [emptyDesktop, ...sidebarData.desktops];
     render(<Sidebar {...baseProps} desktops={groups} visualIndexByDesktopId={groupIndexes(groups)} />);
 
-    expect(screen.queryByTestId('sidebar-desktop-desktop-/repo/empty')).not.toBeInTheDocument();
+    expect(screen.getByTestId('sidebar-desktop-desktop-/repo/empty')).toHaveTextContent('⌘1');
     expect(screen.getByTestId('sidebar-desktop-desktop-/repo/a')).toHaveTextContent('⌘2');
     expect(screen.getByTestId('sidebar-desktop-desktop-/repo/b')).toHaveTextContent('⌘3');
   });

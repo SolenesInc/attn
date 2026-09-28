@@ -1,35 +1,43 @@
 import { act, fireEvent, screen, within } from '@testing-library/react';
 import { onOpenUrl } from '@tauri-apps/plugin-deep-link';
 import { describe, expect, it, vi } from 'vitest';
-import { agentPane, defaultProfile, dockTiles, emptyDesktop, soloDesktop, daemonSession, daemonDesktop, type DaemonSession } from './test/daemonFixtures';
+import {
+  agentPane,
+  daemonDesktop,
+  daemonSession,
+  defaultProfile,
+  dockTiles,
+  soloDesktop,
+  type DaemonDesktop,
+  type DaemonSession,
+} from './test/daemonFixtures';
 import { gesture, pressShortcut, renderApp } from './test/renderApp';
 import type { ScriptedDaemon } from './test/scriptedDaemon';
+import type { CommandMessage } from './test/protocol';
 
-const S1_TURN_OPENED = '2026-08-03T09:00:00Z';
-const S2_TURN_OPENED = '2026-08-03T10:00:00Z';
+const LADDER = ['profile_select', 'desktop_place_session', 'desktop_set_active_pane', 'desktop_set_current'] as const;
+const LATER = '2100-01-01T00:00:00Z';
 
-function agent(id: 's1' | 's2', overrides: Partial<DaemonSession> = {}): DaemonSession {
-  return daemonSession(id, {
-    turn_opened_at: id === 's1' ? S1_TURN_OPENED : S2_TURN_OPENED,
-    ...overrides,
-  });
+type Turns = Record<string, Partial<DaemonSession>>;
+
+function queueSession(id: string, hour: number, overrides: Partial<DaemonSession> = {}): DaemonSession {
+  return daemonSession(id, { turn_opened_at: `2026-08-03T${String(hour).padStart(2, '0')}:00:00Z`, ...overrides });
 }
 
-async function renderQueue({
-  owed = [] as string[],
-  laidOut = ['s1', 's2'],
-  s1 = {} as Partial<DaemonSession>,
-} = {}) {
-  return renderApp({
-    initialState: {
-      sessions: [
-        agent('s1', { turn_owed: owed.includes('s1'), ...s1 }),
-        agent('s2', { turn_owed: owed.includes('s2') }),
-      ],
-      desktops: laidOut.map((id) => soloDesktop(id)),
-      settings: { queue_mode_enabled: 'true' },
-    },
+function queueOf(turns: Turns) {
+  return Object.entries(turns).map(([id, overrides], index) => queueSession(id, 9 + index, overrides));
+}
+
+async function renderAgents(
+  turns: Turns = { s1: {}, s2: {} },
+  { settings = { queue_mode_enabled: 'true' } as Record<string, string>, laidOut }: { settings?: Record<string, string>; laidOut?: string[] } = {},
+) {
+  const sessions = queueOf(turns);
+  const view = await renderApp({
+    initialState: { sessions, desktops: (laidOut ?? sessions.map((session) => session.id)).map((id) => soloDesktop(id)), settings },
   });
+  const update = (next: Turns) => gesture(view.daemon, () => view.daemon.emit({ event: 'sessions_updated', sessions: queueOf(next) }));
+  return { ...view, update };
 }
 
 function press(key: string, modifiers: { shift?: boolean } = {}) {
@@ -47,18 +55,24 @@ const keys = {
   sessions: () => press('L', { shift: true }),
 };
 
-function open(label: string) {
+function clickOpen(label: string) {
   if (!screen.queryByRole('button', { name: `Open ${label}` })) {
     fireEvent.click(screen.getByRole('button', { name: /All agents/ }));
   }
   fireEvent.click(screen.getByRole('button', { name: `Open ${label}` }));
 }
 
+function open(daemon: ScriptedDaemon, label: string) {
+  return gesture(daemon, () => clickOpen(label));
+}
+
+function shownLeaf(): string | null {
+  return document.querySelector('[data-session-visible="1"]')?.getAttribute('data-active-leaf-id') ?? null;
+}
+
 function selectedAgent(): string | null {
-  const row = document.querySelector('.session-item.selected[data-session-id] .session-label')?.textContent;
-  if (row) return row;
-  const pane = document.querySelector('[data-session-visible="1"]')?.getAttribute('data-active-pane-id');
-  return pane ? pane.replace(/^pane-/, '') : null;
+  const leaf = shownLeaf();
+  return leaf?.startsWith('pane-') ? leaf.slice('pane-'.length) : null;
 }
 
 function isHome(): boolean {
@@ -67,69 +81,6 @@ function isHome(): boolean {
 
 function isGrid(): boolean {
   return screen.queryByRole('region', { name: 'Session grid' }) !== null;
-}
-
-function setTurn(daemon: ScriptedDaemon, id: 's1' | 's2', owed: boolean) {
-  daemon.emit({ event: 'session_state_changed', session: agent(id, { turn_owed: owed }) });
-}
-
-function layOut(daemon: ScriptedDaemon, id: string) {
-  daemon.arrange((desktops) => [...desktops, soloDesktop(id)]);
-}
-
-function deepLinkTo(id: string) {
-  act(() => vi.mocked(onOpenUrl).mock.lastCall![0]([`attn://spawn?cwd=%2Ftmp%2F${id}`]));
-}
-
-function selectionsOf(daemon: ScriptedDaemon, desktopId: string) {
-  return daemon.sent.filter(
-    (command) => command.cmd === 'desktop_set_current' && command.desktop_id === desktopId,
-  );
-}
-
-async function workTheQueueDownToHome() {
-  const rendered = await renderQueue({ owed: ['s1'] });
-  open('s1');
-  expect(selectedAgent()).toBe('s1');
-
-  setTurn(rendered.daemon, 's1', false);
-  expect(isHome()).toBe(true);
-  return rendered;
-}
-
-
-const LATER = '2100-01-01T00:00:00Z';
-
-type Turns = Record<string, Partial<DaemonSession>>;
-
-function queueSession(id: string, hour: number, overrides: Partial<DaemonSession> = {}): DaemonSession {
-  return daemonSession(id, { turn_opened_at: `2026-08-03T${String(hour).padStart(2, '0')}:00:00Z`, ...overrides });
-}
-
-function queueOf(turns: Turns) {
-  return Object.entries(turns).map(([id, overrides], index) => queueSession(id, 9 + index, overrides));
-}
-
-async function renderAgents(turns: Turns, settings: Record<string, string> = { queue_mode_enabled: 'true' }) {
-  const sessions = queueOf(turns);
-  const view = await renderApp({ initialState: { sessions, desktops: sessions.map((session) => soloDesktop(session.id)), settings } });
-  const update = (next: Turns) => view.daemon.emit({ event: 'sessions_updated', sessions: queueOf(next) });
-  return { ...view, update };
-}
-
-function notesDesktop() {
-  return daemonDesktop('notes', { root: { type: 'tile', tile_id: 'tile-notes', tile_kind: 'markdown', tile_params: '/tmp/notes.md' } }, { name: 'notes', shortcut_slot: 9 });
-}
-
-function notesWithAgents(ids: string[]) {
-  const panes = ids.map((id) => ({ type: 'pane', pane_id: `pane-${id}` }));
-  const root = panes.length === 1 ? panes[0] : {
-    type: 'split', split_id: 'agents', direction: 'vertical', ratio: 0.5, children: panes,
-  };
-  return daemonDesktop('d1', {
-    root: dockTiles(root, [{ tile_id: 'tile-notes', tile_kind: 'markdown', tile_params: '/tmp/notes.md' }]),
-    panes: ids.map((id) => agentPane(id, 'd1')),
-  }, { active_pane_id: 'tile-notes', shortcut_slot: 1 });
 }
 
 function focusedPane(): string | null {
@@ -141,43 +92,188 @@ async function settleFocus(daemon: ScriptedDaemon) {
   await daemon.idle();
 }
 
+function shows(daemon: ScriptedDaemon): string[] {
+  return daemon.sent.flatMap((command) => {
+    if (command.cmd === 'desktop_show_session') return [`session:${command.session_id}`];
+    if (command.cmd === 'desktop_show_leaf') return [`leaf:${command.desktop_id}/${command.leaf_id}`];
+    return [];
+  });
+}
+
+function ladder(daemon: ScriptedDaemon) {
+  return LADDER.flatMap((cmd) => daemon.sentOf(cmd));
+}
+
+type ShowCommand = CommandMessage<'desktop_show_session'> | CommandMessage<'desktop_show_leaf'>;
+
+function holdShows(daemon: ScriptedDaemon) {
+  const held: ShowCommand[] = [];
+  daemon.on('desktop_show_session', (command) => {
+    held.push(command);
+    return undefined;
+  });
+  daemon.on('desktop_show_leaf', (command) => {
+    held.push(command);
+    return undefined;
+  });
+  const answer = (success: boolean) => gesture(daemon, () => {
+    for (const command of held.splice(0)) {
+      const target = command.cmd === 'desktop_show_session'
+        ? daemon.arrangement.placementOf(command.session_id)
+        : { desktopId: command.desktop_id, paneId: command.leaf_id };
+      if (success && target) daemon.arrangement.show(target.desktopId, target.paneId);
+      daemon.replyTo(command, {
+        event: 'profile_action_result',
+        action: command.cmd,
+        request_id: command.request_id,
+        success,
+        ...(success ? {} : { error: 'the daemon is shutting down', error_code: 'unavailable' }),
+      });
+      if (success) daemon.emit(daemon.arrangement.changed());
+    }
+  });
+  return { held, release: () => answer(true), refuse: () => answer(false) };
+}
+
+function deepLinkTo(id: string) {
+  act(() => vi.mocked(onOpenUrl).mock.lastCall![0]([`attn://spawn?cwd=%2Ftmp%2F${id}`]));
+}
+
+function notesDesktop(id = 'notes'): DaemonDesktop {
+  return daemonDesktop(id, { root: { type: 'tile', tile_id: 'tile-notes', tile_kind: 'markdown', tile_params: '/tmp/notes.md' } }, { name: id, shortcut_slot: 9, active_pane_id: 'tile-notes' });
+}
+
+function agentBesideNotes(sessionId: string, desktopId = 'd1'): DaemonDesktop {
+  return daemonDesktop(desktopId, {
+    root: dockTiles({ type: 'pane', pane_id: `pane-${sessionId}` }, [{ tile_id: 'tile-notes', tile_kind: 'markdown', tile_params: '/tmp/notes.md' }]),
+    panes: [agentPane(sessionId, desktopId)],
+  }, { active_pane_id: `pane-${sessionId}`, shortcut_slot: 1 });
+}
+
+function tileEl(tileId = 'tile-notes') {
+  return document.querySelector<HTMLElement>(`[data-session-visible="1"] [data-pane-id="${tileId}"]`)!;
+}
+
 function sidebarBadges() {
   return Array.from(document.querySelectorAll<HTMLElement>('.sidebar-collapsed .session-icon, .icon-btn.session-icon'))
     .filter((icon) => icon.querySelector('.mini-badge'))
     .map((icon) => icon.title);
 }
 
-describe('agent navigation', () => {
-  it('selects a deferred session when its pane becomes available', async () => {
-    const { daemon } = await renderQueue({ laidOut: ['s1'] });
+describe('agent selection', () => {
+  it('shows an agent with one request and renders the leaf the daemon made active', async () => {
+    const { daemon } = await renderAgents();
 
-    deepLinkTo('s2');
-    expect(isHome()).toBe(true);
+    await open(daemon, 's2');
 
-    layOut(daemon, 's2');
-
+    expect(shows(daemon)).toEqual(['session:s2']);
+    expect(ladder(daemon)).toEqual([]);
     expect(selectedAgent()).toBe('s2');
   });
 
-  it('keeps a newer selection when a deferred one becomes ready', async () => {
-    const { daemon } = await renderQueue({ laidOut: ['s1'] });
+  it('keeps showing the current leaf until the daemon shows the one asked for', async () => {
+    const { daemon } = await renderAgents();
+    await open(daemon, 's1');
+    const hold = holdShows(daemon);
 
-    deepLinkTo('s2');
-    open('s1');
-    layOut(daemon, 's2');
+    await open(daemon, 's2');
+    expect(selectedAgent()).toBe('s1');
 
+    await hold.release();
+    expect(selectedAgent()).toBe('s2');
+    expect(shows(daemon)).toEqual(['session:s1', 'session:s2']);
+  });
+
+  it('asks the daemon to place an agent that has no pane, and shows it', async () => {
+    const { daemon } = await renderAgents({ s1: {}, s2: {} }, { laidOut: ['s1'] });
+
+    await open(daemon, 's2');
+
+    expect(shows(daemon)).toEqual(['session:s2']);
+    expect(ladder(daemon)).toEqual([]);
+    expect(selectedAgent()).toBe('s2');
+  });
+
+  it('sends a show for an agent that is already shown and changes nothing', async () => {
+    const { daemon } = await renderAgents();
+    await open(daemon, 's1');
+
+    await open(daemon, 's1');
+
+    expect(shows(daemon)).toEqual(['session:s1', 'session:s1']);
     expect(selectedAgent()).toBe('s1');
   });
 
-  it('does not leave home when an older deferred selection becomes ready', async () => {
-    const { daemon } = await renderQueue({ laidOut: ['s1'] });
+  it('shows an agent from an active tile without borrowing an agent for the tile', async () => {
+    const { daemon } = await renderApp({ initialState: {
+      sessions: [daemonSession('s1'), daemonSession('s2')],
+      profiles: [defaultProfile('d1')],
+      desktops: [agentBesideNotes('s1'), soloDesktop('s2')],
+    } });
+    await gesture(daemon, () => pressShortcut('desktop.select1'));
+    await gesture(daemon, () => fireEvent.mouseDown(tileEl()));
+    expect(shownLeaf()).toBe('tile-notes');
+    expect(selectedAgent()).toBeNull();
 
-    deepLinkTo('s2');
-    keys.home();
-    layOut(daemon, 's2');
+    await open(daemon, 's2');
 
-    expect(isHome()).toBe(true);
-    expect(selectionsOf(daemon, 'desktop-s2')).toEqual([]);
+    expect(shows(daemon)).toEqual(['leaf:d1/tile-notes', 'session:s2']);
+    expect(selectedAgent()).toBe('s2');
+  });
+
+  it('reports a refused show and stays on the leaf it had, and a later selection still works', async () => {
+    const { daemon } = await renderAgents();
+    await open(daemon, 's1');
+    const hold = holdShows(daemon);
+
+    await open(daemon, 's2');
+    await hold.refuse();
+
+    expect(screen.getByText(/Could not show that agent: the daemon is shutting down/)).toBeInTheDocument();
+    expect(selectedAgent()).toBe('s1');
+
+    await open(daemon, 's2');
+    await hold.release();
+    expect(selectedAgent()).toBe('s2');
+  });
+
+  it.each([
+    ['going home', keys.home, () => expect(isHome()).toBe(true)],
+    ['opening the grid', keys.grid, () => expect(isGrid()).toBe(true)],
+  ])('stays where the user went after %s while a show was on its way', async (_, leave, stayed) => {
+    const { daemon } = await renderAgents();
+    const hold = holdShows(daemon);
+
+    await open(daemon, 's2');
+    await gesture(daemon, leave);
+    await hold.release();
+
+    stayed();
+    expect(focusedPane()).toBeNull();
+  });
+
+  it('drops a pending show when its agent ends and never places it again', async () => {
+    const { daemon } = await renderAgents({ s1: {}, s2: {} }, { laidOut: ['s1'] });
+    await open(daemon, 's1');
+    const hold = holdShows(daemon);
+
+    await open(daemon, 's2');
+    await gesture(daemon, () => daemon.emit({ event: 'session_unregistered', session: queueSession('s2', 10) }));
+    hold.held.splice(0);
+    await daemon.idle();
+
+    expect(shows(daemon)).toEqual(['session:s1', 'session:s2']);
+    expect(daemon.sentOf('desktop_place_session')).toEqual([]);
+    expect(selectedAgent()).toBe('s1');
+  });
+
+  it('shows an agent a deep link names with one request', async () => {
+    const { daemon } = await renderAgents({ s1: {}, s2: {} }, { laidOut: ['s1'] });
+
+    await gesture(daemon, () => deepLinkTo('s2'));
+
+    expect(shows(daemon)).toEqual(['session:s2']);
+    expect(selectedAgent()).toBe('s2');
   });
 
   it.each([
@@ -188,118 +284,60 @@ describe('agent navigation', () => {
     ['opening the shortcuts', keys.shortcuts],
     ['opening the sessions list', keys.sessions],
   ])('dismisses the delegation chain when %s', async (_, shortcut) => {
-    await renderQueue({ s1: { delegation_role: { name: 'Builder' } } });
-    open('s2');
-    open('s1');
+    const { daemon } = await renderAgents({ s1: { delegation_role: { name: 'Builder' } }, s2: {} });
+    await open(daemon, 's2');
+    await open(daemon, 's1');
     fireEvent.click(within(screen.getByTestId('sidebar-queue')).getByTestId('delegation-chain-trigger-s1'));
     expect(screen.getByRole('dialog', { name: 'Delegation chain' })).toBeInTheDocument();
 
-    shortcut();
+    await gesture(daemon, shortcut);
 
     expect(screen.queryByRole('dialog', { name: 'Delegation chain' })).toBeNull();
   });
 
-  it('takes the user to the next turn that opens after the queue ran dry', async () => {
-    const { daemon } = await workTheQueueDownToHome();
-
-    setTurn(daemon, 's2', true);
-
-    expect(selectedAgent()).toBe('s2');
-  });
-
-  it('leaves the user alone at a home they walked to', async () => {
-    const { daemon } = await renderQueue({ owed: ['s1'] });
-    open('s1');
-    keys.home();
-    expect(isHome()).toBe(true);
-
-    setTurn(daemon, 's2', true);
-
-    expect(isHome()).toBe(true);
-    expect(selectionsOf(daemon, 'desktop-s2')).toEqual([]);
-  });
-
-  it('ends the wait when the user leaves home, however they come back', async () => {
-    const { daemon } = await workTheQueueDownToHome();
-    keys.grid();
-    keys.grid();
-    expect(isHome()).toBe(true);
-
-    setTurn(daemon, 's2', true);
-
-    expect(isHome()).toBe(true);
-    expect(selectionsOf(daemon, 'desktop-s2')).toEqual([]);
-  });
-
-  it('hands over the oldest owed turn when several opened while home waited', async () => {
-    const { daemon } = await workTheQueueDownToHome();
-
-    daemon.emit({
-      event: 'sessions_updated',
-      sessions: [agent('s1', { turn_owed: true }), agent('s2', { turn_owed: true })],
-    });
-
-    expect(selectedAgent()).toBe('s1');
-  });
-
-  it('resumes history from home and grid, then traverses normally in the session view', async () => {
-    const { daemon } = await renderQueue();
-    await gesture(daemon, () => open('s1'));
-    await gesture(daemon, () => open('s2'));
-    await gesture(daemon, keys.home);
-
-    await gesture(daemon, keys.back);
-    expect(selectedAgent()).toBe('s2');
-    expect(isGrid()).toBe(false);
-
+  it('keeps the grid through unrelated updates, and leaves it for the agent the user picks', async () => {
+    const { daemon } = await renderAgents();
     await gesture(daemon, keys.grid);
-    await gesture(daemon, keys.forward);
     expect(isGrid()).toBe(true);
 
-    await gesture(daemon, keys.back);
-    expect(selectedAgent()).toBe('s2');
+    await gesture(daemon, () => daemon.emit({ event: 'settings_updated', settings: { queue_mode_enabled: 'true', unrelated: 'x' } }));
+    await gesture(daemon, () => daemon.emit({ event: 'sessions_updated', sessions: [queueSession('s1', 9), queueSession('s2', 10, { state: 'idle' })] }));
+    expect(isGrid()).toBe(true);
+
+    await open(daemon, 's1');
     expect(isGrid()).toBe(false);
-
-    await gesture(daemon, keys.back);
     expect(selectedAgent()).toBe('s1');
 
-    await gesture(daemon, keys.forward);
-    expect(selectedAgent()).toBe('s2');
-    await gesture(daemon, keys.forward);
-    expect(selectedAgent()).toBe('s2');
+    await gesture(daemon, keys.home);
+    expect(isHome()).toBe(true);
   });
 
-  it('forgets the agents ahead in history once the user opens another after going back', async () => {
-    await renderAgents({ s1: {}, s2: {}, s3: {} }, {});
-    open('s1');
-    open('s2');
-    open('s3');
+  it('follows a selection another client made on the same profile', async () => {
+    const { daemon } = await renderAgents();
+    await open(daemon, 's1');
 
-    keys.back();
-    open('s1');
-    keys.forward();
-    expect(selectedAgent()).toBe('s1');
+    await gesture(daemon, () => {
+      daemon.arrangement.show('desktop-s2', 'pane-s2');
+      daemon.emit(daemon.arrangement.changed());
+    });
 
-    keys.back();
     expect(selectedAgent()).toBe('s2');
+    expect(shows(daemon)).toEqual(['session:s1']);
   });
+});
 
-  it('steps over a closed agent when going back through history', async () => {
-    const view = await renderAgents({ s1: {}, s2: {}, s3: {} }, {});
-    open('s1');
-    open('s2');
-    open('s3');
-
-    view.daemon.emit({ event: 'session_unregistered', session: queueSession('s2', 10) });
-    await view.daemon.idle();
-    keys.back();
-
-    expect(selectedAgent()).toBe('s1');
-  });
-
+describe('queue', () => {
   const OWED = { turn_owed: true };
   const SETTLED = { turn_owed: false };
   const SNOOZED = { turn_owed: false, turn_snoozed_until: LATER };
+
+  async function workTheQueueDownToHome() {
+    const view = await renderAgents({ s1: OWED, s2: SETTLED });
+    await open(view.daemon, 's1');
+    await view.update({ s1: SETTLED, s2: SETTLED });
+    expect(isHome()).toBe(true);
+    return view;
+  }
 
   it.each<[string, Turns, string, Turns, string | null]>([
     ['moves on to the next owed turn', { s1: OWED, s2: OWED, s3: OWED }, 's1', { s1: SETTLED, s2: OWED, s3: OWED }, 's2'],
@@ -316,244 +354,376 @@ describe('agent navigation', () => {
     ['stays on an agent that left the queue for the crew', { s1: OWED, s2: OWED }, 's1', { s1: { turn_owed: false, crew_member: 'fern' }, s2: OWED }, 's1'],
   ])('%s', async (_, turns, watched, update, landing) => {
     const view = await renderAgents(turns);
-    open(watched);
+    await open(view.daemon, watched);
 
-    view.update(update);
+    await view.update(update);
 
     if (landing) expect(selectedAgent()).toBe(landing);
     else expect(isHome()).toBe(true);
   });
 
-  it('leaves history and keyboard focus consistent when it moves on', async () => {
-    const view = await renderAgents({ s1: OWED, s2: OWED });
-    open('s1');
-    await view.daemon.idle();
+  it('moves on only from the active leaf, not from a tile beside the agent whose turn closed', async () => {
+    const { daemon } = await renderApp({ initialState: {
+      sessions: [queueSession('s1', 9, OWED), queueSession('s2', 10, OWED)],
+      profiles: [defaultProfile('d1')],
+      desktops: [agentBesideNotes('s1'), soloDesktop('s2')],
+      settings: { queue_mode_enabled: 'true' },
+    } });
+    await gesture(daemon, () => pressShortcut('desktop.select1'));
+    await gesture(daemon, () => fireEvent.mouseDown(tileEl()));
 
-    view.update({ s1: SETTLED, s2: OWED });
-    await settleFocus(view.daemon);
-    expect(selectedAgent()).toBe('s2');
-    expect(focusedPane()).toBe('pane-s2');
+    await gesture(daemon, () => daemon.emit({ event: 'sessions_updated', sessions: [queueSession('s1', 9, SETTLED), queueSession('s2', 10, OWED)] }));
 
-    keys.back();
-    await view.daemon.idle();
-    expect(selectedAgent()).toBe('s1');
+    expect(shownLeaf()).toBe('tile-notes');
+    expect(shows(daemon)).toEqual(['leaf:d1/tile-notes']);
   });
 
   it('keeps a settled agent the user chose while other turns are owed', async () => {
     const view = await renderAgents({ s1: SETTLED, s2: OWED });
-    open('s1');
+    await open(view.daemon, 's1');
 
-    view.update({ s1: SETTLED, s2: OWED });
+    await view.update({ s1: SETTLED, s2: OWED });
 
     expect(selectedAgent()).toBe('s1');
   });
 
-  it.each([
-    ['⌘J', () => press('j')],
-  ])('jumps with %s to the turn owed longest, not the first row', async (_, jump) => {
-    const view = await renderAgents({ s1: { ...OWED, turn_opened_at: '2026-08-03T11:00:00Z' }, s2: { ...OWED, turn_opened_at: '2026-08-03T09:00:00Z' } });
+  it('takes the user to the next turn that opens after the queue ran dry', async () => {
+    const view = await workTheQueueDownToHome();
 
-    jump();
-    await view.daemon.idle();
+    await view.update({ s1: SETTLED, s2: OWED });
 
     expect(selectedAgent()).toBe('s2');
   });
 
-  it('stays home on ⌘J when no turn is owed', async () => {
-    const view = await renderAgents({ s1: SETTLED, s2: SETTLED });
+  it('hands over the oldest owed turn when several opened while home waited', async () => {
+    const view = await workTheQueueDownToHome();
 
-    press('j');
-    await view.daemon.idle();
+    await view.update({ s1: OWED, s2: OWED });
+
+    expect(selectedAgent()).toBe('s1');
+  });
+
+  it('leaves the user alone at a home they walked to', async () => {
+    const view = await renderAgents({ s1: OWED, s2: SETTLED });
+    await open(view.daemon, 's1');
+    await gesture(view.daemon, keys.home);
+
+    await view.update({ s1: OWED, s2: OWED });
 
     expect(isHome()).toBe(true);
+    expect(shows(view.daemon)).toEqual(['session:s1']);
+  });
+
+  it('ends the wait when the user leaves home, however they come back', async () => {
+    const view = await workTheQueueDownToHome();
+    await gesture(view.daemon, keys.grid);
+    await gesture(view.daemon, keys.grid);
+
+    await view.update({ s1: SETTLED, s2: OWED });
+
+    expect(shows(view.daemon)).toEqual(['session:s1']);
   });
 
   it('takes the user to the next turn after they ask to follow from an all-settled home', async () => {
     const view = await renderAgents({ s1: SETTLED, s2: SETTLED });
     fireEvent.click(within(screen.getByTestId('follow-next-turn')).getByRole('checkbox'));
 
-    view.update({ s1: SETTLED, s2: OWED });
+    await view.update({ s1: SETTLED, s2: OWED });
 
     expect(selectedAgent()).toBe('s2');
   });
 
   it.each([
-    ['opening a tile-only desktop', () => pressShortcut('desktop.select9')],
-    ['going back through history', () => keys.back()],
+    ['opening a desktop of tiles', (daemon: ScriptedDaemon) => gesture(daemon, () => pressShortcut('desktop.select9'))],
+    ['going back through history', (daemon: ScriptedDaemon) => gesture(daemon, keys.back)],
   ])('stops waiting for the next turn after %s', async (_, navigate) => {
     const view = await renderAgents({ s1: OWED, s2: SETTLED });
     view.daemon.arrange((desktops) => [...desktops, notesDesktop()]);
-    open('s1');
-    view.update({ s1: SETTLED, s2: SETTLED });
+    await open(view.daemon, 's1');
+    await view.update({ s1: SETTLED, s2: SETTLED });
     expect(isHome()).toBe(true);
 
-    navigate();
-    await view.daemon.idle();
-    const settledOn = selectedAgent();
-    view.update({ s1: SETTLED, s2: OWED });
+    await navigate(view.daemon);
+    const settledOn = shownLeaf();
+    await view.update({ s1: SETTLED, s2: OWED });
 
-    expect(selectedAgent()).toBe(settledOn);
+    expect(shownLeaf()).toBe(settledOn);
   });
 
-  it('keeps a tile-only desktop open when another session closes', async () => {
+  it.each([['⌘J', () => press('j')]])('jumps with %s to the turn owed longest, not the first row', async (_, jump) => {
+    const view = await renderAgents({ s1: { ...OWED, turn_opened_at: '2026-08-03T11:00:00Z' }, s2: { ...OWED, turn_opened_at: '2026-08-03T09:00:00Z' } });
+
+    await gesture(view.daemon, jump);
+
+    expect(shows(view.daemon)).toEqual(['session:s2']);
+    expect(selectedAgent()).toBe('s2');
+  });
+
+  it('stays home on ⌘J when no turn is owed', async () => {
     const view = await renderAgents({ s1: SETTLED, s2: SETTLED });
-    view.daemon.arrange((desktops) => [...desktops, notesDesktop()]);
-    pressShortcut('desktop.select9');
-    await view.daemon.idle();
 
-    view.daemon.emit({ event: 'session_unregistered', session: queueSession('s2', 10) });
-    await view.daemon.idle();
+    await gesture(view.daemon, () => press('j'));
 
-    expect(isHome()).toBe(false);
-    expect(document.querySelector('[data-pane-id="tile-notes"]')).not.toBeNull();
-  });
-
-  it('keeps a tile agent when the requested agent closes before focus changes', async () => {
-    const { daemon } = await renderApp({ initialState: {
-      sessions: [agent('s1'), agent('s2')],
-      profiles: [defaultProfile('d1')],
-      desktops: [notesWithAgents(['s1', 's2'])],
-    } });
-    daemon.on('desktop_set_active_pane', () => undefined);
-
-    open('s2');
-    await daemon.received('desktop_set_active_pane', (command) => command.pane_id === 'pane-s2');
-    daemon.emit({ event: 'session_unregistered', session: agent('s2') });
-    daemon.arrange((desktops) => [{ ...notesWithAgents(['s1']), revision: desktops[0].revision + 1 }]);
-    await daemon.idle();
-
-    expect(document.querySelector('[data-pane-id="tile-notes"]')).not.toBeNull();
-    expect(selectedAgent()).toBe('s1');
-  });
-
-  it('updates tile context when a pending agent closes after the old context moves away', async () => {
-    const { daemon } = await renderApp({ initialState: {
-      sessions: [agent('s1'), agent('s2'), daemonSession('s4')],
-      profiles: [defaultProfile('d1')],
-      desktops: [notesWithAgents(['s1', 's2']), emptyDesktop('d2')],
-    } });
-    daemon.on('desktop_place_session', () => undefined);
-
-    pressShortcut('desktop.select1');
-    await daemon.idle();
-    expect(selectedAgent()).toBe('s1');
-
-    open('s4');
-    await daemon.received('desktop_place_session', (command) => command.session_id === 's4');
-    daemon.arrange((desktops) => [
-      { ...notesWithAgents(['s2']), revision: desktops[0].revision + 1 },
-      soloDesktop('s1', { id: 'd2', revision: desktops[1].revision + 1 }),
-    ]);
-    await daemon.idle();
-    expect(selectedAgent()).toBe('s1');
-    daemon.emit({ event: 'session_unregistered', session: daemonSession('s4') });
-    await daemon.idle();
-
-    expect(document.querySelector('[data-pane-id="tile-notes"]')).not.toBeNull();
-    expect(selectedAgent()).toBe('s2');
-  });
-
-  it.each([
-    ['grid', () => keys.grid()],
-    ['back', () => keys.back()],
-  ])('drops a deep-linked selection that is still waiting for its pane after %s', async (_, navigate) => {
-    const { daemon } = await renderQueue({ laidOut: ['s1'] });
-    open('s1');
-
-    deepLinkTo('s2');
-    navigate();
-    layOut(daemon, 's2');
-
-    expect(selectedAgent()).not.toBe('s2');
-  });
-
-  it('forgets a deep-linked selection once the daemon drops its session', async () => {
-    const { daemon } = await renderQueue({ laidOut: ['s1'] });
-    open('s1');
-    deepLinkTo('s2');
-
-    daemon.emit({ event: 'sessions_updated', sessions: [agent('s1')] });
-    layOut(daemon, 's2');
-    daemon.emit({ event: 'sessions_updated', sessions: [agent('s1'), agent('s2')] });
-
-    expect(selectedAgent()).toBe('s1');
-  });
-
-  it('finishes a deep-linked selection even when the queue would move elsewhere', async () => {
-    const { daemon } = await renderQueue({ owed: ['s1', 's2'], laidOut: ['s1'] });
-    open('s1');
-    deepLinkTo('s2');
-
-    daemon.emit({ event: 'sessions_updated', sessions: [agent('s1', { turn_owed: false }), agent('s2', { turn_owed: true })] });
-    layOut(daemon, 's2');
-
-    expect(selectedAgent()).toBe('s2');
-  });
-
-  it('keeps the grid through unrelated updates, and leaves it for the agent the user picks', async () => {
-    const { daemon } = await renderQueue();
-    keys.grid();
-    expect(isGrid()).toBe(true);
-
-    daemon.emit({ event: 'settings_updated', settings: { queue_mode_enabled: 'true', unrelated: 'x' } });
-    daemon.emit({ event: 'sessions_updated', sessions: [agent('s1'), agent('s2', { state: 'idle' })] });
-    expect(isGrid()).toBe(true);
-
-    await gesture(daemon, () => open('s1'));
-    expect(isGrid()).toBe(false);
-    expect(selectedAgent()).toBe('s1');
-
-    keys.home();
     expect(isHome()).toBe(true);
+    expect(shows(view.daemon)).toEqual([]);
   });
 
-  describe('keyboard focus', () => {
-    it('lands in the opened agent’s terminal once, and later updates do not pull it back', async () => {
-      const { daemon } = await renderQueue();
-      open('s2');
-      await settleFocus(daemon);
-      expect(focusedPane()).toBe('pane-s2');
+  it('leaves history and keyboard focus consistent when it moves on', async () => {
+    const view = await renderAgents({ s1: OWED, s2: OWED });
+    await open(view.daemon, 's1');
 
-      screen.getByRole('button', { name: 'Open s1' }).focus();
-      daemon.emit({ event: 'session_state_changed', session: agent('s2', { label: 'renamed' }) });
-      await settleFocus(daemon);
+    await view.update({ s1: SETTLED, s2: OWED });
+    await settleFocus(view.daemon);
+    expect(selectedAgent()).toBe('s2');
+    expect(focusedPane()).toBe('pane-s2');
 
-      expect(focusedPane()).toBeNull();
-    });
+    await gesture(view.daemon, keys.back);
+    expect(selectedAgent()).toBe('s1');
+  });
+});
 
-    it('lands only in the last of several quick selections', async () => {
-      const ids = ['s1', 's2', 's3'];
-      const { daemon } = await renderApp({
-        initialState: {
-          sessions: ids.map((id) => daemonSession(id, { state: 'idle' })),
-          desktops: ids.map((id) => soloDesktop(id)),
-        },
-      });
-      open('s1');
-      await settleFocus(daemon);
+describe('leaf history', () => {
+  it('walks back and forward through agents and tiles alike', async () => {
+    const { daemon } = await renderApp({ initialState: {
+      sessions: [daemonSession('s1'), daemonSession('s2')],
+      profiles: [defaultProfile('d1')],
+      desktops: [agentBesideNotes('s1'), soloDesktop('s2')],
+    } });
+    await open(daemon, 's1');
+    await gesture(daemon, () => fireEvent.mouseDown(tileEl()));
+    await open(daemon, 's2');
 
-      pressShortcut('session.next');
-      pressShortcut('session.next');
-      await settleFocus(daemon);
+    await gesture(daemon, keys.back);
+    expect(shownLeaf()).toBe('tile-notes');
+    await gesture(daemon, keys.back);
+    expect(selectedAgent()).toBe('s1');
+    await gesture(daemon, keys.forward);
+    expect(shownLeaf()).toBe('tile-notes');
 
-      expect(selectedAgent()).toBe('s3');
-      expect(focusedPane()).toBe('pane-s3');
-    });
-
-    it('stays out of the terminal when Home follows the selection in the same moment', async () => {
-      const { daemon } = await renderQueue();
-
-      act(() => {
-        open('s1');
-        keys.home();
-      });
-      await settleFocus(daemon);
-
-      expect(isHome()).toBe(true);
-      expect(focusedPane()).toBeNull();
-    });
+    expect(shows(daemon)).toEqual([
+      'session:s1',
+      'leaf:d1/tile-notes',
+      'session:s2',
+      'leaf:d1/tile-notes',
+      'leaf:d1/pane-s1',
+      'leaf:d1/tile-notes',
+    ]);
   });
 
+  it('resumes history from home and grid, then traverses normally in the session view', async () => {
+    const { daemon } = await renderAgents();
+    await open(daemon, 's1');
+    await open(daemon, 's2');
+    await gesture(daemon, keys.home);
+
+    await gesture(daemon, keys.back);
+    expect(selectedAgent()).toBe('s2');
+
+    await gesture(daemon, keys.grid);
+    await gesture(daemon, keys.forward);
+    expect(isGrid()).toBe(true);
+
+    await gesture(daemon, keys.back);
+    expect(selectedAgent()).toBe('s2');
+    expect(isGrid()).toBe(false);
+
+    await gesture(daemon, keys.back);
+    expect(selectedAgent()).toBe('s1');
+    await gesture(daemon, keys.forward);
+    expect(selectedAgent()).toBe('s2');
+    await gesture(daemon, keys.forward);
+    expect(selectedAgent()).toBe('s2');
+  });
+
+  it('forgets the leaves ahead once the user opens another after going back', async () => {
+    const { daemon } = await renderAgents({ s1: {}, s2: {}, s3: {} }, { settings: {} });
+    await open(daemon, 's1');
+    await open(daemon, 's2');
+    await open(daemon, 's3');
+
+    await gesture(daemon, keys.back);
+    await open(daemon, 's1');
+    await gesture(daemon, keys.forward);
+    expect(selectedAgent()).toBe('s1');
+
+    await gesture(daemon, keys.back);
+    expect(selectedAgent()).toBe('s2');
+  });
+
+  it('steps over a leaf that is gone when going back', async () => {
+    const view = await renderAgents({ s1: {}, s2: {}, s3: {} }, { settings: {} });
+    await open(view.daemon, 's1');
+    await open(view.daemon, 's2');
+    await open(view.daemon, 's3');
+
+    await gesture(view.daemon, () => {
+      view.daemon.emit({ event: 'session_unregistered', session: queueSession('s2', 10) });
+      view.daemon.arrange((desktops) => desktops.filter((desktop) => desktop.id !== 'desktop-s2'));
+    });
+    await gesture(view.daemon, keys.back);
+
+    expect(selectedAgent()).toBe('s1');
+  });
+
+  it('keeps the cursor where it was when the daemon refuses a step back', async () => {
+    const { daemon } = await renderAgents();
+    await open(daemon, 's1');
+    await open(daemon, 's2');
+    const hold = holdShows(daemon);
+
+    await gesture(daemon, keys.back);
+    await hold.refuse();
+    expect(selectedAgent()).toBe('s2');
+
+    await gesture(daemon, keys.back);
+    await hold.release();
+    expect(selectedAgent()).toBe('s1');
+  });
+
+  it('follows a leaf the daemon moved and renamed, not the leaf that kept its old id', async () => {
+    const { daemon } = await renderApp({ initialState: {
+      sessions: [daemonSession('s1'), daemonSession('s2')],
+      profiles: [defaultProfile('d1')],
+      desktops: [agentBesideNotes('s1'), soloDesktop('s2'), notesDesktop('d2')],
+    } });
+    await gesture(daemon, () => pressShortcut('desktop.select1'));
+    await gesture(daemon, () => fireEvent.mouseDown(tileEl()));
+    await open(daemon, 's2');
+
+    await gesture(daemon, () => {
+      daemon.arrangement.desktops = daemon.arrangement.desktops.map((desktop) => {
+        if (desktop.id === 'd1') return soloDesktop('s1', { id: 'd1', shortcut_slot: 1 });
+        if (desktop.id !== 'd2') return desktop;
+        return daemonDesktop('d2', {
+          root: dockTiles({ type: 'tile', tile_id: 'tile-notes', tile_kind: 'markdown', tile_params: '/tmp/notes.md' }, [
+            { tile_id: 'tile-notes-moved', tile_kind: 'markdown', tile_params: '/tmp/notes.md' },
+          ]),
+        }, { name: 'd2', active_pane_id: 'tile-notes-moved' });
+      });
+      daemon.emit({
+        event: 'profile_arrangement_changed',
+        profile: daemon.arrangement.profile,
+        desktops: daemon.arrangement.desktops,
+        moved_leaf: { from_desktop_id: 'd1', from_leaf_id: 'tile-notes', to_desktop_id: 'd2', to_leaf_id: 'tile-notes-moved' },
+      });
+    });
+    await gesture(daemon, keys.back);
+
+    expect(shows(daemon).pop()).toBe('leaf:d2/tile-notes-moved');
+  });
+
+  it('follows a leaf moved to another desktop when its id is still unique', async () => {
+    const { daemon } = await renderAgents();
+    await open(daemon, 's1');
+    await open(daemon, 's2');
+
+    await gesture(daemon, () => daemon.arrange((desktops) => desktops.map((desktop) =>
+      desktop.id === 'desktop-s1' ? soloDesktop('s1', { id: 'desktop-elsewhere' }) : desktop)));
+    await gesture(daemon, keys.back);
+
+    expect(shows(daemon).pop()).toBe('leaf:desktop-elsewhere/pane-s1');
+    expect(selectedAgent()).toBe('s1');
+  });
+
+  it('keeps a profile’s history while the user is on another profile', async () => {
+    const { daemon } = await renderAgents();
+    await open(daemon, 's1');
+    await open(daemon, 's2');
+    const home = daemon.arrangement.profile;
+
+    await gesture(daemon, () => daemon.emit({
+      event: 'profile_arrangement_changed',
+      profile: { id: 'profile-other', name: 'Other', current_desktop_id: 'desktop-other', revision: 1 },
+      desktops: [soloDesktop('s9', { id: 'desktop-other', profile_id: 'profile-other' })],
+    }));
+    await gesture(daemon, () => daemon.emit({ event: 'profile_arrangement_changed', profile: home, desktops: daemon.arrangement.desktops }));
+    await gesture(daemon, keys.back);
+
+    expect(shows(daemon).pop()).toBe('leaf:desktop-s1/pane-s1');
+  });
+});
+
+describe('keyboard focus', () => {
+  it('lands in the opened agent’s terminal once, and later updates do not pull it back', async () => {
+    const { daemon } = await renderAgents();
+    await open(daemon, 's2');
+    await settleFocus(daemon);
+    expect(focusedPane()).toBe('pane-s2');
+
+    screen.getByRole('button', { name: 'Open s1' }).focus();
+    daemon.emit({ event: 'session_state_changed', session: queueSession('s2', 10, { label: 'renamed' }) });
+    await settleFocus(daemon);
+
+    expect(focusedPane()).toBeNull();
+  });
+
+  it('lands only in the last of several quick selections', async () => {
+    const { daemon } = await renderAgents({ s1: { state: 'idle' }, s2: { state: 'idle' }, s3: { state: 'idle' } }, { settings: {} });
+    await open(daemon, 's1');
+    await settleFocus(daemon);
+
+    pressShortcut('session.next');
+    pressShortcut('session.next');
+    await settleFocus(daemon);
+
+    expect(selectedAgent()).toBe('s3');
+    expect(focusedPane()).toBe('pane-s3');
+  });
+
+  it('stays out of the terminal when Home follows the selection in the same moment', async () => {
+    const { daemon } = await renderAgents();
+
+    act(() => {
+      clickOpen('s1');
+      keys.home();
+    });
+    await settleFocus(daemon);
+
+    expect(isHome()).toBe(true);
+    expect(focusedPane()).toBeNull();
+  });
+
+  it('puts the keyboard in a tile the user reached through history', async () => {
+    const { daemon } = await renderApp({ initialState: {
+      sessions: [daemonSession('s1'), daemonSession('s2')],
+      profiles: [defaultProfile('d1')],
+      desktops: [agentBesideNotes('s1'), soloDesktop('s2')],
+    } });
+    await gesture(daemon, () => pressShortcut('desktop.select1'));
+    await gesture(daemon, () => fireEvent.mouseDown(tileEl()));
+    await open(daemon, 's2');
+
+    await gesture(daemon, keys.back);
+    await settleFocus(daemon);
+
+    expect(focusedPane()).toBe('tile-notes');
+  });
+
+  it('moves the keyboard with a remote switch only when it was in the outgoing leaf', async () => {
+    const { daemon } = await renderAgents();
+    await open(daemon, 's1');
+    await settleFocus(daemon);
+    expect(focusedPane()).toBe('pane-s1');
+
+    await gesture(daemon, () => {
+      daemon.arrangement.show('desktop-s2', 'pane-s2');
+      daemon.emit(daemon.arrangement.changed());
+    });
+    await settleFocus(daemon);
+    expect(focusedPane()).toBe('pane-s2');
+
+    screen.getByRole('button', { name: 'Open s1' }).focus();
+    await gesture(daemon, () => {
+      daemon.arrangement.show('desktop-s1', 'pane-s1');
+      daemon.emit(daemon.arrangement.changed());
+    });
+    await settleFocus(daemon);
+    expect(selectedAgent()).toBe('s1');
+    expect(focusedPane()).toBeNull();
+  });
+});
+
+describe('attention', () => {
   it('asks for attention from sessions waiting on the user or in an unknown state, and not from the others', async () => {
     const states = ['waiting_input', 'pending_approval', 'unknown', 'stopped', 'waiting', 'working', 'idle', 'launching', 'scheduled', 'recoverable'] as DaemonSession['state'][];
     const { daemon } = await renderApp({

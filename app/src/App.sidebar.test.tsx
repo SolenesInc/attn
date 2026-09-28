@@ -278,7 +278,7 @@ describe('App sidebar', () => {
       expect(screen.getByTestId('sidebar-session-s1').compareDocumentPosition(tile) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
 
       await gesture(daemon, () => fireEvent.click(within(tile).getByRole('button', { name: 'Open www.example.test' })));
-      expect(daemon.sentOf('desktop_set_current').slice(-1)).toEqual([expect.objectContaining({ desktop_id: 'ws' })]);
+      expect(daemon.sentOf('desktop_show_leaf').slice(-1)).toEqual([expect.objectContaining({ desktop_id: 'ws', leaf_id: 'tile-browser' })]);
 
       await gesture(daemon, () => fireEvent.click(within(tile).getByRole('button', { name: 'Reload www.example.test' })));
       expect(vi.mocked(invoke)).toHaveBeenCalledWith('browser_host_control', expect.objectContaining({ label: 'browser-ws-tile-browser', action: 'reload' }));

@@ -66,7 +66,8 @@ const EMPTY_GARDEN_SEEDS: Seed[] = [];
 
 function focusIsFree(desktop: HTMLElement | null): boolean {
   const active = document.activeElement;
-  return !active || active === document.body || Boolean(desktop?.contains(active));
+  if (!active || active === document.body) return true;
+  return Boolean(desktop?.contains(active)) && !active.closest('.desktop-dock-tile-body');
 }
 
 const EMPTY_DELEGATION_SESSIONS: NonNullable<SessionTerminalDesktopProps['delegationSessions']> =
@@ -483,10 +484,15 @@ export function useDesktopController(
     return true;
   }, [agentPaneById, desktopId, focusTile, runtime, tileLeafById]);
 
+  const focusShownLeafRef = useRef(focusShownLeaf);
+  useLayoutEffect(() => {
+    focusShownLeafRef.current = focusShownLeaf;
+  }, [focusShownLeaf]);
+
   useEffect(() => {
     if (!sessionVisible || !focusIsFree(panesContainerRef.current)) return;
-    focusShownLeaf(activeLeafIdRef.current);
-  }, [focusRequestToken, focusShownLeaf, paneReadyFocusRequest, sessionVisible]);
+    focusShownLeafRef.current(activeLeafIdRef.current);
+  }, [focusRequestToken, paneReadyFocusRequest, sessionVisible]);
 
   useEffect(() => {
     if (!focusClaim || !sessionVisible || focusClaim.leafId !== activeLeafId) return;

@@ -85,7 +85,7 @@ async function composeHandover(daemon: ScriptedDaemon) {
 }
 
 function selectedSessions(daemon: ScriptedDaemon) {
-  return daemon.sentOf('desktop_set_current').map((command) => command.desktop_id.replace(/^desktop-/, ''));
+  return daemon.sentOf('desktop_show_session').map((command) => command.session_id);
 }
 
 describe('App garden continuation', () => {
