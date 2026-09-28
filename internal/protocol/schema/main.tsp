@@ -3209,7 +3209,8 @@ model DesktopShowSessionMessage {
 // session may move itself and the sessions it dispatched; its profile's chief
 // may move any of its sessions; a request without a caller comes from the user.
 // The moved pane becomes its new desktop's active leaf only when it was its old
-// desktop's, and no profile's current desktop changes.
+// desktop's and the new one is not the current desktop; the current desktop
+// never changes.
 model DesktopMoveSessionMessage {
   cmd: "desktop_move_session";
   session_id: string;

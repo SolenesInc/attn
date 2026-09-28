@@ -111,8 +111,20 @@ func TestASessionMovesItselfAndItsDelegatesBetweenDesktops(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	move("", loose.SessionID, "1")
-	arrangement("the user placing an unplaced session", func(d map[string]protocol.Desktop) bool { return holding(d[home], loose.SessionID) })
+	move("", loose.SessionID, "3")
+	arrangement("the user placing an unplaced session", func(d map[string]protocol.Desktop) bool { return holding(d[web.ID], loose.SessionID) })
+
+	residentSession, _, resident := w.RequestSpawn(app, fakeagent.Codex, cwd, func(m *protocol.SpawnSessionMessage) {
+		m.Label = protocol.Ptr("resident")
+		m.Placement = &protocol.SessionPlacement{DesktopID: protocol.Ptr(home)}
+	})
+	move(s.ID, s.ID, "1")
+	_, desktops = arrangement("the shown pane of a background desktop moving onto the one the user sees", func(d map[string]protocol.Desktop) bool {
+		return holding(d[home], s.ID) && holding(d[home], residentSession.ID)
+	})
+	if desktops[home].ActivePaneID != resident {
+		t.Errorf("a pane arriving on the desktop the user sees took its active pane %q; want %s, unchanged", desktops[home].ActivePaneID, resident)
+	}
 
 	_, err = cli.MoveSessionToDesktop(s.ID, s.ID, "nope")
 	if err == nil || !strings.Contains(err.Error(), `unknown desktop "nope"`) || !strings.Contains(err.Error(), "2 Ops") {

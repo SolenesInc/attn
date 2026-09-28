@@ -1413,8 +1413,8 @@ type SessionDesktopMove struct {
 	Placed     bool
 }
 
-// MoveSessionToDesktop puts a session's pane beside another desktop's active
-// leaf; that leaf follows only a moved active pane or fills an empty desktop.
+// MoveSessionToDesktop puts a session's pane beside another desktop's active leaf;
+// only a moved active pane, onto a desktop not on screen, takes that leaf.
 func (s *Store) MoveSessionToDesktop(sessionID, targetDesktopID, title string) (SessionDesktopMove, error) {
 	var result SessionDesktopMove
 	err := s.profilesTx(func(tx *sql.Tx, now string) error {
@@ -1429,7 +1429,8 @@ func (s *Store) MoveSessionToDesktop(sessionID, targetDesktopID, title string) (
 		if target.ProfileID != profileID {
 			return profiles.Errorf(profiles.CodeCrossProfile, "desktop %s belongs to profile %s, and session %s to profile %s; a move between desktops cannot change membership", target.ID, target.ProfileID, sessionID, profileID)
 		}
-		if _, err := loadLiveProfile(tx, profileID); err != nil {
+		profile, err := loadLiveProfile(tx, profileID)
+		if err != nil {
 			return err
 		}
 		var sourceID, paneID string
@@ -1459,7 +1460,7 @@ func (s *Store) MoveSessionToDesktop(sessionID, targetDesktopID, title string) (
 		}
 		move, err := moveLeafBetweenDesktops(tx, now, source, target, LeafMoveRequest{
 			LeafID: paneID, AnchorID: target.ActivePaneID, Direction: layouttree.DirectionVertical,
-			Activate: source.ActivePaneID == paneID,
+			Activate: source.ActivePaneID == paneID && target.ID != profile.CurrentDesktopID,
 		})
 		result = SessionDesktopMove{Move: move, FromLeafID: paneID}
 		return err
