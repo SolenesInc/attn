@@ -1,6 +1,7 @@
 package store
 
 import (
+	"context"
 	"database/sql"
 	"fmt"
 	"os"
@@ -22,7 +23,7 @@ const premigrationNamePrefix = "attn-premigration-"
 
 const premigrationTimestampLen = len(backupNameLayout)
 
-func (s *Store) BackupNow(dir string) (string, error) {
+func (s *Store) BackupNow(ctx context.Context, dir string) (string, error) {
 	if s == nil || s.db == nil {
 		return "", fmt.Errorf("backup: store has no open database")
 	}
@@ -42,7 +43,8 @@ func (s *Store) BackupNow(dir string) (string, error) {
 		return "", fmt.Errorf("backup: stat target %s: %w", target, err)
 	}
 
-	if _, err := s.db.Exec("VACUUM INTO ?", target); err != nil {
+	if _, err := s.db.ExecContext(ctx, "VACUUM INTO ?", target); err != nil {
+		_ = os.Remove(target)
 		return "", fmt.Errorf("backup: vacuum into %s: %w", target, err)
 	}
 

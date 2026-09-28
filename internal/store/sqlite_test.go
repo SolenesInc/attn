@@ -1620,8 +1620,12 @@ func TestMigration134DropsTheWorkspaceContextAndKeeperState(t *testing.T) {
 	if settings != 0 {
 		t.Fatalf("keeper settings remaining = %d, want 0", settings)
 	}
-	if got := s.GetSetting("notebook.root"); got != "/tmp/notebook" {
-		t.Fatalf("notebook.root = %q, want it untouched", got)
+	var notebookRoot string
+	if err := s.db.QueryRow(`SELECT value FROM settings WHERE key = 'notebook.root'`).Scan(&notebookRoot); err != nil {
+		t.Fatalf("read notebook.root: %v", err)
+	}
+	if notebookRoot != "/tmp/notebook" {
+		t.Fatalf("notebook.root = %q, want it untouched", notebookRoot)
 	}
 	var kinds []string
 	rows, err := s.db.Query(`SELECT kind FROM jobs ORDER BY id`)
