@@ -1,0 +1,50 @@
+.session-lead {
+  position: relative;
+  display: inline-grid;
+  place-items: center;
+  width: 14px;
+  height: 14px;
+  flex: none;
+}
+
+.session-lead .sidebar-harness-icon {
+  width: 14px;
+  height: 14px;
+  margin: 0;
+  color: currentColor;
+}
+
+.session-lead .sidebar-harness-icon svg {
+  width: 14px;
+  height: 14px;
+}
+
+.session-lead > .state-indicator {
+  display: none;
+}
+
+.session-lead > .state-indicator--pending-approval,
+.session-lead > .state-indicator--scheduled {
+  animation: none;
+}
+
+.sidebar--hide-harness-logos .session-lead > .state-indicator {
+  display: inline-flex;
+}
+
+.session-lead[data-state='idle'],
+.session-lead[data-state='recoverable'] { color: #6b7280; }
+.session-lead[data-state='working'] { color: #22c55e; }
+.session-lead[data-state='waiting_input'] { color: #f59e0b; }
+.session-lead[data-state='pending_approval'] { color: #eab308; animation: flash-pending 1s ease-in-out infinite; }
+.session-lead[data-state='scheduled'] { color: #0ea5e9; animation: pulse-scheduled 3.2s ease-in-out infinite; }
+.session-lead[data-state='unknown'] { color: #a855f7; }
+
+.session-lead-emoji { font-size: 13px; line-height: 1; }
+.sidebar--hide-harness-logos .session-lead-emoji { display: none; }
+
+.session-lead-badge {
+  position: absolute;
+  right: -4px;
+  bottom: -4px;
+}

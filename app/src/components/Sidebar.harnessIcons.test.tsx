@@ -3,6 +3,7 @@ import { describe, expect, it, vi } from 'vitest';
 import { Sidebar } from './Sidebar';
 import { desktopGroups } from '../test/desktops';
 import { buildQueueBands } from '../utils/queueBands';
+import { BuiltinDelegationRole, type SessionDelegationRole } from '../types/generated';
 
 const baseProps = {
   selectedId: null,
@@ -19,7 +20,16 @@ const baseProps = {
   onToggleCollapse: vi.fn(),
 };
 
-const sessions = [
+const sessions: Array<{
+  id: string;
+  agent?: string;
+  label: string;
+  state: 'idle' | 'working' | 'unknown';
+  desktopId: string;
+  state_reason?: string;
+  isWorktree?: boolean;
+  delegation_role?: SessionDelegationRole;
+}> = [
   { id: 'claude', agent: 'claude', label: 'Investigate logs' },
   { id: 'codex', agent: 'codex', label: 'Implement sidebar logos' },
   { id: 'pi', agent: 'pi', label: 'Check rendering' },
@@ -53,10 +63,42 @@ describe('sidebar harness identity', () => {
       const row = screen.getByTestId(`sidebar-session-${id}`);
       const icon = within(row).getByRole('img', { name });
       expect(icon).toHaveAttribute('title', name);
-      expect(row.querySelector('.state-indicator')).toBeInTheDocument();
+      expect(row.querySelector('.session-lead')).toHaveAttribute('data-state', 'idle');
       fireEvent.click(within(row).getByRole('button', { name: /^Open / }));
       expect(onSelectSession).toHaveBeenLastCalledWith(id);
     }
+  });
+
+  it('shows state in the lead, keeps delegation visible, and omits the worktree glyph', () => {
+    const data = sidebarData();
+    data.desktops[0].sessions[0].state = 'working';
+    data.desktops[0].sessions[0].isWorktree = true;
+    data.desktops[0].sessions[0].delegation_role = { name: 'Builder', builtin: BuiltinDelegationRole.Builder };
+    render(<Sidebar {...baseProps} {...data} />);
+
+    const row = screen.getByTestId('sidebar-session-claude');
+    expect(row.querySelector('.session-lead')).toHaveAttribute('data-state', 'working');
+    expect(within(row).getByRole('img', { name: 'Claude' })).toBeInTheDocument();
+    expect(within(row).getByTestId('delegation-chain-trigger-claude')).toBeInTheDocument();
+    expect(row).not.toHaveTextContent('⎇');
+  });
+
+  it('shows a state dot in the lead with harness logos off', () => {
+    render(<Sidebar {...baseProps} {...sidebarData()} harnessLogosEnabled={false} />);
+    const row = screen.getByTestId('sidebar-session-claude');
+    expect(row.querySelector('.session-lead .state-indicator')).toBeInTheDocument();
+    expect(row.querySelector('.session-lead')).toHaveAttribute('data-state', 'idle');
+  });
+
+  it('explains an unknown state when hovering the visible logo', () => {
+    const data = sidebarData();
+    data.desktops[0].sessions[0].state = 'unknown';
+    data.desktops[0].sessions[0].state_reason = 'stuck';
+    render(<Sidebar {...baseProps} {...data} />);
+    const row = screen.getByTestId('sidebar-session-claude');
+    expect(within(row).getByRole('img', { name: 'Claude' })).toHaveAttribute(
+      'title', 'Claude · Stuck — the agent has stopped reporting anything at all',
+    );
   });
 
   it('keeps harness identity when switching between desktop and queue arrangements', () => {

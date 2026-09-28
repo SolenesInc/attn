@@ -5,7 +5,7 @@ import { CodexIcon } from './icons/CodexIcon';
 import { CopilotIcon } from './icons/CopilotIcon';
 import { PiIcon } from './icons/PiIcon';
 
-export function HarnessIcon({ agent }: { agent?: string }) {
+export function HarnessIcon({ agent, title }: { agent?: string; title?: string }) {
   const name = normalizeSessionAgent(agent, '');
   const label = harnessLabel(agent);
   let icon;
@@ -35,7 +35,7 @@ export function HarnessIcon({ agent }: { agent?: string }) {
       );
   }
   return (
-    <span className="sidebar-harness-icon" role="img" aria-label={label} title={label}>
+    <span className="sidebar-harness-icon" role="img" aria-label={label} title={title ?? label}>
       {icon}
     </span>
   );
