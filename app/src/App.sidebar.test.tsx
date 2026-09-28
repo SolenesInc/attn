@@ -259,9 +259,9 @@ describe('App sidebar', () => {
       expect(screen.getByTestId('sidebar-session-a1')).not.toHaveTextContent('⌘1');
     });
 
-    it('lists a tile-only desktop without a session state', async () => {
-      const tileOnly = daemonDesktop('docs', { root: { type: 'tile', tile_id: 'tile-notes', tile_kind: 'markdown', tile_params: '/repo/docs/notes.md' } }, { name: 'docs' });
-      await launch({ sessions: [daemonSession('a1')], desktops: [soloDesktop('a1'), tileOnly] });
+    it('lists a desktop without agents and without a session state', async () => {
+      const docs = daemonDesktop('docs', { root: { type: 'tile', tile_id: 'tile-notes', tile_kind: 'markdown', tile_params: '/repo/docs/notes.md' } }, { name: 'docs' });
+      await launch({ sessions: [daemonSession('a1')], desktops: [soloDesktop('a1'), docs] });
 
       expect(within(desktopGroup('docs')).getByTestId('desktop-neutral-indicator')).toBeInTheDocument();
       expect(desktopGroup('docs').querySelector('.state-indicator')).toBeNull();

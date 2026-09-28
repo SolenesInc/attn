@@ -29,7 +29,7 @@ export interface SessionNavigationActions {
   focusDelivered: (id: number) => void;
   transferFocus: (leaf: ActiveLeaf) => void;
   leafMoved: (profileId: string, moved: LeafMoved) => void;
-  navigateAgentHistory: (direction: LeafHistoryDirection, resumeCurrent?: boolean) => boolean;
+  navigateLeafHistory: (direction: LeafHistoryDirection, resumeCurrent?: boolean) => boolean;
   setView: (view: StateUpdate<AppView>) => void;
   setFollowNextTurn: (follow: StateUpdate<boolean>) => void;
   goToDashboard: () => void;
@@ -86,7 +86,7 @@ export function createSessionNavigationActions(
     focusDelivered: (id) => set((state) => focusDelivered(state, id)),
     transferFocus: (leaf) => set((state) => claimFocus(state, leaf)),
     leafMoved: (profileId, moved) => set((state) => leafMoved(state, profileId, moved)),
-    navigateAgentHistory: (direction, resumeCurrent = false) => {
+    navigateLeafHistory: (direction, resumeCurrent = false) => {
       set((state) => navigateHistory(state, arrangementOf(state), direction, resumeCurrent));
       return get().pendingSelection !== null;
     },

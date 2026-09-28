@@ -63,8 +63,8 @@ export function useAppNavigation({
     selectAgent,
     selectLeaf,
     cancelPendingSelection,
-    back: navigateAgentHistoryBack,
-    forward: navigateAgentHistoryForward,
+    back: navigateLeafHistoryBack,
+    forward: navigateLeafHistoryForward,
   } = useAgentNavigation();
 
   const handleSelectSession = selectAgent;
@@ -209,8 +209,8 @@ export function useAppNavigation({
     selectAgent,
     selectLeaf,
     cancelPendingSelection,
-    navigateAgentHistoryBack,
-    navigateAgentHistoryForward,
+    navigateLeafHistoryBack,
+    navigateLeafHistoryForward,
     handleSelectSession,
     selectCreatedSession,
     goToDashboard,

@@ -44,7 +44,10 @@
 - Pane: an agent's place on a desktop. An agent has at most one pane.
 - Unplaced agent: an agent of a profile with no pane. Crew wakes, automation runs and reopened sessions start unplaced; the queue (or, for runs, the automations section) surfaces them and opening one places it.
 - Current desktop: the desktop a profile shows. Every client on that profile shares it.
-- Active pane: the pane or tile a desktop has selected. Every client shares it. With a tile selected, no agent is current; opens and placements land beside that tile.
+- Active leaf (active pane on the wire): the agent pane or tile a desktop has selected. The daemon owns it and every client on the profile shares it. The app stores no current agent: the shown agent is the active leaf of the current desktop when it is an agent pane. With a tile active, agent-only actions are unavailable; opens and placements land beside that tile.
+- Show: one request that selects an agent (`desktop_show_session`) or a leaf (`desktop_show_leaf`). The daemon switches the requesting client's profile if needed, places an unplaced agent beside the active leaf, sets the active leaf and makes its desktop current, in one transaction with one broadcast.
+- View: Home, the grid or the session surface. It is local to each app window; Home and the grid leave the daemon's active leaf untouched.
+- Leaf history: the active leaves a window has shown, per profile, agents and tiles alike. ⌘[ and ⌘] walk it with a show; it follows a leaf the daemon moves and skips one that is gone. It lives only in that window.
 - Workspace migration: the one-time screen after the upgrade to profiles. Each old workspace arrives as an imported group already on a desktop; the user keeps it there, keeps it as an extra desktop, or merges it into another desktop before the app loads. The draft is daemon state shared by every client, and either client can finish it.
 - Focus mode: one pane or tile occupies the shell until the user returns to the split.
 

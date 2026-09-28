@@ -82,7 +82,6 @@ export function requestShow(
     pendingSelection: { id, profileId, target, historyCursor },
     focusRequest: null,
     selectionSequence: id,
-    utilityFocusRequestToken: state.utilityFocusRequestToken + 1,
   };
 }
 

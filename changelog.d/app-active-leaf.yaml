@@ -1,0 +1,4 @@
+kind: changed
+area: desktops
+change: Selecting an agent or a tile is one request to the daemon, and the app shows whatever leaf the daemon made active; a tile no longer borrows an agent, so agent actions wait for an agent, and ⌘[ ⌘] walk tiles as well as agents.
+notes: The "Tile-only desktops" sidebar setting is gone; every desktop is listed.

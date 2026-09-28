@@ -357,7 +357,7 @@ describe('desktop surface', () => {
     expect(useSessionStore.getState().view).toBe('dashboard');
   });
 
-  it('shows the focused tile again when the user comes back from Home to a tile-only desktop', async () => {
+  it('shows the focused tile again when the user comes back from Home to a desktop whose active leaf is a tile', async () => {
     render(<App />);
     await userEvent.click(await screen.findByTestId('select-d2'));
     await waitFor(() => expect(screen.getByTestId('sidebar').getAttribute('data-selected-tile')).toBe('d2:tile-readme'));

@@ -2,15 +2,15 @@ import { useCallback } from 'react';
 import { useSessionStore } from '../store/sessions';
 
 export function useAgentNavigation() {
-  const { selectAgent, selectLeaf, cancelPendingSelection, navigateAgentHistory } =
+  const { selectAgent, selectLeaf, cancelPendingSelection, navigateLeafHistory } =
     useSessionStore();
   const back = useCallback(
-    (resumeCurrent = false) => navigateAgentHistory('back', resumeCurrent),
-    [navigateAgentHistory],
+    (resumeCurrent = false) => navigateLeafHistory('back', resumeCurrent),
+    [navigateLeafHistory],
   );
   const forward = useCallback(
-    (resumeCurrent = false) => navigateAgentHistory('forward', resumeCurrent),
-    [navigateAgentHistory],
+    (resumeCurrent = false) => navigateLeafHistory('forward', resumeCurrent),
+    [navigateLeafHistory],
   );
   return {
     selectAgent,
