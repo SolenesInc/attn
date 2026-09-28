@@ -515,6 +515,26 @@ describe('queue', () => {
     expect(selectedAgent()).toBe('s2');
   });
 
+  it('does not move on while the user’s pane move waits for its answer', async () => {
+    const { daemon } = await renderApp({ initialState: {
+      sessions: [queueSession('s1', 9, OWED), queueSession('s2', 10, OWED)],
+      desktops: [soloDesktop('s1', { shortcut_slot: 5 }), soloDesktop('s2', { shortcut_slot: 6 })],
+      settings: { queue_mode_enabled: 'true' },
+    } });
+    await open(daemon, 's1');
+    const held: Array<{ request_id?: string; cmd: 'desktop_move_leaf' }> = [];
+    daemon.on('desktop_move_leaf', (command) => {
+      held.push(command);
+      return undefined;
+    });
+
+    await gesture(daemon, () => pressShortcut('desktop.send6'));
+    expect(held).toHaveLength(1);
+    await gesture(daemon, () => daemon.emit({ event: 'sessions_updated', sessions: [queueSession('s1', 9, SETTLED), queueSession('s2', 10, OWED)] }));
+
+    expect(shows(daemon)).toEqual(['session:s1']);
+  });
+
   it('moves on only from the active leaf, not from a tile beside the agent whose turn closed', async () => {
     const { daemon } = await renderApp({ initialState: {
       sessions: [queueSession('s1', 9, OWED), queueSession('s2', 10, OWED)],

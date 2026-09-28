@@ -29,7 +29,8 @@ export type IntentTarget =
   | ShowTarget
   | { kind: 'desktop'; desktopId: string }
   | { kind: 'profile'; profileId: string }
-  | { kind: 'open' };
+  | { kind: 'open' }
+  | { kind: 'answer'; requestId: string };
 
 // The user's latest gesture that changes what is shown, until an arrival shows its target.
 export interface Intent {
@@ -43,7 +44,7 @@ export interface Intent {
 }
 
 export type Arrival =
-  | { kind: 'own' }
+  | { kind: 'own'; requestId: string }
   | { kind: 'broadcast' }
   | { kind: 'scope' };
 
@@ -147,10 +148,30 @@ function commandServes(target: IntentTarget, cmd: string, body: Record<string, u
   }
 }
 
-// Rule 1: a command that can change what is shown and does not act on the current intent's target supersedes it.
-export function commandSent(state: SessionNavigationState, cmd: string, body: Record<string, unknown>): SessionNavigationState {
-  if (!state.intent || LAYOUT_ONLY_COMMANDS.has(cmd) || commandServes(state.intent.target, cmd, body)) return state;
-  return { ...state, intent: null };
+function switchTarget(cmd: string, body: Record<string, unknown>): IntentTarget | null {
+  if (cmd === 'profile_select' && typeof body.profile_id === 'string') return { kind: 'profile', profileId: body.profile_id };
+  if (cmd === 'desktop_set_current' && typeof body.desktop_id === 'string') return { kind: 'desktop', desktopId: body.desktop_id };
+  return null;
+}
+
+// Rule 1: a command that can change what is shown and does not act on the current intent's target is the new intent.
+export function commandSent(
+  state: SessionNavigationState,
+  profileId: string,
+  cmd: string,
+  body: Record<string, unknown>,
+  requestId: string,
+  focusOwner: Element | null,
+): SessionNavigationState {
+  if (LAYOUT_ONLY_COMMANDS.has(cmd) || (state.intent && commandServes(state.intent.target, cmd, body))) return state;
+  const target = switchTarget(cmd, body) ?? { kind: 'answer', requestId };
+  return beginIntent(state, target.kind === 'profile' ? target.profileId : profileId, target, focusOwner);
+}
+
+// A command intent whose result arrived without an answer has nothing left to wait for.
+export function commandSettled(state: SessionNavigationState, requestId: string): SessionNavigationState {
+  const target = state.intent?.target;
+  return target?.kind === 'answer' && target.requestId === requestId ? { ...state, intent: null } : state;
 }
 
 export function endIntent(state: SessionNavigationState): SessionNavigationState {
@@ -220,8 +241,10 @@ export function leafMoved(state: SessionNavigationState, profileId: string, move
   return withHistory(state, profileId, remapLeafHistory(historyOf(state, profileId), moved));
 }
 
-function intentShown(arrangement: Arrangement, leaf: ActiveLeaf | null, target: IntentTarget): boolean {
+function intentShown(arrangement: Arrangement, leaf: ActiveLeaf | null, target: IntentTarget, arrival: Arrival): boolean {
   switch (target.kind) {
+    case 'answer':
+      return arrival.kind === 'own' && arrival.requestId === target.requestId;
     case 'desktop':
       return arrangement.currentDesktopId === target.desktopId;
     case 'profile':
@@ -250,7 +273,7 @@ export function reconcileArrangement(
   const leaf = activeLeafOf(arrangement);
   let next = withHistory(state, arrangement.profileId, reconcileLeafHistory(historyOf(state, arrangement.profileId), arrangement.desktops));
   const intent = state.intent;
-  if (intent && intentShown(arrangement, leaf, intent.target)) {
+  if (intent && intentShown(arrangement, leaf, intent.target, arrival)) {
     const shows = intent.target.kind === 'session' || intent.target.kind === 'leaf';
     next = { ...next, intent: null, view: shows ? 'session' : next.view };
     if (intent.historyCursor !== null && intent.profileId === arrangement.profileId) {

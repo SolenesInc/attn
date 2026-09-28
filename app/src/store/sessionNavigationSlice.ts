@@ -6,6 +6,7 @@ import {
   advanceQueue,
   beginIntent,
   commandSent,
+  commandSettled,
   changeView,
   claimFocus,
   endIntent,
@@ -34,7 +35,8 @@ export interface SessionNavigationActions {
   selectAgent: (sessionId: string, focusOwner?: Element | null) => boolean;
   selectLeaf: (desktopId: string, leafId: string, focusOwner?: Element | null) => void;
   beginIntent: (target: IntentTarget) => number;
-  commandSent: (cmd: string, body: Record<string, unknown>) => void;
+  commandSent: (cmd: string, body: Record<string, unknown>, requestId: string) => number | null;
+  commandSettled: (requestId: string) => void;
   cancelIntent: () => void;
   intentFailed: (id: number) => void;
   historyLanded: (profileId: string, cursor: number, leaf: LeafRef) => void;
@@ -104,7 +106,13 @@ export function createSessionNavigationActions(
       set((state) => beginIntent(state, target.kind === 'profile' ? target.profileId : state.navigationProfileId, target, focusOwner()));
       return get().intentSequence;
     },
-    commandSent: (cmd, body) => set((state) => commandSent(state, cmd, body)),
+    commandSent: (cmd, body, requestId) => {
+      const before = get().intent;
+      set((state) => commandSent(state, state.navigationProfileId, cmd, body, requestId, focusOwner()));
+      const after = get().intent;
+      return after && after !== before ? after.id : null;
+    },
+    commandSettled: (requestId) => set((state) => commandSettled(state, requestId)),
     cancelIntent: () => set((state) => endIntent(state)),
     intentFailed: (id) => set((state) => intentFailed(state, id)),
     historyLanded: (profileId, cursor, leaf) => set((state) => historyLanded(state, profileId, cursor, leaf)),

@@ -72,7 +72,7 @@ export function handleProfileDaemonEvent(data: ProfileEvent, pending: PendingReq
       }
       if (message.moved_leaf) useSessionStore.getState().leafMoved(message.profile.id, message.moved_leaf);
       useProfilesStore.getState().arrangementArrived(message.profile, message.desktops ?? []);
-      syncNavigationFromProfiles(message.request_id ? { kind: 'own' } : { kind: 'broadcast' });
+      syncNavigationFromProfiles(message.request_id ? { kind: 'own', requestId: message.request_id } : { kind: 'broadcast' });
       return true;
     }
     case 'migration_changed':

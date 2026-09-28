@@ -93,7 +93,6 @@ import { decodeBinaryFrame } from '../pty/binaryPtyFrame';
 import { kittyImageBlobFromResult, kittyImageCache } from '../utils/kittyImageCache';
 import { resolveDaemonWebSocketURL, type DaemonEndpointInstance } from '../utils/daemonEndpoint';
 import { handleAppDaemonEvent, type AppCommandResult } from './daemonAppEvents';
-import type { IntentTarget } from '../navigation/sessionNavigation';
 import { handleProfileDaemonEvent, syncNavigationFromProfiles, type MigrationResult, type ProfileActionResult } from './daemonProfileEvents';
 import { useProfilesStore } from '../store/profiles';
 import { useSessionStore } from '../store/sessions';
@@ -4711,20 +4710,22 @@ export function useDaemonSocket({
 
   const sendProfileCommand = useCallback(
     (cmd: string, body: Record<string, unknown>) => {
-      const target: IntentTarget | null = cmd === 'profile_select' && typeof body.profile_id === 'string'
-        ? { kind: 'profile', profileId: body.profile_id }
-        : cmd === 'desktop_set_current' && typeof body.desktop_id === 'string'
-          ? { kind: 'desktop', desktopId: body.desktop_id }
-          : null;
-      const navigation = useSessionStore.getState();
-      navigation.commandSent(cmd, body);
-      const serving = useSessionStore.getState().intent;
-      const intent = target ? (serving?.id ?? navigation.beginIntent(target)) : null;
-      const request = sendRequest<ProfileActionResult>(cmd, body, `The daemon did not answer ${cmd}`);
-      if (intent !== null) request.catch(() => useSessionStore.getState().intentFailed(intent));
+      const requestId = nextRequestID(cmd);
+      const intent = useSessionStore.getState().commandSent(cmd, body, requestId);
+      const request = sendKeyedRequest<ProfileActionResult>(
+        pendingRequestKey(cmd, requestId),
+        { cmd, request_id: requestId, ...body },
+        `The daemon did not answer ${cmd}`,
+      );
+      if (intent !== null) {
+        request.then(
+          () => useSessionStore.getState().commandSettled(requestId),
+          () => useSessionStore.getState().intentFailed(intent),
+        );
+      }
       return request;
     },
-    [sendRequest],
+    [nextRequestID, sendKeyedRequest],
   );
 
   const sendProfileSelect = useCallback(
