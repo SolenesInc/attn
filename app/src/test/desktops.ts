@@ -1,4 +1,5 @@
 import { vi } from 'vitest';
+import { syncNavigationFromProfiles } from '../hooks/daemonProfileEvents';
 import { useProfilesStore } from '../store/profiles';
 import { LayoutPaneKind, LayoutPaneStatus, type Desktop, type Profile } from '../types/generated';
 import {
@@ -25,7 +26,7 @@ function treeOf(sessionIds: string[]): unknown {
   };
 }
 
-export function agentDesktop(id: string, slot: number | null, sessionIds: string[], activeSessionId = sessionIds[0]): Desktop {
+export function agentDesktop(id: string, slot: number | null, sessionIds: string[], shownAgentId = sessionIds[0]): Desktop {
   const tree = treeOf(sessionIds);
   return {
     id,
@@ -34,7 +35,7 @@ export function agentDesktop(id: string, slot: number | null, sessionIds: string
     ...(slot ? { shortcut_slot: slot } : {}),
     order_key: slot ? `slot-${slot}` : `extra-${id}`,
     tree_json: tree ? JSON.stringify(tree) : '',
-    active_pane_id: activeSessionId ? paneIdOf(activeSessionId) : '',
+    active_pane_id: shownAgentId ? paneIdOf(shownAgentId) : '',
     revision: 1,
     panes: sessionIds.map((sessionId) => ({
       pane_id: paneIdOf(sessionId),
@@ -51,6 +52,7 @@ export function arrangeDesktops(desktops: Desktop[], currentDesktopId = desktops
   const profile: Profile = { id: TEST_PROFILE_ID, name: 'Test', current_desktop_id: currentDesktopId, revision: 1 };
   useProfilesStore.getState().profilesChanged([profile]);
   useProfilesStore.getState().arrangementArrived(profile, desktops);
+  syncNavigationFromProfiles({ kind: 'scope' });
 }
 
 function sessionIdsOn(desktop: Desktop): string[] {

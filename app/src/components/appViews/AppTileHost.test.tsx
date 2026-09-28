@@ -38,6 +38,27 @@ describe('a view that mounts', () => {
   });
 });
 
+describe('a view bound to an agent', () => {
+  it('keeps its agent while it is the shown leaf, and an unbound view is given none', async () => {
+    const seen: Record<string, unknown>[] = [];
+    loadAppView.mockResolvedValue((props: Record<string, unknown>) => {
+      seen.push(props);
+      return <div>approvals body</div>;
+    });
+    const daemon = await openDockedApprovals([reviewerApp()]);
+
+    await gesture(daemon, () => fireEvent.mouseDown(document.querySelector('[data-pane-id="tile-7"]')!));
+    expect(daemon.arrangement.desktop('desktop-1')?.active_pane_id).toBe('tile-7');
+    expect(seen[seen.length - 1]).toMatchObject({ tileId: 'tile-7', sessionId: 'sess-1' });
+
+    await gesture(daemon, () => daemon.arrange((desktops) => desktops.map((desktop) => ({
+      ...desktop,
+      tree_json: desktop.tree_json.replace(',"tile_session_id":"sess-1"', ''),
+    }))));
+    expect(seen[seen.length - 1]).toMatchObject({ tileId: 'tile-7', sessionId: null });
+  });
+});
+
 describe('docking a view that asks what to show', () => {
   const askingApp = reviewerApp({
     views: [{ name: 'approvals', kind: 'tile', title: 'Pending approvals', params_label: 'Which ticket?', params_placeholder: 't-1234' }],

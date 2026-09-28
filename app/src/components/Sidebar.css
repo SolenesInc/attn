@@ -1163,8 +1163,7 @@
   letter-spacing: 0.04em;
 }
 
-/* Sessionless (panel-only) desktops carry content but no agent, so they get a
-   neutral, hollow marker instead of a session state dot. */
+/* Desktops without an agent row get a hollow marker instead of a state dot. */
 .desktop-neutral-indicator {
   display: inline-block;
   flex: 0 0 auto;
@@ -1174,10 +1173,6 @@
   border-radius: 50%;
   background: transparent;
   opacity: 0.6;
-}
-
-.icon-btn.session-icon.sessionless {
-  opacity: 0.7;
 }
 
 .sidebar--display-open .desktop-group.selected {

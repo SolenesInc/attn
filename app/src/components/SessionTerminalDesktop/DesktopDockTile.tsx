@@ -59,7 +59,7 @@ interface DesktopDockTileProps {
   visible?: boolean;
   desktopSessions?: DesktopTileSessionOption[];
   gardenSeeds?: Seed[];
-  desktopSessionId?: string | null;
+  boundSessionId?: string | null;
   desktopDirectory?: string;
   onClose: () => void;
   onFocusDocument?: () => void;
@@ -84,7 +84,7 @@ export function DesktopDockTile({
   visible = true,
   desktopSessions = NO_DESKTOP_SESSIONS,
   gardenSeeds = NO_GARDEN_SEEDS,
-  desktopSessionId = null,
+  boundSessionId = null,
   desktopDirectory,
   onClose,
   onFocusDocument,
@@ -260,7 +260,7 @@ export function DesktopDockTile({
           onClose={onClose}
           notebookSurfaceRef={notebookSurfaceRef}
           appView={appView}
-          desktopSessionId={desktopSessionId}
+          boundSessionId={boundSessionId}
           documentSource={documentSource}
         />
       </div>
@@ -379,7 +379,7 @@ interface ContentProps {
   onClose: () => void;
   notebookSurfaceRef: RefObject<NotebookSurfaceHandle | null>;
   appView: ReturnType<typeof parseAppViewTileKind>;
-  desktopSessionId: string | null;
+  boundSessionId: string | null;
   documentSource: MarkdownDocumentSource;
 }
 function DesktopTileContent({
@@ -399,7 +399,7 @@ function DesktopTileContent({
   onClose,
   notebookSurfaceRef,
   appView,
-  desktopSessionId,
+  boundSessionId,
   documentSource,
 }: ContentProps) {
   if (tile.tileKind === 'markdown')
@@ -456,7 +456,7 @@ function DesktopTileContent({
         app={appView.app}
         view={appView.view}
         desktopId={desktopId}
-        sessionId={desktopSessionId}
+        sessionId={boundSessionId}
         tileId={tile.tileId}
         params={tile.tileParams || ''}
       />

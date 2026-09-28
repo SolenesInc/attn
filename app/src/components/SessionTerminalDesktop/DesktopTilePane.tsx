@@ -40,7 +40,6 @@ export function DesktopTilePane({
     onRequestTileContent,
     renamePane,
     tileSessionOptions,
-    activePaneSessionId,
     activeLeafId,
     effectivePaneId,
     suspendedLeafIds,
@@ -96,7 +95,7 @@ export function DesktopTilePane({
         }
         desktopSessions={tileLeaf.tileKind === 'seed' ? seedTargetSessions : tileSessionOptions}
         gardenSeeds={gardenSeeds}
-        desktopSessionId={activePaneSessionId}
+        boundSessionId={tileLeaf.tileSessionId || null}
         desktopDirectory={desktopDirectory}
         onClose={() => onUndockTile?.(tileLeaf.tileId)}
         onFocusDocument={

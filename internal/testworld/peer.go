@@ -154,6 +154,17 @@ func (p *Peer) Received() []protocol.WebSocketEvent {
 	return events
 }
 
+// Log is every event the peer received so far, in arrival order, still encoded.
+func (p *Peer) Log() []json.RawMessage {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	log := make([]json.RawMessage, 0, len(p.frames))
+	for _, f := range p.frames {
+		log = append(log, f.raw)
+	}
+	return log
+}
+
 func (p *Peer) Close() {
 	p.mu.Lock()
 	p.closing = true

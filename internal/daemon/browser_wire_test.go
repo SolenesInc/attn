@@ -66,7 +66,7 @@ func TestAttnBrowserOpenDocksBesideTheFocusedAgent(t *testing.T) {
 
 	closeFromApp(app, shop.ID)
 	if err := cli.OpenBrowser("https://example.com/retargeted", ""); err != nil {
-		t.Fatalf("attn browser open on the tile-only desktop: %v", err)
+		t.Fatalf("attn browser open on the desktop without agents: %v", err)
 	}
 	awaitBrowserTile(t, app, shopDesktop, "https://example.com/retargeted")
 	awaitBrowserNavigation(host, shopDesktop, "https://example.com/retargeted")

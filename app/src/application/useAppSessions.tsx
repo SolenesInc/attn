@@ -7,14 +7,12 @@ import { sessionAttentionFields } from '../navigation/sessionNavigation';
 import { buildDesktopViewModels } from '../utils/desktopViewModels';
 import { AppContentProps } from './appSupport';
 interface Options {
-  activeSessionId: string | null;
   daemonEndpoints: AppContentProps['daemonEndpoints'];
   sessions: ReturnType<typeof useSessionStore.getState>['sessions'];
   daemonSessions: AppContentProps['daemonSessions'];
   connect: ReturnType<typeof useSessionStore.getState>['connect'];
 }
 export function useAppSessions({
-  activeSessionId,
   daemonEndpoints,
   sessions,
   daemonSessions,
@@ -96,20 +94,6 @@ export function useAppSessions({
     void connect();
   }, [connect]);
 
-  const activeDaemonSession = useMemo(() => {
-    if (!activeSessionId) {
-      return null;
-    }
-    return daemonSessions.find((session) => session.id === activeSessionId) || null;
-  }, [activeSessionId, daemonSessions]);
-  const activeRemoteSession = Boolean(activeDaemonSession?.endpoint_id);
-  const activeEndpoint = useMemo(() => {
-    const endpointId = activeDaemonSession?.endpoint_id;
-    if (!endpointId) {
-      return null;
-    }
-    return endpointById.get(endpointId) ?? null;
-  }, [activeDaemonSession?.endpoint_id, endpointById]);
   const liveGardenSessions = useMemo(
     () => new Set(daemonSessions.map((session) => session.id)),
     [daemonSessions],
@@ -142,8 +126,6 @@ export function useAppSessions({
   return {
     desktopViews,
     profileSessions,
-    activeEndpoint,
-    activeRemoteSession,
     liveGardenSessions,
     gardenSessionLabels,
     worktreePanelSessions,

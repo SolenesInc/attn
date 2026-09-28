@@ -24,14 +24,14 @@ interface Options {
   desktopViews: DesktopWithSessions<EnrichedSession>[];
   profileSessions: EnrichedSession[];
   enrichedLocalSessions: EnrichedSession[];
-  activeSessionId: string | null;
+  shownAgentId: string | null;
 }
 export function useAttentionQueue({
   settings,
   desktopViews,
   profileSessions,
   enrichedLocalSessions,
-  activeSessionId,
+  shownAgentId,
 }: Options) {
   const { sendSetSetting, sendSettleTurn, sendWakeTurn } = useDaemonApi();
   const handleToggleQueueMode = useCallback(() => {
@@ -53,15 +53,15 @@ export function useAttentionQueue({
   const activeGroupForCommands = useMemo(
     () =>
       desktopViews.find((group) =>
-        group.sessions.some((session) => session.id === activeSessionId),
+        group.sessions.some((session) => session.id === shownAgentId),
       ) ?? null,
-    [desktopViews, activeSessionId],
+    [desktopViews, shownAgentId],
   );
   const activeSessionForCommands = useMemo(
     () =>
-      activeGroupForCommands?.sessions.find((session) => session.id === activeSessionId) ??
+      activeGroupForCommands?.sessions.find((session) => session.id === shownAgentId) ??
       null,
-    [activeGroupForCommands, activeSessionId],
+    [activeGroupForCommands, shownAgentId],
   );
 
   const wantsAttention = useCallback(

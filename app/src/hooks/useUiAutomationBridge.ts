@@ -1,6 +1,7 @@
 import { useCallback } from 'react';
 import { invoke } from '@tauri-apps/api/core';
-import type { Session } from '../store/sessions';
+import { useSessionStore, type Session } from '../store/sessions';
+import { currentActiveLeaf } from './useDesktopSelectionBridge';
 import type { Presentation } from '../types/generated';
 import type { SessionAgent } from '../types/sessionAgent';
 import type { TerminalSplitDirection } from '../types/desktop';
@@ -52,7 +53,7 @@ import {
 
 interface UseUiAutomationBridgeArgs {
   sessions: Session[];
-  activeSessionId: string | null;
+  shownAgentId: string | null;
   daemonReady?: boolean;
   connectionError?: string | null;
   getActivePaneIdForSession: (session: Session | undefined | null) => string;
@@ -75,7 +76,7 @@ interface UseUiAutomationBridgeArgs {
   openShortcutEditor?: () => void;
   splitPane: (sessionId: string, targetPaneId: string, direction: TerminalSplitDirection) => Promise<unknown>;
   closePaneSession: (sessionId: string) => Promise<unknown>;
-  focusPane: (sessionId: string, paneId: string) => void;
+  focusPane: (sessionId: string, paneId: string) => Promise<void>;
   typeInSessionPaneViaUI: (sessionId: string, paneId: string, text: string) => boolean;
   isSessionPaneInputFocused: (sessionId: string, paneId: string) => boolean;
   scrollSessionPaneToTop: (sessionId: string, paneId: string) => boolean;
@@ -161,8 +162,8 @@ function resolvePaneOwnerSessionId(session: Session, paneId: string): string {
   return session.desktop.agents.find((entry) => entry.id === paneId)?.sessionId || session.id;
 }
 
-function resolveDesktopViewSessionId(session: Session, sessions: Session[], activeSessionId: string | null): string {
-  const activeSession = activeSessionId ? sessions.find((entry) => entry.id === activeSessionId) : null;
+function resolveDesktopViewSessionId(session: Session, sessions: Session[], shownAgentId: string | null): string {
+  const activeSession = shownAgentId ? sessions.find((entry) => entry.id === shownAgentId) : null;
   if (activeSession?.desktopId && activeSession.desktopId === session.desktopId) {
     return activeSession.id;
   }
@@ -206,6 +207,16 @@ function serializeSession(session: Session, getActivePaneIdForSession: (session:
     daemonActivePaneId: desktop.daemonActivePaneId,
     panes: desktop.panes,
     desktop,
+  };
+}
+
+function serializeSelection() {
+  const leaf = currentActiveLeaf();
+  return {
+    view: useSessionStore.getState().view,
+    activeLeaf: leaf
+      ? { desktopId: leaf.desktopId, leafId: leaf.leafId, kind: leaf.kind, ...(leaf.kind === 'agent' ? { sessionId: leaf.sessionId } : {}) }
+      : null,
   };
 }
 
@@ -371,7 +382,7 @@ function collectPaneDomMetrics(paneElement: Element | null) {
 
 function collectVisualSnapshot(
   sessions: Session[],
-  activeSessionId: string | null,
+  shownAgentId: string | null,
   getActivePaneIdForSession: (session: Session | undefined | null) => string,
   getPaneText: (sessionId: string, paneId: string) => string,
   getPaneSize: (sessionId: string, paneId: string) => { cols: number; rows: number } | null,
@@ -387,7 +398,7 @@ function collectVisualSnapshot(
     ? sessions.filter((session) => options.sessionIds?.has(session.id))
     : sessions;
   return {
-    activeSessionId,
+    shownAgentId,
     activeElement: {
       tag: document.activeElement?.tagName || null,
       className: (document.activeElement as HTMLElement | null)?.className || null,
@@ -483,7 +494,7 @@ function readProvenance(scope: Element | null | undefined): string {
 
 function collectSessionUiState(
   sessions: Session[],
-  activeSessionId: string | null,
+  shownAgentId: string | null,
   sessionId: string,
   getActivePaneIdForSession: (session: Session | undefined | null) => string,
 ) {
@@ -520,7 +531,7 @@ function collectSessionUiState(
   return {
     sessionId,
     exists: true,
-    selected: activeSessionId === session.id,
+    selected: shownAgentId === session.id,
     label: session.label,
     cwd: session.cwd,
     activePaneId: getActivePaneIdForSession(session),
@@ -555,7 +566,7 @@ function collectSessionUiState(
 
 function collectRenderHealthSnapshot(
   sessions: Session[],
-  activeSessionId: string | null,
+  shownAgentId: string | null,
   getActivePaneIdForSession: (session: Session | undefined | null) => string,
   getPaneText: (sessionId: string, paneId: string) => string,
   getPaneSize: (sessionId: string, paneId: string) => { cols: number; rows: number } | null,
@@ -568,7 +579,7 @@ function collectRenderHealthSnapshot(
 ) {
   const visualSnapshot = collectVisualSnapshot(
     sessions,
-    activeSessionId,
+    shownAgentId,
     getActivePaneIdForSession,
     getPaneText,
     getPaneSize,
@@ -595,7 +606,7 @@ function collectRenderHealthSnapshot(
       sessionId: session.id,
       label: session.label,
       activePaneId: session.activePaneId,
-      selected: activeSessionId === session.id,
+      selected: shownAgentId === session.id,
       panes: (session.panes || []).map((pane) => {
         const terminal = terminalsByPaneId.get(pane.paneId) || null;
         return {
@@ -626,7 +637,7 @@ function collectRenderHealthSnapshot(
   }
 
   return {
-    activeSessionId,
+    shownAgentId,
     capturedAt: new Date().toISOString(),
     summary: {
       sessionCount: sessionHealth.length,
@@ -1841,7 +1852,7 @@ async function getBrowserMemorySnapshot() {
 
 async function capturePerfSnapshot(
   sessions: Session[],
-  activeSessionId: string | null,
+  shownAgentId: string | null,
   getActivePaneIdForSession: (session: Session | undefined | null) => string,
   options?: { includeMemory?: boolean; sessionIds?: Set<string> | null },
 ) {
@@ -1882,8 +1893,8 @@ async function capturePerfSnapshot(
     },
     sessions: {
       count: scopedSessions.length,
-      activeSessionId: scopedSessionIds.size === 0 || scopedSessionIds.has(activeSessionId || '')
-        ? activeSessionId
+      shownAgentId: scopedSessionIds.size === 0 || scopedSessionIds.has(shownAgentId || '')
+        ? shownAgentId
         : null,
       totalPaneCount,
       items: scopedSessions.map((session) => ({
@@ -1959,7 +1970,7 @@ function concatByteChunks(chunks: Uint8Array[]): Uint8Array {
 
 export function useUiAutomationBridge({
   sessions,
-  activeSessionId,
+  shownAgentId,
   daemonReady = true,
   connectionError = null,
   getActivePaneIdForSession,
@@ -2004,7 +2015,7 @@ export function useUiAutomationBridge({
     switch (request.action) {
       case 'get_state':
         return {
-          activeSessionId,
+          ...serializeSelection(),
           daemonReady,
           connectionError,
           appBuild: APP_BUILD_IDENTITY,
@@ -2157,7 +2168,7 @@ export function useUiAutomationBridge({
       }
       case 'list_sessions':
         return {
-          activeSessionId,
+          ...serializeSelection(),
           sessions: sessions.map((session) => summarizeSession(session, getActivePaneIdForSession)),
         };
       case 'find_session': {
@@ -2383,6 +2394,7 @@ export function useUiAutomationBridge({
         const sessionId = await createSession(label, cwd, providedSessionId, agent, endpointId, undefined, {
           chiefOfStaff,
         });
+        await selectionShown({ kind: 'session', sessionId });
         await settleUi();
         window.setTimeout(() => {
           fitSessionActivePane(sessionId);
@@ -2448,7 +2460,7 @@ export function useUiAutomationBridge({
           throw new Error('select_session requires sessionId');
         }
         selectSession(sessionId);
-        await selectionShown(sessionId);
+        await selectionShown({ kind: 'session', sessionId });
         await settleUi();
         return { sessionId };
       }
@@ -2465,7 +2477,7 @@ export function useUiAutomationBridge({
         return { panelId };
       }
       case 'get_desktop': {
-        const sessionId = typeof payload.sessionId === 'string' ? payload.sessionId : activeSessionId;
+        const sessionId = typeof payload.sessionId === 'string' ? payload.sessionId : shownAgentId;
         const session = sessions.find((entry) => entry.id === sessionId);
         if (!session) {
           throw new Error('Session not found');
@@ -2479,7 +2491,7 @@ export function useUiAutomationBridge({
         }
         return collectSessionUiState(
           sessions,
-          activeSessionId,
+          shownAgentId,
           sessionId,
           getActivePaneIdForSession,
         );
@@ -2807,10 +2819,10 @@ export function useUiAutomationBridge({
           throw new Error('Session not found');
         }
         const paneId = resolvePaneId(session, getActivePaneIdForSession, payload.paneId);
-        const viewSessionId = resolveDesktopViewSessionId(session, sessions, activeSessionId);
+        const viewSessionId = resolveDesktopViewSessionId(session, sessions, shownAgentId);
         selectSession(sessionId);
-        await selectionShown(sessionId);
-        focusPane(viewSessionId, paneId);
+        await selectionShown({ kind: 'session', sessionId });
+        await focusPane(viewSessionId, paneId);
         await settleUi();
         return { sessionId, paneId, viewSessionId };
       }
@@ -2822,9 +2834,9 @@ export function useUiAutomationBridge({
         }
         const paneId = resolvePaneId(session, getActivePaneIdForSession, payload.paneId);
         const ownerSessionId = resolvePaneOwnerSessionId(session, paneId);
-        const viewSessionId = resolveDesktopViewSessionId(session, sessions, activeSessionId);
+        const viewSessionId = resolveDesktopViewSessionId(session, sessions, shownAgentId);
         selectSession(sessionId);
-        await selectionShown(sessionId);
+        await selectionShown({ kind: 'session', sessionId });
         await settleUi(1);
         clickPaneElement(ownerSessionId, paneId);
         await settleUi(2);
@@ -2837,8 +2849,9 @@ export function useUiAutomationBridge({
           throw new Error('Session not found');
         }
         const paneId = resolvePaneId(session, getActivePaneIdForSession, payload.paneId);
-        const viewSessionId = resolveDesktopViewSessionId(session, sessions, activeSessionId);
+        const viewSessionId = resolveDesktopViewSessionId(session, sessions, shownAgentId);
         selectSession(sessionId);
+        await selectionShown({ kind: 'session', sessionId });
         await settleUi(1);
         const success = scrollSessionPaneToTop(viewSessionId, paneId);
         if (!success) {
@@ -2855,10 +2868,11 @@ export function useUiAutomationBridge({
         }
         const paneId = resolvePaneId(session, getActivePaneIdForSession, payload.paneId);
         const ownerSessionId = resolvePaneOwnerSessionId(session, paneId);
-        const viewSessionId = resolveDesktopViewSessionId(session, sessions, activeSessionId);
+        const viewSessionId = resolveDesktopViewSessionId(session, sessions, shownAgentId);
         const deltaY = typeof payload.deltaY === 'number' ? payload.deltaY : 0;
         const deltaMode = typeof payload.deltaMode === 'number' ? payload.deltaMode : WheelEvent.DOM_DELTA_PIXEL;
         selectSession(sessionId);
+        await selectionShown({ kind: 'session', sessionId });
         await settleUi(1);
         wheelPaneElement(ownerSessionId, paneId, deltaY, deltaMode);
         await settleUi(2);
@@ -2872,13 +2886,14 @@ export function useUiAutomationBridge({
         }
         const paneId = resolvePaneId(session, getActivePaneIdForSession, payload.paneId);
         const ownerSessionId = resolvePaneOwnerSessionId(session, paneId);
-        const viewSessionId = resolveDesktopViewSessionId(session, sessions, activeSessionId);
+        const viewSessionId = resolveDesktopViewSessionId(session, sessions, shownAgentId);
         const size = getPaneSize(viewSessionId, paneId);
         const cell = payload.cell as { col?: unknown; row?: unknown } | undefined;
         if (!size || typeof cell?.col !== 'number' || typeof cell?.row !== 'number') {
           throw new Error('click_pane_cell requires pane size and a numeric cell');
         }
         selectSession(sessionId);
+        await selectionShown({ kind: 'session', sessionId });
         await settleUi(1);
         clickPaneCell(ownerSessionId, paneId, size, { col: cell.col, row: cell.row });
         await settleUi(2);
@@ -2892,13 +2907,14 @@ export function useUiAutomationBridge({
         }
         const paneId = resolvePaneId(session, getActivePaneIdForSession, payload.paneId);
         const ownerSessionId = resolvePaneOwnerSessionId(session, paneId);
-        const viewSessionId = resolveDesktopViewSessionId(session, sessions, activeSessionId);
+        const viewSessionId = resolveDesktopViewSessionId(session, sessions, shownAgentId);
         const size = getPaneSize(viewSessionId, paneId);
         const cell = payload.cell as { col?: unknown; row?: unknown } | undefined;
         if (!size || typeof cell?.col !== 'number' || typeof cell?.row !== 'number') {
           throw new Error('hover_pane_cell requires pane size and a numeric cell');
         }
         selectSession(sessionId);
+        await selectionShown({ kind: 'session', sessionId });
         await settleUi(1);
         const hovered = hoverPaneCell(
           ownerSessionId,
@@ -2919,7 +2935,7 @@ export function useUiAutomationBridge({
         }
         const paneId = resolvePaneId(session, getActivePaneIdForSession, payload.paneId);
         const ownerSessionId = resolvePaneOwnerSessionId(session, paneId);
-        const viewSessionId = resolveDesktopViewSessionId(session, sessions, activeSessionId);
+        const viewSessionId = resolveDesktopViewSessionId(session, sessions, shownAgentId);
         const size = getPaneSize(viewSessionId, paneId);
         const cell = payload.cell as { col?: unknown; row?: unknown } | undefined;
         if (!size || typeof cell?.col !== 'number' || typeof cell?.row !== 'number') {
@@ -2947,7 +2963,7 @@ export function useUiAutomationBridge({
         }
         const paneId = resolvePaneId(session, getActivePaneIdForSession, payload.paneId);
         const ownerSessionId = resolvePaneOwnerSessionId(session, paneId);
-        const viewSessionId = resolveDesktopViewSessionId(session, sessions, activeSessionId);
+        const viewSessionId = resolveDesktopViewSessionId(session, sessions, shownAgentId);
         const size = getPaneSize(viewSessionId, paneId);
         const start = payload.start as { col?: unknown; row?: unknown } | undefined;
         const end = payload.end as { col?: unknown; row?: unknown } | undefined;
@@ -2957,6 +2973,7 @@ export function useUiAutomationBridge({
           throw new Error('drag_pane_selection requires pane size and numeric start/end cells');
         }
         selectSession(sessionId);
+        await selectionShown({ kind: 'session', sessionId });
         await settleUi(1);
         const altKey = payload.altKey === true;
         dragPaneSelection(
@@ -2982,8 +2999,9 @@ export function useUiAutomationBridge({
         }
         const dropFracX = typeof payload.dropFracX === 'number' ? payload.dropFracX : 0.5;
         const dropFracY = typeof payload.dropFracY === 'number' ? payload.dropFracY : 0.5;
-        const viewSessionId = resolveDesktopViewSessionId(session, sessions, activeSessionId);
+        const viewSessionId = resolveDesktopViewSessionId(session, sessions, shownAgentId);
         selectSession(sessionId);
+        await selectionShown({ kind: 'session', sessionId });
         await settleUi(2);
         const points = dragLeafHeader(leafId, dropFracX, dropFracY);
         await settleUi(2);
@@ -3001,8 +3019,9 @@ export function useUiAutomationBridge({
         if (!splitId || !Number.isFinite(deltaPx) || !Number.isFinite(steps)) {
           throw new Error('drag_split requires splitId and numeric deltaPx/steps');
         }
-        const viewSessionId = resolveDesktopViewSessionId(session, sessions, activeSessionId);
+        const viewSessionId = resolveDesktopViewSessionId(session, sessions, shownAgentId);
         selectSession(sessionId);
+        await selectionShown({ kind: 'session', sessionId });
         await settleUi(2);
         const result = await dragSplitDivider(session.desktopId, splitId, deltaPx, steps);
         return { sessionId, viewSessionId, desktopId: session.desktopId, ...result };
@@ -3090,7 +3109,7 @@ export function useUiAutomationBridge({
           throw new Error('type_pane_via_ui requires text');
         }
         const paneId = resolvePaneId(session, getActivePaneIdForSession, payload.paneId);
-        const viewSessionId = resolveDesktopViewSessionId(session, sessions, activeSessionId);
+        const viewSessionId = resolveDesktopViewSessionId(session, sessions, shownAgentId);
         const success = typeInSessionPaneViaUI(viewSessionId, paneId, text);
         if (!success) {
           throw new Error(`Failed to type into pane ${paneId} via UI input`);
@@ -3104,7 +3123,7 @@ export function useUiAutomationBridge({
           throw new Error('Session not found');
         }
         const paneId = resolvePaneId(session, getActivePaneIdForSession, payload.paneId);
-        const viewSessionId = resolveDesktopViewSessionId(session, sessions, activeSessionId);
+        const viewSessionId = resolveDesktopViewSessionId(session, sessions, shownAgentId);
         return {
           sessionId,
           paneId,
@@ -3120,7 +3139,7 @@ export function useUiAutomationBridge({
           throw new Error('Session not found');
         }
         const paneId = resolvePaneId(session, getActivePaneIdForSession, payload.paneId);
-        const viewSessionId = resolveDesktopViewSessionId(session, sessions, activeSessionId);
+        const viewSessionId = resolveDesktopViewSessionId(session, sessions, shownAgentId);
         return {
           sessionId,
           paneId,
@@ -3136,7 +3155,7 @@ export function useUiAutomationBridge({
           throw new Error('Session not found');
         }
         const paneId = resolvePaneId(session, getActivePaneIdForSession, payload.paneId);
-        const viewSessionId = resolveDesktopViewSessionId(session, sessions, activeSessionId);
+        const viewSessionId = resolveDesktopViewSessionId(session, sessions, shownAgentId);
         const blockState = getPaneBlockState(viewSessionId, paneId);
         // Stable response shape: available=false ("no live terminal handle") is not "no blocks".
         return {
@@ -3154,7 +3173,7 @@ export function useUiAutomationBridge({
           throw new Error('Session not found');
         }
         const paneId = resolvePaneId(session, getActivePaneIdForSession, payload.paneId);
-        const viewSessionId = resolveDesktopViewSessionId(session, sessions, activeSessionId);
+        const viewSessionId = resolveDesktopViewSessionId(session, sessions, shownAgentId);
         const placementState = getPanePlacementState(viewSessionId, paneId);
         return {
           sessionId,
@@ -3173,7 +3192,7 @@ export function useUiAutomationBridge({
         const paneId = resolvePaneId(session, getActivePaneIdForSession, payload.paneId);
         const snapshot = collectVisualSnapshot(
           [session],
-          activeSessionId,
+          shownAgentId,
           getActivePaneIdForSession,
           getPaneText,
           getPaneSize,
@@ -3183,12 +3202,12 @@ export function useUiAutomationBridge({
         return {
           sessionId,
           paneId,
-          inputFocused: isSessionPaneInputFocused(resolveDesktopViewSessionId(session, sessions, activeSessionId), paneId),
+          inputFocused: isSessionPaneInputFocused(resolveDesktopViewSessionId(session, sessions, shownAgentId), paneId),
           activePaneId: getActivePaneIdForSession(session),
           pane: snapshot.sessions[0]?.panes.find((pane) => pane.paneId === paneId) || null,
           renderHealth: collectRenderHealthSnapshot(
             [session],
-            activeSessionId,
+            shownAgentId,
             getActivePaneIdForSession,
             getPaneText,
             getPaneSize,
@@ -3532,7 +3551,7 @@ export function useUiAutomationBridge({
       case 'capture_structured_snapshot':
         return collectVisualSnapshot(
           sessions,
-          activeSessionId,
+          shownAgentId,
           getActivePaneIdForSession,
           getPaneText,
           getPaneSize,
@@ -3548,7 +3567,7 @@ export function useUiAutomationBridge({
       case 'capture_render_health':
         return collectRenderHealthSnapshot(
           sessions,
-          activeSessionId,
+          shownAgentId,
           getActivePaneIdForSession,
           getPaneText,
           getPaneSize,
@@ -3570,7 +3589,7 @@ export function useUiAutomationBridge({
         await settleUi(settleFrames);
         return capturePerfSnapshot(
           sessions,
-          activeSessionId,
+          shownAgentId,
           getActivePaneIdForSession,
           { includeMemory, sessionIds },
         );
@@ -3579,7 +3598,7 @@ export function useUiAutomationBridge({
         clearPtyPerfSnapshot();
         return { ok: true };
       case 'benchmark_pty_transport': {
-        const sessionId = typeof payload.sessionId === 'string' ? payload.sessionId : activeSessionId;
+        const sessionId = typeof payload.sessionId === 'string' ? payload.sessionId : shownAgentId;
         const session = sessions.find((entry) => entry.id === sessionId);
         if (!session || !sessionId) {
           throw new Error('Session not found');
@@ -3604,7 +3623,9 @@ export function useUiAutomationBridge({
         const base64Payload = encodeBytesToBase64(bytes);
 
         selectSession(sessionId);
-        focusPane(sessionId, paneId);
+
+        await selectionShown({ kind: 'session', sessionId });
+        await focusPane(sessionId, paneId);
         await settleUi(2);
         if (!resetSessionPaneTerminal(sessionId, paneId)) {
           throw new Error(`Pane terminal not ready for ${paneId}`);
@@ -3809,7 +3830,7 @@ export function useUiAutomationBridge({
         throw new Error(`Unknown automation action: ${request.action}`);
     }
   }, [
-    activeSessionId,
+    shownAgentId,
     closePaneSession,
     connectionError,
     createSession,

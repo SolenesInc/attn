@@ -2,6 +2,7 @@ package daemon
 
 import (
 	"context"
+	"crypto/sha256"
 	"crypto/subtle"
 	"encoding/json"
 	"errors"
@@ -55,8 +56,12 @@ type wsClient struct {
 	capabilities      map[string]struct{}
 	identityMu        sync.RWMutex
 
-	arrangementMu sync.Mutex
-	shownTiles    []desktopMarkdownTile
+	arrangementMu      sync.Mutex
+	shownTiles         []desktopMarkdownTile
+	arrangementsHeld   int
+	arrangementsMissed bool
+	arrangementPrint   [sha256.Size]byte
+	arrangementSeq     int64
 
 	presence   clientPresence
 	presenceMu sync.RWMutex
@@ -503,16 +508,11 @@ func (h *wsHub) SendRawTextToMatchingClients(payload []byte, match func(*wsClien
 	h.sendRawTextToMatchingClients(payload, match, maxSlowCount, nil)
 }
 
-func (h *wsHub) SendArrangementToMatchingClients(message interface{}, match func(*wsClient) bool, shown func(*wsClient) []desktopMarkdownTile) {
-	data, err := json.Marshal(message)
-	if err != nil {
-		h.logf("WebSocket arrangement send marshal error: %v", err)
-		return
-	}
-	h.sendRawTextToMatchingClients(data, match, 1, shown)
+func (h *wsHub) SendArrangementToMatchingClients(data []byte, match func(*wsClient) bool, delivery *arrangementDelivery) {
+	h.sendRawTextToMatchingClients(data, match, 1, delivery)
 }
 
-func (h *wsHub) sendRawTextToMatchingClients(payload []byte, match func(*wsClient) bool, missesTolerated int, shown func(*wsClient) []desktopMarkdownTile) {
+func (h *wsHub) sendRawTextToMatchingClients(payload []byte, match func(*wsClient) bool, missesTolerated int, arrangement *arrangementDelivery) {
 	if len(payload) == 0 {
 		return
 	}
@@ -525,7 +525,13 @@ func (h *wsHub) sendRawTextToMatchingClients(payload []byte, match func(*wsClien
 		if match != nil && !match(client) {
 			continue
 		}
-		if client.trySendArrangement(message, shown) {
+		sent := false
+		if arrangement == nil {
+			sent = client.trySend(message)
+		} else {
+			sent = client.trySendArrangement(message, arrangement)
+		}
+		if sent {
 			client.slowCount = 0
 			continue
 		}

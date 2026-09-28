@@ -342,7 +342,7 @@ describe('the runs chip', () => {
   it('peeks every run by definition and tags the one the walk opens next from the agent on screen', () => {
     const onSelectSession = vi.fn();
     arrangeDesktops([agentDesktop('d1', 1, ['n1'])]);
-    useSessionStore.setState({ view: 'session', activeSessionId: 'n1' });
+    useSessionStore.setState({ view: 'session' });
     onTestFinished(() => useProfilesStore.setState(useProfilesStore.getInitialState(), true));
     renderBar(runs, { onSelectSession, selectedId: null });
     hover('queue-bar-runs');

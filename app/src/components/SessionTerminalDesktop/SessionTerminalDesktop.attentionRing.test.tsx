@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { fireEvent, render, screen, waitFor, within } from '@testing-library/react';
-import { type ReactNode } from 'react';
+import { useState, type ComponentProps, type ReactNode } from 'react';
 import { SessionTerminalDesktop } from './index';
 import { createPaneRuntimeEventRouterController } from './paneRuntimeEventRouter';
 import {
@@ -139,6 +139,26 @@ afterEach(() => {
   vi.unstubAllGlobals();
 });
 
+function DaemonEcho(props: ComponentProps<typeof SessionTerminalDesktop>) {
+  const [active, setActive] = useState(props.activePaneId);
+  const [seen, setSeen] = useState(props.activePaneId);
+  if (props.activePaneId !== seen) {
+    setSeen(props.activePaneId);
+    setActive(props.activePaneId);
+  }
+  const { onFocusPane } = props;
+  return (
+    <SessionTerminalDesktop
+      {...props}
+      activePaneId={active}
+      onFocusPane={(paneId) => {
+        onFocusPane(paneId);
+        setActive(paneId);
+      }}
+    />
+  );
+}
+
 describe('SessionTerminalDesktop attention ring', () => {
   it('suspends the oldest rightmost documents before newer work', async () => {
     observedWidth = 1816;
@@ -165,7 +185,7 @@ describe('SessionTerminalDesktop attention ring', () => {
       { path: `/tmp/${documentId}.md`, content: `# ${documentId}` },
     ]));
     const { container, rerender } = render(
-      <SessionTerminalDesktop
+      <DaemonEcho
         {...commonProps}
         terminalState={desktopWithOpenedDocuments([])}
         tileContents={tileContents}
@@ -175,7 +195,7 @@ describe('SessionTerminalDesktop attention ring', () => {
 
     for (const [index, documentId] of openedDocuments.entries()) {
       rerender(
-        <SessionTerminalDesktop
+        <DaemonEcho
           {...commonProps}
           activePaneId={documentId}
           terminalState={desktopWithOpenedDocuments(openedDocuments.slice(0, index + 1))}
@@ -242,7 +262,7 @@ describe('SessionTerminalDesktop attention ring', () => {
     );
 
     rerender(
-      <SessionTerminalDesktop
+      <DaemonEcho
         {...commonProps}
         activePaneId="document"
         terminalState={{
@@ -304,11 +324,11 @@ describe('SessionTerminalDesktop attention ring', () => {
       onRequestTileContent: vi.fn(),
     };
     const { rerender } = render(
-      <SessionTerminalDesktop {...props} activePaneId="" terminalState={{ agents: [], layoutTree: null }} />,
+      <DaemonEcho {...props} activePaneId="" terminalState={{ agents: [], layoutTree: null }} />,
       { wrapper: Wrapper },
     );
 
-    rerender(<SessionTerminalDesktop {...props} terminalState={crowdedDesktop()} />);
+    rerender(<DaemonEcho {...props} terminalState={crowdedDesktop()} />);
 
     expect(await screen.findByRole('button', { name: 'Expand Beta' })).toBeInTheDocument();
   });
@@ -316,7 +336,7 @@ describe('SessionTerminalDesktop attention ring', () => {
   it('expands a clicked sliver and folds the least-recently-focused leaf, not the previous one', async () => {
     const onFocusPane = vi.fn();
     const { container } = render(
-      <SessionTerminalDesktop
+      <DaemonEcho
         desktopId="desktop-attention"
         desktopSessions={[
           { id: 'session-a', label: 'Alpha', agent: 'shell', cwd: '/tmp' },
@@ -365,7 +385,7 @@ describe('SessionTerminalDesktop attention ring', () => {
     } as DOMRect);
     try {
       const { container } = render(
-        <SessionTerminalDesktop
+        <DaemonEcho
           desktopId="desktop-drag"
           desktopSessions={[
             { id: 'session-a', label: 'Alpha', agent: 'shell', cwd: '/tmp' },
@@ -459,7 +479,7 @@ describe('SessionTerminalDesktop attention ring', () => {
       ],
     };
     const { container } = render(
-      <SessionTerminalDesktop
+      <DaemonEcho
         desktopId="desktop-focus"
         desktopSessions={[
           { id: 'session-a', label: 'Alpha', agent: 'shell', cwd: '/tmp' },

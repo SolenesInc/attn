@@ -28,7 +28,7 @@ const dockedApprovals = daemonDesktop(
       ratio: 0.5,
       children: [
         { type: 'pane', pane_id: 'pane-sess-1' },
-        { type: 'tile', tile_id: 'tile-7', tile_kind: 'app:reviewer/approvals', tile_params: 't-42' },
+        { type: 'tile', tile_id: 'tile-7', tile_kind: 'app:reviewer/approvals', tile_params: 't-42', tile_session_id: 'sess-1' },
       ],
     },
     panes: [agentPane('sess-1', 'desktop-1')],

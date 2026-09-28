@@ -8,7 +8,6 @@ import { useDaemonStore } from '../store/daemonSessions';
 import { useProfilesStore } from '../store/profiles';
 import { desktopLabel, orderedDesktops } from '../utils/desktops';
 import type { ShortcutId } from '../shortcuts/registry';
-import { useSessionStore } from '../store/sessions';
 import {
   AUTO_SETTLE_ENABLED_SETTING,
   isAutoSettleEnabled,
@@ -39,6 +38,7 @@ import {
   NotificationsBellIcon,
 } from './AppIcons';
 import { useOpenInEditor } from './useOpenInEditor';
+import { useSessionBehindScreen } from '../hooks/useDesktopSelectionBridge';
 
 export function useAppCommands(): PaletteCommand[] {
   const apps = useDaemonStore((state) => state.apps);
@@ -70,7 +70,7 @@ export function useAppCommands(): PaletteCommand[] {
   } = useAttentionQueueContext();
   const { sendSetSetting } = useDaemonApi();
   const { handleCreateDiagnosticReport } = useAppDiagnosticsContext();
-  const activeSessionId = useSessionStore((state) => state.activeSessionId);
+  const contextSessionId = useSessionBehindScreen();
   const desktops = useProfilesStore((state) => state.desktops);
   const profiles = useProfilesStore((state) => state.profiles);
   const selectedProfileId = useProfilesStore((state) => state.selectedProfileId);
@@ -199,7 +199,7 @@ export function useAppCommands(): PaletteCommand[] {
             run: openActiveSessionInEditor,
           }]
         : []),
-      ...(activeSessionId
+      ...(contextSessionId
         ? [
             {
               id: 'workflow-runs',
@@ -251,7 +251,7 @@ export function useAppCommands(): PaletteCommand[] {
     ];
     return commands;
   }, [
-    activeSessionId,
+    contextSessionId,
     automationsPanelOpen,
     desktopNavigation,
     desktops,

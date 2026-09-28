@@ -7,7 +7,7 @@ import { crewDisplayName } from '../utils/crewName';
 import './Sidebar.css';
 import { useSidebarContext } from './SidebarContext';
 import { CollapseIcon, ExpandIcon, HomeIcon, PlusIcon } from './SidebarIcons';
-import { isSessionless, desktopShortcut } from './sidebarModel';
+import { desktopShortcut } from './sidebarModel';
 import { SidebarSettings } from './SidebarSettings';
 
 export function SidebarCollapsed() {
@@ -71,7 +71,7 @@ export function SidebarCollapsed() {
         {visibleVisualOrder.map((desktopView) => (
           <button
             key={desktopView.id}
-            className={`icon-btn session-icon ${selectedDesktopId === desktopView.id ? 'active' : ''} ${isSessionless(desktopView) ? 'sessionless' : ''}`}
+            className={`icon-btn session-icon ${selectedDesktopId === desktopView.id ? 'active' : ''}`}
             onClick={() => onSelectDesktop(desktopView.id)}
             title={
               desktopShortcut(visualIndexOfDesktop(desktopView.id))
@@ -254,8 +254,6 @@ export function SidebarHeader() {
     headerActions,
     gridLayout,
     onSelectGridLayout,
-    showSessionless,
-    onToggleShowSessionless,
     queueModeEnabled,
     onToggleQueueMode,
     crewQueueEnabled,
@@ -325,8 +323,6 @@ export function SidebarHeader() {
             onToggleHarnessLogos={onToggleHarnessLogos}
             desktopSelectionStyle={desktopSelectionStyle}
             onDesktopSelectionStyleChange={onDesktopSelectionStyleChange}
-            showSessionless={showSessionless}
-            onToggleShowSessionless={onToggleShowSessionless}
             displayMode={displayMode}
             setDisplayMode={setDisplayMode}
           />
