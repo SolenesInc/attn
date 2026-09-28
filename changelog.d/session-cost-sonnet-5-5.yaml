@@ -1,0 +1,7 @@
+kind: added
+area: sessions
+change: >
+  Session cost knows Claude Sonnet 5.5 (claude-sonnet-5-5). It bills $2 input
+  and $10 output per million tokens, with cache reads at $0.20.
+symptom: >
+  A Sonnet 5.5 session showed no price at all.

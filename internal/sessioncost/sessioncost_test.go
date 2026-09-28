@@ -235,6 +235,7 @@ func TestBuiltInCoverageForObservedModelIDs(t *testing.T) {
 		"claude-opus-5",
 		"claude-opus-5-5",
 		"claude-sonnet-5",
+		"claude-sonnet-5-5",
 		"gpt-5-codex",
 		"gpt-5.4-mini",
 		"gpt-5.5",
