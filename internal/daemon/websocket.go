@@ -508,12 +508,7 @@ func (h *wsHub) SendRawTextToMatchingClients(payload []byte, match func(*wsClien
 	h.sendRawTextToMatchingClients(payload, match, maxSlowCount, nil)
 }
 
-func (h *wsHub) SendArrangementToMatchingClients(message interface{}, match func(*wsClient) bool, delivery *arrangementDelivery) {
-	data, err := json.Marshal(message)
-	if err != nil {
-		h.logf("WebSocket arrangement send marshal error: %v", err)
-		return
-	}
+func (h *wsHub) SendArrangementToMatchingClients(data []byte, match func(*wsClient) bool, delivery *arrangementDelivery) {
 	h.sendRawTextToMatchingClients(data, match, 1, delivery)
 }
 

@@ -110,3 +110,46 @@ func TestALaunchPlacementReachesTheLauncherAsItsAnswerBeforeTheSpawnResult(t *te
 
 	ownAnswerFirst(t, logSince(t, app, mark), spawned.ID, protocol.EventSpawnResult)
 }
+
+func TestAChangeThatLandsWhileAClientsRequestIsHeldStillReachesItWhenTheRequestFails(t *testing.T) {
+	inBubble(t, func(t *testing.T, w *world) {
+		app := w.App()
+		injectAgent(t, w, "a")
+		desktop, _ := viewProfile(t, w, app.SelectedProfile()).paneOf(t, "a")
+		paused, resume := make(chan struct{}), make(chan struct{})
+		w.daemon.PauseNextHeldAction(paused, resume)
+		mark := len(app.Log())
+
+		requestID := uuid.NewString()
+		app.Send(protocol.DesktopShowLeafMessage{Cmd: protocol.CmdDesktopShowLeaf, RequestID: requestID, DesktopID: desktop.ID, LeafID: "no-such-leaf"})
+		<-paused
+		injectAgent(t, w, "b")
+		close(resume)
+		synctest.Wait()
+
+		refused := false
+		for _, raw := range app.Log()[mark:] {
+			var result protocol.ProfileActionResultMessage
+			if json.Unmarshal(raw, &result) == nil && result.Event == protocol.EventProfileActionResult && result.RequestID == requestID {
+				refused = !result.Success
+			}
+		}
+		if !refused {
+			t.Fatalf("showing a missing leaf was not refused: %s", app.Log()[mark:])
+		}
+		for _, raw := range app.Log()[mark:] {
+			var arrangement protocol.ProfileArrangementChangedMessage
+			if json.Unmarshal(raw, &arrangement) != nil || arrangement.Event != protocol.EventProfileArrangementChanged {
+				continue
+			}
+			for _, d := range arrangement.Desktops {
+				for _, pane := range d.Panes {
+					if pane.SessionID == "b" {
+						return
+					}
+				}
+			}
+		}
+		t.Fatalf("the client never learned of agent b, placed while its refused request held its broadcasts")
+	})
+}

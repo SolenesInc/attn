@@ -230,6 +230,9 @@ func (d *Daemon) runProfileAction(client *wsClient, action, requestID string, ru
 	}
 	client.holdArrangements()
 	outcome, err := run()
+	if pause := d.heldActionRan.Load(); pause != nil {
+		(*pause)()
+	}
 	if err == nil && outcome.profile != nil {
 		wire := protocolProfile(*outcome.profile)
 		result.Profile = &wire
@@ -282,17 +285,17 @@ func (d *Daemon) sendArrangement(client *wsClient, requestID string, moved *prot
 	if profileID == "" {
 		return
 	}
-	message, delivery, ok := d.arrangementMessage(profileID, moved)
+	message, data, delivery, ok := d.arrangementMessage(profileID, moved)
 	if !ok {
 		return
 	}
 	if requestID != "" {
 		message.RequestID = protocol.Ptr(requestID)
-	}
-	data, err := json.Marshal(message)
-	if err != nil {
-		d.logf("arrangement answer: encoding profile %s: %v", profileID, err)
-		return
+		var err error
+		if data, err = json.Marshal(message); err != nil {
+			d.logf("arrangement answer: encoding profile %s: %v", profileID, err)
+			return
+		}
 	}
 	client.arrangementMu.Lock()
 	defer client.arrangementMu.Unlock()
@@ -302,16 +305,17 @@ func (d *Daemon) sendArrangement(client *wsClient, requestID string, moved *prot
 	client.sendArrangementLocked(outboundMessage{kind: messageKindText, payload: data}, delivery)
 }
 
-func (d *Daemon) arrangementMessage(profileID string, moved *protocol.LeafMoved) (protocol.ProfileArrangementChangedMessage, *arrangementDelivery, bool) {
+// arrangementMessage reads a profile's arrangement once and encodes it once for every client it goes to.
+func (d *Daemon) arrangementMessage(profileID string, moved *protocol.LeafMoved) (protocol.ProfileArrangementChangedMessage, []byte, *arrangementDelivery, bool) {
 	profile, desktops, seq, err := d.store.ProfileArrangementSeq(profileID)
 	if err != nil {
 		d.logf("arrangement: reading profile %s: %v", profileID, err)
-		return protocol.ProfileArrangementChangedMessage{}, nil, false
+		return protocol.ProfileArrangementChangedMessage{}, nil, nil, false
 	}
 	wire, err := protocolDesktops(desktops)
 	if err != nil {
 		d.logf("arrangement: encoding profile %s: %v", profileID, err)
-		return protocol.ProfileArrangementChangedMessage{}, nil, false
+		return protocol.ProfileArrangementChangedMessage{}, nil, nil, false
 	}
 	message := protocol.ProfileArrangementChangedMessage{
 		Event:     protocol.EventProfileArrangementChanged,
@@ -319,12 +323,12 @@ func (d *Daemon) arrangementMessage(profileID string, moved *protocol.LeafMoved)
 		Desktops:  wire,
 		MovedLeaf: moved,
 	}
-	content, err := json.Marshal(message)
+	data, err := json.Marshal(message)
 	if err != nil {
 		d.logf("arrangement: encoding profile %s: %v", profileID, err)
-		return protocol.ProfileArrangementChangedMessage{}, nil, false
+		return protocol.ProfileArrangementChangedMessage{}, nil, nil, false
 	}
-	return message, &arrangementDelivery{shown: markdownTilesOnCurrentDesktop(profile, desktops), seq: seq, print: sha256.Sum256(content)}, true
+	return message, data, &arrangementDelivery{shown: markdownTilesOnCurrentDesktop(profile, desktops), seq: seq, print: sha256.Sum256(data)}, true
 }
 
 func (d *Daemon) publishArrangementChanged(profileID string) {
@@ -639,11 +643,11 @@ func (d *Daemon) projectProfileArrangementChanged(ev bus.Event) {
 			moved = &decoded
 		}
 	}
-	message, delivery, ok := d.arrangementMessage(ev.Subject, moved)
+	_, data, delivery, ok := d.arrangementMessage(ev.Subject, moved)
 	if !ok {
 		return
 	}
-	d.wsHub.SendArrangementToMatchingClients(message, func(client *wsClient) bool {
+	d.wsHub.SendArrangementToMatchingClients(data, func(client *wsClient) bool {
 		return client.selectedProfile() == ev.Subject
 	}, delivery)
 }
