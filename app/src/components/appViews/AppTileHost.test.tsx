@@ -49,13 +49,13 @@ describe('a view bound to an agent', () => {
 
     await gesture(daemon, () => fireEvent.mouseDown(document.querySelector('[data-pane-id="tile-7"]')!));
     expect(daemon.arrangement.desktop('desktop-1')?.active_pane_id).toBe('tile-7');
-    expect(seen.at(-1)).toMatchObject({ tileId: 'tile-7', sessionId: 'sess-1' });
+    expect(seen[seen.length - 1]).toMatchObject({ tileId: 'tile-7', sessionId: 'sess-1' });
 
     await gesture(daemon, () => daemon.arrange((desktops) => desktops.map((desktop) => ({
       ...desktop,
       tree_json: desktop.tree_json.replace(',"tile_session_id":"sess-1"', ''),
     }))));
-    expect(seen.at(-1)).toMatchObject({ tileId: 'tile-7', sessionId: null });
+    expect(seen[seen.length - 1]).toMatchObject({ tileId: 'tile-7', sessionId: null });
   });
 });
 
