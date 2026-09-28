@@ -3,6 +3,7 @@ import type { ShortcutId } from '../../shortcuts/registry';
 import { crewDisplayName } from '../../utils/crewName';
 import { formatTurnAge } from '../../utils/queueBands';
 import { isSnoozed } from '../../utils/snoozeDurations';
+import { tileKindLabel } from '../../utils/tilePresentation';
 import { agentStatus, type AgentPaletteRow, type PaletteSession } from './agentPaletteRows';
 import './AgentRows.css';
 
@@ -44,16 +45,7 @@ export function AgentRowView<S extends PaletteSession>({
         </div>
       );
     case 'tile':
-      return (
-        <div className="unified-palette-row">
-          <span className="unified-palette-dot is-tile" />
-          <span className="unified-palette-name">{row.title}</span>
-          <kbd className="unified-palette-slot">{slotOf(row.desktopId)}</kbd>
-          <span className="unified-palette-pill is-tile">{row.tile.tileKind === 'markdown' ? 'doc' : 'tile'}</span>
-          <span className="unified-palette-age" />
-          <span className="unified-palette-tag" />
-        </div>
-      );
+      return <TileRow row={row} slot={slotOf(row.desktopId)} />;
     case 'agent':
       return (
         <AgentSessionRow
@@ -64,6 +56,18 @@ export function AgentRowView<S extends PaletteSession>({
         />
       );
   }
+}
+
+function TileRow<S extends PaletteSession>({ row, slot }: { row: Extract<AgentPaletteRow<S>, { kind: 'tile' }>; slot: string }) {
+  const kind = tileKindLabel(row.tile.tileKind);
+  return (
+    <div className="unified-palette-row is-tile" data-testid={`palette-tile-${row.tile.tileId}`}>
+      <span className="unified-palette-tile-icon" aria-hidden="true">{kind.icon}</span>
+      <span className="unified-palette-tile-kind">{kind.word}</span>
+      <span className="unified-palette-name">{row.title}</span>
+      <kbd className="unified-palette-slot">{slot}</kbd>
+    </div>
+  );
 }
 
 export function AgentSessionRow({
