@@ -994,6 +994,24 @@ describe('keyboard focus', () => {
     expect(focusedPane()).toBe('pane-s3');
   });
 
+  it('moves the keyboard with the leaf another client showed when it sat in the leaf that lost it', async () => {
+    const { daemon } = await renderApp({ initialState: {
+      sessions: [queueSession('s1', 9), queueSession('s2', 10)],
+      desktops: [splitDesktop('beta', ['s1', 's2'], { active_pane_id: 'pane-s1' })],
+    } });
+    await open(daemon, 's1');
+    await settleFocus(daemon);
+    expect(focusedPane()).toBe('pane-s1');
+
+    await gesture(daemon, () => {
+      daemon.arrangement.show('beta', 'pane-s2');
+      daemon.emit(daemon.arrangement.changed());
+    });
+    await settleFocus(daemon);
+
+    expect(focusedPane()).toBe('pane-s2');
+  });
+
   it('puts the keyboard in a tile the user reached through history', async () => {
     const { daemon } = await renderApp({ initialState: {
       sessions: [daemonSession('s1'), daemonSession('s2')],

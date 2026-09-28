@@ -1,4 +1,4 @@
-import { act } from '@testing-library/react';
+import { act, screen } from '@testing-library/react';
 import { isTauri } from '@tauri-apps/api/core';
 import { emit, listen } from '@tauri-apps/api/event';
 import { describe, expect, it, vi } from 'vitest';
@@ -95,6 +95,32 @@ describe('automation select_session', () => {
     await act(() => vi.advanceTimersByTimeAsync(100));
 
     expect(answer()).toMatchObject({ ok: false, error: expect.stringContaining('dropped the request') });
+  });
+
+  it('answers focus_pane on the pane already shown only once the keyboard is in it', async () => {
+    const { daemon, ask } = await renderAutomatedApp([splitDesktop('ws', ['s1', 's2'], { active_pane_id: 'pane-s2' })]);
+    await ask('select_session', { sessionId: 's2' });
+    act(() => screen.getByTestId('sidebar-home').focus());
+    const held: Array<{ request_id: string; cmd: 'desktop_show_leaf'; desktop_id: string; leaf_id: string }> = [];
+    daemon.on('desktop_show_leaf', (command) => {
+      held.push(command);
+      return undefined;
+    });
+
+    const answer = await ask('focus_pane', { sessionId: 's2', paneId: 'pane-s2' });
+    expect(held.map((command) => command.leaf_id)).toEqual(['pane-s2']);
+    expect(answer()).toBeUndefined();
+
+    await act(async () => {
+      for (const command of held.splice(0)) {
+        daemon.emit(daemon.arrangement.answer(command));
+        daemon.replyTo(command as never, { event: 'profile_action_result', action: command.cmd, request_id: command.request_id, success: true });
+      }
+    });
+    await act(() => vi.advanceTimersByTimeAsync(100));
+
+    expect(answer()).toMatchObject({ ok: true });
+    expect(document.activeElement?.closest('[data-pane-id]')?.getAttribute('data-pane-id')).toBe('pane-s2');
   });
 
   it('answers focus_pane only once the daemon shows that pane', async () => {

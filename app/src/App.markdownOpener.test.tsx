@@ -240,6 +240,31 @@ describe('App markdown opener target', () => {
     expect(openPath).toHaveBeenCalledWith('/repo/docs/plan.md');
   });
 
+  it('roots a notebook opened from a shown document tile in the folder of the agent the tile was opened for', async () => {
+    const view = await renderApp({
+      initialState: {
+        settings: { 'notebook.root.effective': NOTEBOOK_ROOT },
+        sessions: [daemonSession('s1', { directory: '/repo' }), daemonSession('s2', { directory: '/elsewhere' })],
+        desktops: [
+          daemonDesktop('ws', {
+            root: dockTiles({ type: 'pane', pane_id: 'pane-s2' }, [
+              { tile_id: 'tile-plan', tile_kind: 'markdown', tile_params: '/repo/docs/plan.md', tile_session_id: 's1' },
+            ]),
+            panes: [agentPane('s2', 'ws')],
+          }, { name: 'ws', active_pane_id: 'tile-plan' }),
+        ],
+      },
+    });
+    await view.daemon.idle();
+    fireEvent.click(screen.getByRole('button', { name: 'Open ws' }));
+    await view.daemon.idle();
+
+    pressShortcut('notebook.openTile');
+    await view.daemon.idle();
+
+    expect(view.daemon.sentOf('desktop_dock_tile')).toEqual([expect.objectContaining({ tile_kind: 'notebook', tile_params: '{"root":"/repo"}' })]);
+  });
+
   it('indexes the folder of the agent a shown document tile was opened for, never a borrowed agent', async () => {
     const view = await renderApp({
       initialState: {

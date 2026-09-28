@@ -39,7 +39,7 @@ import { useDesktopResidency } from './useDesktopResidency';
 import { useLeafDrag } from './useLeafDrag';
 import { useDesktopTiles } from './useDesktopTiles';
 import { openPalette, switchPalette, type PaletteMode } from '../components/palette/paletteState';
-import { selectionShown } from '../hooks/uiAutomationSelection';
+import { focusLanded, selectionShown } from '../hooks/uiAutomationSelection';
 
 export function useAppController({
   daemonSessions,
@@ -466,6 +466,7 @@ export function useAppController({
       if (!owner?.desktopId) throw new Error(`focus_pane: pane ${paneId} of session ${sessionId} is on no desktop`);
       selectLeaf(owner.desktopId, paneId);
       await selectionShown({ kind: 'leaf', desktopId: owner.desktopId, leafId: paneId });
+      await focusLanded(owner.desktopId, paneId);
     },
     typeInSessionPaneViaUI,
     isSessionPaneInputFocused,

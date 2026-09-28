@@ -45,13 +45,14 @@ export function useDesktopTiles({ settings, sessions, shownAgentId, showError }:
     setMarkdownOpenerOpen(true);
   }, []);
 
+  const rootSessionId = shownAgentId ?? (leaf?.kind === 'tile' ? leaf.tileSessionId : null);
   const markdownOpenerTarget = useMemo(
     () =>
       resolveMarkdownOpenerTarget(
-        sessions.find((session) => session.id === (shownAgentId ?? (leaf?.kind === 'tile' ? leaf.tileSessionId : null))),
+        sessions.find((session) => session.id === rootSessionId),
         settings['notebook.root.effective'],
       ),
-    [leaf, sessions, shownAgentId, settings],
+    [rootSessionId, sessions, settings],
   );
   const loadOpenerRecents = useCallback(
     () =>
@@ -68,7 +69,7 @@ export function useDesktopTiles({ settings, sessions, shownAgentId, showError }:
   const handleOpenNotebookTile = useCallback(() => {
     const desktop = currentDesktop();
     if (!desktop) return;
-    const activeSession = sessions.find((session) => session.id === shownAgentId);
+    const activeSession = sessions.find((session) => session.id === rootSessionId);
     const localDirectory = activeSession && !activeSession.endpointId ? activeSession.cwd : '';
     const root = resolveEditorTileRoot(localDirectory, settings['notebook.root.effective'] || '');
     const tileId = `notebook-tile-${crypto.randomUUID()}`;
@@ -87,7 +88,7 @@ export function useDesktopTiles({ settings, sessions, shownAgentId, showError }:
       useSessionStore.getState().intentFailed(intent);
       showError(`Could not open the notebook: ${failureMessage(error)}`);
     });
-  }, [sendDesktopDockTile, settings, sessions, shownAgentId, showError]);
+  }, [rootSessionId, sendDesktopDockTile, settings, sessions, showError]);
 
   // A fresh tile id every time: the daemon reads a duplicate id as a move.
   const dockAppViewTile = useCallback(

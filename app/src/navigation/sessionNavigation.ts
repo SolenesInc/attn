@@ -238,7 +238,7 @@ export function reconcileArrangement(
     return next;
   }
   if (arrival.kind === 'broadcast') {
-    return sameLeaf(leaf, activeLeafOf(previous)) ? next : recordVisit(endIntent(next), arrangement);
+    return sameLeaf(leaf, activeLeafOf(previous)) ? next : recordVisit({ ...next, intent: null }, arrangement);
   }
   return intent ? next : recordVisit(next, arrangement);
 }
