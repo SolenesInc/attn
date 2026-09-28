@@ -59,15 +59,16 @@ export function useDesktopNavigation(showNotice: ShowNotice) {
     [report, sendDesktopSetCurrent],
   );
 
+  // Bouncing back applies only while the user is looking at the slot's desktop.
   const switchToSlot = useCallback(
-    (slot: number) => {
+    (slot: number, looking = true) => {
       const state = useProfilesStore.getState();
       const target = desktopInSlot(state.desktops, slot);
       if (!target) {
         showNotice(`No desktop on ${slotShortcut(slot)}. Give one a shortcut from the overview.`);
         return;
       }
-      const toggleBack = target.id === currentDesktopOf(state)?.id && state.previousDesktopId;
+      const toggleBack = looking && target.id === currentDesktopOf(state)?.id && state.previousDesktopId;
       switchToDesktop(toggleBack || target.id);
     },
     [showNotice, switchToDesktop],

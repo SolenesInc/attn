@@ -1082,6 +1082,36 @@ describe('keyboard focus', () => {
     expect(focusedPane()).toBe('pane-s1');
   });
 
+  async function onDesktopWithAPrevious() {
+    const view = await renderApp({ initialState: {
+      sessions: [queueSession('s1', 9), queueSession('s2', 10)],
+      desktops: [soloDesktop('s1', { name: 'alpha', shortcut_slot: 5 }), soloDesktop('s2', { name: 'beta', shortcut_slot: 6 })],
+    } });
+    await open(view.daemon, 's2');
+    await open(view.daemon, 's1');
+    return view;
+  }
+
+  it('bounces to the previous desktop when the digit names the desktop the user is looking at', async () => {
+    const { daemon } = await onDesktopWithAPrevious();
+
+    await gesture(daemon, () => pressShortcut('desktop.select5'));
+
+    expect(daemon.sentOf('desktop_set_current').slice(-1)).toEqual([expect.objectContaining({ desktop_id: 'desktop-s2' })]);
+  });
+
+  it.each([['home', keys.home], ['the grid', keys.grid]])('opens the digit’s desktop from %s even with a previous desktop to bounce to', async (_, leave) => {
+    const { daemon } = await onDesktopWithAPrevious();
+    await gesture(daemon, leave);
+    act(() => screen.getByTestId('sidebar-home').focus());
+
+    await gesture(daemon, () => pressShortcut('desktop.select5'));
+    await settleFocus(daemon);
+
+    expect(daemon.sentOf('desktop_set_current').slice(-1)).toEqual([expect.objectContaining({ desktop_id: 'desktop-s1' })]);
+    expect(focusedPane()).toBe('pane-s1');
+  });
+
   it('puts the keyboard in a tile the user reached through history', async () => {
     const { daemon } = await renderApp({ initialState: {
       sessions: [daemonSession('s1'), daemonSession('s2')],

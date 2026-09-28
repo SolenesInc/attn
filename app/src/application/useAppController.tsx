@@ -593,8 +593,9 @@ export function useAppController({
     onSnoozeTurn: handleSnoozeShortcut,
     onCancelCountdown: handleCancelCountdown,
     onSwitchToDesktopSlot: (slot) => {
+      const looking = useSessionStore.getState().view === 'session';
       setView('session');
-      desktopNavigation.switchToSlot(slot);
+      desktopNavigation.switchToSlot(slot, looking);
     },
     onSendToDesktopSlot: desktopNavigation.sendActivePaneToSlot,
     onOpenDesktopOverview: () => setDesktopOverviewOpen(true),
