@@ -268,8 +268,16 @@
   border-bottom: 2px solid var(--accent);
 }
 
-.session-terminal-desktop .desktop-pane.leaf-arrival,
-.session-terminal-desktop.desktop-selection--spotlight.multi-leaf .desktop-pane.active.leaf-arrival {
+.session-terminal-desktop .desktop-pane.leaf-arrival::after,
+.session-terminal-desktop.desktop-selection--spotlight.multi-leaf .desktop-pane.active.leaf-arrival::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  width: auto;
+  height: auto;
+  border: 0;
+  z-index: 11;
+  pointer-events: none;
   animation: leaf-arrival-pulse 0.8s ease-out 2;
 }
 
@@ -278,13 +286,13 @@
     box-shadow: 0 0 0 0 var(--accent), inset 0 0 0 2px var(--accent);
   }
   to {
-    box-shadow: 0 0 0 16px transparent, inset 0 0 0 2px transparent;
+    box-shadow: 0 0 0 16px transparent, inset 0 0 0 16px transparent;
   }
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .session-terminal-desktop .desktop-pane.leaf-arrival,
-  .session-terminal-desktop.desktop-selection--spotlight.multi-leaf .desktop-pane.active.leaf-arrival {
+  .session-terminal-desktop .desktop-pane.leaf-arrival::after,
+  .session-terminal-desktop.desktop-selection--spotlight.multi-leaf .desktop-pane.active.leaf-arrival::after {
     animation: leaf-arrival-outline 0.8s ease-out 1;
   }
 }
