@@ -50,6 +50,30 @@
   background: var(--color-border);
 }
 
+.unified-palette-tile-icon {
+  flex: 0 0 14px;
+  width: 14px;
+  height: 14px;
+  color: var(--color-text-tertiary);
+}
+
+.unified-palette-tile-icon svg {
+  display: block;
+  width: 100%;
+  height: 100%;
+}
+
+.unified-palette-tile-kind {
+  flex: 0 0 42px;
+  padding: 2px 0;
+  border-radius: 4px;
+  color: var(--color-text-tertiary);
+  background: color-mix(in srgb, var(--color-text-tertiary) 12%, transparent);
+  font-size: 10px;
+  font-weight: 600;
+  text-align: center;
+}
+
 .unified-palette-name {
   flex: 1 1 auto;
   min-width: 0;
@@ -136,4 +160,3 @@
 .unified-palette-runs-count {
   color: var(--color-text-muted);
 }
-

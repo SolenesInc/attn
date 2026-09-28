@@ -6,6 +6,7 @@ import { tileContentKey, type TileLeaf } from '../types/desktop';
 import { nextRunNeedingYou, runCount, runsNeedingYouCount } from '../utils/automationRuns';
 import { slotShortcut } from '../utils/desktops';
 import { deriveTileTitle } from '../utils/tilePresentation';
+import { useDaemonStore } from '../store/daemonSessions';
 import { clampIntoViewport } from '../utils/viewportClamp';
 import { UNPLACED_GROUP_ID } from '../utils/desktopViewModels';
 import { CriticalNotificationStrip } from './CriticalNotificationStrip';
@@ -121,16 +122,18 @@ function WaitingPeek() {
   const { queue, crew, desktops, tileContents, onSelectSession, onWakeCrewMember, onSelectTile } =
     useSidebarContext();
   const now = useNow(TURN_AGE_TICK_MS);
+  const seeds = useDaemonStore((state) => state.seeds);
   const slotOf = useSlotOf();
   const rows = useMemo(() => {
     if (!queue) return [];
     const tileTitle = (desktopId: string, tile: TileLeaf) =>
-      deriveTileTitle(tile, tileContents[tileContentKey(desktopId, tile.tileId)]);
+      deriveTileTitle(tile, tileContents[tileContentKey(desktopId, tile.tileId)],
+        (id) => seeds.find((seed) => seed.id === id)?.title);
     return agentPaletteRows<LocalSession>(
       { bands: queue, crewRoster: (crew ?? []).map((member) => member.id), desktops, tileTitle, now },
       '',
     ).filter((row) => row.kind !== 'runs' && !(row.kind === 'agent' && row.session.automation));
-  }, [crew, now, queue, tileContents, desktops]);
+  }, [crew, now, queue, tileContents, desktops, seeds]);
 
   const shown: AgentPaletteRow<LocalSession>[] = [];
   let entries = 0;
