@@ -272,6 +272,11 @@ export function useDesktopController(
     agentPaneById,
     selectedSessionId === undefined ? selectedDesktopSessionId : selectedSessionId,
   );
+  useLayoutEffect(() => {
+    if (focusClaim?.announce && focusClaim.desktopId === desktopId
+      && effectivePaneId && tileLeafById.has(effectivePaneId)
+      && focusClaim.leafId !== effectivePaneId) setMaximizedLeafId(null);
+  }, [desktopId, effectivePaneId, focusClaim, setMaximizedLeafId, tileLeafById]);
   const effectiveZoomedPaneId = zoomActive && leafIdSet.has(activeLeafId) ? activeLeafId : null;
 
   const hasLayout = terminalState.layoutTree != null;
@@ -498,6 +503,39 @@ export function useDesktopController(
   useLayoutEffect(() => {
     focusClaimRef.current = focusClaim;
   }, [focusClaim]);
+
+  const lastAnnouncedClaim = useRef(0);
+  useLayoutEffect(() => {
+    const container = panesContainerRef.current;
+    if (!container) return;
+    if (!sessionVisible) {
+      container.querySelectorAll('.desktop-pane.leaf-arrival').forEach((pane) => pane.classList.remove('leaf-arrival'));
+      return;
+    }
+    if (!focusClaim?.announce || focusClaim.desktopId !== desktopId
+      || focusClaim.leafId !== activeLeafId || lastAnnouncedClaim.current === focusClaim.id) return;
+    const pane = Array.from(container.querySelectorAll<HTMLElement>('[data-pane-id]'))
+      .find((element) => element.dataset.paneId === focusClaim.leafId);
+    if (!pane) return;
+
+    lastAnnouncedClaim.current = focusClaim.id;
+    container.querySelectorAll('.desktop-pane.leaf-arrival').forEach((arrived) => arrived.classList.remove('leaf-arrival'));
+    void pane.offsetWidth;
+    pane.classList.add('leaf-arrival');
+  }, [activeLeafId, desktopId, focusClaim, paneReadyFocusRequest, renderedPaneIdsKey, sessionVisible]);
+
+  useEffect(() => {
+    const container = panesContainerRef.current;
+    if (!container) return;
+    const onAnimationEnd = (event: AnimationEvent) => {
+      if ((event.animationName === 'leaf-arrival-pulse' || event.animationName === 'leaf-arrival-outline')
+        && event.target instanceof HTMLElement) event.target.classList.remove('leaf-arrival');
+    };
+    container.addEventListener('animationend', onAnimationEnd);
+    return () => {
+      container.removeEventListener('animationend', onAnimationEnd);
+    };
+  }, [renderedPaneIdsKey]);
 
   useEffect(() => {
     if (!focusClaim || !sessionVisible || focusClaim.leafId !== activeLeafId) return;

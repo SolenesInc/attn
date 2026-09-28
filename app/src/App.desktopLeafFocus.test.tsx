@@ -91,17 +91,23 @@ describe('App desktop leaf focus', () => {
     expect(agentPaneEl()).not.toBeNull();
   });
 
-  it('keeps a maximized tile across selection changes, but a maximized agent pane only while its session stays selected, which going home does not change', async () => {
+  it('keeps a maximized tile through external selection, but releases it for an explicit pick of another leaf', async () => {
     const { perform, press, tile, daemon } = await openPaneBesideNotes();
     const select = (label: string) => perform(() => fireEvent.click(screen.getByRole('button', { name: `Open ${label}` })));
 
     await perform(() => fireEvent.mouseDown(tile()));
     await press('terminal.toggleMaximize');
-    await select('s2');
-    await select('s1');
+    await perform(() => {
+      daemon.arrangement.show('desktop-1', 'pane-s1');
+      daemon.emit(daemon.arrangement.changed());
+    });
     expect(surface()).toHaveAttribute('data-maximized-pane-id', 'tile-a');
 
-    await press('terminal.toggleMaximize');
+    await select('s2');
+    await select('s1');
+    expect(surface()).toHaveAttribute('data-maximized-pane-id', '');
+    expect(agentPaneEl()).toHaveClass('leaf-arrival');
+
     await perform(() => fireEvent.mouseDown(agentPaneEl()!));
     await press('terminal.toggleMaximize');
     expect(surface()).toHaveAttribute('data-maximized-pane-id', 'pane-s1');
