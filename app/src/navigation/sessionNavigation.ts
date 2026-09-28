@@ -111,6 +111,10 @@ export function selectionFailed(state: SessionNavigationState, id: number): Sess
   return state.pendingSelection?.id === id ? cancelSelection(state) : state;
 }
 
+export function focusClaimDelivered(state: SessionNavigationState, id: number): SessionNavigationState {
+  return state.focusRequest?.id === id ? { ...state, focusRequest: null } : state;
+}
+
 export function claimFocus(state: SessionNavigationState, leaf: ActiveLeaf, focusOwner: Element | null): SessionNavigationState {
   const id = state.focusSequence + 1;
   return { ...state, focusSequence: id, focusRequest: { id, desktopId: leaf.desktopId, leafId: leaf.leafId, focusOwner } };

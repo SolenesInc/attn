@@ -9,6 +9,7 @@ import {
   claimFocus,
   enterHome,
   toggleGrid,
+  focusClaimDelivered,
   leafMoved,
   navigateHistory,
   navigationQueue,
@@ -27,6 +28,7 @@ export interface SessionNavigationActions {
   cancelPendingSelection: () => void;
   selectionFailed: (id: number) => void;
   toggleGrid: () => void;
+  focusClaimDelivered: (id: number) => void;
   transferFocus: (leaf: ActiveLeaf) => void;
   leafMoved: (profileId: string, moved: LeafMoved) => void;
   navigateLeafHistory: (direction: LeafHistoryDirection, resumeCurrent?: boolean) => boolean;
@@ -88,6 +90,7 @@ export function createSessionNavigationActions(
     cancelPendingSelection: () => set((state) => cancelSelection(state)),
     selectionFailed: (id) => set((state) => selectionFailed(state, id)),
     toggleGrid: () => set((state) => toggleGrid(state)),
+    focusClaimDelivered: (id) => set((state) => focusClaimDelivered(state, id)),
     transferFocus: (leaf) => set((state) => claimFocus(state, leaf, focusOwner())),
     leafMoved: (profileId, moved) => set((state) => leafMoved(state, profileId, moved)),
     navigateLeafHistory: (direction, resumeCurrent = false) => {

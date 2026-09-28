@@ -44,6 +44,7 @@ import type {
   SessionTerminalDesktopHandle,
   SessionTerminalDesktopProps,
 } from './desktopTypes';
+import { useSessionStore } from '../../store/sessions';
 
 const RESIZE_MOUSE_SUPPRESSION_MS = 1_500;
 
@@ -63,9 +64,6 @@ const EMPTY_DESKTOP_SESSIONS: NonNullable<SessionTerminalDesktopProps['desktopSe
 const EMPTY_SEED_TARGET_SESSIONS: DesktopTileSessionOption[] = [];
 
 const EMPTY_GARDEN_SEEDS: Seed[] = [];
-
-// One-shot: a claim is delivered once, even if its desktop remounts while it is still current.
-const deliveredClaims = new WeakSet<object>();
 
 function focusIsFree(desktop: HTMLElement | null): boolean {
   const active = document.activeElement;
@@ -498,13 +496,10 @@ export function useDesktopController(
   }, [focusRequestToken, paneReadyFocusRequest, sessionVisible]);
 
   useEffect(() => {
-    if (!focusClaim || deliveredClaims.has(focusClaim) || !sessionVisible || focusClaim.leafId !== activeLeafId) return;
+    if (!focusClaim || !sessionVisible || focusClaim.leafId !== activeLeafId) return;
     const active = document.activeElement;
-    if (active && active !== focusClaim.focusOwner && !focusIsFree(panesContainerRef.current)) {
-      deliveredClaims.add(focusClaim);
-      return;
-    }
-    if (focusShownLeaf(activeLeafId)) deliveredClaims.add(focusClaim);
+    const userMovedOn = active && active !== focusClaim.focusOwner && !focusIsFree(panesContainerRef.current);
+    if (userMovedOn || focusShownLeaf(activeLeafId)) useSessionStore.getState().focusClaimDelivered(focusClaim.id);
   }, [activeLeafId, focusClaim, focusShownLeaf, paneReadyFocusRequest, sessionVisible]);
 
   // A pane whose grid overflows its container is not retried by fit()'s reveal
