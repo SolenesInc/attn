@@ -248,6 +248,7 @@ test.describe('Desktop Sessions', () => {
       .poll(() => page.evaluate(() => window.__TEST_GET_SESSION_PANE_TEXT?.('gpu-agent') ?? ''))
       .toContain('second row');
     const canvas = page.locator(`${paneOf('gpu-agent')} canvas`).first();
+    await expect(page.locator(paneOf('gpu-agent'))).not.toHaveClass(/leaf-arrival/);
     const before = await canvas.screenshot();
     const shown = await canvas.evaluate((element: HTMLCanvasElement) => [element.width, element.height]);
     expect(shown[0]).toBeGreaterThan(1);
@@ -270,6 +271,7 @@ test.describe('Desktop Sessions', () => {
     await page.getByTestId('sidebar-session-gpu-agent').getByRole('button', { name: 'Open gpu-agent' }).click();
     await expect(canvas).toHaveJSProperty('width', shown[0]);
     await expect(canvas).toHaveJSProperty('height', shown[1]);
+    await expect(page.locator(paneOf('gpu-agent'))).not.toHaveClass(/leaf-arrival/);
     expect((await canvas.screenshot()).equals(before)).toBe(true);
   });
 
