@@ -44,7 +44,12 @@ export function diffRows(patch) {
   return rows;
 }
 
-function changedParts(before, after) {
+// The catalog's longest line has 225 tokens; 1M LCS cells took 4ms locally.
+const WORD_WORK_LIMIT = 4_000_000;
+// Catalog lines average 14 words; 1M row-word checks is roughly 60ms locally.
+const ROW_WORK_LIMIT = 1_000_000;
+
+function changedParts(before, after, remainingWork) {
   const oldTokens = before.match(/\s+|\S+\s*/g) || [];
   const newTokens = after.match(/\s+|\S+\s*/g) || [];
   const removed = [], added = [];
@@ -60,67 +65,17 @@ function changedParts(before, after) {
     oldEnd--;
     newEnd--;
   }
-
-  const greedyMatches = (reverse, oldStart, oldStop, newStart, newStop) => {
-    const positions = new Map(), offsets = new Map(), matches = [];
-    for (let i = newStart; i < newStop; i++) {
-      if (!positions.has(newTokens[i])) positions.set(newTokens[i], []);
-      positions.get(newTokens[i]).push(i);
+  const oldLength = oldEnd - prefix, newLength = newEnd - prefix;
+  const work = oldLength * newLength;
+  if (work > remainingWork) return { work };
+  const matches = Array.from({ length: oldLength + 1 }, () => new Uint32Array(newLength + 1));
+  for (let old = oldLength - 1; old >= 0; old--) {
+    for (let next = newLength - 1; next >= 0; next--) {
+      matches[old][next] = oldTokens[prefix + old] === newTokens[prefix + next]
+        ? matches[old + 1][next + 1] + 1
+        : Math.max(matches[old + 1][next], matches[old][next + 1]);
     }
-    let nextPosition = reverse ? newStop : newStart - 1;
-    for (let i = reverse ? oldStop - 1 : oldStart; reverse ? i >= oldStart : i < oldStop; i += reverse ? -1 : 1) {
-      const available = positions.get(oldTokens[i]) || [];
-      let offset = offsets.get(oldTokens[i]) ?? (reverse ? available.length - 1 : 0);
-      while (reverse ? offset >= 0 && available[offset] >= nextPosition : offset < available.length && available[offset] <= nextPosition) offset += reverse ? -1 : 1;
-      if (offset >= 0 && offset < available.length) {
-        matches.push({ old: i, next: available[offset] });
-        nextPosition = available[offset];
-        offset += reverse ? -1 : 1;
-      }
-      offsets.set(oldTokens[i], offset);
-    }
-    return reverse ? matches.reverse() : matches;
-  };
-  const bestGreedy = (oldStart, oldStop, newStart, newStop) => {
-    const forward = greedyMatches(false, oldStart, oldStop, newStart, newStop);
-    const backward = greedyMatches(true, oldStart, oldStop, newStart, newStop);
-    return forward.length >= backward.length ? forward : backward;
-  };
-  // Keep the alignment that preserves more words across repeated or moved phrases.
-  let matches = bestGreedy(prefix, oldEnd, prefix, newEnd);
-
-  const oldUnique = new Map(), newUnique = new Map();
-  for (let old = prefix; old < oldEnd; old++) oldUnique.set(oldTokens[old], oldUnique.has(oldTokens[old]) ? -1 : old);
-  for (let next = prefix; next < newEnd; next++) newUnique.set(newTokens[next], newUnique.has(newTokens[next]) ? -1 : next);
-  const candidates = [];
-  for (let old = prefix; old < oldEnd; old++) {
-    const next = newUnique.get(oldTokens[old]);
-    if (oldUnique.get(oldTokens[old]) === old && next >= 0) candidates.push({ old, next });
   }
-  const tails = [], tailIndices = [], previous = new Int32Array(candidates.length).fill(-1);
-  for (let i = 0; i < candidates.length; i++) {
-    let low = 0, high = tails.length;
-    while (low < high) {
-      const middle = (low + high) >> 1;
-      if (tails[middle] < candidates[i].next) low = middle + 1;
-      else high = middle;
-    }
-    if (low) previous[i] = tailIndices[low - 1];
-    tails[low] = candidates[i].next;
-    tailIndices[low] = i;
-  }
-  const anchors = [];
-  for (let i = tailIndices.at(-1); i !== undefined && i >= 0; i = previous[i]) anchors.push(candidates[i]);
-  anchors.reverse();
-  const anchored = [];
-  let gapOld = prefix, gapNew = prefix;
-  for (const anchor of [...anchors, { old: oldEnd, next: newEnd }]) {
-    anchored.push(...bestGreedy(gapOld, anchor.old, gapNew, anchor.next));
-    if (anchor.old < oldEnd) anchored.push(anchor);
-    gapOld = anchor.old + 1;
-    gapNew = anchor.next + 1;
-  }
-  if (anchored.length > matches.length) matches = anchored;
 
   let old = 0, next = 0;
   for (let i = 0; i < prefix; i++) {
@@ -129,28 +84,28 @@ function changedParts(before, after) {
     old++;
     next++;
   }
-  for (const anchor of [...matches, { old: oldEnd, next: newEnd }]) {
-    if (old < anchor.old) append(removed, oldTokens.slice(old, anchor.old).join(""), true);
-    if (next < anchor.next) append(added, newTokens.slice(next, anchor.next).join(""), true);
-    if (anchor.old < oldEnd) {
-      append(removed, oldTokens[anchor.old], false);
-      append(added, newTokens[anchor.next], false);
+  while (old < oldEnd || next < newEnd) {
+    if (old < oldEnd && next < newEnd && oldTokens[old] === newTokens[next]) {
+      append(removed, oldTokens[old++], false);
+      append(added, newTokens[next++], false);
+    } else if (old < oldEnd && (next === newEnd || matches[old - prefix + 1][next - prefix] >= matches[old - prefix][next - prefix + 1])) {
+      append(removed, oldTokens[old++], true);
+    } else {
+      append(added, newTokens[next++], true);
     }
-    old = anchor.old + 1;
-    next = anchor.next + 1;
   }
   for (let i = 0; i < oldTokens.length - oldEnd; i++) {
     append(removed, oldTokens[oldEnd + i], false);
     append(added, newTokens[newEnd + i], false);
   }
-  return [removed, added];
+  return { parts: [removed, added], work };
 }
 
 function sharedWords(before, after) {
   const remaining = new Map();
-  for (const word of before.match(/\S+/g) || []) remaining.set(word, (remaining.get(word) || 0) + 1);
+  for (const word of before) remaining.set(word, (remaining.get(word) || 0) + 1);
   let count = 0;
-  for (const word of after.match(/\S+/g) || []) {
+  for (const word of after) {
     const available = remaining.get(word) || 0;
     if (available) {
       count++;
@@ -161,13 +116,27 @@ function sharedWords(before, after) {
 }
 
 function highlightChangedRows(rows) {
+  const skipped = { rowBlocks: 0, wordPairs: 0, rowAsk: 0, wordAsk: 0 };
+  let rowWork = 0, wordWork = 0;
   for (let start = 0; start < rows.length;) {
     if (rows[start].kind !== "removed") { start++; continue; }
     let end = start;
     while (["removed", "added", "notice"].includes(rows[end]?.kind)) end++;
     const removed = rows.slice(start, end).filter((row) => row.kind === "removed");
     const added = rows.slice(start, end).filter((row) => row.kind === "added");
-    const scores = removed.map((old) => added.map((next) => sharedWords(old.text, next.text)));
+    const oldWords = removed.map((row) => row.text.match(/\S+/g) || []);
+    const newWords = added.map((row) => row.text.match(/\S+/g) || []);
+    const requested = removed.length * added.length
+      + added.length * oldWords.reduce((total, words) => total + words.length, 0)
+      + removed.length * newWords.reduce((total, words) => total + words.length, 0);
+    if (rowWork + requested > ROW_WORK_LIMIT) {
+      skipped.rowBlocks++;
+      skipped.rowAsk = Math.max(skipped.rowAsk, rowWork + requested);
+      start = end;
+      continue;
+    }
+    rowWork += requested;
+    const scores = oldWords.map((old) => newWords.map((next) => sharedWords(old, next)));
     const best = Array.from({ length: removed.length + 1 }, () => new Uint32Array(added.length + 1));
     for (let old = removed.length - 1; old >= 0; old--) {
       for (let next = added.length - 1; next >= 0; next--) {
@@ -177,7 +146,14 @@ function highlightChangedRows(rows) {
     let old = 0, next = 0;
     while (old < removed.length && next < added.length) {
       if (scores[old][next] && best[old][next] === scores[old][next] + best[old + 1][next + 1]) {
-        [removed[old].parts, added[next].parts] = changedParts(removed[old].text, added[next].text);
+        const result = changedParts(removed[old].text, added[next].text, WORD_WORK_LIMIT - wordWork);
+        if (result.parts) {
+          [removed[old].parts, added[next].parts] = result.parts;
+          wordWork += result.work;
+        } else {
+          skipped.wordPairs++;
+          skipped.wordAsk = Math.max(skipped.wordAsk, wordWork + result.work);
+        }
         old++;
         next++;
       } else if (best[old + 1][next] >= best[old][next + 1]) old++;
@@ -185,6 +161,7 @@ function highlightChangedRows(rows) {
     }
     start = end;
   }
+  return skipped;
 }
 
 export function renderDiff(container, patch, message, baseLabel, currentLabel = "Working copy + drafts") {
@@ -203,10 +180,12 @@ export function renderDiff(container, patch, message, baseLabel, currentLabel = 
     return;
   }
   const rows = diffRows(patch);
-  highlightChangedRows(rows);
+  const skipped = highlightChangedRows(rows);
   const added = rows.filter((r) => r.kind === "added").length;
   const removed = rows.filter((r) => r.kind === "removed").length;
   container.append(node("div", `${added} added · ${removed} removed`, "diff-summary"));
+  if (skipped.rowBlocks) container.append(node("div", `Word detail skipped in ${skipped.rowBlocks} changed block(s): line pairing work limit ${ROW_WORK_LIMIT.toLocaleString()}, requested ${skipped.rowAsk.toLocaleString()}. Full-line changes remain visible.`, "diff-limit"));
+  if (skipped.wordPairs) container.append(node("div", `Word detail skipped in ${skipped.wordPairs} line pair(s): word comparison limit ${WORD_WORK_LIMIT.toLocaleString()} cells, requested ${skipped.wordAsk.toLocaleString()}. Full-line changes remain visible.`, "diff-limit"));
   const lines = node("div", "", "diff-lines");
   for (const row of rows) {
     const line = node("div", "", `diff-line ${row.kind}`);
