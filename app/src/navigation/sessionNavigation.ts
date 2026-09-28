@@ -41,6 +41,7 @@ export interface FocusClaim {
 
 export interface SessionNavigationState {
   view: AppView;
+  viewBeforeGrid: AppView;
   followNextTurn: boolean;
   pendingSelection: PendingShow | null;
   focusRequest: FocusClaim | null;
@@ -53,6 +54,7 @@ export interface SessionNavigationState {
 export function initialSessionNavigation(): SessionNavigationState {
   return {
     view: 'dashboard',
+    viewBeforeGrid: 'dashboard',
     followNextTurn: false,
     pendingSelection: null,
     focusRequest: null,
@@ -82,7 +84,6 @@ export function requestShow(
   const id = state.selectionSequence + 1;
   return {
     ...state,
-    view: 'session',
     followNextTurn: false,
     pendingSelection: { id, profileId, target, historyCursor, focusOwner },
     focusRequest: null,
@@ -110,13 +111,13 @@ export function selectionFailed(state: SessionNavigationState, id: number): Sess
   return state.pendingSelection?.id === id ? cancelSelection(state) : state;
 }
 
-export function focusDelivered(state: SessionNavigationState, id: number): SessionNavigationState {
-  return state.focusRequest?.id === id ? { ...state, focusRequest: null } : state;
-}
-
 export function claimFocus(state: SessionNavigationState, leaf: ActiveLeaf, focusOwner: Element | null): SessionNavigationState {
   const id = state.focusSequence + 1;
   return { ...state, focusSequence: id, focusRequest: { id, desktopId: leaf.desktopId, leafId: leaf.leafId, focusOwner } };
+}
+
+export function toggleGrid(state: SessionNavigationState): SessionNavigationState {
+  return changeView(state, state.view === 'grid' ? state.viewBeforeGrid : 'grid');
 }
 
 export function enterHome(state: SessionNavigationState, followNextTurn: boolean): SessionNavigationState {
@@ -128,6 +129,7 @@ export function changeView(state: SessionNavigationState, update: StateUpdate<Ap
   return {
     ...cancelSelection(state),
     view,
+    viewBeforeGrid: view === 'grid' && state.view !== 'grid' ? state.view : state.viewBeforeGrid,
     followNextTurn: view === 'dashboard' && state.followNextTurn,
   };
 }
@@ -174,7 +176,7 @@ export function reconcileArrangement(
     if (pending.historyCursor !== null && pending.profileId === arrangement.profileId) {
       history = { entries: history.entries, cursor: Math.min(pending.historyCursor, history.entries.length - 1) };
     }
-    next = claimFocus({ ...next, pendingSelection: null }, leaf, pending.focusOwner);
+    next = claimFocus({ ...next, view: 'session', pendingSelection: null }, leaf, pending.focusOwner);
   } else if (pending && pendingTargetGone(pending, sessions, arrangement)) {
     next = cancelSelection(next);
   }

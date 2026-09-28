@@ -3,7 +3,7 @@ import { controlBrowserHost } from '../browser/host';
 import { useDaemonApi } from '../contexts/DaemonApiContext';
 import { useAgentNavigation } from '../hooks/useAgentNavigation';
 import { withFreshDesktopRevisions } from '../hooks/desktopRevisions';
-import { currentActiveLeaf, useAgentOnScreen } from '../hooks/useDesktopSelectionBridge';
+import { useAgentOnScreen } from '../hooks/useDesktopSelectionBridge';
 import { useProfilesStore, useSelectedTile } from '../store/profiles';
 import { useSessionStore } from '../store/sessions';
 import { dispatcherOf } from '../utils/delegationLinks';
@@ -100,9 +100,7 @@ export function useAppNavigation({
     );
   }, [desktopViews, agentOnScreenId, handleSelectSession, showNotice]);
 
-  const toggleGridMode = useCallback(() => {
-    setView((prev) => (prev === 'grid' ? (currentActiveLeaf() ? 'session' : 'dashboard') : 'grid'));
-  }, [setView]);
+  const toggleGridMode = useSessionStore((state) => state.toggleGrid);
 
   const [desktopSelectionStyle, setDesktopSelectionStyle] = useState<DesktopSelectionStyle>(
     readDesktopSelectionStyle,

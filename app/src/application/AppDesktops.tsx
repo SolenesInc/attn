@@ -42,7 +42,7 @@ export function AppDesktops() {
   const { setDesktopRef, eventRouter } = useDesktopRuntimeContext();
   const { mountedDesktopIds } = useDesktopResidencyContext();
   const focusRequest = useSessionStore((state) => state.focusRequest);
-  const { selectLeaf, focusDelivered } = useSessionStore.getState();
+  const { selectLeaf } = useSessionStore.getState();
   const {
     presentationBySessionId,
     annotationApi,
@@ -157,7 +157,6 @@ export function AppDesktops() {
           resolvedTheme={resolvedTheme}
           focusRequestToken={utilityFocusRequestToken}
           focusClaim={focusRequest?.desktopId === desktop.id ? focusRequest : null}
-          onFocusClaimDelivered={focusDelivered}
           enabled={!blockingOverlayOpen}
           isActiveSession={isCurrent && view !== 'dashboard'}
           isSessionViewVisible={view === 'session'}

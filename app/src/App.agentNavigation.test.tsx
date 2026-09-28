@@ -252,6 +252,38 @@ describe('agent selection', () => {
     expect(focusedPane()).toBeNull();
   });
 
+  it.each([
+    ['Home', () => undefined, () => expect(isHome()).toBe(true)],
+    ['the grid', keys.grid, () => expect(isGrid()).toBe(true)],
+  ])('stays on %s when the daemon refuses a show asked for from there', async (_, arrive, stayed) => {
+    const { daemon } = await renderAgents();
+    await gesture(daemon, arrive);
+    const hold = holdShows(daemon);
+
+    await open(daemon, 's2');
+    stayed();
+    await hold.refuse();
+
+    stayed();
+    expect(screen.getByText(/Could not show that agent/)).toBeInTheDocument();
+  });
+
+  it.each([
+    ['Home', () => undefined, () => expect(isHome()).toBe(true)],
+    ['an agent', undefined, () => expect(selectedAgent()).toBe('s1')],
+  ])('closes the grid back to %s, where it was opened from', async (_, arrive, cameFrom) => {
+    const { daemon } = await renderAgents();
+    if (arrive) await gesture(daemon, arrive);
+    else await open(daemon, 's1');
+
+    await gesture(daemon, keys.grid);
+    expect(isGrid()).toBe(true);
+    await gesture(daemon, keys.grid);
+
+    expect(isGrid()).toBe(false);
+    cameFrom();
+  });
+
   it('drops a pending show when its agent ends and never places it again', async () => {
     const { daemon } = await renderAgents({ s1: {}, s2: {} }, { laidOut: ['s1'] });
     await open(daemon, 's1');

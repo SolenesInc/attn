@@ -14,7 +14,7 @@ export function selectionShown(target: ShowTarget): Promise<void> {
       else resolve();
     };
     const check = () => {
-      if (leafShows(currentActiveLeaf(), target)) {
+      if (leafShows(currentActiveLeaf(), target) && useSessionStore.getState().view === 'session') {
         settle();
         return;
       }

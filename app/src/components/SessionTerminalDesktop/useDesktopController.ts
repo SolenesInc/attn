@@ -64,6 +64,9 @@ const EMPTY_SEED_TARGET_SESSIONS: DesktopTileSessionOption[] = [];
 
 const EMPTY_GARDEN_SEEDS: Seed[] = [];
 
+// One-shot: a claim is delivered once, even if its desktop remounts while it is still current.
+const deliveredClaims = new WeakSet<object>();
+
 function focusIsFree(desktop: HTMLElement | null): boolean {
   const active = document.activeElement;
   if (!active || active === document.body) return true;
@@ -97,7 +100,6 @@ export function useDesktopController(
     resolvedTheme,
     focusRequestToken,
     focusClaim,
-    onFocusClaimDelivered,
     enabled,
     isActiveSession,
     isSessionViewVisible = true,
@@ -496,14 +498,14 @@ export function useDesktopController(
   }, [focusRequestToken, paneReadyFocusRequest, sessionVisible]);
 
   useEffect(() => {
-    if (!focusClaim || !sessionVisible || focusClaim.leafId !== activeLeafId) return;
+    if (!focusClaim || deliveredClaims.has(focusClaim) || !sessionVisible || focusClaim.leafId !== activeLeafId) return;
     const active = document.activeElement;
     if (active && active !== focusClaim.focusOwner && !focusIsFree(panesContainerRef.current)) {
-      onFocusClaimDelivered?.(focusClaim.id);
+      deliveredClaims.add(focusClaim);
       return;
     }
-    if (focusShownLeaf(activeLeafId)) onFocusClaimDelivered?.(focusClaim.id);
-  }, [activeLeafId, focusClaim, focusShownLeaf, onFocusClaimDelivered, paneReadyFocusRequest, sessionVisible]);
+    if (focusShownLeaf(activeLeafId)) deliveredClaims.add(focusClaim);
+  }, [activeLeafId, focusClaim, focusShownLeaf, paneReadyFocusRequest, sessionVisible]);
 
   // A pane whose grid overflows its container is not retried by fit()'s reveal
   // path — it stays clipped until something unrelated refits it.
