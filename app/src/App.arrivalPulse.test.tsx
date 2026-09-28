@@ -56,13 +56,16 @@ describe('App arrival pulse', () => {
       expect.objectContaining({ session_id: 's2' }),
     ]);
 
+    const departingPane = visiblePane('pane-s2')!;
     daemon.arrangement.show('d1', 'pane-s1');
     await gesture(daemon, () => daemon.emit(daemon.arrangement.changed()));
+    const canceled = new Event('animationcancel', { bubbles: true });
+    Object.defineProperty(canceled, 'animationName', { value: 'leaf-arrival-pulse' });
+    fireEvent(departingPane, canceled);
     expect(visiblePane('pane-s1')).not.toHaveClass('leaf-arrival');
     expect(daemon.sentOf('desktop_show_leaf')).toHaveLength(2);
     expect(daemon.sentOf('desktop_show_session')).toHaveLength(1);
 
-    fireEvent.animationEnd(document.querySelector<HTMLElement>('[data-pane-id="pane-s2"]')!, { animationName: 'leaf-arrival-pulse' });
     await gesture(daemon, () => pressShortcut('desktop.select2'));
     expect(visiblePane('pane-s2')).not.toHaveClass('leaf-arrival');
   });

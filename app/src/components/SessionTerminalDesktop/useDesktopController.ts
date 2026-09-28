@@ -526,7 +526,11 @@ export function useDesktopController(
         && event.target instanceof HTMLElement) event.target.classList.remove('leaf-arrival');
     };
     container.addEventListener('animationend', onAnimationEnd);
-    return () => container.removeEventListener('animationend', onAnimationEnd);
+    container.addEventListener('animationcancel', onAnimationEnd);
+    return () => {
+      container.removeEventListener('animationend', onAnimationEnd);
+      container.removeEventListener('animationcancel', onAnimationEnd);
+    };
   }, [renderedPaneIdsKey]);
 
   useEffect(() => {
