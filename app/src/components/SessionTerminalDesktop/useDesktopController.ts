@@ -501,7 +501,7 @@ export function useDesktopController(
   }, [focusClaim]);
 
   useEffect(() => {
-    if (!focusClaim || !sessionVisible || focusClaim.leafId !== activeLeafId) return;
+    if (!focusClaim || !sessionVisible || !activeLeafId || (focusClaim.leafId ?? activeLeafId) !== activeLeafId) return;
     const active = document.activeElement;
     const userMovedOn = active && active !== focusClaim.focusOwner && !focusIsFree(panesContainerRef.current);
     if (!userMovedOn) focusShownLeaf(activeLeafId);
@@ -751,7 +751,8 @@ export function useDesktopController(
       return;
     }
     const active = document.activeElement;
-    const claimed = focusClaimRef.current?.leafId === paneId;
+    const claim = focusClaimRef.current;
+    const claimed = !!claim && (claim.leafId ?? activeLeafIdRef.current) === paneId;
     if (!claimed && active && active !== document.body) return;
     setPaneReadyFocusRequest((token) => token + 1);
   }, []);

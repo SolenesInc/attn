@@ -34,6 +34,7 @@ export interface SessionNavigationActions {
   navigated: (expect?: ExpectedArrival | null) => void;
   focusClaimDelivered: (id: number) => void;
   claimLeafFocus: (desktopId: string, leafId: string, focusOwner?: Element | null) => void;
+  claimDesktopFocus: (desktopId: string, focusOwner?: Element | null) => void;
   transferFocus: (leaf: ActiveLeaf) => void;
   leafMoved: (profileId: string, moved: LeafMoved) => void;
   navigateLeafHistory: (direction: LeafHistoryDirection, resumeCurrent?: boolean) => boolean;
@@ -108,6 +109,7 @@ export function createSessionNavigationActions(
     navigated: (expect) => set((state) => navigated(state, expect)),
     focusClaimDelivered: (id) => set((state) => focusClaimDelivered(state, id)),
     claimLeafFocus: (desktopId, leafId, owner = focusOwner()) => set((state) => claimFocus(state, { desktopId, leafId }, owner)),
+    claimDesktopFocus: (desktopId, owner = focusOwner()) => set((state) => claimFocus(state, { desktopId, leafId: null }, owner)),
     transferFocus: (leaf) => set((state) => claimFocus(state, leaf, focusOwner())),
     leafMoved: (profileId, moved) => set((state) => leafMoved(state, profileId, moved)),
     navigateLeafHistory: (direction, resumeCurrent = false) => {

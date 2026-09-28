@@ -8,11 +8,12 @@ import {
   defaultProfile,
   dockTiles,
   soloDesktop,
+  splitDesktop,
   type DaemonDesktop,
   type DaemonSession,
 } from './test/daemonFixtures';
 import { gesture, pressShortcut, renderApp } from './test/renderApp';
-import type { ScriptedDaemon } from './test/scriptedDaemon';
+import type { Reply, ScriptedDaemon } from './test/scriptedDaemon';
 import type { CommandMessage } from './test/protocol';
 import { useSessionStore } from './store/sessions';
 
@@ -851,6 +852,29 @@ describe('keyboard focus', () => {
 
     expect(daemon.sentOf('desktop_set_current').slice(-1)).toEqual([expect.objectContaining({ desktop_id: 'desktop-s2' })]);
     expect(focusedPane()).toBe('pane-s2');
+  });
+
+  it('puts the keyboard in the leaf the daemon shows when a desktop switch lands, not the one shown when it was asked', async () => {
+    const { daemon } = await renderApp({ initialState: {
+      sessions: [queueSession('s1', 9), queueSession('s2', 10), queueSession('s3', 11)],
+      desktops: [soloDesktop('s1', { name: 'alpha' }), splitDesktop('beta', ['s2', 's3'], { name: 'beta', active_pane_id: 'pane-s2' })],
+    } });
+    await open(daemon, 's1');
+    await settleFocus(daemon);
+    daemon.on('desktop_set_current', (command) => {
+      daemon.arrangement.show('beta', 'pane-s3');
+      return [
+        { event: 'profile_action_result', action: command.cmd, request_id: command.request_id ?? '', success: true } as Reply,
+        daemon.arrangement.changed(),
+      ];
+    });
+    const row = screen.getByRole('button', { name: 'Open beta' });
+    row.focus();
+
+    await gesture(daemon, () => fireEvent.click(row));
+    await settleFocus(daemon);
+
+    expect(focusedPane()).toBe('pane-s3');
   });
 
   it('puts the keyboard in a tile the user reached through history', async () => {

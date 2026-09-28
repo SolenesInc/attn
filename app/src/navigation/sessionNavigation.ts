@@ -1,6 +1,6 @@
 import type { DaemonSessionSnapshot } from '../store/sessions';
 import type { Desktop, LeafMoved } from '../types/generated';
-import { activeLeafOf, leafShows, type ActiveLeaf, type Arrangement, type ShowTarget } from './activeLeaf';
+import { activeLeafOf, leafShows, type Arrangement, type ShowTarget } from './activeLeaf';
 import {
   createLeafHistory,
   moveLeafHistory,
@@ -35,7 +35,8 @@ export interface PendingShow {
 export interface FocusClaim {
   id: number;
   desktopId: string;
-  leafId: string;
+  // Null claims whichever leaf the daemon shows on that desktop when it lands.
+  leafId: string | null;
   focusOwner: Element | null;
 }
 
@@ -118,7 +119,7 @@ export function focusClaimDelivered(state: SessionNavigationState, id: number): 
   return state.focusRequest?.id === id ? { ...state, focusRequest: null } : state;
 }
 
-export function claimFocus(state: SessionNavigationState, leaf: Pick<ActiveLeaf, 'desktopId' | 'leafId'>, focusOwner: Element | null): SessionNavigationState {
+export function claimFocus(state: SessionNavigationState, leaf: { desktopId: string; leafId: string | null }, focusOwner: Element | null): SessionNavigationState {
   const id = state.focusSequence + 1;
   return { ...state, focusSequence: id, focusRequest: { id, desktopId: leaf.desktopId, leafId: leaf.leafId, focusOwner } };
 }

@@ -1,4 +1,3 @@
-import { useProfilesStore } from '../store/profiles';
 import { useSessionStore } from '../store/sessions';
 
 export interface TrackedOpen<T> {
@@ -27,7 +26,6 @@ export async function trackOpen<T>(dispatch: (own: Own) => Promise<T>): Promise<
 }
 
 export async function showDesktop(desktopId: string, send: () => Promise<unknown>): Promise<void> {
-  const leafId = useProfilesStore.getState().desktops.find((desktop) => desktop.id === desktopId)?.active_pane_id;
   const { moved, focusOwner } = await trackOpen((own) => own(send));
-  if (!moved && leafId) useSessionStore.getState().claimLeafFocus(desktopId, leafId, focusOwner);
+  if (!moved) useSessionStore.getState().claimDesktopFocus(desktopId, focusOwner);
 }
