@@ -13,7 +13,7 @@ import { AppContentProps } from './appSupport';
 interface Options {
   settings: AppContentProps['settings'];
   sessions: ReturnType<typeof useSessionStore.getState>['sessions'];
-  activeSessionId: string | null;
+  shownAgentId: string | null;
   showError: (message: string) => void;
 }
 
@@ -26,7 +26,7 @@ function currentDesktop() {
   return desktops.find((desktop) => desktop.id === currentDesktopId);
 }
 
-export function useDesktopTiles({ settings, sessions, activeSessionId, showError }: Options) {
+export function useDesktopTiles({ settings, sessions, shownAgentId, showError }: Options) {
   const { sendRecentFiles, sendFsIndex, sendDesktopDockTile } = useDaemonApi();
   const [markdownOpenerOpen, setMarkdownOpenerOpen] = useState(false);
   const [appViewParamsPrompt, setAppViewParamsPrompt] = useState<{
@@ -46,10 +46,10 @@ export function useDesktopTiles({ settings, sessions, activeSessionId, showError
   const markdownOpenerTarget = useMemo(
     () =>
       resolveMarkdownOpenerTarget(
-        sessions.find((session) => session.id === activeSessionId),
+        sessions.find((session) => session.id === shownAgentId),
         settings['notebook.root.effective'],
       ),
-    [sessions, activeSessionId, settings],
+    [sessions, shownAgentId, settings],
   );
   const loadOpenerRecents = useCallback(
     () =>
@@ -66,7 +66,7 @@ export function useDesktopTiles({ settings, sessions, activeSessionId, showError
   const handleOpenNotebookTile = useCallback(() => {
     const desktop = currentDesktop();
     if (!desktop) return;
-    const activeSession = sessions.find((session) => session.id === activeSessionId);
+    const activeSession = sessions.find((session) => session.id === shownAgentId);
     const localDirectory = activeSession && !activeSession.endpointId ? activeSession.cwd : '';
     const root = resolveEditorTileRoot(localDirectory, settings['notebook.root.effective'] || '');
     const tileId = `notebook-tile-${crypto.randomUUID()}`;
@@ -81,7 +81,7 @@ export function useDesktopTiles({ settings, sessions, activeSessionId, showError
         tileShare: 0.4,
       }),
     ).catch((error) => showError(`Could not open the notebook: ${failureMessage(error)}`));
-  }, [sendDesktopDockTile, settings, sessions, activeSessionId, showError]);
+  }, [sendDesktopDockTile, settings, sessions, shownAgentId, showError]);
 
   // A fresh tile id every time: the daemon reads a duplicate id as a move.
   const dockAppViewTile = useCallback(

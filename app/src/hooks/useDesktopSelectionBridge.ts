@@ -73,7 +73,7 @@ function focusBelongsTo(leaf: ActiveLeaf | null): boolean {
 }
 
 export function useDesktopSelectionBridge(reportFailure: (message: string) => void) {
-  const { sendDesktopShowSession, sendDesktopShowLeaf, isConnected } = useDaemonApi();
+  const { sendDesktopShowSession, sendDesktopShowLeaf } = useDaemonApi();
   const pending = useSessionStore((state) => state.pendingSelection);
   const sent = useRef(0);
   const reportFailureRef = useRef(reportFailure);
@@ -95,10 +95,6 @@ export function useDesktopSelectionBridge(reportFailure: (message: string) => vo
       reportFailureRef.current(`Could not show that ${target.kind === 'session' ? 'agent' : 'leaf'}: ${error instanceof Error ? error.message : String(error)}`);
     });
   }, [pending, sendDesktopShowSession, sendDesktopShowLeaf]);
-
-  useEffect(() => {
-    if (!isConnected) useSessionStore.getState().cancelPendingSelection();
-  }, [isConnected]);
 
   useEffect(
     () =>

@@ -36,7 +36,7 @@ describe('useAppDiagnostics', () => {
       useAppDiagnostics({
         sessions: [session('s1', 'd1'), session('s2', 'd1'), session('s3', 'd2')],
         getPaneSize: () => ({ cols: 80, rows: 24 }),
-        activeSessionId: 's2',
+        shownAgentId: 's2',
         getActivePaneIdForSession: () => 'pane-s2',
         view: 'session',
         settings: {},

@@ -35,7 +35,7 @@ function currentDesktop(panes: Array<[string, string]>, activePaneId: string): D
 }
 
 function renderLaunch(
-  activeSessionId: string | null = null,
+  shownAgentId: string | null = null,
   methods: Parameters<typeof createMockDaemonApi>[0] = {},
   showError: (message: string) => void = vi.fn(),
 ) {
@@ -47,7 +47,7 @@ function renderLaunch(
         settings: {},
         daemonEndpoints: [],
         sessions: useSessionStore((state) => state.sessions),
-        activeSessionId,
+        shownAgentId,
         selectCreatedSession: vi.fn(() => true),
         showError,
       }),

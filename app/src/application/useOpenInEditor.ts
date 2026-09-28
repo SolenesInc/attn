@@ -9,7 +9,7 @@ export function useOpenInEditor() {
   const { activeEndpoint } = useAppSessionsContext();
   const { showError } = useAppErrorsContext();
   const sessions = useSessionStore((state) => state.sessions);
-  const activeSessionId = useAgentOnScreen();
+  const shownAgentId = useAgentOnScreen();
 
   const isZedEditorConfigured = useMemo(() => {
     const editor = (settings.editor_executable || '').trim().toLowerCase();
@@ -36,7 +36,7 @@ export function useOpenInEditor() {
     [settings.editor_executable, showError],
   );
 
-  const activeSession = sessions.find((s) => s.id === activeSessionId);
+  const activeSession = sessions.find((s) => s.id === shownAgentId);
   const activeSessionIsRemote = Boolean(activeSession?.endpointId);
   const editorTarget = useMemo(
     () => resolveEditorTarget(activeSession, activeEndpoint?.ssh_target, isZedEditorConfigured),

@@ -112,12 +112,12 @@ export function useAppController({
   }, []);
 
   const { connect, sessions, reloadSession, selectLeaf } = useSessionStore();
-  const activeSessionId = useAgentOnScreen();
+  const shownAgentId = useAgentOnScreen();
 
   const appErrors = useAppErrors({ settingError, clearSettingError });
   const { showError, showNotice } = appErrors;
 
-  const desktopRuntime = useDesktopRuntimeController(sessions, activeSessionId);
+  const desktopRuntime = useDesktopRuntimeController(sessions, shownAgentId);
   const {
     getActivePaneIdForSession,
     getDesktopLeafDropSnapshot,
@@ -139,7 +139,7 @@ export function useAppController({
   useDesktopSelectionBridge(showError);
 
   const appSessions = useAppSessions({
-    activeSessionId,
+    shownAgentId,
     daemonEndpoints,
     sessions,
     daemonSessions,
@@ -152,7 +152,7 @@ export function useAppController({
     desktopViews,
     profileSessions,
     enrichedLocalSessions,
-    activeSessionId,
+    shownAgentId,
   });
   const {
     wantsAttention,
@@ -163,7 +163,7 @@ export function useAppController({
   } = attentionQueue;
 
   const navigation = useAppNavigation({
-    activeSessionId,
+    shownAgentId,
     daemonSessions,
     desktopViews,
     profileSessions,
@@ -196,7 +196,7 @@ export function useAppController({
     settings,
     daemonEndpoints,
     sessions,
-    activeSessionId,
+    shownAgentId,
     selectCreatedSession,
     showError,
   });
@@ -253,7 +253,7 @@ export function useAppController({
   const desktopTiles = useDesktopTiles({
     settings,
     sessions,
-    activeSessionId,
+    shownAgentId,
     showError,
   });
   const {
@@ -270,7 +270,7 @@ export function useAppController({
 
   const onReopened = useCallback(() => setSessionsOpen(false), [setSessionsOpen]);
   const sessionLifecycle = useSessionLifecycle({
-    activeSessionId,
+    shownAgentId,
     handleCloseTile,
     sessions,
     daemonSessions,
@@ -296,7 +296,7 @@ export function useAppController({
   const appDiagnostics = useAppDiagnostics({
     sessions,
     getPaneSize,
-    activeSessionId,
+    shownAgentId,
     getActivePaneIdForSession,
     view,
     settings,
@@ -314,7 +314,7 @@ export function useAppController({
     currentCap?: number;
   } | null>(null);
 
-  const workflowPanel = useWorkflowPanel({ activeSessionId, workflowRunPanelOpen });
+  const workflowPanel = useWorkflowPanel({ shownAgentId, workflowRunPanelOpen });
 
   const [desktopOverviewOpen, setDesktopOverviewOpen] = useState(false);
   const [profileSwitcherOpen, setProfileSwitcherOpen] = useState(false);
@@ -343,7 +343,7 @@ export function useAppController({
   // Views with nothing focusable (dashboard, empty desktops) can leave the WebView off first responder, killing EVERY shortcut until the user clicks the window.
   useEffect(() => {
     const claimShellFocus = () => {
-      if (activeSessionId) return;
+      if (shownAgentId) return;
       if (blockingOverlayOpen) return;
       const shell = appShellRef.current;
       if (!shell) return;
@@ -354,7 +354,7 @@ export function useAppController({
     claimShellFocus();
     window.addEventListener('focus', claimShellFocus);
     return () => window.removeEventListener('focus', claimShellFocus);
-  }, [activeSessionId, blockingOverlayOpen, view]);
+  }, [shownAgentId, blockingOverlayOpen, view]);
 
   const seedForSession = useCallback(
     (sessionId: string) => {
@@ -407,13 +407,13 @@ export function useAppController({
     if (paletteBlocked) {
       return;
     }
-    const activeSession = activeSessionId
-      ? sessions.find((session) => session.id === activeSessionId)
+    const activeSession = shownAgentId
+      ? sessions.find((session) => session.id === shownAgentId)
       : null;
     paletteOriginRef.current = {
       capturedAtUnixMs: Date.now(),
       view,
-      activeSessionId,
+      activeSessionId: shownAgentId,
       activePaneId: activeSession ? getActivePaneIdForSession(activeSession) || null : null,
       activeElement: diagnosticFocusKind(document.activeElement),
       documentFocused: document.hasFocus(),
@@ -432,14 +432,14 @@ export function useAppController({
     paletteOriginRef,
     setPalette,
     delegationChainRef,
-    activeSessionId,
+    shownAgentId,
     sessions,
     getActivePaneIdForSession,
     view,
   ]);
   useUiAutomationBridge({
     sessions,
-    activeSessionId,
+    shownAgentId,
     daemonReady: hasReceivedInitialState && !connectionError,
     connectionError,
     getActivePaneIdForSession,
@@ -516,8 +516,8 @@ export function useAppController({
   }, [enrichedLocalSessions, onScreenSessionIds]);
   const armDismissSessionId = useMemo(
     () =>
-      activeSessionId && onScreenSessionIds.has(activeSessionId) ? activeSessionId : undefined,
-    [activeSessionId, onScreenSessionIds],
+      shownAgentId && onScreenSessionIds.has(shownAgentId) ? shownAgentId : undefined,
+    [shownAgentId, onScreenSessionIds],
   );
   const handleCancelCountdown = useMemo(() => {
     if (visibleCountdownSessionIds.length > 0) {
@@ -529,7 +529,7 @@ export function useAppController({
 
   const appGardenActions = useAppGardenActions({
     sendOpenSeed,
-    activeSessionId,
+    shownAgentId,
     showError,
     seeds,
     openDockPanel,

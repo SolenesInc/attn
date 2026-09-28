@@ -28,7 +28,7 @@ describe('useAppSessions Notebook chief status', () => {
       { id: 'work-chief', chief_of_staff: true, profile_id: 'profile-work', state: 'idle' },
     ] as AppContentProps['daemonSessions'];
     const render = () => renderHook(() => useAppSessions({
-      activeSessionId: null,
+      shownAgentId: null,
       daemonEndpoints: [],
       sessions: [localSession('home-chief', 'working'), localSession('work-chief', 'idle')],
       daemonSessions,

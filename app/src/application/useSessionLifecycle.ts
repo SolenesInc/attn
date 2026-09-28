@@ -9,7 +9,7 @@ import { AppContentProps, sessionCloseProtectionHint } from './appSupport';
 import { useAppSessions } from './useAppSessions';
 
 interface Options {
-  activeSessionId: string | null;
+  shownAgentId: string | null;
   handleCloseTile: (desktopId: string, tileId: string) => void;
   sessions: ReturnType<typeof useSessionStore.getState>['sessions'];
   daemonSessions: AppContentProps['daemonSessions'];
@@ -22,7 +22,7 @@ interface Options {
   onReopened: () => void;
 }
 export function useSessionLifecycle({
-  activeSessionId,
+  shownAgentId,
   handleCloseTile,
   sessions,
   daemonSessions,
@@ -126,10 +126,10 @@ export function useSessionLifecycle({
       handleCloseTile(currentDesktopId, tileId);
       return;
     }
-    if (activeSessionId) {
-      handleRequestCloseSession(activeSessionId);
+    if (shownAgentId) {
+      handleRequestCloseSession(shownAgentId);
     }
-  }, [activeSessionId, handleCloseTile, handleRequestCloseSession]);
+  }, [shownAgentId, handleCloseTile, handleRequestCloseSession]);
 
   return {
     handleCloseCurrentSessionShortcut,

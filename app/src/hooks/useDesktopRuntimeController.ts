@@ -41,7 +41,7 @@ export function sessionPaneId(session: Session | undefined | null): string {
 
 export function useDesktopRuntimeController(
   sessions: Session[],
-  activeSessionId: string | null
+  shownAgentId: string | null
 ): DesktopRuntimeController {
   const desktopRefs = useRef<Map<string, SessionTerminalDesktopHandle>>(new Map());
   const eventRouter = usePaneRuntimeEventRouter();
@@ -49,7 +49,7 @@ export function useDesktopRuntimeController(
 
   useDesktopDebugHarness({
     sessions,
-    activeSessionId,
+    shownAgentId,
     desktopRefs,
     getActivePaneIdForSession,
   });

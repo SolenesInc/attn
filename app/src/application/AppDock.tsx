@@ -24,7 +24,7 @@ export function AppDock() {
     gardenHoldsWindow,
     gardenSlotRef,
   } = useAppPanelsContext();
-  const activeSessionId = useAgentOnScreen();
+  const shownAgentId = useAgentOnScreen();
   const { activeWorkflowRun } = useWorkflowPanelContext();
   const { waitingLocalSessions } = useAttentionQueueContext();
   const { prs } = useAppInputs();
@@ -45,11 +45,11 @@ export function AppDock() {
         panels={[
           {
             id: 'workflowRun',
-            isOpen: workflowRunPanelOpen && Boolean(activeSessionId),
+            isOpen: workflowRunPanelOpen && Boolean(shownAgentId),
             width: 'clamp(420px, 50vw, 680px)',
             tone: activeWorkflowRun ? toneForDockPanel(activeWorkflowRun.status) : 'default',
             className: 'dock-panel dock-panel--workflow-run',
-            children: activeSessionId ? (
+            children: shownAgentId ? (
               <WorkflowRunView
                 run={activeWorkflowRun}
                 onClose={() => closeDockPanel('workflowRun')}

@@ -22,7 +22,7 @@ import { useAppSessions } from './useAppSessions';
 import type { useAttentionQueue } from './useAttentionQueue';
 
 interface Options {
-  activeSessionId: string | null;
+  shownAgentId: string | null;
   daemonSessions: AppContentProps['daemonSessions'];
   desktopViews: ReturnType<typeof useAppSessions>['desktopViews'];
   profileSessions: ReturnType<typeof useAppSessions>['profileSessions'];
@@ -31,7 +31,7 @@ interface Options {
   showNotice: (message: string) => void;
 }
 export function useAppNavigation({
-  activeSessionId,
+  shownAgentId,
   daemonSessions,
   desktopViews,
   profileSessions,
@@ -114,11 +114,11 @@ export function useAppNavigation({
 
   useEffect(() => {
     probeUiAfterSwitch({
-      sessionId: activeSessionId,
+      sessionId: shownAgentId,
       desktopId: currentDesktopId,
       view,
     });
-  }, [activeSessionId, currentDesktopId, view]);
+  }, [shownAgentId, currentDesktopId, view]);
 
   const handleSelectDesktop = useCallback(
     (desktopId: string) => {
@@ -191,11 +191,11 @@ export function useAppNavigation({
   );
 
   const handleSelectOrchestrator = useCallback(() => {
-    const session = daemonSessions.find((entry) => entry.id === activeSessionId);
+    const session = daemonSessions.find((entry) => entry.id === shownAgentId);
     if (!session) return;
     const dispatcher = dispatcherOf(session, daemonSessions);
     if (dispatcher) handleSelectSession(dispatcher.id);
-  }, [activeSessionId, daemonSessions, handleSelectSession]);
+  }, [shownAgentId, daemonSessions, handleSelectSession]);
 
   return {
     handleJumpToWaiting,

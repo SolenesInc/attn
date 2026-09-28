@@ -10,6 +10,7 @@ import {
   parseCommonArgs,
   printCommonHelp,
   pressShortcutKeys,
+  shownAgentId,
 } from './common.mjs';
 import { DaemonObserver } from './daemonObserver.mjs';
 import { currentHarnessInstance, instanceCliEnv, socketPathForInstance } from './harnessInstance.mjs';
@@ -50,7 +51,7 @@ async function waitForShown(client, desktopId, sessionId, description) {
     client,
     (state) => {
       const shown = shownDesktop(state);
-      return shown?.id === desktopId && shown.visible && (sessionId === undefined || state.activeSessionId === sessionId);
+      return shown?.id === desktopId && shown.visible && (sessionId === undefined || shownAgentId(state) === sessionId);
     },
     description,
   );
@@ -187,7 +188,7 @@ async function main() {
 
     await runner.step('send_the_focused_pane_to_desktop_b', async () => {
       await client.request('focus_pane', { sessionId: split.sessionId, paneId: split.paneId });
-      await waitForAppState(client, (state) => state.activeSessionId === split.sessionId, 'split pane focused');
+      await waitForAppState(client, (state) => shownAgentId(state) === split.sessionId, 'split pane focused');
       await pressShortcutKeys(client, driver, `desktop.send${desktopB.shortcut_slot}`);
       const moved = await waitForAppState(
         client,

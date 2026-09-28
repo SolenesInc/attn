@@ -3,7 +3,7 @@
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
-import { createRunContext } from './common.mjs';
+import { createRunContext, shownAgentId } from './common.mjs';
 import { assertProductionRunAllowed, defaultAppPathForInstance } from './harnessInstance.mjs';
 import { captureFrontWindowScreenshot } from './nativeWindowCapture.mjs';
 import { UiAutomationClient } from './uiAutomationClient.mjs';
@@ -108,7 +108,7 @@ async function resolveSession(client, options) {
   }
 
   const state = await client.request('get_state');
-  const activeSession = (state.sessions || []).find((session) => session.id === state.activeSessionId);
+  const activeSession = (state.sessions || []).find((session) => session.id === shownAgentId(state));
   if (!activeSession) {
     throw new Error('No active session found');
   }

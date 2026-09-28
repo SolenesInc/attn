@@ -70,7 +70,7 @@ export function useAppCommands(): PaletteCommand[] {
   } = useAttentionQueueContext();
   const { sendSetSetting } = useDaemonApi();
   const { handleCreateDiagnosticReport } = useAppDiagnosticsContext();
-  const activeSessionId = useAgentOnScreen();
+  const shownAgentId = useAgentOnScreen();
   const desktops = useProfilesStore((state) => state.desktops);
   const profiles = useProfilesStore((state) => state.profiles);
   const selectedProfileId = useProfilesStore((state) => state.selectedProfileId);
@@ -199,7 +199,7 @@ export function useAppCommands(): PaletteCommand[] {
             run: openActiveSessionInEditor,
           }]
         : []),
-      ...(activeSessionId
+      ...(shownAgentId
         ? [
             {
               id: 'workflow-runs',
@@ -251,7 +251,7 @@ export function useAppCommands(): PaletteCommand[] {
     ];
     return commands;
   }, [
-    activeSessionId,
+    shownAgentId,
     automationsPanelOpen,
     desktopNavigation,
     desktops,

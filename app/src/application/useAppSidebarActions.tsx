@@ -46,7 +46,7 @@ export function useAppSidebarActions() {
     gardenPanelOpen,
   } = useAppPanelsContext();
   const { keybindings } = useAppAppearanceContext();
-  const activeSessionId = useAgentOnScreen();
+  const shownAgentId = useAgentOnScreen();
   const { currentDesktopId } = useNavigationContext();
   const { openActiveSessionInEditor, activeSessionIsRemote, editorUnavailableReason } = useOpenInEditor();
 
@@ -65,10 +65,10 @@ export function useAppSidebarActions() {
       },
       {
         id: 'workflowRun',
-        title: activeSessionId ? 'Workflow Runs' : 'Workflow Runs (No active session)',
+        title: shownAgentId ? 'Workflow Runs' : 'Workflow Runs (No active session)',
         icon: <WorkflowIcon />,
         active: workflowRunPanelOpen,
-        disabled: !activeSessionId,
+        disabled: !shownAgentId,
         onClick: () => toggleDockPanel('workflowRun'),
       },
       {
@@ -125,7 +125,7 @@ export function useAppSidebarActions() {
       },
     ],
     [
-      activeSessionId,
+      shownAgentId,
       activeSessionIsRemote,
       editorUnavailableReason,
       attentionCount,
@@ -170,12 +170,12 @@ export function useAppSidebarActions() {
         run: () => toggleDockPanel('attention'),
         isActive: attentionPanelOpen,
       },
-      'terminal.splitVertical': { available: Boolean(activeSessionId) },
-      'terminal.splitHorizontal': { available: Boolean(activeSessionId) },
-      'session.newHorizontal': { available: Boolean(activeSessionId) },
-      'terminal.toggleZoom': { isActive: activeSessionZoomed, available: Boolean(activeSessionId) },
+      'terminal.splitVertical': { available: Boolean(shownAgentId) },
+      'terminal.splitHorizontal': { available: Boolean(shownAgentId) },
+      'session.newHorizontal': { available: Boolean(shownAgentId) },
+      'terminal.toggleZoom': { isActive: activeSessionZoomed, available: Boolean(shownAgentId) },
     }),
-    [activeSessionId, attentionPanelOpen, activeSessionZoomed, toggleDockPanel],
+    [shownAgentId, attentionPanelOpen, activeSessionZoomed, toggleDockPanel],
   );
 
   const dockItems = useMemo<DockItem[]>(

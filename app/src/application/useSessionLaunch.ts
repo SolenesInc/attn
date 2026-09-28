@@ -25,7 +25,7 @@ interface Options {
   settings: AppContentProps['settings'];
   daemonEndpoints: AppContentProps['daemonEndpoints'];
   sessions: ReturnType<typeof useSessionStore.getState>['sessions'];
-  activeSessionId: string | null;
+  shownAgentId: string | null;
   selectCreatedSession: (id: string) => boolean;
   showError: ReturnType<typeof useToast>['showError'];
 }
@@ -49,13 +49,13 @@ export function useSessionLaunch({
   settings,
   daemonEndpoints,
   sessions,
-  activeSessionId,
+  shownAgentId,
   selectCreatedSession,
   showError,
 }: Options) {
   const { sendCreateWorktree } = useDaemonApi();
   const { closeSession, createSession, takeSessionSpawnArgs } = useSessionStore();
-  const activeLocalSession = sessions.find((session) => session.id === activeSessionId) ?? null;
+  const activeLocalSession = sessions.find((session) => session.id === shownAgentId) ?? null;
   const currentDesktop = useProfilesStore(
     (state) => state.desktops.find((desktop) => desktop.id === state.currentDesktopId) ?? null,
   );

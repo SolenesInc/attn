@@ -8,7 +8,7 @@ import { gardenPathToSeed, useGardenWalk } from '../store/gardenWalk';
 import { crewDisplayName } from '../utils/crewName';
 interface Options {
   sendOpenSeed: ReturnType<typeof useDaemonApi>['sendOpenSeed'];
-  activeSessionId: string | null;
+  shownAgentId: string | null;
   showError: ReturnType<typeof useToast>['showError'];
   seeds: ReturnType<typeof useDaemonStore.getState>['seeds'];
   openDockPanel: ReturnType<typeof useDockPanels>['openDockPanel'];
@@ -26,7 +26,7 @@ interface Options {
 }
 export function useAppGardenActions({
   sendOpenSeed,
-  activeSessionId,
+  shownAgentId,
   showError,
   seeds,
   openDockPanel,
@@ -62,11 +62,11 @@ export function useAppGardenActions({
 
   const handleOpenSeedTile = useCallback(
     (seedId: string) => {
-      void openSeedTile(seedId, { sessionId: activeSessionId || '' }).catch((error) => {
+      void openSeedTile(seedId, { sessionId: shownAgentId || '' }).catch((error) => {
         showError(error instanceof Error ? error.message : 'Could not open the seed');
       });
     },
-    [activeSessionId, openSeedTile, showError],
+    [shownAgentId, openSeedTile, showError],
   );
 
   const handleOpenSeedFromCrew = useCallback(
@@ -138,19 +138,19 @@ export function useAppGardenActions({
 
   const handleHandoverSeed = useCallback(
     (options: Parameters<typeof sendSeedHandover>[0]) =>
-      sendSeedHandover({ ...options, sourceSessionId: activeSessionId || undefined }).then(
+      sendSeedHandover({ ...options, sourceSessionId: shownAgentId || undefined }).then(
         (result) => {
           handleSelectSession(result.session_id);
           return result;
         },
       ),
-    [activeSessionId, handleSelectSession, sendSeedHandover],
+    [shownAgentId, handleSelectSession, sendSeedHandover],
   );
 
   const handleSendSeedToChief = useCallback(
     (options: Parameters<typeof sendSeedToChief>[0]) =>
-      sendSeedToChief({ ...options, sourceSessionId: activeSessionId || undefined }),
-    [activeSessionId, sendSeedToChief],
+      sendSeedToChief({ ...options, sourceSessionId: shownAgentId || undefined }),
+    [shownAgentId, sendSeedToChief],
   );
 
   const handleWakeCrewMember = useCallback(

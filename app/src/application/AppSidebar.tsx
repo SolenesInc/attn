@@ -51,7 +51,7 @@ export function AppSidebar() {
       ),
     [desktops],
   );
-  const activeSessionId = useAgentOnScreen();
+  const shownAgentId = useAgentOnScreen();
   const focusRequest = useSessionStore((state) => state.focusRequest);
   const {
     desktopTileContents,
@@ -106,7 +106,7 @@ export function AppSidebar() {
     <Sidebar
       desktops={desktopViews}
       visualIndexByDesktopId={slotIndexByDesktopId}
-      selectedId={activeSessionId}
+      selectedId={shownAgentId}
       selectionRequest={focusRequest}
       selectedDesktopId={currentDesktopId}
       selectedTile={selectedTile}

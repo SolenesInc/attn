@@ -7,14 +7,14 @@ import { sessionAttentionFields } from '../navigation/sessionNavigation';
 import { buildDesktopViewModels } from '../utils/desktopViewModels';
 import { AppContentProps } from './appSupport';
 interface Options {
-  activeSessionId: string | null;
+  shownAgentId: string | null;
   daemonEndpoints: AppContentProps['daemonEndpoints'];
   sessions: ReturnType<typeof useSessionStore.getState>['sessions'];
   daemonSessions: AppContentProps['daemonSessions'];
   connect: ReturnType<typeof useSessionStore.getState>['connect'];
 }
 export function useAppSessions({
-  activeSessionId,
+  shownAgentId,
   daemonEndpoints,
   sessions,
   daemonSessions,
@@ -97,11 +97,11 @@ export function useAppSessions({
   }, [connect]);
 
   const activeDaemonSession = useMemo(() => {
-    if (!activeSessionId) {
+    if (!shownAgentId) {
       return null;
     }
-    return daemonSessions.find((session) => session.id === activeSessionId) || null;
-  }, [activeSessionId, daemonSessions]);
+    return daemonSessions.find((session) => session.id === shownAgentId) || null;
+  }, [shownAgentId, daemonSessions]);
   const activeRemoteSession = Boolean(activeDaemonSession?.endpoint_id);
   const activeEndpoint = useMemo(() => {
     const endpointId = activeDaemonSession?.endpoint_id;

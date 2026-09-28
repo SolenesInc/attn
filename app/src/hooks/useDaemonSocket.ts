@@ -95,6 +95,7 @@ import { resolveDaemonWebSocketURL, type DaemonEndpointInstance } from '../utils
 import { handleAppDaemonEvent, type AppCommandResult } from './daemonAppEvents';
 import { handleProfileDaemonEvent, type MigrationResult, type ProfileActionResult } from './daemonProfileEvents';
 import { useProfilesStore } from '../store/profiles';
+import { useSessionStore } from '../store/sessions';
 import type { Desktop } from '../types/generated';
 import { handleBusDaemonEvent, type BusStatus } from './daemonBusEvents';
 import {
@@ -2636,6 +2637,7 @@ export function useDaemonSocket({
       useAutoModePushStore.getState().clear();
       useWorktreeStore.getState().clear();
       useDelegationPreferencesPush.getState().clear();
+      useSessionStore.getState().cancelPendingSelection();
 
       if (circuitOpenRef.current) {
         console.error('[Daemon] Circuit open, not retrying');

@@ -15,7 +15,7 @@ import { diagnosticFocusKind, shortenDiagnosticPath } from './appSupport';
 interface Options {
   sessions: Session[];
   getPaneSize: (sessionId: string, paneId: string) => { cols: number; rows: number } | null;
-  activeSessionId: string | null;
+  shownAgentId: string | null;
   getActivePaneIdForSession: (session: Session | undefined | null) => string;
   view: AppView;
   settings: Record<string, string>;
@@ -25,7 +25,7 @@ interface Options {
 export function useAppDiagnostics({
   sessions,
   getPaneSize,
-  activeSessionId,
+  shownAgentId,
   getActivePaneIdForSession,
   view,
   settings,
@@ -57,8 +57,8 @@ export function useAppDiagnostics({
   }, [getPaneSize, sessions]);
 
   const handleCreateDiagnosticReport = useCallback(async () => {
-    const fallbackSession = activeSessionId
-      ? sessions.find((session) => session.id === activeSessionId)
+    const fallbackSession = shownAgentId
+      ? sessions.find((session) => session.id === shownAgentId)
       : null;
     const fallbackPaneId = fallbackSession
       ? getActivePaneIdForSession(fallbackSession) || null
@@ -66,7 +66,7 @@ export function useAppDiagnostics({
     const context = paletteOriginRef.current ?? {
       capturedAtUnixMs: Date.now(),
       view,
-      activeSessionId,
+      activeSessionId: shownAgentId,
       activePaneId: fallbackPaneId,
       activeElement: diagnosticFocusKind(document.activeElement),
       documentFocused: document.hasFocus(),
@@ -110,7 +110,7 @@ export function useAppDiagnostics({
     });
     setDiagnosticCapture({ capture, affectedPaneId: context.activePaneId });
   }, [
-    activeSessionId,
+    shownAgentId,
     diagnosticPanes,
     getActivePaneIdForSession,
     sendSupportSnapshot,

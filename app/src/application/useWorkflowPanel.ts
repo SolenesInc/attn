@@ -7,24 +7,24 @@ import {
 } from '../store/workflowRuns';
 
 interface Options {
-  activeSessionId: string | null;
+  shownAgentId: string | null;
   workflowRunPanelOpen: boolean;
 }
-export function useWorkflowPanel({ activeSessionId, workflowRunPanelOpen }: Options) {
+export function useWorkflowPanel({ shownAgentId, workflowRunPanelOpen }: Options) {
   const { listWorkflowRuns, getWorkflowRun } = useDaemonApi();
   const workflowRunsMap = useWorkflowRunsStore((s) => s.workflowRuns);
   const activeWorkflowRun = useMemo(
-    () => selectLatestWorkflowRunForSession(workflowRunsMap, activeSessionId),
-    [workflowRunsMap, activeSessionId],
+    () => selectLatestWorkflowRunForSession(workflowRunsMap, shownAgentId),
+    [workflowRunsMap, shownAgentId],
   );
   useEffect(() => {
-    if (!activeSessionId) {
+    if (!shownAgentId) {
       return;
     }
-    listWorkflowRuns(activeSessionId).catch((error) => {
+    listWorkflowRuns(shownAgentId).catch((error) => {
       console.error('[App] Failed to list workflow runs:', error);
     });
-  }, [activeSessionId, listWorkflowRuns]);
+  }, [shownAgentId, listWorkflowRuns]);
 
   // listWorkflowRuns omits agent_calls and a completed run sees no further broadcasts, so without this fetch it stays call-less forever after a reload.
   const workflowRunIdToHydrate = workflowRunIdNeedingHydration(
