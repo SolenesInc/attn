@@ -1,6 +1,6 @@
 import { act, fireEvent, screen, within } from '@testing-library/react';
 import { describe, expect, it, vi } from 'vitest';
-import { soloDesktop, daemonSession, type DaemonSession, type DaemonDesktop } from './test/daemonFixtures';
+import { soloDesktop, daemonSession, crewMember, type DaemonSession, type DaemonDesktop } from './test/daemonFixtures';
 import { gesture, pressShortcut, renderApp } from './test/renderApp';
 import type { ScriptedDaemon } from './test/scriptedDaemon';
 
@@ -27,20 +27,22 @@ interface Launch {
   sessions?: DaemonSession[];
   queue?: boolean;
   desktop?: (session: DaemonSession) => Partial<DaemonDesktop>;
+  crew?: ReturnType<typeof crewMember>[];
 }
 
-function launch({ sessions = team(), queue = true, desktop = () => ({}) }: Launch = {}) {
+function launch({ sessions = team(), queue = true, desktop = () => ({}), crew = [] }: Launch = {}) {
   return renderApp({
     initialState: {
       settings: queue ? QUEUE : {},
       sessions,
+      crew,
       desktops: sessions.map((session) => ({ ...soloDesktop(session.id), ...desktop(session) })),
     },
   });
 }
 
 async function openAgentList(daemon: ScriptedDaemon) {
-  await gesture(daemon, () => fireEvent.click(screen.getByRole('button', { name: /All agents/ })));
+  await gesture(daemon, () => fireEvent.click(screen.getByRole('button', { name: /more agents/i })));
 }
 
 const queue = () => within(screen.getByTestId('sidebar-queue'));
@@ -65,6 +67,66 @@ async function press(daemon: ScriptedDaemon, name: string) {
 }
 
 describe('App queue', () => {
+  it('fits owed turns to the sidebar height and counts only rows below the toggle', async () => {
+    let height = 500;
+    const observers: Array<{ trigger: () => void }> = [];
+    class FitObserver implements ResizeObserver {
+      private connected = true;
+      constructor(private readonly callback: ResizeObserverCallback) { observers.push(this); }
+      observe() {}
+      unobserve() {}
+      disconnect() { this.connected = false; }
+      trigger() { if (this.connected) this.callback([], this); }
+    }
+    vi.stubGlobal('ResizeObserver', FitObserver);
+    vi.spyOn(HTMLElement.prototype, 'clientHeight', 'get').mockImplementation(function (this: HTMLElement) {
+      return this.classList.contains('queue-sidebar-body') ? height : 0;
+    });
+    vi.spyOn(HTMLElement.prototype, 'offsetHeight', 'get').mockImplementation(function (this: HTMLElement) {
+      if (this.classList.contains('queue-waiting-lead')) return this.children.length * 33 - 1;
+      if (this.classList.contains('queue-waiting-card')) return 90 + (this.querySelector('.queue-waiting-lead')?.children.length ?? 0) * 33;
+      if (this.classList.contains('queue-crew-block')) return 120;
+      if (this.classList.contains('sidebar-home-row')) return 30;
+      if (this.classList.contains('queue-row')) return 32;
+      return 0;
+    });
+
+    try {
+      const sessions = [
+        agent('chief', { chief_of_staff: true }),
+        ...[1, 2, 3, 4, 5].map((n) => agent(`owed-${n}`, { turn_owed: true, turn_opened_at: ago(n * HOUR) })),
+        agent('crew-awake', { crew_member: 'alder' }),
+        agent('working'),
+        agent('snoozed-1', { turn_snoozed_until: fromNow(HOUR) }),
+        agent('snoozed-2', { turn_snoozed_until: fromNow(2 * HOUR) }),
+      ];
+      const { daemon } = await launch({ sessions, crew: [crewMember('alder'), crewMember('keel'), crewMember('trellis')] });
+      await daemon.idle();
+      expect(screen.getAllByTestId(/queue-turn-owed-/)).toHaveLength(5);
+      expect(screen.getByTestId('queue-agents-toggle')).toHaveTextContent('3 more agents');
+      expect(screen.getByTestId('queue-agents-counts')).toHaveTextContent('1 working2 snoozed');
+
+      const sent = [...daemon.sent];
+      await act(async () => { height = 360; observers.forEach((observer) => observer.trigger()); });
+      await daemon.idle();
+      expect(screen.getAllByTestId(/queue-turn-owed-/)).toHaveLength(3);
+      expect(screen.getByTestId('queue-agents-toggle')).toHaveTextContent('5 more agents');
+      expect(screen.getByTestId('queue-agents-counts')).toHaveTextContent('2 waiting1 working2 snoozed');
+      expect(daemon.sent).toEqual(sent);
+
+      await openAgentList(daemon);
+      const waitingBand = screen.getByTestId('queue-also-waiting-header');
+      expect(waitingBand).toHaveTextContent('Also waiting 2');
+      expect(waitingBand.compareDocumentPosition(screen.getByText('Working 1')) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+      await act(async () => { height = 500; observers.forEach((observer) => observer.trigger()); });
+      expect(screen.getByTestId('queue-also-waiting-header')).toHaveTextContent('Also waiting 2');
+      expect(daemon.sent).toEqual(sent);
+    } finally {
+      vi.restoreAllMocks();
+      vi.unstubAllGlobals();
+    }
+  });
+
   it('replaces the desktop tree with the chief and the owed turns oldest first, and keeps the settled rest in the agent list', async () => {
     const { daemon } = await launch();
 
