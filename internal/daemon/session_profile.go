@@ -71,6 +71,19 @@ func (d *Daemon) checkLaunchPlacement(profile profiles.Profile, placement *launc
 	return nil
 }
 
+func (d *Daemon) placeAnsweringRequester(session *protocol.Session, placement *launchPlacement, requester *wsClient) placementOutcome {
+	if requester == nil {
+		return d.placeLaunchedSession(session, placement)
+	}
+	requester.holdArrangements()
+	defer d.releaseArrangements(requester)
+	placed := d.placeLaunchedSession(session, placement)
+	if placed.paneID != "" {
+		d.sendArrangement(requester, session.ID, nil)
+	}
+	return placed
+}
+
 func (d *Daemon) placeLaunchedSession(session *protocol.Session, placement *launchPlacement) placementOutcome {
 	if placement == nil {
 		return placementOutcome{}

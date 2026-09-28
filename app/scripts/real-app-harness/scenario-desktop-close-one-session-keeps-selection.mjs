@@ -7,6 +7,7 @@ import {
   launchFreshAppAndConnect,
   parseCommonArgs,
   printCommonHelp,
+  shownAgentId,
 } from './common.mjs';
 import { DaemonObserver } from './daemonObserver.mjs';
 import {
@@ -111,7 +112,7 @@ async function waitForActiveSession(client, sessionId, description, timeoutMs = 
   let lastState = null;
   while (Date.now() - startedAt < timeoutMs) {
     lastState = await client.request('get_state');
-    if (lastState.activeSessionId === sessionId) {
+    if (shownAgentId(lastState) === sessionId) {
       return lastState;
     }
     await new Promise((resolve) => setTimeout(resolve, 200));
@@ -316,7 +317,7 @@ async function main() {
       const emptied = await client.request('get_state');
       const current = emptied.arrangement.desktops.find((desktop) => desktop.id === emptied.arrangement.currentDesktopId);
       runner.assert(
-        current?.panes.length === 0 && emptied.activeSessionId === null && emptied.arrangement.previousDesktopId,
+        current?.panes.length === 0 && shownAgentId(emptied) === null && emptied.arrangement.previousDesktopId,
         `Closing the last agent should leave its desktop empty and current, with a bounce target: ${JSON.stringify(emptied.arrangement, null, 2)}`,
         emptied.arrangement,
       );

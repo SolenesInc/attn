@@ -35,7 +35,7 @@ function currentDesktop(panes: Array<[string, string]>, activePaneId: string): D
 }
 
 function renderLaunch(
-  activeSessionId: string | null = null,
+  shownAgentId: string | null = null,
   methods: Parameters<typeof createMockDaemonApi>[0] = {},
   showError: (message: string) => void = vi.fn(),
 ) {
@@ -47,7 +47,7 @@ function renderLaunch(
         settings: {},
         daemonEndpoints: [],
         sessions: useSessionStore((state) => state.sessions),
-        activeSessionId,
+        shownAgentId,
         selectCreatedSession: vi.fn(() => true),
         showError,
       }),
@@ -58,7 +58,7 @@ function renderLaunch(
 describe('useSessionLaunch placement', () => {
   beforeEach(() => {
     vi.mocked(ptySpawn).mockClear();
-    useSessionStore.setState({ sessions: [], activeSessionId: null });
+    useSessionStore.setState({ sessions: [] });
   });
 
   it('starts a split beside the focused agent on the current desktop, in its directory', async () => {
@@ -104,7 +104,7 @@ describe('useSessionLaunch placement', () => {
 describe('useSessionLaunch from the new-session picker', () => {
   beforeEach(() => {
     vi.mocked(ptySpawn).mockClear();
-    useSessionStore.setState({ sessions: [], activeSessionId: null });
+    useSessionStore.setState({ sessions: [] });
     useProfilesStore.setState({
       selectedProfileId: 'profile-1',
       currentDesktopId: 'desktop-1',
@@ -153,7 +153,7 @@ describe('useSessionLaunch from the new-session picker', () => {
 describe('useSessionLaunch when the daemon cannot place the agent', () => {
   beforeEach(() => {
     vi.mocked(ptySpawn).mockClear();
-    useSessionStore.setState({ sessions: [], activeSessionId: null });
+    useSessionStore.setState({ sessions: [] });
     useProfilesStore.setState({
       selectedProfileId: 'profile-1',
       currentDesktopId: 'desktop-1',
@@ -161,8 +161,11 @@ describe('useSessionLaunch when the daemon cannot place the agent', () => {
     });
   });
 
-  it('keeps the running agent and says once why it has no pane', async () => {
-    vi.mocked(ptySpawn).mockResolvedValueOnce({ placementError: 'desktop desktop-1 is gone' });
+  it('keeps the running agent and says once why it has no pane when the user moved on during the spawn', async () => {
+    vi.mocked(ptySpawn).mockImplementationOnce(async () => {
+      useSessionStore.getState().goToDashboard();
+      return { placementError: 'desktop desktop-1 is gone' };
+    });
     const showError = vi.fn();
     const { result } = renderLaunch(null, {}, showError);
 
@@ -181,7 +184,7 @@ describe('useSessionLaunch when the daemon cannot place the agent', () => {
 describe('useSessionLaunch on a remote endpoint', () => {
   beforeEach(() => {
     vi.mocked(ptySpawn).mockClear();
-    useSessionStore.setState({ sessions: [], activeSessionId: null });
+    useSessionStore.setState({ sessions: [] });
   });
 
   it('refuses an agent on another daemon before spawning, naming the fence', async () => {
@@ -226,7 +229,7 @@ describe('useSessionLaunch on a remote endpoint', () => {
 describe('useSessionLaunch from a remote agent', () => {
   beforeEach(() => {
     vi.mocked(ptySpawn).mockClear();
-    useSessionStore.setState({ sessions: [], activeSessionId: null });
+    useSessionStore.setState({ sessions: [] });
   });
 
   it('refuses to split a remote agent instead of leaving an unplaced session behind', async () => {

@@ -22,13 +22,13 @@ interface Options {
     crewMember?: string;
     automation?: { definition_id: string };
   }) => boolean;
-  cancelPendingSelection: () => void;
+  cancelIntent: () => void;
   setView: (view: StateUpdate<AppView>) => void;
 }
 export function useAppGrid({
   profileSessions,
   wantsAttention,
-  cancelPendingSelection,
+  cancelIntent,
   setView,
 }: Options) {
   const gridSessionTiles = useMemo<GridSessionTile[]>(() => {
@@ -51,12 +51,12 @@ export function useAppGrid({
   const [gridLayout, setGridLayout] = useState<GridLayout>(readGridLayout);
   const handleSelectGridLayout = useCallback(
     (layout: GridLayout) => {
-      cancelPendingSelection();
+      cancelIntent();
       setGridLayout(layout);
       persistGridLayout(layout);
       setView('grid');
     },
-    [cancelPendingSelection, setView],
+    [cancelIntent, setView],
   );
 
   const [excludedGridSessions, setExcludedGridSessions] =

@@ -13,6 +13,7 @@ import {
   pressShortcutKeys,
   printCommonHelp,
   submitPrompt as submitPromptViaAutomation,
+  shownAgentId,
 } from './common.mjs';
 import { DaemonObserver } from './daemonObserver.mjs';
 import { createWindowDriver } from './platform.mjs';
@@ -625,10 +626,10 @@ async function main() {
       let sawActive = null;
       await pollFor(async () => {
         const state = await client.request('get_state');
-        sawActive = state.activeSessionId;
-        return state.activeSessionId === authorId ? state : null;
+        sawActive = shownAgentId(state);
+        return shownAgentId(state) === authorId ? state : null;
       }, 'the split pane to take the selection off the agent', 20_000).catch((error) => {
-        throw new Error(`${error.message} activeSessionId=${sawActive}, wanted author=${authorId} (agent=${agentId})`);
+        throw new Error(`${error.message} shownAgentId=${sawActive}, wanted author=${authorId} (agent=${agentId})`);
       });
       note('split pane holds the selection; the agent tile is still on screen', { authorId });
 
@@ -671,12 +672,12 @@ async function main() {
       await client.request('select_session', { sessionId: agentId });
       await pollFor(async () => {
         const state = await client.request('get_state');
-        return state.activeSessionId === agentId ? state : null;
+        return shownAgentId(state) === agentId ? state : null;
       }, 'the agent to take the selection', 20_000);
       await client.request('select_session', { sessionId: authorId });
       await pollFor(async () => {
         const state = await client.request('get_state');
-        return state.activeSessionId === authorId ? state : null;
+        return shownAgentId(state) === authorId ? state : null;
       }, 'the selection to go back to the split pane', 20_000);
 
       await delay(4_000);

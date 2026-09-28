@@ -16,6 +16,7 @@ import {
   printCommonHelp,
   relaunchAppAndConnect,
   submitPrompt,
+  shownAgentId,
 } from './common.mjs';
 import { DaemonObserver } from './daemonObserver.mjs';
 import { createWindowDriver } from './platform.mjs';
@@ -291,7 +292,7 @@ async function main() {
 
     await runner.step('the_bar_carries_the_queue_when_collapsed', async () => {
       const open = await queueState(client);
-      const activeBefore = (await client.request('get_state')).activeSessionId;
+      const activeBefore = shownAgentId(await client.request('get_state'));
       const alphaTextBefore = (await client.request('read_pane_text', { sessionId: alpha.sessionId, paneId: alpha.paneId })).text || '';
 
       await client.request('dispatch_shortcut', { shortcutId: 'session.toggleSidebar' });
@@ -324,7 +325,7 @@ async function main() {
       await client.request('dom_key', { selector: '[role="combobox"]', key: 'Escape' });
 
       const state = await client.request('get_state');
-      runner.assert(state.activeSessionId === activeBefore, `collapsing kept the selection: ${activeBefore} -> ${state.activeSessionId}`);
+      runner.assert(shownAgentId(state) === activeBefore, `collapsing kept the selection: ${activeBefore} -> ${shownAgentId(state)}`);
       const alphaTextAfter = (await client.request('read_pane_text', { sessionId: alpha.sessionId, paneId: alpha.paneId })).text || '';
       runner.assert(
         alphaTextBefore.includes('QUEUE_ALPHA') && alphaTextAfter.includes('QUEUE_ALPHA'),
@@ -342,7 +343,7 @@ async function main() {
       await client.request('dom_click', { selector: `[data-testid="queue-select-${alpha.sessionId}"]` });
       await pollFor(async () => {
         const state = await client.request('get_state');
-        return state.activeSessionId === alpha.sessionId ? state : null;
+        return shownAgentId(state) === alpha.sessionId ? state : null;
       }, 'the clicked row to select its agent', 15_000);
       await waitForPaneInputFocus(client, alpha.sessionId, alpha.paneId, 15_000);
     });
@@ -365,7 +366,7 @@ async function main() {
       await driver.pressEnter();
       await pollFor(async () => {
         const state = await client.request('get_state');
-        return state.activeSessionId === alpha.sessionId ? state : null;
+        return shownAgentId(state) === alpha.sessionId ? state : null;
       }, 'Return on the focused row to open its agent', 15_000);
       runner.log('a queue row opened from the keyboard', { row: alpha.sessionId, open: row.open });
 
@@ -545,11 +546,11 @@ async function main() {
 
         const handed = await pollFor(async () => {
           const state = await client.request('get_state');
-          return state.activeSessionId === nextId ? state : null;
+          return shownAgentId(state) === nextId ? state : null;
         }, 'the auto-settle to hand over the next agent that owes a turn', 30_000);
         runner.assert(
-          handed.activeSessionId === nextId,
-          `auto-settle selected the next owed turn: ${handed.activeSessionId}`,
+          shownAgentId(handed) === nextId,
+          `auto-settle selected the next owed turn: ${shownAgentId(handed)}`,
         );
         const after = await waitForTurns(client, [nextId], 'the auto-settled agent out of the band');
         runner.assert(
@@ -663,7 +664,7 @@ async function main() {
     });
 
     await runner.step('toggling_the_arrangement_preserves_the_queue', async () => {
-      const activeBefore = (await client.request('get_state')).activeSessionId;
+      const activeBefore = shownAgentId(await client.request('get_state'));
       const expected = turnIds(await queueState(client));
 
       await client.request('set_setting', { key: 'queue_mode_enabled', value: 'false' });
@@ -678,7 +679,7 @@ async function main() {
 
       await client.request('set_setting', { key: 'queue_mode_enabled', value: 'true' });
       await waitForTurns(client, expected, 'the same queue after turning the arrangement back on', 15_000);
-      const activeAfter = (await client.request('get_state')).activeSessionId;
+      const activeAfter = shownAgentId(await client.request('get_state'));
       runner.assert(
         activeAfter === activeBefore,
         `the selected agent survived the toggle: ${activeBefore} -> ${activeAfter}`,
@@ -696,11 +697,11 @@ async function main() {
       // daemon broadcast that drops the settled row.
       const jumped = await pollFor(async () => {
         const state = await client.request('get_state');
-        return state.activeSessionId === alpha.sessionId ? state : null;
+        return shownAgentId(state) === alpha.sessionId ? state : null;
       }, 'settling to hand over the next agent in queue order', 15_000);
       runner.assert(
-        jumped.activeSessionId === alpha.sessionId,
-        `settling selected the next owed turn: ${jumped.activeSessionId}`,
+        shownAgentId(jumped) === alpha.sessionId,
+        `settling selected the next owed turn: ${shownAgentId(jumped)}`,
       );
 
       const betaTurnBefore = observer.getSession(beta.sessionId)?.turn_opened_at ?? null;
@@ -743,11 +744,11 @@ async function main() {
       runner.assert(emptied.empty, 'the band says so itself once nothing is owed');
       const state = await pollFor(async () => {
         const current = await client.request('get_state');
-        return current.activeSessionId === null ? current : null;
+        return shownAgentId(current) === null ? current : null;
       }, 'settling the last turn to land on home', 15_000);
       runner.assert(
-        state.activeSessionId === null,
-        `no agent is selected once the queue is empty: ${state.activeSessionId}`,
+        shownAgentId(state) === null,
+        `no agent is selected once the queue is empty: ${shownAgentId(state)}`,
       );
 
       const home = await pollFor(
@@ -791,14 +792,14 @@ async function main() {
       const jumped = await pollFor(
         async () => {
           const current = await client.request('get_state');
-          return current.activeSessionId === beta.sessionId ? current : null;
+          return shownAgentId(current) === beta.sessionId ? current : null;
         },
         'the wait at home to end on the agent that opened a turn',
         20_000,
       );
       runner.assert(
-        jumped.activeSessionId === beta.sessionId,
-        `waiting at home handed over the agent that wants the user: ${jumped.activeSessionId}`,
+        shownAgentId(jumped) === beta.sessionId,
+        `waiting at home handed over the agent that wants the user: ${shownAgentId(jumped)}`,
       );
     });
 
@@ -806,9 +807,9 @@ async function main() {
       await pressShortcutKeys(client, driver, 'session.goToDashboard');
       const home = await pollFor(async () => {
         const current = await client.request('get_state');
-        return current.activeSessionId === null ? current : null;
+        return shownAgentId(current) === null ? current : null;
       }, 'Cmd+Shift+H to land on home', 15_000);
-      runner.assert(home.activeSessionId === null, 'the user walked home');
+      runner.assert(shownAgentId(home) === null, 'the user walked home');
 
       await driveToOwedTurn(client, observer, alpha, 'whether to stay put', 'alpha to want the user too');
       await waitForTurns(
@@ -820,8 +821,8 @@ async function main() {
       await delay(BAND_UPDATE_WINDOW_MS);
       const stayed = await client.request('get_state');
       runner.assert(
-        stayed.activeSessionId === null,
-        `a home the user chose keeps them, however many agents ask: ${stayed.activeSessionId}`,
+        shownAgentId(stayed) === null,
+        `a home the user chose keeps them, however many agents ask: ${shownAgentId(stayed)}`,
       );
     });
 
@@ -829,7 +830,7 @@ async function main() {
       await client.request('select_session', { sessionId: alpha.sessionId });
       await pollFor(async () => {
         const state = await client.request('get_state');
-        return state.activeSessionId === alpha.sessionId ? state : null;
+        return shownAgentId(state) === alpha.sessionId ? state : null;
       }, 'alpha to be the agent on screen', 15_000);
 
       await client.request('dom_click', { selector: `[data-testid="queue-snooze-${alpha.sessionId}"]` });
@@ -872,9 +873,9 @@ async function main() {
 
       const moved = await pollFor(async () => {
         const state = await client.request('get_state');
-        return state.activeSessionId === beta.sessionId ? state : null;
+        return shownAgentId(state) === beta.sessionId ? state : null;
       }, 'snoozing the agent on screen to hand over the next one that wants the user', 15_000);
-      runner.assert(moved.activeSessionId === beta.sessionId, 'handover landed on beta');
+      runner.assert(shownAgentId(moved) === beta.sessionId, 'handover landed on beta');
     });
 
     await runner.step('the_deferral_holds_while_the_agent_runs_and_stops', async () => {

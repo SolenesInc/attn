@@ -5,11 +5,11 @@ import { type SeedPlacement, type SeedReviewActionContext } from '../hooks/useDa
 import { useDockPanels } from '../hooks/useDockPanels';
 import { useDaemonStore } from '../store/daemonSessions';
 import { gardenPathToSeed, useGardenWalk } from '../store/gardenWalk';
-import { useSessionStore } from '../store/sessions';
 import { crewDisplayName } from '../utils/crewName';
+import { openThenShow } from './openThenShow';
 interface Options {
   sendOpenSeed: ReturnType<typeof useDaemonApi>['sendOpenSeed'];
-  activeSessionId: ReturnType<typeof useSessionStore.getState>['activeSessionId'];
+  contextSessionId: string | null;
   showError: ReturnType<typeof useToast>['showError'];
   seeds: ReturnType<typeof useDaemonStore.getState>['seeds'];
   openDockPanel: ReturnType<typeof useDockPanels>['openDockPanel'];
@@ -21,13 +21,12 @@ interface Options {
   sendSeedToChief: ReturnType<typeof useDaemonApi>['sendSeedToChief'];
   sendCrewWake: ReturnType<typeof useDaemonApi>['sendCrewWake'];
   sendCrewSleep: ReturnType<typeof useDaemonApi>['sendCrewSleep'];
-  handleSelectDesktop: (desktopId: string) => void;
   setCrewSeedTile: (tile: { desktopId: string; tileId: string } | null) => void;
   closeCrewPanel: () => void;
 }
 export function useAppGardenActions({
   sendOpenSeed,
-  activeSessionId,
+  contextSessionId,
   showError,
   seeds,
   openDockPanel,
@@ -39,7 +38,6 @@ export function useAppGardenActions({
   sendSeedToChief,
   sendCrewWake,
   sendCrewSleep,
-  handleSelectDesktop,
   setCrewSeedTile,
   closeCrewPanel,
 }: Options) {
@@ -49,25 +47,24 @@ export function useAppGardenActions({
       placement: SeedPlacement,
       beforeFocus?: (opened: { desktopId: string; tileId: string }) => void,
     ) => {
-      const opened = await sendOpenSeed(seedId, placement);
+      const opened = await openThenShow(() => sendOpenSeed(seedId, placement), ({ desktopId, tileId }) => {
+        if (desktopId && tileId) beforeFocus?.({ desktopId, tileId });
+      });
       if (!opened.desktopId || !opened.tileId) {
         throw new Error(`The daemon opened ${seedId} without a desktop tile`);
       }
-      const { desktopId, tileId } = opened;
-      beforeFocus?.({ desktopId, tileId });
-      handleSelectDesktop(desktopId);
       return opened;
     },
-    [sendOpenSeed, handleSelectDesktop],
+    [sendOpenSeed],
   );
 
   const handleOpenSeedTile = useCallback(
     (seedId: string) => {
-      void openSeedTile(seedId, { sessionId: activeSessionId || '' }).catch((error) => {
+      void openSeedTile(seedId, { sessionId: contextSessionId || '' }).catch((error) => {
         showError(error instanceof Error ? error.message : 'Could not open the seed');
       });
     },
-    [activeSessionId, openSeedTile, showError],
+    [contextSessionId, openSeedTile, showError],
   );
 
   const handleOpenSeedFromCrew = useCallback(
@@ -112,15 +109,12 @@ export function useAppGardenActions({
 
   const handleOpenMarkdownArtifact = useCallback(
     (path: string) => {
-      void sendOpenMarkdown(path, '')
-        .then(({ desktopId, tileId }) => {
-          if (desktopId && tileId) handleSelectDesktop(desktopId);
-        })
+      void openThenShow(() => sendOpenMarkdown(path, ''))
         .catch((error) => {
           showError(error instanceof Error ? error.message : 'Could not open the document');
         });
     },
-    [handleSelectDesktop, sendOpenMarkdown, showError],
+    [sendOpenMarkdown, showError],
   );
 
   const handleResumeSeed = useCallback(
@@ -139,19 +133,19 @@ export function useAppGardenActions({
 
   const handleHandoverSeed = useCallback(
     (options: Parameters<typeof sendSeedHandover>[0]) =>
-      sendSeedHandover({ ...options, sourceSessionId: activeSessionId || undefined }).then(
+      sendSeedHandover({ ...options, sourceSessionId: contextSessionId || undefined }).then(
         (result) => {
           handleSelectSession(result.session_id);
           return result;
         },
       ),
-    [activeSessionId, handleSelectSession, sendSeedHandover],
+    [contextSessionId, handleSelectSession, sendSeedHandover],
   );
 
   const handleSendSeedToChief = useCallback(
     (options: Parameters<typeof sendSeedToChief>[0]) =>
-      sendSeedToChief({ ...options, sourceSessionId: activeSessionId || undefined }),
-    [activeSessionId, sendSeedToChief],
+      sendSeedToChief({ ...options, sourceSessionId: contextSessionId || undefined }),
+    [contextSessionId, sendSeedToChief],
   );
 
   const handleWakeCrewMember = useCallback(

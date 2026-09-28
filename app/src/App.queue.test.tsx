@@ -106,7 +106,8 @@ describe('App queue', () => {
 
     await press(daemon, 'Open older');
 
-    expect(daemon.sentOf('desktop_set_current')).toEqual([expect.objectContaining({ desktop_id: 'desktop-older' })]);
+    expect(daemon.sentOf('desktop_show_session')).toEqual([expect.objectContaining({ session_id: 'older' })]);
+    expect(daemon.sentOf('desktop_set_current')).toEqual([]);
     expect(shownDesktops()).toEqual(['desktop-older']);
   });
 

@@ -22,7 +22,7 @@ import { useAppSessions } from './useAppSessions';
 import type { useAttentionQueue } from './useAttentionQueue';
 
 interface Options {
-  activeSessionId: string | null;
+  shownAgentId: string | null;
   daemonSessions: AppContentProps['daemonSessions'];
   desktopViews: ReturnType<typeof useAppSessions>['desktopViews'];
   profileSessions: ReturnType<typeof useAppSessions>['profileSessions'];
@@ -31,7 +31,7 @@ interface Options {
   showNotice: (message: string) => void;
 }
 export function useAppNavigation({
-  activeSessionId,
+  shownAgentId,
   daemonSessions,
   desktopViews,
   profileSessions,
@@ -49,7 +49,7 @@ export function useAppNavigation({
     goToDashboard,
     goHomeAwaitingNextTurn,
   } = useSessionStore();
-  const { sendDesktopSetCurrent, sendDesktopSetActivePane, sendDesktopRemoveLeaf } = useDaemonApi();
+  const { sendDesktopSetCurrent, sendDesktopRemoveLeaf } = useDaemonApi();
   const currentDesktopId = useProfilesStore((state) => state.currentDesktopId);
   const desktops = useProfilesStore((state) => state.desktops);
   const shownTile = useSelectedTile();
@@ -61,10 +61,10 @@ export function useAppNavigation({
 
   const {
     selectAgent,
-    selectAgentPane,
-    cancelPendingSelection,
-    back: navigateAgentHistoryBack,
-    forward: navigateAgentHistoryForward,
+    selectLeaf,
+    cancelIntent,
+    back: navigateLeafHistoryBack,
+    forward: navigateLeafHistoryForward,
   } = useAgentNavigation();
 
   const handleSelectSession = selectAgent;
@@ -100,9 +100,7 @@ export function useAppNavigation({
     );
   }, [desktopViews, agentOnScreenId, handleSelectSession, showNotice]);
 
-  const toggleGridMode = useCallback(() => {
-    setView((prev) => (prev === 'grid' ? (activeSessionId ? 'session' : 'dashboard') : 'grid'));
-  }, [activeSessionId, setView]);
+  const toggleGridMode = useSessionStore((state) => state.toggleGrid);
 
   const [desktopSelectionStyle, setDesktopSelectionStyle] = useState<DesktopSelectionStyle>(
     readDesktopSelectionStyle,
@@ -114,18 +112,17 @@ export function useAppNavigation({
 
   useEffect(() => {
     probeUiAfterSwitch({
-      sessionId: activeSessionId,
+      sessionId: shownAgentId,
       desktopId: currentDesktopId,
       view,
     });
-  }, [activeSessionId, currentDesktopId, view]);
+  }, [shownAgentId, currentDesktopId, view]);
 
   const handleSelectDesktop = useCallback(
     (desktopId: string) => {
       const { selectedProfileId, desktops } = useProfilesStore.getState();
       if (!selectedProfileId || !desktops.some((desktop) => desktop.id === desktopId)) return;
       setView('session');
-      if (desktopId === currentDesktopIdRef.current) return;
       void sendDesktopSetCurrent(selectedProfileId, desktopId).catch(() => {});
     },
     [sendDesktopSetCurrent, setView],
@@ -137,18 +134,11 @@ export function useAppNavigation({
 
   const handleSelectTile = useCallback(
     (desktopId: string, tileId: string) => {
-      const { selectedProfileId, desktops } = useProfilesStore.getState();
-      if (!selectedProfileId || !desktops.some((desktop) => desktop.id === desktopId)) return;
-      setView('session');
-      void sendDesktopSetActivePane(desktopId, tileId)
-        .then(() => {
-          if (desktopId !== currentDesktopIdRef.current) return sendDesktopSetCurrent(selectedProfileId, desktopId);
-        })
-        .catch((error) => {
-          showError(`Could not focus that tile: ${error instanceof Error ? error.message : String(error)}`);
-        });
+      const { desktops } = useProfilesStore.getState();
+      if (!desktops.some((desktop) => desktop.id === desktopId)) return;
+      selectLeaf(desktopId, tileId);
     },
-    [sendDesktopSetActivePane, sendDesktopSetCurrent, setView, showError],
+    [selectLeaf],
   );
 
   const handleCloseTile = useCallback(
@@ -198,11 +188,11 @@ export function useAppNavigation({
   );
 
   const handleSelectOrchestrator = useCallback(() => {
-    const session = daemonSessions.find((entry) => entry.id === activeSessionId);
+    const session = daemonSessions.find((entry) => entry.id === shownAgentId);
     if (!session) return;
     const dispatcher = dispatcherOf(session, daemonSessions);
     if (dispatcher) handleSelectSession(dispatcher.id);
-  }, [activeSessionId, daemonSessions, handleSelectSession]);
+  }, [shownAgentId, daemonSessions, handleSelectSession]);
 
   return {
     handleJumpToWaiting,
@@ -214,10 +204,10 @@ export function useAppNavigation({
     utilityFocusRequestToken,
     requestTerminalFocus,
     selectAgent,
-    selectAgentPane,
-    cancelPendingSelection,
-    navigateAgentHistoryBack,
-    navigateAgentHistoryForward,
+    selectLeaf,
+    cancelIntent,
+    navigateLeafHistoryBack,
+    navigateLeafHistoryForward,
     handleSelectSession,
     selectCreatedSession,
     goToDashboard,

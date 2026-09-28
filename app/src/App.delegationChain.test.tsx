@@ -107,11 +107,11 @@ describe('App delegation chain', () => {
     await gesture(daemon, () => fireEvent.click(screen.getByRole('button', { name: /^Open child/ })));
 
     await gesture(daemon, () => pressShortcut('session.orchestrator'));
-    expect(daemon.sentOf('desktop_set_current').pop()).toMatchObject({ desktop_id: 'desktop-root' });
+    expect(daemon.sentOf('desktop_show_session').pop()).toMatchObject({ session_id: 'root' });
 
     await gesture(daemon, () => fireEvent.click(screen.getByRole('button', { name: /^Open orphan/ })));
     await gesture(daemon, () => pressShortcut('session.orchestrator'));
-    expect(daemon.sentOf('desktop_set_current').pop()).toMatchObject({ desktop_id: 'desktop-orphan' });
+    expect(daemon.sentOf('desktop_show_session').pop()).toMatchObject({ session_id: 'orphan' });
   });
 
   it('does not reopen under a pointer that has not moved since the user dismissed it', async () => {
@@ -154,7 +154,7 @@ describe('App delegation chain', () => {
 
     it('keeps presses on the pane header’s chain and on the chain itself from selecting the pane', async () => {
       const daemon = await renderPanes();
-      const selectedBefore = daemon.sentOf('desktop_set_active_pane').length;
+      const selectedBefore = daemon.sentOf('desktop_show_leaf').length;
       const headerTrigger = within(buildPane()).getByRole('button', { name: /Show delegation chain for Build navigator/ });
 
       fireEvent.mouseDown(headerTrigger);
@@ -163,7 +163,7 @@ describe('App delegation chain', () => {
       expect(current).toHaveFocus();
       await gesture(daemon, () => fireEvent.mouseDown(current));
 
-      expect(daemon.sentOf('desktop_set_active_pane').slice(selectedBefore)).toEqual([]);
+      expect(daemon.sentOf('desktop_show_leaf').slice(selectedBefore)).toEqual([]);
     });
 
     it('closes on a pointer press in the terminal pane', async () => {

@@ -3,6 +3,7 @@ package daemon
 import (
 	"errors"
 	"net"
+	"sync"
 	"testing"
 	"time"
 
@@ -49,4 +50,16 @@ func (w *WireDaemon) Stop() error {
 func UseShippedPasteGap(t testing.TB) {
 	sessionInputSubmitDelay = shippedSessionInputSubmitDelay
 	t.Cleanup(func() { sessionInputSubmitDelay = 0 })
+}
+
+// PauseNextHeldAction blocks the next profile action after it ran, while its client's broadcasts are held.
+func (w *WireDaemon) PauseNextHeldAction(paused chan<- struct{}, resume <-chan struct{}) {
+	var once sync.Once
+	pause := func() {
+		once.Do(func() {
+			paused <- struct{}{}
+			<-resume
+		})
+	}
+	w.d.heldActionRan.Store(&pause)
 }
