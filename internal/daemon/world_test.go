@@ -102,6 +102,10 @@ func (w *world) stop() {
 	if w.daemon == nil {
 		return
 	}
+	if w.bubbled {
+		// Let calls the agents already have in flight land before their daemon goes away.
+		synctest.Wait()
+	}
 	w.ClosePeers()
 	if err := w.daemon.Stop(); err != nil {
 		w.T.Errorf("stop daemon: %v", err)
