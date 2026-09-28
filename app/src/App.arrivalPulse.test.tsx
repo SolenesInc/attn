@@ -6,6 +6,7 @@ import { openPicker, submitPath } from './test/locations';
 import type { ScriptedDaemon } from './test/scriptedDaemon';
 
 const SEED_ID = 's-7k3f9m';
+const SEED_TITLE = 'Arrival notes';
 const TILE_ID = 'tile-seed';
 
 async function pick(daemon: ScriptedDaemon, label: string) {
@@ -24,7 +25,7 @@ describe('App arrival pulse', () => {
   it('answers repeated tile and cross-desktop agent picks, but not another client’s selection', async () => {
     const { daemon } = await renderApp({ initialState: {
       sessions: [daemonSession('s1'), daemonSession('s2')],
-      seeds: [daemonSeed(SEED_ID, { title: 'Arrival notes' })],
+      seeds: [daemonSeed(SEED_ID, { title: SEED_TITLE })],
       profiles: [defaultProfile('d1')],
       desktops: [
         daemonDesktop('d1', {
@@ -37,7 +38,7 @@ describe('App arrival pulse', () => {
       ],
     } });
 
-    await pick(daemon, SEED_ID);
+    await pick(daemon, SEED_TITLE);
     expect(visiblePane(TILE_ID)).toHaveClass('leaf-arrival');
     expect(daemon.sentOf('desktop_show_leaf')).toEqual([
       expect.objectContaining({ desktop_id: 'd1', leaf_id: TILE_ID }),
@@ -46,7 +47,7 @@ describe('App arrival pulse', () => {
 
     fireEvent.animationEnd(visiblePane(TILE_ID)!, { animationName: 'leaf-arrival-pulse' });
     expect(visiblePane(TILE_ID)).not.toHaveClass('leaf-arrival');
-    await pick(daemon, SEED_ID);
+    await pick(daemon, SEED_TITLE);
     expect(visiblePane(TILE_ID)).toHaveClass('leaf-arrival');
     expect(daemon.sentOf('desktop_show_leaf')).toHaveLength(2);
 
