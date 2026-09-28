@@ -42,7 +42,7 @@ func TestOpenBrowserDocksBesideTheAgentThatOpensIt(t *testing.T) {
 	}
 }
 
-func TestOpenBrowserRetargetsTheBrowserOnATileOnlyDesktop(t *testing.T) {
+func TestOpenBrowserRetargetsTheBrowserOnADesktopWithoutAgents(t *testing.T) {
 	d, desktop := setupAgentDesktop(t)
 	if resp := openBrowserFor(t, d, "", "http://localhost:3000"); !resp.Ok {
 		t.Fatalf("first open: %v", protocol.Deref(resp.Error))

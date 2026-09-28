@@ -96,6 +96,8 @@ const (
 var ErrAlreadyRunning = errors.New("daemon already running")
 
 type Daemon struct {
+	// Nil in production; wire tests pause a profile action here, its broadcasts held, to land a change meanwhile.
+	heldActionRan    atomic.Pointer[func()]
 	socketPath       string
 	pidPath          string
 	pidFile          *os.File

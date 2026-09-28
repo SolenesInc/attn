@@ -2,18 +2,24 @@
 
 import fs from 'node:fs';
 import path from 'node:path';
+import { execFileSync } from 'node:child_process';
+import { fileURLToPath } from 'node:url';
 import {
   createSessionAndWaitForInitialPane,
   launchFreshAppAndConnect,
   parseCommonArgs,
   printCommonHelp,
   pressShortcutKeys,
+  shownAgentId,
 } from './common.mjs';
 import { DaemonObserver } from './daemonObserver.mjs';
+import { currentHarnessInstance, instanceCliEnv, socketPathForInstance } from './harnessInstance.mjs';
 import { createWindowDriver } from './platform.mjs';
 import { waitForPaneAttached, waitForPaneShellReady, waitForPaneText } from './scenarioAssertions.mjs';
 import { createScenarioRunner } from './scenarioRunner.mjs';
 import { UiAutomationClient } from './uiAutomationClient.mjs';
+
+const ATTN_BIN = path.join(path.dirname(fileURLToPath(import.meta.url)), '../../../attn');
 
 function parseArgs(argv) {
   const args = [...argv];
@@ -45,10 +51,26 @@ async function waitForShown(client, desktopId, sessionId, description) {
     client,
     (state) => {
       const shown = shownDesktop(state);
-      return shown?.id === desktopId && shown.visible && (sessionId === undefined || state.activeSessionId === sessionId);
+      return shown?.id === desktopId && shown.visible && (sessionId === undefined || shownAgentId(state) === sessionId);
     },
     description,
   );
+}
+
+async function waitForDesktopUi(client, desktopId, predicate, description, timeoutMs = 20_000) {
+  const startedAt = Date.now();
+  let last = null;
+  while (Date.now() - startedAt < timeoutMs) {
+    last = await client.request('get_desktop_ui_state', { desktopId }).catch((error) => ({ error: String(error) }));
+    if (predicate(last)) return last;
+    await new Promise((resolve) => setTimeout(resolve, 200));
+  }
+  throw new Error(`Timed out waiting for ${description}. Last desktop UI state:\n${JSON.stringify(last, null, 2)}`);
+}
+
+async function focusModeOf(client, sessionId) {
+  const snapshot = await client.request('capture_structured_snapshot', { includePaneText: false });
+  return snapshot.sessions.find((session) => session.id === sessionId);
 }
 
 function mountedDesktopIds(state) {
@@ -73,7 +95,7 @@ async function main() {
     prefix: 'desktop-switching',
     metadata: {
       agent: 'shell',
-      focus: 'desktop shortcuts switch, send and bounce through the daemon; the overview switches; the app follows another client (the harness observer); terminals keep their scrollback across moves',
+      focus: 'desktop shortcuts switch, send and bounce through the daemon; the overview switches; the app follows another client (the harness observer); terminals keep their scrollback across moves; a tile is an ordinary leaf that takes the keyboard and leaves no stale agent focus mode',
     },
   });
 
@@ -166,7 +188,7 @@ async function main() {
 
     await runner.step('send_the_focused_pane_to_desktop_b', async () => {
       await client.request('focus_pane', { sessionId: split.sessionId, paneId: split.paneId });
-      await waitForAppState(client, (state) => state.activeSessionId === split.sessionId, 'split pane focused');
+      await waitForAppState(client, (state) => shownAgentId(state) === split.sessionId, 'split pane focused');
       await pressShortcutKeys(client, driver, `desktop.send${desktopB.shortcut_slot}`);
       const moved = await waitForAppState(
         client,
@@ -219,9 +241,51 @@ async function main() {
       );
     });
 
+    let tileId;
+    await runner.step('a_docked_tile_is_the_active_leaf_and_takes_the_keyboard', async () => {
+      await client.request('select_session', { sessionId: first.sessionId });
+      await client.request('dom_click', { selector: `[data-testid="focus-pane-${first.paneId}"]` });
+      const focused = await focusModeOf(client, first.sessionId);
+      runner.assert(
+        focused?.desktop?.view?.maximizedPaneId === first.paneId,
+        `Focus mode did not maximize ${first.paneId}: ${JSON.stringify(focused?.desktop?.view, null, 2)}`,
+        focused?.desktop?.view,
+      );
+      const notes = path.join(runner.sessionDir, 'shells', 'notes.md');
+      fs.writeFileSync(notes, '# Leaf notes\n\nDocked content.\n', 'utf8');
+      execFileSync(ATTN_BIN, ['open', notes, '--session', first.sessionId], {
+        env: instanceCliEnv(currentHarnessInstance(), { ATTN_SOCKET_PATH: socketPathForInstance() }),
+        encoding: 'utf8',
+      });
+      const state = await waitForDesktopUi(
+        client,
+        desktopA.id,
+        (s) => s?.active === true && s.sessionVisible === true && s.tileBodyFocused === true && s.tileIds?.length === 1,
+        'the docked tile shown as the active leaf with its body focused',
+      );
+      tileId = state.tileIds[0];
+      runner.assert(
+        state.tileTitles?.includes('Leaf notes'),
+        `The tile header did not take its title from the markdown H1: ${JSON.stringify(state, null, 2)}`,
+        state,
+      );
+    });
+
+    await runner.step('returning_to_the_agent_leaves_no_stale_focus_mode', async () => {
+      await client.request('select_session', { sessionId: first.sessionId });
+      const returned = await focusModeOf(client, first.sessionId);
+      runner.assert(
+        returned?.desktop?.view?.maximizedPaneId == null && returned?.sidebarItem?.bounds?.width > 0,
+        `Returning from the tile restored stale focus mode: ${JSON.stringify(returned, null, 2)}`,
+        returned?.desktop?.view,
+      );
+      await waitForPaneText(client, first.sessionId, first.paneId, (text) => text.includes(tokens.first), 'first shell kept its scrollback', 15_000);
+    });
+
     const result = await runner.finishSuccess({
       desktops: { a: desktopA.id, b: desktopB.id },
       sessions: { first: first.sessionId, split: split.sessionId },
+      tileId,
       tokens,
     });
     console.log('[RealAppHarness] Desktop switching passed.');

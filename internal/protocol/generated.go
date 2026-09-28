@@ -7048,6 +7048,9 @@ type ProfileArrangementChangedMessage struct {
 
 	// Profile corresponds to the JSON schema field "profile".
 	Profile Profile `json:"profile"`
+
+	// RequestID corresponds to the JSON schema field "request_id".
+	RequestID *string `json:"request_id,omitempty,omitzero"`
 }
 
 type ProfileCreateMessage struct {

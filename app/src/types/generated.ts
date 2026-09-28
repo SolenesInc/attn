@@ -6931,6 +6931,7 @@ export interface ProfileArrangementChangedMessage {
     event:       ProfileArrangementChangedMessageEvent;
     moved_leaf?: MovedLeaf;
     profile:     ProfileElement;
+    request_id?: string;
     [property: string]: any;
 }
 
@@ -20560,6 +20561,7 @@ const typeMap: any = {
         { json: "event", js: "event", typ: r("ProfileArrangementChangedMessageEvent") },
         { json: "moved_leaf", js: "moved_leaf", typ: u(undefined, r("MovedLeaf")) },
         { json: "profile", js: "profile", typ: r("ProfileElement") },
+        { json: "request_id", js: "request_id", typ: u(undefined, "") },
     ], "any"),
     "MovedLeaf": o([
         { json: "from_desktop_id", js: "from_desktop_id", typ: "" },

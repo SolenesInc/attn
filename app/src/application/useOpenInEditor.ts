@@ -1,14 +1,12 @@
 import { invoke } from '@tauri-apps/api/core';
 import { useCallback, useMemo } from 'react';
-import { useSessionStore } from '../store/sessions';
-import { useAppErrorsContext, useAppInputs, useAppSessionsContext } from './AppContexts';
+import { useAppErrorsContext, useAppInputs } from './AppContexts';
+import { useScreenSession } from './useScreenSession';
 
 export function useOpenInEditor() {
   const { settings } = useAppInputs();
-  const { activeEndpoint } = useAppSessionsContext();
   const { showError } = useAppErrorsContext();
-  const sessions = useSessionStore((state) => state.sessions);
-  const activeSessionId = useSessionStore((state) => state.activeSessionId);
+  const screen = useScreenSession();
 
   const isZedEditorConfigured = useMemo(() => {
     const editor = (settings.editor_executable || '').trim().toLowerCase();
@@ -35,11 +33,11 @@ export function useOpenInEditor() {
     [settings.editor_executable, showError],
   );
 
-  const activeSession = sessions.find((s) => s.id === activeSessionId);
+  const activeSession = screen?.session;
   const activeSessionIsRemote = Boolean(activeSession?.endpointId);
   const editorTarget = useMemo(
-    () => resolveEditorTarget(activeSession, activeEndpoint?.ssh_target, isZedEditorConfigured),
-    [activeSession, activeEndpoint?.ssh_target, isZedEditorConfigured],
+    () => resolveEditorTarget(activeSession, screen?.endpoint?.ssh_target, isZedEditorConfigured),
+    [activeSession, screen?.endpoint?.ssh_target, isZedEditorConfigured],
   );
 
   const openActiveSessionInEditor = useCallback(() => {

@@ -1,171 +1,71 @@
 import { useEffect, useMemo, useRef } from 'react';
+import { useShallow } from 'zustand/react/shallow';
 import { useDaemonApi } from '../contexts/DaemonApiContext';
-import { selectedTile, useProfilesStore, type ProfilesState } from '../store/profiles';
+import { useProfilesStore, type ProfilesState } from '../store/profiles';
 import { useSessionStore } from '../store/sessions';
-import type { Desktop } from '../types/generated';
-import { desktopPaneOfAgent } from '../utils/desktops';
-import { isStaleRevision } from './desktopRevisions';
+import { activeLeafOf, sameLeaf, sessionOfLeaf, type ActiveLeaf } from '../navigation/activeLeaf';
 
-interface Shown {
-  desktopId: string | null;
-  paneId: string;
-  sessionId: string | null;
-  tileId: string | null;
+export function activeLeafIn(state: Pick<ProfilesState, 'selectedProfileId' | 'currentDesktopId' | 'desktops'>): ActiveLeaf | null {
+  return activeLeafOf({
+    profileId: state.selectedProfileId ?? '',
+    currentDesktopId: state.currentDesktopId,
+    desktops: state.desktops,
+  });
 }
 
-function shownOf(state: Pick<ProfilesState, 'desktops' | 'currentDesktopId'>): Shown {
-  const desktop = state.desktops.find((entry) => entry.id === state.currentDesktopId);
-  const paneId = desktop?.active_pane_id ?? '';
-  const sessionId = desktop?.panes.find((pane) => pane.pane_id === paneId)?.session_id ?? null;
-  return { desktopId: state.currentDesktopId, paneId, sessionId, tileId: selectedTile(state)?.tileId ?? null };
+export function currentActiveLeaf(): ActiveLeaf | null {
+  return activeLeafIn(useProfilesStore.getState());
 }
 
-function agentToShow(
-  state: Pick<ProfilesState, 'desktops'>,
-  shown: Shown,
-  activeSessionId: string | null,
-): string | null {
-  if (shown.sessionId || !shown.tileId) return shown.sessionId;
-  const known = new Set(useSessionStore.getState().sessions.map((session) => session.id));
-  const agents = (state.desktops.find((desktop) => desktop.id === shown.desktopId)?.panes ?? [])
-    .map((pane) => pane.session_id)
-    .filter((sessionId) => known.has(sessionId));
-  if (activeSessionId && agents.includes(activeSessionId)) return activeSessionId;
-  return agents[0] ?? null;
+export function shownAgentId(): string | null {
+  if (useSessionStore.getState().view !== 'session') return null;
+  const leaf = currentActiveLeaf();
+  return leaf?.kind === 'agent' ? leaf.sessionId : null;
 }
 
-function keepTileContext(state: Pick<ProfilesState, 'desktops' | 'currentDesktopId'>) {
-  const sessions = useSessionStore.getState();
-  const shown = shownOf(state);
-  if (sessions.view !== 'session' || !shown.tileId) return;
-  if (sessions.pendingSelection || sessions.focusRequest) return;
-  const context = agentToShow(state, shown, sessions.activeSessionId);
-  if (context !== sessions.activeSessionId) useSessionStore.setState({ activeSessionId: context });
-}
-
-function intentSessionOf(sessions: ReturnType<typeof useSessionStore.getState>, tileSelected: boolean): string | null {
-  if (sessions.pendingSelection) return sessions.pendingSelection.sessionId;
-  if (sessions.view !== 'session') return null;
-  return tileSelected ? (sessions.focusRequest?.sessionId ?? null) : sessions.activeSessionId;
-}
-
-function arrivedInPendingProfile(
-  state: Pick<ProfilesState, 'selectedProfileId'>,
-  previous: Pick<ProfilesState, 'selectedProfileId'>,
-  sessions: ReturnType<typeof useSessionStore.getState>,
-): boolean {
-  const pending = sessions.pendingSelection;
-  if (!pending || state.selectedProfileId === previous.selectedProfileId) return false;
-  const pendingProfileId = sessions.sessions.find((session) => session.id === pending.sessionId)?.profileId;
-  return pendingProfileId === state.selectedProfileId;
-}
-
-function abandonSelection(sessionId: string) {
-  const sessions = useSessionStore.getState();
-  if (sessions.pendingSelection?.sessionId !== sessionId && sessions.activeSessionId !== sessionId) return;
-  sessions.cancelPendingSelection();
-  const state = useProfilesStore.getState();
-  const shown = shownOf(state);
-  const current = sessions.activeSessionId;
-  const shownAgent = agentToShow(state, shown, shown.tileId ? current : null);
-  if (shown.tileId) {
-    if (shownAgent !== current) useSessionStore.setState({ activeSessionId: shownAgent });
-    return;
-  }
-  if (shownAgent !== current) useSessionStore.getState().setActiveSession(shownAgent);
-}
-
-type Command =
-  | { key: string; kind: 'active'; desktopId: string; paneId: string }
-  | { key: string; kind: 'current'; profileId: string; desktopId: string }
-  | { key: string; kind: 'place'; desktop: Desktop; sessionId: string }
-  | { key: string; kind: 'profile'; profileId: string };
-
-interface SentCommand {
-  command: Command;
-  sessionId: string;
-}
-
-function commandApplied(state: Pick<ProfilesState, 'desktops' | 'currentDesktopId' | 'selectedProfileId'>, command: Command): boolean {
-  switch (command.kind) {
-    case 'active':
-      return state.desktops.some((desktop) => desktop.id === command.desktopId && desktop.active_pane_id === command.paneId);
-    case 'current':
-      return state.currentDesktopId === command.desktopId;
-    case 'place':
-      return desktopPaneOfAgent(state.desktops, command.sessionId)?.desktop_id === command.desktop.id;
-    case 'profile':
-      return state.selectedProfileId === command.profileId;
-  }
-}
-
-function commandShown(shown: Shown, command: Command): boolean {
-  switch (command.kind) {
-    case 'active':
-      return shown.desktopId === command.desktopId && shown.paneId === command.paneId;
-    case 'current':
-      return shown.desktopId === command.desktopId;
-    case 'place':
-      return shown.sessionId === command.sessionId;
-    case 'profile':
-      return true;
-  }
-}
-
-function nextCommand(intentSessionId: string, intentProfileId: string): Command | null {
-  const { desktops, currentDesktopId, selectedProfileId } = useProfilesStore.getState();
-  if (!selectedProfileId) return null;
-  if (intentProfileId && intentProfileId !== selectedProfileId) {
-    return { key: `profile:${intentProfileId}`, kind: 'profile', profileId: intentProfileId };
-  }
-  const placed = desktopPaneOfAgent(desktops, intentSessionId);
-  if (placed) {
-    const desktop = desktops.find((entry) => entry.id === placed.desktop_id);
-    if (desktop && desktop.active_pane_id !== placed.pane_id) {
+export function useActiveLeaf(): ActiveLeaf | null {
+  const fields = useProfilesStore(
+    useShallow((state) => {
+      const leaf = activeLeafIn(state);
       return {
-        key: `active:${placed.desktop_id}:${placed.pane_id}`,
-        kind: 'active',
-        desktopId: placed.desktop_id,
-        paneId: placed.pane_id,
+        kind: leaf?.kind ?? null,
+        profileId: leaf?.profileId ?? '',
+        desktopId: leaf?.desktopId ?? '',
+        leafId: leaf?.leafId ?? '',
+        sessionId: leaf?.kind === 'agent' ? leaf.sessionId : '',
+        tileSessionId: leaf?.kind === 'tile' ? leaf.tileSessionId : null,
       };
-    }
-    if (placed.desktop_id !== currentDesktopId) {
-      return {
-        key: `current:${placed.desktop_id}`,
-        kind: 'current',
-        profileId: selectedProfileId,
-        desktopId: placed.desktop_id,
-      };
-    }
+    }),
+  );
+  return useMemo<ActiveLeaf | null>(() => {
+    const { kind, profileId, desktopId, leafId, sessionId, tileSessionId } = fields;
+    if (kind === 'agent') return { kind, profileId, desktopId, leafId, sessionId };
+    if (kind === 'tile') return { kind, profileId, desktopId, leafId, tileSessionId };
     return null;
-  }
-  const current = desktops.find((entry) => entry.id === currentDesktopId);
-  if (!current) return null;
-  return {
-    key: `place:${intentSessionId}:${current.id}:${current.revision}`,
-    kind: 'place',
-    desktop: current,
-    sessionId: intentSessionId,
-  };
+  }, [fields]);
 }
 
 export type Surface =
   | { kind: 'dashboard' }
   | { kind: 'grid' }
-  | { kind: 'tile' }
+  | { kind: 'tile'; desktopId: string; leafId: string }
   | { kind: 'agent'; sessionId: string | null };
 
 export function useSurface(): Surface {
   const view = useSessionStore((state) => state.view);
-  const tileSelected = useProfilesStore((state) => selectedTile(state) !== null);
-  const shownSessionId = useProfilesStore((state) => shownOf(state).sessionId);
-  const settledOnShown = useSessionStore((state) => shownSessionId !== null && state.activeSessionId === shownSessionId);
-  const shownAgentId = settledOnShown ? shownSessionId : null;
+  const leaf = useActiveLeaf();
   return useMemo<Surface>(() => {
     if (view !== 'session') return { kind: view };
-    if (tileSelected) return { kind: 'tile' };
-    return { kind: 'agent', sessionId: shownAgentId };
-  }, [view, tileSelected, shownAgentId]);
+    if (leaf?.kind === 'tile') return { kind: 'tile', desktopId: leaf.desktopId, leafId: leaf.leafId };
+    return { kind: 'agent', sessionId: leaf?.kind === 'agent' ? leaf.sessionId : null };
+  }, [view, leaf]);
+}
+
+// The session behind what is on screen, while the session view shows it.
+export function useSessionBehindScreen(): string | null {
+  const view = useSessionStore((state) => state.view);
+  const leaf = useActiveLeaf();
+  return view === 'session' ? sessionOfLeaf(leaf) : null;
 }
 
 export function useAgentOnScreen(): string | null {
@@ -173,127 +73,53 @@ export function useAgentOnScreen(): string | null {
   return surface.kind === 'agent' ? surface.sessionId : null;
 }
 
-export function useDesktopSelectionBridge(
-  focusSessionPane: (sessionId: string, paneId: string) => void,
-  reportFailure: (message: string) => void,
-) {
-  const { sendDesktopSetActivePane, sendDesktopSetCurrent, sendDesktopPlaceSession, sendProfileSelect } =
-    useDaemonApi();
-  const view = useSessionStore((state) => state.view);
-  const activeSessionId = useSessionStore((state) => state.activeSessionId);
-  const pendingSessionId = useSessionStore((state) => state.pendingSelection?.sessionId ?? null);
-  const tileSelected = useProfilesStore((state) => selectedTile(state) !== null);
-  const intentSessionId = useSessionStore((state) => intentSessionOf(state, tileSelected));
-  const intentProfileId = useSessionStore(
-    (state) => state.sessions.find((session) => session.id === intentSessionId)?.profileId ?? null,
-  );
-  const desktops = useProfilesStore((state) => state.desktops);
-  const currentDesktopId = useProfilesStore((state) => state.currentDesktopId);
-  const sentKey = useRef<string | null>(null);
-  const inFlight = useRef<SentCommand[]>([]);
+function focusBelongsTo(leaf: ActiveLeaf | null): boolean {
+  if (!leaf) return false;
+  const focused = document.activeElement;
+  const pane = focused instanceof Element ? focused.closest('[data-pane-id]') : null;
+  return pane?.getAttribute('data-pane-id') === leaf.leafId && pane.closest(`[data-desktop-id="${leaf.desktopId}"]`) !== null;
+}
+
+export function useDesktopSelectionBridge(reportFailure: (message: string) => void) {
+  const { sendDesktopShowSession, sendDesktopShowLeaf } = useDaemonApi();
+  const intent = useSessionStore((state) => state.intent);
+  const sent = useRef(0);
   const reportFailureRef = useRef(reportFailure);
   useEffect(() => {
     reportFailureRef.current = reportFailure;
   }, [reportFailure]);
 
   useEffect(() => {
-    if (!intentSessionId || intentProfileId === null) {
-      sentKey.current = null;
-      return;
-    }
-    const command = nextCommand(intentSessionId, intentProfileId);
-    if (!command) {
-      sentKey.current = null;
-      return;
-    }
-    if (command.key === sentKey.current) return;
-    sentKey.current = command.key;
-    const sent = { command, sessionId: intentSessionId };
-    inFlight.current = [...inFlight.current, sent];
-    const release = (error: unknown) => {
-      if (sentKey.current === command.key) sentKey.current = null;
-      inFlight.current = inFlight.current.filter((entry) => entry !== sent);
-      if (isStaleRevision(error)) return;
-      abandonSelection(intentSessionId);
-      reportFailureRef.current(`Could not show that agent: ${error instanceof Error ? error.message : String(error)}`);
-    };
-    switch (command.kind) {
-      case 'active':
-        void sendDesktopSetActivePane(command.desktopId, command.paneId).catch(release);
-        return;
-      case 'current':
-        void sendDesktopSetCurrent(command.profileId, command.desktopId).catch(release);
-        return;
-      case 'place':
-        void sendDesktopPlaceSession({
-          desktopId: command.desktop.id,
-          sessionId: command.sessionId,
-          expectedRevision: command.desktop.revision,
-          anchorPaneId: command.desktop.active_pane_id || undefined,
-        }).catch(release);
-        return;
-      case 'profile':
-        void sendProfileSelect(command.profileId).catch(release);
-    }
-  }, [
-    intentSessionId,
-    intentProfileId,
-    desktops,
-    currentDesktopId,
-    sendDesktopSetActivePane,
-    sendDesktopSetCurrent,
-    sendDesktopPlaceSession,
-    sendProfileSelect,
-  ]);
-
-  useEffect(() => {
-    if (view !== 'session') return;
-    const state = useProfilesStore.getState();
-    const shown = shownOf(state);
-    if (shown.tileId) {
-      keepTileContext(state);
-      return;
-    }
-    if (activeSessionId || pendingSessionId) return;
-    const sessionId = agentToShow(state, shown, null);
-    if (sessionId) useSessionStore.getState().setActiveSession(sessionId);
-  }, [view, activeSessionId, pendingSessionId, intentSessionId, tileSelected, currentDesktopId]);
-
-  const focusRef = useRef(focusSessionPane);
-  useEffect(() => {
-    focusRef.current = focusSessionPane;
-  }, [focusSessionPane]);
+    if (!intent?.sendsShow || intent.id === sent.current) return;
+    const { id, target, profileId, historyCursor } = intent;
+    if (target.kind !== 'session' && target.kind !== 'leaf') return;
+    sent.current = id;
+    const request = target.kind === 'session'
+      ? sendDesktopShowSession(target.sessionId)
+      : sendDesktopShowLeaf(target.desktopId, target.leafId);
+    request.then(
+      () => {
+        if (historyCursor === null || target.kind !== 'leaf') return;
+        useSessionStore.getState().historyLanded(profileId, historyCursor, { leafId: target.leafId, lastKnownDesktopId: target.desktopId });
+      },
+      (error: unknown) => {
+        const store = useSessionStore.getState();
+        if (store.intent?.id !== id) return;
+        store.intentFailed(id);
+        reportFailureRef.current(`Could not show that ${target.kind === 'session' ? 'agent' : 'leaf'}: ${error instanceof Error ? error.message : String(error)}`);
+      },
+    );
+  }, [intent, sendDesktopShowSession, sendDesktopShowLeaf]);
 
   useEffect(
     () =>
       useProfilesStore.subscribe((state, previous) => {
-        const confirmed: SentCommand[] = [];
-        const waiting: SentCommand[] = [];
-        for (const sent of inFlight.current) (commandApplied(state, sent.command) ? confirmed : waiting).push(sent);
-        inFlight.current = waiting;
-        const shown = shownOf(state);
-        const before = shownOf(previous);
-        if (shown.desktopId === before.desktopId && shown.paneId === before.paneId) {
-          keepTileContext(state);
-          return;
-        }
+        const leaf = activeLeafIn(state);
+        const before = activeLeafIn(previous);
+        if (!leaf || sameLeaf(leaf, before)) return;
         const sessions = useSessionStore.getState();
-        const shownByOwnCommand = confirmed.filter((sent) => commandShown(shown, sent.command));
-        if (shownByOwnCommand.length === 0) {
-          inFlight.current = [];
-        } else {
-          const intent = intentSessionOf(sessions, shown.tileId !== null);
-          if (shownByOwnCommand.every((sent) => sent.sessionId !== intent)) return;
-        }
-        if (arrivedInPendingProfile(state, previous, sessions)) return;
-        if (sessions.view === 'session') {
-          const sessionId = agentToShow(state, shown, sessions.activeSessionId);
-          const overridesRequest = shown.tileId !== null && sessions.focusRequest !== null;
-          if (sessionId !== sessions.activeSessionId || sessions.pendingSelection || overridesRequest) {
-            sessions.setActiveSession(sessionId);
-          }
-          if (shown.sessionId) focusRef.current(shown.sessionId, shown.paneId);
-        }
+        if (sessions.view !== 'session' || sessions.intent) return;
+        if (focusBelongsTo(before)) sessions.transferFocus(leaf);
       }),
     [],
   );

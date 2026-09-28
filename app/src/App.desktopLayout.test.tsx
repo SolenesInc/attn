@@ -4,9 +4,10 @@ import { describe, expect, it, vi } from 'vitest';
 import { openActionMenu, openSession } from './test/appFixtures';
 import { emptyDesktop, soloDesktop, daemonSession } from './test/daemonFixtures';
 import { fakeRects } from './test/layout';
-import { pressShortcut, renderApp } from './test/renderApp';
-import type { ScriptedDaemon } from './test/scriptedDaemon';
+import { gesture, pressShortcut, renderApp } from './test/renderApp';
+import type { Reply, ScriptedDaemon } from './test/scriptedDaemon';
 import { pane, relayOut, renderDesktop, split } from './test/desktopLayouts';
+import { serveLaunches } from './test/locations';
 
 const PANES_WIDTH = 4000;
 const SIDE_BY_SIDE = split('split-a', 'vertical', [pane('s1'), pane('s2')]);
@@ -52,12 +53,206 @@ describe('App desktop layout', () => {
   it('reports a split whose shell failed to spawn', async () => {
     const { daemon } = await openDesktop(pane('s1'), ['s1']);
     daemon.on('spawn_session', ({ id }) => ({ event: 'spawn_result', id, success: false, error: 'shell exited during startup' }));
+    const before = daemon.sent.length;
 
     pressShortcut('terminal.splitVertical');
     await daemon.idle();
 
     expect(daemon.sentOf('spawn_session')).toEqual([expect.objectContaining({ agent: 'shell', placement: expect.objectContaining({ desktop_id: 'ws', anchor_pane_id: 'pane-s1' }) })]);
     expect(screen.getByText(/shell exited during startup/)).toBeInTheDocument();
+    expect(daemon.sent.slice(before).filter((command) => command.cmd.startsWith('desktop_'))).toEqual([]);
+  });
+
+  it('leaves the user on the desktop they switched to while a launch was spawning', async () => {
+    const { daemon } = await renderApp({ initialState: {
+      sessions: [daemonSession('s1', { state: 'idle', directory: '/tmp/s1' })],
+      desktops: [soloDesktop('s1', { shortcut_slot: 1 }), emptyDesktop('other', { shortcut_slot: 2 })],
+    } });
+    await openSession(daemon, 's1');
+    const held: Array<(typeof daemon.sent)[number]> = [];
+    daemon.on('spawn_session', (command) => {
+      held.push(command);
+      return undefined;
+    });
+
+    pressShortcut('terminal.splitVertical');
+    await daemon.idle();
+    expect(held).toHaveLength(1);
+    const switches: Array<Extract<(typeof daemon.sent)[number], { cmd: 'desktop_set_current' }>> = [];
+    daemon.on('desktop_set_current', (command) => {
+      switches.push(command);
+      return undefined;
+    });
+    pressShortcut('desktop.select2');
+    await daemon.idle();
+    expect(switches).toHaveLength(1);
+
+    serveLaunches(daemon);
+    const [spawn] = held.splice(0) as Array<Extract<(typeof daemon.sent)[number], { cmd: 'spawn_session' }>>;
+    await act(async () => {
+      daemon.arrangement.place(spawn.id, `pane-${spawn.id}`, 'desktop-s1');
+      daemon.replyTo(spawn, { event: 'spawn_result', id: spawn.id, success: true, desktop_id: 'desktop-s1', pane_id: `pane-${spawn.id}` });
+      daemon.emit({ event: 'session_registered', session: daemonSession(spawn.id, { directory: '/tmp/s1', agent: 'shell', state: 'launching' }) });
+      daemon.emit(daemon.arrangement.changed());
+    });
+    await daemon.idle();
+    expect(daemon.sentOf('desktop_show_session').filter((command) => command.session_id === spawn.id)).toEqual([]);
+
+    await act(async () => {
+      for (const command of switches.splice(0)) {
+        daemon.arrangement.profiles = daemon.arrangement.profiles.map((profile) => ({ ...profile, current_desktop_id: command.desktop_id }));
+        daemon.replyTo(command, { event: 'profile_action_result', action: command.cmd, request_id: command.request_id ?? '', success: true });
+        daemon.emit(daemon.arrangement.changed());
+      }
+    });
+    await daemon.idle();
+
+    expect(daemon.sentOf('desktop_show_session').filter((command) => command.session_id === spawn.id)).toEqual([]);
+    expect(document.querySelector('[data-session-visible="1"]')?.getAttribute('data-session-terminal-desktop')).toBe('other');
+  });
+
+  it('leaves the user on the tile they docked while a launch was spawning', async () => {
+    const { daemon } = await openDesktop(pane('s1'), ['s1']);
+    const held: Array<Extract<(typeof daemon.sent)[number], { cmd: 'spawn_session' }>> = [];
+    daemon.on('spawn_session', (command) => {
+      held.push(command);
+      return undefined;
+    });
+
+    pressShortcut('terminal.splitVertical');
+    await daemon.idle();
+    pressShortcut('notebook.openTile');
+    await daemon.idle();
+    const [dock] = daemon.sentOf('desktop_dock_tile');
+    expect(dock).toBeDefined();
+
+    const [spawn] = held.splice(0);
+    await act(async () => {
+      daemon.arrangement.place(spawn.id, `pane-${spawn.id}`);
+      daemon.arrangement.show('ws', dock.tile_id);
+      daemon.replyTo(spawn, { event: 'spawn_result', id: spawn.id, success: true, desktop_id: 'ws', pane_id: `pane-${spawn.id}` });
+      daemon.emit({ event: 'session_registered', session: daemonSession(spawn.id, { directory: '/tmp/s1', agent: 'shell', state: 'launching' }) });
+      daemon.emit(daemon.arrangement.changed());
+    });
+    await daemon.idle();
+
+    expect(daemon.sentOf('desktop_show_session').filter((command) => command.session_id === spawn.id)).toEqual([]);
+    expect(document.querySelector('[data-session-visible="1"]')?.getAttribute('data-active-leaf-id')).toBe(dock.tile_id);
+  });
+
+  it('leaves the user on the pane another client showed while a launch was spawning', async () => {
+    const { daemon } = await openDesktop(SIDE_BY_SIDE, ['s1', 's2']);
+    const held: Array<Extract<(typeof daemon.sent)[number], { cmd: 'spawn_session' }>> = [];
+    daemon.on('spawn_session', (command) => {
+      held.push(command);
+      return undefined;
+    });
+
+    pressShortcut('terminal.splitVertical');
+    await daemon.idle();
+    await gesture(daemon, () => {
+      daemon.arrangement.show('ws', 'pane-s2');
+      daemon.emit(daemon.arrangement.changed());
+    });
+    const [spawn] = held.splice(0);
+    await gesture(daemon, () => {
+      daemon.emit({ event: 'session_registered', session: daemonSession(spawn.id, { directory: '/tmp/s1', agent: 'shell', state: 'launching' }) });
+      daemon.replyTo(spawn, { event: 'spawn_result', id: spawn.id, success: true, placement_error: 'desktop ws moved on' });
+    });
+
+    expect(daemon.sentOf('desktop_show_session').filter((command) => command.session_id === spawn.id)).toEqual([]);
+    expect(document.querySelector('[data-session-visible="1"]')?.getAttribute('data-active-leaf-id')).toBe('pane-s2');
+  });
+
+  it('leaves the user where they are when they sent a pane to another desktop while a launch was spawning', async () => {
+    const { daemon } = await renderApp({ initialState: {
+      sessions: [daemonSession('s1', { state: 'idle', directory: '/tmp/s1' })],
+      desktops: [soloDesktop('s1', { shortcut_slot: 1 }), emptyDesktop('other', { shortcut_slot: 2 })],
+    } });
+    await openSession(daemon, 's1');
+    const held: Array<Extract<(typeof daemon.sent)[number], { cmd: 'spawn_session' }>> = [];
+    daemon.on('spawn_session', (command) => {
+      held.push(command);
+      return undefined;
+    });
+    daemon.on('desktop_move_leaf', (command) => [
+      daemon.arrangement.answer(command),
+      { event: 'profile_action_result', action: command.cmd, request_id: command.request_id ?? '', success: true },
+    ]);
+
+    pressShortcut('terminal.splitVertical');
+    await daemon.idle();
+    pressShortcut('desktop.send2');
+    await daemon.idle();
+    expect(daemon.sentOf('desktop_move_leaf')).toHaveLength(1);
+
+    const [spawn] = held.splice(0);
+    await gesture(daemon, () => {
+      daemon.emit({ event: 'session_registered', session: daemonSession(spawn.id, { directory: '/tmp/s1', agent: 'shell', state: 'launching' }) });
+      daemon.replyTo(spawn, { event: 'spawn_result', id: spawn.id, success: true, placement_error: 'desktop desktop-s1 moved on' });
+    });
+
+    expect(daemon.sentOf('desktop_show_session').filter((command) => command.session_id === spawn.id)).toEqual([]);
+  });
+
+  it('puts the keyboard in a docked tile even when its dock had to retry a stale revision', async () => {
+    const { daemon } = await openDesktop(pane('s1'), ['s1']);
+    let refusals = 1;
+    daemon.on('desktop_dock_tile', (command) => {
+      const reply = (success: boolean) => ({
+        event: 'profile_action_result', action: command.cmd, request_id: command.request_id ?? '', success,
+        ...(success ? {} : { error: 'desktop ws moved on', error_code: 'stale_revision' }),
+      }) as Reply;
+      const desktop = daemon.arrangement.desktop('ws')!;
+      if (refusals-- > 0) {
+        daemon.arrangement.replace(desktop);
+        return [reply(false), daemon.arrangement.changed()];
+      }
+      const tree = { type: 'split', split_id: `split-${command.tile_id}`, direction: 'vertical', ratio: 0.5, children: [JSON.parse(desktop.tree_json), { type: 'tile', tile_id: command.tile_id, tile_kind: command.tile_kind, tile_params: command.tile_params }] };
+      daemon.arrangement.replace({ ...desktop, tree_json: JSON.stringify(tree), active_pane_id: command.tile_id });
+      return [reply(true), daemon.arrangement.changed()];
+    });
+
+    act(() => screen.getByTestId('sidebar-home').focus());
+    pressShortcut('notebook.openTile');
+    await daemon.idle();
+    await act(() => vi.advanceTimersByTimeAsync(100));
+    await daemon.idle();
+
+    const docks = daemon.sentOf('desktop_dock_tile');
+    expect(docks).toHaveLength(2);
+    expect(document.activeElement?.closest('[data-pane-id]')?.getAttribute('data-pane-id')).toBe(docks[1].tile_id);
+  });
+
+  it('shows a launched agent whose placement failed, without saying it has no pane', async () => {
+    const { daemon } = await openDesktop(pane('s1'), ['s1']);
+    daemon.on('spawn_session', ({ id }) => [
+      { event: 'spawn_result', id, success: true, placement_error: 'desktop ws is gone' },
+      { event: 'session_registered', session: daemonSession(id, { directory: '/tmp/s1', agent: 'shell', state: 'launching' }) },
+    ]);
+    const before = daemon.sent.length;
+
+    pressShortcut('terminal.splitVertical');
+    await daemon.idle();
+
+    const [spawn] = daemon.sentOf('spawn_session');
+    expect(daemon.sent.slice(before).filter((command) => command.cmd === 'desktop_show_session')).toEqual([expect.objectContaining({ session_id: spawn.id })]);
+    expect(screen.queryByText(/started without a pane/)).toBeNull();
+  });
+
+  it('places a split only through its spawn, whose placement shows it', async () => {
+    const { daemon } = await openDesktop(pane('s1'), ['s1']);
+    serveLaunches(daemon);
+    const before = daemon.sent.length;
+
+    pressShortcut('terminal.splitVertical');
+    await daemon.idle();
+    await act(() => vi.advanceTimersByTimeAsync(100));
+
+    const [spawn] = daemon.sentOf('spawn_session');
+    const traffic = daemon.sent.slice(before).map((command) => command.cmd).filter((cmd) => cmd === 'spawn_session' || cmd.startsWith('desktop_'));
+    expect(traffic).toEqual(['spawn_session']);
+    expect(document.activeElement?.closest('[data-pane-id]')?.getAttribute('data-pane-id')).toBe(`pane-${spawn.id}`);
   });
 
   it('reorders a desktop dragged in the sidebar between its new neighbours', async () => {

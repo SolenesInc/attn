@@ -94,12 +94,6 @@ export const scenarioCatalog = [
     command: ['pnpm', 'run', 'real-app:scenario-sessions-surface'],
   },
   {
-    id: 'tile-only-desktop-select',
-    runnerId: 'TILE-ONLY-DESKTOP-SELECT',
-    label: 'Tile-only desktop select + render',
-    command: ['pnpm', 'run', 'real-app:scenario-tile-only-desktop-select'],
-  },
-  {
     id: 'markdown-opener',
     runnerId: 'MARKDOWN-OPENER',
     label: 'Global Cmd+P markdown opener (git-enumerated fuzzy search + recents)',

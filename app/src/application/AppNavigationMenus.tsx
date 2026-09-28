@@ -6,8 +6,8 @@ import { AppPalette } from './AppPalette';
 import {
   useAttentionQueueContext,
   useDesktopTilesContext,
-  useNavigationContext,
 } from './AppContexts';
+import { openThenShow } from './openThenShow';
 
 export function AppNavigationMenus() {
   const {
@@ -18,7 +18,6 @@ export function AppNavigationMenus() {
     setMarkdownOpenerOpen,
   } = useDesktopTilesContext();
   const { sendBrowseDirectory, sendOpenMarkdown, sendSnoozeTurn } = useDaemonApi();
-  const { handleSelectDesktop } = useNavigationContext();
   const { snoozeMenu, setSnoozeMenu, restoreSnoozeFocus } = useAttentionQueueContext();
   return (
     <>
@@ -39,10 +38,7 @@ export function AppNavigationMenus() {
               });
               return;
             }
-            void sendOpenMarkdown(path, bindTo)
-              .then(({ desktopId, tileId }) => {
-                if (desktopId && tileId) handleSelectDesktop(desktopId);
-              })
+            void openThenShow(() => sendOpenMarkdown(path, bindTo))
               .catch((error) => {
                 console.error(
                   '[MarkdownOpener] in-app open failed, falling back to OS open:',

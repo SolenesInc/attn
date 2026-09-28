@@ -99,9 +99,9 @@ export function serveLaunches(daemon: ScriptedDaemon) {
     const desktopId = placement?.desktop_id || daemon.arrangement.profile.current_desktop_id;
     daemon.arrangement.place(id, `pane-${id}`, desktopId);
     return [
-      { event: 'spawn_result', id, success: true, desktop_id: desktopId, pane_id: `pane-${id}` },
       { event: 'session_registered', session: daemonSession(id, { directory: cwd, agent, state: 'launching' }) },
-      daemon.arrangement.changed(),
+      daemon.arrangement.answer({ request_id: id }),
+      { event: 'spawn_result', id, success: true, desktop_id: desktopId, pane_id: `pane-${id}` },
     ];
   });
 }

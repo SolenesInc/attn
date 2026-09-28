@@ -46,7 +46,19 @@ export function slotShortcut(slot: number): string {
   return formatShortcut(`desktop.select${slot}` as ShortcutId);
 }
 
+const terminalStates = new WeakMap<Desktop, TerminalDesktopState>();
+
+// Cached per daemon snapshot: a new object for an unchanged desktop reads as a new layout authority.
 export function desktopTerminalState(desktop: Desktop): TerminalDesktopState {
+  let state = terminalStates.get(desktop);
+  if (!state) {
+    state = buildTerminalState(desktop);
+    terminalStates.set(desktop, state);
+  }
+  return state;
+}
+
+function buildTerminalState(desktop: Desktop): TerminalDesktopState {
   return {
     agents: desktop.panes
       .filter((pane) => pane.kind === 'agent')
