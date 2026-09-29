@@ -44,7 +44,11 @@ export function buildCheatsheet(): CheatsheetCategory[] {
           combos: [[...modifierTokens('desktop.send1'), '1–9']],
           note: 'A digit with no desktop yet gets a new one.',
         },
-        { label: 'Move this to desktop 1–9', combos: [[...modifierTokens('desktop.sendStay1'), '1–9']] },
+        {
+          label: 'Move this to desktop 1–9',
+          combos: [[...modifierTokens('desktop.sendStay1'), '1–9']],
+          note: 'A digit with no desktop yet gets a new one.',
+        },
         { label: 'Desktop overview', combos: [fromId('desktop.overview')] },
         { label: 'Switch profile', combos: [fromId('profile.switch')] },
         { label: 'Go to dashboard (home)', combos: [fromId('session.goToDashboard')] },
