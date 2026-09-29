@@ -103,7 +103,7 @@ function owed(id: string, hour: number, desktopId = 'ws-a'): TestSession {
 }
 
 describe('the queue sidebar', () => {
-  it('replaces the desktop tree at its own narrower width', () => {
+  it('replaces the desktop tree in queue mode', () => {
     const { container } = renderSidebar(sessions, true);
     expect(screen.getByTestId('queue-sidebar')).toHaveClass('sidebar', 'queue-sidebar');
     expect(container.querySelectorAll('.session-list [data-testid^="sidebar-session-"]')).toHaveLength(0);
@@ -207,13 +207,13 @@ describe('the queue sidebar', () => {
       true,
       { agentListOpen: true },
     );
-    const where = (id: string) => screen.getByTestId(id).querySelector('.queue-row-where');
+    const where = (id: string) => screen.getByTestId(id).querySelector('.queue-lead-badge');
 
     expect(where('queue-turn-older')).toHaveTextContent('2');
     expect(where('queue-turn-older')).toHaveAttribute('title', 'beta');
     expect(where('queue-turn-newer')).toHaveTextContent('1');
     expect(where('queue-settled-loose')).toHaveTextContent('—');
-    expect(where('queue-settled-loose')).toHaveClass('is-unplaced');
+    expect(screen.getByTestId('queue-select-loose')).toHaveAttribute('title', expect.stringContaining('Not on a desktop'));
   });
 
   it('offers the delegation chain without repeating the dispatcher below the title', () => {

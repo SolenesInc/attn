@@ -62,6 +62,7 @@ export function QueueSidebarFitHarness({ onReady, setTriggerRerender }: HarnessP
           crew={[{ id: 'alder', binding_session: 'crew-awake' }, { id: 'birch' }, { id: 'cedar' }]}
           profileName="Harness"
           onSelectSession={noop}
+          onWakeCrewMember={noop}
           onSelectDesktop={noop}
           onNewSession={noop}
           onCloseSession={noop}
