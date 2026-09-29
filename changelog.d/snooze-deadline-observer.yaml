@@ -1,0 +1,3 @@
+kind: internal
+area: testing
+change: Observe each snooze state report on a fresh connection so earlier snapshots cannot fail the deadline test.
