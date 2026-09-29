@@ -110,7 +110,11 @@ func TestAReviewWhoseCodeIsOutOfReachWaitsForItAcrossARestartOrFails(t *testing.
 	withdrawn := r.awaitRuns("review", func(runs []protocol.AutomationRunSummary) bool {
 		return automationRunState(runs, byNumber[45].ID) == "cancelled"
 	})
+	// Drain review retries before fetching; Git reads worktree HEADs while worktree add writes them.
+	r.w.stop()
 	runGit(t, r.clone, "fetch", upstream, "main")
+	r.w.start()
+	r.app, r.cli = r.w.App(), r.w.Client()
 	r.refresh()
 	r.awaitRuns("review", func(runs []protocol.AutomationRunSummary) bool {
 		return automationRunState(runs, byNumber[44].ID) == "delivered"
