@@ -47,11 +47,19 @@ func (s *Stack) Run(inv Invocation) Result {
 	ctx, cancel := context.WithTimeout(context.Background(), fakeagent.HangGuard)
 	defer cancel()
 	cmd := s.command(ctx, inv)
+	// A shell wrapper and its Go child must receive SIGQUIT together.
+	// Their own process group confines the signal to this invocation.
+	cmd.SysProcAttr = &syscall.SysProcAttr{Setpgid: true}
+	cmd.Env = append(cmd.Env, "GOTRACEBACK=all")
+	cmd.Cancel = func() error {
+		s.logPressure()
+		return syscall.Kill(-cmd.Process.Pid, syscall.SIGQUIT)
+	}
 	var stdout, stderr bytes.Buffer
 	cmd.Stdout, cmd.Stderr = &stdout, &stderr
 	err := cmd.Run()
 	if ctx.Err() != nil {
-		s.T.Fatalf("attn %q still running after %s\nstdout:\n%s\nstderr:\n%s", inv.Args, fakeagent.HangGuard, stdout.String(), stderr.String())
+		s.T.Fatalf("attn %q still running after %s\nstdout:\n%s\nstderr:\n%s", inv.Args, fakeagent.HangGuard, boundedDiagnostic(stdout.String()), boundedDiagnostic(stderr.String()))
 	}
 	return Result{Stdout: stdout.String(), Stderr: stderr.String(), Code: exitCode(s.T, inv, err)}
 }
