@@ -1,0 +1,3 @@
+kind: internal
+area: daemon
+change: Separate review-request claims from delivery and log claim preparation errors.
