@@ -79,7 +79,7 @@ for (const reducedMotion of ['no-preference', 'reduce'] as const) {
       expect(ring?.shadow).not.toBe('none');
       expect(ring?.shadow).toContain('inset');
       expect(ring?.shadow).toContain('1.5px');
-      expect(ring?.shadow).not.toContain(',');
+      expect(ring?.shadow.replace(/\([^)]*\)/g, '')).not.toContain(',');
       expect(ring?.zIndex).toBeGreaterThan(dividerZ);
     }
   });
