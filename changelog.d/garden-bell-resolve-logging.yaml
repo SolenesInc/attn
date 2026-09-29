@@ -1,0 +1,3 @@
+kind: internal
+area: garden
+change: The daemon log names a failed read that left seed bells to the background consumer instead of resolving them when the Garden role lock was taken.
