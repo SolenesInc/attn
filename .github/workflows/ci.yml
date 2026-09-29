@@ -378,6 +378,9 @@ jobs:
         uses: ./.github/actions/cache-ghostty-vt
       - name: Build host and native terminal library
         run: make build-pty-host
+      - name: Install listener discovery tool
+        if: runner.os == 'Linux'
+        run: sudo apt-get update && sudo apt-get install -y lsof
       - name: Verify old daemon and mixed host generations
         run: bash scripts/test-pty-upgrade.sh
       - name: Verify shared host protocol and lifecycle
