@@ -1,0 +1,3 @@
+kind: internal
+area: testing
+change: End the kitty pieces test readiness marker without a newline so split PTY reads cannot skip its pause point.
