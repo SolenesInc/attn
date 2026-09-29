@@ -3604,7 +3604,7 @@ func (d *Daemon) doDetailRefresh() {
 
 	d.logf("Detail refresh: %d PRs need refresh", len(prs))
 
-	var fetched []fetchedPRDetails
+	var refreshedIDs []string
 	limitedHosts := make(map[string]time.Time)
 	for _, pr := range prs {
 		host := pr.Host
@@ -3650,8 +3650,16 @@ func (d *Daemon) doDetailRefresh() {
 			continue
 		}
 
-		prHeadSHA := protocol.Deref(pr.HeadSHA)
-		fetched = append(fetched, fetchedPRDetails{id: pr.ID, details: details, hot: prHeadSHA != "" && details.HeadSHA != prHeadSHA})
+		stored := d.durableWork.durably(func() {
+			if prHeadSHA := protocol.Deref(pr.HeadSHA); prHeadSHA != "" && details.HeadSHA != prHeadSHA {
+				d.store.SetPRHot(pr.ID)
+			}
+			d.store.UpdatePRDetails(pr.ID, details.Mergeable, details.MergeableState, details.CIStatus, details.ReviewStatus, details.HeadSHA, details.HeadBranch)
+		})
+		if !stored {
+			return
+		}
+		refreshedIDs = append(refreshedIDs, pr.ID)
 	}
 
 	if len(limitedHosts) > 0 {
@@ -3669,30 +3677,17 @@ func (d *Daemon) doDetailRefresh() {
 		}
 	}
 
-	d.durableWork.durably(func() { d.storePRDetails("Detail refresh", fetched) })
+	d.durableWork.durably(func() { d.publishPRDetailsChanged("Detail refresh", refreshedIDs) })
 }
 
-type fetchedPRDetails struct {
-	id      string
-	details *github.PRDetails
-	hot     bool
-}
-
-func (d *Daemon) storePRDetails(origin string, fetched []fetchedPRDetails) {
-	if len(fetched) == 0 {
+func (d *Daemon) publishPRDetailsChanged(origin string, ids []string) {
+	if len(ids) == 0 {
 		return
 	}
-	for _, pr := range fetched {
-		if pr.hot {
-			d.store.SetPRHot(pr.id)
-		}
-		details := pr.details
-		d.store.UpdatePRDetails(pr.id, details.Mergeable, details.MergeableState, details.CIStatus, details.ReviewStatus, details.HeadSHA, details.HeadBranch)
-	}
-	d.logf("%s: updated %d PRs", origin, len(fetched))
+	d.logf("%s: updated %d PRs", origin, len(ids))
 	d.coalesceSnapshots(func() {
-		for _, pr := range fetched {
-			d.publishFact(FactPRDetailsChanged, pr.id, nil)
+		for _, id := range ids {
+			d.publishFact(FactPRDetailsChanged, id, nil)
 		}
 	})
 }
@@ -3709,7 +3704,7 @@ func (d *Daemon) fetchAllPRDetails() {
 
 	d.logf("App launch: fetching details for %d PRs", len(allPRs))
 
-	var fetched []fetchedPRDetails
+	var refreshedIDs []string
 	limitedHosts := make(map[string]time.Time)
 	for _, pr := range allPRs {
 		if pr.Muted {
@@ -3763,7 +3758,12 @@ func (d *Daemon) fetchAllPRDetails() {
 			continue
 		}
 
-		fetched = append(fetched, fetchedPRDetails{id: pr.ID, details: details})
+		if !d.durableWork.durably(func() {
+			d.store.UpdatePRDetails(pr.ID, details.Mergeable, details.MergeableState, details.CIStatus, details.ReviewStatus, details.HeadSHA, details.HeadBranch)
+		}) {
+			return
+		}
+		refreshedIDs = append(refreshedIDs, pr.ID)
 	}
 
 	if len(limitedHosts) > 0 {
@@ -3781,7 +3781,7 @@ func (d *Daemon) fetchAllPRDetails() {
 		}
 	}
 
-	d.durableWork.durably(func() { d.storePRDetails("App launch", fetched) })
+	d.durableWork.durably(func() { d.publishPRDetailsChanged("App launch", refreshedIDs) })
 }
 
 func (d *Daemon) handleInjectTestPR(conn net.Conn, msg *protocol.InjectTestPRMessage) {

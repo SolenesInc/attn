@@ -664,7 +664,12 @@ func (d *Daemon) runTranscriptWatcher(w *transcriptWatcher) {
 				transcriptPath,
 				quietSince.Format(time.RFC3339Nano),
 			)
-			go d.classifySessionState(w.sessionID, transcriptPath)
+			if d.durableWork.enter() {
+				go func(sessionID, path string) {
+					defer d.durableWork.leave()
+					d.classifySessionState(sessionID, path)
+				}(w.sessionID, transcriptPath)
+			}
 		}
 	}
 }
