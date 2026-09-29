@@ -163,6 +163,7 @@ type Daemon struct {
 	watchersMu                        sync.Mutex
 	transcriptWatch                   map[string]*transcriptWatcher
 	pluginUsageWatch                  map[string]*pluginUsageWatcher
+	watcherRuns                       sync.WaitGroup
 	transcriptWatcherSessionLookup    func(string) *protocol.Session
 	transcriptResumeLookup            func(protocol.SessionAgent, string) string
 	classifiedMu                      sync.Mutex
@@ -908,7 +909,15 @@ func (d *Daemon) Start() error {
 	d.watchRecoveredLaunches()
 	go func() {
 		pausepoint.At(pausepoint.DaemonStartupRecovery)
+		if !d.durableWork.enter() {
+			d.logf("startup recovery skipped: the daemon is stopping; the next daemon recovers")
+			return
+		}
+		defer d.durableWork.leave()
 		d.performStartupPTYRecovery(previousRunSessions, recoveryStartedAt)
+		if d.stopping() {
+			return
+		}
 		d.resolveDue(time.Now())
 		go d.runSessionResolver()
 		if _, routed := d.ptyBackend.(*ptybackend.MigratingBackend); routed {
@@ -916,7 +925,13 @@ func (d *Daemon) Start() error {
 		} else {
 			d.validateSharedPTYHostAfterRecovery()
 		}
+		if d.stopping() {
+			return
+		}
 		d.reconcileCrewRestarts()
+		if d.stopping() {
+			return
+		}
 		d.lockGardenRoles()
 		gardenBellErr := d.discardAllIneligibleGardenSeedBellsLocked()
 		d.unlockGardenRoles()
@@ -925,7 +940,9 @@ func (d *Daemon) Start() error {
 		} else {
 			d.seedQueuedAgentMailboxItems()
 		}
-		recoverAutomationsAfterGitHubReady(githubHostsReady, d.recoverAutomations)
+		if !recoverAutomationsAfterGitHubReady(githubHostsReady, d.done, d.recoverAutomations) {
+			return
+		}
 		d.setRecovering(false)
 		d.resumePendingDelegations()
 	}()
@@ -1566,6 +1583,7 @@ func (d *Daemon) lifetime() context.Context {
 func (d *Daemon) stop() {
 	d.log("daemon stopping")
 	close(d.done)
+	d.durableWork.refuse()
 	d.lifetime()
 	d.endLifetime()
 	if d.listener != nil {
@@ -1575,8 +1593,8 @@ func (d *Daemon) stop() {
 	}
 	d.closeGitExecution(ErrGitExecutorClosed)
 	d.wsHub.closeAll()
-	// Work begun before the stop finishes with every subsystem up; later exits and failures are the
-	// teardown's, not outcomes. PTYs shut next so no real exit lands between the gate and the shutdown.
+	// Work begun before the stop finishes; later exits and failures are the teardown's, not outcomes.
+	// PTYs shut next so no real exit lands between the drain and the shutdown.
 	d.durableWork.close()
 	if d.ptyBackend != nil {
 		_ = d.ptyBackend.Shutdown(context.Background())
@@ -1621,6 +1639,8 @@ func (d *Daemon) stop() {
 	}
 }
 
+var errDaemonStopping = errors.New("the daemon is stopping; retry once it is back")
+
 // workGate is durable work that Daemon.stop waits for before the store closes.
 type workGate struct {
 	mu     sync.Mutex
@@ -1640,10 +1660,25 @@ func (g *workGate) enter() bool {
 
 func (g *workGate) leave() { g.active.Done() }
 
-func (g *workGate) close() {
+// durably runs write inside the durable-work gate; false means the daemon is stopping and write did not run.
+func (g *workGate) durably(write func()) bool {
+	if !g.enter() {
+		return false
+	}
+	defer g.leave()
+	write()
+	return true
+}
+
+// refuse turns away new work; close also waits for the work already inside.
+func (g *workGate) refuse() {
 	g.mu.Lock()
 	g.closed = true
 	g.mu.Unlock()
+}
+
+func (g *workGate) close() {
+	g.refuse()
 	g.active.Wait()
 }
 
@@ -3526,6 +3561,14 @@ func (d *Daemon) doPRPoll() {
 		d.broadcastRateLimited("search", earliestReset)
 	}
 
+	stored := d.durableWork.durably(func() { d.storePRPoll(allPRs, skippedHosts, observedByHost) })
+	d.prRefreshMu.Unlock()
+	if stored {
+		d.doDetailRefresh()
+	}
+}
+
+func (d *Daemon) storePRPoll(allPRs []*protocol.PR, skippedHosts map[string]bool, observedByHost map[string]successfulPRObservation) {
 	if len(skippedHosts) > 0 {
 		existing := d.store.ListPRs("")
 		for _, pr := range existing {
@@ -3558,9 +3601,6 @@ func (d *Daemon) doPRPoll() {
 	for host, observation := range observedByHost {
 		d.observeGitHubReviewRequests(host, observation.prs, observation.observedAt)
 	}
-	d.prRefreshMu.Unlock()
-
-	d.doDetailRefresh()
 }
 
 func (d *Daemon) doDetailRefresh() {
@@ -3568,7 +3608,9 @@ func (d *Daemon) doDetailRefresh() {
 		return
 	}
 
-	d.store.DecayHeatStates()
+	if !d.durableWork.durably(d.store.DecayHeatStates) {
+		return
+	}
 
 	prs := d.store.GetPRsNeedingDetailRefresh()
 	if len(prs) == 0 {
@@ -3623,12 +3665,15 @@ func (d *Daemon) doDetailRefresh() {
 			continue
 		}
 
-		prHeadSHA := protocol.Deref(pr.HeadSHA)
-		if prHeadSHA != "" && details.HeadSHA != prHeadSHA {
-			d.store.SetPRHot(pr.ID)
+		stored := d.durableWork.durably(func() {
+			if prHeadSHA := protocol.Deref(pr.HeadSHA); prHeadSHA != "" && details.HeadSHA != prHeadSHA {
+				d.store.SetPRHot(pr.ID)
+			}
+			d.store.UpdatePRDetails(pr.ID, details.Mergeable, details.MergeableState, details.CIStatus, details.ReviewStatus, details.HeadSHA, details.HeadBranch)
+		})
+		if !stored {
+			return
 		}
-
-		d.store.UpdatePRDetails(pr.ID, details.Mergeable, details.MergeableState, details.CIStatus, details.ReviewStatus, details.HeadSHA, details.HeadBranch)
 		refreshedIDs = append(refreshedIDs, pr.ID)
 	}
 
@@ -3647,14 +3692,19 @@ func (d *Daemon) doDetailRefresh() {
 		}
 	}
 
-	if len(refreshedIDs) > 0 {
-		d.logf("Detail refresh: updated %d PRs", len(refreshedIDs))
-		d.coalesceSnapshots(func() {
-			for _, id := range refreshedIDs {
-				d.publishFact(FactPRDetailsChanged, id, nil)
-			}
-		})
+	d.durableWork.durably(func() { d.publishPRDetailsChanged("Detail refresh", refreshedIDs) })
+}
+
+func (d *Daemon) publishPRDetailsChanged(origin string, ids []string) {
+	if len(ids) == 0 {
+		return
 	}
+	d.logf("%s: updated %d PRs", origin, len(ids))
+	d.coalesceSnapshots(func() {
+		for _, id := range ids {
+			d.publishFact(FactPRDetailsChanged, id, nil)
+		}
+	})
 }
 
 func (d *Daemon) fetchAllPRDetails() {
@@ -3723,7 +3773,11 @@ func (d *Daemon) fetchAllPRDetails() {
 			continue
 		}
 
-		d.store.UpdatePRDetails(pr.ID, details.Mergeable, details.MergeableState, details.CIStatus, details.ReviewStatus, details.HeadSHA, details.HeadBranch)
+		if !d.durableWork.durably(func() {
+			d.store.UpdatePRDetails(pr.ID, details.Mergeable, details.MergeableState, details.CIStatus, details.ReviewStatus, details.HeadSHA, details.HeadBranch)
+		}) {
+			return
+		}
 		refreshedIDs = append(refreshedIDs, pr.ID)
 	}
 
@@ -3742,14 +3796,7 @@ func (d *Daemon) fetchAllPRDetails() {
 		}
 	}
 
-	if len(refreshedIDs) > 0 {
-		d.logf("App launch: updated %d PRs", len(refreshedIDs))
-		d.coalesceSnapshots(func() {
-			for _, id := range refreshedIDs {
-				d.publishFact(FactPRDetailsChanged, id, nil)
-			}
-		})
-	}
+	d.durableWork.durably(func() { d.publishPRDetailsChanged("App launch", refreshedIDs) })
 }
 
 func (d *Daemon) handleInjectTestPR(conn net.Conn, msg *protocol.InjectTestPRMessage) {
@@ -3977,17 +4024,14 @@ func (d *Daemon) fetchPRDetailsImmediate(prID string) {
 func (d *Daemon) monitorBranches() {
 	d.logf("Branch monitoring started (%s interval)", branchMonitorInterval)
 
-	d.checkAllBranches()
-
 	ticker := time.NewTicker(branchMonitorInterval)
 	defer ticker.Stop()
 
-	for {
+	for d.durableWork.durably(d.checkAllBranches) {
 		select {
 		case <-d.done:
 			return
 		case <-ticker.C:
-			d.checkAllBranches()
 		}
 	}
 }

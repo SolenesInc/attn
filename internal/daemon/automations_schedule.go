@@ -37,9 +37,10 @@ func (d *Daemon) automationScheduleHandler(_ context.Context, _ *jobs.Job) (any,
 }
 
 func (d *Daemon) observeDueSchedules(now time.Time) {
-	if d.isRecovering() {
+	if d.isRecovering() || !d.durableWork.enter() {
 		return
 	}
+	defer d.durableWork.leave()
 	definitions, err := d.store.ListAutomationDefinitions()
 	if err != nil {
 		d.logf("automation schedule observation list definitions: %v", err)
