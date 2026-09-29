@@ -123,7 +123,8 @@ logs_unreadable=0
 first_log_error=""
 
 fetch_log() {
-  local job_id="$1" dest="$cache/logs/$job_id.log"
+  local job_id="$1"
+  local dest="$cache/logs/$job_id.log"
   if [ "$use_cache" = true ] && [ -s "$dest" ]; then
     logs_read=$((logs_read + 1))
     cat "$dest"
