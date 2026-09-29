@@ -3,8 +3,6 @@ package daemon
 import (
 	"path/filepath"
 	"testing"
-	"testing/synctest"
-	"time"
 )
 
 func newBubbleDaemon(t *testing.T) *Daemon {
@@ -24,22 +22,6 @@ func stopDaemonBackground(t *testing.T, d *Daemon) {
 		d.stopFsWatchers()
 		d.pluginDriverSilence().stop()
 	})
-}
-
-func requireDone(t *testing.T, done <-chan struct{}, what string) {
-	t.Helper()
-	synctest.Wait()
-	select {
-	case <-done:
-	default:
-		t.Fatal(what)
-	}
-}
-
-func settleStopClassification(t *testing.T) {
-	t.Helper()
-	time.Sleep(4 * time.Second)
-	synctest.Wait()
 }
 
 func newTraceDaemon(t *testing.T) *Daemon {

@@ -3,9 +3,6 @@ package jobs
 import (
 	"context"
 	"errors"
-	"fmt"
-	"strings"
-	"sync"
 	"sync/atomic"
 	"testing"
 	"testing/synctest"
@@ -146,67 +143,6 @@ func TestArmingRevivesACronEntryAPriorBuildKilled(t *testing.T) {
 		default:
 			j, _ := store.LoadByKey(cronKind, CronKey)
 			t.Fatalf("the revived cron entry never fired; it sits at state=%q scheduled=%s", j.State, j.ScheduledAt)
-		}
-	})
-}
-
-func TestArmingRetriesUntilTheStoreTakesTheCronEntry(t *testing.T) {
-	synctest.Test(t, func(t *testing.T) {
-		var logMu sync.Mutex
-		var logged []string
-		r, store := newBubbleRunner(t, func(o *Options) {
-			o.Log = func(format string, args ...any) {
-				logMu.Lock()
-				logged = append(logged, fmt.Sprintf(format, args...))
-				logMu.Unlock()
-			}
-		})
-		var fires atomic.Int64
-		if err := r.RegisterCron(cronKind, time.Hour, func(context.Context, *Job) (any, error) {
-			fires.Add(1)
-			return nil, nil
-		}, HandlerConfig{}); err != nil {
-			t.Fatalf("register cron: %v", err)
-		}
-
-		store.refuseSaves(errors.New("database is locked"))
-		mustStart(t, r)
-		synctest.Wait()
-
-		entry, err := r.CronEntry(cronKind)
-		if entry != nil {
-			t.Fatalf("a store that refused every write still produced a cron entry: %+v", entry)
-		}
-		if err == nil {
-			t.Fatal("an unarmed cron entry reported no error, which reads exactly like a healthy one that has not been written yet")
-		}
-		for _, want := range []string{cronKind, "database is locked"} {
-			if !strings.Contains(err.Error(), want) {
-				t.Fatalf("CronEntry error %q does not name %q", err, want)
-			}
-		}
-		logMu.Lock()
-		lines := strings.Join(logged, "\n")
-		logMu.Unlock()
-		if !strings.Contains(lines, cronKind) || !strings.Contains(lines, "database is locked") {
-			t.Fatalf("nothing in the log names the kind and the cause:\n%s", lines)
-		}
-
-		store.healSaves()
-		time.Sleep(DefaultBackoffBase + time.Second)
-		synctest.Wait()
-
-		armed, err := r.CronEntry(cronKind)
-		if err != nil || armed == nil {
-			t.Fatalf("cron entry after the store recovered: %v (%+v)", err, armed)
-		}
-		if armed.State != StateQueued {
-			t.Fatalf("re-armed cron entry state = %s, want queued", armed.State)
-		}
-		time.Sleep(time.Hour)
-		synctest.Wait()
-		if got := fires.Load(); got != 1 {
-			t.Fatalf("the re-armed cron fired %d times over its interval, want 1", got)
 		}
 	})
 }

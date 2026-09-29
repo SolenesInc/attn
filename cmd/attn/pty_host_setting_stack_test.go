@@ -16,9 +16,9 @@ import (
 	"github.com/victorarias/attn/internal/testworld"
 )
 
-func TestEnablingASharedPTYHostThatCannotStartIsRefusedWithoutBlockingTheDaemon(t *testing.T) {
+func TestEnablingASharedPTYHostThatCannotStartIsRefusedWithoutBlockingTheDaemonOrItsTerminals(t *testing.T) {
 	t.Parallel()
-	s := testworld.NewStack(t)
+	s := testworld.NewStack(t, testworld.WithAgents(fakeagent.Claude))
 	release := filepath.Join(s.Dir, "release-pty-host")
 	if err := syscall.Mkfifo(release, 0o600); err != nil {
 		t.Fatal(err)
@@ -31,6 +31,8 @@ func TestEnablingASharedPTYHostThatCannotStartIsRefusedWithoutBlockingTheDaemon(
 	s.Vars = append(s.Vars, "ATTN_PTY_BACKEND=migrating", "ATTN_PTY_HOST_BINARY="+host)
 	s.Start()
 	app := s.App()
+	running := s.Spawn(app, fakeagent.Claude, s.Path("shop"))
+	agent := s.Launched(running)
 
 	requestID := uuid.NewString()
 	app.Send(protocol.SetSettingMessage{
@@ -46,6 +48,10 @@ func TestEnablingASharedPTYHostThatCannotStartIsRefusedWithoutBlockingTheDaemon(
 	if state := testworld.Request(app, protocol.AutoModeGetMessage{Cmd: protocol.CmdAutoModeGet, RequestID: stateID}, protocol.EventAutoModeStateResult,
 		func(r protocol.AutoModeStateResultMessage) bool { return r.RequestID == stateID }); !state.Success {
 		t.Errorf("automode_get while the host is probed failed: %s", protocol.Deref(state.Error))
+	}
+	app.TypeLine(running, "typed while the host is probed")
+	if prompt := agent.Prompted(); !strings.Contains(prompt, "typed while the host is probed") {
+		t.Errorf("the running agent received %q while the host was probed, want what was typed", prompt)
 	}
 
 	if _, err := probing.WriteString("\n"); err != nil {

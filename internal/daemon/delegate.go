@@ -369,6 +369,7 @@ func (d *Daemon) createDelegationWorktree(protection foregroundCleanupProtection
 			"preparing worktree "+expectedPath, "", "", expectedPath, nil, nil, time.Now()); err != nil {
 			return "", false, fmt.Errorf("record delegated worktree preparation: %w", err)
 		}
+		crashAt(crashAfterWorktreeJournaled)
 	}
 	startingFrom := request.StartingFrom
 	if protocol.Deref(request.ExistingBranch) && strings.TrimSpace(protocol.Deref(startingFrom)) != "" {
@@ -405,6 +406,7 @@ func (d *Daemon) createDelegationWorktree(protection foregroundCleanupProtection
 		if err := d.store.MarkDelegationWorktreeOwned(operationID, worktreePath, ownerToken, time.Now()); err != nil {
 			return worktreePath, true, fmt.Errorf("record delegated worktree ownership: %w", err)
 		}
+		crashAt(crashAfterWorktreeOwned)
 	}
 	return worktreePath, true, nil
 }

@@ -190,3 +190,25 @@ func seedResumeWorkspaceIDs(w *world) []string {
 	slices.Sort(ids)
 	return ids
 }
+
+func TestAResumeWhoseAgentCannotStartLeavesNoPaneBehind(t *testing.T) {
+	w := newWorld(t, fakeagent.Pi)
+	app, cli := w.App(), w.Client()
+	pluginDriverSettings(app, "pi")
+	delegated := seedResumeDelegate(t, w, fakeagent.Pi, "api")
+	w.Launched(delegated.SessionID)
+	closePane(app, seedResumePane(t, w, protocol.Deref(delegated.WorkspaceID), delegated.SessionID))
+	before := paneSessions(w)
+	seed := lifeShow(t, cli, delegated.SeedID).Seed
+
+	defer w.RefusePiLaunches("pi could not start: the model provider is unreachable")()
+	if resumed := seedResumeRequest(app, delegated.SeedID); resumed.Success || !strings.Contains(protocol.Deref(resumed.Error), "provider is unreachable") {
+		t.Fatalf("resuming a seed whose agent cannot start = %+v, want the launch failure", resumed)
+	}
+	if after := paneSessions(w); !slices.Equal(after, before) {
+		t.Errorf("the failed resume left panes for %q, want only %q", after, before)
+	}
+	if after := lifeShow(t, cli, delegated.SeedID).Seed; after.TenderSession != seed.TenderSession || after.Status != seed.Status {
+		t.Errorf("the failed resume changed the seed to %s under %q, want %s under %s", after.Status, after.TenderSession, seed.Status, seed.TenderSession)
+	}
+}

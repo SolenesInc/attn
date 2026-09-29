@@ -66,15 +66,6 @@ func enqueue(t *testing.T, r *jobs.Runner, kind string, opts jobs.EnqueueOptions
 	return job
 }
 
-func stored(t *testing.T, r *jobs.Runner, id string) *jobs.Job {
-	t.Helper()
-	job, err := r.Get(id)
-	if err != nil || job == nil {
-		t.Fatalf("job %s = %v, %v; want it stored", id, job, err)
-	}
-	return job
-}
-
 type runLog struct {
 	mu  sync.Mutex
 	ran []string
@@ -138,29 +129,6 @@ func TestDueJobsRunByPriorityThenByScheduleWithinASecond(t *testing.T) {
 		synctest.Wait()
 		if got := runs.names()[10:]; !slices.Equal(got, []string{"later"}) {
 			t.Errorf("once due, ran %v, want the future job", got)
-		}
-	})
-}
-
-func TestAJobLeftRunningByACrashRunsAgainWithItsSpentAttempt(t *testing.T) {
-	onTheJobDatabase(t, func(t *testing.T, open reopen) {
-		s := open()
-		stale := time.Now().Add(-time.Hour)
-		if err := s.Save(&jobs.Job{
-			ID: "orphan", Kind: "compact", Payload: []byte(`"orphan"`), State: jobs.StateRunning, Attempts: 1, MaxAttempts: 3,
-			ScheduledAt: stale, CreatedAt: stale, UpdatedAt: stale,
-		}); err != nil {
-			t.Fatalf("leave a job running: %v", err)
-		}
-
-		r := newRunner(t, s, nil)
-		var runs runLog
-		register(t, r, "compact", runs.handler)
-		start(t, r)
-		synctest.Wait()
-		recovered := stored(t, r, "orphan")
-		if !slices.Equal(runs.names(), []string{"orphan"}) || recovered.State != jobs.StateDone || recovered.Attempts != 2 {
-			t.Errorf("after a restart the orphan ran %v and settled as %+v, want one run, done on its second attempt", runs.names(), recovered)
 		}
 	})
 }

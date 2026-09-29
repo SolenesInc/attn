@@ -3,6 +3,7 @@ package daemon
 import (
 	"errors"
 	"net"
+	"testing"
 
 	"github.com/victorarias/attn/internal/ptybackend"
 )
@@ -36,4 +37,9 @@ func StartWireDaemonWithTerminals(socketPath string, unix, ws net.Listener, term
 func (w *WireDaemon) Stop() error {
 	w.d.Stop()
 	return errors.Join(<-w.stopped, w.d.store.Close())
+}
+
+func UseShippedPasteGap(t testing.TB) {
+	sessionInputSubmitDelay = shippedSessionInputSubmitDelay
+	t.Cleanup(func() { sessionInputSubmitDelay = 0 })
 }

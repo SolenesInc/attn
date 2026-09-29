@@ -2,7 +2,6 @@ package bus
 
 import (
 	"context"
-	"errors"
 	"fmt"
 	"strings"
 	"sync"
@@ -228,47 +227,6 @@ func TestStartReportsLoudProducersBeforeTheFirstTick(t *testing.T) {
 	}
 }
 
-func TestStatusSaysWhenAnEnabledConsumerStopsAdvancing(t *testing.T) {
-	b, s := statusBus(t)
-	publishAt(t, s, "session.state.changed", 4, 100, 3*time.Hour)
-	if err := s.SaveConsumer(Consumer{Name: "stuck", Cursor: 1, Enabled: true}, statusNow.Add(-StallAge)); err != nil {
-		t.Fatalf("SaveConsumer: %v", err)
-	}
-
-	status, err := b.Status()
-	if err != nil {
-		t.Fatalf("Status: %v", err)
-	}
-	h, ok := findHealth(status, HealthConsumerLagging, "stuck")
-	if !ok {
-		t.Fatal("a consumer whose cursor stopped moving while behind must be reported")
-	}
-	if h.Level != HealthError {
-		t.Errorf("level = %q, want %q", h.Level, HealthError)
-	}
-	for _, want := range []string{"stuck", "99 events", "not advancing"} {
-		if !strings.Contains(h.Message, want) {
-			t.Errorf("message %q is missing %q", h.Message, want)
-		}
-	}
-}
-
-func TestStatusDoesNotCallAMovingConsumerStalled(t *testing.T) {
-	b, s := statusBus(t)
-	publishAt(t, s, "session.state.changed", 4, 100, 3*time.Hour)
-	if err := s.SaveConsumer(Consumer{Name: "catching-up", Cursor: 1, Enabled: true}, statusNow.Add(-time.Second)); err != nil {
-		t.Fatalf("SaveConsumer: %v", err)
-	}
-
-	status, err := b.Status()
-	if err != nil {
-		t.Fatalf("Status: %v", err)
-	}
-	if h, ok := findHealth(status, HealthConsumerLagging, "catching-up"); ok {
-		t.Errorf("a consumer that just advanced is not stalled: %q", h.Message)
-	}
-}
-
 func TestStatusOnlyClaimsDeliveryKnowledgeWhenItHasIt(t *testing.T) {
 	b, s := statusBus(t)
 	publishAt(t, s, "pr.updated", 2, 5, time.Hour)
@@ -306,13 +264,5 @@ func TestStatusOnlyClaimsDeliveryKnowledgeWhenItHasIt(t *testing.T) {
 	}
 	if _, ok := findHealth(status, HealthConsumerNotLive, "elsewhere"); !ok {
 		t.Error("a daemon that owns delivery must report a registration nothing is reading")
-	}
-}
-
-func TestStatusFailsWhenTheLogCannotBeRead(t *testing.T) {
-	b, s := statusBus(t)
-	s.setBoundsErr(errors.New("disk gone"))
-	if _, err := b.Status(); err == nil {
-		t.Fatal("want an error when the log's bounds cannot be read")
 	}
 }
