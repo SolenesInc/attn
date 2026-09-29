@@ -80,6 +80,10 @@ func (a *JobStore) Eligible(now time.Time, limit int) ([]*jobs.Job, error) {
 	return recordsToJobs(recs), nil
 }
 
+func (a *JobStore) NextScheduled() (time.Time, bool, error) {
+	return a.store.NextScheduledJob()
+}
+
 func (a *JobStore) TrimDone(cutoff time.Time) (int, error) {
 	return a.store.TrimDoneJobs(cutoff)
 }

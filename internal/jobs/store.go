@@ -17,6 +17,8 @@ type Store interface {
 	List() ([]*Job, error)
 
 	Eligible(now time.Time, limit int) ([]*Job, error)
+	// NextScheduled reports the earliest scheduled_at among jobs Eligible could return.
+	NextScheduled() (time.Time, bool, error)
 
 	TrimDone(cutoff time.Time) (int, error)
 }

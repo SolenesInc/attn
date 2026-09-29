@@ -3,6 +3,7 @@ package store
 import (
 	"context"
 	"database/sql"
+	"database/sql/driver"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -12,6 +13,7 @@ import (
 	"path/filepath"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	sqlite3 "github.com/mattn/go-sqlite3"
@@ -1262,16 +1264,48 @@ func sqliteDSN(dbPath string) string {
 	return u.String()
 }
 
+// tableWrites counts row writes to the tables the store caches reads of. SQLite's update
+// hook bumps it on every connection, so no write path can skip invalidating the cache.
+type tableWrites struct {
+	sessions atomic.Uint64
+}
+
+type sqliteConnector struct {
+	driver *sqlite3.SQLiteDriver
+	dsn    string
+}
+
+func (c *sqliteConnector) Connect(context.Context) (driver.Conn, error) {
+	return c.driver.Open(c.dsn)
+}
+
+func (c *sqliteConnector) Driver() driver.Driver {
+	return c.driver
+}
+
 func OpenDB(dbPath string) (*sql.DB, error) {
+	db, _, err := openDB(dbPath)
+	return db, err
+}
+
+func openDB(dbPath string) (*sql.DB, *tableWrites, error) {
 	dir := filepath.Dir(dbPath)
 	if err := os.MkdirAll(dir, 0755); err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 
-	db, err := sql.Open("sqlite3", sqliteDSN(dbPath))
-	if err != nil {
-		return nil, err
-	}
+	writes := &tableWrites{}
+	db := sql.OpenDB(&sqliteConnector{
+		driver: &sqlite3.SQLiteDriver{ConnectHook: func(conn *sqlite3.SQLiteConn) error {
+			conn.RegisterUpdateHook(func(_ int, _, table string, _ int64) {
+				if table == "sessions" {
+					writes.sessions.Add(1)
+				}
+			})
+			return nil
+		}},
+		dsn: sqliteDSN(dbPath),
+	})
 
 	if dbPath == ":memory:" {
 		db.SetMaxOpenConns(1)
@@ -1284,16 +1318,16 @@ func OpenDB(dbPath string) (*sql.DB, error) {
 	if dbPath == ":memory:" {
 		if err := copyMigratedSchema(db); err != nil {
 			db.Close()
-			return nil, err
+			return nil, nil, err
 		}
 	}
 
 	if err := migrateSchema(db, dbPath); err != nil {
 		db.Close()
-		return nil, err
+		return nil, nil, err
 	}
 
-	return db, nil
+	return db, writes, nil
 }
 
 func migrateSchema(db *sql.DB, dbPath string) error {
