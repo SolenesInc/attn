@@ -37,8 +37,9 @@
 }
 
 .snooze-menu button:hover,
-.snooze-menu button:focus-visible {
-  background: var(--color-bg-elevated);
+.snooze-menu button:focus,
+.snooze-menu button.is-selected {
+  background: var(--color-bg-selected);
   color: var(--color-text-primary);
   outline: none;
 }
@@ -52,4 +53,12 @@
   font-size: var(--font-size-xs, 11px);
   font-variant-numeric: tabular-nums;
   opacity: 0.75;
+}
+
+.snooze-menu-footer {
+  border-top: 1px solid var(--color-border);
+  color: var(--color-text-secondary);
+  font-size: var(--font-size-xs);
+  margin-top: 5px;
+  padding: 6px 9px;
 }

@@ -1,5 +1,7 @@
 import type { MouseEvent as ReactMouseEvent } from 'react';
-import { useCallback, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
+import type { SnoozePlacement } from '../components/SnoozeMenu';
+import { useSessionStore } from '../store/sessions';
 import { useDaemonApi } from '../contexts/DaemonApiContext';
 import { isAttentionSessionState, type UISessionState } from '../types/sessionState';
 import {
@@ -95,15 +97,22 @@ export function useAttentionQueue({
 
   const [snoozeMenu, setSnoozeMenu] = useState<{
     session: { id: string; label: string };
-    anchor: { top: number; left: number };
+    placement: SnoozePlacement;
+    origin: HTMLElement | null;
+    activeSessionId: string | null;
   } | null>(null);
 
   const openSnoozeMenu = useCallback(
     (session: { id: string; label: string }, event: ReactMouseEvent) => {
       const rect = (event.currentTarget as HTMLElement).getBoundingClientRect();
-      setSnoozeMenu({ session, anchor: { top: rect.bottom + 4, left: rect.left } });
+      setSnoozeMenu({
+        session,
+        placement: { kind: 'anchor', top: rect.bottom + 4, left: rect.left },
+        origin: event.currentTarget as HTMLElement,
+        activeSessionId,
+      });
     },
-    [],
+    [activeSessionId],
   );
 
   const handleSnoozeActiveSession = useMemo(
@@ -113,18 +122,30 @@ export function useAttentionQueue({
             if (!activeSessionId) return;
             const session = enrichedLocalSessions.find((s) => s.id === activeSessionId);
             if (!session) return;
-            const row = document.querySelector<HTMLElement>(
-              `[data-testid$="-${activeSessionId}"].queue-row`,
+            const pane = document.querySelector<HTMLElement>(
+              `.terminal-wrapper.active [data-pane-session-id="${activeSessionId}"]`,
             );
-            const rect = row?.getBoundingClientRect();
             setSnoozeMenu({
               session: { id: session.id, label: session.label },
-              anchor: rect ? { top: rect.bottom + 4, left: rect.left } : { top: 72, left: 72 },
+              placement: { kind: 'center', pane },
+              origin: pane?.querySelector<HTMLElement>('.terminal-container, [role="textbox"]') ?? null,
+              activeSessionId,
             });
           }
         : undefined,
     [queueModeEnabled, activeSessionQueueEligible, activeSessionId, enrichedLocalSessions],
   );
+
+  useEffect(() => {
+    if (snoozeMenu && !enrichedLocalSessions.some((session) => session.id === snoozeMenu.session.id)) {
+      setSnoozeMenu(null);
+    }
+  }, [enrichedLocalSessions, snoozeMenu]);
+
+  const restoreSnoozeFocus = useCallback(() => {
+    if (snoozeMenu?.activeSessionId !== useSessionStore.getState().activeSessionId) return;
+    if (snoozeMenu?.origin?.isConnected) snoozeMenu.origin.focus({ preventScroll: true });
+  }, [snoozeMenu]);
 
   return {
     queueModeEnabled,
@@ -138,6 +159,7 @@ export function useAttentionQueue({
     handleSettleActiveTurn,
     snoozeMenu,
     setSnoozeMenu,
+    restoreSnoozeFocus,
     openSnoozeMenu,
     handleSnoozeActiveSession,
     handleToggleQueueMode,

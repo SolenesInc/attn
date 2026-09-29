@@ -11,6 +11,8 @@ describe('snoozeInstant', () => {
     const now = at(2026, 8, 2, 14, 20);
     expect(snoozeInstant('30m', now)).toEqual(at(2026, 8, 2, 14, 50));
     expect(snoozeInstant('1h', now)).toEqual(at(2026, 8, 2, 15, 20));
+    expect(snoozeInstant('2h', now)).toEqual(at(2026, 8, 2, 16, 20));
+    expect(snoozeInstant('4h', now)).toEqual(at(2026, 8, 2, 18, 20));
     expect(snoozeInstant('8h', now)).toEqual(at(2026, 8, 2, 22, 20));
   });
 
@@ -54,7 +56,7 @@ describe('snoozeInstant', () => {
   });
 
   it('never resolves to the past, whichever choice and whenever it is pressed', () => {
-    const choices = ['30m', '1h', '8h', 'tomorrow', 'saturday', 'monday'] as const;
+    const choices = ['30m', '1h', '2h', '4h', '8h', 'tomorrow', 'saturday', 'monday'] as const;
     for (let day = 1; day <= 7; day += 1) {
       for (const hour of [0, 8, 9, 10, 23]) {
         const now = at(2026, 8, day, hour, 30);

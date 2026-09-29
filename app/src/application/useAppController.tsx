@@ -334,6 +334,7 @@ export function useAppController({
     shortcutsOpen,
     shortcutEditorOpen,
     actionMenuOpen,
+    snoozeMenuOpen: Boolean(attentionQueue.snoozeMenu),
     sessionsOpen,
     notebookOpen,
     crewPanelOpen: crewPanel.open,
