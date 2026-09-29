@@ -726,13 +726,6 @@
   opacity: 0.85;
 }
 
-.worktree-indicator {
-  color: var(--color-text-tertiary);
-  flex-shrink: 0;
-  font-size: var(--font-size-sm);
-  margin-right: 4px;
-}
-
 .session-shortcut {
   font-family: 'JetBrains Mono', 'DejaVu Sans Mono', monospace;
   font-size: var(--font-size-xs);

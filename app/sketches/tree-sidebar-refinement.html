@@ -1,0 +1,296 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Tree sidebar refinement</title>
+<style>
+:root {
+  --bg: #0c0d0f;
+  --panel: #151619;
+  --elevated: #1f2024;
+  --selected: #25272c;
+  --border: #26282d;
+  --hair: rgba(255, 255, 255, 0.06);
+  --text: #e7e7ea;
+  --muted: #9a9ca3;
+  --dim: #62656d;
+  --accent: #5b9bff;
+  --waiting: #f59e0b;
+  --working: #22c55e;
+  --idle: #6b7280;
+  --mono: 'JetBrains Mono', ui-monospace, 'SF Mono', Menlo, monospace;
+  --sans: -apple-system, BlinkMacSystemFont, 'Inter', system-ui, sans-serif;
+  --row: 26px;
+  --sb-width: 240px;
+  --list-height: 728px;
+}
+* { box-sizing: border-box; }
+body { margin: 0; background: var(--bg); color: var(--text); font: 13px/1.4 var(--sans); padding: 24px; }
+h1 { font-size: 16px; margin: 0 0 6px; }
+p.lede { color: var(--muted); max-width: 980px; margin: 0 0 16px; }
+.controls { display: flex; flex-wrap: wrap; gap: 18px; align-items: center; margin-bottom: 20px; color: var(--muted); }
+.controls label { display: inline-flex; gap: 6px; align-items: center; }
+.controls output { color: var(--text); font: 600 12px var(--mono); min-width: 44px; }
+.variants { display: flex; gap: 28px; flex-wrap: wrap; align-items: flex-start; }
+.variant { width: calc(var(--sb-width) + 2px); }
+.variant h2 { font-size: 13px; margin: 0 0 4px; }
+.variant .why { color: var(--muted); font-size: 12px; min-height: 64px; margin: 0 0 8px; }
+.receipt { font: 11px/1.5 var(--mono); color: var(--muted); margin: 8px 0 0; }
+.receipt b { color: var(--text); font-weight: 600; }
+.receipt .over { color: var(--waiting); }
+.receipt .fits { color: var(--working); }
+
+.sb { width: var(--sb-width); background: var(--panel); border: 1px solid var(--border); border-radius: 8px; overflow: hidden; display: flex; flex-direction: column; }
+.sb-top { padding: 6px; border-bottom: 1px solid var(--border); }
+.home { display: flex; align-items: center; gap: 8px; height: 28px; padding: 0 8px; border-radius: 6px; color: var(--text); }
+.home .k, .kbd { margin-left: auto; font: 9px var(--mono); color: var(--dim); }
+.crewline { display: flex; height: 22px; align-items: center; padding: 0 8px; color: var(--dim); font-size: 12px; }
+.crewline span:last-child { margin-left: auto; font: 11px var(--mono); }
+.list { height: var(--list-height); overflow-y: auto; padding: 6px; position: relative; }
+.list::-webkit-scrollbar { width: 6px; }
+.list::-webkit-scrollbar-thumb { background: #2c2e33; border-radius: 3px; }
+
+/* shared glyphs */
+.dot { width: 6px; height: 6px; border-radius: 50%; flex: none; background: var(--idle); }
+.dot.working { background: var(--working); box-shadow: 0 0 6px rgba(34, 197, 94, 0.45); }
+.dot.waiting_input { background: var(--waiting); }
+.dot.hollow { background: transparent; border: 1.5px solid var(--dim); width: 8px; height: 8px; }
+.logo { flex: none; width: 14px; height: 14px; display: inline-grid; place-items: center; color: var(--muted); font-size: 13px; line-height: 1; }
+.logo svg { width: 14px; height: 14px; }
+.tinted .logo.idle { color: var(--idle); }
+.tinted .logo.working { color: var(--working); }
+.tinted .logo.waiting_input { color: var(--waiting); }
+.meta { display: inline-flex; align-items: center; gap: 6px; flex: none; color: var(--dim); }
+.meta svg { width: 12px; height: 12px; display: block; }
+.meta .chief { color: var(--accent); font: 700 9px var(--mono); letter-spacing: 0.06em; }
+.meta .wt { font-size: 11px; }
+
+/* A · today, built to the receipts */
+.A .group { margin-bottom: 8px; border: 1px solid transparent; border-radius: 8px; }
+.A .group.current { background: rgba(255, 255, 255, 0.025); border-color: rgba(255, 255, 255, 0.12); box-shadow: 0 8px 24px rgba(0, 0, 0, 0.18); }
+.A .hdr { display: flex; align-items: center; gap: 8px; height: 34px; padding: 0 10px; border-radius: 7px; }
+.A .group.current .hdr { background: rgba(255, 255, 255, 0.045); }
+.A .hdr .lbl { flex: 1; font: 600 11px var(--mono); }
+.A .row { display: flex; align-items: center; gap: 8px; height: 36px; padding: 0 10px 0 14px; margin-left: 18px; border-left: 1px solid rgba(255, 255, 255, 0.045); border-radius: 6px; }
+.A .row.deleg { height: 38px; }
+.A .row.active { background: var(--elevated); }
+.A .row .logo { margin-right: -2px; }
+.A .row .name { flex: 0 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.A .row .meta { margin-left: auto; gap: 8px; }
+.A .row .meta .deleg { width: 22px; height: 22px; display: grid; place-items: center; }
+.A .row .ghost { width: 24px; flex: none; }
+.A .row .chipchief { border: 1px solid rgba(91, 155, 255, 0.5); border-radius: 4px; padding: 1px 5px; color: var(--accent); font: 700 9px var(--mono); }
+.A .tilebox { width: 8px; height: 8px; border: 1px solid var(--dim); border-radius: 2px; flex: none; }
+
+/* shared new row */
+.nrow { position: relative; display: grid; grid-template-columns: 14px minmax(0, 1fr) auto; align-items: center; gap: 7px; height: var(--row); padding: 0 8px 0 6px; border-radius: 5px; cursor: default; }
+.dotlogo .nrow { grid-template-columns: 6px 14px minmax(0, 1fr) auto; }
+.nrow:hover { background: var(--elevated); }
+.nrow.active { background: var(--selected); }
+.nrow.active::before { content: ''; position: absolute; left: 0; top: 5px; bottom: 5px; width: 2px; border-radius: 1px; background: var(--accent); }
+.nrow .name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.nrow .meta { justify-self: end; }
+.nrow .hover { position: absolute; right: 4px; top: 3px; bottom: 3px; display: none; align-items: center; gap: 2px; padding-left: 8px; background: inherit; border-radius: 4px; color: var(--muted); font: 11px var(--mono); }
+.nrow:hover .hover { display: flex; background: var(--elevated); }
+.nrow:hover .meta { visibility: hidden; }
+.tinted .nrow .dot, .edge .nrow .dot { display: none; }
+.edge .nrow::after { content: ''; position: absolute; left: 0; top: 6px; bottom: 6px; width: 2px; border-radius: 1px; background: var(--idle); }
+.edge .nrow.st-working::after { background: var(--working); }
+.edge .nrow.st-waiting_input::after { background: var(--waiting); }
+.edge .nrow.tile::after { display: none; }
+.edge .nrow.active::before { display: none; }
+.nrow.tile .name { color: #c9cad0; }
+.tilek { font: 700 8px var(--mono); letter-spacing: 0.05em; color: var(--dim); border: 1px solid var(--hair); border-radius: 3px; padding: 0 3px; }
+.showwt .nrow .meta .wt { display: inline; }
+.nrow .meta .wt { display: none; }
+
+/* B · gutter */
+.B .desk { display: grid; grid-template-columns: 18px minmax(0, 1fr); column-gap: 2px; margin-bottom: 5px; }
+.B .gut { position: relative; display: flex; justify-content: center; }
+.B .gut .d { height: var(--row); display: grid; place-items: center; font: 600 10px var(--mono); color: var(--dim); }
+.B .gut::after { content: ''; position: absolute; top: calc(var(--row) - 3px); bottom: 5px; left: 50%; width: 1px; background: var(--hair); }
+.B .desk.current .gut .d { color: #0b1220; background: var(--accent); border-radius: 4px; width: 16px; height: 16px; margin-top: calc((var(--row) - 16px) / 2); }
+.B .desk.current .gut::after { background: rgba(91, 155, 255, 0.45); }
+.B .desk.waits .gut .d { color: var(--waiting); }
+.B .desk.empty .gut::after { display: none; }
+.B .emptyrow { height: 20px; display: flex; align-items: center; color: var(--dim); font-size: 11px; padding-left: 6px; }
+.B .desk.empty .gut .d { height: 20px; }
+
+/* C · section rules */
+.C .sec { display: flex; align-items: center; gap: 6px; height: 20px; padding: 0 8px 0 4px; margin-top: 6px; color: var(--dim); font: 600 10px var(--mono); }
+.C .sec:first-child { margin-top: 0; }
+.C .sec .n { width: 16px; height: 14px; display: grid; place-items: center; border: 1px solid var(--hair); border-radius: 3px; }
+.C .sec .rule { flex: 1; height: 1px; background: var(--hair); }
+.C .sec.current .n { background: var(--accent); color: #0b1220; border-color: var(--accent); }
+.C .sec.current { color: var(--text); }
+.C .sec.empty .n { border-style: dashed; }
+.C .sec .kbd { margin-left: 0; }
+
+/* D · layout map */
+.D .desk { display: grid; grid-template-columns: 24px minmax(0, 1fr); column-gap: 2px; margin-bottom: 6px; }
+.D .gut { display: flex; flex-direction: column; align-items: center; gap: 3px; padding-top: calc((var(--row) - 14px) / 2); }
+.D .map { position: relative; width: 20px; height: 14px; border: 1px solid #3a3d44; border-radius: 3px; overflow: hidden; background: #111215; }
+.D .map i { position: absolute; border-right: 1px solid #3a3d44; background: #23252a; }
+.D .map i:last-child { border-right: 0; }
+.D .map i.working { background: rgba(34, 197, 94, 0.55); }
+.D .map i.waiting_input { background: rgba(245, 158, 11, 0.7); }
+.D .map i.tile { background: #34373e; }
+.D .map i.lit { outline: 1px solid var(--text); outline-offset: -1px; z-index: 1; }
+.D .gut .d { font: 600 9px var(--mono); color: var(--dim); }
+.D .desk.current .map { border-color: var(--accent); box-shadow: 0 0 0 1px rgba(91, 155, 255, 0.35); }
+.D .desk.current .gut .d { color: var(--accent); }
+.D .desk.empty .map { border-style: dashed; background: transparent; }
+.D .emptyrow { height: 20px; display: flex; align-items: center; color: var(--dim); font-size: 11px; padding-left: 6px; }
+
+.notes { margin-top: 28px; max-width: 1040px; color: var(--muted); font-size: 12px; }
+.notes h3 { color: var(--text); font-size: 13px; margin: 18px 0 6px; }
+.notes li { margin: 3px 0; }
+code { font: 11px var(--mono); color: var(--text); }
+</style>
+</head>
+<body>
+<h1>Tree sidebar refinement: sketches</h1>
+<p class="lede">The non-queue sidebar with real data from the Default profile: eight desktops (slot 8 unused), eleven agents, two seed tiles and a browser tile. A is today, built to the measured receipts (header 34px + 10px group gap, rows 36/38px, 33px of indent, 46px of dead space on the right where the hidden ••• menu sits). B, C and D drop the header row a different way and share one row: a 14px lead, the name, and one trailing column flush to the right edge; hover actions float over that column instead of reserving width.</p>
+
+<div class="controls">
+  <label>List height <input id="h" type="range" min="400" max="1100" value="728"><output id="ho"></output></label>
+  <label>Width <input id="w" type="range" min="200" max="300" value="240"><output id="wo"></output></label>
+  <label>Row <select id="row"><option value="26">compact 26</option><option value="30">comfortable 30</option><option value="32">32</option><option value="34">34</option></select></label>
+  <label>Lead <select id="lead"><option value="dotlogo">dot + logo (today)</option><option value="tinted">tinted logo</option><option value="edge">state edge, neutral logo (queue E)</option></select></label>
+  <label><input id="wt" type="checkbox"> worktree glyph</label>
+</div>
+
+<div class="variants" id="variants"></div>
+
+<div class="notes">
+  <h3>What each direction decides</h3>
+  <ul>
+    <li><b>Current desktop</b>: A boxes the whole group; B and C fill the digit with the accent; D rings the layout map. The active leaf is a filled row with a 2px accent tick on its left edge in B, C and D.</li>
+    <li><b>Empty desktop</b>: A shows a hollow dot and a full header. B and D show one 20px "empty" row; C shows a dashed digit on its rule and nothing under it. A desktop that holds only a tile (Desktop 6) is not empty: it lists the tile.</li>
+    <li><b>Selecting a desktop</b> without a leaf: today the header row. B and D: the gutter digit or map is the target (18px and 24px wide, full block height). C: the rule row.</li>
+    <li><b>Truncation</b>: names take whatever the trailing column leaves; the trailing column holds at most the delegation role glyph or the chief mark (12px), so a name gets ~150px at 240 instead of 55 to 85.</li>
+    <li><b>Tiles</b> read as their content: the seed's title with a SEED tag, the page host with WEB. The id stays in the tooltip.</li>
+  </ul>
+</div>
+
+<script>
+const ICON = {
+  claude: '<svg viewBox="0 0 16 16"><g stroke="currentColor" stroke-width="1.6" stroke-linecap="round"><path d="M8 1.5v13M1.5 8h13M3.4 3.4l9.2 9.2M12.6 3.4l-9.2 9.2"/></g></svg>',
+  codex: '<svg viewBox="0 0 16 16"><path fill="currentColor" d="M8 1.2a3 3 0 0 1 2.9 2.2 3 3 0 0 1 2.8 4.2 3 3 0 0 1-2.2 5.1 3 3 0 0 1-4.9 1.1 3 3 0 0 1-4.1-2.9A3 3 0 0 1 2.3 6 3 3 0 0 1 5.4 2.3 3 3 0 0 1 8 1.2Z" opacity=".9"/><path d="M5.5 7l1.5 1.3L5.5 9.6M8.4 9.8h2" stroke="#151619" stroke-width="1.2" fill="none" stroke-linecap="round"/></svg>',
+  pathfinder: '<svg viewBox="0 0 16 16"><circle cx="7" cy="7" r="4.2" fill="none" stroke="currentColor" stroke-width="1.6"/><path d="M10.2 10.2l3.6 3.6" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/></svg>',
+  tree: '<svg viewBox="0 0 16 16"><g fill="none" stroke="currentColor" stroke-width="1.5"><circle cx="4" cy="3.5" r="1.8"/><circle cx="4" cy="12.5" r="1.8"/><circle cx="12" cy="3.5" r="1.8"/><path d="M4 5.3v5.4M12 5.3c0 4-8 2.5-8 5.4"/></g></svg>',
+  seed: '<svg viewBox="0 0 16 16"><path d="M8 14V8" stroke="#7bc47f" stroke-width="1.6" stroke-linecap="round"/><path d="M8 8c0-3 2-5 5-5 0 3-2 5-5 5Z M8 9.5C8 7.5 6.5 6 4 6c0 2 1.5 3.5 4 3.5Z" fill="#7bc47f"/></svg>',
+  web: '<svg viewBox="0 0 16 16"><circle cx="8" cy="8" r="6" fill="none" stroke="#7aa7e0" stroke-width="1.4"/><path d="M2 8h12M8 2c2.2 2.4 2.2 9.6 0 12M8 2c-2.2 2.4-2.2 9.6 0 12" fill="none" stroke="#7aa7e0" stroke-width="1.1"/></svg>',
+};
+const a = (id, name, state, extra = {}) => ({ kind: 'agent', id, name, state, harness: 'claude', worktree: true, ...extra });
+const DESKTOPS = [
+  { slot: 1, leaves: [a('chief', 'Chief', 'idle', { chief: true, worktree: false })], map: [[1, 'chief']] },
+  { slot: 2, current: true, leaves: [
+      a('pec', 'Profiles epic coordinator', 'idle', { dispatcher: true }),
+      a('tp', 'treepath', 'working', { role: 'pathfinder', active: true }),
+      a('qp', 'queuepath', 'waiting_input', { role: 'pathfinder' }),
+      a('sbp', 'sidebarpath', 'waiting_input', { role: 'pathfinder' }),
+      a('flk', 'old-flakes', 'working'),
+    ], map: [[0.168, 'pec'], [0.168, 'tp'], [0.166, 'qp'], [0.168, 'sbp'], [0.33, 'flk']] },
+  { slot: 3, leaves: [a('rev', 'Review and organize attn feedback', 'waiting_input')], map: [[1, 'rev']] },
+  { slot: 4, leaves: [
+      a('nat', 'Design native attn client', 'idle'),
+      { kind: 'tile', id: 's-p54fpa', tileKind: 'seed', title: 'Native client: a Rust multiplexer over the attn daemon' },
+    ], map: [[0.68, 'nat'], [0.32, 's-p54fpa']] },
+  { slot: 5, leaves: [
+      a('cdx', 'Launch Codex for Non-Headless Agents', 'idle', { harness: 'codex' }),
+      { kind: 'tile', id: 's-vhx6e7', tileKind: 'seed', title: 'Finish shared Codex state cost and naming attribution' },
+    ], map: [[0.68, 'cdx'], [0.32, 's-vhx6e7']] },
+  { slot: 6, leaves: [{ kind: 'tile', id: 'web', tileKind: 'web', title: '127.0.0.1:56427 · queue-sidebar-refinement' }], map: [[1, 'web']] },
+  { slot: 7, leaves: [a('son', 'Add Sonnet 5.5 Pricing', 'idle')], map: [[1, 'son']] },
+  { slot: 9, leaves: [a('nvim', 'Neovim Configuration Check', 'waiting_input', { worktree: false })], map: [[1, 'nvim']] },
+  { slot: 10, leaves: [], map: [] },
+];
+const leafById = new Map(DESKTOPS.flatMap((d) => d.leaves.map((l) => [l.id, l])));
+
+function metaHTML(l, variant) {
+  const parts = [];
+  if (l.role) parts.push(`<span class="deleg" title="Pathfinder · delegation chain">${ICON.pathfinder}</span>`);
+  if (l.dispatcher) parts.push(`<span class="deleg" title="Dispatched agents">${ICON.tree}</span>`);
+  if (l.chief) parts.push(variant === 'A' ? '<span class="chipchief">⌁ CHIEF</span>' : '<span class="chief" title="Chief of staff">⌁</span>');
+  if (l.worktree) parts.push('<span class="wt" title="Worktree">⎇</span>');
+  return parts.join('');
+}
+
+function rowA(l) {
+  if (l.kind === 'tile') return `<div class="row"><span class="tilebox"></span><span class="name">${l.id === 'web' ? '127.0.0.1:56427' : l.id}</span><span class="meta"><span class="ghost"></span></span></div>`;
+  const deleg = l.role || l.dispatcher;
+  return `<div class="row ${deleg ? 'deleg' : ''} ${l.active ? 'active' : ''}"><span class="dot ${l.state}"></span><span class="logo">${ICON[l.harness]}</span><span class="name" data-measure="${l.id}">${l.name}</span><span class="meta">${metaHTML(l, 'A').replace('<span class="wt"', '<span class="wt" style="display:inline"')}<span class="ghost"></span></span></div>`;
+}
+
+function nrow(l) {
+  if (l.kind === 'tile') {
+    return `<div class="nrow tile" title="${l.id}"><span class="dot" style="visibility:hidden"></span><span class="logo">${ICON[l.tileKind]}</span><span class="name">${l.title}</span><span class="meta"><span class="tilek">${l.tileKind.toUpperCase()}</span></span><span class="hover">${l.tileKind === 'web' ? '↻ ' : ''}×</span></div>`;
+  }
+  return `<div class="nrow st-${l.state} ${l.active ? 'active' : ''}" title="${l.name}"><span class="dot ${l.state}"></span><span class="logo ${l.state}">${ICON[l.harness]}</span><span class="name" data-measure="${l.id}">${l.name}</span><span class="meta">${metaHTML(l, 'N')}</span><span class="hover">•••</span></div>`;
+}
+
+function deskWaits(d) { return d.leaves.some((l) => l.state === 'waiting_input'); }
+
+const VARIANTS = [
+  { key: 'A', title: 'A · Today', why: 'Full header row per desktop, nested and indented rows, trailing glyphs stop short of the edge because the hidden ••• keeps its width.',
+    render: () => DESKTOPS.map((d) => `<div class="group ${d.current ? 'current' : ''}"><div class="hdr">${d.leaves.some((l) => l.kind === 'agent') ? '<span class="dot"></span>' : '<span class="dot hollow"></span>'}<span class="lbl">Desktop ${d.slot}</span><span class="kbd">${d.slot <= 9 ? '⌘' + d.slot : ''}</span></div>${d.leaves.map(rowA).join('')}</div>`).join('') },
+  { key: 'B', title: 'B · Digit gutter', why: 'No header row. The desktop digit sits in an 18px gutter beside its first leaf, with a hairline down the block. Clicking the digit selects the desktop. Amber digit: something there waits.',
+    render: () => DESKTOPS.map((d) => `<div class="desk ${d.current ? 'current' : ''} ${deskWaits(d) ? 'waits' : ''} ${d.leaves.length ? '' : 'empty'}"><div class="gut"><span class="d" title="Desktop ${d.slot}${d.slot <= 9 ? ' · ⌘' + d.slot : ' · no shortcut'}">${d.slot}</span></div><div>${d.leaves.length ? d.leaves.map(nrow).join('') : '<div class="emptyrow">empty</div>'}</div></div>`).join('') },
+  { key: 'C', title: 'C · Section rules', why: 'The header shrinks to a 20px rule: digit chip, hairline, shortcut on hover. Rows go flush left, no indent. The closest to today; the desktop keeps a row of its own to click, rename and drop onto.',
+    render: () => DESKTOPS.map((d) => `<div class="sec ${d.current ? 'current' : ''} ${d.leaves.length ? '' : 'empty'}"><span class="n">${d.slot}</span><span class="rule"></span>${d.slot <= 9 ? `<span class="kbd">⌘${d.slot}</span>` : '<span class="kbd">—</span>'}</div>${d.leaves.map(nrow).join('')}`).join('') },
+  { key: 'D', title: 'D · Layout map', why: 'Like B, but the gutter shows a 20×14 map of the desktop\'s splits, cells tinted by state, the active leaf outlined. Hover a row to light its cell. Tells you the shape of each desktop at a glance.',
+    render: () => DESKTOPS.map((d) => {
+      let x = 0;
+      const cells = d.map.map(([f, id]) => { const l = leafById.get(id); const cls = l.kind === 'tile' ? 'tile' : l.state; const s = `<i data-cell="${id}" class="${cls} ${l.active ? 'lit' : ''}" style="left:${x * 100}%;width:${f * 100}%;top:0;bottom:0"></i>`; x += f; return s; }).join('');
+      return `<div class="desk ${d.current ? 'current' : ''} ${d.leaves.length ? '' : 'empty'}"><div class="gut"><span class="map">${cells}</span><span class="d">${d.slot}</span></div><div>${d.leaves.length ? d.leaves.map((l) => nrow(l).replace('<div class="nrow', `<div data-leaf="${l.id}" class="nrow`)).join('') : '<div class="emptyrow">empty</div>'}</div></div>`;
+    }).join('') },
+];
+
+const root = document.getElementById('variants');
+root.innerHTML = VARIANTS.map((v) => `<section class="variant"><h2>${v.title}</h2><p class="why">${v.why}</p><div class="sb ${v.key}"><div class="sb-top"><div class="home"><span>⌂</span>Home<span class="k">⌘⇧H</span></div><div class="crewline"><span>Manage crew</span><span>3</span></div></div><div class="list">${v.render()}</div></div><p class="receipt" data-receipt="${v.key}"></p></section>`).join('');
+
+root.addEventListener('mouseover', (e) => {
+  const r = e.target.closest('[data-leaf]');
+  document.querySelectorAll('.D .map i.hover').forEach((c) => c.classList.remove('hover'));
+  if (r) document.querySelectorAll(`.D [data-cell="${r.dataset.leaf}"]`).forEach((c) => { c.classList.add('hover'); c.style.outline = '1px solid #fff'; });
+  document.querySelectorAll('.D .map i:not(.hover)').forEach((c) => { if (!c.classList.contains('lit')) c.style.outline = ''; });
+});
+
+function measure() {
+  for (const v of VARIANTS) {
+    const sb = document.querySelector(`.sb.${v.key}`);
+    const list = sb.querySelector('.list');
+    const have = list.clientHeight;
+    list.style.height = 'auto';
+    const need = list.scrollHeight;
+    list.style.height = '';
+    const rows = [...list.querySelectorAll('.row, .nrow, .emptyrow')];
+    const top = list.getBoundingClientRect().top;
+    const visible = rows.filter((r) => r.getBoundingClientRect().bottom - top <= have + 0.5).length;
+    const nameW = (id) => Math.round(sb.querySelector(`[data-measure="${id}"]`)?.getBoundingClientRect().width ?? 0);
+    const edge = Math.round(sb.getBoundingClientRect().right - Math.max(...[...sb.querySelectorAll('.meta')].map((m) => m.getBoundingClientRect().right)));
+    const status = need <= have ? `<span class="fits">all fit, ${have - need}px spare</span>` : `<span class="over">${need - have}px below the fold</span>`;
+    document.querySelector(`[data-receipt="${v.key}"]`).innerHTML =
+      `list needs <b>${need}px</b> · ${status}<br>leaf rows visible <b>${visible}/${rows.length}</b><br>name px: coordinator <b>${nameW('pec')}</b> · queuepath <b>${nameW('qp')}</b> · review <b>${nameW('rev')}</b><br>trailing column to edge <b>${edge}px</b>`;
+  }
+}
+
+const $ = (id) => document.getElementById(id);
+function apply() {
+  const s = document.documentElement.style;
+  s.setProperty('--list-height', `${$('h').value}px`); $('ho').textContent = `${$('h').value}px`;
+  s.setProperty('--sb-width', `${$('w').value}px`); $('wo').textContent = `${$('w').value}px`;
+  s.setProperty('--row', `${$('row').value}px`);
+  document.body.classList.toggle('tinted', $('lead').value === 'tinted');
+  document.body.classList.toggle('dotlogo', $('lead').value === 'dotlogo');
+  document.body.classList.toggle('edge', $('lead').value === 'edge');
+  document.body.classList.toggle('showwt', $('wt').checked);
+  requestAnimationFrame(measure);
+}
+['h', 'w', 'row', 'lead', 'wt'].forEach((id) => $(id).addEventListener('input', apply));
+apply();
+</script>
+</body>
+</html>
