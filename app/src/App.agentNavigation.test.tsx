@@ -1291,19 +1291,62 @@ describe('moving the active leaf to another desktop', () => {
     expect(daemon.sentOf('desktop_show_leaf')).toEqual([]);
   });
 
-  it('names the missing slot and moves nothing', async () => {
-    const { daemon } = await renderApp({ initialState: {
-      sessions: [daemonSession('s1')],
+  function soloOnSlot1() {
+    return {
+      sessions: [daemonSession('s1'), daemonSession('s2')],
       profiles: [defaultProfile('d1')],
-      desktops: [soloDesktop('s1', { id: 'd1', shortcut_slot: 1 })],
-    } });
+      desktops: [splitDesktop('d1', ['s1', 's2'], { shortcut_slot: 1, active_pane_id: 'pane-s1' })],
+    };
+  }
+
+  it('creates a desktop on an empty slot and follows the leaf into it', async () => {
+    const { daemon } = await renderApp({ initialState: soloOnSlot1() });
     await gesture(daemon, () => pressShortcut('desktop.select1'));
+    await settleFocus(daemon);
     const before = daemon.sent.length;
 
     await gesture(daemon, () => pressShortcut('desktop.send5'));
+    await settleFocus(daemon);
 
-    expect(desktopCommandsAfter(daemon, before)).toEqual([]);
-    expect(screen.getByText(/No desktop on .*5 to move to/)).toBeInTheDocument();
+    expect(desktopCommandsAfter(daemon, before)).toEqual(['desktop_create', 'desktop_move_leaf', 'desktop_show_leaf']);
+    const created = daemon.arrangement.desktops.find((desktop) => desktop.shortcut_slot === 5);
+    expect(daemon.sentOf('desktop_create')).toEqual([expect.objectContaining({ profile_id: daemon.arrangement.profile.id, shortcut_slot: 5 })]);
+    expect(daemon.sentOf('desktop_move_leaf')).toEqual([expect.objectContaining({ leaf_id: 'pane-s1', source_desktop_id: 'd1', target_desktop_id: created?.id })]);
+    expect(shows(daemon).pop()).toBe(`leaf:${created?.id}/pane-s1`);
+    expect(daemon.arrangement.profile.current_desktop_id).toBe(created?.id);
+    expect(shownLeaf()).toBe('pane-s1');
+    expect(focusedPane()).toBe('pane-s1');
+  });
+
+  it('creates a desktop on an empty slot and stays when the user holds shift', async () => {
+    const { daemon } = await renderApp({ initialState: soloOnSlot1() });
+    await gesture(daemon, () => pressShortcut('desktop.select1'));
+    await settleFocus(daemon);
+    const before = daemon.sent.length;
+
+    await gesture(daemon, () => pressShortcut('desktop.sendStay5'));
+    await settleFocus(daemon);
+
+    expect(desktopCommandsAfter(daemon, before)).toEqual(['desktop_create', 'desktop_move_leaf']);
+    const created = daemon.arrangement.desktops.find((desktop) => desktop.shortcut_slot === 5);
+    expect(created?.panes.map((pane) => pane.pane_id)).toEqual(['pane-s1']);
+    expect(daemon.arrangement.profile.current_desktop_id).toBe('d1');
+    expect(shownLeaf()).toBe('pane-s2');
+  });
+
+  it('moves into an empty desktop that already holds the slot without creating one', async () => {
+    const initialState = soloOnSlot1();
+    const { daemon } = await renderApp({ initialState: { ...initialState, desktops: [...initialState.desktops, emptyDesktop('d5', { shortcut_slot: 5 })] } });
+    await gesture(daemon, () => pressShortcut('desktop.select1'));
+    await settleFocus(daemon);
+    const before = daemon.sent.length;
+
+    await gesture(daemon, () => pressShortcut('desktop.send5'));
+    await settleFocus(daemon);
+
+    expect(desktopCommandsAfter(daemon, before)).toEqual(['desktop_move_leaf', 'desktop_show_leaf']);
+    expect(shows(daemon).pop()).toBe('leaf:d5/pane-s1');
+    expect(focusedPane()).toBe('pane-s1');
   });
 });
 

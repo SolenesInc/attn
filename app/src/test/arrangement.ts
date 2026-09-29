@@ -1,4 +1,4 @@
-import type { DaemonDesktop, DaemonProfile } from './daemonFixtures';
+import { emptyDesktop, type DaemonDesktop, type DaemonProfile } from './daemonFixtures';
 import type { CommandMessage } from './protocol';
 import type { Reply, ScriptedDaemon } from './scriptedDaemon';
 
@@ -178,6 +178,15 @@ export function serveArrangement(daemon: ScriptedDaemon, arrangement: Arrangemen
       return refused(command, 'not_found', `leaf ${command.leaf_id} does not belong to desktop ${command.desktop_id}`);
     }
     return accepted(command, arrangement, command.leaf_id);
+  });
+  daemon.on('desktop_create', (command) => {
+    const slot = command.shortcut_slot;
+    const holder = arrangement.desktops.find((desktop) => desktop.profile_id === command.profile_id && slot && desktop.shortcut_slot === slot);
+    if (holder) return refused(command, 'slot_taken', `shortcut slot ${slot} is held by desktop ${holder.id}`);
+    const created = emptyDesktop(`desktop-new-${arrangement.desktops.length + 1}`, { profile_id: command.profile_id, shortcut_slot: slot, order_key: 'z' });
+    arrangement.desktops = [...arrangement.desktops, created];
+    const [changed, result] = accepted(command, arrangement);
+    return [changed, { ...(result as object), desktops: [created] } as Reply];
   });
   // Like the daemon, a leaf whose id the target already holds lands under a new id.
   daemon.on('desktop_move_leaf', (command) => {
