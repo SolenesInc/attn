@@ -197,6 +197,8 @@ returns `testworld.Main(m)`.
 
 If the daemon misses its ready guard or `s.Run` exceeds its hang guard, the
 stack sends SIGQUIT to capture all goroutines before terminating the process.
+CLI invocations have their own process group so shell wrappers and their Go
+children receive the same signal.
 Failure logs include CPU and I/O pressure from `/proc/pressure` when available.
 Oversized diagnostic streams retain their beginning and end and report the
 byte limit, original size and omitted bytes.
