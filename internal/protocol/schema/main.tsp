@@ -3203,6 +3203,29 @@ model DesktopShowSessionMessage {
   session_id: string;
 }
 
+// Moves a session's pane to another desktop of its profile, beside that
+// desktop's active leaf; an unplaced session is placed there. `desktop` is a
+// desktop ref: shortcut digit, label as shown (case-insensitive) or id. A
+// session may move itself and the sessions it dispatched; its profile's chief
+// may move any of its sessions; a request without a caller comes from the user.
+// The moved pane becomes its new desktop's active leaf only when it was its old
+// desktop's and the new one is not the current desktop; the current desktop
+// never changes.
+model DesktopMoveSessionMessage {
+  cmd: "desktop_move_session";
+  session_id: string;
+  caller_session_id?: string;
+  desktop: string;
+}
+
+model DesktopMoveSessionResult {
+  session_id: string;
+  desktop_id: string;
+  pane_id: string;
+  from_desktop_id?: string; // absent when the session was unplaced
+  unchanged?: boolean; // the session already was on that desktop
+}
+
 // Shows an existing leaf, an agent pane or a tile, like desktop_show_session.
 // It never creates or moves a leaf.
 model DesktopShowLeafMessage {
@@ -5991,6 +6014,7 @@ model Response {
   session_list_result?: SessionListResult;
   session_show_result?: SessionShowResult;
   session_reopen_result?: SessionReopenResult;
+  desktop_move_session_result?: DesktopMoveSessionResult;
   state_explain_result?: StateExplainResult;
   agent_peek_result?: AgentPeekResult;
   agent_msg_result?: AgentMsgResult;

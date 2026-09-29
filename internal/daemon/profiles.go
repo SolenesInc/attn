@@ -585,6 +585,7 @@ func (d *Daemon) handleDesktopMoveLeaf(client *wsClient, msg *protocol.DesktopMo
 			LeafShare:              protocol.Deref(msg.LeafShare),
 			ExpectedSourceRevision: int64(msg.ExpectedSourceRevision),
 			ExpectedTargetRevision: int64(msg.ExpectedTargetRevision),
+			Activate:               true,
 		})
 		changed := []profiles.Desktop{move.Source}
 		if move.Target.ID != move.Source.ID {
