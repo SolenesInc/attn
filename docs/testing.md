@@ -195,6 +195,12 @@ returns `testworld.Main(m)`.
   Await its output with `AwaitStdout` or `AwaitStderr`, or its result with
   `Wait`. The stack interrupts it at cleanup.
 
+If the daemon misses its ready guard or `s.Run` exceeds its hang guard, the
+stack sends SIGQUIT to capture all goroutines before terminating the process.
+Failure logs include CPU and I/O pressure from `/proc/pressure` when available.
+Oversized diagnostic streams retain their beginning and end and report the
+byte limit, original size and omitted bytes.
+
 ### Scenario
 
 Scenarios run the packaged app in CI under Xvfb; see the

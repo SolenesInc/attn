@@ -142,7 +142,7 @@ func (s *Stack) launch(vars ...string) {
 	}
 	defer stderr.Close()
 	cmd := exec.Command(s.binary, "daemon")
-	cmd.Env = append(append(append(s.env(), s.pauses.env()...), vars...), "ATTN_DAEMON_READY_FD=3")
+	cmd.Env = append(append(append(s.env(), s.pauses.env()...), vars...), "ATTN_DAEMON_READY_FD=3", "GOTRACEBACK=all")
 	dieWithTestProcess(cmd)
 	cmd.ExtraFiles = []*os.File{signal}
 	cmd.Stdout, cmd.Stderr = stderr, stderr
@@ -173,7 +173,19 @@ func (s *Stack) launch(vars ...string) {
 func (s *Stack) failStart(reason string) {
 	s.T.Helper()
 	s.T.Errorf("attn daemon %s", reason)
-	s.Stop()
+	s.logPressure()
+	_ = s.daemon.Signal(syscall.SIGQUIT)
+	select {
+	case <-s.exited:
+	case <-time.After(fakeagent.HangGuard):
+		s.T.Errorf("attn daemon (pid %d) outlived SIGQUIT by %s", s.daemon.Pid, fakeagent.HangGuard)
+		_ = s.daemon.Kill()
+		<-s.exited
+	}
+	s.daemon, s.exited = nil, nil
+	s.LogDaemonTail()
+	stderr, _ := os.ReadFile(s.stderrPath())
+	s.T.Logf("daemon.stderr:\n%s", boundedDiagnostic(string(stderr)))
 	s.T.FailNow()
 }
 
@@ -196,7 +208,7 @@ func (s *Stack) Stop() {
 	if s.T.Failed() {
 		s.LogDaemonTail()
 		stderr, _ := os.ReadFile(s.stderrPath())
-		s.T.Logf("daemon.stderr:\n%s", stderr)
+		s.T.Logf("daemon.stderr:\n%s", boundedDiagnostic(string(stderr)))
 	}
 }
 
