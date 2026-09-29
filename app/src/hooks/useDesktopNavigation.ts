@@ -3,6 +3,7 @@ import { useDaemonApi } from '../contexts/DaemonApiContext';
 import { useProfilesStore } from '../store/profiles';
 import type { Desktop } from '../types/generated';
 import { withFreshDesktopRevisions } from './desktopRevisions';
+import { actThenShow } from '../application/openThenShow';
 import { desktopInSlot, desktopLabel, firstFreeSlot, isEmptyDesktop, slotShortcut } from '../utils/desktops';
 
 type ShowNotice = (message: string) => void;
@@ -74,18 +75,18 @@ export function useDesktopNavigation(showNotice: ShowNotice) {
     [showNotice, switchToDesktop],
   );
 
-  const moveActivePane = useCallback(
-    async (targetDesktopId: string): Promise<void> => {
+  const moveActiveLeaf = useCallback(
+    async (targetDesktopId: string, follow: boolean): Promise<void> => {
       const state = useProfilesStore.getState();
       const source = currentDesktopOf(state);
       const target = state.desktops.find((desktop) => desktop.id === targetDesktopId);
       if (!source || !target || source.id === target.id) return;
       const leafId = source.active_pane_id;
       if (!leafId) {
-        showNotice('No focused pane to send.');
+        showNotice('Nothing is active to move.');
         return;
       }
-      await withFreshDesktopRevisions([source.id, target.id], (revisionOf) =>
+      const move = () => withFreshDesktopRevisions([source.id, target.id], (revisionOf) =>
         sendDesktopMoveLeaf({
           sourceDesktopId: source.id,
           targetDesktopId: target.id,
@@ -96,25 +97,31 @@ export function useDesktopNavigation(showNotice: ShowNotice) {
           expectedTargetRevision: revisionOf(target.id),
         }),
       );
+      if (!follow) {
+        await move();
+        return;
+      }
+      await actThenShow({ kind: 'move', leafId }, move, (result) =>
+        result.pane_id ? { desktopId: target.id, leafId: result.pane_id } : null);
     },
     [sendDesktopMoveLeaf, showNotice],
   );
 
-  const sendActivePaneToDesktop = useCallback(
-    (desktopId: string) => report(moveActivePane(desktopId)),
-    [moveActivePane, report],
+  const moveActiveLeafToDesktop = useCallback(
+    (desktopId: string, follow: boolean) => report(moveActiveLeaf(desktopId, follow)),
+    [moveActiveLeaf, report],
   );
 
-  const sendActivePaneToSlot = useCallback(
-    (slot: number) => {
+  const moveActiveLeafToSlot = useCallback(
+    (slot: number, follow: boolean) => {
       const target = desktopInSlot(useProfilesStore.getState().desktops, slot);
       if (!target) {
-        showNotice(`No desktop on ${slotShortcut(slot)} to send to. Give one a shortcut from the overview.`);
+        showNotice(`No desktop on ${slotShortcut(slot)} to move to. Give one a shortcut from the overview.`);
         return;
       }
-      sendActivePaneToDesktop(target.id);
+      moveActiveLeafToDesktop(target.id, follow);
     },
-    [sendActivePaneToDesktop, showNotice],
+    [moveActiveLeafToDesktop, showNotice],
   );
 
   const deleteDesktop = useCallback(
@@ -220,8 +227,8 @@ export function useDesktopNavigation(showNotice: ShowNotice) {
     currentDesktop,
     switchToDesktop,
     switchToSlot,
-    sendActivePaneToDesktop,
-    sendActivePaneToSlot,
+    moveActiveLeafToDesktop,
+    moveActiveLeafToSlot,
     deleteDesktop,
     giveShortcutSlot,
     createDesktop,

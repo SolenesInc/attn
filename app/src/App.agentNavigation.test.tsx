@@ -1195,6 +1195,87 @@ describe('keyboard focus', () => {
   });
 });
 
+describe('moving the active leaf to another desktop', () => {
+  function desktopCommandsAfter(daemon: ScriptedDaemon, from: number) {
+    return daemon.sent.slice(from).filter((command) => command.cmd.startsWith('desktop_')).map((command) => command.cmd);
+  }
+
+  it('follows an agent pane to its new desktop with the keyboard in it', async () => {
+    const { daemon } = await renderApp({ initialState: {
+      sessions: [daemonSession('s1'), daemonSession('s2'), daemonSession('s3')],
+      profiles: [defaultProfile('d1')],
+      desktops: [splitDesktop('d1', ['s1', 's2'], { shortcut_slot: 1, active_pane_id: 'pane-s1' }), soloDesktop('s3', { id: 'd2', shortcut_slot: 2 })],
+    } });
+    await gesture(daemon, () => pressShortcut('desktop.select1'));
+    await settleFocus(daemon);
+    const before = daemon.sent.length;
+
+    await gesture(daemon, () => pressShortcut('desktop.send2'));
+    await settleFocus(daemon);
+
+    expect(desktopCommandsAfter(daemon, before)).toEqual(['desktop_move_leaf', 'desktop_show_leaf']);
+    expect(shows(daemon).pop()).toBe('leaf:d2/pane-s1');
+    expect(daemon.arrangement.profile.current_desktop_id).toBe('d2');
+    expect(shownLeaf()).toBe('pane-s1');
+    expect(focusedPane()).toBe('pane-s1');
+  });
+
+  it('follows a tile under the id the daemon gave it when the target already held its id', async () => {
+    const { daemon } = await renderApp({ initialState: {
+      sessions: [daemonSession('s1')],
+      profiles: [defaultProfile('d1')],
+      desktops: [agentBesideNotes('s1'), { ...notesDesktop('d2'), shortcut_slot: 2 }],
+    } });
+    await gesture(daemon, () => pressShortcut('desktop.select1'));
+    await gesture(daemon, () => fireEvent.mouseDown(tileEl()));
+    await settleFocus(daemon);
+    const before = daemon.sent.length;
+
+    await gesture(daemon, () => pressShortcut('desktop.send2'));
+    await settleFocus(daemon);
+
+    expect(desktopCommandsAfter(daemon, before)).toEqual(['desktop_move_leaf', 'desktop_show_leaf']);
+    expect(shows(daemon).pop()).toBe('leaf:d2/tile-notes-moved');
+    expect(daemon.arrangement.profile.current_desktop_id).toBe('d2');
+    expect(shownLeaf()).toBe('tile-notes-moved');
+    expect(focusedPane()).toBe('tile-notes-moved');
+  });
+
+  it('moves without following when the user holds shift', async () => {
+    const { daemon } = await renderApp({ initialState: {
+      sessions: [daemonSession('s1'), daemonSession('s2'), daemonSession('s3')],
+      profiles: [defaultProfile('d1')],
+      desktops: [splitDesktop('d1', ['s1', 's2'], { shortcut_slot: 1, active_pane_id: 'pane-s1' }), soloDesktop('s3', { id: 'd2', shortcut_slot: 2 })],
+    } });
+    await gesture(daemon, () => pressShortcut('desktop.select1'));
+    await settleFocus(daemon);
+    const before = daemon.sent.length;
+
+    await gesture(daemon, () => pressShortcut('desktop.sendStay2'));
+    await settleFocus(daemon);
+
+    expect(desktopCommandsAfter(daemon, before)).toEqual(['desktop_move_leaf']);
+    expect(daemon.arrangement.profile.current_desktop_id).toBe('d1');
+    expect(daemon.arrangement.desktop('d2')?.panes.map((pane) => pane.pane_id)).toContain('pane-s1');
+    expect(shownLeaf()).toBe('pane-s2');
+  });
+
+  it('names the missing slot and moves nothing', async () => {
+    const { daemon } = await renderApp({ initialState: {
+      sessions: [daemonSession('s1')],
+      profiles: [defaultProfile('d1')],
+      desktops: [soloDesktop('s1', { id: 'd1', shortcut_slot: 1 })],
+    } });
+    await gesture(daemon, () => pressShortcut('desktop.select1'));
+    const before = daemon.sent.length;
+
+    await gesture(daemon, () => pressShortcut('desktop.send5'));
+
+    expect(desktopCommandsAfter(daemon, before)).toEqual([]);
+    expect(screen.getByText(/No desktop on .*5 to move to/)).toBeInTheDocument();
+  });
+});
+
 describe('attention', () => {
   it('asks for attention from sessions waiting on the user or in an unknown state, and not from the others', async () => {
     const states = ['waiting_input', 'pending_approval', 'unknown', 'stopped', 'waiting', 'working', 'idle', 'launching', 'scheduled', 'recoverable'] as DaemonSession['state'][];
