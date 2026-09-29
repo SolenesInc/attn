@@ -135,84 +135,90 @@ func (d *Daemon) observeGitHubReviewRequests(host string, prs []*protocol.PR, ob
 			d.logf("automation GitHub observation reconcile %s: %v", definition.ID, err)
 			continue
 		}
-		for _, candidate := range candidates {
-			pr := bySubject[candidate.SubjectKey]
-			if pr == nil {
-				continue
-			}
-			observationLock := d.automationObservationLock(definition.ID, candidate.SubjectKey, candidate.Cycle)
-			observationLock.Lock()
-			needsClaim, err := d.store.AutomationReviewRequestHeadNeedsClaim(definition.ID, candidate.SubjectKey, candidate.Cycle, candidate.HeadSHA)
-			if err != nil || !needsClaim {
-				observationLock.Unlock()
-				if err != nil {
-					d.logf("automation GitHub observation recheck %s: %v", candidate.SubjectKey, err)
-				}
-				continue
-			}
-			repositoryParts := strings.Split(pr.Repo, "/")
-			if len(repositoryParts) != 2 {
-				observationLock.Unlock()
-				d.logf("automation GitHub observation invalid repository %q", pr.Repo)
-				continue
-			}
-			providerSnapshot, err := client.FetchPullRequestSnapshot(pr.Repo, pr.Number)
-			if err != nil {
-				observationLock.Unlock()
-				d.logf("automation GitHub observation fetch %s: %v", candidate.SubjectKey, err)
-				continue
-			}
-			if providerSnapshot.Number != pr.Number || !strings.EqualFold(providerSnapshot.BaseRepository, pr.Repo) || providerSnapshot.State != "open" || providerSnapshot.Draft {
-				observationLock.Unlock()
-				d.logf("automation GitHub observation ignored mismatched snapshot for %s", candidate.SubjectKey)
-				continue
-			}
-			input := pullRequestAutomationInput(host, repositoryParts[0], repositoryParts[1], providerSnapshot)
-			payload, err := json.Marshal(input)
-			if err != nil {
-				observationLock.Unlock()
-				continue
-			}
-			if _, err := automation.ParsePullRequestInput(payload); err != nil {
-				observationLock.Unlock()
-				d.logf("automation GitHub observation invalid snapshot %s: %v", candidate.SubjectKey, err)
-				continue
-			}
-			effective, err := automation.Effective(spec, definition.Revision)
-			if err != nil {
-				observationLock.Unlock()
-				continue
-			}
-			snapshotJSON, err := json.Marshal(effective)
-			if err != nil {
-				observationLock.Unlock()
-				continue
-			}
-			reservation, err := d.newAutomationRunReservation()
-			if err != nil {
-				observationLock.Unlock()
-				d.logf("automation GitHub observation reserve %s: %v", definition.ID, err)
-				continue
-			}
-			run, _, err := d.store.ClaimGitHubReviewAutomationRun(definition.ID, candidate.SubjectKey, candidate.Cycle, definition.Revision, string(payload), string(snapshotJSON), observedAt, reservation)
+		if len(candidates) > 0 {
+			go d.deliverGitHubReviewRequests(host, client, definition, spec, candidates, bySubject, observedAt)
+		}
+	}
+}
+
+func (d *Daemon) deliverGitHubReviewRequests(host string, client *github.Client, definition store.AutomationDefinition, spec automation.DefinitionSpec, candidates []store.AutomationReviewRequestCandidate, bySubject map[string]*protocol.PR, observedAt time.Time) {
+	for _, candidate := range candidates {
+		pr := bySubject[candidate.SubjectKey]
+		if pr == nil {
+			continue
+		}
+		observationLock := d.automationObservationLock(definition.ID, candidate.SubjectKey, candidate.Cycle)
+		observationLock.Lock()
+		needsClaim, err := d.store.AutomationReviewRequestHeadNeedsClaim(definition.ID, candidate.SubjectKey, candidate.Cycle, candidate.HeadSHA)
+		if err != nil || !needsClaim {
 			observationLock.Unlock()
 			if err != nil {
-				d.logf("automation GitHub observation claim %s: %v", candidate.SubjectKey, err)
-				continue
+				d.logf("automation GitHub observation recheck %s: %v", candidate.SubjectKey, err)
 			}
-			d.broadcastAutomationsChanged(definition.ID)
-			d.automationMu.Lock()
-			current, loadErr := d.store.GetAutomationRun(run.ID)
-			if loadErr == nil && current != nil && current.State == store.AutomationRunStatePending {
-				if deliverErr := d.deliverObservedAutomationRun(current); deliverErr != nil {
-					_, deliverErr = d.handleAutomationDeliveryError(current, deliverErr)
-					loadErr = deliverErr
-				}
+			continue
+		}
+		repositoryParts := strings.Split(pr.Repo, "/")
+		if len(repositoryParts) != 2 {
+			observationLock.Unlock()
+			d.logf("automation GitHub observation invalid repository %q", pr.Repo)
+			continue
+		}
+		providerSnapshot, err := client.FetchPullRequestSnapshot(pr.Repo, pr.Number)
+		if err != nil {
+			observationLock.Unlock()
+			d.logf("automation GitHub observation fetch %s: %v", candidate.SubjectKey, err)
+			continue
+		}
+		if providerSnapshot.Number != pr.Number || !strings.EqualFold(providerSnapshot.BaseRepository, pr.Repo) || providerSnapshot.State != "open" || providerSnapshot.Draft {
+			observationLock.Unlock()
+			d.logf("automation GitHub observation ignored mismatched snapshot for %s", candidate.SubjectKey)
+			continue
+		}
+		input := pullRequestAutomationInput(host, repositoryParts[0], repositoryParts[1], providerSnapshot)
+		payload, err := json.Marshal(input)
+		if err != nil {
+			observationLock.Unlock()
+			continue
+		}
+		if _, err := automation.ParsePullRequestInput(payload); err != nil {
+			observationLock.Unlock()
+			d.logf("automation GitHub observation invalid snapshot %s: %v", candidate.SubjectKey, err)
+			continue
+		}
+		effective, err := automation.Effective(spec, definition.Revision)
+		if err != nil {
+			observationLock.Unlock()
+			continue
+		}
+		snapshotJSON, err := json.Marshal(effective)
+		if err != nil {
+			observationLock.Unlock()
+			continue
+		}
+		reservation, err := d.newAutomationRunReservation()
+		if err != nil {
+			observationLock.Unlock()
+			d.logf("automation GitHub observation reserve %s: %v", definition.ID, err)
+			continue
+		}
+		run, _, err := d.store.ClaimGitHubReviewAutomationRun(definition.ID, candidate.SubjectKey, candidate.Cycle, definition.Revision, string(payload), string(snapshotJSON), observedAt, reservation)
+		observationLock.Unlock()
+		if err != nil {
+			d.logf("automation GitHub observation claim %s: %v", candidate.SubjectKey, err)
+			continue
+		}
+		d.broadcastAutomationsChanged(definition.ID)
+		d.automationMu.Lock()
+		current, loadErr := d.store.GetAutomationRun(run.ID)
+		if loadErr == nil && current != nil && current.State == store.AutomationRunStatePending {
+			if deliverErr := d.deliverObservedAutomationRun(current); deliverErr != nil {
+				_, deliverErr = d.handleAutomationDeliveryError(current, deliverErr)
+				loadErr = deliverErr
 			}
-			d.automationMu.Unlock()
-			if loadErr != nil {
-				d.logf("automation GitHub observation deliver %s: %v", candidate.SubjectKey, loadErr)
-			}
+		}
+		d.automationMu.Unlock()
+		if loadErr != nil {
+			d.logf("automation GitHub observation deliver %s: %v", candidate.SubjectKey, loadErr)
 		}
 	}
 }

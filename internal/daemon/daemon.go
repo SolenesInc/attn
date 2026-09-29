@@ -98,13 +98,15 @@ const (
 var ErrAlreadyRunning = errors.New("daemon already running")
 
 type Daemon struct {
-	socketPath                        string
-	pidPath                           string
-	pidFile                           *os.File
-	dataRoot                          string
-	daemonInstanceID                  string
-	clientToken                       string
-	store                             *store.Store
+	socketPath       string
+	pidPath          string
+	pidFile          *os.File
+	dataRoot         string
+	daemonInstanceID string
+	clientToken      string
+	store            *store.Store
+	// Serializes PR fetches with review-request edge reconciliation.
+	prRefreshMu                       sync.Mutex
 	automationMu                      sync.Mutex
 	automationObservationMu           sync.Mutex
 	automationObservationLocks        map[string]*sync.Mutex
@@ -3406,6 +3408,7 @@ func (d *Daemon) doPRPoll() {
 	if !d.githubAvailable() {
 		return
 	}
+	d.prRefreshMu.Lock()
 
 	var allPRs []*protocol.PR
 	observedByHost := make(map[string]successfulPRObservation)
@@ -3494,9 +3497,9 @@ func (d *Daemon) doPRPoll() {
 	d.logf("PR poll: %d PRs (%d waiting)", len(currentPRs), waiting)
 
 	for host, observation := range observedByHost {
-		host, observation := host, observation
-		go d.observeGitHubReviewRequests(host, observation.prs, observation.observedAt)
+		d.observeGitHubReviewRequests(host, observation.prs, observation.observedAt)
 	}
+	d.prRefreshMu.Unlock()
 
 	d.doDetailRefresh()
 }
@@ -3790,6 +3793,8 @@ func (d *Daemon) doRefreshPRsWithResult() error {
 	if !d.githubAvailable() {
 		return fmt.Errorf("GitHub client not available")
 	}
+	d.prRefreshMu.Lock()
+	defer d.prRefreshMu.Unlock()
 
 	var allPRs []*protocol.PR
 	observedByHost := make(map[string]successfulPRObservation)
@@ -3840,8 +3845,7 @@ func (d *Daemon) doRefreshPRsWithResult() error {
 
 	d.logf("PR refresh: %d PRs fetched", len(currentPRs))
 	for host, observation := range observedByHost {
-		host, observation := host, observation
-		go d.observeGitHubReviewRequests(host, observation.prs, observation.observedAt)
+		d.observeGitHubReviewRequests(host, observation.prs, observation.observedAt)
 	}
 	if successCount == 0 && firstErr != nil {
 		return fmt.Errorf("failed to fetch PRs: %w", firstErr)
