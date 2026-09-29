@@ -101,7 +101,7 @@ export function useDesktopNavigation(showNotice: ShowNotice) {
         await move();
         return;
       }
-      await actThenShow({ kind: 'move', leafId }, move, (result) =>
+      await actThenShow({ kind: 'move', leafId, sourceDesktopId: source.id, targetDesktopId: target.id }, move, (result) =>
         result.pane_id ? { desktopId: target.id, leafId: result.pane_id } : null);
     },
     [sendDesktopMoveLeaf, showNotice],

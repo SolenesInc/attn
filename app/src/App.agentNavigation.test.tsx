@@ -1260,6 +1260,34 @@ describe('moving the active leaf to another desktop', () => {
     expect(shownLeaf()).toBe('pane-s2');
   });
 
+  it('drops the follow when the user moves the same leaf elsewhere before the first move answers', async () => {
+    const { daemon } = await renderApp({ initialState: {
+      sessions: [daemonSession('s1'), daemonSession('s2'), daemonSession('s3'), daemonSession('s4')],
+      profiles: [defaultProfile('d1')],
+      desktops: [
+        splitDesktop('d1', ['s1', 's2'], { shortcut_slot: 1, active_pane_id: 'pane-s1' }),
+        soloDesktop('s3', { id: 'd2', shortcut_slot: 2 }),
+        soloDesktop('s4', { id: 'd3', shortcut_slot: 3 }),
+      ],
+    } });
+    await gesture(daemon, () => pressShortcut('desktop.select1'));
+    const held: Array<CommandMessage<'desktop_move_leaf'>> = [];
+    daemon.on('desktop_move_leaf', (command) => {
+      held.push(command);
+      return undefined;
+    });
+
+    await gesture(daemon, () => pressShortcut('desktop.send2'));
+    await gesture(daemon, () => pressShortcut('desktop.sendStay3'));
+    expect(held.map((command) => command.target_desktop_id)).toEqual(['d2', 'd3']);
+    const [first] = held;
+    await gesture(daemon, () => daemon.replyTo(first, {
+      event: 'profile_action_result', action: first.cmd, request_id: first.request_id ?? '', success: true, pane_id: 'pane-s1',
+    } as Reply));
+
+    expect(daemon.sentOf('desktop_show_leaf')).toEqual([]);
+  });
+
   it('names the missing slot and moves nothing', async () => {
     const { daemon } = await renderApp({ initialState: {
       sessions: [daemonSession('s1')],
