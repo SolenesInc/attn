@@ -337,6 +337,10 @@ func (d *Daemon) releaseCrewBinding(memberID, sessionID string) (bool, error) {
 }
 
 func (d *Daemon) releaseExitedCrewBinding(sessionID string) {
+	// Sessions a stopping daemon kills come back recoverable; the next daemon releases and reports them.
+	if d.lifetime().Err() != nil {
+		return
+	}
 	member, bound := d.crewMemberForSession(sessionID)
 	if !bound {
 		return
