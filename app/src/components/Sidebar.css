@@ -618,10 +618,6 @@
   display: none;
 }
 
-.queue-row--crew > .sidebar-harness-icon {
-  margin-right: 0;
-}
-
 .sidebar-session-identity > .session-provenance {
   max-width: 100%;
 }
@@ -1416,47 +1412,8 @@
   margin: 0 6px;
 }
 
-/* A crew member's row lives in the pinned region and is pin-shaped, but it is
-   not a pin: nobody put it there and there is no unpin. The rail down its left
-   edge is what says "crew" at a glance — no other row in the sidebar carries
-   one — and it is drawn in the theme-invariant brand accent, so it reads the
-   same in light and dark. A sleeping member dims to the same weight as the
-   sidebar's other quiet text; its label is legible, its absence is not loud. */
-.queue-row--crew {
-  border-left: 2px solid var(--accent);
-  border-top-left-radius: 0;
-  border-bottom-left-radius: 0;
-}
-
-.queue-row--crew[data-crew-state='asleep'] .session-label,
-.queue-row--crew[data-crew-state='asleep'] .crew-row-mark {
+.queue-row--crew[data-crew-state='asleep'] .session-label {
   color: var(--color-text-tertiary);
-}
-
-/* Same footprint as a StateIndicator so every crew row's label starts on the
-   same column, awake or asleep. A ring, not a dot: there is no state to report
-   because nothing is running. */
-.crew-asleep-dot {
-  width: 10px;
-  height: 10px;
-  flex: none;
-  border-radius: 50%;
-  border: 1.5px solid var(--color-text-dimmed);
-}
-
-/* The word beside the label, so "crew" survives for anyone who cannot see the
-   rail — a colour and a border are not a label. It sits where a row's age sits
-   and yields to the hover controls the same way. */
-.crew-row-mark {
-  margin-left: auto;
-  font-size: var(--font-size-xs);
-  letter-spacing: 0.06em;
-  text-transform: uppercase;
-  color: var(--color-text-muted);
-}
-
-.crew-row-mark + .delegation-chain-trigger {
-  margin-left: 0;
 }
 
 /* Fills the row from behind, so a click lands on it wherever it falls. Absolute
@@ -1480,59 +1437,6 @@
   outline-offset: -2px;
 }
 
-/* The hover controls float over the row's right edge instead of sitting in its
-   flex flow: buttons that are invisible at rest must not reserve label width.
-   Above the fill button, so pressing one of these is not also opening the
-   session; opaque, so while shown they read as replacing the age underneath
-   (the background matches the row's hover/selected background). */
-.queue-row-controls {
-  position: absolute;
-  top: 0;
-  bottom: 0;
-  right: 4px;
-  display: flex;
-  align-items: center;
-  gap: 2px;
-  padding-left: 6px;
-  z-index: 1;
-  opacity: 0;
-  pointer-events: none;
-  background: var(--color-bg-elevated);
-  border-radius: inherit;
-  transition: opacity 120ms ease;
-}
-
-.queue-row:hover .queue-row-controls,
-.queue-row:focus-within .queue-row-controls {
-  opacity: 1;
-  pointer-events: auto;
-}
-
-/* The container is the only visibility gate: the per-button reveals (hover for
-   settle/pin, .session-item:hover for the actions menu) would leave whichever
-   button the current interaction does not match as an invisible hole in an
-   otherwise visible strip. */
-.queue-row-controls .session-actions,
-.queue-row-controls .queue-row-snooze,
-.queue-row-controls .queue-row-sleep,
-.queue-row-controls .queue-row-wake,
-.queue-row-controls .queue-row-settle {
-  opacity: 1;
-  pointer-events: auto;
-}
-
-.queue-row-age {
-  flex: 0 0 auto;
-  margin-left: auto;
-  color: var(--color-text-muted);
-  font-size: var(--font-size-xs);
-  font-variant-numeric: tabular-nums;
-}
-
-.delegation-chain-trigger + .queue-row-age {
-  margin-left: 0;
-}
-
 .queue-row-settle,
 .queue-row-snooze,
 .queue-row-sleep,
@@ -1543,19 +1447,7 @@
   padding: 0 2px;
   cursor: pointer;
   color: var(--color-text-dimmed);
-  opacity: 0;
-  transition: opacity 120ms ease, color 120ms ease;
-}
-
-.queue-row:hover .queue-row-settle,
-.queue-row:hover .queue-row-snooze,
-.queue-row:hover .queue-row-sleep,
-.queue-row:hover .queue-row-wake,
-.queue-row-settle:focus-visible,
-.queue-row-snooze:focus-visible,
-.queue-row-sleep:focus-visible,
-.queue-row-wake:focus-visible {
-  opacity: 1;
+  transition: color 120ms ease;
 }
 
 .queue-row-settle:hover,
@@ -1565,29 +1457,8 @@
   color: var(--color-text-primary);
 }
 
-/* The wake button holds a drawn sun rather than a glyph, so it centers its art
-   instead of a line of text. Armed, it stays lit whether or not the row is
-   hovered: the reveal rules above must not hide the thing waiting for its
-   second click. See CrewWake.css for the sun itself. */
 .queue-row-wake {
   display: flex;
   align-items: center;
   justify-content: center;
-}
-
-.queue-row--crew[data-crew-wake] .queue-row-controls,
-.queue-row--crew[data-crew-wake] .queue-row-wake {
-  opacity: 1;
-  pointer-events: auto;
-}
-
-/* When a deferred agent comes back. It sits where the turn age sits on a queued
-   row — same column, same weight — because both answer the row's one question:
-   a turn's is how long you have owed it, a snooze's is when it returns. */
-.queue-row-wake-at {
-  flex: 0 0 auto;
-  margin-left: auto;
-  color: var(--color-text-muted);
-  font-size: var(--font-size-xs);
-  font-variant-numeric: tabular-nums;
 }

@@ -230,6 +230,7 @@ function CrewBlock() {
           key={member}
           member={member}
           row={row}
+          where={row ? where(row) : undefined}
           selected={row ? selectedId === row.session.id : false}
           onSelect={row ? () => onSelectSession(row.session.id) : undefined}
           onWake={onWakeCrewMember && (() => onWakeCrewMember(member))}

@@ -109,10 +109,10 @@ describe('App sidebar', () => {
       const sessions = harnessSessions((id) => (id === 'pi-row' ? { crew_member: 'fern' } : {}));
       const { daemon } = await launch({ sessions, desktops: [harnessDesktop()], crew, settings: { queue_mode_enabled: 'true' } });
 
-      expect(within(screen.getByTestId('queue-crew-fern')).getByRole('img', { name: 'Pi' })).toBeInTheDocument();
+      expect(within(screen.getByTestId('queue-crew-fern')).getByRole('img', { name: 'Pi · idle' })).toBeInTheDocument();
       expect(within(screen.getByTestId('queue-crew-sleeping')).queryByRole('img')).toBeNull();
       await gesture(daemon, () => fireEvent.click(screen.getByRole('button', { name: /more agents/i })));
-      expect(screen.getByRole('button', { name: 'Open codex-row' })).toHaveAttribute('title', 'Codex');
+      expect(screen.getByRole('button', { name: 'Open codex-row' })).toHaveAttribute('title', expect.stringContaining('Codex'));
       expect(screen.getByTestId('manage-crew')).toHaveTextContent('manage');
 
       const search = await openActionMenu(daemon);
@@ -143,7 +143,7 @@ describe('App sidebar', () => {
       });
 
       await gesture(daemon, () => fireEvent.click(screen.getByRole('button', { name: /more agents/i })));
-      expect(screen.getByRole('button', { name: 'Open codex-row' })).toHaveAttribute('title', 'Codex');
+      expect(screen.getByRole('button', { name: 'Open codex-row' })).toHaveAttribute('title', expect.stringContaining('Codex'));
     });
   });
 
