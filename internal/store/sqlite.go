@@ -1196,6 +1196,7 @@ CREATE INDEX IF NOT EXISTS idx_automode_denials_recent ON automode_denials(id DE
 	{155, "session last-seen stamps move to UTC so the ledger window compares instants", ""},
 	{156, "drop session todos", ""},
 	{157, "retire the apps platform state", ""},
+	{158, "file GPT-6.1 Sol long-context observations under their tier", ""},
 }
 
 const migration99SQL = `
@@ -1881,8 +1882,8 @@ func migrateDB(db *sql.DB, dbPath string) error {
 				tx.Rollback()
 				return fmt.Errorf("migration %d (%s): %w", m.version, m.desc, err)
 			}
-		} else if m.version == 152 {
-			if err := applyMigration152(tx); err != nil {
+		} else if m.version == 152 || m.version == 158 {
+			if err := migrateSessionCostTiers(tx, m.version); err != nil {
 				tx.Rollback()
 				return fmt.Errorf("migration %d (%s): %w", m.version, m.desc, err)
 			}
@@ -2009,7 +2010,11 @@ func applyMigration157(tx *sql.Tx) error {
 	return nil
 }
 
-func applyMigration152(tx *sql.Tx) error {
+func migrateSessionCostTiers(tx *sql.Tx, version int) error {
+	onlyModel := ""
+	if version == 158 {
+		onlyModel = "gpt-6.1-sol"
+	}
 	rows, err := tx.Query("SELECT id, session_cost_json FROM sessions WHERE session_cost_json != ''")
 	if err != nil {
 		return err
@@ -2029,10 +2034,10 @@ func applyMigration152(tx *sql.Tx) error {
 	for id, raw := range costs {
 		state, err := decodeSessionCostState(raw)
 		if err != nil {
-			log.Printf("[store] migration 152: skipped unreadable session cost for %s: %v", id, err)
+			log.Printf("[store] migration %d: skipped unreadable session cost for %s: %v", version, id, err)
 			continue
 		}
-		if !rekeyLongContextObservations(&state) {
+		if !rekeyLongContextObservations(&state, onlyModel) {
 			continue
 		}
 		encoded, err := json.Marshal(state)
