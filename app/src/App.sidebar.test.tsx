@@ -329,18 +329,21 @@ describe('App sidebar', () => {
       ]);
     });
 
-    it('sends one move when a remote pane is dropped on a desktop holding a local pane', async () => {
+    it.each([
+      { source: 'remote', target: 'local' },
+      { source: 'local', target: 'remote' },
+    ])('sends one move from a $source pane to a desktop holding a $target pane', async ({ source, target }) => {
       const { daemon } = await renderApp({ initialState: {
         endpoints: [daemonEndpoint('ep-1')],
         sessions: [daemonSession('remote', { endpoint_id: 'ep-1' }), daemonSession('local')],
         desktops: [
-          splitDesktop('source', ['remote'], { order_key: '0' }),
-          splitDesktop('target', ['local'], { order_key: '1' }),
+          splitDesktop('source', [source], { order_key: '0' }),
+          splitDesktop('target', [target], { order_key: '1' }),
         ],
       } });
       daemon.on('desktop_move_leaf', (command) => ({ event: 'profile_action_result', action: command.cmd, request_id: command.request_id, success: true }));
 
-      pressRow('remote');
+      pressRow(source);
       fireEvent.pointerMove(window, { pointerId: 1, clientX: 10, clientY: 40 });
       expect(desktopGroup('target')).toHaveClass('desktop-group--drag-target');
       fireEvent.pointerEnter(desktopGroup('target'));
@@ -348,7 +351,7 @@ describe('App sidebar', () => {
       await daemon.idle();
 
       expect(daemon.sentOf('desktop_move_leaf')).toEqual([
-        expect.objectContaining({ source_desktop_id: 'source', leaf_id: 'pane-remote', target_desktop_id: 'target' }),
+        expect.objectContaining({ source_desktop_id: 'source', leaf_id: `pane-${source}`, target_desktop_id: 'target' }),
       ]);
     });
 
