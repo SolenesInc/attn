@@ -36,7 +36,6 @@
   width: 100%;
 }
 
-.snooze-menu button:hover,
 .snooze-menu button:focus,
 .snooze-menu button.is-selected {
   background: var(--color-bg-selected);

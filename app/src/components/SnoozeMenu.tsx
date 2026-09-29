@@ -123,7 +123,7 @@ export function SnoozeMenu({ sessionLabel, placement, onSnooze, onClose, onResto
             tabIndex={index === selectedIndex ? 0 : -1}
             data-testid={`snooze-choice-${choice.id}`}
             onFocus={() => setSelectedIndex(index)}
-            onMouseEnter={(event) => event.currentTarget.focus()}
+            onPointerMove={(event) => event.currentTarget.focus()}
             onClick={() => choose(choice.id)}
           >
             <span className="snooze-menu-label">{choice.label}</span>

@@ -68,6 +68,10 @@ async function main() {
   try {
     await runner.step('launch_and_prepare_agents', async () => {
       await launchFreshAppAndConnect(client, observer);
+      const originalSettings = ['queue_mode_enabled', 'auto_settle_enabled'].map((key) => [key, observer.getSetting(key)]);
+      runner.registerCleanup('restore_attention_settings', async () => {
+        for (const [key, value] of originalSettings) await client.request('set_setting', { key, value });
+      });
       await client.request('set_setting', { key: 'queue_mode_enabled', value: 'true' });
       await client.request('set_setting', { key: 'auto_settle_enabled', value: 'false' });
       for (const label of ['alpha', 'beta']) {
