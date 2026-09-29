@@ -182,6 +182,8 @@ returns `testworld.Main(m)`.
   prepares a data directory for the built `attn` binary.
 - `s.Start()` runs `attn daemon` and returns once it signals ready. `s.Stop()`
   ends it. A `Start` after `Stop` restarts over the same data.
+  The stack holds its WebSocket listener until cleanup, including while the
+  daemon is stopped, so another process cannot take its address.
 - For a promise about a crash mid-operation, `s.StartCrashingAt(point)` runs
   a daemon that kills itself with SIGKILL at a crash point named in the
   daemon (`ATTN_CRASH_AT`). `s.AwaitCrash()` returns once it has, and a later

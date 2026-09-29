@@ -1,7 +1,6 @@
 package main_test
 
 import (
-	"net"
 	"os"
 	"path/filepath"
 	"strings"
@@ -14,12 +13,7 @@ import (
 func TestADaemonWhosePortIsTakenExitsBeforeReadyNamingThePort(t *testing.T) {
 	t.Parallel()
 	s := testworld.NewStack(t)
-	occupied, err := net.Listen("tcp", s.WSAddr)
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer occupied.Close()
-
+	// The stack holds its socket; a plain CLI daemon must refuse that address.
 	got := s.Attn("daemon")
 	if got.Code != 1 || !strings.Contains(got.Stderr, s.WSAddr) {
 		t.Fatalf("attn daemon with its port taken exited %d, want 1 naming %s\nstderr:\n%s", got.Code, s.WSAddr, got.Stderr)

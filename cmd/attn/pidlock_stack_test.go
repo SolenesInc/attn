@@ -1,7 +1,6 @@
 package main_test
 
 import (
-	"net"
 	"os"
 	"path/filepath"
 	"syscall"
@@ -23,12 +22,7 @@ func TestADaemonThatFailsToStartLeavesThePIDLockToAProcessAlreadyHoldingTheFile(
 	if err != nil {
 		t.Fatal(err)
 	}
-	occupied, err := net.Listen("tcp", s.WSAddr)
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer occupied.Close()
-
+	// The stack holds its socket; a plain CLI daemon must refuse that address.
 	if got := s.Run(testworld.Invocation{Args: []string{"daemon"}}); got.Code != 1 {
 		t.Fatalf("attn daemon with its port taken exited %d, want 1\nstderr:\n%s", got.Code, got.Stderr)
 	}
