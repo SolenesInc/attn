@@ -39,40 +39,48 @@ test('active-pane selection markers paint above the split divider', async ({ pag
   await expect(pane).toHaveCSS('opacity', '1');
 });
 
-test('arrival ring covers the pane in rail and spotlight selection', async ({ page }) => {
-  await page.goto('/test-harness/?component=PaneFocusRing');
-  await page.waitForFunction(() => window.__HARNESS__?.ready === true);
+for (const reducedMotion of ['no-preference', 'reduce'] as const) {
+  test(`arrival ring flashes once in rail and spotlight selection (${reducedMotion})`, async ({ page }) => {
+    await page.emulateMedia({ reducedMotion });
+    await page.goto('/test-harness/?component=PaneFocusRing');
+    await page.waitForFunction(() => window.__HARNESS__?.ready === true);
 
-  const desktop = page.getByTestId('desktop');
-  const pane = page.getByTestId('pane-active');
-  const dividerZ = Number(await page.getByTestId('split-divider').evaluate((el) => getComputedStyle(el).zIndex));
+    const desktop = page.getByTestId('desktop');
+    const pane = page.getByTestId('pane-active');
+    const dividerZ = Number(await page.getByTestId('split-divider').evaluate((el) => getComputedStyle(el).zIndex));
 
-  for (const style of ['rail', 'spotlight']) {
-    await desktop.evaluate((el, selectionStyle) => {
-      el.classList.remove('desktop-selection--rail', 'desktop-selection--spotlight');
-      el.classList.add(`desktop-selection--${selectionStyle}`);
-    }, style);
-    const ring = await pane.evaluate(async (el) => {
-      el.classList.remove('leaf-arrival');
-      void el.clientWidth;
-      const started = new Promise<void>((resolve) => {
-        el.addEventListener('animationstart', (event) => {
-          if (event.animationName === 'leaf-arrival-pulse') resolve();
-        }, { once: true });
+    for (const style of ['rail', 'spotlight']) {
+      await desktop.evaluate((el, selectionStyle) => {
+        el.classList.remove('desktop-selection--rail', 'desktop-selection--spotlight');
+        el.classList.add(`desktop-selection--${selectionStyle}`);
+      }, style);
+      const ring = await pane.evaluate(async (el) => {
+        el.classList.remove('leaf-arrival');
+        void el.clientWidth;
+        const started = new Promise<void>((resolve) => {
+          el.addEventListener('animationstart', (event) => {
+            if (event.animationName === 'leaf-arrival-pulse') resolve();
+          }, { once: true });
+        });
+        el.classList.add('leaf-arrival');
+        await started;
+        const style = getComputedStyle(el, '::after');
+        return {
+          animationName: style.animationName,
+          iterations: style.animationIterationCount,
+          inset: [style.top, style.right, style.bottom, style.left],
+          shadow: style.boxShadow,
+          zIndex: Number(style.zIndex),
+        };
       });
-      el.classList.add('leaf-arrival');
-      await started;
-      const style = getComputedStyle(el, '::after');
-      return {
-        animationName: style.animationName,
-        inset: [style.top, style.right, style.bottom, style.left],
-        shadow: style.boxShadow,
-        zIndex: Number(style.zIndex),
-      };
-    });
-    expect(ring?.animationName).toBe('leaf-arrival-pulse');
-    expect(ring?.inset).toEqual(['0px', '0px', '0px', '0px']);
-    expect(ring?.shadow).not.toBe('none');
-    expect(ring?.zIndex).toBeGreaterThan(dividerZ);
-  }
-});
+      expect(ring?.animationName).toBe('leaf-arrival-pulse');
+      expect(ring?.iterations).toBe('1');
+      expect(ring?.inset).toEqual(['0px', '0px', '0px', '0px']);
+      expect(ring?.shadow).not.toBe('none');
+      expect(ring?.shadow).toContain('inset');
+      expect(ring?.shadow).toContain('1.5px');
+      expect(ring?.shadow).not.toContain(',');
+      expect(ring?.zIndex).toBeGreaterThan(dividerZ);
+    }
+  });
+}

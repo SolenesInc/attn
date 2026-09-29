@@ -280,29 +280,16 @@
   z-index: 11;
   pointer-events: none;
   background: transparent;
-  animation: leaf-arrival-pulse 0.8s ease-out 2;
+  animation: leaf-arrival-pulse 0.55s ease-out 1;
 }
 
 @keyframes leaf-arrival-pulse {
   from {
-    box-shadow: 0 0 0 0 var(--accent), inset 0 0 0 2px var(--accent);
+    box-shadow: inset 0 0 0 1.5px color-mix(in srgb, var(--accent) 70%, transparent);
   }
   to {
-    box-shadow: 0 0 0 16px transparent, inset 0 0 0 16px transparent;
+    box-shadow: inset 0 0 0 1.5px transparent;
   }
-}
-
-@media (prefers-reduced-motion: reduce) {
-  .session-terminal-desktop .desktop-pane.leaf-arrival::after,
-  .session-terminal-desktop.desktop-selection--rail.multi-leaf .desktop-pane.active.leaf-arrival::after,
-  .session-terminal-desktop.desktop-selection--spotlight.multi-leaf .desktop-pane.active.leaf-arrival::after {
-    animation: leaf-arrival-outline 0.8s ease-out 1;
-  }
-}
-
-@keyframes leaf-arrival-outline {
-  from { box-shadow: inset 0 0 0 2px var(--accent); }
-  to { box-shadow: inset 0 0 0 2px transparent; }
 }
 
 .session-terminal-panes[data-suspension-animating] > .desktop-pane {
