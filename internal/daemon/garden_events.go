@@ -88,12 +88,20 @@ func (d *Daemon) resolveCommittedGardenSeedBells() {
 		return
 	}
 	_, head, err := d.store.BusBounds()
-	if err != nil || head <= d.gardenBellsResolvedThrough {
+	if err != nil {
+		d.logf("Garden seed bells were left to the consumer: reading the event log bounds: %v", err)
+		return
+	}
+	if head <= d.gardenBellsResolvedThrough {
 		return
 	}
 	consumer, ok, err := d.store.GetBusConsumer(gardenSeedBellConsumer)
+	if err != nil {
+		d.logf("Garden seed bells were left to the consumer: reading its cursor: %v", err)
+		return
+	}
 	// A paused consumer (`attn bus disable`) holds its bells until it is enabled again.
-	if err != nil || !ok || !consumer.Enabled {
+	if !ok || !consumer.Enabled {
 		return
 	}
 	after := max(d.gardenBellsResolvedThrough, consumer.Cursor)
