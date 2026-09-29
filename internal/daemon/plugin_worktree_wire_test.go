@@ -528,17 +528,21 @@ func TestPluginWorktreeProviderProcess(t *testing.T) {
 		"params": pluginHelloParams(os.Getenv("ATTN_PLUGIN_NAME"), pluginWireAPIVersion, generation, "worktree.create")}); err != nil {
 		t.Fatal(err)
 	}
-	var hello pluginWireMessage
-	if err := decoder.Decode(&hello); err != nil || hello.Error != nil {
-		t.Fatalf("hello answered %+v: %v", hello, err)
-	}
-	if generation == 1 {
-		return
-	}
 	for {
 		var request pluginWireMessage
 		if err := decoder.Decode(&request); err != nil {
 			return
+		}
+		// attn can call the provider before answering hello; route both directions.
+		if request.Method == "" {
+			var hello pluginHealth
+			if err := json.Unmarshal(request.Result, &hello); err != nil || request.Error != nil || !hello.OK {
+				t.Fatalf("hello answered %+v: %v", request, err)
+			}
+			if generation == 1 {
+				return
+			}
+			continue
 		}
 		var result any = pluginHealth{OK: true}
 		if request.Method == "worktree.create" {
