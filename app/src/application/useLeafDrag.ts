@@ -76,7 +76,7 @@ export function useLeafDrag({
   );
 
   const handleSessionDragStart = useCallback(
-    (desktopId: string, _endpointId: string | undefined, paneId: string) => beginDrag(desktopId, paneId),
+    (desktopId: string, paneId: string) => beginDrag(desktopId, paneId),
     [beginDrag],
   );
 

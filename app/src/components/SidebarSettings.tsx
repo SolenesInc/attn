@@ -11,8 +11,6 @@ export function SidebarSettings({
   onToggleHarnessLogos,
   desktopSelectionStyle,
   onDesktopSelectionStyleChange,
-  displayMode,
-  setDisplayMode,
 }: Pick<
   SidebarProps,
   | 'queueModeEnabled'
@@ -23,10 +21,7 @@ export function SidebarSettings({
   | 'onToggleHarnessLogos'
   | 'desktopSelectionStyle'
   | 'onDesktopSelectionStyleChange'
-> & {
-  displayMode: 'open' | 'tight' | 'boxed';
-  setDisplayMode: (mode: 'open' | 'tight' | 'boxed') => void;
-}) {
+>) {
   const [settingsOpen, setSettingsOpen] = useState(false);
   const anchorRef = useRef<HTMLDivElement>(null);
   const triggerRef = useRef<HTMLButtonElement>(null);
@@ -107,20 +102,6 @@ export function SidebarSettings({
               aria-hidden="true"
             />
           </button>
-          <span className="sidebar-settings-label">Display</span>
-          <div className="sidebar-display-toggle" role="group" aria-label="Sidebar display">
-            {(['open', 'tight', 'boxed'] as const).map((mode) => (
-              <button
-                key={mode}
-                className={displayMode === mode ? 'active' : ''}
-                onClick={() => {
-                  setDisplayMode(mode);
-                }}
-              >
-                {mode}
-              </button>
-            ))}
-          </div>
           <span className="sidebar-settings-sub-label">Tile focus</span>
           <div
             className="sidebar-display-toggle sidebar-display-toggle--selection"

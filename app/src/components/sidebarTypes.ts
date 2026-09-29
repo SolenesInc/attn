@@ -102,17 +102,13 @@ export interface SidebarProps {
   onToggleHarnessLogos?: () => void;
   desktopSelectionStyle?: DesktopSelectionStyle;
   onDesktopSelectionStyleChange?: (style: DesktopSelectionStyle) => void;
-  leafDrag?: { sourceDesktopId: string; endpointId?: string } | null;
+  leafDrag?: { sourceDesktopId: string } | null;
   dragHoverDesktopId?: string | null;
   onDesktopDragEnter?: (desktop: SidebarDesktop) => void;
   onDesktopDragLeave?: (desktop: SidebarDesktop) => void;
   onDesktopDragDrop?: (desktop: SidebarDesktop) => void;
   onNewDesktopDrop?: () => void;
-  onSessionDragStart?: (
-    desktopId: string,
-    endpointId: string | undefined,
-    paneId: string,
-  ) => void;
+  onSessionDragStart?: (desktopId: string, paneId: string) => void;
   onSessionDragEnd?: () => void;
   // prevDesktopId ends up directly above the moved desktop, nextDesktopId
   // directly below; either may be undefined at the very top or bottom.
