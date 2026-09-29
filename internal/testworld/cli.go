@@ -47,11 +47,20 @@ func (s *Stack) Run(inv Invocation) Result {
 	ctx, cancel := context.WithTimeout(context.Background(), fakeagent.HangGuard)
 	defer cancel()
 	cmd := s.command(ctx, inv)
+	defer closeExtraFiles(cmd)
+	// A shell wrapper and its Go child must receive SIGQUIT together.
+	// Their own process group confines the signal to this invocation.
+	cmd.SysProcAttr = &syscall.SysProcAttr{Setpgid: true}
+	cmd.Env = append(cmd.Env, "GOTRACEBACK=all")
+	cmd.Cancel = func() error {
+		s.logPressure()
+		return syscall.Kill(-cmd.Process.Pid, syscall.SIGQUIT)
+	}
 	var stdout, stderr bytes.Buffer
 	cmd.Stdout, cmd.Stderr = &stdout, &stderr
 	err := cmd.Run()
 	if ctx.Err() != nil {
-		s.T.Fatalf("attn %q still running after %s\nstdout:\n%s\nstderr:\n%s", inv.Args, fakeagent.HangGuard, stdout.String(), stderr.String())
+		s.T.Fatalf("attn %q still running after %s\nstdout:\n%s\nstderr:\n%s", inv.Args, fakeagent.HangGuard, boundedDiagnostic(stdout.String()), boundedDiagnostic(stderr.String()))
 	}
 	return Result{Stdout: stdout.String(), Stderr: stderr.String(), Code: exitCode(s.T, inv, err)}
 }
@@ -60,6 +69,7 @@ func (s *Stack) Launch(inv Invocation) *Running {
 	s.T.Helper()
 	r := &Running{t: s.T, args: inv.Args, grew: make(chan struct{}), done: make(chan struct{})}
 	cmd := s.command(context.Background(), inv)
+	defer closeExtraFiles(cmd)
 	cmd.Stdout, cmd.Stderr = runningStream{r, &r.stdout}, runningStream{r, &r.stderr}
 	if err := cmd.Start(); err != nil {
 		s.T.Fatalf("start attn %q: %v", inv.Args, err)
@@ -98,11 +108,25 @@ func (s *Stack) command(ctx context.Context, inv Invocation) *exec.Cmd {
 	if inv.Session != "" {
 		cmd.Env = append(cmd.Env, "ATTN_SESSION_ID="+inv.Session, "ATTN_INSIDE_APP=1")
 	}
+	if len(inv.Args) > 0 && inv.Args[0] == "daemon" && (len(inv.Args) == 1 || inv.Args[1] == "ensure") {
+		file, err := s.wsListener.File()
+		if err != nil {
+			s.T.Fatal(err)
+		}
+		cmd.ExtraFiles = []*os.File{file}
+		cmd.Env = append(cmd.Env, "ATTN_HARNESS_WS_LISTENER_FD=3")
+	}
 	cmd.Env = append(cmd.Env, inv.Env...)
 	if inv.Stdin != "" {
 		cmd.Stdin = strings.NewReader(inv.Stdin)
 	}
 	return cmd
+}
+
+func closeExtraFiles(cmd *exec.Cmd) {
+	for _, file := range cmd.ExtraFiles {
+		_ = file.Close()
+	}
 }
 
 func exitCode(t testing.TB, inv Invocation, err error) int {

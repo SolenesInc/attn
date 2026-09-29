@@ -1196,6 +1196,7 @@ CREATE INDEX IF NOT EXISTS idx_automode_denials_recent ON automode_denials(id DE
 	{155, "session last-seen stamps move to UTC so the ledger window compares instants", ""},
 	{156, "drop session todos", ""},
 	{157, "retire the apps platform state", ""},
+	{158, "file GPT-6.1 Sol long-context observations under their tier", ""},
 }
 
 const migration99SQL = `
@@ -1271,16 +1272,88 @@ type tableWrites struct {
 }
 
 type sqliteConnector struct {
-	driver *sqlite3.SQLiteDriver
-	dsn    string
+	driver  *sqlite3.SQLiteDriver
+	dsn     string
+	file    bool
+	mu      sync.Mutex
+	closed  bool
+	active  int
+	drained chan struct{}
+	err     error
 }
 
 func (c *sqliteConnector) Connect(context.Context) (driver.Conn, error) {
-	return c.driver.Open(c.dsn)
+	c.mu.Lock()
+	if c.closed {
+		c.mu.Unlock()
+		return nil, errors.New("sqlite connector is closed")
+	}
+	c.active++
+	c.mu.Unlock()
+	conn, err := c.driver.Open(c.dsn)
+	if err != nil {
+		c.release(nil)
+		return nil, err
+	}
+	return &sqliteConnection{SQLiteConn: conn.(*sqlite3.SQLiteConn), owner: c}, nil
 }
 
 func (c *sqliteConnector) Driver() driver.Driver {
 	return c.driver
+}
+
+// sql.DB.Close leaves borrowed connections open; drain them before checkpointing committed state.
+func (c *sqliteConnector) Close() error {
+	c.mu.Lock()
+	if !c.closed {
+		c.closed = true
+		c.drained = make(chan struct{})
+		if c.active == 0 {
+			close(c.drained)
+		}
+	}
+	drained := c.drained
+	c.mu.Unlock()
+	<-drained
+	if !c.file {
+		return c.err
+	}
+	return errors.Join(c.err, c.checkpoint())
+}
+
+// An interrupted connection can silently skip SQLite's checkpoint on close.
+func (c *sqliteConnector) checkpoint() error {
+	db, err := sql.Open("sqlite3", c.dsn)
+	if err != nil {
+		return err
+	}
+	var busy, frames, checkpointed int
+	err = db.QueryRow("PRAGMA wal_checkpoint(TRUNCATE)").Scan(&busy, &frames, &checkpointed)
+	if err == nil && busy != 0 {
+		err = fmt.Errorf("checkpoint %s: busy=%d, WAL frames=%d, checkpointed=%d", c.dsn, busy, frames, checkpointed)
+	}
+	return errors.Join(err, db.Close())
+}
+
+func (c *sqliteConnector) release(err error) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	c.err = errors.Join(c.err, err)
+	c.active--
+	if c.closed && c.active == 0 {
+		close(c.drained)
+	}
+}
+
+type sqliteConnection struct {
+	*sqlite3.SQLiteConn
+	owner *sqliteConnector
+}
+
+func (c *sqliteConnection) Close() error {
+	err := c.SQLiteConn.Close()
+	c.owner.release(err)
+	return err
 }
 
 func OpenDB(dbPath string) (*sql.DB, error) {
@@ -1304,7 +1377,8 @@ func openDB(dbPath string) (*sql.DB, *tableWrites, error) {
 			})
 			return nil
 		}},
-		dsn: sqliteDSN(dbPath),
+		dsn:  sqliteDSN(dbPath),
+		file: dbPath != ":memory:",
 	})
 
 	if dbPath == ":memory:" {
@@ -1402,7 +1476,7 @@ func copyMigratedSchema(dst *sql.DB) error {
 			return err
 		}
 		return dstConn.Raw(func(dstDriver any) error {
-			backup, err := dstDriver.(*sqlite3.SQLiteConn).Backup("main", source, "main")
+			backup, err := dstDriver.(*sqliteConnection).Backup("main", source, "main")
 			if err != nil {
 				return err
 			}
@@ -1440,14 +1514,18 @@ func migrateDB(db *sql.DB, dbPath string) error {
 		}
 	}
 
+	if len(migrations) == 0 || currentVersion >= migrations[len(migrations)-1].version {
+		return nil
+	}
+	// One commit for every pending migration: a fresh database runs all of them,
+	// and a commit per migration measured 468 fsyncs on Linux (2026-09-29).
+	tx, err := db.Begin()
+	if err != nil {
+		return fmt.Errorf("starting migration transaction: %w", err)
+	}
 	for _, m := range migrations {
 		if m.version <= currentVersion {
 			continue
-		}
-
-		tx, err := db.Begin()
-		if err != nil {
-			return fmt.Errorf("starting transaction for migration %d: %w", m.version, err)
 		}
 
 		if m.version == 156 {
@@ -1804,8 +1882,8 @@ func migrateDB(db *sql.DB, dbPath string) error {
 				tx.Rollback()
 				return fmt.Errorf("migration %d (%s): %w", m.version, m.desc, err)
 			}
-		} else if m.version == 152 {
-			if err := applyMigration152(tx); err != nil {
+		} else if m.version == 152 || m.version == 158 {
+			if err := migrateSessionCostTiers(tx, m.version); err != nil {
 				tx.Rollback()
 				return fmt.Errorf("migration %d (%s): %w", m.version, m.desc, err)
 			}
@@ -1881,12 +1959,10 @@ func migrateDB(db *sql.DB, dbPath string) error {
 			tx.Rollback()
 			return fmt.Errorf("recording migration %d: %w", m.version, err)
 		}
-
-		if err := tx.Commit(); err != nil {
-			return fmt.Errorf("committing migration %d: %w", m.version, err)
-		}
 	}
-
+	if err := tx.Commit(); err != nil {
+		return fmt.Errorf("committing migrations: %w", err)
+	}
 	return nil
 }
 
@@ -1934,7 +2010,11 @@ func applyMigration157(tx *sql.Tx) error {
 	return nil
 }
 
-func applyMigration152(tx *sql.Tx) error {
+func migrateSessionCostTiers(tx *sql.Tx, version int) error {
+	onlyModel := ""
+	if version == 158 {
+		onlyModel = "gpt-6.1-sol"
+	}
 	rows, err := tx.Query("SELECT id, session_cost_json FROM sessions WHERE session_cost_json != ''")
 	if err != nil {
 		return err
@@ -1954,10 +2034,10 @@ func applyMigration152(tx *sql.Tx) error {
 	for id, raw := range costs {
 		state, err := decodeSessionCostState(raw)
 		if err != nil {
-			log.Printf("[store] migration 152: skipped unreadable session cost for %s: %v", id, err)
+			log.Printf("[store] migration %d: skipped unreadable session cost for %s: %v", version, id, err)
 			continue
 		}
-		if !rekeyLongContextObservations(&state) {
+		if !rekeyLongContextObservations(&state, onlyModel) {
 			continue
 		}
 		encoded, err := json.Marshal(state)

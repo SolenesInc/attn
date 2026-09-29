@@ -1,7 +1,6 @@
 package main_test
 
 import (
-	"net"
 	"os"
 	"slices"
 	"strings"
@@ -26,14 +25,10 @@ func TestDaemonEnsureStartsOneDaemonForRacingCallersAndSaysWhyOneCannotStart(t *
 		return result.Status, got
 	}
 
-	squatter, err := net.Listen("tcp", s.WSAddr)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if _, got := ensure(); got.Code != 1 || !strings.Contains(got.Stderr, "daemon ensure error: daemon startup failed: refusing to start: cannot bind the WebSocket address "+s.WSAddr) {
+	// Without fd inheritance, ensure must refuse the socket held by the stack.
+	if got := s.Run(testworld.Invocation{Args: []string{"daemon", "ensure"}, Env: []string{"ATTN_HARNESS_WS_LISTENER_FD="}}); got.Code != 1 || !strings.Contains(got.Stderr, "daemon ensure error: daemon startup failed: refusing to start: cannot bind the WebSocket address "+s.WSAddr) {
 		t.Errorf("attn daemon ensure with its port taken exited %d with stderr %q, want the daemon's own startup failure", got.Code, got.Stderr)
 	}
-	squatter.Close()
 
 	t.Cleanup(func() { s.Attn("daemon", "stop") })
 	statuses := make([]string, 3)

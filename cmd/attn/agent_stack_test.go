@@ -150,7 +150,12 @@ func TestAgentMessagesCarryTheSenderAndTheDaemonsVerdict(t *testing.T) {
 	register(t, s, bystander, "bystander")
 	recipient := s.Spawn(app, fakeagent.Claude, s.Path("shop"))
 	claude := s.Launched(recipient)
-	converse(app, claude, recipient, "wait for the reviewer", "Waiting.")
+	idle := testworld.AwaitSession(app, recipient, func(s protocol.Session) bool { return s.State == protocol.SessionStateIdle })
+	app.TypeLine(recipient, "wait for the reviewer")
+	claude.Prompted()
+	working := testworld.AwaitStateAfter(app, idle, func(s protocol.Session) bool { return s.State == protocol.SessionStateWorking })
+	claude.Reply("Waiting. <!-- attn:state=idle -->")
+	testworld.AwaitStateAfter(app, working, func(s protocol.Session) bool { return s.State == protocol.SessionStateIdle })
 
 	sent := s.Run(testworld.Invocation{Args: []string{"agent", "msg", recipient[:8], "the discount is applied after tax"}, Session: reviewer})
 	notified, messageID, _ := strings.Cut(strings.TrimSpace(sent.Stdout), " (id ")

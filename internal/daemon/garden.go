@@ -920,12 +920,12 @@ func (d *Daemon) handleSeedLink(conn net.Conn, msg *protocol.SeedLinkMessage) {
 			d.sendGardenError(conn, verb, err)
 			return
 		}
-		d.gardenWatchMu.Lock()
+		d.lockGardenRoles()
 		doc, err := d.writeSeedWithEvents(*schema, next, read.docs[next.ID].Rev, occurrence)
 		if err == nil {
 			err = d.discardAllIneligibleGardenSeedBellsLocked()
 		}
-		d.gardenWatchMu.Unlock()
+		d.unlockGardenRoles()
 		if err != nil {
 			if docstore.IsConflict(err) {
 				continue
@@ -1451,8 +1451,8 @@ func (d *Daemon) applySeedTransitionDetailedAsAtRevisionProtected(
 	if err != nil {
 		return garden.Seed{}, docstore.Document{}, seedTransitionNotes{}, err
 	}
-	d.gardenWatchMu.Lock()
-	defer d.gardenWatchMu.Unlock()
+	d.lockGardenRoles()
+	defer d.unlockGardenRoles()
 	const attempts = 3
 	for range attempts {
 		seed, doc, err := d.readSeed(id)

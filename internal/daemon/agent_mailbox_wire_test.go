@@ -98,10 +98,12 @@ func TestAgentMessageIsReadableByIDOnlyByItsRecipientAndSurvivesARestart(t *test
 	app, cli := w.App(), w.Client()
 	recipient := w.Spawn(app, fakeagent.Claude, w.Path("shop"))
 	agent := w.Launched(recipient)
+	idle := testworld.AwaitSession(app, recipient, func(s protocol.Session) bool { return s.State == protocol.SessionStateIdle })
 	app.TypeLine(recipient, "wait for the reviewer")
 	agent.Prompted()
+	working := testworld.AwaitStateAfter(app, idle, func(s protocol.Session) bool { return s.State == protocol.SessionStateWorking })
 	agent.Reply("Waiting. <!-- attn:state=idle -->")
-	testworld.AwaitSession(app, recipient, func(s protocol.Session) bool { return s.State == protocol.SessionStateIdle })
+	testworld.AwaitStateAfter(app, working, func(s protocol.Session) bool { return s.State == protocol.SessionStateIdle })
 	registerSessions(t, w, cli, "reviewer", "bystander")
 
 	sent := sendAgentMessage(t, cli, "reviewer", recipient, "the discount is applied after tax")

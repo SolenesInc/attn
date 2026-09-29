@@ -203,12 +203,12 @@ func (d *Daemon) bindResumedSeed(
 	if err != nil {
 		return err
 	}
-	d.gardenWatchMu.Lock()
+	d.lockGardenRoles()
 	written, eventSeqs, err := d.store.CommitDocumentWritesWithEvents(commits, events, d.gardenTime())
 	if err == nil {
 		err = d.discardAllIneligibleGardenSeedBellsLocked()
 	}
-	d.gardenWatchMu.Unlock()
+	d.unlockGardenRoles()
 	if err != nil {
 		if docstore.IsConflict(err) {
 			return fmt.Errorf("%s changed while its conversation was resuming; refresh it and try again", seed.ID)

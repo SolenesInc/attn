@@ -30,6 +30,7 @@ type codex struct {
 	picker       bool
 	transcript   string
 	model        string
+	serviceTier  string
 	prompt       string
 	turnID       string
 	lastThread   string

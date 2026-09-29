@@ -11,6 +11,7 @@ type TokenUsage struct {
 	Key                          string
 	Model                        string
 	Purpose                      string
+	FastMode                     bool
 	InputTokens                  int64
 	OutputTokens                 int64
 	CacheWrite5mTokens           int64
@@ -30,10 +31,13 @@ func (u TokenUsage) HasTokens() bool {
 }
 
 type UsageExtractor struct {
-	agent      string
-	codexModel string
-	last       TokenUsage
-	hasLast    bool
+	agent             string
+	codexModel        string
+	codexFastMode     bool
+	codexTurnFastMode bool
+	codexUsageStarted bool
+	last              TokenUsage
+	hasLast           bool
 }
 
 func NewUsageExtractor(agent string) *UsageExtractor {
@@ -77,22 +81,56 @@ func (e *UsageExtractor) setCodexModel(model string) {
 	e.codexModel = strings.TrimSpace(model)
 }
 
-func (e *UsageExtractor) seedCodexModelBefore(f *os.File, before int64) error {
+func (e *UsageExtractor) seedCodexUsageBefore(f *os.File, before int64) error {
 	if e.agent != "codex" {
 		return nil
 	}
+	var records [][]byte
+	foundContext := false
 	for before > 0 {
 		line, start, ok, err := previousCompleteLine(f, before)
-		if err != nil || !ok {
+		if err != nil {
 			return err
 		}
-		if model, isTurnContext := codexTurnContextModel(line); isTurnContext {
-			e.setCodexModel(model)
-			return nil
+		if !ok {
+			break
+		}
+		kind := codexUsageRecordKind(line)
+		if !foundContext && kind != "" {
+			records = append(records, line)
+		}
+		if kind == "thread_settings_applied" && foundContext {
+			records = append(records, line)
+			break
+		}
+		if kind == "turn_context" {
+			foundContext = true
 		}
 		before = start
 	}
+	for i := len(records) - 1; i >= 0; i-- {
+		_, _ = e.extractCodexUsage(records[i], "bootstrap")
+	}
 	return nil
+}
+
+func codexUsageRecordKind(line []byte) string {
+	var entry struct {
+		Type    string `json:"type"`
+		Payload struct {
+			Type string `json:"type"`
+		} `json:"payload"`
+	}
+	if json.Unmarshal(line, &entry) != nil {
+		return ""
+	}
+	if entry.Type == "turn_context" {
+		return entry.Type
+	}
+	if entry.Type == "event_msg" && (entry.Payload.Type == "thread_settings_applied" || entry.Payload.Type == "token_count") {
+		return entry.Payload.Type
+	}
+	return ""
 }
 
 type claudeUsageFields struct {
@@ -187,6 +225,8 @@ func addClaudeUsage(dst *TokenUsage, src claudeUsageFields) bool {
 func (e *UsageExtractor) extractCodexUsage(line []byte, sourceKey string) (TokenUsage, bool) {
 	if model, ok := codexTurnContextModel(line); ok {
 		e.setCodexModel(model)
+		e.codexTurnFastMode = e.codexFastMode
+		e.codexUsageStarted = false
 		return TokenUsage{}, false
 	}
 	var envelope struct {
@@ -200,7 +240,10 @@ func (e *UsageExtractor) extractCodexUsage(line []byte, sourceKey string) (Token
 		return TokenUsage{}, false
 	}
 	var payload struct {
-		Type string `json:"type"`
+		Type           string `json:"type"`
+		ThreadSettings *struct {
+			ServiceTier string `json:"service_tier"`
+		} `json:"thread_settings"`
 		Info *struct {
 			LastTokenUsage struct {
 				InputTokens           int64 `json:"input_tokens"`
@@ -210,7 +253,19 @@ func (e *UsageExtractor) extractCodexUsage(line []byte, sourceKey string) (Token
 			} `json:"last_token_usage"`
 		} `json:"info"`
 	}
-	if json.Unmarshal(envelope.Payload, &payload) != nil || payload.Type != "token_count" || payload.Info == nil {
+	if json.Unmarshal(envelope.Payload, &payload) != nil {
+		return TokenUsage{}, false
+	}
+	if payload.Type == "thread_settings_applied" && payload.ThreadSettings != nil {
+		tier := payload.ThreadSettings.ServiceTier
+		e.codexFastMode = tier == "priority" || tier == "fast"
+		// Codex can persist the turn's settings immediately after its turn_context.
+		if !e.codexUsageStarted {
+			e.codexTurnFastMode = e.codexFastMode
+		}
+		return TokenUsage{}, false
+	}
+	if payload.Type != "token_count" || payload.Info == nil {
 		return TokenUsage{}, false
 	}
 	last := payload.Info.LastTokenUsage
@@ -218,9 +273,11 @@ func (e *UsageExtractor) extractCodexUsage(line []byte, sourceKey string) (Token
 		last.CachedInputTokens+last.CacheWriteInputTokens > last.InputTokens {
 		return TokenUsage{}, false
 	}
+	e.codexUsageStarted = true
 	return TokenUsage{
 		Key:                "codex:" + strings.TrimSpace(sourceKey),
 		Model:              e.codexModel,
+		FastMode:           e.codexTurnFastMode,
 		InputTokens:        last.InputTokens - last.CachedInputTokens - last.CacheWriteInputTokens,
 		OutputTokens:       last.OutputTokens,
 		CacheReadTokens:    last.CachedInputTokens,

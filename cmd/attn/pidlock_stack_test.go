@@ -1,7 +1,6 @@
 package main_test
 
 import (
-	"net"
 	"os"
 	"path/filepath"
 	"syscall"
@@ -23,13 +22,8 @@ func TestADaemonThatFailsToStartLeavesThePIDLockToAProcessAlreadyHoldingTheFile(
 	if err != nil {
 		t.Fatal(err)
 	}
-	occupied, err := net.Listen("tcp", s.WSAddr)
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer occupied.Close()
-
-	if got := s.Run(testworld.Invocation{Args: []string{"daemon"}}); got.Code != 1 {
+	// Without fd inheritance, the daemon must refuse the socket held by the stack.
+	if got := s.Run(testworld.Invocation{Args: []string{"daemon"}, Env: []string{"ATTN_HARNESS_WS_LISTENER_FD="}}); got.Code != 1 {
 		t.Fatalf("attn daemon with its port taken exited %d, want 1\nstderr:\n%s", got.Code, got.Stderr)
 	}
 

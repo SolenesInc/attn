@@ -11,7 +11,6 @@ import (
 	"path/filepath"
 	"strconv"
 	"strings"
-	"sync"
 	"syscall"
 	"testing"
 	"time"
@@ -30,6 +29,7 @@ type Stack struct {
 	exited        chan error
 	allowFallback bool
 	pauses        *pauses
+	wsListener    *net.TCPListener
 }
 
 type stackSetup struct {
@@ -53,7 +53,13 @@ func NewStack(t *testing.T, opts ...StackOption) *Stack {
 	}
 	binary := AttnBinary(t)
 	s := &Stack{World: Prepare(t, binary, setup.harnesses...), binary: binary}
-	port := strconv.Itoa(reservePort(t))
+	listener, err := net.ListenTCP("tcp", &net.TCPAddr{IP: net.ParseIP("127.0.0.1")})
+	if err != nil {
+		t.Fatal(err)
+	}
+	s.wsListener = listener
+	t.Cleanup(func() { _ = listener.Close() })
+	port := strconv.Itoa(listener.Addr().(*net.TCPAddr).Port)
 	wsAddr := net.JoinHostPort("127.0.0.1", port)
 	s.WSAddr = wsAddr
 	s.Dial = func(ctx context.Context) (net.Conn, error) {
@@ -142,9 +148,16 @@ func (s *Stack) launch(vars ...string) {
 	}
 	defer stderr.Close()
 	cmd := exec.Command(s.binary, "daemon")
-	cmd.Env = append(append(append(s.env(), s.pauses.env()...), vars...), "ATTN_DAEMON_READY_FD=3")
+	cmd.Env = append(append(append(s.env(), s.pauses.env()...), vars...), "ATTN_DAEMON_READY_FD=3", "GOTRACEBACK=all")
 	dieWithTestProcess(cmd)
 	cmd.ExtraFiles = []*os.File{signal}
+	file, err := s.wsListener.File()
+	if err != nil {
+		s.T.Fatal(err)
+	}
+	defer file.Close()
+	cmd.ExtraFiles = append(cmd.ExtraFiles, file)
+	cmd.Env = append(cmd.Env, "ATTN_HARNESS_WS_LISTENER_FD=4")
 	cmd.Stdout, cmd.Stderr = stderr, stderr
 	err = cmd.Start()
 	signal.Close()
@@ -173,7 +186,19 @@ func (s *Stack) launch(vars ...string) {
 func (s *Stack) failStart(reason string) {
 	s.T.Helper()
 	s.T.Errorf("attn daemon %s", reason)
-	s.Stop()
+	s.logPressure()
+	_ = s.daemon.Signal(syscall.SIGQUIT)
+	select {
+	case <-s.exited:
+	case <-time.After(fakeagent.HangGuard):
+		s.T.Errorf("attn daemon (pid %d) outlived SIGQUIT by %s", s.daemon.Pid, fakeagent.HangGuard)
+		_ = s.daemon.Kill()
+		<-s.exited
+	}
+	s.daemon, s.exited = nil, nil
+	s.LogDaemonTail()
+	stderr, _ := os.ReadFile(s.stderrPath())
+	s.T.Logf("daemon.stderr:\n%s", boundedDiagnostic(string(stderr)))
 	s.T.FailNow()
 }
 
@@ -196,7 +221,7 @@ func (s *Stack) Stop() {
 	if s.T.Failed() {
 		s.LogDaemonTail()
 		stderr, _ := os.ReadFile(s.stderrPath())
-		s.T.Logf("daemon.stderr:\n%s", stderr)
+		s.T.Logf("daemon.stderr:\n%s", boundedDiagnostic(string(stderr)))
 	}
 }
 
@@ -239,29 +264,6 @@ func (s *Stack) reap() {
 	for _, r := range reaped {
 		if r.Outcome != procreap.ReapTerminated && r.Outcome != procreap.ReapAlreadyGone {
 			s.T.Errorf("process %s (pid %d) %s: %v", r.ID, r.PID, r.Outcome, r.Err)
-		}
-	}
-}
-
-var (
-	reservedMu sync.Mutex
-	reserved   = map[int]bool{}
-)
-
-func reservePort(t testing.TB) int {
-	t.Helper()
-	reservedMu.Lock()
-	defer reservedMu.Unlock()
-	for {
-		listener, err := net.Listen("tcp", "127.0.0.1:0")
-		if err != nil {
-			t.Fatal(err)
-		}
-		port := listener.Addr().(*net.TCPAddr).Port
-		_ = listener.Close()
-		if !reserved[port] {
-			reserved[port] = true
-			return port
 		}
 	}
 }

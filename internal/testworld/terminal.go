@@ -11,6 +11,7 @@ func (s *Stack) LaunchInTerminal(inv Invocation) *Running {
 	s.T.Helper()
 	r := &Running{t: s.T, args: inv.Args, grew: make(chan struct{}), done: make(chan struct{})}
 	cmd := s.command(context.Background(), inv)
+	defer closeExtraFiles(cmd)
 	tty, err := pty.StartWithSize(cmd, &pty.Winsize{Rows: 30, Cols: 100})
 	if err != nil {
 		s.T.Fatalf("start attn %q on a terminal: %v", inv.Args, err)

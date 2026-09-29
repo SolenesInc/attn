@@ -212,3 +212,42 @@ func TestPiExtractorIgnoresEntriesThatAreNotPricedTraffic(t *testing.T) {
 		}
 	}
 }
+
+func TestFollowerRestoresCodexFastSettingsAcrossTurnsAndOffsets(t *testing.T) {
+	path := usageFixture(t, "codex-service-tiers.jsonl")
+	data, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var offsets []int64
+	offset := int64(0)
+	for _, line := range bytes.SplitAfter(data, []byte("\n")) {
+		if bytes.Contains(line, []byte(`"type":"token_count"`)) {
+			offsets = append(offsets, offset)
+		}
+		offset += int64(len(line))
+	}
+	wantFast := []bool{true, true, false, true, false}
+	for start, offset := range append([]int64{0}, offsets...) {
+		follower, err := NewFollower(path, "codex", offset)
+		if err != nil {
+			t.Fatal(err)
+		}
+		batch, err := follower.Read()
+		if err != nil {
+			t.Fatal(err)
+		}
+		first := start - 1
+		if first < 0 {
+			first = 0
+		}
+		if len(batch.Usage) != len(wantFast)-first {
+			t.Fatalf("offset %d: usage = %+v", offset, batch.Usage)
+		}
+		for i, usage := range batch.Usage {
+			if usage.Model != "gpt-6.1-sol" || usage.FastMode != wantFast[first+i] || usage.InputTokens != int64(first+i+1) {
+				t.Fatalf("offset %d, record %d: usage = %+v, want fast=%v", offset, i, usage, wantFast[first+i])
+			}
+		}
+	}
+}
