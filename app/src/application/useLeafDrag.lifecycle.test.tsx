@@ -109,7 +109,7 @@ describe('dropping a leaf on a sidebar desktop', () => {
 
   it('moves a sidebar row dragged from another desktop', async () => {
     const { result, api } = setup();
-    act(() => result.current.handleSessionDragStart('d2', undefined, 'pane-s3'));
+    act(() => result.current.handleSessionDragStart('d2', 'pane-s3'));
 
     await act(async () => result.current.handleDesktopDragDrop({ id: 'd1' }));
 

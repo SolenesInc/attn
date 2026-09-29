@@ -264,8 +264,6 @@ export function SidebarHeader() {
     onDesktopSelectionStyleChange,
     onNewSession,
     onToggleCollapse,
-    displayMode,
-    setDisplayMode,
   } = useSidebarContext();
   return (
     <>
@@ -323,8 +321,6 @@ export function SidebarHeader() {
             onToggleHarnessLogos={onToggleHarnessLogos}
             desktopSelectionStyle={desktopSelectionStyle}
             onDesktopSelectionStyleChange={onDesktopSelectionStyleChange}
-            displayMode={displayMode}
-            setDisplayMode={setDisplayMode}
           />
         </div>
       </div>

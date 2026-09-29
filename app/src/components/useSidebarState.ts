@@ -95,7 +95,6 @@ export function useSidebarState({
   const [expandedAutomationGroups, setExpandedAutomationGroups] = useState<Set<string>>(
     () => new Set(),
   );
-  const [displayMode, setDisplayMode] = useState<'open' | 'tight' | 'boxed'>('boxed');
   const [renameTarget, setRenameTarget] = useState<{
     kind: 'session' | 'desktop';
     id: string;
@@ -212,8 +211,7 @@ export function useSidebarState({
     Boolean(
       leafDrag &&
         desktopView.id !== leafDrag.sourceDesktopId &&
-        desktopView.id !== UNPLACED_GROUP_ID &&
-        (desktopView.endpointId || '') === (leafDrag.endpointId || ''),
+        desktopView.id !== UNPLACED_GROUP_ID,
     );
 
   const desktopDragClass = (desktopView: SidebarDesktop) => {
@@ -323,8 +321,6 @@ export function useSidebarState({
     onToggleCollapse,
     sessionWantsAttention,
     expandedAutomationGroups,
-    displayMode,
-    setDisplayMode,
     renameTarget,
     setRenameTarget,
     sessionActionsTarget,
