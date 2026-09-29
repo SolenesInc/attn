@@ -100,8 +100,9 @@ func TestAgentMessageIsReadableByIDOnlyByItsRecipientAndSurvivesARestart(t *test
 	agent := w.Launched(recipient)
 	app.TypeLine(recipient, "wait for the reviewer")
 	agent.Prompted()
+	working := testworld.AwaitSession(app, recipient, func(s protocol.Session) bool { return s.State == protocol.SessionStateWorking })
 	agent.Reply("Waiting. <!-- attn:state=idle -->")
-	testworld.AwaitSession(app, recipient, func(s protocol.Session) bool { return s.State == protocol.SessionStateIdle })
+	testworld.AwaitStateAfter(app, working, func(s protocol.Session) bool { return s.State == protocol.SessionStateIdle })
 	registerSessions(t, w, cli, "reviewer", "bystander")
 
 	sent := sendAgentMessage(t, cli, "reviewer", recipient, "the discount is applied after tax")
