@@ -95,7 +95,7 @@ async function main() {
     prefix: 'desktop-switching',
     metadata: {
       agent: 'shell',
-      focus: 'desktop shortcuts switch, move (following or staying) and bounce through the daemon; the overview switches; the app follows another client (the harness observer); terminals keep their scrollback across moves; a tile is an ordinary leaf that takes the keyboard and leaves no stale agent focus mode',
+      focus: 'desktop shortcuts switch, move (following or staying, creating the desktop on an empty digit) and bounce through the daemon; the overview switches; the app follows another client (the harness observer); terminals keep their scrollback across moves; a tile is an ordinary leaf that takes the keyboard and leaves no stale agent focus mode',
     },
   });
 
@@ -288,6 +288,29 @@ async function main() {
       );
     });
 
+    let desktopC;
+    await runner.step('the_tile_moves_to_a_digit_with_no_desktop_and_the_user_follows', async () => {
+      const held = new Set(observer.desktops.map((desktop) => desktop.shortcut_slot).filter(Boolean));
+      const slot = [1, 2, 3, 4, 5, 6, 7, 8, 9].find((candidate) => !held.has(candidate));
+      runner.assert(Boolean(slot), `The run needs a third free desktop shortcut:\n${observer.describeArrangement()}`, observer.describeArrangement());
+      await pressShortcutKeys(client, driver, `desktop.send${slot}`);
+      desktopC = await observer.waitFor(() => observer.desktops.find((desktop) => desktop.shortcut_slot === slot), `a desktop created on slot ${slot}`);
+      createdDesktopIds.push(desktopC.id);
+      const state = await waitForDesktopUi(
+        client,
+        desktopC.id,
+        (s) => s?.active === true && s.sessionVisible === true && s.tileBodyFocused === true && s.tileIds?.length === 1,
+        'the new desktop shown with the moved tile holding the keyboard',
+      );
+      tileId = state.tileIds[0];
+      const app = await client.request('get_state');
+      runner.assert(
+        app.arrangement.currentDesktopId === desktopC.id && observer.desktop(desktopC.id)?.panes.length === 0,
+        `Moving the tile to an empty digit did not land it alone on a new desktop there:\n${observer.describeArrangement()}`,
+        observer.describeArrangement(),
+      );
+    });
+
     await runner.step('returning_to_the_agent_leaves_no_stale_focus_mode', async () => {
       await client.request('select_session', { sessionId: first.sessionId });
       const returned = await focusModeOf(client, first.sessionId);
@@ -300,7 +323,7 @@ async function main() {
     });
 
     const result = await runner.finishSuccess({
-      desktops: { a: desktopA.id, b: desktopB.id },
+      desktops: { a: desktopA.id, b: desktopB.id, c: desktopC.id },
       sessions: { first: first.sessionId, split: split.sessionId },
       tileId,
       tokens,
