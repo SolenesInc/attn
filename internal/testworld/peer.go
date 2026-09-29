@@ -22,6 +22,8 @@ type frame struct {
 	event    string
 	raw      json.RawMessage
 	consumed bool
+	// took names the sessions AwaitSession accepted from a frame listing several, so each can still take it.
+	took map[string]bool
 }
 
 type sequencedOutput struct {
@@ -337,21 +339,39 @@ func Refused(p *Peer) protocol.WebSocketEvent {
 func AwaitSession(p *Peer, id string, match func(protocol.Session) bool) protocol.Session {
 	p.T.Helper()
 	var found protocol.Session
-	p.take("an update of session "+id, func(f frame) (bool, error) {
-		var carrier struct {
-			Session  *protocol.Session  `json:"session"`
-			Sessions []protocol.Session `json:"sessions"`
-		}
-		if err := json.Unmarshal(f.raw, &carrier); err != nil {
-			return false, nil
-		}
-		if carrier.Session != nil {
-			carrier.Sessions = append(carrier.Sessions, *carrier.Session)
-		}
-		for _, s := range carrier.Sessions {
-			if s.ID == id && match(s) {
-				found = s
-				return true, nil
+	scanned := 0
+	p.until(func() string { return "an update of session " + id }, func() (bool, error) {
+		for ; scanned < len(p.frames); scanned++ {
+			f := &p.frames[scanned]
+			var carrier struct {
+				Session  *protocol.Session  `json:"session"`
+				Sessions []protocol.Session `json:"sessions"`
+			}
+			if err := json.Unmarshal(f.raw, &carrier); err != nil {
+				continue
+			}
+			listed := len(carrier.Sessions) > 1
+			if f.took[id] || (f.consumed && (!listed || f.took == nil)) {
+				continue
+			}
+			if carrier.Session != nil {
+				carrier.Sessions = append(carrier.Sessions, *carrier.Session)
+			}
+			for _, s := range carrier.Sessions {
+				if s.ID == id && match(s) {
+					found = s
+					if listed {
+						if f.took == nil {
+							f.took = make(map[string]bool)
+						}
+						f.took[id] = true
+					}
+					f.consumed = true
+					return true, nil
+				}
+			}
+			if f.event == protocol.EventCommandError && !f.consumed {
+				return false, fmt.Errorf("the daemon refused a command: %s", f.raw)
 			}
 		}
 		return false, nil
