@@ -1,0 +1,16 @@
+kind: changed
+area: daemon
+change: >
+  Deciding a finished turn's state reads the transcript back from its end to
+  the latest reply instead of parsing the whole file, so the cost no longer
+  grows with the length of the session. Agent peek and the last-message
+  preview read the same way.
+symptom: >
+  Every stop in a long session re-parsed its entire transcript several times
+  per line: about 0.1 s of CPU for a 10,000-line transcript and 0.6 s for a
+  50,000-line one, each time an agent finished a turn.
+notes: >
+  BenchmarkExtractLastAssistantTurn: 10.7 ms to 67 µs at 1k lines, 106 ms to
+  61 µs at 10k, 595 ms to 63 µs at 50k. In a wire world with a Claude session
+  400 answers in, a turn's process CPU went from 303 ms to 82 ms and its
+  allocations from 16.4 MB to 6.8 MB.
