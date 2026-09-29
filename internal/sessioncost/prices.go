@@ -23,7 +23,11 @@ var builtInRateCards = map[string]RateCard{
 
 	"gpt-6-astra": openAIRates(10, 50, 1, 12.5),
 	"gpt-6-sol":   openAIRates(2, 10, 0.2, 2.5),
-	"gpt-6-luna":  openAIRates(0.1, 0.5, 0.01, 0.125),
+	"gpt-6-luna":  openAIRates(0.1, 0.5, 0.01, 0.125)}
+
+// Codex picks the auto-review model server-side; attn assumes gpt-6-luna until the user says otherwise.
+var builtInBilledAs = map[string]string{
+	"codex-auto-review": "gpt-6-luna",
 }
 
 const (

@@ -203,9 +203,10 @@ func (e *UsageExtractor) extractCodexUsage(line []byte, sourceKey string) (Token
 		Type string `json:"type"`
 		Info *struct {
 			LastTokenUsage struct {
-				InputTokens       int64 `json:"input_tokens"`
-				CachedInputTokens int64 `json:"cached_input_tokens"`
-				OutputTokens      int64 `json:"output_tokens"`
+				InputTokens           int64 `json:"input_tokens"`
+				CachedInputTokens     int64 `json:"cached_input_tokens"`
+				CacheWriteInputTokens int64 `json:"cache_write_input_tokens"`
+				OutputTokens          int64 `json:"output_tokens"`
 			} `json:"last_token_usage"`
 		} `json:"info"`
 	}
@@ -213,15 +214,17 @@ func (e *UsageExtractor) extractCodexUsage(line []byte, sourceKey string) (Token
 		return TokenUsage{}, false
 	}
 	last := payload.Info.LastTokenUsage
-	if last.InputTokens < 0 || last.CachedInputTokens < 0 || last.OutputTokens < 0 || last.CachedInputTokens > last.InputTokens {
+	if last.InputTokens < 0 || last.CachedInputTokens < 0 || last.CacheWriteInputTokens < 0 || last.OutputTokens < 0 ||
+		last.CachedInputTokens+last.CacheWriteInputTokens > last.InputTokens {
 		return TokenUsage{}, false
 	}
 	return TokenUsage{
-		Key:             "codex:" + strings.TrimSpace(sourceKey),
-		Model:           e.codexModel,
-		InputTokens:     last.InputTokens - last.CachedInputTokens,
-		OutputTokens:    last.OutputTokens,
-		CacheReadTokens: last.CachedInputTokens,
+		Key:                "codex:" + strings.TrimSpace(sourceKey),
+		Model:              e.codexModel,
+		InputTokens:        last.InputTokens - last.CachedInputTokens - last.CacheWriteInputTokens,
+		OutputTokens:       last.OutputTokens,
+		CacheReadTokens:    last.CachedInputTokens,
+		CacheWrite5mTokens: last.CacheWriteInputTokens,
 	}, true
 }
 

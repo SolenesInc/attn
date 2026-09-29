@@ -4,6 +4,8 @@ import (
 	"os"
 	"path/filepath"
 	"testing"
+
+	"github.com/victorarias/attn/internal/sessioncost"
 )
 
 func TestClaudeUsageSourcesStayInsideTheNativeSubagentDirectory(t *testing.T) {
@@ -35,7 +37,7 @@ func TestClaudeUsageSourcesStayInsideTheNativeSubagentDirectory(t *testing.T) {
 	}
 }
 
-func TestCodexUsageSourcesFollowOnlyThreadSpawnDescendants(t *testing.T) {
+func TestCodexUsageSourcesFollowSessionDescendantsAndGuardians(t *testing.T) {
 	dir := filepath.Join(t.TempDir(), "sessions", "2026", "09", "05")
 	if err := os.MkdirAll(dir, 0o755); err != nil {
 		t.Fatal(err)
@@ -44,14 +46,16 @@ func TestCodexUsageSourcesFollowOnlyThreadSpawnDescendants(t *testing.T) {
 	writeSourceRecord(t, root, codexSourceMeta("root", `"cli"`))
 	writeSourceRecord(t, filepath.Join(dir, "child.jsonl"), codexSourceMeta("child", codexSourceParent("root")))
 	writeSourceRecord(t, filepath.Join(dir, "grandchild.jsonl"), codexSourceMeta("grandchild", codexSourceParent("child")))
-	writeSourceRecord(t, filepath.Join(dir, "guardian.jsonl"), codexSourceMeta("guardian", `{"subagent":{"other":"guardian"}}`))
+	writeSourceRecord(t, filepath.Join(dir, "guardian.jsonl"), codexGuardianMeta("guardian", "root"))
+	writeSourceRecord(t, filepath.Join(dir, "other-guardian.jsonl"), codexGuardianMeta("other-guardian", "someone-else"))
 	writeSourceRecord(t, filepath.Join(dir, "unrelated.jsonl"), codexSourceMeta("unrelated", codexSourceParent("someone-else")))
 
 	sources, err := NewCodexUsageSourceResolver(root).Discover()
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(sources) != 3 || sources[0].Path != root || sources[1].ID != "child" || sources[2].ID != "grandchild" {
+	if len(sources) != 4 || sources[0].Path != root || sources[1].ID != "child" ||
+		sources[2].ID != "grandchild" || sources[3].ID != "guardian" || sources[3].Purpose != sessioncost.PurposeGuardian {
 		t.Fatalf("Codex sources = %+v", sources)
 	}
 }
@@ -93,6 +97,11 @@ func writeSourceRecord(t *testing.T, path, line string) {
 
 func codexSourceMeta(id, source string) string {
 	return `{"type":"session_meta","payload":{"id":"` + id + `","source":` + source + `}}`
+}
+
+func codexGuardianMeta(id, parent string) string {
+	return `{"type":"session_meta","payload":{"id":"` + id + `","parent_thread_id":"` + parent +
+		`","source":{"subagent":{"other":"guardian"}}}}`
 }
 
 func codexSourceParent(parent string) string {

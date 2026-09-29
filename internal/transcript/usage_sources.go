@@ -11,12 +11,15 @@ import (
 	"path/filepath"
 	"sort"
 	"strings"
+
+	"github.com/victorarias/attn/internal/sessioncost"
 )
 
 type UsageSource struct {
-	ID   string
-	Path string
-	Root bool
+	ID      string
+	Path    string
+	Root    bool
+	Purpose string
 }
 
 type UsageSourceResolver interface {
@@ -79,6 +82,7 @@ type codexUsageCandidate struct {
 	complete bool
 	id       string
 	parentID string
+	purpose  string
 }
 
 func (r *codexUsageSourceResolver) Discover() ([]UsageSource, error) {
@@ -133,7 +137,7 @@ func (r *codexUsageSourceResolver) Discover() ([]UsageSource, error) {
 				continue
 			}
 			lineage[candidate.id] = struct{}{}
-			sources = append(sources, UsageSource{ID: candidate.id, Path: path})
+			sources = append(sources, UsageSource{ID: candidate.id, Path: path, Purpose: candidate.purpose})
 			delete(remaining, path)
 			added = true
 		}
@@ -164,14 +168,19 @@ func (r *codexUsageSourceResolver) candidate(path string) (codexUsageCandidate, 
 	var envelope struct {
 		Type    string `json:"type"`
 		Payload struct {
-			ID     string          `json:"id"`
-			Source json.RawMessage `json:"source"`
+			ID             string          `json:"id"`
+			ParentThreadID string          `json:"parent_thread_id"`
+			Source         json.RawMessage `json:"source"`
 		} `json:"payload"`
 	}
 	candidate.complete = true
 	if json.Unmarshal(line, &envelope) == nil && envelope.Type == "session_meta" {
 		candidate.id = strings.TrimSpace(envelope.Payload.ID)
 		candidate.parentID = codexThreadSpawnParent(envelope.Payload.Source)
+		if candidate.parentID == "" && codexGuardianSource(envelope.Payload.Source) {
+			candidate.parentID = strings.TrimSpace(envelope.Payload.ParentThreadID)
+			candidate.purpose = sessioncost.PurposeGuardian
+		}
 	}
 	r.cache[path] = candidate
 	return candidate, nil
@@ -205,6 +214,15 @@ func codexThreadSpawnParent(raw json.RawMessage) string {
 		return ""
 	}
 	return strings.TrimSpace(source.Subagent.ThreadSpawn.ParentThreadID)
+}
+
+func codexGuardianSource(raw json.RawMessage) bool {
+	var source struct {
+		Subagent struct {
+			Other string `json:"other"`
+		} `json:"subagent"`
+	}
+	return json.Unmarshal(raw, &source) == nil && source.Subagent.Other == "guardian"
 }
 
 func codexSessionsRoot(path string) string {

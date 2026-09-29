@@ -10,7 +10,10 @@ import (
 	"strings"
 )
 
-const SessionCostPricePrefix = "session_cost.price."
+const (
+	SessionCostPricePrefix    = "session_cost.price."
+	SessionCostBilledAsPrefix = "session_cost.billed_as."
+)
 
 const (
 	PurposeAgent    = "agent"
@@ -344,8 +347,38 @@ func rateCardForModel(model string, settings map[string]string) (RateCard, bool,
 		card, err := parseRateCard(strings.TrimSpace(raw))
 		return card, err == nil, err != nil
 	}
+	if target := billedAs(model, settings); target != "" {
+		if raw, ok := settings[SessionCostPricePrefix+target]; ok && strings.TrimSpace(raw) != "" {
+			card, err := parseRateCard(strings.TrimSpace(raw))
+			return card, err == nil, err != nil
+		}
+		model = target
+	}
 	card, ok := builtInRateCards[model]
 	return card, ok, false
+}
+
+func billedAs(model string, settings map[string]string) string {
+	if target := strings.TrimSpace(settings[SessionCostBilledAsPrefix+model]); target != "" {
+		return target
+	}
+	return builtInBilledAs[model]
+}
+
+// ValidateBilledAs accepts only aliases attn knows and targets with a built-in rate card.
+func ValidateBilledAs(key, value string) error {
+	alias := strings.TrimPrefix(key, SessionCostBilledAsPrefix)
+	if _, ok := builtInBilledAs[alias]; !ok {
+		return fmt.Errorf("%s is not a model attn can bill as another model", alias)
+	}
+	target := strings.TrimSpace(value)
+	if target == "" {
+		return nil
+	}
+	if _, ok := builtInRateCards[target]; !ok {
+		return fmt.Errorf("%s has no built-in price", target)
+	}
+	return nil
 }
 
 func floatPtr(value float64) *float64 {

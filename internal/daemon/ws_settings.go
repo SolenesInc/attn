@@ -537,6 +537,9 @@ func (d *Daemon) validateSetting(key, value string) error {
 	case SettingReviewerModel:
 		return nil
 	default:
+		if strings.HasPrefix(key, sessioncost.SessionCostBilledAsPrefix) {
+			return sessioncost.ValidateBilledAs(key, value)
+		}
 		if isSessionCostPriceSetting(key) {
 			_, err := sessioncost.ParseOverrides(map[string]string{key: value})
 			return err

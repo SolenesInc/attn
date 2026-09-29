@@ -236,6 +236,7 @@ func TestBuiltInCoverageForObservedModelIDs(t *testing.T) {
 		"claude-opus-5-5",
 		"claude-sonnet-5",
 		"claude-sonnet-5-5",
+		"codex-auto-review",
 		"gpt-5-codex",
 		"gpt-5.4-mini",
 		"gpt-5.5",
@@ -255,7 +256,7 @@ func TestBuiltInCoverageForObservedModelIDs(t *testing.T) {
 		})
 	}
 
-	for _, model := range []string{"<synthetic>", "codex-auto-review"} {
+	for _, model := range []string{"<synthetic>"} {
 		t.Run(model+" remains unpriced", func(t *testing.T) {
 			usd, known, hasUsage := Price(Ledger{AgentKey(model): {InputTokens: 1}}, nil)
 			if usd != 0 || known || !hasUsage {
@@ -312,6 +313,41 @@ func TestPriceStatesAndOverrides(t *testing.T) {
 			t.Fatalf("Price() = %v, %v, %v", usd, known, hasUsage)
 		}
 	})
+}
+
+func TestCodexAutoReviewIsBilledAsAnotherModel(t *testing.T) {
+	ledger := Ledger{GuardianKey("codex-auto-review"): {InputTokens: 1_000_000}}
+	for _, tc := range []struct {
+		name     string
+		settings map[string]string
+		want     float64
+	}{
+		{"defaults to gpt-6-luna", nil, 0.1},
+		{"follows the chosen model", map[string]string{SessionCostBilledAsPrefix + "codex-auto-review": "gpt-6-sol"}, 2},
+		{"uses the chosen model's override", map[string]string{
+			SessionCostBilledAsPrefix + "codex-auto-review": "gpt-6-sol",
+			SessionCostPricePrefix + "gpt-6-sol":            `{"input_usd_per_mtok":7,"output_usd_per_mtok":0,"cache_read_usd_per_mtok":0,"cache_write_5m_usd_per_mtok":0,"cache_write_1h_usd_per_mtok":0}`,
+		}, 7},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			usd, known, _ := Price(ledger, tc.settings)
+			if !known || math.Abs(usd-tc.want) > 1e-9 {
+				t.Fatalf("Price() = %v, %v; want %v", usd, known, tc.want)
+			}
+		})
+	}
+
+	for key, value := range map[string]string{
+		SessionCostBilledAsPrefix + "codex-auto-review": "not-a-model",
+		SessionCostBilledAsPrefix + "gpt-6-sol":         "gpt-6-luna",
+	} {
+		if ValidateBilledAs(key, value) == nil {
+			t.Errorf("ValidateBilledAs(%q, %q) accepted", key, value)
+		}
+	}
+	if err := ValidateBilledAs(SessionCostBilledAsPrefix+"codex-auto-review", ""); err != nil {
+		t.Errorf("clearing the choice was rejected: %v", err)
+	}
 }
 
 func TestParseOverridesIsCompleteAndStrict(t *testing.T) {

@@ -58,7 +58,8 @@ func (d *Daemon) decorateSessionWithCost(session *protocol.Session) {
 }
 
 func isSessionCostPriceSetting(key string) bool {
-	return strings.HasPrefix(key, sessioncost.SessionCostPricePrefix)
+	return strings.HasPrefix(key, sessioncost.SessionCostPricePrefix) ||
+		strings.HasPrefix(key, sessioncost.SessionCostBilledAsPrefix)
 }
 
 func (d *Daemon) publishSessionCostReprices() {

@@ -170,6 +170,10 @@ func (t *sessionUsageTracker) readIfMoved(tracked *trackedUsageSource) {
 		if model == "" {
 			model = "<unknown>"
 		}
+		purpose := usage.Purpose
+		if purpose == "" {
+			purpose = tracked.source.Purpose
+		}
 		observationID := usage.Key
 		if !tracked.source.Root {
 			observationID = "native:" + tracked.source.ID + ":" + usage.Key
@@ -177,7 +181,7 @@ func (t *sessionUsageTracker) readIfMoved(tracked *trackedUsageSource) {
 		observations = append(observations, store.SessionCostObservation{
 			ObservationID: observationID,
 			Model:         model,
-			Purpose:       usage.Purpose,
+			Purpose:       purpose,
 			Usage: sessioncost.Usage{
 				InputTokens:                  usage.InputTokens,
 				OutputTokens:                 usage.OutputTokens,
