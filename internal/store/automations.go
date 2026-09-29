@@ -737,7 +737,7 @@ func (s *Store) ReconcileAutomationReviewRequestHeads(definitionID, host string,
 	} else if err != nil {
 		return nil, err
 	} else if cursor, parseErr := docstore.ParseTime(cursorRaw); parseErr == nil && observedAt.Before(cursor) {
-		// Refreshes reconcile on their own goroutines; an older list must not undo a newer one.
+		// An older observation must not undo newer edge state.
 		return nil, nil
 	}
 	current := make(map[string]string, len(observations))
