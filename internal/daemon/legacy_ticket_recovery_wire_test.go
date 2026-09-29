@@ -216,7 +216,7 @@ func legacyRecoveryNewerRoutineBackups(t *testing.T, dir string, count int) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	written, err := empty.BackupNow(t.TempDir())
+	written, err := empty.BackupNow(context.Background(), t.TempDir())
 	if err != nil {
 		t.Fatal(err)
 	}
