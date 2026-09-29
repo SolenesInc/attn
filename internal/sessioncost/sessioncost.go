@@ -93,7 +93,8 @@ func GuardianKey(model string) LedgerKey {
 
 func RequestLedgerKey(model, purpose string, request Usage) LedgerKey {
 	key := NewLedgerKey(model, purpose)
-	key.LongContext = openAILongContextModels[key.Model] &&
+	_, alias := builtInBilledAs[key.Model]
+	key.LongContext = (openAILongContextModels[key.Model] || alias) &&
 		request.promptTokens() > openAILongContextPromptTokens
 	return key
 }
@@ -282,7 +283,7 @@ func summarizeRow(key LedgerKey, tiers tieredUsage, settings map[string]string) 
 		card  RateCard
 	}{
 		{tiers.standard, card},
-		{tiers.longContext, longContextRates(card)},
+		{tiers.longContext, longContextCard(key.Model, card, settings)},
 	} {
 		if !tier.usage.hasAnyValue() {
 			continue
@@ -356,6 +357,16 @@ func rateCardForModel(model string, settings map[string]string) (RateCard, bool,
 	}
 	card, ok := builtInRateCards[model]
 	return card, ok, false
+}
+
+func longContextCard(model string, card RateCard, settings map[string]string) RateCard {
+	if target := billedAs(model, settings); target != "" {
+		model = target
+	}
+	if !openAILongContextModels[model] {
+		return card
+	}
+	return longContextRates(card)
 }
 
 func billedAs(model string, settings map[string]string) string {

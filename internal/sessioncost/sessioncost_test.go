@@ -337,6 +337,15 @@ func TestCodexAutoReviewIsBilledAsAnotherModel(t *testing.T) {
 		})
 	}
 
+	long := Usage{InputTokens: 300_000}
+	longLedger := Ledger{RequestLedgerKey("codex-auto-review", PurposeGuardian, long): long}
+	for target, want := range map[string]float64{"gpt-6-luna": 0.06, "gpt-5-codex": 0.375} {
+		settings := map[string]string{SessionCostBilledAsPrefix + "codex-auto-review": target}
+		if usd, _, _ := Price(longLedger, settings); math.Abs(usd-want) > 1e-9 {
+			t.Errorf("long-context request billed as %s = %v; want %v", target, usd, want)
+		}
+	}
+
 	for key, value := range map[string]string{
 		SessionCostBilledAsPrefix + "codex-auto-review": "not-a-model",
 		SessionCostBilledAsPrefix + "gpt-6-sol":         "gpt-6-luna",

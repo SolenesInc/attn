@@ -187,7 +187,6 @@ function CodexAutoReviewBilling({ settings, onSetSetting }: SessionCostPriceSett
           </option>
         ))}
       </select>
-      {field.error && <div className="settings-warning" role="alert">{field.error}</div>}
       <span className="settings-hint">
         Codex reports its auto-review reviewer as <code>{CODEX_AUTO_REVIEW_MODEL}</code> and picks the
         real model on its servers. Guardian usage is priced at this model's rates.
