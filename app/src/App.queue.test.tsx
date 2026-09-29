@@ -43,7 +43,7 @@ function launch({ sessions = team(), queue = true, crewInQueue = false, desktop 
 }
 
 async function openAgentList(daemon: ScriptedDaemon) {
-  await gesture(daemon, () => fireEvent.click(screen.getByRole('button', { name: /more agents/i })));
+  await gesture(daemon, () => fireEvent.click(screen.getByRole('button', { name: /more agents?/i })));
 }
 
 const queue = () => within(screen.getByTestId('sidebar-queue'));
@@ -79,7 +79,7 @@ describe('App queue', () => {
 
     expect(screen.getByTestId('queue-crew-alder')).toBeInTheDocument();
     expect(screen.getAllByTestId(/queue-turn-owed-/)).toHaveLength(3);
-    expect(screen.getByTestId('queue-agents-toggle')).toHaveTextContent('1 more agents');
+    expect(screen.getByTestId('queue-agents-toggle')).toHaveTextContent(/1 more agent(?!s)/);
     expect(screen.getByTestId('queue-agents-counts')).toHaveTextContent('1 working');
     await openAgentList(daemon);
     expect(screen.getByTestId('queue-also-waiting-header')).toHaveTextContent('Also waiting 1');

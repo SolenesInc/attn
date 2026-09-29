@@ -61,7 +61,7 @@ const keys = {
 
 function clickOpen(label: string) {
   if (!screen.queryByRole('button', { name: `Open ${label}` })) {
-    fireEvent.click(screen.getByRole('button', { name: /more agents/i }));
+    fireEvent.click(screen.getByRole('button', { name: /more agents?/i }));
   }
   fireEvent.click(screen.getByRole('button', { name: `Open ${label}` }));
 }
