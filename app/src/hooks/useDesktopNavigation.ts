@@ -1,6 +1,7 @@
 import { useCallback, useMemo } from 'react';
 import { useDaemonApi } from '../contexts/DaemonApiContext';
 import { useProfilesStore } from '../store/profiles';
+import { useSessionStore } from '../store/sessions';
 import type { Desktop } from '../types/generated';
 import { withFreshDesktopRevisions } from './desktopRevisions';
 import { actThenShow } from '../application/openThenShow';
@@ -98,6 +99,7 @@ export function useDesktopNavigation(showNotice: ShowNotice) {
         }),
       );
       if (!follow) {
+        useSessionStore.getState().cancelIntent();
         await move();
         return;
       }
