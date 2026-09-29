@@ -39,7 +39,15 @@ type Store struct {
 	instanceRoles          map[string]string
 	workspaces             map[string]workspacelayout.WorkspaceLayout
 	recentLocations        map[string]*protocol.RecentLocation
+	settings               map[string]string
+	writes                 *tableWrites
+	sessionRows            sessionRows
+	touchedAt              map[string]time.Time
 }
+
+// touchResolution bounds how stale last_seen may be; its tightest reader, the Claude
+// transcript watcher, treats hooks as active for two minutes.
+const touchResolution = 5 * time.Second
 
 type AgentDriverReportCursor struct {
 	PluginName string
@@ -75,11 +83,24 @@ type LaunchIntent struct {
 }
 
 func New() *Store {
-	db, err := OpenDB(":memory:")
+	db, writes, err := openDB(":memory:")
 	if err != nil {
 		return newMapBackedStore()
 	}
-	return &Store{db: db}
+	s, err := newDBStore(db, writes, "", false)
+	if err != nil {
+		return newMapBackedStore()
+	}
+	return s
+}
+
+func newDBStore(db *sql.DB, writes *tableWrites, dbPath string, durable bool) (*Store, error) {
+	settings, err := readSettings(db)
+	if err != nil {
+		db.Close()
+		return nil, err
+	}
+	return &Store{db: db, dbPath: dbPath, durable: durable, settings: settings, writes: writes}, nil
 }
 
 func newMapBackedStore() *Store {
@@ -129,15 +150,27 @@ func cloneSession(session *protocol.Session) *protocol.Session {
 	if session.ActivityAt != nil {
 		cloned.ActivityAt = protocol.Ptr(protocol.Deref(session.ActivityAt))
 	}
+	if session.Repository != nil {
+		cloned.Repository = protocol.Ptr(protocol.Deref(session.Repository))
+	}
+	if session.LastModelRequestAt != nil {
+		cloned.LastModelRequestAt = protocol.Ptr(protocol.Deref(session.LastModelRequestAt))
+	}
+	if session.TurnOpenedAt != nil {
+		cloned.TurnOpenedAt = protocol.Ptr(protocol.Deref(session.TurnOpenedAt))
+	}
+	if session.TurnSnoozedUntil != nil {
+		cloned.TurnSnoozedUntil = protocol.Ptr(protocol.Deref(session.TurnSnoozedUntil))
+	}
 	return &cloned
 }
 
 func NewWithDB(dbPath string) (*Store, error) {
-	db, err := OpenDB(dbPath)
+	db, writes, err := openDB(dbPath)
 	if err != nil {
 		return nil, err
 	}
-	return &Store{db: db, dbPath: dbPath, durable: true}, nil
+	return newDBStore(db, writes, dbPath, true)
 }
 
 func (s *Store) DatabasePath() string {
@@ -305,6 +338,13 @@ func (s *Store) Get(id string) *protocol.Session {
 		return session
 	}
 
+	gen, cached := s.sessionsGeneration()
+	if cached {
+		if session, ok := s.sessionRows.session(id, gen); ok {
+			return session
+		}
+	}
+
 	var session protocol.Session
 	var stateSince, stateUpdatedAt, lastSeen string
 	var turnOpenedAt, turnSettledAt, turnSnoozedUntil string
@@ -384,6 +424,9 @@ func (s *Store) Get(id string) *protocol.Session {
 	}
 	session.LastSeen = lastSeen
 
+	if cached {
+		s.sessionRows.putSession(id, gen, &session)
+	}
 	return &session
 }
 
@@ -407,6 +450,7 @@ func (s *Store) Remove(id string) {
 		delete(s.sessionCosts, id)
 		return
 	}
+	delete(s.touchedAt, id)
 
 	_, err := s.db.Exec("DELETE FROM sessions WHERE id = ?", id)
 	if err != nil {
@@ -693,11 +737,19 @@ func (s *Store) Touch(id string) {
 		return
 	}
 
-	now := string(protocol.TimestampNow())
-	_, err := s.db.Exec("UPDATE sessions SET last_seen = ? WHERE id = ? AND closed_at = ''", now, id)
+	now := time.Now()
+	if now.Sub(s.touchedAt[id]) < touchResolution {
+		return
+	}
+	_, err := s.db.Exec("UPDATE sessions SET last_seen = ? WHERE id = ? AND closed_at = ''", string(protocol.NewTimestamp(now)), id)
 	if err != nil {
 		log.Printf("[store] Touch: failed for session %s: %v", id, err)
+		return
 	}
+	if s.touchedAt == nil {
+		s.touchedAt = make(map[string]time.Time)
+	}
+	s.touchedAt[id] = now
 }
 
 func (s *Store) SetResumeSessionID(id, resumeSessionID string) {
@@ -1219,6 +1271,12 @@ func (s *Store) GetAgentDriverRun(id string) AgentDriverReportCursor {
 	if s.db == nil {
 		return s.agentDriverRuns[id]
 	}
+	gen, cached := s.sessionsGeneration()
+	if cached {
+		if cursor, ok := s.sessionRows.driver(id, gen); ok {
+			return cursor
+		}
+	}
 	var cursor AgentDriverReportCursor
 	if err := s.db.QueryRow(
 		"SELECT agent_driver_plugin_name, agent_driver_run_id, agent_driver_report_seq FROM sessions WHERE id = ?",
@@ -1228,6 +1286,9 @@ func (s *Store) GetAgentDriverRun(id string) AgentDriverReportCursor {
 	}
 	cursor.PluginName = strings.TrimSpace(cursor.PluginName)
 	cursor.RunID = strings.TrimSpace(cursor.RunID)
+	if cached {
+		s.sessionRows.putDriver(id, gen, cursor)
+	}
 	return cursor
 }
 
@@ -1989,13 +2050,7 @@ func (s *Store) GetSetting(key string) string {
 	if s.db == nil {
 		return ""
 	}
-
-	var value sql.NullString
-	err := s.db.QueryRow("SELECT value FROM settings WHERE key = ?", key).Scan(&value)
-	if err != nil {
-		return ""
-	}
-	return value.String
+	return s.settings[key]
 }
 
 func (s *Store) SetSetting(key, value string) {
@@ -2019,6 +2074,7 @@ func (s *Store) SetSettingChecked(key, value string) error {
 	if err != nil {
 		return fmt.Errorf("set setting %q: %w", key, err)
 	}
+	s.settings[key] = value
 	return nil
 }
 
@@ -2030,32 +2086,40 @@ func (s *Store) DeleteSetting(key string) {
 		return
 	}
 
-	s.execLog(`DELETE FROM settings WHERE key = ?`, key)
+	if _, err := s.db.Exec(`DELETE FROM settings WHERE key = ?`, key); err != nil {
+		log.Printf("[store] DeleteSetting %q: %v", key, err)
+		return
+	}
+	delete(s.settings, key)
 }
 
 func (s *Store) GetAllSettings() map[string]string {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 
-	result := make(map[string]string)
-	if s.db == nil {
-		return result
+	result := make(map[string]string, len(s.settings))
+	for key, value := range s.settings {
+		result[key] = value
 	}
+	return result
+}
 
-	rows, err := s.db.Query("SELECT key, value FROM settings")
+func readSettings(db *sql.DB) (map[string]string, error) {
+	rows, err := db.Query("SELECT key, value FROM settings")
 	if err != nil {
-		return result
+		return nil, fmt.Errorf("read settings: %w", err)
 	}
 	defer rows.Close()
-
+	settings := make(map[string]string)
 	for rows.Next() {
 		var key string
 		var value sql.NullString
-		if err := rows.Scan(&key, &value); err == nil {
-			result[key] = value.String
+		if err := rows.Scan(&key, &value); err != nil {
+			return nil, fmt.Errorf("read settings: %w", err)
 		}
+		settings[key] = value.String
 	}
-	return result
+	return settings, rows.Err()
 }
 
 func (s *Store) GetInstanceRole(role string) string {

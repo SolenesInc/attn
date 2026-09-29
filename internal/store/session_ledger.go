@@ -73,6 +73,7 @@ func (s *Store) CloseSession(id string, closed SessionClose, now time.Time) (boo
 		by = SessionClosedByUser
 	}
 	at := now.UTC().Format(time.RFC3339Nano)
+	delete(s.touchedAt, id)
 
 	if s.db == nil {
 		session := s.sessions[id]

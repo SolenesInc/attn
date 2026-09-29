@@ -95,6 +95,10 @@ type Runner struct {
 	done chan struct{}
 	exit chan struct{}
 
+	// nextDue is when the earliest queued job becomes eligible; the zero value means now.
+	// Every job write nudges the loop, whose pass re-reads it, so ticks before it skip the store.
+	nextDue time.Time
+
 	lockToken string
 }
 
@@ -456,30 +460,50 @@ func (r *Runner) loop() {
 	defer close(r.exit)
 	ticker := time.NewTicker(r.pollInterval)
 	defer ticker.Stop()
+	woken := true
 	for {
 		r.retryCronArming()
-		for {
-			select {
-			case <-r.done:
-				return
-			default:
-			}
-			progressed, err := r.dispatch()
-			if err != nil {
-				r.log("jobs: dispatch pass: %v", err)
-				break
-			}
-			if !progressed {
-				break
-			}
+		if woken || !r.now().Before(r.nextDue) {
+			r.dispatchUntilIdle()
 		}
 		select {
 		case <-r.done:
 			return
 		case <-r.wake:
+			woken = true
 		case <-ticker.C:
+			woken = false
 		}
 	}
+}
+
+var farFuture = time.Date(9999, 1, 1, 0, 0, 0, 0, time.UTC)
+
+func (r *Runner) dispatchUntilIdle() {
+	for {
+		select {
+		case <-r.done:
+			return
+		default:
+		}
+		progressed, err := r.dispatch()
+		if err != nil {
+			r.log("jobs: dispatch pass: %v", err)
+			r.nextDue = time.Time{}
+			return
+		}
+		if !progressed {
+			break
+		}
+	}
+	next, ok, err := r.store.NextScheduled()
+	if err != nil {
+		r.log("jobs: reading the next scheduled job: %v", err)
+		next = time.Time{}
+	} else if !ok {
+		next = farFuture
+	}
+	r.nextDue = next
 }
 
 func (r *Runner) dispatch() (progressed bool, err error) {

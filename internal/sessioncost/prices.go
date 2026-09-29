@@ -7,6 +7,7 @@ var builtInRateCards = map[string]RateCard{
 	"claude-opus-5":             anthropicRates(5, 25),
 	"claude-opus-4-8":           anthropicRates(5, 25),
 	"claude-opus-4-6":           anthropicRates(5, 25),
+	"claude-sonnet-5-5":         anthropicRates(2, 10),
 	"claude-sonnet-5":           anthropicRates(2, 10),
 	"claude-sonnet-4-6":         anthropicRates(3, 15),
 	"claude-haiku-4-5":          anthropicRates(1, 5),

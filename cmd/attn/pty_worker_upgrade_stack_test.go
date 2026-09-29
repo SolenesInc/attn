@@ -103,7 +103,9 @@ func TestAWorkerRefusingAnUpgradeKeepsRunningItsProgramAndStaysStale(t *testing.
 	}
 	s.StartBinary(next, "ATTN_PTY_WORKER_BINARY="+notAttn)
 	app = s.App()
-	testworld.AwaitSession(app, shell, func(x protocol.Session) bool { return protocol.Deref(x.TerminalBuildStale) })
+	if !protocol.Deref(initialSession(t, app, shell).TerminalBuildStale) {
+		testworld.AwaitSession(app, shell, func(x protocol.Session) bool { return protocol.Deref(x.TerminalBuildStale) })
+	}
 	app.TypeLine(shell, `echo $$ > `+pidFile+`; echo still-$((2+2))`)
 	app.AwaitScreen(shell, "still-4")
 	after, err := os.ReadFile(pidFile)

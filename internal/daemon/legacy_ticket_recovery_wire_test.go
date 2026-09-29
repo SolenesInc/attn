@@ -1,6 +1,7 @@
 package daemon_test
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"os"
@@ -246,7 +247,7 @@ func legacyRecoveryBackup(t *testing.T, path, ticketID, title string, updatedAt 
 	if _, err := source.SetTicketStatus(ticketID, store.TicketStatusDone, "agent", "finished", updatedAt); err != nil {
 		t.Fatal(err)
 	}
-	written, err := source.BackupNow(t.TempDir())
+	written, err := source.BackupNow(context.Background(), t.TempDir())
 	if err != nil {
 		t.Fatal(err)
 	}

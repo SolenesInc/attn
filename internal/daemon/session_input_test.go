@@ -87,14 +87,6 @@ func TestSessionInput_RandomInterleavingsKeepMechanicalAndCausalContracts(t *tes
 			}
 			return count
 		}
-		deliveryWithText := func(text string) (sessionInputDelivery, bool) {
-			for _, delivery := range deliveries {
-				if delivery.text == text {
-					return delivery, true
-				}
-			}
-			return sessionInputDelivery{}, false
-		}
 		startLifetime := func(text string) {
 			pastesAtLifetimeStart[text] = pastesOf(text)
 		}
@@ -167,10 +159,10 @@ func TestSessionInput_RandomInterleavingsKeepMechanicalAndCausalContracts(t *tes
 				if effects.taken != nil && effects.taken.origin.kind == sessionInputOriginUserConversation {
 					userCredited = true
 				}
-				if delivery, ok := deliveryWithText(prompt); placed && ok &&
-					((effects.receipt != nil && effects.receipt.id == delivery.id) || (effects.taken != nil && effects.taken.inputID == delivery.id.String())) {
+				if placed {
 					untaken = ""
 				}
+				clear(ambiguous)
 			},
 			"observe_phase": func(rt *rapid.T) {
 				working := rapid.Bool().Draw(rt, "working")

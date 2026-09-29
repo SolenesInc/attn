@@ -71,7 +71,7 @@ func createClosedTicketBackup(t *testing.T, backupDir, ticketID, title string, u
 	if _, err := s.AddTicketAttachment(store.TicketAttachment{TicketID: ticketID, Filename: "proof.md", Path: "/proof.md"}, "agent", updatedAt); err != nil {
 		t.Fatal(err)
 	}
-	path, err := s.BackupNow(backupDir)
+	path, err := s.BackupNow(context.Background(), backupDir)
 	if err != nil {
 		t.Fatal(err)
 	}

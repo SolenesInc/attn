@@ -1,0 +1,3 @@
+kind: internal
+area: testing
+change: Session input's random-interleaving property forgets a user/attn ambiguity once a take consumes it, so a later attn paste of the same words is credited as before.

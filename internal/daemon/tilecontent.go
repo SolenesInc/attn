@@ -297,6 +297,26 @@ func (c *wsClient) pruneTileContentSubscriptions(workspaceID string, activeTileI
 	}
 }
 
+func (c *wsClient) addTileContentWorkspaces(into map[string]struct{}) {
+	if c == nil {
+		return
+	}
+	c.tileContentMu.RLock()
+	defer c.tileContentMu.RUnlock()
+	for key := range c.tileContentSubscriptions {
+		workspaceID, _, _ := strings.Cut(key, "\x00")
+		into[workspaceID] = struct{}{}
+	}
+}
+
+func (d *Daemon) tileContentSubscribedWorkspaces() map[string]struct{} {
+	workspaces := make(map[string]struct{})
+	if d.wsHub != nil {
+		d.wsHub.ForEachClient(func(client *wsClient) { client.addTileContentWorkspaces(workspaces) })
+	}
+	return workspaces
+}
+
 func (d *Daemon) hasTileContentSubscribers(workspaceID, tileID string) bool {
 	return d.wsHub != nil && d.wsHub.AnyClientMatches(func(client *wsClient) bool {
 		return client.wantsTileContent(workspaceID, tileID)
@@ -670,7 +690,7 @@ func (d *Daemon) collectChangedMarkdownTiles() []markdownTileRef {
 	}
 
 	desired := make(map[string]markdownTileRef)
-	for _, workspaceID := range d.store.WorkspaceLayoutIDs() {
+	for workspaceID := range d.tileContentSubscribedWorkspaces() {
 		snapshot := d.store.GetWorkspaceLayout(workspaceID)
 		if snapshot == nil {
 			continue
