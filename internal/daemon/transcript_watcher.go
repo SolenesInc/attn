@@ -288,6 +288,10 @@ func (d *Daemon) startTranscriptWatcherAtPath(sessionID string, agent protocol.S
 		return
 	}
 	d.watchersMu.Lock()
+	if d.stopping() {
+		d.watchersMu.Unlock()
+		return
+	}
 	session := d.lookupTranscriptWatcherSession(sessionID)
 	if session == nil || session.Agent != agent {
 		d.watchersMu.Unlock()
@@ -303,6 +307,7 @@ func (d *Daemon) startTranscriptWatcherAtPath(sessionID string, agent protocol.S
 	}
 	previous := d.transcriptWatch[sessionID]
 	d.transcriptWatch[sessionID] = watcher
+	d.watcherRuns.Add(1)
 	d.watchersMu.Unlock()
 	if previous != nil {
 		close(previous.stopCh)
@@ -403,6 +408,8 @@ func (d *Daemon) stopAllTranscriptWatchers() {
 	for _, watcher := range watchers {
 		close(watcher.stopCh)
 	}
+	// Starts are refused once stopping, so this waits out every final usage reconcile before the store closes.
+	d.watcherRuns.Wait()
 }
 
 func (d *Daemon) assistantWindow(sessionID string, agent protocol.SessionAgent) (assistantWindowSnapshot, bool) {
@@ -426,6 +433,7 @@ func (d *Daemon) liveTranscriptPath(sessionID string, agent protocol.SessionAgen
 }
 
 func (d *Daemon) runTranscriptWatcher(w *transcriptWatcher) {
+	defer d.watcherRuns.Done()
 	defer close(w.doneCh)
 
 	if w.behavior == nil {

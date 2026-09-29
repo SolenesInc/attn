@@ -112,6 +112,10 @@ func (d *Daemon) runDelegationOperation(id string) {
 	case <-d.done:
 		return
 	}
+	if !d.durableWork.enter() {
+		return
+	}
+	defer d.durableWork.leave()
 	_ = d.worktreeMaintenance.ProtectFromAutomaticCleanup(context.Background(), func(protection foregroundCleanupProtection) error {
 		d.runDelegationOperationProtected(protection, id)
 		return nil
@@ -201,6 +205,11 @@ func (d *Daemon) runDelegationOperationProtected(protection foregroundCleanupPro
 }
 
 func (d *Daemon) finishDelegationFailure(id string, err error) {
+	// A failure during stop is the teardown's (git executor closed, sessions killed); the next daemon resumes it.
+	if d.stopping() {
+		d.logf("delegate operation %s stays pending across daemon stop: %v", id, err)
+		return
+	}
 	d.persistDelegationTerminal(id, protocol.DelegationOperationStateFailed,
 		"delegation failed", "", "", nil, err)
 }

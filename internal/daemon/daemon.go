@@ -163,6 +163,7 @@ type Daemon struct {
 	watchersMu                        sync.Mutex
 	transcriptWatch                   map[string]*transcriptWatcher
 	pluginUsageWatch                  map[string]*pluginUsageWatcher
+	watcherRuns                       sync.WaitGroup
 	transcriptWatcherSessionLookup    func(string) *protocol.Session
 	transcriptResumeLookup            func(protocol.SessionAgent, string) string
 	classifiedMu                      sync.Mutex
@@ -908,6 +909,11 @@ func (d *Daemon) Start() error {
 	d.watchRecoveredLaunches()
 	go func() {
 		pausepoint.At(pausepoint.DaemonStartupRecovery)
+		if !d.durableWork.enter() {
+			d.logf("startup recovery skipped: the daemon is stopping; the next daemon recovers")
+			return
+		}
+		defer d.durableWork.leave()
 		d.performStartupPTYRecovery(previousRunSessions, recoveryStartedAt)
 		d.resolveDue(time.Now())
 		go d.runSessionResolver()
@@ -925,7 +931,9 @@ func (d *Daemon) Start() error {
 		} else {
 			d.seedQueuedAgentMailboxItems()
 		}
-		recoverAutomationsAfterGitHubReady(githubHostsReady, d.recoverAutomations)
+		if !recoverAutomationsAfterGitHubReady(githubHostsReady, d.done, d.recoverAutomations) {
+			return
+		}
 		d.setRecovering(false)
 		d.resumePendingDelegations()
 	}()
@@ -1621,6 +1629,8 @@ func (d *Daemon) stop() {
 	}
 }
 
+var errDaemonStopping = errors.New("the daemon is stopping; retry once it is back")
+
 // workGate is durable work that Daemon.stop waits for before the store closes.
 type workGate struct {
 	mu     sync.Mutex
@@ -1639,6 +1649,16 @@ func (g *workGate) enter() bool {
 }
 
 func (g *workGate) leave() { g.active.Done() }
+
+// durably runs write inside the durable-work gate; false means the daemon is stopping and write did not run.
+func (g *workGate) durably(write func()) bool {
+	if !g.enter() {
+		return false
+	}
+	defer g.leave()
+	write()
+	return true
+}
 
 func (g *workGate) close() {
 	g.mu.Lock()
@@ -3526,6 +3546,14 @@ func (d *Daemon) doPRPoll() {
 		d.broadcastRateLimited("search", earliestReset)
 	}
 
+	stored := d.durableWork.durably(func() { d.storePRPoll(allPRs, skippedHosts, observedByHost) })
+	d.prRefreshMu.Unlock()
+	if stored {
+		d.doDetailRefresh()
+	}
+}
+
+func (d *Daemon) storePRPoll(allPRs []*protocol.PR, skippedHosts map[string]bool, observedByHost map[string]successfulPRObservation) {
 	if len(skippedHosts) > 0 {
 		existing := d.store.ListPRs("")
 		for _, pr := range existing {
@@ -3558,9 +3586,6 @@ func (d *Daemon) doPRPoll() {
 	for host, observation := range observedByHost {
 		d.observeGitHubReviewRequests(host, observation.prs, observation.observedAt)
 	}
-	d.prRefreshMu.Unlock()
-
-	d.doDetailRefresh()
 }
 
 func (d *Daemon) doDetailRefresh() {
@@ -3568,7 +3593,9 @@ func (d *Daemon) doDetailRefresh() {
 		return
 	}
 
-	d.store.DecayHeatStates()
+	if !d.durableWork.durably(d.store.DecayHeatStates) {
+		return
+	}
 
 	prs := d.store.GetPRsNeedingDetailRefresh()
 	if len(prs) == 0 {
@@ -3577,7 +3604,7 @@ func (d *Daemon) doDetailRefresh() {
 
 	d.logf("Detail refresh: %d PRs need refresh", len(prs))
 
-	var refreshedIDs []string
+	var fetched []fetchedPRDetails
 	limitedHosts := make(map[string]time.Time)
 	for _, pr := range prs {
 		host := pr.Host
@@ -3624,12 +3651,7 @@ func (d *Daemon) doDetailRefresh() {
 		}
 
 		prHeadSHA := protocol.Deref(pr.HeadSHA)
-		if prHeadSHA != "" && details.HeadSHA != prHeadSHA {
-			d.store.SetPRHot(pr.ID)
-		}
-
-		d.store.UpdatePRDetails(pr.ID, details.Mergeable, details.MergeableState, details.CIStatus, details.ReviewStatus, details.HeadSHA, details.HeadBranch)
-		refreshedIDs = append(refreshedIDs, pr.ID)
+		fetched = append(fetched, fetchedPRDetails{id: pr.ID, details: details, hot: prHeadSHA != "" && details.HeadSHA != prHeadSHA})
 	}
 
 	if len(limitedHosts) > 0 {
@@ -3647,14 +3669,32 @@ func (d *Daemon) doDetailRefresh() {
 		}
 	}
 
-	if len(refreshedIDs) > 0 {
-		d.logf("Detail refresh: updated %d PRs", len(refreshedIDs))
-		d.coalesceSnapshots(func() {
-			for _, id := range refreshedIDs {
-				d.publishFact(FactPRDetailsChanged, id, nil)
-			}
-		})
+	d.durableWork.durably(func() { d.storePRDetails("Detail refresh", fetched) })
+}
+
+type fetchedPRDetails struct {
+	id      string
+	details *github.PRDetails
+	hot     bool
+}
+
+func (d *Daemon) storePRDetails(origin string, fetched []fetchedPRDetails) {
+	if len(fetched) == 0 {
+		return
 	}
+	for _, pr := range fetched {
+		if pr.hot {
+			d.store.SetPRHot(pr.id)
+		}
+		details := pr.details
+		d.store.UpdatePRDetails(pr.id, details.Mergeable, details.MergeableState, details.CIStatus, details.ReviewStatus, details.HeadSHA, details.HeadBranch)
+	}
+	d.logf("%s: updated %d PRs", origin, len(fetched))
+	d.coalesceSnapshots(func() {
+		for _, pr := range fetched {
+			d.publishFact(FactPRDetailsChanged, pr.id, nil)
+		}
+	})
 }
 
 func (d *Daemon) fetchAllPRDetails() {
@@ -3669,7 +3709,7 @@ func (d *Daemon) fetchAllPRDetails() {
 
 	d.logf("App launch: fetching details for %d PRs", len(allPRs))
 
-	var refreshedIDs []string
+	var fetched []fetchedPRDetails
 	limitedHosts := make(map[string]time.Time)
 	for _, pr := range allPRs {
 		if pr.Muted {
@@ -3723,8 +3763,7 @@ func (d *Daemon) fetchAllPRDetails() {
 			continue
 		}
 
-		d.store.UpdatePRDetails(pr.ID, details.Mergeable, details.MergeableState, details.CIStatus, details.ReviewStatus, details.HeadSHA, details.HeadBranch)
-		refreshedIDs = append(refreshedIDs, pr.ID)
+		fetched = append(fetched, fetchedPRDetails{id: pr.ID, details: details})
 	}
 
 	if len(limitedHosts) > 0 {
@@ -3742,14 +3781,7 @@ func (d *Daemon) fetchAllPRDetails() {
 		}
 	}
 
-	if len(refreshedIDs) > 0 {
-		d.logf("App launch: updated %d PRs", len(refreshedIDs))
-		d.coalesceSnapshots(func() {
-			for _, id := range refreshedIDs {
-				d.publishFact(FactPRDetailsChanged, id, nil)
-			}
-		})
-	}
+	d.durableWork.durably(func() { d.storePRDetails("App launch", fetched) })
 }
 
 func (d *Daemon) handleInjectTestPR(conn net.Conn, msg *protocol.InjectTestPRMessage) {
@@ -3977,17 +4009,14 @@ func (d *Daemon) fetchPRDetailsImmediate(prID string) {
 func (d *Daemon) monitorBranches() {
 	d.logf("Branch monitoring started (%s interval)", branchMonitorInterval)
 
-	d.checkAllBranches()
-
 	ticker := time.NewTicker(branchMonitorInterval)
 	defer ticker.Stop()
 
-	for {
+	for d.durableWork.durably(d.checkAllBranches) {
 		select {
 		case <-d.done:
 			return
 		case <-ticker.C:
-			d.checkAllBranches()
 		}
 	}
 }
