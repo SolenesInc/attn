@@ -48,7 +48,7 @@ func TestAResumedConversationCountsOnlyTheUsageAfterTheResume(t *testing.T) {
 	if !resumed.Resumed || resumed.ConversationID != first.ConversationID {
 		t.Fatalf("the launch ran claude %q, want it to resume %s", resumed.Argv, first.ConversationID)
 	}
-	if window := messageWindow(app, session); window.Status != protocol.SessionMessageWindowStatusReady || len(window.Messages) != 1 {
+	if window := messageWindowShowing(app, session, strings.TrimSuffix(oldAnswer, " <!-- attn:state=idle -->")); window.Status != protocol.SessionMessageWindowStatusReady || len(window.Messages) != 1 {
 		t.Fatalf("the resumed session shows %s %+v, want the conversation it resumed", window.Status, window.Messages)
 	}
 	app.TypeLine(session, "fix it")

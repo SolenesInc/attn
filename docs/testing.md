@@ -186,6 +186,8 @@ returns `testworld.Main(m)`.
   prepares a data directory for the built `attn` binary.
 - `s.Start()` runs `attn daemon` and returns once it signals ready. `s.Stop()`
   ends it. A `Start` after `Stop` restarts over the same data.
+  The stack holds its WebSocket listener until cleanup, including while the
+  daemon is stopped, so another process cannot take its address.
 - For a promise about a crash mid-operation, `s.StartCrashingAt(point)` runs
   a daemon that kills itself with SIGKILL at a crash point named in the
   daemon (`ATTN_CRASH_AT`). `s.AwaitCrash()` returns once it has, and a later
@@ -198,6 +200,14 @@ returns `testworld.Main(m)`.
   such as a long-running watch or a request the test answers as the app.
   Await its output with `AwaitStdout` or `AwaitStderr`, or its result with
   `Wait`. The stack interrupts it at cleanup.
+
+If the daemon misses its ready guard or `s.Run` exceeds its hang guard, the
+stack sends SIGQUIT to capture all goroutines before terminating the process.
+CLI invocations have their own process group so shell wrappers and their Go
+children receive the same signal.
+Failure logs include CPU and I/O pressure from `/proc/pressure` when available.
+Oversized diagnostic streams retain their beginning and end and report the
+byte limit, original size and omitted bytes.
 
 ### Scenario
 

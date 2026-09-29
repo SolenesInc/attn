@@ -192,14 +192,14 @@ func (d *Daemon) bindSeedHandoverProtected(
 	if noteCommit != nil {
 		commits = append(commits, *noteCommit)
 	}
-	d.gardenWatchMu.Lock()
+	d.lockGardenRoles()
 	written, eventSeqs, err := d.store.CommitGardenDispatchWritesWithEvents(
 		commits, store.GardenSeedWatch{WatcherSessionID: sessionID, SeedID: seed.ID}, events, d.gardenTime(),
 	)
 	if err == nil {
 		err = d.discardAllIneligibleGardenSeedBellsLocked()
 	}
-	d.gardenWatchMu.Unlock()
+	d.unlockGardenRoles()
 	if err != nil {
 		var conflict *docstore.ConflictError
 		if errors.As(err, &conflict) {

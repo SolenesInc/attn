@@ -12,6 +12,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"syscall"
 	"time"
@@ -243,6 +244,30 @@ func spawnDaemon(binaryPath string) (daemonProcess, error) {
 		fmt.Sprintf("%s=%d", readyFDEnv, 3),
 	)
 	cmd.ExtraFiles = []*os.File{writer}
+	if rawFD := os.Getenv("ATTN_HARNESS_WS_LISTENER_FD"); rawFD != "" {
+		if os.Getenv("ATTN_HARNESS_DATA_DIR") == "" {
+			reader.Close()
+			writer.Close()
+			return daemonProcess{}, fmt.Errorf("ATTN_HARNESS_WS_LISTENER_FD requires ATTN_HARNESS_DATA_DIR")
+		}
+		fd, err := strconv.Atoi(rawFD)
+		if err != nil {
+			reader.Close()
+			writer.Close()
+			return daemonProcess{}, fmt.Errorf("invalid ATTN_HARNESS_WS_LISTENER_FD %q: %w", rawFD, err)
+		}
+		duplicate, err := syscall.Dup(fd)
+		if err != nil {
+			reader.Close()
+			writer.Close()
+			return daemonProcess{}, fmt.Errorf("duplicate harness WebSocket listener: %w", err)
+		}
+		syscall.CloseOnExec(duplicate)
+		file := os.NewFile(uintptr(duplicate), "harness-websocket-listener")
+		defer file.Close()
+		cmd.ExtraFiles = append(cmd.ExtraFiles, file)
+		cmd.Env = append(cmd.Env, "ATTN_HARNESS_WS_LISTENER_FD=4")
+	}
 	if err := cmd.Start(); err != nil {
 		reader.Close()
 		writer.Close()

@@ -213,11 +213,11 @@ func (d *Daemon) updateGardenDispatch(
 		var writeErr error
 		if current.Crown == "" && next.Crown != "" {
 			var results []store.DocumentWriteResult
-			d.gardenWatchMu.Lock()
+			d.lockGardenRoles()
 			results, writeErr = d.store.CommitGardenDispatchWrites([]store.DocumentCommit{commit}, store.GardenSeedWatch{
 				WatcherSessionID: next.DispatcherSession, SeedID: next.Crown,
 			}, d.gardenTime())
-			d.gardenWatchMu.Unlock()
+			d.unlockGardenRoles()
 			if writeErr == nil {
 				written = results[0]
 			}

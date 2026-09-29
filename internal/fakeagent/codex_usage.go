@@ -11,9 +11,35 @@ import (
 )
 
 const (
-	codexDefaultModel = "gpt-5.5"
-	methodGuardian    = "guardian_review"
+	codexDefaultModel   = "gpt-5.5"
+	methodGuardian      = "guardian_review"
+	methodCodexSettings = "codex_settings"
 )
+
+type codexSettingsParams struct {
+	Model       string `json:"model"`
+	ServiceTier string `json:"service_tier"`
+}
+
+func (r *Run) CodexSettings(model, serviceTier string) {
+	r.t.Helper()
+	r.call(methodCodexSettings, codexSettingsParams{Model: model, ServiceTier: serviceTier}, nil)
+}
+
+func (a *agent) handleCodexSettings(params json.RawMessage) (any, error) {
+	var p codexSettingsParams
+	if err := json.Unmarshal(params, &p); err != nil {
+		return nil, err
+	}
+	c, ok := a.conv.(*codex)
+	if !ok {
+		return nil, fmt.Errorf("%T is not Codex", a.conv)
+	}
+	a.turn.Lock()
+	defer a.turn.Unlock()
+	c.model, c.serviceTier = p.Model, p.ServiceTier
+	return struct{}{}, nil
+}
 
 type guardianReviewer interface {
 	guardianReview(text string) error
@@ -45,6 +71,9 @@ func (c *codex) usageLines(text string) []any {
 	}
 	return []any{
 		map[string]any{"timestamp": now(), "type": "turn_context", "payload": map[string]any{"model": model}},
+		map[string]any{"timestamp": now(), "type": "event_msg", "payload": map[string]any{
+			"type": "thread_settings_applied", "thread_settings": map[string]any{"model": model, "service_tier": c.serviceTier},
+		}},
 		map[string]any{"timestamp": now(), "type": "event_msg", "payload": map[string]any{
 			"type": "token_count",
 			"info": map[string]any{"last_token_usage": map[string]any{

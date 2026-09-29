@@ -1,0 +1,3 @@
+kind: internal
+area: testing
+change: Keep every stack test's WebSocket listener bound across daemon starts and restarts.

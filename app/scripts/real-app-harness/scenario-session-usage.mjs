@@ -13,7 +13,7 @@ import { UiAutomationClient } from './uiAutomationClient.mjs';
 import { DaemonObserver } from './daemonObserver.mjs';
 import { delay } from './platform.mjs';
 import { createScenarioRunner } from './scenarioRunner.mjs';
-import { ensureClaudePromptReadyViaPty } from './scenarioAgents.mjs';
+import { ensureClaudePromptReadyViaPty, ensureCodexPromptReadyViaPty } from './scenarioAgents.mjs';
 import { waitForFirstWorkspacePane } from './scenarioAssertions.mjs';
 import { writeMockAgentFixture } from './mockAgent.mjs';
 import { recordingEnabled } from './windowRecording.mjs';
@@ -92,11 +92,13 @@ async function main() {
   let sessionId = null;
   let receipt = null;
   let rootPath = null;
+  let codexSessionId = null;
 
   runner.registerCleanup('close_observer', () => observer.close());
   runner.registerCleanup('quit_app', () => client.quitApp());
   runner.registerCleanup('close_session', async () => {
     if (sessionId) await client.request('close_session', { sessionId }).catch(() => {});
+    if (codexSessionId) await client.request('close_session', { sessionId: codexSessionId }).catch(() => {});
   });
 
   try {
@@ -212,12 +214,52 @@ async function main() {
       await client.request('dom_key', { selector: '.session-usage-popover', key: 'Escape' });
     });
 
-    console.log(JSON.stringify(await runner.finishSuccess({ sessionId, receipt }), null, 2));
+    await runner.step('codex_fast_toggles_and_long_context', async () => {
+      const cwd = path.join(runner.sessionDir, 'codex');
+      writeMockAgentFixture(cwd, { name: 'Codex pricing', agent: 'codex', turns: [] });
+      codexSessionId = await createSessionAndWaitForInitialPane({
+        client, observer, cwd, label: 'Codex pricing', agent: 'codex',
+        promptReadyFn: ensureCodexPromptReadyViaPty,
+      });
+      await client.request('select_session', { sessionId: codexSessionId });
+      const transcriptDir = path.join(cwd, '.attn-mock-agent');
+      const transcript = await poll(() => {
+        const names = fs.existsSync(transcriptDir)
+          ? fs.readdirSync(transcriptDir).filter((name) => name.endsWith('.jsonl')) : [];
+        return names.length === 1 ? path.join(transcriptDir, names[0]) : null;
+      }, 'the mock Codex transcript');
+      const badge = `[data-testid="session-usage-${codexSessionId}"]`;
+      for (const turn of [
+        { tier: 'priority', input: 100_000, cached: 50_000, tokens: 110_000, usd: 0.41, badge: '$0.41' },
+        { tier: 'default', input: 100_000, cached: 50_000, tokens: 220_000, usd: 0.615, badge: '$0.62' },
+        { tier: 'fast', input: 300_000, cached: 200_000, tokens: 530_000, usd: 1.795, badge: '$1.80' },
+      ]) {
+        const records = [
+          { type: 'turn_context', payload: { model: 'gpt-6.1-sol' } },
+          { type: 'event_msg', payload: { type: 'thread_settings_applied', thread_settings: { model: 'gpt-6.1-sol', service_tier: turn.tier } } },
+          { type: 'event_msg', payload: { type: 'token_count', info: { last_token_usage: { input_tokens: turn.input, cached_input_tokens: turn.cached, output_tokens: 10_000 } } } },
+        ];
+        fs.appendFileSync(transcript, `${records.map((record) => JSON.stringify(record)).join('\n')}\n`);
+        const usage = await poll(() => {
+          const current = observer.getSession(codexSessionId)?.usage;
+          return current?.total_tokens === turn.tokens ? current : null;
+        }, `the ${turn.tier} cost receipt`);
+        runner.assert(Math.abs(usage.cost_usd - turn.usd) < 0.000001 && !usage.has_unpriced_usage,
+          'Codex prices each turn using its recorded tier and context length', usage);
+        await poll(async () => {
+          const shown = await client.request('dom_text', { selector: badge }).catch(() => null);
+          return shown?.text === turn.badge ? shown : null;
+        }, `the ${turn.tier} header cost ${turn.badge}`);
+      }
+    });
+
+    console.log(JSON.stringify(await runner.finishSuccess({ sessionId, codexSessionId, receipt }), null, 2));
   } catch (error) {
     console.error((await runner.finishFailure(error, { sessionId, receipt })).error);
     process.exitCode = 1;
   } finally {
     if (sessionId) await client.request('close_session', { sessionId }).catch(() => {});
+    if (codexSessionId) await client.request('close_session', { sessionId: codexSessionId }).catch(() => {});
     await client.quitApp().catch(() => {});
     await observer.close();
   }

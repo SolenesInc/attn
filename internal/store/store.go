@@ -201,8 +201,6 @@ func (s *Store) execLog(query string, args ...interface{}) {
 
 func (s *Store) Close() error {
 	if s.db != nil {
-		// A connection left open by an interrupted backup stops close from checkpointing on its own.
-		_, _ = s.db.Exec("PRAGMA wal_checkpoint(TRUNCATE)")
 		return s.db.Close()
 	}
 	return nil

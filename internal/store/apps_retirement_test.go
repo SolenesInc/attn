@@ -51,7 +51,7 @@ func TestAppsRetirementKeepsCoreStateAcrossUpgradeAndRestart(t *testing.T) {
 		`INSERT INTO sessions(id, label, directory, state, state_since, state_updated_at, last_seen, agent_driver_plugin_name) VALUES ('session-1', 'Preserved', '/tmp', 'idle', 'now', 'now', 'now', 'attn-pi')`,
 		`INSERT INTO workspaces(id, title, directory, created_at) VALUES ('workspace-1', 'Preserved', '/tmp', 'now')`,
 		`INSERT INTO notifications(id, kind, source_kind, created_at) VALUES ('app-notice', 'warning', 'app', 'now'), ('app-runtime-notice', 'warning', 'app_runtime', 'now'), ('core-notice', 'warning', 'plugin', 'now')`,
-		`DELETE FROM schema_migrations WHERE version = 157`,
+		`DELETE FROM schema_migrations WHERE version >= 157`,
 	} {
 		if _, err := s.db.Exec(query); err != nil {
 			t.Fatal(err)

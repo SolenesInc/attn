@@ -1,6 +1,7 @@
 package daemon_test
 
 import (
+	"math"
 	"testing"
 
 	"github.com/victorarias/attn/internal/fakeagent"
@@ -86,4 +87,36 @@ func awaitUsageTokens(app *testworld.Peer, session string, tokens int) *protocol
 
 func claudeTokens(text string) int {
 	return 2 * len(text)
+}
+
+func TestCodexFastPricingSurvivesTogglesAndRestart(t *testing.T) {
+	w := newWorld(t, fakeagent.Codex)
+	app := w.App()
+	session := w.Spawn(app, fakeagent.Codex, w.Path("shop"))
+	codex := w.Launched(session)
+	reply := "Ready. <!-- attn:state=idle -->"
+	var tokens int
+	var want float64
+	for _, tier := range []string{"priority", "default", "fast"} {
+		codex.CodexSettings("gpt-6.1-sol", tier)
+		app.TypeLine(session, "continue")
+		codex.Prompted()
+		codex.Subagent(reply)
+		codex.Reply(reply)
+		tokens += 4 * len(reply)
+		multiplier := 1.0
+		if tier != "default" {
+			multiplier = 2
+		}
+		want += float64(len(reply)) * 24 * multiplier / 1e6
+		usage := awaitUsageTokens(app, session, tokens)
+		if usage.CostUsd == nil || math.Abs(*usage.CostUsd-want) > 1e-12 || len(usage.Models) != 1 || usage.HasUnpricedUsage {
+			t.Fatalf("usage = %+v, want one fully priced row costing %.9f", usage, want)
+		}
+	}
+	w.restart()
+	usage := queriedSession(t, w.Client(), session).Usage
+	if usage == nil || usage.TotalTokens != tokens || usage.CostUsd == nil || math.Abs(*usage.CostUsd-want) > 1e-12 {
+		t.Fatalf("restored usage = %+v, want %d tokens costing %.9f", usage, tokens, want)
+	}
 }

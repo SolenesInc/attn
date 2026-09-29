@@ -57,7 +57,7 @@ func NewFollower(path, agent string, startOffset int64) (*Follower, error) {
 		return nil, err
 	}
 	usage := NewUsageExtractor(agent)
-	if err := usage.seedCodexModelBefore(f, startOffset); err != nil {
+	if err := usage.seedCodexUsageBefore(f, startOffset); err != nil {
 		return nil, err
 	}
 	return &Follower{
