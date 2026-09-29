@@ -2524,6 +2524,8 @@ func (d *Daemon) handleConnection(conn net.Conn) {
 		d.handleSessionShow(conn, msg.(*protocol.SessionShowMessage))
 	case protocol.CmdSessionReopen:
 		d.handleSessionReopen(conn, msg.(*protocol.SessionReopenMessage))
+	case protocol.CmdDesktopMoveSession:
+		d.handleDesktopMoveSession(conn, msg.(*protocol.DesktopMoveSessionMessage))
 	case protocol.CmdRenameSession:
 		d.handleRenameSessionConn(conn, msg.(*protocol.RenameSessionMessage))
 	case protocol.CmdStateExplain:

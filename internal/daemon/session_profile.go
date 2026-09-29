@@ -131,6 +131,29 @@ func (d *Daemon) placementBeside(sessionID string) *launchPlacement {
 	return &launchPlacement{desktopID: placement.DesktopID, anchorPaneID: placement.PaneID, direction: layouttree.DirectionVertical}
 }
 
+// resolveDesktopRef names a desktop of profile by digit, name or id; an id on
+// another profile is refused naming both profiles.
+func (d *Daemon) resolveDesktopRef(profile profiles.Profile, ref string) (profiles.Desktop, error) {
+	_, desktops, err := d.store.ProfileArrangement(profile.ID)
+	if err != nil {
+		return profiles.Desktop{}, fmt.Errorf("read the desktops of profile %q: %w", profile.Name, err)
+	}
+	desktop, resolveErr := profiles.ResolveDesktopRef(profile, desktops, ref)
+	if resolveErr == nil {
+		return desktop, nil
+	}
+	elsewhere, err := d.store.GetDesktop(strings.TrimSpace(ref))
+	if err != nil || elsewhere.ProfileID == profile.ID {
+		return profiles.Desktop{}, resolveErr
+	}
+	owner, err := d.store.GetProfile(elsewhere.ProfileID)
+	if err != nil {
+		return profiles.Desktop{}, resolveErr
+	}
+	return profiles.Desktop{}, profiles.Errorf(profiles.CodeCrossProfile, "desktop %s belongs to profile %q, not profile %q; %s",
+		elsewhere.ID, owner.Name, profile.Name, profiles.DesktopDirectory(profile, desktops))
+}
+
 func (d *Daemon) callerProfile(callerSessionID string) (profiles.Profile, error) {
 	callerSessionID = strings.TrimSpace(callerSessionID)
 	if callerSessionID == "" {

@@ -49,6 +49,14 @@ func (d *Daemon) startDelegationForeground(msg *protocol.DelegateMessage) (*prot
 	} else if !errors.Is(lookupErr, sql.ErrNoRows) {
 		return nil, lookupErr
 	}
+	if ref := strings.TrimSpace(protocol.Deref(msg.Desktop)); ref != "" {
+		sourceID := strings.TrimSpace(protocol.Deref(msg.SourceSessionID))
+		if source := d.store.Get(sourceID); source != nil || sourceID == "" {
+			if _, _, err := d.delegationDestination(source, ref); err != nil {
+				return nil, err
+			}
+		}
+	}
 	resolved, err := d.resolveDelegationPreferences(msg)
 	if err != nil {
 		return nil, err
