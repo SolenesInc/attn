@@ -14,24 +14,15 @@ import { SidebarSettings } from './SidebarSettings';
 
 export function SidebarCollapsed() {
   const {
-    selectedDesktopId,
     instance,
     headerActions,
     gridLayout,
     onSelectGridLayout,
-    onSelectDesktop,
     onNewSession,
     onGoToDashboard,
     homeActive,
     onToggleCollapse,
-    sessionWantsAttention,
-    visibleVisualOrder,
-    visualIndexOfDesktop,
   } = useSidebarContext();
-  const desktopListRef = useRef<HTMLDivElement>(null);
-  useEffect(() => {
-    desktopListRef.current?.querySelector('[aria-current="true"]')?.scrollIntoView({ block: 'nearest' });
-  }, [selectedDesktopId]);
   return (
     <div className="sidebar collapsed">
       {instance && (
@@ -74,35 +65,7 @@ export function SidebarCollapsed() {
           </button>
         ))}
         <div className="icon-divider" />
-        <div className="rail-desktops" ref={desktopListRef}>
-          {visibleVisualOrder.map((desktopView) => {
-            const shortcut = desktopShortcut(visualIndexOfDesktop(desktopView.id));
-            const label = shortcut ? `${desktopView.title} (${shortcut})` : desktopView.title;
-            const current = selectedDesktopId === desktopView.id;
-            return (
-              <button
-                key={desktopView.id}
-                className={`icon-btn session-icon ${selectedDesktopId === desktopView.id ? 'active' : ''}`}
-                onClick={() => onSelectDesktop(desktopView.id)}
-                title={label}
-                aria-label={label}
-                aria-current={current ? 'true' : undefined}
-              >
-                <DesktopChip
-                  number={desktopView.desktop?.number}
-                  current={current}
-                  empty={hasNoLeaves(desktopView)}
-                >
-                  {desktopView.sessions.some(sessionWantsAttention) && (
-                    <span
-                      className={`mini-badge ${desktopView.status === 'pending_approval' ? 'pending' : ''} ${desktopView.status === 'unknown' ? 'unknown' : ''}`}
-                    />
-                  )}
-                </DesktopChip>
-              </button>
-            );
-          })}
-        </div>
+        <RailDesktops />
         <button
           className="icon-btn"
           onClick={onNewSession}
@@ -114,6 +77,51 @@ export function SidebarCollapsed() {
           <ExpandIcon />
         </button>
       </div>
+    </div>
+  );
+}
+
+function RailDesktops() {
+  const {
+    selectedDesktopId,
+    onSelectDesktop,
+    sessionWantsAttention,
+    visibleVisualOrder,
+    visualIndexOfDesktop,
+  } = useSidebarContext();
+  const desktopListRef = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    desktopListRef.current?.querySelector('[aria-current="true"]')?.scrollIntoView({ block: 'nearest' });
+  }, [selectedDesktopId]);
+  return (
+    <div className="rail-desktops" ref={desktopListRef}>
+      {visibleVisualOrder.map((desktopView) => {
+        const shortcut = desktopShortcut(visualIndexOfDesktop(desktopView.id));
+        const label = shortcut ? `${desktopView.title} (${shortcut})` : desktopView.title;
+        const current = selectedDesktopId === desktopView.id;
+        return (
+          <button
+            key={desktopView.id}
+            className={`icon-btn session-icon ${current ? 'active' : ''}`}
+            onClick={() => onSelectDesktop(desktopView.id)}
+            title={label}
+            aria-label={label}
+            aria-current={current ? 'true' : undefined}
+          >
+            <DesktopChip
+              number={desktopView.desktop?.number}
+              current={current}
+              empty={hasNoLeaves(desktopView)}
+            >
+              {desktopView.sessions.some(sessionWantsAttention) && (
+                <span
+                  className={`mini-badge ${desktopView.status === 'pending_approval' ? 'pending' : ''} ${desktopView.status === 'unknown' ? 'unknown' : ''}`}
+                />
+              )}
+            </DesktopChip>
+          </button>
+        );
+      })}
     </div>
   );
 }
