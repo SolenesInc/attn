@@ -371,6 +371,7 @@ func TestMoveBetweenDesktopsCommitsSourceAndTargetTogether(t *testing.T) {
 	moved, err := s.MoveLeaf(LeafMoveRequest{
 		SourceDesktopID: first.ID, TargetDesktopID: second.ID, LeafID: paneB, AnchorID: paneC,
 		Direction: layouttree.DirectionHorizontal, LeafShare: 0.25, ExpectedSourceRevision: source.Revision, ExpectedTargetRevision: target.Revision,
+		Activate: true,
 	})
 	if err != nil {
 		t.Fatalf("MoveLeaf: %v", err)
