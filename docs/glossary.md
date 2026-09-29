@@ -38,6 +38,19 @@
 
 - Focus mode: one workspace pane or tile occupies the shell until the user returns to the split.
 
+## Cost estimates
+
+Codex costs use the configured service tier from
+`thread_settings_applied.thread_settings.service_tier`. `priority` and `fast`
+select fast rates. Usage recorded before a tier setting uses standard rates.
+Model price overrides specify standard rates; published fast multipliers apply.
+
+Codex does not record backend fallbacks, per-turn tier overrides, or changes to
+the root tier inherited by native subagents beside their usage. These costs
+remain estimates. A settings change between turn context and the first token
+count is attributed to that turn; the transcript cannot tell whether the user
+intended it for the next turn.
+
 ## Garden and crew
 
 - Garden: the home daemon's work tracker, shared across workspaces.

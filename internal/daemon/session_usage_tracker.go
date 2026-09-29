@@ -178,6 +178,7 @@ func (t *sessionUsageTracker) readIfMoved(tracked *trackedUsageSource) {
 			ObservationID: observationID,
 			Model:         model,
 			Purpose:       usage.Purpose,
+			FastMode:      usage.FastMode,
 			Usage: sessioncost.Usage{
 				InputTokens:                  usage.InputTokens,
 				OutputTokens:                 usage.OutputTokens,

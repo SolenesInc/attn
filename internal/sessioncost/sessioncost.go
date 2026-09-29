@@ -68,9 +68,11 @@ type LedgerKey struct {
 	Model       string
 	Purpose     string
 	LongContext bool
+	FastMode    bool
 }
 
 const longContextKeySuffix = "|long-context"
+const fastModeKeySuffix = "|fast"
 
 func NewLedgerKey(model, purpose string) LedgerKey {
 	purpose = strings.TrimSpace(purpose)
@@ -98,6 +100,7 @@ func RequestLedgerKey(model, purpose string, request Usage) LedgerKey {
 func (k LedgerKey) normalized() LedgerKey {
 	normalized := NewLedgerKey(k.Model, k.Purpose)
 	normalized.LongContext = k.LongContext
+	normalized.FastMode = k.FastMode
 	return normalized
 }
 
@@ -107,11 +110,15 @@ func (k LedgerKey) MarshalText() ([]byte, error) {
 	if normalized.LongContext {
 		text += longContextKeySuffix
 	}
+	if normalized.FastMode {
+		text += fastModeKeySuffix
+	}
 	return []byte(text), nil
 }
 
 func (k *LedgerKey) UnmarshalText(text []byte) error {
-	raw, longContext := strings.CutSuffix(string(text), longContextKeySuffix)
+	raw, fastMode := strings.CutSuffix(string(text), fastModeKeySuffix)
+	raw, longContext := strings.CutSuffix(raw, longContextKeySuffix)
 	purpose, model, found := strings.Cut(raw, "|")
 	if !found {
 		*k = NewLedgerKey(raw, PurposeAgent)
@@ -119,6 +126,7 @@ func (k *LedgerKey) UnmarshalText(text []byte) error {
 		*k = NewLedgerKey(model, purpose)
 	}
 	k.LongContext = longContext
+	k.FastMode = fastMode
 	return nil
 }
 
@@ -208,8 +216,10 @@ func Price(ledger Ledger, settings map[string]string) (usd float64, known bool, 
 }
 
 type tieredUsage struct {
-	standard    Usage
-	longContext Usage
+	standard        Usage
+	longContext     Usage
+	fast            Usage
+	fastLongContext Usage
 }
 
 func Summarize(ledger Ledger, settings map[string]string) Summary {
@@ -227,7 +237,11 @@ func Summarize(ledger Ledger, settings map[string]string) Summary {
 			rows[rowKey] = row
 			keys = append(keys, rowKey)
 		}
-		if key.LongContext {
+		if key.FastMode && key.LongContext {
+			row.fastLongContext = row.fastLongContext.Add(usage)
+		} else if key.FastMode {
+			row.fast = row.fast.Add(usage)
+		} else if key.LongContext {
 			row.longContext = row.longContext.Add(usage)
 		} else {
 			row.standard = row.standard.Add(usage)
@@ -264,7 +278,7 @@ func Summarize(ledger Ledger, settings map[string]string) Summary {
 }
 
 func summarizeRow(key LedgerKey, tiers tieredUsage, settings map[string]string) (ModelSummary, bool) {
-	usage := tiers.standard.Add(tiers.longContext)
+	usage := tiers.standard.Add(tiers.longContext).Add(tiers.fast).Add(tiers.fastLongContext)
 	if !usage.valid() {
 		return ModelSummary{}, false
 	}
@@ -274,17 +288,26 @@ func summarizeRow(key LedgerKey, tiers tieredUsage, settings map[string]string) 
 	}
 	row := ModelSummary{Model: key.Model, Purpose: key.Purpose, Usage: usage, TotalTokens: total}
 	card, cardKnown, invalidOverride := rateCardForModel(key.Model, settings)
+	fastMultiplier, fastKnown := openAIFastRateMultipliers[key.Model]
+	fastCard := fastRates(card, fastMultiplier)
 	for _, tier := range []struct {
 		usage Usage
 		card  RateCard
+		known bool
+		fast  bool
 	}{
-		{tiers.standard, card},
-		{tiers.longContext, longContextRates(card)},
+		{tiers.standard, card, cardKnown, false},
+		{tiers.longContext, longContextRates(card), cardKnown, false},
+		{tiers.fast, fastCard, cardKnown && fastKnown, true},
+		{tiers.fastLongContext, longContextRates(fastCard), cardKnown && fastKnown && key.Model != "gpt-5.5", true},
 	} {
 		if !tier.usage.hasAnyValue() {
 			continue
 		}
-		cost, unpricedReason, ok := priceTier(tier.usage, tier.card, cardKnown, invalidOverride)
+		cost, unpricedReason, ok := priceTier(tier.usage, tier.card, tier.known, invalidOverride)
+		if tier.fast && unpricedReason == "No price is configured for this model." {
+			unpricedReason = "No fast-mode price is configured for this model and context length."
+		}
 		if !ok {
 			return ModelSummary{}, false
 		}
