@@ -319,9 +319,10 @@ func mailIdleAgent(w *world, app *testworld.Peer, dir string) (string, *fakeagen
 	w.T.Helper()
 	session := w.Spawn(app, fakeagent.Claude, w.Path(dir))
 	agent := w.Launched(session)
+	idle := testworld.AwaitSession(app, session, func(s protocol.Session) bool { return s.State == protocol.SessionStateIdle })
 	app.TypeLine(session, "wait for the others")
 	agent.Prompted()
-	working := testworld.AwaitSession(app, session, func(s protocol.Session) bool { return s.State == protocol.SessionStateWorking })
+	working := testworld.AwaitStateAfter(app, idle, func(s protocol.Session) bool { return s.State == protocol.SessionStateWorking })
 	agent.Reply("Waiting. <!-- attn:state=idle -->")
 	testworld.AwaitStateAfter(app, working, func(s protocol.Session) bool { return s.State == protocol.SessionStateIdle })
 	return session, agent
