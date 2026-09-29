@@ -1,0 +1,3 @@
+kind: added
+area: delegation
+change: "`attn delegate --desktop <ref>` opens the delegate on another desktop of the caller's profile, named by its shortcut digit, its name or its id, without changing what the user sees."

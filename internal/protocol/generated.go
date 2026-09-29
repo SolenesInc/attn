@@ -2525,6 +2525,9 @@ type DelegateMessage struct {
 	// Cwd corresponds to the JSON schema field "cwd".
 	Cwd string `json:"cwd"`
 
+	// Desktop corresponds to the JSON schema field "desktop".
+	Desktop *string `json:"desktop,omitempty,omitzero"`
+
 	// Effort corresponds to the JSON schema field "effort".
 	Effort *string `json:"effort,omitempty,omitzero"`
 
@@ -3200,6 +3203,37 @@ type DesktopMoveLeafMessage struct {
 
 	// TargetDesktopID corresponds to the JSON schema field "target_desktop_id".
 	TargetDesktopID string `json:"target_desktop_id"`
+}
+
+type DesktopMoveSessionMessage struct {
+	// CallerSessionID corresponds to the JSON schema field "caller_session_id".
+	CallerSessionID *string `json:"caller_session_id,omitempty,omitzero"`
+
+	// Cmd corresponds to the JSON schema field "cmd".
+	Cmd string `json:"cmd"`
+
+	// Desktop corresponds to the JSON schema field "desktop".
+	Desktop string `json:"desktop"`
+
+	// SessionID corresponds to the JSON schema field "session_id".
+	SessionID string `json:"session_id"`
+}
+
+type DesktopMoveSessionResult struct {
+	// DesktopID corresponds to the JSON schema field "desktop_id".
+	DesktopID string `json:"desktop_id"`
+
+	// FromDesktopID corresponds to the JSON schema field "from_desktop_id".
+	FromDesktopID *string `json:"from_desktop_id,omitempty,omitzero"`
+
+	// PaneID corresponds to the JSON schema field "pane_id".
+	PaneID string `json:"pane_id"`
+
+	// SessionID corresponds to the JSON schema field "session_id".
+	SessionID string `json:"session_id"`
+
+	// Unchanged corresponds to the JSON schema field "unchanged".
+	Unchanged *bool `json:"unchanged,omitempty,omitzero"`
 }
 
 type DesktopPane struct {
@@ -7677,6 +7711,10 @@ type Response struct {
 
 	// DelegationRoles corresponds to the JSON schema field "delegation_roles".
 	DelegationRoles *DelegationRolesResult `json:"delegation_roles,omitempty,omitzero"`
+
+	// DesktopMoveSessionResult corresponds to the JSON schema field
+	// "desktop_move_session_result".
+	DesktopMoveSessionResult *DesktopMoveSessionResult `json:"desktop_move_session_result,omitempty,omitzero"`
 
 	// DocCollectionsResult corresponds to the JSON schema field
 	// "doc_collections_result".

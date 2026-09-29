@@ -315,6 +315,63 @@ func runSessionRename(args []string) {
 	fmt.Printf("%s renamed to %q\n", parsed.sessionID, parsed.name)
 }
 
+type sessionMoveArgs struct {
+	desktop, sessionID string
+	json               bool
+}
+
+func parseSessionMoveArgs(args []string, ownSessionID string) (sessionMoveArgs, error) {
+	fs := flag.NewFlagSet("session move", flag.ContinueOnError)
+	fs.SetOutput(io.Discard)
+	session := fs.String("session", "", "session to move (defaults to ATTN_SESSION_ID)")
+	jsonOut := fs.Bool("json", false, "print the result as JSON")
+	var positional []string
+	for rest := args; ; {
+		if err := fs.Parse(rest); err != nil {
+			return sessionMoveArgs{}, err
+		}
+		if fs.NArg() == 0 {
+			break
+		}
+		positional = append(positional, fs.Arg(0))
+		rest = fs.Args()[1:]
+	}
+	if len(positional) != 1 || strings.TrimSpace(positional[0]) == "" {
+		return sessionMoveArgs{}, errors.New("exactly one desktop is required: its shortcut digit (1-9), its name or its id")
+	}
+	parsed := sessionMoveArgs{desktop: strings.TrimSpace(positional[0]), sessionID: strings.TrimSpace(*session), json: *jsonOut}
+	if parsed.sessionID == "" {
+		parsed.sessionID = strings.TrimSpace(ownSessionID)
+	}
+	if parsed.sessionID == "" {
+		return sessionMoveArgs{}, errors.New("no session; run inside attn or pass --session")
+	}
+	return parsed, nil
+}
+
+func runSessionMove(args []string) {
+	own := os.Getenv("ATTN_SESSION_ID")
+	parsed, err := parseSessionMoveArgs(args, own)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "session move: %v\n", err)
+		writeSessionHelp(os.Stderr)
+		os.Exit(2)
+	}
+	result, err := client.New("").MoveSessionToDesktop(own, parsed.sessionID, parsed.desktop)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "session move: %v\n", err)
+		os.Exit(1)
+	}
+	switch {
+	case parsed.json:
+		printJSON(result)
+	case protocol.Deref(result.Unchanged):
+		fmt.Printf("%s already is on desktop %s\n", result.SessionID, result.DesktopID)
+	default:
+		fmt.Printf("%s moved to desktop %s (pane %s)\n", result.SessionID, result.DesktopID, result.PaneID)
+	}
+}
+
 func runSessionShow(args []string) {
 	target, err := parseSessionShowArgs(args)
 	if err != nil {

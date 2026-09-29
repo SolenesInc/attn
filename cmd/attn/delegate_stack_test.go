@@ -224,3 +224,52 @@ func TestDelegateRolesEditWalkBackAndRestoreTheDaemonsTable(t *testing.T) {
 	requireLines(t, "roles show", roles("show"), "revision 7", "build", "claude sonnet", "/hard", "when: Concurrency")
 	requireLines(t, "roles history", roles("history", "--limit", "7"), "revision 7 (live)", "restores 4", "from the CLI", `"the user wants a builder"`, "added role build (claude opus high)")
 }
+
+func TestDelegateDesktopPlacesTheAgentOnTheNamedDesktop(t *testing.T) {
+	t.Parallel()
+	s := testworld.NewStack(t, testworld.WithAgents(fakeagent.Claude))
+	s.Start()
+	app := s.App()
+	notes := s.Path("notes")
+	if err := os.MkdirAll(notes, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	source := s.Spawn(app, fakeagent.Claude, notes)
+	s.Launched(source)
+	id := uuid.NewString()
+	created := testworld.Request(app, protocol.DesktopCreateMessage{Cmd: protocol.CmdDesktopCreate, RequestID: id, ProfileID: app.SelectedProfile(), Name: protocol.Ptr("Ops")},
+		protocol.EventProfileActionResult, func(r protocol.ProfileActionResultMessage) bool { return r.RequestID == id })
+	if !created.Success {
+		t.Fatalf("creating the Ops desktop: %s", protocol.Deref(created.Error))
+	}
+	ops := created.Desktops[0].ID
+
+	delegate := func(args ...string) testworld.Result {
+		return s.Run(testworld.Invocation{Session: source, Args: append([]string{"delegate", "--brief", "Watch the deploy", "--cwd", notes, "--model", "opus", "--name", "watcher"}, args...)})
+	}
+	started := delegate("--desktop", "ops")
+	if started.Code != 0 {
+		t.Fatalf("attn delegate --desktop ops exited %d: %s", started.Code, started.Stderr)
+	}
+	var result struct {
+		DesktopID string `json:"desktop_id"`
+	}
+	started.JSON(t, &result)
+	if result.DesktopID != ops {
+		t.Errorf("the delegate landed on desktop %q; want Ops %s", result.DesktopID, ops)
+	}
+
+	for _, tc := range []struct {
+		ref  string
+		code int
+		want string
+	}{
+		{ref: "", code: 2, want: "--desktop needs a shortcut digit (1-9), a desktop name or a desktop id"},
+		{ref: "nope", code: 1, want: `unknown desktop "nope"`},
+	} {
+		got := delegate("--desktop", tc.ref)
+		if got.Code != tc.code || !strings.Contains(got.Stderr, tc.want) {
+			t.Errorf("--desktop %q exited %d with stderr %q; want %d and %q", tc.ref, got.Code, got.Stderr, tc.code, tc.want)
+		}
+	}
+}
