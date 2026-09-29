@@ -130,11 +130,11 @@ describe('sidebar harness identity', () => {
     const data = sidebarData(true);
     const props = { ...baseProps, ...data, crew: [{ id: 'fern' }, { id: 'sleeping' }] };
     const { rerender } = render(<Sidebar {...props} agentListOpen queue={buildQueueBands(data.desktops)} />);
-    expect(within(screen.getByTestId('queue-crew-fern')).getByRole('img', { name: 'Pi' })).toBeInTheDocument();
+    expect(within(screen.getByTestId('queue-crew-fern')).getByRole('img', { name: 'Pi · idle' })).toBeInTheDocument();
     expect(within(screen.getByTestId('queue-crew-sleeping')).queryByRole('img')).not.toBeInTheDocument();
-    expect(screen.getByRole('button', { name: 'Open Implement sidebar logos' })).toHaveAttribute('title', 'Codex');
-    expect(screen.getByRole('img', { name: 'Claude' })).toBeInTheDocument();
-    expect(screen.getByRole('img', { name: 'Custom Driver' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Open Implement sidebar logos' })).toHaveAttribute('title', expect.stringContaining('Codex'));
+    expect(screen.getByRole('img', { name: 'Claude · idle' })).toBeInTheDocument();
+    expect(screen.getByRole('img', { name: 'Custom Driver · idle' })).toBeInTheDocument();
     rerender(<Sidebar {...props} queue={null} />);
     expect(within(screen.getByTestId('sidebar-session-pi')).getByRole('img', { name: 'Pi · idle' })).toBeInTheDocument();
     expect(within(screen.getByTestId('sidebar-session-codex')).getByRole('img', { name: 'Codex · idle' })).toBeInTheDocument();
@@ -171,7 +171,7 @@ describe('sidebar harness identity', () => {
       />,
     );
 
-    expect(screen.getByTestId('queue-select-codex')).toHaveAttribute('title', 'Codex');
+    expect(screen.getByTestId('queue-select-codex')).toHaveAttribute('title', expect.stringContaining('Codex'));
     expect(document.querySelector('.sidebar')).toHaveClass('sidebar--hide-harness-logos');
     expect(document.querySelectorAll('.sidebar-harness-icon')).not.toHaveLength(0);
   });

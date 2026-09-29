@@ -1,9 +1,7 @@
 import type { MouseEvent as ReactMouseEvent } from 'react';
-import { StateIndicator } from './StateIndicator';
 import { SessionLabel } from './SessionLabel';
-import { HarnessIcon } from './HarnessIcon';
 import { harnessLabel } from './harnessLabel';
-import { ChiefOfStaffBadge } from './ChiefOfStaffBadge';
+import { SessionLead } from './SessionLead';
 import { SidebarSettlingBar } from './SettlingIndicator';
 import { CrewWakeSun, useWakeConfirm } from './CrewWake';
 import { formatShortcut } from '../shortcuts/formatShortcut';
@@ -16,6 +14,8 @@ import type {
 } from '../types/generated';
 import { SessionProvenance } from './SessionProvenance';
 import { DelegationChainTrigger } from './DelegationChain';
+import './SidebarRow.css';
+import './QueueRows.css';
 
 export interface QueueBandSessionView {
   id: string;
@@ -57,7 +57,7 @@ function QueueRowControls({
   if (!onOpenActions && !onSettle && !onSnooze && !onWake) return null;
 
   return (
-    <div className="queue-row-controls">
+    <div className="session-actions">
       {onWake && (
         <button
           type="button"
@@ -89,18 +89,16 @@ function QueueRowControls({
         </button>
       )}
       {onOpenActions && (
-        <div className="session-actions">
-          <button
-            type="button"
-            className="session-action-btn session-more-btn"
-            data-testid={`session-actions-${session.id}`}
-            onClick={onOpenActions}
-            title="Session actions"
-            aria-label={`Actions for ${session.label}`}
-          >
-            •••
-          </button>
-        </div>
+        <button
+          type="button"
+          className="session-action-btn session-more-btn"
+          data-testid={`session-actions-${session.id}`}
+          onClick={onOpenActions}
+          title="Session actions"
+          aria-label={`Actions for ${session.label}`}
+        >
+          •••
+        </button>
       )}
       {onSettle && (
         <button
@@ -153,34 +151,40 @@ export function QueueRowView({
   const { session } = row;
   return (
     <div
-      className={`session-item queue-row ${selected ? 'selected' : ''}`.trim()}
+      className={`session-item sidebar-leaf-row queue-row ${selected ? 'selected' : ''}`.trim()}
       data-testid={`${testIdPrefix}-${session.id}`}
       data-session-id={session.id}
       data-state={session.state}
       data-desktop-id={row.desktopId}
+      title={session.chiefOfStaff ? session.label : undefined}
     >
       <QueueSessionSelection
-        session={session}
-        label={session.label}
+        label={session.chiefOfStaff ? 'Chief' : session.label}
+        title={[session.chiefOfStaff ? session.label : harnessLabel(session.agent), where?.title].filter(Boolean).join(' · ')}
         testId={`queue-select-${session.id}`}
         onSelect={onSelect}
       />
+      <SessionLead
+        agent={session.agent}
+        state={session.state}
+        reason={session.state_reason}
+        seed={session.id}
+        badge={where && <span className="queue-lead-badge" title={where.title}>{where.slot}</span>}
+      />
       <span className="sidebar-session-identity">
-        <span className="sidebar-session-headline">
-          <HarnessIcon agent={session.agent} />
-          <SessionLabel
-            label={session.label}
-            session={session}
-            hasDelegates={delegates.length > 0}
-          />
-        </span>
+        <SessionLabel
+          label={session.chiefOfStaff ? 'Chief' : session.label}
+          session={session}
+          hasDelegates={delegates.length > 0}
+        />
         <SessionProvenance automation={session.automation} density="compact" />
       </span>
-      {session.chiefOfStaff && <ChiefOfStaffBadge />}
-      <DelegationChainTrigger session={session} hasDelegates={delegates.length > 0} />
-      {where && <RowWhereChip where={where} />}
-      {age && <span className="queue-row-age">{age}</span>}
-      {wake && <span className="queue-row-wake-at">{wake}</span>}
+      <span className="session-trailing">
+        <DelegationChainTrigger session={session} hasDelegates={delegates.length > 0} />
+        {session.chiefOfStaff && <span className="queue-chief-glyph" title="Chief of staff" aria-label="Chief of staff">⌁</span>}
+        {age && <span className="queue-row-age">{age}</span>}
+        {wake && <span className="queue-row-wake-at">{wake}</span>}
+      </span>
       <QueueRowControls
         session={session}
         onSettle={onSettle}
@@ -200,17 +204,10 @@ export interface RowWhere {
   title: string;
 }
 
-function RowWhereChip({ where }: { where: RowWhere }) {
-  return (
-    <span className={`queue-row-where ${where.slot === '—' ? 'is-unplaced' : ''}`.trim()} title={where.title}>
-      {where.slot}
-    </span>
-  );
-}
-
 interface CrewRowProps {
   member: string;
   row?: QueueRow<QueueBandSessionView>;
+  where?: RowWhere;
   selected: boolean;
   onSelect?: () => void;
   onWake?: () => void;
@@ -246,7 +243,7 @@ function SleepingCrewRow({
   return (
     <div
       ref={rowRef}
-      className={`session-item queue-row queue-row--crew ${selected ? 'selected' : ''}`.trim()}
+      className={`session-item sidebar-leaf-row queue-row queue-row--crew ${selected ? 'selected' : ''}`.trim()}
       data-testid={`queue-crew-${member}`}
       data-crew-member={member}
       data-crew-state="asleep"
@@ -260,26 +257,22 @@ function SleepingCrewRow({
         onClick={trigger}
         disabled={!onWake}
       />
-      <span className="crew-asleep-dot" aria-hidden="true" />
+      <button
+        type="button"
+        className="queue-crew-sun"
+        data-testid={`queue-crew-wake-${member}`}
+        title={armed ? `Click again to wake ${name}` : `Wake ${name} — start its day`}
+        aria-label={wakeLabel}
+        onClick={trigger}
+        disabled={!onWake}
+      >
+        <CrewWakeSun phase={phase} />
+      </button>
       <SessionLabel label={name} />
-      <span className="crew-row-mark" title={`${name} is asleep`}>
-        asleep
-      </span>
+      <span className="session-trailing" />
       {(onWake || onOpenMemberActions) && (
-        <div className="queue-row-controls">
+        <div className="session-actions">
           {armed && <span className="crew-wake-confirm">confirm</span>}
-          {onWake && (
-            <button
-              type="button"
-              className="queue-row-wake"
-              data-testid={`queue-crew-wake-${member}`}
-              title={armed ? `Click again to wake ${name}` : `Wake ${name} — start its day`}
-              aria-label={wakeLabel}
-              onClick={trigger}
-            >
-              <CrewWakeSun phase={phase} />
-            </button>
-          )}
           {onOpenMemberActions && (
             <button
               type="button"
@@ -304,6 +297,7 @@ function SleepingCrewRow({
 function AwakeCrewRow({
   member,
   row,
+  where,
   selected,
   onSelect,
   onSleep,
@@ -317,7 +311,7 @@ function AwakeCrewRow({
   const label = session.label || name;
   return (
     <div
-      className={`session-item queue-row queue-row--crew ${selected ? 'selected' : ''}`.trim()}
+      className={`session-item sidebar-leaf-row queue-row queue-row--crew ${selected ? 'selected' : ''}`.trim()}
       data-testid={`queue-crew-${member}`}
       data-crew-member={member}
       data-crew-state="awake"
@@ -326,19 +320,24 @@ function AwakeCrewRow({
       data-desktop-id={row.desktopId}
     >
       <QueueSessionSelection
-        session={session}
         label={label}
+        title={[harnessLabel(session.agent), where?.title].filter(Boolean).join(' · ')}
         testId={`queue-crew-select-${member}`}
         onSelect={onSelect}
       />
-      <HarnessIcon agent={session.agent} />
+      <SessionLead
+        agent={session.agent}
+        state={session.state}
+        reason={session.state_reason}
+        seed={session.id}
+        badge={where && <span className="queue-lead-badge" title={where.title}>{where.slot}</span>}
+      />
       <SessionLabel label={label} session={session} hasDelegates={delegates.length > 0} />
-      <span className="crew-row-mark" title={`${name} is awake`}>
-        crew
+      <span className="session-trailing">
+        <DelegationChainTrigger session={session} hasDelegates={delegates.length > 0} />
       </span>
-      <DelegationChainTrigger session={session} hasDelegates={delegates.length > 0} />
       {(onSleep || onOpenActions) && (
-        <div className="queue-row-controls">
+        <div className="session-actions">
           {onSleep && (
             <button
               type="button"
@@ -354,7 +353,7 @@ function AwakeCrewRow({
           {onOpenActions && (
             <button
               type="button"
-              className="session-actions session-more-btn"
+              className="session-action-btn session-more-btn"
               data-testid={`session-actions-${session.id}`}
               title="Session actions"
               aria-label={`Actions for ${label}`}
@@ -370,13 +369,13 @@ function AwakeCrewRow({
 }
 
 function QueueSessionSelection({
-  session,
   label,
+  title,
   testId,
   onSelect,
 }: {
-  session: QueueBandSessionView;
   label: string;
+  title: string;
   testId: string;
   onSelect?: () => void;
 }) {
@@ -387,14 +386,8 @@ function QueueSessionSelection({
         className="queue-row-select"
         data-testid={testId}
         aria-label={`Open ${label}`}
-        title={harnessLabel(session.agent)}
+        title={title}
         onClick={onSelect}
-      />
-      <StateIndicator
-        state={session.state}
-        size="md"
-        seed={session.id}
-        reason={session.state_reason}
       />
     </>
   );
