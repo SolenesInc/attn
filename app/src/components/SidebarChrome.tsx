@@ -1,3 +1,4 @@
+import { useEffect, useRef } from 'react';
 import { formatShortcut } from '../shortcuts/formatShortcut';
 import { GridLayoutControl } from './grid/GridLayoutControl';
 import { RenamePopover } from './RenamePopover';
@@ -7,7 +8,8 @@ import { crewDisplayName } from '../utils/crewName';
 import './Sidebar.css';
 import { useSidebarContext } from './SidebarContext';
 import { CollapseIcon, ExpandIcon, HomeIcon, PlusIcon } from './SidebarIcons';
-import { desktopShortcut } from './sidebarModel';
+import { desktopShortcut, hasNoLeaves } from './sidebarModel';
+import { DesktopChip } from './SidebarDesktops';
 import { SidebarSettings } from './SidebarSettings';
 
 export function SidebarCollapsed() {
@@ -26,6 +28,10 @@ export function SidebarCollapsed() {
     visibleVisualOrder,
     visualIndexOfDesktop,
   } = useSidebarContext();
+  const desktopListRef = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    desktopListRef.current?.querySelector('[aria-current="true"]')?.scrollIntoView({ block: 'nearest' });
+  }, [selectedDesktopId]);
   return (
     <div className="sidebar collapsed">
       {instance && (
@@ -68,25 +74,35 @@ export function SidebarCollapsed() {
           </button>
         ))}
         <div className="icon-divider" />
-        {visibleVisualOrder.map((desktopView) => (
-          <button
-            key={desktopView.id}
-            className={`icon-btn session-icon ${selectedDesktopId === desktopView.id ? 'active' : ''}`}
-            onClick={() => onSelectDesktop(desktopView.id)}
-            title={
-              desktopShortcut(visualIndexOfDesktop(desktopView.id))
-                ? `${desktopView.title} (${desktopShortcut(visualIndexOfDesktop(desktopView.id))})`
-                : desktopView.title
-            }
-          >
-            ▸
-            {desktopView.sessions.some(sessionWantsAttention) && (
-              <span
-                className={`mini-badge ${desktopView.status === 'pending_approval' ? 'pending' : ''} ${desktopView.status === 'unknown' ? 'unknown' : ''}`}
-              />
-            )}
-          </button>
-        ))}
+        <div className="rail-desktops" ref={desktopListRef}>
+          {visibleVisualOrder.map((desktopView) => {
+            const shortcut = desktopShortcut(visualIndexOfDesktop(desktopView.id));
+            const label = shortcut ? `${desktopView.title} (${shortcut})` : desktopView.title;
+            const current = selectedDesktopId === desktopView.id;
+            return (
+              <button
+                key={desktopView.id}
+                className={`icon-btn session-icon ${selectedDesktopId === desktopView.id ? 'active' : ''}`}
+                onClick={() => onSelectDesktop(desktopView.id)}
+                title={label}
+                aria-label={label}
+                aria-current={current ? 'true' : undefined}
+              >
+                <DesktopChip
+                  number={desktopView.desktop?.number}
+                  current={current}
+                  empty={hasNoLeaves(desktopView)}
+                >
+                  {desktopView.sessions.some(sessionWantsAttention) && (
+                    <span
+                      className={`mini-badge ${desktopView.status === 'pending_approval' ? 'pending' : ''} ${desktopView.status === 'unknown' ? 'unknown' : ''}`}
+                    />
+                  )}
+                </DesktopChip>
+              </button>
+            );
+          })}
+        </div>
         <button
           className="icon-btn"
           onClick={onNewSession}
@@ -94,7 +110,6 @@ export function SidebarCollapsed() {
         >
           <PlusIcon />
         </button>
-        <div className="icon-spacer" />
         <button className="icon-btn expand-btn" onClick={onToggleCollapse} title="Expand sidebar">
           <ExpandIcon />
         </button>

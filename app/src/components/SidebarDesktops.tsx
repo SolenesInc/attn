@@ -9,6 +9,21 @@ import { runCount, runsNeedingYouCount } from '../utils/automationRuns';
 import { hasNoLeaves, desktopShortcut } from './sidebarModel';
 import { SidebarSessionRow, TileSidebarRow } from './SidebarRows';
 
+export function DesktopChip({ number, current, empty, title, children }: {
+  number?: number;
+  current: boolean;
+  empty: boolean;
+  title?: string;
+  children?: ReactNode;
+}) {
+  return (
+    <span className={`desktop-number${current ? ' current' : ''}${empty ? ' empty' : ''}`} title={title}>
+      {number ?? '—'}
+      {children}
+    </span>
+  );
+}
+
 export function SidebarDesktopOverview({ compact = false }: { compact?: boolean }) {
   const { onOpenOverview } = useSidebarContext();
   return (
@@ -79,9 +94,12 @@ export function SidebarDesktopList() {
                   onClick={() => onSelectDesktop(desktopView.id)}
                 />
                 {desktop ? (
-                  <span className="desktop-number" title={emptyTitle}>
-                    {desktop.number ?? desktopIndex + 1}
-                  </span>
+                  <DesktopChip
+                    number={desktop.number ?? desktopIndex + 1}
+                    current={desktopView.id === selectedDesktopId}
+                    empty={hasNoLeaves(desktopView)}
+                    title={emptyTitle}
+                  />
                 ) : null}
                 {(desktop?.name || !desktop) && <span className="desktop-label">{desktopView.title}</span>}
                 <span className="desktop-rule-line" aria-hidden="true" />
