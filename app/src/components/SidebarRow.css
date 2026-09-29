@@ -1,0 +1,54 @@
+.sidebar-leaf-row {
+  display: grid;
+  grid-template-columns: 14px minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 7px;
+  height: 32px;
+  padding: 0 8px 0 6px;
+  border-radius: 5px;
+}
+
+.sidebar-leaf-row.selected::before {
+  content: '';
+  position: absolute;
+  left: 0;
+  top: 8px;
+  bottom: 8px;
+  width: 2px;
+  border-radius: 1px;
+  background: var(--accent);
+}
+
+.session-trailing {
+  display: inline-flex;
+  align-items: center;
+  justify-self: end;
+  gap: 6px;
+  min-width: 0;
+  color: var(--color-text-dimmed);
+}
+
+.session-trailing .delegation-chain-trigger--sidebar {
+  margin-left: 0;
+}
+
+.sidebar-leaf-row > .session-actions {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  right: 4px;
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  padding-left: 6px;
+  background: var(--color-bg-elevated);
+  border-radius: inherit;
+  opacity: 0;
+  pointer-events: none;
+}
+
+.sidebar-leaf-row:hover > .session-actions,
+.sidebar-leaf-row:focus-within > .session-actions {
+  opacity: 1;
+  pointer-events: auto;
+}

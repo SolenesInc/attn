@@ -98,7 +98,7 @@ describe('App sidebar', () => {
       const { daemon } = await launch({ sessions: harnessSessions(), desktops: [harnessDesktop()] });
 
       for (const [id, , name] of HARNESSES) {
-        expect(row(id).getByRole('img', { name })).toHaveAttribute('title', name);
+        expect(row(id).getByRole('img', { name: `${name} · idle` })).toHaveAttribute('title', name);
         await gesture(daemon, () => fireEvent.click(row(id).getByRole('button', { name: `Open ${id}` })));
         expect(shownPane()).toBe(`pane-${id}`);
       }
@@ -119,7 +119,7 @@ describe('App sidebar', () => {
       fireEvent.change(search, { target: { value: '>turn off the agent queue' } });
       await gesture(daemon, () => fireEvent.keyDown(search, { key: 'Enter' }));
 
-      expect(row('codex-row').getByRole('img', { name: 'Codex' })).toBeInTheDocument();
+      expect(row('codex-row').getByRole('img', { name: 'Codex · idle' })).toBeInTheDocument();
       expect(screen.getByTestId('manage-crew')).toHaveTextContent('Manage crew2');
       await gesture(daemon, () => fireEvent.click(screen.getByTestId('manage-crew')));
       expect(screen.getByTestId('crew-panel')).toBeInTheDocument();

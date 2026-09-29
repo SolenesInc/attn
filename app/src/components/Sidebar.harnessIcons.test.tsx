@@ -3,6 +3,7 @@ import { describe, expect, it, vi } from 'vitest';
 import { Sidebar } from './Sidebar';
 import { desktopGroups } from '../test/desktops';
 import { buildQueueBands } from '../utils/queueBands';
+import { BuiltinDelegationRole, type SessionDelegationRole } from '../types/generated';
 
 const baseProps = {
   selectedId: null,
@@ -19,7 +20,16 @@ const baseProps = {
   onToggleCollapse: vi.fn(),
 };
 
-const sessions = [
+const sessions: Array<{
+  id: string;
+  agent?: string;
+  label: string;
+  state: 'idle' | 'working' | 'scheduled' | 'unknown' | 'recoverable';
+  desktopId: string;
+  state_reason?: string;
+  isWorktree?: boolean;
+  delegation_role?: SessionDelegationRole;
+}> = [
   { id: 'claude', agent: 'claude', label: 'Investigate logs' },
   { id: 'codex', agent: 'codex', label: 'Implement sidebar logos' },
   { id: 'pi', agent: 'pi', label: 'Check rendering' },
@@ -51,12 +61,69 @@ describe('sidebar harness identity', () => {
       ['shell', 'Shell'], ['plugin', 'Custom Driver'], ['missing', 'Unknown harness'],
     ]) {
       const row = screen.getByTestId(`sidebar-session-${id}`);
-      const icon = within(row).getByRole('img', { name });
+      const icon = within(row).getByRole('img', { name: `${name} · idle` });
       expect(icon).toHaveAttribute('title', name);
-      expect(row.querySelector('.state-indicator')).toBeInTheDocument();
-      fireEvent.click(within(row).getByRole('button', { name: /^Open / }));
+      expect(row.querySelector('.session-lead')).toHaveAttribute('data-state', 'idle');
+      const select = within(row).getByRole('button', { name: /^Open / });
+      expect(select).toHaveAttribute('title', name);
+      fireEvent.click(select);
       expect(onSelectSession).toHaveBeenLastCalledWith(id);
     }
+  });
+
+  it('shows state in the lead, keeps delegation visible, and omits the worktree glyph', () => {
+    const data = sidebarData();
+    data.desktops[0].sessions[0].state = 'working';
+    data.desktops[0].sessions[0].isWorktree = true;
+    data.desktops[0].sessions[0].delegation_role = { name: 'Builder', builtin: BuiltinDelegationRole.Builder };
+    render(<Sidebar {...baseProps} {...data} />);
+
+    const row = screen.getByTestId('sidebar-session-claude');
+    expect(row.querySelector('.session-lead')).toHaveAttribute('data-state', 'working');
+    expect(within(row).getByRole('img', { name: 'Claude · working' })).toBeInTheDocument();
+    expect(within(row).getByTestId('delegation-chain-trigger-claude')).toBeInTheDocument();
+    expect(row).not.toHaveTextContent('⎇');
+  });
+
+  it('shows a state dot in the lead with harness logos off', () => {
+    render(<Sidebar {...baseProps} {...sidebarData()} harnessLogosEnabled={false} />);
+    const row = screen.getByTestId('sidebar-session-claude');
+    expect(row.querySelector('.session-lead .state-indicator')).toBeInTheDocument();
+    expect(row.querySelector('.session-lead')).toHaveAttribute('data-state', 'idle');
+  });
+
+  it('names the scheduled state with harness logos on', () => {
+    const data = sidebarData();
+    data.desktops[0].sessions[0].state = 'scheduled';
+    render(<Sidebar {...baseProps} {...data} />);
+    const row = screen.getByTestId('sidebar-session-claude');
+    expect(within(row).getByRole('img', { name: 'Claude · scheduled' })).toBeInTheDocument();
+  });
+
+  it('explains an unknown state on the hit-tested row button', () => {
+    const data = sidebarData();
+    data.desktops[0].sessions[0].state = 'unknown';
+    data.desktops[0].sessions[0].state_reason = 'stuck';
+    render(<Sidebar {...baseProps} {...data} />);
+    const row = screen.getByTestId('sidebar-session-claude');
+    expect(within(row).getByRole('img', { name: 'Claude · Stuck — the agent has stopped reporting anything at all' })).toHaveAttribute(
+      'title', 'Claude · Stuck — the agent has stopped reporting anything at all',
+    );
+    expect(within(row).getByRole('button', { name: 'Open Investigate logs' })).toHaveAttribute(
+      'title', 'Claude · Stuck — the agent has stopped reporting anything at all',
+    );
+  });
+
+  it.each([
+    ['recoverable', undefined, 'Claude · Session will be recovered when opened'],
+    ['unknown', 'some_future_clause', 'Claude'],
+  ] as const)('keeps the %s row tooltip without inventing a reason', (state, reason, title) => {
+    const data = sidebarData();
+    data.desktops[0].sessions[0].state = state;
+    data.desktops[0].sessions[0].state_reason = reason;
+    render(<Sidebar {...baseProps} {...data} />);
+    const row = screen.getByTestId('sidebar-session-claude');
+    expect(within(row).getByRole('button', { name: 'Open Investigate logs' })).toHaveAttribute('title', title);
   });
 
   it('keeps harness identity when switching between desktop and queue arrangements', () => {
@@ -69,8 +136,8 @@ describe('sidebar harness identity', () => {
     expect(screen.getByRole('img', { name: 'Claude' })).toBeInTheDocument();
     expect(screen.getByRole('img', { name: 'Custom Driver' })).toBeInTheDocument();
     rerender(<Sidebar {...props} queue={null} />);
-    expect(within(screen.getByTestId('sidebar-session-pi')).getByRole('img', { name: 'Pi' })).toBeInTheDocument();
-    expect(within(screen.getByTestId('sidebar-session-codex')).getByRole('img', { name: 'Codex' })).toBeInTheDocument();
+    expect(within(screen.getByTestId('sidebar-session-pi')).getByRole('img', { name: 'Pi · idle' })).toBeInTheDocument();
+    expect(within(screen.getByTestId('sidebar-session-codex')).getByRole('img', { name: 'Codex · idle' })).toBeInTheDocument();
   });
 
   it.each([false, true])('keeps crew management reachable when queue mode is %s', (queueMode) => {

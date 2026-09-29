@@ -1,0 +1,236 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Tree sidebar final</title>
+<style>
+:root {
+  --bg: #0c0d0f;
+  --panel: #151619;
+  --elevated: #1f2024;
+  --selected: #25272c;
+  --border: #26282d;
+  --hair: rgba(255, 255, 255, 0.07);
+  --text: #e7e7ea;
+  --muted: #9a9ca3;
+  --dim: #62656d;
+  --accent: #5b9bff;
+  --working: #22c55e;
+  --waiting: #f59e0b;
+  --idle: #6b7280;
+  --pending: #eab308;
+  --scheduled: #0ea5e9;
+  --unknown: #a855f7;
+  --mono: 'JetBrains Mono', ui-monospace, 'SF Mono', Menlo, monospace;
+  --sans: -apple-system, BlinkMacSystemFont, 'Inter', system-ui, sans-serif;
+  --list-height: 728px;
+}
+* { box-sizing: border-box; }
+body { margin: 0; background: var(--bg); color: var(--text); font: 13px/1.4 var(--sans); padding: 24px; }
+h1 { font-size: 16px; margin: 0 0 6px; }
+.lede { color: var(--muted); max-width: 900px; margin: 0 0 14px; }
+.controls { display: flex; flex-wrap: wrap; gap: 18px; align-items: center; margin-bottom: 18px; color: var(--muted); }
+.controls label { display: inline-flex; gap: 6px; align-items: center; }
+.controls output { color: var(--text); font: 600 12px var(--mono); }
+.stage { display: flex; gap: 40px; align-items: flex-start; flex-wrap: wrap; }
+.col h2 { font-size: 13px; margin: 0 0 8px; }
+.receipt { font: 11px/1.6 var(--mono); color: var(--muted); margin-top: 8px; width: 242px; }
+.receipt b { color: var(--text); }
+.receipt .ok { color: var(--working); } .receipt .over { color: var(--waiting); }
+
+.sb { width: 240px; background: var(--panel); border: 1px solid var(--border); border-radius: 8px; overflow: hidden; }
+.sb-top { padding: 6px; border-bottom: 1px solid var(--border); }
+.home { display: flex; align-items: center; gap: 8px; height: 28px; padding: 0 8px; border-radius: 6px; }
+.kbd { margin-left: auto; font: 9px var(--mono); color: var(--dim); }
+.crewline { display: flex; height: 22px; align-items: center; padding: 0 8px; color: var(--dim); font-size: 12px; }
+.crewline span:last-child { margin-left: auto; font: 11px var(--mono); }
+.list { height: var(--list-height); overflow-y: auto; padding: 6px; }
+.list::-webkit-scrollbar { width: 6px; }
+.list::-webkit-scrollbar-thumb { background: #2c2e33; border-radius: 3px; }
+
+/* rule */
+.rule { position: relative; display: flex; align-items: center; gap: 6px; height: 20px; padding: 0 6px 0 4px; margin-top: 8px; color: var(--dim); font: 600 10px var(--mono); border-radius: 4px; cursor: pointer; }
+.rule:first-child { margin-top: 0; }
+.rule:hover { background: rgba(255, 255, 255, 0.03); }
+.rule .n { min-width: 16px; height: 14px; padding: 0 3px; display: grid; place-items: center; border: 1px solid var(--hair); border-radius: 3px; }
+.rule .nm { color: var(--muted); font: 500 11px var(--sans); }
+.rule .line { flex: 1; height: 1px; background: var(--hair); }
+.rule .ren { display: none; color: var(--muted); font-size: 12px; width: 14px; text-align: center; }
+.rule:hover .ren { display: inline; }
+.rule.current { color: var(--text); }
+.rule.current .n { background: var(--accent); color: #0b1220; border-color: var(--accent); }
+.rule.empty .n { border-style: dashed; border-color: #3d4047; }
+.ep { font: 9px var(--sans); color: rgba(134, 239, 172, 0.92); border: 1px solid rgba(34, 197, 94, 0.25); border-radius: 999px; padding: 0 5px; }
+
+/* row */
+.row { position: relative; display: grid; grid-template-columns: 14px minmax(0, 1fr) auto; align-items: center; gap: 7px; height: 32px; padding: 0 8px 0 6px; border-radius: 5px; cursor: pointer; }
+.row:hover { background: var(--elevated); }
+.row.active { background: var(--selected); }
+.row.active::before { content: ''; position: absolute; left: 0; top: 8px; bottom: 8px; width: 2px; border-radius: 1px; background: var(--accent); }
+.row .name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.row.tile .name { color: #c9cad0; }
+.trail { display: inline-flex; align-items: center; gap: 6px; color: var(--dim); justify-self: end; }
+.trail svg { width: 12px; height: 12px; display: block; }
+.trail .chief { color: var(--accent); font-size: 12px; }
+.tilek { font: 700 8px var(--mono); letter-spacing: 0.05em; color: var(--dim); border: 1px solid var(--hair); border-radius: 3px; padding: 0 3px; }
+.ov { position: absolute; right: 4px; top: 4px; bottom: 4px; display: none; align-items: center; gap: 4px; padding-left: 8px; border-radius: 4px; background: var(--elevated); color: var(--muted); font: 11px var(--mono); }
+.ov b { font-weight: 400; padding: 0 3px; border-radius: 3px; }
+.ov b:hover { color: var(--text); background: rgba(255, 255, 255, 0.06); }
+.row:hover .ov { display: flex; }
+.row.active:hover .ov { background: var(--selected); }
+
+/* lead */
+.lead { width: 14px; height: 14px; display: grid; place-items: center; }
+.lead svg { width: 14px; height: 14px; display: block; }
+.lead[data-state=idle], .lead[data-state=recoverable] { color: var(--idle); }
+.lead[data-state=working] { color: var(--working); }
+.lead[data-state=waiting_input] { color: var(--waiting); }
+.lead[data-state=pending_approval] { color: var(--pending); animation: flash 1s ease-in-out infinite; }
+.lead[data-state=scheduled] { color: var(--scheduled); animation: breathe 3.2s ease-in-out infinite; }
+.lead[data-state=unknown] { color: var(--unknown); }
+.lead .dot { display: none; width: 6px; height: 6px; border-radius: 50%; background: currentColor; }
+.nologos .lead svg { display: none; }
+.nologos .lead .dot { display: block; }
+.nologos .row.tile .lead svg { display: block; }
+@keyframes flash { 50% { opacity: 0.3; } }
+@keyframes breathe { 50% { opacity: 0.55; } }
+
+.legend { margin-top: 16px; }
+.legend .row { width: 240px; cursor: default; }
+
+/* today, built to the receipts */
+.T .group { margin-bottom: 8px; border: 1px solid transparent; border-radius: 8px; }
+.T .group.current { background: rgba(255, 255, 255, 0.025); border-color: rgba(255, 255, 255, 0.12); box-shadow: 0 8px 24px rgba(0, 0, 0, 0.18); }
+.T .hdr { display: flex; align-items: center; gap: 8px; height: 34px; padding: 0 10px; border-radius: 7px; font: 600 11px var(--mono); }
+.T .group.current .hdr { background: rgba(255, 255, 255, 0.045); }
+.T .hdr .kbd { font-weight: 400; }
+.T .r { display: flex; align-items: center; gap: 8px; height: 36px; padding: 0 10px 0 14px; margin-left: 18px; border-left: 1px solid rgba(255, 255, 255, 0.045); border-radius: 6px; }
+.T .r.d { height: 38px; }
+.T .r.active { background: var(--elevated); }
+.T .r .nm { flex: 0 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.T .r .t { margin-left: auto; display: inline-flex; gap: 8px; color: var(--dim); align-items: center; }
+.T .r .t svg { width: 12px; height: 12px; }
+.T .r .gh { width: 24px; }
+.T .dt { width: 6px; height: 6px; border-radius: 50%; background: var(--idle); flex: none; }
+.T .dt.working { background: var(--working); } .T .dt.waiting_input { background: var(--waiting); }
+.T .dt.hollow { background: none; border: 1.5px solid var(--dim); width: 8px; height: 8px; }
+.T .lg { width: 14px; height: 14px; color: var(--muted); flex: none; } .T .lg svg { width: 14px; height: 14px; }
+.T .cp { border: 1px solid rgba(91, 155, 255, 0.5); border-radius: 4px; padding: 1px 5px; color: var(--accent); font: 700 9px var(--mono); }
+.T .tb { width: 8px; height: 8px; border: 1px solid var(--dim); border-radius: 2px; flex: none; }
+.checks { margin-top: 24px; color: var(--muted); max-width: 900px; font-size: 12px; }
+.checks li { margin: 3px 0; }
+</style>
+</head>
+<body>
+<h1>Tree sidebar: final prototype</h1>
+<p class="lede">The agreed design with real data from the Default profile: section rules (C), 32px rows, the harness logo carries state, role glyphs always visible, no worktree glyph, hover actions over the trailing column. Click a row or a rule to move the active leaf or the current desktop. Hover a row for its actions and a rule for rename. Today is on the right for comparison.</p>
+<div class="controls">
+  <label>List height <input id="h" type="range" min="400" max="1100" value="728"><output id="ho"></output></label>
+  <label><input id="logos" type="checkbox" checked> Harness logos</label>
+  <label><input id="named" type="checkbox"> Name Desktop 7 "pricing"</label>
+  <label><input id="remote" type="checkbox"> Neovim agent and its seed tile on a remote daemon</label>
+</div>
+<div class="stage">
+  <div class="col"><h2>New</h2><div class="sb" id="new"></div><div class="receipt" id="rn"></div>
+    <div class="legend" id="legend"></div></div>
+  <div class="col"><h2>Today</h2><div class="sb T" id="today"></div><div class="receipt" id="rt"></div></div>
+</div>
+<ul class="checks">
+  <li>Every lead state in the legend under the new sidebar: idle and recoverable grey, working green and still, waiting amber, pending approval flashing yellow, scheduled breathing blue, unknown purple. Launching keeps its emoji. With harness logos off, the dot comes back in the same slot.</li>
+  <li>Trailing column: Pathfinder ⌕ and dispatcher ⑂ glyphs, the chief's ⌁, and the tile's kind word. A leaf on a remote daemon names its host on its own row; desktops are never remote, so the rule never shows a host. It ends 15px from the edge on every row, and the hover actions cover it without moving the name.</li>
+  <li>Desktop 10 is an extra desktop past the nine shortcuts, left empty so you can see the dashed chip. Desktop 6 holds only a browser tile, so it lists it and isn't marked empty.</li>
+</ul>
+<script>
+const I = {
+  claude: '<svg viewBox="0 0 16 16"><g stroke="currentColor" stroke-width="1.6" stroke-linecap="round"><path d="M8 1.5v13M1.5 8h13M3.4 3.4l9.2 9.2M12.6 3.4l-9.2 9.2"/></g></svg>',
+  codex: '<svg viewBox="0 0 16 16"><path fill="currentColor" d="M8 1.2a3 3 0 0 1 2.9 2.2 3 3 0 0 1 2.8 4.2 3 3 0 0 1-2.2 5.1 3 3 0 0 1-4.9 1.1 3 3 0 0 1-4.1-2.9A3 3 0 0 1 2.3 6 3 3 0 0 1 5.4 2.3 3 3 0 0 1 8 1.2Z"/><path d="M5.5 7l1.5 1.3L5.5 9.6M8.4 9.8h2" stroke="#151619" stroke-width="1.2" fill="none" stroke-linecap="round"/></svg>',
+  pf: '<svg viewBox="0 0 16 16"><circle cx="7" cy="7" r="4.2" fill="none" stroke="currentColor" stroke-width="1.6"/><path d="M10.2 10.2l3.6 3.6" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/></svg>',
+  tree: '<svg viewBox="0 0 16 16"><g fill="none" stroke="currentColor" stroke-width="1.5"><circle cx="4" cy="3.5" r="1.8"/><circle cx="4" cy="12.5" r="1.8"/><circle cx="12" cy="3.5" r="1.8"/><path d="M4 5.3v5.4M12 5.3c0 4-8 2.5-8 5.4"/></g></svg>',
+  seed: '<svg viewBox="0 0 16 16"><path d="M8 14V8" stroke="#7bc47f" stroke-width="1.6" stroke-linecap="round"/><path d="M8 8c0-3 2-5 5-5 0 3-2 5-5 5Z M8 9.5C8 7.5 6.5 6 4 6c0 2 1.5 3.5 4 3.5Z" fill="#7bc47f"/></svg>',
+  web: '<svg viewBox="0 0 16 16"><circle cx="8" cy="8" r="6" fill="none" stroke="#7aa7e0" stroke-width="1.4"/><path d="M2 8h12M8 2c2.2 2.4 2.2 9.6 0 12M8 2c-2.2 2.4-2.2 9.6 0 12" fill="none" stroke="#7aa7e0" stroke-width="1.1"/></svg>',
+  wt: '⎇',
+};
+const ag = (id, name, state, x = {}) => ({ kind: 'agent', id, name, state, harness: 'claude', worktree: true, ...x });
+const tile = (id, tk, title, remote = false) => ({ kind: 'tile', id, tk, title, remote });
+const D = [
+  { slot: 1, leaves: [ag('chief', 'Chief', 'idle', { chief: true, worktree: false })] },
+  { slot: 2, leaves: [
+    ag('pec', 'Profiles epic coordinator', 'idle', { dispatcher: true }),
+    ag('tp', 'treepath', 'working', { role: true }),
+    ag('qp', 'queuepath', 'waiting_input', { role: true }),
+    ag('sbp', 'sidebarpath', 'waiting_input', { role: true }),
+    ag('flk', 'old-flakes', 'working')] },
+  { slot: 3, leaves: [ag('rev', 'Review and organize attn feedback', 'waiting_input')] },
+  { slot: 4, leaves: [ag('nat', 'Design native attn client', 'idle'), tile('s-p54fpa', 'seed', 'Native client: a Rust multiplexer over the attn daemon')] },
+  { slot: 5, leaves: [ag('cdx', 'Launch Codex for Non-Headless Agents', 'idle', { harness: 'codex' }), tile('s-vhx6e7', 'seed', 'Finish shared Codex state cost and naming attribution')] },
+  { slot: 6, leaves: [tile('web', 'web', '127.0.0.1:56427 · queue-sidebar-refinement')] },
+  { slot: 7, leaves: [ag('son', 'Add Sonnet 5.5 Pricing', 'idle')] },
+  { slot: 9, leaves: [ag('nvim', 'Neovim Configuration Check', 'waiting_input', { worktree: false, remote: true }), tile('s-q7rw2d', 'seed', 'Neovim plugin audit', true)] },
+  { slot: 10, leaves: [] },
+];
+let current = 2, active = 'tp';
+
+function lead(l) {
+  if (l.kind === 'tile') return `<span class="lead">${I[l.tk]}</span>`;
+  return `<span class="lead" data-state="${l.state}" title="${l.harness === 'codex' ? 'Codex' : 'Claude'}">${I[l.harness]}<span class="dot"></span></span>`;
+}
+function trail(l, remote) {
+  const t = [];
+  if (l.kind === 'tile') t.push(`<span class="tilek">${l.tk.toUpperCase()}</span>`);
+  if (l.role) t.push(`<span title="Pathfinder · delegation chain">${I.pf}</span>`);
+  if (l.dispatcher) t.push(`<span title="Dispatched agents">${I.tree}</span>`);
+  if (l.chief) t.push('<span class="chief" title="Chief of staff">⌁</span>');
+  if (remote && l.remote) t.push('<span class="ep" title="Runs on devbox">devbox</span>');
+  return `<span class="trail">${t.join('')}</span>`;
+}
+function row(l, remote) {
+  const ov = l.kind === 'tile' ? `${l.tk === 'web' ? '<b title="Reload">↻</b>' : ''}<b title="Close tile">×</b>` : '<b title="Session actions">•••</b>';
+  return `<div class="row ${l.kind === 'tile' ? 'tile' : ''} ${active === l.id ? 'active' : ''}" data-leaf="${l.id}" title="${l.kind === 'tile' ? l.id : l.name}">${lead(l)}<span class="name" data-m="${l.id}">${l.kind === 'tile' ? l.title : l.name}</span>${trail(l, remote)}<span class="ov">${ov}</span></div>`;
+}
+function renderNew() {
+  const named = document.getElementById('named').checked;
+  const remote = document.getElementById('remote').checked;
+  document.getElementById('new').innerHTML = `<div class="sb-top"><div class="home">⌂ Home<span class="kbd">⌘⇧H</span></div><div class="crewline"><span>Manage crew</span><span>3</span></div></div><div class="list">${D.map((d) => {
+    return `<div class="rule ${current === d.slot ? 'current' : ''} ${d.leaves.length ? '' : 'empty'}" data-desk="${d.slot}" title="${d.leaves.length ? '' : 'Empty desktop'}"><span class="n">${d.slot}</span>${named && d.slot === 7 ? '<span class="nm">pricing</span>' : ''}<span class="line"></span><span class="ren" title="Rename desktop">✎</span><span class="kbd" style="margin-left:0">${d.slot <= 9 ? '⌘' + d.slot : ''}</span></div>${d.leaves.map((l) => row(l, remote)).join('')}`;
+  }).join('')}</div>`;
+}
+function renderToday() {
+  const tr = (l) => {
+    if (l.kind === 'tile') return `<div class="r"><span class="tb"></span><span class="nm">${l.id === 'web' ? '127.0.0.1:56427' : l.id}</span><span class="t"><span class="gh"></span></span></div>`;
+    const d = l.role || l.dispatcher;
+    return `<div class="r ${d ? 'd' : ''} ${active === l.id ? 'active' : ''}"><span class="dt ${l.state}"></span><span class="lg">${I[l.harness]}</span><span class="nm" data-m="${l.id}">${l.name}</span><span class="t">${l.role ? I.pf : ''}${l.dispatcher ? I.tree : ''}${l.chief ? '<span class="cp">⌁ CHIEF</span>' : ''}${l.worktree ? '⎇' : ''}<span class="gh"></span></span></div>`;
+  };
+  document.getElementById('today').innerHTML = `<div class="sb-top"><div class="home">⌂ Home<span class="kbd">⌘⇧H</span></div><div class="crewline"><span>Manage crew</span><span>3</span></div></div><div class="list">${D.map((d) => `<div class="group ${current === d.slot ? 'current' : ''}"><div class="hdr"><span class="dt ${d.leaves.some((l) => l.kind === 'agent') ? '' : 'hollow'}"></span>Desktop ${d.slot}<span class="kbd">${d.slot <= 9 ? '⌘' + d.slot : ''}</span></div>${d.leaves.map(tr).join('')}</div>`).join('')}</div>`;
+}
+function renderLegend() {
+  const states = ['idle', 'working', 'waiting_input', 'pending_approval', 'scheduled', 'unknown', 'recoverable'];
+  document.getElementById('legend').innerHTML = states.map((s) => `<div class="row">${lead({ kind: 'agent', harness: 'claude', state: s })}<span class="name" style="color:var(--muted)">${s.replace('_', ' ')}</span><span class="trail"></span></div>`).join('');
+}
+function receipt(id, out) {
+  const list = document.querySelector(`#${id} .list`);
+  const have = list.clientHeight;
+  list.style.height = 'auto'; const need = list.scrollHeight; list.style.height = '';
+  const w = (k) => Math.round(document.querySelector(`#${id} [data-m="${k}"]`).getBoundingClientRect().width);
+  document.getElementById(out).innerHTML = `list needs <b>${need}px</b> · ${need <= have ? `<span class="ok">fits, ${have - need}px spare</span>` : `<span class="over">${need - have}px below</span>`}<br>"Profiles epic coordinator" <b>${w('pec')}px</b><br>"Review and organize attn…" <b>${w('rev')}px</b>`;
+}
+function all() {
+  const h = document.getElementById('h').value;
+  document.documentElement.style.setProperty('--list-height', `${h}px`);
+  document.getElementById('ho').textContent = `${h}px`;
+  document.body.classList.toggle('nologos', !document.getElementById('logos').checked);
+  renderNew(); renderToday(); renderLegend();
+  requestAnimationFrame(() => { receipt('new', 'rn'); receipt('today', 'rt'); });
+}
+document.addEventListener('click', (e) => {
+  if (e.target.closest('.ov')) return;
+  const r = e.target.closest('#new [data-leaf]');
+  const d = e.target.closest('#new [data-desk]');
+  if (r) { active = r.dataset.leaf; current = D.find((x) => x.leaves.some((l) => l.id === active)).slot; all(); }
+  else if (d) { current = +d.dataset.desk; const first = D.find((x) => x.slot === current).leaves[0]; if (first) active = first.id; all(); }
+});
+['h', 'logos', 'named', 'remote'].forEach((id) => document.getElementById(id).addEventListener('input', all));
+all();
+</script>
+</body>
+</html>
