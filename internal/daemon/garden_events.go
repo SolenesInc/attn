@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"slices"
 	"strings"
 	"time"
 
@@ -40,32 +41,64 @@ func encodeGardenSeedEvents(occurrences ...events.Occurrence) ([]store.BusEvent,
 	return encoded, nil
 }
 
+// announceGardenSeedEvents queues freshly committed seed events so their bells resolve against the
+// roles of their own commit; the durable consumer only backstops events a crash left unresolved.
 func announceGardenSeedEvents(d *Daemon, seqs []int64) {
 	if len(seqs) == 0 || d == nil {
 		return
 	}
+	d.gardenBellsMu.Lock()
+	d.gardenBellsPending = append(d.gardenBellsPending, seqs...)
+	d.gardenBellsMu.Unlock()
 	d.coalesceSnapshots(func() {
 		if d.eventBus != nil {
 			d.eventBus.Announce()
 		}
-		if d.gardenSeedEventConsumerStarted || d.store == nil {
-			return
-		}
-		for _, seq := range seqs {
-			rows, err := d.store.BusEventsSince(seq-1, 1)
-			if err != nil || len(rows) != 1 || rows[0].Seq != seq {
-				d.logf("Garden seed event %d committed but test-mode handling could not read it: rows=%d err=%v", seq, len(rows), err)
-				continue
-			}
-			row := rows[0]
-			if err := d.handleGardenSeedEventWithoutRoleLock(context.Background(), bus.Event{
-				Seq: row.Seq, Name: row.Name, Subject: row.Subject, Payload: []byte(row.Payload),
-				Source: row.Source, CreatedAt: row.CreatedAt,
-			}); err != nil {
-				d.logf("Garden seed event %d committed but test-mode handling failed: %v", seq, err)
-			}
+		if !d.gardenSeedEventConsumerStarted {
+			d.resolveQueuedGardenSeedBells()
 		}
 	})
+}
+
+// lockGardenRoles resolves every queued bell before taking the role lock, so no role change made
+// under it can reach the audience of an event committed earlier.
+func (d *Daemon) lockGardenRoles() {
+	d.gardenWatchMu.Lock()
+	d.resolveQueuedGardenSeedBells()
+}
+
+func (d *Daemon) unlockGardenRoles() {
+	d.resolveQueuedGardenSeedBells()
+	d.gardenWatchMu.Unlock()
+}
+
+func (d *Daemon) resolveQueuedGardenSeedBells() {
+	d.gardenBellsMu.Lock()
+	seqs := d.gardenBellsPending
+	d.gardenBellsPending = nil
+	d.gardenBellsMu.Unlock()
+	if len(seqs) == 0 || d.store == nil {
+		return
+	}
+	// A paused consumer (`attn bus disable`) holds its bells until it is enabled again.
+	if consumer, ok, err := d.store.GetBusConsumer(gardenSeedBellConsumer); err == nil && ok && !consumer.Enabled {
+		return
+	}
+	slices.Sort(seqs)
+	for _, seq := range seqs {
+		rows, err := d.store.BusEventsSince(seq-1, 1)
+		if err != nil || len(rows) != 1 || rows[0].Seq != seq {
+			d.logf("Garden seed event %d committed but its bells could not be read: rows=%d err=%v", seq, len(rows), err)
+			continue
+		}
+		row := rows[0]
+		if err := d.handleGardenSeedEventWithoutRoleLock(context.Background(), bus.Event{
+			Seq: row.Seq, Name: row.Name, Subject: row.Subject, Payload: []byte(row.Payload),
+			Source: row.Source, CreatedAt: row.CreatedAt,
+		}); err != nil {
+			d.logf("Garden seed event %d committed but its bells were not resolved: %v", seq, err)
+		}
+	}
 }
 
 func firstString(values []string) string {
@@ -187,8 +220,8 @@ func (d *Daemon) validatePendingGardenSeedBells() error {
 }
 
 func (d *Daemon) handleGardenSeedEvent(_ context.Context, event bus.Event) error {
-	d.gardenWatchMu.Lock()
-	defer d.gardenWatchMu.Unlock()
+	d.lockGardenRoles()
+	defer d.unlockGardenRoles()
 	return d.handleGardenSeedEventWithoutRoleLock(context.Background(), event)
 }
 
@@ -339,9 +372,9 @@ func (d *Daemon) invalidateGardenSeedParties(reason string) {
 	if d == nil || d.store == nil {
 		return
 	}
-	d.gardenWatchMu.Lock()
+	d.lockGardenRoles()
 	err := d.discardAllIneligibleGardenSeedBellsLocked()
-	d.gardenWatchMu.Unlock()
+	d.unlockGardenRoles()
 	if err != nil {
 		d.logf("Garden seed mailbox invalidation after %s: %v", reason, err)
 	}

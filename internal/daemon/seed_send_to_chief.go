@@ -140,7 +140,7 @@ func (d *Daemon) sendSeedToChief(msg *protocol.SeedSendToChiefMessage) (*protoco
 	if err != nil {
 		return nil, err
 	}
-	d.gardenWatchMu.Lock()
+	d.lockGardenRoles()
 	written, notes, err := d.writeSeedMoveWithNotes(*schema, next, doc.Rev, []seedEvents.Occurrence{tended}, []garden.Note{{
 		Seed: next.ID, Kind: garden.NoteKindNote, Body: noteBody,
 		AuthorSession: cause,
@@ -148,7 +148,7 @@ func (d *Daemon) sendSeedToChief(msg *protocol.SeedSendToChiefMessage) (*protoco
 	if err == nil {
 		err = d.discardAllIneligibleGardenSeedBellsLocked()
 	}
-	d.gardenWatchMu.Unlock()
+	d.unlockGardenRoles()
 	if err != nil {
 		if docstore.IsConflict(err) {
 			return nil, fmt.Errorf("%s changed while it was being sent to Chief; refresh the garden", seed.ID)

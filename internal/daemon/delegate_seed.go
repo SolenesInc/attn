@@ -125,14 +125,17 @@ func (d *Daemon) bindDelegationAssignmentProtected(_ foregroundCleanupProtection
 	if err != nil {
 		return "", err
 	}
-	d.gardenWatchMu.Lock()
+	d.lockGardenRoles()
 	written, eventSeqs, err := d.store.CommitGardenDispatchWritesWithEvents(
 		commits, store.GardenSeedWatch{WatcherSessionID: sessionID, SeedID: seed.ID}, events, d.gardenTime(),
 	)
 	if err == nil {
 		err = d.discardAllIneligibleGardenSeedBellsLocked()
 	}
-	d.gardenWatchMu.Unlock()
+	if err == nil {
+		announceGardenSeedEvents(d, eventSeqs)
+	}
+	d.unlockGardenRoles()
 	if err != nil {
 		var conflict *docstore.ConflictError
 		if errors.As(err, &conflict) {
@@ -143,7 +146,6 @@ func (d *Daemon) bindDelegationAssignmentProtected(_ foregroundCleanupProtection
 	for i, commit := range commits {
 		d.announceCommittedWrite(commit.Fact, written[i].Seq)
 	}
-	announceGardenSeedEvents(d, eventSeqs)
 	d.rememberDispatchProjection(sessionID, dispatch, written[1].Rev)
 	return seed.ID, nil
 }

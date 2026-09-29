@@ -203,12 +203,15 @@ func (d *Daemon) bindResumedSeed(
 	if err != nil {
 		return err
 	}
-	d.gardenWatchMu.Lock()
+	d.lockGardenRoles()
 	written, eventSeqs, err := d.store.CommitDocumentWritesWithEvents(commits, events, d.gardenTime())
 	if err == nil {
 		err = d.discardAllIneligibleGardenSeedBellsLocked()
 	}
-	d.gardenWatchMu.Unlock()
+	if err == nil {
+		announceGardenSeedEvents(d, eventSeqs)
+	}
+	d.unlockGardenRoles()
 	if err != nil {
 		if docstore.IsConflict(err) {
 			return fmt.Errorf("%s changed while its conversation was resuming; refresh it and try again", seed.ID)
@@ -217,7 +220,6 @@ func (d *Daemon) bindResumedSeed(
 	}
 	d.announceCommittedWrite(seedFact, written[0].Seq)
 	d.announceCommittedWrite(dispatchFact, written[1].Seq)
-	announceGardenSeedEvents(d, eventSeqs)
 	d.rememberDispatchProjection(sessionID, dispatch, written[1].Rev)
 	return nil
 }
