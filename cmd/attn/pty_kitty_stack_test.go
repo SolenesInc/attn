@@ -65,7 +65,8 @@ func TestAnImageArrivingInPiecesSendsNoEmptyOutput(t *testing.T) {
 				pixels[i] = byte(i * 7 % 251)
 			}
 			payload := base64.StdEncoding.EncodeToString(pixels)
-			app.TypeLine(shell, `stty -echo; echo arm''ed; read first; printf '\033_Ga=T,q=2,f=24,s=8,v=8,i=5;`+payload[:200]+
+			// End readiness output at the marker so a delayed newline cannot mix with the image.
+			app.TypeLine(shell, `stty -echo; printf arm''ed; read first; printf '\033_Ga=T,q=2,f=24,s=8,v=8,i=5;`+payload[:200]+
 				`'; read rest; printf '`+payload[200:]+`\033\\done-%s\n' pieces`)
 			app.AwaitScreen(shell, "armed")
 			app.TypeLine(shell, "")
