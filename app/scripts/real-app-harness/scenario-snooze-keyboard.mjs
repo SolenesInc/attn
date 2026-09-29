@@ -141,6 +141,14 @@ async function main() {
       await pressShortcutKeys(client, driver, 'session.toggleSidebar');
       await openPicker();
       await centered(alpha);
+      const workspaceBefore = await client.request('get_workspace', { sessionId: alpha.sessionId });
+      for (const shortcut of ['terminal.splitVertical', 'terminal.splitHorizontal', 'terminal.focusRight', 'terminal.find']) {
+        await pressShortcutKeys(client, driver, shortcut);
+        await focusedChoice('30m');
+      }
+      const workspaceAfter = await client.request('get_workspace', { sessionId: alpha.sessionId });
+      runner.assert(workspaceAfter.panes.length === workspaceBefore.panes.length, 'picker blocks split shortcuts');
+      runner.assert(workspaceAfter.activePaneId === workspaceBefore.activePaneId, 'picker blocks pane navigation');
       await captureScreenshotData(path.join(runner.runDir, 'centered-snooze.png'), { client });
       await driver.pressKey('Escape');
       await waitForPaneInputFocus(client, alpha.sessionId, alpha.paneId);

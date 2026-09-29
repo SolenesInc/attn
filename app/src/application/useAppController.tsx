@@ -327,7 +327,7 @@ export function useAppController({
 
   const workflowPanel = useWorkflowPanel({ activeSessionId, workflowRunPanelOpen });
 
-  const { blockingOverlayOpen, actionMenuBlocked, appShortcutsEnabled } = appOverlayPolicy({
+  const { blockingOverlayOpen, workspaceShortcutsEnabled, actionMenuBlocked, appShortcutsEnabled } = appOverlayPolicy({
     locationPickerOpen,
     whatsNewOpen: whatsNew.isOpen,
     settingsOpen,
@@ -673,6 +673,7 @@ export function useAppController({
         annotationApi,
         handleOpenPresentationWindow,
         blockingOverlayOpen,
+        workspaceShortcutsEnabled,
         zoomModeBySessionId,
         setZoomModeBySessionId,
         agentAvailability,

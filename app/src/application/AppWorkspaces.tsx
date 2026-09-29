@@ -57,6 +57,7 @@ export function AppWorkspaces() {
     annotationApi,
     handleOpenPresentationWindow,
     blockingOverlayOpen,
+    workspaceShortcutsEnabled,
     zoomModeBySessionId,
     setZoomModeBySessionId,
   } = useAppShell();
@@ -192,6 +193,7 @@ export function AppWorkspaces() {
                 resolvedTheme={resolvedTheme}
                 focusRequestToken={utilityFocusRequestToken}
                 enabled={!blockingOverlayOpen}
+                shortcutsEnabled={workspaceShortcutsEnabled}
                 isActiveSession={isActiveWorkspace}
                 isSessionViewVisible={view === 'session'}
                 terminalsLive={terminalsLive}

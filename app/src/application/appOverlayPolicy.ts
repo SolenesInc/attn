@@ -47,6 +47,7 @@ export function appOverlayPolicy(overlays: Overlays) {
     // Snooze holds focus without suspending the workspace; re-enabling it would
     // steal focus from the row button when the picker closes.
     blockingOverlayOpen: navigationCaptured || actionMenuBlocked,
+    workspaceShortcutsEnabled: !overlays.snoozeMenuOpen,
     actionMenuBlocked: actionMenuBlocked || overlays.snoozeMenuOpen,
     appShortcutsEnabled: !navigationCaptured && !overlays.markdownOpenerOpen && !overlays.snoozeMenuOpen,
   };
