@@ -237,21 +237,7 @@ func (s *Store) BusEventsSince(cursor int64, limit int) ([]BusEvent, error) {
 	if err != nil {
 		return nil, err
 	}
-	defer rows.Close()
-
-	var events []BusEvent
-	for rows.Next() {
-		var (
-			e         BusEvent
-			createdAt string
-		)
-		if err := rows.Scan(&e.Seq, &e.Name, &e.Subject, &e.Payload, &e.Source, &createdAt); err != nil {
-			return nil, err
-		}
-		e.CreatedAt = parseTicketTime(createdAt)
-		events = append(events, e)
-	}
-	return events, rows.Err()
+	return scanBusEvents(rows)
 }
 
 // BusEventsNamedBetween returns events in (after, through] whose name matches the GLOB pattern.
@@ -269,6 +255,10 @@ func (s *Store) BusEventsNamedBetween(after, through int64, pattern string, limi
 	if err != nil {
 		return nil, err
 	}
+	return scanBusEvents(rows)
+}
+
+func scanBusEvents(rows *sql.Rows) ([]BusEvent, error) {
 	defer rows.Close()
 
 	var events []BusEvent
