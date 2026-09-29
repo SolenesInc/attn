@@ -208,9 +208,6 @@ func (d *Daemon) bindResumedSeed(
 	if err == nil {
 		err = d.discardAllIneligibleGardenSeedBellsLocked()
 	}
-	if err == nil {
-		announceGardenSeedEvents(d, eventSeqs)
-	}
 	d.unlockGardenRoles()
 	if err != nil {
 		if docstore.IsConflict(err) {
@@ -220,6 +217,7 @@ func (d *Daemon) bindResumedSeed(
 	}
 	d.announceCommittedWrite(seedFact, written[0].Seq)
 	d.announceCommittedWrite(dispatchFact, written[1].Seq)
+	announceGardenSeedEvents(d, eventSeqs)
 	d.rememberDispatchProjection(sessionID, dispatch, written[1].Rev)
 	return nil
 }

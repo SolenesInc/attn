@@ -4,7 +4,6 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"slices"
 	"strings"
 	"time"
 
@@ -41,64 +40,84 @@ func encodeGardenSeedEvents(occurrences ...events.Occurrence) ([]store.BusEvent,
 	return encoded, nil
 }
 
-// announceGardenSeedEvents queues freshly committed seed events so their bells resolve against the
-// roles of their own commit; the durable consumer only backstops events a crash left unresolved.
 func announceGardenSeedEvents(d *Daemon, seqs []int64) {
 	if len(seqs) == 0 || d == nil {
 		return
 	}
-	d.gardenBellsMu.Lock()
-	d.gardenBellsPending = append(d.gardenBellsPending, seqs...)
-	d.gardenBellsMu.Unlock()
 	d.coalesceSnapshots(func() {
 		if d.eventBus != nil {
 			d.eventBus.Announce()
 		}
-		if !d.gardenSeedEventConsumerStarted {
-			d.resolveQueuedGardenSeedBells()
+		if d.gardenSeedEventConsumerStarted || d.store == nil {
+			return
+		}
+		for _, seq := range seqs {
+			rows, err := d.store.BusEventsSince(seq-1, 1)
+			if err != nil || len(rows) != 1 || rows[0].Seq != seq {
+				d.logf("Garden seed event %d committed but test-mode handling could not read it: rows=%d err=%v", seq, len(rows), err)
+				continue
+			}
+			row := rows[0]
+			if err := d.handleGardenSeedEventWithoutRoleLock(context.Background(), bus.Event{
+				Seq: row.Seq, Name: row.Name, Subject: row.Subject, Payload: []byte(row.Payload),
+				Source: row.Source, CreatedAt: row.CreatedAt,
+			}); err != nil {
+				d.logf("Garden seed event %d committed but test-mode handling failed: %v", seq, err)
+			}
 		}
 	})
 }
 
-// lockGardenRoles resolves every queued bell before taking the role lock, so no role change made
-// under it can reach the audience of an event committed earlier.
+// lockGardenRoles resolves the bells of every seed event already committed, so no role change made
+// under the lock reaches the audience of an earlier event; the durable consumer backstops a crash.
 func (d *Daemon) lockGardenRoles() {
 	d.gardenWatchMu.Lock()
-	d.resolveQueuedGardenSeedBells()
+	d.resolveCommittedGardenSeedBells()
 }
 
 func (d *Daemon) unlockGardenRoles() {
-	d.resolveQueuedGardenSeedBells()
 	d.gardenWatchMu.Unlock()
 }
 
-func (d *Daemon) resolveQueuedGardenSeedBells() {
-	d.gardenBellsMu.Lock()
-	seqs := d.gardenBellsPending
-	d.gardenBellsPending = nil
-	d.gardenBellsMu.Unlock()
-	if len(seqs) == 0 || d.store == nil {
+const gardenSeedBellBatch = 256
+
+// resolveCommittedGardenSeedBells runs under the role lock. Receipts make each event's bells
+// resolve once, whether here or in the durable consumer.
+func (d *Daemon) resolveCommittedGardenSeedBells() {
+	if d.store == nil {
 		return
 	}
+	_, head, err := d.store.BusBounds()
+	if err != nil || head <= d.gardenBellsResolvedThrough {
+		return
+	}
+	consumer, ok, err := d.store.GetBusConsumer(gardenSeedBellConsumer)
 	// A paused consumer (`attn bus disable`) holds its bells until it is enabled again.
-	if consumer, ok, err := d.store.GetBusConsumer(gardenSeedBellConsumer); err == nil && ok && !consumer.Enabled {
+	if err != nil || !ok || !consumer.Enabled {
 		return
 	}
-	slices.Sort(seqs)
-	for _, seq := range seqs {
-		rows, err := d.store.BusEventsSince(seq-1, 1)
-		if err != nil || len(rows) != 1 || rows[0].Seq != seq {
-			d.logf("Garden seed event %d committed but its bells could not be read: rows=%d err=%v", seq, len(rows), err)
-			continue
+	after := max(d.gardenBellsResolvedThrough, consumer.Cursor)
+	for after < head {
+		rows, err := d.store.BusEventsNamedBetween(after, head, "garden.seed.*", gardenSeedBellBatch)
+		if err != nil {
+			d.logf("Garden seed bells after event %d could not be read: %v", after, err)
+			return
 		}
-		row := rows[0]
-		if err := d.handleGardenSeedEventWithoutRoleLock(context.Background(), bus.Event{
-			Seq: row.Seq, Name: row.Name, Subject: row.Subject, Payload: []byte(row.Payload),
-			Source: row.Source, CreatedAt: row.CreatedAt,
-		}); err != nil {
-			d.logf("Garden seed event %d committed but its bells were not resolved: %v", seq, err)
+		for _, row := range rows {
+			if err := d.handleGardenSeedEventWithoutRoleLock(context.Background(), bus.Event{
+				Seq: row.Seq, Name: row.Name, Subject: row.Subject, Payload: []byte(row.Payload),
+				Source: row.Source, CreatedAt: row.CreatedAt,
+			}); err != nil {
+				d.logf("Garden seed event %d committed but its bells were left to the consumer: %v", row.Seq, err)
+			}
+		}
+		if len(rows) < gardenSeedBellBatch {
+			after = head
+		} else {
+			after = rows[len(rows)-1].Seq
 		}
 	}
+	d.gardenBellsResolvedThrough = head
 }
 
 func firstString(values []string) string {

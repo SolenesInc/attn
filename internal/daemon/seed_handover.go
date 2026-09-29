@@ -205,11 +205,9 @@ func (d *Daemon) bindSeedHandoverProtected(
 		if err == nil {
 			err = d.discardAllIneligibleGardenSeedBellsLocked()
 		}
-		if err == nil {
-			announceGardenSeedEvents(d, eventSeqs)
-		}
 		d.unlockGardenRoles()
 		if err == nil {
+			announceGardenSeedEvents(d, eventSeqs)
 			break
 		}
 		var conflict *docstore.ConflictError

@@ -254,6 +254,38 @@ func (s *Store) BusEventsSince(cursor int64, limit int) ([]BusEvent, error) {
 	return events, rows.Err()
 }
 
+// BusEventsNamedBetween returns events in (after, through] whose name matches the GLOB pattern.
+func (s *Store) BusEventsNamedBetween(after, through int64, pattern string, limit int) ([]BusEvent, error) {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+
+	if s.db == nil {
+		return nil, nil
+	}
+	rows, err := s.db.Query(`
+		SELECT seq, name, subject, payload, source, created_at
+		FROM bus_events WHERE seq > ? AND seq <= ? AND name GLOB ? ORDER BY seq ASC LIMIT ?
+	`, after, through, pattern, limit)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var events []BusEvent
+	for rows.Next() {
+		var (
+			e         BusEvent
+			createdAt string
+		)
+		if err := rows.Scan(&e.Seq, &e.Name, &e.Subject, &e.Payload, &e.Source, &createdAt); err != nil {
+			return nil, err
+		}
+		e.CreatedAt = parseTicketTime(createdAt)
+		events = append(events, e)
+	}
+	return events, rows.Err()
+}
+
 func (s *Store) BusBounds() (earliest, head int64, err error) {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
