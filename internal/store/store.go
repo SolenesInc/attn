@@ -43,6 +43,8 @@ type Store struct {
 	writes                 *tableWrites
 	sessionRows            sessionRows
 	touchedAt              map[string]time.Time
+	costMu                 sync.Mutex
+	liveCosts              map[string]*sessionCostEntry
 }
 
 // touchResolution bounds how stale last_seen may be; its tightest reader, the Claude
@@ -201,6 +203,7 @@ func (s *Store) execLog(query string, args ...interface{}) {
 
 func (s *Store) Close() error {
 	if s.db != nil {
+		s.flushSessionCosts()
 		return s.db.Close()
 	}
 	return nil
@@ -451,6 +454,7 @@ func (s *Store) Remove(id string) {
 		return
 	}
 	delete(s.touchedAt, id)
+	s.forgetSessionCost(id)
 
 	_, err := s.db.Exec("DELETE FROM sessions WHERE id = ?", id)
 	if err != nil {
