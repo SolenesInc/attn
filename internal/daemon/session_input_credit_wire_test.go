@@ -26,10 +26,17 @@ func TestAHeartbeatArmsNoAutoSettleButTheUsersAnswerInTheSameRunDoes(t *testing.
 				s.State, protocol.Deref(s.AutoSettleFiresAt), protocol.Deref(s.TurnOwed))
 		}
 
+		answered := time.Now()
 		app.TypeLine(day.id, "blue")
-		w.advance(30 * time.Second)
+		w.advance(autoSettleDefaultArm)
 		if s := queriedSession(t, day.cli, day.id); s.AutoSettleFiresAt == nil {
 			t.Fatalf("the user's own answer in the heartbeat's run armed no countdown: %s owed %v", s.State, protocol.Deref(s.TurnOwed))
+		} else if deadline := autoSettleFiresAt(t, s); !deadline.Equal(answered.Add(autoSettleDefaultArm + autoSettleDefaultCountdown)) {
+			t.Fatalf("the user's answer countdown ends at %s, want %s", deadline, answered.Add(autoSettleDefaultArm+autoSettleDefaultCountdown))
+		}
+		w.advance(autoSettleDefaultCountdown)
+		if s := queriedSession(t, day.cli, day.id); protocol.Deref(s.TurnOwed) || s.AutoSettleFiresAt != nil {
+			t.Fatalf("after the user's answer countdown the day is owed %v with countdown %q, want settled", protocol.Deref(s.TurnOwed), protocol.Deref(s.AutoSettleFiresAt))
 		}
 	})
 }

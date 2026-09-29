@@ -634,6 +634,10 @@ func (d *Daemon) handlePtyInput(client *wsClient, msg *protocol.PtyInputMessage)
 			strings.TrimSpace(protocol.Deref(msg.Source)),
 		)
 	}
+	if userTyped {
+		// Hold the existing timer before the agent can take this input and arm a new one.
+		d.holdAutoSettle(msg.ID)
+	}
 	writeErr := d.writeSessionPTY(msg.ID, []byte(msg.Data), source)
 	d.recordSupportInputTrace(msg, receivedAt, time.Since(receivedAt), writeErr)
 	if writeErr != nil {
@@ -655,10 +659,6 @@ func (d *Daemon) handlePtyInput(client *wsClient, msg *protocol.PtyInputMessage)
 			result.Error = protocol.Ptr(writeErr.Error())
 		}
 		d.sendToClient(client, result)
-	}
-
-	if userTyped {
-		d.holdAutoSettle(msg.ID)
 	}
 }
 
