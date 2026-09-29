@@ -268,6 +268,7 @@ var messageDecoders = map[string]func([]byte) (any, error){
 	CmdDesktopSetActivePane:          decodeInto[DesktopSetActivePaneMessage],
 	CmdDesktopPlaceSession:           decodeInto[DesktopPlaceSessionMessage],
 	CmdDesktopShowSession:            decodeInto[DesktopShowSessionMessage],
+	CmdDesktopMoveSession:            decodeInto[DesktopMoveSessionMessage],
 	CmdDesktopShowLeaf:               decodeInto[DesktopShowLeafMessage],
 	CmdDesktopMoveLeaf:               decodeInto[DesktopMoveLeafMessage],
 	CmdDesktopRemoveLeaf:             decodeInto[DesktopRemoveLeafMessage],

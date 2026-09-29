@@ -799,6 +799,12 @@ session options:
                              medium, high, xhigh); defaults to medium for agents
                              that support reasoning effort
   --name <text>              session name (max 16 chars; defaults from cwd)
+  --desktop <ref>            desktop of your profile for the new agent: its
+                             shortcut digit (1-9), its name as shown
+                             (case-insensitive) or its id; the agent opens
+                             beside that desktop's active pane without changing
+                             what you see. Defaults to beside the source
+                             session.
   --source-session <id>      source session (defaults to ATTN_SESSION_ID)
   --yolo                     bypass agent approval prompts
 
@@ -1610,6 +1616,7 @@ func parseDelegateArgs(args []string) (delegateCLIArgs, error) {
 	model := fs.String("model", "", "pin the delegated agent's model (alias or full id)")
 	effort := fs.String("effort", "", "pin the delegated agent's reasoning effort")
 	name := fs.String("name", "", "name for the agent")
+	desktop := fs.String("desktop", "", "desktop of the caller's profile: shortcut digit, name or id")
 	sourceSessionID := fs.String("source-session", "", "source session id (defaults to ATTN_SESSION_ID)")
 	yolo := fs.Bool("yolo", false, "launch the target agent in yolo mode")
 	cwd := fs.String("cwd", "", "working folder or repository")
@@ -1811,6 +1818,13 @@ func parseDelegateArgs(args []string) (delegateCLIArgs, error) {
 	}
 	if value := strings.TrimSpace(*name); value != "" {
 		request.Label = protocol.Ptr(value)
+	}
+	if present["desktop"] {
+		value := strings.TrimSpace(*desktop)
+		if value == "" {
+			return delegateCLIArgs{}, errors.New("--desktop needs a shortcut digit (1-9), a desktop name or a desktop id")
+		}
+		request.Desktop = protocol.Ptr(value)
 	}
 	if *yolo {
 		request.YoloMode = protocol.Ptr(true)

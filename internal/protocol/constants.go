@@ -2,7 +2,7 @@ package protocol
 
 import "time"
 
-const ProtocolVersion = "334"
+const ProtocolVersion = "336"
 
 const (
 	ErrorCodeConflict             = "conflict"
@@ -275,6 +275,7 @@ const (
 	CmdDesktopSetActivePane   = "desktop_set_active_pane"
 	CmdDesktopPlaceSession    = "desktop_place_session"
 	CmdDesktopShowSession     = "desktop_show_session"
+	CmdDesktopMoveSession     = "desktop_move_session"
 	CmdDesktopShowLeaf        = "desktop_show_leaf"
 	CmdDesktopMoveLeaf        = "desktop_move_leaf"
 	CmdDesktopRemoveLeaf      = "desktop_remove_leaf"
