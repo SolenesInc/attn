@@ -1,13 +1,14 @@
 import { fireEvent, screen, within } from '@testing-library/react';
 import { describe, expect, it } from 'vitest';
-import { agentPane, daemonEndpoint, daemonSession, daemonDesktop, daemonSeed, defaultProfile, dockTiles, splitDesktop } from './test/daemonFixtures';
+import { agentPane, daemonEndpoint, daemonSession, daemonDesktop, daemonSeed, defaultProfile, dockTiles, emptyDesktop, splitDesktop } from './test/daemonFixtures';
 import { gesture, renderApp } from './test/renderApp';
 
 function sidebar() {
   return Array.from(document.querySelectorAll('.desktop-row'), (row) => {
     const rows = Array.from(row.querySelectorAll('.session-item .session-label'), (label) => label.textContent);
-    const placeholder = row.querySelector('[data-testid="desktop-neutral-indicator"]')?.getAttribute('title');
-    return [row.querySelector('.desktop-label')?.textContent, rows, ...(placeholder ? [placeholder] : [])];
+    const emptyTitle = row.querySelector('.desktop-rule.empty .desktop-number')?.getAttribute('title');
+    const title = row.querySelector('.desktop-rule .sidebar-row-select')?.getAttribute('aria-label')?.replace(/^Open /, '');
+    return [title, rows, ...(emptyTitle ? [emptyTitle] : [])] as [string | undefined, (string | null)[], string?];
   });
 }
 
@@ -66,6 +67,8 @@ describe('App desktop sidebar', () => {
             panes: [agentPane('a1', 'a'), agentPane('a2', 'a')],
           }, { order_key: 'a0', name: 'a' }),
           splitDesktop('b', ['b1'], { order_key: 'a1', name: 'b' }),
+          daemonDesktop('tile-only', { root: { type: 'tile', tile_id: 'tile-browser', tile_kind: 'browser', tile_params: 'https://tiles.test' } }, { order_key: 'a3', name: 'tile-only' }),
+          emptyDesktop('empty', { order_key: 'a4', name: 'empty' }),
         ],
         sessions: ['c1', 'a2', 'a1', 'unplaced', 'b1'].map((id) => daemonSession(id)),
         profiles: [defaultProfile('a')],
@@ -76,6 +79,8 @@ describe('App desktop sidebar', () => {
       ['a', ['a1', 'docs.test', 'a2']],
       ['b', ['b1']],
       ['c', ['c1']],
+      ['tile-only', ['tiles.test']],
+      ['empty', [], 'Empty desktop'],
       ['Not on a desktop', ['unplaced']],
     ]);
   });
@@ -101,6 +106,11 @@ describe('App desktop sidebar', () => {
       ['stale', []],
     ]);
     expect(unresolved).toEqual(['failed', 'launching', 'stale']);
+    expect(sidebar().filter(([title]) => ['failed', 'launching'].includes(title!)).map(([, , marker]) => marker)).toEqual([
+      'Desktop has a pane without an active session',
+      'Desktop has a pane without an active session',
+    ]);
+    expect(sidebar().find(([title]) => title === 'stale')?.[2]).toBe('Empty desktop');
 
     daemon.emit({ event: 'session_unregistered', session: daemonSession('live1') });
     await daemon.idle();

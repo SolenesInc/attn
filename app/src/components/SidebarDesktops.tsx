@@ -1,19 +1,18 @@
 import type { ComponentProps, ReactNode } from 'react';
 import type { SidebarDesktop } from './sidebarTypes';
 import type { TileLeaf } from '../types/desktop';
-import { type UISessionState } from '../types/sessionState';
 import { tileContentKey } from '../types/desktop';
 import './Sidebar.css';
 import { useSidebarContext } from './SidebarContext';
 import { formatShortcut } from '../shortcuts/formatShortcut';
 import { runCount, runsNeedingYouCount } from '../utils/automationRuns';
-import { hasNoAgentRows, desktopShortcut } from './sidebarModel';
+import { hasNoLeaves, desktopShortcut } from './sidebarModel';
 import { SidebarSessionRow, TileSidebarRow } from './SidebarRows';
-import { StateIndicator } from './StateIndicator';
 
 export function SidebarDesktopList() {
   const {
     onRenameDesktop,
+    selectedDesktopId,
     onSessionDragStart,
     onSelectDesktop,
     openDesktopRename,
@@ -34,45 +33,38 @@ export function SidebarDesktopList() {
     <>
       {visibleDesktops.map((desktopView) => {
         const desktopIndex = visualIndexOfDesktop(desktopView.id);
+        const shortcut = desktopShortcut(desktopIndex);
         const seamIndex = reorderSeamIndexByDesktopId?.get(desktopView.id);
         const isReorderSource = reorderDrag?.desktopId === desktopView.id;
         const desktop = desktopView.desktop;
+        const emptyTitle = hasNoLeaves(desktopView)
+          ? desktopView.hasUnresolvedAgentPanes
+            ? 'Desktop has a pane without an active session'
+            : 'Empty desktop'
+          : undefined;
         return (
-          <div className="desktop-row" key={`${desktopView.endpointId || 'local'}:${desktopView.id}`}>
+          <div className="desktop-row" key={desktopView.id}>
             {seamIndex !== undefined && renderReorderSeam(seamIndex)}
             <DesktopDropGroup desktopView={desktopView} reorderSource={isReorderSource}>
-              <div className="desktop-group-header">
+              <div className={`desktop-rule${desktopView.id === selectedDesktopId ? ' current' : ''}${hasNoLeaves(desktopView) ? ' empty' : ''}${shortcut ? '' : ' no-shortcut'}`}>
                 <button
                   type="button"
                   className="sidebar-row-select"
                   aria-label={`Open ${desktopView.title}`}
+                  title={emptyTitle}
                   onPointerDown={desktop ? (event) => handleHeaderPointerDown(desktopView, event) : undefined}
                   onClickCapture={handleHeaderClickCapture}
                   onClick={() => onSelectDesktop(desktopView.id)}
                 />
-                {hasNoAgentRows(desktopView) ? (
-                  <span
-                    className="desktop-neutral-indicator"
-                    data-testid="desktop-neutral-indicator"
-                    title={desktopView.hasUnresolvedAgentPanes ? 'Desktop has a pane without an active session' : 'No agent on this desktop'}
-                  />
-                ) : (
-                  <StateIndicator
-                    state={(desktopView.status as UISessionState | undefined) || 'idle'}
-                    size="md"
-                    seed={desktopView.id}
-                  />
-                )}
-                <span className="desktop-label">{desktopView.title}</span>
-                {desktopView.endpointId && desktopView.sessions[0]?.endpointName && (
-                  <span
-                    className={`session-endpoint-badge status-${desktopView.sessions[0].endpointStatus || 'connected'}`}
-                  >
-                    {desktopView.sessions[0].endpointName}
+                {desktop ? (
+                  <span className="desktop-number" title={emptyTitle}>
+                    {desktop.number ?? desktopIndex + 1}
                   </span>
-                )}
-                {desktopShortcut(desktopIndex) && (
-                  <span className="session-shortcut">{desktopShortcut(desktopIndex)}</span>
+                ) : null}
+                {(desktop?.name || !desktop) && <span className="desktop-label">{desktopView.title}</span>}
+                <span className="desktop-rule-line" aria-hidden="true" />
+                {shortcut && (
+                  <span className="session-shortcut">{shortcut}</span>
                 )}
                 {onRenameDesktop && desktop && (
                   <span className="desktop-actions">
@@ -197,6 +189,7 @@ export function SidebarAutomationGroups() {
                   <DesktopSessionRow
                     key={run.id}
                     session={run}
+                    grouped
                     onSettle={
                       onSettleTurn && needingYouIds.has(run.id) ? () => onSettleTurn(run.id) : undefined
                     }

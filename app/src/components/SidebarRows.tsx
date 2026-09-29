@@ -91,7 +91,7 @@ export function TileSidebarRow({
     : tile.tileParams;
   return (
     <div
-      className={`session-item sidebar-leaf-row desktop-tile-item grouped ${selected ? 'selected' : ''}`.trim()}
+      className={`session-item sidebar-leaf-row desktop-tile-item ${selected ? 'selected' : ''}`.trim()}
       data-testid={`sidebar-tile-${desktopId}-${tile.tileId}`}
       data-tile-kind={tile.tileKind}
       title={tileIdentifier || tile.tileId}
@@ -207,6 +207,7 @@ export function SidebarSessionRow({
   onTriggerNudge,
   showSettling,
   delegates,
+  grouped = false,
 }: {
   session: LocalSession;
   selected: boolean;
@@ -220,6 +221,7 @@ export function SidebarSessionRow({
   onTriggerNudge?: () => void;
   showSettling: boolean;
   delegates: readonly LocalSession[];
+  grouped?: boolean;
 }) {
   const harnessTitle = harnessLabel(session.agent);
   const stateTitle = session.state === 'recoverable'
@@ -228,7 +230,7 @@ export function SidebarSessionRow({
   const hoverTitle = stateTitle ? `${harnessTitle} · ${stateTitle}` : harnessTitle;
   return (
     <div
-      className={`session-item sidebar-leaf-row grouped ${selected ? 'selected' : ''} ${session.state === 'recoverable' ? 'recoverable' : ''} ${draggable ? 'session-item--draggable' : ''} ${dragging ? 'session-item--dragging' : ''}`
+      className={`session-item sidebar-leaf-row ${grouped ? 'grouped' : ''} ${selected ? 'selected' : ''} ${session.state === 'recoverable' ? 'recoverable' : ''} ${draggable ? 'session-item--draggable' : ''} ${dragging ? 'session-item--dragging' : ''}`
         .trim()
         .replace(/\s+/g, ' ')}
       data-testid={`sidebar-session-${session.id}`}

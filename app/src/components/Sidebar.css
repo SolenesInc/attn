@@ -299,24 +299,16 @@
 }
 
 .desktop-group {
-  margin-bottom: 8px;
-  border-radius: 8px;
-  border: 1px solid transparent;
+  margin-top: 8px;
   position: relative;
-  overflow: hidden;
 }
 
-.desktop-group.selected {
-  background: rgba(255, 255, 255, 0.025);
-}
-
-.sidebar--display-boxed .desktop-group.selected {
-  border-color: rgba(255, 255, 255, 0.12);
-  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.18);
+.desktop-row:first-child .desktop-group {
+  margin-top: 0;
 }
 
 .desktop-group--drag-target {
-  border-color: color-mix(in srgb, var(--accent) 32%, transparent);
+  outline: 1px solid color-mix(in srgb, var(--accent) 32%, transparent);
   background: color-mix(in srgb, var(--accent) 7%, transparent);
 }
 
@@ -325,7 +317,7 @@
 }
 
 .desktop-group--drag-entering {
-  border-color: color-mix(in srgb, var(--accent) 60%, transparent);
+  outline: 1px solid color-mix(in srgb, var(--accent) 60%, transparent);
   background: color-mix(in srgb, var(--accent) 12%, transparent);
 }
 
@@ -458,39 +450,67 @@
   }
 }
 
-.desktop-group-header {
+.desktop-rule {
   position: relative;
   display: flex;
   align-items: center;
-  gap: 8px;
+  gap: 6px;
   width: 100%;
-  min-height: 34px;
-  padding: 7px 10px;
-  border: 0;
-  border-radius: 7px;
+  height: 20px;
+  padding: 0 6px 0 4px;
+  border-radius: 4px;
   background: transparent;
-  color: var(--color-text-primary);
+  color: var(--color-text-dimmed);
   cursor: pointer;
-  text-align: left;
+  font: 600 10px 'JetBrains Mono', 'DejaVu Sans Mono', monospace;
 }
 
-.desktop-group-header:hover {
-  background: var(--color-bg-elevated);
+.desktop-rule:hover {
+  background: rgba(255, 255, 255, 0.03);
 }
 
-.desktop-group.selected .desktop-group-header {
-  background: rgba(255, 255, 255, 0.045);
+.desktop-rule.current {
+  color: var(--color-text-primary);
+}
+
+.desktop-number {
+  min-width: 16px;
+  height: 14px;
+  padding: 0 3px;
+  display: grid;
+  place-items: center;
+  border: 1px solid rgba(255, 255, 255, 0.07);
+  border-radius: 3px;
+}
+
+.desktop-rule.current .desktop-number {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: #0b1220;
+}
+
+.desktop-rule.empty .desktop-number {
+  border-style: dashed;
+  border-color: #3d4047;
+}
+
+.desktop-rule-line {
+  flex: 1;
+  height: 1px;
+  background: rgba(255, 255, 255, 0.07);
+}
+
+.desktop-rule .session-shortcut {
+  margin-left: 0;
 }
 
 .desktop-label {
-  flex: 1;
   min-width: 0;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
-  font-family: 'JetBrains Mono', 'DejaVu Sans Mono', monospace;
-  font-size: var(--font-size-sm);
-  font-weight: 600;
+  color: var(--color-text-muted);
+  font: 500 11px -apple-system, BlinkMacSystemFont, 'Inter', system-ui, sans-serif;
 }
 
 .session-group-header {
@@ -523,12 +543,6 @@
   background: var(--color-bg-elevated);
 }
 
-.session-item.grouped {
-  margin-left: 18px;
-  padding-left: 14px;
-  border-left: 1px solid rgba(255, 255, 255, 0.045);
-}
-
 .state-indicator {
   width: 6px;
   height: 6px;
@@ -537,7 +551,6 @@
   margin-top: 6px;
 }
 
-.desktop-group-header .state-indicator,
 .session-item > .state-indicator {
   margin-top: 0;
 }
@@ -732,19 +745,24 @@
 }
 
 .desktop-actions {
-  position: relative;
+  position: absolute;
+  right: 28px;
   z-index: 1;
   align-items: center;
   display: flex;
   flex-shrink: 0;
-  margin-left: 6px;
+  background: var(--color-bg-panel);
   opacity: 0;
   pointer-events: none;
   transition: opacity 0.1s;
 }
 
-.desktop-group-header:hover .desktop-actions,
-.desktop-group-header:focus-within .desktop-actions {
+.desktop-rule.no-shortcut .desktop-actions {
+  right: 4px;
+}
+
+.desktop-rule:hover .desktop-actions,
+.desktop-rule:focus-within .desktop-actions {
   opacity: 1;
   pointer-events: auto;
 }
@@ -942,17 +960,6 @@
   box-shadow: 0 16px 36px rgba(0, 0, 0, 0.34);
 }
 
-.sidebar-settings-label {
-  display: block;
-  margin-bottom: 7px;
-  color: var(--color-text-muted);
-  font-family: 'JetBrains Mono', 'DejaVu Sans Mono', monospace;
-  font-size: var(--font-size-xs);
-  font-weight: 700;
-  letter-spacing: 0.12em;
-  text-transform: uppercase;
-}
-
 .sidebar-display-toggle {
   display: grid;
   grid-template-columns: repeat(3, 1fr);
@@ -965,7 +972,7 @@
 
 .sidebar-settings-sub-label {
   display: block;
-  margin: 11px 2px 6px;
+  margin: 8px 2px 6px;
   color: var(--color-text-muted);
   font-family: 'JetBrains Mono', 'DejaVu Sans Mono', monospace;
   font-size: var(--font-size-xs);
@@ -1136,51 +1143,6 @@
   font-family: 'JetBrains Mono', 'DejaVu Sans Mono', monospace;
   font-size: var(--font-size-xs);
   letter-spacing: 0.04em;
-}
-
-/* Desktops without an agent row get a hollow marker instead of a state dot. */
-.desktop-neutral-indicator {
-  display: inline-block;
-  flex: 0 0 auto;
-  width: 8px;
-  height: 8px;
-  border: 1.5px solid var(--color-text-muted);
-  border-radius: 50%;
-  background: transparent;
-  opacity: 0.6;
-}
-
-.sidebar--display-open .desktop-group.selected {
-  border-color: transparent;
-  box-shadow: none;
-}
-
-.sidebar--display-tight .sidebar-header {
-  gap: 6px;
-  padding: 9px;
-}
-
-.sidebar--display-tight .session-list {
-  padding: 6px;
-}
-
-.sidebar--display-tight .desktop-group {
-  margin-bottom: 4px;
-}
-
-.sidebar--display-tight .desktop-group-header {
-  min-height: 30px;
-  padding: 5px 8px;
-}
-
-.sidebar--display-tight .session-item {
-  padding-top: 5px;
-  padding-bottom: 5px;
-}
-
-.sidebar--display-tight .session-item.grouped {
-  margin-left: 14px;
-  padding-left: 10px;
 }
 
 /* Collapsed state - Icon Rail */

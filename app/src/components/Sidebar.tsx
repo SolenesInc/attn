@@ -34,7 +34,6 @@ function SidebarExpanded() {
     onNewDesktopDrop,
     onGoToDashboard,
     homeActive,
-    displayMode,
     newDesktopDropActive,
     setNewDesktopDropActive,
     reorderDrag,
@@ -42,7 +41,7 @@ function SidebarExpanded() {
   } = useSidebarContext();
   return (
     <div
-      className={`sidebar sidebar--display-${displayMode} ${harnessLogosEnabled ? '' : 'sidebar--hide-harness-logos'}`.trim()}
+      className={`sidebar ${harnessLogosEnabled ? '' : 'sidebar--hide-harness-logos'}`.trim()}
     >
       <SidebarHeader />
       {/* Above Home, because it outranks it: this only exists when something is owed. */}
