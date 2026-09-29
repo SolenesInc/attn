@@ -1,6 +1,7 @@
+import { fireEvent, screen, within } from '@testing-library/react';
 import { describe, expect, it } from 'vitest';
-import { agentPane, daemonSession, daemonDesktop, defaultProfile, splitDesktop } from './test/daemonFixtures';
-import { renderApp } from './test/renderApp';
+import { agentPane, daemonEndpoint, daemonSession, daemonDesktop, daemonSeed, defaultProfile, dockTiles, splitDesktop } from './test/daemonFixtures';
+import { gesture, renderApp } from './test/renderApp';
 
 function sidebar() {
   return Array.from(document.querySelectorAll('.desktop-row'), (row) => {
@@ -11,6 +12,40 @@ function sidebar() {
 }
 
 describe('App desktop sidebar', () => {
+  it('names tile kinds, shows a bound remote host, and opens a seed tile once', async () => {
+    const { daemon } = await renderApp({
+      initialState: {
+        desktops: [daemonDesktop('d1', {
+          root: dockTiles({ type: 'pane', pane_id: 'pane-remote' }, [
+            { tile_id: 'tile-seed', tile_kind: 'seed', tile_params: 's-plan', tile_session_id: 'remote' },
+            { tile_id: 'tile-web', tile_kind: 'browser', tile_params: 'https://docs.test/path' },
+          ]),
+          panes: [agentPane('remote', 'd1')],
+        })],
+        endpoints: [daemonEndpoint('ep-1')],
+        sessions: [daemonSession('remote', { endpoint_id: 'ep-1' })],
+        seeds: [daemonSeed('s-plan', { title: 'Native client plan' })],
+        profiles: [defaultProfile('d1')],
+      },
+    });
+
+    const seed = screen.getByTestId('sidebar-tile-d1-tile-seed');
+    expect(seed).toHaveAttribute('title', 's-plan');
+    expect(within(seed).getByText('Native client plan')).toBeInTheDocument();
+    expect(within(seed).getByText('SEED')).toBeInTheDocument();
+    expect(within(seed).getByText('gpu-box')).toBeInTheDocument();
+
+    const browser = screen.getByTestId('sidebar-tile-d1-tile-web');
+    expect(browser).toHaveAttribute('title', 'https://docs.test/path');
+    expect(within(browser).getByText('WEB')).toBeInTheDocument();
+    expect(within(browser).queryByText('gpu-box')).toBeNull();
+
+    await gesture(daemon, () => fireEvent.click(within(seed).getByRole('button', { name: 'Open Native client plan' })));
+    expect(daemon.sentOf('desktop_show_leaf')).toEqual([
+      expect.objectContaining({ desktop_id: 'd1', leaf_id: 'tile-seed' }),
+    ]);
+  });
+
   it('lists desktops in order, each with its laid-out sessions and tiles in layout order', async () => {
     await renderApp({
       initialState: {

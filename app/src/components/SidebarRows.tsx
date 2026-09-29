@@ -1,11 +1,12 @@
 import type { MouseEvent as ReactMouseEvent, PointerEvent as ReactPointerEvent } from 'react';
 import { formatShortcut } from '../shortcuts/formatShortcut';
 import type { SessionPullRequest } from '../types/generated';
-import { type TileContentState, type TileLeaf } from '../types/desktop';
+import { parseNotebookTileParams, type TileContentState, type TileLeaf } from '../types/desktop';
 import { describeSessionPullRequest, pickSessionPullRequest } from '../utils/sessionPullRequest';
-import { deriveTileTitle } from '../utils/tilePresentation';
+import { deriveTileTitle, tileKindLabel } from '../utils/tilePresentation';
 import { useDaemonStore } from '../store/daemonSessions';
 import { ChiefOfStaffBadge } from './ChiefOfStaffBadge';
+import { useSidebarContext } from './SidebarContext';
 import { DelegatedFromChiefBadge } from './DelegatedFromChiefBadge';
 import { DelegationChainTrigger } from './DelegationChain';
 import { SessionLead } from './SessionLead';
@@ -78,12 +79,21 @@ export function TileSidebarRow({
   onReload: () => void;
 }) {
   const seeds = useDaemonStore((state) => state.seeds);
+  const { desktops } = useSidebarContext();
+  const boundSession = tile.tileSessionId
+    ? desktops.flatMap((desktop) => desktop.sessions).find((session) => session.id === tile.tileSessionId)
+    : undefined;
   const title = deriveTileTitle(tile, content, (id) => seeds.find((seed) => seed.id === id)?.title);
+  const kind = tileKindLabel(tile.tileKind);
+  const tileIdentifier = tile.tileKind === 'notebook'
+    ? parseNotebookTileParams(tile.tileParams).path
+    : tile.tileParams;
   return (
     <div
       className={`session-item sidebar-leaf-row desktop-tile-item grouped ${selected ? 'selected' : ''}`.trim()}
       data-testid={`sidebar-tile-${desktopId}-${tile.tileId}`}
       data-tile-kind={tile.tileKind}
+      title={tileIdentifier || tile.tileId}
     >
       <button
         type="button"
@@ -91,12 +101,16 @@ export function TileSidebarRow({
         aria-label={`Open ${title}`}
         onClick={onSelect}
       />
-      <span
-        className={`desktop-tile-indicator desktop-tile-indicator--${tile.tileKind}`}
-        aria-hidden="true"
-      />
+      <span className="desktop-tile-icon" aria-hidden="true">{kind.icon}</span>
       <span className="session-label">{title}</span>
-      <span className="session-trailing" />
+      <span className="session-trailing">
+        <span className="desktop-tile-kind">{kind.word}</span>
+        {boundSession?.endpointName && (
+          <span className={`session-endpoint-badge status-${boundSession.endpointStatus || 'connected'}`}>
+            {boundSession.endpointName}
+          </span>
+        )}
+      </span>
       <div className="session-actions">
         {tile.tileKind === 'browser' && (
           <button
