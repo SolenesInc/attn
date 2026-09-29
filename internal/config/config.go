@@ -243,6 +243,18 @@ func ScopeTestEnvironment(dataDir string) {
 	os.Unsetenv("ATTN_CONFIG_PATH")
 	os.Unsetenv("ATTN_PLUGIN_DIR")
 	os.Unsetenv("ATTN_CLIENT_TOKEN")
+	unsetInheritedGitConfig()
+}
+
+// Git config injected through the environment (such as url.insteadOf rewrites) changes what attn's git calls see.
+func unsetInheritedGitConfig() {
+	os.Unsetenv("GIT_CONFIG_PARAMETERS")
+	for _, entry := range os.Environ() {
+		name, _, _ := strings.Cut(entry, "=")
+		if name == "GIT_CONFIG_COUNT" || strings.HasPrefix(name, "GIT_CONFIG_KEY_") || strings.HasPrefix(name, "GIT_CONFIG_VALUE_") {
+			os.Unsetenv(name)
+		}
+	}
 }
 
 func defaultAttnDir(instance string) string {
