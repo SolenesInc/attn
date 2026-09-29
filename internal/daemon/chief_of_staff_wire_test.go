@@ -1,6 +1,7 @@
 package daemon_test
 
 import (
+	"slices"
 	"testing"
 
 	"github.com/google/uuid"
@@ -40,8 +41,15 @@ func TestChiefOfStaffIsASingleRoleThatTransfers(t *testing.T) {
 	if !transfer.Success || protocol.Deref(transfer.PreviousSessionID) != "first" {
 		t.Fatalf("making second the chief = %+v; want a transfer from first", transfer)
 	}
-	testworld.AwaitSession(app, "second", func(s protocol.Session) bool { return protocol.Deref(s.ChiefOfStaff) })
-	testworld.AwaitSession(app, "first", func(s protocol.Session) bool { return !protocol.Deref(s.ChiefOfStaff) })
+	snapshot := testworld.Await(app, protocol.EventSessionsUpdated, func(m protocol.SessionsUpdatedMessage) bool {
+		return slices.ContainsFunc(m.Sessions, func(s protocol.Session) bool {
+			return s.ID == "second" && protocol.Deref(s.ChiefOfStaff)
+		})
+	})
+	first := slices.IndexFunc(snapshot.Sessions, func(s protocol.Session) bool { return s.ID == "first" })
+	if first < 0 || protocol.Deref(snapshot.Sessions[first].ChiefOfStaff) {
+		t.Fatalf("the transfer snapshot is %+v; want first present without the chief role", snapshot.Sessions)
+	}
 
 	if unknown := setChiefOfStaff(app, "missing", true); unknown.Success || protocol.Deref(unknown.Error) == "" {
 		t.Errorf("making an unknown session the chief = %+v; want a refusal", unknown)
