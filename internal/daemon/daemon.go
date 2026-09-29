@@ -121,6 +121,7 @@ type Daemon struct {
 	httpListener                      net.Listener
 	httpHandler                       http.Handler
 	diagServer                        *diag.Server
+	harnessWSListenerFD               string
 	wsHub                             *wsHub
 	presentSince                      time.Time
 	presenceMu                        sync.RWMutex
@@ -638,6 +639,8 @@ func NewForTesting(socketPath string) *Daemon {
 }
 
 func (d *Daemon) Start() error {
+	d.harnessWSListenerFD = os.Getenv("ATTN_HARNESS_WS_LISTENER_FD")
+	_ = os.Unsetenv("ATTN_HARNESS_WS_LISTENER_FD")
 	if d.dataRoot == "" {
 		d.dataRoot = filepath.Dir(d.socketPath)
 	}
@@ -2072,7 +2075,26 @@ func (d *Daemon) listenHTTP() error {
 		return nil
 	}
 	addr := d.httpServer.Addr
-	listener, err := net.Listen("tcp", addr)
+	var listener net.Listener
+	var err error
+	if rawFD := d.harnessWSListenerFD; rawFD != "" {
+		if os.Getenv("ATTN_HARNESS_DATA_DIR") == "" {
+			return fmt.Errorf("ATTN_HARNESS_WS_LISTENER_FD requires ATTN_HARNESS_DATA_DIR")
+		}
+		fd, parseErr := strconv.Atoi(rawFD)
+		if parseErr != nil {
+			return fmt.Errorf("invalid ATTN_HARNESS_WS_LISTENER_FD %q: %w", rawFD, parseErr)
+		}
+		file := os.NewFile(uintptr(fd), "harness-websocket-listener")
+		listener, err = net.FileListener(file)
+		_ = file.Close()
+		if err == nil && listener.Addr().String() != addr {
+			_ = listener.Close()
+			return fmt.Errorf("harness WebSocket listener is %s, want %s", listener.Addr(), addr)
+		}
+	} else {
+		listener, err = net.Listen("tcp", addr)
+	}
 	if err != nil {
 		return fmt.Errorf(
 			"refusing to start: cannot bind the WebSocket address %s for instance %q: %w. "+
