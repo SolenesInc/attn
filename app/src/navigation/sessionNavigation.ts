@@ -30,6 +30,7 @@ export type IntentTarget =
   | { kind: 'desktop'; desktopId: string }
   | { kind: 'profile'; profileId: string }
   | { kind: 'open' }
+  | { kind: 'move'; leafId: string }
   | { kind: 'answer'; requestId: string };
 
 // The user's latest gesture that changes what is shown, until an arrival shows its target.
@@ -143,6 +144,8 @@ function commandServes(target: IntentTarget, cmd: string, body: Record<string, u
     case 'leaf':
       return (cmd === 'desktop_show_leaf' && body.leaf_id === target.leafId && body.desktop_id === target.desktopId)
         || (cmd === 'desktop_dock_tile' && body.tile_id === target.leafId && body.desktop_id === target.desktopId);
+    case 'move':
+      return cmd === 'desktop_move_leaf' && body.leaf_id === target.leafId;
     case 'desktop':
       return cmd === 'desktop_set_current' && body.desktop_id === target.desktopId;
     case 'profile':
@@ -254,6 +257,7 @@ function intentShown(arrangement: Arrangement, leaf: ActiveLeaf | null, target: 
     case 'profile':
       return arrangement.profileId === target.profileId;
     case 'open':
+    case 'move':
       return false;
     default:
       return leafShows(leaf, target);

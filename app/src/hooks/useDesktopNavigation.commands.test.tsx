@@ -117,14 +117,14 @@ describe('useDesktopNavigation', () => {
     expect(showNotice).toHaveBeenCalledWith(expect.stringContaining('No desktop on'));
   });
 
-  it('sends the focused pane beside the target active leaf and leaves focusing it to the daemon', async () => {
+  it('moves the active leaf beside the target active leaf and stays on the source desktop', async () => {
     seedStore([
       desktop('d1', { shortcut_slot: 1, tree_json: TREE_WITH_PANE('p1'), active_pane_id: 'p1', revision: 4 }),
       desktop('d2', { shortcut_slot: 2, tree_json: TREE_WITH_PANE('p9'), active_pane_id: 'p9', revision: 7 }),
     ]);
     const { api, result } = renderNavigation();
 
-    act(() => result.current.sendActivePaneToSlot(2));
+    act(() => result.current.moveActiveLeafToSlot(2, false));
     await settle();
 
     expect(api.sendDesktopMoveLeaf.mock.calls).toEqual([[{
@@ -157,7 +157,7 @@ describe('useDesktopNavigation', () => {
     ]);
     const { api, result } = renderNavigation();
 
-    act(() => result.current.sendActivePaneToSlot(2));
+    act(() => result.current.moveActiveLeafToSlot(2, false));
     await settle();
 
     expect(api.sendDesktopMoveLeaf.mock.calls[0][0]).toMatchObject({ leafId: 't1', targetDesktopId: 'd2', anchorId: 'p9' });
@@ -171,7 +171,7 @@ describe('useDesktopNavigation', () => {
     const { api, result } = renderNavigation();
     api.sendDesktopMoveLeaf.mockRejectedValueOnce(staleRevision());
 
-    act(() => result.current.sendActivePaneToDesktop('d2'));
+    act(() => result.current.moveActiveLeafToDesktop('d2', false));
     await settle();
     expect(api.sendDesktopMoveLeaf).toHaveBeenCalledTimes(1);
 
@@ -196,7 +196,7 @@ describe('useDesktopNavigation', () => {
       const { api, showNotice, result } = renderNavigation();
       api.sendDesktopMoveLeaf.mockRejectedValueOnce(staleRevision());
 
-      act(() => result.current.sendActivePaneToDesktop('d2'));
+      act(() => result.current.moveActiveLeafToDesktop('d2', false));
       await settle();
       await act(async () => {
         vi.advanceTimersByTime(FRESH_ARRANGEMENT_TRIPWIRE_MS);
@@ -210,14 +210,14 @@ describe('useDesktopNavigation', () => {
     }
   });
 
-  it('says so when there is no focused pane to send', () => {
+  it('says so when nothing is active to move', () => {
     seedStore([desktop('d1', { shortcut_slot: 1 }), desktop('d2', { shortcut_slot: 2 })]);
     const { api, showNotice, result } = renderNavigation();
 
-    act(() => result.current.sendActivePaneToSlot(2));
+    act(() => result.current.moveActiveLeafToSlot(2, false));
 
     expect(api.sendDesktopMoveLeaf).not.toHaveBeenCalled();
-    expect(showNotice).toHaveBeenCalledWith('No focused pane to send.');
+    expect(showNotice).toHaveBeenCalledWith('Nothing is active to move.');
   });
 
   it('gives an extra desktop the first free shortcut slot', () => {

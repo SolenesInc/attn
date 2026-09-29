@@ -95,7 +95,7 @@ async function main() {
     prefix: 'desktop-switching',
     metadata: {
       agent: 'shell',
-      focus: 'desktop shortcuts switch, send and bounce through the daemon; the overview switches; the app follows another client (the harness observer); terminals keep their scrollback across moves; a tile is an ordinary leaf that takes the keyboard and leaves no stale agent focus mode',
+      focus: 'desktop shortcuts switch, move (following or staying) and bounce through the daemon; the overview switches; the app follows another client (the harness observer); terminals keep their scrollback across moves; a tile is an ordinary leaf that takes the keyboard and leaves no stale agent focus mode',
     },
   });
 
@@ -186,10 +186,10 @@ async function main() {
       await writeToken(client, split.sessionId, split.paneId, tokens.split);
     });
 
-    await runner.step('send_the_focused_pane_to_desktop_b', async () => {
+    await runner.step('move_the_split_pane_to_desktop_b_and_stay', async () => {
       await client.request('focus_pane', { sessionId: split.sessionId, paneId: split.paneId });
       await waitForAppState(client, (state) => shownAgentId(state) === split.sessionId, 'split pane focused');
-      await pressShortcutKeys(client, driver, `desktop.send${desktopB.shortcut_slot}`);
+      await pressShortcutKeys(client, driver, `desktop.sendStay${desktopB.shortcut_slot}`);
       const moved = await waitForAppState(
         client,
         (state) => desktopHolding(state, split.sessionId)?.id === desktopB.id,
@@ -197,7 +197,7 @@ async function main() {
       );
       runner.assert(
         moved.arrangement.currentDesktopId === desktopA.id && desktopHolding(moved, first.sessionId)?.id === desktopA.id,
-        `Sending a pane moved the user or the other pane:\n${JSON.stringify(moved.arrangement, null, 2)}`,
+        `Moving a pane with shift moved the user or the other pane:\n${JSON.stringify(moved.arrangement, null, 2)}`,
         moved.arrangement,
       );
     });
@@ -268,6 +268,23 @@ async function main() {
         state.tileTitles?.includes('Leaf notes'),
         `The tile header did not take its title from the markdown H1: ${JSON.stringify(state, null, 2)}`,
         state,
+      );
+    });
+
+    await runner.step('the_tile_moves_to_desktop_b_and_the_user_follows', async () => {
+      await pressShortcutKeys(client, driver, `desktop.send${desktopB.shortcut_slot}`);
+      const state = await waitForDesktopUi(
+        client,
+        desktopB.id,
+        (s) => s?.active === true && s.sessionVisible === true && s.tileBodyFocused === true && s.tileIds?.length === 1,
+        'desktop B shown with the moved tile holding the keyboard',
+      );
+      tileId = state.tileIds[0];
+      const app = await client.request('get_state');
+      runner.assert(
+        app.arrangement.currentDesktopId === desktopB.id,
+        `Moving the tile did not follow it to desktop B:\n${JSON.stringify(app.arrangement, null, 2)}`,
+        app.arrangement,
       );
     });
 
