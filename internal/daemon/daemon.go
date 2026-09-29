@@ -1600,7 +1600,7 @@ func (d *Daemon) stop() {
 		_ = d.diagServer.Close()
 	}
 	d.maintenance.Wait()
-	// Closing the last connection checkpoints the WAL, so attn.db alone holds every commit.
+	// Closing the store checkpoints the WAL, so attn.db alone holds every commit.
 	if d.store != nil {
 		if err := d.store.Close(); err != nil {
 			d.logf("close database: %v", err)

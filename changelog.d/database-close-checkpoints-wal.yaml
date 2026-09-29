@@ -1,0 +1,3 @@
+kind: fixed
+area: daemon
+change: Quitting attn while a database backup is running no longer leaves recent changes out of attn.db.
