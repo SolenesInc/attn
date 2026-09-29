@@ -915,6 +915,9 @@ func (d *Daemon) Start() error {
 		}
 		defer d.durableWork.leave()
 		d.performStartupPTYRecovery(previousRunSessions, recoveryStartedAt)
+		if d.stopping() {
+			return
+		}
 		d.resolveDue(time.Now())
 		go d.runSessionResolver()
 		if _, routed := d.ptyBackend.(*ptybackend.MigratingBackend); routed {
@@ -922,7 +925,13 @@ func (d *Daemon) Start() error {
 		} else {
 			d.validateSharedPTYHostAfterRecovery()
 		}
+		if d.stopping() {
+			return
+		}
 		d.reconcileCrewRestarts()
+		if d.stopping() {
+			return
+		}
 		d.lockGardenRoles()
 		gardenBellErr := d.discardAllIneligibleGardenSeedBellsLocked()
 		d.unlockGardenRoles()
@@ -1574,6 +1583,7 @@ func (d *Daemon) lifetime() context.Context {
 func (d *Daemon) stop() {
 	d.log("daemon stopping")
 	close(d.done)
+	d.durableWork.refuse()
 	d.lifetime()
 	d.endLifetime()
 	if d.listener != nil {
@@ -1583,8 +1593,8 @@ func (d *Daemon) stop() {
 	}
 	d.closeGitExecution(ErrGitExecutorClosed)
 	d.wsHub.closeAll()
-	// Work begun before the stop finishes with every subsystem up; later exits and failures are the
-	// teardown's, not outcomes. PTYs shut next so no real exit lands between the gate and the shutdown.
+	// Work begun before the stop finishes; later exits and failures are the teardown's, not outcomes.
+	// PTYs shut next so no real exit lands between the drain and the shutdown.
 	d.durableWork.close()
 	if d.ptyBackend != nil {
 		_ = d.ptyBackend.Shutdown(context.Background())
@@ -1660,10 +1670,15 @@ func (g *workGate) durably(write func()) bool {
 	return true
 }
 
-func (g *workGate) close() {
+// refuse turns away new work; close also waits for the work already inside.
+func (g *workGate) refuse() {
 	g.mu.Lock()
 	g.closed = true
 	g.mu.Unlock()
+}
+
+func (g *workGate) close() {
+	g.refuse()
 	g.active.Wait()
 }
 

@@ -41,6 +41,11 @@ func recoverAutomationsAfterGitHubReady(ready, stopping <-chan struct{}, recover
 	case <-stopping:
 		return false
 	}
+	select {
+	case <-stopping:
+		return false
+	default:
+	}
 	recover()
 	return true
 }
