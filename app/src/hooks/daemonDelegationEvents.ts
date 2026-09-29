@@ -22,7 +22,6 @@ interface DelegationEvent {
   harnesses?: DelegationHarness[];
   models?: DelegationModel[];
   detail?: string;
-  revision?: number;
 }
 
 export function handleDelegationDaemonEvent(event: DelegationEvent, pending: PendingRequests): boolean {
@@ -42,7 +41,7 @@ export function handleDelegationDaemonEvent(event: DelegationEvent, pending: Pen
     return true;
   }
   if (event.event === 'delegation_preferences_changed') {
-    if (typeof event.revision === 'number') useDelegationPreferencesPush.getState().push(event.revision);
+    useDelegationPreferencesPush.getState().push();
     return true;
   }
   return false;

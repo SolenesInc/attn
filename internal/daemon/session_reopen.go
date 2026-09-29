@@ -391,15 +391,7 @@ func (d *Daemon) reopenSessionProtected(
 			"no ledger row for session %s on this daemon; a session that ran before the ledger, or on another "+
 				"daemon, is not here. Its seed may still hand the work over from its saved dispatch", sessionID)
 	}
-	key := reopenKey{SessionID: sessionID, ClosedAt: protocol.Deref(entry.ClosedAt)}
-	gitView := d.scheduledReopenGit()
-	var verdict sessionReopenVerdict
-	var err error
-	if key.ClosedAt == "" {
-		verdict, err = d.resolveReopen(protection.Context(), *entry, gitView)
-	} else {
-		verdict, err = d.resolveClosedReopen(protection.Context(), key, gitView)
-	}
+	verdict, err := d.resolveReopen(protection.Context(), *entry, d.scheduledReopenGit())
 	if err != nil {
 		return nil, fmt.Errorf("resolve reopen eligibility for session %s: %w", sessionID, err)
 	}

@@ -360,7 +360,7 @@ func (d *Daemon) broadcastTileContentNow(workspaceID, tileID string) {
 }
 
 func (d *Daemon) handleWorkspaceTileContentGet(client *wsClient, msg *protocol.WorkspaceTileContentGetMessage) {
-	kind, _, found := d.tileFilePath(msg.WorkspaceID, msg.TileID)
+	kind, path, found := d.tileFilePath(msg.WorkspaceID, msg.TileID)
 	if !found {
 		d.sendCommandError(client, protocol.CmdWorkspaceTileContentGet, fmt.Sprintf("tile not found: %s", msg.TileID))
 		return
@@ -373,35 +373,19 @@ func (d *Daemon) handleWorkspaceTileContentGet(client *wsClient, msg *protocol.W
 		d.sendCommandError(client, protocol.CmdWorkspaceTileContentGet, "too many tile content subscriptions")
 		return
 	}
-	for attempt := 0; attempt < 2; attempt++ {
-		kind, path, found := d.tileFilePath(msg.WorkspaceID, msg.TileID)
-		if !found {
-			d.sendCommandError(client, protocol.CmdWorkspaceTileContentGet, fmt.Sprintf("tile not found: %s", msg.TileID))
-			return
-		}
-		if kind != string(workspacelayout.TileKindMarkdown) {
-			d.sendCommandError(client, protocol.CmdWorkspaceTileContentGet, fmt.Sprintf("unsupported tile kind: %s", kind))
-			return
-		}
-		content, readErr := readMarkdownFile(path)
-		if !d.tileStillPointsTo(msg.WorkspaceID, msg.TileID, kind, path) {
-			continue
-		}
-		reply := protocol.WorkspaceTileContentMessage{
-			Event:       protocol.EventWorkspaceTileContent,
-			WorkspaceID: msg.WorkspaceID,
-			TileID:      msg.TileID,
-			TileKind:    kind,
-			Path:        path,
-			Content:     content,
-		}
-		if readErr != nil {
-			reply.Error = protocol.Ptr(readErr.Error())
-		}
-		d.sendToClient(client, reply)
-		return
+	content, readErr := readMarkdownFile(path)
+	reply := protocol.WorkspaceTileContentMessage{
+		Event:       protocol.EventWorkspaceTileContent,
+		WorkspaceID: msg.WorkspaceID,
+		TileID:      msg.TileID,
+		TileKind:    kind,
+		Path:        path,
+		Content:     content,
 	}
-	d.sendCommandError(client, protocol.CmdWorkspaceTileContentGet, "tile changed while content was loading; retry")
+	if readErr != nil {
+		reply.Error = protocol.Ptr(readErr.Error())
+	}
+	d.sendToClient(client, reply)
 }
 
 func (d *Daemon) openMarkdownTile(path, sessionID string) (workspaceID, tileID string, err error) {

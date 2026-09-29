@@ -184,71 +184,30 @@ func (d *Daemon) bindSeedHandoverProtected(
 		return nil, err
 	}
 
-	const attempts = 3
-	var commits []store.DocumentCommit
-	var written []store.DocumentWriteResult
-	var dispatches handoverDispatchCommits
-	for attempt := 1; ; attempt++ {
-		dispatches, err = d.handoverDispatchCommits(msg, operationID, sessionID, directory, agent, observed, fromChief, seed)
-		if err != nil {
-			return nil, err
-		}
-		commits = append([]store.DocumentCommit{seedCommit}, dispatches.commits...)
-		if noteCommit != nil {
-			commits = append(commits, *noteCommit)
-		}
-		d.gardenWatchMu.Lock()
-		var eventSeqs []int64
-		written, eventSeqs, err = d.store.CommitGardenDispatchWritesWithEvents(
-			commits, store.GardenSeedWatch{WatcherSessionID: sessionID, SeedID: seed.ID}, events, d.gardenTime(),
-		)
-		if err == nil {
-			err = d.discardAllIneligibleGardenSeedBellsLocked()
-		}
-		d.gardenWatchMu.Unlock()
-		if err == nil {
-			announceGardenSeedEvents(d, eventSeqs)
-			break
-		}
-		var conflict *docstore.ConflictError
-		if !errors.As(err, &conflict) {
-			return nil, err
-		}
-		if conflict.Collection == garden.CollectionSeeds {
-			if attempt == attempts {
-				return nil, fmt.Errorf("seed %s changed under all %d Handover attempts: %w", conflict.ID, attempts, err)
-			}
-			latest, latestDoc, readErr := d.readSeed(seed.ID)
-			if readErr != nil {
-				return nil, readErr
-			}
-			if garden.Closed(latest.Status) || latest.TenderSession != request.ExpectedTenderSession || latest.TenderMember != request.ExpectedTenderMember {
-				return nil, fmt.Errorf("%s ownership or state changed while preparing handover; read it before retrying", seed.ID)
-			}
-			seed = latest
-			unclaimed = latest
-			unclaimed.TenderSession, unclaimed.TenderMember = "", ""
-			next, err = garden.Transition(unclaimed, garden.VerbTend, garden.Ask{Actor: garden.Tender{Session: sessionID}}, func(string) bool { return false })
-			if err != nil {
-				return nil, err
-			}
-			next.LastExecutionID = sessionID
-			seedBody, err = next.Encode()
-			if err != nil {
-				return nil, err
-			}
-			seedExpected = latestDoc.Rev
-			seedCommit.Write.Body = seedBody
-			seedCommit.Write.Expected = &seedExpected
-			continue
-		}
-		if conflict.Collection != garden.CollectionDispatches {
-			return nil, err
-		}
-		if attempt == attempts {
-			return nil, fmt.Errorf("dispatch %s changed under all %d Handover attempts: %w", conflict.ID, attempts, err)
-		}
+	dispatches, err := d.handoverDispatchCommits(msg, operationID, sessionID, directory, agent, observed, fromChief, seed)
+	if err != nil {
+		return nil, err
 	}
+	commits := append([]store.DocumentCommit{seedCommit}, dispatches.commits...)
+	if noteCommit != nil {
+		commits = append(commits, *noteCommit)
+	}
+	d.gardenWatchMu.Lock()
+	written, eventSeqs, err := d.store.CommitGardenDispatchWritesWithEvents(
+		commits, store.GardenSeedWatch{WatcherSessionID: sessionID, SeedID: seed.ID}, events, d.gardenTime(),
+	)
+	if err == nil {
+		err = d.discardAllIneligibleGardenSeedBellsLocked()
+	}
+	d.gardenWatchMu.Unlock()
+	if err != nil {
+		var conflict *docstore.ConflictError
+		if errors.As(err, &conflict) {
+			return nil, fmt.Errorf("%s changed while the new worker was starting; refresh it before handing it over", seed.ID)
+		}
+		return nil, err
+	}
+	announceGardenSeedEvents(d, eventSeqs)
 	for i, commit := range commits {
 		d.announceCommittedWrite(commit.Fact, written[i].Seq)
 	}

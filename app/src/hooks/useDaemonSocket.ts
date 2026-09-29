@@ -1331,7 +1331,7 @@ export function useDaemonSocket({
 
         switch (data.event) {
           case 'initial_state':
-            useDelegationPreferencesPush.getState().clear();
+            useDelegationPreferencesPush.getState().push();
             if (
               data.daemon_instance_id &&
               daemonInstanceIDRef.current &&
@@ -2840,7 +2840,7 @@ export function useDaemonSocket({
       docSubscriptions.markDisconnected();
       useAutoModePushStore.getState().clear();
       useWorktreeStore.getState().clear();
-      useDelegationPreferencesPush.getState().clear();
+      useDelegationPreferencesPush.getState().push();
 
       if (circuitOpenRef.current) {
         console.error('[Daemon] Circuit open, not retrying');

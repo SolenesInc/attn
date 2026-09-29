@@ -260,9 +260,6 @@ func (d *Daemon) captureGardenSessionExecution(session *protocol.Session) (garde
 		if capturedAt, err := time.Parse(time.RFC3339Nano, current.CapturedAt); err == nil && capturedAt.After(startedAt) {
 			return current, false, nil
 		}
-		if d.gardenSession(session.ID) == nil {
-			return current, false, nil
-		}
 		observed.Resume = d.store.GetResumeSessionID(session.ID)
 		return mergeGardenExecution(current, observed), true, nil
 	})
