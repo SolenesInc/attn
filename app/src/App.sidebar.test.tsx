@@ -263,9 +263,9 @@ describe('App sidebar', () => {
       const docs = daemonDesktop('docs', { root: { type: 'tile', tile_id: 'tile-notes', tile_kind: 'markdown', tile_params: '/repo/docs/notes.md' } }, { name: 'docs' });
       await launch({ sessions: [daemonSession('a1')], desktops: [soloDesktop('a1'), docs] });
 
-      expect(within(desktopGroup('docs')).getByTestId('desktop-neutral-indicator')).toBeInTheDocument();
-      expect(desktopGroup('docs').querySelector('.state-indicator')).toBeNull();
-      expect(within(desktopGroup('desktop-a1')).queryByTestId('desktop-neutral-indicator')).toBeNull();
+      expect(desktopGroup('docs').querySelector('.desktop-rule')).not.toHaveClass('empty');
+      expect(desktopGroup('docs').querySelector('.desktop-tile-item')).toBeInTheDocument();
+      expect(desktopGroup('desktop-a1').querySelector('.desktop-rule')).not.toHaveClass('empty');
     });
 
     it('lists a desktop’s browser tile after its session, and opens, reloads and closes it', async () => {
@@ -326,6 +326,32 @@ describe('App sidebar', () => {
 
       expect(daemon.sentOf('desktop_move_leaf')).toEqual([
         expect.objectContaining({ source_desktop_id: 'source', leaf_id: 'pane-s2', target_desktop_id: 'target' }),
+      ]);
+    });
+
+    it.each([
+      { source: 'remote', target: 'local' },
+      { source: 'local', target: 'remote' },
+    ])('sends one move from a $source pane to a desktop holding a $target pane', async ({ source, target }) => {
+      const { daemon } = await renderApp({ initialState: {
+        endpoints: [daemonEndpoint('ep-1')],
+        sessions: [daemonSession('remote', { endpoint_id: 'ep-1' }), daemonSession('local')],
+        desktops: [
+          splitDesktop('source', [source], { order_key: '0' }),
+          splitDesktop('target', [target], { order_key: '1' }),
+        ],
+      } });
+      daemon.on('desktop_move_leaf', (command) => ({ event: 'profile_action_result', action: command.cmd, request_id: command.request_id, success: true }));
+
+      pressRow(source);
+      fireEvent.pointerMove(window, { pointerId: 1, clientX: 10, clientY: 40 });
+      expect(desktopGroup('target')).toHaveClass('desktop-group--drag-target');
+      fireEvent.pointerEnter(desktopGroup('target'));
+      fireEvent.pointerUp(desktopGroup('target'), { pointerId: 1 });
+      await daemon.idle();
+
+      expect(daemon.sentOf('desktop_move_leaf')).toEqual([
+        expect.objectContaining({ source_desktop_id: 'source', leaf_id: `pane-${source}`, target_desktop_id: 'target' }),
       ]);
     });
 

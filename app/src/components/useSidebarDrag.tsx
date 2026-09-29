@@ -261,7 +261,7 @@ export function useSidebarDrag({
           drag.armed = true;
           suppressNextSessionClickRef.current = true;
           setDraggingSessionId(sessionId);
-          onSessionDragStart(desktop.id, desktop.endpointId, paneId);
+          onSessionDragStart(desktop.id, paneId);
         }
         setSessionDragGhost({ x: moveEvent.clientX, y: moveEvent.clientY, label });
       };
