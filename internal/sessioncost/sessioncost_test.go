@@ -209,6 +209,12 @@ func TestPriceBuiltInCacheRates(t *testing.T) {
 			want:  225.5,
 		},
 		{
+			name:  "Sol 6.1 input output and discounted cache rates",
+			model: "gpt-6.1-sol",
+			usage: Usage{InputTokens: 1_000_000, OutputTokens: 2_000_000, CacheReadInputTokens: 3_000_000, CacheWrite5mInputTokens: 4_000_000, CacheWrite1hInputTokens: 5_000_000},
+			want:  44.8,
+		},
+		{
 			name:  "Codex cached input is not charged at input rate",
 			model: "gpt-5.6-luna",
 			usage: Usage{InputTokens: 1_000_000, OutputTokens: 1_000_000, CacheReadInputTokens: 1_000_000},
@@ -245,6 +251,7 @@ func TestBuiltInCoverageForObservedModelIDs(t *testing.T) {
 		"gpt-6-astra",
 		"gpt-6-luna",
 		"gpt-6-sol",
+		"gpt-6.1-sol",
 	}
 	for _, model := range priced {
 		t.Run(model, func(t *testing.T) {
@@ -424,6 +431,16 @@ func TestOpenAIRequestsPastTheLongContextThresholdArePricedAtTheLongContextRate(
 			wantUSD:  (72_001*4 + 200_000*0.4 + 10_000*15) / 1e6,
 		},
 		{
+			name: "Sol 6.1 at the threshold", model: "gpt-6.1-sol",
+			requests: []Usage{{InputTokens: 72_000, CacheReadInputTokens: 200_000, OutputTokens: 10_000}},
+			wantUSD:  (72_000*2 + 200_000*0.1 + 10_000*10) / 1e6,
+		},
+		{
+			name: "Sol 6.1 past the threshold including both cache write durations", model: "gpt-6.1-sol",
+			requests: []Usage{{InputTokens: 72_001, CacheReadInputTokens: 199_998, CacheWrite5mInputTokens: 1, CacheWrite1hInputTokens: 1, OutputTokens: 10_000}},
+			wantUSD:  (72_001*4 + 199_998*0.2 + 2*5 + 10_000*15) / 1e6,
+		},
+		{
 			name: "cache writes count toward the prompt", model: "gpt-6-sol",
 			requests: []Usage{{InputTokens: 1, CacheWrite5mInputTokens: 272_000, OutputTokens: 10}},
 			wantUSD:  (1*4 + 272_000*5 + 10*15) / 1e6,
@@ -453,7 +470,7 @@ func TestOpenAIRequestsPastTheLongContextThresholdArePricedAtTheLongContextRate(
 			var tokens int64
 			for _, request := range c.requests {
 				ledger.Add(RequestLedgerKey(c.model, PurposeAgent, request), request)
-				tokens += request.InputTokens + request.OutputTokens + request.CacheReadInputTokens + request.CacheWrite5mInputTokens
+				tokens += request.InputTokens + request.OutputTokens + request.CacheReadInputTokens + request.CacheWrite5mInputTokens + request.CacheWrite1hInputTokens
 			}
 			summary := Summarize(ledger, nil)
 			if !summary.Valid || summary.HasUnpricedUsage || len(summary.Models) != 1 || summary.TotalTokens != tokens {
@@ -463,5 +480,60 @@ func TestOpenAIRequestsPastTheLongContextThresholdArePricedAtTheLongContextRate(
 				t.Fatalf("cost = %v, want %.6f", summary.CostUSD, c.wantUSD)
 			}
 		})
+	}
+}
+
+func TestFastModeRatesAndContextTiers(t *testing.T) {
+	for _, c := range []struct {
+		model                        string
+		input, output, cached, write float64
+		long                         bool
+	}{
+		{"gpt-6.1-sol", 4, 20, 0.2, 5, true},
+		{"gpt-6-astra", 20, 100, 2, 25, true},
+		{"gpt-6-sol", 4, 20, 0.4, 5, true},
+		{"gpt-6-luna", 0.2, 1, 0.02, 0.25, true},
+		{"gpt-5.6-sol", 8, 40, 0.8, 10, true},
+		{"gpt-5.6-terra", 4, 24, 0.4, 5, true},
+		{"gpt-5.6-luna", 0.4, 2.4, 0.04, 0.5, true},
+		{"gpt-5.5", 12.5, 75, 1.25, 0, false},
+		{"gpt-5.4-mini", 1.5, 9, 0.15, 0, false},
+		{"gpt-5.3-codex", 3.5, 28, 0.35, 0, false},
+	} {
+		t.Run(c.model, func(t *testing.T) {
+			for _, long := range []bool{false, true} {
+				if long && !c.long {
+					continue
+				}
+				usage := Usage{InputTokens: 100_000, OutputTokens: 10_000, CacheReadInputTokens: 100_000}
+				if c.write != 0 {
+					usage.CacheWrite5mInputTokens = 1000
+					usage.CacheWrite1hInputTokens = 1000
+				}
+				if long {
+					usage.InputTokens = 200_000
+				}
+				key := RequestLedgerKey(c.model, PurposeAgent, usage)
+				key.FastMode = true
+				inputFactor, outputFactor := 1.0, 1.0
+				if long {
+					inputFactor, outputFactor = 2, 1.5
+				}
+				want := (float64(usage.InputTokens)*c.input*inputFactor + float64(usage.OutputTokens)*c.output*outputFactor + float64(usage.CacheReadInputTokens)*c.cached*inputFactor + 2000*c.write*inputFactor) / 1e6
+				usd, known, hasUsage := Price(Ledger{key: usage}, nil)
+				if !known || !hasUsage || math.Abs(usd-want) > 1e-12 {
+					t.Fatalf("long=%v: cost %v known=%v, want %v", long, usd, known, want)
+				}
+			}
+		})
+	}
+	for _, model := range []string{"gpt-reserve", "codex-auto-review", "claude-opus-5", "gpt-5.5"} {
+		usage := Usage{InputTokens: 300_000}
+		key := RequestLedgerKey(model, PurposeAgent, usage)
+		key.FastMode = true
+		summary := Summarize(Ledger{key: usage}, nil)
+		if summary.CostUSD != nil || !summary.HasUnpricedUsage || !summary.Valid {
+			t.Fatalf("%s: summary = %+v, want unavailable fast price", model, summary)
+		}
 	}
 }

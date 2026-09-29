@@ -133,12 +133,12 @@ func (d *Daemon) armHarvestWhenMerged(
 			notes = append(notes, attachment)
 		}
 
-		d.gardenWatchMu.Lock()
+		d.lockGardenRoles()
 		written, wireNotes, err := d.writeSeedMoveWithNotes(*schema, next, doc.Rev, occurrences, notes)
 		if err == nil {
 			err = d.discardAllIneligibleGardenSeedBellsLocked()
 		}
-		d.gardenWatchMu.Unlock()
+		d.unlockGardenRoles()
 		if err != nil {
 			if docstore.IsConflict(err) {
 				continue
@@ -264,13 +264,13 @@ func (d *Daemon) clearHarvestWhen(
 		if eventErr != nil {
 			return garden.Seed{}, docstore.Document{}, eventErr
 		}
-		d.gardenWatchMu.Lock()
+		d.lockGardenRoles()
 		written, _, err := d.writeSeedMoveWithNotes(*schema, next, doc.Rev, []seedEvents.Occurrence{cleared},
 			[]garden.Note{d.harvestWhenNote(seed.ID, noteBody, actor)})
 		if err == nil {
 			err = d.discardAllIneligibleGardenSeedBellsLocked()
 		}
-		d.gardenWatchMu.Unlock()
+		d.unlockGardenRoles()
 		if err != nil {
 			if docstore.IsConflict(err) {
 				continue

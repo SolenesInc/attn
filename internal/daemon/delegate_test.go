@@ -1,14 +1,12 @@
 package daemon
 
 import (
-	"os"
 	"path/filepath"
 	"strings"
 	"testing"
 
 	"github.com/victorarias/attn/internal/enrollment"
 	"github.com/victorarias/attn/internal/protocol"
-	"github.com/victorarias/attn/internal/ptybackend"
 )
 
 func setupDelegationSource(t *testing.T, d *Daemon, backend *fakeSpawnBackend) (string, string, string) {
@@ -65,29 +63,6 @@ func setupDelegationGarden(t *testing.T, d *Daemon) {
 		}
 	}
 	d.ensureGardenCollections()
-}
-
-func consumeDelegatedPrompt(t *testing.T, backend *fakeSpawnBackend) {
-	t.Helper()
-	backend.onSpawn = func(opts ptybackend.SpawnOptions) {
-		if opts.InitialPromptFile == "" {
-			return
-		}
-		if _, err := os.ReadFile(opts.InitialPromptFile); err != nil {
-			t.Fatalf("read initial prompt: %v", err)
-		}
-		if err := os.Remove(opts.InitialPromptFile); err != nil {
-			t.Fatalf("remove initial prompt: %v", err)
-		}
-	}
-}
-
-func newDelegationDaemon(t *testing.T) *Daemon {
-	t.Helper()
-	d := newEnrolledDaemon(t, "")
-	t.Cleanup(d.stopEventBus)
-	d.ensureGardenCollections()
-	return d
 }
 
 func TestDelegateRejectsRemoteSourceSession(t *testing.T) {

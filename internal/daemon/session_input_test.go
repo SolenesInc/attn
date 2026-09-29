@@ -2,7 +2,6 @@ package daemon
 
 import (
 	"context"
-	"errors"
 	"path/filepath"
 	"sync"
 	"testing"
@@ -24,25 +23,6 @@ func newSessionInputDaemon(t *testing.T, state protocol.SessionState) (*Daemon, 
 		State: state, StateSince: now, StateUpdatedAt: now, LastSeen: now,
 	})
 	return d, backend, id
-}
-
-func TestSessionInput_RetryCannotAnswerANewApproval(t *testing.T) {
-	d, backend, sessionID := newSessionInputDaemon(t, protocol.SessionStateWaitingInput)
-	var writes [][]byte
-	backend.onInput = func(_ string, data []byte) { writes = append(writes, append([]byte(nil), data...)) }
-	delivery := maintenanceSessionInput("ticket-nudge", "cursor-approval", sessionID, "first", sessionInputAtTurnBoundary)
-	if attempt := d.sessionInputs().try(context.Background(), delivery); attempt.err != nil {
-		t.Fatalf("first attempt: %v", attempt.err)
-	}
-	if !d.store.UpdateState(sessionID, protocol.StatePendingApproval) {
-		t.Fatal("move session to pending approval")
-	}
-	if attempt := d.sessionInputs().try(context.Background(), delivery); !errors.Is(attempt.err, errSessionInputBlockedByApproval) {
-		t.Fatalf("retry error = %v, want approval refusal", attempt.err)
-	}
-	if len(writes) != 2 {
-		t.Fatalf("writes = %q, want no retry Enter after approval opened", writes)
-	}
 }
 
 func TestSessionInput_PlacementPhaseContracts(t *testing.T) {

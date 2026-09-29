@@ -10,6 +10,9 @@ const (
 	crashAfterSeedArtifactStaged    = "seed-artifact-staged"
 	crashAfterSeedArtifactInstalled = "seed-artifact-installed"
 	crashAfterMergePersisted        = "pull-request-merge-persisted"
+	crashWhileWakingASnooze         = "snooze-wake-running"
+	crashAfterWorktreeJournaled     = "delegation-worktree-journaled"
+	crashAfterWorktreeOwned         = "delegation-worktree-owned"
 )
 
 func crashAt(point string) {

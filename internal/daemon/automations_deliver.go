@@ -876,7 +876,7 @@ func (d *Daemon) passUnattendedLaunchGate(req automation.WorkRequest) error {
 	}
 	deadline := time.Now().Add(10 * time.Second)
 	acknowledged := false
-	for time.Now().Before(deadline) {
+	for time.Now().Before(deadline) && !d.stopping() {
 		info, err := snapshots.ScreenSnapshot(context.Background(), req.IDs.SessionID)
 		if err == nil {
 			var payload []byte

@@ -13,9 +13,10 @@ var builtInRateCards = map[string]RateCard{
 	"claude-haiku-4-5":          anthropicRates(1, 5),
 	"claude-haiku-4-5-20251001": anthropicRates(1, 5),
 
-	"gpt-5-codex":  openAIRates(1.25, 10, 0.125, 0),
-	"gpt-5.4-mini": openAIRates(0.75, 4.5, 0.075, 0),
-	"gpt-5.5":      openAIRates(5, 30, 0.5, 0),
+	"gpt-5-codex":   openAIRates(1.25, 10, 0.125, 0),
+	"gpt-5.3-codex": openAIRates(1.75, 14, 0.175, 0),
+	"gpt-5.4-mini":  openAIRates(0.75, 4.5, 0.075, 0),
+	"gpt-5.5":       openAIRates(5, 30, 0.5, 0),
 
 	"gpt-5.6-sol":   openAIRates(4, 20, 0.4, 5),
 	"gpt-5.6-terra": openAIRates(2, 12, 0.2, 2.5),
@@ -24,6 +25,32 @@ var builtInRateCards = map[string]RateCard{
 	"gpt-6-astra": openAIRates(10, 50, 1, 12.5),
 	"gpt-6-sol":   openAIRates(2, 10, 0.2, 2.5),
 	"gpt-6-luna":  openAIRates(0.1, 0.5, 0.01, 0.125),
+	// https://developers.openai.com/api/docs/models/gpt-6.1-sol (2026-09-29).
+	"gpt-6.1-sol": openAIRates(2, 10, 0.1, 2.5),
+}
+
+// https://developers.openai.com/api/docs/pricing (2026-09-29), Fast table.
+var openAIFastRateMultipliers = map[string]float64{
+	"gpt-6.1-sol":   2,
+	"gpt-6-astra":   2,
+	"gpt-6-sol":     2,
+	"gpt-6-luna":    2,
+	"gpt-5.6-sol":   2,
+	"gpt-5.6-terra": 2,
+	"gpt-5.6-luna":  2,
+	"gpt-5.5":       2.5,
+	"gpt-5.4-mini":  2,
+	"gpt-5.3-codex": 2,
+}
+
+func fastRates(card RateCard, multiplier float64) RateCard {
+	return RateCard{
+		InputUSDPerMTok:        card.InputUSDPerMTok * multiplier,
+		OutputUSDPerMTok:       card.OutputUSDPerMTok * multiplier,
+		CacheReadUSDPerMTok:    card.CacheReadUSDPerMTok * multiplier,
+		CacheWrite5mUSDPerMTok: card.CacheWrite5mUSDPerMTok * multiplier,
+		CacheWrite1hUSDPerMTok: card.CacheWrite1hUSDPerMTok * multiplier,
+	}
 }
 
 const (
@@ -40,6 +67,7 @@ var openAILongContextModels = map[string]bool{
 	"gpt-6-astra":   true,
 	"gpt-6-sol":     true,
 	"gpt-6-luna":    true,
+	"gpt-6.1-sol":   true,
 }
 
 func longContextRates(card RateCard) RateCard {

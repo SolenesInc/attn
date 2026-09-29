@@ -98,9 +98,12 @@ func (d *Daemon) writeCrewMember(schema docstore.CollectionSchema, member crew.M
 		return 0, err
 	}
 	fact := documentChangedFact(crew.Namespace, crew.CollectionMembers, member.ID, false)
+	// A member's binding decides which session its seed roles reach, so it changes under the role lock.
+	d.lockGardenRoles()
 	written, err := d.store.CommitDocumentWrite(store.DocumentWrite{
 		Schema: schema, ID: member.ID, Body: body, Expected: &expected,
 	}, fact, time.Now())
+	d.unlockGardenRoles()
 	if err != nil {
 		return 0, err
 	}

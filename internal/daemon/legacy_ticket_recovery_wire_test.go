@@ -3,6 +3,7 @@ package daemon_test
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"os"
 	"path/filepath"
 	"slices"
@@ -22,6 +23,7 @@ func TestAnUpgradeRecoversClosedTicketsAsSeeds(t *testing.T) {
 	var backups map[string]string
 	legacyRecoveryUpgrade(t, func(dir string) {
 		backups = legacyRecoveryBackupBodies(t, legacyRecoveryOlderData(t, dir))
+		legacyRecoveryNewerRoutineBackups(t, dir, 12)
 	}, func(t *testing.T, w *world) {
 		cli := w.Client()
 		if feed := listNotifications(w.App()).Notifications; len(feed) != 0 {
@@ -74,7 +76,7 @@ func TestAnUpgradeRecoversClosedTicketsAsSeeds(t *testing.T) {
 			t.Errorf("the recovered conversation reads %q, want the exchange without reasoning or tool output", body)
 		}
 		for path, before := range backups {
-			if after, _ := os.ReadFile(path); string(after) != before {
+			if after, err := os.ReadFile(path); err == nil && string(after) != before {
 				t.Errorf("recovery changed backup %s", path)
 			}
 		}
@@ -206,6 +208,31 @@ func legacyRecoveryOlderData(t *testing.T, dir string) []string {
 	}
 	legacyRecoveryCodexRollout(t, dir, "native-one", "transcript-only")
 	return backups
+}
+
+func legacyRecoveryNewerRoutineBackups(t *testing.T, dir string, count int) {
+	t.Helper()
+	empty, err := store.NewWithDB(filepath.Join(t.TempDir(), "empty.db"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	written, err := empty.BackupNow(context.Background(), t.TempDir())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := empty.Close(); err != nil {
+		t.Fatal(err)
+	}
+	body, err := os.ReadFile(written)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for day := 2; day < 2+count; day++ {
+		name := filepath.Join(dir, "backups", fmt.Sprintf("attn-202601%02d-000000.db", day))
+		if err := os.WriteFile(name, body, 0o600); err != nil {
+			t.Fatal(err)
+		}
+	}
 }
 
 func legacyRecoveryBackup(t *testing.T, path, ticketID, title string, updatedAt time.Time) string {

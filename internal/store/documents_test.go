@@ -21,23 +21,6 @@ func requestsDeclaration() docstore.CollectionSchema {
 	}
 }
 
-func storeWithRequests(t *testing.T, bodies map[string]string) (*Store, time.Time) {
-	t.Helper()
-	s := New()
-	base := time.Date(2026, 8, 3, 12, 0, 0, 0, time.UTC)
-	if _, err := s.DefineDocumentCollection(requestsDeclaration(), base); err != nil {
-		t.Fatalf("define: %v", err)
-	}
-	i := 0
-	for _, id := range sortedKeys(bodies) {
-		if _, err := s.PutDocument(declOf(t, s, "test/approval-gate", "requests"), id, []byte(bodies[id]), base.Add(time.Duration(i)*time.Second), nil); err != nil {
-			t.Fatalf("put %s: %v", id, err)
-		}
-		i++
-	}
-	return s, base
-}
-
 func declOf(t *testing.T, s *Store, namespace, collection string) docstore.CollectionSchema {
 	t.Helper()
 	schema, ok, err := s.DocumentCollection(namespace, collection)
@@ -45,21 +28,6 @@ func declOf(t *testing.T, s *Store, namespace, collection string) docstore.Colle
 		t.Fatalf("declaration for %s/%s: ok=%v err=%v", namespace, collection, ok, err)
 	}
 	return *schema
-}
-
-func sortedKeys(m map[string]string) []string {
-	out := make([]string, 0, len(m))
-	for k := range m {
-		out = append(out, k)
-	}
-	for i := range out {
-		for j := i + 1; j < len(out); j++ {
-			if out[j] < out[i] {
-				out[i], out[j] = out[j], out[i]
-			}
-		}
-	}
-	return out
 }
 
 func queryIDs(t *testing.T, s *Store, q docstore.Query) []string {
@@ -94,11 +62,6 @@ func queryIDs(t *testing.T, s *Store, q docstore.Query) []string {
 }
 
 func rev(n int64) *int64 { return &n }
-
-func requestsDecl(t *testing.T, s *Store) docstore.CollectionSchema {
-	t.Helper()
-	return declOf(t, s, "test/approval-gate", "requests")
-}
 
 func seedV88DocumentStore(t *testing.T, dbPath string) {
 	t.Helper()

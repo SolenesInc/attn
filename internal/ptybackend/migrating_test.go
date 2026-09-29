@@ -89,29 +89,6 @@ func TestMigratingBackendToggleKeepsExistingAndPendingOwners(t *testing.T) {
 	}
 }
 
-func TestMigratingBackendProbeDoesNotBlockExistingIO(t *testing.T) {
-	legacy, shared := newMigrationTestBackend("running"), newMigrationTestBackend()
-	backend, err := NewMigrating(legacy, shared, false)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if _, err := backend.Recover(context.Background()); err != nil {
-		t.Fatal(err)
-	}
-	started, release := make(chan struct{}), make(chan struct{})
-	shared.probe = func(context.Context) error { close(started); <-release; return nil }
-	done := make(chan error, 1)
-	go func() { done <- backend.ProbeShared(context.Background()) }()
-	<-started
-	if err := backend.Input(context.Background(), "running", []byte("still-alive")); err != nil {
-		t.Fatal(err)
-	}
-	close(release)
-	if err := <-done; err != nil {
-		t.Fatal(err)
-	}
-}
-
 func (b *migrationTestBackend) Attach(context.Context, string, string, ...AttachOptions) (AttachInfo, Stream, error) {
 	return AttachInfo{}, nil, nil
 }

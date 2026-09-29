@@ -17,11 +17,14 @@ type SessionCostObservation struct {
 	ObservationID string            `json:"observation_id"`
 	Model         string            `json:"model"`
 	Purpose       string            `json:"purpose,omitempty"`
+	FastMode      bool              `json:"fast_mode,omitempty"`
 	Usage         sessioncost.Usage `json:"usage"`
 }
 
 func (o SessionCostObservation) ledgerKey() sessioncost.LedgerKey {
-	return sessioncost.RequestLedgerKey(o.Model, o.Purpose, o.Usage)
+	key := sessioncost.RequestLedgerKey(o.Model, o.Purpose, o.Usage)
+	key.FastMode = o.FastMode
+	return key
 }
 
 type SessionCostState struct {
@@ -321,12 +324,15 @@ func applySessionCostObservations(sessionID string, state *SessionCostState, obs
 	return changed
 }
 
-func rekeyLongContextObservations(state *SessionCostState) bool {
+func rekeyLongContextObservations(state *SessionCostState, onlyModel string) bool {
 	if state.Ledger == nil {
 		return false
 	}
 	changed := false
 	for _, observation := range state.Observations {
+		if onlyModel != "" && observation.Model != onlyModel || onlyModel == "" && observation.Model == "gpt-6.1-sol" {
+			continue
+		}
 		standard := sessioncost.NewLedgerKey(observation.Model, observation.Purpose)
 		key := observation.ledgerKey()
 		if key == standard {

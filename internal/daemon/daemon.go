@@ -121,6 +121,7 @@ type Daemon struct {
 	httpListener                      net.Listener
 	httpHandler                       http.Handler
 	diagServer                        *diag.Server
+	harnessWSListenerFD               string
 	wsHub                             *wsHub
 	presentSince                      time.Time
 	presenceMu                        sync.RWMutex
@@ -203,6 +204,7 @@ type Daemon struct {
 	lifetimeOnce                      sync.Once
 	lifetimeCtx                       context.Context
 	endLifetime                       context.CancelFunc
+	durableWork                       workGate
 	agentMailboxMu                    sync.Mutex
 	agentMailboxDoorbells             map[string]*agentMailboxDoorbellState
 	agentMailboxCooldownOverride      time.Duration
@@ -317,13 +319,15 @@ type Daemon struct {
 	gardenNow              func() time.Time
 	gitHubPollingOffLogged bool
 	gardenWatchMu          sync.Mutex
-	gardenReviewMu         sync.Mutex
-	dispatchSeedsMu        sync.Mutex
-	dispatchSeeds          map[string]string
-	dispatchersBySession   map[string]garden.Tender
-	dispatchFromChief      map[string]bool
-	dispatchProjectionRevs map[string]int64
-	dispatchSeedsLoaded    bool
+	// gardenBellsResolvedThrough is the last bus seq whose seed bells were resolved; gardenWatchMu guards it.
+	gardenBellsResolvedThrough int64
+	gardenReviewMu             sync.Mutex
+	dispatchSeedsMu            sync.Mutex
+	dispatchSeeds              map[string]string
+	dispatchersBySession       map[string]garden.Tender
+	dispatchFromChief          map[string]bool
+	dispatchProjectionRevs     map[string]int64
+	dispatchSeedsLoaded        bool
 
 	automationsBroadcastHook func(*protocol.AutomationsChangedMessage)
 
@@ -638,6 +642,8 @@ func NewForTesting(socketPath string) *Daemon {
 }
 
 func (d *Daemon) Start() error {
+	d.harnessWSListenerFD = os.Getenv("ATTN_HARNESS_WS_LISTENER_FD")
+	_ = os.Unsetenv("ATTN_HARNESS_WS_LISTENER_FD")
 	if d.dataRoot == "" {
 		d.dataRoot = filepath.Dir(d.socketPath)
 	}
@@ -911,9 +917,9 @@ func (d *Daemon) Start() error {
 			d.validateSharedPTYHostAfterRecovery()
 		}
 		d.reconcileCrewRestarts()
-		d.gardenWatchMu.Lock()
+		d.lockGardenRoles()
 		gardenBellErr := d.discardAllIneligibleGardenSeedBellsLocked()
-		d.gardenWatchMu.Unlock()
+		d.unlockGardenRoles()
 		if gardenBellErr != nil {
 			d.logf("Garden seed mailbox startup reconciliation failed; queued updates remain undelivered: %v", gardenBellErr)
 		} else {
@@ -1569,6 +1575,12 @@ func (d *Daemon) stop() {
 	}
 	d.closeGitExecution(ErrGitExecutorClosed)
 	d.wsHub.closeAll()
+	// Work begun before the stop finishes with every subsystem up; later exits and failures are the
+	// teardown's, not outcomes. PTYs shut next so no real exit lands between the gate and the shutdown.
+	d.durableWork.close()
+	if d.ptyBackend != nil {
+		_ = d.ptyBackend.Shutdown(context.Background())
+	}
 	d.sessionInputs().stopRetries()
 	d.stopNotebookWatcher()
 	d.stopFsWatchers()
@@ -1585,9 +1597,6 @@ func (d *Daemon) stop() {
 	d.stopAgentMailboxDoorbells()
 	d.pluginDriverSilence().stop()
 	d.stopAutoSettleTimers()
-	if d.ptyBackend != nil {
-		_ = d.ptyBackend.Shutdown(context.Background())
-	}
 	if d.httpServer != nil {
 		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 		defer cancel()
@@ -1612,6 +1621,32 @@ func (d *Daemon) stop() {
 	}
 }
 
+// workGate is durable work that Daemon.stop waits for before the store closes.
+type workGate struct {
+	mu     sync.Mutex
+	closed bool
+	active sync.WaitGroup
+}
+
+func (g *workGate) enter() bool {
+	g.mu.Lock()
+	defer g.mu.Unlock()
+	if g.closed {
+		return false
+	}
+	g.active.Add(1)
+	return true
+}
+
+func (g *workGate) leave() { g.active.Done() }
+
+func (g *workGate) close() {
+	g.mu.Lock()
+	g.closed = true
+	g.mu.Unlock()
+	g.active.Wait()
+}
+
 func (d *Daemon) doneContext() context.Context {
 	ctx, cancel := context.WithCancel(context.Background())
 	go func() {
@@ -1625,6 +1660,11 @@ func (d *Daemon) doneContext() context.Context {
 }
 
 func (d *Daemon) handlePTYExit(info ptybackend.ExitInfo) bool {
+	if !d.durableWork.enter() {
+		d.logf("pty exit of %s during daemon stop is not an outcome; the next daemon recovers the session", info.ID)
+		return false
+	}
+	defer d.durableWork.leave()
 	if d.consumeReloading(info.ID) {
 		d.logf("suppressing exit for reloading session %s (runtime replaced in place)", info.ID)
 		return false
@@ -2072,7 +2112,26 @@ func (d *Daemon) listenHTTP() error {
 		return nil
 	}
 	addr := d.httpServer.Addr
-	listener, err := net.Listen("tcp", addr)
+	var listener net.Listener
+	var err error
+	if rawFD := d.harnessWSListenerFD; rawFD != "" {
+		if os.Getenv("ATTN_HARNESS_DATA_DIR") == "" {
+			return fmt.Errorf("ATTN_HARNESS_WS_LISTENER_FD requires ATTN_HARNESS_DATA_DIR")
+		}
+		fd, parseErr := strconv.Atoi(rawFD)
+		if parseErr != nil {
+			return fmt.Errorf("invalid ATTN_HARNESS_WS_LISTENER_FD %q: %w", rawFD, parseErr)
+		}
+		file := os.NewFile(uintptr(fd), "harness-websocket-listener")
+		listener, err = net.FileListener(file)
+		_ = file.Close()
+		if err == nil && listener.Addr().String() != addr {
+			_ = listener.Close()
+			return fmt.Errorf("harness WebSocket listener is %s, want %s", listener.Addr(), addr)
+		}
+	} else {
+		listener, err = net.Listen("tcp", addr)
+	}
 	if err != nil {
 		return fmt.Errorf(
 			"refusing to start: cannot bind the WebSocket address %s for instance %q: %w. "+

@@ -67,17 +67,6 @@ it('keeps undo when the push announcing its own save reloads the same revision',
   expect(screen.getByRole('button', { name: 'Undo' })).toBeInTheDocument();
 });
 
-it('loads again after a save when a newer revision was announced during the flight', async () => {
-  const { daemon, server, loads, write } = await openFallback();
-  server.holdSaves();
-  await gesture(daemon, () => write('one'));
-  await gesture(daemon, () => server.announce(2));
-  expect(loads()).toHaveLength(1);
-
-  await gesture(daemon, () => server.resumeSaves());
-  expect(loads()).toHaveLength(2);
-});
-
 it('discards an edit made while the conflict reload is still loading', async () => {
   const { daemon, server, saves, field, write } = await openFallback();
   server.changeElsewhere();

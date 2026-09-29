@@ -89,10 +89,7 @@ export function useDelegationPreferences(active: boolean, load: () => Promise<De
     flight.current = drain().finally(() => {
       flight.current = null;
       setBusy(false);
-      // A push that landed during the flight was not acted on; a newer revision than ours needs a load.
-      const announced = useDelegationPreferencesPush.getState().revision;
-      const stale = announced !== null && announced > revision.current;
-      if (deferred.current || stale) { deferred.current = false; void fetch(); }
+      if (deferred.current) { deferred.current = false; void fetch(); }
     });
     return flight.current;
   }, [drain, fetch]);

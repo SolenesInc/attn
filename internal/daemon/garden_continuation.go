@@ -213,11 +213,11 @@ func (d *Daemon) updateGardenDispatch(
 		var writeErr error
 		if current.Crown == "" && next.Crown != "" {
 			var results []store.DocumentWriteResult
-			d.gardenWatchMu.Lock()
+			d.lockGardenRoles()
 			results, writeErr = d.store.CommitGardenDispatchWrites([]store.DocumentCommit{commit}, store.GardenSeedWatch{
 				WatcherSessionID: next.DispatcherSession, SeedID: next.Crown,
 			}, d.gardenTime())
-			d.gardenWatchMu.Unlock()
+			d.unlockGardenRoles()
 			if writeErr == nil {
 				written = results[0]
 			}
@@ -258,9 +258,6 @@ func (d *Daemon) captureGardenSessionExecution(session *protocol.Session) (garde
 	observed := d.observedGardenExecution(session, resumeID, startedAt)
 	return d.updateGardenDispatch(session.ID, func(current garden.Dispatch) (garden.Dispatch, bool, error) {
 		if capturedAt, err := time.Parse(time.RFC3339Nano, current.CapturedAt); err == nil && capturedAt.After(startedAt) {
-			return current, false, nil
-		}
-		if d.gardenSession(session.ID) == nil {
 			return current, false, nil
 		}
 		observed.Resume = d.store.GetResumeSessionID(session.ID)
