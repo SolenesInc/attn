@@ -217,20 +217,14 @@
    pointer-armed one, and the controls strip takes the identical pair — it is
    opaque over the row and would otherwise sit on the warmth as a grey patch. */
 .queue-row.queue-row--crew[data-crew-wake='armed'],
-.queue-row.queue-row--crew[data-crew-wake='armed'] .queue-row-controls {
+.queue-row.queue-row--crew[data-crew-wake='armed'] .session-actions {
   background-color: var(--color-bg-elevated);
   background-image: linear-gradient(var(--accent-glow), var(--accent-glow));
 }
 
-/* Confirmed: the strip gets out of the light's way, and the word that says the
-   member is asleep goes with it — it stops being true here. */
-.queue-row.queue-row--crew[data-crew-wake='breaking'] .queue-row-controls {
+/* Confirmed: the strip gets out of the light's way. */
+.queue-row.queue-row--crew[data-crew-wake='breaking'] .session-actions {
   background: none;
-}
-
-.queue-row.queue-row--crew[data-crew-wake='breaking'] .crew-row-mark {
-  opacity: 0;
-  transition: opacity 200ms ease;
 }
 
 /* Daybreak across the row. One pass, left to right, then gone — the wake is
@@ -297,9 +291,5 @@
   .crew-sun-shock,
   .queue-row--crew[data-crew-wake='breaking']::after {
     display: none;
-  }
-
-  .queue-row.queue-row--crew[data-crew-wake='breaking'] .crew-row-mark {
-    transition: none;
   }
 }
