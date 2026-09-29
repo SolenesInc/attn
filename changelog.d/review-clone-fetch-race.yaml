@@ -1,0 +1,3 @@
+kind: internal
+area: testing
+change: Fetch unavailable review code while the wire test daemon is stopped so review retries cannot race the fetch.
