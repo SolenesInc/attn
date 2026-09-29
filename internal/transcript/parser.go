@@ -30,6 +30,56 @@ func readJSONLLines(r io.Reader, fn func(line []byte)) error {
 	}
 }
 
+const reverseReadChunk = 64 << 10
+
+// readJSONLLinesReverse calls fn with each non-blank line of the first size bytes, last line first,
+// until fn returns true. A line longer than the chunk grows the next read, so copying stays linear.
+func readJSONLLinesReverse(r io.ReaderAt, size int64, fn func(line []byte) bool) error {
+	var tail []byte
+	pos := size
+	for {
+		if pos > 0 {
+			n := min(max(int64(reverseReadChunk), int64(len(tail))), pos)
+			buf := make([]byte, n+int64(len(tail)))
+			if _, err := r.ReadAt(buf[:n], pos-n); err != nil && !errors.Is(err, io.EOF) {
+				return err
+			}
+			copy(buf[n:], tail)
+			tail = buf
+			pos -= n
+		}
+		for {
+			i := bytes.LastIndexByte(tail, '\n')
+			if i < 0 {
+				break
+			}
+			if line := bytes.TrimSpace(tail[i+1:]); len(line) > 0 && fn(line) {
+				return nil
+			}
+			tail = tail[:i]
+		}
+		if pos == 0 {
+			if line := bytes.TrimSpace(tail); len(line) > 0 {
+				fn(line)
+			}
+			return nil
+		}
+	}
+}
+
+func readJSONLFileReverse(path string, fn func(line []byte) bool) error {
+	file, err := os.Open(path)
+	if err != nil {
+		return err
+	}
+	defer file.Close()
+	info, err := file.Stat()
+	if err != nil {
+		return err
+	}
+	return readJSONLLinesReverse(file, info.Size(), fn)
+}
+
 type contentBlock struct {
 	Type string `json:"type"`
 	Text string `json:"text"`
@@ -110,17 +160,10 @@ type AssistantTurn struct {
 }
 
 func ExtractLastAssistantMessage(path string, maxChars int) (string, error) {
-	file, err := os.Open(path)
-	if err != nil {
-		return "", err
-	}
-	defer file.Close()
-
 	var lastAssistantContent string
-	if err := readJSONLLines(file, func(line []byte) {
-		if content := ExtractAssistantContent(line); content != "" {
-			lastAssistantContent = content
-		}
+	if err := readJSONLFileReverse(path, func(line []byte) bool {
+		lastAssistantContent = ExtractAssistantContent(line)
+		return lastAssistantContent != ""
 	}); err != nil {
 		return "", err
 	}
@@ -144,53 +187,31 @@ func ExtractLastAssistantMessageAfterLastUserSince(path string, maxChars int, mi
 	return turn.Content, nil
 }
 
+// ExtractLastAssistantTurnAfterLastUserSince reads back from the end to the last user or assistant
+// entry: a user entry there means the latest turn has no reply yet.
 func ExtractLastAssistantTurnAfterLastUserSince(path string, maxChars int, minAssistantTimestamp time.Time) (AssistantTurn, error) {
-	file, err := os.Open(path)
-	if err != nil {
-		return AssistantTurn{}, err
-	}
-	defer file.Close()
-
-	var (
-		lastAssistantContent string
-		lastAssistantSeq     int
-		lastUserSeq          int
-		lastAssistantTS      time.Time
-		lastAssistantUUID    string
-		seq                  int
-	)
-
-	if err := readJSONLLines(file, func(line []byte) {
-		seq++
+	var turn AssistantTurn
+	if err := readJSONLFileReverse(path, func(line []byte) bool {
 		if isUserEntry(line) {
-			lastUserSeq = seq
-			return
+			return true
 		}
-		if content := ExtractAssistantContent(line); content != "" {
-			lastAssistantContent = content
-			lastAssistantSeq = seq
-			lastAssistantTS = extractLineTimestamp(line)
-			lastAssistantUUID = extractLineUUID(line)
+		content := ExtractAssistantContent(line)
+		if content == "" {
+			return false
 		}
+		turn = AssistantTurn{Content: content, Timestamp: extractLineTimestamp(line), UUID: extractLineUUID(line)}
+		return true
 	}); err != nil {
 		return AssistantTurn{}, err
 	}
 
-	if lastUserSeq > 0 && lastAssistantSeq <= lastUserSeq {
+	if !minAssistantTimestamp.IsZero() && !turn.Timestamp.IsZero() && turn.Timestamp.Before(minAssistantTimestamp) {
 		return AssistantTurn{}, nil
 	}
-	if !minAssistantTimestamp.IsZero() && !lastAssistantTS.IsZero() && lastAssistantTS.Before(minAssistantTimestamp) {
-		return AssistantTurn{}, nil
+	if len(turn.Content) > maxChars {
+		turn.Content = turn.Content[len(turn.Content)-maxChars:]
 	}
-
-	if len(lastAssistantContent) > maxChars {
-		lastAssistantContent = lastAssistantContent[len(lastAssistantContent)-maxChars:]
-	}
-	return AssistantTurn{
-		Content:   lastAssistantContent,
-		Timestamp: lastAssistantTS,
-		UUID:      lastAssistantUUID,
-	}, nil
+	return turn, nil
 }
 
 type codexEnvelope struct {
