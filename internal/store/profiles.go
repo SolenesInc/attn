@@ -45,6 +45,7 @@ type LeafMoveRequest struct {
 	LeafShare              float64
 	ExpectedSourceRevision int64
 	ExpectedTargetRevision int64
+	Activate               bool
 }
 
 type SessionPlacementRequest struct {
@@ -1379,21 +1380,90 @@ func (s *Store) MoveLeaf(request LeafMoveRequest) (LeafMove, error) {
 		if err != nil {
 			return err
 		}
-		moved, ok := layouttree.MoveLeafBetweenLayouts(source.Tree, target.Tree, request.LeafID, request.AnchorID, newProfileEntityID("split"), request.Direction, request.Before, firstChildRatio(request.LeafShare, request.Before), uuid.NewString())
-		if !ok {
-			return profiles.Errorf(profiles.CodeInvalid, "leaf %q could not move from desktop %s beside %q on desktop %s", request.LeafID, source.ID, request.AnchorID, target.ID)
-		}
-		source.Tree, target.Tree = moved.SourceLayout, moved.TargetLayout
-		handOverPane(&source, &target, request.LeafID, moved.FinalLeafID)
+		result, err = moveLeafBetweenDesktops(tx, now, source, target, request)
+		return err
+	})
+	return result, err
+}
+
+func moveLeafBetweenDesktops(tx *sql.Tx, now string, source, target profiles.Desktop, request LeafMoveRequest) (LeafMove, error) {
+	moved, ok := layouttree.MoveLeafBetweenLayouts(source.Tree, target.Tree, request.LeafID, request.AnchorID, newProfileEntityID("split"), request.Direction, request.Before, firstChildRatio(request.LeafShare, request.Before), uuid.NewString())
+	if !ok {
+		return LeafMove{}, profiles.Errorf(profiles.CodeInvalid, "leaf %q could not move from desktop %s beside %q on desktop %s", request.LeafID, source.ID, request.AnchorID, target.ID)
+	}
+	source.Tree, target.Tree = moved.SourceLayout, moved.TargetLayout
+	handOverPane(&source, &target, request.LeafID, moved.FinalLeafID)
+	if request.Activate {
 		target.ActivePaneID = moved.FinalLeafID
-		if err := writeDesktopArrangement(tx, now, &source); err != nil {
+	}
+	if err := writeDesktopArrangement(tx, now, &source); err != nil {
+		return LeafMove{}, err
+	}
+	if err := writeDesktopArrangement(tx, now, &target); err != nil {
+		return LeafMove{}, err
+	}
+	return LeafMove{Source: source, Target: target, FinalLeafID: moved.FinalLeafID}, nil
+}
+
+// SessionDesktopMove is what MoveSessionToDesktop did: Placed for an unplaced
+// session, Move.Source empty when the session already was on the desktop.
+type SessionDesktopMove struct {
+	Move       LeafMove
+	FromLeafID string
+	Placed     bool
+}
+
+// MoveSessionToDesktop puts a session's pane beside another desktop's active leaf;
+// only a moved active pane, onto a desktop not on screen, takes that leaf.
+func (s *Store) MoveSessionToDesktop(sessionID, targetDesktopID, title string) (SessionDesktopMove, error) {
+	var result SessionDesktopMove
+	err := s.profilesTx(func(tx *sql.Tx, now string) error {
+		profileID, err := openSessionProfileID(tx, sessionID)
+		if err != nil {
 			return err
 		}
-		if err := writeDesktopArrangement(tx, now, &target); err != nil {
+		target, err := loadDesktop(tx, targetDesktopID)
+		if err != nil {
 			return err
 		}
-		result = LeafMove{Source: source, Target: target, FinalLeafID: moved.FinalLeafID}
-		return nil
+		if target.ProfileID != profileID {
+			return profiles.Errorf(profiles.CodeCrossProfile, "desktop %s belongs to profile %s, and session %s to profile %s; a move between desktops cannot change membership", target.ID, target.ProfileID, sessionID, profileID)
+		}
+		profile, err := loadLiveProfile(tx, profileID)
+		if err != nil {
+			return err
+		}
+		var sourceID, paneID string
+		placed, err := rowFound(tx.QueryRow(`SELECT desktop_id, pane_id FROM desktop_panes WHERE session_id = ?`, sessionID), &sourceID, &paneID)
+		if err != nil {
+			return err
+		}
+		if !placed {
+			paneID = newProfileEntityID("pane")
+			desktop, err := placeSessionInTree(target, SessionPlacementRequest{SessionID: sessionID, Direction: layouttree.DirectionVertical, Title: title, Status: profiles.PaneStatusReady}, paneID)
+			if err != nil {
+				return err
+			}
+			if err := writeDesktopArrangement(tx, now, &desktop); err != nil {
+				return err
+			}
+			result = SessionDesktopMove{Move: LeafMove{Target: desktop, FinalLeafID: paneID}, Placed: true}
+			return nil
+		}
+		if sourceID == target.ID {
+			result = SessionDesktopMove{Move: LeafMove{Target: target, FinalLeafID: paneID}}
+			return nil
+		}
+		source, err := loadDesktop(tx, sourceID)
+		if err != nil {
+			return err
+		}
+		move, err := moveLeafBetweenDesktops(tx, now, source, target, LeafMoveRequest{
+			LeafID: paneID, AnchorID: target.ActivePaneID, Direction: layouttree.DirectionVertical,
+			Activate: source.ActivePaneID == paneID && target.ID != profile.CurrentDesktopID,
+		})
+		result = SessionDesktopMove{Move: move, FromLeafID: paneID}
+		return err
 	})
 	return result, err
 }
