@@ -76,7 +76,7 @@ test.describe('Keyboard Shortcuts', () => {
 
       await page.keyboard.press('Meta+n');
 
-      const selectedDesktopSessions = page.locator('.desktop-group.selected .session-item');
+      const selectedDesktopSessions = page.locator('.desktop-rule.current').locator('..').locator('.session-item');
       await expect(page.locator('.location-picker-overlay')).toBeVisible();
       await expect(page.locator('.picker-title')).toHaveText('New Session Location');
       await expect(selectedDesktopSessions).toHaveCount(1);
@@ -186,6 +186,9 @@ test.describe('Keyboard Shortcuts', () => {
       await createSession(page, daemon, { id: 's1', label: 'First', state: 'working', cwd: '/tmp/test/s1' });
       await createSession(page, daemon, { id: 's2', label: 'Second', state: 'working', cwd: '/tmp/test/s2' });
       await createSession(page, daemon, { id: 's3', label: 'Third', state: 'working', cwd: '/tmp/test/s3' });
+      await page.keyboard.press('Meta+g');
+      await page.getByRole('button', { name: '+ New desktop' }).click();
+      await expect(page.locator('.desktop-rule')).toHaveCount(2);
 
       await expect(page.locator('[data-testid="session-s1"]')).toBeVisible();
 
@@ -196,6 +199,7 @@ test.describe('Keyboard Shortcuts', () => {
 
       await page.keyboard.press('Meta+2');
       await expect(page.locator('.terminal-wrapper.active [data-session-terminal-desktop]')).toBeVisible();
+      await expect(page.locator('.desktop-rule.current .desktop-number')).toHaveText('2');
       expect(await page.evaluate(() => (
         window.__TEST_GET_SESSION_INPUT_EVENTS?.('s1') ?? []
       ).filter((event) => event.event === 'send_to_pty').length)).toBe(0);
@@ -204,6 +208,7 @@ test.describe('Keyboard Shortcuts', () => {
 
       await page.keyboard.press('Meta+1');
       await expect(page.locator('.terminal-wrapper.active')).toBeVisible();
+      await expect(page.locator('.desktop-rule.current .desktop-number')).toHaveText('1');
     });
 
   });

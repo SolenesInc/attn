@@ -209,13 +209,13 @@ describe('Sidebar', () => {
       { id: 'b1', label: 'B1', state: 'idle', cwd: '/repo/b' },
       { id: 'c1', label: 'C1', state: 'idle', cwd: '/repo/c' },
     ]);
-    expect(sidebarData.desktops[0].endpointId).toBe('ep-1');
+    expect(sidebarData.desktops[0].sessions[0].endpointId).toBe('ep-1');
     const onDesktopReorder = vi.fn();
     render(<Sidebar {...baseProps} {...sidebarData} onDesktopReorder={onDesktopReorder} />);
 
     const header = screen
       .getByTestId('sidebar-desktop-desktop-/repo/a')
-      .querySelector('.desktop-group-header > .sidebar-row-select') as HTMLElement;
+      .querySelector('.desktop-rule > .sidebar-row-select') as HTMLElement;
     fireEvent.pointerDown(header, { button: 0, pointerId: 1, clientX: 10, clientY: 10 });
     fireEvent.pointerMove(window, { pointerId: 1, clientX: 10, clientY: 80 });
     expect(screen.getByTestId('desktop-reorder-seam-3')).toBeInTheDocument();
@@ -240,7 +240,7 @@ describe('Sidebar', () => {
     render(<Sidebar {...baseProps} {...sidebarData} onDesktopReorder={onDesktopReorder} />);
     const header = screen
       .getByTestId('sidebar-desktop-desktop-/repo/a')
-      .querySelector('.desktop-group-header > .sidebar-row-select') as HTMLElement;
+      .querySelector('.desktop-rule > .sidebar-row-select') as HTMLElement;
 
     fireEvent.pointerDown(header, { button: 0, pointerId: 1, clientX: 10, clientY: 10 });
     fireEvent.pointerMove(window, { pointerId: 1, clientX: 10, clientY: 80 });
@@ -271,7 +271,7 @@ describe('Sidebar', () => {
     );
     const header = screen
       .getByTestId('sidebar-desktop-desktop-/repo/a')
-      .querySelector('.desktop-group-header > .sidebar-row-select') as HTMLElement;
+      .querySelector('.desktop-rule > .sidebar-row-select') as HTMLElement;
 
     fireEvent.pointerDown(header, { button: 0, pointerId: 1, clientX: 10, clientY: 10 });
     fireEvent.pointerMove(window, { pointerId: 1, clientX: 10, clientY: 80 });
@@ -297,7 +297,7 @@ describe('Sidebar', () => {
     const headerOf = (cwd: string) =>
       screen
         .getByTestId(`sidebar-desktop-desktop-${cwd}`)
-        .querySelector('.desktop-group-header > .sidebar-row-select') as HTMLElement;
+        .querySelector('.desktop-rule > .sidebar-row-select') as HTMLElement;
 
     fireEvent.pointerDown(headerOf('/repo/a'), { button: 0, pointerId: 1, clientX: 10, clientY: 10 });
     fireEvent.pointerMove(window, { pointerId: 1, clientX: 10, clientY: 80 });
@@ -381,14 +381,14 @@ describe('Sidebar', () => {
     expect(screen.queryByTestId('rename-desktop-unplaced')).not.toBeInTheDocument();
     expect(screen.getByTestId('rename-desktop-desktop-a')).toBeInTheDocument();
 
-    const header = loose.querySelector('.desktop-group-header > .sidebar-row-select') as HTMLElement;
+    const header = loose.querySelector('.desktop-rule > .sidebar-row-select') as HTMLElement;
     fireEvent.pointerDown(header, { button: 0, pointerId: 1, clientX: 10, clientY: 10 });
     fireEvent.pointerMove(window, { pointerId: 1, clientX: 10, clientY: 80 });
     expect(screen.queryByTestId('desktop-reorder-seam-0')).not.toBeInTheDocument();
 
     const aHeader = screen
       .getByTestId('sidebar-desktop-desktop-a')
-      .querySelector('.desktop-group-header > .sidebar-row-select') as HTMLElement;
+      .querySelector('.desktop-rule > .sidebar-row-select') as HTMLElement;
     fireEvent.pointerDown(aHeader, { button: 0, pointerId: 2, clientX: 10, clientY: 10 });
     fireEvent.pointerMove(window, { pointerId: 2, clientX: 10, clientY: 80 });
     expect(screen.getByTestId('desktop-reorder-seam-2')).toBeInTheDocument();

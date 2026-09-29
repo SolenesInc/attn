@@ -128,14 +128,15 @@ test.describe('Desktop Sessions', () => {
       await page.keyboard.press('Meta+g');
       await page.getByRole('button', { name: '+ New desktop' }).click();
     }
-    const headerLabels = page.locator('.desktop-group-header .desktop-label');
-    await expect(headerLabels).toHaveText(['Desktop 1', 'Desktop 2', 'Desktop 3']);
+    const rules = page.locator('.desktop-rule');
+    const headerNames = () => rules.locator('.sidebar-row-select').evaluateAll((buttons) => buttons.map((button) => button.getAttribute('aria-label')?.replace(/^Open /, '')));
+    await expect.poll(headerNames).toEqual(['Desktop 1', 'Desktop 2', 'Desktop 3']);
 
     const headerOf = (label: string) =>
-      page.locator('.desktop-group-header', { has: page.locator('.desktop-label', { hasText: label }) });
+      page.locator('.desktop-rule', { has: page.getByRole('button', { name: `Open ${label}`, exact: true }) });
     const dragHeaderToTop = async (label: string) => {
       const source = (await headerOf(label).boundingBox())!;
-      const top = (await headerLabels.first().boundingBox())!;
+      const top = (await rules.first().boundingBox())!;
       await page.mouse.move(source.x + 24, source.y + source.height / 2);
       await page.mouse.down();
       await page.mouse.move(source.x + 24, source.y - 12, { steps: 4 });
@@ -147,12 +148,12 @@ test.describe('Desktop Sessions', () => {
     await page.keyboard.press('Escape');
     await expect(page.locator('[data-testid="desktop-reorder-seam-0"]')).toHaveCount(0);
     await page.mouse.up();
-    await expect(headerLabels).toHaveText(['Desktop 1', 'Desktop 2', 'Desktop 3']);
+    await expect.poll(headerNames).toEqual(['Desktop 1', 'Desktop 2', 'Desktop 3']);
 
     await dragHeaderToTop('Desktop 3');
     await page.mouse.up();
 
-    await expect(headerLabels).toHaveText(['Desktop 3', 'Desktop 1', 'Desktop 2']);
+    await expect.poll(headerNames).toEqual(['Desktop 3', 'Desktop 1', 'Desktop 2']);
     await expect(headerOf('Desktop 3').locator('.session-shortcut')).toHaveText(/3/);
 
     await headerOf('Desktop 2').hover();
@@ -161,13 +162,13 @@ test.describe('Desktop Sessions', () => {
     await expect(nameInput).toHaveAttribute('placeholder', 'Desktop 2');
     await nameInput.fill('Reviews');
     await nameInput.press('Enter');
-    await expect(headerLabels).toHaveText(['Desktop 3', 'Desktop 1', 'Reviews']);
+    await expect.poll(headerNames).toEqual(['Desktop 3', 'Desktop 1', 'Reviews']);
 
     await headerOf('Reviews').hover();
     await headerOf('Reviews').getByRole('button', { name: 'Rename Reviews' }).click();
     await nameInput.fill('');
     await nameInput.press('Enter');
-    await expect(headerLabels).toHaveText(['Desktop 3', 'Desktop 1', 'Desktop 2']);
+    await expect.poll(headerNames).toEqual(['Desktop 3', 'Desktop 1', 'Desktop 2']);
   });
 
   test('clicking and keyboard navigation focus panes across agents on one desktop', async ({ page, daemon }) => {
@@ -292,7 +293,7 @@ test.describe('Desktop Sessions', () => {
 
     await page.keyboard.press('Meta+g');
     await page.getByRole('button', { name: '+ New desktop' }).click();
-    await expect(page.locator('.desktop-group-header')).toHaveCount(2);
+    await expect(page.locator('.desktop-rule')).toHaveCount(2);
     await page.keyboard.press('Escape');
     await page.getByRole('button', { name: 'Open Desktop 2' }).click();
     await expect(canvas).toHaveJSProperty('width', 1);
