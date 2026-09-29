@@ -34,12 +34,21 @@ func (d *Daemon) deliverObservedAutomationRun(run *store.AutomationRun) error {
 }
 func (d *Daemon) handleAutomationDeliveryError(run *store.AutomationRun, deliveryErr error) (*store.AutomationRun, error) {
 	var retryable *retryableAutomationDeliveryError
-	if errors.As(deliveryErr, &retryable) {
+	// A delivery cut short by shutdown stays pending, and the next start delivers it again.
+	if errors.As(deliveryErr, &retryable) || d.stopping() {
 		current, err := d.store.GetAutomationRun(run.ID)
 		return current, errors.Join(deliveryErr, err)
 	}
 	failed, failErr := d.failAutomationRun(run, deliveryErr)
 	return failed, errors.Join(deliveryErr, failErr)
+}
+func (d *Daemon) stopping() bool {
+	select {
+	case <-d.done:
+		return true
+	default:
+		return false
+	}
 }
 func (d *Daemon) failAutomationRun(run *store.AutomationRun, deliveryErr error) (*store.AutomationRun, error) {
 	now := time.Now()
