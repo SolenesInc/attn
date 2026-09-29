@@ -108,7 +108,7 @@ func (s *Stack) command(ctx context.Context, inv Invocation) *exec.Cmd {
 	if inv.Session != "" {
 		cmd.Env = append(cmd.Env, "ATTN_SESSION_ID="+inv.Session, "ATTN_INSIDE_APP=1")
 	}
-	if len(inv.Args) >= 2 && inv.Args[0] == "daemon" && inv.Args[1] == "ensure" {
+	if len(inv.Args) > 0 && inv.Args[0] == "daemon" && (len(inv.Args) == 1 || inv.Args[1] == "ensure") {
 		file, err := s.wsListener.File()
 		if err != nil {
 			s.T.Fatal(err)

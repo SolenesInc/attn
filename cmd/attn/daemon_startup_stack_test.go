@@ -13,8 +13,8 @@ import (
 func TestADaemonWhosePortIsTakenExitsBeforeReadyNamingThePort(t *testing.T) {
 	t.Parallel()
 	s := testworld.NewStack(t)
-	// The stack holds its socket; a plain CLI daemon must refuse that address.
-	got := s.Attn("daemon")
+	// Without fd inheritance, the daemon must refuse the socket held by the stack.
+	got := s.Run(testworld.Invocation{Args: []string{"daemon"}, Env: []string{"ATTN_HARNESS_WS_LISTENER_FD="}})
 	if got.Code != 1 || !strings.Contains(got.Stderr, s.WSAddr) {
 		t.Fatalf("attn daemon with its port taken exited %d, want 1 naming %s\nstderr:\n%s", got.Code, s.WSAddr, got.Stderr)
 	}
