@@ -45,14 +45,14 @@ func (d *Daemon) handleAgentInbox(conn net.Conn, msg *protocol.AgentInboxMessage
 }
 
 func (d *Daemon) handleAgentInboxBatch(conn net.Conn, recipientSessionID string, limit int) {
-	d.gardenWatchMu.Lock()
+	d.lockGardenRoles()
 	err := d.discardUncoveredSeedBells(recipientSessionID)
 	var deliveries []agentmailbox.Delivery
 	var remaining int
 	if err == nil {
 		deliveries, remaining, err = d.store.ReadAgentMailbox(recipientSessionID, limit, time.Now())
 	}
-	d.gardenWatchMu.Unlock()
+	d.unlockGardenRoles()
 	if err != nil {
 		d.logf("agent inbox batch: session=%s err=%v", recipientSessionID, err)
 		d.replyAgentMsgError(conn, "internal_error", "the agent inbox could not be read")

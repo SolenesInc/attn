@@ -82,8 +82,8 @@ func (d *Daemon) handleSeedWatch(conn net.Conn, msg *protocol.SeedWatchMessage) 
 }
 
 func (d *Daemon) setSeedWatch(sessionID, seedID string, watching bool) (*protocol.SeedWatchResult, error) {
-	d.gardenWatchMu.Lock()
-	defer d.gardenWatchMu.Unlock()
+	d.lockGardenRoles()
+	defer d.unlockGardenRoles()
 	changed, err := d.store.SetGardenSeedWatch(sessionID, seedID, watching, time.Now())
 	if err != nil {
 		return nil, err
@@ -192,14 +192,14 @@ func (d *Daemon) consumeSeedBell(sessionID, seedID string) {
 	if sessionID == "" || d.store == nil {
 		return
 	}
-	d.gardenWatchMu.Lock()
+	d.lockGardenRoles()
 	err := d.discardIneligibleGardenSeedBellsLocked(sessionID)
 	var consumed bool
 	var remaining int
 	if err == nil {
 		consumed, remaining, err = d.store.ReadGardenSeedMailboxItems(sessionID, seedID, time.Now())
 	}
-	d.gardenWatchMu.Unlock()
+	d.unlockGardenRoles()
 	if err != nil {
 		d.logf("garden bell: consuming session=%s seed=%s: %v", sessionID, seedID, err)
 		return

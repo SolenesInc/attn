@@ -318,13 +318,15 @@ type Daemon struct {
 	gardenNow              func() time.Time
 	gitHubPollingOffLogged bool
 	gardenWatchMu          sync.Mutex
-	gardenReviewMu         sync.Mutex
-	dispatchSeedsMu        sync.Mutex
-	dispatchSeeds          map[string]string
-	dispatchersBySession   map[string]garden.Tender
-	dispatchFromChief      map[string]bool
-	dispatchProjectionRevs map[string]int64
-	dispatchSeedsLoaded    bool
+	// gardenBellsResolvedThrough is the last bus seq whose seed bells were resolved; gardenWatchMu guards it.
+	gardenBellsResolvedThrough int64
+	gardenReviewMu             sync.Mutex
+	dispatchSeedsMu            sync.Mutex
+	dispatchSeeds              map[string]string
+	dispatchersBySession       map[string]garden.Tender
+	dispatchFromChief          map[string]bool
+	dispatchProjectionRevs     map[string]int64
+	dispatchSeedsLoaded        bool
 
 	automationsBroadcastHook func(*protocol.AutomationsChangedMessage)
 
@@ -914,9 +916,9 @@ func (d *Daemon) Start() error {
 			d.validateSharedPTYHostAfterRecovery()
 		}
 		d.reconcileCrewRestarts()
-		d.gardenWatchMu.Lock()
+		d.lockGardenRoles()
 		gardenBellErr := d.discardAllIneligibleGardenSeedBellsLocked()
-		d.gardenWatchMu.Unlock()
+		d.unlockGardenRoles()
 		if gardenBellErr != nil {
 			d.logf("Garden seed mailbox startup reconciliation failed; queued updates remain undelivered: %v", gardenBellErr)
 		} else {

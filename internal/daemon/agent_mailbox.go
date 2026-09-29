@@ -93,7 +93,7 @@ func (d *Daemon) claimAgentMailboxDoorbell(sessionID string) (*agentMailboxDoorb
 }
 
 func (d *Daemon) ringClaimedAgentMailboxDoorbell(sessionID string, state *agentMailboxDoorbellState) error {
-	d.gardenWatchMu.Lock()
+	d.lockGardenRoles()
 	coverageErr := d.discardUncoveredSeedBells(sessionID)
 	d.agentMailboxMu.Lock()
 	current := d.agentMailboxDoorbells[sessionID]
@@ -103,14 +103,14 @@ func (d *Daemon) ringClaimedAgentMailboxDoorbell(sessionID string, state *agentM
 			d.armAgentMailboxDoorbellLocked(sessionID, state, d.agentMailboxCooldown())
 		}
 		d.agentMailboxMu.Unlock()
-		d.gardenWatchMu.Unlock()
+		d.unlockGardenRoles()
 		if coverageErr != nil {
 			return fmt.Errorf("check Garden inbox coverage: %w", coverageErr)
 		}
 		return nil
 	}
 	d.agentMailboxMu.Unlock()
-	d.gardenWatchMu.Unlock()
+	d.unlockGardenRoles()
 
 	attemptKey := uuid.NewString()
 	id := inputAttemptID("agent-mailbox-doorbell", attemptKey)
