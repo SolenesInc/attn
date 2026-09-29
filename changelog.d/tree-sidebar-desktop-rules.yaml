@@ -1,0 +1,6 @@
+kind: changed
+area: app
+change: >
+  Desktop groups in the tree sidebar use compact numbered rules with leaves
+  flush beneath them. Empty desktops are marked, the Display setting is gone,
+  and panes can move between desktops regardless of where their sessions run.

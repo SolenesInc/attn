@@ -4,7 +4,7 @@ import {
   parseLayoutJSON,
   type TileLeaf,
 } from '../types/desktop';
-import { defaultDesktopLabel, desktopLabel, orderedDesktops } from './desktops';
+import { defaultDesktopLabel, desktopLabel, desktopNumber, orderedDesktops } from './desktops';
 
 export interface DesktopViewSession {
   id: string;
@@ -21,8 +21,6 @@ export interface DesktopViewDesktop {
   title: string;
   directory: string;
   status?: string;
-  endpointId?: string;
-  endpoint_id?: string;
   layout?: {
     layout_json?: string;
     panes?: Array<{
@@ -50,10 +48,9 @@ export type DesktopChild<TSession extends DesktopViewSession = DesktopViewSessio
 export interface DesktopWithSessions<TSession extends DesktopViewSession = DesktopViewSession> {
   id: string;
   title: string;
-  desktop?: { name: string; defaultLabel: string };
+  desktop?: { name: string; defaultLabel: string; number?: number };
   directory: string;
   status?: string;
-  endpointId?: string;
   sessions: TSession[];
   children: DesktopChild<TSession>[];
   firstSessionId: string | null;
@@ -64,18 +61,6 @@ export interface DesktopWithSessions<TSession extends DesktopViewSession = Deskt
 interface DesktopViewModelOptions {
   focusedSessionIdByDesktop?: Record<string, string | null | undefined>;
 }
-
-
-
-function sessionEndpointId(session: DesktopViewSession): string | undefined {
-  return session.endpointId || session.endpoint_id;
-}
-
-function desktopEndpointId(desktopView: DesktopViewDesktop): string | undefined {
-  return desktopView.endpointId || desktopView.endpoint_id;
-}
-
-
 
 
 
@@ -108,7 +93,6 @@ function toDesktopViewModel<TSession extends DesktopViewSession>(
     title: desktopView.title,
     directory: desktopView.directory,
     status: desktopView.status,
-    endpointId: desktopEndpointId(desktopView) || (sessions[0] ? sessionEndpointId(sessions[0]) : undefined),
     sessions,
     children,
     firstSessionId,
@@ -180,7 +164,7 @@ export function buildDesktopViewModels<TSession extends DesktopViewSession>(
       liveSessionIds,
       {},
     ),
-    desktop: { name: desktop.name.trim(), defaultLabel: defaultDesktopLabel(desktop, desktops) },
+    desktop: { name: desktop.name.trim(), defaultLabel: defaultDesktopLabel(desktop, desktops), number: desktopNumber(desktop, desktops) },
   }));
   const unplacedSessions = sessions.filter((session) => !desktopIdBySessionId.has(session.id));
   if (unplacedSessions.length === 0) return onDesktop;
