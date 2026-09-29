@@ -10,6 +10,7 @@ import type { SidebarProps } from './sidebarTypes';
 import {
   SidebarAutomationGroups,
   SidebarDesktopList,
+  SidebarDesktopOverview,
 } from './SidebarDesktops';
 import { useSidebarState } from './useSidebarState';
 export type { DockItem, SidebarHeaderAction } from './sidebarTypes';
@@ -67,6 +68,7 @@ function SidebarExpanded() {
       </button>
 
       <SidebarCrewManage />
+      <SidebarDesktopOverview />
 
       <div className={`session-list ${reorderDrag ? 'session-list--reordering' : ''}`.trim()}>
         <SidebarDesktopList />

@@ -12,7 +12,7 @@ import { SidebarPopovers } from './SidebarChrome';
 import { useSidebarContext } from './SidebarContext';
 import { useDesktopChipDrop } from './useDesktopChipDrop';
 import { CollapseIcon, HomeIcon, PlusIcon } from './SidebarIcons';
-import { SidebarAutomationGroups } from './SidebarDesktops';
+import { SidebarAutomationGroups, SidebarDesktopOverview } from './SidebarDesktops';
 import { useWaitingFit } from './useWaitingFit';
 
 const WALK_ROW_SELECTOR = '.queue-row-select, .sidebar-row-select';
@@ -469,16 +469,7 @@ function DesktopStrip() {
             )}
           </button>
         )}
-        <button
-          type="button"
-          className="queue-desktop-chip is-extra"
-          data-testid="queue-desktop-overview"
-          title={`Overview (${formatShortcut('desktop.overview')})`}
-          aria-label="Desktop overview"
-          onClick={onOpenOverview}
-        >
-          ⊞
-        </button>
+        <SidebarDesktopOverview compact />
       </div>
       <div className="queue-desktop-current" data-testid="queue-desktop-current">
         <span className="queue-desktop-current-name">{current?.title ?? ''}</span>
