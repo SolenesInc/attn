@@ -206,5 +206,5 @@ func (w *World) LogDaemonTail() {
 	}
 	lines := bytes.Split(bytes.TrimRight(log, "\n"), []byte("\n"))
 	lines = lines[max(0, len(lines)-80):]
-	w.T.Logf("daemon.log tail:\n%s", bytes.Join(lines, []byte("\n")))
+	w.T.Logf("daemon.log tail:\n%s", boundedDiagnostic(string(bytes.Join(lines, []byte("\n")))))
 }
