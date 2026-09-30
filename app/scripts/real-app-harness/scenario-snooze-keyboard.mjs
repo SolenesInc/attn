@@ -240,6 +240,7 @@ async function main() {
     });
     await runner.step('grid_cancel_preserves_zoom_and_typing_focus', async () => {
       await pressShortcutKeys(client, driver, 'view.toggleGrid');
+      runner.log('grid entered', await client.request('grid_get_state'));
       await waitDom('.grid-view-stage', { focused: true });
       await client.request('dom_focus', { selector: '[aria-label="Grid layout"][type="button"]' });
       await driver.pressEnter();
@@ -251,6 +252,7 @@ async function main() {
       await waitDom('[aria-label="Grid layout"][type="button"]', { focused: true });
       await driver.pressKey('Escape');
       await waitDom('.grid-layout-popover', { absent: true });
+      await client.request('dom_focus', { selector: '.grid-view-stage' });
       const workspace = await client.request('get_workspace', { sessionId: alpha.sessionId });
       const runtimeId = workspace.panes.find((pane) => pane.paneId === alpha.paneId).runtimeId;
       await client.request('grid_zoom', { runtimeId });
