@@ -105,6 +105,7 @@ type Manager struct {
 	ctx             context.Context
 	cancel          context.CancelFunc
 	started         bool
+	endpointLoops   sync.WaitGroup
 }
 
 func NewManager(
@@ -176,7 +177,6 @@ func (m *Manager) Start(parent context.Context) {
 }
 
 func (m *Manager) Stop() {
-	var emptied []string
 	shutdownTargets := make([]isolatedShutdownTarget, 0)
 	seenTargets := make(map[string]struct{})
 	m.mu.Lock()
@@ -187,10 +187,7 @@ func (m *Manager) Stop() {
 	if m.cancel != nil {
 		m.cancel()
 	}
-	for id, runtime := range m.runtimes {
-		if len(runtime.sessions) > 0 {
-			emptied = append(emptied, id)
-		}
+	for _, runtime := range m.runtimes {
 		if target := isolatedRemoteShutdownTarget(runtime.record); target.Target != "" {
 			key := target.Target + "|" + target.Instance
 			if _, exists := seenTargets[key]; !exists {
@@ -202,14 +199,8 @@ func (m *Manager) Stop() {
 	}
 	m.started = false
 	m.mu.Unlock()
+	m.endpointLoops.Wait()
 	m.stopIsolatedRemoteDaemons(shutdownTargets)
-	if len(emptied) > 0 {
-		go func() {
-			for _, id := range emptied {
-				m.publishSessionsChanged(id)
-			}
-		}()
-	}
 }
 
 func (m *Manager) List() []protocol.EndpointInfo {
@@ -409,7 +400,7 @@ func (m *Manager) startRuntimeLocked(id string) {
 	}
 	ctx, cancel := context.WithCancel(m.ctx)
 	runtime.cancel = cancel
-	go m.runEndpointLoop(ctx, id)
+	m.endpointLoops.Go(func() { m.runEndpointLoop(ctx, id) })
 }
 
 func (m *Manager) stopRuntimeLocked(runtime *endpointRuntime) {
