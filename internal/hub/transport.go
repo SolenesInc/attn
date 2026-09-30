@@ -8,7 +8,6 @@ import (
 	"net/http"
 	"os/exec"
 	"strings"
-	"sync"
 	"time"
 
 	"nhooyr.io/websocket"
@@ -57,16 +56,11 @@ func connectViaSSHOnce(ctx context.Context, sshTarget, authToken, instance strin
 		return nil, nil, err
 	}
 
-	var (
-		acceptOnce sync.Once
-		acceptErr  error
-	)
+	acceptResult := make(chan error, 1)
 
 	go func() {
 		conn, err := ln.Accept()
-		acceptOnce.Do(func() {
-			acceptErr = err
-		})
+		acceptResult <- err
 		_ = ln.Close()
 		if err != nil {
 			return
@@ -91,7 +85,7 @@ func connectViaSSHOnce(ctx context.Context, sshTarget, authToken, instance strin
 	if err != nil {
 		_ = ln.Close()
 		killAndReap(cmd)
-		if acceptErr != nil {
+		if acceptErr := <-acceptResult; acceptErr != nil {
 			return nil, nil, acceptErr
 		}
 		return nil, nil, err
