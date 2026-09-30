@@ -12,6 +12,14 @@ type memStore struct {
 	events    []Event
 	nextSeq   int64
 	consumers map[string]Consumer
+	// attempts, when set, receives every SetCursor outcome so a test can wait
+	// on the drain instead of sleeping.
+	attempts chan cursorAttempt
+}
+
+type cursorAttempt struct {
+	cursor  int64
+	applied bool
 }
 
 func newMemStore() *memStore {
@@ -87,13 +95,15 @@ func (m *memStore) SetCursor(name string, cursor int64, now time.Time) (bool, er
 	if !ok {
 		return false, errors.New("no such consumer")
 	}
-	if !c.Enabled {
-		return false, nil
+	if c.Enabled {
+		c.Cursor = cursor
+		c.UpdatedAt = now
+		m.consumers[name] = c
 	}
-	c.Cursor = cursor
-	c.UpdatedAt = now
-	m.consumers[name] = c
-	return true, nil
+	if m.attempts != nil {
+		m.attempts <- cursorAttempt{cursor: cursor, applied: c.Enabled}
+	}
+	return c.Enabled, nil
 }
 
 func (m *memStore) ListConsumers() ([]Consumer, error) {

@@ -6,42 +6,6 @@ import (
 	"time"
 )
 
-// A disable that lands while a handler runs is final: the drain's own poll
-// has not noticed it yet, but no later cursor write may land.
-func TestADisableDuringAnEventFreezesTheCursor(t *testing.T) {
-	s := newMemStore()
-	b := New(Options{Store: s, Now: func() time.Time { return statusNow }})
-	for _, name := range []string{"a.one", "a.two", "skipped.three"} {
-		if _, err := s.Append(Event{Name: name, Subject: name, Source: "test"}, statusNow); err != nil {
-			t.Fatal(err)
-		}
-	}
-	if err := s.SaveConsumer(Consumer{Name: "c", Filter: "a.*", Enabled: true}, statusNow); err != nil {
-		t.Fatal(err)
-	}
-	var handled []string
-	d := b.newDurable("c", ParseFilter("a.*"), nil, func(_ context.Context, ev Event) error {
-		handled = append(handled, ev.Name)
-		s.mu.Lock()
-		c := s.consumers["c"]
-		c.Enabled = false
-		s.consumers["c"] = c
-		s.mu.Unlock()
-		return nil
-	})
-
-	if err := b.drain(d); err != nil {
-		t.Fatalf("drain after a disable: %v", err)
-	}
-	rec, _, _ := s.GetConsumer("c")
-	if rec.Cursor != 0 {
-		t.Errorf("disabled consumer's cursor moved to %d; want 0", rec.Cursor)
-	}
-	if len(handled) != 1 {
-		t.Errorf("handled %v; want only the in-flight event", handled)
-	}
-}
-
 func setEnabled(s *memStore, enabled bool) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -50,69 +14,102 @@ func setEnabled(s *memStore, enabled bool) {
 	s.consumers["c"] = c
 }
 
-func seedDisableBus(t *testing.T) (*Bus, *memStore) {
+// runConsumer starts a bus with consumer "c" on a.* and publishes a.one,
+// a.two and skipped.three while the first handler call is held open.
+// onFirst runs inside that first call; later calls are recorded on handled.
+func runConsumer(t *testing.T, s *memStore, onFirst func()) (handled chan string) {
 	t.Helper()
-	s := newMemStore()
-	b := New(Options{Store: s, Now: func() time.Time { return statusNow }})
-	for _, name := range []string{"a.one", "a.two", "skipped.three"} {
-		if _, err := s.Append(Event{Name: name, Subject: name, Source: "test"}, statusNow); err != nil {
+	b := New(Options{
+		Store: s, PollInterval: time.Millisecond,
+		Now: func() time.Time { return statusNow },
+	})
+	t.Cleanup(b.Stop)
+	handled = make(chan string, 8)
+	release := make(chan struct{})
+	first := true
+	if err := b.Register("c", ParseFilter("a.*"), func(_ context.Context, ev Event) error {
+		handled <- ev.Name
+		if first {
+			first = false
+			<-release
+			onFirst()
+		}
+		return nil
+	}); err != nil {
+		t.Fatal(err)
+	}
+	if err := b.Start(); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := b.Publish("a.one", "x", nil); err != nil {
+		t.Fatal(err)
+	}
+	<-handled
+	handled <- "a.one"
+	for _, name := range []string{"a.two", "skipped.three"} {
+		if _, err := b.Publish(name, "x", nil); err != nil {
 			t.Fatal(err)
 		}
 	}
-	if err := s.SaveConsumer(Consumer{Name: "c", Filter: "a.*", Enabled: true}, statusNow); err != nil {
-		t.Fatal(err)
-	}
-	return b, s
+	close(release)
+	return handled
 }
 
-// Durable handlers are idempotent, so the unacked in-flight event may run
-// twice on re-enable; the effect set must still be each event exactly once.
-func TestReEnablingAfterADisableRedeliversTheUnackedEventAndSkipsNothing(t *testing.T) {
-	b, s := seedDisableBus(t)
-	effects := map[int64]bool{}
-	first := true
-	d := b.newDurable("c", ParseFilter("a.*"), nil, func(_ context.Context, ev Event) error {
-		effects[ev.Seq] = true
-		if first {
-			first = false
-			setEnabled(s, false)
+func waitAttempt(t *testing.T, s *memStore, cursor int64, applied bool) {
+	t.Helper()
+	for a := range s.attempts {
+		if a.cursor == cursor && a.applied == applied {
+			return
 		}
-		return nil
-	})
-	if err := b.drain(d); err != nil {
-		t.Fatal(err)
+	}
+}
+
+func cursorOf(s *memStore) int64 {
+	c, _, _ := s.GetConsumer("c")
+	return c.Cursor
+}
+
+// A disable that lands while a handler runs is final: the drain has not
+// polled yet, but no later cursor write may land. The in-flight event is
+// redelivered on re-enable (durable handlers are idempotent).
+func TestADisableDuringAnEventFreezesTheCursorAndReEnableRedeliversIt(t *testing.T) {
+	s := newMemStore()
+	s.attempts = make(chan cursorAttempt, 16)
+	handled := runConsumer(t, s, func() { setEnabled(s, false) })
+
+	waitAttempt(t, s, 1, false)
+	if got := cursorOf(s); got != 0 {
+		t.Fatalf("disabled consumer's cursor moved to %d; want 0", got)
 	}
 	setEnabled(s, true)
-	if err := b.drain(d); err != nil {
-		t.Fatal(err)
+	waitAttempt(t, s, 3, true)
+
+	var got []string
+	for len(handled) > 0 {
+		got = append(got, <-handled)
 	}
-	rec, _, _ := s.GetConsumer("c")
-	if rec.Cursor != 3 || len(effects) != 2 || !effects[1] || !effects[2] {
-		t.Errorf("cursor %d, effects %v; want cursor 3 and events 1 and 2 applied", rec.Cursor, effects)
+	if want := []string{"a.one", "a.one", "a.two"}; len(got) != len(want) || got[0] != want[0] || got[1] != want[1] || got[2] != want[2] {
+		t.Errorf("handled %v; want %v", got, want)
+	}
+	if got := cursorOf(s); got != 3 {
+		t.Errorf("cursor %d after re-enable; want 3", got)
 	}
 }
 
-// Disable then enable before the running drain reaches its next write: the
-// write applies again, and it is the next event after the cursor, so the
-// cursor never moves back and no event is skipped.
+// Disable then enable before the running drain writes: the write applies
+// again and is the next event past the cursor, so nothing moves back or is
+// skipped.
 func TestADisableAndEnableInsideOneEventKeepsTheCursorMovingForward(t *testing.T) {
-	b, s := seedDisableBus(t)
-	var handled []int64
-	first := true
-	d := b.newDurable("c", ParseFilter("a.*"), nil, func(_ context.Context, ev Event) error {
-		handled = append(handled, ev.Seq)
-		if first {
-			first = false
-			setEnabled(s, false)
-			setEnabled(s, true)
-		}
-		return nil
-	})
-	if err := b.drain(d); err != nil {
-		t.Fatal(err)
+	s := newMemStore()
+	s.attempts = make(chan cursorAttempt, 16)
+	handled := runConsumer(t, s, func() { setEnabled(s, false); setEnabled(s, true) })
+
+	waitAttempt(t, s, 3, true)
+	var got []string
+	for len(handled) > 0 {
+		got = append(got, <-handled)
 	}
-	rec, _, _ := s.GetConsumer("c")
-	if rec.Cursor != 3 || len(handled) != 2 || handled[0] != 1 || handled[1] != 2 {
-		t.Errorf("cursor %d, handled %v; want cursor 3 and events 1, 2 once each", rec.Cursor, handled)
+	if len(got) != 2 || got[0] != "a.one" || got[1] != "a.two" {
+		t.Errorf("handled %v; want [a.one a.two]", got)
 	}
 }

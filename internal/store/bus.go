@@ -338,8 +338,7 @@ func (s *Store) SaveBusConsumer(c BusConsumer, now time.Time) error {
 }
 
 // SetBusConsumerCursor moves an enabled consumer's cursor and reports whether
-// it moved. Checking enabled in the same statement makes a disable final: no
-// cursor write lands after SetBusConsumerEnabled(false) returns.
+// it moved; checking enabled in the same UPDATE makes a disable final.
 func (s *Store) SetBusConsumerCursor(name string, cursor int64, now time.Time) (bool, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
