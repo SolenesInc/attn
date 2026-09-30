@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { Sidebar } from '../../src/components/Sidebar';
 import { HomeIcon } from '../../src/components/SidebarIcons';
 import { buildDesktopViewModels } from '../../src/utils/desktopViewModels';
@@ -27,13 +27,14 @@ export function SidebarRailHarness({ onReady, setTriggerRerender }: HarnessProps
   const [selected, setSelected] = useState('desk-1');
   const [arrangement, setArrangement] = useState(desktops);
   const reorder = new URLSearchParams(window.location.search).get('update') === 'reorder';
+  const triggerRerender = useCallback(() => {
+    if (reorder) setArrangement([...desktops.slice(1), desktops[0]]);
+    else setSelected('desk-8');
+  }, [reorder]);
   useEffect(() => {
     onReady();
-    setTriggerRerender(() => {
-      if (reorder) setArrangement([...desktops.slice(1), desktops[0]]);
-      else setSelected('desk-8');
-    });
-  }, [onReady, setTriggerRerender, reorder]);
+    setTriggerRerender(triggerRerender);
+  }, [onReady, setTriggerRerender, triggerRerender]);
   return (
     <div className="app" style={{ height: '100vh' }}>
       <Sidebar
