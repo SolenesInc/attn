@@ -129,6 +129,21 @@ async function main() {
       await driver.typeText('CANCEL_FOCUS');
       await waitForPaneText(client, alpha.sessionId, alpha.paneId, (text) => text.includes('CANCEL_FOCUS'), 'typing after cancel');
     });
+    await runner.step('palette_cancel_returns_to_unfinished_edit', async () => {
+      await pressShortcutKeys(client, driver, 'terminal.find');
+      const selector = `[data-pane-id="${alpha.paneId}"] [data-testid="ghostty-find-input"]`;
+      await waitDom(selector, { focused: true });
+      await driver.typeText('Ready');
+      await openPicker();
+      await driver.pressKey('Escape');
+      await waitDom('[data-testid="snooze-menu"]', { absent: true });
+      await waitDom(selector, { focused: true });
+      await driver.typeText(' for keyboard');
+      runner.assert((await client.request('dom_value', { selector })).value === 'Ready for keyboard', 'typing resumes the unfinished search');
+      await driver.pressKey('Escape');
+      await waitDom(selector, { absent: true });
+      await waitForPaneInputFocus(client, alpha.sessionId, alpha.paneId);
+    });
     await runner.step('keyboard_row_entry_returns_focus_to_button', async () => {
       const selector = `[data-testid="queue-snooze-${alpha.sessionId}"]`;
       await client.request('dom_focus', { selector });

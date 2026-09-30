@@ -118,7 +118,7 @@ export function useAttentionQueue({
   const handleSnoozeActiveSession = useMemo(
     () =>
       queueModeEnabled && activeSessionQueueEligible
-        ? () => {
+        ? (origin: HTMLElement | null = document.activeElement instanceof HTMLElement ? document.activeElement : null) => {
             if (!activeSessionId) return;
             const session = enrichedLocalSessions.find((s) => s.id === activeSessionId);
             if (!session) return;
@@ -128,7 +128,7 @@ export function useAttentionQueue({
             setSnoozeMenu({
               session: { id: session.id, label: session.label },
               placement: { kind: 'center', pane },
-              origin: pane?.querySelector<HTMLElement>('.terminal-container, [role="textbox"]') ?? null,
+              origin,
               activeSessionId,
             });
           }

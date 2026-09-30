@@ -238,6 +238,7 @@ export function useAppController({
     setShortcutEditorOpen,
     actionMenuOpen,
     setActionMenuOpen,
+    actionMenuFocusOriginRef,
     delegationChainRef,
     sessionsOpen,
     setSessionsOpen,
@@ -405,12 +406,15 @@ export function useAppController({
         devicePixelRatio: window.devicePixelRatio,
       },
     };
+    actionMenuFocusOriginRef.current = document.activeElement instanceof HTMLElement
+      ? document.activeElement : null;
     delegationChainRef.current?.prepareCommand();
     setActionMenuOpen(true);
   }, [
     actionMenuOpen,
     actionMenuBlocked,
     actionMenuOriginRef,
+    actionMenuFocusOriginRef,
     setActionMenuOpen,
     delegationChainRef,
     activeSessionId,

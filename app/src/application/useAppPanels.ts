@@ -16,6 +16,7 @@ export function useAppPanels({ agentSurfaceCount }: Options) {
   const [shortcutsOpen, setShortcutsOpen] = useState(false);
   const [shortcutEditorOpen, setShortcutEditorOpen] = useState(false);
   const [actionMenuOpen, setActionMenuOpen] = useState(false);
+  const actionMenuFocusOriginRef = useRef<HTMLElement | null>(null);
   const delegationChainRef = useRef<DelegationChainHandle>(null);
   const [seedPopoverRequest, setSeedPopoverRequest] = useState<{
     sessionId: string;
@@ -94,6 +95,7 @@ export function useAppPanels({ agentSurfaceCount }: Options) {
     setShortcutEditorOpen,
     actionMenuOpen,
     setActionMenuOpen,
+    actionMenuFocusOriginRef,
     delegationChainRef,
     seedPopoverRequest,
     setSeedPopoverRequest,

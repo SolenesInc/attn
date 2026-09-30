@@ -39,6 +39,7 @@ export function useAppActionItems() {
     delegationChainRef,
     setSeedPopoverRequest,
     setUsagePopoverRequest,
+    actionMenuFocusOriginRef,
   } = useAppPanelsContext();
   const { settings } = useAppInputs();
   const {
@@ -348,7 +349,7 @@ export function useAppActionItems() {
         keywords: ['snooze', 'defer', 'later', 'queue', 'turn'],
         icon: <AttentionActionIcon />,
         shortcut: [shortcutTokens('session.snooze')],
-        run: handleSnoozeActiveSession,
+        run: () => handleSnoozeActiveSession(actionMenuFocusOriginRef.current),
       });
     }
     return items;
@@ -359,6 +360,7 @@ export function useAppActionItems() {
     activeSessionQueueEligible,
     activeSessionSnoozedUntil,
     handleSnoozeActiveSession,
+    actionMenuFocusOriginRef,
     sendWakeTurn,
   ]);
 
