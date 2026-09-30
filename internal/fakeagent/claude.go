@@ -217,6 +217,9 @@ func (c *claude) clear() error {
 	}
 	c.conversation, c.resumed = uuid.NewString(), false
 	c.transcript = c.transcriptPath()
+	if err := c.record("system", nil, map[string]any{"subtype": "local_command", "content": "Conversation cleared"}); err != nil {
+		return err
+	}
 	return c.hooks.run("SessionStart", "clear", c.hookInput("SessionStart", map[string]any{"source": "clear"}))
 }
 
