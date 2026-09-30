@@ -7,6 +7,7 @@ import (
 	"io"
 	"os"
 	"path/filepath"
+	"time"
 
 	"github.com/victorarias/attn/internal/config"
 	"github.com/victorarias/attn/internal/jobs"
@@ -117,6 +118,7 @@ func (d *Daemon) startJobQueueWithStore(queueStore jobs.Store) error {
 		d.registerCrewLifecycleCron(runner)
 		d.registerSessionPullRequestRefreshCron(runner)
 		d.registerWorktreeSweepCron(runner)
+		d.registerConversationKeepCron(runner)
 		if err := runner.RegisterCron(
 			automationScheduleKind,
 			automationScheduleInterval(),
@@ -135,6 +137,7 @@ func (d *Daemon) startJobQueueWithStore(queueStore jobs.Store) error {
 		return fmt.Errorf("start background jobs: %w", err)
 	}
 	d.setJobQueue(runner)
+	d.keepConversations(time.Now())
 	d.reconcileSnoozeWakeJobs()
 	d.resumeGardenReviews()
 	d.settleHarvestConditions()

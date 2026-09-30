@@ -133,3 +133,16 @@ func ClassifyWithDriver(d Driver, text, executable, workDir string, timeout time
 	state, err = cp.Classify(text, timeout)
 	return state, err, true
 }
+
+// ConversationKeeper is implemented by harnesses that prune their own conversations.
+type ConversationKeeper interface {
+	ConversationFiles(resumeID, transcriptPath string) []string
+}
+
+func ConversationFiles(d Driver, resumeID, transcriptPath string) ([]string, bool) {
+	keeper, ok := d.(ConversationKeeper)
+	if !ok {
+		return nil, false
+	}
+	return keeper.ConversationFiles(resumeID, transcriptPath), true
+}

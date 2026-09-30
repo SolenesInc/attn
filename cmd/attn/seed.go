@@ -923,6 +923,17 @@ func fprintArtifactReferences(w io.Writer, artifacts []protocol.SeedArtifactRefe
 func fprintSeedShow(w io.Writer, result *protocol.SeedShowResult) {
 	fprintHandoff(w, result.Handoff)
 	fprintSeed(w, result.Seed, result.Watching)
+	if continuation := result.Seed.Continuation; continuation != nil && continuation.KeptConversation != nil {
+		kept := continuation.KeptConversation
+		switch {
+		case protocol.Deref(kept.DeletedAt) != "":
+			fmt.Fprintf(w, "conversation  attn deleted its copy on %s\n", conversationDate(protocol.Deref(kept.DeletedAt)))
+		case protocol.Deref(kept.DeleteAfter) != "":
+			fmt.Fprintf(w, "conversation  kept by attn (%.1f MB) until %s; replant to keep it\n", float64(kept.Bytes)/1e6, conversationDate(protocol.Deref(kept.DeleteAfter)))
+		default:
+			fmt.Fprintf(w, "conversation  kept by attn (%.1f MB) while this seed is open\n", float64(kept.Bytes)/1e6)
+		}
+	}
 	fprintSeedWatchCoverage(w, result.WatchingVia)
 	if len(result.Relations) > 0 {
 		fmt.Fprintln(w)
@@ -1568,4 +1579,11 @@ func gardenSeedFromWire(seed protocol.Seed) garden.Seed {
 		out.Edges = append(out.Edges, garden.Edge{Kind: edge.Kind, To: edge.To})
 	}
 	return out
+}
+
+func conversationDate(stamp string) string {
+	if at, err := time.Parse(time.RFC3339Nano, stamp); err == nil {
+		return at.Format("2006-01-02")
+	}
+	return stamp
 }

@@ -663,3 +663,16 @@ func claudeProjectDir(cwd string) string {
 	escapedPath = strings.ReplaceAll(escapedPath, ".", "-")
 	return filepath.Join(homeDir, ".claude", "projects", escapedPath)
 }
+
+func (c *Claude) ConversationFiles(resumeID, transcriptPath string) []string {
+	home, err := toolhome.Dir()
+	if err != nil || transcriptPath == "" {
+		return nil
+	}
+	directories, err := filepath.Glob(filepath.Join(home, ".claude", "projects", "*", resumeID))
+	if err != nil {
+		return nil
+	}
+	files := append([]string{transcriptPath}, directories...)
+	return append(files, filepath.Join(home, ".claude", "file-history", resumeID))
+}

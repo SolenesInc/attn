@@ -332,8 +332,12 @@ func (d *Daemon) conversationResumable(agentName, resumeID string) (bool, string
 	if driver == nil {
 		return false, fmt.Sprintf("agent %q is not installed here, so its conversation cannot be resumed", agentName)
 	}
-	if !agentdriver.ResumeAvailable(driver, resumeID) {
-		return false, fmt.Sprintf("conversation %s is no longer in %s's storage", resumeID, agentName)
+	if !d.conversationKnown(driver, resumeID) {
+		reason := fmt.Sprintf("conversation %s is no longer in %s's storage", resumeID, agentName)
+		if kept, ok := d.store.KeptConversation(agentName, resumeID); ok && !kept.DeletedAt.IsZero() {
+			reason += fmt.Sprintf("; attn deleted its copy of conversation %s on %s, %d days after no open seed pointed at it", resumeID, kept.DeletedAt.UTC().Format("2006-01-02"), int(conversationKeepGrace().Hours()/24))
+		}
+		return false, reason
 	}
 	return true, ""
 }

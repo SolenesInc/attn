@@ -36,6 +36,7 @@ type seedContinuation struct {
 	LedgerAvailable   bool
 	SessionLive       bool
 	DirectoryState    string
+	KeptConversation  *protocol.KeptConversation
 	ResumeAvailable   bool
 	ResumeReason      string
 	HandoverPlacement string
@@ -460,6 +461,7 @@ func (d *Daemon) continuationForSeedForeground(seed garden.Seed) *seedContinuati
 	}
 	continuation := &seedContinuation{
 		Execution:         execution,
+		KeptConversation:  d.keptConversationForSession(execution.SessionID),
 		Source:            source,
 		LedgerAvailable:   d.store.SessionLedgerEntry(execution.SessionID) != nil,
 		DirectoryState:    inspectContinuationDirectory(execution),
@@ -543,6 +545,7 @@ func continuationToProtocol(continuation *seedContinuation) *protocol.SeedContin
 	execution := continuation.Execution
 	out := &protocol.SeedContinuation{
 		ExecutionID:       execution.SessionID,
+		KeptConversation:  continuation.KeptConversation,
 		Source:            continuation.Source,
 		SessionLive:       continuation.SessionLive,
 		Agent:             execution.Agent,

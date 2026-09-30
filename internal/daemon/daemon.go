@@ -358,6 +358,7 @@ type Daemon struct {
 	pendingSnapshots     map[string]func()
 	pendingSnapshotOrder []string
 
+	conversationKeepMu   sync.Mutex
 	jobQueueMu           sync.RWMutex
 	jobQueue             *jobs.Runner
 	taskFailureRenderers map[string]taskFailureRenderer
@@ -1057,7 +1058,7 @@ func (d *Daemon) sessionConversationSurvives(session *protocol.Session, intent s
 	}
 	driver := agentdriver.Get(string(session.Agent))
 	resumeID := agentdriver.ResolveSpawnResumeSessionID(driver, session.ID, "", d.store.GetResumeSessionID(session.ID))
-	if agentdriver.ResumeAvailable(driver, resumeID) {
+	if d.conversationKnown(driver, resumeID) {
 		return true
 	}
 	return d.store.GetAgentDriverRun(session.ID).RunID != "" ||
@@ -2026,6 +2027,7 @@ func (d *Daemon) recordSessionClose(sessionID string, commit func() (bool, error
 	}
 	d.forgetSessionTrace(sessionID)
 	if recorded {
+		d.keepConversations(time.Now())
 		d.invalidateGardenSeedParties("session close")
 		entry := d.store.SessionLedgerEntry(sessionID)
 		d.publishFact(FactSessionClosed, sessionID, entry)

@@ -334,7 +334,7 @@ func (d *Daemon) automationResumeSessionID(req automation.WorkRequest) (string, 
 		return "", errors.New("reviewer continuity cannot resume the stopped session without a recorded transcript")
 	}
 	driver := agentdriver.Get(req.Launch.Agent)
-	if !agentdriver.ResumeAvailable(driver, resumeID) {
+	if !d.conversationReady(driver, resumeID) {
 		return "", errors.New("reviewer continuity transcript is unavailable; refusing an unattended fresh session")
 	}
 	return resumeID, nil

@@ -96,7 +96,7 @@ func TestAResumeThatCannotReachItsConversationIsRefusedAndCreatesNothing(t *test
 		t.Fatal(err)
 	}
 
-	forgotten := seedResumeDelegate(t, w, fakeagent.Claude, "forgotten")
+	forgotten := seedResumeDelegate(t, w, fakeagent.Codex, "forgotten")
 	conversation := w.Launched(forgotten.SessionID).ConversationID
 	closePane(app, seedResumePane(t, w, protocol.Deref(forgotten.WorkspaceID), forgotten.SessionID))
 	sessionRecoveryDeleteTranscript(t, conversation)

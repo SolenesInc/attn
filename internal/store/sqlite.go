@@ -1197,6 +1197,14 @@ CREATE INDEX IF NOT EXISTS idx_automode_denials_recent ON automode_denials(id DE
 	{156, "drop session todos", ""},
 	{157, "retire the apps platform state", ""},
 	{158, "file GPT-6.1 Sol long-context observations under their tier", ""},
+	{159, "keep conversations referenced by open work", `
+ CREATE TABLE IF NOT EXISTS kept_conversations (
+ resume_id TEXT NOT NULL, agent TEXT NOT NULL,
+ source_path TEXT NOT NULL, bytes INTEGER NOT NULL, stored_bytes INTEGER NOT NULL,
+ copied_at TEXT NOT NULL, released_at TEXT NOT NULL DEFAULT '', deleted_at TEXT NOT NULL DEFAULT '',
+ PRIMARY KEY (agent, resume_id)
+ );
+ `},
 }
 
 const migration99SQL = `
