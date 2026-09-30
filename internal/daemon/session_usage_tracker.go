@@ -6,7 +6,6 @@ import (
 	"strings"
 
 	agentdriver "github.com/victorarias/attn/internal/agent"
-	"github.com/victorarias/attn/internal/protocol"
 	"github.com/victorarias/attn/internal/sessioncost"
 	"github.com/victorarias/attn/internal/store"
 	"github.com/victorarias/attn/internal/transcript"
@@ -93,10 +92,6 @@ func (t *sessionUsageTracker) Reconcile() {
 		}
 	}
 
-	if t.agent == string(protocol.SessionAgentCodex) && state.UsageRevision < codexUsageRevision {
-		t.reviseRecordedUsage(sources)
-	}
-
 	discovered := make(map[string]struct{}, len(sources))
 	for _, source := range sources {
 		discovered[source.ID] = struct{}{}
@@ -176,34 +171,6 @@ func (t *sessionUsageTracker) readIfMoved(tracked *trackedUsageSource) {
 	if err != nil {
 		t.daemon.logf("transcript watcher: usage source persist failed session=%s path=%s err=%v", t.sessionID, tracked.source.Path, err)
 		t.markIncomplete()
-		return
-	}
-	if changed {
-		t.daemon.publishFact(FactSessionCostChanged, t.sessionID, nil)
-	}
-}
-
-// codexUsageRevision 1 split cache writes out of Codex input tokens.
-const codexUsageRevision = 1
-
-func (t *sessionUsageTracker) reviseRecordedUsage(sources []transcript.UsageSource) {
-	var observations []store.SessionCostObservation
-	for _, source := range sources {
-		follower, err := transcript.NewFollower(source.Path, t.agent, 0)
-		if err != nil {
-			t.daemon.logf("transcript watcher: usage revision failed session=%s path=%s err=%v", t.sessionID, source.Path, err)
-			return
-		}
-		batch, err := follower.Read()
-		if err != nil {
-			t.daemon.logf("transcript watcher: usage revision failed session=%s path=%s err=%v", t.sessionID, source.Path, err)
-			return
-		}
-		observations = append(observations, usageObservations(source, batch.Usage)...)
-	}
-	changed, err := t.daemon.store.ReviseSessionCostObservations(t.sessionID, codexUsageRevision, observations)
-	if err != nil {
-		t.daemon.logf("transcript watcher: usage revision persist failed session=%s err=%v", t.sessionID, err)
 		return
 	}
 	if changed {

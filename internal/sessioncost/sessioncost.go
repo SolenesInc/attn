@@ -292,7 +292,11 @@ func summarizeRow(key LedgerKey, tiers tieredUsage, settings map[string]string) 
 	}
 	row := ModelSummary{Model: key.Model, Purpose: key.Purpose, Usage: usage, TotalTokens: total}
 	card, cardKnown, invalidOverride := rateCardForModel(key.Model, settings)
-	fastMultiplier, fastKnown := openAIFastRateMultipliers[key.Model]
+	priced := key.Model
+	if target := billedAs(key.Model, settings); target != "" {
+		priced = target
+	}
+	fastMultiplier, fastKnown := openAIFastRateMultipliers[priced]
 	fastCard := fastRates(card, fastMultiplier)
 	for _, tier := range []struct {
 		usage Usage
@@ -301,9 +305,9 @@ func summarizeRow(key LedgerKey, tiers tieredUsage, settings map[string]string) 
 		fast  bool
 	}{
 		{tiers.standard, card, cardKnown, false},
-		{tiers.longContext, longContextCard(key.Model, card, settings), cardKnown, false},
+		{tiers.longContext, longContextCard(priced, card), cardKnown, false},
 		{tiers.fast, fastCard, cardKnown && fastKnown, true},
-		{tiers.fastLongContext, longContextRates(fastCard), cardKnown && fastKnown && key.Model != "gpt-5.5", true},
+		{tiers.fastLongContext, longContextRates(fastCard), cardKnown && fastKnown && priced != "gpt-5.5", true},
 	} {
 		if !tier.usage.hasAnyValue() {
 			continue
@@ -382,10 +386,7 @@ func rateCardForModel(model string, settings map[string]string) (RateCard, bool,
 	return card, ok, false
 }
 
-func longContextCard(model string, card RateCard, settings map[string]string) RateCard {
-	if target := billedAs(model, settings); target != "" {
-		model = target
-	}
+func longContextCard(model string, card RateCard) RateCard {
 	if !openAILongContextModels[model] {
 		return card
 	}

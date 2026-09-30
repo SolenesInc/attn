@@ -36,7 +36,6 @@ type SessionCostState struct {
 	Ledger                sessioncost.Ledger                `json:"ledger,omitempty"`
 	Observations          map[string]SessionCostObservation `json:"observations,omitempty"`
 	Finalized             []string                          `json:"finalized,omitempty"`
-	UsageRevision         int                               `json:"usage_revision,omitempty"`
 }
 
 type SessionCostSourceState struct {
@@ -46,7 +45,7 @@ type SessionCostSourceState struct {
 func cloneSessionCostState(state SessionCostState) SessionCostState {
 	clone := SessionCostState{
 		Initialized: state.Initialized, Cursor: state.Cursor, UsageUnavailable: state.UsageUnavailable,
-		MeasurementIncomplete: state.MeasurementIncomplete, UsageRevision: state.UsageRevision,
+		MeasurementIncomplete: state.MeasurementIncomplete,
 	}
 	if state.Sources != nil {
 		clone.Sources = make(map[string]SessionCostSourceState, len(state.Sources))
@@ -283,22 +282,6 @@ func (s *Store) ApplySessionCostSourceObservations(sessionID, sourceID, cursor s
 		durable := setSessionCostSourceCursor(state, sourceID, cursor)
 		changed = applySessionCostObservations(sessionID, state, observations)
 		return durable
-	})
-	return changed, err
-}
-
-// ReviseSessionCostObservations re-prices only observations already recorded, then marks the revision.
-func (s *Store) ReviseSessionCostObservations(sessionID string, revision int, observations []SessionCostObservation) (bool, error) {
-	changed := false
-	err := s.updateSessionCost(sessionID, func(state *SessionCostState) {
-		recorded := observations[:0:0]
-		for _, observation := range observations {
-			if _, exists := state.Observations[strings.TrimSpace(observation.ObservationID)]; exists {
-				recorded = append(recorded, observation)
-			}
-		}
-		changed = applySessionCostObservations(sessionID, state, recorded)
-		state.UsageRevision = revision
 	})
 	return changed, err
 }

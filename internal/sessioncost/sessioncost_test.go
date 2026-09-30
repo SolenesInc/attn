@@ -353,6 +353,12 @@ func TestCodexAutoReviewIsBilledAsAnotherModel(t *testing.T) {
 		}
 	}
 
+	fast := GuardianKey("codex-auto-review")
+	fast.FastMode = true
+	if usd, known, _ := Price(Ledger{fast: {InputTokens: 1_000_000}}, nil); !known || math.Abs(usd-0.2) > 1e-9 {
+		t.Errorf("fast request billed as gpt-6-luna = %v, %v; want 0.2", usd, known)
+	}
+
 	for key, value := range map[string]string{
 		SessionCostBilledAsPrefix + "codex-auto-review": "not-a-model",
 		SessionCostBilledAsPrefix + "gpt-6-sol":         "gpt-6-luna",
@@ -572,7 +578,7 @@ func TestFastModeRatesAndContextTiers(t *testing.T) {
 			}
 		})
 	}
-	for _, model := range []string{"gpt-reserve", "codex-auto-review", "claude-opus-5", "gpt-5.5"} {
+	for _, model := range []string{"gpt-reserve", "claude-opus-5", "gpt-5.5"} {
 		usage := Usage{InputTokens: 300_000}
 		key := RequestLedgerKey(model, PurposeAgent, usage)
 		key.FastMode = true
