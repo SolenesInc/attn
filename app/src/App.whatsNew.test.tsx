@@ -1,6 +1,6 @@
 import { fireEvent, screen, within } from '@testing-library/react';
 import { describe, expect, it, onTestFinished } from 'vitest';
-import { WHATS_NEW_ID, WHATS_NEW_STORAGE_KEY } from './hooks/useWhatsNew';
+import { WHATS_NEW_BANNER_STORAGE_KEY, WHATS_NEW_ID, WHATS_NEW_STORAGE_KEY } from './hooks/useWhatsNew';
 import { openAttachedTerminals } from './test/appFixtures';
 import { daemonSession, soloDesktop } from './test/daemonFixtures';
 import { stubNavigatorPlatform } from './test/platformStub';
@@ -8,6 +8,7 @@ import { gesture, pressShortcut, renderApp, restartApp } from './test/renderApp'
 import type { ScriptedDaemon } from './test/scriptedDaemon';
 
 const whatsNew = () => screen.queryByRole('dialog', { name: "What's new" });
+const introBanner = () => screen.queryByTestId('intro-banner');
 const stepTitle = () => within(whatsNew()!).getByRole('heading', { level: 2 }).textContent;
 const stepKeys = () =>
   Array.from(whatsNew()!.querySelectorAll('.whats-new-keys li'), (row) => [
@@ -144,5 +145,31 @@ describe('App what’s new', () => {
 
     expect(stepTitle()).toBe('Profiles keep your worlds apart');
     expect(daemon.sentOf('pty_input').slice(before)).toEqual([]);
+  });
+
+  it('offers a replay banner on Home for a new release, which replays from the first step', async () => {
+    localStorage.removeItem(WHATS_NEW_BANNER_STORAGE_KEY);
+    const { daemon } = await renderApp();
+    expect(whatsNew()).toBeNull();
+
+    await gesture(daemon, () => fireEvent.click(within(introBanner()!).getByRole('button', { name: 'Replay the intro' })));
+
+    expect(stepTitle()).toBe('Profiles keep your worlds apart');
+  });
+
+  it('keeps a dismissed banner away across launches, leaving the command palette as the way back', async () => {
+    localStorage.removeItem(WHATS_NEW_BANNER_STORAGE_KEY);
+    const first = await renderApp();
+
+    await gesture(first.daemon, () => fireEvent.click(screen.getByRole('button', { name: 'Dismiss the intro banner' })));
+    expect(introBanner()).toBeNull();
+
+    const { daemon } = await restartApp(first);
+    expect(introBanner()).toBeNull();
+    await gesture(daemon, () => pressShortcut('ui.commandPalette'));
+    const search = within(screen.getByRole('dialog')).getByRole('combobox');
+    fireEvent.change(search, { target: { value: ">What's new" } });
+    await gesture(daemon, () => fireEvent.keyDown(search, { key: 'Enter' }));
+    expect(stepTitle()).toBe('Profiles keep your worlds apart');
   });
 });
