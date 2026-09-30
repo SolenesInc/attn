@@ -112,6 +112,7 @@ async function main() {
         const agent = { sessionId, paneId: pane.paneId };
         agents.push(agent);
         if (label === 'alpha') await submitPrompt(client, sessionId, pane.paneId, 'READY');
+        else await client.request('select_session', { sessionId });
         await waitForPaneText(client, sessionId, pane.paneId, (text) => text.includes('Ready for keyboard snooze'), 'ready reply');
         await observer.waitFor(() => observer.getSession(sessionId)?.state === 'waiting_input', `${label} stopped`);
       }
@@ -152,6 +153,28 @@ async function main() {
       runner.assert((await client.request('read_pane_text', alpha)).text === before.text, 'picker keys do not change terminal text');
       await driver.typeText('CANCEL_FOCUS');
       await waitForPaneText(client, alpha.sessionId, alpha.paneId, (text) => text.includes('CANCEL_FOCUS'), 'typing after cancel');
+    });
+    await runner.step('grid_cancel_preserves_zoom_and_typing_focus', async () => {
+      await pressShortcutKeys(client, driver, 'view.toggleGrid');
+      await waitDom('.grid-view-stage', { focused: true });
+      const workspace = await client.request('get_workspace', { sessionId: alpha.sessionId });
+      const runtimeId = workspace.panes.find((pane) => pane.paneId === alpha.paneId).runtimeId;
+      await client.request('grid_zoom', { runtimeId });
+      await openPicker();
+      const { bounds: stage } = await client.request('dom_bounds', { selector: '.grid-view-stage' });
+      const { bounds: menu } = await client.request('dom_bounds', { selector: '[data-testid="snooze-menu"]' });
+      runner.assert(Math.abs(menu.x + menu.width / 2 - stage.x - stage.width / 2) <= 1, 'grid picker centered in the zoomed stage');
+      runner.assert(Math.abs(menu.y + menu.height / 2 - stage.y - stage.height / 2) <= 1, 'grid picker centered vertically in the zoomed stage');
+      await driver.pressKey('Escape');
+      await waitDom('[data-testid="snooze-menu"]', { absent: true });
+      await waitDom('.grid-view-stage', { focused: true });
+      runner.assert((await client.request('grid_get_state')).zoomedId === runtimeId, 'cancel leaves grid zoom unchanged');
+      await driver.typeText('GRID_CANCEL_FOCUS');
+      await driver.pressKey('Escape');
+      runner.assert((await client.request('grid_get_state')).zoomedId === null, 'Escape still exits grid zoom once picker is closed');
+      await pressShortcutKeys(client, driver, 'view.toggleGrid');
+      await waitForPaneInputFocus(client, alpha.sessionId, alpha.paneId);
+      await waitForPaneText(client, alpha.sessionId, alpha.paneId, (text) => text.includes('GRID_CANCEL_FOCUS'), 'typing after grid cancel');
     });
     await runner.step('delegation_hover_cannot_take_picker_focus', async () => {
       await hover(`[data-testid="queue-select-${beta.sessionId}"]`);

@@ -1,6 +1,6 @@
 import { GridView } from '../components/grid/GridView';
 import { useDaemonApi } from '../contexts/DaemonApiContext';
-import { useAppAppearanceContext, useAppGridContext, useNavigationContext } from './AppContexts';
+import { useAppAppearanceContext, useAppGridContext, useAppShell, useAttentionQueueContext, useNavigationContext } from './AppContexts';
 
 export function AppGrid() {
   const { view } = useNavigationContext();
@@ -13,6 +13,8 @@ export function AppGrid() {
     handleRestoreToGrid,
   } = useAppGridContext();
   const { resolvedTheme } = useAppAppearanceContext();
+  const { blockingOverlayOpen } = useAppShell();
+  const { snoozeMenu } = useAttentionQueueContext();
   const { getScreenSnapshot } = useDaemonApi();
   return (
     <>
@@ -27,6 +29,7 @@ export function AppGrid() {
             onRestoreTile={handleRestoreToGrid}
             resolvedTheme={resolvedTheme}
             getScreenSnapshot={getScreenSnapshot}
+            escapeEnabled={!blockingOverlayOpen && !snoozeMenu}
           />
         </div>
       )}

@@ -122,9 +122,11 @@ export function useAttentionQueue({
             if (!activeSessionId) return;
             const session = enrichedLocalSessions.find((s) => s.id === activeSessionId);
             if (!session) return;
-            const pane = document.querySelector<HTMLElement>(
+            const agentPane = document.querySelector<HTMLElement>(
               `.terminal-wrapper.active [data-pane-session-id="${activeSessionId}"]`,
             );
+            const pane = agentPane?.getClientRects().length ? agentPane
+              : document.querySelector<HTMLElement>('.grid-view-stage');
             setSnoozeMenu({
               session: { id: session.id, label: session.label },
               placement: { kind: 'center', pane },
