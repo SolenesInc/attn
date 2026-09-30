@@ -332,7 +332,7 @@ function WaitingCard({ leadRef, leadCount }: { leadRef: RefObject<HTMLDivElement
         onClick={onToggleAgentList}
       >
         <span className={`queue-agents-chevron ${agentListOpen ? 'is-open' : ''}`}>▸</span>
-        {more === 0 ? 'No more agents' : `${more} more agents`}
+        {more === 0 ? 'No more agents' : `${more} more agent${more === 1 ? '' : 's'}`}
         <span className="queue-rule-line" aria-hidden="true" />
         <kbd>{formatShortcut('sidebar.agentList')}</kbd>
       </button>
