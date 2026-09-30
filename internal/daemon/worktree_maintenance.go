@@ -64,10 +64,23 @@ func (c *worktreeMaintenanceCoordinator) TryAutomaticRemoval(
 	run func(automaticWorktreeCleanupProtection) error,
 ) error {
 	c.preemptSweep()
-	return c.TryBackgroundRemoval(ctx, run)
+	return c.tryRemoval(ctx, run)
 }
 
 func (c *worktreeMaintenanceCoordinator) TryBackgroundRemoval(
+	ctx context.Context,
+	run func(automaticWorktreeCleanupProtection) error,
+) error {
+	// Hold mu through removal so a sweep cannot start after the active-lease check.
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	if c.sweepCancel != nil {
+		return errAutomaticWorktreeCleanupPreempted
+	}
+	return c.tryRemoval(ctx, run)
+}
+
+func (c *worktreeMaintenanceCoordinator) tryRemoval(
 	ctx context.Context,
 	run func(automaticWorktreeCleanupProtection) error,
 ) error {

@@ -451,3 +451,38 @@ func TestKeptConversationRefusesSymlinkedProviderDirectories(t *testing.T) {
 		})
 	}
 }
+
+func TestConversationRetirementWaitsForAnActiveWorktreeSweep(t *testing.T) {
+	t.Setenv("ATTN_CONVERSATION_KEEP_GRACE_DAYS", "0")
+	t.Setenv("ATTN_WORKTREE_SWEEP_IDLE_DAYS", "0")
+	pulls := newMergedPullRequests(t)
+	w := newWorld(t, fakeagent.Claude)
+	app, cli := w.App(), w.Client()
+	delegated := seedResumeDelegate(t, w, fakeagent.Claude, "api")
+	first := w.Launched(delegated.SessionID)
+	first.Prompted()
+	closePane(app, seedResumePane(t, w, protocol.Deref(delegated.WorkspaceID), delegated.SessionID))
+	testworld.AwaitTaskDone(app, "conversation_keep")
+	lifeMove(t, cli, "", delegated.SeedID, "wither", "finished", "")
+	testworld.AwaitTaskDone(app, "conversation_keep")
+	if kept := lifeShow(t, cli, delegated.SeedID).Seed.Continuation.KeptConversation; kept == nil || kept.DeleteAfter == nil {
+		t.Fatalf("released copy: %+v", kept)
+	}
+
+	shop := sweepRepoOnGitHub(t)
+	path := createWorktree(t, app, shop, "feat-reclaim")
+	runGit(t, shop, "update-ref", "refs/remotes/origin/main", "main")
+	refreshWorktrees(t, cli)
+	answer := pulls.awaitSweepAsking(t)
+	if _, err := cli.SeedNote("", delegated.SeedID, "Record the completed work", "", "", false, nil); err != nil {
+		t.Fatal(err)
+	}
+	testworld.AwaitTaskDone(app, "conversation_keep")
+	if kept := lifeShow(t, cli, delegated.SeedID).Seed.Continuation.KeptConversation; kept == nil || kept.DeletedAt != nil {
+		t.Errorf("retired copy while the worktree sweep was active: %+v", kept)
+	}
+	close(answer)
+	if swept := sweepAwaitSwept(app, path); swept.Action != "removed" {
+		t.Errorf("sweep action = %s; want removed", swept.Action)
+	}
+}
