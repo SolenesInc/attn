@@ -188,6 +188,9 @@ returns `testworld.Main(m)`.
   ends it. A `Start` after `Stop` restarts over the same data.
   The stack holds its WebSocket listener until cleanup, including while the
   daemon is stopped, so another process cannot take its address.
+- The historical PTY upgrade test uses port `0`: older binaries cannot inherit
+  that listener. After the daemon's bind-ready log, `lsof` discovers the captured
+  PID's assigned port without releasing a reservation or retrying startup.
 - For a promise about a crash mid-operation, `s.StartCrashingAt(point)` runs
   a daemon that kills itself with SIGKILL at a crash point named in the
   daemon (`ATTN_CRASH_AT`). `s.AwaitCrash()` returns once it has, and a later

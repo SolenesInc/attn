@@ -3,6 +3,10 @@ set -euo pipefail
 
 root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$root"
+if ! command -v lsof >/dev/null; then
+  echo 'PTY upgrade test requires lsof to discover historical daemon listeners (install lsof).' >&2
+  exit 1
+fi
 # Last daemon revision before the Rust host: never build both sides from HEAD.
 legacy_revision=f68ab3f02f329f46d3b9b3d1e7603f545c27dd50
 test_root="$(mktemp -d "${TMPDIR:-/tmp}/attn-pty-upgrade.XXXXXX")"

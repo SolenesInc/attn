@@ -254,12 +254,6 @@ type upgradeDaemon struct {
 
 func startUpgradeDaemon(t *testing.T, root, binary, host string) *upgradeDaemon {
 	t.Helper()
-	listener, err := net.Listen("tcp", "127.0.0.1:0")
-	if err != nil {
-		t.Fatal(err)
-	}
-	port := listener.Addr().(*net.TCPAddr).Port
-	_ = listener.Close()
 	var offset int64
 	if info, err := os.Stat(filepath.Join(root, "daemon.log")); err == nil {
 		offset = info.Size()
@@ -272,7 +266,7 @@ func startUpgradeDaemon(t *testing.T, root, binary, host string) *upgradeDaemon 
 			cmd.Env = append(cmd.Env, env)
 		}
 	}
-	cmd.Env = append(cmd.Env, "ATTN_DATA_DIR="+root, "ATTN_WS_PORT="+strconv.Itoa(port), "ATTN_HEADLESS_TASKS=0", "ATTN_WRAPPER_PATH="+binary, "SHELL=/bin/sh", "DEBUG=debug")
+	cmd.Env = append(cmd.Env, "ATTN_DATA_DIR="+root, "ATTN_WS_PORT=0", "ATTN_HEADLESS_TASKS=0", "ATTN_WRAPPER_PATH="+binary, "SHELL=/bin/sh", "DEBUG=debug")
 	cmd.Env = append(cmd.Env, "PATH="+filepath.Join(root, "bin")+string(os.PathListSeparator)+os.Getenv("PATH"))
 	cmd.Env = append(cmd.Env, "ATTN_TOOL_HOME="+filepath.Join(root, "tools"))
 	if host != "" {
@@ -283,10 +277,36 @@ func startUpgradeDaemon(t *testing.T, root, binary, host string) *upgradeDaemon 
 	if err := cmd.Start(); err != nil {
 		t.Fatal(err)
 	}
-	d := &upgradeDaemon{t: t, root: root, port: port, logOffset: offset, cmd: cmd, done: make(chan error, 1)}
+	d := &upgradeDaemon{t: t, root: root, logOffset: offset, cmd: cmd, done: make(chan error, 1)}
 	go func() { d.done <- cmd.Wait() }()
 	t.Cleanup(d.stop)
 	d.waitForLog("WebSocket server starting", &stderr)
+	// Historical daemons cannot inherit a listener or report the assigned port.
+	// The readiness log follows bind, so inspect the captured PID once.
+	inspect := exec.Command("lsof", "-nP", "-a", "-p", strconv.Itoa(cmd.Process.Pid), "-iTCP", "-sTCP:LISTEN", "-Fn")
+	var inspectStderr bytes.Buffer
+	inspect.Stderr = &inspectStderr
+	output, err := inspect.Output()
+	if err != nil {
+		t.Fatalf("discover daemon %d listener: %v\n%s\n%s", cmd.Process.Pid, err, output, &inspectStderr)
+	}
+	var addresses []string
+	for line := range strings.SplitSeq(string(output), "\n") {
+		if address, ok := strings.CutPrefix(line, "n"); ok {
+			addresses = append(addresses, address)
+		}
+	}
+	if len(addresses) != 1 {
+		t.Fatalf("daemon %d has %d TCP listeners, want one: %s", cmd.Process.Pid, len(addresses), output)
+	}
+	_, port, err := net.SplitHostPort(addresses[0])
+	if err != nil {
+		t.Fatalf("daemon %d listener %q: %v", cmd.Process.Pid, addresses[0], err)
+	}
+	d.port, err = strconv.Atoi(port)
+	if err != nil || d.port == 0 {
+		t.Fatalf("daemon %d listener has invalid port %q: %v", cmd.Process.Pid, port, err)
+	}
 	d.connect()
 	t.Logf("daemon binary=%s pid=%d ready instance=%s", binary, cmd.Process.Pid, d.instanceID)
 	return d
