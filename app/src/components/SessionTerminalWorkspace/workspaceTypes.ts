@@ -91,6 +91,7 @@ export interface SessionTerminalWorkspaceProps {
   resolvedTheme?: ResolvedTheme;
   focusRequestToken?: number;
   enabled: boolean;
+  shortcutsEnabled?: boolean;
   isActiveSession: boolean;
   isSessionViewVisible?: boolean;
   terminalsLive?: boolean;

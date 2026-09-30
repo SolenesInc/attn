@@ -1,7 +1,7 @@
 // The client computes snooze instants: "tomorrow" needs the user's timezone, which a
 // remote daemon does not share. The wire carries an absolute instant.
 
-export type SnoozeChoiceId = '30m' | '1h' | '8h' | 'tomorrow' | 'saturday' | 'monday';
+export type SnoozeChoiceId = '30m' | '1h' | '2h' | '4h' | '8h' | 'tomorrow' | 'saturday' | 'monday';
 
 export interface SnoozeChoice {
   id: SnoozeChoiceId;
@@ -52,6 +52,10 @@ export function snoozeInstant(choice: SnoozeChoiceId, now: Date): Date {
       return new Date(now.getTime() + 30 * MINUTE);
     case '1h':
       return new Date(now.getTime() + HOUR);
+    case '2h':
+      return new Date(now.getTime() + 2 * HOUR);
+    case '4h':
+      return new Date(now.getTime() + 4 * HOUR);
     case '8h':
       return new Date(now.getTime() + 8 * HOUR);
     case 'tomorrow':
@@ -80,6 +84,8 @@ export function formatWakeTime(until: string | undefined, now: number): string {
 export const SNOOZE_CHOICES: SnoozeChoice[] = [
   { id: '30m', label: 'For 30 minutes', detail: (now) => clockTime(snoozeInstant('30m', now)) },
   { id: '1h', label: 'For an hour', detail: (now) => clockTime(snoozeInstant('1h', now)) },
+  { id: '2h', label: 'For 2 hours', detail: (now) => clockTime(snoozeInstant('2h', now)) },
+  { id: '4h', label: 'For 4 hours', detail: (now) => clockTime(snoozeInstant('4h', now)) },
   { id: '8h', label: 'For 8 hours', detail: (now) => clockTime(snoozeInstant('8h', now)) },
   { id: 'tomorrow', label: 'Until tomorrow', detail: (now) => dayAndTime(snoozeInstant('tomorrow', now)) },
   { id: 'saturday', label: 'Until Saturday', detail: (now) => dayAndTime(snoozeInstant('saturday', now)) },

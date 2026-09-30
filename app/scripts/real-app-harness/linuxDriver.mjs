@@ -13,7 +13,11 @@ const execFileAsync = promisify(execFile);
 
 const LINUX_KEY_CODES = new Map([
   [36, 'Return'],
+  [48, 'Tab'],
+  [49, 'space'],
   [53, 'Escape'],
+  [115, 'Home'],
+  [119, 'End'],
   [123, 'Left'],
   [124, 'Right'],
 ]);

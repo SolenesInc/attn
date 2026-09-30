@@ -25,6 +25,7 @@ export function WorkspaceAgentBody({ agentPane, paneSession, paneTitle }: Worksp
     runtime,
     terminalRefForPane,
     sessionVisible,
+    shortcutsEnabled,
     handleGhosttyTerminalReady,
   } = useWorkspaceContext();
   const notice = paneNotice(agentPane, paneSession, paneTitle);
@@ -54,7 +55,7 @@ export function WorkspaceAgentBody({ agentPane, paneSession, paneTitle }: Worksp
           sessionId={agentPane.sessionId}
           annotationApi={annotationApi}
           // At most one pane owns ⌘Enter for the annotation send shortcut.
-          paneActive={isActiveSession && sessionVisible && activeLeafId === agentPane.id}
+          paneActive={isActiveSession && sessionVisible && shortcutsEnabled && activeLeafId === agentPane.id}
           fontSize={fontSize}
           resolvedTheme={resolvedTheme}
           cwd={paneSession?.cwd}

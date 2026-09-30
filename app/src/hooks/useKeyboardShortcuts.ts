@@ -38,6 +38,7 @@ interface KeyboardShortcutsConfig {
   onOpenSessions?: () => void;
   onQuit?: () => void;
   enabled: boolean;
+  blocked?: boolean;
 }
 
 export function useKeyboardShortcuts({
@@ -73,9 +74,11 @@ export function useKeyboardShortcuts({
   gardenShortcutEnabled,
   onOpenSessions,
   onQuit,
-  enabled,
+  enabled: navigationEnabled,
+  blocked = false,
 }: KeyboardShortcutsConfig) {
-  useShortcut('app.quit', onQuit ?? (() => {}), !!onQuit);
+  const enabled = navigationEnabled && !blocked;
+  useShortcut('app.quit', onQuit ?? (() => {}), !blocked && !!onQuit);
 
   useShortcut('session.new', onNewSession, enabled);
   useShortcut('session.newHorizontal', onNewSessionHorizontal ?? (() => {}), enabled && !!onNewSessionHorizontal);
@@ -107,24 +110,24 @@ export function useKeyboardShortcuts({
   useShortcut('workspace.select9', () => onSelectWorkspaceByIndex(8), enabled);
   useShortcut('dock.attention', onToggleAttentionPanel ?? (() => {}), enabled && !!onToggleAttentionPanel);
 
-  useShortcut('ui.actionMenu', onToggleActionMenu, true);
+  useShortcut('ui.actionMenu', onToggleActionMenu, !blocked);
 
-  useShortcut('ui.openSettings', onOpenSettings ?? (() => {}), !!onOpenSettings);
+  useShortcut('ui.openSettings', onOpenSettings ?? (() => {}), !blocked && !!onOpenSettings);
 
-  useShortcut('ui.showShortcuts', onShowShortcuts ?? (() => {}), !!onShowShortcuts);
+  useShortcut('ui.showShortcuts', onShowShortcuts ?? (() => {}), !blocked && !!onShowShortcuts);
 
-  useShortcut('ui.increaseFontSize', onIncreaseFontSize ?? (() => {}), !!onIncreaseFontSize);
-  useShortcut('ui.decreaseFontSize', onDecreaseFontSize ?? (() => {}), !!onDecreaseFontSize);
-  useShortcut('ui.resetFontSize', onResetFontSize ?? (() => {}), !!onResetFontSize);
+  useShortcut('ui.increaseFontSize', onIncreaseFontSize ?? (() => {}), !blocked && !!onIncreaseFontSize);
+  useShortcut('ui.decreaseFontSize', onDecreaseFontSize ?? (() => {}), !blocked && !!onDecreaseFontSize);
+  useShortcut('ui.resetFontSize', onResetFontSize ?? (() => {}), !blocked && !!onResetFontSize);
 
   useShortcut('file.open', onOpenFile ?? (() => {}), enabled && !!onOpenFile);
 
   useShortcut('notebook.openTile', onOpenNotebookTile ?? (() => {}), enabled && !!onOpenNotebookTile);
   useShortcut('notebook.openFullscreen', onOpenNotebookFullscreen ?? (() => {}), enabled && !!onOpenNotebookFullscreen);
 
-  useShortcut('board.open', onOpenGarden ?? (() => {}), (gardenShortcutEnabled ?? enabled) && !!onOpenGarden);
+  useShortcut('board.open', onOpenGarden ?? (() => {}), !blocked && (gardenShortcutEnabled ?? enabled) && !!onOpenGarden);
 
-  useShortcut('sessions.open', onOpenSessions ?? (() => {}), !!onOpenSessions);
+  useShortcut('sessions.open', onOpenSessions ?? (() => {}), !blocked && !!onOpenSessions);
 
   useEffect(() => {
     const preventWindowCloseShortcut = (e: KeyboardEvent) => {

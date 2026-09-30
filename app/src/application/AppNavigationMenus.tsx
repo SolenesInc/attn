@@ -19,7 +19,7 @@ export function AppNavigationMenus() {
   } = useWorkspaceTilesContext();
   const { sendBrowseDirectory, sendOpenMarkdown, sendSnoozeTurn } = useDaemonApi();
   const { focusWorkspaceLeaf } = useWorkspaceRuntimeContext();
-  const { snoozeMenu, setSnoozeMenu } = useAttentionQueueContext();
+  const { snoozeMenu, setSnoozeMenu, restoreSnoozeFocus } = useAttentionQueueContext();
   return (
     <>
       {markdownOpenerOpen && (
@@ -58,9 +58,10 @@ export function AppNavigationMenus() {
       {snoozeMenu && (
         <SnoozeMenu
           sessionLabel={snoozeMenu.session.label}
-          anchor={snoozeMenu.anchor}
+          placement={snoozeMenu.placement}
           onSnooze={(until) => sendSnoozeTurn(snoozeMenu.session.id, until)}
           onClose={() => setSnoozeMenu(null)}
+          onRestoreFocus={restoreSnoozeFocus}
         />
       )}
       <AppActionMenu />

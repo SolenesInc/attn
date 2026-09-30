@@ -1,5 +1,7 @@
 import type { MouseEvent as ReactMouseEvent } from 'react';
-import { useCallback, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
+import type { SnoozePlacement } from '../components/SnoozeMenu';
+import { useSessionStore } from '../store/sessions';
 import { useDaemonApi } from '../contexts/DaemonApiContext';
 import { isAttentionSessionState, type UISessionState } from '../types/sessionState';
 import {
@@ -95,36 +97,70 @@ export function useAttentionQueue({
 
   const [snoozeMenu, setSnoozeMenu] = useState<{
     session: { id: string; label: string };
-    anchor: { top: number; left: number };
+    placement: SnoozePlacement;
+    origin: HTMLElement | null;
+    activeSessionId: string | null;
   } | null>(null);
 
   const openSnoozeMenu = useCallback(
     (session: { id: string; label: string }, event: ReactMouseEvent) => {
       const rect = (event.currentTarget as HTMLElement).getBoundingClientRect();
-      setSnoozeMenu({ session, anchor: { top: rect.bottom + 4, left: rect.left } });
+      setSnoozeMenu({
+        session,
+        placement: { kind: 'anchor', top: rect.bottom + 4, left: rect.left },
+        origin: event.currentTarget as HTMLElement,
+        activeSessionId,
+      });
     },
-    [],
+    [activeSessionId],
   );
 
   const handleSnoozeActiveSession = useMemo(
     () =>
       queueModeEnabled && activeSessionQueueEligible
-        ? () => {
+        ? (origin: HTMLElement | null = document.activeElement instanceof HTMLElement ? document.activeElement : null) => {
             if (!activeSessionId) return;
             const session = enrichedLocalSessions.find((s) => s.id === activeSessionId);
             if (!session) return;
-            const row = document.querySelector<HTMLElement>(
-              `[data-testid$="-${activeSessionId}"].queue-row`,
+            const agentPane = document.querySelector<HTMLElement>(
+              `.terminal-wrapper.active [data-pane-session-id="${activeSessionId}"]`,
             );
-            const rect = row?.getBoundingClientRect();
+            const pane = document.querySelector<HTMLElement>('.grid-view-stage') ?? agentPane;
             setSnoozeMenu({
               session: { id: session.id, label: session.label },
-              anchor: rect ? { top: rect.bottom + 4, left: rect.left } : { top: 72, left: 72 },
+              placement: { kind: 'center', pane },
+              origin,
+              activeSessionId,
             });
           }
         : undefined,
     [queueModeEnabled, activeSessionQueueEligible, activeSessionId, enrichedLocalSessions],
   );
+
+  useEffect(() => {
+    if (snoozeMenu && !enrichedLocalSessions.some((session) => session.id === snoozeMenu.session.id)) {
+      setSnoozeMenu(null);
+    }
+  }, [enrichedLocalSessions, snoozeMenu]);
+
+  const restoreSnoozeFocus = useCallback((reason: 'cancel' | 'choose' | 'removed') => {
+    const selectionUnchanged = snoozeMenu?.activeSessionId === useSessionStore.getState().activeSessionId;
+    if (reason === 'cancel' && selectionUnchanged && snoozeMenu?.origin?.isConnected) {
+      snoozeMenu.origin.focus({ preventScroll: true });
+      return;
+    }
+    const workspace = document.querySelector<HTMLElement>(
+      '.terminal-wrapper.active .session-terminal-workspace[data-session-visible="1"]',
+    );
+    const leaf = workspace?.querySelector<HTMLElement>(`[data-pane-id="${workspace.dataset.activeLeafId}"]`);
+    const terminal = leaf?.querySelector<HTMLElement>('.terminal-container');
+    const editor = leaf?.querySelector<HTMLElement>('[role="textbox"], textarea, [contenteditable="true"]');
+    const tile = leaf?.querySelector<HTMLElement>('.workspace-dock-tile-body');
+    const grid = document.querySelector<HTMLElement>('.grid-view-stage');
+    const home = document.querySelector<HTMLElement>('[data-testid="sidebar-home"]');
+    const destination = [terminal, editor, tile, grid, home].find((element) => element && element.getClientRects().length > 0);
+    destination?.focus({ preventScroll: true });
+  }, [snoozeMenu]);
 
   return {
     queueModeEnabled,
@@ -138,6 +174,7 @@ export function useAttentionQueue({
     handleSettleActiveTurn,
     snoozeMenu,
     setSnoozeMenu,
+    restoreSnoozeFocus,
     openSnoozeMenu,
     handleSnoozeActiveSession,
     handleToggleQueueMode,

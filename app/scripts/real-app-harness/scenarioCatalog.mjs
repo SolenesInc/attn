@@ -1,5 +1,13 @@
 export const scenarioCatalog = [
   {
+    id: 'snooze-keyboard',
+    runnerId: 'SNOOZE-KEYBOARD',
+    label: 'Snooze from the palette: agent-centered picker, native keys, focus handover and wake',
+    command: ['node', 'scripts/real-app-harness/scenario-snooze-keyboard.mjs'],
+    // Fifteen native Linux steps took 116s before cleanup; keep the matrix kill budget beyond that.
+    timeoutMs: 300_000,
+  },
+  {
     id: 'prompt-composition',
     runnerId: 'PromptComposition',
     label: 'Prompt delivery: ordinary/chief channels, peer attribution, crew wake/sleep and successor',

@@ -91,6 +91,7 @@ export function useWorkspaceController(
     resolvedTheme,
     focusRequestToken,
     enabled,
+    shortcutsEnabled = true,
     isActiveSession,
     isSessionViewVisible = true,
     terminalsLive = true,
@@ -824,35 +825,36 @@ export function useWorkspaceController(
     [requestFocusForReadyPane, runtime],
   );
 
-  useShortcut('terminal.open', focusActivePane, sessionVisible);
+  const workspaceShortcutsActive = sessionVisible && shortcutsEnabled;
+  useShortcut('terminal.open', focusActivePane, workspaceShortcutsActive);
   useShortcut(
     'terminal.find',
     () => {
       runtime.openFindInActivePane();
     },
-    sessionVisible,
+    workspaceShortcutsActive,
   );
   useShortcut(
     'terminal.splitVertical',
     () => {
       handleSplit('vertical');
     },
-    sessionVisible,
+    workspaceShortcutsActive,
   );
   useShortcut(
     'terminal.splitHorizontal',
     () => {
       handleSplit('horizontal');
     },
-    sessionVisible,
+    workspaceShortcutsActive,
   );
-  useShortcut('terminal.toggleZoom', toggleZoomActivePane, sessionVisible);
-  useShortcut('terminal.toggleMaximize', toggleMaximizeActivePane, sessionVisible);
-  useShortcut('terminal.close', handleCloseFocusedLeaf, sessionVisible && splitLayoutActive);
-  useShortcut('terminal.focusLeft', () => handleMovePane('left'), sessionVisible);
-  useShortcut('terminal.focusRight', () => handleMovePane('right'), sessionVisible);
-  useShortcut('terminal.focusUp', () => handleMovePane('up'), sessionVisible);
-  useShortcut('terminal.focusDown', () => handleMovePane('down'), sessionVisible);
+  useShortcut('terminal.toggleZoom', toggleZoomActivePane, workspaceShortcutsActive);
+  useShortcut('terminal.toggleMaximize', toggleMaximizeActivePane, workspaceShortcutsActive);
+  useShortcut('terminal.close', handleCloseFocusedLeaf, workspaceShortcutsActive && splitLayoutActive);
+  useShortcut('terminal.focusLeft', () => handleMovePane('left'), workspaceShortcutsActive);
+  useShortcut('terminal.focusRight', () => handleMovePane('right'), workspaceShortcutsActive);
+  useShortcut('terminal.focusUp', () => handleMovePane('up'), workspaceShortcutsActive);
+  useShortcut('terminal.focusDown', () => handleMovePane('down'), workspaceShortcutsActive);
 
   const paneFrameStyle = useCallback(
     (bounds: NormalizedPaneBounds) => ({
@@ -1144,6 +1146,7 @@ export function useWorkspaceController(
     fontSize,
     resolvedTheme,
     enabled,
+    shortcutsEnabled,
     isActiveSession,
     isSessionViewVisible,
     terminalsLive,

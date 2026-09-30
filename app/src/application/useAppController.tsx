@@ -238,6 +238,7 @@ export function useAppController({
     setShortcutEditorOpen,
     actionMenuOpen,
     setActionMenuOpen,
+    actionMenuFocusOriginRef,
     delegationChainRef,
     sessionsOpen,
     setSessionsOpen,
@@ -327,13 +328,14 @@ export function useAppController({
 
   const workflowPanel = useWorkflowPanel({ activeSessionId, workflowRunPanelOpen });
 
-  const { blockingOverlayOpen, actionMenuBlocked, appShortcutsEnabled } = appOverlayPolicy({
+  const { blockingOverlayOpen, workspaceShortcutsEnabled, actionMenuBlocked, appShortcutsEnabled } = appOverlayPolicy({
     locationPickerOpen,
     whatsNewOpen: whatsNew.isOpen,
     settingsOpen,
     shortcutsOpen,
     shortcutEditorOpen,
     actionMenuOpen,
+    snoozeMenuOpen: Boolean(attentionQueue.snoozeMenu),
     sessionsOpen,
     notebookOpen,
     crewPanelOpen: crewPanel.open,
@@ -404,12 +406,15 @@ export function useAppController({
         devicePixelRatio: window.devicePixelRatio,
       },
     };
+    actionMenuFocusOriginRef.current = document.activeElement instanceof HTMLElement
+      ? document.activeElement : null;
     delegationChainRef.current?.prepareCommand();
     setActionMenuOpen(true);
   }, [
     actionMenuOpen,
     actionMenuBlocked,
     actionMenuOriginRef,
+    actionMenuFocusOriginRef,
     setActionMenuOpen,
     delegationChainRef,
     activeSessionId,
@@ -597,6 +602,7 @@ export function useAppController({
     onOpenGarden: toggleGardenFrame,
     onQuit: handleQuitApp,
     enabled: appShortcutsEnabled && !gardenHoldsWindow,
+    blocked: Boolean(attentionQueue.snoozeMenu),
     gardenShortcutEnabled: appShortcutsEnabled,
   });
 
@@ -672,6 +678,7 @@ export function useAppController({
         annotationApi,
         handleOpenPresentationWindow,
         blockingOverlayOpen,
+        workspaceShortcutsEnabled,
         zoomModeBySessionId,
         setZoomModeBySessionId,
         agentAvailability,

@@ -147,17 +147,17 @@ describe('App queue', () => {
     expect(queue().queryByRole('button', { name: 'Snooze held' })).toBeNull();
   });
 
-  it('snoozes an owed or settled agent until the instant the user picks, and never the chief', async () => {
+  it.each([['1h', 1], ['2h', 2], ['4h', 4]] as const)('snoozes an owed or settled agent for %s, and never the chief', async (choice, hours) => {
     const { daemon } = await launch();
     expect(queue().queryByRole('button', { name: 'Snooze chief' })).toBeNull();
 
     await press(daemon, 'Snooze older');
-    const inAnHour = new Date(Date.now() + HOUR).toISOString();
-    await gesture(daemon, () => fireEvent.click(within(screen.getByRole('menu', { name: 'Snooze older' })).getByTestId('snooze-choice-1h')));
+    const until = new Date(Date.now() + hours * HOUR).toISOString();
+    await gesture(daemon, () => fireEvent.click(within(screen.getByRole('menu', { name: 'Snooze older' })).getByTestId(`snooze-choice-${choice}`)));
     await press(daemon, 'Snooze settled');
     expect(screen.getByRole('menu', { name: 'Snooze settled' })).toBeInTheDocument();
 
-    expect(daemon.sentOf('snooze_turn')).toEqual([{ cmd: 'snooze_turn', session_id: 'older', until: inAnHour }]);
+    expect(daemon.sentOf('snooze_turn')).toEqual([{ cmd: 'snooze_turn', session_id: 'older', until }]);
     expect(daemon.sentOf('session_selected')).toEqual([]);
   });
 

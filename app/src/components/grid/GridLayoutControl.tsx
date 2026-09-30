@@ -1,6 +1,7 @@
 // Sidebar control for choosing the grid's shape. Selecting any size also opens grid mode,
 // so the picker doubles as the grid launcher (there is otherwise no grid button, only ⌘G).
 import { useEffect, useRef, useState } from 'react';
+import { useEscapeStack } from '../../hooks/useEscapeStack';
 import {
   AUTO_LAYOUT,
   MAX_GRID_COLS,
@@ -45,16 +46,12 @@ export function GridLayoutControl({
     const onDown = (e: MouseEvent) => {
       if (anchorRef.current && !anchorRef.current.contains(e.target as Node)) setOpen(false);
     };
-    const onKey = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') setOpen(false);
-    };
     window.addEventListener('mousedown', onDown, true);
-    window.addEventListener('keydown', onKey, true);
     return () => {
       window.removeEventListener('mousedown', onDown, true);
-      window.removeEventListener('keydown', onKey, true);
     };
   }, [open]);
+  useEscapeStack(() => setOpen(false), open);
 
   const fixed = layout.mode === 'fixed' ? layout : null;
   const active = hover ?? (fixed ? { rows: fixed.rows, cols: fixed.cols } : null);

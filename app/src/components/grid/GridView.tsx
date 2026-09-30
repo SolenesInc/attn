@@ -40,6 +40,7 @@ interface GridViewProps {
   onRestoreTile?: (sessionId: string) => void;
   resolvedTheme: Parameters<typeof getTerminalTheme>[0];
   getScreenSnapshot?: (runtimeId: string) => Promise<ScreenSnapshotResult | null>;
+  escapeEnabled?: boolean;
 }
 
 const RESET_BYTES = new TextEncoder().encode('\x1bc');
@@ -64,6 +65,7 @@ export function GridView({
   onRestoreTile,
   resolvedTheme,
   getScreenSnapshot,
+  escapeEnabled = true,
 }: GridViewProps) {
   const stageRef = useRef<HTMLDivElement | null>(null);
   const gridRef = useRef<TerminalGrid | null>(null);
@@ -279,6 +281,7 @@ export function GridView({
   }, [layout.rows, layout.cols]);
 
   useEffect(() => {
+    if (!escapeEnabled) return;
     const onKey = (e: KeyboardEvent) => {
       if (e.key !== 'Escape') return;
       const grid = gridRef.current;
@@ -290,7 +293,7 @@ export function GridView({
     };
     window.addEventListener('keydown', onKey, true);
     return () => window.removeEventListener('keydown', onKey, true);
-  }, []);
+  }, [escapeEnabled]);
 
   const onStageClick = (e: React.MouseEvent) => {
     const grid = gridRef.current;

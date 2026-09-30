@@ -50,6 +50,31 @@ async function shownLayout(daemon: ScriptedDaemon) {
 const offBoard = () => document.querySelector('.grid-view-offboard')?.textContent ?? null;
 
 describe('App grid layout', () => {
+  it.each(['Hidden sessions', 'Grid layout'])('Escape from snooze preserves the open %s popover', async (name) => {
+    layOutGridStage(900, 600);
+    const { daemon } = await renderApp({ initialState: {
+      settings: { queue_mode_enabled: 'true' },
+      sessions: SESSIONS.map((id) => daemonSession(id, { state: 'waiting_input' })),
+      workspaces: SESSIONS.map(agentWorkspace),
+    } });
+    await gesture(daemon, () => fireEvent.click(screen.getByTestId('queue-select-s1')));
+    await gesture(daemon, () => pressShortcut('view.toggleGrid'));
+    if (name === 'Hidden sessions') {
+      fireEvent.mouseMove(screen.getByRole('region', { name: 'Session grid' }), { clientX: 200, clientY: 250 });
+      await gesture(daemon, () => fireEvent.click(screen.getByRole('button', { name: 'Remove from grid' })));
+    }
+    await gesture(daemon, () => fireEvent.click(screen.getByRole('button', { name: name === 'Hidden sessions' ? '1 hidden' : name })));
+    await gesture(daemon, () => pressShortcut('ui.actionMenu'));
+    await gesture(daemon, () => fireEvent.click(screen.getByText('Snooze this agent…')));
+    expect(screen.getByTestId('snooze-menu')).toBeInTheDocument();
+    await gesture(daemon, () => fireEvent.keyDown(window, { key: 'Escape' }));
+    expect(screen.queryByTestId('snooze-menu')).toBeNull();
+    expect(screen.getByRole('dialog', { name })).toBeInTheDocument();
+    await gesture(daemon, () => fireEvent.keyDown(window, { key: 'Escape' }));
+    expect(screen.queryByRole('dialog', { name })).toBeNull();
+    expect(daemon.sentOf('snooze_turn')).toEqual([]);
+  });
+
   it('keeps the grid shape the user picked across restarts', async () => {
     const first = await launchIntoGrid();
     expect(await shownLayout(first.daemon)).toBe('Auto');

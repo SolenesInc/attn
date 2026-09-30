@@ -5,6 +5,7 @@ interface Overlays {
   shortcutsOpen: boolean;
   shortcutEditorOpen: boolean;
   actionMenuOpen: boolean;
+  snoozeMenuOpen: boolean;
   sessionsOpen: boolean;
   notebookOpen: boolean;
   crewPanelOpen: boolean;
@@ -43,8 +44,11 @@ export function appOverlayPolicy(overlays: Overlays) {
     overlays.gardenHoldsWindow,
   ].some(Boolean);
   return {
+    // Snooze holds focus without suspending the workspace; re-enabling it would
+    // steal focus from the row button when the picker closes.
     blockingOverlayOpen: navigationCaptured || actionMenuBlocked,
-    actionMenuBlocked,
-    appShortcutsEnabled: !navigationCaptured && !overlays.markdownOpenerOpen,
+    workspaceShortcutsEnabled: !overlays.snoozeMenuOpen,
+    actionMenuBlocked: actionMenuBlocked || overlays.snoozeMenuOpen,
+    appShortcutsEnabled: !navigationCaptured && !overlays.markdownOpenerOpen && !overlays.snoozeMenuOpen,
   };
 }
