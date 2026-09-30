@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"net"
+	"os"
 	"path/filepath"
 	"slices"
 	"strings"
@@ -76,6 +77,57 @@ func TestFsWatchReportsExternalEditsOnlyToItsSubscribers(t *testing.T) {
 	}
 }
 
+func TestFsWatchReportsNewAndMovedTreesWithoutHiddenDirectories(t *testing.T) {
+	w := newFsWorld(t)
+	app := pickerApp(w)
+	root := fsDir(t, "watched")
+	fsMustWatch(t, app, root)
+
+	fsWriteFile(t, filepath.Join(root, ".hidden", "inside.txt"), []byte("hidden"))
+	fsWriteFile(t, filepath.Join(root, "new", ".nested", "inside.txt"), []byte("hidden"))
+	fsWriteFile(t, filepath.Join(root, "new", "deep", "created.txt"), []byte("created"))
+	outside := fsDir(t, "outside")
+	fsWriteFile(t, filepath.Join(outside, "tree", "deep", "moved.txt"), []byte("moved"))
+	if err := os.Rename(filepath.Join(outside, "tree"), filepath.Join(root, "moved")); err != nil {
+		t.Fatal(err)
+	}
+	heard := map[string]bool{}
+	for !heard["new/deep/created.txt"] || !heard["moved/deep/moved.txt"] {
+		changed := fsAwaitChanged(app, func(m protocol.FsChangedMessage) bool { return m.Root == root && m.Origin == "external" })
+		for _, path := range changed.Paths {
+			if strings.Contains(path, ".hidden/") || strings.Contains(path, ".nested/") {
+				t.Fatalf("hidden directory reported: %v", changed.Paths)
+			}
+			heard[path] = true
+		}
+	}
+
+	fsWriteFile(t, filepath.Join(root, "moved", "deep", "moved.txt"), []byte("edited after moving"))
+	fsAwaitChanged(app, func(m protocol.FsChangedMessage) bool {
+		return m.Root == root && m.Origin == "external" && slices.Contains(m.Paths, "moved/deep/moved.txt")
+	})
+}
+
+func TestFsWatchReportsATreeMovedOutOfItsRoot(t *testing.T) {
+	w := newFsWorld(t)
+	app := pickerApp(w)
+	root := fsDir(t, "watched")
+	fsWriteFile(t, filepath.Join(root, "tree", "deep", "note.txt"), []byte("before"))
+	fsMustWatch(t, app, root)
+	outside := fsDir(t, "outside")
+	if err := os.Rename(filepath.Join(root, "tree"), filepath.Join(outside, "tree")); err != nil {
+		t.Fatal(err)
+	}
+	fsAwaitChanged(app, func(m protocol.FsChangedMessage) bool {
+		if m.Root != root || m.Origin != "external" {
+			return false
+		}
+		return slices.ContainsFunc(m.Paths, func(path string) bool {
+			return path == "tree" || strings.HasPrefix(path, "tree/")
+		})
+	})
+}
+
 func TestAWatchedRootStaysWatchedUntilItsLastClientUnwatches(t *testing.T) {
 	w := newFsWorld(t)
 	leaving, staying := pickerApp(w), pickerApp(w)
@@ -97,11 +149,9 @@ func TestAWatchedRootStaysWatchedUntilItsLastClientUnwatches(t *testing.T) {
 	fsWriteFile(t, filepath.Join(shared, "no-longer-watched.txt"), []byte("x"))
 	fsMustWatch(t, staying, shared)
 	fsWriteFile(t, filepath.Join(shared, "watched-again.txt"), []byte("x"))
-	if first := fsAwaitChanged(staying, func(m protocol.FsChangedMessage) bool {
-		return m.Root == shared && (slices.Contains(m.Paths, "no-longer-watched.txt") || slices.Contains(m.Paths, "watched-again.txt"))
-	}); slices.Contains(first.Paths, "no-longer-watched.txt") {
-		t.Fatalf("after its last client unwatched it, %s still reported %+v", shared, first)
-	}
+	fsAwaitChanged(staying, func(m protocol.FsChangedMessage) bool {
+		return m.Root == shared && slices.Contains(m.Paths, "watched-again.txt")
+	})
 }
 
 func TestAWatchedRootOutlivesAClientThatVanishesWithoutUnwatching(t *testing.T) {

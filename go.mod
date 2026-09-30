@@ -6,6 +6,7 @@ require (
 	github.com/BurntSushi/toml v1.5.0
 	github.com/creack/pty v1.1.24
 	github.com/dop251/goja v0.0.0-20260607120635-348e6bea910d
+	github.com/fsnotify/fsevents v0.2.0
 	github.com/fsnotify/fsnotify v1.10.1
 	github.com/google/uuid v1.6.0
 	github.com/mattn/go-sqlite3 v1.14.32
