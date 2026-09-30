@@ -133,14 +133,9 @@ while IFS= read -r package; do
 done <"$packages_file"
 run_job packages "$go_bin" test -timeout "$test_timeout" -p "$package_parallelism" "$@" "${packages[@]}"
 
-# A live document query re-reads on a wake set by the very write it is
-# reporting, so the store's own concurrency is load-bearing in a way a wrong
-# answer hides better than a crash does: a lost wake or a torn read looks like a
-# stale window, not a panic. Race detection is too slow to spend on every
-# package on every push, so it is scoped to the two that compile and execute
-# those queries. These packages therefore run twice — once for the answers,
-# once for the memory model.
-run_job race "$go_bin" test -timeout "$race_timeout" -race "$@" ./internal/store ./internal/docstore
+# Race-check document queries for lost wakes/torn reads and the hub's SSH
+# relay accept/teardown synchronization.
+run_job race "$go_bin" test -timeout "$race_timeout" -race "$@" ./internal/store ./internal/docstore ./internal/hub
 
 shard=0
 while [ "$shard" -lt "$shard_count" ]; do
