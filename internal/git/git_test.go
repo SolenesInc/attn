@@ -122,6 +122,22 @@ func TestBranchInfoGitParity(t *testing.T) {
 			runGit(t, repo, "worktree", "add", "-b", "topic", dir)
 			return dir
 		}},
+		{"symlink HEAD", func(t *testing.T, repo string) string {
+			head := filepath.Join(repo, ".git", "HEAD")
+			if err := os.Remove(head); err != nil {
+				t.Fatal(err)
+			}
+			if err := os.Symlink("refs/heads/main", head); err != nil {
+				t.Fatal(err)
+			}
+			return repo
+		}},
+		{"foreign owner", func(t *testing.T, repo string) string {
+			if err := os.Chown(repo, os.Geteuid()+1, -1); err != nil {
+				t.Skipf("changing fixture ownership requires privilege: %v", err)
+			}
+			return repo
+		}},
 		{"detached", func(t *testing.T, repo string) string { runGit(t, repo, "checkout", "--detach"); return repo }},
 		{"gitfile", func(t *testing.T, repo string) string {
 			dir := filepath.Join(filepath.Dir(repo), "separate")

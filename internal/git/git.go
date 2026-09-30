@@ -48,8 +48,11 @@ func (c *Client) branchInfoFromFiles(ctx context.Context, dir string) (*BranchIn
 			}
 		}
 		gitPath := filepath.Join(root, ".git")
-		entry, err := os.Stat(gitPath)
+		entry, err := os.Lstat(gitPath)
 		if err == nil {
+			if !gitPathOwnedByCurrentUser(entry) || (!entry.IsDir() && !entry.Mode().IsRegular()) {
+				return nil, false
+			}
 			gitDir = gitPath
 			if !entry.IsDir() {
 				content, err := os.ReadFile(gitPath)
@@ -76,6 +79,13 @@ func (c *Client) branchInfoFromFiles(ctx context.Context, dir string) (*BranchIn
 		root = parent
 	}
 	gitDir = filepath.Clean(gitDir)
+	// Git owns safe.directory decisions for repositories owned by other users.
+	for _, path := range []string{root, gitDir} {
+		entry, err := os.Stat(path)
+		if err != nil || !gitPathOwnedByCurrentUser(entry) {
+			return nil, false
+		}
+	}
 	commonDir := gitDir
 	if content, err := os.ReadFile(filepath.Join(gitDir, "commondir")); err == nil {
 		commonDir = strings.TrimSpace(string(content))
@@ -95,7 +105,12 @@ func (c *Client) branchInfoFromFiles(ctx context.Context, dir string) (*BranchIn
 			return nil, false
 		}
 	}
-	content, err := os.ReadFile(filepath.Join(gitDir, "HEAD"))
+	headPath := filepath.Join(gitDir, "HEAD")
+	entry, err := os.Lstat(headPath)
+	if err != nil || !entry.Mode().IsRegular() {
+		return nil, false
+	}
+	content, err := os.ReadFile(headPath)
 	if err != nil {
 		return nil, false
 	}
