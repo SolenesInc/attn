@@ -451,6 +451,38 @@ describe('App sidebar', () => {
   });
 
   describe('header', () => {
+    it('names collapsed desktops by title and shortcut, keeps their chips and attention, and selects through the daemon', async () => {
+      const { daemon } = await launch({
+        sessions: [daemonSession('s1', { state: 'idle' }), daemonSession('s2', { state: 'waiting_input' }), daemonSession('loose', { state: 'idle' })],
+        desktops: [
+          soloDesktop('s1', { id: 'desktop-1', name: 'Sidebar refinement', shortcut_slot: 1 }),
+          soloDesktop('s2', { name: 'Queue work', shortcut_slot: 2 }),
+          daemonDesktop('empty', { root: null }, { name: 'Sketches', shortcut_slot: 3 }),
+        ],
+      });
+      await gesture(daemon, () => pressShortcut('session.toggleSidebar'));
+      const first = screen.getByRole('button', { name: 'Sidebar refinement (⌘1)' });
+      const waiting = screen.getByRole('button', { name: 'Queue work (⌘2)' });
+      const empty = screen.getByRole('button', { name: 'Sketches (⌘3)' });
+      expect(first.querySelector('.desktop-number')).toHaveTextContent('1');
+      expect(waiting.querySelector('.desktop-number')).toHaveTextContent('2');
+      expect(empty.querySelector('.desktop-number')).toHaveTextContent('3');
+      expect(first).toHaveAttribute('aria-current', 'true');
+      expect(waiting).not.toHaveAttribute('aria-current');
+      expect(empty.querySelector('.desktop-number')).toHaveClass('empty');
+      expect(waiting.querySelector('.mini-badge')).not.toBeNull();
+      expect(first.querySelector('.mini-badge')).toBeNull();
+      expect(empty.querySelector('.mini-badge')).toBeNull();
+      expect(screen.getByRole('button', { name: 'Not on a desktop' }).querySelector('.desktop-number')).toHaveTextContent('—');
+
+      await gesture(daemon, () => fireEvent.click(waiting));
+      expect(daemon.sentOf('desktop_set_current')).toEqual([
+        { cmd: 'desktop_set_current', profile_id: 'profile-default', desktop_id: 'desktop-s2', request_id: expect.any(String) },
+      ]);
+      expect(waiting).toHaveAttribute('aria-current', 'true');
+      expect(first).not.toHaveAttribute('aria-current');
+    });
+
     it('names no instance in a default build, expanded or collapsed', async () => {
       const { daemon } = await launch({ sessions: [daemonSession('s1')] });
       expect(document.querySelector('.sidebar-header')).not.toHaveTextContent(/instance/i);
