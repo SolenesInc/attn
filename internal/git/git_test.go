@@ -35,7 +35,7 @@ func TestBranchInfoFileLayouts(t *testing.T) {
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
-			root := CanonicalizePath(t.TempDir())
+			root := canonicalFixturePath(t, t.TempDir())
 			for path, content := range tc.files {
 				path = filepath.Join(root, path)
 				if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
@@ -49,6 +49,7 @@ func TestBranchInfoFileLayouts(t *testing.T) {
 			if err := os.MkdirAll(cwd, 0o755); err != nil {
 				t.Fatal(err)
 			}
+			t.Setenv("GIT_CEILING_DIRECTORIES", "")
 			t.Setenv("PATH", t.TempDir())
 			got, err := NewClient().GetBranchInfo(context.Background(), cwd)
 			want := BranchInfo{Branch: tc.branch, IsWorktree: tc.worktree, Repository: tc.repository}
@@ -72,6 +73,14 @@ func TestBranchInfoGitParity(t *testing.T) {
 	}{
 		{"normal", func(t *testing.T, repo string) string { return repo }},
 		{"unborn", func(t *testing.T, repo string) string { runGit(t, repo, "checkout", "--orphan", "unborn"); return repo }},
+		{"discovery ceiling", func(t *testing.T, repo string) string {
+			dir := filepath.Join(repo, "src", "deep")
+			if err := os.MkdirAll(dir, 0o755); err != nil {
+				t.Fatal(err)
+			}
+			t.Setenv("GIT_CEILING_DIRECTORIES", canonicalFixturePath(t, filepath.Dir(dir)))
+			return dir
+		}},
 		{"subdirectory", func(t *testing.T, repo string) string {
 			dir := filepath.Join(repo, "src")
 			if err := os.Mkdir(dir, 0o755); err != nil {
@@ -152,9 +161,9 @@ func TestBranchInfoGitParity(t *testing.T) {
 			dir := tc.prepare(t, repo)
 			client := NewClient()
 			got, err := client.GetBranchInfo(context.Background(), dir)
-			want, wantErr := client.branchInfoFromGit(context.Background(), dir)
-			if err != nil || wantErr != nil || *got != *want {
-				t.Fatalf("GetBranchInfo = %+v, %v; git = %+v, %v", got, err, want, wantErr)
+			want := branchIdentityObservedByGit(t, dir)
+			if err != nil || *got != want {
+				t.Fatalf("GetBranchInfo = %+v, %v; git = %+v", got, err, want)
 			}
 		})
 	}
@@ -173,4 +182,49 @@ func initReftable(t *testing.T, repo string) {
 		}
 		t.Fatalf("git init reftable: %s: %v", out, err)
 	}
+}
+
+func branchIdentityObservedByGit(t *testing.T, dir string) BranchInfo {
+	t.Helper()
+	observe := func(args ...string) (string, error) {
+		cmd := exec.Command("git", args...)
+		cmd.Dir = dir
+		out, err := cmd.Output()
+		return strings.TrimSpace(string(out)), err
+	}
+	root, err := observe("rev-parse", "--show-toplevel")
+	if err != nil {
+		return BranchInfo{}
+	}
+	branch, err := observe("symbolic-ref", "--short", "HEAD")
+	if err != nil {
+		branch, err = observe("rev-parse", "--short=7", "HEAD")
+		if err != nil {
+			t.Fatal(err)
+		}
+	}
+	gitDir, err := observe("rev-parse", "--absolute-git-dir")
+	if err != nil {
+		t.Fatal(err)
+	}
+	common, err := observe("rev-parse", "--path-format=absolute", "--git-common-dir")
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := BranchInfo{Branch: branch, Repository: canonicalFixturePath(t, root)}
+	if canonicalFixturePath(t, common) != canonicalFixturePath(t, gitDir) {
+		want.IsWorktree = true
+		want.MainRepo = filepath.Dir(canonicalFixturePath(t, common))
+		want.Repository = want.MainRepo
+	}
+	return want
+}
+
+func canonicalFixturePath(t *testing.T, path string) string {
+	t.Helper()
+	resolved, err := filepath.EvalSymlinks(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return filepath.Clean(resolved)
 }

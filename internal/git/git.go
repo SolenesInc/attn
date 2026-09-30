@@ -24,8 +24,10 @@ type BranchInfo struct {
 }
 
 func (c *Client) GetBranchInfo(ctx context.Context, dir string) (*BranchInfo, error) {
-	if info, ok := c.branchInfoFromFiles(ctx, dir); ok {
-		return info, nil
+	if os.Getenv("GIT_CEILING_DIRECTORIES") == "" {
+		if info, ok := c.branchInfoFromFiles(ctx, dir); ok {
+			return info, nil
+		}
 	}
 	return c.branchInfoFromGit(ctx, dir)
 }
