@@ -1,0 +1,3 @@
+kind: fixed
+area: terminal
+change: Terminal panes keep reconnecting after a move or remount near an earlier attachment's timeout.

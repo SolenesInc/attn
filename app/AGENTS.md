@@ -44,6 +44,8 @@ Daemon connection paths are relative to `app/src`.
 
 ## Small traps
 
+- PTY attachment deadlines belong to one pending waiter. Clear them when it settles;
+  a stale timer deleting a newer waiter blocks every later attachment for that session.
 - `sendCreateWorktreeFromBranch` and local `sendCreateWorktree` share `_local`
   pending-action keys; do not run both concurrently.
 - Reconnect's circuit breaker stays open until the user clicks retry.
