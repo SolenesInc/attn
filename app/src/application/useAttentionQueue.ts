@@ -125,8 +125,7 @@ export function useAttentionQueue({
             const agentPane = document.querySelector<HTMLElement>(
               `.terminal-wrapper.active [data-pane-session-id="${activeSessionId}"]`,
             );
-            const pane = agentPane?.getClientRects().length ? agentPane
-              : document.querySelector<HTMLElement>('.grid-view-stage');
+            const pane = document.querySelector<HTMLElement>('.grid-view-stage') ?? agentPane;
             setSnoozeMenu({
               session: { id: session.id, label: session.label },
               placement: { kind: 'center', pane },
