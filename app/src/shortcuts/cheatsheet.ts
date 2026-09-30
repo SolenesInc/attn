@@ -43,7 +43,6 @@ export function buildCheatsheet(): CheatsheetCategory[] {
         { label: 'Desktop overview', combos: [fromId('desktop.overview')] },
         { label: 'Switch profile', combos: [fromId('profile.switch')] },
         { label: 'Go to dashboard (home)', combos: [fromId('session.goToDashboard')] },
-        { label: 'Toggle grid view', combos: [fromId('view.toggleGrid')] },
         { label: 'Jump to next waiting session', combos: [fromId('session.jumpToWaiting')] },
         { label: 'Next automation run needing you', combos: [fromId('session.nextRun')] },
         { label: 'All agents', combos: [fromId('sidebar.agentList')] },

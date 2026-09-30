@@ -62,9 +62,6 @@ export const AttentionContext = createContext<
 export function useAttentionQueueContext() {
   return useRequiredContext(AttentionContext).attentionQueue;
 }
-export function useAppGridContext() {
-  return useRequiredContext(AttentionContext).appGrid;
-}
 
 export const LibrariesContext = createContext<
   ReturnType<typeof useAppController>['libraries'] | null

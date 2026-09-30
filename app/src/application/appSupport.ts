@@ -95,7 +95,7 @@ export function activePaneIdForDesktop(
 
 export function diagnosticFocusKind(element: Element | null): string {
   if (!element) return 'none';
-  if (element.closest('.terminal-container, .grid-view-stage')) return 'terminal';
+  if (element.closest('.terminal-container')) return 'terminal';
   if (element.matches('input, textarea, [contenteditable="true"]')) return 'editor';
   if (element.matches('button, a, select')) return 'control';
   return element === document.body ? 'body' : 'other';

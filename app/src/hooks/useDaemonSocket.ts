@@ -259,9 +259,6 @@ type WebSocketEvent = GeneratedWebSocketEvent & {
   tile_id?: string;
   data?: string;
   seq?: number;
-  screen_snapshot?: string;
-  screen_rows?: number;
-  screen_cols?: number;
   last_seq?: number;
   cols?: number;
   rows?: number;
@@ -371,13 +368,6 @@ interface PluginActionResult {
 export interface PluginListResult {
   plugins: DaemonPlugin[];
   issues: DaemonPluginIssue[];
-}
-
-export interface ScreenSnapshotResult {
-  screenSnapshot?: string;
-  screenCols?: number;
-  screenRows?: number;
-  lastSeq: number;
 }
 
 interface RecentLocationsResult {
@@ -1962,28 +1952,6 @@ export function useDaemonSocket({
             break;
           }
 
-          case 'get_screen_snapshot_result': {
-            if (data.id) {
-              const key = `screen_snapshot_${data.id}`;
-              const pending = pendingActionsRef.current.get(key);
-              if (pending) {
-                pendingActionsRef.current.delete(key);
-                if (data.success) {
-                  const result: ScreenSnapshotResult = {
-                    screenSnapshot: data.screen_snapshot ?? undefined,
-                    screenCols: data.screen_cols,
-                    screenRows: data.screen_rows,
-                    lastSeq: typeof data.last_seq === 'number' ? data.last_seq : 0,
-                  };
-                  pending.resolve(result);
-                } else {
-                  pending.resolve(null);
-                }
-              }
-            }
-            break;
-          }
-
           case 'pty_output': {
             if (data.id && data.data) {
               handleLivePtyOutput(data.id, data.seq, data.data);
@@ -3390,26 +3358,6 @@ export function useDaemonSocket({
           reject(new Error('Timeout'));
         }
       }, 30000);
-    });
-  }, []);
-
-  const getScreenSnapshot = useCallback((runtimeId: string): Promise<ScreenSnapshotResult | null> => {
-    return new Promise((resolve) => {
-      const ws = wsRef.current;
-      if (!ws || ws.readyState !== WebSocket.OPEN || !runtimeId) {
-        resolve(null);
-        return;
-      }
-      const key = `screen_snapshot_${runtimeId}`;
-      pendingActionsRef.current.get(key)?.resolve(null);
-      pendingActionsRef.current.set(key, { resolve, reject: () => resolve(null) });
-      ws.send(JSON.stringify({ cmd: 'get_screen_snapshot', id: runtimeId }));
-      setTimeout(() => {
-        if (pendingActionsRef.current.has(key)) {
-          pendingActionsRef.current.delete(key);
-          resolve(null);
-        }
-      }, 10000);
     });
   }, []);
 
@@ -4971,7 +4919,6 @@ export function useDaemonSocket({
     clearWarnings,
     retryConnection,
     sendPRAction,
-    getScreenSnapshot,
     getMarkdownAnnotations,
     saveMarkdownAnnotations,
     clearMarkdownAnnotations,

@@ -278,9 +278,9 @@ earned it.
 
 **What the empty queue eventually becomes.** Draining the queue is the win, but a
 product whose reward for succeeding is a blank panel has a hole in it. There is
-something on the other side of "nothing wants you" — plausibly a version of grid
-mode, many agents watchable at once, the shift from steering one at a time to
-seeing the whole board move. That is a later chapter, and naming it now mostly
+something on the other side of "nothing wants you" — plausibly many agents
+watchable at once, the shift from steering one at a time to seeing the whole
+board move. That is a later chapter, and naming it now mostly
 guards against filling the space with something worse in the meantime.
 
 **What this feels like at rest.** The design reasoning here is about motion: things

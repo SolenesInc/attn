@@ -9,7 +9,6 @@ import { areSidebarHarnessLogosEnabled } from '../utils/sidebarHarnessLogos';
 import {
   useAppAppearanceContext,
   useAppGardenActionsContext,
-  useAppGridContext,
   useAppInputs,
   useAppPanelsContext,
   useAppShell,
@@ -66,7 +65,6 @@ export function AppSidebar() {
   const { handleOpenPalette, attentionCount, sidebarSurface, windowCovered, agentFocused } = useAppShell();
   const { keybindings, handleToggleSidebarHarnessLogos } = useAppAppearanceContext();
   const { criticalNotifications, settings, notificationsUnread } = useAppInputs();
-  const { gridLayout, handleSelectGridLayout } = useAppGridContext();
   const { handleChangeChiefOfStaff } = useChiefOfStaffContext();
   const allCrew = useDaemonStore((state) => state.crew);
   const selectedProfileId = useProfilesStore((state) => state.selectedProfileId);
@@ -117,8 +115,6 @@ export function AppSidebar() {
       headerActions={sidebarHeaderActions}
       criticalNotifications={criticalNotifications}
       onOpenNotifications={openNotificationsPanel}
-      gridLayout={gridLayout}
-      onSelectGridLayout={handleSelectGridLayout}
       dockItems={dockItems}
       dockCollapsed={keybindings.dock.collapsed}
       onToggleDockCollapsed={() => keybindings.setDockCollapsed(!keybindings.dock.collapsed)}
@@ -161,7 +157,7 @@ export function AppSidebar() {
       onSwitchProfile={() => setProfileSwitcherOpen(true)}
       onOpenCommands={() => handleOpenPalette('commands')}
       onOpenAgents={() => handleOpenPalette('agents')}
-      peeksSilenced={windowCovered || agentFocused || view === 'grid'}
+      peeksSilenced={windowCovered || agentFocused}
       commandsBadge={notificationsUnread + attentionCount}
       agentListOpen={agentListOpen}
       onToggleAgentList={toggleAgentList}

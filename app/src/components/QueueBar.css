@@ -17,10 +17,6 @@
   -webkit-user-select: none;
 }
 
-.app.is-grid .queue-bar {
-  visibility: hidden;
-}
-
 .queue-bar button {
   font-family: inherit;
   cursor: pointer;

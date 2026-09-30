@@ -3,8 +3,6 @@ import { BrokenLinksHarness } from './BrokenLinksHarness';
 import { DiffViewHarness } from './DiffViewHarness';
 import { FileTreeHarness } from './FileTreeHarness';
 import { FrontmatterCardHarness } from './FrontmatterCardHarness';
-import { GridLayoutControlHarness } from './GridLayoutControlHarness';
-import { GridViewHarness } from './GridViewHarness';
 import { LiveMarkdownEditorHarness } from './LiveMarkdownEditorHarness';
 import { MarkdownAnnotationTilesHarness } from './MarkdownAnnotationTilesHarness';
 import { MermaidDiagramHarness } from './MermaidDiagramHarness';
@@ -27,8 +25,6 @@ export const harnesses: Record<string, React.ComponentType<HarnessProps>> = {
   DiffView: DiffViewHarness,
   FileTree: FileTreeHarness,
   FrontmatterCard: FrontmatterCardHarness,
-  GridLayoutControl: GridLayoutControlHarness,
-  GridView: GridViewHarness,
   LiveMarkdownEditor: LiveMarkdownEditorHarness,
   MarkdownAnnotationTiles: MarkdownAnnotationTilesHarness,
   MermaidDiagram: MermaidDiagramHarness,
