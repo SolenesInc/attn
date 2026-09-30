@@ -542,6 +542,17 @@ describe('queue', () => {
     expect(shows(view.daemon)).toEqual(['session:s1']);
   });
 
+  it('ends the wait when the user leaves home and comes back', async () => {
+    const view = await workTheQueueDownToHome();
+    await gesture(view.daemon, keys.back);
+    await gesture(view.daemon, keys.home);
+
+    await view.update({ s1: SETTLED, s2: OWED });
+
+    expect(isHome()).toBe(true);
+    expect(shows(view.daemon)).not.toContain('session:s2');
+  });
+
   it('takes the user to the next turn after they ask to follow from an all-settled home', async () => {
     const view = await renderAgents({ s1: SETTLED, s2: SETTLED });
     fireEvent.click(within(screen.getByTestId('follow-next-turn')).getByRole('checkbox'));
