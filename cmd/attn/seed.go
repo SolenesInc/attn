@@ -931,7 +931,7 @@ func fprintSeedShow(w io.Writer, result *protocol.SeedShowResult) {
 		case protocol.Deref(kept.DeleteAfter) != "":
 			fmt.Fprintf(w, "conversation  kept by attn (%.1f MB) until %s; replant to keep it\n", float64(kept.Bytes)/1e6, conversationDate(protocol.Deref(kept.DeleteAfter)))
 		default:
-			fmt.Fprintf(w, "conversation  kept by attn (%.1f MB) while this seed is open\n", float64(kept.Bytes)/1e6)
+			fmt.Fprintf(w, "conversation  kept by attn (%.1f MB) while an open seed points at it\n", float64(kept.Bytes)/1e6)
 		}
 	}
 	fprintSeedWatchCoverage(w, result.WatchingVia)

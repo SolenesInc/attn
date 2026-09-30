@@ -27,6 +27,10 @@ func TestKeptConversationSurvivesDaemonRestartAndResumeRestoresIt(t *testing.T) 
 	}
 	first := s.Launched(delegated.SessionID)
 	first.Prompted()
+	shared := plant(t, s, "Keep another piece of this conversation")
+	if tended := s.Run(testworld.Invocation{Args: []string{"seed", "tend", shared.ID}, Session: delegated.SessionID}); tended.Code != 0 {
+		t.Fatalf("tend shared conversation: %+v", tended)
+	}
 	first.Reply("remember this <!-- attn:state=waiting_input -->")
 	paths, err := filepath.Glob(filepath.Join(s.Dir, "toolhome", ".claude", "projects", "*", first.ConversationID+".jsonl"))
 	if err != nil || len(paths) != 1 {
@@ -43,8 +47,16 @@ func TestKeptConversationSurvivesDaemonRestartAndResumeRestoresIt(t *testing.T) 
 	}
 	testworld.AwaitTaskDone(s.App(), "conversation_keep")
 	shown := s.Attn("seed", "show", delegated.SeedID).Stdout
-	if !strings.Contains(shown, "conversation  kept by attn") || !strings.Contains(shown, "while this seed is open") {
+	if !strings.Contains(shown, "conversation  kept by attn") || !strings.Contains(shown, "while an open seed points at it") {
 		t.Fatalf("seed show:\n%s", shown)
+	}
+	if closedSeed := s.Attn("seed", "wither", shared.ID, "-m", "This piece is done"); closedSeed.Code != 0 {
+		t.Fatalf("wither shared seed: %+v", closedSeed)
+	}
+	testworld.AwaitTaskDone(s.App(), "conversation_keep")
+	closedShow := s.Attn("seed", "show", shared.ID).Stdout
+	if !strings.Contains(closedShow, "while an open seed points at it") || strings.Contains(closedShow, "while this seed is open") {
+		t.Fatalf("closed seed must describe the other open reference:\n%s", closedShow)
 	}
 	s.Stop()
 	if err := os.Remove(path); err != nil {
