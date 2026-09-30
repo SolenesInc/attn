@@ -7,7 +7,6 @@ import (
 	"io"
 	"os"
 	"path/filepath"
-	"time"
 
 	"github.com/victorarias/attn/internal/config"
 	"github.com/victorarias/attn/internal/jobs"
@@ -137,7 +136,9 @@ func (d *Daemon) startJobQueueWithStore(queueStore jobs.Store) error {
 		return fmt.Errorf("start background jobs: %w", err)
 	}
 	d.setJobQueue(runner)
-	d.keepConversations(time.Now())
+	if _, err := runner.Enqueue(conversationKeepKind+"_tick", jobs.EnqueueOptions{UniqueKey: jobs.CronKey, RunNow: true}); err != nil {
+		d.logf("conversation keep: enqueue startup: %v", err)
+	}
 	d.reconcileSnoozeWakeJobs()
 	d.resumeGardenReviews()
 	d.settleHarvestConditions()

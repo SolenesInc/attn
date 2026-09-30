@@ -41,6 +41,7 @@ func TestKeptConversationSurvivesDaemonRestartAndResumeRestoresIt(t *testing.T) 
 	if closed.Code != 0 {
 		t.Fatalf("close: %+v", closed)
 	}
+	testworld.AwaitTaskDone(s.App(), "conversation_keep")
 	shown := s.Attn("seed", "show", delegated.SeedID).Stdout
 	if !strings.Contains(shown, "conversation  kept by attn") || !strings.Contains(shown, "while this seed is open") {
 		t.Fatalf("seed show:\n%s", shown)

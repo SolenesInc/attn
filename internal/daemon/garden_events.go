@@ -44,7 +44,7 @@ func announceGardenSeedEvents(d *Daemon, seqs []int64) {
 	if len(seqs) == 0 || d == nil {
 		return
 	}
-	d.keepConversations(time.Now())
+	d.queueConversationKeep()
 	d.coalesceSnapshots(func() {
 		if d.eventBus != nil {
 			d.eventBus.Announce()

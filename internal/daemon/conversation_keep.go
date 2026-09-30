@@ -50,11 +50,25 @@ func conversationKeepInterval() time.Duration {
 }
 
 func (d *Daemon) registerConversationKeepCron(runner *jobs.Runner) {
-	if err := runner.RegisterCron(conversationKeepKind, conversationKeepInterval(), func(context.Context, *jobs.Job) (any, error) {
+	handler := func(context.Context, *jobs.Job) (any, error) {
 		d.keepConversations(time.Now())
 		return nil, nil
-	}, jobs.HandlerConfig{}); err != nil {
+	}
+	if err := runner.RegisterWith(conversationKeepKind, handler, jobs.HandlerConfig{}); err != nil {
+		d.logf("conversation keep: register handler: %v", err)
+	}
+	if err := runner.RegisterCron(conversationKeepKind+"_tick", conversationKeepInterval(), handler, jobs.HandlerConfig{}); err != nil {
 		d.logf("conversation keep: register tick: %v", err)
+	}
+}
+
+func (d *Daemon) queueConversationKeep() {
+	queue := d.jobQueueRef()
+	if queue == nil {
+		return
+	}
+	if _, err := queue.Enqueue(conversationKeepKind, jobs.EnqueueOptions{UniqueKey: "all"}); err != nil {
+		d.logf("conversation keep: enqueue: %v", err)
 	}
 }
 
@@ -335,8 +349,6 @@ func (d *Daemon) conversationReady(driver agentdriver.Driver, resumeID string) b
 	if d.store == nil {
 		return false
 	}
-	d.conversationKeepMu.Lock()
-	defer d.conversationKeepMu.Unlock()
 	kept, ok := d.store.KeptConversation(driver.Name(), resumeID)
 	if !ok || !kept.DeletedAt.IsZero() || kept.Agent != driver.Name() {
 		return false
@@ -356,6 +368,7 @@ func restoreConversationArchive(path string, now time.Time) error {
 	if err != nil {
 		return err
 	}
+	// An opened archive survives deletion; replacement installs a complete archive by rename.
 	src, err := os.Open(path)
 	if err != nil {
 		return err

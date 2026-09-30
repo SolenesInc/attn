@@ -9,6 +9,7 @@ import (
 
 	"github.com/victorarias/attn/internal/fakeagent"
 	"github.com/victorarias/attn/internal/protocol"
+	"github.com/victorarias/attn/internal/testworld"
 	"github.com/victorarias/attn/internal/transcript"
 )
 
@@ -44,6 +45,7 @@ func TestKeptClaudeConversationRestoresForSeedResumeAndLedgerReopen(t *testing.T
 				}
 			}
 			closePane(app, seedResumePane(t, w, protocol.Deref(delegated.WorkspaceID), delegated.SessionID))
+			testworld.AwaitTaskDone(app, "conversation_keep")
 			kept := lifeShow(t, cli, delegated.SeedID).Seed.Continuation.KeptConversation
 			if kept == nil || kept.Bytes <= 0 || protocol.Deref(kept.DeleteAfter) != "" {
 				t.Fatalf("open seed's kept conversation: %+v", kept)
@@ -87,7 +89,9 @@ func TestKeptConversationReleaseReplantAndDeletionAreVisible(t *testing.T) {
 	first := w.Launched(delegated.SessionID)
 	first.Prompted()
 	closePane(app, seedResumePane(t, w, protocol.Deref(delegated.WorkspaceID), delegated.SessionID))
+	testworld.AwaitTaskDone(app, "conversation_keep")
 	lifeMove(t, cli, "", delegated.SeedID, "wither", "abandoned", "")
+	testworld.AwaitTaskDone(app, "conversation_keep")
 	released := lifeShow(t, cli, delegated.SeedID).Seed.Continuation.KeptConversation
 	if released == nil || protocol.Deref(released.DeleteAfter) == "" {
 		t.Fatalf("released copy: %+v", released)
@@ -95,17 +99,21 @@ func TestKeptConversationReleaseReplantAndDeletionAreVisible(t *testing.T) {
 	// Replant retains the copy even after Claude has removed its own transcript.
 	sessionRecoveryDeleteTranscript(t, first.ConversationID)
 	lifeMove(t, cli, "", delegated.SeedID, "replant", "", "")
+	testworld.AwaitTaskDone(app, "conversation_keep")
 	retained := lifeShow(t, cli, delegated.SeedID).Seed.Continuation.KeptConversation
 	if retained == nil || retained.DeleteAfter != nil {
 		t.Fatalf("replanted copy: %+v", retained)
 	}
 	lifeMove(t, cli, "", delegated.SeedID, "wither", "abandoned again", "")
+	testworld.AwaitTaskDone(app, "conversation_keep")
 	plantSeedAs(t, cli, "", "trigger the next keep pass")
+	testworld.AwaitTaskDone(app, "conversation_keep")
 	deleted := lifeShow(t, cli, delegated.SeedID).Seed.Continuation.KeptConversation
 	if deleted == nil || protocol.Deref(deleted.DeletedAt) == "" {
 		t.Fatalf("deleted copy: %+v", deleted)
 	}
 	lifeMove(t, cli, "", delegated.SeedID, "replant", "", "")
+	testworld.AwaitTaskDone(app, "conversation_keep")
 	date := strings.Split(protocol.Deref(deleted.DeletedAt), "T")[0]
 	result := seedResumeRequest(app, delegated.SeedID)
 	if result.Success || !strings.Contains(protocol.Deref(result.Error), "attn deleted its copy") || !strings.Contains(protocol.Deref(result.Error), date) {
@@ -125,6 +133,7 @@ func TestLiveClaudeIsKeptOnlyWhenQuietAndNeverReplacedByASmallerSource(t *testin
 	first.Prompted()
 	first.Reply("original full conversation <!-- attn:state=waiting_input -->")
 	lifeMove(t, cli, delegated.SessionID, delegated.SeedID, "park", "", "")
+	testworld.AwaitTaskDone(app, "conversation_keep")
 	if kept := lifeShow(t, cli, delegated.SeedID).Seed.Continuation.KeptConversation; kept != nil {
 		t.Fatalf("active conversation was copied: %+v", kept)
 	}
@@ -138,6 +147,7 @@ func TestLiveClaudeIsKeptOnlyWhenQuietAndNeverReplacedByASmallerSource(t *testin
 		t.Fatal(err)
 	}
 	lifeMove(t, cli, delegated.SessionID, delegated.SeedID, "tend", "", "")
+	testworld.AwaitTaskDone(app, "conversation_keep")
 	kept := lifeShow(t, cli, delegated.SeedID).Seed.Continuation.KeptConversation
 	if kept == nil {
 		t.Fatal("quiet conversation was not copied")
@@ -147,6 +157,7 @@ func TestLiveClaudeIsKeptOnlyWhenQuietAndNeverReplacedByASmallerSource(t *testin
 		t.Fatal(err)
 	}
 	closePane(app, seedResumePane(t, w, protocol.Deref(delegated.WorkspaceID), delegated.SessionID))
+	testworld.AwaitTaskDone(app, "conversation_keep")
 	if next := lifeShow(t, cli, delegated.SeedID).Seed.Continuation.KeptConversation; next.CopiedAt != kept.CopiedAt {
 		t.Fatalf("smaller source replaced the copy: %+v", next)
 	}
@@ -158,6 +169,7 @@ func TestLiveClaudeIsKeptOnlyWhenQuietAndNeverReplacedByASmallerSource(t *testin
 		t.Fatalf("existing transcript overwritten: %q, %v", got, err)
 	}
 	closePane(app, seedResumePane(t, w, protocol.Deref(delegated.WorkspaceID), delegated.SessionID))
+	testworld.AwaitTaskDone(app, "conversation_keep")
 	if err := os.Remove(path); err != nil {
 		t.Fatal(err)
 	}
@@ -177,6 +189,7 @@ func TestCodexConversationNeedsNoKeptCopy(t *testing.T) {
 	first := w.Launched(delegated.SessionID)
 	first.Prompted()
 	closePane(app, seedResumePane(t, w, protocol.Deref(delegated.WorkspaceID), delegated.SessionID))
+	testworld.AwaitTaskDone(app, "conversation_keep")
 	if kept := lifeShow(t, cli, delegated.SeedID).Seed.Continuation.KeptConversation; kept != nil {
 		t.Fatalf("Codex copied: %+v", kept)
 	}
@@ -200,6 +213,7 @@ func TestSessionsSharingAConversationKeepOneCopyUntilAllTheirWorkCloses(t *testi
 		t.Fatal(err)
 	}
 	closePane(app, seedResumePane(t, w, protocol.Deref(delegated.WorkspaceID), delegated.SessionID))
+	testworld.AwaitTaskDone(app, "conversation_keep")
 	spawned, secondWorkspace, _ := w.RequestSpawn(app, fakeagent.Claude, w.Path("elsewhere"), func(msg *protocol.SpawnSessionMessage) {
 		msg.ResumeSessionID = protocol.Ptr(first.ConversationID)
 	})
@@ -213,16 +227,19 @@ func TestSessionsSharingAConversationKeepOneCopyUntilAllTheirWorkCloses(t *testi
 	}
 	secondSeed := plantSeedAs(t, cli, "", "continue the same conversation")
 	lifeMove(t, cli, second, secondSeed, "tend", "", "")
+	testworld.AwaitTaskDone(app, "conversation_keep")
 	app.TypeLine(second, "continue the work")
 	resumed.Prompted()
 	resumed.Reply("second session's longer answer to keep with the original conversation <!-- attn:state=waiting_input -->")
 	closePane(app, seedResumePane(t, w, secondWorkspace, second))
+	testworld.AwaitTaskDone(app, "conversation_keep")
 	firstCopy := lifeShow(t, cli, delegated.SeedID).Seed.Continuation.KeptConversation
 	secondCopy := lifeShow(t, cli, secondSeed).Seed.Continuation.KeptConversation
 	if firstCopy == nil || secondCopy == nil || *firstCopy != *secondCopy {
 		t.Fatalf("shared copy: first %+v, second %+v", firstCopy, secondCopy)
 	}
 	lifeMove(t, cli, "", delegated.SeedID, "wither", "first work abandoned", "")
+	testworld.AwaitTaskDone(app, "conversation_keep")
 	kept := lifeShow(t, cli, secondSeed).Seed.Continuation.KeptConversation
 	if kept == nil || kept.DeleteAfter != nil {
 		t.Fatalf("copy released while other work remains open: %+v", kept)

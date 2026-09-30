@@ -14,6 +14,52 @@ import (
 
 const testPoll = 2 * time.Millisecond
 
+func TestEnqueueDuringAUniqueJobRunsOneFollowupAfterTheCurrentPass(t *testing.T) {
+	synctest.Test(t, func(t *testing.T) {
+		r, _ := newBubbleRunner(t, nil)
+		started := make(chan int)
+		finishFirst := make(chan struct{})
+		var runs atomic.Int32
+		mustRegister(t, r, "keep", func(ctx context.Context, _ *Job) (any, error) {
+			n := int(runs.Add(1))
+			select {
+			case started <- n:
+			case <-ctx.Done():
+				return nil, ctx.Err()
+			}
+			if n == 1 {
+				select {
+				case <-finishFirst:
+				case <-ctx.Done():
+					return nil, ctx.Err()
+				}
+			}
+			return nil, nil
+		})
+		mustStart(t, r)
+		job, err := r.Enqueue("keep", EnqueueOptions{UniqueKey: "all"})
+		if err != nil {
+			t.Fatal(err)
+		}
+		if n := <-started; n != 1 {
+			t.Fatalf("first pass = %d", n)
+		}
+		for range 3 {
+			if _, err := r.Enqueue("keep", EnqueueOptions{UniqueKey: "all"}); err != nil {
+				t.Fatal(err)
+			}
+		}
+		close(finishFirst)
+		if n := <-started; n != 2 {
+			t.Fatalf("followup pass = %d", n)
+		}
+		synctest.Wait()
+		if got := mustGet(t, r, job.ID).State; got != StateDone || runs.Load() != 2 {
+			t.Fatalf("coalesced job: state=%s, runs=%d; want done after two passes", got, runs.Load())
+		}
+	})
+}
+
 func newTestRunner(t *testing.T, tune func(*Options)) (*Runner, *memStore, *fakeClock) {
 	t.Helper()
 	store := newMemStore()

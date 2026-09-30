@@ -2027,7 +2027,7 @@ func (d *Daemon) recordSessionClose(sessionID string, commit func() (bool, error
 	}
 	d.forgetSessionTrace(sessionID)
 	if recorded {
-		d.keepConversations(time.Now())
+		d.queueConversationKeep()
 		d.invalidateGardenSeedParties("session close")
 		entry := d.store.SessionLedgerEntry(sessionID)
 		d.publishFact(FactSessionClosed, sessionID, entry)
