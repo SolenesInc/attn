@@ -1,0 +1,3 @@
+kind: internal
+area: daemon
+change: Serialize ticket nudge cancellation with scheduling when a session enters approval, and recheck eligibility before queuing a countdown nudge.

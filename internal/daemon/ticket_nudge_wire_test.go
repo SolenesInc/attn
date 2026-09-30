@@ -155,33 +155,55 @@ func TestTicketActivityNudgesAParticipantOnceItsCountdownRunsOut(t *testing.T) {
 }
 
 func TestAParticipantAwaitingApprovalIsNudgedOnlyOnceItMovesOn(t *testing.T) {
-	inBubble(t, func(t *testing.T, w *world) {
-		w.finishStartupWork()
-		app, cli := w.App(), w.Client()
-		ticketNudgeReadySessions(t, w, cli, "worker")
-		ticketReportTake(t, cli, "worker", "pricing")
-		w.advance(ticketNudgeBundleWindow)
-		if err := cli.UpdateState("worker", protocol.StatePendingApproval); err != nil {
-			t.Fatal(err)
+	for _, alreadyArmed := range []bool{false, true} {
+		name := "activity arrives while entering approval"
+		if alreadyArmed {
+			name = "approval interrupts an armed countdown"
 		}
+		t.Run(name, func(t *testing.T) {
+			inBubble(t, func(t *testing.T, w *world) {
+				w.finishStartupWork()
+				app, cli := w.App(), w.Client()
+				ticketNudgeReadySessions(t, w, cli, "worker")
+				ticketReportTake(t, cli, "worker", "pricing")
+				w.advance(ticketNudgeBundleWindow)
+				if alreadyArmed {
+					commentOnTicket(t, cli, "chief", "pricing", "take a look")
+					ticketNudgeAwaitDeadline(t, w, app, "worker", time.Now().Add(ticketNudgeCountdown))
+				}
+				if err := cli.UpdateState("worker", protocol.StatePendingApproval); err != nil {
+					t.Fatal(err)
+				}
+				if !alreadyArmed {
+					commentOnTicket(t, cli, "chief", "pricing", "take a look")
+				}
+				testworld.AwaitSession(app, "worker", func(s protocol.Session) bool {
+					return s.State == protocol.SessionStatePendingApproval && protocol.Deref(s.TicketUnread) && s.NudgeFiresAt == nil
+				})
+				w.advance(ticketNudgeCountdown)
+				if latest := ticketLatestSession(t, app, "worker"); latest.NudgeFiresAt != nil {
+					t.Errorf("a session awaiting approval armed a countdown to %s", *latest.NudgeFiresAt)
+				}
+				if early := readInbox(t, cli, "worker", 0); len(early.Items) != 0 {
+					t.Fatalf("a session awaiting approval was nudged %q", inboxContents(early.Items))
+				}
 
-		commentOnTicket(t, cli, "chief", "pricing", "take a look")
-		testworld.AwaitSession(app, "worker", func(s protocol.Session) bool { return protocol.Deref(s.TicketUnread) })
-		w.advance(ticketNudgeCountdown)
-		if latest := ticketLatestSession(t, app, "worker"); latest.NudgeFiresAt != nil {
-			t.Errorf("a session awaiting approval armed a countdown to %s", *latest.NudgeFiresAt)
-		}
-		if early := readInbox(t, cli, "worker", 0); len(early.Items) != 0 {
-			t.Fatalf("a session awaiting approval was nudged %q", inboxContents(early.Items))
-		}
-
-		if err := cli.UpdateState("worker", protocol.StateWorking); err != nil {
-			t.Fatal(err)
-		}
-		ticketNudgeAwaitDeadline(t, w, app, "worker", time.Now().Add(ticketNudgeCountdown))
-		w.advance(ticketNudgeCountdown)
-		ticketNudgeAwaitDelivered(t, w, app, cli, "worker")
-	})
+				if err := cli.UpdateState("worker", protocol.StateWorking); err != nil {
+					t.Fatal(err)
+				}
+				ticketNudgeAwaitDeadline(t, w, app, "worker", time.Now().Add(ticketNudgeCountdown))
+				w.advance(ticketNudgeCountdown)
+				ticketNudgeAwaitDelivered(t, w, app, cli, "worker")
+				if got := inboxLines(t, cli, "worker"); !slices.Equal(got, []string{"pricing commented take a look"}) {
+					t.Fatalf("after approval the ticket inbox returned %q", got)
+				}
+				w.advance(ticketNudgeBundleWindow)
+				if again := readInbox(t, cli, "worker", 0); len(again.Items) != 0 {
+					t.Errorf("after recovery the session was nudged again: %q", inboxContents(again.Items))
+				}
+			})
+		})
+	}
 }
 
 func TestALiveWatcherReceivesActivityInsteadOfANudge(t *testing.T) {

@@ -6,6 +6,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/victorarias/attn/internal/agentmailbox"
 	"github.com/victorarias/attn/internal/protocol"
 )
 
@@ -254,15 +255,14 @@ func (d *Daemon) runNudgeDelivery(sessionID string) string {
 	if d.store == nil {
 		return "noop"
 	}
-	session := d.store.Get(sessionID)
-	if session == nil {
-		return "blocked"
-	}
 	if d.currentlySelectedSession() == sessionID {
 		return "active"
 	}
 	d.deliveryMu.Lock()
 	defer d.deliveryMu.Unlock()
+	if session := d.store.Get(sessionID); session == nil || !sessionInputPhaseAllows(sessionInputAtTurnBoundary, session.State) {
+		return "blocked"
+	}
 	if until := d.watchLeaseUntil[sessionID]; until.After(time.Now()) {
 		d.nudgeMu.Lock()
 		d.startCountdownAtLocked(sessionID, until)
@@ -283,17 +283,13 @@ func (d *Daemon) runNudgeDelivery(sessionID string) string {
 		d.logf("nudge delivered-through scan %s: %v", sessionID, err)
 		return "error"
 	}
-	delivery, _, err := d.store.EnqueueMaintenancePromptOnce(
-		fmt.Sprintf("legacy-ticket/%s/%d", sessionID, deliveredThroughSeq),
-		sessionID,
-		fmt.Sprintf("%d", deliveredThroughSeq),
-		legacyTicketMailboxCoalesceKey,
-		ticketNudgePrompt,
-		time.Now(),
-	)
+	delivery, eligible, err := d.enqueueAutomaticTicketNudge(sessionID, deliveredThroughSeq)
 	if err != nil {
 		d.logf("nudge countdown mailbox enqueue %s: %v", sessionID, err)
 		return "error"
+	}
+	if !eligible {
+		return "blocked"
 	}
 	if err := d.store.SetTicketDeliveryAttentionThrough(d.ticketAttentionKey(sessionID), time.Now(), deliveredThroughSeq); err != nil {
 		d.logf("nudge attention update %s: %v", sessionID, err)
@@ -303,6 +299,25 @@ func (d *Daemon) runNudgeDelivery(sessionID string) string {
 		return "queued"
 	}
 	return "doorbell"
+}
+
+func (d *Daemon) enqueueAutomaticTicketNudge(sessionID string, deliveredThroughSeq int64) (delivery agentmailbox.Delivery, eligible bool, err error) {
+	// Serialize eligibility and enqueue with approval-state commits.
+	lane := d.sessionInputs().lane(sessionID)
+	lane.mu.Lock()
+	defer lane.mu.Unlock()
+	if session := d.store.Get(sessionID); session == nil || !sessionInputPhaseAllows(sessionInputAtTurnBoundary, session.State) {
+		return delivery, false, nil
+	}
+	delivery, _, err = d.store.EnqueueMaintenancePromptOnce(
+		fmt.Sprintf("legacy-ticket/%s/%d", sessionID, deliveredThroughSeq),
+		sessionID,
+		fmt.Sprintf("%d", deliveredThroughSeq),
+		legacyTicketMailboxCoalesceKey,
+		ticketNudgePrompt,
+		time.Now(),
+	)
+	return delivery, true, err
 }
 
 func (d *Daemon) updateNudgeSelection(oldID, newID string) {
