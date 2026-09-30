@@ -30,6 +30,11 @@ Daemon connection paths are relative to `app/src`.
 
 - Resize order: model, renderer, paint, `onResize`, PTY SIGWINCH.
 - Limit `will-change` and similar layer hints to visible components.
+- Avoid continuous paint/layout animations in persistent UI, especially
+  `box-shadow` and `width`/`height` countdown transitions. Keep decoration static;
+  animate `opacity` or `transform` (countdown fills use `scaleX` with the correct
+  origin). Verify the whole effect in a fully visible running app and measure
+  idle/active CPU; transform alone does not prove it is cheap.
 - Disable unused WebGL depth/stencil attachments.
 - Hidden canvases retain buffers. Release inactive panes via
   `setSurfaceReleased(true)`; restore in a layout effect before reveal.

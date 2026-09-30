@@ -71,9 +71,7 @@
   animation: nudge-marker-pulse 2.6s ease-in-out infinite;
 }
 
-/* Counting: an accent hairline along the header's bottom edge fills left→right to the
-   deadline (the JS-driven width transition in CountdownFill). The header is
-   position:relative so this pins to it. */
+/* A full-width hairline scales left to right against the absolute deadline. */
 .nudge-header-track {
   position: absolute;
   left: 0;
@@ -88,7 +86,7 @@
 .nudge-header-track-fill {
   display: block;
   height: 100%;
-  width: 0;
+  width: 100%;
   background: #38bdf8;
   box-shadow: 0 0 9px 1px rgba(56, 189, 248, 0.75);
 }
@@ -102,7 +100,7 @@
   border-radius: 5px;
   background: rgba(var(--nudge-accent), 0.16);
   color: #f6dcab;
-  animation: nudge-header-glow 1.9s ease-in-out infinite;
+  box-shadow: 0 0 5px 0 rgba(var(--nudge-accent), 0.2);
   transition: background 120ms ease, border-color 120ms ease;
 }
 
@@ -113,7 +111,6 @@
 .nudge-header-trigger:hover {
   background: rgba(var(--nudge-accent), 0.28);
   border-color: rgba(var(--nudge-accent), 0.9);
-  animation: none;
 }
 
 .nudge-header-trigger:active {
@@ -141,7 +138,7 @@
 .nudge-sidebar-bar-fill {
   display: block;
   height: 100%;
-  width: 0;
+  width: 100%;
   background: var(--nudge-accent-solid);
   box-shadow: 0 0 9px 1px rgba(var(--nudge-accent), 0.7);
 }
@@ -190,11 +187,6 @@
 @keyframes nudge-dot-pulse {
   0%, 100% { opacity: 1; transform: scale(1); }
   50% { opacity: 0.45; transform: scale(0.78); }
-}
-
-@keyframes nudge-header-glow {
-  0%, 100% { box-shadow: 0 0 0 0 rgba(var(--nudge-accent), 0); }
-  50% { box-shadow: 0 0 10px 0 rgba(var(--nudge-accent), 0.45); }
 }
 
 @media (prefers-reduced-motion: reduce) {

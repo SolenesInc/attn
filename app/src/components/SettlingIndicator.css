@@ -73,11 +73,7 @@
   animation: settling-dot-pulse 1.2s ease-in-out infinite;
 }
 
-/* The countdown itself: a hairline along the header's bottom edge that drains
-   right-to-left to the deadline (the width transition in CountdownFill). The
-   header is position:relative, so this pins to it and spans the full pane width.
-   Anchored right so the shrinking bar retreats toward its own end rather than
-   sliding. */
+/* The full-width hairline scales toward its right edge against the deadline. */
 .settling-header-track {
   position: absolute;
   left: 0;
@@ -87,8 +83,6 @@
   overflow: hidden;
   background: rgba(var(--settling-accent), 0.16);
   pointer-events: none;
-  display: flex;
-  justify-content: flex-end;
 }
 
 .settling-header-track-fill {
@@ -111,8 +105,6 @@
   overflow: hidden;
   pointer-events: none;
   background: rgba(var(--settling-accent), 0.18);
-  display: flex;
-  justify-content: flex-end;
 }
 
 .settling-sidebar-bar-fill {

@@ -1,0 +1,3 @@
+kind: fixed
+area: queue
+change: Nudge and auto-settle countdowns use less CPU while keeping their progress and pulsing dots.

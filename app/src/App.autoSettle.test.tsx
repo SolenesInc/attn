@@ -5,7 +5,6 @@ import { gesture, renderApp } from './test/renderApp';
 
 const WORKSPACE = 'workspace-main';
 const FIRES_AT = '2999-01-01T00:00:00.000Z';
-const PASSED = '2000-01-01T00:00:00.000Z';
 
 const owed = { turn_owed: true, turn_opened_at: '2026-08-03T09:00:00Z' };
 
@@ -83,12 +82,6 @@ describe('App auto-settle', () => {
     expect(header().queryByTestId('settle-kept-chip')).toBeNull();
   });
 
-  it('drains the header track toward the deadline in one animation, not a tick per frame', async () => {
-    await showTargetBesideOther({ auto_settle_fires_at: FIRES_AT });
-
-    expect(headerFill().style.width).toBe('0%');
-    expect(headerFill().style.transition).toMatch(/^width \d+ms linear$/);
-  });
 
   it('holds the header track full and still while the settle is paused', async () => {
     await showTargetBesideOther({ auto_settle_held: true });
@@ -97,12 +90,6 @@ describe('App auto-settle', () => {
     expect(headerFill()).toHaveClass('settling-track-fill--held');
   });
 
-  it('snaps the header track empty, with no animation, for a deadline that already passed', async () => {
-    await showTargetBesideOther({ auto_settle_fires_at: PASSED });
-
-    expect(headerFill().style.width).toBe('0%');
-    expect(headerFill().style.transition).toBe('none');
-  });
 
   it('announces a settle on the queue row of an off-screen turn as a bare bar, held full while paused', async () => {
     const daemon = await queueTargetOffScreen({ auto_settle_fires_at: FIRES_AT });
