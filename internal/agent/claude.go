@@ -5,13 +5,15 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"io"
+	"io/fs"
 	"os"
 	"os/exec"
 	"path/filepath"
 	"strconv"
 	"strings"
 	"time"
+
+	"github.com/google/uuid"
 
 	"github.com/victorarias/attn/internal/classifier"
 	"github.com/victorarias/attn/internal/hooks"
@@ -618,62 +620,66 @@ func (c *Claude) ClassifyWithExecutable(text, executable, workDir string, timeou
 }
 
 func copyTranscriptForResume(resumeSessionID, cwd string) error {
-	srcPath := transcript.FindClaudeTranscript(resumeSessionID)
-	if srcPath == "" {
-		return fmt.Errorf("resume transcript not found for session %s", resumeSessionID)
+	id, err := uuid.Parse(resumeSessionID)
+	if err != nil || id.String() != resumeSessionID {
+		return fmt.Errorf("invalid Claude conversation ID: %s", resumeSessionID)
 	}
 	home, err := toolhome.Dir()
 	if err != nil {
 		return err
 	}
-	paths, err := filepath.Glob(filepath.Join(home, ".claude", "projects", "*", resumeSessionID+".jsonl"))
+	files, err := OpenConversationFiles(home)
 	if err != nil {
 		return err
 	}
-	var largest int64 = -1
-	for _, path := range paths {
-		if info, err := os.Stat(path); err == nil && info.Mode().IsRegular() && info.Size() > largest {
-			srcPath, largest = path, info.Size()
+	defer files.Close()
+	dest, err := filepath.Rel(home, filepath.Join(claudeProjectDir(cwd), resumeSessionID+".jsonl"))
+	if err != nil || !filepath.IsLocal(dest) {
+		return fmt.Errorf("invalid Claude project directory: %s", cwd)
+	}
+	dest = filepath.ToSlash(dest)
+	if existing, err := files.Open(dest); err == nil {
+		info, statErr := existing.Stat()
+		existing.Close()
+		if statErr != nil {
+			return statErr
 		}
-	}
-
-	destDir := claudeProjectDir(cwd)
-	if destDir == "" {
-		return fmt.Errorf("could not determine Claude project directory")
-	}
-	if err := os.MkdirAll(destDir, 0700); err != nil {
-		return fmt.Errorf("failed to create project directory: %w", err)
-	}
-
-	destPath := filepath.Join(destDir, resumeSessionID+".jsonl")
-	if srcPath == destPath {
-		return nil
-	}
-	if _, err := os.Lstat(destPath); err == nil {
+		if !info.Mode().IsRegular() {
+			return fmt.Errorf("conversation destination is not a regular file: %s", dest)
+		}
 		return nil
 	} else if !os.IsNotExist(err) {
 		return err
 	}
-
-	src, err := os.Open(srcPath)
+	projects, err := fs.ReadDir(files, ".claude/projects")
 	if err != nil {
-		return fmt.Errorf("failed to open source transcript: %w", err)
+		return err
 	}
-	defer src.Close()
-
-	dst, err := os.OpenFile(destPath, os.O_WRONLY|os.O_CREATE|os.O_EXCL, 0600)
-	if os.IsExist(err) {
-		return nil
+	var best fs.File
+	var largest int64
+	for _, project := range projects {
+		if !project.IsDir() {
+			continue
+		}
+		candidate, err := files.Open(".claude/projects/" + project.Name() + "/" + resumeSessionID + ".jsonl")
+		if err != nil {
+			continue
+		}
+		info, err := candidate.Stat()
+		if err != nil || !info.Mode().IsRegular() || (best != nil && info.Size() <= largest) {
+			candidate.Close()
+			continue
+		}
+		if best != nil {
+			best.Close()
+		}
+		best, largest = candidate, info.Size()
 	}
-	if err != nil {
-		return fmt.Errorf("failed to create destination transcript: %w", err)
+	if best == nil {
+		return fmt.Errorf("resume transcript not found for session %s", resumeSessionID)
 	}
-	defer dst.Close()
-
-	if _, err := io.Copy(dst, src); err != nil {
-		return fmt.Errorf("failed to copy transcript: %w", err)
-	}
-	return nil
+	defer best.Close()
+	return files.Restore(best, dest, false, time.Now())
 }
 
 func claudeProjectDir(cwd string) string {

@@ -327,6 +327,71 @@ func TestSessionsSharingAConversationKeepOneCopyUntilAllTheirWorkCloses(t *testi
 	}
 }
 
+func TestCrossDirectoryClaudeResumeIgnoresLargerSymlinkedTranscripts(t *testing.T) {
+	for _, symlink := range []string{"transcript", "project directory"} {
+		t.Run(symlink, func(t *testing.T) {
+			w := newWorld(t, fakeagent.Claude)
+			app := w.App()
+			delegated := seedResumeDelegate(t, w, fakeagent.Claude, "api")
+			first := w.Launched(delegated.SessionID)
+			first.Prompted()
+			first.Reply("the actual conversation <!-- attn:state=waiting_input -->")
+			originalPath := transcript.FindClaudeTranscript(first.ConversationID)
+			original, err := os.ReadFile(originalPath)
+			if err != nil {
+				t.Fatal(err)
+			}
+			closePane(app, seedResumePane(t, w, protocol.Deref(delegated.WorkspaceID), delegated.SessionID))
+			testworld.AwaitTaskDone(app, "conversation_keep")
+			outside := w.Path("private-project")
+			if err := os.MkdirAll(outside, 0700); err != nil {
+				t.Fatal(err)
+			}
+			privatePath := filepath.Join(outside, first.ConversationID+".jsonl")
+			private := strings.Repeat("private content must not enter a conversation\n", len(original)+1)
+			if err := os.WriteFile(privatePath, []byte(private), 0600); err != nil {
+				t.Fatal(err)
+			}
+			projects := filepath.Dir(filepath.Dir(originalPath))
+			decoy := filepath.Join(projects, "aaa-private-decoy")
+			if symlink == "project directory" {
+				if err := os.Symlink(outside, decoy); err != nil {
+					t.Fatal(err)
+				}
+			} else {
+				if err := os.MkdirAll(decoy, 0700); err != nil {
+					t.Fatal(err)
+				}
+				if err := os.Symlink(privatePath, filepath.Join(decoy, first.ConversationID+".jsonl")); err != nil {
+					t.Fatal(err)
+				}
+			}
+			resumed, _, _ := w.RequestSpawn(app, fakeagent.Claude, w.Path("third-directory"), func(msg *protocol.SpawnSessionMessage) {
+				msg.ResumeSessionID = protocol.Ptr(first.ConversationID)
+			})
+			if !resumed.Success {
+				t.Fatalf("cross-directory resume: %+v", resumed)
+			}
+			w.Launched(resumed.ID)
+			paths, err := filepath.Glob(filepath.Join(projects, "*", first.ConversationID+".jsonl"))
+			if err != nil || len(paths) != 3 {
+				t.Fatalf("resumed main transcripts: %v, %v", paths, err)
+			}
+			for _, path := range paths {
+				if path == originalPath || path == filepath.Join(decoy, first.ConversationID+".jsonl") {
+					continue
+				}
+				if got, err := os.ReadFile(path); err != nil || string(got) != string(original) {
+					t.Fatalf("resume copied a symlinked private file: %q, %v", got, err)
+				}
+			}
+			if got, err := os.ReadFile(privatePath); err != nil || string(got) != private {
+				t.Fatalf("private transcript changed: %q, %v", got, err)
+			}
+		})
+	}
+}
+
 func TestKeptConversationRefusesSymlinkedProviderDirectories(t *testing.T) {
 	for _, stage := range []string{"copy", "restore", "reload"} {
 		t.Run(stage, func(t *testing.T) {

@@ -206,11 +206,14 @@ func (d *Daemon) keepConversations(now time.Time) {
 }
 
 func (d *Daemon) retireConversations(all []store.KeptConversation, liveFiles map[string]bool, changed map[conversationKey]bool, now time.Time) {
+	if len(all) == 0 {
+		return
+	}
 	// Garden role writes and foreground planting use different guards.
 	// Hold both only across reference inspection and archive retirement.
 	d.gardenWatchMu.Lock()
 	defer d.gardenWatchMu.Unlock()
-	err := d.worktreeMaintenance.TryAutomaticRemoval(context.Background(), func(automaticWorktreeCleanupProtection) error {
+	err := d.worktreeMaintenance.TryBackgroundRemoval(context.Background(), func(automaticWorktreeCleanupProtection) error {
 		referenced, err := d.referencedConversations()
 		if err != nil {
 			return err
@@ -272,11 +275,11 @@ func (d *Daemon) copyConversation(agent string, conversation store.SessionConver
 	}
 	archive := tar.NewWriter(encoder)
 	writtenNames := make(map[string]bool)
-	inputs, err := openConversationFiles(home)
+	inputs, err := agentdriver.OpenConversationFiles(home)
 	if err != nil {
 		return err
 	}
-	defer inputs.home.Close()
+	defer inputs.Close()
 	for _, path := range files {
 		relative, relErr := filepath.Rel(home, path)
 		if relErr != nil || !conversationFileAllowed(agent, conversation.NativeID, filepath.ToSlash(relative)) {
@@ -448,11 +451,11 @@ func restoreConversationArchive(path, agent, resumeID string, now time.Time) err
 	if err != nil {
 		return err
 	}
-	outputs, err := openConversationFiles(home)
+	outputs, err := agentdriver.OpenConversationFiles(home)
 	if err != nil {
 		return err
 	}
-	defer outputs.home.Close()
+	defer outputs.Close()
 	// An opened archive survives deletion; replacement installs a complete archive by rename.
 	src, err := os.Open(path)
 	if err != nil {
@@ -479,7 +482,7 @@ func restoreConversationArchive(path, agent, resumeID string, now time.Time) err
 		if header.Typeflag != tar.TypeReg && header.Typeflag != tar.TypeDir {
 			return fmt.Errorf("unsupported archive file: %s", header.Name)
 		}
-		if err := outputs.restore(archive, header.Name, header.Typeflag == tar.TypeDir, now); err != nil {
+		if err := outputs.Restore(archive, header.Name, header.Typeflag == tar.TypeDir, now); err != nil {
 			return err
 		}
 	}

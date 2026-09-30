@@ -64,6 +64,13 @@ func (c *worktreeMaintenanceCoordinator) TryAutomaticRemoval(
 	run func(automaticWorktreeCleanupProtection) error,
 ) error {
 	c.preemptSweep()
+	return c.TryBackgroundRemoval(ctx, run)
+}
+
+func (c *worktreeMaintenanceCoordinator) TryBackgroundRemoval(
+	ctx context.Context,
+	run func(automaticWorktreeCleanupProtection) error,
+) error {
 	if !c.gate.TryLock() {
 		return errAutomaticWorktreeCleanupPreempted
 	}
