@@ -92,7 +92,15 @@ function RailDesktops() {
   const desktopListRef = useRef<HTMLDivElement>(null);
   const desktopOrder = JSON.stringify(visibleVisualOrder.map((desktop) => desktop.id));
   useEffect(() => {
-    desktopListRef.current?.querySelector('[aria-current="true"]')?.scrollIntoView({ block: 'nearest' });
+    const list = desktopListRef.current;
+    if (!list) return;
+    const revealCurrent = () => {
+      list.querySelector('[aria-current="true"]')?.scrollIntoView({ block: 'nearest' });
+    };
+    revealCurrent();
+    const observer = new ResizeObserver(revealCurrent);
+    observer.observe(list);
+    return () => observer.disconnect();
   }, [selectedDesktopId, desktopOrder]);
   return (
     <div className="rail-desktops" ref={desktopListRef}>

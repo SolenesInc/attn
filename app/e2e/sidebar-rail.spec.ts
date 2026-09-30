@@ -45,6 +45,20 @@ test('reveals the same current desktop after an arrangement update moves it to t
   expect(await page.evaluate(() => window.__HARNESS__.getCalls('desktop'))).toEqual([]);
 });
 
+test('keeps the current desktop visible when the window shrinks', async ({ page }) => {
+  await page.setViewportSize({ width: 1200, height: 900 });
+  await page.goto('/test-harness/?component=SidebarRail');
+  await page.waitForFunction(() => window.__HARNESS__?.ready === true);
+  await page.evaluate(() => window.__HARNESS__.triggerRerender());
+  const current = page.getByRole('button', { name: 'Sketches (⌘8)' });
+  await expect(current).toHaveAttribute('aria-current', 'true');
+  await expect(current).toBeInViewport({ ratio: 1 });
+  await page.setViewportSize({ width: 1200, height: 600 });
+  await expect(current).toBeInViewport({ ratio: 1 });
+  await expect(current).toHaveAttribute('aria-current', 'true');
+  expect(await page.evaluate(() => window.__HARNESS__.getCalls('desktop'))).toEqual([]);
+});
+
 test('pins the tools and bottom actions at 600px while scrolling desktops and revealing the current one', async ({ page }) => {
   await page.setViewportSize({ width: 1200, height: 600 });
   await page.goto('/test-harness/?component=SidebarRail');
