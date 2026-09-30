@@ -2956,7 +2956,26 @@ export function useDaemonSocket({
       } else {
         ptyTransportRef.current.setAttachContext(id);
       }
-      pendingActionsRef.current.set(key, { resolve, reject });
+      const waiter = {
+        resolve: (result: AttachResult) => {
+          clearTimeout(timeout);
+          resolve(result);
+        },
+        reject: (error: unknown) => {
+          clearTimeout(timeout);
+          reject(error);
+        },
+      };
+      const timeout = setTimeout(() => {
+        if (pendingActionsRef.current.get(key) === waiter) {
+          pendingActionsRef.current.delete(key);
+          canceledAttachIdsRef.current.delete(id);
+          ptyTransportRef.current.clearQueuedAttachOutputs(id);
+          ptyTransportRef.current.setAttachContext(id);
+          waiter.reject(new Error('Attach session timed out'));
+        }
+      }, 15000);
+      pendingActionsRef.current.set(key, waiter);
       recordPtyCommand('attach_session', id);
       ws.send(JSON.stringify({
         cmd: 'attach_session',
@@ -2966,16 +2985,6 @@ export function useDaemonSocket({
           ? { cols: context.requestedCols, rows: context.requestedRows }
           : {}),
       }));
-
-      setTimeout(() => {
-        if (pendingActionsRef.current.has(key)) {
-          pendingActionsRef.current.delete(key);
-          canceledAttachIdsRef.current.delete(id);
-          ptyTransportRef.current.clearQueuedAttachOutputs(id);
-          ptyTransportRef.current.setAttachContext(id);
-          reject(new Error('Attach session timed out'));
-        }
-      }, 15000);
     });
   }, []);
 
