@@ -103,6 +103,15 @@ async function main() {
           ], { encoding: 'utf8', env: instanceCliEnv(currentHarnessInstance()) });
           sessionId = JSON.parse(output.slice(output.indexOf('{'))).session_id;
           await observer.waitFor(() => observer.getSession(sessionId), 'delegated beta visible');
+          await observer.waitFor(() => observer.getSession(sessionId)?.state === 'idle', 'delegation opening turn stopped');
+          const shared = await client.request('get_workspace', { sessionId });
+          const delegatedPane = shared.panes.find((pane) => pane.runtimeId === sessionId);
+          runner.assert(delegatedPane, 'delegated agent has a pane');
+          await observer.requestResult({
+            cmd: 'workspace_layout_move_leaf_to_new_workspace',
+            source_workspace_id: shared.workspaceId, leaf_id: delegatedPane.paneId,
+          }, 'workspace_layout_action_result');
+          await observer.waitFor(() => observer.getSession(sessionId)?.workspace_id !== shared.workspaceId, 'beta moved to its own workspace');
         } else {
           sessionId = await createSessionAndWaitForInitialPane({
             client, observer, cwd, label, agent: 'claude', promptReadyFn: ensureClaudePromptReadyViaPty,
@@ -111,8 +120,8 @@ async function main() {
         const pane = await waitForFirstWorkspacePane(client, sessionId, `${label} pane`);
         const agent = { sessionId, paneId: pane.paneId };
         agents.push(agent);
-        if (label === 'alpha') await submitPrompt(client, sessionId, pane.paneId, 'READY');
-        else await client.request('select_session', { sessionId });
+        await client.request('select_session', { sessionId });
+        await submitPrompt(client, sessionId, pane.paneId, 'READY');
         await waitForPaneText(client, sessionId, pane.paneId, (text) => text.includes('Ready for keyboard snooze'), 'ready reply');
         await observer.waitFor(() => observer.getSession(sessionId)?.state === 'waiting_input', `${label} stopped`);
       }
