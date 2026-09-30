@@ -19,6 +19,7 @@ import { SeedHeaderHarness } from './SeedHeaderHarness';
 import { TerminalAnnotationsHarness } from './TerminalAnnotationsHarness';
 import { DelegationChainHarness } from './DelegationChainHarness';
 import { AgentHeaderHarness } from './AgentHeaderHarness';
+import { SidebarRailHarness } from './SidebarRailHarness';
 
 export const harnesses: Record<string, React.ComponentType<HarnessProps>> = {
   AgentHeader: AgentHeaderHarness,
@@ -41,4 +42,5 @@ export const harnesses: Record<string, React.ComponentType<HarnessProps>> = {
   DelegationChain: DelegationChainHarness,
   QueueBar: QueueBarHarness,
   QueueSidebarFit: QueueSidebarFitHarness,
+  SidebarRail: SidebarRailHarness,
 };
