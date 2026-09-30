@@ -29,6 +29,9 @@ func TestBranchInfoFileLayouts(t *testing.T) {
 		{name: "absolute worktree", files: map[string]string{"wt/.git": "gitdir: ROOT/main/.git/worktrees/wt\n", "main/.git/worktrees/wt/HEAD": "ref: refs/heads/topic\n", "main/.git/worktrees/wt/commondir": "../..\n"}, cwd: "wt/subdir", branch: "topic", worktree: true, main: "main", repository: "main"},
 		{name: "relative worktree", files: map[string]string{"wt/.git": "gitdir: ../main/.git/worktrees/wt\n", "main/.git/worktrees/wt/HEAD": "ref: refs/heads/topic\n"}, cwd: "wt", branch: "topic", worktree: true, main: "main", repository: "../main"},
 		{name: "submodule gitfile", files: map[string]string{"repo/sub/.git": "gitdir: ../.git/modules/sub\n", "repo/.git/modules/sub/HEAD": "ref: refs/heads/module\n"}, cwd: "repo/sub", branch: "module", repository: "repo/sub"},
+		{name: "reftable stub", files: map[string]string{"repo/.git/HEAD": "ref: refs/heads/.invalid\n"}, cwd: "repo"},
+		{name: "reftable directory", files: map[string]string{"repo/.git/HEAD": strings.Repeat("a", 40), "repo/.git/reftable/tables.list": ""}, cwd: "repo"},
+		{name: "worktree own reftable", files: map[string]string{"wt/.git": "gitdir: ROOT/main/.git/worktrees/wt\n", "main/.git/worktrees/wt/HEAD": strings.Repeat("a", 40), "main/.git/worktrees/wt/commondir": "../..\n", "main/.git/worktrees/wt/reftable/tables.list": ""}, cwd: "wt"},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
@@ -48,9 +51,9 @@ func TestBranchInfoFileLayouts(t *testing.T) {
 			}
 			t.Setenv("PATH", t.TempDir())
 			got, err := NewClient().GetBranchInfo(context.Background(), cwd)
-			want := BranchInfo{Branch: tc.branch, IsWorktree: tc.worktree, Repository: filepath.Join(root, tc.repository)}
-			if strings.HasPrefix(tc.repository, "../") {
-				want.Repository = tc.repository
+			want := BranchInfo{Branch: tc.branch, IsWorktree: tc.worktree, Repository: tc.repository}
+			if tc.repository != "" && !strings.HasPrefix(tc.repository, "../") {
+				want.Repository = filepath.Join(root, tc.repository)
 			}
 			if tc.main != "" {
 				want.MainRepo = filepath.Join(root, tc.main)

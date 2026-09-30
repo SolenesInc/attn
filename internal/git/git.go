@@ -79,8 +79,10 @@ func (c *Client) branchInfoFromFiles(ctx context.Context, dir string) (*BranchIn
 		}
 	}
 	// Reftable's HEAD can be a stub; git owns decoding that backend.
-	if _, err := os.Stat(filepath.Join(commonDir, "reftable")); !os.IsNotExist(err) {
-		return nil, false
+	for _, refDir := range []string{gitDir, commonDir} {
+		if _, err := os.Stat(filepath.Join(refDir, "reftable")); !os.IsNotExist(err) {
+			return nil, false
+		}
 	}
 	content, err := os.ReadFile(filepath.Join(gitDir, "HEAD"))
 	if err != nil {
