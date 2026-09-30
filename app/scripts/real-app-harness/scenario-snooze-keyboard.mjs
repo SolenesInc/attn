@@ -32,6 +32,7 @@ async function main() {
   runner.registerCleanup('quit_app', () => client.quitApp());
   runner.registerCleanup('close_sessions', async () => {
     for (const agent of agents) {
+      if (!observer.getSession(agent.sessionId)) continue;
       const workspace = await client.request('get_workspace', { sessionId: agent.sessionId });
       for (const pane of [...workspace.panes].reverse()) {
         await client.request('close_pane', { sessionId: agent.sessionId, paneId: pane.paneId });
@@ -292,6 +293,22 @@ async function main() {
       await waitDom('[data-testid="session-group-snoozed"]', { absent: true });
       await waitForPaneInputFocus(client, alpha.sessionId, alpha.paneId);
       runner.assert((await client.request('get_state')).activeSessionId === alpha.sessionId, 'home follows the newly woken turn');
+    });
+    await runner.step('removed_target_returns_to_the_current_agent', async () => {
+      const workspace = await client.request('get_workspace', { sessionId: alpha.sessionId });
+      for (const pane of workspace.panes.filter((pane) => pane.paneId !== alpha.paneId)) {
+        await client.request('close_pane', { sessionId: alpha.sessionId, paneId: pane.paneId });
+      }
+      await select(beta);
+      await client.request('dom_focus', { selector: `[data-testid="queue-snooze-${alpha.sessionId}"]` });
+      await driver.pressEnter();
+      await focusedChoice('30m');
+      observer.send({ cmd: 'unregister', id: alpha.sessionId });
+      await observer.waitFor(() => !observer.getSession(alpha.sessionId), 'picker target removed by another client');
+      await waitDom('[data-testid="snooze-menu"]', { absent: true });
+      await waitForPaneInputFocus(client, beta.sessionId, beta.paneId);
+      await driver.typeText('REMOVAL_FOCUS');
+      await waitForPaneText(client, beta.sessionId, beta.paneId, (text) => text.includes('REMOVAL_FOCUS'), 'typing after target removal');
     });
     console.log(JSON.stringify(await runner.finishSuccess({ agents }), null, 2));
   } catch (error) {

@@ -13,7 +13,7 @@ interface SnoozeMenuProps {
   placement: SnoozePlacement;
   onSnooze: (until: Date) => void;
   onClose: () => void;
-  onRestoreFocus: (reason: 'cancel' | 'choose') => void;
+  onRestoreFocus: (reason: 'cancel' | 'choose' | 'removed') => void;
 }
 
 const VIEWPORT_MARGIN = 8;
@@ -87,7 +87,7 @@ export function SnoozeMenu({ sessionLabel, placement, onSnooze, onClose, onResto
       returnFocusOnDeactivate: false,
       // Restore only after the trap releases focus, before queue handover can run.
       onDeactivate: () => {
-        if (closeReason.current === 'cancel' || closeReason.current === 'choose') restoreFocusRef.current(closeReason.current);
+        if (closeReason.current !== 'outside') restoreFocusRef.current(closeReason.current ?? 'removed');
       },
     }}>
       <div

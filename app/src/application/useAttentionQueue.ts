@@ -142,7 +142,7 @@ export function useAttentionQueue({
     }
   }, [enrichedLocalSessions, snoozeMenu]);
 
-  const restoreSnoozeFocus = useCallback((reason: 'cancel' | 'choose') => {
+  const restoreSnoozeFocus = useCallback((reason: 'cancel' | 'choose' | 'removed') => {
     const selectionUnchanged = snoozeMenu?.activeSessionId === useSessionStore.getState().activeSessionId;
     if (reason === 'cancel' && selectionUnchanged && snoozeMenu?.origin?.isConnected) {
       snoozeMenu.origin.focus({ preventScroll: true });
