@@ -147,12 +147,11 @@ export function useSessionLedger({
   const [omitted, setOmitted] = useState(0);
   const [nextBefore, setNextBefore] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
-  const [loadingMoreRead, setLoadingMoreRead] = useState<SessionLedgerEntry[] | null>(null);
+  const [loadingMoreRead, setLoadingMoreRead] = useState<object | null>(null);
   const [reloadNonce, setReloadNonce] = useState(0);
   const [lifecycle, setLifecycle] = useState({ connected: false, generation: 0 });
   const lifecycleRef = useRef(lifecycle);
   const readEpoch = useRef(0);
-  const closesDuringReads = useRef(new Set<SessionLedgerEntry[]>());
   const loadingMore = loadingMoreRead !== null;
 
   const filtersRef = useRef(filters);
@@ -171,7 +170,6 @@ export function useSessionLedger({
           : next);
         if (!event.connected) {
           readEpoch.current += 1;
-          closesDuringReads.current.clear();
           setLoading(false);
           setLoadingMoreRead(null);
         }
@@ -180,7 +178,6 @@ export function useSessionLedger({
       if (!lifecycleRef.current.connected
         || event.connectionGeneration !== lifecycleRef.current.generation) return;
       const entry = event.entry;
-      for (const closes of closesDuringReads.current) closes.push(entry);
       const at = now();
       setRead((current) => ({ ...current, entries: applyClose(current.entries, entry, filtersRef.current, at) }));
     });
@@ -199,7 +196,6 @@ export function useSessionLedger({
 
   useEffect(() => {
     const epoch = ++readEpoch.current;
-    closesDuringReads.current.clear();
     setLoadingMoreRead(null);
     setNextBefore(null);
     setOmitted(0);
@@ -212,17 +208,13 @@ export function useSessionLedger({
       return;
     }
     const generation = lifecycle.generation;
-    const closes: SessionLedgerEntry[] = [];
-    closesDuringReads.current.add(closes);
     const superseded = () => epoch !== readEpoch.current || generation !== lifecycleRef.current.generation;
     setLoading(true);
     setRead((current) => (current.query === queryKey ? { ...current, error: null } : current));
     connection.list({ ...(query as SessionLedgerQuery), limit: pageSize })
       .then((page) => {
         if (superseded()) return;
-        const at = now();
-        const listed = closes.reduce((next, entry) => applyClose(next, entry, filters, at), page.entries ?? []);
-        setRead({ query: queryKey, entries: listed, facets: page.facets ?? null, error: null });
+        setRead({ query: queryKey, entries: page.entries ?? [], facets: page.facets ?? null, error: null });
         setOmitted(page.omitted ?? 0);
         setNextBefore(page.next_before ?? null);
       })
@@ -233,14 +225,12 @@ export function useSessionLedger({
           : { ...NO_READ, query: queryKey, error: failure.message }));
       })
       .finally(() => {
-        closesDuringReads.current.delete(closes);
         if (epoch === readEpoch.current) setLoading(false);
       });
     return () => {
       if (readEpoch.current === epoch) readEpoch.current += 1;
-      closesDuringReads.current.clear();
     };
-  }, [enabled, filters, query, queryKey, filterError, connection.list, lifecycle, pageSize, reloadNonce, now]);
+  }, [enabled, query, queryKey, filterError, connection.list, lifecycle, pageSize, reloadNonce]);
 
   const reload = useCallback(() => setReloadNonce((n) => n + 1), []);
 
@@ -248,18 +238,15 @@ export function useSessionLedger({
     if (!nextBefore || loading || loadingMore || filterError || !lifecycleRef.current.connected) return;
     const epoch = readEpoch.current;
     const generation = lifecycleRef.current.generation;
-    const closes: SessionLedgerEntry[] = [];
-    closesDuringReads.current.add(closes);
+    const token = {};
     const superseded = () => epoch !== readEpoch.current || generation !== lifecycleRef.current.generation;
-    setLoadingMoreRead(closes);
+    setLoadingMoreRead(token);
     connection.list({ ...(sessionLedgerQuery(filtersRef.current, now()) as SessionLedgerQuery), limit: pageSize, before: nextBefore })
       .then((page) => {
         if (superseded()) return;
-        const at = now();
         setRead((current) => {
           const present = new Set(current.entries.map((entry) => entry.id));
-          const appended = [...current.entries, ...(page.entries ?? []).filter((entry) => !present.has(entry.id))];
-          return { ...current, entries: closes.reduce((next, entry) => applyClose(next, entry, filtersRef.current, at), appended) };
+          return { ...current, entries: [...current.entries, ...(page.entries ?? []).filter((entry) => !present.has(entry.id))] };
         });
         setOmitted(page.omitted ?? 0);
         setNextBefore(page.next_before ?? null);
@@ -268,8 +255,7 @@ export function useSessionLedger({
         if (epoch === readEpoch.current) setRead((current) => ({ ...current, error: failure.message }));
       })
       .finally(() => {
-        closesDuringReads.current.delete(closes);
-        setLoadingMoreRead((current) => current === closes ? null : current);
+        setLoadingMoreRead((current) => current === token ? null : current);
       });
   }, [nextBefore, loading, loadingMore, filterError, connection.list, pageSize, now]);
 

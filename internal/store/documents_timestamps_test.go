@@ -140,3 +140,19 @@ func collectionID(t *testing.T, s *Store, namespace, collection string) int64 {
 	}
 	return id
 }
+
+func readIDs(t *testing.T, s *Store, q docstore.Query) ([]string, error) {
+	t.Helper()
+	read, found, err := s.ReadQuery(q)
+	if err != nil {
+		return nil, err
+	}
+	if !found {
+		t.Fatalf("%s/%s is not declared", q.Namespace, q.Collection)
+	}
+	ids := make([]string, 0, len(read.Documents))
+	for _, d := range read.Documents {
+		ids = append(ids, d.ID)
+	}
+	return ids, nil
+}

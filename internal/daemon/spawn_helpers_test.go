@@ -103,7 +103,6 @@ type fakeSpawnBackend struct {
 	onInput           func(string, []byte)
 	onInputResult     func(string, []byte) error
 	onKill            func()
-	killErr           error
 	spawnErr          error
 	sessionIDs        []string
 	themeCalls        []pty.TerminalTheme
@@ -111,17 +110,10 @@ type fakeSpawnBackend struct {
 	setThemeErr       error
 	screen            string
 	screenUnavailable bool
-	onSnapshot        func()
 	onRecover         func()
 }
 
 func (b *fakeSpawnBackend) ScreenSnapshot(_ context.Context, _ string) (pty.ScreenSnapshotInfo, error) {
-	b.mu.Lock()
-	onSnapshot := b.onSnapshot
-	b.mu.Unlock()
-	if onSnapshot != nil {
-		onSnapshot()
-	}
 	b.mu.Lock()
 	defer b.mu.Unlock()
 	if b.screenUnavailable {
@@ -180,10 +172,10 @@ func (b *fakeSpawnBackend) Kill(_ context.Context, id string, _ syscall.Signal) 
 	b.mu.Lock()
 	b.killed = append(b.killed, id)
 	b.mu.Unlock()
-	if b.killErr == nil && b.onKill != nil {
+	if b.onKill != nil {
 		b.onKill()
 	}
-	return b.killErr
+	return nil
 }
 
 func (b *fakeSpawnBackend) Remove(_ context.Context, id string) error {

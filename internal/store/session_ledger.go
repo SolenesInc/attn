@@ -113,12 +113,16 @@ func (s *Store) CloseSession(id string, closed SessionClose, now time.Time) (boo
 	if affected != 1 {
 		return false, nil
 	}
+	if err := s.saveUnsavedSessionCostTx(tx, id); err != nil {
+		return false, fmt.Errorf("close session %s: %w", id, err)
+	}
 	if err := finalizeSessionCostTx(tx, id); err != nil {
 		return false, fmt.Errorf("close session %s: %w", id, err)
 	}
 	if err := tx.Commit(); err != nil {
 		return false, fmt.Errorf("close session %s: %w", id, err)
 	}
+	s.forgetSessionCost(id)
 	return true, nil
 }
 
@@ -202,7 +206,12 @@ func (s *Store) RestoreSessionClose(id string, closed SessionCloseRecord) (bool,
 		return true, nil
 	}
 
-	result, err := s.db.Exec(`UPDATE sessions SET closed_at = ?, closed_by = ?, close_reason = ?
+	tx, err := s.db.Begin()
+	if err != nil {
+		return false, fmt.Errorf("restore the close of session %s: %w", id, err)
+	}
+	defer tx.Rollback()
+	result, err := tx.Exec(`UPDATE sessions SET closed_at = ?, closed_by = ?, close_reason = ?
 		WHERE id = ? AND closed_at = ''`, closed.At, closed.By, closed.Reason, id)
 	if err != nil {
 		return false, fmt.Errorf("restore the close of session %s: %w", id, err)
@@ -211,6 +220,18 @@ func (s *Store) RestoreSessionClose(id string, closed SessionCloseRecord) (bool,
 	if err != nil {
 		return false, fmt.Errorf("restore the close of session %s: %w", id, err)
 	}
+	if affected == 1 {
+		if err := s.saveUnsavedSessionCostTx(tx, id); err != nil {
+			return false, fmt.Errorf("restore the close of session %s: %w", id, err)
+		}
+		if err := finalizeSessionCostTx(tx, id); err != nil {
+			return false, fmt.Errorf("restore the close of session %s: %w", id, err)
+		}
+	}
+	if err := tx.Commit(); err != nil {
+		return false, fmt.Errorf("restore the close of session %s: %w", id, err)
+	}
+	s.forgetSessionCost(id)
 	return affected == 1, nil
 }
 

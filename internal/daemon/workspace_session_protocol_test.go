@@ -1,15 +1,11 @@
 package daemon
 
 import (
-	"context"
 	"encoding/json"
-	"errors"
-	"syscall"
 	"testing"
 	"time"
 
 	"github.com/victorarias/attn/internal/protocol"
-	"github.com/victorarias/attn/internal/pty"
 	"github.com/victorarias/attn/internal/ptybackend"
 )
 
@@ -87,28 +83,3 @@ func expectSpawnResult(t *testing.T, client *wsClient, sessionID string, success
 		}
 	}
 }
-
-type failingSpawnBackend struct {
-	err error
-}
-
-func (b *failingSpawnBackend) Spawn(context.Context, ptybackend.SpawnOptions) error {
-	return b.err
-}
-func (b *failingSpawnBackend) Attach(context.Context, string, string, ...ptybackend.AttachOptions) (ptybackend.AttachInfo, ptybackend.Stream, error) {
-	return ptybackend.AttachInfo{}, nil, errors.New("attach unsupported")
-}
-func (b *failingSpawnBackend) Input(context.Context, string, []byte) error { return nil }
-func (b *failingSpawnBackend) Resize(context.Context, string, uint16, uint16, uint16, uint16) (ptybackend.ResizeResult, error) {
-	return ptybackend.ResizeResult{Changed: true}, nil
-}
-func (b *failingSpawnBackend) SetTheme(context.Context, string, pty.TerminalTheme) error {
-	return nil
-}
-func (b *failingSpawnBackend) Kill(context.Context, string, syscall.Signal) error { return nil }
-func (b *failingSpawnBackend) Remove(context.Context, string) error               { return nil }
-func (b *failingSpawnBackend) SessionIDs(context.Context) []string                { return nil }
-func (b *failingSpawnBackend) Recover(context.Context) (ptybackend.RecoveryReport, error) {
-	return ptybackend.RecoveryReport{}, nil
-}
-func (b *failingSpawnBackend) Shutdown(context.Context) error { return nil }

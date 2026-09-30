@@ -35,7 +35,17 @@ func (d *Daemon) recoverAutomations() {
 		}
 	}
 }
-func recoverAutomationsAfterGitHubReady(ready <-chan struct{}, recover func()) {
-	<-ready
+func recoverAutomationsAfterGitHubReady(ready, stopping <-chan struct{}, recover func()) bool {
+	select {
+	case <-ready:
+	case <-stopping:
+		return false
+	}
+	select {
+	case <-stopping:
+		return false
+	default:
+	}
 	recover()
+	return true
 }

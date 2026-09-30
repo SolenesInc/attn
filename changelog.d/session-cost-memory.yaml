@@ -1,0 +1,15 @@
+kind: changed
+area: daemon
+change: >
+  A running session's cost is kept in memory instead of being read, decoded
+  and rewritten on every transcript read. Changes that a transcript re-read
+  cannot rebuild are still written at once; token counts are saved at most
+  every 30 seconds, and always when the session closes or the daemon stops.
+symptom: >
+  During a long turn the daemon rewrote each session's whole cost record
+  about twice a second, and the record grew with every model request.
+notes: >
+  Measured in a wire world with a Claude session 400 answers into its
+  transcript: a turn went from about 42 MB to 15.6 MB allocated and from
+  2.87 MB to 1.19 MB written to the database. A crash loses no cost; the
+  transcript is re-read from the last saved cursor.

@@ -1,0 +1,3 @@
+kind: internal
+area: daemon
+change: Daemon.Stop waits for exit handling and review deliveries that began before it, and no longer records the exits and failures its own teardown causes. Restart wire tests stop racing the store closing.

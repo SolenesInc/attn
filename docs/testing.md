@@ -163,8 +163,12 @@ Timers:
 - For behavior on a timer, write the test as
   `inBubble(t, func(t *testing.T, w *world) {...})`, which runs the world
   under `synctest`, and move the clock with `w.advance(d)`.
-- A bubbled world cannot run agents or watch folders. Its notebook at
+- A world from `inBubble` cannot run agents or watch folders. Its notebook at
   `<w.Dir>/notebook` exists only if a test outside a bubble creates it.
+- `inBubbleWithAgents` gives the world fake terminals, `w.terms`. A
+  terminal's `Stall(alive, err)` makes its worker stop answering until the
+  test calls the returned function: recovery waits out its deadline and counts
+  it missing, and the liveness probe answers `alive, err`.
 
 ### Stack
 
@@ -184,6 +188,9 @@ returns `testworld.Main(m)`.
   ends it. A `Start` after `Stop` restarts over the same data.
   The stack holds its WebSocket listener until cleanup, including while the
   daemon is stopped, so another process cannot take its address.
+- The historical PTY upgrade test uses port `0`: older binaries cannot inherit
+  that listener. After the daemon's bind-ready log, `lsof` discovers the captured
+  PID's assigned port without releasing a reservation or retrying startup.
 - For a promise about a crash mid-operation, `s.StartCrashingAt(point)` runs
   a daemon that kills itself with SIGKILL at a crash point named in the
   daemon (`ATTN_CRASH_AT`). `s.AwaitCrash()` returns once it has, and a later

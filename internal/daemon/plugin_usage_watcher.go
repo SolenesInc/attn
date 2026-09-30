@@ -24,7 +24,7 @@ func (d *Daemon) ensurePluginUsageWatcher(sessionID, agent, path string) {
 
 	d.watchersMu.Lock()
 	previous := d.pluginUsageWatch[sessionID]
-	if previous != nil && previous.path == path {
+	if d.stopping() || previous != nil && previous.path == path {
 		d.watchersMu.Unlock()
 		return
 	}
@@ -33,6 +33,7 @@ func (d *Daemon) ensurePluginUsageWatcher(sessionID, agent, path string) {
 	}
 	watcher := &pluginUsageWatcher{sessionID: sessionID, path: path, stopCh: make(chan struct{})}
 	d.pluginUsageWatch[sessionID] = watcher
+	d.watcherRuns.Add(1)
 	d.watchersMu.Unlock()
 	if previous != nil {
 		close(previous.stopCh)
@@ -57,6 +58,7 @@ func (d *Daemon) seedPluginUsageBaseline(sessionID, path string) {
 }
 
 func (d *Daemon) runPluginUsageWatcher(w *pluginUsageWatcher, tracker *sessionUsageTracker) {
+	defer d.watcherRuns.Done()
 	ticker := time.NewTicker(transcriptPollInterval)
 	defer ticker.Stop()
 

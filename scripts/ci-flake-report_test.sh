@@ -58,6 +58,10 @@ for arg in "\$@"; do
   case "\$arg" in
     */attempts/*/jobs*)
       run="\${arg#repos/*/actions/runs/}"; run="\${run%%/*}"
+      attempt="\${arg#*/attempts/}"; attempt="\${attempt%%/*}"
+      if [ -f "$work/jobs-\$run-\$attempt.json" ]; then
+        cat "$work/jobs-\$run-\$attempt.json"; exit 0
+      fi
       cat "$work/jobs-\$run.json"; exit 0 ;;
     */jobs/*/logs)
       job="\${arg#repos/*/actions/jobs/}"; job="\${job%/logs}"
@@ -104,5 +108,47 @@ grep -q 'read 0 of 1 failed job logs' "$work/err.txt" \
 grep -q 'escape sequences' "$work/err.txt" \
   || fail "the underlying gh error was swallowed: $(cat "$work/err.txt")"
 if grep -q '## Active' <<<"$out"; then fail "a blind report still printed an Active section"; fi
+
+cat >"$work/runs.json" <<'EOF'
+[
+  {"databaseId":904,"headSha":"cccc3333","headBranch":"next","conclusion":"failure",
+   "createdAt":"2026-09-06T04:00:00Z","attempt":2,"event":"push","status":"completed"},
+  {"databaseId":905,"headSha":"dddd4444","headBranch":"next","conclusion":"success",
+   "createdAt":"2026-09-06T05:00:00Z","attempt":2,"event":"push","status":"completed"}
+]
+EOF
+for run in 904 905; do
+  for attempt in 1 2; do
+    job="$run$attempt"
+    conclusion=failure
+    [ "$run-$attempt" = 905-2 ] && conclusion=success
+    printf '{"jobs":[{"id":%s,"name":"Daemon","run_attempt":%s,"conclusion":"%s"}]}\n' \
+      "$job" "$attempt" "$conclusion" >"$work/jobs-$run-$attempt.json"
+    printf '%s\n' \
+      "--- FAIL: TestAttempt$attempt (0.01s)" \
+      $'FAIL\tgithub.com/victor/attn/internal/daemon\t0.01s' >"$work/logs/$job.log"
+  done
+done
+fake_gh yes
+expected='[["904",1,"TestAttempt1","unresolved"],["904",2,"TestAttempt2","unresolved"],["905",1,"TestAttempt1","rerun-green"]]'
+assert_attempts() {
+  local actual
+  actual="$(jq -sc 'sort_by(.run, .attempt) | map([.run, .attempt, .test, .verdict])' <<<"$1")"
+  [ "$actual" = "$expected" ] || fail "failures attributed to the wrong attempt: $actual"
+}
+
+out="$(run_report --format jsonl)"
+assert_attempts "$out"
+out="$(ATTN_FLAKE_CACHE="$work/cache" "$report" --repo example/attn --format jsonl)"
+assert_attempts "$out"
+out="$(ATTN_FLAKE_CACHE="$work/cache" "$report" --repo example/attn --format jsonl --no-cache)"
+assert_attempts "$out"
+
+# Existing caches can hold attempt 1's jobs under the latest attempt's key.
+rm -rf "$work/cache"
+mkdir -p "$work/cache/jobs"
+cp "$work/jobs-904-1.json" "$work/cache/jobs/904-2.json"
+out="$(ATTN_FLAKE_CACHE="$work/cache" "$report" --repo example/attn --format jsonl)"
+assert_attempts "$out"
 
 echo "ci-flake-report: all tests passed"

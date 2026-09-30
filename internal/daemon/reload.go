@@ -120,9 +120,10 @@ func (d *Daemon) agentSupportsChiefReload(agent string) bool {
 
 func (d *Daemon) reloadSessionAgent(sessionID string) {
 	sessionID = strings.TrimSpace(sessionID)
-	if sessionID == "" || d.ptyBackend == nil || d.store == nil {
+	if sessionID == "" || d.ptyBackend == nil || d.store == nil || !d.durableWork.enter() {
 		return
 	}
+	defer d.durableWork.leave()
 	lock := d.sessionLifecycleLockFor(sessionID)
 	lock.Lock()
 	defer lock.Unlock()

@@ -1,12 +1,14 @@
 package store
 
 import (
+	"database/sql"
 	"encoding/json"
 	"fmt"
 	"log"
 	"reflect"
 	"slices"
 	"strings"
+	"time"
 
 	"github.com/victorarias/attn/internal/sessioncost"
 )
@@ -70,6 +72,97 @@ func cloneSessionCostState(state SessionCostState) SessionCostState {
 	return clone
 }
 
+// costView is what readers get: the ledger, flags and cursors, without the per-request observations
+// that only the store needs and that grow for the life of a session.
+func costView(state SessionCostState) SessionCostState {
+	state.Observations = nil
+	state.Finalized = nil
+	return cloneSessionCostState(state)
+}
+
+// sessionCostSaveInterval spaces saves of transcript-derived cost: each save is a consistent
+// snapshot with its cursor, so after a crash re-reading from that cursor rebuilds the rest.
+const sessionCostSaveInterval = 30 * time.Second
+
+type sessionCostEntry struct {
+	state   SessionCostState
+	unsaved bool
+	savedAt time.Time
+}
+
+func (s *Store) liveSessionCost(sessionID string) (*sessionCostEntry, bool, error) {
+	s.costMu.Lock()
+	defer s.costMu.Unlock()
+	if entry := s.liveCosts[sessionID]; entry != nil {
+		return entry, true, nil
+	}
+	var raw, closedAt string
+	if err := s.db.QueryRow("SELECT session_cost_json, closed_at FROM sessions WHERE id = ?", sessionID).Scan(&raw, &closedAt); err != nil {
+		return nil, false, err
+	}
+	state, err := decodeSessionCostState(raw)
+	if err != nil {
+		return nil, false, fmt.Errorf("decode session cost for %s: %w", sessionID, err)
+	}
+	entry := &sessionCostEntry{state: state}
+	if closedAt != "" {
+		return entry, false, nil
+	}
+	if s.liveCosts == nil {
+		s.liveCosts = make(map[string]*sessionCostEntry)
+	}
+	s.liveCosts[sessionID] = entry
+	return entry, true, nil
+}
+
+func (s *Store) forgetSessionCost(sessionID string) {
+	s.costMu.Lock()
+	delete(s.liveCosts, sessionID)
+	s.costMu.Unlock()
+}
+
+func (s *Store) writeSessionCost(sessionID string, state SessionCostState) error {
+	encoded, err := json.Marshal(state)
+	if err != nil {
+		return fmt.Errorf("encode session cost for %s: %w", sessionID, err)
+	}
+	_, err = s.db.Exec("UPDATE sessions SET session_cost_json = ? WHERE id = ? AND closed_at = ''", string(encoded), sessionID)
+	return err
+}
+
+func (s *Store) flushSessionCosts() {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.costMu.Lock()
+	defer s.costMu.Unlock()
+	for sessionID, entry := range s.liveCosts {
+		if !entry.unsaved {
+			continue
+		}
+		if err := s.writeSessionCost(sessionID, entry.state); err != nil {
+			log.Printf("[store] session cost: saving %s: %v", sessionID, err)
+			continue
+		}
+		entry.unsaved = false
+	}
+}
+
+// saveUnsavedSessionCostTx writes a live session's pending cost into tx, so a close finalizes it.
+func (s *Store) saveUnsavedSessionCostTx(tx *sql.Tx, sessionID string) error {
+	s.costMu.Lock()
+	entry := s.liveCosts[sessionID]
+	s.costMu.Unlock()
+	if entry == nil || !entry.unsaved {
+		return nil
+	}
+	encoded, err := json.Marshal(entry.state)
+	if err != nil {
+		return fmt.Errorf("encode session cost for %s: %w", sessionID, err)
+	}
+	_, err = tx.Exec("UPDATE sessions SET session_cost_json = ? WHERE id = ?", string(encoded), sessionID)
+	return err
+}
+
 func decodeSessionCostState(raw string) (SessionCostState, error) {
 	state := SessionCostState{}
 	if strings.TrimSpace(raw) == "" {
@@ -85,34 +178,35 @@ func (s *Store) SessionCost(sessionID string) (SessionCostState, error) {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 	if s.db == nil {
-		return cloneSessionCostState(s.sessionCosts[sessionID]), nil
+		return costView(s.sessionCosts[sessionID]), nil
 	}
-	var raw string
-	if err := s.db.QueryRow("SELECT session_cost_json FROM sessions WHERE id = ?", sessionID).Scan(&raw); err != nil {
+	entry, _, err := s.liveSessionCost(sessionID)
+	if err != nil {
 		return SessionCostState{}, err
 	}
-	state, err := decodeSessionCostState(raw)
-	if err != nil {
-		return SessionCostState{}, fmt.Errorf("decode session cost for %s: %w", sessionID, err)
-	}
-	return state, nil
+	return costView(entry.state), nil
 }
 
 func (s *Store) SetSessionCostCursor(sessionID, cursor string) error {
-	return s.updateSessionCost(sessionID, func(state *SessionCostState) {
+	return s.updateSessionCost(sessionID, func(state *SessionCostState) bool {
+		durable := !state.Initialized
 		state.Initialized = true
 		state.Cursor = strings.TrimSpace(cursor)
+		return durable
 	})
 }
 
 func (s *Store) InitializeSessionCostTracking(sessionID string) error {
-	return s.updateSessionCost(sessionID, func(state *SessionCostState) {
+	return s.updateSessionCost(sessionID, func(state *SessionCostState) bool {
+		durable := !state.Initialized
 		state.Initialized = true
+		return durable
 	})
 }
 
 func (s *Store) InitializeSessionCostSources(sessionID string, cursors map[string]string) error {
-	return s.updateSessionCost(sessionID, func(state *SessionCostState) {
+	return s.updateSessionCost(sessionID, func(state *SessionCostState) bool {
+		durable := !state.Initialized
 		if state.Sources == nil {
 			state.Sources = make(map[string]SessionCostSourceState)
 		}
@@ -123,60 +217,72 @@ func (s *Store) InitializeSessionCostSources(sessionID string, cursors map[strin
 			}
 			if _, exists := state.Sources[id]; !exists {
 				state.Sources[id] = SessionCostSourceState{Cursor: strings.TrimSpace(cursor)}
+				durable = true
 			}
 		}
 		state.Initialized = true
+		return durable
 	})
 }
 
 func (s *Store) SetSessionCostSourceCursor(sessionID, sourceID, cursor string) error {
-	return s.updateSessionCost(sessionID, func(state *SessionCostState) {
-		if state.Sources == nil {
-			state.Sources = make(map[string]SessionCostSourceState)
-		}
-		state.Initialized = true
-		state.Sources[strings.TrimSpace(sourceID)] = SessionCostSourceState{Cursor: strings.TrimSpace(cursor)}
+	return s.updateSessionCost(sessionID, func(state *SessionCostState) bool {
+		return setSessionCostSourceCursor(state, sourceID, cursor)
 	})
+}
+
+func setSessionCostSourceCursor(state *SessionCostState, sourceID, cursor string) (durable bool) {
+	sourceID = strings.TrimSpace(sourceID)
+	if state.Sources == nil {
+		state.Sources = make(map[string]SessionCostSourceState)
+	}
+	_, known := state.Sources[sourceID]
+	durable = !state.Initialized || !known
+	state.Initialized = true
+	state.Sources[sourceID] = SessionCostSourceState{Cursor: strings.TrimSpace(cursor)}
+	return durable
 }
 
 func (s *Store) MarkSessionCostMeasurementIncomplete(sessionID string) (bool, error) {
 	changed := false
-	err := s.updateSessionCost(sessionID, func(state *SessionCostState) {
+	err := s.updateSessionCost(sessionID, func(state *SessionCostState) bool {
 		changed = !state.MeasurementIncomplete
 		state.MeasurementIncomplete = true
+		return changed
 	})
 	return changed, err
 }
 
 func (s *Store) MarkSessionCostUsageUnavailable(sessionID, cursor string) (bool, error) {
 	changed := false
-	err := s.updateSessionCost(sessionID, func(state *SessionCostState) {
+	err := s.updateSessionCost(sessionID, func(state *SessionCostState) bool {
+		durable := !state.Initialized
 		state.Initialized = true
 		changed = !state.UsageUnavailable
 		state.UsageUnavailable = true
 		state.Cursor = strings.TrimSpace(cursor)
+		return durable || changed
 	})
 	return changed, err
 }
 
 func (s *Store) ApplySessionCostObservations(sessionID, cursor string, observations []SessionCostObservation) (bool, error) {
 	changed := false
-	err := s.updateSessionCost(sessionID, func(state *SessionCostState) {
+	err := s.updateSessionCost(sessionID, func(state *SessionCostState) bool {
+		durable := !state.Initialized
 		changed = applySessionCostObservations(sessionID, state, observations)
 		state.Cursor = strings.TrimSpace(cursor)
+		return durable
 	})
 	return changed, err
 }
 
 func (s *Store) ApplySessionCostSourceObservations(sessionID, sourceID, cursor string, observations []SessionCostObservation) (bool, error) {
 	changed := false
-	err := s.updateSessionCost(sessionID, func(state *SessionCostState) {
-		state.Initialized = true
-		if state.Sources == nil {
-			state.Sources = make(map[string]SessionCostSourceState)
-		}
-		state.Sources[strings.TrimSpace(sourceID)] = SessionCostSourceState{Cursor: strings.TrimSpace(cursor)}
+	err := s.updateSessionCost(sessionID, func(state *SessionCostState) bool {
+		durable := setSessionCostSourceCursor(state, sourceID, cursor)
 		changed = applySessionCostObservations(sessionID, state, observations)
+		return durable
 	})
 	return changed, err
 }
@@ -280,7 +386,9 @@ func finalizeSessionCost(state *SessionCostState) {
 	state.Observations = nil
 }
 
-func (s *Store) updateSessionCost(sessionID string, mutate func(*SessionCostState)) error {
+// updateSessionCost applies mutate, which reports a change a transcript re-read cannot rebuild;
+// that is written at once, anything else at most every sessionCostSaveInterval.
+func (s *Store) updateSessionCost(sessionID string, mutate func(*SessionCostState) bool) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	if s.db == nil {
@@ -296,26 +404,20 @@ func (s *Store) updateSessionCost(sessionID string, mutate func(*SessionCostStat
 		return nil
 	}
 
-	tx, err := s.db.Begin()
-	if err != nil {
+	entry, live, err := s.liveSessionCost(sessionID)
+	if err != nil || !live {
 		return err
 	}
-	defer tx.Rollback()
-	var raw string
-	if err := tx.QueryRow("SELECT session_cost_json FROM sessions WHERE id = ?", sessionID).Scan(&raw); err != nil {
+	now := time.Now()
+	if !mutate(&entry.state) && now.Sub(entry.savedAt) < sessionCostSaveInterval {
+		entry.unsaved = true
+		return nil
+	}
+	if err := s.writeSessionCost(sessionID, entry.state); err != nil {
+		s.forgetSessionCost(sessionID)
 		return err
 	}
-	state, err := decodeSessionCostState(raw)
-	if err != nil {
-		return fmt.Errorf("decode session cost for %s: %w", sessionID, err)
-	}
-	mutate(&state)
-	encoded, err := json.Marshal(state)
-	if err != nil {
-		return fmt.Errorf("encode session cost for %s: %w", sessionID, err)
-	}
-	if _, err := tx.Exec("UPDATE sessions SET session_cost_json = ? WHERE id = ? AND closed_at = ''", string(encoded), sessionID); err != nil {
-		return err
-	}
-	return tx.Commit()
+	entry.unsaved = false
+	entry.savedAt = now
+	return nil
 }

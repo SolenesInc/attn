@@ -1,0 +1,3 @@
+kind: internal
+area: testing
+change: Check both chief role changes in the same wire snapshot so the transfer test does not miss a consumed update.

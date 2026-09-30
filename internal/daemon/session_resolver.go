@@ -92,7 +92,9 @@ func (d *Daemon) runSessionResolver() {
 	timer.Stop()
 	defer timer.Stop()
 	for {
-		d.resolveDue(time.Now())
+		if !d.durableWork.durably(func() { d.resolveDue(time.Now()) }) {
+			return
+		}
 		if next, ok := resolver.next(); ok {
 			timer.Reset(time.Until(next))
 		} else {

@@ -62,7 +62,8 @@ for tool in gh jq awk; do
   command -v "$tool" >/dev/null || { echo "missing required tool: $tool" >&2; exit 2; }
 done
 
-mkdir -p "$cache/logs" "$cache/jobs"
+# Old jobs/ entries used the caller's latest attempt as the cache key.
+mkdir -p "$cache/logs" "$cache/jobs-v2"
 work="$(mktemp -d "${TMPDIR:-/tmp}/attn-flake.XXXXXX")"
 # shellcheck disable=SC2329 # invoked indirectly by trap
 cleanup() { rm -rf "$work"; }
@@ -93,7 +94,8 @@ total_runs="$(jq 'length' "$runs")"
 
 # Job lists for a finished attempt never change, so they cache by (run,attempt).
 fetch_jobs() {
-  local run_id="$1" attempt="$2" dest="$cache/jobs/$run_id-$attempt.json"
+  local run_id="$1" attempt="$2"
+  local dest="$cache/jobs-v2/$run_id-$attempt.json"
   if [ "$use_cache" = true ] && [ -s "$dest" ]; then
     cat "$dest"
     return 0
@@ -121,7 +123,8 @@ logs_unreadable=0
 first_log_error=""
 
 fetch_log() {
-  local job_id="$1" dest="$cache/logs/$job_id.log"
+  local job_id="$1"
+  local dest="$cache/logs/$job_id.log"
   if [ "$use_cache" = true ] && [ -s "$dest" ]; then
     logs_read=$((logs_read + 1))
     cat "$dest"

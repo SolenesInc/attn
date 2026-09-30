@@ -1,0 +1,3 @@
+kind: internal
+area: daemon
+change: Daemon.Stop also waits for startup recovery, delegation launches, session reloads, automation runs, PR polls, and resolver and branch passes that began before it, and drains transcript watchers. A delegation cut short by the stop stays pending for the next daemon, and no agent launches after the stop kills sessions.
