@@ -1,14 +1,19 @@
 package daemon_test
 
 import (
+	"context"
 	"encoding/json"
 	"io"
+	"net"
 	"net/http"
 	"net/http/httptest"
 	"strconv"
 	"strings"
 	"sync"
+	"sync/atomic"
+	"syscall"
 	"testing"
+	"testing/synctest"
 	"time"
 
 	"github.com/victorarias/attn/internal/client"
@@ -23,6 +28,7 @@ type refreshedPullRequest struct {
 	reviews                    []string
 	reviewsFail, snapshotFails bool
 	readinessFails             bool
+	keepAlive                  bool
 	codexThumbsUp              bool
 	limitedUntil               time.Time
 	inboxTitle                 string
@@ -44,7 +50,9 @@ func (gh *refreshedPullRequest) serve(rw http.ResponseWriter, r *http.Request) {
 	gh.mu.Lock()
 	defer gh.mu.Unlock()
 	rw.Header().Set("Content-Type", "application/json")
-	rw.Header().Set("Connection", "close")
+	if !gh.keepAlive {
+		rw.Header().Set("Connection", "close")
+	}
 	body, _ := io.ReadAll(r.Body)
 	var answer any
 	switch {
@@ -373,5 +381,122 @@ func watchPullRequestOn(t *testing.T, cli *client.Client, session string, mode p
 	recordPullRequest(t, cli, session, shopPull(71))
 	if err := cli.WatchSessionPullRequest(session, shopPull(71), mode, ""); err != nil {
 		t.Fatalf("%s watches the pull request: %v", session, err)
+	}
+}
+
+// Reset the client connection after a query is written, including an idle reader already blocked in Read.
+type resetQueryConn struct {
+	net.Conn
+	reset   *atomic.Int32
+	queries *atomic.Int32
+	failed  atomic.Bool
+}
+
+func (c *resetQueryConn) Write(p []byte) (int, error) {
+	if strings.Contains(string(p), "PullRequestReadiness") {
+		c.queries.Add(1)
+		if c.reset.Load() != 0 {
+			if c.reset.Load() > 0 {
+				c.reset.Add(-1)
+			}
+			c.failed.Store(true)
+			c.Conn.Close()
+			return len(p), nil
+		}
+	}
+	return c.Conn.Write(p)
+}
+
+func (c *resetQueryConn) Read(p []byte) (int, error) {
+	n, err := c.Conn.Read(p)
+	if err != nil && c.failed.Load() {
+		return n, &net.OpError{Op: "read", Net: "tcp", Err: syscall.ECONNRESET}
+	}
+	return n, err
+}
+
+func TestAWatchRetriesAReusedConnectionResetBeforeReportingDelay(t *testing.T) {
+	for _, http2 := range []bool{false, true} {
+		for _, tc := range []struct {
+			name              string
+			persistent, fresh bool
+			attempts          int32
+		}{
+			{name: "one reset", attempts: 2},
+			{name: "persistent resets", persistent: true, attempts: 2},
+			{name: "fresh connection reset", fresh: true, attempts: 1},
+		} {
+			version := "HTTP1"
+			if http2 {
+				version = "HTTP2"
+			}
+			t.Run(version+"/"+tc.name, func(t *testing.T) {
+				t.Setenv("ATTN_MOCK_GH_URL", "http://127.0.0.1:80")
+				t.Setenv("ATTN_MOCK_GH_TOKEN", "test-token")
+				t.Setenv("ATTN_MOCK_GH_HOST", "github.com")
+				prepared := prepareWorld(t)
+				synctest.Test(t, func(t *testing.T) {
+					gh := &refreshedPullRequest{title: "Recover from reset", mergeable: "clean", keepAlive: true}
+					listener := newPipeListener()
+					protocols := new(http.Protocols)
+					if http2 {
+						protocols.SetUnencryptedHTTP2(true)
+					} else {
+						protocols.SetHTTP1(true)
+					}
+					server := &http.Server{Handler: http.HandlerFunc(gh.serve), Protocols: protocols}
+					go server.Serve(listener)
+					defer server.Close()
+					var resets, queries atomic.Int32
+
+					original := http.DefaultTransport
+					transport := original.(*http.Transport).Clone()
+					transport.Proxy = nil
+					transport.Protocols = protocols
+					transport.DialContext = func(ctx context.Context, _, _ string) (net.Conn, error) {
+						conn, err := listener.dial(ctx)
+						if err != nil {
+							return nil, err
+						}
+						return &resetQueryConn{Conn: conn, reset: &resets, queries: &queries}, nil
+					}
+					http.DefaultTransport = transport
+					defer func() { transport.CloseIdleConnections(); http.DefaultTransport = original }()
+					bubbled := *prepared
+					bubbled.T = t
+					w := &world{World: &bubbled, bubbled: true}
+					w.start()
+					defer w.stop()
+					cli := w.Client()
+					registerSessions(t, w, cli, "s1")
+					watchPullRequestOn(t, cli, "s1", protocol.PullRequestWatchModeGreen)
+					synctest.Wait()
+					if pr := onlyPullRequest(t, cli, "s1"); protocol.Deref(pr.WatchHealth) != "current" {
+						t.Fatalf("watch did not warm up: %+v", pr)
+					}
+					before := queries.Load()
+					if tc.fresh {
+						transport.CloseIdleConnections()
+					}
+					resets.Store(1)
+					if tc.persistent {
+						resets.Store(-1)
+					}
+					w.advance(protocol.HeatHotInterval)
+					pr := onlyPullRequest(t, cli, "s1")
+					inbox := inboxContents(readInbox(t, cli, "s1", 0).Items)
+					if attempts := queries.Load() - before; attempts != tc.attempts {
+						t.Errorf("readiness attempts = %d, want %d", attempts, tc.attempts)
+					}
+					if tc.persistent || tc.fresh {
+						if protocol.Deref(pr.WatchHealth) != "delayed" || !strings.Contains(inbox, "monitoring is delayed") {
+							t.Fatalf("reset: watch=%+v inbox=%q, want visible delay", pr, inbox)
+						}
+					} else if protocol.Deref(pr.WatchHealth) != "current" || strings.Contains(inbox, "monitoring is delayed") {
+						t.Fatalf("one reset: watch=%+v inbox=%q, want current without delay", pr, inbox)
+					}
+				})
+			})
+		}
 	}
 }
