@@ -1146,6 +1146,7 @@ export function useWorkspaceController(
     fontSize,
     resolvedTheme,
     enabled,
+    shortcutsEnabled,
     isActiveSession,
     isSessionViewVisible,
     terminalsLive,

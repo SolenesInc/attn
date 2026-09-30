@@ -152,10 +152,10 @@ export function useAttentionQueue({
       '.terminal-wrapper.active .session-terminal-workspace[data-session-visible="1"]',
     );
     const leaf = workspace?.querySelector<HTMLElement>(`[data-pane-id="${workspace.dataset.activeLeafId}"]`);
-    const destination = Array.from(leaf?.querySelectorAll<HTMLElement>(
-      '.terminal-container, [role="textbox"], input, textarea, [contenteditable="true"], button, [tabindex="0"]',
-    ) ?? []).find((element) => element.getClientRects().length > 0)
-      ?? document.querySelector<HTMLElement>('[data-testid="sidebar-home"]');
+    const terminal = leaf?.querySelector<HTMLElement>('.terminal-container');
+    const editor = leaf?.querySelector<HTMLElement>('[role="textbox"], textarea, [contenteditable="true"]');
+    const home = document.querySelector<HTMLElement>('[data-testid="sidebar-home"]');
+    const destination = [terminal, editor, home].find((element) => element && element.getClientRects().length > 0);
     destination?.focus({ preventScroll: true });
   }, [snoozeMenu]);
 
