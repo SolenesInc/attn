@@ -88,7 +88,7 @@ func (c *codex) subagent(text string) error {
 	if parent == "" {
 		parent = c.conversation
 	}
-	id, err := c.childRollout(map[string]any{"thread_spawn": map[string]any{"parent_thread_id": parent}}, text)
+	id, err := c.childRollout(map[string]any{"thread_spawn": map[string]any{"parent_thread_id": parent}}, "", text)
 	if err == nil {
 		c.lastThread = id
 	}
@@ -96,11 +96,11 @@ func (c *codex) subagent(text string) error {
 }
 
 func (c *codex) guardianReview(text string) error {
-	_, err := c.childRollout(map[string]any{"other": "guardian"}, text)
+	_, err := c.childRollout(map[string]any{"other": "guardian"}, c.conversation, text)
 	return err
 }
 
-func (c *codex) childRollout(subagent map[string]any, text string) (string, error) {
+func (c *codex) childRollout(subagent map[string]any, parentThread, text string) (string, error) {
 	id, err := uuid.NewV7()
 	if err != nil {
 		return "", err
@@ -108,14 +108,12 @@ func (c *codex) childRollout(subagent map[string]any, text string) (string, erro
 	started := time.Now().UTC()
 	path := filepath.Join(c.sessionsDir(), started.Format("2006/01/02"),
 		"rollout-"+started.Format("2006-01-02T15-04-05")+"-"+id.String()+".jsonl")
+	meta := map[string]any{"id": id.String(), "cwd": c.cwd, "source": map[string]any{"subagent": subagent}}
+	if parentThread != "" {
+		meta["parent_thread_id"] = parentThread
+	}
 	lines := append([]any{map[string]any{
-		"timestamp": started.Format(time.RFC3339Nano),
-		"type":      "session_meta",
-		"payload": map[string]any{
-			"id":     id.String(),
-			"cwd":    c.cwd,
-			"source": map[string]any{"subagent": subagent},
-		},
+		"timestamp": started.Format(time.RFC3339Nano), "type": "session_meta", "payload": meta,
 	}}, c.usageLines(text)...)
 	return id.String(), appendLines(path, lines...)
 }

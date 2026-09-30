@@ -10,7 +10,10 @@ import (
 	"strings"
 )
 
-const SessionCostPricePrefix = "session_cost.price."
+const (
+	SessionCostPricePrefix    = "session_cost.price."
+	SessionCostBilledAsPrefix = "session_cost.billed_as."
+)
 
 const (
 	PurposeAgent    = "agent"
@@ -92,7 +95,8 @@ func GuardianKey(model string) LedgerKey {
 
 func RequestLedgerKey(model, purpose string, request Usage) LedgerKey {
 	key := NewLedgerKey(model, purpose)
-	key.LongContext = openAILongContextModels[key.Model] &&
+	_, alias := builtInBilledAs[key.Model]
+	key.LongContext = (openAILongContextModels[key.Model] || alias) &&
 		request.promptTokens() > openAILongContextPromptTokens
 	return key
 }
@@ -288,7 +292,11 @@ func summarizeRow(key LedgerKey, tiers tieredUsage, settings map[string]string) 
 	}
 	row := ModelSummary{Model: key.Model, Purpose: key.Purpose, Usage: usage, TotalTokens: total}
 	card, cardKnown, invalidOverride := rateCardForModel(key.Model, settings)
-	fastMultiplier, fastKnown := openAIFastRateMultipliers[key.Model]
+	priced := key.Model
+	if target := billedAs(key.Model, settings); target != "" {
+		priced = target
+	}
+	fastMultiplier, fastKnown := openAIFastRateMultipliers[priced]
 	fastCard := fastRates(card, fastMultiplier)
 	for _, tier := range []struct {
 		usage Usage
@@ -297,9 +305,9 @@ func summarizeRow(key LedgerKey, tiers tieredUsage, settings map[string]string) 
 		fast  bool
 	}{
 		{tiers.standard, card, cardKnown, false},
-		{tiers.longContext, longContextRates(card), cardKnown, false},
+		{tiers.longContext, longContextCard(priced, card), cardKnown, false},
 		{tiers.fast, fastCard, cardKnown && fastKnown, true},
-		{tiers.fastLongContext, longContextRates(fastCard), cardKnown && fastKnown && key.Model != "gpt-5.5", true},
+		{tiers.fastLongContext, longContextRates(fastCard), cardKnown && fastKnown && priced != "gpt-5.5", true},
 	} {
 		if !tier.usage.hasAnyValue() {
 			continue
@@ -367,8 +375,45 @@ func rateCardForModel(model string, settings map[string]string) (RateCard, bool,
 		card, err := parseRateCard(strings.TrimSpace(raw))
 		return card, err == nil, err != nil
 	}
+	if target := billedAs(model, settings); target != "" {
+		if raw, ok := settings[SessionCostPricePrefix+target]; ok && strings.TrimSpace(raw) != "" {
+			card, err := parseRateCard(strings.TrimSpace(raw))
+			return card, err == nil, err != nil
+		}
+		model = target
+	}
 	card, ok := builtInRateCards[model]
 	return card, ok, false
+}
+
+func longContextCard(model string, card RateCard) RateCard {
+	if !openAILongContextModels[model] {
+		return card
+	}
+	return longContextRates(card)
+}
+
+func billedAs(model string, settings map[string]string) string {
+	if target := strings.TrimSpace(settings[SessionCostBilledAsPrefix+model]); target != "" {
+		return target
+	}
+	return builtInBilledAs[model]
+}
+
+// ValidateBilledAs accepts only aliases attn knows and targets with a built-in rate card.
+func ValidateBilledAs(key, value string) error {
+	alias := strings.TrimPrefix(key, SessionCostBilledAsPrefix)
+	if _, ok := builtInBilledAs[alias]; !ok {
+		return fmt.Errorf("%s is not a model attn can bill as another model", alias)
+	}
+	target := strings.TrimSpace(value)
+	if target == "" {
+		return nil
+	}
+	if _, ok := builtInRateCards[target]; !ok {
+		return fmt.Errorf("%s has no built-in price", target)
+	}
+	return nil
 }
 
 func floatPtr(value float64) *float64 {

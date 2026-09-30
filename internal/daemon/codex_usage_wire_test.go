@@ -9,7 +9,7 @@ import (
 	"github.com/victorarias/attn/internal/fakeagent"
 )
 
-func TestCodexUsageCountsNestedSubagentsButNotGuardianReviewsAndSurvivesANewConversation(t *testing.T) {
+func TestCodexUsageCountsNestedSubagentsAndGuardianReviewsAndSurvivesANewConversation(t *testing.T) {
 	w := newWorld(t, fakeagent.Codex)
 	app := w.App()
 	session := w.Spawn(app, fakeagent.Codex, w.Path("shop"))
@@ -19,10 +19,11 @@ func TestCodexUsageCountsNestedSubagentsButNotGuardianReviewsAndSurvivesANewConv
 	research, deeper := "The flaky test races the tax lookup.", "The lookup has no lock."
 	codex.Subagent(research)
 	codex.Subagent(deeper)
-	codex.GuardianReview("Approve the lock change.")
+	review := "Approve the lock change."
+	codex.GuardianReview(review)
 	found := "It races the tax lookup. <!-- attn:state=idle -->"
 	codex.Reply(found)
-	counted := claudeTokens(research) + claudeTokens(deeper) + claudeTokens(found)
+	counted := claudeTokens(research) + claudeTokens(deeper) + claudeTokens(review) + claudeTokens(found)
 	awaitUsageTokens(app, session, counted)
 
 	rollout := codexRollout(t, w, codex.ConversationID)

@@ -2,6 +2,21 @@ import { useAutosaveSetting, useSettingsAutosave, type SaveSetting } from './Set
 import { useEffect, useMemo, useRef, useState } from 'react';
 
 export const SESSION_COST_PRICE_PREFIX = 'session_cost.price.';
+export const SESSION_COST_BILLED_AS_PREFIX = 'session_cost.billed_as.';
+
+const CODEX_AUTO_REVIEW_MODEL = 'codex-auto-review';
+const CODEX_AUTO_REVIEW_DEFAULT = 'gpt-6-luna';
+const CODEX_BILLING_MODELS = [
+  'gpt-6-luna',
+  'gpt-6-sol',
+  'gpt-6-astra',
+  'gpt-5.6-luna',
+  'gpt-5.6-terra',
+  'gpt-5.6-sol',
+  'gpt-5.5',
+  'gpt-5.4-mini',
+  'gpt-5-codex',
+];
 
 const RATE_FIELDS = [
   { key: 'input_usd_per_mtok', label: 'Input' },
@@ -149,6 +164,37 @@ function ExistingPriceOverride({ modelId, raw, onSetSetting }: ExistingPriceOver
   );
 }
 
+function CodexAutoReviewBilling({ settings, onSetSetting }: SessionCostPriceSettingsProps) {
+  const key = `${SESSION_COST_BILLED_AS_PREFIX}${CODEX_AUTO_REVIEW_MODEL}`;
+  const field = useAutosaveSetting(key, settings[key] ?? '', onSetSetting);
+  const selected = field.value.trim() || CODEX_AUTO_REVIEW_DEFAULT;
+  return (
+    <div className="settings-field">
+      <label className="settings-label" htmlFor="settings-price-billed-as-codex-auto-review">
+        Codex auto-review billed as
+      </label>
+      <select
+        id="settings-price-billed-as-codex-auto-review"
+        data-testid="settings-price-billed-as-codex-auto-review"
+        className="settings-input"
+        value={selected}
+        onChange={(event) => void field.apply(event.target.value === CODEX_AUTO_REVIEW_DEFAULT ? '' : event.target.value)}
+      >
+        {!CODEX_BILLING_MODELS.includes(selected) && <option value={selected}>{selected}</option>}
+        {CODEX_BILLING_MODELS.map((model) => (
+          <option key={model} value={model}>
+            {model}{model === CODEX_AUTO_REVIEW_DEFAULT ? ' (default)' : ''}
+          </option>
+        ))}
+      </select>
+      <span className="settings-hint">
+        Codex reports its auto-review reviewer as <code>{CODEX_AUTO_REVIEW_MODEL}</code> and picks the
+        real model on its servers. Guardian usage is priced at this model's rates.
+      </span>
+    </div>
+  );
+}
+
 interface SessionCostPriceSettingsProps {
   settings: Record<string, string>;
   onSetSetting: SaveSetting;
@@ -221,6 +267,7 @@ export function SessionCostPriceSettings({ settings, onSetSetting }: SessionCost
         </p>
       </div>
       <div className="settings-block-body">
+        <CodexAutoReviewBilling settings={settings} onSetSetting={onSetSetting} />
         {overrides.length > 0 && (
           <div className="settings-price-list">
             {overrides.map(({ modelId: overrideModelId, raw }) => (

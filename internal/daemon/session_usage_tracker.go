@@ -164,20 +164,39 @@ func (t *sessionUsageTracker) readIfMoved(tracked *trackedUsageSource) {
 		return
 	}
 	tracked.info = info
-	observations := make([]store.SessionCostObservation, 0, len(batch.Usage))
-	for _, usage := range batch.Usage {
+	observations := usageObservations(tracked.source, batch.Usage)
+	changed, err := t.daemon.store.ApplySessionCostSourceObservations(
+		t.sessionID, tracked.source.ID, tracked.follower.Cursor(), observations,
+	)
+	if err != nil {
+		t.daemon.logf("transcript watcher: usage source persist failed session=%s path=%s err=%v", t.sessionID, tracked.source.Path, err)
+		t.markIncomplete()
+		return
+	}
+	if changed {
+		t.daemon.publishFact(FactSessionCostChanged, t.sessionID, nil)
+	}
+}
+
+func usageObservations(source transcript.UsageSource, usages []transcript.TokenUsage) []store.SessionCostObservation {
+	observations := make([]store.SessionCostObservation, 0, len(usages))
+	for _, usage := range usages {
 		model := strings.TrimSpace(usage.Model)
 		if model == "" {
 			model = "<unknown>"
 		}
+		purpose := usage.Purpose
+		if purpose == "" {
+			purpose = source.Purpose
+		}
 		observationID := usage.Key
-		if !tracked.source.Root {
-			observationID = "native:" + tracked.source.ID + ":" + usage.Key
+		if !source.Root {
+			observationID = "native:" + source.ID + ":" + usage.Key
 		}
 		observations = append(observations, store.SessionCostObservation{
 			ObservationID: observationID,
 			Model:         model,
-			Purpose:       usage.Purpose,
+			Purpose:       purpose,
 			FastMode:      usage.FastMode,
 			Usage: sessioncost.Usage{
 				InputTokens:                  usage.InputTokens,
@@ -190,17 +209,7 @@ func (t *sessionUsageTracker) readIfMoved(tracked *trackedUsageSource) {
 			},
 		})
 	}
-	changed, err := t.daemon.store.ApplySessionCostSourceObservations(
-		t.sessionID, tracked.source.ID, tracked.follower.Cursor(), observations,
-	)
-	if err != nil {
-		t.daemon.logf("transcript watcher: usage source persist failed session=%s path=%s err=%v", t.sessionID, tracked.source.Path, err)
-		t.markIncomplete()
-		return
-	}
-	if changed {
-		t.daemon.publishFact(FactSessionCostChanged, t.sessionID, nil)
-	}
+	return observations
 }
 
 func (t *sessionUsageTracker) resetAtHead(tracked *trackedUsageSource) bool {

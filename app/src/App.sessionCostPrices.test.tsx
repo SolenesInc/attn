@@ -38,6 +38,16 @@ async function addOverride(daemon: ScriptedDaemon, model: string) {
 const addedRates = '{"input_usd_per_mtok":2,"output_usd_per_mtok":10,"cache_read_usd_per_mtok":0.2,"cache_write_5m_usd_per_mtok":2.5,"cache_write_1h_usd_per_mtok":4}';
 
 describe('App session cost prices', () => {
+  it('bills Codex auto-review as gpt-6-luna until the user picks another model', async () => {
+    const daemon = await openPricing();
+    const picker = pricing().getByLabelText('Codex auto-review billed as');
+    expect(picker).toHaveValue('gpt-6-luna');
+
+    await gesture(daemon, () => fireEvent.change(picker, { target: { value: 'gpt-6-sol' } }));
+    expect(savedSettings(daemon)).toEqual([['session_cost.billed_as.codex-auto-review', 'gpt-6-sol']]);
+    expect(picker).toHaveValue('gpt-6-sol');
+  });
+
   it('lists saved overrides by model id and leaves out removed ones', async () => {
     await openPricing({
       'session_cost.price.z-model': JSON.stringify(rates),
