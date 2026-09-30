@@ -1,15 +1,17 @@
 #!/usr/bin/env node
 import fs from 'node:fs';
 import path from 'node:path';
+import { execFileSync } from 'node:child_process';
 import {
   createSessionAndWaitForInitialPane, launchFreshAppAndConnect, parseCommonArgs,
   pressShortcutKeys, printCommonHelp, submitPrompt,
 } from './common.mjs';
 import { UiAutomationClient } from './uiAutomationClient.mjs';
 import { DaemonObserver } from './daemonObserver.mjs';
-import { createWindowDriver } from './platform.mjs';
+import { appDaemonInTree, createWindowDriver } from './platform.mjs';
+import { currentHarnessInstance, instanceCliEnv } from './harnessInstance.mjs';
 import { createScenarioRunner } from './scenarioRunner.mjs';
-import { writeMockAgentFixture } from './mockAgent.mjs';
+import { MOCK_AGENT_MODEL, writeMockAgentFixture } from './mockAgent.mjs';
 import { ensureClaudePromptReadyViaPty } from './scenarioAgents.mjs';
 import { waitForFirstWorkspacePane, waitForPaneInputFocus, waitForPaneText } from './scenarioAssertions.mjs';
 import { captureScreenshotData } from './nativeWindowCapture.mjs';
@@ -42,6 +44,17 @@ async function main() {
   // Native palette opening took 420ms locally; this guards a hung UI, not input timing.
   const waitDom = (selector, extra = {}) => client.request('dom_wait', { selector, timeoutMs: 15_000, ...extra });
   const focusedChoice = (id) => waitDom(`[data-testid="snooze-choice-${id}"]`, { focused: true });
+  const hover = async (selector) => {
+    const [{ bounds }, { logicalBounds }, { innerWidth, innerHeight }] = await Promise.all([
+      client.request('dom_bounds', { selector }),
+      client.request('get_window_bounds'),
+      client.request('get_terminal_context_menu_state'),
+    ]);
+    await driver.movePointerInWindow(
+      (Math.max(0, logicalBounds.width - innerWidth) / 2 + bounds.x + bounds.width / 2) / logicalBounds.width,
+      (Math.max(0, logicalBounds.height - innerHeight) + bounds.y + bounds.height / 2) / logicalBounds.height,
+    );
+  };
   const palette = async (query) => {
     await pressShortcutKeys(client, driver, 'ui.actionMenu');
     await waitDom('[aria-label="Search actions"]', { focused: true });
@@ -82,13 +95,23 @@ async function main() {
           name: 'snooze keyboard mock',
           turns: [{ includes: 'READY', actions: [{ type: 'reply', text: 'Ready for keyboard snooze', state: 'waiting_input' }] }],
         });
-        const sessionId = await createSessionAndWaitForInitialPane({
-          client, observer, cwd, label, agent: 'claude', promptReadyFn: ensureClaudePromptReadyViaPty,
-        });
+        let sessionId;
+        if (label === 'beta') {
+          const output = execFileSync(appDaemonInTree(options.appPath), [
+            'delegate', '--source-session', agents[0].sessionId, '--agent', 'claude', '--model', MOCK_AGENT_MODEL,
+            '--brief', 'READY: Exercise the isolated mock snooze keyboard test, then wait for input.', '--cwd', cwd, '--name', label,
+          ], { encoding: 'utf8', env: instanceCliEnv(currentHarnessInstance()) });
+          sessionId = JSON.parse(output.slice(output.indexOf('{'))).session_id;
+          await observer.waitFor(() => observer.getSession(sessionId), 'delegated beta visible');
+        } else {
+          sessionId = await createSessionAndWaitForInitialPane({
+            client, observer, cwd, label, agent: 'claude', promptReadyFn: ensureClaudePromptReadyViaPty,
+          });
+        }
         const pane = await waitForFirstWorkspacePane(client, sessionId, `${label} pane`);
         const agent = { sessionId, paneId: pane.paneId };
         agents.push(agent);
-        await submitPrompt(client, sessionId, pane.paneId, 'READY');
+        if (label === 'alpha') await submitPrompt(client, sessionId, pane.paneId, 'READY');
         await waitForPaneText(client, sessionId, pane.paneId, (text) => text.includes('Ready for keyboard snooze'), 'ready reply');
         await observer.waitFor(() => observer.getSession(sessionId)?.state === 'waiting_input', `${label} stopped`);
       }
@@ -129,6 +152,26 @@ async function main() {
       runner.assert((await client.request('read_pane_text', alpha)).text === before.text, 'picker keys do not change terminal text');
       await driver.typeText('CANCEL_FOCUS');
       await waitForPaneText(client, alpha.sessionId, alpha.paneId, (text) => text.includes('CANCEL_FOCUS'), 'typing after cancel');
+    });
+    await runner.step('delegation_hover_cannot_take_picker_focus', async () => {
+      await hover(`[data-testid="queue-select-${beta.sessionId}"]`);
+      await waitDom('[data-testid="delegation-chain-popover"]');
+      await openPicker();
+      for (const selector of [
+        `[data-testid="queue-select-${beta.sessionId}"]`,
+        `.delegation-chain-trigger--header[data-delegation-session="${alpha.sessionId}"]`,
+      ]) {
+        await hover(selector);
+        await waitDom('[data-testid="delegation-chain-popover"]', { absent: true });
+        await focusedChoice('30m');
+      }
+      await driver.pressKey('ArrowDown');
+      await focusedChoice('1h');
+      await driver.pressKey('Escape');
+      await hover('[data-testid="sidebar-home"]');
+      await waitDom('[data-testid="snooze-menu"]', { absent: true });
+      await waitDom('[data-testid="delegation-chain-popover"]', { absent: true });
+      await waitForPaneInputFocus(client, alpha.sessionId, alpha.paneId);
     });
     await runner.step('palette_cancel_returns_to_unfinished_edit', async () => {
       await pressShortcutKeys(client, driver, 'terminal.find');

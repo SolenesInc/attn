@@ -21,6 +21,7 @@ import {
   useNavigationContext,
   usePRLauncherContext,
   useWorkspaceTilesContext,
+  useAttentionQueueContext,
 } from './AppContexts';
 import { AppDashboard } from './AppDashboard';
 import { AppDock } from './AppDock';
@@ -58,6 +59,7 @@ export function AppSurface() {
   const { delegationSessions } = useAppSessionsContext();
   const activeSessionId = useSessionStore((state) => state.activeSessionId);
   const { markdownOpenerOpen } = useWorkspaceTilesContext();
+  const { snoozeMenu } = useAttentionQueueContext();
   const { openPRLauncherJob } = usePRLauncherContext();
   const {
     diagnosticReportSaved,
@@ -81,7 +83,7 @@ export function AppSurface() {
             sessions={delegationSessions}
             onSelectSession={handleSelectSession}
             navigationKey={`${view}:${activeSessionId ?? ''}`}
-            blocked={blockingOverlayOpen || markdownOpenerOpen}
+            blocked={blockingOverlayOpen || markdownOpenerOpen || Boolean(snoozeMenu)}
           >
             <div
               className="app"
