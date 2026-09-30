@@ -27,7 +27,7 @@ func TestBranchInfoFileLayouts(t *testing.T) {
 		{name: "detached sha1", files: map[string]string{"repo/.git/HEAD": strings.Repeat("a", 40) + "\n"}, cwd: "repo", branch: "aaaaaaa", repository: "repo"},
 		{name: "detached sha256", files: map[string]string{"repo/.git/HEAD": strings.Repeat("b", 64) + "\n"}, cwd: "repo", branch: "bbbbbbb", repository: "repo"},
 		{name: "absolute worktree", files: map[string]string{"wt/.git": "gitdir: ROOT/main/.git/worktrees/wt\n", "main/.git/worktrees/wt/HEAD": "ref: refs/heads/topic\n", "main/.git/worktrees/wt/commondir": "../..\n"}, cwd: "wt/subdir", branch: "topic", worktree: true, main: "main", repository: "main"},
-		{name: "relative worktree", files: map[string]string{"wt/.git": "gitdir: ../main/.git/worktrees/wt\n", "main/.git/worktrees/wt/HEAD": "ref: refs/heads/topic\n"}, cwd: "wt", branch: "topic", worktree: true, main: "main", repository: "../main"},
+		{name: "relative worktree", files: map[string]string{"wt/.git": "gitdir: ../main/.git/worktrees/wt\n", "main/.git/worktrees/wt/HEAD": "ref: refs/heads/topic\n", "main/.git/worktrees/wt/commondir": "../..\n"}, cwd: "wt", branch: "topic", worktree: true, main: "main", repository: "../main"},
 		{name: "submodule gitfile", files: map[string]string{"repo/sub/.git": "gitdir: ../.git/modules/sub\n", "repo/.git/modules/sub/HEAD": "ref: refs/heads/module\n"}, cwd: "repo/sub", branch: "module", repository: "repo/sub"},
 		{name: "reftable stub", files: map[string]string{"repo/.git/HEAD": "ref: refs/heads/.invalid\n"}, cwd: "repo"},
 		{name: "reftable directory", files: map[string]string{"repo/.git/HEAD": strings.Repeat("a", 40), "repo/.git/reftable/tables.list": ""}, cwd: "repo"},
@@ -36,6 +36,21 @@ func TestBranchInfoFileLayouts(t *testing.T) {
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
 			root := canonicalFixturePath(t, t.TempDir())
+			for path := range tc.files {
+				if strings.HasSuffix(path, "/HEAD") {
+					configDir := filepath.Dir(path)
+					if i := strings.Index(configDir, "/.git/worktrees/"); i >= 0 {
+						configDir = configDir[:i] + "/.git"
+					}
+					configPath := filepath.Join(root, configDir, "config")
+					if err := os.MkdirAll(filepath.Dir(configPath), 0o755); err != nil {
+						t.Fatal(err)
+					}
+					if err := os.WriteFile(configPath, []byte("[core]\n bare = false\n"), 0o600); err != nil {
+						t.Fatal(err)
+					}
+				}
+			}
 			for path, content := range tc.files {
 				path = filepath.Join(root, path)
 				if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
@@ -49,7 +64,9 @@ func TestBranchInfoFileLayouts(t *testing.T) {
 			if err := os.MkdirAll(cwd, 0o755); err != nil {
 				t.Fatal(err)
 			}
-			t.Setenv("GIT_CEILING_DIRECTORIES", "")
+			for _, name := range []string{"GIT_DIR", "GIT_WORK_TREE", "GIT_COMMON_DIR", "GIT_CEILING_DIRECTORIES", "GIT_DISCOVERY_ACROSS_FILESYSTEM", "GIT_CONFIG_COUNT", "GIT_CONFIG_PARAMETERS"} {
+				t.Setenv(name, "")
+			}
 			t.Setenv("PATH", t.TempDir())
 			got, err := NewClient().GetBranchInfo(context.Background(), cwd)
 			want := BranchInfo{Branch: tc.branch, IsWorktree: tc.worktree, Repository: tc.repository}
@@ -73,6 +90,18 @@ func TestBranchInfoGitParity(t *testing.T) {
 	}{
 		{"normal", func(t *testing.T, repo string) string { return repo }},
 		{"unborn", func(t *testing.T, repo string) string { runGit(t, repo, "checkout", "--orphan", "unborn"); return repo }},
+		{"explicit gitdir", func(t *testing.T, repo string) string {
+			dir := filepath.Join(repo, "inner")
+			runGit(t, repo, "init", "-b", "inner", dir)
+			t.Setenv("GIT_DIR", canonicalFixturePath(t, filepath.Join(repo, ".git")))
+			return dir
+		}},
+		{"config environment", func(t *testing.T, repo string) string {
+			t.Setenv("GIT_CONFIG_COUNT", "1")
+			t.Setenv("GIT_CONFIG_KEY_0", "core.bare")
+			t.Setenv("GIT_CONFIG_VALUE_0", "true")
+			return repo
+		}},
 		{"discovery ceiling", func(t *testing.T, repo string) string {
 			dir := filepath.Join(repo, "src", "deep")
 			if err := os.MkdirAll(dir, 0o755); err != nil {
@@ -102,6 +131,45 @@ func TestBranchInfoGitParity(t *testing.T) {
 			runGit(t, repo, "init", "--separate-git-dir", filepath.Join(repo, ".git", "modules", "sub"), dir)
 			return dir
 		}},
+		{"alternate core.worktree", func(t *testing.T, repo string) string {
+			other := filepath.Join(filepath.Dir(repo), "other")
+			if err := os.Mkdir(other, 0o755); err != nil {
+				t.Fatal(err)
+			}
+			runGit(t, repo, "config", "core.worktree", other)
+			return repo
+		}},
+		{"submodule worktree path", func(t *testing.T, repo string) string {
+			dir := filepath.Join(repo, "sub")
+			gitdir := filepath.Join(repo, ".git", "modules", "sub")
+			if err := os.MkdirAll(filepath.Dir(gitdir), 0o755); err != nil {
+				t.Fatal(err)
+			}
+			runGit(t, repo, "init", "--separate-git-dir", gitdir, dir)
+			runGit(t, dir, "config", "core.worktree", "../../../sub")
+			return dir
+		}},
+		{"included bare setting", func(t *testing.T, repo string) string {
+			config := filepath.Join(filepath.Dir(repo), "bare.config")
+			if err := os.WriteFile(config, []byte("[core]\n bare = true\n"), 0o600); err != nil {
+				t.Fatal(err)
+			}
+			runGit(t, repo, "config", "include.path", config)
+			return repo
+		}},
+		{"worktree bare setting", func(t *testing.T, repo string) string {
+			runGit(t, repo, "config", "extensions.worktreeConfig", "true")
+			runGit(t, repo, "config", "--worktree", "core.bare", "true")
+			return repo
+		}},
+		{"bare in .git", func(t *testing.T, repo string) string {
+			if err := os.RemoveAll(filepath.Join(repo, ".git")); err != nil {
+				t.Fatal(err)
+			}
+			runGit(t, repo, "init", "--bare", filepath.Join(repo, ".git"))
+			return repo
+		}},
+		{"core.bare", func(t *testing.T, repo string) string { runGit(t, repo, "config", "core.bare", "true"); return repo }},
 		{"bare", func(t *testing.T, repo string) string {
 			dir := filepath.Join(filepath.Dir(repo), "bare")
 			runGit(t, repo, "init", "--bare", dir)
@@ -191,6 +259,10 @@ func branchIdentityObservedByGit(t *testing.T, dir string) BranchInfo {
 		cmd.Dir = dir
 		out, err := cmd.Output()
 		return strings.TrimSpace(string(out)), err
+	}
+	inside, err := observe("rev-parse", "--is-inside-work-tree")
+	if err != nil || inside != "true" {
+		return BranchInfo{}
 	}
 	root, err := observe("rev-parse", "--show-toplevel")
 	if err != nil {

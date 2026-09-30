@@ -24,10 +24,13 @@ type BranchInfo struct {
 }
 
 func (c *Client) GetBranchInfo(ctx context.Context, dir string) (*BranchInfo, error) {
-	if os.Getenv("GIT_CEILING_DIRECTORIES") == "" {
-		if info, ok := c.branchInfoFromFiles(ctx, dir); ok {
-			return info, nil
+	for _, name := range []string{"GIT_DIR", "GIT_WORK_TREE", "GIT_COMMON_DIR", "GIT_CEILING_DIRECTORIES", "GIT_DISCOVERY_ACROSS_FILESYSTEM", "GIT_CONFIG_COUNT", "GIT_CONFIG_PARAMETERS"} {
+		if os.Getenv(name) != "" {
+			return c.branchInfoFromGit(ctx, dir)
 		}
+	}
+	if info, ok := c.branchInfoFromFiles(ctx, dir); ok {
+		return info, nil
 	}
 	return c.branchInfoFromGit(ctx, dir)
 }
@@ -80,6 +83,12 @@ func (c *Client) branchInfoFromFiles(ctx context.Context, dir string) (*BranchIn
 			commonDir = filepath.Join(gitDir, commonDir)
 		}
 	}
+	if !recognizesWorktreeConfig(commonDir, root) {
+		return nil, false
+	}
+	if _, err := os.Stat(filepath.Join(gitDir, "config.worktree")); !os.IsNotExist(err) {
+		return nil, false
+	}
 	// Reftable's HEAD can be a stub; git owns decoding that backend.
 	for _, refDir := range []string{gitDir, commonDir} {
 		if _, err := os.Stat(filepath.Join(refDir, "reftable")); !os.IsNotExist(err) {
@@ -116,6 +125,47 @@ func (c *Client) branchInfoFromFiles(ctx context.Context, dir string) (*BranchIn
 	}
 	info.Repository, _ = c.RepositoryRoot(ctx, dir)
 	return info, true
+}
+
+// Accept simple local config; git resolves includes and other config forms.
+func recognizesWorktreeConfig(gitDir, root string) bool {
+	content, err := os.ReadFile(filepath.Join(gitDir, "config"))
+	if err != nil {
+		return false
+	}
+	core, worktree := false, false
+	for _, line := range strings.Split(string(content), "\n") {
+		line = strings.TrimSpace(line)
+		if strings.HasPrefix(line, "[") {
+			if strings.HasPrefix(strings.ToLower(line), "[include") {
+				return false
+			}
+			core = strings.EqualFold(line, "[core]")
+			continue
+		}
+		key, value, _ := strings.Cut(line, "=")
+		if !core {
+			continue
+		}
+		switch strings.ToLower(strings.TrimSpace(key)) {
+		case "worktree":
+			path := strings.TrimSpace(value)
+			if !filepath.IsAbs(path) {
+				path = filepath.Join(gitDir, path)
+			}
+			if CanonicalizePath(path) != root {
+				return false
+			}
+		case "bare":
+			switch strings.ToLower(strings.TrimSpace(value)) {
+			case "false", "no", "off", "0":
+				worktree = true
+			default:
+				return false
+			}
+		}
+	}
+	return worktree
 }
 
 func (c *Client) branchInfoFromGit(ctx context.Context, dir string) (*BranchInfo, error) {
