@@ -12,8 +12,8 @@ const introBanner = () => screen.queryByTestId('intro-banner');
 const stepTitle = () => within(whatsNew()!).getByRole('heading', { level: 2 }).textContent;
 const stepKeys = () =>
   Array.from(whatsNew()!.querySelectorAll('.whats-new-keys li'), (row) => [
-    row.querySelector('.key-combo')!.textContent,
-    row.querySelector('span:last-child')!.textContent,
+    row.querySelector('.key-combos')!.textContent,
+    row.querySelector('.whats-new-key-label')!.textContent,
   ]);
 
 async function launchAfterUpdate(settings: Record<string, string> = {}) {
@@ -121,6 +121,14 @@ describe('App what’s new', () => {
       ['⌘⌥⇧1–9', 'Move and stay'],
     ]);
     expect(screen.getByTestId('whats-new-scene-press')).toHaveTextContent('⌘⌥2');
+
+    await press(daemon, 'ArrowRight');
+    expect(stepKeys()).toEqual([
+      ['⌘⇧E', 'Settle and go to the next'],
+      ['⌘↑/⌘↓', 'Step through the queue'],
+      ['⌘J', 'Next waiting agent'],
+      ['⌘⇧J', 'Next automation run'],
+    ]);
   });
 
   it('names Linux keys on Linux', async () => {

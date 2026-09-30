@@ -2,7 +2,7 @@ import { useRef, useState, type KeyboardEvent } from 'react';
 import FocusTrap from 'focus-trap-react';
 import { useKeybindings } from '../contexts/KeybindingsContext';
 import { useEscapeStack } from '../hooks/useEscapeStack';
-import { KeyCombo } from './Keycap';
+import { KeyCombos } from './Keycap';
 import { whatsNewSteps } from './whatsNewSteps';
 import './WhatsNewModal.css';
 
@@ -86,8 +86,8 @@ function WhatsNewTour({ onClose, onViewShortcuts }: Omit<WhatsNewModalProps, 'is
               <ul className="whats-new-keys">
                 {step.keys.map((entry) => (
                   <li key={entry.label}>
-                    <KeyCombo tokens={entry.combo} />
-                    <span>{entry.label}</span>
+                    <KeyCombos combos={entry.combos} />
+                    <span className="whats-new-key-label">{entry.label}</span>
                   </li>
                 ))}
               </ul>

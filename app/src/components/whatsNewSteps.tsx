@@ -17,7 +17,7 @@ import {
 
 export interface WhatsNewKey {
   label: string;
-  combo: string[];
+  combos: string[][];
 }
 
 export interface WhatsNewStep {
@@ -37,7 +37,10 @@ export function whatsNewSteps(resolve: (id: ShortcutId) => Binding | null): What
     const binding = resolve(id);
     return binding ? [...modifierTokens(binding), '1–9'] : [];
   };
-  const key = (label: string, combo: string[]): WhatsNewKey[] => (combo.length ? [{ label, combo }] : []);
+  const key = (label: string, ...combos: string[][]): WhatsNewKey[] => {
+    const bound = combos.filter((combo) => combo.length);
+    return bound.length ? [{ label, combos: bound }] : [];
+  };
   const press = (id: ShortcutId): ScenePress | null => {
     const combo = tokens(id);
     return combo.length ? { combos: [combo] } : null;
@@ -77,6 +80,7 @@ export function whatsNewSteps(resolve: (id: ShortcutId) => Binding | null): What
       body: 'Turn on the agent queue and agents sort into waiting for you or busy. Once you have unblocked one, settle it and attn shows you the next.',
       keys: [
         ...key('Settle and go to the next', tokens('session.settle')),
+        ...key('Step through the queue', tokens('session.prev'), tokens('session.next')),
         ...key('Next waiting agent', tokens('session.jumpToWaiting')),
         ...key('Next automation run', tokens('session.nextRun')),
       ],
