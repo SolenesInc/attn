@@ -189,7 +189,7 @@ export function useAppController({
     handleSelectDesktop,
     handleCloseTile,
     setCrewSeedTile,
-    handleNavigateOutOfSession,
+    handleStepSession,
     handleSelectOrchestrator,
   } = navigation;
 
@@ -598,8 +598,8 @@ export function useAppController({
     onSendToDesktopSlot: desktopNavigation.sendActivePaneToSlot,
     onOpenDesktopOverview: () => setDesktopOverviewOpen(true),
     onSwitchProfile: () => setProfileSwitcherOpen(true),
-    onPrevSession: () => handleNavigateOutOfSession('left'),
-    onNextSession: () => handleNavigateOutOfSession('right'),
+    onPrevSession: () => handleStepSession(-1),
+    onNextSession: () => handleStepSession(1),
     onHistoryBack: () => navigateLeafHistoryBack(view !== 'session'),
     onHistoryForward: () => navigateLeafHistoryForward(view !== 'session'),
     onSelectOrchestrator: handleSelectOrchestrator,
