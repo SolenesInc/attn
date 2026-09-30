@@ -56,14 +56,14 @@ describe('buildCheatsheet', () => {
 
   it('includes history bindings and desktop step labels', () => {
     const rows = buildCheatsheet().flatMap((category) => category.rows);
-    expect(rows.find((row) => row.label === 'Previous / next desktop')?.combos).toEqual([
+    expect(rows.find((row) => row.label === 'Previous / next desktop (queue mode: agent in the queue)')?.combos).toEqual([
       ['⌘', '↑'], ['⌘', '↓'],
     ]);
     expect(rows.find((row) => row.label === 'Back / forward through agent history')?.combos).toEqual([
       ['⌘', '['], ['⌘', ']'],
     ]);
-    expect(SHORTCUT_META['session.prev'].label).toBe('Previous desktop');
-    expect(SHORTCUT_META['session.next'].label).toBe('Next desktop');
+    expect(SHORTCUT_META['session.prev'].label).toBe('Previous desktop (queue mode: previous agent in the queue)');
+    expect(SHORTCUT_META['session.next'].label).toBe('Next desktop (queue mode: next agent in the queue)');
     expect(SHORTCUT_META['session.historyBack'].label).toBe('Back through agent history');
     expect(SHORTCUT_META['session.historyForward'].label).toBe('Forward through agent history');
   });

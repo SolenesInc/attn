@@ -87,7 +87,7 @@ describe('App shortcut editor', () => {
     expect(within(editor).getByRole('heading', { name: 'Desktops & Sessions' })).toBeInTheDocument();
     expect(within(editor).getByRole('heading', { name: 'Panes & Terminals' })).toBeInTheDocument();
     expect(row('New session on this desktop')).toHaveTextContent('⌘N');
-    for (const label of ['Previous desktop', 'Next desktop', 'Back through agent history', 'Forward through agent history']) {
+    for (const label of ['Previous desktop (queue mode: previous agent in the queue)', 'Next desktop (queue mode: next agent in the queue)', 'Back through agent history', 'Forward through agent history']) {
       expect(within(row(label)).getByTitle('Unbind')).toBeInTheDocument();
     }
     expect(within(row('Settings')).getByText('Required')).toBeInTheDocument();
