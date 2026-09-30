@@ -2,6 +2,7 @@ package git
 
 import (
 	"context"
+	"encoding/hex"
 	"os"
 	"path/filepath"
 	"strings"
@@ -23,6 +24,166 @@ type BranchInfo struct {
 }
 
 func (c *Client) GetBranchInfo(ctx context.Context, dir string) (*BranchInfo, error) {
+	for _, name := range []string{"GIT_DIR", "GIT_WORK_TREE", "GIT_COMMON_DIR", "GIT_CEILING_DIRECTORIES", "GIT_DISCOVERY_ACROSS_FILESYSTEM", "GIT_CONFIG_COUNT", "GIT_CONFIG_PARAMETERS"} {
+		if os.Getenv(name) != "" {
+			return c.branchInfoFromGit(ctx, dir)
+		}
+	}
+	if info, ok := c.branchInfoFromFiles(ctx, dir); ok {
+		return info, nil
+	}
+	return c.branchInfoFromGit(ctx, dir)
+}
+
+func (c *Client) branchInfoFromFiles(ctx context.Context, dir string) (*BranchInfo, bool) {
+	root := CanonicalizePath(dir)
+	var gitDir string
+	for {
+		if context.Cause(ctx) != nil {
+			return nil, false
+		}
+		if _, err := os.Stat(filepath.Join(root, "HEAD")); err == nil {
+			if objects, err := os.Stat(filepath.Join(root, "objects")); err == nil && objects.IsDir() {
+				return nil, false
+			}
+		}
+		gitPath := filepath.Join(root, ".git")
+		entry, err := os.Lstat(gitPath)
+		if err == nil {
+			if !gitPathOwnedByCurrentUser(entry) || (!entry.IsDir() && !entry.Mode().IsRegular()) {
+				return nil, false
+			}
+			gitDir = gitPath
+			if !entry.IsDir() {
+				content, err := os.ReadFile(gitPath)
+				if err != nil || !strings.HasPrefix(string(content), "gitdir: ") {
+					return nil, false
+				}
+				gitDir = strings.TrimSpace(strings.TrimPrefix(string(content), "gitdir: "))
+				if gitDir == "" {
+					return nil, false
+				}
+				if !filepath.IsAbs(gitDir) {
+					gitDir = filepath.Join(root, gitDir)
+				}
+			}
+			break
+		}
+		if !os.IsNotExist(err) {
+			return nil, false
+		}
+		parent := filepath.Dir(root)
+		if parent == root {
+			return nil, false
+		}
+		root = parent
+	}
+	gitDir = filepath.Clean(gitDir)
+	// Git owns safe.directory decisions for repositories owned by other users.
+	for _, path := range []string{root, gitDir} {
+		entry, err := os.Stat(path)
+		if err != nil || !gitPathOwnedByCurrentUser(entry) {
+			return nil, false
+		}
+	}
+	commonDir := gitDir
+	if content, err := os.ReadFile(filepath.Join(gitDir, "commondir")); err == nil {
+		commonDir = strings.TrimSpace(string(content))
+		if !filepath.IsAbs(commonDir) {
+			commonDir = filepath.Join(gitDir, commonDir)
+		}
+	}
+	if !recognizesWorktreeConfig(commonDir, root) {
+		return nil, false
+	}
+	if _, err := os.Stat(filepath.Join(gitDir, "config.worktree")); !os.IsNotExist(err) {
+		return nil, false
+	}
+	// Reftable's HEAD can be a stub; git owns decoding that backend.
+	for _, refDir := range []string{gitDir, commonDir} {
+		if _, err := os.Stat(filepath.Join(refDir, "reftable")); !os.IsNotExist(err) {
+			return nil, false
+		}
+	}
+	headPath := filepath.Join(gitDir, "HEAD")
+	entry, err := os.Lstat(headPath)
+	if err != nil || !entry.Mode().IsRegular() {
+		return nil, false
+	}
+	content, err := os.ReadFile(headPath)
+	if err != nil {
+		return nil, false
+	}
+	head := strings.TrimSpace(string(content))
+	info := &BranchInfo{}
+	switch {
+	case strings.HasPrefix(head, "ref: refs/heads/"):
+		info.Branch = strings.TrimPrefix(head, "ref: refs/heads/")
+		if info.Branch == "" || info.Branch == ".invalid" {
+			return nil, false
+		}
+	case len(head) == 40 || len(head) == 64:
+		if _, err := hex.DecodeString(head); err != nil {
+			return nil, false
+		}
+		info.Branch = head[:7]
+	default:
+		return nil, false
+	}
+	if filepath.Base(filepath.Dir(gitDir)) == "worktrees" {
+		mainGitDir := filepath.Dir(filepath.Dir(gitDir))
+		if filepath.Base(mainGitDir) != ".git" {
+			return nil, false
+		}
+		info.MainRepo = filepath.Dir(mainGitDir)
+		info.IsWorktree = true
+	}
+	info.Repository, _ = c.RepositoryRoot(ctx, dir)
+	return info, true
+}
+
+// Accept simple local config; git resolves includes and other config forms.
+func recognizesWorktreeConfig(gitDir, root string) bool {
+	content, err := os.ReadFile(filepath.Join(gitDir, "config"))
+	if err != nil {
+		return false
+	}
+	core, worktree := false, false
+	for _, line := range strings.Split(string(content), "\n") {
+		line = strings.TrimSpace(line)
+		if strings.HasPrefix(line, "[") {
+			if strings.HasPrefix(strings.ToLower(line), "[include") {
+				return false
+			}
+			core = strings.EqualFold(line, "[core]")
+			continue
+		}
+		key, value, _ := strings.Cut(line, "=")
+		if !core {
+			continue
+		}
+		switch strings.ToLower(strings.TrimSpace(key)) {
+		case "worktree":
+			path := strings.TrimSpace(value)
+			if !filepath.IsAbs(path) {
+				path = filepath.Join(gitDir, path)
+			}
+			if CanonicalizePath(path) != root {
+				return false
+			}
+		case "bare":
+			switch strings.ToLower(strings.TrimSpace(value)) {
+			case "false", "no", "off", "0":
+				worktree = true
+			default:
+				return false
+			}
+		}
+	}
+	return worktree
+}
+
+func (c *Client) branchInfoFromGit(ctx context.Context, dir string) (*BranchInfo, error) {
 	info := &BranchInfo{}
 
 	if !c.isGitRepo(ctx, dir) {
