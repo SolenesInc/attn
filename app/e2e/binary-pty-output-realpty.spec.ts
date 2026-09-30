@@ -94,10 +94,9 @@ test.describe('Binary PTY output transport', () => {
     await page.locator(`[data-testid="session-${sessionId}"]`).click();
     await expect(page.locator('.terminal-wrapper.active')).toBeVisible();
 
-    await page.waitForFunction((id) => {
-      const events = (window as any).__TEST_PTY_EVENTS as Array<{ event: string; id?: string }> | undefined;
-      return Boolean(events?.some((evt) => evt.event === 'data' && evt.id === id));
-    }, sessionId, { timeout: 15000 });
+    await expect
+      .poll(async () => page.evaluate((id) => window.__TEST_GET_SESSION_PANE_TEXT?.(id) ?? '', sessionId), { timeout: 15000 })
+      .not.toBe('');
 
     const transport = await page.evaluate((id) => {
       const dump = (window as any).__ATTN_PTY_PERF_DUMP?.();
