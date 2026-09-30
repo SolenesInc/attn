@@ -270,6 +270,20 @@ export function headOfQueue<TSession extends QueueBandSession>(
   return bands?.turns[0] ?? null;
 }
 
+/** The agent `step` rows away from `fromId` in the order the sidebar lists the queue:
+ * waiting, working, snoozed. An agent off the queue steps onto its first or last row. */
+export function stepQueue<TSession extends QueueBandSession>(
+  bands: QueueBands<TSession>,
+  fromId: string | null,
+  step: 1 | -1,
+): TSession | null {
+  const order = [...bands.turns, ...bands.settled, ...bands.snoozed];
+  if (order.length === 0) return null;
+  const index = order.findIndex((row) => row.session.id === fromId);
+  const next = index < 0 ? (step === 1 ? 0 : order.length - 1) : (index + step + order.length) % order.length;
+  return order[next].session;
+}
+
 /** Where selection goes when a turn closes: the next agent, or home. */
 export type QueueAdvance<TSession extends QueueBandSession> =
   | { to: 'session'; row: QueueRow<TSession> }

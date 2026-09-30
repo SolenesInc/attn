@@ -9,7 +9,7 @@ import { useSessionStore } from '../store/sessions';
 import { dispatcherOf } from '../utils/delegationLinks';
 import { orderedDesktops } from '../utils/desktops';
 import { automationRunGroups, nextRunNeedingYou, runCount } from '../utils/automationRuns';
-import { oldestWantedTurn } from '../utils/queueBands';
+import { oldestWantedTurn, stepQueue } from '../utils/queueBands';
 import { formatShortcut } from '../shortcuts/formatShortcut';
 import { probeUiAfterSwitch } from '../utils/uiDiagnosticsLog';
 import {
@@ -71,7 +71,7 @@ export function useAppNavigation({
   const selectCreatedSession = useCallback((id: string, owner?: Element | null) =>
     selectAgent(id, owner, false), [selectAgent]);
 
-  const { wantsAttention } = attentionQueue;
+  const { wantsAttention, queueBands } = attentionQueue;
 
   const handleJumpToWaiting = useCallback(() => {
     const waiting = oldestWantedTurn(profileSessions, wantsAttention);
@@ -181,11 +181,36 @@ export function useAppNavigation({
     [currentDesktopId, desktopOrder, handleSelectDesktop],
   );
 
+  const steppedToAgentId = useRef<string | null>(null);
+  useEffect(() => {
+    steppedToAgentId.current = null;
+  }, [agentOnScreenId]);
+
+  const handleStepQueue = useCallback(
+    (step: 1 | -1) => {
+      if (!queueBands) return;
+      const from = steppedToAgentId.current ?? (view === 'dashboard' ? null : agentOnScreenId);
+      const next = stepQueue(queueBands, from, step);
+      if (!next) return;
+      steppedToAgentId.current = next.id;
+      handleSelectSession(next.id);
+    },
+    [queueBands, view, agentOnScreenId, handleSelectSession],
+  );
+
+  const handleStepSession = useCallback(
+    (step: 1 | -1) => (queueBands ? handleStepQueue(step) : handleStepDesktop(step)),
+    [queueBands, handleStepQueue, handleStepDesktop],
+  );
+
+  // The queue is a vertical list, so only up/down leave a pane for it.
   const handleNavigateOutOfSession = useCallback(
     (direction: 'left' | 'right' | 'up' | 'down') => {
-      handleStepDesktop(direction === 'left' || direction === 'up' ? -1 : 1);
+      const step = direction === 'left' || direction === 'up' ? -1 : 1;
+      if (direction === 'up' || direction === 'down') handleStepSession(step);
+      else handleStepDesktop(step);
     },
-    [handleStepDesktop],
+    [handleStepSession, handleStepDesktop],
   );
 
   const handleSelectOrchestrator = useCallback(() => {
@@ -226,6 +251,7 @@ export function useAppNavigation({
     selectedTile,
     crewSeedTile,
     setCrewSeedTile,
+    handleStepSession,
     handleNavigateOutOfSession,
     handleSelectOrchestrator,
   };
