@@ -107,11 +107,12 @@ async function main() {
           const shared = await client.request('get_workspace', { sessionId });
           const delegatedPane = shared.panes.find((pane) => pane.runtimeId === sessionId);
           runner.assert(delegatedPane, 'delegated agent has a pane');
-          await observer.requestResult({
+          observer.send({
             cmd: 'workspace_layout_move_leaf_to_new_workspace',
             source_workspace_id: shared.workspaceId, leaf_id: delegatedPane.paneId,
-          }, 'workspace_layout_action_result');
+          });
           await observer.waitFor(() => observer.getSession(sessionId)?.workspace_id !== shared.workspaceId, 'beta moved to its own workspace');
+          await waitDom(`.session-terminal-workspace[data-workspace-id="${observer.getSession(sessionId).workspace_id}"]`);
         } else {
           sessionId = await createSessionAndWaitForInitialPane({
             client, observer, cwd, label, agent: 'claude', promptReadyFn: ensureClaudePromptReadyViaPty,
@@ -164,14 +165,15 @@ async function main() {
       await waitForPaneText(client, alpha.sessionId, alpha.paneId, (text) => text.includes('CANCEL_FOCUS'), 'typing after cancel');
     });
     await runner.step('delegation_hover_cannot_take_picker_focus', async () => {
-      await hover(`[data-testid="queue-select-${beta.sessionId}"]`);
+      const row = `.session-item:has([data-testid="queue-select-${beta.sessionId}"])`;
+      await client.request('dom_hover', { selector: row });
       await waitDom('[data-testid="delegation-chain-popover"]');
       await openPicker();
       for (const selector of [
-        `[data-testid="queue-select-${beta.sessionId}"]`,
+        row,
         `.delegation-chain-trigger--header[data-delegation-session="${alpha.sessionId}"]`,
       ]) {
-        await hover(selector);
+        await client.request('dom_hover', { selector });
         await waitDom('[data-testid="delegation-chain-popover"]', { absent: true });
         await focusedChoice('30m');
       }
@@ -239,6 +241,16 @@ async function main() {
     await runner.step('grid_cancel_preserves_zoom_and_typing_focus', async () => {
       await pressShortcutKeys(client, driver, 'view.toggleGrid');
       await waitDom('.grid-view-stage', { focused: true });
+      await client.request('dom_focus', { selector: '[aria-label="Grid layout"][type="button"]' });
+      await driver.pressEnter();
+      await waitDom('.grid-layout-popover');
+      await openPicker();
+      await driver.pressKey('Escape');
+      await waitDom('[data-testid="snooze-menu"]', { absent: true });
+      await waitDom('.grid-layout-popover');
+      await waitDom('[aria-label="Grid layout"][type="button"]', { focused: true });
+      await driver.pressKey('Escape');
+      await waitDom('.grid-layout-popover', { absent: true });
       const workspace = await client.request('get_workspace', { sessionId: alpha.sessionId });
       const runtimeId = workspace.panes.find((pane) => pane.paneId === alpha.paneId).runtimeId;
       await client.request('grid_zoom', { runtimeId });
@@ -251,7 +263,7 @@ async function main() {
       await waitDom('[data-testid="snooze-menu"]', { absent: true });
       await waitDom('.grid-view-stage', { focused: true });
       runner.assert((await client.request('grid_get_state')).zoomedId === runtimeId, 'cancel leaves grid zoom unchanged');
-      await driver.typeText('GRID_CANCEL_FOCUS');
+      await driver.typeText('GCF');
       await client.request('dom_focus', { selector: `[data-testid="queue-snooze-${beta.sessionId}"]` });
       await driver.pressEnter();
       await focusedChoice('30m');
@@ -260,15 +272,15 @@ async function main() {
       await waitDom(`[data-testid="queue-snooze-${beta.sessionId}"]`, { absent: true });
       await waitDom('.grid-view-stage', { focused: true });
       runner.assert((await client.request('grid_get_state')).zoomedId === runtimeId, 'non-active row confirmation leaves grid zoom unchanged');
-      await driver.typeText('GRID_CONFIRM_FOCUS');
+      await driver.typeText('GSF');
       observer.send({ cmd: 'wake_turn', session_id: beta.sessionId });
       await observer.waitFor(() => !observer.getSession(beta.sessionId)?.turn_snoozed_until, 'other agent woken after grid focus check');
       await driver.pressKey('Escape');
       runner.assert((await client.request('grid_get_state')).zoomedId === null, 'Escape still exits grid zoom once picker is closed');
       await pressShortcutKeys(client, driver, 'view.toggleGrid');
       await waitForPaneInputFocus(client, alpha.sessionId, alpha.paneId);
-      await waitForPaneText(client, alpha.sessionId, alpha.paneId, (text) => text.includes('GRID_CANCEL_FOCUS'), 'typing after grid cancel');
-      await waitForPaneText(client, alpha.sessionId, alpha.paneId, (text) => text.includes('GRID_CONFIRM_FOCUS'), 'typing after non-active grid confirmation');
+      await waitForPaneText(client, alpha.sessionId, alpha.paneId, (text) => text.includes('GCF'), 'typing after grid cancel');
+      await waitForPaneText(client, alpha.sessionId, alpha.paneId, (text) => text.includes('GSF'), 'typing after non-active grid confirmation');
     });
     await runner.step('new_durations_confirm_and_handover_then_keyboard_wake', async () => {
       for (const [choice, hours, moves] of [['2h', 2, 2], ['4h', 4, 3]]) {

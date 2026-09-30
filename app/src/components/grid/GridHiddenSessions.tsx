@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
+import { useEscapeStack } from '../../hooks/useEscapeStack';
 
 export interface HiddenGridSession {
   sessionId: string;
@@ -19,19 +20,12 @@ export function GridHiddenSessions({ sessions, onRestore }: GridHiddenSessionsPr
     const onDown = (e: MouseEvent) => {
       if (anchorRef.current && !anchorRef.current.contains(e.target as Node)) setOpen(false);
     };
-    const onKey = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') {
-        e.stopPropagation();
-        setOpen(false);
-      }
-    };
     window.addEventListener('mousedown', onDown, true);
-    window.addEventListener('keydown', onKey, true);
     return () => {
       window.removeEventListener('mousedown', onDown, true);
-      window.removeEventListener('keydown', onKey, true);
     };
   }, [open]);
+  useEscapeStack(() => setOpen(false), open);
 
   if (sessions.length === 0) return null;
 
