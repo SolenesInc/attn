@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useState } from 'react';
 
-export const WHATS_NEW_ID = 'desktops-2026-09';
+export const WHATS_NEW_ID = 'profiles-desktops-intro-2026-10';
 export const WHATS_NEW_STORAGE_KEY = 'attn.whats_new.last_seen';
 
 function readLastSeen(): string | null {
@@ -24,7 +24,7 @@ function persistSeen(id: string): void {
 
 export interface WhatsNewControls {
   isOpen: boolean;
-  /** Re-open the modal on demand (e.g. from a Help entry). */
+  /** Re-open the intro on demand (the command palette's What's new). */
   open: () => void;
   /** Close and mark the current release as seen. */
   dismiss: () => void;

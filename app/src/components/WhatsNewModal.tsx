@@ -1,8 +1,9 @@
-
+import { useRef, useState, type KeyboardEvent } from 'react';
 import FocusTrap from 'focus-trap-react';
+import { useKeybindings } from '../contexts/KeybindingsContext';
 import { useEscapeStack } from '../hooks/useEscapeStack';
-import { formatShortcut, modifierTokens, shortcutTokens } from '../shortcuts/formatShortcut';
-import { KeyCombos } from './Keycap';
+import { KeyCombo } from './Keycap';
+import { whatsNewSteps } from './whatsNewSteps';
 import './WhatsNewModal.css';
 
 interface WhatsNewModalProps {
@@ -11,48 +12,44 @@ interface WhatsNewModalProps {
   onViewShortcuts: () => void;
 }
 
-interface Highlight {
-  title: string;
-  body: string;
-  combos: string[][];
-  flagged?: boolean;
-}
-
-function highlights(): Highlight[] {
-  return [
-  {
-    flagged: true,
-    title: 'Agents live on desktops',
-    body: `A desktop is an arrangement of agents and tiles. ${formatShortcut('desktop.select1')} to ${formatShortcut('desktop.select9')} switch desktops; pressing the digit of the desktop you are on takes you back to the one before.`,
-    combos: [[...modifierTokens('desktop.select1'), '1–9']],
-  },
-  {
-    title: 'Take what you are on to another desktop',
-    body: 'Move the active pane or tile to another desktop and go with it, or move it there and stay where you are.',
-    combos: [[...modifierTokens('desktop.send1'), '1–9'], [...modifierTokens('desktop.sendStay1'), '1–9']],
-  },
-  {
-    title: 'See every desktop at once',
-    body: 'The overview lists every desktop, including extras past nine. Switch, send the focused pane, delete an empty desktop or give an extra a shortcut from there.',
-    combos: [shortcutTokens('desktop.overview')],
-  },
-  {
-    title: 'Profiles group everything',
-    body: 'A profile holds its own agents, crew, automations and desktops, and remembers the desktop you were on. Switch profiles without closing anything.',
-    combos: [shortcutTokens('profile.switch')],
-  },
-  {
-    title: 'Every window agrees',
-    body: 'The current desktop and the focused pane belong to the daemon, so every window on the same profile shows the same thing.',
-    combos: [],
-  },
-  ];
-}
-
 export function WhatsNewModal({ isOpen, onClose, onViewShortcuts }: WhatsNewModalProps) {
   useEscapeStack(onClose, isOpen);
-
   if (!isOpen) return null;
+  return <WhatsNewTour onClose={onClose} onViewShortcuts={onViewShortcuts} />;
+}
+
+function WhatsNewTour({ onClose, onViewShortcuts }: Omit<WhatsNewModalProps, 'isOpen'>) {
+  const { resolve } = useKeybindings();
+  const steps = whatsNewSteps(resolve);
+  const [index, setIndex] = useState(0);
+  const primaryRef = useRef<HTMLButtonElement>(null);
+  const step = steps[index];
+  const last = index === steps.length - 1;
+
+  const goTo = (next: number) => {
+    const clamped = Math.min(steps.length - 1, Math.max(0, next));
+    // Back disappears on the first step; keep the keyboard on the dialog.
+    if (clamped === 0) primaryRef.current?.focus();
+    setIndex(clamped);
+  };
+
+  const advance = () => (last ? onClose() : goTo(index + 1));
+
+  const handleKeyDown = (event: KeyboardEvent<HTMLDivElement>) => {
+    if (event.metaKey || event.ctrlKey || event.altKey || event.shiftKey) return;
+    if (event.key === 'ArrowRight' || event.key === 'ArrowLeft') {
+      event.preventDefault();
+      event.stopPropagation();
+      goTo(index + (event.key === 'ArrowRight' ? 1 : -1));
+      return;
+    }
+    // Enter advances from the primary button or the dialog itself (a click on the scene
+    // focuses it); on Back, a dot or the shortcuts link it keeps the button's own action.
+    if (event.key === 'Enter' && (event.target === event.currentTarget || event.target === primaryRef.current)) {
+      event.preventDefault();
+      advance();
+    }
+  };
 
   return (
     <div className="whats-new-overlay" onClick={onClose}>
@@ -60,65 +57,75 @@ export function WhatsNewModal({ isOpen, onClose, onViewShortcuts }: WhatsNewModa
         focusTrapOptions={{
           allowOutsideClick: true,
           escapeDeactivates: false,
+          delayInitialFocus: false,
+          initialFocus: () => primaryRef.current ?? false,
         }}
       >
         <div
           className="whats-new-modal"
           onClick={(e) => e.stopPropagation()}
+          onKeyDown={handleKeyDown}
+          tabIndex={-1}
           role="dialog"
           aria-modal="true"
-          aria-labelledby="whats-new-title"
+          aria-label="What's new"
         >
           <div className="whats-new-header">
-            <div className="whats-new-eyebrow">What's new</div>
-            <h2 id="whats-new-title">attn is organized around desktops</h2>
-            <button
-              className="whats-new-close"
-              onClick={onClose}
-              aria-label="Close what's new"
-              type="button"
-            >
+            <span className="whats-new-eyebrow">What's new</span>
+            <span className="whats-new-count">{index + 1} of {steps.length}</span>
+            <button className="whats-new-close" onClick={onClose} aria-label="Close what's new" type="button">
               ×
             </button>
           </div>
 
-          <div className="whats-new-body">
-            {highlights().map((highlight) => (
-              <section
-                className={`whats-new-item${highlight.flagged ? ' whats-new-item--key' : ''}`}
-                key={highlight.title}
-              >
-                <div className="whats-new-item-head">
-                  <h3>
-                    {highlight.flagged && <span className="whats-new-tag">Changed</span>}
-                    {highlight.title}
-                  </h3>
-                  {highlight.combos.length > 0 && (
-                    <span className="whats-new-keys">
-                      <KeyCombos combos={highlight.combos} />
-                    </span>
-                  )}
-                </div>
-                <p>{highlight.body}</p>
-              </section>
-            ))}
-          </div>
+          <section className="whats-new-step" key={step.id} aria-live="polite" data-testid={`whats-new-step-${step.id}`}>
+            {step.scene}
+            <h2>{step.title}</h2>
+            <p>{step.body}</p>
+            {step.keys.length > 0 && (
+              <ul className="whats-new-keys">
+                {step.keys.map((entry) => (
+                  <li key={entry.label}>
+                    <KeyCombo tokens={entry.combo} />
+                    <span>{entry.label}</span>
+                  </li>
+                ))}
+              </ul>
+            )}
+          </section>
 
           <div className="whats-new-footer">
-            <button
-              className="whats-new-link"
-              onClick={onViewShortcuts}
-              type="button"
-            >
+            <button className="whats-new-link" onClick={onViewShortcuts} type="button">
               View all shortcuts →
             </button>
-            <button
-              className="whats-new-primary"
-              onClick={onClose}
-              type="button"
-            >
-              Got it
-            </button>
+            <div className="whats-new-dots">
+              {steps.map((entry, i) => (
+                <button
+                  key={entry.id}
+                  type="button"
+                  tabIndex={-1}
+                  className={`whats-new-dot${i === index ? ' is-current' : ''}`}
+                  aria-label={`Step ${i + 1}: ${entry.title}`}
+                  aria-current={i === index ? 'step' : undefined}
+                  onClick={() => goTo(i)}
+                />
+              ))}
+            </div>
+            <div className="whats-new-nav">
+              {index > 0 && (
+                <button className="whats-new-back" onClick={() => goTo(index - 1)} type="button">
+                  Back
+                </button>
+              )}
+              <button
+                ref={primaryRef}
+                className="whats-new-primary"
+                onClick={advance}
+                type="button"
+              >
+                {last ? 'Got it' : 'Next'}
+              </button>
+            </div>
           </div>
         </div>
       </FocusTrap>
