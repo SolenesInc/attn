@@ -6,6 +6,7 @@ import (
 	"strings"
 
 	agentdriver "github.com/victorarias/attn/internal/agent"
+	"github.com/victorarias/attn/internal/protocol"
 	"github.com/victorarias/attn/internal/sessioncost"
 	"github.com/victorarias/attn/internal/store"
 	"github.com/victorarias/attn/internal/transcript"
@@ -92,6 +93,10 @@ func (t *sessionUsageTracker) Reconcile() {
 		}
 	}
 
+	if t.agent == string(protocol.SessionAgentCodex) && state.UsageRevision < codexUsageRevision {
+		t.reviseRecordedUsage(sources)
+	}
+
 	discovered := make(map[string]struct{}, len(sources))
 	for _, source := range sources {
 		discovered[source.ID] = struct{}{}
@@ -164,19 +169,62 @@ func (t *sessionUsageTracker) readIfMoved(tracked *trackedUsageSource) {
 		return
 	}
 	tracked.info = info
-	observations := make([]store.SessionCostObservation, 0, len(batch.Usage))
-	for _, usage := range batch.Usage {
+	observations := usageObservations(tracked.source, batch.Usage)
+	changed, err := t.daemon.store.ApplySessionCostSourceObservations(
+		t.sessionID, tracked.source.ID, tracked.follower.Cursor(), observations,
+	)
+	if err != nil {
+		t.daemon.logf("transcript watcher: usage source persist failed session=%s path=%s err=%v", t.sessionID, tracked.source.Path, err)
+		t.markIncomplete()
+		return
+	}
+	if changed {
+		t.daemon.publishFact(FactSessionCostChanged, t.sessionID, nil)
+	}
+}
+
+// codexUsageRevision 1 split cache writes out of Codex input tokens.
+const codexUsageRevision = 1
+
+func (t *sessionUsageTracker) reviseRecordedUsage(sources []transcript.UsageSource) {
+	var observations []store.SessionCostObservation
+	for _, source := range sources {
+		follower, err := transcript.NewFollower(source.Path, t.agent, 0)
+		if err != nil {
+			t.daemon.logf("transcript watcher: usage revision failed session=%s path=%s err=%v", t.sessionID, source.Path, err)
+			return
+		}
+		batch, err := follower.Read()
+		if err != nil {
+			t.daemon.logf("transcript watcher: usage revision failed session=%s path=%s err=%v", t.sessionID, source.Path, err)
+			return
+		}
+		observations = append(observations, usageObservations(source, batch.Usage)...)
+	}
+	changed, err := t.daemon.store.ReviseSessionCostObservations(t.sessionID, codexUsageRevision, observations)
+	if err != nil {
+		t.daemon.logf("transcript watcher: usage revision persist failed session=%s err=%v", t.sessionID, err)
+		return
+	}
+	if changed {
+		t.daemon.publishFact(FactSessionCostChanged, t.sessionID, nil)
+	}
+}
+
+func usageObservations(source transcript.UsageSource, usages []transcript.TokenUsage) []store.SessionCostObservation {
+	observations := make([]store.SessionCostObservation, 0, len(usages))
+	for _, usage := range usages {
 		model := strings.TrimSpace(usage.Model)
 		if model == "" {
 			model = "<unknown>"
 		}
 		purpose := usage.Purpose
 		if purpose == "" {
-			purpose = tracked.source.Purpose
+			purpose = source.Purpose
 		}
 		observationID := usage.Key
-		if !tracked.source.Root {
-			observationID = "native:" + tracked.source.ID + ":" + usage.Key
+		if !source.Root {
+			observationID = "native:" + source.ID + ":" + usage.Key
 		}
 		observations = append(observations, store.SessionCostObservation{
 			ObservationID: observationID,
@@ -194,17 +242,7 @@ func (t *sessionUsageTracker) readIfMoved(tracked *trackedUsageSource) {
 			},
 		})
 	}
-	changed, err := t.daemon.store.ApplySessionCostSourceObservations(
-		t.sessionID, tracked.source.ID, tracked.follower.Cursor(), observations,
-	)
-	if err != nil {
-		t.daemon.logf("transcript watcher: usage source persist failed session=%s path=%s err=%v", t.sessionID, tracked.source.Path, err)
-		t.markIncomplete()
-		return
-	}
-	if changed {
-		t.daemon.publishFact(FactSessionCostChanged, t.sessionID, nil)
-	}
+	return observations
 }
 
 func (t *sessionUsageTracker) resetAtHead(tracked *trackedUsageSource) bool {
