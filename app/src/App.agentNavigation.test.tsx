@@ -1210,3 +1210,44 @@ describe('attention', () => {
     expect(sidebarBadges().map((title) => title.replace(/ \(.*\)$/, '')).sort()).toEqual(['pending_approval', 'stopped', 'unknown', 'waiting', 'waiting_input']);
   });
 });
+
+describe('stepping through agents', () => {
+  const waitingTwoBusyOne: Turns = {
+    w1: { turn_owed: true },
+    w2: { turn_owed: true },
+    busy: { turn_owed: false },
+  };
+
+  async function walk(daemon: ScriptedDaemon, press: () => void, times: number): Promise<string[]> {
+    const seen: string[] = [];
+    for (let i = 0; i < times; i += 1) {
+      await gesture(daemon, press);
+      seen.push(selectedAgent() ?? 'none');
+    }
+    return seen;
+  }
+
+  it('walks the queue in sidebar order in queue mode, wrapping both ways', async () => {
+    const { daemon } = await renderAgents(waitingTwoBusyOne);
+    await open(daemon, 'w1');
+
+    expect(await walk(daemon, () => pressShortcut('session.next'), 3)).toEqual(['w2', 'busy', 'w1']);
+    expect(await walk(daemon, () => pressShortcut('session.prev'), 3)).toEqual(['busy', 'w2', 'w1']);
+  });
+
+  it('falls through from a lone pane to the queue on the vertical pane keys', async () => {
+    const { daemon } = await renderAgents(waitingTwoBusyOne);
+    await open(daemon, 'w1');
+
+    expect(await walk(daemon, () => pressShortcut('terminal.focusDown'), 2)).toEqual(['w2', 'busy']);
+    expect(await walk(daemon, () => pressShortcut('terminal.focusUp'), 1)).toEqual(['w2']);
+  });
+
+  it('keeps stepping desktops when queue mode is off', async () => {
+    const { daemon } = await renderAgents(waitingTwoBusyOne, { settings: {} });
+    await open(daemon, 'w1');
+
+    // Desktops sort by id, and the profile's own empty desktop-1 sorts before busy.
+    expect(await walk(daemon, () => pressShortcut('session.next'), 3)).toEqual(['w2', 'none', 'busy']);
+  });
+});

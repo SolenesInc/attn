@@ -38,7 +38,7 @@ describe('App shortcut cheatsheet', () => {
       'Desktop overview': [['⌘', 'G']],
       'New session on this desktop': [['⌘', 'N']],
       'Switch to desktop 1–9': [['⌘', '1–9']],
-      'Previous / next desktop': [['⌘', '↑'], ['⌘', '↓']],
+      'Previous / next desktop (queue mode: agent in the queue)': [['⌘', '↑'], ['⌘', '↓']],
       'Back / forward through agent history': [['⌘', '['], ['⌘', ']']],
     }],
     ['Linux', 'Linux x86_64', {
