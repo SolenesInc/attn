@@ -204,6 +204,10 @@ func TestSessionsSharingAConversationKeepOneCopyUntilAllTheirWorkCloses(t *testi
 	first.Subagent("original subagent output")
 	first.Reply("first session's answer <!-- attn:state=waiting_input -->")
 	originalPath := transcript.FindClaudeTranscript(first.ConversationID)
+	older, err := os.ReadFile(originalPath)
+	if err != nil {
+		t.Fatal(err)
+	}
 	subfiles, err := filepath.Glob(filepath.Join(strings.TrimSuffix(originalPath, ".jsonl"), "subagents", "*.jsonl"))
 	if err != nil || len(subfiles) != 1 {
 		t.Fatalf("subagent files: %v, %v", subfiles, err)
@@ -244,15 +248,141 @@ func TestSessionsSharingAConversationKeepOneCopyUntilAllTheirWorkCloses(t *testi
 	if kept == nil || kept.DeleteAfter != nil {
 		t.Fatalf("copy released while other work remains open: %+v", kept)
 	}
+	mainfiles, err := filepath.Glob(filepath.Join(filepath.Dir(filepath.Dir(originalPath)), "*", first.ConversationID+".jsonl"))
+	if err != nil || len(mainfiles) != 2 {
+		t.Fatalf("cross-directory main transcripts: %v, %v", mainfiles, err)
+	}
+	newerPath := mainfiles[0]
+	if newerPath == originalPath {
+		newerPath = mainfiles[1]
+	}
+	newer, err := os.ReadFile(newerPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Remove(newerPath); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.RemoveAll(strings.TrimSuffix(originalPath, ".jsonl")); err != nil {
+		t.Fatal(err)
+	}
+	partialRestore := seedResumeRequest(app, secondSeed)
+	if !partialRestore.Success {
+		t.Fatalf("restore newer transcript while older survives: %+v", partialRestore)
+	}
+	continued := w.Launched(second)
+	if got, err := os.ReadFile(newerPath); err != nil || string(got) != string(newer) {
+		t.Fatalf("newer transcript replaced with stale surviving history: %q, %v", got, err)
+	}
+	if got, err := os.ReadFile(subfiles[0]); err != nil || string(got) != string(suboriginal) {
+		t.Fatalf("missing auxiliary file not restored with surviving main: %q, %v", got, err)
+	}
+	if err := os.RemoveAll(strings.TrimSuffix(originalPath, ".jsonl")); err != nil {
+		t.Fatal(err)
+	}
+	app.TypeLine(second, "continue after the original auxiliary files were pruned")
+	continued.Prompted()
+	continued.Reply("the new archive must retain missing old auxiliary files <!-- attn:state=waiting_input -->")
+	closePane(app, seedResumePane(t, w, protocol.Deref(partialRestore.WorkspaceID), second))
+	testworld.AwaitTaskDone(app, "conversation_keep")
 	sessionRecoveryDeleteTranscript(t, first.ConversationID)
 	if err := os.RemoveAll(strings.TrimSuffix(originalPath, ".jsonl")); err != nil {
 		t.Fatal(err)
 	}
-	if result := seedResumeRequest(app, secondSeed); !result.Success {
-		t.Fatalf("shared conversation restore: %+v", result)
+	fullRestore := seedResumeRequest(app, secondSeed)
+	if !fullRestore.Success {
+		t.Fatalf("shared conversation restore: %+v", fullRestore)
 	}
 	seedResumeContinues(t, w, first, second)
 	if got, err := os.ReadFile(subfiles[0]); err != nil || string(got) != string(suboriginal) {
 		t.Fatalf("subagent output from original directory lost: %q, %v", got, err)
+	}
+	latest, err := os.ReadFile(newerPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	closePane(app, seedResumePane(t, w, protocol.Deref(fullRestore.WorkspaceID), second))
+	testworld.AwaitTaskDone(app, "conversation_keep")
+	if err := os.WriteFile(originalPath, older, 0600); err != nil {
+		t.Fatal(err)
+	}
+	third, _, _ := w.RequestSpawn(app, fakeagent.Claude, w.Path("third-directory"), func(msg *protocol.SpawnSessionMessage) {
+		msg.ResumeSessionID = protocol.Ptr(first.ConversationID)
+	})
+	if !third.Success {
+		t.Fatalf("third-directory resume: %+v", third)
+	}
+	w.Launched(third.ID)
+	mainfiles, err = filepath.Glob(filepath.Join(filepath.Dir(filepath.Dir(originalPath)), "*", first.ConversationID+".jsonl"))
+	if err != nil || len(mainfiles) != 3 {
+		t.Fatalf("third-directory main transcripts: %v, %v", mainfiles, err)
+	}
+	for _, path := range mainfiles {
+		if path == originalPath || path == newerPath {
+			continue
+		}
+		if got, err := os.ReadFile(path); err != nil || string(got) != string(latest) {
+			t.Fatalf("new directory resumed stale surviving history: %q, %v", got, err)
+		}
+	}
+}
+
+func TestKeptConversationRefusesSymlinkedProviderDirectories(t *testing.T) {
+	for _, stage := range []string{"copy", "restore", "reload"} {
+		t.Run(stage, func(t *testing.T) {
+			w := newWorld(t, fakeagent.Claude)
+			app, cli := w.App(), w.Client()
+			delegated := seedResumeDelegate(t, w, fakeagent.Claude, "api")
+			first := w.Launched(delegated.SessionID)
+			first.Prompted()
+			first.Reply("keep this conversation <!-- attn:state=waiting_input -->")
+			path := transcript.FindClaudeTranscript(first.ConversationID)
+			if stage != "copy" {
+				closePane(app, seedResumePane(t, w, protocol.Deref(delegated.WorkspaceID), delegated.SessionID))
+				testworld.AwaitTaskDone(app, "conversation_keep")
+				if lifeShow(t, cli, delegated.SeedID).Seed.Continuation.KeptConversation == nil {
+					t.Fatal("conversation was not kept")
+				}
+			}
+			if stage == "reload" {
+				if result := seedResumeRequest(app, delegated.SeedID); !result.Success {
+					t.Fatalf("resume before reload: %+v", result)
+				}
+				seedResumeContinues(t, w, first, delegated.SessionID)
+			}
+			outside := t.TempDir()
+			if stage == "copy" {
+				if err := os.WriteFile(filepath.Join(outside, filepath.Base(path)), []byte("private host data"), 0600); err != nil {
+					t.Fatal(err)
+				}
+			}
+			project := filepath.Dir(path)
+			if err := os.Rename(project, project+"-original"); err != nil {
+				t.Fatal(err)
+			}
+			if err := os.Symlink(outside, project); err != nil {
+				t.Fatal(err)
+			}
+			if stage == "copy" {
+				closePane(app, seedResumePane(t, w, protocol.Deref(delegated.WorkspaceID), delegated.SessionID))
+				testworld.AwaitTaskDone(app, "conversation_keep")
+				if kept := lifeShow(t, cli, delegated.SeedID).Seed.Continuation.KeptConversation; kept != nil {
+					t.Fatalf("copied through symlink: %+v", kept)
+				}
+			} else {
+				if stage == "reload" {
+					result := testworld.Request(app, protocol.ReloadSessionMessage{Cmd: protocol.CmdReloadSession, ID: delegated.SessionID}, protocol.EventReloadSessionResult, func(r protocol.ReloadSessionResultMessage) bool { return r.ID == delegated.SessionID })
+					if result.Success || !strings.Contains(protocol.Deref(result.Error), "could not be prepared") {
+						t.Fatalf("reload must refuse instead of fresh-spawning: %+v", result)
+					}
+				} else if result := seedResumeRequest(app, delegated.SeedID); result.Success {
+					t.Fatalf("restored through symlink: %+v", result)
+				}
+				entries, err := os.ReadDir(outside)
+				if err != nil || len(entries) != 0 {
+					t.Fatalf("restore wrote outside provider directories: %v, %v", entries, err)
+				}
+			}
+		})
 	}
 }

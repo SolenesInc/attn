@@ -184,13 +184,15 @@ func (d *Daemon) resolveSpawnIntent(req *spawnRequest) (*spawnPlan, *spawnReject
 	}
 	if req.existingSession != nil && !req.hasPluginDriver {
 		req.resumeSessionID = agentdriver.ResolveSpawnResumeSessionID(req.driver, req.existingSession.ID, req.resumeSessionID, d.store.GetResumeSessionID(msg.ID))
-		if req.resumeSessionID == msg.ID && !d.conversationReady(req.driver, req.resumeSessionID) {
+		if req.resumeSessionID == msg.ID && !d.conversationKnown(req.driver, req.resumeSessionID) {
 			d.logf("spawn: self-resume target %s has no transcript yet; fresh-spawning instead", msg.ID)
 			req.resumeSessionID = ""
 		}
 	}
 	if !req.hasPluginDriver && req.resumeSessionID != "" {
-		d.conversationReady(req.driver, req.resumeSessionID)
+		if !d.conversationReady(req.driver, req.resumeSessionID) {
+			return nil, &spawnRejection{err: fmt.Errorf("conversation %s could not be prepared for resume; check the daemon log", req.resumeSessionID)}
+		}
 	}
 	configuredExecutable := strings.TrimSpace(protocol.Deref(msg.Executable))
 	if configuredExecutable == "" {

@@ -181,27 +181,8 @@ func (d *Daemon) keepConversations(now time.Time) {
 		key := conversationKey{kept.Agent, kept.ResumeID}
 		path := conversationArchive(key.agent, key.resumeID)
 		liveFiles[path] = true
-		if len(referenced[key]) > 0 {
-			continue
-		}
-		if kept.ReleasedAt.IsZero() {
-			if d.store.ReleaseKeptConversation(key.agent, key.resumeID, now) {
-				changed[key] = true
-			}
-			continue
-		}
-		if now.Before(kept.ReleasedAt.Add(conversationKeepGrace())) {
-			continue
-		}
-		if err := os.Remove(path); err != nil && !os.IsNotExist(err) {
-			d.logf("conversation keep: delete %s/%s: %v", key.agent, key.resumeID, err)
-			continue
-		}
-		if d.store.TombstoneKeptConversation(key.agent, key.resumeID, now) {
-			changed[key] = true
-			delete(liveFiles, path)
-		}
 	}
+	d.retireConversations(all, liveFiles, changed, now)
 	err = filepath.WalkDir(config.ConversationsDir(), func(path string, entry fs.DirEntry, err error) error {
 		if os.IsNotExist(err) {
 			return nil
@@ -224,6 +205,53 @@ func (d *Daemon) keepConversations(now time.Time) {
 	})
 }
 
+func (d *Daemon) retireConversations(all []store.KeptConversation, liveFiles map[string]bool, changed map[conversationKey]bool, now time.Time) {
+	// Garden role writes and foreground planting use different guards.
+	// Hold both only across reference inspection and archive retirement.
+	d.gardenWatchMu.Lock()
+	defer d.gardenWatchMu.Unlock()
+	err := d.worktreeMaintenance.TryAutomaticRemoval(context.Background(), func(automaticWorktreeCleanupProtection) error {
+		referenced, err := d.referencedConversations()
+		if err != nil {
+			return err
+		}
+		for _, kept := range all {
+			if !kept.DeletedAt.IsZero() {
+				continue
+			}
+			key := conversationKey{kept.Agent, kept.ResumeID}
+			if len(referenced[key]) > 0 {
+				if d.store.RetainKeptConversation(key.agent, key.resumeID) {
+					changed[key] = true
+				}
+				continue
+			}
+			if kept.ReleasedAt.IsZero() {
+				if d.store.ReleaseKeptConversation(key.agent, key.resumeID, now) {
+					changed[key] = true
+				}
+				continue
+			}
+			if now.Before(kept.ReleasedAt.Add(conversationKeepGrace())) {
+				continue
+			}
+			path := conversationArchive(key.agent, key.resumeID)
+			if err := os.Remove(path); err != nil && !os.IsNotExist(err) {
+				d.logf("conversation keep: delete %s/%s: %v", key.agent, key.resumeID, err)
+				continue
+			}
+			if d.store.TombstoneKeptConversation(key.agent, key.resumeID, now) {
+				changed[key] = true
+				delete(liveFiles, path)
+			}
+		}
+		return nil
+	})
+	if err != nil && !errors.Is(err, errAutomaticWorktreeCleanupPreempted) {
+		d.logf("conversation keep: retire copies: %v", err)
+	}
+}
+
 func (d *Daemon) copyConversation(agent string, conversation store.SessionConversation, files []string, bytes int64, now time.Time) error {
 	home, err := toolhome.Dir()
 	if err != nil {
@@ -243,46 +271,61 @@ func (d *Daemon) copyConversation(agent string, conversation store.SessionConver
 		return err
 	}
 	archive := tar.NewWriter(encoder)
+	writtenNames := make(map[string]bool)
+	inputs, err := openConversationFiles(home)
+	if err != nil {
+		return err
+	}
+	defer inputs.home.Close()
 	for _, path := range files {
-		err = filepath.WalkDir(path, func(path string, entry fs.DirEntry, walkErr error) error {
+		relative, relErr := filepath.Rel(home, path)
+		if relErr != nil || !conversationFileAllowed(agent, conversation.NativeID, filepath.ToSlash(relative)) {
+			err = fmt.Errorf("invalid %s conversation file: %s", agent, path)
+			break
+		}
+		err = fs.WalkDir(inputs, filepath.ToSlash(relative), func(name string, entry fs.DirEntry, walkErr error) error {
 			if os.IsNotExist(walkErr) {
 				return nil
 			}
 			if walkErr != nil {
 				return walkErr
 			}
-			info, err := entry.Info()
+			if !conversationFileAllowed(agent, conversation.NativeID, name) {
+				return fmt.Errorf("invalid conversation file: %s", name)
+			}
+			src, err := inputs.Open(name)
+			if err != nil {
+				return err
+			}
+			defer src.Close()
+			info, err := src.Stat()
 			if err != nil {
 				return err
 			}
 			if !info.IsDir() && !info.Mode().IsRegular() {
-				return fmt.Errorf("unsupported conversation file: %s", path)
-			}
-			relative, err := filepath.Rel(home, path)
-			if err != nil || !filepath.IsLocal(relative) {
-				return fmt.Errorf("conversation file outside tool home: %s", path)
+				return fmt.Errorf("unsupported conversation file: %s", name)
 			}
 			header, err := tar.FileInfoHeader(info, "")
 			if err != nil {
 				return err
 			}
-			header.Name = filepath.ToSlash(relative)
+			header.Name = name
 			if err := archive.WriteHeader(header); err != nil {
 				return err
 			}
+			writtenNames[name] = true
 			if info.IsDir() {
 				return nil
 			}
-			src, err := os.Open(path)
-			if err != nil {
-				return err
-			}
-			_, copyErr := io.Copy(archive, src)
-			return errors.Join(copyErr, src.Close())
+			_, err = io.Copy(archive, src)
+			return err
 		})
 		if err != nil {
 			break
 		}
+	}
+	if err == nil {
+		err = appendMissingConversationEntries(archive, conversationArchive(agent, conversation.NativeID), agent, conversation.NativeID, writtenNames)
 	}
 	err = errors.Join(err, archive.Close(), encoder.Close())
 	if err != nil {
@@ -343,31 +386,73 @@ func (d *Daemon) conversationReady(driver agentdriver.Driver, resumeID string) b
 	if resumeID == "" {
 		return false
 	}
-	if agentdriver.ResumeAvailable(driver, resumeID) {
-		return true
-	}
 	if d.store == nil {
-		return false
+		return agentdriver.ResumeAvailable(driver, resumeID)
 	}
 	kept, ok := d.store.KeptConversation(driver.Name(), resumeID)
 	if !ok || !kept.DeletedAt.IsZero() || kept.Agent != driver.Name() {
-		return false
+		return agentdriver.ResumeAvailable(driver, resumeID)
 	}
-	if _, err := os.Stat(kept.SourcePath); !os.IsNotExist(err) {
-		return false
-	}
-	if err := restoreConversationArchive(conversationArchive(kept.Agent, kept.ResumeID), time.Now()); err != nil {
+	if err := restoreConversationArchive(conversationArchive(kept.Agent, kept.ResumeID), kept.Agent, kept.ResumeID, time.Now()); err != nil {
 		d.logf("conversation keep: restore %s/%s: %v", kept.Agent, kept.ResumeID, err)
 		return false
 	}
 	return agentdriver.ResumeAvailable(driver, resumeID)
 }
 
-func restoreConversationArchive(path string, now time.Time) error {
+func appendMissingConversationEntries(dst *tar.Writer, path, agent, resumeID string, writtenNames map[string]bool) error {
+	src, err := os.Open(path)
+	if os.IsNotExist(err) {
+		return nil
+	}
+	if err != nil {
+		return err
+	}
+	defer src.Close()
+	decoder, err := zstd.NewReader(src, zstd.WithDecoderConcurrency(1))
+	if err != nil {
+		return err
+	}
+	defer decoder.Close()
+	previous := tar.NewReader(decoder)
+	for {
+		header, err := previous.Next()
+		if err == io.EOF {
+			return nil
+		}
+		if err != nil {
+			return err
+		}
+		if writtenNames[header.Name] {
+			continue
+		}
+		if !conversationFileAllowed(agent, resumeID, header.Name) {
+			return fmt.Errorf("invalid %s archive path: %s", agent, header.Name)
+		}
+		parts := strings.Split(header.Name, "/")
+		if len(parts) == 4 && parts[1] == "projects" && parts[3] == resumeID+".jsonl" {
+			continue
+		}
+		if err := dst.WriteHeader(header); err != nil {
+			return err
+		}
+		if _, err := io.Copy(dst, previous); err != nil {
+			return err
+		}
+		writtenNames[header.Name] = true
+	}
+}
+
+func restoreConversationArchive(path, agent, resumeID string, now time.Time) error {
 	home, err := toolhome.Dir()
 	if err != nil {
 		return err
 	}
+	outputs, err := openConversationFiles(home)
+	if err != nil {
+		return err
+	}
+	defer outputs.home.Close()
 	// An opened archive survives deletion; replacement installs a complete archive by rename.
 	src, err := os.Open(path)
 	if err != nil {
@@ -388,55 +473,16 @@ func restoreConversationArchive(path string, now time.Time) error {
 		if err != nil {
 			return err
 		}
-		relative := filepath.FromSlash(header.Name)
-		if !filepath.IsLocal(relative) {
-			return fmt.Errorf("archive path outside tool home: %s", header.Name)
+		if !conversationFileAllowed(agent, resumeID, header.Name) {
+			return fmt.Errorf("invalid %s archive path: %s", agent, header.Name)
 		}
-		dest := filepath.Join(home, relative)
-		if header.Typeflag == tar.TypeDir {
-			if err := os.MkdirAll(dest, 0700); err != nil {
-				return err
-			}
-			continue
-		}
-		if header.Typeflag != tar.TypeReg {
+		if header.Typeflag != tar.TypeReg && header.Typeflag != tar.TypeDir {
 			return fmt.Errorf("unsupported archive file: %s", header.Name)
 		}
-		if _, err := os.Lstat(dest); err == nil {
-			continue
-		} else if !os.IsNotExist(err) {
-			return err
-		}
-		if err := os.MkdirAll(filepath.Dir(dest), 0700); err != nil {
-			return err
-		}
-		if err := restoreConversationFile(archive, dest, now); err != nil {
+		if err := outputs.restore(archive, header.Name, header.Typeflag == tar.TypeDir, now); err != nil {
 			return err
 		}
 	}
-}
-
-func restoreConversationFile(src io.Reader, dest string, now time.Time) error {
-	tmp, err := os.CreateTemp(filepath.Dir(dest), ".restore-*")
-	if err != nil {
-		return err
-	}
-	defer os.Remove(tmp.Name())
-	defer tmp.Close()
-	if _, err := io.Copy(tmp, src); err != nil {
-		return err
-	}
-	if err := tmp.Close(); err != nil {
-		return err
-	}
-	if err := os.Chtimes(tmp.Name(), now, now); err != nil {
-		return err
-	}
-	// Linking installs atomically and refuses an existing harness file, including a concurrent writer.
-	if err := os.Link(tmp.Name(), dest); err != nil && !os.IsExist(err) {
-		return err
-	}
-	return nil
 }
 
 func (d *Daemon) keptConversationForSession(id string) *protocol.KeptConversation {

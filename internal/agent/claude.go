@@ -622,6 +622,20 @@ func copyTranscriptForResume(resumeSessionID, cwd string) error {
 	if srcPath == "" {
 		return fmt.Errorf("resume transcript not found for session %s", resumeSessionID)
 	}
+	home, err := toolhome.Dir()
+	if err != nil {
+		return err
+	}
+	paths, err := filepath.Glob(filepath.Join(home, ".claude", "projects", "*", resumeSessionID+".jsonl"))
+	if err != nil {
+		return err
+	}
+	var largest int64 = -1
+	for _, path := range paths {
+		if info, err := os.Stat(path); err == nil && info.Mode().IsRegular() && info.Size() > largest {
+			srcPath, largest = path, info.Size()
+		}
+	}
 
 	destDir := claudeProjectDir(cwd)
 	if destDir == "" {
@@ -635,6 +649,11 @@ func copyTranscriptForResume(resumeSessionID, cwd string) error {
 	if srcPath == destPath {
 		return nil
 	}
+	if _, err := os.Lstat(destPath); err == nil {
+		return nil
+	} else if !os.IsNotExist(err) {
+		return err
+	}
 
 	src, err := os.Open(srcPath)
 	if err != nil {
@@ -642,7 +661,10 @@ func copyTranscriptForResume(resumeSessionID, cwd string) error {
 	}
 	defer src.Close()
 
-	dst, err := os.OpenFile(destPath, os.O_WRONLY|os.O_CREATE|os.O_TRUNC, 0600)
+	dst, err := os.OpenFile(destPath, os.O_WRONLY|os.O_CREATE|os.O_EXCL, 0600)
+	if os.IsExist(err) {
+		return nil
+	}
 	if err != nil {
 		return fmt.Errorf("failed to create destination transcript: %w", err)
 	}

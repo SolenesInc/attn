@@ -329,6 +329,9 @@ func (d *Daemon) buildReloadSpawnOptionsFromLaunchParams(session *protocol.Sessi
 	driver := agentdriver.Get(agent)
 	resumeSessionID := agentdriver.ResolveSpawnResumeSessionID(driver, sessionID, "", d.store.GetResumeSessionID(sessionID))
 	if resumeSessionID != "" && !d.conversationReady(driver, resumeSessionID) {
+		if d.conversationKnown(driver, resumeSessionID) {
+			return ptybackend.SpawnOptions{}, fmt.Errorf("conversation %s could not be prepared for resume; check the daemon log", resumeSessionID)
+		}
 		d.logf("reload: resume target %s for session %s is not resumable (no transcript yet); fresh-spawning instead", resumeSessionID, sessionID)
 		resumeSessionID = ""
 	}
