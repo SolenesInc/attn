@@ -9,7 +9,6 @@ interface KeyboardShortcutsConfig {
   onCloseSession: () => void;
   onOpenPalette: (mode: PaletteMode) => void;
   onGoToDashboard: () => void;
-  onToggleGridMode?: () => void;
   onJumpToWaiting: () => void;
   onNextRun: () => void;
   /** Undefined while the queue arrangement is off; the keystroke is then unbound. */
@@ -52,7 +51,6 @@ export function useKeyboardShortcuts({
   onCloseSession,
   onOpenPalette,
   onGoToDashboard,
-  onToggleGridMode,
   onJumpToWaiting,
   onNextRun,
   onSettleTurn,
@@ -100,7 +98,6 @@ export function useKeyboardShortcuts({
   useShortcut('session.goToDashboard', onGoToDashboard, enabled);
   useShortcut('desktop.overview', onOpenDesktopOverview, enabled);
   useShortcut('profile.switch', onSwitchProfile, enabled);
-  useShortcut('view.toggleGrid', onToggleGridMode ?? (() => {}), enabled && !!onToggleGridMode);
   useShortcut('session.jumpToWaiting', onJumpToWaiting, enabled);
   useShortcut('session.nextRun', onNextRun, enabled);
   useShortcut('sidebar.agentList', onShowAgentList, enabled);

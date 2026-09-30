@@ -60,10 +60,6 @@ panes and tiles; Cmd+1–9 switches between them and Cmd+Option+1–9 sends the
 focused pane over. Every window on the same profile shows the same desktop and
 the same focused pane.
 
-**Grid view.** Hit Cmd+Shift+G to see every session as a live terminal tile at once;
-the ones waiting on you flash. Click a tile to zoom in and type straight into
-it. Pick the layout, drop tiles you don't care about; it sticks across restarts.
-
 **Panes, splits, and first-class shells.** A desktop can hold several sessions
 side by side. Split a pane, open a plain shell as its own session from the same
 dialog you use for agents, and move focus between panes with the keyboard.
@@ -165,7 +161,6 @@ agent (or a plain shell), pick a directory, go.
 | Cmd+G | Desktop overview |
 | Cmd+Shift+U | Switch profile |
 | Cmd+Up / Down | Jump between sessions |
-| Cmd+Shift+G | Grid view |
 | Cmd+F | Find in terminal |
 | Cmd+K | Agent palette (crew, agents, tiles, runs) |
 | Cmd+Shift+K | Command palette (or type `>` in the agent palette) |

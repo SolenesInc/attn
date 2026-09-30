@@ -10,7 +10,6 @@ const noop = () => {};
 const long = (words: string) => `${words}-${'and-then-some-more-'.repeat(4)}end`;
 
 const params = new URLSearchParams(window.location.search);
-const underGrid = params.has('grid');
 const desktopIds = Array.from({ length: params.has('oneDesktop') ? 1 : 11 }, (_, index) => `desk-${index + 1}`);
 
 const sessions = [
@@ -68,7 +67,7 @@ export function QueueBarHarness({ onReady, setTriggerRerender }: HarnessProps) {
     setTriggerRerender(() => noop);
   }, [onReady, setTriggerRerender]);
   return (
-    <div className={`app${underGrid ? ' is-grid' : ''}`} style={{ height: '100vh' }}>
+    <div className="app" style={{ height: '100vh' }}>
       <div className="app-frame">
         <Sidebar
           collapsed
@@ -93,7 +92,6 @@ export function QueueBarHarness({ onReady, setTriggerRerender }: HarnessProps) {
           onWalkRuns={noop}
         />
       </div>
-      {underGrid && <div className="view-container visible" data-testid="grid-stand-in" />}
     </div>
   );
 }

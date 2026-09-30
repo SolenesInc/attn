@@ -7,7 +7,6 @@ import type { SessionAgent } from '../types/sessionAgent';
 import type { TerminalSplitDirection } from '../types/desktop';
 import { SHORTCUTS, type ShortcutId, type Combo, isChord } from '../shortcuts/registry';
 import { resolveBinding } from '../shortcuts/resolver';
-import { getGridAutomationHandle, INACTIVE_GRID_STATE } from '../components/grid/gridAutomation';
 import {
   getAutomationFormAutomationHandle,
   type AutomationFormAutomationState,
@@ -2019,7 +2018,6 @@ export function useUiAutomationBridge({
           daemonReady,
           connectionError,
           appBuild: APP_BUILD_IDENTITY,
-          gridActive: typeof document !== 'undefined' && document.querySelector('.grid-view') != null,
           sessions: sessions.map((session) => serializeSession(session, getActivePaneIdForSession)),
           arrangement: serializeArrangement(),
         };
@@ -2039,33 +2037,6 @@ export function useUiAutomationBridge({
           getMarkdownAnnotationsAutomationHandle()?.getState() ??
           INACTIVE_MARKDOWN_ANNOTATIONS_STATE
         );
-      }
-      case 'grid_get_state':
-        return getGridAutomationHandle()?.getState() ?? INACTIVE_GRID_STATE;
-      case 'grid_get_tile_text': {
-        const handle = getGridAutomationHandle();
-        if (!handle) throw new Error('grid is not active');
-        const runtimeId = typeof payload.runtimeId === 'string' ? payload.runtimeId : null;
-        if (!runtimeId) {
-          throw new Error('grid_get_tile_text requires runtimeId');
-        }
-        return { runtimeId, text: handle.getTileText(runtimeId) };
-      }
-      case 'grid_zoom': {
-        const handle = getGridAutomationHandle();
-        if (!handle) throw new Error('grid is not active');
-        const runtimeId = typeof payload.runtimeId === 'string' ? payload.runtimeId : null;
-        handle.zoom(runtimeId);
-        return { requested: runtimeId, zoomedId: handle.getState().zoomedId };
-      }
-      case 'grid_send_text': {
-        const handle = getGridAutomationHandle();
-        if (!handle) throw new Error('grid is not active');
-        const text = typeof payload.text === 'string' ? payload.text : null;
-        if (text === null) throw new Error('grid_send_text requires text');
-        const sent = handle.sendText(text);
-        await settleUi();
-        return { sent, zoomedId: handle.getState().zoomedId };
       }
       case 'settings_get_state':
         return getSettingsAutomationHandle()?.getState() ?? INACTIVE_SETTINGS_STATE;

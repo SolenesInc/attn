@@ -155,29 +155,6 @@ async function waitForExactLine(client, sessionId, paneId, expected, minimum = 1
   );
 }
 
-async function waitForGrid(client, predicate, description, timeoutMs = 10_000) {
-  const deadline = Date.now() + timeoutMs;
-  let last = null;
-  while (Date.now() < deadline) {
-    last = await client.request('grid_get_state').catch(() => null);
-    if (predicate(last)) return last;
-    await delay(150);
-  }
-  throw new Error(`Timed out waiting for ${description}. Last grid state: ${JSON.stringify(last)}`);
-}
-
-async function waitForGridText(client, runtimeId, predicate, description, timeoutMs = 15_000) {
-  const deadline = Date.now() + timeoutMs;
-  let last = '';
-  while (Date.now() < deadline) {
-    const response = await client.request('grid_get_tile_text', { runtimeId }).catch(() => null);
-    last = response?.text || '';
-    if (predicate(last)) return last;
-    await delay(150);
-  }
-  throw new Error(`Timed out waiting for ${description}. Last grid text:\n${last}`);
-}
-
 async function waitForZoom(client, sessionId, expectedPaneId, description, timeoutMs = 8_000) {
   const deadline = Date.now() + timeoutMs;
   let last = null;
@@ -203,7 +180,7 @@ async function main() {
     prefix: 'terminal-input',
     metadata: {
       agent: 'shell',
-      focus: 'background browser keyboard, diagnostic report, shortcut, IME, Kitty, and zoomed-grid input through libghostty',
+      focus: 'background browser keyboard, diagnostic report, shortcut, IME, and Kitty input through libghostty',
     },
   });
   const client = new UiAutomationClient(options);
@@ -544,37 +521,6 @@ async function main() {
       await client.request('set_setting', { key: 'keybindings_config', value: '' });
     });
 
-    await runner.step('zoomed_grid_input', async () => {
-      await focusPane();
-      await pressShortcut('view.toggleGrid');
-      await waitForGrid(client, (state) => state?.active === true, 'grid to open');
-      await client.request('grid_zoom', { runtimeId: pane.runtimeId });
-      await waitForGrid(client, (state) => state?.zoomedId === pane.runtimeId, 'shell tile to zoom');
-      await client.request('dom_focus', { selector: '.grid-view-stage' });
-
-      const token = `GRID_INPUT_${runner.runId}`;
-      await pasteText(`echo ${token}`, '.grid-view-stage');
-      await pressKey(KEY.ENTER, {}, '.grid-view-stage');
-      let text = await waitForGridText(
-        client,
-        pane.runtimeId,
-        (value) => exactLineCount(value, token) >= 1,
-        'text input to reach the zoomed grid tile',
-      );
-      const before = exactLineCount(text, token);
-      await pressKey(KEY.UP, {}, '.grid-view-stage');
-      await pressKey(KEY.ENTER, {}, '.grid-view-stage');
-      text = await waitForGridText(
-        client,
-        pane.runtimeId,
-        (value) => exactLineCount(value, token) >= before + 1,
-        'Up history input to reach the zoomed grid tile',
-      );
-      await pressShortcut('view.toggleGrid', '.grid-view-stage');
-      await waitForGrid(client, (state) => state?.active === false, 'grid to close');
-      runner.assert(exactLineCount(text, token) >= before + 1, 'grid history command did not rerun');
-    });
-
     const result = await runner.finishSuccess({
       sessionId,
       paneId: pane.paneId,
@@ -591,7 +537,6 @@ async function main() {
         'bracketed-unicode-paste',
         'image-paste',
         'shortcut-chord-consumption',
-        'zoomed-grid-input',
       ],
     });
     console.log('[verify] PASS — first-party terminal input matched packaged PTY bytes and state.');
