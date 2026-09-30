@@ -16,12 +16,6 @@ test('keeps the compact rail controls usable with eight desktops and a 9+ tool b
   const badge = rail.locator('.sidebar-tool-badge');
   await expect(badge).toHaveText('9+');
   await expect(badge).toBeInViewport();
-  await page.getByRole('button', { name: 'Grid layout' }).click();
-  await expect(page.getByRole('dialog', { name: 'Grid layout' })).toBeVisible();
-  await page.getByRole('button', { name: '2 by 3' }).hover();
-  await expect(page.locator('.grid-layout-label')).toHaveText('2 × 3');
-  await page.getByRole('button', { name: '2 by 3' }).click();
-  expect(await page.evaluate(() => window.__HARNESS__.getCalls('grid'))).toEqual([[{ mode: 'fixed', rows: 2, cols: 3 }]]);
   const second = page.getByRole('button', { name: 'Queue polish (⌘2)' });
   await second.hover();
   await second.click();
@@ -67,7 +61,7 @@ test('pins the tools and bottom actions at 600px while scrolling desktops and re
   const add = page.getByTitle('New Session (⌘N)');
   await expect(expand).toBeInViewport();
   await expect(add).toBeInViewport();
-  const grid = (await page.getByRole('button', { name: 'Grid layout' }).boundingBox())!;
+  const tool = (await page.getByTitle('Tool 1').boundingBox())!;
   const bottom = (await expand.boundingBox())!;
   const last = page.getByRole('button', { name: 'Sketches (⌘8)' });
   await expect(last).not.toBeInViewport();
@@ -77,7 +71,7 @@ test('pins the tools and bottom actions at 600px while scrolling desktops and re
   await last.click();
   await expect(last).toHaveAttribute('aria-current', 'true');
   expect(await expand.boundingBox()).toEqual(bottom);
-  expect(await page.getByRole('button', { name: 'Grid layout' }).boundingBox()).toEqual(grid);
+  expect(await page.getByTitle('Tool 1').boundingBox()).toEqual(tool);
 
   await page.reload();
   await page.waitForFunction(() => window.__HARNESS__?.ready === true);

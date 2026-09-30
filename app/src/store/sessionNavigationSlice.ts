@@ -11,7 +11,6 @@ import {
   claimFocus,
   endIntent,
   enterHome,
-  toggleGrid,
   focusClaimDelivered,
   historyLanded,
   intentFailed,
@@ -40,7 +39,6 @@ export interface SessionNavigationActions {
   cancelIntent: () => void;
   intentFailed: (id: number) => void;
   historyLanded: (profileId: string, cursor: number, leaf: LeafRef) => void;
-  toggleGrid: () => void;
   focusClaimDelivered: (id: number) => void;
   transferFocus: (leaf: ActiveLeaf) => void;
   leafMoved: (profileId: string, moved: LeafMoved) => void;
@@ -116,7 +114,6 @@ export function createSessionNavigationActions(
     cancelIntent: () => set((state) => endIntent(state)),
     intentFailed: (id) => set((state) => intentFailed(state, id)),
     historyLanded: (profileId, cursor, leaf) => set((state) => historyLanded(state, profileId, cursor, leaf)),
-    toggleGrid: () => set((state) => withVisit(state, toggleGrid(state))),
     focusClaimDelivered: (id) => set((state) => focusClaimDelivered(state, id)),
     transferFocus: (leaf) => set((state) => claimFocus(state, leaf, focusOwner(), false)),
     leafMoved: (profileId, moved) => set((state) => leafMoved(state, profileId, moved)),

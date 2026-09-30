@@ -47,7 +47,7 @@ function focusKind(element: Element | null): string {
   if (!element) return 'none';
   if (element.closest('.ghostty-filter-input')) return 'terminal_filter';
   if (element.closest('.ghostty-find-input')) return 'terminal_find';
-  if (element.closest('.terminal-container, .grid-view-stage')) return 'terminal';
+  if (element.closest('.terminal-container')) return 'terminal';
   if (element.matches('input, textarea, [contenteditable="true"]')) return 'editor';
   if (element.matches('button, a, select')) return 'control';
   return element === element.ownerDocument.body ? 'body' : 'other';

@@ -58,7 +58,6 @@ export function useAppCommands(): PaletteCommand[] {
   const { settings } = useAppInputs();
   const { handleToggleSidebarHarnessLogos } = useAppAppearanceContext();
   const { handleOpenCrew } = useCrewPanelContext();
-  const { toggleGridMode } = useNavigationContext();
   const {
     handleToggleCrewQueue,
     handleToggleQueueMode,
@@ -373,15 +372,6 @@ export function useAppCommands(): PaletteCommand[] {
         run: handleToggleSidebarHarnessLogos,
       },
       {
-        id: 'toggle-grid-view',
-        title: 'Toggle grid view',
-        description: 'Every agent on screen at once',
-        keywords: ['grid', 'view', 'tiles', 'all'],
-        icon: <ContextActionIcon />,
-        shortcut: [shortcutTokens('view.toggleGrid')],
-        run: toggleGridMode,
-      },
-      {
         id: 'toggle-auto-settle',
         title: isAutoSettleEnabled(settings) ? 'Turn off auto-settle' : 'Turn on auto-settle',
         description: 'Settle a turn once you have steered the agent and it goes back to work',
@@ -433,7 +423,6 @@ export function useAppCommands(): PaletteCommand[] {
       handleToggleCrewQueue,
       handleOpenCrew,
       handleToggleSidebarHarnessLogos,
-      toggleGridMode,
       sendSetSetting,
       handleCreateDiagnosticReport,
     ],

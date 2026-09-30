@@ -23,7 +23,6 @@ import {
 } from './AppContexts';
 import { AppDashboard } from './AppDashboard';
 import { AppDock } from './AppDock';
-import { AppGrid } from './AppGrid';
 import { AppCrewPanel } from './AppCrewPanel';
 import { AppLibrarySurfaces } from './AppLibrarySurfaces';
 import { AppNavigationMenus } from './AppNavigationMenus';
@@ -83,7 +82,7 @@ export function AppSurface() {
             blocked={windowCovered}
           >
             <div
-              className={`app${agentFocused ? ' is-agent-focused' : ''}${view === 'grid' ? ' is-grid' : ''}`}
+              className={`app${agentFocused ? ' is-agent-focused' : ''}`}
               ref={appShellRef}
               tabIndex={-1}
               style={{ outline: 'none' }}
@@ -126,8 +125,6 @@ export function AppSurface() {
                 </div>
               </div>
 
-              {/* Mounted only while active, so its WebGL context is released on exit. */}
-              <AppGrid />
               <AppSessionPrompts />
               <Toast toast={toast} onDone={clearToast} />
               {diagnosticReportSaved.saved('saved') && (

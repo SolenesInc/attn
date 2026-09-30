@@ -52,7 +52,6 @@ const keys = {
   home: () => press('H', { shift: true }),
   back: () => press('['),
   forward: () => press(']'),
-  grid: () => pressShortcut('view.toggleGrid'),
   sidebar: () => press('B', { shift: true }),
   settings: () => press(','),
   shortcuts: () => press('/'),
@@ -81,10 +80,6 @@ function selectedAgent(): string | null {
 
 function isHome(): boolean {
   return screen.getByTestId('sidebar-home').getAttribute('aria-current') === 'page';
-}
-
-function isGrid(): boolean {
-  return screen.queryByRole('region', { name: 'Session grid' }) !== null;
 }
 
 function focusedPane(): string | null {
@@ -242,20 +237,17 @@ describe('agent selection', () => {
     expect(selectedAgent()).toBe('s2');
   });
 
-  it.each([
-    ['going home', keys.home, () => expect(isHome()).toBe(true)],
-    ['opening the grid', keys.grid, () => expect(isGrid()).toBe(true)],
-  ])('stays where the user went after %s while a show was on its way', async (_, leave, stayed) => {
+  it('stays home after going there while a show was on its way', async () => {
     const { daemon } = await renderAgents();
     await open(daemon, 's1');
     const hold = holdShows(daemon);
 
     await open(daemon, 's2');
     expect(selectedAgent()).toBe('s1');
-    await gesture(daemon, leave);
+    await gesture(daemon, keys.home);
     await hold.release();
 
-    stayed();
+    expect(isHome()).toBe(true);
     expect(focusedPane()).not.toBe('pane-s2');
   });
 
@@ -273,36 +265,16 @@ describe('agent selection', () => {
     expect(focusedPane()).toBe('pane-s2');
   });
 
-  it.each([
-    ['Home', () => undefined, () => expect(isHome()).toBe(true)],
-    ['the grid', keys.grid, () => expect(isGrid()).toBe(true)],
-  ])('stays on %s when the daemon refuses a show asked for from there', async (_, arrive, stayed) => {
+  it('stays on Home when the daemon refuses a show asked for from there', async () => {
     const { daemon } = await renderAgents();
-    await gesture(daemon, arrive);
     const hold = holdShows(daemon);
 
     await open(daemon, 's2');
-    stayed();
+    expect(isHome()).toBe(true);
     await hold.refuse();
 
-    stayed();
+    expect(isHome()).toBe(true);
     expect(screen.getByText(/Could not show that agent/)).toBeInTheDocument();
-  });
-
-  it.each([
-    ['Home', () => undefined, () => expect(isHome()).toBe(true)],
-    ['an agent', undefined, () => expect(selectedAgent()).toBe('s1')],
-  ])('closes the grid back to %s, where it was opened from', async (_, arrive, cameFrom) => {
-    const { daemon } = await renderAgents();
-    if (arrive) await gesture(daemon, arrive);
-    else await open(daemon, 's1');
-
-    await gesture(daemon, keys.grid);
-    expect(isGrid()).toBe(true);
-    await gesture(daemon, keys.grid);
-
-    expect(isGrid()).toBe(false);
-    cameFrom();
   });
 
   it('records the leaf a desktop showed when the user entered it from Home', async () => {
@@ -389,23 +361,6 @@ describe('agent selection', () => {
     await gesture(daemon, shortcut);
 
     expect(screen.queryByRole('dialog', { name: 'Delegation chain' })).toBeNull();
-  });
-
-  it('keeps the grid through unrelated updates, and leaves it for the agent the user picks', async () => {
-    const { daemon } = await renderAgents();
-    await gesture(daemon, keys.grid);
-    expect(isGrid()).toBe(true);
-
-    await gesture(daemon, () => daemon.emit({ event: 'settings_updated', settings: { queue_mode_enabled: 'true', unrelated: 'x' } }));
-    await gesture(daemon, () => daemon.emit({ event: 'sessions_updated', sessions: [queueSession('s1', 9), queueSession('s2', 10, { state: 'idle' })] }));
-    expect(isGrid()).toBe(true);
-
-    await open(daemon, 's1');
-    expect(isGrid()).toBe(false);
-    expect(selectedAgent()).toBe('s1');
-
-    await gesture(daemon, keys.home);
-    expect(isHome()).toBe(true);
   });
 
   it('follows a selection another client made on the same profile', async () => {
@@ -587,14 +542,15 @@ describe('queue', () => {
     expect(shows(view.daemon)).toEqual(['session:s1']);
   });
 
-  it('ends the wait when the user leaves home, however they come back', async () => {
+  it('ends the wait when the user leaves home and comes back', async () => {
     const view = await workTheQueueDownToHome();
-    await gesture(view.daemon, keys.grid);
-    await gesture(view.daemon, keys.grid);
+    await gesture(view.daemon, keys.back);
+    await gesture(view.daemon, keys.home);
 
     await view.update({ s1: SETTLED, s2: OWED });
 
-    expect(shows(view.daemon)).toEqual(['session:s1']);
+    expect(isHome()).toBe(true);
+    expect(shows(view.daemon)).not.toContain('session:s2');
   });
 
   it('takes the user to the next turn after they ask to follow from an all-settled home', async () => {
@@ -683,7 +639,7 @@ describe('leaf history', () => {
     ]);
   });
 
-  it('resumes history from home and grid, then traverses normally in the session view', async () => {
+  it('resumes history from home, then traverses normally in the session view', async () => {
     const { daemon } = await renderAgents();
     await open(daemon, 's1');
     await open(daemon, 's2');
@@ -691,14 +647,6 @@ describe('leaf history', () => {
 
     await gesture(daemon, keys.back);
     expect(selectedAgent()).toBe('s2');
-
-    await gesture(daemon, keys.grid);
-    await gesture(daemon, keys.forward);
-    expect(isGrid()).toBe(true);
-
-    await gesture(daemon, keys.back);
-    expect(selectedAgent()).toBe('s2');
-    expect(isGrid()).toBe(false);
 
     await gesture(daemon, keys.back);
     expect(selectedAgent()).toBe('s1');
@@ -1143,9 +1091,9 @@ describe('keyboard focus', () => {
     expect(daemon.sentOf('desktop_set_current').slice(-1)).toEqual([expect.objectContaining({ desktop_id: 'desktop-s2' })]);
   });
 
-  it.each([['home', keys.home], ['the grid', keys.grid]])('opens the digit’s desktop from %s even with a previous desktop to bounce to', async (_, leave) => {
+  it('opens the digit’s desktop from home even with a previous desktop to bounce to', async () => {
     const { daemon } = await onDesktopWithAPrevious();
-    await gesture(daemon, leave);
+    await gesture(daemon, keys.home);
     act(() => screen.getByTestId('sidebar-home').focus());
 
     await gesture(daemon, () => pressShortcut('desktop.select5'));

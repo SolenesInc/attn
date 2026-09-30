@@ -239,13 +239,13 @@ describe('App shortcut editor', () => {
   it('saves a recorded chord, which fires once the daemon echoes the setting back', async () => {
     const { daemon } = await renderEditor();
 
-    await recordChord(daemon, 'Toggle grid view', { key: 'y', code: 'KeyY', metaKey: true }, { key: 'g', code: 'KeyG' });
-    expect(saved(daemon).overrides['view.toggleGrid']).toEqual({ leader: { key: 'y', meta: true }, then: { key: 'g' } });
+    await recordChord(daemon, 'Desktop overview', { key: 'y', code: 'KeyY', metaKey: true }, { key: 'g', code: 'KeyG' });
+    expect(saved(daemon).overrides['desktop.overview']).toEqual({ leader: { key: 'y', meta: true }, then: { key: 'g' } });
     await closeEditor(daemon);
 
     await gesture(daemon, () => fireEvent.keyDown(window, { key: 'y', code: 'KeyY', metaKey: true }));
     await gesture(daemon, () => fireEvent.keyDown(window, { key: 'g', code: 'KeyG' }));
-    expect(screen.getByRole('region', { name: 'Session grid' })).toBeInTheDocument();
+    expect(screen.getByRole('dialog', { name: 'Desktop overview' })).toBeInTheDocument();
   });
 
   it('saves a chord whose leader is the row’s own default keys', async () => {

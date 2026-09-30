@@ -44,7 +44,6 @@ export function SidebarRailHarness({ onReady, setTriggerRerender }: HarnessProps
           id: `tool-${index}`, title: `Tool ${index + 1}`, icon: <HomeIcon />,
           badge: index === 2 ? 12 : undefined, onClick: noop,
         }))}
-        gridLayout={{ mode: 'auto' }} onSelectGridLayout={(layout) => window.__HARNESS__.recordCall('grid', [layout])}
         onSelectDesktop={(id) => { setSelected(id); window.__HARNESS__.recordCall('desktop', [id]); }}
         onSelectSession={noop} onNewSession={noop} onCloseSession={noop} onReloadSession={noop}
         onGoToDashboard={noop} onToggleCollapse={noop}
