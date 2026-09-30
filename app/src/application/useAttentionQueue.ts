@@ -154,8 +154,9 @@ export function useAttentionQueue({
     const leaf = workspace?.querySelector<HTMLElement>(`[data-pane-id="${workspace.dataset.activeLeafId}"]`);
     const terminal = leaf?.querySelector<HTMLElement>('.terminal-container');
     const editor = leaf?.querySelector<HTMLElement>('[role="textbox"], textarea, [contenteditable="true"]');
+    const tile = leaf?.querySelector<HTMLElement>('.workspace-dock-tile-body');
     const home = document.querySelector<HTMLElement>('[data-testid="sidebar-home"]');
-    const destination = [terminal, editor, home].find((element) => element && element.getClientRects().length > 0);
+    const destination = [terminal, editor, tile, home].find((element) => element && element.getClientRects().length > 0);
     destination?.focus({ preventScroll: true });
   }, [snoozeMenu]);
 

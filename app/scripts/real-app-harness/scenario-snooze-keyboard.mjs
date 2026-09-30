@@ -232,6 +232,33 @@ async function main() {
         await observer.waitFor(() => !observer.getSession(beta.sessionId)?.turn_snoozed_until, 'non-active row woken');
       }
     });
+    await runner.step('non_active_row_confirmation_preserves_active_document', async () => {
+      await select(alpha);
+      const { workspaceId } = await client.request('get_workspace', { sessionId: alpha.sessionId });
+      const tileId = 'snooze-keyboard-notes';
+      const notesPath = path.join(runner.sessionDir, 'snooze-notes.md');
+      fs.writeFileSync(notesPath, '# Snooze keyboard notes\nKeep reading after snoozing another agent.\n');
+      observer.send({ cmd: 'workspace_layout_dock_tile', workspace_id: workspaceId, anchor_pane_id: alpha.paneId, edge: 'right', tile_id: tileId, tile_kind: 'markdown', tile_params: notesPath });
+      const selector = `[data-pane-id="${tileId}"] .workspace-dock-tile-body`;
+      await waitDom(selector, { textIncludes: 'Keep reading' });
+      await client.request('dom_click', { selector });
+      await waitDom(selector, { focused: true });
+      await openPicker();
+      await driver.pressKey('Escape');
+      await waitDom(selector, { focused: true });
+      await client.request('dom_focus', { selector: `[data-testid="queue-snooze-${beta.sessionId}"]` });
+      await driver.pressEnter();
+      await focusedChoice('30m');
+      await driver.pressEnter();
+      await observer.waitFor(() => observer.getSession(beta.sessionId)?.turn_snoozed_until, 'other agent snoozed while reading');
+      await waitDom(`[data-testid="queue-snooze-${beta.sessionId}"]`, { absent: true });
+      await waitDom(selector, { focused: true });
+      observer.send({ cmd: 'workspace_layout_undock_tile', workspace_id: workspaceId, tile_id: tileId });
+      await waitDom(selector, { absent: true });
+      await select(beta);
+      await palette('wake');
+      await observer.waitFor(() => !observer.getSession(beta.sessionId)?.turn_snoozed_until, 'other agent woken after document focus check');
+    });
     await runner.step('changed_selection_cancels_into_current_pane', async () => {
       await select(alpha);
       await openPicker();
