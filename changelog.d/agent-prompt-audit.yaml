@@ -1,0 +1,11 @@
+kind: changed
+area: agents
+change: Agent prompts state their contracts precisely and no longer carry guardrails written for older models.
+symptom: >
+  Builders were told never to use subagents, the workflow reference misdescribed
+  the `isolation` and `agentType` options, and the Garden advisor on Copilot was
+  never told which fields to return.
+notes: >
+  Session-instruction answers are now schema-constrained, and the Claude turn
+  classifier returns unknown instead of guessing from free text when the
+  structured verdict is missing.

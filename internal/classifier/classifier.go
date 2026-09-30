@@ -163,18 +163,15 @@ func ClaudeClassifierModel() string {
 	return DefaultClaudeClassifierModel
 }
 
-func ParseVerdict(structuredOutput json.RawMessage, finalText string) (string, bool) {
-	if len(structuredOutput) > 0 {
-		if result, ok := parseVerdictFromJSONResponse(string(structuredOutput)); ok {
-			DefaultLogger("classifier: parsed result from structured output: %s", result)
-			return result, true
-		}
+func ParseVerdict(structuredOutput json.RawMessage) (string, bool) {
+	if len(structuredOutput) == 0 {
+		return "", false
 	}
-	if result, ok := parseVerdictFromResponse(finalText); ok {
-		DefaultLogger("classifier: parsed result from final text: %s", result)
-		return result, true
+	result, ok := parseVerdictFromJSONResponse(string(structuredOutput))
+	if ok {
+		DefaultLogger("classifier: parsed result from structured output: %s", result)
 	}
-	return "", false
+	return result, ok
 }
 
 func TruncateForLog(value string) string {

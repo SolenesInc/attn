@@ -70,6 +70,7 @@ func (m daemonSessionInstructionsModel) Run(ctx context.Context, request session
 		Prompt:          sessioninstructions.Prompt(request),
 		WorkDir:         workDir,
 		DisableTools:    true,
+		OutputSchema:    json.RawMessage(sessioninstructions.AnswerSchema),
 	})
 	if err != nil {
 		diagnostic := strings.TrimSpace(result.Diagnostics)

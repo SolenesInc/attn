@@ -35,6 +35,8 @@ func (e *Error) Error() string { return e.Message }
 
 var ErrInvalidResponse = errors.New("invalid structured model response")
 
+const AnswerSchema = `{"type":"object","properties":{"answer":{"type":"string"},"evidence":{"type":"array","items":{"type":"object","properties":{"turn_id":{"type":"string"},"quote":{"type":"string"}},"required":["turn_id","quote"],"additionalProperties":false}}},"required":["answer","evidence"],"additionalProperties":false}`
+
 type ConversationTurn struct {
 	ID        string
 	Author    string
@@ -378,14 +380,8 @@ func Prompt(request ModelRequest) string {
 }
 
 func ParseModelAnswer(text string) (ModelAnswer, error) {
-	text = strings.TrimSpace(text)
-	if strings.HasPrefix(text, "```") {
-		text = strings.TrimPrefix(text, "```json")
-		text = strings.TrimPrefix(text, "```")
-		text = strings.TrimSuffix(strings.TrimSpace(text), "```")
-	}
 	var answer ModelAnswer
-	if err := json.Unmarshal([]byte(text), &answer); err != nil {
+	if err := json.Unmarshal([]byte(strings.TrimSpace(text)), &answer); err != nil {
 		return ModelAnswer{}, ErrInvalidResponse
 	}
 	return answer, nil

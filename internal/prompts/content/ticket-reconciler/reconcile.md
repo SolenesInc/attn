@@ -9,7 +9,7 @@ Ticket brief (the definition of done), as filed:
 Ticket column at session end: {{status}}
 How the session ended: {{close_context}}
 
-Stop as soon as you can support a verdict — but judge against the BRIEF above, never the final messages alone: an agent can sound finished while the brief is half-done.
+Judge against the brief above, not the final messages alone: an agent can sound finished while the brief is half-done.
 
 The brief is the starting definition of done, not the final one: the user can re-scope the work mid-session. If the conversation slice shows the user explicitly authorizing, narrowing, or extending the scope, judge against that latest explicit agreement — work the user approved in-session is in scope even where the original brief's wording says otherwise. The slice's first human turn is often the more detailed real instruction (the delegation prompt) — read it alongside the filed brief above; they can differ and both matter.
 
