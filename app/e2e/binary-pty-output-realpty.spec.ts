@@ -95,8 +95,10 @@ test.describe('Binary PTY output transport', () => {
     await expect(page.locator('.terminal-wrapper.active')).toBeVisible();
 
     await page.waitForFunction((id) => {
-      const events = (window as any).__TEST_PTY_EVENTS as Array<{ event: string; id?: string }> | undefined;
-      return Boolean(events?.some((evt) => evt.event === 'data' && evt.id === id));
+      const dump = (window as any).__ATTN_PTY_PERF_DUMP?.();
+      return Boolean(dump?.recentEvents.some(
+        (e: { event: string | null; runtimeId: string | null }) => e.event === 'pty_output' && e.runtimeId === id,
+      ));
     }, sessionId, { timeout: 15000 });
 
     const transport = await page.evaluate((id) => {
