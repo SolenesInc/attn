@@ -137,6 +137,10 @@ run_job packages "$go_bin" test -timeout "$test_timeout" -p "$package_parallelis
 # relay accept/teardown synchronization.
 run_job race "$go_bin" test -timeout "$race_timeout" -race "$@" ./internal/store ./internal/docstore ./internal/hub
 
+# Endpoint edits exercise failed SSH accepts that the hub's relay tests miss.
+# CI receipt (2026-10-01): 2.486s warm, 82.117s first race build/run.
+run_job race-endpoints "$go_bin" test -timeout "$race_timeout" -race "$@" -run '^TestEndpointsAreEditedCanonicallyAndSurviveARestart$' ./internal/daemon
+
 shard=0
 while [ "$shard" -lt "$shard_count" ]; do
   regex="$(awk -v count="$shard_count" -v target="$shard" '
