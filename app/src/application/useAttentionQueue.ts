@@ -142,9 +142,21 @@ export function useAttentionQueue({
     }
   }, [enrichedLocalSessions, snoozeMenu]);
 
-  const restoreSnoozeFocus = useCallback(() => {
-    if (snoozeMenu?.activeSessionId !== useSessionStore.getState().activeSessionId) return;
-    if (snoozeMenu?.origin?.isConnected) snoozeMenu.origin.focus({ preventScroll: true });
+  const restoreSnoozeFocus = useCallback((reason: 'cancel' | 'choose') => {
+    const selectionUnchanged = snoozeMenu?.activeSessionId === useSessionStore.getState().activeSessionId;
+    if (reason === 'cancel' && selectionUnchanged && snoozeMenu?.origin?.isConnected) {
+      snoozeMenu.origin.focus({ preventScroll: true });
+      return;
+    }
+    const workspace = document.querySelector<HTMLElement>(
+      '.terminal-wrapper.active .session-terminal-workspace[data-session-visible="1"]',
+    );
+    const leaf = workspace?.querySelector<HTMLElement>(`[data-pane-id="${workspace.dataset.activeLeafId}"]`);
+    const destination = Array.from(leaf?.querySelectorAll<HTMLElement>(
+      '.terminal-container, [role="textbox"], input, textarea, [contenteditable="true"], button, [tabindex="0"]',
+    ) ?? []).find((element) => element.getClientRects().length > 0)
+      ?? document.querySelector<HTMLElement>('[data-testid="sidebar-home"]');
+    destination?.focus({ preventScroll: true });
   }, [snoozeMenu]);
 
   return {

@@ -598,6 +598,7 @@ export function useAppController({
     onOpenGarden: toggleGardenFrame,
     onQuit: handleQuitApp,
     enabled: appShortcutsEnabled && !gardenHoldsWindow,
+    blocked: Boolean(attentionQueue.snoozeMenu),
     gardenShortcutEnabled: appShortcutsEnabled,
   });
 

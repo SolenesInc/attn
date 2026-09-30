@@ -98,6 +98,15 @@ async function main() {
       const before = await client.request('read_pane_text', alpha);
       await openPicker();
       await centered(alpha);
+      const menuBefore = await client.request('dom_bounds', { selector: '[data-testid="snooze-menu"]' });
+      const scaleBefore = observer.getSetting('uiScale');
+      for (const shortcut of ['ui.openSettings', 'ui.showShortcuts', 'sessions.open', 'ui.increaseFontSize', 'ui.decreaseFontSize', 'ui.resetFontSize', 'ui.actionMenu']) {
+        await pressShortcutKeys(client, driver, shortcut);
+        await focusedChoice('30m');
+      }
+      const menuAfter = await client.request('dom_bounds', { selector: '[data-testid="snooze-menu"]' });
+      runner.assert(JSON.stringify(menuAfter.bounds) === JSON.stringify(menuBefore.bounds), 'always-on shortcuts leave picker geometry unchanged');
+      runner.assert(observer.getSetting('uiScale') === scaleBefore, 'font shortcuts do not persist scale changes');
       await driver.pressKey('ArrowUp');
       await focusedChoice('monday');
       await driver.pressKeyCode(115);
@@ -179,6 +188,43 @@ async function main() {
         await observer.waitFor(() => !observer.getSession(alpha.sessionId)?.turn_snoozed_until, 'keyboard wake cleared deadline');
         await waitForPaneInputFocus(client, alpha.sessionId, alpha.paneId);
       }
+    });
+    await runner.step('non_active_row_confirmation_keeps_a_stable_destination', async () => {
+      for (const fromHome of [false, true]) {
+        await select(alpha);
+        if (fromHome) {
+          await pressShortcutKeys(client, driver, 'session.goToDashboard');
+          await waitDom('[data-testid="sidebar-home"][aria-current="page"]');
+        }
+        await client.request('dom_focus', { selector: `[data-testid="queue-snooze-${beta.sessionId}"]` });
+        await driver.pressEnter();
+        await focusedChoice('30m');
+        await driver.pressEnter();
+        await observer.waitFor(() => observer.getSession(beta.sessionId)?.turn_snoozed_until, 'non-active row snoozed');
+        await waitDom(`[data-testid="queue-snooze-${beta.sessionId}"]`, { absent: true });
+        if (fromHome) {
+          await waitDom('[data-testid="sidebar-home"]', { focused: true });
+          await pressShortcutKeys(client, driver, 'ui.actionMenu');
+          await waitDom('[aria-label="Search actions"]', { focused: true });
+          await driver.pressKey('Escape');
+        } else {
+          await waitForPaneInputFocus(client, alpha.sessionId, alpha.paneId);
+          await driver.typeText('NON_ACTIVE_ROW');
+          await waitForPaneText(client, alpha.sessionId, alpha.paneId, (text) => text.includes('NON_ACTIVE_ROW'), 'typing after non-active snooze');
+        }
+        await select(beta);
+        await palette('wake');
+        await observer.waitFor(() => !observer.getSession(beta.sessionId)?.turn_snoozed_until, 'non-active row woken');
+      }
+    });
+    await runner.step('changed_selection_cancels_into_current_pane', async () => {
+      await select(alpha);
+      await openPicker();
+      await client.request('select_session', { sessionId: beta.sessionId });
+      await focusedChoice('30m');
+      await driver.pressKey('Escape');
+      await waitForPaneInputFocus(client, beta.sessionId, beta.paneId);
+      runner.assert(!observer.getSession(alpha.sessionId)?.turn_snoozed_until, 'selection change then cancel sends no snooze');
     });
     await runner.step('empty_queue_returns_to_home_with_live_keyboard', async () => {
       observer.send({ cmd: 'settle_turn', session_id: beta.sessionId });
