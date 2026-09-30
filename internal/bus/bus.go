@@ -56,7 +56,9 @@ type Store interface {
 	GetConsumer(name string) (Consumer, bool, error)
 	SaveConsumer(c Consumer, now time.Time) error
 	DeleteConsumer(name string) error
-	SetCursor(name string, cursor int64, now time.Time) error
+	// SetCursor moves the cursor only while the consumer is enabled and
+	// reports whether it moved.
+	SetCursor(name string, cursor int64, now time.Time) (bool, error)
 	ListConsumers() ([]Consumer, error)
 	Trim(cutoff time.Time) (int, error)
 	Compact(names []string, floor int64) (int, error)
@@ -597,7 +599,16 @@ func (b *Bus) deliver(d *durable) {
 	}
 }
 
+// drain stops quietly when advance finds the consumer disabled: a disable is
+// final at the store, so the events handled since are redelivered on enable.
 func (b *Bus) drain(d *durable) error {
+	if err := b.drainEnabled(d); !errors.Is(err, errDisabled) {
+		return err
+	}
+	return nil
+}
+
+func (b *Bus) drainEnabled(d *durable) error {
 	prepare := func() (bool, error) {
 		rec, ok, err := b.store.GetConsumer(d.name)
 		if err != nil {
@@ -697,9 +708,6 @@ func (b *Bus) drain(d *durable) error {
 				return err
 			}
 			if stop {
-				if skipped != 0 {
-					return b.advance(d, skipped)
-				}
 				return nil
 			}
 			if !d.matches(ev.Name) {
@@ -731,6 +739,8 @@ func (b *Bus) drain(d *durable) error {
 	}
 }
 
+var errDisabled = errors.New("consumer is disabled")
+
 func (b *Bus) reconcileGap(d *durable, gap Gap) error {
 	b.log("bus: consumer %s resumed at head %d; %d event(s) were trimmed before its cursor %d",
 		d.name, gap.Head, gap.Missed, gap.Cursor)
@@ -741,8 +751,13 @@ func (b *Bus) advance(d *durable, seq int64) error {
 	if d.isRetired() {
 		return nil
 	}
-	if err := b.store.SetCursor(d.name, seq, b.now()); err != nil {
+	applied, err := b.store.SetCursor(d.name, seq, b.now())
+	if err != nil {
 		return fmt.Errorf("persisting cursor: %w", err)
+	}
+	if !applied {
+		d.setEnabled(false)
+		return errDisabled
 	}
 	d.setCursor(seq)
 	return nil

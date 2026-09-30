@@ -337,17 +337,23 @@ func (s *Store) SaveBusConsumer(c BusConsumer, now time.Time) error {
 	return err
 }
 
-func (s *Store) SetBusConsumerCursor(name string, cursor int64, now time.Time) error {
+// SetBusConsumerCursor moves an enabled consumer's cursor and reports whether
+// it moved; checking enabled in the same UPDATE makes a disable final.
+func (s *Store) SetBusConsumerCursor(name string, cursor int64, now time.Time) (bool, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
 	if s.db == nil {
-		return nil
+		return true, nil
 	}
-	_, err := s.db.Exec(`
-		UPDATE bus_consumers SET cursor = ?, updated_at = ? WHERE name = ?
+	res, err := s.db.Exec(`
+		UPDATE bus_consumers SET cursor = ?, updated_at = ? WHERE name = ? AND enabled = 1
 	`, cursor, formatTicketTime(now), name)
-	return err
+	if err != nil {
+		return false, err
+	}
+	n, err := res.RowsAffected()
+	return n > 0, err
 }
 
 func (s *Store) AdvanceBusConsumerCursor(name string, cursor int64, now time.Time) error {

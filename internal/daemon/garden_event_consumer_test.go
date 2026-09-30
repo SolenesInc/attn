@@ -23,18 +23,18 @@ type failFirstGardenCursorStore struct {
 	failed   bool
 }
 
-func (s *failFirstGardenCursorStore) SetCursor(name string, cursor int64, now time.Time) error {
+func (s *failFirstGardenCursorStore) SetCursor(name string, cursor int64, now time.Time) (bool, error) {
 	if name == gardenSeedBellConsumer && !s.failed {
 		s.failed = true
 		err := errors.New("cursor unavailable")
 		s.attempts <- gardenCursorAttempt{cursor: cursor, err: err}
-		return err
+		return false, err
 	}
-	err := s.Store.SetCursor(name, cursor, now)
+	applied, err := s.Store.SetCursor(name, cursor, now)
 	if name == gardenSeedBellConsumer {
 		s.attempts <- gardenCursorAttempt{cursor: cursor, err: err}
 	}
-	return err
+	return applied, err
 }
 
 func TestGardenSeedEventForARemoteTenderDoesNotBlockLaterLocalBell(t *testing.T) {
