@@ -33,6 +33,8 @@
 - Launch prompt: the opening message sent to a new agent.
 - Session pull request: a PR an agent opened during a session.
 - [PR watch](../README.md#watching-pull-requests): a durable, mode-configured subscription delivering PR readiness and feedback updates to a session's agent mailbox.
+  A reset on a reused GitHub connection gets one retry on a fresh connection
+  before the watch reports that monitoring is delayed.
 - PR inbox: pull requests waiting on the user.
 - Provenance line: shows where a session came from and what it produced.
 

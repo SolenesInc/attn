@@ -5,11 +5,17 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"net/http"
+	"net/http/httptrace"
 	"net/url"
 	"sort"
 	"strings"
+	"sync/atomic"
+	"syscall"
 	"time"
 
+	"github.com/vektah/gqlparser/v2/ast"
+	"github.com/vektah/gqlparser/v2/parser"
 	"github.com/victorarias/attn/internal/prreadiness"
 )
 
@@ -169,7 +175,43 @@ func (c *Client) FetchPullRequestReadiness(ctx context.Context, repo string, num
 }
 
 func (c *Client) GraphQL(ctx context.Context, query string, variables map[string]any) ([]byte, error) {
-	return c.doRequestContext(ctx, "POST", c.graphQLURL(), map[string]any{"query": query, "variables": variables})
+	if c.httpClient.Timeout > 0 {
+		var cancel context.CancelFunc
+		ctx, cancel = context.WithTimeout(ctx, c.httpClient.Timeout)
+		defer cancel()
+	}
+	var reused atomic.Bool
+	traced := httptrace.WithClientTrace(ctx, &httptrace.ClientTrace{
+		GotConn: func(info httptrace.GotConnInfo) { reused.Store(info.Reused) },
+	})
+	body := map[string]any{"query": query, "variables": variables}
+	result, err := c.doRequestContext(traced, "POST", c.graphQLURL(), body)
+	if err == nil || ctx.Err() != nil || !reused.Load() || !errors.Is(err, syscall.ECONNRESET) {
+		return result, err
+	}
+	document, parseErr := parser.ParseQuery(&ast.Source{Input: query})
+	if parseErr != nil || len(document.Operations) == 0 {
+		return result, err
+	}
+	for _, operation := range document.Operations {
+		if operation.Operation != ast.Query {
+			return result, err
+		}
+	}
+	transport := c.httpClient.Transport
+	if transport == nil {
+		transport = http.DefaultTransport
+	}
+	base, ok := transport.(*http.Transport)
+	if !ok {
+		return result, err
+	}
+	// A separate pool guarantees a fresh connection even when HTTP/2 has other active streams.
+	fresh := base.Clone()
+	defer fresh.CloseIdleConnections()
+	retryClient := *c.httpClient
+	retryClient.Transport = fresh
+	return c.doRequestWithClient(ctx, &retryClient, "POST", c.graphQLURL(), body)
 }
 
 func (c *Client) graphQLURL() string {

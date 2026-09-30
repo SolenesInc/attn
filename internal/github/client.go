@@ -116,6 +116,10 @@ func (c *Client) doRequest(method, path string, body interface{}) ([]byte, error
 }
 
 func (c *Client) doRequestContext(ctx context.Context, method, path string, body interface{}) ([]byte, error) {
+	return c.doRequestWithClient(ctx, c.httpClient, method, path, body)
+}
+
+func (c *Client) doRequestWithClient(ctx context.Context, httpClient *http.Client, method, path string, body interface{}) ([]byte, error) {
 	if !c.selfLimiter.Allow() {
 		return nil, ErrSelfRateLimited
 	}
@@ -147,7 +151,7 @@ func (c *Client) doRequestContext(ctx context.Context, method, path string, body
 		req.Header.Set("Content-Type", "application/json")
 	}
 
-	resp, err := c.httpClient.Do(req)
+	resp, err := httpClient.Do(req)
 	if err != nil {
 		if cause := context.Cause(ctx); cause != nil {
 			return nil, cause
