@@ -80,17 +80,20 @@ func (m *memStore) DeleteConsumer(name string) error {
 	return nil
 }
 
-func (m *memStore) SetCursor(name string, cursor int64, now time.Time) error {
+func (m *memStore) SetCursor(name string, cursor int64, now time.Time) (bool, error) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	c, ok := m.consumers[name]
 	if !ok {
-		return errors.New("no such consumer")
+		return false, errors.New("no such consumer")
+	}
+	if !c.Enabled {
+		return false, nil
 	}
 	c.Cursor = cursor
 	c.UpdatedAt = now
 	m.consumers[name] = c
-	return nil
+	return true, nil
 }
 
 func (m *memStore) ListConsumers() ([]Consumer, error) {

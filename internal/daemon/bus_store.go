@@ -67,7 +67,7 @@ func (a *sqlBusStore) DeleteConsumer(name string) error {
 	return a.store.DeleteBusConsumer(name)
 }
 
-func (a *sqlBusStore) SetCursor(name string, cursor int64, now time.Time) error {
+func (a *sqlBusStore) SetCursor(name string, cursor int64, now time.Time) (bool, error) {
 	return a.store.SetBusConsumerCursor(name, cursor, now)
 }
 
