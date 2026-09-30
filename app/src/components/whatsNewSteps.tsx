@@ -38,9 +38,9 @@ export function whatsNewSteps(resolve: (id: ShortcutId) => Binding | null): What
     return binding ? [...modifierTokens(binding), '1–9'] : [];
   };
   const key = (label: string, combo: string[]): WhatsNewKey[] => (combo.length ? [{ label, combo }] : []);
-  const press = (id: ShortcutId, lead?: string): ScenePress | null => {
+  const press = (id: ShortcutId): ScenePress | null => {
     const combo = tokens(id);
-    return combo.length ? { lead, combos: [combo] } : null;
+    return combo.length ? { combos: [combo] } : null;
   };
 
   return [
@@ -64,9 +64,12 @@ export function whatsNewSteps(resolve: (id: ShortcutId) => Binding | null): What
     {
       id: 'move',
       title: 'Move agents between desktops',
-      body: 'Drag an agent by its sidebar row or its pane header onto another desktop. From the keyboard, send the focused pane away and stay where you are.',
-      keys: key('Send focused pane', digits('desktop.send1')),
-      scene: <MoveAgentsScene press={press('desktop.send2', 'or')} />,
+      body: 'Send the focused pane to another desktop and follow it there, or send it and stay where you are. A digit with no desktop yet makes one, and dragging a sidebar row or pane header works too.',
+      keys: [
+        ...key('Move and follow', digits('desktop.send1')),
+        ...key('Move and stay', digits('desktop.sendStay1')),
+      ],
+      scene: <MoveAgentsScene press={press('desktop.send2')} />,
     },
     {
       id: 'queue',

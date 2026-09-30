@@ -116,8 +116,11 @@ describe('App what’s new', () => {
 
     await press(daemon, 'ArrowRight');
     await press(daemon, 'ArrowRight');
-    expect(stepKeys()).toEqual([['⌘⌥1–9', 'Send focused pane']]);
-    expect(screen.getByTestId('whats-new-scene-press')).toHaveTextContent('or⌘⌥2');
+    expect(stepKeys()).toEqual([
+      ['⌘⌥1–9', 'Move and follow'],
+      ['⌘⌥⇧1–9', 'Move and stay'],
+    ]);
+    expect(screen.getByTestId('whats-new-scene-press')).toHaveTextContent('⌘⌥2');
   });
 
   it('names Linux keys on Linux', async () => {

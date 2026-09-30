@@ -8,7 +8,6 @@ import './WhatsNewScenes.css';
 type AgentState = 'waiting' | 'busy' | 'idle';
 
 export interface ScenePress {
-  lead?: string;
   combos: string[][];
 }
 
@@ -24,7 +23,6 @@ function Scene({ label, press, children }: { label: string; press: ScenePress | 
       </svg>
       {press && press.combos.length > 0 && (
         <div className="wn-press" data-testid="whats-new-scene-press">
-          {press.lead && <span className="wn-press-lead">{press.lead}</span>}
           <KeyCombos combos={press.combos} />
         </div>
       )}
@@ -228,32 +226,32 @@ export function DesktopsScene({ press }: { press: ScenePress | null }) {
 }
 
 export function MoveAgentsScene({ press }: { press: ScenePress | null }) {
-  const drag: CSSProperties = { ['--wn-drag-y' as string]: '58px' };
+  const move: CSSProperties = { ['--wn-drag-y' as string]: '44px' };
   return (
-    <Scene label="Dragging the web agent onto desktop 2 moves its pane there while you stay on desktop 1" press={press}>
+    <Scene label="Moving the web agent to desktop 2 takes you there with it, beside tests" press={press}>
       <Sidebar />
-      <DesktopRule y={46} number={1} current />
-      <Row y={64} label="api" state="waiting" selected />
+      <Row y={64} label="api" state="waiting" />
       <Before>
+        <DesktopRule y={46} number={1} current />
+        <rect className="wn-row-selected" x="16" y="73" width="118" height="18" rx="4" />
         <Row y={84} label="web" state="busy" />
         <DesktopRule y={110} number={2} />
         <Row y={128} label="tests" state="busy" />
-        <Pane x={150} y={38} w={172} h={194} label="api" state="waiting" active />
-        <Pane x={330} y={38} w={172} h={194} label="web" />
+        <Pane x={150} y={38} w={172} h={194} label="api" state="waiting" />
+        <Pane x={330} y={38} w={172} h={194} label="web" active />
       </Before>
       <After>
-        <DesktopRule y={90} number={2} />
+        <DesktopRule y={46} number={1} />
+        <DesktopRule y={90} number={2} current />
         <Row y={108} label="tests" state="busy" />
+        <rect className="wn-row-selected" x="16" y="117" width="118" height="18" rx="4" />
         <Row y={128} label="web" state="busy" />
-        <Pane x={150} y={38} w={352} h={194} label="api" state="waiting" active lines={6} />
+        <Pane x={150} y={38} w={172} h={194} label="tests" />
+        <Pane x={330} y={38} w={172} h={194} label="web" active />
       </After>
-      <Flash>
-        <rect className="wn-drop" x="12" y="98" width="124" height="40" rx="5" />
-      </Flash>
-      <g className="wn-drag" style={drag}>
+      <g className="wn-drag" style={move}>
         <rect className="wn-ghost" x="16" y="73" width="118" height="18" rx="4" />
         <Row y={84} label="web" state="busy" />
-        <path className="wn-cursor" d="M 70 80 l 0 14 l 4 -4 l 3 6 l 2 -1 l -3 -6 l 5 0 z" />
       </g>
     </Scene>
   );
