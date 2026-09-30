@@ -620,10 +620,6 @@ func (c *Claude) ClassifyWithExecutable(text, executable, workDir string, timeou
 }
 
 func copyTranscriptForResume(resumeSessionID, cwd string) error {
-	id, err := uuid.Parse(resumeSessionID)
-	if err != nil || id.String() != resumeSessionID {
-		return fmt.Errorf("invalid Claude conversation ID: %s", resumeSessionID)
-	}
 	home, err := toolhome.Dir()
 	if err != nil {
 		return err
@@ -633,6 +629,11 @@ func copyTranscriptForResume(resumeSessionID, cwd string) error {
 		return err
 	}
 	defer files.Close()
+	best, _, err := largestClaudeTranscript(files, resumeSessionID)
+	if err != nil {
+		return err
+	}
+	defer best.Close()
 	dest, err := filepath.Rel(home, filepath.Join(claudeProjectDir(cwd), resumeSessionID+".jsonl"))
 	if err != nil || !filepath.IsLocal(dest) {
 		return fmt.Errorf("invalid Claude project directory: %s", cwd)
@@ -651,17 +652,27 @@ func copyTranscriptForResume(resumeSessionID, cwd string) error {
 	} else if !os.IsNotExist(err) {
 		return err
 	}
+	return files.Restore(best, dest, false, time.Now())
+}
+
+func largestClaudeTranscript(files *ConversationFileSystem, resumeSessionID string) (fs.File, string, error) {
+	id, err := uuid.Parse(resumeSessionID)
+	if err != nil || id.String() != resumeSessionID {
+		return nil, "", fmt.Errorf("invalid Claude conversation ID: %s", resumeSessionID)
+	}
 	projects, err := fs.ReadDir(files, ".claude/projects")
 	if err != nil {
-		return err
+		return nil, "", err
 	}
 	var best fs.File
+	var bestPath string
 	var largest int64
 	for _, project := range projects {
 		if !project.IsDir() {
 			continue
 		}
-		candidate, err := files.Open(".claude/projects/" + project.Name() + "/" + resumeSessionID + ".jsonl")
+		path := ".claude/projects/" + project.Name() + "/" + resumeSessionID + ".jsonl"
+		candidate, err := files.Open(path)
 		if err != nil {
 			continue
 		}
@@ -673,13 +684,12 @@ func copyTranscriptForResume(resumeSessionID, cwd string) error {
 		if best != nil {
 			best.Close()
 		}
-		best, largest = candidate, info.Size()
+		best, bestPath, largest = candidate, path, info.Size()
 	}
 	if best == nil {
-		return fmt.Errorf("resume transcript not found for session %s", resumeSessionID)
+		return nil, "", fmt.Errorf("resume transcript not found for session %s", resumeSessionID)
 	}
-	defer best.Close()
-	return files.Restore(best, dest, false, time.Now())
+	return best, bestPath, nil
 }
 
 func claudeProjectDir(cwd string) string {
@@ -692,15 +702,25 @@ func claudeProjectDir(cwd string) string {
 	return filepath.Join(homeDir, ".claude", "projects", escapedPath)
 }
 
-func (c *Claude) ConversationFiles(resumeID, transcriptPath string) []string {
+func (c *Claude) ConversationFiles(resumeID, _ string) []string {
 	home, err := toolhome.Dir()
-	if err != nil || transcriptPath == "" {
+	if err != nil {
 		return nil
 	}
+	inputs, err := OpenConversationFiles(home)
+	if err != nil {
+		return nil
+	}
+	defer inputs.Close()
+	main, relative, err := largestClaudeTranscript(inputs, resumeID)
+	if err != nil {
+		return nil
+	}
+	main.Close()
 	directories, err := filepath.Glob(filepath.Join(home, ".claude", "projects", "*", resumeID))
 	if err != nil {
 		return nil
 	}
-	files := append([]string{transcriptPath}, directories...)
+	files := append([]string{filepath.Join(home, filepath.FromSlash(relative))}, directories...)
 	return append(files, filepath.Join(home, ".claude", "file-history", resumeID))
 }

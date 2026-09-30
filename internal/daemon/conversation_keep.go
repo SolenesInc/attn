@@ -138,20 +138,14 @@ func (d *Daemon) keepConversations(now time.Time) {
 			changed[key] = true
 		}
 		driver := agentdriver.Get(key.agent)
-		var best store.SessionConversation
-		var bestInfo fs.FileInfo
-		for _, id := range sessions {
-			conversation := d.store.GetSessionConversation(id)
-			info, err := os.Stat(conversation.TranscriptPath)
-			if err == nil && (bestInfo == nil || info.Size() > bestInfo.Size()) {
-				best, bestInfo = conversation, info
-			}
-		}
-		if bestInfo == nil {
+		observed := d.store.GetSessionConversation(sessions[0])
+		files, keeper := agentdriver.ConversationFiles(driver, key.resumeID, observed.TranscriptPath)
+		if !keeper || len(files) == 0 {
 			continue
 		}
-		files, keeper := agentdriver.ConversationFiles(driver, key.resumeID, best.TranscriptPath)
-		if !keeper || len(files) == 0 {
+		best := store.SessionConversation{NativeID: key.resumeID, TranscriptPath: files[0]}
+		bestInfo, err := os.Stat(best.TranscriptPath)
+		if err != nil {
 			continue
 		}
 		if live[key] && bestInfo.ModTime().After(now.Add(-conversationKeepQuiet())) {

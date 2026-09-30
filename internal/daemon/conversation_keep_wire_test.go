@@ -327,6 +327,82 @@ func TestSessionsSharingAConversationKeepOneCopyUntilAllTheirWorkCloses(t *testi
 	}
 }
 
+func TestOpenWorkKeepsLatestClaudeHistoryFromAnUnassignedSession(t *testing.T) {
+	for _, oldSource := range []string{"present", "removed"} {
+		t.Run(oldSource, func(t *testing.T) {
+			w := newWorld(t, fakeagent.Claude)
+			app, cli := w.App(), w.Client()
+			delegated := seedResumeDelegate(t, w, fakeagent.Claude, "api")
+			first := w.Launched(delegated.SessionID)
+			first.Prompted()
+			first.Reply("the seed's original history <!-- attn:state=waiting_input -->")
+			originalPath := transcript.FindClaudeTranscript(first.ConversationID)
+			closePane(app, seedResumePane(t, w, protocol.Deref(delegated.WorkspaceID), delegated.SessionID))
+			testworld.AwaitTaskDone(app, "conversation_keep")
+			spawned, workspace, _ := w.RequestSpawn(app, fakeagent.Claude, w.Path("unassigned-directory"), func(msg *protocol.SpawnSessionMessage) {
+				msg.ResumeSessionID = protocol.Ptr(first.ConversationID)
+			})
+			if !spawned.Success {
+				t.Fatalf("plain conversation resume: %+v", spawned)
+			}
+			second := w.Launched(spawned.ID)
+			app.TypeLine(spawned.ID, "continue without tending any seed")
+			second.Prompted()
+			second.Subagent("the unassigned session's complete auxiliary answer")
+			second.Reply("newer history belongs to the shared conversation <!-- attn:state=waiting_input -->")
+			projects := filepath.Dir(filepath.Dir(originalPath))
+			mains, err := filepath.Glob(filepath.Join(projects, "*", first.ConversationID+".jsonl"))
+			if err != nil || len(mains) != 2 {
+				t.Fatalf("cross-directory transcripts: %v, %v", mains, err)
+			}
+			newerPath := mains[0]
+			if newerPath == originalPath {
+				newerPath = mains[1]
+			}
+			latest, err := os.ReadFile(newerPath)
+			if err != nil {
+				t.Fatal(err)
+			}
+			auxiliary, err := filepath.Glob(filepath.Join(strings.TrimSuffix(newerPath, ".jsonl"), "subagents", "*.jsonl"))
+			if err != nil || len(auxiliary) != 1 {
+				t.Fatalf("new session's auxiliary transcript: %v, %v", auxiliary, err)
+			}
+			auxiliaryBytes, err := os.ReadFile(auxiliary[0])
+			if err != nil {
+				t.Fatal(err)
+			}
+			if oldSource == "removed" {
+				if err := os.Remove(originalPath); err != nil {
+					t.Fatal(err)
+				}
+			}
+			closePane(app, seedResumePane(t, w, workspace, spawned.ID))
+			testworld.AwaitTaskDone(app, "conversation_keep")
+			if seed := lifeShow(t, cli, delegated.SeedID).Seed; protocol.Deref(seed.LastExecutionID) != delegated.SessionID {
+				t.Fatalf("plain resume changed seed's execution: %+v", seed)
+			}
+			sessionRecoveryDeleteTranscript(t, first.ConversationID)
+			for _, path := range mains {
+				if err := os.RemoveAll(strings.TrimSuffix(path, ".jsonl")); err != nil {
+					t.Fatal(err)
+				}
+			}
+			if err := os.RemoveAll(filepath.Join(filepath.Dir(projects), "file-history", first.ConversationID)); err != nil {
+				t.Fatal(err)
+			}
+			if result := seedResumeRequest(app, delegated.SeedID); !result.Success {
+				t.Fatalf("seed resume after pruning: %+v", result)
+			}
+			seedResumeContinues(t, w, first, delegated.SessionID)
+			for restored, want := range map[string][]byte{originalPath: latest, newerPath: latest, auxiliary[0]: auxiliaryBytes} {
+				if got, err := os.ReadFile(restored); err != nil || string(got) != string(want) {
+					t.Fatalf("latest unassigned-session history lost at %s: %q, %v", restored, got, err)
+				}
+			}
+		})
+	}
+}
+
 func TestCrossDirectoryClaudeResumeIgnoresLargerSymlinkedTranscripts(t *testing.T) {
 	for _, symlink := range []string{"transcript", "project directory"} {
 		t.Run(symlink, func(t *testing.T) {
@@ -402,6 +478,10 @@ func TestKeptConversationRefusesSymlinkedProviderDirectories(t *testing.T) {
 			first.Prompted()
 			first.Reply("keep this conversation <!-- attn:state=waiting_input -->")
 			path := transcript.FindClaudeTranscript(first.ConversationID)
+			original, err := os.ReadFile(path)
+			if err != nil {
+				t.Fatal(err)
+			}
 			if stage != "copy" {
 				closePane(app, seedResumePane(t, w, protocol.Deref(delegated.WorkspaceID), delegated.SessionID))
 				testworld.AwaitTaskDone(app, "conversation_keep")
@@ -431,8 +511,21 @@ func TestKeptConversationRefusesSymlinkedProviderDirectories(t *testing.T) {
 			if stage == "copy" {
 				closePane(app, seedResumePane(t, w, protocol.Deref(delegated.WorkspaceID), delegated.SessionID))
 				testworld.AwaitTaskDone(app, "conversation_keep")
-				if kept := lifeShow(t, cli, delegated.SeedID).Seed.Continuation.KeptConversation; kept != nil {
-					t.Fatalf("copied through symlink: %+v", kept)
+				if err := os.Remove(project); err != nil {
+					t.Fatal(err)
+				}
+				if err := os.RemoveAll(project + "-original"); err != nil {
+					t.Fatal(err)
+				}
+				if result := seedResumeRequest(app, delegated.SeedID); !result.Success {
+					t.Fatalf("resume safely kept relocated conversation: %+v", result)
+				}
+				seedResumeContinues(t, w, first, delegated.SessionID)
+				if got, err := os.ReadFile(path); err != nil || string(got) != string(original) {
+					t.Fatalf("kept symlinked private data instead of the real conversation: %q, %v", got, err)
+				}
+				if got, err := os.ReadFile(filepath.Join(outside, filepath.Base(path))); err != nil || string(got) != "private host data" {
+					t.Fatalf("private host file changed: %q, %v", got, err)
 				}
 			} else {
 				if stage == "reload" {

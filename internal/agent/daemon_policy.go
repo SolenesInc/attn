@@ -135,6 +135,7 @@ func ClassifyWithDriver(d Driver, text, executable, workDir string, timeout time
 }
 
 // ConversationKeeper is implemented by harnesses that prune their own conversations.
+// ConversationFiles returns the selected main transcript first, followed by its auxiliary paths.
 type ConversationKeeper interface {
 	ConversationFiles(resumeID, transcriptPath string) []string
 }
