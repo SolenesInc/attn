@@ -7,12 +7,12 @@
     "note": "Seconds each scenario took in a green Linux serial matrix. Remeasure from matrix-digest.txt when a scenario changes shape; the shard planner balances on these.",
     "updates": {
       "snooze-keyboard": {
-        "run": "snooze-keyboard-2026-09-29T21-48-35-992Z",
+        "run": "snooze-keyboard-2026-09-30T19-24-32-980Z",
         "job": "Local native scenario, snoozekeys instance",
-        "recordedAt": "2026-09-29",
-        "seconds": 27.4,
+        "recordedAt": "2026-09-30",
+        "seconds": 34.9,
         "runnerClass": "local macOS",
-        "note": "Green PR-head run with keyboard entry/cancel, row and split placement, shortcut capture, 2h/4h handover, empty queue and wake; summary durationMs=27401. Remeasure on Linux CI."
+        "note": "Green a20071963 run with ten steps, including always-on shortcut capture, non-active row confirmation from terminal/Home and selection change cancellation; summary durationMs=34884. Remeasure on Linux CI."
       },
       "crew-management": {
         "run": "crew-management-2026-09-19T20-31-21-890Z",
@@ -118,7 +118,7 @@
     }
   },
   "seconds": {
-    "snooze-keyboard": 27.4,
+    "snooze-keyboard": 34.9,
     "agent-close": 8.2,
     "agent-queue": 93.8,
     "agent-settings": 18.7,
