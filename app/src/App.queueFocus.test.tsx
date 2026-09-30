@@ -184,17 +184,6 @@ describe('the agent list and the agent palette', () => {
     expect(agentListOpen()).toBe(false);
     expect(agentPalette()).toBeInTheDocument();
   });
-
-  it('opens the palette on agents in grid view, where the grid covers the queue sidebar', async () => {
-    const { daemon, container } = await launch();
-
-    await gesture(daemon, () => pressShortcut('view.toggleGrid'));
-    expect(container.querySelector('.app')).toHaveClass('is-grid');
-    await gesture(daemon, () => pressShortcut('sidebar.agentList'));
-
-    expect(agentListOpen()).toBe(false);
-    expect(agentPalette()).toBeInTheDocument();
-  });
 });
 
 describe('handing focus to the terminal', () => {
@@ -254,13 +243,5 @@ describe('the collapsed queue bar', () => {
     await gesture(daemon, () => pressShortcut('file.open'));
 
     expect(await hoverWaitingPill(daemon)).toBeNull();
-  });
-
-  it('silences the bar peeks while the grid hides the bar', async () => {
-    const { daemon } = await collapsed();
-
-    await gesture(daemon, () => pressShortcut('view.toggleGrid'));
-
-    expect(screen.queryByTestId('queue-bar-waiting') === null || (await hoverWaitingPill(daemon)) === null).toBe(true);
   });
 });

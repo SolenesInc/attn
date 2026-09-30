@@ -22,7 +22,7 @@ import {
 } from '../utils/queueBands';
 import { buildDesktopViewModels } from '../utils/desktopViewModels';
 
-export type AppView = 'dashboard' | 'session' | 'grid';
+export type AppView = 'dashboard' | 'session';
 export type StateUpdate<T> = T | ((previous: T) => T);
 
 export type IntentTarget =
@@ -59,7 +59,6 @@ export interface FocusClaim {
 
 export interface SessionNavigationState {
   view: AppView;
-  viewBeforeGrid: AppView;
   followNextTurn: boolean;
   intent: Intent | null;
   focusRequest: FocusClaim | null;
@@ -72,7 +71,6 @@ export interface SessionNavigationState {
 export function initialSessionNavigation(): SessionNavigationState {
   return {
     view: 'dashboard',
-    viewBeforeGrid: 'dashboard',
     followNextTurn: false,
     intent: null,
     focusRequest: null,
@@ -204,10 +202,6 @@ export function claimFocus(state: SessionNavigationState, leaf: { desktopId: str
   return { ...state, focusSequence: id, focusRequest: { id, desktopId: leaf.desktopId, leafId: leaf.leafId, focusOwner, announce } };
 }
 
-export function toggleGrid(state: SessionNavigationState): SessionNavigationState {
-  return changeView(state, state.view === 'grid' ? state.viewBeforeGrid : 'grid');
-}
-
 export function enterHome(state: SessionNavigationState, followNextTurn: boolean): SessionNavigationState {
   return { ...endIntent(state), view: 'dashboard', followNextTurn };
 }
@@ -217,7 +211,6 @@ export function changeView(state: SessionNavigationState, update: StateUpdate<Ap
   return {
     ...endIntent(state),
     view,
-    viewBeforeGrid: view === 'grid' && state.view !== 'grid' ? state.view : state.viewBeforeGrid,
     followNextTurn: view === 'dashboard' && state.followNextTurn,
   };
 }

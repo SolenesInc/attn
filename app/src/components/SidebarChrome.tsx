@@ -1,6 +1,5 @@
 import { useEffect, useRef } from 'react';
 import { formatShortcut } from '../shortcuts/formatShortcut';
-import { GridLayoutControl } from './grid/GridLayoutControl';
 import { RenamePopover } from './RenamePopover';
 import { SessionActionsPopover } from './SessionActionsPopover';
 import { CrewMemberActionsPopover } from './CrewMemberActionsPopover';
@@ -16,8 +15,6 @@ export function SidebarCollapsed() {
   const {
     instance,
     headerActions,
-    gridLayout,
-    onSelectGridLayout,
     onNewSession,
     onGoToDashboard,
     homeActive,
@@ -44,9 +41,6 @@ export function SidebarCollapsed() {
           <HomeIcon />
         </button>
         <div className="icon-divider" />
-        {gridLayout && onSelectGridLayout && (
-          <GridLayoutControl layout={gridLayout} onSelect={onSelectGridLayout} />
-        )}
         {headerActions.map((action) => (
           <button
             key={action.id}
@@ -284,8 +278,6 @@ export function SidebarHeader() {
   const {
     instance,
     headerActions,
-    gridLayout,
-    onSelectGridLayout,
     queueModeEnabled,
     onToggleQueueMode,
     crewQueueEnabled,
@@ -306,9 +298,6 @@ export function SidebarHeader() {
           </div>
         )}
         <div className="sidebar-tool-row">
-          {gridLayout && onSelectGridLayout && (
-            <GridLayoutControl layout={gridLayout} onSelect={onSelectGridLayout} />
-          )}
           {headerActions.map((action) => (
             <button
               key={action.id}
