@@ -1,0 +1,3 @@
+kind: changed
+area: queue
+change: In queue mode, Cmd+Up and Cmd+Down step to the previous or next agent in the order the queue sidebar lists them, and Cmd+Option+Up/Down fall through to the same step when no pane lies that way.
