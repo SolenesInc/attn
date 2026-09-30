@@ -111,7 +111,7 @@ describe('App sidebar', () => {
 
       expect(within(screen.getByTestId('queue-crew-fern')).getByRole('img', { name: 'Pi · idle' })).toBeInTheDocument();
       expect(within(screen.getByTestId('queue-crew-sleeping')).queryByRole('img')).toBeNull();
-      await gesture(daemon, () => fireEvent.click(screen.getByRole('button', { name: /more agents/i })));
+      await gesture(daemon, () => fireEvent.click(screen.getByRole('button', { name: /more agents?/i })));
       expect(screen.getByRole('button', { name: 'Open codex-row' })).toHaveAttribute('title', expect.stringContaining('Codex'));
       expect(screen.getByTestId('manage-crew')).toHaveTextContent('manage');
 
@@ -142,7 +142,7 @@ describe('App sidebar', () => {
         settings: { queue_mode_enabled: 'true', sidebar_harness_logos_enabled: 'false' },
       });
 
-      await gesture(daemon, () => fireEvent.click(screen.getByRole('button', { name: /more agents/i })));
+      await gesture(daemon, () => fireEvent.click(screen.getByRole('button', { name: /more agents?/i })));
       expect(screen.getByRole('button', { name: 'Open codex-row' })).toHaveAttribute('title', expect.stringContaining('Codex'));
     });
   });

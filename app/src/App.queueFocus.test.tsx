@@ -26,7 +26,7 @@ async function launch({
 }
 
 async function openS2(daemon: ScriptedDaemon) {
-  const agentList = screen.queryByRole('button', { name: /more agents/i });
+  const agentList = screen.queryByRole('button', { name: /more agents?/i });
   if (!screen.queryByRole('button', { name: 'Open s2' }) && agentList) await gesture(daemon, () => fireEvent.click(agentList));
   await gesture(daemon, () => fireEvent.click(screen.getByRole('button', { name: 'Open s2' })));
 }
@@ -63,7 +63,7 @@ describe('acting on the queue sidebar row that holds focus', () => {
   it('settles nothing when the focused row owes no turn', async () => {
     const { daemon } = await launch({ owed: ['s2'] });
     await openS2(daemon);
-    await gesture(daemon, () => fireEvent.click(screen.getByRole('button', { name: /more agents/i })));
+    await gesture(daemon, () => fireEvent.click(screen.getByRole('button', { name: /more agents?/i })));
 
     screen.getByTestId('queue-select-s1').focus();
     await settle(daemon);
@@ -117,7 +117,7 @@ describe('acting on the queue sidebar row that holds focus', () => {
   it('opens the snooze menu beside the focused copy of an agent listed twice', async () => {
     const { daemon } = await launch({ owed: ['s1'] });
     await openS2(daemon);
-    await gesture(daemon, () => fireEvent.click(screen.getByRole('button', { name: /more agents/i })));
+    await gesture(daemon, () => fireEvent.click(screen.getByRole('button', { name: /more agents?/i })));
     const copies = screen.getAllByTestId(/^queue-(turn|settled)-s1$/);
     const focusedCopy = copies[copies.length - 1];
     fakeRects((element) => (element === focusedCopy ? DOMRect.fromRect({ x: 40, y: 280, width: 180, height: 20 }) : null));
