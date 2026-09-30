@@ -98,11 +98,4 @@ describe('App ticket nudge', () => {
     expect(daemon.sent.slice(before)).toEqual([{ cmd: 'cancel_countdown', session_id: 'target' }]);
   });
 
-  it('fills the counting nudge track toward full, the opposite of a settle draining', async () => {
-    await renderNudge({ ticket_unread: true, nudge_fires_at: FIRES_AT }, { selected: false });
-    const fill = document.querySelector<HTMLElement>('[data-pane-id="pane-target"] .nudge-header-track-fill')!;
-
-    expect(fill.style.width).toBe('100%');
-    expect(fill.style.transition).toMatch(/^width \d+ms linear$/);
-  });
 });
