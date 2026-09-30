@@ -852,7 +852,9 @@ func (b *Bootstrapper) ensureRemoteDaemonRunning(ctx context.Context, sshTarget,
 		if err == nil && current.Running {
 			return nil
 		}
-		time.Sleep(500 * time.Millisecond)
+		if !sleepOrDone(ctx, 500*time.Millisecond) {
+			return ctx.Err()
+		}
 	}
 	return fmt.Errorf("daemon did not become ready")
 }
