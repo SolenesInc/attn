@@ -9,13 +9,22 @@ import (
 	"strings"
 	"sync"
 	"time"
-
-	"github.com/fsnotify/fsnotify"
 )
 
 const DefaultWatchDebounce = 400 * time.Millisecond
 
 const selfWriteTTL = 3 * time.Second
+
+type treeEvent struct {
+	Path   string
+	IsDir  bool
+	Rescan bool
+}
+
+type treeBackend interface {
+	events() <-chan treeEvent
+	Close() error
+}
 
 type Watcher struct {
 	root      string
@@ -23,7 +32,7 @@ type Watcher struct {
 	cleanPath func(string) (string, error)
 	onChange  func(paths []string)
 
-	fsw *fsnotify.Watcher
+	backend treeBackend
 
 	mu         sync.Mutex
 	selfWrites map[string]selfWriteRecord
@@ -52,7 +61,7 @@ func NewWatcherWithCleaner(root string, debounce time.Duration, cleanPath func(s
 	} else if !info.IsDir() {
 		return nil, fmt.Errorf("notebook watcher: %s is not a directory", clean)
 	}
-	fsw, err := fsnotify.NewWatcher()
+	backend, err := newTreeBackend(clean)
 	if err != nil {
 		return nil, err
 	}
@@ -61,13 +70,9 @@ func NewWatcherWithCleaner(root string, debounce time.Duration, cleanPath func(s
 		debounce:   debounce,
 		cleanPath:  cleanPath,
 		onChange:   onChange,
-		fsw:        fsw,
+		backend:    backend,
 		selfWrites: make(map[string]selfWriteRecord),
 		loopDone:   make(chan struct{}),
-	}
-	if _, err := w.addTree(w.root); err != nil {
-		_ = fsw.Close()
-		return nil, err
 	}
 	go w.loop()
 	return w, nil
@@ -95,7 +100,7 @@ func (w *Watcher) Close() error {
 	}
 	var err error
 	w.closeOnce.Do(func() {
-		err = w.fsw.Close()
+		err = w.backend.Close()
 	})
 	<-w.loopDone
 	return err
@@ -107,7 +112,7 @@ func (w *Watcher) loop() {
 	var timerC <-chan time.Time
 	for {
 		select {
-		case ev, ok := <-w.fsw.Events:
+		case ev, ok := <-w.backend.events():
 			if !ok {
 				return
 			}
@@ -118,28 +123,29 @@ func (w *Watcher) loop() {
 		case <-timerC:
 			timerC = nil
 			w.flush(pending)
-		case _, ok := <-w.fsw.Errors:
-			if !ok {
-				return
-			}
 		}
 	}
 }
 
-func (w *Watcher) handleEvent(ev fsnotify.Event, pending map[string]struct{}) {
-	if ev.Op&fsnotify.Create != 0 {
-		if info, err := os.Stat(ev.Name); err == nil && info.IsDir() {
-			if base := filepath.Base(ev.Name); base == "." || strings.HasPrefix(base, ".") {
-				return
-			}
-			files, _ := w.addTree(ev.Name)
-			for _, rel := range files {
-				pending[rel] = struct{}{}
-			}
-			return
-		}
+func (w *Watcher) handleEvent(ev treeEvent, pending map[string]struct{}) {
+	if !w.visible(ev.Path) {
+		return
 	}
-	if rel, ok := w.trackable(ev.Name); ok {
+	if ev.IsDir || ev.Rescan {
+		files, _ := w.scanTree(ev.Path)
+		for _, rel := range files {
+			pending[rel] = struct{}{}
+		}
+		// A rescan still invalidates the root after its last file disappears.
+		if ev.Rescan && filepath.Clean(ev.Path) == w.root {
+			pending["."] = struct{}{}
+		}
+		if rel, ok := w.trackable(ev.Path); ok {
+			pending[rel] = struct{}{}
+		}
+		return
+	}
+	if rel, ok := w.trackable(ev.Path); ok {
 		pending[rel] = struct{}{}
 	}
 }
@@ -200,7 +206,7 @@ func (w *Watcher) diskHash(rel string) string {
 	return Hash(content)
 }
 
-func (w *Watcher) addTree(dir string) ([]string, error) {
+func (w *Watcher) scanTree(dir string) ([]string, error) {
 	var files []string
 	err := filepath.WalkDir(dir, func(p string, dirent fs.DirEntry, err error) error {
 		if err != nil {
@@ -213,7 +219,6 @@ func (w *Watcher) addTree(dir string) ([]string, error) {
 			if p != w.root && strings.HasPrefix(dirent.Name(), ".") {
 				return fs.SkipDir
 			}
-			_ = w.fsw.Add(p)
 			return nil
 		}
 		if rel, ok := w.trackable(p); ok {
@@ -224,7 +229,26 @@ func (w *Watcher) addTree(dir string) ([]string, error) {
 	return files, err
 }
 
+func (w *Watcher) visible(absPath string) bool {
+	rel, err := filepath.Rel(w.root, absPath)
+	if err != nil || rel == ".." || strings.HasPrefix(rel, ".."+string(filepath.Separator)) {
+		return false
+	}
+	if rel == "." {
+		return true
+	}
+	for _, part := range strings.Split(rel, string(filepath.Separator)) {
+		if strings.HasPrefix(part, ".") {
+			return false
+		}
+	}
+	return true
+}
+
 func (w *Watcher) trackable(absPath string) (string, bool) {
+	if !w.visible(absPath) {
+		return "", false
+	}
 	rel, err := filepath.Rel(w.root, absPath)
 	if err != nil {
 		return "", false

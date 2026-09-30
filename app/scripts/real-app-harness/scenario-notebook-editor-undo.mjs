@@ -338,6 +338,15 @@ async function main() {
       });
     });
 
+    await runner.step('external_edit_refreshes_the_open_document', async () => {
+      fs.writeFileSync(probeFilePath, `${ORIGINAL_CONTENT}\nExternal refresh probe.\n`, 'utf8');
+      await client.request('dom_wait', {
+        selector: EDITOR_SELECTOR,
+        textIncludes: 'External refresh probe.',
+        timeoutMs: 10_000,
+      });
+    });
+
     await runner.step('assert_no_pane_zoom', async () => {
       const sessionUiState = await client.request('get_session_ui_state', { sessionId });
       const zoomedPaneId = sessionUiState?.workspace?.view?.zoomedPaneId ?? null;
