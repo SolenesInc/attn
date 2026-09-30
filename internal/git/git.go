@@ -2,6 +2,7 @@ package git
 
 import (
 	"context"
+	"encoding/hex"
 	"os"
 	"path/filepath"
 	"strings"
@@ -23,6 +24,97 @@ type BranchInfo struct {
 }
 
 func (c *Client) GetBranchInfo(ctx context.Context, dir string) (*BranchInfo, error) {
+	if info, ok := c.branchInfoFromFiles(ctx, dir); ok {
+		return info, nil
+	}
+	return c.branchInfoFromGit(ctx, dir)
+}
+
+func (c *Client) branchInfoFromFiles(ctx context.Context, dir string) (*BranchInfo, bool) {
+	root := CanonicalizePath(dir)
+	var gitDir string
+	for {
+		if context.Cause(ctx) != nil {
+			return nil, false
+		}
+		if _, err := os.Stat(filepath.Join(root, "HEAD")); err == nil {
+			if objects, err := os.Stat(filepath.Join(root, "objects")); err == nil && objects.IsDir() {
+				return nil, false
+			}
+		}
+		gitPath := filepath.Join(root, ".git")
+		entry, err := os.Stat(gitPath)
+		if err == nil {
+			gitDir = gitPath
+			if !entry.IsDir() {
+				content, err := os.ReadFile(gitPath)
+				if err != nil || !strings.HasPrefix(string(content), "gitdir: ") {
+					return nil, false
+				}
+				gitDir = strings.TrimSpace(strings.TrimPrefix(string(content), "gitdir: "))
+				if gitDir == "" {
+					return nil, false
+				}
+				if !filepath.IsAbs(gitDir) {
+					gitDir = filepath.Join(root, gitDir)
+				}
+			}
+			break
+		}
+		if !os.IsNotExist(err) {
+			return nil, false
+		}
+		parent := filepath.Dir(root)
+		if parent == root {
+			return nil, false
+		}
+		root = parent
+	}
+	gitDir = filepath.Clean(gitDir)
+	commonDir := gitDir
+	if content, err := os.ReadFile(filepath.Join(gitDir, "commondir")); err == nil {
+		commonDir = strings.TrimSpace(string(content))
+		if !filepath.IsAbs(commonDir) {
+			commonDir = filepath.Join(gitDir, commonDir)
+		}
+	}
+	// Reftable's HEAD can be a stub; git owns decoding that backend.
+	if _, err := os.Stat(filepath.Join(commonDir, "reftable")); !os.IsNotExist(err) {
+		return nil, false
+	}
+	content, err := os.ReadFile(filepath.Join(gitDir, "HEAD"))
+	if err != nil {
+		return nil, false
+	}
+	head := strings.TrimSpace(string(content))
+	info := &BranchInfo{}
+	switch {
+	case strings.HasPrefix(head, "ref: refs/heads/"):
+		info.Branch = strings.TrimPrefix(head, "ref: refs/heads/")
+		if info.Branch == "" || info.Branch == ".invalid" {
+			return nil, false
+		}
+	case len(head) == 40 || len(head) == 64:
+		if _, err := hex.DecodeString(head); err != nil {
+			return nil, false
+		}
+		info.Branch = head[:7]
+	default:
+		return nil, false
+	}
+	if filepath.Base(filepath.Dir(gitDir)) == "worktrees" {
+		mainGitDir := filepath.Dir(filepath.Dir(gitDir))
+		if filepath.Base(mainGitDir) != ".git" {
+			return nil, false
+		}
+		info.MainRepo = filepath.Dir(mainGitDir)
+		info.IsWorktree = true
+	}
+	info.Repository, _ = c.RepositoryRoot(ctx, dir)
+	return info, true
+}
+
+func (c *Client) branchInfoFromGit(ctx context.Context, dir string) (*BranchInfo, error) {
 	info := &BranchInfo{}
 
 	if !c.isGitRepo(ctx, dir) {
