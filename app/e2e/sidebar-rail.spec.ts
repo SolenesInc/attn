@@ -31,6 +31,20 @@ test('keeps the compact rail controls usable with eight desktops and a 9+ tool b
   expect(await page.evaluate(() => window.__HARNESS__.getCalls('desktop'))).toEqual([['desk-2'], ['desk-8']]);
 });
 
+test('reveals the same current desktop after an arrangement update moves it to the end', async ({ page }) => {
+  await page.setViewportSize({ width: 1200, height: 600 });
+  await page.goto('/test-harness/?component=SidebarRail&update=reorder');
+  await page.waitForFunction(() => window.__HARNESS__?.ready === true);
+  const current = page.getByRole('button', { name: 'Sidebar refinement (⌘1)' });
+  await expect(current).toHaveAttribute('aria-current', 'true');
+  await expect(current).toBeInViewport();
+  await page.evaluate(() => window.__HARNESS__.triggerRerender());
+  const reordered = page.getByRole('button', { name: 'Sidebar refinement (⌘8)' });
+  await expect(reordered).toHaveAttribute('aria-current', 'true');
+  await expect(reordered).toBeInViewport();
+  expect(await page.evaluate(() => window.__HARNESS__.getCalls('desktop'))).toEqual([]);
+});
+
 test('pins the tools and bottom actions at 600px while scrolling desktops and revealing the current one', async ({ page }) => {
   await page.setViewportSize({ width: 1200, height: 600 });
   await page.goto('/test-harness/?component=SidebarRail');

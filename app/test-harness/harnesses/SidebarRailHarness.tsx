@@ -25,15 +25,20 @@ const desktops = buildDesktopViewModels(titles.map((name, index): Desktop => ({
 
 export function SidebarRailHarness({ onReady, setTriggerRerender }: HarnessProps) {
   const [selected, setSelected] = useState('desk-1');
+  const [arrangement, setArrangement] = useState(desktops);
+  const reorder = new URLSearchParams(window.location.search).get('update') === 'reorder';
   useEffect(() => {
     onReady();
-    setTriggerRerender(() => setSelected('desk-8'));
-  }, [onReady, setTriggerRerender]);
+    setTriggerRerender(() => {
+      if (reorder) setArrangement([...desktops.slice(1), desktops[0]]);
+      else setSelected('desk-8');
+    });
+  }, [onReady, setTriggerRerender, reorder]);
   return (
     <div className="app" style={{ height: '100vh' }}>
       <Sidebar
         collapsed surface="tree-collapsed" selectedId={null} selectedDesktopId={selected}
-        desktops={desktops} visualIndexByDesktopId={new Map(desktops.map((desktop, index) => [desktop.id, index]))}
+        desktops={arrangement} visualIndexByDesktopId={new Map(arrangement.map((desktop, index) => [desktop.id, index]))}
         headerActions={Array.from({ length: 9 }, (_, index) => ({
           id: `tool-${index}`, title: `Tool ${index + 1}`, icon: <HomeIcon />,
           badge: index === 2 ? 12 : undefined, onClick: noop,

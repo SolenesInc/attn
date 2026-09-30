@@ -90,9 +90,10 @@ function RailDesktops() {
     visualIndexOfDesktop,
   } = useSidebarContext();
   const desktopListRef = useRef<HTMLDivElement>(null);
+  const desktopOrder = JSON.stringify(visibleVisualOrder.map((desktop) => desktop.id));
   useEffect(() => {
     desktopListRef.current?.querySelector('[aria-current="true"]')?.scrollIntoView({ block: 'nearest' });
-  }, [selectedDesktopId]);
+  }, [selectedDesktopId, desktopOrder]);
   return (
     <div className="rail-desktops" ref={desktopListRef}>
       {visibleVisualOrder.map((desktopView) => {
