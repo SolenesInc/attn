@@ -1936,7 +1936,7 @@ model DetachSessionMessage {
 
 // Read-only request for a session's current rendered screen. Unlike
 // attach_session it registers no subscriber and claims no PTY geometry; used to
-// seed observers (e.g. grid tiles) that then dedup live output against last_seq.
+// seed observers that then dedup live output against last_seq.
 model GetScreenSnapshotMessage {
   cmd: "get_screen_snapshot";
   id: string;

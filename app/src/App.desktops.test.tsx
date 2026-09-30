@@ -51,7 +51,6 @@ vi.mock('./components/Sidebar', () => ({
     selectedTile,
     onSelectDesktop,
     onSelectTile,
-    onSelectGridLayout,
     headerActions,
   }: {
     headerActions: Array<{ id: string; disabled?: boolean }>;
@@ -61,7 +60,6 @@ vi.mock('./components/Sidebar', () => ({
     selectedTile?: { desktopId: string; tileId: string } | null;
     onSelectDesktop: (id: string) => void;
     onSelectTile: (desktopId: string, tileId: string) => void;
-    onSelectGridLayout?: (layout: { mode: 'auto' }) => void;
   }) => (
     <div
       data-testid="sidebar"
@@ -76,9 +74,6 @@ vi.mock('./components/Sidebar', () => ({
           {group.id}
         </button>
       ))}
-      <button type="button" data-testid="open-grid" onClick={() => onSelectGridLayout?.({ mode: 'auto' })}>
-        grid
-      </button>
       <button type="button" data-testid="select-readme-tile" onClick={() => onSelectTile('d2', 'tile-readme')}>
         readme
       </button>
@@ -86,12 +81,6 @@ vi.mock('./components/Sidebar', () => ({
         notes
       </button>
     </div>
-  ),
-}));
-
-vi.mock('./components/grid/GridView', () => ({
-  GridView: ({ tiles }: { tiles: Array<{ runtimeId: string }> }) => (
-    <div data-testid="grid-view" data-runtime-ids={tiles.map((tile) => tile.runtimeId).join(',')} />
   ),
 }));
 
@@ -434,19 +423,6 @@ describe('desktop surface', () => {
 
     await waitFor(() => expect(sendDesktopRemoveLeaf).toHaveBeenLastCalledWith('d2', 'tile-readme', 7));
     expect(sendDesktopRemoveLeaf).toHaveBeenCalledTimes(2);
-  });
-
-  it('mounts the desktops the grid shows', async () => {
-    render(<App />);
-    await screen.findByTestId(desktopTestId('d1'));
-    expect(screen.queryByTestId(desktopTestId('d3'))).toBeNull();
-
-    await userEvent.click(screen.getByTestId('open-grid'));
-
-    await waitFor(() => {
-      expect(screen.getByTestId('grid-view').getAttribute('data-runtime-ids')).toContain('s3');
-      expect(screen.getByTestId(desktopTestId('d3'))).toBeInTheDocument();
-    });
   });
 
   it('sends the resolved terminal theme once the daemon handshake completes', async () => {

@@ -11,7 +11,6 @@ import { type QueueBands as QueueBandsModel } from '../utils/queueBands';
 import type { DesktopSelectionStyle } from '../utils/desktopSelectionStyle';
 import type { DesktopWithSessions } from '../utils/desktopViewModels';
 import { type CrewMemberView } from './QueueRows';
-import type { GridLayout } from './grid/gridLayout';
 
 export interface LocalSession {
   id: string;
@@ -63,8 +62,6 @@ export interface SidebarProps {
   headerActions: SidebarHeaderAction[];
   criticalNotifications?: CriticalNotificationState;
   onOpenNotifications?: () => void;
-  gridLayout?: GridLayout;
-  onSelectGridLayout?: (layout: GridLayout) => void;
   dockItems?: DockItem[];
   dockCollapsed?: boolean;
   onToggleDockCollapsed?: () => void;

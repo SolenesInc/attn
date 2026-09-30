@@ -62,7 +62,6 @@ export function useAppNavigation({
   const {
     selectAgent,
     selectLeaf,
-    cancelIntent,
     back: navigateLeafHistoryBack,
     forward: navigateLeafHistoryForward,
   } = useAgentNavigation();
@@ -100,8 +99,6 @@ export function useAppNavigation({
       `${step.group.name} · run ${step.position} of ${step.total} needing you · ${formatShortcut('session.settle')} settles, ${formatShortcut('session.nextRun')} moves on`,
     );
   }, [desktopViews, agentOnScreenId, handleSelectSession, showNotice]);
-
-  const toggleGridMode = useSessionStore((state) => state.toggleGrid);
 
   const [desktopSelectionStyle, setDesktopSelectionStyle] = useState<DesktopSelectionStyle>(
     readDesktopSelectionStyle,
@@ -231,14 +228,12 @@ export function useAppNavigation({
     requestTerminalFocus,
     selectAgent,
     selectLeaf,
-    cancelIntent,
     navigateLeafHistoryBack,
     navigateLeafHistoryForward,
     handleSelectSession,
     selectCreatedSession,
     goToDashboard,
     goHomeAwaitingNextTurn,
-    toggleGridMode,
     desktopViews,
     desktopSelectionStyle,
     handleDesktopSelectionStyleChange,

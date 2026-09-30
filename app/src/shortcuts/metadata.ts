@@ -46,7 +46,6 @@ export const SHORTCUT_META: Record<ShortcutId, ShortcutMeta> = {
   'session.historyForward': { label: 'Forward through agent history', category: 'sessions' },
   'session.orchestrator': { label: 'Jump to this session\'s dispatcher', category: 'sessions' },
   'session.goToDashboard': { label: 'Go to dashboard (home)', category: 'sessions' },
-  'view.toggleGrid': { label: 'Toggle grid view', category: 'sessions' },
   'desktop.overview': { label: 'Desktop overview', category: 'sessions' },
   'profile.switch': { label: 'Switch profile', category: 'sessions' },
   'session.jumpToWaiting': { label: 'Jump to next waiting session', category: 'sessions' },

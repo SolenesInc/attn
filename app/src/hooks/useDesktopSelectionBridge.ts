@@ -47,7 +47,6 @@ export function useActiveLeaf(): ActiveLeaf | null {
 
 export type Surface =
   | { kind: 'dashboard' }
-  | { kind: 'grid' }
   | { kind: 'tile'; desktopId: string; leafId: string }
   | { kind: 'agent'; sessionId: string | null };
 

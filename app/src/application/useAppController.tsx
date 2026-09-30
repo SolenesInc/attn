@@ -23,7 +23,6 @@ import { useAppDiagnostics } from './useAppDiagnostics';
 import { useAppErrors } from './useAppErrors';
 import { useAppGardenActions } from './useAppGardenActions';
 import { useCrewPanel } from './useCrewPanel';
-import { useAppGrid } from './useAppGrid';
 import { useAppNavigation } from './useAppNavigation';
 import { useAppNotebookSurface } from './useAppNotebookSurface';
 import { useAppPanels } from './useAppPanels';
@@ -156,7 +155,6 @@ export function useAppController({
     shownAgentId,
   });
   const {
-    wantsAttention,
     waitingLocalSessions,
     handleSettleShortcut,
     handleSnoozeShortcut,
@@ -176,13 +174,11 @@ export function useAppController({
     view,
     setView,
     selectAgent,
-    cancelIntent,
     navigateLeafHistoryBack,
     navigateLeafHistoryForward,
     handleSelectSession,
     selectCreatedSession,
     goToDashboard,
-    toggleGridMode,
     handleJumpToWaiting,
     handleNextRun,
     currentDesktopIdRef,
@@ -381,9 +377,9 @@ export function useAppController({
     return Boolean(leafId && desktop?.panes.some((pane) => pane.pane_id === leafId && pane.session_id));
   });
   const agentFocused = (surface.kind === 'agent' || surface.kind === 'tile') && currentDesktopAgentFocused;
-  const sidebarVisible = !sidebarCollapsed && surface.kind !== 'grid' && !agentFocused;
+  const sidebarVisible = !sidebarCollapsed && !agentFocused;
   const queueSidebarShown = queueModeEnabled && sidebarVisible;
-  const sidebarHidden = surface.kind === 'grid' || agentFocused;
+  const sidebarHidden = agentFocused;
   const sidebarSurface: SidebarSurface = sidebarHidden
     ? 'hidden'
     : `${queueModeEnabled ? 'queue' : 'tree'}-${sidebarCollapsed ? 'collapsed' : 'open'}`;
@@ -493,19 +489,10 @@ export function useAppController({
   const { needsAttention: prsNeedingAttention } = usePRsNeedingAttention(prs);
   const attentionCount = waitingLocalSessions.length + prsNeedingAttention.length;
 
-  const appGrid = useAppGrid({
-    profileSessions,
-    wantsAttention,
-    cancelIntent,
-    setView,
-  });
-  const { visibleGridTiles } = appGrid;
-
   const leafDrag = useLeafDrag({ currentDesktopIdRef, getDesktopLeafDropSnapshot, handleSelectDesktop, showError });
   const desktopResidency = useDesktopResidency({
     desktopViews,
     view,
-    visibleGridTiles,
     dragSourceDesktopId: leafDrag.leafDesktopDrag?.sourceDesktopId ?? null,
   });
   const { onScreenSessionIds } = desktopResidency;
@@ -587,7 +574,6 @@ export function useAppController({
     onCloseSession: handleCloseCurrentSessionShortcut,
     onOpenPalette: handleOpenPalette,
     onGoToDashboard: goToDashboard,
-    onToggleGridMode: toggleGridMode,
     onJumpToWaiting: handleJumpToWaiting,
     onNextRun: handleNextRun,
     onSettleTurn: handleSettleShortcut,
@@ -692,7 +678,6 @@ export function useAppController({
     },
     attention: {
       attentionQueue,
-      appGrid,
     },
     libraries: {
       workflowPanel,
