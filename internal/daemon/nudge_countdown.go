@@ -252,53 +252,62 @@ func (d *Daemon) deliverNudgeOrReArm(sessionID string) {
 }
 
 func (d *Daemon) runNudgeDelivery(sessionID string) string {
-	if d.store == nil {
-		return "noop"
+	delivery, outcome := d.queueNudgeDelivery(sessionID)
+	if outcome != "queued" {
+		return outcome
 	}
-	if d.currentlySelectedSession() == sessionID {
-		return "active"
-	}
-	d.deliveryMu.Lock()
-	defer d.deliveryMu.Unlock()
-	if session := d.store.Get(sessionID); session == nil || !sessionInputPhaseAllows(sessionInputAtTurnBoundary, session.State) {
-		return "blocked"
-	}
-	if until := d.watchLeaseUntil[sessionID]; until.After(time.Now()) {
-		d.nudgeMu.Lock()
-		d.startCountdownAtLocked(sessionID, until)
-		d.nudgeMu.Unlock()
-		return "watch"
-	}
-	unread, err := d.ticketUnreadForSession(sessionID)
-	if err != nil {
-		d.logf("nudge countdown unread check %s: %v", sessionID, err)
-		return "error"
-	}
-	if unread == 0 {
-		d.markTicketUnread(sessionID, false)
-		return "drained"
-	}
-	deliveredThroughSeq, err := d.newestUnreadTicketSeq(sessionID)
-	if err != nil {
-		d.logf("nudge delivered-through scan %s: %v", sessionID, err)
-		return "error"
-	}
-	delivery, eligible, err := d.enqueueAutomaticTicketNudge(sessionID, deliveredThroughSeq)
-	if err != nil {
-		d.logf("nudge countdown mailbox enqueue %s: %v", sessionID, err)
-		return "error"
-	}
-	if !eligible {
-		return "blocked"
-	}
-	if err := d.store.SetTicketDeliveryAttentionThrough(d.ticketAttentionKey(sessionID), time.Now(), deliveredThroughSeq); err != nil {
-		d.logf("nudge attention update %s: %v", sessionID, err)
-	}
+	// Plugin replies share the reader that applies state reports; ring without deliveryMu.
 	if err := d.deliverAgentMailboxItem(delivery); err != nil {
 		d.logf("nudge countdown inbox doorbell deferred %s: %v", sessionID, err)
 		return "queued"
 	}
 	return "doorbell"
+}
+
+func (d *Daemon) queueNudgeDelivery(sessionID string) (agentmailbox.Delivery, string) {
+	if d.store == nil {
+		return agentmailbox.Delivery{}, "noop"
+	}
+	if d.currentlySelectedSession() == sessionID {
+		return agentmailbox.Delivery{}, "active"
+	}
+	d.deliveryMu.Lock()
+	defer d.deliveryMu.Unlock()
+	if session := d.store.Get(sessionID); session == nil || !sessionInputPhaseAllows(sessionInputAtTurnBoundary, session.State) {
+		return agentmailbox.Delivery{}, "blocked"
+	}
+	if until := d.watchLeaseUntil[sessionID]; until.After(time.Now()) {
+		d.nudgeMu.Lock()
+		d.startCountdownAtLocked(sessionID, until)
+		d.nudgeMu.Unlock()
+		return agentmailbox.Delivery{}, "watch"
+	}
+	unread, err := d.ticketUnreadForSession(sessionID)
+	if err != nil {
+		d.logf("nudge countdown unread check %s: %v", sessionID, err)
+		return agentmailbox.Delivery{}, "error"
+	}
+	if unread == 0 {
+		d.markTicketUnread(sessionID, false)
+		return agentmailbox.Delivery{}, "drained"
+	}
+	deliveredThroughSeq, err := d.newestUnreadTicketSeq(sessionID)
+	if err != nil {
+		d.logf("nudge delivered-through scan %s: %v", sessionID, err)
+		return agentmailbox.Delivery{}, "error"
+	}
+	delivery, eligible, err := d.enqueueAutomaticTicketNudge(sessionID, deliveredThroughSeq)
+	if err != nil {
+		d.logf("nudge countdown mailbox enqueue %s: %v", sessionID, err)
+		return agentmailbox.Delivery{}, "error"
+	}
+	if !eligible {
+		return agentmailbox.Delivery{}, "blocked"
+	}
+	if err := d.store.SetTicketDeliveryAttentionThrough(d.ticketAttentionKey(sessionID), time.Now(), deliveredThroughSeq); err != nil {
+		d.logf("nudge attention update %s: %v", sessionID, err)
+	}
+	return delivery, "queued"
 }
 
 func (d *Daemon) enqueueAutomaticTicketNudge(sessionID string, deliveredThroughSeq int64) (delivery agentmailbox.Delivery, eligible bool, err error) {
@@ -369,18 +378,27 @@ func (d *Daemon) handleTriggerNudge(msg *protocol.TriggerNudgeMessage) {
 	if session == nil {
 		return
 	}
+	delivery, queued := d.queueTriggeredNudge(sessionID)
+	if queued {
+		if err := d.deliverAgentMailboxItem(delivery); err != nil {
+			d.logf("trigger_nudge inbox doorbell deferred %s: %v", sessionID, err)
+		}
+	}
+	d.broadcastSessionStateChanged(sessionID)
+}
+
+func (d *Daemon) queueTriggeredNudge(sessionID string) (agentmailbox.Delivery, bool) {
 	d.deliveryMu.Lock()
 	defer d.deliveryMu.Unlock()
 	unread, err := d.ticketUnreadForSession(sessionID)
 	if err != nil || unread == 0 {
 		d.markTicketUnread(sessionID, false)
-		return
+		return agentmailbox.Delivery{}, false
 	}
 	deliveredThroughSeq, scanErr := d.newestUnreadTicketSeq(sessionID)
 	if scanErr != nil {
 		d.logf("trigger_nudge delivered-through scan %s: %v", sessionID, scanErr)
-		d.broadcastSessionStateChanged(sessionID)
-		return
+		return agentmailbox.Delivery{}, false
 	}
 	delivery, _, enqueueErr := d.store.EnqueueMaintenancePromptOnce(
 		fmt.Sprintf("legacy-ticket/%s/%d", sessionID, deliveredThroughSeq),
@@ -392,15 +410,12 @@ func (d *Daemon) handleTriggerNudge(msg *protocol.TriggerNudgeMessage) {
 	)
 	if enqueueErr != nil {
 		d.logf("trigger_nudge mailbox enqueue %s: %v", sessionID, enqueueErr)
-	} else {
-		if err := d.store.SetTicketDeliveryAttentionThrough(d.ticketAttentionKey(sessionID), time.Now(), deliveredThroughSeq); err != nil {
-			d.logf("trigger_nudge attention update %s: %v", sessionID, err)
-		}
-		if err := d.deliverAgentMailboxItem(delivery); err != nil {
-			d.logf("trigger_nudge inbox doorbell deferred %s: %v", sessionID, err)
-		}
+		return agentmailbox.Delivery{}, false
 	}
-	d.broadcastSessionStateChanged(sessionID)
+	if err := d.store.SetTicketDeliveryAttentionThrough(d.ticketAttentionKey(sessionID), time.Now(), deliveredThroughSeq); err != nil {
+		d.logf("trigger_nudge attention update %s: %v", sessionID, err)
+	}
+	return delivery, true
 }
 
 func (d *Daemon) noteUserInput(sessionID, source string, data []byte) bool {
