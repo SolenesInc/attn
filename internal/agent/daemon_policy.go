@@ -135,15 +135,15 @@ func ClassifyWithDriver(d Driver, text, executable, workDir string, timeout time
 }
 
 // ConversationKeeper is implemented by harnesses that prune their own conversations.
-// ConversationFiles returns the selected main transcript first, followed by its auxiliary paths.
+// ConversationFiles maps each ID to its selected main transcript first, followed by auxiliary paths.
 type ConversationKeeper interface {
-	ConversationFiles(resumeID, transcriptPath string) []string
+	ConversationFiles(resumeIDs []string) map[string][]string
 }
 
-func ConversationFiles(d Driver, resumeID, transcriptPath string) ([]string, bool) {
+func ConversationFiles(d Driver, resumeIDs []string) (map[string][]string, bool) {
 	keeper, ok := d.(ConversationKeeper)
 	if !ok {
 		return nil, false
 	}
-	return keeper.ConversationFiles(resumeID, transcriptPath), true
+	return keeper.ConversationFiles(resumeIDs), true
 }

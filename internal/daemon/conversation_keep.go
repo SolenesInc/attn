@@ -131,16 +131,24 @@ func (d *Daemon) keepConversations(now time.Time) {
 	for _, session := range d.store.List("") {
 		live[conversationKey{session.Agent, d.store.GetResumeSessionID(session.ID)}] = true
 	}
+	idsByAgent := make(map[string][]string)
+	for key := range referenced {
+		idsByAgent[key.agent] = append(idsByAgent[key.agent], key.resumeID)
+	}
+	filesByAgent := make(map[string]map[string][]string)
+	for agent, ids := range idsByAgent {
+		if files, keeper := agentdriver.ConversationFiles(agentdriver.Get(agent), ids); keeper {
+			filesByAgent[agent] = files
+		}
+	}
 	changed := make(map[conversationKey]bool)
-	for key, sessions := range referenced {
+	for key := range referenced {
 		kept, exists := d.store.KeptConversation(key.agent, key.resumeID)
 		if exists && kept.DeletedAt.IsZero() && d.store.RetainKeptConversation(key.agent, key.resumeID) {
 			changed[key] = true
 		}
-		driver := agentdriver.Get(key.agent)
-		observed := d.store.GetSessionConversation(sessions[0])
-		files, keeper := agentdriver.ConversationFiles(driver, key.resumeID, observed.TranscriptPath)
-		if !keeper || len(files) == 0 {
+		files := filesByAgent[key.agent][key.resumeID]
+		if len(files) == 0 {
 			continue
 		}
 		best := store.SessionConversation{NativeID: key.resumeID, TranscriptPath: files[0]}

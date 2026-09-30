@@ -403,6 +403,92 @@ func TestOpenWorkKeepsLatestClaudeHistoryFromAnUnassignedSession(t *testing.T) {
 	}
 }
 
+func TestOpenWorkKeepsDistinctClaudeConversationsInOneBatch(t *testing.T) {
+	w := newWorld(t, fakeagent.Claude)
+	app := w.App()
+	type conversation struct {
+		seed, session, workspace, native, original, latest, auxiliary string
+		continued                                                     string
+		mainBytes, auxiliaryBytes                                     []byte
+	}
+	var conversations []conversation
+	for _, marker := range []string{"first", "second"} {
+		delegated := seedResumeDelegate(t, w, fakeagent.Claude, "batch-original-"+marker)
+		first := w.Launched(delegated.SessionID)
+		first.Prompted()
+		first.Reply(marker + " conversation's original history <!-- attn:state=waiting_input -->")
+		conversations = append(conversations, conversation{
+			seed: delegated.SeedID, session: delegated.SessionID, workspace: protocol.Deref(delegated.WorkspaceID),
+			native: first.ConversationID, original: transcript.FindClaudeTranscript(first.ConversationID),
+		})
+	}
+	for _, c := range conversations {
+		closePane(app, seedResumePane(t, w, c.workspace, c.session))
+		testworld.AwaitTaskDone(app, "conversation_keep")
+	}
+	for i := range conversations {
+		c := &conversations[i]
+		spawned, workspace, _ := w.RequestSpawn(app, fakeagent.Claude, w.Path("batch-newer"), func(msg *protocol.SpawnSessionMessage) {
+			msg.ResumeSessionID = protocol.Ptr(c.native)
+		})
+		if !spawned.Success {
+			t.Fatalf("plain resume of %s: %+v", c.native, spawned)
+		}
+		c.continued, c.workspace = spawned.ID, workspace
+		second := w.Launched(spawned.ID)
+		app.TypeLine(spawned.ID, "continue the distinct conversation without tending a seed")
+		second.Prompted()
+		second.Subagent("auxiliary history belongs to " + c.native)
+		second.Reply("newer history belongs only to " + c.native + " <!-- attn:state=waiting_input -->")
+		mains, err := filepath.Glob(filepath.Join(filepath.Dir(filepath.Dir(c.original)), "*", c.native+".jsonl"))
+		if err != nil || len(mains) != 2 {
+			t.Fatalf("main transcripts for %s: %v, %v", c.native, mains, err)
+		}
+		c.latest = mains[0]
+		if c.latest == c.original {
+			c.latest = mains[1]
+		}
+		c.mainBytes, err = os.ReadFile(c.latest)
+		if err != nil {
+			t.Fatal(err)
+		}
+		auxiliary, err := filepath.Glob(filepath.Join(strings.TrimSuffix(c.latest, ".jsonl"), "subagents", "*.jsonl"))
+		if err != nil || len(auxiliary) != 1 {
+			t.Fatalf("auxiliary transcript for %s: %v, %v", c.native, auxiliary, err)
+		}
+		c.auxiliary = auxiliary[0]
+		c.auxiliaryBytes, err = os.ReadFile(c.auxiliary)
+		if err != nil {
+			t.Fatal(err)
+		}
+	}
+	for _, c := range conversations {
+		closePane(app, seedResumePane(t, w, c.workspace, c.continued))
+		testworld.AwaitTaskDone(app, "conversation_keep")
+	}
+	for _, c := range conversations {
+		sessionRecoveryDeleteTranscript(t, c.native)
+		for _, main := range []string{c.original, c.latest} {
+			if err := os.RemoveAll(strings.TrimSuffix(main, ".jsonl")); err != nil {
+				t.Fatal(err)
+			}
+		}
+	}
+	for _, c := range conversations {
+		if result := seedResumeRequest(app, c.seed); !result.Success {
+			t.Fatalf("resume batched conversation %s: %+v", c.native, result)
+		}
+		if resumed := w.Launched(c.session); !resumed.Resumed || resumed.ConversationID != c.native {
+			t.Fatalf("batched resume mixed conversation identity: %+v", resumed)
+		}
+		for restored, want := range map[string][]byte{c.original: c.mainBytes, c.latest: c.mainBytes, c.auxiliary: c.auxiliaryBytes} {
+			if got, err := os.ReadFile(restored); err != nil || string(got) != string(want) {
+				t.Fatalf("batched history for %s lost or mixed at %s: %q, %v", c.native, restored, got, err)
+			}
+		}
+	}
+}
+
 func TestCrossDirectoryClaudeResumeIgnoresLargerSymlinkedTranscripts(t *testing.T) {
 	for _, symlink := range []string{"transcript", "project directory"} {
 		t.Run(symlink, func(t *testing.T) {

@@ -702,7 +702,16 @@ func claudeProjectDir(cwd string) string {
 	return filepath.Join(homeDir, ".claude", "projects", escapedPath)
 }
 
-func (c *Claude) ConversationFiles(resumeID, _ string) []string {
+func (c *Claude) ConversationFiles(resumeIDs []string) map[string][]string {
+	requested := make(map[string]bool)
+	for _, resumeID := range resumeIDs {
+		if id, err := uuid.Parse(resumeID); err == nil && id.String() == resumeID {
+			requested[resumeID] = true
+		}
+	}
+	if len(requested) == 0 {
+		return nil
+	}
 	home, err := toolhome.Dir()
 	if err != nil {
 		return nil
@@ -712,15 +721,51 @@ func (c *Claude) ConversationFiles(resumeID, _ string) []string {
 		return nil
 	}
 	defer inputs.Close()
-	main, relative, err := largestClaudeTranscript(inputs, resumeID)
+	projects, err := fs.ReadDir(inputs, ".claude/projects")
 	if err != nil {
 		return nil
 	}
-	main.Close()
-	directories, err := filepath.Glob(filepath.Join(home, ".claude", "projects", "*", resumeID))
-	if err != nil {
-		return nil
+	files := make(map[string][]string)
+	sizes := make(map[string]int64)
+	auxiliary := make(map[string][]string)
+	for _, project := range projects {
+		if !project.IsDir() {
+			continue
+		}
+		projectPath := ".claude/projects/" + project.Name()
+		entries, err := fs.ReadDir(inputs, projectPath)
+		if err != nil {
+			continue
+		}
+		for _, entry := range entries {
+			relative := projectPath + "/" + entry.Name()
+			if entry.IsDir() && requested[entry.Name()] {
+				auxiliary[entry.Name()] = append(auxiliary[entry.Name()], filepath.Join(home, filepath.FromSlash(relative)))
+				continue
+			}
+			if !strings.HasSuffix(entry.Name(), ".jsonl") {
+				continue
+			}
+			resumeID := strings.TrimSuffix(entry.Name(), ".jsonl")
+			if !requested[resumeID] {
+				continue
+			}
+			main, err := inputs.Open(relative)
+			if err != nil {
+				continue
+			}
+			info, err := main.Stat()
+			main.Close()
+			if err != nil || !info.Mode().IsRegular() || (len(files[resumeID]) != 0 && info.Size() <= sizes[resumeID]) {
+				continue
+			}
+			files[resumeID] = []string{filepath.Join(home, filepath.FromSlash(relative))}
+			sizes[resumeID] = info.Size()
+		}
 	}
-	files := append([]string{filepath.Join(home, filepath.FromSlash(relative))}, directories...)
-	return append(files, filepath.Join(home, ".claude", "file-history", resumeID))
+	for resumeID := range files {
+		files[resumeID] = append(files[resumeID], auxiliary[resumeID]...)
+		files[resumeID] = append(files[resumeID], filepath.Join(home, ".claude", "file-history", resumeID))
+	}
+	return files
 }
