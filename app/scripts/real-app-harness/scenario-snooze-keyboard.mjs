@@ -170,11 +170,23 @@ async function main() {
       await waitDom('.grid-view-stage', { focused: true });
       runner.assert((await client.request('grid_get_state')).zoomedId === runtimeId, 'cancel leaves grid zoom unchanged');
       await driver.typeText('GRID_CANCEL_FOCUS');
+      await client.request('dom_focus', { selector: `[data-testid="queue-snooze-${beta.sessionId}"]` });
+      await driver.pressEnter();
+      await focusedChoice('30m');
+      await driver.pressEnter();
+      await observer.waitFor(() => observer.getSession(beta.sessionId)?.turn_snoozed_until, 'other agent snoozed from grid');
+      await waitDom(`[data-testid="queue-snooze-${beta.sessionId}"]`, { absent: true });
+      await waitDom('.grid-view-stage', { focused: true });
+      runner.assert((await client.request('grid_get_state')).zoomedId === runtimeId, 'non-active row confirmation leaves grid zoom unchanged');
+      await driver.typeText('GRID_CONFIRM_FOCUS');
+      observer.send({ cmd: 'wake_turn', session_id: beta.sessionId });
+      await observer.waitFor(() => !observer.getSession(beta.sessionId)?.turn_snoozed_until, 'other agent woken after grid focus check');
       await driver.pressKey('Escape');
       runner.assert((await client.request('grid_get_state')).zoomedId === null, 'Escape still exits grid zoom once picker is closed');
       await pressShortcutKeys(client, driver, 'view.toggleGrid');
       await waitForPaneInputFocus(client, alpha.sessionId, alpha.paneId);
       await waitForPaneText(client, alpha.sessionId, alpha.paneId, (text) => text.includes('GRID_CANCEL_FOCUS'), 'typing after grid cancel');
+      await waitForPaneText(client, alpha.sessionId, alpha.paneId, (text) => text.includes('GRID_CONFIRM_FOCUS'), 'typing after non-active grid confirmation');
     });
     await runner.step('delegation_hover_cannot_take_picker_focus', async () => {
       await hover(`[data-testid="queue-select-${beta.sessionId}"]`);
