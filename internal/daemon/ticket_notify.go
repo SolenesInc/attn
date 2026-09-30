@@ -160,7 +160,10 @@ func (d *Daemon) notifyTicketSession(sessionID string, now time.Time) {
 
 func (d *Daemon) syncNudgeForState(sessionID, state string) {
 	if !sessionInputPhaseAllows(sessionInputAtTurnBoundary, protocol.SessionState(state)) {
+		// Finish any scheduling that read the previous state before canceling it.
+		d.deliveryMu.Lock()
 		d.cancelNudgeCountdown(sessionID, "waiting for approval")
+		d.deliveryMu.Unlock()
 		return
 	}
 	go d.notifyUnreadTicketSession(sessionID, time.Now())
