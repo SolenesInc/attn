@@ -114,20 +114,22 @@ func (d *Daemon) captureGardenReview() (gardenReviewCapture, error) {
 		checks       []pendingInspection
 		availability map[pluginResumeConversation]pluginResumeAvailability
 	}
-	results := make(chan inspectionResult, len(pending))
+	results := make([]inspectionResult, len(pending))
+	tasks := make([]func(), 0, len(pending))
 	for key, checks := range pending {
 		reg := registrations[key]
-		go func() {
+		index := len(tasks)
+		tasks = append(tasks, func() {
 			conversations := make([]pluginResumeConversation, len(checks))
 			for i, check := range checks {
 				conversations[i] = check.conversation
 			}
-			results <- inspectionResult{checks, d.pluginConversationsResumable(reg, conversations)}
-		}()
+			results[index] = inspectionResult{checks, d.pluginConversationsResumable(reg, conversations)}
+		})
 	}
 	// Resolve independent plugin checks before any candidate observes availability.
-	for range len(pending) {
-		result := <-results
+	runJoined(tasks...)
+	for _, result := range results {
 		for _, check := range result.checks {
 			observations[check.seedIndex].ResumeAvailable = result.availability[check.conversation].Available
 			observation := observations[check.seedIndex]

@@ -92,6 +92,16 @@ func (l *lifetime) Go(name string, fn func()) bool {
 	return true
 }
 
+// runJoined runs children of a shutdown-drained request or job concurrently and joins them before returning.
+// The caller owns them even after lifetime admission ends; no child can outlive that caller.
+func runJoined(tasks ...func()) {
+	var children sync.WaitGroup
+	for _, task := range tasks {
+		children.Go(task)
+	}
+	children.Wait()
+}
+
 // goTransport runs I/O that ends with its peer rather than with the daemon. Stop does not wait for it,
 // so it may touch daemon state only inside life.Hold or life.Do.
 func goTransport(fn func()) {
