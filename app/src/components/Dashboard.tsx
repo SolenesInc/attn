@@ -67,11 +67,34 @@ interface DashboardProps {
   onRefreshPRs?: () => void;
   onOpenPR?: (pr: DaemonPR) => void;
   onOpenSettings: () => void;
+  introBanner?: { onReplay: () => void; onDismiss: () => void };
   queueModeEnabled?: boolean;
   crewQueueEnabled?: boolean;
   followNextTurn?: boolean;
   onToggleFollowNextTurn?: () => void;
   activityStaleMs?: number;
+}
+
+function IntroBanner({ banner }: { banner?: DashboardProps['introBanner'] }) {
+  if (!banner) return null;
+  return (
+    <div className="intro-banner" data-testid="intro-banner">
+      <span className="intro-banner-text">
+        <strong>New in attn:</strong> profiles, desktops, the agent queue and two palettes.
+      </span>
+      <button type="button" className="intro-banner-replay" onClick={banner.onReplay}>
+        Replay the intro
+      </button>
+      <button
+        type="button"
+        className="intro-banner-dismiss"
+        aria-label="Dismiss the intro banner"
+        onClick={banner.onDismiss}
+      >
+        ×
+      </button>
+    </div>
+  );
 }
 
 export function Dashboard({
@@ -89,6 +112,7 @@ export function Dashboard({
   onRefreshPRs,
   onOpenPR,
   onOpenSettings,
+  introBanner,
   queueModeEnabled = false,
   crewQueueEnabled = false,
   followNextTurn = false,
@@ -390,6 +414,8 @@ export function Dashboard({
           </svg>
         </button>
       </header>
+
+      <IntroBanner banner={introBanner} />
 
       {/* Only in queue mode: only there does an agent stop wanting you without
           its state changing. */}

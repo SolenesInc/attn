@@ -2021,15 +2021,14 @@ export function useUiAutomationBridge({
           arrangement: serializeArrangement(),
         };
       case 'dismiss_whats_new': {
-        // A fresh instance's one-time What's New modal sits above the desktop and swallows native
-        // HID clicks. Dismiss it the way a user can: a backdrop click (persists "seen").
+        // A fresh instance's What's New intro swallows native HID clicks. Dismiss it and Home's
+        // replay banner the way a user can (both persist), so scenario screens stay stable.
         const overlay = document.querySelector('.whats-new-overlay');
-        if (overlay instanceof HTMLElement) {
-          clickElement(overlay);
-          await settleUi();
-          return { dismissed: true };
-        }
-        return { dismissed: false };
+        if (overlay instanceof HTMLElement) clickElement(overlay);
+        const banner = document.querySelector('[aria-label="Dismiss the intro banner"]');
+        if (banner instanceof HTMLElement) clickElement(banner);
+        await settleUi();
+        return { dismissed: overlay instanceof HTMLElement };
       }
       case 'markdown_get_annotations_state': {
         return (
