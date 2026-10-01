@@ -46,7 +46,7 @@ func TestGardenProfileMigrationUsesTheConvertedDefaultIdentity(t *testing.T) {
 			if _, err := s.db.Exec(`INSERT INTO `+storedSchema.Table+` (id, body, rev, created_at, updated_at) VALUES (?, ?, 1, ?, ?)`, "s-abc123", string(body), "2026-09-01T00:00:00Z", "2026-09-01T00:00:00Z"); err != nil {
 				t.Fatal(err)
 			}
-			if _, err := s.db.Exec(`DELETE FROM schema_migrations WHERE version = 165`); err != nil {
+			if _, err := s.db.Exec(`DELETE FROM schema_migrations WHERE version >= 165`); err != nil {
 				t.Fatal(err)
 			}
 			if err := s.Close(); err != nil {
