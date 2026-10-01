@@ -175,7 +175,7 @@ func (d *Daemon) normalizeSpawnRequest(req *spawnRequest) *spawnRejection {
 func (d *Daemon) resolveSpawnIntent(req *spawnRequest) (*spawnPlan, *spawnRejection) {
 	msg := req.msg
 	if !req.hasPluginDriver && protocol.Deref(msg.ResumePicker) && req.resumeSessionID != "" &&
-		!agentdriver.ResumeAvailable(req.driver, req.resumeSessionID) {
+		!d.conversationReady(req.driver, req.resumeSessionID) {
 		d.logf("spawn: explicit resume target %s for session %s is not resumable; using resume picker", req.resumeSessionID, msg.ID)
 		req.resumeSessionID = ""
 	}
@@ -184,9 +184,14 @@ func (d *Daemon) resolveSpawnIntent(req *spawnRequest) (*spawnPlan, *spawnReject
 	}
 	if req.existingSession != nil && !req.hasPluginDriver {
 		req.resumeSessionID = agentdriver.ResolveSpawnResumeSessionID(req.driver, req.existingSession.ID, req.resumeSessionID, d.store.GetResumeSessionID(msg.ID))
-		if req.resumeSessionID == msg.ID && !agentdriver.ResumeAvailable(req.driver, req.resumeSessionID) {
+		if req.resumeSessionID == msg.ID && !d.conversationKnown(req.driver, req.resumeSessionID) {
 			d.logf("spawn: self-resume target %s has no transcript yet; fresh-spawning instead", msg.ID)
 			req.resumeSessionID = ""
+		}
+	}
+	if !req.hasPluginDriver && req.resumeSessionID != "" {
+		if !d.conversationReady(req.driver, req.resumeSessionID) {
+			return nil, &spawnRejection{err: fmt.Errorf("conversation %s could not be prepared for resume; check the daemon log", req.resumeSessionID)}
 		}
 	}
 	configuredExecutable := strings.TrimSpace(protocol.Deref(msg.Executable))

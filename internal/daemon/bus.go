@@ -266,7 +266,7 @@ func buildWireProjections() []projection {
 			apply:  func(d *Daemon, ev bus.Event) { d.projectWorkspaceLayoutRepublished(ev.Subject) },
 		},
 		{
-			filter: bus.Filter{"garden.seed.*"},
+			filter: bus.Filter{"garden.seed.*", factConversationKeptChanged},
 			apply:  func(d *Daemon, _ bus.Event) { d.projectGardenSeeds() },
 		},
 		{

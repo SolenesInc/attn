@@ -5,13 +5,15 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"io"
+	"io/fs"
 	"os"
 	"os/exec"
 	"path/filepath"
 	"strconv"
 	"strings"
 	"time"
+
+	"github.com/google/uuid"
 
 	"github.com/victorarias/attn/internal/classifier"
 	"github.com/victorarias/attn/internal/hooks"
@@ -618,40 +620,76 @@ func (c *Claude) ClassifyWithExecutable(text, executable, workDir string, timeou
 }
 
 func copyTranscriptForResume(resumeSessionID, cwd string) error {
-	srcPath := transcript.FindClaudeTranscript(resumeSessionID)
-	if srcPath == "" {
-		return fmt.Errorf("resume transcript not found for session %s", resumeSessionID)
+	home, err := toolhome.Dir()
+	if err != nil {
+		return err
 	}
-
-	destDir := claudeProjectDir(cwd)
-	if destDir == "" {
-		return fmt.Errorf("could not determine Claude project directory")
+	files, err := OpenConversationFiles(home)
+	if err != nil {
+		return err
 	}
-	if err := os.MkdirAll(destDir, 0700); err != nil {
-		return fmt.Errorf("failed to create project directory: %w", err)
+	defer files.Close()
+	best, _, err := largestClaudeTranscript(files, resumeSessionID)
+	if err != nil {
+		return err
 	}
-
-	destPath := filepath.Join(destDir, resumeSessionID+".jsonl")
-	if srcPath == destPath {
+	defer best.Close()
+	dest, err := filepath.Rel(home, filepath.Join(claudeProjectDir(cwd), resumeSessionID+".jsonl"))
+	if err != nil || !filepath.IsLocal(dest) {
+		return fmt.Errorf("invalid Claude project directory: %s", cwd)
+	}
+	dest = filepath.ToSlash(dest)
+	if existing, err := files.Open(dest); err == nil {
+		info, statErr := existing.Stat()
+		existing.Close()
+		if statErr != nil {
+			return statErr
+		}
+		if !info.Mode().IsRegular() {
+			return fmt.Errorf("conversation destination is not a regular file: %s", dest)
+		}
 		return nil
+	} else if !os.IsNotExist(err) {
+		return err
 	}
+	return files.Restore(best, dest, false, time.Now())
+}
 
-	src, err := os.Open(srcPath)
+func largestClaudeTranscript(files *ConversationFileSystem, resumeSessionID string) (fs.File, string, error) {
+	id, err := uuid.Parse(resumeSessionID)
+	if err != nil || id.String() != resumeSessionID {
+		return nil, "", fmt.Errorf("invalid Claude conversation ID: %s", resumeSessionID)
+	}
+	projects, err := fs.ReadDir(files, ".claude/projects")
 	if err != nil {
-		return fmt.Errorf("failed to open source transcript: %w", err)
+		return nil, "", err
 	}
-	defer src.Close()
-
-	dst, err := os.OpenFile(destPath, os.O_WRONLY|os.O_CREATE|os.O_TRUNC, 0600)
-	if err != nil {
-		return fmt.Errorf("failed to create destination transcript: %w", err)
+	var best fs.File
+	var bestPath string
+	var largest int64
+	for _, project := range projects {
+		if !project.IsDir() {
+			continue
+		}
+		path := ".claude/projects/" + project.Name() + "/" + resumeSessionID + ".jsonl"
+		candidate, err := files.Open(path)
+		if err != nil {
+			continue
+		}
+		info, err := candidate.Stat()
+		if err != nil || !info.Mode().IsRegular() || (best != nil && info.Size() <= largest) {
+			candidate.Close()
+			continue
+		}
+		if best != nil {
+			best.Close()
+		}
+		best, bestPath, largest = candidate, path, info.Size()
 	}
-	defer dst.Close()
-
-	if _, err := io.Copy(dst, src); err != nil {
-		return fmt.Errorf("failed to copy transcript: %w", err)
+	if best == nil {
+		return nil, "", fmt.Errorf("resume transcript not found for session %s", resumeSessionID)
 	}
-	return nil
+	return best, bestPath, nil
 }
 
 func claudeProjectDir(cwd string) string {
@@ -662,4 +700,72 @@ func claudeProjectDir(cwd string) string {
 	escapedPath := strings.ReplaceAll(cwd, "/", "-")
 	escapedPath = strings.ReplaceAll(escapedPath, ".", "-")
 	return filepath.Join(homeDir, ".claude", "projects", escapedPath)
+}
+
+func (c *Claude) ConversationFiles(resumeIDs []string) map[string][]string {
+	requested := make(map[string]bool)
+	for _, resumeID := range resumeIDs {
+		if id, err := uuid.Parse(resumeID); err == nil && id.String() == resumeID {
+			requested[resumeID] = true
+		}
+	}
+	if len(requested) == 0 {
+		return nil
+	}
+	home, err := toolhome.Dir()
+	if err != nil {
+		return nil
+	}
+	inputs, err := OpenConversationFiles(home)
+	if err != nil {
+		return nil
+	}
+	defer inputs.Close()
+	projects, err := fs.ReadDir(inputs, ".claude/projects")
+	if err != nil {
+		return nil
+	}
+	files := make(map[string][]string)
+	sizes := make(map[string]int64)
+	auxiliary := make(map[string][]string)
+	for _, project := range projects {
+		if !project.IsDir() {
+			continue
+		}
+		projectPath := ".claude/projects/" + project.Name()
+		entries, err := fs.ReadDir(inputs, projectPath)
+		if err != nil {
+			continue
+		}
+		for _, entry := range entries {
+			relative := projectPath + "/" + entry.Name()
+			if entry.IsDir() && requested[entry.Name()] {
+				auxiliary[entry.Name()] = append(auxiliary[entry.Name()], filepath.Join(home, filepath.FromSlash(relative)))
+				continue
+			}
+			if !strings.HasSuffix(entry.Name(), ".jsonl") {
+				continue
+			}
+			resumeID := strings.TrimSuffix(entry.Name(), ".jsonl")
+			if !requested[resumeID] {
+				continue
+			}
+			main, err := inputs.Open(relative)
+			if err != nil {
+				continue
+			}
+			info, err := main.Stat()
+			main.Close()
+			if err != nil || !info.Mode().IsRegular() || (len(files[resumeID]) != 0 && info.Size() <= sizes[resumeID]) {
+				continue
+			}
+			files[resumeID] = []string{filepath.Join(home, filepath.FromSlash(relative))}
+			sizes[resumeID] = info.Size()
+		}
+	}
+	for resumeID := range files {
+		files[resumeID] = append(files[resumeID], auxiliary[resumeID]...)
+		files[resumeID] = append(files[resumeID], filepath.Join(home, ".claude", "file-history", resumeID))
+	}
+	return files
 }

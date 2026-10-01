@@ -4738,6 +4738,20 @@ type JournalAppendResult struct {
 	RelPath string `json:"rel_path"`
 }
 
+type KeptConversation struct {
+	// Bytes corresponds to the JSON schema field "bytes".
+	Bytes int `json:"bytes"`
+
+	// CopiedAt corresponds to the JSON schema field "copied_at".
+	CopiedAt string `json:"copied_at"`
+
+	// DeleteAfter corresponds to the JSON schema field "delete_after".
+	DeleteAfter *string `json:"delete_after,omitempty,omitzero"`
+
+	// DeletedAt corresponds to the JSON schema field "deleted_at".
+	DeletedAt *string `json:"deleted_at,omitempty,omitzero"`
+}
+
 type KillSessionMessage struct {
 	// Cmd corresponds to the JSON schema field "cmd".
 	Cmd string `json:"cmd"`
@@ -7367,6 +7381,9 @@ type SeedContinuation struct {
 
 	// HostKind corresponds to the JSON schema field "host_kind".
 	HostKind string `json:"host_kind"`
+
+	// KeptConversation corresponds to the JSON schema field "kept_conversation".
+	KeptConversation *KeptConversation `json:"kept_conversation,omitempty,omitzero"`
 
 	// NativeConversationID corresponds to the JSON schema field
 	// "native_conversation_id".

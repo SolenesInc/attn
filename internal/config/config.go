@@ -590,3 +590,7 @@ func PprofAddr() (addr string, enabled bool) {
 	}
 	return "", false
 }
+
+func ConversationsDir() string {
+	return filepath.Join(DataDir(), "conversations")
+}

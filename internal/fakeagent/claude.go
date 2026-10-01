@@ -138,6 +138,11 @@ func (c *claude) begin(term *terminal) error {
 	c.permission = claudePermissionMode(args)
 	c.prompt = strings.Join(args.afterDashes, " ")
 	c.transcript = c.transcriptPath()
+	if c.resumed {
+		if _, err := os.Stat(c.transcript); err != nil {
+			return fmt.Errorf("no conversation found with session ID: %s", c.conversation)
+		}
+	}
 	if c.hooks, err = claudeHooks(args.value("--settings"), c.cwd); err != nil {
 		return err
 	}
@@ -212,6 +217,9 @@ func (c *claude) clear() error {
 	}
 	c.conversation, c.resumed = uuid.NewString(), false
 	c.transcript = c.transcriptPath()
+	if err := c.record("system", nil, map[string]any{"subtype": "local_command", "content": "Conversation cleared"}); err != nil {
+		return err
+	}
 	return c.hooks.run("SessionStart", "clear", c.hookInput("SessionStart", map[string]any{"source": "clear"}))
 }
 

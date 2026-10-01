@@ -4746,6 +4746,13 @@ model SeedHarvestCondition {
   "checked_at"?: string;
 }
 
+model KeptConversation {
+ "bytes": safeint;
+ "copied_at": string;
+ "delete_after"?: string;
+ "deleted_at"?: string;
+}
+
 model SeedContinuation {
   "execution_id": string;
   // execution
@@ -4764,6 +4771,7 @@ model SeedContinuation {
   "directory_state": string;
   "resume_available": boolean;
   "resume_reason"?: string;
+  "kept_conversation"?: KeptConversation;
   // reuse_cwd | recreate_branch | placement_required
   "handover_placement": string;
   "placement_reason"?: string;
