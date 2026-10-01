@@ -7,14 +7,14 @@ import (
 )
 
 func TestConversationPinsAndDeletionActorsSurviveMigrationReplay(t *testing.T) {
-	path := filepath.Join(t.TempDir(), "v159.db")
+	path := filepath.Join(t.TempDir(), "v165.db")
 	db, err := sql.Open("sqlite3", path)
 	if err != nil {
 		t.Fatal(err)
 	}
 	defer db.Close()
 	_, err = db.Exec(`CREATE TABLE schema_migrations (version INTEGER PRIMARY KEY, applied_at TEXT NOT NULL);
- INSERT INTO schema_migrations VALUES (159, '2026-10-01');
+ INSERT INTO schema_migrations VALUES (165, '2026-10-01');
  CREATE TABLE kept_conversations (
  resume_id TEXT NOT NULL, agent TEXT NOT NULL, source_path TEXT NOT NULL,
  bytes INTEGER NOT NULL, stored_bytes INTEGER NOT NULL, copied_at TEXT NOT NULL,
@@ -37,7 +37,7 @@ func TestConversationPinsAndDeletionActorsSurviveMigrationReplay(t *testing.T) {
 	}
 	_, err = db.Exec(`INSERT INTO kept_conversation_pins VALUES ('claude', 'live', 'session-live', '2026-10-01');
  UPDATE kept_conversations SET deleted_by='user' WHERE resume_id='deleted';
- DELETE FROM schema_migrations WHERE version=160;`)
+ DELETE FROM schema_migrations WHERE version=166;`)
 	if err != nil {
 		t.Fatal(err)
 	}

@@ -2200,8 +2200,8 @@ func applyPendingMigrations(db *sql.DB, recorded, currentVersion, through int) e
 				tx.Rollback()
 				return fmt.Errorf("migration %d (%s): %w", m.version, m.desc, err)
 			}
-		} else if m.version == 160 {
-			if err := applyMigration160(tx, m.sql); err != nil {
+		} else if m.version == 166 {
+			if err := applyMigration166(tx, m.sql); err != nil {
 				tx.Rollback()
 				return fmt.Errorf("migration %d (%s): %w", m.version, m.desc, err)
 			}
@@ -4526,7 +4526,7 @@ func applyMigration144(tx *sql.Tx) error {
 	return err
 }
 
-func applyMigration160(tx *sql.Tx, migrationSQL string) error {
+func applyMigration166(tx *sql.Tx, migrationSQL string) error {
 	if _, err := tx.Exec(migrationSQL); err != nil {
 		return err
 	}
