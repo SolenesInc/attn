@@ -1663,7 +1663,7 @@ func (d *Daemon) handlePTYExit(info ptybackend.ExitInfo) bool {
 		return false
 	}
 	if d.codexRuntime().hasRuntime(info.ID) {
-		d.life.Do("codexViewExit", func() { d.codexRuntime().disconnectView(info.ID) })
+		d.life.Do("codexViewExit", func() { d.codexRuntime().disconnectView(info.ID, info.LifecycleID) })
 		return false
 	}
 	if d.sharedCodexOwner(info.ID) {

@@ -34,6 +34,9 @@ func (r *codexRuntime) closeViewLocked(runtimeID string, closed store.SessionClo
 			}
 		}
 		if last {
+			if err := r.d.sessionCloseError(v.SessionID); err != nil {
+				return err
+			}
 			for otherID, other := range r.views {
 				if otherID != runtimeID && other.Resolution == "unresolved" {
 					return fmt.Errorf("cannot archive Codex owner %s while view %s has unresolved identity; close or resolve that view first", v.SessionID, otherID)
@@ -127,6 +130,9 @@ func (d *Daemon) stopCodexTranscriptWatcherAndWait(id string) {
 }
 
 func (r *codexRuntime) closeAddressedOwner(id string, closed store.SessionClose) error {
+	if err := r.d.sessionCloseError(id); err != nil {
+		return err
+	}
 	r.mu.Lock()
 	var runtimeID string
 	for key, v := range r.views {

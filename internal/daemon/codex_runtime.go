@@ -193,12 +193,19 @@ func (r *codexRuntime) recover() error {
 	if err != nil {
 		return err
 	}
-	if len(views) == 0 {
-		return nil
+	owners, err := r.d.store.CodexOwners(r.serverID)
+	if err != nil {
+		return err
 	}
-	owner, err := r.d.store.CodexOwner(views[0].LaunchOwnerID)
-	if err != nil || owner == nil {
-		return fmt.Errorf("recover Codex launch owner: %v", err)
+	var owner *store.CodexOwner
+	for i := range owners {
+		if !owners[i].Archived {
+			owner = &owners[i]
+			break
+		}
+	}
+	if owner == nil {
+		return nil
 	}
 	launch, err := r.ownerContext(owner)
 	if err != nil {

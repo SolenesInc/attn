@@ -433,3 +433,38 @@ func (r *codexRuntime) send(ctx context.Context, id, text string, active bool) e
 	_, err = r.control.Call(ctx, method, params)
 	return err
 }
+
+func (r *codexRuntime) reconfigureOwner(id string) error {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	owner, err := r.d.store.CodexOwner(id)
+	if err != nil {
+		return err
+	}
+	if owner == nil || owner.NativeRootID == "" {
+		return fmt.Errorf("codex owner %s has not initialized", id)
+	}
+	launch, err := r.ownerContext(owner)
+	if err != nil {
+		return err
+	}
+	launch.Guidance.Crew = r.d.crewPrimeForLaunch(id)
+	launch.Guidance.NotebookRoot = ""
+	if r.d.isChiefOfStaffSession(id) {
+		launch.Guidance.NotebookRoot = r.d.store.GetSetting(SettingNotebookRootEffective)
+	}
+	raw, err := json.Marshal(launch)
+	if err != nil {
+		return err
+	}
+	if err := r.d.store.UpdateCodexContext(id, raw); err != nil {
+		return err
+	}
+	if err := r.ensureServer(r.d.life.Context(), launch); err != nil {
+		return err
+	}
+	params := map[string]any{"threadId": owner.NativeRootID}
+	injectCodexOwner(params, id, r.d.socketPath, r.d.wrapperExecutable(), launch)
+	_, err = r.control.Call(r.d.life.Context(), "thread/resume", params)
+	return err
+}

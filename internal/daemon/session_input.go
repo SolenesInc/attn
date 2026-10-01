@@ -653,10 +653,9 @@ func (m *sessionInputModule) try(ctx context.Context, delivery sessionInputDeliv
 		}
 		lane.mu.Lock()
 		lane.placing = false
-		if err != nil {
-			lane.removePending(delivery.id)
-			delete(lane.attempts, key)
-			return sessionInputAttempt{id: delivery.id, stage: sessionInputIndeterminate, route: sessionInputRouteCodex, reason: sessionInputReasonTransport, err: err}
+		if err != nil && attempt.stage != sessionInputTaken {
+			attempt.stage = sessionInputIndeterminate
+			return sessionInputAttempt{id: delivery.id, stage: sessionInputIndeterminate, route: sessionInputRouteCodex, reason: sessionInputReasonTransport, wait: attempt.wait, err: err}
 		}
 		return attemptFromState(delivery.id, attempt)
 	}

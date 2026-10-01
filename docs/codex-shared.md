@@ -52,7 +52,8 @@ cwd, model, effort, permissions, routing environment and Attn instructions.
 Config additions preserve request fields, nested user entries and existing hook
 indices/trust. Hook commands explicitly carry the owner/socket/wrapper env.
 
-Control subscriptions hold hidden roots. Switching away to zero views keeps an
+Owner-addressed reload reapplies native configuration and current role guidance
+through resume, preserving every terminal and draft. Control subscriptions hold hidden roots. Switching away to zero views keeps an
 owner alive. App loss, transport loss and daemon restart do not close owners.
 The native app-server runs in a recoverable PTY worker and survives daemon stop.
 Reconnect restores subscriptions and saved IDs without resending input. Native

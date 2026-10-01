@@ -19,6 +19,15 @@ func (r *codexRuntime) addView(v store.CodexView) error {
 
 func (r *codexRuntime) addViewLocked(v store.CodexView) error {
 	if _, ok := r.servers[v.RuntimeID]; ok {
+		previous := r.views[v.RuntimeID]
+		if previous.Generation != v.Generation {
+			v.Revision = previous.Revision + 1
+			if err := r.d.store.SaveCodexView(v); err != nil {
+				return err
+			}
+			r.views[v.RuntimeID] = v
+			r.projectViewLocked(v)
+		}
 		return nil
 	}
 	if err := r.d.store.SaveCodexView(v); err != nil {
@@ -168,11 +177,11 @@ func (r *codexRuntime) loadViews() error {
 	return nil
 }
 
-func (r *codexRuntime) disconnectView(id string) {
+func (r *codexRuntime) disconnectView(id string, generation ...string) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	v, ok := r.views[id]
-	if !ok {
+	if !ok || (len(generation) > 0 && generation[0] != "" && generation[0] != v.Generation) {
 		return
 	}
 	v.SessionID = ""

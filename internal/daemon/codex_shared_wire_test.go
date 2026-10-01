@@ -351,3 +351,42 @@ func TestSharedCodexClosingAViewThatNeverInitializedCleansItsUnusedReservation(t
 		t.Fatalf("unused failed owner remains: %+v %v", page, err)
 	}
 }
+
+func TestSharedCodexDetachesAnExtraChiefViewButProtectsTheLastView(t *testing.T) {
+	w := newWorld(t, fakeagent.Codex)
+	app := w.App()
+	sharedCodexSetting(t, app, true)
+	spawn, workspaceID, _ := w.RequestSpawn(app, fakeagent.Codex, w.Path("chief"))
+	if !spawn.Success {
+		t.Fatal(protocol.Deref(spawn.Error))
+	}
+	w.Launched(spawn.ID)
+	first := awaitSharedView(app, spawn.ID, spawn.ID)
+	if result := setChiefOfStaff(app, spawn.ID, true); !result.Success {
+		t.Fatal(protocol.Deref(result.Error))
+	}
+	second, err := w.Client().SessionReopen(client.SessionReopenOptions{SessionID: spawn.ID})
+	if err != nil {
+		t.Fatal(err)
+	}
+	attached := testworld.Await(app, protocol.EventWorkspaceLayoutUpdated, func(e protocol.WorkspaceLayoutUpdatedMessage) bool {
+		for _, p := range e.WorkspaceLayout.Panes {
+			if p.PaneID == protocol.Deref(second.PaneID) {
+				return protocol.Deref(p.CodexResolution) == protocol.CodexViewResolutionResolved
+			}
+		}
+		return false
+	})
+	result := workspaceLayoutAction(app, protocol.WorkspaceLayoutClosePaneMessage{Cmd: protocol.CmdWorkspaceLayoutClosePane, WorkspaceID: attached.WorkspaceLayout.WorkspaceID, PaneID: protocol.Deref(second.PaneID)}, protocol.CmdWorkspaceLayoutClosePane, workspaceID)
+	if !result.Success {
+		t.Fatal(protocol.Deref(result.Error))
+	}
+	result = workspaceLayoutAction(app, protocol.WorkspaceLayoutClosePaneMessage{Cmd: protocol.CmdWorkspaceLayoutClosePane, WorkspaceID: workspaceID, PaneID: first.PaneID}, protocol.CmdWorkspaceLayoutClosePane, workspaceID)
+	if result.Success || !strings.Contains(protocol.Deref(result.Error), "chief of staff is protected") {
+		t.Fatalf("last chief view was not protected: %+v", result)
+	}
+	shown, err := w.Client().SessionShow(spawn.ID)
+	if err != nil || shown.Entry.ClosedAt != nil {
+		t.Fatalf("protected chief closed: %+v %v", shown, err)
+	}
+}
