@@ -385,9 +385,9 @@ func (d *Daemon) crewSessionActuallyLive(sessionID string) (bool, error) {
 		return info.Running, nil
 	}
 	if errors.Is(err, pty.ErrSessionNotFound) || errors.Is(err, os.ErrNotExist) {
-		// Bare CLI days register without a daemon launch intent or terminal; their wrapper unregisters on exit.
-		_, managed := d.store.LaunchIntent(sessionID)
-		return !managed, nil
+		// Bare CLI wrappers own their registered days until they unregister; recovered managed days stay unmarked.
+		_, external := d.externalRegistrations.Load(sessionID)
+		return external, nil
 	}
 	return false, err
 }

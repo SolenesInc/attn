@@ -14,6 +14,7 @@ import (
 	"github.com/victorarias/attn/internal/crew"
 	"github.com/victorarias/attn/internal/fakeagent"
 	"github.com/victorarias/attn/internal/protocol"
+	"github.com/victorarias/attn/internal/ptybackend"
 	"github.com/victorarias/attn/internal/testworld"
 )
 
@@ -260,6 +261,64 @@ func TestWakingAMemberWhoseManagedTerminalDisappearedStartsANewDay(t *testing.T)
 		next := wakeCrew(t, cli, "trellis", "")
 		if next.AlreadyAwake || next.SessionID == previous.SessionID || protocol.Deref(next.ReleasedSessionID) != previous.SessionID {
 			t.Fatalf("waking with a missing managed terminal = %+v, want the old day released and a new one started", next)
+		}
+	})
+}
+
+func TestARecoveredManagedDayCannotBecomeExternalByRegisteringAgain(t *testing.T) {
+	inBubbleWithAgents(t, func(t *testing.T, w *world) {
+		w.App()
+		writeCrewCharter(t, w, "trellis")
+		previous := "recovered-day"
+		if err := w.terms.Spawn(context.Background(), ptybackend.SpawnOptions{
+			ID: previous, Agent: "claude", CWD: w.Path("recovered"),
+		}); err != nil {
+			t.Fatal(err)
+		}
+		w.restart()
+		// The initial app snapshot waits for worker recovery to settle.
+		w.App()
+		cli := w.Client()
+		if sessions, err := cli.Query(""); err != nil || len(sessions) != 1 || sessions[0].ID != previous {
+			t.Fatalf("the worker's day was not recovered: %v, %v", sessions, err)
+		}
+		if err := cli.RegisterAsMember(previous, previous, w.Path("recovered"), "", "trellis"); err != nil {
+			t.Fatal(err)
+		}
+		if awake := wakeCrew(t, cli, "trellis", ""); !awake.AlreadyAwake || awake.SessionID != previous {
+			t.Fatalf("the recovered worker was replaced while running: %+v", awake)
+		}
+		if err := w.terms.Remove(context.Background(), previous); err != nil {
+			t.Fatal(err)
+		}
+		next := wakeCrew(t, cli, "trellis", "")
+		if next.AlreadyAwake || next.SessionID == previous || protocol.Deref(next.ReleasedSessionID) != previous {
+			t.Fatalf("waking after the recovered worker disappeared = %+v, want a new day", next)
+		}
+	})
+}
+
+func TestADayTakenOverByAManagedTerminalUsesTerminalLiveness(t *testing.T) {
+	inBubbleWithAgents(t, func(t *testing.T, w *world) {
+		writeCrewCharter(t, w, "trellis")
+		w.restart()
+		app, cli := w.App(), w.Client()
+		previous := "external-day"
+		if err := cli.RegisterAsMember(previous, previous, w.Path(previous), "", "trellis"); err != nil {
+			t.Fatal(err)
+		}
+		w.Spawn(app, fakeagent.Claude, w.Path("managed-day"), func(msg *protocol.SpawnSessionMessage) {
+			msg.ID = previous
+		})
+		if awake := wakeCrew(t, cli, "trellis", ""); !awake.AlreadyAwake || awake.SessionID != previous {
+			t.Fatalf("the managed takeover changed the member's day: %+v", awake)
+		}
+		if err := w.terms.Remove(context.Background(), previous); err != nil {
+			t.Fatal(err)
+		}
+		next := wakeCrew(t, cli, "trellis", "")
+		if next.AlreadyAwake || next.SessionID == previous || protocol.Deref(next.ReleasedSessionID) != previous {
+			t.Fatalf("waking after the managed takeover disappeared = %+v, want a new day", next)
 		}
 	})
 }
