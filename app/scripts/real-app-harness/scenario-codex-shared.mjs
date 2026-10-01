@@ -17,6 +17,12 @@ const panes = new Map();
 let resumeViewer;
 let resumeViewerPane;
 async function type(id, paneId, text) { await client.request('type_pane_via_ui', { sessionId: id, paneId, text }); }
+async function closePane(workspaceId, paneId) {
+  const pending = observer.waitForMessage(event => event.event === 'workspace_layout_action_result' && event.action === 'workspace_layout_close_pane' && event.workspace_id === workspaceId && event.pane_id === paneId ? event : null, 'shared pane close result');
+  observer.send({ cmd: 'workspace_layout_close_pane', workspace_id: workspaceId, pane_id: paneId });
+  const result = await pending;
+  if (!result.success) throw new Error(result.error || 'shared pane close failed');
+}
 async function resolved(runtimeId, ownerId) {
   return observer.waitFor(() => [...observer.layoutsByWorkspaceId.values()].flatMap(layout => layout.panes || []).find(pane => pane.runtime_id === runtimeId && pane.session_id === ownerId && pane.codex_resolution === 'resolved'), `runtime ${runtimeId} displays ${ownerId}`);
 }
@@ -130,7 +136,7 @@ try {
   await runner.step('last_shared_pane_close_clears_the_running_app', async () => {
     const workspaceId = observer.sessionsById.get(resumeViewer).workspace_id;
     const empty = observer.waitForMessage(event => event.event === 'workspace_layout_updated' && event.workspace_layout.workspace_id === workspaceId && event.workspace_layout.panes.length === 0 ? event : null, 'last shared pane clears the layout');
-    await observer.requestResult({ cmd: 'workspace_layout_close_pane', workspace_id: workspaceId, pane_id: resumeViewerPane.pane_id }, 'workspace_layout_action_result');
+    await closePane(workspaceId, resumeViewerPane.pane_id);
     await empty;
     await client.request('select_session', { sessionId: resumeViewer });
     const workspace = await client.request('get_workspace', { sessionId: resumeViewer });
@@ -140,7 +146,7 @@ try {
 } catch (error) { console.error((await runner.finishFailure(error, { owners })).error); process.exitCode = 1; }
 finally {
   for (const layout of observer.layoutsByWorkspaceId.values()) for (const pane of layout.panes || []) {
-    if (pane.codex_resolution) await observer.requestResult({ cmd: 'workspace_layout_close_pane', workspace_id: layout.workspace_id, pane_id: pane.pane_id }, 'workspace_layout_action_result').catch(() => {});
+    if (pane.codex_resolution) await closePane(layout.workspace_id, pane.pane_id).catch(() => {});
   }
   observer.send({ cmd: 'set_setting', key: 'codex_shared_enabled', value: 'false' });
   observer.send({ cmd: 'set_setting', key: 'queue_mode_enabled', value: 'false' });
