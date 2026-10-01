@@ -78,6 +78,7 @@ func (r *codexRuntime) forgetViewLocked(runtimeID string) error {
 	if err := r.d.store.RemoveCodexView(runtimeID); err != nil {
 		return err
 	}
+	crashAt(crashAfterCodexViewRemoved)
 	delete(r.views, runtimeID)
 	delete(r.initialConsumed, runtimeID)
 	return nil
@@ -208,7 +209,14 @@ func (r *codexRuntime) removeLayoutView(runtimeID string) {
 		snapshot.Panes = next
 		if workspacelayout.LayoutEmpty(snapshot.Layout) {
 			r.d.store.RemoveWorkspaceLayout(workspaceID)
-			r.d.unregisterWorkspaceIfEmpty(workspaceID)
+			if !r.d.unregisterWorkspaceIfEmpty(workspaceID) {
+				empty, err := protocolWorkspaceLayout(workspacelayout.NormalizeWorkspaceLayout(*snapshot))
+				if err != nil {
+					r.d.logf("Codex empty layout: %v", err)
+				} else {
+					r.d.broadcastWorkspaceLayoutSnapshotUpdated(empty)
+				}
+			}
 		} else {
 			if err := r.d.store.SaveWorkspaceLayout(*snapshot); err != nil {
 				r.d.logf("Codex remove view layout: %v", err)
@@ -307,10 +315,6 @@ func (r *codexRuntime) attachOwner(id, directory string) (outcome *sessionReopen
 	runtimeID = uuid.NewString()
 	paneID := newWorkspaceLayoutEntityID("pane")
 	v := store.CodexView{RuntimeID: runtimeID, ServerID: owner.ServerID, LaunchOwnerID: id, Generation: codexViewGenerationPrefix + uuid.NewString(), Resolution: "unresolved"}
-	err = r.addViewLocked(v)
-	if err != nil {
-		return nil, err
-	}
 	pane := workspacelayout.Pane{PaneID: paneID, RuntimeID: runtimeID, SessionID: id, Kind: workspacelayout.PaneKindAgent, Title: session.Label, Status: workspacelayout.PaneStatusReady, CodexResolution: "unresolved"}
 	if workspacelayout.LayoutEmpty(snapshot.Layout) {
 		snapshot.Layout = workspacelayout.DefaultLayout(paneID)
@@ -326,6 +330,10 @@ func (r *codexRuntime) attachOwner(id, directory string) (outcome *sessionReopen
 	if err := r.d.store.SaveWorkspaceLayout(*snapshot); err != nil {
 		return nil, err
 	}
+	if err := r.addViewLocked(v); err != nil {
+		return nil, err
+	}
+	crashAt(crashAfterCodexAttachView)
 	driver := agentdriver.MustGet("codex")
 	spawn := agentdriver.SpawnOpts{Executable: driver.ResolveExecutable(launch.Executable), CWD: session.Directory, CodexRemote: "unix://" + r.socket(runtimeID), ResumeSessionID: owner.NativeRootID, TrustWorkingDirectory: launch.TrustWorkingDirectory}
 	spawn.ConfigOverrides = driver.(agentdriver.ConfigOverrideProvider).GenerateConfigOverrides(spawn)

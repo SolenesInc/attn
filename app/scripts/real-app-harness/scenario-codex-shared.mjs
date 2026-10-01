@@ -14,6 +14,8 @@ const client = new UiAutomationClient(options);
 const observer = new DaemonObserver({ wsUrl: options.wsUrl });
 const owners = [];
 const panes = new Map();
+let resumeViewer;
+let resumeViewerPane;
 async function type(id, paneId, text) { await client.request('type_pane_via_ui', { sessionId: id, paneId, text }); }
 async function resolved(runtimeId, ownerId) {
   return observer.waitFor(() => [...observer.layoutsByWorkspaceId.values()].flatMap(layout => layout.panes || []).find(pane => pane.runtime_id === runtimeId && pane.session_id === ownerId && pane.codex_resolution === 'resolved'), `runtime ${runtimeId} displays ${ownerId}`);
@@ -109,6 +111,7 @@ try {
     const { sessionId: viewer } = await client.request('create_session', { cwd, agent: 'codex', label: 'resume-viewer' });
     owners.push(viewer);
     const pane = await resolved(viewer, viewer);
+    resumeViewer = viewer; resumeViewerPane = pane;
     await client.request('set_setting', { key: 'codex_shared_enabled', value: 'false' });
     const source = observer.sessionsById.get(a).workspace_id;
     const removed = observer.waitForMessage(event => event.event === 'workspace_unregistered' && event.workspace.id === source ? event : null, 'original workspace removed');
@@ -123,6 +126,15 @@ try {
     const successor = await observer.waitFor(() => [...observer.layoutsByWorkspaceId.values()].flatMap(layout => layout.panes || []).find(entry => entry.runtime_id === viewer && entry.session_id && !owners.includes(entry.session_id) && entry.codex_resolution === 'resolved'), 'native New after resume');
     owners.push(successor.session_id);
     runner.assert(observer.sessionsById.get(successor.session_id)?.workspace_id === replacement.id, 'native New inherited removed workspace', observer.sessionsById.get(successor.session_id));
+  });
+  await runner.step('last_shared_pane_close_clears_the_running_app', async () => {
+    const workspaceId = observer.sessionsById.get(resumeViewer).workspace_id;
+    const empty = observer.waitForMessage(event => event.event === 'workspace_layout_updated' && event.workspace_layout.workspace_id === workspaceId && event.workspace_layout.panes.length === 0 ? event : null, 'last shared pane clears the layout');
+    await observer.requestResult({ cmd: 'workspace_layout_close_pane', workspace_id: workspaceId, pane_id: resumeViewerPane.pane_id }, 'workspace_layout_action_result');
+    await empty;
+    await client.request('select_session', { sessionId: resumeViewer });
+    const workspace = await client.request('get_workspace', { sessionId: resumeViewer });
+    runner.assert(workspace.panes.length === 0, 'closed shared pane remains in the running app', workspace);
   });
   console.log(JSON.stringify(await runner.finishSuccess({ owners, roots }), null, 2));
 } catch (error) { console.error((await runner.finishFailure(error, { owners })).error); process.exitCode = 1; }

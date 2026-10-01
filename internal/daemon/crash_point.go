@@ -16,6 +16,8 @@ const (
 	crashAfterGardenAdvice          = "garden-advice-received"
 	crashAfterCodexReservation      = "codex-launch-reserved"
 	crashAfterCodexClosePersisted   = "codex-owner-close-persisted"
+	crashAfterCodexAttachView       = "codex-attach-view-persisted"
+	crashAfterCodexViewRemoved      = "codex-view-removed"
 )
 
 func crashAt(point string) {

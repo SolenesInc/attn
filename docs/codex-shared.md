@@ -133,3 +133,9 @@ one transaction. If startup is interrupted, the saved view remains visible and
 closable as disconnected; it does not replay the launch. Reopening into a replacement
 workspace saves that placement for later native New/fork owners. A selected
 unresolved or disconnected view still supplies its workspace for New Session.
+
+Additional attachments also save their pane before their durable view. An
+interrupted attachment stays visible and closable as disconnected. Startup
+layout reconciliation drops Codex panes whose view has already been removed,
+without closing the live owner. Last-pane close publishes an empty layout when
+the workspace remains registered, so the running app clears the pane immediately.

@@ -1233,7 +1233,7 @@ func (d *Daemon) reconcileWorkspaceLayoutsWithPTYBackend(ctx context.Context) {
 				continue
 			}
 			sessionID := strings.TrimSpace(pane.SessionID)
-			if pane.Kind == workspacelayout.PaneKindAgent && sessionID != "" &&
+			if pane.Kind == workspacelayout.PaneKindAgent && pane.CodexResolution == "" && sessionID != "" &&
 				(d.store.Get(sessionID) != nil ||
 					pane.Status == workspacelayout.PaneStatusSpawning ||
 					pane.Status == workspacelayout.PaneStatusFailed) {

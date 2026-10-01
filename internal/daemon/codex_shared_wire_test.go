@@ -1136,3 +1136,111 @@ func TestSharedCodexFailedWorkspaceCloseRemovesAlreadyClosedPanes(t *testing.T) 
 	testworld.Request(app, protocol.UnregisterWorkspaceMessage{Cmd: protocol.CmdUnregisterWorkspace, ID: workspace}, protocol.EventWorkspaceUnregistered, func(e protocol.WorkspaceUnregisteredMessage) bool { return e.Workspace.ID == workspace })
 	awaitClosed(app, b)
 }
+
+func TestSharedCodexInterruptedAttachmentKeepsAClosablePane(t *testing.T) {
+	stack := testworld.NewStack(t, testworld.WithAgents(fakeagent.Codex))
+	stack.Start()
+	app := stack.App()
+	sharedCodexSetting(t, app, true)
+	id := stack.Spawn(app, fakeagent.Codex, stack.Path("attach-crash"))
+	stack.Launched(id)
+	awaitSharedView(app, id, id)
+	stack.Stop()
+	stack.StartCrashingAt("codex-attach-view-persisted")
+	app = stack.App()
+	app.Send(protocol.SessionReopenMessage{Cmd: protocol.CmdSessionReopen, SessionID: id})
+	stack.AwaitCrash()
+	stack.Start()
+	app = stack.App()
+	var interrupted protocol.WorkspaceLayoutPane
+	var workspaceID string
+	for _, workspace := range app.Initial.Workspaces {
+		if workspace.Layout == nil {
+			continue
+		}
+		for _, pane := range workspace.Layout.Panes {
+			if protocol.Deref(pane.RuntimeID) != id && protocol.Deref(pane.CodexResolution) == protocol.CodexViewResolutionDisconnected {
+				interrupted, workspaceID = pane, workspace.ID
+			}
+		}
+	}
+	if interrupted.PaneID == "" {
+		t.Fatal("interrupted attachment has no pane to inspect or close")
+	}
+	result := workspaceLayoutAction(app, protocol.WorkspaceLayoutClosePaneMessage{Cmd: protocol.CmdWorkspaceLayoutClosePane, WorkspaceID: workspaceID, PaneID: interrupted.PaneID}, protocol.CmdWorkspaceLayoutClosePane, workspaceID)
+	if !result.Success {
+		t.Fatal(protocol.Deref(result.Error))
+	}
+	shown, err := stack.Client().SessionShow(id)
+	if err != nil || shown.Entry.ClosedAt != nil {
+		t.Fatalf("closing interrupted attachment closed live owner: %+v %v", shown, err)
+	}
+}
+
+func TestSharedCodexInterruptedExtraViewCloseDoesNotLeaveADeadPane(t *testing.T) {
+	stack := testworld.NewStack(t, testworld.WithAgents(fakeagent.Codex))
+	stack.Start()
+	app := stack.App()
+	sharedCodexSetting(t, app, true)
+	id := stack.Spawn(app, fakeagent.Codex, stack.Path("extra-close-crash"))
+	stack.Launched(id)
+	awaitSharedView(app, id, id)
+	attached, err := stack.Client().SessionReopen(client.SessionReopenOptions{SessionID: id})
+	if err != nil {
+		t.Fatal(err)
+	}
+	var extra protocol.WorkspaceLayoutPane
+	testworld.Await(app, protocol.EventWorkspaceLayoutUpdated, func(e protocol.WorkspaceLayoutUpdatedMessage) bool {
+		for _, pane := range e.WorkspaceLayout.Panes {
+			if pane.PaneID == protocol.Deref(attached.PaneID) && protocol.Deref(pane.CodexResolution) == protocol.CodexViewResolutionResolved {
+				extra = pane
+				return true
+			}
+		}
+		return false
+	})
+	stack.Stop()
+	stack.StartCrashingAt("codex-view-removed")
+	app = stack.App()
+	app.Send(protocol.WorkspaceLayoutClosePaneMessage{Cmd: protocol.CmdWorkspaceLayoutClosePane, WorkspaceID: attached.WorkspaceID, PaneID: extra.PaneID})
+	stack.AwaitCrash()
+	stack.Start()
+	app = stack.App()
+	for _, workspace := range app.Initial.Workspaces {
+		if workspace.Layout != nil && slices.ContainsFunc(workspace.Layout.Panes, func(p protocol.WorkspaceLayoutPane) bool { return p.PaneID == extra.PaneID }) {
+			t.Fatalf("closed extra view retained a dead pane: %+v", workspace.Layout)
+		}
+	}
+	shown, err := stack.Client().SessionShow(id)
+	if err != nil || shown.Entry.ClosedAt != nil {
+		t.Fatalf("extra close closed owner: %+v %v", shown, err)
+	}
+}
+
+func TestSharedCodexLastPaneClosePublishesEmptyLayoutWithHiddenOwner(t *testing.T) {
+	w := newWorld(t, fakeagent.Codex)
+	app := w.App()
+	sharedCodexSetting(t, app, true)
+	a := w.Spawn(app, fakeagent.Codex, w.Path("hidden-after-pane-close"))
+	w.Launched(a)
+	awaitSharedView(app, a, a)
+	b := w.Spawn(app, fakeagent.Codex, w.Path("other-live-view"))
+	agentB := w.Launched(b)
+	awaitSharedView(app, b, b)
+	app.TypeLine(a, "/agents "+agentB.ConversationID)
+	pane := awaitSharedView(app, a, b)
+	workspace := workspaceIDFor(t, w, w.Path("hidden-after-pane-close"))
+	result := workspaceLayoutAction(app, protocol.WorkspaceLayoutClosePaneMessage{Cmd: protocol.CmdWorkspaceLayoutClosePane, WorkspaceID: workspace, PaneID: pane.PaneID}, protocol.CmdWorkspaceLayoutClosePane, workspace)
+	if !result.Success {
+		t.Fatal(protocol.Deref(result.Error))
+	}
+	testworld.Await(app, protocol.EventWorkspaceLayoutUpdated, func(e protocol.WorkspaceLayoutUpdatedMessage) bool {
+		return e.WorkspaceLayout.WorkspaceID == workspace && len(e.WorkspaceLayout.Panes) == 0
+	})
+	for _, id := range []string{a, b} {
+		shown, err := w.Client().SessionShow(id)
+		if err != nil || shown.Entry.ClosedAt != nil {
+			t.Fatalf("pane close closed owner %s: %+v %v", id, shown, err)
+		}
+	}
+}
