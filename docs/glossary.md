@@ -3,7 +3,7 @@
 ## Sessions
 
 - Session: an agent and its terminals, with history that survives restarts.
-- Kept conversation: attn's copy of a local conversation whose harness deletes transcripts, kept while an open seed points at its session and for 14 days after. Resume fills missing main and auxiliary files without replacing harness files; refreshing a copy retains auxiliary files the harness has pruned.
+- Kept conversation: attn's copy of a local conversation whose harness deletes transcripts, kept while an open seed points at its session and for 14 days after. Resume fills missing main and auxiliary files without replacing harness files; refreshing a copy retains auxiliary files the harness has pruned. Retention changes refresh the Garden snapshot without changing a seed's revision, so readers must refresh continuation details on each snapshot.
 - Agent conversation: the provider's chat history. A session can start a new conversation.
 - Run: one prompt and response.
 - Parked run: a finished response whose background work is still running.

@@ -22,6 +22,7 @@ import { Markdown } from './Markdown';
 import { MarkdownReader } from './MarkdownReader';
 import { seedMarkdownSource } from './MarkdownReader/documentSource';
 import { SeedArtifactRows } from './SeedArtifactRows';
+import { SeedContinuationNotes } from './SeedContinuationNotes';
 import { DelegationCheckoutFields } from './DelegationCheckoutFields';
 import type { SeedDocument } from './SeedDocumentView';
 import type { SeedDocumentNote } from './seedArtifacts';
@@ -598,7 +599,7 @@ export function GardenPanel({
   const [query, setQuery] = useState('');
   const [wideIn, setWideIn] = useState<string | null>(null);
   const [walk, setWalk] = useState<{ of: string; index: number }>({ of: '', index: 0 });
-  const [seedDocument, setSeedDocument] = useState<SeedDocument | null>(null);
+  const [seedDocument, setSeedDocument] = useState<{ document: SeedDocument; snapshot: Seed[] } | null>(null);
   const [documentError, setDocumentError] = useState<string | null>(null);
   const [continuationDraft, setContinuationDraft] = useState<ContinuationDraft | null>(null);
   const [titlePinned, setTitlePinned] = useState(false);
@@ -764,7 +765,7 @@ export function GardenPanel({
     setDocumentError(null);
     fetchSeedDocument(hereId)
       .then((document) => {
-        if (!ignore) setSeedDocument(document);
+        if (!ignore) setSeedDocument({ document, snapshot: seeds });
       })
       .catch((error) => {
         if (!ignore) setDocumentError(error instanceof Error ? error.message : `Could not read ${hereId}`);
@@ -909,8 +910,9 @@ export function GardenPanel({
       : hiddenClosed;
   const closedToggle = otherLens || (!closedOn && closedCount === 0) ? null : { count: closedCount, on: closedOn };
 
-  const seedDoc = seedDocument && here && seedDocument.seed.id === here.id ? seedDocument : null;
+  const seedDoc = seedDocument && here && seedDocument.document.seed.id === here.id ? seedDocument.document : null;
   const documentIsCurrent = Boolean(seedDoc && here && seedDoc.seed.rev === here.rev);
+  const continuationNotesAreCurrent = documentIsCurrent && seedDocument?.snapshot === seeds;
   const continuation = seedDoc?.seed.continuation;
   const seedIsOpen = seedDoc ? !isClosed(seedDoc.seed) : false;
   const canResume = Boolean(documentIsCurrent && onResumeSeed && seedIsOpen && continuation?.resume_available);
@@ -1226,6 +1228,7 @@ export function GardenPanel({
           <span>{formatPlantedAt(here.created_at)}</span>
           <span className="garden-head__id">{here.id}</span>
         </div>
+        <SeedContinuationNotes continuation={continuationNotesAreCurrent ? continuation : undefined} resumeOffered={canResume} />
         {/* Only a closed seed has one, so it is an exception by construction —
             and it is the one thing the reader of a closed seed came for. */}
         {here.reason && <p className="garden-head__reason">{here.reason}</p>}
