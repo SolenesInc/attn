@@ -27,11 +27,13 @@ export function EmptyDesktopLauncher({ label, active }: { label: string; active:
   const { hasChiefOfStaff } = useChiefOfStaffContext();
   const rootRef = useRef<HTMLDivElement>(null);
   const [launching, setLaunching] = useState<string | null>(null);
+  // The dialog unmounts after a pick; the inline picker starts over instead.
+  const [pickerGeneration, setPickerGeneration] = useState(0);
 
   useEffect(() => {
     if (!active || launching) return;
     registerInlineLauncher(() => {
-      rootRef.current?.querySelector<HTMLInputElement>('[data-testid="location-picker-path-input"]')?.focus();
+      rootRef.current?.querySelector<HTMLElement>('[data-testid="location-picker-path-input"], [data-testid="repo-options"]')?.focus();
     });
     return () => registerInlineLauncher(null);
   }, [active, launching, registerInlineLauncher]);
@@ -53,11 +55,12 @@ export function EmptyDesktopLauncher({ label, active }: { label: string; active:
         </div>
       ) : (
         <LocationPicker
+          key={pickerGeneration}
           isOpen
           variant="inline"
           active={active}
           title={`New agent on ${label}`}
-          onClose={() => {}}
+          onClose={() => setPickerGeneration((generation) => generation + 1)}
           onSelect={handleSelect}
           onGetRecentLocations={sendGetRecentLocations}
           onBrowseDirectory={sendBrowseDirectory}

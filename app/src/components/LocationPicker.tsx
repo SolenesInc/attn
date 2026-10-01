@@ -951,10 +951,15 @@ export function LocationPicker({
       handleClosePicker();
     }
   }, [mode, handleBack, highlightedItemKey, autoHighlight, handleClosePicker, inline]);
-  const escapeHasWork = !inline || mode === 'repo-options' || Boolean(highlightedItemKey && !autoHighlight);
-  useEscapeStack(handleEscape, isOpen && active && escapeHasWork);
+  // Inline handles Escape only with focus inside it; the global stack would take it from the sidebar.
+  useEscapeStack(handleEscape, isOpen && !inline);
 
   const handleDialogKeyDown = useCallback((e: React.KeyboardEvent<HTMLDivElement>) => {
+    if (inline && e.key === 'Escape') {
+      if (!e.defaultPrevented) handleEscape();
+      e.preventDefault();
+      return;
+    }
     if (e.altKey && !e.metaKey && !e.ctrlKey) {
       if (e.code === 'KeyT') {
         e.preventDefault();
@@ -994,7 +999,9 @@ export function LocationPicker({
     }
   }, [
     handleAgentChange,
+    handleEscape,
     handleTargetChange,
+    inline,
     mode,
     movePathSelection,
     orderedAgentList,
