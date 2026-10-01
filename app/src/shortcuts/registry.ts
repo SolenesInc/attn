@@ -70,7 +70,7 @@ export const MAC_SHORTCUTS = {
   // AppKit consumes ⌘. as `cancelOperation:` before any DOM keydown, so a native menu item
   // in `app_menu` (src-tauri/src/lib.rs) delivers it via `attn:native-shortcut`. The entry
   'session.cancelCountdown': { key: '.', meta: true },
-  'session.toggleSidebar': { key: 'b', meta: true },
+  'session.toggleSidebar': { key: 'b', meta: true, editableTarget: 'native' },
   'session.refreshPRs': { key: 'r', meta: true },
 
   'desktop.select1': { key: '1', code: 'Digit1', meta: true },
