@@ -141,7 +141,7 @@ describe('acting on the queue sidebar row that holds focus', () => {
     origin.focus();
     await gesture(daemon, () => pressShortcut('ui.commandPalette', origin));
     const search = screen.getByRole('combobox');
-    await gesture(daemon, () => fireEvent.change(search, { target: { value: 'Snooze this agent' } }));
+    await gesture(daemon, () => fireEvent.change(search, { target: { value: '>Snooze this agent' } }));
     await gesture(daemon, () => fireEvent.keyDown(search, { key: 'Enter' }));
     expect(screen.getByRole('menu', { name: 'Snooze s2' })).toBeInTheDocument();
     await gesture(daemon, () => fireEvent.keyDown(screen.getByTestId('snooze-choice-30m'), { key: 'Escape' }));

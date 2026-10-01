@@ -98,6 +98,7 @@ export function SnoozeMenu({ sessionLabel, placement, onSnooze, onClose, onResto
         aria-label={`Snooze ${sessionLabel}`}
         data-testid="snooze-menu"
         onKeyDown={(event) => {
+          if (event.metaKey || event.ctrlKey || event.altKey) return;
           if (event.key === 'ArrowDown') {
             event.preventDefault();
             focusChoice((selectedIndex + 1) % SNOOZE_CHOICES.length);
