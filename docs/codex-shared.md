@@ -54,6 +54,7 @@ before its response arrives. Resume reapplies the selected owner's stored
 cwd, model, effort, permissions, routing environment and Attn instructions.
 Config additions preserve request fields, nested user entries and existing hook
 indices/trust. Hook commands explicitly carry the owner/socket/wrapper env.
+Attached and reopened terminals retain the original launch's directory-trust choice.
 
 A rejected initial creation keeps its launch owner and view, so retry uses the
 same owner. Rejected later New/fork creations discard their unused reservation.
@@ -84,7 +85,7 @@ explicit close
   another resolved view of this owner -> remove requested runtime only
   last resolved view -> native thread/archive
     await transcript watcher's final available-record reconciliation
-    finalize ledger and publish closed owner
+    finalize ledger, release native turn state and publish closed owner
   remove requested runtime and view
 ```
 

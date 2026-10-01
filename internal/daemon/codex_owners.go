@@ -48,10 +48,11 @@ func (r *codexRuntime) prepareLaunch(opts *ptybackend.SpawnOptions, session *pro
 	}
 	view := store.CodexView{RuntimeID: opts.ID, ServerID: r.serverID, LaunchOwnerID: session.ID, Generation: codexViewGenerationPrefix + uuid.NewString(), Resolution: "unresolved"}
 	if owner == nil {
-		launch := codexLaunchContext{CWD: opts.CWD, WorkspaceID: session.WorkspaceID, Executable: opts.Executable, Model: opts.Model, Effort: opts.Effort, Yolo: opts.YoloMode, AutoApprove: opts.AutoApprove, Guidance: hooks.Launch{Garden: r.d.requireHome(garden.Surface) == nil, InjectWorkflow: opts.WorkflowGuidanceEnabled, Crew: r.d.crewPrimeForLaunch(session.ID)}}
+		launch := codexLaunchContext{CWD: opts.CWD, WorkspaceID: session.WorkspaceID, Executable: opts.Executable, Model: opts.Model, Effort: opts.Effort, Yolo: opts.YoloMode, AutoApprove: opts.AutoApprove, TrustWorkingDirectory: opts.TrustWorkingDirectory, Guidance: hooks.Launch{Garden: r.d.requireHome(garden.Surface) == nil, InjectWorkflow: opts.WorkflowGuidanceEnabled, Crew: r.d.crewPrimeForLaunch(session.ID)}}
 		if unattended := opts.UnattendedLaunch; !unattended.IsZero() {
 			launch.Model, launch.Effort, launch.Executable = unattended.Model, unattended.Effort, unattended.Executable
 			launch.AutoApprove = unattended.ApprovalDriverMode == "auto_review"
+			launch.TrustWorkingDirectory = true
 		}
 		if r.d.isChiefOfStaffSession(session.ID) {
 			launch.Guidance.NotebookRoot = r.d.store.GetSetting(SettingNotebookRootEffective)
@@ -406,7 +407,9 @@ type codexTurnState struct {
 func (r *codexRuntime) resumeOwner(ctx context.Context, control *codexshared.Client, params map[string]any) (json.RawMessage, error) {
 	root, _ := params["threadId"].(string)
 	r.activeMu.Lock()
-	revision := r.activeTurns[root].Revision
+	state := r.activeTurns[root]
+	r.activeTurns[root] = state
+	revision := state.Revision
 	r.activeMu.Unlock()
 	result, err := control.Call(ctx, "thread/resume", params)
 	if err != nil {
@@ -425,7 +428,7 @@ func (r *codexRuntime) resumeOwner(ctx context.Context, control *codexshared.Cli
 		}
 	}
 	r.activeMu.Lock()
-	state := r.activeTurns[root]
+	state = r.activeTurns[root]
 	// A native notification received during resume is newer than its snapshot.
 	if state.Revision == revision {
 		state.ID = activeID
@@ -451,7 +454,11 @@ func (r *codexRuntime) observeNative(m codexshared.Message) {
 	}
 	if m.Method == "turn/started" || m.Method == "turn/completed" {
 		r.activeMu.Lock()
-		state := r.activeTurns[params.ThreadID]
+		state, known := r.activeTurns[params.ThreadID]
+		if m.Method == "turn/completed" && !known {
+			r.activeMu.Unlock()
+			return
+		}
 		if m.Method == "turn/started" {
 			state.ID = params.Turn.ID
 		} else if state.ID == params.Turn.ID {

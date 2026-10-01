@@ -29,17 +29,18 @@ const codexViewGenerationPrefix = "codex-view:"
 const SettingCodexSharedEnabled = "codex_shared_enabled"
 
 type codexLaunchContext struct {
-	CWD            string
-	WorkspaceID    string
-	Executable     string
-	Model          string
-	Effort         string
-	Yolo           bool
-	AutoApprove    bool
-	ApprovalPolicy json.RawMessage
-	Sandbox        string
-	Reviewer       string
-	Guidance       hooks.Launch
+	CWD                   string
+	WorkspaceID           string
+	Executable            string
+	Model                 string
+	Effort                string
+	Yolo                  bool
+	AutoApprove           bool
+	TrustWorkingDirectory bool
+	ApprovalPolicy        json.RawMessage
+	Sandbox               string
+	Reviewer              string
+	Guidance              hooks.Launch
 }
 
 type codexRuntime struct {

@@ -103,7 +103,7 @@ func (r *codexRuntime) closeOwnerLocked(id string, closed store.SessionClose) er
 	if err := r.archiveOwnerLocked(owner); err != nil {
 		return err
 	}
-	return r.finishOwnerCloseLocked(id, closed)
+	return r.finishOwnerCloseLocked(owner, closed)
 }
 
 func (r *codexRuntime) archiveOwnerLocked(owner *store.CodexOwner) error {
@@ -118,7 +118,8 @@ func (r *codexRuntime) archiveOwnerLocked(owner *store.CodexOwner) error {
 	return err
 }
 
-func (r *codexRuntime) finishOwnerCloseLocked(id string, closed store.SessionClose) error {
+func (r *codexRuntime) finishOwnerCloseLocked(owner *store.CodexOwner, closed store.SessionClose) error {
+	id := owner.SessionID
 	if err := r.d.store.SetCodexArchived(id, true); err != nil {
 		return err
 	}
@@ -126,6 +127,9 @@ func (r *codexRuntime) finishOwnerCloseLocked(id string, closed store.SessionClo
 	session := r.d.store.Get(id)
 	r.d.commitSessionUnregister(id, closed)
 	r.d.dissociateSessionFromWorkspace(id)
+	r.activeMu.Lock()
+	delete(r.activeTurns, owner.NativeRootID)
+	r.activeMu.Unlock()
 	if session != nil {
 		r.d.publishSessionUnregistered(session)
 	}
@@ -304,8 +308,10 @@ func (r *codexRuntime) attachOwner(id string) (outcome *sessionReopenOutcome, re
 	if err := r.d.store.SaveWorkspaceLayout(*snapshot); err != nil {
 		return nil, err
 	}
-	executable := agentdriver.MustGet("codex").ResolveExecutable(launch.Executable)
-	cmd := agentdriver.MustGet("codex").BuildCommand(agentdriver.SpawnOpts{Executable: executable, CWD: session.Directory, CodexRemote: "unix://" + r.socket(runtimeID), ResumeSessionID: owner.NativeRootID})
+	driver := agentdriver.MustGet("codex")
+	spawn := agentdriver.SpawnOpts{Executable: driver.ResolveExecutable(launch.Executable), CWD: session.Directory, CodexRemote: "unix://" + r.socket(runtimeID), ResumeSessionID: owner.NativeRootID, TrustWorkingDirectory: launch.TrustWorkingDirectory}
+	spawn.ConfigOverrides = driver.(agentdriver.ConfigOverrideProvider).GenerateConfigOverrides(spawn)
+	cmd := driver.BuildCommand(spawn)
 	opts := ptybackend.SpawnOptions{ID: runtimeID, CWD: session.Directory, Agent: "codex", Cols: 80, Rows: 24, LifecycleID: v.Generation, ExternalCommand: cmd.Args, LoginShellEnv: r.d.cachedLoginShellEnv(), DaemonEnv: r.d.spawnRoutingEnv()}
 	if err := r.d.ptyBackend.Spawn(r.d.life.Context(), opts); err != nil {
 		return nil, err
@@ -490,5 +496,5 @@ func (r *codexRuntime) closeDeletedOwner(id string) error {
 	if cleanupErr != nil {
 		return cleanupErr
 	}
-	return r.finishOwnerCloseLocked(id, closed)
+	return r.finishOwnerCloseLocked(owner, closed)
 }

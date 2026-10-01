@@ -207,6 +207,13 @@ func (s *sharedFakeCodex) handle(m codexshared.Message) (any, error) {
 			root.archived = false
 			return map[string]any{}, nil
 		}
+		if m.Method == "thread/resume" && len(p.ViewArgv) > 0 && os.Getenv("ATTN_FAKE_CODEX_REPORT_VIEW_LAUNCH") == "1" {
+			report := root.c.launch()
+			report.Role, report.AttnSessionID, report.Argv = roleAgent, root.owner, p.ViewArgv
+			if err := root.a.control.call(context.Background(), methodLaunched, report, nil); err != nil {
+				return nil, err
+			}
+		}
 		return map[string]any{"thread": s.metadata(root)}, nil
 	case "thread/loaded/list":
 		s.mu.Lock()

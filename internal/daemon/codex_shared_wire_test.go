@@ -677,14 +677,17 @@ func TestSharedCodexWorkspaceCloseIncludesMovedOwnerViews(t *testing.T) {
 }
 
 func TestSharedCodexAutomationPreservesTheNativeTrustOverride(t *testing.T) {
-	w := newWorld(t, fakeagent.Codex)
-	app := w.App()
-	sharedCodexSetting(t, app, true)
-	cwd := w.Path("unattended")
-	if err := os.MkdirAll(cwd, 0755); err != nil {
-		t.Fatal(err)
-	}
-	applyAutomation(t, w.Client(), fmt.Sprintf(`api_version: attn.dev/automations/v1alpha1
+	t.Setenv("ATTN_FAKE_CODEX_REPORT_VIEW_LAUNCH", "1")
+	for _, archived := range []bool{false, true} {
+		t.Run(fmt.Sprintf("archived=%t", archived), func(t *testing.T) {
+			w := newWorld(t, fakeagent.Codex)
+			app := w.App()
+			sharedCodexSetting(t, app, true)
+			cwd := w.Path("unattended")
+			if err := os.MkdirAll(cwd, 0755); err != nil {
+				t.Fatal(err)
+			}
+			applyAutomation(t, w.Client(), fmt.Sprintf(`api_version: attn.dev/automations/v1alpha1
 id: shared-check
 name: Shared check
 trigger: {type: manual}
@@ -692,17 +695,33 @@ prompt: Check the build.
 launch: {driver: codex, model: gpt-5.4, effort: high}
 location: {type: directory, path: %q}
 `, cwd))
-	awaitAutomationChanged(app, "shared-check")
-	result := testworld.Request(app, protocol.AutomationRunMessage{Cmd: protocol.CmdAutomationRun, DefinitionID: "shared-check", RequestID: "shared-trust"}, protocol.EventAutomationRunResult, automationAnswer[protocol.AutomationRunResultMessage]("shared-trust"))
-	if !result.Success {
-		t.Fatal(protocol.Deref(result.Error))
-	}
-	id := protocol.Deref(result.Run.SessionID)
-	run := w.Launched(id)
-	directory, _ := flagValue(run.Argv, "-C")
-	trust := fmt.Sprintf(`projects.%s.trust_level="trusted"`, strconv.Quote(directory))
-	if directory == "" || !slices.Contains(run.Argv, trust) || !slices.Contains(run.Argv, "--remote") {
-		t.Fatalf("shared unattended launch dropped trust: %q", run.Argv)
+			awaitAutomationChanged(app, "shared-check")
+			result := testworld.Request(app, protocol.AutomationRunMessage{Cmd: protocol.CmdAutomationRun, DefinitionID: "shared-check", RequestID: "shared-trust"}, protocol.EventAutomationRunResult, automationAnswer[protocol.AutomationRunResultMessage]("shared-trust"))
+			if !result.Success {
+				t.Fatal(protocol.Deref(result.Error))
+			}
+			id := protocol.Deref(result.Run.SessionID)
+			run := w.Launched(id)
+			directory, _ := flagValue(run.Argv, "-C")
+			trust := fmt.Sprintf(`projects.%s.trust_level="trusted"`, strconv.Quote(directory))
+			if directory == "" || !slices.Contains(run.Argv, trust) || !slices.Contains(run.Argv, "--remote") {
+				t.Fatalf("shared unattended launch dropped trust: %q", run.Argv)
+			}
+			awaitSharedView(app, id, id)
+			if archived {
+				if err := w.Client().Unregister(id); err != nil {
+					t.Fatal(err)
+				}
+				awaitClosed(app, id)
+			}
+			if _, err := w.Client().SessionReopen(client.SessionReopenOptions{SessionID: id}); err != nil {
+				t.Fatal(err)
+			}
+			view := w.Launched(id)
+			if !slices.Contains(view.Argv, trust) || !slices.Contains(view.Argv, "--remote") {
+				t.Fatalf("shared attachment (archived=%t) dropped trust: %q", archived, view.Argv)
+			}
+		})
 	}
 }
 
