@@ -120,3 +120,33 @@ func TestStoppingTheDaemonLetsAnAdmittedCloneFinish(t *testing.T) {
 		t.Errorf("ensuring the finished clone after restart = %+v, want success using the existing repo", ensured)
 	}
 }
+
+func TestStoppingTheDaemonLetsAnAdmittedFetchFinish(t *testing.T) {
+	w := newWorld(t)
+	app := w.App()
+	origin := newRepo(t, "origin")
+	checkout := w.Path("checkout")
+	runGit(t, "", "clone", origin, checkout)
+	head := commitFile(t, origin, "change.go", "package change\n")
+	gate := newMaintenanceGitGate(t, "fetch --all --prune")
+	release, err := os.OpenFile(gate.released, os.O_RDWR, 0)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer release.Close()
+	gate.arm(t)
+	app.Send(protocol.FetchRemotesMessage{Cmd: protocol.CmdFetchRemotes, Repo: checkout})
+	gate.awaitBlocked(t)
+	finish := w.beginStop(t)
+	gate.release(t)
+	finish()
+	w.start()
+	if got := strings.TrimSpace(runGit(t, checkout, "rev-parse", "refs/remotes/origin/main")); got != head {
+		t.Errorf("the admitted fetch saved %q, want origin's new head %q", got, head)
+	}
+	fetched := testworld.Request(w.App(), protocol.FetchRemotesMessage{Cmd: protocol.CmdFetchRemotes, Repo: checkout},
+		protocol.EventFetchRemotesResult, func(protocol.WebSocketEvent) bool { return true })
+	if !protocol.Deref(fetched.Success) {
+		t.Errorf("fetching again after restart = %+v, want a usable checkout", fetched)
+	}
+}

@@ -195,7 +195,7 @@ func (d *Daemon) handleGetDefaultBranchWS(client *wsClient, msg *protocol.GetDef
 
 func (d *Daemon) handleFetchRemotesWS(client *wsClient, msg *protocol.FetchRemotesMessage) {
 	d.life.Go("handleFetchRemotesWS", func() {
-		err := d.gitExecution().Run(d.life.Context(), gitTask{Kind: gitTaskBranch, Lane: gitInteractive}, func(ctx context.Context, client *git.Client) error {
+		err := d.gitExecution().Run(context.Background(), gitTask{Kind: gitTaskBranch, Lane: gitInteractive}, func(ctx context.Context, client *git.Client) error {
 			return client.FetchRemotes(ctx, msg.Repo)
 		})
 		result := &protocol.WebSocketEvent{
@@ -242,15 +242,15 @@ func (d *Daemon) handleEnsureRepoWS(client *wsClient, msg *protocol.EnsureRepoMe
 		}
 
 		cloned, err := gitValue(context.Background(), d.gitExecution(), gitTask{Kind: gitTaskBranch, Lane: gitInteractive}, func(ctx context.Context, client *git.Client) (bool, error) {
-			return client.EnsureRepo(ctx, msg.CloneURL, msg.TargetPath)
-		})
-		if err == nil {
-			if fetchErr := d.gitExecution().Run(d.life.Context(), gitTask{Kind: gitTaskBranch, Lane: gitInteractive}, func(ctx context.Context, client *git.Client) error {
-				return client.FetchRemotes(ctx, msg.TargetPath)
-			}); fetchErr != nil {
-				err = fmt.Errorf("repo exists but fetch failed: %w", fetchErr)
+			cloned, runErr := client.EnsureRepo(ctx, msg.CloneURL, msg.TargetPath)
+			if runErr != nil {
+				return false, runErr
 			}
-		}
+			if runErr = client.FetchRemotes(ctx, msg.TargetPath); runErr != nil {
+				return cloned, fmt.Errorf("repo exists but fetch failed: %w", runErr)
+			}
+			return cloned, nil
+		})
 		if err != nil {
 			result.Success = protocol.Ptr(false)
 			result.Error = protocol.Ptr(err.Error())
