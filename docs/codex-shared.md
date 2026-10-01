@@ -32,7 +32,9 @@ distinguishes shared and legacy owners. Old rows remain legacy. The frontend
 reads placement from daemon workspace layouts and metadata from the global
 session lookup; it never rewrites an owner's workspace when its view switches.
 Workspace rows retain each view; the queue counts each owner once and prefers
-its saved workspace when that workspace participates in the queue.
+its saved workspace when that workspace contains a view and participates in the
+queue. Moving the only view leaves owner placement unchanged; the empty source
+workspace does not gain a fallback agent row. Queue navigation follows the view.
 
 ## Lifecycle contracts
 

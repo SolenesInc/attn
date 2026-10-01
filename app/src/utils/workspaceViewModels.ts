@@ -265,6 +265,7 @@ export function filterSessionsRepresentedInWorkspaceLayouts<TSession extends Wor
   }
 
   const sessionIdsByWorkspaceId = new Map<string, Set<string>>();
+  const sharedViewOwnerIds = new Set<string>();
   for (const workspace of workspaces) {
     if (!workspace.layout) {
       continue;
@@ -273,6 +274,7 @@ export function filterSessionsRepresentedInWorkspaceLayouts<TSession extends Wor
     for (const pane of workspace.layout.panes || []) {
       if (pane.session_id) {
         sessionIds.add(pane.session_id);
+        if (pane.codex_resolution) sharedViewOwnerIds.add(pane.session_id);
       }
     }
     sessionIdsByWorkspaceId.set(workspace.id, sessionIds);
@@ -284,7 +286,7 @@ export function filterSessionsRepresentedInWorkspaceLayouts<TSession extends Wor
       return false;
     }
     if (!workspaceIdsWithLayout.has(workspaceId)) {
-      return true;
+      return !sharedViewOwnerIds.has(session.id);
     }
     return sessionIdsByWorkspaceId.get(workspaceId)?.has(session.id) ?? false;
   });

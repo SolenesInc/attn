@@ -131,6 +131,28 @@ describe('App queue', () => {
     expect(treeRows()).toEqual(['shared', 'satellite', 'shared']);
   });
 
+  it('queues a moved shared view in its destination and follows its next turn there', async () => {
+    const owner = agent('moved', { agent: 'codex' });
+    const source = { ...agentWorkspace(owner.id), layout: undefined };
+    const destination = agentWorkspace('destination');
+    destination.layout!.panes[0] = {
+      ...destination.layout!.panes[0], session_id: owner.id, codex_resolution: 'resolved', codex_revision: '1',
+    };
+    const { daemon } = await renderApp({ initialState: { settings: QUEUE, sessions: [owner], workspaces: [source, destination] } });
+
+    expect(bandRows()).toEqual(['queue-settled-moved']);
+    expect(screen.getByTestId('queue-settled-moved')).toHaveAttribute('data-workspace-id', destination.id);
+    await press(daemon, 'Open moved');
+    expect(shownWorkspaces()).toEqual([destination.id]);
+    await gesture(daemon, () => pressShortcut('session.goToDashboard'));
+    await gesture(daemon, () => fireEvent.click(within(screen.getByTestId('follow-next-turn')).getByRole('checkbox')));
+    await daemon.emit({ event: 'session_state_changed', session: { ...owner, turn_owed: true, turn_opened_at: ago(HOUR) } });
+    expect(shownWorkspaces()).toEqual([destination.id]);
+
+    await daemon.emit({ event: 'settings_updated', settings: { queue_mode_enabled: 'false' } });
+    expect(treeRows()).toEqual([owner.id]);
+  });
+
   it('keeps the session menu reachable from every band', async () => {
     await launch();
 

@@ -102,26 +102,7 @@ export function createSessionNavigationActions(
   get: () => SessionStore,
 ): SessionNavigationActions {
   const select = (sessionId: string, paneId?: string) => {
-    set((state) => {
-      const queue = state.navigationQueue;
-      const row = queue && [queue.chief, ...queue.turns, ...queue.settled, ...queue.pinned, ...queue.crew, ...queue.snoozed]
-        .find(entry => entry?.session.id === sessionId);
-      const preferredWorkspaceId = row?.workspaceId ?? state.sessions.find(session => session.id === sessionId)?.workspaceId;
-      const placements = workspaceSessions(state).filter(session => session.workspace.agents.some(pane => paneId ? pane.id === paneId : pane.sessionId === sessionId));
-      const placement = (!paneId && placements.find(session => session.workspaceId === preferredWorkspaceId)) || placements[0];
-      const pane = placement?.workspace.agents.find(pane => paneId ? pane.id === paneId : pane.sessionId === sessionId);
-      if (placement && pane && (pane.codexResolution || placement.workspaceId !== state.sessions.find(session => session.id === sessionId)?.workspaceId)) {
-        return {
-          ...activateSession(state, pane.sessionId || null),
-          view: 'session' as const,
-          selectedWorkspacePane: { workspaceId: placement.workspaceId, paneId: pane.id },
-          workspacePaneSelections: selectWorkspacePane(state.workspacePaneSelections, placement, pane.id),
-          focusRequest: { sessionId: pane.sessionId, paneId: pane.id, workspaceId: placement.workspaceId },
-          utilityFocusRequestToken: state.utilityFocusRequestToken + 1,
-        };
-      }
-      return selectAgent(state, state.sessions, sessionId, paneId);
-    });
+    set((state) => selectAgent(state, state.sessions, sessionId, paneId));
     return get().focusRequest?.sessionId === sessionId;
   };
   return {

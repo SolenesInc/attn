@@ -75,6 +75,22 @@ try {
     await type(a, paneA.pane_id, `/cached ${roots[0]}\r`);
     await resolved(a, a);
   });
+  await runner.step('moved_shared_view_has_no_phantom_source_row', async () => {
+    const source = observer.sessionsById.get(b).workspace_id;
+    const destination = observer.sessionsById.get(a).workspace_id;
+    await observer.requestResult({ cmd: 'workspace_layout_move_leaf_to_workspace', source_workspace_id: source, target_workspace_id: destination, leaf_id: panes.get(b).pane_id, edge: 'right' }, 'workspace_layout_action_result');
+    await observer.waitFor(() => observer.layoutsByWorkspaceId.get(destination)?.panes.some(pane => pane.runtime_id === b), 'moved shared pane');
+    await client.request('set_setting', { key: 'queue_mode_enabled', value: 'true' });
+    await client.request('dom_wait', { selector: '[data-testid="sidebar-queue"]', timeoutMs: observer.connectTimeoutMs });
+    const queue = await client.request('queue_get_state');
+    const rows = [...queue.turns, ...queue.settled].filter(row => row.id === b);
+    runner.assert(rows.length === 1 && rows[0].workspaceId === destination, 'moved owner queues in its empty source workspace', { queue, destination });
+    await client.request('dom_click', { selector: `[data-testid="queue-${queue.turns.some(row => row.id === b) ? 'turn' : 'settled'}-${b}"] .queue-row-select` });
+    await client.request('dom_wait', { selector: `[data-session-terminal-workspace="${destination}"][data-session-visible="1"]`, timeoutMs: observer.connectTimeoutMs });
+    await client.request('set_setting', { key: 'queue_mode_enabled', value: 'false' });
+    const tree = await client.request('queue_get_state');
+    runner.assert(tree.treeSessionIds.filter(id => id === b).length === 1, 'moved owner has a phantom source row', tree);
+  });
   await runner.step('native_new_keeps_shared_mode_after_default_off', async () => {
     observer.send({ cmd: 'set_setting', key: 'codex_shared_enabled', value: 'false' });
     await observer.waitFor(() => observer.getSetting('codex_shared_enabled') === 'false', 'default off');
