@@ -22,6 +22,7 @@ import { Markdown } from './Markdown';
 import { MarkdownReader } from './MarkdownReader';
 import { seedMarkdownSource } from './MarkdownReader/documentSource';
 import { SeedArtifactRows } from './SeedArtifactRows';
+import { SeedContinuationNotes } from './SeedContinuationNotes';
 import { DelegationCheckoutFields } from './DelegationCheckoutFields';
 import type { SeedDocument } from './SeedDocumentView';
 import type { SeedDocumentNote } from './seedArtifacts';
@@ -1226,6 +1227,7 @@ export function GardenPanel({
           <span>{formatPlantedAt(here.created_at)}</span>
           <span className="garden-head__id">{here.id}</span>
         </div>
+        <SeedContinuationNotes continuation={documentIsCurrent ? continuation : undefined} resumeOffered={canResume} />
         {/* Only a closed seed has one, so it is an exception by construction —
             and it is the one thing the reader of a closed seed came for. */}
         {here.reason && <p className="garden-head__reason">{here.reason}</p>}
