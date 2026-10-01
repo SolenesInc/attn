@@ -32,6 +32,8 @@ function expectReads(daemon: Awaited<ReturnType<typeof open>>['daemon'], count =
 describe('App kept conversation in the Garden reader', () => {
   it.each([
     [kept, 'conversation kept by attn (1.6 MB) while an open seed points at it'],
+    [{ ...kept, bytes: 4_200 }, 'conversation kept by attn (4.2 KB) while an open seed points at it'],
+    [{ ...kept, bytes: 42 }, 'conversation kept by attn (42 B) while an open seed points at it'],
     [{ ...kept, delete_after: '2026-10-13T23:30:00Z' }, 'conversation kept by attn (1.6 MB) until 2026-10-13; replant to keep it'],
     [{ ...kept, delete_after: '2026-10-13T23:30:00Z', deleted_at: '2026-10-14T01:00:00Z' }, 'conversation attn deleted its copy on 2026-10-14'],
   ])('renders the daemon’s retention state: %j', async (kept_conversation, line) => {

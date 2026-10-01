@@ -4,7 +4,10 @@ type Continuation = NonNullable<Seed['continuation']>;
 
 function conversationLine(kept: NonNullable<Continuation['kept_conversation']>): string {
   if (kept.deleted_at) return `attn deleted its copy on ${kept.deleted_at.slice(0, 10)}`;
-  const size = `kept by attn (${(kept.bytes / 1e6).toFixed(1)} MB)`;
+  const bytes = kept.bytes;
+  const amount = bytes >= 1e6 ? `${(bytes / 1e6).toFixed(1)} MB`
+    : bytes >= 1e3 ? `${(bytes / 1e3).toFixed(1)} KB` : `${bytes} B`;
+  const size = `kept by attn (${amount})`;
   if (kept.delete_after) return `${size} until ${kept.delete_after.slice(0, 10)}; replant to keep it`;
   return `${size} while an open seed points at it`;
 }
