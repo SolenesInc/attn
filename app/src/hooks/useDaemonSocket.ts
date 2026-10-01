@@ -4675,7 +4675,8 @@ export function useDaemonSocket({
   );
 
   const sendDesktopCreate = useCallback(
-    (profileId: string) => sendProfileCommand('desktop_create', { profile_id: profileId }),
+    (profileId: string, shortcutSlot?: number) =>
+      sendProfileCommand('desktop_create', { profile_id: profileId, shortcut_slot: shortcutSlot }),
     [sendProfileCommand],
   );
 
