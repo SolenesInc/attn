@@ -112,3 +112,9 @@ Explicit native input rejections are reported as failures and release that attem
 for a later explicit submission. Transport loss remains indeterminate; input is
 not automatically replayed. View lifecycle generations identify Codex exits even
 after the view is removed, so closing an extra view emits no owner exit event.
+
+Initial external launch creates its pane before reserving the owner and view in
+one transaction. If startup is interrupted, the saved view remains visible and
+closable as disconnected; it does not replay the launch. Reopening into a replacement
+workspace saves that placement for later native New/fork owners. A selected
+unresolved or disconnected view still supplies its workspace for New Session.

@@ -51,8 +51,9 @@ export function useSessionLaunch({
     sendWorkspaceAddSessionPane,
     sendCreateWorktree,
   } = useDaemonApi();
-  const { closeSession, createSession, takeSessionSpawnArgs } = useSessionStore();
+  const { closeSession, createSession, takeSessionSpawnArgs, selectedWorkspacePane } = useSessionStore();
   const activeLocalSession = sessions.find((session) => session.id === activeSessionId) ?? null;
+  const activeWorkspaceId = selectedWorkspacePane?.workspaceId || activeLocalSession?.workspaceId;
   const agentAvailability = useMemo(() => getAgentAvailability(settings), [settings]);
   const hasAvailableAgents = hasAnyAvailableAgents(agentAvailability);
   const [sessionCreationJob, setSessionCreationJob] = useState<SessionCreationJob | null>(null);
@@ -179,7 +180,7 @@ export function useSessionLaunch({
 
   const handleNewSession = useCallback(
     (direction: TerminalSplitDirection = 'vertical') => {
-      if (!activeLocalSession?.workspaceId) {
+      if (!activeWorkspaceId) {
         handleNewWorkspace();
         return;
       }
@@ -187,7 +188,7 @@ export function useSessionLaunch({
       locationPickerSessionDirection.current = direction;
       setLocationPickerOpen(true);
     },
-    [activeLocalSession?.workspaceId, handleNewWorkspace],
+    [activeWorkspaceId, handleNewWorkspace],
   );
 
   const handleLocationSelect = useCallback(
@@ -233,7 +234,7 @@ export function useSessionLaunch({
             : resolvePreferredAgent(agent, agentAvailability, 'codex');
       }
       const folderName = path.split('/').pop() || 'session';
-      if (locationPickerPurpose === 'session' && activeLocalSession?.workspaceId) {
+      if (locationPickerPurpose === 'session' && activeWorkspaceId) {
         await createSplitSession(selectedAgent, locationPickerSessionDirection.current, undefined, {
           cwd: path,
           endpointId: endpointId ?? null,
@@ -273,7 +274,7 @@ export function useSessionLaunch({
       }
     },
     [
-      activeLocalSession?.workspaceId,
+      activeWorkspaceId,
       agentAvailability,
       createSplitSession,
       createWorkspaceSession,
@@ -330,7 +331,7 @@ export function useSessionLaunch({
               : current,
           );
           const folderName = worktreePath.split('/').pop() || branchName || 'session';
-          if (locationPickerPurpose === 'session' && activeLocalSession?.workspaceId) {
+          if (locationPickerPurpose === 'session' && activeWorkspaceId) {
             await createSplitSession(agent, locationPickerSessionDirection.current, undefined, {
               cwd: worktreePath,
               endpointId: endpointId ?? null,
@@ -377,7 +378,7 @@ export function useSessionLaunch({
       })();
     },
     [
-      activeLocalSession?.workspaceId,
+      activeWorkspaceId,
       createSplitSession,
       createWorkspaceSession,
       locationPickerPurpose,

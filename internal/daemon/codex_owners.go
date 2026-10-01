@@ -37,12 +37,16 @@ func (r *codexRuntime) rollbackLaunch(id string) {
 }
 
 func (r *codexRuntime) prepareLaunch(opts *ptybackend.SpawnOptions, session *protocol.Session) error {
+	if _, err := r.d.ensureWorkspaceSessionPane(session.WorkspaceID, session.ID, session.Label); err != nil {
+		return err
+	}
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	owner, err := r.d.store.CodexOwner(session.ID)
 	if err != nil {
 		return err
 	}
+	view := store.CodexView{RuntimeID: opts.ID, ServerID: r.serverID, LaunchOwnerID: session.ID, Generation: codexViewGenerationPrefix + uuid.NewString(), Resolution: "unresolved"}
 	if owner == nil {
 		launch := codexLaunchContext{CWD: opts.CWD, WorkspaceID: session.WorkspaceID, Executable: opts.Executable, Model: opts.Model, Effort: opts.Effort, Yolo: opts.YoloMode, AutoApprove: opts.AutoApprove, Guidance: hooks.Launch{Garden: r.d.requireHome(garden.Surface) == nil, InjectWorkflow: opts.WorkflowGuidanceEnabled, Crew: r.d.crewPrimeForLaunch(session.ID)}}
 		if unattended := opts.UnattendedLaunch; !unattended.IsZero() {
@@ -57,10 +61,14 @@ func (r *codexRuntime) prepareLaunch(opts *ptybackend.SpawnOptions, session *pro
 			return err
 		}
 		owner = &store.CodexOwner{SessionID: session.ID, ServerID: r.serverID, Context: raw}
-		if err := r.d.store.ReserveCodexOwner(*owner); err != nil {
+		if err := r.d.store.ReserveCodexOwnerAndView(*owner, view); err != nil {
 			return err
 		}
+	} else if err := r.d.store.SaveCodexView(view); err != nil {
+		return err
 	}
+	r.views[view.RuntimeID] = view
+	crashAt(crashAfterCodexReservation)
 	launch, err := r.ownerContext(owner)
 	if err != nil {
 		return err
@@ -76,7 +84,6 @@ func (r *codexRuntime) prepareLaunch(opts *ptybackend.SpawnOptions, session *pro
 			return err
 		}
 	}
-	view := store.CodexView{RuntimeID: opts.ID, ServerID: owner.ServerID, LaunchOwnerID: owner.SessionID, Generation: codexViewGenerationPrefix + uuid.NewString(), Resolution: "unresolved"}
 	if err := r.addViewLocked(view); err != nil {
 		return err
 	}

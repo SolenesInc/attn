@@ -52,6 +52,17 @@ try {
     runner.assert(draft.text.includes('draft about B'), 'attachment lost another view draft', draft);
     await type(a, paneA.pane_id, `\x15/agents ${roots[0]}\r`); await resolved(a, a);
   });
+  await runner.step('new_session_from_an_unresolved_shared_pane', async () => {
+    await type(a, paneA.pane_id, '/title unknown-root\r');
+    await observer.waitFor(() => [...observer.layoutsByWorkspaceId.values()].flatMap(layout => layout.panes || []).some(pane => pane.runtime_id === a && pane.codex_resolution === 'unresolved' && !pane.session_id), 'unresolved selected native view');
+    await client.request('dispatch_shortcut', { shortcutId: 'session.new' });
+    await client.request('dom_wait', { selector: '[data-testid="location-picker-title"]' });
+    const title = await client.request('dom_text', { selector: '[data-testid="location-picker-title"]' });
+    runner.assert(title.text === 'New Session Location', 'unresolved pane opened the wrong location picker', title);
+    await client.request('dom_key', { selector: '[data-testid="location-picker"]', key: 'Escape' });
+    await type(a, paneA.pane_id, `/cached ${roots[0]}\r`);
+    await resolved(a, a);
+  });
   await runner.step('native_new_keeps_shared_mode_after_default_off', async () => {
     observer.send({ cmd: 'set_setting', key: 'codex_shared_enabled', value: 'false' });
     await observer.waitFor(() => observer.getSetting('codex_shared_enabled') === 'false', 'default off');

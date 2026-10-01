@@ -110,8 +110,25 @@ func (s *Store) CodexOwners(serverID string) ([]CodexOwner, error) {
 	return owners, rows.Err()
 }
 
-func (s *Store) SaveCodexView(v CodexView) error {
-	_, err := s.db.Exec(`INSERT INTO codex_views(runtime_id,server_id,launch_owner_id,session_id,raw_title,observed_at,generation,revision,resolution) VALUES(?,?,?,?,?,?,?,?,?) ON CONFLICT(runtime_id) DO UPDATE SET session_id=excluded.session_id,raw_title=excluded.raw_title,observed_at=excluded.observed_at,generation=excluded.generation,revision=excluded.revision,resolution=excluded.resolution`, v.RuntimeID, v.ServerID, v.LaunchOwnerID, v.SessionID, v.RawTitle, v.ObservedAt, v.Generation, v.Revision, v.Resolution)
+func (s *Store) ReserveCodexOwnerAndView(owner CodexOwner, view CodexView) error {
+	tx, err := s.db.Begin()
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback()
+	if _, err := tx.Exec(`INSERT INTO codex_owners(session_id,server_id,context_json) VALUES(?,?,?)`, owner.SessionID, owner.ServerID, string(owner.Context)); err != nil {
+		return err
+	}
+	if err := saveCodexView(tx.Exec, view); err != nil {
+		return err
+	}
+	return tx.Commit()
+}
+
+func (s *Store) SaveCodexView(v CodexView) error { return saveCodexView(s.db.Exec, v) }
+
+func saveCodexView(exec func(string, ...any) (sql.Result, error), v CodexView) error {
+	_, err := exec(`INSERT INTO codex_views(runtime_id,server_id,launch_owner_id,session_id,raw_title,observed_at,generation,revision,resolution) VALUES(?,?,?,?,?,?,?,?,?) ON CONFLICT(runtime_id) DO UPDATE SET session_id=excluded.session_id,raw_title=excluded.raw_title,observed_at=excluded.observed_at,generation=excluded.generation,revision=excluded.revision,resolution=excluded.resolution`, v.RuntimeID, v.ServerID, v.LaunchOwnerID, v.SessionID, v.RawTitle, v.ObservedAt, v.Generation, v.Revision, v.Resolution)
 	return err
 }
 

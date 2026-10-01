@@ -2,6 +2,7 @@ package daemon
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"github.com/google/uuid"
@@ -275,6 +276,7 @@ func (r *codexRuntime) attachOwner(id string) (outcome *sessionReopenOutcome, re
 		workspaceID = reopenWorkspaceID(id)
 		r.d.handleRegisterWorkspace(nil, &protocol.RegisterWorkspaceMessage{Cmd: protocol.CmdRegisterWorkspace, ID: workspaceID, Directory: session.Directory, Title: session.Label})
 	}
+
 	r.d.associateSessionWithWorkspace(id, workspaceID)
 	snapshot, err := r.d.currentOrEmptyWorkspaceLayout(workspaceID)
 	if err != nil {
@@ -307,6 +309,16 @@ func (r *codexRuntime) attachOwner(id string) (outcome *sessionReopenOutcome, re
 	opts := ptybackend.SpawnOptions{ID: runtimeID, CWD: session.Directory, Agent: "codex", Cols: 80, Rows: 24, LifecycleID: v.Generation, ExternalCommand: cmd.Args, LoginShellEnv: r.d.cachedLoginShellEnv(), DaemonEnv: r.d.spawnRoutingEnv()}
 	if err := r.d.ptyBackend.Spawn(r.d.life.Context(), opts); err != nil {
 		return nil, err
+	}
+	if launch.WorkspaceID != workspaceID {
+		launch.WorkspaceID = workspaceID
+		raw, err := json.Marshal(launch)
+		if err != nil {
+			return nil, err
+		}
+		if err := r.d.store.UpdateCodexContext(id, raw); err != nil {
+			return nil, err
+		}
 	}
 	attached = true
 	r.d.broadcastWorkspaceLayoutUpdated(workspaceID)

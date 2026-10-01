@@ -801,3 +801,130 @@ func TestSharedCodexRemovedExtraViewDoesNotEmitSessionExit(t *testing.T) {
 		t.Fatalf("remaining owner: %+v %v", shown, err)
 	}
 }
+
+func TestSharedCodexNewAfterReopenUsesTheReplacementWorkspace(t *testing.T) {
+	w := newWorld(t, fakeagent.Codex)
+	app, cli := w.App(), w.Client()
+	sharedCodexSetting(t, app, true)
+	cwd := w.Path("replaced-workspace")
+	id := w.Spawn(app, fakeagent.Codex, cwd)
+	w.Launched(id)
+	awaitSharedView(app, id, id)
+	original := workspaceIDFor(t, w, cwd)
+	testworld.Request(app, protocol.UnregisterWorkspaceMessage{Cmd: protocol.CmdUnregisterWorkspace, ID: original}, protocol.EventWorkspaceUnregistered, func(e protocol.WorkspaceUnregisteredMessage) bool { return e.Workspace.ID == original })
+	awaitClosed(app, id)
+	reopened, err := cli.SessionReopen(client.SessionReopenOptions{SessionID: id})
+	if err != nil {
+		t.Fatal(err)
+	}
+	var view protocol.WorkspaceLayoutPane
+	testworld.Await(app, protocol.EventWorkspaceLayoutUpdated, func(e protocol.WorkspaceLayoutUpdatedMessage) bool {
+		if e.WorkspaceLayout.WorkspaceID != reopened.WorkspaceID {
+			return false
+		}
+		for _, pane := range e.WorkspaceLayout.Panes {
+			if protocol.Deref(pane.SessionID) == id && protocol.Deref(pane.CodexResolution) == protocol.CodexViewResolutionResolved {
+				view = pane
+				return true
+			}
+		}
+		return false
+	})
+	runtimeID := protocol.Deref(view.RuntimeID)
+	app.TypeLine(runtimeID, "/new")
+	var successor string
+	testworld.Await(app, protocol.EventWorkspaceLayoutUpdated, func(e protocol.WorkspaceLayoutUpdatedMessage) bool {
+		for _, pane := range e.WorkspaceLayout.Panes {
+			if protocol.Deref(pane.RuntimeID) == runtimeID && protocol.Deref(pane.SessionID) != id && protocol.Deref(pane.CodexResolution) == protocol.CodexViewResolutionResolved {
+				successor = protocol.Deref(pane.SessionID)
+				return successor != ""
+			}
+		}
+		return false
+	})
+	w.Launched(successor)
+	session := testworld.AwaitSession(app, successor, func(protocol.Session) bool { return true })
+	if session.WorkspaceID != reopened.WorkspaceID {
+		t.Fatalf("successor workspace %q, wanted replacement %q", session.WorkspaceID, reopened.WorkspaceID)
+	}
+	testworld.Request(app, protocol.UnregisterWorkspaceMessage{Cmd: protocol.CmdUnregisterWorkspace, ID: reopened.WorkspaceID}, protocol.EventWorkspaceUnregistered, func(e protocol.WorkspaceUnregisteredMessage) bool { return e.Workspace.ID == reopened.WorkspaceID })
+	awaitClosed(app, successor)
+}
+
+func TestSharedCodexInterruptedReservationRemainsClosable(t *testing.T) {
+	for _, precreated := range []bool{true, false} {
+		t.Run(fmt.Sprintf("precreated-pane-%t", precreated), func(t *testing.T) {
+			stack := testworld.NewStack(t, testworld.WithAgents(fakeagent.Codex))
+			stack.StartCrashingAt("codex-launch-reserved")
+			app := stack.App()
+			sharedCodexSetting(t, app, true)
+			cwd := stack.Path("interrupted")
+			if err := os.MkdirAll(cwd, 0755); err != nil {
+				t.Fatal(err)
+			}
+			workspace := "workspace-interrupted"
+			id := "interrupted-owner"
+			testworld.Request(app, protocol.RegisterWorkspaceMessage{Cmd: protocol.CmdRegisterWorkspace, ID: workspace, Directory: cwd, Title: "interrupted"}, protocol.EventWorkspaceRegistered, func(e protocol.WebSocketEvent) bool { return e.Workspace != nil && e.Workspace.ID == workspace })
+			if precreated {
+				result := workspaceLayoutAction(app, protocol.WorkspaceLayoutAddSessionPaneMessage{Cmd: protocol.CmdWorkspaceLayoutAddSessionPane, WorkspaceID: workspace, SessionID: id}, protocol.CmdWorkspaceLayoutAddSessionPane, workspace)
+				if !result.Success {
+					t.Fatal(protocol.Deref(result.Error))
+				}
+			}
+			app.Send(protocol.SpawnSessionMessage{Cmd: protocol.CmdSpawnSession, ID: id, Agent: "codex", Cwd: cwd, WorkspaceID: workspace, Cols: 80, Rows: 24})
+			stack.AwaitCrash()
+			stack.Start()
+			app = stack.App()
+			layout := testworld.Request(app, protocol.WorkspaceLayoutGetMessage{Cmd: protocol.CmdWorkspaceLayoutGet, WorkspaceID: workspace}, protocol.EventWorkspaceLayout, func(e protocol.WorkspaceLayoutMessage) bool { return e.WorkspaceLayout.WorkspaceID == workspace })
+			var interrupted protocol.WorkspaceLayoutPane
+			for _, pane := range layout.WorkspaceLayout.Panes {
+				if protocol.Deref(pane.RuntimeID) == id {
+					interrupted = pane
+				}
+			}
+			if interrupted.PaneID == "" || protocol.Deref(interrupted.CodexResolution) != protocol.CodexViewResolutionDisconnected {
+				t.Fatalf("interrupted launch lost its close surface: %+v", layout.WorkspaceLayout.Panes)
+			}
+			result := workspaceLayoutAction(app, protocol.WorkspaceLayoutClosePaneMessage{Cmd: protocol.CmdWorkspaceLayoutClosePane, WorkspaceID: workspace, PaneID: interrupted.PaneID}, protocol.CmdWorkspaceLayoutClosePane, workspace)
+			if !result.Success {
+				t.Fatal(protocol.Deref(result.Error))
+			}
+			if _, err := stack.Client().SessionShow(id); err == nil {
+				t.Fatal("unused reservation remains after close")
+			}
+			fresh := stack.App()
+			id = stack.Spawn(fresh, fakeagent.Codex, cwd, func(m *protocol.SpawnSessionMessage) { m.ID = "interrupted-owner" })
+			stack.Launched(id)
+			awaitSharedView(fresh, id, id)
+		})
+	}
+}
+
+func TestSharedCodexServerStartFailureRemovesItsReservation(t *testing.T) {
+	w := newWorld(t, fakeagent.Codex)
+	app := w.App()
+	sharedCodexSetting(t, app, true)
+	id := "failed-shared-start"
+	cwd := w.Path("server-failure")
+	executable := os.Getenv("ATTN_CODEX_EXECUTABLE")
+	t.Setenv("ATTN_CODEX_EXECUTABLE", "/usr/bin/false")
+	result, workspace, paneID := w.RequestSpawn(app, fakeagent.Codex, cwd, func(m *protocol.SpawnSessionMessage) { m.ID = id })
+	t.Setenv("ATTN_CODEX_EXECUTABLE", executable)
+	if result.Success {
+		t.Fatal("failing server executable launched")
+	}
+	if _, err := w.Client().SessionShow(id); err == nil {
+		t.Fatal("failed owner remains open")
+	}
+	w.restart()
+	app = w.App()
+	layout := testworld.Request(app, protocol.WorkspaceLayoutGetMessage{Cmd: protocol.CmdWorkspaceLayoutGet, WorkspaceID: workspace}, protocol.EventWorkspaceLayout, func(e protocol.WorkspaceLayoutMessage) bool { return e.WorkspaceLayout.WorkspaceID == workspace })
+	for _, pane := range layout.WorkspaceLayout.Panes {
+		if pane.PaneID == paneID && protocol.Deref(pane.CodexResolution) != "" {
+			t.Fatalf("failed launch left a saved shared view: %+v", pane)
+		}
+	}
+	id = w.Spawn(app, fakeagent.Codex, cwd, func(m *protocol.SpawnSessionMessage) { m.ID = "failed-shared-start" })
+	w.Launched(id)
+	awaitSharedView(app, id, id)
+}

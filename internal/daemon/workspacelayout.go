@@ -1222,6 +1222,10 @@ func (d *Daemon) reconcileWorkspaceLayoutsWithPTYBackend(ctx context.Context) {
 		nextPanes := make([]workspacelayout.Pane, 0, len(snapshot.Panes))
 		changed := false
 		for _, pane := range snapshot.Panes {
+			if pane.Kind == workspacelayout.PaneKindAgent && d.codexRuntime().hasRuntime(pane.RuntimeID) {
+				nextPanes = append(nextPanes, pane)
+				continue
+			}
 			sessionID := strings.TrimSpace(pane.SessionID)
 			if pane.Kind == workspacelayout.PaneKindAgent && sessionID != "" &&
 				(d.store.Get(sessionID) != nil ||
