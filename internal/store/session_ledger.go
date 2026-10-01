@@ -289,7 +289,8 @@ func (s *Store) SessionLedger(query SessionLedgerQuery) (SessionLedgerPage, erro
 }
 
 const ledgerSelect = `SELECT id, label, agent, directory, workspace_id, branch, is_worktree, main_repo,
-	repository, state, last_seen, closed_at, closed_by, close_reason`
+	repository, state, last_seen, closed_at, closed_by, close_reason,
+ COALESCE((SELECT pinned_at FROM kept_conversation_pins p WHERE p.agent=sessions.agent AND p.resume_id=sessions.resume_session_id), '')`
 
 const ledgerAt = `CASE WHEN closed_at <> '' THEN closed_at ELSE last_seen END`
 
@@ -604,7 +605,7 @@ func scanLedgerEntry(row ledgerScanner) (protocol.SessionLedgerEntry, error) {
 	var entry protocol.SessionLedgerEntry
 	var isWorktree int
 	var branch, mainRepo, repository, workspaceID sql.NullString
-	var closedAt, closedBy, closeReason string
+	var closedAt, closedBy, closeReason, pinnedAt string
 
 	err := row.Scan(
 		&entry.ID,
@@ -621,9 +622,13 @@ func scanLedgerEntry(row ledgerScanner) (protocol.SessionLedgerEntry, error) {
 		&closedAt,
 		&closedBy,
 		&closeReason,
+		&pinnedAt,
 	)
 	if err != nil {
 		return protocol.SessionLedgerEntry{}, err
+	}
+	if pinnedAt != "" {
+		entry.ConversationPinnedAt = protocol.Ptr(pinnedAt)
 	}
 	if workspaceID.Valid {
 		entry.WorkspaceID = workspaceID.String

@@ -1205,6 +1205,14 @@ CREATE INDEX IF NOT EXISTS idx_automode_denials_recent ON automode_denials(id DE
  PRIMARY KEY (agent, resume_id)
  );
  `},
+	{160, "pin and forget kept conversations", `
+ CREATE TABLE kept_conversation_pins (
+ agent TEXT NOT NULL, resume_id TEXT NOT NULL, session_id TEXT NOT NULL, pinned_at TEXT NOT NULL,
+ PRIMARY KEY (agent, resume_id)
+ );
+ ALTER TABLE kept_conversations ADD COLUMN deleted_by TEXT NOT NULL DEFAULT '';
+ UPDATE kept_conversations SET deleted_by='sweep' WHERE deleted_at!='';
+ `},
 }
 
 const migration99SQL = `
