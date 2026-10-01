@@ -69,6 +69,7 @@ export const scenarioCatalog = [
     runnerId: 'CONVERSATIONS-SURFACE',
     label: 'The Ledger shows kept conversation reasons and supports keep, unkeep and confirmed Forget',
     command: ['pnpm', 'run', 'real-app:scenario-conversations-surface'],
+    freshWorldAfter: true,
   },
   {
     id: 'sessions-surface',

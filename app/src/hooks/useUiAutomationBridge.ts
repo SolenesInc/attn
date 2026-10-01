@@ -1600,7 +1600,7 @@ function requireWorktreePath(payload: Record<string, unknown>): string {
   return path;
 }
 
-const VERB_SEPARATOR = '\u001f';
+const VERB_SEPARATOR = ' · ';
 function ledgerRoot(tab: 'Sessions' | 'Worktrees'): HTMLElement | null {
   const panel = document.querySelector('.ledger-panel');
   if (!(panel instanceof HTMLElement)) return null;
