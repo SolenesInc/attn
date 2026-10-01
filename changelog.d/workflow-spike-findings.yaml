@@ -1,0 +1,3 @@
+kind: changed
+area: delegation
+change: Plans built on spikes now carry what the spikes learned. The attn-workflow planning template gains a Findings section with evidence, design constraints, and ruled-out approaches; spike artifacts alone no longer count as the record. Builders, Orchestrators, and reviewers work from those findings, and `attn seed guide` says a spike is done when its learnings are written into the plan.

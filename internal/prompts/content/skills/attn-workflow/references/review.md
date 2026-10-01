@@ -6,7 +6,7 @@ Assess a change against its intended outcome and return findings that help decid
 
 For a PR, read its description and linked requirements or design context. Establish what the change is intended to do. If important intent is missing, identify the gap and ask a focused question while continuing checks that do not depend on it.
 
-For changes against a plan, read the agreed plan, its decisions, and any recorded amendments. Check that the implementation covers the requirements. Examine departures from the plan and explain their consequences; a departure may be justified by what implementation revealed.
+For changes against a plan, read the agreed plan, its decisions, and any recorded amendments. Check that the implementation covers the requirements. Examine departures from the plan, including its findings, and explain their consequences; a departure may be justified by what implementation revealed.
 
 Identify the revision under review. Read relevant repository guidance and inspect the surrounding code to understand how the changed paths fit the system.
 
