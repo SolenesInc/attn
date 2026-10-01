@@ -101,7 +101,6 @@ export function useSeedTileNavigation({
 function useLiveSeedDocument(seedId: string, gardenSeeds: Seed[], enabled: boolean) {
   const api = useOptionalDaemonApi();
   const sendSeedDocumentGet = api?.sendSeedDocumentGet;
-  const conversationChangeSignal = api?.keptConversationsChangeSignal ?? 0;
   const connectionGeneration = api?.connectionGeneration ?? 0;
   const [document, setDocument] = useState<SeedDocument | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -167,7 +166,7 @@ function useLiveSeedDocument(seedId: string, gardenSeeds: Seed[], enabled: boole
     return () => {
       ignore = true;
     };
-  }, [enabled, gardenSeeds, liveSeed, seedId, sendSeedDocumentGet, conversationChangeSignal, connectionGeneration]);
+  }, [enabled, gardenSeeds, liveSeed, seedId, sendSeedDocumentGet, connectionGeneration]);
 
   return { document: displayedDocument, error };
 }

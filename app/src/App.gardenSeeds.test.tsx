@@ -102,15 +102,19 @@ describe('App garden seeds', () => {
     expect(screen.getByText('1 more entry on the log.')).toBeInTheDocument();
   });
 
-  it('refreshes a shown seed tile on conversation changes and ignores an older detail response', async () => {
+  it('refreshes a shown seed tile once per conversation snapshot and ignores an older detail response', async () => {
     const daemon = await openSeedTile(PLAN, { notes: [note('n-before', { body: 'Before the keep pass' })], notes_total: 1 });
     fireEvent.click(screen.getByText('Log').closest('summary')!);
     daemon.on('seed_document_get', () => undefined);
     await gesture(daemon, () => daemon.emit({ event: 'kept_conversations_changed' }));
+    expect(daemon.sentOf('seed_document_get')).toHaveLength(1);
+    await gesture(daemon, () => daemon.emit({ event: 'garden_seeds_updated', seeds: [PLAN], total: 1 }));
     const older = daemon.sentOf('seed_document_get')[1];
     daemon.on('seed_document_get', () => ({ event: 'seed_document_get_result', success: true,
       document: seedDocument(PLAN, { notes: [note('n-after', { body: 'After the keep pass' })], notes_total: 1 }) }));
     await gesture(daemon, () => daemon.emit({ event: 'kept_conversations_changed' }));
+    expect(daemon.sentOf('seed_document_get')).toHaveLength(2);
+    await gesture(daemon, () => daemon.emit({ event: 'garden_seeds_updated', seeds: [PLAN], total: 1 }));
     await gesture(daemon, () => daemon.replyTo(older, { event: 'seed_document_get_result', success: true,
       document: seedDocument(PLAN, { notes: [note('n-old', { body: 'Superseded detail' })], notes_total: 1 }) }));
     expect(screen.getByText('After the keep pass')).toBeInTheDocument();

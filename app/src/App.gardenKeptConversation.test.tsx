@@ -112,15 +112,17 @@ describe('App kept conversation in the Garden reader', () => {
     expectReads(garden.daemon, 3);
   });
 
-  it('refreshes retention and Resume on conversation changes without a seed revision change', async () => {
+  it('refreshes the kept line once from a conversation fact’s same-revision snapshot', async () => {
     const garden = await open();
-    garden.documents[seed.id] = { seed: { ...seed, continuation: {
-      ...seed.continuation!, resume_available: false, resume_reason: 'You deleted attn’s copy on 2026-10-01',
-      kept_conversation: { ...kept, deleted_at: '2026-10-01T12:00:00Z', deleted_by: 'user' },
-    } } };
+    const releasing = { ...seed, continuation: { ...seed.continuation!,
+      kept_conversation: { ...kept, delete_after: '2026-10-15T12:00:00Z' },
+    } };
+    garden.documents[seed.id] = { seed: releasing };
     await gesture(garden.daemon, () => garden.daemon.emit({ event: 'kept_conversations_changed' }));
-    expect(screen.getByText('conversation you deleted attn’s copy on 2026-10-01')).toBeInTheDocument();
-    expect(screen.queryByRole('button', { name: 'Resume' })).toBeNull();
+    expectReads(garden.daemon, 1);
+    await gesture(garden.daemon, () => garden.push([{ ...releasing, continuation: undefined }]));
+    expect(screen.getByText('conversation kept by attn (1.6 MB) until 2026-10-15; replant to keep it')).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Resume' })).toBeInTheDocument();
     expectReads(garden.daemon, 2);
   });
 
