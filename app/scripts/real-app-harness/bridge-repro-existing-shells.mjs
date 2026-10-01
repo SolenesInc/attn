@@ -47,7 +47,7 @@ async function main() {
   const runDir = path.join(options.artifactsDir || '/tmp/attn-real-app-harness', runId);
   fs.mkdirSync(runDir, { recursive: true });
 
-  const client = new UiAutomationClient({ appPath: options.appPath });
+  const client = new UiAutomationClient(options);
   await client.waitForManifest(5_000);
   await client.waitForReady(5_000);
 

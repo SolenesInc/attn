@@ -67,7 +67,7 @@ async function main() {
   const revisitToken = `__ATTN_OLDER_PANE_REVISIT_${Date.now()}__`;
 
   const observer = new DaemonObserver({ wsUrl: options.wsUrl });
-  const client = new UiAutomationClient({ appPath: options.appPath });
+  const client = new UiAutomationClient(options);
 
   console.log(`[RealAppHarness] runDir=${runDir}`);
   console.log(`[RealAppHarness] sessionDir=${sessionDir}`);

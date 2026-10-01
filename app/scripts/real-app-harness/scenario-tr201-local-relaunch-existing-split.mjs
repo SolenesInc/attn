@@ -95,7 +95,7 @@ async function main() {
       focus: 'relaunch restores an existing split with its content, SGR styling and deep colored scrollback',
     },
   });
-  const client = new UiAutomationClient({ appPath: options.appPath });
+  const client = new UiAutomationClient(options);
   const observer = new DaemonObserver({ wsUrl: options.wsUrl });
 
   let sessionId = null;

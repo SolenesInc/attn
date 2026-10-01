@@ -260,7 +260,7 @@ async function main() {
   const startedAt = Date.now();
   const port = pprofPort();
   const { runId, runDir, sessionDir } = createRunContext(options, 'perf-baseline');
-  const client = new UiAutomationClient({ appPath: options.appPath });
+  const client = new UiAutomationClient(options);
   const observer = new DaemonObserver({ wsUrl: options.wsUrl });
   const isPerfBaselineLabel = (session) => typeof session.label === 'string' && session.label.startsWith('perf-baseline-');
   const sessionIds = [];

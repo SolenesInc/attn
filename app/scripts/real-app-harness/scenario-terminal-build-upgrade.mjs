@@ -98,7 +98,7 @@ async function main() {
     },
   });
 
-  const client = new UiAutomationClient({ appPath: options.appPath });
+  const client = new UiAutomationClient(options);
   let observer = new DaemonObserver({ wsUrl: options.wsUrl });
 
   runner.log(`[RealAppHarness] instance=${instance} dataDir=${dataDir} wsUrl=${options.wsUrl}`);

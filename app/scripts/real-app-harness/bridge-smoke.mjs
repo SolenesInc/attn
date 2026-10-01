@@ -22,7 +22,7 @@ async function main() {
   const tripwire = armAgentTripwire({ scenarioId: 'bridge-smoke', runDir, allowRealAgents: true });
   ensureDaemonCarriesTripwire({ marker: tripwire.marker, appPath: options.appPath });
 
-  const client = new UiAutomationClient({ appPath: options.appPath });
+  const client = new UiAutomationClient(options);
   const observer = new DaemonObserver({ wsUrl: options.wsUrl });
 
   console.log(`[RealAppHarness] runDir=${runDir}`);

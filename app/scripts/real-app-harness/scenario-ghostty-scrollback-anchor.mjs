@@ -47,7 +47,7 @@ async function main() {
       focus: 'manual scroll position remains anchored while shell output streams',
     },
   });
-  const client = new UiAutomationClient({ appPath: options.appPath });
+  const client = new UiAutomationClient(options);
   const observer = new DaemonObserver({ wsUrl: options.wsUrl });
   const seedAnchor = `SCROLL_HEAD_${Date.now()}`;
   const seedEnd = `SCROLL_SEED_END_${Date.now()}`;

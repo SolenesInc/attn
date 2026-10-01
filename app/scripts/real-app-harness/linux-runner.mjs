@@ -138,7 +138,8 @@ Examples:
   if (options.action === 'artifacts') return collect(provider, root, destination);
   let testError;
   try {
-    execute(['xvfb-run', '-a', '-s', '-screen 0 1600x1000x24', 'pnpm', '--dir', 'app', 'run', 'real-app:serial-matrix', ...(options.commandArgs || [])]);
+    // Window probes must not reset Xvfb while GTK connects during app startup.
+    execute(['xvfb-run', '-a', '-s', '-noreset -screen 0 1600x1000x24', 'pnpm', '--dir', 'app', 'run', 'real-app:serial-matrix', ...(options.commandArgs || [])]);
   } catch (error) { testError = error; }
   try { collect(provider, root, destination); }
   catch (error) { if (!testError) throw error; console.error(`Artifact collection failed: ${error.message}`); }

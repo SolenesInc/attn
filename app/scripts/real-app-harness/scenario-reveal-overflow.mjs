@@ -159,7 +159,7 @@ async function main() {
   }
 
   const { runId, runDir, sessionDir } = createRunContext(options, 'reveal-overflow');
-  const client = new UiAutomationClient({ appPath: options.appPath });
+  const client = new UiAutomationClient(options);
   const observer = new DaemonObserver({ wsUrl: options.wsUrl });
 
   console.log(`[RealAppHarness] runDir=${runDir}`);

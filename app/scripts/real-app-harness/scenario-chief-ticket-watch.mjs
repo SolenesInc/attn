@@ -213,7 +213,7 @@ async function main() {
   if (agent === 'claude') preTrustClaudeFolder(repoDir);
 
   const ensureReady = agent === 'claude' ? ensureClaudePromptReadyViaPty : ensureCodexPromptReadyViaPty;
-  const client = new UiAutomationClient({ appPath: options.appPath });
+  const client = new UiAutomationClient(options);
   const observer = new DaemonObserver({ wsUrl: options.wsUrl });
   let chiefId = null;
   let workerId = null;

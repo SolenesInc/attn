@@ -324,7 +324,7 @@ async function main() {
     metadata: { instance, excludes: 'A3 retention (time-based policy, unit-tested only)' },
   });
 
-  const client = new UiAutomationClient({ appPath: options.appPath });
+  const client = new UiAutomationClient(options);
   const observer = new DaemonObserver({ wsUrl: options.wsUrl });
 
   const suffix = Date.now().toString(36);

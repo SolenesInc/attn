@@ -52,7 +52,7 @@ async function main() {
       focus: 'utility focus survives session switch',
     },
   });
-  const client = new UiAutomationClient({ appPath: options.appPath });
+  const client = new UiAutomationClient(options);
   const observer = new DaemonObserver({ wsUrl: options.wsUrl });
 
   const returnUtilityToken = `__TR301_RETURN_${Date.now()}__`;

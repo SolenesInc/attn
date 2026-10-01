@@ -1,6 +1,8 @@
 import fs from 'node:fs';
 import net from 'node:net';
 import path from 'node:path';
+import os from 'node:os';
+import { randomUUID } from 'node:crypto';
 import { execFile } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 import { promisify } from 'node:util';
@@ -101,9 +103,9 @@ export class UiAutomationClient {
     appPath = defaultAppPathForInstance(),
     manifestPath = null,
     launchEnv = null,
-    backgroundLaunch = false,
     bundleId = null,
     platform = appPlatform,
+    artifactsDir = process.env.ATTN_REAL_APP_ARTIFACTS_DIR || path.join(os.tmpdir(), 'attn-real-app-harness'),
   } = {}) {
     const appInstance = instanceForAppPath(appPath);
     const resolvedBundleId = bundleId || bundleIdentifierForAppPath(appPath);
@@ -111,9 +113,9 @@ export class UiAutomationClient {
     this.appPath = appPath;
     this.manifestPath = manifestPath || manifestPathForInstance(appInstance);
     this.launchEnv = launchEnv;
-    this.backgroundLaunch = backgroundLaunch;
     this.bundleId = resolvedBundleId;
     this.platform = platform;
+    this.artifactsDir = artifactsDir;
     this.launch = null;
     this.currentSourceIdentityPromise = null;
     this.verifiedBuildIdentityKey = null;
@@ -123,7 +125,6 @@ export class UiAutomationClient {
     // Always-on-top keeps WKWebView rAF/ResizeObserver unthrottled on a window that
     // never takes focus; focus probes set ATTN_HARNESS_ALWAYS_ON_TOP=0 to opt out.
     const alwaysOnTop = process.env.ATTN_HARNESS_ALWAYS_ON_TOP !== '0';
-    // `open` drops env, so naming these forces the spawn-style launch.
     const harnessDaemonEnv = { ...agentTripwireLaunchEnv(), ...mockGitHubLaunchEnv() };
     // Park the attn window off-screen by default so scenarios don't cover the
     // caller's work. Opt out with ATTN_HARNESS_PARK_VISIBLE_PX=0.
@@ -139,17 +140,17 @@ export class UiAutomationClient {
       : { ...harnessDaemonEnv, ...this.launchEnv };
 
     const focusDriver = this.#focusDriver();
+    fs.mkdirSync(this.artifactsDir, { recursive: true });
+    const logPath = path.resolve(this.artifactsDir, `app-launch-${randomUUID()}.log`);
     const launched = await this.platform.launchApp({
       appPath: this.appPath,
       env: effectiveLaunchEnv,
-      background: this.backgroundLaunch,
+      logPath,
     });
     this.launch = launched;
-    if (!launched.spawned) {
-      return;
-    }
 
     await focusDriver.waitForMainWindow(10_000, 150, { pid: launched.pid }).catch(() => null);
+    this.#assertAppRunning();
     const parkPx = alwaysOnTop ? Number.parseInt(parkPxStr || '', 10) : 0;
     await this.platform.placeWindow(focusDriver, { parkPx, pid: launched.pid }).catch((error) => {
       console.warn(`[RealAppHarness] Window placement failed: ${error?.message || error}`);
@@ -238,8 +239,10 @@ export class UiAutomationClient {
   async waitForManifest(timeoutMs = 15_000) {
     const startedAt = Date.now();
     let lastError = null;
+    const appExited = this.launch?.exited;
 
     while (Date.now() - startedAt < timeoutMs) {
+      this.#assertAppRunning();
       try {
         const manifest = this.readManifest();
         if (manifest?.enabled && manifest.port && manifest.token && processExists(manifest.pid)) {
@@ -248,12 +251,30 @@ export class UiAutomationClient {
       } catch (error) {
         lastError = error;
       }
-      await delay(200);
+      if (appExited) {
+        const exit = await Promise.race([delay(200), appExited]);
+        if (exit) throw this.#appExitError(exit);
+      } else {
+        await delay(200);
+      }
     }
 
     throw new Error(
       `Timed out waiting for UI automation manifest after ${timeoutMs}ms at ${this.manifestPath}: ${lastError instanceof Error ? lastError.message : lastError || 'manifest unavailable'}`
     );
+  }
+
+  #appExitError({ code, signal, error = null }) {
+    return new Error(
+      `Packaged app exited before UI automation became ready: exit code=${code}, signal=${signal}, log=${this.launch.logPath}${error ? `: ${error.message}` : ''}`
+    );
+  }
+
+  #assertAppRunning() {
+    const child = this.launch?.child;
+    if (child && (child.exitCode !== null || child.signalCode !== null)) {
+      throw this.#appExitError({ code: child.exitCode, signal: child.signalCode });
+    }
   }
 
   readManifest() {

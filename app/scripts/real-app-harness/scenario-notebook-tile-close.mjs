@@ -99,7 +99,7 @@ async function main() {
   }
 
   const { runId, runDir, sessionDir } = createRunContext(options, 'notebook-tile-close');
-  const client = new UiAutomationClient({ appPath: options.appPath });
+  const client = new UiAutomationClient(options);
   const observer = new DaemonObserver({ wsUrl: options.wsUrl });
   const driver = createWindowDriver({ appPath: options.appPath, client });
   let sessionId = null;

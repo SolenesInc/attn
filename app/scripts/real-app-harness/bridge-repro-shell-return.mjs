@@ -111,7 +111,7 @@ async function main() {
   const secondToken = `__ATTN_BRIDGE_SHELL_TWO_${Date.now()}__`;
   const revisitToken = `__ATTN_BRIDGE_SHELL_REVISIT_${Date.now()}__`;
 
-  const client = new UiAutomationClient({ appPath: options.appPath });
+  const client = new UiAutomationClient(options);
   const observer = new DaemonObserver({ wsUrl: options.wsUrl });
 
   console.log(`[RealAppHarness] runDir=${runDir}`);

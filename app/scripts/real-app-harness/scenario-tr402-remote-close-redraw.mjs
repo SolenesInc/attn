@@ -102,7 +102,7 @@ async function main() {
   const remotePaths = buildRemoteHarnessPaths(remoteHome, runner.runId);
   const remoteHarnessWSPort = String(chooseRemoteWSPort());
   const client = new UiAutomationClient({
-    appPath: options.appPath,
+    ...options,
     launchEnv: {
       ATTN_REMOTE_ATTN_BIN: remotePaths.remoteHarnessBinary,
       ATTN_REMOTE_SOCKET_PATH: remotePaths.remoteHarnessSocket,

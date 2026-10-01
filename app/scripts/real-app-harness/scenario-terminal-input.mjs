@@ -206,7 +206,7 @@ async function main() {
       focus: 'background browser keyboard, diagnostic report, shortcut, IME, Kitty, and zoomed-grid input through libghostty',
     },
   });
-  const client = new UiAutomationClient({ appPath: options.appPath, backgroundLaunch: true });
+  const client = new UiAutomationClient(options);
   const observer = new DaemonObserver({ wsUrl: options.wsUrl });
   const captureScript = path.join(runner.sessionDir, 'capture-terminal-input.cjs');
   const terminalSelector = '.terminal-wrapper.active .terminal-container';

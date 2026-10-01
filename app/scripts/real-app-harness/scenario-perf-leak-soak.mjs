@@ -83,7 +83,7 @@ async function main() {
   }
 
   const { runId, runDir, sessionDir } = createRunContext(options, 'perf-leak-soak');
-  const client = new UiAutomationClient({ appPath: options.appPath });
+  const client = new UiAutomationClient(options);
 
   await teardownInstanceState({ client, instance });
   const webkitBaseline = await captureWebKitPids();

@@ -120,7 +120,7 @@ async function main() {
   }
 
   const { runId, runDir, sessionDir } = createRunContext(options, 'notebook-link-nav');
-  const client = new UiAutomationClient({ appPath: options.appPath });
+  const client = new UiAutomationClient(options);
   const observer = new DaemonObserver({ wsUrl: options.wsUrl });
   let sessionId = null;
 

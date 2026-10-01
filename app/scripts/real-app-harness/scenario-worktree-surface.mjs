@@ -183,7 +183,7 @@ async function main() {
     metadata: { instance, panel: 'the Worktrees list of the ledger surface', slowRepoFiles: SLOW_REPO_FILES },
   });
 
-  const client = new UiAutomationClient({ appPath: options.appPath });
+  const client = new UiAutomationClient(options);
   const observer = new DaemonObserver(options);
 
   let daemonEnv = null;

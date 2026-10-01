@@ -333,7 +333,7 @@ async function main() {
       focus: 'one window: Codex header framing, split-close redraw and split-session window resize render health for both agent vocabularies',
     },
   });
-  const client = new UiAutomationClient({ appPath: options.appPath });
+  const client = new UiAutomationClient(options);
   const observer = new DaemonObserver({ wsUrl: options.wsUrl });
 
   const claudeToken = `TR401CLAUDE${Date.now()}`;

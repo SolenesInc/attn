@@ -68,7 +68,7 @@ async function main() {
   }
 
   const { runId, runDir, sessionDir } = createRunContext(options, 'perf-cold-warm');
-  const client = new UiAutomationClient({ appPath: options.appPath });
+  const client = new UiAutomationClient(options);
 
   async function runPhase({ warmup }) {
     await teardownInstanceState({ client, instance });

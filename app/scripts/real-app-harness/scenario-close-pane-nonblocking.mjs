@@ -102,7 +102,7 @@ async function main() {
   });
 
   const slowGit = prepareSlowGit(runner.sessionDir);
-  const client = new UiAutomationClient({ appPath: options.appPath, launchEnv: slowGit.env });
+  const client = new UiAutomationClient({ ...options, launchEnv: slowGit.env });
   const observer = new DaemonObserver({ wsUrl: options.wsUrl });
   let sessionId = null;
   let cleanupSessionId = null;

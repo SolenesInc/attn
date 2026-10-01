@@ -133,7 +133,7 @@ async function main() {
   }
 
   const { runId, runDir, sessionDir } = createRunContext(options, 'webgl-recovery');
-  const client = new UiAutomationClient({ appPath: options.appPath });
+  const client = new UiAutomationClient(options);
   const observer = new DaemonObserver({ wsUrl: options.wsUrl });
   const logPath = terminalDiagnosticsLogPath(currentHarnessInstance());
   const sessionLabel = `webgl-recovery-${runId}`;

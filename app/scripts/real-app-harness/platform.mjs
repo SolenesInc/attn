@@ -23,14 +23,24 @@ function parsePids(stdout) {
     .filter((value) => Number.isInteger(value) && value > 0);
 }
 
-function spawnDetached(executablePath, env, appPath) {
-  const child = spawn(executablePath, [], {
-    detached: true,
-    stdio: 'ignore',
-    env: instanceCliEnv(instanceForAppPath(appPath), env ?? {}),
+function spawnDetached(executablePath, env, appPath, logPath) {
+  const logFd = fs.openSync(logPath, 'wx');
+  let child;
+  try {
+    child = spawn(executablePath, [], {
+      detached: true,
+      stdio: ['ignore', logFd, logFd],
+      env: instanceCliEnv(instanceForAppPath(appPath), env ?? {}),
+    });
+  } finally {
+    fs.closeSync(logFd);
+  }
+  const exited = new Promise((resolve) => {
+    child.once('exit', (code, signal) => resolve({ code, signal }));
+    child.once('error', (error) => resolve({ code: null, signal: null, error }));
   });
   child.unref();
-  return { spawned: true, pid: Number.isInteger(child.pid) ? child.pid : null, child };
+  return { spawned: true, pid: Number.isInteger(child.pid) ? child.pid : null, child, exited, logPath };
 }
 
 function positivePid(value) {
@@ -128,14 +138,8 @@ const darwinPlatform = {
     execFileSync('pbcopy', { input: text });
   },
 
-  async launchApp({ appPath, env = null, background = false }) {
-    if (env && Object.keys(env).length > 0) {
-      // LaunchServices and `open` do not reliably propagate env into Tauri's
-      // window-creation path, so custom env needs spawn-style delivery.
-      return spawnDetached(this.appExecutableInTree(appPath), env, appPath);
-    }
-    await execFileAsync('open', background ? ['-g', appPath] : [appPath]);
-    return { spawned: false, pid: null };
+  async launchApp({ appPath, env = null, logPath }) {
+    return spawnDetached(this.appExecutableInTree(appPath), env, appPath, logPath);
   },
 
   async requestQuit({ bundleId }) {
@@ -145,7 +149,7 @@ const darwinPlatform = {
     }
   },
 
-  // `open`, osascript, and pgrep address the bundle, so the spawn pid adds
+  // osascript and pgrep address the bundle, so the spawn pid adds
   // nothing here and the manifest pid is only ever a hint for the wait loop.
   ownedPids({ manifestPid = null }) {
     const pid = positivePid(manifestPid);
@@ -214,8 +218,8 @@ const linuxPlatform = {
     };
   },
 
-  async launchApp({ appPath, env = null }) {
-    return spawnDetached(this.appExecutableInTree(appPath), this.launchEnvironment(env), appPath);
+  async launchApp({ appPath, env = null, logPath }) {
+    return spawnDetached(this.appExecutableInTree(appPath), this.launchEnvironment(env), appPath, logPath);
   },
 
   async requestQuit({ pids = [] }) {
