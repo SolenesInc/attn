@@ -145,6 +145,21 @@ describe('App empty desktop launcher', () => {
     expect(screen.getByRole('dialog', { name: 'Desktop overview' }).contains(document.activeElement)).toBe(true);
   });
 
+  it('leaves the keyboard in the sidebar when repository options arrive after the user went there', async () => {
+    const { daemon } = await onAgentBesideEmptyDesktop();
+    await gesture(daemon, () => pressShortcut('desktop.select2'));
+    daemon.on('get_repo_info', () => undefined);
+    await submitPath(daemon, '/home/me/projects/repo');
+    const [lookup] = daemon.sentOf('get_repo_info');
+    const row = screen.getByRole('button', { name: 'Open s1' });
+    row.focus();
+
+    await gesture(daemon, () => daemon.replyTo(lookup, { event: 'get_repo_info_result', success: true, info: repoInfo('/home/me/projects/repo') } as never));
+
+    expect(screen.getByTestId('repo-options')).toBeInTheDocument();
+    expect(document.activeElement).toBe(row);
+  });
+
   it('stays put on Escape', async () => {
     const { daemon } = await onAgentBesideEmptyDesktop();
     await gesture(daemon, () => pressShortcut('desktop.select2'));
