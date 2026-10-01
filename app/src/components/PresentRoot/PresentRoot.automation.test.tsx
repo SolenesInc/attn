@@ -57,6 +57,7 @@ describe('PresentRoot automation', () => {
       const completion = listener!({ event: 'attn://ui-automation/request', id: 1, payload: {
         request_id: 'submit-delayed-frame', action: 'present_window_submit', payload: { action },
       } });
+      // Two 50ms frame fallbacks, the next task (1ms), and the old dialog poll (50ms).
       await vi.advanceTimersByTimeAsync(151);
       await completion;
       await daemon.idle();
