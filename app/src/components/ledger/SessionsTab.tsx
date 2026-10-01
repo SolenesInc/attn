@@ -386,7 +386,7 @@ function sessionRow(entry: SessionLedgerEntry, context: RowContext): RowModel {
     verbs,
     dim: closed,
     yank: entry.directory,
-    attrs: { state: closed ? 'closed' : entry.state, verbs: verbs.map((verb) => verb.label).join(' · ') },
+    attrs: { state: closed ? 'closed' : entry.state, verbs: JSON.stringify(verbs.map((verb) => verb.label)) },
   };
 }
 

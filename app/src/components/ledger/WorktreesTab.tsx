@@ -407,7 +407,7 @@ function worktreeRow(worktree: Worktree, context: WorktreeRowContext): RowModel 
       pinned: worktree.pinned ? 'true' : 'false',
       reason: worktree.sweep_reason ?? '',
       sweep: worktree.pinned ? 'kept' : worktree.sweep_status ?? '',
-      verbs: verbs.map((verb) => verb.label).join(' · '),
+      verbs: JSON.stringify(verbs.map((verb) => verb.label)),
     },
   };
 }
