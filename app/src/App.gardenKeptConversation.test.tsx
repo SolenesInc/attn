@@ -16,7 +16,8 @@ const seed = daemonSeed('s-kept11', {
 });
 
 async function open(current = seed) {
-  const garden = await openGarden([current]);
+  const garden = await openGarden([{ ...current, continuation: undefined }]);
+  garden.documents[current.id] = { seed: current };
   await openRow(garden.daemon, current.title);
   return garden;
 }
@@ -52,7 +53,9 @@ describe('App kept conversation in the Garden reader', () => {
 
   it('shows retention on a closed seed whose conversation another open seed keeps', async () => {
     const garden = await open();
-    await gesture(garden.daemon, () => garden.push([{ ...seed, rev: 2, status: 'harvested' }]));
+    const closed = { ...seed, rev: 2, status: 'harvested' };
+    garden.documents[seed.id] = { seed: closed };
+    await gesture(garden.daemon, () => garden.push([{ ...closed, continuation: undefined }]));
     expect(screen.getByText('conversation kept by attn (1.6 MB) while an open seed points at it')).toBeInTheDocument();
     expect(screen.queryByRole('button', { name: 'Resume' })).toBeNull();
     expectReads(garden.daemon, 2);
@@ -71,7 +74,8 @@ describe('App kept conversation in the Garden reader', () => {
   it('waits for the current seed document before describing its conversation', async () => {
     const garden = await open();
     garden.daemon.on('seed_document_get', () => undefined);
-    await gesture(garden.daemon, () => garden.push([{ ...seed, rev: 2 }]));
+    garden.documents[seed.id] = { seed: { ...seed, rev: 2 } };
+    await gesture(garden.daemon, () => garden.push([{ ...seed, rev: 2, continuation: undefined }]));
     expect(screen.queryByText(/conversation kept by attn/)).toBeNull();
     garden.daemon.on('seed_document_get', (read) => garden.answer(read));
     await gesture(garden.daemon, () => {
@@ -89,14 +93,15 @@ describe('App kept conversation in the Garden reader', () => {
       resume_reason: 'attn deleted its copy on 2026-10-14',
       kept_conversation: { ...kept, deleted_at: '2026-10-14T01:00:00Z' },
     } };
-    await gesture(garden.daemon, () => garden.push([deleted]));
+    garden.documents[seed.id] = { seed: deleted };
+    await gesture(garden.daemon, () => garden.push([{ ...deleted, continuation: undefined }]));
     expect(screen.queryByText(/conversation kept by attn/)).toBeNull();
     await gesture(garden.daemon, () => garden.daemon.replyTo(garden.daemon.sentOf('seed_document_get')[1], {
       event: 'seed_document_get_result', success: false, error: 'document unavailable',
     }));
     expect(screen.queryByText(/conversation kept by attn/)).toBeNull();
     garden.daemon.on('seed_document_get', (read) => garden.answer(read));
-    await gesture(garden.daemon, () => garden.push([deleted]));
+    await gesture(garden.daemon, () => garden.push([{ ...deleted, continuation: undefined }]));
     expect(screen.getByText('conversation attn deleted its copy on 2026-10-14')).toBeInTheDocument();
     expect(screen.getByText('attn deleted its copy on 2026-10-14')).toBeInTheDocument();
     expect(screen.queryByRole('button', { name: 'Resume' })).toBeNull();
@@ -108,7 +113,7 @@ describe('App kept conversation in the Garden reader', () => {
     const resume = screen.getByRole('button', { name: 'Resume' });
     resume.focus();
     garden.daemon.on('seed_document_get', () => undefined);
-    await gesture(garden.daemon, () => garden.push([seed, daemonSeed('s-other1', { title: 'Other work' })]));
+    await gesture(garden.daemon, () => garden.push([{ ...seed, continuation: undefined }, daemonSeed('s-other1', { title: 'Other work' })]));
     expect(screen.getByRole('button', { name: 'Resume' })).toBe(resume);
     expect(resume).toHaveFocus();
     expect(screen.getByRole('button', { name: 'Handover' })).toBeInTheDocument();
