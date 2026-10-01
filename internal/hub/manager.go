@@ -207,11 +207,8 @@ func (m *Manager) Stop() {
 	if m.cancel != nil {
 		m.cancel()
 	}
-	for id, runtime := range m.runtimes {
-		if len(runtime.sessions) > 0 {
-			emptied = append(emptied, id)
-		}
-		if target := isolatedRemoteShutdownTarget(runtime.record); target.Target != "" {
+	for _, runtime := range m.runtimes {
+		if target := isolatedRemoteShutdownTarget(runtime); target.Target != "" {
 			key := target.Target + "|" + target.Instance
 			if _, exists := seenTargets[key]; !exists {
 				seenTargets[key] = struct{}{}

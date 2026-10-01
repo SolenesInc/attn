@@ -560,7 +560,7 @@ export function useAppCommands(): PaletteCommand[] {
         keywords: ['snooze', 'defer', 'later', 'queue', 'turn'],
         icon: <AttentionActionIcon />,
         shortcut: [shortcutTokens('session.snooze')],
-        run: handleSnoozeActiveSession,
+        run: (opener) => handleSnoozeActiveSession(opener),
       }];
     }
     return actionMenuItemsWithDesktopActions;
