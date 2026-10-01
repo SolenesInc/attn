@@ -82,16 +82,25 @@ func TestKeptClaudeConversationRestoresForSeedResumeAndLedgerReopen(t *testing.T
 }
 
 func TestKeptConversationReleaseReplantAndDeletionAreVisible(t *testing.T) {
-	t.Setenv("ATTN_CONVERSATION_KEEP_GRACE_DAYS", "0")
+	t.Setenv("ATTN_CONVERSATION_KEEP_GRACE_DAYS", "")
 	w := newWorld(t, fakeagent.Claude)
 	app, cli := w.App(), w.Client()
 	delegated := seedResumeDelegate(t, w, fakeagent.Claude, "api")
+	// Lifecycle writes protect against cleanup, so their keep pass can skip retirement.
+	// Notes queue an unprotected pass; normal grace preserves release/replant checks.
+	keepPass := func() {
+		t.Helper()
+		if _, err := cli.SeedNote("", delegated.SeedID, "Record the abandoned work", "", "", false, nil); err != nil {
+			t.Fatal(err)
+		}
+		testworld.AwaitTaskDone(app, "conversation_keep")
+	}
 	first := w.Launched(delegated.SessionID)
 	first.Prompted()
 	closePane(app, seedResumePane(t, w, protocol.Deref(delegated.WorkspaceID), delegated.SessionID))
 	testworld.AwaitTaskDone(app, "conversation_keep")
 	lifeMove(t, cli, "", delegated.SeedID, "wither", "abandoned", "")
-	testworld.AwaitTaskDone(app, "conversation_keep")
+	keepPass()
 	released := lifeShow(t, cli, delegated.SeedID).Seed.Continuation.KeptConversation
 	if released == nil || protocol.Deref(released.DeleteAfter) == "" {
 		t.Fatalf("released copy: %+v", released)
@@ -105,13 +114,9 @@ func TestKeptConversationReleaseReplantAndDeletionAreVisible(t *testing.T) {
 		t.Fatalf("replanted copy: %+v", retained)
 	}
 	lifeMove(t, cli, "", delegated.SeedID, "wither", "abandoned again", "")
-	testworld.AwaitTaskDone(app, "conversation_keep")
-	// Planting protects against cleanup, so its keep pass can skip retirement.
-	// A note queues the next pass after the wither's protection has ended.
-	if _, err := cli.SeedNote("", delegated.SeedID, "Record the abandoned work", "", "", false, nil); err != nil {
-		t.Fatal(err)
-	}
-	testworld.AwaitTaskDone(app, "conversation_keep")
+	keepPass()
+	t.Setenv("ATTN_CONVERSATION_KEEP_GRACE_DAYS", "0")
+	keepPass()
 	deleted := lifeShow(t, cli, delegated.SeedID).Seed.Continuation.KeptConversation
 	if deleted == nil || protocol.Deref(deleted.DeletedAt) == "" {
 		t.Fatalf("deleted copy: %+v", deleted)

@@ -1,3 +1,3 @@
 kind: internal
 area: testing
-change: Trigger kept-conversation deletion checks after foreground cleanup protection has ended.
+change: Check kept-conversation release and deletion after foreground cleanup protection has ended.
