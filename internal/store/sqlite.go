@@ -1206,12 +1206,10 @@ CREATE INDEX IF NOT EXISTS idx_automode_denials_recent ON automode_denials(id DE
  );
  `},
 	{160, "pin and forget kept conversations", `
- CREATE TABLE kept_conversation_pins (
+ CREATE TABLE IF NOT EXISTS kept_conversation_pins (
  agent TEXT NOT NULL, resume_id TEXT NOT NULL, session_id TEXT NOT NULL, pinned_at TEXT NOT NULL,
  PRIMARY KEY (agent, resume_id)
  );
- ALTER TABLE kept_conversations ADD COLUMN deleted_by TEXT NOT NULL DEFAULT '';
- UPDATE kept_conversations SET deleted_by='sweep' WHERE deleted_at!='';
  `},
 }
 
@@ -1953,6 +1951,11 @@ func migrateDB(db *sql.DB, dbPath string) error {
 			}
 		} else if m.version == 140 {
 			if err := applyMigration140(tx); err != nil {
+				tx.Rollback()
+				return fmt.Errorf("migration %d (%s): %w", m.version, m.desc, err)
+			}
+		} else if m.version == 160 {
+			if err := applyMigration160(tx, m.sql); err != nil {
 				tx.Rollback()
 				return fmt.Errorf("migration %d (%s): %w", m.version, m.desc, err)
 			}
@@ -4207,6 +4210,23 @@ func applyMigration144(tx *sql.Tx) error {
 		return err
 	}
 	_, err = tx.Exec("ALTER TABLE delegation_operations ADD COLUMN parent_seed_id TEXT NOT NULL DEFAULT ''")
+	return err
+}
+
+func applyMigration160(tx *sql.Tx, migrationSQL string) error {
+	if _, err := tx.Exec(migrationSQL); err != nil {
+		return err
+	}
+	exists, err := columnExists(tx, "kept_conversations", "deleted_by")
+	if err != nil {
+		return err
+	}
+	if !exists {
+		if _, err := tx.Exec("ALTER TABLE kept_conversations ADD COLUMN deleted_by TEXT NOT NULL DEFAULT ''"); err != nil {
+			return err
+		}
+	}
+	_, err = tx.Exec("UPDATE kept_conversations SET deleted_by='sweep' WHERE deleted_at!='' AND deleted_by=''")
 	return err
 }
 
