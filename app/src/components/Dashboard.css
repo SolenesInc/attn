@@ -128,6 +128,56 @@
   color: var(--color-text-secondary);
 }
 
+.intro-banner {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 8px 8px 8px 16px;
+  margin-bottom: 20px;
+  background: rgba(255, 107, 53, 0.06);
+  border: 1px solid rgba(255, 107, 53, 0.22);
+  border-radius: 6px;
+  font-size: var(--font-size-md);
+  color: var(--color-text-secondary);
+}
+.intro-banner-text {
+  flex: 1;
+  min-width: 0;
+}
+.intro-banner-text strong {
+  color: var(--accent);
+  font-weight: 600;
+}
+.intro-banner-replay {
+  flex-shrink: 0;
+  background: var(--accent);
+  border: none;
+  color: #fff;
+  font-size: var(--font-size-sm);
+  font-weight: 600;
+  padding: 5px 12px;
+  border-radius: 6px;
+  cursor: pointer;
+}
+.intro-banner-replay:hover {
+  filter: brightness(1.08);
+}
+.intro-banner-dismiss {
+  flex-shrink: 0;
+  background: transparent;
+  border: none;
+  color: var(--color-text-dimmed);
+  font-size: 16px;
+  line-height: 1;
+  padding: 4px 8px;
+  border-radius: 6px;
+  cursor: pointer;
+}
+.intro-banner-dismiss:hover {
+  color: var(--color-text-primary);
+  background: var(--color-bg-button);
+}
+
 .rate-limit-banner {
   display: flex;
   align-items: center;

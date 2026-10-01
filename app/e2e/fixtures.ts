@@ -7,7 +7,7 @@ import * as os from 'os';
 import * as net from 'net';
 import { E2E_CLIENT_TOKEN, e2ePorts, resolveAttnBinaryPath } from './instanceEnv';
 import { waitForDaemonSocket } from './daemonReadiness';
-import { WHATS_NEW_ID, WHATS_NEW_STORAGE_KEY } from '../src/hooks/useWhatsNew';
+import { WHATS_NEW_BANNER_STORAGE_KEY, WHATS_NEW_ID, WHATS_NEW_STORAGE_KEY } from '../src/hooks/useWhatsNew';
 
 class MockGitHubServer {
   private server: http.Server;
@@ -544,10 +544,10 @@ type Fixtures = {
 
 export const test = base.extend<Fixtures>({
   page: async ({ page }, use) => {
-    await page.addInitScript(({ storageKey, releaseId }) => {
-      window.localStorage.setItem(storageKey, releaseId);
+    await page.addInitScript(({ storageKeys, releaseId }) => {
+      for (const key of storageKeys) window.localStorage.setItem(key, releaseId);
     }, {
-      storageKey: WHATS_NEW_STORAGE_KEY,
+      storageKeys: [WHATS_NEW_STORAGE_KEY, WHATS_NEW_BANNER_STORAGE_KEY],
       releaseId: WHATS_NEW_ID,
     });
 

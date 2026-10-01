@@ -87,6 +87,7 @@ export function useAppCommands(): PaletteCommand[] {
     notificationsPanelOpen,
     toggleNotificationsPanel,
     openNotebookBrowser,
+    whatsNew,
   } = useAppPanelsContext();
   const { openActiveSessionInEditor, editorUnavailableReason } = useOpenInEditor();
   const navigationCommands = useMemo<PaletteCommand[]>(() => {
@@ -239,6 +240,14 @@ export function useAppCommands(): PaletteCommand[] {
         run: () => setShortcutsOpen(true),
       },
       {
+        id: 'whats-new',
+        title: "What's new",
+        description: 'Replay the intro to profiles, desktops, the queue and the palettes',
+        keywords: ['whats new', 'intro', 'tour', 'changes', 'release', 'help'],
+        icon: <KeyboardActionIcon />,
+        run: whatsNew.open,
+      },
+      {
         id: 'settings',
         title: 'Settings',
         keywords: ['settings', 'preferences'],
@@ -273,6 +282,7 @@ export function useAppCommands(): PaletteCommand[] {
     toggleDockPanel,
     toggleNotificationsPanel,
     toggleSidebarCollapse,
+    whatsNew.open,
     workflowRunPanelOpen,
   ]);
   const actionMenuItems = useMemo<PaletteCommand[]>(
