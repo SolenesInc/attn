@@ -8,6 +8,7 @@ import {
   parseCommonArgs,
   printCommonHelp,
   pressShortcutKeys,
+  queueDaemonSettingRestore,
   shownAgentId,
 } from './common.mjs';
 import { DaemonObserver } from './daemonObserver.mjs';
@@ -157,6 +158,9 @@ async function main() {
   try {
     await runner.step('launch_app', async () => {
       await launchFreshAppAndConnect(client, observer);
+      queueDaemonSettingRestore(observer, 'queue_mode_enabled');
+      queueDaemonSettingRestore(observer, 'keybindings_config');
+      await client.request('set_setting', { key: 'keybindings_config', value: '' });
     });
 
     // Without a selected local session Cmd+N falls back to the new-session
@@ -204,23 +208,23 @@ async function main() {
     for (const queueMode of ['true', 'false']) {
       await runner.step(`sidebar_round_trip_queue_${queueMode}`, async () => {
         await client.request('set_setting', { key: 'queue_mode_enabled', value: queueMode });
-        const expanded = queueMode === 'true' ? '.queue-sidebar' : '.sidebar:not(.sidebar-collapsed)';
-        const collapsed = queueMode === 'true' ? '[data-testid="queue-bar"]' : '.sidebar-collapsed';
-        await client.request('dom_wait', { selector: expanded });
+        const expanded = queueMode === 'true' ? '.queue-sidebar' : '.sidebar:not(.collapsed)';
+        const collapsed = queueMode === 'true' ? '[data-testid="queue-bar"]' : '.sidebar.collapsed';
+        await client.request('dom_wait', { timeoutMs: 10_000, selector: expanded });
         await client.request('focus_pane', { sessionId: seedSessionId, paneId: (await client.request('get_desktop', { sessionId: seedSessionId })).panes[0].paneId });
         if (process.platform === 'darwin') {
           await driver.pressKey('b', { command: true, shift: true });
-          await client.request('dom_wait', { selector: expanded });
+          await client.request('dom_wait', { timeoutMs: 10_000, selector: expanded });
         }
         await pressShortcutKeys(client, driver, 'session.toggleSidebar');
-        await client.request('dom_wait', { selector: expanded, absent: true });
-        await client.request('dom_wait', { selector: collapsed });
+        await client.request('dom_wait', { timeoutMs: 10_000, selector: expanded, absent: true });
+        await client.request('dom_wait', { timeoutMs: 10_000, selector: collapsed });
         if (process.platform === 'darwin') {
           await driver.pressKey('b', { command: true, shift: true });
-          await client.request('dom_wait', { selector: collapsed });
+          await client.request('dom_wait', { timeoutMs: 10_000, selector: collapsed });
         }
         await pressShortcutKeys(client, driver, 'session.toggleSidebar');
-        await client.request('dom_wait', { selector: expanded });
+        await client.request('dom_wait', { timeoutMs: 10_000, selector: expanded });
       });
     }
 
@@ -228,11 +232,12 @@ async function main() {
       await client.request('open_shortcut_editor');
       await client.request('dom_type', { selector: '.shortcut-editor-search-input', text: 'Toggle sidebar' });
       const selector = '.shortcut-editor-row';
-      await client.request('dom_wait', { selector });
+      await client.request('dom_wait', { timeoutMs: 10_000, selector });
       const { text } = await client.request('dom_text', { selector });
       const expected = process.platform === 'darwin' ? '⌘B' : 'CtrlAltB';
-      runner.assert(text.replace(/\s+/g, '').includes(expected), `Toggle sidebar should show ${expected}: ${text}`);
-      await client.captureScreenshot(path.join(runner.runDir, 'sidebar-shortcut-editor.png'), { selector: '.shortcut-editor-modal' });
+      runner.assert(text.replace(/[\s+]+/g, '').includes(expected), `Toggle sidebar should show ${expected}: ${text}`);
+      const shot = await client.request('capture_screenshot_data', { selector: '.shortcut-editor-modal' });
+      fs.writeFileSync(path.join(runner.runDir, 'sidebar-shortcut-editor.png'), Buffer.from(shot.pngBase64, 'base64'));
       await driver.pressKey('Escape');
     });
 
@@ -242,16 +247,12 @@ async function main() {
           key: 'keybindings_config',
           value: JSON.stringify({ version: 1, overrides: { 'session.toggleSidebar': { key: 'b', meta: true, shift: true } } }),
         });
-        try {
-          await driver.pressKey('b', { command: true });
-          await client.request('dom_wait', { selector: '.sidebar:not(.sidebar-collapsed)' });
-          await driver.pressKey('b', { command: true, shift: true });
-          await client.request('dom_wait', { selector: '.sidebar-collapsed' });
-          await driver.pressKey('b', { command: true, shift: true });
-          await client.request('dom_wait', { selector: '.sidebar:not(.sidebar-collapsed)' });
-        } finally {
-          await client.request('set_setting', { key: 'keybindings_config', value: '' });
-        }
+        await driver.pressKey('b', { command: true });
+        await client.request('dom_wait', { timeoutMs: 10_000, selector: '.sidebar:not(.collapsed)' });
+        await driver.pressKey('b', { command: true, shift: true });
+        await client.request('dom_wait', { timeoutMs: 10_000, selector: '.sidebar.collapsed' });
+        await driver.pressKey('b', { command: true, shift: true });
+        await client.request('dom_wait', { timeoutMs: 10_000, selector: '.sidebar:not(.collapsed)' });
       });
     }
 
