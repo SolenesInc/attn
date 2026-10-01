@@ -11,7 +11,7 @@ function worktreesButton() {
 }
 
 function ledger() {
-  return screen.queryByRole('dialog', { name: 'Sessions and worktrees' });
+  return screen.queryByRole('dialog', { name: 'Sessions, worktrees and conversations' });
 }
 
 function shownList() {

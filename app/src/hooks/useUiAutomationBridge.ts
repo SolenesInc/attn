@@ -1600,7 +1600,6 @@ function requireWorktreePath(payload: Record<string, unknown>): string {
   return path;
 }
 
-const VERB_SEPARATOR = '\u001f';
 function ledgerRoot(tab: 'Sessions' | 'Worktrees'): HTMLElement | null {
   const panel = document.querySelector('.ledger-panel');
   if (!(panel instanceof HTMLElement)) return null;
@@ -1609,7 +1608,7 @@ function ledgerRoot(tab: 'Sessions' | 'Worktrees'): HTMLElement | null {
 }
 
 function ledgerRowVerbs(row: Element): string[] {
-  return (row.getAttribute('data-verbs') || '').split(VERB_SEPARATOR).filter(Boolean);
+  return JSON.parse(row.getAttribute('data-verbs') || '[]') as string[];
 }
 
 function ledgerStatusLink(root: HTMLElement, startsWith: string): HTMLElement | null {

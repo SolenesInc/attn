@@ -1,3 +1,4 @@
+import { useOptionalDaemonApi } from '../contexts/DaemonApiContext';
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { gardenPathToSeed, gardenScrollMemory, seedParentID, useGardenWalk } from '../store/gardenWalk';
 import type { Seed, SeedHandoverOptions, SeedSendToChiefOptions } from '../hooks/useDaemonSocket';
@@ -599,7 +600,8 @@ export function GardenPanel({
   const [query, setQuery] = useState('');
   const [wideIn, setWideIn] = useState<string | null>(null);
   const [walk, setWalk] = useState<{ of: string; index: number }>({ of: '', index: 0 });
-  const [seedDocument, setSeedDocument] = useState<{ document: SeedDocument; snapshot: Seed[] } | null>(null);
+  const connectionGeneration = useOptionalDaemonApi()?.connectionGeneration ?? 0;
+  const [seedDocument, setSeedDocument] = useState<{ document: SeedDocument; snapshot: Seed[]; connectionGeneration: number } | null>(null);
   const [documentError, setDocumentError] = useState<string | null>(null);
   const [continuationDraft, setContinuationDraft] = useState<ContinuationDraft | null>(null);
   const [titlePinned, setTitlePinned] = useState(false);
@@ -765,7 +767,7 @@ export function GardenPanel({
     setDocumentError(null);
     fetchSeedDocument(hereId)
       .then((document) => {
-        if (!ignore) setSeedDocument({ document, snapshot: seeds });
+        if (!ignore) setSeedDocument({ document, snapshot: seeds, connectionGeneration });
       })
       .catch((error) => {
         if (!ignore) setDocumentError(error instanceof Error ? error.message : `Could not read ${hereId}`);
@@ -773,7 +775,7 @@ export function GardenPanel({
     return () => {
       ignore = true;
     };
-  }, [hereId, hereRev, fetchSeedDocument, isOpen, seeds]);
+  }, [hereId, hereRev, fetchSeedDocument, isOpen, seeds, connectionGeneration]);
 
   const onPageKeyDown = useCallback((event: React.KeyboardEvent<HTMLDivElement>) => {
     if (event.key !== 'ArrowDown' && event.key !== 'ArrowUp' && event.key !== 'ArrowLeft') return;
@@ -911,7 +913,7 @@ export function GardenPanel({
   const closedToggle = otherLens || (!closedOn && closedCount === 0) ? null : { count: closedCount, on: closedOn };
 
   const seedDoc = seedDocument && here && seedDocument.document.seed.id === here.id ? seedDocument.document : null;
-  const documentIsCurrent = Boolean(seedDoc && here && seedDoc.seed.rev === here.rev);
+  const documentIsCurrent = seedDocumentIsCurrent(seedDoc, here, seedDocument, connectionGeneration);
   const continuationNotesAreCurrent = documentIsCurrent && seedDocument?.snapshot === seeds;
   const continuation = seedDoc?.seed.continuation;
   const seedIsOpen = seedDoc ? !isClosed(seedDoc.seed) : false;
@@ -1460,4 +1462,11 @@ export function GardenPanel({
       </div>
     </div>
   );
+}
+
+function seedDocumentIsCurrent(document: SeedDocument | null, seed: Seed | null | undefined, read: {
+  connectionGeneration: number;
+} | null, generation: number): boolean {
+  return Boolean(document && seed && document.seed.rev === seed.rev
+    && read?.connectionGeneration === generation);
 }

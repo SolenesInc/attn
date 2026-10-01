@@ -10,7 +10,7 @@ import { namedWorkspaces, openSessionsLedger, page, pages, rows, type LedgerAnsw
 
 type ReopenReply = Reply | 'hold';
 
-const ledger = () => screen.queryByRole('dialog', { name: 'Sessions and worktrees' });
+const ledger = () => screen.queryByRole('dialog', { name: 'Sessions, worktrees and conversations' });
 const row = (label: string) => rows().getByText(label).closest('.ledger-row') as HTMLElement;
 const inspector = () => screen.getByRole('complementary', { name: 'Details' });
 const shownList = () => within(within(ledger()!).getByRole('navigation', { name: 'Which list' })).getByRole('button', { current: 'page' }).textContent;

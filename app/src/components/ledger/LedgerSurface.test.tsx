@@ -36,7 +36,7 @@ async function openLedger() {
   return view;
 }
 
-const ledger = () => screen.queryByRole('dialog', { name: 'Sessions and worktrees' });
+const ledger = () => screen.queryByRole('dialog', { name: 'Sessions, worktrees and conversations' });
 const shownList = () => within(within(ledger()!).getByRole('navigation', { name: 'Which list' })).getByRole('button', { current: 'page' }).textContent;
 const row = (label: string) => rows().getByText(label).closest<HTMLElement>('.ledger-row')!;
 const selectedAgent = () => document.querySelector('.session-item.selected .session-label')?.textContent ?? null;

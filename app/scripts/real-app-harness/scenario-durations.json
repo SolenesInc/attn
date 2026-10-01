@@ -6,6 +6,14 @@
     "matrixSeconds": 826.7,
     "note": "Seconds each scenario took in a green Linux serial matrix. Remeasure from matrix-digest.txt when a scenario changes shape; the shard planner balances on these.",
     "updates": {
+      "conversations-surface": {
+        "run": "conversations-surface-2026-10-01T20-03-13-079Z",
+        "job": "Local packaged scenario, conv-tab isolated instance",
+        "recordedAt": "2026-10-01",
+        "seconds": 9.112,
+        "runnerClass": "local macOS",
+        "note": "Green ATTN_VERDICT durationMs=9112, including cleanup, with native keyboard input and recording attached to seed s-yq8ngw. Remeasure on Linux CI."
+      },
       "snooze-keyboard": {
         "run": "snooze-keyboard-2026-09-30T21-06-25-232Z",
         "job": "Local native Linux serial matrix, Orb attn-linux isolated instance",
@@ -118,6 +126,7 @@
     }
   },
   "seconds": {
+    "conversations-surface": 9.112,
     "snooze-keyboard": 103.8,
     "agent-close": 8.2,
     "agent-queue": 93.8,

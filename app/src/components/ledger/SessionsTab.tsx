@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type { ReactNode } from 'react';
 import type { SessionLedgerEntry } from '../../types/generated';
 import { useSessionLedger } from '../../hooks/useSessionLedger';
@@ -39,6 +39,8 @@ export interface SessionsTabProps {
   onFocusSession?: (sessionId: string) => void;
   onOpenSeed?: (seedId: string) => void;
   onReopen?: (sessionId: string, actionId: string) => Promise<boolean | void> | boolean | void;
+  setConversationKeep?: (sessionId: string, keep: boolean) => Promise<boolean>;
+  conversationChangeSignal?: number;
   onShowWorktree?: (path: string) => void;
   requestedDir?: { path: string; nonce: number } | null;
   queryRef: React.RefObject<HTMLInputElement | null>;
@@ -64,6 +66,8 @@ export function SessionsTab({
   onOpenSeed,
   onReopen,
   onShowWorktree,
+  setConversationKeep,
+  conversationChangeSignal = 0,
   requestedDir,
   queryRef,
   now,
@@ -83,6 +87,7 @@ export function SessionsTab({
     onFiltersChange: rememberFilters,
   });
   const { filters, setFilters, entries, reload } = ledger;
+  const { keepNotices, runKeepVerb, clearKeepNotice } = useConversationPins(setConversationKeep, conversationChangeSignal, reload);
 
   const workspaceLabel = useCallback((id: string) => workspaceNames[id] ?? id, [workspaceNames]);
 
@@ -190,25 +195,28 @@ export function SessionsTab({
     setMenuKey(null);
     if (verbId === 'focus') { onFocusSession?.(entry.id); return; }
     if (verbId === 'seed') { const seed = seedForSession?.(entry.id); if (seed) onOpenSeed?.(seed.id); return; }
+    if (runKeepVerb(entry.id, verbId)) return;
     if (verbId === 'worktree') { onShowWorktree?.(entry.directory); return; }
+    clearKeepNotice(entry.id);
     fire(entry, verdictId(verbId));
-  }, [visible, onFocusSession, seedForSession, onOpenSeed, onShowWorktree, fire]);
+  }, [visible, onFocusSession, seedForSession, onOpenSeed, onShowWorktree, fire, runKeepVerb, clearKeepNotice]);
 
   const items = useMemo<ListItem[]>(() => visible.map((entry) => ({
     kind: 'row',
     row: sessionRow(entry, {
       verdict: attemptFor(entry)?.verdict,
-      note: attemptFor(entry)?.note,
+      note: rowNote(keepNotices, entry.id, attemptFor(entry)),
       live: isLive(entry),
       seed: seedForSession?.(entry.id) ?? null,
       workspaceLabel: workspaceShown,
       sessionLabel,
       nameText,
+      canKeepConversation: !!setConversationKeep,
       actionsAvailable: !!onReopen,
       canShowWorktree: !!onShowWorktree && !!entry.is_worktree && attemptFor(entry)?.verdict?.directoryState !== 'missing',
       now: now(),
     }),
-  })), [visible, attemptFor, isLive, seedForSession, workspaceShown, sessionLabel, nameText, onReopen, onShowWorktree, now]);
+  })), [visible, attemptFor, isLive, seedForSession, workspaceShown, sessionLabel, nameText, onReopen, onShowWorktree, now, setConversationKeep, keepNotices]);
 
   // Counts, not arrays, drive the status line: a parent that rerenders on status must not loop it.
   const shown = visible.length;
@@ -292,7 +300,7 @@ export function SessionsTab({
             <SessionInspector
               entry={selected}
               verdict={attemptFor(selected)?.verdict}
-              note={attemptFor(selected)?.note}
+              note={rowNote(keepNotices, selected.id, attemptFor(selected))}
               live={isLive(selected)}
               seed={seedForSession?.(selected.id) ?? null}
               workspaceLabel={workspaceLabel}
@@ -303,6 +311,7 @@ export function SessionsTab({
               copied={copied}
               onCopy={copy}
               onVerb={(verbId) => runVerb(selected.id, verbId)}
+              canKeepConversation={!!setConversationKeep}
               actionsAvailable={!!onReopen}
             />
           )
@@ -334,6 +343,7 @@ interface RowContext {
   seed: SessionSeedLink | null;
   workspaceLabel: (id: string) => string | null;
   sessionLabel: (id: string) => string;
+  canKeepConversation: boolean;
   actionsAvailable: boolean;
   canShowWorktree: boolean;
   now: Date;
@@ -349,6 +359,7 @@ function sessionRow(entry: SessionLedgerEntry, context: RowContext): RowModel {
   }
   if (context.seed) verbs.push({ id: 'seed', label: `Seed · ${context.seed.title}` });
   if (context.canShowWorktree) verbs.push({ id: 'worktree', label: 'Show worktree' });
+  if (context.canKeepConversation && entry.agent === 'claude') verbs.push(conversationVerb(entry));
 
   const meta: ReactNode[] = [
     entry.agent,
@@ -375,7 +386,7 @@ function sessionRow(entry: SessionLedgerEntry, context: RowContext): RowModel {
     verbs,
     dim: closed,
     yank: entry.directory,
-    attrs: { state: closed ? 'closed' : entry.state, verbs: verbs.map((verb) => verb.label).join('\u001f') },
+    attrs: { state: closed ? 'closed' : entry.state, verbs: JSON.stringify(verbs.map((verb) => verb.label)) },
   };
 }
 
@@ -400,11 +411,12 @@ interface SessionInspectorProps {
   copied: string | null;
   onCopy: (text: string) => void;
   onVerb: (verbId: string) => void;
+  canKeepConversation: boolean;
   actionsAvailable: boolean;
 }
 
 function SessionInspector({
-  entry, verdict, note, live, seed, workspaceLabel, workspaceShown, sessionLabel, nameText, now, copied, onCopy, onVerb, actionsAvailable,
+  entry, verdict, note, live, seed, workspaceLabel, workspaceShown, sessionLabel, nameText, now, copied, onCopy, onVerb, actionsAvailable, canKeepConversation,
 }: SessionInspectorProps) {
   const closed = isClosed(entry);
   const busy = note?.kind === 'busy';
@@ -480,6 +492,7 @@ function SessionInspector({
           )}
         </div>
       )}
+      <ConversationPinAction available={canKeepConversation} entry={entry} note={note} closed={closed} onVerb={onVerb} />
       {live && (
         <div className="ledger-verdict-actions">
           <button type="button" className="ledger-verb is-primary" onClick={() => onVerb('focus')}>
@@ -489,4 +502,54 @@ function SessionInspector({
       )}
     </Inspector>
   );
+}
+
+function conversationVerb(entry: SessionLedgerEntry): RowVerb {
+  return entry.conversation_pinned_at
+    ? { id: 'unkeep-conversation', label: 'Unkeep' }
+    : { id: 'keep-conversation', label: 'Keep conversation' };
+}
+
+function useConversationPins(setKeep: SessionsTabProps['setConversationKeep'], changeSignal: number, reload: () => void) {
+  const [keepNotices, setKeepNotices] = useState<Record<string, RowNote | undefined>>({});
+  const observedSignal = useRef(changeSignal);
+  useEffect(() => {
+    if (observedSignal.current === changeSignal) return;
+    observedSignal.current = changeSignal;
+    reload();
+  }, [changeSignal, reload]);
+  const clearKeepNotice = useCallback((id: string) => {
+    setKeepNotices((current) => current[id] ? { ...current, [id]: undefined } : current);
+  }, []);
+  const runKeepVerb = useCallback((id: string, verb: string): boolean => {
+    if (!setKeep || (verb !== 'keep-conversation' && verb !== 'unkeep-conversation')) return false;
+    if (keepNotices[id]?.kind === 'busy') return true;
+    setKeepNotices((current) => ({ ...current, [id]: { kind: 'busy', text: 'changing conversation pin…' } }));
+    void setKeep(`session:${id}`, verb === 'keep-conversation').then(() => {
+      setKeepNotices((current) => ({ ...current, [id]: undefined }));
+    }).catch((failure: Error) => {
+      setKeepNotices((current) => ({ ...current, [id]: { kind: 'refused', text: failure.message } }));
+    });
+    return true;
+  }, [setKeep, keepNotices]);
+  return { keepNotices, runKeepVerb, clearKeepNotice };
+}
+
+function ConversationPinAction({ available, entry, note, closed, onVerb }: {
+  available: boolean;
+  entry: SessionLedgerEntry;
+  note?: RowNote;
+  closed: boolean;
+  onVerb: (id: string) => void;
+}) {
+  if (!available || entry.agent !== 'claude') return null;
+  return <Field label="Conversation">
+    <div className="ledger-muted">{entry.conversation_pinned_at ? 'Kept forever' : 'Keep attn’s copy forever'}</div>
+    {note && note.kind !== 'busy' && !closed && <div className="ledger-row-note is-refused" role="status">{note.text}</div>}
+    <button type="button" className="ledger-verb" disabled={note?.kind === 'busy'} onClick={() => onVerb(conversationVerb(entry).id)}>{conversationVerb(entry).label}</button>
+  </Field>;
+}
+
+function rowNote(notices: Record<string, RowNote | undefined>, id: string, attempt?: ReopenAttempt): RowNote | undefined {
+  return notices[id] ?? attempt?.note;
 }

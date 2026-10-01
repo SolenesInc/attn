@@ -65,6 +65,13 @@ export const scenarioCatalog = [
     command: ['pnpm', 'run', 'real-app:scenario-session-reopen'],
   },
   {
+    id: 'conversations-surface',
+    runnerId: 'CONVERSATIONS-SURFACE',
+    label: 'The Ledger shows kept conversation reasons and supports keep, unkeep and confirmed Forget',
+    command: ['pnpm', 'run', 'real-app:scenario-conversations-surface'],
+    freshWorldAfter: true,
+  },
+  {
     id: 'sessions-surface',
     runnerId: 'SESSIONS-SURFACE',
     label: 'The Sessions surface lists, filters, remembers its filters, and updates live and closed sessions',

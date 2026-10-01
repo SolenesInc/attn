@@ -99,7 +99,9 @@ export function useSeedTileNavigation({
   };
 }
 function useLiveSeedDocument(seedId: string, gardenSeeds: Seed[], enabled: boolean) {
-  const sendSeedDocumentGet = useOptionalDaemonApi()?.sendSeedDocumentGet;
+  const api = useOptionalDaemonApi();
+  const sendSeedDocumentGet = api?.sendSeedDocumentGet;
+  const connectionGeneration = api?.connectionGeneration ?? 0;
   const [document, setDocument] = useState<SeedDocument | null>(null);
   const [error, setError] = useState<string | null>(null);
   const liveSeed = useMemo(
@@ -116,7 +118,7 @@ function useLiveSeedDocument(seedId: string, gardenSeeds: Seed[], enabled: boole
       liveSeed.tender_member !== document.seed.tender_member;
     return {
       ...document,
-      seed: liveSeed,
+      seed: liveSeed.rev === document.seed.rev ? { ...liveSeed, continuation: document.seed.continuation } : liveSeed,
       tender_holds: tenderChanged
         ? Boolean(liveSeed.tender_session || liveSeed.tender_member)
         : document.tender_holds,
@@ -148,7 +150,7 @@ function useLiveSeedDocument(seedId: string, gardenSeeds: Seed[], enabled: boole
             liveSeed.tender_member !== next.seed.tender_member;
           setDocument({
             ...next,
-            seed: liveSeed,
+            seed: liveSeed.rev === next.seed.rev ? { ...liveSeed, continuation: next.seed.continuation } : liveSeed,
             tender_holds: tenderChanged
               ? Boolean(liveSeed.tender_session || liveSeed.tender_member)
               : next.tender_holds,
@@ -164,7 +166,7 @@ function useLiveSeedDocument(seedId: string, gardenSeeds: Seed[], enabled: boole
     return () => {
       ignore = true;
     };
-  }, [enabled, gardenSeeds, liveSeed, seedId, sendSeedDocumentGet]);
+  }, [enabled, gardenSeeds, liveSeed, seedId, sendSeedDocumentGet, connectionGeneration]);
 
   return { document: displayedDocument, error };
 }

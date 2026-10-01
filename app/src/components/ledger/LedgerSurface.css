@@ -598,3 +598,12 @@
   .ledger-split { grid-template-columns: minmax(0, 1fr); }
   .ledger-inspector { display: none; }
 }
+
+.ledger-deleted-toggle {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  white-space: nowrap;
+  color: var(--ledger-fg-2);
+  font-size: 12px;
+}

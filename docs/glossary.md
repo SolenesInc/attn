@@ -32,7 +32,7 @@
 - Resume: copies a conversation into a new session.
 - Reload: restores a recoverable session's own conversation.
 - Session ledger: a daemon's record of its live and closed sessions.
-- Ledger panel: the app's searchable lists of sessions and worktrees.
+- Ledger panel: the app's searchable lists of sessions, worktrees and kept conversations.
 - Session repository: the repository where a session ran.
 - Launch prompt: the opening message sent to a new agent.
 - Session pull request: a PR an agent opened during a session.

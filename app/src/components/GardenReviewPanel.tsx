@@ -1,3 +1,4 @@
+import { useOptionalDaemonApi } from '../contexts/DaemonApiContext';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import type {
   GardenReview,
@@ -592,6 +593,7 @@ export function GardenReviewPanel({
   const [composer, setComposer] = useState<ComposerState | null>(null);
   const [actionError, setActionError] = useState('');
   const [retrying, setRetrying] = useState(false);
+  const connectionGeneration = useOptionalDaemonApi()?.connectionGeneration ?? 0;
   const [browsedSeedId, setBrowsedSeedId] = useState('');
   const [browsedDocument, setBrowsedDocument] = useState<SeedDocument | null>(null);
   const [seedReadError, setSeedReadError] = useState('');
@@ -630,7 +632,7 @@ export function GardenReviewPanel({
     return () => {
       ignore = true;
     };
-  }, [browsedSeedId, fetchSeedDocument, seeds]);
+  }, [browsedSeedId, fetchSeedDocument, seeds, connectionGeneration]);
 
   useEffect(() => {
     if (complete) return;

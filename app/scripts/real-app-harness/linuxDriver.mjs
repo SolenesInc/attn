@@ -70,6 +70,8 @@ export function linuxKeyName(key, modifiers = {}) {
     '/': 'slash',
     '-': 'minus',
     '=': 'equal',
+    '[': 'bracketleft',
+    ']': 'bracketright',
     Enter: 'Return',
     ArrowLeft: 'Left',
     ArrowRight: 'Right',

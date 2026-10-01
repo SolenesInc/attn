@@ -36,6 +36,11 @@ export function AppLibrarySurfaces() {
     closeNotificationsPanel,
   } = useAppPanelsContext();
   const {
+    listKeptConversations,
+    setConversationKeep,
+    forgetConversation,
+    keptConversationsChangeSignal,
+    connectionGeneration,
     listWorktrees,
     refreshWorktrees,
     gitOperations,
@@ -100,6 +105,16 @@ export function AppLibrarySurfaces() {
           onFocusSession: handleSelectSession,
           onOpenSeed: handleOpenSeedTile,
           onReopen: handleReopenSession,
+          setConversationKeep,
+          conversationChangeSignal: keptConversationsChangeSignal,
+        }}
+        conversations={{
+          listConversations: listKeptConversations,
+          setKeep: setConversationKeep,
+          forget: forgetConversation,
+          changeSignal: keptConversationsChangeSignal,
+          connectionGeneration,
+          onOpenSeed: handleOpenSeedTile,
         }}
         worktrees={{
           listWorktrees,
