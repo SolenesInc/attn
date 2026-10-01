@@ -383,6 +383,12 @@ func (d *Daemon) cleanupDeletedWorktreeSessions(path string) {
 		if !pathAtOrBelow(session.Directory, path) {
 			continue
 		}
+		if d.sharedCodexOwner(session.ID) {
+			if err := d.codexRuntime().closeAllOwnerViews(session.ID, store.SessionClose{By: store.SessionClosedByUser, Reason: "worktree deleted"}); err != nil {
+				d.logf("close deleted worktree Codex owner %s: %v", session.ID, err)
+			}
+			continue
+		}
 		d.terminateSession(session.ID, syscall.SIGTERM)
 		d.closeSession(session.ID, store.SessionClose{By: store.SessionClosedByUser, Reason: "worktree deleted"})
 		d.publishSessionUnregistered(session)

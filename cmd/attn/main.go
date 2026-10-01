@@ -2391,6 +2391,7 @@ func runAgentDirectly(requestedAgent string) {
 	}
 
 	opts := agentdriver.SpawnOpts{
+		CodexRemote:     consumeOneShotEnv("ATTN_CODEX_REMOTE"),
 		SessionID:       sessionID,
 		CWD:             cwd,
 		Label:           parsed.label,

@@ -93,6 +93,7 @@ type EventEnvelope struct {
 
 	StateSource     *string `json:"state_source,omitempty"`
 	StateDetail     *string `json:"state_detail,omitempty"`
+	StateGeneration *string `json:"state_generation,omitempty"`
 	StateObservedAt *string `json:"state_observed_at,omitempty"`
 
 	Placements []KittyPlacement `json:"placements,omitempty"`
@@ -202,6 +203,9 @@ type InfoResult struct {
 	LastSeq   uint32 `json:"last_seq"`
 	State     string `json:"state"`
 
+	RawTitle         string `json:"raw_title,omitempty"`
+	TitleGeneration  string `json:"title_generation,omitempty"`
+	TitleObservedAt  string `json:"title_observed_at,omitempty"`
 	LastSignalClaim  string `json:"last_signal_claim,omitempty"`
 	LastSignalDetail string `json:"last_signal_detail,omitempty"`
 	LastSignalSource string `json:"last_signal_source,omitempty"`
@@ -389,6 +393,9 @@ func stateChangedEvent(sessionID string, obs pty.Observation) EventEnvelope {
 		State:       &claim,
 		StateSource: &source,
 	}
+	if obs.Generation != "" {
+		evt.StateGeneration = &obs.Generation
+	}
 	if obs.Detail != "" {
 		detail := obs.Detail
 		evt.StateDetail = &detail
@@ -405,6 +412,9 @@ func ObservationFromEvent(evt EventEnvelope, claim string, fallbackAt time.Time)
 		Source: pty.SourceUnknown,
 		Claim:  claim,
 		At:     fallbackAt,
+	}
+	if evt.StateGeneration != nil {
+		obs.Generation = *evt.StateGeneration
 	}
 	if evt.StateSource != nil && *evt.StateSource != "" {
 		obs.Source = pty.Source(*evt.StateSource)

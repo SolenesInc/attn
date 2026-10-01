@@ -44,6 +44,7 @@ const (
 	sessionInputRouteNone sessionInputRoute = iota
 	sessionInputRoutePlugin
 	sessionInputRoutePTY
+	sessionInputRouteCodex
 )
 
 type sessionInputPlacement uint8
@@ -640,6 +641,25 @@ func (m *sessionInputModule) try(ctx context.Context, delivery sessionInputDeliv
 	lane.attempts[key] = attempt
 	inputID := key
 	candidate := sessionInputCandidate{inputID: inputID, attempt: delivery.id, text: delivery.text, origin: delivery.origin}
+
+	if m.daemon.sharedCodexOwner(delivery.sessionID) {
+		attempt.route = sessionInputRouteCodex
+		lane.pending = append(lane.pending, candidate)
+		lane.placing = true
+		lane.mu.Unlock()
+		err := m.daemon.codexRuntime().send(ctx, delivery.sessionID, delivery.text, delivery.placement == sessionInputAtTurnBoundary)
+		if err == nil {
+			m.daemon.observeStructuredInputTaken(delivery.sessionID, inputID, time.Now())
+		}
+		lane.mu.Lock()
+		lane.placing = false
+		if err != nil {
+			lane.removePending(delivery.id)
+			delete(lane.attempts, key)
+			return sessionInputAttempt{id: delivery.id, stage: sessionInputIndeterminate, route: sessionInputRouteCodex, reason: sessionInputReasonTransport, err: err}
+		}
+		return attemptFromState(delivery.id, attempt)
+	}
 
 	if m.daemon.sessionUsesPluginMessageDelivery(state) {
 		attempt.route = sessionInputRoutePlugin

@@ -5,6 +5,7 @@ import type { SessionTerminalWorkspaceHandle } from '../components/SessionTermin
 
 declare global {
   interface Window {
+    __TEST_GET_WORKSPACE_PANE_VISIBLE_TEXT?: (workspaceId: string, paneId: string) => string;
     __TEST_GET_SESSION_PANE_TEXT?: (sessionId: string) => string;
     __TEST_GET_SESSION_PANE_VISIBLE_TEXT?: (sessionId: string) => string;
     __TEST_GET_SESSION_PANE_SIZE?: (sessionId: string) => { cols: number; rows: number } | null;
@@ -30,6 +31,8 @@ export function useWorkspaceDebugHarness({
     if (!import.meta.env.DEV) {
       return;
     }
+
+    window.__TEST_GET_WORKSPACE_PANE_VISIBLE_TEXT = (workspaceId, paneId) => workspaceRefs.current.get(workspaceId)?.getPaneVisibleContent(paneId)?.lines.join('\n') ?? '';
 
     window.__TEST_GET_SESSION_PANE_TEXT = (sessionId: string) => {
       const session = sessions.find((entry) => entry.id === sessionId);
@@ -81,6 +84,7 @@ export function useWorkspaceDebugHarness({
     };
 
     return () => {
+      delete window.__TEST_GET_WORKSPACE_PANE_VISIBLE_TEXT;
       delete window.__TEST_GET_SESSION_PANE_TEXT;
       delete window.__TEST_GET_SESSION_PANE_VISIBLE_TEXT;
       delete window.__TEST_GET_SESSION_PANE_SIZE;

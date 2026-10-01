@@ -3,6 +3,7 @@ package daemon
 import (
 	"context"
 	"fmt"
+	"strconv"
 	"strings"
 	"syscall"
 
@@ -96,6 +97,10 @@ func protocolWorkspaceLayout(snapshot workspacelayout.WorkspaceLayout) (*protoco
 			Kind:   protocol.WorkspaceLayoutPaneKind(pane.Kind),
 			Title:  pane.Title,
 			Status: protocol.WorkspaceLayoutPaneStatus(pane.Status),
+		}
+		if pane.CodexResolution != "" {
+			next.CodexResolution = protocol.Ptr(protocol.CodexViewResolution(pane.CodexResolution))
+			next.CodexRevision = protocol.Ptr(strconv.FormatUint(pane.CodexRevision, 10))
 		}
 		if next.Status == "" {
 			next.Status = protocol.WorkspaceLayoutPaneStatusReady
@@ -898,7 +903,7 @@ func (d *Daemon) moveLeafToWorkspace(sourceWorkspaceID, targetWorkspaceID, leafI
 		d.broadcastWorkspaceLayoutUpdated(sourceWorkspaceID)
 	}
 
-	if movedPane != nil && movedPane.SessionID != "" {
+	if movedPane != nil && movedPane.SessionID != "" && movedPane.CodexResolution == "" {
 		if d.workspaces != nil {
 			d.workspaces.associateSession(movedPane.SessionID, targetWorkspaceID, movedPane.Title)
 		}
@@ -1078,6 +1083,14 @@ func (d *Daemon) handleWorkspaceLayoutClosePane(client *wsClient, msg *protocol.
 	for _, pane := range snapshot.Panes {
 		if pane.PaneID == msg.PaneID {
 			sessionID = pane.SessionID
+			if d.codexRuntime().hasRuntime(pane.RuntimeID) {
+				err := d.codexRuntime().closeView(pane.RuntimeID, store.SessionClose{By: store.SessionClosedByUser})
+				if err == nil {
+					d.codexRuntime().removeLayoutView(pane.RuntimeID)
+				}
+				d.sendWorkspaceLayoutActionResult(client, protocol.CmdWorkspaceLayoutClosePane, msg.WorkspaceID, protocol.Ptr(msg.PaneID), err)
+				return
+			}
 			found = true
 			continue
 		}
@@ -1236,6 +1249,9 @@ func (d *Daemon) reconcileWorkspaceLayoutsWithPTYBackend(ctx context.Context) {
 	}
 
 	for runtimeID := range liveIDs {
+		if runtimeID == codexServerRuntime || d.codexRuntime().hasRuntime(runtimeID) {
+			continue
+		}
 		if d.store.Get(runtimeID) != nil {
 			continue
 		}

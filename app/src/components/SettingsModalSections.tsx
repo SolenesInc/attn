@@ -724,6 +724,7 @@ export function TerminalSettings({
   ptyBackendLabel,
   sharedPtyHostActive,
   sharedPtyHostEnabled,
+  codexSharedEnabled,
   onSetSetting,
 }: Pick<
   SettingsModalState,
@@ -732,6 +733,7 @@ export function TerminalSettings({
   | 'ptyBackendLabel'
   | 'sharedPtyHostActive'
   | 'sharedPtyHostEnabled'
+  | 'codexSharedEnabled'
   | 'onSetSetting'
 >) {
   return (
@@ -750,6 +752,21 @@ export function TerminalSettings({
             <p className="settings-row-copy">{ptyBackendHint}</p>
           </div>
           <span className={`settings-status mode-${ptyBackendMode}`}>{ptyBackendLabel}</span>
+        </div>
+        <div className="settings-row-card">
+          <div>
+            <p className="settings-row-title">Shared Codex (experimental)</p>
+            <p className="settings-row-copy" id="shared-codex-description">
+              Off by default. New Codex agents share a native server, so you can switch agents or open another view.
+              This changes future launches only. Existing agents keep their mode when reopened; New inside shared Codex stays shared.
+            </p>
+          </div>
+          <button type="button" role="switch" aria-label="Shared Codex (experimental)"
+            aria-checked={codexSharedEnabled} aria-describedby="shared-codex-description"
+            className="settings-action" data-testid="settings-shared-codex-toggle"
+            onClick={() => onSetSetting('codex_shared_enabled', codexSharedEnabled ? 'false' : 'true')}>
+            {codexSharedEnabled ? 'Disable' : 'Enable'}
+          </button>
         </div>
         <div className="settings-row-card">
           <div>

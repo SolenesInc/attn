@@ -1,0 +1,431 @@
+package daemon
+
+import (
+	"context"
+	"encoding/json"
+	"errors"
+	"fmt"
+	"github.com/google/uuid"
+	"github.com/victorarias/attn/internal/codexshared"
+	"github.com/victorarias/attn/internal/garden"
+	"github.com/victorarias/attn/internal/hooks"
+	"github.com/victorarias/attn/internal/protocol"
+	"github.com/victorarias/attn/internal/ptybackend"
+	"github.com/victorarias/attn/internal/store"
+	"os"
+	"path/filepath"
+	"strings"
+)
+
+func (r *codexRuntime) ownerContext(owner *store.CodexOwner) (codexLaunchContext, error) {
+	var launch codexLaunchContext
+	if err := json.Unmarshal(owner.Context, &launch); err != nil {
+		return launch, fmt.Errorf("read owner %s launch context: %w", owner.SessionID, err)
+	}
+	return launch, nil
+}
+
+func (r *codexRuntime) rollbackLaunch(id string) {
+	r.mu.Lock()
+	if _, exists := r.views[id]; exists {
+		if err := r.removeViewLocked(id); err != nil {
+			r.d.logf("rollback shared Codex launch %s: %v", id, err)
+		}
+	}
+	r.mu.Unlock()
+	r.cleanupReservation(id)
+}
+
+func (r *codexRuntime) prepareLaunch(opts *ptybackend.SpawnOptions, session *protocol.Session) error {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	owner, err := r.d.store.CodexOwner(session.ID)
+	if err != nil {
+		return err
+	}
+	if owner == nil {
+		launch := codexLaunchContext{CWD: opts.CWD, WorkspaceID: session.WorkspaceID, Executable: opts.Executable, Model: opts.Model, Effort: opts.Effort, Yolo: opts.YoloMode, AutoApprove: opts.AutoApprove, Guidance: hooks.Launch{Garden: r.d.requireHome(garden.Surface) == nil, InjectWorkflow: opts.WorkflowGuidanceEnabled, Crew: r.d.crewPrimeForLaunch(session.ID)}}
+		if unattended := opts.UnattendedLaunch; !unattended.IsZero() {
+			launch.Model, launch.Effort, launch.Executable = unattended.Model, unattended.Effort, unattended.Executable
+			launch.AutoApprove = unattended.ApprovalDriverMode == "auto_review"
+		}
+		if r.d.isChiefOfStaffSession(session.ID) {
+			launch.Guidance.NotebookRoot = r.d.store.GetSetting(SettingNotebookRootEffective)
+		}
+		raw, err := json.Marshal(launch)
+		if err != nil {
+			return err
+		}
+		owner = &store.CodexOwner{SessionID: session.ID, ServerID: r.serverID, Context: raw}
+		if err := r.d.store.ReserveCodexOwner(*owner); err != nil {
+			return err
+		}
+	}
+	launch, err := r.ownerContext(owner)
+	if err != nil {
+		return err
+	}
+	if err := r.ensureServer(r.d.life.Context(), launch); err != nil {
+		return err
+	}
+	if owner.Archived {
+		if _, err := r.control.Call(r.d.life.Context(), "thread/unarchive", map[string]any{"threadId": owner.NativeRootID}); err != nil {
+			return err
+		}
+		if err := r.d.store.SetCodexArchived(owner.SessionID, false); err != nil {
+			return err
+		}
+	}
+	view := store.CodexView{RuntimeID: opts.ID, ServerID: owner.ServerID, LaunchOwnerID: owner.SessionID, Generation: uuid.NewString(), Resolution: "unresolved"}
+	if err := r.addViewLocked(view); err != nil {
+		return err
+	}
+	opts.LifecycleID = view.Generation
+	opts.ExternalEnv = append(opts.ExternalEnv, "ATTN_CODEX_REMOTE=unix://"+r.socket(opts.ID))
+	return nil
+}
+
+func (r *codexRuntime) reserveNativeOwner(v store.CodexView, params map[string]any) (*store.CodexOwner, error) {
+	sourceID := v.LaunchOwnerID
+	if v.Resolution == "resolved" {
+		sourceID = v.SessionID
+	}
+	source, err := r.d.store.CodexOwner(sourceID)
+	if err != nil || source == nil {
+		return nil, fmt.Errorf("missing launch owner %s: %v", sourceID, err)
+	}
+	if source.NativeRootID == "" && !r.initialConsumed[v.RuntimeID] {
+		r.initialConsumed[v.RuntimeID] = true
+		return source, nil
+	}
+	launch, err := r.ownerContext(source)
+	if err != nil {
+		return nil, err
+	}
+	if cwd, ok := params["cwd"].(string); ok && cwd != "" {
+		launch.CWD = cwd
+	}
+	launch.Guidance.NotebookRoot = ""
+	launch.Guidance.Crew = ""
+	id := uuid.NewString()
+	now := string(protocol.TimestampNow())
+	session := &protocol.Session{ID: id, Agent: protocol.SessionAgentCodex, Directory: launch.CWD, WorkspaceID: launch.WorkspaceID, Label: filepath.Base(launch.CWD), State: protocol.SessionStateLaunching, StateSince: now, StateUpdatedAt: now, LastSeen: now}
+	if err := r.d.store.AddCheckedUnlessTeardown(session); err != nil {
+		return nil, err
+	}
+	raw, err := json.Marshal(launch)
+	if err != nil {
+		return nil, err
+	}
+	owner := &store.CodexOwner{SessionID: id, ServerID: r.serverID, Context: raw}
+	if err := r.d.store.ReserveCodexOwner(*owner); err != nil {
+		r.d.store.Remove(id)
+		return nil, err
+	}
+	intent, _ := r.d.store.LaunchIntent(source.SessionID)
+	intent.CodexMode = "shared"
+	intent.ChiefOfStaff = false
+	r.d.store.SetLaunchIntent(id, intent)
+	if err := r.d.store.InitializeSessionCostTracking(id); err != nil {
+		return nil, err
+	}
+	r.d.associateSessionWithWorkspace(id, launch.WorkspaceID)
+	r.d.startEvidence(id, r.d.sharedCodexEvidence(launch))
+	r.d.publishFact(FactSessionReregistered, id, nil)
+	return owner, nil
+}
+
+func (r *codexRuntime) prepareRPC(runtimeID string, m *codexshared.Message) (func(codexshared.Message), error) {
+	if m.Method != "thread/start" && m.Method != "thread/resume" && m.Method != "thread/fork" {
+		return nil, nil
+	}
+	var params map[string]any
+	if err := json.Unmarshal(m.Params, &params); err != nil {
+		return nil, err
+	}
+	if ephemeral, _ := params["ephemeral"].(bool); ephemeral {
+		return nil, nil
+	}
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	v, ok := r.views[runtimeID]
+	if !ok {
+		return nil, errors.New("codex view is closed")
+	}
+	var owner *store.CodexOwner
+	var err error
+	if m.Method == "thread/resume" {
+		root, _ := params["threadId"].(string)
+		owner, err = r.d.store.CodexOwnerByRoot(r.serverID, root)
+		if err == nil && owner == nil {
+			owner, err = r.adoptRoot(root, v)
+		}
+	} else {
+		owner, err = r.reserveNativeOwner(v, params)
+	}
+	if err != nil {
+		return nil, err
+	}
+	if owner == nil {
+		return nil, errors.New("codex lifecycle request has no owner")
+	}
+	launch, err := r.ownerContext(owner)
+	if err != nil {
+		return nil, err
+	}
+	if m.Method != "thread/resume" {
+		if launch.Model == "" {
+			launch.Model, _ = params["model"].(string)
+		}
+		launch.ApprovalPolicy, _ = json.Marshal(params["approvalPolicy"])
+		launch.Sandbox, _ = params["sandbox"].(string)
+		launch.Reviewer, _ = params["approvalsReviewer"].(string)
+		if config, ok := params["config"].(map[string]any); ok && launch.Effort == "" {
+			launch.Effort, _ = config["model_reasoning_effort"].(string)
+		}
+		raw, err := json.Marshal(launch)
+		if err != nil {
+			return nil, err
+		}
+		if err := r.d.store.UpdateCodexContext(owner.SessionID, raw); err != nil {
+			return nil, err
+		}
+	}
+	injectCodexOwner(params, owner.SessionID, r.d.socketPath, r.d.wrapperExecutable(), launch)
+	m.Params, err = json.Marshal(params)
+	if err != nil {
+		return nil, err
+	}
+	creation := m.Method != "thread/resume"
+	return func(reply codexshared.Message) {
+		if len(reply.Error) > 0 {
+			if creation {
+				r.cleanupReservation(owner.SessionID)
+			}
+			return
+		}
+		var result struct {
+			Thread codexNativeThread `json:"thread"`
+		}
+		if json.Unmarshal(reply.Result, &result) != nil || result.Thread.ID == "" {
+			return
+		}
+		if !creation {
+			r.mu.Lock()
+			if err := r.reopenOwnerLocked(owner.SessionID); err != nil {
+				r.d.logf("Codex native reopen %s: %v", owner.SessionID, err)
+			}
+			r.mu.Unlock()
+		}
+		r.bindOwner(owner.SessionID, result.Thread)
+	}, nil
+}
+
+type codexNativeThread struct {
+	ID        string          `json:"id"`
+	Path      string          `json:"path"`
+	CWD       string          `json:"cwd"`
+	Source    json.RawMessage `json:"source"`
+	Ephemeral bool            `json:"ephemeral"`
+}
+
+func (r *codexRuntime) adoptRoot(root string, v store.CodexView) (*store.CodexOwner, error) {
+	result, err := r.control.Call(r.d.life.Context(), "thread/read", map[string]any{"threadId": root, "includeTurns": false})
+	if err != nil {
+		return nil, err
+	}
+	var read struct {
+		Thread codexNativeThread `json:"thread"`
+	}
+	if err := json.Unmarshal(result, &read); err != nil {
+		return nil, err
+	}
+	if read.Thread.Ephemeral || strings.Contains(string(read.Thread.Source), "subAgent") {
+		return nil, errors.New("native helper thread is not an independent Codex owner")
+	}
+	owner, err := r.reserveNativeOwner(v, map[string]any{"cwd": read.Thread.CWD})
+	if err != nil {
+		return nil, err
+	}
+	if err := r.d.store.BindCodexRoot(owner.SessionID, root); err != nil {
+		return nil, err
+	}
+	owner.NativeRootID = root
+	r.d.observeOrQueueAgentConversation(agentConversationObservation{SessionID: owner.SessionID, NativeID: root, TranscriptPath: read.Thread.Path})
+	return owner, nil
+}
+
+func injectCodexOwner(params map[string]any, id, socket, wrapper string, launch codexLaunchContext) {
+	params["cwd"] = launch.CWD
+	config, _ := params["config"].(map[string]any)
+	if config == nil {
+		config = make(map[string]any)
+		params["config"] = config
+	}
+	hooks.MergeCodexOwnerConfig(config, id, socket, wrapper, launch.Guidance)
+	if guidance, ok := config["developer_instructions"].(string); ok {
+		prior, _ := params["developerInstructions"].(string)
+		params["developerInstructions"] = strings.TrimSpace(prior + "\n\n" + guidance)
+		delete(config, "developer_instructions")
+	}
+	if launch.Model != "" {
+		params["model"] = launch.Model
+	}
+	if launch.Effort != "" {
+		config["model_reasoning_effort"] = launch.Effort
+	}
+	if len(launch.ApprovalPolicy) > 0 && string(launch.ApprovalPolicy) != "null" {
+		var policy any
+		if json.Unmarshal(launch.ApprovalPolicy, &policy) == nil {
+			params["approvalPolicy"] = policy
+		}
+	}
+	if launch.Sandbox != "" {
+		params["sandbox"] = launch.Sandbox
+	}
+	if launch.Reviewer != "" {
+		params["approvalsReviewer"] = launch.Reviewer
+	}
+	if launch.Yolo {
+		params["approvalPolicy"] = "never"
+		params["sandbox"] = "danger-full-access"
+	} else if launch.AutoApprove {
+		params["approvalPolicy"] = "on-request"
+		config["approvals_reviewer"] = "auto_review"
+	}
+}
+
+func (d *Daemon) wrapperExecutable() string {
+	path := strings.TrimSpace(os.Getenv("ATTN_WRAPPER_PATH"))
+	if path != "" {
+		return path
+	}
+	path, _ = os.Executable()
+	return path
+}
+
+func (r *codexRuntime) bindOwner(id string, t codexNativeThread) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	if err := r.d.store.BindCodexRoot(id, t.ID); err != nil {
+		r.d.logf("Codex bind owner %s to %s: %v", id, t.ID, err)
+		return
+	}
+	if t.CWD != "" {
+		owner, err := r.d.store.CodexOwner(id)
+		if err == nil && owner != nil {
+			launch, err := r.ownerContext(owner)
+			if err == nil {
+				launch.CWD = t.CWD
+				raw, err := json.Marshal(launch)
+				if err == nil {
+					err = r.d.store.UpdateCodexContext(id, raw)
+				}
+				if err != nil {
+					r.d.logf("persist Codex cwd %s: %v", id, err)
+				}
+			}
+		}
+		session := r.d.store.Get(id)
+		if session != nil && session.Directory != t.CWD {
+			session.Directory = t.CWD
+			if err := r.d.store.AddCheckedUnlessTeardown(session); err != nil {
+				r.d.logf("Codex cwd %s: %v", id, err)
+			}
+		}
+	}
+	r.d.observeOrQueueAgentConversation(agentConversationObservation{SessionID: id, NativeID: t.ID, TranscriptPath: t.Path})
+	if session := r.d.store.Get(id); session != nil && session.State == protocol.SessionStateLaunching {
+		r.d.applyState(sessionStateChange{sessionID: id, state: string(protocol.SessionStateIdle), cause: liveSignal{}, origin: stateOrigin{source: "codex", detail: "native root bound"}})
+	}
+	for runtimeID, v := range r.views {
+		if v.RawTitle != "" && v.Resolution != "disconnected" {
+			r.resolveTitleLocked(runtimeID, v.RawTitle)
+		}
+	}
+	// A control subscription keeps hidden roots alive independently of views.
+	r.d.life.Go("codexHoldRoot", func() {
+		r.mu.Lock()
+		defer r.mu.Unlock()
+		params := map[string]any{"threadId": t.ID}
+		owner, err := r.d.store.CodexOwner(id)
+		if err != nil || owner == nil || owner.Archived {
+			return
+		}
+		launch, err := r.ownerContext(owner)
+		if err != nil {
+			return
+		}
+		injectCodexOwner(params, id, r.d.socketPath, r.d.wrapperExecutable(), launch)
+		if _, err := r.control.Call(r.d.life.Context(), "thread/resume", params); err != nil {
+			r.d.logf("Codex hold root %s: %v", id, err)
+		}
+	})
+}
+
+func (r *codexRuntime) cleanupReservation(id string) {
+	owner, err := r.d.store.CodexOwner(id)
+	if err != nil || owner == nil || owner.NativeRootID != "" {
+		return
+	}
+	if err := r.d.store.RemoveUnusedCodexOwner(id); err != nil {
+		r.d.logf("Codex clean reservation %s: %v", id, err)
+		return
+	}
+	r.d.store.Remove(id)
+	r.d.dissociateSessionFromWorkspace(id)
+}
+
+func (r *codexRuntime) observeNative(m codexshared.Message) {
+	if m.Method == "" {
+		return
+	}
+	var params struct {
+		ThreadID string `json:"threadId"`
+		Turn     struct {
+			ID string `json:"id"`
+		} `json:"turn"`
+	}
+	if json.Unmarshal(m.Params, &params) != nil {
+		return
+	}
+	if m.Method == "turn/started" || m.Method == "turn/completed" {
+		r.activeMu.Lock()
+		if m.Method == "turn/started" {
+			r.activeTurns[params.ThreadID] = params.Turn.ID
+		} else if r.activeTurns[params.ThreadID] == params.Turn.ID {
+			delete(r.activeTurns, params.ThreadID)
+		}
+		r.activeMu.Unlock()
+	}
+}
+
+func (r *codexRuntime) send(ctx context.Context, id, text string, active bool) error {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	owner, err := r.d.store.CodexOwner(id)
+	if err != nil {
+		return err
+	}
+	if owner == nil || owner.NativeRootID == "" {
+		return fmt.Errorf("codex owner %s has no native root", id)
+	}
+	launch, err := r.ownerContext(owner)
+	if err != nil {
+		return err
+	}
+	if err := r.ensureServer(ctx, launch); err != nil {
+		return err
+	}
+	r.activeMu.Lock()
+	turnID := r.activeTurns[owner.NativeRootID]
+	r.activeMu.Unlock()
+	params := map[string]any{"threadId": owner.NativeRootID, "input": []any{map[string]any{"type": "text", "text": text, "text_elements": []any{}}}}
+	method := "turn/start"
+	if active && turnID != "" {
+		method = "turn/steer"
+		params["expectedTurnId"] = turnID
+	}
+	_, err = r.control.Call(ctx, method, params)
+	return err
+}

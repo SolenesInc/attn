@@ -1205,6 +1205,20 @@ CREATE INDEX IF NOT EXISTS idx_automode_denials_recent ON automode_denials(id DE
  PRIMARY KEY (agent, resume_id)
  );
  `},
+	{160, "durable shared Codex owners and terminal views", `
+ CREATE TABLE IF NOT EXISTS codex_owners (
+ session_id TEXT PRIMARY KEY, server_id TEXT NOT NULL, native_root_id TEXT,
+ context_json TEXT NOT NULL, archived INTEGER NOT NULL DEFAULT 0,
+ UNIQUE(server_id, native_root_id)
+ );
+ CREATE TABLE IF NOT EXISTS codex_views (
+ runtime_id TEXT PRIMARY KEY, server_id TEXT NOT NULL, launch_owner_id TEXT NOT NULL,
+ session_id TEXT NOT NULL DEFAULT '', raw_title TEXT NOT NULL DEFAULT '', observed_at TEXT NOT NULL DEFAULT '',
+ generation TEXT NOT NULL, revision INTEGER NOT NULL DEFAULT 0,
+ resolution TEXT NOT NULL DEFAULT 'unresolved'
+ );
+ CREATE INDEX IF NOT EXISTS codex_views_owner ON codex_views(session_id);
+ `},
 }
 
 const migration99SQL = `
@@ -1534,6 +1548,27 @@ func migrateDB(db *sql.DB, dbPath string) error {
 	for _, m := range migrations {
 		if m.version <= currentVersion {
 			continue
+		}
+
+		if m.version == 160 {
+			hasLayout, err := tableExists(tx, "workspace_layout_panes")
+			if err != nil {
+				tx.Rollback()
+				return err
+			}
+			for _, column := range []struct{ name, definition string }{{"codex_resolution", "TEXT NOT NULL DEFAULT ''"}, {"codex_revision", "INTEGER NOT NULL DEFAULT 0"}} {
+				exists, err := columnExists(tx, "workspace_layout_panes", column.name)
+				if err != nil {
+					tx.Rollback()
+					return err
+				}
+				if hasLayout && !exists {
+					if _, err := tx.Exec("ALTER TABLE workspace_layout_panes ADD COLUMN " + column.name + " " + column.definition); err != nil {
+						tx.Rollback()
+						return err
+					}
+				}
+			}
 		}
 
 		if m.version == 156 {

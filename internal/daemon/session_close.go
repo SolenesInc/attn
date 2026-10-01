@@ -17,6 +17,9 @@ type sessionCloseInFlight struct {
 func (d *Daemon) beginSessionClose(
 	sessionID string, closed store.SessionClose, client *wsClient,
 ) (sessionCloseInFlight, error) {
+	if d.sharedCodexOwner(sessionID) {
+		return sessionCloseInFlight{}, d.codexRuntime().closeAddressedOwner(sessionID, closed)
+	}
 	teardown, err := d.prepareSessionTeardown(sessionID)
 	if err != nil {
 		return sessionCloseInFlight{}, err

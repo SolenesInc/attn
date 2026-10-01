@@ -1783,6 +1783,12 @@ type ClientHelloMessage struct {
 	Version string `json:"version"`
 }
 
+type CodexViewResolution string
+
+const CodexViewResolutionDisconnected CodexViewResolution = "disconnected"
+const CodexViewResolutionResolved CodexViewResolution = "resolved"
+const CodexViewResolutionUnresolved CodexViewResolution = "unresolved"
+
 type CollapseRepoMessage struct {
 	// Cmd corresponds to the JSON schema field "cmd".
 	Cmd string `json:"cmd"`
@@ -8660,6 +8666,9 @@ type SessionLedgerEntry struct {
 	// ClosedBy corresponds to the JSON schema field "closed_by".
 	ClosedBy *string `json:"closed_by,omitempty,omitzero"`
 
+	// CodexMode corresponds to the JSON schema field "codex_mode".
+	CodexMode *string `json:"codex_mode,omitempty,omitzero"`
+
 	// Directory corresponds to the JSON schema field "directory".
 	Directory string `json:"directory"`
 
@@ -8975,6 +8984,9 @@ type SessionReopenResult struct {
 
 	// Directory corresponds to the JSON schema field "directory".
 	Directory string `json:"directory"`
+
+	// PaneID corresponds to the JSON schema field "pane_id".
+	PaneID *string `json:"pane_id,omitempty,omitzero"`
 
 	// SessionID corresponds to the JSON schema field "session_id".
 	SessionID string `json:"session_id"`
@@ -10971,6 +10983,12 @@ type WorkspaceLayoutMoveLeafToWorkspaceMessage struct {
 }
 
 type WorkspaceLayoutPane struct {
+	// CodexResolution corresponds to the JSON schema field "codex_resolution".
+	CodexResolution *CodexViewResolution `json:"codex_resolution,omitempty,omitzero"`
+
+	// CodexRevision corresponds to the JSON schema field "codex_revision".
+	CodexRevision *string `json:"codex_revision,omitempty,omitzero"`
+
 	// Error corresponds to the JSON schema field "error".
 	Error *string `json:"error,omitempty,omitzero"`
 

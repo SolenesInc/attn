@@ -64,7 +64,7 @@ export function AppWorkspaces() {
   const { handleTerminalModelRecovered } = useAppErrorsContext();
   const { seedPopoverRequest, usagePopoverRequest } = useAppPanelsContext();
   const { terminalFontSize, resolvedTheme } = useAppAppearanceContext();
-  const { delegationSessions } = useAppSessionsContext();
+  const { delegationSessions, enrichedLocalSessions } = useAppSessionsContext();
   const { daemonSessions } = useAppInputs();
   const seeds = useDaemonStore((state) => state.seeds);
   const { handleOpenSeedTile, handleRevealSeedInGarden } = useAppGardenActionsContext();
@@ -96,8 +96,8 @@ export function AppWorkspaces() {
       <div className="terminal-main-area">
         {workspaceViews.map((workspace) => {
           const workspaceState =
-            terminalStateForWorkspaceSessions(workspace.sessions) ??
             daemonWorkspaceStateById.get(workspace.id) ??
+            terminalStateForWorkspaceSessions(workspace.sessions) ??
             null;
           if (!workspaceState) {
             return null;
@@ -108,7 +108,8 @@ export function AppWorkspaces() {
           const focusedSession = focusedSessionId
             ? (workspace.sessions.find((session) => session.id === focusedSessionId) ?? null)
             : null;
-          const activePaneId = activePaneIdForFocusedSession(
+          const selectedPane = useSessionStore.getState().workspacePaneSelections[workspace.id]?.activePaneId;
+          const activePaneId = selectedPane || activePaneIdForFocusedSession(
             workspaceState,
             focusedSession,
             getActivePaneIdForSession,
@@ -128,7 +129,7 @@ export function AppWorkspaces() {
                   directory: workspace.directory,
                   endpoint_id: workspace.endpointId,
                 })}
-                workspaceSessions={workspace.sessions.map((entry) => ({
+                workspaceSessions={enrichedLocalSessions.map((entry) => ({
                   id: entry.id,
                   label: entry.label,
                   agent: entry.agent,
@@ -205,9 +206,7 @@ export function AppWorkspaces() {
                   const paneSessionId = workspaceState.agents.find(
                     (pane) => pane.id === paneId,
                   )?.sessionId;
-                  if (paneSessionId) {
-                    void handleClosePane(paneSessionId, paneId, workspace.id).catch(console.error);
-                  }
+                  void handleClosePane(paneSessionId || '', paneId, workspace.id).catch(console.error);
                 }}
                 onRenameSession={sendRenameSession}
                 onSelectSession={handleSelectSession}
@@ -217,10 +216,7 @@ export function AppWorkspaces() {
                 onFocusPane={(paneId) => {
                   const agentPane = workspaceState.agents.find((pane) => pane.id === paneId);
                   const paneSessionId = agentPane?.sessionId;
-                  if (!paneSessionId) {
-                    return;
-                  }
-                  selectAgentPane(paneSessionId, paneId);
+                  selectAgentPane(paneSessionId || '', paneId);
                 }}
                 zoomActive={Boolean(zoomModeBySessionId[workspace.id])}
                 onSetZoomActive={(active) => {

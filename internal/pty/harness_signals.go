@@ -32,6 +32,8 @@ type harnessSignalPolicy struct {
 type harnessSignalObserver struct {
 	policy    harnessSignalPolicy
 	scanner   oscScanner
+	onTitle   func(string, time.Time)
+	lastTitle string
 	lastClaim string
 	lastEmit  time.Time
 }
@@ -59,6 +61,12 @@ func (o *harnessSignalObserver) Observe(chunk []byte, now time.Time) []Observati
 	o.scanner.Feed(chunk, func(code int, payload string) {
 		switch code {
 		case oscCodeTitleAndIcon, oscCodeTitle:
+			if payload != o.lastTitle {
+				o.lastTitle = payload
+				if o.onTitle != nil {
+					o.onTitle(payload, now)
+				}
+			}
 			if obs, ok := o.observeTitle(payload, now); ok {
 				out = append(out, obs)
 			}

@@ -30,6 +30,7 @@ export interface TileSelection {
 }
 export interface SessionNavigationState {
   activeSessionId: string | null;
+  selectedWorkspacePane: { workspaceId: string; paneId: string } | null;
   recentSessionIds: string[];
   agentHistory: AgentHistoryState;
   view: AppView;
@@ -37,7 +38,7 @@ export interface SessionNavigationState {
   selectedSessionlessWorkspaceId: string | null;
   selectedTile: TileSelection | null;
   pendingSelection: { sessionId: string; seen: boolean } | null;
-  focusRequest: { sessionId: string; paneId: string } | null;
+  focusRequest: { sessionId: string; paneId: string; workspaceId?: string } | null;
   utilityFocusRequestToken: number;
   workspacePaneSelections: WorkspacePaneSelections;
 }
@@ -45,6 +46,7 @@ export interface SessionNavigationState {
 export function initialSessionNavigation(): SessionNavigationState {
   return {
     activeSessionId: null,
+    selectedWorkspacePane: null,
     recentSessionIds: [],
     agentHistory: createAgentHistory(),
     view: 'dashboard',
@@ -72,6 +74,7 @@ export function activateSession(
   return {
     ...state,
     activeSessionId: id,
+    selectedWorkspacePane: null,
     pendingSelection: null,
     focusRequest: null,
     view: id ? 'session' : state.view,

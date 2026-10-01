@@ -104,6 +104,7 @@ type Session struct {
 
 	lastSignalMu sync.RWMutex
 	lastSignal   *Observation
+	lastTitle    *Observation
 
 	quiescing        atomic.Bool
 	quiesced         chan struct{}
@@ -601,9 +602,24 @@ func parseExitStatus(waitErr error) (int, string) {
 func (s *Session) emitSignal(obs Observation) {
 	s.lastSignalMu.Lock()
 	stored := obs
-	s.lastSignal = &stored
+	if obs.Source == SourceTitle {
+		s.lastTitle = &stored
+	} else {
+		s.lastSignal = &stored
+	}
 	s.lastSignalMu.Unlock()
-	s.onState(obs)
+	if s.onState != nil {
+		s.onState(obs)
+	}
+}
+
+func (s *Session) LastTitle() (Observation, bool) {
+	s.lastSignalMu.RLock()
+	defer s.lastSignalMu.RUnlock()
+	if s.lastTitle == nil {
+		return Observation{}, false
+	}
+	return *s.lastTitle, true
 }
 
 func (s *Session) LastSignal() (Observation, bool) {

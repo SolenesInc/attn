@@ -504,6 +504,9 @@ func (d *Daemon) handleUnregisterWorkspace(client *wsClient, msg *protocol.Unreg
 	sort.Strings(memberIDs)
 	teardowns := make(map[string]*sessionTeardown, len(memberIDs))
 	for _, sid := range memberIDs {
+		if d.sharedCodexOwner(sid) {
+			continue
+		}
 		teardown, err := d.prepareSessionTeardown(sid)
 		if err != nil {
 			for preparedID, prepared := range teardowns {
@@ -514,8 +517,29 @@ func (d *Daemon) handleUnregisterWorkspace(client *wsClient, msg *protocol.Unreg
 		}
 		teardowns[sid] = teardown
 	}
+	if layout := d.store.GetWorkspaceLayout(id); layout != nil {
+		panes := append([]workspacelayout.Pane(nil), layout.Panes...)
+		sort.SliceStable(panes, func(i, j int) bool {
+			return panes[i].CodexResolution == "unresolved" && panes[j].CodexResolution != "unresolved"
+		})
+		for _, pane := range panes {
+			if !d.codexRuntime().hasRuntime(pane.RuntimeID) {
+				continue
+			}
+			if err := d.codexRuntime().closeView(pane.RuntimeID, store.SessionClose{By: store.SessionClosedByUser}); err != nil {
+				for sid, teardown := range teardowns {
+					d.cancelSessionTeardown(sid, teardown)
+				}
+				d.sendCommandError(client, protocol.CmdUnregisterWorkspace, err.Error())
+				return
+			}
+		}
+	}
 	for _, sid := range memberIDs {
 		teardown := teardowns[sid]
+		if teardown == nil {
+			continue
+		}
 		d.commitSessionUnregister(sid, store.SessionClose{By: store.SessionClosedByUser})
 		d.publishSessionUnregistered(teardown.session)
 	}

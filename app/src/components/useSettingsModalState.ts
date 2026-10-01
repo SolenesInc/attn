@@ -289,6 +289,7 @@ export function useSettingsModalState({
     ? rawPtyBackendMode
     : 'unknown';
   const { label: ptyBackendLabel, hint: ptyBackendHint } = PTY_BACKENDS[ptyBackendMode];
+  const codexSharedEnabled = settings.codex_shared_enabled === 'true';
   const sharedPtyHostEnabled = settings.pty_shared_host_enabled === 'true';
   const sharedPtyHostActive = settings.pty_shared_host_active === 'true';
 
@@ -879,6 +880,7 @@ export function useSettingsModalState({
     ptyBackendLabel,
     sharedPtyHostActive,
     sharedPtyHostEnabled,
+    codexSharedEnabled,
     onSetSetting,
     settings,
     activityAgents,

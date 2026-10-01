@@ -72,6 +72,7 @@ type ActiveAgentDriverRun struct {
 }
 
 type LaunchIntent struct {
+	CodexMode        string                              `json:"codex_mode,omitempty"`
 	YoloMode         bool                                `json:"yolo_mode,omitempty"`
 	AutoMode         *bool                               `json:"auto_mode,omitempty"`
 	ApprovalPolicy   string                              `json:"approval_policy,omitempty"`

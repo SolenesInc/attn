@@ -364,6 +364,7 @@ func reopenBranchWarning(ctx context.Context, gitView reopenGit, execution garde
 }
 
 type sessionReopenOutcome struct {
+	PaneID          string
 	SessionID       string
 	WorkspaceID     string
 	Directory       string
@@ -388,6 +389,12 @@ func (d *Daemon) reopenSessionProtected(
 	protection foregroundCleanupProtection, sessionID string, action protocol.SessionReopenAction, directory string,
 ) (*sessionReopenOutcome, error) {
 	sessionID = strings.TrimSpace(sessionID)
+	if d.sharedCodexOwner(sessionID) {
+		if action != "" && action != protocol.SessionReopenActionReopen {
+			return nil, fmt.Errorf("shared Codex history reopens with reopen; native New and fork create new owners")
+		}
+		return d.codexRuntime().attachOwner(sessionID)
+	}
 	if sessionID == "" {
 		return nil, fmt.Errorf("session_id is required")
 	}
@@ -887,6 +894,9 @@ func sessionReopenResult(outcome *sessionReopenOutcome) *protocol.SessionReopenR
 		WorkspaceID: outcome.WorkspaceID,
 		Directory:   outcome.Directory,
 		Action:      outcome.Action,
+	}
+	if outcome.PaneID != "" {
+		result.PaneID = protocol.Ptr(outcome.PaneID)
 	}
 	if outcome.AlreadyRunning {
 		result.AlreadyRunning = protocol.Ptr(true)

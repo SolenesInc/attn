@@ -343,7 +343,10 @@ function sessionRow(entry: SessionLedgerEntry, context: RowContext): RowModel {
   const closed = isClosed(entry);
   const { verdict } = context;
   const verbs: RowVerb[] = [];
-  if (context.live) verbs.push({ id: 'focus', label: 'Focus' });
+  if (context.live) {
+    verbs.push({ id: 'focus', label: 'Focus' });
+    if (entry.codex_mode === 'shared' && context.actionsAvailable) verbs.push({ id: 'act:reopen', label: 'Open another view' });
+  }
   if (closed && context.actionsAvailable) {
     for (const action of verdict?.actions ?? [PLAIN_REOPEN]) verbs.push({ id: `act:${action.id}`, label: action.label });
   }

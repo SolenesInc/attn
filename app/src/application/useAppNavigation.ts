@@ -127,7 +127,7 @@ export function useAppNavigation({
   const workspaceSelection = useWorkspaceSelectionController(
     workspaceViews,
     activeSessionId,
-    selectedSessionlessWorkspaceId,
+    useSessionStore(state => state.selectedWorkspacePane?.workspaceId) ?? selectedSessionlessWorkspaceId,
   );
   const activeWorkspaceId = workspaceSelection.activeWorkspaceId;
 
@@ -151,25 +151,15 @@ export function useAppNavigation({
 
   const daemonWorkspaceStateById = useMemo(() => {
     const map = new Map<string, TerminalWorkspaceState>();
-    const unresolvedWorkspaceIds = new Set(
-      workspaceViews
-        .filter((workspace) => workspace.hasUnresolvedAgentPanes)
-        .map((workspace) => workspace.id),
-    );
     for (const workspace of daemonWorkspaces) {
       if (!workspace.layout) {
         continue;
       }
       const { workspace: state } = workspaceSnapshotFromDaemonWorkspace(workspace.layout);
-      if (
-        state.layoutTree &&
-        (state.agents.length === 0 || unresolvedWorkspaceIds.has(workspace.id))
-      ) {
-        map.set(workspace.id, state);
-      }
+      if (state.layoutTree) map.set(workspace.id, state);
     }
     return map;
-  }, [daemonWorkspaces, workspaceViews]);
+  }, [daemonWorkspaces]);
 
   const visualWorkspaces = sidebarWorkspaceViews;
   const visualIndexByWorkspaceId = useMemo(() => {
@@ -185,13 +175,15 @@ export function useAppNavigation({
         return;
       }
       const sessionId = workspace.firstSessionId;
+      const paneId = workspace.children.find(child => child.kind === 'session')?.paneId;
       if (sessionId) {
-        handleSelectSession(sessionId);
+        if (paneId) selectAgentPane(sessionId, paneId);
+        else handleSelectSession(sessionId);
         return;
       }
       selectSessionlessWorkspace(workspace.id);
     },
-    [handleSelectSession, selectSessionlessWorkspace, sidebarWorkspaceViews, workspaceViews],
+    [handleSelectSession, selectAgentPane, selectSessionlessWorkspace, sidebarWorkspaceViews, workspaceViews],
   );
 
   const selectTile = useCallback(

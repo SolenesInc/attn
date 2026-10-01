@@ -143,6 +143,7 @@ func boolEnv(key string) (bool, bool) {
 }
 
 type SpawnOpts struct {
+	CodexRemote     string
 	SessionID       string
 	CWD             string
 	Label           string

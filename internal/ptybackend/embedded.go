@@ -177,6 +177,10 @@ func (b *EmbeddedBackend) SessionInfo(_ context.Context, sessionID string) (Sess
 		ExitCode:   info.ExitCode,
 		ExitSignal: info.ExitSignal,
 	}
+	if title, ok := b.manager.LastTitle(sessionID); ok {
+		result.RawTitle = title.Detail
+		result.TitleObservation = title
+	}
 	result.LastSignal, result.HasLastSignal = b.manager.LastSignal(sessionID)
 	return result, nil
 }

@@ -57,7 +57,7 @@ export function useWorkspacePanes({
     const seen = new Set<string>();
     const options: { sessionId: string; label: string; state?: string }[] = [];
     for (const pane of agentPanes) {
-      if (seen.has(pane.sessionId)) {
+      if (!pane.sessionId || seen.has(pane.sessionId)) {
         continue;
       }
       seen.add(pane.sessionId);

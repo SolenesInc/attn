@@ -60,13 +60,20 @@ func (c *Codex) Capabilities() Capabilities {
 
 func (c *Codex) BuildCommand(opts SpawnOpts) *exec.Cmd {
 	args := []string{}
+	if opts.CodexRemote != "" {
+		args = append(args, "--remote", opts.CodexRemote, "-c", `tui.terminal_title=["thread-id"]`)
+	}
 	if opts.ResumeSessionID != "" {
 		args = append(args, "resume", opts.ResumeSessionID)
 	} else if opts.ResumePicker {
 		args = append(args, "resume")
 	}
 
-	for _, override := range opts.ConfigOverrides {
+	overrides := opts.ConfigOverrides
+	if opts.CodexRemote != "" {
+		overrides = nil
+	}
+	for _, override := range overrides {
 		if strings.TrimSpace(override) == "" {
 			continue
 		}

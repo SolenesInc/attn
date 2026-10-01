@@ -189,6 +189,41 @@ async function reattachAfterReconnect(output: string) {
 }
 
 describe('App terminal runtime', () => {
+  it('changes a shared Codex pane owner while keeping its terminal and painted draft', async () => {
+    const workspace = agentWorkspace('s1');
+    const pane = { ...workspace.layout!.panes[0], codex_resolution: 'resolved' as const, codex_revision: '1' };
+    workspace.layout!.panes = [pane];
+    const { daemon } = await openAttachedTerminals({
+      sessions: [daemonSession('s1', { agent: 'codex', state: 'idle' }), daemonSession('s2', { agent: 'codex', state: 'idle', workspace_id: 'workspace-s2' })],
+      workspaces: [workspace, agentWorkspace('s2')],
+      output: { s1: 'native draft remains' },
+    });
+    const canvas = document.querySelector('[data-pane-id="pane-s1"] canvas');
+    const update = async (sessionId: string | undefined, resolution: 'resolved' | 'unresolved', revision: string) => {
+      daemon.emit({ event: 'workspace_layout_updated', workspace_layout: {
+        ...workspace.layout!, panes: [{ ...pane, session_id: sessionId, codex_resolution: resolution, codex_revision: revision }],
+      } });
+      await daemon.idle();
+    };
+    await update('s2', 'resolved', '2');
+    expect(document.querySelector('[data-pane-id="pane-s1"]')).toHaveAttribute('data-pane-session-id', 's2');
+    expect(document.querySelector('[data-pane-id="pane-s1"] canvas')).toBe(canvas);
+    fireEvent.mouseDown(document.querySelector('[data-pane-id="pane-s1"]')!);
+    await daemon.idle();
+    expect(document.querySelector('.terminal-wrapper.active [data-pane-id="pane-s1"]')).not.toBeNull();
+    expect(window.__TEST_GET_WORKSPACE_PANE_VISIBLE_TEXT?.('workspace-s1', 'pane-s1')).toContain('native draft remains');
+    await update(undefined, 'unresolved', '3');
+    expect(screen.getByRole('group', { name: 'Codex (resolving agent)' })).toBeVisible();
+    expect(document.querySelector('[data-pane-id="pane-s1"] canvas')).toBe(canvas);
+    pressShortcut('session.close');
+    await daemon.idle();
+    expect(daemon.sentOf('workspace_layout_close_pane')).toEqual([expect.objectContaining({ workspace_id: 'workspace-s1', pane_id: 'pane-s1' })]);
+    await update('s1', 'resolved', '4');
+    expect(visibleText('s1')).toContain('native draft remains');
+    expect(daemon.sentOf('attach_session').filter(command => command.id === 's1')).toHaveLength(1);
+    expect(daemon.sentOf('detach_session')).toEqual([]);
+  });
+
   it('restores the daemon snapshot before output that raced the attach', async () => {
     const { daemon } = await renderSessions(daemonSession('s1', { state: 'idle' }));
     open('s1');

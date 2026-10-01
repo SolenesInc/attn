@@ -98,6 +98,8 @@ const (
 var ErrAlreadyRunning = errors.New("daemon already running")
 
 type Daemon struct {
+	codexOnce        sync.Once
+	codex            *codexRuntime
 	socketPath       string
 	pidPath          string
 	pidFile          *os.File
@@ -1008,6 +1010,9 @@ func (d *Daemon) pruneSessionsWithoutPTY(previousRunSessions map[string]struct{}
 	removed := 0
 	recoverable := 0
 	for _, session := range sessions {
+		if d.sharedCodexOwner(session.ID) {
+			continue
+		}
 		if _, fromPreviousRun := previousRunSessions[session.ID]; !fromPreviousRun {
 			continue
 		}
@@ -1083,6 +1088,9 @@ func (d *Daemon) pluginDriverReportsState(agent protocol.SessionAgent) bool {
 
 func (d *Daemon) performStartupPTYRecovery(previousRunSessions map[string]struct{}, recoveryStartedAt time.Time) {
 	defer d.rebuildTicketDeliverySchedules()
+	if err := d.codexRuntime().loadViews(); err != nil {
+		d.logf("load shared Codex views: %v", err)
+	}
 	recoveryReport, recoverErr := d.recoverPTYBackend(10 * time.Second)
 	if recoverErr != nil {
 		d.logf("PTY backend recovery failed: %v", recoverErr)
@@ -1106,6 +1114,9 @@ func (d *Daemon) performStartupPTYRecovery(previousRunSessions map[string]struct
 	if _, ok := d.ptyBackend.(ptybackend.RecoverableRuntime); ok {
 		d.reconcileStartupWorkerSessions(recoveryReport, recoverErr, previousRunSessions, recoveryStartedAt)
 		d.restoreTranscriptWatchers()
+		if err := d.codexRuntime().recover(); err != nil {
+			d.logf("recover shared Codex: %v", err)
+		}
 		d.reconcileWorkspaceLayoutsWithPTYBackend(context.Background())
 		d.reseedWorkspaceStatuses()
 		return
@@ -1261,6 +1272,9 @@ func (d *Daemon) reconcileSessionsWithWorkerBackendState(ctx context.Context, al
 	livenessProber, _ := d.ptyBackend.(ptybackend.SessionLivenessProber)
 
 	for sessionID := range liveIDs {
+		if sessionID == codexServerRuntime || d.codexRuntime().hasRuntime(sessionID) {
+			continue
+		}
 		existing := d.store.Get(sessionID)
 		intentionalClose, intentErr := d.store.SessionCloseIntentionalChecked(sessionID)
 		if intentErr != nil {
@@ -1394,6 +1408,9 @@ func (d *Daemon) reconcileSessionsWithWorkerBackendState(ctx context.Context, al
 	}
 
 	for _, session := range d.store.List("") {
+		if d.sharedCodexOwner(session.ID) {
+			continue
+		}
 		if _, fromPreviousRun := previousRunSessions[session.ID]; !fromPreviousRun {
 			continue
 		}
@@ -1586,6 +1603,9 @@ func (d *Daemon) Stop() {
 func (d *Daemon) stop() {
 	d.log("daemon stopping")
 	d.life.end()
+	if d.codex != nil {
+		d.codex.stop()
+	}
 	if d.listener != nil {
 		d.listener.Close()
 		d.listener = nil
@@ -1638,6 +1658,17 @@ func (d *Daemon) stop() {
 var errDaemonStopping = errors.New("the daemon is stopping; retry once it is back")
 
 func (d *Daemon) handlePTYExit(info ptybackend.ExitInfo) bool {
+	if info.ID == codexServerRuntime {
+		d.codexRuntime().noteServerExit(info)
+		return false
+	}
+	if d.codexRuntime().hasRuntime(info.ID) {
+		d.life.Do("codexViewExit", func() { d.codexRuntime().disconnectView(info.ID) })
+		return false
+	}
+	if d.sharedCodexOwner(info.ID) {
+		return false
+	}
 	release, held := d.life.Hold("handlePTYExit")
 	if !held {
 		d.logf("pty exit of %s during daemon stop is not an outcome; the next daemon recovers the session", info.ID)
@@ -2032,6 +2063,13 @@ func (d *Daemon) forgetSessionTrace(sessionID string) {
 }
 
 func (d *Daemon) handlePTYState(sessionID string, obs pty.Observation) {
+	if obs.Source == pty.SourceTitle {
+		d.life.Do("codexViewTitle", func() { d.codexRuntime().observeTitle(sessionID, obs) })
+		return
+	}
+	if sessionID == codexServerRuntime || d.codexRuntime().hasRuntime(sessionID) || d.sharedCodexOwner(sessionID) {
+		return
+	}
 	state := obs.Claim
 	origin := stateOrigin{source: string(obs.Source), detail: obs.Detail, observedAt: obs.At}
 	evidenceChanged := d.recordPTYEvidence(sessionID, obs)
@@ -2903,6 +2941,14 @@ func (d *Daemon) publishSessionUnregistered(session *protocol.Session) {
 }
 
 func (d *Daemon) handleUnregister(conn net.Conn, msg *protocol.UnregisterMessage) {
+	if d.sharedCodexOwner(msg.ID) {
+		if err := d.codexRuntime().closeAddressedOwner(msg.ID, store.SessionClose{By: store.SessionClosedByUser}); err != nil {
+			d.sendError(conn, err.Error())
+			return
+		}
+		d.sendOK(conn)
+		return
+	}
 	teardown, err := d.prepareSessionTeardown(msg.ID)
 	if err != nil {
 		d.sendError(conn, fmt.Sprintf("prepare session teardown: %v", err))

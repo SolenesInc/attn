@@ -137,8 +137,8 @@ export function useAppSessions({
   );
 
   const workspaceViews = useMemo(
-    () => buildWorkspaceViewModels(daemonWorkspaces, visibleEnrichedSessions),
-    [daemonWorkspaces, visibleEnrichedSessions],
+    () => buildWorkspaceViewModels(daemonWorkspaces, enrichedLocalSessions),
+    [daemonWorkspaces, enrichedLocalSessions],
   );
   const unmutedWorkspaceViews = useMemo(
     () =>

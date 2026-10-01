@@ -600,6 +600,10 @@ func (r *Runtime) removeWatcher(conn *connCtx) {
 func (r *Runtime) observeState(obs pty.Observation) {
 	r.deliverMu.Lock()
 	defer r.deliverMu.Unlock()
+	if obs.Source == pty.SourceTitle {
+		r.broadcastLifecycle(stateChangedEvent(r.cfg.SessionID, obs))
+		return
+	}
 	if !obs.Source.ClaimsProtocolState() {
 		r.stateMu.Lock()
 		r.lastEvidence = &obs
@@ -1221,6 +1225,9 @@ func (c *connCtx) handleRequest(req RequestEnvelope) {
 			Detail: "watch subscribe replay",
 			At:     time.Now(),
 		}))
+		if title, ok := c.runtime.manager.LastTitle(c.runtime.cfg.SessionID); ok {
+			_ = c.sendEvent(stateChangedEvent(c.runtime.cfg.SessionID, title))
+		}
 		if lastEvidence != nil {
 			_ = c.sendEvent(stateChangedEvent(c.runtime.cfg.SessionID, *lastEvidence))
 		}
@@ -1306,6 +1313,11 @@ func (r *Runtime) infoResult() (InfoResult, error) {
 		ChildPID:  info.PID,
 		LastSeq:   info.LastSeq,
 		State:     state,
+	}
+	if title, ok := r.manager.LastTitle(r.cfg.SessionID); ok {
+		result.RawTitle = title.Detail
+		result.TitleGeneration = title.Generation
+		result.TitleObservedAt = title.At.Format(time.RFC3339Nano)
 	}
 	if signal, ok := r.manager.LastSignal(r.cfg.SessionID); ok {
 		result.LastSignalClaim = signal.Claim
