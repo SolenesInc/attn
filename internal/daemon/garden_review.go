@@ -67,10 +67,19 @@ func (d *Daemon) captureGardenReview() (gardenReviewCapture, error) {
 	observations := make([]garden.ReviewObservation, 0, len(read.seeds))
 	byID := make(map[string]garden.ReviewObservation, len(read.seeds))
 	chiefAvailable := d.chiefOfStaffSessionID() != ""
-	// A stalled driver's deadline is paid once per capture; the next capture retries it.
-	timedOutPlugins := make(map[string]bool)
+	type pendingInspection struct {
+		seedIndex    int
+		conversation pluginResumeConversation
+	}
+	pending := make(map[string][]pendingInspection)
+	registrations := make(map[string]pluginDriverRegistration)
 	checkResume := func(agentName, resumeID, cwd string) (bool, string) {
-		return d.conversationResumableWithTimeouts(agentName, resumeID, cwd, timedOutPlugins)
+		if reg, ok := d.ensurePluginRegistry().driver(agentName); ok && reg.Capabilities["resume"] && reg.Capabilities["resume_availability"] {
+			pending[reg.PluginName] = append(pending[reg.PluginName], pendingInspection{len(observations), pluginResumeConversation{CWD: cwd, ResumeSessionID: resumeID}})
+			registrations[reg.PluginName] = reg
+			return false, ""
+		}
+		return d.conversationResumable(agentName, resumeID, cwd)
 	}
 	for _, seed := range read.seeds {
 		doc := read.docs[seed.ID]
@@ -99,6 +108,20 @@ func (d *Daemon) captureGardenReview() (gardenReviewCapture, error) {
 		}
 		observations = append(observations, observation)
 		byID[seed.ID] = observation
+	}
+
+	// Resolve collected plugin checks before any candidate observes availability.
+	for key, checks := range pending {
+		conversations := make([]pluginResumeConversation, len(checks))
+		for i, check := range checks {
+			conversations[i] = check.conversation
+		}
+		availability := d.pluginConversationsResumable(registrations[key], conversations)
+		for _, check := range checks {
+			observations[check.seedIndex].ResumeAvailable = availability[check.conversation].Available
+			observation := observations[check.seedIndex]
+			byID[observation.Seed.ID] = observation
+		}
 	}
 
 	candidates := garden.ReviewCandidates(

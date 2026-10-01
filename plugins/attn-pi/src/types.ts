@@ -91,6 +91,14 @@ export type DriverResumeAvailableParams = {
   resume_session_id: string;
 };
 
+export type DriverResumeAvailabilityBatchParams = {
+  conversations: DriverResumeAvailableParams[];
+};
+
+export type DriverResumeAvailabilityBatchResult = {
+  availability: (DriverResumeAvailableParams & DriverResumeAvailableResult)[];
+};
+
 export type DriverResumeAvailableResult = {
   available: boolean;
   reason?: string;

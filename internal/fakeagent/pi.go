@@ -113,13 +113,19 @@ func piSessionDir(home, cwd string) string {
 }
 
 func findPiSession(home, cwd, id string) (string, error) {
+	sessions, err := findPiSessions(home, cwd)
+	return sessions[id], err
+}
+
+func findPiSessions(home, cwd string) (map[string]string, error) {
+	matches := make(map[string]string)
 	dir := piSessionDir(home, cwd)
 	files, err := os.ReadDir(dir)
 	if os.IsNotExist(err) {
-		return "", nil
+		return matches, nil
 	}
 	if err != nil {
-		return "", err
+		return nil, err
 	}
 	for _, entry := range files {
 		if entry.IsDir() || !strings.HasSuffix(entry.Name(), ".jsonl") {
@@ -128,7 +134,7 @@ func findPiSession(home, cwd, id string) (string, error) {
 		path := filepath.Join(dir, entry.Name())
 		file, err := os.Open(path)
 		if err != nil {
-			return "", err
+			return nil, err
 		}
 		line, err := bufio.NewReader(file).ReadBytes('\n')
 		file.Close()
@@ -136,11 +142,11 @@ func findPiSession(home, cwd, id string) (string, error) {
 			Type string `json:"type"`
 			ID   string `json:"id"`
 		}
-		if err == nil && json.Unmarshal(line, &header) == nil && header.Type == "session" && header.ID == id {
-			return path, nil
+		if err == nil && json.Unmarshal(line, &header) == nil && header.Type == "session" {
+			matches[header.ID] = path
 		}
 	}
-	return "", nil
+	return matches, nil
 }
 
 func (p *piTerminal) launch() launch {
@@ -307,15 +313,30 @@ func (p *piPlugin) handleDaemon(_ *rpcPeer, method string, params json.RawMessag
 		}
 		return p.launchRun(params, true)
 	case "driver.resume_available":
-		var request piSpawn
+		var request struct {
+			Conversations []struct {
+				CWD             string `json:"cwd"`
+				ResumeSessionID string `json:"resume_session_id"`
+			} `json:"conversations"`
+		}
 		if err := json.Unmarshal(params, &request); err != nil {
 			return nil, err
 		}
-		path, err := findPiSession(p.cfg.ToolHome, request.CWD, request.ResumeSessionID)
-		if err != nil {
-			return nil, err
+		sessions := make(map[string]map[string]string)
+		availability := make([]map[string]any, 0, len(request.Conversations))
+		for _, conversation := range request.Conversations {
+			stored, ok := sessions[conversation.CWD]
+			if !ok {
+				var err error
+				stored, err = findPiSessions(p.cfg.ToolHome, conversation.CWD)
+				if err != nil {
+					return nil, err
+				}
+				sessions[conversation.CWD] = stored
+			}
+			availability = append(availability, map[string]any{"cwd": conversation.CWD, "resume_session_id": conversation.ResumeSessionID, "available": stored[conversation.ResumeSessionID] != "", "reason": fmt.Sprintf("conversation %s is no longer in pi's storage (%s)", conversation.ResumeSessionID, piSessionDir(p.cfg.ToolHome, conversation.CWD))})
 		}
-		return map[string]any{"available": path != "", "reason": fmt.Sprintf("conversation %s is no longer in pi's storage (%s)", request.ResumeSessionID, piSessionDir(p.cfg.ToolHome, request.CWD))}, nil
+		return map[string]any{"availability": availability}, nil
 	case "driver.models":
 		if catalog := os.Getenv(PiModelsEnv); catalog != "" {
 			return json.RawMessage(catalog), nil

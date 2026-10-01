@@ -6,11 +6,13 @@ import (
 	"path/filepath"
 	"slices"
 	"strings"
+	"sync/atomic"
 	"testing"
 	"time"
 
 	"github.com/victorarias/attn/internal/client"
 	"github.com/victorarias/attn/internal/fakeagent"
+	"github.com/victorarias/attn/internal/garden"
 	"github.com/victorarias/attn/internal/protocol"
 	"github.com/victorarias/attn/internal/testworld"
 )
@@ -104,12 +106,9 @@ func TestAStalledResumeInspectionTimesOutAndIsRetriedOnTheNextRead(t *testing.T)
 
 		shown := make(chan *protocol.SeedShowResult, 1)
 		go func() { shown <- lifeShow(t, cli, delegated.SeedID) }()
-		var check struct {
-			CWD      string `json:"cwd"`
-			ResumeID string `json:"resume_session_id"`
-		}
+		var check resumeInspection
 		driver.asked("driver.resume_available", &check)
-		if check.CWD != delegated.Directory || check.ResumeID != "saved-conversation" {
+		if len(check.Conversations) != 1 || check.Conversations[0].CWD != delegated.Directory || check.Conversations[0].ResumeID != "saved-conversation" {
 			t.Fatalf("inspection = %+v", check)
 		}
 		w.advance(10 * time.Second)
@@ -120,7 +119,7 @@ func TestAStalledResumeInspectionTimesOutAndIsRetriedOnTheNextRead(t *testing.T)
 
 		go func() { shown <- lifeShow(t, cli, delegated.SeedID) }()
 		request := driver.asked("driver.resume_available", &check)
-		driver.answer(request, map[string]any{"available": true})
+		answerResumeInspection(driver, request, check, func(string) bool { return true }, "")
 		if result := <-shown; result.Seed.Continuation == nil || !result.Seed.Continuation.ResumeAvailable {
 			t.Fatalf("next read after the driver recovered = %+v", result.Seed.Continuation)
 		}
@@ -164,11 +163,78 @@ func TestAGardenReviewWaitsForAStalledResumeDriverOnlyOncePerCapture(t *testing.
 		}
 
 		go func() { shown <- gardenReviewShow(t, cli, "") }()
-		for range 2 {
-			request := driver.asked("driver.resume_available", nil)
-			driver.answer(request, map[string]any{"available": true})
-		}
+		var check resumeInspection
+		request := driver.asked("driver.resume_available", &check)
+		answerResumeInspection(driver, request, check, func(string) bool { return true }, "")
 		<-shown
+	})
+}
+
+func TestAGardenReviewInspectsSharedPluginStorageOncePerCapture(t *testing.T) {
+	inBubbleWithAgents(t, func(t *testing.T, w *world) {
+		var now atomic.Int64
+		now.Store(time.Now().UnixNano())
+		w.gardenClock = func() time.Time { return time.Unix(0, now.Load()) }
+		w.restart()
+		app, cli := w.App(), w.Client()
+		seeds := make(map[string]string)
+		driver := connectDriver(t, w, "snipe-plugin", "snipe", map[string]bool{
+			"resume": true, "resume_availability": true, "initial_prompt": true, "state_reporting": true,
+		})
+		awaitDriverAvailable(app, "snipe")
+		for _, name := range []string{"first", "second"} {
+			delegations := make(chan *protocol.DelegateResult, 1)
+			go func() { delegations <- seedResumeDelegate(t, w, scriptedAgent, "shared-storage") }()
+			run := driver.launched()
+			if err := driver.state(run, 1, "working"); err != nil {
+				t.Fatal(err)
+			}
+			delegated := <-delegations
+			seeds[name] = delegated.SeedID
+			driver.mustReport("session.report_metadata", map[string]any{
+				"session_id": delegated.SessionID, "run_id": run.RunID, "seq": 2,
+				"metadata": map[string]string{"native_id": name}, "resume_session_id": name,
+			})
+			closePane(app, seedResumePane(t, w, protocol.Deref(delegated.WorkspaceID), delegated.SessionID))
+		}
+		shown := make(chan *protocol.SeedReviewResult, 1)
+		for _, firstAvailable := range []bool{true, false} {
+			go func() { shown <- gardenReviewShow(t, cli, "") }()
+			var check resumeInspection
+			request := driver.asked("driver.resume_available", &check)
+			ids := make([]string, 0, len(check.Conversations))
+			for _, conversation := range check.Conversations {
+				if conversation.CWD != w.Path("shared-storage") {
+					t.Fatalf("batch cwd = %q", conversation.CWD)
+				}
+				ids = append(ids, conversation.ResumeID)
+			}
+			slices.Sort(ids)
+			if !slices.Equal(ids, []string{"first", "second"}) {
+				t.Fatalf("batch IDs = %v", ids)
+			}
+			answerResumeInspection(driver, request, check, func(id string) bool { return (id == "first") == firstAvailable }, "")
+			<-shown
+			select {
+			case extra := <-driver.requests:
+				t.Fatalf("shared storage inspected again in one capture: %s", extra.Method)
+			default:
+			}
+		}
+		now.Store(time.Now().Add(garden.DefaultStaleWindow).UnixNano())
+		reviews := make(chan protocol.GardenReview, 1)
+		go func() { reviews <- gardenReviewStart(t, cli) }()
+		var check resumeInspection
+		request := driver.asked("driver.resume_available", &check)
+		answerResumeInspection(driver, request, check, func(id string) bool { return id == "first" }, "")
+		review := <-reviews
+		for name, seedID := range seeds {
+			item := gardenReviewItem(t, &review, seedID)
+			if resumable := slices.Contains(item.Actions, "resume"); resumable != (name == "first") {
+				t.Fatalf("review actions for %s = %v", name, item.Actions)
+			}
+		}
+
 	})
 }
 
@@ -207,17 +273,15 @@ func TestRecreatingAWorktreeChecksPluginStorageAfterProjectSettingsReturn(t *tes
 				_, err := cli.SessionReopen(client.SessionReopenOptions{SessionID: session, Action: string(protocol.SessionReopenActionRecreateWorktreeAndReopen)})
 				done <- err
 			}()
-			var inspection struct {
-				CWD string `json:"cwd"`
-			}
+			var inspection resumeInspection
 			request := driver.asked("driver.resume_available", &inspection)
-			if inspection.CWD != worktree {
-				t.Fatalf("inspection cwd = %q, want %q", inspection.CWD, worktree)
+			if len(inspection.Conversations) != 1 || inspection.Conversations[0].CWD != worktree {
+				t.Fatalf("inspection = %+v", inspection)
 			}
-			if _, err := os.Stat(filepath.Join(inspection.CWD, ".pi", "settings.json")); err != nil {
+			if _, err := os.Stat(filepath.Join(inspection.Conversations[0].CWD, ".pi", "settings.json")); err != nil {
 				t.Fatalf("storage checked before project settings returned: %v", err)
 			}
-			driver.answer(request, map[string]any{"available": available, "reason": "saved conversation missing from configured storage"})
+			answerResumeInspection(driver, request, inspection, func(string) bool { return available }, "saved conversation missing from configured storage")
 			err := <-done
 			if available {
 				if err != nil {
@@ -239,4 +303,20 @@ func TestRecreatingAWorktreeChecksPluginStorageAfterProjectSettingsReturn(t *tes
 			}
 		})
 	}
+}
+
+type resumeInspection struct {
+	Conversations []struct {
+		CWD      string `json:"cwd"`
+		ResumeID string `json:"resume_session_id"`
+	} `json:"conversations"`
+}
+
+func answerResumeInspection(driver *driverPeer, request json.RawMessage, check resumeInspection, available func(string) bool, reason string) {
+	driver.t.Helper()
+	answers := make([]map[string]any, 0, len(check.Conversations))
+	for _, conversation := range check.Conversations {
+		answers = append(answers, map[string]any{"cwd": conversation.CWD, "resume_session_id": conversation.ResumeID, "available": available(conversation.ResumeID), "reason": reason})
+	}
+	driver.answer(request, map[string]any{"availability": answers})
 }

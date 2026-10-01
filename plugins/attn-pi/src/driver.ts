@@ -1,4 +1,4 @@
-import { resumeAvailable } from "./sessions";
+import { resumeAvailable, resumeAvailabilityBatch } from "./sessions";
 import { existsSync } from "node:fs";
 import { randomUUID } from "node:crypto";
 import { NetworkProxy, networkPolicyFrom, type NetworkDecision, type NetworkPolicy, type NetworkRequest } from "../netproxy";
@@ -30,6 +30,8 @@ import {
   piThinkingLevels,
   type ActivePluginRun,
   type DriverRegisterResult,
+  type DriverResumeAvailabilityBatchParams,
+  type DriverResumeAvailabilityBatchResult,
   type DriverResumeAvailableParams,
   type DriverResumeAvailableResult,
   type DriverSpawnParams,
@@ -192,6 +194,10 @@ export class PiDriver implements RelayDelegate {
       cwd: params.cwd,
       env: await this.envFor(run, params.auto_mode),
     };
+  }
+
+  resumeAvailabilityBatch(params: DriverResumeAvailabilityBatchParams): Promise<DriverResumeAvailabilityBatchResult> {
+    return resumeAvailabilityBatch(params, this.env);
   }
 
   resumeAvailable(params: DriverResumeAvailableParams): Promise<DriverResumeAvailableResult> {

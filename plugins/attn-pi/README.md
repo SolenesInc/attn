@@ -31,13 +31,16 @@ file produces a reason naming the conversation and storage directory. Starting
 fresh remains an explicit action in the session ledger.
 
 The driver advertises `resume_availability` and answers
-`driver.resume_available({cwd, resume_session_id})` with `{available, reason?}`.
+`driver.resume_available({conversations: [{cwd, resume_session_id}]})` with
+`{availability: [{cwd, resume_session_id, available, reason?}]}`.
 This read-only check matches the session header ID in Pi's cwd directory. It
 honors `PI_CODING_AGENT_DIR`, `PI_CODING_AGENT_SESSION_DIR`, and project/global
 `sessionDir` settings. Unreadable unrelated session files are skipped, as in Pi discovery. The driver
 checks again before preparing a resume launch. Availability has a dedicated
-ten-second daemon deadline; Garden review waits once per stalled plugin in
-each capture and retries on the next read. See the
+ten-second daemon deadline. Garden review sends one batch per plugin per
+capture; Pi scans each resolved directory once, including custom directories
+shared across cwds. Single reads send one conversation. Every new read
+inspects storage again. See the
 [scan receipt](receipts/resume-availability.md). A missing worktree is restored
 before inspecting plugin storage, so project settings are available again;
 failed inspection rolls the recreated worktree back.

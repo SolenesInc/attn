@@ -2,7 +2,7 @@ import { afterAll, expect, test } from "bun:test";
 import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { resumeAvailable } from "../src/sessions";
+import { resumeAvailable, resumeAvailabilityBatch } from "../src/sessions";
 
 const root = mkdtempSync(join(tmpdir(), "pi-sessions-"));
 afterAll(() => rmSync(root, { recursive: true, force: true }));
@@ -15,6 +15,7 @@ for (const scenario of [
   { name: "unreadable project settings", unreadableSettings: "project", available: true },
   { name: "unreadable global settings", unreadableSettings: "global", available: true },
   { name: "unreadable non-target candidate", unreadable: true, available: true },
+  { name: "large multibyte header", headerPadding: "λ".repeat(4096), available: true },
   { name: "renamed file", filename: "arbitrary.jsonl", available: true },
   { name: "filename only matches", headerID: "other", available: false },
   { name: "prefix only matches", headerID: "conversation-longer", available: false },
@@ -63,6 +64,7 @@ for (const scenario of [
         type: "type" in scenario ? scenario.type : "session",
         id: "headerID" in scenario ? scenario.headerID : "conversation",
         cwd: "headerCwd" in scenario ? scenario.headerCwd : cwd,
+        ...("headerPadding" in scenario ? { padding: scenario.headerPadding } : {}),
       };
       writeFileSync(join(directory, "filename" in scenario ? scenario.filename : "timestamp_conversation.jsonl"),
         ("prefix" in scenario ? scenario.prefix : "") + JSON.stringify(header) + ("newline" in scenario ? "" : "\n"));
@@ -81,3 +83,27 @@ for (const scenario of [
     }
   });
 }
+
+
+test("Pi batch availability is fresh and matches each ID in shared custom storage", async () => {
+  const caseRoot = join(root,"batch");
+  const first = join(caseRoot,"first");
+  const second = join(caseRoot,"second");
+  const directory = join(caseRoot,"sessions");
+  mkdirSync(first,{recursive:true}); mkdirSync(second,{recursive:true}); mkdirSync(directory,{recursive:true});
+  const env = { PI_CODING_AGENT_DIR:join(caseRoot,"agent"), PI_CODING_AGENT_SESSION_DIR:directory };
+  const write = (filename:string,id:string,cwd:string) => writeFileSync(join(directory,filename),JSON.stringify({type:"session",id,cwd})+"\n");
+  write("a.jsonl","same-id",first); write("b.jsonl","second-id",first); write("c.jsonl","same-id",second);
+  const params = { conversations: [
+    {cwd:first,resume_session_id:"same-id"},
+    {cwd:first,resume_session_id:"second-id"},
+    {cwd:first,resume_session_id:"missing"},
+    {cwd:second,resume_session_id:"same-id"},
+  ] };
+  const initial = await resumeAvailabilityBatch(params,env);
+  expect(initial.availability.map(answer => answer.available)).toEqual([true,true,false,true]);
+  expect(initial.availability.map(({cwd,resume_session_id}) => ({cwd,resume_session_id}))).toEqual(params.conversations);
+  rmSync(join(directory,"a.jsonl"));
+  const next = await resumeAvailabilityBatch(params,env);
+  expect(next.availability.map(answer => answer.available)).toEqual([false,true,false,true]);
+});

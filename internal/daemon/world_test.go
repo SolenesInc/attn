@@ -18,11 +18,12 @@ import (
 
 type world struct {
 	*testworld.World
-	bubbled bool
-	unix    net.Listener
-	ws      net.Listener
-	daemon  *daemon.WireDaemon
-	terms   *testworld.Terminals
+	bubbled     bool
+	unix        net.Listener
+	ws          net.Listener
+	daemon      *daemon.WireDaemon
+	terms       *testworld.Terminals
+	gardenClock func() time.Time
 }
 
 func newWorld(t *testing.T, agents ...fakeagent.Harness) *world {
@@ -65,7 +66,7 @@ func (w *world) start() {
 	if w.terms != nil {
 		terminals = w.terms
 	}
-	started, err := daemon.StartWireDaemonWithTerminals(w.Socket, w.unix, w.ws, terminals)
+	started, err := daemon.StartWireDaemonWithTerminals(w.Socket, w.unix, w.ws, terminals, w.gardenClock)
 	if err != nil {
 		w.T.Fatalf("start daemon: %v", err)
 	}

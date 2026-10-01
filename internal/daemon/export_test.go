@@ -4,6 +4,7 @@ import (
 	"errors"
 	"net"
 	"testing"
+	"time"
 
 	"github.com/victorarias/attn/internal/ptybackend"
 )
@@ -17,8 +18,11 @@ func StartWireDaemon(socketPath string, unix, ws net.Listener) (*WireDaemon, err
 	return StartWireDaemonWithTerminals(socketPath, unix, ws, nil)
 }
 
-func StartWireDaemonWithTerminals(socketPath string, unix, ws net.Listener, terminals ptybackend.Backend) (*WireDaemon, error) {
+func StartWireDaemonWithTerminals(socketPath string, unix, ws net.Listener, terminals ptybackend.Backend, gardenClock ...func() time.Time) (*WireDaemon, error) {
 	d := New(socketPath)
+	if len(gardenClock) > 0 {
+		d.gardenNow = gardenClock[0]
+	}
 	if terminals != nil {
 		d.ptyBackend = terminals
 	}

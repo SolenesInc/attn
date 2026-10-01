@@ -19,7 +19,7 @@ import (
 const pluginDriverCallTimeout = 30 * time.Second
 const pluginDeliverMessageTimeout = 15 * time.Second
 
-// Full header scans: 91 real files <=125ms; 10,000 synthetic files <=4.1s.
+// Full header scans: 91 real files <=125ms; 10,000 synthetic files across two directories <=7.3s.
 // Receipt: plugins/attn-pi/receipts/resume-availability.md (2026-10-01).
 const pluginResumeAvailabilityTimeout = 10 * time.Second
 
@@ -69,12 +69,23 @@ type pluginDriverSpawnResult struct {
 	CWD  string            `json:"cwd,omitempty"`
 }
 
-type pluginResumeAvailableParams struct {
+type pluginResumeConversation struct {
 	CWD             string `json:"cwd"`
 	ResumeSessionID string `json:"resume_session_id"`
 }
 
+type pluginResumeAvailableParams struct {
+	Conversations []pluginResumeConversation `json:"conversations"`
+}
+
 type pluginResumeAvailableResult struct {
+	Availability []struct {
+		pluginResumeConversation
+		pluginResumeAvailability
+	} `json:"availability"`
+}
+
+type pluginResumeAvailability struct {
 	Available bool   `json:"available"`
 	Reason    string `json:"reason,omitempty"`
 }
@@ -767,33 +778,40 @@ func (d *Daemon) notifyPluginDriverSessionClosed(pluginName, sessionID, runID, r
 	}()
 }
 
-func (d *Daemon) pluginConversationResumable(reg pluginDriverRegistration, resumeID, cwd string, timedOutPlugins map[string]bool) (bool, string) {
+func (d *Daemon) pluginConversationResumable(reg pluginDriverRegistration, resumeID, cwd string) (bool, string) {
 	if !reg.Capabilities["resume_availability"] {
 		return true, ""
 	}
-	timeoutReason := fmt.Sprintf("cannot check conversation %s in %s's storage: resume_availability_timeout=%s exceeded; the driver did not answer", resumeID, reg.Agent, pluginResumeAvailabilityTimeout)
-	if timedOutPlugins[reg.PluginName] {
-		return false, timeoutReason
-	}
+	conversation := pluginResumeConversation{CWD: cwd, ResumeSessionID: resumeID}
+	result := d.pluginConversationsResumable(reg, []pluginResumeConversation{conversation})[conversation]
+	return result.Available, result.Reason
+}
+
+func (d *Daemon) pluginConversationsResumable(reg pluginDriverRegistration, conversations []pluginResumeConversation) map[pluginResumeConversation]pluginResumeAvailability {
 	ctx, cancel := context.WithTimeout(context.Background(), pluginResumeAvailabilityTimeout)
 	defer cancel()
 	var result pluginResumeAvailableResult
-	if err := d.callPlugin(ctx, reg.PluginName, "driver.resume_available", pluginResumeAvailableParams{CWD: cwd, ResumeSessionID: resumeID}, &result); err != nil {
-		if errors.Is(err, context.DeadlineExceeded) {
-			if timedOutPlugins != nil {
-				timedOutPlugins[reg.PluginName] = true
-			}
-			return false, timeoutReason
-		}
-		return false, fmt.Sprintf("cannot check conversation %s in %s's storage: %v", resumeID, reg.Agent, err)
+	err := d.callPlugin(ctx, reg.PluginName, "driver.resume_available", pluginResumeAvailableParams{Conversations: conversations}, &result)
+	reported := make(map[pluginResumeConversation]pluginResumeAvailability, len(result.Availability))
+	for _, answer := range result.Availability {
+		reported[answer.pluginResumeConversation] = answer.pluginResumeAvailability
 	}
-	if !result.Available {
-		if reason := strings.TrimSpace(result.Reason); reason != "" {
-			return false, reason
+	availability := make(map[pluginResumeConversation]pluginResumeAvailability, len(conversations))
+	for _, conversation := range conversations {
+		answer, found := reported[conversation]
+		switch {
+		case errors.Is(err, context.DeadlineExceeded):
+			answer = pluginResumeAvailability{Reason: fmt.Sprintf("cannot check conversation %s in %s's storage: resume_availability_timeout=%s exceeded; the driver did not answer", conversation.ResumeSessionID, reg.Agent, pluginResumeAvailabilityTimeout)}
+		case err != nil:
+			answer = pluginResumeAvailability{Reason: fmt.Sprintf("cannot check conversation %s in %s's storage: %v", conversation.ResumeSessionID, reg.Agent, err)}
+		case !found:
+			answer = pluginResumeAvailability{Reason: fmt.Sprintf("driver %s omitted resume availability for conversation %s in %s", reg.Agent, conversation.ResumeSessionID, conversation.CWD)}
+		case !answer.Available && strings.TrimSpace(answer.Reason) == "":
+			answer.Reason = fmt.Sprintf("conversation %s is no longer in %s's storage", conversation.ResumeSessionID, reg.Agent)
 		}
-		return false, fmt.Sprintf("conversation %s is no longer in %s's storage", resumeID, reg.Agent)
+		availability[conversation] = answer
 	}
-	return true, ""
+	return availability
 }
 
 func (d *Daemon) resolvePluginDriverLaunch(reg pluginDriverRegistration, params pluginDriverSpawnParams, resume bool) (pluginDriverSpawnResult, error) {
