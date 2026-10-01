@@ -1,6 +1,7 @@
 package daemon_test
 
 import (
+	"database/sql"
 	"os"
 	"path/filepath"
 	"strings"
@@ -126,6 +127,31 @@ func TestConversationForgetRefusesOpenSeedsThenDeletesOnlyAttnsCopy(t *testing.T
 	testworld.AwaitTaskDone(app, "conversation_keep")
 	lifeMove(t, cli, "", delegated.SeedID, "wither", "finished", "")
 	testworld.AwaitTaskDone(app, "conversation_keep")
+	archive := filepath.Join(w.Dir, "conversations", "claude", first.ConversationID+".tar.zst")
+	archiveBytes, err := os.ReadFile(archive)
+	if err != nil {
+		t.Fatal(err)
+	}
+	db, err := sql.Open("sqlite3", filepath.Join(w.Dir, "attn.db"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer db.Close()
+	if _, err := db.Exec(`CREATE TRIGGER reject_forget BEFORE UPDATE OF deleted_at ON kept_conversations BEGIN SELECT RAISE(ABORT, 'forget database unavailable'); END`); err != nil {
+		t.Fatal(err)
+	}
+	if err := cli.KeptConversationForget(first.ConversationID); err == nil || !strings.Contains(err.Error(), "forget database unavailable") {
+		t.Fatalf("database failure: %v", err)
+	}
+	if rows := conversationRows(t, cli, false); rows.Count != 1 || rows.Rows[0].Kept.PinnedAt == nil {
+		t.Fatalf("failed forget removed the pin or copy: %+v", rows)
+	}
+	if got, err := os.ReadFile(archive); err != nil || string(got) != string(archiveBytes) {
+		t.Fatalf("failed forget removed archive: %v", err)
+	}
+	if _, err := db.Exec("DROP TRIGGER reject_forget"); err != nil {
+		t.Fatal(err)
+	}
 	events := w.App()
 	forgot := testworld.Request(app, protocol.KeptConversationForgetMessage{Cmd: protocol.CmdKeptConversationForget, SessionID: first.ConversationID, RequestID: protocol.Ptr("forget")}, protocol.EventKeptConversationForgetResult, func(r protocol.KeptConversationForgetResultEvent) bool {
 		return protocol.Deref(r.RequestID) == "forget"
@@ -137,7 +163,6 @@ func TestConversationForgetRefusesOpenSeedsThenDeletesOnlyAttnsCopy(t *testing.T
 	if got, err := os.ReadFile(path); err != nil || string(got) != string(original) {
 		t.Fatalf("forget touched native transcript: %q, %v", got, err)
 	}
-	archive := filepath.Join(w.Dir, "conversations", "claude", first.ConversationID+".tar.zst")
 	if _, err := os.Stat(archive); !os.IsNotExist(err) {
 		t.Fatalf("archive survived forget: %v", err)
 	}
@@ -147,6 +172,20 @@ func TestConversationForgetRefusesOpenSeedsThenDeletesOnlyAttnsCopy(t *testing.T
 	tombstone := conversationRows(t, cli, true).Rows[0].Kept
 	if protocol.Deref(tombstone.DeletedBy) != protocol.KeptConversationDeletedByUser || tombstone.PinnedAt != nil || conversationDateForTest(protocol.Deref(tombstone.DeletedAt)) != time.Now().UTC().Format("2006-01-02") {
 		t.Fatalf("user tombstone: %+v", tombstone)
+	}
+	// Model a crash after the committed deletion but before its archive unlink.
+	if err := os.WriteFile(archive, archiveBytes, 0600); err != nil {
+		t.Fatal(err)
+	}
+	w.restart()
+	app, cli = w.App(), w.Client()
+	plantSeedAs(t, cli, "", "drain crash recovery")
+	testworld.AwaitTaskDone(app, "conversation_keep")
+	if _, err := os.Stat(archive); !os.IsNotExist(err) {
+		t.Fatalf("restart left forgotten archive: %v", err)
+	}
+	if rows := conversationRows(t, cli, false); rows.Count != 0 || rows.PendingCount != 0 {
+		t.Fatalf("restart recreated forgotten conversation: %+v", rows)
 	}
 	resumed, workspace, _ := w.RequestSpawn(app, fakeagent.Claude, w.Path("native-resume"), func(msg *protocol.SpawnSessionMessage) { msg.ResumeSessionID = protocol.Ptr(first.ConversationID) })
 	if !resumed.Success {

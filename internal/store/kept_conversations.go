@@ -144,6 +144,26 @@ func (s *Store) UnpinConversation(agent, resumeID string) error {
 	return err
 }
 
+func (s *Store) ForgetKeptConversation(agent, resumeID string, at time.Time) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if s.db == nil {
+		return sql.ErrConnDone
+	}
+	tx, err := s.db.Begin()
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback()
+	if _, err := tx.Exec("DELETE FROM kept_conversation_pins WHERE agent=? AND resume_id=?", agent, resumeID); err != nil {
+		return err
+	}
+	if _, err := tx.Exec("UPDATE kept_conversations SET deleted_at=?, deleted_by='user' WHERE agent=? AND resume_id=? AND deleted_at=''", keptInstant(at), agent, resumeID); err != nil {
+		return err
+	}
+	return tx.Commit()
+}
+
 func (s *Store) ConversationPins() ([]ConversationPin, error) {
 	s.mu.RLock()
 	defer s.mu.RUnlock()

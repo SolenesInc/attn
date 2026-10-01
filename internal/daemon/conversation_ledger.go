@@ -235,19 +235,19 @@ func (d *Daemon) forgetConversation(id string) error {
 		if !exists || !kept.DeletedAt.IsZero() {
 			return fmt.Errorf("attn has no live copy of conversation %s to forget", key.resumeID)
 		}
+		// Commit the deletion before unlinking; the keep job removes leftovers after a crash.
+		if err := d.store.ForgetKeptConversation(key.agent, key.resumeID, time.Now()); err != nil {
+			return err
+		}
+		d.publishFact(factConversationKeptChanged, key.resumeID, nil)
+		d.queueConversationKeep()
 		if err := os.Remove(conversationArchive(key.agent, key.resumeID)); err != nil && !os.IsNotExist(err) {
-			return err
+			return fmt.Errorf("conversation %s is forgotten; removing its archive failed (the keep job will retry): %w", key.resumeID, err)
 		}
-		if err := d.store.UnpinConversation(key.agent, key.resumeID); err != nil {
-			return err
-		}
-		return d.store.TombstoneKeptConversation(key.agent, key.resumeID, time.Now(), "user")
+		return nil
 	})
 	if errors.Is(err, errAutomaticWorktreeCleanupPreempted) {
 		return fmt.Errorf("garden reference changes are in progress; retry forgetting conversation %s", key.resumeID)
-	}
-	if err == nil {
-		d.publishFact(factConversationKeptChanged, key.resumeID, nil)
 	}
 	return err
 }
