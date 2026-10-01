@@ -1,8 +1,9 @@
 import { useEffect } from 'react';
+import { flushSync } from 'react-dom';
 import { emit, listen } from '@tauri-apps/api/event';
 import { isTauri } from '@tauri-apps/api/core';
 import { getCurrentWindow } from '@tauri-apps/api/window';
-import { nextAnimationFrame, settleBeforeBridgeRequest } from './uiAutomationSettle';
+import { settleBeforeBridgeRequest } from './uiAutomationSettle';
 
 // Wire strings shared with useUiAutomationBridge.ts by value: ui_automation.rs
 // broadcasts these to EVERY webview window, so both bridges must agree.
@@ -31,16 +32,6 @@ interface AutomationResponse {
   error?: string;
 }
 
-async function waitForSubmitDialog(timeoutMs = 1_000): Promise<HTMLElement> {
-  const startedAt = Date.now();
-  while (Date.now() - startedAt < timeoutMs) {
-    const dialog = document.querySelector<HTMLElement>('.present-root-submit-dialog');
-    if (dialog) return dialog;
-    await nextAnimationFrame();
-  }
-  throw new Error('present_window_submit: submit dialog did not appear');
-}
-
 // Submit-dialog buttons are addressed by class, never by position: their order is
 // not a contract.
 const SUBMIT_DIALOG_ACTION_CLASS: Record<string, string> = {
@@ -65,9 +56,13 @@ async function handlePresentWindowAction(action: string, payload?: Record<string
       if (!submitButton) {
         throw new Error('present_window_submit: submit button not found');
       }
-      submitButton.click();
+      // The click only opens React state; commit it before reading the dialog DOM.
+      flushSync(() => submitButton.click());
 
-      const dialog = await waitForSubmitDialog();
+      const dialog = document.querySelector<HTMLElement>('.present-root-submit-dialog');
+      if (!dialog) {
+        throw new Error('present_window_submit: submit dialog did not appear');
+      }
       const confirmButton = dialog.querySelector<HTMLElement>(`.${buttonClass}`);
       if (!confirmButton) {
         throw new Error(`present_window_submit: "${dialogAction}" button not found in submit dialog`);
