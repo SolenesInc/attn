@@ -401,7 +401,7 @@ func (d *Daemon) handleProfileDelete(client *wsClient, msg *protocol.ProfileDele
 			if demoted := deletion.DemotedChiefID; demoted != "" {
 				d.publishFact(FactSessionChiefRoleChanged, demoted, nil)
 				d.retargetChiefTicketDelivery(demoted, "")
-				go d.reloadSessionAgent(demoted)
+				d.life.Go("reloadSessionAgent", func() { d.reloadSessionAgent(demoted) })
 			}
 		}}, nil
 	})
@@ -462,7 +462,7 @@ func (d *Daemon) publishSessionMoved(move store.SessionProfileMove) {
 	if demoted := move.DemotedChiefID; demoted != "" {
 		d.publishFact(FactSessionChiefRoleChanged, demoted, nil)
 		d.retargetChiefTicketDelivery(demoted, "")
-		go d.reloadSessionAgent(demoted)
+		d.life.Go("reloadSessionAgent", func() { d.reloadSessionAgent(demoted) })
 	}
 }
 

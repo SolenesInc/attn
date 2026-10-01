@@ -114,6 +114,41 @@ describe('acting on the queue sidebar row that holds focus', () => {
     expect(screen.getByRole('menu', { name: 'Snooze s1' })).toBeInTheDocument();
   });
 
+  it('cancels keyboard snooze back to the focused row and blocks navigation while choosing', async () => {
+    const { daemon } = await launch({ owed: ['s1', 's2'] });
+    await openS2(daemon);
+    const origin = screen.getByTestId('queue-select-s1');
+    origin.focus();
+    await snooze(daemon);
+    const choice = screen.getByTestId('snooze-choice-30m');
+    expect(document.activeElement).toBe(choice);
+    const sentBefore = daemon.sent.length;
+    for (const shortcut of ['session.next', 'ui.actionMenu', 'ui.commandPalette', 'terminal.splitVertical'] as const) {
+      await gesture(daemon, () => pressShortcut(shortcut, choice));
+      expect(document.activeElement).toBe(choice);
+    }
+    expect(daemon.sent.slice(sentBefore)).toEqual([]);
+    await gesture(daemon, () => fireEvent.keyDown(choice, { key: 'Escape' }));
+    expect(snoozeMenu()).toBeNull();
+    expect(document.activeElement).toBe(origin);
+    expect(daemon.sentOf('snooze_turn')).toEqual([]);
+  });
+
+  it('returns command-palette snooze cancellation to the opening terminal', async () => {
+    const { daemon } = await launch({ owed: ['s2'] });
+    await openS2(daemon);
+    const origin = terminalInput()!;
+    origin.focus();
+    await gesture(daemon, () => pressShortcut('ui.commandPalette', origin));
+    const search = screen.getByRole('combobox');
+    await gesture(daemon, () => fireEvent.change(search, { target: { value: 'Snooze this agent' } }));
+    await gesture(daemon, () => fireEvent.keyDown(search, { key: 'Enter' }));
+    expect(screen.getByRole('menu', { name: 'Snooze s2' })).toBeInTheDocument();
+    await gesture(daemon, () => fireEvent.keyDown(screen.getByTestId('snooze-choice-30m'), { key: 'Escape' }));
+    expect(snoozeMenu()).toBeNull();
+    expect(document.activeElement).toBe(origin);
+  });
+
   it('opens the snooze menu beside the focused copy of an agent listed twice', async () => {
     const { daemon } = await launch({ owed: ['s1'] });
     await openS2(daemon);

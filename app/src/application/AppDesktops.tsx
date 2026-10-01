@@ -15,6 +15,7 @@ import {
   useAppPanelsContext,
   useAppSessionsContext,
   useAppShell,
+  useAttentionQueueContext,
   useCrewPanelContext,
   useDesktopResidencyContext,
   useDesktopRuntimeContext,
@@ -28,6 +29,7 @@ import { localDirectoryOf } from './useScreenSession';
 import { leafOn, sessionOfLeaf } from '../navigation/activeLeaf';
 
 export function AppDesktops() {
+  const { snoozeMenu } = useAttentionQueueContext();
   const desktops = useProfilesStore((state) => state.desktops);
   const currentDesktopId = useProfilesStore((state) => state.currentDesktopId);
   const {
@@ -98,6 +100,7 @@ export function AppDesktops() {
         <SessionTerminalDesktop
           ref={setDesktopRef(desktop.id)}
           desktopId={desktop.id}
+          shortcutsEnabled={!snoozeMenu}
           desktopDirectory={desktopDirectory}
           desktopSessions={desktopSessions.map((entry) => ({
             id: entry.id,

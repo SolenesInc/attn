@@ -2,6 +2,7 @@ package store
 
 import (
 	"database/sql"
+	"fmt"
 	"path/filepath"
 	"reflect"
 	"strings"
@@ -82,36 +83,45 @@ func desktopRows(t *testing.T, db *sql.DB) []string {
 }
 
 func TestADatabaseUpgradedByNextsSolMigrationIsRefusedWithItsCauseAndLeftAsItWas(t *testing.T) {
-	path := filepath.Join(t.TempDir(), "attn.db")
-	db, err := OpenDBAtSchemaVersion(path, 157)
-	if err != nil {
-		t.Fatalf("OpenDBAtSchemaVersion: %v", err)
-	}
-	if _, err := db.Exec(`INSERT INTO schema_migrations (version, applied_at) VALUES (158, '')`); err != nil {
-		t.Fatal(err)
-	}
-	if err := db.Close(); err != nil {
-		t.Fatal(err)
-	}
+	for _, schema := range []int{158, 159} {
+		t.Run(fmt.Sprint(schema), func(t *testing.T) {
+			path := filepath.Join(t.TempDir(), "attn.db")
+			db, err := OpenDBAtSchemaVersion(path, 157)
+			if err != nil {
+				t.Fatalf("OpenDBAtSchemaVersion: %v", err)
+			}
+			if _, err := db.Exec(`INSERT INTO schema_migrations (version, applied_at) VALUES (?, '')`, schema); err != nil {
+				t.Fatal(err)
+			}
+			if schema == 159 {
+				if _, err := db.Exec(`CREATE TABLE kept_conversations (resume_id TEXT NOT NULL, agent TEXT NOT NULL, source_path TEXT NOT NULL, bytes INTEGER NOT NULL, stored_bytes INTEGER NOT NULL, copied_at TEXT NOT NULL, released_at TEXT NOT NULL DEFAULT '', deleted_at TEXT NOT NULL DEFAULT '', PRIMARY KEY (agent, resume_id))`); err != nil {
+					t.Fatal(err)
+				}
+			}
+			if err := db.Close(); err != nil {
+				t.Fatal(err)
+			}
 
-	if s, _, err := Open(path); err == nil {
-		s.Close()
-		t.Fatal("a database from next's migration 158 opened, want it refused")
-	} else if !strings.Contains(err.Error(), "build of next whose migration 158") || !strings.Contains(err.Error(), "moving "+path+" aside") {
-		t.Fatalf("refusal = %v, want the cause and the reset", err)
-	}
+			if s, _, err := Open(path); err == nil {
+				s.Close()
+				t.Fatal("a database from next's migration 158 opened, want it refused")
+			} else if !strings.Contains(err.Error(), "build of next whose migration 158") || !strings.Contains(err.Error(), "moving "+path+" aside") {
+				t.Fatalf("refusal = %v, want the cause and the reset", err)
+			}
 
-	reopened, _, err := openSQLite(path)
-	if err != nil {
-		t.Fatal(err)
-	}
-	t.Cleanup(func() { reopened.Close() })
-	var version, profiles int
-	if err := reopened.QueryRow(`SELECT MAX(version) FROM schema_migrations`).Scan(&version); err != nil || version != 158 {
-		t.Fatalf("schema version after the refusal = %d (%v), want 158 untouched", version, err)
-	}
-	if err := reopened.QueryRow(`SELECT count(*) FROM sqlite_master WHERE name = 'profiles'`).Scan(&profiles); err != nil || profiles != 0 {
-		t.Fatalf("the refused database has %d profiles tables (%v), want none", profiles, err)
+			reopened, _, err := openSQLite(path)
+			if err != nil {
+				t.Fatal(err)
+			}
+			t.Cleanup(func() { reopened.Close() })
+			var version, profiles int
+			if err := reopened.QueryRow(`SELECT MAX(version) FROM schema_migrations`).Scan(&version); err != nil || version != schema {
+				t.Fatalf("schema version after the refusal = %d (%v), want %d untouched", version, err, schema)
+			}
+			if err := reopened.QueryRow(`SELECT count(*) FROM sqlite_master WHERE name = 'profiles'`).Scan(&profiles); err != nil || profiles != 0 {
+				t.Fatalf("the refused database has %d profiles tables (%v), want none", profiles, err)
+			}
+		})
 	}
 }
 
@@ -121,8 +131,9 @@ func TestTheSolMigrationRunsAfterTheProfileLadder(t *testing.T) {
 		schema int
 		wants  []int
 	}{
-		{"an install at 153", 153, []int{154, 155, 156, 157, 158, ProfileConversionSchemaVersion, 160, 161, 162, 163}},
-		{"a desktops install at 162", 162, []int{163}},
+		{"an install at 153", 153, []int{154, 155, 156, 157, 158, ProfileConversionSchemaVersion, 160, 161, 162, 163, 164}},
+		{"a desktops install at 162", 162, []int{163, 164}},
+		{"a production desktops install at 163", 163, []int{164}},
 	} {
 		t.Run(start.name, func(t *testing.T) {
 			path := filepath.Join(t.TempDir(), "attn.db")
@@ -151,8 +162,8 @@ func TestTheSolMigrationRunsAfterTheProfileLadder(t *testing.T) {
 				t.Fatalf("upgrade from %d: %v", start.schema, err)
 			}
 			t.Cleanup(func() { s.Close() })
-			if upgrade.From != start.schema || upgrade.To != 163 {
-				t.Fatalf("upgrade = %+v, want %d -> 163", upgrade, start.schema)
+			if upgrade.From != start.schema || upgrade.To != 164 {
+				t.Fatalf("upgrade = %+v, want %d -> 164", upgrade, start.schema)
 			}
 			var applied []int
 			for _, version := range recordedVersions(t, s.db) {
@@ -168,11 +179,14 @@ func TestTheSolMigrationRunsAfterTheProfileLadder(t *testing.T) {
 					t.Fatalf("desktops changed from %v to %v, want only the Sol migration applied", desktops, got)
 				}
 			}
+			if _, err := s.db.Exec(`INSERT INTO kept_conversations (resume_id, agent, source_path, bytes, stored_bytes, copied_at) VALUES ('kept', 'codex', '/fixture', 1, 1, 'now')`); err != nil {
+				t.Fatalf("kept conversations after upgrade: %v", err)
+			}
 			state, err := s.SessionCost("sol")
 			if err != nil {
 				t.Fatal(err)
 			}
-			if len(state.Ledger) != 2 {
+			if start.schema < 163 && len(state.Ledger) != 2 {
 				t.Fatalf("ledger = %+v, want the Sol observations filed under a standard and a long-context row", state.Ledger)
 			}
 		})

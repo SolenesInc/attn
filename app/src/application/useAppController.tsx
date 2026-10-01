@@ -420,8 +420,6 @@ export function useAppController({
         devicePixelRatio: window.devicePixelRatio,
       },
     };
-    actionMenuFocusOriginRef.current = document.activeElement instanceof HTMLElement
-      ? document.activeElement : null;
     delegationChainRef.current?.prepareCommand();
     setPalette(openPalette(mode));
   }, [

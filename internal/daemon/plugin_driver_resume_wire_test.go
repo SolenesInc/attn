@@ -103,7 +103,7 @@ func TestAStalledResumeInspectionTimesOutAndIsRetriedOnTheNextRead(t *testing.T)
 			"session_id": delegated.SessionID, "run_id": run.RunID, "seq": 2,
 			"metadata": map[string]string{"native_id": "saved-conversation"}, "resume_session_id": "saved-conversation",
 		})
-		closePane(app, seedResumePane(t, w, protocol.Deref(delegated.WorkspaceID), delegated.SessionID))
+		closePane(app, sessionPane{session: delegated.SessionID})
 
 		shown := make(chan *protocol.SeedShowResult, 1)
 		go func() { shown <- lifeShow(t, cli, delegated.SeedID) }()
@@ -146,7 +146,7 @@ func TestAGardenReviewWaitsForAStalledResumeDriverOnlyOncePerCapture(t *testing.
 				"session_id": delegated.SessionID, "run_id": run.RunID, "seq": 2,
 				"metadata": map[string]string{"native_id": name}, "resume_session_id": name,
 			})
-			closePane(app, seedResumePane(t, w, protocol.Deref(delegated.WorkspaceID), delegated.SessionID))
+			closePane(app, sessionPane{session: delegated.SessionID})
 		}
 		shown := make(chan *protocol.SeedReviewResult, 1)
 		go func() { shown <- gardenReviewShow(t, cli, "") }()
@@ -192,7 +192,7 @@ func TestAGardenReviewWaitsForIndependentDriversTogether(t *testing.T) {
 				"session_id": delegated.SessionID, "run_id": run.RunID, "seq": 2,
 				"resume_session_id": agent + "-conversation", "metadata": map[string]string{"native_id": agent + "-conversation"},
 			})
-			closePane(app, seedResumePane(t, w, protocol.Deref(delegated.WorkspaceID), delegated.SessionID))
+			closePane(app, sessionPane{session: delegated.SessionID})
 		}
 		shown := make(chan *protocol.SeedReviewResult, 1)
 		go func() { shown <- gardenReviewShow(t, cli, "") }()
@@ -234,7 +234,7 @@ func TestAGardenReviewJoinsResumeInspectionWhenItsAdvisorReturnsDuringShutdown(t
 		"session_id": delegated.SessionID, "run_id": run.RunID, "seq": 2,
 		"resume_session_id": "saved-conversation", "metadata": map[string]string{"native_id": "saved-conversation"},
 	})
-	closePane(app, seedResumePane(t, w, protocol.Deref(delegated.WorkspaceID), delegated.SessionID))
+	closePane(app, sessionPane{session: delegated.SessionID})
 	now.Store(time.Now().Add(garden.DefaultStaleWindow).UnixNano())
 	t.Setenv("ATTN_HEADLESS_TASKS", "on")
 	reviews := make(chan protocol.GardenReview, 1)
@@ -309,7 +309,7 @@ func TestAGardenReviewInspectsSharedPluginStorageOncePerCapture(t *testing.T) {
 				"session_id": delegated.SessionID, "run_id": run.RunID, "seq": 2,
 				"metadata": map[string]string{"native_id": "shared-id"}, "resume_session_id": "shared-id",
 			})
-			closePane(app, seedResumePane(t, w, protocol.Deref(delegated.WorkspaceID), delegated.SessionID))
+			closePane(app, sessionPane{session: delegated.SessionID})
 		}
 		shown := make(chan *protocol.SeedReviewResult, 1)
 		for _, firstAvailable := range []bool{true, false} {
