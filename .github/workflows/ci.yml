@@ -784,6 +784,7 @@ jobs:
             ${{ runner.temp }}/attn-real-app-harness/**/*.txt
             ${{ runner.temp }}/attn-real-app-harness/**/*.png
             ${{ runner.temp }}/attn-real-app-harness/**/*.json
+            ${{ runner.temp }}/attn-real-app-harness/**/app-launch-*.log
             ${{ runner.temp }}/attn-real-app-harness/daemon/*.log
 
       - name: Upload shard result
@@ -971,6 +972,7 @@ jobs:
             ${{ runner.temp }}/attn-real-app-harness/**/*.txt
             ${{ runner.temp }}/attn-real-app-harness/**/*.png
             ${{ runner.temp }}/attn-real-app-harness/**/*.json
+            ${{ runner.temp }}/attn-real-app-harness/**/app-launch-*.log
             ${{ runner.temp }}/attn-real-app-harness/daemon/*.log
 
       - name: Clean instance
