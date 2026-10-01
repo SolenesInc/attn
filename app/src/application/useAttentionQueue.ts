@@ -105,7 +105,7 @@ export function useAttentionQueue({
   );
 
   const openSnoozeForSession = useCallback((session: { id: string; label: string }, row?: HTMLElement, opener?: HTMLElement | null) => {
-    const origin = opener ?? row ?? (document.activeElement instanceof HTMLElement ? document.activeElement : null);
+    const origin = opener ?? (document.activeElement instanceof HTMLElement ? document.activeElement : null);
     const rect = row?.getBoundingClientRect();
     const pane = document.querySelector<HTMLElement>(`.terminal-wrapper.active [data-pane-session-id="${session.id}"]`);
     setSnoozeMenu({
