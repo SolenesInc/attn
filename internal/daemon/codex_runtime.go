@@ -142,17 +142,14 @@ func (r *codexRuntime) ensureServer(ctx context.Context, launch codexLaunchConte
 	}
 	var control *codexshared.Client
 	var err error
-	var retryDelay time.Duration
 	for {
-		began := time.Now()
 		control, err = codexshared.Connect(r.d.life.Context(), r.socket(""), r.observeNative)
 		if !errors.Is(err, syscall.ECONNREFUSED) || alive {
 			break
 		}
-		// Unix bind publishes the path before listen. Pace refused startup dials
-		// by their measured duration; never repeat a request on an opened transport.
-		retryDelay += time.Since(began)
-		timer := time.NewTimer(retryDelay)
+		// Stock 0.159.3 socket-to-handshake was <=24ms over five starts; 100ms
+		// matches worker startup polling. Retry only a refused, unopened transport.
+		timer := time.NewTimer(100 * time.Millisecond)
 		select {
 		case <-ctx.Done():
 			timer.Stop()

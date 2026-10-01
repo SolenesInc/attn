@@ -67,6 +67,12 @@ takes precedence over the resume snapshot; uncertain input is never resent. Nati
 server exit marks open owners recoverable with interrupted work; it never replays
 an uncertain submission.
 
+Owner input releases the shared runtime lock before awaiting Codex's reply, so
+an unanswered request cannot block other clients' owner/view operations. Calls
+keep their caller's cancellation and disconnect handling; there is no added
+input deadline or automatic resend. Recovery uses the saved Codex executable
+and reports failure rather than selecting another installation.
+
 ## Close coordination
 
 ```text

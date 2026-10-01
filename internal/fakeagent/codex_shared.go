@@ -73,6 +73,9 @@ func (s *sharedFakeCodex) serve(w http.ResponseWriter, req *http.Request) {
 			continue
 		}
 		result, err := s.handle(m)
+		if err == nil && (m.Method == "turn/start" || m.Method == "turn/steer") && os.Getenv("ATTN_FAKE_CODEX_DROP_TURN_REPLY") == "1" {
+			continue
+		}
 		reply := codexshared.Message{ID: m.ID}
 		if err != nil {
 			reply.Error, _ = json.Marshal(map[string]any{"code": -32603, "message": err.Error()})

@@ -451,32 +451,38 @@ func (r *codexRuntime) observeNative(m codexshared.Message) {
 }
 
 func (r *codexRuntime) send(ctx context.Context, id, text string, active bool) error {
-	r.mu.Lock()
-	defer r.mu.Unlock()
-	owner, err := r.d.store.CodexOwner(id)
+	control, root, err := func() (*codexshared.Client, string, error) {
+		r.mu.Lock()
+		defer r.mu.Unlock()
+		owner, err := r.d.store.CodexOwner(id)
+		if err != nil {
+			return nil, "", err
+		}
+		if owner == nil || owner.NativeRootID == "" {
+			return nil, "", fmt.Errorf("codex owner %s has no native root", id)
+		}
+		launch, err := r.ownerContext(owner)
+		if err != nil {
+			return nil, "", err
+		}
+		if err := r.ensureServer(ctx, launch); err != nil {
+			return nil, "", err
+		}
+		return r.control, owner.NativeRootID, nil
+	}()
 	if err != nil {
-		return err
-	}
-	if owner == nil || owner.NativeRootID == "" {
-		return fmt.Errorf("codex owner %s has no native root", id)
-	}
-	launch, err := r.ownerContext(owner)
-	if err != nil {
-		return err
-	}
-	if err := r.ensureServer(ctx, launch); err != nil {
 		return err
 	}
 	r.activeMu.Lock()
-	turnID := r.activeTurns[owner.NativeRootID].ID
+	turnID := r.activeTurns[root].ID
 	r.activeMu.Unlock()
-	params := map[string]any{"threadId": owner.NativeRootID, "input": []any{map[string]any{"type": "text", "text": text, "text_elements": []any{}}}}
+	params := map[string]any{"threadId": root, "input": []any{map[string]any{"type": "text", "text": text, "text_elements": []any{}}}}
 	method := "turn/start"
 	if active && turnID != "" {
 		method = "turn/steer"
 		params["expectedTurnId"] = turnID
 	}
-	_, err = r.control.Call(ctx, method, params)
+	_, err = control.Call(ctx, method, params)
 	return err
 }
 

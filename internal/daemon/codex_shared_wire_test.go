@@ -224,6 +224,30 @@ func TestSharedCodexTitleAuthorityAndHiddenInputPreserveTheVisibleDraft(t *testi
 	awaitSharedView(app, a, a)
 }
 
+func TestSharedCodexUnansweredInputDoesNotBlockClosingAnotherOwner(t *testing.T) {
+	t.Setenv("ATTN_FAKE_CODEX_DROP_TURN_REPLY", "1")
+	w := newWorld(t, fakeagent.Codex)
+	app := w.App()
+	sharedCodexSetting(t, app, true)
+	a := w.Spawn(app, fakeagent.Codex, w.Path("exo"))
+	agentA := w.Launched(a)
+	awaitSharedView(app, a, a)
+	b := w.Spawn(app, fakeagent.Codex, w.Path("foo"))
+	awaitSharedView(app, b, b)
+	app.Send(protocol.SessionAnnotationsSubmitMessage{Cmd: protocol.CmdSessionAnnotationsSubmit, RequestID: "unanswered-A", SessionID: a, Text: "accepted without a reply"})
+	if got := agentA.Prompted(); got != "accepted without a reply" {
+		t.Fatal(got)
+	}
+	if err := w.Client().Unregister(b); err != nil {
+		t.Fatal(err)
+	}
+	awaitClosed(app, b)
+	shown, err := w.Client().SessionShow(a)
+	if err != nil || shown.Entry.ClosedAt != nil {
+		t.Fatalf("unanswered owner was closed: %+v %v", shown, err)
+	}
+}
+
 func TestSharedCodexSurvivesAnActualDaemonRestartWithTheSameOwnersAndPTYs(t *testing.T) {
 	stack := testworld.NewStack(t, testworld.WithAgents(fakeagent.Codex))
 	stack.Start()
