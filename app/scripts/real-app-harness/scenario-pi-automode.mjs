@@ -151,7 +151,7 @@ async function drive({ options, instance, runAttn, stub, judgeQueue, launchEnv, 
     preflightLaunchEnv: launchEnv,
   });
 
-  const client = new UiAutomationClient({ appPath: options.appPath, launchEnv });
+  const client = new UiAutomationClient({ ...options, launchEnv });
   const observer = new DaemonObserver({ wsUrl: options.wsUrl });
   const note = (message, extra) => runner.log(message, extra);
   let sessionId = null;

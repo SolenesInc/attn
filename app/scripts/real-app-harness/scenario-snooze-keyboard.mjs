@@ -26,7 +26,7 @@ async function main() {
   const runner = createScenarioRunner(options, {
     scenarioId: 'SNOOZE-KEYBOARD', tier: 'tier2-local-mock-agent', prefix: 'snooze-keyboard',
   });
-  const client = new UiAutomationClient({ appPath: options.appPath });
+  const client = new UiAutomationClient(options);
   const observer = new DaemonObserver({ wsUrl: options.wsUrl });
   const driver = createWindowDriver({ appPath: options.appPath, client });
   const agents = [];

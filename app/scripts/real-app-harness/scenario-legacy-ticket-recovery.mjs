@@ -400,6 +400,7 @@ function idempotenceReceipt(world, conversations) {
 
 async function launchAndInspect(runner, world, binary, receipt) {
   const client = new UiAutomationClient({
+    artifactsDir: runner.runDir,
     appPath: world.resources.appPath,
     bundleId: world.resources.bundleId,
     launchEnv: world.env,

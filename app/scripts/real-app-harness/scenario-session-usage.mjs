@@ -87,7 +87,7 @@ async function main() {
     prefix: 'session-usage',
     metadata: { focus: 'native subagent accounting, partial pricing, hover preview, and Action menu pinning' },
   });
-  const client = new UiAutomationClient({ appPath: options.appPath });
+  const client = new UiAutomationClient(options);
   const observer = new DaemonObserver({ wsUrl: options.wsUrl });
   let sessionId = null;
   let receipt = null;

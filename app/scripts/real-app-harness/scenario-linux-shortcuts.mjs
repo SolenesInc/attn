@@ -84,7 +84,7 @@ async function main() {
       focus: 'xdotool drives Ctrl+Shift app actions while plain Ctrl+W reaches bash readline',
     },
   });
-  const client = new UiAutomationClient({ appPath: options.appPath });
+  const client = new UiAutomationClient(options);
   const observer = new DaemonObserver({ wsUrl: options.wsUrl });
   const driver = createWindowDriver({ appPath: options.appPath, client });
   let sessionId = null;

@@ -174,7 +174,7 @@ async function main() {
 
   // A worker inherits the DAEMON's environment, so the dark leg ensures a daemon
   // carrying the hatch BEFORE relaunching the app.
-  const client = new UiAutomationClient({ appPath: options.appPath });
+  const client = new UiAutomationClient(options);
   const observer = new DaemonObserver({ wsUrl: options.wsUrl });
 
   let sessionId = null;

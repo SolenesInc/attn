@@ -194,7 +194,7 @@ async function main() {
 
   process.env.ATTN_HARNESS_ALWAYS_ON_TOP ??= '0';
 
-  const client = new UiAutomationClient({ appPath: options.appPath });
+  const client = new UiAutomationClient(options);
   const observer = new DaemonObserver({ wsUrl: options.wsUrl });
   const driver = createWindowDriver({ appPath: options.appPath, client });
   const note = (message, extra) => runner.log(message, extra);

@@ -155,7 +155,7 @@ async function main() {
       focus: 'a crash keeps what it can bring back, with its codex binding and its pane intact',
     },
   });
-  const client = new UiAutomationClient({ appPath: options.appPath });
+  const client = new UiAutomationClient(options);
   const observer = new DaemonObserver({ wsUrl: options.wsUrl });
   // Daemon lifecycle and CLI reads must run through the exact build under test,
   // not an unrelated ./attn on PATH.

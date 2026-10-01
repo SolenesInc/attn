@@ -248,7 +248,7 @@ async function main() {
     prefix: 'automation-pr-continuity',
     metadata: { instance, provider: 'local mock GitHub', transcript: 'copied existing Codex rollout' },
   });
-  const client = new UiAutomationClient({ appPath: options.appPath });
+  const client = new UiAutomationClient(options);
   const observer = new DaemonObserver({ wsUrl: options.wsUrl });
   const fixture = createFixture(runner.sessionDir);
   const seedHome = path.join(runner.sessionDir, 'codex-home');

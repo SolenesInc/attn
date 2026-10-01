@@ -65,6 +65,8 @@ when a scenario fails. It preserves the failing command's exit status. Pass
 host temporary directory in `attn-linux-artifacts/<provider>/<checkout hash>`.
 Xvfb uses `-noreset` so short-lived window probes cannot reset the display while
 GTK initializes the app. CI acceptance and soak runs use the same setting.
+Packaged-app stdout and stderr are saved as `app-launch-<id>.log` in the scenario
+artifacts directory. An early exit reports its code, signal, and log path.
 `artifacts` repeats collection after an interrupted run. For shell operators,
 use an explicit shell: `run -- bash -c 'command && next-command'`.
 

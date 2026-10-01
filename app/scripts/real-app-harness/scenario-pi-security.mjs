@@ -79,7 +79,7 @@ const runner = createScenarioRunner(options, {
   allowRealAgents: ['pi'], preflightLaunchEnv: world.launchEnv,
   metadata: { focus: 'sandbox, secret filtering, user grants, auto independence, session replacement', model: 'loopback stub' },
 });
-const client = new UiAutomationClient({ appPath: options.appPath, launchEnv: world.launchEnv });
+const client = new UiAutomationClient({ ...options, launchEnv: world.launchEnv });
 const observer = new DaemonObserver(options);
 let sessionId;
 let paneId;

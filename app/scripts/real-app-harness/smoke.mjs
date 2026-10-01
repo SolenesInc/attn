@@ -35,7 +35,7 @@ async function main() {
   const utilityToken = `__ATTN_REAL_UTILITY_${Date.now()}__`;
 
   const observer = new DaemonObserver({ wsUrl: options.wsUrl });
-  const client = new UiAutomationClient({ appPath: options.appPath });
+  const client = new UiAutomationClient(options);
   const driver = createWindowDriver({ appPath: options.appPath, client });
 
   console.log(`[RealAppHarness] runDir=${runDir}`);

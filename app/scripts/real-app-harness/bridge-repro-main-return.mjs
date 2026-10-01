@@ -166,7 +166,7 @@ async function main() {
   const shellToken = `__FLOW_SHELL_${Date.now()}__`;
   const mainToken2 = `__FLOW_MAIN_TWO_${Date.now()}__`;
 
-  const client = new UiAutomationClient({ appPath: options.appPath });
+  const client = new UiAutomationClient(options);
   const observer = new DaemonObserver({ wsUrl: options.wsUrl });
   const trace = createTracer(runDir);
 

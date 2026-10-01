@@ -600,7 +600,7 @@ Remote hub options:
   let remoteWorktreePath = null;
   let remoteWorktreeBranch = null;
   const client = new UiAutomationClient({
-    appPath: options.appPath,
+    ...options,
     launchEnv: {},
   });
   const observer = new DaemonObserver({ wsUrl: options.wsUrl });

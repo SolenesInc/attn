@@ -130,7 +130,7 @@ async function main() {
   });
   const remoteHarnessWSPort = String(chooseRemoteWSPort());
   const client = new UiAutomationClient({
-    appPath: options.appPath,
+    ...options,
     launchEnv: {
       ...remoteTripwire.launchEnv,
       ATTN_REMOTE_ATTN_BIN: remotePaths.remoteHarnessBinary,
