@@ -1,0 +1,3 @@
+kind: added
+area: desktops
+change: An empty desktop shows the new agent launcher in place of a blank surface, with every option of the New Session dialog; Cmd+N focuses it there instead of opening the dialog.

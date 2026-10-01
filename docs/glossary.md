@@ -52,6 +52,7 @@
 - Pane: an agent's place on a desktop. An agent has at most one pane.
 - Unplaced agent: an agent of a profile with no pane. Crew wakes, automation runs and reopened sessions start unplaced; the queue (or, for runs, the automations section) surfaces them and opening one places it.
 - Current desktop: the desktop a profile shows. Every client on that profile shares it.
+- Empty desktop launcher: the New Session picker shown inline on a current desktop with no leaves. Launches land there; New Session (Cmd+N) focuses it instead of opening the dialog, and Escape never dismisses it.
 - Active leaf (active pane on the wire): the agent pane or tile a desktop has selected. The daemon owns it and every client on the profile shares it. The app stores no current agent: the shown agent is the active leaf of the current desktop when it is an agent pane. With a tile active, agent-only actions are unavailable; opens and placements land beside that tile.
 - Show: one request that selects an agent (`desktop_show_session`) or a leaf (`desktop_show_leaf`). The daemon switches the requesting client's profile if needed, places an unplaced agent beside the active leaf, sets the active leaf and makes its desktop current, in one transaction with one broadcast.
 - Own answer: the arrangement the daemon sends a client for that client's own request, marked with its request id (a launch's session id), before the result and before any broadcast that includes the change. The daemon never sends a client an arrangement older than, or identical to, the one it already has.
