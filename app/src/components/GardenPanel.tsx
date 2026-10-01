@@ -599,7 +599,7 @@ export function GardenPanel({
   const [query, setQuery] = useState('');
   const [wideIn, setWideIn] = useState<string | null>(null);
   const [walk, setWalk] = useState<{ of: string; index: number }>({ of: '', index: 0 });
-  const [seedDocument, setSeedDocument] = useState<SeedDocument | null>(null);
+  const [seedDocument, setSeedDocument] = useState<{ document: SeedDocument; snapshot: Seed[] } | null>(null);
   const [documentError, setDocumentError] = useState<string | null>(null);
   const [continuationDraft, setContinuationDraft] = useState<ContinuationDraft | null>(null);
   const [titlePinned, setTitlePinned] = useState(false);
@@ -765,7 +765,7 @@ export function GardenPanel({
     setDocumentError(null);
     fetchSeedDocument(hereId)
       .then((document) => {
-        if (!ignore) setSeedDocument(document);
+        if (!ignore) setSeedDocument({ document, snapshot: seeds });
       })
       .catch((error) => {
         if (!ignore) setDocumentError(error instanceof Error ? error.message : `Could not read ${hereId}`);
@@ -910,8 +910,8 @@ export function GardenPanel({
       : hiddenClosed;
   const closedToggle = otherLens || (!closedOn && closedCount === 0) ? null : { count: closedCount, on: closedOn };
 
-  const seedDoc = seedDocument && here && seedDocument.seed.id === here.id ? seedDocument : null;
-  const documentIsCurrent = Boolean(seedDoc && here && seedDoc.seed.rev === here.rev);
+  const seedDoc = seedDocument && here && seedDocument.document.seed.id === here.id ? seedDocument.document : null;
+  const documentIsCurrent = Boolean(seedDoc && here && seedDoc.seed.rev === here.rev && seedDocument?.snapshot === seeds);
   const continuation = seedDoc?.seed.continuation;
   const seedIsOpen = seedDoc ? !isClosed(seedDoc.seed) : false;
   const canResume = Boolean(documentIsCurrent && onResumeSeed && seedIsOpen && continuation?.resume_available);

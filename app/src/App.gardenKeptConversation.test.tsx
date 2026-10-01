@@ -81,4 +81,26 @@ describe('App kept conversation in the Garden reader', () => {
     expect(screen.getByText('conversation kept by attn (1.6 MB) while an open seed points at it')).toBeInTheDocument();
     expectReads(garden.daemon, 2);
   });
+
+  it('invalidates retention and Resume on a same-revision snapshot, even when the read fails', async () => {
+    const garden = await open();
+    garden.daemon.on('seed_document_get', () => undefined);
+    const deleted = { ...seed, continuation: { ...seed.continuation!, resume_available: false,
+      resume_reason: 'attn deleted its copy on 2026-10-14',
+      kept_conversation: { ...kept, deleted_at: '2026-10-14T01:00:00Z' },
+    } };
+    await gesture(garden.daemon, () => garden.push([deleted]));
+    expect(screen.queryByText(/conversation kept by attn/)).toBeNull();
+    expect(screen.queryByRole('button', { name: 'Resume' })).toBeNull();
+    await gesture(garden.daemon, () => garden.daemon.replyTo(garden.daemon.sentOf('seed_document_get')[1], {
+      event: 'seed_document_get_result', success: false, error: 'document unavailable',
+    }));
+    expect(screen.queryByText(/conversation kept by attn/)).toBeNull();
+    expect(screen.queryByRole('button', { name: 'Resume' })).toBeNull();
+    garden.daemon.on('seed_document_get', (read) => garden.answer(read));
+    await gesture(garden.daemon, () => garden.push([deleted]));
+    expect(screen.getByText('conversation attn deleted its copy on 2026-10-14')).toBeInTheDocument();
+    expect(screen.getByText('attn deleted its copy on 2026-10-14')).toBeInTheDocument();
+    expectReads(garden.daemon, 3);
+  });
 });
