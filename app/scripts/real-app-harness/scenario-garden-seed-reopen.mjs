@@ -249,11 +249,17 @@ async function main() {
       );
       runner.assert(chip.id === seed,
         'the Handover session reports to the same seed', { chip, seed });
-      const { limit } = await client.request('get_warm_workspace_limit');
-      runner.registerCleanup('restore warm workspace limit', () =>
-        client.request('set_warm_workspace_limit', { limit }));
-      await client.request('set_warm_workspace_limit', { limit: 0 });
-      const dispatcher = await client.request('get_pane_state', pane);
+      // Only the current and previous desktops stay mounted. Visit two others
+      // so the dispatcher's next command reads from a newly attached terminal.
+      for (const label of ['away', 'further']) {
+        const desktop = await observer.createDesktop(`harness-${runner.runId}-${label}`);
+        runner.registerCleanup(`delete ${label} desktop`, () => observer.deleteDesktop(desktop.id));
+        await client.request('select_desktop', { desktopId: desktop.id });
+      }
+      const dispatcher = await pollFor(async () => {
+        const state = await client.request('get_pane_state', pane);
+        return state.pane.runtimeAttached === false ? state : null;
+      }, 'the dispatcher terminal to detach outside the resident desktops');
       runner.writeJson('dispatcher-before-read.json', dispatcher);
       runner.assert(dispatcher.pane.runtimeAttached === false,
         'the dispatcher is detached before its command output is read', { dispatcher });
