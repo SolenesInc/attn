@@ -51,7 +51,7 @@ func (d *Daemon) setSessionContextWindowCap(sessionID string, cap int) error {
 	}
 	d.publishFact(FactSessionCapChanged, id, nil)
 	if d.sessionHasLiveWorker(id) {
-		go d.reloadSessionAgent(id)
+		d.life.Go("reloadSessionAgent", func() { d.reloadSessionAgent(id) })
 	}
 	return nil
 }

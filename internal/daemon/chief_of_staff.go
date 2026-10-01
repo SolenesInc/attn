@@ -240,10 +240,10 @@ func (d *Daemon) handleSetChiefOfStaff(client *wsClient, msg *protocol.SetChiefO
 		}
 		d.retargetChiefTicketDelivery(previousSessionID, newChiefSessionID)
 		if !preparedSessions[sessionID] {
-			go d.reloadSessionAgent(sessionID)
+			d.life.Go("reloadSessionAgent", func() { d.reloadSessionAgent(sessionID) })
 		}
 		if msg.ChiefOfStaff && previousSessionID != "" && !preparedSessions[previousSessionID] {
-			go d.reloadSessionAgent(previousSessionID)
+			d.life.Go("reloadSessionAgent", func() { d.reloadSessionAgent(previousSessionID) })
 		}
 	}
 	d.sendChiefOfStaffResult(client, sessionID, msg.ChiefOfStaff, previousSessionID, reloadErr)

@@ -16,15 +16,13 @@ type sharedCall[V any] struct {
 
 type sharedCalls[K comparable, V any] struct {
 	mu     sync.Mutex
-	root   context.Context
+	name   string
+	life   *lifetime
 	active map[K]*sharedCall[V]
 }
 
-func newSharedCalls[K comparable, V any](root context.Context) *sharedCalls[K, V] {
-	if root == nil {
-		root = context.Background()
-	}
-	return &sharedCalls[K, V]{root: root, active: make(map[K]*sharedCall[V])}
+func newSharedCalls[K comparable, V any](life *lifetime, name string) *sharedCalls[K, V] {
+	return &sharedCalls[K, V]{name: name, life: life, active: make(map[K]*sharedCall[V])}
 }
 
 func (s *sharedCalls[K, V]) Do(ctx context.Context, key K, run func(context.Context) (V, error)) (V, error) {
@@ -34,11 +32,16 @@ func (s *sharedCalls[K, V]) Do(ctx context.Context, key K, run func(context.Cont
 		call.waiters++
 		s.mu.Unlock()
 	} else {
-		callCtx, cancel := context.WithCancel(s.root)
+		callCtx, cancel := context.WithCancel(context.Background())
 		call = &sharedCall[V]{ctx: callCtx, cancel: cancel, done: make(chan struct{}), waiters: 1}
 		s.active[key] = call
 		s.mu.Unlock()
-		go s.run(key, call, run)
+		if !s.life.Go(s.name, func() { s.run(key, call, run) }) {
+			s.run(key, call, func(context.Context) (V, error) {
+				var zero V
+				return zero, errDaemonStopping
+			})
+		}
 	}
 
 	select {

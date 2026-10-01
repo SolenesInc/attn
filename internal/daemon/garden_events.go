@@ -282,7 +282,7 @@ func (d *Daemon) handleGardenSeedEventWithoutRoleLock(_ context.Context, event b
 	}
 	for _, sessionID := range created {
 		d.noteQueuedAgentMailboxItem(sessionID)
-		go d.drainQueuedAgentMailboxItems(sessionID)
+		d.life.Go("drainQueuedAgentMailboxItems", func() { d.drainQueuedAgentMailboxItems(sessionID) })
 	}
 	return nil
 }

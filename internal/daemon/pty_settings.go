@@ -97,7 +97,7 @@ func (d *Daemon) validateSharedPTYHostAfterRecovery() {
 	if routed && !parseBooleanSetting(d.store.GetSetting(SettingSharedPTYHostEnabled)) {
 		return
 	}
-	ctx, cancel := context.WithTimeout(d.doneContext(), workerStartupProbeTimeout)
+	ctx, cancel := context.WithTimeout(d.life.Context(), workerStartupProbeTimeout)
 	if err := host.ValidateSharedCandidate(ctx, false); err != nil {
 		d.logf("shared PTY host candidate validation: %v", err)
 	}

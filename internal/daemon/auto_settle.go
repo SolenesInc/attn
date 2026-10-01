@@ -167,7 +167,7 @@ func (d *Daemon) startAutoSettleLocked(sessionID string, phase autoSettlePhase, 
 	opened := d.store.TurnStamps(sessionID).OpenedAt
 	ready := make(chan struct{})
 	var timer *time.Timer
-	timer = time.AfterFunc(window, func() {
+	timer = d.life.AfterFunc("autoSettle", window, func() {
 		<-ready
 		d.autoSettleFire(sessionID, timer)
 	})

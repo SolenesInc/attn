@@ -92,7 +92,7 @@ func (d *Daemon) runSessionResolver() {
 	timer.Stop()
 	defer timer.Stop()
 	for {
-		if !d.durableWork.durably(func() { d.resolveDue(time.Now()) }) {
+		if !d.life.Do("runSessionResolver", func() { d.resolveDue(time.Now()) }) {
 			return
 		}
 		if next, ok := resolver.next(); ok {
@@ -101,7 +101,7 @@ func (d *Daemon) runSessionResolver() {
 			timer.Stop()
 		}
 		select {
-		case <-d.done:
+		case <-d.life.Done():
 			return
 		case <-resolver.wake:
 		case <-timer.C:

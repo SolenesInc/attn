@@ -137,7 +137,7 @@ func groundTruthUntrackedLines(ctx context.Context, refs []int, tracked map[int]
 			break
 		}
 		lookups++
-		state, merged, title, err := fetchPRStateCtx(ctx, fetch, repoSlug, n)
+		state, merged, title, err := fetch(repoSlug, n)
 		if err != nil {
 			continue
 		}
@@ -149,26 +149,6 @@ func groundTruthUntrackedLines(ctx context.Context, refs []int, tracked map[int]
 		}
 	}
 	return lines, caps
-}
-
-func fetchPRStateCtx(ctx context.Context, fetch prStateFetcher, repo string, number int) (state string, merged bool, title string, err error) {
-	type result struct {
-		state  string
-		merged bool
-		title  string
-		err    error
-	}
-	ch := make(chan result, 1)
-	go func() {
-		s, m, t, e := fetch(repo, number)
-		ch <- result{s, m, t, e}
-	}()
-	select {
-	case r := <-ch:
-		return r.state, r.merged, r.title, r.err
-	case <-ctx.Done():
-		return "", false, "", ctx.Err()
-	}
 }
 
 func (d *Daemon) reconcileGroundTruth(ctx context.Context, verdict *ticketReconcileVerdict, cwd string) []string {
@@ -201,14 +181,16 @@ func (d *Daemon) reconcileGroundTruth(ctx context.Context, verdict *ticketReconc
 		}
 	}
 
+	lookupCtx, cancel := context.WithTimeout(ctx, groundTruthLookupTimeout)
+	defer cancel()
 	var fetch prStateFetcher
 	if d.githubAvailable() {
 		if client, ok := d.ghRegistry.Get(host); ok {
-			fetch = client.FetchPRState
+			fetch = func(repo string, number int) (string, bool, string, error) {
+				return client.FetchPRState(lookupCtx, repo, number)
+			}
 		}
 	}
-	lookupCtx, cancel := context.WithTimeout(ctx, groundTruthLookupTimeout)
-	defer cancel()
 	untracked, caps := groundTruthUntrackedLines(lookupCtx, refs, tracked, repoSlug, fetch)
 	lines = append(lines, untracked...)
 	if trackedLineCap {

@@ -24,25 +24,31 @@ func (d *Daemon) ensurePluginUsageWatcher(sessionID, agent, path string) {
 
 	d.watchersMu.Lock()
 	previous := d.pluginUsageWatch[sessionID]
-	if d.stopping() || previous != nil && previous.path == path {
+	if previous != nil && previous.path == path {
+		d.watchersMu.Unlock()
+		return
+	}
+	watcher := &pluginUsageWatcher{sessionID: sessionID, path: path, stopCh: make(chan struct{})}
+	// The baseline lands before the report is answered, so a transcript written right after it still counts.
+	if !d.life.Do("seedPluginUsageBaseline", func() { d.seedPluginUsageBaseline(sessionID, path) }) {
+		d.watchersMu.Unlock()
+		return
+	}
+	tracker := newSessionUsageTrackerAt(d, sessionID, agent, path, transcript.NewReportedUsageSourceResolver(path))
+	// Admitted before it replaces the previous watcher, so a refused start leaves that one to stop's final reconcile.
+	if !d.life.Go("runPluginUsageWatcher", func() { d.runPluginUsageWatcher(watcher, tracker) }) {
 		d.watchersMu.Unlock()
 		return
 	}
 	if d.pluginUsageWatch == nil {
 		d.pluginUsageWatch = make(map[string]*pluginUsageWatcher)
 	}
-	watcher := &pluginUsageWatcher{sessionID: sessionID, path: path, stopCh: make(chan struct{})}
 	d.pluginUsageWatch[sessionID] = watcher
-	d.watcherRuns.Add(1)
 	d.watchersMu.Unlock()
 	if previous != nil {
 		close(previous.stopCh)
 	}
-
-	d.seedPluginUsageBaseline(sessionID, path)
-	tracker := newSessionUsageTrackerAt(d, sessionID, agent, path, transcript.NewReportedUsageSourceResolver(path))
 	d.logf("plugin usage watcher: started session=%s agent=%s path=%s", sessionID, agent, path)
-	go d.runPluginUsageWatcher(watcher, tracker)
 }
 
 func (d *Daemon) seedPluginUsageBaseline(sessionID, path string) {
@@ -58,7 +64,6 @@ func (d *Daemon) seedPluginUsageBaseline(sessionID, path string) {
 }
 
 func (d *Daemon) runPluginUsageWatcher(w *pluginUsageWatcher, tracker *sessionUsageTracker) {
-	defer d.watcherRuns.Done()
 	ticker := time.NewTicker(transcriptPollInterval)
 	defer ticker.Stop()
 
@@ -68,6 +73,10 @@ func (d *Daemon) runPluginUsageWatcher(w *pluginUsageWatcher, tracker *sessionUs
 		case <-w.stopCh:
 			d.reconcilePluginUsageOnStop(w.path, read != nil, tracker)
 			d.logf("plugin usage watcher: stopped session=%s", w.sessionID)
+			return
+		case <-d.life.Done():
+			seen := read != nil
+			d.deferFinalUsage(func() { d.reconcilePluginUsageOnStop(w.path, seen, tracker) })
 			return
 		case <-ticker.C:
 		}

@@ -108,7 +108,7 @@ func TestLegacyTicketRecoveryRejectsTranscriptReplacedWithSameSizeAndModTime(t *
 	t.Setenv("CODEX_HOME", codexHome)
 	path := createCodexLegacyTranscript(t, codexHome, dataRoot, "native-one", "original-ticket", "completed", "done")
 
-	d := &Daemon{store: target, dataRoot: dataRoot, done: make(chan struct{})}
+	d := &Daemon{store: target, dataRoot: dataRoot}
 	d.legacyTicketRecoveryFinishOnce.Do(func() {})
 	if wait, prepareErr := d.prepareLegacyTicketRecovery(); prepareErr != nil || !wait {
 		t.Fatalf("prepare wait=%v err=%v", wait, prepareErr)
@@ -177,7 +177,7 @@ func TestLegacyTicketRecoveryChangedSourceWarnsAndStaysProtected(t *testing.T) {
 	defer target.Close()
 	makeRecoveryHome(t, dataRoot)
 	path := createClosedTicketBackup(t, filepath.Join(dataRoot, "backups"), "changed", "Changed", time.Now())
-	d := &Daemon{store: target, dataRoot: dataRoot, done: make(chan struct{})}
+	d := &Daemon{store: target, dataRoot: dataRoot}
 	d.legacyTicketRecoveryFinishOnce.Do(func() {})
 	if _, err := d.prepareLegacyTicketRecovery(); err != nil {
 		t.Fatal(err)
@@ -214,7 +214,7 @@ func TestLegacyTicketRecoveryRetriesTransientIOThenWarnsOnce(t *testing.T) {
 	defer target.Close()
 	makeRecoveryHome(t, dataRoot)
 	createClosedTicketBackup(t, filepath.Join(dataRoot, "backups"), "retry-me", "Retry", time.Now())
-	d := &Daemon{store: target, dataRoot: dataRoot, done: make(chan struct{})}
+	d := &Daemon{store: target, dataRoot: dataRoot}
 	d.legacyTicketRecoveryFinishOnce.Do(func() {})
 	if _, err := d.prepareLegacyTicketRecovery(); err != nil {
 		t.Fatal(err)
@@ -267,7 +267,7 @@ func TestLegacyTicketRecoveryResumesCommittedItemsAfterCrash(t *testing.T) {
 	defer target.Close()
 	makeRecoveryHome(t, dataRoot)
 	createClosedTicketBackup(t, filepath.Join(dataRoot, "backups"), "crash-safe", "Crash safe", time.Now())
-	d := &Daemon{store: target, dataRoot: dataRoot, done: make(chan struct{})}
+	d := &Daemon{store: target, dataRoot: dataRoot}
 	d.legacyTicketRecoveryFinishOnce.Do(func() {})
 	if _, err := d.prepareLegacyTicketRecovery(); err != nil {
 		t.Fatal(err)

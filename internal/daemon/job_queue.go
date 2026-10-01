@@ -130,7 +130,10 @@ func (d *Daemon) startJobQueueWithStore(queueStore jobs.Store) error {
 	runner.OnChange(func(jobID string) { d.publishFact(FactTaskChanged, jobID, nil) })
 	runner.OnTerminalFailure(func(j *jobs.Job) {
 		d.notifyTaskTerminalFailure(j)
-		go d.failGardenReviewJob(j)
+		// The runner outlives the lifetime and reports a death once; nothing redoes it, so it lands inline.
+		if !d.life.Go("failGardenReviewJob", func() { d.failGardenReviewJob(j) }) {
+			d.failGardenReviewJob(j)
+		}
 	})
 	if err := runner.Start(); err != nil {
 		return fmt.Errorf("start background jobs: %w", err)

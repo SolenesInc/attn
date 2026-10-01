@@ -115,7 +115,7 @@ func (d *Daemon) awaitDelegatedLaunch(sessionID string, watch *launchWatch) laun
 		return launchOutcome{unconfirmed: fmt.Sprintf(
 			"no turn reported by the agent within %s; the session is up, `attn agent peek %s` shows its pane",
 			delegationFirstTurnTimeout, shortSessionID(sessionID))}
-	case <-d.done:
+	case <-d.life.Done():
 		return launchOutcome{interrupted: true}
 	}
 }

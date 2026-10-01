@@ -26,10 +26,11 @@ func (d *Daemon) automationRun(ctx context.Context, definitionID, requestID, inp
 	if !json.Valid([]byte(input)) {
 		return nil, fmt.Errorf("input_json must be valid JSON")
 	}
-	if !d.durableWork.enter() {
+	release, held := d.life.Hold("automationRun")
+	if !held {
 		return nil, errDaemonStopping
 	}
-	defer d.durableWork.leave()
+	defer release()
 	def, err := d.store.GetAutomationDefinition(definitionID)
 	if err != nil || def == nil {
 		if err == nil {

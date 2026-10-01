@@ -65,7 +65,7 @@ func (d *Daemon) runModelCaptureLoop() {
 	defer ticker.Stop()
 	for {
 		select {
-		case <-d.done:
+		case <-d.life.Done():
 			return
 		case now := <-ticker.C:
 			d.modelCapturePass(recorder, now)
@@ -84,6 +84,9 @@ func (d *Daemon) modelCapturePass(recorder *modelcapture.Recorder, now time.Time
 	interval := d.modelCaptureInterval()
 	maxBytes := d.modelCaptureMaxBytes()
 	for _, sessionID := range d.ptyBackend.SessionIDs(context.Background()) {
+		if d.stopping() {
+			return
+		}
 		session := d.store.Get(sessionID)
 		if session == nil || !isModelCaptureAgent(session.Agent) {
 			continue

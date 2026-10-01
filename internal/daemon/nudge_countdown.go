@@ -75,7 +75,7 @@ func (d *Daemon) startCountdownAtLocked(sessionID string, firesAt time.Time) {
 	if delay < 0 {
 		delay = 0
 	}
-	timer = time.AfterFunc(delay, func() {
+	timer = d.life.AfterFunc("nudgeCountdown", delay, func() {
 		<-ready
 		d.nudgeCountdownFire(sessionID, timer)
 	})
@@ -349,7 +349,8 @@ func (d *Daemon) updateNudgeSelection(oldID, newID string) {
 		d.broadcastSessionStateChanged(id)
 	}
 	if resumeUnread {
-		go d.notifyUnreadTicketSession(oldID, time.Now())
+		now := time.Now()
+		d.life.Go("notifyUnreadTicketSession", func() { d.notifyUnreadTicketSession(oldID, now) })
 	}
 }
 

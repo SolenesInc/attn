@@ -26,13 +26,7 @@ func (d *Daemon) discoverDelegationModels(ctx context.Context, harness string) (
 	value, err, _ := d.delegationModelQueries.Do(harness+"\x00"+executable, func() (any, error) {
 		ctx, cancel := context.WithTimeout(ctx, time.Minute)
 		defer cancel()
-		go func() {
-			select {
-			case <-d.done:
-				cancel()
-			case <-ctx.Done():
-			}
-		}()
+		defer context.AfterFunc(d.life.Context(), cancel)()
 		result := delegationModelCatalog{Models: []protocol.DelegationModel{}}
 		if plugin, ok := d.ensurePluginRegistry().driver(harness); ok {
 			if !plugin.Capabilities["model_discovery"] {

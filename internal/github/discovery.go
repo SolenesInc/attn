@@ -1,6 +1,7 @@
 package github
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"os/exec"
@@ -14,16 +15,16 @@ type HostInfo struct {
 	Active bool
 }
 
-func DiscoverHosts() ([]HostInfo, error) {
-	output, err := ghAuthStatusHosts()
+func DiscoverHosts(ctx context.Context) ([]HostInfo, error) {
+	output, err := ghAuthStatusHosts(ctx)
 	if err != nil {
 		return nil, err
 	}
 	return parseAuthStatusHosts(output)
 }
 
-func GetTokenForHost(host string) (string, error) {
-	cmd := exec.Command("gh", "auth", "token", "-h", host)
+func GetTokenForHost(ctx context.Context, host string) (string, error) {
+	cmd := exec.CommandContext(ctx, "gh", "auth", "token", "-h", host)
 	output, err := cmd.Output()
 	if err != nil {
 		return "", fmt.Errorf("gh auth token -h %s failed: %w", host, err)
@@ -31,8 +32,8 @@ func GetTokenForHost(host string) (string, error) {
 	return strings.TrimSpace(string(output)), nil
 }
 
-func ghAuthStatusHosts() ([]byte, error) {
-	cmd := exec.Command("gh", "auth", "status", "--json", "hosts")
+func ghAuthStatusHosts(ctx context.Context) ([]byte, error) {
+	cmd := exec.CommandContext(ctx, "gh", "auth", "status", "--json", "hosts")
 	output, err := cmd.Output()
 	if err != nil {
 		return nil, fmt.Errorf("gh auth status --json hosts failed: %w", err)

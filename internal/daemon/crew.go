@@ -338,7 +338,7 @@ func (d *Daemon) releaseCrewBinding(memberID, sessionID string) (bool, error) {
 
 func (d *Daemon) releaseExitedCrewBinding(sessionID string) {
 	// Sessions a stopping daemon kills come back recoverable; the next daemon releases and reports them.
-	if d.lifetime().Err() != nil {
+	if d.stopping() {
 		return
 	}
 	member, bound := d.crewMemberForSession(sessionID)
@@ -358,7 +358,7 @@ func (d *Daemon) releaseExitedCrewBinding(sessionID string) {
 	if !pending || restart.LetterPath != "" || member.LetterSession == sessionID {
 		return
 	}
-	if d.lifetime().Err() != nil {
+	if d.stopping() {
 		// A stopping daemon cannot run the successor; the next daemon completes the queued restart.
 		return
 	}
