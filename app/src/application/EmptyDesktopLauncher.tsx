@@ -11,7 +11,7 @@ import {
 } from './AppContexts';
 import './EmptyDesktopLauncher.css';
 
-export function EmptyDesktopLauncher({ label, active }: { label: string; active: boolean }) {
+export function EmptyDesktopLauncher({ desktopId, label, active }: { desktopId: string; label: string; active: boolean }) {
   const { launchLocation, handleCreateWorktreeSession, registerInlineLauncher } = useSessionLaunchContext();
   const {
     sendGetRecentLocations,
@@ -43,10 +43,17 @@ export function EmptyDesktopLauncher({ label, active }: { label: string; active:
   const handleSelect = useCallback(
     (path: string, agent: SessionAgent, endpointId?: string, yoloMode?: boolean, chiefOfStaff?: boolean, autoMode?: boolean) => {
       setLaunching(path.split('/').pop() || path);
-      void launchLocation(path, agent, endpointId, yoloMode, chiefOfStaff, autoMode)
+      void launchLocation(path, agent, endpointId, yoloMode, chiefOfStaff, autoMode, desktopId)
         .finally(() => setLaunching(null));
     },
-    [launchLocation],
+    [desktopId, launchLocation],
+  );
+  const handleCreateWorktree = useCallback(
+    (...pick: Parameters<typeof handleCreateWorktreeSession>) => {
+      const [mainRepo, branch, startingFrom, endpointId, agent, yoloMode, autoMode, chiefOfStaff] = pick;
+      handleCreateWorktreeSession(mainRepo, branch, startingFrom, endpointId, agent, yoloMode, autoMode, chiefOfStaff, desktopId);
+    },
+    [desktopId, handleCreateWorktreeSession],
   );
 
   return (
@@ -69,7 +76,7 @@ export function EmptyDesktopLauncher({ label, active }: { label: string; active:
           onInspectPath={sendInspectPath}
           onGetRepoInfo={getRepoInfo}
           onCreateWorktree={sendCreateWorktree}
-          onCreateWorktreeSession={handleCreateWorktreeSession}
+          onCreateWorktreeSession={handleCreateWorktree}
           onDeleteWorktree={sendDeleteWorktree}
           onError={showError}
           projectsDirectory={settings.projects_directory}

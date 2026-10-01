@@ -19,3 +19,7 @@
   font-size: var(--font-size-sm);
   color: var(--color-text-tertiary);
 }
+
+.location-picker--inline .picker-footer-cancel {
+  display: none;
+}

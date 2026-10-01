@@ -111,7 +111,7 @@ export function useSessionLaunch({
       spawnedFrom?: string;
       desktopId?: string;
     }) => {
-      // A slow pick (a worktree being created) lands on the desktop it was made from, if that still exists.
+      // A pick lands on the desktop it was made for, even when it answers after the user moved on.
       const current = localDesktopForLaunch(spawn.endpointId);
       const desktop = useProfilesStore.getState().desktops.find((entry) => entry.id === spawn.desktopId) ?? current;
       const target = launchTarget(desktop, spawn.direction, spawn.anchorPaneId);
@@ -274,6 +274,7 @@ export function useSessionLaunch({
       yoloMode = false,
       chiefOfStaff = false,
       autoMode?: boolean,
+      desktopId?: string,
     ) => {
       const jobId = sessionCreationJobIdRef.current + 1;
       sessionCreationJobIdRef.current = jobId;
@@ -304,7 +305,7 @@ export function useSessionLaunch({
             : resolvePreferredAgent(agent, agentAvailability, 'codex');
       }
       const folderName = path.split('/').pop() || 'session';
-      const pick = { label: folderName, cwd: path, agent: selectedAgent, endpointId, yoloMode, autoMode, chiefOfStaff };
+      const pick = { label: folderName, cwd: path, agent: selectedAgent, endpointId, yoloMode, autoMode, chiefOfStaff, desktopId };
       if (!chiefOfStaff) {
         await launchPicked(pick);
         return;
@@ -352,10 +353,11 @@ export function useSessionLaunch({
       yoloMode: boolean,
       autoMode?: boolean,
       chiefOfStaff = false,
+      pickedOnDesktopId?: string,
     ) => {
       let desktopId: string;
       try {
-        desktopId = localDesktopForLaunch(endpointId).id;
+        desktopId = pickedOnDesktopId ?? localDesktopForLaunch(endpointId).id;
       } catch (error) {
         showError(error instanceof Error ? error.message : 'Failed to start the agent');
         return;

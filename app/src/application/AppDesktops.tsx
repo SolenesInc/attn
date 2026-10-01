@@ -217,7 +217,7 @@ export function AppDesktops() {
           allowLocalTileTargets
         />
         {isCurrent && view === 'session' && !terminalState.layoutTree && (
-          <EmptyDesktopLauncher label={desktopLabel(desktop, desktops)} active={!windowCovered} />
+          <EmptyDesktopLauncher desktopId={desktop.id} label={desktopLabel(desktop, desktops)} active={!windowCovered} />
         )}
       </div>
     );

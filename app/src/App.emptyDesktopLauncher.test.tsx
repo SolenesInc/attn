@@ -99,7 +99,7 @@ describe('App empty desktop launcher', () => {
     expect(pathInput()).toHaveFocus();
   });
 
-  it('drops a pick still being looked up when the user leaves the desktop', async () => {
+  it('launches a pick that answers after the user left onto the launcher’s desktop', async () => {
     const { daemon } = await onAgentBesideEmptyDesktop();
     await gesture(daemon, () => pressShortcut('desktop.select2'));
     const held: CommandMessage[] = [];
@@ -112,7 +112,7 @@ describe('App empty desktop launcher', () => {
     await gesture(daemon, () => pressShortcut('desktop.select1'));
     await gesture(daemon, () => daemon.replyTo(held[0], { ...inspection('/home/me/projects/scratch'), request_id: (held[0] as { request_id?: string }).request_id }));
 
-    expect(daemon.sentOf('spawn_session')).toEqual([]);
+    expect(daemon.sentOf('spawn_session').map((spawn) => spawn.placement?.desktop_id)).toEqual(['other']);
   });
 
   it('starts a worktree agent on the desktop it was asked for, even after the user moves on', async () => {

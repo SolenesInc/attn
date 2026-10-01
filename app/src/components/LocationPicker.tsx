@@ -230,7 +230,7 @@ export function LocationPicker({
   purpose = 'session',
   variant = 'dialog',
   active = true,
-  title,
+  title = 'New Session Location',
   onClose,
   onSelect,
   onGetRecentLocations,
@@ -259,7 +259,7 @@ export function LocationPicker({
     : {
         agentAria: 'Session agent',
         targetAria: 'Session target',
-        title: title ?? 'New Session Location',
+        title,
       };
   const inline = variant === 'inline';
 
@@ -426,9 +426,6 @@ export function LocationPicker({
     requestGenerationRef.current = nextGeneration;
     return nextGeneration;
   }, []);
-
-  // A lookup that answers after the picker is gone must not launch onto whatever desktop is current then.
-  useEffect(() => invalidateRequestGeneration, [invalidateRequestGeneration]);
 
   const isRequestCurrent = useCallback(
     (requestGeneration: number) => requestGenerationRef.current === requestGeneration,
@@ -943,26 +940,22 @@ export function LocationPicker({
     onClose();
   }, [invalidateRequestGeneration, onClose]);
 
-  const handleEscape = useCallback(() => {
+  // Returns false when there is nothing to step back from, which dismisses the dialog.
+  const stepBack = useCallback(() => {
     if (mode === 'repo-options') {
       // RepoOptions pushes its own handlers above this one in the escape
       // stack, so this branch fires only when those are inactive.
       handleBack();
-    } else if (highlightedItemKey && !autoHighlight) {
-      setHighlightedItemKey(null);
-    } else if (!inline) {
-      handleClosePicker();
+      return true;
     }
-  }, [mode, handleBack, highlightedItemKey, autoHighlight, handleClosePicker, inline]);
-  // Inline handles Escape only with focus inside it; the global stack would take it from the sidebar.
-  useEscapeStack(handleEscape, isOpen && !inline);
+    if (highlightedItemKey && !autoHighlight) {
+      setHighlightedItemKey(null);
+      return true;
+    }
+    return false;
+  }, [mode, handleBack, highlightedItemKey, autoHighlight]);
 
   const handleDialogKeyDown = useCallback((e: React.KeyboardEvent<HTMLDivElement>) => {
-    if (inline && e.key === 'Escape') {
-      if (!e.defaultPrevented) handleEscape();
-      e.preventDefault();
-      return;
-    }
     if (e.altKey && !e.metaKey && !e.ctrlKey) {
       if (e.code === 'KeyT') {
         e.preventDefault();
@@ -1002,9 +995,7 @@ export function LocationPicker({
     }
   }, [
     handleAgentChange,
-    handleEscape,
     handleTargetChange,
-    inline,
     mode,
     movePathSelection,
     orderedAgentList,
@@ -1015,14 +1006,8 @@ export function LocationPicker({
     return null;
   }
 
-  const picker = (
-    <div
-      className={`location-picker${inline ? ' location-picker--inline' : ''}`}
-      data-testid={inline ? 'location-picker-inline' : 'location-picker'}
-      tabIndex={-1}
-      onClick={(e) => e.stopPropagation()}
-      onKeyDown={handleDialogKeyDown}
-    >
+  return (
+    <PickerFrame inline={inline} purpose={purpose} onDismiss={handleClosePicker} onStepBack={stepBack} onKeyDown={handleDialogKeyDown}>
       {!pathOnly && (
       <div className="picker-agent-bar">
         <div className="picker-agent-label">SESSION AGENT</div>
@@ -1254,7 +1239,7 @@ export function LocationPicker({
             <span className="shortcut"><kbd>↑↓</kbd> navigate</span>
             <span className="shortcut"><kbd>Tab</kbd> autocomplete</span>
             <span className="shortcut"><kbd>Enter</kbd> select</span>
-            {!inline && <span className="shortcut"><kbd>Esc</kbd> cancel</span>}
+            <span className="shortcut picker-footer-cancel"><kbd>Esc</kbd> cancel</span>
           </div>
         </>
       ) : repoInfo ? (
@@ -1292,14 +1277,46 @@ export function LocationPicker({
           globalEscape={!inline}
         />
       ) : null}
+    </PickerFrame>
+  );
+}
+
+// The dialog sits in a dismissable overlay; inline, the frame stands alone and Escape only steps back.
+function PickerFrame({ inline, purpose, onDismiss, onStepBack, onKeyDown, children }: {
+  inline: boolean;
+  purpose: 'session' | 'reopen';
+  onDismiss: () => void;
+  onStepBack: () => boolean;
+  onKeyDown: (e: React.KeyboardEvent<HTMLDivElement>) => void;
+  children: React.ReactNode;
+}) {
+  // Inline takes Escape only with focus inside it; the global stack would take it from the sidebar.
+  useEscapeStack(() => {
+    if (!onStepBack()) onDismiss();
+  }, !inline);
+  const handleKeyDown = (e: React.KeyboardEvent<HTMLDivElement>) => {
+    if (inline && e.key === 'Escape') {
+      if (!e.defaultPrevented) onStepBack();
+      e.preventDefault();
+      return;
+    }
+    onKeyDown(e);
+  };
+  const frame = (
+    <div
+      className={`location-picker${inline ? ' location-picker--inline' : ''}`}
+      data-testid={inline ? 'location-picker-inline' : 'location-picker'}
+      tabIndex={-1}
+      onClick={(e) => e.stopPropagation()}
+      onKeyDown={handleKeyDown}
+    >
+      {children}
     </div>
   );
-  if (inline) {
-    return picker;
-  }
+  if (inline) return frame;
   return (
-    <div className="location-picker-overlay" data-testid="location-picker-overlay" data-purpose={purpose} onClick={handleClosePicker}>
-      {picker}
+    <div className="location-picker-overlay" data-testid="location-picker-overlay" data-purpose={purpose} onClick={onDismiss}>
+      {frame}
     </div>
   );
 }
