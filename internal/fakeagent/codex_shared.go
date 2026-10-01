@@ -21,6 +21,7 @@ type sharedFakeCodex struct {
 	roots         map[string]*sharedFakeRoot
 	peers         map[*websocket.Conn]bool
 	archiveError  bool
+	archiveErrors map[string]bool
 	rejectedStart atomic.Bool
 	rejectedInput atomic.Bool
 }
@@ -109,7 +110,14 @@ func (s *sharedFakeCodex) handle(m codexshared.Message) (any, error) {
 	switch m.Method {
 	case "attn-fixture/archive-error":
 		s.mu.Lock()
-		s.archiveError = p.ArchiveError
+		if p.ThreadID == "" {
+			s.archiveError = p.ArchiveError
+		} else {
+			if s.archiveErrors == nil {
+				s.archiveErrors = make(map[string]bool)
+			}
+			s.archiveErrors[p.ThreadID] = p.ArchiveError
+		}
 		s.mu.Unlock()
 		return map[string]any{}, nil
 	case "initialize":
@@ -193,7 +201,7 @@ func (s *sharedFakeCodex) handle(m codexshared.Message) (any, error) {
 		}
 		if m.Method == "thread/archive" {
 			s.mu.Lock()
-			if s.archiveError {
+			if s.archiveError || s.archiveErrors[p.ThreadID] {
 				s.mu.Unlock()
 				return nil, fmt.Errorf("fixture archive unavailable for %s", p.ThreadID)
 			}
@@ -374,7 +382,12 @@ func runSharedCodexView(cfg config) int {
 				term.print("Loaded " + string(result))
 			}
 		case strings.HasPrefix(text, "/archive-error "):
-			_, err := client.Call(context.Background(), "attn-fixture/archive-error", map[string]any{"archiveError": strings.TrimPrefix(text, "/archive-error ") == "on"})
+			fields := strings.Fields(text)
+			params := map[string]any{"archiveError": len(fields) > 1 && fields[1] == "on"}
+			if len(fields) > 2 {
+				params["threadId"] = fields[2]
+			}
+			_, err := client.Call(context.Background(), "attn-fixture/archive-error", params)
 			if err != nil {
 				term.print(err.Error())
 			} else {

@@ -364,6 +364,10 @@ func (r *codexRuntime) reopenOwnerLocked(id string) error {
 	if err != nil || owner == nil || !owner.Archived {
 		return err
 	}
+	launch, err := r.ownerContext(owner)
+	if err != nil {
+		return err
+	}
 	if err := r.d.store.SetCodexArchived(id, false); err != nil {
 		return err
 	}
@@ -371,7 +375,22 @@ func (r *codexRuntime) reopenOwnerLocked(id string) error {
 		return err
 	}
 	if session := r.d.store.Get(id); session != nil {
-		r.d.associateSessionWithWorkspace(id, session.WorkspaceID)
+		workspaceID := launch.WorkspaceID
+		if r.d.store.GetWorkspace(workspaceID) == nil {
+			workspaceID = reopenWorkspaceID(id)
+			r.d.handleRegisterWorkspace(nil, &protocol.RegisterWorkspaceMessage{Cmd: protocol.CmdRegisterWorkspace, ID: workspaceID, Directory: session.Directory, Title: session.Label})
+		}
+		r.d.associateSessionWithWorkspace(id, workspaceID)
+		if launch.WorkspaceID != workspaceID {
+			launch.WorkspaceID = workspaceID
+			raw, err := json.Marshal(launch)
+			if err != nil {
+				return err
+			}
+			if err := r.d.store.UpdateCodexContext(id, raw); err != nil {
+				return err
+			}
+		}
 	}
 	r.d.publishFact(FactSessionReregistered, id, nil)
 	return nil
@@ -462,6 +481,7 @@ func (r *codexRuntime) closeWorkspaceViews(panes []workspacelayout.Pane, members
 		if err := r.closeViewLocked(pane.RuntimeID, store.SessionClose{By: store.SessionClosedByUser}); err != nil {
 			return err
 		}
+		r.removeLayoutView(pane.RuntimeID)
 	}
 	for _, id := range owned {
 		if r.d.store.Get(id) == nil {

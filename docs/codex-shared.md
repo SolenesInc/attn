@@ -104,7 +104,10 @@ Startup removes surviving views of archived owners through the same helpers,
 so a crash after saving the close cannot leave their terminals behind.
 Archive is the native stop/unload operation; it does not require the TUI to exit
 or a `thread/closed` event. Ledger reopening unarchives the same native ID and
-preserves the Attn owner and history.
+preserves the Attn owner and history. Native resume also creates and saves a
+replacement placement when the original workspace was removed. Workspace close
+removes each successfully closed pane before attempting the next; a later error
+leaves the remaining panes available for an explicit retry.
 When the saved worktree is missing, ledger recreation actions restore its branch
 through the normal worktree planner before attaching that same native owner.
 

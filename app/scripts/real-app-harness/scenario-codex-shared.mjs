@@ -102,6 +102,28 @@ try {
     const changed = await observer.waitFor(() => [...observer.layoutsByWorkspaceId.values()].flatMap(layout => layout.panes || []).find(pane => pane.runtime_id === a && pane.session_id && !owners.includes(pane.session_id) && pane.codex_resolution === 'resolved'), 'new native owner');
     owners.push(changed.session_id);
   });
+  await runner.step('native_resume_restores_placement_after_workspace_removal', async () => {
+    await client.request('set_setting', { key: 'codex_shared_enabled', value: 'true' });
+    const cwd = path.join(runner.sessionDir, 'resume-viewer'); fs.mkdirSync(cwd, { recursive: true });
+    writeMockAgentFixture(cwd, { agent: 'codex', resumable: true, turns: [] });
+    const { sessionId: viewer } = await client.request('create_session', { cwd, agent: 'codex', label: 'resume-viewer' });
+    owners.push(viewer);
+    const pane = await resolved(viewer, viewer);
+    await client.request('set_setting', { key: 'codex_shared_enabled', value: 'false' });
+    const source = observer.sessionsById.get(a).workspace_id;
+    const removed = observer.waitForMessage(event => event.event === 'workspace_unregistered' && event.workspace.id === source ? event : null, 'original workspace removed');
+    observer.send({ cmd: 'unregister_workspace', id: source });
+    await removed;
+    const registered = observer.waitForMessage(event => event.event === 'workspace_registered' ? event.workspace : null, 'native resume replacement workspace');
+    await type(viewer, pane.pane_id, `/agents ${roots[0]}\r`);
+    await resolved(viewer, a);
+    const replacement = await registered;
+    runner.assert(replacement.id !== source && observer.sessionsById.get(a)?.workspace_id === replacement.id, 'native resume kept removed owner placement', { replacement, owner: observer.sessionsById.get(a) });
+    await type(viewer, pane.pane_id, '/new\r');
+    const successor = await observer.waitFor(() => [...observer.layoutsByWorkspaceId.values()].flatMap(layout => layout.panes || []).find(entry => entry.runtime_id === viewer && entry.session_id && !owners.includes(entry.session_id) && entry.codex_resolution === 'resolved'), 'native New after resume');
+    owners.push(successor.session_id);
+    runner.assert(observer.sessionsById.get(successor.session_id)?.workspace_id === replacement.id, 'native New inherited removed workspace', observer.sessionsById.get(successor.session_id));
+  });
   console.log(JSON.stringify(await runner.finishSuccess({ owners, roots }), null, 2));
 } catch (error) { console.error((await runner.finishFailure(error, { owners })).error); process.exitCode = 1; }
 finally {

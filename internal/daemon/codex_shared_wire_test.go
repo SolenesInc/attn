@@ -1055,3 +1055,84 @@ func TestSharedCodexServerStartFailureRemovesItsReservation(t *testing.T) {
 	w.Launched(id)
 	awaitSharedView(app, id, id)
 }
+
+func TestSharedCodexNativeResumeAfterWorkspaceRemovalRetainsValidPlacementForNew(t *testing.T) {
+	w := newWorld(t, fakeagent.Codex)
+	app, cli := w.App(), w.Client()
+	sharedCodexSetting(t, app, true)
+	a := w.Spawn(app, fakeagent.Codex, w.Path("native-reopen-source"))
+	original := w.Launched(a)
+	awaitSharedView(app, a, a)
+	source := workspaceIDFor(t, w, w.Path("native-reopen-source"))
+	testworld.Request(app, protocol.UnregisterWorkspaceMessage{Cmd: protocol.CmdUnregisterWorkspace, ID: source}, protocol.EventWorkspaceUnregistered, func(e protocol.WorkspaceUnregisteredMessage) bool { return e.Workspace.ID == source })
+	awaitClosed(app, a)
+	b := w.Spawn(app, fakeagent.Codex, w.Path("native-reopen-view"))
+	w.Launched(b)
+	awaitSharedView(app, b, b)
+	app.TypeLine(b, "/agents "+original.ConversationID)
+	awaitSharedView(app, b, a)
+	listed, err := cli.List("")
+	if err != nil {
+		t.Fatal(err)
+	}
+	var reopened protocol.Session
+	for _, session := range listed.Sessions {
+		if session.ID == a {
+			reopened = session
+		}
+	}
+	if reopened.WorkspaceID == source || reopened.WorkspaceID == "" || !slices.ContainsFunc(listed.Workspaces, func(workspace protocol.Workspace) bool { return workspace.ID == reopened.WorkspaceID }) {
+		t.Fatalf("native resume has no valid workspace: %+v", reopened)
+	}
+	app.TypeLine(b, "/new")
+	var successor string
+	testworld.Await(app, protocol.EventWorkspaceLayoutUpdated, func(e protocol.WorkspaceLayoutUpdatedMessage) bool {
+		for _, pane := range e.WorkspaceLayout.Panes {
+			if protocol.Deref(pane.RuntimeID) == b && protocol.Deref(pane.SessionID) != a && protocol.Deref(pane.SessionID) != b && protocol.Deref(pane.CodexResolution) == protocol.CodexViewResolutionResolved {
+				successor = protocol.Deref(pane.SessionID)
+				return successor != ""
+			}
+		}
+		return false
+	})
+	w.Launched(successor)
+	next := testworld.AwaitSession(app, successor, func(protocol.Session) bool { return true })
+	if next.WorkspaceID != reopened.WorkspaceID {
+		t.Fatalf("native New lost resumed placement: %+v", next)
+	}
+	shown, err := cli.SessionShow(a)
+	if err != nil || shown.Entry.ClosedAt != nil {
+		t.Fatalf("native resume did not reopen original owner: %+v %v", shown, err)
+	}
+}
+
+func TestSharedCodexFailedWorkspaceCloseRemovesAlreadyClosedPanes(t *testing.T) {
+	w := newWorld(t, fakeagent.Codex)
+	app, cli := w.App(), w.Client()
+	sharedCodexSetting(t, app, true)
+	cwd := w.Path("partial-workspace-close")
+	a := w.Spawn(app, fakeagent.Codex, cwd)
+	w.Launched(a)
+	awaitSharedView(app, a, a)
+	b := w.Spawn(app, fakeagent.Codex, cwd)
+	agentB := w.Launched(b)
+	awaitSharedView(app, b, b)
+	app.TypeLine(b, "/archive-error on "+agentB.ConversationID)
+	app.AwaitScreen(b, "Archive error on "+agentB.ConversationID)
+	workspace := workspaceIDFor(t, w, cwd)
+	testworld.Request(app, protocol.UnregisterWorkspaceMessage{Cmd: protocol.CmdUnregisterWorkspace, ID: workspace}, protocol.EventCommandError, func(e protocol.CommandErrorMessage) bool {
+		return protocol.Deref(e.Cmd) == protocol.CmdUnregisterWorkspace
+	})
+	shown, err := cli.SessionShow(a)
+	if err != nil || shown.Entry.ClosedAt == nil {
+		t.Fatalf("first owner was not closed: %+v %v", shown, err)
+	}
+	layout := testworld.Request(app, protocol.WorkspaceLayoutGetMessage{Cmd: protocol.CmdWorkspaceLayoutGet, WorkspaceID: workspace}, protocol.EventWorkspaceLayout, func(e protocol.WorkspaceLayoutMessage) bool { return e.WorkspaceLayout.WorkspaceID == workspace })
+	if slices.ContainsFunc(layout.WorkspaceLayout.Panes, func(p protocol.WorkspaceLayoutPane) bool { return protocol.Deref(p.RuntimeID) == a }) {
+		t.Fatalf("failed close retained a removed runtime pane: %+v", layout.WorkspaceLayout)
+	}
+	app.TypeLine(b, "/archive-error off "+agentB.ConversationID)
+	app.AwaitScreen(b, "Archive error off "+agentB.ConversationID)
+	testworld.Request(app, protocol.UnregisterWorkspaceMessage{Cmd: protocol.CmdUnregisterWorkspace, ID: workspace}, protocol.EventWorkspaceUnregistered, func(e protocol.WorkspaceUnregisteredMessage) bool { return e.Workspace.ID == workspace })
+	awaitClosed(app, b)
+}
