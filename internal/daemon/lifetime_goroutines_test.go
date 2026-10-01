@@ -41,7 +41,7 @@ func TestTheDaemonStartsGoroutinesAndTimersOnlyThroughItsLifetime(t *testing.T) 
 				case *ast.CallExpr:
 					if isTimeAfterFunc(node) {
 						problem = "time.AfterFunc: use d.life.AfterFunc so a timer that fires during stop does nothing"
-					} else if isUnownedGoCall(node, path, name) {
+					} else if isUnownedGoCall(node) {
 						problem = "group.Go: use d.life.Go so Daemon.stop waits for it, or runJoined for children joined before their shutdown-drained caller returns"
 					}
 				}
@@ -59,18 +59,13 @@ func TestTheDaemonStartsGoroutinesAndTimersOnlyThroughItsLifetime(t *testing.T) 
 	}
 }
 
-func isUnownedGoCall(call *ast.CallExpr, path, name string) bool {
+func isUnownedGoCall(call *ast.CallExpr) bool {
 	sel, ok := call.Fun.(*ast.SelectorExpr)
 	if !ok || sel.Sel.Name != "Go" {
 		return false
 	}
-	if owner, ok := sel.X.(*ast.SelectorExpr); ok && owner.Sel.Name == "life" {
-		return false
-	}
-	// Both CLI and WS callers hold lifetime work; group.Wait joins every child before this method returns.
-	// Allow only this group's launch, so another group added to the method still needs an ownership review.
-	group, ok := sel.X.(*ast.Ident)
-	return !(ok && group.Name == "group" && path == "session_ledger.go" && name == "(*Daemon).reopenVerdictsForPage")
+	owner, ok := sel.X.(*ast.SelectorExpr)
+	return !ok || owner.Sel.Name != "life"
 }
 
 func funcDeclName(fn *ast.FuncDecl) string {
