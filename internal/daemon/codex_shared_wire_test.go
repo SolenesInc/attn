@@ -426,7 +426,7 @@ func TestSharedCodexClosingAViewThatNeverInitializedCleansItsUnusedReservation(t
 	w := newWorld(t, fakeagent.Codex)
 	app := w.App()
 	sharedCodexSetting(t, app, true)
-	spawn, workspaceID, _ := w.RequestSpawn(app, fakeagent.Codex, w.Path("failed"))
+	spawn, workspaceID, paneID := w.RequestSpawn(app, fakeagent.Codex, w.Path("failed"), func(m *protocol.SpawnSessionMessage) { m.ChiefOfStaff = protocol.Ptr(true) })
 	if !spawn.Success {
 		t.Fatal(protocol.Deref(spawn.Error))
 	}
@@ -438,13 +438,22 @@ func TestSharedCodexClosingAViewThatNeverInitializedCleansItsUnusedReservation(t
 		}
 		return false
 	})
-	if err := w.Client().Unregister(spawn.ID); err != nil {
-		t.Fatal(err)
+	result := workspaceLayoutAction(app, protocol.WorkspaceLayoutClosePaneMessage{Cmd: protocol.CmdWorkspaceLayoutClosePane, WorkspaceID: workspaceID, PaneID: paneID}, protocol.CmdWorkspaceLayoutClosePane, workspaceID)
+	if !result.Success {
+		t.Fatal(protocol.Deref(result.Error))
 	}
 	testworld.Await(app, protocol.EventWorkspaceUnregistered, func(e protocol.WorkspaceUnregisteredMessage) bool { return e.Workspace.ID == workspaceID })
 	page, err := w.Client().SessionList(client.SessionListOptions{})
 	if err != nil || len(page.Entries) != 0 {
 		t.Fatalf("unused failed owner remains: %+v %v", page, err)
+	}
+	sharedCodexSetting(t, app, false)
+	next := w.Spawn(app, fakeagent.Codex, w.Path("next-chief"), func(m *protocol.SpawnSessionMessage) { m.ChiefOfStaff = protocol.Ptr(true) })
+	w.Launched(next)
+	for _, session := range w.App().Initial.Sessions {
+		if session.ID == next && !protocol.Deref(session.ChiefOfStaff) {
+			t.Fatal("discarded initial launch kept the Chief role")
+		}
 	}
 }
 

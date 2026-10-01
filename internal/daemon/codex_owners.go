@@ -178,6 +178,13 @@ func (r *codexRuntime) prepareRPC(runtimeID string, m *codexshared.Message) (fun
 	if owner == nil {
 		return nil, errors.New("codex lifecycle request has no owner")
 	}
+	creation := m.Method != "thread/resume"
+	prepared := false
+	defer func() {
+		if creation && !prepared {
+			r.rejectCreationLocked(runtimeID, owner.SessionID)
+		}
+	}()
 	launch, err := r.ownerContext(owner)
 	if err != nil {
 		return nil, err
@@ -206,17 +213,13 @@ func (r *codexRuntime) prepareRPC(runtimeID string, m *codexshared.Message) (fun
 		return nil, err
 	}
 	method := m.Method
-	creation := method != "thread/resume"
+	prepared = true
 	return func(reply codexshared.Message) {
 		if len(reply.Error) > 0 {
 			r.d.logf("Codex %s for owner %s in view %s: %s", method, owner.SessionID, runtimeID, reply.Error)
 			if creation {
 				r.mu.Lock()
-				if view, live := r.views[runtimeID]; live && view.LaunchOwnerID == owner.SessionID {
-					delete(r.initialConsumed, runtimeID)
-				} else {
-					r.cleanupReservation(owner.SessionID)
-				}
+				r.rejectCreationLocked(runtimeID, owner.SessionID)
 				r.mu.Unlock()
 			}
 			return
@@ -384,6 +387,14 @@ func (r *codexRuntime) bindOwner(id string, t codexNativeThread) {
 	})
 }
 
+func (r *codexRuntime) rejectCreationLocked(runtimeID, ownerID string) {
+	if view, live := r.views[runtimeID]; live && view.LaunchOwnerID == ownerID {
+		delete(r.initialConsumed, runtimeID)
+	} else {
+		r.cleanupReservation(ownerID)
+	}
+}
+
 func (r *codexRuntime) cleanupReservation(id string) {
 	owner, err := r.d.store.CodexOwner(id)
 	if err != nil || owner == nil || owner.NativeRootID != "" {
@@ -394,7 +405,11 @@ func (r *codexRuntime) cleanupReservation(id string) {
 		return
 	}
 	session := r.d.store.Get(id)
+	r.d.forgetSessionRuntime(id)
 	r.d.store.Remove(id)
+	r.d.forgetSessionTrace(id)
+	r.d.clearChiefOfStaffIfSession(id)
+	r.d.releaseCrewBindingIfSession(id)
 	r.d.dissociateSessionFromWorkspace(id)
 	r.d.publishSessionUnregistered(session)
 }

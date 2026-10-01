@@ -58,6 +58,8 @@ Attached and reopened terminals retain the original launch's directory-trust cho
 
 A rejected initial creation keeps its launch owner and view, so retry uses the
 same owner. Rejected later New/fork creations discard their unused reservation.
+Preparation failures use the same rule. Discarding an unused launch releases
+its runtime state and role bindings.
 
 Owner-addressed reload reapplies native configuration and current role guidance
 through resume, preserving every terminal and draft. Control subscriptions hold hidden roots. Switching away to zero views keeps an
