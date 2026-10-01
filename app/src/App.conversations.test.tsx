@@ -128,11 +128,19 @@ describe('App kept conversations ledger', () => {
 
   it('cycles all three tabs in both directions', async () => {
     const { daemon } = await open();
-    const panel = screen.getByRole('dialog', { name: 'Sessions, worktrees and conversations' });
-    await gesture(daemon, () => fireEvent.keyDown(panel, { key: ']' }));
+    await gesture(daemon, () => row('Pinned parser').focus());
+    await gesture(daemon, () => fireEvent.keyDown(document.activeElement!, { key: ']' }));
     expect(screen.getByRole('button', { name: 'Sessions' })).toHaveAttribute('aria-current', 'page');
-    await gesture(daemon, () => fireEvent.keyDown(panel, { key: '[' }));
+    await gesture(daemon, () => fireEvent.keyDown(document.activeElement!, { key: ']' }));
+    expect(screen.getByRole('button', { name: 'Worktrees' })).toHaveAttribute('aria-current', 'page');
+    expect(screen.getByRole('listbox', { name: 'Rows' })).toHaveFocus();
+    await gesture(daemon, () => fireEvent.keyDown(document.activeElement!, { key: ']' }));
     expect(screen.getByRole('button', { name: 'Conversations' })).toHaveAttribute('aria-current', 'page');
+    expect(row('Pinned parser')).toHaveFocus();
+    await gesture(daemon, () => fireEvent.keyDown(document.activeElement!, { key: '[' }));
+    expect(screen.getByRole('button', { name: 'Worktrees' })).toHaveAttribute('aria-current', 'page');
+    await gesture(daemon, () => fireEvent.keyDown(document.activeElement!, { key: '[' }));
+    expect(screen.getByRole('button', { name: 'Sessions' })).toHaveAttribute('aria-current', 'page');
   });
 });
 

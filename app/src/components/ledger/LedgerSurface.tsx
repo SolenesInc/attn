@@ -69,7 +69,8 @@ function OpenLedgerSurface({
 
   useEffect(() => {
     // Land on the list, not the query: arrows should work the moment the surface opens.
-    const first = shellRef.current?.querySelector<HTMLElement>('.ledger-row');
+    const first = shellRef.current?.querySelector<HTMLElement>('.ledger-row')
+      ?? shellRef.current?.querySelector<HTMLElement>('.ledger-list');
     first?.focus({ preventScroll: true });
   }, [tab]);
 

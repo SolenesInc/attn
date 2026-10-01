@@ -43,15 +43,16 @@ async function main() {
   const driver = createWindowDriver({ client });
   const binary = appDaemonInTree(options.appPath);
   const sessions = [];
+  const openSessions = new Set();
   const seeds = [];
   const cli = (...argv) => execFileSync(binary, argv, { env: instanceCliEnv(instance), encoding: 'utf8' });
   const text = async (selector) => (await client.request('dom_text', { selector })).text;
   const key = (selector, value) => client.request('dom_key', { selector, key: value });
   const selector = (id) => `.ledger-row[data-row-key="claude:${id}"]`;
-  runner.registerCleanup('close_observer', () => observer.close());
-  runner.registerCleanup('close_sessions', () => closeScenarioSessions(client, sessions));
-  runner.registerCleanup('close_seeds', () => { for (const seed of seeds) cli('seed', 'wither', seed, '-m', 'scenario complete'); });
   runner.registerCleanup('quit_app', () => client.quitApp());
+  runner.registerCleanup('close_observer', () => observer.close());
+  runner.registerCleanup('close_seeds', () => { for (const seed of seeds) cli('seed', 'wither', seed, '-m', 'scenario complete'); });
+  runner.registerCleanup('close_sessions', () => closeScenarioSessions(client, [...openSessions]));
   try {
     await runner.step('launch_isolated_app', () => launchFreshAppAndConnect(client, observer));
     await runner.step('prepare_pinned_seed_kept_and_releasing_copies', async () => {
@@ -61,6 +62,7 @@ async function main() {
         writeMockAgentFixture(cwd, { name: label, resumable: true, turns: [{ includes: 'CONVERSATION_READY', actions: [{ type: 'reply', text: 'CONVERSATION_READY', state: 'waiting_input' }] }] });
         const id = await createSessionAndWaitForInitialPane({ client, observer, cwd, label, agent: 'claude' });
         sessions.push(id);
+        openSessions.add(id);
         const replied = observer.waitForMessage((event) => event.event === 'session_state_changed' && event.session?.id === id && event.session?.state === 'waiting_input', `${label} mock turn ends`);
         await client.request('write_pane', { sessionId: id, text: 'CONVERSATION_READY' });
         await replied;
@@ -73,6 +75,7 @@ async function main() {
         }
         const copied = awaitRows(observer, (result) => result.rows.some((row) => row.session_ids.includes(id) && row.kept && !row.kept.deleted_at), `${label} copy exists`);
         await client.request('close_session', { sessionId: id });
+        openSessions.delete(id);
         await copied;
       };
       await createCopy('Pinned parser');
