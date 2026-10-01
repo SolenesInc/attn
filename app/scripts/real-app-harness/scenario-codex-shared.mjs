@@ -78,7 +78,10 @@ try {
   await runner.step('moved_shared_view_has_no_phantom_source_row', async () => {
     const source = observer.sessionsById.get(b).workspace_id;
     const destination = observer.sessionsById.get(a).workspace_id;
-    await observer.requestResult({ cmd: 'workspace_layout_move_leaf_to_workspace', source_workspace_id: source, target_workspace_id: destination, leaf_id: panes.get(b).pane_id, edge: 'right' }, 'workspace_layout_action_result');
+    const moved = observer.waitForMessage(event => event.event === 'workspace_layout_action_result' && event.action === 'workspace_layout_move_leaf_to_workspace' && event.source_workspace_id === source ? event : null, 'shared view move result');
+    observer.send({ cmd: 'workspace_layout_move_leaf_to_workspace', source_workspace_id: source, target_workspace_id: destination, leaf_id: panes.get(b).pane_id, edge: 'right' });
+    const result = await moved;
+    runner.assert(result.success, 'shared view move failed', result);
     await observer.waitFor(() => observer.layoutsByWorkspaceId.get(destination)?.panes.some(pane => pane.runtime_id === b), 'moved shared pane');
     await client.request('set_setting', { key: 'queue_mode_enabled', value: 'true' });
     await client.request('dom_wait', { selector: '[data-testid="sidebar-queue"]', timeoutMs: observer.connectTimeoutMs });
