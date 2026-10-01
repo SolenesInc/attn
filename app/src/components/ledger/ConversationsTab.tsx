@@ -104,7 +104,7 @@ export function ConversationsTab({
       key, title: row.title || row.resume_id, titleHint: row.resume_id,
       glyph: row.kept?.deleted_at ? 'removed' : pinned(row) ? 'pinned' : row.kept?.delete_after ? 'scheduled' : 'clean',
       meta: [row.agent, row.kept?.deleted_at ? 'Deleted copy' : row.kept ? amount(row.kept.bytes) : 'Pending copy', retention(row)],
-      attrs: { verbs: verbs(row, confirmForget === key).map((verb) => verb.label).join('\u001f') },
+      attrs: { verbs: verbs(row, confirmForget === key).map((verb) => verb.label).join(' · ') },
       verbs: verbs(row, confirmForget === key), note: notices[key], dim: Boolean(row.kept?.deleted_at), yank: row.resume_id,
     } };
   });
