@@ -125,6 +125,18 @@
   stroke: var(--accent);
 }
 
+.wn-drop {
+  fill: rgba(255, 107, 53, 0.1);
+  stroke: var(--accent);
+  stroke-dasharray: 4 3;
+}
+
+.wn-cursor {
+  fill: var(--color-text-primary);
+  stroke: var(--color-bg-app);
+  stroke-width: 1;
+}
+
 /* Press chip: the registry's keycaps drawn over the scene at the moment of the change. */
 .wn-press {
   position: absolute;
@@ -176,10 +188,54 @@
 }
 
 @keyframes wn-drag {
-  0%, 10% { opacity: 0; transform: translateY(0); }
-  14% { opacity: 1; transform: translateY(0); }
-  34% { opacity: 1; transform: translateY(var(--wn-drag-y)); }
-  40%, 100% { opacity: 0; transform: translateY(var(--wn-drag-y)); }
+  0%, 10% { opacity: 0; transform: translate(0, 0); }
+  14% { opacity: 1; transform: translate(0, 0); }
+  34% { opacity: 1; transform: translate(var(--wn-drag-x, 0), var(--wn-drag-y)); }
+  40%, 100% { opacity: 0; transform: translate(var(--wn-drag-x, 0), var(--wn-drag-y)); }
+}
+
+/* Three-stage scenes: a gesture, then a key press, on a longer cycle. */
+.wn-scene--late {
+  --wn-cycle: 7.5s;
+}
+
+.wn-stage1,
+.wn-stage2 {
+  opacity: 0;
+}
+
+.wn-stage1 { animation: wn-stage1 var(--wn-cycle) ease-in-out 3 both; }
+.wn-stage2 { animation: wn-stage2 var(--wn-cycle) ease-in-out 3 both; }
+.wn-stage1.wn-stage2 { animation: wn-stage12 var(--wn-cycle) ease-in-out 3 both; }
+.wn-stage3 { animation: wn-stage3 var(--wn-cycle) ease-in-out 3 both; }
+.wn-scene--late .wn-press { animation-name: wn-press-late; }
+
+@keyframes wn-stage1 {
+  0%, 36% { opacity: 1; }
+  42%, 100% { opacity: 0; }
+}
+
+@keyframes wn-stage2 {
+  0%, 36% { opacity: 0; }
+  42%, 64% { opacity: 1; }
+  70%, 100% { opacity: 0; }
+}
+
+@keyframes wn-stage12 {
+  0%, 64% { opacity: 1; }
+  70%, 100% { opacity: 0; }
+}
+
+@keyframes wn-stage3 {
+  0%, 64% { opacity: 0; }
+  70%, 100% { opacity: 1; }
+}
+
+@keyframes wn-press-late {
+  0%, 46% { opacity: 0; transform: translateY(6px); }
+  52%, 60% { opacity: 1; transform: translateY(0) scale(1); }
+  64% { transform: scale(0.94); }
+  68%, 100% { opacity: 1; transform: scale(1); }
 }
 
 @keyframes wn-press {
@@ -194,7 +250,11 @@
   .wn-after,
   .wn-flash,
   .wn-drag,
-  .wn-press {
+  .wn-press,
+  .wn-scene--late .wn-press,
+  .wn-stage1,
+  .wn-stage2,
+  .wn-stage3 {
     animation: none;
   }
 }

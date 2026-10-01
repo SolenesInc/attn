@@ -33,7 +33,7 @@ async function walkToLastStep(daemon: ScriptedDaemon) {
 describe('App what’s new', () => {
   it('greets the first launch after an update with the first step, and never an up-to-date launch', async () => {
     const first = await launchAfterUpdate();
-    expect(stepTitle()).toBe('Profiles keep your worlds apart');
+    expect(stepTitle()).toBe('One profile per world');
     expect(within(whatsNew()!).getByText(/^1 of \d+$/)).toBeInTheDocument();
 
     localStorage.setItem(WHATS_NEW_STORAGE_KEY, WHATS_NEW_ID);
@@ -45,30 +45,30 @@ describe('App what’s new', () => {
     const { daemon } = await launchAfterUpdate();
 
     await press(daemon, 'ArrowRight');
-    expect(stepTitle()).toBe('Agents live on desktops');
+    expect(stepTitle()).toBe('Desktops arrange your agents');
     await press(daemon, 'Enter');
-    expect(stepTitle()).toBe('Move agents between desktops');
+    expect(stepTitle()).toBe('Arrange each desktop your way');
     await gesture(daemon, () => fireEvent.click(screen.getByRole('button', { name: 'Next' })));
-    expect(stepTitle()).toBe('The queue brings you what is waiting');
+    expect(stepTitle()).toBe("The queue decides what's next");
 
     await press(daemon, 'ArrowLeft');
-    expect(stepTitle()).toBe('Move agents between desktops');
+    expect(stepTitle()).toBe('Arrange each desktop your way');
     await gesture(daemon, () => fireEvent.click(screen.getByRole('button', { name: 'Back' })));
-    expect(stepTitle()).toBe('Agents live on desktops');
+    expect(stepTitle()).toBe('Desktops arrange your agents');
     await press(daemon, 'ArrowLeft');
     await press(daemon, 'ArrowLeft');
-    expect(stepTitle()).toBe('Profiles keep your worlds apart');
+    expect(stepTitle()).toBe('One profile per world');
     expect(screen.queryByRole('button', { name: 'Back' })).toBeNull();
   });
 
   it('ends on Got it, which stays dismissed across launches', async () => {
     const first = await launchAfterUpdate();
     await walkToLastStep(first.daemon);
-    expect(stepTitle()).toBe('Everything else is a command away');
+    expect(stepTitle()).toBe('Keep your hands on the keyboard');
     expect(screen.queryByRole('button', { name: 'Next' })).toBeNull();
 
     await press(first.daemon, 'ArrowRight');
-    expect(stepTitle()).toBe('Everything else is a command away');
+    expect(stepTitle()).toBe('Keep your hands on the keyboard');
 
     await gesture(first.daemon, () => fireEvent.click(screen.getByRole('button', { name: 'Got it' })));
     expect(whatsNew()).toBeNull();
@@ -104,7 +104,7 @@ describe('App what’s new', () => {
     fireEvent.change(search, { target: { value: ">What's new" } });
     await gesture(daemon, () => fireEvent.keyDown(search, { key: 'Enter' }));
 
-    expect(stepTitle()).toBe('Profiles keep your worlds apart');
+    expect(stepTitle()).toBe('One profile per world');
   });
 
   it('draws the keycaps the user’s bindings resolve to', async () => {
@@ -117,6 +117,7 @@ describe('App what’s new', () => {
     await press(daemon, 'ArrowRight');
     await press(daemon, 'ArrowRight');
     expect(stepKeys()).toEqual([
+      ['⌘⇧⏎', 'Focus one pane'],
       ['⌘⌥1–9', 'Move and follow'],
       ['⌘⌥⇧1–9', 'Move and stay'],
     ]);
@@ -124,7 +125,7 @@ describe('App what’s new', () => {
 
     await press(daemon, 'ArrowRight');
     expect(stepKeys()).toEqual([
-      ['⌘⇧E', 'Settle and go to the next'],
+      ['⌘⇧E', 'Settle'],
       ['⌘↑/⌘↓', 'Step through the queue'],
       ['⌘J', 'Next waiting agent'],
       ['⌘⇧J', 'Next automation run'],
@@ -139,7 +140,7 @@ describe('App what’s new', () => {
     await press(daemon, 'ArrowRight');
     expect(stepKeys()).toEqual([
       ['CtrlShift1–9', 'Switch desktop'],
-      ['CtrlShiftG', 'Desktop overview'],
+      ['CtrlShiftG', 'See all desktops'],
     ]);
   });
 
@@ -154,7 +155,7 @@ describe('App what’s new', () => {
     await press(daemon, 'ArrowRight');
     await press(daemon, 'ArrowLeft');
 
-    expect(stepTitle()).toBe('Profiles keep your worlds apart');
+    expect(stepTitle()).toBe('One profile per world');
     expect(daemon.sentOf('pty_input').slice(before)).toEqual([]);
   });
 
@@ -165,7 +166,7 @@ describe('App what’s new', () => {
 
     await gesture(daemon, () => fireEvent.click(within(introBanner()!).getByRole('button', { name: 'Replay the intro' })));
 
-    expect(stepTitle()).toBe('Profiles keep your worlds apart');
+    expect(stepTitle()).toBe('One profile per world');
   });
 
   it('keeps a dismissed banner away across launches, leaving the command palette as the way back', async () => {
@@ -181,6 +182,6 @@ describe('App what’s new', () => {
     const search = within(screen.getByRole('dialog')).getByRole('combobox');
     fireEvent.change(search, { target: { value: ">What's new" } });
     await gesture(daemon, () => fireEvent.keyDown(search, { key: 'Enter' }));
-    expect(stepTitle()).toBe('Profiles keep your worlds apart');
+    expect(stepTitle()).toBe('One profile per world');
   });
 });

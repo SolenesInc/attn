@@ -11,9 +11,14 @@ export interface ScenePress {
   combos: string[][];
 }
 
-function Scene({ label, press, children }: { label: string; press: ScenePress | null; children: ReactNode }) {
+function Scene({ label, press, late = false, children }: {
+  label: string;
+  press: ScenePress | null;
+  late?: boolean;
+  children: ReactNode;
+}) {
   return (
-    <div className="wn-scene" role="img" aria-label={label}>
+    <div className={`wn-scene${late ? ' wn-scene--late' : ''}`} role="img" aria-label={label}>
       <svg viewBox="0 0 520 250" aria-hidden="true">
         <rect className="wn-frame" x="8" y="8" width="504" height="234" rx="10" />
         <circle className="wn-light" cx="22" cy="18" r="3.5" />
@@ -225,22 +230,32 @@ export function DesktopsScene({ press }: { press: ScenePress | null }) {
   );
 }
 
-export function MoveAgentsScene({ press }: { press: ScenePress | null }) {
-  const move: CSSProperties = { ['--wn-drag-y' as string]: '44px' };
+export function ArrangeScene({ press }: { press: ScenePress | null }) {
+  const drag: CSSProperties = { ['--wn-drag-x' as string]: '-180px', ['--wn-drag-y' as string]: '101px' };
   return (
-    <Scene label="Moving the web agent to desktop 2 takes you there with it, beside tests" press={press}>
+    <Scene
+      label="Dragging web's header docks it below api; then sending web to desktop 2 takes you there with it"
+      press={press}
+      late
+    >
       <Sidebar />
       <Row y={64} label="api" state="waiting" />
-      <Before>
+      <g className="wn-stage1 wn-stage2">
         <DesktopRule y={46} number={1} current />
         <rect className="wn-row-selected" x="16" y="73" width="118" height="18" rx="4" />
         <Row y={84} label="web" state="busy" />
         <DesktopRule y={110} number={2} />
         <Row y={128} label="tests" state="busy" />
+      </g>
+      <g className="wn-stage1">
         <Pane x={150} y={38} w={172} h={194} label="api" state="waiting" />
         <Pane x={330} y={38} w={172} h={194} label="web" active />
-      </Before>
-      <After>
+      </g>
+      <g className="wn-stage2">
+        <Pane x={150} y={38} w={352} h={93} label="api" state="waiting" lines={3} />
+        <Pane x={150} y={139} w={352} h={93} label="web" active lines={3} />
+      </g>
+      <g className="wn-stage3">
         <DesktopRule y={46} number={1} />
         <DesktopRule y={90} number={2} current />
         <Row y={108} label="tests" state="busy" />
@@ -248,10 +263,15 @@ export function MoveAgentsScene({ press }: { press: ScenePress | null }) {
         <Row y={128} label="web" state="busy" />
         <Pane x={150} y={38} w={172} h={194} label="tests" />
         <Pane x={330} y={38} w={172} h={194} label="web" active />
-      </After>
-      <g className="wn-drag" style={move}>
-        <rect className="wn-ghost" x="16" y="73" width="118" height="18" rx="4" />
-        <Row y={84} label="web" state="busy" />
+      </g>
+      <Flash>
+        <rect className="wn-drop" x="150" y="139" width="352" height="93" rx="6" />
+      </Flash>
+      <g className="wn-drag" style={drag}>
+        <rect className="wn-ghost" x="330" y="38" width="172" height="20" rx="5" />
+        <circle className="wn-dot is-busy" cx="341" cy="48" r="3" />
+        <text className="wn-text wn-text--small" x="350" y="51">web</text>
+        <path className="wn-cursor" d="M 400 44 l 0 14 l 4 -4 l 3 6 l 2 -1 l -3 -6 l 5 0 z" />
       </g>
     </Scene>
   );
