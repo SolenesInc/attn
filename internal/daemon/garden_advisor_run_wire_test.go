@@ -51,21 +51,19 @@ func TestTheGardenAdvisorAdvisesAndDraftsWithTheReviewsFrozenRecipeFromBoundedEv
 			t.Errorf("the %s ran %s %q at effort %q, want the review's frozen Claude sonnet at medium", what, task.Harness, task.Model, task.Effort)
 		}
 	}
-	interrupted := w.HeadlessTask()
-	frozen(interrupted, "advice")
-	if !strings.Contains(interrupted.Prompt, strings.Repeat("b", 15000)) || strings.Contains(interrupted.Prompt, strings.Repeat("b", 16000)) ||
-		!strings.Contains(interrupted.Prompt, strings.Repeat("n", 1000)) || strings.Contains(interrupted.Prompt, strings.Repeat("n", 1200)) {
-		t.Errorf("the advisor was shown %d body and %d log characters, want both cut to their caps", strings.Count(interrupted.Prompt, "b"), strings.Count(interrupted.Prompt, "n"))
+	task := w.HeadlessTask()
+	frozen(task, "advice")
+	if !strings.Contains(task.Prompt, strings.Repeat("b", 15000)) || strings.Contains(task.Prompt, strings.Repeat("b", 16000)) ||
+		!strings.Contains(task.Prompt, strings.Repeat("n", 1000)) || strings.Contains(task.Prompt, strings.Repeat("n", 1200)) {
+		t.Errorf("the advisor was shown %d body and %d log characters, want both cut to their caps", strings.Count(task.Prompt, "b"), strings.Count(task.Prompt, "n"))
 	}
 
-	w.restart()
-	app = w.App()
-	task := w.HeadlessTask()
-	frozen(task, "advice resumed after a restart")
+	finish := w.beginStop(t)
 	task.Answer(`{"recommendation":"harvest","explanation":" The branch holds the finished work. ","evidence":[" The seed log records the work. "]}`)
-	ready := testworld.Await(app, protocol.EventGardenReviewUpdated, func(m protocol.GardenReviewUpdatedMessage) bool {
-		return m.Review.Run.ID == review.Run.ID && m.Review.Items[0].Status == "ready"
-	}).Review.Items[0]
+	finish()
+	w.start()
+	app = w.App()
+	ready := gardenReviewItem(t, gardenReviewShow(t, w.Client(), review.Run.ID).Review, seed)
 	if protocol.Deref(ready.Recommendation) != "harvest" || protocol.Deref(ready.Explanation) != "The branch holds the finished work." ||
 		!slices.Equal(ready.CitedEvidence, []string{"The seed log records the work."}) {
 		t.Errorf("the advised item = %q because %q citing %q, want the advisor's trimmed harvest", protocol.Deref(ready.Recommendation), protocol.Deref(ready.Explanation), ready.CitedEvidence)

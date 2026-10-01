@@ -138,6 +138,8 @@ Follow [Testing](docs/testing.md). In short:
   `internal/supervise` owns long-lived daemon children.
 - Goroutines and timers in `internal/daemon` start through `d.life` (`lifetime.go`);
   `Daemon.stop` waits for them without cancelling. `goTransport` is only for peer I/O.
+- Stop drains running jobs and lifetime work before closing Git or shutting down PTYs.
+  Handler and Git deadlines still apply; shutdown itself does not fence or cancel their results.
 - Garden/crew handlers call `Daemon.requireHome` (`internal/enrollment`).
   Outposts own sessions; Garden/crew belong to their home.
 - Crew files are authoritative; the registry records paths. One active session
