@@ -1,0 +1,3 @@
+kind: internal
+area: testing
+change: Refresh pull request observations before reading pushed heads in the automation review restart test.

@@ -61,7 +61,7 @@ func TestAPushToAPullRequestUnderReviewStartsAReviewOfTheNewHeadOnEachAutomation
 
 	pushed := commitFile(t, r.clone, "fix.go", "package fix\n")
 	r.github.request(42, pushed, false)
-	r.readPullRequest(42)
+	r.readPullRequest(42, pushed)
 	r.refresh()
 	for id, first := range threads {
 		next := r.awaitNewRun(id, "delivered", first)
@@ -80,12 +80,12 @@ func TestAPushToAPullRequestUnderReviewStartsAReviewOfTheNewHeadOnEachAutomation
 	upstream := newRepo(t, "upstream")
 	held := commitFile(t, upstream, "held.go", "package held\n")
 	r.github.request(42, held, false)
-	r.readPullRequest(42)
+	r.readPullRequest(42, held)
 	r.refresh()
 	pending := r.awaitNewRun("review", "pending", earlier...)
 	newer := commitFile(t, upstream, "newer.go", "package newer\n")
 	r.github.request(42, newer, false)
-	r.readPullRequest(42)
+	r.readPullRequest(42, newer)
 	r.refresh()
 	r.refresh()
 	if runs := automationRuns(t, r.cli, "review"); len(runs) != len(earlier)+1 || automationRunState(runs, pending.ID) != "pending" {
@@ -103,8 +103,17 @@ func TestAPushToAPullRequestUnderReviewStartsAReviewOfTheNewHeadOnEachAutomation
 	}
 }
 
-func (r *automationReviewWorld) readPullRequest(number int) {
+func (r *automationReviewWorld) readPullRequest(number int, head string) {
 	r.t.Helper()
-	testworld.Request(r.app, protocol.FetchPRDetailsMessage{Cmd: protocol.CmdFetchPRDetails, ID: protocol.FormatPRID("github.test", "acme/shop", number)},
+	// Detail reads reuse fresh cached heads; refresh the list before reading a simulated push.
+	r.refresh()
+	result := testworld.Request(r.app, protocol.FetchPRDetailsMessage{Cmd: protocol.CmdFetchPRDetails, ID: protocol.FormatPRID("github.test", "acme/shop", number)},
 		protocol.EventFetchPRDetailsResult, func(protocol.FetchPRDetailsResultMessage) bool { return true })
+	if !result.Success {
+		r.t.Fatalf("fetch pull request #%d: %s", number, protocol.Deref(result.Error))
+	}
+	pr := prNumbered(r.t, result.Prs, number)
+	if got := protocol.Deref(pr.HeadSHA); got != head {
+		r.t.Fatalf("pull request #%d head = %s, want %s", number, got, head)
+	}
 }
