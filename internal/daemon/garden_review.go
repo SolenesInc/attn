@@ -110,15 +110,26 @@ func (d *Daemon) captureGardenReview() (gardenReviewCapture, error) {
 		byID[seed.ID] = observation
 	}
 
-	// Resolve collected plugin checks before any candidate observes availability.
+	type inspectionResult struct {
+		checks       []pendingInspection
+		availability map[pluginResumeConversation]pluginResumeAvailability
+	}
+	results := make(chan inspectionResult, len(pending))
 	for key, checks := range pending {
-		conversations := make([]pluginResumeConversation, len(checks))
-		for i, check := range checks {
-			conversations[i] = check.conversation
-		}
-		availability := d.pluginConversationsResumable(registrations[key], conversations)
-		for _, check := range checks {
-			observations[check.seedIndex].ResumeAvailable = availability[check.conversation].Available
+		reg := registrations[key]
+		go func() {
+			conversations := make([]pluginResumeConversation, len(checks))
+			for i, check := range checks {
+				conversations[i] = check.conversation
+			}
+			results <- inspectionResult{checks, d.pluginConversationsResumable(reg, conversations)}
+		}()
+	}
+	// Resolve independent plugin checks before any candidate observes availability.
+	for range len(pending) {
+		result := <-results
+		for _, check := range result.checks {
+			observations[check.seedIndex].ResumeAvailable = result.availability[check.conversation].Available
 			observation := observations[check.seedIndex]
 			byID[observation.Seed.ID] = observation
 		}

@@ -170,6 +170,47 @@ func TestAGardenReviewWaitsForAStalledResumeDriverOnlyOncePerCapture(t *testing.
 	})
 }
 
+func TestAGardenReviewWaitsForIndependentDriversTogether(t *testing.T) {
+	inBubbleWithAgents(t, func(t *testing.T, w *world) {
+		app, cli := w.App(), w.Client()
+		drivers := make([]*driverPeer, 0, 2)
+		for _, agent := range []string{"snipe", "wren"} {
+			driver := connectDriver(t, w, agent+"-plugin", agent, map[string]bool{
+				"resume": true, "resume_availability": true, "initial_prompt": true, "state_reporting": true,
+			})
+			drivers = append(drivers, driver)
+			awaitDriverAvailable(app, agent)
+			delegations := make(chan *protocol.DelegateResult, 1)
+			go func() { delegations <- seedResumeDelegate(t, w, fakeagent.Harness(agent), agent) }()
+			run := driver.launched()
+			if err := driver.state(run, 1, "working"); err != nil {
+				t.Fatal(err)
+			}
+			delegated := <-delegations
+			driver.mustReport("session.report_metadata", map[string]any{
+				"session_id": delegated.SessionID, "run_id": run.RunID, "seq": 2,
+				"resume_session_id": agent + "-conversation", "metadata": map[string]string{"native_id": agent + "-conversation"},
+			})
+			closePane(app, seedResumePane(t, w, protocol.Deref(delegated.WorkspaceID), delegated.SessionID))
+		}
+		shown := make(chan *protocol.SeedReviewResult, 1)
+		go func() { shown <- gardenReviewShow(t, cli, "") }()
+		started := time.Now()
+		for _, driver := range drivers {
+			driver.asked("driver.resume_available", nil)
+		}
+		if elapsed := time.Since(started); elapsed != 0 {
+			t.Fatalf("independent calls began %s apart", elapsed)
+		}
+		w.advance(10 * time.Second)
+		select {
+		case <-shown:
+		default:
+			t.Fatal("review did not finish after one deadline for independent stalled drivers")
+		}
+	})
+}
+
 func TestAGardenReviewInspectsSharedPluginStorageOncePerCapture(t *testing.T) {
 	inBubbleWithAgents(t, func(t *testing.T, w *world) {
 		var now atomic.Int64
