@@ -12,7 +12,7 @@ export function AppDesktopNavigation() {
     desktops,
     currentDesktop,
     switchToDesktop,
-    sendActivePaneToDesktop,
+    moveActiveLeafToDesktop,
     deleteDesktop,
     giveShortcutSlot,
     createDesktop,
@@ -33,7 +33,7 @@ export function AppDesktopNavigation() {
             setView('session');
             switchToDesktop(desktopId);
           }}
-          onSendActivePane={sendActivePaneToDesktop}
+          onSendActivePane={(desktopId) => moveActiveLeafToDesktop(desktopId, false)}
           onDelete={deleteDesktop}
           onGiveShortcutSlot={giveShortcutSlot}
           onCreate={createDesktop}

@@ -27,9 +27,9 @@ function highlights(): Highlight[] {
     combos: [[...modifierTokens('desktop.select1'), '1–9']],
   },
   {
-    title: 'Send the focused pane elsewhere',
-    body: 'Move the pane you are in to another desktop without leaving the keyboard.',
-    combos: [[...modifierTokens('desktop.send1'), '1–9']],
+    title: 'Take what you are on to another desktop',
+    body: 'Move the active pane or tile to another desktop and go with it, or move it there and stay where you are.',
+    combos: [[...modifierTokens('desktop.send1'), '1–9'], [...modifierTokens('desktop.sendStay1'), '1–9']],
   },
   {
     title: 'See every desktop at once',
