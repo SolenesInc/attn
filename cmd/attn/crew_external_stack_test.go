@@ -98,39 +98,41 @@ func TestACrashedBareCrewWrapperReleasesItsDay(t *testing.T) {
 
 func TestAReusedWrapperPIDCannotKeepACrewDayAlive(t *testing.T) {
 	t.Parallel()
-	for _, restartDaemon := range []bool{false, true} {
-		t.Run(fmt.Sprintf("restart-daemon=%t", restartDaemon), func(t *testing.T) {
-			s := testworld.NewStack(t, testworld.WithAgents(fakeagent.Claude))
-			writeCharter(t, s, "keel")
-			s.Start()
-			token, err := procreap.StartToken(os.Getpid())
-			if err != nil {
-				t.Fatal(err)
-			}
-			conn, err := s.DialUnix()
-			if err != nil {
-				t.Fatal(err)
-			}
-			id := uuid.NewString()
-			err = json.NewEncoder(conn).Encode(protocol.RegisterMessage{Cmd: protocol.CmdRegister, ID: id, Dir: s.Dir, WorkspaceID: "workspace-" + id, Agent: protocol.Ptr("claude"), Member: protocol.Ptr("keel"), ExternalProcess: &protocol.ExternalProcess{Pid: os.Getpid(), StartToken: token + "-previous-process"}})
-			if err != nil {
-				t.Fatal(err)
-			}
-			var result protocol.Response
-			if err := json.NewDecoder(conn).Decode(&result); err != nil || !result.Ok {
-				t.Fatalf("register = %+v, %v", result, err)
-			}
-			conn.Close()
-			if restartDaemon {
-				s.Stop()
+	for _, processPID := range []int{os.Getpid(), 1} {
+		for _, restartDaemon := range []bool{false, true} {
+			t.Run(fmt.Sprintf("pid=%d/restart-daemon=%t", processPID, restartDaemon), func(t *testing.T) {
+				s := testworld.NewStack(t, testworld.WithAgents(fakeagent.Claude))
+				writeCharter(t, s, "keel")
 				s.Start()
-				s.App()
-			}
-			awake, err := s.Client().CrewWake("keel", "claude")
-			if err != nil || awake.AlreadyAwake || awake.SessionID == id {
-				t.Fatalf("wake with mismatched process identity = %+v, %v", awake, err)
-			}
-			s.Launched(awake.SessionID)
-		})
+				token, err := procreap.StartToken(processPID)
+				if err != nil {
+					t.Fatal(err)
+				}
+				conn, err := s.DialUnix()
+				if err != nil {
+					t.Fatal(err)
+				}
+				id := uuid.NewString()
+				err = json.NewEncoder(conn).Encode(protocol.RegisterMessage{Cmd: protocol.CmdRegister, ID: id, Dir: s.Dir, WorkspaceID: "workspace-" + id, Agent: protocol.Ptr("claude"), Member: protocol.Ptr("keel"), ExternalProcess: &protocol.ExternalProcess{Pid: processPID, StartToken: token + "-previous-process"}})
+				if err != nil {
+					t.Fatal(err)
+				}
+				var result protocol.Response
+				if err := json.NewDecoder(conn).Decode(&result); err != nil || !result.Ok {
+					t.Fatalf("register = %+v, %v", result, err)
+				}
+				conn.Close()
+				if restartDaemon {
+					s.Stop()
+					s.Start()
+					s.App()
+				}
+				awake, err := s.Client().CrewWake("keel", "claude")
+				if err != nil || awake.AlreadyAwake || awake.SessionID == id {
+					t.Fatalf("wake with mismatched process identity = %+v, %v", awake, err)
+				}
+				s.Launched(awake.SessionID)
+			})
+		}
 	}
 }

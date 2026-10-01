@@ -224,7 +224,9 @@ func MatchesProcess(pid int, token string) (bool, error) {
 		if errors.Is(err, syscall.ESRCH) {
 			return false, nil
 		}
-		return false, err
+		if !errors.Is(err, syscall.EPERM) {
+			return false, err
+		}
 	}
 	current, err := StartToken(pid)
 	if errors.Is(err, os.ErrNotExist) || errors.Is(err, syscall.ESRCH) {
@@ -236,5 +238,5 @@ func MatchesProcess(pid int, token string) (bool, error) {
 		}
 		return false, err
 	}
-	return current == token && ProcessAlive(pid), nil
+	return current == token && !isZombie(pid), nil
 }

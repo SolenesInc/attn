@@ -202,7 +202,7 @@ func (c *Client) Register(id, label, dir string) error {
 }
 
 func (c *Client) RegisterWithAgent(id, label, dir, agent string) error {
-	return c.RegisterAsMember(id, label, dir, agent, "")
+	return c.register(id, label, dir, agent, "", nil)
 }
 
 func (c *Client) RegisterAsMember(id, label, dir, agent, member string) error {
@@ -210,9 +210,13 @@ func (c *Client) RegisterAsMember(id, label, dir, agent, member string) error {
 	if err != nil {
 		return fmt.Errorf("identify external wrapper: %w", err)
 	}
+	return c.register(id, label, dir, agent, member, &protocol.ExternalProcess{Pid: os.Getpid(), StartToken: token})
+}
+
+func (c *Client) register(id, label, dir, agent, member string, process *protocol.ExternalProcess) error {
 	msg := protocol.RegisterMessage{
 		Cmd:             protocol.CmdRegister,
-		ExternalProcess: &protocol.ExternalProcess{Pid: os.Getpid(), StartToken: token},
+		ExternalProcess: process,
 		ID:              id,
 		Label:           protocol.Ptr(label),
 		Dir:             dir,
@@ -225,7 +229,7 @@ func (c *Client) RegisterAsMember(id, label, dir, agent, member string) error {
 	if member != "" {
 		msg.Member = protocol.Ptr(member)
 	}
-	_, err = c.send(msg)
+	_, err := c.send(msg)
 	return err
 }
 
