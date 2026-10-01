@@ -164,7 +164,7 @@ func (d *Daemon) crewPriming(member crew.Member) (crew.Priming, error) {
 }
 
 func (d *Daemon) primeCrewGarden(priming *crew.Priming, memberID string) {
-	read, err := d.readWholeGarden()
+	read, err := d.readGardenTo(0, d.crewProfileID(memberID))
 	if err != nil {
 		d.logf("crew: reading the garden to prime %s: %v", crew.DisplayName(memberID), err)
 		return

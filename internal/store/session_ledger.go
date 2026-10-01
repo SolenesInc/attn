@@ -199,6 +199,14 @@ func (s *Store) ReopenSession(id, profileID string) (SessionCloseRecord, bool, e
 			return SessionCloseRecord{}, false, fmt.Errorf("reopen session %s: %w", id, err)
 		}
 	}
+	if profileID != lifted.ProfileID {
+		if err := refuseMovingGardenWork(tx, id, "", lifted.ProfileID, profileID); err != nil {
+			return SessionCloseRecord{}, false, err
+		}
+		if _, err := tx.Exec(`DELETE FROM garden_seed_watches WHERE watcher_session_id = ?`, id); err != nil {
+			return SessionCloseRecord{}, false, err
+		}
+	}
 	if _, err := tx.Exec(`UPDATE sessions SET closed_at = '', closed_by = '', close_reason = '', profile_id = ?
 		WHERE id = ?`, profileID, id); err != nil {
 		return SessionCloseRecord{}, false, fmt.Errorf("reopen session %s: %w", id, err)

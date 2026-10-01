@@ -294,7 +294,7 @@ func (r gardenEventRoles) ResolveSeedRole(seedID string, role events.Role) ([]st
 			}
 			return []string{inbox.ToMember(member.ID).String()}, nil
 		}
-		sessionID, err := r.daemon.localGardenTenderSession(seed.Tender())
+		sessionID, err := r.daemon.localGardenTenderSession(seed)
 		if errors.Is(err, errRemoteGardenTender) {
 			return nil, nil
 		}

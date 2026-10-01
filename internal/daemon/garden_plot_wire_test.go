@@ -15,7 +15,7 @@ import (
 )
 
 func TestAPlotPlantsItsCrownAndChildrenInOneStep(t *testing.T) {
-	inBubble(t, func(t *testing.T, w *world) {
+	inCrewBubble(t, func(t *testing.T, w *world) {
 		app, cli := w.App(), w.Client()
 		registerSessions(t, w, cli, "sess-a")
 		w.advance(0)
@@ -170,7 +170,7 @@ func TestStaleListsOnlyTheQuietOpenSeeds(t *testing.T) {
 }
 
 func TestADelegationAtACrownIsScopedToItsPlot(t *testing.T) {
-	w := newWorld(t, fakeagent.Claude, fakeagent.Codex)
+	w := newCrewWorld(t, fakeagent.Claude, fakeagent.Codex)
 	app, cli := w.App(), w.Client()
 	planner := spawnPanes(w, app, w.Path("planner"))[0].session
 	cwd := w.Path("shop")
@@ -241,7 +241,7 @@ func gardenPlotPushes(app *testworld.Peer) int {
 
 func gardenPlotList(t *testing.T, cli *client.Client, stale bool, windowSeconds int) *protocol.SeedListResult {
 	t.Helper()
-	listed, err := cli.SeedList("sess-a", stale, windowSeconds)
+	listed, err := cli.SeedList("", stale, windowSeconds)
 	if err != nil {
 		t.Fatalf("seed ls: %v", err)
 	}

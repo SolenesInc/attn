@@ -12,7 +12,7 @@ import (
 )
 
 func TestBlockingEdgesGateReadiness(t *testing.T) {
-	w := newWorld(t, fakeagent.Claude)
+	w := newCrewWorld(t, fakeagent.Claude)
 	app, cli := w.App(), w.Client()
 	worker := spawnPanes(w, app, w.Path("worker"))[0].session
 	first := plantSeedAs(t, cli, worker, "waited longest")

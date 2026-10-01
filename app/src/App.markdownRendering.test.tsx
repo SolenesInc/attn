@@ -222,7 +222,7 @@ describe('App markdown rendering seed targets', () => {
     details.open = true;
 
     modifiedAt = '2026-08-29T20:01:00Z';
-    await gesture(daemon, () => daemon.emit({ event: 'garden_seeds_updated', seeds: [{ ...seed, rev: 2 }], total: 1 }));
+    await gesture(daemon, () => daemon.emit({ event: 'garden_seeds_updated', profile_id: 'profile-default', seeds: [{ ...seed, rev: 2 }], total: 1 }));
 
     expect(reader.getByRole('img', { name: 'cover' })).toHaveAttribute('src', 'data:image/png;base64,dHdv');
     expect(details.open).toBe(true);

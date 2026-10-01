@@ -2,6 +2,8 @@ import { fireEvent, screen, within } from '@testing-library/react';
 import { openUrl } from '@tauri-apps/plugin-opener';
 import { describe, expect, it } from 'vitest';
 import {
+  defaultProfile,
+  emptyDesktop,
   agentPane,
   soloDesktop,
   daemonSeed,
@@ -54,13 +56,35 @@ describe('App garden seeds', () => {
     const { daemon } = await openGarden([daemonSeed('s-aaa111', { title: 'already planted' })]);
 
     daemon.emit({
-      event: 'garden_seeds_updated',
+      event: 'garden_seeds_updated', profile_id: 'profile-default',
       seeds: [daemonSeed('s-bbb222', { title: 'just planted' }), daemonSeed('s-aaa111', { title: 'already planted' })],
       total: 2,
     });
 
     expect(screen.getByText('just planted')).toBeInTheDocument();
     expect(screen.getByText('already planted')).toBeInTheDocument();
+  });
+
+  it('replaces the garden on profile switches and ignores late snapshots from the old profile', async () => {
+    const alpha = daemonSeed('s-alpha1', { title: 'Default work' });
+    const beta = daemonSeed('s-beta11', { title: 'Side work', profile_id: 'profile-side' });
+    const { daemon } = await openGarden([alpha]);
+    expect(screen.getByText('Default work')).toBeInTheDocument();
+
+    await gesture(daemon, () => daemon.emit({
+      event: 'profile_arrangement_changed',
+      profile: defaultProfile('side-desktop', { id: 'profile-side', name: 'Side' }),
+      desktops: [emptyDesktop('side-desktop', { profile_id: 'profile-side' })],
+    }));
+    expect(screen.queryByText('Default work')).toBeNull();
+    daemon.emit({ event: 'garden_seeds_updated', profile_id: 'profile-side', seeds: [beta], total: 1 });
+    expect(screen.getByText('Side work')).toBeInTheDocument();
+    daemon.emit({ event: 'garden_seeds_updated', profile_id: 'profile-default', seeds: [alpha], total: 1 });
+    expect(screen.queryByText('Default work')).toBeNull();
+    expect(screen.getByText('Side work')).toBeInTheDocument();
+
+    daemon.emit({ event: 'garden_seeds_updated', profile_id: 'profile-side', seeds: [], total: 0 });
+    expect(screen.queryByText('Side work')).toBeNull();
   });
 
   it('reads a garden-less daemon as an empty garden', async () => {
@@ -76,11 +100,11 @@ describe('App garden seeds', () => {
   it('carries how many seeds the garden holds, not just the ones it sent', async () => {
     const { daemon } = await openGarden([]);
 
-    daemon.emit({ event: 'garden_seeds_updated', seeds: [daemonSeed('s-bbb222', { title: 'the newest one' })], total: 1421 });
+    daemon.emit({ event: 'garden_seeds_updated', profile_id: 'profile-default', seeds: [daemonSeed('s-bbb222', { title: 'the newest one' })], total: 1421 });
 
     expect(screen.getByText('The garden holds 1421 seeds; this panel has the newest 1.')).toBeInTheDocument();
 
-    daemon.emit({ event: 'garden_seeds_updated', seeds: [daemonSeed('s-bbb222', { title: 'the newest one' })], total: 1 });
+    daemon.emit({ event: 'garden_seeds_updated', profile_id: 'profile-default', seeds: [daemonSeed('s-bbb222', { title: 'the newest one' })], total: 1 });
 
     expect(screen.queryByText(/The garden holds/)).toBeNull();
   });

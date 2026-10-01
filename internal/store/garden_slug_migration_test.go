@@ -25,6 +25,19 @@ func TestMigration126RecomputesStoredSlugs(t *testing.T) {
 		t.Fatalf("read the seeds declaration: %v", err)
 	}
 	body := []byte(`{"id":"s-e5zefj","title":"Mermaid rendered in the grid, in Rust","body":"","status":"planted","step_slug":"mermaid-rendered-in-the-grid-in-rust","edges":[],"vars":[]}`)
+	profile, err := s.ProfileMigration()
+	if err != nil {
+		t.Fatal(err)
+	}
+	var fixture garden.Seed
+	if err := json.Unmarshal(body, &fixture); err != nil {
+		t.Fatal(err)
+	}
+	fixture.ProfileID = profile.Manifest.ProfileID
+	body, err = fixture.Encode()
+	if err != nil {
+		t.Fatal(err)
+	}
 	if _, err := s.PutDocument(*schema, "s-e5zefj", body, time.Now(), nil); err != nil {
 		t.Fatalf("plant the old-slug seed: %v", err)
 	}

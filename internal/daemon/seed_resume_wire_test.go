@@ -277,26 +277,3 @@ func TestPiResumeAndReopenRequireTheSavedConversation(t *testing.T) {
 		t.Errorf("refusal recreated Pi storage: %v", err)
 	}
 }
-
-func TestResumingASeedWhoseTendersProfileWasDeletedResumesInTheAppsProfile(t *testing.T) {
-	w := newWorld(t, fakeagent.Codex)
-	app := w.App()
-	delegated := seedResumeDelegate(t, w, fakeagent.Codex, "api")
-	first := w.Launched(delegated.SessionID)
-	closePane(app, sessionPane{session: delegated.SessionID})
-
-	kept := protocol.Deref(mustProfileRequest(app, protocol.ProfileCreateMessage{Cmd: protocol.CmdProfileCreate, Name: "Kept", RequestID: "create-kept"}, "create-kept").Profile)
-	var deleted protocol.Profile
-	for _, profile := range app.Initial.Profiles {
-		if profile.ID == protocol.Deref(delegated.ProfileID) {
-			deleted = profile
-		}
-	}
-	mustProfileRequest(app, protocol.ProfileDeleteMessage{Cmd: protocol.CmdProfileDelete, ProfileID: deleted.ID, ExpectedRevision: deleted.Revision, DestinationProfileID: kept.ID, RequestID: "delete-tenders"}, "delete-tenders")
-
-	resumed := seedResumeRequest(app, delegated.SeedID)
-	if !resumed.Success || protocol.Deref(resumed.ProfileID) != kept.ID {
-		t.Fatalf("resuming a seed whose tender's profile %s was deleted = %+v, want it resumed in %s", deleted.ID, resumed, kept.ID)
-	}
-	seedResumeContinues(t, w, first, delegated.SessionID)
-}

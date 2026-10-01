@@ -56,7 +56,7 @@ export async function renderGarden(
     documents: {},
     push(next, pushedTotal = next.length) {
       garden.seeds = next;
-      daemon.emit({ event: 'garden_seeds_updated', seeds: next, total: pushedTotal });
+      daemon.emit({ event: 'garden_seeds_updated', profile_id: 'profile-default', seeds: next, total: pushedTotal });
     },
     answer({ seed_id, request_id }) {
       const seed = garden.seeds.find((candidate) => candidate.id === seed_id);

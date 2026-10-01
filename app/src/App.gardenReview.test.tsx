@@ -52,6 +52,7 @@ function reviewItem(overrides: Partial<ReviewItem> = {}): ReviewItem {
 function review(items = [reviewItem()], runOverrides: Partial<Review['run']> = {}): Review {
   return {
     run: {
+      profile_id: 'profile-default',
       id: 'r-1',
       candidate_ids: items.map((item) => item.seed_id),
       recipe: { agent: 'codex', model: 'gpt-5.6-luna', effort: 'xhigh' },
@@ -78,7 +79,7 @@ async function openGarden(shown: Review | undefined, { seeds = [reviewedSeed], d
   garden.documents = documents;
   const { daemon } = garden;
   daemon.on('seed_review_show', () => ({
-    event: 'seed_review_result',
+    event: 'seed_review_result', profile_id: 'profile-default',
     operation: 'show',
     success: true,
     candidate_count: candidates ?? shown?.items.filter((item) => item.resolution === 'unresolved').length ?? 0,
@@ -116,7 +117,7 @@ describe('App garden review', () => {
   it('counts the seeds that need review and starts a new review', async () => {
     const daemon = await openGarden(undefined, { candidates: 3 });
     daemon.on('seed_review_start', () => ({
-      event: 'seed_review_result', operation: 'start', success: true, candidate_count: 3, review: review(),
+      event: 'seed_review_result', profile_id: 'profile-default', operation: 'start', success: true, candidate_count: 3, review: review(),
     }));
     expect(screen.getByTestId('garden-review-prompt')).toHaveTextContent('3 seeds need review');
 
@@ -219,7 +220,7 @@ describe('App garden review', () => {
   it('keeps a reviewed seed growing with its evidence receipt', async () => {
     const daemon = await openReview();
     daemon.on('seed_review_keep', () => ({
-      event: 'seed_review_result', operation: 'keep', success: true, candidate_count: 0, review: review(),
+      event: 'seed_review_result', profile_id: 'profile-default', operation: 'keep', success: true, candidate_count: 0, review: review(),
     }));
 
     await click(daemon, 'Keep growing');
@@ -253,7 +254,7 @@ describe('App garden review', () => {
       status: 'invalidated', recommendation: undefined, explanation: undefined, error: 'The seed changed during classification.',
     });
     daemon.on('seed_review_retry', () => ({
-      event: 'seed_review_result', operation: 'retry', success: true, candidate_count: 1, review: review(),
+      event: 'seed_review_result', profile_id: 'profile-default', operation: 'retry', success: true, candidate_count: 1, review: review(),
     }));
     expect(screen.getByText('This seed changed')).toBeInTheDocument();
     expect(screen.queryByRole('button', { name: 'Harvest' })).toBeNull();

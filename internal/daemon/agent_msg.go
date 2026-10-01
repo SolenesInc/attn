@@ -65,6 +65,10 @@ func (d *Daemon) handleAgentMsg(conn net.Conn, msg *protocol.AgentMsgMessage) {
 	targetRef := msg.TargetSessionID
 	var address inbox.Address
 	if seedID := strings.TrimSpace(protocol.Deref(msg.TargetSeedID)); seedID != "" {
+		if err := d.requireSeedInProfile(seedID, sender.ProfileID, false); err != nil {
+			d.replyAgentMsgError(conn, "cross_profile", err.Error())
+			return
+		}
 		if strings.TrimSpace(targetRef) != "" {
 			d.replyAgentMsgError(conn, "ambiguous_target", "a message goes to one place; name a session or a seed, not both")
 			return

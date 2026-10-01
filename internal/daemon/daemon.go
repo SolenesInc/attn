@@ -2453,6 +2453,11 @@ func (d *Daemon) handleConnection(conn net.Conn) {
 	}
 	defer release()
 
+	if err := d.scopeGardenRequest(cmd, msg, ""); err != nil {
+		d.sendError(conn, err.Error())
+		return
+	}
+
 	switch cmd {
 	case protocol.CmdDelegate:
 		d.handleDelegate(conn, msg.(*protocol.DelegateMessage))
@@ -3045,6 +3050,10 @@ func (d *Daemon) sessionForBroadcastWithChiefOfStaff(
 	d.decorateCrewMember(clone, crewBySession)
 	d.decorateSessionSeed(clone, seedBySession)
 	d.decorateSessionDispatcher(clone, dispatcherBySession)
+	if seedBySession[clone.ID] != "" && clone.SeedID == nil {
+		clone.DispatcherMember, clone.DispatcherSessionID = nil, nil
+		clone.DelegatedFromChief = nil
+	}
 	d.decorateSessionWithCost(clone)
 	d.decorateSessionWithTerminalBuild(clone)
 	d.decorateSessionWithTurn(clone)

@@ -8,7 +8,6 @@ import (
 	"strings"
 	"sync"
 	"testing"
-	"time"
 
 	"github.com/victorarias/attn/internal/profiles"
 	"github.com/victorarias/attn/internal/protocol"
@@ -158,7 +157,7 @@ func TestDelegationFromAnUnplacedSourceStartsUnplacedInTheSourcesProfile(t *test
 	}
 }
 
-func TestDelegationWithoutASourceStartsUnplacedInTheMostRecentProfile(t *testing.T) {
+func TestDelegationWithoutASourceStartsUnplacedInTheExplicitProfile(t *testing.T) {
 	d := NewForTesting(filepath.Join(t.TempDir(), "test.sock"))
 	backend := &fakeSpawnBackend{}
 	d.ptyBackend = backend
@@ -170,13 +169,13 @@ func TestDelegationWithoutASourceStartsUnplacedInTheMostRecentProfile(t *testing
 	}
 
 	result, err := d.delegateResolved(&resolvedDelegationLaunch{
-		Cmd: protocol.CmdDelegate, Brief: protocol.Ptr("Nobody sent me."), Agent: protocol.Ptr("codex"), Cwd: t.TempDir(),
+		Cmd: protocol.CmdDelegate, ProfileID: protocol.Ptr(work.ID), Brief: protocol.Ptr("Nobody sent me."), Agent: protocol.Ptr("codex"), Cwd: t.TempDir(),
 	})
 	if err != nil {
 		t.Fatalf("delegate: %v", err)
 	}
 	if protocol.Deref(result.ProfileID) != work.ID {
-		t.Fatalf("child profile = %q, want the most recently used %s", protocol.Deref(result.ProfileID), work.ID)
+		t.Fatalf("child profile = %q, want the explicitly selected %s", protocol.Deref(result.ProfileID), work.ID)
 	}
 	if desktop := desktopOf(t, d, result.SessionID); desktop != "" {
 		t.Fatalf("child placed on %s, want it unplaced", desktop)
@@ -308,43 +307,6 @@ func TestWebSocketCommandsWithoutAProfileUseTheConnectionsProfile(t *testing.T) 
 	expectSpawnResult(t, client, "scoped", true)
 	if got := w.d.store.Get("scoped").ProfileID; got != work.ID {
 		t.Fatalf("spawn without profile_id landed in %q, want the connection's profile %s", got, work.ID)
-	}
-}
-
-func TestDeletingAProfileCarriesItsAutomationsToTheDestination(t *testing.T) {
-	d := newCrewDaemon(t)
-	d.ptyBackend = &fakeSpawnBackend{}
-	w := &profilesTestDaemon{t: t, d: d}
-	d.clientToken = "the-token"
-	client, _ := w.connect("")
-	doomed := w.mustSend(client, map[string]any{"cmd": protocol.CmdProfileCreate, "name": "doomed"}).Profile
-	defaultID := defaultProfileID(t, d.store)
-	now := time.Now()
-	definition, err := d.store.UpsertAutomationDefinition("nightly", "Nightly", `{}`, doomed.ID, now)
-	if err != nil {
-		t.Fatal(err)
-	}
-	pending, _, err := d.store.ClaimManualAutomationRun(definition.ID, "req-1", "", `{}`, definition.Revision, `{}`, now, store.AutomationRunReservation{
-		RunID: "run-1", OccurrenceID: "occ-1", SeedID: "seed-1", SessionID: "session-1",
-	})
-	if err != nil {
-		t.Fatal(err)
-	}
-
-	w.mustSend(client, map[string]any{
-		"cmd": protocol.CmdProfileDelete, "profile_id": doomed.ID, "expected_revision": doomed.Revision, "destination_profile_id": defaultID,
-	})
-	if moved, err := d.store.GetAutomationDefinition(definition.ID); err != nil || moved.ProfileID != defaultID {
-		t.Fatalf("definition after delete = %+v err=%v, want it in %s", moved, err, defaultID)
-	}
-	if run, err := d.store.GetAutomationRun(pending.ID); err != nil || run.ProfileID != defaultID {
-		t.Fatalf("pending run after delete = %+v err=%v, want it in %s", run, err, defaultID)
-	}
-	later, _, err := d.store.ClaimManualAutomationRun(definition.ID, "req-2", "", `{}`, definition.Revision, `{}`, now, store.AutomationRunReservation{
-		RunID: "run-2", OccurrenceID: "occ-2", SeedID: "seed-2", SessionID: "session-2",
-	})
-	if err != nil || later.ProfileID != defaultID {
-		t.Fatalf("a run claimed from the stale definition = %+v err=%v, want it in %s", later, err, defaultID)
 	}
 }
 

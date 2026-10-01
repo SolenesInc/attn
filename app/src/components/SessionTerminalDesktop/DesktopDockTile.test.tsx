@@ -954,6 +954,7 @@ function seedFixture(overrides: Partial<Seed> = {}): Seed {
     state_changed_at: '2026-08-15T08:00:00Z',
     state_changed_at_exact: true,
     step_slug: 'seed-reader-plan',
+    profile_id: 'profile-default',
     planter_session: '',
     planter_member: '',
     tender_session: 'sess-a',

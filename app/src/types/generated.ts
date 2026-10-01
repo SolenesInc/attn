@@ -2880,6 +2880,7 @@ export interface DelegateMessage {
     fallback?:             boolean;
     label?:                string;
     model?:                string;
+    profile_id?:           string;
     provider?:             string;
     request_id:            string;
     review?:               DelegateMessageReview;
@@ -2971,8 +2972,10 @@ export interface DelegateResultObject {
 }
 
 export interface DelegateStatusMessage {
-    cmd: DelegateStatusMessageCmd;
-    id:  string;
+    cmd:                DelegateStatusMessageCmd;
+    id:                 string;
+    profile_id?:        string;
+    source_session_id?: string;
     [property: string]: any;
 }
 
@@ -4662,6 +4665,7 @@ export interface GardenReviewRunObject {
     captured_at:   string;
     completed_at?: string;
     id:            string;
+    profile_id:    string;
     recipe:        Recipe;
     status:        string;
     [property: string]: any;
@@ -4721,6 +4725,7 @@ export interface GardenReviewRun {
     captured_at:   string;
     completed_at?: string;
     id:            string;
+    profile_id:    string;
     recipe:        Recipe;
     status:        string;
     [property: string]: any;
@@ -4743,9 +4748,10 @@ export interface GardenReviewUpdatedMessageReview {
 }
 
 export interface GardenSeedsUpdatedMessage {
-    event: GardenSeedsUpdatedMessageEvent;
-    seeds: SeedElement[];
-    total: number;
+    event:      GardenSeedsUpdatedMessageEvent;
+    profile_id: string;
+    seeds:      SeedElement[];
+    total:      number;
     [property: string]: any;
 }
 
@@ -4765,6 +4771,7 @@ export interface SeedElement {
     planter_member:         string;
     planter_session:        string;
     plot_progress?:         PlotProgress;
+    profile_id:             string;
     ready:                  boolean;
     reason?:                string;
     rev:                    number;
@@ -6501,6 +6508,7 @@ export enum OpenMarkdownResultMessageEvent {
 
 export interface OpenSeedMessage {
     cmd:         OpenSeedMessageCmd;
+    profile_id?: string;
     request_id?: string;
     seed_id:     string;
     session_id?: string;
@@ -8152,6 +8160,7 @@ export interface Seed {
     planter_member:         string;
     planter_session:        string;
     plot_progress?:         PlotProgress;
+    profile_id:             string;
     ready:                  boolean;
     reason?:                string;
     rev:                    number;
@@ -8186,11 +8195,13 @@ export interface SeedArtifactReference {
 }
 
 export interface SeedArtifactTargetMessage {
-    cmd:             SeedArtifactTargetMessageCmd;
-    purpose:         string;
-    relative_target: string;
-    request_id:      string;
-    seed_id:         string;
+    cmd:                SeedArtifactTargetMessageCmd;
+    profile_id?:        string;
+    purpose:            string;
+    relative_target:    string;
+    request_id:         string;
+    seed_id:            string;
+    source_session_id?: string;
     [property: string]: any;
 }
 
@@ -8233,6 +8244,7 @@ export interface SeedArtifactTransferMessage {
     filename?:          string;
     legacy_reference?:  LegacyReferenceElement;
     operation:          string;
+    profile_id?:        string;
     request_id?:        string;
     seed_id:            string;
     source_path?:       string;
@@ -8302,9 +8314,11 @@ export interface SeedDocument {
 }
 
 export interface SeedDocumentGetMessage {
-    cmd:        SeedDocumentGetMessageCmd;
-    request_id: string;
-    seed_id:    string;
+    cmd:                SeedDocumentGetMessageCmd;
+    profile_id?:        string;
+    request_id:         string;
+    seed_id:            string;
+    source_session_id?: string;
     [property: string]: any;
 }
 
@@ -8343,9 +8357,11 @@ export interface SeedEdge {
 }
 
 export interface SeedEditMessage {
-    body:    string;
-    cmd:     SeedEditMessageCmd;
-    seed_id: string;
+    body:               string;
+    cmd:                SeedEditMessageCmd;
+    profile_id?:        string;
+    seed_id:            string;
+    source_session_id?: string;
     [property: string]: any;
 }
 
@@ -8385,11 +8401,13 @@ export interface SeedHarvestWhenMerged {
 }
 
 export interface SeedLinkMessage {
-    cmd:        SeedLinkMessageCmd;
-    kind:       string;
-    seed_id:    string;
-    to_seed_id: string;
-    unlink?:    boolean;
+    cmd:                SeedLinkMessageCmd;
+    kind:               string;
+    profile_id?:        string;
+    seed_id:            string;
+    source_session_id?: string;
+    to_seed_id:         string;
+    unlink?:            boolean;
     [property: string]: any;
 }
 
@@ -8405,6 +8423,7 @@ export interface SeedLinkResult {
 
 export interface SeedListMessage {
     cmd:                   SeedListMessageCmd;
+    profile_id?:           string;
     source_session_id?:    string;
     stale?:                boolean;
     stale_window_seconds?: number;
@@ -8440,6 +8459,7 @@ export interface SeedNoteMessage {
     cmd:                SeedNoteMessageCmd;
     kind?:              string;
     member?:            string;
+    profile_id?:        string;
     request_id?:        string;
     ring?:              boolean;
     seed_id:            string;
@@ -8472,6 +8492,7 @@ export enum SeedNoteResultMessageEvent {
 export interface SeedNotesMessage {
     cmd:                SeedNotesMessageCmd;
     limit?:             number;
+    profile_id?:        string;
     seed_id:            string;
     source_session_id?: string;
     [property: string]: any;
@@ -8493,6 +8514,7 @@ export interface SeedPlantMessage {
     discovered_from?:   string;
     member?:            string;
     part_of?:           string;
+    profile_id?:        string;
     source_session_id?: string;
     title:              string;
     [property: string]: any;
@@ -8519,6 +8541,7 @@ export interface SeedPlotMessage {
     children:           ChildElement[];
     cmd:                SeedPlotMessageCmd;
     member?:            string;
+    profile_id?:        string;
     source_session_id?: string;
     title:              string;
     [property: string]: any;
@@ -8556,6 +8579,7 @@ export interface SeedReadyMessage {
     all?:               boolean;
     cmd:                SeedReadyMessageCmd;
     plot?:              string;
+    profile_id?:        string;
     source_session_id?: string;
     [property: string]: any;
 }
@@ -8583,11 +8607,12 @@ export interface SeedRelation {
 }
 
 export interface SeedResumeMessage {
-    cmd:         SeedResumeMessageCmd;
-    profile_id?: string;
-    request_id?: string;
-    review?:     DelegateMessageReview;
-    seed_id:     string;
+    cmd:                SeedResumeMessageCmd;
+    profile_id?:        string;
+    request_id?:        string;
+    review?:            DelegateMessageReview;
+    seed_id:            string;
+    source_session_id?: string;
     [property: string]: any;
 }
 
@@ -8617,9 +8642,11 @@ export interface SeedReviewActionContext {
 }
 
 export interface SeedReviewCancelMessage {
-    cmd:         SeedReviewCancelMessageCmd;
-    request_id?: string;
-    review_id:   string;
+    cmd:                SeedReviewCancelMessageCmd;
+    profile_id?:        string;
+    request_id?:        string;
+    review_id:          string;
+    source_session_id?: string;
     [property: string]: any;
 }
 
@@ -8628,10 +8655,12 @@ export enum SeedReviewCancelMessageCmd {
 }
 
 export interface SeedReviewDraftMessage {
-    cmd:        SeedReviewDraftMessageCmd;
-    request_id: string;
-    review:     DelegateMessageReview;
-    seed_id:    string;
+    cmd:                SeedReviewDraftMessageCmd;
+    profile_id?:        string;
+    request_id:         string;
+    review:             DelegateMessageReview;
+    seed_id:            string;
+    source_session_id?: string;
     [property: string]: any;
 }
 
@@ -8653,10 +8682,12 @@ export enum SeedReviewDraftResultMessageEvent {
 }
 
 export interface SeedReviewKeepMessage {
-    cmd:         SeedReviewKeepMessageCmd;
-    request_id?: string;
-    review:      DelegateMessageReview;
-    seed_id:     string;
+    cmd:                SeedReviewKeepMessageCmd;
+    profile_id?:        string;
+    request_id?:        string;
+    review:             DelegateMessageReview;
+    seed_id:            string;
+    source_session_id?: string;
     [property: string]: any;
 }
 
@@ -8675,6 +8706,7 @@ export interface SeedReviewResultMessage {
     error?:          string;
     event:           SeedReviewResultMessageEvent;
     operation:       string;
+    profile_id:      string;
     request_id:      string;
     review?:         GardenReviewUpdatedMessageReview;
     success:         boolean;
@@ -8686,10 +8718,12 @@ export enum SeedReviewResultMessageEvent {
 }
 
 export interface SeedReviewRetryMessage {
-    cmd:         SeedReviewRetryMessageCmd;
-    request_id?: string;
-    review_id:   string;
-    seed_id:     string;
+    cmd:                SeedReviewRetryMessageCmd;
+    profile_id?:        string;
+    request_id?:        string;
+    review_id:          string;
+    seed_id:            string;
+    source_session_id?: string;
     [property: string]: any;
 }
 
@@ -8698,9 +8732,11 @@ export enum SeedReviewRetryMessageCmd {
 }
 
 export interface SeedReviewShowMessage {
-    cmd:         SeedReviewShowMessageCmd;
-    request_id?: string;
-    review_id?:  string;
+    cmd:                SeedReviewShowMessageCmd;
+    profile_id?:        string;
+    request_id?:        string;
+    review_id?:         string;
+    source_session_id?: string;
     [property: string]: any;
 }
 
@@ -8709,8 +8745,10 @@ export enum SeedReviewShowMessageCmd {
 }
 
 export interface SeedReviewStartMessage {
-    cmd:         SeedReviewStartMessageCmd;
-    request_id?: string;
+    cmd:                SeedReviewStartMessageCmd;
+    profile_id?:        string;
+    request_id?:        string;
+    source_session_id?: string;
     [property: string]: any;
 }
 
@@ -8728,6 +8766,7 @@ export interface SeedSearchHit {
 export interface SeedSearchMessage {
     cmd:                SeedSearchMessageCmd;
     limit?:             number;
+    profile_id?:        string;
     query:              string;
     source_session_id?: string;
     [property: string]: any;
@@ -8751,6 +8790,7 @@ export interface SeedSendToChiefMessage {
     expected_tender_member:  string;
     expected_tender_session: string;
     guidance?:               string;
+    profile_id?:             string;
     request_id?:             string;
     review?:                 DelegateMessageReview;
     seed_id:                 string;
@@ -8785,6 +8825,7 @@ export enum SeedSendToChiefResultMessageEvent {
 
 export interface SeedShowMessage {
     cmd:                SeedShowMessageCmd;
+    profile_id?:        string;
     seed_id:            string;
     source_session_id?: string;
     [property: string]: any;
@@ -8813,6 +8854,7 @@ export interface SeedTransitionMessage {
     comment?:            string;
     force?:              boolean;
     member?:             string;
+    profile_id?:         string;
     reason?:             string;
     request_id?:         string;
     review?:             DelegateMessageReview;
@@ -8864,6 +8906,7 @@ export interface SeedVar {
 
 export interface SeedWatchMessage {
     cmd:               SeedWatchMessageCmd;
+    profile_id?:       string;
     seed_id:           string;
     source_session_id: string;
     unwatch?:          boolean;
@@ -17359,6 +17402,7 @@ const typeMap: any = {
         { json: "fallback", js: "fallback", typ: u(undefined, true) },
         { json: "label", js: "label", typ: u(undefined, "") },
         { json: "model", js: "model", typ: u(undefined, "") },
+        { json: "profile_id", js: "profile_id", typ: u(undefined, "") },
         { json: "provider", js: "provider", typ: u(undefined, "") },
         { json: "request_id", js: "request_id", typ: "" },
         { json: "review", js: "review", typ: u(undefined, r("DelegateMessageReview")) },
@@ -17430,6 +17474,8 @@ const typeMap: any = {
     "DelegateStatusMessage": o([
         { json: "cmd", js: "cmd", typ: r("DelegateStatusMessageCmd") },
         { json: "id", js: "id", typ: "" },
+        { json: "profile_id", js: "profile_id", typ: u(undefined, "") },
+        { json: "source_session_id", js: "source_session_id", typ: u(undefined, "") },
     ], "any"),
     "DelegateWorktreeRequest": o([
         { json: "branch", js: "branch", typ: "" },
@@ -18449,6 +18495,7 @@ const typeMap: any = {
         { json: "captured_at", js: "captured_at", typ: "" },
         { json: "completed_at", js: "completed_at", typ: u(undefined, "") },
         { json: "id", js: "id", typ: "" },
+        { json: "profile_id", js: "profile_id", typ: "" },
         { json: "recipe", js: "recipe", typ: r("Recipe") },
         { json: "status", js: "status", typ: "" },
     ], "any"),
@@ -18498,6 +18545,7 @@ const typeMap: any = {
         { json: "captured_at", js: "captured_at", typ: "" },
         { json: "completed_at", js: "completed_at", typ: u(undefined, "") },
         { json: "id", js: "id", typ: "" },
+        { json: "profile_id", js: "profile_id", typ: "" },
         { json: "recipe", js: "recipe", typ: r("Recipe") },
         { json: "status", js: "status", typ: "" },
     ], "any"),
@@ -18511,6 +18559,7 @@ const typeMap: any = {
     ], "any"),
     "GardenSeedsUpdatedMessage": o([
         { json: "event", js: "event", typ: r("GardenSeedsUpdatedMessageEvent") },
+        { json: "profile_id", js: "profile_id", typ: "" },
         { json: "seeds", js: "seeds", typ: a(r("SeedElement")) },
         { json: "total", js: "total", typ: 0 },
     ], "any"),
@@ -18526,6 +18575,7 @@ const typeMap: any = {
         { json: "planter_member", js: "planter_member", typ: "" },
         { json: "planter_session", js: "planter_session", typ: "" },
         { json: "plot_progress", js: "plot_progress", typ: u(undefined, r("PlotProgress")) },
+        { json: "profile_id", js: "profile_id", typ: "" },
         { json: "ready", js: "ready", typ: true },
         { json: "reason", js: "reason", typ: u(undefined, "") },
         { json: "rev", js: "rev", typ: 0 },
@@ -19579,6 +19629,7 @@ const typeMap: any = {
     ], "any"),
     "OpenSeedMessage": o([
         { json: "cmd", js: "cmd", typ: r("OpenSeedMessageCmd") },
+        { json: "profile_id", js: "profile_id", typ: u(undefined, "") },
         { json: "request_id", js: "request_id", typ: u(undefined, "") },
         { json: "seed_id", js: "seed_id", typ: "" },
         { json: "session_id", js: "session_id", typ: u(undefined, "") },
@@ -20691,6 +20742,7 @@ const typeMap: any = {
         { json: "planter_member", js: "planter_member", typ: "" },
         { json: "planter_session", js: "planter_session", typ: "" },
         { json: "plot_progress", js: "plot_progress", typ: u(undefined, r("PlotProgress")) },
+        { json: "profile_id", js: "profile_id", typ: "" },
         { json: "ready", js: "ready", typ: true },
         { json: "reason", js: "reason", typ: u(undefined, "") },
         { json: "rev", js: "rev", typ: 0 },
@@ -20720,10 +20772,12 @@ const typeMap: any = {
     ], "any"),
     "SeedArtifactTargetMessage": o([
         { json: "cmd", js: "cmd", typ: r("SeedArtifactTargetMessageCmd") },
+        { json: "profile_id", js: "profile_id", typ: u(undefined, "") },
         { json: "purpose", js: "purpose", typ: "" },
         { json: "relative_target", js: "relative_target", typ: "" },
         { json: "request_id", js: "request_id", typ: "" },
         { json: "seed_id", js: "seed_id", typ: "" },
+        { json: "source_session_id", js: "source_session_id", typ: u(undefined, "") },
     ], "any"),
     "SeedArtifactTargetResult": o([
         { json: "data_base64", js: "data_base64", typ: u(undefined, "") },
@@ -20750,6 +20804,7 @@ const typeMap: any = {
         { json: "filename", js: "filename", typ: u(undefined, "") },
         { json: "legacy_reference", js: "legacy_reference", typ: u(undefined, r("LegacyReferenceElement")) },
         { json: "operation", js: "operation", typ: "" },
+        { json: "profile_id", js: "profile_id", typ: u(undefined, "") },
         { json: "request_id", js: "request_id", typ: u(undefined, "") },
         { json: "seed_id", js: "seed_id", typ: "" },
         { json: "source_path", js: "source_path", typ: u(undefined, "") },
@@ -20802,8 +20857,10 @@ const typeMap: any = {
     ], "any"),
     "SeedDocumentGetMessage": o([
         { json: "cmd", js: "cmd", typ: r("SeedDocumentGetMessageCmd") },
+        { json: "profile_id", js: "profile_id", typ: u(undefined, "") },
         { json: "request_id", js: "request_id", typ: "" },
         { json: "seed_id", js: "seed_id", typ: "" },
+        { json: "source_session_id", js: "source_session_id", typ: u(undefined, "") },
     ], "any"),
     "SeedDocumentGetResultMessage": o([
         { json: "document", js: "document", typ: u(undefined, r("SeedDocumentGetResultMessageDocument")) },
@@ -20828,7 +20885,9 @@ const typeMap: any = {
     "SeedEditMessage": o([
         { json: "body", js: "body", typ: "" },
         { json: "cmd", js: "cmd", typ: r("SeedEditMessageCmd") },
+        { json: "profile_id", js: "profile_id", typ: u(undefined, "") },
         { json: "seed_id", js: "seed_id", typ: "" },
+        { json: "source_session_id", js: "source_session_id", typ: u(undefined, "") },
     ], "any"),
     "SeedEditResult": o([
         { json: "seed", js: "seed", typ: r("SeedElement") },
@@ -20856,7 +20915,9 @@ const typeMap: any = {
     "SeedLinkMessage": o([
         { json: "cmd", js: "cmd", typ: r("SeedLinkMessageCmd") },
         { json: "kind", js: "kind", typ: "" },
+        { json: "profile_id", js: "profile_id", typ: u(undefined, "") },
         { json: "seed_id", js: "seed_id", typ: "" },
+        { json: "source_session_id", js: "source_session_id", typ: u(undefined, "") },
         { json: "to_seed_id", js: "to_seed_id", typ: "" },
         { json: "unlink", js: "unlink", typ: u(undefined, true) },
     ], "any"),
@@ -20866,6 +20927,7 @@ const typeMap: any = {
     ], "any"),
     "SeedListMessage": o([
         { json: "cmd", js: "cmd", typ: r("SeedListMessageCmd") },
+        { json: "profile_id", js: "profile_id", typ: u(undefined, "") },
         { json: "source_session_id", js: "source_session_id", typ: u(undefined, "") },
         { json: "stale", js: "stale", typ: u(undefined, true) },
         { json: "stale_window_seconds", js: "stale_window_seconds", typ: u(undefined, 0) },
@@ -20891,6 +20953,7 @@ const typeMap: any = {
         { json: "cmd", js: "cmd", typ: r("SeedNoteMessageCmd") },
         { json: "kind", js: "kind", typ: u(undefined, "") },
         { json: "member", js: "member", typ: u(undefined, "") },
+        { json: "profile_id", js: "profile_id", typ: u(undefined, "") },
         { json: "request_id", js: "request_id", typ: u(undefined, "") },
         { json: "ring", js: "ring", typ: u(undefined, true) },
         { json: "seed_id", js: "seed_id", typ: "" },
@@ -20909,6 +20972,7 @@ const typeMap: any = {
     "SeedNotesMessage": o([
         { json: "cmd", js: "cmd", typ: r("SeedNotesMessageCmd") },
         { json: "limit", js: "limit", typ: u(undefined, 0) },
+        { json: "profile_id", js: "profile_id", typ: u(undefined, "") },
         { json: "seed_id", js: "seed_id", typ: "" },
         { json: "source_session_id", js: "source_session_id", typ: u(undefined, "") },
     ], "any"),
@@ -20922,6 +20986,7 @@ const typeMap: any = {
         { json: "discovered_from", js: "discovered_from", typ: u(undefined, "") },
         { json: "member", js: "member", typ: u(undefined, "") },
         { json: "part_of", js: "part_of", typ: u(undefined, "") },
+        { json: "profile_id", js: "profile_id", typ: u(undefined, "") },
         { json: "source_session_id", js: "source_session_id", typ: u(undefined, "") },
         { json: "title", js: "title", typ: "" },
     ], "any"),
@@ -20938,6 +21003,7 @@ const typeMap: any = {
         { json: "children", js: "children", typ: a(r("ChildElement")) },
         { json: "cmd", js: "cmd", typ: r("SeedPlotMessageCmd") },
         { json: "member", js: "member", typ: u(undefined, "") },
+        { json: "profile_id", js: "profile_id", typ: u(undefined, "") },
         { json: "source_session_id", js: "source_session_id", typ: u(undefined, "") },
         { json: "title", js: "title", typ: "" },
     ], "any"),
@@ -20963,6 +21029,7 @@ const typeMap: any = {
         { json: "all", js: "all", typ: u(undefined, true) },
         { json: "cmd", js: "cmd", typ: r("SeedReadyMessageCmd") },
         { json: "plot", js: "plot", typ: u(undefined, "") },
+        { json: "profile_id", js: "profile_id", typ: u(undefined, "") },
         { json: "source_session_id", js: "source_session_id", typ: u(undefined, "") },
     ], "any"),
     "SeedReadyResult": o([
@@ -20985,6 +21052,7 @@ const typeMap: any = {
         { json: "request_id", js: "request_id", typ: u(undefined, "") },
         { json: "review", js: "review", typ: u(undefined, r("DelegateMessageReview")) },
         { json: "seed_id", js: "seed_id", typ: "" },
+        { json: "source_session_id", js: "source_session_id", typ: u(undefined, "") },
     ], "any"),
     "SeedResumeResultMessage": o([
         { json: "already_running", js: "already_running", typ: u(undefined, true) },
@@ -21001,14 +21069,18 @@ const typeMap: any = {
     ], "any"),
     "SeedReviewCancelMessage": o([
         { json: "cmd", js: "cmd", typ: r("SeedReviewCancelMessageCmd") },
+        { json: "profile_id", js: "profile_id", typ: u(undefined, "") },
         { json: "request_id", js: "request_id", typ: u(undefined, "") },
         { json: "review_id", js: "review_id", typ: "" },
+        { json: "source_session_id", js: "source_session_id", typ: u(undefined, "") },
     ], "any"),
     "SeedReviewDraftMessage": o([
         { json: "cmd", js: "cmd", typ: r("SeedReviewDraftMessageCmd") },
+        { json: "profile_id", js: "profile_id", typ: u(undefined, "") },
         { json: "request_id", js: "request_id", typ: "" },
         { json: "review", js: "review", typ: r("DelegateMessageReview") },
         { json: "seed_id", js: "seed_id", typ: "" },
+        { json: "source_session_id", js: "source_session_id", typ: u(undefined, "") },
     ], "any"),
     "SeedReviewDraftResultMessage": o([
         { json: "error", js: "error", typ: u(undefined, "") },
@@ -21019,9 +21091,11 @@ const typeMap: any = {
     ], "any"),
     "SeedReviewKeepMessage": o([
         { json: "cmd", js: "cmd", typ: r("SeedReviewKeepMessageCmd") },
+        { json: "profile_id", js: "profile_id", typ: u(undefined, "") },
         { json: "request_id", js: "request_id", typ: u(undefined, "") },
         { json: "review", js: "review", typ: r("DelegateMessageReview") },
         { json: "seed_id", js: "seed_id", typ: "" },
+        { json: "source_session_id", js: "source_session_id", typ: u(undefined, "") },
     ], "any"),
     "SeedReviewResult": o([
         { json: "candidate_count", js: "candidate_count", typ: 0 },
@@ -21032,24 +21106,31 @@ const typeMap: any = {
         { json: "error", js: "error", typ: u(undefined, "") },
         { json: "event", js: "event", typ: r("SeedReviewResultMessageEvent") },
         { json: "operation", js: "operation", typ: "" },
+        { json: "profile_id", js: "profile_id", typ: "" },
         { json: "request_id", js: "request_id", typ: "" },
         { json: "review", js: "review", typ: u(undefined, r("GardenReviewUpdatedMessageReview")) },
         { json: "success", js: "success", typ: true },
     ], "any"),
     "SeedReviewRetryMessage": o([
         { json: "cmd", js: "cmd", typ: r("SeedReviewRetryMessageCmd") },
+        { json: "profile_id", js: "profile_id", typ: u(undefined, "") },
         { json: "request_id", js: "request_id", typ: u(undefined, "") },
         { json: "review_id", js: "review_id", typ: "" },
         { json: "seed_id", js: "seed_id", typ: "" },
+        { json: "source_session_id", js: "source_session_id", typ: u(undefined, "") },
     ], "any"),
     "SeedReviewShowMessage": o([
         { json: "cmd", js: "cmd", typ: r("SeedReviewShowMessageCmd") },
+        { json: "profile_id", js: "profile_id", typ: u(undefined, "") },
         { json: "request_id", js: "request_id", typ: u(undefined, "") },
         { json: "review_id", js: "review_id", typ: u(undefined, "") },
+        { json: "source_session_id", js: "source_session_id", typ: u(undefined, "") },
     ], "any"),
     "SeedReviewStartMessage": o([
         { json: "cmd", js: "cmd", typ: r("SeedReviewStartMessageCmd") },
+        { json: "profile_id", js: "profile_id", typ: u(undefined, "") },
         { json: "request_id", js: "request_id", typ: u(undefined, "") },
+        { json: "source_session_id", js: "source_session_id", typ: u(undefined, "") },
     ], "any"),
     "SeedSearchHit": o([
         { json: "seed", js: "seed", typ: r("SeedElement") },
@@ -21059,6 +21140,7 @@ const typeMap: any = {
     "SeedSearchMessage": o([
         { json: "cmd", js: "cmd", typ: r("SeedSearchMessageCmd") },
         { json: "limit", js: "limit", typ: u(undefined, 0) },
+        { json: "profile_id", js: "profile_id", typ: u(undefined, "") },
         { json: "query", js: "query", typ: "" },
         { json: "source_session_id", js: "source_session_id", typ: u(undefined, "") },
     ], "any"),
@@ -21074,6 +21156,7 @@ const typeMap: any = {
         { json: "expected_tender_member", js: "expected_tender_member", typ: "" },
         { json: "expected_tender_session", js: "expected_tender_session", typ: "" },
         { json: "guidance", js: "guidance", typ: u(undefined, "") },
+        { json: "profile_id", js: "profile_id", typ: u(undefined, "") },
         { json: "request_id", js: "request_id", typ: u(undefined, "") },
         { json: "review", js: "review", typ: u(undefined, r("DelegateMessageReview")) },
         { json: "seed_id", js: "seed_id", typ: "" },
@@ -21094,6 +21177,7 @@ const typeMap: any = {
     ], "any"),
     "SeedShowMessage": o([
         { json: "cmd", js: "cmd", typ: r("SeedShowMessageCmd") },
+        { json: "profile_id", js: "profile_id", typ: u(undefined, "") },
         { json: "seed_id", js: "seed_id", typ: "" },
         { json: "source_session_id", js: "source_session_id", typ: u(undefined, "") },
     ], "any"),
@@ -21114,6 +21198,7 @@ const typeMap: any = {
         { json: "comment", js: "comment", typ: u(undefined, "") },
         { json: "force", js: "force", typ: u(undefined, true) },
         { json: "member", js: "member", typ: u(undefined, "") },
+        { json: "profile_id", js: "profile_id", typ: u(undefined, "") },
         { json: "reason", js: "reason", typ: u(undefined, "") },
         { json: "request_id", js: "request_id", typ: u(undefined, "") },
         { json: "review", js: "review", typ: u(undefined, r("DelegateMessageReview")) },
@@ -21147,6 +21232,7 @@ const typeMap: any = {
     ], "any"),
     "SeedWatchMessage": o([
         { json: "cmd", js: "cmd", typ: r("SeedWatchMessageCmd") },
+        { json: "profile_id", js: "profile_id", typ: u(undefined, "") },
         { json: "seed_id", js: "seed_id", typ: "" },
         { json: "source_session_id", js: "source_session_id", typ: "" },
         { json: "unwatch", js: "unwatch", typ: u(undefined, true) },

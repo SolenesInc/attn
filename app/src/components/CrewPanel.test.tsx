@@ -834,7 +834,7 @@ describe('CrewPanel seeds', () => {
   }
 
   const pushSeeds = async (daemon: ScriptedDaemon, seeds: DaemonSeed[], total = seeds.length) => {
-    daemon.emit({ event: 'garden_seeds_updated', seeds, total });
+    daemon.emit({ event: 'garden_seeds_updated', profile_id: 'profile-default', seeds, total });
     await daemon.idle();
   };
 

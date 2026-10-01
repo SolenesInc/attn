@@ -36,6 +36,12 @@ func (d *Daemon) handleMarkdownAnnotationsSubmit(client *wsClient, msg *protocol
 		fail("markdown_annotations_submit: " + sourceErr.Error())
 		return
 	}
+	if source.seedID != "" {
+		if err := d.requireSeedInProfile(source.seedID, client.selectedProfile(), false); err != nil {
+			fail("markdown_annotations_submit: " + err.Error())
+			return
+		}
+	}
 	if (targetSession == "") == (targetSeed == "") {
 		fail("markdown_annotations_submit: exactly one of target_session_id or target_seed_id is required")
 		return

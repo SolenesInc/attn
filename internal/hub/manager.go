@@ -1334,6 +1334,7 @@ func sessionsEqual(left, right map[string]protocol.Session) bool {
 
 func sessionsMatch(left, right protocol.Session) bool {
 	return left.ID == right.ID &&
+		left.ProfileID == right.ProfileID &&
 		left.Label == right.Label &&
 		left.Agent == right.Agent &&
 		left.Directory == right.Directory &&

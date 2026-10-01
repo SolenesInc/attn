@@ -478,10 +478,21 @@ func (d *Daemon) delegateOperationProtected(protection foregroundCleanupProtecti
 	var source *protocol.Session
 	existingSession := d.store.Get(sessionID)
 	if sourceSessionID != "" {
-		source = d.store.Get(sourceSessionID)
+		source = d.gardenSession(sourceSessionID)
 		if source == nil && existingSession == nil {
 			return nil, fmt.Errorf("source session %s was not found; omit --source-session for a standalone launch", sourceSessionID)
 		}
+	}
+	if pinned := protocol.Deref(msg.ProfileID); pinned != "" && source != nil && source.ProfileID != pinned {
+		owner, err := d.store.GetProfile(pinned)
+		if err != nil {
+			return nil, err
+		}
+		actual, err := d.store.GetProfile(source.ProfileID)
+		if err != nil {
+			return nil, err
+		}
+		return nil, fmt.Errorf("delegation was accepted in profile %q; source session %s belongs to profile %q now", owner.Name, source.ID, actual.Name)
 	}
 	if source == nil && existingSession == nil && msg.Agent == nil {
 		return nil, fmt.Errorf("source inheritance is unavailable; choose an agent directly or through a configured role/fallback")
@@ -548,10 +559,10 @@ func (d *Daemon) delegateOperationProtected(protection foregroundCleanupProtecti
 		} else {
 			if msg.Assignment.Kind == "" {
 				observed := d.observeGardenDispatchExecution(sessionID, existing.Directory, agent)
-				seedID, err = d.bindDelegationSeedProtected(protection, sessionID, sourceSessionID, brief, existing.Label, seedID, observed, delegatedByChief)
+				seedID, err = d.bindDelegationSeedProtected(protection, sessionID, sourceSessionID, brief, existing.Label, seedID, observed, delegatedByChief, existing.ProfileID)
 			} else {
 				observed := d.observeGardenDispatchExecution(sessionID, existing.Directory, agent)
-				seedID, err = d.bindDelegationAssignmentProtected(protection, operationID, sessionID, sourceSessionID, msg.ParentSeedID, brief, existing.Label, seedID, observed, delegatedByChief, msg.Assignment.Kind == protocol.DelegateAssignmentKindNew)
+				seedID, err = d.bindDelegationAssignmentProtected(protection, operationID, sessionID, sourceSessionID, msg.ParentSeedID, brief, existing.Label, seedID, observed, delegatedByChief, msg.Assignment.Kind == protocol.DelegateAssignmentKindNew, existing.ProfileID)
 			}
 			if err != nil {
 				return nil, err
@@ -594,7 +605,7 @@ func (d *Daemon) delegateOperationProtected(protection foregroundCleanupProtecti
 		return result, nil
 	}
 
-	profile, placement, err := d.delegationDestination(source, protocol.Deref(msg.Desktop))
+	profile, placement, err := d.delegationDestination(source, protocol.Deref(msg.Desktop), protocol.Deref(msg.ProfileID))
 	if err != nil {
 		return nil, err
 	}
@@ -709,10 +720,10 @@ func (d *Daemon) delegateOperationProtected(protection foregroundCleanupProtecti
 	} else {
 		if msg.Assignment.Kind == "" {
 			observed := d.observeGardenDispatchExecution(sessionID, directory, agent)
-			seedID, err = d.bindDelegationSeedProtected(protection, sessionID, sourceSessionID, brief, name, seedID, observed, delegatedByChief)
+			seedID, err = d.bindDelegationSeedProtected(protection, sessionID, sourceSessionID, brief, name, seedID, observed, delegatedByChief, profile.ID)
 		} else {
 			observed := d.observeGardenDispatchExecution(sessionID, directory, agent)
-			seedID, err = d.bindDelegationAssignmentProtected(protection, operationID, sessionID, sourceSessionID, msg.ParentSeedID, brief, name, seedID, observed, delegatedByChief, msg.Assignment.Kind == protocol.DelegateAssignmentKindNew)
+			seedID, err = d.bindDelegationAssignmentProtected(protection, operationID, sessionID, sourceSessionID, msg.ParentSeedID, brief, name, seedID, observed, delegatedByChief, msg.Assignment.Kind == protocol.DelegateAssignmentKindNew, profile.ID)
 		}
 		if err != nil {
 			return nil, err
@@ -777,17 +788,21 @@ func (d *Daemon) delegateOperationProtected(protection foregroundCleanupProtecti
 	return result, nil
 }
 
-func (d *Daemon) delegationDestination(source *protocol.Session, desktopRef string) (profiles.Profile, *launchPlacement, error) {
+func (d *Daemon) delegationDestination(source *protocol.Session, desktopRef string, requestedProfile ...string) (profiles.Profile, *launchPlacement, error) {
 	var profile profiles.Profile
 	var beside *launchPlacement
 	var err error
 	if source == nil {
-		if profile, err = d.callerProfile(""); err != nil {
+		if profile, err = d.resolveGardenProfile("", firstProfile(requestedProfile), ""); err != nil {
 			return profiles.Profile{}, nil, fmt.Errorf("resolve the profile for a delegation without a source session: %w", err)
 		}
 	} else {
 		if profile, err = d.liveLaunchProfile(source.ProfileID); err != nil {
 			return profiles.Profile{}, nil, fmt.Errorf("source session %s: %w", source.ID, err)
+		}
+		if pinned := firstProfile(requestedProfile); pinned != "" && pinned != profile.ID {
+			owner, _ := d.store.GetProfile(pinned)
+			return profiles.Profile{}, nil, fmt.Errorf("delegation was accepted in profile %q; source session %s belongs to profile %q now", owner.Name, source.ID, profile.Name)
 		}
 		beside = d.placementBeside(source.ID)
 	}
@@ -860,7 +875,7 @@ func (d *Daemon) handleDelegate(conn net.Conn, msg *protocol.DelegateMessage) {
 }
 
 func (d *Daemon) handleDelegateStatus(conn net.Conn, msg *protocol.DelegateStatusMessage) {
-	operation, err := d.delegationOperation(msg.ID)
+	operation, err := d.scopedDelegationOperation(msg.ID, protocol.Deref(msg.SourceSessionID), protocol.Deref(msg.ProfileID), "")
 	if err != nil {
 		d.sendError(conn, "delegate status: "+err.Error())
 		return

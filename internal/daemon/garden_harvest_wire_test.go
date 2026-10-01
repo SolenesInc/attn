@@ -20,7 +20,7 @@ import (
 
 func TestArmingASeedParksItOnItsPullRequest(t *testing.T) {
 	github := newHarvestGitHub(t)
-	inBubble(t, func(t *testing.T, w *world) {
+	inCrewBubble(t, func(t *testing.T, w *world) {
 		cli := w.Client()
 		registerSessions(t, w, cli, "shipper")
 		url := github.open(71, "Ship the daemon")
@@ -282,7 +282,7 @@ func TestAClearedOrEditedHarvestConditionMeetsTheMergeAsItStandsNow(t *testing.T
 
 func TestArmingASeedSomebodyElseHoldsTakesForce(t *testing.T) {
 	github := newHarvestGitHub(t)
-	w := newWorld(t, fakeagent.Claude)
+	w := newCrewWorld(t, fakeagent.Claude)
 	app, cli := w.App(), w.Client()
 	panes := spawnPanes(w, app, w.Path("shipper"), w.Path("holder"))
 	shipper, holder := panes[0].session, panes[1].session

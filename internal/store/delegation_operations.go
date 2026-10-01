@@ -55,15 +55,26 @@ func (s *Store) ClaimDelegationOperationWithHandoverSnapshot(requestID, operatio
 	if s.db == nil {
 		return nil, false, errors.New("delegation idempotency requires a database")
 	}
-	if resolvedPreferences != "" {
-		if existing, err := getDelegationOperation(s.db, requestID); err == nil {
-			if existing.RequestJSON != requestJSON {
-				return nil, false, ErrDelegationRequestConflict
-			}
-			return existing, false, nil
-		} else if !errors.Is(err, sql.ErrNoRows) {
+	if existing, err := getDelegationOperation(s.db, requestID); err == nil {
+		if existing.RequestJSON != requestJSON {
+			return nil, false, ErrDelegationRequestConflict
+		}
+		return existing, false, nil
+	} else if !errors.Is(err, sql.ErrNoRows) {
+		return nil, false, err
+	}
+	var request struct {
+		ProfileID string `json:"profile_id"`
+	}
+	if err := json.Unmarshal([]byte(requestJSON), &request); err != nil {
+		return nil, false, err
+	}
+	if request.ProfileID != "" {
+		if _, err := loadLiveProfile(s.db, request.ProfileID); err != nil {
 			return nil, false, err
 		}
+	}
+	if resolvedPreferences != "" {
 		var resolved delegationprefs.Resolved
 		if err := json.Unmarshal([]byte(resolvedPreferences), &resolved); err != nil {
 			return nil, false, err

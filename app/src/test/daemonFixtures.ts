@@ -115,6 +115,7 @@ export function soloDesktop(sessionId: string, overrides: Partial<DaemonDesktop>
 export function daemonSeed(id: string, overrides: Partial<DaemonSeed> = {}): DaemonSeed {
   return {
     id,
+    profile_id: DEFAULT_PROFILE_ID,
     title: id,
     body: '',
     status: 'growing',

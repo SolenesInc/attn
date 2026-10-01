@@ -197,7 +197,7 @@ func TestMigration148PreservesPendingGardenMailboxReceiptsAndNamesItsBell(t *tes
 
 func TestMigration73RepairsAutomationInstanceMigration70Collision(t *testing.T) {
 	dbPath := filepath.Join(t.TempDir(), "migration-73-collision.db")
-	db, err := openDBAtVersion(dbPath, 161)
+	db, err := OpenDBAtSchemaVersion(dbPath, 70)
 	if err != nil {
 		t.Fatalf("OpenDB() setup error = %v", err)
 	}

@@ -125,7 +125,7 @@ function documentFor(value: DaemonSeed, body = 'Leaves look good at header size.
 }
 
 function pushSeeds(daemon: ScriptedDaemon, seeds: DaemonSeed[]) {
-  daemon.emit({ event: 'garden_seeds_updated', seeds, total: seeds.length });
+  daemon.emit({ event: 'garden_seeds_updated', profile_id: 'profile-default', seeds, total: seeds.length });
 }
 
 describe('seed lifecycle and context', () => {

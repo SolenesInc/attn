@@ -17,6 +17,7 @@ function seed(overrides: Partial<Seed> & { id: string; title: string }): Seed {
     state_changed_at: new Date().toISOString(),
     state_changed_at_exact: true,
     step_slug: overrides.title,
+    profile_id: 'profile-default',
     planter_session: '',
     planter_member: '',
     tender_session: '',
