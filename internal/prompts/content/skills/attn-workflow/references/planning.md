@@ -7,18 +7,19 @@ Read the `attn` skill's garden guidance and run `attn seed guide` for seed and p
 ## Workflow
 
 1. **Find the work.** Read the relevant implementation seed or plot, its notes, and any children. Reuse existing work and preserve its scope and decisions. If the work has no implementation seed, plant one to hold the plan.
-2. **Investigate the approach.** Start from the user's request, relevant conversation, and any vision referenced by the work or supplied by the user. Read vision seeds with `attn seed show <id>`. Read enough code to identify the components, entry points, state, interfaces, and ownership involved. Trace production and test paths where they differ. Propose an approach from your findings. Ask about choices or assumptions that could change the plan.
+2. **Investigate the approach.** Start from the user's request, relevant conversation, and any vision referenced by the work or supplied by the user. Read vision seeds with `attn seed show <id>`. Read the results of any spikes and investigation for the work, including their code, notes, and reports. Read enough code to identify the components, entry points, state, interfaces, and ownership involved. Trace production and test paths where they differ. Propose an approach from your findings. Ask about choices or assumptions that could change the plan.
 3. **Write the plan.** Fill the template below into the seed or plot body. If there is a vision seed, reference its ID; do not overwrite its body with the implementation plan.
 4. **Organize execution.** Use a plot when the work has distinct pieces to scope and track separately, even within one PR. Use a single seed for one coherent task. Add or reuse child seeds for each unit of work, with an outcome, scope, and verification; refer to the parent plan without repeating it. When delivery is by pull request, explain which changes belong in each one. Add `blocks` links only for actual prerequisites; otherwise leave children independent.
 
 ## The plan body
 
-Write for an implementer starting fresh and a user reviewing the direction. The body describes the current design; it is not a record of the conversation. Who decided what, when, and what the user authorized go in seed notes. A body that reads as meeting minutes is not a plan.
+Write for an implementer starting fresh and a user reviewing the direction. The body describes the current design; it is not a record of the conversation. Who decided what, when, and what the user authorized go in seed notes. A body that reads as meeting minutes is not a plan. What was learned is not history: it is the evidence the design rests on, and it belongs in the body.
 
-The body has five sections in this order. Each design part is required; a part that does not apply becomes one line with the reason in its place.
+The body has six sections in this order. Each design part is required; a part that does not apply becomes one line with the reason in its place.
 
 - **Task and outcome**: what to build and what done looks like, in a few sentences.
 - **Decisions**: the choices the user might still change, each with its reason, and the open questions, saying which block work and which the implementer may decide.
+- **Findings**: what spikes and investigation established that the design depends on, written as described under Findings below. When nothing was learned beyond what the code shows, one line saying so.
 - **Design**, in four parts:
   - **Ownership**: each file or package that changes, as a shallow file tree with one comment per entry saying what it is responsible for.
   - **Interfaces**: the types, signatures, wire messages and persisted data the change adds or alters, sketched in the codebase's language, with the schema, generation and migration steps a wire or storage change requires.
@@ -26,6 +27,19 @@ The body has five sections in this order. Each design part is required; a part t
   - **State**: each piece of state with its owner, what sets it, what reads it, what happens on failure and what happens on restart. In-memory state counts as state and has the same entry.
 - **Execution**: for a plot, the children, which changes belong to each pull request, and their order; for a single seed, one line saying so; without pull requests, the delivery step.
 - **Completion**: the checks the repository's verification guidance requires for the affected surfaces and where the evidence is recorded, or the documented exemption when one applies.
+
+## Findings
+
+A plan built on a spike contains what the spike learned. Spike code, branches, transcripts, reports, and notes are evidence behind the plan, not a substitute for it: an implementer works from the plan, and a learning that lives only in an artifact is relearned, often wrongly. Link the artifacts as supporting evidence and write the learnings themselves into the body. The same holds for consequential discoveries from investigation.
+
+Write each finding so an implementer can act on it without the spike:
+
+- the fact, concretely: the behavior, mechanism, ordering, or limit observed
+- the evidence: a file and line, a command and its output, a measurement, or the snippet that worked, quoted, because spike code is disposable
+- what it requires of the design
+- what it rules out: the approach that looks simpler or more natural, and why it fails
+
+Number findings (F1, F2) and cite them where the design depends on them and in the child briefs whose work they constrain, so a child names the findings that apply without repeating them. When implementation overturns a finding, correct it in the body and record the reason in a note.
 
 ## Showing the design
 
@@ -67,6 +81,17 @@ Only after a daemon restart.>
 Open: <whether `--yolo` on a pi launch maps to the full-access preset (blocks the
 CLI child)> · <the picker's position beside auto mode (the app tender decides)>
 
+## Findings
+
+<From the spike on branch spike/pi-presets; its code is not kept.>
+
+- <F1. Pi's sandbox wraps only bash. The spike's Read Only session wrote a file
+  through `edit` with no prompt. Read Only therefore needs a file-tool guard in
+  the approval extension; setting sandbox_mode alone looks sufficient and is not.>
+- <F2. Pi repaints the status line only on session events, so after a switch the
+  spike showed the old preset until the next turn. The switch must repaint itself:
+  `ctx.ui.setStatus("permissions", preset.label)` right after the config changes.>
+
 ## Design
 
 Ownership:
@@ -76,7 +101,8 @@ Ownership:
      internal/protocol/constants.go         ProtocolVersion bump
      app/src/hooks/useDaemonSocket.ts       PROTOCOL_VERSION bump
      internal/daemon/spawn_pipeline.go      applies the launch intent's pair over the daemon default
-     plugins/attn-pi/approval/session.ts    /permissions picker; repaints the status line
+     plugins/attn-pi/approval/rules.ts      refuses file-tool writes under Read Only (F1)
+     plugins/attn-pi/approval/session.ts    /permissions picker; repaints the status line (F2)
      app/src/components/LocationPicker.tsx  preset control beside auto mode>
 
 Interfaces:
@@ -153,7 +179,7 @@ and records the run; the recording and the scenario output go on the app child.>
 
 Seed states and notes carry progress. Update the plan body when the approach changes, and record the reason in a note. Plant deferred work as seeds. Do not keep a task checklist or activity log in the plan body.
 
-Read back the saved plan, children, and dependency links as a fresh agent: can you tell what to build, where to start, which constraints apply, and how to establish completion? Check that every design part is present or explicitly waived. Show the user the proposed plan and, when pull-request delivery applies, its proposed pull-request boundaries and ordering. Name the seed or plot for review.
+Read back the saved plan, children, and dependency links as a fresh agent: can you tell what to build, where to start, which constraints apply, and how to establish completion? Would an implementer who never saw the spikes avoid every trap they hit? Check that every design part is present or explicitly waived, and that each learning from a spike is in the body rather than only in its artifacts. Show the user the proposed plan and, when pull-request delivery applies, its proposed pull-request boundaries and ordering. Name the seed or plot for review.
 
 Recommend how to execute it. Recommend an Orchestrator when the plan requires coordinated or reviewed Builder work, or benefits from mixing harnesses or models between the coordinating agent and its Builders. Otherwise, recommend a single Builder. Explain the recommendation briefly.
 

@@ -23,7 +23,9 @@ Build enough shared understanding to avoid costly misalignment. Keep discovery p
 
 Suggest a spike when a question is best settled by building something: code design, integration with the existing system, the impact of a change, missed behavior, feasibility, or the experience of using the feature. Say what the smallest useful spike would teach and roughly what it takes; the user decides whether to run it. When the change is already understood, implementing it may teach more than a spike; offer that instead. Run agreed spikes in isolation within the task's workspace constraints, involve the user where their preferences, judgment, or firsthand experience matter, and bring the findings back to the discussion.
 
-Treat spike code as disposable by default. Carry forward the learning; keeping any code needs a reason beyond the demonstration working. If retaining code is justified, review and verify it as production code.
+Treat spike code as disposable by default; what carries forward is the learning. When a spike ends, write down what it established while the detail is fresh: the facts, the evidence, the constraints they put on the design, and the approaches that looked viable and failed, with why. The spike's code, branch, transcript, and report are not enough on their own: an implementer works from the plan, and learning left only in those artifacts is relearned, often wrongly. A plan built on a spike contains its learnings, as [Planning](planning.md) describes under Findings.
+
+Keeping any spike code needs a reason beyond the demonstration working. If retaining code is justified, review and verify it as production code.
 
 Capture decisions and the emerging plan as the discussion develops. Keep unresolved questions visible so a draft does not imply agreement.
 
@@ -35,6 +37,6 @@ Continue until the approach is clear enough to implement, with consequential unc
 - recommended implementation approach
 - next step
 
-When the outcome is a plan, continue with [Planning](planning.md). The plan lives in the seed with the design detail that reference requires; this summary is for the conversation and is not the plan.
+When the outcome is a plan, continue with [Planning](planning.md). The plan lives in the seed with the design detail and findings that reference requires; this summary is for the conversation and is not the plan.
 
 The discussion produces understanding or a plan; the user chooses when implementation starts.

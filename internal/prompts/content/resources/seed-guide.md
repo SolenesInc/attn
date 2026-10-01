@@ -94,8 +94,10 @@ Adapt the assignment and its completion check to the work:
     refactor   The named code issue is gone and behavior is preserved.
                Identify the issue and the checks that establish preservation.
     spike      The result answers a design question or lets the user judge the
-               experience. State what it should teach; its code is disposable
-               unless the user decides to keep it.
+               experience. What it taught, with evidence, is written into the
+               plan it informs, or into its own body until a plan exists. State
+               what it should teach; its code is disposable unless the user
+               decides to keep it.
 
 Harvest when the outcome and required verification in the body are complete.
 When the only thing left is a pull request merging, say so once and let attn
