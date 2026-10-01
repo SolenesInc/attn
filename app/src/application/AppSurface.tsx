@@ -131,6 +131,8 @@ export function AppSurface() {
 
               {/* Mounted only while active, so its WebGL context is released on exit. */}
               <AppGrid />
+              {/* Yield library focus traps before session prompts take focus in layout effects. */}
+              <AppLibrarySurfaces />
               <AppSessionPrompts />
               <ErrorToast message={errorMessage} durationMs={errorDurationMs} onDone={clearError} />
               {diagnosticReportSaved.saved('saved') && (
@@ -139,7 +141,6 @@ export function AppSurface() {
                 </div>
               )}
               <ChordLeaderHud />
-              <AppLibrarySurfaces />
               <AppNavigationMenus />
               {diagnosticCapture && (
                 <DiagnosticReportPrompt

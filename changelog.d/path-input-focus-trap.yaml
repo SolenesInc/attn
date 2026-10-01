@@ -1,0 +1,3 @@
+kind: fixed
+area: sessions
+change: Focus the path input when choosing where to start a closed session afresh.

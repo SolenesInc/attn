@@ -116,7 +116,7 @@ test.describe('LocationPicker', () => {
         await expect(page.locator('[data-testid="repo-options"]')).toBeVisible();
         await page.keyboard.press('Escape');
         await expect(input).toBeVisible();
-        await page.keyboard.press('Meta+a');
+        await page.keyboard.press('ControlOrMeta+a');
         await page.keyboard.type(repo.repoPath);
         await expect(input).toHaveValue(repo.repoPath);
         await page.keyboard.press('Enter');
@@ -158,7 +158,7 @@ test.describe('LocationPicker', () => {
         await expect(page.getByText('Start from feat-images')).toBeVisible();
 
         await page.locator('[data-testid="repo-new-worktree-input"]').focus();
-        await page.keyboard.press('Meta+a');
+        await page.keyboard.press('ControlOrMeta+a');
         await page.keyboard.type('feat-more');
         await page.keyboard.press('Enter');
 
