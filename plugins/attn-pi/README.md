@@ -38,7 +38,9 @@ honors `PI_CODING_AGENT_DIR`, `PI_CODING_AGENT_SESSION_DIR`, and project/global
 checks again before preparing a resume launch. Availability has a dedicated
 ten-second daemon deadline; Garden review waits once per stalled plugin in
 each capture and retries on the next read. See the
-[scan receipt](receipts/resume-availability.md).
+[scan receipt](receipts/resume-availability.md). A missing worktree is restored
+before inspecting plugin storage, so project settings are available again;
+failed inspection rolls the recreated worktree back.
 
 Plugins without this optional capability keep their existing resume behavior.
 The updated Pi plugin requires a daemon that recognizes `resume_availability`.

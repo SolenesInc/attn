@@ -2,10 +2,14 @@ package daemon_test
 
 import (
 	"encoding/json"
+	"os"
+	"path/filepath"
+	"slices"
 	"strings"
 	"testing"
 	"time"
 
+	"github.com/victorarias/attn/internal/client"
 	"github.com/victorarias/attn/internal/fakeagent"
 	"github.com/victorarias/attn/internal/protocol"
 	"github.com/victorarias/attn/internal/testworld"
@@ -166,4 +170,73 @@ func TestAGardenReviewWaitsForAStalledResumeDriverOnlyOncePerCapture(t *testing.
 		}
 		<-shown
 	})
+}
+
+func TestRecreatingAWorktreeChecksPluginStorageAfterProjectSettingsReturn(t *testing.T) {
+	for _, available := range []bool{true, false} {
+		t.Run(map[bool]string{true: "present", false: "missing"}[available], func(t *testing.T) {
+			w := newWorld(t)
+			app, cli := w.App(), w.Client()
+			driver := connectDriver(t, w, "snipe-plugin", "snipe", map[string]bool{"resume": true, "resume_availability": true})
+			awaitDriverAvailable(app, "snipe")
+			repo := reopenRepoWithOrigin(t)
+			settings := filepath.Join(repo, ".pi", "settings.json")
+			if err := os.MkdirAll(filepath.Dir(settings), 0o755); err != nil {
+				t.Fatal(err)
+			}
+			if err := os.WriteFile(settings, []byte(`{"sessionDir":"/external/pi-sessions"}`), 0o644); err != nil {
+				t.Fatal(err)
+			}
+			runGit(t, repo, "add", ".pi/settings.json")
+			runGit(t, repo, "commit", "-m", "Configure external Pi storage")
+			worktree := reopenWorktree(t, repo, "feat/project-storage")
+			session, run := spawnDriven(w, app, driver, worktree)
+			driver.mustReport("session.report_metadata", map[string]any{"session_id": session, "run_id": run.RunID, "seq": 1, "metadata": map[string]string{"native_id": "saved-conversation"}, "resume_session_id": "saved-conversation"})
+			closeSession(t, cli, session, "finished for now")
+			awaitClosed(app, session)
+			if err := os.RemoveAll(worktree); err != nil {
+				t.Fatal(err)
+			}
+			runGit(t, repo, "worktree", "prune")
+			verdict := reopenVerdict(t, cli, session)
+			if !slices.Contains(verdict.Actions, protocol.SessionReopenActionRecreateWorktreeAndReopen) {
+				t.Fatalf("missing worktree offers %v", verdict.Actions)
+			}
+			done := make(chan error, 1)
+			go func() {
+				_, err := cli.SessionReopen(client.SessionReopenOptions{SessionID: session, Action: string(protocol.SessionReopenActionRecreateWorktreeAndReopen)})
+				done <- err
+			}()
+			var inspection struct {
+				CWD string `json:"cwd"`
+			}
+			request := driver.asked("driver.resume_available", &inspection)
+			if inspection.CWD != worktree {
+				t.Fatalf("inspection cwd = %q, want %q", inspection.CWD, worktree)
+			}
+			if _, err := os.Stat(filepath.Join(inspection.CWD, ".pi", "settings.json")); err != nil {
+				t.Fatalf("storage checked before project settings returned: %v", err)
+			}
+			driver.answer(request, map[string]any{"available": available, "reason": "saved conversation missing from configured storage"})
+			err := <-done
+			if available {
+				if err != nil {
+					t.Fatal(err)
+				}
+				if resumed := driver.launched(); resumed.Method != "driver.resume" || resumed.ResumeSessionID != "saved-conversation" {
+					t.Fatalf("recreated launch = %+v", resumed)
+				}
+			} else {
+				if err == nil || !strings.Contains(err.Error(), "saved conversation missing") {
+					t.Fatalf("missing conversation reopened: %v", err)
+				}
+				if _, err := os.Stat(worktree); !os.IsNotExist(err) {
+					t.Fatalf("refusal left recreated worktree: %v", err)
+				}
+				if row := showSession(t, cli, session); protocol.Deref(row.ClosedAt) == "" {
+					t.Fatal("refusal reopened ledger row")
+				}
+			}
+		})
+	}
 }
