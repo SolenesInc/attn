@@ -84,12 +84,16 @@ export function useSessionLifecycle({
 
   const handleClosePane = useCallback(
     (sessionId: string, paneId: string, workspaceIdHint?: string) => {
-      const closeProtection = sessionCloseProtectionHint(daemonSessions, sessionId);
+      const state = useSessionStore.getState();
+      const panes = Object.values(state.daemonWorkspaceLayouts).flatMap(snapshot => snapshot.workspace.agents);
+      const requestedPane = panes.find(pane => pane.id === paneId);
+      const extraSharedView = requestedPane?.codexResolution === 'resolved' &&
+        panes.filter(pane => pane.codexResolution === 'resolved' && pane.sessionId === sessionId).length > 1;
+      const closeProtection = extraSharedView ? null : sessionCloseProtectionHint(daemonSessions, sessionId);
       if (closeProtection) {
         showError(closeProtection);
         return Promise.resolve();
       }
-      const state = useSessionStore.getState();
       const workspaceId = workspaceIdHint ?? Object.entries(state.daemonWorkspaceLayouts).find(([, snapshot]) => snapshot.workspace.agents.some(pane => pane.id === paneId))?.[0] ?? sessions.find(session => session.id === sessionId)?.workspaceId;
       const workspace = workspaceId ? state.daemonWorkspaceLayouts[workspaceId]?.workspace : undefined;
       const ownerWorkspaceId = sessions.find(session => session.id === sessionId)?.workspaceId;

@@ -100,12 +100,13 @@ function workspaceKey(workspaceId: string, endpointId?: string): string {
 export function buildWorkspaceViewModels<TSession extends WorkspaceViewSession>(
   workspaces: WorkspaceViewWorkspace[],
   sessions: TSession[],
+  allSessions: TSession[] = sessions,
 ): WorkspaceWithSessions<TSession>[] {
   const sessionsByWorkspace = new Map<string, TSession[]>();
   const sessionKeysByWorkspaceId = new Map<string, string[]>();
   const workspaceIdBySessionId = workspaceIdsBySessionId(workspaces);
-  const liveSessionIds = new Set(sessions.map((session) => session.id));
-  const sessionById = new Map(sessions.map((session) => [session.id, session]));
+  const liveSessionIds = new Set(allSessions.map((session) => session.id));
+  const sessionById = new Map(allSessions.map((session) => [session.id, session]));
 
   for (const session of sessions) {
     const workspaceId = sessionWorkspaceId(session, workspaceIdBySessionId);
@@ -208,7 +209,7 @@ function toWorkspaceViewModel<TSession extends WorkspaceViewSession>(
     pinned: workspace.pinned ?? false,
     rank: workspace.rank,
     endpointId: workspaceEndpointId(workspace) || (sessions[0] ? sessionEndpointId(sessions[0]) : undefined),
-    sessions,
+    sessions: [...presentationById.values()],
     children,
     firstSessionId,
     hasUnresolvedAgentPanes,

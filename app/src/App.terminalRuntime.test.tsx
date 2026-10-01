@@ -189,6 +189,24 @@ async function reattachAfterReconnect(output: string) {
 }
 
 describe('App terminal runtime', () => {
+  it('allows the close shortcut to detach an extra protected shared view', async () => {
+    const workspace = splitWorkspace('workspace-s1', ['s1', 'view-s1']);
+    workspace.layout!.panes = workspace.layout!.panes.map(pane => ({
+      ...pane, session_id: 's1', runtime_id: pane.session_id!, codex_resolution: 'resolved', codex_revision: '1',
+    }));
+    const { daemon } = await openAttachedTerminals({
+      sessions: [daemonSession('s1', { agent: 'codex', state: 'idle', chief_of_staff: true })],
+      workspaces: [workspace],
+    });
+    fireEvent.mouseDown(document.querySelector('[data-pane-id="pane-s1"]')!);
+    await daemon.idle();
+    pressShortcut('session.close');
+    await daemon.idle();
+    expect(daemon.sentOf('workspace_layout_close_pane')).toEqual([
+      expect.objectContaining({ workspace_id: 'workspace-s1', pane_id: 'pane-s1' }),
+    ]);
+  });
+
   it('changes a shared Codex pane owner while keeping its terminal and painted draft', async () => {
     const workspace = agentWorkspace('s1');
     const pane = { ...workspace.layout!.panes[0], codex_resolution: 'resolved' as const, codex_revision: '1' };
@@ -206,6 +224,7 @@ describe('App terminal runtime', () => {
       await daemon.idle();
     };
     await update('s2', 'resolved', '2');
+    expect([...document.querySelectorAll('.session-item.grouped .session-label')].map(label => label.textContent)).not.toContain('s1');
     expect(document.querySelector('[data-pane-id="pane-s1"]')).toHaveAttribute('data-pane-session-id', 's2');
     expect(document.querySelector('[data-pane-id="pane-s1"] canvas')).toBe(canvas);
     fireEvent.mouseDown(document.querySelector('[data-pane-id="pane-s1"]')!);

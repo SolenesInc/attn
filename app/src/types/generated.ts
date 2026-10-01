@@ -7399,6 +7399,7 @@ export interface SessionReopenResultObject {
     action:            SessionReopenAction;
     already_running?:  boolean;
     directory:         string;
+    pane_id?:          string;
     session_id:        string;
     workspace_id:      string;
     worktree_created?: string;
@@ -8862,6 +8863,7 @@ export interface SessionReopenResult {
     action:            SessionReopenAction;
     already_running?:  boolean;
     directory:         string;
+    pane_id?:          string;
     session_id:        string;
     workspace_id:      string;
     worktree_created?: string;
@@ -20455,6 +20457,7 @@ const typeMap: any = {
         { json: "action", js: "action", typ: r("SessionReopenAction") },
         { json: "already_running", js: "already_running", typ: u(undefined, true) },
         { json: "directory", js: "directory", typ: "" },
+        { json: "pane_id", js: "pane_id", typ: u(undefined, "") },
         { json: "session_id", js: "session_id", typ: "" },
         { json: "workspace_id", js: "workspace_id", typ: "" },
         { json: "worktree_created", js: "worktree_created", typ: u(undefined, "") },
@@ -21413,6 +21416,7 @@ const typeMap: any = {
         { json: "action", js: "action", typ: r("SessionReopenAction") },
         { json: "already_running", js: "already_running", typ: u(undefined, true) },
         { json: "directory", js: "directory", typ: "" },
+        { json: "pane_id", js: "pane_id", typ: u(undefined, "") },
         { json: "session_id", js: "session_id", typ: "" },
         { json: "workspace_id", js: "workspace_id", typ: "" },
         { json: "worktree_created", js: "worktree_created", typ: u(undefined, "") },

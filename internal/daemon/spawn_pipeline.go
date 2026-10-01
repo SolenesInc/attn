@@ -380,6 +380,7 @@ func (d *Daemon) executeSpawn(req *spawnRequest, plan *spawnPlan) *spawnOutcome 
 	if intent.CodexMode == "shared" {
 		if req.existingSession == nil {
 			if err := d.store.InitializeSessionCostTracking(session.ID); err != nil {
+				plan.rollback(d, msg.ID)
 				return &spawnOutcome{err: err}
 			}
 		}
