@@ -1,0 +1,3 @@
+kind: fixed
+area: location-picker
+change: The location picker and repository chooser accept the first keystroke even when the app is busy.
