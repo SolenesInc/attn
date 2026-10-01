@@ -131,7 +131,8 @@ func TestCrewPrime_AClaimOlderThanAPageOfTheGardenStillWakesWithItsMember(t *tes
 	}
 	planted := time.Date(2026, 8, 1, 12, 0, 0, 0, time.UTC)
 	oldest := garden.Seed{
-		ID: "s-000000", Title: "The claim nobody released", Status: garden.StatusGrowing,
+		ProfileID: defaultProfileID(t, d.store),
+		ID:        "s-000000", Title: "The claim nobody released", Status: garden.StatusGrowing,
 		StepSlug: "claim-nobody-released", TenderMember: "trellis",
 		StateChangedAt: planted.Format(time.RFC3339Nano), Edges: []garden.Edge{}, Vars: []garden.Var{},
 	}
@@ -145,7 +146,8 @@ func TestCrewPrime_AClaimOlderThanAPageOfTheGardenStillWakesWithItsMember(t *tes
 	for i := 1; i <= docstore.MaxLimit; i++ {
 		id := fmt.Sprintf("s-%06x", i)
 		seed := garden.Seed{
-			ID: id, Title: id, Status: garden.StatusPlanted, StepSlug: id,
+			ProfileID: defaultProfileID(t, d.store),
+			ID:        id, Title: id, Status: garden.StatusPlanted, StepSlug: id,
 			StateChangedAt: planted.Format(time.RFC3339Nano), Edges: []garden.Edge{}, Vars: []garden.Var{},
 		}
 		newer, err := seed.Encode()

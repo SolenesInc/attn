@@ -19,7 +19,7 @@ func TestSeedContinuationResumesAPluginTenderByCapability(t *testing.T) {
 	cwd := t.TempDir()
 	now := string(protocol.TimestampNow())
 	d.store.Add(&protocol.Session{
-		ID: "sess-snipe", Label: "plugin worker", Agent: "snipe",
+		ID: "sess-snipe", Label: "plugin worker", Agent: "snipe", ProfileID: defaultProfileID(t, d.store),
 		Directory: cwd, State: protocol.SessionStateIdle,
 		StateSince: now, StateUpdatedAt: now, LastSeen: now,
 	})
@@ -43,7 +43,7 @@ func TestSeedContinuationPreservesRemoteSessionWithoutLocalWorker(t *testing.T) 
 	d := newGardenDaemon(t)
 	d.store.Remove("sess-a")
 	d.store.Add(&protocol.Session{
-		ID: "sess-a", Directory: "/srv/work", Agent: protocol.SessionAgentClaude,
+		ID: "sess-a", Directory: "/srv/work", Agent: protocol.SessionAgentClaude, ProfileID: defaultProfileID(t, d.store),
 		EndpointID: protocol.Ptr("outpost-a"), State: protocol.SessionStateIdle,
 	})
 	seed := plant(t, d, protocol.SeedPlantMessage{Title: "Remote work"})

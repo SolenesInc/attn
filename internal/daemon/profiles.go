@@ -8,7 +8,10 @@ import (
 	"strings"
 
 	"github.com/victorarias/attn/internal/bus"
+	"github.com/victorarias/attn/internal/config"
+	"github.com/victorarias/attn/internal/docstore"
 	"github.com/victorarias/attn/internal/enrollment"
+	"github.com/victorarias/attn/internal/garden"
 	"github.com/victorarias/attn/internal/layouttree"
 	"github.com/victorarias/attn/internal/profiles"
 	"github.com/victorarias/attn/internal/protocol"
@@ -228,6 +231,7 @@ func (d *Daemon) runProfileAction(client *wsClient, action, requestID string, ru
 		fail(err)
 		return
 	}
+	previousProfile := client.selectedProfile()
 	client.holdArrangements()
 	outcome, err := run()
 	if pause := d.heldActionRan.Load(); pause != nil {
@@ -251,6 +255,9 @@ func (d *Daemon) runProfileAction(client *wsClient, action, requestID string, ru
 	result.Success = true
 	if outcome.arranges {
 		d.sendArrangement(client, requestID, outcome.moved)
+	}
+	if previousProfile != client.selectedProfile() {
+		d.sendGardenProfile(client)
 	}
 	d.sendToClient(client, result)
 	d.releaseArrangements(client)
@@ -373,19 +380,45 @@ func (d *Daemon) handleProfileRename(client *wsClient, msg *protocol.ProfileRena
 
 func (d *Daemon) handleProfileDelete(client *wsClient, msg *protocol.ProfileDeleteMessage) {
 	d.runProfileAction(client, msg.Cmd, msg.RequestID, func() (profileActionOutcome, error) {
+		options := store.ProfileDeletionOptions{AllowGardenWork: config.Instance() != ""}
+		if !options.AllowGardenWork {
+			var err error
+			options.RemoteLiveDispatches, err = d.countRemoteProfileDispatches(msg.ProfileID)
+			if err != nil {
+				return profileActionOutcome{}, err
+			}
+		}
 		d.automationMu.Lock()
-		deletion, err := d.store.DeleteProfile(msg.ProfileID, int64(msg.ExpectedRevision), msg.DestinationProfileID)
+		d.gardenReviewMu.Lock()
+		deletion, err := d.store.DeleteProfile(msg.ProfileID, int64(msg.ExpectedRevision), msg.DestinationProfileID, options)
+		d.gardenReviewMu.Unlock()
 		d.automationMu.Unlock()
 		if err != nil {
 			return profileActionOutcome{}, err
 		}
+		if len(deletion.MovedSessionIDs) > 0 {
+			d.invalidateGardenSeedParties("profile deletion")
+		}
+		if runner := d.jobQueueRef(); runner != nil {
+			for _, itemID := range deletion.CanceledGardenReviewItemIDs {
+				runner.RemoveByKey(gardenReviewClassifyKind, itemID)
+			}
+		}
+		d.logf("profile delete: %q moved %d automation definitions to %q, canceled %d pending runs and released continuity bindings; the next event starts fresh work", deletion.Deleted.Name, len(deletion.MovedAutomationIDs), deletion.Destination.Name, len(deletion.CanceledAutomationRunIDs))
 		d.wsHub.ForEachClient(func(scoped *wsClient) {
 			if scoped.selectedProfile() == deletion.Deleted.ID {
 				scoped.selectProfile(deletion.Destination.ID)
+				if scoped != client {
+					d.sendArrangement(scoped, "", nil)
+					d.sendGardenProfile(scoped)
+				}
 			}
 		})
 		return profileActionOutcome{arranges: true, publish: func() {
 			d.coalesceSnapshots(func() {
+				for _, runID := range deletion.CanceledGardenReviewIDs {
+					d.publishFact(FactDocumentChanged, docstore.Address(garden.Namespace, garden.CollectionReviewRuns, runID), documentChanged{Namespace: garden.Namespace, Collection: garden.CollectionReviewRuns, ID: runID})
+				}
 				d.publishFact(FactProfileDeleted, deletion.Deleted.ID, nil)
 				d.publishArrangementChanged(deletion.Destination.ID)
 				for _, sessionID := range deletion.MovedSessionIDs {
@@ -405,6 +438,29 @@ func (d *Daemon) handleProfileDelete(client *wsClient, msg *protocol.ProfileDele
 			}
 		}}, nil
 	})
+}
+
+func (d *Daemon) countRemoteProfileDispatches(profileID string) (int, error) {
+	if d.hubManager == nil {
+		return 0, nil
+	}
+	counted := map[string]bool{}
+	for _, session := range d.hubManager.RemoteSessions() {
+		if d.store.Get(session.ID) != nil || counted[session.ID] {
+			continue
+		}
+		owner, err := d.sessionProfileID(session.ID)
+		if err != nil {
+			return 0, err
+		}
+		if owner != profileID {
+			continue
+		}
+		if dispatch, ok := d.gardenDispatch(session.ID); ok && strings.TrimSpace(dispatch.Crown) != "" {
+			counted[session.ID] = true
+		}
+	}
+	return len(counted), nil
 }
 
 func (d *Daemon) handleProfileSelect(client *wsClient, msg *protocol.ProfileSelectMessage) {
@@ -450,6 +506,9 @@ func (d *Daemon) moveSessionWithItsCrewMember(msg *protocol.SessionMoveMessage) 
 }
 
 func (d *Daemon) publishSessionMoved(move store.SessionProfileMove) {
+	if move.FromProfileID != move.ToProfileID {
+		d.invalidateGardenSeedParties("session profile move")
+	}
 	d.coalesceSnapshots(func() {
 		d.publishFact(FactSessionProfileChanged, move.SessionID, sessionProfileChange{FromProfileID: move.FromProfileID, ToProfileID: move.ToProfileID})
 		if move.SourceDesktop != nil {

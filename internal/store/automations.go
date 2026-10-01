@@ -31,6 +31,7 @@ const (
 	AutomationCancelReasonReviewWithdrawn    = "review_withdrawn"
 	AutomationCancelReasonDefinitionDisabled = "definition_disabled"
 	AutomationCancelReasonDefinitionDeleted  = "definition_deleted"
+	AutomationCancelReasonProfileDeleted     = "profile_deleted"
 )
 
 const (
@@ -41,6 +42,7 @@ const (
 	AutomationBindingReleasedContractRotated   = "contract_rotated"
 	AutomationBindingReleasedTicketSwept       = "ticket_swept"
 	AutomationBindingReleasedDefinitionDeleted = "definition_deleted"
+	AutomationBindingReleasedProfileDeleted    = "profile_deleted"
 )
 
 type AutomationDefinition struct {

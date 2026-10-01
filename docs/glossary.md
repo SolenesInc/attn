@@ -44,7 +44,8 @@
 - PR inbox: pull requests waiting on the user.
 - Provenance line: shows where a session came from and what it produced.
 
-- Profile: the user's named grouping of agents, crew, automation definitions and the desktops that arrange them. It belongs to the daemon. Every agent belongs to one profile. Renaming keeps its identity.
+- Profile: the user's named grouping of agents, crew, automation definitions, Garden and the desktops that arrange them. It belongs to the daemon. Every agent belongs to one profile. Renaming keeps its identity.
+- Profile deletion: production refuses while open seeds, live dispatched sessions or accepted/preparing delegations remain. Delegation acceptance checks the owning profile under the same store lock as deletion. Automation definitions move to the destination, pending source runs and running Garden reviews cancel, and continuity bindings release so the next event starts fresh work. Named instances bypass the Garden deletion guards.
 - Desktop: one arrangement of panes and tiles inside a profile. A profile always has at least one, and up to nine hold a shortcut slot.
 - Desktop ref: how the CLI names a desktop of the caller's profile: its shortcut digit (1-9), its label as shown (the name, or "Desktop N" when unnamed; case-insensitive), or its id. `attn delegate --desktop` and `attn session move` take one.
 - Pane: an agent's place on a desktop. An agent has at most one pane.
@@ -74,8 +75,8 @@ intended it for the next turn.
 
 ## Garden and crew
 
-- Garden: the home daemon's work tracker, shared across profiles.
-- Seed: a work item with an ID, title, body and state.
+- Garden: a profile's work tracker on the home daemon. Seeds, plots, relationships and claims stay inside that profile.
+- Seed: a work item with an ID, title, body and state, belonging to its planting profile for life. Closed seeds of a deleted profile stay readable by ID, outside live Gardens, and cannot be replanted or resumed elsewhere.
 - Slug: a readable name derived from a seed's title. Slugs need not be unique.
 - Plot: a seed with child seeds. Its body holds their shared plan.
 - Packet: a reusable plot template.
@@ -90,6 +91,7 @@ intended it for the next turn.
 - Harvest condition: an instruction to harvest a seed when its PR merges. A PR closed without merging clears it instead of closing the seed.
 - Tender: the agent or person claiming a seed. A seed has one tender at a time.
 - Member claim: a tender recorded as a crew member with no session. It belongs to the permanent member and stays held while the member is asleep.
+- Named claim: an unregistered tender name passed with `--member`. The claim stays in its seed's profile; later crew registration elsewhere cannot receive its updates or prevent editing its existing claim.
 - Session claim: a tender recorded as a session. It counts as a crew member's work only while that session is the member's current day.
 - Execution: the saved conversation and working location for a seed.
 - Garden resume: reopens the seed's saved conversation in its saved directory.
@@ -108,6 +110,7 @@ intended it for the next turn.
 - Delegation preferences: saved roles and model choices for delegating work. They do not authorize delegation.
 - Session delegation role: optional role identity captured at launch. Later settings changes do not relabel the agent.
 - Delegation chain: an agent's dispatchers and delegates.
+- Dispatched session: an agent with a saved reporting seed in its dispatch record. It stays in that profile even after its work closes; moving work to another profile requires closing the agent and delegating afresh there.
 - Ticket: an archived work item from before the Garden.
 - Crew member: an agent with a permanent charter.
 - `attn`: the reserved member name the daemon uses when it moves a seed by itself. No crew home may claim it.

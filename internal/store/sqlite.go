@@ -1276,6 +1276,7 @@ CREATE INDEX IF NOT EXISTS idx_automode_denials_recent ON automode_denials(id DE
  PRIMARY KEY (agent, resume_id)
  );
  `},
+	{165, "scope the Garden to profiles", ""},
 }
 
 const migration99SQL = `
@@ -2061,6 +2062,11 @@ func applyPendingMigrations(db *sql.DB, recorded, currentVersion, through int) e
 			}
 		} else if m.version == 152 || m.version == 163 {
 			if err := migrateSessionCostTiers(tx, m.version); err != nil {
+				tx.Rollback()
+				return fmt.Errorf("migration %d (%s): %w", m.version, m.desc, err)
+			}
+		} else if m.version == 165 {
+			if err := migrateGardenProfiles(tx); err != nil {
 				tx.Rollback()
 				return fmt.Errorf("migration %d (%s): %w", m.version, m.desc, err)
 			}

@@ -111,6 +111,9 @@ func annotationSourcePointers(source annotationDocumentSource) (path, seedID *st
 
 func (d *Daemon) handleMarkdownAnnotationsGet(client *wsClient, msg *protocol.MarkdownAnnotationsGetMessage) {
 	source, sourceErr := d.resolveAnnotationDocumentSource(msg.DocumentUri, msg.SourceKind, msg.Path, msg.SeedID)
+	if sourceErr == nil && source.seedID != "" {
+		sourceErr = d.requireSeedInProfile(source.seedID, client.selectedProfile(), false)
+	}
 	path, seedID := annotationSourcePointers(source)
 	handler := newAnnotationDraftHandler(d, client, markdownAnnotationDraftAccessors(d.store), "document source",
 		func(result annotationDraftResult[protocol.MarkdownAnnotation]) protocol.MarkdownAnnotationsGetResultMessage {
@@ -133,6 +136,9 @@ func (d *Daemon) handleMarkdownAnnotationsGet(client *wsClient, msg *protocol.Ma
 
 func (d *Daemon) handleMarkdownAnnotationsSave(client *wsClient, msg *protocol.MarkdownAnnotationsSaveMessage) {
 	source, sourceErr := d.resolveAnnotationDocumentSource(msg.DocumentUri, msg.SourceKind, msg.Path, msg.SeedID)
+	if sourceErr == nil && source.seedID != "" {
+		sourceErr = d.requireSeedInProfile(source.seedID, client.selectedProfile(), false)
+	}
 	path, seedID := annotationSourcePointers(source)
 	handler := newAnnotationDraftHandler(d, client, markdownAnnotationDraftAccessors(d.store), "document source",
 		func(result annotationDraftResult[protocol.MarkdownAnnotation]) protocol.MarkdownAnnotationsSaveResultMessage {
@@ -155,6 +161,9 @@ func (d *Daemon) handleMarkdownAnnotationsSave(client *wsClient, msg *protocol.M
 
 func (d *Daemon) handleMarkdownAnnotationsClear(client *wsClient, msg *protocol.MarkdownAnnotationsClearMessage) {
 	source, sourceErr := d.resolveAnnotationDocumentSource(msg.DocumentUri, msg.SourceKind, msg.Path, msg.SeedID)
+	if sourceErr == nil && source.seedID != "" {
+		sourceErr = d.requireSeedInProfile(source.seedID, client.selectedProfile(), false)
+	}
 	path, seedID := annotationSourcePointers(source)
 	handler := newAnnotationDraftHandler(d, client, markdownAnnotationDraftAccessors(d.store), "document source",
 		func(result annotationDraftResult[protocol.MarkdownAnnotation]) protocol.MarkdownAnnotationsClearResultMessage {

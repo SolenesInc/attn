@@ -25,12 +25,17 @@ var crewHomeLetters = map[string]string{
 func newCrewWorld(t *testing.T, agents ...fakeagent.Harness) *world {
 	t.Helper()
 	w := &world{World: prepareWorld(t, agents...)}
+	writeCrewHomes(t, w)
+	w.start()
+	return w
+}
+
+func writeCrewHomes(t *testing.T, w *world) {
+	t.Helper()
 	for member, letter := range crewHomeLetters {
 		writeCrewHomeFile(t, w, member, crew.CharterFileName, "# "+member+"\n\nWhat I care about.\n")
 		writeCrewHomeFile(t, w, member, filepath.Join(crew.HandoffsDirName, letter), "Where I left off.\n")
 	}
-	w.start()
-	return w
 }
 
 func crewHome(w *world, member string) string {
@@ -542,12 +547,12 @@ func TestSeedTendersResolveToTheMemberTheyName(t *testing.T) {
 	unbound := plantSeedAs(t, cli, "sess-a", "Picked up by a worker")
 	moved, err := tend("sess-a", unbound, "some-worker")
 	if err != nil || moved.Seed.TenderMember != "some-worker" || moved.Seed.TenderSession != "" {
-		t.Fatalf("tending as some-worker = %+v, %v; want the free name holding it", moved, err)
+		t.Fatalf("tending as some-worker = %+v, %v; want the named worker holding it", moved, err)
 	}
 	_, err = tend("sess-b", unbound, "")
 	crewErrorContains(t, err, "Some-worker")
 	if _, err := cli.SeedTransition("sess-a", unbound, "harvest", "done", "some-worker", false, client.SeedTransitionOptions{}); err != nil {
-		t.Fatalf("the free name could not harvest its seed: %v", err)
+		t.Fatalf("the named worker could not harvest its seed: %v", err)
 	}
 	if peek, err := cli.AgentPeek("sess-a"); err != nil || peek.CrewMember != nil {
 		t.Fatalf("the worker's session peeks as crew member %v (%v), want none", peek, err)

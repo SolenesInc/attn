@@ -359,6 +359,9 @@ func (d *Daemon) ensureAutomationSeed(req automation.WorkRequest) (bool, func() 
 	body := strings.TrimSpace(req.Prompt)
 	var restore func() error
 	if seed, _, readErr := d.readSeed(req.IDs.SeedID); readErr == nil {
+		if err := d.requireSeedInProfile(seed.ID, req.IDs.ProfileID, false); err != nil {
+			return false, nil, err
+		}
 		if continuation {
 			if _, watchErr := d.setSeedWatch(req.IDs.SessionID, seed.ID, true); watchErr != nil {
 				return false, nil, fmt.Errorf("watch automation continuation seed %s: %w", seed.ID, watchErr)
@@ -382,7 +385,7 @@ func (d *Daemon) ensureAutomationSeed(req automation.WorkRequest) (bool, func() 
 			return false, nil, schemaErr
 		}
 		seed := d.initializeSeedLifecycle(garden.Seed{
-			ID: req.IDs.SeedID, Title: title, Body: body,
+			ProfileID: req.IDs.ProfileID, ID: req.IDs.SeedID, Title: title, Body: body,
 			Status: garden.StatusPlanted, StepSlug: garden.StepSlug(title), Edges: []garden.Edge{}, Vars: []garden.Var{},
 		})
 		seed, err = garden.Transition(seed, garden.VerbTend, garden.Ask{Actor: garden.Tender{Session: req.IDs.SessionID}}, func(string) bool { return false })

@@ -117,6 +117,11 @@ func (d *Daemon) replantStrandedTicket(ticket *store.Ticket) (string, error) {
 			StepSlug: garden.StepSlug(title), Edges: []garden.Edge{}, Vars: []garden.Var{},
 			Reason: "recovered from legacy ticket " + ticket.ID,
 		}
+		view, err := d.store.ProfileMigration()
+		if err != nil {
+			return "", err
+		}
+		seed.ProfileID = view.Manifest.ProfileID
 		seedBody, err := seed.Encode()
 		if err != nil {
 			return "", err

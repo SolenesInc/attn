@@ -683,11 +683,13 @@ func runDelegate() {
 		return
 	}
 	if len(os.Args) >= 3 && os.Args[2] == "status" {
-		if len(os.Args) != 4 || strings.TrimSpace(os.Args[3]) == "" {
-			fmt.Fprintln(os.Stderr, "delegate status: usage: attn delegate status <request-or-operation-id>")
+		f := newSeedFlags("delegate status")
+		positionals := f.parse("delegate status", os.Args[3:])
+		if len(positionals) != 1 {
+			fmt.Fprintln(os.Stderr, "delegate status: usage: attn delegate status <request-or-operation-id> [--profile <name|id>]")
 			os.Exit(2)
 		}
-		result, err := client.New("").DelegationStatus(os.Args[3])
+		result, err := f.client().DelegationStatus(positionals[0])
 		if err != nil {
 			fmt.Fprintf(os.Stderr, "delegate status: %v\n", err)
 			os.Exit(1)
@@ -695,13 +697,14 @@ func runDelegate() {
 		printJSON(result)
 		return
 	}
+
 	args, err := parseDelegateArgs(os.Args[2:])
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "delegate: %v\n", err)
 		os.Exit(2)
 	}
 	warnIfDaemonVersionMismatch()
-	c := client.New("")
+	c := client.New("").WithGardenProfile(protocol.Deref(args.request.ProfileID), protocol.Deref(args.request.SourceSessionID))
 	fmt.Fprintf(os.Stderr, "delegation request: request_id=%s\n", args.request.RequestID)
 	operation, err := c.StartDelegation(args.request)
 	if err != nil {
@@ -1596,6 +1599,7 @@ type delegateCLIArgs struct {
 
 func parseDelegateArgs(args []string) (delegateCLIArgs, error) {
 	fs := flag.NewFlagSet("delegate", flag.ContinueOnError)
+	profile := fs.String("profile", "", "profile name or id outside an attn session")
 	fs.SetOutput(io.Discard)
 	briefText := fs.String("brief", "", "delegated task brief")
 	briefFile := fs.String("brief-file", "", "file containing the delegated task brief")
@@ -1793,7 +1797,7 @@ func parseDelegateArgs(args []string) (delegateCLIArgs, error) {
 			}
 		}
 	}
-	request := protocol.DelegateMessage{Cmd: protocol.CmdDelegate, RequestID: stableRequestID, Assignment: assignment, Cwd: customCWD, Checkout: checkout}
+	request := protocol.DelegateMessage{Cmd: protocol.CmdDelegate, ProfileID: protocol.Ptr(strings.TrimSpace(*profile)), RequestID: stableRequestID, Assignment: assignment, Cwd: customCWD, Checkout: checkout}
 	if source != "" {
 		request.SourceSessionID = protocol.Ptr(source)
 	}
@@ -1831,16 +1835,17 @@ func parseDelegateArgs(args []string) (delegateCLIArgs, error) {
 	return delegateCLIArgs{request: request}, nil
 }
 
-func parseOpenArgs(args []string) (rawPath string, sessionFlag string, err error) {
+func parseOpenArgs(args []string) (rawPath string, sessionFlag string, profileFlag string, err error) {
 	fs := flag.NewFlagSet("open", flag.ContinueOnError)
 	fs.SetOutput(io.Discard)
 	sessionID := fs.String("session", "", "session id (defaults to ATTN_SESSION_ID, then the selected session)")
 
+	profileID := fs.String("profile", "", "profile name or id for a seed outside attn")
 	var positionals []string
 	rest := args
 	for {
 		if perr := fs.Parse(rest); perr != nil {
-			return "", "", perr
+			return "", "", "", perr
 		}
 		rest = fs.Args()
 		if len(rest) == 0 {
@@ -1851,12 +1856,12 @@ func parseOpenArgs(args []string) (rawPath string, sessionFlag string, err error
 	}
 
 	if len(positionals) == 0 {
-		return "", "", fmt.Errorf("missing <file.md|seed-id> argument")
+		return "", "", "", fmt.Errorf("missing <file.md|seed-id> argument")
 	}
 	if len(positionals) > 1 {
-		return "", "", fmt.Errorf("unexpected extra arguments: %v", positionals[1:])
+		return "", "", "", fmt.Errorf("unexpected extra arguments: %v", positionals[1:])
 	}
-	return strings.TrimSpace(positionals[0]), strings.TrimSpace(*sessionID), nil
+	return strings.TrimSpace(positionals[0]), strings.TrimSpace(*sessionID), strings.TrimSpace(*profileID), nil
 }
 
 func isSeedOpenTarget(target string) bool {
@@ -1865,7 +1870,7 @@ func isSeedOpenTarget(target string) bool {
 
 func runOpen() {
 	warnIfDaemonVersionMismatch()
-	rawPath, sessionFlag, err := parseOpenArgs(os.Args[2:])
+	rawPath, sessionFlag, profileFlag, err := parseOpenArgs(os.Args[2:])
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "attn open: %v\nusage: attn open <file.md|seed-id> [--session <id>]\n", err)
 		os.Exit(1)
@@ -1878,7 +1883,7 @@ func runOpen() {
 
 	c := client.New(strings.TrimSpace(os.Getenv("ATTN_SOCKET_PATH")))
 	if isSeedOpenTarget(rawPath) {
-		if err := c.OpenSeed(rawPath, resolvedSession); err != nil {
+		if err := c.WithGardenProfile(profileFlag, "").OpenSeed(rawPath, resolvedSession); err != nil {
 			fmt.Fprintf(os.Stderr, "open: %v\n", err)
 			os.Exit(1)
 		}

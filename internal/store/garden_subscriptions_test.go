@@ -24,12 +24,16 @@ func seedSubscriptionHistory(t *testing.T, s *Store) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	profile, err := s.ProfileMigration()
+	if err != nil {
+		t.Fatal(err)
+	}
 	dispatchSchema, _, err := s.DocumentCollection(garden.Namespace, garden.CollectionDispatches)
 	if err != nil {
 		t.Fatal(err)
 	}
 	for _, id := range []string{"plot", "child", "separate"} {
-		body, err := (garden.Seed{ID: id, Title: id, Status: garden.StatusPlanted}).Encode()
+		body, err := (garden.Seed{ID: id, ProfileID: profile.Manifest.ProfileID, Title: id, Status: garden.StatusPlanted}).Encode()
 		if err != nil {
 			t.Fatal(err)
 		}

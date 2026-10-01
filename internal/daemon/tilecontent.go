@@ -129,7 +129,7 @@ func (d *Daemon) openMarkdownTile(path, callerSessionID string) (desktopID, tile
 	return desktop.ID, tileID, nil
 }
 
-func (d *Daemon) openSeedTile(seedID, callerSessionID string, standalone bool) (desktopID, tileID string, err error) {
+func (d *Daemon) openSeedTile(seedID, callerSessionID string, standalone bool, selectedProfile ...string) (desktopID, tileID string, err error) {
 	if err := d.requireHome(garden.Surface); err != nil {
 		return "", "", err
 	}
@@ -137,15 +137,30 @@ func (d *Daemon) openSeedTile(seedID, callerSessionID string, standalone bool) (
 	if err != nil {
 		return "", "", err
 	}
-	if standalone {
-		callerSessionID = ""
+	selected := ""
+	if len(selectedProfile) > 1 {
+		selected = selectedProfile[1]
 	}
-	location, err := d.currentAgent(callerSessionID)
+	profile, err := d.resolveGardenProfile(callerSessionID, firstProfile(selectedProfile), selected)
 	if err != nil {
 		return "", "", err
 	}
-	if standalone {
-		location.sessionID = ""
+	if selected != "" && profile.ID != selected {
+		owner, err := d.store.GetProfile(selected)
+		if err != nil {
+			return "", "", err
+		}
+		return "", "", fmt.Errorf("source session belongs to profile %q; app belongs to profile %q", profile.Name, owner.Name)
+	}
+	if err := d.requireSeedInProfile(seedID, profile.ID, false); err != nil {
+		return "", "", err
+	}
+	location := agentLocation{profileID: profile.ID, desktopID: profile.CurrentDesktopID}
+	if callerSessionID != "" && !standalone {
+		location, err = d.agentLocation(callerSessionID)
+		if err != nil {
+			return "", "", err
+		}
 	}
 	d.openTileMu.Lock()
 	defer d.openTileMu.Unlock()
@@ -183,7 +198,7 @@ func (d *Daemon) handleOpenMarkdown(conn net.Conn, msg *protocol.OpenMarkdownMes
 }
 
 func (d *Daemon) handleOpenSeed(conn net.Conn, msg *protocol.OpenSeedMessage) {
-	desktopID, tileID, err := d.openSeedTile(msg.SeedID, protocol.Deref(msg.SessionID), protocol.Deref(msg.Standalone))
+	desktopID, tileID, err := d.openSeedTile(msg.SeedID, protocol.Deref(msg.SessionID), protocol.Deref(msg.Standalone), protocol.Deref(msg.ProfileID))
 	if err != nil {
 		d.sendError(conn, fmt.Sprintf("open_seed: %v", err))
 		return
@@ -260,7 +275,7 @@ func (d *Daemon) handleOpenSeedWS(client *wsClient, msg *protocol.OpenSeedMessag
 	}
 	client.holdArrangements()
 	defer d.releaseArrangements(client)
-	desktopID, tileID, err := d.openSeedTile(msg.SeedID, protocol.Deref(msg.SessionID), protocol.Deref(msg.Standalone))
+	desktopID, tileID, err := d.openSeedTile(msg.SeedID, protocol.Deref(msg.SessionID), protocol.Deref(msg.Standalone), protocol.Deref(msg.ProfileID), client.selectedProfile())
 	if err != nil {
 		result.Success = false
 		result.Error = protocol.Ptr(err.Error())

@@ -1,6 +1,6 @@
 # The garden: seeds, plots, and reporting
 
-The garden is where work lives. Run `attn seed prime` for working rules.
+The garden is where work lives, inside your session's profile. Seeds belong to their planting profile for life; lists, relationships, claims and delegations stay there. Outside attn, seed verbs require `--profile <name|id>` when several profiles exist. Run `attn seed prime` for working rules.
 Before writing a plot, read `attn seed guide` for body authoring, a complete
 plot example and completion checks. Syntax lives in `attn seed --help`.
 

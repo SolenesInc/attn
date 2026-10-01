@@ -8,6 +8,8 @@ import type {
 } from '../types/generated';
 import { useProfilesStore } from '../store/profiles';
 import { useSessionStore } from '../store/sessions';
+import { useDaemonStore } from '../store/daemonSessions';
+import { useGardenWalk, gardenScrollMemory } from '../store/gardenWalk';
 import type { Arrival } from '../navigation/sessionNavigation';
 import { parseLayoutJSON } from '../types/desktop';
 import { recordLayout } from '../utils/terminalDiagnosticsLog';
@@ -66,6 +68,11 @@ export function handleProfileDaemonEvent(data: ProfileEvent, pending: PendingReq
       return true;
     case 'profile_arrangement_changed': {
       const message = data as ProfileArrangementChangedMessage;
+      if (useProfilesStore.getState().selectedProfileId !== message.profile.id) {
+        useDaemonStore.getState().setSeeds([], 0);
+        useGardenWalk.getState().setTrail([]);
+        gardenScrollMemory.clear();
+      }
       for (const desktop of message.desktops ?? []) {
         const layout = collectDesktopLayoutDiagnostics(parseLayoutJSON(desktop.tree_json));
         recordLayout(desktop.id, layout.panes.map((pane) => pane.paneId), layout.splitCount);

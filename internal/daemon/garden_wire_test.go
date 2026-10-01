@@ -20,7 +20,7 @@ import (
 )
 
 func TestEverySeedMoveReachesTheAppAsOneGardenPush(t *testing.T) {
-	inBubble(t, func(t *testing.T, w *world) {
+	inCrewBubble(t, func(t *testing.T, w *world) {
 		app, cli := w.App(), w.Client()
 		registerSessions(t, w, cli, "gardener")
 		w.advance(0)
@@ -95,7 +95,7 @@ func TestEverySeedMoveReachesTheAppAsOneGardenPush(t *testing.T) {
 }
 
 func TestALiveSeedClaimRefusesOthersUntilForcedOrParked(t *testing.T) {
-	w := newWorld(t, fakeagent.Claude)
+	w := newCrewWorld(t, fakeagent.Claude)
 	app, cli := w.App(), w.Client()
 	panes := spawnPanes(w, app, w.Path("first"), w.Path("second"), w.Path("departing"))
 	first, second, departing := panes[0].session, panes[1].session, panes[2]
@@ -200,7 +200,7 @@ func TestALiveSeedClaimRefusesOthersUntilForcedOrParked(t *testing.T) {
 }
 
 func TestASeedLogReadsNewestFirstAndSaysWhatItWithheld(t *testing.T) {
-	w := newWorld(t, fakeagent.Claude)
+	w := newCrewWorld(t, fakeagent.Claude)
 	app, cli := w.App(), w.Client()
 	writer := spawnPanes(w, app, w.Path("writer"))[0].session
 	seed := plantSeedAs(t, cli, writer, "with a log")
@@ -232,7 +232,7 @@ func TestASeedLogReadsNewestFirstAndSaysWhatItWithheld(t *testing.T) {
 }
 
 func TestSeedRefusalsNameWhatIsWrongAndChangeNothing(t *testing.T) {
-	w := newWorld(t, fakeagent.Claude)
+	w := newCrewWorld(t, fakeagent.Claude)
 	app, cli := w.App(), w.Client()
 	gardener := spawnPanes(w, app, w.Path("gardener"))[0].session
 	seed := plantSeedAs(t, cli, gardener, "refusals")
@@ -300,7 +300,7 @@ func TestSeedRefusalsNameWhatIsWrongAndChangeNothing(t *testing.T) {
 }
 
 func TestEditingASeedChangesOnlyItsBody(t *testing.T) {
-	w := newWorld(t, fakeagent.Claude)
+	w := newCrewWorld(t, fakeagent.Claude)
 	app, cli := w.App(), w.Client()
 	editor := spawnPanes(w, app, w.Path("editor"))[0].session
 	crown := plantSeedAs(t, cli, "", "Crown")
@@ -334,7 +334,7 @@ func TestEditingASeedChangesOnlyItsBody(t *testing.T) {
 }
 
 func TestAPlantedSeedRoundTripsThroughListAndShow(t *testing.T) {
-	w := newWorld(t, fakeagent.Claude)
+	w := newCrewWorld(t, fakeagent.Claude)
 	app, cli := w.App(), w.Client()
 	planter := spawnPanes(w, app, w.Path("planter"))[0].session
 

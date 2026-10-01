@@ -78,6 +78,11 @@ func (d *Daemon) resumeSeedFromReviewProtected(
 	if _, err := garden.Transition(seed, garden.VerbTend, garden.Ask{Actor: actor}, d.sessionExists); err != nil {
 		return nil, err
 	}
+	if existing := d.gardenSession(sessionID); existing != nil && existing.ProfileID != seed.ProfileID {
+		owner, _ := d.store.GetProfile(seed.ProfileID)
+		caller, _ := d.store.GetProfile(existing.ProfileID)
+		return nil, fmt.Errorf("seed %s belongs to profile %q; its previous agent now belongs to profile %q: hand the seed to a new agent in its own profile", seed.ID, owner.Name, caller.Name)
+	}
 	if existing := d.gardenSession(sessionID); existing != nil &&
 		(execution.HostKind == garden.HostRemote || d.sessionHasLiveWorker(sessionID)) {
 		if _, _, _, err := d.applySeedTransitionDetailedAsAtRevisionProtected(protection,
@@ -103,6 +108,11 @@ func (d *Daemon) resumeSeedFromReviewProtected(
 	profileID, err := recorded.destinationProfile(destination)
 	if err != nil {
 		return nil, fmt.Errorf("%s cannot resume: %w; reopen its session from the Sessions ledger to choose where it lands", seedID, err)
+	}
+	if profileID != seed.ProfileID {
+		owner, _ := d.store.GetProfile(seed.ProfileID)
+		target, _ := d.store.GetProfile(profileID)
+		return nil, fmt.Errorf("seed %s belongs to profile %q; its conversation would reopen in profile %q: hand the seed to a new agent in its own profile", seed.ID, owner.Name, target.Name)
 	}
 	afterSpawn := func() error {
 		if _, err := d.validateGardenReviewAction(review, seedID, "resume"); err != nil {

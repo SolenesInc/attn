@@ -3,6 +3,7 @@ package store
 import (
 	"database/sql"
 	"errors"
+	"fmt"
 	"log"
 	"strings"
 	"time"
@@ -15,12 +16,20 @@ import (
 )
 
 type ProfileDeletion struct {
-	Deleted            profiles.Profile
-	Destination        profiles.Profile
-	MovedSessionIDs    []string
-	MovedAutomationIDs []string
-	MovedCrewIDs       []string
-	DemotedChiefID     string
+	Deleted                     profiles.Profile
+	Destination                 profiles.Profile
+	MovedSessionIDs             []string
+	MovedAutomationIDs          []string
+	CanceledAutomationRunIDs    []string
+	CanceledGardenReviewIDs     []string
+	CanceledGardenReviewItemIDs []string
+	MovedCrewIDs                []string
+	DemotedChiefID              string
+}
+
+type ProfileDeletionOptions struct {
+	AllowGardenWork      bool
+	RemoteLiveDispatches int
 }
 
 type DesktopDeletion struct {
@@ -127,7 +136,7 @@ func scanProfile(row rowScanner) (profiles.Profile, error) {
 	return profile, err
 }
 
-func loadProfile(q queryer, id string) (profiles.Profile, error) {
+func loadProfile(q rowQuerier, id string) (profiles.Profile, error) {
 	profile, err := scanProfile(q.QueryRow(`SELECT `+profileColumns+` FROM profiles WHERE id = ?`, id))
 	if errors.Is(err, sql.ErrNoRows) {
 		return profiles.Profile{}, profiles.Errorf(profiles.CodeNotFound, "profile %q does not exist", id)
@@ -135,7 +144,7 @@ func loadProfile(q queryer, id string) (profiles.Profile, error) {
 	return profile, err
 }
 
-func loadLiveProfile(q queryer, id string) (profiles.Profile, error) {
+func loadLiveProfile(q rowQuerier, id string) (profiles.Profile, error) {
 	profile, err := loadProfile(q, id)
 	if err != nil {
 		return profiles.Profile{}, err
@@ -513,7 +522,11 @@ func deleteProfileDesktops(tx *sql.Tx, profileID string) error {
 	return err
 }
 
-func (s *Store) DeleteProfile(id string, expectedRevision int64, destinationID string) (ProfileDeletion, error) {
+func (s *Store) DeleteProfile(id string, expectedRevision int64, destinationID string, options ...ProfileDeletionOptions) (ProfileDeletion, error) {
+	var opts ProfileDeletionOptions
+	if len(options) > 0 {
+		opts = options[0]
+	}
 	var result ProfileDeletion
 	err := s.profilesTx(func(tx *sql.Tx, now string) error {
 		profile, err := loadLiveProfile(tx, id)
@@ -533,13 +546,43 @@ func (s *Store) DeleteProfile(id string, expectedRevision int64, destinationID s
 		if err != nil {
 			return err
 		}
+		if !opts.AllowGardenWork {
+			count, err := countOpenProfileSeeds(tx, profile.ID)
+			if err != nil {
+				return err
+			}
+			dispatched, err := countLiveProfileDispatches(tx, profile.ID)
+			if err != nil {
+				return err
+			}
+			dispatched += opts.RemoteLiveDispatches
+			pending, err := countPendingProfileDelegations(tx, profile.ID)
+			if err != nil {
+				return err
+			}
+			if count != 0 || dispatched != 0 || pending != 0 {
+				return fmt.Errorf("profile %q has %d open seeds and %d live dispatched sessions, plus %d pending delegations; wait for the delegations to finish, then ask an agent to harvest or wither the seeds and close the delegated agents before deleting the profile", profile.Name, count, dispatched, pending)
+			}
+		}
 		if result.MovedSessionIDs, err = queryColumn[string](tx, `SELECT id FROM sessions WHERE profile_id = ? AND closed_at = '' ORDER BY id`, id); err != nil {
+			return err
+		}
+		if _, err := tx.Exec(`DELETE FROM garden_seed_watches WHERE watcher_session_id IN (SELECT id FROM sessions WHERE profile_id = ? AND closed_at = '')`, id); err != nil {
 			return err
 		}
 		if _, err := tx.Exec(`UPDATE sessions SET profile_id = ? WHERE profile_id = ? AND closed_at = ''`, destinationID, id); err != nil {
 			return err
 		}
-		if result.MovedAutomationIDs, err = moveProfileAutomations(tx, id, destinationID); err != nil {
+		if result.MovedAutomationIDs, err = moveProfileAutomations(tx, id, destinationID, now); err != nil {
+			return err
+		}
+		if result.CanceledAutomationRunIDs, err = queryColumn[string](tx, `SELECT id FROM automation_runs WHERE profile_id = ? AND state = ? ORDER BY id`, id, AutomationRunStatePending); err != nil {
+			return err
+		}
+		if _, err := tx.Exec(`UPDATE automation_runs SET state = ?, cancel_reason = ?, updated_at = ? WHERE profile_id = ? AND state = ?`, AutomationRunStateCancelled, AutomationCancelReasonProfileDeleted, now, id, AutomationRunStatePending); err != nil {
+			return err
+		}
+		if result.CanceledGardenReviewIDs, result.CanceledGardenReviewItemIDs, err = cancelProfileGardenReviews(tx, id, now); err != nil {
 			return err
 		}
 		if result.MovedCrewIDs, err = queryColumn[string](tx, `SELECT member_id FROM crew_profiles WHERE profile_id = ? ORDER BY member_id`, id); err != nil {
@@ -680,19 +723,16 @@ func (s *Store) EnsureCrewProfile(memberID, profileID string) (string, error) {
 	return assigned, err
 }
 
-func moveProfileAutomations(tx *sql.Tx, from, to string) ([]string, error) {
+func moveProfileAutomations(tx *sql.Tx, from, to, now string) ([]string, error) {
 	moved, err := queryColumn[string](tx, `SELECT id FROM automation_definitions WHERE profile_id = ? ORDER BY id`, from)
 	if err != nil {
 		return nil, err
 	}
-	for _, statement := range []string{
-		`UPDATE automation_definitions SET profile_id = ? WHERE profile_id = ?`,
-		`UPDATE automation_runs SET profile_id = ? WHERE profile_id = ? AND state = '` + AutomationRunStatePending + `'`,
-		`UPDATE automation_continuity_bindings SET profile_id = ? WHERE profile_id = ? AND status = '` + AutomationBindingStatusActive + `'`,
-	} {
-		if _, err := tx.Exec(statement, to, from); err != nil {
-			return nil, err
-		}
+	if _, err := tx.Exec(`UPDATE automation_definitions SET profile_id = ? WHERE profile_id = ?`, to, from); err != nil {
+		return nil, err
+	}
+	if _, err := tx.Exec(`UPDATE automation_continuity_bindings SET status = ?, released_reason = ?, released_at = ?, updated_at = ? WHERE profile_id = ? AND status = ?`, AutomationBindingStatusReleased, AutomationBindingReleasedProfileDeleted, now, now, from, AutomationBindingStatusActive); err != nil {
+		return nil, err
 	}
 	return moved, nil
 }
@@ -1607,6 +1647,12 @@ func (s *Store) MoveSessionToProfile(request SessionProfileMoveRequest) (Session
 		}
 		if from != request.ExpectedProfileID {
 			return profiles.Errorf(profiles.CodeStaleRevision, "session %s belongs to profile %s now, the move was made against profile %s; re-read and retry", sessionID, from, request.ExpectedProfileID)
+		}
+		if err := refuseMovingGardenWork(tx, sessionID, request.CrewMemberID, from, destinationID); err != nil {
+			return err
+		}
+		if _, err := tx.Exec(`DELETE FROM garden_seed_watches WHERE watcher_session_id = ?`, sessionID); err != nil {
+			return err
 		}
 		if move.SourceDesktop, err = removeSessionPlacement(tx, now, sessionID); err != nil {
 			return err

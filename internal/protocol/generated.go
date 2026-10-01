@@ -2536,6 +2536,9 @@ type DelegateMessage struct {
 	// Model corresponds to the JSON schema field "model".
 	Model *string `json:"model,omitempty,omitzero"`
 
+	// ProfileID corresponds to the JSON schema field "profile_id".
+	ProfileID *string `json:"profile_id,omitempty,omitzero"`
+
 	// Provider corresponds to the JSON schema field "provider".
 	Provider *string `json:"provider,omitempty,omitzero"`
 
@@ -2633,6 +2636,12 @@ type DelegateStatusMessage struct {
 
 	// ID corresponds to the JSON schema field "id".
 	ID string `json:"id"`
+
+	// ProfileID corresponds to the JSON schema field "profile_id".
+	ProfileID *string `json:"profile_id,omitempty,omitzero"`
+
+	// SourceSessionID corresponds to the JSON schema field "source_session_id".
+	SourceSessionID *string `json:"source_session_id,omitempty,omitzero"`
 }
 
 type DelegateWorktreeRequest struct {
@@ -4591,6 +4600,9 @@ type GardenReviewRun struct {
 	// ID corresponds to the JSON schema field "id".
 	ID string `json:"id"`
 
+	// ProfileID corresponds to the JSON schema field "profile_id".
+	ProfileID string `json:"profile_id"`
+
 	// Recipe corresponds to the JSON schema field "recipe".
 	Recipe GardenReviewRecipe `json:"recipe"`
 
@@ -4609,6 +4621,9 @@ type GardenReviewUpdatedMessage struct {
 type GardenSeedsUpdatedMessage struct {
 	// Event corresponds to the JSON schema field "event".
 	Event string `json:"event"`
+
+	// ProfileID corresponds to the JSON schema field "profile_id".
+	ProfileID string `json:"profile_id"`
 
 	// Seeds corresponds to the JSON schema field "seeds".
 	Seeds []Seed `json:"seeds"`
@@ -6295,6 +6310,9 @@ type OpenSeedMessage struct {
 	// Cmd corresponds to the JSON schema field "cmd".
 	Cmd string `json:"cmd"`
 
+	// ProfileID corresponds to the JSON schema field "profile_id".
+	ProfileID *string `json:"profile_id,omitempty,omitzero"`
+
 	// RequestID corresponds to the JSON schema field "request_id".
 	RequestID *string `json:"request_id,omitempty,omitzero"`
 
@@ -7843,6 +7861,9 @@ type Seed struct {
 	// PlotProgress corresponds to the JSON schema field "plot_progress".
 	PlotProgress *SeedPlotProgress `json:"plot_progress,omitempty,omitzero"`
 
+	// ProfileID corresponds to the JSON schema field "profile_id".
+	ProfileID string `json:"profile_id"`
+
 	// Ready corresponds to the JSON schema field "ready".
 	Ready bool `json:"ready"`
 
@@ -7919,6 +7940,9 @@ type SeedArtifactTargetMessage struct {
 	// Cmd corresponds to the JSON schema field "cmd".
 	Cmd string `json:"cmd"`
 
+	// ProfileID corresponds to the JSON schema field "profile_id".
+	ProfileID *string `json:"profile_id,omitempty,omitzero"`
+
 	// Purpose corresponds to the JSON schema field "purpose".
 	Purpose string `json:"purpose"`
 
@@ -7930,6 +7954,9 @@ type SeedArtifactTargetMessage struct {
 
 	// SeedID corresponds to the JSON schema field "seed_id".
 	SeedID string `json:"seed_id"`
+
+	// SourceSessionID corresponds to the JSON schema field "source_session_id".
+	SourceSessionID *string `json:"source_session_id,omitempty,omitzero"`
 }
 
 type SeedArtifactTargetResult struct {
@@ -7978,6 +8005,9 @@ type SeedArtifactTransferMessage struct {
 
 	// Operation corresponds to the JSON schema field "operation".
 	Operation string `json:"operation"`
+
+	// ProfileID corresponds to the JSON schema field "profile_id".
+	ProfileID *string `json:"profile_id,omitempty,omitzero"`
 
 	// RequestID corresponds to the JSON schema field "request_id".
 	RequestID *string `json:"request_id,omitempty,omitzero"`
@@ -8116,11 +8146,17 @@ type SeedDocumentGetMessage struct {
 	// Cmd corresponds to the JSON schema field "cmd".
 	Cmd string `json:"cmd"`
 
+	// ProfileID corresponds to the JSON schema field "profile_id".
+	ProfileID *string `json:"profile_id,omitempty,omitzero"`
+
 	// RequestID corresponds to the JSON schema field "request_id".
 	RequestID string `json:"request_id"`
 
 	// SeedID corresponds to the JSON schema field "seed_id".
 	SeedID string `json:"seed_id"`
+
+	// SourceSessionID corresponds to the JSON schema field "source_session_id".
+	SourceSessionID *string `json:"source_session_id,omitempty,omitzero"`
 }
 
 type SeedDocumentGetResultMessage struct {
@@ -8155,8 +8191,14 @@ type SeedEditMessage struct {
 	// Cmd corresponds to the JSON schema field "cmd".
 	Cmd string `json:"cmd"`
 
+	// ProfileID corresponds to the JSON schema field "profile_id".
+	ProfileID *string `json:"profile_id,omitempty,omitzero"`
+
 	// SeedID corresponds to the JSON schema field "seed_id".
 	SeedID string `json:"seed_id"`
+
+	// SourceSessionID corresponds to the JSON schema field "source_session_id".
+	SourceSessionID *string `json:"source_session_id,omitempty,omitzero"`
 }
 
 type SeedEditResult struct {
@@ -8221,8 +8263,14 @@ type SeedLinkMessage struct {
 	// Kind corresponds to the JSON schema field "kind".
 	Kind string `json:"kind"`
 
+	// ProfileID corresponds to the JSON schema field "profile_id".
+	ProfileID *string `json:"profile_id,omitempty,omitzero"`
+
 	// SeedID corresponds to the JSON schema field "seed_id".
 	SeedID string `json:"seed_id"`
+
+	// SourceSessionID corresponds to the JSON schema field "source_session_id".
+	SourceSessionID *string `json:"source_session_id,omitempty,omitzero"`
 
 	// ToSeedID corresponds to the JSON schema field "to_seed_id".
 	ToSeedID string `json:"to_seed_id"`
@@ -8242,6 +8290,9 @@ type SeedLinkResult struct {
 type SeedListMessage struct {
 	// Cmd corresponds to the JSON schema field "cmd".
 	Cmd string `json:"cmd"`
+
+	// ProfileID corresponds to the JSON schema field "profile_id".
+	ProfileID *string `json:"profile_id,omitempty,omitzero"`
 
 	// SourceSessionID corresponds to the JSON schema field "source_session_id".
 	SourceSessionID *string `json:"source_session_id,omitempty,omitzero"`
@@ -8306,6 +8357,9 @@ type SeedNoteMessage struct {
 	// Member corresponds to the JSON schema field "member".
 	Member *string `json:"member,omitempty,omitzero"`
 
+	// ProfileID corresponds to the JSON schema field "profile_id".
+	ProfileID *string `json:"profile_id,omitempty,omitzero"`
+
 	// RequestID corresponds to the JSON schema field "request_id".
 	RequestID *string `json:"request_id,omitempty,omitzero"`
 
@@ -8348,6 +8402,9 @@ type SeedNotesMessage struct {
 	// Limit corresponds to the JSON schema field "limit".
 	Limit *int `json:"limit,omitempty,omitzero"`
 
+	// ProfileID corresponds to the JSON schema field "profile_id".
+	ProfileID *string `json:"profile_id,omitempty,omitzero"`
+
 	// SeedID corresponds to the JSON schema field "seed_id".
 	SeedID string `json:"seed_id"`
 
@@ -8378,6 +8435,9 @@ type SeedPlantMessage struct {
 
 	// PartOf corresponds to the JSON schema field "part_of".
 	PartOf *string `json:"part_of,omitempty,omitzero"`
+
+	// ProfileID corresponds to the JSON schema field "profile_id".
+	ProfileID *string `json:"profile_id,omitempty,omitzero"`
 
 	// SourceSessionID corresponds to the JSON schema field "source_session_id".
 	SourceSessionID *string `json:"source_session_id,omitempty,omitzero"`
@@ -8414,6 +8474,9 @@ type SeedPlotMessage struct {
 
 	// Member corresponds to the JSON schema field "member".
 	Member *string `json:"member,omitempty,omitzero"`
+
+	// ProfileID corresponds to the JSON schema field "profile_id".
+	ProfileID *string `json:"profile_id,omitempty,omitzero"`
 
 	// SourceSessionID corresponds to the JSON schema field "source_session_id".
 	SourceSessionID *string `json:"source_session_id,omitempty,omitzero"`
@@ -8462,6 +8525,9 @@ type SeedReadyMessage struct {
 
 	// Plot corresponds to the JSON schema field "plot".
 	Plot *string `json:"plot,omitempty,omitzero"`
+
+	// ProfileID corresponds to the JSON schema field "profile_id".
+	ProfileID *string `json:"profile_id,omitempty,omitzero"`
 
 	// SourceSessionID corresponds to the JSON schema field "source_session_id".
 	SourceSessionID *string `json:"source_session_id,omitempty,omitzero"`
@@ -8516,6 +8582,9 @@ type SeedResumeMessage struct {
 
 	// SeedID corresponds to the JSON schema field "seed_id".
 	SeedID string `json:"seed_id"`
+
+	// SourceSessionID corresponds to the JSON schema field "source_session_id".
+	SourceSessionID *string `json:"source_session_id,omitempty,omitzero"`
 }
 
 type SeedResumeResultMessage struct {
@@ -8553,16 +8622,25 @@ type SeedReviewCancelMessage struct {
 	// Cmd corresponds to the JSON schema field "cmd".
 	Cmd string `json:"cmd"`
 
+	// ProfileID corresponds to the JSON schema field "profile_id".
+	ProfileID *string `json:"profile_id,omitempty,omitzero"`
+
 	// RequestID corresponds to the JSON schema field "request_id".
 	RequestID *string `json:"request_id,omitempty,omitzero"`
 
 	// ReviewID corresponds to the JSON schema field "review_id".
 	ReviewID string `json:"review_id"`
+
+	// SourceSessionID corresponds to the JSON schema field "source_session_id".
+	SourceSessionID *string `json:"source_session_id,omitempty,omitzero"`
 }
 
 type SeedReviewDraftMessage struct {
 	// Cmd corresponds to the JSON schema field "cmd".
 	Cmd string `json:"cmd"`
+
+	// ProfileID corresponds to the JSON schema field "profile_id".
+	ProfileID *string `json:"profile_id,omitempty,omitzero"`
 
 	// RequestID corresponds to the JSON schema field "request_id".
 	RequestID string `json:"request_id"`
@@ -8572,6 +8650,9 @@ type SeedReviewDraftMessage struct {
 
 	// SeedID corresponds to the JSON schema field "seed_id".
 	SeedID string `json:"seed_id"`
+
+	// SourceSessionID corresponds to the JSON schema field "source_session_id".
+	SourceSessionID *string `json:"source_session_id,omitempty,omitzero"`
 }
 
 type SeedReviewDraftResultMessage struct {
@@ -8595,6 +8676,9 @@ type SeedReviewKeepMessage struct {
 	// Cmd corresponds to the JSON schema field "cmd".
 	Cmd string `json:"cmd"`
 
+	// ProfileID corresponds to the JSON schema field "profile_id".
+	ProfileID *string `json:"profile_id,omitempty,omitzero"`
+
 	// RequestID corresponds to the JSON schema field "request_id".
 	RequestID *string `json:"request_id,omitempty,omitzero"`
 
@@ -8603,6 +8687,9 @@ type SeedReviewKeepMessage struct {
 
 	// SeedID corresponds to the JSON schema field "seed_id".
 	SeedID string `json:"seed_id"`
+
+	// SourceSessionID corresponds to the JSON schema field "source_session_id".
+	SourceSessionID *string `json:"source_session_id,omitempty,omitzero"`
 }
 
 type SeedReviewResult struct {
@@ -8626,6 +8713,9 @@ type SeedReviewResultMessage struct {
 	// Operation corresponds to the JSON schema field "operation".
 	Operation string `json:"operation"`
 
+	// ProfileID corresponds to the JSON schema field "profile_id".
+	ProfileID string `json:"profile_id"`
+
 	// RequestID corresponds to the JSON schema field "request_id".
 	RequestID string `json:"request_id"`
 
@@ -8640,6 +8730,9 @@ type SeedReviewRetryMessage struct {
 	// Cmd corresponds to the JSON schema field "cmd".
 	Cmd string `json:"cmd"`
 
+	// ProfileID corresponds to the JSON schema field "profile_id".
+	ProfileID *string `json:"profile_id,omitempty,omitzero"`
+
 	// RequestID corresponds to the JSON schema field "request_id".
 	RequestID *string `json:"request_id,omitempty,omitzero"`
 
@@ -8648,25 +8741,40 @@ type SeedReviewRetryMessage struct {
 
 	// SeedID corresponds to the JSON schema field "seed_id".
 	SeedID string `json:"seed_id"`
+
+	// SourceSessionID corresponds to the JSON schema field "source_session_id".
+	SourceSessionID *string `json:"source_session_id,omitempty,omitzero"`
 }
 
 type SeedReviewShowMessage struct {
 	// Cmd corresponds to the JSON schema field "cmd".
 	Cmd string `json:"cmd"`
 
+	// ProfileID corresponds to the JSON schema field "profile_id".
+	ProfileID *string `json:"profile_id,omitempty,omitzero"`
+
 	// RequestID corresponds to the JSON schema field "request_id".
 	RequestID *string `json:"request_id,omitempty,omitzero"`
 
 	// ReviewID corresponds to the JSON schema field "review_id".
 	ReviewID *string `json:"review_id,omitempty,omitzero"`
+
+	// SourceSessionID corresponds to the JSON schema field "source_session_id".
+	SourceSessionID *string `json:"source_session_id,omitempty,omitzero"`
 }
 
 type SeedReviewStartMessage struct {
 	// Cmd corresponds to the JSON schema field "cmd".
 	Cmd string `json:"cmd"`
 
+	// ProfileID corresponds to the JSON schema field "profile_id".
+	ProfileID *string `json:"profile_id,omitempty,omitzero"`
+
 	// RequestID corresponds to the JSON schema field "request_id".
 	RequestID *string `json:"request_id,omitempty,omitzero"`
+
+	// SourceSessionID corresponds to the JSON schema field "source_session_id".
+	SourceSessionID *string `json:"source_session_id,omitempty,omitzero"`
 }
 
 type SeedSearchHit struct {
@@ -8686,6 +8794,9 @@ type SeedSearchMessage struct {
 
 	// Limit corresponds to the JSON schema field "limit".
 	Limit *int `json:"limit,omitempty,omitzero"`
+
+	// ProfileID corresponds to the JSON schema field "profile_id".
+	ProfileID *string `json:"profile_id,omitempty,omitzero"`
 
 	// Query corresponds to the JSON schema field "query".
 	Query string `json:"query"`
@@ -8725,6 +8836,9 @@ type SeedSendToChiefMessage struct {
 
 	// Guidance corresponds to the JSON schema field "guidance".
 	Guidance *string `json:"guidance,omitempty,omitzero"`
+
+	// ProfileID corresponds to the JSON schema field "profile_id".
+	ProfileID *string `json:"profile_id,omitempty,omitzero"`
 
 	// RequestID corresponds to the JSON schema field "request_id".
 	RequestID *string `json:"request_id,omitempty,omitzero"`
@@ -8773,6 +8887,9 @@ type SeedSendToChiefResultMessage struct {
 type SeedShowMessage struct {
 	// Cmd corresponds to the JSON schema field "cmd".
 	Cmd string `json:"cmd"`
+
+	// ProfileID corresponds to the JSON schema field "profile_id".
+	ProfileID *string `json:"profile_id,omitempty,omitzero"`
 
 	// SeedID corresponds to the JSON schema field "seed_id".
 	SeedID string `json:"seed_id"`
@@ -8825,6 +8942,9 @@ type SeedTransitionMessage struct {
 
 	// Member corresponds to the JSON schema field "member".
 	Member *string `json:"member,omitempty,omitzero"`
+
+	// ProfileID corresponds to the JSON schema field "profile_id".
+	ProfileID *string `json:"profile_id,omitempty,omitzero"`
 
 	// Reason corresponds to the JSON schema field "reason".
 	Reason *string `json:"reason,omitempty,omitzero"`
@@ -8899,6 +9019,9 @@ type SeedVar struct {
 type SeedWatchMessage struct {
 	// Cmd corresponds to the JSON schema field "cmd".
 	Cmd string `json:"cmd"`
+
+	// ProfileID corresponds to the JSON schema field "profile_id".
+	ProfileID *string `json:"profile_id,omitempty,omitzero"`
 
 	// SeedID corresponds to the JSON schema field "seed_id".
 	SeedID string `json:"seed_id"`

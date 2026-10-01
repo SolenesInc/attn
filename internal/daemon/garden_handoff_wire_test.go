@@ -11,7 +11,7 @@ import (
 )
 
 func TestAHandoffReachesTheNextTenderAndOnlyTheTender(t *testing.T) {
-	w := newWorld(t, fakeagent.Claude)
+	w := newCrewWorld(t, fakeagent.Claude)
 	app, cli := w.App(), w.Client()
 	panes := spawnPanes(w, app, w.Path("predecessor"), w.Path("successor"))
 	predecessor, successor := panes[0], panes[1].session

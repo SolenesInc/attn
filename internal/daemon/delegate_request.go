@@ -16,6 +16,7 @@ var errLegacyDelegationRequest = errors.New("this pending delegation used the re
 type resolvedDelegationLaunch struct {
 	Cmd                string
 	RequestID          string
+	ProfileID          *string
 	SourceSessionID    *string
 	Assignment         protocol.DelegateAssignment
 	Checkout           *protocol.DelegateCheckout
@@ -45,7 +46,7 @@ type resolvedDelegationLaunch struct {
 
 func resolveLaunchInput(msg *protocol.DelegateMessage) resolvedDelegationLaunch {
 	return resolvedDelegationLaunch{
-		RequestID: msg.RequestID, SourceSessionID: msg.SourceSessionID,
+		ProfileID: msg.ProfileID, RequestID: msg.RequestID, SourceSessionID: msg.SourceSessionID,
 		Assignment: msg.Assignment, Checkout: msg.Checkout, Cwd: msg.Cwd,
 		Agent: msg.Agent, Label: msg.Label, YoloMode: msg.YoloMode,
 		Model: msg.Model, Effort: msg.Effort, AllowWorktreeReuse: msg.AllowWorktreeReuse,
@@ -57,7 +58,7 @@ func resolveLaunchInput(msg *protocol.DelegateMessage) resolvedDelegationLaunch 
 func (msg *resolvedDelegationLaunch) preferenceRequest() *protocol.DelegateMessage {
 	return &protocol.DelegateMessage{
 		Cmd: protocol.CmdDelegate, RequestID: msg.RequestID,
-		SourceSessionID: msg.SourceSessionID, Assignment: msg.Assignment,
+		ProfileID: msg.ProfileID, SourceSessionID: msg.SourceSessionID, Assignment: msg.Assignment,
 		Cwd: msg.Cwd, Checkout: msg.Checkout, Agent: msg.Agent, Label: msg.Label,
 		YoloMode: msg.YoloMode, Model: msg.Model, Effort: msg.Effort,
 		AllowWorktreeReuse: msg.AllowWorktreeReuse, Role: msg.Role, Choice: msg.Choice,

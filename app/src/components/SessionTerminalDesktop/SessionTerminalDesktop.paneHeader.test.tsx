@@ -337,7 +337,8 @@ describe('SessionTerminalDesktop pane header', () => {
       }],
       gardenSeeds: [{
         id: 's-crew11', title: 'Member work', body: '', status: 'growing', step_slug: 'member-work',
-        planter_session: '', planter_member: '', tender_session: '', tender_member: 'fern',
+        profile_id: 'profile-default',
+    planter_session: '', planter_member: '', tender_session: '', tender_member: 'fern',
         edges: [], ready: false, template: false, gate: false, vars: [], rev: 1,
         created_at: '2026-09-04T12:00:00Z', updated_at: '2026-09-04T12:00:00Z',
         state_changed_at: '2026-09-04T12:00:00Z', state_changed_at_exact: true,

@@ -11,12 +11,15 @@ import (
 	"github.com/victorarias/attn/internal/store"
 )
 
-func (d *Daemon) bindDelegationAssignmentProtected(_ foregroundCleanupProtection, operationID, sessionID, plannerSessionID, parentSeedID, brief, name, seedID string, observed garden.Dispatch, fromChief, createSeed bool) (string, error) {
+func (d *Daemon) bindDelegationAssignmentProtected(_ foregroundCleanupProtection, operationID, sessionID, plannerSessionID, parentSeedID, brief, name, seedID string, observed garden.Dispatch, fromChief, createSeed bool, profileID ...string) (string, error) {
 	if err := d.requireHome(garden.Surface); err != nil {
 		return "", err
 	}
-	if bound, ok := d.gardenDispatchCrown(sessionID); ok {
-		dispatch, _ := d.gardenDispatch(sessionID)
+	if dispatch, found := d.gardenDispatch(sessionID); found && activeDispatchCrown(dispatch) != "" {
+		bound := activeDispatchCrown(dispatch)
+		if err := d.requireSeedInProfile(bound, firstProfile(profileID), false); err != nil {
+			return "", err
+		}
 		if strings.TrimSpace(dispatch.OperationID) == strings.TrimSpace(operationID) || operationID == "" {
 			return bound, nil
 		}
@@ -45,7 +48,7 @@ func (d *Daemon) bindDelegationAssignmentProtected(_ foregroundCleanupProtection
 		if strings.TrimSpace(seedID) == "" {
 			return "", fmt.Errorf("new delegation seed identity was not reserved")
 		}
-		seed = garden.Seed{ID: seedID, Title: title, Body: body, Status: garden.StatusPlanted, StepSlug: garden.StepSlug(title), PlanterSession: plannerSessionID, PlanterMember: d.resolveTenderMember("", plannerSessionID), Edges: []garden.Edge{}, Vars: []garden.Var{}}
+		seed = garden.Seed{ProfileID: firstProfile(profileID), ID: seedID, Title: title, Body: body, Status: garden.StatusPlanted, StepSlug: garden.StepSlug(title), PlanterSession: plannerSessionID, PlanterMember: d.resolveTenderMember("", plannerSessionID), Edges: []garden.Edge{}, Vars: []garden.Var{}}
 		if parent := strings.TrimSpace(parentSeedID); parent != "" {
 			seed.Edges = append(seed.Edges, garden.Edge{Kind: garden.EdgePartOf, To: parent})
 		}
@@ -63,6 +66,11 @@ func (d *Daemon) bindDelegationAssignmentProtected(_ foregroundCleanupProtection
 			return "", fmt.Errorf("seed %s has active holder %s; use --handover to transfer it", seed.ID, holder.DisplayName())
 		}
 		seedExpected = doc.Rev
+	}
+	var profileErr error
+	seed.ProfileID, profileErr = d.seedBirthProfile(seed)
+	if profileErr != nil {
+		return "", profileErr
 	}
 	previousStatus := seed.Status
 	seed, err = garden.Transition(seed, garden.VerbTend, garden.Ask{Actor: garden.Tender{Session: sessionID}}, func(string) bool { return false })
@@ -148,8 +156,8 @@ func (d *Daemon) bindDelegationAssignmentProtected(_ foregroundCleanupProtection
 	return seed.ID, nil
 }
 
-func (d *Daemon) bindDelegationSeedProtected(protection foregroundCleanupProtection, sessionID, plannerSessionID, brief, name, crown string, observed garden.Dispatch, fromChief bool) (string, error) {
-	seedID, err := d.bindDelegatedSeedProtected(protection, sessionID, plannerSessionID, brief, name, crown, observed, fromChief)
+func (d *Daemon) bindDelegationSeedProtected(protection foregroundCleanupProtection, sessionID, plannerSessionID, brief, name, crown string, observed garden.Dispatch, fromChief bool, profileID string) (string, error) {
+	seedID, err := d.bindDelegatedSeedProtected(protection, sessionID, plannerSessionID, brief, name, crown, observed, fromChief, profileID)
 	switch {
 	case err == nil:
 		d.logf("delegate: bound seed %q to session %s", seedID, sessionID)
@@ -159,7 +167,7 @@ func (d *Daemon) bindDelegationSeedProtected(protection foregroundCleanupProtect
 	return seedID, nil
 }
 
-func (d *Daemon) bindDelegatedSeedProtected(protection foregroundCleanupProtection, sessionID, plannerSessionID, brief, name, crown string, observed garden.Dispatch, fromChief bool) (string, error) {
+func (d *Daemon) bindDelegatedSeedProtected(protection foregroundCleanupProtection, sessionID, plannerSessionID, brief, name, crown string, observed garden.Dispatch, fromChief bool, profileID string) (string, error) {
 	if err := d.requireHome(garden.Surface); err != nil {
 		return "", err
 	}
@@ -171,7 +179,7 @@ func (d *Daemon) bindDelegatedSeedProtected(protection foregroundCleanupProtecti
 	}
 	seedID := strings.TrimSpace(crown)
 	if seedID == "" {
-		seed, err := d.plantDelegatedSeedProtected(protection, sessionID, plannerSessionID, brief, name)
+		seed, err := d.plantDelegatedSeedProtected(protection, sessionID, plannerSessionID, brief, name, profileID)
 		if err != nil {
 			return "", err
 		}
@@ -185,7 +193,7 @@ func (d *Daemon) bindDelegatedSeedProtected(protection foregroundCleanupProtecti
 	return seedID, nil
 }
 
-func (d *Daemon) plantDelegatedSeedProtected(protection foregroundCleanupProtection, sessionID, plannerSessionID, brief, name string) (garden.Seed, error) {
+func (d *Daemon) plantDelegatedSeedProtected(protection foregroundCleanupProtection, sessionID, plannerSessionID, brief, name, profileID string) (garden.Seed, error) {
 	title := strings.TrimSpace(name)
 	if title == "" {
 		title = "delegated work"
@@ -199,6 +207,7 @@ func (d *Daemon) plantDelegatedSeedProtected(protection foregroundCleanupProtect
 		return garden.Seed{}, err
 	}
 	seed := garden.Seed{
+		ProfileID:      profileID,
 		Title:          title,
 		Body:           body,
 		Status:         garden.StatusPlanted,

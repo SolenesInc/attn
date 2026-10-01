@@ -1246,6 +1246,7 @@ model DelegateCheckout {
 }
 
 model DelegateMessage {
+  profile_id?: string;
   cmd: "delegate";
   request_id: string; // Stable caller-supplied idempotency key for one logical delegation
   source_session_id?: string;
@@ -1277,6 +1278,8 @@ model SeedHandoverRequest {
 }
 
 model DelegateStatusMessage {
+  profile_id?: string;
+  source_session_id?: string;
   cmd: "delegate_status";
   id: string; // Request id or daemon-issued operation id
 }
@@ -2678,6 +2681,7 @@ model OpenMarkdownResultMessage {
 }
 
 model OpenSeedMessage {
+  "profile_id"?: string;
   cmd: "open_seed";
   seed_id: string;
   session_id?: string;
@@ -4804,6 +4808,7 @@ model DocSubscriptionEndedMessage {
 // of it moves yet: `tender`, `edges`, `template`, `gate` and `vars` are written
 // and returned, and the slices that give them meaning add behavior, not fields.
 model Seed {
+  "profile_id": string;
   "id": string;
   "title": string;
   // Markdown. On a crown this is the plan itself.
@@ -4930,6 +4935,8 @@ model SeedPlotProgress {
 // Plant a seed. Planting costs one line: the daemon already knows who is
 // asking, and the garden is one space — plots are its only grouping.
 model SeedPlantMessage {
+  "profile_id"?: string;
+
   "cmd": "seed_plant";
   "source_session_id"?: string;
   "title": string;
@@ -4952,6 +4959,8 @@ model SeedPlantResult {
 // children's sequencing edges. Validation is all-before-anything — a payload
 // that cannot be a plot is refused before one seed is written.
 model SeedPlotMessage {
+  "profile_id"?: string;
+
   "cmd": "seed_plot";
   "source_session_id"?: string;
   "member"?: string;
@@ -4976,6 +4985,8 @@ model SeedPlotResult {
 // List the garden, newest first. One space, no scope: plots group, `show`
 // drills.
 model SeedListMessage {
+  "profile_id"?: string;
+
   "cmd": "seed_list";
   "source_session_id"?: string;
   // Only the open seeds whose log has not moved for the window — a query for
@@ -5000,6 +5011,8 @@ model SeedListResult {
 // across the whole garden, closed seeds included: "was this already done or
 // abandoned" is as much the question as "is someone on it".
 model SeedSearchMessage {
+  "profile_id"?: string;
+
   "cmd": "seed_search";
   "source_session_id"?: string;
   // Whitespace-separated terms. A seed matches when one field — its title, its
@@ -5031,6 +5044,8 @@ model SeedSearchResult {
 }
 
 model SeedShowMessage {
+  "profile_id"?: string;
+
   "cmd": "seed_show";
   // The reading session. When present, showing the seed consumes its pending
   // bell for this reader and reports its effective watch coverage.
@@ -5071,6 +5086,9 @@ model SeedShowResult {
 // The daemon re-reads on a revision conflict so a concurrent tend/park is
 // preserved rather than overwritten by the editor's older snapshot.
 model SeedEditMessage {
+  "profile_id"?: string;
+  "source_session_id"?: string;
+
   "cmd": "seed_edit";
   "seed_id": string;
   "body": string;
@@ -5084,6 +5102,9 @@ model SeedEditResult {
 // garden_seeds_updated carries the live seed for immediate body/tender updates;
 // clients also re-read this model for the ledger and bounded-snapshot fallback.
 model SeedDocumentGetMessage {
+  "profile_id"?: string;
+  "source_session_id"?: string;
+
   "cmd": "seed_document_get";
   "seed_id": string;
   "request_id": string;
@@ -5126,6 +5147,8 @@ model SeedArtifact {
 // destination. Source and destination paths are absolute so the owning daemon,
 // never a caller's cwd, decides which file is mutated.
 model SeedArtifactTransferMessage {
+  "profile_id"?: string;
+
   "cmd": "seed_artifact_transfer";
   "request_id"?: string;
   "source_session_id"?: string;
@@ -5168,6 +5191,9 @@ model SeedArtifactTransferResultMessage {
 // returns bounded bytes; `link` returns only safe document/image targets;
 // `artifact` accepts any regular managed file for explicit row actions.
 model SeedArtifactTargetMessage {
+  "profile_id"?: string;
+  "source_session_id"?: string;
+
   "cmd": "seed_artifact_target";
   "request_id": string;
   "seed_id": string;
@@ -5206,6 +5232,9 @@ model SeedRelation {
 // relation — an edge onto a seed that is not planted, a second crown, a cycle —
 // naming both seeds and the edge to remove.
 model SeedLinkMessage {
+  "profile_id"?: string;
+  "source_session_id"?: string;
+
   "cmd": "seed_link";
   "seed_id": string;
   // blocks | part-of.
@@ -5226,6 +5255,8 @@ model SeedLinkResult {
 // asking, so the common form takes no flags at all: the whole garden, unless
 // the calling session was dispatched at a crown, and then that plot.
 model SeedReadyMessage {
+  "profile_id"?: string;
+
   "cmd": "seed_ready";
   "source_session_id"?: string;
   // A crown: the answer is that plot's seeds.
@@ -5255,6 +5286,8 @@ model SeedReadyResult {
 // machine: the daemon reads the seed, checks the move against the state it is
 // actually in, and refuses by name — the seed, its state, and the way out.
 model SeedTransitionMessage {
+  "profile_id"?: string;
+
   "cmd": "seed_transition";
   "source_session_id"?: string;
   // Set by a WebSocket caller, which correlates the answer by request_id; the
@@ -5344,6 +5377,8 @@ model SeedNote {
 }
 
 model SeedNoteMessage {
+  "profile_id"?: string;
+
   "cmd": "seed_note";
   "source_session_id"?: string;
   // Set by a WebSocket caller, as on seed_transition.
@@ -5379,6 +5414,8 @@ model SeedNoteResultMessage {
 
 // The whole log, newest first — what `show`'s bounded list points at.
 model SeedNotesMessage {
+  "profile_id"?: string;
+
   "cmd": "seed_notes";
   // Reading the log consumes this session's pending bell for the seed.
   "source_session_id"?: string;
@@ -5394,6 +5431,8 @@ model SeedNotesResult {
 // Add or remove one session's ordinary watch on a seed. The watch survives
 // daemon restarts and session state changes; unwatch is the exact way out.
 model SeedWatchMessage {
+  "profile_id"?: string;
+
   "cmd": "seed_watch";
   "source_session_id": string;
   "seed_id": string;
@@ -5417,6 +5456,8 @@ model SeedWatchResult {
 // profile_arrangement_changed broadcasts. An untended seed refuses by name —
 // there is nobody to reopen.
 model SeedResumeMessage {
+  "source_session_id"?: string;
+
   "cmd": "seed_resume";
   "request_id"?: string;
   "seed_id": string;
@@ -5447,6 +5488,8 @@ model SeedResumeResultMessage {
 // The optional guidance is the user's exception to the saved placement, not a
 // replacement for the seed body or log.
 model SeedSendToChiefMessage {
+  "profile_id"?: string;
+
   "cmd": "seed_send_to_chief";
   "request_id"?: string;
   "source_session_id"?: string;
@@ -5474,10 +5517,9 @@ model SeedSendToChiefResultMessage {
   "result"?: SeedSendToChiefResult;
 }
 
-// The whole garden, re-pushed whenever a seed changes. Clients filter it
-// themselves: the panel's scope is a view, and a client that switches profiles
-// must not have to ask the daemon again.
+// The selected profile's garden, replaced on profile switches and seed changes.
 model GardenSeedsUpdatedMessage {
+  profile_id: string;
   event: "garden_seeds_updated";
   seeds: Seed[];
   // How many seeds the garden holds. Equal to `seeds`'s length until the
@@ -5530,6 +5572,7 @@ model GardenReviewItem {
 }
 
 model GardenReviewRun {
+  "profile_id": string;
   "id": string;
   "candidate_ids": string[];
   "recipe": GardenReviewRecipe;
@@ -5552,11 +5595,17 @@ model SeedReviewActionContext {
 }
 
 model SeedReviewStartMessage {
+  "profile_id"?: string;
+  "source_session_id"?: string;
+
   "cmd": "seed_review_start";
   "request_id"?: string;
 }
 
 model SeedReviewShowMessage {
+  "profile_id"?: string;
+  "source_session_id"?: string;
+
   "cmd": "seed_review_show";
   "request_id"?: string;
   // Omitted reads the newest run.
@@ -5564,12 +5613,18 @@ model SeedReviewShowMessage {
 }
 
 model SeedReviewCancelMessage {
+  "profile_id"?: string;
+  "source_session_id"?: string;
+
   "cmd": "seed_review_cancel";
   "request_id"?: string;
   "review_id": string;
 }
 
 model SeedReviewRetryMessage {
+  "profile_id"?: string;
+  "source_session_id"?: string;
+
   "cmd": "seed_review_retry";
   "request_id"?: string;
   "review_id": string;
@@ -5577,6 +5632,9 @@ model SeedReviewRetryMessage {
 }
 
 model SeedReviewKeepMessage {
+  "profile_id"?: string;
+  "source_session_id"?: string;
+
   "cmd": "seed_review_keep";
   "request_id"?: string;
   "seed_id": string;
@@ -5584,6 +5642,9 @@ model SeedReviewKeepMessage {
 }
 
 model SeedReviewDraftMessage {
+  "profile_id"?: string;
+  "source_session_id"?: string;
+
   "cmd": "seed_review_draft";
   "request_id": string;
   "seed_id": string;
@@ -5597,6 +5658,7 @@ model SeedReviewResult {
 
 // Correlated answer for every app-origin Review garden operation.
 model SeedReviewResultMessage {
+  "profile_id": string;
   "event": "seed_review_result";
   "request_id": string;
   "operation": string;

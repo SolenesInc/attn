@@ -21,8 +21,10 @@ func DefaultSocketPath() string {
 }
 
 type Client struct {
-	socketPath string
-	dial       func() (net.Conn, error)
+	gardenProfile string
+	gardenSession string
+	socketPath    string
+	dial          func() (net.Conn, error)
 }
 
 type automationResult struct {
@@ -153,7 +155,34 @@ func (c *Client) connect() (net.Conn, error) {
 	return conn, nil
 }
 
+func (c *Client) WithGardenProfile(profileID, sessionID string) *Client {
+	scoped := *c
+	scoped.gardenProfile, scoped.gardenSession = profileID, sessionID
+	return &scoped
+}
+
 func (c *Client) send(msg interface{}) (*protocol.Response, error) {
+	if c.gardenProfile != "" || c.gardenSession != "" {
+		raw, err := json.Marshal(msg)
+		if err != nil {
+			return nil, err
+		}
+		var fields map[string]any
+		if err := json.Unmarshal(raw, &fields); err != nil {
+			return nil, err
+		}
+		cmd, _ := fields["cmd"].(string)
+		if strings.HasPrefix(cmd, "seed_") || cmd == protocol.CmdOpenSeed || cmd == protocol.CmdDelegateStatus || cmd == protocol.CmdDelegate {
+			if fields["profile_id"] == nil || fields["profile_id"] == "" {
+				fields["profile_id"] = c.gardenProfile
+			}
+			if cmd != protocol.CmdOpenSeed && (fields["source_session_id"] == nil || fields["source_session_id"] == "") {
+				fields["source_session_id"] = c.gardenSession
+			}
+			msg = fields
+		}
+	}
+
 	conn, err := c.connect()
 	if err != nil {
 		return nil, err
@@ -642,6 +671,14 @@ func (c *Client) DelegationStatus(id string) (*protocol.DelegationOperation, err
 }
 
 func (c *Client) Delegate(request protocol.DelegateMessage) (*protocol.DelegateResult, error) {
+	profileID, sessionID := c.gardenProfile, c.gardenSession
+	if request.ProfileID != nil {
+		profileID = *request.ProfileID
+	}
+	if request.SourceSessionID != nil {
+		sessionID = *request.SourceSessionID
+	}
+	c = c.WithGardenProfile(profileID, sessionID)
 	op, err := c.StartDelegation(request)
 	if err != nil {
 		return nil, err
