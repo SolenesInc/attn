@@ -268,7 +268,15 @@ func (d *Daemon) claimCrewBinding(memberName, sessionID string) (string, error) 
 			}
 			return member.ID, nil
 		}
-		if d.crewBindingLive(member) {
+		live := d.crewBindingLive(member)
+		process, err := d.store.ExternalProcess(member.BindingSession)
+		if err == nil && process != nil {
+			live, err = d.externalSessionAlive(member.BindingSession)
+		}
+		if err != nil {
+			return "", fmt.Errorf("check %s's bound session: %w", crew.DisplayName(member.ID), err)
+		}
+		if live {
 			return "", fmt.Errorf("%s is already awake in session %s; two agents with the same identity never run at once — wait for that day to end, or wake another member",
 				crew.DisplayName(member.ID), shortSessionID(member.BindingSession))
 		}

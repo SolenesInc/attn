@@ -16,6 +16,7 @@ import (
 	"github.com/victorarias/attn/internal/crew"
 	"github.com/victorarias/attn/internal/docstore"
 	"github.com/victorarias/attn/internal/garden"
+	"github.com/victorarias/attn/internal/procreap"
 	"github.com/victorarias/attn/internal/prompts"
 	"github.com/victorarias/attn/internal/protocol"
 	"github.com/victorarias/attn/internal/pty"
@@ -378,6 +379,13 @@ func (d *Daemon) crewSessionActuallyLive(sessionID string) (bool, error) {
 	}
 	provider, ok := d.ptyBackend.(ptybackend.SessionInfoProvider)
 	if !ok {
+		process, err := d.store.ExternalProcess(sessionID)
+		if err != nil {
+			return false, err
+		}
+		if process != nil {
+			return procreap.MatchesProcess(process.Pid, process.StartToken)
+		}
 		return true, nil
 	}
 	info, err := provider.SessionInfo(context.Background(), sessionID)
@@ -385,9 +393,7 @@ func (d *Daemon) crewSessionActuallyLive(sessionID string) (bool, error) {
 		return info.Running, nil
 	}
 	if errors.Is(err, pty.ErrSessionNotFound) || errors.Is(err, os.ErrNotExist) {
-		// Bare CLI wrappers own their registered days until they unregister; recovered managed days stay unmarked.
-		_, external := d.externalRegistrations.Load(sessionID)
-		return external, nil
+		return d.externalSessionAlive(sessionID)
 	}
 	return false, err
 }
@@ -651,4 +657,18 @@ func resolveCrewDir(dir string) (string, error) {
 		return "", fmt.Errorf("%s is not a directory", absolute)
 	}
 	return absolute, nil
+}
+
+func (d *Daemon) externalSessionAlive(sessionID string) (bool, error) {
+	process, err := d.store.ExternalProcess(sessionID)
+	if err != nil || process == nil {
+		return false, err
+	}
+	return procreap.MatchesProcess(process.Pid, process.StartToken)
+}
+
+func (d *Daemon) clearExternalProcess(sessionID string) {
+	if err := d.store.ClearExternalProcess(sessionID); err != nil {
+		d.logf("clear external wrapper identity for %s: %v", sessionID, err)
+	}
 }

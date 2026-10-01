@@ -741,6 +741,11 @@ model ClientHelloMessage {
   client_id?: string;
 }
 
+model ExternalProcess {
+  pid: int32;
+  start_token: string;
+}
+
 model RegisterMessage {
   cmd: "register";
   id: string;
@@ -753,6 +758,7 @@ model RegisterMessage {
   // refuses the whole registration: an unknown name, an outpost daemon, or a
   // member whose day is already live all fail here, before the agent runs.
   member?: string;
+  external_process?: ExternalProcess;
 }
 
 model UnregisterMessage {

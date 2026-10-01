@@ -13,6 +13,7 @@ import (
 	"github.com/google/uuid"
 	"github.com/victorarias/attn/internal/config"
 	"github.com/victorarias/attn/internal/garden"
+	"github.com/victorarias/attn/internal/procreap"
 	"github.com/victorarias/attn/internal/protocol"
 )
 
@@ -205,12 +206,17 @@ func (c *Client) RegisterWithAgent(id, label, dir, agent string) error {
 }
 
 func (c *Client) RegisterAsMember(id, label, dir, agent, member string) error {
+	token, err := procreap.StartToken(os.Getpid())
+	if err != nil {
+		return fmt.Errorf("identify external wrapper: %w", err)
+	}
 	msg := protocol.RegisterMessage{
-		Cmd:         protocol.CmdRegister,
-		ID:          id,
-		Label:       protocol.Ptr(label),
-		Dir:         dir,
-		WorkspaceID: "workspace-" + id,
+		Cmd:             protocol.CmdRegister,
+		ExternalProcess: &protocol.ExternalProcess{Pid: os.Getpid(), StartToken: token},
+		ID:              id,
+		Label:           protocol.Ptr(label),
+		Dir:             dir,
+		WorkspaceID:     "workspace-" + id,
 	}
 	if agent != "" {
 		normalized := protocol.NormalizeSessionAgentString(agent, string(protocol.SessionAgentCodex))
@@ -219,7 +225,7 @@ func (c *Client) RegisterAsMember(id, label, dir, agent, member string) error {
 	if member != "" {
 		msg.Member = protocol.Ptr(member)
 	}
-	_, err := c.send(msg)
+	_, err = c.send(msg)
 	return err
 }
 

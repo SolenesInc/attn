@@ -209,3 +209,32 @@ func waitForGone(pid int, timeout time.Duration) bool {
 	}
 	return !ProcessAlive(pid)
 }
+
+// StartToken identifies a process across PID reuse and machine reboots.
+func StartToken(pid int) (string, error) {
+	return processIdentityToken(pid)
+}
+
+// MatchesProcess excludes exited and zombie processes as well as reused PIDs.
+func MatchesProcess(pid int, token string) (bool, error) {
+	if pid <= 0 || token == "" {
+		return false, nil
+	}
+	if err := syscall.Kill(pid, 0); err != nil {
+		if errors.Is(err, syscall.ESRCH) {
+			return false, nil
+		}
+		return false, err
+	}
+	current, err := StartToken(pid)
+	if errors.Is(err, os.ErrNotExist) || errors.Is(err, syscall.ESRCH) {
+		return false, nil
+	}
+	if err != nil {
+		if errors.Is(syscall.Kill(pid, 0), syscall.ESRCH) {
+			return false, nil
+		}
+		return false, err
+	}
+	return current == token && ProcessAlive(pid), nil
+}
