@@ -99,7 +99,7 @@ export function AppWorkspaces() {
             daemonWorkspaceStateById.get(workspace.id) ??
             terminalStateForWorkspaceSessions(workspace.sessions) ??
             null;
-          if (!workspaceState) {
+          if (!workspaceState || (!workspace.sessions.length && !workspace.hasUnresolvedAgentPanes && !workspace.children.some(child => child.kind === 'tile'))) {
             return null;
           }
           const focusedSessionId =

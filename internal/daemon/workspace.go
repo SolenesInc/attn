@@ -522,7 +522,7 @@ func (d *Daemon) handleUnregisterWorkspace(client *wsClient, msg *protocol.Unreg
 		sort.SliceStable(panes, func(i, j int) bool {
 			return panes[i].CodexResolution == "unresolved" && panes[j].CodexResolution != "unresolved"
 		})
-		if err := d.codexRuntime().closeWorkspaceViews(panes); err != nil {
+		if err := d.codexRuntime().closeWorkspaceViews(panes, memberIDs); err != nil {
 			for sid, teardown := range teardowns {
 				d.cancelSessionTeardown(sid, teardown)
 			}

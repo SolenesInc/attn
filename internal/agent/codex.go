@@ -70,10 +70,10 @@ func (c *Codex) BuildCommand(opts SpawnOpts) *exec.Cmd {
 	}
 
 	overrides := opts.ConfigOverrides
-	if opts.CodexRemote != "" {
-		overrides = nil
-	}
 	for _, override := range overrides {
+		if opts.CodexRemote != "" && !(strings.HasPrefix(override, "projects.") && strings.Contains(override, ".trust_level=")) {
+			continue
+		}
 		if strings.TrimSpace(override) == "" {
 			continue
 		}

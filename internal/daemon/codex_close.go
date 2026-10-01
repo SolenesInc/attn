@@ -341,12 +341,36 @@ func (r *codexRuntime) closeAllOwnerViews(id string, closed store.SessionClose) 
 	return nil
 }
 
-func (r *codexRuntime) closeWorkspaceViews(panes []workspacelayout.Pane) error {
+func (r *codexRuntime) closeWorkspaceViews(panes []workspacelayout.Pane, members []string) error {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	closing := make(map[string]bool)
 	for _, pane := range panes {
 		closing[pane.RuntimeID] = true
+	}
+	hidden := make([]string, 0)
+	for _, id := range members {
+		if !r.d.sharedCodexOwner(id) {
+			continue
+		}
+		hasView := false
+		for _, view := range r.views {
+			if view.Resolution == "resolved" && view.SessionID == id {
+				hasView = true
+			}
+		}
+		if hasView {
+			continue
+		}
+		if err := r.d.sessionCloseError(id); err != nil {
+			return err
+		}
+		for runtimeID, view := range r.views {
+			if !closing[runtimeID] && view.Resolution == "unresolved" {
+				return fmt.Errorf("cannot archive Codex owner %s while view %s has unresolved identity", id, runtimeID)
+			}
+		}
+		hidden = append(hidden, id)
 	}
 	for _, pane := range panes {
 		view, ok := r.views[pane.RuntimeID]
@@ -381,6 +405,15 @@ func (r *codexRuntime) closeWorkspaceViews(panes []workspacelayout.Pane) error {
 			return err
 		}
 	}
+	for _, id := range hidden {
+		if r.d.store.Get(id) == nil {
+			continue
+		}
+		if err := r.closeOwnerLocked(id, store.SessionClose{By: store.SessionClosedByUser}); err != nil {
+			return err
+		}
+	}
+
 	return nil
 }
 

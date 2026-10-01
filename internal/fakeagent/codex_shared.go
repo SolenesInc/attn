@@ -89,6 +89,7 @@ func (s *sharedFakeCodex) serve(w http.ResponseWriter, req *http.Request) {
 func (s *sharedFakeCodex) handle(m codexshared.Message) (any, error) {
 	var p struct {
 		ThreadID string          `json:"threadId"`
+		ViewArgv []string        `json:"fixture_view_argv"`
 		CWD      string          `json:"cwd"`
 		Config   json.RawMessage `json:"config"`
 		Input    []struct {
@@ -152,6 +153,9 @@ func (s *sharedFakeCodex) handle(m codexshared.Message) (any, error) {
 		report.Role = roleAgent
 		report.Pid = os.Getpid()
 		report.Argv = os.Args
+		if len(p.ViewArgv) > 0 {
+			report.Argv = p.ViewArgv
+		}
 		report.Env = c.hooks.env
 		report.AttnSessionID = root.owner
 		if err := control.call(context.Background(), methodLaunched, report, nil); err != nil {
@@ -264,7 +268,7 @@ func runSharedCodexView(cfg config) int {
 		cwd, _ = os.Getwd()
 	}
 	selectRoot := func(method, id string, display bool) error {
-		params := map[string]any{"cwd": cwd}
+		params := map[string]any{"cwd": cwd, "fixture_view_argv": os.Args}
 		if id != "" {
 			params["threadId"] = id
 		}

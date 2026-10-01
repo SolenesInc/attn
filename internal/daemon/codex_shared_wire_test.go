@@ -2,7 +2,9 @@ package daemon_test
 
 import (
 	"encoding/base64"
+	"fmt"
 	"os"
+	"slices"
 	"strconv"
 	"strings"
 	"testing"
@@ -482,5 +484,60 @@ func TestSharedCodexDeletedWorktreeClosesItsOwnerEvenWithAnUnresolvedView(t *tes
 	shown, err := cli.SessionShow(b)
 	if err != nil || shown.Entry.ClosedAt != nil {
 		t.Fatalf("deletion affected the other owner: %+v %v", shown, err)
+	}
+}
+
+func TestSharedCodexWorkspaceCloseIncludesHiddenOwners(t *testing.T) {
+	w := newWorld(t, fakeagent.Codex)
+	app, cli := w.App(), w.Client()
+	sharedCodexSetting(t, app, true)
+	a := w.Spawn(app, fakeagent.Codex, w.Path("hidden-workspace"))
+	w.Launched(a)
+	awaitSharedView(app, a, a)
+	b := w.Spawn(app, fakeagent.Codex, w.Path("other-workspace"))
+	agentB := w.Launched(b)
+	awaitSharedView(app, b, b)
+	app.TypeLine(a, "/agents "+agentB.ConversationID)
+	awaitSharedView(app, a, b)
+	workspace := workspaceIDFor(t, w, w.Path("hidden-workspace"))
+	testworld.Request(app, protocol.UnregisterWorkspaceMessage{Cmd: protocol.CmdUnregisterWorkspace, ID: workspace}, protocol.EventWorkspaceUnregistered, func(e protocol.WorkspaceUnregisteredMessage) bool { return e.Workspace.ID == workspace })
+	awaitClosed(app, a)
+	shown, err := cli.SessionShow(b)
+	if err != nil || shown.Entry.ClosedAt != nil {
+		t.Fatalf("workspace close affected foreign B: %+v %v", shown, err)
+	}
+	app.TypeLine(b, "B continues")
+	if got := agentB.Prompted(); got != "B continues" {
+		t.Fatal(got)
+	}
+}
+
+func TestSharedCodexAutomationPreservesTheNativeTrustOverride(t *testing.T) {
+	w := newWorld(t, fakeagent.Codex)
+	app := w.App()
+	sharedCodexSetting(t, app, true)
+	cwd := w.Path("unattended")
+	if err := os.MkdirAll(cwd, 0755); err != nil {
+		t.Fatal(err)
+	}
+	applyAutomation(t, w.Client(), fmt.Sprintf(`api_version: attn.dev/automations/v1alpha1
+id: shared-check
+name: Shared check
+trigger: {type: manual}
+prompt: Check the build.
+launch: {driver: codex, model: gpt-5.4, effort: high}
+location: {type: directory, path: %q}
+`, cwd))
+	awaitAutomationChanged(app, "shared-check")
+	result := testworld.Request(app, protocol.AutomationRunMessage{Cmd: protocol.CmdAutomationRun, DefinitionID: "shared-check", RequestID: "shared-trust"}, protocol.EventAutomationRunResult, automationAnswer[protocol.AutomationRunResultMessage]("shared-trust"))
+	if !result.Success {
+		t.Fatal(protocol.Deref(result.Error))
+	}
+	id := protocol.Deref(result.Run.SessionID)
+	run := w.Launched(id)
+	directory, _ := flagValue(run.Argv, "-C")
+	trust := fmt.Sprintf(`projects.%s.trust_level="trusted"`, strconv.Quote(directory))
+	if directory == "" || !slices.Contains(run.Argv, trust) || !slices.Contains(run.Argv, "--remote") {
+		t.Fatalf("shared unattended launch dropped trust: %q", run.Argv)
 	}
 }

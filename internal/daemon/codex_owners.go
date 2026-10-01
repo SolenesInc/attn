@@ -127,6 +127,7 @@ func (r *codexRuntime) reserveNativeOwner(v store.CodexView, params map[string]a
 	intent.ChiefOfStaff = false
 	r.d.store.SetLaunchIntent(id, intent)
 	if err := r.d.store.InitializeSessionCostTracking(id); err != nil {
+		r.cleanupReservation(id)
 		return nil, err
 	}
 	r.d.associateSessionWithWorkspace(id, launch.WorkspaceID)
