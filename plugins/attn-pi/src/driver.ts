@@ -1,3 +1,4 @@
+import { resumeAvailable, resumeAvailabilityBatch } from "./sessions";
 import { existsSync } from "node:fs";
 import { randomUUID } from "node:crypto";
 import { NetworkProxy, networkPolicyFrom, type NetworkDecision, type NetworkPolicy, type NetworkRequest } from "../netproxy";
@@ -29,6 +30,10 @@ import {
   piThinkingLevels,
   type ActivePluginRun,
   type DriverRegisterResult,
+  type DriverResumeAvailabilityBatchParams,
+  type DriverResumeAvailabilityBatchResult,
+  type DriverResumeAvailableParams,
+  type DriverResumeAvailableResult,
   type DriverSpawnParams,
   type DriverSpawnResult,
   type PiMetadata,
@@ -125,6 +130,7 @@ export class PiDriver implements RelayDelegate {
       agent: "pi",
       capabilities: {
         resume: true,
+        resume_availability: true,
         initial_prompt: true,
         model_pin: true,
         model_discovery: true,
@@ -190,6 +196,14 @@ export class PiDriver implements RelayDelegate {
     };
   }
 
+  resumeAvailabilityBatch(params: DriverResumeAvailabilityBatchParams): Promise<DriverResumeAvailabilityBatchResult> {
+    return resumeAvailabilityBatch(params, this.env);
+  }
+
+  resumeAvailable(params: DriverResumeAvailableParams): Promise<DriverResumeAvailableResult> {
+    return resumeAvailable(params, this.env);
+  }
+
   async resume(params: DriverSpawnParams): Promise<DriverSpawnResult> {
     const availability = await this.requireAvailability();
     const suitePath = this.requireSuitePath();
@@ -216,6 +230,8 @@ export class PiDriver implements RelayDelegate {
       model: cleanOptional(params.model) ?? previous?.model,
       thinking: thinkingFor(params.effort) ?? previous?.thinking,
     };
+    const stored = await this.resumeAvailable({ cwd: params.cwd, resume_session_id: metadata.pi_session_id });
+    if (!stored.available) throw new Error(stored.reason);
     const run = this.createRun(requireText(params.session_id, "session_id"), requireText(params.run_id, "run_id"), metadata);
     await this.reportMetadata(run);
     return {

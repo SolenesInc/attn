@@ -1,4 +1,4 @@
-export const pluginAPIVersion = 6;
+export const pluginAPIVersion = 7;
 
 export type StableVersion = {
   raw: string;
@@ -84,6 +84,24 @@ export type DriverSpawnParams = {
    * rather than through this session's stored metadata. */
   resume_session_id?: string;
   auto_mode?: unknown;
+};
+
+export type DriverResumeAvailableParams = {
+  cwd: string;
+  resume_session_id: string;
+};
+
+export type DriverResumeAvailabilityBatchParams = {
+  conversations: (DriverResumeAvailableParams & { agent: string })[];
+};
+
+export type DriverResumeAvailabilityBatchResult = {
+  availability: (DriverResumeAvailableParams & DriverResumeAvailableResult & { agent: string })[];
+};
+
+export type DriverResumeAvailableResult = {
+  available: boolean;
+  reason?: string;
 };
 
 export type DriverSpawnResult = {

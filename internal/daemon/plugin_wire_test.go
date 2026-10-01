@@ -16,7 +16,7 @@ import (
 	"github.com/victorarias/attn/internal/testworld"
 )
 
-const pluginWireAPIVersion = 6
+const pluginWireAPIVersion = 7
 
 type pluginWireMessage struct {
 	JSONRPC string           `json:"jsonrpc"`
@@ -190,7 +190,7 @@ func writePluginManifest(t *testing.T, dir, name, script string) {
 	if err := os.MkdirAll(dir, 0o755); err != nil {
 		t.Fatal(err)
 	}
-	manifest := "name = \"" + name + "\"\nversion = \"0.1.0\"\nattn_api_version = 6\n\n[plugin]\nkind = \"executable\"\npath = \"run\"\n"
+	manifest := "name = \"" + name + "\"\nversion = \"0.1.0\"\nattn_api_version = 7\n\n[plugin]\nkind = \"executable\"\npath = \"run\"\n"
 	if err := os.WriteFile(filepath.Join(dir, "attn-plugin.toml"), []byte(manifest), 0o644); err != nil {
 		t.Fatal(err)
 	}
@@ -249,7 +249,7 @@ func TestAPluginHelloConnectsItUntilItHangsUp(t *testing.T) {
 		name, refusal string
 		hello         map[string]any
 	}{
-		{name: "old-provider", refusal: "unsupported attn_api_version 5",
+		{name: "old-provider", refusal: "unsupported attn_api_version 6",
 			hello: pluginHelloParams("old-provider", pluginWireAPIVersion-1, 1)},
 		{name: "unnumbered-provider", refusal: "hello params.generation is required",
 			hello: pluginHelloParams("unnumbered-provider", pluginWireAPIVersion, 0)},
@@ -359,7 +359,7 @@ func TestTheAppSeesBrokenPluginManifestsBesideThePluginsItAccepts(t *testing.T) 
 		t.Fatal(err)
 	}
 	badManifest := filepath.Join(w.Dir, "plugins", "bad-plugin", "attn-plugin.toml")
-	if err := os.WriteFile(badManifest, []byte("name = \"bad-plugin\"\nversion = \"0.1.0\"\nattn_api_version = 6\n"), 0o644); err != nil {
+	if err := os.WriteFile(badManifest, []byte("name = \"bad-plugin\"\nversion = \"0.1.0\"\nattn_api_version = 7\n"), 0o644); err != nil {
 		t.Fatal(err)
 	}
 	writePluginManifest(t, filepath.Join(w.Dir, "plugins", "manual-provider"), "manual/provider", "exit 0")

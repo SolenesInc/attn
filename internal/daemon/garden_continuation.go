@@ -455,6 +455,10 @@ func (d *Daemon) continuationForSeed(seed garden.Seed) *seedContinuation {
 }
 
 func (d *Daemon) continuationForSeedForeground(seed garden.Seed) *seedContinuation {
+	return d.continuationForSeedWithResumeCheck(seed, d.conversationResumable)
+}
+
+func (d *Daemon) continuationForSeedWithResumeCheck(seed garden.Seed, checkResume func(string, string, string) (bool, string)) *seedContinuation {
 	execution, source, ok := d.normalizedSeedContinuation(seed)
 	if !ok {
 		return nil
@@ -511,7 +515,7 @@ func (d *Daemon) continuationForSeedForeground(seed garden.Seed) *seedContinuati
 		continuation.HandoverPlacement = handoverReuseCwd
 		return continuation
 	}
-	if ok, reason := d.conversationResumable(agentName, resumeID); !ok {
+	if ok, reason := checkResume(agentName, resumeID, execution.Cwd); !ok {
 		continuation.ResumeReason = "the original conversation is unavailable: " + reason
 		continuation.HandoverPlacement = handoverReuseCwd
 		return continuation

@@ -23,3 +23,29 @@ pi -e /path/to/attn-pi/security.js
 Without attn there is no daemon config, so there is no approval policy, no
 network proxy and no reviewer. `/security` and its settings file are the whole
 story there.
+
+## Resume availability
+
+Resume and Reopen check that the saved Pi conversation still exists. A missing
+file produces a reason naming the conversation and storage directory. Starting
+fresh remains an explicit action in the session ledger.
+
+The driver advertises `resume_availability` and answers
+`driver.resume_available({conversations: [{agent, cwd, resume_session_id}]})` with
+`{availability: [{agent, cwd, resume_session_id, available, reason?}]}`.
+This read-only check verifies matching-header existence in Pi's cwd directory;
+full transcript integrity is tracked separately. It
+honors `PI_CODING_AGENT_DIR`, `PI_CODING_AGENT_SESSION_DIR`, and project/global
+`sessionDir` settings. Unreadable unrelated session files are skipped, as in Pi discovery. The driver
+checks again before preparing a resume launch. Availability has a dedicated
+ten-second daemon deadline. Garden review sends one batch per plugin per
+capture; Pi scans each resolved directory once, including custom directories
+shared across cwds. Single reads send one conversation. Every new read
+inspects storage again. See the
+[scan receipt](receipts/resume-availability.md). A missing worktree is restored
+before inspecting plugin storage, so project settings are available again;
+failed inspection rolls the recreated worktree back.
+
+The updated Pi plugin uses plugin API 7, so an older daemon rejects it at
+manifest/hello validation. API 7 drivers without `resume_availability` retain
+capability-based resume behavior.

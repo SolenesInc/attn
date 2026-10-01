@@ -3,7 +3,7 @@ import { join } from "node:path";
 import { AttnRPCClient } from "./attn-rpc";
 import { PiDriver } from "./driver";
 import { RelayServer } from "./relay";
-import type { DriverSpawnParams, SessionClosedParams } from "./types";
+import type { DriverResumeAvailabilityBatchParams, DriverSpawnParams, SessionClosedParams } from "./types";
 
 const pluginVersion = "0.2.0";
 
@@ -36,6 +36,7 @@ async function runPlugin(): Promise<void> {
 
   rpc.handle("attn.health", () => driver.health());
   rpc.handle("driver.spawn", (params) => driver.spawn(params as DriverSpawnParams));
+  rpc.handle("driver.resume_available", (params) => driver.resumeAvailabilityBatch(params as DriverResumeAvailabilityBatchParams));
   rpc.handle("driver.resume", (params) => driver.resume(params as DriverSpawnParams));
   rpc.handle("driver.session_closed", (params) => driver.sessionClosed(params as SessionClosedParams));
   rpc.handle("driver.deliver_message", (params) => driver.deliverMessage(params));

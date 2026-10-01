@@ -72,6 +72,7 @@ func TestAPiDriverWithoutResumeIsRefusedANamedConversation(t *testing.T) {
 }
 
 func TestAPiSessionFollowsItsDriversReportsAndResumesItsConversationAfterItExits(t *testing.T) {
+	t.Setenv(fakeagent.PiCapabilitiesEnv, "resume_availability=false")
 	w := newWorld(t, fakeagent.Pi)
 	app := w.App()
 	pluginDriverSettings(app, "pi")

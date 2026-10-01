@@ -182,7 +182,7 @@ func (d *Daemon) decideReopenPlace(
 	hasLaunchIntent bool,
 	gitView reopenGit,
 ) error {
-	conversation, conversationReason := d.reopenConversation(verdict.Execution)
+	conversation, conversationReason := d.reopenConversation(verdict.Execution, verdict.DirectoryState == directoryMissing)
 	if !hasLaunchIntent {
 		conversation = false
 		conversationReason = fmt.Sprintf("session %s has no saved launch contract, so its exact agent configuration cannot be restored", verdict.SessionID)
@@ -313,20 +313,26 @@ func (d *Daemon) branchMerged(sessionID, branch string) bool {
 	return false
 }
 
-func (d *Daemon) reopenConversation(execution garden.Dispatch) (bool, string) {
+func (d *Daemon) reopenConversation(execution garden.Dispatch, directoryMissing bool) (bool, string) {
 	resumeID := strings.TrimSpace(execution.Resume)
 	if resumeID == "" {
 		return false, "no conversation id was saved for this session, so there is nothing to resume"
 	}
-	return d.conversationResumable(strings.TrimSpace(execution.Agent), resumeID)
+	// A missing worktree can hide project storage settings; inspect after recreation.
+	if directoryMissing {
+		if driver, ok := d.ensurePluginRegistry().driver(strings.TrimSpace(execution.Agent)); ok && driver.Capabilities["resume"] && driver.Capabilities["resume_availability"] {
+			return true, ""
+		}
+	}
+	return d.conversationResumable(strings.TrimSpace(execution.Agent), resumeID, execution.Cwd)
 }
 
-func (d *Daemon) conversationResumable(agentName, resumeID string) (bool, string) {
+func (d *Daemon) conversationResumable(agentName, resumeID, cwd string) (bool, string) {
 	if plugin, ok := d.ensurePluginRegistry().driver(agentName); ok {
 		if !plugin.Capabilities["resume"] {
 			return false, fmt.Sprintf("agent %q does not resume conversations, so conversation %s cannot be picked up", agentName, resumeID)
 		}
-		return true, ""
+		return d.pluginConversationResumable(plugin, resumeID, cwd)
 	}
 	driver := agentdriver.Get(agentName)
 	if driver == nil {
@@ -484,6 +490,13 @@ func (d *Daemon) performReopenLocked(
 		return nil, fmt.Errorf("%q is not a reopen action", action)
 	}
 
+	if created != "" && !plan.FreshConversation {
+		execution := verdict.Execution
+		execution.Cwd = plan.Directory
+		if available, reason := d.reopenConversation(execution, false); !available {
+			return nil, rollback.fail(protection, fmt.Errorf("cannot reopen after restoring the worktree: %s", reason))
+		}
+	}
 	outcome, err := d.reopenSessionRuntimeProtected(protection, plan, rollback, nil)
 	if err != nil {
 		return nil, err

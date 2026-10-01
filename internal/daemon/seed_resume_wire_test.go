@@ -2,6 +2,7 @@ package daemon_test
 
 import (
 	"os"
+	"path/filepath"
 	"slices"
 	"strings"
 	"testing"
@@ -11,6 +12,7 @@ import (
 	"github.com/victorarias/attn/internal/fakeagent"
 	"github.com/victorarias/attn/internal/protocol"
 	"github.com/victorarias/attn/internal/testworld"
+	"github.com/victorarias/attn/internal/toolhome"
 )
 
 func TestResumingASeedRelaunchesItsTenderInItsOwnConversation(t *testing.T) {
@@ -210,5 +212,82 @@ func TestAResumeWhoseAgentCannotStartLeavesNoPaneBehind(t *testing.T) {
 	}
 	if after := lifeShow(t, cli, delegated.SeedID).Seed; after.TenderSession != seed.TenderSession || after.Status != seed.Status {
 		t.Errorf("the failed resume changed the seed to %s under %q, want %s under %s", after.Status, after.TenderSession, seed.Status, seed.TenderSession)
+	}
+}
+
+func TestPiResumeAndReopenRequireTheSavedConversation(t *testing.T) {
+	w := newWorld(t, fakeagent.Pi)
+	app, cli := w.App(), w.Client()
+	pluginDriverSettings(app, "pi")
+	delegated := seedResumeDelegate(t, w, fakeagent.Pi, "api")
+	first := w.Launched(delegated.SessionID)
+	close := func() {
+		closePane(app, seedResumePane(t, w, protocol.Deref(delegated.WorkspaceID), delegated.SessionID))
+	}
+	close()
+
+	if got := lifeShow(t, cli, delegated.SeedID).Seed.Continuation; got == nil || !got.ResumeAvailable {
+		t.Fatalf("Pi seed with a stored conversation = %+v, want resume available", got)
+	}
+	if got := seedResumeRequest(app, delegated.SeedID); !got.Success {
+		t.Fatalf("resume stored Pi conversation: %+v", got)
+	}
+	seedResumeContinues(t, w, first, delegated.SessionID)
+	close()
+	if got := reopenOverTheWebSocket(app, delegated.SessionID); !got.Success {
+		t.Fatalf("reopen stored Pi conversation: %+v", got)
+	}
+	seedResumeContinues(t, w, first, delegated.SessionID)
+	close()
+
+	home, err := toolhome.Dir()
+	if err != nil {
+		t.Fatal(err)
+	}
+	files, err := filepath.Glob(filepath.Join(home, ".pi", "agent", "sessions", "*", "*"+first.ConversationID+".jsonl"))
+	if err != nil || len(files) != 1 {
+		t.Fatalf("Pi conversation files = %v, %v", files, err)
+	}
+	if err := os.Remove(files[0]); err != nil {
+		t.Fatal(err)
+	}
+
+	before := lifeShow(t, cli, delegated.SeedID)
+	if got := before.Seed.Continuation; got == nil || got.ResumeAvailable || !strings.Contains(protocol.Deref(got.ResumeReason), "pi's storage") {
+		t.Fatalf("Pi seed after its file was deleted = %+v, want unavailable with storage reason", got)
+	}
+	verdict := reopenVerdict(t, cli, delegated.SessionID)
+	if verdict.Reopenable || !slices.Equal(verdict.Actions, []protocol.SessionReopenAction{protocol.SessionReopenActionStartFreshSamePlace}) {
+		t.Fatalf("Pi reopen after deletion = %+v, want only an explicit fresh start", verdict)
+	}
+	workspaces := seedResumeWorkspaceIDs(w)
+	panes := paneSessions(w)
+	resumed := seedResumeRequest(app, delegated.SeedID)
+	reopened := reopenOverTheWebSocket(app, delegated.SessionID)
+	for name, result := range map[string]struct {
+		success bool
+		reason  string
+	}{
+		"Resume": {resumed.Success, protocol.Deref(resumed.Error)},
+		"Reopen": {reopened.Success, protocol.Deref(reopened.Error)},
+	} {
+		if result.success || !strings.Contains(result.reason, first.ConversationID) || !strings.Contains(result.reason, "pi's storage") {
+			t.Errorf("Pi %s after deletion = %+v, want refusal naming the missing conversation", name, result)
+		}
+	}
+	if after := lifeShow(t, cli, delegated.SeedID); after.Seed.Rev != before.Seed.Rev || after.NotesTotal != before.NotesTotal {
+		t.Errorf("refused Pi resume changed the seed: %+v -> %+v", before, after)
+	}
+	if after := seedResumeWorkspaceIDs(w); !slices.Equal(after, workspaces) {
+		t.Errorf("refusal changed workspaces: %v -> %v", workspaces, after)
+	}
+	if after := paneSessions(w); !slices.Equal(after, panes) {
+		t.Errorf("refusal changed panes: %v -> %v", panes, after)
+	}
+	if got := showSession(t, cli, delegated.SessionID); protocol.Deref(got.ClosedAt) == "" {
+		t.Error("refusal reopened the ledger session")
+	}
+	if _, err := os.Stat(files[0]); !os.IsNotExist(err) {
+		t.Errorf("refusal recreated Pi storage: %v", err)
 	}
 }

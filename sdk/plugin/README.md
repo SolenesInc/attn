@@ -2,6 +2,10 @@
 
 Small TypeScript SDK for attn plugins.
 
+The SDK uses plugin API 7. Declare `attn_api_version = 7` in the plugin manifest
+and run it with a daemon supporting that API. Older API declarations are
+rejected at manifest or handshake validation.
+
 This first cut focuses on the worktree extension path already exercised by attn:
 
 - connect to the attn daemon over its plugin socket

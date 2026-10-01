@@ -15,7 +15,7 @@ import (
 	"time"
 )
 
-const pluginAPIVersion = 6
+const pluginAPIVersion = 7
 const pluginHealthMethod = "attn.health"
 const pluginHealthInterval = 15 * time.Second
 const pluginHealthTimeout = 2 * time.Second

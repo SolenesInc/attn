@@ -19,6 +19,10 @@ import (
 const pluginDriverCallTimeout = 30 * time.Second
 const pluginDeliverMessageTimeout = 15 * time.Second
 
+// Full header scans: 91 real files <=125ms; 10,000 synthetic files across two directories <=7.3s.
+// Receipt: plugins/attn-pi/receipts/resume-availability.md (2026-10-01).
+const pluginResumeAvailabilityTimeout = 10 * time.Second
+
 type pluginDriverRegistration struct {
 	PluginName   string
 	Agent        string
@@ -63,6 +67,28 @@ type pluginDriverSpawnResult struct {
 	Argv []string          `json:"argv"`
 	Env  map[string]string `json:"env,omitempty"`
 	CWD  string            `json:"cwd,omitempty"`
+}
+
+type pluginResumeConversation struct {
+	Agent           string `json:"agent"`
+	CWD             string `json:"cwd"`
+	ResumeSessionID string `json:"resume_session_id"`
+}
+
+type pluginResumeAvailableParams struct {
+	Conversations []pluginResumeConversation `json:"conversations"`
+}
+
+type pluginResumeAvailableResult struct {
+	Availability []struct {
+		pluginResumeConversation
+		pluginResumeAvailability
+	} `json:"availability"`
+}
+
+type pluginResumeAvailability struct {
+	Available bool   `json:"available"`
+	Reason    string `json:"reason,omitempty"`
 }
 
 type pluginReportStateParams struct {
@@ -240,6 +266,7 @@ func normalizePluginAgent(value string) string {
 func validatePluginDriverCapabilities(values map[string]bool) (map[string]bool, error) {
 	allowed := map[string]struct{}{
 		"resume":                 {},
+		"resume_availability":    {},
 		"yolo":                   {},
 		"initial_prompt":         {},
 		"classifier":             {},
@@ -750,6 +777,42 @@ func (d *Daemon) notifyPluginDriverSessionClosed(pluginName, sessionID, runID, r
 		}
 		d.logf("plugin session close notified: plugin=%s session=%s run=%s reason=%s", pluginName, sessionID, runID, params.Reason)
 	})
+}
+
+func (d *Daemon) pluginConversationResumable(reg pluginDriverRegistration, resumeID, cwd string) (bool, string) {
+	if !reg.Capabilities["resume_availability"] {
+		return true, ""
+	}
+	conversation := pluginResumeConversation{Agent: reg.Agent, CWD: cwd, ResumeSessionID: resumeID}
+	result := d.pluginConversationsResumable(reg, []pluginResumeConversation{conversation})[conversation]
+	return result.Available, result.Reason
+}
+
+func (d *Daemon) pluginConversationsResumable(reg pluginDriverRegistration, conversations []pluginResumeConversation) map[pluginResumeConversation]pluginResumeAvailability {
+	ctx, cancel := context.WithTimeout(context.Background(), pluginResumeAvailabilityTimeout)
+	defer cancel()
+	var result pluginResumeAvailableResult
+	err := d.callPlugin(ctx, reg.PluginName, "driver.resume_available", pluginResumeAvailableParams{Conversations: conversations}, &result)
+	reported := make(map[pluginResumeConversation]pluginResumeAvailability, len(result.Availability))
+	for _, answer := range result.Availability {
+		reported[answer.pluginResumeConversation] = answer.pluginResumeAvailability
+	}
+	availability := make(map[pluginResumeConversation]pluginResumeAvailability, len(conversations))
+	for _, conversation := range conversations {
+		answer, found := reported[conversation]
+		switch {
+		case errors.Is(err, context.DeadlineExceeded):
+			answer = pluginResumeAvailability{Reason: fmt.Sprintf("cannot check conversation %s in %s's storage: resume_availability_timeout=%s exceeded; the driver did not answer", conversation.ResumeSessionID, conversation.Agent, pluginResumeAvailabilityTimeout)}
+		case err != nil:
+			answer = pluginResumeAvailability{Reason: fmt.Sprintf("cannot check conversation %s in %s's storage: %v", conversation.ResumeSessionID, conversation.Agent, err)}
+		case !found:
+			answer = pluginResumeAvailability{Reason: fmt.Sprintf("driver %s omitted resume availability for conversation %s in %s", conversation.Agent, conversation.ResumeSessionID, conversation.CWD)}
+		case !answer.Available && strings.TrimSpace(answer.Reason) == "":
+			answer.Reason = fmt.Sprintf("conversation %s is no longer in %s's storage", conversation.ResumeSessionID, conversation.Agent)
+		}
+		availability[conversation] = answer
+	}
+	return availability
 }
 
 func (d *Daemon) resolvePluginDriverLaunch(reg pluginDriverRegistration, params pluginDriverSpawnParams, resume bool) (pluginDriverSpawnResult, error) {

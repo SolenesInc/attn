@@ -67,10 +67,24 @@ func (d *Daemon) captureGardenReview() (gardenReviewCapture, error) {
 	observations := make([]garden.ReviewObservation, 0, len(read.seeds))
 	byID := make(map[string]garden.ReviewObservation, len(read.seeds))
 	chiefAvailable := d.chiefOfStaffSessionID() != ""
+	type pendingInspection struct {
+		seedIndex    int
+		conversation pluginResumeConversation
+	}
+	pending := make(map[string][]pendingInspection)
+	registrations := make(map[string]pluginDriverRegistration)
+	checkResume := func(agentName, resumeID, cwd string) (bool, string) {
+		if reg, ok := d.ensurePluginRegistry().driver(agentName); ok && reg.Capabilities["resume"] && reg.Capabilities["resume_availability"] {
+			pending[reg.PluginName] = append(pending[reg.PluginName], pendingInspection{len(observations), pluginResumeConversation{Agent: agentName, CWD: cwd, ResumeSessionID: resumeID}})
+			registrations[reg.PluginName] = reg
+			return false, ""
+		}
+		return d.conversationResumable(agentName, resumeID, cwd)
+	}
 	for _, seed := range read.seeds {
 		doc := read.docs[seed.ID]
 		lifecycleAt, exact := reviewLifecycleTime(seed, doc)
-		continuation := d.continuationForSeed(seed)
+		continuation := d.continuationForSeedWithResumeCheck(seed, checkResume)
 		directoryState := garden.ReviewDirectoryUnknown
 		resumeAvailable := false
 		handoverAvailable := false
@@ -94,6 +108,31 @@ func (d *Daemon) captureGardenReview() (gardenReviewCapture, error) {
 		}
 		observations = append(observations, observation)
 		byID[seed.ID] = observation
+	}
+
+	type inspectionResult struct {
+		checks       []pendingInspection
+		availability map[pluginResumeConversation]pluginResumeAvailability
+	}
+	results := make(chan inspectionResult, len(pending))
+	for key, checks := range pending {
+		reg := registrations[key]
+		go func() {
+			conversations := make([]pluginResumeConversation, len(checks))
+			for i, check := range checks {
+				conversations[i] = check.conversation
+			}
+			results <- inspectionResult{checks, d.pluginConversationsResumable(reg, conversations)}
+		}()
+	}
+	// Resolve independent plugin checks before any candidate observes availability.
+	for range len(pending) {
+		result := <-results
+		for _, check := range result.checks {
+			observations[check.seedIndex].ResumeAvailable = result.availability[check.conversation].Available
+			observation := observations[check.seedIndex]
+			byID[observation.Seed.ID] = observation
+		}
 	}
 
 	candidates := garden.ReviewCandidates(
