@@ -159,7 +159,7 @@ func (d *Daemon) handleBrowseDirectoryWS(client *wsClient, msg *protocol.BrowseD
 		})
 		return
 	}
-	go func() {
+	d.life.Go("handleBrowseDirectoryWS", func() {
 		dirToQuery, prefix, homePath, err := parseBrowseInput(msg.InputPath)
 		if err != nil {
 			d.sendToClient(client, &protocol.BrowseDirectoryResultMessage{
@@ -212,11 +212,11 @@ func (d *Daemon) handleBrowseDirectoryWS(client *wsClient, msg *protocol.BrowseD
 			HomePath:   protocol.Ptr(homePath),
 			Success:    true,
 		})
-	}()
+	})
 }
 
 func (d *Daemon) handleInspectPathWS(client *wsClient, msg *protocol.InspectPathMessage) {
-	go func() {
+	d.life.Go("handleInspectPathWS", func() {
 		inspection, err := gitValue(context.Background(), d.gitExecution(), gitTask{Kind: gitTaskPicker, Lane: gitInteractive}, func(ctx context.Context, gitClient *git.Client) (*protocol.PathInspection, error) {
 			return inspectPickerPath(ctx, gitClient, msg.Path)
 		})
@@ -239,5 +239,5 @@ func (d *Daemon) handleInspectPathWS(client *wsClient, msg *protocol.InspectPath
 			RequestID:  msg.RequestID,
 			Success:    true,
 		})
-	}()
+	})
 }

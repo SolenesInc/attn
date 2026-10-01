@@ -4,7 +4,7 @@ import "github.com/victorarias/attn/internal/protocol"
 
 func (d *Daemon) handleApprovePRWS(client *wsClient, msg *protocol.ApprovePRMessage) {
 	d.logf("Processing approve for %s", msg.ID)
-	go func() {
+	d.life.Go("handleApprovePRWS", func() {
 		ghClient, repo, number, _, err := d.clientForPRID(msg.ID)
 		if err == nil {
 			err = ghClient.ApprovePR(repo, number)
@@ -22,16 +22,16 @@ func (d *Daemon) handleApprovePRWS(client *wsClient, msg *protocol.ApprovePRMess
 			d.logf("Approve succeeded for %s", msg.ID)
 			d.store.MarkPRApproved(msg.ID)
 			d.store.SetPRHot(msg.ID)
-			go d.fetchPRDetailsImmediate(msg.ID)
+			d.life.Go("fetchPRDetailsImmediate", func() { d.fetchPRDetailsImmediate(msg.ID) })
 		}
 		d.sendToClient(client, result)
 		d.logf("Sent approve result to client")
 		d.RefreshPRs()
-	}()
+	})
 }
 
 func (d *Daemon) handleMergePRWS(client *wsClient, msg *protocol.MergePRMessage) {
-	go func() {
+	d.life.Go("handleMergePRWS", func() {
 		ghClient, repo, number, _, err := d.clientForPRID(msg.ID)
 		if err == nil {
 			err = ghClient.MergePR(repo, number, msg.Method)
@@ -47,7 +47,7 @@ func (d *Daemon) handleMergePRWS(client *wsClient, msg *protocol.MergePRMessage)
 		}
 		d.sendToClient(client, result)
 		d.RefreshPRs()
-	}()
+	})
 }
 
 func (d *Daemon) handleMutePRWS(msg *protocol.MutePRMessage) {
@@ -60,7 +60,7 @@ func (d *Daemon) handleMutePRWS(msg *protocol.MutePRMessage) {
 		d.publishFact(FactPRMuteChanged, msg.ID, nil)
 		if wasMuted {
 			d.store.SetPRHot(msg.ID)
-			go d.fetchPRDetailsImmediate(msg.ID)
+			d.life.Go("fetchPRDetailsImmediate", func() { d.fetchPRDetailsImmediate(msg.ID) })
 			d.publishFact(FactPRHeatChanged, msg.ID, nil)
 		}
 	})
@@ -76,7 +76,7 @@ func (d *Daemon) handleMuteRepoWS(msg *protocol.MuteRepoMessage) {
 		if wasMuted {
 			for _, pr := range d.store.ListPRsByRepo(msg.Repo) {
 				d.store.SetPRHot(pr.ID)
-				go d.fetchPRDetailsImmediate(pr.ID)
+				d.life.Go("fetchPRDetailsImmediate", func() { d.fetchPRDetailsImmediate(pr.ID) })
 				d.publishFact(FactPRHeatChanged, pr.ID, nil)
 			}
 		}
@@ -91,7 +91,7 @@ func (d *Daemon) handleMuteAuthorWS(msg *protocol.MuteAuthorMessage) {
 
 func (d *Daemon) handleRefreshPRsWS(client *wsClient) {
 	d.logf("Refreshing PRs on request")
-	go func() {
+	d.life.Go("handleRefreshPRsWS", func() {
 		err := d.doRefreshPRsWithResult()
 		result := protocol.RefreshPRsResultMessage{
 			Event:   protocol.EventRefreshPRsResult,
@@ -104,12 +104,12 @@ func (d *Daemon) handleRefreshPRsWS(client *wsClient) {
 			d.logf("Refresh PRs succeeded")
 		}
 		d.sendToClient(client, result)
-	}()
+	})
 }
 
 func (d *Daemon) handleFetchPRDetailsWS(client *wsClient, msg *protocol.FetchPRDetailsMessage) {
 	d.logf("Fetching PR details")
-	go func() {
+	d.life.Go("handleFetchPRDetailsWS", func() {
 		updatedPRs, err := d.fetchPRDetailsForID(msg.ID)
 		result := protocol.WebSocketEvent{
 			Event:   protocol.EventFetchPRDetailsResult,
@@ -128,7 +128,7 @@ func (d *Daemon) handleFetchPRDetailsWS(client *wsClient, msg *protocol.FetchPRD
 			d.logf("Fetch PR details succeeded")
 		}
 		d.sendToClient(client, result)
-	}()
+	})
 }
 
 func (d *Daemon) handlePRVisitedWS(msg *protocol.PRVisitedMessage) {
@@ -140,13 +140,13 @@ func (d *Daemon) handlePRVisitedWS(msg *protocol.PRVisitedMessage) {
 			for _, pr := range d.store.ListPRs("") {
 				if pr.Repo == repo {
 					d.store.SetPRHot(pr.ID)
-					go d.fetchPRDetailsImmediate(pr.ID)
+					d.life.Go("fetchPRDetailsImmediate", func() { d.fetchPRDetailsImmediate(pr.ID) })
 					d.publishFact(FactPRHeatChanged, pr.ID, nil)
 				}
 			}
 		} else {
 			d.store.SetPRHot(msg.ID)
-			go d.fetchPRDetailsImmediate(msg.ID)
+			d.life.Go("fetchPRDetailsImmediate", func() { d.fetchPRDetailsImmediate(msg.ID) })
 			d.publishFact(FactPRHeatChanged, msg.ID, nil)
 		}
 	})

@@ -92,6 +92,12 @@ func (l *lifetime) Go(name string, fn func()) bool {
 	return true
 }
 
+// goTransport runs I/O that ends with its peer rather than with the daemon. Stop does not wait for it,
+// so it may touch daemon state only inside life.Hold or life.Do.
+func goTransport(fn func()) {
+	go fn()
+}
+
 // AfterFunc runs fn after delay inside Hold; a timer that fires once the daemon is stopping does nothing.
 func (l *lifetime) AfterFunc(name string, delay time.Duration, fn func()) *time.Timer {
 	return time.AfterFunc(delay, func() {

@@ -943,7 +943,13 @@ func (d *Daemon) handleDelegateWS(client *wsClient, msg *protocol.DelegateMessag
 	operation, err := d.startDelegation(msg)
 	if err == nil {
 		for operation.State == protocol.DelegationOperationStateAccepted || operation.State == protocol.DelegationOperationStatePreparing {
-			time.Sleep(100 * time.Millisecond)
+			// A delegation interrupted by stop stays preparing on purpose; the next daemon resumes it.
+			select {
+			case <-time.After(100 * time.Millisecond):
+			case <-d.life.Done():
+				d.sendCommandError(client, protocol.CmdDelegate, errDaemonStopping.Error())
+				return
+			}
 			operation, err = d.delegationOperation(operation.OperationID)
 			if err != nil {
 				break

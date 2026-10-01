@@ -136,6 +136,8 @@ Follow [Testing](docs/testing.md). In short:
   Derive `turn_owed` from persisted opened/settled timestamps.
 - `internal/jobs` owns background duties and periodic ticks;
   `internal/supervise` owns long-lived daemon children.
+- Goroutines and timers in `internal/daemon` start through `d.life` (`lifetime.go`);
+  `Daemon.stop` waits for them without cancelling. `goTransport` is only for peer I/O.
 - Garden/crew handlers call `Daemon.requireHome` (`internal/enrollment`).
   Outposts own sessions; Garden/crew belong to their home.
 - Crew files are authoritative; the registry records paths. One active session

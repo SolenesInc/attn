@@ -507,7 +507,7 @@ func (d *Daemon) handlePluginClassifyStop(plugin *pluginConnection, msg jsonRPCM
 		if err != nil {
 			verdict = protocol.StateUnknown
 		}
-		_ = plugin.sendContext(d.life.Context(), jsonRPCResult(id, pluginClassifyStopResult{Verdict: verdict}))
+		_ = plugin.send(jsonRPCResult(id, pluginClassifyStopResult{Verdict: verdict}))
 	})
 }
 

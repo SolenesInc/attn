@@ -84,15 +84,15 @@ func (h *wsHub) evict(client *wsClient, reason string) {
 		return
 	}
 	h.rememberEviction(client.ClientID(), record)
-	go client.hangUp(websocket.StatusPolicyViolation, reason, evictionCloseGrace)
+	goTransport(func() { client.hangUp(websocket.StatusPolicyViolation, reason, evictionCloseGrace) })
 }
 
 func (c *wsClient) hangUp(code websocket.StatusCode, reason string, grace time.Duration) {
 	closed := make(chan struct{})
-	go func() {
+	goTransport(func() {
 		defer close(closed)
 		_ = c.conn.Close(code, reason)
-	}()
+	})
 	timer := time.NewTimer(grace)
 	defer timer.Stop()
 	select {

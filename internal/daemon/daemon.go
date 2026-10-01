@@ -968,7 +968,7 @@ func (d *Daemon) Start() error {
 			}
 		}
 
-		go d.handleConnection(conn)
+		goTransport(func() { d.handleConnection(conn) })
 	}
 }
 
@@ -1602,10 +1602,10 @@ func (d *Daemon) stop() {
 	if runner := d.jobQueueRef(); runner != nil {
 		runner.Stop()
 	}
-	d.stopEventBus()
 	if d.hubManager != nil {
 		d.hubManager.Stop()
 	}
+	d.stopEventBus()
 	d.stopInstalledPlugins()
 	d.stopAllTranscriptWatchers()
 	d.stopNudgeCountdowns()
@@ -2432,10 +2432,20 @@ func (d *Daemon) releasePIDLock() {
 
 func (d *Daemon) handleConnection(conn net.Conn) {
 	defer conn.Close()
+	// Stop ends reads on a command socket at once and gives writes the 10s a WebSocket client gets (defaultWSWriteTimeout),
+	// so a finished command still sends its reply but a client that stopped reading cannot hold stop.
+	stopReading := context.AfterFunc(d.life.Context(), func() {
+		_ = conn.SetReadDeadline(time.Now())
+		_ = conn.SetWriteDeadline(time.Now().Add(defaultWSWriteTimeout))
+	})
+	defer stopReading()
 
 	reader := bufio.NewReader(conn)
 	data, err := readInitialSocketFrame(reader, maxInitialSocketFrameBytes)
 	if err != nil {
+		if errors.Is(err, os.ErrDeadlineExceeded) && d.stopping() {
+			err = errDaemonStopping
+		}
 		if !errors.Is(err, io.EOF) {
 			d.sendError(conn, err.Error())
 		}
@@ -2448,6 +2458,8 @@ func (d *Daemon) handleConnection(conn net.Conn) {
 			_ = json.NewEncoder(conn).Encode(jsonRPCFailure(helloID, jsonRPCInvalidRequest, err.Error()))
 			return
 		}
+		// A plugin socket stays open until the plugin shuts down, after the wait, so requests to it finish.
+		stopReading()
 		d.handlePluginConnection(conn, reader, helloID, helloParams)
 		return
 	}
@@ -2457,6 +2469,12 @@ func (d *Daemon) handleConnection(conn net.Conn) {
 		d.sendError(conn, err.Error())
 		return
 	}
+	release, held := d.life.Hold("handleConnection")
+	if !held {
+		d.sendError(conn, errDaemonStopping.Error())
+		return
+	}
+	defer release()
 
 	switch cmd {
 	case protocol.CmdRegister:

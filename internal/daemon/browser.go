@@ -486,6 +486,22 @@ func (d *Daemon) handleRemoteBrowserControl(client *wsClient, msg *protocol.Brow
 	d.sendToClient(client, response)
 }
 
+// failBrowserControlFor answers every request waiting on host once it disconnects, instead of letting each
+// sit out its timeout (20s by default, up to the action's own budget).
+func (d *Daemon) failBrowserControlFor(host *wsClient) {
+	d.browserControlMu.Lock()
+	defer d.browserControlMu.Unlock()
+	for _, pending := range d.browserControl {
+		if pending.host != host {
+			continue
+		}
+		select {
+		case pending.result <- browserControlResult{err: "the in-app browser host disconnected"}:
+		default:
+		}
+	}
+}
+
 func (d *Daemon) handleBrowserControlResult(client *wsClient, msg *protocol.BrowserControlResultMessage) {
 	if !client.IsBrowserHost() {
 		d.sendCommandError(client, protocol.CmdBrowserControlResult, "trusted browser host required")

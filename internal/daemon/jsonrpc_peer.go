@@ -34,10 +34,6 @@ func newJSONRPCPeer(conn net.Conn, reader *bufio.Reader) *jsonrpcPeer {
 	}
 }
 
-func (p *jsonrpcPeer) send(msg jsonRPCMessage) error {
-	return p.sendContext(context.Background(), msg)
-}
-
 func (p *jsonrpcPeer) sendContext(ctx context.Context, msg jsonRPCMessage) error {
 	select {
 	case p.writeGate <- struct{}{}:
