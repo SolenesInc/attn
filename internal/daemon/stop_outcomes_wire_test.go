@@ -92,3 +92,31 @@ func TestStoppingTheDaemonLetsAnAdmittedWorktreeCreationFinish(t *testing.T) {
 		t.Errorf("the worktree did not finish during stop: %v", err)
 	}
 }
+
+func TestStoppingTheDaemonLetsAnAdmittedCloneFinish(t *testing.T) {
+	w := newWorld(t)
+	app := w.App()
+	repo := newRepo(t, "origin")
+	target := w.Path("checkout")
+	gate := newMaintenanceGitGate(t, "clone "+repo+" "+target)
+	release, err := os.OpenFile(gate.released, os.O_RDWR, 0)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer release.Close()
+	gate.arm(t)
+	app.Send(protocol.EnsureRepoMessage{Cmd: protocol.CmdEnsureRepo, CloneURL: repo, TargetPath: target})
+	gate.awaitBlocked(t)
+	finish := w.beginStop(t)
+	gate.release(t)
+	finish()
+	w.start()
+	if got, want := strings.TrimSpace(runGit(t, target, "rev-parse", "HEAD")), strings.TrimSpace(runGit(t, repo, "rev-parse", "HEAD")); got != want {
+		t.Errorf("the admitted clone saved %q, want origin's %q", got, want)
+	}
+	ensured := testworld.Request(w.App(), protocol.EnsureRepoMessage{Cmd: protocol.CmdEnsureRepo, CloneURL: repo, TargetPath: target},
+		protocol.EventEnsureRepoResult, func(r protocol.WebSocketEvent) bool { return protocol.Deref(r.TargetPath) == target })
+	if !protocol.Deref(ensured.Success) || protocol.Deref(ensured.Cloned) {
+		t.Errorf("ensuring the finished clone after restart = %+v, want success using the existing repo", ensured)
+	}
+}
