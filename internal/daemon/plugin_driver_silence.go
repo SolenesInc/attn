@@ -11,12 +11,13 @@ const pluginDriverSilenceGrace = 2 * time.Minute
 
 type pluginDriverSilenceWatch struct {
 	mu     sync.Mutex
+	life   *lifetime
 	armed  map[string]*time.Timer
 	closed bool
 }
 
-func newPluginDriverSilenceWatch() *pluginDriverSilenceWatch {
-	return &pluginDriverSilenceWatch{armed: map[string]*time.Timer{}}
+func newPluginDriverSilenceWatch(life *lifetime) *pluginDriverSilenceWatch {
+	return &pluginDriverSilenceWatch{life: life, armed: map[string]*time.Timer{}}
 }
 
 func (w *pluginDriverSilenceWatch) arm(sessionID string, grace time.Duration, fire func()) {
@@ -28,7 +29,7 @@ func (w *pluginDriverSilenceWatch) arm(sessionID string, grace time.Duration, fi
 	if timer, ok := w.armed[sessionID]; ok {
 		timer.Stop()
 	}
-	w.armed[sessionID] = time.AfterFunc(grace, fire)
+	w.armed[sessionID] = w.life.AfterFunc("pluginDriverSilence", grace, fire)
 }
 
 func (w *pluginDriverSilenceWatch) disarm(sessionID string) bool {
@@ -55,7 +56,7 @@ func (w *pluginDriverSilenceWatch) stop() {
 
 func (d *Daemon) pluginDriverSilence() *pluginDriverSilenceWatch {
 	d.pluginDriverSilenceOnce.Do(func() {
-		d.pluginDriverSilenceWatch = newPluginDriverSilenceWatch()
+		d.pluginDriverSilenceWatch = newPluginDriverSilenceWatch(&d.life)
 	})
 	return d.pluginDriverSilenceWatch
 }

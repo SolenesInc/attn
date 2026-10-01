@@ -42,8 +42,9 @@ func (d *Daemon) repoVisibility(identity string) (string, bool) {
 		if d.repoVisibilityPending == nil {
 			d.repoVisibilityPending = map[string]bool{}
 		}
-		d.repoVisibilityPending[identity] = true
-		go d.lookUpRepoVisibility(identity)
+		if d.life.Go("lookUpRepoVisibility", func() { d.lookUpRepoVisibility(identity) }) {
+			d.repoVisibilityPending[identity] = true
+		}
 	}
 	return "", false
 }

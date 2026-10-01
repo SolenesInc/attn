@@ -430,10 +430,8 @@ func (m *sessionInputModule) scheduleLocked(lane *sessionInputLane, sessionID, k
 	if lane.stopped {
 		return
 	}
-	select {
-	case <-m.daemon.done:
+	if m.daemon.life.Ended() {
 		return
-	default:
 	}
 	if lane.retries == nil {
 		lane.retries = make(map[string]*sessionInputRetry)
@@ -442,7 +440,7 @@ func (m *sessionInputModule) scheduleLocked(lane *sessionInputLane, sessionID, k
 		existing.timer.Stop()
 	}
 	entry := &sessionInputRetry{resend: resend}
-	entry.timer = time.AfterFunc(after, func() { m.fireRetry(sessionID, key, entry) })
+	entry.timer = m.daemon.life.AfterFunc("sessionInputRetry", after, func() { m.fireRetry(sessionID, key, entry) })
 	lane.retries[key] = entry
 }
 
@@ -466,7 +464,7 @@ func (m *sessionInputModule) pressHeldEnter(sessionID string) {
 	if !lane.heldEnter || lane.stopped {
 		return
 	}
-	ctx := m.daemon.lifetime()
+	ctx := m.daemon.life.Context()
 	if _, blocked := m.promptInTheWayLocked(ctx, sessionID); blocked {
 		m.holdEnterLocked(lane, sessionID, sessionInputComposerRetry)
 		return
@@ -552,7 +550,7 @@ func (m *sessionInputModule) try(ctx context.Context, delivery sessionInputDeliv
 	}
 	ctx, cancel := context.WithCancel(ctx)
 	defer cancel()
-	defer context.AfterFunc(m.daemon.lifetime(), cancel)()
+	defer context.AfterFunc(m.daemon.life.Context(), cancel)()
 	lane := m.lane(delivery.sessionID)
 	lane.mu.Lock()
 	defer lane.mu.Unlock()
@@ -662,7 +660,8 @@ func (m *sessionInputModule) try(ctx context.Context, delivery sessionInputDeliv
 			if attempt.stage != sessionInputTaken {
 				attempt.stage = sessionInputPlaced
 			}
-			go m.daemon.maybeGenerateSessionTitleFromPrompt(delivery.sessionID, delivery.text, delivery.origin)
+			sessionID, text, origin := delivery.sessionID, delivery.text, delivery.origin
+			m.daemon.life.Go("maybeGenerateSessionTitleFromPrompt", func() { m.daemon.maybeGenerateSessionTitleFromPrompt(sessionID, text, origin) })
 			return attemptFromState(delivery.id, attempt)
 		}
 	}

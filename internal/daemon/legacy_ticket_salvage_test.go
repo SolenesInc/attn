@@ -30,7 +30,7 @@ func newLegacySalvageDaemon(t *testing.T) (*Daemon, *store.Store, string) {
 		t.Fatal(err)
 	}
 	t.Cleanup(func() { _ = target.Close() })
-	d := &Daemon{store: target, dataRoot: dataRoot, done: make(chan struct{})}
+	d := &Daemon{store: target, dataRoot: dataRoot}
 	d.legacyTicketRecoveryFinishOnce.Do(func() {})
 	return d, target, dataRoot
 }

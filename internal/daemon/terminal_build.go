@@ -33,7 +33,9 @@ func (d *Daemon) handleTerminalBuildChanged(sessionID, workerFormat string) {
 	}
 	d.logf("terminal build: session=%s worker=%q daemon=%s; upgrading in place",
 		sessionID, workerFormat, buildinfo.SnapshotFormat)
-	go d.upgradeStaleWorker(sessionID, upgrader)
+	if !d.life.Go("upgradeStaleWorker", func() { d.upgradeStaleWorker(sessionID, upgrader) }) {
+		d.releaseWorkerUpgrade(sessionID)
+	}
 }
 
 func (d *Daemon) claimWorkerUpgrade(sessionID string) bool {

@@ -502,13 +502,13 @@ func (d *Daemon) handlePluginClassifyStop(plugin *pluginConnection, msg jsonRPCM
 	}
 	session := d.store.Get(params.SessionID)
 	id := msg.ID
-	go func() {
+	d.life.Go("classifyPluginStop", func() {
 		verdict, err := d.runClassifier(session, text, 30*time.Second)
 		if err != nil {
 			verdict = protocol.StateUnknown
 		}
-		_ = plugin.send(jsonRPCResult(id, pluginClassifyStopResult{Verdict: verdict}))
-	}()
+		_ = plugin.sendContext(d.life.Context(), jsonRPCResult(id, pluginClassifyStopResult{Verdict: verdict}))
+	})
 }
 
 func validatePluginReportedState(params pluginReportStateParams) error {
@@ -740,7 +740,7 @@ func (d *Daemon) notifyPluginDriverSessionClosed(pluginName, sessionID, runID, r
 		ExitCode:  exitCode,
 		Signal:    strings.TrimSpace(signal),
 	}
-	go func() {
+	d.life.Go("notifyPluginSessionClosed", func() {
 		ctx, cancel := context.WithTimeout(context.Background(), pluginDriverCallTimeout)
 		defer cancel()
 		var result pluginDriverSessionClosedResult
@@ -749,7 +749,7 @@ func (d *Daemon) notifyPluginDriverSessionClosed(pluginName, sessionID, runID, r
 			return
 		}
 		d.logf("plugin session close notified: plugin=%s session=%s run=%s reason=%s", pluginName, sessionID, runID, params.Reason)
-	}()
+	})
 }
 
 func (d *Daemon) resolvePluginDriverLaunch(reg pluginDriverRegistration, params pluginDriverSpawnParams, resume bool) (pluginDriverSpawnResult, error) {

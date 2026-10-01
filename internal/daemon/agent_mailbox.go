@@ -173,12 +173,7 @@ func (d *Daemon) armAgentMailboxDoorbellLocked(sessionID string, state *agentMai
 		after = d.agentMailboxCooldown()
 	}
 	var timer *time.Timer
-	timer = time.AfterFunc(after, func() {
-		select {
-		case <-d.done:
-			return
-		default:
-		}
+	timer = d.life.AfterFunc("agentMailboxDoorbell", after, func() {
 		d.agentMailboxMu.Lock()
 		current := d.agentMailboxDoorbells[sessionID]
 		if current != state || state.retry != timer || state.delivering || !state.unread {
@@ -232,7 +227,7 @@ func (d *Daemon) seedQueuedAgentMailboxItems() {
 	}
 	for _, recipient := range recipients {
 		select {
-		case <-d.done:
+		case <-d.life.Done():
 			return
 		default:
 		}

@@ -97,7 +97,7 @@ func (d *Daemon) reopenBranchSharedCalls() *sharedCalls[reopenBranchKey, branchI
 	d.reopenGitMu.Lock()
 	defer d.reopenGitMu.Unlock()
 	if d.reopenBranches == nil {
-		d.reopenBranches = newSharedCalls[reopenBranchKey, branchInspection](context.Background())
+		d.reopenBranches = newSharedCalls[reopenBranchKey, branchInspection](&d.life, "reopenBranch")
 	}
 	return d.reopenBranches
 }

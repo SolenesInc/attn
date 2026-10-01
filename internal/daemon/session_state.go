@@ -145,7 +145,7 @@ func (d *Daemon) applyState(change sessionStateChange) bool {
 		d.broadcastSessionStateChanged(change.sessionID)
 	}
 	if ringMailbox != nil {
-		go ringMailbox()
+		d.life.Go("ringMailbox", ringMailbox)
 	}
 	if _, resolved := change.cause.(resolverObservation); !resolved {
 		d.resolveSoon(change.sessionID)

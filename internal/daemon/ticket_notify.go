@@ -166,7 +166,8 @@ func (d *Daemon) syncNudgeForState(sessionID, state string) {
 		d.deliveryMu.Unlock()
 		return
 	}
-	go d.notifyUnreadTicketSession(sessionID, time.Now())
+	now := time.Now()
+	d.life.Go("notifyUnreadTicketSession", func() { d.notifyUnreadTicketSession(sessionID, now) })
 }
 
 func (d *Daemon) notifyUnreadTicketSession(sessionID string, now time.Time) {

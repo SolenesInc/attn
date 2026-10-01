@@ -120,10 +120,14 @@ func (d *Daemon) agentSupportsChiefReload(agent string) bool {
 
 func (d *Daemon) reloadSessionAgent(sessionID string) {
 	sessionID = strings.TrimSpace(sessionID)
-	if sessionID == "" || d.ptyBackend == nil || d.store == nil || !d.durableWork.enter() {
+	if sessionID == "" || d.ptyBackend == nil || d.store == nil {
 		return
 	}
-	defer d.durableWork.leave()
+	release, held := d.life.Hold("reloadSessionAgent")
+	if !held {
+		return
+	}
+	defer release()
 	lock := d.sessionLifecycleLockFor(sessionID)
 	lock.Lock()
 	defer lock.Unlock()
@@ -251,7 +255,7 @@ func (d *Daemon) executePreparedSessionReload(sessionID string, opts ptybackend.
 	d.sessionInputs().forgetSession(sessionID)
 	d.recordPlacedInputOwed(sessionID, false)
 
-	time.AfterFunc(reloadStuckFlagGrace, func() { d.clearReloading(sessionID) })
+	d.life.AfterFunc("clearReloading", reloadStuckFlagGrace, func() { d.clearReloading(sessionID) })
 	intent := launchIntentFromSpawnOptions(opts, d.isChiefOfStaffSession(sessionID))
 	if prior, ok := d.store.LaunchIntent(sessionID); ok {
 		intent.AutoMode = prior.AutoMode
@@ -410,7 +414,8 @@ func (p *preparedPluginReload) commit() error {
 	}
 	p.completed = true
 	if exit := p.d.finishPluginSessionLaunch(p.sessionID, true); exit != nil {
-		go p.d.handlePTYExit(*exit)
+		info := *exit
+		p.d.life.Go("handlePTYExit", func() { p.d.handlePTYExit(info) })
 	}
 	if oldRun.RunID != "" && oldRun.RunID != p.runID {
 		p.d.notifyPluginDriverSessionClosed(oldRun.PluginName, p.sessionID, oldRun.RunID, "reloaded", nil, "")

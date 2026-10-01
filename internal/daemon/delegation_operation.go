@@ -43,7 +43,8 @@ func (d *Daemon) startDelegationForeground(msg *protocol.DelegateMessage) (*prot
 			return nil, store.ErrDelegationRequestConflict
 		}
 		if existing.Operation.State == protocol.DelegationOperationStateAccepted || existing.Operation.State == protocol.DelegationOperationStatePreparing {
-			go d.runDelegationOperation(existing.Operation.OperationID)
+			operationID := existing.Operation.OperationID
+			d.life.Go("runDelegationOperation", func() { d.runDelegationOperation(operationID) })
 		}
 		return &existing.Operation, nil
 	} else if !errors.Is(lookupErr, sql.ErrNoRows) {
@@ -97,7 +98,8 @@ func (d *Daemon) startDelegationForeground(msg *protocol.DelegateMessage) (*prot
 		return nil, err
 	}
 	if claimed || record.Operation.State == protocol.DelegationOperationStateAccepted || record.Operation.State == protocol.DelegationOperationStatePreparing {
-		go d.runDelegationOperation(record.Operation.OperationID)
+		operationID := record.Operation.OperationID
+		d.life.Go("runDelegationOperation", func() { d.runDelegationOperation(operationID) })
 	}
 	return &record.Operation, nil
 }
@@ -109,13 +111,14 @@ func (d *Daemon) runDelegationOperation(id string) {
 	defer d.endDelegationRun(id)
 	select {
 	case <-d.recoverySettledSignal():
-	case <-d.done:
+	case <-d.life.Done():
 		return
 	}
-	if !d.durableWork.enter() {
+	release, held := d.life.Hold("runDelegationOperation")
+	if !held {
 		return
 	}
-	defer d.durableWork.leave()
+	defer release()
 	_ = d.worktreeMaintenance.ProtectFromAutomaticCleanup(context.Background(), func(protection foregroundCleanupProtection) error {
 		d.runDelegationOperationProtected(protection, id)
 		return nil
@@ -223,7 +226,7 @@ func (d *Daemon) persistDelegationTerminal(id string, state protocol.DelegationO
 			d.logf("persist terminal delegation operation %s: %v", id, err)
 		}
 		select {
-		case <-d.done:
+		case <-d.life.Done():
 			return
 		case <-time.After(delay):
 			if delay < 5*time.Second {
@@ -293,7 +296,8 @@ func (d *Daemon) resumePendingDelegations() {
 		return
 	}
 	for i := range records {
-		go d.runDelegationOperation(records[i].Operation.OperationID)
+		operationID := records[i].Operation.OperationID
+		d.life.Go("runDelegationOperation", func() { d.runDelegationOperation(operationID) })
 	}
 }
 

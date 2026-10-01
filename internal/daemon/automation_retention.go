@@ -54,7 +54,7 @@ func (d *Daemon) runAutomationRetentionSweep() {
 	defer ticker.Stop()
 	for {
 		select {
-		case <-d.done:
+		case <-d.life.Done():
 			return
 		case <-ticker.C:
 			d.automationRetentionSweepPass(time.Now())

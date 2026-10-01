@@ -402,7 +402,7 @@ func (d *Daemon) executeSpawn(req *spawnRequest, plan *spawnPlan) *spawnOutcome 
 	}
 	if plan.spawnOpts.InitialPromptFile != "" {
 		plan.cleanupInitialPromptOnReturn = false
-		time.AfterFunc(5*time.Minute, plan.cleanupInitialPrompt)
+		d.life.AfterFunc("cleanupInitialPrompt", initialPromptCleanupAfter, plan.cleanupInitialPrompt)
 	}
 	return &spawnOutcome{}
 }

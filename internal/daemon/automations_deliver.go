@@ -42,14 +42,8 @@ func (d *Daemon) handleAutomationDeliveryError(run *store.AutomationRun, deliver
 	failed, failErr := d.failAutomationRun(run, deliveryErr)
 	return failed, errors.Join(deliveryErr, failErr)
 }
-func (d *Daemon) stopping() bool {
-	select {
-	case <-d.done:
-		return true
-	default:
-		return false
-	}
-}
+func (d *Daemon) stopping() bool { return d.life.Ended() }
+
 func (d *Daemon) failAutomationRun(run *store.AutomationRun, deliveryErr error) (*store.AutomationRun, error) {
 	now := time.Now()
 	var persistErr error

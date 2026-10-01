@@ -88,10 +88,11 @@ func pullRequestAutomationInput(host, owner, repository string, snapshot *github
 }
 
 func (d *Daemon) observeGitHubReviewRequests(host string, prs []*protocol.PR, observedAt time.Time) {
-	if !d.durableWork.enter() {
+	release, held := d.life.Hold("observeGitHubReviewRequests")
+	if !held {
 		return
 	}
-	defer d.durableWork.leave()
+	defer release()
 	definitions, err := d.store.ListAutomationDefinitions()
 	if err != nil {
 		d.logf("automation GitHub observation list definitions: %v", err)
@@ -139,11 +140,10 @@ func (d *Daemon) observeGitHubReviewRequests(host string, prs []*protocol.PR, ob
 			d.logf("automation GitHub observation reconcile %s: %v", definition.ID, err)
 			continue
 		}
-		if len(candidates) > 0 && d.durableWork.enter() {
-			go func() {
-				defer d.durableWork.leave()
+		if len(candidates) > 0 {
+			d.life.Go("deliverGitHubReviewRequests", func() {
 				d.deliverGitHubReviewRequests(host, client, definition, spec, candidates, bySubject, observedAt)
-			}()
+			})
 		}
 	}
 }

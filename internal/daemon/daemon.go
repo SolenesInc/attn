@@ -128,7 +128,7 @@ type Daemon struct {
 	crewLifecycleState                *crewLifecycleMemo
 	crewMemoOnce                      sync.Once
 	crewCharterMu                     sync.Mutex
-	done                              chan struct{}
+	life                              lifetime
 	stopOnce                          sync.Once
 	logger                            *logging.Logger
 	debugLogging                      bool
@@ -163,7 +163,7 @@ type Daemon struct {
 	watchersMu                        sync.Mutex
 	transcriptWatch                   map[string]*transcriptWatcher
 	pluginUsageWatch                  map[string]*pluginUsageWatcher
-	watcherRuns                       sync.WaitGroup
+	finalUsage                        []func()
 	transcriptWatcherSessionLookup    func(string) *protocol.Session
 	transcriptResumeLookup            func(protocol.SessionAgent, string) string
 	classifiedMu                      sync.Mutex
@@ -202,10 +202,6 @@ type Daemon struct {
 	spawnLocks                        map[string]*spawnLock
 	sessionInputOnce                  sync.Once
 	sessionInputState                 *sessionInputModule
-	lifetimeOnce                      sync.Once
-	lifetimeCtx                       context.Context
-	endLifetime                       context.CancelFunc
-	durableWork                       workGate
 	agentMailboxMu                    sync.Mutex
 	agentMailboxDoorbells             map[string]*agentMailboxDoorbellState
 	agentMailboxCooldownOverride      time.Duration
@@ -309,7 +305,6 @@ type Daemon struct {
 	browserControl   map[string]browserControlPending
 
 	lastBackupMu sync.Mutex
-	maintenance  sync.WaitGroup
 	lastBackupAt time.Time
 
 	workflowBroadcastMu    sync.Mutex
@@ -573,7 +568,6 @@ func New(socketPath string) *Daemon {
 		store:               sessionStore,
 		wsHub:               newWSHub(),
 		presentSince:        time.Now(),
-		done:                make(chan struct{}),
 		logger:              logger,
 		debugLogging:        logger != nil && logger.DebugEnabled(),
 		ghRegistry:          github.NewClientRegistry(),
@@ -616,7 +610,6 @@ func NewForTesting(socketPath string) *Daemon {
 		store:               store.New(),
 		wsHub:               newWSHub(),
 		presentSince:        time.Now(),
-		done:                make(chan struct{}),
 		logger:              nil,
 		ghRegistry:          github.NewClientRegistry(),
 		hubManager:          nil,
@@ -835,7 +828,8 @@ func (d *Daemon) Start() error {
 		)
 	}
 
-	go d.warmLoginShellEnvCache()
+	d.sweepStaleInitialPrompts(time.Now())
+	d.life.Go("warmLoginShellEnvCache", d.warmLoginShellEnvCache)
 
 	d.setRecovering(true)
 	defer func() {
@@ -858,9 +852,9 @@ func (d *Daemon) Start() error {
 
 	d.wsHub.logf = d.logf
 
-	go d.startWorkflowBroadcastLoop(d.doneContext())
+	d.life.Go("startWorkflowBroadcastLoop", func() { d.startWorkflowBroadcastLoop(d.life.Context()) })
 
-	go d.runMarkdownContentWatcher(d.done)
+	d.life.Go("runMarkdownContentWatcher", func() { d.runMarkdownContentWatcher(d.life.Done()) })
 
 	if hooks, ok := d.ptyBackend.(ptybackend.LifecycleHooks); ok {
 		hooks.SetExitHandler(func(info ptybackend.ExitInfo) { d.handlePTYExit(info) })
@@ -872,28 +866,29 @@ func (d *Daemon) Start() error {
 		d.logf("%v", err)
 		return err
 	}
-	go d.runHTTPServer(d.httpListener)
+	httpListener := d.httpListener
+	d.life.Go("runHTTPServer", func() { d.runHTTPServer(httpListener) })
 	d.maybeStartDiagServer()
 	d.removeLegacyEmbeddedTailscaleState()
-	go d.ensureTailscaleServeFromSettingsAndBroadcast()
-	d.hubManager.Start(d.doneContext())
+	d.life.Go("ensureTailscaleServeFromSettingsAndBroadcast", d.ensureTailscaleServeFromSettingsAndBroadcast)
+	d.hubManager.Start(d.life.Context())
 
 	githubHostsReady := make(chan struct{})
-	go func() {
+	d.life.Go("refreshGitHubHosts", func() {
 		defer close(githubHostsReady)
 		if err := d.refreshGitHubHosts(); err != nil {
 			d.logf("Initial GitHub host discovery failed: %v", err)
 		}
-		go d.pollPRs()
-		go d.refreshGitHubHostsLoop()
-	}()
+		d.life.Go("pollPRs", d.pollPRs)
+		d.life.Go("refreshGitHubHostsLoop", d.refreshGitHubHostsLoop)
+	})
 	recoveryStartedAt := time.Now()
 
-	go d.monitorBranches()
+	d.life.Go("monitorBranches", d.monitorBranches)
 
-	go d.runTicketReconcileSweep()
+	d.life.Go("runTicketReconcileSweep", d.runTicketReconcileSweep)
 
-	go d.runModelCaptureLoop()
+	d.life.Go("runModelCaptureLoop", d.runModelCaptureLoop)
 
 	if err := d.startJobQueue(); err != nil {
 		return err
@@ -908,21 +903,20 @@ func (d *Daemon) Start() error {
 	d.startPermanentMaintenance()
 
 	d.watchRecoveredLaunches()
-	go func() {
+	d.life.Go("startupRecovery", func() {
 		pausepoint.At(pausepoint.DaemonStartupRecovery)
-		if !d.durableWork.enter() {
+		if d.stopping() {
 			d.logf("startup recovery skipped: the daemon is stopping; the next daemon recovers")
 			return
 		}
-		defer d.durableWork.leave()
 		d.performStartupPTYRecovery(previousRunSessions, recoveryStartedAt)
 		if d.stopping() {
 			return
 		}
 		d.resolveDue(time.Now())
-		go d.runSessionResolver()
+		d.life.Go("runSessionResolver", d.runSessionResolver)
 		if _, routed := d.ptyBackend.(*ptybackend.MigratingBackend); routed {
-			go d.validateSharedPTYHostAfterRecovery()
+			d.life.Go("validateSharedPTYHostAfterRecovery", d.validateSharedPTYHostAfterRecovery)
 		} else {
 			d.validateSharedPTYHostAfterRecovery()
 		}
@@ -941,24 +935,24 @@ func (d *Daemon) Start() error {
 		} else {
 			d.seedQueuedAgentMailboxItems()
 		}
-		if !recoverAutomationsAfterGitHubReady(githubHostsReady, d.done, d.recoverAutomations) {
+		if !recoverAutomationsAfterGitHubReady(githubHostsReady, d.life.Done(), d.recoverAutomations) {
 			return
 		}
 		d.setRecovering(false)
 		d.resumePendingDelegations()
-	}()
+	})
 
 	d.signalStarted()
-	go func() {
+	d.life.Go("reconcileSeedArtifactObservations", func() {
 		if err := d.reconcileSeedArtifactObservations(); err != nil {
 			d.logf("Garden seed artifact startup reconciliation incomplete: %v", err)
 		}
-	}()
+	})
 	startSucceeded = true
 
 	for {
 		select {
-		case <-d.done:
+		case <-d.life.Done():
 			return nil
 		default:
 		}
@@ -966,7 +960,7 @@ func (d *Daemon) Start() error {
 		conn, err := listener.Accept()
 		if err != nil {
 			select {
-			case <-d.done:
+			case <-d.life.Done():
 				return nil
 			default:
 				d.logf("accept error: %v", err)
@@ -1138,6 +1132,10 @@ func (d *Daemon) reconcileStartupWorkerSessions(recoveryReport ptybackend.Recove
 	allowIdleDemotion := recoverErr == nil && recoveryReport.Missing == 0 && recoveryReport.Failed == 0
 	if !allowIdleDemotion {
 		for attempt := 1; attempt <= startupRecoveryRetryMax; attempt++ {
+			// A recovery cut short would read as no live PTYs; stop leaves reconciliation to the next daemon.
+			if d.stopping() {
+				return
+			}
 			retryReport, retryErr := d.recoverPTYBackend(5 * time.Second)
 			if retryErr == nil && retryReport.Missing == 0 && retryReport.Failed == 0 {
 				recoveryReport = retryReport
@@ -1432,7 +1430,9 @@ func (d *Daemon) reconcileSessionsWithWorkerBackendState(ctx context.Context, al
 }
 
 func (d *Daemon) scheduleDeferredWorkerReconciliation(previousRunSessions map[string]struct{}, recoveryStartedAt time.Time) {
-	go d.runDeferredWorkerReconciliation(deferredRecoveryMaxAttempts, deferredRecoveryRetryInterval, previousRunSessions, recoveryStartedAt)
+	d.life.Go("runDeferredWorkerReconciliation", func() {
+		d.runDeferredWorkerReconciliation(deferredRecoveryMaxAttempts, deferredRecoveryRetryInterval, previousRunSessions, recoveryStartedAt)
+	})
 }
 
 func (d *Daemon) runDeferredWorkerReconciliation(maxAttempts int, retryInterval time.Duration, previousRunSessions map[string]struct{}, recoveryStartedAt time.Time) {
@@ -1445,13 +1445,13 @@ func (d *Daemon) runDeferredWorkerReconciliation(maxAttempts int, retryInterval 
 
 	for attempt := 1; attempt <= maxAttempts; attempt++ {
 		select {
-		case <-d.done:
+		case <-d.life.Done():
 			return
 		default:
 		}
 		if attempt > 1 && retryInterval > 0 {
 			select {
-			case <-d.done:
+			case <-d.life.Done():
 				return
 			case <-time.After(retryInterval):
 			}
@@ -1569,24 +1569,9 @@ func (d *Daemon) Stop() {
 	d.stopOnce.Do(d.stop)
 }
 
-func (d *Daemon) lifetime() context.Context {
-	d.lifetimeOnce.Do(func() {
-		d.lifetimeCtx, d.endLifetime = context.WithCancel(context.Background())
-		select {
-		case <-d.done:
-			d.endLifetime()
-		default:
-		}
-	})
-	return d.lifetimeCtx
-}
-
 func (d *Daemon) stop() {
 	d.log("daemon stopping")
-	close(d.done)
-	d.durableWork.refuse()
-	d.lifetime()
-	d.endLifetime()
+	d.life.end()
 	if d.listener != nil {
 		d.listener.Close()
 		d.listener = nil
@@ -1594,9 +1579,20 @@ func (d *Daemon) stop() {
 	}
 	d.closeGitExecution(ErrGitExecutorClosed)
 	d.wsHub.closeAll()
+	if d.httpServer != nil {
+		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+		defer cancel()
+		d.httpServer.Shutdown(ctx)
+	}
+	if d.httpListener != nil {
+		d.httpListener.Close()
+	}
+	if d.diagServer != nil {
+		_ = d.diagServer.Close()
+	}
 	// Work begun before the stop finishes; later exits and failures are the teardown's, not outcomes.
 	// PTYs shut next so no real exit lands between the drain and the shutdown.
-	d.durableWork.close()
+	d.life.wait(d.logf)
 	if d.ptyBackend != nil {
 		_ = d.ptyBackend.Shutdown(context.Background())
 	}
@@ -1616,18 +1612,6 @@ func (d *Daemon) stop() {
 	d.stopAgentMailboxDoorbells()
 	d.pluginDriverSilence().stop()
 	d.stopAutoSettleTimers()
-	if d.httpServer != nil {
-		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
-		defer cancel()
-		d.httpServer.Shutdown(ctx)
-	}
-	if d.httpListener != nil {
-		d.httpListener.Close()
-	}
-	if d.diagServer != nil {
-		_ = d.diagServer.Close()
-	}
-	d.maintenance.Wait()
 	// Store.Close drains connections and checkpoints the WAL so attn.db alone holds every commit.
 	if d.store != nil {
 		if err := d.store.Close(); err != nil {
@@ -1642,65 +1626,13 @@ func (d *Daemon) stop() {
 
 var errDaemonStopping = errors.New("the daemon is stopping; retry once it is back")
 
-// workGate is durable work that Daemon.stop waits for before the store closes.
-type workGate struct {
-	mu     sync.Mutex
-	closed bool
-	active sync.WaitGroup
-}
-
-func (g *workGate) enter() bool {
-	g.mu.Lock()
-	defer g.mu.Unlock()
-	if g.closed {
-		return false
-	}
-	g.active.Add(1)
-	return true
-}
-
-func (g *workGate) leave() { g.active.Done() }
-
-// durably runs write inside the durable-work gate; false means the daemon is stopping and write did not run.
-func (g *workGate) durably(write func()) bool {
-	if !g.enter() {
-		return false
-	}
-	defer g.leave()
-	write()
-	return true
-}
-
-// refuse turns away new work; close also waits for the work already inside.
-func (g *workGate) refuse() {
-	g.mu.Lock()
-	g.closed = true
-	g.mu.Unlock()
-}
-
-func (g *workGate) close() {
-	g.refuse()
-	g.active.Wait()
-}
-
-func (d *Daemon) doneContext() context.Context {
-	ctx, cancel := context.WithCancel(context.Background())
-	go func() {
-		select {
-		case <-d.done:
-			cancel()
-		case <-ctx.Done():
-		}
-	}()
-	return ctx
-}
-
 func (d *Daemon) handlePTYExit(info ptybackend.ExitInfo) bool {
-	if !d.durableWork.enter() {
+	release, held := d.life.Hold("handlePTYExit")
+	if !held {
 		d.logf("pty exit of %s during daemon stop is not an outcome; the next daemon recovers the session", info.ID)
 		return false
 	}
-	defer d.durableWork.leave()
+	defer release()
 	if d.consumeReloading(info.ID) {
 		d.logf("suppressing exit for reloading session %s (runtime replaced in place)", info.ID)
 		return false
@@ -1778,10 +1710,14 @@ func (d *Daemon) removePTYSession(sessionID string) error {
 	if err == nil || errors.Is(err, pty.ErrSessionNotFound) || errors.Is(err, os.ErrNotExist) {
 		return nil
 	}
-	go func() {
+	d.life.Go("removePTYSession", func() {
 		backoff := 250 * time.Millisecond
 		for i := 0; i < 4; i++ {
-			time.Sleep(backoff)
+			select {
+			case <-time.After(backoff):
+			case <-d.life.Done():
+				return
+			}
 			ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
 			retryErr := d.ptyBackend.Remove(ctx, sessionID)
 			cancel()
@@ -1791,7 +1727,7 @@ func (d *Daemon) removePTYSession(sessionID string) error {
 			backoff *= 2
 		}
 		d.logf("pty backend remove still failing after retries for %s: %v", sessionID, err)
-	}()
+	})
 	return err
 }
 
@@ -1981,7 +1917,7 @@ func (d *Daemon) terminateSessionAsync(sessionID string, sig syscall.Signal, tea
 	d.teardownMu.Unlock()
 	teardown.releaseLifecycle()
 
-	go func() {
+	terminate := func() {
 		defer func() {
 			d.teardownMu.Lock()
 			delete(d.tearingDown, sessionID)
@@ -1998,7 +1934,11 @@ func (d *Daemon) terminateSessionAsync(sessionID string, sig syscall.Signal, tea
 			return
 		}
 		d.notifyPreparedPluginDriverSessionClosed(sessionID, teardown.driverRun, sig)
-	}()
+	}
+	// A close the user asked for still ends the session while the daemon stops, on the caller's goroutine.
+	if !d.life.Go("terminateSessionAsync", terminate) {
+		terminate()
+	}
 	return done
 }
 
@@ -2247,7 +2187,7 @@ func (d *Daemon) refreshGitHubHostsLoop() {
 
 	for {
 		select {
-		case <-d.done:
+		case <-d.life.Done():
 			return
 		case <-ticker.C:
 			if err := d.refreshGitHubHosts(); err != nil {
@@ -2303,7 +2243,7 @@ func (d *Daemon) refreshGitHubHosts() error {
 		return nil
 	}
 
-	hosts, err := github.DiscoverHosts()
+	hosts, err := github.DiscoverHosts(d.life.Context())
 	if err != nil {
 		d.logf("GitHub host discovery failed: %v", err)
 		return nil
@@ -2314,7 +2254,7 @@ func (d *Daemon) refreshGitHubHosts() error {
 		if hostInfo.Host == "" {
 			continue
 		}
-		token, err := github.GetTokenForHost(hostInfo.Host)
+		token, err := github.GetTokenForHost(d.life.Context(), hostInfo.Host)
 		if err != nil {
 			d.logf("GitHub token fetch failed for %s: %v", hostInfo.Host, err)
 			continue
@@ -2326,6 +2266,10 @@ func (d *Daemon) refreshGitHubHosts() error {
 		}
 		d.ghRegistry.Register(hostInfo.Host, client)
 		discovered[hostInfo.Host] = true
+	}
+	// Stop cancels the token fetches; hosts it cut short are not gone.
+	if d.stopping() {
+		return nil
 	}
 
 	allowed := make(map[string]bool)
@@ -2951,7 +2895,7 @@ func (d *Daemon) handleState(conn net.Conn, msg *protocol.StateMessage) {
 		if effects.taken != nil {
 			origin = effects.taken.origin
 		}
-		go d.maybeGenerateSessionTitleFromPrompt(msg.ID, protocol.Deref(msg.Prompt), origin)
+		d.life.Go("maybeGenerateSessionTitleFromPrompt", func() { d.maybeGenerateSessionTitleFromPrompt(msg.ID, protocol.Deref(msg.Prompt), origin) })
 	}
 	d.store.Touch(msg.ID)
 	d.sendOK(conn)
@@ -2998,10 +2942,11 @@ func (d *Daemon) handleStop(conn net.Conn, msg *protocol.StopMessage) {
 			d.logf("handleStop: skipping yield classification for daemon-terminated session=%s", msg.ID)
 			return
 		}
-		go d.classifyStop(msg.ID, msg.TranscriptPath, stopClassification{
+		classification := stopClassification{
 			yielded:                true,
 			runningBackgroundTasks: runningBackgroundTaskCount(msg),
-		})
+		}
+		d.life.Go("classifyStop", func() { d.classifyStop(msg.ID, msg.TranscriptPath, classification) })
 		return
 	}
 
@@ -3028,8 +2973,8 @@ func (d *Daemon) handleStop(conn net.Conn, msg *protocol.StopMessage) {
 		return
 	}
 
-	go d.classifySessionState(msg.ID, msg.TranscriptPath)
-	go d.maybeGenerateSessionTitle(msg.ID, msg.TranscriptPath)
+	d.life.Go("classifySessionState", func() { d.classifySessionState(msg.ID, msg.TranscriptPath) })
+	d.life.Go("maybeGenerateSessionTitle", func() { d.maybeGenerateSessionTitle(msg.ID, msg.TranscriptPath) })
 }
 
 func (d *Daemon) resolveStopTranscriptPath(session *protocol.Session, reported string) string {
@@ -3434,6 +3379,9 @@ func (d *Daemon) fetchPRDetailsForID(id string) ([]*protocol.PR, error) {
 	prs := d.store.ListPRsByRepoHost(repo, host)
 
 	for _, pr := range prs {
+		if d.stopping() {
+			break
+		}
 		if pr.NeedsDetailRefresh() {
 			details, err := client.FetchPRDetails(pr.Repo, pr.Number)
 			if err != nil {
@@ -3492,7 +3440,7 @@ func (d *Daemon) pollPRs() {
 
 	for {
 		select {
-		case <-d.done:
+		case <-d.life.Done():
 			return
 		case <-ticker.C:
 			d.doPRPoll()
@@ -3512,6 +3460,9 @@ func (d *Daemon) doPRPoll() {
 	var earliestReset time.Time
 
 	for _, host := range d.ghRegistry.Hosts() {
+		if d.stopping() {
+			break
+		}
 		client, ok := d.ghRegistry.Get(host)
 		if !ok {
 			continue
@@ -3563,7 +3514,7 @@ func (d *Daemon) doPRPoll() {
 		d.broadcastRateLimited("search", earliestReset)
 	}
 
-	stored := d.durableWork.durably(func() { d.storePRPoll(allPRs, skippedHosts, observedByHost) })
+	stored := d.life.Do("doPRPoll", func() { d.storePRPoll(allPRs, skippedHosts, observedByHost) })
 	d.prRefreshMu.Unlock()
 	if stored {
 		d.doDetailRefresh()
@@ -3610,7 +3561,7 @@ func (d *Daemon) doDetailRefresh() {
 		return
 	}
 
-	if !d.durableWork.durably(d.store.DecayHeatStates) {
+	if !d.life.Do("doDetailRefresh", d.store.DecayHeatStates) {
 		return
 	}
 
@@ -3624,6 +3575,9 @@ func (d *Daemon) doDetailRefresh() {
 	var refreshedIDs []string
 	limitedHosts := make(map[string]time.Time)
 	for _, pr := range prs {
+		if d.stopping() {
+			break
+		}
 		host := pr.Host
 		if host == "" {
 			if parsedHost, _, _, err := protocol.ParsePRID(pr.ID); err == nil {
@@ -3667,7 +3621,7 @@ func (d *Daemon) doDetailRefresh() {
 			continue
 		}
 
-		stored := d.durableWork.durably(func() {
+		stored := d.life.Do("doDetailRefresh", func() {
 			if prHeadSHA := protocol.Deref(pr.HeadSHA); prHeadSHA != "" && details.HeadSHA != prHeadSHA {
 				d.store.SetPRHot(pr.ID)
 			}
@@ -3694,7 +3648,7 @@ func (d *Daemon) doDetailRefresh() {
 		}
 	}
 
-	d.durableWork.durably(func() { d.publishPRDetailsChanged("Detail refresh", refreshedIDs) })
+	d.life.Do("doDetailRefresh", func() { d.publishPRDetailsChanged("Detail refresh", refreshedIDs) })
 }
 
 func (d *Daemon) publishPRDetailsChanged(origin string, ids []string) {
@@ -3724,6 +3678,9 @@ func (d *Daemon) fetchAllPRDetails() {
 	var refreshedIDs []string
 	limitedHosts := make(map[string]time.Time)
 	for _, pr := range allPRs {
+		if d.stopping() {
+			break
+		}
 		if pr.Muted {
 			continue
 		}
@@ -3775,7 +3732,7 @@ func (d *Daemon) fetchAllPRDetails() {
 			continue
 		}
 
-		if !d.durableWork.durably(func() {
+		if !d.life.Do("fetchAllPRDetails", func() {
 			d.store.UpdatePRDetails(pr.ID, details.Mergeable, details.MergeableState, details.CIStatus, details.ReviewStatus, details.HeadSHA, details.HeadBranch)
 		}) {
 			return
@@ -3798,7 +3755,7 @@ func (d *Daemon) fetchAllPRDetails() {
 		}
 	}
 
-	d.durableWork.durably(func() { d.publishPRDetailsChanged("App launch", refreshedIDs) })
+	d.life.Do("fetchAllPRDetails", func() { d.publishPRDetailsChanged("App launch", refreshedIDs) })
 }
 
 func (d *Daemon) handleInjectTestPR(conn net.Conn, msg *protocol.InjectTestPRMessage) {
@@ -3911,6 +3868,9 @@ func (d *Daemon) doRefreshPRsWithResult() error {
 	successCount := 0
 
 	for _, host := range d.ghRegistry.Hosts() {
+		if d.stopping() {
+			break
+		}
 		client, ok := d.ghRegistry.Get(host)
 		if !ok {
 			continue
@@ -3945,11 +3905,16 @@ func (d *Daemon) doRefreshPRsWithResult() error {
 		}
 	}
 
-	previousPRs := d.store.ListPRs("")
-	d.store.SetPRs(allPRs)
-
-	currentPRs := d.store.ListPRs("")
-	d.publishPRSetChanges(previousPRs, currentPRs)
+	// The host loop stops early once stopping, so saving its set would drop the hosts it skipped.
+	var currentPRs []*protocol.PR
+	if !d.life.Do("doRefreshPRs", func() {
+		previousPRs := d.store.ListPRs("")
+		d.store.SetPRs(allPRs)
+		currentPRs = d.store.ListPRs("")
+		d.publishPRSetChanges(previousPRs, currentPRs)
+	}) {
+		return errDaemonStopping
+	}
 
 	d.logf("PR refresh: %d PRs fetched", len(currentPRs))
 	for host, observation := range observedByHost {
@@ -4029,9 +3994,9 @@ func (d *Daemon) monitorBranches() {
 	ticker := time.NewTicker(branchMonitorInterval)
 	defer ticker.Stop()
 
-	for d.durableWork.durably(d.checkAllBranches) {
+	for d.life.Do("monitorBranches", d.checkAllBranches) {
 		select {
-		case <-d.done:
+		case <-d.life.Done():
 			return
 		case <-ticker.C:
 		}

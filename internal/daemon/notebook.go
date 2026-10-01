@@ -40,7 +40,7 @@ func (d *Daemon) notebookStoreFor() (*notebook.Store, error) {
 
 func (d *Daemon) ensureNotebookWatcher(root string) {
 	select {
-	case <-d.done:
+	case <-d.life.Done():
 		return
 	default:
 	}

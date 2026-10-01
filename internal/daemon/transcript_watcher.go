@@ -288,10 +288,6 @@ func (d *Daemon) startTranscriptWatcherAtPath(sessionID string, agent protocol.S
 		return
 	}
 	d.watchersMu.Lock()
-	if d.stopping() {
-		d.watchersMu.Unlock()
-		return
-	}
 	session := d.lookupTranscriptWatcherSession(sessionID)
 	if session == nil || session.Agent != agent {
 		d.watchersMu.Unlock()
@@ -302,19 +298,21 @@ func (d *Daemon) startTranscriptWatcherAtPath(sessionID string, agent protocol.S
 	watcher.preferredPath = strings.TrimSpace(transcriptPath)
 	watcher.setState(session.State)
 
+	// Admitted before it replaces the previous watcher, so a refused start leaves that one to stop's final reconcile.
+	if !d.life.Go("runTranscriptWatcher", func() { d.runTranscriptWatcher(watcher) }) {
+		d.watchersMu.Unlock()
+		return
+	}
 	if d.transcriptWatch == nil {
 		d.transcriptWatch = make(map[string]*transcriptWatcher)
 	}
 	previous := d.transcriptWatch[sessionID]
 	d.transcriptWatch[sessionID] = watcher
-	d.watcherRuns.Add(1)
 	d.watchersMu.Unlock()
 	if previous != nil {
 		close(previous.stopCh)
 	}
-
 	d.logf("transcript watcher: started session=%s agent=%s cwd=%s", sessionID, agent, cwd)
-	go d.runTranscriptWatcher(watcher)
 }
 
 func (d *Daemon) lookupTranscriptWatcherSession(sessionID string) *protocol.Session {
@@ -408,8 +406,21 @@ func (d *Daemon) stopAllTranscriptWatchers() {
 	for _, watcher := range watchers {
 		close(watcher.stopCh)
 	}
-	// Starts are refused once stopping, so this waits out every final usage reconcile before the store closes.
-	d.watcherRuns.Wait()
+	d.watchersMu.Lock()
+	finalUsage := d.finalUsage
+	d.finalUsage = nil
+	d.watchersMu.Unlock()
+	for _, reconcile := range finalUsage {
+		reconcile()
+	}
+}
+
+// deferFinalUsage hands a watcher's last reconcile to stopAllTranscriptWatchers, which runs it after PTYs and
+// plugins shut down and agents flush usage, even for a watcher already removed from its map.
+func (d *Daemon) deferFinalUsage(reconcile func()) {
+	d.watchersMu.Lock()
+	d.finalUsage = append(d.finalUsage, reconcile)
+	d.watchersMu.Unlock()
 }
 
 func (d *Daemon) assistantWindow(sessionID string, agent protocol.SessionAgent) (assistantWindowSnapshot, bool) {
@@ -433,7 +444,6 @@ func (d *Daemon) liveTranscriptPath(sessionID string, agent protocol.SessionAgen
 }
 
 func (d *Daemon) runTranscriptWatcher(w *transcriptWatcher) {
-	defer d.watcherRuns.Done()
 	defer close(w.doneCh)
 
 	if w.behavior == nil {
@@ -469,6 +479,12 @@ func (d *Daemon) runTranscriptWatcher(w *transcriptWatcher) {
 		select {
 		case <-w.stopCh:
 			d.logf("transcript watcher: stopped session=%s", w.sessionID)
+			return
+		case <-d.life.Done():
+			if usageTracker != nil {
+				d.deferFinalUsage(usageTracker.Reconcile)
+				usageTracker = nil
+			}
 			return
 		case <-ticker.C:
 		}
@@ -664,12 +680,8 @@ func (d *Daemon) runTranscriptWatcher(w *transcriptWatcher) {
 				transcriptPath,
 				quietSince.Format(time.RFC3339Nano),
 			)
-			if d.durableWork.enter() {
-				go func(sessionID, path string) {
-					defer d.durableWork.leave()
-					d.classifySessionState(sessionID, path)
-				}(w.sessionID, transcriptPath)
-			}
+			sessionID, path := w.sessionID, transcriptPath
+			d.life.Go("classifySessionState", func() { d.classifySessionState(sessionID, path) })
 		}
 	}
 }

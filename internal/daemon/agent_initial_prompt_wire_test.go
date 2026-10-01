@@ -1,7 +1,11 @@
 package daemon_test
 
 import (
+	"errors"
+	"os"
+	"path/filepath"
 	"testing"
+	"time"
 
 	"github.com/victorarias/attn/internal/fakeagent"
 	"github.com/victorarias/attn/internal/protocol"
@@ -45,4 +49,32 @@ func awaitAgentAvailable(p *testworld.Peer, agent string) {
 		return
 	}
 	testworld.Await(p, protocol.EventSettingsUpdated, func(m protocol.SettingsUpdatedMessage) bool { return m.Settings[key] == "true" })
+}
+
+func TestARestartRemovesInitialPromptFilesTheLastDaemonLeftUnread(t *testing.T) {
+	w := newWorld(t)
+	prompts := filepath.Join(filepath.Dir(w.Socket), "runtime", "prompts")
+	if err := os.MkdirAll(prompts, 0o700); err != nil {
+		t.Fatal(err)
+	}
+	stale := filepath.Join(prompts, "left-by-a-stopped-daemon.md")
+	fresh := filepath.Join(prompts, "a-wrapper-is-about-to-read.md")
+	for _, path := range []string{stale, fresh} {
+		if err := os.WriteFile(path, []byte("a plaintext prompt"), 0o600); err != nil {
+			t.Fatal(err)
+		}
+	}
+	anHourAgo := time.Now().Add(-time.Hour)
+	if err := os.Chtimes(stale, anHourAgo, anHourAgo); err != nil {
+		t.Fatal(err)
+	}
+
+	w.restart()
+
+	if _, err := os.Stat(stale); !errors.Is(err, os.ErrNotExist) {
+		t.Errorf("the prompt file from an hour ago survived the restart (stat err %v)", err)
+	}
+	if _, err := os.Stat(fresh); err != nil {
+		t.Errorf("the restart removed a prompt file a launching wrapper may still read: %v", err)
+	}
 }

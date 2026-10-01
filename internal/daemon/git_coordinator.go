@@ -48,19 +48,19 @@ var (
 	readFileDiffForDaemon = readFileDiffCoordinated
 )
 
-func newGitStatusReader(executor gitExecutor) *gitStatusReader {
-	return &gitStatusReader{executor: executor, calls: newSharedCalls[gitStatusCacheKey, gitStatusResult](context.Background())}
+func newGitStatusReader(executor gitExecutor, life *lifetime) *gitStatusReader {
+	return &gitStatusReader{executor: executor, calls: newSharedCalls[gitStatusCacheKey, gitStatusResult](life, "gitStatus")}
 }
 
-func newFileDiffReader(executor gitExecutor) *fileDiffReader {
-	return &fileDiffReader{executor: executor, calls: newSharedCalls[fileDiffCacheKey, fileDiffContent](context.Background())}
+func newFileDiffReader(executor gitExecutor, life *lifetime) *fileDiffReader {
+	return &fileDiffReader{executor: executor, calls: newSharedCalls[fileDiffCacheKey, fileDiffContent](life, "fileDiff")}
 }
 
 func (d *Daemon) statusReader() *gitStatusReader {
 	d.gitReaderMu.Lock()
 	defer d.gitReaderMu.Unlock()
 	if d.gitStatus == nil {
-		d.gitStatus = newGitStatusReader(d.gitExecution())
+		d.gitStatus = newGitStatusReader(d.gitExecution(), &d.life)
 	}
 	return d.gitStatus
 }
@@ -69,7 +69,7 @@ func (d *Daemon) diffReader() *fileDiffReader {
 	d.gitReaderMu.Lock()
 	defer d.gitReaderMu.Unlock()
 	if d.fileDiff == nil {
-		d.fileDiff = newFileDiffReader(d.gitExecution())
+		d.fileDiff = newFileDiffReader(d.gitExecution(), &d.life)
 	}
 	return d.fileDiff
 }

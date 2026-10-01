@@ -425,7 +425,7 @@ func (d *Daemon) runTicketReconcileSweep() {
 	defer ticker.Stop()
 	for {
 		select {
-		case <-d.done:
+		case <-d.life.Done():
 			return
 		case <-ticker.C:
 			d.ticketReconcileSweepPass(time.Now())

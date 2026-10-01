@@ -529,8 +529,8 @@ func (c *Client) FetchPullRequestSnapshot(repo string, number int) (*PullRequest
 	}, nil
 }
 
-func (c *Client) FetchPRState(repo string, number int) (state string, merged bool, title string, err error) {
-	body, err := c.doRequest("GET", fmt.Sprintf("/repos/%s/pulls/%d", repo, number), nil)
+func (c *Client) FetchPRState(ctx context.Context, repo string, number int) (state string, merged bool, title string, err error) {
+	body, err := c.doRequestContext(ctx, "GET", fmt.Sprintf("/repos/%s/pulls/%d", repo, number), nil)
 	if err != nil {
 		return "", false, "", fmt.Errorf("fetch PR state: %w", err)
 	}

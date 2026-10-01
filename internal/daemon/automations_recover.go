@@ -13,6 +13,9 @@ func (d *Daemon) recoverAutomations() {
 		return
 	}
 	for i := range runs {
+		if d.stopping() {
+			return
+		}
 		occurrence, occurrenceErr := d.store.GetAutomationOccurrence(runs[i].OccurrenceID)
 		if occurrenceErr != nil {
 			d.logf("automation recovery occurrence %s: %v", runs[i].OccurrenceID, occurrenceErr)
