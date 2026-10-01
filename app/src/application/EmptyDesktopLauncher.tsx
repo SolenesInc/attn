@@ -32,9 +32,11 @@ export function EmptyDesktopLauncher({ label, active }: { label: string; active:
 
   useEffect(() => {
     if (!active || launching) return;
-    registerInlineLauncher(() => {
+    const focusLauncher = () => {
       rootRef.current?.querySelector<HTMLElement>('[data-testid="location-picker-path-input"], [data-testid="repo-options"]')?.focus();
-    });
+    };
+    focusLauncher();
+    registerInlineLauncher(focusLauncher);
     return () => registerInlineLauncher(null);
   }, [active, launching, registerInlineLauncher]);
 

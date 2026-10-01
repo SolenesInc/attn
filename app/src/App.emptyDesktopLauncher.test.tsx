@@ -74,6 +74,18 @@ describe('App empty desktop launcher', () => {
     expect(screen.getByTestId('repo-options').contains(document.activeElement)).toBe(true);
   });
 
+  it('takes the keyboard back in a repository’s options when an overlay closes', async () => {
+    const { daemon } = await onAgentBesideEmptyDesktop();
+    await gesture(daemon, () => pressShortcut('desktop.select2'));
+    await submitPath(daemon, '/home/me/projects/repo');
+
+    await gesture(daemon, () => pressShortcut('desktop.overview'));
+    await gesture(daemon, () => fireEvent.keyDown(window, { key: 'Escape' }));
+
+    expect(screen.queryByRole('dialog', { name: 'Desktop overview' })).toBeNull();
+    expect(screen.getByTestId('repo-options').contains(document.activeElement)).toBe(true);
+  });
+
   it('stays put on Escape', async () => {
     const { daemon } = await onAgentBesideEmptyDesktop();
     await gesture(daemon, () => pressShortcut('desktop.select2'));
