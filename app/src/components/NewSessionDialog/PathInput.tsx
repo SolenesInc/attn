@@ -1,4 +1,4 @@
-import { useRef, useEffect, useCallback, useState, useLayoutEffect } from 'react';
+import { useRef, useCallback, useState, useLayoutEffect } from 'react';
 import './PathInput.css';
 
 interface PathInputProps {
@@ -30,7 +30,7 @@ export function PathInput({
   const measureRef = useRef<HTMLSpanElement>(null);
   const [ghostOffset, setGhostOffset] = useState(0);
 
-  useEffect(() => {
+  useLayoutEffect(() => {
     const input = inputRef.current;
     if (!autoFocus || !input) return;
     input.focus();
