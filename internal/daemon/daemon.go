@@ -200,6 +200,7 @@ type Daemon struct {
 	sessionLifecycleLocks             map[string]*sessionLifecycleLockEntry
 	spawnLocksMu                      sync.Mutex
 	spawnLocks                        map[string]*spawnLock
+	externalRegistrations             sync.Map
 	sessionInputOnce                  sync.Once
 	sessionInputState                 *sessionInputModule
 	agentMailboxMu                    sync.Mutex
@@ -2008,6 +2009,7 @@ func (d *Daemon) removeReapedSession(sessionID string) {
 }
 
 func (d *Daemon) forgetSessionRuntime(sessionID string) {
+	d.externalRegistrations.Delete(sessionID)
 	d.stopTranscriptWatcher(sessionID)
 	if session := d.store.Get(sessionID); session != nil {
 		d.reconcileTicketsOnSessionEnd(sessionID, string(session.State))
@@ -2770,6 +2772,9 @@ func (d *Daemon) handleRegister(conn net.Conn, msg *protocol.RegisterMessage) {
 }
 
 func (d *Daemon) handleRegisterProtected(protection foregroundCleanupProtection, conn net.Conn, msg *protocol.RegisterMessage) {
+	// Registration and managed spawning must agree on who owns an absent session.
+	releaseSpawnLock := d.acquireSpawnLock(msg.ID)
+	defer releaseSpawnLock()
 	d.logf("session registered: id=%s label=%s dir=%s", msg.ID, protocol.Deref(msg.Label), msg.Dir)
 	existing := d.store.Get(msg.ID)
 
@@ -2821,8 +2826,14 @@ func (d *Daemon) handleRegisterProtected(protection foregroundCleanupProtection,
 		d.releaseCrewBindingIfSession(msg.ID)
 	}
 	session.WorkspaceID = workspaceID
+	if existing == nil {
+		d.externalRegistrations.Store(session.ID, struct{}{})
+	}
 	persistErr := d.store.AddCheckedUnlessTeardown(session)
 	if persistErr != nil {
+		if existing == nil {
+			d.externalRegistrations.Delete(session.ID)
+		}
 		d.releaseCrewBindingIfSession(session.ID)
 		d.sendError(conn, persistErr.Error())
 		return
