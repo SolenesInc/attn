@@ -106,7 +106,11 @@ func TestKeptConversationReleaseReplantAndDeletionAreVisible(t *testing.T) {
 	}
 	lifeMove(t, cli, "", delegated.SeedID, "wither", "abandoned again", "")
 	testworld.AwaitTaskDone(app, "conversation_keep")
-	plantSeedAs(t, cli, "", "trigger the next keep pass")
+	// Planting protects against cleanup, so its keep pass can skip retirement.
+	// A note queues the next pass after the wither's protection has ended.
+	if _, err := cli.SeedNote("", delegated.SeedID, "Record the abandoned work", "", "", false, nil); err != nil {
+		t.Fatal(err)
+	}
 	testworld.AwaitTaskDone(app, "conversation_keep")
 	deleted := lifeShow(t, cli, delegated.SeedID).Seed.Continuation.KeptConversation
 	if deleted == nil || protocol.Deref(deleted.DeletedAt) == "" {
