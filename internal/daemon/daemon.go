@@ -890,7 +890,20 @@ func (d *Daemon) Start() error {
 
 	d.life.Go("runModelCaptureLoop", d.runModelCaptureLoop)
 
-	if err := d.startJobQueue(); err != nil {
+	queueStarted := make(chan error, 1)
+	if !d.life.Go("jobQueue", func() {
+		err := d.startJobQueue()
+		queueStarted <- err
+		if err != nil {
+			return
+		}
+		runner := d.jobQueueRef()
+		<-d.life.Done()
+		runner.Stop()
+	}) {
+		return errDaemonStopping
+	}
+	if err := <-queueStarted; err != nil {
 		return err
 	}
 	if waitForLegacyTicketRecovery {
@@ -1588,9 +1601,6 @@ func (d *Daemon) stop() {
 	}
 	if d.diagServer != nil {
 		_ = d.diagServer.Close()
-	}
-	if runner := d.jobQueueRef(); runner != nil {
-		runner.Stop()
 	}
 	// Work begun before the stop finishes; later exits and failures are the teardown's, not outcomes.
 	// PTYs shut next so no real exit lands between the drain and the shutdown.
