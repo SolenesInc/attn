@@ -84,6 +84,13 @@ Archive is the native stop/unload operation; it does not require the TUI to exit
 or a `thread/closed` event. Ledger reopening unarchives the same native ID and
 preserves the Attn owner and history.
 
+Worktree deletion identifies owners by their stored directory, so it can archive
+those roots even when a view has unknown foreground identity. It removes views
+displaying the deleted owner and runtimes launched for that owner, without
+archiving foreign owners. Native archive and runtime removal must succeed before
+ledger finalization. Cleanup failures name the owner and let the caller retry
+deletion of the already-removed path; the removal audit remains recorded.
+
 This first integration exposes the shared identity and close boundary. Attention,
 mailbox/annotation policy, final accounting guarantees and naming reconciliation
 have separate follow-up work. They must use these owner/view contracts and the

@@ -483,36 +483,73 @@ func TestSharedCodexWorkspaceClosePreflightsTheProtectedOwner(t *testing.T) {
 	}
 }
 
-func TestSharedCodexDeletedWorktreeClosesItsOwnerEvenWithAnUnresolvedView(t *testing.T) {
-	w := newWorld(t, fakeagent.Codex)
-	app, cli := w.App(), w.Client()
-	sharedCodexSetting(t, app, true)
-	cwd := w.Path("deleted")
-	a := w.Spawn(app, fakeagent.Codex, cwd)
-	w.Launched(a)
-	awaitSharedView(app, a, a)
-	b := w.Spawn(app, fakeagent.Codex, w.Path("other"))
-	w.Launched(b)
-	awaitSharedView(app, b, b)
-	app.TypeLine(b, "/title unknown")
-	testworld.Await(app, protocol.EventWorkspaceLayoutUpdated, func(e protocol.WorkspaceLayoutUpdatedMessage) bool {
-		for _, p := range e.WorkspaceLayout.Panes {
-			if protocol.Deref(p.RuntimeID) == b {
-				return protocol.Deref(p.CodexResolution) == protocol.CodexViewResolutionUnresolved
+func TestSharedCodexDeletedWorktreeArchivesNativeOwnerAndRemovesItsUnresolvedView(t *testing.T) {
+	for _, foreign := range []bool{false, true} {
+		t.Run(fmt.Sprintf("foreign=%v", foreign), func(t *testing.T) {
+			w := newWorld(t, fakeagent.Codex)
+			app, cli := w.App(), w.Client()
+			sharedCodexSetting(t, app, true)
+			cwd := w.Path("deleted")
+			a := w.Spawn(app, fakeagent.Codex, cwd)
+			w.Launched(a)
+			awaitSharedView(app, a, a)
+			workspace := workspaceIDFor(t, w, cwd)
+			b := w.Spawn(app, fakeagent.Codex, w.Path("other"))
+			agentB := w.Launched(b)
+			awaitSharedView(app, b, b)
+			if foreign {
+				app.TypeLine(a, "/agents "+agentB.ConversationID)
+				awaitSharedView(app, a, b)
+			} else {
+				app.TypeLine(a, "/title unknown")
+				testworld.Await(app, protocol.EventWorkspaceLayoutUpdated, func(e protocol.WorkspaceLayoutUpdatedMessage) bool {
+					for _, p := range e.WorkspaceLayout.Panes {
+						if protocol.Deref(p.RuntimeID) == a {
+							return protocol.Deref(p.CodexResolution) == protocol.CodexViewResolutionUnresolved
+						}
+					}
+					return false
+				})
 			}
-		}
-		return false
-	})
-	if err := os.RemoveAll(cwd); err != nil {
-		t.Fatal(err)
-	}
-	if err := cli.DeleteWorktree(cwd, true); err != nil {
-		t.Fatal(err)
-	}
-	awaitClosed(app, a)
-	shown, err := cli.SessionShow(b)
-	if err != nil || shown.Entry.ClosedAt != nil {
-		t.Fatalf("deletion affected the other owner: %+v %v", shown, err)
+			app.TypeLine(b, "/title unknown-other")
+			testworld.Await(app, protocol.EventWorkspaceLayoutUpdated, func(e protocol.WorkspaceLayoutUpdatedMessage) bool {
+				for _, p := range e.WorkspaceLayout.Panes {
+					if protocol.Deref(p.RuntimeID) == b {
+						return protocol.Deref(p.CodexResolution) == protocol.CodexViewResolutionUnresolved
+					}
+				}
+				return false
+			})
+			app.TypeLine(b, "/archive-error on")
+			app.AwaitScreen(b, "Archive error on")
+			if err := os.RemoveAll(cwd); err != nil {
+				t.Fatal(err)
+			}
+			if err := cli.DeleteWorktree(cwd, true); err == nil || !strings.Contains(err.Error(), "retry worktree deletion") || !strings.Contains(err.Error(), a) {
+				t.Fatalf("missing partial cleanup error: %v", err)
+			}
+			shown, err := cli.SessionShow(a)
+			if err != nil || shown.Entry.ClosedAt != nil {
+				t.Fatalf("failed native archive falsely closed owner: %+v %v", shown, err)
+			}
+			app.TypeLine(b, "/archive-error off")
+			app.AwaitScreen(b, "Archive error off")
+			if err := cli.DeleteWorktree(cwd, true); err != nil {
+				t.Fatal(err)
+			}
+			awaitClosed(app, a)
+			app.TypeLine(b, "/loaded")
+			app.AwaitScreen(b, `Loaded {"data":["`+agentB.ConversationID+`"]}`)
+			testworld.Await(app, protocol.EventWorkspaceUnregistered, func(e protocol.WorkspaceUnregisteredMessage) bool { return e.Workspace.ID == workspace })
+			shown, err = cli.SessionShow(b)
+			if err != nil || shown.Entry.ClosedAt != nil {
+				t.Fatalf("deletion affected the other owner: %+v %v", shown, err)
+			}
+			app.TypeLine(b, "B continues after deletion")
+			if got := agentB.Prompted(); got != "B continues after deletion" {
+				t.Fatal(got)
+			}
+		})
 	}
 }
 

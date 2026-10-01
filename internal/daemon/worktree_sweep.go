@@ -182,6 +182,7 @@ func (d *Daemon) worktreeSweepPassWithLease(lease *worktreeSweepLease, now time.
 				continue
 			}
 			var seeds []string
+			var cleanupErr error
 			deleteErr := lease.TryAutomaticRemoval(func(protection automaticWorktreeCleanupProtection) error {
 				if err := d.finalWorktreeSweepGitCheck(protection.Context(), candidate); err != nil {
 					return err
@@ -194,6 +195,8 @@ func (d *Daemon) worktreeSweepPassWithLease(lease *worktreeSweepLease, now time.
 				if failure != nil {
 					return failure.err
 				}
+				d.recordWorktreeRemoval(wt, seeds, deleteWorktreeOptions{RemovalAction: "removed", RemovalReason: verdict.Reason}, now)
+				cleanupErr = d.cleanupDeletedWorktreeSessions(wt.Path)
 				return nil
 			})
 			if errors.Is(deleteErr, errAutomaticWorktreeCleanupPreempted) {
@@ -204,7 +207,9 @@ func (d *Daemon) worktreeSweepPassWithLease(lease *worktreeSweepLease, now time.
 				kept++
 				continue
 			}
-			d.recordWorktreeRemoval(wt, seeds, deleteWorktreeOptions{RemovalAction: "removed", RemovalReason: verdict.Reason}, now)
+			if cleanupErr != nil {
+				d.recordSweptWorktreeFailure(wt, cleanupErr, now)
+			}
 			d.logf("worktree sweep: reclaimed %s (%s)", wt.Path, verdict.Reason)
 			removed++
 		}

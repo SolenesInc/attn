@@ -95,16 +95,28 @@ func (r *codexRuntime) closeOwnerLocked(id string, closed store.SessionClose) er
 		r.cleanupReservation(id)
 		return nil
 	}
+	if err := r.archiveOwnerLocked(owner, ""); err != nil {
+		return err
+	}
+	return r.finishOwnerCloseLocked(id, closed)
+}
+
+func (r *codexRuntime) archiveOwnerLocked(owner *store.CodexOwner, serverCWD string) error {
 	launch, err := r.ownerContext(owner)
 	if err != nil {
 		return err
 	}
+	if serverCWD != "" {
+		launch.CWD = serverCWD
+	}
 	if err := r.ensureServer(r.d.life.Context(), launch); err != nil {
 		return err
 	}
-	if _, err := r.control.Call(r.d.life.Context(), "thread/archive", map[string]any{"threadId": owner.NativeRootID}); err != nil {
-		return err
-	}
+	_, err = r.control.Call(r.d.life.Context(), "thread/archive", map[string]any{"threadId": owner.NativeRootID})
+	return err
+}
+
+func (r *codexRuntime) finishOwnerCloseLocked(id string, closed store.SessionClose) error {
 	if err := r.d.store.SetCodexArchived(id, true); err != nil {
 		return err
 	}
@@ -432,26 +444,38 @@ func (r *codexRuntime) abortOwnerLaunch(id string) error {
 	return r.closeOwnerLocked(id, store.SessionClose{Reason: "launch failed"})
 }
 
-func (r *codexRuntime) finalizeDeletedOwner(id string) {
+// Worktree removal targets a known owner, even when foreground identity is unknown.
+// Keep it retryable until native archive and runtime removal both succeed.
+func (r *codexRuntime) closeDeletedOwner(id string) error {
 	r.mu.Lock()
 	defer r.mu.Unlock()
-	if err := r.d.store.SetCodexArchived(id, true); err != nil {
-		r.d.logf("mark deleted-worktree Codex owner archived: %v", err)
+	owner, err := r.d.store.CodexOwner(id)
+	if err != nil {
+		return err
 	}
-	r.d.stopCodexTranscriptWatcherAndWait(id)
-	session := r.d.store.Get(id)
-	r.d.commitSessionUnregister(id, store.SessionClose{By: store.SessionClosedByUser, Reason: "worktree deleted"})
-	r.d.dissociateSessionFromWorkspace(id)
-	if session != nil {
-		r.d.publishSessionUnregistered(session)
+	if owner == nil {
+		return fmt.Errorf("missing Codex owner %s", id)
 	}
+	closed := store.SessionClose{By: store.SessionClosedByUser, Reason: "worktree deleted"}
+	if owner.NativeRootID == "" {
+		return r.closeOwnerLocked(id, closed)
+	}
+	if err := r.archiveOwnerLocked(owner, r.d.dataRoot); err != nil {
+		return err
+	}
+	var cleanupErr error
 	for runtimeID, view := range r.views {
-		if view.Resolution != "resolved" || view.SessionID != id {
+		if view.LaunchOwnerID != id && (view.Resolution != "resolved" || view.SessionID != id) {
 			continue
 		}
 		if err := r.removeViewLocked(runtimeID); err != nil {
-			r.d.logf("remove deleted-worktree Codex view: %v", err)
+			cleanupErr = errors.Join(cleanupErr, err)
+			continue
 		}
 		r.removeLayoutView(runtimeID)
 	}
+	if cleanupErr != nil {
+		return cleanupErr
+	}
+	return r.finishOwnerCloseLocked(id, closed)
 }

@@ -259,8 +259,7 @@ func (d *Daemon) doDeleteWorktreeProtected(protection foregroundCleanupProtectio
 			if _, statErr := os.Stat(path); os.IsNotExist(statErr) {
 				d.logf("Worktree %s doesn't exist and not in registry, treating as already deleted", path)
 				d.publishFact(FactWorktreeDeleted, path, nil)
-				d.cleanupDeletedWorktreeSessions(path)
-				return nil
+				return d.cleanupDeletedWorktreeSessions(path)
 			}
 			return &deleteWorktreeError{
 				err:  &worktreeNotFoundError{path: path},
@@ -277,7 +276,7 @@ func (d *Daemon) doDeleteWorktreeProtected(protection foregroundCleanupProtectio
 		return d.classifyDeleteWorktreeGitError(path, opts.Force, failure.err)
 	}
 	d.recordWorktreeRemoval(wt, seeds, opts, time.Now())
-	return nil
+	return d.cleanupDeletedWorktreeSessions(path)
 }
 
 type removalFailure struct {
@@ -373,20 +372,19 @@ func (d *Daemon) deleteDeletableWorktreeBranch(ctx context.Context, client *git.
 }
 
 func (d *Daemon) finalizeDeletedWorktree(_ worktreeCleanupProtection, path string) {
-	d.cleanupDeletedWorktreeSessions(path)
 	d.store.RemoveWorktree(path)
 	d.publishFact(FactWorktreeDeleted, path, nil)
 }
 
-func (d *Daemon) cleanupDeletedWorktreeSessions(path string) {
+func (d *Daemon) cleanupDeletedWorktreeSessions(path string) error {
+	var cleanupErr error
 	for _, session := range d.store.List("") {
 		if !pathAtOrBelow(session.Directory, path) {
 			continue
 		}
 		if d.sharedCodexOwner(session.ID) {
-			if err := d.codexRuntime().closeAllOwnerViews(session.ID, store.SessionClose{By: store.SessionClosedByUser, Reason: "worktree deleted"}); err != nil {
-				d.logf("close deleted worktree Codex owner %s: %v", session.ID, err)
-				d.codexRuntime().finalizeDeletedOwner(session.ID)
+			if err := d.codexRuntime().closeDeletedOwner(session.ID); err != nil {
+				cleanupErr = errors.Join(cleanupErr, fmt.Errorf("codex owner %s: %w", session.ID, err))
 			}
 			continue
 		}
@@ -396,6 +394,10 @@ func (d *Daemon) cleanupDeletedWorktreeSessions(path string) {
 		d.dissociateSessionFromWorkspace(session.ID)
 		d.removeWorkspaceLayoutPaneForSession(session.ID)
 	}
+	if cleanupErr != nil {
+		return fmt.Errorf("worktree %s was removed, but session cleanup failed: %w; retry worktree deletion for %s", path, cleanupErr, path)
+	}
+	return nil
 }
 
 func (d *Daemon) classifyDeleteWorktreeGitError(path string, force bool, err error) error {

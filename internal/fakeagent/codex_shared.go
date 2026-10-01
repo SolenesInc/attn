@@ -16,10 +16,11 @@ import (
 )
 
 type sharedFakeCodex struct {
-	cfg   config
-	mu    sync.Mutex
-	roots map[string]*sharedFakeRoot
-	peers map[*websocket.Conn]bool
+	cfg          config
+	mu           sync.Mutex
+	roots        map[string]*sharedFakeRoot
+	peers        map[*websocket.Conn]bool
+	archiveError bool
 }
 type sharedFakeRoot struct {
 	c        *codex
@@ -92,6 +93,7 @@ func (s *sharedFakeCodex) handle(m codexshared.Message) (any, error) {
 		ThreadID       string          `json:"threadId"`
 		ExpectedTurnID string          `json:"expectedTurnId"`
 		ViewArgv       []string        `json:"fixture_view_argv"`
+		ArchiveError   bool            `json:"archiveError"`
 		CWD            string          `json:"cwd"`
 		Config         json.RawMessage `json:"config"`
 		Input          []struct {
@@ -100,6 +102,11 @@ func (s *sharedFakeCodex) handle(m codexshared.Message) (any, error) {
 	}
 	_ = json.Unmarshal(m.Params, &p)
 	switch m.Method {
+	case "attn-fixture/archive-error":
+		s.mu.Lock()
+		s.archiveError = p.ArchiveError
+		s.mu.Unlock()
+		return map[string]any{}, nil
 	case "initialize":
 		return map[string]any{}, nil
 	case "thread/start", "thread/fork":
@@ -177,7 +184,13 @@ func (s *sharedFakeCodex) handle(m codexshared.Message) (any, error) {
 			return nil, fmt.Errorf("cannot resume a blank thread %s", p.ThreadID)
 		}
 		if m.Method == "thread/archive" {
+			s.mu.Lock()
+			if s.archiveError {
+				s.mu.Unlock()
+				return nil, fmt.Errorf("fixture archive unavailable for %s", p.ThreadID)
+			}
 			root.archived = true
+			s.mu.Unlock()
 			_ = root.c.halt()
 			s.broadcast("thread/archived", map[string]any{"threadId": p.ThreadID})
 			return map[string]any{}, nil
@@ -332,6 +345,20 @@ func runSharedCodexView(cfg config) int {
 	}
 	submit := func(text string) {
 		switch {
+		case text == "/loaded":
+			result, err := client.Call(context.Background(), "thread/loaded/list", map[string]any{})
+			if err != nil {
+				term.print(err.Error())
+			} else {
+				term.print("Loaded " + string(result))
+			}
+		case strings.HasPrefix(text, "/archive-error "):
+			_, err := client.Call(context.Background(), "attn-fixture/archive-error", map[string]any{"archiveError": strings.TrimPrefix(text, "/archive-error ") == "on"})
+			if err != nil {
+				term.print(err.Error())
+			} else {
+				term.print("Archive error " + strings.TrimPrefix(text, "/archive-error "))
+			}
 		case text == "/new":
 			_ = selectRoot("thread/start", "", true)
 		case text == "/fork":
