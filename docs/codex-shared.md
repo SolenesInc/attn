@@ -59,6 +59,8 @@ Owner-addressed reload reapplies native configuration and current role guidance
 through resume, preserving every terminal and draft. Control subscriptions hold hidden roots. Switching away to zero views keeps an
 owner alive. App loss, transport loss and daemon restart do not close owners.
 The native app-server runs in a recoverable PTY worker and survives daemon stop.
+Its process cwd is the instance-owned server directory; owner and TUI cwd remain
+their selected projects, so deleting one checkout cannot invalidate the server.
 Reconnect restores subscriptions, saved IDs and the active native turn from
 resume state before owner input is accepted. A newer native turn notification
 takes precedence over the resume snapshot; uncertain input is never resent. Native

@@ -118,7 +118,7 @@ func (r *codexRuntime) ensureServer(ctx context.Context, launch codexLaunchConte
 			return err
 		}
 		executable := agentdriver.MustGet("codex").ResolveExecutable(launch.Executable)
-		opts := ptybackend.SpawnOptions{ID: codexServerRuntime, Agent: "codex", CWD: launch.CWD, Cols: 80, Rows: 24, ExternalCommand: []string{executable, "app-server", "--listen", "unix://" + r.socket("")}, LoginShellEnv: r.d.cachedLoginShellEnv(), DaemonEnv: r.d.spawnRoutingEnv()}
+		opts := ptybackend.SpawnOptions{ID: codexServerRuntime, Agent: "codex", CWD: dir, Cols: 80, Rows: 24, ExternalCommand: []string{executable, "app-server", "--listen", "unix://" + r.socket("")}, LoginShellEnv: r.d.cachedLoginShellEnv(), DaemonEnv: r.d.spawnRoutingEnv()}
 		if err := r.d.ptyBackend.Spawn(ctx, opts); err != nil {
 			return fmt.Errorf("start shared Codex server: %w", err)
 		}

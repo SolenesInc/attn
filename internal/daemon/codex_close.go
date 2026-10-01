@@ -95,19 +95,16 @@ func (r *codexRuntime) closeOwnerLocked(id string, closed store.SessionClose) er
 		r.cleanupReservation(id)
 		return nil
 	}
-	if err := r.archiveOwnerLocked(owner, ""); err != nil {
+	if err := r.archiveOwnerLocked(owner); err != nil {
 		return err
 	}
 	return r.finishOwnerCloseLocked(id, closed)
 }
 
-func (r *codexRuntime) archiveOwnerLocked(owner *store.CodexOwner, serverCWD string) error {
+func (r *codexRuntime) archiveOwnerLocked(owner *store.CodexOwner) error {
 	launch, err := r.ownerContext(owner)
 	if err != nil {
 		return err
-	}
-	if serverCWD != "" {
-		launch.CWD = serverCWD
 	}
 	if err := r.ensureServer(r.d.life.Context(), launch); err != nil {
 		return err
@@ -460,7 +457,7 @@ func (r *codexRuntime) closeDeletedOwner(id string) error {
 	if owner.NativeRootID == "" {
 		return r.closeOwnerLocked(id, closed)
 	}
-	if err := r.archiveOwnerLocked(owner, r.d.dataRoot); err != nil {
+	if err := r.archiveOwnerLocked(owner); err != nil {
 		return err
 	}
 	var cleanupErr error

@@ -211,6 +211,9 @@ func (s *sharedFakeCodex) handle(m codexshared.Message) (any, error) {
 		s.mu.Unlock()
 		return map[string]any{"data": ids}, nil
 	case "turn/start", "turn/steer":
+		if _, err := os.Getwd(); err != nil {
+			return nil, fmt.Errorf("invalid cwd: %w", err)
+		}
 		s.mu.Lock()
 		root := s.roots[p.ThreadID]
 		s.mu.Unlock()
