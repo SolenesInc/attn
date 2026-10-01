@@ -91,7 +91,16 @@ function OpenLedgerSurface({
 
   return (
     <div className="ledger-shell" ref={shellRef} onKeyDown={onKeyDown}>
-      <FocusTrap paused={yieldsFocus} focusTrapOptions={{ escapeDeactivates: false, initialFocus: false }}>
+      <FocusTrap paused={yieldsFocus} focusTrapOptions={{
+        escapeDeactivates: false,
+        initialFocus: false,
+        onPostUnpause: () => {
+          const target = shellRef.current?.querySelector<HTMLElement>('.ledger-row.is-selected')
+            ?? shellRef.current?.querySelector<HTMLElement>('.ledger-row')
+            ?? queryRef.current;
+          target?.focus({ preventScroll: true });
+        },
+      }}>
         <div className="ledger-panel" role="dialog" aria-modal="true" aria-label="Sessions and worktrees">
           <header className="ledger-header">
             <nav className="ledger-tabs" aria-label="Which list">
