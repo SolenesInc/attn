@@ -926,12 +926,16 @@ func fprintSeedShow(w io.Writer, result *protocol.SeedShowResult) {
 	if continuation := result.Seed.Continuation; continuation != nil && continuation.KeptConversation != nil {
 		kept := continuation.KeptConversation
 		switch {
+		case protocol.Deref(kept.DeletedAt) != "" && protocol.Deref(kept.DeletedBy) == "user":
+			fmt.Fprintf(w, "conversation  you deleted attn's copy on %s\n", conversationDate(protocol.Deref(kept.DeletedAt)))
 		case protocol.Deref(kept.DeletedAt) != "":
 			fmt.Fprintf(w, "conversation  attn deleted its copy on %s\n", conversationDate(protocol.Deref(kept.DeletedAt)))
+		case protocol.Deref(kept.PinnedAt) != "":
+			fmt.Fprintf(w, "conversation  kept by attn (%s) forever (pinned %s)\n", formatConversationBytes(kept.Bytes), conversationDate(*kept.PinnedAt))
 		case protocol.Deref(kept.DeleteAfter) != "":
-			fmt.Fprintf(w, "conversation  kept by attn (%.1f MB) until %s; replant to keep it\n", float64(kept.Bytes)/1e6, conversationDate(protocol.Deref(kept.DeleteAfter)))
+			fmt.Fprintf(w, "conversation  kept by attn (%s) until %s; replant to keep it\n", formatConversationBytes(kept.Bytes), conversationDate(protocol.Deref(kept.DeleteAfter)))
 		default:
-			fmt.Fprintf(w, "conversation  kept by attn (%.1f MB) while an open seed points at it\n", float64(kept.Bytes)/1e6)
+			fmt.Fprintf(w, "conversation  kept by attn (%s) while an open seed points at it\n", formatConversationBytes(kept.Bytes))
 		}
 	}
 	fprintSeedWatchCoverage(w, result.WatchingVia)
