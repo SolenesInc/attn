@@ -282,7 +282,7 @@ func (r *codexRuntime) attachOwner(id string) (outcome *sessionReopenOutcome, re
 	}
 	runtimeID = uuid.NewString()
 	paneID := newWorkspaceLayoutEntityID("pane")
-	v := store.CodexView{RuntimeID: runtimeID, ServerID: owner.ServerID, LaunchOwnerID: id, Generation: uuid.NewString(), Resolution: "unresolved"}
+	v := store.CodexView{RuntimeID: runtimeID, ServerID: owner.ServerID, LaunchOwnerID: id, Generation: codexViewGenerationPrefix + uuid.NewString(), Resolution: "unresolved"}
 	err = r.addViewLocked(v)
 	if err != nil {
 		return nil, err

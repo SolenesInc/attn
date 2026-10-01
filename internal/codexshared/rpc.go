@@ -22,6 +22,13 @@ type Message struct {
 	Error  json.RawMessage `json:"error,omitempty"`
 }
 
+type RPCError struct {
+	Method string
+	Reply  json.RawMessage
+}
+
+func (e *RPCError) Error() string { return fmt.Sprintf("codex %s: %s", e.Method, e.Reply) }
+
 func Dial(ctx context.Context, path string) (*websocket.Conn, error) {
 	transport := &http.Transport{DialContext: func(ctx context.Context, _, _ string) (net.Conn, error) {
 		return (&net.Dialer{}).DialContext(ctx, "unix", path)
@@ -108,7 +115,7 @@ func (c *Client) Call(ctx context.Context, method string, params any) (json.RawM
 	select {
 	case m := <-reply:
 		if len(m.Error) > 0 {
-			return nil, fmt.Errorf("codex %s: %s", method, m.Error)
+			return nil, &RPCError{Method: method, Reply: m.Error}
 		}
 		return m.Result, nil
 	case <-ctx.Done():

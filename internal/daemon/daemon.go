@@ -1662,7 +1662,7 @@ func (d *Daemon) handlePTYExit(info ptybackend.ExitInfo) bool {
 		d.codexRuntime().noteServerExit(info)
 		return false
 	}
-	if d.codexRuntime().hasRuntime(info.ID) {
+	if strings.HasPrefix(info.LifecycleID, codexViewGenerationPrefix) || d.codexRuntime().hasRuntime(info.ID) {
 		d.life.Do("codexViewExit", func() { d.codexRuntime().disconnectView(info.ID, info.LifecycleID) })
 		return false
 	}

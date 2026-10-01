@@ -76,7 +76,7 @@ func (r *codexRuntime) prepareLaunch(opts *ptybackend.SpawnOptions, session *pro
 			return err
 		}
 	}
-	view := store.CodexView{RuntimeID: opts.ID, ServerID: owner.ServerID, LaunchOwnerID: owner.SessionID, Generation: uuid.NewString(), Resolution: "unresolved"}
+	view := store.CodexView{RuntimeID: opts.ID, ServerID: owner.ServerID, LaunchOwnerID: owner.SessionID, Generation: codexViewGenerationPrefix + uuid.NewString(), Resolution: "unresolved"}
 	if err := r.addViewLocked(view); err != nil {
 		return err
 	}

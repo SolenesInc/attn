@@ -107,3 +107,8 @@ This first integration exposes the shared identity and close boundary. Attention
 mailbox/annotation policy, final accounting guarantees and naming reconciliation
 have separate follow-up work. They must use these owner/view contracts and the
 same awaited close pipeline.
+
+Explicit native input rejections are reported as failures and release that attempt
+for a later explicit submission. Transport loss remains indeterminate; input is
+not automatically replayed. View lifecycle generations identify Codex exits even
+after the view is removed, so closing an extra view emits no owner exit event.

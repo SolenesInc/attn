@@ -25,6 +25,7 @@ import (
 )
 
 const codexServerRuntime = "attn-codex-server"
+const codexViewGenerationPrefix = "codex-view:"
 const SettingCodexSharedEnabled = "codex_shared_enabled"
 
 type codexLaunchContext struct {

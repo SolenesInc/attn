@@ -7,11 +7,13 @@ import (
 	"slices"
 	"strconv"
 	"strings"
+	"sync"
 	"testing"
 
 	"github.com/victorarias/attn/internal/client"
 	"github.com/victorarias/attn/internal/fakeagent"
 	"github.com/victorarias/attn/internal/protocol"
+	"github.com/victorarias/attn/internal/ptybackend"
 	"github.com/victorarias/attn/internal/testworld"
 )
 
@@ -701,5 +703,101 @@ location: {type: directory, path: %q}
 	trust := fmt.Sprintf(`projects.%s.trust_level="trusted"`, strconv.Quote(directory))
 	if directory == "" || !slices.Contains(run.Argv, trust) || !slices.Contains(run.Argv, "--remote") {
 		t.Fatalf("shared unattended launch dropped trust: %q", run.Argv)
+	}
+}
+
+func TestSharedCodexRejectedInputCanBeExplicitlySubmittedAgain(t *testing.T) {
+	t.Setenv("ATTN_FAKE_CODEX_REJECT_INPUT_ONCE", "1")
+	w := newWorld(t, fakeagent.Codex)
+	app := w.App()
+	sharedCodexSetting(t, app, true)
+	id := w.Spawn(app, fakeagent.Codex, w.Path("exo"))
+	native := w.Launched(id)
+	awaitSharedView(app, id, id)
+	submit := protocol.SessionAnnotationsSubmitMessage{Cmd: protocol.CmdSessionAnnotationsSubmit, RequestID: "rejected-input", SessionID: id, Text: "try this input"}
+	send := func() protocol.SessionAnnotationsSubmitResultMessage {
+		return testworld.Request(app, submit, protocol.EventSessionAnnotationsSubmitResult, func(e protocol.SessionAnnotationsSubmitResultMessage) bool { return e.RequestID == submit.RequestID })
+	}
+	first := send()
+	if first.Success || !strings.Contains(protocol.Deref(first.Error), "fixture input rejected") {
+		t.Fatalf("explicit rejection: %+v", first)
+	}
+	second := send()
+	if !second.Success || second.Status != "delivered" {
+		t.Fatalf("explicit resubmission: %+v", second)
+	}
+	if got := native.Prompted(); got != submit.Text {
+		t.Fatal(got)
+	}
+}
+
+type heldCodexExit struct {
+	*ptybackend.EmbeddedBackend
+	mu        sync.Mutex
+	runtimeID string
+	reached   chan struct{}
+	release   chan struct{}
+	done      chan struct{}
+}
+
+func (b *heldCodexExit) SetExitHandler(handler func(ptybackend.ExitInfo)) {
+	b.EmbeddedBackend.SetExitHandler(func(info ptybackend.ExitInfo) {
+		b.mu.Lock()
+		held := info.ID == b.runtimeID
+		b.mu.Unlock()
+		if held {
+			close(b.reached)
+			<-b.release
+		}
+		handler(info)
+		if held {
+			close(b.done)
+		}
+	})
+}
+
+func TestSharedCodexRemovedExtraViewDoesNotEmitSessionExit(t *testing.T) {
+	backend := &heldCodexExit{EmbeddedBackend: ptybackend.NewEmbedded(nil), reached: make(chan struct{}), release: make(chan struct{}), done: make(chan struct{})}
+	w := &world{World: prepareWorld(t, fakeagent.Codex), backend: backend}
+	w.start()
+	app, cli := w.App(), w.Client()
+	sharedCodexSetting(t, app, true)
+	id := w.Spawn(app, fakeagent.Codex, w.Path("exo"))
+	w.Launched(id)
+	awaitSharedView(app, id, id)
+	if _, err := cli.SessionReopen(client.SessionReopenOptions{SessionID: id}); err != nil {
+		t.Fatal(err)
+	}
+	var second protocol.WorkspaceLayoutPane
+	layout := testworld.Await(app, protocol.EventWorkspaceLayoutUpdated, func(e protocol.WorkspaceLayoutUpdatedMessage) bool {
+		for _, pane := range e.WorkspaceLayout.Panes {
+			if protocol.Deref(pane.SessionID) == id && protocol.Deref(pane.RuntimeID) != id && protocol.Deref(pane.CodexResolution) == protocol.CodexViewResolutionResolved {
+				second = pane
+				return true
+			}
+		}
+		return false
+	})
+	backend.mu.Lock()
+	backend.runtimeID = protocol.Deref(second.RuntimeID)
+	backend.mu.Unlock()
+	var release sync.Once
+	t.Cleanup(func() { release.Do(func() { close(backend.release) }) })
+	result := workspaceLayoutAction(app, protocol.WorkspaceLayoutClosePaneMessage{Cmd: protocol.CmdWorkspaceLayoutClosePane, WorkspaceID: layout.WorkspaceLayout.WorkspaceID, PaneID: second.PaneID}, protocol.CmdWorkspaceLayoutClosePane, layout.WorkspaceLayout.WorkspaceID)
+	if !result.Success {
+		t.Fatal(protocol.Deref(result.Error))
+	}
+	<-backend.reached
+	release.Do(func() { close(backend.release) })
+	<-backend.done
+	sharedCodexSetting(t, app, false)
+	for _, event := range app.Received() {
+		if event.Event == protocol.EventSessionExited && protocol.Deref(event.ID) == protocol.Deref(second.RuntimeID) {
+			t.Fatalf("removed extra view emitted owner exit: %+v", event)
+		}
+	}
+	shown, err := cli.SessionShow(id)
+	if err != nil || shown.Entry.ClosedAt != nil {
+		t.Fatalf("remaining owner: %+v %v", shown, err)
 	}
 }

@@ -9,6 +9,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/victorarias/attn/internal/codexshared"
 	"github.com/victorarias/attn/internal/pausepoint"
 	"github.com/victorarias/attn/internal/protocol"
 )
@@ -654,6 +655,12 @@ func (m *sessionInputModule) try(ctx context.Context, delivery sessionInputDeliv
 		lane.mu.Lock()
 		lane.placing = false
 		if err != nil && attempt.stage != sessionInputTaken {
+			var rejected *codexshared.RPCError
+			if errors.As(err, &rejected) {
+				lane.removePending(delivery.id)
+				delete(lane.attempts, key)
+				return sessionInputAttempt{id: delivery.id, stage: sessionInputDeferred, route: sessionInputRouteCodex, reason: sessionInputReasonTransport, err: err}
+			}
 			attempt.stage = sessionInputIndeterminate
 			return sessionInputAttempt{id: delivery.id, stage: sessionInputIndeterminate, route: sessionInputRouteCodex, reason: sessionInputReasonTransport, wait: attempt.wait, err: err}
 		}

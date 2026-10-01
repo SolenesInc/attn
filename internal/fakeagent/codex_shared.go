@@ -22,6 +22,7 @@ type sharedFakeCodex struct {
 	peers         map[*websocket.Conn]bool
 	archiveError  bool
 	rejectedStart atomic.Bool
+	rejectedInput atomic.Bool
 }
 type sharedFakeRoot struct {
 	c        *codex
@@ -218,6 +219,9 @@ func (s *sharedFakeCodex) handle(m codexshared.Message) (any, error) {
 		s.mu.Unlock()
 		return map[string]any{"data": ids}, nil
 	case "turn/start", "turn/steer":
+		if os.Getenv("ATTN_FAKE_CODEX_REJECT_INPUT_ONCE") == "1" && !s.rejectedInput.Swap(true) {
+			return nil, fmt.Errorf("fixture input rejected")
+		}
 		if _, err := os.Getwd(); err != nil {
 			return nil, fmt.Errorf("invalid cwd: %w", err)
 		}
