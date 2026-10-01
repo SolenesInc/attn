@@ -239,6 +239,14 @@ async function main() {
       );
       runner.assert(chip.id === seed,
         'the Handover session reports to the same seed', { chip, seed });
+      const { limit } = await client.request('get_warm_workspace_limit');
+      runner.registerCleanup('restore warm workspace limit', () =>
+        client.request('set_warm_workspace_limit', { limit }));
+      await client.request('set_warm_workspace_limit', { limit: 0 });
+      const dispatcher = await client.request('get_pane_state', pane);
+      runner.writeJson('dispatcher-before-read.json', dispatcher);
+      runner.assert(dispatcher.pane.runtimeAttached === false,
+        'the dispatcher is detached before its command output is read', { dispatcher });
       const shown = await runInPane(client, pane, `attn seed show ${seed}`, HANDOFF);
       runner.assert(saw(shown, HANDOFF), 'the confirmed handoff landed on the seed log', { shown });
     });
