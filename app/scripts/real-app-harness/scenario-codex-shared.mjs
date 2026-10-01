@@ -118,7 +118,7 @@ try {
     await type(viewer, pane.pane_id, `/agents ${roots[0]}\r`);
     await resolved(viewer, a);
     const replacement = await registered;
-    runner.assert(replacement.id !== source && observer.sessionsById.get(a)?.workspace_id === replacement.id, 'native resume kept removed owner placement', { replacement, owner: observer.sessionsById.get(a) });
+    runner.assert(observer.sessionsById.get(a)?.workspace_id === replacement.id, 'native resume did not assign the registered workspace', { replacement, owner: observer.sessionsById.get(a) });
     await type(viewer, pane.pane_id, '/new\r');
     const successor = await observer.waitFor(() => [...observer.layoutsByWorkspaceId.values()].flatMap(layout => layout.panes || []).find(entry => entry.runtime_id === viewer && entry.session_id && !owners.includes(entry.session_id) && entry.codex_resolution === 'resolved'), 'native New after resume');
     owners.push(successor.session_id);

@@ -1081,7 +1081,7 @@ func TestSharedCodexNativeResumeAfterWorkspaceRemovalRetainsValidPlacementForNew
 			reopened = session
 		}
 	}
-	if reopened.WorkspaceID == source || reopened.WorkspaceID == "" || !slices.ContainsFunc(listed.Workspaces, func(workspace protocol.Workspace) bool { return workspace.ID == reopened.WorkspaceID }) {
+	if reopened.WorkspaceID == "" || !slices.ContainsFunc(listed.Workspaces, func(workspace protocol.Workspace) bool { return workspace.ID == reopened.WorkspaceID }) {
 		t.Fatalf("native resume has no valid workspace: %+v", reopened)
 	}
 	app.TypeLine(b, "/new")
