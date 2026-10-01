@@ -318,6 +318,42 @@ func TestSharedCodexSteersTheActiveNativeTurnAfterDaemonRestart(t *testing.T) {
 	agent.Reply("turn complete <!-- attn:state=idle -->")
 }
 
+func TestSharedCodexInterruptedFinalCloseStaysClosedAndReopensTheSameHistory(t *testing.T) {
+	stack := testworld.NewStack(t, testworld.WithAgents(fakeagent.Codex))
+	stack.StartCrashingAt("codex-owner-close-persisted")
+	app := stack.App()
+	sharedCodexSetting(t, app, true)
+	id := stack.Spawn(app, fakeagent.Codex, stack.Path("close-restart"))
+	original := stack.Launched(id)
+	awaitSharedView(app, id, id)
+	app.Send(protocol.UnregisterMessage{Cmd: protocol.CmdUnregister, ID: id, CloseReason: protocol.Ptr("finished before restart")})
+	stack.AwaitCrash()
+	stack.Start()
+	app = stack.App()
+	shown, err := stack.Client().SessionShow(id)
+	if err != nil || shown.Entry.ClosedAt == nil || protocol.Deref(shown.Entry.CloseReason) != "finished before restart" {
+		t.Fatalf("interrupted final close left a live owner: %+v %v", shown, err)
+	}
+	for _, workspace := range app.Initial.Workspaces {
+		if workspace.Layout != nil && slices.ContainsFunc(workspace.Layout.Panes, func(p protocol.WorkspaceLayoutPane) bool { return protocol.Deref(p.RuntimeID) == id }) {
+			t.Fatalf("interrupted close retained the old view: %+v", workspace)
+		}
+	}
+	if _, err := stack.Client().SessionReopen(client.SessionReopenOptions{SessionID: id}); err != nil {
+		t.Fatal(err)
+	}
+	updated := testworld.Await(app, protocol.EventWorkspaceLayoutUpdated, func(e protocol.WorkspaceLayoutUpdatedMessage) bool {
+		return slices.ContainsFunc(e.WorkspaceLayout.Panes, func(p protocol.WorkspaceLayoutPane) bool {
+			return protocol.Deref(p.SessionID) == id && protocol.Deref(p.CodexResolution) == protocol.CodexViewResolutionResolved
+		})
+	})
+	for _, pane := range updated.WorkspaceLayout.Panes {
+		if protocol.Deref(pane.SessionID) == id {
+			app.AwaitScreen(protocol.Deref(pane.RuntimeID), "Showing "+original.ConversationID)
+		}
+	}
+}
+
 func TestSharedCodexClosingAFailedBlankAttachmentLeavesTheOriginalOwnerLive(t *testing.T) {
 	t.Setenv("ATTN_FAKE_CODEX_REJECT_BLANK_ATTACH", "1")
 	w := newWorld(t, fakeagent.Codex)

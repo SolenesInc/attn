@@ -15,6 +15,7 @@ const (
 	crashAfterWorktreeOwned         = "delegation-worktree-owned"
 	crashAfterGardenAdvice          = "garden-advice-received"
 	crashAfterCodexReservation      = "codex-launch-reserved"
+	crashAfterCodexClosePersisted   = "codex-owner-close-persisted"
 )
 
 func crashAt(point string) {

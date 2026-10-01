@@ -1088,7 +1088,8 @@ func (d *Daemon) pluginDriverReportsState(agent protocol.SessionAgent) bool {
 
 func (d *Daemon) performStartupPTYRecovery(previousRunSessions map[string]struct{}, recoveryStartedAt time.Time) {
 	defer d.rebuildTicketDeliverySchedules()
-	if err := d.codexRuntime().loadViews(); err != nil {
+	codexViews, err := d.codexRuntime().loadViews()
+	if err != nil {
 		d.logf("load shared Codex views: %v", err)
 	}
 	recoveryReport, recoverErr := d.recoverPTYBackend(10 * time.Second)
@@ -1114,7 +1115,7 @@ func (d *Daemon) performStartupPTYRecovery(previousRunSessions map[string]struct
 	if _, ok := d.ptyBackend.(ptybackend.RecoverableRuntime); ok {
 		d.reconcileStartupWorkerSessions(recoveryReport, recoverErr, previousRunSessions, recoveryStartedAt)
 		d.restoreTranscriptWatchers()
-		if err := d.codexRuntime().recover(); err != nil {
+		if err := d.codexRuntime().recover(codexViews); err != nil {
 			d.logf("recover shared Codex: %v", err)
 		}
 		d.reconcileWorkspaceLayoutsWithPTYBackend(context.Background())
@@ -1996,7 +1997,7 @@ func (d *Daemon) restoreSessionClose(sessionID string, closed store.SessionClose
 	})
 }
 
-func (d *Daemon) recordSessionClose(sessionID string, commit func() (bool, error)) {
+func (d *Daemon) recordSessionClose(sessionID string, commit func() (bool, error)) error {
 	if session := d.store.Get(sessionID); session != nil {
 		if _, err := d.captureGardenSessionSnapshot(session); err != nil {
 			d.logf("garden: preserving execution %s before closing it: %v", sessionID, err)
@@ -2022,6 +2023,7 @@ func (d *Daemon) recordSessionClose(sessionID string, commit func() (bool, error
 	}
 	d.clearClassifiedTurn(sessionID)
 	d.clearClassifyingTurn(sessionID)
+	return err
 }
 
 func (d *Daemon) removeReapedSession(sessionID string) {

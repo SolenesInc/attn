@@ -201,12 +201,32 @@ func (r *codexRuntime) ensureServer(ctx context.Context, launch codexLaunchConte
 	return nil
 }
 
-func (r *codexRuntime) recover() error {
-	views, err := r.d.store.CodexViews()
+func (r *codexRuntime) recover(startupViews []store.CodexView) error {
+	owners, err := r.d.store.CodexOwners(r.serverID)
 	if err != nil {
 		return err
 	}
-	owners, err := r.d.store.CodexOwners(r.serverID)
+	archived := make(map[string]bool)
+	for _, owner := range owners {
+		archived[owner.SessionID] = owner.Archived
+	}
+	for _, view := range startupViews {
+		if !archived[view.SessionID] {
+			continue
+		}
+		// Worker removal drains title callbacks, which acquire r.mu.
+		if err := r.d.ptyBackend.Remove(context.Background(), view.RuntimeID); err != nil && !errors.Is(err, pty.ErrSessionNotFound) {
+			return err
+		}
+		r.mu.Lock()
+		err := r.forgetViewLocked(view.RuntimeID)
+		r.mu.Unlock()
+		if err != nil {
+			return err
+		}
+		r.removeLayoutView(view.RuntimeID)
+	}
+	views, err := r.d.store.CodexViews()
 	if err != nil {
 		return err
 	}

@@ -1,6 +1,6 @@
 import { act, fireEvent, screen, within } from '@testing-library/react';
 import { describe, expect, it, vi } from 'vitest';
-import { agentWorkspace, daemonSession, type DaemonSession, type DaemonWorkspace } from './test/daemonFixtures';
+import { agentWorkspace, daemonSession, splitWorkspace, type DaemonSession, type DaemonWorkspace } from './test/daemonFixtures';
 import { gesture, pressShortcut, renderApp } from './test/renderApp';
 import type { ScriptedDaemon } from './test/scriptedDaemon';
 
@@ -108,6 +108,27 @@ describe('App queue', () => {
 
     expect(daemon.sentOf('session_selected')).toEqual([{ cmd: 'session_selected', id: 'older' }]);
     expect(shownWorkspaces()).toEqual(['workspace-older']);
+  });
+
+  it('queues one shared owner with views in two workspaces and retains both workspace rows', async () => {
+    const owner = agent('shared', { agent: 'codex', turn_owed: true, turn_opened_at: ago(HOUR) });
+    const home = agentWorkspace(owner.id);
+    home.layout!.panes[0] = { ...home.layout!.panes[0], codex_resolution: 'resolved', codex_revision: '1' };
+    const satellite = agent('satellite', { agent: 'shell', parent_session_id: owner.id, workspace_id: 'workspace-other' });
+    const other = splitWorkspace('workspace-other', ['other', satellite.id], { rank: 'a' });
+    other.layout!.panes[0] = {
+      ...other.layout!.panes[0], session_id: owner.id, codex_resolution: 'resolved', codex_revision: '1',
+    };
+    const { daemon } = await renderApp({ initialState: { settings: QUEUE, sessions: [owner, satellite], workspaces: [other, home] } });
+
+    expect(bandRows()).toEqual(['queue-turn-shared']);
+    expect(within(screen.getByTestId('queue-turn-shared')).getByText('shared')).toBeInTheDocument();
+    await press(daemon, 'Open shared');
+    expect(shownWorkspaces()).toEqual([home.id]);
+    expect(daemon.sentOf('session_selected')).toEqual([{ cmd: 'session_selected', id: owner.id }]);
+
+    await daemon.emit({ event: 'settings_updated', settings: { queue_mode_enabled: 'false' } });
+    expect(treeRows()).toEqual(['shared', 'satellite', 'shared']);
   });
 
   it('keeps the session menu reachable from every band', async () => {

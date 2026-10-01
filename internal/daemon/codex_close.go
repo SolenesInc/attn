@@ -14,6 +14,7 @@ import (
 	"github.com/victorarias/attn/internal/workspacelayout"
 	"os"
 	"syscall"
+	"time"
 )
 
 func (r *codexRuntime) closeView(runtimeID string, closed store.SessionClose) error {
@@ -67,6 +68,10 @@ func (r *codexRuntime) removeViewLocked(runtimeID string) error {
 	if err := r.d.ptyBackend.Remove(context.Background(), runtimeID); err != nil && !errors.Is(err, pty.ErrSessionNotFound) {
 		return err
 	}
+	return r.forgetViewLocked(runtimeID)
+}
+
+func (r *codexRuntime) forgetViewLocked(runtimeID string) error {
 	if err := os.Remove(r.socket(runtimeID)); err != nil && !errors.Is(err, os.ErrNotExist) {
 		return fmt.Errorf("remove Codex view socket %s: %w", runtimeID, err)
 	}
@@ -120,12 +125,14 @@ func (r *codexRuntime) archiveOwnerLocked(owner *store.CodexOwner) error {
 
 func (r *codexRuntime) finishOwnerCloseLocked(owner *store.CodexOwner, closed store.SessionClose) error {
 	id := owner.SessionID
-	if err := r.d.store.SetCodexArchived(id, true); err != nil {
-		return err
-	}
 	r.d.stopCodexTranscriptWatcherAndWait(id)
 	session := r.d.store.Get(id)
-	r.d.commitSessionUnregister(id, closed)
+	if err := r.d.recordSessionClose(id, func() (bool, error) {
+		return r.d.store.CloseSession(id, closed, time.Now())
+	}); err != nil {
+		return err
+	}
+	crashAt(crashAfterCodexClosePersisted)
 	r.d.dissociateSessionFromWorkspace(id)
 	r.activeMu.Lock()
 	delete(r.activeTurns, owner.NativeRootID)

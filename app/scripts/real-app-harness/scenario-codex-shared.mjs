@@ -39,6 +39,18 @@ try {
     runner.assert(text.text.includes('OpenAI Codex shared mock'), 'foreign owner removed the terminal', text);
     await type(a, paneA.pane_id, 'draft about B');
   });
+  await runner.step('queue_lists_shared_owner_once_and_opens_its_workspace', async () => {
+    await client.request('set_setting', { key: 'queue_mode_enabled', value: 'true' });
+    await client.request('dom_wait', { selector: '[data-testid="sidebar-queue"]', timeoutMs: observer.connectTimeoutMs });
+    const queue = await client.request('queue_get_state');
+    const rows = [...queue.turns, ...queue.settled, ...queue.pinned, ...queue.snoozed.rows].filter(row => row.id === b);
+    const workspaceId = observer.sessionsById.get(b).workspace_id;
+    runner.assert(rows.length === 1 && rows[0].workspaceId === workspaceId, 'shared owner has duplicate or misplaced queue rows', { queue, workspaceId });
+    await client.request('dom_click', { selector: `[data-testid="queue-${queue.turns.some(row => row.id === b) ? 'turn' : 'settled'}-${b}"] .queue-row-select` });
+    await client.request('dom_wait', { selector: `[data-session-terminal-workspace="${workspaceId}"][data-session-visible="1"]`, timeoutMs: observer.connectTimeoutMs });
+    await client.request('set_setting', { key: 'queue_mode_enabled', value: 'false' });
+    await client.request('select_session', { sessionId: a });
+  });
   await runner.step('ledger_attach_focuses_the_new_view', async () => {
     await client.request('dispatch_shortcut', { shortcutId: 'sessions.open' });
     await client.request('sessions_row_action', { sessionId: a, action: 'Open another view' });
@@ -77,5 +89,6 @@ finally {
     if (pane.codex_resolution) await observer.requestResult({ cmd: 'workspace_layout_close_pane', workspace_id: layout.workspace_id, pane_id: pane.pane_id }, 'workspace_layout_action_result').catch(() => {});
   }
   observer.send({ cmd: 'set_setting', key: 'codex_shared_enabled', value: 'false' });
+  observer.send({ cmd: 'set_setting', key: 'queue_mode_enabled', value: 'false' });
   await client.quitApp().catch(() => {}); await observer.close();
 }

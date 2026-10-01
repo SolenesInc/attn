@@ -31,6 +31,8 @@ layout snapshot without rewriting placement, focus or pane status.
 distinguishes shared and legacy owners. Old rows remain legacy. The frontend
 reads placement from daemon workspace layouts and metadata from the global
 session lookup; it never rewrites an owner's workspace when its view switches.
+Workspace rows retain each view; the queue counts each owner once and prefers
+its saved workspace when that workspace participates in the queue.
 
 ## Lifecycle contracts
 
@@ -87,7 +89,8 @@ explicit close
   another resolved view of this owner -> remove requested runtime only
   last resolved view -> native thread/archive
     await transcript watcher's final available-record reconciliation
-    finalize ledger, release native turn state and publish closed owner
+    atomically save archived owner and closed ledger
+    release native turn state and publish closed owner
   remove requested runtime and view
 ```
 
@@ -95,6 +98,8 @@ An unresolved view cannot close its previous owner. Archiving the last known
 view is refused while another unresolved view could still show that root. A
 failed blank attachment can be closed without archiving the original owner.
 Removing a view also removes its Unix socket after stopping its runtime.
+Startup removes surviving views of archived owners through the same helpers,
+so a crash after saving the close cannot leave their terminals behind.
 Archive is the native stop/unload operation; it does not require the TUI to exit
 or a `thread/closed` event. Ledger reopening unarchives the same native ID and
 preserves the Attn owner and history.

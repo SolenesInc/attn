@@ -103,7 +103,12 @@ export function createSessionNavigationActions(
 ): SessionNavigationActions {
   const select = (sessionId: string, paneId?: string) => {
     set((state) => {
-      const placement = workspaceSessions(state).find(session => session.workspace.agents.some(pane => pane.id === paneId || (!paneId && pane.sessionId === sessionId)));
+      const queue = state.navigationQueue;
+      const row = queue && [queue.chief, ...queue.turns, ...queue.settled, ...queue.pinned, ...queue.crew, ...queue.snoozed]
+        .find(entry => entry?.session.id === sessionId);
+      const preferredWorkspaceId = row?.workspaceId ?? state.sessions.find(session => session.id === sessionId)?.workspaceId;
+      const placements = workspaceSessions(state).filter(session => session.workspace.agents.some(pane => paneId ? pane.id === paneId : pane.sessionId === sessionId));
+      const placement = (!paneId && placements.find(session => session.workspaceId === preferredWorkspaceId)) || placements[0];
       const pane = placement?.workspace.agents.find(pane => paneId ? pane.id === paneId : pane.sessionId === sessionId);
       if (placement && pane && (pane.codexResolution || placement.workspaceId !== state.sessions.find(session => session.id === sessionId)?.workspaceId)) {
         return {

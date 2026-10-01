@@ -2,7 +2,7 @@ export const scenarioCatalog = [
   {
     id: 'codex-shared',
     runnerId: 'CODEX-SHARED',
-    label: 'Shared Codex: mutable pane owner, symmetric attach focus, draft and native New',
+    label: 'Shared Codex: mutable pane owner, symmetric attach focus, owner queue, draft and native New',
     command: ['node', 'scripts/real-app-harness/scenario-codex-shared.mjs'],
   },
   {

@@ -153,17 +153,17 @@ func (r *codexRuntime) projectViewLocked(v store.CodexView) {
 	}
 }
 
-func (r *codexRuntime) loadViews() error {
+func (r *codexRuntime) loadViews() ([]store.CodexView, error) {
 	views, err := r.d.store.CodexViews()
 	if err != nil {
-		return err
+		return nil, err
 	}
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	for _, v := range views {
 		r.views[v.RuntimeID] = v
 	}
-	return nil
+	return views, nil
 }
 
 func (r *codexRuntime) disconnectView(id string, generation ...string) {
