@@ -65,6 +65,16 @@ type pluginDriverSpawnResult struct {
 	CWD  string            `json:"cwd,omitempty"`
 }
 
+type pluginResumeAvailableParams struct {
+	CWD             string `json:"cwd"`
+	ResumeSessionID string `json:"resume_session_id"`
+}
+
+type pluginResumeAvailableResult struct {
+	Available bool   `json:"available"`
+	Reason    string `json:"reason,omitempty"`
+}
+
 type pluginReportStateParams struct {
 	SessionID     string `json:"session_id"`
 	RunID         string `json:"run_id"`
@@ -240,6 +250,7 @@ func normalizePluginAgent(value string) string {
 func validatePluginDriverCapabilities(values map[string]bool) (map[string]bool, error) {
 	allowed := map[string]struct{}{
 		"resume":                 {},
+		"resume_availability":    {},
 		"yolo":                   {},
 		"initial_prompt":         {},
 		"classifier":             {},
@@ -750,6 +761,25 @@ func (d *Daemon) notifyPluginDriverSessionClosed(pluginName, sessionID, runID, r
 		}
 		d.logf("plugin session close notified: plugin=%s session=%s run=%s reason=%s", pluginName, sessionID, runID, params.Reason)
 	}()
+}
+
+func (d *Daemon) pluginConversationResumable(reg pluginDriverRegistration, resumeID, cwd string) (bool, string) {
+	if !reg.Capabilities["resume_availability"] {
+		return true, ""
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), pluginDriverCallTimeout)
+	defer cancel()
+	var result pluginResumeAvailableResult
+	if err := d.callPlugin(ctx, reg.PluginName, "driver.resume_available", pluginResumeAvailableParams{CWD: cwd, ResumeSessionID: resumeID}, &result); err != nil {
+		return false, fmt.Sprintf("cannot check conversation %s in %s's storage: %v", resumeID, reg.Agent, err)
+	}
+	if !result.Available {
+		if reason := strings.TrimSpace(result.Reason); reason != "" {
+			return false, reason
+		}
+		return false, fmt.Sprintf("conversation %s is no longer in %s's storage", resumeID, reg.Agent)
+	}
+	return true, ""
 }
 
 func (d *Daemon) resolvePluginDriverLaunch(reg pluginDriverRegistration, params pluginDriverSpawnParams, resume bool) (pluginDriverSpawnResult, error) {

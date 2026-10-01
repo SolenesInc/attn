@@ -1,6 +1,7 @@
 package fakeagent
 
 import (
+	"bufio"
 	"context"
 	"encoding/json"
 	"errors"
@@ -89,16 +90,57 @@ func (p *piTerminal) begin(term *terminal) error {
 }
 
 func (p *piTerminal) openSession() error {
-	file := filepath.Join(p.cfg.ToolHome, ".pi", "agent", "sessions", p.conversation+".jsonl")
-	if _, err := os.Stat(file); err == nil {
-		p.resumed = true
-		return nil
-	}
 	cwd, err := os.Getwd()
 	if err != nil {
 		return err
 	}
+	file, err := findPiSession(p.cfg.ToolHome, cwd, p.conversation)
+	if err != nil {
+		return err
+	}
+	if file != "" {
+		p.resumed = true
+		return nil
+	}
+	p.term.print(fmt.Sprintf("Warning: No project session found with id %s; creating a new session with that id.", p.conversation))
+	file = filepath.Join(piSessionDir(p.cfg.ToolHome, cwd), strings.ReplaceAll(now(), ":", "-")+"_"+p.conversation+".jsonl")
 	return appendLines(file, map[string]any{"type": "session", "version": 3, "id": p.conversation, "timestamp": now(), "cwd": cwd})
+}
+
+func piSessionDir(home, cwd string) string {
+	encoded := "--" + strings.NewReplacer("/", "-", "\\", "-", ":", "-").Replace(strings.TrimLeft(cwd, "/\\")) + "--"
+	return filepath.Join(home, ".pi", "agent", "sessions", encoded)
+}
+
+func findPiSession(home, cwd, id string) (string, error) {
+	dir := piSessionDir(home, cwd)
+	files, err := os.ReadDir(dir)
+	if os.IsNotExist(err) {
+		return "", nil
+	}
+	if err != nil {
+		return "", err
+	}
+	for _, entry := range files {
+		if entry.IsDir() || !strings.HasSuffix(entry.Name(), ".jsonl") {
+			continue
+		}
+		path := filepath.Join(dir, entry.Name())
+		file, err := os.Open(path)
+		if err != nil {
+			return "", err
+		}
+		line, err := bufio.NewReader(file).ReadBytes('\n')
+		file.Close()
+		var header struct {
+			Type string `json:"type"`
+			ID   string `json:"id"`
+		}
+		if err == nil && json.Unmarshal(line, &header) == nil && header.Type == "session" && header.ID == id {
+			return path, nil
+		}
+	}
+	return "", nil
 }
 
 func (p *piTerminal) launch() launch {
@@ -229,11 +271,12 @@ func (p *piPlugin) connect() error {
 	err = p.daemon.call(context.Background(), "driver.register", map[string]any{
 		"agent": piAgentName(),
 		"capabilities": withPiCapabilityOverrides(map[string]bool{
-			"resume":           p.resume,
-			"initial_prompt":   true,
-			"state_reporting":  true,
-			"message_delivery": false,
-			"auto_mode":        true,
+			"resume":              p.resume,
+			"resume_availability": true,
+			"initial_prompt":      true,
+			"state_reporting":     true,
+			"message_delivery":    false,
+			"auto_mode":           true,
 		}),
 	}, &registered)
 	if err != nil || !registered.OK {
@@ -263,6 +306,16 @@ func (p *piPlugin) handleDaemon(_ *rpcPeer, method string, params json.RawMessag
 			return nil, fmt.Errorf("unknown method %q", method)
 		}
 		return p.launchRun(params, true)
+	case "driver.resume_available":
+		var request piSpawn
+		if err := json.Unmarshal(params, &request); err != nil {
+			return nil, err
+		}
+		path, err := findPiSession(p.cfg.ToolHome, request.CWD, request.ResumeSessionID)
+		if err != nil {
+			return nil, err
+		}
+		return map[string]any{"available": path != "", "reason": fmt.Sprintf("conversation %s is no longer in pi's storage (%s)", request.ResumeSessionID, piSessionDir(p.cfg.ToolHome, request.CWD))}, nil
 	case "driver.models":
 		if catalog := os.Getenv(PiModelsEnv); catalog != "" {
 			return json.RawMessage(catalog), nil

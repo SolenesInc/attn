@@ -1,0 +1,3 @@
+kind: fixed
+area: pi
+change: Resume and Reopen explain when a Pi conversation file is missing and refuse to start an empty conversation under its saved identity.

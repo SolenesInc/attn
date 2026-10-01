@@ -86,6 +86,16 @@ export type DriverSpawnParams = {
   auto_mode?: unknown;
 };
 
+export type DriverResumeAvailableParams = {
+  cwd: string;
+  resume_session_id: string;
+};
+
+export type DriverResumeAvailableResult = {
+  available: boolean;
+  reason?: string;
+};
+
 export type DriverSpawnResult = {
   argv: string[];
   env?: Record<string, string>;

@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { mkdtempSync, writeFileSync } from "node:fs";
+import { mkdirSync, mkdtempSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { PiDriver, type CommandResult, type RunCommand } from "../src/driver";
@@ -39,6 +39,12 @@ const uuidPattern = /^[0-9a-f-]{36}$/;
 
 // Keep filenames short: macOS unix socket paths cap at 104 bytes.
 const tmpRoot = mkdtempSync(join(tmpdir(), "attn-pi-"));
+const agentDir = join(tmpRoot, "agent");
+const sessionDir = join(agentDir, "sessions", "--tmp-work--");
+mkdirSync(sessionDir, { recursive: true });
+for (const id of ["abc-123", "conv-from-seed", "other-conv"]) {
+  writeFileSync(join(sessionDir, `${id}.jsonl`), JSON.stringify({ type: "session", id, cwd: "/tmp/work" }) + "\n");
+}
 const suitePath = join(tmpRoot, "suite.js");
 writeFileSync(suitePath, "// fake pi suite entrypoint\n");
 let relayCounter = 0;
@@ -81,7 +87,7 @@ function newDriver(options: {
 }): PiDriver {
   return new PiDriver({
     rpc: options.rpc,
-    env: options.env,
+    env: { PI_CODING_AGENT_DIR: agentDir, ...options.env },
     runCommand: options.runCommand ?? fakeRunCommand(),
     executable: options.executable ?? "pi",
     relay: noopRelay(),
@@ -104,6 +110,7 @@ describe("PiDriver", () => {
       agent: "pi",
       capabilities: {
         resume: true,
+        resume_availability: true,
         initial_prompt: true,
         model_pin: true,
         model_discovery: true,
@@ -305,6 +312,17 @@ describe("PiDriver", () => {
       model: "m1",
       thinking: "low",
     });
+  });
+
+  test("resume refuses missing storage before reporting metadata", async () => {
+    const rpc = new FakeRPC();
+    const driver = newDriver({ rpc });
+    const missingID = "deleted-conversation";
+    const availability = await driver.resumeAvailable({ cwd: "/tmp/work", resume_session_id: missingID });
+    expect(availability.available).toBe(false);
+    expect(availability.reason).toContain(missingID);
+    await expect(driver.resume(params({ resume_session_id: missingID }))).rejects.toThrow(/pi's storage/);
+    expect(rpc.requests).toEqual([]);
   });
 
   test("resume params pins override metadata pins", async () => {

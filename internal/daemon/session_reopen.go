@@ -318,15 +318,15 @@ func (d *Daemon) reopenConversation(execution garden.Dispatch) (bool, string) {
 	if resumeID == "" {
 		return false, "no conversation id was saved for this session, so there is nothing to resume"
 	}
-	return d.conversationResumable(strings.TrimSpace(execution.Agent), resumeID)
+	return d.conversationResumable(strings.TrimSpace(execution.Agent), resumeID, execution.Cwd)
 }
 
-func (d *Daemon) conversationResumable(agentName, resumeID string) (bool, string) {
+func (d *Daemon) conversationResumable(agentName, resumeID, cwd string) (bool, string) {
 	if plugin, ok := d.ensurePluginRegistry().driver(agentName); ok {
 		if !plugin.Capabilities["resume"] {
 			return false, fmt.Sprintf("agent %q does not resume conversations, so conversation %s cannot be picked up", agentName, resumeID)
 		}
-		return true, ""
+		return d.pluginConversationResumable(plugin, resumeID, cwd)
 	}
 	driver := agentdriver.Get(agentName)
 	if driver == nil {

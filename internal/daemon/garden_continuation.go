@@ -511,7 +511,7 @@ func (d *Daemon) continuationForSeedForeground(seed garden.Seed) *seedContinuati
 		continuation.HandoverPlacement = handoverReuseCwd
 		return continuation
 	}
-	if ok, reason := d.conversationResumable(agentName, resumeID); !ok {
+	if ok, reason := d.conversationResumable(agentName, resumeID, execution.Cwd); !ok {
 		continuation.ResumeReason = "the original conversation is unavailable: " + reason
 		continuation.HandoverPlacement = handoverReuseCwd
 		return continuation
