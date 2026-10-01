@@ -13,6 +13,7 @@ const (
 	crashWhileWakingASnooze         = "snooze-wake-running"
 	crashAfterWorktreeJournaled     = "delegation-worktree-journaled"
 	crashAfterWorktreeOwned         = "delegation-worktree-owned"
+	crashAfterGardenAdvice          = "garden-advice-received"
 )
 
 func crashAt(point string) {

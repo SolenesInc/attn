@@ -611,6 +611,7 @@ func (d *Daemon) gardenReviewClassifyHandler(ctx context.Context, job *jobs.Job)
 		return nil, err
 	}
 
+	crashAt(crashAfterGardenAdvice)
 	capture, err := d.captureGardenReview()
 	if err != nil {
 		return nil, err
