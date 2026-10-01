@@ -44,7 +44,11 @@ func (r *codexRuntime) closeViewLocked(runtimeID string, closed store.SessionClo
 			}
 		}
 	}
-	return r.removeViewLocked(runtimeID)
+	if err := r.removeViewLocked(runtimeID); err != nil {
+		return err
+	}
+	r.cleanupReservation(v.LaunchOwnerID)
+	return nil
 }
 
 func (r *codexRuntime) removeViewLocked(runtimeID string) error {
@@ -75,6 +79,18 @@ func (r *codexRuntime) closeOwnerLocked(id string, closed store.SessionClose) er
 	}
 	if owner == nil {
 		return fmt.Errorf("missing Codex owner %s", id)
+	}
+	if owner.NativeRootID == "" {
+		for runtimeID, view := range r.views {
+			if view.LaunchOwnerID == id {
+				if err := r.removeViewLocked(runtimeID); err != nil {
+					return err
+				}
+				r.removeLayoutView(runtimeID)
+			}
+		}
+		r.cleanupReservation(id)
+		return nil
 	}
 	launch, err := r.ownerContext(owner)
 	if err != nil {

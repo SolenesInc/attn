@@ -227,6 +227,10 @@ func (s *sharedFakeCodex) broadcast(method string, params any) {
 }
 
 func runSharedCodexView(cfg config) int {
+	if os.Getenv("ATTN_FAKE_CODEX_VIEW_FAIL_BEFORE_INITIALIZE") == "1" {
+		fmt.Fprintln(os.Stderr, "native view failed before initialization")
+		return 1
+	}
 	args := codexFlags.parse(os.Args[1:])
 	term, err := openTerminal(codexComposer)
 	if err != nil {

@@ -324,3 +324,30 @@ func TestSharedCodexUnixUnregisterClosesTheDisplayedOwnerAndRemovesItsWorkspace(
 		t.Fatalf("reopen exact pane: %+v %v", reopened, err)
 	}
 }
+
+func TestSharedCodexClosingAViewThatNeverInitializedCleansItsUnusedReservation(t *testing.T) {
+	t.Setenv("ATTN_FAKE_CODEX_VIEW_FAIL_BEFORE_INITIALIZE", "1")
+	w := newWorld(t, fakeagent.Codex)
+	app := w.App()
+	sharedCodexSetting(t, app, true)
+	spawn, workspaceID, _ := w.RequestSpawn(app, fakeagent.Codex, w.Path("failed"))
+	if !spawn.Success {
+		t.Fatal(protocol.Deref(spawn.Error))
+	}
+	testworld.Await(app, protocol.EventWorkspaceLayoutUpdated, func(e protocol.WorkspaceLayoutUpdatedMessage) bool {
+		for _, pane := range e.WorkspaceLayout.Panes {
+			if protocol.Deref(pane.RuntimeID) == spawn.ID {
+				return protocol.Deref(pane.CodexResolution) == protocol.CodexViewResolutionDisconnected
+			}
+		}
+		return false
+	})
+	if err := w.Client().Unregister(spawn.ID); err != nil {
+		t.Fatal(err)
+	}
+	testworld.Await(app, protocol.EventWorkspaceUnregistered, func(e protocol.WorkspaceUnregisteredMessage) bool { return e.Workspace.ID == workspaceID })
+	page, err := w.Client().SessionList(client.SessionListOptions{})
+	if err != nil || len(page.Entries) != 0 {
+		t.Fatalf("unused failed owner remains: %+v %v", page, err)
+	}
+}

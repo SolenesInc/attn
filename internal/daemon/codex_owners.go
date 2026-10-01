@@ -196,9 +196,11 @@ func (r *codexRuntime) prepareRPC(runtimeID string, m *codexshared.Message) (fun
 	if err != nil {
 		return nil, err
 	}
-	creation := m.Method != "thread/resume"
+	method := m.Method
+	creation := method != "thread/resume"
 	return func(reply codexshared.Message) {
 		if len(reply.Error) > 0 {
+			r.d.logf("Codex %s for owner %s in view %s: %s", method, owner.SessionID, runtimeID, reply.Error)
 			if creation {
 				r.cleanupReservation(owner.SessionID)
 			}
@@ -372,8 +374,10 @@ func (r *codexRuntime) cleanupReservation(id string) {
 		r.d.logf("Codex clean reservation %s: %v", id, err)
 		return
 	}
+	session := r.d.store.Get(id)
 	r.d.store.Remove(id)
 	r.d.dissociateSessionFromWorkspace(id)
+	r.d.publishSessionUnregistered(session)
 }
 
 func (r *codexRuntime) observeNative(m codexshared.Message) {

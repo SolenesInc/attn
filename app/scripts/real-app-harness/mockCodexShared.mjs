@@ -65,7 +65,7 @@ export async function runSharedMockServer() {
 
 export async function runSharedMockView() {
   const socket = arg('--remote').replace('unix://', '');
-  const peer = new WebSocket('ws://localhost/', { socketPath: socket });
+  const peer = new WebSocket(`ws+unix://${socket}:/`);
   await new Promise((resolve, reject) => { peer.once('open', resolve); peer.once('error', reject); });
   let seq = 0; const pending = new Map(); let selected = ''; let draft = '';
   const title = () => process.stdout.write(`\x1b]0;${selected}\x07`);
