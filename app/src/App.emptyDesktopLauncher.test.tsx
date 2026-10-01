@@ -1,6 +1,6 @@
 import { fireEvent, screen, within } from '@testing-library/react';
 import { describe, expect, it } from 'vitest';
-import { openSession } from './test/appFixtures';
+import { openActionMenu, openSession } from './test/appFixtures';
 import { daemonSession, emptyDesktop, soloDesktop } from './test/daemonFixtures';
 import { inspection, launchedAt, pathInput, repoInfo, serveLaunches, serveMachine, submitPath } from './test/locations';
 import type { CommandMessage } from './test/protocol';
@@ -113,6 +113,7 @@ describe('App empty desktop launcher', () => {
     await gesture(daemon, () => daemon.replyTo(held[0], { ...inspection('/home/me/projects/scratch'), request_id: (held[0] as { request_id?: string }).request_id }));
 
     expect(daemon.sentOf('spawn_session').map((spawn) => spawn.placement?.desktop_id)).toEqual(['other']);
+    expect(document.querySelector('[data-session-visible="1"]')?.getAttribute('data-desktop-id')).not.toBe('other');
   });
 
   it('starts a worktree agent on the desktop it was asked for, even after the user moves on', async () => {
@@ -158,6 +159,19 @@ describe('App empty desktop launcher', () => {
 
     expect(screen.getByTestId('repo-options')).toBeInTheDocument();
     expect(document.activeElement).toBe(row);
+  });
+
+  it('takes New agent from the command palette itself', async () => {
+    const { daemon } = await onAgentBesideEmptyDesktop();
+    await gesture(daemon, () => pressShortcut('desktop.select2'));
+    const search = await openActionMenu(daemon);
+    fireEvent.change(search, { target: { value: '>New agent' } });
+
+    await gesture(daemon, () => fireEvent.keyDown(search, { key: 'Enter' }));
+
+    expect(screen.queryByRole('dialog', { name: 'Commands' })).toBeNull();
+    expect(screen.queryByTestId('location-picker-overlay')).toBeNull();
+    expect(pathInput()).toHaveFocus();
   });
 
   it('stays put on Escape', async () => {

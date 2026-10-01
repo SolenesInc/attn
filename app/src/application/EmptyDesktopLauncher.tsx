@@ -30,15 +30,19 @@ export function EmptyDesktopLauncher({ desktopId, label, active }: { desktopId: 
   // The dialog unmounts after a pick; the inline picker starts over instead.
   const [pickerGeneration, setPickerGeneration] = useState(0);
 
+  const focusLauncher = useCallback(() => {
+    rootRef.current?.querySelector<HTMLElement>('[data-testid="location-picker-path-input"], [data-testid="repo-options"]')?.focus();
+  }, []);
+  // Registered even while covered (New Session from the palette closes it and lands here);
+  // a covered launcher takes focus when the cover lifts, below.
   useEffect(() => {
-    if (!active || launching) return;
-    const focusLauncher = () => {
-      rootRef.current?.querySelector<HTMLElement>('[data-testid="location-picker-path-input"], [data-testid="repo-options"]')?.focus();
-    };
-    focusLauncher();
-    registerInlineLauncher(focusLauncher);
+    if (launching) return;
+    registerInlineLauncher(active ? focusLauncher : () => {});
     return () => registerInlineLauncher(null);
-  }, [active, launching, registerInlineLauncher]);
+  }, [active, focusLauncher, launching, registerInlineLauncher]);
+  useEffect(() => {
+    if (active && !launching) focusLauncher();
+  }, [active, focusLauncher, launching]);
 
   const handleSelect = useCallback(
     (path: string, agent: SessionAgent, endpointId?: string, yoloMode?: boolean, chiefOfStaff?: boolean, autoMode?: boolean) => {

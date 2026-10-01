@@ -111,11 +111,14 @@ export function useSessionLaunch({
       spawnedFrom?: string;
       desktopId?: string;
     }) => {
-      // A pick lands on the desktop it was made for, even when it answers after the user moved on.
+      // A pick lands on the desktop it was made for, even when it answers after the user moved on;
+      // then it starts in the background instead of pulling the user back.
       const current = localDesktopForLaunch(spawn.endpointId);
       const desktop = useProfilesStore.getState().desktops.find((entry) => entry.id === spawn.desktopId) ?? current;
       const target = launchTarget(desktop, spawn.direction, spawn.anchorPaneId);
-      const launch = useSessionStore.getState().beginIntent({ kind: 'session', sessionId: spawn.sessionId });
+      const launch = desktop.id === current.id
+        ? useSessionStore.getState().beginIntent({ kind: 'session', sessionId: spawn.sessionId })
+        : null;
       let placementError: string | undefined;
       try {
         await createSession(
@@ -140,12 +143,12 @@ export function useSessionLaunch({
           },
         }));
       } catch (error) {
-        useSessionStore.getState().intentFailed(launch);
+        if (launch) useSessionStore.getState().intentFailed(launch);
         closeSession(spawn.sessionId);
         throw error;
       }
       const { intent } = useSessionStore.getState();
-      if (intent?.id === launch) {
+      if (launch && intent?.id === launch) {
         selectCreatedSession(spawn.sessionId, intent.focusOwner);
       } else if (placementError) {
         showError(`${spawn.label} started without a pane on this desktop: ${placementError}`);
