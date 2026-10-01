@@ -381,15 +381,18 @@ describe('App notebook saving', () => {
     expect(documentPane()).not.toHaveTextContent('Saved');
   });
 
-  it('bolds the word under the cursor with Ctrl+B on Linux', async () => {
-    onTestFinished(stubNavigatorPlatform('Linux x86_64'));
+  it.each([
+    ['Linux x86_64', { ctrlKey: true }],
+    ['MacIntel', { metaKey: true }],
+  ])('bolds the word under the cursor with the native shortcut on %s', async (platform, modifiers) => {
+    onTestFinished(stubNavigatorPlatform(platform));
     const vault = freshVault();
     vault.files['knowledge/index.md'] = 'buy milk';
     const { daemon } = await openVault({ vault });
     const editor = noteEditor();
     act(() => editor.dispatch({ selection: { anchor: 5 } }));
 
-    fireEvent.keyDown(documentPane().querySelector('.cm-content')!, { key: 'b', code: 'KeyB', ctrlKey: true });
+    fireEvent.keyDown(documentPane().querySelector('.cm-content')!, { key: 'b', code: 'KeyB', ...modifiers });
     await act(() => vi.advanceTimersByTimeAsync(700));
     await daemon.idle();
 
@@ -652,4 +655,3 @@ describe('App notebook tile root', () => {
     expect(dock.tile_params).toBe(tileParams);
   });
 });
-
