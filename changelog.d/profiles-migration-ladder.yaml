@@ -1,3 +1,3 @@
 kind: internal
 area: profiles
-change: Profile migrations run at 158–162, after next's session-todos and apps-platform retirements (156–157), and next's GPT-6.1 Sol cost migration runs after them at 163. A database a development desktops build upgraded before then, or a next build upgraded with the Sol migration at 158, is refused with a reset instruction.
+change: Profile migrations run at 158–162, after next's session-todos and apps-platform retirements (156–157), and next's GPT-6.1 Sol cost migration runs after them at 163. The kept-conversations migration runs next at 164, preserving the profile ladder already used by production. A database a development desktops build upgraded before then, or a next build upgraded with the Sol migration at 158 or kept-conversations migration at 159, is refused with a reset instruction.

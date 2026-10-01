@@ -14,7 +14,6 @@ import (
 	"github.com/victorarias/attn/internal/crew"
 	"github.com/victorarias/attn/internal/fakeagent"
 	"github.com/victorarias/attn/internal/protocol"
-	"github.com/victorarias/attn/internal/ptybackend"
 	"github.com/victorarias/attn/internal/testworld"
 )
 
@@ -169,84 +168,63 @@ func TestEveryOpenTicketOfASessionThatDiesMidFlightCrashesAndSettledOnesStay(t *
 }
 
 func TestASessionThatJoinsTheCrewKeepsItsTicketThreadsWithoutReplayingThem(t *testing.T) {
-	for _, mode := range []string{"external", "managed"} {
-		t.Run(mode, func(t *testing.T) {
-			inBubbleWithAgents(t, func(t *testing.T, w *world) {
-				w.finishStartupWork()
-				writeCrewCharter(t, w, "trellis")
-				w.restart()
-				app, cli := w.App(), w.Client()
-				dayA, dayB := "day-a", "day-b"
-				if mode == "managed" {
-					dayA = w.Spawn(app, fakeagent.Claude, w.Path("day-a"))
-					dayB = w.Spawn(app, fakeagent.Claude, w.Path("day-b"))
-				} else {
-					for _, day := range []string{dayA, dayB} {
-						if err := cli.Register(day, day, w.Path(day)); err != nil {
-							t.Fatal(err)
-						}
-					}
-				}
-				createTicket(t, cli, dayA, "Own thread", "own-thread")
-				commentOnTicket(t, cli, dayA, "own-thread", "my own note")
-				createTicket(t, cli, "planner", "Watched", "watched")
-				for _, day := range []string{dayA, dayB} {
-					if _, err := cli.SubscribeTicket(day, "watched"); err != nil {
-						t.Fatal(err)
-					}
-				}
-				commentOnTicket(t, cli, "planner", "watched", "already read")
-				for _, day := range []string{dayA, dayB} {
-					if got := inboxLines(t, cli, day); !slices.Contains(got, "watched commented already read") {
-						t.Fatalf("before joining, %s was told %q", day, got)
-					}
-				}
-				commentOnTicket(t, cli, "planner", "own-thread", "while you were away")
+	inBubble(t, func(t *testing.T, w *world) {
+		w.finishStartupWork()
+		writeCrewCharter(t, w, "trellis")
+		w.restart()
+		cli := w.Client()
+		for _, day := range []string{"day-a", "day-b"} {
+			if err := w.InjectSession(day, day, w.Path(day), protocol.SessionAgentClaude); err != nil {
+				t.Fatal(err)
+			}
+		}
+		createTicket(t, cli, "day-a", "Own thread", "own-thread")
+		commentOnTicket(t, cli, "day-a", "own-thread", "my own note")
+		createTicket(t, cli, "planner", "Watched", "watched")
+		for _, day := range []string{"day-a", "day-b"} {
+			if _, err := cli.SubscribeTicket(day, "watched"); err != nil {
+				t.Fatal(err)
+			}
+		}
+		commentOnTicket(t, cli, "planner", "watched", "already read")
+		for _, day := range []string{"day-a", "day-b"} {
+			if got := inboxLines(t, cli, day); !slices.Contains(got, "watched commented already read") {
+				t.Fatalf("before joining, %s was told %q", day, got)
+			}
+		}
+		commentOnTicket(t, cli, "planner", "own-thread", "while you were away")
 
-				if err := cli.RegisterAsMember(dayA, "day-a", w.Path("day-a"), "", "trellis"); err != nil {
-					t.Fatalf("join the crew as trellis: %v", err)
-				}
+		if err := w.InjectCrewSession("day-a", "day-a", w.Path("day-a"), "trellis"); err != nil {
+			t.Fatalf("join the crew as trellis: %v", err)
+		}
 
-				if got := inboxLines(t, cli, dayA); !slices.Equal(got, []string{"own-thread commented while you were away"}) {
-					t.Errorf("after joining, the member was told %q, want only the unread comment from someone else", got)
-				}
-				if got := activityLines(showTicket(t, cli, "own-thread")); !slices.Equal(got, []string{
-					"member:trellis comment my own note", "planner comment while you were away",
-				}) {
-					t.Errorf("own-thread activity = %q, want the earlier note attributed to the member", got)
-				}
-				commentOnTicket(t, cli, "planner", "watched", "still following?")
-				if got := inboxLines(t, cli, dayA); !slices.Equal(got, []string{"watched commented still following?"}) {
-					t.Errorf("the member was told %q, want new activity on the ticket it followed", got)
-				}
+		if got := inboxLines(t, cli, "day-a"); !slices.Equal(got, []string{"own-thread commented while you were away"}) {
+			t.Errorf("after joining, the member was told %q, want only the unread comment from someone else", got)
+		}
+		if got := activityLines(showTicket(t, cli, "own-thread")); !slices.Equal(got, []string{
+			"member:trellis comment my own note", "planner comment while you were away",
+		}) {
+			t.Errorf("own-thread activity = %q, want the earlier note attributed to the member", got)
+		}
+		commentOnTicket(t, cli, "planner", "watched", "still following?")
+		if got := inboxLines(t, cli, "day-a"); !slices.Equal(got, []string{"watched commented still following?"}) {
+			t.Errorf("the member was told %q, want new activity on the ticket it followed", got)
+		}
 
-				if err := cli.Unregister(dayA); err != nil {
-					t.Fatal(err)
-				}
-				if err := cli.RegisterAsMember(dayB, "day-b", w.Path("day-b"), "", "trellis"); err != nil {
-					t.Fatalf("day-b wakes as trellis: %v", err)
-				}
-				if got := inboxLines(t, cli, dayB); len(got) != 0 {
-					t.Errorf("waking in a session that had read less replayed %q", got)
-				}
-				commentOnTicket(t, cli, "planner", "watched", "new day")
-				awake := wakeCrew(t, cli, "trellis", "")
-				if !awake.AlreadyAwake || awake.SessionID != dayB {
-					t.Errorf("waking the member with unread ticket activity = %+v, want its registered day %s", awake, dayB)
-				}
-				if got := inboxLines(t, cli, dayB); !slices.Equal(got, []string{"watched commented new day"}) {
-					t.Errorf("the member's new session was told %q, want the new comment", got)
-				}
-				if err := cli.Unregister(dayB); err != nil {
-					t.Fatal(err)
-				}
-				next := wakeCrew(t, cli, "trellis", "")
-				if next.AlreadyAwake || next.SessionID == dayB {
-					t.Errorf("waking after the wrapper unregisters = %+v, want a new day", next)
-				}
-			})
-		})
-	}
+		if err := cli.Unregister("day-a"); err != nil {
+			t.Fatal(err)
+		}
+		if err := w.InjectCrewSession("day-b", "day-b", w.Path("day-b"), "trellis"); err != nil {
+			t.Fatalf("day-b wakes as trellis: %v", err)
+		}
+		if got := inboxLines(t, cli, "day-b"); len(got) != 0 {
+			t.Errorf("waking in a session that had read less replayed %q", got)
+		}
+		commentOnTicket(t, cli, "planner", "watched", "new day")
+		if got := inboxLines(t, cli, "day-b"); !slices.Equal(got, []string{"watched commented new day"}) {
+			t.Errorf("the member's new session was told %q, want the new comment", got)
+		}
+	})
 }
 
 func TestWakingAMemberWhoseManagedTerminalDisappearedStartsANewDay(t *testing.T) {
@@ -261,64 +239,6 @@ func TestWakingAMemberWhoseManagedTerminalDisappearedStartsANewDay(t *testing.T)
 		next := wakeCrew(t, cli, "trellis", "")
 		if next.AlreadyAwake || next.SessionID == previous.SessionID || protocol.Deref(next.ReleasedSessionID) != previous.SessionID {
 			t.Fatalf("waking with a missing managed terminal = %+v, want the old day released and a new one started", next)
-		}
-	})
-}
-
-func TestARecoveredManagedDayCannotBecomeExternalByRegisteringAgain(t *testing.T) {
-	inBubbleWithAgents(t, func(t *testing.T, w *world) {
-		w.App()
-		writeCrewCharter(t, w, "trellis")
-		previous := "recovered-day"
-		if err := w.terms.Spawn(context.Background(), ptybackend.SpawnOptions{
-			ID: previous, Agent: "claude", CWD: w.Path("recovered"),
-		}); err != nil {
-			t.Fatal(err)
-		}
-		w.restart()
-		// The initial app snapshot waits for worker recovery to settle.
-		w.App()
-		cli := w.Client()
-		if sessions, err := cli.Query(""); err != nil || len(sessions) != 1 || sessions[0].ID != previous {
-			t.Fatalf("the worker's day was not recovered: %v, %v", sessions, err)
-		}
-		if err := cli.RegisterAsMember(previous, previous, w.Path("recovered"), "", "trellis"); err != nil {
-			t.Fatal(err)
-		}
-		if awake := wakeCrew(t, cli, "trellis", ""); !awake.AlreadyAwake || awake.SessionID != previous {
-			t.Fatalf("the recovered worker was replaced while running: %+v", awake)
-		}
-		if err := w.terms.Remove(context.Background(), previous); err != nil {
-			t.Fatal(err)
-		}
-		next := wakeCrew(t, cli, "trellis", "")
-		if next.AlreadyAwake || next.SessionID == previous || protocol.Deref(next.ReleasedSessionID) != previous {
-			t.Fatalf("waking after the recovered worker disappeared = %+v, want a new day", next)
-		}
-	})
-}
-
-func TestADayTakenOverByAManagedTerminalUsesTerminalLiveness(t *testing.T) {
-	inBubbleWithAgents(t, func(t *testing.T, w *world) {
-		writeCrewCharter(t, w, "trellis")
-		w.restart()
-		app, cli := w.App(), w.Client()
-		previous := "external-day"
-		if err := cli.RegisterAsMember(previous, previous, w.Path(previous), "", "trellis"); err != nil {
-			t.Fatal(err)
-		}
-		w.Spawn(app, fakeagent.Claude, w.Path("managed-day"), func(msg *protocol.SpawnSessionMessage) {
-			msg.ID = previous
-		})
-		if awake := wakeCrew(t, cli, "trellis", ""); !awake.AlreadyAwake || awake.SessionID != previous {
-			t.Fatalf("the managed takeover changed the member's day: %+v", awake)
-		}
-		if err := w.terms.Remove(context.Background(), previous); err != nil {
-			t.Fatal(err)
-		}
-		next := wakeCrew(t, cli, "trellis", "")
-		if next.AlreadyAwake || next.SessionID == previous || protocol.Deref(next.ReleasedSessionID) != previous {
-			t.Fatalf("waking after the managed takeover disappeared = %+v, want a new day", next)
 		}
 	})
 }

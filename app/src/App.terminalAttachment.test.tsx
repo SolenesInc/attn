@@ -1,19 +1,19 @@
 import { act } from '@testing-library/react';
 import { expect, it, vi } from 'vitest';
 import { openSession } from './test/appFixtures';
-import { laidOutWorkspace, pane, renderWorkspace, split } from './test/workspaces';
+import { pane, relayOut, renderDesktop, split } from './test/desktopLayouts';
 
 it('keeps reattaching when a completed request deadline passes during the next attach', async () => {
   const root = split('source', 'vertical', [pane('s1'), pane('s2')]);
-  const { daemon } = await renderWorkspace(root, ['s1', 's2']);
+  const { daemon } = await renderDesktop(root, ['s1', 's2']);
   await openSession(daemon, 's1');
   const attaches = () => daemon.sentOf('attach_session').filter((command) => command.id === 's1');
   expect(attaches()).toHaveLength(1);
 
   const remount = async () => {
-    daemon.emit({ event: 'workspace_layout_updated', workspace_layout: laidOutWorkspace(pane('s2'), ['s2']).layout! });
+    relayOut(daemon, pane('s2'), ['s2']);
     await daemon.idle();
-    daemon.emit({ event: 'workspace_layout_updated', workspace_layout: laidOutWorkspace(root, ['s1', 's2']).layout! });
+    relayOut(daemon, root, ['s1', 's2']);
     await daemon.idle();
   };
 

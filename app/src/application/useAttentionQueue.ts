@@ -2,9 +2,10 @@ import type { MouseEvent as ReactMouseEvent } from 'react';
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import type { SnoozePlacement } from '../components/SnoozeMenu';
 import { useSessionStore } from '../store/sessions';
+import { sameLeaf, type ActiveLeaf } from '../navigation/activeLeaf';
 import { focusedQueueRow } from '../components/focusedQueueRow';
 import { useDaemonApi } from '../contexts/DaemonApiContext';
-import { useAgentOnScreen } from '../hooks/useDesktopSelectionBridge';
+import { useAgentOnScreen, currentActiveLeaf } from '../hooks/useDesktopSelectionBridge';
 import { isAttentionSessionState, type UISessionState } from '../types/sessionState';
 import {
   buildQueueBands,
@@ -85,7 +86,8 @@ export function useAttentionQueue({
     session: { id: string; label: string };
     placement: SnoozePlacement;
     origin: HTMLElement | null;
-    activeSessionId: string | null;
+    leaf: ActiveLeaf | null;
+    view: string;
   } | null>(null);
 
   const openSnoozeMenu = useCallback(
@@ -95,23 +97,25 @@ export function useAttentionQueue({
         session,
         placement: { kind: 'anchor', top: rect.bottom + 4, left: rect.left },
         origin: event.currentTarget as HTMLElement,
-        activeSessionId,
+        leaf: currentActiveLeaf(),
+        view: useSessionStore.getState().view,
       });
     },
-    [activeSessionId],
+    [],
   );
 
-  const openSnoozeForSession = useCallback((session: { id: string; label: string }, row?: HTMLElement) => {
-    const origin = row ?? (document.activeElement instanceof HTMLElement ? document.activeElement : null);
+  const openSnoozeForSession = useCallback((session: { id: string; label: string }, row?: HTMLElement, opener?: HTMLElement | null) => {
+    const origin = opener ?? row ?? (document.activeElement instanceof HTMLElement ? document.activeElement : null);
     const rect = row?.getBoundingClientRect();
     const pane = document.querySelector<HTMLElement>(`.terminal-wrapper.active [data-pane-session-id="${session.id}"]`);
     setSnoozeMenu({
       session: { id: session.id, label: session.label },
       placement: rect ? { kind: 'anchor', top: rect.bottom + 4, left: rect.left } : { kind: 'center', pane },
       origin,
-      activeSessionId,
+      leaf: currentActiveLeaf(),
+      view: useSessionStore.getState().view,
     });
-  }, [activeSessionId]);
+  }, []);
 
   const actionsFor = useCallback(
     (session: EnrichedSession) =>
@@ -131,7 +135,7 @@ export function useAttentionQueue({
 
   const handleSnoozeActiveSession = useMemo(
     () =>
-      agentOnScreen && agentOnScreenActions?.snooze ? () => openSnoozeForSession(agentOnScreen) : undefined,
+      agentOnScreen && agentOnScreenActions?.snooze ? (opener?: HTMLElement | null) => openSnoozeForSession(agentOnScreen, undefined, opener) : undefined,
     [agentOnScreen, agentOnScreenActions?.snooze, openSnoozeForSession],
   );
 
@@ -183,7 +187,7 @@ export function useAttentionQueue({
   }, [enrichedLocalSessions, snoozeMenu]);
 
   const restoreSnoozeFocus = useCallback((reason: 'cancel' | 'choose' | 'removed') => {
-    const selectionUnchanged = snoozeMenu?.activeSessionId === useSessionStore.getState().activeSessionId;
+    const selectionUnchanged = snoozeMenu?.view === useSessionStore.getState().view && sameLeaf(snoozeMenu.leaf, currentActiveLeaf());
     if (reason === 'cancel' && selectionUnchanged && snoozeMenu?.origin?.isConnected) {
       snoozeMenu.origin.focus({ preventScroll: true });
       return;
