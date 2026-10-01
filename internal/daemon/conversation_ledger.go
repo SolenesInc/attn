@@ -133,14 +133,43 @@ func (d *Daemon) keptConversationList(includeDeleted bool) (*protocol.KeptConver
 		row := rowsByKey[key]
 		row.Agent, row.ResumeID = key.agent, key.resumeID
 		row.PinnedAt = protocol.Ptr(pin.PinnedAt.UTC().Format(time.RFC3339Nano))
+		rowsByKey[key] = row
+	}
+	for key := range seeds {
+		if _, keeper := agentdriver.Get(key.agent).(agentdriver.ConversationKeeper); !keeper {
+			continue
+		}
+		row := rowsByKey[key]
+		row.Agent, row.ResumeID = key.agent, key.resumeID
+		rowsByKey[key] = row
+		if len(byKey[key]) == 0 {
+			entries, err := d.store.ConversationSessions(key.resumeID)
+			if err != nil {
+				return nil, err
+			}
+			for _, entry := range entries {
+				if entry.Agent == key.agent && entry.ResumeID == key.resumeID {
+					byKey[key] = append(byKey[key], entry)
+				}
+			}
+		}
+	}
+	for key, row := range rowsByKey {
 		if row.Kept == nil || row.Kept.DeletedAt != nil {
+			if row.PinnedAt == nil && len(seeds[key]) == 0 {
+				continue
+			}
 			row.Kept, row.SourceBytes = nil, nil
-			reason := "pinned; copying on the next pass"
+			reason := "kept by open seeds; copying on the next pass"
+			if row.PinnedAt != nil {
+				reason = "pinned; copying on the next pass"
+			}
 			if live[key] {
+				reason = strings.TrimSuffix(reason, "copying on the next pass")
 				if conversationKeepQuiet() == 24*time.Hour {
-					reason = "pinned; copy once quiet for a day"
+					reason += "copy once quiet for a day"
 				} else {
-					reason = "pinned; copy once quiet for " + conversationKeepQuiet().String()
+					reason += "copy once quiet for " + conversationKeepQuiet().String()
 				}
 			}
 			row.PendingReason = protocol.Ptr(reason)
@@ -194,6 +223,9 @@ func (d *Daemon) keepConversation(id string, keep bool) error {
 		return err
 	}
 	if keep {
+		if !d.conversationKnown(agentdriver.Get(key.agent), key.resumeID) {
+			return fmt.Errorf("cannot keep conversation %s: neither native files nor a live attn copy exist", key.resumeID)
+		}
 		err = d.store.PinConversation(key.agent, key.resumeID, session, time.Now())
 	} else {
 		err = d.store.UnpinConversation(key.agent, key.resumeID)

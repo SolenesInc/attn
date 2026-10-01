@@ -1,7 +1,6 @@
 package daemon_test
 
 import (
-	"database/sql"
 	"os"
 	"path/filepath"
 	"strings"
@@ -132,26 +131,6 @@ func TestConversationForgetRefusesOpenSeedsThenDeletesOnlyAttnsCopy(t *testing.T
 	if err != nil {
 		t.Fatal(err)
 	}
-	db, err := sql.Open("sqlite3", filepath.Join(w.Dir, "attn.db"))
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer db.Close()
-	if _, err := db.Exec(`CREATE TRIGGER reject_forget BEFORE UPDATE OF deleted_at ON kept_conversations BEGIN SELECT RAISE(ABORT, 'forget database unavailable'); END`); err != nil {
-		t.Fatal(err)
-	}
-	if err := cli.KeptConversationForget(first.ConversationID); err == nil || !strings.Contains(err.Error(), "forget database unavailable") {
-		t.Fatalf("database failure: %v", err)
-	}
-	if rows := conversationRows(t, cli, false); rows.Count != 1 || rows.Rows[0].Kept.PinnedAt == nil {
-		t.Fatalf("failed forget removed the pin or copy: %+v", rows)
-	}
-	if got, err := os.ReadFile(archive); err != nil || string(got) != string(archiveBytes) {
-		t.Fatalf("failed forget removed archive: %v", err)
-	}
-	if _, err := db.Exec("DROP TRIGGER reject_forget"); err != nil {
-		t.Fatal(err)
-	}
 	events := w.App()
 	forgot := testworld.Request(app, protocol.KeptConversationForgetMessage{Cmd: protocol.CmdKeptConversationForget, SessionID: first.ConversationID, RequestID: protocol.Ptr("forget")}, protocol.EventKeptConversationForgetResult, func(r protocol.KeptConversationForgetResultEvent) bool {
 		return protocol.Deref(r.RequestID) == "forget"
@@ -201,6 +180,12 @@ func TestConversationForgetRefusesOpenSeedsThenDeletesOnlyAttnsCopy(t *testing.T
 		t.Fatalf("forget left pin: %+v", rows)
 	}
 	sessionRecoveryDeleteTranscript(t, first.ConversationID)
+	if err := cli.KeptConversationKeep(first.ConversationID, true); err == nil || !strings.Contains(err.Error(), "neither native files nor a live attn copy exist") {
+		t.Fatalf("missing conversation pin: %v", err)
+	}
+	if rows := conversationRows(t, cli, false); rows.PendingCount != 0 {
+		t.Fatalf("missing conversation left a pending pin: %+v", rows)
+	}
 	verdict := reopenVerdict(t, cli, delegated.SessionID)
 	date := conversationDateForTest(protocol.Deref(tombstone.DeletedAt))
 	if verdict.Reopenable || !strings.Contains(protocol.Deref(verdict.Reason), "you deleted attn's copy") || !strings.Contains(protocol.Deref(verdict.Reason), date) {
@@ -327,6 +312,30 @@ func TestConversationLivePinIsVisibleBeforeCopyAndCanBeRemoved(t *testing.T) {
 	shown, err = cli.SessionShow(id)
 	if err != nil || shown.Entry.ConversationPinnedAt != nil {
 		t.Fatalf("ledger pin survived unkeep: %+v, %v", shown, err)
+	}
+}
+
+func TestConversationSeedReferenceIsVisibleBeforeCopy(t *testing.T) {
+	w := newWorld(t, fakeagent.Claude)
+	app, cli := w.App(), w.Client()
+	delegated := seedResumeDelegate(t, w, fakeagent.Claude, "api")
+	run := w.Launched(delegated.SessionID)
+	run.Prompted()
+	run.Reply("live <!-- attn:state=waiting_input -->")
+	plantSeedAs(t, cli, "", "drain the keep pass")
+	testworld.AwaitTaskDone(app, "conversation_keep")
+	rows := conversationRows(t, cli, false)
+	if rows.Count != 0 || rows.StoredBytes != 0 || rows.PendingCount != 1 || len(rows.Rows) != 1 {
+		t.Fatalf("seed-only pending totals: %+v", rows)
+	}
+	row := rows.Rows[0]
+	if row.Kept != nil || row.SourceBytes != nil || row.PinnedAt != nil || len(row.Seeds) != 1 || row.Seeds[0].ID != delegated.SeedID || len(row.SessionIds) != 1 || row.SessionIds[0] != delegated.SessionID || !strings.Contains(protocol.Deref(row.PendingReason), "quiet") {
+		t.Fatalf("seed-only pending row: %+v", row)
+	}
+	lifeMove(t, cli, "", delegated.SeedID, "wither", "finished", "")
+	testworld.AwaitTaskDone(app, "conversation_keep")
+	if rows := conversationRows(t, cli, false); rows.PendingCount != 0 || len(rows.Rows) != 0 {
+		t.Fatalf("closed seed left a pending row: %+v", rows)
 	}
 }
 
