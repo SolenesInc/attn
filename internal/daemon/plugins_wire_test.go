@@ -211,7 +211,7 @@ func pluginsCheckout(t *testing.T, dir, name, version, script string) string {
 	if err := os.MkdirAll(dir, 0o755); err != nil {
 		t.Fatal(err)
 	}
-	manifest := "name = \"" + name + "\"\nversion = \"" + version + "\"\nattn_api_version = 6\n\n[plugin]\nkind = \"executable\"\npath = \"run\"\n"
+	manifest := "name = \"" + name + "\"\nversion = \"" + version + "\"\nattn_api_version = 7\n\n[plugin]\nkind = \"executable\"\npath = \"run\"\n"
 	if err := os.WriteFile(filepath.Join(dir, "attn-plugin.toml"), []byte(manifest), 0o644); err != nil {
 		t.Fatal(err)
 	}

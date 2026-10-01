@@ -33,7 +33,8 @@ fresh remains an explicit action in the session ledger.
 The driver advertises `resume_availability` and answers
 `driver.resume_available({conversations: [{cwd, resume_session_id}]})` with
 `{availability: [{cwd, resume_session_id, available, reason?}]}`.
-This read-only check matches the session header ID in Pi's cwd directory. It
+This read-only check verifies matching-header existence in Pi's cwd directory;
+full transcript integrity is tracked separately. It
 honors `PI_CODING_AGENT_DIR`, `PI_CODING_AGENT_SESSION_DIR`, and project/global
 `sessionDir` settings. Unreadable unrelated session files are skipped, as in Pi discovery. The driver
 checks again before preparing a resume launch. Availability has a dedicated
@@ -45,5 +46,6 @@ inspects storage again. See the
 before inspecting plugin storage, so project settings are available again;
 failed inspection rolls the recreated worktree back.
 
-Plugins without this optional capability keep their existing resume behavior.
-The updated Pi plugin requires a daemon that recognizes `resume_availability`.
+The updated Pi plugin uses plugin API 7, so an older daemon rejects it at
+manifest/hello validation. API 7 drivers without `resume_availability` retain
+capability-based resume behavior.

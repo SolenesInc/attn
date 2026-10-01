@@ -18,7 +18,7 @@ import (
 
 const (
 	piVersion          = "0.80.10"
-	piPluginAPIVersion = 6
+	piPluginAPIVersion = 7
 	piRelaySocketEnv   = "ATTN_PI_SUITE_SOCKET"
 	piRelayTokenEnv    = "ATTN_PI_TOKEN"
 	piAutoModeEnv      = "ATTN_PI_AUTOMODE_CONFIG"

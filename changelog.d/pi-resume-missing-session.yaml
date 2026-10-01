@@ -1,3 +1,4 @@
 kind: fixed
 area: pi
 change: Resume and Reopen explain when a Pi conversation file is missing and refuse to start an empty conversation under its saved identity.
+notes: Plugin API is now 7; custom plugins must update their SDK and manifest API declaration.

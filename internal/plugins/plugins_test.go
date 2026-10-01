@@ -23,22 +23,22 @@ func TestLoadManifestAcceptsWhatARuntimeCanStartAndNamesWhatItRefuses(t *testing
 		refusal  string
 	}{
 		{name: "a legacy entrypoint runs under bun",
-			manifest: "name = \"worktree-provider\"\nversion = \"0.1.0\"\nattn_api_version = 6\n\n[plugin]\nentrypoint = \"src/index.ts\"\n",
+			manifest: "name = \"worktree-provider\"\nversion = \"0.1.0\"\nattn_api_version = 7\n\n[plugin]\nentrypoint = \"src/index.ts\"\n",
 			files:    bunEntry, wantName: "worktree-provider", wantKind: EntrypointBun, wantPath: "src/index.ts"},
 		{name: "a runtime-only name may hold a slash",
-			manifest: "name = \"team/worktree-provider\"\nversion = \"0.1.0\"\nattn_api_version = 6\n\n[plugin]\nentrypoint = \"src/index.ts\"\n",
+			manifest: "name = \"team/worktree-provider\"\nversion = \"0.1.0\"\nattn_api_version = 7\n\n[plugin]\nentrypoint = \"src/index.ts\"\n",
 			files:    bunEntry, wantName: "team/worktree-provider", wantKind: EntrypointBun, wantPath: "src/index.ts"},
 		{name: "an executable entrypoint runs as itself",
-			manifest: "name = \"provider\"\nversion = \"0.1.0\"\nattn_api_version = 6\n\n[plugin]\nkind = \"executable\"\npath = \"bin/provider\"\n",
+			manifest: "name = \"provider\"\nversion = \"0.1.0\"\nattn_api_version = 7\n\n[plugin]\nkind = \"executable\"\npath = \"bin/provider\"\n",
 			files:    map[string]file{"bin/provider": {"#!/bin/sh\n", 0o755}}, wantName: "provider", wantKind: EntrypointExecutable, wantPath: "bin/provider"},
 		{name: "an executable entrypoint without the executable bit is refused",
-			manifest: "name = \"provider\"\nversion = \"0.1.0\"\nattn_api_version = 6\n\n[plugin]\nkind = \"executable\"\npath = \"bin/provider\"\n",
+			manifest: "name = \"provider\"\nversion = \"0.1.0\"\nattn_api_version = 7\n\n[plugin]\nkind = \"executable\"\npath = \"bin/provider\"\n",
 			files:    map[string]file{"bin/provider": {"binary", 0o644}}, refusal: "must be executable"},
 		{name: "an entrypoint outside the plugin is refused",
-			manifest: "name = \"worktree-provider\"\nversion = \"0.1.0\"\nattn_api_version = 6\n\n[plugin]\nentrypoint = \"../outside.ts\"\n",
+			manifest: "name = \"worktree-provider\"\nversion = \"0.1.0\"\nattn_api_version = 7\n\n[plugin]\nentrypoint = \"../outside.ts\"\n",
 			files:    map[string]file{"../outside.ts": {"// outside\n", 0o644}}, refusal: "must stay within the plugin directory"},
 		{name: "an older plugin API is refused",
-			manifest: "name = \"provider\"\nversion = \"0.1.0\"\nattn_api_version = 3\n\n[plugin]\nentrypoint = \"entry.ts\"\n",
+			manifest: "name = \"provider\"\nversion = \"0.1.0\"\nattn_api_version = 6\n\n[plugin]\nentrypoint = \"entry.ts\"\n",
 			files:    map[string]file{"entry.ts": {"// entrypoint\n", 0o644}}, refusal: "unsupported attn_api_version"},
 	}
 	for _, tc := range cases {
