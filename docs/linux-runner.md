@@ -63,6 +63,8 @@ The guest receives no host routing variables or provider credentials.
 when a scenario fails. It preserves the failing command's exit status. Pass
 `--out <directory>` to choose where results land; by default they go under the
 host temporary directory in `attn-linux-artifacts/<provider>/<checkout hash>`.
+Xvfb uses `-noreset` so short-lived window probes cannot reset the display while
+GTK initializes the app. CI acceptance and soak runs use the same setting.
 `artifacts` repeats collection after an interrupted run. For shell operators,
 use an explicit shell: `run -- bash -c 'command && next-command'`.
 
