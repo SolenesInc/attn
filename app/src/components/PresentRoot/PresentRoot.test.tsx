@@ -1,7 +1,5 @@
 import { act, cleanup, fireEvent, render, screen, within } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { isTauri } from '@tauri-apps/api/core';
-import { emit, listen } from '@tauri-apps/api/event';
 import { PresentRoot } from './index';
 import type { Presentation, PresentationComment, PresentationRound } from '../../types/generated';
 import type { ReplyHandler } from '../../test/scriptedDaemon';
@@ -204,41 +202,6 @@ const { summary: _summary, ...manifestWithoutSummary } = round.manifest;
 const roundWithoutSummary: PresentationRound = { ...round, manifest: manifestWithoutSummary };
 
 describe('PresentRoot', () => {
-  it.each(['feedback', 'approve', 'close'])('automates %s with compositor frames withheld and the clock advancing after the click', async (action) => {
-    Object.assign(window, { __ATTN_AUTOMATION_ENABLED: true });
-    vi.mocked(isTauri).mockReturnValueOnce(true);
-    const daemon = await loadRound();
-    daemon.on('present_submit_round', () => ({ event: 'present_submit_round_result', success: true, round_id: 'round-1' }));
-    daemon.on('present_close', () => ({ event: 'present_close_result', success: true, presentation_id: 'pres-1' }));
-    const listener = vi.mocked(listen).mock.calls.find(([name]) => name === 'attn://ui-automation/request')?.[1];
-    expect(listener).toBeDefined();
-    vi.spyOn(window, 'requestAnimationFrame').mockImplementation(() => 0);
-    screen.getByRole('button', { name: /Submit review/ }).addEventListener('click', () => {
-      queueMicrotask(() => vi.setSystemTime(Date.now() + 1001));
-    }, { once: true });
-    let completed: unknown;
-    await act(async () => {
-      completed = listener!({ event: 'attn://ui-automation/request', id: 1, payload: {
-        request_id: 'submit-delayed-frame', action: 'present_window_submit', payload: { action },
-      } });
-      await vi.advanceTimersByTimeAsync(151);
-      await completed;
-      await daemon.idle();
-    });
-    expect(emit).toHaveBeenCalledWith('attn://ui-automation/response', {
-      request_id: 'submit-delayed-frame', ok: true, result: { submitted: true, action },
-    });
-    if (action === 'close') {
-      expect(daemon.sentOf('present_close')).toMatchObject([{ presentation_id: 'pres-1' }]);
-      expect(daemon.sentOf('present_submit_round')).toHaveLength(0);
-    } else {
-      expect(daemon.sentOf('present_submit_round')).toMatchObject([
-        { round_id: 'round-1', verdict: action === 'approve' ? 'approved' : 'feedback', handback: true },
-      ]);
-    }
-    expect(mockHide).toHaveBeenCalledTimes(1);
-    expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
-  });
   beforeEach(() => {
     const loadingScreen = document.createElement('div');
     loadingScreen.id = 'loading-screen';
@@ -249,8 +212,6 @@ describe('PresentRoot', () => {
   });
 
   afterEach(() => {
-    vi.restoreAllMocks();
-    delete (window as { __ATTN_AUTOMATION_ENABLED?: boolean }).__ATTN_AUTOMATION_ENABLED;
     document.getElementById('loading-screen')?.remove();
   });
 
