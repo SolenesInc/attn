@@ -193,7 +193,7 @@ func (r *codexRuntime) removeLayoutView(runtimeID string) {
 	}
 }
 
-func (r *codexRuntime) attachOwner(id string) (*sessionReopenOutcome, error) {
+func (r *codexRuntime) attachOwner(id string) (outcome *sessionReopenOutcome, resultErr error) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	owner, err := r.d.store.CodexOwner(id)
@@ -210,21 +210,53 @@ func (r *codexRuntime) attachOwner(id string) (*sessionReopenOutcome, error) {
 	if err := r.ensureServer(r.d.life.Context(), launch); err != nil {
 		return nil, err
 	}
+	attached, unarchived, reopened := false, false, false
+	var closed store.SessionCloseRecord
+	var runtimeID, priorWorkspaceID string
+	defer func() {
+		if attached {
+			return
+		}
+		if runtimeID != "" {
+			resultErr = errors.Join(resultErr, r.removeViewLocked(runtimeID))
+			r.removeLayoutView(runtimeID)
+		}
+		if unarchived {
+			_, archiveErr := r.control.Call(r.d.life.Context(), "thread/archive", map[string]any{"threadId": owner.NativeRootID})
+			resultErr = errors.Join(resultErr, archiveErr, r.d.store.SetCodexArchived(id, true))
+		}
+		if !reopened && priorWorkspaceID != "" {
+			r.d.associateSessionWithWorkspace(id, priorWorkspaceID)
+		}
+		if reopened {
+			r.d.stopCodexTranscriptWatcherAndWait(id)
+			r.d.dissociateSessionFromWorkspace(id)
+			r.d.store.AssignSessionWorkspace(id, priorWorkspaceID)
+			r.d.recordSessionClose(id, func() (bool, error) {
+				restored, err := r.d.store.RestoreSessionClose(id, closed)
+				resultErr = errors.Join(resultErr, err)
+				return restored, err
+			})
+		}
+	}()
 	if owner.Archived {
 		if _, err := r.control.Call(r.d.life.Context(), "thread/unarchive", map[string]any{"threadId": owner.NativeRootID}); err != nil {
 			return nil, err
 		}
+		unarchived = true
 		if err := r.d.store.SetCodexArchived(id, false); err != nil {
 			return nil, err
 		}
 	}
-	if _, _, err := r.d.store.ReopenSession(id); err != nil {
+	closed, reopened, err = r.d.store.ReopenSession(id)
+	if err != nil {
 		return nil, err
 	}
 	session := r.d.store.Get(id)
 	if session == nil {
 		return nil, fmt.Errorf("codex owner %s is absent from ledger", id)
 	}
+	priorWorkspaceID = session.WorkspaceID
 	workspaceID := launch.WorkspaceID
 	if r.d.store.GetWorkspace(workspaceID) == nil {
 		workspaceID = reopenWorkspaceID(id)
@@ -235,22 +267,13 @@ func (r *codexRuntime) attachOwner(id string) (*sessionReopenOutcome, error) {
 	if err != nil {
 		return nil, err
 	}
-	runtimeID := uuid.NewString()
+	runtimeID = uuid.NewString()
 	paneID := newWorkspaceLayoutEntityID("pane")
 	v := store.CodexView{RuntimeID: runtimeID, ServerID: owner.ServerID, LaunchOwnerID: id, Generation: uuid.NewString(), Resolution: "unresolved"}
 	err = r.addViewLocked(v)
 	if err != nil {
 		return nil, err
 	}
-	attached := false
-	defer func() {
-		if !attached {
-			if err := r.removeViewLocked(runtimeID); err != nil {
-				r.d.logf("rollback Codex attachment: %v", err)
-			}
-			r.removeLayoutView(runtimeID)
-		}
-	}()
 	pane := workspacelayout.Pane{PaneID: paneID, RuntimeID: runtimeID, SessionID: id, Kind: workspacelayout.PaneKindAgent, Title: session.Label, Status: workspacelayout.PaneStatusReady, CodexResolution: "unresolved"}
 	if workspacelayout.LayoutEmpty(snapshot.Layout) {
 		snapshot.Layout = workspacelayout.DefaultLayout(paneID)
@@ -316,4 +339,86 @@ func (r *codexRuntime) closeAllOwnerViews(id string, closed store.SessionClose) 
 		}
 	}
 	return nil
+}
+
+func (r *codexRuntime) closeWorkspaceViews(panes []workspacelayout.Pane) error {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	closing := make(map[string]bool)
+	for _, pane := range panes {
+		closing[pane.RuntimeID] = true
+	}
+	for _, pane := range panes {
+		view, ok := r.views[pane.RuntimeID]
+		if !ok || view.Resolution != "resolved" {
+			continue
+		}
+		last := true
+		for id, other := range r.views {
+			if closing[id] {
+				continue
+			}
+			if other.Resolution == "resolved" && other.SessionID == view.SessionID {
+				last = false
+			}
+		}
+		if last {
+			for id, other := range r.views {
+				if !closing[id] && other.Resolution == "unresolved" {
+					return fmt.Errorf("cannot archive Codex owner %s while view %s has unresolved identity", view.SessionID, id)
+				}
+			}
+			if err := r.d.sessionCloseError(view.SessionID); err != nil {
+				return err
+			}
+		}
+	}
+	for _, pane := range panes {
+		if _, ok := r.views[pane.RuntimeID]; !ok {
+			continue
+		}
+		if err := r.closeViewLocked(pane.RuntimeID, store.SessionClose{By: store.SessionClosedByUser}); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func (r *codexRuntime) abortOwnerLaunch(id string) error {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	for runtimeID, view := range r.views {
+		if view.LaunchOwnerID != id {
+			continue
+		}
+		if err := r.removeViewLocked(runtimeID); err != nil {
+			return err
+		}
+		r.removeLayoutView(runtimeID)
+	}
+	return r.closeOwnerLocked(id, store.SessionClose{Reason: "launch failed"})
+}
+
+func (r *codexRuntime) finalizeDeletedOwner(id string) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	if err := r.d.store.SetCodexArchived(id, true); err != nil {
+		r.d.logf("mark deleted-worktree Codex owner archived: %v", err)
+	}
+	r.d.stopCodexTranscriptWatcherAndWait(id)
+	session := r.d.store.Get(id)
+	r.d.commitSessionUnregister(id, store.SessionClose{By: store.SessionClosedByUser, Reason: "worktree deleted"})
+	r.d.dissociateSessionFromWorkspace(id)
+	if session != nil {
+		r.d.publishSessionUnregistered(session)
+	}
+	for runtimeID, view := range r.views {
+		if view.Resolution != "resolved" || view.SessionID != id {
+			continue
+		}
+		if err := r.removeViewLocked(runtimeID); err != nil {
+			r.d.logf("remove deleted-worktree Codex view: %v", err)
+		}
+		r.removeLayoutView(runtimeID)
+	}
 }

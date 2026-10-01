@@ -2,6 +2,7 @@ package daemon_test
 
 import (
 	"encoding/base64"
+	"os"
 	"strconv"
 	"strings"
 	"testing"
@@ -388,5 +389,98 @@ func TestSharedCodexDetachesAnExtraChiefViewButProtectsTheLastView(t *testing.T)
 	shown, err := w.Client().SessionShow(spawn.ID)
 	if err != nil || shown.Entry.ClosedAt != nil {
 		t.Fatalf("protected chief closed: %+v %v", shown, err)
+	}
+}
+
+func TestSharedCodexFailedReopenPreservesTheOriginalClose(t *testing.T) {
+	w := newWorld(t, fakeagent.Codex)
+	app, cli := w.App(), w.Client()
+	sharedCodexSetting(t, app, true)
+	cwd := w.Path("reopen")
+	a := w.Spawn(app, fakeagent.Codex, cwd)
+	w.Launched(a)
+	awaitSharedView(app, a, a)
+	if err := cli.Unregister(a); err != nil {
+		t.Fatal(err)
+	}
+	awaitClosed(app, a)
+	before, err := cli.SessionShow(a)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := os.RemoveAll(cwd); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := cli.SessionReopen(client.SessionReopenOptions{SessionID: a}); err == nil {
+		t.Fatal("reopen with missing cwd succeeded")
+	}
+	after, err := cli.SessionShow(a)
+	if err != nil || after.Entry.ClosedAt == nil || protocol.Deref(after.Entry.ClosedAt) != protocol.Deref(before.Entry.ClosedAt) {
+		t.Fatalf("failed reopen changed close: %+v %v", after, err)
+	}
+	if err := os.MkdirAll(cwd, 0755); err != nil {
+		t.Fatal(err)
+	}
+	reopened, err := cli.SessionReopen(client.SessionReopenOptions{SessionID: a})
+	if err != nil || reopened.SessionID != a {
+		t.Fatalf("reopen after rollback: %+v %v", reopened, err)
+	}
+}
+
+func TestSharedCodexWorkspaceClosePreflightsTheProtectedOwner(t *testing.T) {
+	w := newWorld(t, fakeagent.Codex)
+	app, cli := w.App(), w.Client()
+	sharedCodexSetting(t, app, true)
+	cwd := w.Path("workspace")
+	a := w.Spawn(app, fakeagent.Codex, cwd)
+	w.Launched(a)
+	awaitSharedView(app, a, a)
+	b := w.Spawn(app, fakeagent.Codex, cwd)
+	w.Launched(b)
+	awaitSharedView(app, b, b)
+	if result := setChiefOfStaff(app, b, true); !result.Success {
+		t.Fatal(protocol.Deref(result.Error))
+	}
+	testworld.Request(app, protocol.UnregisterWorkspaceMessage{Cmd: protocol.CmdUnregisterWorkspace, ID: workspaceIDFor(t, w, cwd)}, protocol.EventCommandError, func(e protocol.CommandErrorMessage) bool {
+		return protocol.Deref(e.Cmd) == protocol.CmdUnregisterWorkspace
+	})
+	for _, id := range []string{a, b} {
+		shown, err := cli.SessionShow(id)
+		if err != nil || shown.Entry.ClosedAt != nil {
+			t.Fatalf("failed workspace close affected %s: %+v %v", id, shown, err)
+		}
+	}
+}
+
+func TestSharedCodexDeletedWorktreeClosesItsOwnerEvenWithAnUnresolvedView(t *testing.T) {
+	w := newWorld(t, fakeagent.Codex)
+	app, cli := w.App(), w.Client()
+	sharedCodexSetting(t, app, true)
+	cwd := w.Path("deleted")
+	a := w.Spawn(app, fakeagent.Codex, cwd)
+	w.Launched(a)
+	awaitSharedView(app, a, a)
+	b := w.Spawn(app, fakeagent.Codex, w.Path("other"))
+	w.Launched(b)
+	awaitSharedView(app, b, b)
+	app.TypeLine(b, "/title unknown")
+	testworld.Await(app, protocol.EventWorkspaceLayoutUpdated, func(e protocol.WorkspaceLayoutUpdatedMessage) bool {
+		for _, p := range e.WorkspaceLayout.Panes {
+			if protocol.Deref(p.RuntimeID) == b {
+				return protocol.Deref(p.CodexResolution) == protocol.CodexViewResolutionUnresolved
+			}
+		}
+		return false
+	})
+	if err := os.RemoveAll(cwd); err != nil {
+		t.Fatal(err)
+	}
+	if err := cli.DeleteWorktree(cwd, true); err != nil {
+		t.Fatal(err)
+	}
+	awaitClosed(app, a)
+	shown, err := cli.SessionShow(b)
+	if err != nil || shown.Entry.ClosedAt != nil {
+		t.Fatalf("deletion affected the other owner: %+v %v", shown, err)
 	}
 }

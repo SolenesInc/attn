@@ -129,7 +129,10 @@ export function AppWorkspaces() {
                   directory: workspace.directory,
                   endpoint_id: workspace.endpointId,
                 })}
-                workspaceSessions={enrichedLocalSessions.map((entry) => ({
+                workspaceSessions={enrichedLocalSessions.filter((entry) =>
+                  daemonSessions.some((session) => session.id === entry.id && session.workspace_id === workspace.id) ||
+                  workspaceState.agents.some((pane) => pane.codexResolution && pane.sessionId === entry.id)
+                ).map((entry) => ({
                   id: entry.id,
                   label: entry.label,
                   agent: entry.agent,

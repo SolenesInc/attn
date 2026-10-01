@@ -3,7 +3,7 @@ import userEvent from '@testing-library/user-event';
 import { invoke } from '@tauri-apps/api/core';
 import { describe, expect, it, vi } from 'vitest';
 import { openMarkdownTiles, openTiles } from './test/appFixtures';
-import { daemonSeed, seedDocument, type DaemonSeedDocument } from './test/daemonFixtures';
+import { daemonSeed, daemonSession, workspaceWithTiles, seedDocument, type DaemonSeedDocument } from './test/daemonFixtures';
 import type { EventMessage } from './test/protocol';
 import { gesture } from './test/renderApp';
 
@@ -67,6 +67,31 @@ function tileBodyScrolls() {
 }
 
 describe('App markdown rendering', () => {
+  it('offers workspace annotation destinations and the owner displayed in a shared pane', async () => {
+    const view = await openMarkdownTiles('Workspace note', {
+      path: DOC,
+      initialState: { sessions: [
+        daemonSession('s1', { workspace_id: 'ws' }),
+        daemonSession('s2', { workspace_id: 'elsewhere' }),
+        daemonSession('s3', { workspace_id: 'another', agent: 'codex' }),
+      ] },
+    });
+    const caret = within(view.tile()).getByRole('button', { name: 'Annotation destination: s1' });
+    fireEvent.click(caret);
+    await view.daemon.idle();
+    let menu = within(view.tile()).getByRole('menu', { name: 'Send annotations to session' });
+    expect(within(menu).getAllByRole('menuitemradio').map(item => item.textContent)).toEqual([expect.stringContaining('s1')]);
+    fireEvent.click(caret);
+    const workspace = workspaceWithTiles([{ tile_id: 'tile-a', tile_kind: 'markdown', tile_params: DOC, tile_session_id: 's1' }]);
+    workspace.layout!.panes[0] = { ...workspace.layout!.panes[0], session_id: 's3', codex_resolution: 'resolved', codex_revision: '1' };
+    view.daemon.emit({ event: 'workspace_layout_updated', workspace_layout: workspace.layout! });
+    await view.daemon.idle();
+    fireEvent.click(within(view.tile()).getByRole('button', { name: /^Annotation destination:/ }));
+    await view.daemon.idle();
+    menu = within(view.tile()).getByRole('menu', { name: 'Send annotations to session' });
+    const destinations = within(menu).getAllByRole('menuitemradio').map(item => item.textContent);
+    expect(destinations).toEqual([expect.stringContaining('s3')]);
+  });
   it('renders a document’s heading and GFM table, and keeps a single newline inside its paragraph', async () => {
     const { reader } = await openMarkdown('# Plan\n\n| step | owner |\n| - | - |\n| parse | ana |\n\nfirst line\nsecond line\n');
 

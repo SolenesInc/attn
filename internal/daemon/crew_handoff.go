@@ -278,6 +278,13 @@ func (d *Daemon) crewNap(member crew.Member, oldSessionID string, teardown *sess
 	}
 
 	if err := d.closeNappedSession(oldSessionID, teardown); err != nil {
+		if d.sharedCodexOwner(newSessionID) {
+			err = errors.Join(err, d.codexRuntime().abortOwnerLaunch(newSessionID))
+		} else {
+			d.terminateSession(newSessionID, syscall.SIGTERM)
+			d.closeSession(newSessionID, store.SessionClose{Reason: "launch failed"})
+			d.removeWorkspaceLayoutPaneForSession(newSessionID)
+		}
 		undoBinding()
 		return "", err
 	}
