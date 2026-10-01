@@ -80,7 +80,17 @@ export function useSessionLaunch({
     [currentDesktop, sessions],
   );
 
+  // The empty desktop's inline launcher is the new-session surface while it shows.
+  const inlineLauncherFocusRef = useRef<(() => void) | null>(null);
+  const registerInlineLauncher = useCallback((focus: (() => void) | null) => {
+    inlineLauncherFocusRef.current = focus;
+  }, []);
+
   const handleNewSession = useCallback((direction: TerminalSplitDirection = 'vertical') => {
+    if (inlineLauncherFocusRef.current) {
+      inlineLauncherFocusRef.current();
+      return;
+    }
     setLocationPickerPurpose('session');
     locationPickerSessionDirection.current = direction;
     setLocationPickerOpen(true);
@@ -99,10 +109,16 @@ export function useSessionLaunch({
       direction: TerminalSplitDirection;
       anchorPaneId?: string;
       spawnedFrom?: string;
+      desktopId?: string;
     }) => {
-      const desktop = localDesktopForLaunch(spawn.endpointId);
+      // A pick lands on the desktop it was made for, even when it answers after the user moved on;
+      // then it starts in the background instead of pulling the user back.
+      const current = localDesktopForLaunch(spawn.endpointId);
+      const desktop = useProfilesStore.getState().desktops.find((entry) => entry.id === spawn.desktopId) ?? current;
       const target = launchTarget(desktop, spawn.direction, spawn.anchorPaneId);
-      const launch = useSessionStore.getState().beginIntent({ kind: 'session', sessionId: spawn.sessionId });
+      const launch = desktop.id === current.id
+        ? useSessionStore.getState().beginIntent({ kind: 'session', sessionId: spawn.sessionId })
+        : null;
       let placementError: string | undefined;
       try {
         await createSession(
@@ -127,12 +143,12 @@ export function useSessionLaunch({
           },
         }));
       } catch (error) {
-        useSessionStore.getState().intentFailed(launch);
+        if (launch) useSessionStore.getState().intentFailed(launch);
         closeSession(spawn.sessionId);
         throw error;
       }
       const { intent } = useSessionStore.getState();
-      if (intent?.id === launch) {
+      if (launch && intent?.id === launch) {
         selectCreatedSession(spawn.sessionId, intent.focusOwner);
       } else if (placementError) {
         showError(`${spawn.label} started without a pane on this desktop: ${placementError}`);
@@ -150,7 +166,7 @@ export function useSessionLaunch({
       agent: SessionAgent = 'claude',
       endpointId?: string,
       yoloMode = false,
-      options?: { chiefOfStaff?: boolean; autoMode?: boolean },
+      options?: { chiefOfStaff?: boolean; autoMode?: boolean; desktopId?: string },
     ) =>
       spawnOnCurrentDesktop({
         sessionId: providedSessionId || crypto.randomUUID(),
@@ -162,6 +178,7 @@ export function useSessionLaunch({
         autoMode: options?.autoMode,
         chiefOfStaff: options?.chiefOfStaff,
         direction: 'vertical',
+        desktopId: options?.desktopId,
       }),
     [spawnOnCurrentDesktop],
   );
@@ -199,6 +216,7 @@ export function useSessionLaunch({
           direction,
           anchorPaneId: targetPaneId,
           spawnedFrom: base?.id,
+          desktopId: options.desktopId,
         });
       } catch (error) {
         showError(error instanceof Error ? error.message : 'Failed to start the agent');
@@ -224,6 +242,7 @@ export function useSessionLaunch({
       yoloMode: boolean;
       autoMode?: boolean;
       chiefOfStaff: boolean;
+      desktopId?: string;
     }): Promise<string | null> => {
       if (!pick.chiefOfStaff) {
         await createSplitSession(pick.agent, locationPickerSessionDirection.current, undefined, {
@@ -232,6 +251,7 @@ export function useSessionLaunch({
           label: pick.label,
           yoloMode: pick.yoloMode,
           autoMode: pick.autoMode,
+          desktopId: pick.desktopId,
         });
         return null;
       }
@@ -242,14 +262,14 @@ export function useSessionLaunch({
         pick.agent,
         pick.endpointId,
         pick.yoloMode,
-        { chiefOfStaff: true, autoMode: pick.autoMode },
+        { chiefOfStaff: true, autoMode: pick.autoMode, desktopId: pick.desktopId },
       );
       return sessionId;
     },
     [createSplitSession, launchAgent],
   );
 
-  const handleLocationSelect = useCallback(
+  const launchLocation = useCallback(
     async (
       path: string,
       agent: SessionAgent,
@@ -257,12 +277,8 @@ export function useSessionLaunch({
       yoloMode = false,
       chiefOfStaff = false,
       autoMode?: boolean,
+      desktopId?: string,
     ) => {
-      if (locationPickerPurpose === 'reopen') {
-        reopenPickRef.current?.settle(path);
-        reopenPickRef.current = null;
-        return;
-      }
       const jobId = sessionCreationJobIdRef.current + 1;
       sessionCreationJobIdRef.current = jobId;
       let selectedAgent: SessionAgent;
@@ -292,7 +308,7 @@ export function useSessionLaunch({
             : resolvePreferredAgent(agent, agentAvailability, 'codex');
       }
       const folderName = path.split('/').pop() || 'session';
-      const pick = { label: folderName, cwd: path, agent: selectedAgent, endpointId, yoloMode, autoMode, chiefOfStaff };
+      const pick = { label: folderName, cwd: path, agent: selectedAgent, endpointId, yoloMode, autoMode, chiefOfStaff, desktopId };
       if (!chiefOfStaff) {
         await launchPicked(pick);
         return;
@@ -315,14 +331,19 @@ export function useSessionLaunch({
         );
       }
     },
-    [
-      agentAvailability,
-      daemonEndpoints,
-      hasAvailableAgents,
-      launchPicked,
-      locationPickerPurpose,
-      showError,
-    ],
+    [agentAvailability, daemonEndpoints, hasAvailableAgents, launchPicked, showError],
+  );
+
+  const handleLocationSelect = useCallback(
+    async (...pick: Parameters<typeof launchLocation>) => {
+      if (locationPickerPurpose === 'reopen') {
+        reopenPickRef.current?.settle(pick[0]);
+        reopenPickRef.current = null;
+        return;
+      }
+      await launchLocation(...pick);
+    },
+    [launchLocation, locationPickerPurpose],
   );
 
   const handleCreateWorktreeSession = useCallback(
@@ -335,9 +356,11 @@ export function useSessionLaunch({
       yoloMode: boolean,
       autoMode?: boolean,
       chiefOfStaff = false,
+      pickedOnDesktopId?: string,
     ) => {
+      let desktopId: string;
       try {
-        localDesktopForLaunch(endpointId);
+        desktopId = pickedOnDesktopId ?? localDesktopForLaunch(endpointId).id;
       } catch (error) {
         showError(error instanceof Error ? error.message : 'Failed to start the agent');
         return;
@@ -385,6 +408,7 @@ export function useSessionLaunch({
             yoloMode,
             autoMode,
             chiefOfStaff,
+            desktopId,
           });
           setSessionCreationJob((current) => (current?.id === jobId ? null : current));
         } catch (err) {
@@ -437,6 +461,8 @@ export function useSessionLaunch({
     locationPickerPurpose,
     closeLocationPicker,
     handleLocationSelect,
+    launchLocation,
+    registerInlineLauncher,
     handleCreateWorktreeSession,
     handleNewSession,
     createSplitSession,

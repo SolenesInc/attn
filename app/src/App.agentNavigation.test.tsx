@@ -1035,7 +1035,7 @@ describe('keyboard focus', () => {
     expect(focusedPane()).toBe('pane-s2');
   });
 
-  it('leaves the keyboard alone when a pane lands later on an empty desktop the user switched to', async () => {
+  it('moves the keyboard from an empty desktop’s launcher into a pane that lands there later', async () => {
     const { daemon } = await renderApp({ initialState: {
       sessions: [queueSession('s1', 9), queueSession('s2', 10)],
       desktops: [soloDesktop('s1', { name: 'alpha' }), emptyDesktop('beta', { name: 'beta' })],
@@ -1046,6 +1046,7 @@ describe('keyboard focus', () => {
     row.focus();
     await gesture(daemon, () => fireEvent.click(row));
     await settleFocus(daemon);
+    expect(document.activeElement).toBe(screen.getByTestId('location-picker-path-input'));
 
     await gesture(daemon, () => {
       daemon.arrangement.place('s2', 'pane-s2', 'beta');
@@ -1054,7 +1055,7 @@ describe('keyboard focus', () => {
     await settleFocus(daemon);
 
     expect(shownLeaf()).toBe('pane-s2');
-    expect(document.activeElement).toBe(row);
+    expect(focusedPane()).toBe('pane-s2');
   });
 
   it('puts the keyboard in the current desktop’s leaf when its digit reopens it from home', async () => {

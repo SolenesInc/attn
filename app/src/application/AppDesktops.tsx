@@ -6,7 +6,7 @@ import { useProfilesStore } from '../store/profiles';
 import { useSessionStore } from '../store/sessions';
 import type { Desktop } from '../types/generated';
 import { withFreshDesktopRevisions } from '../hooks/desktopRevisions';
-import { desktopTerminalState, orderedDesktops } from '../utils/desktops';
+import { desktopLabel, desktopTerminalState, orderedDesktops } from '../utils/desktops';
 import {
   useAppAppearanceContext,
   useAppErrorsContext,
@@ -24,6 +24,7 @@ import {
   useSessionLaunchContext,
   useSessionLifecycleContext,
 } from './AppContexts';
+import { EmptyDesktopLauncher } from './EmptyDesktopLauncher';
 import { openThenShow } from './openThenShow';
 import { localDirectoryOf } from './useScreenSession';
 import { leafOn, sessionOfLeaf } from '../navigation/activeLeaf';
@@ -52,6 +53,7 @@ export function AppDesktops() {
     annotationApi,
     handleOpenPresentationWindow,
     blockingOverlayOpen,
+    windowCovered,
     zoomModeBySessionId,
     setZoomModeBySessionId,
   } = useAppShell();
@@ -210,6 +212,9 @@ export function AppDesktops() {
           tileContents={desktopTileContents}
           allowLocalTileTargets
         />
+        {isCurrent && view === 'session' && !terminalState.layoutTree && (
+          <EmptyDesktopLauncher desktopId={desktop.id} label={desktopLabel(desktop, desktops)} active={!windowCovered} />
+        )}
       </div>
     );
   };
