@@ -64,7 +64,10 @@ func (d *Daemon) codexRuntime() *codexRuntime {
 }
 
 func (r *codexRuntime) socket(runtimeID string) string {
-	name := "server"
+	if runtimeID == "" {
+		return filepath.Join(r.d.dataRoot, "cx", "server", "rpc.sock")
+	}
+	name := ""
 	if runtimeID != "" {
 		sum := sha256.Sum256([]byte(runtimeID))
 		name = hex.EncodeToString(sum[:16])
@@ -103,15 +106,15 @@ func (r *codexRuntime) ensureServer(ctx context.Context, launch codexLaunchConte
 		r.exitMu.Lock()
 		r.serverExit = exitNotice
 		r.exitMu.Unlock()
+		if err := os.Remove(r.socket("")); err != nil && !errors.Is(err, os.ErrNotExist) {
+			return err
+		}
 		watcher, err := fsnotify.NewWatcher()
 		if err != nil {
 			return err
 		}
 		defer watcher.Close()
 		if err := watcher.Add(dir); err != nil {
-			return err
-		}
-		if err := os.Remove(r.socket("")); err != nil && !errors.Is(err, os.ErrNotExist) {
 			return err
 		}
 		executable := agentdriver.MustGet("codex").ResolveExecutable(launch.Executable)
