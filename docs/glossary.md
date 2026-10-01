@@ -15,7 +15,7 @@
 - Standing dismissal: suppresses the next auto-settle during the agent's current stretch of work.
 - Queue: agents ordered by attention owed.
 - Queue sidebar: the sidebar in queue mode. Chief and crew on top, then as many oldest turns as fit (at least three when available), a list of the remaining waiting, working and snoozed agents (Cmd+Shift+A), the automations and a strip of desktop chips.
-- Queue bar: the queue sidebar collapsed into a strip across the top of the window (Cmd+Shift+B). A waiting pill with the three oldest turns, a runs chip, and the desktop chips; hovering the pill or the chip peeks their lists.
+- Queue bar: the queue sidebar collapsed into a strip across the top of the window (Cmd+B on macOS, Ctrl+Alt+B on Linux). A waiting pill with the three oldest turns, a runs chip, and the desktop chips; hovering the pill or the chip peeks their lists.
 - Automation run: an agent an automation started. Runs stay out of the queue; the runs owing a turn form a batch the user walks with Cmd+Shift+J.
 - Satellite: a shell pane attached to an agent.
 - Orphan: a satellite without a live parent.

@@ -241,11 +241,11 @@ test('a blocking dialog replaces the chain focus trap and Escape does not resurr
 
 test('collapsing a pinned sidebar chain dismisses it and returns focus to the terminal', async ({ page }) => {
   await page.getByTestId('row-builder').getByRole('button').click();
-  await page.keyboard.press('Meta+Shift+b');
+  await page.keyboard.press('Meta+b');
   await expect(page.getByTestId('row-builder')).toHaveCount(0);
   await expect(page.getByRole('dialog', { name: 'Delegation chain' })).toHaveCount(0);
   await expect(page.getByRole('textbox', { name: 'Terminal keyboard target' })).toBeFocused();
-  await page.keyboard.press('Meta+Shift+b');
+  await page.keyboard.press('Meta+b');
   await expect(page.getByTestId('row-builder')).toBeVisible();
   await expect(page.getByRole('dialog', { name: 'Delegation chain' })).toHaveCount(0);
 });
