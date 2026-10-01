@@ -57,7 +57,8 @@ describe('App kept conversations ledger', () => {
     daemon.on('kept_conversation_list', () => ({ event: 'kept_conversation_list_result', success: true,
       kept_conversation_list_result: { ...fixture, rows: [], count: 0, stored_bytes: 0, pending_count: 0 } }));
     await gesture(daemon, () => daemon.emit({ event: 'kept_conversations_changed' }));
-    await gesture(daemon, () => daemon.replyTo(older, { event: 'kept_conversation_list_result', success: true, kept_conversation_list_result: fixture }));
+    await gesture(daemon, () => daemon.replyTo(older, { event: 'kept_conversation_list_result', request_id: older.request_id,
+      success: true, kept_conversation_list_result: fixture }));
     expect(rows().queryByText('Pinned parser')).toBeNull();
     expect(screen.getByText('0 kept · 0 B')).toBeInTheDocument();
     await daemon.reconnect();
@@ -145,6 +146,27 @@ describe('App kept conversations ledger', () => {
 });
 
 describe('App session conversation pins', () => {
+  it('shows reopen progress and refusal after a conversation pin fails', async () => {
+    const { daemon } = await openSessionsLedger(pages([page({ entries: [closedEntry('closed')] })]));
+    daemon.on('kept_conversation_keep', () => ({ event: 'kept_conversation_keep_result', success: false, error: 'nothing left to keep' }));
+    daemon.on('session_reopen', () => undefined);
+    await gesture(daemon, () => fireEvent.click(inspector().getByRole('button', { name: 'Keep conversation' })));
+    expect(inspector().getByText('nothing left to keep')).toBeInTheDocument();
+    await gesture(daemon, () => fireEvent.click(inspector().getByRole('button', { name: /Reopen$/ })));
+    expect(inspector().getByRole('button', { name: /reopening…/ })).toBeDisabled();
+    expect(within(row('run closed')).getByText('reopening…')).toBeInTheDocument();
+    await gesture(daemon, () => fireEvent.keyDown(row('run closed'), { key: 'Enter' }));
+    expect(daemon.sentOf('session_reopen')).toEqual([
+      { cmd: 'session_reopen', session_id: 'closed', action: 'reopen', request_id: expect.any(String) },
+    ]);
+    await gesture(daemon, () => daemon.replyTo(daemon.sentOf('session_reopen')[0], {
+      event: 'session_reopen_result', request_id: daemon.sentOf('session_reopen')[0].request_id,
+      success: false, error: 'the session changed after this row was listed',
+    }));
+    expect(inspector().queryByText('nothing left to keep')).toBeNull();
+    expect(inspector().getByText('the session changed after this row was listed')).toBeInTheDocument();
+  });
+
   it('offers keep only for Claude and refreshes all rows sharing a changed pin', async () => {
     const sessions = [entry({ id: 'claude' }), closedEntry('closed'), entry({ id: 'codex', agent: 'codex' }), entry({ id: 'pi', agent: 'pi' })];
     const { daemon } = await openSessionsLedger(pages([page({ entries: sessions })]));

@@ -116,6 +116,7 @@ describe('App garden seeds', () => {
     expect(daemon.sentOf('seed_document_get')).toHaveLength(2);
     await gesture(daemon, () => daemon.emit({ event: 'garden_seeds_updated', seeds: [PLAN], total: 1 }));
     await gesture(daemon, () => daemon.replyTo(older, { event: 'seed_document_get_result', success: true,
+      request_id: older.request_id,
       document: seedDocument(PLAN, { notes: [note('n-old', { body: 'Superseded detail' })], notes_total: 1 }) }));
     expect(screen.getByText('After the keep pass')).toBeInTheDocument();
     expect(screen.queryByText('Superseded detail')).toBeNull();

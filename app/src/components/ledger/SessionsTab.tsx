@@ -87,7 +87,7 @@ export function SessionsTab({
     onFiltersChange: rememberFilters,
   });
   const { filters, setFilters, entries, reload } = ledger;
-  const { keepNotices, runKeepVerb } = useConversationPins(setConversationKeep, conversationChangeSignal, reload);
+  const { keepNotices, runKeepVerb, clearKeepNotice } = useConversationPins(setConversationKeep, conversationChangeSignal, reload);
 
   const workspaceLabel = useCallback((id: string) => workspaceNames[id] ?? id, [workspaceNames]);
 
@@ -197,8 +197,9 @@ export function SessionsTab({
     if (verbId === 'seed') { const seed = seedForSession?.(entry.id); if (seed) onOpenSeed?.(seed.id); return; }
     if (runKeepVerb(entry.id, verbId)) return;
     if (verbId === 'worktree') { onShowWorktree?.(entry.directory); return; }
+    clearKeepNotice(entry.id);
     fire(entry, verdictId(verbId));
-  }, [visible, onFocusSession, seedForSession, onOpenSeed, onShowWorktree, fire, runKeepVerb]);
+  }, [visible, onFocusSession, seedForSession, onOpenSeed, onShowWorktree, fire, runKeepVerb, clearKeepNotice]);
 
   const items = useMemo<ListItem[]>(() => visible.map((entry) => ({
     kind: 'row',
@@ -517,6 +518,9 @@ function useConversationPins(setKeep: SessionsTabProps['setConversationKeep'], c
     observedSignal.current = changeSignal;
     reload();
   }, [changeSignal, reload]);
+  const clearKeepNotice = useCallback((id: string) => {
+    setKeepNotices((current) => current[id] ? { ...current, [id]: undefined } : current);
+  }, []);
   const runKeepVerb = useCallback((id: string, verb: string): boolean => {
     if (!setKeep || (verb !== 'keep-conversation' && verb !== 'unkeep-conversation')) return false;
     if (keepNotices[id]?.kind === 'busy') return true;
@@ -528,7 +532,7 @@ function useConversationPins(setKeep: SessionsTabProps['setConversationKeep'], c
     });
     return true;
   }, [setKeep, keepNotices]);
-  return { keepNotices, runKeepVerb };
+  return { keepNotices, runKeepVerb, clearKeepNotice };
 }
 
 function ConversationPinAction({ available, entry, note, closed, onVerb }: {
