@@ -93,6 +93,16 @@ export const MAC_SHORTCUTS = {
   'desktop.send8': { key: '8', code: 'Digit8', meta: true, alt: true },
   'desktop.send9': { key: '9', code: 'Digit9', meta: true, alt: true },
 
+  'desktop.sendStay1': { key: '1', code: 'Digit1', meta: true, alt: true, shift: true },
+  'desktop.sendStay2': { key: '2', code: 'Digit2', meta: true, alt: true, shift: true },
+  'desktop.sendStay3': { key: '3', code: 'Digit3', meta: true, alt: true, shift: true },
+  'desktop.sendStay4': { key: '4', code: 'Digit4', meta: true, alt: true, shift: true },
+  'desktop.sendStay5': { key: '5', code: 'Digit5', meta: true, alt: true, shift: true },
+  'desktop.sendStay6': { key: '6', code: 'Digit6', meta: true, alt: true, shift: true },
+  'desktop.sendStay7': { key: '7', code: 'Digit7', meta: true, alt: true, shift: true },
+  'desktop.sendStay8': { key: '8', code: 'Digit8', meta: true, alt: true, shift: true },
+  'desktop.sendStay9': { key: '9', code: 'Digit9', meta: true, alt: true, shift: true },
+
   'dock.attention': { key: 'p', meta: true, shift: true },
 
   'ui.actionMenu': { key: 'k', meta: true },
@@ -183,6 +193,16 @@ export const LINUX_SHORTCUTS = {
   'desktop.send7': { key: '7', code: 'Digit7', meta: true, alt: true },
   'desktop.send8': { key: '8', code: 'Digit8', meta: true, alt: true },
   'desktop.send9': { key: '9', code: 'Digit9', meta: true, alt: true },
+
+  'desktop.sendStay1': { key: '1', code: 'Digit1', meta: true, alt: true, shift: true },
+  'desktop.sendStay2': { key: '2', code: 'Digit2', meta: true, alt: true, shift: true },
+  'desktop.sendStay3': { key: '3', code: 'Digit3', meta: true, alt: true, shift: true },
+  'desktop.sendStay4': { key: '4', code: 'Digit4', meta: true, alt: true, shift: true },
+  'desktop.sendStay5': { key: '5', code: 'Digit5', meta: true, alt: true, shift: true },
+  'desktop.sendStay6': { key: '6', code: 'Digit6', meta: true, alt: true, shift: true },
+  'desktop.sendStay7': { key: '7', code: 'Digit7', meta: true, alt: true, shift: true },
+  'desktop.sendStay8': { key: '8', code: 'Digit8', meta: true, alt: true, shift: true },
+  'desktop.sendStay9': { key: '9', code: 'Digit9', meta: true, alt: true, shift: true },
 
   'dock.attention': { key: 'p', meta: true, alt: true },
   'ui.actionMenu': { key: 'k', meta: true, shift: true },

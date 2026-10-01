@@ -1,4 +1,4 @@
-import type { DaemonDesktop, DaemonProfile } from './daemonFixtures';
+import { emptyDesktop, type DaemonDesktop, type DaemonProfile } from './daemonFixtures';
 import type { CommandMessage } from './protocol';
 import type { Reply, ScriptedDaemon } from './scriptedDaemon';
 
@@ -45,6 +45,16 @@ function mapSplit(node: Node | null, splitId: string, change: (split: Node) => N
   if (node.type === 'split' && node.split_id === splitId) return change(node);
   if (!node.children) return node;
   return { ...node, children: node.children.map((child) => mapSplit(child, splitId, change)!) };
+}
+
+function findLeaf(node: Node | null, leaf: string): Node | null {
+  if (!node) return null;
+  if (leafId(node) === leaf) return node;
+  for (const child of node.children ?? []) {
+    const found = findLeaf(child, leaf);
+    if (found) return found;
+  }
+  return null;
 }
 
 function hasLeaf(node: Node | null, leaf: string): boolean {
@@ -168,6 +178,36 @@ export function serveArrangement(daemon: ScriptedDaemon, arrangement: Arrangemen
       return refused(command, 'not_found', `leaf ${command.leaf_id} does not belong to desktop ${command.desktop_id}`);
     }
     return accepted(command, arrangement, command.leaf_id);
+  });
+  daemon.on('desktop_create', (command) => {
+    const held = (candidate: number) => arrangement.desktops.some((desktop) => desktop.profile_id === command.profile_id && desktop.shortcut_slot === candidate);
+    const slot = command.shortcut_slot ?? [1, 2, 3, 4, 5, 6, 7, 8, 9].find((candidate) => !held(candidate));
+    const holder = arrangement.desktops.find((desktop) => desktop.profile_id === command.profile_id && slot && desktop.shortcut_slot === slot);
+    if (holder) return refused(command, 'slot_taken', `shortcut slot ${slot} is held by desktop ${holder.id}`);
+    const created = emptyDesktop(`desktop-new-${arrangement.desktops.length + 1}`, { profile_id: command.profile_id, shortcut_slot: slot, order_key: 'z' });
+    arrangement.desktops = [...arrangement.desktops, created];
+    const [changed, result] = accepted(command, arrangement);
+    return [changed, { ...(result as object), desktops: [created] } as Reply];
+  });
+  // Like the daemon, a leaf whose id the target already holds lands under a new id.
+  daemon.on('desktop_move_leaf', (command) => {
+    const source = arrangement.desktop(command.source_desktop_id);
+    const target = arrangement.desktop(command.target_desktop_id);
+    const leaf = source ? findLeaf(parse(source), command.leaf_id) : null;
+    if (!source || !target || !leaf) {
+      return refused(command, 'not_found', `leaf ${command.leaf_id} does not belong to desktop ${command.source_desktop_id}`);
+    }
+    const finalId = hasLeaf(parse(target), command.leaf_id) ? `${command.leaf_id}-moved` : command.leaf_id;
+    const landed: Node = leaf.type === 'pane' ? { ...leaf, pane_id: finalId } : { ...leaf, tile_id: finalId };
+    const current = parse(target);
+    const tree = current ? { type: 'split', split_id: `split-${finalId}`, direction: 'vertical', ratio: 0.5, children: [current, landed] } : landed;
+    const pane = source.panes.find((entry) => entry.pane_id === command.leaf_id);
+    const panes = pane ? [...target.panes, { ...pane, pane_id: finalId, desktop_id: target.id }] : target.panes;
+    arrangement.replace(arrangement.withTree(source, without(parse(source), command.leaf_id)));
+    arrangement.replace({ ...arrangement.withTree(target, tree, panes), active_pane_id: finalId });
+    const moved = { from_desktop_id: source.id, from_leaf_id: command.leaf_id, to_desktop_id: target.id, to_leaf_id: finalId };
+    const [changed, result] = accepted(command, arrangement, finalId);
+    return [{ ...(changed as object), moved_leaf: moved } as Reply, result];
   });
   daemon.on('desktop_remove_leaf', (command) => {
     const desktop = arrangement.desktop(command.desktop_id);
