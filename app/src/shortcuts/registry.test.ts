@@ -39,6 +39,10 @@ describe('shortcut registry', () => {
     ['Ctrl+Shift+{ as history back on Linux', LINUX, { key: '{', code: 'BracketLeft', ctrlKey: true, shiftKey: true }, LINUX_SHORTCUTS['session.historyBack'], true],
     ['Ctrl+Shift+} as history forward on Linux', LINUX, { key: '}', code: 'BracketRight', ctrlKey: true, shiftKey: true }, LINUX_SHORTCUTS['session.historyForward'], true],
     ['Ctrl+[ as history back on Linux', LINUX, { key: '[', code: 'BracketLeft', ctrlKey: true }, LINUX_SHORTCUTS['session.historyBack'], false],
+    ['Cmd+B toggles the sidebar on macOS', MAC, { key: 'b', metaKey: true }, MAC_SHORTCUTS['session.toggleSidebar'], true],
+    ['Cmd+Shift+B no longer toggles the sidebar on macOS', MAC, { key: 'B', metaKey: true, shiftKey: true }, MAC_SHORTCUTS['session.toggleSidebar'], false],
+    ['Ctrl+Alt+B toggles the sidebar on Linux', LINUX, { key: 'b', ctrlKey: true, altKey: true }, LINUX_SHORTCUTS['session.toggleSidebar'], true],
+    ['plain Ctrl+B reaches the shell on Linux', LINUX, { key: 'b', ctrlKey: true }, LINUX_SHORTCUTS['session.toggleSidebar'], false],
   ])('%s on %s matches: %s', (_name, platform, init, def, matches) => {
     withNavigatorPlatform(platform, () => {
       expect(matchesShortcut(new KeyboardEvent('keydown', init), def)).toBe(matches);
@@ -90,14 +94,13 @@ describe('shortcut registry', () => {
       }
     });
 
-    it('adds Shift to every macOS Cmd+letter action that had no Shift', () => {
+    it('adds Shift or Alt to every macOS Cmd+letter action that had no Shift', () => {
       for (const [id, mac] of Object.entries(MAC_SHORTCUTS) as Array<[ShortcutId, ShortcutDef]>) {
         if (!mac.meta || mac.shift || !/^[a-z]$/i.test(mac.key)) continue;
         const linux: ShortcutDef = LINUX_SHORTCUTS[id];
         expect(linux.key, id).toBe(mac.key);
         expect(linux.meta, id).toBe(true);
-        expect(linux.shift, id).toBe(true);
-        expect(Boolean(linux.alt), id).toBe(Boolean(mac.alt));
+        expect(Boolean(linux.shift || linux.alt), id).toBe(true);
       }
     });
 

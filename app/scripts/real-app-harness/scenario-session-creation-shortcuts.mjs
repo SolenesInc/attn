@@ -131,7 +131,7 @@ async function main() {
     prefix: 'session-creation-shortcuts',
     metadata: {
       agent: 'shell',
-      focus: 'Cmd+N and Cmd+Shift+N survive the real OS keyboard path and summon the new-session location picker',
+      focus: 'Session creation and sidebar shortcuts survive native keyboard input in queue and desktop modes',
     },
   });
 
@@ -200,6 +200,60 @@ async function main() {
       await summonPicker(client, driver, 'session.newHorizontal', 'New Session Location');
       note(`Cmd+Shift+N summoned the new-session picker`);
     });
+
+    for (const queueMode of ['true', 'false']) {
+      await runner.step(`sidebar_round_trip_queue_${queueMode}`, async () => {
+        await client.request('set_setting', { key: 'queue_mode_enabled', value: queueMode });
+        const expanded = queueMode === 'true' ? '.queue-sidebar' : '.sidebar:not(.sidebar-collapsed)';
+        const collapsed = queueMode === 'true' ? '[data-testid="queue-bar"]' : '.sidebar-collapsed';
+        await client.request('dom_wait', { selector: expanded });
+        await client.request('focus_pane', { sessionId: seedSessionId, paneId: (await client.request('get_desktop', { sessionId: seedSessionId })).panes[0].paneId });
+        if (process.platform === 'darwin') {
+          await driver.pressKey('b', { command: true, shift: true });
+          await client.request('dom_wait', { selector: expanded });
+        }
+        await pressShortcutKeys(client, driver, 'session.toggleSidebar');
+        await client.request('dom_wait', { selector: expanded, absent: true });
+        await client.request('dom_wait', { selector: collapsed });
+        if (process.platform === 'darwin') {
+          await driver.pressKey('b', { command: true, shift: true });
+          await client.request('dom_wait', { selector: collapsed });
+        }
+        await pressShortcutKeys(client, driver, 'session.toggleSidebar');
+        await client.request('dom_wait', { selector: expanded });
+      });
+    }
+
+    await runner.step('sidebar_shortcut_editor_label', async () => {
+      await client.request('open_shortcut_editor');
+      await client.request('dom_type', { selector: '.shortcut-editor-search-input', text: 'Toggle sidebar' });
+      const selector = '.shortcut-editor-row';
+      await client.request('dom_wait', { selector });
+      const { text } = await client.request('dom_text', { selector });
+      const expected = process.platform === 'darwin' ? '⌘B' : 'CtrlAltB';
+      runner.assert(text.replace(/\s+/g, '').includes(expected), `Toggle sidebar should show ${expected}: ${text}`);
+      await client.captureScreenshot(path.join(runner.runDir, 'sidebar-shortcut-editor.png'), { selector: '.shortcut-editor-modal' });
+      await driver.pressKey('Escape');
+    });
+
+    if (process.platform === 'darwin') {
+      await runner.step('saved_sidebar_override', async () => {
+        await client.request('set_setting', {
+          key: 'keybindings_config',
+          value: JSON.stringify({ version: 1, overrides: { 'session.toggleSidebar': { key: 'b', meta: true, shift: true } } }),
+        });
+        try {
+          await driver.pressKey('b', { command: true });
+          await client.request('dom_wait', { selector: '.sidebar:not(.sidebar-collapsed)' });
+          await driver.pressKey('b', { command: true, shift: true });
+          await client.request('dom_wait', { selector: '.sidebar-collapsed' });
+          await driver.pressKey('b', { command: true, shift: true });
+          await client.request('dom_wait', { selector: '.sidebar:not(.sidebar-collapsed)' });
+        } finally {
+          await client.request('set_setting', { key: 'keybindings_config', value: '' });
+        }
+      });
+    }
 
     const summary = await runner.finishSuccess({ seedSessionId, seedDesktopId, sessionIds: createdSessionIds });
     console.log('[RealAppHarness] Session creation shortcuts passed.');
