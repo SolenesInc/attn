@@ -31,8 +31,8 @@ file produces a reason naming the conversation and storage directory. Starting
 fresh remains an explicit action in the session ledger.
 
 The driver advertises `resume_availability` and answers
-`driver.resume_available({conversations: [{cwd, resume_session_id}]})` with
-`{availability: [{cwd, resume_session_id, available, reason?}]}`.
+`driver.resume_available({conversations: [{agent, cwd, resume_session_id}]})` with
+`{availability: [{agent, cwd, resume_session_id, available, reason?}]}`.
 This read-only check verifies matching-header existence in Pi's cwd directory;
 full transcript integrity is tracked separately. It
 honors `PI_CODING_AGENT_DIR`, `PI_CODING_AGENT_SESSION_DIR`, and project/global

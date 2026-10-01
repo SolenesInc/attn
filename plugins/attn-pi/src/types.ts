@@ -92,11 +92,11 @@ export type DriverResumeAvailableParams = {
 };
 
 export type DriverResumeAvailabilityBatchParams = {
-  conversations: DriverResumeAvailableParams[];
+  conversations: (DriverResumeAvailableParams & { agent: string })[];
 };
 
 export type DriverResumeAvailabilityBatchResult = {
-  availability: (DriverResumeAvailableParams & DriverResumeAvailableResult)[];
+  availability: (DriverResumeAvailableParams & DriverResumeAvailableResult & { agent: string })[];
 };
 
 export type DriverResumeAvailableResult = {

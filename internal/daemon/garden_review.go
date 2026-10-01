@@ -75,7 +75,7 @@ func (d *Daemon) captureGardenReview() (gardenReviewCapture, error) {
 	registrations := make(map[string]pluginDriverRegistration)
 	checkResume := func(agentName, resumeID, cwd string) (bool, string) {
 		if reg, ok := d.ensurePluginRegistry().driver(agentName); ok && reg.Capabilities["resume"] && reg.Capabilities["resume_availability"] {
-			pending[reg.PluginName] = append(pending[reg.PluginName], pendingInspection{len(observations), pluginResumeConversation{CWD: cwd, ResumeSessionID: resumeID}})
+			pending[reg.PluginName] = append(pending[reg.PluginName], pendingInspection{len(observations), pluginResumeConversation{Agent: agentName, CWD: cwd, ResumeSessionID: resumeID}})
 			registrations[reg.PluginName] = reg
 			return false, ""
 		}

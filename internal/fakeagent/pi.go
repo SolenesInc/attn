@@ -315,6 +315,7 @@ func (p *piPlugin) handleDaemon(_ *rpcPeer, method string, params json.RawMessag
 	case "driver.resume_available":
 		var request struct {
 			Conversations []struct {
+				Agent           string `json:"agent"`
 				CWD             string `json:"cwd"`
 				ResumeSessionID string `json:"resume_session_id"`
 			} `json:"conversations"`
@@ -334,7 +335,7 @@ func (p *piPlugin) handleDaemon(_ *rpcPeer, method string, params json.RawMessag
 				}
 				sessions[conversation.CWD] = stored
 			}
-			availability = append(availability, map[string]any{"cwd": conversation.CWD, "resume_session_id": conversation.ResumeSessionID, "available": stored[conversation.ResumeSessionID] != "", "reason": fmt.Sprintf("conversation %s is no longer in pi's storage (%s)", conversation.ResumeSessionID, piSessionDir(p.cfg.ToolHome, conversation.CWD))})
+			availability = append(availability, map[string]any{"agent": conversation.Agent, "cwd": conversation.CWD, "resume_session_id": conversation.ResumeSessionID, "available": stored[conversation.ResumeSessionID] != "", "reason": fmt.Sprintf("conversation %s is no longer in pi's storage (%s)", conversation.ResumeSessionID, piSessionDir(p.cfg.ToolHome, conversation.CWD))})
 		}
 		return map[string]any{"availability": availability}, nil
 	case "driver.models":

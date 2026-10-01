@@ -119,7 +119,7 @@ func TestAStalledResumeInspectionTimesOutAndIsRetriedOnTheNextRead(t *testing.T)
 
 		go func() { shown <- lifeShow(t, cli, delegated.SeedID) }()
 		request := driver.asked("driver.resume_available", &check)
-		answerResumeInspection(driver, request, check, func(string) bool { return true }, "")
+		answerResumeInspection(driver, request, check, func(string, string) bool { return true }, "")
 		if result := <-shown; result.Seed.Continuation == nil || !result.Seed.Continuation.ResumeAvailable {
 			t.Fatalf("next read after the driver recovered = %+v", result.Seed.Continuation)
 		}
@@ -165,7 +165,7 @@ func TestAGardenReviewWaitsForAStalledResumeDriverOnlyOncePerCapture(t *testing.
 		go func() { shown <- gardenReviewShow(t, cli, "") }()
 		var check resumeInspection
 		request := driver.asked("driver.resume_available", &check)
-		answerResumeInspection(driver, request, check, func(string) bool { return true }, "")
+		answerResumeInspection(driver, request, check, func(string, string) bool { return true }, "")
 		<-shown
 	})
 }
@@ -223,9 +223,11 @@ func TestAGardenReviewInspectsSharedPluginStorageOncePerCapture(t *testing.T) {
 			"resume": true, "resume_availability": true, "initial_prompt": true, "state_reporting": true,
 		})
 		awaitDriverAvailable(app, "snipe")
-		for _, name := range []string{"first", "second"} {
+		driver.register("wren", map[string]bool{"resume": true, "resume_availability": true, "initial_prompt": true, "state_reporting": true})
+		awaitDriverAvailable(app, "wren")
+		for _, name := range []string{"snipe", "wren"} {
 			delegations := make(chan *protocol.DelegateResult, 1)
-			go func() { delegations <- seedResumeDelegate(t, w, scriptedAgent, "shared-storage") }()
+			go func() { delegations <- seedResumeDelegate(t, w, fakeagent.Harness(name), "shared-storage") }()
 			run := driver.launched()
 			if err := driver.state(run, 1, "working"); err != nil {
 				t.Fatal(err)
@@ -234,7 +236,7 @@ func TestAGardenReviewInspectsSharedPluginStorageOncePerCapture(t *testing.T) {
 			seeds[name] = delegated.SeedID
 			driver.mustReport("session.report_metadata", map[string]any{
 				"session_id": delegated.SessionID, "run_id": run.RunID, "seq": 2,
-				"metadata": map[string]string{"native_id": name}, "resume_session_id": name,
+				"metadata": map[string]string{"native_id": "shared-id"}, "resume_session_id": "shared-id",
 			})
 			closePane(app, seedResumePane(t, w, protocol.Deref(delegated.WorkspaceID), delegated.SessionID))
 		}
@@ -245,16 +247,16 @@ func TestAGardenReviewInspectsSharedPluginStorageOncePerCapture(t *testing.T) {
 			request := driver.asked("driver.resume_available", &check)
 			ids := make([]string, 0, len(check.Conversations))
 			for _, conversation := range check.Conversations {
-				if conversation.CWD != w.Path("shared-storage") {
+				if conversation.CWD != w.Path("shared-storage") || conversation.ResumeID != "shared-id" {
 					t.Fatalf("batch cwd = %q", conversation.CWD)
 				}
-				ids = append(ids, conversation.ResumeID)
+				ids = append(ids, conversation.Agent)
 			}
 			slices.Sort(ids)
-			if !slices.Equal(ids, []string{"first", "second"}) {
+			if !slices.Equal(ids, []string{"snipe", "wren"}) {
 				t.Fatalf("batch IDs = %v", ids)
 			}
-			answerResumeInspection(driver, request, check, func(id string) bool { return (id == "first") == firstAvailable }, "")
+			answerResumeInspection(driver, request, check, func(agent string, _ string) bool { return (agent == "snipe") == firstAvailable }, "")
 			<-shown
 			select {
 			case extra := <-driver.requests:
@@ -267,11 +269,11 @@ func TestAGardenReviewInspectsSharedPluginStorageOncePerCapture(t *testing.T) {
 		go func() { reviews <- gardenReviewStart(t, cli) }()
 		var check resumeInspection
 		request := driver.asked("driver.resume_available", &check)
-		answerResumeInspection(driver, request, check, func(id string) bool { return id == "first" }, "")
+		answerResumeInspection(driver, request, check, func(agent string, _ string) bool { return agent == "snipe" }, "")
 		review := <-reviews
 		for name, seedID := range seeds {
 			item := gardenReviewItem(t, &review, seedID)
-			if resumable := slices.Contains(item.Actions, "resume"); resumable != (name == "first") {
+			if resumable := slices.Contains(item.Actions, "resume"); resumable != (name == "snipe") {
 				t.Fatalf("review actions for %s = %v", name, item.Actions)
 			}
 		}
@@ -322,7 +324,7 @@ func TestRecreatingAWorktreeChecksPluginStorageAfterProjectSettingsReturn(t *tes
 			if _, err := os.Stat(filepath.Join(inspection.Conversations[0].CWD, ".pi", "settings.json")); err != nil {
 				t.Fatalf("storage checked before project settings returned: %v", err)
 			}
-			answerResumeInspection(driver, request, inspection, func(string) bool { return available }, "saved conversation missing from configured storage")
+			answerResumeInspection(driver, request, inspection, func(string, string) bool { return available }, "saved conversation missing from configured storage")
 			err := <-done
 			if available {
 				if err != nil {
@@ -348,16 +350,17 @@ func TestRecreatingAWorktreeChecksPluginStorageAfterProjectSettingsReturn(t *tes
 
 type resumeInspection struct {
 	Conversations []struct {
+		Agent    string `json:"agent"`
 		CWD      string `json:"cwd"`
 		ResumeID string `json:"resume_session_id"`
 	} `json:"conversations"`
 }
 
-func answerResumeInspection(driver *driverPeer, request json.RawMessage, check resumeInspection, available func(string) bool, reason string) {
+func answerResumeInspection(driver *driverPeer, request json.RawMessage, check resumeInspection, available func(string, string) bool, reason string) {
 	driver.t.Helper()
 	answers := make([]map[string]any, 0, len(check.Conversations))
 	for _, conversation := range check.Conversations {
-		answers = append(answers, map[string]any{"cwd": conversation.CWD, "resume_session_id": conversation.ResumeID, "available": available(conversation.ResumeID), "reason": reason})
+		answers = append(answers, map[string]any{"agent": conversation.Agent, "cwd": conversation.CWD, "resume_session_id": conversation.ResumeID, "available": available(conversation.Agent, conversation.ResumeID), "reason": reason})
 	}
 	driver.answer(request, map[string]any{"availability": answers})
 }

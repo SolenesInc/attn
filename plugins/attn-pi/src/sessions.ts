@@ -13,7 +13,7 @@ export async function resumeAvailable(
   params: DriverResumeAvailableParams,
   env: Record<string, string | undefined>,
 ): Promise<DriverResumeAvailableResult> {
-  const result = await resumeAvailabilityBatch({ conversations: [params] }, env);
+  const result = await resumeAvailabilityBatch({ conversations: [{ ...params, agent: "pi" }] }, env);
   return result.availability[0];
 }
 

@@ -95,14 +95,14 @@ test("Pi batch availability is fresh and matches each ID in shared custom storag
   const write = (filename:string,id:string,cwd:string) => writeFileSync(join(directory,filename),JSON.stringify({type:"session",id,cwd})+"\n");
   write("a.jsonl","same-id",first); write("b.jsonl","second-id",first); write("c.jsonl","same-id",second);
   const params = { conversations: [
-    {cwd:first,resume_session_id:"same-id"},
-    {cwd:first,resume_session_id:"second-id"},
-    {cwd:first,resume_session_id:"missing"},
-    {cwd:second,resume_session_id:"same-id"},
+    {agent:"pi",cwd:first,resume_session_id:"same-id"},
+    {agent:"pi",cwd:first,resume_session_id:"second-id"},
+    {agent:"pi",cwd:first,resume_session_id:"missing"},
+    {agent:"pi",cwd:second,resume_session_id:"same-id"},
   ] };
   const initial = await resumeAvailabilityBatch(params,env);
   expect(initial.availability.map(answer => answer.available)).toEqual([true,true,false,true]);
-  expect(initial.availability.map(({cwd,resume_session_id}) => ({cwd,resume_session_id}))).toEqual(params.conversations);
+  expect(initial.availability.map(({agent,cwd,resume_session_id}) => ({agent,cwd,resume_session_id}))).toEqual(params.conversations);
   rmSync(join(directory,"a.jsonl"));
   const next = await resumeAvailabilityBatch(params,env);
   expect(next.availability.map(answer => answer.available)).toEqual([false,true,false,true]);
