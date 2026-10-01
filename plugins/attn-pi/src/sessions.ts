@@ -56,9 +56,8 @@ async function configuredSessionDir(path: string): Promise<string | null | undef
   try {
     const settings = JSON.parse(await readFile(path, "utf8"));
     return settings.sessionDir;
-  } catch (error) {
-    if (missing(error) || error instanceof SyntaxError) return undefined;
-    throw error;
+  } catch {
+    return undefined;
   }
 }
 

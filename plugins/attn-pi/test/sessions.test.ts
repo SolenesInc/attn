@@ -12,6 +12,8 @@ afterAll(() => rmSync(root, { recursive: true, force: true }));
 for (const scenario of [
   { name: "missing directory", directory: false, available: false },
   { name: "empty directory", available: false },
+  { name: "unreadable project settings", unreadableSettings: "project", available: true },
+  { name: "unreadable global settings", unreadableSettings: "global", available: true },
   { name: "unreadable non-target candidate", unreadable: true, available: true },
   { name: "renamed file", filename: "arbitrary.jsonl", available: true },
   { name: "filename only matches", headerID: "other", available: false },
@@ -66,6 +68,10 @@ for (const scenario of [
         ("prefix" in scenario ? scenario.prefix : "") + JSON.stringify(header) + ("newline" in scenario ? "" : "\n"));
     }
     if ("unreadable" in scenario) mkdirSync(join(directory, "00-unreadable.jsonl"));
+    if ("unreadableSettings" in scenario) {
+      const settingsDir = scenario.unreadableSettings === "project" ? join(cwd, ".pi") : agentDir;
+      mkdirSync(join(settingsDir, "settings.json"), { recursive: true });
+    }
     const result = await resumeAvailable({ cwd, resume_session_id: "conversation" }, env);
     expect(result.available).toBe(scenario.available);
     if (!result.available) expect(result.reason).toContain(`conversation conversation is no longer in pi's storage (${directory})`);
