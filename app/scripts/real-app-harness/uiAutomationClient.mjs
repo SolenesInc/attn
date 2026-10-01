@@ -103,7 +103,6 @@ export class UiAutomationClient {
     appPath = defaultAppPathForInstance(),
     manifestPath = null,
     launchEnv = null,
-    backgroundLaunch = false,
     bundleId = null,
     platform = appPlatform,
     artifactsDir = process.env.ATTN_REAL_APP_ARTIFACTS_DIR || path.join(os.tmpdir(), 'attn-real-app-harness'),
@@ -114,7 +113,6 @@ export class UiAutomationClient {
     this.appPath = appPath;
     this.manifestPath = manifestPath || manifestPathForInstance(appInstance);
     this.launchEnv = launchEnv;
-    this.backgroundLaunch = backgroundLaunch;
     this.bundleId = resolvedBundleId;
     this.platform = platform;
     this.artifactsDir = artifactsDir;
@@ -127,7 +125,6 @@ export class UiAutomationClient {
     // Always-on-top keeps WKWebView rAF/ResizeObserver unthrottled on a window that
     // never takes focus; focus probes set ATTN_HARNESS_ALWAYS_ON_TOP=0 to opt out.
     const alwaysOnTop = process.env.ATTN_HARNESS_ALWAYS_ON_TOP !== '0';
-    // `open` drops env, so naming these forces the spawn-style launch.
     const harnessDaemonEnv = { ...agentTripwireLaunchEnv(), ...mockGitHubLaunchEnv() };
     // Park the attn window off-screen by default so scenarios don't cover the
     // caller's work. Opt out with ATTN_HARNESS_PARK_VISIBLE_PX=0.
@@ -148,13 +145,9 @@ export class UiAutomationClient {
     const launched = await this.platform.launchApp({
       appPath: this.appPath,
       env: effectiveLaunchEnv,
-      background: this.backgroundLaunch,
       logPath,
     });
     this.launch = launched;
-    if (!launched.spawned) {
-      return;
-    }
 
     await focusDriver.waitForMainWindow(10_000, 150, { pid: launched.pid }).catch(() => null);
     this.#assertAppRunning();

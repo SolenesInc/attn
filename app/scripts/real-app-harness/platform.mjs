@@ -138,14 +138,8 @@ const darwinPlatform = {
     execFileSync('pbcopy', { input: text });
   },
 
-  async launchApp({ appPath, env = null, background = false, logPath }) {
-    if (logPath || (env && Object.keys(env).length > 0)) {
-      // LaunchServices and `open` do not reliably propagate env into Tauri's
-      // window-creation path, so custom env needs spawn-style delivery.
-      return spawnDetached(this.appExecutableInTree(appPath), env, appPath, logPath);
-    }
-    await execFileAsync('open', background ? ['-g', appPath] : [appPath]);
-    return { spawned: false, pid: null };
+  async launchApp({ appPath, env = null, logPath }) {
+    return spawnDetached(this.appExecutableInTree(appPath), env, appPath, logPath);
   },
 
   async requestQuit({ bundleId }) {
@@ -155,7 +149,7 @@ const darwinPlatform = {
     }
   },
 
-  // `open`, osascript, and pgrep address the bundle, so the spawn pid adds
+  // osascript and pgrep address the bundle, so the spawn pid adds
   // nothing here and the manifest pid is only ever a hint for the wait loop.
   ownedPids({ manifestPid = null }) {
     const pid = positivePid(manifestPid);
