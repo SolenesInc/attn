@@ -322,6 +322,10 @@ func (r *codexRuntime) reopenOwnerLocked(id string) error {
 func (r *codexRuntime) closeAllOwnerViews(id string, closed store.SessionClose) error {
 	r.mu.Lock()
 	defer r.mu.Unlock()
+	return r.closeAllOwnerViewsLocked(id, closed)
+}
+
+func (r *codexRuntime) closeAllOwnerViewsLocked(id string, closed store.SessionClose) error {
 	for runtimeID, view := range r.views {
 		if view.Resolution == "unresolved" {
 			return fmt.Errorf("cannot archive Codex owner %s while view %s has unresolved identity", id, runtimeID)
@@ -348,19 +352,15 @@ func (r *codexRuntime) closeWorkspaceViews(panes []workspacelayout.Pane, members
 	for _, pane := range panes {
 		closing[pane.RuntimeID] = true
 	}
-	hidden := make([]string, 0)
+	owned := make([]string, 0)
 	for _, id := range members {
 		if !r.d.sharedCodexOwner(id) {
 			continue
 		}
-		hasView := false
-		for _, view := range r.views {
+		for runtimeID, view := range r.views {
 			if view.Resolution == "resolved" && view.SessionID == id {
-				hasView = true
+				closing[runtimeID] = true
 			}
-		}
-		if hasView {
-			continue
 		}
 		if err := r.d.sessionCloseError(id); err != nil {
 			return err
@@ -370,7 +370,7 @@ func (r *codexRuntime) closeWorkspaceViews(panes []workspacelayout.Pane, members
 				return fmt.Errorf("cannot archive Codex owner %s while view %s has unresolved identity", id, runtimeID)
 			}
 		}
-		hidden = append(hidden, id)
+		owned = append(owned, id)
 	}
 	for _, pane := range panes {
 		view, ok := r.views[pane.RuntimeID]
@@ -405,11 +405,11 @@ func (r *codexRuntime) closeWorkspaceViews(panes []workspacelayout.Pane, members
 			return err
 		}
 	}
-	for _, id := range hidden {
+	for _, id := range owned {
 		if r.d.store.Get(id) == nil {
 			continue
 		}
-		if err := r.closeOwnerLocked(id, store.SessionClose{By: store.SessionClosedByUser}); err != nil {
+		if err := r.closeAllOwnerViewsLocked(id, store.SessionClose{By: store.SessionClosedByUser}); err != nil {
 			return err
 		}
 	}

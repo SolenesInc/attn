@@ -517,19 +517,21 @@ func (d *Daemon) handleUnregisterWorkspace(client *wsClient, msg *protocol.Unreg
 		}
 		teardowns[sid] = teardown
 	}
+	var panes []workspacelayout.Pane
 	if layout := d.store.GetWorkspaceLayout(id); layout != nil {
-		panes := append([]workspacelayout.Pane(nil), layout.Panes...)
-		sort.SliceStable(panes, func(i, j int) bool {
-			return panes[i].CodexResolution == "unresolved" && panes[j].CodexResolution != "unresolved"
-		})
-		if err := d.codexRuntime().closeWorkspaceViews(panes, memberIDs); err != nil {
-			for sid, teardown := range teardowns {
-				d.cancelSessionTeardown(sid, teardown)
-			}
-			d.sendCommandError(client, protocol.CmdUnregisterWorkspace, err.Error())
-			return
-		}
+		panes = append(panes, layout.Panes...)
 	}
+	sort.SliceStable(panes, func(i, j int) bool {
+		return panes[i].CodexResolution == "unresolved" && panes[j].CodexResolution != "unresolved"
+	})
+	if err := d.codexRuntime().closeWorkspaceViews(panes, memberIDs); err != nil {
+		for sid, teardown := range teardowns {
+			d.cancelSessionTeardown(sid, teardown)
+		}
+		d.sendCommandError(client, protocol.CmdUnregisterWorkspace, err.Error())
+		return
+	}
+
 	for _, sid := range memberIDs {
 		teardown := teardowns[sid]
 		if teardown == nil {

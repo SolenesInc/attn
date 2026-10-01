@@ -541,6 +541,40 @@ func TestSharedCodexWorkspaceCloseIncludesHiddenOwners(t *testing.T) {
 	}
 }
 
+func TestSharedCodexWorkspaceCloseIncludesMovedOwnerViews(t *testing.T) {
+	w := newWorld(t, fakeagent.Codex)
+	app, cli := w.App(), w.Client()
+	sharedCodexSetting(t, app, true)
+	a := w.Spawn(app, fakeagent.Codex, w.Path("moved-source"))
+	w.Launched(a)
+	awaitSharedView(app, a, a)
+	b := w.Spawn(app, fakeagent.Codex, w.Path("moved-target"))
+	agentB := w.Launched(b)
+	awaitSharedView(app, b, b)
+	source := workspaceIDFor(t, w, w.Path("moved-source"))
+	target := workspaceIDFor(t, w, w.Path("moved-target"))
+	moved := workspaceLayoutAction(app, protocol.WorkspaceLayoutMoveLeafToWorkspaceMessage{Cmd: protocol.CmdWorkspaceLayoutMoveLeafToWorkspace, SourceWorkspaceID: source, TargetWorkspaceID: target, LeafID: "pane-" + a, AnchorID: protocol.Ptr("pane-" + b), Edge: protocol.WorkspaceLayoutDockEdgeRight}, protocol.CmdWorkspaceLayoutMoveLeafToWorkspace, source)
+	if !moved.Success {
+		t.Fatal(protocol.Deref(moved.Error))
+	}
+	testworld.Request(app, protocol.UnregisterWorkspaceMessage{Cmd: protocol.CmdUnregisterWorkspace, ID: source}, protocol.EventWorkspaceUnregistered, func(e protocol.WorkspaceUnregisteredMessage) bool { return e.Workspace.ID == source })
+	awaitClosed(app, a)
+	layout := testworld.Request(app, protocol.WorkspaceLayoutGetMessage{Cmd: protocol.CmdWorkspaceLayoutGet, WorkspaceID: target}, protocol.EventWorkspaceLayout, func(e protocol.WorkspaceLayoutMessage) bool { return e.WorkspaceLayout.WorkspaceID == target })
+	for _, pane := range layout.WorkspaceLayout.Panes {
+		if protocol.Deref(pane.RuntimeID) == a {
+			t.Fatal("moved owner left a stale view")
+		}
+	}
+	shown, err := cli.SessionShow(b)
+	if err != nil || shown.Entry.ClosedAt != nil {
+		t.Fatalf("target owner closed: %+v %v", shown, err)
+	}
+	app.TypeLine(b, "B continues after source removal")
+	if got := agentB.Prompted(); got != "B continues after source removal" {
+		t.Fatal(got)
+	}
+}
+
 func TestSharedCodexAutomationPreservesTheNativeTrustOverride(t *testing.T) {
 	w := newWorld(t, fakeagent.Codex)
 	app := w.App()
