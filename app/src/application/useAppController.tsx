@@ -584,7 +584,7 @@ export function useAppController({
       setView('session');
       desktopNavigation.switchToSlot(slot, looking);
     },
-    onSendToDesktopSlot: desktopNavigation.sendActivePaneToSlot,
+    onMoveToDesktopSlot: desktopNavigation.moveActiveLeafToSlot,
     onOpenDesktopOverview: () => setDesktopOverviewOpen(true),
     onSwitchProfile: () => setProfileSwitcherOpen(true),
     onPrevSession: () => handleStepSession(-1),
