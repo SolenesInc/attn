@@ -911,7 +911,8 @@ export function GardenPanel({
   const closedToggle = otherLens || (!closedOn && closedCount === 0) ? null : { count: closedCount, on: closedOn };
 
   const seedDoc = seedDocument && here && seedDocument.document.seed.id === here.id ? seedDocument.document : null;
-  const documentIsCurrent = Boolean(seedDoc && here && seedDoc.seed.rev === here.rev && seedDocument?.snapshot === seeds);
+  const documentIsCurrent = Boolean(seedDoc && here && seedDoc.seed.rev === here.rev);
+  const continuationNotesAreCurrent = documentIsCurrent && seedDocument?.snapshot === seeds;
   const continuation = seedDoc?.seed.continuation;
   const seedIsOpen = seedDoc ? !isClosed(seedDoc.seed) : false;
   const canResume = Boolean(documentIsCurrent && onResumeSeed && seedIsOpen && continuation?.resume_available);
@@ -1227,7 +1228,7 @@ export function GardenPanel({
           <span>{formatPlantedAt(here.created_at)}</span>
           <span className="garden-head__id">{here.id}</span>
         </div>
-        <SeedContinuationNotes continuation={documentIsCurrent ? continuation : undefined} resumeOffered={canResume} />
+        <SeedContinuationNotes continuation={continuationNotesAreCurrent ? continuation : undefined} resumeOffered={canResume} />
         {/* Only a closed seed has one, so it is an exception by construction —
             and it is the one thing the reader of a closed seed came for. */}
         {here.reason && <p className="garden-head__reason">{here.reason}</p>}

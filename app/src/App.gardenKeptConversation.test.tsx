@@ -82,7 +82,7 @@ describe('App kept conversation in the Garden reader', () => {
     expectReads(garden.daemon, 2);
   });
 
-  it('invalidates retention and Resume on a same-revision snapshot, even when the read fails', async () => {
+  it('invalidates retention on a same-revision snapshot, even when the read fails', async () => {
     const garden = await open();
     garden.daemon.on('seed_document_get', () => undefined);
     const deleted = { ...seed, continuation: { ...seed.continuation!, resume_available: false,
@@ -91,16 +91,27 @@ describe('App kept conversation in the Garden reader', () => {
     } };
     await gesture(garden.daemon, () => garden.push([deleted]));
     expect(screen.queryByText(/conversation kept by attn/)).toBeNull();
-    expect(screen.queryByRole('button', { name: 'Resume' })).toBeNull();
     await gesture(garden.daemon, () => garden.daemon.replyTo(garden.daemon.sentOf('seed_document_get')[1], {
       event: 'seed_document_get_result', success: false, error: 'document unavailable',
     }));
     expect(screen.queryByText(/conversation kept by attn/)).toBeNull();
-    expect(screen.queryByRole('button', { name: 'Resume' })).toBeNull();
     garden.daemon.on('seed_document_get', (read) => garden.answer(read));
     await gesture(garden.daemon, () => garden.push([deleted]));
     expect(screen.getByText('conversation attn deleted its copy on 2026-10-14')).toBeInTheDocument();
     expect(screen.getByText('attn deleted its copy on 2026-10-14')).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Resume' })).toBeNull();
     expectReads(garden.daemon, 3);
+  });
+
+  it('keeps continuation actions and their keyboard focus during an unrelated snapshot refresh', async () => {
+    const garden = await open();
+    const resume = screen.getByRole('button', { name: 'Resume' });
+    resume.focus();
+    garden.daemon.on('seed_document_get', () => undefined);
+    await gesture(garden.daemon, () => garden.push([seed, daemonSeed('s-other1', { title: 'Other work' })]));
+    expect(screen.getByRole('button', { name: 'Resume' })).toBe(resume);
+    expect(resume).toHaveFocus();
+    expect(screen.getByRole('button', { name: 'Handover' })).toBeInTheDocument();
+    expectReads(garden.daemon, 2);
   });
 });
