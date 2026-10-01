@@ -230,6 +230,10 @@ type codexNativeThread struct {
 	CWD       string          `json:"cwd"`
 	Source    json.RawMessage `json:"source"`
 	Ephemeral bool            `json:"ephemeral"`
+	Turns     []struct {
+		ID     string `json:"id"`
+		Status string `json:"status"`
+	} `json:"turns"`
 }
 
 func (r *codexRuntime) adoptRoot(root string, v store.CodexView) (*store.CodexOwner, error) {
@@ -360,7 +364,7 @@ func (r *codexRuntime) bindOwner(id string, t codexNativeThread) {
 			return
 		}
 		injectCodexOwner(params, id, r.d.socketPath, r.d.wrapperExecutable(), launch)
-		if _, err := r.control.Call(r.d.life.Context(), "thread/resume", params); err != nil {
+		if _, err := r.resumeOwner(r.d.life.Context(), r.control, params); err != nil {
 			r.d.logf("Codex hold root %s: %v", id, err)
 		}
 	})
@@ -381,6 +385,44 @@ func (r *codexRuntime) cleanupReservation(id string) {
 	r.d.publishSessionUnregistered(session)
 }
 
+type codexTurnState struct {
+	ID       string
+	Revision uint64
+}
+
+func (r *codexRuntime) resumeOwner(ctx context.Context, control *codexshared.Client, params map[string]any) (json.RawMessage, error) {
+	root, _ := params["threadId"].(string)
+	r.activeMu.Lock()
+	revision := r.activeTurns[root].Revision
+	r.activeMu.Unlock()
+	result, err := control.Call(ctx, "thread/resume", params)
+	if err != nil {
+		return nil, err
+	}
+	var reply struct {
+		Thread codexNativeThread `json:"thread"`
+	}
+	if err := json.Unmarshal(result, &reply); err != nil {
+		return nil, err
+	}
+	var activeID string
+	for _, turn := range reply.Thread.Turns {
+		if turn.Status == "inProgress" {
+			activeID = turn.ID
+		}
+	}
+	r.activeMu.Lock()
+	state := r.activeTurns[root]
+	// A native notification received during resume is newer than its snapshot.
+	if state.Revision == revision {
+		state.ID = activeID
+		state.Revision++
+		r.activeTurns[root] = state
+	}
+	r.activeMu.Unlock()
+	return result, nil
+}
+
 func (r *codexRuntime) observeNative(m codexshared.Message) {
 	if m.Method == "" {
 		return
@@ -396,11 +438,14 @@ func (r *codexRuntime) observeNative(m codexshared.Message) {
 	}
 	if m.Method == "turn/started" || m.Method == "turn/completed" {
 		r.activeMu.Lock()
+		state := r.activeTurns[params.ThreadID]
 		if m.Method == "turn/started" {
-			r.activeTurns[params.ThreadID] = params.Turn.ID
-		} else if r.activeTurns[params.ThreadID] == params.Turn.ID {
-			delete(r.activeTurns, params.ThreadID)
+			state.ID = params.Turn.ID
+		} else if state.ID == params.Turn.ID {
+			state.ID = ""
 		}
+		state.Revision++
+		r.activeTurns[params.ThreadID] = state
 		r.activeMu.Unlock()
 	}
 }
@@ -423,7 +468,7 @@ func (r *codexRuntime) send(ctx context.Context, id, text string, active bool) e
 		return err
 	}
 	r.activeMu.Lock()
-	turnID := r.activeTurns[owner.NativeRootID]
+	turnID := r.activeTurns[owner.NativeRootID].ID
 	r.activeMu.Unlock()
 	params := map[string]any{"threadId": owner.NativeRootID, "input": []any{map[string]any{"type": "text", "text": text, "text_elements": []any{}}}}
 	method := "turn/start"
@@ -466,6 +511,6 @@ func (r *codexRuntime) reconfigureOwner(id string) error {
 	}
 	params := map[string]any{"threadId": owner.NativeRootID}
 	injectCodexOwner(params, id, r.d.socketPath, r.d.wrapperExecutable(), launch)
-	_, err = r.control.Call(r.d.life.Context(), "thread/resume", params)
+	_, err = r.resumeOwner(r.d.life.Context(), r.control, params)
 	return err
 }

@@ -27,6 +27,7 @@ type sharedFakeRoot struct {
 	owner    string
 	archived bool
 	hasTurn  atomic.Bool
+	active   atomic.Bool
 }
 
 func runSharedCodexServer(cfg config) int {
@@ -88,11 +89,12 @@ func (s *sharedFakeCodex) serve(w http.ResponseWriter, req *http.Request) {
 
 func (s *sharedFakeCodex) handle(m codexshared.Message) (any, error) {
 	var p struct {
-		ThreadID string          `json:"threadId"`
-		ViewArgv []string        `json:"fixture_view_argv"`
-		CWD      string          `json:"cwd"`
-		Config   json.RawMessage `json:"config"`
-		Input    []struct {
+		ThreadID       string          `json:"threadId"`
+		ExpectedTurnID string          `json:"expectedTurnId"`
+		ViewArgv       []string        `json:"fixture_view_argv"`
+		CWD            string          `json:"cwd"`
+		Config         json.RawMessage `json:"config"`
+		Input          []struct {
 			Text string `json:"text"`
 		} `json:"input"`
 	}
@@ -134,6 +136,7 @@ func (s *sharedFakeCodex) handle(m codexshared.Message) (any, error) {
 				var text textParams
 				_ = json.Unmarshal(params, &text)
 				s.broadcast("attn-fixture/reply", map[string]any{"threadId": c.conversation, "text": text.Text})
+				root.active.Store(false)
 				s.broadcast("turn/completed", map[string]any{"threadId": c.conversation, "turn": map[string]any{"id": c.turnID}})
 			}
 			return result, err
@@ -205,8 +208,27 @@ func (s *sharedFakeCodex) handle(m codexshared.Message) (any, error) {
 		for _, input := range p.Input {
 			texts = append(texts, input.Text)
 		}
-		root.hasTurn.Store(true)
-		root.a.submit(strings.Join(texts, "\n"))
+		if m.Method == "turn/start" {
+			if root.active.Load() {
+				return nil, fmt.Errorf("turn already active")
+			}
+			root.a.submit(strings.Join(texts, "\n"))
+			root.hasTurn.Store(true)
+			root.active.Store(true)
+		} else {
+			root.a.turn.Lock()
+			if !root.active.Load() || p.ExpectedTurnID != root.c.turnID {
+				root.a.turn.Unlock()
+				return nil, fmt.Errorf("steer expected an active matching turn")
+			}
+			text := strings.Join(texts, "\n")
+			err := appendLines(root.c.transcript, codexEvent("user_message", text))
+			root.a.turn.Unlock()
+			if err != nil {
+				return nil, err
+			}
+			root.a.prompts <- promptSubmission{text: text, conversation: root.c.conversation}
+		}
 		s.broadcast("turn/started", map[string]any{"threadId": p.ThreadID, "turn": map[string]any{"id": root.c.turnID}})
 		return map[string]any{"turn": map[string]any{"id": root.c.turnID}}, nil
 	default:
@@ -215,7 +237,13 @@ func (s *sharedFakeCodex) handle(m codexshared.Message) (any, error) {
 }
 
 func (s *sharedFakeCodex) metadata(root *sharedFakeRoot) any {
-	return map[string]any{"id": root.c.conversation, "cwd": root.c.cwd, "path": root.c.transcript, "source": "cli", "ephemeral": false}
+	root.a.turn.Lock()
+	defer root.a.turn.Unlock()
+	turns := []any{}
+	if root.active.Load() {
+		turns = append(turns, map[string]any{"id": root.c.turnID, "status": "inProgress"})
+	}
+	return map[string]any{"id": root.c.conversation, "cwd": root.c.cwd, "path": root.c.transcript, "source": "cli", "ephemeral": false, "turns": turns}
 }
 func (s *sharedFakeCodex) broadcast(method string, params any) {
 	data, _ := json.Marshal(map[string]any{"method": method, "params": params})

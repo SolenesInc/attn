@@ -53,12 +53,12 @@ type codexRuntime struct {
 	servers         map[string]*http.Server
 	initialConsumed map[string]bool
 	activeMu        sync.Mutex
-	activeTurns     map[string]string
+	activeTurns     map[string]codexTurnState
 }
 
 func (d *Daemon) codexRuntime() *codexRuntime {
 	d.codexOnce.Do(func() {
-		d.codex = &codexRuntime{d: d, serverID: "codex", views: make(map[string]store.CodexView), servers: make(map[string]*http.Server), initialConsumed: make(map[string]bool), activeTurns: make(map[string]string)}
+		d.codex = &codexRuntime{d: d, serverID: "codex", views: make(map[string]store.CodexView), servers: make(map[string]*http.Server), initialConsumed: make(map[string]bool), activeTurns: make(map[string]codexTurnState)}
 	})
 	return d.codex
 }
@@ -183,7 +183,7 @@ func (r *codexRuntime) ensureServer(ctx context.Context, launch codexLaunchConte
 		params := map[string]any{"threadId": owner.NativeRootID}
 		injectCodexOwner(params, owner.SessionID, r.d.socketPath, r.d.wrapperExecutable(), context)
 		r.d.logf("restore shared Codex owner %s: beginning native resume", owner.SessionID)
-		if _, err := control.Call(ctx, "thread/resume", params); err != nil {
+		if _, err := r.resumeOwner(ctx, control, params); err != nil {
 			r.d.logf("restore shared Codex owner %s: %v", owner.SessionID, err)
 		}
 	}

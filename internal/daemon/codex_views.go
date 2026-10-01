@@ -144,22 +144,11 @@ func (r *codexRuntime) projectViewLocked(v store.CodexView) {
 		if snapshot == nil {
 			continue
 		}
-		changed := false
-		for i, pane := range snapshot.Panes {
-			if pane.RuntimeID != v.RuntimeID {
-				continue
+		for _, pane := range snapshot.Panes {
+			if pane.RuntimeID == v.RuntimeID {
+				r.d.broadcastWorkspaceLayoutUpdated(workspaceID)
+				break
 			}
-			snapshot.Panes[i].SessionID = v.SessionID
-			snapshot.Panes[i].CodexResolution = v.Resolution
-			snapshot.Panes[i].CodexRevision = v.Revision
-			changed = true
-		}
-		if changed {
-			if err := r.d.store.SaveWorkspaceLayout(*snapshot); err != nil {
-				r.d.logf("Codex layout view %s: %v", v.RuntimeID, err)
-				continue
-			}
-			r.d.broadcastWorkspaceLayoutUpdated(workspaceID)
 		}
 	}
 }

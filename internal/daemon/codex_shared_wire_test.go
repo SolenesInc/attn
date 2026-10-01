@@ -30,6 +30,7 @@ func sharedCodexSetting(t *testing.T, app *testworld.Peer, on bool) {
 }
 
 func awaitSharedView(app *testworld.Peer, runtimeID, ownerID string, after ...string) protocol.WorkspaceLayoutPane {
+	app.T.Helper()
 	var pane protocol.WorkspaceLayoutPane
 	testworld.Await(app, protocol.EventWorkspaceLayoutUpdated, func(e protocol.WorkspaceLayoutUpdatedMessage) bool {
 		for _, p := range e.WorkspaceLayout.Panes {
@@ -231,10 +232,13 @@ func TestSharedCodexSurvivesAnActualDaemonRestartWithTheSameOwnersAndPTYs(t *tes
 	a := stack.Spawn(app, fakeagent.Codex, stack.Path("exo"))
 	agentA := stack.Launched(a)
 	awaitSharedView(app, a, a)
+	app.AwaitScreen(a, "Showing "+agentA.ConversationID)
 	b := stack.Spawn(app, fakeagent.Codex, stack.Path("foo"))
 	agentB := stack.Launched(b)
 	awaitSharedView(app, b, b)
+	app.AwaitScreen(b, "Showing "+agentB.ConversationID)
 	app.TypeLine(a, "/agents "+agentB.ConversationID)
+	app.AwaitScreen(a, "Showing "+agentB.ConversationID)
 	awaitSharedView(app, a, b)
 	app.Send(protocol.PtyInputMessage{Cmd: protocol.CmdPtyInput, ID: a, Data: "saved draft"})
 	app.AwaitScreen(a, "saved draft")
@@ -261,6 +265,31 @@ func TestSharedCodexSurvivesAnActualDaemonRestartWithTheSameOwnersAndPTYs(t *tes
 	if err != nil || len(page.Entries) != 2 {
 		t.Fatalf("restart duplicated owners: %+v %v", page, err)
 	}
+}
+
+func TestSharedCodexSteersTheActiveNativeTurnAfterDaemonRestart(t *testing.T) {
+	stack := testworld.NewStack(t, testworld.WithAgents(fakeagent.Codex))
+	stack.Start()
+	app := stack.App()
+	sharedCodexSetting(t, app, true)
+	id := stack.Spawn(app, fakeagent.Codex, stack.Path("active-restart"))
+	agent := stack.Launched(id)
+	awaitSharedView(app, id, id)
+	app.TypeLine(id, "keep this native turn active")
+	if got := agent.Prompted(); got != "keep this native turn active" {
+		t.Fatal(got)
+	}
+	stack.Stop()
+	stack.Start()
+	app = stack.App()
+	result := testworld.Request(app, protocol.SessionAnnotationsSubmitMessage{Cmd: protocol.CmdSessionAnnotationsSubmit, RequestID: "active-restart", SessionID: id, Text: "steer the surviving turn"}, protocol.EventSessionAnnotationsSubmitResult, func(e protocol.SessionAnnotationsSubmitResultMessage) bool { return e.RequestID == "active-restart" })
+	if result.Status != "delivered" {
+		t.Fatalf("active restart delivery: %+v", result)
+	}
+	if got := agent.Prompted(); got != "steer the surviving turn" {
+		t.Fatal(got)
+	}
+	agent.Reply("turn complete <!-- attn:state=idle -->")
 }
 
 func TestSharedCodexClosingAFailedBlankAttachmentLeavesTheOriginalOwnerLive(t *testing.T) {

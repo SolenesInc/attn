@@ -24,7 +24,10 @@ of heartbeat/state claims. Layout projections carry `codex_resolution` and
 `codex_revision`; changing an agent never replaces its terminal.
 
 The database owns launch context and the unique root binding in `codex_owners`.
-`codex_views` owns runtime/display relationships. `store.LaunchIntent.CodexMode`
+`codex_views` owns runtime/display relationships. Layout reads join that table
+for the displayed owner, resolution and revision. Title updates publish a fresh
+layout snapshot without rewriting placement, focus or pane status.
+`store.LaunchIntent.CodexMode`
 distinguishes shared and legacy owners. Old rows remain legacy. The frontend
 reads placement from daemon workspace layouts and metadata from the global
 session lookup; it never rewrites an owner's workspace when its view switches.
@@ -56,7 +59,9 @@ Owner-addressed reload reapplies native configuration and current role guidance
 through resume, preserving every terminal and draft. Control subscriptions hold hidden roots. Switching away to zero views keeps an
 owner alive. App loss, transport loss and daemon restart do not close owners.
 The native app-server runs in a recoverable PTY worker and survives daemon stop.
-Reconnect restores subscriptions and saved IDs without resending input. Native
+Reconnect restores subscriptions, saved IDs and the active native turn from
+resume state before owner input is accepted. A newer native turn notification
+takes precedence over the resume snapshot; uncertain input is never resent. Native
 server exit marks open owners recoverable with interrupted work; it never replays
 an uncertain submission.
 

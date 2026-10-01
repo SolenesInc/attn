@@ -985,7 +985,7 @@ func (d *Daemon) addWorkspaceSessionPaneLocked(msg *protocol.WorkspaceLayoutAddS
 		return nil, false, fmt.Errorf("session_id is required")
 	}
 	for _, pane := range snapshot.Panes {
-		if pane.SessionID == sessionID {
+		if pane.SessionID == sessionID || pane.RuntimeID == sessionID {
 			return protocol.Ptr(pane.PaneID), false, nil
 		}
 	}
