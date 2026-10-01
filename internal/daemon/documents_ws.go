@@ -92,7 +92,8 @@ func (d *Daemon) handleDocSubscribeWS(client *wsClient, msg *protocol.DocSubscri
 		return
 	}
 
-	go func() {
+	// open counted this subscription as running; a refused start has to uncount it or the disconnect waits forever.
+	if !d.life.Go("handleDocSubscribeWS", func() {
 		defer client.docSubscriptions.running.Done()
 		defer client.docSubscriptions.close(id)
 		d.runDocSubscription(q, msg.Have, docSink{
@@ -111,7 +112,10 @@ func (d *Daemon) handleDocSubscribeWS(client *wsClient, msg *protocol.DocSubscri
 			},
 			end: func(err error, code string) { d.endDocSubscriptionWS(client, id, err, code) },
 		}, done)
-	}()
+	}) {
+		client.docSubscriptions.close(id)
+		client.docSubscriptions.running.Done()
+	}
 }
 
 func (d *Daemon) handleDocUnsubscribeWS(client *wsClient, msg *protocol.DocUnsubscribeMessage) {

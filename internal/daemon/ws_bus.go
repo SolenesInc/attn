@@ -14,7 +14,7 @@ func (d *Daemon) handleBusStatusGet(client *wsClient, msg *protocol.BusStatusGet
 		d.sendCommandError(client, protocol.CmdBusStatusGet, "bus_status_get is missing a request id")
 		return
 	}
-	go func() {
+	d.life.Go("handleBusStatusGet", func() {
 		result := protocol.BusStatusResultMessage{
 			Event:     protocol.EventBusStatusResult,
 			RequestID: requestID,
@@ -28,7 +28,7 @@ func (d *Daemon) handleBusStatusGet(client *wsClient, msg *protocol.BusStatusGet
 		fillBusStatusResult(&result, status)
 		result.Success = true
 		d.sendToClient(client, result)
-	}()
+	})
 }
 
 func (d *Daemon) handleBusSetConsumerEnabled(client *wsClient, msg *protocol.BusSetConsumerEnabledMessage) {

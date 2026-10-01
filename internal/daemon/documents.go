@@ -574,6 +574,8 @@ func (d *Daemon) runDocSubscription(q docstore.Query, have []protocol.DocumentRe
 		case <-sub.wake:
 		case <-done:
 			return
+		case <-d.life.Done():
+			return
 		}
 	}
 }
@@ -592,10 +594,10 @@ func (d *Daemon) handleDocSubscribe(conn net.Conn, msg *protocol.DocSubscribeMes
 	}
 
 	gone := make(chan struct{})
-	go func() {
+	d.life.Go("handleDocSubscribe", func() {
 		defer close(gone)
 		_, _ = io.Copy(io.Discard, conn)
-	}()
+	})
 
 	encoder := json.NewEncoder(conn)
 	d.runDocSubscription(q, msg.Have, docSink{

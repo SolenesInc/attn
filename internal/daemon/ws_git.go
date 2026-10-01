@@ -44,7 +44,7 @@ func (d *Daemon) handleSubscribeGitStatus(client *wsClient, msg *protocol.Subscr
 	client.gitStatusRefresh = refreshChan
 	client.gitStatusMu.Unlock()
 
-	go d.runGitStatusScheduler(client, msg.Directory, stopChan, refreshChan)
+	d.life.Go("runGitStatusScheduler", func() { d.runGitStatusScheduler(client, msg.Directory, stopChan, refreshChan) })
 	client.requestGitStatusRefresh(gitStatusRefreshRequest{immediate: true, reason: gitStatusRefreshReasonSubscribe})
 }
 
@@ -179,7 +179,7 @@ func sameOrNestedPath(path, dir string) bool {
 
 func (d *Daemon) handleGetFileDiffWS(client *wsClient, msg *protocol.GetFileDiffMessage) {
 	d.logf("Getting file diff for %s in %s", msg.Path, msg.Directory)
-	go d.handleGetFileDiff(client, msg)
+	d.life.Go("handleGetFileDiff", func() { d.handleGetFileDiff(client, msg) })
 }
 
 func (d *Daemon) handleGetFileDiff(client *wsClient, msg *protocol.GetFileDiffMessage) {

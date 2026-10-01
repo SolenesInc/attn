@@ -407,7 +407,11 @@ func (d *Daemon) handleAttachSession(client *wsClient, msg *protocol.AttachSessi
 	if previous != nil && previous != stream {
 		_ = previous.Close()
 	}
-	go d.forwardPTYStreamEvents(client, msg.ID, stream)
+	// An attached stream nobody drains backs up the PTY; a refused forward detaches it again.
+	if !d.life.Go("forwardPTYStreamEvents", func() { d.forwardPTYStreamEvents(client, msg.ID, stream) }) {
+		d.detachSession(client, msg.ID)
+		return
+	}
 
 	result := protocol.AttachResultMessage{
 		Event:   protocol.EventAttachResult,
@@ -811,7 +815,7 @@ func parseSignal(name string) syscall.Signal {
 func (d *Daemon) handleKillSession(client *wsClient, msg *protocol.KillSessionMessage) {
 	d.detachSession(client, msg.ID)
 	sig := parseSignal(protocol.Deref(msg.Signal))
-	go d.killSessionRuntimeAsync(msg.ID, sig)
+	d.life.Go("killSessionRuntimeAsync", func() { d.killSessionRuntimeAsync(msg.ID, sig) })
 }
 
 func (d *Daemon) killSessionRuntimeAsync(sessionID string, sig syscall.Signal) {

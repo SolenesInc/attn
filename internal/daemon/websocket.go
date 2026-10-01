@@ -713,6 +713,12 @@ func (d *Daemon) handleWS(w http.ResponseWriter, r *http.Request) {
 		attachedRemote:     make(map[string]struct{}),
 		pendingRemote:      make(map[string]struct{}),
 	}
+	release, held := d.life.Hold("handleWS")
+	if !held {
+		client.abortTransport()
+		return
+	}
+	defer release()
 	if !d.wsHub.track(client) {
 		client.abortTransport()
 		return
@@ -721,10 +727,9 @@ func (d *Daemon) handleWS(w http.ResponseWriter, r *http.Request) {
 	d.logf("WebSocket connection accepted, awaiting client_hello")
 
 	done := make(chan struct{})
-	go d.wsPingLoop(client, done)
-
-	go d.wsWritePump(client)
-	go d.wsMsgPump(client)
+	d.life.Go("wsPingLoop", func() { d.wsPingLoop(client, done) })
+	d.life.Go("wsWritePump", func() { d.wsWritePump(client) })
+	d.life.Go("wsMsgPump", func() { d.wsMsgPump(client) })
 	d.wsReadPump(client)
 
 	close(done)
@@ -762,7 +767,7 @@ func (d *Daemon) sendInitialState(client *wsClient) {
 	}
 	_ = d.sendOutbound(client, outboundMessage{kind: messageKindText, payload: data})
 
-	go d.fetchAllPRDetails()
+	d.life.Go("fetchAllPRDetails", d.fetchAllPRDetails)
 }
 
 const defaultWSWriteTimeout = 10 * time.Second
@@ -832,12 +837,22 @@ func (d *Daemon) sendStream(client *wsClient, message outboundMessage) bool {
 
 func (d *Daemon) wsMsgPump(client *wsClient) {
 	for data := range client.recv {
-		if client.sendChannelClosed() {
+		// A gone client's commands are skipped, except a browser result: it answers a request someone is waiting on.
+		if client.sendChannelClosed() && !isBrowserControlResultFrame(data) {
 			continue
 		}
 		d.handleClientMessage(client, data)
 	}
+	// After the queue drains, so a result the host sent just before leaving still lands first.
+	d.failBrowserControlFor(client)
 	d.logf("WebSocket message pump exited")
+}
+
+func isBrowserControlResultFrame(data []byte) bool {
+	var peek struct {
+		Cmd string `json:"cmd"`
+	}
+	return json.Unmarshal(data, &peek) == nil && peek.Cmd == protocol.CmdBrowserControlResult
 }
 
 func (c *wsClient) sendChannelClosed() bool {
@@ -990,116 +1005,140 @@ func (d *Daemon) handleClientMessage(client *wsClient, data []byte) {
 	case protocol.CmdClientHello:
 		d.handleClientHello(client, msg.(*protocol.ClientHelloMessage))
 	case protocol.CmdDelegate:
-		go d.handleDelegateWS(client, msg.(*protocol.DelegateMessage))
+		d.life.Go("handleDelegateWS", func() { d.handleDelegateWS(client, msg.(*protocol.DelegateMessage)) })
 	case protocol.CmdDelegationModels:
-		go d.handleDelegationModels(client, msg.(*protocol.DelegationModelsMessage))
+		d.life.Go("handleDelegationModels", func() { d.handleDelegationModels(client, msg.(*protocol.DelegationModelsMessage)) })
 	case protocol.CmdDelegationPreferencesGet:
 		d.handleDelegationPreferencesGet(client, msg.(*protocol.DelegationPreferencesGetMessage))
 	case protocol.CmdDelegationPreferencesSave:
 		d.handleDelegationPreferencesSave(client, msg.(*protocol.DelegationPreferencesSaveMessage))
 	case protocol.CmdDelegateStatus:
-		go d.handleDelegateStatusWS(client, msg.(*protocol.DelegateStatusMessage))
+		d.life.Go("handleDelegateStatusWS", func() { d.handleDelegateStatusWS(client, msg.(*protocol.DelegateStatusMessage)) })
 	case protocol.CmdNotebookList:
 		nbList := msg.(*protocol.NotebookListMessage)
-		go d.sendNotebookListWSResult(client, protocol.Deref(nbList.RequestID), protocol.Deref(nbList.Prefix))
+		d.life.Go("sendNotebookListWSResult", func() {
+			d.sendNotebookListWSResult(client, protocol.Deref(nbList.RequestID), protocol.Deref(nbList.Prefix))
+		})
 	case protocol.CmdNotebookRead:
 		nbRead := msg.(*protocol.NotebookReadMessage)
-		go d.sendNotebookReadWSResult(client, protocol.Deref(nbRead.RequestID), nbRead.Path)
+		d.life.Go("sendNotebookReadWSResult", func() { d.sendNotebookReadWSResult(client, protocol.Deref(nbRead.RequestID), nbRead.Path) })
 	case protocol.CmdNotebookBacklinks:
 		nbBack := msg.(*protocol.NotebookBacklinksMessage)
-		go d.sendNotebookBacklinksWSResult(client, protocol.Deref(nbBack.RequestID), nbBack.Path)
+		d.life.Go("sendNotebookBacklinksWSResult", func() { d.sendNotebookBacklinksWSResult(client, protocol.Deref(nbBack.RequestID), nbBack.Path) })
 	case protocol.CmdNotebookWrite:
 		nbWrite := msg.(*protocol.NotebookWriteMessage)
-		go d.sendNotebookWriteWSResult(client, protocol.Deref(nbWrite.RequestID), nbWrite.Path, nbWrite.Content, protocol.Deref(nbWrite.BaseHash))
+		d.life.Go("sendNotebookWriteWSResult", func() {
+			d.sendNotebookWriteWSResult(client, protocol.Deref(nbWrite.RequestID), nbWrite.Path, nbWrite.Content, protocol.Deref(nbWrite.BaseHash))
+		})
 	case protocol.CmdNotebookSendToChief:
 		nbChief := msg.(*protocol.NotebookSendToChiefMessage)
-		go d.sendNotebookToChiefWSResult(client, protocol.Deref(nbChief.RequestID), protocol.Deref(nbChief.SourcePath), nbChief.Selection)
+		d.life.Go("sendNotebookToChiefWSResult", func() {
+			d.sendNotebookToChiefWSResult(client, protocol.Deref(nbChief.RequestID), protocol.Deref(nbChief.SourcePath), nbChief.Selection)
+		})
 	case protocol.CmdTaskList:
 		nbTaskList := msg.(*protocol.TaskListMessage)
-		go d.sendTaskListWSResult(client, protocol.Deref(nbTaskList.RequestID))
+		d.life.Go("sendTaskListWSResult", func() { d.sendTaskListWSResult(client, protocol.Deref(nbTaskList.RequestID)) })
 	case protocol.CmdTaskRetry:
 		nbTaskRetry := msg.(*protocol.TaskRetryMessage)
-		go d.sendTaskRetryWSResult(client, protocol.Deref(nbTaskRetry.RequestID), nbTaskRetry.TaskID)
+		d.life.Go("sendTaskRetryWSResult", func() { d.sendTaskRetryWSResult(client, protocol.Deref(nbTaskRetry.RequestID), nbTaskRetry.TaskID) })
 	case protocol.CmdSessionList:
-		go d.sendSessionListWSResult(client, msg.(*protocol.SessionListMessage))
+		d.life.Go("sendSessionListWSResult", func() { d.sendSessionListWSResult(client, msg.(*protocol.SessionListMessage)) })
 	case protocol.CmdSessionShow:
-		go d.sendSessionShowWSResult(client, msg.(*protocol.SessionShowMessage))
+		d.life.Go("sendSessionShowWSResult", func() { d.sendSessionShowWSResult(client, msg.(*protocol.SessionShowMessage)) })
 	case protocol.CmdSessionReopen:
-		go d.sendSessionReopenWSResult(client, msg.(*protocol.SessionReopenMessage))
+		d.life.Go("sendSessionReopenWSResult", func() { d.sendSessionReopenWSResult(client, msg.(*protocol.SessionReopenMessage)) })
 	case protocol.CmdNotificationList:
 		notifList := msg.(*protocol.NotificationListMessage)
-		go d.sendNotificationListWSResult(client, protocol.Deref(notifList.RequestID))
+		d.life.Go("sendNotificationListWSResult", func() { d.sendNotificationListWSResult(client, protocol.Deref(notifList.RequestID)) })
 	case protocol.CmdNotificationMarkRead:
 		notifMark := msg.(*protocol.NotificationMarkReadMessage)
-		go d.sendNotificationMarkReadWSResult(client, protocol.Deref(notifMark.RequestID), notifMark.NotificationID)
+		d.life.Go("sendNotificationMarkReadWSResult", func() {
+			d.sendNotificationMarkReadWSResult(client, protocol.Deref(notifMark.RequestID), notifMark.NotificationID)
+		})
 	case protocol.CmdTicketAttach:
-		go d.handleTicketAttachWS(client, msg.(*protocol.TicketAttachMessage))
+		d.life.Go("handleTicketAttachWS", func() { d.handleTicketAttachWS(client, msg.(*protocol.TicketAttachMessage)) })
 	case protocol.CmdSeedArtifactTransfer:
-		go d.handleSeedArtifactTransferWS(client, msg.(*protocol.SeedArtifactTransferMessage))
+		d.life.Go("handleSeedArtifactTransferWS", func() { d.handleSeedArtifactTransferWS(client, msg.(*protocol.SeedArtifactTransferMessage)) })
 	case protocol.CmdSeedArtifactTarget:
-		go d.handleSeedArtifactTarget(client, msg.(*protocol.SeedArtifactTargetMessage))
+		d.life.Go("handleSeedArtifactTarget", func() { d.handleSeedArtifactTarget(client, msg.(*protocol.SeedArtifactTargetMessage)) })
 	case protocol.CmdSeedResume:
-		go d.handleSeedResume(client, msg.(*protocol.SeedResumeMessage))
+		d.life.Go("handleSeedResume", func() { d.handleSeedResume(client, msg.(*protocol.SeedResumeMessage)) })
 	case protocol.CmdSeedSendToChief:
-		go d.handleSeedSendToChiefWS(client, msg.(*protocol.SeedSendToChiefMessage))
+		d.life.Go("handleSeedSendToChiefWS", func() { d.handleSeedSendToChiefWS(client, msg.(*protocol.SeedSendToChiefMessage)) })
 	case protocol.CmdSeedReviewStart:
-		go d.handleSeedReviewStartWS(client, msg.(*protocol.SeedReviewStartMessage))
+		d.life.Go("handleSeedReviewStartWS", func() { d.handleSeedReviewStartWS(client, msg.(*protocol.SeedReviewStartMessage)) })
 	case protocol.CmdSeedReviewShow:
-		go d.handleSeedReviewShowWS(client, msg.(*protocol.SeedReviewShowMessage))
+		d.life.Go("handleSeedReviewShowWS", func() { d.handleSeedReviewShowWS(client, msg.(*protocol.SeedReviewShowMessage)) })
 	case protocol.CmdSeedReviewCancel:
-		go d.handleSeedReviewCancelWS(client, msg.(*protocol.SeedReviewCancelMessage))
+		d.life.Go("handleSeedReviewCancelWS", func() { d.handleSeedReviewCancelWS(client, msg.(*protocol.SeedReviewCancelMessage)) })
 	case protocol.CmdSeedReviewRetry:
-		go d.handleSeedReviewRetryWS(client, msg.(*protocol.SeedReviewRetryMessage))
+		d.life.Go("handleSeedReviewRetryWS", func() { d.handleSeedReviewRetryWS(client, msg.(*protocol.SeedReviewRetryMessage)) })
 	case protocol.CmdSeedReviewKeep:
-		go d.handleSeedReviewKeepWS(client, msg.(*protocol.SeedReviewKeepMessage))
+		d.life.Go("handleSeedReviewKeepWS", func() { d.handleSeedReviewKeepWS(client, msg.(*protocol.SeedReviewKeepMessage)) })
 	case protocol.CmdSeedReviewDraft:
-		go d.handleSeedReviewDraftWS(client, msg.(*protocol.SeedReviewDraftMessage))
+		d.life.Go("handleSeedReviewDraftWS", func() { d.handleSeedReviewDraftWS(client, msg.(*protocol.SeedReviewDraftMessage)) })
 	case protocol.CmdCrewWake:
-		go d.handleCrewWakeWS(client, msg.(*protocol.CrewWakeMessage))
+		d.life.Go("handleCrewWakeWS", func() { d.handleCrewWakeWS(client, msg.(*protocol.CrewWakeMessage)) })
 	case protocol.CmdCrewCharterGet:
-		go d.handleCrewCharterGetWS(client, msg.(*protocol.CrewCharterGetMessage))
+		d.life.Go("handleCrewCharterGetWS", func() { d.handleCrewCharterGetWS(client, msg.(*protocol.CrewCharterGetMessage)) })
 	case protocol.CmdCrewCharterSet:
-		go d.handleCrewCharterSetWS(client, msg.(*protocol.CrewCharterSetMessage))
+		d.life.Go("handleCrewCharterSetWS", func() { d.handleCrewCharterSetWS(client, msg.(*protocol.CrewCharterSetMessage)) })
 	case protocol.CmdCrewHandoffsGet:
-		go d.handleCrewHandoffsGetWS(client, msg.(*protocol.CrewHandoffsGetMessage))
+		d.life.Go("handleCrewHandoffsGetWS", func() { d.handleCrewHandoffsGetWS(client, msg.(*protocol.CrewHandoffsGetMessage)) })
 	case protocol.CmdCrewHandoffGet:
-		go d.handleCrewHandoffGetWS(client, msg.(*protocol.CrewHandoffGetMessage))
+		d.life.Go("handleCrewHandoffGetWS", func() { d.handleCrewHandoffGetWS(client, msg.(*protocol.CrewHandoffGetMessage)) })
 	case protocol.CmdCrewSleep:
-		go d.handleCrewSleepWS(client, msg.(*protocol.CrewSleepMessage))
+		d.life.Go("handleCrewSleepWS", func() { d.handleCrewSleepWS(client, msg.(*protocol.CrewSleepMessage)) })
 	case protocol.CmdCrewSet:
-		go d.handleCrewSetWS(client, msg.(*protocol.CrewSetMessage))
+		d.life.Go("handleCrewSetWS", func() { d.handleCrewSetWS(client, msg.(*protocol.CrewSetMessage)) })
 	case protocol.CmdCrewRestart:
-		go d.handleCrewRestartWS(client, msg.(*protocol.CrewRestartMessage))
+		d.life.Go("handleCrewRestartWS", func() { d.handleCrewRestartWS(client, msg.(*protocol.CrewRestartMessage)) })
 	case protocol.CmdFsList:
 		fsList := msg.(*protocol.FsListMessage)
-		go d.sendFsListWSResult(client, protocol.Deref(fsList.RequestID), protocol.Deref(fsList.Path), protocol.Deref(fsList.Root))
+		d.life.Go("sendFsListWSResult", func() {
+			d.sendFsListWSResult(client, protocol.Deref(fsList.RequestID), protocol.Deref(fsList.Path), protocol.Deref(fsList.Root))
+		})
 	case protocol.CmdFsRead:
 		fsRead := msg.(*protocol.FsReadMessage)
-		go d.sendFsReadWSResult(client, protocol.Deref(fsRead.RequestID), fsRead.Path, protocol.Deref(fsRead.Root))
+		d.life.Go("sendFsReadWSResult", func() {
+			d.sendFsReadWSResult(client, protocol.Deref(fsRead.RequestID), fsRead.Path, protocol.Deref(fsRead.Root))
+		})
 	case protocol.CmdFsReadAsset:
 		fsReadAsset := msg.(*protocol.FsReadAssetMessage)
-		go d.sendFsReadAssetWSResult(client, protocol.Deref(fsReadAsset.RequestID), fsReadAsset.Path, protocol.Deref(fsReadAsset.Root))
+		d.life.Go("sendFsReadAssetWSResult", func() {
+			d.sendFsReadAssetWSResult(client, protocol.Deref(fsReadAsset.RequestID), fsReadAsset.Path, protocol.Deref(fsReadAsset.Root))
+		})
 	case protocol.CmdFsWrite:
 		fsWrite := msg.(*protocol.FsWriteMessage)
-		go d.sendFsWriteWSResult(client, protocol.Deref(fsWrite.RequestID), fsWrite.Path, fsWrite.Content, protocol.Deref(fsWrite.BaseHash), protocol.Deref(fsWrite.Root))
+		d.life.Go("sendFsWriteWSResult", func() {
+			d.sendFsWriteWSResult(client, protocol.Deref(fsWrite.RequestID), fsWrite.Path, fsWrite.Content, protocol.Deref(fsWrite.BaseHash), protocol.Deref(fsWrite.Root))
+		})
 	case protocol.CmdFsRename:
 		fsRename := msg.(*protocol.FsRenameMessage)
-		go d.sendFsRenameWSResult(client, protocol.Deref(fsRename.RequestID), fsRename.Path, fsRename.NewPath, protocol.Deref(fsRename.Root))
+		d.life.Go("sendFsRenameWSResult", func() {
+			d.sendFsRenameWSResult(client, protocol.Deref(fsRename.RequestID), fsRename.Path, fsRename.NewPath, protocol.Deref(fsRename.Root))
+		})
 	case protocol.CmdFsDelete:
 		fsDelete := msg.(*protocol.FsDeleteMessage)
-		go d.sendFsDeleteWSResult(client, protocol.Deref(fsDelete.RequestID), fsDelete.Path, protocol.Deref(fsDelete.Root))
+		d.life.Go("sendFsDeleteWSResult", func() {
+			d.sendFsDeleteWSResult(client, protocol.Deref(fsDelete.RequestID), fsDelete.Path, protocol.Deref(fsDelete.Root))
+		})
 	case protocol.CmdFsExists:
 		fsExists := msg.(*protocol.FsExistsMessage)
-		go d.sendFsExistsWSResult(client, protocol.Deref(fsExists.RequestID), fsExists.Path, protocol.Deref(fsExists.Root))
+		d.life.Go("sendFsExistsWSResult", func() {
+			d.sendFsExistsWSResult(client, protocol.Deref(fsExists.RequestID), fsExists.Path, protocol.Deref(fsExists.Root))
+		})
 	case protocol.CmdFsWatch:
 		fsWatch := msg.(*protocol.FsWatchMessage)
-		go d.handleFsWatch(client, protocol.Deref(fsWatch.RequestID), protocol.Deref(fsWatch.Root))
+		d.life.Go("handleFsWatch", func() { d.handleFsWatch(client, protocol.Deref(fsWatch.RequestID), protocol.Deref(fsWatch.Root)) })
 	case protocol.CmdFsUnwatch:
 		fsUnwatch := msg.(*protocol.FsUnwatchMessage)
-		go d.handleFsUnwatch(client, protocol.Deref(fsUnwatch.RequestID), protocol.Deref(fsUnwatch.Root))
+		d.life.Go("handleFsUnwatch", func() { d.handleFsUnwatch(client, protocol.Deref(fsUnwatch.RequestID), protocol.Deref(fsUnwatch.Root)) })
 	case protocol.CmdFsIndex:
 		fsIndex := msg.(*protocol.FsIndexMessage)
-		go d.handleFsIndex(client, protocol.Deref(fsIndex.RequestID), protocol.Deref(fsIndex.Root), fsIndex.Extensions)
+		d.life.Go("handleFsIndex", func() {
+			d.handleFsIndex(client, protocol.Deref(fsIndex.RequestID), protocol.Deref(fsIndex.Root), fsIndex.Extensions)
+		})
 	case protocol.CmdApprovePR:
 		d.handleApprovePRWS(client, msg.(*protocol.ApprovePRMessage))
 	case protocol.CmdMergePR:
@@ -1143,7 +1182,7 @@ func (d *Daemon) handleClientMessage(client *wsClient, data []byte) {
 	case protocol.CmdCancelCountdown:
 		d.handleCancelCountdown(msg.(*protocol.CancelCountdownMessage))
 	case protocol.CmdTriggerNudge:
-		go d.handleTriggerNudge(msg.(*protocol.TriggerNudgeMessage))
+		d.life.Go("handleTriggerNudge", func() { d.handleTriggerNudge(msg.(*protocol.TriggerNudgeMessage)) })
 	case protocol.CmdPRVisited:
 		d.handlePRVisitedWS(msg.(*protocol.PRVisitedMessage))
 	case protocol.CmdListWorktrees:
@@ -1165,7 +1204,7 @@ func (d *Daemon) handleClientMessage(client *wsClient, data []byte) {
 	case protocol.CmdSetSetting:
 		setting := msg.(*protocol.SetSettingMessage)
 		if setting.Key == SettingSharedPTYHostEnabled {
-			go d.handleSetSettingWS(client, setting)
+			d.life.Go("handleSetSettingWS", func() { d.handleSetSettingWS(client, setting) })
 		} else {
 			d.handleSetSettingWS(client, setting)
 		}
@@ -1368,7 +1407,7 @@ func (d *Daemon) handleClientMessage(client *wsClient, data []byte) {
 	case protocol.CmdMarkdownAnnotationsSubmit:
 		d.handleMarkdownAnnotationsSubmit(client, msg.(*protocol.MarkdownAnnotationsSubmitMessage))
 	case protocol.CmdBrowserControl:
-		go d.handleRemoteBrowserControl(client, msg.(*protocol.BrowserControlMessage))
+		d.life.Go("handleRemoteBrowserControl", func() { d.handleRemoteBrowserControl(client, msg.(*protocol.BrowserControlMessage)) })
 	case protocol.CmdBrowserControlResult:
 		d.handleBrowserControlResult(client, msg.(*protocol.BrowserControlResultMessage))
 	case protocol.CmdRegisterWorkspace:

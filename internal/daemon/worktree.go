@@ -475,7 +475,7 @@ func (d *Daemon) handleListWorktreesWS(client *wsClient, msg *protocol.ListWorkt
 }
 
 func (d *Daemon) handleCreateWorktreeWS(client *wsClient, msg *protocol.CreateWorktreeMessage) {
-	go func() {
+	d.life.Go("handleCreateWorktreeWS", func() {
 		path, err := d.doCreateWorktree(msg)
 		result := protocol.CreateWorktreeResultMessage{
 			Event:      protocol.EventCreateWorktreeResult,
@@ -490,11 +490,11 @@ func (d *Daemon) handleCreateWorktreeWS(client *wsClient, msg *protocol.CreateWo
 			d.logf("Create worktree succeeded: %s at %s", msg.Branch, path)
 		}
 		d.sendToClient(client, result)
-	}()
+	})
 }
 
 func (d *Daemon) handleDeleteWorktreeWS(client *wsClient, msg *protocol.DeleteWorktreeMessage) {
-	go func() {
+	d.life.Go("handleDeleteWorktreeWS", func() {
 		defer d.publishFact(FactWorktreeSessionsRemoved, msg.Path, nil)
 
 		err := d.doDeleteWorktree(msg.Path, msg.EndpointID, deleteWorktreeOptions{
@@ -520,7 +520,7 @@ func (d *Daemon) handleDeleteWorktreeWS(client *wsClient, msg *protocol.DeleteWo
 			d.logf("Delete worktree succeeded: %s", msg.Path)
 		}
 		d.sendToClient(client, result)
-	}()
+	})
 }
 
 func (d *Daemon) projectWorktreeCreated(ev bus.Event) {

@@ -181,7 +181,7 @@ type autoModePolicyChangedParams struct {
 func (d *Daemon) announceAutoModeConfig(cfg automode.Config) {
 	d.publishFact(FactAutoModeConfigChanged, AutoModeConfigSubject, nil)
 	network := autoModeConfigInfo(cfg).Network
-	go func() {
+	d.life.Go("announceAutoModeConfig", func() {
 		ctx, cancel := context.WithTimeout(context.Background(), autoModePolicyChangedTimeout)
 		defer cancel()
 		var ignored struct{}
@@ -189,7 +189,7 @@ func (d *Daemon) announceAutoModeConfig(cfg automode.Config) {
 			autoModePolicyChangedParams{Network: network}, &ignored); err != nil {
 			d.logf("automode: telling %s the policy changed: %v", autoModePluginName, err)
 		}
-	}()
+	})
 }
 
 type autoModeConfigEdit func() (automode.Config, error)

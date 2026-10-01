@@ -266,6 +266,14 @@ func newPluginConnection(conn net.Conn, reader *bufio.Reader, params pluginHello
 	}
 }
 
+// send bounds every write to a plugin by the longest a driver call may take: a plugin that stops reading that long
+// is gone, and a write left blocked would hold Daemon.stop until plugins are killed after its wait.
+func (p *pluginConnection) send(msg jsonRPCMessage) error {
+	ctx, cancel := context.WithTimeout(context.Background(), pluginDriverCallTimeout)
+	defer cancel()
+	return p.sendContext(ctx, msg)
+}
+
 func (p *pluginConnection) request(ctx context.Context, method string, params interface{}, result interface{}) error {
 	return p.jsonrpcPeer.request(ctx, fmt.Sprintf("plugin %q", p.name), method, params, result)
 }
@@ -441,32 +449,29 @@ func (d *Daemon) ensurePluginRegistry() *pluginRegistry {
 	return d.plugins
 }
 
+// handlePluginConnection runs on a transport goroutine: its read loop ends when the plugin does, and
+// everything that touches daemon state runs inside life.Hold or life.Do.
 func (d *Daemon) handlePluginConnection(conn net.Conn, reader *bufio.Reader, helloID json.RawMessage, params pluginHelloParams) {
 	plugin := newPluginConnection(conn, reader, params)
 	registry := d.ensurePluginRegistry()
-	if err := registry.register(plugin); err != nil {
-		_ = plugin.send(jsonRPCFailure(helloID, jsonRPCInvalidRequest, err.Error()))
+	connected := false
+	if !d.life.Do("connectPlugin", func() { connected = d.connectPlugin(plugin, registry, helloID, params) }) {
+		_ = plugin.send(jsonRPCFailure(helloID, jsonRPCInternalError, errDaemonStopping.Error()))
 		return
 	}
-	if err := registry.registerSurfaces(plugin, params.Surfaces); err != nil {
-		registry.unregister(plugin)
-		_ = plugin.send(jsonRPCFailure(helloID, jsonRPCInvalidRequest, err.Error()))
-		return
-	}
-	if !d.ensurePluginSupervisor().NoteConnected(plugin.name, plugin.generation) {
-		registry.unregister(plugin)
-		_ = plugin.send(jsonRPCFailure(helloID, jsonRPCInvalidRequest, "plugin generation is no longer current"))
+	if !connected {
 		return
 	}
 	defer func() {
-		d.ensurePluginSupervisor().NoteDisconnected(plugin.name, plugin.generation)
 		registry.unregister(plugin)
+		// Stop kills plugins after its wait; a disconnect it causes is no crash to restart.
 		release, held := d.life.Hold("handlePluginConnection")
 		if !held {
 			plugin.closePending(io.EOF)
 			return
 		}
 		defer release()
+		d.ensurePluginSupervisor().NoteDisconnected(plugin.name, plugin.generation)
 		for _, run := range d.store.ListAgentDriverRuns(plugin.name) {
 			d.resolveSoon(run.SessionID)
 		}
@@ -478,10 +483,12 @@ func (d *Daemon) handlePluginConnection(conn net.Conn, reader *bufio.Reader, hel
 	if err := plugin.send(jsonRPCResult(helloID, pluginHelloResult{OK: true})); err != nil {
 		return
 	}
-	d.publishFact(FactPluginConnected, plugin.name, nil)
-	if d.pluginHealthEnabled {
-		d.life.Go("monitorPluginHealth", func() { d.monitorPluginHealth(plugin) })
-	}
+	d.life.Do("connectPlugin", func() {
+		d.publishFact(FactPluginConnected, plugin.name, nil)
+		if d.pluginHealthEnabled {
+			d.life.Go("monitorPluginHealth", func() { d.monitorPluginHealth(plugin) })
+		}
+	})
 
 	for {
 		data, err := readSocketFrame(reader)
@@ -499,13 +506,33 @@ func (d *Daemon) handlePluginConnection(conn net.Conn, reader *bufio.Reader, hel
 			continue
 		}
 		if msg.Method != "" {
-			d.handlePluginMethod(plugin, msg)
+			if !d.life.Do("handlePluginMethod", func() { d.handlePluginMethod(plugin, msg) }) {
+				_ = plugin.send(jsonRPCFailure(msg.ID, jsonRPCInternalError, errDaemonStopping.Error()))
+			}
 			continue
 		}
 		if !plugin.routeResponse(msg) {
 			_ = plugin.send(jsonRPCFailure(msg.ID, jsonRPCInvalidRequest, "response id is not pending"))
 		}
 	}
+}
+
+func (d *Daemon) connectPlugin(plugin *pluginConnection, registry *pluginRegistry, helloID json.RawMessage, params pluginHelloParams) bool {
+	if err := registry.register(plugin); err != nil {
+		_ = plugin.send(jsonRPCFailure(helloID, jsonRPCInvalidRequest, err.Error()))
+		return false
+	}
+	if err := registry.registerSurfaces(plugin, params.Surfaces); err != nil {
+		registry.unregister(plugin)
+		_ = plugin.send(jsonRPCFailure(helloID, jsonRPCInvalidRequest, err.Error()))
+		return false
+	}
+	if !d.ensurePluginSupervisor().NoteConnected(plugin.name, plugin.generation) {
+		registry.unregister(plugin)
+		_ = plugin.send(jsonRPCFailure(helloID, jsonRPCInvalidRequest, "plugin generation is no longer current"))
+		return false
+	}
+	return true
 }
 
 func (d *Daemon) handlePluginMethod(plugin *pluginConnection, msg jsonRPCMessage) {

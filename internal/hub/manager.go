@@ -1048,6 +1048,9 @@ func (m *Manager) ForwardPTYCommand(ctx context.Context, targetID string, payloa
 	return m.ForwardEndpointCommand(ctx, endpointID, payload)
 }
 
+// The daemon gives its own WebSocket clients 10s to accept a message (defaultWSWriteTimeout); a remote gets the same.
+const remoteWriteTimeout = 10 * time.Second
+
 func (m *Manager) ForwardEndpointCommand(ctx context.Context, endpointID string, payload []byte) error {
 	m.mu.RLock()
 	runtime, ok := m.runtimes[endpointID]
@@ -1067,7 +1070,15 @@ func (m *Manager) ForwardEndpointCommand(ctx context.Context, endpointID string,
 
 	runtime.writeMu.Lock()
 	defer runtime.writeMu.Unlock()
-	return conn.Write(ctx, websocket.MessageText, payload)
+	writeCtx, cancel := context.WithTimeout(ctx, remoteWriteTimeout)
+	defer cancel()
+	if err := conn.Write(writeCtx, websocket.MessageText, payload); err != nil {
+		if ctx.Err() == nil && writeCtx.Err() != nil {
+			return fmt.Errorf("endpoint %s did not accept the command within %s: %w", endpointID, remoteWriteTimeout, err)
+		}
+		return err
+	}
+	return nil
 }
 
 func (m *Manager) ForwardBrowserControl(

@@ -17,53 +17,53 @@ func (d *Daemon) handleAutomationRunsGetWS(client *wsClient, msg *protocol.Autom
 }
 
 func (d *Daemon) handleAutomationSetEnabledWS(client *wsClient, msg *protocol.AutomationSetEnabledMessage) {
-	go func() {
+	d.life.Go("handleAutomationSetEnabledWS", func() {
 		ctx, cancel := context.WithTimeout(context.Background(), wsAutomationMutationTimeout)
 		defer cancel()
 		result := d.actionAutomationSetEnabled(ctx, msg)
 		d.sendToClient(client, result)
-	}()
+	})
 }
 
 func (d *Daemon) handleAutomationDeleteWS(client *wsClient, msg *protocol.AutomationDeleteMessage) {
-	go func() {
+	d.life.Go("handleAutomationDeleteWS", func() {
 		ctx, cancel := context.WithTimeout(context.Background(), wsAutomationMutationTimeout)
 		defer cancel()
 		result := d.actionAutomationDelete(ctx, msg)
 		d.sendToClient(client, result)
-	}()
+	})
 }
 
 func (d *Daemon) handleAutomationCleanupWS(client *wsClient, msg *protocol.AutomationCleanupMessage) {
-	go func() {
+	d.life.Go("handleAutomationCleanupWS", func() {
 		ctx, cancel := context.WithTimeout(context.Background(), wsAutomationMutationTimeout)
 		defer cancel()
 		result := d.actionAutomationCleanup(ctx, msg)
 		d.sendToClient(client, result)
-	}()
+	})
 }
 
 func (d *Daemon) handleAutomationRunWS(client *wsClient, msg *protocol.AutomationRunMessage) {
-	go func() {
+	d.life.Go("handleAutomationRunWS", func() {
 		result := d.actionAutomationRun(context.Background(), msg)
 		d.sendToClient(client, result)
-	}()
+	})
 }
 
 func (d *Daemon) handleAutomationApplyWS(client *wsClient, msg *protocol.AutomationApplyMessage) {
-	go func() {
+	d.life.Go("handleAutomationApplyWS", func() {
 		ctx, cancel := context.WithTimeout(context.Background(), wsAutomationMutationTimeout)
 		defer cancel()
 		result := d.actionAutomationApply(ctx, msg)
 		d.sendToClient(client, result)
-	}()
+	})
 }
 
 func (d *Daemon) handleAutomationValidateWS(client *wsClient, msg *protocol.AutomationValidateMessage) {
-	go func() {
+	d.life.Go("handleAutomationValidateWS", func() {
 		result := d.actionAutomationValidate(msg)
 		d.sendToClient(client, result)
-	}()
+	})
 }
 
 func (d *Daemon) handleAutomationDefinitionGetWS(client *wsClient, msg *protocol.AutomationDefinitionGetMessage) {
