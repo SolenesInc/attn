@@ -10,6 +10,7 @@ function seed(status: string, tender: { session?: string; member?: string } = {}
     gate: false,
     id: 's-7k3f9m',
     planter_member: '',
+    profile_id: 'profile-default',
     planter_session: '',
     ready: false,
     rev: 1,

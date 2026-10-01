@@ -143,6 +143,7 @@ export function AppLibrarySurfaces() {
         chiefActive={notebookChiefActive}
       />
       <GardenFrame
+        key={selectedProfileId}
         mode={gardenMode}
         dockRect={gardenDockRect}
         onToggleFrame={toggleGardenFrame}

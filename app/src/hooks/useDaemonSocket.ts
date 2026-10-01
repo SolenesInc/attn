@@ -304,7 +304,7 @@ export interface RateLimitState {
 }
 
 // Protocol version - must match daemon's ProtocolVersion
-export const PROTOCOL_VERSION = '336';
+export const PROTOCOL_VERSION = '337';
 const MAX_PENDING_ATTACH_OUTPUTS = 512;
 
 const CLIENT_INSTANCE_ID =
@@ -817,6 +817,9 @@ export function useDaemonSocket({
     setDesktopTileContents((prev) => contentOnCurrentDesktop(prev, scopedDesktops, currentDesktopId));
   }, [scopedDesktops, currentDesktopId]);
   const [seedReviewOverview, setSeedReviewOverview] = useState<SeedReviewOverview>({ candidateCount: 0 });
+  useEffect(() => useProfilesStore.subscribe((next, previous) => {
+    if (next.selectedProfileId !== previous.selectedProfileId) setSeedReviewOverview({ candidateCount: 0 });
+  }), []);
 
   const reconnectAttemptsRef = useRef(0);
   const circuitOpenRef = useRef(false);
@@ -1348,6 +1351,7 @@ export function useDaemonSocket({
             break;
 
           case 'garden_seeds_updated':
+            if (data.profile_id !== useProfilesStore.getState().selectedProfileId) break;
             callbacksRef.current.onSeedsUpdate?.(
               data.seeds || [],
               data.total ?? (data.seeds || []).length,
@@ -1356,7 +1360,7 @@ export function useDaemonSocket({
 
           case 'garden_review_updated': {
             const review = data.review as GeneratedGardenReview | undefined;
-            if (!review) break;
+            if (!review || review.run.profile_id !== useProfilesStore.getState().selectedProfileId) break;
             setSeedReviewOverview((current) => {
               if (current.review && current.review.run.id !== review.run.id) {
                 const currentCapturedAt = Date.parse(current.review.run.captured_at);
@@ -1385,7 +1389,9 @@ export function useDaemonSocket({
                 candidateCount: typeof data.candidate_count === 'number' ? data.candidate_count : 0,
                 review: data.review as GeneratedGardenReview | undefined,
               };
-              setSeedReviewOverview(overview);
+              if (data.profile_id === useProfilesStore.getState().selectedProfileId) {
+                setSeedReviewOverview(overview);
+              }
               pending.resolve(overview);
             } else {
               pending.reject(new Error(data.error || 'Garden review failed'));

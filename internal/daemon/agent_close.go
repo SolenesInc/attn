@@ -39,10 +39,17 @@ func (d *Daemon) handleAgentClose(conn net.Conn, msg *protocol.AgentCloseMessage
 		return
 	}
 
-	target, refusal := d.resolveAgentCloseTarget(msg)
+	target, refusal := d.resolveAgentCloseTarget(msg, caller)
 	if refusal != nil {
 		d.replyAgentMsgError(conn, refusal.code, refusal.message)
 		return
+	}
+
+	if dispatch, ok := d.gardenDispatch(target.ID); caller.ID != target.ID && ok && strings.TrimSpace(dispatch.Crown) != "" {
+		if err := d.requireSeedInProfile(dispatch.Crown, caller.ProfileID, false); err != nil {
+			d.replyAgentMsgError(conn, "cross_profile", err.Error())
+			return
+		}
 	}
 
 	rule, err := d.agentCloseRule(caller, target)
@@ -79,9 +86,18 @@ type agentCloseRefusal struct {
 	message string
 }
 
-func (d *Daemon) resolveAgentCloseTarget(msg *protocol.AgentCloseMessage) (*protocol.Session, *agentCloseRefusal) {
+func (d *Daemon) resolveAgentCloseTarget(msg *protocol.AgentCloseMessage, caller *protocol.Session) (*protocol.Session, *agentCloseRefusal) {
 	reference := strings.TrimSpace(msg.TargetSessionID)
 	if seedID := strings.TrimSpace(protocol.Deref(msg.TargetSeedID)); seedID != "" {
+		seed, _, err := d.readSeed(seedID)
+		if err != nil {
+			return nil, &agentCloseRefusal{"cross_profile", err.Error()}
+		}
+		if seed.TenderSession != caller.ID {
+			if err := d.requireSeedInProfile(seedID, caller.ProfileID, false); err != nil {
+				return nil, &agentCloseRefusal{"cross_profile", err.Error()}
+			}
+		}
 		if reference != "" {
 			return nil, &agentCloseRefusal{"ambiguous_target",
 				"a close ends one session; name a session or a seed, not both"}
@@ -178,7 +194,7 @@ func (d *Daemon) noteCloseOnTendedSeeds(
 	read, _, err := d.runDocQuery(docstore.Query{
 		Namespace:  garden.Namespace,
 		Collection: garden.CollectionSeeds,
-		Filters:    []docstore.Filter{{Field: "tender_session", Op: docstore.OpEq, Value: target.ID}},
+		Filters:    []docstore.Filter{{Field: "tender_session", Op: docstore.OpEq, Value: target.ID}, {Field: "profile_id", Op: docstore.OpEq, Value: caller.ProfileID}},
 		Limit:      agentCloseTendedSeedLimit,
 	})
 	if err != nil {

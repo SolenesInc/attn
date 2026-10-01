@@ -46,6 +46,7 @@ type Var struct {
 
 type Seed struct {
 	ID              string `json:"id"`
+	ProfileID       string `json:"profile_id"`
 	Title           string `json:"title"`
 	Body            string `json:"body"`
 	Status          string `json:"status"`
@@ -89,6 +90,7 @@ func SeedsSchema() docstore.CollectionSchema {
 		Namespace:  Namespace,
 		Collection: CollectionSeeds,
 		Fields: []docstore.FieldSpec{
+			{Name: "profile_id", Type: docstore.FieldString},
 			{Name: "status", Type: docstore.FieldString},
 			{Name: "step_slug", Type: docstore.FieldString},
 			{Name: "tender_session", Type: docstore.FieldString},

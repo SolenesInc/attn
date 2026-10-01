@@ -30,8 +30,21 @@ func (d *Daemon) startDelegationForeground(msg *protocol.DelegateMessage) (*prot
 	}
 	msg.RequestID = requestID
 	msg.Cmd = protocol.CmdDelegate
+	if strings.TrimSpace(protocol.Deref(msg.SourceSessionID)) == "" {
+		msg.SourceSessionID = nil
+	}
 	if err := validateDelegateRequestShape(msg); err != nil {
 		return nil, err
+	}
+	profile, err := d.resolveGardenProfile(protocol.Deref(msg.SourceSessionID), protocol.Deref(msg.ProfileID), "")
+	if err != nil {
+		return nil, err
+	}
+	msg.ProfileID = protocol.Ptr(profile.ID)
+	if seedID := protocol.Deref(msg.Assignment.SeedID); seedID != "" {
+		if err := d.requireSeedInProfile(seedID, profile.ID, false); err != nil {
+			return nil, err
+		}
 	}
 	encoded, err := json.Marshal(msg)
 	if err != nil {
@@ -39,7 +52,18 @@ func (d *Daemon) startDelegationForeground(msg *protocol.DelegateMessage) (*prot
 	}
 
 	if existing, lookupErr := d.store.GetDelegationOperation(requestID); lookupErr == nil {
-		if existing.RequestJSON != string(encoded) {
+		var saved protocol.DelegateMessage
+		if err := json.Unmarshal([]byte(existing.RequestJSON), &saved); err != nil {
+			return nil, err
+		}
+		if strings.TrimSpace(protocol.Deref(saved.SourceSessionID)) == "" {
+			saved.SourceSessionID = nil
+		}
+		normalized, err := json.Marshal(saved)
+		if err != nil {
+			return nil, err
+		}
+		if string(normalized) != string(encoded) {
 			return nil, store.ErrDelegationRequestConflict
 		}
 		if existing.Operation.State == protocol.DelegationOperationStateAccepted || existing.Operation.State == protocol.DelegationOperationStatePreparing {
@@ -53,7 +77,7 @@ func (d *Daemon) startDelegationForeground(msg *protocol.DelegateMessage) (*prot
 	if ref := strings.TrimSpace(protocol.Deref(msg.Desktop)); ref != "" {
 		sourceID := strings.TrimSpace(protocol.Deref(msg.SourceSessionID))
 		if source := d.store.Get(sourceID); source != nil || sourceID == "" {
-			if _, _, err := d.delegationDestination(source, ref); err != nil {
+			if _, _, err := d.delegationDestination(source, ref, protocol.Deref(msg.ProfileID)); err != nil {
 				return nil, err
 			}
 		}
@@ -297,6 +321,52 @@ func (d *Daemon) delegationOperation(id string) (*protocol.DelegationOperation, 
 	return &operation, nil
 }
 
+func (d *Daemon) scopedDelegationOperation(id, sessionID, requested, selected string) (*protocol.DelegationOperation, error) {
+	profile, err := d.resolveGardenProfile(sessionID, requested, selected)
+	if err != nil {
+		return nil, err
+	}
+	if selected != "" && profile.ID != selected {
+		app, err := d.store.GetProfile(selected)
+		if err != nil {
+			return nil, err
+		}
+		return nil, fmt.Errorf("source session belongs to profile %q; app belongs to profile %q", profile.Name, app.Name)
+	}
+	record, err := d.store.GetDelegationOperation(strings.TrimSpace(id))
+	if err != nil {
+		return nil, err
+	}
+	var request protocol.DelegateMessage
+	if err := json.Unmarshal([]byte(record.RequestJSON), &request); err != nil {
+		return nil, err
+	}
+	ownerID := protocol.Deref(request.ProfileID)
+	if ownerID != "" && ownerID != profile.ID {
+		owner, err := d.store.GetProfile(ownerID)
+		if err != nil {
+			return nil, err
+		}
+		return nil, fmt.Errorf("delegation %s belongs to profile %q; caller belongs to profile %q", id, owner.Name, profile.Name)
+	}
+	if seedID := protocol.Deref(record.Operation.SeedID); seedID != "" {
+		schema, err := d.seedsCollection()
+		if err != nil {
+			return nil, err
+		}
+		_, found, err := d.store.GetDocument(*schema, seedID)
+		if err != nil {
+			return nil, err
+		}
+		if found {
+			if err := d.requireSeedInProfile(seedID, profile.ID, false); err != nil {
+				return nil, err
+			}
+		}
+	}
+	return d.delegationOperation(id)
+}
+
 func (d *Daemon) resumePendingDelegations() {
 	records, err := d.store.PendingDelegationOperations()
 	if err != nil {
@@ -310,7 +380,7 @@ func (d *Daemon) resumePendingDelegations() {
 }
 
 func (d *Daemon) handleDelegateStatusWS(client *wsClient, msg *protocol.DelegateStatusMessage) {
-	operation, err := d.delegationOperation(msg.ID)
+	operation, err := d.scopedDelegationOperation(msg.ID, protocol.Deref(msg.SourceSessionID), protocol.Deref(msg.ProfileID), client.selectedProfile())
 	response := protocol.DelegationOperationMessage{
 		Event:     protocol.EventDelegationOperation,
 		Success:   err == nil,

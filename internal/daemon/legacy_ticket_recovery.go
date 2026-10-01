@@ -1041,6 +1041,11 @@ func (d *Daemon) recoverLegacyTicketSeeds(ctx context.Context, job *jobs.Job, ru
 				seed.Status = garden.StatusWithered
 			}
 			seed.Reason = "recovered from legacy ticket " + ticket.ID
+			view, err := d.store.ProfileMigration()
+			if err != nil {
+				return err
+			}
+			seed.ProfileID = view.Manifest.ProfileID
 			seedBody, err := seed.Encode()
 			if err != nil {
 				return err

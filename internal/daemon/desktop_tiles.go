@@ -111,6 +111,9 @@ func (d *Daemon) resolvedDesktopTileDock(desktopID string, dock desktopTileDock)
 	existing, docked := tileLeafByID(desktop.Tree, dock.tileID)
 	if !docked {
 		dock.params, err = d.validatedNewTileParams(dock.tileKind, dock.params)
+		if err == nil && dock.tileKind == string(layouttree.TileKindSeed) {
+			err = d.requireSeedInProfile(dock.params, desktop.ProfileID, false)
+		}
 		return dock, err
 	}
 	if existing.TileKind != dock.tileKind {
@@ -120,6 +123,9 @@ func (d *Daemon) resolvedDesktopTileDock(desktopID string, dock desktopTileDock)
 		dock.sessionID = existing.TileSessionID
 	}
 	dock.params, err = d.effectiveTileParams(existing, dock.params)
+	if err == nil && dock.tileKind == string(layouttree.TileKindSeed) {
+		err = d.requireSeedInProfile(dock.params, desktop.ProfileID, false)
+	}
 	return dock, err
 }
 
@@ -216,6 +222,11 @@ func (d *Daemon) checkedDesktopTileUpdate(desktopID string, update desktopTileUp
 			return update, profiles.Errorf(profiles.CodeInvalid, "a %s tile cannot drop its tile_params; only a notebook tile falls back to the default root", tile.TileKind)
 		}
 		return update, nil
+	}
+	if tile.TileKind == string(layouttree.TileKindSeed) {
+		if err := d.requireSeedInProfile(update.params, desktop.ProfileID, false); err != nil {
+			return update, err
+		}
 	}
 	update.params, err = d.effectiveTileParams(tile, update.params)
 	return update, err

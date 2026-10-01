@@ -88,6 +88,33 @@ func TestConcurrentReconnectsDeliverOneEvictionNotice(t *testing.T) {
 	})
 }
 
+func TestGardenUpdatesKeepFlowingWhenAnotherClientFallsBehind(t *testing.T) {
+	inBubble(t, func(t *testing.T, w *world) {
+		app, cli := w.App(), w.Client()
+		seed := plantSeedAs(t, cli, "", "Garden delivery under backpressure")
+		stalled := evictionStalledClient(t, w, "garden-fell-behind")
+		var finalBody string
+		for i := range 300 {
+			finalBody = strconv.Itoa(i)
+			if _, err := cli.SeedEdit(seed, finalBody); err != nil {
+				t.Fatalf("edit the seed while another client is stalled: %v", err)
+			}
+			synctest.Wait()
+		}
+		testworld.Await(app, protocol.EventGardenSeedsUpdated, func(m protocol.GardenSeedsUpdatedMessage) bool {
+			return len(m.Seeds) == 1 && m.Seeds[0].ID == seed && m.Seeds[0].Body == finalBody
+		})
+		evictionDrain(t, stalled)
+		if notice := evictionNotice(t, w, "garden-fell-behind"); notice == nil || notice.Reason != "client too slow" {
+			t.Fatalf("reconnect after Garden backpressure: %+v", notice)
+		}
+		fresh := w.App()
+		if protocol.Deref(fresh.Initial.SelectedProfileID) != app.SelectedProfile() {
+			t.Fatal("a fresh client could not join the same profile after eviction")
+		}
+	})
+}
+
 func TestAClientWhoseSocketStopsAcceptingWritesIsDroppedAndToldWhyWhileItIsRemembered(t *testing.T) {
 	inBubble(t, func(t *testing.T, w *world) {
 		prompt := evictionStalledClient(t, w, "returns-soon")

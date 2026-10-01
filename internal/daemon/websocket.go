@@ -562,8 +562,12 @@ func (h *wsHub) ForEachClient(fn func(*wsClient)) {
 		return
 	}
 	h.mu.RLock()
-	defer h.mu.RUnlock()
+	clients := make([]*wsClient, 0, len(h.clients))
 	for client := range h.clients {
+		clients = append(clients, client)
+	}
+	h.mu.RUnlock()
+	for _, client := range clients {
 		fn(client)
 	}
 }
@@ -762,7 +766,7 @@ func (d *Daemon) sendInitialState(client *wsClient) {
 	if status, err := d.enrollmentStatus(); err == nil {
 		homeDaemonID = status.HomeDaemonID
 	}
-	state := d.currentStateProjection()
+	state := d.currentStateProjection(client.selectedProfile())
 	event := &protocol.InitialStateMessage{
 		Event:                  protocol.EventInitialState,
 		ProtocolVersion:        protocol.Ptr(protocol.ProtocolVersion),
@@ -779,7 +783,7 @@ func (d *Daemon) sendInitialState(client *wsClient) {
 		Settings:               d.settingsWithAgentAvailability(),
 		Warnings:               d.getWarnings(),
 		Seeds:                  state.Seeds,
-		SeedsTotal:             protocol.Ptr(d.countSeedsForBroadcast()),
+		SeedsTotal:             protocol.Ptr(d.countSeedsForBroadcast(client.selectedProfile())),
 		Crew:                   state.Crew,
 	}
 	d.fillInitialMigrationPhase(event)
@@ -1007,6 +1011,10 @@ func (d *Daemon) handleClientMessage(client *wsClient, data []byte) {
 		}
 		return
 	}
+	if err := d.scopeGardenRequest(cmd, msg, client.selectedProfile()); err != nil {
+		d.sendGardenScopeError(client, cmd, msg, err)
+		return
+	}
 	if isUserPresenceCommand(cmd) {
 		d.recordUserActivity(time.Now())
 	}
@@ -1070,7 +1078,22 @@ func (d *Daemon) handleClientMessage(client *wsClient, data []byte) {
 	case protocol.CmdClientHello:
 		d.handleClientHello(client, msg.(*protocol.ClientHelloMessage))
 	case protocol.CmdDelegate:
-		d.life.Go("handleDelegateWS", func() { d.handleDelegateWS(client, msg.(*protocol.DelegateMessage)) })
+		request := msg.(*protocol.DelegateMessage)
+		profile, err := d.resolveGardenProfile(protocol.Deref(request.SourceSessionID), protocol.Deref(request.ProfileID), client.selectedProfile())
+		if err == nil && profile.ID != client.selectedProfile() {
+			selected, readErr := d.store.GetProfile(client.selectedProfile())
+			if readErr != nil {
+				err = readErr
+			} else {
+				err = fmt.Errorf("source session belongs to profile %q; app belongs to profile %q", profile.Name, selected.Name)
+			}
+		}
+		if err != nil {
+			d.sendToClient(client, protocol.DelegateResultMessage{Event: protocol.EventDelegateResult, RequestID: protocol.Ptr(request.RequestID), Error: protocol.Ptr(err.Error())})
+			break
+		}
+		request.ProfileID = protocol.Ptr(profile.ID)
+		d.life.Go("handleDelegateWS", func() { d.handleDelegateWS(client, request) })
 	case protocol.CmdDelegationModels:
 		d.life.Go("handleDelegationModels", func() { d.handleDelegationModels(client, msg.(*protocol.DelegationModelsMessage)) })
 	case protocol.CmdDelegationPreferencesGet:

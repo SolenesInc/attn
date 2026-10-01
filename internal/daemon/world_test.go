@@ -35,7 +35,18 @@ func newWorld(t *testing.T, agents ...fakeagent.Harness) *world {
 
 func inBubble(t *testing.T, script func(t *testing.T, w *world)) {
 	t.Helper()
-	prepared := prepareWorld(t)
+	inPreparedBubble(t, prepareWorld(t), script)
+}
+
+func inCrewBubble(t *testing.T, script func(t *testing.T, w *world)) {
+	t.Helper()
+	w := &world{World: prepareWorld(t)}
+	writeCrewHomes(t, w)
+	inPreparedBubble(t, w.World, script)
+}
+
+func inPreparedBubble(t *testing.T, prepared *testworld.World, script func(t *testing.T, w *world)) {
+	t.Helper()
 	synctest.Test(t, func(t *testing.T) {
 		bubbled := *prepared
 		bubbled.T = t

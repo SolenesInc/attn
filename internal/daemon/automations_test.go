@@ -93,7 +93,7 @@ func setupContinuationWorktree(t *testing.T) (*Daemon, automation.WorkRequest, s
 		RunID: origin.ID, DefinitionID: def.ID, SubjectKey: subject, ContinuityKey: subject,
 		Provider: "github", Prompt: "Review", Context: payload, Location: location,
 		Launch: testAutomationLaunch("codex"), IDs: automation.DeliveryIDs{
-			SeedID: origin.SeedID, SessionID: origin.SessionID,
+			SeedID: origin.SeedID, SessionID: origin.SessionID, ProfileID: origin.ProfileID,
 		},
 	}
 	if _, _, err := d.ensureAutomationSeed(firstReq); err != nil {

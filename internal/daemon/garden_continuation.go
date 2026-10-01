@@ -258,6 +258,19 @@ func (d *Daemon) captureGardenSessionExecution(session *protocol.Session) (garde
 	startedAt := d.gardenTime()
 	observed := d.observedGardenExecution(session, resumeID, startedAt)
 	return d.updateGardenDispatch(session.ID, func(current garden.Dispatch) (garden.Dispatch, bool, error) {
+		if crown := activeDispatchCrown(current); crown != "" {
+			seed, _, err := d.readSeed(crown)
+			if err != nil {
+				return current, false, err
+			}
+			profileID, err := d.sessionProfileID(session.ID)
+			if err != nil {
+				return current, false, err
+			}
+			if seed.ProfileID != profileID {
+				return current, false, nil
+			}
+		}
 		if capturedAt, err := time.Parse(time.RFC3339Nano, current.CapturedAt); err == nil && capturedAt.After(startedAt) {
 			return current, false, nil
 		}
@@ -268,6 +281,19 @@ func (d *Daemon) captureGardenSessionExecution(session *protocol.Session) (garde
 
 func (d *Daemon) captureGardenSessionSnapshot(session *protocol.Session) (garden.Dispatch, error) {
 	return d.updateGardenDispatch(session.ID, func(current garden.Dispatch) (garden.Dispatch, bool, error) {
+		if crown := activeDispatchCrown(current); crown != "" {
+			seed, _, err := d.readSeed(crown)
+			if err != nil {
+				return current, false, err
+			}
+			profileID, err := d.sessionProfileID(session.ID)
+			if err != nil {
+				return current, false, err
+			}
+			if seed.ProfileID != profileID {
+				return current, false, nil
+			}
+		}
 		observed := snapshotGardenExecution(session, d.store.GetResumeSessionID(session.ID), d.gardenTime())
 		return mergeGardenExecution(current, observed), true, nil
 	})
@@ -344,8 +370,17 @@ func (d *Daemon) normalizedSeedContinuation(seed garden.Seed) (garden.Dispatch, 
 	if executionID := strings.TrimSpace(seed.LastExecutionID); executionID != "" {
 		if execution, ok := d.gardenDispatch(executionID); ok {
 			entry := d.store.SessionLedgerEntry(executionID)
+			foreign := entry != nil && entry.ProfileID != seed.ProfileID
+			if entry == nil {
+				if live := d.gardenSession(executionID); live != nil {
+					foreign = live.ProfileID != seed.ProfileID
+				}
+			}
+			if foreign {
+				return garden.Dispatch{SessionID: executionID}, continuationSourceExecution, true
+			}
 			localLedgerGone := entry == nil && execution.HostKind != garden.HostRemote
-			if entry != nil {
+			if entry != nil && entry.ProfileID == seed.ProfileID {
 				execution.SessionID = entry.ID
 				execution.Cwd = entry.Directory
 				execution.Agent = entry.Agent
@@ -463,13 +498,30 @@ func (d *Daemon) continuationForSeedWithResumeCheck(seed garden.Seed, checkResum
 	if !ok {
 		return nil
 	}
+	entry := d.store.SessionLedgerEntry(execution.SessionID)
 	continuation := &seedContinuation{
 		Execution:         execution,
 		KeptConversation:  d.keptConversationForSession(execution.SessionID),
 		Source:            source,
-		LedgerAvailable:   d.store.SessionLedgerEntry(execution.SessionID) != nil,
+		LedgerAvailable:   entry != nil,
 		DirectoryState:    inspectContinuationDirectory(execution),
 		HandoverPlacement: handoverNeedsPlacement,
+	}
+	var profileID string
+	foreign := false
+	if entry != nil {
+		profileID = entry.ProfileID
+		foreign = profileID != seed.ProfileID
+	} else if live := d.gardenSession(execution.SessionID); live != nil {
+		profileID = live.ProfileID
+		foreign = profileID != seed.ProfileID
+	}
+	if foreign {
+		owner, _ := d.store.GetProfile(seed.ProfileID)
+		caller, _ := d.store.GetProfile(profileID)
+		continuation.ResumeReason = fmt.Sprintf("the original agent moved from profile %q to profile %q; hand this seed to a new agent in its own profile", owner.Name, caller.Name)
+		d.planSeedHandoverPlacement(continuation)
+		return continuation
 	}
 	if live := d.gardenSession(execution.SessionID); live != nil &&
 		(strings.TrimSpace(protocol.Deref(live.EndpointID)) != "" || d.sessionHasLiveWorker(live.ID)) {

@@ -113,6 +113,11 @@ func (d *Daemon) convertBacklogTicket(ticket *store.Ticket) (string, error) {
 		}
 		seed := garden.Seed{ID: seedID, Title: title, Body: body, Status: garden.StatusPlanted,
 			StepSlug: garden.StepSlug(title), Edges: []garden.Edge{}, Vars: []garden.Var{}}
+		view, err := d.store.ProfileMigration()
+		if err != nil {
+			return "", err
+		}
+		seed.ProfileID = view.Manifest.ProfileID
 		seedBody, err := seed.Encode()
 		if err != nil {
 			return "", err

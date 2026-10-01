@@ -175,10 +175,14 @@ func legacyTicketSeedTestStore(t *testing.T) (*Store, docstore.CollectionSchema,
 		declOf(t, s, garden.Namespace, garden.CollectionDispatches)
 }
 
-func ticketSeedHandover(t *testing.T, seedSchema, noteSchema, dispatchSchema docstore.CollectionSchema, ticketID, seedID, noteID string) TicketSeedHandover {
+func ticketSeedHandover(t *testing.T, s *Store, seedSchema, noteSchema, dispatchSchema docstore.CollectionSchema, ticketID, seedID, noteID string) TicketSeedHandover {
 	t.Helper()
+	profile, err := s.ProfileMigration()
+	if err != nil {
+		t.Fatal(err)
+	}
 	seed := garden.Seed{
-		ID: seedID, Title: "Recovered work", Body: "the original brief", Status: garden.StatusHarvested,
+		ProfileID: profile.Manifest.ProfileID, ID: seedID, Title: "Recovered work", Body: "the original brief", Status: garden.StatusHarvested,
 		StepSlug: "recovered-work", Edges: []garden.Edge{}, Vars: []garden.Var{}, Reason: "recovered from legacy ticket " + ticketID,
 	}
 	seedBody, err := seed.Encode()
@@ -224,7 +228,11 @@ func (g *ticketSeedGarden) put(t *testing.T, schema docstore.CollectionSchema, i
 
 func (g *ticketSeedGarden) seed(t *testing.T, id, title, body string) {
 	t.Helper()
-	encoded, err := (garden.Seed{ID: id, Title: title, Body: body, Status: garden.StatusHarvested,
+	profile, err := g.store.ProfileMigration()
+	if err != nil {
+		t.Fatal(err)
+	}
+	encoded, err := (garden.Seed{ProfileID: profile.Manifest.ProfileID, ID: id, Title: title, Body: body, Status: garden.StatusHarvested,
 		StepSlug: garden.StepSlug(title), Edges: []garden.Edge{}, Vars: []garden.Var{}}).Encode()
 	if err != nil {
 		t.Fatal(err)
@@ -254,7 +262,7 @@ func TestEnsureTicketSeedHandoverDecidesOnceOverThePriorGarden(t *testing.T) {
 		{
 			name: "earlier handover of the same ticket",
 			prior: func(t *testing.T, g *ticketSeedGarden) {
-				earlier := ticketSeedHandover(t, g.seeds, g.notes, g.dispatches, "ticket-1", "s-first", "n-first")
+				earlier := ticketSeedHandover(t, g.store, g.seeds, g.notes, g.dispatches, "ticket-1", "s-first", "n-first")
 				if got, err := g.store.EnsureTicketSeedHandover(earlier); err != nil || got.Result != "created" {
 					t.Fatalf("earlier handover = %#v, %v", got, err)
 				}
@@ -327,7 +335,7 @@ func TestEnsureTicketSeedHandoverDecidesOnceOverThePriorGarden(t *testing.T) {
 				t.Fatal(err)
 			}
 
-			handover := ticketSeedHandover(t, seeds, notes, dispatches, "ticket-1", "s-proposed", "n-proposed")
+			handover := ticketSeedHandover(t, s, seeds, notes, dispatches, "ticket-1", "s-proposed", "n-proposed")
 			handover.SessionIDs = tc.sessions
 			got, err := s.EnsureTicketSeedHandover(handover)
 			switch {

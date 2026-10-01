@@ -22,7 +22,7 @@ func TestSeedNudges_RemoteTenderStopsAtTheHomeFence(t *testing.T) {
 	}
 	seed := garden.Seed{ID: "s-remote", TenderSession: "remote-worker"}
 
-	sessionID, err := d.localGardenTenderSession(seed.Tender())
+	sessionID, err := d.localGardenTenderSession(seed)
 	if err == nil || sessionID != "" || !strings.Contains(err.Error(), "garden notifications are home-only") ||
 		!strings.Contains(err.Error(), "remote-worker") || !strings.Contains(err.Error(), endpoint.ID) {
 		t.Fatalf("remote tender = %q, %v; want a named home-only refusal", sessionID, err)

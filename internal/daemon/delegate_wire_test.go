@@ -264,7 +264,7 @@ func TestADelegationThatCannotBePlacedIsRefusedBeforeAnythingLaunches(t *testing
 		{name: "a name that names nothing", cwd: w.Path("svc"), label: ".", refusal: `"." is not a usable name`},
 		{name: "the caller's own name", source: "reviewer", cwd: w.Path("docs"), label: "Reviewer", refusal: `session name "Reviewer" is already used on this desktop`},
 		{name: "a neighbour's name", source: "reviewer", cwd: w.Path("docs"), label: "WRITER", refusal: `session name "WRITER" is already used on this desktop`},
-		{name: "a caller attn does not know", source: "missing-source", cwd: w.Path("svc"), refusal: "source session missing-source was not found"},
+		{name: "a caller attn does not know", source: "missing-source", cwd: w.Path("svc"), refusal: "session missing-source"},
 	} {
 		request := brief(row.cwd, "Reconcile the ledgers")
 		request.Agent = protocol.Ptr("codex")

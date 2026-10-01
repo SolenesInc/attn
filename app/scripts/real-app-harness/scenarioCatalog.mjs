@@ -112,6 +112,12 @@ export const scenarioCatalog = [
     command: ['pnpm', 'run', 'real-app:scenario-autoclose-on-exit'],
   },
   {
+    id: 'garden-profile-scope',
+    runnerId: 'GardenProfileScope',
+    label: 'Garden rows, search and empty state follow the selected profile',
+    command: ['node', 'scripts/real-app-harness/scenario-garden-profile-scope.mjs'],
+  },
+  {
     id: 'garden-plot-dispatch',
     runnerId: 'GardenPlotDispatch',
     label: 'Garden plot dispatch: a plot is planted, a delegate is dispatched at it, and the panel walks it draining',
