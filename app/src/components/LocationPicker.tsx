@@ -1286,6 +1286,7 @@ export function LocationPicker({
           onRefresh={handleRefresh}
           onBack={handleBack}
           refreshing={refreshing}
+          globalEscape={!inline}
         />
       ) : null}
     </div>

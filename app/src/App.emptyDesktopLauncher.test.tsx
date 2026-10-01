@@ -1,4 +1,4 @@
-import { fireEvent, screen } from '@testing-library/react';
+import { fireEvent, screen, within } from '@testing-library/react';
 import { describe, expect, it } from 'vitest';
 import { openSession } from './test/appFixtures';
 import { daemonSession, emptyDesktop, soloDesktop } from './test/daemonFixtures';
@@ -12,7 +12,7 @@ async function onAgentBesideEmptyDesktop() {
     sessions: [daemonSession('s1', { state: 'idle', directory: '/tmp/s1' })],
     desktops: [soloDesktop('s1', { shortcut_slot: 1 }), emptyDesktop('other', { shortcut_slot: 2 })],
   } });
-  serveMachine(view.daemon, { recent: ['/home/me/projects/repo'], repos: [repoInfo('/home/me/projects/repo')] });
+  serveMachine(view.daemon, { recent: ['/home/me/projects/repo'], repos: [repoInfo('/home/me/projects/repo', [{ path: '/home/me/projects/repo--feature', branch: 'feature' }])] });
   serveLaunches(view.daemon);
   await openSession(view.daemon, 's1');
   return view;
@@ -86,6 +86,18 @@ describe('App empty desktop launcher', () => {
     expect(screen.getByTestId('repo-options').contains(document.activeElement)).toBe(true);
   });
 
+  it('takes the keyboard back when the markdown opener closes', async () => {
+    const { daemon } = await onAgentBesideEmptyDesktop();
+    await gesture(daemon, () => pressShortcut('desktop.select2'));
+
+    await gesture(daemon, () => pressShortcut('file.open'));
+    const opener = screen.getByRole('dialog', { name: 'Open a markdown file' });
+    await gesture(daemon, () => fireEvent.keyDown(within(opener).getByRole('combobox'), { key: 'Escape' }));
+
+    expect(screen.queryByRole('dialog', { name: 'Open a markdown file' })).toBeNull();
+    expect(pathInput()).toHaveFocus();
+  });
+
   it('stays put on Escape', async () => {
     const { daemon } = await onAgentBesideEmptyDesktop();
     await gesture(daemon, () => pressShortcut('desktop.select2'));
@@ -111,6 +123,22 @@ describe('App empty desktop launcher', () => {
 
     expect(filter).toHaveValue('');
     expect(launcher()).not.toBeNull();
+  });
+
+  it('leaves Escape to the sidebar while a worktree delete waits for an answer', async () => {
+    const { daemon } = await onAgentBesideEmptyDesktop();
+    await gesture(daemon, () => daemon.emit({ event: 'settings_updated', settings: { queue_mode_enabled: 'true' } }));
+    await gesture(daemon, () => pressShortcut('desktop.select2'));
+    await submitPath(daemon, '/home/me/projects/repo--feature');
+    await gesture(daemon, () => fireEvent.keyDown(screen.getByTestId('repo-options'), { key: 'd' }));
+    expect(screen.getByText(/Delete repo--feature/)).toBeInTheDocument();
+    await gesture(daemon, () => pressShortcut('sidebar.agentList'));
+    const filter = screen.getByTestId('queue-agent-filter');
+    await gesture(daemon, () => fireEvent.change(filter, { target: { value: 's1' } }));
+
+    await gesture(daemon, () => fireEvent.keyDown(filter, { key: 'Escape' }));
+
+    expect(filter).toHaveValue('');
   });
 
   it('stays off Home', async () => {

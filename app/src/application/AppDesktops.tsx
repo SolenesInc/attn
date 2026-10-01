@@ -53,6 +53,7 @@ export function AppDesktops() {
     annotationApi,
     handleOpenPresentationWindow,
     blockingOverlayOpen,
+    windowCovered,
     zoomModeBySessionId,
     setZoomModeBySessionId,
   } = useAppShell();
@@ -216,7 +217,7 @@ export function AppDesktops() {
           allowLocalTileTargets
         />
         {isCurrent && view === 'session' && !terminalState.layoutTree && (
-          <EmptyDesktopLauncher label={desktopLabel(desktop, desktops)} active={!blockingOverlayOpen} />
+          <EmptyDesktopLauncher label={desktopLabel(desktop, desktops)} active={!windowCovered} />
         )}
       </div>
     );

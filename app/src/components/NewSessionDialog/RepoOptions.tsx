@@ -26,6 +26,8 @@ interface RepoOptionsProps {
   onRefresh: () => void;
   onBack: () => void;
   refreshing?: boolean;
+  // Off inline: the root's own keydown cancels a pending delete, so sidebar Escape stays with the sidebar.
+  globalEscape?: boolean;
 }
 
 const formatTime = (isoTime?: string) => {
@@ -97,6 +99,7 @@ export const RepoOptions: React.FC<RepoOptionsProps> = ({
   onRefresh,
   onBack,
   refreshing = false,
+  globalEscape = true,
 }) => {
   const rootRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
@@ -154,7 +157,7 @@ export const RepoOptions: React.FC<RepoOptionsProps> = ({
     setPendingDeletePath(null);
     setDeleteFailure(null);
   }, []);
-  useEscapeStack(cancelPendingDelete, pendingDeletePath !== null || deleteFailure !== null);
+  useEscapeStack(cancelPendingDelete, globalEscape && (pendingDeletePath !== null || deleteFailure !== null));
 
   useEffect(() => {
     setPendingDeletePath(null);
