@@ -1,0 +1,21 @@
+.empty-desktop-launcher {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: flex-start;
+  justify-content: center;
+  padding: 12vh 24px 24px;
+  box-sizing: border-box;
+  background: var(--color-bg-app);
+}
+
+.location-picker.location-picker--inline {
+  max-width: 100%;
+  box-shadow: 0 0 0 1px rgba(255, 255, 255, 0.03), 0 20px 50px rgba(0, 0, 0, 0.45);
+}
+
+.empty-desktop-launcher-starting {
+  font-family: 'JetBrains Mono', 'SF Mono', 'DejaVu Sans Mono', monospace;
+  font-size: var(--font-size-sm);
+  color: var(--color-text-tertiary);
+}

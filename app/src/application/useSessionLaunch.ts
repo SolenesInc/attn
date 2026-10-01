@@ -80,7 +80,17 @@ export function useSessionLaunch({
     [currentDesktop, sessions],
   );
 
+  // The empty desktop's inline launcher is the new-session surface while it shows.
+  const inlineLauncherFocusRef = useRef<(() => void) | null>(null);
+  const registerInlineLauncher = useCallback((focus: (() => void) | null) => {
+    inlineLauncherFocusRef.current = focus;
+  }, []);
+
   const handleNewSession = useCallback((direction: TerminalSplitDirection = 'vertical') => {
+    if (inlineLauncherFocusRef.current) {
+      inlineLauncherFocusRef.current();
+      return;
+    }
     setLocationPickerPurpose('session');
     locationPickerSessionDirection.current = direction;
     setLocationPickerOpen(true);
@@ -249,7 +259,7 @@ export function useSessionLaunch({
     [createSplitSession, launchAgent],
   );
 
-  const handleLocationSelect = useCallback(
+  const launchLocation = useCallback(
     async (
       path: string,
       agent: SessionAgent,
@@ -258,11 +268,6 @@ export function useSessionLaunch({
       chiefOfStaff = false,
       autoMode?: boolean,
     ) => {
-      if (locationPickerPurpose === 'reopen') {
-        reopenPickRef.current?.settle(path);
-        reopenPickRef.current = null;
-        return;
-      }
       const jobId = sessionCreationJobIdRef.current + 1;
       sessionCreationJobIdRef.current = jobId;
       let selectedAgent: SessionAgent;
@@ -315,14 +320,19 @@ export function useSessionLaunch({
         );
       }
     },
-    [
-      agentAvailability,
-      daemonEndpoints,
-      hasAvailableAgents,
-      launchPicked,
-      locationPickerPurpose,
-      showError,
-    ],
+    [agentAvailability, daemonEndpoints, hasAvailableAgents, launchPicked, showError],
+  );
+
+  const handleLocationSelect = useCallback(
+    async (...pick: Parameters<typeof launchLocation>) => {
+      if (locationPickerPurpose === 'reopen') {
+        reopenPickRef.current?.settle(pick[0]);
+        reopenPickRef.current = null;
+        return;
+      }
+      await launchLocation(...pick);
+    },
+    [launchLocation, locationPickerPurpose],
   );
 
   const handleCreateWorktreeSession = useCallback(
@@ -437,6 +447,8 @@ export function useSessionLaunch({
     locationPickerPurpose,
     closeLocationPicker,
     handleLocationSelect,
+    launchLocation,
+    registerInlineLauncher,
     handleCreateWorktreeSession,
     handleNewSession,
     createSplitSession,

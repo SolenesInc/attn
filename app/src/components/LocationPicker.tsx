@@ -74,6 +74,11 @@ interface PathSelectableItem {
 interface LocationPickerProps {
   isOpen: boolean;
   purpose?: 'session' | 'reopen';
+  // Inline lives on an empty desktop: no overlay, and Escape never dismisses it.
+  variant?: 'dialog' | 'inline';
+  // False while another surface holds the keyboard: no focus grab, no Escape handling.
+  active?: boolean;
+  title?: string;
   onClose: () => void;
   onSelect: (
     path: string,
@@ -223,6 +228,9 @@ type Mode = 'path-input' | 'repo-options';
 export function LocationPicker({
   isOpen,
   purpose = 'session',
+  variant = 'dialog',
+  active = true,
+  title,
   onClose,
   onSelect,
   onGetRecentLocations,
@@ -251,8 +259,9 @@ export function LocationPicker({
     : {
         agentAria: 'Session agent',
         targetAria: 'Session target',
-        title: 'New Session Location',
+        title: title ?? 'New Session Location',
       };
+  const inline = variant === 'inline';
 
   const [mode, setMode] = useState<Mode>('path-input');
   const [inputValue, setInputValue] = useState('');
@@ -938,11 +947,12 @@ export function LocationPicker({
       handleBack();
     } else if (highlightedItemKey && !autoHighlight) {
       setHighlightedItemKey(null);
-    } else {
+    } else if (!inline) {
       handleClosePicker();
     }
-  }, [mode, handleBack, highlightedItemKey, autoHighlight, handleClosePicker]);
-  useEscapeStack(handleEscape, isOpen);
+  }, [mode, handleBack, highlightedItemKey, autoHighlight, handleClosePicker, inline]);
+  const escapeHasWork = !inline || mode === 'repo-options' || Boolean(highlightedItemKey && !autoHighlight);
+  useEscapeStack(handleEscape, isOpen && active && escapeHasWork);
 
   const handleDialogKeyDown = useCallback((e: React.KeyboardEvent<HTMLDivElement>) => {
     if (e.altKey && !e.metaKey && !e.ctrlKey) {
@@ -995,283 +1005,290 @@ export function LocationPicker({
     return null;
   }
 
-  return (
-    <div className="location-picker-overlay" data-testid="location-picker-overlay" data-purpose={purpose} onClick={handleClosePicker}>
-      <div
-        className="location-picker"
-        data-testid="location-picker"
-        tabIndex={-1}
-        onClick={(e) => e.stopPropagation()}
-        onKeyDown={handleDialogKeyDown}
-      >
-        {!pathOnly && (
-        <div className="picker-agent-bar">
-          <div className="picker-agent-label">SESSION AGENT</div>
-          <div className="picker-agent-controls">
-            <div className="agent-toggle" role="radiogroup" aria-label={copy.agentAria}>
-              {orderedAgentList.map((candidate) => {
-                const available = isAgentAvailable(effectiveAgentAvailability, candidate);
-                const shortcutNumber = agentShortcutByName.get(candidate);
-                const shortcut = candidate === TERMINAL_AGENT
-                  ? keyCombo('alt', 'T')
-                  : shortcutNumber && shortcutNumber <= 9 ? keyCombo('alt', String(shortcutNumber)) : null;
-                const label = pickerAgentLabel(candidate);
-                return (
-                  <button
-                    key={candidate}
-                    type="button"
-                    className={`agent-option ${agent === candidate ? 'active' : ''}`}
-                    onMouseDown={(e) => e.preventDefault()}
-                    onClick={() => handleAgentChange(candidate)}
-                    role="radio"
-                    aria-checked={agent === candidate}
-                    disabled={!available}
-                    title={!available ? `${label} is not available on ${selectedTarget.name}` : undefined}
-                  >
-                    <span className="agent-option-name">{label}</span>
-                    {available && shortcut && <kbd className="agent-shortcut">{shortcut}</kbd>}
-                  </button>
-                );
-              })}
-            </div>
-          </div>
-        </div>
-        )}
-        {autoModeSupported && !pathOnly && (
-          <div className="picker-chief-bar">
-            <div className="picker-agent-label">AUTO MODE</div>
-            <div className="picker-chief-controls">
-              <div className="agent-toggle">
-                <button
-                  type="button"
-                  className={`agent-option ${autoMode ? 'active' : ''}`}
-                  data-testid="location-picker-automode-toggle"
-                  role="switch"
-                  aria-checked={autoMode}
-                  onMouseDown={(e) => e.preventDefault()}
-                  onClick={() => {
-                    autoModeTouchedRef.current = true;
-                    setAutoMode((prev) => !prev);
-                  }}
-                  title="Judge calls that reach outside this session's directory against what the conversation asked for, instead of running everything"
-                >
-                  <span className="agent-option-name">{autoMode ? 'On' : 'Off'}</span>
-                </button>
-              </div>
-            </div>
-          </div>
-        )}
-        {chiefToggleEligible && (
-          <div className="picker-chief-bar">
-            <div className="picker-agent-label">CHIEF OF STAFF</div>
-            <div className="picker-chief-controls">
-              <div className="agent-toggle">
-                <button
-                  type="button"
-                  className={`agent-option ${chiefOfStaff ? 'active' : ''}`}
-                  data-testid="location-picker-chief-toggle"
-                  role="switch"
-                  aria-checked={chiefOfStaff}
-                  onMouseDown={(e) => e.preventDefault()}
-                  onClick={() => setChiefOfStaff((prev) => !prev)}
-                  title="Launch this session as the chief of staff — it runs the notebook and delegates work to other sessions"
-                >
-                  <span className="agent-option-name">{chiefOfStaff ? 'On' : 'Off'}</span>
-                </button>
-              </div>
-            </div>
-          </div>
-        )}
-        {!pathOnly && (
-        <div className="picker-endpoint-bar">
-          <div className="picker-endpoint-leading">
-            <div className="picker-endpoint-label">SESSION TARGET</div>
-          </div>
-          <div className="picker-endpoint-controls" role="radiogroup" aria-label={copy.targetAria}>
-            {selectableTargets.map((target) => {
-              const shortcutKey = targetShortcutByID.get(target.id);
-              const active = target.id === selectedTarget.id;
+  const picker = (
+    <div
+      className={`location-picker${inline ? ' location-picker--inline' : ''}`}
+      data-testid={inline ? 'location-picker-inline' : 'location-picker'}
+      tabIndex={-1}
+      onClick={(e) => e.stopPropagation()}
+      onKeyDown={handleDialogKeyDown}
+    >
+      {!pathOnly && (
+      <div className="picker-agent-bar">
+        <div className="picker-agent-label">SESSION AGENT</div>
+        <div className="picker-agent-controls">
+          <div className="agent-toggle" role="radiogroup" aria-label={copy.agentAria}>
+            {orderedAgentList.map((candidate) => {
+              const available = isAgentAvailable(effectiveAgentAvailability, candidate);
+              const shortcutNumber = agentShortcutByName.get(candidate);
+              const shortcut = candidate === TERMINAL_AGENT
+                ? keyCombo('alt', 'T')
+                : shortcutNumber && shortcutNumber <= 9 ? keyCombo('alt', String(shortcutNumber)) : null;
+              const label = pickerAgentLabel(candidate);
               return (
                 <button
-                  key={target.id}
+                  key={candidate}
                   type="button"
-                  className={`endpoint-option ${active ? 'active' : ''} ${active && yoloMode ? 'yolo-active' : ''}`}
-                  data-testid={target.id === LOCAL_TARGET ? 'location-picker-target-local' : `location-picker-target-${target.id}`}
-                  data-endpoint-id={target.endpointId}
+                  className={`agent-option ${agent === candidate ? 'active' : ''}`}
                   onMouseDown={(e) => e.preventDefault()}
-                  onClick={() => handleTargetChange(target.id)}
+                  onClick={() => handleAgentChange(candidate)}
                   role="radio"
-                  aria-checked={active}
-                  disabled={!target.connected}
-                  title={!target.connected ? target.unavailableReason : undefined}
+                  aria-checked={agent === candidate}
+                  disabled={!available}
+                  title={!available ? `${label} is not available on ${selectedTarget.name}` : undefined}
                 >
-                  <span className="endpoint-option-name">{target.name}</span>
-                  {active && yoloMode && (
-                    <span className="endpoint-option-badge">YOLO</span>
-                  )}
-                  <div className="endpoint-option-footer">
-                    <span className={`endpoint-option-meta ${target.metaClassName || ''}`.trim()}>{target.metaLabel}</span>
-                    {target.connected && shortcutKey && <kbd className="agent-shortcut endpoint-shortcut">{keyCombo('alt', shortcutKey.toUpperCase())}</kbd>}
-                  </div>
+                  <span className="agent-option-name">{label}</span>
+                  {available && shortcut && <kbd className="agent-shortcut">{shortcut}</kbd>}
                 </button>
               );
             })}
           </div>
         </div>
-        )}
-        {!hasAvailableAgents && !pathOnly && (
-          <div className="picker-agent-warning">{noAgentsMessage}</div>
-        )}
-        {mode === 'path-input' ? (
-          <>
-            <div className="picker-header">
-              <div className="picker-header-top">
-                <div className="picker-title" data-testid="location-picker-title">
-                  {copy.title}
-                </div>
-                {!pathOnly && (
-                <div
-                  className={`picker-endpoint-hint ${!yoloSupported ? 'disabled' : ''}`}
-                  title={!yoloSupported ? `${agentLabel(agent)} does not support yolo mode` : undefined}
-                >
-                  {yoloSupported ? 'select the same target again for YOLO' : 'YOLO unavailable'}
-                </div>
+      </div>
+      )}
+      {autoModeSupported && !pathOnly && (
+        <div className="picker-chief-bar">
+          <div className="picker-agent-label">AUTO MODE</div>
+          <div className="picker-chief-controls">
+            <div className="agent-toggle">
+              <button
+                type="button"
+                className={`agent-option ${autoMode ? 'active' : ''}`}
+                data-testid="location-picker-automode-toggle"
+                role="switch"
+                aria-checked={autoMode}
+                onMouseDown={(e) => e.preventDefault()}
+                onClick={() => {
+                  autoModeTouchedRef.current = true;
+                  setAutoMode((prev) => !prev);
+                }}
+                title="Judge calls that reach outside this session's directory against what the conversation asked for, instead of running everything"
+              >
+                <span className="agent-option-name">{autoMode ? 'On' : 'Off'}</span>
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+      {chiefToggleEligible && (
+        <div className="picker-chief-bar">
+          <div className="picker-agent-label">CHIEF OF STAFF</div>
+          <div className="picker-chief-controls">
+            <div className="agent-toggle">
+              <button
+                type="button"
+                className={`agent-option ${chiefOfStaff ? 'active' : ''}`}
+                data-testid="location-picker-chief-toggle"
+                role="switch"
+                aria-checked={chiefOfStaff}
+                onMouseDown={(e) => e.preventDefault()}
+                onClick={() => setChiefOfStaff((prev) => !prev)}
+                title="Launch this session as the chief of staff — it runs the notebook and delegates work to other sessions"
+              >
+                <span className="agent-option-name">{chiefOfStaff ? 'On' : 'Off'}</span>
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+      {!pathOnly && (
+      <div className="picker-endpoint-bar">
+        <div className="picker-endpoint-leading">
+          <div className="picker-endpoint-label">SESSION TARGET</div>
+        </div>
+        <div className="picker-endpoint-controls" role="radiogroup" aria-label={copy.targetAria}>
+          {selectableTargets.map((target) => {
+            const shortcutKey = targetShortcutByID.get(target.id);
+            const active = target.id === selectedTarget.id;
+            return (
+              <button
+                key={target.id}
+                type="button"
+                className={`endpoint-option ${active ? 'active' : ''} ${active && yoloMode ? 'yolo-active' : ''}`}
+                data-testid={target.id === LOCAL_TARGET ? 'location-picker-target-local' : `location-picker-target-${target.id}`}
+                data-endpoint-id={target.endpointId}
+                onMouseDown={(e) => e.preventDefault()}
+                onClick={() => handleTargetChange(target.id)}
+                role="radio"
+                aria-checked={active}
+                disabled={!target.connected}
+                title={!target.connected ? target.unavailableReason : undefined}
+              >
+                <span className="endpoint-option-name">{target.name}</span>
+                {active && yoloMode && (
+                  <span className="endpoint-option-badge">YOLO</span>
                 )}
+                <div className="endpoint-option-footer">
+                  <span className={`endpoint-option-meta ${target.metaClassName || ''}`.trim()}>{target.metaLabel}</span>
+                  {target.connected && shortcutKey && <kbd className="agent-shortcut endpoint-shortcut">{keyCombo('alt', shortcutKey.toUpperCase())}</kbd>}
+                </div>
+              </button>
+            );
+          })}
+        </div>
+      </div>
+      )}
+      {!hasAvailableAgents && !pathOnly && (
+        <div className="picker-agent-warning">{noAgentsMessage}</div>
+      )}
+      {mode === 'path-input' ? (
+        <>
+          <div className="picker-header">
+            <div className="picker-header-top">
+              <div className="picker-title" data-testid="location-picker-title">
+                {copy.title}
               </div>
-              <PathInput
-                value={inputValue}
-                onChange={updateInputValue}
-                onTabComplete={handleTabComplete}
-                onSelect={handlePathSelect}
-                onSubmit={handlePathInputSubmit}
-                ghostText={ghostText}
-                completionValue={tabCompletionValue}
-                hasSelectedSinceTab={hasSelectedSinceTab}
-                placeholder={selectedTarget.placeholder}
-              />
-              {currentDir && (
-                <div className="picker-breadcrumb">
-                  <span className="picker-breadcrumb-label">Browsing:</span>
-                  <span className="picker-breadcrumb-path" data-testid="location-picker-breadcrumb-path">{currentDir}</span>
-                </div>
-              )}
-              {pickerOperation && (
-                <div className="picker-operation" role="status" aria-label={pickerOperation}>
-                  <span className="picker-operation-pulse" aria-hidden="true" />
-                  <span>{pickerOperation}</span>
-                  {selectedPath && <span className="picker-operation-path">{toDisplayPath(selectedPath, homePath)}</span>}
-                </div>
+              {!pathOnly && (
+              <div
+                className={`picker-endpoint-hint ${!yoloSupported ? 'disabled' : ''}`}
+                title={!yoloSupported ? `${agentLabel(agent)} does not support yolo mode` : undefined}
+              >
+                {yoloSupported ? 'select the same target again for YOLO' : 'YOLO unavailable'}
+              </div>
               )}
             </div>
+            <PathInput
+              value={inputValue}
+              onChange={updateInputValue}
+              onTabComplete={handleTabComplete}
+              onSelect={handlePathSelect}
+              onSubmit={handlePathInputSubmit}
+              ghostText={ghostText}
+              completionValue={tabCompletionValue}
+              hasSelectedSinceTab={hasSelectedSinceTab}
+              placeholder={selectedTarget.placeholder}
+              autoFocus={active}
+            />
+            {currentDir && (
+              <div className="picker-breadcrumb">
+                <span className="picker-breadcrumb-label">Browsing:</span>
+                <span className="picker-breadcrumb-path" data-testid="location-picker-breadcrumb-path">{currentDir}</span>
+              </div>
+            )}
+            {pickerOperation && (
+              <div className="picker-operation" role="status" aria-label={pickerOperation}>
+                <span className="picker-operation-pulse" aria-hidden="true" />
+                <span>{pickerOperation}</span>
+                {selectedPath && <span className="picker-operation-path">{toDisplayPath(selectedPath, homePath)}</span>}
+              </div>
+            )}
+          </div>
 
-            <div className="picker-results" role="listbox" aria-label="Locations">
-              {visibleRecent.length > 0 && (
-                <div className="picker-section" role="group" aria-label="Recent">
-                  <div className="picker-section-title">RECENT</div>
-                  {visibleRecent.map((loc, index) => (
+          <div className="picker-results" role="listbox" aria-label="Locations">
+            {visibleRecent.length > 0 && (
+              <div className="picker-section" role="group" aria-label="Recent">
+                <div className="picker-section-title">RECENT</div>
+                {visibleRecent.map((loc, index) => (
+                  <div
+                    key={loc.path}
+                    className={`picker-item ${index === highlightedIndex ? 'selected' : ''}`}
+                    role="option"
+                    tabIndex={-1}
+                    aria-selected={index === highlightedIndex}
+                    data-testid={`location-picker-item-${index}`}
+                    data-index={index}
+                    data-kind="recent"
+                    data-path={loc.selectionPath}
+                    onMouseDown={(e) => e.preventDefault()}
+                    onClick={() => void handleSelectPath(loc.selectionPath)}
+                  >
+                    <div className="picker-icon">🕐</div>
+                    <div className="picker-info">
+                      <div className="picker-name">{loc.name}</div>
+                      <div className="picker-path">{loc.selectionPath}</div>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+
+            {fsSuggestions.length > 0 && (
+              <div className="picker-section" role="group" aria-label="Directories">
+                <div className="picker-section-title">DIRECTORIES</div>
+                {fsSuggestions.map((item, index) => {
+                  const globalIndex = visibleRecent.length + index;
+                  return (
                     <div
-                      key={loc.path}
-                      className={`picker-item ${index === highlightedIndex ? 'selected' : ''}`}
+                      key={item.path}
+                      className={`picker-item ${globalIndex === highlightedIndex ? 'selected' : ''}`}
                       role="option"
                       tabIndex={-1}
-                      aria-selected={index === highlightedIndex}
-                      data-testid={`location-picker-item-${index}`}
-                      data-index={index}
-                      data-kind="recent"
-                      data-path={loc.selectionPath}
+                      aria-selected={globalIndex === highlightedIndex}
+                      data-testid={`location-picker-item-${globalIndex}`}
+                      data-index={globalIndex}
+                      data-kind="directory"
+                      data-path={item.path}
                       onMouseDown={(e) => e.preventDefault()}
-                      onClick={() => void handleSelectPath(loc.selectionPath)}
+                      onClick={() => void handleSelectPath(item.path)}
                     >
-                      <div className="picker-icon">🕐</div>
+                      <div className="picker-icon">📁</div>
                       <div className="picker-info">
-                        <div className="picker-name">{loc.name}</div>
-                        <div className="picker-path">{loc.selectionPath}</div>
+                        <div className="picker-name">{item.name}</div>
                       </div>
                     </div>
-                  ))}
-                </div>
-              )}
+                  );
+                })}
+              </div>
+            )}
 
-              {fsSuggestions.length > 0 && (
-                <div className="picker-section" role="group" aria-label="Directories">
-                  <div className="picker-section-title">DIRECTORIES</div>
-                  {fsSuggestions.map((item, index) => {
-                    const globalIndex = visibleRecent.length + index;
-                    return (
-                      <div
-                        key={item.path}
-                        className={`picker-item ${globalIndex === highlightedIndex ? 'selected' : ''}`}
-                        role="option"
-                        tabIndex={-1}
-                        aria-selected={globalIndex === highlightedIndex}
-                        data-testid={`location-picker-item-${globalIndex}`}
-                        data-index={globalIndex}
-                        data-kind="directory"
-                        data-path={item.path}
-                        onMouseDown={(e) => e.preventDefault()}
-                        onClick={() => void handleSelectPath(item.path)}
-                      >
-                        <div className="picker-icon">📁</div>
-                        <div className="picker-info">
-                          <div className="picker-name">{item.name}</div>
-                        </div>
-                      </div>
-                    );
-                  })}
-                </div>
-              )}
+            {fsSuggestions.length === 0 && visibleRecent.length === 0 && (
+              <div className="picker-empty" data-testid="location-picker-empty">
+                {inputValue
+                  ? 'No matches. Press Enter to use path directly.'
+                  : 'Type a path to browse directories'}
+              </div>
+            )}
+          </div>
 
-              {fsSuggestions.length === 0 && visibleRecent.length === 0 && (
-                <div className="picker-empty" data-testid="location-picker-empty">
-                  {inputValue
-                    ? 'No matches. Press Enter to use path directly.'
-                    : 'Type a path to browse directories'}
-                </div>
-              )}
-            </div>
-
-            <div className="picker-footer">
-              <span className="shortcut"><kbd>↑↓</kbd> navigate</span>
-              <span className="shortcut"><kbd>Tab</kbd> autocomplete</span>
-              <span className="shortcut"><kbd>Enter</kbd> select</span>
-              <span className="shortcut"><kbd>Esc</kbd> cancel</span>
-            </div>
-          </>
-        ) : repoInfo ? (
-          <RepoOptions
-            repoInfo={repoInfo}
-            selectedPath={selectedPath || repoRootPath || undefined}
-            preferredDestination={rememberedDestination}
-            onSelectedPathChange={(path) => {
-              setSelectedPathFromPhysical(path);
-            }}
-            onSelectMainRepo={handleSelectMainRepo}
-            onSelectWorktree={handleSelectWorktree}
-            onCreateWorktree={handleCreateWorktree}
-            onDeleteWorktree={onDeleteWorktree ? async (path, options) => {
-              const requestGeneration = requestGenerationRef.current;
-              const deleteResult = options
-                ? await onDeleteWorktree(path, selectedEndpointId, options)
-                : await onDeleteWorktree(path, selectedEndpointId);
-              if (!deleteResult.success) {
-                throw new Error(deleteResult.error || 'Failed to delete worktree');
+          <div className="picker-footer">
+            <span className="shortcut"><kbd>↑↓</kbd> navigate</span>
+            <span className="shortcut"><kbd>Tab</kbd> autocomplete</span>
+            <span className="shortcut"><kbd>Enter</kbd> select</span>
+            {!inline && <span className="shortcut"><kbd>Esc</kbd> cancel</span>}
+          </div>
+        </>
+      ) : repoInfo ? (
+        <RepoOptions
+          repoInfo={repoInfo}
+          selectedPath={selectedPath || repoRootPath || undefined}
+          preferredDestination={rememberedDestination}
+          onSelectedPathChange={(path) => {
+            setSelectedPathFromPhysical(path);
+          }}
+          onSelectMainRepo={handleSelectMainRepo}
+          onSelectWorktree={handleSelectWorktree}
+          onCreateWorktree={handleCreateWorktree}
+          onDeleteWorktree={onDeleteWorktree ? async (path, options) => {
+            const requestGeneration = requestGenerationRef.current;
+            const deleteResult = options
+              ? await onDeleteWorktree(path, selectedEndpointId, options)
+              : await onDeleteWorktree(path, selectedEndpointId);
+            if (!deleteResult.success) {
+              throw new Error(deleteResult.error || 'Failed to delete worktree');
+            }
+            if (repoRootPath && onGetRepoInfo) {
+              const result = await onGetRepoInfo(repoRootPath, selectedEndpointId);
+              if (isRequestCurrent(requestGeneration) && result.success && result.info) {
+                setRepoInfo(toChooserRepoInfo(result.info));
+              } else if (isRequestCurrent(requestGeneration) && !result.success) {
+                throw new Error(result.error || 'Failed to refresh repo options');
               }
-              if (repoRootPath && onGetRepoInfo) {
-                const result = await onGetRepoInfo(repoRootPath, selectedEndpointId);
-                if (isRequestCurrent(requestGeneration) && result.success && result.info) {
-                  setRepoInfo(toChooserRepoInfo(result.info));
-                } else if (isRequestCurrent(requestGeneration) && !result.success) {
-                  throw new Error(result.error || 'Failed to refresh repo options');
-                }
-              }
-            } : undefined}
-            onError={onError}
-            onRefresh={handleRefresh}
-            onBack={handleBack}
-            refreshing={refreshing}
-          />
-        ) : null}
-      </div>
+            }
+          } : undefined}
+          onError={onError}
+          onRefresh={handleRefresh}
+          onBack={handleBack}
+          refreshing={refreshing}
+        />
+      ) : null}
+    </div>
+  );
+  if (inline) {
+    return picker;
+  }
+  return (
+    <div className="location-picker-overlay" data-testid="location-picker-overlay" data-purpose={purpose} onClick={handleClosePicker}>
+      {picker}
     </div>
   );
 }
