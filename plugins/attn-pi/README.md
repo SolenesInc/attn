@@ -34,7 +34,11 @@ The driver advertises `resume_availability` and answers
 `driver.resume_available({cwd, resume_session_id})` with `{available, reason?}`.
 This read-only check matches the session header ID in Pi's cwd directory. It
 honors `PI_CODING_AGENT_DIR`, `PI_CODING_AGENT_SESSION_DIR`, and project/global
-`sessionDir` settings. The driver checks again before preparing a resume launch.
+`sessionDir` settings. Unreadable unrelated session files are skipped, as in Pi discovery. The driver
+checks again before preparing a resume launch. Availability has a dedicated
+ten-second daemon deadline; Garden review waits once per stalled plugin in
+each capture and retries on the next read. See the
+[scan receipt](receipts/resume-availability.md).
 
 Plugins without this optional capability keep their existing resume behavior.
 The updated Pi plugin requires a daemon that recognizes `resume_availability`.

@@ -2,7 +2,9 @@ package daemon_test
 
 import (
 	"encoding/json"
+	"strings"
 	"testing"
+	"time"
 
 	"github.com/victorarias/attn/internal/fakeagent"
 	"github.com/victorarias/attn/internal/protocol"
@@ -74,4 +76,94 @@ func TestADriverWithoutResumeRelaunchesFreshWhateverConversationItReported(t *te
 	if relaunch := relaunchDriven(w, driver, session, cwd); relaunch.Method != "driver.spawn" || relaunch.ResumeSessionID != "" {
 		t.Errorf("the relaunch asked the driver %s for %q, want a fresh driver.spawn", relaunch.Method, relaunch.ResumeSessionID)
 	}
+}
+
+func TestAStalledResumeInspectionTimesOutAndIsRetriedOnTheNextRead(t *testing.T) {
+	inBubbleWithAgents(t, func(t *testing.T, w *world) {
+		app, cli := w.App(), w.Client()
+		driver := connectDriver(t, w, "snipe-plugin", "snipe", map[string]bool{
+			"resume": true, "resume_availability": true, "initial_prompt": true, "state_reporting": true,
+		})
+		awaitDriverAvailable(app, "snipe")
+		delegations := make(chan *protocol.DelegateResult, 1)
+		go func() { delegations <- seedResumeDelegate(t, w, scriptedAgent, "inspection") }()
+		run := driver.launched()
+		if err := driver.state(run, 1, "working"); err != nil {
+			t.Fatal(err)
+		}
+		delegated := <-delegations
+		driver.mustReport("session.report_metadata", map[string]any{
+			"session_id": delegated.SessionID, "run_id": run.RunID, "seq": 2,
+			"metadata": map[string]string{"native_id": "saved-conversation"}, "resume_session_id": "saved-conversation",
+		})
+		closePane(app, seedResumePane(t, w, protocol.Deref(delegated.WorkspaceID), delegated.SessionID))
+
+		shown := make(chan *protocol.SeedShowResult, 1)
+		go func() { shown <- lifeShow(t, cli, delegated.SeedID) }()
+		var check struct {
+			CWD      string `json:"cwd"`
+			ResumeID string `json:"resume_session_id"`
+		}
+		driver.asked("driver.resume_available", &check)
+		if check.CWD != delegated.Directory || check.ResumeID != "saved-conversation" {
+			t.Fatalf("inspection = %+v", check)
+		}
+		w.advance(10 * time.Second)
+		result := <-shown
+		if continuation := result.Seed.Continuation; continuation == nil || continuation.ResumeAvailable || !strings.Contains(protocol.Deref(continuation.ResumeReason), "resume_availability_timeout=10s") {
+			t.Fatalf("stalled inspection = %+v, want the named timeout", continuation)
+		}
+
+		go func() { shown <- lifeShow(t, cli, delegated.SeedID) }()
+		request := driver.asked("driver.resume_available", &check)
+		driver.answer(request, map[string]any{"available": true})
+		if result := <-shown; result.Seed.Continuation == nil || !result.Seed.Continuation.ResumeAvailable {
+			t.Fatalf("next read after the driver recovered = %+v", result.Seed.Continuation)
+		}
+	})
+}
+
+func TestAGardenReviewWaitsForAStalledResumeDriverOnlyOncePerCapture(t *testing.T) {
+	inBubbleWithAgents(t, func(t *testing.T, w *world) {
+		app, cli := w.App(), w.Client()
+		driver := connectDriver(t, w, "snipe-plugin", "snipe", map[string]bool{
+			"resume": true, "resume_availability": true, "initial_prompt": true, "state_reporting": true,
+		})
+		awaitDriverAvailable(app, "snipe")
+		for _, name := range []string{"first", "second"} {
+			delegations := make(chan *protocol.DelegateResult, 1)
+			go func() { delegations <- seedResumeDelegate(t, w, scriptedAgent, name) }()
+			run := driver.launched()
+			if err := driver.state(run, 1, "working"); err != nil {
+				t.Fatal(err)
+			}
+			delegated := <-delegations
+			driver.mustReport("session.report_metadata", map[string]any{
+				"session_id": delegated.SessionID, "run_id": run.RunID, "seq": 2,
+				"metadata": map[string]string{"native_id": name}, "resume_session_id": name,
+			})
+			closePane(app, seedResumePane(t, w, protocol.Deref(delegated.WorkspaceID), delegated.SessionID))
+		}
+		shown := make(chan *protocol.SeedReviewResult, 1)
+		go func() { shown <- gardenReviewShow(t, cli, "") }()
+		driver.asked("driver.resume_available", nil)
+		w.advance(10 * time.Second)
+		select {
+		case <-shown:
+		default:
+			t.Fatal("review did not finish after one stalled-driver timeout")
+		}
+		select {
+		case extra := <-driver.requests:
+			t.Fatalf("review queried stalled driver again: %s", extra.Method)
+		default:
+		}
+
+		go func() { shown <- gardenReviewShow(t, cli, "") }()
+		for range 2 {
+			request := driver.asked("driver.resume_available", nil)
+			driver.answer(request, map[string]any{"available": true})
+		}
+		<-shown
+	})
 }

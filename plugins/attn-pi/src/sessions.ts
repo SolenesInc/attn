@@ -6,6 +6,10 @@ import { createInterface } from "node:readline";
 import { fileURLToPath } from "node:url";
 import type { DriverResumeAvailableParams, DriverResumeAvailableResult } from "./types";
 
+// Pi uses ten concurrent discovery reads; a 10,000-file header scan took at
+// most 4.1s with this batch size (receipts/resume-availability.md).
+const sessionHeaderConcurrency = 10;
+
 export async function resumeAvailable(
   params: DriverResumeAvailableParams,
   env: Record<string, string | undefined>,
@@ -27,11 +31,12 @@ export async function resumeAvailable(
       if (!missing(error)) throw error;
       files = [];
     }
-    for (const file of files) {
-      if (!file.endsWith(".jsonl")) continue;
-      const header = await sessionHeader(join(directory, file));
-      if (header?.id === params.resume_session_id &&
-          (directory === defaultDirectory || typeof header.cwd === "string" && resolve(expandPath(header.cwd)) === cwd)) {
+    for (let offset = 0; offset < files.length; offset += sessionHeaderConcurrency) {
+      const headers = await Promise.all(files.slice(offset, offset + sessionHeaderConcurrency)
+        .filter(file => file.endsWith(".jsonl"))
+        .map(file => sessionHeader(join(directory, file))));
+      if (headers.some(header => header?.id === params.resume_session_id &&
+          (directory === defaultDirectory || typeof header.cwd === "string" && resolve(expandPath(header.cwd)) === cwd))) {
         return { available: true };
       }
     }
@@ -67,8 +72,8 @@ async function sessionHeader(path: string): Promise<{ id: string; cwd?: string }
       if (!entry) continue;
       return entry.type === "session" && typeof entry.id === "string" ? entry : undefined;
     }
-  } catch (error) {
-    if (!missing(error)) throw error;
+  } catch {
+    return undefined;
   } finally {
     lines.close();
     stream.destroy();

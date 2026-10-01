@@ -67,10 +67,15 @@ func (d *Daemon) captureGardenReview() (gardenReviewCapture, error) {
 	observations := make([]garden.ReviewObservation, 0, len(read.seeds))
 	byID := make(map[string]garden.ReviewObservation, len(read.seeds))
 	chiefAvailable := d.chiefOfStaffSessionID() != ""
+	// A stalled driver's deadline is paid once per capture; the next capture retries it.
+	timedOutPlugins := make(map[string]bool)
+	checkResume := func(agentName, resumeID, cwd string) (bool, string) {
+		return d.conversationResumableWithTimeouts(agentName, resumeID, cwd, timedOutPlugins)
+	}
 	for _, seed := range read.seeds {
 		doc := read.docs[seed.ID]
 		lifecycleAt, exact := reviewLifecycleTime(seed, doc)
-		continuation := d.continuationForSeed(seed)
+		continuation := d.continuationForSeedWithResumeCheck(seed, checkResume)
 		directoryState := garden.ReviewDirectoryUnknown
 		resumeAvailable := false
 		handoverAvailable := false

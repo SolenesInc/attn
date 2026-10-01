@@ -19,6 +19,10 @@ import (
 const pluginDriverCallTimeout = 30 * time.Second
 const pluginDeliverMessageTimeout = 15 * time.Second
 
+// Full header scans: 91 real files <=125ms; 10,000 synthetic files <=4.1s.
+// Receipt: plugins/attn-pi/receipts/resume-availability.md (2026-10-01).
+const pluginResumeAvailabilityTimeout = 10 * time.Second
+
 type pluginDriverRegistration struct {
 	PluginName   string
 	Agent        string
@@ -763,14 +767,24 @@ func (d *Daemon) notifyPluginDriverSessionClosed(pluginName, sessionID, runID, r
 	}()
 }
 
-func (d *Daemon) pluginConversationResumable(reg pluginDriverRegistration, resumeID, cwd string) (bool, string) {
+func (d *Daemon) pluginConversationResumable(reg pluginDriverRegistration, resumeID, cwd string, timedOutPlugins map[string]bool) (bool, string) {
 	if !reg.Capabilities["resume_availability"] {
 		return true, ""
 	}
-	ctx, cancel := context.WithTimeout(context.Background(), pluginDriverCallTimeout)
+	timeoutReason := fmt.Sprintf("cannot check conversation %s in %s's storage: resume_availability_timeout=%s exceeded; the driver did not answer", resumeID, reg.Agent, pluginResumeAvailabilityTimeout)
+	if timedOutPlugins[reg.PluginName] {
+		return false, timeoutReason
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), pluginResumeAvailabilityTimeout)
 	defer cancel()
 	var result pluginResumeAvailableResult
 	if err := d.callPlugin(ctx, reg.PluginName, "driver.resume_available", pluginResumeAvailableParams{CWD: cwd, ResumeSessionID: resumeID}, &result); err != nil {
+		if errors.Is(err, context.DeadlineExceeded) {
+			if timedOutPlugins != nil {
+				timedOutPlugins[reg.PluginName] = true
+			}
+			return false, timeoutReason
+		}
 		return false, fmt.Sprintf("cannot check conversation %s in %s's storage: %v", resumeID, reg.Agent, err)
 	}
 	if !result.Available {

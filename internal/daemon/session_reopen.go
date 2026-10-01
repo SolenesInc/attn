@@ -322,11 +322,15 @@ func (d *Daemon) reopenConversation(execution garden.Dispatch) (bool, string) {
 }
 
 func (d *Daemon) conversationResumable(agentName, resumeID, cwd string) (bool, string) {
+	return d.conversationResumableWithTimeouts(agentName, resumeID, cwd, nil)
+}
+
+func (d *Daemon) conversationResumableWithTimeouts(agentName, resumeID, cwd string, timedOutPlugins map[string]bool) (bool, string) {
 	if plugin, ok := d.ensurePluginRegistry().driver(agentName); ok {
 		if !plugin.Capabilities["resume"] {
 			return false, fmt.Sprintf("agent %q does not resume conversations, so conversation %s cannot be picked up", agentName, resumeID)
 		}
-		return d.pluginConversationResumable(plugin, resumeID, cwd)
+		return d.pluginConversationResumable(plugin, resumeID, cwd, timedOutPlugins)
 	}
 	driver := agentdriver.Get(agentName)
 	if driver == nil {
