@@ -28,6 +28,8 @@ interface RepoOptionsProps {
   refreshing?: boolean;
   // Off inline: the root's own keydown cancels a pending delete, so sidebar Escape stays with the sidebar.
   globalEscape?: boolean;
+  // False while another surface holds the keyboard: an answer arriving then must not take focus.
+  active?: boolean;
 }
 
 const formatTime = (isoTime?: string) => {
@@ -100,6 +102,7 @@ export const RepoOptions: React.FC<RepoOptionsProps> = ({
   onBack,
   refreshing = false,
   globalEscape = true,
+  active = true,
 }) => {
   const rootRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
@@ -166,6 +169,7 @@ export const RepoOptions: React.FC<RepoOptionsProps> = ({
   }, [committedDestinationIndex]);
 
   useEffect(() => {
+    if (!active) return;
     if (pendingDeletePath) {
       rootRef.current?.focus();
       return;
@@ -179,7 +183,7 @@ export const RepoOptions: React.FC<RepoOptionsProps> = ({
       return;
     }
     rootRef.current?.focus();
-  }, [creatingWorktree, focusZone, pendingDeletePath]);
+  }, [active, creatingWorktree, focusZone, pendingDeletePath]);
 
   useEffect(() => {
     const activeDeletePath = pendingDeletePath || deleteFailure?.path || null;

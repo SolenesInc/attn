@@ -115,6 +115,36 @@ describe('App empty desktop launcher', () => {
     expect(daemon.sentOf('spawn_session')).toEqual([]);
   });
 
+  it('starts a worktree agent on the desktop it was asked for, even after the user moves on', async () => {
+    const { daemon } = await onAgentBesideEmptyDesktop();
+    await gesture(daemon, () => pressShortcut('desktop.select2'));
+    daemon.on('create_worktree', () => undefined);
+    await submitPath(daemon, '/home/me/projects/repo');
+    await gesture(daemon, () => fireEvent.keyDown(screen.getByTestId('repo-options'), { key: 'ArrowUp' }));
+    fireEvent.change(screen.getByTestId('repo-new-worktree-input'), { target: { value: 'fresh' } });
+    await gesture(daemon, () => fireEvent.keyDown(screen.getByTestId('repo-options'), { key: 'Enter' }));
+    const [create] = daemon.sentOf('create_worktree');
+
+    await gesture(daemon, () => pressShortcut('desktop.select1'));
+    await gesture(daemon, () => daemon.replyTo(create, { event: 'create_worktree_result', success: true, path: '/home/me/projects/repo--fresh' } as never));
+
+    expect(daemon.sentOf('spawn_session').map((spawn) => [spawn.cwd, spawn.placement?.desktop_id])).toEqual([['/home/me/projects/repo--fresh', 'other']]);
+  });
+
+  it('leaves the keyboard with an overlay when repository options arrive under it', async () => {
+    const { daemon } = await onAgentBesideEmptyDesktop();
+    await gesture(daemon, () => pressShortcut('desktop.select2'));
+    daemon.on('get_repo_info', () => undefined);
+    await submitPath(daemon, '/home/me/projects/repo');
+    const [lookup] = daemon.sentOf('get_repo_info');
+
+    await gesture(daemon, () => pressShortcut('desktop.overview'));
+    await gesture(daemon, () => daemon.replyTo(lookup, { event: 'get_repo_info_result', success: true, info: repoInfo('/home/me/projects/repo') } as never));
+
+    expect(screen.getByTestId('repo-options').contains(document.activeElement)).toBe(false);
+    expect(screen.getByRole('dialog', { name: 'Desktop overview' }).contains(document.activeElement)).toBe(true);
+  });
+
   it('stays put on Escape', async () => {
     const { daemon } = await onAgentBesideEmptyDesktop();
     await gesture(daemon, () => pressShortcut('desktop.select2'));

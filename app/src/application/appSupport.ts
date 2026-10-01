@@ -56,6 +56,7 @@ export interface SplitSessionOptions {
   label?: string;
   yoloMode?: boolean;
   autoMode?: boolean;
+  desktopId?: string;
 }
 
 export interface GitHubReleaseResponse {
