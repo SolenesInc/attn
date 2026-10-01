@@ -11,6 +11,7 @@ import (
 	"github.com/victorarias/attn/internal/ptybackend"
 	"github.com/victorarias/attn/internal/store"
 	"github.com/victorarias/attn/internal/workspacelayout"
+	"os"
 	"syscall"
 )
 
@@ -64,6 +65,9 @@ func (r *codexRuntime) removeViewLocked(runtimeID string) error {
 	}
 	if err := r.d.ptyBackend.Remove(context.Background(), runtimeID); err != nil && !errors.Is(err, pty.ErrSessionNotFound) {
 		return err
+	}
+	if err := os.Remove(r.socket(runtimeID)); err != nil && !errors.Is(err, os.ErrNotExist) {
+		return fmt.Errorf("remove Codex view socket %s: %w", runtimeID, err)
 	}
 	if err := r.d.store.RemoveCodexView(runtimeID); err != nil {
 		return err

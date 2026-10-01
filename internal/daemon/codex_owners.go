@@ -203,7 +203,13 @@ func (r *codexRuntime) prepareRPC(runtimeID string, m *codexshared.Message) (fun
 		if len(reply.Error) > 0 {
 			r.d.logf("Codex %s for owner %s in view %s: %s", method, owner.SessionID, runtimeID, reply.Error)
 			if creation {
-				r.cleanupReservation(owner.SessionID)
+				r.mu.Lock()
+				if view, live := r.views[runtimeID]; live && view.LaunchOwnerID == owner.SessionID {
+					delete(r.initialConsumed, runtimeID)
+				} else {
+					r.cleanupReservation(owner.SessionID)
+				}
+				r.mu.Unlock()
 			}
 			return
 		}

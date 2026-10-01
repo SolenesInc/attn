@@ -364,12 +364,23 @@ func TestSharedCodexUnixUnregisterClosesTheDisplayedOwnerAndRemovesItsWorkspace(
 		t.Fatal(protocol.Deref(spawn.Error))
 	}
 	a := spawn.ID
-	w.Launched(a)
+	native := w.Launched(a)
+	remoteArg := slices.Index(native.Argv, "--remote")
+	if remoteArg < 0 || remoteArg+1 >= len(native.Argv) {
+		t.Fatalf("native view has no remote endpoint: %v", native.Argv)
+	}
+	viewSocket := strings.TrimPrefix(native.Argv[remoteArg+1], "unix://")
+	if _, err := os.Stat(viewSocket); err != nil {
+		t.Fatal(err)
+	}
 	awaitSharedView(app, a, a)
 	if err := w.Client().Unregister(a); err != nil {
 		t.Fatal(err)
 	}
 	awaitClosed(app, a)
+	if _, err := os.Stat(viewSocket); !os.IsNotExist(err) {
+		t.Fatalf("closed view socket remains: %s: %v", viewSocket, err)
+	}
 	testworld.Await(app, protocol.EventWorkspaceUnregistered, func(e protocol.WorkspaceUnregisteredMessage) bool { return e.Workspace.ID == workspaceID })
 	shown, err := w.Client().SessionShow(a)
 	if err != nil || shown.Entry.ClosedAt == nil {
@@ -378,6 +389,33 @@ func TestSharedCodexUnixUnregisterClosesTheDisplayedOwnerAndRemovesItsWorkspace(
 	reopened, err := w.Client().SessionReopen(client.SessionReopenOptions{SessionID: a})
 	if err != nil || reopened.SessionID != a || protocol.Deref(reopened.PaneID) == "" {
 		t.Fatalf("reopen exact pane: %+v %v", reopened, err)
+	}
+}
+
+func TestSharedCodexInitialCreationRejectionKeepsTheSameOwnerForRetry(t *testing.T) {
+	t.Setenv("ATTN_FAKE_CODEX_REJECT_INITIAL_START_ONCE", "1")
+	w := newWorld(t, fakeagent.Codex)
+	app, cli := w.App(), w.Client()
+	sharedCodexSetting(t, app, true)
+	spawn, _, _ := w.RequestSpawn(app, fakeagent.Codex, w.Path("retry"))
+	if !spawn.Success {
+		t.Fatal(protocol.Deref(spawn.Error))
+	}
+	app.AwaitScreen(spawn.ID, "fixture initial creation rejected")
+	shown, err := cli.SessionShow(spawn.ID)
+	if err != nil || shown.Entry.ClosedAt != nil {
+		t.Fatalf("rejection removed the launch owner: %+v %v", shown, err)
+	}
+	app.TypeLine(spawn.ID, "/new")
+	native := w.Launched(spawn.ID)
+	awaitSharedView(app, spawn.ID, spawn.ID)
+	page, err := cli.SessionList(client.SessionListOptions{})
+	if err != nil || len(page.Entries) != 1 || page.Entries[0].ID != spawn.ID {
+		t.Fatalf("retry changed the owner: %+v %v", page, err)
+	}
+	app.TypeLine(spawn.ID, "retry works")
+	if got := native.Prompted(); got != "retry works" {
+		t.Fatal(got)
 	}
 }
 

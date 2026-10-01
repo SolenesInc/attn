@@ -55,6 +55,9 @@ cwd, model, effort, permissions, routing environment and Attn instructions.
 Config additions preserve request fields, nested user entries and existing hook
 indices/trust. Hook commands explicitly carry the owner/socket/wrapper env.
 
+A rejected initial creation keeps its launch owner and view, so retry uses the
+same owner. Rejected later New/fork creations discard their unused reservation.
+
 Owner-addressed reload reapplies native configuration and current role guidance
 through resume, preserving every terminal and draft. Control subscriptions hold hidden roots. Switching away to zero views keeps an
 owner alive. App loss, transport loss and daemon restart do not close owners.
@@ -88,6 +91,7 @@ explicit close
 An unresolved view cannot close its previous owner. Archiving the last known
 view is refused while another unresolved view could still show that root. A
 failed blank attachment can be closed without archiving the original owner.
+Removing a view also removes its Unix socket after stopping its runtime.
 Archive is the native stop/unload operation; it does not require the TUI to exit
 or a `thread/closed` event. Ledger reopening unarchives the same native ID and
 preserves the Attn owner and history.

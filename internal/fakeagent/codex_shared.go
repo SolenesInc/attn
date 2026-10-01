@@ -16,11 +16,12 @@ import (
 )
 
 type sharedFakeCodex struct {
-	cfg          config
-	mu           sync.Mutex
-	roots        map[string]*sharedFakeRoot
-	peers        map[*websocket.Conn]bool
-	archiveError bool
+	cfg           config
+	mu            sync.Mutex
+	roots         map[string]*sharedFakeRoot
+	peers         map[*websocket.Conn]bool
+	archiveError  bool
+	rejectedStart atomic.Bool
 }
 type sharedFakeRoot struct {
 	c        *codex
@@ -113,6 +114,9 @@ func (s *sharedFakeCodex) handle(m codexshared.Message) (any, error) {
 	case "initialize":
 		return map[string]any{}, nil
 	case "thread/start", "thread/fork":
+		if m.Method == "thread/start" && os.Getenv("ATTN_FAKE_CODEX_REJECT_INITIAL_START_ONCE") == "1" && !s.rejectedStart.Swap(true) {
+			return nil, fmt.Errorf("fixture initial creation rejected")
+		}
 		if p.CWD == "" {
 			p.CWD, _ = os.Getwd()
 		}
@@ -346,7 +350,7 @@ func runSharedCodexView(cfg config) int {
 	} else {
 		err = selectRoot("thread/start", "", true)
 	}
-	if err != nil {
+	if err != nil && os.Getenv("ATTN_FAKE_CODEX_REJECT_INITIAL_START_ONCE") != "1" {
 		return 1
 	}
 	submit := func(text string) {
