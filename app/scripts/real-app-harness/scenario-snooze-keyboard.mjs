@@ -105,7 +105,9 @@ async function main() {
           await observer.waitFor(() => observer.getSession(sessionId), 'delegated beta visible');
           await observer.waitFor(() => observer.getSession(sessionId)?.state === 'idle', 'delegation opening turn stopped');
           const desktop = await observer.createDesktop('beta');
-          await observer.profileCommand('desktop_move_session', { session_id: sessionId, desktop: desktop.id });
+          execFileSync(appDaemonInTree(options.appPath), [
+            'session', 'move', desktop.id, '--session', sessionId,
+          ], { encoding: 'utf8', env: instanceCliEnv(currentHarnessInstance(), { ATTN_SESSION_ID: agents[0].sessionId }) });
           await observer.waitFor(() => observer.desktopOf(sessionId)?.id === desktop.id, 'beta moved to its own desktop');
           await client.request('select_session', { sessionId });
           await waitDom(`.session-terminal-desktop[data-desktop-id="${desktop.id}"]`);
