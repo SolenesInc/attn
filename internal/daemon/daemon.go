@@ -1577,7 +1577,6 @@ func (d *Daemon) stop() {
 		d.listener = nil
 		os.Remove(d.socketPath)
 	}
-	d.closeGitExecution(ErrGitExecutorClosed)
 	d.wsHub.closeAll()
 	if d.httpServer != nil {
 		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
@@ -1590,18 +1589,19 @@ func (d *Daemon) stop() {
 	if d.diagServer != nil {
 		_ = d.diagServer.Close()
 	}
+	if runner := d.jobQueueRef(); runner != nil {
+		runner.Stop()
+	}
 	// Work begun before the stop finishes; later exits and failures are the teardown's, not outcomes.
 	// PTYs shut next so no real exit lands between the drain and the shutdown.
 	d.life.wait(d.logf)
+	d.closeGitExecution(ErrGitExecutorClosed)
 	if d.ptyBackend != nil {
 		_ = d.ptyBackend.Shutdown(context.Background())
 	}
 	d.sessionInputs().stopRetries()
 	d.stopNotebookWatcher()
 	d.stopFsWatchers()
-	if runner := d.jobQueueRef(); runner != nil {
-		runner.Stop()
-	}
 	if d.hubManager != nil {
 		d.hubManager.Stop()
 	}

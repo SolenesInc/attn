@@ -1,0 +1,3 @@
+kind: fixed
+area: daemon
+change: Daemon restarts let running background jobs and Git commands finish without recording shutdown as a failure.

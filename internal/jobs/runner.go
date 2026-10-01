@@ -243,7 +243,7 @@ func (r *Runner) Stop() {
 
 	close(done)
 	<-exit
-	r.cancelAll()
+	r.waitAll()
 	r.store.ReleaseLock(token)
 }
 
@@ -792,7 +792,7 @@ func (r *Runner) backoff(attempt int) time.Duration {
 	return d
 }
 
-func (r *Runner) cancelAll() {
+func (r *Runner) waitAll() {
 	r.mu.Lock()
 	runs := make([]*activeRun, 0, len(r.runs))
 	for _, run := range r.runs {
@@ -800,9 +800,6 @@ func (r *Runner) cancelAll() {
 	}
 	r.mu.Unlock()
 	for _, run := range runs {
-		if run.guard.tryFence() {
-			run.cancel()
-		}
 		<-run.done
 	}
 }

@@ -123,13 +123,45 @@ func (w *world) restart() {
 	w.start()
 }
 
+func (w *world) beginStop(t *testing.T) (finish func()) {
+	t.Helper()
+	observer := transportConnectRaw(t, w)
+	stopped := make(chan error, 1)
+	d := w.daemon
+	go func() { stopped <- d.Stop() }()
+	deadline := time.NewTimer(fakeagent.HangGuard)
+	defer deadline.Stop()
+	for {
+		select {
+		case _, open := <-observer.frames:
+			if !open {
+				return func() {
+					w.T.Helper()
+					if err := <-stopped; err != nil {
+						w.T.Errorf("stop daemon: %v", err)
+					}
+					w.daemon = nil
+					w.ClosePeers()
+				}
+			}
+		case <-deadline.C:
+			w.T.Fatal("daemon did not close its transport during stop")
+		}
+	}
+}
+
 func (w *world) advance(d time.Duration) {
+	w.elapse(d)
+	synctest.Wait()
+}
+
+// elapse moves the fake clock without draining work held by an external process.
+func (w *world) elapse(d time.Duration) {
 	w.T.Helper()
 	if !w.bubbled {
 		w.T.Fatal("advance moves the fake clock, which only a world inBubble has")
 	}
 	time.Sleep(d)
-	synctest.Wait()
 }
 
 type pipeListener struct {
