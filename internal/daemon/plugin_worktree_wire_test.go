@@ -201,6 +201,7 @@ func TestADelegationReportsTheProviderWorktreeWhenItsAfterCreateHookFails(t *tes
 	repo := newRepo(t, "shop")
 	providerPath := filepath.Join(filepath.Dir(repo), "provider-actual")
 	source := w.Spawn(app, fakeagent.Codex, repo)
+	w.Launched(source)
 	provider := connectPlugin(t, w, "delegation-path-provider", "worktree.create")
 	hook := connectPlugin(t, w, "delegation-after-hook", "worktree.after_create")
 

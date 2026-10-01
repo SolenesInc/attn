@@ -27,6 +27,7 @@ func TestAutomaticWorktreeCleanupYieldsToForegroundWork(t *testing.T) {
 	refreshWorktrees(t, cli)
 	observation.awaitBlocked(t)
 	session := w.Spawn(app, fakeagent.Codex, first)
+	w.Launched(session)
 
 	observation.arm(t)
 	refreshWorktrees(t, cli)
