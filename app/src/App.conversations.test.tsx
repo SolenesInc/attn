@@ -163,6 +163,9 @@ describe('App session conversation pins', () => {
       { cmd: 'kept_conversation_keep', session_id: 'session:claude', keep: true, request_id: expect.any(String) },
       { cmd: 'kept_conversation_keep', session_id: 'session:claude', keep: false, request_id: expect.any(String) },
     ]);
-    expect(daemon.sentOf('session_list')).toEqual(Array.from({ length: 2 }, () => ({ cmd: 'session_list', all: true, limit: 50, request_id: expect.any(String) })));
+    await gesture(daemon, () => fireEvent.click(screen.getByRole('button', { name: 'Worktrees' })));
+    await gesture(daemon, () => fireEvent.click(screen.getByRole('button', { name: 'Sessions' })));
+    expect(row('run closed')).toHaveAttribute('data-verbs', expect.stringContaining('Unkeep'));
+    expect(daemon.sentOf('session_list')).toEqual(Array.from({ length: 3 }, () => ({ cmd: 'session_list', all: true, limit: 50, request_id: expect.any(String) })));
   });
 });

@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type { ReactNode } from 'react';
 import type { SessionLedgerEntry } from '../../types/generated';
 import { useSessionLedger } from '../../hooks/useSessionLedger';
@@ -511,7 +511,12 @@ function conversationVerb(entry: SessionLedgerEntry): RowVerb {
 
 function useConversationPins(setKeep: SessionsTabProps['setConversationKeep'], changeSignal: number, reload: () => void) {
   const [keepNotices, setKeepNotices] = useState<Record<string, RowNote | undefined>>({});
-  useEffect(() => { if (changeSignal > 0) reload(); }, [changeSignal, reload]);
+  const observedSignal = useRef(changeSignal);
+  useEffect(() => {
+    if (observedSignal.current === changeSignal) return;
+    observedSignal.current = changeSignal;
+    reload();
+  }, [changeSignal, reload]);
   const runKeepVerb = useCallback((id: string, verb: string): boolean => {
     if (!setKeep || (verb !== 'keep-conversation' && verb !== 'unkeep-conversation')) return false;
     if (keepNotices[id]?.kind === 'busy') return true;
