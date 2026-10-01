@@ -56,7 +56,7 @@ try {
     await type(a, paneA.pane_id, '/title unknown-root\r');
     await observer.waitFor(() => [...observer.layoutsByWorkspaceId.values()].flatMap(layout => layout.panes || []).some(pane => pane.runtime_id === a && pane.codex_resolution === 'unresolved' && !pane.session_id), 'unresolved selected native view');
     await client.request('dispatch_shortcut', { shortcutId: 'session.new' });
-    await client.request('dom_wait', { selector: '[data-testid="location-picker-title"]' });
+    await client.request('dom_wait', { selector: '[data-testid="location-picker-title"]', timeoutMs: observer.connectTimeoutMs });
     const title = await client.request('dom_text', { selector: '[data-testid="location-picker-title"]' });
     runner.assert(title.text === 'New Session Location', 'unresolved pane opened the wrong location picker', title);
     await client.request('dom_key', { selector: '[data-testid="location-picker"]', key: 'Escape' });
