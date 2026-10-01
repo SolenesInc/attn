@@ -93,6 +93,7 @@ try {
     await client.request('set_setting', { key: 'queue_mode_enabled', value: 'false' });
     const tree = await client.request('queue_get_state');
     runner.assert(tree.treeSessionIds.filter(id => id === b).length === 1, 'moved owner has a phantom source row', tree);
+    await client.request('focus_pane', { sessionId: a, paneId: paneA.pane_id });
   });
   await runner.step('native_new_keeps_shared_mode_after_default_off', async () => {
     observer.send({ cmd: 'set_setting', key: 'codex_shared_enabled', value: 'false' });
