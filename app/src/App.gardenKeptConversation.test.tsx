@@ -112,6 +112,18 @@ describe('App kept conversation in the Garden reader', () => {
     expectReads(garden.daemon, 3);
   });
 
+  it('refreshes retention and Resume on conversation changes without a seed revision change', async () => {
+    const garden = await open();
+    garden.documents[seed.id] = { seed: { ...seed, continuation: {
+      ...seed.continuation!, resume_available: false, resume_reason: 'You deleted attn’s copy on 2026-10-01',
+      kept_conversation: { ...kept, deleted_at: '2026-10-01T12:00:00Z', deleted_by: 'user' },
+    } } };
+    await gesture(garden.daemon, () => garden.daemon.emit({ event: 'kept_conversations_changed' }));
+    expect(screen.getByText('conversation you deleted attn’s copy on 2026-10-01')).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Resume' })).toBeNull();
+    expectReads(garden.daemon, 2);
+  });
+
   it('keeps continuation actions and their keyboard focus during an unrelated snapshot refresh', async () => {
     const garden = await open();
     const resume = screen.getByRole('button', { name: 'Resume' });

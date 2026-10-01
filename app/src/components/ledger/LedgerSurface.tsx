@@ -6,9 +6,10 @@ import { SessionsTab } from './SessionsTab';
 import type { SessionsTabProps } from './SessionsTab';
 import { WorktreesTab } from './WorktreesTab';
 import type { WorktreesTabProps } from './WorktreesTab';
+import { ConversationsTab, type ConversationsTabProps } from './ConversationsTab';
 import './LedgerSurface.css';
 
-export type LedgerTab = 'sessions' | 'worktrees';
+export type LedgerTab = 'sessions' | 'worktrees' | 'conversations';
 
 type TabProps<T> = Omit<T, 'queryRef' | 'now' | 'onStatus'>;
 
@@ -20,6 +21,7 @@ export interface LedgerSurfaceProps {
   yieldsFocus?: boolean;
   now?: () => Date;
   sessions: TabProps<Omit<SessionsTabProps, 'onShowWorktree' | 'requestedDir'>>;
+  conversations: Omit<ConversationsTabProps, 'queryRef' | 'statusTarget'>;
   worktrees: TabProps<Omit<WorktreesTabProps, 'onShowSessions' | 'requestedPath'>>;
 }
 
@@ -28,6 +30,7 @@ const systemNow = () => new Date();
 const TABS: { id: LedgerTab; label: string }[] = [
   { id: 'sessions', label: 'Sessions' },
   { id: 'worktrees', label: 'Worktrees' },
+  { id: 'conversations', label: 'Conversations' },
 ];
 
 export function LedgerSurface(props: LedgerSurfaceProps) {
@@ -36,8 +39,9 @@ export function LedgerSurface(props: LedgerSurfaceProps) {
 }
 
 function OpenLedgerSurface({
-  tab, onTabChange, onClose, yieldsFocus = false, now = systemNow, sessions, worktrees,
+  tab, onTabChange, onClose, yieldsFocus = false, now = systemNow, sessions, worktrees, conversations,
 }: LedgerSurfaceProps) {
+  const [conversationStatusTarget, setConversationStatusTarget] = useState<HTMLDivElement | null>(null);
   const [status, setStatus] = useState<ReactNode>(null);
   const [legendOpen, setLegendOpen] = useState(false);
   const [requestedDir, setRequestedDir] = useState<{ path: string; nonce: number } | null>(null);
@@ -85,7 +89,8 @@ function OpenLedgerSurface({
     }
     if ((event.key === '[' || event.key === ']') && !typing) {
       event.preventDefault();
-      onTabChange(tab === 'sessions' ? 'worktrees' : 'sessions');
+      const direction = event.key === ']' ? 1 : -1;
+      onTabChange(TABS[(TABS.findIndex((option) => option.id === tab) + direction + TABS.length) % TABS.length].id);
     }
   }, [tab, onTabChange]);
 
@@ -101,7 +106,7 @@ function OpenLedgerSurface({
           target?.focus({ preventScroll: true });
         },
       }}>
-        <div className="ledger-panel" role="dialog" aria-modal="true" aria-label="Sessions and worktrees">
+        <div className="ledger-panel" role="dialog" aria-modal="true" aria-label="Sessions, worktrees and conversations">
           <header className="ledger-header">
             <nav className="ledger-tabs" aria-label="Which list">
               {TABS.map((option) => (
@@ -134,7 +139,9 @@ function OpenLedgerSurface({
                   onStatus={onStatus}
                 />
               )
-              : (
+              : tab === 'conversations' ? (
+                <ConversationsTab {...conversations} onOpenSeed={(id) => { conversations.onOpenSeed(id); onClose(); }} queryRef={queryRef} statusTarget={conversationStatusTarget} />
+              ) : (
                 <WorktreesTab
                   {...worktrees}
                   onSelectSession={selectSession}
@@ -148,7 +155,7 @@ function OpenLedgerSurface({
           </div>
 
           <footer className="ledger-status" aria-live="polite">
-            <div className="ledger-status-left">{status}</div>
+            <div className="ledger-status-left" ref={setConversationStatusTarget}>{tab === 'conversations' ? null : status}</div>
             <button
               type="button"
               className="ledger-status-link"

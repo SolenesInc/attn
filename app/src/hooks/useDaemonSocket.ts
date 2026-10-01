@@ -18,6 +18,7 @@ import type {
   PR as GeneratedPR,
   Worktree as GeneratedWorktree,
   WorktreeListResult,
+  KeptConversationListResult,
   WorktreeSweepLogResult,
   PluginInfo as GeneratedPluginInfo,
   PluginIssue as GeneratedPluginIssue,
@@ -140,6 +141,7 @@ import { useAutoModePushStore } from '../store/autoMode';
 import { useAutomationsStore } from '../store/automations';
 import { useWorktreeStore } from '../store/worktrees';
 import { handleWorktreeDaemonEvent } from './daemonWorktreeEvents';
+import { handleConversationDaemonEvent } from './daemonConversationEvents';
 
 export type DaemonSession = GeneratedSession;
 
@@ -935,6 +937,7 @@ export function useDaemonSocket({
   const [warnings, setWarnings] = useState<DaemonWarning[]>([]);
   const [gitOperations, setGitOperations] = useState<Record<string, DaemonGitOperation>>({});
   const [tileContents, setTileContents] = useState<Record<string, TileContentState>>({});
+  const [keptConversationsChangeSignal, setKeptConversationsChangeSignal] = useState(0);
   const [seedReviewOverview, setSeedReviewOverview] = useState<SeedReviewOverview>({ candidateCount: 0 });
 
   const reconnectAttemptsRef = useRef(0);
@@ -2820,6 +2823,7 @@ export function useDaemonSocket({
             if (handleDelegationDaemonEvent(data, pending)) break;
             if (handleCrewDaemonEvent(data, pending)) break;
             if (handleAutoModeDaemonEvent(data, pending)) break;
+            if (handleConversationDaemonEvent(data, pending, () => setKeptConversationsChangeSignal((signal) => signal + 1))) break;
             if (handleWorktreeDaemonEvent(data, pending, {
               onWorktreeState: (worktree) => useWorktreeStore.getState().observe(worktree),
               onWorktreeSwept: (entry) => useWorktreeStore.getState().swept(entry),
@@ -5052,6 +5056,18 @@ export function useDaemonSocket({
     }, 'List workflow runs timed out');
   }, [sendKeyedRequest]);
 
+  const listKeptConversations = useCallback((includeDeleted: boolean): Promise<KeptConversationListResult> => (
+    sendRequest('kept_conversation_list', { include_deleted: includeDeleted }, 'Listing conversations timed out')
+  ), [sendRequest]);
+
+  const setConversationKeep = useCallback((sessionId: string, keep: boolean): Promise<boolean> => (
+    sendRequest('kept_conversation_keep', { session_id: sessionId, keep }, 'Changing the conversation pin timed out')
+  ), [sendRequest]);
+
+  const forgetConversation = useCallback((sessionId: string): Promise<boolean> => (
+    sendRequest('kept_conversation_forget', { session_id: sessionId }, 'Forgetting the conversation timed out')
+  ), [sendRequest]);
+
   const listWorktrees = useCallback((mainRepo?: string): Promise<WorktreeListResult> => {
     return sendRequest<WorktreeListResult>(
       'worktree_list',
@@ -5486,6 +5502,10 @@ export function useDaemonSocket({
     getRepoInfo,
     getWorkflowRun,
     listWorkflowRuns,
+    listKeptConversations,
+    setConversationKeep,
+    forgetConversation,
+    keptConversationsChangeSignal,
     listWorktrees,
     setWorktreeKeep,
     getWorktreeSweepLog,

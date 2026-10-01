@@ -51,6 +51,7 @@ export function LedgerList({
   items, selectedKey, onSelect, onVerb, onEnter, menuKey, onMenu, onYank, empty,
 }: LedgerListProps) {
   const listRef = useRef<HTMLDivElement>(null);
+  const focusedKey = useRef<string | null>(null);
   const rows = items.filter((item): item is Extract<ListItem, { kind: 'row' }> => item.kind === 'row');
 
   const focusRow = useCallback((key: string) => {
@@ -69,6 +70,9 @@ export function LedgerList({
     if (has && !hadRows.current) {
       const panel = listRef.current?.closest('.ledger-panel');
       if (panel && !panel.contains(document.activeElement)) focusRow(selectedKey ?? rows[0].row.key);
+    }
+    if (has && focusedKey.current && !rows.some((item) => item.row.key === focusedKey.current)) {
+      focusRow(selectedKey ?? rows[0].row.key);
     }
     hadRows.current = has;
   });
@@ -108,7 +112,11 @@ export function LedgerList({
   }, [move, rows.length, onEnter, onVerb, onMenu, menuKey, onYank]);
 
   return (
-    <div className="ledger-list" ref={listRef} role="listbox" aria-label="Rows">
+    <div className="ledger-list" ref={listRef} role="listbox" aria-label="Rows" onFocusCapture={(event) => {
+      focusedKey.current = (event.target as HTMLElement).closest('.ledger-row')?.getAttribute('data-row-key') ?? null;
+    }} onBlurCapture={(event) => {
+      if (!event.currentTarget.contains(event.relatedTarget as Node | null)) focusedKey.current = null;
+    }}>
       {items.length === 0 && empty}
       {items.map((item) => item.kind === 'group'
         ? (

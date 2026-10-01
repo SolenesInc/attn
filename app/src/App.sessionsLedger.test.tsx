@@ -23,7 +23,7 @@ async function openLedger(answer: LedgerAnswer) {
   };
 }
 
-const ledger = () => within(screen.getByRole('dialog', { name: 'Sessions and worktrees' }));
+const ledger = () => within(screen.getByRole('dialog', { name: 'Sessions, worktrees and conversations' }));
 const listed = () => rows().queryAllByRole('option').map((option) => option.querySelector('.ledger-row-title')?.textContent);
 const olderButton = () => ledger().queryByRole('button', { name: /older ↓|loading…/ });
 const showClosed = () => fireEvent.click(ledger().getByRole('button', { name: 'Closed' }));
