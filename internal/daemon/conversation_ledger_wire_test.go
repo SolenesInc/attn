@@ -27,6 +27,61 @@ func awaitConversationsChanged(app *testworld.Peer) {
 	testworld.Await(app, protocol.EventKeptConversationsChanged, func(protocol.KeptConversationsChangedEvent) bool { return true })
 }
 
+func TestConversationKeepPassNotifiesOnceForMultipleCopies(t *testing.T) {
+	w := newWorld(t, fakeagent.Claude)
+	app, cli := w.App(), w.Client()
+	var paths []string
+	for _, name := range []string{"one", "two"} {
+		delegated := seedResumeDelegate(t, w, fakeagent.Claude, name)
+		run := w.Launched(delegated.SessionID)
+		run.Prompted()
+		run.Reply("source answer <!-- attn:state=waiting_input -->")
+		paths = append(paths, transcript.FindClaudeTranscript(run.ConversationID))
+		closePane(app, seedResumePane(t, w, protocol.Deref(delegated.WorkspaceID), delegated.SessionID))
+		testworld.AwaitTaskDone(app, "conversation_keep")
+	}
+	before := conversationRows(t, cli, false)
+	if before.Count != len(paths) {
+		t.Fatalf("initial copies: %+v", before)
+	}
+	for _, path := range paths {
+		file, err := os.OpenFile(path, os.O_APPEND|os.O_WRONLY, 0)
+		if err != nil {
+			t.Fatal(err)
+		}
+		_, writeErr := file.WriteString("{\"type\":\"summary\",\"summary\":\"additional source content\"}\n")
+		closeErr := file.Close()
+		if writeErr != nil || closeErr != nil {
+			t.Fatalf("extend native transcript: %v, %v", writeErr, closeErr)
+		}
+	}
+	events := w.App()
+	plantSeedAs(t, cli, "", "refresh both changed copies")
+	testworld.AwaitTaskDone(events, "conversation_keep")
+	listed := testworld.Request(events, protocol.KeptConversationListMessage{Cmd: protocol.CmdKeptConversationList, RequestID: protocol.Ptr("after-pass")}, protocol.EventKeptConversationListResult, func(r protocol.KeptConversationListResultEvent) bool {
+		return protocol.Deref(r.RequestID) == "after-pass"
+	})
+	if !listed.Success || listed.KeptConversationListResult == nil || listed.KeptConversationListResult.Count != len(paths) || listed.KeptConversationListResult.StoredBytes <= before.StoredBytes {
+		t.Fatalf("updated copies: %+v", listed)
+	}
+	for _, row := range listed.KeptConversationListResult.Rows {
+		for _, old := range before.Rows {
+			if row.ResumeID == old.ResumeID && protocol.Deref(row.SourceBytes) <= protocol.Deref(old.SourceBytes) {
+				t.Fatalf("conversation %s was not recopied: before=%+v, after=%+v", row.ResumeID, old, row)
+			}
+		}
+	}
+	changed := 0
+	for _, event := range events.Received() {
+		if event.Event == protocol.EventKeptConversationsChanged {
+			changed++
+		}
+	}
+	if changed != 1 {
+		t.Fatalf("multi-copy keep pass sent %d kept_conversations_changed events; want 1", changed)
+	}
+}
+
 func TestConversationPinCopiesUnreferencedClosedSessionAndUnkeepExpires(t *testing.T) {
 	t.Setenv("ATTN_CONVERSATION_KEEP_GRACE_DAYS", "0")
 	w := newWorld(t, fakeagent.Claude)

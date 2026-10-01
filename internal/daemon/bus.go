@@ -268,7 +268,9 @@ func buildWireProjections() []projection {
 		{
 			filter: bus.Filter{factConversationKeptChanged},
 			apply: func(d *Daemon, _ bus.Event) {
-				d.wsHub.Broadcast(&protocol.WebSocketEvent{Event: protocol.EventKeptConversationsChanged})
+				d.projectSnapshot(protocol.EventKeptConversationsChanged, func() {
+					d.wsHub.Broadcast(&protocol.WebSocketEvent{Event: protocol.EventKeptConversationsChanged})
+				})
 			},
 		},
 		{
