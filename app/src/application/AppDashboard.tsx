@@ -20,7 +20,7 @@ export function AppDashboard() {
 
   const { isRefreshingPRs, refreshError, handleRefreshPRs } = usePRLauncherContext();
   const { handleRebootstrapEndpoint } = useAppErrorsContext();
-  const { setSettingsOpen } = useAppPanelsContext();
+  const { setSettingsOpen, whatsNew } = useAppPanelsContext();
   const { queueModeEnabled, crewQueueEnabled } = useAttentionQueueContext();
   const { handleNewSession } = useSessionLaunchContext();
   const { handleOpenPR } = usePRLauncherContext();
@@ -47,6 +47,7 @@ export function AppDashboard() {
           onRefreshPRs={handleRefreshPRs}
           onOpenPR={handleOpenPR}
           onOpenSettings={() => setSettingsOpen(true)}
+          introBanner={whatsNew.bannerVisible ? { onReplay: whatsNew.open, onDismiss: whatsNew.dismissBanner } : undefined}
         />
       </div>
     </>
