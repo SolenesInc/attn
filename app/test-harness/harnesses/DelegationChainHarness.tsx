@@ -56,7 +56,9 @@ export function DelegationChainHarness({ onReady, setTriggerRerender }: HarnessP
         </aside>
         <main style={{ minWidth: 0 }}>
           <div data-testid="agent-header"><DelegationChainTrigger session={agents.find((agent) => agent.id === current)!} variant="header" /></div>
-          <textarea ref={terminal} aria-label="Terminal keyboard target" />
+          <div className="terminal-container">
+            <textarea ref={terminal} aria-label="Terminal keyboard target" />
+          </div>
           <output data-testid="selected-agent">{current}</output>
           <button data-testid="replace-sidebar-rows" onClick={() => setRowGeneration((value) => value + 1)}>Replace sidebar rows</button>
         </main>
