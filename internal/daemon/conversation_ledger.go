@@ -160,7 +160,12 @@ func (d *Daemon) keptConversationList(includeDeleted bool) (*protocol.KeptConver
 				continue
 			}
 			row.Kept, row.SourceBytes = nil, nil
-			reason := "kept by open seeds; copying on the next pass"
+			names := make([]string, 0, len(seeds[key]))
+			for _, seed := range seeds[key] {
+				names = append(names, seed.Slug)
+			}
+			sort.Strings(names)
+			reason := "open seed " + strings.Join(names, ", ") + "; copying on the next pass"
 			if row.PinnedAt != nil {
 				reason = "pinned; copying on the next pass"
 			}
@@ -224,7 +229,7 @@ func (d *Daemon) keepConversation(id string, keep bool) error {
 	}
 	if keep {
 		if !d.conversationKnown(agentdriver.Get(key.agent), key.resumeID) {
-			return fmt.Errorf("cannot keep conversation %s: neither native files nor a live attn copy exist", key.resumeID)
+			return fmt.Errorf("nothing left to keep: %s no longer has conversation %s and attn has no copy", key.agent, key.resumeID)
 		}
 		err = d.store.PinConversation(key.agent, key.resumeID, session, time.Now())
 	} else {

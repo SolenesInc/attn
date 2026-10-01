@@ -180,7 +180,7 @@ func TestConversationForgetRefusesOpenSeedsThenDeletesOnlyAttnsCopy(t *testing.T
 		t.Fatalf("forget left pin: %+v", rows)
 	}
 	sessionRecoveryDeleteTranscript(t, first.ConversationID)
-	if err := cli.KeptConversationKeep(first.ConversationID, true); err == nil || !strings.Contains(err.Error(), "neither native files nor a live attn copy exist") {
+	if err := cli.KeptConversationKeep(first.ConversationID, true); err == nil || !strings.Contains(err.Error(), "nothing left to keep") || !strings.Contains(err.Error(), first.ConversationID) {
 		t.Fatalf("missing conversation pin: %v", err)
 	}
 	if rows := conversationRows(t, cli, false); rows.PendingCount != 0 {
@@ -329,10 +329,10 @@ func TestConversationSeedReferenceIsVisibleBeforeCopy(t *testing.T) {
 		t.Fatalf("seed-only pending totals: %+v", rows)
 	}
 	row := rows.Rows[0]
-	if row.Kept != nil || row.SourceBytes != nil || row.PinnedAt != nil || len(row.Seeds) != 1 || row.Seeds[0].ID != delegated.SeedID || len(row.SessionIds) != 1 || row.SessionIds[0] != delegated.SessionID || !strings.Contains(protocol.Deref(row.PendingReason), "quiet") {
+	if row.Kept != nil || row.SourceBytes != nil || row.PinnedAt != nil || len(row.Seeds) != 1 || row.Seeds[0].ID != delegated.SeedID || len(row.SessionIds) != 1 || row.SessionIds[0] != delegated.SessionID || !strings.Contains(protocol.Deref(row.PendingReason), "quiet") || !strings.Contains(protocol.Deref(row.PendingReason), row.Seeds[0].Slug) {
 		t.Fatalf("seed-only pending row: %+v", row)
 	}
-	lifeMove(t, cli, "", delegated.SeedID, "wither", "finished", "")
+	lifeMove(t, cli, delegated.SessionID, delegated.SeedID, "wither", "finished", "")
 	testworld.AwaitTaskDone(app, "conversation_keep")
 	if rows := conversationRows(t, cli, false); rows.PendingCount != 0 || len(rows.Rows) != 0 {
 		t.Fatalf("closed seed left a pending row: %+v", rows)
