@@ -2,7 +2,8 @@ import { fireEvent, screen, within } from '@testing-library/react';
 import { describe, expect, it } from 'vitest';
 import { openSession } from './test/appFixtures';
 import { daemonSession, emptyDesktop, soloDesktop } from './test/daemonFixtures';
-import { launchedAt, pathInput, repoInfo, serveLaunches, serveMachine, submitPath } from './test/locations';
+import { inspection, launchedAt, pathInput, repoInfo, serveLaunches, serveMachine, submitPath } from './test/locations';
+import type { CommandMessage } from './test/protocol';
 import { gesture, pressShortcut, renderApp } from './test/renderApp';
 
 const launcher = () => screen.queryByTestId('empty-desktop-launcher');
@@ -96,6 +97,22 @@ describe('App empty desktop launcher', () => {
 
     expect(screen.queryByRole('dialog', { name: 'Open a markdown file' })).toBeNull();
     expect(pathInput()).toHaveFocus();
+  });
+
+  it('drops a pick still being looked up when the user leaves the desktop', async () => {
+    const { daemon } = await onAgentBesideEmptyDesktop();
+    await gesture(daemon, () => pressShortcut('desktop.select2'));
+    const held: CommandMessage[] = [];
+    daemon.on('inspect_path', (command) => {
+      held.push(command);
+      return undefined;
+    });
+    await submitPath(daemon, '/home/me/projects/scratch');
+
+    await gesture(daemon, () => pressShortcut('desktop.select1'));
+    await gesture(daemon, () => daemon.replyTo(held[0], { ...inspection('/home/me/projects/scratch'), request_id: (held[0] as { request_id?: string }).request_id }));
+
+    expect(daemon.sentOf('spawn_session')).toEqual([]);
   });
 
   it('stays put on Escape', async () => {

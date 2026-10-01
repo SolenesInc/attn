@@ -427,6 +427,9 @@ export function LocationPicker({
     return nextGeneration;
   }, []);
 
+  // A lookup that answers after the picker is gone must not launch onto whatever desktop is current then.
+  useEffect(() => invalidateRequestGeneration, [invalidateRequestGeneration]);
+
   const isRequestCurrent = useCallback(
     (requestGeneration: number) => requestGenerationRef.current === requestGeneration,
     [],
