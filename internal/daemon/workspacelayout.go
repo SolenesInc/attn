@@ -899,7 +899,13 @@ func (d *Daemon) moveLeafToWorkspace(sourceWorkspaceID, targetWorkspaceID, leafI
 	}
 
 	d.broadcastWorkspaceLayoutUpdated(targetWorkspaceID)
-	if !sourceEmpty {
+	if sourceEmpty {
+		emptyLayout, err := protocolWorkspaceLayout(sourceNormalized)
+		if err != nil {
+			return "", err
+		}
+		d.broadcastWorkspaceLayoutSnapshotUpdated(emptyLayout)
+	} else {
 		d.broadcastWorkspaceLayoutUpdated(sourceWorkspaceID)
 	}
 

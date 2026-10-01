@@ -763,6 +763,9 @@ func TestSharedCodexWorkspaceCloseIncludesMovedOwnerViews(t *testing.T) {
 	if !moved.Success {
 		t.Fatal(protocol.Deref(moved.Error))
 	}
+	testworld.Await(app, protocol.EventWorkspaceLayoutUpdated, func(e protocol.WorkspaceLayoutUpdatedMessage) bool {
+		return e.WorkspaceLayout.WorkspaceID == source && len(e.WorkspaceLayout.Panes) == 0
+	})
 	testworld.Request(app, protocol.UnregisterWorkspaceMessage{Cmd: protocol.CmdUnregisterWorkspace, ID: source}, protocol.EventWorkspaceUnregistered, func(e protocol.WorkspaceUnregisteredMessage) bool { return e.Workspace.ID == source })
 	awaitClosed(app, a)
 	layout := testworld.Request(app, protocol.WorkspaceLayoutGetMessage{Cmd: protocol.CmdWorkspaceLayoutGet, WorkspaceID: target}, protocol.EventWorkspaceLayout, func(e protocol.WorkspaceLayoutMessage) bool { return e.WorkspaceLayout.WorkspaceID == target })
