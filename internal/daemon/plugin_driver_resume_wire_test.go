@@ -1,6 +1,7 @@
 package daemon_test
 
 import (
+	"context"
 	"encoding/json"
 	"os"
 	"path/filepath"
@@ -209,6 +210,76 @@ func TestAGardenReviewWaitsForIndependentDriversTogether(t *testing.T) {
 			t.Fatal("review did not finish after one deadline for independent stalled drivers")
 		}
 	})
+}
+
+func TestAGardenReviewJoinsResumeInspectionWhenItsAdvisorReturnsDuringShutdown(t *testing.T) {
+	w := newWorld(t, fakeagent.Codex)
+	var now atomic.Int64
+	now.Store(time.Now().UnixNano())
+	w.gardenClock = func() time.Time { return time.Unix(0, now.Load()) }
+	w.restart()
+	app, cli := w.App(), w.Client()
+	driver := connectDriver(t, w, "snipe-plugin", "snipe", map[string]bool{
+		"resume": true, "resume_availability": true, "initial_prompt": true, "state_reporting": true,
+	})
+	awaitDriverAvailable(app, "snipe")
+	delegations := make(chan *protocol.DelegateResult, 1)
+	go func() { delegations <- seedResumeDelegate(t, w, scriptedAgent, "shutdown-inspection") }()
+	run := driver.launched()
+	if err := driver.state(run, 1, "working"); err != nil {
+		t.Fatal(err)
+	}
+	delegated := <-delegations
+	driver.mustReport("session.report_metadata", map[string]any{
+		"session_id": delegated.SessionID, "run_id": run.RunID, "seq": 2,
+		"resume_session_id": "saved-conversation", "metadata": map[string]string{"native_id": "saved-conversation"},
+	})
+	closePane(app, seedResumePane(t, w, protocol.Deref(delegated.WorkspaceID), delegated.SessionID))
+	now.Store(time.Now().Add(garden.DefaultStaleWindow).UnixNano())
+	t.Setenv("ATTN_HEADLESS_TASKS", "on")
+	reviews := make(chan protocol.GardenReview, 1)
+	go func() { reviews <- gardenReviewStart(t, cli) }()
+	answerInspection := func() {
+		t.Helper()
+		var inspection resumeInspection
+		request := driver.asked("driver.resume_available", &inspection)
+		answerResumeInspection(driver, request, inspection, func(string, string) bool { return true }, "")
+	}
+	answerInspection()
+	review := <-reviews
+	if len(review.Items) != 1 || review.Items[0].SeedID != delegated.SeedID {
+		t.Fatalf("review items = %+v, want the stopped seed", review.Items)
+	}
+	answerInspection()
+	advice := w.HeadlessTask()
+
+	// An admitted CLI inspection holds shutdown before it reaches the job runner.
+	shown := make(chan error, 1)
+	go func() {
+		_, err := cli.SeedShow("", delegated.SeedID)
+		shown <- err
+	}()
+	var heldInspection resumeInspection
+	heldRequest := driver.asked("driver.resume_available", &heldInspection)
+	ctx, cancel := context.WithTimeout(context.Background(), fakeagent.HangGuard)
+	defer cancel()
+	silent := transportDial(t, ctx, w)
+	stopped := make(chan error, 1)
+	go func() { stopped <- w.daemon.Stop() }()
+	if _, _, err := silent.Read(ctx); err == nil || ctx.Err() != nil {
+		t.Fatalf("shutdown did not close its listener connections: %v", err)
+	}
+
+	advice.Answer(`{"recommendation":"keep_growing","explanation":"Continue the work.","evidence":["Saved conversation."]}`)
+	answerInspection()
+	answerResumeInspection(driver, heldRequest, heldInspection, func(string, string) bool { return true }, "")
+	if err := <-shown; err != nil {
+		t.Fatal(err)
+	}
+	if err := <-stopped; err != nil {
+		t.Fatal(err)
+	}
+	w.daemon = nil
 }
 
 func TestAGardenReviewInspectsSharedPluginStorageOncePerCapture(t *testing.T) {
