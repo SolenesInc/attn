@@ -52,18 +52,17 @@ func (h *wsHub) rememberEviction(clientID string, record evictionRecord) {
 	}
 }
 
-func (h *wsHub) takeEviction(clientID string) (evictionRecord, bool) {
+func (h *wsHub) deliverEviction(clientID string, send func(evictionRecord) bool) {
 	if clientID == "" {
-		return evictionRecord{}, false
+		return
 	}
 	h.evictionMu.Lock()
 	defer h.evictionMu.Unlock()
 	h.pruneEvictionsLocked(time.Now())
 	record, ok := h.evictions[clientID]
-	if ok {
+	if ok && send(record) {
 		delete(h.evictions, clientID)
 	}
-	return record, ok
 }
 
 func (h *wsHub) pruneEvictionsLocked(now time.Time) {
@@ -124,21 +123,28 @@ func rawConnFrom(ctx context.Context) net.Conn {
 	return conn
 }
 
-func (d *Daemon) sendEvictionNotice(client *wsClient, record evictionRecord) bool {
-	notice := &protocol.ClientEvictionNoticeMessage{
-		Event:               protocol.EventClientEvictionNotice,
-		EvictedAt:           record.at.Format(time.RFC3339),
-		Reason:              record.reason,
-		UndeliveredMessages: record.undelivered,
+func (d *Daemon) deliverEvictionNotice(client *wsClient) {
+	var full bool
+	d.wsHub.deliverEviction(client.ClientID(), func(record evictionRecord) bool {
+		notice := &protocol.ClientEvictionNoticeMessage{
+			Event:               protocol.EventClientEvictionNotice,
+			EvictedAt:           record.at.Format(time.RFC3339),
+			Reason:              record.reason,
+			UndeliveredMessages: record.undelivered,
+		}
+		data, err := json.Marshal(notice)
+		if err != nil {
+			d.logf("eviction notice marshal error: %v", err)
+			return false
+		}
+		d.logf("telling client %s it was evicted at %s (%s)", client.ClientID(), notice.EvictedAt, record.reason)
+		queued, queueFull := client.offer(outboundMessage{kind: messageKindText, payload: data})
+		full = queueFull
+		return queued
+	})
+	if full && client.conn != nil {
+		d.wsHub.logf("WebSocket client stopped draining its %d queued messages, disconnecting", len(client.send))
+		d.wsHub.evict(client, slowClientCloseReason)
+		d.wsHub.forget(client)
 	}
-	data, err := json.Marshal(notice)
-	if err != nil {
-		d.logf("eviction notice marshal error: %v", err)
-		return false
-	}
-	d.logf(
-		"telling client %s it was evicted at %s (%s)",
-		client.ClientID(), notice.EvictedAt, record.reason,
-	)
-	return d.sendOutbound(client, outboundMessage{kind: messageKindText, payload: data})
 }
