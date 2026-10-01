@@ -7,7 +7,7 @@ import (
 	"time"
 )
 
-const ProtocolVersion = "325"
+const ProtocolVersion = "326"
 
 const (
 	ErrorCodeConflict             = "conflict"
@@ -183,6 +183,9 @@ const (
 	CmdListWorktrees                         = "list_worktrees"
 	CmdCreateWorktree                        = "create_worktree"
 	CmdDeleteWorktree                        = "delete_worktree"
+	CmdKeptConversationList                  = "kept_conversation_list"
+	CmdKeptConversationKeep                  = "kept_conversation_keep"
+	CmdKeptConversationForget                = "kept_conversation_forget"
 	CmdWorktreeList                          = "worktree_list"
 	CmdWorktreeKeep                          = "worktree_keep"
 	CmdWorktreeSweepLog                      = "worktree_sweep_log"
@@ -402,6 +405,10 @@ const (
 	EventWorktreesUpdated                = "worktrees_updated"
 	EventWorktreeStateChanged            = "worktree_state_changed"
 	EventWorktreeSwept                   = "worktree_swept"
+	EventKeptConversationListResult      = "kept_conversation_list_result"
+	EventKeptConversationKeepResult      = "kept_conversation_keep_result"
+	EventKeptConversationForgetResult    = "kept_conversation_forget_result"
+	EventKeptConversationsChanged        = "kept_conversations_changed"
 	EventWorktreeListResult              = "worktree_list_result"
 	EventWorktreeKeepResult              = "worktree_keep_result"
 	EventWorktreeSweepLogResult          = "worktree_sweep_log_result"
@@ -1626,6 +1633,27 @@ func ParseMessage(data []byte) (string, interface{}, error) {
 
 	case CmdDeleteWorktree:
 		var msg DeleteWorktreeMessage
+		if err := json.Unmarshal(data, &msg); err != nil {
+			return "", nil, err
+		}
+		return peek.Cmd, &msg, nil
+
+	case CmdKeptConversationList:
+		var msg KeptConversationListMessage
+		if err := json.Unmarshal(data, &msg); err != nil {
+			return "", nil, err
+		}
+		return peek.Cmd, &msg, nil
+
+	case CmdKeptConversationKeep:
+		var msg KeptConversationKeepMessage
+		if err := json.Unmarshal(data, &msg); err != nil {
+			return "", nil, err
+		}
+		return peek.Cmd, &msg, nil
+
+	case CmdKeptConversationForget:
+		var msg KeptConversationForgetMessage
 		if err := json.Unmarshal(data, &msg); err != nil {
 			return "", nil, err
 		}

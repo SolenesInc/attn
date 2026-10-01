@@ -102,14 +102,24 @@ test.describe('LocationPicker', () => {
       try {
         await page.goto('/');
         await page.waitForSelector('.dashboard');
+        const cdp = await page.context().newCDPSession(page);
+        // Sixfold CPU throttling reproduced the first ArrowDown reaching the body.
+        await cdp.send('Emulation.setCPUThrottlingRate', { rate: 6 });
         await page.keyboard.press('Meta+t');
         await expect(page.locator('.location-picker-overlay')).toBeVisible();
 
         const input = page.locator('[data-testid="location-picker-path-input"]');
-        await input.focus();
         await page.keyboard.type(repo.repoPath);
+        await expect(input).toHaveValue(repo.repoPath);
         await page.keyboard.press('Enter');
 
+        await expect(page.locator('[data-testid="repo-options"]')).toBeVisible();
+        await page.keyboard.press('Escape');
+        await expect(input).toBeVisible();
+        await page.keyboard.press('ControlOrMeta+a');
+        await page.keyboard.type(repo.repoPath);
+        await expect(input).toHaveValue(repo.repoPath);
+        await page.keyboard.press('Enter');
         await expect(page.locator('[data-testid="repo-options"]')).toBeVisible();
         // The repo root lands on the create form; step into the destination list.
         await page.keyboard.press('ArrowDown');
@@ -148,7 +158,7 @@ test.describe('LocationPicker', () => {
         await expect(page.getByText('Start from feat-images')).toBeVisible();
 
         await page.locator('[data-testid="repo-new-worktree-input"]').focus();
-        await page.keyboard.press('Meta+a');
+        await page.keyboard.press('ControlOrMeta+a');
         await page.keyboard.type('feat-more');
         await page.keyboard.press('Enter');
 

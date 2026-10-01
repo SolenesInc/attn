@@ -208,6 +208,9 @@ func main() {
 	case "present":
 		maybePrintInstanceBanner()
 		runPresent()
+	case "conversation":
+		maybePrintInstanceBanner()
+		runConversation()
 	case "worktree":
 		maybePrintInstanceBanner()
 		runWorktree()
@@ -653,6 +656,7 @@ commands:
   pr <command>                      watch or inspect pull request readiness
   list                              list sessions and workspaces
   activity [clear <id>]             what each agent is doing right now
+  conversation <command>            list, keep forever or forget attn's conversation copies
   worktree <command>                every tracked worktree, the sweep and the keep pin
   present <command>                 open a review presentation and read feedback
   debug <command>                   probe debug artifacts (incidents, logs)

@@ -2789,6 +2789,12 @@ func (d *Daemon) handleConnection(conn net.Conn) {
 		d.handleCreateWorktree(conn, msg.(*protocol.CreateWorktreeMessage))
 	case protocol.CmdDeleteWorktree:
 		d.handleDeleteWorktree(conn, msg.(*protocol.DeleteWorktreeMessage))
+	case protocol.CmdKeptConversationList:
+		d.handleKeptConversationList(conn, msg.(*protocol.KeptConversationListMessage))
+	case protocol.CmdKeptConversationKeep:
+		d.handleKeptConversationKeep(conn, msg.(*protocol.KeptConversationKeepMessage))
+	case protocol.CmdKeptConversationForget:
+		d.handleKeptConversationForget(conn, msg.(*protocol.KeptConversationForgetMessage))
 	case protocol.CmdWorktreeList:
 		d.handleWorktreeList(conn, msg.(*protocol.WorktreeListMessage))
 	case protocol.CmdWorktreeKeep:

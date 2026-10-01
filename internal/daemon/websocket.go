@@ -1191,6 +1191,12 @@ func (d *Daemon) handleClientMessage(client *wsClient, data []byte) {
 		d.handleCreateWorktreeWS(client, msg.(*protocol.CreateWorktreeMessage))
 	case protocol.CmdDeleteWorktree:
 		d.handleDeleteWorktreeWS(client, msg.(*protocol.DeleteWorktreeMessage))
+	case protocol.CmdKeptConversationList:
+		d.handleKeptConversationListWS(client, msg.(*protocol.KeptConversationListMessage))
+	case protocol.CmdKeptConversationKeep:
+		d.handleKeptConversationKeepWS(client, msg.(*protocol.KeptConversationKeepMessage))
+	case protocol.CmdKeptConversationForget:
+		d.handleKeptConversationForgetWS(client, msg.(*protocol.KeptConversationForgetMessage))
 	case protocol.CmdWorktreeList:
 		d.handleWorktreeListWS(client, msg.(*protocol.WorktreeListMessage))
 	case protocol.CmdWorktreeKeep:

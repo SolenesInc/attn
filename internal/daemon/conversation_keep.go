@@ -78,8 +78,8 @@ func conversationArchive(agent, resumeID string) string {
 	return filepath.Join(config.ConversationsDir(), agent, resumeID+".tar.zst")
 }
 
-func (d *Daemon) referencedConversations() (map[conversationKey][]string, error) {
-	referenced := make(map[conversationKey][]string)
+func (d *Daemon) conversationSeedReferences() (map[conversationKey][]protocol.KeptConversationSeed, error) {
+	referenced := make(map[conversationKey][]protocol.KeptConversationSeed)
 	after := ""
 	for {
 		read, _, err := d.runDocQuery(docstore.Query{Namespace: garden.Namespace, Collection: garden.CollectionSeeds, Limit: docstore.MaxLimit, After: after})
@@ -107,13 +107,32 @@ func (d *Daemon) referencedConversations() (map[conversationKey][]string, error)
 				continue
 			}
 			key := conversationKey{entry.Agent, resumeID}
-			referenced[key] = append(referenced[key], entry.ID)
+			referenced[key] = append(referenced[key], protocol.KeptConversationSeed{ID: doc.ID, Slug: seed.StepSlug, Title: seed.Title})
 		}
 		if len(read.Documents) < docstore.MaxLimit {
 			return referenced, nil
 		}
 		after = read.Documents[len(read.Documents)-1].ID
 	}
+}
+
+func (d *Daemon) referencedConversations() (map[conversationKey]bool, error) {
+	seeds, err := d.conversationSeedReferences()
+	if err != nil {
+		return nil, err
+	}
+	referenced := make(map[conversationKey]bool, len(seeds))
+	for key := range seeds {
+		referenced[key] = true
+	}
+	pins, err := d.store.ConversationPins()
+	if err != nil {
+		return nil, err
+	}
+	for _, pin := range pins {
+		referenced[conversationKey{pin.Agent, pin.ResumeID}] = true
+	}
+	return referenced, nil
 }
 
 func (d *Daemon) keepConversations(now time.Time) {
@@ -225,7 +244,7 @@ func (d *Daemon) retireConversations(all []store.KeptConversation, liveFiles map
 				continue
 			}
 			key := conversationKey{kept.Agent, kept.ResumeID}
-			if len(referenced[key]) > 0 {
+			if referenced[key] {
 				if d.store.RetainKeptConversation(key.agent, key.resumeID) {
 					changed[key] = true
 				}
@@ -245,9 +264,11 @@ func (d *Daemon) retireConversations(all []store.KeptConversation, liveFiles map
 				d.logf("conversation keep: delete %s/%s: %v", key.agent, key.resumeID, err)
 				continue
 			}
-			if d.store.TombstoneKeptConversation(key.agent, key.resumeID, now) {
+			if err := d.store.TombstoneKeptConversation(key.agent, key.resumeID, now, "sweep"); err == nil {
 				changed[key] = true
 				delete(liveFiles, path)
+			} else {
+				d.logf("conversation keep: tombstone %s/%s: %v", key.agent, key.resumeID, err)
 			}
 		}
 		return nil
@@ -499,11 +520,30 @@ func (d *Daemon) keptConversationForSession(id string) *protocol.KeptConversatio
 	if !ok {
 		return nil
 	}
+	pins, err := d.store.ConversationPins()
+	if err != nil {
+		d.logf("conversation keep: read pins: %v", err)
+	}
+	return protocolKeptConversation(kept, pins)
+}
+
+func protocolKeptConversation(kept store.KeptConversation, pins []store.ConversationPin) *protocol.KeptConversation {
 	out := &protocol.KeptConversation{Bytes: int(kept.StoredBytes), CopiedAt: kept.CopiedAt.UTC().Format(time.RFC3339Nano)}
 	if !kept.DeletedAt.IsZero() {
 		out.DeletedAt = protocol.Ptr(kept.DeletedAt.UTC().Format(time.RFC3339Nano))
-	} else if !kept.ReleasedAt.IsZero() {
-		out.DeleteAfter = protocol.Ptr(kept.ReleasedAt.Add(conversationKeepGrace()).UTC().Format(time.RFC3339Nano))
+		if kept.DeletedBy != "" {
+			out.DeletedBy = protocol.Ptr(protocol.KeptConversationDeletedBy(kept.DeletedBy))
+		}
+	} else {
+		for _, pin := range pins {
+			if pin.Agent == kept.Agent && pin.ResumeID == kept.ResumeID {
+				out.PinnedAt = protocol.Ptr(pin.PinnedAt.UTC().Format(time.RFC3339Nano))
+				break
+			}
+		}
+		if out.PinnedAt == nil && !kept.ReleasedAt.IsZero() {
+			out.DeleteAfter = protocol.Ptr(kept.ReleasedAt.Add(conversationKeepGrace()).UTC().Format(time.RFC3339Nano))
+		}
 	}
 	return out
 }

@@ -34,8 +34,10 @@ describe('App kept conversation in the Garden reader', () => {
     [kept, 'conversation kept by attn (1.6 MB) while an open seed points at it'],
     [{ ...kept, bytes: 4_200 }, 'conversation kept by attn (4.2 KB) while an open seed points at it'],
     [{ ...kept, bytes: 42 }, 'conversation kept by attn (42 B) while an open seed points at it'],
+    [{ ...kept, pinned_at: '2026-10-01T12:00:00Z' }, 'conversation kept by attn (1.6 MB) forever; pinned'],
     [{ ...kept, delete_after: '2026-10-13T23:30:00Z' }, 'conversation kept by attn (1.6 MB) until 2026-10-13; replant to keep it'],
     [{ ...kept, delete_after: '2026-10-13T23:30:00Z', deleted_at: '2026-10-14T01:00:00Z' }, 'conversation attn deleted its copy on 2026-10-14'],
+    [{ ...kept, deleted_at: '2026-10-14T01:00:00Z', deleted_by: 'user' as const }, 'conversation you deleted attn’s copy on 2026-10-14'],
   ])('renders the daemon’s retention state: %j', async (kept_conversation, line) => {
     const { daemon } = await open({ ...seed, continuation: { ...seed.continuation!, kept_conversation } });
     expect(screen.getByText(line)).toBeInTheDocument();

@@ -79,3 +79,81 @@ func TestKeptConversationSurvivesDaemonRestartAndResumeRestoresIt(t *testing.T) 
 		t.Fatalf("restored transcript = %q, %v; want %q", got, err, original)
 	}
 }
+
+func TestConversationCLIListPinUnkeepAndForget(t *testing.T) {
+	s := testworld.NewStack(t, testworld.WithAgents(fakeagent.Claude))
+	s.Start()
+	cwd := s.Path("api")
+	if err := os.MkdirAll(cwd, 0700); err != nil {
+		t.Fatal(err)
+	}
+	delegated, err := s.Client().Delegate(protocol.DelegateMessage{
+		Cmd: protocol.CmdDelegate, RequestID: "conversation-cli", Cwd: cwd, Agent: protocol.Ptr("claude"),
+		Assignment: protocol.DelegateAssignment{Kind: protocol.DelegateAssignmentKindNew, Brief: protocol.Ptr("A small kept conversation")},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	first := s.Launched(delegated.SessionID)
+	first.Prompted()
+	app := s.App()
+
+	if result := s.Attn("conversation", "keep", delegated.SessionID); result.Code != 0 {
+		t.Fatalf("live pin: %+v", result)
+	}
+	testworld.AwaitTaskDone(app, "conversation_keep")
+	pending := s.Attn("conversation", "list")
+	if pending.Code != 0 || !strings.Contains(pending.Stdout, "0 kept · 0 B · 1 pending") || !strings.Contains(pending.Stdout, "copy once quiet") || !strings.Contains(pending.Stdout, first.ConversationID) {
+		t.Fatalf("pending list: %+v", pending)
+	}
+	if result := s.Attn("conversation", "unkeep", delegated.SessionID); result.Code != 0 {
+		t.Fatalf("live unpin: %+v", result)
+	}
+	testworld.AwaitTaskDone(app, "conversation_keep")
+	if result := s.Attn("agent", "close", delegated.SessionID, "-m", "done", "--source-session", delegated.SessionID); result.Code != 0 {
+		t.Fatalf("close: %+v", result)
+	}
+	testworld.AwaitTaskDone(app, "conversation_keep")
+	shown := s.Attn("seed", "show", delegated.SeedID)
+	if shown.Code != 0 || strings.Contains(shown.Stdout, "0.0 MB") || !strings.Contains(shown.Stdout, "kept by attn (") || !(strings.Contains(shown.Stdout, " B)") || strings.Contains(shown.Stdout, " KB)")) {
+		t.Fatalf("small archive display: %+v", shown)
+	}
+	for _, args := range [][]string{{"conversation", "keep", first.ConversationID}, {"conversation", "unkeep", delegated.SessionID}, {"conversation", "keep", delegated.SessionID}} {
+		if result := s.Attn(args...); result.Code != 0 {
+			t.Fatalf("%v: %+v", args, result)
+		}
+		testworld.AwaitTaskDone(app, "conversation_keep")
+	}
+	list := s.Attn("conversation", "list")
+	for _, want := range []string{"1 kept · ", "CONVERSATION", first.ConversationID, "claude", "pinned ", "open seed ", delegated.SeedID, delegated.SessionID} {
+		if list.Code != 0 || !strings.Contains(list.Stdout, want) {
+			t.Errorf("list missing %q: %+v", want, list)
+		}
+	}
+	if strings.Contains(list.Stdout, "0.0 MB") {
+		t.Fatalf("small list size rounded to zero: %+v", list)
+	}
+	refused := s.Attn("conversation", "forget", delegated.SessionID)
+	if refused.Code == 0 || !strings.Contains(refused.Stderr, delegated.SeedID) {
+		t.Fatalf("open seed forget: %+v", refused)
+	}
+	if result := s.Attn("seed", "wither", delegated.SeedID, "-m", "finished"); result.Code != 0 {
+		t.Fatalf("wither: %+v", result)
+	}
+	testworld.AwaitTaskDone(app, "conversation_keep")
+	if result := s.Attn("conversation", "forget", first.ConversationID); result.Code != 0 || !strings.Contains(result.Stdout, "Claude's own files are untouched") {
+		t.Fatalf("forget: %+v", result)
+	}
+	list = s.Attn("conversation", "list")
+	if list.Code != 0 || !strings.Contains(list.Stdout, "0 kept · 0 B") || strings.Contains(list.Stdout, first.ConversationID) {
+		t.Fatalf("live list: %+v", list)
+	}
+	all := s.Attn("conversation", "list", "--all")
+	if all.Code != 0 || !strings.Contains(all.Stdout, first.ConversationID) || !strings.Contains(all.Stdout, "you deleted ") {
+		t.Fatalf("tombstone list: %+v", all)
+	}
+	shown = s.Attn("seed", "show", delegated.SeedID)
+	if shown.Code != 0 || !strings.Contains(shown.Stdout, "you deleted attn's copy") {
+		t.Fatalf("seed user tombstone: %+v", shown)
+	}
+}

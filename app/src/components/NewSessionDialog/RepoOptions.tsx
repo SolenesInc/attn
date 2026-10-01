@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react';
+import React, { useState, useEffect, useLayoutEffect, useCallback, useMemo, useRef } from 'react';
 import { useEscapeStack } from '../../hooks/useEscapeStack';
 import { generateWorktreeName, isBranchAlreadyExistsError } from './worktreeNames';
 import './RepoOptions.css';
@@ -162,7 +162,9 @@ export const RepoOptions: React.FC<RepoOptionsProps> = ({
     setFocusIndex(committedDestinationIndex);
   }, [committedDestinationIndex]);
 
-  useEffect(() => {
+  // Move focus before paint so the first chooser key cannot reach the body
+  // after the path input unmounts.
+  useLayoutEffect(() => {
     if (pendingDeletePath) {
       rootRef.current?.focus();
       return;

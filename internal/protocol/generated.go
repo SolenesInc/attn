@@ -4756,6 +4756,161 @@ type KeptConversation struct {
 
 	// DeletedAt corresponds to the JSON schema field "deleted_at".
 	DeletedAt *string `json:"deleted_at,omitempty,omitzero"`
+
+	// DeletedBy corresponds to the JSON schema field "deleted_by".
+	DeletedBy *KeptConversationDeletedBy `json:"deleted_by,omitempty,omitzero"`
+
+	// PinnedAt corresponds to the JSON schema field "pinned_at".
+	PinnedAt *string `json:"pinned_at,omitempty,omitzero"`
+}
+
+type KeptConversationDeletedBy string
+
+const KeptConversationDeletedBySweep KeptConversationDeletedBy = "sweep"
+const KeptConversationDeletedByUser KeptConversationDeletedBy = "user"
+
+type KeptConversationForgetMessage struct {
+	// Cmd corresponds to the JSON schema field "cmd".
+	Cmd string `json:"cmd"`
+
+	// RequestID corresponds to the JSON schema field "request_id".
+	RequestID *string `json:"request_id,omitempty,omitzero"`
+
+	// SessionID corresponds to the JSON schema field "session_id".
+	SessionID string `json:"session_id"`
+}
+
+type KeptConversationForgetResultEvent struct {
+	// Error corresponds to the JSON schema field "error".
+	Error *string `json:"error,omitempty,omitzero"`
+
+	// Event corresponds to the JSON schema field "event".
+	Event string `json:"event"`
+
+	// RequestID corresponds to the JSON schema field "request_id".
+	RequestID *string `json:"request_id,omitempty,omitzero"`
+
+	// Success corresponds to the JSON schema field "success".
+	Success bool `json:"success"`
+}
+
+type KeptConversationKeepMessage struct {
+	// Cmd corresponds to the JSON schema field "cmd".
+	Cmd string `json:"cmd"`
+
+	// Keep corresponds to the JSON schema field "keep".
+	Keep bool `json:"keep"`
+
+	// RequestID corresponds to the JSON schema field "request_id".
+	RequestID *string `json:"request_id,omitempty,omitzero"`
+
+	// SessionID corresponds to the JSON schema field "session_id".
+	SessionID string `json:"session_id"`
+}
+
+type KeptConversationKeepResultEvent struct {
+	// Error corresponds to the JSON schema field "error".
+	Error *string `json:"error,omitempty,omitzero"`
+
+	// Event corresponds to the JSON schema field "event".
+	Event string `json:"event"`
+
+	// RequestID corresponds to the JSON schema field "request_id".
+	RequestID *string `json:"request_id,omitempty,omitzero"`
+
+	// Success corresponds to the JSON schema field "success".
+	Success bool `json:"success"`
+}
+
+type KeptConversationListMessage struct {
+	// Cmd corresponds to the JSON schema field "cmd".
+	Cmd string `json:"cmd"`
+
+	// IncludeDeleted corresponds to the JSON schema field "include_deleted".
+	IncludeDeleted *bool `json:"include_deleted,omitempty,omitzero"`
+
+	// RequestID corresponds to the JSON schema field "request_id".
+	RequestID *string `json:"request_id,omitempty,omitzero"`
+}
+
+type KeptConversationListResult struct {
+	// Count corresponds to the JSON schema field "count".
+	Count int `json:"count"`
+
+	// NextDeleteAfter corresponds to the JSON schema field "next_delete_after".
+	NextDeleteAfter *string `json:"next_delete_after,omitempty,omitzero"`
+
+	// PendingCount corresponds to the JSON schema field "pending_count".
+	PendingCount int `json:"pending_count"`
+
+	// Rows corresponds to the JSON schema field "rows".
+	Rows []KeptConversationRow `json:"rows"`
+
+	// StoredBytes corresponds to the JSON schema field "stored_bytes".
+	StoredBytes int `json:"stored_bytes"`
+}
+
+type KeptConversationListResultEvent struct {
+	// Error corresponds to the JSON schema field "error".
+	Error *string `json:"error,omitempty,omitzero"`
+
+	// Event corresponds to the JSON schema field "event".
+	Event string `json:"event"`
+
+	// KeptConversationListResult corresponds to the JSON schema field
+	// "kept_conversation_list_result".
+	KeptConversationListResult *KeptConversationListResult `json:"kept_conversation_list_result,omitempty,omitzero"`
+
+	// RequestID corresponds to the JSON schema field "request_id".
+	RequestID *string `json:"request_id,omitempty,omitzero"`
+
+	// Success corresponds to the JSON schema field "success".
+	Success bool `json:"success"`
+}
+
+type KeptConversationRow struct {
+	// Agent corresponds to the JSON schema field "agent".
+	Agent string `json:"agent"`
+
+	// Kept corresponds to the JSON schema field "kept".
+	Kept *KeptConversation `json:"kept,omitempty,omitzero"`
+
+	// PendingReason corresponds to the JSON schema field "pending_reason".
+	PendingReason *string `json:"pending_reason,omitempty,omitzero"`
+
+	// PinnedAt corresponds to the JSON schema field "pinned_at".
+	PinnedAt *string `json:"pinned_at,omitempty,omitzero"`
+
+	// ResumeID corresponds to the JSON schema field "resume_id".
+	ResumeID string `json:"resume_id"`
+
+	// Seeds corresponds to the JSON schema field "seeds".
+	Seeds []KeptConversationSeed `json:"seeds"`
+
+	// SessionIds corresponds to the JSON schema field "session_ids".
+	SessionIds []string `json:"session_ids"`
+
+	// SourceBytes corresponds to the JSON schema field "source_bytes".
+	SourceBytes *int `json:"source_bytes,omitempty,omitzero"`
+
+	// Title corresponds to the JSON schema field "title".
+	Title string `json:"title"`
+}
+
+type KeptConversationSeed struct {
+	// ID corresponds to the JSON schema field "id".
+	ID string `json:"id"`
+
+	// Slug corresponds to the JSON schema field "slug".
+	Slug string `json:"slug"`
+
+	// Title corresponds to the JSON schema field "title".
+	Title string `json:"title"`
+}
+
+type KeptConversationsChangedEvent struct {
+	// Event corresponds to the JSON schema field "event".
+	Event string `json:"event"`
 }
 
 type KillSessionMessage struct {
@@ -6943,6 +7098,10 @@ type Response struct {
 	// "journal_append_result".
 	JournalAppendResult *JournalAppendResult `json:"journal_append_result,omitempty,omitzero"`
 
+	// KeptConversationListResult corresponds to the JSON schema field
+	// "kept_conversation_list_result".
+	KeptConversationListResult *KeptConversationListResult `json:"kept_conversation_list_result,omitempty,omitzero"`
+
 	// NotebookEntries corresponds to the JSON schema field "notebook_entries".
 	NotebookEntries []NotebookEntry `json:"notebook_entries,omitempty,omitzero"`
 
@@ -8669,6 +8828,10 @@ type SessionLedgerEntry struct {
 	// CodexMode corresponds to the JSON schema field "codex_mode".
 	CodexMode *string `json:"codex_mode,omitempty,omitzero"`
 
+	// ConversationPinnedAt corresponds to the JSON schema field
+	// "conversation_pinned_at".
+	ConversationPinnedAt *string `json:"conversation_pinned_at,omitempty,omitzero"`
+
 	// Directory corresponds to the JSON schema field "directory".
 	Directory string `json:"directory"`
 
@@ -10369,6 +10532,10 @@ type WebSocketEvent struct {
 
 	// ID corresponds to the JSON schema field "id".
 	ID *string `json:"id,omitempty,omitzero"`
+
+	// KeptConversationListResult corresponds to the JSON schema field
+	// "kept_conversation_list_result".
+	KeptConversationListResult *KeptConversationListResult `json:"kept_conversation_list_result,omitempty,omitzero"`
 
 	// LastSeq corresponds to the JSON schema field "last_seq".
 	LastSeq *int `json:"last_seq,omitempty,omitzero"`

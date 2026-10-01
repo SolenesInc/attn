@@ -4750,11 +4750,80 @@ model SeedHarvestCondition {
   "checked_at"?: string;
 }
 
+model KeptConversationSeed {
+  id: string;
+  slug: string;
+  title: string;
+}
+model KeptConversationRow {
+  agent: string;
+  resume_id: string;
+  title: string;
+  session_ids: string[];
+  source_bytes?: safeint;
+  kept?: KeptConversation;
+  pinned_at?: string;
+  pending_reason?: string;
+  seeds: KeptConversationSeed[];
+}
+model KeptConversationListMessage {
+  cmd: "kept_conversation_list";
+  include_deleted?: boolean;
+  request_id?: string;
+}
+model KeptConversationListResult {
+  rows: KeptConversationRow[];
+  pending_count: int32;
+  count: int32;
+  stored_bytes: safeint;
+  next_delete_after?: string;
+}
+model KeptConversationKeepMessage {
+  cmd: "kept_conversation_keep";
+  session_id: string;
+  keep: boolean;
+  request_id?: string;
+}
+model KeptConversationForgetMessage {
+  cmd: "kept_conversation_forget";
+  session_id: string;
+  request_id?: string;
+}
+model KeptConversationListResultEvent {
+  event: "kept_conversation_list_result";
+  request_id?: string;
+  success: boolean;
+  error?: string;
+  kept_conversation_list_result?: KeptConversationListResult;
+}
+model KeptConversationKeepResultEvent {
+  event: "kept_conversation_keep_result";
+  request_id?: string;
+  success: boolean;
+  error?: string;
+}
+model KeptConversationForgetResultEvent {
+  event: "kept_conversation_forget_result";
+  request_id?: string;
+  success: boolean;
+  error?: string;
+}
+model KeptConversationsChangedEvent {
+  event: "kept_conversations_changed";
+}
+
+enum KeptConversationDeletedBy {
+ sweep,
+ user,
+}
+
 model KeptConversation {
  "bytes": safeint;
  "copied_at": string;
  "delete_after"?: string;
  "deleted_at"?: string;
+ "deleted_by"?: KeptConversationDeletedBy;
+ "pinned_at"?: string;
 }
 
 model SeedContinuation {
@@ -5886,6 +5955,7 @@ model Response {
   ticket_list_result?: TicketListResult;
   ticket_show_result?: TicketShowResult;
   activity_status_result?: ActivityStatusResult;
+  kept_conversation_list_result?: KeptConversationListResult;
   worktree_list_result?: WorktreeListResult;
   worktree_keep_result?: WorktreeKeepResult;
   worktree_sweep_log_result?: WorktreeSweepLogResult;
@@ -6487,6 +6557,7 @@ model SessionTranscriptResult {
 model SessionLedgerEntry {
   codex_mode?: string;
   id: string;
+  conversation_pinned_at?: string;
   label: string;
   agent: string;
   directory: string;
@@ -7091,6 +7162,7 @@ model WebSocketEvent {
   authors?: AuthorState[];
   worktrees?: Worktree[];
   sweep_entry?: WorktreeSweepEntry;
+  kept_conversation_list_result?: KeptConversationListResult;
   worktree_list_result?: WorktreeListResult;
   worktree_sweep_log_result?: WorktreeSweepLogResult;
   request_id?: string;
@@ -7221,6 +7293,10 @@ alias DaemonEvent =
   | WorktreeDeletedEvent
   | WorktreeStateChangedEvent
   | WorktreeSweptEvent
+  | KeptConversationListResultEvent
+  | KeptConversationKeepResultEvent
+  | KeptConversationForgetResultEvent
+  | KeptConversationsChangedEvent
   | WorktreeListResultEvent
   | WorktreeKeepResultEvent
   | WorktreeSweepLogResultEvent

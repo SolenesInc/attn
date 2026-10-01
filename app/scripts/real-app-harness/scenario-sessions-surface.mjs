@@ -320,6 +320,31 @@ async function main() {
       runner.writeText('session-list-repository.txt', listed);
     });
 
+    await runner.step('start_fresh_elsewhere_accepts_typing_and_returns_focus_on_escape', async () => {
+      fs.renameSync(other, `${other}-moved`);
+      await client.request('sessions_row_action', { sessionId: sessions.elsewhere, action: 'Reopen' });
+      await waitForSessions(client, (s) => rowFor(s, sessions.elsewhere)?.actions.includes('Start fresh elsewhere'),
+        'the missing directory to offer a fresh start elsewhere');
+      await client.request('sessions_row_action', { sessionId: sessions.elsewhere, action: 'Start fresh elsewhere' });
+
+      const picker = await client.request('location_picker_get_state');
+      runner.assert(picker.open && picker.title === 'Start fresh where?', 'the path chooser opens', { picker });
+      const focus = await client.request('dom_active_element');
+      runner.assert(focus.testId === 'location-picker-path-input', 'the path input owns focus', { focus });
+      runner.assert(focus.selectionStart === focus.valueLength, 'the caret starts at the end', { focus });
+      await driver.typeText('fresh-path');
+      const typed = await client.request('location_picker_get_state');
+      runner.assert(typed.pathInputValue === `${picker.pathInputValue}fresh-path`, 'typing reaches the path input', { picker, typed });
+      runner.writeJson('fresh-elsewhere-picker.json', { picker, focus, typed });
+      await driver.screenshot(path.join(runner.runDir, 'fresh-elsewhere-picker.png'));
+
+      await driver.pressKey('Escape');
+      const dismissed = await client.request('location_picker_get_state');
+      runner.assert(!dismissed.open, 'Escape closes the picker', { dismissed });
+      const returned = await client.request('dom_active_element', { selector: '.ledger-row' });
+      runner.assert(returned.matches, 'the ledger regains row focus', { returned });
+    });
+
     const summary = await runner.finishSuccess({ sessions, repo, other, openedRows: opened.rows.length });
     console.log('[RealAppHarness] The Sessions surface listed, filtered and updated in place.');
     console.log(JSON.stringify(summary, null, 2));

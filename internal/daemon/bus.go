@@ -266,6 +266,12 @@ func buildWireProjections() []projection {
 			apply:  func(d *Daemon, ev bus.Event) { d.projectWorkspaceLayoutRepublished(ev.Subject) },
 		},
 		{
+			filter: bus.Filter{factConversationKeptChanged},
+			apply: func(d *Daemon, _ bus.Event) {
+				d.wsHub.Broadcast(&protocol.WebSocketEvent{Event: protocol.EventKeptConversationsChanged})
+			},
+		},
+		{
 			filter: bus.Filter{"garden.seed.*", factConversationKeptChanged},
 			apply:  func(d *Daemon, _ bus.Event) { d.projectGardenSeeds() },
 		},
