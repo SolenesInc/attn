@@ -107,7 +107,7 @@ export function whatsNewSteps(resolve: (id: ShortcutId) => Binding | null): What
     {
       id: 'command-palette',
       title: 'Keep your hands on the keyboard',
-      body: 'Most of what attn can do is in the command palette: make a new desktop, switch profile, turn on the agent queue or auto-settle, open the notebook or the Garden. Each command shows its shortcut, so the palette is also where you pick them up.',
+      body: 'Most of what attn can do is in the command palette: make a new desktop, switch profile, turn on the agent queue or auto-settle, open the notebook or the Garden. Commands that have a shortcut show it, so the palette is also where you pick them up.',
       keys: key('Command palette', tokens('ui.commandPalette')),
       scene: <CommandPaletteScene press={press('ui.commandPalette')} />,
     },

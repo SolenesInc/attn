@@ -11,10 +11,7 @@ const whatsNew = () => screen.queryByRole('dialog', { name: "What's new" });
 const introBanner = () => screen.queryByTestId('intro-banner');
 const stepTitle = () => within(whatsNew()!).getByRole('heading', { level: 2 }).textContent;
 const stepKeys = () =>
-  Array.from(whatsNew()!.querySelectorAll('.whats-new-keys li'), (row) => [
-    row.querySelector('.key-combos')!.textContent,
-    row.querySelector('.whats-new-key-label')!.textContent,
-  ]);
+  within(within(whatsNew()!).getByRole('list')).getAllByRole('listitem').map((row) => row.textContent);
 
 async function launchAfterUpdate(settings: Record<string, string> = {}) {
   localStorage.setItem(WHATS_NEW_STORAGE_KEY, 'an-earlier-release');
@@ -96,7 +93,9 @@ describe('App what’s new', () => {
   });
 
   it('replays from the command palette, starting over', async () => {
-    const { daemon } = await renderApp();
+    const { daemon } = await launchAfterUpdate();
+    await press(daemon, 'ArrowRight');
+    await press(daemon, 'Escape');
     expect(whatsNew()).toBeNull();
 
     await gesture(daemon, () => pressShortcut('ui.commandPalette'));
@@ -111,36 +110,36 @@ describe('App what’s new', () => {
     const { daemon } = await launchAfterUpdate({
       keybindings_config: JSON.stringify({ version: 1, overrides: { 'profile.switch': { key: 'y', meta: true, alt: true } } }),
     });
-    expect(stepKeys()).toEqual([['⌘⌥Y', 'Switch profile']]);
+    expect(stepKeys()).toEqual(['⌘⌥YSwitch profile']);
     expect(screen.getByTestId('whats-new-scene-press')).toHaveTextContent('⌘⌥Y');
 
     await press(daemon, 'ArrowRight');
     await press(daemon, 'ArrowRight');
     expect(stepKeys()).toEqual([
-      ['⌘⇧⏎', 'Focus one pane'],
-      ['⌘⌥1–9', 'Move and follow'],
-      ['⌘⌥⇧1–9', 'Move and stay'],
+      '⌘⇧⏎Focus one pane',
+      '⌘⌥1–9Move and follow',
+      '⌘⌥⇧1–9Move and stay',
     ]);
     expect(screen.getByTestId('whats-new-scene-press')).toHaveTextContent('⌘⌥2');
 
     await press(daemon, 'ArrowRight');
     expect(stepKeys()).toEqual([
-      ['⌘⇧E', 'Settle'],
-      ['⌘↑/⌘↓', 'Step through the queue'],
-      ['⌘J', 'Next waiting agent'],
-      ['⌘⇧J', 'Next automation run'],
+      '⌘⇧ESettle',
+      '⌘↑/⌘↓Step through the queue',
+      '⌘JNext waiting agent',
+      '⌘⇧JNext automation run',
     ]);
   });
 
   it('names Linux keys on Linux', async () => {
     onTestFinished(stubNavigatorPlatform('Linux x86_64'));
     const { daemon } = await launchAfterUpdate();
-    expect(stepKeys()).toEqual([['CtrlAltU', 'Switch profile']]);
+    expect(stepKeys()).toEqual(['CtrlAltUSwitch profile']);
 
     await press(daemon, 'ArrowRight');
     expect(stepKeys()).toEqual([
-      ['CtrlShift1–9', 'Switch desktop'],
-      ['CtrlShiftG', 'See all desktops'],
+      'CtrlShift1–9Switch desktop',
+      'CtrlShiftGSee all desktops',
     ]);
   });
 

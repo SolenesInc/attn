@@ -277,25 +277,35 @@ export function ArrangeScene({ press }: { press: ScenePress | null }) {
   );
 }
 
+function QueueRail({ waiting, more }: { waiting: string[]; more: number }) {
+  const head = `${waiting.length} WAITING`;
+  const tail = `▸ ${more} MORE ${more === 1 ? 'AGENT' : 'AGENTS'}`;
+  const ruleFrom = (label: string) => 18 + label.length * 6.3 + 6;
+  const moreY = 62 + waiting.length * 20 + 6;
+  return (
+    <g>
+      <text className="wn-label" x="18" y="44">{head}</text>
+      <line className="wn-rule" x1={ruleFrom(head)} y1="41.5" x2="134" y2="41.5" />
+      {waiting.map((label, i) => (
+        <Row key={label} y={62 + i * 20} label={label} state="waiting" selected={i === 0} />
+      ))}
+      <text className="wn-label" x="18" y={moreY}>{tail}</text>
+      <line className="wn-rule" x1={ruleFrom(tail)} y1={moreY - 2.5} x2="134" y2={moreY - 2.5} />
+      <text className="wn-text wn-text--dim wn-text--small" x="18" y={moreY + 16}>{more} working</text>
+    </g>
+  );
+}
+
 export function QueueScene({ press }: { press: ScenePress | null }) {
   return (
-    <Scene label="Settling api takes it out of the waiting list and shows web, the next agent waiting" press={press}>
+    <Scene label="Settling api takes it off the waiting list and shows web, the next agent in the queue" press={press}>
       <Sidebar />
-      <text className="wn-label" x="18" y="44">WAITING</text>
       <Before>
-        <Row y={62} label="api" state="waiting" selected />
-        <Row y={82} label="web" state="waiting" />
-        <Row y={102} label="docs" state="waiting" />
-        <text className="wn-label" x="18" y="130">BUSY</text>
-        <Row y={148} label="tests" state="busy" />
+        <QueueRail waiting={['api', 'web', 'docs']} more={1} />
         <Pane x={150} y={38} w={352} h={194} label="api" state="waiting" active lines={7} ask="Opened the pull request. Anything else?" />
       </Before>
       <After>
-        <Row y={62} label="web" state="waiting" selected />
-        <Row y={82} label="docs" state="waiting" />
-        <text className="wn-label" x="18" y="110">BUSY</text>
-        <Row y={128} label="tests" state="busy" />
-        <Row y={148} label="api" state="idle" />
+        <QueueRail waiting={['web', 'docs']} more={2} />
         <Pane x={150} y={38} w={352} h={194} label="web" state="waiting" active lines={7} ask="Two tests fail on main. Fix them first?" />
       </After>
     </Scene>
@@ -307,12 +317,7 @@ export function QueueBarScene({ press }: { press: ScenePress | null }) {
     <Scene label="Hiding the queue sidebar folds it into a bar across the top of the window" press={press}>
       <Before>
         <Sidebar />
-        <text className="wn-label" x="18" y="44">WAITING</text>
-        <Row y={62} label="api" state="waiting" selected />
-        <Row y={82} label="web" state="waiting" />
-        <Row y={102} label="docs" state="waiting" />
-        <text className="wn-label" x="18" y="130">BUSY</text>
-        <Row y={148} label="tests" state="busy" />
+        <QueueRail waiting={['api', 'web', 'docs']} more={1} />
         <Chip x={16} y={226} number={1} current />
         <Chip x={36} y={226} number={2} />
         <Chip x={56} y={226} number={3} />

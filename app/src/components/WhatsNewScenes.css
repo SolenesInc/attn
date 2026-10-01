@@ -44,8 +44,8 @@
 }
 
 .wn-line {
-  fill: var(--color-text-dimmed);
-  opacity: 0.35;
+  fill: var(--color-text-muted);
+  opacity: 0.5;
 }
 
 .wn-rule {
@@ -62,7 +62,7 @@
 }
 
 .wn-text--dim {
-  fill: var(--color-text-dimmed);
+  fill: var(--color-text-tertiary);
 }
 
 .wn-text--ask {
@@ -71,7 +71,7 @@
 }
 
 .wn-label {
-  fill: var(--color-text-dimmed);
+  fill: var(--color-text-tertiary);
   font-size: 8.5px;
   font-weight: 700;
   letter-spacing: 0.08em;
@@ -254,6 +254,7 @@
   .wn-scene--late .wn-press,
   .wn-stage1,
   .wn-stage2,
+  .wn-stage1.wn-stage2,
   .wn-stage3 {
     animation: none;
   }

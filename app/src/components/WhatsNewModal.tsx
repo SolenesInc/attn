@@ -78,21 +78,23 @@ function WhatsNewTour({ onClose, onViewShortcuts }: Omit<WhatsNewModalProps, 'is
             </button>
           </div>
 
-          <section className="whats-new-step" key={step.id} aria-live="polite" data-testid={`whats-new-step-${step.id}`}>
-            {step.scene}
-            <h2>{step.title}</h2>
-            <p>{step.body}</p>
-            {step.keys.length > 0 && (
-              <ul className="whats-new-keys">
-                {step.keys.map((entry) => (
-                  <li key={entry.label}>
-                    <KeyCombos combos={entry.combos} />
-                    <span className="whats-new-key-label">{entry.label}</span>
-                  </li>
-                ))}
-              </ul>
-            )}
-          </section>
+          <div className="whats-new-live" aria-live="polite">
+            <section className="whats-new-step" key={step.id} data-testid={`whats-new-step-${step.id}`}>
+              {step.scene}
+              <h2>{step.title}</h2>
+              <p>{step.body}</p>
+              {step.keys.length > 0 && (
+                <ul className="whats-new-keys">
+                  {step.keys.map((entry) => (
+                    <li key={entry.label}>
+                      <KeyCombos combos={entry.combos} />
+                      <span className="whats-new-key-label">{entry.label}</span>
+                    </li>
+                  ))}
+                </ul>
+              )}
+            </section>
+          </div>
 
           <div className="whats-new-footer">
             <button className="whats-new-link" onClick={onViewShortcuts} type="button">
@@ -107,7 +109,10 @@ function WhatsNewTour({ onClose, onViewShortcuts }: Omit<WhatsNewModalProps, 'is
                   className={`whats-new-dot${i === index ? ' is-current' : ''}`}
                   aria-label={`Step ${i + 1}: ${entry.title}`}
                   aria-current={i === index ? 'step' : undefined}
-                  onClick={() => goTo(i)}
+                  onClick={() => {
+                    goTo(i);
+                    primaryRef.current?.focus();
+                  }}
                 />
               ))}
             </div>

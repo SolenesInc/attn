@@ -87,12 +87,19 @@
   background: rgba(255, 255, 255, 0.06);
 }
 
+.whats-new-live {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+}
+
 .whats-new-step {
   flex: 1;
   overflow-y: auto;
   padding: 12px 24px 4px;
-  /* Room for the longest step so the footer holds still while stepping. */
-  min-height: 430px;
+  /* Tallest step (queue) measured 459px at 600px wide; this keeps the footer still. */
+  min-height: 480px;
   animation: whats-new-step 180ms ease-out;
 }
 
@@ -177,7 +184,8 @@
   padding: 0;
   border: none;
   border-radius: 4px;
-  background: var(--color-border);
+  background: var(--color-text-tertiary);
+  opacity: 0.6;
   cursor: pointer;
   transition: width 160ms ease-out, background 160ms ease-out;
 }
@@ -185,6 +193,7 @@
 .whats-new-dot.is-current {
   width: 18px;
   background: var(--accent);
+  opacity: 1;
 }
 
 .whats-new-nav {
