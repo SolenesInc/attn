@@ -10,9 +10,7 @@ import {
 import {
   runShellCommandInPane,
   waitForFirstWorkspacePane,
-  waitForPaneAttached,
   waitForPaneShellReady,
-  waitForPaneVisible,
 } from './scenarioAssertions.mjs';
 import { delay } from './platform.mjs';
 import { UiAutomationClient } from './uiAutomationClient.mjs';
@@ -67,15 +65,6 @@ async function runInPane(client, pane, command, expected, timeoutMs = 30_000) {
   const output = await runShellCommandInPane(client, pane, command, expected, timeoutMs);
   await pace();
   return output;
-}
-
-// A pane folded behind a tile, or belonging to another session, has no live
-// text buffer until it is on screen.
-async function runInRevealedPane(client, pane, command, expected, timeoutMs = 30_000) {
-  await client.request('click_pane', pane);
-  await waitForPaneVisible(client, pane.sessionId, pane.paneId);
-  await waitForPaneAttached(client, pane.sessionId, pane.paneId);
-  return runInPane(client, pane, command, expected, timeoutMs);
 }
 
 async function waitForMessageNotification(client, pane, messageID, timeoutMs = 20_000) {
@@ -377,7 +366,7 @@ async function main() {
 
       const delegatePane = await waitForFirstWorkspacePane(client, delegated, 'the delegate’s pane', 20_000);
       const tender = { sessionId: delegated, paneId: delegatePane.paneId };
-      const read = await runInRevealedPane(client, tender,
+      const read = await runInPane(client, tender,
         `attn agent inbox ${messageID} --session ${delegated}`, STEER);
       runner.assert(saw(read, STEER),
         'only the tender the seed id resolved to can read the steer', { read, crown, delegated });
@@ -454,7 +443,7 @@ async function main() {
           { selector: '.workspace-dock-tile' })).pngBase64, 'base64'));
       await pace();
 
-      await runInRevealedPane(client, pane,
+      await runInPane(client, pane,
         `attn seed detach ${strayID} --path ${artifactPath} --repo harness-fixture -m "superseded" ` +
           `--session ${pane.sessionId}`, 'detached');
       const afterTile = await awaitTile(client, strayID, (state) => state.notes.some((note) => note.kind === 'detach'));

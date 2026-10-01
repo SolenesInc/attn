@@ -14,6 +14,9 @@ export function compactTerminalText(text) {
 }
 
 export async function runShellCommandInPane(client, pane, command, expected, timeoutMs = 30_000) {
+  await client.request('click_pane', pane);
+  await waitForPaneVisible(client, pane.sessionId, pane.paneId);
+  await waitForPaneAttached(client, pane.sessionId, pane.paneId);
   const framed = createPaneCommand(command);
   await client.request('write_pane', { ...pane, text: framed.text });
   const deadline = Date.now() + timeoutMs;
