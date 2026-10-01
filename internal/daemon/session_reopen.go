@@ -394,10 +394,14 @@ func (d *Daemon) reopenSessionProtected(
 ) (*sessionReopenOutcome, error) {
 	sessionID = strings.TrimSpace(sessionID)
 	if d.sharedCodexOwner(sessionID) {
-		if action != "" && action != protocol.SessionReopenActionReopen {
+		switch action {
+		case "", protocol.SessionReopenActionReopen:
+			return d.codexRuntime().attachOwner(sessionID, "")
+		case protocol.SessionReopenActionRecreateWorktreeAndReopen,
+			protocol.SessionReopenActionFetchRecreateAndReopen:
+		default:
 			return nil, fmt.Errorf("shared Codex history reopens with reopen; native New and fork create new owners")
 		}
-		return d.codexRuntime().attachOwner(sessionID)
 	}
 	if sessionID == "" {
 		return nil, fmt.Errorf("session_id is required")
@@ -501,6 +505,16 @@ func (d *Daemon) performReopenLocked(
 		return nil, fmt.Errorf("%q is not a reopen action", action)
 	}
 
+	if d.sharedCodexOwner(plan.SessionID) {
+		outcome, err := d.codexRuntime().attachOwner(plan.SessionID, plan.Directory)
+		if err != nil {
+			return nil, rollback.fail(protection, err)
+		}
+		rollback.abandon()
+		outcome.Action = action
+		outcome.WorktreeCreated = created
+		return outcome, nil
+	}
 	if created != "" && !plan.FreshConversation {
 		execution := verdict.Execution
 		execution.Cwd = plan.Directory

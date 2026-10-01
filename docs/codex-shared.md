@@ -98,6 +98,8 @@ Removing a view also removes its Unix socket after stopping its runtime.
 Archive is the native stop/unload operation; it does not require the TUI to exit
 or a `thread/closed` event. Ledger reopening unarchives the same native ID and
 preserves the Attn owner and history.
+When the saved worktree is missing, ledger recreation actions restore its branch
+through the normal worktree planner before attaching that same native owner.
 
 Worktree deletion identifies owners by their stored directory, so it can archive
 those roots even when a view has unknown foreground identity. It removes views

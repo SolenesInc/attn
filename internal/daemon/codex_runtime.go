@@ -146,11 +146,22 @@ func (r *codexRuntime) ensureServer(ctx context.Context, launch codexLaunchConte
 	var err error
 	for {
 		control, err = codexshared.Connect(r.d.life.Context(), r.socket(""), r.observeNative)
-		if !errors.Is(err, syscall.ECONNREFUSED) || alive {
+		if !errors.Is(err, syscall.ECONNREFUSED) && !errors.Is(err, os.ErrNotExist) {
 			break
 		}
+		if alive {
+			if provider, ok := r.d.ptyBackend.(ptybackend.SessionInfoProvider); ok {
+				info, err := provider.SessionInfo(ctx, codexServerRuntime)
+				if err != nil {
+					return err
+				}
+				if !info.Running {
+					return errors.New("shared Codex server exited before accepting connections")
+				}
+			}
+		}
 		// Stock 0.159.3 socket-to-handshake was <=24ms over five starts; 100ms
-		// matches worker startup polling. Retry only a refused, unopened transport.
+		// matches worker startup polling, including a surviving process still starting.
 		timer := time.NewTimer(100 * time.Millisecond)
 		select {
 		case <-ctx.Done():

@@ -531,6 +531,66 @@ func TestSharedCodexFailedReopenPreservesTheOriginalClose(t *testing.T) {
 	}
 }
 
+func TestSharedCodexRecreatesADeletedWorktreeAndReopensTheSameNativeHistory(t *testing.T) {
+	for _, remote := range []bool{false, true} {
+		t.Run(fmt.Sprintf("remote=%t", remote), func(t *testing.T) {
+			w := newWorld(t, fakeagent.Codex)
+			app, cli := w.App(), w.Client()
+			sharedCodexSetting(t, app, true)
+			repo := reopenRepoWithOrigin(t)
+			worktree := reopenWorktree(t, repo, "feat/shared-reopen")
+			cwd := worktree
+			id := w.Spawn(app, fakeagent.Codex, cwd)
+			original := w.Launched(id)
+			awaitSharedView(app, id, id)
+			app.TypeLine(id, "save this history")
+			original.Prompted()
+			original.Reply("saved reply <!-- attn:state=idle -->")
+			closeSession(t, cli, id, "done for now")
+			awaitClosed(app, id)
+			if remote {
+				runGit(t, cwd, "push", "-q", "-u", "origin", "feat/shared-reopen")
+			}
+			if err := os.RemoveAll(worktree); err != nil {
+				t.Fatal(err)
+			}
+			runGit(t, repo, "worktree", "prune")
+			action := protocol.SessionReopenActionRecreateWorktreeAndReopen
+			if remote {
+				runGit(t, repo, "branch", "-q", "-D", "feat/shared-reopen")
+				action = protocol.SessionReopenActionFetchRecreateAndReopen
+			}
+			if verdict := reopenVerdict(t, cli, id); !slices.Contains(verdict.Actions, action) {
+				t.Fatalf("recreation not offered: %+v", verdict)
+			}
+			reopened, err := cli.SessionReopen(client.SessionReopenOptions{SessionID: id, Action: string(action)})
+			if err != nil {
+				t.Fatal(err)
+			}
+			if reopened.SessionID != id || reopened.Directory != worktree || protocol.Deref(reopened.WorktreeCreated) != worktree {
+				t.Fatalf("reopened in wrong place or identity: %+v", reopened)
+			}
+			pane := testworld.Await(app, protocol.EventWorkspaceLayoutUpdated, func(e protocol.WorkspaceLayoutUpdatedMessage) bool {
+				return slices.ContainsFunc(e.WorkspaceLayout.Panes, func(p protocol.WorkspaceLayoutPane) bool {
+					return protocol.Deref(p.SessionID) == id && protocol.Deref(p.CodexResolution) == protocol.CodexViewResolutionResolved
+				})
+			})
+			for _, p := range pane.WorkspaceLayout.Panes {
+				if protocol.Deref(p.SessionID) == id {
+					app.AwaitScreen(protocol.Deref(p.RuntimeID), "Showing "+original.ConversationID)
+				}
+			}
+			if branch := strings.TrimSpace(runGit(t, worktree, "branch", "--show-current")); branch != "feat/shared-reopen" {
+				t.Fatalf("restored branch %q", branch)
+			}
+			page, err := cli.SessionList(client.SessionListOptions{})
+			if err != nil || len(page.Entries) != 1 || page.Entries[0].ID != id {
+				t.Fatalf("recreation duplicated owners: %+v %v", page, err)
+			}
+		})
+	}
+}
+
 func TestSharedCodexWorkspaceClosePreflightsTheProtectedOwner(t *testing.T) {
 	w := newWorld(t, fakeagent.Codex)
 	app, cli := w.App(), w.Client()

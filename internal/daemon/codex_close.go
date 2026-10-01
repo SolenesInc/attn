@@ -211,7 +211,7 @@ func (r *codexRuntime) removeLayoutView(runtimeID string) {
 	}
 }
 
-func (r *codexRuntime) attachOwner(id string) (outcome *sessionReopenOutcome, resultErr error) {
+func (r *codexRuntime) attachOwner(id, directory string) (outcome *sessionReopenOutcome, resultErr error) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	owner, err := r.d.store.CodexOwner(id)
@@ -229,8 +229,9 @@ func (r *codexRuntime) attachOwner(id string) (outcome *sessionReopenOutcome, re
 		return nil, err
 	}
 	attached, unarchived, reopened := false, false, false
+	directoryChanged := false
 	var closed store.SessionCloseRecord
-	var runtimeID, priorWorkspaceID string
+	var runtimeID, priorWorkspaceID, priorDirectory string
 	defer func() {
 		if attached {
 			return
@@ -245,6 +246,12 @@ func (r *codexRuntime) attachOwner(id string) (outcome *sessionReopenOutcome, re
 		}
 		if !reopened && priorWorkspaceID != "" {
 			r.d.associateSessionWithWorkspace(id, priorWorkspaceID)
+		}
+		if directoryChanged {
+			if session := r.d.store.Get(id); session != nil {
+				session.Directory = priorDirectory
+				resultErr = errors.Join(resultErr, r.d.store.AddChecked(session))
+			}
 		}
 		if reopened {
 			r.d.stopCodexTranscriptWatcherAndWait(id)
@@ -275,6 +282,10 @@ func (r *codexRuntime) attachOwner(id string) (outcome *sessionReopenOutcome, re
 		return nil, fmt.Errorf("codex owner %s is absent from ledger", id)
 	}
 	priorWorkspaceID = session.WorkspaceID
+	priorDirectory = session.Directory
+	if directory != "" {
+		session.Directory = directory
+	}
 	workspaceID := launch.WorkspaceID
 	if r.d.store.GetWorkspace(workspaceID) == nil {
 		workspaceID = reopenWorkspaceID(id)
@@ -316,8 +327,17 @@ func (r *codexRuntime) attachOwner(id string) (outcome *sessionReopenOutcome, re
 	if err := r.d.ptyBackend.Spawn(r.d.life.Context(), opts); err != nil {
 		return nil, err
 	}
-	if launch.WorkspaceID != workspaceID {
+	if session.Directory != priorDirectory {
+		updated := r.d.store.Get(id)
+		updated.Directory = session.Directory
+		if err := r.d.store.AddChecked(updated); err != nil {
+			return nil, err
+		}
+		directoryChanged = true
+	}
+	if launch.WorkspaceID != workspaceID || launch.CWD != session.Directory {
 		launch.WorkspaceID = workspaceID
+		launch.CWD = session.Directory
 		raw, err := json.Marshal(launch)
 		if err != nil {
 			return nil, err
