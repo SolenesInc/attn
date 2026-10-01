@@ -17,6 +17,7 @@ import { DaemonObserver } from './daemonObserver.mjs';
 import { assertFreshWorldTargetSafe } from './freshWorld.mjs';
 import { currentHarnessInstance, instanceCliEnv } from './harnessInstance.mjs';
 import { writeMockAgentFixture } from './mockAgent.mjs';
+import { captureScreenshotData } from './nativeWindowCapture.mjs';
 import { appDaemonInTree, createWindowDriver } from './platform.mjs';
 import { closeScenarioSessions, createScenarioRunner } from './scenarioRunner.mjs';
 import { sleep } from './scenarioAssertions.mjs';
@@ -338,7 +339,7 @@ async function main() {
       const typed = await client.request('location_picker_get_state');
       runner.assert(typed.pathInputValue === `${picker.pathInputValue}fresh-path`, 'typing reaches the path input', { picker, typed });
       runner.writeJson('fresh-elsewhere-picker.json', { picker, focus, typed });
-      await driver.screenshot(path.join(runner.runDir, 'fresh-elsewhere-picker.png'));
+      await captureScreenshotData(path.join(runner.runDir, 'fresh-elsewhere-picker.png'), { client });
 
       await driver.pressKey('Escape');
       const dismissed = await client.request('location_picker_get_state');
