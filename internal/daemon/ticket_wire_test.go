@@ -167,37 +167,34 @@ func TestEveryOpenTicketOfASessionThatDiesMidFlightCrashesAndSettledOnesStay(t *
 }
 
 func TestASessionThatJoinsTheCrewKeepsItsTicketThreadsWithoutReplayingThem(t *testing.T) {
-	inBubble(t, func(t *testing.T, w *world) {
+	inBubbleWithAgents(t, func(t *testing.T, w *world) {
 		w.finishStartupWork()
 		writeCrewCharter(t, w, "trellis")
 		w.restart()
-		cli := w.Client()
-		for _, day := range []string{"day-a", "day-b"} {
-			if err := cli.Register(day, day, w.Path(day)); err != nil {
-				t.Fatal(err)
-			}
-		}
-		createTicket(t, cli, "day-a", "Own thread", "own-thread")
-		commentOnTicket(t, cli, "day-a", "own-thread", "my own note")
+		app, cli := w.App(), w.Client()
+		dayA := w.Spawn(app, fakeagent.Claude, w.Path("day-a"))
+		dayB := w.Spawn(app, fakeagent.Claude, w.Path("day-b"))
+		createTicket(t, cli, dayA, "Own thread", "own-thread")
+		commentOnTicket(t, cli, dayA, "own-thread", "my own note")
 		createTicket(t, cli, "planner", "Watched", "watched")
-		for _, day := range []string{"day-a", "day-b"} {
+		for _, day := range []string{dayA, dayB} {
 			if _, err := cli.SubscribeTicket(day, "watched"); err != nil {
 				t.Fatal(err)
 			}
 		}
 		commentOnTicket(t, cli, "planner", "watched", "already read")
-		for _, day := range []string{"day-a", "day-b"} {
+		for _, day := range []string{dayA, dayB} {
 			if got := inboxLines(t, cli, day); !slices.Contains(got, "watched commented already read") {
 				t.Fatalf("before joining, %s was told %q", day, got)
 			}
 		}
 		commentOnTicket(t, cli, "planner", "own-thread", "while you were away")
 
-		if err := cli.RegisterAsMember("day-a", "day-a", w.Path("day-a"), "", "trellis"); err != nil {
+		if err := cli.RegisterAsMember(dayA, "day-a", w.Path("day-a"), "", "trellis"); err != nil {
 			t.Fatalf("join the crew as trellis: %v", err)
 		}
 
-		if got := inboxLines(t, cli, "day-a"); !slices.Equal(got, []string{"own-thread commented while you were away"}) {
+		if got := inboxLines(t, cli, dayA); !slices.Equal(got, []string{"own-thread commented while you were away"}) {
 			t.Errorf("after joining, the member was told %q, want only the unread comment from someone else", got)
 		}
 		if got := activityLines(showTicket(t, cli, "own-thread")); !slices.Equal(got, []string{
@@ -206,21 +203,21 @@ func TestASessionThatJoinsTheCrewKeepsItsTicketThreadsWithoutReplayingThem(t *te
 			t.Errorf("own-thread activity = %q, want the earlier note attributed to the member", got)
 		}
 		commentOnTicket(t, cli, "planner", "watched", "still following?")
-		if got := inboxLines(t, cli, "day-a"); !slices.Equal(got, []string{"watched commented still following?"}) {
+		if got := inboxLines(t, cli, dayA); !slices.Equal(got, []string{"watched commented still following?"}) {
 			t.Errorf("the member was told %q, want new activity on the ticket it followed", got)
 		}
 
-		if err := cli.Unregister("day-a"); err != nil {
+		if err := cli.Unregister(dayA); err != nil {
 			t.Fatal(err)
 		}
-		if err := cli.RegisterAsMember("day-b", "day-b", w.Path("day-b"), "", "trellis"); err != nil {
+		if err := cli.RegisterAsMember(dayB, "day-b", w.Path("day-b"), "", "trellis"); err != nil {
 			t.Fatalf("day-b wakes as trellis: %v", err)
 		}
-		if got := inboxLines(t, cli, "day-b"); len(got) != 0 {
+		if got := inboxLines(t, cli, dayB); len(got) != 0 {
 			t.Errorf("waking in a session that had read less replayed %q", got)
 		}
 		commentOnTicket(t, cli, "planner", "watched", "new day")
-		if got := inboxLines(t, cli, "day-b"); !slices.Equal(got, []string{"watched commented new day"}) {
+		if got := inboxLines(t, cli, dayB); !slices.Equal(got, []string{"watched commented new day"}) {
 			t.Errorf("the member's new session was told %q, want the new comment", got)
 		}
 	})
