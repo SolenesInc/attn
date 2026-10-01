@@ -75,6 +75,28 @@ interface DashboardProps {
   activityStaleMs?: number;
 }
 
+function IntroBanner({ banner }: { banner?: DashboardProps['introBanner'] }) {
+  if (!banner) return null;
+  return (
+    <div className="intro-banner" data-testid="intro-banner">
+      <span className="intro-banner-text">
+        <strong>New in attn:</strong> profiles, desktops, the agent queue and two palettes.
+      </span>
+      <button type="button" className="intro-banner-replay" onClick={banner.onReplay}>
+        Replay the intro
+      </button>
+      <button
+        type="button"
+        className="intro-banner-dismiss"
+        aria-label="Dismiss the intro banner"
+        onClick={banner.onDismiss}
+      >
+        ×
+      </button>
+    </div>
+  );
+}
+
 export function Dashboard({
   sessions,
   prs,
@@ -393,24 +415,7 @@ export function Dashboard({
         </button>
       </header>
 
-      {introBanner && (
-        <div className="intro-banner" data-testid="intro-banner">
-          <span className="intro-banner-text">
-            <strong>New in attn:</strong> profiles, desktops, the agent queue and two palettes.
-          </span>
-          <button type="button" className="intro-banner-replay" onClick={introBanner.onReplay}>
-            Replay the intro
-          </button>
-          <button
-            type="button"
-            className="intro-banner-dismiss"
-            aria-label="Dismiss the intro banner"
-            onClick={introBanner.onDismiss}
-          >
-            ×
-          </button>
-        </div>
-      )}
+      <IntroBanner banner={introBanner} />
 
       {/* Only in queue mode: only there does an agent stop wanting you without
           its state changing. */}
