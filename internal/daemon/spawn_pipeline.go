@@ -489,10 +489,7 @@ func (d *Daemon) commitSpawn(req *spawnRequest, plan *spawnPlan) *spawnOutcome {
 	if persistResumeID := agentdriver.SpawnResumeSessionID(req.driver, session.ID, req.resumeSessionID, protocol.Deref(msg.ResumePicker)); persistResumeID != "" {
 		d.persistResumeSessionID(session.ID, persistResumeID)
 	}
-	if err := d.store.ClearTicketReconciliationForAssignee(session.ID); err != nil {
-		d.logf("clear ticket reconciliation on spawn for %s: %v", session.ID, err)
-	}
-	d.reviveCrashedTicketsForSession(session.ID)
+
 	d.store.SetSessionLaunchedAt(session.ID, req.spawnStartedAt)
 	if !req.isShell {
 		d.startTranscriptWatcher(session.ID, session.Agent, session.Directory, req.spawnStartedAt)

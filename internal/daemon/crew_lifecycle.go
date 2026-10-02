@@ -7,9 +7,9 @@ import (
 	"sync"
 	"time"
 
-	"github.com/google/uuid"
 	"github.com/victorarias/attn/internal/crew"
 	"github.com/victorarias/attn/internal/docstore"
+	"github.com/victorarias/attn/internal/inbox"
 	"github.com/victorarias/attn/internal/jobs"
 	"github.com/victorarias/attn/internal/prompts"
 	"github.com/victorarias/attn/internal/protocol"
@@ -280,22 +280,20 @@ func (d *Daemon) actOnCrewMember(member crew.Member, sessionID string, action cr
 		d.logf("crew: warmed %s's context in session %s (cache estimated %s old against a %s assumption)",
 			crew.DisplayName(member.ID), sessionID, cache.Age.Round(time.Second), cache.TTL)
 	case crew.ActionSleep:
-		delivery, _, err := d.store.EnqueueMaintenancePromptOnce(
-			"crew-auto-sleep/"+uuid.NewString(),
-			sessionID,
-			member.ID,
-			"crew-auto-sleep",
-			crewSleepPrompt,
-			now,
-		)
+		session := d.store.Get(sessionID)
+		if session == nil {
+			return
+		}
+		generation := protocol.Deref(session.LastModelRequestAt)
+		receipt, err := d.sendToInbox(inbox.Item{ID: "crew-auto-sleep/" + sessionID + "/" + generation, To: inbox.ToSession(sessionID), Kind: inbox.Notice, Source: member.ID, Key: "crew-auto-sleep", Text: crewSleepPrompt})
 		if err != nil {
 			d.logf("crew: %s's sleep request could not be recorded: %v", crew.DisplayName(member.ID), err)
 			return
 		}
-		if err := d.deliverAgentMailboxItem(delivery); err != nil {
-			d.logf("crew: %s's sleep request is queued for session %s: %v", crew.DisplayName(member.ID), sessionID, err)
+		if !receipt.Rang {
 			return
 		}
+
 		d.logf("crew: asked %s to close its day — the user has been away and the cache is %s from lapsing",
 			crew.DisplayName(member.ID), cache.Remaining().Round(time.Second))
 	}

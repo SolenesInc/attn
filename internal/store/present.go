@@ -6,12 +6,13 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/victorarias/attn/internal/inbox"
 )
 
 type Presentation struct {
 	ID                   string
 	SessionID            string
-	TicketID             *string
+	To                   inbox.Address
 	Title                string
 	Kind                 string
 	RepoPath             string
@@ -45,7 +46,7 @@ type PresentationComment struct {
 	CreatedAt string
 }
 
-func (s *Store) CreatePresentation(sessionID string, ticketID *string, title, kind, repoPath string, now time.Time) (*Presentation, error) {
+func (s *Store) CreatePresentation(sessionID string, to inbox.Address, title, kind, repoPath string, now time.Time) (*Presentation, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
@@ -53,7 +54,7 @@ func (s *Store) CreatePresentation(sessionID string, ticketID *string, title, ki
 	p := &Presentation{
 		ID:        uuid.New().String(),
 		SessionID: sessionID,
-		TicketID:  ticketID,
+		To:        to,
 		Title:     title,
 		Kind:      kind,
 		RepoPath:  repoPath,
@@ -62,9 +63,9 @@ func (s *Store) CreatePresentation(sessionID string, ticketID *string, title, ki
 	}
 
 	_, err := s.db.Exec(`
-		INSERT INTO presentations (id, session_id, ticket_id, title, kind, repo_path, status, created_at)
+		INSERT INTO presentations (id, session_id, address, title, kind, repo_path, status, created_at)
 		VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-	`, p.ID, p.SessionID, p.TicketID, p.Title, p.Kind, p.RepoPath, p.Status, p.CreatedAt)
+	`, p.ID, p.SessionID, p.To.String(), p.Title, p.Kind, p.RepoPath, p.Status, p.CreatedAt)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create presentation: %w", err)
 	}
@@ -137,23 +138,23 @@ func (s *Store) GetPresentation(id string) (*Presentation, error) {
 
 func (s *Store) getPresentationLocked(id string) (*Presentation, error) {
 	var p Presentation
-	var ticketID sql.NullString
+	var address string
 
 	err := s.db.QueryRow(`
-		SELECT id, session_id, ticket_id, title, kind, repo_path, status, created_at
+		SELECT id, session_id, address, title, kind, repo_path, status, created_at
 		FROM presentations WHERE id = ?
-	`, id).Scan(&p.ID, &p.SessionID, &ticketID, &p.Title, &p.Kind, &p.RepoPath, &p.Status, &p.CreatedAt)
+	`, id).Scan(&p.ID, &p.SessionID, &address, &p.Title, &p.Kind, &p.RepoPath, &p.Status, &p.CreatedAt)
 	if err != nil {
 		if err == sql.ErrNoRows {
 			return nil, err
 		}
 		return nil, fmt.Errorf("failed to get presentation: %w", err)
 	}
-	if ticketID.Valid {
-		t := ticketID.String
-		p.TicketID = &t
-	}
 
+	p.To, err = inbox.ParseAddress(address)
+	if err != nil {
+		return nil, err
+	}
 	if err := s.enrichLatestRound(&p); err != nil {
 		return nil, err
 	}
@@ -185,7 +186,7 @@ func (s *Store) ListPresentations() ([]*Presentation, error) {
 	defer s.mu.RUnlock()
 
 	rows, err := s.db.Query(`
-		SELECT id, session_id, ticket_id, title, kind, repo_path, status, created_at
+		SELECT id, session_id, address, title, kind, repo_path, status, created_at
 		FROM presentations ORDER BY created_at DESC
 	`)
 	if err != nil {
@@ -196,13 +197,13 @@ func (s *Store) ListPresentations() ([]*Presentation, error) {
 	var result []*Presentation
 	for rows.Next() {
 		var p Presentation
-		var ticketID sql.NullString
-		if err := rows.Scan(&p.ID, &p.SessionID, &ticketID, &p.Title, &p.Kind, &p.RepoPath, &p.Status, &p.CreatedAt); err != nil {
+		var address string
+		if err := rows.Scan(&p.ID, &p.SessionID, &address, &p.Title, &p.Kind, &p.RepoPath, &p.Status, &p.CreatedAt); err != nil {
 			return nil, fmt.Errorf("failed to scan presentation: %w", err)
 		}
-		if ticketID.Valid {
-			t := ticketID.String
-			p.TicketID = &t
+		p.To, err = inbox.ParseAddress(address)
+		if err != nil {
+			return nil, err
 		}
 		result = append(result, &p)
 	}

@@ -16,7 +16,7 @@ func parseOptionalAutomationTime(value string) *time.Time {
 	if value == "" {
 		return nil
 	}
-	parsed := parseTicketTime(value)
+	parsed := parseStoredTime(value)
 	return &parsed
 }
 
@@ -210,7 +210,7 @@ func (s *Store) UpsertAutomationDefinition(id, name, specJSON string, now time.T
 	switch err {
 	case sql.ErrNoRows:
 		revision = 1
-		_, err = tx.Exec(`INSERT INTO automation_definitions(id,name,enabled,revision,spec_json,created_at,updated_at,deleted_at) VALUES(?,?,?,?,?,?,?,'')`, id, name, enabled, revision, specJSON, formatTicketTime(now), formatTicketTime(now))
+		_, err = tx.Exec(`INSERT INTO automation_definitions(id,name,enabled,revision,spec_json,created_at,updated_at,deleted_at) VALUES(?,?,?,?,?,?,?,'')`, id, name, enabled, revision, specJSON, formatStoredTime(now), formatStoredTime(now))
 	case nil:
 		wasDeleted := deletedAt != ""
 		if wasDeleted {
@@ -221,7 +221,7 @@ func (s *Store) UpsertAutomationDefinition(id, name, specJSON string, now time.T
 				revision++
 			}
 		}
-		_, err = tx.Exec(`UPDATE automation_definitions SET name=?, enabled=?, revision=?, spec_json=?, updated_at=?, deleted_at='' WHERE id=?`, name, enabled, revision, specJSON, formatTicketTime(now), id)
+		_, err = tx.Exec(`UPDATE automation_definitions SET name=?, enabled=?, revision=?, spec_json=?, updated_at=?, deleted_at='' WHERE id=?`, name, enabled, revision, specJSON, formatStoredTime(now), id)
 		activation = wasDeleted
 	}
 	if err != nil {
@@ -245,7 +245,7 @@ func (s *Store) UpsertAutomationDefinition(id, name, specJSON string, now time.T
 }
 
 func activateAutomationReviewRequestsTx(tx *sql.Tx, definitionID string, now time.Time) error {
-	if _, err := tx.Exec(`UPDATE automation_review_request_edges SET active=0,updated_at=? WHERE definition_id=?`, formatTicketTime(now), definitionID); err != nil {
+	if _, err := tx.Exec(`UPDATE automation_review_request_edges SET active=0,updated_at=? WHERE definition_id=?`, formatStoredTime(now), definitionID); err != nil {
 		return err
 	}
 	if _, err := tx.Exec(`DELETE FROM automation_provider_cursors WHERE definition_id=? AND provider='github_review_requested' AND scope<>'*'`, definitionID); err != nil {
@@ -292,7 +292,7 @@ func (s *Store) SetAutomationEnabled(id string, enabled bool, now time.Time) (*A
 		def, getErr := s.GetAutomationDefinition(id)
 		return def, false, getErr
 	}
-	if _, err := tx.Exec(`UPDATE automation_definitions SET enabled=?, updated_at=? WHERE id=?`, enabled, formatTicketTime(now), id); err != nil {
+	if _, err := tx.Exec(`UPDATE automation_definitions SET enabled=?, updated_at=? WHERE id=?`, enabled, formatStoredTime(now), id); err != nil {
 		return nil, false, err
 	}
 	if enabled {
@@ -317,8 +317,8 @@ func scanAutomationDefinition(scanner interface{ Scan(...any) error }) (*Automat
 		return nil, err
 	}
 	d.Enabled = enabled != 0
-	d.CreatedAt = parseTicketTime(created)
-	d.UpdatedAt = parseTicketTime(updated)
+	d.CreatedAt = parseStoredTime(created)
+	d.UpdatedAt = parseStoredTime(updated)
 	d.DeletedAt = parseOptionalAutomationTime(deleted)
 	return &d, nil
 }
@@ -358,8 +358,8 @@ func scanAutomationContinuityBinding(scanner interface{ Scan(...any) error }) (*
 		return nil, err
 	}
 	b.ReleasedAt = parseOptionalAutomationTime(releasedAt)
-	b.CreatedAt = parseTicketTime(created)
-	b.UpdatedAt = parseTicketTime(updated)
+	b.CreatedAt = parseStoredTime(created)
+	b.UpdatedAt = parseStoredTime(updated)
 	return &b, nil
 }
 
@@ -398,7 +398,7 @@ func (s *Store) ReleaseAutomationContinuityBinding(definitionID, continuityKey, 
 	}
 	_, err := s.db.Exec(
 		`UPDATE automation_continuity_bindings SET status=?,released_reason=?,released_at=?,updated_at=? WHERE definition_id=? AND continuity_key=? AND status=?`,
-		AutomationBindingStatusReleased, reason, formatTicketTime(now), formatTicketTime(now), definitionID, continuityKey, AutomationBindingStatusActive,
+		AutomationBindingStatusReleased, reason, formatStoredTime(now), formatStoredTime(now), definitionID, continuityKey, AutomationBindingStatusActive,
 	)
 	return err
 }
@@ -411,7 +411,7 @@ func (s *Store) ReleaseAutomationContinuityBindings(definitionID, reason string,
 	}
 	_, err := s.db.Exec(
 		`UPDATE automation_continuity_bindings SET status=?,released_reason=?,released_at=?,updated_at=? WHERE definition_id=? AND status=?`,
-		AutomationBindingStatusReleased, reason, formatTicketTime(now), formatTicketTime(now), definitionID, AutomationBindingStatusActive,
+		AutomationBindingStatusReleased, reason, formatStoredTime(now), formatStoredTime(now), definitionID, AutomationBindingStatusActive,
 	)
 	return err
 }
@@ -437,7 +437,7 @@ func getOrCreateActiveAutomationContinuityBindingTx(tx *sql.Tx, definitionID, co
 	).Scan(&ids.SeedID, &ids.SessionID, &ids.WorkspaceID, &ids.PaneID, &createdAt, &updatedAt)
 	switch err {
 	case sql.ErrNoRows:
-		nowRaw := formatTicketTime(now)
+		nowRaw := formatStoredTime(now)
 		_, err = tx.Exec(
 			`INSERT INTO automation_continuity_bindings(id,definition_id,continuity_key,seed_id,origin_run_id,ticket_id,session_id,workspace_id,pane_id,status,created_at,updated_at) VALUES(?,?,?,?,?,'',?,?,?,?,?,?)`,
 			uuid.NewString(), definitionID, continuityKey, ids.SeedID, ids.RunID, ids.SessionID, ids.WorkspaceID, ids.PaneID, AutomationBindingStatusActive, nowRaw, nowRaw,
@@ -473,7 +473,7 @@ func (s *Store) DeactivateAutomationReviewRequestEdges(definitionID string, now 
 	if s.db == nil {
 		return errors.New("automation persistence unavailable")
 	}
-	_, err := s.db.Exec(`UPDATE automation_review_request_edges SET active=0,updated_at=? WHERE definition_id=?`, formatTicketTime(now), definitionID)
+	_, err := s.db.Exec(`UPDATE automation_review_request_edges SET active=0,updated_at=? WHERE definition_id=?`, formatStoredTime(now), definitionID)
 	return err
 }
 
@@ -500,7 +500,7 @@ func (s *Store) DeleteAutomationDefinition(id string, now time.Time) error {
 	if s.db == nil {
 		return errors.New("automation persistence unavailable")
 	}
-	res, err := s.db.Exec(`UPDATE automation_definitions SET deleted_at=?, updated_at=? WHERE id=? AND deleted_at=''`, formatTicketTime(now), formatTicketTime(now), id)
+	res, err := s.db.Exec(`UPDATE automation_definitions SET deleted_at=?, updated_at=? WHERE id=? AND deleted_at=''`, formatStoredTime(now), formatStoredTime(now), id)
 	if err != nil {
 		return err
 	}
@@ -591,7 +591,7 @@ func (s *Store) ClaimManualAutomationRun(definitionID, requestID, subjectKey, pa
 	if enabled == 0 {
 		return nil, false, fmt.Errorf("automation %q is disabled", definitionID)
 	}
-	now := formatTicketTime(observedAt)
+	now := formatStoredTime(observedAt)
 	if _, err = tx.Exec(`INSERT INTO automation_occurrences(id,definition_id,provider,occurrence_key,subject_key,observed_at,payload_json,created_at) VALUES(?,?, 'manual',?,?,?,?,?)`, ids.OccurrenceID, definitionID, key, subjectKey, now, payloadJSON, now); err != nil {
 		return nil, false, err
 	}
@@ -649,7 +649,7 @@ func (s *Store) ClaimScheduledAutomationRun(definitionID, occurrenceKey, continu
 			return nil, false, err
 		}
 	}
-	now := formatTicketTime(observedAt)
+	now := formatStoredTime(observedAt)
 	if _, err = tx.Exec(`INSERT INTO automation_occurrences(id,definition_id,provider,occurrence_key,subject_key,observed_at,payload_json,created_at) VALUES(?,?, 'schedule',?,?,?,?,?)`, ids.OccurrenceID, definitionID, occurrenceKey, continuityKey, now, payloadJSON, now); err != nil {
 		return nil, false, err
 	}
@@ -714,7 +714,7 @@ func (s *Store) ReconcileAutomationReviewRequestHeads(definitionID, host string,
 	}
 	defer tx.Rollback()
 	observedRaw := observedAt.UTC().Format(sortableTimeFormat)
-	updatedRaw := formatTicketTime(observedAt)
+	updatedRaw := formatStoredTime(observedAt)
 	var enableFenceRaw string
 	err = tx.QueryRow(`SELECT observed_at FROM automation_provider_cursors WHERE definition_id=? AND provider='github_review_requested' AND scope='*'`, definitionID).Scan(&enableFenceRaw)
 	if err == nil {
@@ -958,7 +958,7 @@ func (s *Store) ClaimGitHubReviewAutomationRun(definitionID, subjectKey string, 
 	if err := getOrCreateActiveAutomationContinuityBindingTx(tx, definitionID, subjectKey, &ids, observedAt); err != nil {
 		return nil, false, err
 	}
-	now := formatTicketTime(observedAt)
+	now := formatStoredTime(observedAt)
 	if _, err = tx.Exec(`INSERT INTO automation_occurrences(id,definition_id,provider,occurrence_key,subject_key,observed_at,payload_json,created_at) VALUES(?,?, 'github',?,?,?,?,?)`, ids.OccurrenceID, definitionID, occurrenceKey, subjectKey, now, payloadJSON, now); err != nil {
 		return nil, false, err
 	}
@@ -979,8 +979,8 @@ func scanAutomationRun(scanner interface{ Scan(...any) error }) (*AutomationRun,
 	if err != nil {
 		return nil, err
 	}
-	r.CreatedAt = parseTicketTime(created)
-	r.UpdatedAt = parseTicketTime(updated)
+	r.CreatedAt = parseStoredTime(created)
+	r.UpdatedAt = parseStoredTime(updated)
 	r.DeliveredAt = parseOptionalAutomationTime(delivered)
 	return &r, nil
 }
@@ -1076,8 +1076,8 @@ func (s *Store) ListAutomationRunsWithOccurrenceKeys(definitionID string, limit 
 		if err := rows.Scan(&r.ID, &r.DefinitionID, &r.OccurrenceID, &r.DefinitionRevision, &r.SnapshotJSON, &r.State, &r.CancelReason, &r.Attempts, &r.LastError, &r.SeedID, &r.LegacyTicketID, &r.SessionID, &r.WorkspaceID, &r.PaneID, &r.ResolvedLocationJSON, &created, &updated, &delivered, &occurrenceKey, &provenance.DefinitionName, &provenance.DefinitionSpecJSON, &provenance.Provider, &provenance.SubjectKey, &provenance.PayloadJSON); err != nil {
 			return nil, err
 		}
-		r.CreatedAt = parseTicketTime(created)
-		r.UpdatedAt = parseTicketTime(updated)
+		r.CreatedAt = parseStoredTime(created)
+		r.UpdatedAt = parseStoredTime(updated)
 		r.DeliveredAt = parseOptionalAutomationTime(delivered)
 		provenance.RunID = r.ID
 		provenance.DefinitionID = r.DefinitionID
@@ -1122,8 +1122,8 @@ func (s *Store) LatestAutomationRunPerDefinition() (map[string]AutomationRunWith
 		if err := rows.Scan(&r.ID, &r.DefinitionID, &r.OccurrenceID, &r.DefinitionRevision, &r.SnapshotJSON, &r.State, &r.CancelReason, &r.Attempts, &r.LastError, &r.SeedID, &r.LegacyTicketID, &r.SessionID, &r.WorkspaceID, &r.PaneID, &r.ResolvedLocationJSON, &created, &updated, &delivered, &occurrenceKey, &provenance.DefinitionName, &provenance.DefinitionSpecJSON, &provenance.Provider, &provenance.SubjectKey, &provenance.PayloadJSON); err != nil {
 			return nil, err
 		}
-		r.CreatedAt = parseTicketTime(created)
-		r.UpdatedAt = parseTicketTime(updated)
+		r.CreatedAt = parseStoredTime(created)
+		r.UpdatedAt = parseStoredTime(updated)
 		r.DeliveredAt = parseOptionalAutomationTime(delivered)
 		provenance.RunID = r.ID
 		provenance.DefinitionID = r.DefinitionID
@@ -1152,10 +1152,9 @@ func (s *Store) ListLatestAutomationProvenanceRecords() ([]AutomationProvenanceR
 			SELECT id FROM (
 				SELECT id,
 					ROW_NUMBER() OVER (PARTITION BY session_id ORDER BY created_at DESC,id DESC) AS session_rank,
-					ROW_NUMBER() OVER (PARTITION BY seed_id ORDER BY created_at DESC,id DESC) AS seed_rank,
-					ROW_NUMBER() OVER (PARTITION BY ticket_id ORDER BY created_at DESC,id DESC) AS ticket_rank
+					ROW_NUMBER() OVER (PARTITION BY seed_id ORDER BY created_at DESC,id DESC) AS seed_rank
 				FROM automation_runs
-			) WHERE session_rank=1 OR seed_rank=1 OR (ticket_id<>'' AND ticket_rank=1)
+			) WHERE session_rank=1 OR seed_rank=1
 		)
 		ORDER BY r.created_at DESC,r.id DESC
 	`)
@@ -1170,7 +1169,7 @@ func (s *Store) ListLatestAutomationProvenanceRecords() ([]AutomationProvenanceR
 		if err := rows.Scan(&record.RunID, &record.DefinitionID, &record.DefinitionName, &record.DefinitionSpecJSON, &record.SessionID, &record.SeedID, &record.TicketID, &record.Provider, &record.SubjectKey, &record.PayloadJSON, &created); err != nil {
 			return nil, err
 		}
-		record.CreatedAt = parseTicketTime(created)
+		record.CreatedAt = parseStoredTime(created)
 		out = append(out, record)
 	}
 	return out, rows.Err()
@@ -1198,7 +1197,7 @@ func (s *Store) GetAutomationProvenanceRecord(runID string) (*AutomationProvenan
 	if err != nil {
 		return nil, err
 	}
-	record.CreatedAt = parseTicketTime(created)
+	record.CreatedAt = parseStoredTime(created)
 	return &record, nil
 }
 
@@ -1208,10 +1207,6 @@ func (s *Store) GetLatestAutomationProvenanceRecordForSession(sessionID string) 
 
 func (s *Store) GetLatestAutomationProvenanceRecordForSeed(seedID string) (*AutomationProvenanceRecord, error) {
 	return s.getLatestAutomationProvenanceRecord(`r.seed_id=?`, seedID)
-}
-
-func (s *Store) GetLatestAutomationProvenanceRecordForTicket(ticketID string) (*AutomationProvenanceRecord, error) {
-	return s.getLatestAutomationProvenanceRecord(`r.ticket_id=?`, ticketID)
 }
 
 func (s *Store) getLatestAutomationProvenanceRecord(where, id string) (*AutomationProvenanceRecord, error) {
@@ -1238,7 +1233,7 @@ func (s *Store) getLatestAutomationProvenanceRecord(where, id string) (*Automati
 	if err != nil {
 		return nil, err
 	}
-	record.CreatedAt = parseTicketTime(created)
+	record.CreatedAt = parseStoredTime(created)
 	return &record, nil
 }
 
@@ -1276,7 +1271,7 @@ func (s *Store) MarkAutomationRunDeliveredWithEvent(
 		return 0, false, err
 	}
 	defer func() { _ = tx.Rollback() }()
-	stamp := formatTicketTime(now)
+	stamp := formatStoredTime(now)
 	result, err := tx.Exec(`
 		UPDATE automation_runs
 		SET state=?, last_error='', resolved_location_json=?, updated_at=?, delivered_at=?
@@ -1328,7 +1323,7 @@ func (s *Store) MarkAutomationRunDeliveredWithEvent(
 func (s *Store) MarkAutomationRunFailed(id, message string, now time.Time) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	_, e := s.db.Exec(`UPDATE automation_runs SET state=?,last_error=?,updated_at=? WHERE id=?`, AutomationRunStateFailed, message, formatTicketTime(now), id)
+	_, e := s.db.Exec(`UPDATE automation_runs SET state=?,last_error=?,updated_at=? WHERE id=?`, AutomationRunStateFailed, message, formatStoredTime(now), id)
 	return e
 }
 
@@ -1338,7 +1333,7 @@ func (s *Store) MarkAutomationRunCancelled(id, reason string, now time.Time) err
 	if s.db == nil {
 		return errors.New("automation persistence unavailable")
 	}
-	_, err := s.db.Exec(`UPDATE automation_runs SET state=?,cancel_reason=?,updated_at=? WHERE id=?`, AutomationRunStateCancelled, reason, formatTicketTime(now), id)
+	_, err := s.db.Exec(`UPDATE automation_runs SET state=?,cancel_reason=?,updated_at=? WHERE id=?`, AutomationRunStateCancelled, reason, formatStoredTime(now), id)
 	return err
 }
 
@@ -1360,7 +1355,7 @@ func (s *Store) ListPrunableAutomationRuns(definitionID string, keep int, olderT
 			WHERE status=? AND origin_run_id <> ''
 		  )
 		ORDER BY created_at
-	`, definitionID, AutomationRunStateDelivered, AutomationRunStateFailed, AutomationRunStateCancelled, formatTicketTime(olderThan), definitionID, keep, AutomationBindingStatusActive)
+	`, definitionID, AutomationRunStateDelivered, AutomationRunStateFailed, AutomationRunStateCancelled, formatStoredTime(olderThan), definitionID, keep, AutomationBindingStatusActive)
 	if err != nil {
 		return nil, err
 	}
@@ -1461,7 +1456,7 @@ func (s *Store) GetAutomationOccurrence(id string) (*AutomationOccurrence, error
 	if err != nil {
 		return nil, err
 	}
-	occurrence.ObservedAt = parseTicketTime(observedAt)
-	occurrence.CreatedAt = parseTicketTime(createdAt)
+	occurrence.ObservedAt = parseStoredTime(observedAt)
+	occurrence.CreatedAt = parseStoredTime(createdAt)
 	return &occurrence, nil
 }

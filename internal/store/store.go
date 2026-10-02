@@ -461,8 +461,6 @@ func (s *Store) Get(id string) *protocol.Session {
 
 var sessionOwnedTables = []string{
 	"session_annotation_drafts",
-	"session_pull_requests",
-	"pull_request_watches",
 	"session_exit_screens",
 }
 
@@ -486,6 +484,12 @@ func (s *Store) Remove(id string) {
 	_, err := s.db.Exec("DELETE FROM sessions WHERE id = ?", id)
 	if err != nil {
 		log.Printf("[store] Remove: failed for session %s: %v", id, err)
+	}
+	if _, err := s.db.Exec(`DELETE FROM session_pull_requests WHERE session_id=? AND NOT EXISTS(SELECT 1 FROM pull_request_watches w WHERE w.session_id=session_pull_requests.session_id AND w.pr_id=session_pull_requests.pr_id AND w.address NOT LIKE 'session:%')`, id); err != nil {
+		log.Printf("[store] Remove: failed to drop session PRs for %s: %v", id, err)
+	}
+	if _, err := s.db.Exec(`DELETE FROM pull_request_watches WHERE address=?`, "session:"+id); err != nil {
+		log.Printf("[store] Remove: failed to drop session PR watches for %s: %v", id, err)
 	}
 	for _, table := range sessionOwnedTables {
 		if _, err := s.db.Exec("DELETE FROM "+table+" WHERE session_id = ?", id); err != nil {

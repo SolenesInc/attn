@@ -26,7 +26,7 @@ func TestConversationPinsAndDeletionActorsSurviveMigrationReplay(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if err := migrateDB(db, path); err != nil {
+	if err := migrateConversationPinsFixture(db); err != nil {
 		t.Fatal(err)
 	}
 	for id, want := range map[string]string{"live": "", "deleted": "sweep"} {
@@ -41,7 +41,7 @@ func TestConversationPinsAndDeletionActorsSurviveMigrationReplay(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if err := migrateDB(db, path); err != nil {
+	if err := migrateConversationPinsFixture(db); err != nil {
 		t.Fatalf("replay: %v", err)
 	}
 	var actor, pinned, session string
@@ -51,4 +51,22 @@ func TestConversationPinsAndDeletionActorsSurviveMigrationReplay(t *testing.T) {
 	if err := db.QueryRow("SELECT pinned_at, session_id FROM kept_conversation_pins WHERE resume_id='live'").Scan(&pinned, &session); err != nil || pinned != "2026-10-01" || session != "session-live" {
 		t.Fatalf("replay changed pin: %q, %q, %v", pinned, session, err)
 	}
+}
+
+func migrateConversationPinsFixture(db *sql.DB) error {
+	tx, err := db.Begin()
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback()
+	var migrationSQL string
+	for _, m := range migrations {
+		if m.version == 160 {
+			migrationSQL = m.sql
+		}
+	}
+	if err := applyMigration160(tx, migrationSQL); err != nil {
+		return err
+	}
+	return tx.Commit()
 }

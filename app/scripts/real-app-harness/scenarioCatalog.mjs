@@ -171,7 +171,7 @@ export const scenarioCatalog = [
   {
     id: 'countdown-cancel',
     runnerId: 'COUNTDOWN-CANCEL',
-    label: 'Countdown cancel: a real Cmd+. stops the auto-settle and nudge countdowns on screen',
+    label: 'Countdown cancel: a real Cmd+. stops the auto-settle countdown on screen',
     command: ['pnpm', 'run', 'real-app:scenario-countdown-cancel'],
     timeoutMs: 300_000,
   },

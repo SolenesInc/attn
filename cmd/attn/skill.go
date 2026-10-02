@@ -72,7 +72,7 @@ print the agent skill bundled with this binary — the instructions attn
 installs for supported agents, release-matched to the running version.
 
   (no flags)            print SKILL.md
-  --reference <name>    print one bundled reference, e.g. tickets
+  --reference <name>    print one bundled reference, e.g. garden
   --list                list bundled reference names
 `)
 }

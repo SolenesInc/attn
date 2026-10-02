@@ -3,6 +3,7 @@ package daemon_test
 import (
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/victorarias/attn/internal/fakeagent"
 	"github.com/victorarias/attn/internal/protocol"
@@ -84,4 +85,25 @@ func TestADayThatExitsAfterItsRestartWasWithdrawnStaysAsleepUntilRestarted(t *te
 		t.Fatalf("restarting alder after its day exited = %+v, want a fresh day", restarted.Restart)
 	}
 	w.Launched(successor)
+}
+
+func TestAskingAnAsleepMemberToSleepSendsNothingAndWakesNobody(t *testing.T) {
+	inBubbleWithAgents(t, func(t *testing.T, w *world) {
+		writeCrewCharter(t, w, "trellis")
+		w.restart()
+		cli := w.Client()
+		before := crewSessionCount(t, cli)
+		if slept := sleepCrew(t, w, "trellis"); !slept.AlreadyAsleep {
+			t.Fatalf("sleep=%+v", slept)
+		}
+		w.advance(time.Hour)
+		if got := crewSessionCount(t, cli); got != before {
+			t.Fatalf("sleep woke a session: before=%d after=%d", before, got)
+		}
+		day := w.bootBubbleClaude(t, wakeCrew(t, cli, "trellis", "").SessionID)
+		day.reply("Ready. <!-- attn:state=idle -->")
+		if items := readInbox(t, cli, day.id, 0).Items; len(items) != 0 {
+			t.Fatalf("sleep queued mail=%+v", items)
+		}
+	})
 }

@@ -59,7 +59,6 @@ func (d *Daemon) setSelectedSession(sessionID string) {
 		return
 	}
 	d.selectedSessionMu.Lock()
-	oldID := d.selectedSessionID
 	d.selectedSessionID = sessionID
 	if workspaceID, _, ok := d.store.FindWorkspaceLayoutPaneBySessionID(sessionID); ok {
 		d.selectedWorkspaceID = workspaceID
@@ -67,9 +66,6 @@ func (d *Daemon) setSelectedSession(sessionID string) {
 		d.selectedWorkspaceID = ""
 	}
 	d.selectedSessionMu.Unlock()
-	if oldID != sessionID {
-		d.updateNudgeSelection(oldID, sessionID)
-	}
 }
 
 func (d *Daemon) currentlySelectedSession() string {

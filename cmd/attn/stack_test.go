@@ -104,9 +104,7 @@ func TestASessionKeepsItsAgentAcrossADaemonRestart(t *testing.T) {
 	id := s.Spawn(s.App(), fakeagent.Claude, s.Path("shop"))
 	claude := s.Launched(id)
 
-	watch := s.Launch(testworld.Invocation{Args: []string{"ticket", "inbox", "--watch", "--interval", "20ms"}, Session: id})
 	s.Stop()
-	watch.AwaitStderr("ticket inbox --watch:")
 	s.Start()
 
 	app := s.App()

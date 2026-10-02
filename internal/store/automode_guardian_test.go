@@ -15,6 +15,7 @@ func TestMigration146AddsGuardianAndPreservesItOnReplay(t *testing.T) {
 		t.Fatal(err)
 	}
 	defer s.Close()
+	restorePreInboxFixture(t, s.db)
 	if _, err := s.db.Exec(`ALTER TABLE automode_config DROP COLUMN guardian; DELETE FROM schema_migrations WHERE version >= 146;`); err != nil {
 		t.Fatal(err)
 	}
@@ -29,6 +30,7 @@ func TestMigration146AddsGuardianAndPreservesItOnReplay(t *testing.T) {
 	if _, err := s.SetAutoModePolicy(automode.PolicyAmendment{Guardian: &want}, time.Now()); err != nil {
 		t.Fatal(err)
 	}
+	restorePreInboxFixture(t, s.db)
 	if _, err := s.db.Exec(`DELETE FROM schema_migrations WHERE version >= 146`); err != nil {
 		t.Fatal(err)
 	}

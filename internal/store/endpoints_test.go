@@ -74,6 +74,7 @@ func TestMigration151CarriesProfileColumnsIntoInstances(t *testing.T) {
 		t.Fatal(err)
 	}
 	defer s.Close()
+	restorePreInboxFixture(t, s.db)
 	if _, err := s.db.Exec(`
 		ALTER TABLE endpoints RENAME COLUMN instance TO profile;
 		ALTER TABLE instance_roles RENAME TO profile_roles;

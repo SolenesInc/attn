@@ -1212,6 +1212,55 @@ CREATE INDEX IF NOT EXISTS idx_automode_denials_recent ON automode_denials(id DE
  );
  `},
 	{161, "persist external wrapper process identity", ""},
+	{162, "addressed inbox delivery", `
+ CREATE TABLE inbox_items (
+ id TEXT PRIMARY KEY, address TEXT NOT NULL, kind TEXT NOT NULL,
+ source_id TEXT NOT NULL DEFAULT '', coalesce_key TEXT NOT NULL DEFAULT '',
+ hint TEXT NOT NULL DEFAULT '', text TEXT NOT NULL DEFAULT '', bell_name TEXT NOT NULL DEFAULT '',
+ created_at TEXT NOT NULL, attempts INTEGER NOT NULL DEFAULT 0, attempted_at TEXT NOT NULL DEFAULT '',
+ notified_at TEXT NOT NULL DEFAULT '', read_at TEXT NOT NULL DEFAULT '', read_by TEXT NOT NULL DEFAULT '',
+ CHECK(read_at = '' OR notified_at != ''));
+ INSERT INTO inbox_items (id,address,kind,source_id,coalesce_key,hint,text,bell_name,created_at,
+ attempts,attempted_at,notified_at,read_at,read_by)
+ SELECT id,'session:' || recipient_session_id,kind,source_id,coalesce_key,hint,prompt,bell_name,created_at,
+ CASE WHEN read_at = '' AND notified_at != '' THEN 1 ELSE 0 END,
+ CASE WHEN read_at = '' AND notified_at != '' THEN notified_at ELSE '' END,
+ notified_at,read_at,CASE WHEN read_at != '' THEN recipient_session_id ELSE '' END FROM agent_mailbox_items;
+ DROP TABLE agent_mailbox_items;
+ CREATE INDEX idx_inbox_unread ON inbox_items(address,created_at,id) WHERE read_at = '';
+ CREATE INDEX idx_inbox_source ON inbox_items(kind,source_id,address);
+ CREATE INDEX idx_inbox_attempt ON inbox_items(address,attempted_at);
+ CREATE INDEX idx_inbox_read ON inbox_items(address,read_at);
+ CREATE UNIQUE INDEX idx_inbox_unread_key ON inbox_items(address,kind,coalesce_key)
+ WHERE coalesce_key != '' AND read_at = '';
+ ALTER TABLE pull_request_watches RENAME TO old_pull_request_watches;
+ CREATE TABLE pull_request_watches (
+ address TEXT NOT NULL, session_id TEXT NOT NULL, pr_id TEXT NOT NULL, mode TEXT NOT NULL,
+ reviewer TEXT NOT NULL DEFAULT '', created_at TEXT NOT NULL, cursor_json TEXT NOT NULL DEFAULT '{}',
+ last_success_at TEXT NOT NULL DEFAULT '',last_error TEXT NOT NULL DEFAULT '',feedback_error TEXT NOT NULL DEFAULT '',
+ outage_active INTEGER NOT NULL DEFAULT 0, PRIMARY KEY(address,pr_id));
+ INSERT INTO pull_request_watches SELECT 'session:' || session_id,* FROM old_pull_request_watches;
+ DROP TABLE old_pull_request_watches;
+ CREATE INDEX idx_pull_request_watches_pr ON pull_request_watches(pr_id,address);
+ DROP TABLE IF EXISTS automation_ticket_occurrence_events;
+ DROP TABLE IF EXISTS legacy_ticket_recovery_items;
+ DROP TABLE IF EXISTS legacy_ticket_recovery_runs;
+ DROP TABLE IF EXISTS legacy_ticket_recovery_sources;
+ DROP TABLE IF EXISTS legacy_ticket_seed_links;
+ DROP TABLE IF EXISTS ticket_activity;
+ DROP TABLE IF EXISTS ticket_attachments;
+ DROP TABLE IF EXISTS ticket_delivery_attention;
+ DROP TABLE IF EXISTS ticket_event_cursors;
+ DROP TABLE IF EXISTS ticket_events;
+ DROP TABLE IF EXISTS ticket_role_owners;
+ DROP TABLE IF EXISTS ticket_subscriptions;
+ DROP VIEW IF EXISTS ticket_participants;
+ DROP TABLE IF EXISTS tickets;
+ DELETE FROM jobs WHERE kind IN ('reconcile','recover_legacy_closed_work');
+ DELETE FROM tasks WHERE kind IN ('reconcile','recover_legacy_closed_work');
+ ALTER TABLE presentations ADD COLUMN address TEXT NOT NULL DEFAULT '';
+ UPDATE presentations SET address = 'session:' || session_id;
+`},
 }
 
 const migration99SQL = `

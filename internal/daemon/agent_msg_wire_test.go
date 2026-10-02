@@ -15,29 +15,6 @@ import (
 	"github.com/victorarias/attn/internal/testworld"
 )
 
-func TestMailRingsAnIdleAgentWithTheInboxDoorbellAgainAfterEachRead(t *testing.T) {
-	w := newWorld(t, fakeagent.Claude)
-	app, cli := w.App(), w.Client()
-	recipient, agent := mailIdleAgent(w, app, "shop")
-	sender := spawnPanes(w, app, w.Path("sender"))[0].session
-	idle := queriedSession(t, cli, recipient)
-
-	for _, body := range []string{"the migration landed", "the rollback is ready"} {
-		sent := sendAgentMessage(t, cli, sender, recipient, body)
-		if sent.Status != protocol.AgentMsgStatusNotified {
-			t.Fatalf("%q to an idle agent = %+v, want notified", body, sent)
-		}
-		if got := agent.Prompted(); !strings.Contains(got, inboxDoorbell) {
-			t.Fatalf("the agent was prompted with %q, want only the inbox doorbell", got)
-		}
-		if got := inboxContents(readInbox(t, cli, recipient, 0).Items); got != body {
-			t.Fatalf("the agent read %q from its inbox, want %q", got, body)
-		}
-		agent.Reply("Read it. <!-- attn:state=idle -->")
-		idle = testworld.AwaitStateAfter(app, idle, func(s protocol.Session) bool { return s.State == protocol.SessionStateIdle })
-	}
-}
-
 func TestMailForAnAgentMidTurnStaysSealedUntilItsTurnEndsThenRings(t *testing.T) {
 	w := newWorld(t, fakeagent.Claude)
 	app, cli := w.App(), w.Client()
@@ -299,22 +276,6 @@ func TestMessagingACrewMemberReachesItsDayWakingItIfNeeded(t *testing.T) {
 	}
 }
 
-func TestAMessageThatWouldWakePastTheLimitDeliversNothing(t *testing.T) {
-	w := newCrewWorld(t, fakeagent.Claude)
-	app, cli := w.App(), w.Client()
-	sender := spawnPanes(w, app, w.Path("sender"))[0].session
-	setSetting(t, app, "crew.wake_limit", "0")
-
-	_, err := cli.AgentMsg("alder", sender, "wake up")
-	crewErrorContains(t, err, "crew.wake_limit=0", "Alder", "sidebar", "nothing was delivered")
-	if got := crewSessionCount(t, cli); got != 1 {
-		t.Errorf("sessions = %d, want only the sender", got)
-	}
-	if binding := crewRosterMember(t, cli, "alder").BindingSession; binding != nil {
-		t.Errorf("the refused wake bound alder to %s", *binding)
-	}
-}
-
 func mailIdleAgent(w *world, app *testworld.Peer, dir string) (string, *fakeagent.Run) {
 	w.T.Helper()
 	session := w.Spawn(app, fakeagent.Claude, w.Path(dir))
@@ -328,7 +289,7 @@ func mailIdleAgent(w *world, app *testworld.Peer, dir string) (string, *fakeagen
 	return session, agent
 }
 
-func TestMailForAMemberWhoCannotWakeFailsAndLeavesNoDayBehind(t *testing.T) {
+func TestMailForAMemberWhoseLaunchFailsWaitsForItsNextDay(t *testing.T) {
 	w := newCrewWorld(t, fakeagent.Claude, fakeagent.Pi)
 	app, cli := w.App(), w.Client()
 	pluginDriverSettings(app, "pi")
@@ -337,7 +298,7 @@ func TestMailForAMemberWhoCannotWakeFailsAndLeavesNoDayBehind(t *testing.T) {
 	before := paneSessions(w)
 
 	allow := w.RefusePiLaunches("pi could not start: the model provider is unreachable")
-	if result, err := cli.AgentMsg("keel", sender, "please wake"); err == nil || !strings.Contains(err.Error(), "provider is unreachable") {
+	if result, err := cli.AgentMsg("keel", sender, "please wake"); err != nil || result.Status != protocol.AgentMsgStatusQueued || !strings.Contains(result.Detail, "provider is unreachable") {
 		t.Fatalf("mail for a Keel that cannot wake = %+v, %v; want the launch failure", result, err)
 	}
 	if bound := crewRosterMember(t, cli, "keel").BindingSession; bound != nil {
@@ -348,13 +309,13 @@ func TestMailForAMemberWhoCannotWakeFailsAndLeavesNoDayBehind(t *testing.T) {
 	}
 
 	allow()
-	woke := sendAgentMessage(t, cli, sender, "keel", "the build is green")
-	day := w.Launched(woke.TargetSessionID)
+	woke := wakeCrew(t, cli, "keel", "")
+	sendAgentMessage(t, cli, sender, "keel", "the build is green")
+	day := w.Launched(woke.SessionID)
 	day.Prompted()
 	day.Reply("Morning. <!-- attn:state=idle -->")
-	day.Prompted()
-	if got := inboxContents(readInbox(t, cli, woke.TargetSessionID, 0).Items); got != "the build is green" {
-		t.Errorf("Keel's next day reads %q, want only the mail sent once it could wake", got)
+	if got := inboxContents(readInbox(t, cli, woke.SessionID, 0).Items); got != "please wake the build is green" {
+		t.Errorf("Keel's next day reads %q, want the saved mail across its failed wake", got)
 	}
 }
 

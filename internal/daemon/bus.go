@@ -110,13 +110,6 @@ const (
 	FactPresentationAdded   = "presentation.added"
 	FactPresentationUpdated = "presentation.updated"
 
-	FactTicketCreated       = "ticket.created"
-	FactTicketStatusChanged = "ticket.status_changed"
-	FactTicketCommented     = "ticket.commented"
-	FactTicketAssigned      = "ticket.assigned"
-	FactTicketAttached      = "ticket.attached"
-	FactTicketChanged       = "ticket.changed"
-
 	FactDocumentChanged              = "document.changed"
 	FactDocumentCollectionRemoved    = "document.collection.removed"
 	FactDocumentCollectionRedeclared = "document.collection.redeclared"
@@ -430,6 +423,7 @@ func (d *Daemon) ensureEventBus() {
 		PinAlarmAge: d.busPinAlarmAge(),
 	})
 	d.busUnsubscribe = d.eventBus.Subscribe(bus.All, d.projectToClients)
+	d.subscribeInboxFacts()
 	d.subscribeDocumentFacts()
 	d.subscribeAgentConversationFacts()
 	d.subscribeSessionPullRequestFacts()
@@ -452,6 +446,10 @@ func (d *Daemon) startEventBus() error {
 }
 
 func (d *Daemon) stopEventBus() {
+	if d.inboxUnsubscribe != nil {
+		d.inboxUnsubscribe()
+		d.inboxUnsubscribe = nil
+	}
 	d.unsubscribeDocumentFacts()
 	d.unsubscribeAgentConversationFacts()
 	d.unsubscribeSessionPullRequestFacts()

@@ -140,12 +140,12 @@ func (d *Daemon) watchSessionPullRequest(rec store.SessionPullRequestRecord, mod
 	if err := prreadiness.ValidateConfig(mode, reviewer); err != nil {
 		return err
 	}
-	recorded, changed, err := d.store.WatchPullRequest(rec, mode, reviewer, time.Now())
+	recorded, changed, err := d.store.WatchPullRequest(rec, d.inboxAddressOf(rec.SessionID), mode, reviewer, time.Now())
 	if err != nil {
 		return fmt.Errorf("watch pull request %s: %w", rec.PRID, err)
 	}
 	if changed {
-		d.refreshAgentMailboxUnread(rec.SessionID)
+		d.sentToInbox(d.inboxAddressOf(rec.SessionID))
 		d.publishSessionPullRequestMembershipChanged(rec.PRID, rec.SessionID)
 		d.schedulePullRequestRefreshNow(rec.SessionID, rec.PRID)
 	} else if recorded {
@@ -155,14 +155,14 @@ func (d *Daemon) watchSessionPullRequest(rec store.SessionPullRequestRecord, mod
 }
 
 func (d *Daemon) unwatchSessionPullRequest(rec store.SessionPullRequestRecord) error {
-	changed, err := d.store.StopPullRequestWatch(rec.SessionID, rec.PRID)
+	changed, err := d.store.StopPullRequestWatch(d.inboxAddressOf(rec.SessionID), rec.PRID)
 	if err != nil {
 		return fmt.Errorf("unwatch pull request %s: %w", rec.PRID, err)
 	}
 	if !changed {
 		return fmt.Errorf("session %s is not watching pull request %s", rec.SessionID, rec.PRID)
 	}
-	d.refreshAgentMailboxUnread(rec.SessionID)
+	d.sentToInbox(d.inboxAddressOf(rec.SessionID))
 	d.publishSessionPullRequestMembershipChanged(rec.PRID, rec.SessionID)
 	return nil
 }
@@ -194,14 +194,14 @@ func (d *Daemon) recordSessionPullRequest(rec store.SessionPullRequestRecord) er
 }
 
 func (d *Daemon) forgetSessionPullRequest(rec store.SessionPullRequestRecord) error {
-	forgotten, err := d.store.ForgetSessionPullRequest(rec.SessionID, rec.PRID)
+	forgotten, err := d.store.ForgetSessionPullRequest(rec.SessionID, d.inboxAddressOf(rec.SessionID), rec.PRID)
 	if err != nil {
 		return fmt.Errorf("forget pull request %s: %w", rec.PRID, err)
 	}
 	if !forgotten {
 		return fmt.Errorf("session %s has no pull request %s recorded", rec.SessionID, rec.PRID)
 	}
-	d.refreshAgentMailboxUnread(rec.SessionID)
+	d.sentToInbox(d.inboxAddressOf(rec.SessionID))
 	d.publishSessionPullRequestMembershipChanged(rec.PRID, rec.SessionID)
 	return nil
 }
@@ -268,7 +268,7 @@ func (d *Daemon) sessionPullRequestsForBroadcast(records []store.SessionPullRequ
 		watches := watchesByPR[rec.PRID]
 		if len(watches) > 0 {
 			for _, watch := range watches {
-				if watch.SessionID == rec.SessionID {
+				if watch.To == d.inboxAddressOf(rec.SessionID) {
 					entry.Watching = protocol.Ptr(true)
 					entry.WatchMode = protocol.Ptr(protocol.PullRequestWatchMode(watch.Mode))
 					entry.WatchReviewer = pullRequestField(watch.Reviewer)
@@ -295,7 +295,7 @@ func pullRequestField(value string) *string {
 }
 
 func (d *Daemon) sessionPullRequestsForSession(sessionID string) []protocol.SessionPullRequest {
-	return d.sessionPullRequestsForBroadcast(d.store.ListSessionPullRequests(sessionID), d.pullRequestWatchesByPR())
+	return d.sessionPullRequestsForBroadcast(d.sessionPullRequestRecords(sessionID, d.store.ListSessionPullRequestsBySession(), d.pullRequestWatchesByPR()), d.pullRequestWatchesByPR())
 }
 
 func (d *Daemon) forwardedToSessionOwner(conn net.Conn, sessionID string, msg any) bool {
@@ -325,4 +325,33 @@ func (d *Daemon) sessionOwnerEndpoint(sessionID string) string {
 		return ""
 	}
 	return endpointID
+}
+
+func (d *Daemon) sessionPullRequestRecords(sessionID string, bySession map[string][]store.SessionPullRequestRecord, byPR map[string][]store.PullRequestWatch) []store.SessionPullRequestRecord {
+	records := append([]store.SessionPullRequestRecord(nil), bySession[sessionID]...)
+	for prID, watches := range byPR {
+		for _, watch := range watches {
+			if watch.To != d.inboxAddressOf(sessionID) {
+				continue
+			}
+			for _, rec := range bySession[watch.SessionID] {
+				if rec.PRID != prID {
+					continue
+				}
+				rec.SessionID = sessionID
+				replaced := false
+				for i := range records {
+					if records[i].PRID == prID {
+						records[i] = rec
+						replaced = true
+						break
+					}
+				}
+				if !replaced {
+					records = append(records, rec)
+				}
+			}
+		}
+	}
+	return records
 }

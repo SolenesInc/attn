@@ -85,6 +85,7 @@ func TestMigration91RewritesStampsThatDoNotSort(t *testing.T) {
 	if _, err := s.db.Exec(`UPDATE document_collections SET updated_at = 'not a timestamp'`); err != nil {
 		t.Fatalf("plant unreadable stamp: %v", err)
 	}
+	restorePreInboxFixture(t, s.db)
 	if _, err := s.db.Exec(`DELETE FROM schema_migrations WHERE version >= 91`); err != nil {
 		t.Fatalf("unrecord migration 91: %v", err)
 	}
@@ -107,6 +108,7 @@ func TestMigration91RewritesStampsThatDoNotSort(t *testing.T) {
 		t.Fatalf("after migration 91 the stamps sort as %v, want %v", got, want)
 	}
 
+	restorePreInboxFixture(t, s.db)
 	if _, err := s.db.Exec(`DELETE FROM schema_migrations WHERE version >= 91`); err != nil {
 		t.Fatalf("unrecord migration 91 again: %v", err)
 	}

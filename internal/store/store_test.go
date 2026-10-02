@@ -14,6 +14,7 @@ func TestMigration130CarriesLegacyIntentionalCloseMark(t *testing.T) {
 		t.Fatalf("open: %v", err)
 	}
 	s.Add(&protocol.Session{ID: "legacy-close", Label: "legacy-close"})
+	restorePreInboxFixture(t, s.db)
 	if _, err := s.db.Exec(`UPDATE sessions SET closed_intentionally_at = '2026-09-01T12:00:00Z' WHERE id = 'legacy-close';
 		DROP TABLE session_teardown_tombstones;
 		DELETE FROM schema_migrations WHERE version = 130`); err != nil {

@@ -31,7 +31,6 @@ func (d *Daemon) runDatabaseBackupLoop() {
 func (d *Daemon) startPermanentMaintenance() {
 	d.life.Go("runDatabaseBackupLoop", d.runDatabaseBackupLoop)
 	d.life.Go("runAutomationRetentionSweep", d.runAutomationRetentionSweep)
-	d.life.Go("runAutomationTicketRetentionSweep", d.runAutomationTicketRetentionSweep)
 }
 
 func (d *Daemon) performDatabaseBackup() {
@@ -61,12 +60,7 @@ func (d *Daemon) performDatabaseBackup() {
 }
 
 func (d *Daemon) pruneEligibleDatabaseBackups() {
-	protected, ready := d.legacyTicketRecoveryBackupProtection()
-	if !ready {
-		d.logf("legacy ticket recovery: backup pruning remains fenced")
-		return
-	}
-	d.pruneDatabaseBackups(protected)
+	d.pruneDatabaseBackups(nil)
 }
 
 func (d *Daemon) pruneDatabaseBackups(protected map[string]struct{}) {

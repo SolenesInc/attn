@@ -37,3 +37,71 @@ func TestMailQueuedForABusyAgentRingsItOnceAfterADaemonRestart(t *testing.T) {
 		t.Fatalf("the agent was next prompted with %q, want the user's words and no second doorbell", got)
 	}
 }
+
+func TestAnOutstandingInboxRingSurvivesAProcessRestart(t *testing.T) {
+	t.Parallel()
+	s := testworld.NewStack(t, testworld.WithAgents(fakeagent.Claude))
+	s.Start()
+	app, cli := s.App(), s.Client()
+	recipient, run := claudeAtWork(t, s, app, "shop")
+	sender := s.Spawn(app, fakeagent.Claude, s.Path("reviewer"))
+	s.Launched(sender)
+	run.Reply("Ready. <!-- attn:state=idle -->")
+	testworld.AwaitSession(app, recipient, func(session protocol.Session) bool { return session.State == protocol.SessionStateIdle })
+	sent, err := cli.AgentMsg(recipient, sender, "retain the outstanding attempt")
+	if err != nil || sent.Status != protocol.AgentMsgStatusNotified {
+		t.Fatalf("send=%+v, %v", sent, err)
+	}
+	if prompt := run.Prompted(); !strings.Contains(prompt, inboxDoorbell) {
+		t.Fatalf("first ring=%q", prompt)
+	}
+	s.Stop()
+	run.ReplyUnheard("Later. <!-- attn:state=idle -->")
+	s.Start()
+	app = s.App()
+	app.TypeLine(recipient, "continue without reading")
+	if prompt := run.Prompted(); prompt != "continue without reading" {
+		t.Fatalf("restart renewed the outstanding ring: %q", prompt)
+	}
+	status, err := s.Client().AgentMsgStatus(sent.MessageID, sender)
+	if err != nil || status.State != protocol.AgentMessageStateNotified {
+		t.Fatalf("durable receipt=%+v, %v", status, err)
+	}
+	batch, err := s.Client().AgentInboxBatch(recipient, 0)
+	if err != nil || len(batch.Items) != 1 || batch.Items[0].Address != "session:"+recipient {
+		t.Fatalf("durable item=%+v, %v", batch, err)
+	}
+}
+
+func TestAnInboxWakeDoesNotWakeAMemberTwiceAcrossAProcessRestart(t *testing.T) {
+	t.Parallel()
+	s := testworld.NewStack(t, testworld.WithAgents(fakeagent.Claude))
+	writeCharter(t, s, "trellis")
+	s.Start()
+	cli := s.Client()
+	if err := cli.Register("reviewer", "reviewer", s.Path("reviewer")); err != nil {
+		t.Fatal(err)
+	}
+	sent, err := cli.AgentMsg("trellis", "reviewer", "keep this through priming and restart")
+	if err != nil || sent.Status != protocol.AgentMsgStatusQueued || sent.TargetSessionID == "" {
+		t.Fatalf("asleep send=%+v, %v", sent, err)
+	}
+	day := s.Launched(sent.TargetSessionID)
+	day.Prompted()
+	s.Stop()
+	s.Start()
+	app := s.App()
+	if bound := protocol.Deref(crewRoster(t, s)["trellis"].BindingSession); bound != sent.TargetSessionID {
+		t.Fatalf("restart woke a second day: %s, original %s", bound, sent.TargetSessionID)
+	}
+	day.Reply("Ready. <!-- attn:state=idle -->")
+	testworld.AwaitSession(app, sent.TargetSessionID, func(session protocol.Session) bool { return session.State == protocol.SessionStateIdle })
+	app.TypeLine(sent.TargetSessionID, "check the inbox yourself")
+	if prompt := day.Prompted(); prompt != "check the inbox yourself" {
+		t.Fatalf("restart completed a fresh attempt early: %q", prompt)
+	}
+	batch, err := s.Client().AgentInboxBatch(sent.TargetSessionID, 0)
+	if err != nil || len(batch.Items) != 1 || batch.Items[0].Address != "member:trellis" {
+		t.Fatalf("member item=%+v, %v", batch, err)
+	}
+}

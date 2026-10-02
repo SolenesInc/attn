@@ -15,8 +15,8 @@ func stopDaemonBackground(t *testing.T, d *Daemon) {
 	t.Cleanup(func() {
 		d.sessionInputs().stopRetries()
 		d.stopAllTranscriptWatchers()
-		d.stopNudgeCountdowns()
-		d.stopAgentMailboxDoorbells()
+		d.stopInbox()
+		d.stopInbox()
 		d.stopAutoSettleTimers()
 		d.stopNotebookWatcher()
 		d.stopFsWatchers()

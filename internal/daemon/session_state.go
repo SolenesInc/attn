@@ -49,25 +49,25 @@ type stateOrigin struct {
 }
 
 type stateEffectInstance struct {
-	touch     bool
-	syncNudge bool
-	broadcast bool
+	touch         bool
+	syncInputLane bool
+	broadcast     bool
 }
 
 func stateEffectInstanceFor(cause sessionStateCause) (stateEffectInstance, bool) {
 	switch cause.(type) {
 	case liveSignal:
-		return stateEffectInstance{touch: true, syncNudge: true, broadcast: true}, true
+		return stateEffectInstance{touch: true, syncInputLane: true, broadcast: true}, true
 	case resolverObservation:
-		return stateEffectInstance{syncNudge: true, broadcast: true}, true
+		return stateEffectInstance{syncInputLane: true, broadcast: true}, true
 	case pluginReport:
-		return stateEffectInstance{touch: true, syncNudge: true, broadcast: true}, true
+		return stateEffectInstance{touch: true, syncInputLane: true, broadcast: true}, true
 	case startupRecovery:
 		return stateEffectInstance{}, true
 	case hostExitRecovery:
-		return stateEffectInstance{syncNudge: true, broadcast: true}, true
+		return stateEffectInstance{syncInputLane: true, broadcast: true}, true
 	case pluginDriverSilent:
-		return stateEffectInstance{syncNudge: true, broadcast: true}, true
+		return stateEffectInstance{syncInputLane: true, broadcast: true}, true
 	default:
 		return stateEffectInstance{}, false
 	}
@@ -106,7 +106,7 @@ func (d *Daemon) applyState(change sessionStateChange) bool {
 	opening := d.turnOpeningFor(change.sessionID, protocol.SessionState(change.state))
 	d.autoSettleFireMu.Lock()
 	var inputLane *sessionInputLane
-	if instance.syncNudge {
+	if instance.syncInputLane {
 		inputLane = d.sessionInputs().lane(change.sessionID)
 		inputLane.mu.Lock()
 	}
@@ -136,17 +136,12 @@ func (d *Daemon) applyState(change sessionStateChange) bool {
 	if instance.touch {
 		d.store.Touch(change.sessionID)
 	}
-	if instance.syncNudge {
-		d.syncNudgeForState(change.sessionID, change.state)
-	}
 	d.syncAutoSettle(change.sessionID, change.state)
-	ringMailbox := d.claimAgentMailboxDrainAfterStateChange(change.sessionID, change.state)
+	d.kickSessionInbox(change.sessionID, change.state)
 	if instance.broadcast {
 		d.broadcastSessionStateChanged(change.sessionID)
 	}
-	if ringMailbox != nil {
-		d.life.Go("ringMailbox", ringMailbox)
-	}
+
 	if _, resolved := change.cause.(resolverObservation); !resolved {
 		d.resolveSoon(change.sessionID)
 	}

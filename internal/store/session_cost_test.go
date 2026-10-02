@@ -62,6 +62,7 @@ func TestMigration152FilesStoredLongContextObservationsUnderTheirTier(t *testing
 	if _, err := s.db.Exec("UPDATE sessions SET session_cost_json = ? WHERE id = ?", legacy, "sol"); err != nil {
 		t.Fatal(err)
 	}
+	restorePreInboxFixture(t, s.db)
 	if _, err := s.db.Exec("DELETE FROM schema_migrations WHERE version >= 152"); err != nil {
 		t.Fatal(err)
 	}
@@ -107,6 +108,7 @@ func TestMigration158FilesGPT61SolObservationsUnderTheirTier(t *testing.T) {
 	if _, err := s.db.Exec("UPDATE sessions SET session_cost_json = ? WHERE id = ?", legacy, "sol"); err != nil {
 		t.Fatal(err)
 	}
+	restorePreInboxFixture(t, s.db)
 	if _, err := s.db.Exec("DELETE FROM schema_migrations WHERE version >= 158"); err != nil {
 		t.Fatal(err)
 	}

@@ -20,7 +20,14 @@ func TestExternalWrapperMigrationPreservesManagedDaysAndProcessReceiptsOnReplay(
 	if err != nil {
 		t.Fatal(err)
 	}
-	if err := migrateDB(db, path); err != nil {
+	tx, err := db.Begin()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := applyMigration161(tx); err != nil {
+		t.Fatal(err)
+	}
+	if err := tx.Commit(); err != nil {
 		t.Fatal(err)
 	}
 	var identity, intent string
@@ -31,10 +38,18 @@ func TestExternalWrapperMigrationPreservesManagedDaysAndProcessReceiptsOnReplay(
 	if _, err := db.Exec("UPDATE sessions SET external_process=? WHERE id='external'", receipt); err != nil {
 		t.Fatal(err)
 	}
+	restorePreInboxFixture(t, db)
 	if _, err := db.Exec("DELETE FROM schema_migrations WHERE version=161"); err != nil {
 		t.Fatal(err)
 	}
-	if err := migrateDB(db, path); err != nil {
+	tx, err = db.Begin()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := applyMigration161(tx); err != nil {
+		t.Fatal(err)
+	}
+	if err := tx.Commit(); err != nil {
 		t.Fatal(err)
 	}
 	if err := db.QueryRow("SELECT external_process FROM sessions WHERE id='external'").Scan(&identity); err != nil || identity != receipt {

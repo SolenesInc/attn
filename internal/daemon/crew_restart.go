@@ -10,9 +10,9 @@ import (
 	"time"
 
 	"github.com/google/uuid"
-	"github.com/victorarias/attn/internal/agentmailbox"
 	"github.com/victorarias/attn/internal/crew"
 	"github.com/victorarias/attn/internal/docstore"
+	"github.com/victorarias/attn/internal/inbox"
 	"github.com/victorarias/attn/internal/prompts"
 	"github.com/victorarias/attn/internal/protocol"
 	"github.com/victorarias/attn/internal/store"
@@ -378,7 +378,7 @@ func (d *Daemon) resumeCrewRestart(member crew.Member, revision int64) (*protoco
 }
 
 func (d *Daemon) wakeForCrewRestart(member crew.Member, restart crew.Restart, exitedSessionID string) (*protocol.CrewRestartResult, error) {
-	woken, err := d.crewWakeWithDeliveryLocked(member.ID, "", false, nil)
+	woken, err := d.crewWakeWithChargeLocked(member.ID, "", false)
 	if err != nil {
 		if recordErr := d.failCrewRestart(member.ID, restart.RequestID, restart.SessionID, "", err); recordErr != nil {
 			return nil, errors.Join(err, recordErr)
@@ -427,10 +427,8 @@ func crewRestartDayChanged(memberID, expected, current string) error {
 }
 
 func (d *Daemon) ensureCrewRestartRequest(memberID string, restart crew.Restart) error {
-	delivery, _, err := d.store.EnqueueMaintenancePromptOnce(
-		crewRestartMailboxID(memberID, restart.RequestID), restart.SessionID, restart.RequestID,
-		"crew-restart-"+memberID, crewRequestedRestartPrompt, time.Now(),
-	)
+	itemID := crewRestartMailboxID(memberID, restart.RequestID)
+	receipt, err := d.sendToInbox(inbox.Item{ID: itemID, To: inbox.ToSession(restart.SessionID), Kind: inbox.Notice, Source: restart.RequestID, Key: "crew-restart-" + memberID, Text: crewRequestedRestartPrompt})
 	if err != nil {
 		cause := fmt.Errorf("record restart request: %w", err)
 		if recordErr := d.failCrewRestart(memberID, restart.RequestID, restart.SessionID, "", cause); recordErr != nil {
@@ -440,11 +438,15 @@ func (d *Daemon) ensureCrewRestartRequest(memberID string, restart crew.Restart)
 	}
 	status := protocol.AgentMsgStatusNotified
 	detail := fmt.Sprintf("asked %s in session %s to file its handoff and start the next day", crew.DisplayName(memberID), shortSessionID(restart.SessionID))
-	if delivery.Item.ReadAt != "" {
+	item, _, readErr := d.store.InboxItem(itemID)
+	if readErr != nil {
+		return readErr
+	}
+	if item.ReadAt != "" {
 		detail = fmt.Sprintf("%s read the restart request", crew.DisplayName(memberID))
-	} else if err := d.deliverAgentMailboxItem(delivery); err != nil {
+	} else if !receipt.Rang {
 		status = protocol.AgentMsgStatusQueued
-		detail = agentMessageQueuedDetail(err)
+		detail = receipt.Detail
 	}
 	_, updateErr := d.updateCrewMember(memberID, func(member *crew.Member) (bool, error) {
 		if member.Restart == nil || member.Restart.RequestID != restart.RequestID || member.Restart.SessionID != restart.SessionID ||
@@ -456,7 +458,7 @@ func (d *Daemon) ensureCrewRestartRequest(memberID string, restart crew.Restart)
 		}
 		member.Restart.DeliveryStatus = string(status)
 		member.Restart.Detail = detail
-		if delivery.Item.ReadAt != "" {
+		if item.ReadAt != "" {
 			member.Restart.State = crew.RestartRequested
 		}
 		return true, nil
@@ -558,9 +560,9 @@ func (d *Daemon) completeCrewRestartWithDetail(memberID, requestID, sessionID, l
 	}
 }
 
-func (d *Daemon) noteCrewRestartMailboxRead(deliveries []agentmailbox.Delivery) {
+func (d *Daemon) noteCrewRestartMailboxRead(deliveries []inbox.Delivery) {
 	for _, delivery := range deliveries {
-		if delivery.Item.Kind != agentmailbox.KindMaintenancePrompt || delivery.Item.SourceID == "" || !strings.HasPrefix(delivery.Item.CoalesceKey, "crew-restart-") {
+		if delivery.Item.Kind != inbox.Notice || delivery.Item.Source == "" || !strings.HasPrefix(delivery.Item.Key, "crew-restart-") {
 			continue
 		}
 		members, _, err := d.readCrewMembers()
@@ -568,11 +570,11 @@ func (d *Daemon) noteCrewRestartMailboxRead(deliveries []agentmailbox.Delivery) 
 			continue
 		}
 		for _, member := range members {
-			if member.Restart == nil || member.Restart.RequestID != delivery.Item.SourceID || member.Restart.SessionID != delivery.Item.RecipientSessionID || member.Restart.State != crew.RestartQueued {
+			if member.Restart == nil || member.Restart.RequestID != delivery.Item.Source || member.Restart.SessionID != delivery.Item.To.SessionID() || member.Restart.State != crew.RestartQueued {
 				continue
 			}
 			_, updateErr := d.updateCrewMember(member.ID, func(current *crew.Member) (bool, error) {
-				if current.Restart == nil || current.Restart.RequestID != delivery.Item.SourceID || current.Restart.SessionID != delivery.Item.RecipientSessionID || current.Restart.State != crew.RestartQueued {
+				if current.Restart == nil || current.Restart.RequestID != delivery.Item.Source || current.Restart.SessionID != delivery.Item.To.SessionID() || current.Restart.State != crew.RestartQueued {
 					return false, nil
 				}
 				current.Restart.State = crew.RestartRequested

@@ -9,9 +9,9 @@ import (
 	"time"
 
 	"github.com/google/uuid"
-	"github.com/victorarias/attn/internal/agentmailbox"
 	"github.com/victorarias/attn/internal/crew"
 	"github.com/victorarias/attn/internal/garden"
+	"github.com/victorarias/attn/internal/inbox"
 	"github.com/victorarias/attn/internal/protocol"
 )
 
@@ -22,7 +22,7 @@ const (
 	agentMessageQueueCap     = 50
 )
 
-func agentMessageGuardVerdict(counts agentmailbox.PeerGuardCounts) string {
+func agentMessageGuardVerdict(counts inbox.PeerGuardCounts) string {
 	switch {
 	case counts.DuplicateFromSender:
 		return fmt.Sprintf(
@@ -62,80 +62,66 @@ func (d *Daemon) handleAgentMsg(conn net.Conn, msg *protocol.AgentMsgMessage) {
 		return
 	}
 
+	targetRef := msg.TargetSessionID
+	var address inbox.Address
 	if seedID := strings.TrimSpace(protocol.Deref(msg.TargetSeedID)); seedID != "" {
-		if strings.TrimSpace(msg.TargetSessionID) != "" {
-			d.replyAgentMsgError(conn, "ambiguous_target",
-				"a message goes to one place; name a session or a seed, not both")
+		if strings.TrimSpace(targetRef) != "" {
+			d.replyAgentMsgError(conn, "ambiguous_target", "a message goes to one place; name a session or a seed, not both")
 			return
 		}
-		tender, err := d.seedTenderSession(seedID)
+		if err := d.requireHome(garden.Surface); err != nil {
+			d.sendError(conn, err.Error())
+			return
+		}
+		seed, _, err := d.readSeed(seedID)
 		if err != nil {
 			d.replyAgentMsgError(conn, "seed_untended", err.Error())
 			return
 		}
-		msg.TargetSessionID = tender
-	}
-
-	now := time.Now()
-	member, memberFound, memberErr := d.resolveCrewMember(msg.TargetSessionID)
-	target, targetErrCode := d.resolveSessionByIDOrPrefix(msg.TargetSessionID)
-	if memberFound {
-		if sessionID, ok := d.liveSessionForTender(garden.Tender{
-			Session: member.BindingSession,
-			Member:  member.ID,
-		}); ok {
-			target = d.store.Get(sessionID)
+		tender := seed.Tender()
+		if tender.Member != "" {
+			address = inbox.ToMember(tender.Member)
+		} else if tender.Session != "" {
+			address = d.inboxAddressOf(tender.Session)
 		} else {
-			message := agentmailbox.PeerMessage{
-				ID: uuid.NewString(), SenderSessionID: sender.ID, Body: content,
-				CreatedAt: now.UTC().Format(time.RFC3339Nano),
-			}
-			woken, err := d.crewWakeWithDelivery(member.ID, "", true, &crewWakeDelivery{
-				Message: &message,
-			})
-			if err != nil {
-				d.sendError(conn, err.Error())
-				return
-			}
-			target = d.store.Get(woken.SessionID)
-			if !woken.AlreadyAwake {
-				memberName := crew.DisplayName(member.ID)
-				result.MessageID = message.ID
-				result.TargetSessionID = woken.SessionID
-				result.Status = protocol.AgentMsgStatusQueued
-				result.Detail = fmt.Sprintf("woke %s in session %s; notification queued until it reaches a safe prompt", memberName, shortSessionID(woken.SessionID))
-				d.replyAgentMsg(conn, result)
-				return
-			}
-		}
-	}
-	if target == nil {
-		if memberErr != nil {
-			d.sendError(conn, memberErr.Error())
+			_, err := d.seedTenderSession(seedID)
+			d.replyAgentMsgError(conn, "seed_untended", err.Error())
 			return
 		}
-		if targetErrCode == "session_not_found" {
-			d.replyAgentMsgError(conn, "session_or_crew_member_not_found", fmt.Sprintf(
-				"no session or crew member matches %q; `attn agent list` names sessions and `attn crew list` names members",
-				strings.TrimSpace(msg.TargetSessionID)))
+	} else {
+		member, found, memberErr := d.resolveCrewMember(targetRef)
+		if found {
+			address = inbox.ToMember(member.ID)
+		} else {
+			target, code := d.resolveSessionByIDOrPrefix(targetRef)
+			if target == nil {
+				if memberErr != nil {
+					d.sendError(conn, memberErr.Error())
+					return
+				}
+				if code == "session_not_found" {
+					d.replyAgentMsgError(conn, "session_or_crew_member_not_found", fmt.Sprintf("no session or crew member matches %q; `attn agent list` names sessions and `attn crew list` names members", strings.TrimSpace(targetRef)))
+				} else {
+					d.sendError(conn, code)
+				}
+				return
+			}
+			address = inbox.ToSession(target.ID)
+		}
+	}
+	target := d.inboxHolder(address)
+	if target != nil {
+		result.TargetSessionID = target.ID
+		if sender.ID == target.ID {
+			result.Detail = "that is this session; a message to yourself is not a conversation"
+			d.replyAgentMsg(conn, result)
 			return
 		}
-		d.sendError(conn, targetErrCode)
-		return
 	}
-	result.TargetSessionID = target.ID
-	if sender.ID == target.ID {
-		result.Detail = "that is this session; a message to yourself is not a conversation"
-		d.replyAgentMsg(conn, result)
-		return
-	}
-
-	counts, err := d.store.PeerMessageGuardCounts(
-		sender.ID, target.ID, content,
-		now.Add(-agentMessageDedupeWindow), now.Add(-agentMessageRateWindow),
-	)
+	now := time.Now()
+	counts, err := d.store.PeerMessageGuardCounts(sender.ID, address, content, now.Add(-agentMessageDedupeWindow), now.Add(-agentMessageRateWindow))
 	if err != nil {
-		d.logf("agent msg guard counts: sender=%s target=%s err=%v", sender.ID, target.ID, err)
+		d.logf("agent msg guard counts: %v", err)
 		d.sendError(conn, "internal_error")
 		return
 	}
@@ -144,29 +130,30 @@ func (d *Daemon) handleAgentMsg(conn net.Conn, msg *protocol.AgentMsgMessage) {
 		d.replyAgentMsg(conn, result)
 		return
 	}
-
-	message := agentmailbox.PeerMessage{
-		ID: uuid.NewString(), SenderSessionID: sender.ID, Body: content,
-		CreatedAt: now.UTC().Format(time.RFC3339Nano),
-	}
-	delivery, err := d.store.EnqueuePeerMessage(message, target.ID)
-	if err != nil {
-		d.logf("agent msg enqueue: sender=%s target=%s err=%v", sender.ID, target.ID, err)
+	message := inbox.Message{ID: uuid.NewString(), SenderSessionID: sender.ID, Body: content, CreatedAt: now.UTC().Format(time.RFC3339Nano)}
+	if err := d.store.SavePeerMessage(message); err != nil {
 		d.sendError(conn, "internal_error")
 		return
 	}
-	result.MessageID = message.ID
-	if err := d.deliverAgentMailboxItem(delivery); err != nil {
-		result.Status = protocol.AgentMsgStatusQueued
-		result.Detail = agentMessageQueuedDetail(err)
-	} else {
-		result.Status = protocol.AgentMsgStatusNotified
-		targetName := sessionDisplayName(target)
-		if memberFound {
-			targetName = crew.DisplayName(member.ID)
-		}
-		result.Detail = fmt.Sprintf("notified %s", targetName)
+	receipt, err := d.sendToInbox(inbox.Item{ID: message.ID, To: address, Kind: inbox.PeerMessage, Source: message.ID})
+	if err != nil {
+		d.logf("agent msg send: %v", err)
+		d.sendError(conn, "internal_error")
+		return
 	}
+	result.MessageID = receipt.ItemID
+	result.Status = protocol.AgentMsgStatusQueued
+	if receipt.Rang {
+		result.Status = protocol.AgentMsgStatusNotified
+	}
+	result.Detail = receipt.Detail
+	if holder := d.inboxHolder(address); holder != nil {
+		result.TargetSessionID = holder.ID
+	}
+	if receipt.Rang && address.MemberID() != "" {
+		result.Detail = "notified " + crew.DisplayName(address.MemberID())
+	}
+
 	d.replyAgentMsg(conn, result)
 }
 
@@ -181,13 +168,13 @@ func (d *Daemon) replyAgentMsgError(conn net.Conn, code, message string) {
 }
 
 func agentMessageQueuedDetail(err error) string {
-	if errors.Is(err, errAgentMailboxNoPromptReader) {
+	if errors.Is(err, errInboxNoPromptReader) {
 		return "queued (target is a shell pane, so attn will not type at it; the message waits for `attn agent inbox` there)"
 	}
-	if errors.Is(err, errAgentMailboxDoorbellOutstanding) {
+	if errors.Is(err, errInboxDoorbellOutstanding) {
 		return "queued (target already has an inbox doorbell; this message is in the same unread batch)"
 	}
-	if errors.Is(err, errAgentMailboxDoorbellInFlight) {
+	if errors.Is(err, errInboxDoorbellInFlight) {
 		return "queued (target's inbox doorbell is already being placed)"
 	}
 	if errors.Is(err, errSessionInputBlockedByApproval) {

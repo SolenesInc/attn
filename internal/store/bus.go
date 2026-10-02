@@ -192,7 +192,7 @@ func upsertGardenSeedArtifactObservation(tx *sql.Tx, seedID, checksum string, ev
 			checksum=excluded.checksum,
 			event_seq=excluded.event_seq,
 			observed_at=excluded.observed_at
-	`, seedID, checksum, eventSeq, formatTicketTime(now))
+	`, seedID, checksum, eventSeq, formatStoredTime(now))
 	return err
 }
 
@@ -213,7 +213,7 @@ func appendBusEventWith(x execer, e BusEvent, now time.Time) (int64, error) {
 	res, err := x.Exec(`
 		INSERT INTO bus_events (name, subject, payload, source, created_at)
 		VALUES (?, ?, ?, ?, ?)
-	`, e.Name, e.Subject, e.Payload, e.Source, formatTicketTime(now))
+	`, e.Name, e.Subject, e.Payload, e.Source, formatStoredTime(now))
 	if err != nil {
 		return 0, err
 	}
@@ -270,7 +270,7 @@ func scanBusEvents(rows *sql.Rows) ([]BusEvent, error) {
 		if err := rows.Scan(&e.Seq, &e.Name, &e.Subject, &e.Payload, &e.Source, &createdAt); err != nil {
 			return nil, err
 		}
-		e.CreatedAt = parseTicketTime(createdAt)
+		e.CreatedAt = parseStoredTime(createdAt)
 		events = append(events, e)
 	}
 	return events, rows.Err()
@@ -309,7 +309,7 @@ func (s *Store) GetBusConsumer(name string) (BusConsumer, bool, error) {
 	switch err {
 	case nil:
 		c.Enabled = enabled != 0
-		c.UpdatedAt = parseTicketTime(updatedAt)
+		c.UpdatedAt = parseStoredTime(updatedAt)
 		return c, true, nil
 	case sql.ErrNoRows:
 		return BusConsumer{}, false, nil
@@ -333,7 +333,7 @@ func (s *Store) SaveBusConsumer(c BusConsumer, now time.Time) error {
 		INSERT INTO bus_consumers (name, cursor, filter, enabled, updated_at)
 		VALUES (?, ?, ?, ?, ?)
 		ON CONFLICT(name) DO UPDATE SET filter = excluded.filter, updated_at = excluded.updated_at
-	`, c.Name, c.Cursor, c.Filter, enabled, formatTicketTime(now))
+	`, c.Name, c.Cursor, c.Filter, enabled, formatStoredTime(now))
 	return err
 }
 
@@ -348,7 +348,7 @@ func (s *Store) SetBusConsumerCursor(name string, cursor int64, now time.Time) (
 	}
 	res, err := s.db.Exec(`
 		UPDATE bus_consumers SET cursor = ?, updated_at = ? WHERE name = ? AND enabled = 1
-	`, cursor, formatTicketTime(now), name)
+	`, cursor, formatStoredTime(now), name)
 	if err != nil {
 		return false, err
 	}
@@ -365,7 +365,7 @@ func (s *Store) AdvanceBusConsumerCursor(name string, cursor int64, now time.Tim
 	}
 	_, err := s.db.Exec(`
 		UPDATE bus_consumers SET cursor = MAX(cursor, ?), updated_at = ? WHERE name = ?
-	`, cursor, formatTicketTime(now), name)
+	`, cursor, formatStoredTime(now), name)
 	return err
 }
 
@@ -382,7 +382,7 @@ func (s *Store) SetBusConsumerEnabled(name string, enabled bool, now time.Time) 
 	}
 	res, err := s.db.Exec(`
 		UPDATE bus_consumers SET enabled = ?, updated_at = ? WHERE name = ?
-	`, flag, formatTicketTime(now), name)
+	`, flag, formatStoredTime(now), name)
 	if err != nil {
 		return false, err
 	}
@@ -430,7 +430,7 @@ func (s *Store) ListBusConsumers() ([]BusConsumer, error) {
 		}
 		c.Enabled = enabled != 0
 		c.PinsRetention = c.Enabled
-		c.UpdatedAt = parseTicketTime(updatedAt)
+		c.UpdatedAt = parseStoredTime(updatedAt)
 		out = append(out, c)
 	}
 	return out, rows.Err()
@@ -457,7 +457,7 @@ func (s *Store) TrimBusEvents(cutoff time.Time) (int, error) {
 		        WHERE c.enabled = 1),
 		      (SELECT COALESCE(MAX(seq), 0) FROM bus_events)
 		  )
-	`, formatTicketTime(cutoff))
+	`, formatStoredTime(cutoff))
 	if err != nil {
 		return 0, err
 	}
@@ -533,7 +533,7 @@ func (s *Store) BusProducers(cutoffs []time.Time) ([]BusProducer, error) {
 	)
 	for _, c := range cutoffs {
 		columns.WriteString(", COALESCE(SUM(created_at >= ?), 0)")
-		args = append(args, formatTicketTime(c))
+		args = append(args, formatStoredTime(c))
 	}
 	rows, err := s.db.Query(`
 		SELECT name,
@@ -595,7 +595,7 @@ func (s *Store) BusEventTimeAt(seq int64) (time.Time, bool, error) {
 	`, seq).Scan(&createdAt)
 	switch err {
 	case nil:
-		return parseTicketTime(createdAt), true, nil
+		return parseStoredTime(createdAt), true, nil
 	case sql.ErrNoRows:
 		return time.Time{}, false, nil
 	default:

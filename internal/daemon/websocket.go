@@ -994,9 +994,6 @@ func (d *Daemon) handleClientMessage(client *wsClient, data []byte) {
 	if cmd == protocol.CmdWorkspaceSelected {
 		d.setSelectedWorkspace(msg.(*protocol.WorkspaceSelectedMessage).WorkspaceID)
 	}
-	if isUserPresenceCommand(cmd) {
-		d.recordUserActivity(time.Now())
-	}
 	if d.tryHandleRemoteWSCommand(client, cmd, msg, data) {
 		return
 	}
@@ -1055,8 +1052,7 @@ func (d *Daemon) handleClientMessage(client *wsClient, data []byte) {
 		d.life.Go("sendNotificationMarkReadWSResult", func() {
 			d.sendNotificationMarkReadWSResult(client, protocol.Deref(notifMark.RequestID), notifMark.NotificationID)
 		})
-	case protocol.CmdTicketAttach:
-		d.life.Go("handleTicketAttachWS", func() { d.handleTicketAttachWS(client, msg.(*protocol.TicketAttachMessage)) })
+
 	case protocol.CmdSeedArtifactTransfer:
 		d.life.Go("handleSeedArtifactTransferWS", func() { d.handleSeedArtifactTransferWS(client, msg.(*protocol.SeedArtifactTransferMessage)) })
 	case protocol.CmdSeedArtifactTarget:
@@ -1181,8 +1177,7 @@ func (d *Daemon) handleClientMessage(client *wsClient, data []byte) {
 		d.handlePullRequestUnwatchWS(client, msg.(*protocol.PullRequestUnwatchMessage))
 	case protocol.CmdCancelCountdown:
 		d.handleCancelCountdown(msg.(*protocol.CancelCountdownMessage))
-	case protocol.CmdTriggerNudge:
-		d.life.Go("handleTriggerNudge", func() { d.handleTriggerNudge(msg.(*protocol.TriggerNudgeMessage)) })
+
 	case protocol.CmdPRVisited:
 		d.handlePRVisitedWS(msg.(*protocol.PRVisitedMessage))
 	case protocol.CmdListWorktrees:
@@ -1560,10 +1555,7 @@ func remoteCommandSessionID(cmd string, msg interface{}) string {
 		if typed, ok := msg.(*protocol.SessionSelectedMessage); ok {
 			return typed.ID
 		}
-	case protocol.CmdTriggerNudge:
-		if typed, ok := msg.(*protocol.TriggerNudgeMessage); ok {
-			return typed.SessionID
-		}
+
 	case protocol.CmdRenameSession:
 		if typed, ok := msg.(*protocol.RenameSessionMessage); ok {
 			return typed.SessionID

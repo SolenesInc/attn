@@ -19,11 +19,6 @@ func TestWithHeadlessTasksOffNoModelRunsAndSessionsStillSettle(t *testing.T) {
 	agent := w.Launched(session)
 	app.TypeLine(session, "run the checkout tests")
 	agent.Prompted()
-	createTicket(t, cli, "planner", "Checkout tests", "checkout-tests")
-	if _, err := cli.TakeTicket(session, "checkout-tests", false); err != nil {
-		t.Fatalf("take the ticket: %v", err)
-	}
-	taken := showTicket(t, cli, "checkout-tests").Status
 	testworld.AwaitSession(app, session, func(s protocol.Session) bool { return s.State == protocol.SessionStateWorking })
 	watcher := w.App()
 
@@ -53,9 +48,6 @@ func TestWithHeadlessTasksOffNoModelRunsAndSessionsStillSettle(t *testing.T) {
 
 	agent.Exit(0)
 	testworld.Await(watcher, protocol.EventSessionExited, func(e protocol.SessionExitedMessage) bool { return e.ID == session })
-	if got := showTicket(t, cli, "checkout-tests").Status; got != taken {
-		t.Errorf("the ticket of the ended session is %q, want it left %q with no reconcile model", got, taken)
-	}
 }
 
 func TestTheHeadlessTasksSettingIsReportedApartFromItsEnvOverride(t *testing.T) {

@@ -1,4 +1,3 @@
-import { HeaderNudgeIndicator, deriveNudgeMode } from '../NudgeIndicator';
 import { PaneSeedChip } from '../PaneSeedChip';
 import { HeaderPresentationChip } from '../PresentationChip';
 import { HeaderSettleKeptChip, HeaderSettlingIndicator } from '../SettlingIndicator';
@@ -9,20 +8,11 @@ export function WorkspaceAgentSignals({ agentPane, paneSession }: WorkspaceAgent
   const {
     gardenSeeds,
     onOpenSeed,
-    onTriggerNudge,
     onCancelCountdown,
     onOpenPresentation,
     pinnedSeedPopover,
     dismissSeedPopover,
   } = useWorkspaceContext();
-  const nudgeMode = paneSession?.state
-    ? deriveNudgeMode({
-        ticketUnread: paneSession.ticketUnread,
-        nudgeFiresAt: paneSession.nudgeFiresAt,
-        state: paneSession.state,
-        isActive: Boolean(paneSession.isActive),
-      })
-    : null;
   const paneSeedDisplay = derivePaneSeedDisplay(
     gardenSeeds,
     agentPane.sessionId,
@@ -51,19 +41,11 @@ export function WorkspaceAgentSignals({ agentPane, paneSession }: WorkspaceAgent
       ) : autoSettleDismissArmed ? (
         <HeaderSettleKeptChip onDisarm={() => onCancelCountdown?.(agentPane.sessionId)} />
       ) : null}
-      {nudgeMode ? (
-        <HeaderNudgeIndicator
-          mode={nudgeMode}
-          firesAt={paneSession?.nudgeFiresAt}
-          onTrigger={() => onTriggerNudge?.(agentPane.sessionId)}
-          onCancel={() => onCancelCountdown?.(agentPane.sessionId)}
-        />
-      ) : null}
       {paneSeedDisplay.kind !== 'none' && onOpenSeed ? (
         <PaneSeedChip
           display={paneSeedDisplay}
           crownSeedId={paneSession?.seedId}
-          unread={Boolean(paneSession?.ticketUnread)}
+          unread={false}
           sessionId={agentPane.sessionId}
           pinned={pinnedSeedPopover === agentPane.sessionId}
           onOpenSeed={onOpenSeed}

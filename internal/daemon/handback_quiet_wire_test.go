@@ -64,3 +64,38 @@ func TestANotebookEntryForAChiefHeldByTheUsersTypingLandsOnceTheyAreQuiet(t *tes
 		}
 	})
 }
+
+func TestAPresentationHandbackReachesItsMemberAfterThePresentingDayEnds(t *testing.T) {
+	inBubbleWithAgents(t, func(t *testing.T, w *world) {
+		writeCrewCharter(t, w, "trellis")
+		w.restart()
+		cli, app := w.Client(), w.App()
+		first := w.bootBubbleClaude(t, wakeCrew(t, cli, "trellis", "").SessionID)
+		first.reply("Ready. <!-- attn:state=idle -->")
+		opened, err := cli.PresentOpen(first.id, presentationManifest("Checkout", newRepo(t, "shop"), "HEAD", "HEAD", ""), "")
+		if err != nil {
+			t.Fatal(err)
+		}
+		if _, err := cli.CrewHandoff(first.id, "Review tomorrow", false, protocol.CrewDayCloseSleep); err != nil {
+			t.Fatal(err)
+		}
+		if err := cli.Unregister(first.id); err != nil {
+			t.Fatal(err)
+		}
+		approved := testworld.Request(app, protocol.PresentSubmitRoundMessage{Cmd: protocol.CmdPresentSubmitRound, RoundID: opened.RoundID, Verdict: "approved", Handback: true}, protocol.EventPresentSubmitRoundResult, func(r protocol.PresentSubmitRoundResultMessage) bool { return r.RoundID == opened.RoundID })
+		if !approved.Success {
+			t.Fatal(protocol.Deref(approved.Error))
+		}
+		synctest.Wait()
+		nextID := protocol.Deref(crewRosterMember(t, cli, "trellis").BindingSession)
+		if nextID == "" || nextID == first.id {
+			t.Fatalf("no successor: %q", nextID)
+		}
+		next := w.bootBubbleClaude(t, nextID)
+		next.reply("Ready. <!-- attn:state=idle -->")
+		items := readInbox(t, cli, next.id, 0).Items
+		if len(items) != 1 || items[0].Address != "member:trellis" || !strings.Contains(items[0].Content, "attn present feedback") {
+			t.Fatalf("handback=%+v", items)
+		}
+	})
+}

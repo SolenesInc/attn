@@ -40,6 +40,7 @@ func TestASnoozeWrittenInTheOldEncodingIsStillWakeable(t *testing.T) {
 		until.Format(time.RFC3339Nano)); err != nil {
 		t.Fatalf("plant old snooze stamp: %v", err)
 	}
+	restorePreInboxFixture(t, s.db)
 	if _, err := s.db.Exec(`DELETE FROM schema_migrations WHERE version >= 95`); err != nil {
 		t.Fatalf("unrecord migration 95: %v", err)
 	}
@@ -92,6 +93,7 @@ func TestMigration95RewritesTurnCursorAndListingStampsThatDoNotSort(t *testing.T
 		`UPDATE delegation_operations SET updated_at = 'not a timestamp' WHERE request_id = ?`, "r5"); err != nil {
 		t.Fatalf("plant unreadable stamp: %v", err)
 	}
+	restorePreInboxFixture(t, s.db)
 	if _, err := s.db.Exec(`DELETE FROM schema_migrations WHERE version >= 95`); err != nil {
 		t.Fatalf("unrecord migration 95: %v", err)
 	}
@@ -106,6 +108,7 @@ func TestMigration95RewritesTurnCursorAndListingStampsThatDoNotSort(t *testing.T
 	assertMigration95Applied(t, s)
 
 	before := stampDigest(t, s)
+	restorePreInboxFixture(t, s.db)
 	if _, err := s.db.Exec(`DELETE FROM schema_migrations WHERE version >= 95`); err != nil {
 		t.Fatalf("unrecord migration 95 again: %v", err)
 	}

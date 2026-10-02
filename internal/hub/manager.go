@@ -1526,8 +1526,6 @@ func sessionsMatch(left, right protocol.Session) bool {
 		protocol.Deref(left.TurnSnoozedUntil) == protocol.Deref(right.TurnSnoozedUntil) &&
 		protocol.Deref(left.PinnedAt) == protocol.Deref(right.PinnedAt) &&
 		protocol.Deref(left.ParentSessionID) == protocol.Deref(right.ParentSessionID) &&
-		protocol.Deref(left.TicketUnread) == protocol.Deref(right.TicketUnread) &&
-		protocol.Deref(left.NudgeFiresAt) == protocol.Deref(right.NudgeFiresAt) &&
 		left.LastSeen == right.LastSeen
 }
 

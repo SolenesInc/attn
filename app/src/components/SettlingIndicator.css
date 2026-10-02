@@ -1,15 +1,5 @@
-/* Auto-settle countdown, shared by the pane header (an inline chip in
-   .workspace-pane-header) and the sidebar row (a thin bar on .session-item, used
-   only for sessions with no rendered tile).
-
-   Violet, and draining right-to-left, against the nudge indicator's sky-blue
-   left-to-right fill. Both can be on the same row at once and they mean opposite
-   things — one is something arriving, the other is something being taken away —
-   so they are separated by hue AND direction rather than by hue alone.
-
-   Colors are literal (not theme tokens) for the same reason NudgeIndicator.css
-   uses literals: the indicator must render identically in the packaged app
-   regardless of which token blocks are defined. */
+/* Auto-settle countdown for pane headers and sidebar rows. Literal colors keep
+   the indicator consistent in packaged apps with different theme tokens. */
 
 /* The palette is declared on every root this file styles, not just the chip.
    The header's track is a *sibling* of the chip button, not a descendant, so a
@@ -175,4 +165,31 @@
   .settling-dot {
     animation: none !important;
   }
+}
+
+.settle-cancel-hint {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  flex: none;
+  opacity: 0.8;
+}
+
+.settle-cancel-hint-key {
+  font-family: inherit;
+  font-size: inherit;
+  font-weight: 700;
+  line-height: 1;
+  padding: 2px 4px;
+  border: 1px solid currentColor;
+  border-radius: 3px;
+  /* The border already reads as a keycap; a filled background would compete with
+     the chip's own fill. */
+  background: transparent;
+  color: inherit;
+  white-space: nowrap;
+}
+
+.settle-cancel-hint-verb {
+  white-space: nowrap;
 }

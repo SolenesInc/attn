@@ -2,15 +2,15 @@ package daemon
 
 import (
 	"fmt"
-	"github.com/victorarias/attn/internal/prompts"
 	"net"
 	"strings"
-	"time"
 
-	"github.com/google/uuid"
+	"github.com/victorarias/attn/internal/prompts"
+
 	"github.com/victorarias/attn/internal/docstore"
 	"github.com/victorarias/attn/internal/garden"
 	seedEvents "github.com/victorarias/attn/internal/garden/events"
+	"github.com/victorarias/attn/internal/inbox"
 	"github.com/victorarias/attn/internal/protocol"
 )
 
@@ -63,16 +63,13 @@ func chiefSeedAssignmentPrompt(seedID string) string {
 }
 
 func (d *Daemon) deliverChiefSeedAssignment(chiefSessionID, seedID string) (protocol.AgentMsgStatus, string) {
-	now := time.Now()
-	itemID := uuid.NewString()
-	prompt := chiefSeedAssignmentPrompt(seedID)
-	delivery, err := d.store.EnqueueMaintenancePrompt(itemID, chiefSessionID, prompt, now)
+	receipt, err := d.sendToInbox(inbox.Item{To: inbox.ToChief(), Kind: inbox.Notice, Text: chiefSeedAssignmentPrompt(seedID)})
 	if err != nil {
 		d.logf("seed send to Chief: queue %s for %s: %v", seedID, chiefSessionID, err)
 		return protocol.AgentMsgStatusRefused, "Chief now tends the seed, but its inbox item could not be recorded; the assignment remains on the seed log"
 	}
-	if err := d.deliverAgentMailboxItem(delivery); err != nil {
-		return protocol.AgentMsgStatusQueued, agentMessageQueuedDetail(err)
+	if !receipt.Rang {
+		return protocol.AgentMsgStatusQueued, receipt.Detail
 	}
 	return protocol.AgentMsgStatusNotified, "notified Chief"
 }
@@ -141,7 +138,7 @@ func (d *Daemon) sendSeedToChief(msg *protocol.SeedSendToChiefMessage) (*protoco
 		return nil, err
 	}
 	d.lockGardenRoles()
-	written, notes, err := d.writeSeedMoveWithNotes(*schema, next, doc.Rev, []seedEvents.Occurrence{tended}, []garden.Note{{
+	written, _, err := d.writeSeedMoveWithNotes(*schema, next, doc.Rev, []seedEvents.Occurrence{tended}, []garden.Note{{
 		Seed: next.ID, Kind: garden.NoteKindNote, Body: noteBody,
 		AuthorSession: cause,
 	}})
@@ -154,9 +151,6 @@ func (d *Daemon) sendSeedToChief(msg *protocol.SeedSendToChiefMessage) (*protoco
 			return nil, fmt.Errorf("%s changed while it was being sent to Chief; refresh the garden", seed.ID)
 		}
 		return nil, err
-	}
-	if len(notes) > 0 {
-		d.mirrorSeedNoteOntoTicket(protocol.Deref(msg.SourceSessionID), seed.ID, notes[0].Body)
 	}
 	if err := d.resolveGardenReviewAction(msg.Review, seed.ID, "send_to_chief"); err != nil {
 		d.logf("Garden review: settle %s after Send to Chief: %v", seed.ID, err)

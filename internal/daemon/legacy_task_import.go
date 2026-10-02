@@ -1,14 +1,9 @@
 package daemon
 
 import (
-	"encoding/json"
-	"strings"
-
 	"github.com/victorarias/attn/internal/jobs"
 	"github.com/victorarias/attn/internal/store"
 )
-
-const legacyMetaReconcileInputs = "reconcile_inputs"
 
 func (d *Daemon) importLegacyTasks() {
 	if d.store == nil {
@@ -26,15 +21,11 @@ func (d *Daemon) importLegacyTasks() {
 }
 
 func (d *Daemon) legacyTaskToJob(rec store.LegacyTaskRecord) store.JobRecord {
-	payload, err := legacyTaskPayload(rec)
-	if err != nil {
-		d.logf("jobs: import legacy task %s (%s): %v", rec.ID, rec.Kind, err)
-	}
 	job := store.JobRecord{
 		ID:          rec.ID,
 		Kind:        rec.Kind,
 		UniqueKey:   rec.Subject,
-		Payload:     payload,
+		Payload:     "",
 		State:       rec.State,
 		Attempts:    rec.Attempts,
 		ScheduledAt: rec.NextAttemptAt,
@@ -47,19 +38,4 @@ func (d *Daemon) legacyTaskToJob(rec store.LegacyTaskRecord) store.JobRecord {
 		job.State = string(jobs.StateQueued)
 	}
 	return job
-}
-
-func legacyTaskPayload(rec store.LegacyTaskRecord) (string, error) {
-	raw := strings.TrimSpace(rec.MetaJSON)
-	if raw == "" || raw == "null" {
-		return "", nil
-	}
-	var meta map[string]string
-	if err := json.Unmarshal([]byte(raw), &meta); err != nil {
-		return "", err
-	}
-	if rec.Kind == reconcileKind {
-		return meta[legacyMetaReconcileInputs], nil
-	}
-	return "", nil
 }

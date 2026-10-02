@@ -344,9 +344,6 @@ location: {type: directory, path: %q}
 	if seed.Seed.Status != "withered" || len(seed.Notes) != 1 || !strings.Contains(seed.Notes[0].Body, "no such file or directory") {
 		t.Errorf("the run's seed is %s with notes %+v, want it withered with one note naming the failure", seed.Seed.Status, seed.Notes)
 	}
-	if tickets, err := cli.TicketList("", "", true); err != nil || len(tickets) != 0 {
-		t.Errorf("tickets = %+v (%v), want none", tickets, err)
-	}
 
 	if _, err := cli.AutomationRun("verbose", "first", ""); err == nil || !strings.Contains(err.Error(), "limit is") {
 		t.Fatalf("a run whose name exceeds the seed title limit = %v, want it refused naming the limit", err)

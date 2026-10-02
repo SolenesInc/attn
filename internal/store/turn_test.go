@@ -31,6 +31,7 @@ func TestMigration81BackfillsOpenTurnsFromStateSince(t *testing.T) {
 	if err != nil {
 		t.Fatalf("OpenDB setup: %v", err)
 	}
+	restorePreInboxFixture(t, db)
 	if _, err := db.Exec(`
 		INSERT INTO sessions (id, label, directory, state, state_since, state_updated_at, last_seen) VALUES
 			('waiting',  'Waiting',  '/tmp/a', 'waiting_input',    '2026-07-26T10:00:00Z', '2026-07-26T10:00:00Z', '2026-07-26T10:00:00Z'),

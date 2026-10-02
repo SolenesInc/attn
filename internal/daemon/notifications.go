@@ -164,10 +164,6 @@ func (d *Daemon) notifyTaskTerminalFailure(t *jobs.Job) {
 	if t == nil || d.store == nil {
 		return
 	}
-	if t.Kind == legacyTicketRecoveryKind {
-		d.finalizeExhaustedLegacyTicketRecovery(t)
-		return
-	}
 	renderer := d.taskFailureRenderers[t.Kind]
 	if renderer == nil {
 		renderer = renderUnknownTaskFailure
@@ -256,21 +252,6 @@ func (d *Daemon) renderSnoozeWakeFailure(t *jobs.Job) store.NotificationRecord {
 		"The snooze deadline passed and attn tried to wake the session.",
 		"The session may remain snoozed until you wake it manually.",
 		[]store.NotificationAction{openSessionAction(sessionID), retryTaskAction(t)})
-}
-
-func (d *Daemon) renderReconcileFailure(t *jobs.Job) store.NotificationRecord {
-	title := strings.TrimSpace(jobSubject(t))
-	if in, err := reconcileInputsFromJob(t); err == nil && strings.TrimSpace(in.Title) != "" {
-		title = in.Title
-	}
-	if title == "" {
-		title = "ticket"
-	}
-	return taskFailureNotification(t,
-		"Couldn’t reconcile ticket "+fmt.Sprintf("%q", title),
-		"A session ended before its ticket outcome was clear.",
-		"The ticket may not reflect what the session completed.",
-		[]store.NotificationAction{retryTaskAction(t)})
 }
 
 func (d *Daemon) renderGardenReviewFailure(t *jobs.Job) store.NotificationRecord {

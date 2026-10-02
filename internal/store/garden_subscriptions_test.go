@@ -90,6 +90,7 @@ func TestGardenSubscriptionMigrationRunsOnceAndPreservesExplicitWatches(t *testi
 	if err := s.db.QueryRow(`SELECT created_at FROM garden_seed_watches WHERE watcher_session_id = 'planner' AND seed_id = 'plot'`).Scan(&created); err != nil {
 		t.Fatal(err)
 	}
+	restorePreInboxFixture(t, s.db)
 	if _, err := s.db.Exec(`DELETE FROM schema_migrations WHERE version >= 139`); err != nil {
 		t.Fatal(err)
 	}
@@ -128,6 +129,7 @@ func TestGardenSubscriptionMigrationFailureRollsBackAndRetries(t *testing.T) {
 	s := newAgentMailboxStore(t)
 	seedSubscriptionHistory(t, s)
 	before := sortedGardenWatches(t, s)
+	restorePreInboxFixture(t, s.db)
 	if _, err := s.db.Exec(`DELETE FROM schema_migrations WHERE version >= 139;
   CREATE TRIGGER refuse_migrated_watch BEFORE INSERT ON garden_seed_watches
   WHEN NEW.watcher_session_id = 'other'

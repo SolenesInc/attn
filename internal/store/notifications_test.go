@@ -35,6 +35,7 @@ func TestMigration100CarriesPreSeverityNotifications(t *testing.T) {
 		t.Fatal("the planted schema already has severity; this test would pass without the migration")
 	}
 
+	restorePreInboxFixture(t, s.db)
 	if _, err := s.db.Exec(`DELETE FROM schema_migrations WHERE version >= 100`); err != nil {
 		t.Fatalf("unrecord migration 100: %v", err)
 	}
@@ -65,6 +66,7 @@ func TestMigration100CarriesPreSeverityNotifications(t *testing.T) {
 		t.Fatalf("unread = %d, want 1", unread)
 	}
 
+	restorePreInboxFixture(t, s.db)
 	if _, err := s.db.Exec(`DELETE FROM schema_migrations WHERE version >= 100`); err != nil {
 		t.Fatalf("unrecord migration 100 again: %v", err)
 	}

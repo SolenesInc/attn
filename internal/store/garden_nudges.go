@@ -5,7 +5,7 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/victorarias/attn/internal/agentmailbox"
+	"github.com/victorarias/attn/internal/inbox"
 )
 
 type GardenSeedWatch struct {
@@ -14,14 +14,14 @@ type GardenSeedWatch struct {
 }
 
 type GardenSeedMailboxItem struct {
-	RecipientSessionID string
-	SeedID             string
-	BellName           string
+	To       inbox.Address
+	SeedID   string
+	BellName string
 }
 
 type GardenSeedBellDelivery struct {
-	RecipientSessionID string
-	ItemID             string
+	To     inbox.Address
+	ItemID string
 }
 
 const gardenSeedUnblockedHint = "unblocked"
@@ -104,7 +104,7 @@ func (s *Store) HandleGardenSeedEvent(
 		return nil, false, fmt.Errorf("handle Garden seed event %d: quiet event has %d deliveries", eventSeq, len(deliveries))
 	}
 	for _, delivery := range deliveries {
-		if delivery.RecipientSessionID == "" || delivery.ItemID == "" {
+		if delivery.To == (inbox.Address{}) || delivery.ItemID == "" {
 			return nil, false, fmt.Errorf("handle Garden seed event %d: delivery recipient and item id are required", eventSeq)
 		}
 	}
@@ -139,36 +139,25 @@ func (s *Store) HandleGardenSeedEvent(
 	created := make([]string, 0, len(deliveries))
 	seen := make(map[string]bool, len(deliveries))
 	for _, delivery := range deliveries {
-		if seen[delivery.RecipientSessionID] {
-			return nil, false, fmt.Errorf("handle Garden seed event %d: duplicate recipient %s", eventSeq, delivery.RecipientSessionID)
+		if seen[delivery.To.String()] {
+			return nil, false, fmt.Errorf("handle Garden seed event %d: duplicate recipient %s", eventSeq, delivery.To.String())
 		}
-		seen[delivery.RecipientSessionID] = true
-		res, err := tx.Exec(`
-			INSERT OR IGNORE INTO agent_mailbox_items
-				(id, recipient_session_id, kind, source_id, coalesce_key, hint, bell_name, created_at)
-			VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-		`, delivery.ItemID, delivery.RecipientSessionID, agentmailbox.KindGardenSeed,
-			seedID, seedID, eventName, bellName, stamp)
-		if err != nil {
-			return nil, false, fmt.Errorf("handle Garden seed event %d: enqueue %s: %w", eventSeq, delivery.RecipientSessionID, err)
+		seen[delivery.To.String()] = true
+		var existingID string
+		err := tx.QueryRow(`SELECT id FROM inbox_items WHERE address=? AND kind=? AND coalesce_key=? AND read_at=''`, delivery.To.String(), inbox.SeedUpdate, seedID).Scan(&existingID)
+		if err == sql.ErrNoRows {
+			if err := putInbox(tx, inbox.Item{ID: delivery.ItemID, To: delivery.To, Kind: inbox.SeedUpdate, Source: seedID, Key: seedID, Hint: eventName, BellName: bellName}, now); err != nil {
+				return nil, false, err
+			}
+			created = append(created, delivery.To.String())
+			continue
 		}
-		inserted, err := res.RowsAffected()
 		if err != nil {
 			return nil, false, err
 		}
-		if inserted == 1 {
-			created = append(created, delivery.RecipientSessionID)
-			continue
-		}
-		var existingID string
-		if err := tx.QueryRow(`
-			SELECT id FROM agent_mailbox_items
-			WHERE recipient_session_id = ? AND kind = ? AND coalesce_key = ? AND read_at = ''
-		`, delivery.RecipientSessionID, agentmailbox.KindGardenSeed, seedID).Scan(&existingID); err != nil {
-			return nil, false, fmt.Errorf("handle Garden seed event %d: ignored item %s has no coalesced delivery: %w", eventSeq, delivery.ItemID, err)
-		}
+
 		if eventName == gardenSeedUnblockedHint {
-			if _, err := tx.Exec(`UPDATE agent_mailbox_items SET hint = ? WHERE id = ?`, eventName, existingID); err != nil {
+			if _, err := tx.Exec(`UPDATE inbox_items SET hint = ? WHERE id = ?`, eventName, existingID); err != nil {
 				return nil, false, fmt.Errorf("handle Garden seed event %d: promote coalesced delivery %s: %w", eventSeq, existingID, err)
 			}
 		}
@@ -179,11 +168,11 @@ func (s *Store) HandleGardenSeedEvent(
 	return created, true, nil
 }
 
-func (s *Store) UnreadGardenSeedMailboxItems(sessionID string) ([]GardenSeedMailboxItem, error) {
+func (s *Store) UnreadGardenSeedMailboxItems(to inbox.Address) ([]GardenSeedMailboxItem, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	rows, err := s.db.Query(`SELECT source_id, bell_name FROM agent_mailbox_items
-  WHERE recipient_session_id = ? AND kind = ? AND read_at = ''`, sessionID, agentmailbox.KindGardenSeed)
+	rows, err := s.db.Query(`SELECT source_id, bell_name FROM inbox_items
+  WHERE address = ? AND kind = ? AND read_at = ''`, to.String(), inbox.SeedUpdate)
 	if err != nil {
 		return nil, fmt.Errorf("read queued Garden seed mailbox items: %w", err)
 	}
@@ -191,7 +180,7 @@ func (s *Store) UnreadGardenSeedMailboxItems(sessionID string) ([]GardenSeedMail
 	var items []GardenSeedMailboxItem
 	for rows.Next() {
 		var item GardenSeedMailboxItem
-		item.RecipientSessionID = sessionID
+		item.To = to
 		if err := rows.Scan(&item.SeedID, &item.BellName); err != nil {
 			return nil, err
 		}
@@ -203,8 +192,8 @@ func (s *Store) UnreadGardenSeedMailboxItems(sessionID string) ([]GardenSeedMail
 func (s *Store) PendingGardenSeedMailboxItems() ([]GardenSeedMailboxItem, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	rows, err := s.db.Query(`SELECT recipient_session_id, source_id, bell_name FROM agent_mailbox_items
-  WHERE kind = ? AND read_at = '' ORDER BY recipient_session_id, source_id`, agentmailbox.KindGardenSeed)
+	rows, err := s.db.Query(`SELECT address, source_id, bell_name FROM inbox_items
+  WHERE kind = ? AND read_at = '' ORDER BY address, source_id`, inbox.SeedUpdate)
 	if err != nil {
 		return nil, fmt.Errorf("read all queued Garden seed mailbox items: %w", err)
 	}
@@ -212,7 +201,12 @@ func (s *Store) PendingGardenSeedMailboxItems() ([]GardenSeedMailboxItem, error)
 	var items []GardenSeedMailboxItem
 	for rows.Next() {
 		var item GardenSeedMailboxItem
-		if err := rows.Scan(&item.RecipientSessionID, &item.SeedID, &item.BellName); err != nil {
+		var address string
+		if err := rows.Scan(&address, &item.SeedID, &item.BellName); err != nil {
+			return nil, err
+		}
+		item.To, err = inbox.ParseAddress(address)
+		if err != nil {
 			return nil, err
 		}
 		items = append(items, item)
@@ -223,8 +217,8 @@ func (s *Store) PendingGardenSeedMailboxItems() ([]GardenSeedMailboxItem, error)
 func (s *Store) PendingGardenSeedBellNames() ([]string, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	rows, err := s.db.Query(`SELECT DISTINCT bell_name FROM agent_mailbox_items
-	  WHERE kind = ? AND read_at = '' ORDER BY bell_name`, agentmailbox.KindGardenSeed)
+	rows, err := s.db.Query(`SELECT DISTINCT bell_name FROM inbox_items
+	  WHERE kind = ? AND read_at = '' ORDER BY bell_name`, inbox.SeedUpdate)
 	if err != nil {
 		return nil, fmt.Errorf("read queued Garden seed bell definitions: %w", err)
 	}
@@ -241,7 +235,7 @@ func (s *Store) PendingGardenSeedBellNames() ([]string, error) {
 }
 
 func (s *Store) UnreadGardenSeedMailboxSeeds(sessionID string) ([]string, error) {
-	items, err := s.UnreadGardenSeedMailboxItems(sessionID)
+	items, err := s.UnreadGardenSeedMailboxItems(inbox.ToSession(sessionID))
 	if err != nil {
 		return nil, err
 	}
@@ -265,10 +259,10 @@ func (s *Store) DiscardGardenSeedMailboxItems(sessionID string, seedIDs []string
 	defer tx.Rollback()
 	stamp := now.UTC().Format(sortableTimeFormat)
 	for _, seedID := range seedIDs {
-		if _, err := tx.Exec(`UPDATE agent_mailbox_items
+		if _, err := tx.Exec(`UPDATE inbox_items
    SET read_at = ?, notified_at = CASE WHEN notified_at = '' THEN ? ELSE notified_at END
-   WHERE recipient_session_id = ? AND kind = ? AND source_id = ? AND read_at = ''`,
-			stamp, stamp, sessionID, agentmailbox.KindGardenSeed, seedID); err != nil {
+   WHERE address = ? AND kind = ? AND source_id = ? AND read_at = ''`,
+			stamp, stamp, inbox.ToSession(sessionID).String(), inbox.SeedUpdate, seedID); err != nil {
 			return fmt.Errorf("discard uncovered Garden update: %w", err)
 		}
 	}

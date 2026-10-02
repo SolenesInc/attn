@@ -10,11 +10,11 @@ import (
 	"time"
 
 	"github.com/google/uuid"
-	"github.com/victorarias/attn/internal/agentmailbox"
 	"github.com/victorarias/attn/internal/bus"
 	"github.com/victorarias/attn/internal/docstore"
 	"github.com/victorarias/attn/internal/garden"
 	"github.com/victorarias/attn/internal/github"
+	"github.com/victorarias/attn/internal/inbox"
 	"github.com/victorarias/attn/internal/jobs"
 	"github.com/victorarias/attn/internal/protocol"
 	"github.com/victorarias/attn/internal/prreadiness"
@@ -498,7 +498,7 @@ func (d *Daemon) recordPullRequestWatchFailures(group *sessionPullRequestGroup, 
 			"monitoring is delayed", []string{fetchErr.Error()}, now,
 		)
 		delivery, err := d.store.RecordPullRequestWatchFailure(
-			watch.SessionID, watch.PRID, watch.CreatedAt, watch.Mode, watch.Reviewer,
+			watch.To, watch.SessionID, watch.PRID, watch.CreatedAt, watch.Mode, watch.Reviewer,
 			fetchErr.Error(), item, now,
 		)
 		if errors.Is(err, sql.ErrNoRows) {
@@ -512,6 +512,9 @@ func (d *Daemon) recordPullRequestWatchFailures(group *sessionPullRequestGroup, 
 			d.deliverPullRequestMailbox(*delivery)
 		}
 		changed = append(changed, watch.SessionID)
+		if holder := d.inboxHolder(watch.To); holder != nil && holder.ID != watch.SessionID {
+			changed = append(changed, holder.ID)
+		}
 	}
 	return changed
 }
@@ -534,7 +537,7 @@ func (d *Daemon) processPullRequestWatches(
 			healthError = "feedback: " + feedbackErr.Error()
 			feedbackError = feedbackErr.Error()
 		}
-		items := make([]agentmailbox.Item, 0, len(transition.Actions))
+		items := make([]inbox.Item, 0, len(transition.Actions))
 		for _, action := range transition.Actions {
 			coalesceKey := store.PullRequestWatchCoalesceKey(watch.PRID)
 			kind := pullRequestWatchActionKind(action.Kind)
@@ -555,7 +558,7 @@ func (d *Daemon) processPullRequestWatches(
 		}
 		terminal := transition.Evaluation.State == prreadiness.StateMerged || transition.Evaluation.State == prreadiness.StateClosed
 		deliveries, projectionChanged, err := d.store.ReconcilePullRequestWatch(store.PullRequestWatchReconcile{
-			SessionID: watch.SessionID, PRID: watch.PRID, CreatedAt: watch.CreatedAt,
+			To: watch.To, SessionID: watch.SessionID, PRID: watch.PRID, CreatedAt: watch.CreatedAt,
 			Mode: watch.Mode, Reviewer: watch.Reviewer, Cursor: transition.Cursor,
 			Status: status, Evaluation: transition.Evaluation,
 			Health: health, HealthError: healthError, FeedbackError: feedbackError,
@@ -577,17 +580,16 @@ func (d *Daemon) processPullRequestWatches(
 		}
 		if projectionChanged {
 			changed = append(changed, watch.SessionID)
+			if holder := d.inboxHolder(watch.To); holder != nil && holder.ID != watch.SessionID {
+				changed = append(changed, holder.ID)
+			}
 		}
 	}
 	return changed
 }
 
-func (d *Daemon) deliverPullRequestMailbox(delivery agentmailbox.Delivery) {
-	if err := d.deliverAgentMailboxItem(delivery); err != nil &&
-		!errors.Is(err, errAgentMailboxDoorbellOutstanding) &&
-		!errors.Is(err, errAgentMailboxDoorbellInFlight) {
-		d.logf("pull request watch: deliver %s: %v", delivery.Item.ID, err)
-	}
+func (d *Daemon) deliverPullRequestMailbox(delivery inbox.Delivery) {
+	d.sentToInbox(delivery.Item.To)
 }
 
 func (d *Daemon) schedulePullRequestSettle(watch store.PullRequestWatch, deadline, now time.Time) {
@@ -628,9 +630,9 @@ func pullRequestWatchMailboxItem(
 	eventID, coalesceKey, kind string,
 	details []string,
 	now time.Time,
-) agentmailbox.Item {
+) inbox.Item {
 	id := uuid.NewSHA1(uuid.NameSpaceURL, []byte(strings.Join([]string{
-		"pull-request-watch", watch.SessionID, watch.PRID, watch.CreatedAt, eventID,
+		"pull-request-watch", watch.To.String(), watch.PRID, watch.CreatedAt, eventID,
 	}, "\x00"))).String()
 	details = append([]string(nil), details...)
 	sort.Strings(details)
@@ -641,10 +643,10 @@ func pullRequestWatchMailboxItem(
 		}
 	}
 	prompt += "\nCheck the current pull request before acting. This notification grants no merge authority."
-	return agentmailbox.Item{
-		ID: id, RecipientSessionID: watch.SessionID, Kind: agentmailbox.KindMaintenancePrompt,
-		SourceID: watch.PRID, CoalesceKey: coalesceKey,
-		Hint: "pull request update", Prompt: prompt,
+	return inbox.Item{
+		ID: id, To: watch.To, Kind: inbox.Notice,
+		Source: watch.PRID, Key: coalesceKey,
+		Hint: "pull request update", Text: prompt,
 		CreatedAt: now.UTC().Format(docstore.TimeFormat),
 	}
 }

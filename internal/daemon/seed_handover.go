@@ -234,7 +234,7 @@ func (d *Daemon) bindSeedHandoverProtected(
 		return nil, fmt.Errorf("handoff note %s was committed but cannot be read", note.ID)
 	}
 	wire := noteToProtocol(note, *noteDoc)
-	d.mirrorSeedNoteOntoTicket(protocol.Deref(msg.SourceSessionID), seed.ID, wire.Body)
+
 	return &wire, nil
 }
 

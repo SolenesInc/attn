@@ -282,7 +282,7 @@ func TestSendToChiefAppendsToTheInboxAndRingsOnlyAReadyChief(t *testing.T) {
 }
 
 func TestSendToChiefWithoutAChiefStillLandsAndRefusesBadSelections(t *testing.T) {
-	w := newWorld(t)
+	w := newWorld(t, fakeagent.Claude)
 	app := w.App()
 
 	for name, selection := range map[string]string{"an empty selection": "   ", "an oversize selection": strings.Repeat("a", 32<<10+1)} {
@@ -325,4 +325,22 @@ func TestSendToChiefWithoutAChiefStillLandsAndRefusesBadSelections(t *testing.T)
 	if back := notebookAskBacklinks(app, "/knowledge/areas/Q3 (draft).md"); len(back.Entries) != 0 {
 		t.Errorf("the source with special characters is linked from %v, want it shown as code only", notebookEntryPaths(back.Entries))
 	}
+	chief, _ := mailIdleAgent(w, app, "next-chief")
+	if assigned := setChiefOfStaff(app, chief, true); !assigned.Success {
+		t.Fatalf("assign Chief=%+v", assigned)
+	}
+	agent := w.Launched(chief)
+	if prompt := agent.Prompted(); !strings.Contains(prompt, inboxDoorbell) {
+		t.Fatalf("next Chief prompt=%q", prompt)
+	}
+	mail := readInbox(t, w.Client(), chief, 0).Items
+	if len(mail) != 4 {
+		t.Fatalf("next Chief inbox=%+v", mail)
+	}
+	for _, item := range mail {
+		if item.Address != "role:chief" {
+			t.Fatalf("Chief item address=%s", item.Address)
+		}
+	}
+
 }

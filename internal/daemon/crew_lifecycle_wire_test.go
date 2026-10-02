@@ -202,7 +202,7 @@ func TestAHarnessCacheLifetimeSettingMovesTheHeartbeat(t *testing.T) {
 	})
 }
 
-func TestTheWakeLimitCountsOnlyWakesInsideItsWindow(t *testing.T) {
+func TestDeliveryWakesResumeAfterTheWakeLimitWindow(t *testing.T) {
 	inBubbleWithAgents(t, func(t *testing.T, w *world) {
 		writeCrewCharter(t, w, "trellis")
 		w.restart()
@@ -210,39 +210,23 @@ func TestTheWakeLimitCountsOnlyWakesInsideItsWindow(t *testing.T) {
 		setSetting(t, app, "crew.wake_limit", "1")
 		setSetting(t, app, "crew.wake_limit_window_seconds", "3600")
 		registerSessions(t, w, cli, "sender")
-
-		wakeByMail := func(body string) (string, error) {
-			t.Helper()
-			sent, err := cli.AgentMsg("trellis", "sender", body)
-			if err != nil {
-				return "", err
-			}
-			if !strings.Contains(sent.Detail, "woke Trellis") {
-				t.Fatalf("mail for the sleeping Trellis = %+v, want it to wake a day", sent)
-			}
-			return sent.TargetSessionID, nil
+		first := sendAgentMessage(t, cli, "sender", "trellis", "the build broke")
+		if first.TargetSessionID == "" || !strings.Contains(first.Detail, "woke Trellis") {
+			t.Fatalf("first wake=%+v", first)
 		}
-		endDay := func(session string) {
-			t.Helper()
-			w.terms.Terminal(session).Exit(0)
-			w.advance(0)
-			if binding := crewRosterMember(t, cli, "trellis").BindingSession; binding != nil {
-				t.Fatalf("trellis is still bound to %s after its day exited", *binding)
-			}
-		}
-
-		first, err := wakeByMail("the build broke")
-		if err != nil {
-			t.Fatalf("the first wake: %v", err)
-		}
-		endDay(first)
+		w.terms.Terminal(first.TargetSessionID).Exit(0)
 		w.advance(30 * time.Minute)
-		if _, err := wakeByMail("the build broke again"); err == nil || !strings.Contains(err.Error(), "crew.wake_limit=1") {
-			t.Fatalf("a second wake inside the hour = %v, want it refused by the limit", err)
+		inside := sendAgentMessage(t, cli, "sender", "trellis", "the build broke again")
+		if inside.Status != protocol.AgentMsgStatusQueued || !strings.Contains(inside.Detail, "crew.wake_limit=1") {
+			t.Fatalf("inside limit window=%+v", inside)
+		}
+		if binding := crewRosterMember(t, cli, "trellis").BindingSession; binding != nil {
+			t.Fatalf("limit woke %s", *binding)
 		}
 		w.advance(31 * time.Minute)
-		if _, err := wakeByMail("the build broke a third time"); err != nil {
-			t.Fatalf("a wake once the first left the window was refused: %v", err)
+		fresh := sendAgentMessage(t, cli, "sender", "trellis", "the build broke a third time")
+		if fresh.TargetSessionID == "" || !strings.Contains(fresh.Detail, "woke Trellis") {
+			t.Fatalf("after limit window=%+v", fresh)
 		}
 	})
 }

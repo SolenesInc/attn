@@ -213,37 +213,6 @@ func (d *Daemon) liveSessionForTender(tender garden.Tender) (string, bool) {
 	return "", false
 }
 
-func (d *Daemon) migrateCrewTicketIdentity(memberID string, sessionIDs ...string) error {
-	identity := store.TicketMemberIdentity(memberID)
-	for _, sessionID := range sessionIDs {
-		sessionID = strings.TrimSpace(sessionID)
-		if sessionID == "" {
-			continue
-		}
-		if err := d.store.MigrateTicketIdentity(sessionID, identity, time.Now()); err != nil {
-			return fmt.Errorf("carry session %s's ticket participation into %s: %w", shortSessionID(sessionID), identity, err)
-		}
-	}
-	return nil
-}
-
-func (d *Daemon) migrateCrewTicketIdentities() error {
-	members, _, err := d.readCrewMembersRaw()
-	if err != nil {
-		return err
-	}
-	for _, member := range members {
-		if err := d.validateCrewMemberPaths(member); err != nil {
-			d.logf("crew: ticket identity migration skipped stored member %s: %v", crew.DisplayName(member.ID), err)
-			continue
-		}
-		if err := d.migrateCrewTicketIdentity(member.ID, member.BindingSession, member.LetterSession); err != nil {
-			return err
-		}
-	}
-	return nil
-}
-
 func (d *Daemon) claimCrewBinding(memberName, sessionID string) (string, error) {
 	if err := d.requireHome(crew.Surface); err != nil {
 		return "", err
@@ -263,9 +232,7 @@ func (d *Daemon) claimCrewBinding(memberName, sessionID string) (string, error) 
 			return "", fmt.Errorf("no crew member %q is registered; `attn crew list` names the roster", memberName)
 		}
 		if member.BindingSession == sessionID {
-			if err := d.migrateCrewTicketIdentity(member.ID, sessionID); err != nil {
-				return "", err
-			}
+
 			return member.ID, nil
 		}
 		live := d.crewBindingLive(member)
@@ -281,16 +248,11 @@ func (d *Daemon) claimCrewBinding(memberName, sessionID string) (string, error) 
 				crew.DisplayName(member.ID), shortSessionID(member.BindingSession))
 		}
 		d.releaseCrewBindingsExcept(*schema, members, docs, member.ID, sessionID)
-		previousSessionID := member.BindingSession
-		if err := d.migrateCrewTicketIdentity(member.ID, previousSessionID); err != nil {
-			return "", err
-		}
+
 		member.BindingSession = sessionID
 		_, err = d.writeCrewMember(*schema, member, docs[member.ID].Rev)
 		if err == nil {
-			if err := d.migrateCrewTicketIdentity(member.ID, sessionID); err != nil {
-				return "", err
-			}
+
 			d.invalidateGardenSeedParties("crew bind")
 			d.publishFact(FactCrewBound, member.ID, nil)
 			d.logf("crew: session %s bound as %s", sessionID, crew.DisplayName(member.ID))
@@ -328,9 +290,7 @@ func (d *Daemon) releaseCrewBinding(memberID, sessionID string) (bool, error) {
 		if member.BindingSession != sessionID {
 			return false, nil
 		}
-		if err := d.migrateCrewTicketIdentity(member.ID, sessionID); err != nil {
-			return false, err
-		}
+
 		member.BindingSession = ""
 		released = true
 		return true, nil
@@ -397,10 +357,7 @@ func (d *Daemon) releaseCrewBindingsExcept(schema docstore.CollectionSchema, mem
 		if member.BindingSession != sessionID || member.ID == keepID {
 			continue
 		}
-		if err := d.migrateCrewTicketIdentity(member.ID, sessionID); err != nil {
-			d.logf("crew: keeping %s's stale binding for session %s because ticket participation did not move: %v", crew.DisplayName(member.ID), sessionID, err)
-			continue
-		}
+
 		member.BindingSession = ""
 		if _, err := d.writeCrewMember(schema, member, docs[member.ID].Rev); err != nil {
 			d.logf("crew: releasing %s's binding for session %s: %v", crew.DisplayName(member.ID), sessionID, err)

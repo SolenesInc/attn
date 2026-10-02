@@ -493,7 +493,7 @@ export function useAppController({
     const ids: string[] = [];
     for (const session of enrichedLocalSessions) {
       if (!onScreenSessionIds.has(session.id)) continue;
-      if (session.autoSettleFiresAt || session.autoSettleHeld || session.nudgeFiresAt)
+      if (session.autoSettleFiresAt || session.autoSettleHeld)
         ids.push(session.id);
     }
     return ids;

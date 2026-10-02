@@ -6,6 +6,8 @@ import (
 	"fmt"
 	"time"
 
+	"github.com/victorarias/attn/internal/inbox"
+
 	"github.com/victorarias/attn/internal/docstore"
 	"github.com/victorarias/attn/internal/protocol"
 )
@@ -293,7 +295,7 @@ func (s *Store) TouchSessionPullRequestActivity(prID string, at time.Time) error
 	return err
 }
 
-func (s *Store) ForgetSessionPullRequest(sessionID, prID string) (bool, error) {
+func (s *Store) ForgetSessionPullRequest(sessionID string, to inbox.Address, prID string) (bool, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	if s.db == nil {
@@ -305,14 +307,22 @@ func (s *Store) ForgetSessionPullRequest(sessionID, prID string) (bool, error) {
 		return false, err
 	}
 	defer tx.Rollback()
-	if err := clearUnreadPullRequestItems(tx, sessionID, prID); err != nil {
+	if err := clearUnreadPullRequestItems(tx, to, prID); err != nil {
 		return false, err
 	}
-	if _, err := tx.Exec(`DELETE FROM pull_request_watches WHERE session_id=? AND pr_id=?`, sessionID, prID); err != nil {
+	owner := sessionID
+	if err := tx.QueryRow(`SELECT session_id FROM pull_request_watches WHERE address=? AND pr_id=?`, to.String(), prID).Scan(&owner); err != nil && err != sql.ErrNoRows {
 		return false, err
 	}
-	result, err := tx.Exec(
-		`DELETE FROM session_pull_requests WHERE session_id = ? AND pr_id = ?`, sessionID, prID)
+	watchResult, err := tx.Exec(`DELETE FROM pull_request_watches WHERE address=? AND pr_id=?`, to.String(), prID)
+	if err != nil {
+		return false, err
+	}
+	watchCount, err := watchResult.RowsAffected()
+	if err != nil {
+		return false, err
+	}
+	result, err := tx.Exec(`DELETE FROM session_pull_requests WHERE session_id IN (?,?) AND pr_id=? AND NOT EXISTS(SELECT 1 FROM pull_request_watches WHERE session_id=session_pull_requests.session_id AND pr_id=session_pull_requests.pr_id)`, owner, sessionID, prID)
 	if err != nil {
 		return false, err
 	}
@@ -320,7 +330,7 @@ func (s *Store) ForgetSessionPullRequest(sessionID, prID string) (bool, error) {
 	if err != nil {
 		return false, err
 	}
-	if affected == 0 {
+	if affected == 0 && watchCount == 0 {
 		return false, nil
 	}
 	return true, tx.Commit()

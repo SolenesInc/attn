@@ -79,6 +79,7 @@ func TestMigration94RewritesJobAndNotificationStampsThatDoNotSort(t *testing.T) 
 		`UPDATE jobs SET created_at = 'not a timestamp' WHERE id = ?`, "j5"); err != nil {
 		t.Fatalf("plant unreadable stamp: %v", err)
 	}
+	restorePreInboxFixture(t, s.db)
 	if _, err := s.db.Exec(`DELETE FROM schema_migrations WHERE version >= 94`); err != nil {
 		t.Fatalf("unrecord migration 94: %v", err)
 	}
@@ -94,6 +95,7 @@ func TestMigration94RewritesJobAndNotificationStampsThatDoNotSort(t *testing.T) 
 	}
 	assertMigration94Applied(t, s)
 
+	restorePreInboxFixture(t, s.db)
 	if _, err := s.db.Exec(`DELETE FROM schema_migrations WHERE version >= 94`); err != nil {
 		t.Fatalf("unrecord migration 94 again: %v", err)
 	}

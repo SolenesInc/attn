@@ -60,8 +60,6 @@ export interface SessionTerminalWorkspaceProps {
     endpointId?: string;
     state?: UISessionState;
     usage?: SessionUsage;
-    ticketUnread?: boolean;
-    nudgeFiresAt?: string;
     autoSettleFiresAt?: string;
     autoSettleHeld?: boolean;
     autoSettleDismissArmed?: boolean;
@@ -101,7 +99,6 @@ export interface SessionTerminalWorkspaceProps {
   onFocusPane: (paneId: string) => void;
   onRenameSession?: (sessionId: string, label: string) => Promise<void>;
   onSelectSession?: (sessionId: string) => void;
-  onTriggerNudge?: (sessionId: string) => void;
   onCancelCountdown?: (sessionId: string) => void;
   onTerminalPointerActivity?: (sessionId: string) => void;
   onOpenPresentation?: (presentationId: string) => void;

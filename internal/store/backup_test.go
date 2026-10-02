@@ -16,6 +16,7 @@ func TestMigrateDB_PreMigrationBackup(t *testing.T) {
 	defer s.Close()
 
 	latest := latestSchemaVersion()
+	restorePreInboxFixture(t, s.db)
 	if _, err := s.db.Exec(`DELETE FROM schema_migrations WHERE version = ?`, latest); err != nil {
 		t.Fatalf("unrecord latest migration: %v", err)
 	}

@@ -1008,7 +1008,7 @@ export function AutomationForm({
             >
               {deleteArmed ? 'Confirm delete' : 'Delete'}
             </button>
-            {deleteArmed && <span className="automation-form__delete-note">Existing tickets and run history are kept.</span>}
+            {deleteArmed && <span className="automation-form__delete-note">Existing seeds and run history are kept.</span>}
           </div>
         ) : (
           <span />

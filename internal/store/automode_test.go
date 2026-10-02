@@ -46,6 +46,7 @@ func plantPre140AutoModeConfig(t *testing.T, s *Store, dbPath, environment, allo
 	if _, err := s.GetAutoModeConfig(); err == nil {
 		t.Fatal("the planted schema already reads; this test would pass without the migration")
 	}
+	restorePreInboxFixture(t, s.db)
 	if _, err := s.db.Exec(`DELETE FROM schema_migrations WHERE version >= ?`, from); err != nil {
 		t.Fatalf("unrecord migration %d: %v", from, err)
 	}

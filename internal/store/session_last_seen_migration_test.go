@@ -27,6 +27,7 @@ func TestMigration155MovesLastSeenStampsToUTC(t *testing.T) {
 			t.Fatalf("seed %s: %v", stamp.id, err)
 		}
 	}
+	restorePreInboxFixture(t, db)
 	if _, err := db.Exec(`DELETE FROM schema_migrations WHERE version >= 155`); err != nil {
 		t.Fatalf("rewind to schema 154: %v", err)
 	}

@@ -32,6 +32,7 @@ func TestMigration126RecomputesStoredSlugs(t *testing.T) {
 	if err != nil {
 		t.Fatalf("read the seed before the migration: %v", err)
 	}
+	restorePreInboxFixture(t, s.db)
 	if _, err := s.db.Exec(`DELETE FROM schema_migrations WHERE version >= 126`); err != nil {
 		t.Fatalf("unrecord migration 126: %v", err)
 	}

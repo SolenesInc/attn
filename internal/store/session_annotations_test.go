@@ -13,6 +13,7 @@ func TestMigration93KeepsDraftsWrittenBeforeTheNoteExisted(t *testing.T) {
 	if err != nil {
 		t.Fatalf("OpenDB setup: %v", err)
 	}
+	restorePreInboxFixture(t, db)
 	if _, err := db.Exec(`
 		ALTER TABLE session_annotation_drafts DROP COLUMN note;
 		INSERT INTO session_annotation_drafts
