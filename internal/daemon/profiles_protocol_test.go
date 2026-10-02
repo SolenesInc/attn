@@ -318,8 +318,8 @@ func TestSelectionReachesTheOtherConnectionAndSurvivesARestart(t *testing.T) {
 		t.Fatalf("the second connection saw current desktop %s, want %s", seen[0].Profile.CurrentDesktopID, desktopTwo.ID)
 	}
 	focused, ok := desktopIn(seen[1].Desktops, desktopTwo.ID)
-	if len(seen[1].Desktops) != 2 || !ok || focused.ActivePaneID != paneB {
-		t.Fatalf("the second connection saw %+v, want both desktops with %s focused on %s", seen[1].Desktops, desktopTwo.ID, paneB)
+	if len(seen[1].Desktops) != 1 || !ok || focused.ActivePaneID != paneB {
+		t.Fatalf("the second connection saw %+v, want the occupied desktop with %s focused on %s", seen[1].Desktops, desktopTwo.ID, paneB)
 	}
 	if focused.Revision != revisionBeforeSelection {
 		t.Fatalf("selecting a pane moved the desktop revision from %d to %d", revisionBeforeSelection, focused.Revision)
@@ -394,7 +394,6 @@ func TestMoveBetweenDesktopsArrivesAsOneMessageAndFailsWhole(t *testing.T) {
 	client, _ := w.connect("")
 	created := w.mustSend(client, map[string]any{"cmd": protocol.CmdProfileCreate, "name": "attn"})
 	profileID, source := created.Profile.ID, created.Desktops[0]
-	target := w.mustSend(client, map[string]any{"cmd": protocol.CmdDesktopCreate, "profile_id": profileID}).Desktops[0]
 	w.mustSend(client, map[string]any{"cmd": protocol.CmdProfileSelect, "profile_id": profileID})
 	watcher, _ := w.connect(profileID)
 	w.agent("agent-a", profileID)
@@ -403,6 +402,8 @@ func TestMoveBetweenDesktopsArrivesAsOneMessageAndFailsWhole(t *testing.T) {
 	})
 	paneID := protocol.Deref(placed.PaneID)
 	source = placed.Desktops[0]
+	target := w.mustSend(client, map[string]any{"cmd": protocol.CmdDesktopCreate, "profile_id": profileID}).Desktops[0]
+
 	drainClientPayloads(t, watcher)
 
 	stale := w.send(client, map[string]any{
@@ -425,8 +426,8 @@ func TestMoveBetweenDesktopsArrivesAsOneMessageAndFailsWhole(t *testing.T) {
 		t.Fatalf("the move result carries %d desktops, want source and target", len(moved.Desktops))
 	}
 	seen := arrangementChanges(t, watcher)
-	if len(seen) != 1 || len(seen[0].Desktops) != 2 {
-		t.Fatalf("the move arrived as %d messages, want one carrying both desktops", len(seen))
+	if len(seen) != 1 || len(seen[0].Desktops) != 1 || seen[0].Desktops[0].ID != target.ID {
+		t.Fatalf("the move arrived as %d messages, want one carrying the occupied target", len(seen))
 	}
 	for _, desktop := range seen[0].Desktops {
 		tree, err := layouttree.DecodeLayout(desktop.TreeJson)

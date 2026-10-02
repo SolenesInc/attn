@@ -24,11 +24,12 @@ func runAutomationCommand() {
 	switch os.Args[2] {
 	case "set":
 		if len(os.Args) < 4 {
-			err = fmt.Errorf("usage: attn automation set <definition-id> --launch-desktop <current|dedicated|desktop>")
+			err = fmt.Errorf("usage: attn automation set <definition-id> --launch-desktop <own|desktop>")
 			break
 		}
 		fs := flag.NewFlagSet("automation set", flag.ContinueOnError)
-		desktop := fs.String("launch-desktop", "", "current, dedicated, or a desktop digit, name or id")
+		desktopName := fs.String("desktop-name", "", "name for its own desktop (defaults to the automation name)")
+		desktop := fs.String("launch-desktop", "", "own, an empty slot (5–9), or a desktop digit, name or id")
 		if e := fs.Parse(os.Args[4:]); e != nil {
 			os.Exit(2)
 		}
@@ -37,14 +38,21 @@ func runAutomationCommand() {
 			break
 		}
 		var result *protocol.LaunchDesktopResultMessage
-		result, err = c.SetAutomationLaunchDesktop(os.Args[3], *desktop)
+		var name *string
+		fs.Visit(func(f *flag.Flag) {
+			if f.Name == "desktop-name" {
+				name = desktopName
+			}
+		})
+		result, err = c.SetAutomationLaunchDesktopWithName(os.Args[3], *desktop, name)
 		if err == nil {
 			printJSON(result.Item)
 		}
 
 	case "apply":
 		fs := flag.NewFlagSet("automation apply", flag.ContinueOnError)
-		desktop := fs.String("launch-desktop", "", "current, dedicated, or a desktop digit, name or id of the automation profile")
+		desktopName := fs.String("desktop-name", "", "name for its own desktop (defaults to the automation name)")
+		desktop := fs.String("launch-desktop", "", "own, an empty slot (5–9), or a desktop digit, name or id of the automation profile")
 		file := fs.String("file", "", "definition YAML")
 		if e := fs.Parse(os.Args[3:]); e != nil {
 			os.Exit(2)
@@ -65,7 +73,17 @@ func runAutomationCommand() {
 				desktopRef = desktop
 			}
 		})
-		result, err = c.AutomationApplyWithDesktop(string(raw), desktopRef)
+		var name *string
+		fs.Visit(func(f *flag.Flag) {
+			if f.Name == "desktop-name" {
+				name = desktopName
+			}
+		})
+		if name != nil && desktopRef == nil {
+			err = fmt.Errorf("--desktop-name needs --launch-desktop own or an empty slot")
+			break
+		}
+		result, err = c.AutomationApplyWithNamedDesktop(string(raw), desktopRef, name)
 		if err == nil {
 			printJSON(result.Definition)
 		}

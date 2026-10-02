@@ -1,6 +1,6 @@
 import { act, fireEvent, screen, within } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { CrewRestartState, type CrewMember } from '../types/generated';
+import { CrewRestartState, LaunchDesktopMode, type CrewMember } from '../types/generated';
 import {
   agentPane,
   soloDesktop,
@@ -189,6 +189,20 @@ describe('CrewPanel', () => {
     expect(panel().getByRole('option', { name: 'openai / Astra' })).toBeInTheDocument();
     expect(daemon.sentOf('delegation_models').map((command) => command.harness)).toEqual(['codex']);
     expect(daemon.sentOf('delegation_preferences_get')).toHaveLength(1);
+  });
+
+  it('keeps the acknowledged own destination when another launch field changes during its save', async () => {
+    const { daemon, answer } = await renderPanel({ members: [member('keel', 5, { resolved_agent: 'codex' })], script: { crew_set: [HOLD] } });
+    await gesture(daemon, () => fireEvent.change(panel().getByLabelText('Desktop'), { target: { value: '__own' } }));
+    const dialog = screen.getByRole('dialog', { name: 'Its own desktop' });
+    fireEvent.change(within(dialog).getByRole('textbox', { name: 'Name' }), { target: { value: 'Review' } });
+    await gesture(daemon, () => fireEvent.click(within(dialog).getByRole('button', { name: 'Use this name' })));
+    fireEvent.change(panel().getByLabelText('Model'), { target: { value: 'openai/gpt-6-astra' } });
+    const launch_desktop = { mode: LaunchDesktopMode.Own, desktop_name: 'Review', shortcut_slot: 0, destination_id: 'review-destination', pending: true, label: 'Review (no ⌘ number)' };
+    await answer(daemon.sentOf('crew_set')[0], saved({ member: member('keel', 6, { resolved_agent: 'codex', launch_desktop }) }));
+    expect(daemon.sentOf('crew_set')).toHaveLength(2);
+    expect(daemon.sentOf('crew_set')[1].launch_desktop_setting).toEqual(launch_desktop);
+    expect(daemon.sentOf('crew_set')[1].model).toBe('openai/gpt-6-astra');
   });
 
   it('saves a full atomic selection, blocks restart until acknowledgment, and clears to defaults', async () => {

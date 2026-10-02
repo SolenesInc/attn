@@ -234,6 +234,7 @@ export function useAppController({
     setSessionsOpen,
     openLedger,
     notebookOpen,
+    setNotebookOpen,
     whatsNew,
     toggleDockPanel,
     openDockPanel,
@@ -246,6 +247,13 @@ export function useAppController({
     toggleGardenFrame,
     openNotebookBrowser,
   } = appPanels;
+
+  useEffect(() => useSessionStore.subscribe((state, previous) => {
+    if (previous.intent?.target.kind !== 'session' || state.view !== 'session' || !state.focusRequest || state.focusRequest.id === previous.focusRequest?.id) return;
+    closeCrewPanel();
+    setNotebookOpen(false);
+    setSessionsOpen(false);
+  }), [closeCrewPanel, setNotebookOpen, setSessionsOpen]);
 
   const desktopTiles = useDesktopTiles({
     settings,

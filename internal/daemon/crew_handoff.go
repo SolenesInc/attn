@@ -271,6 +271,7 @@ func (d *Daemon) crewNap(member crew.Member, oldSessionID string, teardown *sess
 
 	d.closeNappedSession(oldSessionID, teardown)
 	committed = true
+	d.announceBackgroundLaunch("crew", member.ID, newSessionID, crew.DisplayName(member.ID)+" handoff")
 	d.logf("crew: %s napped — session %s ended, session %s is the new day", crew.DisplayName(member.ID), oldSessionID, newSessionID)
 	return newSessionID, nil
 }

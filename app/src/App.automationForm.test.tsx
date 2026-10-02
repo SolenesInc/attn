@@ -1,4 +1,4 @@
-import { fireEvent, screen } from '@testing-library/react';
+import { fireEvent, screen, within } from '@testing-library/react';
 import { describe, expect, it } from 'vitest';
 import type { EventMessage } from './test/protocol';
 import { gesture, renderApp } from './test/renderApp';
@@ -10,7 +10,16 @@ type Definition = NonNullable<EventMessage<'automation_definitions_result'>['def
 const API_VERSION = 'attn.dev/automations/v1alpha1';
 
 function definition(id: string, over: Partial<Definition> = {}): Definition {
-  return { id, profile_id: 'default', name: 'PR reviewer', enabled: true, revision: 1, trigger_type: 'manual', updated_at: '2026-01-01T00:00:00Z', ...over };
+  return {
+    id,
+    profile_id: 'default',
+    name: 'PR reviewer',
+    enabled: true,
+    revision: 1,
+    trigger_type: 'manual',
+    updated_at: '2026-01-01T00:00:00Z',
+    ...over,
+  };
 }
 
 const manualSpec = (name = 'PR reviewer', id = 'd1') => ({
@@ -32,7 +41,10 @@ const githubSpec = {
   launch: { driver: 'claude', model: 'sonnet', effort: 'medium' },
   location: {
     type: 'repository_worktree',
-    repository_sources: { default: { type: 'managed_cache' }, overrides: { 'github.com/acme/widgets': { type: 'local_clone', path: '/home/user/widgets' } } },
+    repository_sources: {
+      default: { type: 'managed_cache' },
+      overrides: { 'github.com/acme/widgets': { type: 'local_clone', path: '/home/user/widgets' } },
+    },
   },
 };
 
@@ -61,9 +73,25 @@ const specResult = (scene: Scene): Reply => ({
 
 async function openAutomations(scene: Scene, script: (daemon: ScriptedDaemon) => void = () => {}) {
   const { daemon } = await renderApp();
-  daemon.on('automation_definitions_get', () => ({ event: 'automation_definitions_result', success: true, definitions: scene.definitions }));
-  daemon.on('automation_runs_get', ({ definition_id }) => ({ event: 'automation_runs_result', success: true, definition_id, runs: [] }));
+  daemon.on('automation_definitions_get', () => ({
+    event: 'automation_definitions_result',
+    success: true,
+    definitions: scene.definitions,
+  }));
+  daemon.on('automation_runs_get', ({ definition_id }) => ({
+    event: 'automation_runs_result',
+    success: true,
+    definition_id,
+    runs: [],
+  }));
   daemon.on('automation_definition_get', () => specResult(scene));
+  daemon.on('launch_desktop_get', () => ({
+    event: 'launch_desktop_result',
+    action: 'launch_desktop_get',
+    success: true,
+    items: [],
+    desktops: [],
+  }));
   daemon.on('automation_apply', ({ expected_id }) => ({
     event: 'automation_apply_result',
     success: true,
@@ -162,6 +190,36 @@ describe('App automation form', () => {
   });
 
   describe('creating', () => {
+    it('offers confirmed pending destinations before the new automation exists', async () => {
+      const daemon = await openNew({ definitions: [] }, (scripted) => {
+        scripted.on('launch_desktop_get', () => ({
+          event: 'launch_desktop_result',
+          action: 'launch_desktop_get',
+          success: true,
+          desktops: [],
+          items: [
+            {
+              kind: 'crew',
+              item_id: 'reviewer',
+              name: 'Reviewer',
+              profile_id: 'profile-default',
+              confirmed: true,
+              setting: { mode: 'own', destination_id: 'pending-review', desktop_name: 'Review', pending: true },
+            },
+          ],
+        }));
+      });
+      expect(daemon.sentOf('launch_desktop_get').some(({ item_id }) => item_id === '')).toBe(true);
+      expect(screen.getByRole('option', { name: 'Review (new)' })).toBeInTheDocument();
+      fireEvent.change(screen.getByLabelText('Desktop'), { target: { value: 'destination:pending-review' } });
+      fillManual();
+      await press(daemon, 'save');
+      expect(daemon.sentOf('automation_apply')[0].launch_desktop_setting).toEqual({
+        mode: 'desktop',
+        destination_id: 'pending-review',
+      });
+    });
+
     it('derives the id from the name until the user sets one', async () => {
       await openNew();
 
@@ -180,13 +238,17 @@ describe('App automation form', () => {
 
       await press(daemon, 'save');
 
-      expect(applied(daemon)).toEqual([{ spec: manualSpec('My automation', 'my-automation'), expected_id: '', expected_revision: 0 }]);
+      expect(applied(daemon)).toEqual([
+        { spec: manualSpec('My automation', 'my-automation'), expected_id: '', expected_revision: 0 },
+      ]);
       expect(screen.queryByTestId('automation-form')).toBeNull();
       expect(screen.getByTestId('automations-panel-list')).toBeInTheDocument();
     });
 
     it('holds the form while the daemon applies it', async () => {
-      const daemon = await openNew({ definitions: [definition('d1')] }, (scripted) => answerInTurn(scripted, 'automation_apply', [HOLD]));
+      const daemon = await openNew({ definitions: [definition('d1')] }, (scripted) =>
+        answerInTurn(scripted, 'automation_apply', [HOLD]),
+      );
       fillManual();
 
       await press(daemon, 'save');
@@ -221,7 +283,12 @@ describe('App automation form', () => {
 
     it('puts a taken id on the id field rather than calling the form stale', async () => {
       const daemon = await openNew({ definitions: [definition('d1')] }, (scripted) => {
-        scripted.on('automation_apply', () => ({ event: 'automation_apply_result', success: false, error: 'id already exists', error_code: 'id_collision' }));
+        scripted.on('automation_apply', () => ({
+          event: 'automation_apply_result',
+          success: false,
+          error: 'id already exists',
+          error_code: 'id_collision',
+        }));
       });
       fillManual();
 
@@ -234,7 +301,10 @@ describe('App automation form', () => {
 
   describe('editing', () => {
     it('loads a GitHub definition into its fields and saves it against the revision it loaded', async () => {
-      const daemon = await openEdit({ definitions: [definition('d1', { revision: 7, trigger_type: 'github_review_requested' })], spec: githubSpec });
+      const daemon = await openEdit({
+        definitions: [definition('d1', { revision: 7, trigger_type: 'github_review_requested' })],
+        spec: githubSpec,
+      });
 
       expect(field('repositories-include-chip-0')).toHaveTextContent('github.com/acme/widgets');
       expect(field('model')).toHaveValue('sonnet');
@@ -276,6 +346,19 @@ describe('App automation form', () => {
       expect(field('sentence')).not.toHaveTextContent('effort');
     });
 
+    it('saves a named launch destination beside the definition without putting it in the spec', async () => {
+      const daemon = await openEdit({ definitions: [definition('d1', { profile_id: 'work' })] });
+      fireEvent.change(screen.getByLabelText('Desktop'), { target: { value: '__own' } });
+      const dialog = screen.getByRole('dialog', { name: 'Its own desktop' });
+      fireEvent.change(within(dialog).getByRole('textbox', { name: 'Name' }), { target: { value: 'Checks' } });
+      await gesture(daemon, () => fireEvent.click(within(dialog).getByRole('button', { name: 'Use this name' })));
+      await press(daemon, 'save');
+      const request = daemon.sentOf('automation_apply')[0];
+      expect(request.launch_desktop_setting).toEqual({ mode: 'own', desktop_name: 'Checks', shortcut_slot: 0 });
+      expect(request.profile_id).toBe('work');
+      expect(JSON.parse(request.definition_yaml)).not.toHaveProperty('launch_desktop');
+    });
+
     it('offers to reload when the definition changed elsewhere, and shows what is there now', async () => {
       const scene: Scene = { definitions: [definition('d1', { revision: 3 })], spec: manualSpec('Original') };
       const daemon = await openEdit(scene, (scripted) => {
@@ -291,11 +374,17 @@ describe('App automation form', () => {
       await press(daemon, 'save');
       expect(field('stale-banner')).toBeInTheDocument();
 
-      scene.definitions = [definition('d1', { revision: 4 })];
+      scene.definitions = [
+        definition('d1', {
+          revision: 4,
+          launch_desktop: { mode: 'own', desktop_name: 'New checks', label: 'New checks' },
+        }),
+      ];
       scene.spec = manualSpec('Changed elsewhere');
       await press(daemon, 'reload');
 
       expect(field('name')).toHaveValue('Changed elsewhere');
+      expect(screen.getByLabelText('Desktop')).toHaveTextContent('New checks');
       expect(screen.queryByTestId('automation-form-stale-banner')).toBeNull();
       expect(daemon.sentOf('automation_definition_get')).toHaveLength(2);
     });
@@ -306,7 +395,9 @@ describe('App automation form', () => {
 
       await press(daemon, 'enabled');
 
-      expect(daemon.sentOf('automation_set_enabled').map(({ definition_id, enabled }) => [definition_id, enabled])).toEqual([['d1', false]]);
+      expect(
+        daemon.sentOf('automation_set_enabled').map(({ definition_id, enabled }) => [definition_id, enabled]),
+      ).toEqual([['d1', false]]);
       expect(field('enabled')).toHaveAttribute('aria-checked', 'false');
     });
 

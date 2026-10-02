@@ -50,7 +50,6 @@ function renderOverview(overrides: Partial<Parameters<typeof DesktopOverview>[0]
     canSendActivePane: true,
     onSwitch: vi.fn(),
     onSendActivePane: vi.fn(),
-    onDelete: vi.fn(),
     onGiveShortcutSlot: vi.fn(),
     onCreate: vi.fn(),
     onClose: vi.fn(),
@@ -116,16 +115,6 @@ describe('DesktopOverview', () => {
     expect(props.onSwitch).toHaveBeenCalledWith('d2');
   });
 
-  it('deletes the highlighted empty desktop but never the current one', () => {
-    const { props, dialog } = renderOverview();
-
-    fireEvent.keyDown(dialog, { key: 'Delete' });
-    fireEvent.keyDown(dialog, { key: 'ArrowRight' });
-    fireEvent.keyDown(dialog, { key: 'Delete' });
-
-    expect(props.onDelete).toHaveBeenCalledTimes(1);
-    expect(props.onDelete).toHaveBeenCalledWith('d10');
-  });
 
   it('offers a shortcut slot only to extra desktops', () => {
     const { props } = renderOverview();
@@ -151,7 +140,7 @@ describe('DesktopOverview', () => {
 
   it('leaves Enter on a focused action button to that button', () => {
     const { props } = renderOverview();
-    const deleteButton = screen.getAllByRole('button', { name: 'Delete' })[0];
+    const deleteButton = screen.getAllByRole('button', { name: 'Give a shortcut' })[0];
 
     deleteButton.focus();
     fireEvent.keyDown(deleteButton, { key: 'ArrowRight' });

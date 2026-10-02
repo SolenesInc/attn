@@ -137,7 +137,7 @@ func (d *Daemon) actionAutomationApply(ctx context.Context, msg *protocol.Automa
 		Event:     protocol.EventAutomationApplyResult,
 		RequestID: msg.RequestID,
 	}
-	definition, err := d.automationApplyWithGuards(ctx, msg.DefinitionYaml, protocol.Deref(msg.ProfileID), msg.ExpectedID, msg.ExpectedRevision, msg.LaunchDesktop)
+	definition, err := d.automationApplyWithGuards(ctx, msg.DefinitionYaml, protocol.Deref(msg.ProfileID), msg.ExpectedID, msg.ExpectedRevision, &launchDesktopWrite{ref: msg.LaunchDesktop, name: msg.LaunchDesktopName, setting: msg.LaunchDesktopSetting})
 	if err != nil {
 		result.Error = protocol.Ptr(err.Error())
 		var refusal *automationRefusal

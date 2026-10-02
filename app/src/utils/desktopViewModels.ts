@@ -142,7 +142,6 @@ export function firstSessionIdForDesktop<TSession extends DesktopViewSession>(
 }
 
 
-export const UNPLACED_GROUP_ID = 'unplaced';
 
 export function buildDesktopViewModels<TSession extends DesktopViewSession>(
   desktops: Desktop[],
@@ -166,13 +165,5 @@ export function buildDesktopViewModels<TSession extends DesktopViewSession>(
     ),
     desktop: { name: desktop.name.trim(), defaultLabel: defaultDesktopLabel(desktop, desktops), number: desktopNumber(desktop, desktops) },
   }));
-  const unplacedSessions = sessions.filter((session) => !desktopIdBySessionId.has(session.id));
-  if (unplacedSessions.length === 0) return onDesktop;
-  const unplaced = toDesktopViewModel(
-    { id: UNPLACED_GROUP_ID, title: 'Not on a desktop', directory: '' },
-    unplacedSessions,
-    liveSessionIds,
-    {},
-  );
-  return [...onDesktop, unplaced];
+  return onDesktop;
 }

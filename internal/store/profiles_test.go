@@ -154,10 +154,10 @@ func TestProfileArrangementSurvivesRestart(t *testing.T) {
 	if gotProfile.CurrentDesktopID != second.ID {
 		t.Fatalf("current desktop after restart = %s, want %s", gotProfile.CurrentDesktopID, second.ID)
 	}
-	if len(desktops) != 2 || desktops[1].ID != second.ID {
-		t.Fatalf("desktops after restart = %+v, want the two created in order", desktops)
+	if len(desktops) != 1 || desktops[0].ID != second.ID {
+		t.Fatalf("desktops after restart = %+v, want the occupied desktop retained", desktops)
 	}
-	got := desktops[1]
+	got := desktops[0]
 	if got.ActivePaneID != paneA {
 		t.Fatalf("active pane after restart = %s, want %s", got.ActivePaneID, paneA)
 	}
@@ -211,12 +211,13 @@ func TestSelectionDoesNotStaleAStructuralEdit(t *testing.T) {
 func TestActivePaneMustBelongToTheDesktop(t *testing.T) {
 	s, _ := openProfileStore(t)
 	profile, first := mustCreateProfile(t, s, "Main")
+
+	addProfileSession(t, s, "agent-a", profile.ID)
+	_, paneA := mustPlace(t, s, first.ID, "agent-a")
 	_, second, err := s.CreateDesktop(profile.ID, "", 0, true)
 	if err != nil {
 		t.Fatalf("CreateDesktop: %v", err)
 	}
-	addProfileSession(t, s, "agent-a", profile.ID)
-	_, paneA := mustPlace(t, s, first.ID, "agent-a")
 
 	_, _, err = s.SetActivePane(second.ID, paneA)
 	wantCode(t, err, profiles.CodeNotFound)
@@ -237,12 +238,13 @@ func TestActivePaneMustBelongToTheDesktop(t *testing.T) {
 func TestAnAgentHasAtMostOnePlacementAcrossTheDaemon(t *testing.T) {
 	s, _ := openProfileStore(t)
 	profile, first := mustCreateProfile(t, s, "Main")
+
+	addProfileSession(t, s, "agent-a", profile.ID)
+	mustPlace(t, s, first.ID, "agent-a")
 	_, second, err := s.CreateDesktop(profile.ID, "", 0, true)
 	if err != nil {
 		t.Fatalf("CreateDesktop: %v", err)
 	}
-	addProfileSession(t, s, "agent-a", profile.ID)
-	mustPlace(t, s, first.ID, "agent-a")
 
 	target, _ := s.GetDesktop(second.ID)
 	_, _, err = s.PlaceSession(SessionPlacementRequest{DesktopID: second.ID, ExpectedRevision: target.Revision, SessionID: "agent-a", Direction: layouttree.DirectionVertical})
@@ -340,15 +342,16 @@ func TestCorruptArrangementsAreRefusedNotNormalized(t *testing.T) {
 func TestMoveBetweenDesktopsCommitsSourceAndTargetTogether(t *testing.T) {
 	s, restart := openProfileStore(t)
 	profile, first := mustCreateProfile(t, s, "Main")
-	_, second, err := s.CreateDesktop(profile.ID, "", 0, true)
-	if err != nil {
-		t.Fatalf("CreateDesktop: %v", err)
-	}
+
 	for _, id := range []string{"agent-a", "agent-b", "agent-c"} {
 		addProfileSession(t, s, id, profile.ID)
 	}
 	mustPlace(t, s, first.ID, "agent-a")
 	source, paneB := mustPlace(t, s, first.ID, "agent-b")
+	_, second, err := s.CreateDesktop(profile.ID, "", 0, true)
+	if err != nil {
+		t.Fatalf("CreateDesktop: %v", err)
+	}
 	target, paneC := mustPlace(t, s, second.ID, "agent-c")
 
 	_, err = s.MoveLeaf(LeafMoveRequest{

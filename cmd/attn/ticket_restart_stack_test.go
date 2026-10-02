@@ -42,6 +42,8 @@ func TestADaemonRestartKeepsTicketNudgesCountingDown(t *testing.T) {
 			t.Fatal(err)
 		}
 	}
+	// User wakes now show their member; return to the anchor so both days are unattended.
+	testworld.Request(app, protocol.DesktopShowSessionMessage{Cmd: protocol.CmdDesktopShowSession, RequestID: "show-anchor", SessionID: anchor}, protocol.EventProfileActionResult, func(result protocol.ProfileActionResultMessage) bool { return result.RequestID == "show-anchor" })
 	if _, err := cli.CommentTicket("reviewer", "watched", "while you were busy"); err != nil {
 		t.Fatal(err)
 	}

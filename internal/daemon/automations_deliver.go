@@ -653,7 +653,11 @@ func (d *Daemon) continueAutomationSessionForeground(req automation.WorkRequest,
 	if err != nil {
 		return err
 	}
-	return d.verifyUnattendedLaunch(req)
+	if err := d.verifyUnattendedLaunch(req); err != nil {
+		return err
+	}
+	d.announceBackgroundLaunch("automation", req.DefinitionID, req.IDs.SessionID, "automation")
+	return nil
 }
 
 func (d *Daemon) automationSessionLaunch(req automation.WorkRequest, directory, inputPath string) (string, string) {
@@ -686,7 +690,11 @@ func (d *Daemon) startAutomationSession(req automation.WorkRequest, directory, i
 	if _, err := readInternalActionResult(client); err != nil {
 		return err
 	}
-	return d.verifyUnattendedLaunch(req)
+	if err := d.verifyUnattendedLaunch(req); err != nil {
+		return err
+	}
+	d.announceBackgroundLaunch("automation", req.DefinitionID, req.IDs.SessionID, "automation")
+	return nil
 }
 func canStartWithdrawnUndeliveredReviewer(origin *store.AutomationRun) bool {
 	return origin != nil && origin.State == store.AutomationRunStateCancelled && origin.CancelReason == store.AutomationCancelReasonReviewWithdrawn

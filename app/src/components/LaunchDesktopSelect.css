@@ -1,0 +1,6 @@
+.launch-desktop-field { display: flex; flex-direction: column; gap: 6px; min-width: 0; }
+.launch-desktop-field select { width: 100%; min-width: 0; }
+.launch-desktop-error { color: var(--color-error); font-size: 12px; }
+.launch-name-field { display: flex; flex-direction: column; gap: 8px; margin: 20px 0 8px; }
+.launch-name-field input { width: 100%; box-sizing: border-box; }
+.launch-name-hint { color: var(--color-text-muted); font-size: 12px; }

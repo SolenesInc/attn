@@ -1,68 +1,165 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useCallback, useEffect, useLayoutEffect, useRef, useState, useSyncExternalStore } from 'react';
+import { createPortal } from 'react-dom';
+import { toastHost, subscribeToastHost } from '../utils/toastHost';
+import { useDaemonApi } from '../contexts/DaemonApiContext';
+import { useToastStore, type ToastRow } from '../store/toasts';
 import './Toast.css';
 
-export interface ToastMessage {
-  message: string;
-  tone: 'error' | 'notice';
-  durationMs: number;
+export function Toast() {
+  const visible = useToastStore((state) => state.rows.length > 0);
+  return visible ? <ToastLayer /> : null;
 }
 
-interface ToastProps {
-  toast: ToastMessage | null;
-  onDone: () => void;
+function ToastLayer() {
+  const host = useSyncExternalStore(subscribeToastHost, toastHost, () => null);
+  return host ? createPortal(<ToastContent />, host) : null;
 }
 
-export function Toast({ toast, onDone }: ToastProps) {
-  const [phase, setPhase] = useState<'shown' | 'fading' | null>(null);
-
+function ToastContent() {
+  const { rows, fading, fade, clear, complete, append } = useToastStore();
+  const [hovered, setHovered] = useState(false);
+  const [focused, setFocused] = useState(false);
+  const { sendDesktopShowSession } = useDaemonApi();
+  const toastRef = useRef<HTMLDivElement>(null);
+  useLayoutEffect(() => {
+    const element = toastRef.current;
+    element?.showPopover?.();
+    return () => element?.hidePopover?.();
+  }, []);
   useEffect(() => {
-    if (!toast) return;
-    setPhase('shown');
-    const hideTimer = setTimeout(() => setPhase('fading'), toast.durationMs);
-    return () => clearTimeout(hideTimer);
-  }, [toast]);
-
+    if (!rows.length || hovered || focused || fading) return;
+    // The approved grouped-toast prototype holds each new arrival for six seconds.
+    const timer = setTimeout(fade, 6000);
+    return () => clearTimeout(timer);
+  }, [rows, hovered, focused, fading, fade]);
   useEffect(() => {
-    if (phase !== 'fading') return;
-    const doneTimer = setTimeout(onDone, 200);
-    return () => clearTimeout(doneTimer);
-  }, [phase, onDone]);
-
-  if (!toast) return null;
-
-  const error = toast.tone === 'error';
+    if (!fading) return;
+    // Match the opacity transition in Toast.css before releasing the rows.
+    const timer = setTimeout(clear, 150);
+    return () => clearTimeout(timer);
+  }, [fading, clear]);
+  if (!rows.length) return null;
+  const activate = async (row: ToastRow) => {
+    try {
+      if (row.sessionId) await sendDesktopShowSession(row.sessionId);
+      else await row.action?.();
+      complete(row.id);
+    } catch (reason) {
+      append({
+        message: reason instanceof Error ? reason.message : String(reason),
+        source: row.message,
+        tone: 'error',
+      });
+    }
+  };
+  const error = rows.some((row) => row.tone === 'error');
   return (
     <div
-      className={`toast toast--${toast.tone} ${phase === 'shown' ? 'visible' : ''}`}
+      ref={toastRef}
+      popover="manual"
+      className={`toast toast--${error ? 'error' : 'notice'} ${fading ? '' : 'visible'}`}
       role={error ? 'alert' : 'status'}
       aria-live={error ? 'assertive' : 'polite'}
+      onMouseEnter={() => setHovered(true)}
+      onMouseLeave={() => setHovered(false)}
+      onFocus={() => setFocused(true)}
+      onBlur={(event) => {
+        if (!event.currentTarget.contains(event.relatedTarget)) setFocused(false);
+      }}
     >
-      {error && (
-        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
-          <circle cx="12" cy="12" r="10" />
-          <line x1="15" y1="9" x2="9" y2="15" />
-          <line x1="9" y1="9" x2="15" y2="15" />
-        </svg>
+      <NotificationGlyph row={rows[0]} error={error} />
+      <div className="toast-content">
+        {rows.length > 1 && <strong className="toast-title">{rows.length} notifications</strong>}
+        <div className={`toast-list ${rows.length === 1 ? 'toast-list--single' : ''}`}>
+          {rows.map((row, index) => (
+            <NotificationRow
+              key={row.id}
+              row={row}
+              single={rows.length === 1}
+              newest={index === rows.length - 1}
+              activate={activate}
+            />
+          ))}
+        </div>
+        <NotificationFooter multiple={rows.length > 1} paused={hovered || focused} clear={clear} />
+      </div>
+    </div>
+  );
+}
+
+function NotificationGlyph({ row, error }: { row: ToastRow; error: boolean }) {
+  const kind = row.launchKind ?? (error ? 'error' : 'notice');
+  const glyph = row.launchKind === 'crew' ? '◆' : row.launchKind === 'automation' ? '⟳' : error ? '!' : '✓';
+  return (
+    <span className={`toast-glyph ${kind}`} aria-hidden="true">
+      {glyph}
+    </span>
+  );
+}
+
+function NotificationFooter({ multiple, paused, clear }: { multiple: boolean; paused: boolean; clear: () => void }) {
+  return (
+    <div className="toast-footer">
+      <span>{multiple ? 'click a row to go' : 'click to go'}</span>
+      <span>{paused ? 'paused' : 'fades 6s after the last notification'}</span>
+      <button className="toast-close" type="button" aria-label="Dismiss notifications" onClick={clear}>
+        Dismiss
+      </button>
+    </div>
+  );
+}
+
+function NotificationRow({
+  row,
+  single,
+  newest,
+  activate,
+}: {
+  row: ToastRow;
+  single: boolean;
+  newest: boolean;
+  activate: (row: ToastRow) => Promise<void>;
+}) {
+  const label = row.completed ? '✓ Done' : row.actionLabel || 'Click to go';
+  const content = (
+    <>
+      <strong>{row.message}</strong>
+      {single && row.desktopLabel && (
+        <span>
+          {' '}
+          {row.launchKind === 'crew' ? 'woke' : 'started'} on its desktop “{row.desktopLabel}”
+        </span>
       )}
-      <span>{toast.message}</span>
+      <span className="toast-source">{row.source}</span>
+    </>
+  );
+  return (
+    <div className={`toast-row ${newest ? 'toast-row--new' : ''} ${row.completed ? 'toast-row--seen' : ''}`}>
+      {row.sessionId || row.action ? (
+        <button
+          type="button"
+          disabled={Boolean(row.action && row.completed)}
+          onClick={() => {
+            void activate(row);
+          }}
+        >
+          {content}
+          <small>{label}</small>
+        </button>
+      ) : (
+        content
+      )}
     </div>
   );
 }
 
 export function useToast() {
-  const [toast, setToast] = useState<ToastMessage | null>(null);
-
-  const showError = useCallback((message: string, options?: { durationMs?: number }) => {
-    setToast({ message, tone: 'error', durationMs: options?.durationMs ?? 3000 });
-  }, []);
-
-  const showNotice = useCallback((message: string) => {
-    setToast({ message, tone: 'notice', durationMs: 3000 });
-  }, []);
-
-  const clearToast = useCallback(() => {
-    setToast(null);
-  }, []);
-
-  return { toast, showError, showNotice, clearToast };
+  const append = useToastStore((state) => state.append);
+  const clearToast = useToastStore((state) => state.clear);
+  return {
+    toast: null,
+    clearToast,
+    showError: useCallback((message: string) => append({ message, tone: 'error', source: 'attn' }), [append]),
+    showNotice: useCallback((message: string) => append({ message, tone: 'notice', source: 'attn' }), [append]),
+  };
 }

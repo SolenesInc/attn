@@ -67,7 +67,9 @@ func (d *Daemon) crewAgentAvailable(agent string) bool {
 var crewWakePrompt = prompts.RenderText("crew", "wake", prompts.Values{})
 
 type crewWakeDelivery struct {
-	Message *agentmailbox.PeerMessage
+	Message     *agentmailbox.PeerMessage
+	RequestedBy string
+	UserStarted bool
 }
 
 func (d *Daemon) crewMember(name string) (crew.Member, docstore.Document, error) {
@@ -203,7 +205,8 @@ func (d *Daemon) crewWakeAsked(msg *protocol.CrewWakeMessage) (*protocol.CrewWak
 	if err := d.refuseCrossProfileWake(name, protocol.Deref(msg.ProfileID), protocol.Deref(msg.SourceSessionID)); err != nil {
 		return nil, err
 	}
-	return d.crewWake(name, strings.TrimSpace(strings.ToLower(protocol.Deref(msg.Agent))))
+	delivery := &crewWakeDelivery{UserStarted: d.crewWakeUserStarted(msg), RequestedBy: d.launchRequester(protocol.Deref(msg.SourceSessionID), "another agent")}
+	return d.crewWakeWithDelivery(name, strings.TrimSpace(strings.ToLower(protocol.Deref(msg.Agent))), false, delivery)
 }
 
 func (d *Daemon) refuseCrossProfileWake(name, askedProfileID, sourceSessionID string) error {
@@ -237,11 +240,20 @@ func (d *Daemon) handleCrewWake(conn net.Conn, msg *protocol.CrewWakeMessage) {
 		d.sendCrewError(conn, "wake", err)
 		return
 	}
+	if d.crewWakeUserStarted(msg) {
+		if err := d.showCrewWake(result, nil, ""); err != nil {
+			d.sendCrewError(conn, "wake", err)
+			return
+		}
+	}
 	d.sendGardenResponse(conn, protocol.Response{Ok: true, CrewWakeResult: result})
 }
 
 func (d *Daemon) handleCrewWakeWS(client *wsClient, msg *protocol.CrewWakeMessage) {
 	result, err := d.crewWakeAsked(msg)
+	if err == nil && d.crewWakeUserStarted(msg) {
+		err = d.showCrewWake(result, client, protocol.Deref(msg.RequestID))
+	}
 	response := protocol.CrewWakeResultMessage{
 		Event:     protocol.EventCrewWakeResult,
 		RequestID: protocol.Deref(msg.RequestID),
@@ -355,6 +367,16 @@ func (d *Daemon) crewWakeWithDeliveryLocked(name, agent string, autonomous bool,
 		}
 		d.releaseCrewBindingIfSession(sessionID)
 		return nil, fmt.Errorf("wake %s: %w", crew.DisplayName(member.ID), err)
+	}
+	if delivery == nil || !delivery.UserStarted {
+		requester := "a garden notification"
+		if delivery != nil {
+			requester = delivery.RequestedBy
+			if delivery.Message != nil {
+				requester = d.launchRequester(delivery.Message.SenderSessionID, "another agent")
+			}
+		}
+		d.announceBackgroundLaunch("crew", member.ID, sessionID, requester)
 	}
 	d.logf("crew: woke %s in session %s at %s", crew.DisplayName(member.ID), sessionID, directory)
 	result := &protocol.CrewWakeResult{
@@ -497,10 +519,17 @@ func (d *Daemon) crewSet(msg *protocol.CrewSetMessage) (*protocol.CrewMember, bo
 			return &wire, true, nil
 		}
 		var setting *store.LaunchDesktopSetting
+		if msg.LaunchDesktopSetting != nil {
+			chosen := storeLaunchSetting(*msg.LaunchDesktopSetting)
+			setting = &chosen
+		}
 		if msg.LaunchDesktop != nil {
 			chosen, err := d.launchDesktopFromRef(d.crewProfileID(member.ID), "crew", *msg.LaunchDesktop)
 			if err != nil {
 				return nil, false, err
+			}
+			if msg.LaunchDesktopName != nil {
+				chosen.DesktopName = *msg.LaunchDesktopName
 			}
 			setting = &chosen
 		}

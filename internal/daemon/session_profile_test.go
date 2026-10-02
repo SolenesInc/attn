@@ -100,6 +100,9 @@ func focusTestAgent(t testing.TB, d *Daemon, sessionID string) {
 			t.Fatalf("read the placement of %s: %v", sessionID, err)
 		}
 	}
+	if _, err := d.store.SetCurrentDesktop(placement.ProfileID, placement.DesktopID); err != nil {
+		t.Fatal(err)
+	}
 	profile, _, err := d.store.SetActivePane(placement.DesktopID, placement.PaneID)
 	if err != nil {
 		t.Fatalf("focus %s: %v", sessionID, err)

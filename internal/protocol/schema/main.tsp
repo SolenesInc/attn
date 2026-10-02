@@ -2212,6 +2212,8 @@ model AutomationApplyMessage {
   profile_id?: string;
   expected_id?: string;
   expected_revision?: int32;
+  launch_desktop_name?: string;
+  launch_desktop_setting?: LaunchDesktopSetting;
 }
 model AutomationRunMessage { cmd: "automation_run"; definition_id: string; request_id: string; input_json?: string; pr_url?: string; }
 
@@ -3385,13 +3387,34 @@ model MigrationDraftDesktop {
   tree_json: string;            // Split tree of {"group": id} leaves; ratio is the first child's share; empty when nothing is placed
 }
 
+model SessionShowRequestedMessage {
+ event: "session_show_requested";
+ session_id: string;
+}
+
+model BackgroundLaunchMessage {
+ event: "background_launch";
+ session_id: string;
+ profile_id: string;
+ desktop_id: string;
+ name: string;
+ requested_by: string;
+ desktop_label: string;
+ kind: LaunchDesktopKind;
+}
+
 enum LaunchDesktopKind { automation, crew }
-enum LaunchDesktopMode { current, dedicated, desktop }
+enum LaunchDesktopMode { own, desktop }
 model LaunchDesktopSetting {
   label?: string;
   mode: LaunchDesktopMode;
   desktop_id?: string;
-  fallback?: boolean;
+  destination_id?: string;
+  desktop_name?: string;
+  shortcut_slot?: safeint;
+  pending?: boolean;
+  owner_kind?: LaunchDesktopKind;
+  owner_id?: string;
 }
 model LaunchDesktopItem {
   kind: LaunchDesktopKind;
@@ -3414,6 +3437,7 @@ model LaunchDesktopSetMessage {
   kind: LaunchDesktopKind;
   item_id: string;
   setting: LaunchDesktopSetting;
+  desktop_name?: string;
 }
 model LaunchDesktopResultMessage {
   event: "launch_desktop_result";
@@ -3423,6 +3447,7 @@ model LaunchDesktopResultMessage {
   error?: string;
   item?: LaunchDesktopItem;
   desktops?: Desktop[];
+  items?: LaunchDesktopItem[];
 }
 
 model MigrationState {
@@ -6576,6 +6601,8 @@ model CrewSetMessage {
   // optional, so an empty list marshals away and reaches the daemon as absent,
   // which is how "leave it alone" is said.
   clear_awareness_dirs?: boolean;
+  launch_desktop_name?: string;
+  launch_desktop_setting?: LaunchDesktopSetting;
 }
 
 model CrewSetResult {
@@ -7499,6 +7526,8 @@ alias DaemonEvent =
   | ProfilesChangedMessage
   | ProfileArrangementChangedMessage
   | DesktopTileContentMessage
+  | BackgroundLaunchMessage
+  | SessionShowRequestedMessage
   | LaunchDesktopResultMessage
   | MigrationResultMessage
   | MigrationChangedMessage

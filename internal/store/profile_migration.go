@@ -79,9 +79,22 @@ func (s *Store) ProfileMigration() (ProfileMigrationView, error) {
 	err := s.profilesTx(func(tx *sql.Tx, _ string) error {
 		var err error
 		view, err = loadProfileMigration(tx)
+		if err == nil {
+			err = loadLaunchPreview(tx, &view)
+		}
 		return err
 	})
 	return view, err
+}
+
+// Runtime reads include the later step; the conversion ladder runs before its tables exist.
+func loadLaunchPreview(tx *sql.Tx, view *ProfileMigrationView) error {
+	if !view.PlacementRequired() {
+		return nil
+	}
+	var err error
+	view.LaunchItems, err = migrationLaunchItems(tx)
+	return err
 }
 
 func requirePlacement(view ProfileMigrationView, expectedRevision int64) error {
@@ -120,14 +133,17 @@ func (s *Store) EditProfileMigration(expectedRevision int64, edit func(plan prof
 			return err
 		}
 		view.Plan = edited
-		return saveMigrationRow(tx, &view)
+		if err := saveMigrationRow(tx, &view); err != nil {
+			return err
+		}
+		return loadLaunchPreview(tx, &view)
 	})
 	return view, err
 }
 
 func (s *Store) FinishProfileMigration(expectedRevision int64) (ProfileMigrationFinish, error) {
 	var result ProfileMigrationFinish
-	err := s.profilesTx(func(tx *sql.Tx, now string) error {
+	err := s.profilesArrangementTx(func(tx *sql.Tx, now string) error {
 		view, err := loadProfileMigration(tx)
 		if err != nil {
 			return err

@@ -123,6 +123,9 @@ func (s *Store) CloseSession(id string, closed SessionClose, now time.Time) (boo
 	if err := unplaceClosingSession(tx, now.UTC().Format(sortableTimeFormat), id); err != nil {
 		return false, fmt.Errorf("close session %s: %w", id, err)
 	}
+	if err := pruneEmptyDesktops(tx); err != nil {
+		return false, fmt.Errorf("close session %s: %w", id, err)
+	}
 	if err := tx.Commit(); err != nil {
 		return false, fmt.Errorf("close session %s: %w", id, err)
 	}

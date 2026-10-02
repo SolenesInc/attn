@@ -51,6 +51,44 @@ func TestAutomationReapplyEditsOnlyOnChangeAndTogglesAreIdempotent(t *testing.T)
 	}
 }
 
+func TestAutomationDesktopEditsAdvanceTheRevisionAndRefuseStaleEditors(t *testing.T) {
+	w := newWorld(t)
+	app, cli := w.App(), w.Client()
+	if err := os.MkdirAll(w.Path("check"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	spec := manualAutomation(w, "Check locally.")
+	created := applyAutomation(t, cli, spec)
+	apply := func(request string, revision int, setting protocol.LaunchDesktopSetting) protocol.AutomationApplyResultMessage {
+		return testworld.Request(app, protocol.AutomationApplyMessage{
+			Cmd: protocol.CmdAutomationApply, DefinitionYaml: spec, ExpectedID: protocol.Ptr(created.ID),
+			ExpectedRevision: protocol.Ptr(revision), LaunchDesktopSetting: &setting, RequestID: protocol.Ptr(request),
+		}, protocol.EventAutomationApplyResult, automationAnswer[protocol.AutomationApplyResultMessage](request))
+	}
+	changed := apply("desktop-edit", created.Revision, protocol.LaunchDesktopSetting{Mode: protocol.LaunchDesktopModeOwn, DesktopName: protocol.Ptr("Checks")})
+	if !changed.Success || changed.Definition.Revision != created.Revision+1 {
+		t.Fatalf("desktop edit = %+v", changed)
+	}
+	stale := apply("stale-desktop-edit", created.Revision, protocol.LaunchDesktopSetting{Mode: protocol.LaunchDesktopModeOwn, DesktopName: protocol.Ptr("Stale")})
+	if stale.Success || protocol.Deref(stale.ErrorCode) != "revision_conflict" {
+		t.Fatalf("stale edit = %+v", stale)
+	}
+	saved := readLaunchSetting(app, "automation", created.ID)
+	unchanged := apply("same-desktop", changed.Definition.Revision, saved.Setting)
+	if !unchanged.Success || unchanged.Definition.Revision != changed.Definition.Revision {
+		t.Fatalf("unchanged desktop = %+v", unchanged)
+	}
+	writeLaunchChoice(app, "automation", created.ID, protocol.LaunchDesktopSetting{Mode: protocol.LaunchDesktopModeOwn, DesktopName: protocol.Ptr("CLI checks")})
+	stale = apply("stale-after-cli", changed.Definition.Revision, saved.Setting)
+	if stale.Success || protocol.Deref(stale.ErrorCode) != "revision_conflict" {
+		t.Fatalf("stale after separate desktop write = %+v", stale)
+	}
+	current, err := cli.AutomationDefinition(created.ID)
+	if err != nil || current.Definition.Revision != changed.Definition.Revision+1 || protocol.Deref(current.Definition.LaunchDesktop.DesktopName) != "CLI checks" {
+		t.Fatalf("current = %+v (%v)", current, err)
+	}
+}
+
 func manualAutomation(w *world, prompt string) string {
 	return fmt.Sprintf(`api_version: attn.dev/automations/v1alpha1
 id: manual-check

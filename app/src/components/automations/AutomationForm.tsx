@@ -1,3 +1,7 @@
+import { LaunchDesktopKind } from '../../types/generated';
+import { LaunchDesktopSelect } from '../LaunchDesktopSelect';
+import { useProfilesStore } from '../../store/profiles';
+import type { LaunchDesktopSetting } from '../../types/generated';
 // The host remounts on a fresh key per target, so mount already means an explicit
 // load: edit mode reads once on mount and never re-fetches on definitionId churn.
 import { useCallback, useEffect, useRef, useState, type ComponentProps, type ReactNode, type RefObject } from 'react';
@@ -35,6 +39,8 @@ export interface AutomationFormProps {
     specJson: string,
     expectedId: string,
     expectedRevision: number,
+    launchDesktop?: LaunchDesktopSetting,
+    profileId?: string,
   ) => Promise<{ definition: AutomationDefinitionSummary }>;
   deleteDefinition: (definitionId: string) => Promise<void>;
   setEnabled: (definitionId: string, enabled: boolean) => Promise<void>;
@@ -586,11 +592,13 @@ function AutomationLaunchFields({
   modelMode,
   onAgentChange,
   onModelChange,
+  desktop,
 }: {
   fields: AutomationFields;
   modelMode: ModelMode;
   onAgentChange: ComponentProps<'select'>['onChange'];
   onModelChange: ComponentProps<'select'>['onChange'];
+  desktop: ReactNode;
 }) {
   const { values, regField, fieldError, setValue } = fields;
   const { efforts } = effortOptionsFor(values.agent, values.model);
@@ -598,6 +606,7 @@ function AutomationLaunchFields({
   return (
     <section className="automation-form__section">
       <span className="automation-form__section-label">Runs as</span>
+      {desktop}
       <div className="automation-form__field">
         <label className="automation-form__label" htmlFor="automation-form-agent">
           Agent
@@ -855,6 +864,9 @@ export function AutomationForm({
   const [loadError, setLoadError] = useState('');
   const [loadedId, setLoadedId] = useState<string | null>(definitionId);
   const [revision, setRevision] = useState(0);
+  const [launchDesktop, setLaunchDesktop] = useState<LaunchDesktopSetting>();
+  const selectedProfile = useProfilesStore((state) => state.selectedProfileId);
+  const [profileId, setProfileId] = useState(selectedProfile ?? '');
   const [enabled, setEnabledState] = useState<boolean | null>(null);
   const [modelMode, setModelMode] = useState<ModelMode>('preset');
 
@@ -886,6 +898,8 @@ export function AutomationForm({
         setModelMode(modelModeFor(parsed.agent, parsed.model));
         setLoadedId(result.definition?.id ?? definitionId);
         setRevision(result.definition?.revision ?? 0);
+        setLaunchDesktop(result.definition?.launch_desktop);
+        setProfileId(result.definition?.profile_id ?? selectedProfile ?? '');
         setEnabledState(result.definition?.enabled ?? null);
         setStatus('ready');
       })
@@ -905,7 +919,7 @@ export function AutomationForm({
       setSaving(true);
       setSaveError('');
       setSaveErrorCode('');
-      applyDefinition(specJSONString(values), loadedId ?? '', revision)
+      applyDefinition(specJSONString(values), loadedId ?? '', revision, launchDesktop, profileId)
         .then((result) => {
           setSaving(false);
           setLoadedId(result.definition.id);
@@ -925,7 +939,7 @@ export function AutomationForm({
           setSaveError(message);
         });
     },
-    [applyDefinition, loadedId, revision, onSaved, setError],
+    [applyDefinition, loadedId, revision, launchDesktop, profileId, onSaved, setError],
   );
 
   const onSubmit = handleSubmit(doSave);
@@ -945,6 +959,8 @@ export function AutomationForm({
         reset(parsed);
         setModelMode(modelModeFor(parsed.agent, parsed.model));
         setRevision(result.definition?.revision ?? revision);
+        setLaunchDesktop(result.definition?.launch_desktop);
+        setProfileId(result.definition?.profile_id ?? profileId);
         setEnabledState(result.definition?.enabled ?? enabled);
         setSaveError('');
         setSaveErrorCode('');
@@ -953,7 +969,7 @@ export function AutomationForm({
         setSaveErrorCode('');
         setSaveError(messageOf(error, 'Failed to reload automation definition'));
       });
-  }, [getDefinition, loadedId, reset, revision, enabled]);
+  }, [getDefinition, loadedId, reset, revision, enabled, profileId]);
 
   const performDelete = useCallback(() => {
     if (loadedId === null) return;
@@ -1220,6 +1236,17 @@ export function AutomationForm({
           modelMode={modelMode}
           onAgentChange={handleAgentChange}
           onModelChange={handleModelSelectChange}
+          desktop={
+            <LaunchDesktopSelect
+              kind={LaunchDesktopKind.Automation}
+              itemId={loadedId}
+              profileId={profileId}
+              defaultName={values.name}
+              value={launchDesktop}
+              onChange={setLaunchDesktop}
+              disabled={saving}
+            />
+          }
         />
 
         <section className="automation-form__section">

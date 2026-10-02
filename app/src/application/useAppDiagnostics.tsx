@@ -1,3 +1,4 @@
+import { useToastStore } from '../store/toasts';
 import { useCallback, useRef, useState } from 'react';
 import { useSavedFlash } from '../components/useSavedFlash';
 import type { useDaemonApi } from '../contexts/DaemonApiContext';
@@ -139,6 +140,7 @@ export function useAppDiagnostics({
       );
       await saveDiagnosticReport(report);
       diagnosticReportSaved.flash('saved');
+      useToastStore.getState().append({ message: 'Diagnostic report saved', source: 'Diagnostics', tone: 'notice' });
     },
     [diagnosticCapture, diagnosticReportSaved.flash, getPaneSize, getPaneText],
   );

@@ -50,7 +50,7 @@
 - Desktop: one arrangement of panes and tiles inside a profile. A profile always has at least one, and up to nine hold a shortcut slot.
 - Desktop ref: how the CLI names a desktop of the caller's profile: its shortcut digit (1-9), its label as shown (the name, or "Desktop N" when unnamed; case-insensitive), or its id. `attn delegate --desktop` and `attn session move` take one.
 - Pane: an agent's place on a desktop. An agent has at most one pane.
-- Launch desktop: an automation definition's or crew member's saved destination in its profile. A launch lands beside its active leaf without changing focus. The choice can follow the current desktop or name a specific one. New automations create a dedicated desktop on first run; new crew members follow current. A deleted destination falls back to current and stays visible in the setting. Install state lives in SQLite.
+- Launch desktop: a crew member's or automation's saved launch destination in its own profile. Background launches land beside its active leaf without changing focus. A user wake shows the member, including an already-awake member. The setting lives in SQLite, separate from charters and automation files.
 - Current desktop: the desktop a profile shows. Every client on that profile shares it.
 - Empty desktop launcher: the New Session picker shown inline on a current desktop with no leaves. Launches land there; New Session (Cmd+N) focuses it instead of opening the dialog, and Escape never dismisses it.
 - Active leaf (active pane on the wire): the agent pane or tile a desktop has selected. The daemon owns it and every client on the profile shares it. The app stores no current agent: the shown agent is the active leaf of the current desktop when it is an agent pane. With a tile active, agent-only actions are unavailable; opens and placements land beside that tile.
@@ -118,6 +118,7 @@ intended it for the next turn.
 - `attn`: the reserved member name the daemon uses when it moves a seed by itself. No crew home may claim it.
 - Registry: the index of crew member files.
 - Binding: a crew member's active session. Daemon-managed days use terminal liveness; bare CLI days remain live while registered, until their wrapper unregisters. The daemon tracks external registrations during its lifetime; recovered managed days never become external merely by registering again.
+- Launch destination: a saved desktop name in one profile, optionally with an explicitly requested shortcut slot. Crew members and automations may share a destination by selecting it. The desktop appears on launch and disappears when empty unless it is current; a later launch recreates it. Own desktops have no shortcut number unless the user chooses one.
 - Launch settings: a member's harness, model, effort and launch desktop choices. Blank harness, model and effort pins resolve through daemon and harness defaults.
 - Charter token: the receipt for the exact charter bytes read. A replacement needs it and advances it, so a stale write cannot overwrite a newer one.
 - Chief of staff: the agent coordinating the work of one profile. Each profile has at most one; all chiefs share the Notebook.

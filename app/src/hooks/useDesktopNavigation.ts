@@ -5,7 +5,7 @@ import { useSessionStore } from '../store/sessions';
 import type { Desktop } from '../types/generated';
 import { withFreshDesktopRevisions } from './desktopRevisions';
 import { actThenShow } from '../application/openThenShow';
-import { desktopInSlot, desktopLabel, firstFreeSlot, isEmptyDesktop, slotShortcut } from '../utils/desktops';
+import { desktopInSlot, firstFreeSlot, slotShortcut } from '../utils/desktops';
 
 type ShowNotice = (message: string) => void;
 
@@ -21,7 +21,6 @@ export function useDesktopNavigation(showNotice: ShowNotice) {
   const {
     sendDesktopSetCurrent,
     sendDesktopMoveLeaf,
-    sendDesktopDelete,
     sendDesktopSetShortcutSlot,
     sendDesktopCreate,
     sendDesktopRename,
@@ -134,20 +133,6 @@ export function useDesktopNavigation(showNotice: ShowNotice) {
     [moveActiveLeaf, report],
   );
 
-  const deleteDesktop = useCallback(
-    (desktopId: string) => {
-      const state = useProfilesStore.getState();
-      const desktop = state.desktops.find((entry) => entry.id === desktopId);
-      if (!desktop) return;
-      if (!isEmptyDesktop(desktop)) {
-        showNotice(`${desktopLabel(desktop, state.desktops)} still has panes; only an empty desktop can be deleted.`);
-        return;
-      }
-      report(sendDesktopDelete(desktop.id, desktop.revision));
-    },
-    [report, sendDesktopDelete, showNotice],
-  );
-
   const giveShortcutSlot = useCallback(
     (desktopId: string) => {
       const state = useProfilesStore.getState();
@@ -239,7 +224,6 @@ export function useDesktopNavigation(showNotice: ShowNotice) {
     switchToSlot,
     moveActiveLeafToDesktop,
     moveActiveLeafToSlot,
-    deleteDesktop,
     giveShortcutSlot,
     createDesktop,
     renameDesktop,

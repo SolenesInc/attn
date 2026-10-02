@@ -57,116 +57,178 @@ func deleteLaunchDesktop(app *testworld.Peer, desktop protocol.Desktop) {
 	mustProfileRequest(app, req, req.RequestID)
 }
 
-func TestCrewLaunchDesktopPreservesFocusAndFallsBackAfterDeletion(t *testing.T) {
-	w := newCrewWorld(t, fakeagent.Claude)
-	app := w.App()
-	profile := app.SelectedProfile()
-	target := createDesktop(app, profile)
-	launchSetting(app, "crew", "trellis", "desktop", target.ID)
-	w.restart()
-	app = w.App()
-	cli := w.Client()
-	if got := readLaunchSetting(app, "crew", "trellis"); protocol.Deref(got.Setting.DesktopID) != target.ID {
-		t.Fatalf("restart lost destination: %+v", got)
+func writeLaunchChoice(app *testworld.Peer, kind, id string, setting protocol.LaunchDesktopSetting) protocol.LaunchDesktopItem {
+	req := protocol.LaunchDesktopSetMessage{Cmd: protocol.CmdLaunchDesktopSet, RequestID: "choice-" + kind + id, Kind: protocol.LaunchDesktopKind(kind), ItemID: id, Setting: setting}
+	result := testworld.Request(app, req, protocol.EventLaunchDesktopResult, func(r protocol.LaunchDesktopResultMessage) bool { return r.RequestID == req.RequestID })
+	if !result.Success || result.Item == nil {
+		app.T.Fatalf("launch choice: %+v", result)
 	}
-	occupied := w.Spawn(app, fakeagent.Claude, w.Path("target-anchor"))
-	w.Launched(occupied)
-	if _, err := cli.MoveSessionToDesktop(occupied, occupied, target.ID); err != nil {
-		t.Fatal(err)
-	}
-	anchor := w.Spawn(app, fakeagent.Claude, w.Path("anchor"))
-	w.Launched(anchor)
-	focusAgent(t, w, app, anchor)
-	before := viewProfile(t, w, profile)
-	current := before.profile.CurrentDesktopID
-	active := before.desktops[current].ActivePaneID
-	day := wakeCrew(t, cli, "trellis", "")
-	w.Launched(day.SessionID)
-	assertBackgroundPlacement(t, w, profile, day.SessionID, target.ID, current, active)
-	launchSetting(app, "crew", "trellis", "current", "")
-	targetActive := viewProfile(t, w, profile).desktops[target.ID].ActivePaneID
-	successor := protocol.Deref(crewHandoff(t, cli, day.SessionID, "Continue on the chosen desktop.", false, protocol.CrewDayCloseNap).SessionID)
-	next := w.Launched(successor)
-	assertBackgroundPlacement(t, w, profile, successor, target.ID, current, active)
-	if got := viewProfile(t, w, profile).desktops[target.ID].ActivePaneID; got != targetActive {
-		t.Fatalf("nap changed target active pane: %s, want %s", got, targetActive)
-	}
-	day.SessionID = successor
-	launchSetting(app, "crew", "trellis", "desktop", target.ID)
-	deleteLaunchDesktop(app, viewProfile(t, w, profile).desktops[target.ID])
-	assertBackgroundPlacement(t, w, profile, day.SessionID, current, current, active)
-	setting := readLaunchSetting(app, "crew", "trellis")
-	if !protocol.Deref(setting.Setting.Fallback) || protocol.Deref(setting.Setting.DesktopID) != target.ID || !strings.Contains(protocol.Deref(setting.Setting.Label), fmt.Sprintf("Desktop %d", protocol.Deref(target.ShortcutSlot))) {
-		t.Fatalf("deleted setting = %+v", setting)
-	}
-	launchSetting(app, "crew", "alder", "desktop", current)
-	second := wakeCrew(t, cli, "alder", "")
-	w.Launched(second.SessionID)
-	assertBackgroundPlacement(t, w, profile, second.SessionID, current, current, active)
-	exitCrewDay(w, next)
-	fallback := wakeCrew(t, cli, "trellis", "")
-	w.Launched(fallback.SessionID)
-	assertBackgroundPlacement(t, w, profile, fallback.SessionID, current, current, active)
+	return *result.Item
 }
 
-func TestAutomationLaunchDesktopIsCreatedOnceAndCanBeChanged(t *testing.T) {
-	w := newWorld(t, fakeagent.Claude)
-	app, cli := w.App(), w.Client()
-	if err := os.MkdirAll(w.Path("check"), 0o755); err != nil {
-		t.Fatal(err)
+func TestNewAutomationCanReadPendingLaunchDestinationsBeforeItExists(t *testing.T) {
+	w := newCrewWorld(t, fakeagent.Claude)
+	app := w.App()
+	owner := writeLaunchChoice(app, "crew", "alder", protocol.LaunchDesktopSetting{Mode: protocol.LaunchDesktopModeOwn, DesktopName: protocol.Ptr("Review")})
+	result := testworld.Request(app, protocol.LaunchDesktopGetMessage{Cmd: protocol.CmdLaunchDesktopGet, RequestID: "new-automation", Kind: protocol.LaunchDesktopKindAutomation}, protocol.EventLaunchDesktopResult, func(r protocol.LaunchDesktopResultMessage) bool { return r.RequestID == "new-automation" })
+	if !result.Success || result.Item != nil {
+		t.Fatalf("catalog = %+v", result)
 	}
-	applyAutomation(t, cli, fmt.Sprintf(`api_version: attn.dev/automations/v1alpha1
-id: nightly
-name: Nightly check
-trigger: {type: manual}
-prompt: Check locally.
-launch: {driver: claude}
-location: {type: directory, path: %q}
-`, w.Path("check")))
+	for _, item := range result.Items {
+		if item.ItemID == owner.ItemID && item.Kind == owner.Kind && protocol.Deref(item.Setting.DestinationID) == protocol.Deref(owner.Setting.DestinationID) && item.Confirmed && protocol.Deref(item.Setting.Pending) {
+			return
+		}
+	}
+	t.Fatalf("pending owner absent from catalog: %+v", result.Items)
+}
+
+func TestNamedCrewDesktopsShareRecreateAndUserWakeTakesFocus(t *testing.T) {
+	w := newCrewWorld(t, fakeagent.Claude)
+	app, cli := w.App(), w.Client()
 	profile := app.SelectedProfile()
-	anchor := w.Spawn(app, fakeagent.Claude, w.Path("anchor"))
-	w.Launched(anchor)
-	focusAgent(t, w, app, anchor)
+	caller := w.Spawn(app, fakeagent.Claude, w.Path("requester"))
+	w.Launched(caller)
+	focusAgent(t, w, app, caller)
 	before := viewProfile(t, w, profile)
 	current, active := before.profile.CurrentDesktopID, before.desktops[before.profile.CurrentDesktopID].ActivePaneID
-	run := func(id string) string {
-		t.Helper()
-		result, err := cli.AutomationRun("nightly", id, "")
+	owner := writeLaunchChoice(app, "crew", "trellis", protocol.LaunchDesktopSetting{Mode: protocol.LaunchDesktopModeOwn, DesktopName: protocol.Ptr("Review")})
+	joined := writeLaunchChoice(app, "crew", "alder", protocol.LaunchDesktopSetting{Mode: protocol.LaunchDesktopModeDesktop, DestinationID: owner.Setting.DestinationID})
+	if joined.Setting.DestinationID == nil || *joined.Setting.DestinationID != *owner.Setting.DestinationID {
+		t.Fatal("pending destination not shared")
+	}
+	writeLaunchChoice(app, "crew", "trellis", protocol.LaunchDesktopSetting{Mode: protocol.LaunchDesktopModeOwn, DesktopName: protocol.Ptr("Review")})
+	inherited := readLaunchSetting(app, "crew", "alder")
+	if inherited.Setting.Mode != protocol.LaunchDesktopModeOwn || protocol.Deref(inherited.Setting.OwnerID) != "alder" {
+		t.Fatalf("owner switch stranded joiner: %+v", inherited)
+	}
+	day, err := cli.CrewWake("alder", "", caller)
+	if err != nil {
+		t.Fatal(err)
+	}
+	w.Launched(day.SessionID)
+	placed, _ := viewProfile(t, w, profile).paneOf(t, day.SessionID)
+	if placed.Name != "Review" || protocol.Deref(placed.ShortcutSlot) != 0 {
+		t.Fatalf("own desktop took a number: %+v", placed)
+	}
+	assertBackgroundPlacement(t, w, profile, day.SessionID, placed.ID, current, active)
+	event := testworld.Await(app, protocol.EventBackgroundLaunch, func(r protocol.BackgroundLaunchMessage) bool { return r.SessionID == day.SessionID })
+	if event.RequestedBy == "" || event.DesktopID != placed.ID || event.Name != "alder" {
+		t.Fatalf("arrival: %+v", event)
+	}
+	other, err := cli.CrewWake("trellis", "", caller)
+	if err != nil {
+		t.Fatal(err)
+	}
+	w.Launched(other.SessionID)
+	sameName, _ := viewProfile(t, w, profile).paneOf(t, other.SessionID)
+	if sameName.Name != placed.Name || sameName.ID == placed.ID {
+		t.Fatal("equal names implicitly shared destinations")
+	}
+	writeLaunchChoice(app, "crew", "trellis", protocol.LaunchDesktopSetting{Mode: protocol.LaunchDesktopModeOwn, DesktopName: protocol.Ptr("Later")})
+	successor := protocol.Deref(crewHandoff(t, cli, other.SessionID, "Continue beside the predecessor.", false, protocol.CrewDayCloseNap).SessionID)
+	w.Launched(successor)
+	assertBackgroundPlacement(t, w, profile, successor, sameName.ID, current, active)
+	napArrival := testworld.Await(app, protocol.EventBackgroundLaunch, func(message protocol.BackgroundLaunchMessage) bool { return message.SessionID == successor })
+	if napArrival.DesktopLabel != "Review (no ⌘ number)" || !strings.Contains(napArrival.RequestedBy, "handoff") {
+		t.Fatalf("nap arrival names configured rather than actual desktop: %+v", napArrival)
+	}
+	crewHandoff(t, cli, day.SessionID, "Day complete.", false, protocol.CrewDayCloseSleep)
+	awaitClosed(app, day.SessionID)
+	if _, exists := viewProfile(t, w, profile).desktops[placed.ID]; exists {
+		t.Fatal("empty noncurrent desktop survived")
+	}
+	again, err := cli.CrewWake("alder", "", caller)
+	if err != nil {
+		t.Fatal(err)
+	}
+	w.Launched(again.SessionID)
+	recreated, _ := viewProfile(t, w, profile).paneOf(t, again.SessionID)
+	if recreated.ID == placed.ID || recreated.Name != "Review" || protocol.Deref(recreated.ShortcutSlot) != 0 {
+		t.Fatalf("recreation: %+v", recreated)
+	}
+	assertBackgroundPlacement(t, w, profile, again.SessionID, recreated.ID, current, active)
+	user := wakeCrew(t, cli, "alder", "")
+	if !user.AlreadyAwake {
+		t.Fatal("user wake started an awake member again")
+	}
+	show := testworld.Await(app, protocol.EventSessionShowRequested, func(message protocol.SessionShowRequestedMessage) bool { return message.SessionID == again.SessionID })
+	if show.SessionID != again.SessionID {
+		t.Fatal("shell wake did not ask the app to show the member")
+	}
+	shown := viewProfile(t, w, profile)
+	_, pane := shown.paneOf(t, again.SessionID)
+	if shown.profile.CurrentDesktopID != recreated.ID || shown.desktops[recreated.ID].ActivePaneID != pane {
+		t.Fatal("user wake did not show the member")
+	}
+	switchDesktop(app, profile, current)
+	woke := testworld.Request(app, protocol.CrewWakeMessage{Cmd: protocol.CmdCrewWake, Member: "alder", RequestID: protocol.Ptr("app-wake")}, protocol.EventCrewWakeResult, func(r protocol.CrewWakeResultMessage) bool { return r.RequestID == "app-wake" })
+	if !woke.Success || !protocol.Deref(woke.AlreadyAwake) {
+		t.Fatalf("app wake: %+v", woke)
+	}
+	if got := viewProfile(t, w, profile); got.profile.CurrentDesktopID != recreated.ID || got.desktops[recreated.ID].ActivePaneID != pane {
+		t.Fatal("app user wake did not focus the member")
+	}
+
+}
+
+func TestAutomationOwnDesktopUsesOnlyExplicitSlotsAndKeepsFocus(t *testing.T) {
+	w := newWorld(t, fakeagent.Claude)
+	app, cli := w.App(), w.Client()
+	profile := app.SelectedProfile()
+	caller := w.Spawn(app, fakeagent.Claude, w.Path("anchor"))
+	w.Launched(caller)
+	focusAgent(t, w, app, caller)
+	before := viewProfile(t, w, profile)
+	current, active := before.profile.CurrentDesktopID, before.desktops[before.profile.CurrentDesktopID].ActivePaneID
+	dir := w.Path("check")
+	if err := os.MkdirAll(dir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	applyAutomation(t, cli, fmt.Sprintf("api_version: attn.dev/automations/v1alpha1\nid: nightly\nname: Nightly check\ntrigger: {type: manual}\nprompt: Check locally.\nlaunch: {driver: claude}\nlocation: {type: directory, path: %q}\n", dir))
+	launch := func(key string) string {
+		r, err := cli.AutomationRun("nightly", key, "")
 		if err != nil {
 			t.Fatal(err)
 		}
-		session := protocol.Deref(result.Run.SessionID)
-		w.Launched(session)
-		return session
+		id := protocol.Deref(r.Run.SessionID)
+		w.Launched(id)
+		return id
 	}
-	first := run("first")
+	first := launch("first")
+	arrival := testworld.Await(app, protocol.EventBackgroundLaunch, func(event protocol.BackgroundLaunchMessage) bool { return event.SessionID == first })
+	if arrival.Name != "Nightly check" || arrival.RequestedBy != "automation" {
+		t.Fatalf("automation arrival: %+v", arrival)
+	}
 	desktop, _ := viewProfile(t, w, profile).paneOf(t, first)
-	if desktop.Name != "Nightly check" || desktop.ID == current {
-		t.Fatalf("dedicated desktop = %+v", desktop)
+	if protocol.Deref(desktop.ShortcutSlot) != 0 || desktop.Name != "Nightly check" {
+		t.Fatalf("default own desktop: %+v", desktop)
 	}
-	assertBackgroundPlacement(t, w, profile, first, desktop.ID, current, active)
-	firstActive := viewProfile(t, w, profile).desktops[desktop.ID].ActivePaneID
-	second := run("second")
-	if got := viewProfile(t, w, profile).desktops[desktop.ID].ActivePaneID; got != firstActive {
-		t.Fatalf("automation changed target active pane: %s, want %s", got, firstActive)
-	}
+	second := launch("second")
 	assertBackgroundPlacement(t, w, profile, second, desktop.ID, current, active)
-	if len(viewProfile(t, w, profile).desktops) != len(before.desktops)+1 {
-		t.Fatal("the second run created another desktop")
+	writeLaunchChoice(app, "automation", "nightly", protocol.LaunchDesktopSetting{Mode: protocol.LaunchDesktopModeOwn, DesktopName: protocol.Ptr("Checks"), ShortcutSlot: protocol.Ptr(5)})
+	third := launch("third")
+	numbered, _ := viewProfile(t, w, profile).paneOf(t, third)
+	if protocol.Deref(numbered.ShortcutSlot) != 5 {
+		t.Fatal("explicit slot was not used")
 	}
-	deleteLaunchDesktop(app, viewProfile(t, w, profile).desktops[desktop.ID])
-	if !protocol.Deref(readLaunchSetting(app, "automation", "nightly").Setting.Fallback) {
-		t.Fatal("missing desktop fallback is not visible")
+	closeSession(t, cli, third, "finished")
+	awaitClosed(app, third)
+	if _, exists := viewProfile(t, w, profile).desktops[numbered.ID]; exists {
+		t.Fatal("empty numbered desktop survived")
 	}
-	third := run("third")
-	assertBackgroundPlacement(t, w, profile, third, current, current, active)
-	target := createDesktop(app, profile)
-	launchSetting(app, "automation", "nightly", "desktop", target.ID)
-	fourth := run("fourth")
-	assertBackgroundPlacement(t, w, profile, fourth, target.ID, current, active)
-	launchSetting(app, "automation", "nightly", "current", "")
-	fifth := run("fifth")
-	assertBackgroundPlacement(t, w, profile, fifth, current, current, active)
+	occupied := mustProfileRequest(app, protocol.DesktopCreateMessage{Cmd: protocol.CmdDesktopCreate, RequestID: "occupy-slot", ProfileID: profile, Name: protocol.Ptr("Taken"), ShortcutSlot: protocol.Ptr(5)}, "occupy-slot").Desktops[0]
+	occupant := w.Spawn(app, fakeagent.Claude, w.Path("occupant"))
+	w.Launched(occupant)
+	switchDesktop(app, profile, current)
+	fourth := launch("fourth")
+	withoutSlot, _ := viewProfile(t, w, profile).paneOf(t, fourth)
+	if withoutSlot.ID == occupied.ID || protocol.Deref(withoutSlot.ShortcutSlot) != 0 || withoutSlot.Name != "Checks" {
+		t.Fatalf("occupied slot recreation: %+v", withoutSlot)
+	}
+	assertBackgroundPlacement(t, w, profile, fourth, withoutSlot.ID, current, active)
+	if got := readLaunchSetting(app, "automation", "nightly"); protocol.Deref(got.Setting.ShortcutSlot) != 5 {
+		t.Fatal("occupied slot discarded saved preference")
+	}
 }
 
 func TestReopenReturnsToTheLastDesktopAndFallsBackAfterItIsDeleted(t *testing.T) {
@@ -183,6 +245,9 @@ func TestReopenReturnsToTheLastDesktopAndFallsBackAfterItIsDeleted(t *testing.T)
 	agent.Prompted()
 	agent.Reply("Ready. <!-- attn:state=idle -->")
 	target := createDesktop(app, profile)
+	targetAnchor := w.Spawn(app, fakeagent.Codex, w.Path("target-anchor"))
+	w.Launched(targetAnchor)
+	switchDesktop(app, profile, current.ID)
 	if _, err := cli.MoveSessionToDesktop(session, session, target.ID); err != nil {
 		t.Fatal(err)
 	}
@@ -195,7 +260,8 @@ func TestReopenReturnsToTheLastDesktopAndFallsBackAfterItIsDeleted(t *testing.T)
 	assertBackgroundPlacement(t, w, profile, session, target.ID, current.ID, active)
 	closeSession(t, cli, session, "done again")
 	awaitClosed(app, session)
-	deleteLaunchDesktop(app, viewProfile(t, w, profile).desktops[target.ID])
+	closeSession(t, cli, targetAnchor, "empty the desktop")
+	awaitClosed(app, targetAnchor)
 	if _, err := cli.SessionReopen(client.SessionReopenOptions{SessionID: session}); err != nil {
 		t.Fatal(err)
 	}
@@ -241,13 +307,13 @@ func TestLaunchMigrationNeedsEveryChoiceAndKeepsConfirmedChoicesAcrossRestart(t 
 				t.Fatalf("restart lost the choice: %+v", item)
 			}
 		} else {
-			if item.Confirmed || item.Setting.Mode != protocol.LaunchDesktopModeCurrent {
+			if item.Confirmed || item.Setting.Mode != protocol.LaunchDesktopModeOwn {
 				t.Fatalf("default was silently confirmed: %+v", item)
 			}
 		}
 	}
 	stale := read(app)
-	deleteLaunchDesktop(app, viewProfile(t, w, app.SelectedProfile()).desktops[target.ID])
+	writeLaunchChoice(app, "crew", "alder", protocol.LaunchDesktopSetting{Mode: protocol.LaunchDesktopModeOwn, DesktopName: protocol.Ptr("Changed")})
 	if result := finish(app, stale); result.Success {
 		t.Fatal("a deleted launch destination did not invalidate the review")
 	}
@@ -293,7 +359,7 @@ func TestUpgradingAnInstallWithOnlyAutomationsRequiresLaunchReviewAndPlacesExist
 		t.Fatalf("automation-only migration = %+v", result)
 	}
 	item := result.State.LaunchItems[0]
-	if item.Kind != protocol.LaunchDesktopKindAutomation || item.ItemID != "check" || item.Confirmed || item.Setting.Mode != protocol.LaunchDesktopModeDedicated {
+	if item.Kind != protocol.LaunchDesktopKindAutomation || item.ItemID != "check" || item.Confirmed || item.Setting.Mode != protocol.LaunchDesktopModeOwn {
 		t.Fatalf("existing automation = %+v", item)
 	}
 	viewProfile(t, w, profileID).paneOf(t, "existing")
@@ -304,7 +370,7 @@ func TestUpgradingAnInstallWithOnlyAutomationsRequiresLaunchReviewAndPlacesExist
 	w.Launched(protocol.Deref(run.Run.SessionID))
 	oldRevision := result.State.Revision
 	changed := testworld.Request(app, protocol.MigrationGetMessage{Cmd: protocol.CmdMigrationGet, RequestID: "changed"}, protocol.EventMigrationResult, func(r protocol.MigrationResultMessage) bool { return r.RequestID == "changed" })
-	if !changed.Success || changed.State.Revision <= oldRevision || changed.State.LaunchItems[0].Setting.Mode != protocol.LaunchDesktopModeDesktop || changed.State.LaunchItems[0].Confirmed {
+	if !changed.Success || changed.State.Revision <= oldRevision || protocol.Deref(changed.State.LaunchItems[0].Setting.Pending) || changed.State.LaunchItems[0].Confirmed {
 		t.Fatalf("dedicated launch did not version pending choice: %+v", changed)
 	}
 	stale := testworld.Request(app, protocol.MigrationFinishMessage{Cmd: protocol.CmdMigrationFinish, RequestID: "stale", ExpectedRevision: oldRevision}, protocol.EventMigrationResult, func(r protocol.MigrationResultMessage) bool { return r.RequestID == "stale" })
@@ -326,6 +392,7 @@ func TestALaunchWhoseDesktopDisappearsDuringDriverPreparationLeavesNoAgentOrActi
 	app, control := w.App(), w.App()
 	driver := connectDriver(t, w, "snipe-plugin", "snipe", map[string]bool{"state_reporting": true, "resume": true})
 	awaitDriverAvailable(app, "snipe")
+	w.Spawn(app, shellHarness, w.Path("keep-source"))
 	target := createDesktop(control, control.SelectedProfile())
 	dir := w.Path("launch")
 	if err := os.MkdirAll(dir, 0o755); err != nil {
@@ -497,4 +564,50 @@ func TestFinishingMigrationWithoutLaunchItemsDoesNotReopenForALaterAutomation(t 
 	if got := read(w.App()); got.Phase != protocol.MigrationPhaseComplete {
 		t.Fatalf("later automation reopened migration: %+v", got)
 	}
+}
+
+func TestRestoringASharedAutomationOwnerInAnotherProfileKeepsDestinationsIndependent(t *testing.T) {
+	w := newCrewWorld(t, fakeagent.Claude)
+	app, cli := w.App(), w.Client()
+	original := app.SelectedProfile()
+	dir := w.Path("check")
+	if err := os.MkdirAll(dir, 0755); err != nil {
+		t.Fatal(err)
+	}
+	spec := fmt.Sprintf("api_version: attn.dev/automations/v1alpha1\nid: shared-owner\nname: Shared check\ntrigger: {type: manual}\nprompt: Check locally.\nlaunch: {driver: claude}\nlocation: {type: directory, path: %q}\n", dir)
+	applyAutomation(t, cli, spec)
+	owner := readLaunchSetting(app, "automation", "shared-owner")
+	writeLaunchChoice(app, "crew", "alder", protocol.LaunchDesktopSetting{Mode: protocol.LaunchDesktopModeDesktop, DestinationID: owner.Setting.DestinationID})
+	if err := cli.AutomationDelete("shared-owner"); err != nil {
+		t.Fatal(err)
+	}
+	destination := createProfile(app, "Other")
+	otherApp := w.AppOn(destination.ID)
+	req := protocol.AutomationApplyMessage{Cmd: protocol.CmdAutomationApply, RequestID: protocol.Ptr("restore"), DefinitionYaml: spec, ProfileID: protocol.Ptr(destination.ID)}
+	restored := testworld.Request(otherApp, req, protocol.EventAutomationApplyResult, func(r protocol.AutomationApplyResultMessage) bool { return protocol.Deref(r.RequestID) == "restore" })
+	if !restored.Success {
+		t.Fatalf("restore: %+v", restored)
+	}
+	fresh := readLaunchSetting(otherApp, "automation", "shared-owner")
+	retained := readLaunchSetting(app, "crew", "alder")
+	if protocol.Deref(fresh.Setting.DestinationID) == protocol.Deref(retained.Setting.DestinationID) {
+		t.Fatal("restored owner rejoined its former shared destination")
+	}
+	run, err := cli.AutomationRun("shared-owner", "restored", "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	runID := protocol.Deref(run.Run.SessionID)
+	w.Launched(runID)
+	viewProfile(t, w, destination.ID).paneOf(t, runID)
+	arrival := testworld.Await(app, protocol.EventBackgroundLaunch, func(message protocol.BackgroundLaunchMessage) bool { return message.SessionID == runID })
+	if arrival.ProfileID != destination.ID {
+		t.Fatalf("cross-profile arrival identifies %s, want %s", arrival.ProfileID, destination.ID)
+	}
+	wake, err := cli.CrewWake("alder", "", "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	w.Launched(wake.SessionID)
+	viewProfile(t, w, original).paneOf(t, wake.SessionID)
 }

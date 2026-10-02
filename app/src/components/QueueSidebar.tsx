@@ -4,7 +4,6 @@ import { formatShortcut } from '../shortcuts/formatShortcut';
 import { crewRows, formatTurnAge, type QueueRow } from '../utils/queueBands';
 import { slotShortcut } from '../utils/desktops';
 import { formatWakeTimeShort } from '../utils/snoozeDurations';
-import { UNPLACED_GROUP_ID } from '../utils/desktopViewModels';
 import { CriticalNotificationStrip } from './CriticalNotificationStrip';
 import { CrewRowView, QueueRowView, type QueueBandSessionView, type RowWhere } from './QueueRows';
 import './QueueSidebar.css';
@@ -179,9 +178,6 @@ function HomeRow() {
 function useRowWhere(): (row: QueueRow<QueueBandSessionView>) => RowWhere {
   const { visualIndexOfDesktop } = useSidebarContext();
   return (row) => {
-    if (row.desktopId === UNPLACED_GROUP_ID) {
-      return { slot: '—', title: 'Not on a desktop; opening places it beside the active pane' };
-    }
     const index = visualIndexOfDesktop(row.desktopId);
     return index >= 0
       ? { slot: String(index + 1), title: row.desktopTitle }
@@ -229,6 +225,7 @@ function CrewBlock() {
         <CrewRowView
           key={member}
           member={member}
+          desktopLabel={crew?.find((candidate) => candidate.id === member)?.launch_desktop?.label}
           row={row}
           where={row ? where(row) : undefined}
           selected={row ? selectedId === row.session.id : false}
@@ -422,7 +419,7 @@ function DesktopStrip() {
     onOpenOverview,
   } = useSidebarContext();
   const chipDrop = useDesktopChipDrop();
-  const placed = desktops.filter((desktop) => desktop.id !== UNPLACED_GROUP_ID);
+  const placed = desktops;
   const slotted = placed
     .filter((desktop) => visualIndexOfDesktop(desktop.id) >= 0)
     .sort((a, b) => visualIndexOfDesktop(a.id) - visualIndexOfDesktop(b.id));

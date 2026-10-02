@@ -115,10 +115,12 @@ const (
 
 	FactGardenReviewChanged = "garden.review.changed"
 
-	FactCrewRegistered = "crew.registered"
-	FactCrewBound      = "crew.bound"
-	FactCrewReleased   = "crew.released"
-	FactCrewUpdated    = "crew.updated"
+	FactCrewRegistered       = "crew.registered"
+	FactCrewBound            = "crew.bound"
+	FactCrewReleased         = "crew.released"
+	FactCrewUpdated          = "crew.updated"
+	FactBackgroundLaunch     = "session.background.launch"
+	FactSessionShowRequested = "session.show.requested"
 )
 
 var CompactableFacts = []string{FactDocumentChanged, FactDocumentCollectionRemoved, FactDocumentCollectionRedeclared, FactSessionAssistantWindowChanged}
@@ -250,6 +252,8 @@ func buildWireProjections() []projection {
 			filter: bus.Filter{FactGardenReviewChanged},
 			apply:  func(d *Daemon, ev bus.Event) { d.projectGardenReview(ev.Subject) },
 		},
+		{filter: bus.Filter{FactBackgroundLaunch}, apply: func(d *Daemon, ev bus.Event) { d.projectBackgroundLaunch(ev) }},
+		{filter: bus.Filter{FactSessionShowRequested}, apply: func(d *Daemon, ev bus.Event) { d.projectSessionShowRequested(ev) }},
 		{
 			filter: bus.Filter{"crew.*"},
 			apply:  func(d *Daemon, _ bus.Event) { d.projectCrewRoster() },

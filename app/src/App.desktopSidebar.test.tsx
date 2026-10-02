@@ -81,7 +81,6 @@ describe('App desktop sidebar', () => {
       ['c', ['c1']],
       ['tile-only', ['tiles.test']],
       ['empty', [], 'Empty desktop'],
-      ['Not on a desktop', ['unplaced']],
     ]);
   });
 

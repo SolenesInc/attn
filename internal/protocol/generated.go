@@ -969,6 +969,13 @@ type AutomationApplyMessage struct {
 	// LaunchDesktop corresponds to the JSON schema field "launch_desktop".
 	LaunchDesktop *string `json:"launch_desktop,omitempty,omitzero"`
 
+	// LaunchDesktopName corresponds to the JSON schema field "launch_desktop_name".
+	LaunchDesktopName *string `json:"launch_desktop_name,omitempty,omitzero"`
+
+	// LaunchDesktopSetting corresponds to the JSON schema field
+	// "launch_desktop_setting".
+	LaunchDesktopSetting *LaunchDesktopSetting `json:"launch_desktop_setting,omitempty,omitzero"`
+
 	// ProfileID corresponds to the JSON schema field "profile_id".
 	ProfileID *string `json:"profile_id,omitempty,omitzero"`
 
@@ -1340,6 +1347,32 @@ type AutomationsChangedMessage struct {
 
 	// Event corresponds to the JSON schema field "event".
 	Event string `json:"event"`
+}
+
+type BackgroundLaunchMessage struct {
+	// DesktopID corresponds to the JSON schema field "desktop_id".
+	DesktopID string `json:"desktop_id"`
+
+	// DesktopLabel corresponds to the JSON schema field "desktop_label".
+	DesktopLabel string `json:"desktop_label"`
+
+	// Event corresponds to the JSON schema field "event".
+	Event string `json:"event"`
+
+	// Kind corresponds to the JSON schema field "kind".
+	Kind LaunchDesktopKind `json:"kind"`
+
+	// Name corresponds to the JSON schema field "name".
+	Name string `json:"name"`
+
+	// ProfileID corresponds to the JSON schema field "profile_id".
+	ProfileID string `json:"profile_id"`
+
+	// RequestedBy corresponds to the JSON schema field "requested_by".
+	RequestedBy string `json:"requested_by"`
+
+	// SessionID corresponds to the JSON schema field "session_id".
+	SessionID string `json:"session_id"`
 }
 
 type BootstrapEndpointMessage struct {
@@ -2301,6 +2334,13 @@ type CrewSetMessage struct {
 
 	// LaunchDesktop corresponds to the JSON schema field "launch_desktop".
 	LaunchDesktop *string `json:"launch_desktop,omitempty,omitzero"`
+
+	// LaunchDesktopName corresponds to the JSON schema field "launch_desktop_name".
+	LaunchDesktopName *string `json:"launch_desktop_name,omitempty,omitzero"`
+
+	// LaunchDesktopSetting corresponds to the JSON schema field
+	// "launch_desktop_setting".
+	LaunchDesktopSetting *LaunchDesktopSetting `json:"launch_desktop_setting,omitempty,omitzero"`
 
 	// Member corresponds to the JSON schema field "member".
 	Member string `json:"member"`
@@ -5514,9 +5554,8 @@ const LaunchDesktopKindCrew LaunchDesktopKind = "crew"
 
 type LaunchDesktopMode string
 
-const LaunchDesktopModeCurrent LaunchDesktopMode = "current"
-const LaunchDesktopModeDedicated LaunchDesktopMode = "dedicated"
 const LaunchDesktopModeDesktop LaunchDesktopMode = "desktop"
+const LaunchDesktopModeOwn LaunchDesktopMode = "own"
 
 type LaunchDesktopResultMessage struct {
 	// Action corresponds to the JSON schema field "action".
@@ -5534,6 +5573,9 @@ type LaunchDesktopResultMessage struct {
 	// Item corresponds to the JSON schema field "item".
 	Item *LaunchDesktopItem `json:"item,omitempty,omitzero"`
 
+	// Items corresponds to the JSON schema field "items".
+	Items []LaunchDesktopItem `json:"items,omitempty,omitzero"`
+
 	// RequestID corresponds to the JSON schema field "request_id".
 	RequestID string `json:"request_id"`
 
@@ -5544,6 +5586,9 @@ type LaunchDesktopResultMessage struct {
 type LaunchDesktopSetMessage struct {
 	// Cmd corresponds to the JSON schema field "cmd".
 	Cmd string `json:"cmd"`
+
+	// DesktopName corresponds to the JSON schema field "desktop_name".
+	DesktopName *string `json:"desktop_name,omitempty,omitzero"`
 
 	// DesktopRef corresponds to the JSON schema field "desktop_ref".
 	DesktopRef *string `json:"desktop_ref,omitempty,omitzero"`
@@ -5565,14 +5610,29 @@ type LaunchDesktopSetting struct {
 	// DesktopID corresponds to the JSON schema field "desktop_id".
 	DesktopID *string `json:"desktop_id,omitempty,omitzero"`
 
-	// Fallback corresponds to the JSON schema field "fallback".
-	Fallback *bool `json:"fallback,omitempty,omitzero"`
+	// DesktopName corresponds to the JSON schema field "desktop_name".
+	DesktopName *string `json:"desktop_name,omitempty,omitzero"`
+
+	// DestinationID corresponds to the JSON schema field "destination_id".
+	DestinationID *string `json:"destination_id,omitempty,omitzero"`
 
 	// Label corresponds to the JSON schema field "label".
 	Label *string `json:"label,omitempty,omitzero"`
 
 	// Mode corresponds to the JSON schema field "mode".
 	Mode LaunchDesktopMode `json:"mode"`
+
+	// OwnerID corresponds to the JSON schema field "owner_id".
+	OwnerID *string `json:"owner_id,omitempty,omitzero"`
+
+	// OwnerKind corresponds to the JSON schema field "owner_kind".
+	OwnerKind *LaunchDesktopKind `json:"owner_kind,omitempty,omitzero"`
+
+	// Pending corresponds to the JSON schema field "pending".
+	Pending *bool `json:"pending,omitempty,omitzero"`
+
+	// ShortcutSlot corresponds to the JSON schema field "shortcut_slot".
+	ShortcutSlot *int `json:"shortcut_slot,omitempty,omitzero"`
 }
 
 type LayoutDockEdge string
@@ -10152,6 +10212,14 @@ type SessionShowMessage struct {
 
 	// RequestID corresponds to the JSON schema field "request_id".
 	RequestID *string `json:"request_id,omitempty,omitzero"`
+
+	// SessionID corresponds to the JSON schema field "session_id".
+	SessionID string `json:"session_id"`
+}
+
+type SessionShowRequestedMessage struct {
+	// Event corresponds to the JSON schema field "event".
+	Event string `json:"event"`
 
 	// SessionID corresponds to the JSON schema field "session_id".
 	SessionID string `json:"session_id"`

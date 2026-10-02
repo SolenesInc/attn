@@ -242,7 +242,7 @@ func (s *Store) UpsertAutomationDefinitionWithLaunch(id, name, specJSON, profile
 		return nil, err
 	}
 	if launch != nil {
-		if _, err := saveLaunchSetting(tx, "automation", id, *launch); err != nil {
+		if _, err := saveLaunchSetting(tx, "automation", id, *launch, !activation && oldSpec == specJSON); err != nil {
 			return nil, err
 		}
 	}

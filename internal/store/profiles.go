@@ -515,19 +515,10 @@ func loadDeletionDestination(tx *sql.Tx, profile profiles.Profile, destinationID
 }
 
 func deleteProfileDesktops(tx *sql.Tx, profileID string) error {
-	desktops, err := listDesktops(tx, profileID)
-	if err != nil {
-		return err
-	}
-	for _, desktop := range desktops {
-		if _, err := tx.Exec(`UPDATE launch_desktops SET desktop_name = ? WHERE desktop_id = ?`, profiles.DesktopLabel(desktop, desktops), desktop.ID); err != nil {
-			return err
-		}
-	}
 	if _, err := tx.Exec(`DELETE FROM desktop_panes WHERE desktop_id IN (SELECT id FROM desktops WHERE profile_id = ?)`, profileID); err != nil {
 		return err
 	}
-	_, err = tx.Exec(`DELETE FROM desktops WHERE profile_id = ?`, profileID)
+	_, err := tx.Exec(`DELETE FROM desktops WHERE profile_id = ?`, profileID)
 	return err
 }
 
@@ -537,7 +528,7 @@ func (s *Store) DeleteProfile(id string, expectedRevision int64, destinationID s
 		opts = options[0]
 	}
 	var result ProfileDeletion
-	err := s.profilesTx(func(tx *sql.Tx, now string) error {
+	err := s.profilesArrangementTx(func(tx *sql.Tx, now string) error {
 		profile, err := loadLiveProfile(tx, id)
 		if err != nil {
 			return err
@@ -580,6 +571,9 @@ func (s *Store) DeleteProfile(id string, expectedRevision int64, destinationID s
 			return err
 		}
 		if _, err := tx.Exec(`UPDATE sessions SET profile_id = ? WHERE profile_id = ? AND closed_at = ''`, destinationID, id); err != nil {
+			return err
+		}
+		if _, err := tx.Exec(`UPDATE launch_destinations SET profile_id = ? WHERE profile_id = ?`, destinationID, id); err != nil {
 			return err
 		}
 		if result.MovedAutomationIDs, err = moveProfileAutomations(tx, id, destinationID, now); err != nil {
@@ -752,7 +746,7 @@ func moveProfileAutomations(tx *sql.Tx, from, to, now string) ([]string, error) 
 func (s *Store) CreateDesktop(profileID, name string, shortcutSlot int, takeFreeSlot bool) (profiles.Profile, profiles.Desktop, error) {
 	var profile profiles.Profile
 	var desktop profiles.Desktop
-	err := s.profilesTx(func(tx *sql.Tx, now string) error {
+	err := s.profilesArrangementTx(func(tx *sql.Tx, now string) error {
 		var err error
 		if profile, err = loadLiveProfile(tx, profileID); err != nil {
 			return err
@@ -765,6 +759,7 @@ func (s *Store) CreateDesktop(profileID, name string, shortcutSlot int, takeFree
 		if desktop, err = insertDesktop(tx, now, profileID, name, shortcutSlot); err != nil {
 			return err
 		}
+		profile.CurrentDesktopID = desktop.ID
 		return bumpProfile(tx, &profile)
 	})
 	return profile, desktop, err
@@ -887,27 +882,16 @@ func repointCurrentDesktop(profile *profiles.Profile, siblings []profiles.Deskto
 }
 
 func deleteDesktop(tx *sql.Tx, id string) error {
-	desktop, err := loadDesktop(tx, id)
-	if err != nil {
-		return err
-	}
-	name, err := launchDesktopName(tx, desktop)
-	if err != nil {
-		return err
-	}
-	if _, err := tx.Exec(`UPDATE launch_desktops SET desktop_name = ? WHERE desktop_id = ?`, name, id); err != nil {
-		return err
-	}
 	if _, err := tx.Exec(`DELETE FROM desktop_panes WHERE desktop_id = ?`, id); err != nil {
 		return err
 	}
-	_, err = tx.Exec(`DELETE FROM desktops WHERE id = ?`, id)
+	_, err := tx.Exec(`DELETE FROM desktops WHERE id = ?`, id)
 	return err
 }
 
 func (s *Store) DeleteDesktop(id string, expectedRevision int64) (DesktopDeletion, error) {
 	var result DesktopDeletion
-	err := s.profilesTx(func(tx *sql.Tx, now string) error {
+	err := s.profilesArrangementTx(func(tx *sql.Tx, now string) error {
 		desktop, err := loadDesktop(tx, id)
 		if err != nil {
 			return err
@@ -958,7 +942,7 @@ func (s *Store) DeleteDesktop(id string, expectedRevision int64) (DesktopDeletio
 
 func (s *Store) SetCurrentDesktop(profileID, desktopID string) (profiles.Profile, error) {
 	var profile profiles.Profile
-	err := s.profilesTx(func(tx *sql.Tx, now string) error {
+	err := s.profilesArrangementTx(func(tx *sql.Tx, now string) error {
 		var err error
 		if profile, err = loadLiveProfile(tx, profileID); err != nil {
 			return err
@@ -1019,7 +1003,7 @@ func (s *Store) ShowLeaf(desktopID, leafID string) (profiles.Profile, profiles.D
 	desktopID, leafID = strings.TrimSpace(desktopID), strings.TrimSpace(leafID)
 	var profile profiles.Profile
 	var desktop profiles.Desktop
-	err := s.profilesTx(func(tx *sql.Tx, now string) error {
+	err := s.profilesArrangementTx(func(tx *sql.Tx, now string) error {
 		if desktopID == "" || leafID == "" {
 			return profiles.Errorf(profiles.CodeInvalid, "showing a leaf needs desktop_id and leaf_id")
 		}
@@ -1040,7 +1024,7 @@ func (s *Store) ShowSession(sessionID string) (profiles.Profile, profiles.Deskto
 	var profile profiles.Profile
 	var desktop profiles.Desktop
 	var leafID string
-	err := s.profilesTx(func(tx *sql.Tx, now string) error {
+	err := s.profilesArrangementTx(func(tx *sql.Tx, now string) error {
 		if sessionID == "" {
 			return profiles.Errorf(profiles.CodeInvalid, "showing a session needs session_id")
 		}
@@ -1235,7 +1219,7 @@ func writeDesktopArrangement(tx *sql.Tx, now string, desktop *profiles.Desktop) 
 
 func (s *Store) UpdateDesktopArrangement(id string, expectedRevision int64, edit func(desktop profiles.Desktop) (profiles.Desktop, error)) (profiles.Desktop, error) {
 	var desktop profiles.Desktop
-	err := s.profilesTx(func(tx *sql.Tx, now string) error {
+	err := s.profilesArrangementTx(func(tx *sql.Tx, now string) error {
 		current, err := loadDesktop(tx, id)
 		if err != nil {
 			return err
@@ -1339,7 +1323,7 @@ func (s *Store) LaunchDesktop(profileID, desktopID string) (profiles.Desktop, er
 func (s *Store) PlaceLaunchedSession(request SessionPlacementRequest) (profiles.Desktop, string, error) {
 	paneID := newProfileEntityID("pane")
 	var desktop profiles.Desktop
-	err := s.profilesTx(func(tx *sql.Tx, now string) error {
+	err := s.profilesArrangementTx(func(tx *sql.Tx, now string) error {
 		profileID, err := openSessionProfileID(tx, request.SessionID)
 		if err != nil {
 			return err
@@ -1445,7 +1429,7 @@ func (s *Store) MoveLeaf(request LeafMoveRequest) (LeafMove, error) {
 		return s.moveLeafWithinDesktop(request)
 	}
 	var result LeafMove
-	err := s.profilesTx(func(tx *sql.Tx, now string) error {
+	err := s.profilesArrangementTx(func(tx *sql.Tx, now string) error {
 		source, target, err := loadMoveEnds(tx, request)
 		if err != nil {
 			return err
@@ -1487,7 +1471,7 @@ type SessionDesktopMove struct {
 // only a moved active pane, onto a desktop not on screen, takes that leaf.
 func (s *Store) MoveSessionToDesktop(sessionID, targetDesktopID, title string) (SessionDesktopMove, error) {
 	var result SessionDesktopMove
-	err := s.profilesTx(func(tx *sql.Tx, now string) error {
+	err := s.profilesArrangementTx(func(tx *sql.Tx, now string) error {
 		profileID, err := openSessionProfileID(tx, sessionID)
 		if err != nil {
 			return err
@@ -1630,6 +1614,9 @@ func (s *Store) unplaceSessionLocked(now, sessionID string) error {
 	if _, err := removeSessionPlacement(tx, now, sessionID); err != nil {
 		return err
 	}
+	if err := pruneEmptyDesktops(tx); err != nil {
+		return err
+	}
 	return tx.Commit()
 }
 
@@ -1649,7 +1636,7 @@ func (s *Store) unplaceSessionsLocked(reason, where string, args ...any) {
 
 func (s *Store) RemoveSessionPlacement(sessionID string) (*profiles.Desktop, error) {
 	var desktop *profiles.Desktop
-	err := s.profilesTx(func(tx *sql.Tx, now string) error {
+	err := s.profilesArrangementTx(func(tx *sql.Tx, now string) error {
 		var err error
 		desktop, err = removeSessionPlacement(tx, now, sessionID)
 		return err
@@ -1660,7 +1647,7 @@ func (s *Store) RemoveSessionPlacement(sessionID string) (*profiles.Desktop, err
 func (s *Store) MoveSessionToProfile(request SessionProfileMoveRequest) (SessionProfileMove, error) {
 	sessionID, destinationID := request.SessionID, request.DestinationProfileID
 	move := SessionProfileMove{SessionID: sessionID, ToProfileID: destinationID}
-	err := s.profilesTx(func(tx *sql.Tx, now string) error {
+	err := s.profilesArrangementTx(func(tx *sql.Tx, now string) error {
 		if strings.TrimSpace(request.ExpectedProfileID) == "" {
 			return profiles.Errorf(profiles.CodeInvalid, "moving session %s needs the profile it was seen in", sessionID)
 		}
@@ -1725,5 +1712,8 @@ func moveCrewMember(tx *sql.Tx, memberID, profileID string) (string, error) {
 	}
 	_, err := tx.Exec(`INSERT INTO crew_profiles(member_id, profile_id) VALUES (?, ?)
 		ON CONFLICT(member_id) DO UPDATE SET profile_id = excluded.profile_id`, memberID, profileID)
+	if err == nil {
+		err = moveLaunchItemProfile(tx, "crew", memberID, profileID)
+	}
 	return memberID, err
 }

@@ -1283,12 +1283,18 @@ CREATE INDEX IF NOT EXISTS idx_automode_denials_recent ON automode_denials(id DE
  PRIMARY KEY (agent, resume_id)
  );
  `},
-	{167, "place background launches and remember session desktops", `
+	{167, "place background launches and remember named destinations", `
+ CREATE TABLE IF NOT EXISTS launch_destinations (
+ id TEXT PRIMARY KEY, profile_id TEXT NOT NULL, name TEXT NOT NULL,
+ requested_slot INTEGER NOT NULL DEFAULT 0 CHECK(requested_slot = 0 OR requested_slot BETWEEN 5 AND 9),
+ live_desktop_id TEXT NOT NULL DEFAULT '', own INTEGER NOT NULL DEFAULT 1
+ );
+ CREATE UNIQUE INDEX IF NOT EXISTS launch_destination_binding ON launch_destinations(live_desktop_id) WHERE live_desktop_id != '';
  CREATE TABLE IF NOT EXISTS launch_desktops (
+ joined_order INTEGER PRIMARY KEY AUTOINCREMENT,
  kind TEXT NOT NULL CHECK(kind IN ('automation', 'crew')), item_id TEXT NOT NULL,
- mode TEXT NOT NULL CHECK(mode IN ('current', 'dedicated', 'desktop')),
- desktop_id TEXT NOT NULL DEFAULT '', desktop_name TEXT NOT NULL DEFAULT '', confirmed INTEGER NOT NULL DEFAULT 0,
- PRIMARY KEY(kind, item_id)
+ destination_id TEXT NOT NULL REFERENCES launch_destinations(id), confirmed INTEGER NOT NULL DEFAULT 0,
+ UNIQUE(kind, item_id)
  );
  CREATE TRIGGER IF NOT EXISTS remember_session_desktop AFTER INSERT ON desktop_panes WHEN NEW.session_id != ''
  BEGIN UPDATE sessions SET last_desktop_id = NEW.desktop_id WHERE id = NEW.session_id; END;
@@ -1298,19 +1304,41 @@ CREATE INDEX IF NOT EXISTS idx_automode_denials_recent ON automode_denials(id DE
  BEGIN UPDATE profile_migration SET revision = revision + 1 WHERE phase = 'launch_required'; END;
  CREATE TRIGGER IF NOT EXISTS launch_review_setting_delete AFTER DELETE ON launch_desktops
  BEGIN UPDATE profile_migration SET revision = revision + 1 WHERE phase = 'launch_required'; END;
+ CREATE TRIGGER IF NOT EXISTS launch_review_destination_update AFTER UPDATE ON launch_destinations
+ BEGIN UPDATE profile_migration SET revision = revision + 1 WHERE phase = 'launch_required'; END;
+ CREATE TRIGGER IF NOT EXISTS launch_destination_unbind AFTER DELETE ON desktops
+ BEGIN UPDATE launch_destinations SET live_desktop_id = '' WHERE live_desktop_id = OLD.id; END;
+ CREATE TRIGGER IF NOT EXISTS launch_destination_rename AFTER UPDATE OF name ON desktops WHEN NEW.name != '' AND NEW.name != OLD.name
+ BEGIN UPDATE launch_destinations SET name = NEW.name WHERE live_desktop_id = NEW.id; END;
  CREATE TRIGGER IF NOT EXISTS launch_review_definition_update AFTER UPDATE OF name, profile_id, deleted_at ON automation_definitions
  WHEN OLD.name != NEW.name OR OLD.profile_id != NEW.profile_id OR OLD.deleted_at != NEW.deleted_at
  BEGIN UPDATE profile_migration SET revision = revision + 1 WHERE phase = 'launch_required'; END;
- CREATE TRIGGER IF NOT EXISTS launch_review_definition_insert AFTER INSERT ON automation_definitions
- WHEN EXISTS (SELECT 1 FROM profile_migration WHERE phase = 'launch_required')
- BEGIN INSERT OR IGNORE INTO launch_desktops(kind, item_id, mode) VALUES ('automation', NEW.id, 'dedicated'); END;
+ CREATE TRIGGER IF NOT EXISTS launch_default_automation AFTER INSERT ON automation_definitions
+ BEGIN
+ INSERT OR IGNORE INTO launch_destinations(id, profile_id, name) VALUES ('automation:' || NEW.id, NEW.profile_id, NEW.name);
+ INSERT OR IGNORE INTO launch_desktops(kind, item_id, destination_id) VALUES ('automation', NEW.id, 'automation:' || NEW.id);
+ END;
+ CREATE TRIGGER IF NOT EXISTS launch_automation_deleted AFTER UPDATE OF deleted_at ON automation_definitions WHEN NEW.deleted_at != ''
+ BEGIN
+ DELETE FROM launch_desktops WHERE kind = 'automation' AND item_id = NEW.id;
+ DELETE FROM launch_destinations WHERE NOT EXISTS (SELECT 1 FROM launch_desktops WHERE destination_id = launch_destinations.id);
+ END;
+ CREATE TRIGGER IF NOT EXISTS launch_automation_restored AFTER UPDATE OF deleted_at ON automation_definitions WHEN OLD.deleted_at != '' AND NEW.deleted_at = ''
+ BEGIN
+ INSERT INTO launch_destinations(id,profile_id,name) VALUES (lower(hex(randomblob(16))),NEW.profile_id,NEW.name);
+ INSERT INTO launch_desktops(kind,item_id,destination_id) SELECT 'automation',NEW.id,id FROM launch_destinations WHERE rowid = last_insert_rowid();
+ END;
+ CREATE TRIGGER IF NOT EXISTS launch_default_crew AFTER INSERT ON crew_profiles
+ BEGIN
+ INSERT INTO launch_destinations(id, profile_id, name) VALUES (lower(hex(randomblob(16))), NEW.profile_id, NEW.member_id);
+ INSERT INTO launch_desktops(kind, item_id, destination_id) SELECT 'crew', NEW.member_id, id FROM launch_destinations WHERE rowid = last_insert_rowid();
+ END;
  CREATE TRIGGER IF NOT EXISTS launch_review_crew_profile AFTER UPDATE ON crew_profiles WHEN OLD.profile_id != NEW.profile_id
  BEGIN UPDATE profile_migration SET revision = revision + 1 WHERE phase = 'launch_required'; END;
- CREATE TRIGGER IF NOT EXISTS launch_review_desktop_label AFTER UPDATE OF name, shortcut_slot ON desktops
- WHEN EXISTS (SELECT 1 FROM launch_desktops WHERE desktop_id = NEW.id)
- BEGIN UPDATE profile_migration SET revision = revision + 1 WHERE phase = 'launch_required'; END;
- INSERT OR IGNORE INTO launch_desktops(kind, item_id, mode) SELECT 'automation', id, 'dedicated' FROM automation_definitions WHERE deleted_at = '';
- INSERT OR IGNORE INTO launch_desktops(kind, item_id, mode) SELECT 'crew', member_id, 'current' FROM crew_profiles;
+ INSERT OR IGNORE INTO launch_destinations(id, profile_id, name) SELECT 'automation:' || id, profile_id, name FROM automation_definitions WHERE deleted_at = '';
+ INSERT OR IGNORE INTO launch_desktops(kind, item_id, destination_id) SELECT 'automation', id, 'automation:' || id FROM automation_definitions WHERE deleted_at = '';
+ INSERT OR IGNORE INTO launch_destinations(id, profile_id, name) SELECT 'crew:' || member_id, profile_id, member_id FROM crew_profiles;
+ INSERT OR IGNORE INTO launch_desktops(kind, item_id, destination_id) SELECT 'crew', member_id, 'crew:' || member_id FROM crew_profiles;
  `},
 }
 

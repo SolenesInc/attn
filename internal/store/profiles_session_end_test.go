@@ -131,13 +131,14 @@ func TestPlacingWithAShareKeepsThatShare(t *testing.T) {
 func TestAMoveWhoseTargetWriteFailsLeavesTheSourceUntouched(t *testing.T) {
 	s, _ := openProfileStore(t)
 	profile, source := mustCreateProfile(t, s, "attn")
+
+	addProfileSession(t, s, "agent-a", profile.ID)
+	addProfileSession(t, s, "agent-b", profile.ID)
+	source, paneA := mustPlace(t, s, source.ID, "agent-a")
 	_, target, err := s.CreateDesktop(profile.ID, "", 0, true)
 	if err != nil {
 		t.Fatal(err)
 	}
-	addProfileSession(t, s, "agent-a", profile.ID)
-	addProfileSession(t, s, "agent-b", profile.ID)
-	source, paneA := mustPlace(t, s, source.ID, "agent-a")
 	target, _ = mustPlace(t, s, target.ID, "agent-b")
 	if _, err := s.db.Exec(`UPDATE desktop_panes SET status = 'melted' WHERE session_id = 'agent-b'`); err != nil {
 		t.Fatal(err)

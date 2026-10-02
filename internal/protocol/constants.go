@@ -2,7 +2,7 @@ package protocol
 
 import "time"
 
-const ProtocolVersion = "339"
+const ProtocolVersion = "341"
 
 const (
 	ErrorCodeConflict             = "conflict"
@@ -296,6 +296,8 @@ const (
 )
 
 const (
+	EventBackgroundLaunch          = "background_launch"
+	EventSessionShowRequested      = "session_show_requested"
 	EventLaunchDesktopResult       = "launch_desktop_result"
 	EventProfileActionResult       = "profile_action_result"
 	EventProfilesChanged           = "profiles_changed"

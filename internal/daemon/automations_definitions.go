@@ -59,7 +59,7 @@ func (d *Daemon) automationApply(raw string) (*store.AutomationDefinition, error
 	return d.automationApplyWithGuards(context.Background(), raw, "", nil, nil, nil)
 }
 
-func (d *Daemon) automationApplyWithGuards(ctx context.Context, raw, profileID string, expectedID *string, expectedRevision *int, desktopRef *string) (*store.AutomationDefinition, error) {
+func (d *Daemon) automationApplyWithGuards(ctx context.Context, raw, profileID string, expectedID *string, expectedRevision *int, launch *launchDesktopWrite) (*store.AutomationDefinition, error) {
 	if err := d.requireHome(automation.Surface); err != nil {
 		return nil, err
 	}
@@ -92,10 +92,10 @@ func (d *Daemon) automationApplyWithGuards(ctx context.Context, raw, profileID s
 	if err != nil {
 		return nil, &automationRefusal{Code: automationErrCodeValidation, Err: err}
 	}
-	return d.automationApplyLocked(ctx, spec, canonical, profile.ID, guard, desktopRef)
+	return d.automationApplyLocked(ctx, spec, canonical, profile.ID, guard, launch)
 }
 
-func (d *Daemon) automationApplyLocked(ctx context.Context, spec automation.DefinitionSpec, canonical []byte, profileID string, guard func(*store.AutomationDefinition) error, desktopRef *string) (*store.AutomationDefinition, error) {
+func (d *Daemon) automationApplyLocked(ctx context.Context, spec automation.DefinitionSpec, canonical []byte, profileID string, guard func(*store.AutomationDefinition) error, launch *launchDesktopWrite) (*store.AutomationDefinition, error) {
 	d.automationMu.Lock()
 	defer d.automationMu.Unlock()
 	if err := ctx.Err(); err != nil {
@@ -111,14 +111,21 @@ func (d *Daemon) automationApplyLocked(ctx context.Context, spec automation.Defi
 		}
 	}
 	var setting *store.LaunchDesktopSetting
-	if desktopRef != nil {
+	if launch != nil && launch.setting != nil {
+		chosen := storeLaunchSetting(*launch.setting)
+		setting = &chosen
+	}
+	if launch != nil && launch.ref != nil {
 		owner := profileID
 		if existing != nil && existing.DeletedAt == nil {
 			owner = existing.ProfileID
 		}
-		chosen, err := d.launchDesktopFromRef(owner, "automation", *desktopRef)
+		chosen, err := d.launchDesktopFromRef(owner, "automation", *launch.ref)
 		if err != nil {
 			return nil, err
+		}
+		if launch.name != nil {
+			chosen.DesktopName = *launch.name
 		}
 		setting = &chosen
 	}

@@ -24,8 +24,11 @@ func TestASessionMovesItselfAndItsDelegatesBetweenDesktops(t *testing.T) {
 	})
 	id := uuid.NewString()
 	ops := mustProfileRequest(app, protocol.DesktopCreateMessage{Cmd: protocol.CmdDesktopCreate, RequestID: id, ProfileID: profile, Name: protocol.Ptr("Ops")}, id).Desktops[0]
+	w.Spawn(app, fakeagent.Codex, w.Path("ops-anchor"))
 	id = uuid.NewString()
 	web := mustProfileRequest(app, protocol.DesktopCreateMessage{Cmd: protocol.CmdDesktopCreate, RequestID: id, ProfileID: profile, Name: protocol.Ptr("Web")}, id).Desktops[0]
+	w.Spawn(app, fakeagent.Codex, w.Path("web-anchor"))
+	focusAgent(t, w, app, s.ID)
 
 	arrangement := func(when string, holds func(map[string]protocol.Desktop) bool) (protocol.ProfileArrangementChangedMessage, map[string]protocol.Desktop) {
 		t.Helper()

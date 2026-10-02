@@ -16,12 +16,12 @@ func TestLaunchDesktopsAreInstallSettingsVisibleThroughTheCLI(t *testing.T) {
 	s := testworld.NewStack(t, testworld.WithAgents(fakeagent.Claude))
 	writeCharter(t, s, "alder")
 	s.Start()
-	requireStdout(t, s.Attn("crew", "set", "alder", "--launch-desktop", "current"), "launch desktop: current desktop", "profile:")
+	requireStdout(t, s.Attn("crew", "set", "alder", "--launch-desktop", "own"), "launch desktop: alder (no ⌘ number)", "profile:")
 	member := crewRoster(t, s)["alder"]
-	if member.LaunchDesktop == nil || member.LaunchDesktop.Mode != protocol.LaunchDesktopModeCurrent || protocol.Deref(member.ProfileName) == "" {
+	if member.LaunchDesktop == nil || member.LaunchDesktop.Mode != protocol.LaunchDesktopModeOwn || protocol.Deref(member.ProfileName) == "" {
 		t.Fatalf("crew list = %+v", member)
 	}
-	requireStdout(t, s.Attn("crew", "list"), "current desktop", *member.ProfileName)
+	requireStdout(t, s.Attn("crew", "list"), "alder (no ⌘ number)", *member.ProfileName)
 	charter, err := os.ReadFile(filepath.Join(s.Dir, "crew", "alder", "CHARTER.md"))
 	if err != nil || string(charter) != "# alder\n" {
 		t.Fatalf("launch setting changed charter: %q %v", charter, err)
@@ -35,17 +35,17 @@ func TestLaunchDesktopsAreInstallSettingsVisibleThroughTheCLI(t *testing.T) {
 	if err := os.WriteFile(file, []byte(yaml), 0o600); err != nil {
 		t.Fatal(err)
 	}
-	requireStdout(t, s.Attn("automation", "apply", "--file", file, "--launch-desktop", "dedicated"), "dedicated")
-	requireStdout(t, s.Attn("automation", "set", "check", "--launch-desktop", "current"), "current desktop")
+	requireStdout(t, s.Attn("automation", "apply", "--file", file, "--launch-desktop", "own"), "own")
+	requireStdout(t, s.Attn("automation", "set", "check", "--launch-desktop", "own", "--desktop-name", "Review"), "Review (no ⌘ number)")
 	assert := func() {
 		t.Helper()
 		var definitions []protocol.AutomationDefinitionSummary
 		s.Attn("automation", "list").JSON(t, &definitions)
-		if len(definitions) != 1 || definitions[0].LaunchDesktop == nil || definitions[0].LaunchDesktop.Mode != protocol.LaunchDesktopModeCurrent || protocol.Deref(definitions[0].ProfileName) != *member.ProfileName {
+		if len(definitions) != 1 || definitions[0].LaunchDesktop == nil || definitions[0].LaunchDesktop.Mode != protocol.LaunchDesktopModeOwn || protocol.Deref(definitions[0].ProfileName) != *member.ProfileName {
 			t.Fatalf("automation list = %+v", definitions)
 		}
 		shown := s.Attn("automation", "show", "check")
-		requireStdout(t, shown, "# Profile: "+*member.ProfileName, "# Launch desktop: current desktop")
+		requireStdout(t, shown, "# Profile: "+*member.ProfileName, "# Launch desktop: Review (no ⌘ number)")
 		if strings.Contains(shown.Stdout, "launch_desktop:") {
 			t.Fatal("install setting leaked into definition YAML")
 		}

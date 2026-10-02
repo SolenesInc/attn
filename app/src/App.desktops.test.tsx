@@ -278,12 +278,12 @@ describe('desktop surface', () => {
     expect(await screen.findByTestId('sidebar')).toBeInTheDocument();
   });
 
-  it('groups the sidebar by desktop in the arrangement order, then those not on a desktop', async () => {
+  it('groups the sidebar by desktop in the arrangement order', async () => {
     render(<App />);
 
     await waitFor(() => {
       expect(screen.getByTestId('sidebar').getAttribute('data-groups')).toBe(
-        'Desktop 1=s1+s2,Desktop 2=,Desktop 3=s3,Not on a desktop=s4',
+        'Desktop 1=s1+s2,Desktop 2=,Desktop 3=s3',
       );
     });
   });
@@ -333,18 +333,6 @@ describe('desktop surface', () => {
     expect(isActive('d1')).toBe(false);
   });
 
-  it('ignores a click on the group of agents not on a desktop', async () => {
-    render(<App />);
-    await screen.findByTestId(desktopTestId('d1'));
-    act(() => {
-      useSessionStore.getState().goToDashboard();
-    });
-
-    await userEvent.click(screen.getByTestId('select-unplaced'));
-
-    expect(desktopCommands.sendDesktopSetCurrent).not.toHaveBeenCalled();
-    expect(useSessionStore.getState().view).toBe('dashboard');
-  });
 
   it('shows the focused tile again when the user comes back from Home to a desktop whose active leaf is a tile', async () => {
     render(<App />);

@@ -240,20 +240,6 @@ describe('useDesktopNavigation', () => {
     expect(showNotice).toHaveBeenCalledWith(expect.stringContaining('is taken'));
   });
 
-  it('deletes only an empty desktop', () => {
-    seedStore([
-      desktop('d1', { shortcut_slot: 1 }),
-      desktop('d2', { shortcut_slot: 2, tree_json: TREE_WITH_PANE('p2') }),
-      desktop('d3', { shortcut_slot: 3, revision: 2 }),
-    ]);
-    const { api, showNotice, result } = renderNavigation();
-
-    act(() => result.current.deleteDesktop('d2'));
-    act(() => result.current.deleteDesktop('d3'));
-
-    expect(showNotice).toHaveBeenCalledWith('Desktop 2 still has panes; only an empty desktop can be deleted.');
-    expect(api.sendDesktopDelete.mock.calls).toEqual([['d3', 2]]);
-  });
 
   it('renames a desktop at its current revision and hands a refusal back to the rename form', async () => {
     seedStore([desktop('d1', { shortcut_slot: 1, revision: 6 })]);

@@ -10,6 +10,25 @@ function twin(id: string, desktopId: string, agent: string) {
 }
 
 describe('App migration picker', () => {
+  it('counts agents and tiles separately on desktop cards', async () => {
+    const agents = importedGroup('g1', 'Agents', 'd1', { agents: 2 });
+    const mixed = importedGroup('g2', 'Mixed', 'd2');
+    mixed.tree_json = JSON.stringify({ type: 'split', split_id: 'mixed-split', direction: 'vertical', ratio: 0.5, children: [
+      { type: 'pane', pane_id: mixed.panes[0].pane_id }, { type: 'tile', tile_id: 'browser', tile_kind: 'browser' },
+    ] });
+    const tiles = { ...importedGroup('g3', 'Tiles', 'd3'), panes: [], tree_json: JSON.stringify({ type: 'tile', tile_id: 'garden', tile_kind: 'garden' }) };
+    const state = migrationState({ groups: [agents, mixed, tiles] });
+    const { daemon } = await renderApp({ initialState: { migration_phase: MigrationPhase.PlacementRequired },
+      script: (scripted) => scripted.on('migration_get', () => ({ event: 'migration_result', action: 'migration_get', success: true, state })),
+    });
+    await daemon.idle();
+    await gesture(daemon, () => fireEvent.click(screen.getByRole('button', { name: 'Continue →' })));
+    const desktops = screen.getByRole('region', { name: 'Desktops' });
+    expect(within(desktops).getByRole('button', { name: 'Desktop 1, Agents' })).toHaveTextContent('2 agents');
+    expect(within(desktops).getByRole('button', { name: 'Desktop 2, Mixed' })).toHaveTextContent('1 agent · 1 tile');
+    expect(within(desktops).getByRole('button', { name: 'Desktop 10, Tiles' })).toHaveTextContent('1 tile');
+  });
+
   it('names two workspaces that share a title apart by their first agent', async () => {
     const state = migrationState({
       groups: [twin('g1', 'd1', 'Chief'), twin('g2', 'd2', 'Delete X tweet history'), importedGroup('g3', 'exo · Chief', 'd3')],

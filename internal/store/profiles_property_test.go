@@ -16,21 +16,13 @@ func TestArrangementInvariantsHoldUnderRandomOperations(t *testing.T) {
 	rapid.Check(t, func(t *rapid.T) {
 		s := New()
 		defer s.Close()
-		profile, first, err := s.CreateProfile("Main")
+		profile, _, err := s.CreateProfile("Main")
 		if err != nil {
 			t.Fatalf("CreateProfile: %v", err)
 		}
 		other, _, err := s.CreateProfile("Other")
 		if err != nil {
 			t.Fatalf("CreateProfile: %v", err)
-		}
-		desktopIDs := []string{first.ID}
-		for i := 0; i < 2; i++ {
-			_, desktop, err := s.CreateDesktop(profile.ID, "", 0, true)
-			if err != nil {
-				t.Fatalf("CreateDesktop: %v", err)
-			}
-			desktopIDs = append(desktopIDs, desktop.ID)
 		}
 		sessionIDs := make([]string, 6)
 		for i := range sessionIDs {
@@ -57,7 +49,11 @@ func TestArrangementInvariantsHoldUnderRandomOperations(t *testing.T) {
 			}
 		}
 		draw := func(label string) profiles.Desktop {
-			desktop, err := s.GetDesktop(rapid.SampledFrom(desktopIDs).Draw(t, label))
+			_, live, err := s.ProfileArrangement(profile.ID)
+			if err != nil {
+				t.Fatal(err)
+			}
+			desktop, err := s.GetDesktop(rapid.SampledFrom(live).Draw(t, label).ID)
 			if err != nil {
 				t.Fatalf("GetDesktop: %v", err)
 			}
@@ -76,6 +72,7 @@ func TestArrangementInvariantsHoldUnderRandomOperations(t *testing.T) {
 		tiles := 0
 
 		t.Repeat(map[string]func(*rapid.T){
+			"create": func(t *rapid.T) { _, _, err := s.CreateDesktop(profile.ID, "", 0, true); refusal(err) },
 			"place": func(t *rapid.T) {
 				desktop := draw("desktop")
 				_, _, err := s.PlaceSession(SessionPlacementRequest{

@@ -4,6 +4,7 @@ import './SessionActionsPopover.css';
 
 interface CrewMemberActionsPopoverProps {
   memberName: string;
+  desktopLabel?: string;
   anchor: { top: number; left: number };
   onOpenDetails: () => void;
   onClose: () => void;
@@ -13,6 +14,7 @@ const VIEWPORT_MARGIN = 8;
 
 export function CrewMemberActionsPopover({
   memberName,
+  desktopLabel,
   anchor,
   onOpenDetails,
   onClose,
@@ -52,6 +54,7 @@ export function CrewMemberActionsPopover({
       role="menu"
       aria-label={`Actions for ${memberName}`}
     >
+      {desktopLabel && <div className="crew-desktop-label">{desktopLabel}</div>}
       <button type="button" role="menuitem" data-testid="crew-member-details-action" onClick={onOpenDetails}>
         <span aria-hidden="true">⌁</span>
         Member details

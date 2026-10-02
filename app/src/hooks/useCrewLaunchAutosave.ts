@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo } from 'react';
-import type { CrewMember } from '../types/generated';
+import type { CrewMember, LaunchDesktopSetting } from '../types/generated';
 import type { CrewMutationOutcome } from './daemonCrewEvents';
 import { useAutosave, type AutosaveSpec, type AutosaveState } from './useAutosave';
 
@@ -7,6 +7,7 @@ export interface CrewLaunchSelection {
   agent: string;
   model: string;
   effort: string;
+  launchDesktop?: LaunchDesktopSetting;
 }
 
 export type CrewLaunchSaveState = 'saved' | 'saving' | 'error';
@@ -24,21 +25,30 @@ export interface CrewLaunchWrite {
   agent: string;
   model: string;
   effort: string;
+  launchDesktop?: LaunchDesktopSetting;
 }
 
 const selectionFromMember = (member: CrewMember): CrewLaunchSelection => ({
   agent: member.agent ?? '',
   model: member.model ?? '',
   effort: member.effort ?? '',
+  launchDesktop: member.launch_desktop,
 });
 
-const merge = (pending: Partial<CrewLaunchSelection>, member: CrewMember): CrewLaunchSelection => ({
-  ...selectionFromMember(member),
-  ...pending,
-});
+const merge = (pending: Partial<CrewLaunchSelection>, member: CrewMember): CrewLaunchSelection => {
+  const wanted = pending.launchDesktop;
+  const saved = member.launch_desktop;
+  const sameDesktop = wanted && saved && (
+    wanted.destination_id ? wanted.destination_id === saved.destination_id
+      : wanted.desktop_id ? wanted.desktop_id === saved.desktop_id
+      : wanted.mode === saved.mode && wanted.desktop_name === saved.desktop_name
+        && (wanted.shortcut_slot ?? 0) === (saved.shortcut_slot ?? 0)
+  );
+  return { ...selectionFromMember(member), ...pending, ...(sameDesktop ? { launchDesktop: saved } : {}) };
+};
 
 const sameSelection = (a: CrewLaunchSelection, b: CrewLaunchSelection) => (
-  a.agent === b.agent && a.model === b.model && a.effort === b.effort
+  a.agent === b.agent && a.model === b.model && a.effort === b.effort && JSON.stringify(a.launchDesktop) === JSON.stringify(b.launchDesktop)
 );
 
 const launchState = (state: AutosaveState): CrewLaunchSaveState => (

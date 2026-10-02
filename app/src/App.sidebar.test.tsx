@@ -473,7 +473,6 @@ describe('App sidebar', () => {
       expect(waiting.querySelector('.mini-badge')).not.toBeNull();
       expect(first.querySelector('.mini-badge')).toBeNull();
       expect(empty.querySelector('.mini-badge')).toBeNull();
-      expect(screen.getByRole('button', { name: 'Not on a desktop' }).querySelector('.desktop-number')).toHaveTextContent('—');
 
       await gesture(daemon, () => fireEvent.click(waiting));
       expect(daemon.sentOf('desktop_set_current')).toEqual([

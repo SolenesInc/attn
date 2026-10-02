@@ -70,9 +70,9 @@ commands:
         Reuse --request-id when retrying a request whose result was not received.
 
   set <member> [--cwd <dir>] [--agent <name>] [--model <name>] [--effort <level>]
-               [--launch-desktop <current|desktop>] [--awareness-dir <dir>]...
+               [--launch-desktop <own|desktop>] [--awareness-dir <dir>]...
         Save launch settings without changing the member's markdown files.
-        --launch-desktop selects current, or a desktop digit, name or id.
+        --launch-desktop selects own, an empty slot (5–9), or a desktop digit, name or id.
         --cwd sets the working directory; --model selects the model.
         --agent accepts claude, codex, or an installed plugin driver.
         --agent "" restores the crew default; --model "" the harness default.
@@ -330,14 +330,15 @@ func (l *crewDirList) Set(value string) error {
 }
 
 type crewSetArgs struct {
-	member    string
-	cwd       *string
-	agent     *string
-	model     *string
-	effort    *string
-	desktop   *string
-	awareness []string
-	json      bool
+	member      string
+	cwd         *string
+	agent       *string
+	model       *string
+	effort      *string
+	desktop     *string
+	desktopName *string
+	awareness   []string
+	json        bool
 }
 
 func parseCrewSetArgs(args []string) (crewSetArgs, error) {
@@ -347,7 +348,8 @@ func parseCrewSetArgs(args []string) (crewSetArgs, error) {
 	agent := fs.String("agent", "", "the harness the member's days run on; empty goes back to the default")
 	model := fs.String("model", "", "the model the member's days run on; empty goes back to the configured default")
 	effort := fs.String("effort", "", "the reasoning effort the member's days run on; empty goes back to the harness default")
-	desktop := fs.String("launch-desktop", "", "current, or a desktop digit, name or id in this member profile")
+	desktopName := fs.String("desktop-name", "", "name for its own desktop (defaults to the member name)")
+	desktop := fs.String("launch-desktop", "", "own, an empty slot (5–9), or a desktop digit, name or id in this member profile")
 	var dirs crewDirList
 	fs.Var(&dirs, "awareness-dir", "a directory the member's charter is about; repeat for several")
 	jsonOut := fs.Bool("json", false, "print the machine result as JSON")
@@ -368,8 +370,13 @@ func parseCrewSetArgs(args []string) (crewSetArgs, error) {
 			parsed.effort = effort
 		case "launch-desktop":
 			parsed.desktop = desktop
+		case "desktop-name":
+			parsed.desktopName = desktopName
 		}
 	})
+	if parsed.desktopName != nil && parsed.desktop == nil {
+		return crewSetArgs{}, errors.New("--desktop-name needs --launch-desktop own or an empty slot")
+	}
 	if dirs.set {
 		parsed.awareness = dirs.values
 		if parsed.awareness == nil {
@@ -389,7 +396,7 @@ func runCrewSet(args []string) {
 		writeCrewHelp(os.Stderr)
 		os.Exit(2)
 	}
-	result, err := client.New("").CrewSetWithDesktop(parsed.member, parsed.cwd, parsed.agent, parsed.model, parsed.effort, parsed.awareness, parsed.desktop)
+	result, err := client.New("").CrewSetWithNamedDesktop(parsed.member, parsed.cwd, parsed.agent, parsed.model, parsed.effort, parsed.awareness, parsed.desktop, parsed.desktopName)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "crew set: %v\n", err)
 		os.Exit(1)
@@ -429,16 +436,10 @@ func printCrewList(w io.Writer, members []protocol.CrewMember) {
 
 func launchDesktopText(setting *protocol.LaunchDesktopSetting) string {
 	if setting == nil {
-		return "current"
+		return "its own desktop"
 	}
 	if setting.Label != nil {
 		return *setting.Label
 	}
-	if setting.Mode != protocol.LaunchDesktopModeDesktop {
-		return string(setting.Mode)
-	}
-	if protocol.Deref(setting.Fallback) {
-		return protocol.Deref(setting.DesktopID) + " (using current)"
-	}
-	return protocol.Deref(setting.DesktopID)
+	return protocol.Deref(setting.DesktopName)
 }

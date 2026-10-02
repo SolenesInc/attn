@@ -2,7 +2,7 @@ import { useEffect, useMemo, useRef, useState, type KeyboardEvent } from 'react'
 import { useEscapeStack } from '../hooks/useEscapeStack';
 import type { Desktop } from '../types/generated';
 import { collectLayoutLeaves, getNormalizedPaneBounds, leafSlotId, parseLayoutJSON } from '../types/desktop';
-import { desktopInSlot, desktopLabel, isEmptyDesktop, orderedDesktops, slotShortcut } from '../utils/desktops';
+import { desktopInSlot, desktopLabel, orderedDesktops, slotShortcut } from '../utils/desktops';
 import './DesktopOverview.css';
 
 const GRID_COLUMNS = 3;
@@ -14,7 +14,6 @@ interface DesktopOverviewProps {
   canSendActivePane: boolean;
   onSwitch: (desktopId: string) => void;
   onSendActivePane: (desktopId: string) => void;
-  onDelete: (desktopId: string) => void;
   onGiveShortcutSlot: (desktopId: string) => void;
   onCreate: () => void;
   onClose: () => void;
@@ -50,7 +49,6 @@ export function DesktopOverview({
   canSendActivePane,
   onSwitch,
   onSendActivePane,
-  onDelete,
   onGiveShortcutSlot,
   onCreate,
   onClose,
@@ -77,7 +75,6 @@ export function DesktopOverview({
   };
 
   const canSendTo = (desktop: Desktop) => canSendActivePane && desktop.id !== currentDesktopId;
-  const canDelete = (desktop: Desktop) => isEmptyDesktop(desktop) && desktop.id !== currentDesktopId;
 
   const moveFocus = (delta: number) => {
     if (ordered.length === 0) return;
@@ -106,11 +103,7 @@ export function DesktopOverview({
       act(() => onSwitch(focused.id));
       return;
     }
-    if ((event.key === 'Delete' || event.key === 'Backspace') && focused && canDelete(focused)) {
-      event.preventDefault();
-      onDelete(focused.id);
-      return;
-    }
+
     const digit = /^Digit([1-9])$/.exec(event.code);
     if (digit && !event.metaKey && !event.ctrlKey && !event.altKey) {
       const target = desktopInSlot(desktops, Number(digit[1]));
@@ -165,11 +158,6 @@ export function DesktopOverview({
               Send focused pane here ⇧↵
             </button>
           )}
-          {canDelete(desktop) && (
-            <button type="button" onClick={() => stay(() => onDelete(desktop.id))}>
-              Delete
-            </button>
-          )}
           {!desktop.shortcut_slot && (
             <button type="button" onClick={() => stay(() => onGiveShortcutSlot(desktop.id))}>
               Give a shortcut
@@ -195,7 +183,7 @@ export function DesktopOverview({
           {profileName} · {desktops.length} {desktops.length === 1 ? 'desktop' : 'desktops'}
         </h2>
         <div className="desktop-overview-hint">
-          Arrows move · ↵ switch · ⇧↵ send the focused pane · digits switch · Delete removes an empty desktop · Esc closes
+          Arrows move · ↵ switch · ⇧↵ send the focused pane · digits switch · Esc closes
         </div>
         <div className="desktop-overview-grid">
           {ordered.map(card)}

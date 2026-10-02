@@ -1,4 +1,4 @@
-import { fireEvent, render, screen, waitFor, within } from '@testing-library/react';
+import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { describe, it, expect, vi } from 'vitest';
 import { Sidebar, type DockItem } from './Sidebar';
 import { type SessionDelegationRole } from '../types/generated';
@@ -355,52 +355,5 @@ describe('Sidebar', () => {
     await waitFor(() => expect(onRenameDesktop).toHaveBeenCalledWith('desktop-s1', ''));
   });
 
-  it('neither renames nor reorders the agents that are not on a desktop', () => {
-    const sessions = [
-      { id: 'a1', label: 'A1', state: 'idle' as const, desktopId: 'desktop-a' },
-      { id: 'b1', label: 'B1', state: 'idle' as const, desktopId: 'desktop-b' },
-      { id: 'loose', label: 'Loose', state: 'idle' as const },
-    ];
-    const desktops = desktopGroups(
-      [{ id: 'desktop-a', title: 'A' }, { id: 'desktop-b', title: 'B' }],
-      sessions,
-    );
-    const onDesktopReorder = vi.fn();
-    render(
-      <Sidebar
-        {...baseProps}
-        desktops={desktops}
-        visualIndexByDesktopId={groupIndexes(desktops)}
-        onRenameDesktop={vi.fn(async () => {})}
-        onDesktopReorder={onDesktopReorder}
-      />,
-    );
-
-    const loose = screen.getByTestId('sidebar-desktop-unplaced');
-    expect(within(loose).getByText('Not on a desktop')).toBeInTheDocument();
-    expect(screen.queryByTestId('rename-desktop-unplaced')).not.toBeInTheDocument();
-    expect(screen.getByTestId('rename-desktop-desktop-a')).toBeInTheDocument();
-
-    const header = loose.querySelector('.desktop-rule > .sidebar-row-select') as HTMLElement;
-    fireEvent.pointerDown(header, { button: 0, pointerId: 1, clientX: 10, clientY: 10 });
-    fireEvent.pointerMove(window, { pointerId: 1, clientX: 10, clientY: 80 });
-    expect(screen.queryByTestId('desktop-reorder-seam-0')).not.toBeInTheDocument();
-
-    const aHeader = screen
-      .getByTestId('sidebar-desktop-desktop-a')
-      .querySelector('.desktop-rule > .sidebar-row-select') as HTMLElement;
-    fireEvent.pointerDown(aHeader, { button: 0, pointerId: 2, clientX: 10, clientY: 10 });
-    fireEvent.pointerMove(window, { pointerId: 2, clientX: 10, clientY: 80 });
-    expect(screen.getByTestId('desktop-reorder-seam-2')).toBeInTheDocument();
-    expect(screen.queryByTestId('desktop-reorder-seam-3')).not.toBeInTheDocument();
-    fireEvent.pointerEnter(screen.getByTestId('desktop-reorder-seam-2'));
-    fireEvent.pointerUp(window, { pointerId: 2, clientX: 10, clientY: 120 });
-
-    expect(onDesktopReorder).toHaveBeenCalledWith({
-      desktopId: 'desktop-a',
-      prevDesktopId: 'desktop-b',
-      nextDesktopId: undefined,
-    });
-  });
 
 });

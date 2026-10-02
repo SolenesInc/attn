@@ -1,3 +1,4 @@
+import type { LaunchDesktopSetting } from '../types/generated';
 import { useEffect, useState } from 'react';
 import { AutomationDefinitionSummary, AutomationRunSummary } from '../types/generated';
 import { useAutomationsStore, selectDefinitionById } from '../store/automations';
@@ -20,6 +21,8 @@ export interface AutomationsPanelProps {
     definitionYaml: string,
     expectedId: string,
     expectedRevision: number,
+    launchDesktop?: LaunchDesktopSetting,
+    profileId?: string,
   ) => Promise<{ definition: AutomationDefinitionSummary; specYaml: string }>;
   deleteDefinition: (definitionId: string) => Promise<void>;
   onSelectSession: (sessionId: string) => void;
@@ -293,6 +296,7 @@ export function AutomationsPanel({
                 >
                   <span className="automations-panel__name">{definition.name}</span>
                   <span className="automations-panel__trigger">{triggerLabel(definition)}</span>
+                  <span className="automations-panel__trigger">{definition.launch_desktop?.label}</span>
                   {failed && (
                     <span
                       className="automations-panel__badge automations-panel__badge--failed"
