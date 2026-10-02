@@ -7,6 +7,7 @@ import (
 	"net"
 	"net/http"
 	"os"
+	"os/exec"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -20,18 +21,22 @@ type sharedFakeCodex struct {
 	mu            sync.Mutex
 	roots         map[string]*sharedFakeRoot
 	peers         map[*websocket.Conn]bool
+	control       *websocket.Conn
 	archiveError  bool
 	archiveErrors map[string]bool
 	rejectedStart atomic.Bool
 	rejectedInput atomic.Bool
 }
 type sharedFakeRoot struct {
-	c        *codex
-	a        *agent
-	owner    string
-	archived bool
-	hasTurn  atomic.Bool
-	active   atomic.Bool
+	c            *codex
+	a            *agent
+	owner        string
+	archived     bool
+	hasTurn      atomic.Bool
+	active       atomic.Bool
+	approval     atomic.Bool
+	failed       atomic.Bool
+	snapshotOnly atomic.Bool
 }
 
 func runSharedCodexServer(cfg config) int {
@@ -62,7 +67,14 @@ func (s *sharedFakeCodex) serve(w http.ResponseWriter, req *http.Request) {
 	s.mu.Lock()
 	s.peers[conn] = true
 	s.mu.Unlock()
-	defer func() { s.mu.Lock(); delete(s.peers, conn); s.mu.Unlock() }()
+	defer func() {
+		s.mu.Lock()
+		delete(s.peers, conn)
+		if s.control == conn {
+			s.control = nil
+		}
+		s.mu.Unlock()
+	}()
 	for {
 		_, raw, err := conn.Read(context.Background())
 		if err != nil {
@@ -75,7 +87,27 @@ func (s *sharedFakeCodex) serve(w http.ResponseWriter, req *http.Request) {
 		if m.Method == "initialized" {
 			continue
 		}
-		result, err := s.handle(m)
+		if m.Method == "initialize" {
+			s.mu.Lock()
+			if s.control == nil {
+				s.control = conn
+			}
+			s.mu.Unlock()
+		}
+		if m.Method == "" && len(m.Result) > 0 {
+			var rootID string
+			_ = json.Unmarshal(m.ID, &rootID)
+			s.mu.Lock()
+			root := s.roots[strings.TrimPrefix(rootID, "approval:")]
+			s.mu.Unlock()
+			if root != nil && root.approval.Swap(false) {
+				s.broadcast("serverRequest/resolved", map[string]any{"threadId": root.c.conversation, "requestId": rootID})
+				s.broadcastStatus(root)
+				root.a.term.answers <- "accepted"
+			}
+			continue
+		}
+		result, err := s.handle(conn, m)
 		if err == nil && (m.Method == "turn/start" || m.Method == "turn/steer") && os.Getenv("ATTN_FAKE_CODEX_DROP_TURN_REPLY") == "1" {
 			continue
 		}
@@ -90,11 +122,23 @@ func (s *sharedFakeCodex) serve(w http.ResponseWriter, req *http.Request) {
 			if conn.Write(context.Background(), websocket.MessageText, data) != nil {
 				return
 			}
+			if m.Method == "thread/resume" {
+				var p struct {
+					ThreadID string `json:"threadId"`
+				}
+				_ = json.Unmarshal(m.Params, &p)
+				s.mu.Lock()
+				root := s.roots[p.ThreadID]
+				s.mu.Unlock()
+				if root != nil && root.approval.Load() {
+					_ = conn.Write(context.Background(), websocket.MessageText, s.approvalRequest(root))
+				}
+			}
 		}
 	}
 }
 
-func (s *sharedFakeCodex) handle(m codexshared.Message) (any, error) {
+func (s *sharedFakeCodex) handle(conn *websocket.Conn, m codexshared.Message) (any, error) {
 	var p struct {
 		ThreadID       string          `json:"threadId"`
 		ExpectedTurnID string          `json:"expectedTurnId"`
@@ -129,7 +173,7 @@ func (s *sharedFakeCodex) handle(m codexshared.Message) (any, error) {
 		if p.CWD == "" {
 			p.CWD, _ = os.Getwd()
 		}
-		c := &codex{cfg: s.cfg, cwd: p.CWD, term: &terminal{style: codexComposer}}
+		c := &codex{cfg: s.cfg, cwd: p.CWD, term: &terminal{style: codexComposer, answers: make(chan string, 4)}}
 		if err := c.startRollout(); err != nil {
 			return nil, err
 		}
@@ -154,6 +198,52 @@ func (s *sharedFakeCodex) handle(m codexshared.Message) (any, error) {
 		a := &agent{term: c.term, conv: c, prompts: make(chan promptSubmission, 16)}
 		root.a = a
 		control, err := dialControl(s.cfg, func(peer *rpcPeer, method string, params json.RawMessage) (any, error) {
+			if method == "native_snapshots_only" {
+				root.snapshotOnly.Store(true)
+				return struct{}{}, nil
+			}
+			if method == "disconnect_control" {
+				s.mu.Lock()
+				conn := s.control
+				s.control = nil
+				s.mu.Unlock()
+				if conn != nil {
+					_ = conn.CloseNow()
+				}
+				return struct{}{}, nil
+			}
+			if method == "system_error" {
+				root.failed.Store(true)
+				s.broadcastStatus(root)
+				return struct{}{}, nil
+			}
+			if method == "tool_shell" {
+				var input textParams
+				if err := json.Unmarshal(params, &input); err != nil {
+					return nil, err
+				}
+				command := exec.Command("/bin/sh", "-c", input.Text)
+				command.Env, command.Dir = c.hooks.env, c.cwd
+				output, err := command.CombinedOutput()
+				if err != nil {
+					return nil, fmt.Errorf("tool shell: %w: %s", err, output)
+				}
+				return map[string]any{"stdout": string(output)}, nil
+			}
+			if method == methodAskApproval {
+				root.approval.Store(true)
+				s.broadcastStatus(root)
+				s.mu.Lock()
+				var peers []*websocket.Conn
+				for peer := range s.peers {
+					peers = append(peers, peer)
+				}
+				s.mu.Unlock()
+				for _, peer := range peers {
+					_ = peer.Write(context.Background(), websocket.MessageText, s.approvalRequest(root))
+				}
+				return struct{}{}, nil
+			}
 			result, err := a.handle(peer, method, params)
 			if method == methodReply || method == methodReplyLate {
 				var text textParams
@@ -161,6 +251,7 @@ func (s *sharedFakeCodex) handle(m codexshared.Message) (any, error) {
 				s.broadcast("attn-fixture/reply", map[string]any{"threadId": c.conversation, "text": text.Text})
 				root.active.Store(false)
 				s.broadcast("turn/completed", map[string]any{"threadId": c.conversation, "turn": map[string]any{"id": c.turnID}})
+				s.broadcastStatus(root)
 			}
 			return result, err
 		})
@@ -188,6 +279,7 @@ func (s *sharedFakeCodex) handle(m codexshared.Message) (any, error) {
 			return nil, err
 		}
 		s.broadcast("thread/started", map[string]any{"thread": s.metadata(root)})
+		s.broadcastStatus(root)
 		return map[string]any{"thread": s.metadata(root)}, nil
 	case "thread/resume", "thread/read", "thread/unarchive", "thread/archive":
 		s.mu.Lock()
@@ -195,6 +287,12 @@ func (s *sharedFakeCodex) handle(m codexshared.Message) (any, error) {
 		s.mu.Unlock()
 		if root == nil {
 			return nil, fmt.Errorf("no rollout found for %s", p.ThreadID)
+		}
+		s.mu.Lock()
+		isControl := conn == s.control
+		s.mu.Unlock()
+		if m.Method == "thread/resume" && isControl && root.snapshotOnly.Load() {
+			return nil, fmt.Errorf("fixture control resume rejected")
 		}
 		if m.Method == "thread/resume" && os.Getenv("ATTN_FAKE_CODEX_REJECT_BLANK_ATTACH") == "1" && !root.hasTurn.Load() {
 			return nil, fmt.Errorf("cannot resume a blank thread %s", p.ThreadID)
@@ -272,6 +370,7 @@ func (s *sharedFakeCodex) handle(m codexshared.Message) (any, error) {
 			root.a.prompts <- promptSubmission{text: text, conversation: root.c.conversation}
 		}
 		s.broadcast("turn/started", map[string]any{"threadId": p.ThreadID, "turn": map[string]any{"id": root.c.turnID}})
+		s.broadcastStatus(root)
 		return map[string]any{"turn": map[string]any{"id": root.c.turnID}}, nil
 	default:
 		return map[string]any{}, nil
@@ -285,7 +384,33 @@ func (s *sharedFakeCodex) metadata(root *sharedFakeRoot) any {
 	if root.active.Load() {
 		turns = append(turns, map[string]any{"id": root.c.turnID, "status": "inProgress"})
 	}
-	return map[string]any{"id": root.c.conversation, "cwd": root.c.cwd, "path": root.c.transcript, "source": "cli", "ephemeral": false, "turns": turns}
+	return map[string]any{"id": root.c.conversation, "cwd": root.c.cwd, "path": root.c.transcript, "source": "cli", "ephemeral": false, "turns": turns, "status": s.status(root)}
+}
+
+func (s *sharedFakeCodex) status(root *sharedFakeRoot) any {
+	if root.failed.Load() {
+		return map[string]any{"type": "systemError"}
+	}
+	if root.active.Load() {
+		flags := []string{}
+		if root.approval.Load() {
+			flags = append(flags, "waitingOnApproval")
+		}
+		return map[string]any{"type": "active", "activeFlags": flags}
+	}
+	return map[string]any{"type": "idle"}
+}
+
+func (s *sharedFakeCodex) approvalRequest(root *sharedFakeRoot) []byte {
+	data, _ := json.Marshal(map[string]any{"id": "approval:" + root.c.conversation, "method": "item/commandExecution/requestApproval", "params": map[string]any{"threadId": root.c.conversation, "turnId": root.c.turnID, "itemId": "command-1"}})
+	return data
+}
+
+func (s *sharedFakeCodex) broadcastStatus(root *sharedFakeRoot) {
+	if root.snapshotOnly.Load() {
+		return
+	}
+	s.broadcast("thread/status/changed", map[string]any{"threadId": root.c.conversation, "status": s.status(root)})
 }
 func (s *sharedFakeCodex) broadcast(method string, params any) {
 	data, _ := json.Marshal(map[string]any{"method": method, "params": params})
@@ -312,7 +437,28 @@ func runSharedCodexView(cfg config) int {
 	}
 	var current string
 	var mu sync.Mutex
+	approvals := make(map[string]json.RawMessage)
+	var showApproval func(string)
 	client, err := codexshared.Connect(context.Background(), strings.TrimPrefix(args.value("--remote"), "unix://"), func(m codexshared.Message) {
+		if m.Method == "item/commandExecution/requestApproval" || m.Method == "serverRequest/resolved" {
+			var p struct {
+				ThreadID string `json:"threadId"`
+			}
+			_ = json.Unmarshal(m.Params, &p)
+			mu.Lock()
+			if m.Method == "serverRequest/resolved" {
+				delete(approvals, p.ThreadID)
+			} else {
+				approvals[p.ThreadID] = m.ID
+			}
+			visible := current == p.ThreadID
+			show := showApproval
+			mu.Unlock()
+			if visible && show != nil {
+				show(p.ThreadID)
+			}
+			return
+		}
 		if m.Method != "attn-fixture/reply" {
 			return
 		}
@@ -333,6 +479,25 @@ func runSharedCodexView(cfg config) int {
 		return 1
 	}
 	defer client.Close()
+	mu.Lock()
+	showApproval = func(root string) {
+		mu.Lock()
+		id := approvals[root]
+		mu.Unlock()
+		term.mu.Lock()
+		open := term.modal != nil
+		term.mu.Unlock()
+		if len(id) == 0 {
+			if open {
+				_, _ = term.closeModal()
+			}
+			return
+		}
+		if !open {
+			_ = term.openModal(&modal{lines: []string{"Allow the command to run?", "Press enter to confirm"}, answering: true, resting: func() { _ = client.Respond(context.Background(), id, map[string]any{"decision": "accept"}) }})
+		}
+	}
+	mu.Unlock()
 	cwd := args.value("-C")
 	if cwd == "" {
 		cwd, _ = os.Getwd()
@@ -359,6 +524,7 @@ func runSharedCodexView(cfg config) int {
 			mu.Unlock()
 			term.title(p.Thread.ID)
 			term.print("Showing " + p.Thread.ID)
+			showApproval(p.Thread.ID)
 		} else {
 			term.print("Background " + p.Thread.ID)
 		}

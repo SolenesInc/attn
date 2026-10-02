@@ -92,6 +92,27 @@ func (r *Run) StopReadingTerminal() {
 	r.call(methodStopRead, struct{}{}, nil)
 }
 
+func (r *Run) NativeSystemError() {
+	r.call("system_error", nil, nil)
+}
+
+func (r *Run) DisconnectNativeControl() {
+	r.call("disconnect_control", nil, nil)
+}
+
+func (r *Run) NativeSnapshotsOnly() {
+	r.call("native_snapshots_only", nil, nil)
+}
+
+func (r *Run) ToolShell(command string) string {
+	r.t.Helper()
+	var result struct {
+		Stdout string `json:"stdout"`
+	}
+	r.call("tool_shell", textParams{Text: command}, &result)
+	return result.Stdout
+}
+
 func (r *Run) call(method string, params, result any) {
 	r.t.Helper()
 	ctx, cancel := context.WithTimeout(context.Background(), HangGuard)

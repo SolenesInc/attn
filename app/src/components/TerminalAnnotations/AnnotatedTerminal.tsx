@@ -1,4 +1,4 @@
-import React, { forwardRef, useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react';
+import React, { forwardRef, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import {
   GhosttyTerminal,
@@ -74,6 +74,7 @@ type TerminalProps = Omit<
 export interface AnnotatedTerminalProps extends TerminalProps {
   workspaceId: string;
   sessionId: string;
+  sessionLabel?: string;
   annotationApi?: SessionAnnotationApi;
   // Gates the send shortcut's *registration*: the dispatcher consumes ⌘Enter
   // whenever a handler exists, so every mounted pane registering would eat it.
@@ -99,13 +100,24 @@ interface Composer {
   writing: boolean;
 }
 
+function annotationOwner() {
+  return {
+    store: new TerminalAnnotationStore(),
+    note: { current: '' },
+    generation: { current: 0 },
+  };
+}
+
 export const AnnotatedTerminal = forwardRef<GhosttyTerminalHandle, AnnotatedTerminalProps>(
   function AnnotatedTerminal(
-    { workspaceId, sessionId, annotationApi, paneActive = false, ...terminalProps },
+    { workspaceId, sessionId: displayedSessionId, sessionLabel, annotationApi, paneActive = false, ...terminalProps },
     ref,
   ) {
-    // Built once: `useRef(new …)` would construct and discard a store per render.
-    const [store] = useState(() => new TerminalAnnotationStore());
+    const [recipient, setRecipient] = useState(() => ({ id: displayedSessionId, label: sessionLabel || displayedSessionId }));
+    const sessionId = recipient.id;
+    const pendingOwners = useRef(new Map<string, ReturnType<typeof annotationOwner>>());
+    const owner = useMemo(() => pendingOwners.current.get(sessionId) ?? annotationOwner(), [sessionId]);
+    const store = owner.store;
     const [version, setVersion] = useState(0);
     const [composer, setComposer] = useState<Composer | null>(null);
     const [notice, setNotice] = useState<Notice | null>(null);
@@ -127,13 +139,14 @@ export const AnnotatedTerminal = forwardRef<GhosttyTerminalHandle, AnnotatedTerm
     }), []);
     // Mirrored into a ref: the writes carrying it read in the same tick as a state
     // update that has not landed, which would re-save what was just spent.
-    const [note, setNote] = useState('');
-    const noteRef = useRef('');
+    const noteRef = owner.note;
+    const note = noteRef.current;
     const writeNote = useCallback((next: string) => {
       noteRef.current = next;
-      setNote(next);
-    }, []);
+      setVersion(value => value + 1);
+    }, [noteRef]);
     const noteSaveTimerRef = useRef<number | null>(null);
+    const pendingNoteSave = useRef<(() => void) | null>(null);
     const commentRef = useRef<HTMLTextAreaElement>(null);
     const popupRef = useRef<HTMLDialogElement>(null);
     const [popupAt, setPopupAt] = useState<Placement | null>(null);
@@ -144,7 +157,7 @@ export const AnnotatedTerminal = forwardRef<GhosttyTerminalHandle, AnnotatedTerm
     const [panelAt, setPanelAt] = useState<Placement | null>(null);
     const [panelDragging, setPanelDragging] = useState(false);
     const panelGrabRef = useRef<{ dx: number; dy: number } | null>(null);
-    const generationRef = useRef(0);
+    const generationRef = owner.generation;
     const enabled = Boolean(annotationApi);
 
     const terminalRef = useRef<GhosttyTerminalHandle | null>(null);
@@ -175,31 +188,36 @@ export const AnnotatedTerminal = forwardRef<GhosttyTerminalHandle, AnnotatedTerm
         });
     }, [annotationApi, bump, sessionId, store, writeNote]);
 
-    const persistRef = useRef(persist);
-    useLayoutEffect(() => {
-      persistRef.current = persist;
-    }, [persist]);
-
     // Measured: 400ms clears an ordinary inter-keystroke gap (~100-250ms).
     const NOTE_SAVE_PAUSE_MS = 400;
     const scheduleNoteSave = useCallback(() => {
       if (noteSaveTimerRef.current !== null) window.clearTimeout(noteSaveTimerRef.current);
+      pendingNoteSave.current = persist;
       noteSaveTimerRef.current = window.setTimeout(() => {
         noteSaveTimerRef.current = null;
-        persistRef.current();
+        pendingNoteSave.current?.();
+        pendingNoteSave.current = null;
       }, NOTE_SAVE_PAUSE_MS);
-    }, []);
+    }, [persist]);
 
     const flushNoteSave = useCallback(() => {
       if (noteSaveTimerRef.current === null) return;
       window.clearTimeout(noteSaveTimerRef.current);
       noteSaveTimerRef.current = null;
-      persistRef.current();
+      pendingNoteSave.current?.();
+      pendingNoteSave.current = null;
     }, []);
     useEffect(() => flushNoteSave, [flushNoteSave]);
 
+    useLayoutEffect(() => {
+      if (sessionId === displayedSessionId || composer) return;
+      flushNoteSave();
+      setRecipient({ id: displayedSessionId, label: sessionLabel || displayedSessionId });
+    }, [displayedSessionId, sessionLabel, sessionId, composer, flushNoteSave]);
+
     useEffect(() => {
       if (!enabled || !sessionId) return;
+      if (pendingOwners.current.get(sessionId) === owner) return;
       let cancelled = false;
       void annotationApi!.fetchAnnotations(sessionId)
         .then((stored) => {
@@ -214,7 +232,7 @@ export const AnnotatedTerminal = forwardRef<GhosttyTerminalHandle, AnnotatedTerm
       return () => {
         cancelled = true;
       };
-    }, [annotationApi, bump, enabled, sessionId, store]);
+    }, [annotationApi, bump, enabled, owner, sessionId, store]);
 
     useEffect(() => {
       if (!enabled || !sessionId) return;
@@ -544,8 +562,9 @@ export const AnnotatedTerminal = forwardRef<GhosttyTerminalHandle, AnnotatedTerm
         comment: entry.comment,
         start: entry.start,
       })), sendingNote);
+      pendingOwners.current.set(sessionId, owner);
       return annotationApi.submitAnnotations(sessionId, payload)
-        .then((result) => {
+        .then((result): TerminalSendResult => {
           if (result.status !== 'delivered') {
             return result.status === 'skipped_pending_approval'
               ? { kind: 'skipped' }
@@ -573,10 +592,14 @@ export const AnnotatedTerminal = forwardRef<GhosttyTerminalHandle, AnnotatedTerm
             .catch(() => {
             });
           return { kind: 'sent', count: sending.length, kept };
+        })
+        .finally(() => {
+          if (pendingOwners.current.get(sessionId) === owner) pendingOwners.current.delete(sessionId);
         });
     };
 
     const { outcome, send } = useAnnotationSend<TerminalSendResult>({
+      identity: sessionId,
       send: performSend,
       shortcutId: 'terminal.sendAnnotations',
       enabled: enabled && paneActive && annotations.length > 0,
@@ -674,11 +697,11 @@ export const AnnotatedTerminal = forwardRef<GhosttyTerminalHandle, AnnotatedTerm
         <GhosttyTerminal
           {...terminalProps}
           ref={attachTerminal}
-          annotations={enabled ? store : undefined}
+          annotations={enabled && sessionId === displayedSessionId ? store : undefined}
           annotationsVersion={version}
-          onAnnotationAnchor={enabled ? handleAnchor : undefined}
+          onAnnotationAnchor={enabled && sessionId === displayedSessionId ? handleAnchor : undefined}
           onAnnotationMiss={enabled ? handleMiss : undefined}
-          onAnnotationActivate={enabled ? openAnnotation : undefined}
+          onAnnotationActivate={enabled && sessionId === displayedSessionId ? openAnnotation : undefined}
         />
         {/* Portalled out of the pane: these are positioned against the window and reach
             past the pane's edge, which its stacking context would draw under the chrome. */}
@@ -841,7 +864,7 @@ export const AnnotatedTerminal = forwardRef<GhosttyTerminalHandle, AnnotatedTerm
           >
             <div className="anno-panel-head" onMouseDown={startPanelDrag}>
               <span className="anno-panel-grip" aria-hidden="true">⠿</span>
-              <span className="anno-panel-title">Annotations</span>
+              <span className="anno-panel-title">{sessionId === displayedSessionId ? 'Annotations' : `Annotations for ${recipient.label}`}</span>
               <span className="anno-panel-count">{annotations.length}</span>
             </div>
             <div className="anno-panel-body">

@@ -52,6 +52,7 @@ export interface Session {
 }
 
 export interface DaemonSessionSnapshot {
+	 codex_mode?: string;
   chief_of_staff?: boolean;
   turn_owed?: boolean;
   turn_opened_at?: string;

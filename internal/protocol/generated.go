@@ -8437,6 +8437,9 @@ type Session struct {
 	// ChiefOfStaff corresponds to the JSON schema field "chief_of_staff".
 	ChiefOfStaff *bool `json:"chief_of_staff,omitempty,omitzero"`
 
+	// CodexMode corresponds to the JSON schema field "codex_mode".
+	CodexMode *string `json:"codex_mode,omitempty,omitzero"`
+
 	// ContextWindowCap corresponds to the JSON schema field "context_window_cap".
 	ContextWindowCap *int `json:"context_window_cap,omitempty,omitzero"`
 

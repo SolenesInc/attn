@@ -11,6 +11,13 @@ import (
 	"time"
 )
 
+// PTY readers check membership while close holds mu and waits for them to drain.
+func (r *codexRuntime) setViewLocked(v store.CodexView) {
+	r.viewsMu.Lock()
+	r.views[v.RuntimeID] = v
+	r.viewsMu.Unlock()
+}
+
 func (r *codexRuntime) addView(v store.CodexView) error {
 	r.mu.Lock()
 	defer r.mu.Unlock()
@@ -25,7 +32,7 @@ func (r *codexRuntime) addViewLocked(v store.CodexView) error {
 			if err := r.d.store.SaveCodexView(v); err != nil {
 				return err
 			}
-			r.views[v.RuntimeID] = v
+			r.setViewLocked(v)
 			r.projectViewLocked(v)
 		}
 		return nil
@@ -73,12 +80,33 @@ func (r *codexRuntime) addViewLocked(v store.CodexView) error {
 			down.Close(websocket.StatusInternalError, err.Error())
 			return
 		}
-		codexshared.Proxy(r.d.life.Context(), down, up, func(m *codexshared.Message) (func(codexshared.Message), error) { return r.prepareRPC(v.RuntimeID, m) }, r.observeNative)
+		codexshared.Proxy(r.d.life.Context(), down, up, func(m *codexshared.Message) (func(codexshared.Message), error) { return r.prepareRPC(v.RuntimeID, m) }, func(m codexshared.Message) {
+			if m.Method == "thread/status/changed" || m.Method == "turn/started" || m.Method == "turn/completed" || m.Method == "" {
+				r.reconcileViewControl(v.RuntimeID, launch)
+			}
+		})
 	})}
-	r.views[v.RuntimeID] = v
+	r.setViewLocked(v)
 	r.servers[v.RuntimeID] = server
 	r.d.life.Go("codexViewProxy", func() { _ = server.Serve(listener) })
 	return nil
+}
+
+func (r *codexRuntime) reconcileViewControl(runtimeID string, launch codexLaunchContext) {
+	// Close drains the proxy reader while holding r.mu; reconciliation must not block it.
+	r.d.life.Go("codexViewControl", func() {
+		r.mu.Lock()
+		defer r.mu.Unlock()
+		if r.control != nil && r.control.Connected() {
+			return
+		}
+		if _, ok := r.views[runtimeID]; !ok {
+			return
+		}
+		if err := r.ensureServer(r.d.life.Context(), launch); err != nil {
+			r.d.logf("Codex view %s control reconciliation: %v", runtimeID, err)
+		}
+	})
 }
 
 func (r *codexRuntime) observeTitle(runtimeID string, obs pty.Observation) bool {
@@ -95,7 +123,7 @@ func (r *codexRuntime) observeTitle(runtimeID string, obs pty.Observation) bool 
 		return true
 	}
 	v.ObservedAt = obs.At.UTC().Format(time.RFC3339Nano)
-	r.views[runtimeID] = v
+	r.setViewLocked(v)
 	r.resolveTitleLocked(runtimeID, obs.Detail)
 	return true
 }
@@ -132,7 +160,7 @@ func (r *codexRuntime) resolveTitleLocked(runtimeID, title string) {
 		r.d.logf("Codex view %s: %v", runtimeID, err)
 		return
 	}
-	r.views[runtimeID] = v
+	r.setViewLocked(v)
 	if changed {
 		r.projectViewLocked(v)
 	}
@@ -161,9 +189,22 @@ func (r *codexRuntime) loadViews() ([]store.CodexView, error) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	for _, v := range views {
-		r.views[v.RuntimeID] = v
+		r.setViewLocked(v)
 	}
 	return views, nil
+}
+
+func (d *Daemon) terminalInputOwner(runtimeID string) string {
+	r := d.codexRuntime()
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	if view, shared := r.views[runtimeID]; shared {
+		if view.Resolution == "resolved" {
+			return view.SessionID
+		}
+		return ""
+	}
+	return runtimeID
 }
 
 func (r *codexRuntime) disconnectView(id string, generation ...string) {
@@ -180,7 +221,7 @@ func (r *codexRuntime) disconnectView(id string, generation ...string) {
 		r.d.logf("disconnect Codex view: %v", err)
 		return
 	}
-	r.views[id] = v
+	r.setViewLocked(v)
 	r.projectViewLocked(v)
 }
 

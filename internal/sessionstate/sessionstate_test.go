@@ -35,6 +35,30 @@ func TestResolve(t *testing.T) {
 		wantReason Reason
 		wantHold   bool
 	}{
+		{
+			name:       "native active state survives a quiet hidden root and a late verdict",
+			evidence:   Evidence{NativeRoot: seen(SourceNative, ClaimBusy, testPolicy().StuckAfter*2), LastClassifier: seen(SourceClassifier, ClaimNeedsInput, time.Second)},
+			wantState:  protocol.SessionStateWorking,
+			wantReason: ReasonNativeRoot,
+		},
+		{
+			name:       "native approval remains pending until the root changes status",
+			evidence:   Evidence{NativeRoot: seen(SourceNative, ClaimApprovalPending, testPolicy().StuckAfter*2), Heartbeat: seen(SourceHeartbeat, ClaimBusy, 0)},
+			wantState:  protocol.SessionStatePendingApproval,
+			wantReason: ReasonApprovalOpen,
+		},
+		{
+			name:       "native user-input request belongs to the root",
+			evidence:   Evidence{NativeRoot: seen(SourceNative, ClaimNeedsInput, time.Second)},
+			wantState:  protocol.SessionStateWaitingInput,
+			wantReason: ReasonQuestionOpen,
+		},
+		{
+			name:       "native idle preserves Stop classification",
+			evidence:   Evidence{NativeRoot: seen(SourceNative, ClaimIdle, 0), LastClassifier: seen(SourceClassifier, ClaimNeedsInput, time.Second)},
+			wantState:  protocol.SessionStateWaitingInput,
+			wantReason: ReasonClassifierVerdict,
+		},
 
 		{
 			name: "a fresh heartbeat works without any bracket",

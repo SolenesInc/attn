@@ -4,7 +4,7 @@ import fs from 'node:fs';
 import http from 'node:http';
 import path from 'node:path';
 import WebSocket, { WebSocketServer } from 'ws';
-import { codexTranscriptPath, conversationHeaderRecords, messageRecords, mockAgentSplash, readMockAgentConfig, selectMockAgentActions } from './mockAgent.mjs';
+import { conversationHeaderRecords, messageRecords, mockAgentSplash, readMockAgentConfig, selectMockAgentActions } from './mockAgent.mjs';
 
 function arg(name) { const index = process.argv.indexOf(name); return index < 0 ? '' : process.argv[index + 1]; }
 function hook(root, event, input = {}) {
@@ -21,19 +21,37 @@ export async function runSharedMockServer() {
   const server = http.createServer();
   const peers = new WebSocketServer({ server });
   const broadcast = (method, params) => { for (const peer of peers.clients) if (peer.readyState === WebSocket.OPEN) peer.send(JSON.stringify({ method, params })); };
-  const metadata = (root) => ({ id: root.id, cwd: root.cwd, path: root.path, source: 'cli', ephemeral: false });
+  const metadata = (root) => ({ id: root.id, cwd: root.cwd, path: root.path, source: 'cli', ephemeral: false, status: root.status });
+  const status = (root, type, activeFlags = []) => { root.status = { type, activeFlags }; broadcast('thread/status/changed', { threadId: root.id, status: root.status }); };
+  const approval = (root) => ({ id: `approval:${root.id}`, method: 'item/commandExecution/requestApproval', params: { threadId: root.id, turnId: root.pending.turnId, itemId: 'command', command: 'fixture command' } });
+  const finish = (root, turnId, text, reply) => {
+    root.turns.push({ id: turnId, status: 'completed' });
+    const records = [...messageRecords({ agent: 'codex', role: 'user', text, sequence: root.turns.length }), ...messageRecords({ agent: 'codex', role: 'assistant', text: reply, sequence: root.turns.length })];
+    fs.appendFileSync(root.path, records.join('\n') + '\n');
+    broadcast('attn-fixture/reply', { threadId: root.id, text: reply }); hook(root, 'Stop', { last_assistant_message: reply });
+    broadcast('turn/completed', { threadId: root.id, turn: { id: turnId } }); status(root, 'idle');
+  };
   peers.on('connection', peer => peer.on('message', raw => {
     const message = JSON.parse(raw);
     if (message.id === undefined) return;
+    if (!message.method) {
+      const root = [...roots.values()].find(root => root.pending && message.id === `approval:${root.id}`);
+      if (root) {
+        const { turnId, text, reply } = root.pending; root.pending = null;
+        broadcast('serverRequest/resolved', { threadId: root.id, requestId: message.id }); status(root, 'active');
+        finish(root, turnId, text, reply);
+      }
+      return;
+    }
     try {
       const p = message.params || {}; let root = roots.get(p.threadId); let result = {};
       switch (message.method) {
         case 'initialize': break;
         case 'thread/start': case 'thread/fork': {
           const id = randomUUID(); const cwd = p.cwd || process.cwd();
-          root = { id, cwd, path: codexTranscriptPath(id), config: p.config || {}, archived: false, turns: [] };
+          root = { id, cwd, path: path.join(cwd, '.attn-shared-mock', `${id}.jsonl`), config: p.config || {}, archived: false, turns: [], status: { type: 'idle' } };
           fs.mkdirSync(path.dirname(root.path), { recursive: true });
-          fs.writeFileSync(root.path, conversationHeaderRecords({ agent: 'codex', id, cwd, launch: { argv: [] } }).map(row => JSON.stringify(row)).join('\n') + '\n');
+          fs.writeFileSync(root.path, conversationHeaderRecords({ agent: 'codex', id, cwd, launch: { argv: [] } }).join('\n') + '\n');
           roots.set(id, root); hook(root, 'SessionStart', { source: 'startup' }); result = { thread: metadata(root) }; break;
         }
         case 'thread/resume': {
@@ -46,18 +64,20 @@ export async function runSharedMockServer() {
         case 'thread/loaded/list': result = { data: [...roots.values()].filter(r => !r.archived).map(r => r.id) }; break;
         case 'turn/start': case 'turn/steer': {
           const text = p.input.map(item => item.text || '').join('\n'); const turnId = randomUUID();
-          hook(root, 'UserPromptSubmit', { prompt: text }); broadcast('turn/started', { threadId: root.id, turn: { id: turnId } });
+          hook(root, 'UserPromptSubmit', { prompt: text }); broadcast('turn/started', { threadId: root.id, turn: { id: turnId } }); status(root, 'active');
           const fixture = readMockAgentConfig(root.cwd);
-          const reply = selectMockAgentActions(fixture, text).filter(action => action.type === 'reply').map(action => action.text).join('\n');
-          root.turns.push({ id: turnId, status: 'completed' });
-          const records = [...messageRecords({ agent: 'codex', role: 'user', text, sequence: root.turns.length }), ...messageRecords({ agent: 'codex', role: 'assistant', text: reply, sequence: root.turns.length })];
-          fs.appendFileSync(root.path, records.map(row => JSON.stringify(row)).join('\n') + '\n');
-          broadcast('attn-fixture/reply', { threadId: root.id, text: reply }); hook(root, 'Stop', { last_assistant_message: reply });
-          broadcast('turn/completed', { threadId: root.id, turn: { id: turnId } }); result = { turn: { id: turnId } }; break;
+          const actions = selectMockAgentActions(fixture, text).filter(action => action.type === 'reply');
+          const reply = actions.map(action => `${action.text} <!-- attn:state=${action.state || 'waiting_input'} -->`).join('\n');
+          if (actions.some(action => action.approval)) {
+            root.pending = { turnId, text, reply }; status(root, 'active', ['waitingOnApproval']);
+            for (const other of peers.clients) if (other.readyState === WebSocket.OPEN) other.send(JSON.stringify(approval(root)));
+          } else finish(root, turnId, text, reply);
+          result = { turn: { id: turnId } }; break;
         }
         default: throw new Error(`shared mock does not implement ${message.method}`);
       }
       peer.send(JSON.stringify({ id: message.id, result }));
+      if (message.method === 'thread/resume' && root.pending) peer.send(JSON.stringify(approval(root)));
     } catch (error) { peer.send(JSON.stringify({ id: message.id, error: { code: -32603, message: error.message } })); }
   }));
   server.listen(arg('--listen').replace('unix://', ''));
@@ -67,11 +87,14 @@ export async function runSharedMockView() {
   const socket = arg('--remote').replace('unix://', '');
   const peer = new WebSocket(`ws+unix://${socket}:/`);
   await new Promise((resolve, reject) => { peer.once('open', resolve); peer.once('error', reject); });
-  let seq = 0; const pending = new Map(); let selected = ''; let draft = '';
+  let seq = 0; const pending = new Map(); const approvals = new Map(); let selected = ''; let draft = '';
   const title = () => process.stdout.write(`\x1b]0;${selected}\x07`);
-  const prompt = () => process.stdout.write('\r\x1b[2K› ' + draft);
+  const prompt = () => process.stdout.write('\r\x1b[2K' + (approvals.has(selected) ? 'Allow the command to run? Enter to approve' : '› ' + draft));
   peer.on('message', raw => {
-    const m = JSON.parse(raw); if (m.id !== undefined) { const next = pending.get(m.id); pending.delete(m.id); if (next) { if (m.error) next.reject(new Error(m.error.message)); else next.resolve(m.result); } }
+    const m = JSON.parse(raw);
+    if (m.method === 'item/commandExecution/requestApproval') { approvals.set(m.params.threadId, m.id); if (m.params.threadId === selected) prompt(); return; }
+    if (m.method === 'serverRequest/resolved') { approvals.delete(m.params.threadId); if (m.params.threadId === selected) prompt(); }
+    if (m.id !== undefined) { const next = pending.get(m.id); pending.delete(m.id); if (next) { if (m.error) next.reject(new Error(m.error.message)); else next.resolve(m.result); } }
     if (m.method === 'attn-fixture/reply' && m.params.threadId === selected) { process.stdout.write('\r\x1b[2K' + m.params.text + '\r\n'); prompt(); }
   });
   const call = (method, params) => new Promise((resolve, reject) => { const id = ++seq; pending.set(id, { resolve, reject }); peer.send(JSON.stringify({ id, method, params })); });
@@ -97,7 +120,10 @@ export async function runSharedMockView() {
   process.stdin.on('data', chunk => {
     const text = chunk.replace(/\x1b\[[0-9;?]*[a-zA-Z~]/g, '').replace(/\x1b\][^\x07]*\x07/g, '');
     for (const char of text) {
-      if (char === '\r' || char === '\n') { const input = draft; draft = ''; if (input) take(input); }
+      if (char === '\r' || char === '\n') {
+        if (approvals.has(selected)) peer.send(JSON.stringify({ id: approvals.get(selected), result: { decision: 'accept' } }));
+        else { const input = draft; draft = ''; if (input) take(input); }
+      }
       else if (char === '\x7f') draft = draft.slice(0, -1);
       else if (char === '\x15') draft = '';
       else if (char >= ' ') draft += char;

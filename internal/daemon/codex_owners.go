@@ -11,10 +11,12 @@ import (
 	"github.com/victorarias/attn/internal/hooks"
 	"github.com/victorarias/attn/internal/protocol"
 	"github.com/victorarias/attn/internal/ptybackend"
+	"github.com/victorarias/attn/internal/sessionstate"
 	"github.com/victorarias/attn/internal/store"
 	"os"
 	"path/filepath"
 	"strings"
+	"time"
 )
 
 func (r *codexRuntime) ownerContext(owner *store.CodexOwner) (codexLaunchContext, error) {
@@ -68,7 +70,7 @@ func (r *codexRuntime) prepareLaunch(opts *ptybackend.SpawnOptions, session *pro
 	} else if err := r.d.store.SaveCodexView(view); err != nil {
 		return err
 	}
-	r.views[view.RuntimeID] = view
+	r.setViewLocked(view)
 	crashAt(crashAfterCodexReservation)
 	launch, err := r.ownerContext(owner)
 	if err != nil {
@@ -213,6 +215,9 @@ func (r *codexRuntime) prepareRPC(runtimeID string, m *codexshared.Message) (fun
 		return nil, err
 	}
 	method := m.Method
+	r.activeMu.Lock()
+	revision := r.activeTurns[owner.NativeRootID].Revision
+	r.activeMu.Unlock()
 	prepared = true
 	return func(reply codexshared.Message) {
 		if len(reply.Error) > 0 {
@@ -237,16 +242,17 @@ func (r *codexRuntime) prepareRPC(runtimeID string, m *codexshared.Message) (fun
 			}
 			r.mu.Unlock()
 		}
-		r.bindOwner(owner.SessionID, result.Thread)
+		r.bindOwner(owner.SessionID, result.Thread, revision)
 	}, nil
 }
 
 type codexNativeThread struct {
-	ID        string          `json:"id"`
-	Path      string          `json:"path"`
-	CWD       string          `json:"cwd"`
-	Source    json.RawMessage `json:"source"`
-	Ephemeral bool            `json:"ephemeral"`
+	ID        string            `json:"id"`
+	Path      string            `json:"path"`
+	CWD       string            `json:"cwd"`
+	Source    json.RawMessage   `json:"source"`
+	Ephemeral bool              `json:"ephemeral"`
+	Status    codexNativeStatus `json:"status"`
 	Turns     []struct {
 		ID     string `json:"id"`
 		Status string `json:"status"`
@@ -254,6 +260,9 @@ type codexNativeThread struct {
 }
 
 func (r *codexRuntime) adoptRoot(root string, v store.CodexView) (*store.CodexOwner, error) {
+	r.activeMu.Lock()
+	revision := r.activeTurns[root].Revision
+	r.activeMu.Unlock()
 	result, err := r.control.Call(r.d.life.Context(), "thread/read", map[string]any{"threadId": root, "includeTurns": false})
 	if err != nil {
 		return nil, err
@@ -276,6 +285,7 @@ func (r *codexRuntime) adoptRoot(root string, v store.CodexView) (*store.CodexOw
 	}
 	owner.NativeRootID = root
 	r.d.observeOrQueueAgentConversation(agentConversationObservation{SessionID: owner.SessionID, NativeID: root, TranscriptPath: read.Thread.Path})
+	r.projectNativeSnapshot(read.Thread, revision)
 	return owner, nil
 }
 
@@ -328,7 +338,7 @@ func (d *Daemon) wrapperExecutable() string {
 	return path
 }
 
-func (r *codexRuntime) bindOwner(id string, t codexNativeThread) {
+func (r *codexRuntime) bindOwner(id string, t codexNativeThread, revision uint64) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	if err := r.d.store.BindCodexRoot(id, t.ID); err != nil {
@@ -359,6 +369,7 @@ func (r *codexRuntime) bindOwner(id string, t codexNativeThread) {
 		}
 	}
 	r.d.observeOrQueueAgentConversation(agentConversationObservation{SessionID: id, NativeID: t.ID, TranscriptPath: t.Path})
+	r.projectNativeSnapshot(t, revision)
 	if session := r.d.store.Get(id); session != nil && session.State == protocol.SessionStateLaunching {
 		r.d.applyState(sessionStateChange{sessionID: id, state: string(protocol.SessionStateIdle), cause: liveSignal{}, origin: stateOrigin{source: "codex", detail: "native root bound"}})
 	}
@@ -378,6 +389,10 @@ func (r *codexRuntime) bindOwner(id string, t codexNativeThread) {
 		}
 		launch, err := r.ownerContext(owner)
 		if err != nil {
+			return
+		}
+		if err := r.ensureServer(r.d.life.Context(), launch); err != nil {
+			r.d.logf("Codex hold root %s: %v", id, err)
 			return
 		}
 		injectCodexOwner(params, id, r.d.socketPath, r.d.wrapperExecutable(), launch)
@@ -417,6 +432,7 @@ func (r *codexRuntime) cleanupReservation(id string) {
 type codexTurnState struct {
 	ID       string
 	Revision uint64
+	Status   codexNativeStatus
 }
 
 func (r *codexRuntime) resumeOwner(ctx context.Context, control *codexshared.Client, params map[string]any) (json.RawMessage, error) {
@@ -436,22 +452,120 @@ func (r *codexRuntime) resumeOwner(ctx context.Context, control *codexshared.Cli
 	if err := json.Unmarshal(result, &reply); err != nil {
 		return nil, err
 	}
+	r.projectNativeSnapshot(reply.Thread, revision)
+	return result, nil
+}
+
+func (r *codexRuntime) projectNativeSnapshot(thread codexNativeThread, revision uint64) {
 	var activeID string
-	for _, turn := range reply.Thread.Turns {
+	for _, turn := range thread.Turns {
 		if turn.Status == "inProgress" {
 			activeID = turn.ID
 		}
 	}
 	r.activeMu.Lock()
-	state = r.activeTurns[root]
-	// A native notification received during resume is newer than its snapshot.
+	state := r.activeTurns[thread.ID]
+	// A native notification received during the request is newer than its snapshot.
 	if state.Revision == revision {
 		state.ID = activeID
+		state.Status = thread.Status
+		state.Revision++
+		r.activeTurns[thread.ID] = state
+	}
+	r.activeMu.Unlock()
+	r.projectNativeStatus(thread.ID)
+}
+
+type codexNativeStatus struct {
+	Type        string   `json:"type"`
+	ActiveFlags []string `json:"activeFlags"`
+}
+
+func (r *codexRuntime) controlDisconnected() {
+	r.d.logf("shared Codex control disconnected; native attention needs reconciliation")
+	owners, err := r.d.store.CodexOwners(r.serverID)
+	if err != nil {
+		r.d.logf("read shared Codex owners after control disconnect: %v", err)
+		return
+	}
+	r.activeMu.Lock()
+	defer r.activeMu.Unlock()
+	for root, state := range r.activeTurns {
+		state.ID = ""
+		state.Status = codexNativeStatus{}
 		state.Revision++
 		r.activeTurns[root] = state
 	}
+	for _, owner := range owners {
+		if owner.Archived || owner.NativeRootID == "" {
+			continue
+		}
+		r.d.recordEvidence(owner.SessionID, time.Now(), func(e *sessionstate.Evidence) {
+			e.NativeRoot = &sessionstate.Observation{Source: sessionstate.SourceNative, Claim: sessionstate.ClaimStopFailed, Detail: "control_disconnected", ObservedAt: time.Now()}
+		})
+	}
+}
+
+func (r *codexRuntime) observeControl(m codexshared.Message) {
+	r.observeNative(m)
+	if m.Method != "thread/status/changed" {
+		return
+	}
+	var params struct {
+		ThreadID string            `json:"threadId"`
+		Status   codexNativeStatus `json:"status"`
+	}
+	if json.Unmarshal(m.Params, &params) != nil || params.ThreadID == "" {
+		return
+	}
+	r.activeMu.Lock()
+	state := r.activeTurns[params.ThreadID]
+	state.Status = params.Status
+	state.Revision++
+	r.activeTurns[params.ThreadID] = state
 	r.activeMu.Unlock()
-	return result, nil
+	r.projectNativeStatus(params.ThreadID)
+}
+
+func (r *codexRuntime) projectNativeStatus(root string) {
+	owner, err := r.d.store.CodexOwnerByRoot(r.serverID, root)
+	if err != nil || owner == nil || owner.Archived {
+		return
+	}
+	r.activeMu.Lock()
+	defer r.activeMu.Unlock()
+	status := r.activeTurns[root].Status
+	var claim sessionstate.Claim
+	switch status.Type {
+	case "active":
+		claim = sessionstate.ClaimBusy
+		for _, flag := range status.ActiveFlags {
+			if flag == "waitingOnApproval" {
+				claim = sessionstate.ClaimApprovalPending
+				break
+			}
+			if flag == "waitingOnUserInput" {
+				claim = sessionstate.ClaimNeedsInput
+			}
+		}
+	case "idle":
+		claim = sessionstate.ClaimIdle
+	case "systemError":
+		claim = sessionstate.ClaimStopFailed
+	case "notLoaded":
+		r.d.updateEvidence(owner.SessionID, nil, func(e *sessionstate.Evidence) { e.NativeRoot = nil })
+		return
+	default:
+		return
+	}
+	at := time.Now()
+	r.d.traceStateEvidence(owner.SessionID, stateOrigin{source: "codex_native", detail: status.Type, observedAt: at}, string(claim))
+	r.d.recordEvidence(owner.SessionID, at, func(e *sessionstate.Evidence) {
+		e.NativeRoot = &sessionstate.Observation{Source: sessionstate.SourceNative, Claim: claim, Detail: status.Type, ObservedAt: at}
+		if claim == sessionstate.ClaimBusy {
+			e.LastBusyAt = at
+		}
+	})
 }
 
 func (r *codexRuntime) observeNative(m codexshared.Message) {

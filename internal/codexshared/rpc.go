@@ -140,6 +140,16 @@ func (c *Client) write(ctx context.Context, m Message) error {
 }
 func (c *Client) Close() { _ = c.conn.CloseNow() }
 
+func (c *Client) Done() <-chan struct{} { return c.done }
+
+func (c *Client) Respond(ctx context.Context, id json.RawMessage, result any) error {
+	raw, err := json.Marshal(result)
+	if err != nil {
+		return err
+	}
+	return c.write(ctx, Message{ID: id, Result: raw})
+}
+
 // Proxy preserves connection-local IDs and approvals, transforming lifecycle
 // requests before forwarding and observing replies without claiming foreground.
 func Proxy(ctx context.Context, down, up *websocket.Conn, prepare func(*Message) (func(Message), error), observe func(Message)) {

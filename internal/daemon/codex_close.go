@@ -79,7 +79,9 @@ func (r *codexRuntime) forgetViewLocked(runtimeID string) error {
 		return err
 	}
 	crashAt(crashAfterCodexViewRemoved)
+	r.viewsMu.Lock()
 	delete(r.views, runtimeID)
+	r.viewsMu.Unlock()
 	delete(r.initialConsumed, runtimeID)
 	return nil
 }

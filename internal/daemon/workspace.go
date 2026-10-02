@@ -677,7 +677,13 @@ func (d *Daemon) dissociateSessionFromWorkspace(sessionID string) {
 }
 
 func (d *Daemon) decorateSessionWithWorkspace(session *protocol.Session) {
-	if session == nil || d.workspaces == nil {
+	if session == nil {
+		return
+	}
+	if intent, ok := d.store.LaunchIntent(session.ID); ok && intent.CodexMode != "" {
+		session.CodexMode = protocol.Ptr(intent.CodexMode)
+	}
+	if d.workspaces == nil {
 		return
 	}
 	if id := d.workspaces.workspaceIDForSession(session.ID); id != "" {

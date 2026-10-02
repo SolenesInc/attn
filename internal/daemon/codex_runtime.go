@@ -51,6 +51,7 @@ type codexRuntime struct {
 	serverExit      chan error
 	serverID        string
 	control         *codexshared.Client
+	viewsMu         sync.RWMutex
 	views           map[string]store.CodexView
 	servers         map[string]*http.Server
 	initialConsumed map[string]bool
@@ -145,7 +146,7 @@ func (r *codexRuntime) ensureServer(ctx context.Context, launch codexLaunchConte
 	var control *codexshared.Client
 	var err error
 	for {
-		control, err = codexshared.Connect(r.d.life.Context(), r.socket(""), r.observeNative)
+		control, err = codexshared.Connect(r.d.life.Context(), r.socket(""), r.observeControl)
 		if !errors.Is(err, syscall.ECONNREFUSED) && !errors.Is(err, os.ErrNotExist) {
 			break
 		}
@@ -177,6 +178,19 @@ func (r *codexRuntime) ensureServer(ctx context.Context, launch codexLaunchConte
 		return fmt.Errorf("connect shared Codex server: %w", err)
 	}
 	r.control = control
+	r.d.life.Go("codexControlDisconnected", func() {
+		select {
+		case <-r.d.life.Done():
+			return
+		case <-control.Done():
+		}
+		r.mu.Lock()
+		defer r.mu.Unlock()
+		if r.control != control || r.d.life.Ended() {
+			return
+		}
+		r.controlDisconnected()
+	})
 	r.d.logf("shared Codex control connected")
 	owners, err := r.d.store.CodexOwners(r.serverID)
 	if err != nil {
@@ -288,6 +302,12 @@ func (r *codexRuntime) noteServerExit(info ptybackend.ExitInfo) {
 		}
 	}
 	r.d.life.Go("codexServerInterrupted", func() {
+		r.mu.Lock()
+		defer r.mu.Unlock()
+		if r.control != nil {
+			r.control.Close()
+			r.control = nil
+		}
 		r.activeMu.Lock()
 		clear(r.activeTurns)
 		r.activeMu.Unlock()
@@ -297,14 +317,15 @@ func (r *codexRuntime) noteServerExit(info ptybackend.ExitInfo) {
 		}
 		for _, owner := range owners {
 			if !owner.Archived {
+				r.d.updateEvidence(owner.SessionID, nil, func(e *sessionstate.Evidence) { e.NativeRoot = nil })
 				r.d.applyState(sessionStateChange{sessionID: owner.SessionID, state: string(protocol.SessionStateRecoverable), cause: startupRecovery{}, origin: stateOrigin{source: "codex", detail: "native server exited; interrupted input is not replayed"}})
 			}
 		}
 	})
 }
 func (r *codexRuntime) hasRuntime(id string) bool {
-	r.mu.Lock()
-	defer r.mu.Unlock()
+	r.viewsMu.RLock()
+	defer r.viewsMu.RUnlock()
 	_, ok := r.views[id]
 	return ok
 }

@@ -27,7 +27,7 @@ The database owns launch context and the unique root binding in `codex_owners`.
 `codex_views` owns runtime/display relationships. Layout reads join that table
 for the displayed owner, resolution and revision. Title updates publish a fresh
 layout snapshot without rewriting placement, focus or pane status.
-`store.LaunchIntent.CodexMode`
+`store.LaunchIntent.CodexMode`, projected as `Session.codex_mode`,
 distinguishes shared and legacy owners. Old rows remain legacy. The frontend
 reads placement from daemon workspace layouts and metadata from the global
 session lookup; it never rewrites an owner's workspace when its view switches.
@@ -118,10 +118,42 @@ archiving foreign owners. Native archive and runtime removal must succeed before
 ledger finalization. Cleanup failures name the owner and let the caller retry
 deletion of the already-removed path; the removal audit remains recorded.
 
-This first integration exposes the shared identity and close boundary. Attention,
-mailbox/annotation policy, final accounting guarantees and naming reconciliation
-have separate follow-up work. They must use these owner/view contracts and the
-same awaited close pipeline.
+Final accounting guarantees and naming reconciliation have separate follow-up
+work. They use these owner/view contracts and the same awaited close pipeline.
+
+## Attention and input
+
+The control connection projects `thread/status/changed` through the root-to-owner
+binding into session evidence. Native active, approval and user-input flags remain
+authoritative while a root has no visible terminal. Idle status uses the existing
+Stop classifier to distinguish completion from a question. A new prompt hook
+invalidates the previous idle snapshot before the next active notification arrives.
+View connections do not duplicate this state projection.
+Losing the control connection replaces its claims with attention needing input
+and clears the active turn. The next explicit operation reconnects and reconciles
+native root snapshots; it does not replay input.
+Traffic from a surviving native view also wakes that reconciliation, so ordinary
+prompts and approval answers restore attention without an unrelated app action.
+
+The queue retains hidden shared owners once. Selecting one attaches its native
+root through the existing reopen operation; an attachment error appears to the
+user immediately. Native approval requests keep their original connection routing,
+so answering in either view resolves the same operation.
+
+PTY bytes address the surviving runtime. Typing and pointer activity capture its
+resolved displayed owner for composition, quiet-window and attention credit.
+Unresolved views earn no owner credit. Structured input addresses the intended
+owner directly, using `turn/start` while idle and `turn/steer` with the current
+expected turn while active. It leaves native drafts intact. Mailbox doorbells use
+the existing prompt-ready and composition gates and earn maintenance credit;
+mailbox storage and `attn agent inbox` remain owner-scoped.
+
+An open annotation editor keeps the owner selected when it opened. After a native
+switch its panel names that recipient. Draft stores, notes, save generations and
+send progress belong to that owner; delayed replies cannot spend another owner's
+draft. The terminal itself remains mounted throughout the switch.
+Returning to an owner with a pending send restores that same send guard and draft
+store until its reply settles.
 
 Explicit native input rejections are reported as failures and release that attempt
 for a later explicit submission. Transport loss remains indeterminate; input is

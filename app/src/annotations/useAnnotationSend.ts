@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { useShortcut } from '../shortcuts/useShortcut';
 import type { ShortcutId } from '../shortcuts/registry';
 
@@ -19,6 +19,7 @@ interface UseAnnotationSendOptions<T extends AnnotationSendResult> {
   shortcutId: ShortcutId;
   enabled: boolean;
   sentClearMs: number;
+  identity?: string;
 }
 
 export function useAnnotationSend<T extends AnnotationSendResult>({
@@ -26,26 +27,39 @@ export function useAnnotationSend<T extends AnnotationSendResult>({
   shortcutId,
   enabled,
   sentClearMs,
+  identity,
 }: UseAnnotationSendOptions<T>) {
   const sendRef = useRef(send);
-  const sendingRef = useRef(false);
-  const [outcome, setOutcome] = useState<AnnotationSendOutcome<T>>(null);
+  const pending = useRef(new Map<string | undefined, { sending: boolean }>());
+  const gate = useMemo(() => pending.current.get(identity) ?? { sending: false }, [identity]);
+  const currentGate = useRef(gate);
+  const [display, setDisplay] = useState<{ gate: typeof gate; outcome: AnnotationSendOutcome<T> } | null>(null);
+  const outcome = display?.gate === gate ? display.outcome : gate.sending ? { kind: 'sending' as const } : null;
+  const setOutcome = useCallback((next: AnnotationSendOutcome<T>) => {
+    if (currentGate.current === gate) setDisplay({ gate, outcome: next });
+  }, [gate]);
 
   useLayoutEffect(() => {
     sendRef.current = send;
-  }, [send]);
+    currentGate.current = gate;
+  }, [send, gate]);
 
   const runSend = useCallback((action: () => T | null | Promise<T | null>) => {
-    if (sendingRef.current) {
+    if (gate.sending) {
       return;
     }
-    sendingRef.current = true;
+    gate.sending = true;
+    pending.current.set(identity, gate);
+    const finish = () => {
+      gate.sending = false;
+      if (pending.current.get(identity) === gate) pending.current.delete(identity);
+    };
 
     let result: T | null | Promise<T | null>;
     try {
       result = action();
     } catch (error) {
-      sendingRef.current = false;
+      finish();
       setOutcome({
         kind: 'error',
         message: error instanceof Error ? error.message : 'Send failed',
@@ -54,11 +68,11 @@ export function useAnnotationSend<T extends AnnotationSendResult>({
     }
 
     if (result === null) {
-      sendingRef.current = false;
+      finish();
       return;
     }
     if (!(result instanceof Promise)) {
-      sendingRef.current = false;
+      finish();
       setOutcome(result);
       return;
     }
@@ -76,10 +90,8 @@ export function useAnnotationSend<T extends AnnotationSendResult>({
           message: error instanceof Error ? error.message : 'Send failed',
         });
       })
-      .finally(() => {
-        sendingRef.current = false;
-      });
-  }, []);
+      .finally(finish);
+  }, [gate, identity, setOutcome]);
 
   const sendNow = useCallback(() => runSend(sendRef.current), [runSend]);
   const sendAlternative = useCallback(
@@ -95,8 +107,8 @@ export function useAnnotationSend<T extends AnnotationSendResult>({
     }
     const timer = window.setTimeout(() => setOutcome(null), sentClearMs);
     return () => window.clearTimeout(timer);
-  }, [outcome, sentClearMs]);
+  }, [outcome, sentClearMs, setOutcome]);
 
-  const clearOutcome = useCallback(() => setOutcome(null), []);
+  const clearOutcome = useCallback(() => setOutcome(null), [setOutcome]);
   return { outcome, send: sendNow, sendAlternative, clearOutcome };
 }

@@ -166,6 +166,117 @@ async function writeComment(daemon: ScriptedDaemon, text: string) {
   await daemon.idle();
 }
 
+async function openSharedAnnotations() {
+  const stored = {
+    s1: { annotations: [PARSER], note: 'A note', generation: 7 },
+    s2: { annotations: [RETRY], note: 'B note', generation: 20 },
+  };
+  const workspace = agentWorkspace('s1');
+  workspace.layout!.panes[0].codex_resolution = 'resolved';
+  const view = await openAttachedTerminals({
+    sessions: ['s1', 's2'].map(id => daemonSession(id, { agent: 'codex', codex_mode: 'shared', state: 'idle' })),
+    workspaces: [workspace, agentWorkspace('s2')],
+    output: { s1: AGENT_TEXT },
+    script: daemon => {
+      daemon.on('session_messages_get', ({ session_id }) => ({ event: 'session_messages_get_result', session_id, ...readyWindow({ key: 'turn-1', markdown: AGENT_TEXT }) }));
+      daemon.on('session_annotations_get', ({ session_id }) => ({ event: 'session_annotations_get_result', session_id, success: true, ...stored[session_id as keyof typeof stored] }));
+      acceptSaves(daemon);
+      answerSubmits(daemon, null);
+    },
+  });
+  const switchToB = async () => {
+    const layout = workspace.layout!;
+    view.daemon.emit({ event: 'workspace_layout_updated', workspace_layout: { ...layout, panes: [{ ...layout.panes[0], session_id: 's2', codex_revision: '2' }] } });
+    await view.daemon.idle();
+  };
+  const switchToA = async () => {
+    const layout = workspace.layout!;
+    view.daemon.emit({ event: 'workspace_layout_updated', workspace_layout: { ...layout, panes: [{ ...layout.panes[0], session_id: 's1', codex_revision: '3' }] } });
+    await view.daemon.idle();
+  };
+  return { ...view, switchToB, switchToA };
+}
+
+describe('shared Codex annotation recipients', () => {
+  it('keeps A pending when switching A to B and back before its reply', async () => {
+    const { daemon, switchToB, switchToA } = await openSharedAnnotations();
+    fireEvent.click(panel().getByRole('button', { name: /Send all/ }));
+    await daemon.idle();
+    const submitA = daemon.sentOf('session_annotations_submit')[0];
+    await switchToB();
+    await switchToA();
+    expect(panel().getByRole('button', { name: 'Sending…' })).toBeDisabled();
+    fireEvent.keyDown(document, { key: 'Enter', metaKey: true });
+    await daemon.idle();
+    expect(daemon.sentOf('session_annotations_submit')).toHaveLength(1);
+    deliver(daemon, submitA);
+    await daemon.idle();
+    expect(cards()).toEqual([]);
+  });
+
+  it('lets B send while A is pending and keeps B progress when A answers', async () => {
+    const { daemon, switchToB } = await openSharedAnnotations();
+    fireEvent.click(panel().getByRole('button', { name: /Send all/ }));
+    await daemon.idle();
+    const submitA = daemon.sentOf('session_annotations_submit')[0];
+    await switchToB();
+    fireEvent.click(panel().getByRole('button', { name: /Send all/ }));
+    await daemon.idle();
+    expect(daemon.sentOf('session_annotations_submit').map(command => command.session_id)).toEqual(['s1', 's2']);
+    deliver(daemon, submitA);
+    await daemon.idle();
+    expect(panel().getByRole('button', { name: 'Sending…' })).toBeDisabled();
+    expect(cards()).toEqual(['❓retry']);
+  });
+
+  it('keeps an open editor addressed to its original owner through a native switch', async () => {
+    const { daemon, switchToB } = await openSharedAnnotations();
+    const canvas = terminalCanvas();
+    fireEvent.click(cardButtons()[0]);
+    fireEvent.click(popup().getByRole('button', { name: 'Write a comment' }));
+    fireEvent.change(commentBox(), { target: { value: 'feedback for A' } });
+    await switchToB();
+    expect(commentBox()).toHaveValue('feedback for A');
+    expect(panel().getByText('Annotations for s1')).toBeInTheDocument();
+    fireEvent.click(panel().getByRole('button', { name: /Send all/ }));
+    await daemon.idle();
+    expect(daemon.sentOf('session_annotations_submit')).toEqual([expect.objectContaining({ session_id: 's1', text: expect.stringContaining('feedback for A') })]);
+    expect(terminalCanvas()).toBe(canvas);
+  });
+
+  it('flushes a delayed note to A and hydrates B without replacing the terminal', async () => {
+    const { daemon, switchToB } = await openSharedAnnotations();
+    const canvas = terminalCanvas();
+    fireEvent.change(panel().getByLabelText('Note sent with these annotations'), { target: { value: 'updated A note' } });
+    await switchToB();
+    await act(() => vi.advanceTimersByTimeAsync(400));
+    await daemon.idle();
+    expect(daemon.sentOf('session_annotations_save')).toEqual([expect.objectContaining({ session_id: 's1', note: 'updated A note', generation: 8 })]);
+    expect(panel().getByLabelText('Note sent with these annotations')).toHaveValue('B note');
+    expect(cards()).toEqual(['❓retry']);
+    expect(terminalCanvas()).toBe(canvas);
+  });
+
+  it('settles an A submit after switching without spending B annotations or generation', async () => {
+    const { daemon, switchToB } = await openSharedAnnotations();
+    fireEvent.click(panel().getByRole('button', { name: /Send all/ }));
+    await daemon.idle();
+    const submit = daemon.sentOf('session_annotations_submit')[0];
+    await switchToB();
+    expect(panel().getByRole('button', { name: /Send all/ })).toBeEnabled();
+    deliver(daemon, submit);
+    await daemon.idle();
+    expect(cards()).toEqual(['❓retry']);
+    expect(panel().getByRole('button', { name: /Send all/ })).toBeEnabled();
+    expect(panel().getByLabelText('Note sent with these annotations')).toHaveValue('B note');
+    expect(daemon.sentOf('session_annotations_clear')).toEqual([expect.objectContaining({ session_id: 's1', generation: 8 })]);
+    fireEvent.change(panel().getByLabelText('Note sent with these annotations'), { target: { value: 'updated B note' } });
+    await act(() => vi.advanceTimersByTimeAsync(400));
+    await daemon.idle();
+    expect(lastSave(daemon)).toEqual(expect.objectContaining({ session_id: 's2', generation: 21, note: 'updated B note' }));
+  });
+});
+
 describe('App session annotations', () => {
   it('shows the marks and note stored for a session, reading an old emoji-only mark as its quick label', async () => {
     await openAnnotatedSession({ annotations: [PARSER], note: 'Split this into two PRs.', generation: 7 });

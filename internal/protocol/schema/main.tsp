@@ -200,6 +200,7 @@ model SessionDelegationRole {
 }
 
 model Session {
+	 codex_mode?: string;
   id: string;
   label: string;
   agent: string;                // Built-in ID or registered plugin driver ID
