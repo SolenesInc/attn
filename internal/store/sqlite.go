@@ -1382,6 +1382,18 @@ CREATE INDEX IF NOT EXISTS idx_automode_denials_recent ON automode_denials(id DE
  BEGIN UPDATE sessions SET last_desktop_id = (SELECT desktop_id FROM desktop_panes WHERE session_id = OLD.session_id
  ORDER BY created_at DESC, pane_id DESC LIMIT 1) WHERE id = OLD.session_id; END;
 `},
+	{171, "durable user captures and file manifests", `
+ CREATE TABLE user_messages (
+ id TEXT PRIMARY KEY, submission TEXT NOT NULL, target_kind TEXT NOT NULL,
+ target_member_id TEXT NOT NULL DEFAULT '', body TEXT NOT NULL, created_at TEXT NOT NULL
+ );
+ CREATE INDEX user_messages_recent ON user_messages(created_at DESC,id DESC);
+ CREATE TABLE capture_attachments (
+ capture_id TEXT NOT NULL, attachment_id TEXT NOT NULL, name TEXT NOT NULL,
+ media_type TEXT NOT NULL DEFAULT '', byte_count INTEGER NOT NULL DEFAULT 0,
+ state TEXT NOT NULL, position INTEGER NOT NULL DEFAULT 0, PRIMARY KEY(capture_id, attachment_id)
+ );
+ `},
 }
 
 const migration99SQL = `
