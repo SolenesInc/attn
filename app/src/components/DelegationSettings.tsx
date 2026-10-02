@@ -235,7 +235,7 @@ function AddRow({ config, missing, onAdd, onAdopt }: { config: DelegationPrefere
   const some = config.roles.some(role => role.builtin);
   return <div className="delegation-addrow">
     <button type="button" className="settings-action quiet" onClick={onAdd}>+ Custom role</button>
-    {missing.length > 0 && <button type="button" className="settings-action quiet" onClick={onAdopt}>{some ? `+ ${missing.join(', ')}` : 'Add Attn roles'}</button>}
+    {missing.length > 0 && <button type="button" className="settings-action quiet" onClick={onAdopt}>{!some ? 'Add Attn roles' : missing.length === 1 ? `+ ${missing[0]}` : `Add Attn roles: ${missing.join(', ')}`}</button>}
   </div>;
 }
 

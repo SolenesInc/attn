@@ -693,7 +693,7 @@ export function useSettingsModalState({
             description: '',
             count: delegationLiveCount(delegationPolicy.preferences),
             keywords:
-              'delegate roles pathfinder builder reviewer orchestrator fallback harness models effort preferences alternatives',
+              'delegate roles pathfinder builder reviewer orchestrator prototyper fallback harness models effort preferences alternatives',
           },
           {
             id: 'workflows',

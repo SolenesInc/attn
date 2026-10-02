@@ -18,7 +18,7 @@ For proposed work, examine how it fits the system and what happens in failures o
 - State the assumption or interpretation behind each question so the user has something concrete to correct. Ask where intent, meanings, priorities, or expected behavior could differ.
 - Revisit earlier assumptions when later answers expose a conflict.
 - Use concrete scenarios, counterexamples, and alternatives to test the idea and any apparent agreement. Explain the consequence behind a challenge and revise your own view when the answer changes it.
-- When a quality is easier to recognize than describe, ask for a reference or suggest comparing variants in a [prototype](prototype.md). Prefer source code, then screenshots, then adjectives when available and relevant.
+- When a quality is easier to recognize than describe, ask for a reference or suggest comparing variants in a spike ([Prototype](prototype.md) for a UI or an interface). Prefer source code, then screenshots, then adjectives when available and relevant.
 
 For example:
 
