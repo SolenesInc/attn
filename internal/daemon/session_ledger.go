@@ -82,6 +82,7 @@ func (d *Daemon) sessionLedgerPage(msg *protocol.SessionListMessage, wantFacets 
 	}
 
 	for i := range page.Entries {
+		d.decorateLedgerEntryWithCost(&page.Entries[i])
 		intent, ok := d.store.LaunchIntent(page.Entries[i].ID)
 		if ok && intent.CodexMode != "" {
 			page.Entries[i].CodexMode = protocol.Ptr(intent.CodexMode)
@@ -149,6 +150,7 @@ func (d *Daemon) handleSessionShow(conn net.Conn, msg *protocol.SessionShowMessa
 		entry.CodexMode = protocol.Ptr(intent.CodexMode)
 	}
 	result := &protocol.SessionShowResult{Entry: *entry}
+	d.decorateLedgerEntryWithCost(&result.Entry)
 	verdict, err := d.resolveReopen(context.Background(), *entry, d.scheduledReopenGit())
 	if err != nil {
 		d.logf("session show: resolve reopen eligibility for session %s: %v", entry.ID, err)
@@ -204,6 +206,7 @@ func (d *Daemon) sendSessionShowWSResult(client *wsClient, msg *protocol.Session
 		if intent, ok := d.store.LaunchIntent(entry.ID); ok && intent.CodexMode != "" {
 			entry.CodexMode = protocol.Ptr(intent.CodexMode)
 		}
+		d.decorateLedgerEntryWithCost(entry)
 		reply.Success = true
 		reply.Entry = entry
 	} else {
@@ -217,6 +220,7 @@ func projectSessionClosed(d *Daemon, event bus.Event) {
 	if !ok {
 		return
 	}
+	d.decorateLedgerEntryWithCost(&entry)
 	d.wsHub.Broadcast(&protocol.WebSocketEvent{
 		Event:              protocol.EventSessionClosed,
 		SessionLedgerEntry: &entry,

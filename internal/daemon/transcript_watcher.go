@@ -343,7 +343,7 @@ func (d *Daemon) restoreTranscriptWatchers() {
 		if session == nil || session.Agent == protocol.SessionAgentShell {
 			continue
 		}
-		if _, ok := live[session.ID]; !ok {
+		if _, ok := live[session.ID]; !ok && !d.sharedCodexOwner(session.ID) {
 			continue
 		}
 		binding := d.store.GetSessionConversation(session.ID)

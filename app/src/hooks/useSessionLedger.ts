@@ -177,6 +177,16 @@ export function useSessionLedger({
       }
       if (!lifecycleRef.current.connected
         || event.connectionGeneration !== lifecycleRef.current.generation) return;
+      if (event.type === 'live') {
+        setRead((current) => ({ ...current, entries: current.entries.flatMap((entry) => {
+          if (entry.id !== event.session.id) return [entry];
+          if (filtersRef.current.scope === 'closed') return [];
+          const { closed_at: _at, closed_by: _by, close_reason: _reason, ...open } = entry;
+          return [{ ...open, label: event.session.label, state: event.session.state,
+            last_seen: event.session.last_seen, usage: event.session.usage }];
+        }) }));
+        return;
+      }
       const entry = event.entry;
       const at = now();
       setRead((current) => ({ ...current, entries: applyClose(current.entries, entry, filtersRef.current, at) }));

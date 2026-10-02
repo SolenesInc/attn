@@ -86,8 +86,8 @@ func (r *codexRuntime) forgetViewLocked(runtimeID string) error {
 	return nil
 }
 
-// CloseOwner is the single final-close boundary: native archive, await the
-// transcript's available-record reconciliation, then finalize the ledger.
+// CloseOwner is the single final-close boundary: native archive, reconcile
+// available transcript records, then finalize the ledger.
 func (r *codexRuntime) closeOwnerLocked(id string, closed store.SessionClose) error {
 	owner, err := r.d.store.CodexOwner(id)
 	if err != nil {
@@ -122,7 +122,12 @@ func (r *codexRuntime) archiveOwnerLocked(owner *store.CodexOwner) error {
 	if err := r.ensureServer(r.d.life.Context(), launch); err != nil {
 		return err
 	}
+	r.d.drainCodexTranscriptWatcher(owner.SessionID)
 	_, err = r.control.Call(r.d.life.Context(), "thread/archive", map[string]any{"threadId": owner.NativeRootID})
+	if err != nil {
+		binding := r.d.store.GetSessionConversation(owner.SessionID)
+		r.d.ensureTranscriptWatcherAtPath(owner.SessionID, binding.TranscriptPath)
+	}
 	return err
 }
 
@@ -147,6 +152,11 @@ func (r *codexRuntime) finishOwnerCloseLocked(owner *store.CodexOwner, closed st
 }
 
 func (d *Daemon) stopCodexTranscriptWatcherAndWait(id string) {
+	d.drainCodexTranscriptWatcher(id)
+	d.reconcileCodexAvailableUsage(id)
+}
+
+func (d *Daemon) drainCodexTranscriptWatcher(id string) {
 	d.watchersMu.Lock()
 	watcher := d.transcriptWatch[id]
 	delete(d.transcriptWatch, id)
@@ -154,6 +164,20 @@ func (d *Daemon) stopCodexTranscriptWatcherAndWait(id string) {
 	if watcher != nil {
 		close(watcher.stopCh)
 		<-watcher.doneCh
+	}
+}
+
+func (d *Daemon) reconcileCodexAvailableUsage(id string) {
+	// Close can precede the watcher's first poll. Read the bound source even then;
+	// persisted cursors make a second reconciliation harmless.
+	binding := d.store.GetSessionConversation(id)
+	if binding.TranscriptPath != "" {
+		w := &transcriptWatcher{sessionID: id, agent: protocol.SessionAgentCodex}
+		if tracker := d.newSessionUsageTracker(w, binding.TranscriptPath); tracker != nil {
+			tracker.Reconcile()
+		}
+	} else {
+		d.markSharedCodexUsageIncomplete(id)
 	}
 }
 

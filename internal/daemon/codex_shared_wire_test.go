@@ -582,6 +582,7 @@ func TestSharedCodexRecreatesADeletedWorktreeAndReopensTheSameNativeHistory(t *t
 			app.TypeLine(id, "save this history")
 			original.Prompted()
 			original.Reply("saved reply <!-- attn:state=idle -->")
+			beforeUsage := testworld.AwaitSession(app, id, func(s protocol.Session) bool { return s.Usage != nil && s.Usage.TotalTokens > 0 }).Usage
 			closeSession(t, cli, id, "done for now")
 			awaitClosed(app, id)
 			if remote {
@@ -616,6 +617,7 @@ func TestSharedCodexRecreatesADeletedWorktreeAndReopensTheSameNativeHistory(t *t
 					app.AwaitScreen(protocol.Deref(p.RuntimeID), "Showing "+original.ConversationID)
 				}
 			}
+			assertLedgerUsage(t, cli, id, beforeUsage)
 			if branch := strings.TrimSpace(runGit(t, worktree, "branch", "--show-current")); branch != "feat/shared-reopen" {
 				t.Fatalf("restored branch %q", branch)
 			}

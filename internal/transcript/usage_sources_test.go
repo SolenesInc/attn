@@ -1,6 +1,7 @@
 package transcript
 
 import (
+	"fmt"
 	"os"
 	"path/filepath"
 	"testing"
@@ -34,6 +35,45 @@ func TestClaudeUsageSourcesStayInsideTheNativeSubagentDirectory(t *testing.T) {
 	}
 	if len(sources) != 2 || !sources[0].Root || sources[1].Path != child {
 		t.Fatalf("Claude sources = %+v", sources)
+	}
+}
+
+func TestCodexUsageSourcesKeepTheirIdentityAcrossArchiveLocations(t *testing.T) {
+	for _, rootArchived := range []bool{false, true} {
+		for _, childArchived := range []bool{false, true} {
+			for _, boundArchived := range []bool{false, true} {
+				t.Run(fmt.Sprintf("root=%t/child=%t/binding=%t", rootArchived, childArchived, boundArchived), func(t *testing.T) {
+					home := t.TempDir()
+					live := filepath.Join(home, "sessions", "2026", "10", "02")
+					archived := filepath.Join(home, "archived_sessions")
+					for _, dir := range []string{live, archived} {
+						if err := os.MkdirAll(dir, 0o755); err != nil {
+							t.Fatal(err)
+						}
+					}
+					rootName := "rollout-2026-10-02T12-00-00-root.jsonl"
+					rootDir, childDir := live, live
+					if rootArchived {
+						rootDir = archived
+					}
+					if childArchived {
+						childDir = archived
+					}
+					root := filepath.Join(rootDir, rootName)
+					child := filepath.Join(childDir, "rollout-2026-10-02T12-00-00-child.jsonl")
+					writeSourceRecord(t, root, codexSourceMeta("root", `"cli"`))
+					writeSourceRecord(t, child, codexSourceMeta("child", codexSourceParent("root")))
+					binding := filepath.Join(live, rootName)
+					if boundArchived {
+						binding = filepath.Join(archived, rootName)
+					}
+					sources, err := NewCodexUsageSourceResolver(binding).Discover()
+					if err != nil || len(sources) != 2 || sources[0].ID != filepath.Join(live, rootName) || sources[0].Path != root || sources[1].ID != "child" || sources[1].Path != child {
+						t.Fatalf("sources = %+v (%v), want stable live root identity and native child in either location", sources, err)
+					}
+				})
+			}
+		}
 	}
 }
 

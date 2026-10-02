@@ -1,0 +1,3 @@
+kind: fixed
+area: codex
+change: Shared Codex costs follow hidden owners across views and restarts, include available usage before final close, and remain visible in the session ledger.

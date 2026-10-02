@@ -11,6 +11,7 @@ import (
 	"path/filepath"
 	"sort"
 	"strings"
+	"time"
 
 	"github.com/victorarias/attn/internal/sessioncost"
 )
@@ -67,9 +68,20 @@ func (r *claudeUsageSourceResolver) Discover() ([]UsageSource, error) {
 
 func NewCodexUsageSourceResolver(rootPath string) UsageSourceResolver {
 	return &codexUsageSourceResolver{
-		rootPath: filepath.Clean(rootPath),
+		rootPath: codexUsageSourceIdentity(filepath.Clean(rootPath)),
 		cache:    make(map[string]codexUsageCandidate),
 	}
+}
+
+// ResolveCodexRolloutPath follows native archive moves without changing source identity.
+func ResolveCodexRolloutPath(path string) string {
+	path = codexUsageSourceIdentity(filepath.Clean(path))
+	if _, err := os.Stat(path); errors.Is(err, fs.ErrNotExist) {
+		if sessionsDir := codexSessionsRoot(path); sessionsDir != "" {
+			return filepath.Join(filepath.Dir(sessionsDir), "archived_sessions", filepath.Base(path))
+		}
+	}
+	return path
 }
 
 type codexUsageSourceResolver struct {
@@ -86,31 +98,34 @@ type codexUsageCandidate struct {
 }
 
 func (r *codexUsageSourceResolver) Discover() ([]UsageSource, error) {
-	rootMeta, err := r.candidate(r.rootPath)
+	rootPath := ResolveCodexRolloutPath(r.rootPath)
+	sessionsDir := codexSessionsRoot(r.rootPath)
+	rootMeta, err := r.candidate(rootPath)
 	if err != nil {
 		return nil, err
 	}
 	if !rootMeta.complete || rootMeta.id == "" {
-		return []UsageSource{{ID: r.rootPath, Path: r.rootPath, Root: true}}, nil
+		return []UsageSource{{ID: r.rootPath, Path: rootPath, Root: true}}, nil
 	}
-	sessionsDir := codexSessionsRoot(r.rootPath)
 	if sessionsDir == "" {
-		return []UsageSource{{ID: r.rootPath, Path: r.rootPath, Root: true}}, nil
+		return []UsageSource{{ID: r.rootPath, Path: rootPath, Root: true}}, nil
 	}
 
 	paths := make([]string, 0)
-	err = filepath.WalkDir(sessionsDir, func(path string, entry fs.DirEntry, walkErr error) error {
-		if walkErr != nil {
+	for _, dir := range []string{sessionsDir, filepath.Join(filepath.Dir(sessionsDir), "archived_sessions")} {
+		err = filepath.WalkDir(dir, func(path string, entry fs.DirEntry, walkErr error) error {
+			if walkErr != nil {
+				return nil
+			}
+			if entry.IsDir() || filepath.Ext(entry.Name()) != ".jsonl" || path == rootPath {
+				return nil
+			}
+			paths = append(paths, path)
 			return nil
+		})
+		if err != nil {
+			return nil, err
 		}
-		if entry.IsDir() || filepath.Ext(entry.Name()) != ".jsonl" || path == r.rootPath {
-			return nil
-		}
-		paths = append(paths, path)
-		return nil
-	})
-	if err != nil {
-		return nil, err
 	}
 	sort.Strings(paths)
 
@@ -124,7 +139,7 @@ func (r *codexUsageSourceResolver) Discover() ([]UsageSource, error) {
 	}
 
 	lineage := map[string]struct{}{rootMeta.id: {}}
-	sources := []UsageSource{{ID: r.rootPath, Path: r.rootPath, Root: true}}
+	sources := []UsageSource{{ID: r.rootPath, Path: rootPath, Root: true}}
 	remaining := candidates
 	for len(remaining) > 0 {
 		added := false
@@ -230,8 +245,25 @@ func codexSessionsRoot(path string) string {
 		if filepath.Base(dir) == "sessions" {
 			return dir
 		}
+		if filepath.Base(dir) == "archived_sessions" {
+			return filepath.Join(filepath.Dir(dir), "sessions")
+		}
 	}
 	return ""
+}
+
+// Native archive flattens the dated rollout path; unarchive restores its date.
+// Keep the live path as source identity so either location resumes the same cursor.
+func codexUsageSourceIdentity(path string) string {
+	if filepath.Base(filepath.Dir(path)) != "archived_sessions" {
+		return path
+	}
+	stamp, _, _ := strings.Cut(strings.TrimPrefix(filepath.Base(path), "rollout-"), "T")
+	date, err := time.Parse("2006-01-02", stamp)
+	if err != nil {
+		return path
+	}
+	return filepath.Join(filepath.Dir(filepath.Dir(path)), "sessions", date.Format("2006/01/02"), filepath.Base(path))
 }
 
 func NewReportedUsageSourceResolver(rootPath string) UsageSourceResolver {

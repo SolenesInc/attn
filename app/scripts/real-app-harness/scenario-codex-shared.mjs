@@ -107,6 +107,20 @@ try {
     await recordedReply;
     await closePane(observer.sessionsById.get(a).workspace_id, attached.pane_id);
   });
+  await runner.step('owner_usage_agrees_with_live_and_ledger_surfaces', async () => {
+    const owner = await observer.waitFor(() => observer.getSession(a)?.usage?.total_tokens > 0 && observer.getSession(a), 'owner usage after approval');
+    const shown = await request('session_show', 'session_show_result', { session_id: a });
+    runner.assert(JSON.stringify(shown.entry.usage) === JSON.stringify(owner.usage), 'ledger usage differs from live owner', { shown, owner });
+    await client.request('dispatch_shortcut', { shortcutId: 'sessions.open' });
+    await client.request('dom_click', { selector: `.ledger-row[data-row-key="${a}"]` });
+    await client.request('dom_wait', { selector: `.ledger-inspector [data-testid="session-usage-${a}"]`, timeoutMs: observer.connectTimeoutMs });
+    await client.request('dom_click', { selector: `.ledger-inspector [data-testid="session-usage-${a}"]` });
+    await client.request('dom_wait', { selector: '[aria-label="Session usage breakdown"]', timeoutMs: observer.connectTimeoutMs });
+    const detail = await client.request('dom_text', { selector: '[aria-label="Session usage breakdown"]' });
+    runner.assert(detail.text.includes(owner.usage.total_tokens.toLocaleString('en-US') + ' tokens'), 'ledger breakdown omits owner tokens', { detail, owner });
+    await client.request('dom_key', { selector: '[aria-label="Session usage breakdown"]', key: 'Escape' });
+    await client.request('dom_key', { selector: '[aria-label="Sessions and worktrees"]', key: 'Escape' });
+  });
   await runner.step('annotation_editor_keeps_A_when_native_view_switches_to_B', async () => {
     const messages = await request('session_messages_get', 'session_messages_get_result', { session_id: a });
     const message = messages.messages.find(message => message.markdown.includes('approved exo'));

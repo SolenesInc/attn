@@ -25,6 +25,7 @@ import { fullStamp, nameIds, relativeStamp, shortPath, tildePath } from './ledge
 import { formatQuery, matchesDir, matchesWords, parseQuery, removeToken } from './ledgerQuery';
 import { Field, Inspector, LedgerList, QueryBar, Segmented, useCopied } from './LedgerPrimitives';
 import type { Chip, ListItem, RowGlyph, RowModel, RowNote, RowVerb } from './LedgerPrimitives';
+import { HeaderSessionUsage } from '../SessionTerminalWorkspace/SessionUsage';
 
 export interface SessionSeedLink {
   id: string;
@@ -445,6 +446,13 @@ function SessionInspector({
           </div>
         )}
       </Field>
+      {entry.usage && (
+        <Field label="Usage">
+          {entry.usage.total_tokens.toLocaleString('en-US')} tokens{' '}
+          <HeaderSessionUsage usage={entry.usage} sessionId={entry.id} pinned={false} onPopoverClosed={() => {}} />
+          {entry.usage.measurement_incomplete && <div className="ledger-muted">Measurement incomplete; native usage may be missing.</div>}
+        </Field>
+      )}
       {seed && (
         <Field label="Seed">
           <button type="button" className="ledger-link" onClick={() => onVerb('seed')}>{seed.title}</button>

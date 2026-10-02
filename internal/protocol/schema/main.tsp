@@ -6556,6 +6556,7 @@ model SessionTranscriptResult {
 // A session as the ledger holds it. Distinct from Session, which is the live
 // broadcast shape: this one outlives the runtime and carries how it ended.
 model SessionLedgerEntry {
+  usage?: SessionUsage;
   codex_mode?: string;
   id: string;
   conversation_pinned_at?: string;

@@ -309,7 +309,7 @@ export interface RateLimitState {
 }
 
 // Protocol version - must match daemon's ProtocolVersion
-export const PROTOCOL_VERSION = '327';
+export const PROTOCOL_VERSION = '328';
 const MAX_PENDING_ATTACH_OUTPUTS = 512;
 
 const CLIENT_INSTANCE_ID =
@@ -2290,6 +2290,7 @@ export function useDaemonSocket({
 
           case 'session_registered':
             if (data.session) {
+              emitSessionLedger({ type: 'live', session: data.session });
               sessionsRef.current = upsertSessionByID(sessionsRef.current, data.session);
               callbacksRef.current.onSessionsUpdate(sessionsRef.current);
             }
@@ -2326,6 +2327,7 @@ export function useDaemonSocket({
 
           case 'session_state_changed':
             if (data.session) {
+              emitSessionLedger({ type: 'live', session: data.session });
               sessionsRef.current = upsertSessionByID(sessionsRef.current, data.session);
               callbacksRef.current.onSessionsUpdate(sessionsRef.current);
             }

@@ -317,11 +317,21 @@ func (r *codexRuntime) noteServerExit(info ptybackend.ExitInfo) {
 		}
 		for _, owner := range owners {
 			if !owner.Archived {
+				r.d.markSharedCodexUsageIncomplete(owner.SessionID)
 				r.d.updateEvidence(owner.SessionID, nil, func(e *sessionstate.Evidence) { e.NativeRoot = nil })
 				r.d.applyState(sessionStateChange{sessionID: owner.SessionID, state: string(protocol.SessionStateRecoverable), cause: startupRecovery{}, origin: stateOrigin{source: "codex", detail: "native server exited; interrupted input is not replayed"}})
 			}
 		}
 	})
+}
+
+func (d *Daemon) markSharedCodexUsageIncomplete(id string) {
+	changed, err := d.store.MarkSessionCostMeasurementIncomplete(id)
+	if err != nil {
+		d.logf("shared Codex usage completeness %s: %v", id, err)
+	} else if changed {
+		d.publishFact(FactSessionCostChanged, id, nil)
+	}
 }
 func (r *codexRuntime) hasRuntime(id string) bool {
 	r.viewsMu.RLock()

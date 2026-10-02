@@ -14,6 +14,7 @@ import (
 	attngit "github.com/victorarias/attn/internal/git"
 	"github.com/victorarias/attn/internal/protocol"
 	"github.com/victorarias/attn/internal/store"
+	"github.com/victorarias/attn/internal/transcript"
 )
 
 const (
@@ -183,6 +184,13 @@ func (d *Daemon) decideReopenPlace(
 	gitView reopenGit,
 ) error {
 	conversation, conversationReason := d.reopenConversation(verdict.Execution, verdict.DirectoryState == directoryMissing)
+	if !conversation && d.sharedCodexOwner(verdict.SessionID) {
+		binding := d.store.GetSessionConversation(verdict.SessionID)
+		if binding.TranscriptPath != "" {
+			_, err := os.Stat(transcript.ResolveCodexRolloutPath(binding.TranscriptPath))
+			conversation = err == nil
+		}
+	}
 	if !hasLaunchIntent {
 		conversation = false
 		conversationReason = fmt.Sprintf("session %s has no saved launch contract, so its exact agent configuration cannot be restored", verdict.SessionID)

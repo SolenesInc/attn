@@ -519,7 +519,13 @@ func (d *Daemon) commitSpawn(req *spawnRequest, plan *spawnPlan) *spawnOutcome {
 	d.reviveCrashedTicketsForSession(session.ID)
 	d.store.SetSessionLaunchedAt(session.ID, req.spawnStartedAt)
 	if !req.isShell {
-		d.startTranscriptWatcher(session.ID, session.Agent, session.Directory, req.spawnStartedAt)
+		if d.sharedCodexOwner(session.ID) {
+			if binding := d.store.GetSessionConversation(session.ID); binding.TranscriptPath != "" {
+				d.ensureTranscriptWatcherAtPath(session.ID, binding.TranscriptPath)
+			}
+		} else {
+			d.startTranscriptWatcher(session.ID, session.Agent, session.Directory, req.spawnStartedAt)
+		}
 	}
 	if pending, ok := d.consumePendingAgentConversation(session.ID); ok {
 		d.observeAgentConversation(pending)
