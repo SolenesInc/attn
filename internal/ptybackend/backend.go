@@ -157,8 +157,10 @@ type SessionInfo struct {
 	Running bool
 	State   string
 
-	LastSignal    pty.Observation
-	HasLastSignal bool
+	RawTitle         string
+	TitleObservation pty.Observation
+	LastSignal       pty.Observation
+	HasLastSignal    bool
 
 	Cols    uint16
 	Rows    uint16

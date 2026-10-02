@@ -61,6 +61,7 @@ export function leafSlotId(node: TerminalLeaf): string {
 }
 
 export interface AgentTerminal {
+  codexResolution?: "resolved" | "unresolved" | "disconnected";
   id: string;
   runtimeId: string;
   sessionId: string;
@@ -470,13 +471,14 @@ export function localWorkspaceDirectory(
 
 function agentTerminalsFromPanes(panes: PaneElement[]): AgentTerminal[] {
   return panes
-    .filter((pane) => pane.kind === 'agent' && typeof pane.runtime_id === 'string' && typeof pane.session_id === 'string')
+    .filter((pane) => pane.kind === 'agent' && typeof pane.runtime_id === 'string' && (typeof pane.session_id === 'string' || pane.codex_resolution))
     .map((pane) => {
       const status = pane.status && pane.status !== 'ready' ? pane.status : undefined;
       return {
         id: pane.pane_id,
         runtimeId: pane.runtime_id as string,
-        sessionId: pane.session_id as string,
+        sessionId: pane.session_id as string || '',
+        codexResolution: pane.codex_resolution as AgentTerminal['codexResolution'],
         title: pane.title || pane.pane_id,
         ...(status ? { status } : {}),
         ...(pane.error ? { error: pane.error } : {}),

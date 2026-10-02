@@ -17,7 +17,7 @@ const codexBusyGlyph = "⠋ "
 var codexComposer = composer{prompt: "› "}
 
 var codexFlags = flagSpec{
-	values: map[string]bool{"-c": true, "-C": true, "--cd": true, "--add-dir": true, "--model": true, "-m": true},
+	values: map[string]bool{"-c": true, "-C": true, "--cd": true, "--add-dir": true, "--model": true, "-m": true, "--remote": true},
 }
 
 type codex struct {
@@ -44,6 +44,12 @@ var codexExecFlags = flagSpec{
 }
 
 func runCodex(cfg config) int {
+	if len(os.Args) > 1 && os.Args[1] == "app-server" {
+		return runSharedCodexServer(cfg)
+	}
+	if codexFlags.parse(os.Args[1:]).value("--remote") != "" {
+		return runSharedCodexView(cfg)
+	}
 	if len(os.Args) > 1 && os.Args[1] == "exec" {
 		return codexExec(codexExecFlags.parse(os.Args[2:])).serve(cfg)
 	}

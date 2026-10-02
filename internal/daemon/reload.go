@@ -142,6 +142,12 @@ func (d *Daemon) reloadSessionAgent(sessionID string) {
 		d.logf("reload: agent %q for session %s has no chief-guidance launch path; skipping", agent, sessionID)
 		return
 	}
+	if d.sharedCodexOwner(sessionID) {
+		if err := d.codexRuntime().reconfigureOwner(sessionID); err != nil {
+			d.logf("reload shared Codex owner %s: %v", sessionID, err)
+		}
+		return
+	}
 	if !d.sessionHasLiveWorker(sessionID) {
 		d.logf("reload: session %s has no live worker; skipping", sessionID)
 		return
@@ -179,6 +185,9 @@ func (d *Daemon) reloadSessionForClient(sessionID string, cols, rows int) error 
 		return errors.New("session not found")
 	}
 
+	if d.sharedCodexOwner(sessionID) {
+		return d.codexRuntime().reconfigureOwner(sessionID)
+	}
 	if d.sessionHasLiveWorker(sessionID) {
 		opts, err := d.buildReloadSpawnOptions(session)
 		if err != nil {

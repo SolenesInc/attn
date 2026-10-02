@@ -70,9 +70,9 @@ func (s *Store) SaveWorkspaceLayout(snapshot workspacelayout.WorkspaceLayout) er
 			status = string(workspacelayout.PaneStatusReady)
 		}
 		if _, err := tx.Exec(`
-			INSERT INTO workspace_layout_panes (workspace_id, pane_id, runtime_id, session_id, kind, title, status, error, created_at, updated_at)
-			VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-		`, snapshot.WorkspaceID, pane.PaneID, pane.RuntimeID, nilIfEmpty(pane.SessionID), pane.Kind, pane.Title, status, pane.Error, createdAt, now); err != nil {
+			INSERT INTO workspace_layout_panes (workspace_id, pane_id, runtime_id, session_id, kind, title, status, error, created_at, updated_at, codex_resolution, codex_revision)
+			VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+		`, snapshot.WorkspaceID, pane.PaneID, pane.RuntimeID, nilIfEmpty(pane.SessionID), pane.Kind, pane.Title, status, pane.Error, createdAt, now, pane.CodexResolution, pane.CodexRevision); err != nil {
 			return err
 		}
 	}
@@ -112,10 +112,15 @@ func (s *Store) GetWorkspaceLayout(workspaceID string) *workspacelayout.Workspac
 	}
 
 	rows, err := s.db.Query(`
-		SELECT pane_id, runtime_id, session_id, kind, title, status, error
-		FROM workspace_layout_panes
-		WHERE workspace_id = ?
-		ORDER BY created_at ASC, pane_id ASC
+		SELECT p.pane_id, p.runtime_id,
+ CASE WHEN v.runtime_id IS NOT NULL THEN v.session_id ELSE p.session_id END,
+ p.kind, p.title, p.status, p.error,
+ CASE WHEN v.runtime_id IS NOT NULL THEN v.resolution ELSE p.codex_resolution END,
+ CASE WHEN v.runtime_id IS NOT NULL THEN v.revision ELSE p.codex_revision END
+ FROM workspace_layout_panes p
+ LEFT JOIN codex_views v ON v.runtime_id=p.runtime_id
+ WHERE p.workspace_id = ?
+ ORDER BY p.created_at ASC, p.pane_id ASC
 	`, workspaceID)
 	if err != nil {
 		return nil
@@ -131,7 +136,7 @@ func (s *Store) GetWorkspaceLayout(workspaceID string) *workspacelayout.Workspac
 	for rows.Next() {
 		var pane workspacelayout.Pane
 		var sessionID sql.NullString
-		if err := rows.Scan(&pane.PaneID, &pane.RuntimeID, &sessionID, &pane.Kind, &pane.Title, &pane.Status, &pane.Error); err != nil {
+		if err := rows.Scan(&pane.PaneID, &pane.RuntimeID, &sessionID, &pane.Kind, &pane.Title, &pane.Status, &pane.Error, &pane.CodexResolution, &pane.CodexRevision); err != nil {
 			log.Printf("[store] GetWorkspaceLayout: failed to scan pane for workspace %s: %v", workspaceID, err)
 			continue
 		}
@@ -177,10 +182,11 @@ func (s *Store) FindWorkspaceLayoutPaneBySessionID(sessionID string) (workspaceI
 
 	var rowWorkspaceID, rowPaneID string
 	err := s.db.QueryRow(`
-		SELECT workspace_id, pane_id
-		FROM workspace_layout_panes
-		WHERE session_id = ?
-	`, sessionID).Scan(&rowWorkspaceID, &rowPaneID)
+		SELECT p.workspace_id, p.pane_id
+ FROM workspace_layout_panes p
+ LEFT JOIN codex_views v ON v.runtime_id=p.runtime_id
+ WHERE (CASE WHEN v.runtime_id IS NOT NULL THEN v.session_id ELSE p.session_id END) = ? OR p.runtime_id = ?
+	`, sessionID, sessionID).Scan(&rowWorkspaceID, &rowPaneID)
 	if err != nil {
 		if err != sql.ErrNoRows {
 			log.Printf("[store] FindWorkspaceLayoutPaneBySessionID: query failed for session %s: %v", sessionID, err)

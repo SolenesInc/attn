@@ -66,6 +66,13 @@ func (d *Daemon) consumePendingAgentConversation(sessionID string) (agentConvers
 }
 
 func (d *Daemon) observeAgentConversation(observation agentConversationObservation) {
+	if d.sharedCodexOwner(observation.SessionID) {
+		if err := d.store.BindCodexRoot(observation.SessionID, observation.NativeID); err != nil {
+			d.logf("Codex hook bind %s: %v", observation.SessionID, err)
+			return
+		}
+		d.life.Go("codexReconcileTitles", func() { d.codexRuntime().reconcileTitles() })
+	}
 	d.applyAgentConversation(observation, d.store.TransitionSessionConversation)
 }
 

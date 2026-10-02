@@ -113,6 +113,9 @@ func (s *Store) CloseSession(id string, closed SessionClose, now time.Time) (boo
 	if affected != 1 {
 		return false, nil
 	}
+	if _, err := tx.Exec("UPDATE codex_owners SET archived = 1 WHERE session_id = ?", id); err != nil {
+		return false, fmt.Errorf("archive closed Codex owner %s: %w", id, err)
+	}
 	if err := s.saveUnsavedSessionCostTx(tx, id); err != nil {
 		return false, fmt.Errorf("close session %s: %w", id, err)
 	}

@@ -329,6 +329,13 @@ func (m *Manager) start(session *Session, lifecycleID string) {
 	m.mu.Unlock()
 
 	session.harnessSignals = newHarnessSignalObserver(agentHarnessSignals(session.agent))
+	if session.harnessSignals != nil {
+		session.harnessSignals.onTitle = func(title string, at time.Time) {
+			obs := newObservation(SourceTitle, "title", title, at)
+			obs.Generation = lifecycleID
+			session.emitSignal(obs)
+		}
+	}
 	isShellPane := session.agent == "shell"
 	if (session.harnessSignals != nil || isShellPane) && onState != nil {
 		id := session.id
@@ -470,6 +477,14 @@ func (m *Manager) SessionInfo(sessionID string) (SessionInfo, error) {
 	}
 
 	return session.sessionInfo(), nil
+}
+
+func (m *Manager) LastTitle(sessionID string) (Observation, bool) {
+	session, err := m.getSession(sessionID)
+	if err != nil {
+		return Observation{}, false
+	}
+	return session.LastTitle()
 }
 
 func (m *Manager) LastSignal(sessionID string) (Observation, bool) {

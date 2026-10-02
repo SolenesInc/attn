@@ -23,6 +23,7 @@ type world struct {
 	ws          net.Listener
 	daemon      *daemon.WireDaemon
 	terms       *testworld.Terminals
+	backend     ptybackend.Backend
 	gardenClock func() time.Time
 }
 
@@ -62,7 +63,7 @@ func prepareWorld(t *testing.T, agents ...fakeagent.Harness) *testworld.World {
 func (w *world) start() {
 	w.T.Helper()
 	w.listen()
-	var terminals ptybackend.Backend
+	terminals := w.backend
 	if w.terms != nil {
 		terminals = w.terms
 	}

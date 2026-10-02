@@ -1,4 +1,4 @@
-import type { SessionStore } from './sessions';
+import type { Session, SessionStore } from './sessions';
 import type { AgentHistoryDirection } from '../navigation/agentHistory';
 import {
   activateSession,
@@ -47,6 +47,14 @@ type SetState = (
   update: Partial<SessionStore> | ((state: SessionStore) => Partial<SessionStore>),
 ) => void;
 
+function workspaceSessions(state: SessionStore): Session[] {
+  const placements = Object.entries(state.daemonWorkspaceLayouts).flatMap(([workspaceId, snapshot]) => {
+    const owner = state.sessions.find(session => snapshot.workspace.agents.some(pane => pane.sessionId === session.id)) ?? state.sessions[0];
+    return owner ? [{ ...owner, workspaceId, ...snapshot }] : [];
+  });
+  return [...placements, ...state.sessions.filter(session => !state.daemonWorkspaceLayouts[session.workspaceId])];
+}
+
 export function reconcileSessionNavigation(
   state: SessionStore,
   update: Partial<SessionStore>,
@@ -54,7 +62,7 @@ export function reconcileSessionNavigation(
   const next = { ...state, ...update };
   next.workspacePaneSelections = reconcileWorkspacePanes(
     state.workspacePaneSelections,
-    next.sessions,
+    workspaceSessions(next),
   );
   if (next.activeSessionId !== state.activeSessionId && next.activeSessionId) {
     next.focusRequest = null;
@@ -62,6 +70,12 @@ export function reconcileSessionNavigation(
       next.view = 'session';
       next.followNextTurn = false;
     }
+  }
+  if (next.selectedWorkspacePane) {
+    const { workspaceId, paneId } = next.selectedWorkspacePane;
+    const pane = next.daemonWorkspaceLayouts[workspaceId]?.workspace.agents.find(entry => entry.id === paneId);
+    if (pane) next.activeSessionId = pane.sessionId || null;
+    else next.selectedWorkspacePane = null;
   }
   next.navigationQueue = navigationQueue(
     next.navigationSessions,
@@ -113,6 +127,7 @@ export function createSessionNavigationActions(
       set((state) => ({
         ...changeView(state, 'session'),
         selectedSessionlessWorkspaceId: id,
+        selectedWorkspacePane: null,
         selectedTile: null,
         utilityFocusRequestToken: state.utilityFocusRequestToken + 1,
       })),

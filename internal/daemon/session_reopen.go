@@ -368,6 +368,7 @@ func reopenBranchWarning(ctx context.Context, gitView reopenGit, execution garde
 }
 
 type sessionReopenOutcome struct {
+	PaneID          string
 	SessionID       string
 	WorkspaceID     string
 	Directory       string
@@ -392,6 +393,16 @@ func (d *Daemon) reopenSessionProtected(
 	protection foregroundCleanupProtection, sessionID string, action protocol.SessionReopenAction, directory string,
 ) (*sessionReopenOutcome, error) {
 	sessionID = strings.TrimSpace(sessionID)
+	if d.sharedCodexOwner(sessionID) {
+		switch action {
+		case "", protocol.SessionReopenActionReopen:
+			return d.codexRuntime().attachOwner(sessionID, "")
+		case protocol.SessionReopenActionRecreateWorktreeAndReopen,
+			protocol.SessionReopenActionFetchRecreateAndReopen:
+		default:
+			return nil, fmt.Errorf("shared Codex history reopens with reopen; native New and fork create new owners")
+		}
+	}
 	if sessionID == "" {
 		return nil, fmt.Errorf("session_id is required")
 	}
@@ -494,6 +505,16 @@ func (d *Daemon) performReopenLocked(
 		return nil, fmt.Errorf("%q is not a reopen action", action)
 	}
 
+	if d.sharedCodexOwner(plan.SessionID) {
+		outcome, err := d.codexRuntime().attachOwner(plan.SessionID, plan.Directory)
+		if err != nil {
+			return nil, rollback.fail(protection, err)
+		}
+		rollback.abandon()
+		outcome.Action = action
+		outcome.WorktreeCreated = created
+		return outcome, nil
+	}
 	if created != "" && !plan.FreshConversation {
 		execution := verdict.Execution
 		execution.Cwd = plan.Directory
@@ -891,6 +912,9 @@ func sessionReopenResult(outcome *sessionReopenOutcome) *protocol.SessionReopenR
 		WorkspaceID: outcome.WorkspaceID,
 		Directory:   outcome.Directory,
 		Action:      outcome.Action,
+	}
+	if outcome.PaneID != "" {
+		result.PaneID = protocol.Ptr(outcome.PaneID)
 	}
 	if outcome.AlreadyRunning {
 		result.AlreadyRunning = protocol.Ptr(true)

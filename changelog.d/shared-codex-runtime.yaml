@@ -1,0 +1,3 @@
+kind: added
+area: codex
+change: Opt into a shared native Codex runtime, switch agents without replacing terminals, and open another view from the session ledger.

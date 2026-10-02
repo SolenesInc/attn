@@ -83,6 +83,9 @@ type spawnOutcome struct {
 }
 
 func (plan *spawnPlan) rollback(d *Daemon, sessionID string) {
+	if d.codex != nil {
+		d.codex.rollbackLaunch(sessionID)
+	}
 	if plan.cleanupInitialPromptOnReturn {
 		plan.cleanupInitialPrompt()
 	}
@@ -364,7 +367,28 @@ func (d *Daemon) executeSpawn(req *spawnRequest, plan *spawnPlan) *spawnOutcome 
 	if req.autoModeDriver {
 		intent.ApprovalPolicy, intent.SandboxMode = effectiveSpawnPolicyPair(msg)
 	}
+	if req.agent == "codex" {
+		if plan.hadPriorIntent {
+			intent.CodexMode = plan.priorIntent.CodexMode
+		} else if parseBooleanSetting(d.store.GetSetting(SettingCodexSharedEnabled)) {
+			intent.CodexMode = "shared"
+		} else {
+			intent.CodexMode = "legacy"
+		}
+	}
 	d.store.SetLaunchIntent(session.ID, intent)
+	if intent.CodexMode == "shared" {
+		if req.existingSession == nil {
+			if err := d.store.InitializeSessionCostTracking(session.ID); err != nil {
+				plan.rollback(d, msg.ID)
+				return &spawnOutcome{err: err}
+			}
+		}
+		if err := d.codexRuntime().prepareLaunch(&plan.spawnOpts, session); err != nil {
+			plan.rollback(d, msg.ID)
+			return &spawnOutcome{err: err}
+		}
+	}
 	d.rememberSessionTitleInitialPrompt(msg.ID, req.initialPrompt)
 	priorExit := d.store.GetSessionExitScreen(msg.ID)
 	if err := d.store.DeleteSessionExitScreen(msg.ID); err != nil {

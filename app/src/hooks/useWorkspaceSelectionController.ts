@@ -33,7 +33,7 @@ export function buildWorkspaceSelectionState<TSession extends WorkspaceViewSessi
     ? sessionWorkspaceById.get(activeSessionId) ?? null
     : null;
   const selectedSessionlessWorkspaceId = selectedWorkspaceId
-    && workspaces.some((workspace) => workspace.id === selectedWorkspaceId && workspace.sessions.length === 0)
+    && workspaces.some((workspace) => workspace.id === selectedWorkspaceId)
     ? selectedWorkspaceId
     : null;
   const activeWorkspaceId = selectedSessionlessWorkspaceId ?? sessionDerivedWorkspaceId;

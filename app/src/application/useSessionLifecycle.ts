@@ -84,18 +84,23 @@ export function useSessionLifecycle({
 
   const handleClosePane = useCallback(
     (sessionId: string, paneId: string, workspaceIdHint?: string) => {
-      const closeProtection = sessionCloseProtectionHint(daemonSessions, sessionId);
+      const state = useSessionStore.getState();
+      const panes = Object.values(state.daemonWorkspaceLayouts).flatMap(snapshot => snapshot.workspace.agents);
+      const requestedPane = panes.find(pane => pane.id === paneId);
+      const extraSharedView = requestedPane?.codexResolution === 'resolved' &&
+        panes.filter(pane => pane.codexResolution === 'resolved' && pane.sessionId === sessionId).length > 1;
+      const closeProtection = extraSharedView ? null : sessionCloseProtectionHint(daemonSessions, sessionId);
       if (closeProtection) {
         showError(closeProtection);
         return Promise.resolve();
       }
-      const session = enrichedLocalSessions.find((entry) => entry.id === sessionId);
-      const fallbackPaneId = prepareClosePaneFocus(sessionId, paneId);
-      const fallbackSessionId = session?.workspace.agents.find(
-        (pane) => pane.id === fallbackPaneId && pane.id !== paneId,
-      )?.sessionId;
-      const workspaceId =
-        sessions.find((session) => session.id === sessionId)?.workspaceId ?? workspaceIdHint;
+      const workspaceId = workspaceIdHint ?? Object.entries(state.daemonWorkspaceLayouts).find(([, snapshot]) => snapshot.workspace.agents.some(pane => pane.id === paneId))?.[0] ?? sessions.find(session => session.id === sessionId)?.workspaceId;
+      const workspace = workspaceId ? state.daemonWorkspaceLayouts[workspaceId]?.workspace : undefined;
+      const ownerWorkspaceId = sessions.find(session => session.id === sessionId)?.workspaceId;
+      const fallbackPaneId = workspaceId === ownerWorkspaceId
+        ? prepareClosePaneFocus(sessionId, paneId)
+        : workspace?.agents.find(pane => pane.id !== paneId)?.id ?? '';
+      const fallbackSessionId = workspace?.agents.find(pane => pane.id === fallbackPaneId)?.sessionId;
       if (!workspaceId) {
         return Promise.reject(
           new Error(`Cannot close pane ${paneId}: session ${sessionId} has no workspace`),
@@ -184,11 +189,12 @@ export function useSessionLifecycle({
         directory = chosen;
       }
       const result = await sendSessionReopen(sessionId, actionId, directory);
-      handleSelectSession(result.session_id);
+      if (result.pane_id) selectAgentPane(result.session_id, result.pane_id);
+      else handleSelectSession(result.session_id);
       onReopened();
       return true;
     },
-    [sendSessionReopen, chooseReopenDirectory, onReopened, handleSelectSession],
+    [sendSessionReopen, chooseReopenDirectory, onReopened, handleSelectSession, selectAgentPane],
   );
 
   const handleCloseCurrentSessionShortcut = useCallback(() => {
@@ -204,6 +210,16 @@ export function useSessionLifecycle({
     if (isTile && activeWorkspaceId) {
       handleCloseTile(activeWorkspaceId, tileId);
       return;
+    }
+
+    const state = useSessionStore.getState();
+    if (state.selectedWorkspacePane) {
+      const { workspaceId, paneId } = state.selectedWorkspacePane;
+      const pane = state.daemonWorkspaceLayouts[workspaceId]?.workspace.agents.find(entry => entry.id === paneId);
+      if (pane) {
+        void handleClosePane(pane.sessionId, paneId, workspaceId);
+        return;
+      }
     }
 
     if (!activeSessionId) {

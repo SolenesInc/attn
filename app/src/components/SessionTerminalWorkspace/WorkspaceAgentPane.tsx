@@ -27,7 +27,8 @@ export function WorkspaceAgentPane({
   } = useWorkspaceContext();
 
   const paneSession = sessionById.get(agentPane.sessionId);
-  const paneTitle = paneSession?.label || agentPane.title || 'Session';
+  const paneTitle = agentPane.codexResolution && agentPane.codexResolution !== 'resolved'
+    ? (agentPane.codexResolution === 'disconnected' ? 'Codex (disconnected)' : 'Codex (resolving agent)') : paneSession?.label || agentPane.title || 'Session';
   if (suspendedLeafIds.has(agentPane.id) && !effectivePaneId) {
     return (
       <SuspendedWorkspacePane

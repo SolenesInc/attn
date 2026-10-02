@@ -698,7 +698,9 @@ function runLineServer(answerLine) {
 }
 
 if (process.argv[1] && path.resolve(process.argv[1]) === executablePath) {
-  if (process.argv[2] === 'app-server') runLineServer(answerAppServerLine);
+  if (process.argv[2] === 'app-server' && process.argv.includes('--listen')) import('./mockCodexShared.mjs').then(module => module.runSharedMockServer());
+  else if (process.argv.includes('--remote')) import('./mockCodexShared.mjs').then(module => module.runSharedMockView()).catch(error => { console.error(error); process.exitCode = 1; });
+  else if (process.argv[2] === 'app-server') runLineServer(answerAppServerLine);
   else if (isStreamJsonDiscovery(process.argv.slice(2))) runLineServer(answerStreamJsonLine);
   else runMockAgent().catch((error) => {
     console.error(`mock agent failed: ${error instanceof Error ? error.message : String(error)}`);

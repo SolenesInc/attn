@@ -33,6 +33,7 @@ export interface WorkspaceViewWorkspace {
       session_id?: string;
       kind?: string;
       status?: string;
+      codex_resolution?: string;
     }>;
   };
 }
@@ -99,11 +100,13 @@ function workspaceKey(workspaceId: string, endpointId?: string): string {
 export function buildWorkspaceViewModels<TSession extends WorkspaceViewSession>(
   workspaces: WorkspaceViewWorkspace[],
   sessions: TSession[],
+  allSessions: TSession[] = sessions,
 ): WorkspaceWithSessions<TSession>[] {
   const sessionsByWorkspace = new Map<string, TSession[]>();
   const sessionKeysByWorkspaceId = new Map<string, string[]>();
   const workspaceIdBySessionId = workspaceIdsBySessionId(workspaces);
-  const liveSessionIds = new Set(sessions.map((session) => session.id));
+  const liveSessionIds = new Set(allSessions.map((session) => session.id));
+  const sessionById = new Map(allSessions.map((session) => [session.id, session]));
 
   for (const session of sessions) {
     const workspaceId = sessionWorkspaceId(session, workspaceIdBySessionId);
@@ -131,7 +134,7 @@ export function buildWorkspaceViewModels<TSession extends WorkspaceViewSession>(
     const key = resolveWorkspaceSessionKey(workspace, sessionKeysByWorkspaceId, consumed);
     const workspaceSessions = sessionsByWorkspace.get(key) || [];
     consumed.add(key);
-    result.push(toWorkspaceViewModel(workspace, workspaceSessions, liveSessionIds));
+    result.push(toWorkspaceViewModel(workspace, workspaceSessions, liveSessionIds, sessionById));
   }
 
   return result;
@@ -176,8 +179,14 @@ function toWorkspaceViewModel<TSession extends WorkspaceViewSession>(
   workspace: WorkspaceViewWorkspace,
   sessions: TSession[],
   liveSessionIds: ReadonlySet<string>,
+  sessionById: ReadonlyMap<string, TSession>,
 ): WorkspaceWithSessions<TSession> {
-  const children = workspaceChildren(workspace, sessions);
+  const presentationById = new Map(sessions.map(session => [session.id, session]));
+  for (const pane of workspace.layout?.panes ?? []) {
+    const owner = pane.codex_resolution && pane.session_id ? sessionById.get(pane.session_id) : undefined;
+    if (owner) presentationById.set(owner.id, owner);
+  }
+  const children = workspaceChildren(workspace, sessions, presentationById);
   const firstSessionId = children.find((child) => child.kind === 'session')?.session.id ?? null;
   const layoutPaneIds = new Set(
     collectLayoutLeaves(parseLayoutJSON(workspace.layout?.layout_json || ''))
@@ -186,9 +195,9 @@ function toWorkspaceViewModel<TSession extends WorkspaceViewSession>(
   );
   const hasUnresolvedAgentPanes = (workspace.layout?.panes || []).some((pane) => (
     pane.kind !== 'tile'
-    && (pane.status === 'spawning' || pane.status === 'failed')
+    && (Boolean(pane.codex_resolution) || pane.status === 'spawning' || pane.status === 'failed')
     && Boolean(pane.pane_id && layoutPaneIds.has(pane.pane_id))
-    && Boolean(pane.session_id && !liveSessionIds.has(pane.session_id))
+    && (!pane.session_id || !liveSessionIds.has(pane.session_id))
   ));
 
   return {
@@ -200,7 +209,7 @@ function toWorkspaceViewModel<TSession extends WorkspaceViewSession>(
     pinned: workspace.pinned ?? false,
     rank: workspace.rank,
     endpointId: workspaceEndpointId(workspace) || (sessions[0] ? sessionEndpointId(sessions[0]) : undefined),
-    sessions,
+    sessions: [...presentationById.values()],
     children,
     firstSessionId,
     hasUnresolvedAgentPanes,
@@ -210,8 +219,8 @@ function toWorkspaceViewModel<TSession extends WorkspaceViewSession>(
 function workspaceChildren<TSession extends WorkspaceViewSession>(
   workspace: WorkspaceViewWorkspace,
   sessions: TSession[],
+  sessionById: ReadonlyMap<string, TSession>,
 ): WorkspaceChild<TSession>[] {
-  const sessionById = new Map(sessions.map((session) => [session.id, session]));
   const sessionIdByPaneId = new Map(
     (workspace.layout?.panes || [])
       .filter((pane): pane is { pane_id: string; session_id: string } => Boolean(pane.pane_id && pane.session_id))
@@ -256,6 +265,7 @@ export function filterSessionsRepresentedInWorkspaceLayouts<TSession extends Wor
   }
 
   const sessionIdsByWorkspaceId = new Map<string, Set<string>>();
+  const sharedViewOwnerIds = new Set<string>();
   for (const workspace of workspaces) {
     if (!workspace.layout) {
       continue;
@@ -264,6 +274,7 @@ export function filterSessionsRepresentedInWorkspaceLayouts<TSession extends Wor
     for (const pane of workspace.layout.panes || []) {
       if (pane.session_id) {
         sessionIds.add(pane.session_id);
+        if (pane.codex_resolution) sharedViewOwnerIds.add(pane.session_id);
       }
     }
     sessionIdsByWorkspaceId.set(workspace.id, sessionIds);
@@ -275,7 +286,7 @@ export function filterSessionsRepresentedInWorkspaceLayouts<TSession extends Wor
       return false;
     }
     if (!workspaceIdsWithLayout.has(workspaceId)) {
-      return true;
+      return !sharedViewOwnerIds.has(session.id);
     }
     return sessionIdsByWorkspaceId.get(workspaceId)?.has(session.id) ?? false;
   });

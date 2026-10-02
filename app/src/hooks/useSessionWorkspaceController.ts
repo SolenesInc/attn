@@ -51,7 +51,7 @@ export function useSessionWorkspaceController(
   const focusedRequest = useRef<typeof focusRequest>(null);
   useEffect(() => {
     if (!focusRequest || focusedRequest.current === focusRequest) return;
-    const workspaceId = sessions.find(session => session.id === focusRequest.sessionId)?.workspaceId;
+    const workspaceId = focusRequest.workspaceId ?? sessions.find(session => session.id === focusRequest.sessionId)?.workspaceId;
     const workspace = workspaceId ? workspaceRefs.current.get(workspaceId) : undefined;
     if (!workspace) return;
     focusedRequest.current = focusRequest;
@@ -72,8 +72,10 @@ export function useSessionWorkspaceController(
     getActivePaneIdForSession,
   });
 
-  const workspaceIdForSession = useCallback((sessionId: string) => {
-    return sessions.find((entry) => entry.id === sessionId)?.workspaceId ?? null;
+  const workspaceIdForSession = useCallback((sessionId: string, paneId?: string) => {
+    const layouts = useSessionStore.getState().daemonWorkspaceLayouts;
+    const placement = paneId ? Object.entries(layouts).find(([, snapshot]) => snapshot.workspace.agents.some(pane => pane.id === paneId)) : null;
+    return placement?.[0] ?? sessions.find((entry) => entry.id === sessionId)?.workspaceId ?? null;
   }, [sessions]);
 
   const setWorkspaceRef = useCallback(
@@ -105,23 +107,23 @@ export function useSessionWorkspaceController(
   }, [prepareClosePaneFocusForSession, sessions]);
 
   const focusSessionPane = useCallback((sessionId: string, paneId: string, retries = 20) => {
-    const workspaceId = workspaceIdForSession(sessionId);
+    const workspaceId = workspaceIdForSession(sessionId, paneId);
     if (!workspaceId) return;
     workspaceRefs.current.get(workspaceId)?.focusPane(paneId, retries);
   }, [workspaceIdForSession]);
 
   const typeInSessionPaneViaUI = useCallback((sessionId: string, paneId: string, text: string) => {
-    const workspaceId = workspaceIdForSession(sessionId);
+    const workspaceId = workspaceIdForSession(sessionId, paneId);
     return workspaceId ? workspaceRefs.current.get(workspaceId)?.typePaneTextViaUI(paneId, text) || false : false;
   }, [workspaceIdForSession]);
 
   const isSessionPaneInputFocused = useCallback((sessionId: string, paneId: string) => {
-    const workspaceId = workspaceIdForSession(sessionId);
+    const workspaceId = workspaceIdForSession(sessionId, paneId);
     return workspaceId ? workspaceRefs.current.get(workspaceId)?.isPaneInputFocused(paneId) || false : false;
   }, [workspaceIdForSession]);
 
   const scrollSessionPaneToTop = useCallback((sessionId: string, paneId: string) => {
-    const workspaceId = workspaceIdForSession(sessionId);
+    const workspaceId = workspaceIdForSession(sessionId, paneId);
     return workspaceId ? workspaceRefs.current.get(workspaceId)?.scrollPaneToTop(paneId) || false : false;
   }, [workspaceIdForSession]);
 
@@ -132,54 +134,54 @@ export function useSessionWorkspaceController(
   }, [workspaceIdForSession]);
 
   const getPaneText = useCallback((sessionId: string, paneId: string) => {
-    const workspaceId = workspaceIdForSession(sessionId);
+    const workspaceId = workspaceIdForSession(sessionId, paneId);
     return workspaceId ? workspaceRefs.current.get(workspaceId)?.getPaneText(paneId) || '' : '';
   }, [workspaceIdForSession]);
 
   const getPaneSize = useCallback((sessionId: string, paneId: string) => {
-    const workspaceId = workspaceIdForSession(sessionId);
+    const workspaceId = workspaceIdForSession(sessionId, paneId);
     return workspaceId ? workspaceRefs.current.get(workspaceId)?.getPaneSize(paneId) || null : null;
   }, [workspaceIdForSession]);
 
   const getPaneVisibleContent = useCallback((sessionId: string, paneId: string) => {
-    const workspaceId = workspaceIdForSession(sessionId);
+    const workspaceId = workspaceIdForSession(sessionId, paneId);
     return (workspaceId ? workspaceRefs.current.get(workspaceId)?.getPaneVisibleContent(paneId) : null)
       || snapshotVisibleTerminalContent(null);
   }, [workspaceIdForSession]);
 
   const getPaneVisibleStyleSummary = useCallback((sessionId: string, paneId: string) => {
-    const workspaceId = workspaceIdForSession(sessionId);
+    const workspaceId = workspaceIdForSession(sessionId, paneId);
     return (workspaceId ? workspaceRefs.current.get(workspaceId)?.getPaneVisibleStyleSummary(paneId) : null)
       || emptyTerminalVisibleStyleSnapshot();
   }, [workspaceIdForSession]);
 
   const getPaneBlockState = useCallback((sessionId: string, paneId: string) => {
-    const workspaceId = workspaceIdForSession(sessionId);
+    const workspaceId = workspaceIdForSession(sessionId, paneId);
     return workspaceId ? workspaceRefs.current.get(workspaceId)?.getPaneBlockState(paneId) ?? null : null;
   }, [workspaceIdForSession]);
 
   const getPanePlacementState = useCallback((sessionId: string, paneId: string) => {
-    const workspaceId = workspaceIdForSession(sessionId);
+    const workspaceId = workspaceIdForSession(sessionId, paneId);
     return workspaceId ? workspaceRefs.current.get(workspaceId)?.getPanePlacementState(paneId) ?? null : null;
   }, [workspaceIdForSession]);
 
   const resetSessionPaneTerminal = useCallback((sessionId: string, paneId: string) => {
-    const workspaceId = workspaceIdForSession(sessionId);
+    const workspaceId = workspaceIdForSession(sessionId, paneId);
     return workspaceId ? workspaceRefs.current.get(workspaceId)?.resetPaneTerminal(paneId) || false : false;
   }, [workspaceIdForSession]);
 
   const injectSessionPaneBytes = useCallback((sessionId: string, paneId: string, bytes: Uint8Array) => {
-    const workspaceId = workspaceIdForSession(sessionId);
+    const workspaceId = workspaceIdForSession(sessionId, paneId);
     return workspaceId ? workspaceRefs.current.get(workspaceId)?.injectPaneBytes(paneId, bytes) || Promise.resolve(false) : Promise.resolve(false);
   }, [workspaceIdForSession]);
 
   const injectSessionPaneBase64 = useCallback((sessionId: string, paneId: string, payload: string) => {
-    const workspaceId = workspaceIdForSession(sessionId);
+    const workspaceId = workspaceIdForSession(sessionId, paneId);
     return workspaceId ? workspaceRefs.current.get(workspaceId)?.injectPaneBase64(paneId, payload) || Promise.resolve(false) : Promise.resolve(false);
   }, [workspaceIdForSession]);
 
   const drainSessionPaneTerminal = useCallback((sessionId: string, paneId: string) => {
-    const workspaceId = workspaceIdForSession(sessionId);
+    const workspaceId = workspaceIdForSession(sessionId, paneId);
     return workspaceId ? workspaceRefs.current.get(workspaceId)?.drainPaneTerminal(paneId) || Promise.resolve(false) : Promise.resolve(false);
   }, [workspaceIdForSession]);
 

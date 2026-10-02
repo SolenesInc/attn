@@ -670,7 +670,11 @@ model GitFileChange {
   old_path?: string;     // For renames
 }
 
+enum CodexViewResolution { resolved, unresolved, disconnected }
+
 model WorkspaceLayoutPane {
+  codex_resolution?: CodexViewResolution;
+  codex_revision?: uint64;
   pane_id: string;
   runtime_id?: string;
   workspace_id: string;
@@ -6551,6 +6555,7 @@ model SessionTranscriptResult {
 // A session as the ledger holds it. Distinct from Session, which is the live
 // broadcast shape: this one outlives the runtime and carries how it ended.
 model SessionLedgerEntry {
+  codex_mode?: string;
   id: string;
   conversation_pinned_at?: string;
   label: string;
@@ -6639,6 +6644,7 @@ model SessionReopen {
 }
 
 model SessionReopenResult {
+  pane_id?: string;
   session_id: string;
   workspace_id: string;
   directory: string;

@@ -1201,6 +1201,10 @@ func (b *WorkerBackend) SessionInfo(ctx context.Context, sessionID string) (Sess
 		ExitCode:   info.ExitCode,
 		ExitSignal: info.ExitSignal,
 	}
+	result.RawTitle = info.RawTitle
+	if at, err := time.Parse(time.RFC3339Nano, info.TitleObservedAt); err == nil {
+		result.TitleObservation = pty.Observation{Source: pty.SourceTitle, Detail: info.RawTitle, Generation: info.TitleGeneration, At: at}
+	}
 	if claim := strings.TrimSpace(info.LastSignalClaim); claim != "" {
 		at, err := time.Parse(time.RFC3339Nano, strings.TrimSpace(info.LastSignalAt))
 		if err == nil {

@@ -21,6 +21,7 @@ import {
   filterSessionsRepresentedInWorkspaceLayouts,
 } from '../utils/workspaceViewModels';
 import { selectWorkspacePane, type WorkspacePaneSelections } from './workspacePaneSelection';
+import type { TerminalWorkspaceSnapshot } from '../types/workspace';
 
 export type AppView = 'dashboard' | 'session' | 'grid';
 export type StateUpdate<T> = T | ((previous: T) => T);
@@ -30,6 +31,9 @@ export interface TileSelection {
 }
 export interface SessionNavigationState {
   activeSessionId: string | null;
+  daemonWorkspaceLayouts?: Record<string, TerminalWorkspaceSnapshot>;
+  navigationQueue?: QueueBands<QueueBandSession> | null;
+  selectedWorkspacePane: { workspaceId: string; paneId: string } | null;
   recentSessionIds: string[];
   agentHistory: AgentHistoryState;
   view: AppView;
@@ -37,7 +41,7 @@ export interface SessionNavigationState {
   selectedSessionlessWorkspaceId: string | null;
   selectedTile: TileSelection | null;
   pendingSelection: { sessionId: string; seen: boolean } | null;
-  focusRequest: { sessionId: string; paneId: string } | null;
+  focusRequest: { sessionId: string; paneId: string; workspaceId?: string } | null;
   utilityFocusRequestToken: number;
   workspacePaneSelections: WorkspacePaneSelections;
 }
@@ -45,6 +49,7 @@ export interface SessionNavigationState {
 export function initialSessionNavigation(): SessionNavigationState {
   return {
     activeSessionId: null,
+    selectedWorkspacePane: null,
     recentSessionIds: [],
     agentHistory: createAgentHistory(),
     view: 'dashboard',
@@ -72,6 +77,7 @@ export function activateSession(
   return {
     ...state,
     activeSessionId: id,
+    selectedWorkspacePane: null,
     pendingSelection: null,
     focusRequest: null,
     view: id ? 'session' : state.view,
@@ -93,6 +99,26 @@ export function selectAgent(
   paneId?: string,
 ): SessionNavigationState {
   const session = sessions.find((entry) => entry.id === sessionId);
+  const queue = state.navigationQueue;
+  const row = queue && [queue.chief, ...queue.turns, ...queue.settled, ...queue.pinned, ...queue.crew, ...queue.snoozed]
+    .find(entry => entry?.session.id === sessionId);
+  const preferredWorkspaceId = row?.workspaceId ?? session?.workspaceId;
+  const placements = Object.entries(state.daemonWorkspaceLayouts ?? {}).filter(([, snapshot]) =>
+    snapshot.workspace.agents.some(pane => paneId ? pane.id === paneId : pane.sessionId === sessionId));
+  const placement = (!paneId && placements.find(([workspaceId]) => workspaceId === preferredWorkspaceId)) || placements[0];
+  const displayedPane = placement?.[1].workspace.agents.find(pane => paneId ? pane.id === paneId : pane.sessionId === sessionId);
+  const workspaceSession = session ?? sessions[0];
+  if (workspaceSession && placement && displayedPane && (displayedPane.codexResolution || placement[0] !== session?.workspaceId)) {
+    const [workspaceId, snapshot] = placement;
+    return {
+      ...activateSession(state, displayedPane.sessionId || null),
+      view: 'session',
+      selectedWorkspacePane: { workspaceId, paneId: displayedPane.id },
+      workspacePaneSelections: selectWorkspacePane(state.workspacePaneSelections, { ...workspaceSession, ...snapshot, workspaceId }, displayedPane.id),
+      focusRequest: { sessionId: displayedPane.sessionId, paneId: displayedPane.id, workspaceId },
+      utilityFocusRequestToken: state.utilityFocusRequestToken + 1,
+    };
+  }
   const pane = session?.workspace.agents.find(
     (entry) => entry.sessionId === sessionId && (!paneId || entry.id === paneId),
   );
@@ -199,7 +225,7 @@ export function navigationQueue(
     ...sessionAttentionFields(session),
   }));
   const visible = filterSessionsRepresentedInWorkspaceLayouts(workspaces, queueSessions);
-  const views = buildWorkspaceViewModels(workspaces, visible).filter(
+  const views = buildWorkspaceViewModels(workspaces, visible, queueSessions).filter(
     (workspace) => !workspace.muted,
   );
   return buildQueueBands(views, { crewInQueue: isCrewQueueEnabled(settings) });

@@ -249,6 +249,7 @@ function SelectedSection({ state }: { state: SettingsModalState }) {
           ptyBackendLabel={state.ptyBackendLabel}
           sharedPtyHostActive={state.sharedPtyHostActive}
           sharedPtyHostEnabled={state.sharedPtyHostEnabled}
+          codexSharedEnabled={state.codexSharedEnabled}
           onSetSetting={state.onSetSetting}
         />
       );

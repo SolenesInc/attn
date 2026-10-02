@@ -148,30 +148,15 @@ test.describe('Keyboard Shortcuts', () => {
       await page.locator('[data-testid="session-s-zoom"]').click();
       await expect(page.locator('.terminal-wrapper.active')).toBeVisible();
 
-      await page.evaluate(() => {
-        window.__TEST_SET_SESSION_WORKSPACE?.('s-zoom', {
-          agents: [
-            { id: 'pane-session', runtimeId: 's-zoom', sessionId: 's-zoom', title: 'Zoom' },
-            { id: 'pane-shell-1', runtimeId: 'runtime-shell-1', sessionId: 's-zoom', title: 'Shell 1' },
-          ],
-          layoutTree: {
-            type: 'split',
-            splitId: 'root',
-            direction: 'vertical',
-            ratio: 0.5,
-            children: [
-              { type: 'pane', paneId: 'pane-session' },
-              { type: 'pane', paneId: 'pane-shell-1' },
-            ],
-          },
-        }, 'pane-shell-1');
-      });
-      await expect(page.locator('[data-pane-session-id="s-zoom"][data-pane-id="pane-shell-1"]')).toBeVisible();
-
+      await page.locator('.terminal-wrapper.active .terminal-container').click();
+      await page.keyboard.press('Meta+d');
       const workspace = page.locator('[data-session-terminal-workspace="workspace-s-zoom"]');
-      const mainPane = page.locator('[data-pane-session-id="s-zoom"][data-pane-id="pane-session"]');
-      const utilityPane = page.locator('[data-pane-session-id="s-zoom"][data-pane-id="pane-shell-1"]').first();
-      const rootSplit = page.locator('[data-split-id="root"]');
+      await expect(workspace.locator('[data-pane-kind="agent"]')).toHaveCount(2);
+      const mainPane = workspace.locator('[data-pane-session-id="s-zoom"]');
+      const utilityPane = workspace.locator('[data-pane-kind="agent"]:not([data-pane-session-id="s-zoom"])');
+      const mainPaneId = await mainPane.getAttribute('data-pane-id');
+      const utilityPaneId = await utilityPane.getAttribute('data-pane-id');
+      const rootSplit = workspace.locator('[data-split-id]').first();
       // Dock chips render their key tokens in a styled child span, so match the chip by its label.
       const zoomHint = page.locator('.shortcut-hint', { hasText: 'zoom' });
 
@@ -184,7 +169,7 @@ test.describe('Keyboard Shortcuts', () => {
 
       await utilityPane.click();
       await page.keyboard.press('Meta+Shift+z');
-      await expect(workspace).toHaveAttribute('data-zoomed-pane-id', 'pane-shell-1');
+      await expect(workspace).toHaveAttribute('data-zoomed-pane-id', utilityPaneId!);
       await expect(rootSplit).toHaveAttribute('data-split-ratio', '0.240');
       await expect(zoomHint).toHaveAttribute('data-active', 'true');
 
@@ -203,7 +188,7 @@ test.describe('Keyboard Shortcuts', () => {
       await expect(utilityPane).toBeVisible();
 
       await mainPane.click();
-      await expect(workspace).toHaveAttribute('data-zoomed-pane-id', 'pane-session');
+      await expect(workspace).toHaveAttribute('data-zoomed-pane-id', mainPaneId!);
       await expect(rootSplit).toHaveAttribute('data-split-ratio', '0.760');
       await expect(zoomHint).toHaveAttribute('data-active', 'true');
 

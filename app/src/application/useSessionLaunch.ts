@@ -51,8 +51,9 @@ export function useSessionLaunch({
     sendWorkspaceAddSessionPane,
     sendCreateWorktree,
   } = useDaemonApi();
-  const { closeSession, createSession, takeSessionSpawnArgs } = useSessionStore();
+  const { closeSession, createSession, takeSessionSpawnArgs, selectedWorkspacePane } = useSessionStore();
   const activeLocalSession = sessions.find((session) => session.id === activeSessionId) ?? null;
+  const activeWorkspaceId = selectedWorkspacePane?.workspaceId || activeLocalSession?.workspaceId;
   const agentAvailability = useMemo(() => getAgentAvailability(settings), [settings]);
   const hasAvailableAgents = hasAnyAvailableAgents(agentAvailability);
   const [sessionCreationJob, setSessionCreationJob] = useState<SessionCreationJob | null>(null);
@@ -105,30 +106,37 @@ export function useSessionLaunch({
       targetPaneId?: string,
       options: SplitSessionOptions = {},
     ) => {
+      const state = useSessionStore.getState();
+      const targetWorkspaceId = targetPaneId
+        ? Object.entries(state.daemonWorkspaceLayouts).find(([, snapshot]) =>
+            snapshot.workspace.agents.some((pane) => pane.id === targetPaneId),
+          )?.[0]
+        : state.selectedWorkspacePane?.workspaceId;
+      const targetWorkspace = state.navigationWorkspaces.find((workspace) => workspace.id === targetWorkspaceId);
       const activeSession = options.baseSessionId
         ? sessions.find((session) => session.id === options.baseSessionId)
         : activeLocalSession;
-      if (!activeSession?.workspaceId) {
+      const workspaceId = targetWorkspaceId || activeSession?.workspaceId;
+      if (!workspaceId) {
         handleNewWorkspace();
         return;
       }
       const sessionId = crypto.randomUUID();
-      const workspaceId = activeSession.workspaceId;
-      const paneId = targetPaneId || getActivePaneIdForSession(activeSession);
+      const paneId = targetPaneId || state.selectedWorkspacePane?.paneId || (activeSession ? getActivePaneIdForSession(activeSession) : undefined);
       const newPaneId = paneIdForSession(sessionId);
       const label = options.label || nextSplitSessionLabel(workspaceId, agent);
       const endpointId =
-        options.endpointId === null ? undefined : (options.endpointId ?? activeSession.endpointId);
+        options.endpointId === null ? undefined : (options.endpointId ?? activeSession?.endpointId);
       let paneAdded = false;
 
       try {
         await createSession(
           label,
-          options.cwd || activeSession.cwd,
+          options.cwd || targetWorkspace?.directory || activeSession?.cwd || '',
           sessionId,
           agent,
           endpointId,
-          agent === 'shell' ? false : (options.yoloMode ?? activeSession.yoloMode),
+          agent === 'shell' ? false : (options.yoloMode ?? activeSession?.yoloMode),
           workspaceId,
           undefined,
           agent === 'shell' ? undefined : options.autoMode,
@@ -141,7 +149,7 @@ export function useSessionLaunch({
         });
         paneAdded = true;
         if (spawnArgs) {
-          await ptySpawn({ args: { ...spawnArgs, spawned_from: activeSession.id } });
+          await ptySpawn({ args: { ...spawnArgs, spawned_from: activeSession?.id } });
         } else {
           throw new Error('Session spawn arguments were not prepared.');
         }
@@ -172,7 +180,7 @@ export function useSessionLaunch({
 
   const handleNewSession = useCallback(
     (direction: TerminalSplitDirection = 'vertical') => {
-      if (!activeLocalSession?.workspaceId) {
+      if (!activeWorkspaceId) {
         handleNewWorkspace();
         return;
       }
@@ -180,7 +188,7 @@ export function useSessionLaunch({
       locationPickerSessionDirection.current = direction;
       setLocationPickerOpen(true);
     },
-    [activeLocalSession?.workspaceId, handleNewWorkspace],
+    [activeWorkspaceId, handleNewWorkspace],
   );
 
   const handleLocationSelect = useCallback(
@@ -226,7 +234,7 @@ export function useSessionLaunch({
             : resolvePreferredAgent(agent, agentAvailability, 'codex');
       }
       const folderName = path.split('/').pop() || 'session';
-      if (locationPickerPurpose === 'session' && activeLocalSession?.workspaceId) {
+      if (locationPickerPurpose === 'session' && activeWorkspaceId) {
         await createSplitSession(selectedAgent, locationPickerSessionDirection.current, undefined, {
           cwd: path,
           endpointId: endpointId ?? null,
@@ -266,7 +274,7 @@ export function useSessionLaunch({
       }
     },
     [
-      activeLocalSession?.workspaceId,
+      activeWorkspaceId,
       agentAvailability,
       createSplitSession,
       createWorkspaceSession,
@@ -323,7 +331,7 @@ export function useSessionLaunch({
               : current,
           );
           const folderName = worktreePath.split('/').pop() || branchName || 'session';
-          if (locationPickerPurpose === 'session' && activeLocalSession?.workspaceId) {
+          if (locationPickerPurpose === 'session' && activeWorkspaceId) {
             await createSplitSession(agent, locationPickerSessionDirection.current, undefined, {
               cwd: worktreePath,
               endpointId: endpointId ?? null,
@@ -370,7 +378,7 @@ export function useSessionLaunch({
       })();
     },
     [
-      activeLocalSession?.workspaceId,
+      activeWorkspaceId,
       createSplitSession,
       createWorkspaceSession,
       locationPickerPurpose,

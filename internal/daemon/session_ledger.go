@@ -81,6 +81,12 @@ func (d *Daemon) sessionLedgerPage(msg *protocol.SessionListMessage, wantFacets 
 		return nil, errors.New("session ledger unavailable")
 	}
 
+	for i := range page.Entries {
+		intent, ok := d.store.LaunchIntent(page.Entries[i].ID)
+		if ok && intent.CodexMode != "" {
+			page.Entries[i].CodexMode = protocol.Ptr(intent.CodexMode)
+		}
+	}
 	result := &protocol.SessionListResult{Entries: page.Entries, Omitted: page.Omitted, Facets: page.Facets}
 	if result.Entries == nil {
 		result.Entries = []protocol.SessionLedgerEntry{}
@@ -138,6 +144,10 @@ func (d *Daemon) handleSessionShow(conn net.Conn, msg *protocol.SessionShowMessa
 		d.sendError(conn, "session_not_found")
 		return
 	}
+	intent, ok := d.store.LaunchIntent(entry.ID)
+	if ok && intent.CodexMode != "" {
+		entry.CodexMode = protocol.Ptr(intent.CodexMode)
+	}
 	result := &protocol.SessionShowResult{Entry: *entry}
 	verdict, err := d.resolveReopen(context.Background(), *entry, d.scheduledReopenGit())
 	if err != nil {
@@ -191,6 +201,9 @@ func (d *Daemon) sendSessionShowWSResult(client *wsClient, msg *protocol.Session
 		RequestID: protocol.Deref(msg.RequestID),
 	}
 	if entry := d.store.SessionLedgerEntry(strings.TrimSpace(msg.SessionID)); entry != nil {
+		if intent, ok := d.store.LaunchIntent(entry.ID); ok && intent.CodexMode != "" {
+			entry.CodexMode = protocol.Ptr(intent.CodexMode)
+		}
 		reply.Success = true
 		reply.Entry = entry
 	} else {

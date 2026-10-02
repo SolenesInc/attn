@@ -5,6 +5,8 @@
 - Session: an agent and its terminals, with history that survives restarts.
 - Kept conversation: attn's copy of a local conversation whose harness deletes transcripts, kept forever when pinned, or while an open seed points at its session and for 14 days after the last reference ends. Resume fills missing main and auxiliary files without replacing harness files; refreshing a copy retains auxiliary files the harness has pruned. Retention changes refresh the Garden snapshot without changing a seed's revision, so readers must refresh continuation details on each snapshot.
 - Forget (conversation): delete attn's copy now and remove its keep pin, leaving the harness's own files untouched. Open seeds must release the conversation first. A user deletion is recorded on the tombstone.
+- Shared Codex owner: one independent native root bound to a durable session. Views can display it in several terminals, or none.
+- Codex view: a terminal runtime whose displayed owner follows native title evidence; placement and runtime survive owner changes.
 - Agent conversation: the provider's chat history. A session can start a new conversation.
 - Run: one prompt and response.
 - Parked run: a finished response whose background work is still running.

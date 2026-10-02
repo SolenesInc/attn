@@ -138,7 +138,9 @@ func (d *Daemon) crewHandoffLocked(sessionID, note string, retry bool, close pro
 		return nil, fmt.Errorf("prepare %s's day to close: %w", crew.DisplayName(member.ID), err)
 	}
 	if d.crewDayEndsHere(close, time.Now()) {
-		d.closeNappedSession(sessionID, teardown)
+		if err := d.closeNappedSession(sessionID, teardown); err != nil {
+			return nil, err
+		}
 		d.logf("crew: %s went to sleep — session %s ended and nobody was woken behind it", crew.DisplayName(member.ID), sessionID)
 		result.Outcome = protocol.Ptr(protocol.CrewDayCloseSleep)
 		return result, nil
@@ -275,7 +277,17 @@ func (d *Daemon) crewNap(member crew.Member, oldSessionID string, teardown *sess
 		return "", fmt.Errorf("wake %s's successor: %w", crew.DisplayName(member.ID), rejection.reason())
 	}
 
-	d.closeNappedSession(oldSessionID, teardown)
+	if err := d.closeNappedSession(oldSessionID, teardown); err != nil {
+		if d.sharedCodexOwner(newSessionID) {
+			err = errors.Join(err, d.codexRuntime().abortOwnerLaunch(newSessionID))
+		} else {
+			d.terminateSession(newSessionID, syscall.SIGTERM)
+			d.closeSession(newSessionID, store.SessionClose{Reason: "launch failed"})
+			d.removeWorkspaceLayoutPaneForSession(newSessionID)
+		}
+		undoBinding()
+		return "", err
+	}
 	committed = true
 	d.logf("crew: %s napped — session %s ended, session %s is the new day", crew.DisplayName(member.ID), oldSessionID, newSessionID)
 	return newSessionID, nil
@@ -349,7 +361,11 @@ func (d *Daemon) crewSessionGeometry(sessionID string) (int, int) {
 	return cols, rows
 }
 
-func (d *Daemon) closeNappedSession(sessionID string, teardown *sessionTeardown) {
+func (d *Daemon) closeNappedSession(sessionID string, teardown *sessionTeardown) error {
+	if d.sharedCodexOwner(sessionID) {
+		d.cancelSessionTeardown(sessionID, teardown)
+		return d.codexRuntime().closeAllOwnerViews(sessionID, store.SessionClose{By: store.SessionClosedByUser, Reason: "crew member put to sleep"})
+	}
 	d.commitSessionUnregister(sessionID, store.SessionClose{By: store.SessionClosedByUser, Reason: "crew member put to sleep"})
 	if teardown.session != nil {
 		d.publishSessionUnregistered(teardown.session)
@@ -358,6 +374,7 @@ func (d *Daemon) closeNappedSession(sessionID string, teardown *sessionTeardown)
 		d.publishFact(FactSessionTerminated, teardown.session.ID, nil)
 	}
 	d.terminateSessionAsync(sessionID, syscall.SIGTERM, teardown)
+	return nil
 }
 
 func (d *Daemon) handleCrewHandoff(conn net.Conn, msg *protocol.CrewHandoffMessage) {

@@ -14,7 +14,7 @@ export function paneNotice(
   if (paneStatus === 'spawning') {
     return { tone: 'spawning', text: `Starting ${paneTitle}...` };
   }
-  if (!paneSession && paneStatus === 'ready') {
+  if (!paneSession && paneStatus === 'ready' && !agentPane.codexResolution) {
     return { tone: 'spawning', text: `Waiting for ${paneTitle}...` };
   }
   return null;

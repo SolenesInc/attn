@@ -145,10 +145,12 @@ export function buildQueueBands<TSession extends QueueBandSession>(
   const pinned: QueueRow<TSession>[] = [];
   const snoozed: QueueRow<TSession>[] = [];
   const crew: QueueRow<TSession>[] = [];
-  const attachedParents = liveParentIds(workspaces);
+  const workspaceBySessionId = queueWorkspaceIds(workspaces);
 
   for (const workspace of workspaces) {
+    const presentSessionIds = new Set(workspace.sessions.map(session => session.id));
     for (const session of workspace.sessions) {
+      if (workspaceBySessionId.get(session.id) !== workspace.id) continue;
       const row: QueueRow<TSession> = {
         session,
         workspaceId: workspace.id,
@@ -177,7 +179,7 @@ export function buildQueueBands<TSession extends QueueBandSession>(
         pinned.push(row);
         continue;
       }
-      if (isAttachedSatellite(session, workspace.id, attachedParents)) {
+      if (session.parentSessionId && presentSessionIds.has(session.parentSessionId)) {
         continue;
       }
       // Before the turn check, so the row's home does not depend on the daemon's settle-as-it-snoozes invariant holding in a mid-broadcast snapshot.
@@ -199,28 +201,17 @@ export function buildQueueBands<TSession extends QueueBandSession>(
   return { chief, turns, settled, pinned, snoozed, crew };
 }
 
-/** Index every session by its workspace, so a satellite's parent is confirmed present
- * *and* co-located in one lookup. */
-function liveParentIds(workspaces: WorkspaceWithSessions<QueueBandSession>[]): Map<string, string> {
+/** Queue rows represent owners. Prefer the saved workspace when it is in this list. */
+function queueWorkspaceIds(workspaces: WorkspaceWithSessions<QueueBandSession>[]): Map<string, string> {
   const byId = new Map<string, string>();
   for (const workspace of workspaces) {
     for (const session of workspace.sessions) {
-      byId.set(session.id, workspace.id);
+      if (!byId.has(session.id) || workspace.id === (session.workspaceId || session.workspace_id)) {
+        byId.set(session.id, workspace.id);
+      }
     }
   }
   return byId;
-}
-
-/** Whether this is a shell whose parent agent is present in the same workspace — the one
- * case that earns no row. An orphan keeps its settled row: the queue reorders, never hides. */
-function isAttachedSatellite(
-  session: QueueBandSession,
-  workspaceId: string,
-  parents: Map<string, string>,
-): boolean {
-  const parentId = session.parentSessionId;
-  if (!parentId) return false;
-  return parents.get(parentId) === workspaceId;
 }
 
 /** Member order: by name, so a member's row is where it was yesterday. */

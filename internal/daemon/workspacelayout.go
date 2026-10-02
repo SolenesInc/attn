@@ -3,6 +3,7 @@ package daemon
 import (
 	"context"
 	"fmt"
+	"strconv"
 	"strings"
 	"syscall"
 
@@ -96,6 +97,10 @@ func protocolWorkspaceLayout(snapshot workspacelayout.WorkspaceLayout) (*protoco
 			Kind:   protocol.WorkspaceLayoutPaneKind(pane.Kind),
 			Title:  pane.Title,
 			Status: protocol.WorkspaceLayoutPaneStatus(pane.Status),
+		}
+		if pane.CodexResolution != "" {
+			next.CodexResolution = protocol.Ptr(protocol.CodexViewResolution(pane.CodexResolution))
+			next.CodexRevision = protocol.Ptr(strconv.FormatUint(pane.CodexRevision, 10))
 		}
 		if next.Status == "" {
 			next.Status = protocol.WorkspaceLayoutPaneStatusReady
@@ -894,11 +899,17 @@ func (d *Daemon) moveLeafToWorkspace(sourceWorkspaceID, targetWorkspaceID, leafI
 	}
 
 	d.broadcastWorkspaceLayoutUpdated(targetWorkspaceID)
-	if !sourceEmpty {
+	if sourceEmpty {
+		emptyLayout, err := protocolWorkspaceLayout(sourceNormalized)
+		if err != nil {
+			return "", err
+		}
+		d.broadcastWorkspaceLayoutSnapshotUpdated(emptyLayout)
+	} else {
 		d.broadcastWorkspaceLayoutUpdated(sourceWorkspaceID)
 	}
 
-	if movedPane != nil && movedPane.SessionID != "" {
+	if movedPane != nil && movedPane.SessionID != "" && movedPane.CodexResolution == "" {
 		if d.workspaces != nil {
 			d.workspaces.associateSession(movedPane.SessionID, targetWorkspaceID, movedPane.Title)
 		}
@@ -980,7 +991,7 @@ func (d *Daemon) addWorkspaceSessionPaneLocked(msg *protocol.WorkspaceLayoutAddS
 		return nil, false, fmt.Errorf("session_id is required")
 	}
 	for _, pane := range snapshot.Panes {
-		if pane.SessionID == sessionID {
+		if pane.SessionID == sessionID || pane.RuntimeID == sessionID {
 			return protocol.Ptr(pane.PaneID), false, nil
 		}
 	}
@@ -1078,6 +1089,14 @@ func (d *Daemon) handleWorkspaceLayoutClosePane(client *wsClient, msg *protocol.
 	for _, pane := range snapshot.Panes {
 		if pane.PaneID == msg.PaneID {
 			sessionID = pane.SessionID
+			if d.codexRuntime().hasRuntime(pane.RuntimeID) {
+				err := d.codexRuntime().closeView(pane.RuntimeID, store.SessionClose{By: store.SessionClosedByUser})
+				if err == nil {
+					d.codexRuntime().removeLayoutView(pane.RuntimeID)
+				}
+				d.sendWorkspaceLayoutActionResult(client, protocol.CmdWorkspaceLayoutClosePane, msg.WorkspaceID, protocol.Ptr(msg.PaneID), err)
+				return
+			}
 			found = true
 			continue
 		}
@@ -1209,8 +1228,12 @@ func (d *Daemon) reconcileWorkspaceLayoutsWithPTYBackend(ctx context.Context) {
 		nextPanes := make([]workspacelayout.Pane, 0, len(snapshot.Panes))
 		changed := false
 		for _, pane := range snapshot.Panes {
+			if pane.Kind == workspacelayout.PaneKindAgent && d.codexRuntime().hasRuntime(pane.RuntimeID) {
+				nextPanes = append(nextPanes, pane)
+				continue
+			}
 			sessionID := strings.TrimSpace(pane.SessionID)
-			if pane.Kind == workspacelayout.PaneKindAgent && sessionID != "" &&
+			if pane.Kind == workspacelayout.PaneKindAgent && pane.CodexResolution == "" && sessionID != "" &&
 				(d.store.Get(sessionID) != nil ||
 					pane.Status == workspacelayout.PaneStatusSpawning ||
 					pane.Status == workspacelayout.PaneStatusFailed) {
@@ -1236,6 +1259,9 @@ func (d *Daemon) reconcileWorkspaceLayoutsWithPTYBackend(ctx context.Context) {
 	}
 
 	for runtimeID := range liveIDs {
+		if runtimeID == codexServerRuntime || d.codexRuntime().hasRuntime(runtimeID) {
+			continue
+		}
 		if d.store.Get(runtimeID) != nil {
 			continue
 		}

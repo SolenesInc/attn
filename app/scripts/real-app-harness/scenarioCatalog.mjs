@@ -1,5 +1,11 @@
 export const scenarioCatalog = [
   {
+    id: 'codex-shared',
+    runnerId: 'CODEX-SHARED',
+    label: 'Shared Codex: mutable pane owner, symmetric attach focus, owner queue, draft and native New',
+    command: ['node', 'scripts/real-app-harness/scenario-codex-shared.mjs'],
+  },
+  {
     id: 'snooze-keyboard',
     runnerId: 'SNOOZE-KEYBOARD',
     label: 'Snooze from the palette: agent-centered picker, native keys, focus handover and wake',
