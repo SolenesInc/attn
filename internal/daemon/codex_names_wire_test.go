@@ -479,3 +479,34 @@ func TestSharedCodexCrewNameIsNativeBeforeItsOpeningPrompt(t *testing.T) {
 	}
 	agent.Reply("ready <!-- attn:state=idle -->")
 }
+
+func TestSharedCodexForeignAdoptionDoesNotPublishAnOlderReadName(t *testing.T) {
+	w := newWorld(t, fakeagent.Codex)
+	app, cli := w.App(), w.Client()
+	sharedCodexSetting(t, app, true)
+	a := w.Spawn(app, fakeagent.Codex, w.Path("same"))
+	agent := w.Launched(a)
+	awaitSharedView(app, a, a)
+	root := agent.ForeignNativeRootRenamedDuringRead()
+	app.TypeLine(a, "/agents "+root)
+	app.AwaitScreen(a, "fixture foreign resume rejected")
+	owners, err := cli.Query("")
+	if err != nil {
+		t.Fatal(err)
+	}
+	var adopted string
+	for _, owner := range owners {
+		if owner.ID != a {
+			adopted = owner.ID
+			if owner.Label != "same" {
+				t.Fatalf("failed resume published unconfirmed old name: %q", owner.Label)
+			}
+		}
+	}
+	if adopted == "" {
+		t.Fatal("foreign conversation was not adopted")
+	}
+	app.TypeLine(a, "/agents "+root)
+	awaitSharedView(app, a, adopted)
+	awaitLabel(app, adopted, "Latest foreign name")
+}

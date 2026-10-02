@@ -30,23 +30,25 @@ type sharedFakeCodex struct {
 	controlUnavailable atomic.Bool
 }
 type sharedFakeRoot struct {
-	c               *codex
-	a               *agent
-	owner           string
-	archived        bool
-	hasTurn         atomic.Bool
-	active          atomic.Bool
-	approval        atomic.Bool
-	failed          atomic.Bool
-	snapshotOnly    atomic.Bool
-	archiveUsage    string
-	name            string
-	nameError       bool
-	nameOnResume    string
-	holdNameReplies bool
-	nameHeld        chan struct{}
-	nameReplies     []heldCodexNameReply
-	livePath        string
+	c                *codex
+	a                *agent
+	owner            string
+	archived         bool
+	hasTurn          atomic.Bool
+	active           atomic.Bool
+	approval         atomic.Bool
+	failed           atomic.Bool
+	snapshotOnly     atomic.Bool
+	archiveUsage     string
+	name             string
+	nameError        bool
+	nameOnResume     string
+	nameOnRead       string
+	rejectResumeOnce bool
+	holdNameReplies  bool
+	nameHeld         chan struct{}
+	nameReplies      []heldCodexNameReply
+	livePath         string
 }
 
 type heldCodexNameReply struct {
@@ -238,6 +240,23 @@ func (s *sharedFakeCodex) handle(conn *websocket.Conn, m codexshared.Message) (a
 		a := &agent{term: c.term, conv: c, prompts: make(chan promptSubmission, 16)}
 		root.a = a
 		control, err := dialControl(s.cfg, func(peer *rpcPeer, method string, params json.RawMessage) (any, error) {
+			if method == "foreign_root_rename_during_read" {
+				var config codexConfig
+				config.ShellEnvironmentPolicy.Set = map[string]string{"ATTN_SESSION_ID": "foreign-" + c.conversation}
+				params, _ := json.Marshal(map[string]any{"cwd": c.cwd, "config": config})
+				result, err := s.handle(nil, codexshared.Message{Method: "thread/start", Params: params})
+				if err != nil {
+					return nil, err
+				}
+				id := result.(map[string]any)["thread"].(map[string]any)["id"].(string)
+				s.mu.Lock()
+				foreign := s.roots[id]
+				foreign.name = "Older foreign name"
+				foreign.nameOnRead = "Latest foreign name"
+				foreign.rejectResumeOnce = true
+				s.mu.Unlock()
+				return map[string]any{"root": id}, nil
+			}
 			if method == "hold_name_replies" {
 				s.mu.Lock()
 				root.holdNameReplies = true
@@ -414,6 +433,15 @@ func (s *sharedFakeCodex) handle(conn *websocket.Conn, m codexshared.Message) (a
 		s.mu.Lock()
 		isControl := conn == s.control
 		s.mu.Unlock()
+		s.mu.Lock()
+		rejectResume := m.Method == "thread/resume" && root.rejectResumeOnce
+		if rejectResume {
+			root.rejectResumeOnce = false
+		}
+		s.mu.Unlock()
+		if rejectResume {
+			return nil, fmt.Errorf("fixture foreign resume rejected")
+		}
 		if m.Method == "thread/resume" && isControl && root.snapshotOnly.Load() {
 			return nil, fmt.Errorf("fixture control resume rejected")
 		}
@@ -476,6 +504,14 @@ func (s *sharedFakeCodex) handle(conn *websocket.Conn, m codexshared.Message) (a
 		}
 		snapshot := s.metadata(root)
 		s.mu.Lock()
+		if m.Method == "thread/read" && root.nameOnRead != "" {
+			name := root.nameOnRead
+			root.name = name
+			root.nameOnRead = ""
+			s.mu.Unlock()
+			s.broadcast("thread/name/updated", map[string]any{"threadId": p.ThreadID, "threadName": name})
+			return map[string]any{"thread": snapshot}, nil
+		}
 		name := root.nameOnResume
 		if m.Method == "thread/resume" {
 			root.nameOnResume = ""

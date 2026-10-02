@@ -326,7 +326,6 @@ func (r *codexRuntime) adoptRoot(root string, v store.CodexView) (*store.CodexOw
 	r.activeMu.Lock()
 	revision := r.activeTurns[root].Revision
 	r.activeMu.Unlock()
-	nameRevision := r.nameRevision(root)
 	result, err := r.control.Call(r.d.life.Context(), "thread/read", map[string]any{"threadId": root, "includeTurns": false})
 	if err != nil {
 		return nil, err
@@ -350,7 +349,6 @@ func (r *codexRuntime) adoptRoot(root string, v store.CodexView) (*store.CodexOw
 	owner.NativeRootID = root
 	r.d.observeOrQueueAgentConversation(agentConversationObservation{SessionID: owner.SessionID, NativeID: root, TranscriptPath: read.Thread.Path})
 	r.projectNativeSnapshot(read.Thread, revision)
-	r.projectNativeName(root, read.Thread.Name, nameRevision, false)
 	return owner, nil
 }
 

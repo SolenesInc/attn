@@ -163,3 +163,12 @@ func (r *Run) NativeNameDuringResume(name string) {
 func (r *Run) HoldNativeNameReplies()    { r.call("hold_name_replies", nil, nil) }
 func (r *Run) AwaitNativeNameReplyHeld() { r.call("name_reply_held", nil, nil) }
 func (r *Run) ReleaseNativeNameReplies() { r.call("release_name_replies", nil, nil) }
+
+// ForeignNativeRootRenamedDuringRead models another native client's conversation.
+func (r *Run) ForeignNativeRootRenamedDuringRead() string {
+	var result struct {
+		Root string `json:"root"`
+	}
+	r.call("foreign_root_rename_during_read", nil, &result)
+	return result.Root
+}
