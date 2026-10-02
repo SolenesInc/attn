@@ -36,7 +36,6 @@ const (
 	defaultRPCTimeout       = 5 * time.Second
 	killRPCTimeout          = 15 * time.Second
 	livenessRPCTimeout      = 2 * time.Second
-	reclaimRPCTimeout       = 3 * time.Second
 	pollerInterval          = 5 * time.Second
 	monitorRetryInterval    = 1 * time.Second
 	watchResponseTimeout    = 5 * time.Second
@@ -977,6 +976,11 @@ func (b *WorkerBackend) Remove(ctx context.Context, sessionID string) error {
 	session, err := b.getSession(sessionID)
 	if err != nil {
 		return err
+	}
+	if _, ok := ctx.Deadline(); !ok {
+		var cancel context.CancelFunc
+		ctx, cancel = context.WithTimeout(ctx, killRPCTimeout)
+		defer cancel()
 	}
 	workerPID := b.workerPIDForSession(session)
 	callErr := b.callSimple(ctx, session, ptyworker.MethodRemove, map[string]any{})
@@ -2046,7 +2050,7 @@ func (b *WorkerBackend) reclaimOwnershipMismatch(ctx context.Context, registryPa
 		removeCtx = context.Background()
 	}
 	if _, hasDeadline := removeCtx.Deadline(); !hasDeadline {
-		removeCtx, cancel = context.WithTimeout(removeCtx, reclaimRPCTimeout)
+		removeCtx, cancel = context.WithTimeout(removeCtx, killRPCTimeout)
 	} else {
 		removeCtx, cancel = context.WithCancel(removeCtx)
 	}

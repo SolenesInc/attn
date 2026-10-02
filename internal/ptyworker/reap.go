@@ -11,7 +11,6 @@ import (
 	"sort"
 	"strconv"
 	"strings"
-	"syscall"
 	"time"
 
 	"github.com/victorarias/attn/internal/procreap"
@@ -22,7 +21,7 @@ type ReapOutcome string
 const (
 	ReapRemoved      ReapOutcome = "removed"
 	ReapAlreadyGone  ReapOutcome = "already gone"
-	ReapSignalled    ReapOutcome = "signalled"
+	ReapFailed       ReapOutcome = "failed"
 	ReapUnidentified ReapOutcome = "unidentified"
 )
 
@@ -47,7 +46,7 @@ func ReapDataDir(dataDir string) []ReapResult {
 			continue
 		}
 		res := reapEntry(entry, path)
-		if res.Outcome == ReapRemoved || res.Outcome == ReapAlreadyGone || res.Outcome == ReapSignalled {
+		if res.Outcome == ReapRemoved || res.Outcome == ReapAlreadyGone {
 			RemoveHandoff(path, entry.SessionID)
 		}
 		results = append(results, res)
@@ -84,9 +83,7 @@ func reapEntry(entry RegistryEntry, registryPath string) ReapResult {
 		res.Outcome = ReapUnidentified
 		return res
 	}
-	_ = syscall.Kill(entry.WorkerPID, syscall.SIGTERM)
-	waitForExit(entry.WorkerPID, 5*time.Second)
-	res.Outcome = ReapSignalled
+	res.Outcome = ReapFailed
 	return res
 }
 
@@ -116,6 +113,10 @@ func requestWorkerRemove(entry RegistryEntry) error {
 		return err
 	}
 	if err := awaitOK(dec, "reap-hello"); err != nil {
+		return err
+	}
+	// Removal acknowledges the child's completed teardown, including escalation.
+	if err := conn.SetDeadline(time.Time{}); err != nil {
 		return err
 	}
 	if err := writeReapRequest(enc, "reap-remove", MethodRemove, map[string]any{}); err != nil {

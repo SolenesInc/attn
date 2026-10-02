@@ -233,7 +233,7 @@ func TestReapDataDirRemovesTheHandoffOfADeadWorker(t *testing.T) {
 	}
 }
 
-func TestReapDataDirSignalsIdentifiedWorkerWhenSocketUnreachable(t *testing.T) {
+func TestReapDataDirPreservesIdentifiedWorkerWhenSocketUnreachable(t *testing.T) {
 	dataDir := t.TempDir()
 	registryPath := filepath.Join(dataDir, "workers", "d-1", "registry", "sess-wedged.json")
 	cmd := spawnSleeper(t, registryPath)
@@ -249,11 +249,11 @@ func TestReapDataDirSignalsIdentifiedWorkerWhenSocketUnreachable(t *testing.T) {
 	if len(results) != 1 {
 		t.Fatalf("results = %d, want 1", len(results))
 	}
-	if results[0].Outcome != ReapSignalled {
-		t.Fatalf("outcome = %s (err=%v), want %s", results[0].Outcome, results[0].Err, ReapSignalled)
+	if results[0].Outcome != ReapFailed {
+		t.Fatalf("outcome = %s (err=%v), want %s", results[0].Outcome, results[0].Err, ReapFailed)
 	}
-	if procreap.ProcessAlive(cmd.Process.Pid) {
-		t.Fatal("worker still alive after reap")
+	if !procreap.ProcessAlive(cmd.Process.Pid) {
+		t.Fatal("unreachable worker was killed before child removal was confirmed")
 	}
 }
 

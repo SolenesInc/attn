@@ -1,0 +1,3 @@
+kind: fix
+area: instances
+change: Wait for PTY child teardown before completing worker removal, and preserve instance data when cleanup fails.
