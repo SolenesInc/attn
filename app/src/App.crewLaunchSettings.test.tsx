@@ -63,6 +63,18 @@ async function answer(daemon: ScriptedDaemon, save: CommandMessage<'crew_set'>, 
 }
 
 describe('App crew launch settings', () => {
+  it('wakes a sleeping member through the app wake action and shows its day', async () => {
+    const daemon = await openLaunchSettings([member('keel', 1)], []);
+    daemon.on('crew_wake', () => ({ event: 'crew_wake_result', success: true, member: 'keel', session_id: 's1' }));
+
+    await gesture(daemon, () => fireEvent.click(screen.getByTestId('crew-restart')));
+    await gesture(daemon, () => fireEvent.click(screen.getByTestId('crew-confirm-restart')));
+
+    expect(daemon.sentOf('crew_wake')).toEqual([expect.objectContaining({ member: 'keel' })]);
+    expect(daemon.sentOf('crew_restart')).toEqual([]);
+    expect(screen.getByTestId('crew-panel')).not.toHaveAttribute('open');
+  });
+
   it('shows the next wake the roster reports while a save is out, and ignores an older roster', async () => {
     const daemon = await openLaunchSettings([member('trellis', 1)], [HOLD]);
     await setEffort(daemon, 'high');
