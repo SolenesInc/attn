@@ -1,7 +1,8 @@
 import { describe, expect, it, vi } from 'vitest';
 import { act, fireEvent, screen } from '@testing-library/react';
 import { SESSION_FILTERS_SETTING_KEY } from '../../hooks/sessionFiltersSetting';
-import { NOW, entry } from '../../test/sessionLedgerFixtures';
+import { daemonSession } from '../../test/daemonFixtures';
+import { NOW, closedEntry, entry } from '../../test/sessionLedgerFixtures';
 import { savedSettings, serveSettings } from '../../test/settings';
 import type { ScriptedDaemon } from '../../test/scriptedDaemon';
 import { namedWorkspaces, openSessionsLedger, page, pages, rows, type LedgerAnswer } from './testSupport';
@@ -109,6 +110,86 @@ describe('SessionsTab query', () => {
     expect(chip.className).toContain('is-unresolved');
     fireEvent.click(chip);
     expect(query().value).toBe('');
+  });
+
+  it.each(['session_registered', 'session_state_changed', 'session_closed'] as const)('refreshes filter metadata for an owner arriving through %s', async (event) => {
+    const added = entry({ id: 'new-owner', workspace_id: 'ws-new', repository: '/tmp/new-project' });
+    const view = await openLedger({
+      workspaceNames: { 'ws-new': 'New workspace' },
+      answer: pages([
+        page({ facets: { workspaces: [], repositories: [] } }),
+        page({ entries: [added], facets: {
+          workspaces: [{ value: 'ws-new', count: 1 }], repositories: [{ value: '/tmp/new-project', count: 1 }],
+        } }),
+      ]),
+    });
+    view.daemon.emit(event === 'session_closed'
+      ? { event, session_ledger_entry: closedEntry('new-owner', added) }
+      : { event, session: daemonSession('new-owner', added) });
+    await view.daemon.idle();
+    expect(rows().getByText('run new-owner')).toBeInTheDocument();
+
+    await typeAndPause(view, 'ws:new-workspace repo:new-project');
+
+    expect(view.queries()[view.queries().length - 1]).toEqual({ all: true, limit: 50, workspace_id: 'ws-new', repository: '/tmp/new-project' });
+    expect(document.querySelector('.is-unresolved')).toBeNull();
+  });
+
+  it('refreshes facets omitted by an initial page that predates a live owner', async () => {
+    const added = entry({ id: 'new-owner', workspace_id: 'ws-new', repository: '/tmp/new-project' });
+    const view = await openLedger({
+      workspaceNames: { 'ws-new': 'New workspace' },
+      answer: (_query, index) => index === 0 ? 'hold' : page({ entries: [added], facets: {
+        workspaces: [{ value: 'ws-new', count: 1 }], repositories: [{ value: '/tmp/new-project', count: 1 }],
+      } }),
+    });
+    view.daemon.emit({ event: 'session_registered', session: daemonSession('new-owner', added) });
+    await view.daemon.idle();
+    await view.release(0, page({ facets: { workspaces: [], repositories: [] } }));
+
+    await typeAndPause(view, 'ws:new-workspace repo:new-project');
+
+    expect(view.queries()[view.queries().length - 1]).toEqual({ all: true, limit: 50, workspace_id: 'ws-new', repository: '/tmp/new-project' });
+    expect(rows().getByText('run new-owner')).toBeInTheDocument();
+  });
+
+  it('refreshes filter metadata after a live owner arrives during pagination', async () => {
+    const added = entry({ id: 'new-owner', workspace_id: 'ws-new', repository: '/tmp/new-project' });
+    const view = await openLedger({
+      workspaceNames: { 'ws-new': 'New workspace' },
+      answer: (query, index) => query.before ? 'hold' : index === 0
+        ? page({ entries: [entry({ id: 'previous' })], facets: { workspaces: [{ value: 'ws-1', count: 2 }], repositories: [] }, omitted: 1, next_before: 'previous' })
+        : page({ entries: [added], facets: {
+          workspaces: [{ value: 'ws-new', count: 1 }], repositories: [{ value: '/tmp/new-project', count: 1 }],
+        } }),
+    });
+    fireEvent.click(screen.getByRole('button', { name: /1 older/ }));
+    await view.daemon.idle();
+    view.daemon.emit({ event: 'session_registered', session: daemonSession('new-owner', added) });
+    await view.daemon.idle();
+    await view.release(0, page({ entries: [entry({ id: 'older' })] }));
+
+    await typeAndPause(view, 'ws:new-workspace repo:new-project');
+
+    expect(view.queries()[view.queries().length - 1]).toEqual({ all: true, limit: 50, workspace_id: 'ws-new', repository: '/tmp/new-project' });
+    expect(rows().getByText('run new-owner')).toBeInTheDocument();
+  });
+
+  it('discovers new filter values while another workspace is selected', async () => {
+    const view = await openLedger({
+      workspaceNames: { 'ws-1': 'Old workspace', 'ws-new': 'New workspace' },
+      answer: (_query, index) => page({ facets: {
+        workspaces: [{ value: 'ws-1', count: 1 }, ...(index >= 2 ? [{ value: 'ws-new', count: 1 }] : [])],
+        repositories: [],
+      } }),
+    });
+    await typeAndPause(view, 'ws:old-workspace');
+    view.daemon.emit({ event: 'session_registered', session: daemonSession('new-owner', { workspace_id: 'ws-new' }) });
+    await view.daemon.idle();
+
+    await typeAndPause(view, 'ws:new-workspace');
+
+    expect(view.queries()[view.queries().length - 1]).toEqual({ all: true, limit: 50, workspace_id: 'ws-new' });
   });
 
   it('narrows the page by words and dir: without asking the daemon', async () => {

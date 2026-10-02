@@ -83,8 +83,8 @@ it.each(['workspace', 'repository'])('removes a reopened owner outside its %s fi
 });
 
 it.each(['session_registered', 'session_state_changed'] as const)('inserts an absent live owner from %s without reloading', async (event) => {
-  const view = await openSessionsLedger(pages([page({ entries: [closedEntry('previous')] })]));
-  view.daemon.emit({ event, session: daemonSession('new-owner', { usage, label: 'new owner' }) });
+  const view = await openSessionsLedger(pages([page({ entries: [closedEntry('previous')], facets: { workspaces: [{ value: 'ws-1', count: 1 }], repositories: [] } })]));
+  view.daemon.emit({ event, session: daemonSession('new-owner', { usage, label: 'new owner', workspace_id: 'ws-1' }) });
   await view.daemon.idle();
   expect(document.querySelector('.ledger-row[data-row-key="new-owner"]')).toHaveTextContent('new owner');
   fireEvent.click(document.querySelector('.ledger-row[data-row-key="new-owner"]')!);

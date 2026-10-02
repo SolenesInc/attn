@@ -154,6 +154,18 @@ function overlayUpdates(entries: SessionLedgerEntry[], updates: ReadUpdates, fil
   return sortEntries(entries);
 }
 
+function missingUpdateFacets(facets: SessionLedgerFacets | null | undefined, updates: Iterable<SessionLedgerUpdate>, filters: SessionLedgerFilters, at: Date): boolean {
+  if (!facets) return false;
+  for (const event of updates) {
+    // Facet queries follow scope and time but ignore location filters.
+    const [entry] = applyUpdate([], event, { ...filters, workspaceId: '', repository: '' }, at);
+    if (!entry) continue;
+    if (entry.workspace_id && !facets.workspaces.some((facet) => facet.value === entry.workspace_id)) return true;
+    if (entry.repository && !facets.repositories.some((facet) => facet.value === entry.repository)) return true;
+  }
+  return false;
+}
+
 interface LedgerRead {
   query: string | null;
   entries: SessionLedgerEntry[];
@@ -173,6 +185,8 @@ export function useSessionLedger({
 }: UseSessionLedgerOptions): SessionLedgerView {
   const [filters, setFilters] = useState<SessionLedgerFilters>(initialFilters);
   const [read, setRead] = useState<LedgerRead>(NO_READ);
+  const facetsRef = useRef(read.facets);
+  facetsRef.current = read.facets;
   const [omitted, setOmitted] = useState(0);
   const [nextBefore, setNextBefore] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
@@ -216,6 +230,9 @@ export function useSessionLedger({
       }
       const id = event.type === 'live' ? event.session.id : event.entry.id;
       pendingUpdates.current?.set(id, event);
+      if (!pendingUpdates.current && missingUpdateFacets(facetsRef.current, [event], filtersRef.current, now())) {
+        setReloadNonce((n) => n + 1);
+      }
       setRead((current) => ({ ...current, entries: applyUpdate(current.entries, event, filtersRef.current, now()) }));
     });
   }, [connection.subscribe, enabled, now]);
@@ -255,6 +272,7 @@ export function useSessionLedger({
       .then((page) => {
         if (superseded()) return;
         setRead({ query: queryKey, entries: overlayUpdates(page.entries ?? [], updates, filtersRef.current, now()), facets: page.facets ?? null, error: null });
+        if (missingUpdateFacets(page.facets, updates.values(), filtersRef.current, now())) setReloadNonce((n) => n + 1);
         setOmitted(page.omitted ?? 0);
         setNextBefore(page.next_before ?? null);
       })
@@ -290,6 +308,7 @@ export function useSessionLedger({
       .then((page) => {
         if (superseded()) return;
         const snapshot = new Map(updates);
+        if (missingUpdateFacets(facetsRef.current, snapshot.values(), filtersRef.current, now())) setReloadNonce((n) => n + 1);
         setRead((current) => {
           const present = new Set(current.entries.map((entry) => entry.id));
           return { ...current, entries: overlayUpdates([...current.entries, ...(page.entries ?? []).filter((entry) => !present.has(entry.id))], snapshot, filtersRef.current, now()) };
