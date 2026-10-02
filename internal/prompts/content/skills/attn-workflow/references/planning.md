@@ -7,7 +7,7 @@ Read the `attn` skill's garden guidance and run `attn seed guide` for seed and p
 ## Workflow
 
 1. **Find the work.** Read the relevant implementation seed or plot, its notes, and any children. Reuse existing work and preserve its scope and decisions. If the work has no implementation seed, plant one to hold the plan.
-2. **Investigate the approach.** Start from the user's request, relevant conversation, and any vision referenced by the work or supplied by the user. Read vision seeds with `attn seed show <id>`. Read the results of any spikes and investigation for the work, including their code, notes, and reports. Read enough code to identify the components, entry points, state, interfaces, and ownership involved. Trace production and test paths where they differ. Propose an approach from your findings. Ask about choices or assumptions that could change the plan.
+2. **Investigate the approach.** Start from the user's request, relevant conversation, and any vision referenced by the work or supplied by the user. Read vision seeds with `attn seed show <id>`. Read the results of any spikes and investigation for the work, including their code, notes, and reports. Read enough code to identify the components, entry points, state, interfaces, and ownership involved, and apply refactor first from the skill's engineering judgment: list the existing paths that do the same job, with how each is addressed, triggered, and recovered, and record the list as a finding. Trace production and test paths where they differ. Propose an approach from your findings. Ask about choices or assumptions that could change the plan.
 3. **Write the plan.** Fill the template below into the seed or plot body. If there is a vision seed, reference its ID; do not overwrite its body with the implementation plan.
 4. **Organize execution.** Use a plot when the work has distinct pieces to scope and track separately, even within one PR. Use a single seed for one coherent task. Add or reuse child seeds for each unit of work, with an outcome, scope, and verification; refer to the parent plan without repeating it. When delivery is by pull request, explain which changes belong in each one. Add `blocks` links only for actual prerequisites; otherwise leave children independent.
 
@@ -18,14 +18,14 @@ Write for an implementer starting fresh and a user reviewing the direction. The 
 The body has six sections in this order. Each design part is required; a part that does not apply becomes one line with the reason in its place.
 
 - **Task and outcome**: what to build and what done looks like, in a few sentences.
-- **Decisions**: the choices the user might still change, each with its reason, and the open questions, saying which block work and which the implementer may decide.
+- **Decisions**: the choices the user might still change, each with its reason, and the open questions, saying which block work and which the implementer may decide. When a refactor would let the change fit existing code, show the user both orders, refactor first or build beside it, with the smallest refactor that would do; replacing a whole subsystem is not the only alternative.
 - **Findings**: what spikes and investigation established that the design depends on, written as described under Findings below. When nothing was learned beyond what the code shows, one line saying so.
 - **Design**, in four parts:
   - **Ownership**: each file or package that changes, as a shallow file tree with one comment per entry saying what it is responsible for.
   - **Interfaces**: the types, signatures, wire messages and persisted data the change adds or alters, sketched in the codebase's language, with the schema, generation and migration steps a wire or storage change requires. For an interface the change adds or reshapes, include a representative call site and check it with [Design](design.md).
   - **Behavior**: how control and data flow through the changed parts, as a sequence for messages between processes, a call tree within one process, or pseudocode for a rule.
   - **State**: each piece of state with its owner, what sets it, what reads it, what happens on failure and what happens on restart. In-memory state counts as state and has the same entry.
-- **Execution**: for a plot, the children, which changes belong to each pull request, and their order; for a single seed, one line saying so; without pull requests, the delivery step.
+- **Execution**: for a plot, the children, which changes belong to each pull request, and their order, with an agreed refactor as its own behavior-preserving change that blocks the work built on it; for a single seed, one line saying so; without pull requests, the delivery step.
 - **Completion**: the checks the repository's verification guidance requires for the affected surfaces and where the evidence is recorded, or the documented exemption when one applies.
 
 ## Findings

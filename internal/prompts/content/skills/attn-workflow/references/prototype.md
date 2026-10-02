@@ -4,7 +4,7 @@ Prototype when a decision is easier to make by comparing options than by describ
 
 ## Frame the decision
 
-State the decision the prototypes inform, what is fixed, and what the options may vary. Read the code, existing design, and conventions the result must fit, so every option is realistic. If the brief leaves the decision unclear, ask before building; when you were delegated and nobody answers, state the interpretation you chose and build against it.
+State the decision the prototypes inform, what is fixed, and what the options may vary. Read the code, existing design, and conventions the result must fit, so every option is realistic. When the change overlaps an existing mechanism, make one option reshape that mechanism to absorb the new case, so the comparison shows refactoring first beside building alongside it. If the brief leaves the decision unclear, ask before building; when you were delegated and nobody answers, state the interpretation you chose and build against it.
 
 ## Build the options
 
