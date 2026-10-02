@@ -3775,6 +3775,36 @@
             "id": "delegation-preferences.orchestrator-stopping-point",
             "source": "content/delegation-preferences/orchestrator-stopping-point.md"
           }
+        },
+        {
+          "id": "prototyper-description",
+          "delivery": "message_fragment",
+          "description": "Editable starting guidance for a delegation role.",
+          "body": {
+            "kind": "text",
+            "id": "delegation-preferences.prototyper-description",
+            "source": "content/delegation-preferences/prototyper-description.md"
+          }
+        },
+        {
+          "id": "prototyper-instructions",
+          "delivery": "message_fragment",
+          "description": "Editable starting guidance for a delegation role.",
+          "body": {
+            "kind": "text",
+            "id": "delegation-preferences.prototyper-instructions",
+            "source": "content/delegation-preferences/prototyper-instructions.md"
+          }
+        },
+        {
+          "id": "prototyper-stopping-point",
+          "delivery": "message_fragment",
+          "description": "Editable starting guidance for a delegation role.",
+          "body": {
+            "kind": "text",
+            "id": "delegation-preferences.prototyper-stopping-point",
+            "source": "content/delegation-preferences/prototyper-stopping-point.md"
+          }
         }
       ]
     },
@@ -3881,6 +3911,18 @@
           }
         },
         {
+          "id": "design",
+          "delivery": "reference",
+          "description": "Loaded on demand through the installed attn-workflow skill.",
+          "body": {
+            "kind": "text",
+            "id": "attn-workflow-skill.design",
+            "source": "content/skills/attn-workflow/references/design.md",
+            "verbatim": true,
+            "keep_final_newline": true
+          }
+        },
+        {
           "id": "discuss",
           "delivery": "reference",
           "description": "Loaded on demand through the installed attn-workflow skill.",
@@ -3924,6 +3966,18 @@
             "kind": "text",
             "id": "attn-workflow-skill.planning",
             "source": "content/skills/attn-workflow/references/planning.md",
+            "verbatim": true,
+            "keep_final_newline": true
+          }
+        },
+        {
+          "id": "prototype",
+          "delivery": "reference",
+          "description": "Loaded on demand through the installed attn-workflow skill.",
+          "body": {
+            "kind": "text",
+            "id": "attn-workflow-skill.prototype",
+            "source": "content/skills/attn-workflow/references/prototype.md",
             "verbatim": true,
             "keep_final_newline": true
           }
@@ -4893,5 +4947,5 @@
       ]
     }
   ],
-  "definitions_hash": "378b1b4a65ed5eb3b9b0305cfe3d2091c053d5f213e96f004bd177b41d0ae1c2"
+  "definitions_hash": "87590e3250a5e9a11ea3dad7ee79fae53c3739a63230369e351bf6d71ce2c19f"
 }

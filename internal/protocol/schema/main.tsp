@@ -1089,6 +1089,7 @@ enum BuiltinDelegationRole {
   builder,
   reviewer,
   orchestrator,
+  prototyper,
 }
 
 model DelegationFallback {

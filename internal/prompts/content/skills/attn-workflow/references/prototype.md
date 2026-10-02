@@ -1,0 +1,22 @@
+# Prototype
+
+Prototype when a decision is easier to make by comparing options than by describing them: a screen, a flow, an interaction, or the shape of an interface in code. A prototype is a spike whose product is a set of options; its code is disposable, and what carries forward is the choice and the reasons for it.
+
+## Frame the decision
+
+State the decision the prototypes inform, what is fixed, and what the options may vary. Read the code, existing design, and conventions the result must fit, so every option is realistic. If the brief leaves the decision unclear, ask before building.
+
+## Build the options
+
+Build at least two options, usually three, that differ in approach rather than in detail: a different structure, interaction model, or boundary, not a different color or parameter name. If only one approach is credible, say so and show the strongest alternative you rejected, with the reason. Give each option a short name and one sentence on the idea behind it.
+
+Make each option concrete enough to judge the decision, and no more.
+
+- **Visual.** Write each option as a self-contained HTML file with inline styles and scripts, realistic content, the states that matter (such as empty, typical, overflowing, and failed), and working versions of the interactions in question. Match the product's existing look unless the look is the question. Show the options with the harness's native artifact or preview feature when it has one; otherwise open the files in the default browser (`open` on macOS, `xdg-open` on Linux) and give their paths.
+- **Interface design.** Write each option as the interface's declarations and the same two or three realistic call sites, using names from the codebase. Put the options side by side in one document and judge them with [Design](design.md).
+
+## Compare and recommend
+
+For each option, state what it does well, what it costs, and where it breaks. Then recommend one option, or a combination, and give the reason, pointing to the call site, screen, or state that shows it. The user chooses.
+
+Record where the options live, the comparison, and the recommendation in the assigned seed. When the user chooses, the choice and its reasons are a finding for the plan, as [Planning](planning.md) describes.

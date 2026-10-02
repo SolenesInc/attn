@@ -1,0 +1,3 @@
+kind: added
+area: delegation
+change: A maintained Prototyper role builds two or more options for a UI or for an interface in code, compares them, and recommends one. Pathfinders delegate prototypes to it when it is enabled, so a Prototyper alternative can route visual work to a different model. The attn-workflow skill gains Prototype and Design references; Design gives interface-design checks drawn from the API design literature. Settings > Delegation names any maintained role missing from an existing table so it can be added in one click.

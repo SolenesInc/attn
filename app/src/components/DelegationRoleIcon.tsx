@@ -7,6 +7,7 @@ const ICON_PATHS: Record<string, React.ReactNode> = {
   bug: <><rect x="4" y="5" width="8" height="9" rx="4" /><path d="m5 2 2 3m4-3-2 3M1 7h3m8 0h3M1 11h3m8 0h3M8 6v7" /></>,
   spark: <path d="m8 1 2 5 5 2-5 2-2 5-2-5-5-2 5-2Z" />,
   circle: <circle cx="8" cy="8" r="6" />,
+  layers: <path d="M8 2 14 5 8 8 2 5Z M2 8l6 3 6-3M2 11l6 3 6-3" />,
 };
 
 export function DelegationRoleIcon({ icon, name }: { icon: string; name: string }) {

@@ -1514,6 +1514,7 @@ type BuiltinDelegationRole string
 const BuiltinDelegationRoleBuilder BuiltinDelegationRole = "builder"
 const BuiltinDelegationRoleOrchestrator BuiltinDelegationRole = "orchestrator"
 const BuiltinDelegationRolePathfinder BuiltinDelegationRole = "pathfinder"
+const BuiltinDelegationRolePrototyper BuiltinDelegationRole = "prototyper"
 const BuiltinDelegationRoleReviewer BuiltinDelegationRole = "reviewer"
 
 type BusConsumerStatus struct {

@@ -59,6 +59,8 @@ Choose the smallest view that explains the point:
 - messages between processes as a sequence
 - a UI layout or state comparison as an ASCII wireframe
 
+When the design adds or reshapes an interface, show its call sites and check it with [Design](design.md).
+
 ## Template
 
 Copy the template and replace everything in angle brackets. The bracketed content is one example plan, a per-session permission preset for pi; it shows each part's form, and it shows a diff where the shape already exists and a whole block where it is new.
