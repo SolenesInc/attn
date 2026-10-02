@@ -12,7 +12,6 @@ import (
 	"github.com/victorarias/attn/internal/bus"
 	"github.com/victorarias/attn/internal/protocol"
 	"github.com/victorarias/attn/internal/store"
-	"golang.org/x/sync/errgroup"
 )
 
 const sessionListReopenConcurrency = 4
@@ -106,23 +105,28 @@ func (d *Daemon) handleSessionList(conn net.Conn, msg *protocol.SessionListMessa
 func (d *Daemon) reopenVerdictsForPage(entries []protocol.SessionLedgerEntry) []protocol.SessionReopenEntry {
 	verdicts := make([]*protocol.SessionReopenEntry, len(entries))
 	gitView := d.scheduledReopenGit()
-	var group errgroup.Group
-	group.SetLimit(sessionListReopenConcurrency)
+	pending := make(chan int, len(entries))
 	for i, entry := range entries {
-		if protocol.Deref(entry.ClosedAt) == "" {
-			continue
+		if protocol.Deref(entry.ClosedAt) != "" {
+			pending <- i
 		}
-		group.Go(func() error {
-			verdict, err := d.resolveReopen(context.Background(), entry, gitView)
-			if err != nil {
-				d.logf("session list: resolve reopen eligibility for session %s: %v", entry.ID, err)
-				return nil
-			}
-			verdicts[i] = &protocol.SessionReopenEntry{SessionID: entry.ID, Reopen: *verdict.toProtocol()}
-			return nil
-		})
 	}
-	_ = group.Wait()
+	close(pending)
+	workers := make([]func(), min(sessionListReopenConcurrency, len(pending)))
+	for i := range workers {
+		workers[i] = func() {
+			for index := range pending {
+				entry := entries[index]
+				verdict, err := d.resolveReopen(context.Background(), entry, gitView)
+				if err != nil {
+					d.logf("session list: resolve reopen eligibility for session %s: %v", entry.ID, err)
+					continue
+				}
+				verdicts[index] = &protocol.SessionReopenEntry{SessionID: entry.ID, Reopen: *verdict.toProtocol()}
+			}
+		}
+	}
+	runJoined(workers...)
 	resolved := make([]protocol.SessionReopenEntry, 0, len(verdicts))
 	for _, verdict := range verdicts {
 		if verdict != nil {

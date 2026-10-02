@@ -41,6 +41,8 @@ func TestTheDaemonStartsGoroutinesAndTimersOnlyThroughItsLifetime(t *testing.T) 
 				case *ast.CallExpr:
 					if isTimeAfterFunc(node) {
 						problem = "time.AfterFunc: use d.life.AfterFunc so a timer that fires during stop does nothing"
+					} else if isUnownedGoCall(node) {
+						problem = "group.Go: use d.life.Go so Daemon.stop waits for it, or runJoined for children joined before their shutdown-drained caller returns"
 					}
 				}
 				if problem == "" {
@@ -55,6 +57,15 @@ func TestTheDaemonStartsGoroutinesAndTimersOnlyThroughItsLifetime(t *testing.T) 
 	if len(violations) > 0 {
 		t.Fatalf("goroutines and timers outside the daemon lifetime (lifetime.go):\n%s", strings.Join(violations, "\n"))
 	}
+}
+
+func isUnownedGoCall(call *ast.CallExpr) bool {
+	sel, ok := call.Fun.(*ast.SelectorExpr)
+	if !ok || sel.Sel.Name != "Go" {
+		return false
+	}
+	owner, ok := sel.X.(*ast.SelectorExpr)
+	return !ok || owner.Sel.Name != "life"
 }
 
 func funcDeclName(fn *ast.FuncDecl) string {

@@ -1,0 +1,3 @@
+kind: internal
+area: daemon
+change: Guard group-started goroutines against escaping the daemon lifetime.
