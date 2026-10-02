@@ -130,14 +130,12 @@ func (w *profilesTestDaemon) agent(sessionID, profileID string) {
 	w.t.Helper()
 	w.d.store.Add(&protocol.Session{
 		ID:        sessionID,
+		ProfileID: profileID,
 		Label:     sessionID,
 		Directory: w.t.TempDir(),
 		State:     protocol.SessionStateIdle,
 		Agent:     protocol.SessionAgentClaude,
 	})
-	if err := w.d.store.AssignSessionProfile(sessionID, profileID); err != nil {
-		w.t.Fatalf("assign %s to profile %s: %v", sessionID, profileID, err)
-	}
 }
 
 func eventName(t *testing.T, payload []byte) string {

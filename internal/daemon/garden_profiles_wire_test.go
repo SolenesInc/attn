@@ -3,6 +3,7 @@ package daemon_test
 import (
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/google/uuid"
 	"github.com/victorarias/attn/internal/client"
@@ -53,6 +54,7 @@ func TestFreeTenderNamesStayInsideTheirSeedsProfile(t *testing.T) {
 			t.Fatal(err)
 		}
 		side := createProfile(app, "Side")
+		w.advance(time.Second)
 		selectProfile(app, side.ID)
 		registerSessions(t, w, cli, "side-worker")
 		other := plantSeedAs(t, cli, "side-worker", "free worker in Side")
@@ -65,7 +67,9 @@ func TestFreeTenderNamesStayInsideTheirSeedsProfile(t *testing.T) {
 		if err := w.InjectCrewSession("registered-keel", "Keel", w.Path("keel"), "keel"); err != nil {
 			t.Fatal(err)
 		}
-		selectProfile(w.App(), home)
+		homeApp := w.App()
+		w.advance(time.Second)
+		selectProfile(homeApp, home)
 		registerSessions(t, w, cli, "default-worker")
 		if _, err := cli.WithGardenProfile("", "default-worker").SeedEdit(original, "the existing free claim stays editable after registration"); err != nil {
 			t.Fatal(err)

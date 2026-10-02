@@ -27,19 +27,16 @@ func TestArrangementInvariantsHoldUnderRandomOperations(t *testing.T) {
 		sessionIDs := make([]string, 6)
 		for i := range sessionIDs {
 			sessionIDs[i] = fmt.Sprintf("agent-%d", i)
-			now := string(protocol.TimestampNow())
-			if err := s.AddChecked(&protocol.Session{
-				ID: sessionIDs[i], Label: sessionIDs[i], Agent: protocol.SessionAgentCodex, Directory: "/tmp/project",
-				State: protocol.SessionStateIdle, StateSince: now, StateUpdatedAt: now, LastSeen: now,
-			}); err != nil {
-				t.Fatalf("AddChecked: %v", err)
-			}
 			owner := profile.ID
 			if i == len(sessionIDs)-1 {
 				owner = other.ID
 			}
-			if err := s.AssignSessionProfile(sessionIDs[i], owner); err != nil {
-				t.Fatalf("AssignSessionProfile: %v", err)
+			now := string(protocol.TimestampNow())
+			if err := s.AddChecked(&protocol.Session{
+				ID: sessionIDs[i], Label: sessionIDs[i], Agent: protocol.SessionAgentCodex, Directory: "/tmp/project", ProfileID: owner,
+				State: protocol.SessionStateIdle, StateSince: now, StateUpdatedAt: now, LastSeen: now,
+			}); err != nil {
+				t.Fatalf("AddChecked: %v", err)
 			}
 		}
 		refusal := func(err error) {

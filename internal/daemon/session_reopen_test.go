@@ -148,7 +148,7 @@ func TestReopenVerdictNamesADeletedProfile(t *testing.T) {
 	closeReopenSession(t, d, reopenSession{
 		ID: "gone-profile", Directory: t.TempDir(), Agent: "codex", Resume: "conv-gone-profile", ProfileID: work.ID,
 	})
-	deleteTestProfile(t, d.store, work.ID, defaultProfileID(t, d.store))
+	deleteTestProfile(t, d.store, work.ID)
 
 	verdict := decidedReopenVerdict(t, d, "gone-profile")
 	if verdict.ProfileID != work.ID || !verdict.ProfileDeleted {

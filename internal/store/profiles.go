@@ -1383,23 +1383,6 @@ func openSessionProfileID(tx *sql.Tx, sessionID string) (string, error) {
 	return profileID, nil
 }
 
-func (s *Store) AssignSessionProfile(sessionID, profileID string) error {
-	return s.profilesTx(func(tx *sql.Tx, _ string) error {
-		if _, err := loadLiveProfile(tx, profileID); err != nil {
-			return err
-		}
-		current, err := openSessionProfileID(tx, sessionID)
-		if err != nil {
-			return err
-		}
-		if current != "" && current != profileID {
-			return profiles.Errorf(profiles.CodeCrossProfile, "session %s already belongs to profile %s; profile ownership cannot change", sessionID, current)
-		}
-		_, err = tx.Exec(`UPDATE sessions SET profile_id = ? WHERE id = ? AND closed_at = ''`, profileID, sessionID)
-		return err
-	})
-}
-
 func (s *Store) SessionProfileID(sessionID string) (string, error) {
 	var profileID string
 	err := s.profilesTx(func(tx *sql.Tx, _ string) error {

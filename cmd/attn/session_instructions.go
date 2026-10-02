@@ -304,7 +304,7 @@ commands:
         until interrupted; --json emits one event per line.
   list [--closed | --all] [--limit <n>] [--before <id>]
        [--repository <path>] [--last <preset> | --since <when> [--until <when>]]
-       [--reopen] [--json]
+       [--profile <id>] [--reopen] [--json]
         read the session ledger, newest first: live sessions by default,
         --closed for the ones that ended, --all for both. When rows are
         omitted the notice names the id to pass to --before for the next page.

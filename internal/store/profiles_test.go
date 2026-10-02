@@ -41,16 +41,10 @@ func addProfileSession(t *testing.T, s *Store, id, profileID string) {
 	t.Helper()
 	now := string(protocol.TimestampNow())
 	if err := s.AddChecked(&protocol.Session{
-		ID: id, Label: id, Agent: protocol.SessionAgentCodex, Directory: "/tmp/project",
+		ID: id, Label: id, Agent: protocol.SessionAgentCodex, Directory: "/tmp/project", ProfileID: profileID,
 		State: protocol.SessionStateIdle, StateSince: now, StateUpdatedAt: now, LastSeen: now,
 	}); err != nil {
 		t.Fatalf("adding session %s: %v", id, err)
-	}
-	if profileID == "" {
-		return
-	}
-	if err := s.AssignSessionProfile(id, profileID); err != nil {
-		t.Fatalf("assigning session %s to profile %s: %v", id, profileID, err)
 	}
 }
 
@@ -292,9 +286,6 @@ func TestLayoutWritesNeverChangeMembership(t *testing.T) {
 	if profileID, _ := s.SessionProfileID("work-agent"); profileID != work.ID {
 		t.Fatalf("work-agent profile = %s, want %s", profileID, work.ID)
 	}
-	if err := s.AssignSessionProfile("work-agent", home.ID); err == nil {
-		t.Fatal("assigning a second profile to a session succeeded; membership changes only through a move")
-	}
 }
 
 func TestCorruptArrangementsAreRefusedNotNormalized(t *testing.T) {
@@ -449,7 +440,6 @@ func TestProfileIDsSurviveRenameAndDeletedNamesAreReusable(t *testing.T) {
 	if _, err := s.CloseSession("closed-agent", SessionClose{}, time.Now()); err != nil {
 		t.Fatalf("closing closed-agent: %v", err)
 	}
-	wantCode(t, s.AssignSessionProfile("closed-agent", work.ID), profiles.CodeSessionClosed)
 
 	_, _, err = s.CreateProfile("  Home ")
 	wantCode(t, err, profiles.CodeNameTaken)

@@ -56,7 +56,7 @@ func createTestProfile(t testing.TB, s *store.Store, name string) profiles.Profi
 	return profile
 }
 
-func deleteTestProfile(t testing.TB, s *store.Store, profileID, destinationID string) {
+func deleteTestProfile(t testing.TB, s *store.Store, profileID string) {
 	t.Helper()
 	profile, err := s.GetProfile(profileID)
 	if err != nil {
@@ -89,9 +89,10 @@ func focusTestAgent(t testing.TB, d *Daemon, sessionID string) {
 		if err != nil {
 			t.Fatalf("read the most recent profile: %v", err)
 		}
-		if profileID, _ := d.store.SessionProfileID(sessionID); profileID == "" {
-			if err := d.store.AssignSessionProfile(sessionID, profile.ID); err != nil {
-				t.Fatalf("give %s a profile: %v", sessionID, err)
+		if session := d.store.Get(sessionID); session != nil && session.ProfileID == "" {
+			session.ProfileID = profile.ID
+			if err := d.store.AddChecked(session); err != nil {
+				t.Fatalf("give %s its initial profile: %v", sessionID, err)
 			}
 		}
 		placeTestSession(t, d, sessionID, profile.CurrentDesktopID)
@@ -208,8 +209,9 @@ func setTestChief(d *Daemon, sessionID string) error {
 		now := string(protocol.TimestampNow())
 		d.store.Add(&protocol.Session{ID: sessionID, Label: sessionID, State: protocol.SessionStateIdle, StateSince: now, StateUpdatedAt: now, LastSeen: now})
 	}
-	if profileID, _ := d.store.SessionProfileID(sessionID); profileID == "" {
-		if err := d.store.AssignSessionProfile(sessionID, profile.ID); err != nil {
+	if session := d.store.Get(sessionID); session.ProfileID == "" {
+		session.ProfileID = profile.ID
+		if err := d.store.AddChecked(session); err != nil {
 			return err
 		}
 	}
