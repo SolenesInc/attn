@@ -466,6 +466,31 @@ type codexNativeStatus struct {
 	ActiveFlags []string `json:"activeFlags"`
 }
 
+func (r *codexRuntime) controlDisconnected() {
+	r.d.logf("shared Codex control disconnected; native attention needs reconciliation")
+	owners, err := r.d.store.CodexOwners(r.serverID)
+	if err != nil {
+		r.d.logf("read shared Codex owners after control disconnect: %v", err)
+		return
+	}
+	r.activeMu.Lock()
+	defer r.activeMu.Unlock()
+	for root, state := range r.activeTurns {
+		state.ID = ""
+		state.Status = codexNativeStatus{}
+		state.Revision++
+		r.activeTurns[root] = state
+	}
+	for _, owner := range owners {
+		if owner.Archived || owner.NativeRootID == "" {
+			continue
+		}
+		r.d.recordEvidence(owner.SessionID, time.Now(), func(e *sessionstate.Evidence) {
+			e.NativeRoot = &sessionstate.Observation{Source: sessionstate.SourceNative, Claim: sessionstate.ClaimStopFailed, Detail: "control_disconnected", ObservedAt: time.Now()}
+		})
+	}
+}
+
 func (r *codexRuntime) observeControl(m codexshared.Message) {
 	r.observeNative(m)
 	if m.Method != "thread/status/changed" {

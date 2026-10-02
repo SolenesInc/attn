@@ -100,6 +100,14 @@ interface Composer {
   writing: boolean;
 }
 
+function annotationOwner() {
+  return {
+    store: new TerminalAnnotationStore(),
+    note: { current: '' },
+    generation: { current: 0 },
+  };
+}
+
 export const AnnotatedTerminal = forwardRef<GhosttyTerminalHandle, AnnotatedTerminalProps>(
   function AnnotatedTerminal(
     { workspaceId, sessionId: displayedSessionId, sessionLabel, annotationApi, paneActive = false, ...terminalProps },
@@ -107,11 +115,8 @@ export const AnnotatedTerminal = forwardRef<GhosttyTerminalHandle, AnnotatedTerm
   ) {
     const [recipient, setRecipient] = useState(() => ({ id: displayedSessionId, label: sessionLabel || displayedSessionId }));
     const sessionId = recipient.id;
-    const owner = useMemo(() => ({
-      store: new TerminalAnnotationStore(),
-      note: { current: '' },
-      generation: { current: 0 },
-    }), [sessionId]);
+    const pendingOwners = useRef(new Map<string, ReturnType<typeof annotationOwner>>());
+    const owner = useMemo(() => pendingOwners.current.get(sessionId) ?? annotationOwner(), [sessionId]);
     const store = owner.store;
     const [version, setVersion] = useState(0);
     const [composer, setComposer] = useState<Composer | null>(null);
@@ -212,6 +217,7 @@ export const AnnotatedTerminal = forwardRef<GhosttyTerminalHandle, AnnotatedTerm
 
     useEffect(() => {
       if (!enabled || !sessionId) return;
+      if (pendingOwners.current.get(sessionId) === owner) return;
       let cancelled = false;
       void annotationApi!.fetchAnnotations(sessionId)
         .then((stored) => {
@@ -226,7 +232,7 @@ export const AnnotatedTerminal = forwardRef<GhosttyTerminalHandle, AnnotatedTerm
       return () => {
         cancelled = true;
       };
-    }, [annotationApi, bump, enabled, sessionId, store]);
+    }, [annotationApi, bump, enabled, owner, sessionId, store]);
 
     useEffect(() => {
       if (!enabled || !sessionId) return;
@@ -556,8 +562,9 @@ export const AnnotatedTerminal = forwardRef<GhosttyTerminalHandle, AnnotatedTerm
         comment: entry.comment,
         start: entry.start,
       })), sendingNote);
+      pendingOwners.current.set(sessionId, owner);
       return annotationApi.submitAnnotations(sessionId, payload)
-        .then((result) => {
+        .then((result): TerminalSendResult => {
           if (result.status !== 'delivered') {
             return result.status === 'skipped_pending_approval'
               ? { kind: 'skipped' }
@@ -585,6 +592,9 @@ export const AnnotatedTerminal = forwardRef<GhosttyTerminalHandle, AnnotatedTerm
             .catch(() => {
             });
           return { kind: 'sent', count: sending.length, kept };
+        })
+        .finally(() => {
+          if (pendingOwners.current.get(sessionId) === owner) pendingOwners.current.delete(sessionId);
         });
     };
 

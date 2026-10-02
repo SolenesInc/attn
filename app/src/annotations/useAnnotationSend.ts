@@ -30,10 +30,11 @@ export function useAnnotationSend<T extends AnnotationSendResult>({
   identity,
 }: UseAnnotationSendOptions<T>) {
   const sendRef = useRef(send);
-  const gate = useMemo(() => ({ sending: false }), [identity]);
+  const pending = useRef(new Map<string | undefined, { sending: boolean }>());
+  const gate = useMemo(() => pending.current.get(identity) ?? { sending: false }, [identity]);
   const currentGate = useRef(gate);
   const [display, setDisplay] = useState<{ gate: typeof gate; outcome: AnnotationSendOutcome<T> } | null>(null);
-  const outcome = display?.gate === gate ? display.outcome : null;
+  const outcome = display?.gate === gate ? display.outcome : gate.sending ? { kind: 'sending' as const } : null;
   const setOutcome = useCallback((next: AnnotationSendOutcome<T>) => {
     if (currentGate.current === gate) setDisplay({ gate, outcome: next });
   }, [gate]);
@@ -48,12 +49,17 @@ export function useAnnotationSend<T extends AnnotationSendResult>({
       return;
     }
     gate.sending = true;
+    pending.current.set(identity, gate);
+    const finish = () => {
+      gate.sending = false;
+      if (pending.current.get(identity) === gate) pending.current.delete(identity);
+    };
 
     let result: T | null | Promise<T | null>;
     try {
       result = action();
     } catch (error) {
-      gate.sending = false;
+      finish();
       setOutcome({
         kind: 'error',
         message: error instanceof Error ? error.message : 'Send failed',
@@ -62,11 +68,11 @@ export function useAnnotationSend<T extends AnnotationSendResult>({
     }
 
     if (result === null) {
-      gate.sending = false;
+      finish();
       return;
     }
     if (!(result instanceof Promise)) {
-      gate.sending = false;
+      finish();
       setOutcome(result);
       return;
     }
@@ -84,10 +90,8 @@ export function useAnnotationSend<T extends AnnotationSendResult>({
           message: error instanceof Error ? error.message : 'Send failed',
         });
       })
-      .finally(() => {
-        gate.sending = false;
-      });
-  }, [gate, setOutcome]);
+      .finally(finish);
+  }, [gate, identity, setOutcome]);
 
   const sendNow = useCallback(() => runSend(sendRef.current), [runSend]);
   const sendAlternative = useCallback(

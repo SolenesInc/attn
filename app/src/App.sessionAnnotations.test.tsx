@@ -189,10 +189,31 @@ async function openSharedAnnotations() {
     view.daemon.emit({ event: 'workspace_layout_updated', workspace_layout: { ...layout, panes: [{ ...layout.panes[0], session_id: 's2', codex_revision: '2' }] } });
     await view.daemon.idle();
   };
-  return { ...view, switchToB };
+  const switchToA = async () => {
+    const layout = workspace.layout!;
+    view.daemon.emit({ event: 'workspace_layout_updated', workspace_layout: { ...layout, panes: [{ ...layout.panes[0], session_id: 's1', codex_revision: '3' }] } });
+    await view.daemon.idle();
+  };
+  return { ...view, switchToB, switchToA };
 }
 
 describe('shared Codex annotation recipients', () => {
+  it('keeps A pending when switching A to B and back before its reply', async () => {
+    const { daemon, switchToB, switchToA } = await openSharedAnnotations();
+    fireEvent.click(panel().getByRole('button', { name: /Send all/ }));
+    await daemon.idle();
+    const submitA = daemon.sentOf('session_annotations_submit')[0];
+    await switchToB();
+    await switchToA();
+    expect(panel().getByRole('button', { name: 'Sending…' })).toBeDisabled();
+    fireEvent.keyDown(document, { key: 'Enter', metaKey: true });
+    await daemon.idle();
+    expect(daemon.sentOf('session_annotations_submit')).toHaveLength(1);
+    deliver(daemon, submitA);
+    await daemon.idle();
+    expect(cards()).toEqual([]);
+  });
+
   it('lets B send while A is pending and keeps B progress when A answers', async () => {
     const { daemon, switchToB } = await openSharedAnnotations();
     fireEvent.click(panel().getByRole('button', { name: /Send all/ }));

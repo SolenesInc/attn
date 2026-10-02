@@ -129,6 +129,9 @@ authoritative while a root has no visible terminal. Idle status uses the existin
 Stop classifier to distinguish completion from a question. A new prompt hook
 invalidates the previous idle snapshot before the next active notification arrives.
 View connections do not duplicate this state projection.
+Losing the control connection replaces its claims with attention needing input
+and clears the active turn. The next explicit operation reconnects and reconciles
+native root snapshots; it does not replay input.
 
 The queue retains hidden shared owners once. Selecting one attaches its native
 root through the existing reopen operation; an attachment error appears to the
@@ -147,6 +150,8 @@ An open annotation editor keeps the owner selected when it opened. After a nativ
 switch its panel names that recipient. Draft stores, notes, save generations and
 send progress belong to that owner; delayed replies cannot spend another owner's
 draft. The terminal itself remains mounted throughout the switch.
+Returning to an owner with a pending send restores that same send guard and draft
+store until its reply settles.
 
 Explicit native input rejections are reported as failures and release that attempt
 for a later explicit submission. Transport loss remains indeterminate; input is

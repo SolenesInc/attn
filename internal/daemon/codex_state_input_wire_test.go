@@ -105,6 +105,54 @@ func TestSharedCodexSystemErrorReplacesHiddenBusyAndApprovalClaims(t *testing.T)
 	}
 }
 
+func TestSharedCodexControlDisconnectReconcilesHiddenBusyAndApprovalClaims(t *testing.T) {
+	for _, approval := range []bool{false, true} {
+		t.Run(map[bool]string{false: "working", true: "approval"}[approval], func(t *testing.T) {
+			w := newWorld(t, fakeagent.Codex)
+			app := w.App()
+			sharedCodexSetting(t, app, true)
+			a := w.Spawn(app, fakeagent.Codex, w.Path("a"))
+			agentA := w.Launched(a)
+			awaitSharedView(app, a, a)
+			b := w.Spawn(app, fakeagent.Codex, w.Path("b"))
+			agentB := w.Launched(b)
+			awaitSharedView(app, b, b)
+			app.TypeLine(a, "work on A")
+			agentA.Prompted()
+			app.TypeLine(a, "/agents "+agentB.ConversationID)
+			awaitSharedView(app, a, b)
+			if approval {
+				agentA.AskApproval()
+				testworld.AwaitSession(app, a, func(s protocol.Session) bool { return s.State == protocol.SessionStatePendingApproval })
+			}
+			agentA.DisconnectNativeControl()
+			failed := testworld.AwaitSession(app, a, func(s protocol.Session) bool { return s.State == protocol.SessionStateWaitingInput })
+			if !protocol.Deref(failed.TurnOwed) {
+				t.Fatal("control disconnect lost its owed attention turn")
+			}
+			app.TypeLine(a, "/agents "+agentA.ConversationID)
+			awaitSharedView(app, a, a)
+			if approval {
+				app.AwaitScreen(a, "Allow the command to run?")
+				app.Send(protocol.PtyInputMessage{Cmd: protocol.CmdPtyInput, ID: a, Data: "\r"})
+				if got := agentA.Answered(); got != "accepted" {
+					t.Fatal(got)
+				}
+			}
+			result := sharedAnnotationSubmit(app, a, "reconnect-A", "reconnect and steer A")
+			if !result.Success {
+				t.Fatal(result)
+			}
+			if got := agentA.Prompted(); got != "reconnect and steer A" {
+				t.Fatal(got)
+			}
+			testworld.AwaitSession(app, a, func(s protocol.Session) bool { return s.State == protocol.SessionStateWorking })
+			agentA.Reply("A finished <!-- attn:state=idle -->")
+			testworld.AwaitSession(app, a, func(s protocol.Session) bool { return s.State == protocol.SessionStateIdle })
+		})
+	}
+}
+
 func TestSharedCodexMailboxUsesOneHiddenOwnerAndSteeringPreservesBothDrafts(t *testing.T) {
 	w := newWorld(t, fakeagent.Codex)
 	app, cli := w.App(), w.Client()

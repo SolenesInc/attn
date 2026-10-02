@@ -140,6 +140,8 @@ func (c *Client) write(ctx context.Context, m Message) error {
 }
 func (c *Client) Close() { _ = c.conn.CloseNow() }
 
+func (c *Client) Done() <-chan struct{} { return c.done }
+
 func (c *Client) Respond(ctx context.Context, id json.RawMessage, result any) error {
 	raw, err := json.Marshal(result)
 	if err != nil {

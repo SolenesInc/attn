@@ -177,6 +177,19 @@ func (r *codexRuntime) ensureServer(ctx context.Context, launch codexLaunchConte
 		return fmt.Errorf("connect shared Codex server: %w", err)
 	}
 	r.control = control
+	r.d.life.Go("codexControlDisconnected", func() {
+		select {
+		case <-r.d.life.Done():
+			return
+		case <-control.Done():
+		}
+		r.mu.Lock()
+		defer r.mu.Unlock()
+		if r.control != control || r.d.life.Ended() {
+			return
+		}
+		r.controlDisconnected()
+	})
 	r.d.logf("shared Codex control connected")
 	owners, err := r.d.store.CodexOwners(r.serverID)
 	if err != nil {
@@ -288,6 +301,12 @@ func (r *codexRuntime) noteServerExit(info ptybackend.ExitInfo) {
 		}
 	}
 	r.d.life.Go("codexServerInterrupted", func() {
+		r.mu.Lock()
+		defer r.mu.Unlock()
+		if r.control != nil {
+			r.control.Close()
+			r.control = nil
+		}
 		r.activeMu.Lock()
 		clear(r.activeTurns)
 		r.activeMu.Unlock()

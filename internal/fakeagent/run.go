@@ -96,6 +96,10 @@ func (r *Run) NativeSystemError() {
 	r.call("system_error", nil, nil)
 }
 
+func (r *Run) DisconnectNativeControl() {
+	r.call("disconnect_control", nil, nil)
+}
+
 func (r *Run) ToolShell(command string) string {
 	r.t.Helper()
 	var result struct {

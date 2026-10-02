@@ -21,6 +21,7 @@ type sharedFakeCodex struct {
 	mu            sync.Mutex
 	roots         map[string]*sharedFakeRoot
 	peers         map[*websocket.Conn]bool
+	control       *websocket.Conn
 	archiveError  bool
 	archiveErrors map[string]bool
 	rejectedStart atomic.Bool
@@ -65,7 +66,14 @@ func (s *sharedFakeCodex) serve(w http.ResponseWriter, req *http.Request) {
 	s.mu.Lock()
 	s.peers[conn] = true
 	s.mu.Unlock()
-	defer func() { s.mu.Lock(); delete(s.peers, conn); s.mu.Unlock() }()
+	defer func() {
+		s.mu.Lock()
+		delete(s.peers, conn)
+		if s.control == conn {
+			s.control = nil
+		}
+		s.mu.Unlock()
+	}()
 	for {
 		_, raw, err := conn.Read(context.Background())
 		if err != nil {
@@ -77,6 +85,13 @@ func (s *sharedFakeCodex) serve(w http.ResponseWriter, req *http.Request) {
 		}
 		if m.Method == "initialized" {
 			continue
+		}
+		if m.Method == "initialize" {
+			s.mu.Lock()
+			if s.control == nil {
+				s.control = conn
+			}
+			s.mu.Unlock()
 		}
 		if m.Method == "" && len(m.Result) > 0 {
 			var rootID string
@@ -182,6 +197,16 @@ func (s *sharedFakeCodex) handle(m codexshared.Message) (any, error) {
 		a := &agent{term: c.term, conv: c, prompts: make(chan promptSubmission, 16)}
 		root.a = a
 		control, err := dialControl(s.cfg, func(peer *rpcPeer, method string, params json.RawMessage) (any, error) {
+			if method == "disconnect_control" {
+				s.mu.Lock()
+				conn := s.control
+				s.control = nil
+				s.mu.Unlock()
+				if conn != nil {
+					_ = conn.CloseNow()
+				}
+				return struct{}{}, nil
+			}
 			if method == "system_error" {
 				root.failed.Store(true)
 				s.broadcastStatus(root)
