@@ -151,6 +151,14 @@ success. The usage resolver follows this relocation, retains the original dated
 live path as root source identity, and discovers native children in both trees.
 Unarchive restores that same live path, so the saved cursor remains valid.
 
+Archive discovery retains only this owner's matched descendants and partial
+metadata awaiting completion. It scans on first discovery, archive directory
+membership changes, or expanded descendant lineage; unchanged reconciliation
+checks the directory stamp and retained sources. A failed metadata read does not
+certify the scan. Cold and membership-change scans still read archive metadata
+to recover parent links. Native filenames use local wall time, so creation-date
+cutoffs would lose valid children across clock changes.
+
 ## Attention and input
 
 The control connection projects `thread/status/changed` through the root-to-owner
