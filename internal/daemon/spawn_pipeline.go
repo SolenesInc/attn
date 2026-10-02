@@ -263,7 +263,7 @@ func (d *Daemon) executeSpawn(req *spawnRequest, plan *spawnPlan) *spawnOutcome 
 	if req.existingSession != nil {
 		for _, liveID := range d.liveRuntimeSessionIDs(context.Background()) {
 			if liveID == msg.ID {
-				d.externalRegistrations.Delete(msg.ID)
+				d.clearExternalProcess(msg.ID)
 				plan.rollback(d, msg.ID)
 				return &spawnOutcome{alreadyLive: true}
 			}
@@ -412,7 +412,7 @@ func (d *Daemon) spawnSessionRuntime(_ *spawnRequest, opts ptybackend.SpawnOptio
 	opts.DaemonEnv = d.spawnRoutingEnv()
 	err := d.ptyBackend.Spawn(context.Background(), opts)
 	if err == nil {
-		d.externalRegistrations.Delete(opts.ID)
+		d.clearExternalProcess(opts.ID)
 		d.sessionInputs().forgetSession(opts.ID)
 	}
 	return err

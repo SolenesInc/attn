@@ -1014,6 +1014,12 @@ func (d *Daemon) pruneSessionsWithoutPTY(previousRunSessions map[string]struct{}
 		if _, ok := liveIDs[session.ID]; ok {
 			continue
 		}
+		if live, err := d.externalSessionAlive(session.ID); err != nil {
+			d.logf("external wrapper liveness for %s: %v", session.ID, err)
+			continue
+		} else if live {
+			continue
+		}
 		if sessionUpdatedAfter(session, recoveryStartedAt) {
 			continue
 		}
@@ -1398,6 +1404,12 @@ func (d *Daemon) reconcileSessionsWithWorkerBackendState(ctx context.Context, al
 			continue
 		}
 		if _, ok := liveIDs[session.ID]; ok {
+			continue
+		}
+		if live, err := d.externalSessionAlive(session.ID); err != nil {
+			d.logf("external wrapper liveness for %s: %v", session.ID, err)
+			continue
+		} else if live {
 			continue
 		}
 		if sessionUpdatedAfter(session, recoveryStartedAt) {
@@ -2832,10 +2844,10 @@ func (d *Daemon) handleRegisterProtected(protection foregroundCleanupProtection,
 		d.releaseCrewBindingIfSession(msg.ID)
 	}
 	session.WorkspaceID = workspaceID
-	if existing == nil {
+	if existing == nil && msg.ExternalProcess == nil {
 		d.externalRegistrations.Store(session.ID, struct{}{})
 	}
-	persistErr := d.store.AddCheckedUnlessTeardown(session)
+	persistErr := d.store.AddRegisteredSession(session, msg.ExternalProcess)
 	if persistErr != nil {
 		if existing == nil {
 			d.externalRegistrations.Delete(session.ID)

@@ -1211,6 +1211,7 @@ CREATE INDEX IF NOT EXISTS idx_automode_denials_recent ON automode_denials(id DE
  PRIMARY KEY (agent, resume_id)
  );
  `},
+	{161, "persist external wrapper process identity", ""},
 }
 
 const migration99SQL = `
@@ -1951,6 +1952,11 @@ func migrateDB(db *sql.DB, dbPath string) error {
 			}
 		} else if m.version == 140 {
 			if err := applyMigration140(tx); err != nil {
+				tx.Rollback()
+				return fmt.Errorf("migration %d (%s): %w", m.version, m.desc, err)
+			}
+		} else if m.version == 161 {
+			if err := applyMigration161(tx); err != nil {
 				tx.Rollback()
 				return fmt.Errorf("migration %d (%s): %w", m.version, m.desc, err)
 			}
@@ -4310,4 +4316,17 @@ func getCurrentVersion(db *sql.DB) (int, error) {
 
 func GetSchemaVersion(db *sql.DB) (int, error) {
 	return getCurrentVersion(db)
+}
+
+func applyMigration161(tx *sql.Tx) error {
+	exists, err := tableExists(tx, "sessions")
+	if err != nil || !exists {
+		return err
+	}
+	has, err := columnExists(tx, "sessions", "external_process")
+	if err != nil || has {
+		return err
+	}
+	_, err = tx.Exec("ALTER TABLE sessions ADD COLUMN external_process TEXT NOT NULL DEFAULT ''")
+	return err
 }

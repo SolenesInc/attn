@@ -24,3 +24,7 @@ func isZombie(pid int) bool {
 	proc, err := unix.SysctlKinfoProc("kern.proc.pid", pid)
 	return err == nil && proc.Proc.P_stat == darwinZombieState
 }
+
+func processIdentityToken(pid int) (string, error) {
+	return processStartTime(pid)
+}

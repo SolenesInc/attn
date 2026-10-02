@@ -3558,6 +3558,14 @@ type EvidenceExcerpt struct {
 	TurnID string `json:"turn_id"`
 }
 
+type ExternalProcess struct {
+	// Pid corresponds to the JSON schema field "pid".
+	Pid int `json:"pid"`
+
+	// StartToken corresponds to the JSON schema field "start_token".
+	StartToken string `json:"start_token"`
+}
+
 type FetchPRDetailsMessage struct {
 	// Cmd corresponds to the JSON schema field "cmd".
 	Cmd string `json:"cmd"`
@@ -6788,6 +6796,9 @@ type RegisterMessage struct {
 
 	// Dir corresponds to the JSON schema field "dir".
 	Dir string `json:"dir"`
+
+	// ExternalProcess corresponds to the JSON schema field "external_process".
+	ExternalProcess *ExternalProcess `json:"external_process,omitempty,omitzero"`
 
 	// ID corresponds to the JSON schema field "id".
 	ID string `json:"id"`

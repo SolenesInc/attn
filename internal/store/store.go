@@ -27,6 +27,7 @@ type Store struct {
 
 	durable bool
 
+	externalProcesses      map[string]*protocol.ExternalProcess
 	sessions               map[string]*protocol.Session
 	turnStamps             map[string]TurnStamps
 	activityCursors        map[string]string
@@ -218,16 +219,22 @@ func (s *Store) Add(session *protocol.Session) {
 func (s *Store) AddChecked(session *protocol.Session) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	return s.addCheckedLocked(session, false)
+	return s.addCheckedLocked(session, false, nil)
 }
 
 func (s *Store) AddCheckedUnlessTeardown(session *protocol.Session) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	return s.addCheckedLocked(session, true)
+	return s.addCheckedLocked(session, true, nil)
 }
 
-func (s *Store) addCheckedLocked(session *protocol.Session, rejectTeardown bool) error {
+func (s *Store) AddRegisteredSession(session *protocol.Session, process *protocol.ExternalProcess) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return s.addCheckedLocked(session, true, process)
+}
+
+func (s *Store) addCheckedLocked(session *protocol.Session, rejectTeardown bool, process *protocol.ExternalProcess) error {
 	if s.db == nil {
 		if _, closing := s.teardownIntents[session.ID]; rejectTeardown && closing {
 			return fmt.Errorf("session %s is closing", session.ID)
@@ -257,6 +264,13 @@ func (s *Store) addCheckedLocked(session *protocol.Session, rejectTeardown bool)
 				stored.ActivityAt = protocol.Ptr(protocol.Deref(existing.ActivityAt))
 			}
 		}
+		if process != nil && (s.sessions[session.ID] == nil || s.externalProcesses[session.ID] != nil) {
+			if s.externalProcesses == nil {
+				s.externalProcesses = make(map[string]*protocol.ExternalProcess)
+			}
+			copy := *process
+			s.externalProcesses[session.ID] = &copy
+		}
 		s.sessions[session.ID] = stored
 		return nil
 	}
@@ -283,10 +297,18 @@ func (s *Store) addCheckedLocked(session *protocol.Session, rejectTeardown bool)
 	if lastModelRequestAt == "" {
 		lastModelRequestAt = session.StateUpdatedAt
 	}
+	processJSON := ""
+	if process != nil {
+		encoded, err := json.Marshal(process)
+		if err != nil {
+			return err
+		}
+		processJSON = string(encoded)
+	}
 	_, err := s.db.Exec(`
 		INSERT INTO sessions
-		(id, label, agent, directory, endpoint_id, workspace_id, branch, is_worktree, main_repo, repository, state, state_since, state_updated_at, last_model_request_at, parent_session_id, last_seen)
-		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+		(id, label, agent, directory, endpoint_id, workspace_id, branch, is_worktree, main_repo, repository, state, state_since, state_updated_at, last_model_request_at, parent_session_id, last_seen, external_process)
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
 		ON CONFLICT(id) DO UPDATE SET
 			label = excluded.label,
 			agent = excluded.agent,
@@ -305,7 +327,10 @@ func (s *Store) addCheckedLocked(session *protocol.Session, rejectTeardown bool)
 				ELSE sessions.last_model_request_at
 			END,
 			parent_session_id = excluded.parent_session_id,
-			last_seen = excluded.last_seen`,
+			last_seen = excluded.last_seen,
+			external_process = CASE
+				WHEN sessions.external_process != '' AND excluded.external_process != '' THEN excluded.external_process
+				ELSE sessions.external_process END`,
 		session.ID,
 		session.Label,
 		session.Agent,
@@ -322,6 +347,7 @@ func (s *Store) addCheckedLocked(session *protocol.Session, rejectTeardown bool)
 		lastModelRequestAt,
 		protocol.Deref(session.ParentSessionID),
 		session.LastSeen,
+		processJSON,
 	)
 	if err != nil {
 		return fmt.Errorf("insert session %s: %w", session.ID, err)
@@ -446,6 +472,7 @@ func (s *Store) Remove(id string) {
 
 	if s.db == nil {
 		delete(s.sessions, id)
+		delete(s.externalProcesses, id)
 		delete(s.sessionCloses, id)
 		delete(s.turnStamps, id)
 		delete(s.agentDriverRuns, id)

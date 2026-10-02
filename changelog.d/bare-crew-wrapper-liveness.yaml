@@ -1,0 +1,3 @@
+kind: fixed
+area: crew
+change: Bare CLI crew sessions survive daemon restarts, and crashed wrappers release their days when waking, sleeping, restarting, or launching another member session.

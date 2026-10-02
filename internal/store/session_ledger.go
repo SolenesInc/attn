@@ -87,6 +87,7 @@ func (s *Store) CloseSession(id string, closed SessionClose, now time.Time) (boo
 			return false, nil
 		}
 		delete(s.sessions, id)
+		delete(s.externalProcesses, id)
 		s.sessionCloses[id] = sessionCloseMark{At: at, By: by, Reason: strings.TrimSpace(closed.Reason), session: session}
 		if cost, tracked := s.sessionCosts[id]; tracked {
 			finalizeSessionCost(&cost)
@@ -101,7 +102,7 @@ func (s *Store) CloseSession(id string, closed SessionClose, now time.Time) (boo
 	}
 	defer tx.Rollback()
 
-	result, err := tx.Exec(`UPDATE sessions SET closed_at = ?, closed_by = ?, close_reason = ?
+	result, err := tx.Exec(`UPDATE sessions SET closed_at = ?, closed_by = ?, close_reason = ?, external_process = ''
 		WHERE id = ? AND closed_at = ''`, at, by, strings.TrimSpace(closed.Reason), id)
 	if err != nil {
 		return false, fmt.Errorf("close session %s: %w", id, err)
@@ -202,6 +203,7 @@ func (s *Store) RestoreSessionClose(id string, closed SessionCloseRecord) (bool,
 			return false, nil
 		}
 		delete(s.sessions, id)
+		delete(s.externalProcesses, id)
 		s.sessionCloses[id] = sessionCloseMark{At: closed.At, By: closed.By, Reason: closed.Reason, session: session}
 		return true, nil
 	}
@@ -211,7 +213,7 @@ func (s *Store) RestoreSessionClose(id string, closed SessionCloseRecord) (bool,
 		return false, fmt.Errorf("restore the close of session %s: %w", id, err)
 	}
 	defer tx.Rollback()
-	result, err := tx.Exec(`UPDATE sessions SET closed_at = ?, closed_by = ?, close_reason = ?
+	result, err := tx.Exec(`UPDATE sessions SET closed_at = ?, closed_by = ?, close_reason = ?, external_process = ''
 		WHERE id = ? AND closed_at = ''`, closed.At, closed.By, closed.Reason, id)
 	if err != nil {
 		return false, fmt.Errorf("restore the close of session %s: %w", id, err)

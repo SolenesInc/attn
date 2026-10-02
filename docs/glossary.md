@@ -97,7 +97,7 @@ intended it for the next turn.
 - Crew member: an agent with a permanent charter.
 - `attn`: the reserved member name the daemon uses when it moves a seed by itself. No crew home may claim it.
 - Registry: the index of crew member files.
-- Binding: a crew member's active session. Daemon-managed days use terminal liveness; bare CLI days remain live while registered, until their wrapper unregisters. The daemon tracks external registrations during its lifetime; recovered managed days never become external merely by registering again.
+- Binding: a crew member's active session. Daemon-managed days use terminal liveness; bare CLI days use their wrapper PID and process start token, persisted across daemon restarts. Linux tokens include boot identity. Dead or reused wrapper PIDs release the binding on crew actions or startup recovery; recovered managed days never become external merely by registering again. Legacy registrations without a process receipt retain current-daemon liveness until unregistering; they cannot survive startup pruning.
 - Launch settings: a member's optional harness, model and effort pins. Blanks resolve through daemon and harness defaults.
 - Charter token: the receipt for the exact charter bytes read. A replacement needs it and advances it, so a stale write cannot overwrite a newer one.
 - Chief of staff: the agent coordinating work across workspaces.

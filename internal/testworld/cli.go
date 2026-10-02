@@ -241,3 +241,12 @@ func (r *Running) interrupt() {
 		<-r.done
 	}
 }
+
+// Crash kills only this captured wrapper, without running its unregister cleanup.
+func (r *Running) Crash() Result {
+	r.t.Helper()
+	if err := r.process.Kill(); err != nil {
+		r.t.Fatalf("kill attn wrapper: %v", err)
+	}
+	return r.Wait()
+}
