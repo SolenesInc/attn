@@ -175,7 +175,7 @@ try {
     observer.send({ cmd: 'pty_input', id: a, source: 'automation', data: `/agents ${roots[1]}\r` });
     await resolved(a, b);
     const title = await client.request('dom_text', { selector: '.anno-panel-title' });
-    runner.assert(title.text.includes('Annotations for exo'), 'open editor silently changed recipient', title);
+    runner.assert(title.text.includes('Annotations for Native names A'), 'open editor silently changed recipient', title);
     const sent = observer.waitForMessage(message => message.event === 'session_messages_changed' && message.session_id === a ? message : null, 'A records its feedback reply');
     await client.request('dom_click', { selector: '.anno-panel-send' });
     await sent;
