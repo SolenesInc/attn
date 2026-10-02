@@ -186,7 +186,9 @@ export function useSessionLedger({
   const [filters, setFilters] = useState<SessionLedgerFilters>(initialFilters);
   const [read, setRead] = useState<LedgerRead>(NO_READ);
   const facetsRef = useRef(read.facets);
-  facetsRef.current = read.facets;
+  useEffect(() => {
+    facetsRef.current = read.facets;
+  }, [read.facets]);
   const [omitted, setOmitted] = useState(0);
   const [nextBefore, setNextBefore] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
