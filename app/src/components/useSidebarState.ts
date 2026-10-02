@@ -4,7 +4,6 @@ import { isAttentionSessionState } from '../types/sessionState';
 import { type TileContentState } from '../types/desktop';
 import { delegatesByDispatcher } from '../utils/delegationLinks';
 import { sessionParticipatesInQueue } from '../utils/queueBands';
-import { UNPLACED_GROUP_ID } from '../utils/desktopViewModels';
 import { automationRunGroups } from '../utils/automationRuns';
 import type { DockItem, LocalSession, SidebarProps, SidebarDesktop } from './sidebarTypes';
 import { useSidebarDrag } from './useSidebarDrag';
@@ -208,8 +207,7 @@ export function useSidebarState({
   const canAcceptLeafDrag = (desktopView: SidebarDesktop) =>
     Boolean(
       leafDrag &&
-        desktopView.id !== leafDrag.sourceDesktopId &&
-        desktopView.id !== UNPLACED_GROUP_ID,
+        desktopView.id !== leafDrag.sourceDesktopId,
     );
 
   const desktopDragClass = (desktopView: SidebarDesktop) => {

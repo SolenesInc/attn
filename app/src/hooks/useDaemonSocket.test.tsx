@@ -246,9 +246,9 @@ describe('useDaemonSocket PTY kill sequencing', () => {
     });
 
     act(() => {
-      ws.emit({ event: 'spawn_result', id: 'sess-new', success: true, placement_error: 'desktop desktop-1 is gone' });
+      ws.emit({ event: 'spawn_result', id: 'sess-new', success: true });
     });
-    await expect(spawnPromise).resolves.toEqual({ placementError: 'desktop desktop-1 is gone' });
+    await expect(spawnPromise).resolves.toBeUndefined();
     expect(ws.sent.map((entry) => JSON.parse(entry)).filter((message) =>
       message.cmd === 'attach_session' || message.cmd === 'pty_resize',
     )).toEqual([]);

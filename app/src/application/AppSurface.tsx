@@ -3,7 +3,6 @@ import { BannerStack } from '../components/BannerStack';
 import { ChordLeaderHud } from '../components/ChordLeaderHud';
 import { DelegationChainProvider } from '../components/DelegationChain';
 import { DiagnosticReportPrompt } from '../components/DiagnosticReportPrompt';
-import { Toast } from '../components/Toast';
 import { OpenPRLauncherProgress } from '../components/OpenPRLauncherProgress';
 import { useDaemonApi } from '../contexts/DaemonApiContext';
 import { DaemonProvider } from '../contexts/DaemonContext';
@@ -12,7 +11,6 @@ import { NotebookSurfaceProvider } from '../contexts/NotebookSurfaceContext';
 import { useActiveLeaf } from '../hooks/useDesktopSelectionBridge';
 import {
   useAppDiagnosticsContext,
-  useAppErrorsContext,
   useAppInputs,
   useAppNotebookSurfaceContext,
   useAppPanelsContext,
@@ -53,14 +51,12 @@ export function AppSurface() {
   const { notebookSurfaceContextValue } = useAppNotebookSurfaceContext();
   const { snoozeMenu } = useAttentionQueueContext();
   const { windowCovered, appShellRef, agentFocused } = useAppShell();
-  const { toast, clearToast } = useAppErrorsContext();
   const { delegationChainRef } = useAppPanelsContext();
   const { requestTerminalFocus, handleSelectSession, view } = useNavigationContext();
   const { delegationSessions } = useAppSessionsContext();
   const leaf = useActiveLeaf();
   const { openPRLauncherJob } = usePRLauncherContext();
   const {
-    diagnosticReportSaved,
     diagnosticCapture,
     handleSaveDiagnosticReport,
     setDiagnosticCapture,
@@ -130,12 +126,6 @@ export function AppSurface() {
               {/* Yield library focus traps before session prompts take focus in layout effects. */}
               <AppLibrarySurfaces />
               <AppSessionPrompts />
-              <Toast toast={toast} onDone={clearToast} />
-              {diagnosticReportSaved.saved('saved') && (
-                <div className="input-diagnostics-copied" role="status">
-                  Diagnostic report saved
-                </div>
-              )}
               <ChordLeaderHud />
               <AppNavigationMenus />
               <AppDesktopNavigation />

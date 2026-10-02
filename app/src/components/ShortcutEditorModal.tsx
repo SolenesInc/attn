@@ -1,6 +1,6 @@
 
 import { useEffect, useMemo, useRef, useState } from 'react';
-import FocusTrap from 'focus-trap-react';
+import FocusTrap from './AppFocusTrap';
 import { useEscapeStack } from '../hooks/useEscapeStack';
 import {
   SHORTCUTS,

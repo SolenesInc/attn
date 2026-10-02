@@ -13,6 +13,15 @@ export interface AutomationRepositoryOverride {
   path: string;
 }
 
+export interface AutomationRepositoryEntry {
+  id: string;
+  repository: string;
+}
+
+export function repositoryEntry(repository: string): AutomationRepositoryEntry {
+  return { id: crypto.randomUUID(), repository };
+}
+
 export interface AutomationFormValues {
   name: string;
   id: string;
@@ -21,8 +30,8 @@ export interface AutomationFormValues {
   scheduleCron: string;
   continuity: 'fresh' | 'singleton';
   catchUp: '' | 'skip' | 'latest'; // '' = not chosen yet; schema rejects on scheduled
-  repositoriesInclude: string[];
-  repositoriesExclude: string[];
+  repositoriesInclude: AutomationRepositoryEntry[];
+  repositoriesExclude: AutomationRepositoryEntry[];
   agent: AutomationAgent;
   model: string;
   effort: string;
@@ -120,7 +129,11 @@ function validateOverrides(overrides: AutomationRepositoryOverride[], ctx: z.Ref
       seen.add(canonical);
     }
     if (!override.path.startsWith('/')) {
-      ctx.addIssue({ code: z.ZodIssueCode.custom, path: ['repositoryOverrides', index, 'path'], message: ABSOLUTE_PATH_MESSAGE });
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ['repositoryOverrides', index, 'path'],
+        message: ABSOLUTE_PATH_MESSAGE,
+      });
     }
   });
 }
@@ -133,8 +146,8 @@ const baseFormSchema = z.object({
   scheduleCron: z.string(),
   continuity: z.enum(['fresh', 'singleton']),
   catchUp: z.enum(['', 'skip', 'latest']),
-  repositoriesInclude: z.array(z.string()),
-  repositoriesExclude: z.array(z.string()),
+  repositoriesInclude: z.array(z.object({ id: z.string(), repository: z.string() })),
+  repositoriesExclude: z.array(z.object({ id: z.string(), repository: z.string() })),
   agent: z.enum(['codex', 'claude']),
   model: z.string(),
   effort: z.string(),
@@ -149,7 +162,11 @@ export const automationFormSchema = baseFormSchema.superRefine((values, ctx) => 
     ctx.addIssue({ code: z.ZodIssueCode.custom, path: ['name'], message: 'A name is required.' });
   }
   if (!ID_PATTERN.test(values.id)) {
-    ctx.addIssue({ code: z.ZodIssueCode.custom, path: ['id'], message: 'ID must be a lowercase slug (a–z, 0–9, dashes).' });
+    ctx.addIssue({
+      code: z.ZodIssueCode.custom,
+      path: ['id'],
+      message: 'ID must be a lowercase slug (a–z, 0–9, dashes).',
+    });
   }
   if (values.prompt.trim() === '') {
     ctx.addIssue({ code: z.ZodIssueCode.custom, path: ['prompt'], message: 'A prompt is required.' });
@@ -160,7 +177,11 @@ export const automationFormSchema = baseFormSchema.superRefine((values, ctx) => 
   if (values.effort !== '') {
     const { efforts } = effortOptionsFor(values.agent, values.model);
     if (!efforts.includes(values.effort)) {
-      ctx.addIssue({ code: z.ZodIssueCode.custom, path: ['effort'], message: "Effort isn't available for this model." });
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ['effort'],
+        message: "Effort isn't available for this model.",
+      });
     }
   }
 
@@ -182,7 +203,11 @@ export const automationFormSchema = baseFormSchema.superRefine((values, ctx) => 
         });
       }
       if (values.catchUp !== 'skip' && values.catchUp !== 'latest') {
-        ctx.addIssue({ code: z.ZodIssueCode.custom, path: ['catchUp'], message: 'Choose what happens to missed runs.' });
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          path: ['catchUp'],
+          message: 'Choose what happens to missed runs.',
+        });
       }
       if (!values.directoryPath.startsWith('/')) {
         ctx.addIssue({ code: z.ZodIssueCode.custom, path: ['directoryPath'], message: ABSOLUTE_PATH_MESSAGE });
@@ -190,9 +215,21 @@ export const automationFormSchema = baseFormSchema.superRefine((values, ctx) => 
       break;
     }
     case 'github_review_requested': {
-      validateRepositoryList(values.repositoriesInclude, 'repositoriesInclude', ctx);
-      validateRepositoryList(values.repositoriesExclude, 'repositoriesExclude', ctx);
-      checkCrossListOverlap(values.repositoriesInclude, values.repositoriesExclude, ctx);
+      validateRepositoryList(
+        values.repositoriesInclude.map((entry) => entry.repository),
+        'repositoriesInclude',
+        ctx,
+      );
+      validateRepositoryList(
+        values.repositoriesExclude.map((entry) => entry.repository),
+        'repositoriesExclude',
+        ctx,
+      );
+      checkCrossListOverlap(
+        values.repositoriesInclude.map((entry) => entry.repository),
+        values.repositoriesExclude.map((entry) => entry.repository),
+        ctx,
+      );
       validateOverrides(values.repositoryOverrides, ctx);
       break;
     }
@@ -223,8 +260,8 @@ function buildTrigger(values: AutomationFormValues): Record<string, unknown> {
       };
     case 'github_review_requested': {
       const trigger: Record<string, unknown> = { type: 'github_review_requested' };
-      const include = dedupeCanonical(values.repositoriesInclude);
-      const exclude = dedupeCanonical(values.repositoriesExclude);
+      const include = dedupeCanonical(values.repositoriesInclude.map((entry) => entry.repository));
+      const exclude = dedupeCanonical(values.repositoriesExclude.map((entry) => entry.repository));
       if (include.length > 0 || exclude.length > 0) {
         const repositories: Record<string, unknown> = {};
         if (include.length > 0) repositories.include = include;
@@ -320,8 +357,8 @@ export function specToFormValues(specJson: string): AutomationFormValues {
   let scheduleCron = '';
   let continuity: 'fresh' | 'singleton' = 'fresh';
   let catchUp: '' | 'skip' | 'latest' = '';
-  let repositoriesInclude: string[] = [];
-  let repositoriesExclude: string[] = [];
+  let repositoriesInclude: AutomationRepositoryEntry[] = [];
+  let repositoriesExclude: AutomationRepositoryEntry[] = [];
   let repositoryOverrides: AutomationRepositoryOverride[] = [];
 
   switch (triggerType) {
@@ -347,8 +384,8 @@ export function specToFormValues(specJson: string): AutomationFormValues {
     }
     case 'github_review_requested': {
       const repositories = asRecord(trigger.repositories);
-      repositoriesInclude = asStringArray(repositories.include);
-      repositoriesExclude = asStringArray(repositories.exclude);
+      repositoriesInclude = asStringArray(repositories.include).map(repositoryEntry);
+      repositoriesExclude = asStringArray(repositories.exclude).map(repositoryEntry);
       const location = asRecord(root.location);
       const sources = asRecord(location.repository_sources);
       const overrides = asRecord(sources.overrides);

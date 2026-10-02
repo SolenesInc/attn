@@ -31,12 +31,6 @@ func TestAShellSplitFromAnAgentOnItsDesktopBecomesItsSatellite(t *testing.T) {
 		return id
 	}
 	spawnFrom := func(h fakeagent.Harness, dir, base string) string { return spawnOn(h, dir, base, "") }
-	created := testworld.Request(app, protocol.DesktopCreateMessage{Cmd: protocol.CmdDesktopCreate, ProfileID: app.SelectedProfile(), RequestID: "other-desktop"},
-		protocol.EventProfileActionResult, func(r protocol.ProfileActionResultMessage) bool { return r.RequestID == "other-desktop" })
-	if !created.Success || len(created.Desktops) == 0 {
-		t.Fatalf("create another desktop: %+v", created)
-	}
-	otherDesktop := created.Desktops[len(created.Desktops)-1].ID
 	agent := spawnFrom(fakeagent.Claude, cwd, "")
 	satellite := spawnFrom(shell, cwd, agent)
 	loneShell := spawnFrom(shell, cwd, "")
@@ -52,8 +46,16 @@ func TestAShellSplitFromAnAgentOnItsDesktopBecomesItsSatellite(t *testing.T) {
 		{"a shell split from a shell that has no agent", spawnFrom(shell, cwd, loneShell), ""},
 		{"a shell split from a session that is gone", spawnFrom(shell, cwd, "session-long-gone"), ""},
 		{"an agent split from an agent", spawnFrom(fakeagent.Claude, cwd, agent), ""},
-		{"a shell split from an agent onto another desktop", spawnOn(shell, w.Path("web"), agent, otherDesktop), ""},
 	}
+	created := testworld.Request(app, protocol.DesktopCreateMessage{Cmd: protocol.CmdDesktopCreate, ProfileID: app.SelectedProfile(), RequestID: "other-desktop"},
+		protocol.EventProfileActionResult, func(r protocol.ProfileActionResultMessage) bool { return r.RequestID == "other-desktop" })
+	if !created.Success || len(created.Desktops) == 0 {
+		t.Fatalf("create another desktop: %+v", created)
+	}
+	otherDesktop := created.Desktops[len(created.Desktops)-1].ID
+	spawnOn(shell, w.Path("other"), "", otherDesktop)
+
+	cases = append(cases, struct{ name, session, wantParent string }{"a shell split from an agent onto another desktop", spawnOn(shell, w.Path("web"), agent, otherDesktop), ""})
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {
 			announced := testworld.AwaitSession(app, c.session, func(protocol.Session) bool { return true })

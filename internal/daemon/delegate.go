@@ -29,12 +29,11 @@ const (
 var delegationGitTask = gitTask{Kind: gitTaskDelegation, Lane: gitInteractive}
 
 type internalActionResult struct {
-	Event          string  `json:"event"`
-	Success        bool    `json:"success"`
-	Error          *string `json:"error,omitempty"`
-	DesktopID      *string `json:"desktop_id,omitempty"`
-	PaneID         *string `json:"pane_id,omitempty"`
-	PlacementError *string `json:"placement_error,omitempty"`
+	Event     string  `json:"event"`
+	Success   bool    `json:"success"`
+	Error     *string `json:"error,omitempty"`
+	DesktopID *string `json:"desktop_id,omitempty"`
+	PaneID    *string `json:"pane_id,omitempty"`
 }
 
 func newInternalWSClient() *wsClient {
@@ -756,17 +755,16 @@ func (d *Daemon) delegateOperationProtected(protection foregroundCleanupProtecti
 			"delegated session bound", profile.ID, "", operationWorktreePath, nil, nil, time.Now())
 	}
 	result := &protocol.DelegateResult{
-		SeedID:         seedID,
-		SessionID:      session.ID,
-		ProfileID:      protocol.Ptr(profile.ID),
-		Directory:      session.Directory,
-		Checkout:       "reused",
-		Agent:          agent,
-		Model:          model,
-		Effort:         effort,
-		DesktopID:      spawned.DesktopID,
-		PaneID:         spawned.PaneID,
-		PlacementError: spawned.PlacementError,
+		SeedID:    seedID,
+		SessionID: session.ID,
+		ProfileID: protocol.Ptr(profile.ID),
+		Directory: session.Directory,
+		Checkout:  "reused",
+		Agent:     agent,
+		Model:     model,
+		Effort:    effort,
+		DesktopID: spawned.DesktopID,
+		PaneID:    spawned.PaneID,
 	}
 	if predecessorID != "" {
 		result.PredecessorSessionID = protocol.Ptr(predecessorID)

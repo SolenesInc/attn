@@ -34,6 +34,12 @@ func (d *Daemon) ensureCrewCollections() {
 func (d *Daemon) importCrewHomes() {
 	d.registerCrewHomes()
 	d.assignCrewProfiles()
+	if d.store == nil || d.requireHome(crew.Surface) != nil {
+		return
+	}
+	if err := d.store.PrepareLaunchMigration(); err != nil {
+		d.logf("launch desktop migration: %v", err)
+	}
 }
 
 func (d *Daemon) registerCrewHomes() {
@@ -129,6 +135,10 @@ func (d *Daemon) crewRestartRequestsCollection() (*docstore.CollectionSchema, er
 }
 
 func (d *Daemon) writeCrewMember(schema docstore.CollectionSchema, member crew.Member, expected int64) (int64, error) {
+	return d.writeCrewMemberWithLaunch(schema, member, expected, nil)
+}
+
+func (d *Daemon) writeCrewMemberWithLaunch(schema docstore.CollectionSchema, member crew.Member, expected int64, setting *store.LaunchDesktopSetting) (int64, error) {
 	if err := d.validateCrewMemberPaths(member); err != nil {
 		return 0, err
 	}
@@ -139,9 +149,13 @@ func (d *Daemon) writeCrewMember(schema docstore.CollectionSchema, member crew.M
 	fact := documentChangedFact(crew.Namespace, crew.CollectionMembers, member.ID, false)
 	// A member's binding decides which session its seed roles reach, so it changes under the role lock.
 	d.lockGardenRoles()
-	written, err := d.store.CommitDocumentWrite(store.DocumentWrite{
-		Schema: schema, ID: member.ID, Body: body, Expected: &expected,
-	}, fact, time.Now())
+	write := store.DocumentWrite{Schema: schema, ID: member.ID, Body: body, Expected: &expected}
+	var written store.DocumentWriteResult
+	if setting == nil {
+		written, err = d.store.CommitDocumentWrite(write, fact, time.Now())
+	} else {
+		written, err = d.store.CommitCrewSettings(write, fact, time.Now(), *setting)
+	}
 	d.unlockGardenRoles()
 	if err != nil {
 		return 0, err
@@ -542,6 +556,13 @@ func (d *Daemon) crewMemberWire(member crew.Member, revision int64) protocol.Cre
 		CharterPath:   member.CharterPath,
 		HomeDir:       member.HomeDir,
 		ResolvedAgent: member.LaunchAgent(),
+	}
+	if item, err := d.store.LaunchDesktopItem("crew", member.ID); err == nil {
+		setting := protocolLaunchItem(item).Setting
+		wire.LaunchDesktop = &setting
+		wire.ProfileName = protocol.Ptr(item.ProfileName)
+	} else {
+		d.logf("crew launch desktop %s: %v", member.ID, err)
 	}
 	if member.CWD != "" {
 		wire.Cwd = protocol.Ptr(member.CWD)

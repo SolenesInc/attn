@@ -104,7 +104,7 @@ async function main() {
           sessionId = JSON.parse(output.slice(output.indexOf('{'))).session_id;
           await observer.waitFor(() => observer.getSession(sessionId), 'delegated beta visible');
           await observer.waitFor(() => observer.getSession(sessionId)?.state === 'idle', 'delegation opening turn stopped');
-          const desktop = await observer.createDesktop('beta');
+          const desktop = await observer.createDesktop();
           execFileSync(appDaemonInTree(options.appPath), [
             'session', 'move', desktop.id, '--session', sessionId,
           ], { encoding: 'utf8', env: instanceCliEnv(currentHarnessInstance(), { ATTN_SESSION_ID: agents[0].sessionId }) });

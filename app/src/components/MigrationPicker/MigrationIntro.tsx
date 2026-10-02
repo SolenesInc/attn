@@ -4,9 +4,9 @@ import { WorkspaceExplainer } from './WorkspaceExplainer';
 
 export const INTRO_SENTENCE = 'Each workspace with sessions is already its own desktop. Before you continue, confirm each one is where you want it.';
 
-export type Step = 'intro' | 'place';
+export type Step = 'intro' | 'place' | 'launch';
 
-export function StepNav({ step, onIntro }: { step: Step; onIntro: () => void }) {
+export function StepNav({ step, onIntro, hasLaunch = false }: { step: Step; onIntro: () => void; hasLaunch?: boolean }) {
   return (
     <div className="mp-topline">
       <div className="mp-brand"><span className="mp-brandmark" aria-hidden="true" />attn</div>
@@ -23,6 +23,7 @@ export function StepNav({ step, onIntro }: { step: Step; onIntro: () => void }) 
         <span className={step === 'place' ? 'active' : ''} aria-current={step === 'place' ? 'step' : undefined}>
           <i>02</i> Confirm desktops
         </span>
+        {hasLaunch && <><span aria-hidden="true">›</span><span className={step === 'launch' ? 'active' : ''} aria-current={step === 'launch' ? 'step' : undefined}><i>03</i> Launch desktops</span></>}
       </nav>
     </div>
   );

@@ -112,6 +112,8 @@ describe('App dashboard pull requests', () => {
     await gesture(daemon, () => fireEvent.click(within(card('review this')!).getByRole('button', { name: 'Approve' })));
     await gesture(daemon, () => fireEvent.click(within(card('review this')!).getByRole('button', { name: 'Mute' })));
 
+    expect(screen.queryByText('PR muted')).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: /Undo/ })).not.toBeInTheDocument();
     expect(daemon.sent.filter(({ cmd }) => cmd === 'approve_pr' || cmd === 'mute_pr')).toEqual([
       { cmd: 'approve_pr', id: 'p1' },
       { cmd: 'mute_pr', id: 'p1' },

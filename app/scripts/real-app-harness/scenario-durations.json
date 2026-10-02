@@ -145,6 +145,14 @@
         "seconds": 29.9,
         "runnerClass": "local macOS",
         "note": "Green recorded run: original Default agent/panel/CLI boundaries, new-profile seed, empty Garden/search reset and selected-profile deletion fallback. Remeasure on Linux CI."
+      },
+      "launch-desktops": {
+        "run": "launch-desktops-2026-10-02T13-59-32-770Z",
+        "job": "Local recorded copied-data launchmig scenario",
+        "recordedAt": "2026-10-02",
+        "seconds": 50.8,
+        "runnerClass": "local macOS",
+        "note": "Green native run, ATTN_VERDICT durationMs=50847 including copied-data migration, sharing, settings, wake, preflight and cleanup. Private receipt attached to seed s-836tat. Remeasure on Linux CI."
       }
     }
   },
@@ -196,6 +204,7 @@
     "crew-management": 57.6,
     "desktop-migration": 20.7,
     "profile-lifecycle": 18.5,
-    "garden-profile-scope": 29.9
+    "garden-profile-scope": 29.9,
+    "launch-desktops": 50.8
   }
 }

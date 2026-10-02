@@ -97,12 +97,12 @@ describe('automation select_session', () => {
     expect(answer()).toMatchObject({ ok: false, error: expect.stringContaining('dropped the request') });
   });
 
-  it('answers create_session only once the launched agent is shown, even when its placement failed', async () => {
+  it('answers create_session only once the launched agent is shown', async () => {
     const { daemon, ask } = await renderAutomatedApp();
     await ask('select_session', { sessionId: 's1' });
     daemon.on('spawn_session', ({ id, cwd, agent }) => [
       { event: 'session_registered', session: daemonSession(id, { directory: cwd, agent, state: 'launching' }) },
-      { event: 'spawn_result', id, success: true, placement_error: 'desktop moved on' },
+      { event: 'spawn_result', id, success: true },
     ]);
     const held: Array<{ request_id: string; cmd: 'desktop_show_session'; session_id: string }> = [];
     daemon.on('desktop_show_session', (command) => {

@@ -486,6 +486,9 @@ func (d *Daemon) handleSessionMove(client *wsClient, msg *protocol.SessionMoveMe
 		if move.SourceDesktop != nil {
 			outcome.desktops = []profiles.Desktop{*move.SourceDesktop}
 		}
+		if move.DestinationDesktop != nil {
+			outcome.desktops = append(outcome.desktops, *move.DestinationDesktop)
+		}
 		return outcome, nil
 	})
 }
@@ -514,6 +517,7 @@ func (d *Daemon) publishSessionMoved(move store.SessionProfileMove) {
 		if move.SourceDesktop != nil {
 			d.publishArrangementChanged(move.FromProfileID)
 		}
+		d.publishArrangementChanged(move.ToProfileID)
 		if move.MovedCrewID != "" {
 			d.publishFact(FactCrewUpdated, move.MovedCrewID, nil)
 		}
@@ -539,26 +543,10 @@ func (d *Daemon) handleDesktopRename(client *wsClient, msg *protocol.DesktopRena
 	})
 }
 
-func (d *Daemon) handleDesktopSetShortcutSlot(client *wsClient, msg *protocol.DesktopSetShortcutSlotMessage) {
-	d.runProfileAction(client, msg.Cmd, msg.RequestID, func() (profileActionOutcome, error) {
-		desktop, err := d.store.SetDesktopShortcutSlot(msg.DesktopID, protocol.Deref(msg.ShortcutSlot), int64(msg.ExpectedRevision))
-		return d.desktopChanged(desktop), err
-	})
-}
-
 func (d *Daemon) handleDesktopReorder(client *wsClient, msg *protocol.DesktopReorderMessage) {
 	d.runProfileAction(client, msg.Cmd, msg.RequestID, func() (profileActionOutcome, error) {
 		desktop, err := d.store.ReorderDesktop(msg.DesktopID, protocol.Deref(msg.PreviousDesktopID), protocol.Deref(msg.NextDesktopID), int64(msg.ExpectedRevision))
 		return d.desktopChanged(desktop), err
-	})
-}
-
-func (d *Daemon) handleDesktopDelete(client *wsClient, msg *protocol.DesktopDeleteMessage) {
-	d.runProfileAction(client, msg.Cmd, msg.RequestID, func() (profileActionOutcome, error) {
-		deletion, err := d.store.DeleteDesktop(msg.DesktopID, int64(msg.ExpectedRevision))
-		return profileActionOutcome{profile: &deletion.Profile, arranges: true, publish: func() {
-			d.publishArrangementChanged(deletion.Profile.ID)
-		}}, err
 	})
 }
 

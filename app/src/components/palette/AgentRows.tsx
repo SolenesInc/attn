@@ -1,3 +1,4 @@
+import { useDaemonStore } from '../../store/daemonSessions';
 import { formatShortcut } from '../../shortcuts/formatShortcut';
 import type { ShortcutId } from '../../shortcuts/registry';
 import { crewDisplayName } from '../../utils/crewName';
@@ -32,18 +33,7 @@ export function AgentRowView<S extends PaletteSession>({
         </div>
       );
     case 'member':
-      return (
-        <div className="unified-palette-row">
-          <span className="unified-palette-dot is-asleep" />
-          <span className="unified-palette-name">
-            {crewDisplayName(row.member)} <span className="unified-palette-muted">· crew</span>
-          </span>
-          <kbd className="unified-palette-slot is-unplaced">—</kbd>
-          <span className="unified-palette-pill">asleep</span>
-          <span className="unified-palette-age">wake</span>
-          <span className="unified-palette-tag" />
-        </div>
-      );
+      return <SleepingMember member={row.member} />;
     case 'tile':
       return <TileRow row={row} slot={slotOf(row.desktopId)} />;
     case 'agent':
@@ -96,4 +86,16 @@ export function AgentSessionRow({
       <span className="unified-palette-tag">{tag && <kbd>{formatShortcut(tag)}</kbd>}</span>
     </div>
   );
+}
+
+function SleepingMember({ member }: { member: string }) {
+  const label = useDaemonStore((state) => state.crew.find((entry) => entry.id === member)?.launch_desktop?.label);
+  return <div className="unified-palette-row">
+    <span className="unified-palette-dot is-asleep" />
+    <span className="unified-palette-name">{crewDisplayName(member)} <span className="unified-palette-muted">· crew{label ? ` · ${label}` : ''}</span></span>
+    <kbd className="unified-palette-slot" />
+    <span className="unified-palette-pill">asleep</span>
+    <span className="unified-palette-age">wake</span>
+    <span className="unified-palette-tag" />
+  </div>;
 }

@@ -653,7 +653,11 @@ func (d *Daemon) continueAutomationSessionForeground(req automation.WorkRequest,
 	if err != nil {
 		return err
 	}
-	return d.verifyUnattendedLaunch(req)
+	if err := d.verifyUnattendedLaunch(req); err != nil {
+		return err
+	}
+	d.announceBackgroundLaunch("automation", req.DefinitionID, req.IDs.SessionID, "automation")
+	return nil
 }
 
 func (d *Daemon) automationSessionLaunch(req automation.WorkRequest, directory, inputPath string) (string, string) {
@@ -682,11 +686,15 @@ func (d *Daemon) startAutomationSession(req automation.WorkRequest, directory, i
 	label, prompt := d.automationSessionLaunch(req, directory, inputPath)
 	client := newInternalWSClient()
 	message := &protocol.SpawnSessionMessage{Cmd: protocol.CmdSpawnSession, ID: req.IDs.SessionID, Cwd: directory, ProfileID: req.IDs.ProfileID, Agent: req.Launch.Agent, Cols: 80, Rows: 24, Label: protocol.Ptr(label), InitialPrompt: protocol.Ptr(prompt), Model: protocol.Ptr(req.Launch.Model), Effort: protocol.Ptr(req.Launch.Effort), Executable: protocol.Ptr(req.Launch.Executable)}
-	d.handleSpawnSessionWithPolicy(client, message, internalSpawnPolicy{unattendedLaunch: req.Launch})
+	d.handleSpawnSessionWithPolicy(client, message, internalSpawnPolicy{unattendedLaunch: req.Launch, launchPlacement: &launchPlacement{kind: "automation", itemID: req.DefinitionID}})
 	if _, err := readInternalActionResult(client); err != nil {
 		return err
 	}
-	return d.verifyUnattendedLaunch(req)
+	if err := d.verifyUnattendedLaunch(req); err != nil {
+		return err
+	}
+	d.announceBackgroundLaunch("automation", req.DefinitionID, req.IDs.SessionID, "automation")
+	return nil
 }
 func canStartWithdrawnUndeliveredReviewer(origin *store.AutomationRun) bool {
 	return origin != nil && origin.State == store.AutomationRunStateCancelled && origin.CancelReason == store.AutomationCancelReasonReviewWithdrawn

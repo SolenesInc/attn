@@ -150,7 +150,7 @@ export function reopenVerdictView(reopen: SessionReopen): ReopenVerdictView {
 export function reopenPlacement(verdict: ReopenVerdictView): string {
   return verdict.profileDeleted
     ? 'its profile was deleted; reopening asks which profile to land it in'
-    : 'lands unplaced in its profile';
+    : 'lands on its last or current desktop';
 }
 
 const BRANCH_STATE_LABELS: Record<string, string> = {

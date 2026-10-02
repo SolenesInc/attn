@@ -11,11 +11,10 @@ interface Options {
 export function useAppErrors({ settingError, clearSettingError }: Options) {
   const { disconnectExplanation, clearDisconnectExplanation, sendBootstrapEndpoint } =
     useDaemonApi();
-  const { toast, showError, showNotice, clearToast } = useToast();
+  const { showError, showNotice } = useToast();
   const handleTerminalModelRecovered = useCallback(() => {
     showError(
       `Terminal issue recovered. We reloaded it for you. Diagnostics were saved to ${UI_DIAGNOSTICS_FILE_DISPLAY}; please send this file to Victor so he can troubleshoot it.`,
-      { durationMs: 12_000 },
     );
   }, [showError]);
 
@@ -41,15 +40,13 @@ export function useAppErrors({ settingError, clearSettingError }: Options) {
     if (!disconnectExplanation) {
       return;
     }
-    showError(disconnectExplanation, { durationMs: 8000 });
+    showError(disconnectExplanation);
     clearDisconnectExplanation();
   }, [clearDisconnectExplanation, disconnectExplanation, showError]);
 
   return {
-    toast,
     showError,
     showNotice,
-    clearToast,
     handleTerminalModelRecovered,
     handleRebootstrapEndpoint,
   };

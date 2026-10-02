@@ -105,7 +105,7 @@ func fprintSessionReopen(w io.Writer, result *protocol.SessionReopenResult) {
 	if created := protocol.Deref(result.WorktreeCreated); created != "" {
 		fmt.Fprintf(w, "recreated worktree %s\n", created)
 	}
-	fmt.Fprintf(w, "%s reopened in %s (profile %s, unplaced, %s)\n",
+	fmt.Fprintf(w, "%s reopened in %s (profile %s, last or current desktop, %s)\n",
 		result.SessionID, result.Directory, result.ProfileID, result.Action)
 }
 
@@ -127,7 +127,7 @@ func fprintSessionReopenVerdict(w io.Writer, sessionID string, reopen *protocol.
 	if reopen.ProfileDeleted {
 		fmt.Fprintf(w, "lands in   profile %s is gone; pass --profile <id> to choose where\n", reopen.ProfileID)
 	} else {
-		fmt.Fprintf(w, "lands in   profile %s, unplaced\n", reopen.ProfileID)
+		fmt.Fprintf(w, "lands in   profile %s, last or current desktop\n", reopen.ProfileID)
 	}
 	fmt.Fprintf(w, "place      directory %s", reopen.DirectoryState)
 	if branch := strings.TrimSpace(protocol.Deref(reopen.BranchState)); branch != "" {

@@ -17,30 +17,6 @@ func reopenDaemonWithBackend(t *testing.T, d *Daemon) *fakeSpawnBackend {
 	return backend
 }
 
-func TestAReopenComesBackUnplacedInItsProfileUnderItsOwnID(t *testing.T) {
-	d := NewForTesting(filepath.Join(t.TempDir(), "attn.sock"))
-	backend := reopenDaemonWithBackend(t, d)
-	writeCodexRolloutFixture(t, "conv-unplaced")
-	closeReopenSession(t, d, reopenSession{
-		ID: "unplaced", Directory: t.TempDir(), Agent: "codex", Resume: "conv-unplaced",
-	})
-	before := spawnCount(backend)
-
-	outcome, err := d.reopenSession("unplaced", "", "", profileDestination{})
-	if err != nil {
-		t.Fatalf("reopen: %v", err)
-	}
-	if outcome.SessionID != "unplaced" || outcome.ProfileID != defaultProfileID(t, d.store) {
-		t.Errorf("outcome = %+v, want the same id back in the default profile", outcome)
-	}
-	if spawn := resumeSpawnForSession(t, backend, "unplaced", before); spawn.ID != "unplaced" {
-		t.Errorf("spawned %q, want the session's own id", spawn.ID)
-	}
-	if _, placed, err := d.store.SessionPlacement("unplaced"); err != nil || placed {
-		t.Errorf("placed=%v err=%v, want the reopened agent unplaced", placed, err)
-	}
-}
-
 func TestReopeningIntoADeletedProfileNeedsALiveDestination(t *testing.T) {
 	d := NewForTesting(filepath.Join(t.TempDir(), "attn.sock"))
 	backend := reopenDaemonWithBackend(t, d)

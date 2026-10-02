@@ -3,7 +3,7 @@ import {
   useMemo, useRef, useState, useSyncExternalStore, type CSSProperties, type ReactNode,
 } from 'react';
 import { createPortal } from 'react-dom';
-import FocusTrap from 'focus-trap-react';
+import FocusTrap from './AppFocusTrap';
 import { useEscapeStack } from '../hooks/useEscapeStack';
 import { delegationTree, hasDelegationChain, type DelegationSession } from '../utils/delegationLinks';
 import type { UISessionState } from '../types/sessionState';

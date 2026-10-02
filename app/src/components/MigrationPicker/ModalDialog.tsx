@@ -1,4 +1,5 @@
 import { useLayoutEffect, useRef, type KeyboardEvent, type ReactNode } from 'react';
+import { useToastHost } from '../../utils/toastHost';
 import { useEscapeStack } from '../../hooks/useEscapeStack';
 
 interface ModalDialogProps {
@@ -10,6 +11,7 @@ interface ModalDialogProps {
 
 export function ModalDialog({ labelledBy, onCancel, onKeyDown, children }: ModalDialogProps) {
   const ref = useRef<HTMLDialogElement>(null);
+  const hostRef = useToastHost(true, ref);
   useEscapeStack(onCancel, true);
   useLayoutEffect(() => {
     const dialog = ref.current;
@@ -18,7 +20,7 @@ export function ModalDialog({ labelledBy, onCancel, onKeyDown, children }: Modal
   }, []);
   return (
     <dialog
-      ref={ref}
+      ref={hostRef}
       className="mp-dialog"
       aria-labelledby={labelledBy}
       onCancel={(event) => event.preventDefault()}

@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react';
-import FocusTrap from 'focus-trap-react';
+import FocusTrap from './AppFocusTrap';
 import { useEscapeStack } from '../hooks/useEscapeStack';
 import { SNOOZE_CHOICES, snoozeInstant, type SnoozeChoiceId } from '../utils/snoozeDurations';
 import './SnoozeMenu.css';

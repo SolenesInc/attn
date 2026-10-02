@@ -291,9 +291,6 @@ func (d *Daemon) answerSpawn(client *wsClient, sessionID string, placed placemen
 		result.DesktopID = protocol.Ptr(placed.desktopID)
 		result.PaneID = protocol.Ptr(placed.paneID)
 	}
-	if placed.err != nil {
-		result.PlacementError = protocol.Ptr(placed.err.Error())
-	}
 	d.sendToClient(client, result)
 }
 

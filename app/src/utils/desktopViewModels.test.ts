@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { LayoutPaneKind, LayoutPaneStatus, type Desktop } from '../types/generated';
-import { buildDesktopViewModels, UNPLACED_GROUP_ID } from './desktopViewModels';
+import { buildDesktopViewModels } from './desktopViewModels';
 
 function desktop(
   id: string,
@@ -31,7 +31,7 @@ function desktop(
 const session = (id: string) => ({ id, label: id });
 
 describe('buildDesktopViewModels', () => {
-  it('groups agents by the desktop holding their pane, in the arrangement order, then those not on a desktop', () => {
+  it('groups agents by the desktop holding their pane, in the arrangement order', () => {
     const desktops = [
       desktop('extra', null, { type: 'pane', pane_id: 'p-c' }, [{ pane_id: 'p-c', session_id: 'c' }], { orderKey: 'b' }),
       desktop('two', 2, { type: 'pane', pane_id: 'p-b' }, [{ pane_id: 'p-b', session_id: 'b' }], { orderKey: 'c' }),
@@ -46,7 +46,6 @@ describe('buildDesktopViewModels', () => {
       ['extra', 'Desktop 10', ['c']],
       ['two', 'Desktop 2', ['b']],
       ['empty', 'Reviews', []],
-      [UNPLACED_GROUP_ID, 'Not on a desktop', ['d']],
     ]);
   });
 

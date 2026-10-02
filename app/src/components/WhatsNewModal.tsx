@@ -1,5 +1,5 @@
 import { useRef, useState, type KeyboardEvent } from 'react';
-import FocusTrap from 'focus-trap-react';
+import FocusTrap from './AppFocusTrap';
 import { useKeybindings } from '../contexts/KeybindingsContext';
 import { useEscapeStack } from '../hooks/useEscapeStack';
 import { KeyCombos } from './Keycap';

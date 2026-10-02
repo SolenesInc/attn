@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import type { KeyboardEvent, ReactNode } from 'react';
-import FocusTrap from 'focus-trap-react';
+import FocusTrap from '../AppFocusTrap';
 import { useEscapeStack } from '../../hooks/useEscapeStack';
 import { SessionsTab } from './SessionsTab';
 import type { SessionsTabProps } from './SessionsTab';

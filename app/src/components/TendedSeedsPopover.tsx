@@ -1,5 +1,5 @@
 import { useEffect, useLayoutEffect, useRef, useState, type ReactNode } from 'react';
-import FocusTrap from 'focus-trap-react';
+import FocusTrap from './AppFocusTrap';
 import { createPortal } from 'react-dom';
 import { useEscapeStack } from '../hooks/useEscapeStack';
 import type { PaneSeedPopoverRow } from './paneSeedDisplay';

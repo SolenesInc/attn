@@ -1,5 +1,5 @@
 import { useEffect, useLayoutEffect, useRef, useState, type RefObject } from 'react';
-import FocusTrap from 'focus-trap-react';
+import FocusTrap from '../AppFocusTrap';
 import { createPortal } from 'react-dom';
 import type { SessionUsage } from '../../types/generated';
 import { useEscapeStack } from '../../hooks/useEscapeStack';

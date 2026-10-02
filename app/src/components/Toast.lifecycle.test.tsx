@@ -1,57 +1,64 @@
-import { act, render, screen } from '@testing-library/react';
+import { act, fireEvent, render, screen } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { Toast } from './Toast';
+import { Toast, useToast } from './Toast';
 
-afterEach(() => {
-  vi.useRealTimers();
-});
+vi.mock('../contexts/DaemonApiContext', () => ({ useDaemonApi: () => ({}) }));
 
-describe('Toast', () => {
-  it('keeps an explicitly extended recovery notice visible for its requested duration', () => {
+afterEach(() => { vi.useRealTimers(); });
+
+function Notifications() {
+  const { showNotice, showError } = useToast();
+  return <><button onClick={() => showNotice('Saved')}>Notify</button><button onClick={() => showError('Could not save')}>Fail</button><Toast /></>;
+}
+
+describe('grouped toast', () => {
+  it('absorbs notices and errors, restarts the fade and starts fresh after dismissal', () => {
     vi.useFakeTimers();
-    const onDone = vi.fn();
-    render(
-      <Toast
-        toast={{
-          message: 'Terminal issue recovered. Diagnostics were saved for Victor.',
-          tone: 'error',
-          durationMs: 12_000,
-        }}
-        onDone={onDone}
-      />,
-    );
-
-    expect(screen.getByRole('alert')).toHaveTextContent('Terminal issue recovered');
-    act(() => {
-      vi.advanceTimersByTime(11_999);
-    });
-    expect(onDone).not.toHaveBeenCalled();
-    act(() => {
-      vi.advanceTimersByTime(1);
-    });
+    render(<Notifications />);
+    fireEvent.click(screen.getByText('Notify'));
+    act(() => { vi.advanceTimersByTime(5000); });
+    fireEvent.click(screen.getByText('Fail'));
+    expect(screen.getByRole('alert')).toHaveTextContent('2 notifications');
+    expect(screen.getByRole('alert')).toHaveTextContent('Saved');
+    act(() => { vi.advanceTimersByTime(5999); });
+    expect(screen.getByRole('alert')).toHaveClass('visible');
+    act(() => { vi.advanceTimersByTime(1); });
     expect(screen.getByRole('alert')).not.toHaveClass('visible');
-    expect(onDone).not.toHaveBeenCalled();
-    act(() => {
-      vi.advanceTimersByTime(200);
-    });
-    expect(onDone).toHaveBeenCalledTimes(1);
+    fireEvent.click(screen.getByText('Notify'));
+    expect(screen.queryByRole('alert')).not.toBeInTheDocument();
+    expect(screen.getByRole('status')).toHaveTextContent('Saved');
+    fireEvent.click(screen.getByLabelText('Dismiss notifications'));
+    expect(screen.queryByRole('status')).not.toBeInTheDocument();
+    fireEvent.click(screen.getByText('Fail'));
+    expect(screen.getByRole('alert')).not.toHaveTextContent('Saved');
   });
 
-  it('keeps a toast that arrives while the previous one fades out', () => {
+  it('resets a paused group after dismissal', () => {
     vi.useFakeTimers();
-    const onDone = vi.fn();
-    const { rerender } = render(
-      <Toast toast={{ message: 'first', tone: 'notice', durationMs: 1_000 }} onDone={onDone} />,
-    );
-    act(() => {
-      vi.advanceTimersByTime(1_100);
-    });
-    rerender(<Toast toast={{ message: 'second', tone: 'notice', durationMs: 1_000 }} onDone={onDone} />);
-    act(() => {
-      vi.advanceTimersByTime(500);
-    });
+    render(<Notifications />);
+    fireEvent.click(screen.getByText('Notify'));
+    fireEvent.mouseEnter(screen.getByRole('status'));
+    fireEvent.click(screen.getByLabelText('Dismiss notifications'));
+    fireEvent.click(screen.getByText('Fail'));
+    act(() => { vi.advanceTimersByTime(6000); });
+    expect(screen.getByRole('alert')).not.toHaveClass('visible');
+  });
 
-    expect(onDone).not.toHaveBeenCalled();
-    expect(screen.getByRole('status')).toHaveTextContent('second');
+  it('pauses while hovered or focused, and fades away after leaving', () => {
+    vi.useFakeTimers();
+    render(<Notifications />);
+    fireEvent.click(screen.getByText('Notify'));
+    const toast = screen.getByRole('status');
+    fireEvent.mouseEnter(toast);
+    act(() => { vi.advanceTimersByTime(12000); });
+    expect(toast).toHaveClass('visible');
+    fireEvent.mouseLeave(toast);
+    fireEvent.focus(screen.getByLabelText('Dismiss notifications'));
+    act(() => { vi.advanceTimersByTime(12000); });
+    expect(toast).toHaveClass('visible');
+    fireEvent.blur(screen.getByLabelText('Dismiss notifications'));
+    act(() => { vi.advanceTimersByTime(6000); });
+    act(() => { vi.advanceTimersByTime(150); });
+    expect(screen.queryByRole('status')).not.toBeInTheDocument();
   });
 });

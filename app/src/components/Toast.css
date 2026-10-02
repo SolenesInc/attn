@@ -1,43 +1,52 @@
 .toast {
+  --color-accent: #ff6b35;
   position: fixed;
-  bottom: 24px;
-  left: 50%;
-  transform: translateX(-50%) translateY(8px);
+  inset: auto 18px 18px auto;
+  margin: 0;
+  width: 360px;
+  max-width: calc(100vw - 36px);
+  box-sizing: border-box;
+  border: 1px solid var(--color-border);
+  border-radius: 10px;
   background: var(--color-bg-elevated);
-  border: 1px solid var(--toast-accent);
-  border-radius: 8px;
-  padding: 10px 16px;
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  font-size: 13px;
-  max-width: min(640px, calc(100vw - 32px));
   color: var(--color-text-primary);
-  box-shadow: 0 8px 24px color-mix(in srgb, var(--toast-accent) 20%, transparent);
+  box-shadow: 0 18px 50px #0008;
+  padding: 10px 12px;
+  display: flex;
+  gap: 10px;
+  align-items: flex-start;
   z-index: 400;
   opacity: 0;
+  transform: translateY(8px);
   transition: opacity 150ms ease-out, transform 150ms ease-out;
-  pointer-events: none;
 }
-
-.toast--error {
-  --toast-accent: #dc2626;
-}
-
-.toast--notice {
-  --toast-accent: var(--color-border);
-}
-
-.toast.visible {
-  opacity: 1;
-  transform: translateX(-50%) translateY(0);
-}
-
-.toast svg {
-  color: var(--toast-accent);
-  flex-shrink: 0;
-}
-
-.toast span {
-  overflow-wrap: anywhere;
-}
+.toast.visible { opacity: 1; transform: translateY(0); }
+.toast:hover, .toast:focus-within { border-color: var(--color-text-muted); }
+.toast-glyph { flex: none; width: 22px; height: 22px; border-radius: 5px; display: grid; place-items: center; font: 600 11px monospace; border: 1px solid var(--color-border); }
+.toast-glyph.crew { border-color: color-mix(in srgb, var(--color-accent) 40%, transparent); background: color-mix(in srgb, var(--color-accent) 10%, transparent); color: var(--color-accent); }
+.toast-glyph.automation { border-color: #5b8cff59; background: #5b8cff1a; color: #9db6ff; }
+.toast-glyph.error { color: var(--color-error); }
+.toast-content { flex: 1; min-width: 0; }
+.toast-title { font-size: 12.5px; }
+.toast-list { margin-top: 8px; border-top: 1px solid var(--color-border); padding-top: 6px; display: flex; flex-direction: column; gap: 2px; max-height: min(50vh, 216px); overflow-y: auto; }
+.toast-list--single { margin: 0; padding: 0; border: 0; }
+.toast-row { padding: 4px 6px; border-radius: 5px; font-size: 12px; color: var(--color-text-secondary); }
+.toast-list--single .toast-row { padding: 0; font-size: 12.5px; }
+.toast-row button { display: flex; width: 100%; gap: 8px; align-items: center; background: transparent; border: 0; color: inherit; text-align: left; cursor: pointer; padding: 0; font: inherit; }
+.toast-row button:hover { background: var(--color-bg-hover); }
+.toast-row button strong { flex: 1; min-width: 0; overflow-wrap: anywhere; }
+.toast-source { font: 10.5px monospace; color: var(--color-text-muted); }
+.toast-list--single .toast-row button { display: block; }
+.toast-list--single .toast-source { display: block; font-size: 11px; margin-top: 2px; }
+.toast-row small { font: 10.5px monospace; color: var(--color-text-muted); }
+.toast-list--single .toast-row small { display: none; }
+.toast-row--seen { color: var(--color-text-muted); }
+.toast-list--single .toast-row--seen small { display: inline; margin-left: 6px; }
+.toast-row--seen small { color: var(--color-success, #3fb950); }
+.toast-row--new { animation: toast-row-arrival 1.6s ease-out; }
+@keyframes toast-row-arrival { from { background: color-mix(in srgb, var(--color-accent) 16%, transparent); } }
+.toast-footer { display: flex; align-items: center; gap: 10px; margin-top: 6px; font-size: 11px; color: var(--color-text-muted); }
+.toast-footer > span:first-child { white-space: nowrap; }
+.toast-close { margin-left: auto; padding: 0; border: 0; background: transparent; color: var(--color-text-secondary); font: inherit; cursor: pointer; }
+.queue-crew-desktop { color: var(--color-text-muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 10px; margin-left: 8px; }
+.crew-desktop-label { color: var(--color-text-muted); padding: 6px 12px; font-size: 11px; }

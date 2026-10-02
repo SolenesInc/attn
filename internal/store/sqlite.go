@@ -1211,7 +1211,6 @@ CREATE INDEX IF NOT EXISTS idx_automode_denials_recent ON automode_denials(id DE
 			id TEXT PRIMARY KEY,
 			profile_id TEXT NOT NULL,
 			name TEXT NOT NULL DEFAULT '',
-			shortcut_slot INTEGER,
 			order_key TEXT NOT NULL,
 			tree_json TEXT NOT NULL DEFAULT '',
 			active_pane_id TEXT NOT NULL DEFAULT '',
@@ -1220,8 +1219,6 @@ CREATE INDEX IF NOT EXISTS idx_automode_denials_recent ON automode_denials(id DE
 			updated_at TEXT NOT NULL
 		);
 		CREATE INDEX IF NOT EXISTS idx_desktops_profile ON desktops(profile_id, order_key);
-		CREATE UNIQUE INDEX IF NOT EXISTS idx_desktops_shortcut_slot
-			ON desktops(profile_id, shortcut_slot) WHERE shortcut_slot IS NOT NULL;
 		CREATE TABLE IF NOT EXISTS desktop_panes (
 			pane_id TEXT PRIMARY KEY,
 			desktop_id TEXT NOT NULL,
@@ -1282,6 +1279,33 @@ CREATE INDEX IF NOT EXISTS idx_automode_denials_recent ON automode_denials(id DE
  agent TEXT NOT NULL, resume_id TEXT NOT NULL, session_id TEXT NOT NULL, pinned_at TEXT NOT NULL,
  PRIMARY KEY (agent, resume_id)
  );
+ `},
+	{167, "place background launches and remember the desktop each item starts on", `
+ CREATE TABLE IF NOT EXISTS launch_desktops (
+ kind TEXT NOT NULL CHECK(kind IN ('automation', 'crew')), item_id TEXT NOT NULL,
+ desktop_id TEXT NOT NULL, confirmed INTEGER NOT NULL DEFAULT 0,
+ PRIMARY KEY (kind, item_id)
+ );
+ CREATE INDEX IF NOT EXISTS launch_desktops_desktop ON launch_desktops(desktop_id);
+ CREATE TRIGGER IF NOT EXISTS remember_session_desktop AFTER INSERT ON desktop_panes WHEN NEW.session_id != ''
+ BEGIN UPDATE sessions SET last_desktop_id = NEW.desktop_id WHERE id = NEW.session_id; END;
+ CREATE TRIGGER IF NOT EXISTS launch_automation_deleted AFTER UPDATE OF deleted_at ON automation_definitions WHEN NEW.deleted_at != ''
+ BEGIN DELETE FROM launch_desktops WHERE kind = 'automation' AND item_id = NEW.id; END;
+ CREATE TRIGGER IF NOT EXISTS launch_review_setting_insert AFTER INSERT ON launch_desktops
+ BEGIN UPDATE profile_migration SET revision = revision + 1 WHERE phase = 'launch_required'; END;
+ CREATE TRIGGER IF NOT EXISTS launch_review_setting_update AFTER UPDATE ON launch_desktops
+ BEGIN UPDATE profile_migration SET revision = revision + 1 WHERE phase = 'launch_required'; END;
+ CREATE TRIGGER IF NOT EXISTS launch_review_setting_delete AFTER DELETE ON launch_desktops
+ BEGIN UPDATE profile_migration SET revision = revision + 1 WHERE phase = 'launch_required'; END;
+ CREATE TRIGGER IF NOT EXISTS launch_review_definition_insert AFTER INSERT ON automation_definitions
+ BEGIN UPDATE profile_migration SET revision = revision + 1 WHERE phase = 'launch_required'; END;
+ CREATE TRIGGER IF NOT EXISTS launch_review_definition_update AFTER UPDATE OF name, profile_id, deleted_at ON automation_definitions
+ WHEN OLD.name != NEW.name OR OLD.profile_id != NEW.profile_id OR OLD.deleted_at != NEW.deleted_at
+ BEGIN UPDATE profile_migration SET revision = revision + 1 WHERE phase = 'launch_required'; END;
+ CREATE TRIGGER IF NOT EXISTS launch_review_crew_insert AFTER INSERT ON crew_profiles
+ BEGIN UPDATE profile_migration SET revision = revision + 1 WHERE phase = 'launch_required'; END;
+ CREATE TRIGGER IF NOT EXISTS launch_review_crew_profile AFTER UPDATE ON crew_profiles WHEN OLD.profile_id != NEW.profile_id
+ BEGIN UPDATE profile_migration SET revision = revision + 1 WHERE phase = 'launch_required'; END;
  `},
 }
 
@@ -2146,6 +2170,11 @@ func applyPendingMigrations(db *sql.DB, recorded, currentVersion, through int) e
 			}
 		} else if m.version == 140 {
 			if err := applyMigration140(tx); err != nil {
+				tx.Rollback()
+				return fmt.Errorf("migration %d (%s): %w", m.version, m.desc, err)
+			}
+		} else if m.version == 167 {
+			if err := applyMigration167(tx, m.sql); err != nil {
 				tx.Rollback()
 				return fmt.Errorf("migration %d (%s): %w", m.version, m.desc, err)
 			}

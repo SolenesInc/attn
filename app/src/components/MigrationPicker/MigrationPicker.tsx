@@ -158,7 +158,7 @@ function PlacementBoard({ readError, migration, view, profileName, onShowIntro }
 
   return (
     <main className={`mp-shell${drag ? ' dragging' : ''}`} onPointerDown={onPointerDown} onLostPointerCapture={onLostPointerCapture}>
-      <StepNav step="place" onIntro={onShowIntro} />
+      <StepNav step="place" onIntro={onShowIntro} hasLaunch={Boolean(migration.launch_items?.length)} />
       <div className="mp-intro">
         <div>
           <div className="mp-eyebrow">One-time setup</div>
@@ -276,7 +276,7 @@ export function MigrationPicker() {
   if (step === 'intro' || (step === null && !hasStarted(migration))) {
     return (
       <main className="mp-shell">
-        <StepNav step="intro" onIntro={() => undefined} />
+        <StepNav step="intro" onIntro={() => undefined} hasLaunch={Boolean(migration.launch_items?.length)} />
         <Intro onStart={() => setStep('place')} />
       </main>
     );

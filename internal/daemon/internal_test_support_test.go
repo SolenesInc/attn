@@ -12,7 +12,6 @@ import (
 	"github.com/victorarias/attn/internal/enrollment"
 	"github.com/victorarias/attn/internal/git"
 	"github.com/victorarias/attn/internal/protocol"
-	"github.com/victorarias/attn/internal/ptybackend"
 )
 
 func addTurnSession(t *testing.T, d *Daemon, id string, agent protocol.SessionAgent) {
@@ -102,19 +101,6 @@ func initDelegationRepo(t *testing.T, root, name string) string {
 	runGitDaemon(t, repo, "init")
 	runGitDaemon(t, repo, "commit", "--allow-empty", "-m", "init")
 	return git.CanonicalizePath(repo)
-}
-
-func resumeSpawnForSession(t *testing.T, backend *fakeSpawnBackend, sessionID string, since int) ptybackend.SpawnOptions {
-	t.Helper()
-	backend.mu.Lock()
-	defer backend.mu.Unlock()
-	for i := since; i < len(backend.spawnOpts); i++ {
-		if backend.spawnOpts[i].ID == sessionID {
-			return backend.spawnOpts[i]
-		}
-	}
-	t.Fatalf("no spawn recorded for %s at/after index %d (spawns=%d)", sessionID, since, len(backend.spawnOpts))
-	return ptybackend.SpawnOptions{}
 }
 
 func spawnCount(backend *fakeSpawnBackend) int {

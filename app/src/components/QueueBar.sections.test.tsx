@@ -59,6 +59,7 @@ function run(id: string, definition: string, needsYou = false): TestSession {
     state: needsYou ? 'waiting_input' : 'working',
     turnOwed: needsYou,
     turnOpenedAt: needsYou ? '2026-07-26T08:00:00Z' : undefined,
+    desktopId: 'ws-a',
     automation: {
       definition_id: definition,
       definition_name: definition === 'nightly' ? 'Nightly docs sweep' : 'PR reviewer',
@@ -157,7 +158,7 @@ describe('the waiting peek', () => {
     owed('newer', 11, 'ws-b'),
     owed('older', 9),
     { id: 'busy', label: 'busy', state: 'working', desktopId: 'ws-a' },
-    { id: 'loose', label: 'loose', state: 'working' },
+    { id: 'loose', label: 'loose', state: 'working', desktopId: 'ws-b' },
     run('r1', 'nightly', true),
   ];
 
@@ -188,7 +189,7 @@ describe('the waiting peek', () => {
     expect(row('newer').querySelector('.unified-palette-tag kbd')).toBeNull();
     expect(row('older').querySelector('.unified-palette-slot')!.textContent).toBe('⌘1');
     expect(row('newer').querySelector('.unified-palette-slot')!.textContent).toBe('·');
-    expect(row('loose').querySelector('.unified-palette-slot')!.textContent).toBe('—');
+    expect(row('loose').querySelector('.unified-palette-slot')!.textContent).toBe('·');
     expect(row('older').querySelector('.unified-palette-pill')!.textContent).toBe('waiting');
   });
 

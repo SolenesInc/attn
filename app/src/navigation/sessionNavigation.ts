@@ -132,7 +132,7 @@ export function selectAgent(
 
 // Commands that never change what a window shows; everything else the user sends does.
 const LAYOUT_ONLY_COMMANDS = new Set([
-  'desktop_create', 'desktop_rename', 'desktop_reorder', 'desktop_set_shortcut_slot', 'desktop_set_split_ratio',
+  'desktop_create', 'desktop_rename', 'desktop_reorder', 'desktop_set_split_ratio',
   'desktop_update_tile', 'profile_create', 'profile_rename',
 ]);
 
@@ -157,6 +157,8 @@ function commandServes(target: IntentTarget, cmd: string, body: Record<string, u
 }
 
 function switchTarget(cmd: string, body: Record<string, unknown>): IntentTarget | null {
+  if (cmd === 'desktop_show_session' && typeof body.session_id === 'string') return { kind: 'session', sessionId: body.session_id };
+  if (cmd === 'desktop_show_leaf' && typeof body.desktop_id === 'string' && typeof body.leaf_id === 'string') return { kind: 'leaf', desktopId: body.desktop_id, leafId: body.leaf_id };
   if (cmd === 'profile_select' && typeof body.profile_id === 'string') return { kind: 'profile', profileId: body.profile_id };
   if (cmd === 'desktop_set_current' && typeof body.desktop_id === 'string') return { kind: 'desktop', desktopId: body.desktop_id };
   return null;

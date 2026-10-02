@@ -318,8 +318,8 @@ func TestSelectionReachesTheOtherConnectionAndSurvivesARestart(t *testing.T) {
 		t.Fatalf("the second connection saw current desktop %s, want %s", seen[0].Profile.CurrentDesktopID, desktopTwo.ID)
 	}
 	focused, ok := desktopIn(seen[1].Desktops, desktopTwo.ID)
-	if len(seen[1].Desktops) != 2 || !ok || focused.ActivePaneID != paneB {
-		t.Fatalf("the second connection saw %+v, want both desktops with %s focused on %s", seen[1].Desktops, desktopTwo.ID, paneB)
+	if !ok || focused.ActivePaneID != paneB {
+		t.Fatalf("the second connection saw %+v, want the occupied desktop with %s focused on %s", seen[1].Desktops, desktopTwo.ID, paneB)
 	}
 	if focused.Revision != revisionBeforeSelection {
 		t.Fatalf("selecting a pane moved the desktop revision from %d to %d", revisionBeforeSelection, focused.Revision)
@@ -394,7 +394,6 @@ func TestMoveBetweenDesktopsArrivesAsOneMessageAndFailsWhole(t *testing.T) {
 	client, _ := w.connect("")
 	created := w.mustSend(client, map[string]any{"cmd": protocol.CmdProfileCreate, "name": "attn"})
 	profileID, source := created.Profile.ID, created.Desktops[0]
-	target := w.mustSend(client, map[string]any{"cmd": protocol.CmdDesktopCreate, "profile_id": profileID}).Desktops[0]
 	w.mustSend(client, map[string]any{"cmd": protocol.CmdProfileSelect, "profile_id": profileID})
 	watcher, _ := w.connect(profileID)
 	w.agent("agent-a", profileID)
@@ -403,6 +402,8 @@ func TestMoveBetweenDesktopsArrivesAsOneMessageAndFailsWhole(t *testing.T) {
 	})
 	paneID := protocol.Deref(placed.PaneID)
 	source = placed.Desktops[0]
+	target := w.mustSend(client, map[string]any{"cmd": protocol.CmdDesktopCreate, "profile_id": profileID}).Desktops[0]
+
 	drainClientPayloads(t, watcher)
 
 	stale := w.send(client, map[string]any{
@@ -426,7 +427,7 @@ func TestMoveBetweenDesktopsArrivesAsOneMessageAndFailsWhole(t *testing.T) {
 	}
 	seen := arrangementChanges(t, watcher)
 	if len(seen) != 1 || len(seen[0].Desktops) != 2 {
-		t.Fatalf("the move arrived as %d messages, want one carrying both desktops", len(seen))
+		t.Fatalf("the move arrived as %d messages, want one carrying the emptied source and the occupied target", len(seen))
 	}
 	for _, desktop := range seen[0].Desktops {
 		tree, err := layouttree.DecodeLayout(desktop.TreeJson)
@@ -644,86 +645,4 @@ func TestAClientThatCannotTakeAnArrangementIsDisconnectedToResync(t *testing.T) 
 	if stillConnected || !stalled.sendChannelClosed() {
 		t.Fatal("a client that missed its arrangement stayed connected, so it would keep showing the old one")
 	}
-}
-
-func (w *profilesTestDaemon) recordSessionBroadcasts(sessionID string) *[]protocol.Session {
-	seen := &[]protocol.Session{}
-	w.d.wsHub.broadcastListener = func(event *protocol.WebSocketEvent) {
-		if event.Event == protocol.EventSessionStateChanged && event.Session != nil && event.Session.ID == sessionID {
-			*seen = append(*seen, *event.Session)
-		}
-	}
-	return seen
-}
-
-func TestMovingAnAgentUnplacesItAndAnnouncesItInTheDestination(t *testing.T) {
-	w := newProfilesTestDaemon(t)
-	mover, _ := w.connect("")
-	work := w.mustSend(mover, map[string]any{"cmd": protocol.CmdProfileCreate, "name": "work"})
-	home := w.mustSend(mover, map[string]any{"cmd": protocol.CmdProfileCreate, "name": "home"}).Profile
-	w.agent("agent", work.Profile.ID)
-	w.agent("neighbour", work.Profile.ID)
-	desktop := work.Desktops[0]
-	placed := w.mustSend(mover, map[string]any{
-		"cmd": protocol.CmdDesktopPlaceSession, "desktop_id": desktop.ID, "expected_revision": desktop.Revision, "session_id": "neighbour",
-	})
-	placed = w.mustSend(mover, map[string]any{
-		"cmd": protocol.CmdDesktopPlaceSession, "desktop_id": desktop.ID, "expected_revision": placed.Desktops[0].Revision, "session_id": "agent",
-	})
-	w.mustSend(mover, map[string]any{"cmd": protocol.CmdProfileSelect, "profile_id": work.Profile.ID})
-	watcher, _ := w.connect(home.ID)
-	drainClientPayloads(t, mover)
-	before := w.d.store.Get("agent")
-	announced := w.recordSessionBroadcasts("agent")
-
-	request := map[string]any{
-		"cmd": protocol.CmdSessionMove, "request_id": "move-1", "session_id": "agent",
-		"expected_profile_id": work.Profile.ID, "destination_profile_id": home.ID,
-	}
-	moved := w.mustSend(mover, request)
-
-	if len(moved.Desktops) != 1 || moved.Desktops[0].ID != desktop.ID || len(moved.Desktops[0].Panes) != 1 || moved.Desktops[0].Panes[0].SessionID != "neighbour" {
-		t.Fatalf("session_move answered desktops %+v, want the source desktop without the agent's pane", moved.Desktops)
-	}
-	if moved.Desktops[0].Revision != placed.Desktops[0].Revision+1 {
-		t.Fatalf("the source desktop moved from revision %d to %d, want one step", placed.Desktops[0].Revision, moved.Desktops[0].Revision)
-	}
-	if source := arrangementChanges(t, mover); len(source) != 1 || source[0].Profile.ID != work.Profile.ID {
-		t.Fatalf("the source profile's client saw %+v, want one arrangement change of work", source)
-	}
-	if leaked := arrangementChanges(t, watcher); len(leaked) != 0 {
-		t.Fatalf("the destination's client saw arrangement changes %+v; the agent arrives unplaced", leaked)
-	}
-	if len(*announced) != 1 || (*announced)[0].ProfileID != home.ID {
-		t.Fatalf("clients were told %+v, want the agent announced once in home", *announced)
-	}
-	if _, placedNow, _ := w.d.store.SessionPlacement("agent"); placedNow {
-		t.Fatal("the moved agent kept a placement")
-	}
-	after := w.d.store.Get("agent")
-	if after == nil || after.ID != before.ID || after.State != before.State || after.Directory != before.Directory {
-		t.Fatalf("the move changed the agent from %+v to %+v, want only its profile", before, after)
-	}
-
-	retried := w.mustSend(mover, request)
-	if retried.Desktops != nil {
-		t.Fatalf("a retried move answered desktops %+v, want success without a change", retried.Desktops)
-	}
-	if len(*announced) != 1 {
-		t.Fatalf("a retried move announced the agent again: %+v", *announced)
-	}
-
-	stale := w.send(mover, map[string]any{
-		"cmd": protocol.CmdSessionMove, "session_id": "agent",
-		"expected_profile_id": work.Profile.ID, "destination_profile_id": w.defaultProfileID(),
-	})
-	wantErrorCode(t, stale, protocol.ProfileErrorCodeStaleRevision)
-	if profileID, _ := w.d.store.SessionProfileID("agent"); profileID != home.ID {
-		t.Fatalf("a stale move left the agent in %s, want %s", profileID, home.ID)
-	}
-}
-
-func (w *profilesTestDaemon) defaultProfileID() string {
-	w.t.Helper()
-	return defaultProfileID(w.t, w.d.store)
 }

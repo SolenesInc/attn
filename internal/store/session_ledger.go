@@ -120,11 +120,19 @@ func (s *Store) CloseSession(id string, closed SessionClose, now time.Time) (boo
 	if err := finalizeSessionCostTx(tx, id); err != nil {
 		return false, fmt.Errorf("close session %s: %w", id, err)
 	}
-	if err := unplaceClosingSession(tx, now.UTC().Format(sortableTimeFormat), id); err != nil {
+	unplacedAt := now.UTC().Format(sortableTimeFormat)
+	if err := unplaceClosingSession(tx, unplacedAt, id); err != nil {
+		return false, fmt.Errorf("close session %s: %w", id, err)
+	}
+	emptied, err := stampEmptyDesktops(tx, unplacedAt)
+	if err != nil {
 		return false, fmt.Errorf("close session %s: %w", id, err)
 	}
 	if err := tx.Commit(); err != nil {
 		return false, fmt.Errorf("close session %s: %w", id, err)
+	}
+	if emptied {
+		s.announceEmptyDesktop(now)
 	}
 	s.forgetSessionCost(id)
 	return true, nil

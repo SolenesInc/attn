@@ -66,7 +66,9 @@ func (d *Daemon) crewAgentAvailable(agent string) bool {
 var crewWakePrompt = prompts.RenderText("crew", "wake", prompts.Values{})
 
 type crewWakeDelivery struct {
-	Message *agentmailbox.PeerMessage
+	Message     *agentmailbox.PeerMessage
+	RequestedBy string
+	UserStarted bool
 }
 
 func (d *Daemon) crewMember(name string) (crew.Member, docstore.Document, error) {
@@ -198,11 +200,16 @@ func (d *Daemon) primeCrewGarden(priming *crew.Priming, memberID string) {
 }
 
 func (d *Daemon) crewWakeAsked(msg *protocol.CrewWakeMessage) (*protocol.CrewWakeResult, error) {
+	return d.crewWakeAskedFor(msg, false)
+}
+
+func (d *Daemon) crewWakeAskedFor(msg *protocol.CrewWakeMessage, userStarted bool) (*protocol.CrewWakeResult, error) {
 	name := strings.TrimSpace(msg.Member)
 	if err := d.refuseCrossProfileWake(name, protocol.Deref(msg.ProfileID), protocol.Deref(msg.SourceSessionID)); err != nil {
 		return nil, err
 	}
-	return d.crewWake(name, strings.TrimSpace(strings.ToLower(protocol.Deref(msg.Agent))))
+	delivery := &crewWakeDelivery{UserStarted: userStarted, RequestedBy: d.launchRequester(protocol.Deref(msg.SourceSessionID), "attn crew wake")}
+	return d.crewWakeWithDelivery(name, strings.TrimSpace(strings.ToLower(protocol.Deref(msg.Agent))), false, delivery)
 }
 
 func (d *Daemon) refuseCrossProfileWake(name, askedProfileID, sourceSessionID string) error {
@@ -240,7 +247,11 @@ func (d *Daemon) handleCrewWake(conn net.Conn, msg *protocol.CrewWakeMessage) {
 }
 
 func (d *Daemon) handleCrewWakeWS(client *wsClient, msg *protocol.CrewWakeMessage) {
-	result, err := d.crewWakeAsked(msg)
+	result, err := d.crewWakeAskedFor(msg, true)
+	var showErr error
+	if err == nil {
+		showErr = d.showCrewWake(result, client, protocol.Deref(msg.RequestID))
+	}
 	response := protocol.CrewWakeResultMessage{
 		Event:     protocol.EventCrewWakeResult,
 		RequestID: protocol.Deref(msg.RequestID),
@@ -256,6 +267,9 @@ func (d *Daemon) handleCrewWakeWS(client *wsClient, msg *protocol.CrewWakeMessag
 			response.AlreadyAwake = protocol.Ptr(true)
 		}
 		response.ReleasedSessionID = result.ReleasedSessionID
+		if showErr != nil {
+			response.ShowError = protocol.Ptr(showErr.Error())
+		}
 	}
 	d.sendToClient(client, response)
 }
@@ -347,13 +361,23 @@ func (d *Daemon) crewWakeWithDeliveryLocked(name, agent string, autonomous bool,
 		Rows:          24,
 		Label:         protocol.Ptr(crew.DisplayName(member.ID)),
 		InitialPrompt: protocol.Ptr(initialPrompt),
-	}, internalSpawnPolicy{})
+	}, internalSpawnPolicy{launchPlacement: &launchPlacement{kind: "crew", itemID: member.ID}})
 	if _, err := readInternalActionResult(spawnClient); err != nil {
 		if delivery != nil && delivery.Message != nil {
 			d.rollbackQueuedPeerMessage(sessionID, delivery.Message.ID)
 		}
 		d.releaseCrewBindingIfSession(sessionID)
 		return nil, fmt.Errorf("wake %s: %w", crew.DisplayName(member.ID), err)
+	}
+	if delivery == nil || !delivery.UserStarted {
+		requester := "a garden notification"
+		if delivery != nil {
+			requester = delivery.RequestedBy
+			if delivery.Message != nil {
+				requester = d.launchRequester(delivery.Message.SenderSessionID, "another agent")
+			}
+		}
+		d.announceBackgroundLaunch("crew", member.ID, sessionID, requester)
 	}
 	d.logf("crew: woke %s in session %s at %s", crew.DisplayName(member.ID), sessionID, directory)
 	result := &protocol.CrewWakeResult{
@@ -495,11 +519,23 @@ func (d *Daemon) crewSet(msg *protocol.CrewSetMessage) (*protocol.CrewMember, bo
 			wire := d.crewMemberWire(member, doc.Rev)
 			return &wire, true, nil
 		}
+		setting := storeLaunchSetting(msg.LaunchDesktopSetting)
+		if msg.LaunchDesktop != nil {
+			chosen, err := d.launchDesktopFromRef(d.crewProfileID(member.ID), member.ID, *msg.LaunchDesktop, msg.LaunchDesktopName)
+			if err != nil {
+				return nil, false, err
+			}
+			setting = &chosen
+		}
 		if err := d.applyCrewSettings(&member, msg); err != nil {
 			return nil, false, err
 		}
-		revision, err := d.writeCrewMember(*schema, member, doc.Rev)
+		revision, err := d.writeCrewMemberWithLaunch(*schema, member, doc.Rev, setting)
 		if err == nil {
+			if setting != nil {
+				d.publishArrangementChanged(d.crewProfileID(member.ID))
+				d.publishMigrationChanged(d.crewProfileID(member.ID))
+			}
 			wire := d.crewMemberWire(member, revision)
 			return &wire, false, nil
 		}
