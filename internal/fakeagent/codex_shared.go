@@ -39,7 +39,6 @@ type sharedFakeRoot struct {
 	approval        atomic.Bool
 	failed          atomic.Bool
 	snapshotOnly    atomic.Bool
-	statusMu        sync.Mutex
 	archiveUsage    string
 	name            string
 	nameError       bool
@@ -529,11 +528,17 @@ func (s *sharedFakeCodex) handle(conn *websocket.Conn, m codexshared.Message) (a
 		for _, input := range p.Input {
 			texts = append(texts, input.Text)
 		}
+		text := strings.Join(texts, "\n")
 		if m.Method == "turn/start" {
 			if root.active.Load() {
 				return nil, fmt.Errorf("turn already active")
 			}
-			root.a.submit(strings.Join(texts, "\n"))
+			root.a.turn.Lock()
+			err := root.c.submit(text)
+			root.a.turn.Unlock()
+			if err != nil {
+				return nil, err
+			}
 			root.hasTurn.Store(true)
 			root.active.Store(true)
 		} else {
@@ -542,16 +547,16 @@ func (s *sharedFakeCodex) handle(conn *websocket.Conn, m codexshared.Message) (a
 				root.a.turn.Unlock()
 				return nil, fmt.Errorf("steer expected an active matching turn")
 			}
-			text := strings.Join(texts, "\n")
 			err := appendLines(root.c.transcript, codexEvent("user_message", text))
 			root.a.turn.Unlock()
 			if err != nil {
 				return nil, err
 			}
-			root.a.prompts <- promptSubmission{text: text, conversation: root.c.conversation}
 		}
 		s.broadcast("turn/started", map[string]any{"threadId": p.ThreadID, "turn": map[string]any{"id": root.c.turnID}})
 		s.broadcastStatus(root)
+		// Prompted acknowledges native acceptance after its state has reached every peer.
+		root.a.prompts <- promptSubmission{text: text, conversation: root.c.conversation}
 		return map[string]any{"turn": map[string]any{"id": root.c.turnID}}, nil
 	default:
 		return map[string]any{}, nil
@@ -591,9 +596,6 @@ func (s *sharedFakeCodex) approvalRequest(root *sharedFakeRoot) []byte {
 }
 
 func (s *sharedFakeCodex) broadcastStatus(root *sharedFakeRoot) {
-	// Compute and deliver together so a delayed busy payload cannot follow approval.
-	root.statusMu.Lock()
-	defer root.statusMu.Unlock()
 	if root.snapshotOnly.Load() {
 		return
 	}

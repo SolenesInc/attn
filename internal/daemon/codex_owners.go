@@ -168,7 +168,7 @@ func (r *codexRuntime) prepareRPC(runtimeID string, m *codexshared.Message) (fun
 			if len(reply.Error) > 0 {
 				return
 			}
-			if err := r.d.store.ConsumeCodexInitialName(owner.SessionID, p.ThreadID); err != nil {
+			if err := r.d.store.ConsumeCodexInitialName(owner.SessionID, p.ThreadID, p.Name); err != nil {
 				r.d.logf("Codex native rename for %s: %v", owner.SessionID, err)
 				return
 			}

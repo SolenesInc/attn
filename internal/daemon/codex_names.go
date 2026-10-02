@@ -46,7 +46,7 @@ func (r *codexRuntime) projectNativeName(root string, name *string, revision uin
 		return
 	}
 	if notification {
-		if err := r.d.store.ConsumeCodexInitialName(owner.SessionID, root); err != nil {
+		if err := r.d.store.ConsumeCodexInitialName(owner.SessionID, root, *state.Name); err != nil {
 			r.d.logf("Codex confirmed name for %s: %v", owner.SessionID, err)
 		}
 	}
@@ -97,10 +97,21 @@ func (r *codexRuntime) applyInitialName(ctx context.Context, id string) error {
 	if _, err := control.Call(ctx, "thread/name/set", map[string]any{"threadId": owner.NativeRootID, "name": launch.InitialName}); err != nil {
 		return fmt.Errorf("set initial Codex name for %s: %w", id, err)
 	}
-	if err := r.d.store.ConsumeCodexInitialName(id, owner.NativeRootID); err != nil {
+	if err := r.d.store.ConsumeCodexInitialName(id, owner.NativeRootID, launch.InitialName); err != nil {
 		return err
 	}
 	r.projectNativeName(owner.NativeRootID, &launch.InitialName, revision, false)
+	owner, err = r.d.store.CodexOwner(id)
+	if err != nil {
+		return err
+	}
+	pending, err := r.ownerContext(owner)
+	if err != nil {
+		return err
+	}
+	if pending.InitialName != "" {
+		return fmt.Errorf("codex name changed while setting it; rename the agent or retry work to apply %q", pending.InitialName)
+	}
 	return nil
 }
 
@@ -188,7 +199,7 @@ func (r *codexRuntime) rename(ctx context.Context, id, name string) error {
 		return err
 	}
 	crashAt(crashAfterCodexNameWritten)
-	if err := r.d.store.ConsumeCodexInitialName(id, owner.NativeRootID); err != nil {
+	if err := r.d.store.ConsumeCodexInitialName(id, owner.NativeRootID, name); err != nil {
 		return err
 	}
 	r.projectNativeName(owner.NativeRootID, &name, revision, false)

@@ -177,6 +177,72 @@ func TestSharedCodexFailedPendingReplacementKeepsLabelAndRetriesLatestName(t *te
 	awaitLabel(app, a, "Latest correction")
 }
 
+func TestSharedCodexOlderNameReplyCannotConsumeNewerRejectedNativeCorrection(t *testing.T) {
+	for _, initial := range []bool{false, true} {
+		t.Run(map[bool]string{false: "attn_reply", true: "initial_reply"}[initial], func(t *testing.T) {
+			t.Setenv("ATTN_FAKE_CODEX_DROP_NAME_EVENTS", "1")
+			w := newWorld(t, fakeagent.Codex)
+			app, cli := w.App(), w.Client()
+			sharedCodexSetting(t, app, true)
+			a := w.Spawn(app, fakeagent.Codex, w.Path("a"), func(m *protocol.SpawnSessionMessage) {
+				if initial {
+					m.Label = protocol.Ptr("Held initial name")
+					m.InitialPrompt = protocol.Ptr("blocked initial work")
+				} else {
+					m.Label = protocol.Ptr("fixture rejected name")
+				}
+			})
+			agent := w.Launched(a)
+			t.Cleanup(agent.ReleaseNativeNameReplies)
+			var renamed chan error
+			if !initial {
+				awaitSharedView(app, a, a)
+				app.AwaitScreen(a, "Showing "+agent.ConversationID)
+				agent.HoldNativeNameReplies()
+				renamed = make(chan error, 1)
+				go func() { renamed <- cli.RenameSession(a, "Older correction") }()
+			}
+			agent.AwaitNativeNameReplyHeld()
+			b := w.Spawn(app, fakeagent.Codex, w.Path("b"))
+			w.Launched(b)
+			awaitSharedView(app, b, b)
+			app.TypeLine(b, "/agents "+agent.ConversationID)
+			awaitSharedView(app, b, a)
+			app.TypeLine(b, "/rename fixture rejected name")
+			app.AwaitScreen(b, "fixture name write rejected for "+agent.ConversationID)
+			agent.ReleaseNativeNameReplies()
+			if initial {
+				awaitSharedView(app, a, a)
+				app.AwaitScreen(a, "fixture name write rejected for "+agent.ConversationID)
+			} else if err := <-renamed; err != nil {
+				t.Fatal(err)
+			}
+			if initial {
+				var refused bool
+				for _, notice := range listNotifications(app).Notifications {
+					if notice.SourceID == a && strings.Contains(notice.Detail, "name changed while setting it") {
+						refused = true
+					}
+				}
+				if !refused {
+					t.Fatal("initial gate admitted work despite a newer pending correction")
+				}
+			} else {
+				sent := sharedAnnotationSubmit(app, a, "newer-name-blocked", "must remain blocked")
+				if sent.Success || !strings.Contains(protocol.Deref(sent.Error), "fixture name write rejected") {
+					t.Fatalf("older reply discarded latest pending correction: %+v", sent)
+				}
+			}
+			app.TypeLine(b, "/rename Recovered latest correction")
+			awaitLabel(app, a, "Recovered latest correction")
+			app.TypeLine(a, "work after corrected overlap")
+			if got := agent.Prompted(); got != "work after corrected overlap" {
+				t.Fatalf("work bypassed pending name: %q", got)
+			}
+		})
+	}
+}
+
 func TestSharedCodexPendingRenameSurvivesCrashAfterNativeWrite(t *testing.T) {
 	t.Setenv("ATTN_FAKE_CODEX_DROP_NAME_EVENTS", "1")
 	w := testworld.NewStack(t, testworld.WithAgents(fakeagent.Codex))

@@ -178,9 +178,9 @@ func (s *Store) ReplacePendingCodexName(id, root, name string) error {
 	return nil
 }
 
-// Consume only the pending name; concurrent launch-context changes remain intact.
-func (s *Store) ConsumeCodexInitialName(id, root string) error {
-	result, err := s.db.Exec(`UPDATE codex_owners SET context_json=json_remove(context_json,'$.InitialName') WHERE session_id=? AND native_root_id=? AND archived=0`, id, root)
+// Consume only the confirmed pending value; newer corrections and other context survive.
+func (s *Store) ConsumeCodexInitialName(id, root, name string) error {
+	result, err := s.db.Exec(`UPDATE codex_owners SET context_json=CASE WHEN json_extract(context_json,'$.InitialName')=? THEN json_remove(context_json,'$.InitialName') ELSE context_json END WHERE session_id=? AND native_root_id=? AND archived=0`, name, id, root)
 	if err != nil {
 		return err
 	}
