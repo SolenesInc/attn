@@ -2066,7 +2066,7 @@ func (d *Daemon) forgetSessionTrace(sessionID string) {
 
 func (d *Daemon) handlePTYState(sessionID string, obs pty.Observation) {
 	if obs.Source == pty.SourceTitle {
-		d.life.Do("codexViewTitle", func() { d.codexRuntime().observeTitle(sessionID, obs) })
+		d.life.Go("codexViewTitle", func() { d.codexRuntime().observeTitle(sessionID, obs) })
 		return
 	}
 	if sessionID == codexServerRuntime || d.codexRuntime().hasRuntime(sessionID) || d.sharedCodexOwner(sessionID) {

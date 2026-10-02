@@ -51,6 +51,7 @@ type codexRuntime struct {
 	serverExit      chan error
 	serverID        string
 	control         *codexshared.Client
+	viewsMu         sync.RWMutex
 	views           map[string]store.CodexView
 	servers         map[string]*http.Server
 	initialConsumed map[string]bool
@@ -323,8 +324,8 @@ func (r *codexRuntime) noteServerExit(info ptybackend.ExitInfo) {
 	})
 }
 func (r *codexRuntime) hasRuntime(id string) bool {
-	r.mu.Lock()
-	defer r.mu.Unlock()
+	r.viewsMu.RLock()
+	defer r.viewsMu.RUnlock()
 	_, ok := r.views[id]
 	return ok
 }

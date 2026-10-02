@@ -70,7 +70,7 @@ func (r *codexRuntime) prepareLaunch(opts *ptybackend.SpawnOptions, session *pro
 	} else if err := r.d.store.SaveCodexView(view); err != nil {
 		return err
 	}
-	r.views[view.RuntimeID] = view
+	r.setViewLocked(view)
 	crashAt(crashAfterCodexReservation)
 	launch, err := r.ownerContext(owner)
 	if err != nil {
