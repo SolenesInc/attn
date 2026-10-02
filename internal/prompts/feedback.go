@@ -2,6 +2,7 @@ package prompts
 
 func feedbackEvents() []Event {
 	return []Event{
+		On("user-message", "cli_output", "User-authored Quick Capture inbox content.", template("session.user-message", "content/session/user-message.md", TextField("message", "User message"), TextField("files", "File retrieval instructions"))),
 		On("inbox-notification", "user_message", "Generic notification directing the recipient to the durable inbox.", Use("session.inbox-notification", "content/session/inbox-notification.md")),
 		On("inbox-empty", "cli_output", "No unread items remain.", Use("session.inbox-empty", "content/session/inbox-empty.md")),
 		On("inbox-more", "cli_output", "Read the next batch of unread items.", template("session.inbox-more", "content/session/inbox-more.md", TextField("remaining", "Unread items remaining."))),

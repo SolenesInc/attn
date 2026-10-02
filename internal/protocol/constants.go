@@ -3,6 +3,7 @@ package protocol
 import "time"
 
 const (
+	ErrorCodeCaptureNotFound = "capture_not_found"
 	ErrorCodeConflict             = "conflict"
 	ErrorCodeUndeclaredCollection = "undeclared_collection"
 	ErrorCodeInvalidQuery         = "invalid_query"
@@ -15,6 +16,8 @@ const (
 const DocSubscriptionsPerClient = 64
 
 const AgentMessageMaxChars = 32 * 1024
+
+const CommandFrameMaxBytes = 64 * 1024
 
 const CapabilityBrowserHost = "browser_host"
 
@@ -32,6 +35,12 @@ const (
 )
 
 const (
+	CmdCaptureAttachmentDiscard              = "capture_attachment_discard"
+	CmdCaptureAttachmentGet                  = "capture_attachment_get"
+	CmdCaptureAttachmentPut                  = "capture_attachment_put"
+	CmdCaptureList                           = "capture_list"
+	CmdCaptureGet                            = "capture_get"
+	CmdCaptureSend                           = "capture_send"
 	CmdClientHello                   = "client_hello"
 	CmdDelegate                      = "delegate"
 	CmdDelegationPreferencesGet      = "delegation_preferences_get"
@@ -311,6 +320,8 @@ const (
 const EventAutomationsChanged = "automations_changed"
 
 const (
+	EventCaptureResult = "capture_result"
+	EventCaptureChanged = "capture_changed"
 	EventSessionRegistered               = "session_registered"
 	EventSessionUnregistered             = "session_unregistered"
 	EventSessionCloseResult              = "session_close_result"

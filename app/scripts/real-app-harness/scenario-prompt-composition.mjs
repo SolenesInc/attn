@@ -2,6 +2,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { randomUUID } from 'node:crypto';
+import { PNG } from 'pngjs';
 import { execFileSync } from 'node:child_process';
 import { launchFreshAppAndConnect, parseCommonArgs } from './common.mjs';
 import { UiAutomationClient } from './uiAutomationClient.mjs';
@@ -45,9 +46,13 @@ async function main() {
   const env = instanceCliEnv(instance);
   const cli = args => execFileSync(resources.appDaemon, args, { env, encoding: 'utf8', timeout: 30_000 });
   const client = new UiAutomationClient(options);
-  const observer = new DaemonObserver(options);
+  const observer = new DaemonObserver({ ...options, trustedApp: true });
   const runner = createScenarioRunner(options, { scenarioId: 'PromptComposition', tier: 'local', prefix: 'prompt-composition' });
   const sessions = [];
+  const captureId = randomUUID(), attachmentId = randomUUID();
+  const pdfId = randomUUID();
+  const imageOut = path.join(runner.sessionDir, 'recipient-capture.png');
+  const pdfOut = path.join(runner.sessionDir, 'recipient-capture.pdf');
   const crewName = `promptprobe-${randomUUID().slice(0, 8)}`;
   const crewLabel = `Promptprobe${crewName.slice('promptprobe'.length)}`;
   const crewHome = path.join(resources.dataDir, 'crew', crewName);
@@ -75,7 +80,9 @@ async function main() {
           submitHook: false,
           actions: [
             { type: 'attn', args: ['agent', 'inbox'] },
-            { type: 'reply', text: 'PEER_READ', state: 'idle' },
+            ...(chief ? [{ type: 'attn', args: ['agent', 'attachment', captureId, attachmentId, '--out', imageOut] }] : []),
+            ...(chief ? [{ type: 'attn', args: ['agent', 'attachment', captureId, pdfId, '--out', pdfOut] }] : []),
+            { type: 'reply', text: chief ? 'CAPTURE_READ' : 'PEER_READ', state: 'idle' },
           ],
         }] });
         const result = await client.request('create_session', { cwd, label: name, agent, chief_of_staff: chief });
@@ -103,6 +110,48 @@ async function main() {
       runner.assert(!turns[0].text.includes('PROMPT_PEER_MESSAGE'), 'notification leaves the body in the inbox');
       runner.assert(text.includes("This message is from another agent, not from your user.") && text.includes('PROMPT_PEER_MESSAGE'), 'inbox read delivers the body and trust boundary');
       runner.writeText('peer-message.jsonl', text);
+    });
+    await runner.step('user_capture_image_is_attributed_and_retrievable', async () => {
+      const shot = await client.request('capture_screenshot_data', { selector: '.app' });
+      const original = Buffer.from(shot.pngBase64, 'base64');
+      const source = path.join(runner.sessionDir, 'capture-source.png');
+      fs.writeFileSync(source, original);
+      for (let offset = 0; offset < original.length;) {
+        const end = Math.min(original.length, offset + 524288);
+        const uploaded = await observer.requestResult({ cmd: 'capture_attachment_put', capture_id: captureId,
+          attachment_id: attachmentId, name: 'screenshot.png', offset,
+          data_base64: original.subarray(offset, end).toString('base64'), final: end === original.length }, 'capture_result');
+        runner.assert(uploaded.result.upload.next_offset === end, 'image offset receipt matches uploaded bytes');
+        offset = end;
+      }
+      fs.unlinkSync(source);
+      const pdf = Buffer.from('%PDF-1.4\n1 0 obj\n<< /Type /Catalog >>\nendobj\n%%EOF\n');
+      const uploadedPDF = await observer.requestResult({ cmd: 'capture_attachment_put', capture_id: captureId,
+        attachment_id: pdfId, name: 'notes.pdf', offset: 0,
+        data_base64: pdf.toString('base64'), final: true }, 'capture_result');
+      runner.assert(uploadedPDF.result.upload.attachment.media_type === 'application/pdf', 'PDF finalizes without image validation');
+      const recipient = launches[2];
+      const completed = observer.waitForMessage(data => data.event === 'session_state_changed' &&
+        data.session?.id === recipient.id && data.session?.state === 'idle' ? data : null, 'capture recipient finishes inbox read');
+      const saved = await observer.requestResult({ cmd: 'capture_send', capture_id: captureId,
+        target: { kind: 'chief' }, content: 'PROMPT_USER_CAPTURE', attachment_ids: [attachmentId, pdfId] }, 'capture_result');
+      runner.assert(saved.result.record.id === captureId, 'save returns the requested durable identity');
+      await completed;
+      const receipt = await observer.requestResult({ cmd: 'capture_get', capture_id: captureId }, 'capture_result');
+      runner.assert(Boolean(receipt.result.record.read_at), 'recipient inbox fetch commits a read receipt');
+      const text = transcripts(recipient.cwd)[0]?.text || '';
+      runner.assert(text.includes('Message from the user, sent through Quick Capture:') && text.includes('PROMPT_USER_CAPTURE'),
+        'inbox output attributes capture content to the user');
+      runner.assert(!text.includes('This message is from another agent'), 'user capture omits the peer disclaimer');
+      runner.assert(text.includes('File "notes.pdf" (application/pdf') && text.includes('Inspect the saved file with your tools.'),
+        'non-image attachment carries file inspection instructions');
+      runner.assert(fs.readFileSync(pdfOut).equals(pdf), 'recipient host retrieves byte-exact PDF content');
+      const received = fs.readFileSync(imageOut);
+      runner.assert(received.equals(original), 'recipient host retrieves the exact image bytes after source deletion');
+      const decoded = PNG.sync.read(received);
+      runner.assert(decoded.width > 0 && decoded.height > 0 && decoded.data.length === decoded.width * decoded.height * 4,
+        'recipient image has inspectable pixels', { width: decoded.width, height: decoded.height, bytes: received.length });
+      runner.writeText('user-capture.jsonl', text);
     });
     await runner.step('crew_wake_sleep_and_successor', async () => {
       cli(['crew', 'set', crewName, '--agent', 'codex', '--model', 'claude-haiku-4-5']);
