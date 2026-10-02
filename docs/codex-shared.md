@@ -140,6 +140,13 @@ successful. A warning links to the agent and explains how to rename it. Work is
 refused while the launch name remains pending; a successful rename clears it and
 lets the same conversation receive work.
 
+Confirmed native name events also consume pending initialization, so native
+`/rename` recovers the same way. A manual rename replaces an existing pending
+name before the native write; after a crash, recovery can retry that replacement
+but cannot replay the superseded launch name. Ordinary renames create no pending
+initialization. A rejected replacement retains the confirmed label and remains
+the pending correction until a write succeeds.
+
 Initial and manual name writes serialize for each owner. They release the shared
 runtime lock before waiting for Codex, so a delayed name reply cannot block other
 owners. Successful writes consume only the pending name field and require the

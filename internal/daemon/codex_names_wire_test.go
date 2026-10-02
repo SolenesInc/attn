@@ -88,46 +88,124 @@ func TestSharedCodexHeldManualNameAllowsOtherInputAndCannotReviveClosedOwner(t *
 }
 
 func TestSharedCodexInitialNameFailureKeepsCreatedRootAndRenameRecoversWork(t *testing.T) {
+	for _, native := range []bool{false, true} {
+		t.Run(map[bool]string{false: "attn", true: "native"}[native], func(t *testing.T) {
+			w := newWorld(t, fakeagent.Codex)
+			app, cli := w.App(), w.Client()
+			sharedCodexSetting(t, app, true)
+			a := w.Spawn(app, fakeagent.Codex, w.Path("same"), func(m *protocol.SpawnSessionMessage) {
+				m.Label = protocol.Ptr("fixture rejected name")
+				m.InitialPrompt = protocol.Ptr("blocked initial work")
+			})
+			agent := w.Launched(a)
+			root := agent.ConversationID
+			awaitSharedView(app, a, a)
+			app.AwaitScreen(a, "Showing "+root)
+			app.AwaitScreen(a, "fixture name write rejected")
+			listed := listNotifications(app)
+			var visible bool
+			for _, notice := range listed.Notifications {
+				if notice.SourceID == a && strings.Contains(notice.Detail, "fixture name write rejected") && strings.Contains(notice.Body, "Rename the agent") {
+					visible = true
+				}
+			}
+			if !visible {
+				t.Fatalf("initial naming failure has no recovery notice: %+v", listed)
+			}
+			if native {
+				app.TypeLine(a, "/rename Recovered name")
+			} else if err := cli.RenameSession(a, "Recovered name"); err != nil {
+				t.Fatal(err)
+			}
+			awaitLabel(app, a, "Recovered name")
+			app.TypeLine(a, "retry work")
+			if got := agent.Prompted(); got != "retry work" {
+				t.Fatalf("work passed naming failure: %q", got)
+			}
+			if got := agent.ReadNativeName(); got != "Recovered name" {
+				t.Fatalf("pending rejected name survived correction: %q", got)
+			}
+			if agent.ConversationID != root {
+				t.Fatalf("recovery replaced created root %s with %s", root, agent.ConversationID)
+			}
+			owners, err := cli.SessionList(client.SessionListOptions{})
+			if err != nil || len(owners.Entries) != 1 {
+				t.Fatalf("naming failure left extra owners: %+v %v", owners, err)
+			}
+		})
+	}
+}
+
+func TestSharedCodexConfirmedNativeNameUnblocksWorkWhenLabelIsUnchanged(t *testing.T) {
+	w := newWorld(t, fakeagent.Codex)
+	app := w.App()
+	sharedCodexSetting(t, app, true)
+	a := w.Spawn(app, fakeagent.Codex, w.Path("same"), func(m *protocol.SpawnSessionMessage) { m.Label = protocol.Ptr("fixture rejected name") })
+	agent := w.Launched(a)
+	awaitSharedView(app, a, a)
+	app.AwaitScreen(a, "Showing "+agent.ConversationID)
+	agent.NativeName("fixture rejected name")
+	app.TypeLine(a, "work after confirmed same name")
+	if got := agent.Prompted(); got != "work after confirmed same name" {
+		t.Fatal(got)
+	}
+}
+
+func TestSharedCodexFailedPendingReplacementKeepsLabelAndRetriesLatestName(t *testing.T) {
 	w := newWorld(t, fakeagent.Codex)
 	app, cli := w.App(), w.Client()
 	sharedCodexSetting(t, app, true)
-	a := w.Spawn(app, fakeagent.Codex, w.Path("same"), func(m *protocol.SpawnSessionMessage) {
-		m.Label = protocol.Ptr("fixture rejected name")
-		m.InitialPrompt = protocol.Ptr("blocked initial work")
-	})
+	a := w.Spawn(app, fakeagent.Codex, w.Path("same"), func(m *protocol.SpawnSessionMessage) { m.Label = protocol.Ptr("fixture rejected name") })
 	agent := w.Launched(a)
-	root := agent.ConversationID
 	awaitSharedView(app, a, a)
-	app.AwaitScreen(a, "Showing "+root)
-	app.AwaitScreen(a, "fixture name write rejected")
-	listed := listNotifications(app)
-	var visible bool
-	for _, notice := range listed.Notifications {
-		if notice.SourceID == a && strings.Contains(notice.Detail, "fixture name write rejected") && strings.Contains(notice.Body, "Rename the agent") {
-			visible = true
-		}
+	app.AwaitScreen(a, "Showing "+agent.ConversationID)
+	agent.RejectNativeNameWrites(true)
+	if err := cli.RenameSession(a, "Latest correction"); err == nil {
+		t.Fatal("rejected replacement reported success")
 	}
-	if !visible {
-		t.Fatalf("initial naming failure has no recovery notice: %+v", listed)
+	if got := queriedSession(t, cli, a).Label; got != "fixture rejected name" {
+		t.Fatalf("failed write changed label: %q", got)
 	}
-	if err := cli.RenameSession(a, "Recovered name"); err != nil {
-		t.Fatal(err)
+	agent.RejectNativeNameWrites(false)
+	app.TypeLine(a, "retry latest correction")
+	if got := agent.Prompted(); got != "retry latest correction" {
+		t.Fatal(got)
 	}
-	awaitLabel(app, a, "Recovered name")
-	app.TypeLine(a, "retry work")
-	if got := agent.Prompted(); got != "retry work" {
-		t.Fatalf("work passed naming failure: %q", got)
+	if got := agent.ReadNativeName(); got != "Latest correction" {
+		t.Fatalf("replayed superseded name: %q", got)
 	}
-	if got := agent.ReadNativeName(); got != "Recovered name" {
-		t.Fatalf("pending rejected name survived correction: %q", got)
+	awaitLabel(app, a, "Latest correction")
+}
+
+func TestSharedCodexPendingRenameSurvivesCrashAfterNativeWrite(t *testing.T) {
+	t.Setenv("ATTN_FAKE_CODEX_DROP_NAME_EVENTS", "1")
+	w := testworld.NewStack(t, testworld.WithAgents(fakeagent.Codex))
+	w.StartCrashingAt("codex-name-written")
+	app, cli := w.App(), w.Client()
+	sharedCodexSetting(t, app, true)
+	a := w.Spawn(app, fakeagent.Codex, w.Path("same"), func(m *protocol.SpawnSessionMessage) { m.Label = protocol.Ptr("fixture rejected name") })
+	agent := w.Launched(a)
+	awaitSharedView(app, a, a)
+	app.AwaitScreen(a, "Showing "+agent.ConversationID)
+	if err := cli.RenameSession(a, "Crash-safe replacement"); err == nil {
+		t.Fatal("rename succeeded despite daemon crash")
 	}
-	if agent.ConversationID != root {
-		t.Fatalf("recovery replaced created root %s with %s", root, agent.ConversationID)
+	w.AwaitCrash()
+	if got := agent.ReadNativeName(); got != "Crash-safe replacement" {
+		t.Fatalf("native write was not saved before crash: %q", got)
 	}
-	owners, err := cli.SessionList(client.SessionListOptions{})
-	if err != nil || len(owners.Entries) != 1 {
-		t.Fatalf("naming failure left extra owners: %+v %v", owners, err)
+	w.Start()
+	app = w.App()
+	if sent := sharedAnnotationSubmit(app, a, "rename-crash-work", "work after rename crash"); !sent.Success {
+		t.Fatalf("work after rename crash: %+v", sent)
 	}
+	if got := agent.Prompted(); got != "work after rename crash" {
+		t.Fatal(got)
+	}
+	if got := agent.ReadNativeName(); got != "Crash-safe replacement" {
+		t.Fatalf("restart replayed stale initial name: %q", got)
+	}
+	awaitLabel(app, a, "Crash-safe replacement")
 }
 
 func TestSharedCodexNativeNamesFollowHiddenOwnersAndBothRenameDirections(t *testing.T) {

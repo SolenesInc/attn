@@ -148,6 +148,33 @@ func (r *codexRuntime) reserveNativeOwner(v store.CodexView, params map[string]a
 }
 
 func (r *codexRuntime) prepareRPC(runtimeID string, m *codexshared.Message) (func(*codexshared.Message), error) {
+	if m.Method == "thread/name/set" {
+		var p struct {
+			ThreadID string `json:"threadId"`
+			Name     string `json:"name"`
+		}
+		if err := json.Unmarshal(m.Params, &p); err != nil {
+			return nil, err
+		}
+		owner, err := r.d.store.CodexOwnerByRoot(r.serverID, p.ThreadID)
+		if err != nil || owner == nil {
+			return nil, err
+		}
+		if err := r.d.store.ReplacePendingCodexName(owner.SessionID, p.ThreadID, p.Name); err != nil {
+			return nil, err
+		}
+		revision := r.nameRevision(p.ThreadID)
+		return func(reply *codexshared.Message) {
+			if len(reply.Error) > 0 {
+				return
+			}
+			if err := r.d.store.ConsumeCodexInitialName(owner.SessionID, p.ThreadID); err != nil {
+				r.d.logf("Codex native rename for %s: %v", owner.SessionID, err)
+				return
+			}
+			r.projectNativeName(p.ThreadID, &p.Name, revision, false)
+		}, nil
+	}
 	if m.Method == "turn/start" {
 		var p struct {
 			ThreadID string `json:"threadId"`

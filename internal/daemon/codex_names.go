@@ -45,6 +45,11 @@ func (r *codexRuntime) projectNativeName(root string, name *string, revision uin
 	if owner == nil {
 		return
 	}
+	if notification {
+		if err := r.d.store.ConsumeCodexInitialName(owner.SessionID, root); err != nil {
+			r.d.logf("Codex confirmed name for %s: %v", owner.SessionID, err)
+		}
+	}
 	session := r.d.store.Get(owner.SessionID)
 	if session == nil || session.Label == *state.Name {
 		return
@@ -176,9 +181,13 @@ func (r *codexRuntime) rename(ctx context.Context, id, name string) error {
 	}
 	r.mu.Unlock()
 	revision := r.nameRevision(owner.NativeRootID)
+	if err := r.d.store.ReplacePendingCodexName(id, owner.NativeRootID, name); err != nil {
+		return err
+	}
 	if _, err := control.Call(ctx, "thread/name/set", map[string]any{"threadId": owner.NativeRootID, "name": name}); err != nil {
 		return err
 	}
+	crashAt(crashAfterCodexNameWritten)
 	if err := r.d.store.ConsumeCodexInitialName(id, owner.NativeRootID); err != nil {
 		return err
 	}

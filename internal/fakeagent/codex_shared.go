@@ -497,7 +497,9 @@ func (s *sharedFakeCodex) handle(conn *websocket.Conn, m codexshared.Message) (a
 		}
 		root.name = p.Name
 		s.mu.Unlock()
-		s.broadcast("thread/name/updated", map[string]any{"threadId": p.ThreadID, "threadName": p.Name})
+		if os.Getenv("ATTN_FAKE_CODEX_DROP_NAME_EVENTS") != "1" {
+			s.broadcast("thread/name/updated", map[string]any{"threadId": p.ThreadID, "threadName": p.Name})
+		}
 		return map[string]any{}, nil
 	case "thread/loaded/list":
 		s.mu.Lock()
