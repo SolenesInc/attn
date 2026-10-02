@@ -50,6 +50,8 @@ func runAgent() {
 			return
 		}
 		runAgentClose(os.Args[3:])
+	case "attachment":
+		runAgentAttachment(os.Args[3:])
 	case "inbox":
 		if hasHelpFlag(os.Args[3:]) {
 			writeAgentHelp(os.Stdout)
@@ -589,12 +591,20 @@ func runAgentInbox(args []string) {
 		os.Exit(2)
 	}
 	if parsed.messageID != "" {
-		result, err := client.New("").AgentInbox(parsed.messageID, parsed.sessionID)
+		result, item, err := client.New("").AgentInboxEntry(parsed.messageID, parsed.sessionID)
 		if err != nil {
 			fmt.Fprintf(os.Stderr, "agent inbox: %s\n", agentMailboxErrorMessage(agentMailboxArgs{
 				messageID: parsed.messageID, sessionID: parsed.sessionID,
 			}, err))
 			os.Exit(1)
+		}
+		if item != nil {
+			if parsed.json {
+				printJSON(item)
+			} else {
+				printAgentInboxBatch(os.Stdout, &protocol.AgentInboxBatchResult{Items: []protocol.AgentInboxItem{*item}})
+			}
+			return
 		}
 		if parsed.json {
 			printJSON(result)
@@ -653,6 +663,14 @@ func printAgentInboxBatch(w io.Writer, result *protocol.AgentInboxBatchResult) {
 			if sourceID := strings.TrimSpace(protocol.Deref(item.SourceID)); sourceID != "" {
 				content += " " + sourceID
 			}
+		}
+		if item.Kind == string(inbox.UserMessage) {
+			var files strings.Builder
+			for _, a := range item.Attachments {
+				fmt.Fprintf(&files, "File %q (%s, %d bytes):\n  attn agent attachment %s %s --out <path>\n  Inspect the saved file with your tools.\n", a.Name, a.MediaType, a.Bytes, protocol.Deref(item.SourceID), a.ID)
+			}
+			fmt.Fprintln(w, prompts.RenderText("session", "user-message", prompts.Values{"message": item.Content, "files": files.String()}))
+			continue
 		}
 		if item.Kind != string(inbox.PeerMessage) {
 			if item.Kind == string(inbox.Notice) {
@@ -719,9 +737,12 @@ commands:
         whoever tends it, and the seed keeps its tender with a note about the close.
         The caller defaults to this session (ATTN_SESSION_ID).
   inbox [message-id] [--limit <count>] [--session <id>] [--json]
-        read up to 20 unread notifications in FIFO order, or one notified peer
+        read up to 20 unread notifications in FIFO order, or one notified user or peer
         message by id. Each returned item gets its durable read receipt. The batch
         limit can be 1 through 50. The session defaults to ATTN_SESSION_ID.
+  attachment <capture-id> <attachment-id> --out <path>
+    Download a saved user file, then inspect it with your tools.
+
   msg-status <message-id> [--session <id>] [--json]
         inspect your sent message as queued, notified, or read. The sender
         session defaults to ATTN_SESSION_ID.

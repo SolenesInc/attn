@@ -137,8 +137,12 @@ func TestBrowserControlIsBrokeredToTheHostThatWasAsked(t *testing.T) {
 
 	ordinary := w.App()
 	ordinary.Send(protocol.PtyInputMessage{Cmd: protocol.CmdPtyInput, ID: ordinary.Terminal(shop.ID), Data: strings.Repeat("x", 1<<20)})
-	if status := ordinary.Closed(); status.Code != websocket.StatusMessageTooBig {
+	status := ordinary.Closed()
+	if status.Code != websocket.StatusMessageTooBig {
 		t.Errorf("an app peer sending a message past the command-sized limit was closed with %d, want %d", status.Code, websocket.StatusMessageTooBig)
+	}
+	if !strings.Contains(status.Reason, "limit=1048576") || !strings.Contains(status.Reason, "asked for at least 1048577") {
+		t.Errorf("overflow must name limit and received bytes: %+v", status)
 	}
 	exitWorkspaceShells(app, shop.ID, docs.ID)
 }

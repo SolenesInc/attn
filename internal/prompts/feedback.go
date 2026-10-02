@@ -5,6 +5,7 @@ func feedbackEvents() []Event {
 	fields := []Field{TextField("round", "Review round number."), TextField("title", "Quoted presentation title."), TextField("presentation_id", "Presentation ID.")}
 	notice := Choose(Enabled(approved), template("session.present-approved", "content/session/present-approved.md", fields...), template("session.present-submitted", "content/session/present-submitted.md", fields...))
 	return []Event{
+		On("user-message", "cli_output", "User-authored Quick Capture inbox content.", template("session.user-message", "content/session/user-message.md", TextField("message", "User message"), TextField("files", "File retrieval instructions"))),
 		On("inbox-notification", "user_message", "Generic notification directing the recipient to the durable inbox.", Use("session.inbox-notification", "content/session/inbox-notification.md")),
 		On("inbox-empty", "cli_output", "No unread items remain.", Use("session.inbox-empty", "content/session/inbox-empty.md")),
 		On("inbox-more", "cli_output", "Read the next batch of unread items.", template("session.inbox-more", "content/session/inbox-more.md", TextField("remaining", "Unread items remaining."))),

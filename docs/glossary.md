@@ -158,3 +158,11 @@ intended it for the next turn.
 - Kept reason: why the sweep left a worktree alone.
 - Keep pin: the user's instruction to preserve a worktree.
 - Sweep log: a record of worktree removals and their reasons.
+
+## Quick Capture
+
+- Capture: a durable user-authored message with text, files, or both, addressed to the Chief role or a stable crew member identity.
+- User message: a capture retrieved through the inbox, explicitly attributed to the user. It retains the harness's tool-output role.
+- Capture attachment: file bytes owned by a capture under the home daemon's data directory. Reads retain the bytes.
+- Draft asset: an uploaded file awaiting capture submission. Inspection exposes incomplete assets; explicit discard removes uncommitted bytes.
+- Capture read: an agent inbox fetch whose read receipt committed, without claiming understanding or action.

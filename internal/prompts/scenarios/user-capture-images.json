@@ -1,0 +1,11 @@
+{
+  "version": 1,
+  "id": "user-capture-images",
+  "recipient": "session",
+  "event": "user-message",
+  "description": "A user sends text and a screenshot through Quick Capture.",
+  "values": {
+    "message": "Please investigate the build error in this screenshot.",
+    "files": "File screenshot.png (image/png, 524288 bytes):\n  attn agent attachment <capture-id> <attachment-id> --out <path>\n  Inspect the saved file with your tools."
+  }
+}

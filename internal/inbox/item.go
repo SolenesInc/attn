@@ -5,6 +5,7 @@ type Kind string
 const (
 	SeedUpdate  Kind = "garden_seed"
 	PeerMessage Kind = "peer_message"
+	UserMessage Kind = "user_message"
 	Notice      Kind = "maintenance_prompt"
 )
 
