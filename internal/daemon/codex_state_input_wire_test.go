@@ -76,6 +76,35 @@ func sharedAnnotationSubmit(app *testworld.Peer, owner, request, text string) pr
 	return testworld.Request(app, protocol.SessionAnnotationsSubmitMessage{Cmd: protocol.CmdSessionAnnotationsSubmit, RequestID: request, SessionID: owner, Text: text}, protocol.EventSessionAnnotationsSubmitResult, func(e protocol.SessionAnnotationsSubmitResultMessage) bool { return e.RequestID == request })
 }
 
+func TestSharedCodexSystemErrorReplacesHiddenBusyAndApprovalClaims(t *testing.T) {
+	for _, approval := range []bool{false, true} {
+		t.Run(map[bool]string{false: "working", true: "approval"}[approval], func(t *testing.T) {
+			w := newWorld(t, fakeagent.Codex)
+			app := w.App()
+			sharedCodexSetting(t, app, true)
+			a := w.Spawn(app, fakeagent.Codex, w.Path("a"))
+			agentA := w.Launched(a)
+			awaitSharedView(app, a, a)
+			b := w.Spawn(app, fakeagent.Codex, w.Path("b"))
+			agentB := w.Launched(b)
+			awaitSharedView(app, b, b)
+			app.TypeLine(a, "work on A")
+			agentA.Prompted()
+			app.TypeLine(a, "/agents "+agentB.ConversationID)
+			awaitSharedView(app, a, b)
+			if approval {
+				agentA.AskApproval()
+				testworld.AwaitSession(app, a, func(s protocol.Session) bool { return s.State == protocol.SessionStatePendingApproval })
+			}
+			agentA.NativeSystemError()
+			failed := testworld.AwaitSession(app, a, func(s protocol.Session) bool { return s.State == protocol.SessionStateWaitingInput })
+			if !protocol.Deref(failed.TurnOwed) {
+				t.Fatal("native error lost its owed attention turn")
+			}
+		})
+	}
+}
+
 func TestSharedCodexMailboxUsesOneHiddenOwnerAndSteeringPreservesBothDrafts(t *testing.T) {
 	w := newWorld(t, fakeagent.Codex)
 	app, cli := w.App(), w.Client()

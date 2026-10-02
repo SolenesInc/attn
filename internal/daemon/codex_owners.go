@@ -510,6 +510,11 @@ func (r *codexRuntime) projectNativeStatus(root string) {
 		}
 	case "idle":
 		claim = sessionstate.ClaimIdle
+	case "systemError":
+		claim = sessionstate.ClaimStopFailed
+	case "notLoaded":
+		r.d.updateEvidence(owner.SessionID, nil, func(e *sessionstate.Evidence) { e.NativeRoot = nil })
+		return
 	default:
 		return
 	}

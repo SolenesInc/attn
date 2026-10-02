@@ -4,7 +4,7 @@ import fs from 'node:fs';
 import http from 'node:http';
 import path from 'node:path';
 import WebSocket, { WebSocketServer } from 'ws';
-import { codexTranscriptPath, conversationHeaderRecords, messageRecords, mockAgentSplash, readMockAgentConfig, selectMockAgentActions } from './mockAgent.mjs';
+import { conversationHeaderRecords, messageRecords, mockAgentSplash, readMockAgentConfig, selectMockAgentActions } from './mockAgent.mjs';
 
 function arg(name) { const index = process.argv.indexOf(name); return index < 0 ? '' : process.argv[index + 1]; }
 function hook(root, event, input = {}) {
@@ -27,7 +27,7 @@ export async function runSharedMockServer() {
   const finish = (root, turnId, text, reply) => {
     root.turns.push({ id: turnId, status: 'completed' });
     const records = [...messageRecords({ agent: 'codex', role: 'user', text, sequence: root.turns.length }), ...messageRecords({ agent: 'codex', role: 'assistant', text: reply, sequence: root.turns.length })];
-    fs.appendFileSync(root.path, records.map(row => JSON.stringify(row)).join('\n') + '\n');
+    fs.appendFileSync(root.path, records.join('\n') + '\n');
     broadcast('attn-fixture/reply', { threadId: root.id, text: reply }); hook(root, 'Stop', { last_assistant_message: reply });
     broadcast('turn/completed', { threadId: root.id, turn: { id: turnId } }); status(root, 'idle');
   };
@@ -49,9 +49,9 @@ export async function runSharedMockServer() {
         case 'initialize': break;
         case 'thread/start': case 'thread/fork': {
           const id = randomUUID(); const cwd = p.cwd || process.cwd();
-          root = { id, cwd, path: codexTranscriptPath(id), config: p.config || {}, archived: false, turns: [], status: { type: 'idle' } };
+          root = { id, cwd, path: path.join(cwd, '.attn-shared-mock', `${id}.jsonl`), config: p.config || {}, archived: false, turns: [], status: { type: 'idle' } };
           fs.mkdirSync(path.dirname(root.path), { recursive: true });
-          fs.writeFileSync(root.path, conversationHeaderRecords({ agent: 'codex', id, cwd, launch: { argv: [] } }).map(row => JSON.stringify(row)).join('\n') + '\n');
+          fs.writeFileSync(root.path, conversationHeaderRecords({ agent: 'codex', id, cwd, launch: { argv: [] } }).join('\n') + '\n');
           roots.set(id, root); hook(root, 'SessionStart', { source: 'startup' }); result = { thread: metadata(root) }; break;
         }
         case 'thread/resume': {

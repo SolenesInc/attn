@@ -71,7 +71,7 @@ export function WorkspaceAgentBody({ agentPane, paneSession, paneTitle }: Worksp
             paneCount: paneIds.length,
           }}
           onInput={runtime.handleTerminalInput(agentPane.id)}
-          onPointerActivity={() => onTerminalPointerActivity?.(agentPane.sessionId)}
+          onPointerActivity={() => onTerminalPointerActivity?.(agentPane.runtimeId)}
           onOpenMarkdown={onOpenMarkdown}
           gardenSeeds={gardenSeeds}
           onOpenSeed={onOpenSeed}

@@ -158,6 +158,8 @@ func Resolve(e Evidence, policy Policy, now time.Time) Resolution {
 			return Resolution{State: protocol.SessionStatePendingApproval, Reason: ReasonApprovalOpen, Detail: native.Detail}
 		case ClaimNeedsInput:
 			return Resolution{State: protocol.SessionStateWaitingInput, Reason: ReasonQuestionOpen, Detail: native.Detail}
+		case ClaimStopFailed:
+			return Resolution{State: protocol.SessionStateWaitingInput, Reason: ReasonStopFailed, Detail: native.Detail}
 		case ClaimIdle:
 			if !supersededByBusy(native, e) {
 				return settled(e, ReasonNativeRoot, policy, now)

@@ -509,6 +509,22 @@ describe('App terminal runtime', () => {
     expect(screen.getByText('Failed to reload session: reload denied')).toBeInTheDocument();
   });
 
+  it('addresses pointer activity to the surviving runtime after a native owner switch', async () => {
+    const workspace = agentWorkspace('s1');
+    workspace.layout!.panes[0].codex_resolution = 'resolved';
+    const { daemon } = await openAttachedTerminals({
+      sessions: [daemonSession('s1', { state: 'idle' }), daemonSession('s2', { state: 'idle' })],
+      workspaces: [workspace],
+    });
+    const layout = workspace.layout!;
+    daemon.emit({ event: 'workspace_layout_updated', workspace_layout: { ...layout, panes: [{ ...layout.panes[0], session_id: 's2', codex_revision: '2' }] } });
+    await daemon.idle();
+    await act(() => vi.advanceTimersByTimeAsync(250));
+    fireEvent.mouseMove(screen.getByRole('textbox', { name: 'Terminal input' }));
+    await daemon.idle();
+    expect(daemon.sentOf('terminal_pointer_activity')).toEqual([{ cmd: 'terminal_pointer_activity', id: 's1' }]);
+  });
+
   it('reports pointer activity over a terminal only once the daemon handshake completes', async () => {
     const { daemon } = await renderSessions(daemonSession('s1', { state: 'idle' }));
     open('s1');

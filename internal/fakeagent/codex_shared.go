@@ -34,6 +34,7 @@ type sharedFakeRoot struct {
 	hasTurn  atomic.Bool
 	active   atomic.Bool
 	approval atomic.Bool
+	failed   atomic.Bool
 }
 
 func runSharedCodexServer(cfg config) int {
@@ -181,6 +182,11 @@ func (s *sharedFakeCodex) handle(m codexshared.Message) (any, error) {
 		a := &agent{term: c.term, conv: c, prompts: make(chan promptSubmission, 16)}
 		root.a = a
 		control, err := dialControl(s.cfg, func(peer *rpcPeer, method string, params json.RawMessage) (any, error) {
+			if method == "system_error" {
+				root.failed.Store(true)
+				s.broadcastStatus(root)
+				return struct{}{}, nil
+			}
 			if method == "tool_shell" {
 				var input textParams
 				if err := json.Unmarshal(params, &input); err != nil {
@@ -346,6 +352,9 @@ func (s *sharedFakeCodex) metadata(root *sharedFakeRoot) any {
 }
 
 func (s *sharedFakeCodex) status(root *sharedFakeRoot) any {
+	if root.failed.Load() {
+		return map[string]any{"type": "systemError"}
+	}
 	if root.active.Load() {
 		flags := []string{}
 		if root.approval.Load() {
