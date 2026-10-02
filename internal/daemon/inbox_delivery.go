@@ -90,6 +90,16 @@ func (d *Daemon) deliverInbox(a inbox.Address) (inbox.Receipt, error) {
 }
 func (d *Daemon) deliverInboxLocked(a inbox.Address, state *inboxDeliveryState) (inbox.Receipt, error) {
 	receipt := inbox.Receipt{}
+	defer func() {
+		if state.timer != nil {
+			return
+		}
+		d.inboxMu.Lock()
+		if d.inboxStates[a] == state {
+			delete(d.inboxStates, a)
+		}
+		d.inboxMu.Unlock()
+	}()
 	if state.timer != nil {
 		state.timer.Stop()
 		state.timer = nil
@@ -110,11 +120,6 @@ func (d *Daemon) deliverInboxLocked(a inbox.Address, state *inboxDeliveryState) 
 		return receipt, err
 	}
 	if attempt.Unread == 0 {
-		d.inboxMu.Lock()
-		if d.inboxStates[a] == state {
-			delete(d.inboxStates, a)
-		}
-		d.inboxMu.Unlock()
 		return receipt, nil
 	}
 	holder := d.inboxHolder(a)
@@ -197,7 +202,11 @@ func (d *Daemon) deliverInboxLocked(a inbox.Address, state *inboxDeliveryState) 
 		return receipt, nil
 	}
 	receipt.Detail = agentMessageQueuedDetail(placement.err)
-	if delay, retry := sessionInputRetryDelay(placement.err); retry {
+	delay, retry := sessionInputRetryDelay(placement.err)
+	if errors.Is(placement.err, errSessionInputBlockedBySelector) || errors.Is(placement.err, errSessionInputScreenUnavailable) {
+		delay, retry = sessionInputComposerRetry, true
+	}
+	if retry {
 		d.armInboxLocked(a, state, delay)
 	}
 	return receipt, nil

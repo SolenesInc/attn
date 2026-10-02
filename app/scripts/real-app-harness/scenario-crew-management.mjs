@@ -41,6 +41,7 @@ const awakeHome = path.join(resources.dataDir, 'crew', awake);
 const asleepHome = path.join(resources.dataDir, 'crew', asleep);
 const historyHome = path.join(resources.dataDir, 'crew', history);
 const wakeReceipt = path.join(awakeHome, 'wake-received');
+const claimReadReceipt = path.join(asleepHome, 'claim-read');
 let firstSession = '';
 let successor = '';
 let linkedSeed = '';
@@ -210,13 +211,14 @@ runner.registerCleanup('settle_seeds', () => {
   for (const id of plantedSeeds) runAttn(['seed', 'wither', id, '--force', '-m', 'Harness fixture cleanup']);
 });
 const tendBetweenDays = async (seed) => {
-  let sawBinding = false;
-  const asleepAgain = waitForCrew(asleep, (member) => {
-    if (member.binding_session) sawBinding = true;
-    return sawBinding && !member.binding_session;
-  }, 'the member reads its claim update and returns between days');
+  const read = waitForFileSignal(claimReadReceipt, 'the member reads its claim update');
   json(['seed', 'tend', seed, '--member', asleep, '--json']);
-  await asleepAgain;
+  await read;
+  fs.unlinkSync(claimReadReceipt);
+  const day = crewMember(asleep).binding_session;
+  const closed = waitForCrew(asleep, (member) => !member.binding_session, 'the member returns between days');
+  json(['handoff', '--sleep', '-m', 'Read the Garden claim update', '--session', day, '--json']);
+  await closed;
 };
 const plant = (args) => {
   const seed = json(['seed', 'plant', ...args, '--json']);
@@ -255,7 +257,7 @@ try {
       { includes: 'You have been woken', actions: [{ type: 'reply', text: 'ASLEEP_MEMBER_READY', state: 'idle' }] },
       { includes: '📬 You have unread items', submitHook: false, actions: [
         { type: 'attn', args: ['agent', 'inbox'] },
-        { type: 'attn', args: ['handoff', '--sleep', '-m', 'Read the Garden claim update'] },
+        { type: 'touch', path: claimReadReceipt },
       ] },
     ],
   });
@@ -324,11 +326,6 @@ try {
     await click('[data-testid="manage-crew"]');
     await click(`[data-testid="crew-roster-${asleep}"]`);
     await click('[data-testid="crew-tab-seeds"]');
-    await waitForDom(`[data-testid="crew-seed-${asleepHeld}"]`);
-
-    json(['seed', 'park', asleepHeld, '--member', asleep, '--json']);
-    await waitForDom('[data-testid="crew-panel"]', { textIncludes: `${asleep[0].toUpperCase()}${asleep.slice(1)} isn't tending a seed.` });
-    await tendBetweenDays(asleepHeld);
     await waitForDom(`[data-testid="crew-seed-${asleepHeld}"]`);
 
     await click(`[data-testid="crew-roster-${awake}"]`);
@@ -409,6 +406,17 @@ try {
     runner.assert((await panelText()).includes('Saved'), 'the cleared default is acknowledged');
     await screenshot('02-asleep-defaults.png');
     await pressEscapeAndWaitFor(`crew-actions-${asleep}`);
+  });
+
+  await runner.step('park_and_retend_restore_the_member_seed_list', async () => {
+    await click('[data-testid="manage-crew"]');
+    await click(`[data-testid="crew-roster-${asleep}"]`);
+    await click('[data-testid="crew-tab-seeds"]');
+    json(['seed', 'park', asleepHeld, '--member', asleep, '--json']);
+    await waitForDom('[data-testid="crew-panel"]', { textIncludes: `${asleep[0].toUpperCase()}${asleep.slice(1)} isn't tending a seed.` });
+    json(['seed', 'tend', asleepHeld, '--member', asleep, '--json']);
+    await waitForDom(`[data-testid="crew-seed-${asleepHeld}"]`);
+    await pressEscapeAndWaitFor('manage-crew');
   });
 
   await runner.step('full_charter_saves_recovers_and_detects_an_external_edit', async () => {

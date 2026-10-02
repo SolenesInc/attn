@@ -363,8 +363,6 @@ async function main() {
     await runner.step('unwatch_drops_only_uncovered_updates', async () => {
       await client.request('focus_pane', author);
       const output = await runInShell(client, author, `attn seed unwatch ${seed} --session ${watcher.sessionId}`, `removed watch on ${seed}`);
-      const kept = JSON.parse(cli(['seed', 'show', keptChild, '--session', watcher.sessionId, '--json']));
-      runner.assert(kept.watching, 'the separate child watch survives plot unwatch', { kept });
       const inherited = JSON.parse(cli(['seed', 'unwatch', droppedChild, '--session', watcher.sessionId, '--json']));
       runner.assert(!inherited.watching && inherited.watching_via.length === 0, 'the other child has no remaining coverage', { inherited });
       cli(['seed', 'note', droppedChild, '-m', 'This later activity must stay quiet', '--ring', '--session', author.sessionId]);
@@ -372,6 +370,8 @@ async function main() {
       fs.writeFileSync(path.join(watcherCwd, HOLD_RELEASE), 'release\n');
       await waitForAgentReads(client, watcher, 3, HOLD_DONE);
       await waitForAgentReads(client, watcher, 4, keptChild);
+      const kept = JSON.parse(cli(['seed', 'show', keptChild, '--session', watcher.sessionId, '--json']));
+      runner.assert(kept.watching, 'the separate child watch survives plot unwatch', { kept });
       const messages = await waitForTranscriptMessage(watcherCwd, `${keptChild} moved: note`);
       runner.assert(messages.some((message) => saw(message.text, `${keptChild} moved: note`)), 'the surviving child update reaches the actual inbox', { keptChild });
       runner.assert(!messages.some((message) => saw(message.text, `${droppedChild} moved: note`)), 'the removed update never reaches the inbox', { droppedChild });

@@ -566,3 +566,32 @@ func TestAPartialInboxReadReleasesOnlyTheAddressesItActuallyReads(t *testing.T) 
 		}
 	})
 }
+
+func TestAnInboxRingsAfterASelectorClearsWithoutAnotherTurn(t *testing.T) {
+	inBubbleWithAgents(t, func(t *testing.T, w *world) {
+		recipient := w.bubbleClaude(t, w.App(), "recipient")
+		cli := w.Client()
+		registerSessions(t, w, cli, "sender")
+		recipient.term.PaintScreen("Which should I keep?\n❯ 1. The old import path\nEnter to select · Esc to cancel")
+		sent := sendAgentMessage(t, cli, "sender", recipient.id, "read after dismissing")
+		if sent.Status != protocol.AgentMsgStatusQueued {
+			t.Fatalf("selector send=%+v", sent)
+		}
+		w.advance(15 * time.Minute)
+		if got := recipient.promptsContaining(inboxDoorbell); got != 0 {
+			t.Fatalf("selector rings=%d", got)
+		}
+		recipient.term.PaintScreen("❯ ")
+		w.advance(3 * time.Second)
+		if got := recipient.promptsContaining(inboxDoorbell); got != 1 {
+			t.Fatalf("cleared selector rings=%d", got)
+		}
+		for want := 2; want <= 3; want++ {
+			recipient.reply("Later. <!-- attn:state=idle -->")
+			w.advance(5 * time.Minute)
+			if got := recipient.promptsContaining(inboxDoorbell); got != want {
+				t.Fatalf("ring=%d want=%d", got, want)
+			}
+		}
+	})
+}
