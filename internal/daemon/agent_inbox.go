@@ -23,7 +23,30 @@ func (d *Daemon) handleAgentInbox(conn net.Conn, msg *protocol.AgentInboxMessage
 		d.handleAgentInboxBatch(conn, recipient.ID, protocol.Deref(msg.Limit))
 		return
 	}
-	record, readNow, err := d.readPeerMessageForSession(strings.TrimSpace(protocol.Deref(msg.MessageID)), recipient.ID)
+	addresses, err := d.inboxAddressesOf(recipient.ID)
+	if err != nil {
+		d.replyPeerMessageError(conn, err)
+		return
+	}
+	messageID := strings.TrimSpace(protocol.Deref(msg.MessageID))
+	stored, err := d.store.PeerMessageRecord(messageID)
+	if err != nil {
+		d.replyPeerMessageError(conn, err)
+		return
+	}
+	if stored.To.SeedID() != "" {
+		holder, _, err := d.inboxRecipient(stored.To)
+		if err != nil {
+			d.replyPeerMessageError(conn, err)
+			return
+		}
+		if holder != nil && holder.ID == recipient.ID {
+			addresses = append(addresses, stored.To)
+		}
+	}
+	record, readNow, err := d.store.ReadPeerMessage(
+		messageID, recipient.ID, addresses, time.Now(),
+	)
 	if err != nil {
 		d.replyPeerMessageError(conn, err)
 		return
@@ -34,31 +57,6 @@ func (d *Daemon) handleAgentInbox(conn net.Conn, msg *protocol.AgentInboxMessage
 	if readNow {
 		d.kickInboxAfterCommit(record.To)
 	}
-}
-
-func (d *Daemon) readPeerMessageForSession(messageID, sessionID string) (inbox.PeerRecord, bool, error) {
-	d.lockGardenRoles()
-	defer d.unlockGardenRoles()
-	addresses, err := d.inboxAddressesOf(sessionID)
-	if err != nil {
-		return inbox.PeerRecord{}, false, err
-	}
-	stored, err := d.store.PeerMessageRecord(messageID)
-	if err != nil {
-		return inbox.PeerRecord{}, false, err
-	}
-	if stored.To.SeedID() != "" {
-		holder, _, err := d.inboxRecipient(stored.To)
-		if err != nil {
-			return inbox.PeerRecord{}, false, err
-		}
-		if holder != nil && holder.ID == sessionID {
-			addresses = append(addresses, stored.To)
-		}
-	}
-	return d.store.ReadPeerMessage(
-		messageID, sessionID, addresses, time.Now(),
-	)
 }
 
 func (d *Daemon) handleAgentInboxBatch(conn net.Conn, recipientSessionID string, limit int) {

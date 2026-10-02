@@ -19,7 +19,6 @@ import (
 
 var inboxRingText = prompts.RenderText("session", "inbox-notification", nil)
 var errInboxNoUnread = errors.New("agent inbox has no unread items to wake for")
-var errInboxHolderChanged = errors.New("agent inbox holder changed before its wake")
 var errInboxNoPromptReader = errors.New("agent inbox recipient is a shell pane")
 var errInboxDoorbellOutstanding = errors.New("agent inbox ring already outstanding")
 var errInboxDoorbellInFlight = errors.New("agent inbox ring already being placed")
@@ -186,15 +185,6 @@ func (d *Daemon) deliverInboxLocked(a inbox.Address, state *inboxDeliveryState) 
 			if member := memberID; member != "" {
 				d.crewWakeMu.Lock()
 				result, err := d.crewWakeDayWithChargeLocked(member, "", true, func() error {
-					d.lockGardenRoles()
-					defer d.unlockGardenRoles()
-					currentHolder, currentMember, err := d.inboxRecipient(a)
-					if err != nil {
-						return err
-					}
-					if currentHolder != nil || currentMember != member {
-						return errInboxHolderChanged
-					}
 					started, err := d.store.StampInboxAttempt(a, now)
 					if err != nil {
 						return err
@@ -207,11 +197,6 @@ func (d *Daemon) deliverInboxLocked(a inbox.Address, state *inboxDeliveryState) 
 				})
 				d.crewWakeMu.Unlock()
 				if errors.Is(err, errInboxNoUnread) {
-					return receipt, nil
-				}
-				if errors.Is(err, errInboxHolderChanged) {
-					state.wakeSession = ""
-					d.kickInbox(a)
 					return receipt, nil
 				}
 				if err != nil {
@@ -252,25 +237,7 @@ func (d *Daemon) deliverInboxLocked(a inbox.Address, state *inboxDeliveryState) 
 	if placement.err == nil && (placement.stage == sessionInputPlaced || placement.stage == sessionInputTaken) {
 		d.sessionInputs().forget(holder.ID, id)
 		now := time.Now()
-		if a.SessionID() == "" {
-			d.lockGardenRoles()
-			current, _, err := d.inboxRecipient(a)
-			if err != nil {
-				d.unlockGardenRoles()
-				return receipt, err
-			}
-			if current == nil || current.ID != holder.ID {
-				d.unlockGardenRoles()
-				state.wakeSession = ""
-				d.kickInbox(a)
-				return receipt, nil
-			}
-			err = d.store.RingInbox(a, finishingWake, now)
-			d.unlockGardenRoles()
-			if err != nil {
-				return receipt, err
-			}
-		} else if err := d.store.RingInbox(a, finishingWake, now); err != nil {
+		if err := d.store.RingInbox(a, finishingWake, now); err != nil {
 			return receipt, err
 		}
 		state.wakeSession = ""

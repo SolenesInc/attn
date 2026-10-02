@@ -74,8 +74,6 @@ func (d *Daemon) clearChiefOfStaffIfSession(sessionID string) {
 	if d.store == nil || strings.TrimSpace(sessionID) == "" {
 		return
 	}
-	d.lockGardenRoles()
-	defer d.unlockGardenRoles()
 	if err := d.store.ClearInstanceRole(instanceRoleChiefOfStaff, sessionID); err != nil {
 		d.logf("clear chief of staff role failed for session %s: %v", sessionID, err)
 	}
@@ -105,8 +103,6 @@ func (d *Daemon) maybeAssignChiefOnSpawn(sessionID, agent string, requested bool
 		d.logf("create-as-chief: agent %q for session %s has no chief-guidance launch path; ignoring", agent, sessionID)
 		return false
 	}
-	d.lockGardenRoles()
-	defer d.unlockGardenRoles()
 	if current := d.chiefOfStaffSessionID(); current != "" {
 		d.logf("create-as-chief: a chief (%s) already exists; ignoring request for session %s", current, sessionID)
 		return false
@@ -195,16 +191,13 @@ func (d *Daemon) handleSetChiefOfStaff(client *wsClient, msg *protocol.SetChiefO
 		}
 	}()
 
-	d.lockGardenRoles()
-	var roleErr error
 	if msg.ChiefOfStaff {
-		roleErr = d.store.SetInstanceRole(instanceRoleChiefOfStaff, sessionID)
-	} else {
-		roleErr = d.store.ClearInstanceRole(instanceRoleChiefOfStaff, sessionID)
-	}
-	d.unlockGardenRoles()
-	if roleErr != nil {
-		d.sendChiefOfStaffResult(client, sessionID, msg.ChiefOfStaff, previousSessionID, roleErr)
+		if err := d.store.SetInstanceRole(instanceRoleChiefOfStaff, sessionID); err != nil {
+			d.sendChiefOfStaffResult(client, sessionID, true, previousSessionID, err)
+			return
+		}
+	} else if err := d.store.ClearInstanceRole(instanceRoleChiefOfStaff, sessionID); err != nil {
+		d.sendChiefOfStaffResult(client, sessionID, false, previousSessionID, err)
 		return
 	}
 
