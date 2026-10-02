@@ -140,6 +140,11 @@ successful. A warning links to the agent and explains how to rename it. Work is
 refused while the launch name remains pending; a successful rename clears it and
 lets the same conversation receive work.
 
+Initial and manual name writes serialize for each owner. They release the shared
+runtime lock before waiting for Codex, so a delayed name reply cannot block other
+owners. Successful writes consume only the pending name field and require the
+same live native root; a late result cannot revive an archived owner.
+
 Stock Codex 0.159.3 retained an explicit name on the first turn and a manual
 `/rename` while its generated title response was delayed. Native precedence owns
 that decision; Attn does not classify name events as manual or automatic.

@@ -11,6 +11,82 @@ import (
 	"github.com/victorarias/attn/internal/testworld"
 )
 
+func TestSharedCodexHeldInitialNameDoesNotBlockOtherOwnerAndManualRenameWins(t *testing.T) {
+	w := newWorld(t, fakeagent.Codex)
+	app := w.App()
+	sharedCodexSetting(t, app, true)
+	a := w.Spawn(app, fakeagent.Codex, w.Path("a"), func(m *protocol.SpawnSessionMessage) {
+		m.Label = protocol.Ptr("Held initial name")
+		m.InitialPrompt = protocol.Ptr("A opening work")
+	})
+	agentA := w.Launched(a)
+	t.Cleanup(agentA.ReleaseNativeNameReplies)
+	agentA.AwaitNativeNameReplyHeld()
+	renamed := make(chan error, 1)
+	go func() { renamed <- w.Client().RenameSession(a, "Manual A") }()
+	b := w.Spawn(app, fakeagent.Codex, w.Path("b"))
+	agentB := w.Launched(b)
+	awaitSharedView(app, b, b)
+	if sent := sharedAnnotationSubmit(app, b, "held-name-B", "ordinary B work"); !sent.Success {
+		t.Fatalf("held A name blocked B: %+v", sent)
+	}
+	if got := agentB.Prompted(); got != "ordinary B work" {
+		t.Fatal(got)
+	}
+	agentB.Reply("done <!-- attn:state=idle -->")
+	agentA.ReleaseNativeNameReplies()
+	if err := <-renamed; err != nil {
+		t.Fatal(err)
+	}
+	awaitSharedView(app, a, a)
+	if got := agentA.Prompted(); got != "A opening work" {
+		t.Fatal(got)
+	}
+	if got := agentA.ReadNativeName(); got != "Manual A" {
+		t.Fatalf("initial name overwrote manual rename: %q", got)
+	}
+	awaitLabel(app, a, "Manual A")
+}
+
+func TestSharedCodexHeldManualNameAllowsOtherInputAndCannotReviveClosedOwner(t *testing.T) {
+	w := newWorld(t, fakeagent.Codex)
+	app, cli := w.App(), w.Client()
+	sharedCodexSetting(t, app, true)
+	a := w.Spawn(app, fakeagent.Codex, w.Path("a"))
+	agentA := w.Launched(a)
+	pane := awaitSharedView(app, a, a)
+	workspace := queriedSession(t, cli, a).WorkspaceID
+	b := w.Spawn(app, fakeagent.Codex, w.Path("b"))
+	agentB := w.Launched(b)
+	awaitSharedView(app, b, b)
+	agentA.HoldNativeNameReplies()
+	t.Cleanup(agentA.ReleaseNativeNameReplies)
+	renamed := make(chan error, 1)
+	go func() { renamed <- cli.RenameSession(a, "Name before close") }()
+	agentA.AwaitNativeNameReplyHeld()
+	if sent := sharedAnnotationSubmit(app, b, "held-manual-B", "ordinary B work"); !sent.Success {
+		t.Fatalf("held A name blocked B input: %+v", sent)
+	}
+	agentB.Prompted()
+	closed := workspaceLayoutAction(app, protocol.WorkspaceLayoutClosePaneMessage{Cmd: protocol.CmdWorkspaceLayoutClosePane, WorkspaceID: workspace, PaneID: pane.PaneID}, protocol.CmdWorkspaceLayoutClosePane, workspace)
+	if !closed.Success {
+		t.Fatal(protocol.Deref(closed.Error))
+	}
+	awaitClosed(app, a)
+	agentA.ReleaseNativeNameReplies()
+	if err := <-renamed; err == nil {
+		t.Fatal("late rename reported success for closed owner")
+	}
+	shown, err := cli.SessionShow(a)
+	if err != nil || shown.Entry.ClosedAt == nil {
+		t.Fatalf("late rename revived owner: %+v %v", shown, err)
+	}
+	owners, err := cli.Query("")
+	if err != nil || len(owners) != 1 || owners[0].ID != b {
+		t.Fatalf("late rename changed live owners: %+v %v", owners, err)
+	}
+}
+
 func TestSharedCodexInitialNameFailureKeepsCreatedRootAndRenameRecoversWork(t *testing.T) {
 	w := newWorld(t, fakeagent.Codex)
 	app, cli := w.App(), w.Client()

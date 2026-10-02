@@ -30,20 +30,28 @@ type sharedFakeCodex struct {
 	controlUnavailable atomic.Bool
 }
 type sharedFakeRoot struct {
-	c            *codex
-	a            *agent
-	owner        string
-	archived     bool
-	hasTurn      atomic.Bool
-	active       atomic.Bool
-	approval     atomic.Bool
-	failed       atomic.Bool
-	snapshotOnly atomic.Bool
-	archiveUsage string
-	name         string
-	nameError    bool
-	nameOnResume string
-	livePath     string
+	c               *codex
+	a               *agent
+	owner           string
+	archived        bool
+	hasTurn         atomic.Bool
+	active          atomic.Bool
+	approval        atomic.Bool
+	failed          atomic.Bool
+	snapshotOnly    atomic.Bool
+	archiveUsage    string
+	name            string
+	nameError       bool
+	nameOnResume    string
+	holdNameReplies bool
+	nameHeld        chan struct{}
+	nameReplies     []heldCodexNameReply
+	livePath        string
+}
+
+type heldCodexNameReply struct {
+	conn *websocket.Conn
+	data []byte
 }
 
 func runSharedCodexServer(cfg config) int {
@@ -119,6 +127,24 @@ func (s *sharedFakeCodex) serve(w http.ResponseWriter, req *http.Request) {
 		}
 		if len(m.ID) > 0 {
 			data, _ := json.Marshal(reply)
+			if m.Method == "thread/name/set" && err == nil {
+				var p struct {
+					ThreadID string `json:"threadId"`
+					Name     string `json:"name"`
+				}
+				_ = json.Unmarshal(m.Params, &p)
+				s.mu.Lock()
+				root := s.roots[p.ThreadID]
+				if root != nil && (root.holdNameReplies || p.Name == "Held initial name") {
+					root.nameReplies = append(root.nameReplies, heldCodexNameReply{conn, data})
+					if len(root.nameReplies) == 1 {
+						close(root.nameHeld)
+					}
+					s.mu.Unlock()
+					continue
+				}
+				s.mu.Unlock()
+			}
 			if conn.Write(context.Background(), websocket.MessageText, data) != nil {
 				return
 			}
@@ -205,13 +231,40 @@ func (s *sharedFakeCodex) handle(conn *websocket.Conn, m codexshared.Message) (a
 		for key, value := range cfg.ShellEnvironmentPolicy.Set {
 			c.hooks.env = withEnv(c.hooks.env, key, value)
 		}
-		root := &sharedFakeRoot{c: c, owner: cfg.ShellEnvironmentPolicy.Set["ATTN_SESSION_ID"], livePath: c.transcript}
+		root := &sharedFakeRoot{c: c, owner: cfg.ShellEnvironmentPolicy.Set["ATTN_SESSION_ID"], livePath: c.transcript, nameHeld: make(chan struct{})}
 		if root.owner == "" {
 			return nil, fmt.Errorf("shared root missing owner config")
 		}
 		a := &agent{term: c.term, conv: c, prompts: make(chan promptSubmission, 16)}
 		root.a = a
 		control, err := dialControl(s.cfg, func(peer *rpcPeer, method string, params json.RawMessage) (any, error) {
+			if method == "hold_name_replies" {
+				s.mu.Lock()
+				root.holdNameReplies = true
+				s.mu.Unlock()
+				return struct{}{}, nil
+			}
+			if method == "name_reply_held" {
+				s.mu.Lock()
+				held := root.nameHeld
+				s.mu.Unlock()
+				<-held
+				return struct{}{}, nil
+			}
+			if method == "release_name_replies" {
+				s.mu.Lock()
+				replies := root.nameReplies
+				root.nameReplies = nil
+				root.holdNameReplies = false
+				root.nameHeld = make(chan struct{})
+				s.mu.Unlock()
+				for _, reply := range replies {
+					if err := reply.conn.Write(context.Background(), websocket.MessageText, reply.data); err != nil {
+						return nil, err
+					}
+				}
+				return struct{}{}, nil
+			}
 			if method == "usage_on_archive" {
 				var input textParams
 				if err := json.Unmarshal(params, &input); err != nil {

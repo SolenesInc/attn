@@ -155,12 +155,10 @@ func (r *codexRuntime) prepareRPC(runtimeID string, m *codexshared.Message) (fun
 		if err := json.Unmarshal(m.Params, &p); err != nil {
 			return nil, err
 		}
-		r.mu.Lock()
 		owner, err := r.d.store.CodexOwnerByRoot(r.serverID, p.ThreadID)
 		if err == nil && owner != nil {
-			err = r.applyInitialNameLocked(r.d.life.Context(), owner)
+			err = r.applyInitialName(r.d.life.Context(), owner.SessionID)
 		}
-		r.mu.Unlock()
 		return nil, err
 	}
 	if m.Method != "thread/start" && m.Method != "thread/resume" && m.Method != "thread/fork" {
@@ -262,12 +260,7 @@ func (r *codexRuntime) prepareRPC(runtimeID string, m *codexshared.Message) (fun
 		r.bindOwner(owner.SessionID, result.Thread, revision)
 		r.projectNativeName(result.Thread.ID, result.Thread.Name, nameRevision, false)
 		if creation {
-			r.mu.Lock()
-			bound, err := r.d.store.CodexOwner(owner.SessionID)
-			if err == nil && bound != nil {
-				err = r.applyInitialNameLocked(r.d.life.Context(), bound)
-			}
-			r.mu.Unlock()
+			err := r.applyInitialName(r.d.life.Context(), owner.SessionID)
 			if err != nil {
 				r.notifyInitialNameFailure(owner.SessionID, err)
 				return
@@ -482,19 +475,6 @@ type codexTurnState struct {
 
 func (r *codexRuntime) resumeOwner(ctx context.Context, control *codexshared.Client, params map[string]any) (json.RawMessage, error) {
 	root, _ := params["threadId"].(string)
-	owner, err := r.d.store.CodexOwnerByRoot(r.serverID, root)
-	if err != nil {
-		return nil, err
-	}
-	if owner != nil {
-		launch, err := r.ownerContext(owner)
-		if err != nil {
-			return nil, err
-		}
-		if err := r.applyInitialName(ctx, control, owner, launch); err != nil {
-			return nil, err
-		}
-	}
 	r.activeMu.Lock()
 	state := r.activeTurns[root]
 	r.activeTurns[root] = state
@@ -661,6 +641,9 @@ func (r *codexRuntime) observeNative(m codexshared.Message) {
 }
 
 func (r *codexRuntime) send(ctx context.Context, id, text string, active bool) error {
+	if err := r.applyInitialName(ctx, id); err != nil {
+		return err
+	}
 	control, root, err := func() (*codexshared.Client, string, error) {
 		r.mu.Lock()
 		defer r.mu.Unlock()
@@ -676,9 +659,6 @@ func (r *codexRuntime) send(ctx context.Context, id, text string, active bool) e
 			return nil, "", err
 		}
 		if err := r.ensureServer(ctx, launch); err != nil {
-			return nil, "", err
-		}
-		if err := r.applyInitialNameLocked(ctx, owner); err != nil {
 			return nil, "", err
 		}
 		return r.control, owner.NativeRootID, nil

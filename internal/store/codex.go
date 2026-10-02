@@ -161,3 +161,19 @@ func (s *Store) UpdateCodexContext(id string, context json.RawMessage) error {
 	_, err := s.db.Exec(`UPDATE codex_owners SET context_json=? WHERE session_id=?`, string(context), id)
 	return err
 }
+
+// Consume only the pending name; concurrent launch-context changes remain intact.
+func (s *Store) ConsumeCodexInitialName(id, root string) error {
+	result, err := s.db.Exec(`UPDATE codex_owners SET context_json=json_remove(context_json,'$.InitialName') WHERE session_id=? AND native_root_id=? AND archived=0`, id, root)
+	if err != nil {
+		return err
+	}
+	n, err := result.RowsAffected()
+	if err != nil {
+		return err
+	}
+	if n != 1 {
+		return fmt.Errorf("codex owner %s is no longer live on root %s", id, root)
+	}
+	return nil
+}

@@ -67,48 +67,73 @@ func (r *codexRuntime) observeNativeName(m codexshared.Message) {
 }
 
 // Pending launch names are consumed before either native or owner-addressed work.
-func (r *codexRuntime) applyInitialNameLocked(ctx context.Context, owner *store.CodexOwner) error {
+func (r *codexRuntime) applyInitialName(ctx context.Context, id string) error {
+	owner, err := r.d.store.CodexOwner(id)
+	if err != nil || owner == nil {
+		return err
+	}
 	launch, err := r.ownerContext(owner)
 	if err != nil || launch.InitialName == "" {
 		return err
 	}
+	lock := r.d.sessionLifecycleLockFor(id)
+	lock.Lock()
+	defer lock.Unlock()
+	r.mu.Lock()
+	owner, launch, control, err := r.nameOwnerLocked(ctx, id)
+	r.mu.Unlock()
+	if err != nil || launch.InitialName == "" {
+		return err
+	}
 	if owner.NativeRootID == "" {
-		return fmt.Errorf("codex owner %s has not initialized", owner.SessionID)
+		return fmt.Errorf("codex owner %s has not initialized", id)
+	}
+	revision := r.nameRevision(owner.NativeRootID)
+	if _, err := control.Call(ctx, "thread/name/set", map[string]any{"threadId": owner.NativeRootID, "name": launch.InitialName}); err != nil {
+		return fmt.Errorf("set initial Codex name for %s: %w", id, err)
+	}
+	if err := r.d.store.ConsumeCodexInitialName(id, owner.NativeRootID); err != nil {
+		return err
+	}
+	r.projectNativeName(owner.NativeRootID, &launch.InitialName, revision, false)
+	return nil
+}
+
+func (r *codexRuntime) nameOwnerLocked(ctx context.Context, id string) (*store.CodexOwner, codexLaunchContext, *codexshared.Client, error) {
+	owner, err := r.d.store.CodexOwner(id)
+	if err != nil {
+		return nil, codexLaunchContext{}, nil, err
+	}
+	if owner == nil || owner.Archived || r.d.store.Get(id) == nil {
+		return nil, codexLaunchContext{}, nil, fmt.Errorf("codex owner %s is closed", id)
+	}
+	launch, err := r.ownerContext(owner)
+	if err != nil {
+		return nil, launch, nil, err
 	}
 	if err := r.ensureServer(ctx, launch); err != nil {
-		return err
+		return nil, launch, nil, err
 	}
-	owner, err = r.d.store.CodexOwner(owner.SessionID)
+	// Recovery can update owner context while establishing the control connection.
+	owner, err = r.d.store.CodexOwner(id)
 	if err != nil {
-		return err
+		return nil, launch, nil, err
 	}
-	if owner == nil {
-		return fmt.Errorf("codex owner disappeared before naming")
+	if owner == nil || owner.Archived || r.d.store.Get(id) == nil {
+		return nil, launch, nil, fmt.Errorf("codex owner %s is closed", id)
 	}
 	launch, err = r.ownerContext(owner)
 	if err != nil {
-		return err
+		return nil, launch, nil, err
 	}
-	return r.applyInitialName(ctx, r.control, owner, launch)
-}
-
-func (r *codexRuntime) applyInitialName(ctx context.Context, control *codexshared.Client, owner *store.CodexOwner, launch codexLaunchContext) error {
-	if launch.InitialName == "" {
-		return nil
-	}
-	if _, err := control.Call(ctx, "thread/name/set", map[string]any{"threadId": owner.NativeRootID, "name": launch.InitialName}); err != nil {
-		return fmt.Errorf("set initial Codex name for %s: %w", owner.SessionID, err)
-	}
-	launch.InitialName = ""
-	raw, err := json.Marshal(launch)
-	if err != nil {
-		return err
-	}
-	return r.d.store.UpdateCodexContext(owner.SessionID, raw)
+	return owner, launch, r.control, nil
 }
 
 func (r *codexRuntime) notifyInitialNameFailure(id string, nameErr error) {
 	r.d.logf("Codex initial name for %s: %v", id, nameErr)
+	if r.d.store.Get(id) == nil {
+		return
+	}
 	record, err := r.d.store.AddNotification(store.NotificationRecord{
 		Kind:       "codex_initial_name_failed",
 		Severity:   store.NotificationWarning,
@@ -127,13 +152,11 @@ func (r *codexRuntime) notifyInitialNameFailure(id string, nameErr error) {
 }
 
 func (r *codexRuntime) rename(ctx context.Context, id, name string) error {
+	lock := r.d.sessionLifecycleLockFor(id)
+	lock.Lock()
+	defer lock.Unlock()
 	r.mu.Lock()
-	owner, err := r.d.store.CodexOwner(id)
-	if err != nil || owner == nil {
-		r.mu.Unlock()
-		return fmt.Errorf("read Codex owner %s: %v", id, err)
-	}
-	launch, err := r.ownerContext(owner)
+	owner, launch, control, err := r.nameOwnerLocked(ctx, id)
 	if err != nil {
 		r.mu.Unlock()
 		return err
@@ -151,23 +174,13 @@ func (r *codexRuntime) rename(ctx context.Context, id, name string) error {
 		}
 		return err
 	}
-	defer r.mu.Unlock()
-	if err := r.ensureServer(ctx, launch); err != nil {
-		return err
-	}
+	r.mu.Unlock()
 	revision := r.nameRevision(owner.NativeRootID)
-	if _, err := r.control.Call(ctx, "thread/name/set", map[string]any{"threadId": owner.NativeRootID, "name": name}); err != nil {
+	if _, err := control.Call(ctx, "thread/name/set", map[string]any{"threadId": owner.NativeRootID, "name": name}); err != nil {
 		return err
 	}
-	if launch.InitialName != "" {
-		launch.InitialName = ""
-		raw, err := json.Marshal(launch)
-		if err != nil {
-			return err
-		}
-		if err := r.d.store.UpdateCodexContext(id, raw); err != nil {
-			return err
-		}
+	if err := r.d.store.ConsumeCodexInitialName(id, owner.NativeRootID); err != nil {
+		return err
 	}
 	r.projectNativeName(owner.NativeRootID, &name, revision, false)
 	return nil

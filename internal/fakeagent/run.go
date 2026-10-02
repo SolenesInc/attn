@@ -159,3 +159,7 @@ func (r *Run) ReadNativeName() string {
 func (r *Run) NativeNameDuringResume(name string) {
 	r.call("name_on_resume", textParams{Text: name}, nil)
 }
+
+func (r *Run) HoldNativeNameReplies()    { r.call("hold_name_replies", nil, nil) }
+func (r *Run) AwaitNativeNameReplyHeld() { r.call("name_reply_held", nil, nil) }
+func (r *Run) ReleaseNativeNameReplies() { r.call("release_name_replies", nil, nil) }
