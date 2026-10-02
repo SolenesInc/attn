@@ -420,3 +420,27 @@ func (s *Store) UnreadInboxAddresses() ([]inbox.Address, error) {
 	}
 	return result, rows.Err()
 }
+
+func (s *Store) PendingSeedInboxAddresses() ([]inbox.Address, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	rows, err := s.db.Query(`SELECT address FROM inbox_items WHERE address >= 'seed:' AND address < 'seed;' AND read_at=''
+		UNION SELECT address FROM inbox_delivery WHERE address >= 'seed:' AND address < 'seed;' ORDER BY address`)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var addresses []inbox.Address
+	for rows.Next() {
+		var value string
+		if err := rows.Scan(&value); err != nil {
+			return nil, err
+		}
+		address, err := inbox.ParseAddress(value)
+		if err != nil {
+			return nil, err
+		}
+		addresses = append(addresses, address)
+	}
+	return addresses, rows.Err()
+}

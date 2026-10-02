@@ -319,6 +319,9 @@ func TestMailForAnUntendedSeedWaitsForItsNextTender(t *testing.T) {
 		if len(mail) != 1 || mail[0].Address != "seed:"+seed || mail[0].Content != "the deployment is ready" {
 			t.Fatalf("seed mail=%+v", mail)
 		}
+		if reread, err := cli.AgentInbox(sent.MessageID, next.id); err != nil || reread.Content != "the deployment is ready" {
+			t.Fatalf("seed reread=%+v, %v", reread, err)
+		}
 	})
 }
 func TestMailForASeedTendedByAnUnregisteredMemberWaitsForANewTender(t *testing.T) {

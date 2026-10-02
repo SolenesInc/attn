@@ -28,8 +28,24 @@ func (d *Daemon) handleAgentInbox(conn net.Conn, msg *protocol.AgentInboxMessage
 		d.replyPeerMessageError(conn, err)
 		return
 	}
+	messageID := strings.TrimSpace(protocol.Deref(msg.MessageID))
+	stored, err := d.store.PeerMessageRecord(messageID)
+	if err != nil {
+		d.replyPeerMessageError(conn, err)
+		return
+	}
+	if stored.To.SeedID() != "" {
+		holder, _, err := d.inboxRecipient(stored.To)
+		if err != nil {
+			d.replyPeerMessageError(conn, err)
+			return
+		}
+		if holder != nil && holder.ID == recipient.ID {
+			addresses = append(addresses, stored.To)
+		}
+	}
 	record, readNow, err := d.store.ReadPeerMessage(
-		strings.TrimSpace(protocol.Deref(msg.MessageID)), recipient.ID, addresses, time.Now(),
+		messageID, recipient.ID, addresses, time.Now(),
 	)
 	if err != nil {
 		d.replyPeerMessageError(conn, err)

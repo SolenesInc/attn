@@ -1,8 +1,6 @@
 package daemon
 
 import (
-	"github.com/victorarias/attn/internal/docstore"
-	"github.com/victorarias/attn/internal/garden"
 	"strings"
 	"time"
 
@@ -86,34 +84,29 @@ func (d *Daemon) inboxAddressesOf(sessionID string) ([]inbox.Address, error) {
 			break
 		}
 	}
-	after := ""
-	for {
-		read, _, err := d.runDocQuery(docstore.Query{Namespace: garden.Namespace, Collection: garden.CollectionSeeds,
-			Filters: []docstore.Filter{{Field: "status", Op: docstore.OpEq, Value: garden.StatusGrowing}}, Limit: docstore.MaxLimit, After: after})
+	pending, err := d.store.PendingSeedInboxAddresses()
+	if err != nil {
+		return nil, err
+	}
+	for _, address := range pending {
+		seed, _, err := d.readSeed(address.SeedID())
 		if err != nil {
 			return nil, err
 		}
-		for _, doc := range read.Documents {
-			seed, err := garden.Decode(doc.Body)
-			if err != nil {
-				return nil, err
-			}
-			tender := seed.Tender()
-			if tender.Session == sessionID || (member != "" && strings.EqualFold(tender.Member, member)) {
-				addresses = append(addresses, inbox.ToSeed(seed.ID))
-			}
+		tender := seed.Tender()
+		if tender.Session == sessionID || (member != "" && strings.EqualFold(tender.Member, member)) {
+			addresses = append(addresses, address)
 		}
-		if len(read.Documents) < docstore.MaxLimit {
-			return addresses, nil
-		}
-		after = read.Documents[len(read.Documents)-1].ID
 	}
+	return addresses, nil
 }
 func (d *Daemon) kickSessionInboxAddresses(sessionID string) {
-	addresses, err := d.inboxAddressesOf(sessionID)
-	if err != nil {
-		d.logf("inbox: addresses of %s: %v", sessionID, err)
-		return
-	}
-	d.kickInboxAfterCommit(addresses...)
+	d.life.Go("inbox-session-ready", func() {
+		addresses, err := d.inboxAddressesOf(sessionID)
+		if err != nil {
+			d.logf("inbox: addresses of %s: %v", sessionID, err)
+			return
+		}
+		d.kickInboxAfterCommit(addresses...)
+	})
 }
