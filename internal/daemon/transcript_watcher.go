@@ -148,6 +148,9 @@ func (d *Daemon) resolveExactTranscriptPathForWatcher(w *transcriptWatcher) stri
 		if path == "" {
 			continue
 		}
+		if d.sharedCodexOwner(w.sessionID) {
+			path = transcript.ResolveCodexRolloutPath(path)
+		}
 		if _, err := os.Stat(path); err == nil {
 			return path
 		}

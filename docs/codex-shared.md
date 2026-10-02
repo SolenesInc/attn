@@ -131,7 +131,9 @@ guardian usage keeps its existing root attribution. Native token broadcasts are
 observations and never add per-view usage to the ledger.
 
 Final close drains the watcher before archive moves its rollout, then reconciles
-the bound source from its persisted cursor before saving the closed row. An archive
+the bound source from its persisted cursor before saving the closed row. Tracking
+resumes after the move until final close succeeds, so a failed view cleanup or
+ledger close keeps the open owner observable, including after restart. An archive
 failure restores the watcher. This also covers a close before the watcher's first
 poll. Records available at reconciliation are included, with the existing
 model/cache/pricing policy. Native archive has no demonstrated disk-flush guarantee;

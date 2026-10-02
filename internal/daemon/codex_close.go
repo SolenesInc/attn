@@ -123,10 +123,12 @@ func (r *codexRuntime) archiveOwnerLocked(owner *store.CodexOwner) error {
 		return err
 	}
 	r.d.drainCodexTranscriptWatcher(owner.SessionID)
+	binding := r.d.store.GetSessionConversation(owner.SessionID)
+	// Archive moves the rollout; resume tracking if subsequent cleanup leaves it open.
+	defer r.d.ensureTranscriptWatcherAtPath(owner.SessionID, binding.TranscriptPath)
 	_, err = r.control.Call(r.d.life.Context(), "thread/archive", map[string]any{"threadId": owner.NativeRootID})
-	if err != nil {
-		binding := r.d.store.GetSessionConversation(owner.SessionID)
-		r.d.ensureTranscriptWatcherAtPath(owner.SessionID, binding.TranscriptPath)
+	if err == nil {
+		crashAt(crashAfterCodexNativeArchive)
 	}
 	return err
 }
@@ -138,6 +140,8 @@ func (r *codexRuntime) finishOwnerCloseLocked(owner *store.CodexOwner, closed st
 	if err := r.d.recordSessionClose(id, func() (bool, error) {
 		return r.d.store.CloseSession(id, closed, time.Now())
 	}); err != nil {
+		binding := r.d.store.GetSessionConversation(id)
+		r.d.ensureTranscriptWatcherAtPath(id, binding.TranscriptPath)
 		return err
 	}
 	crashAt(crashAfterCodexClosePersisted)

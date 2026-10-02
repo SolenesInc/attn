@@ -1,15 +1,18 @@
 package daemon_test
 
 import (
+	"context"
 	"fmt"
 	"math"
 	"reflect"
 	"strings"
+	"sync/atomic"
 	"testing"
 
 	"github.com/victorarias/attn/internal/client"
 	"github.com/victorarias/attn/internal/fakeagent"
 	"github.com/victorarias/attn/internal/protocol"
+	"github.com/victorarias/attn/internal/ptybackend"
 	"github.com/victorarias/attn/internal/testworld"
 )
 
@@ -242,4 +245,79 @@ func TestSharedCodexHiddenOwnerUsageContinuesAcrossDaemonRestart(t *testing.T) {
 	if !strings.Contains(output.Stdout, fmt.Sprintf("usage      %d tokens", counted)) {
 		t.Fatalf("CLI omitted saved usage: %s", output.Stdout)
 	}
+}
+
+// A real PTY backend with a failed cleanup boundary; all other operations remain native.
+type failingCostViewRemoval struct {
+	*ptybackend.EmbeddedBackend
+	id   string
+	fail atomic.Bool
+}
+
+func (b *failingCostViewRemoval) Remove(ctx context.Context, id string) error {
+	if id == b.id && b.fail.Load() {
+		return fmt.Errorf("view cleanup unavailable")
+	}
+	return b.EmbeddedBackend.Remove(ctx, id)
+}
+
+func TestSharedCodexFailedPostArchiveCleanupKeepsOwnerAccountingLive(t *testing.T) {
+	backend := &failingCostViewRemoval{EmbeddedBackend: ptybackend.NewEmbedded(nil), id: "accounting-cleanup"}
+	w := &world{World: prepareWorld(t, fakeagent.Codex), backend: backend}
+	w.start()
+	app, cli := w.App(), w.Client()
+	sharedCodexSetting(t, app, true)
+	repo := reopenRepoWithOrigin(t)
+	cwd := reopenWorktree(t, repo, "feat/accounting-cleanup")
+	id := w.Spawn(app, fakeagent.Codex, cwd, func(m *protocol.SpawnSessionMessage) { m.ID = backend.id })
+	run := w.Launched(id)
+	awaitSharedView(app, id, id)
+	run.UsageOnArchive("available at archive")
+	backend.fail.Store(true)
+	result := testworld.Request(app, protocol.DeleteWorktreeMessage{Cmd: protocol.CmdDeleteWorktree, Path: cwd, Force: protocol.Ptr(true)}, protocol.EventDeleteWorktreeResult, func(e protocol.DeleteWorktreeResultMessage) bool { return e.Path == cwd })
+	if result.Success {
+		t.Fatal("failed view cleanup unexpectedly finalized the worktree close")
+	}
+	shown, err := cli.SessionShow(id)
+	if err != nil || shown.Entry.ClosedAt != nil {
+		t.Fatalf("cleanup failure closed the owner: %+v %v", shown, err)
+	}
+	tokens := claudeTokens("available at archive")
+	usage := awaitUsageTokens(app, id, tokens)
+	assertLedgerUsage(t, cli, id, usage)
+	backend.fail.Store(false)
+	closeSession(t, w.Client(), id, "cleanup recovered")
+	closed := awaitClosed(app, id)
+	if closed.Usage == nil || closed.Usage.TotalTokens != tokens || protocol.Deref(closed.Usage.MeasurementIncomplete) {
+		t.Fatalf("retry changed available totals: %+v", closed.Usage)
+	}
+	assertLedgerUsage(t, w.Client(), id, closed.Usage)
+}
+
+func TestSharedCodexArchivedOpenOwnerUsageContinuesAcrossDaemonRestart(t *testing.T) {
+	stack := testworld.NewStack(t, testworld.WithAgents(fakeagent.Codex))
+	stack.StartCrashingAt("codex-owner-native-archived")
+	app := stack.App()
+	sharedCodexSetting(t, app, true)
+	id := stack.Spawn(app, fakeagent.Codex, stack.Path("archived-open"))
+	run := stack.Launched(id)
+	awaitSharedView(app, id, id)
+	run.UsageOnArchive("available before interrupted close")
+	app.Send(protocol.UnregisterMessage{Cmd: protocol.CmdUnregister, ID: id})
+	stack.AwaitCrash()
+	stack.Start()
+	app = stack.App()
+	shown, err := stack.Client().SessionShow(id)
+	if err != nil || shown.Entry.ClosedAt != nil {
+		t.Fatalf("interrupted close finalized its owner: %+v %v", shown, err)
+	}
+	tokens := claudeTokens("available before interrupted close")
+	usage := awaitUsageTokens(app, id, tokens)
+	assertLedgerUsage(t, stack.Client(), id, usage)
+	closeSession(t, stack.Client(), id, "retry interrupted close")
+	closed := awaitClosed(app, id)
+	if closed.Usage == nil || closed.Usage.TotalTokens != tokens || protocol.Deref(closed.Usage.MeasurementIncomplete) {
+		t.Fatalf("retry changed available totals: %+v", closed.Usage)
+	}
+	assertLedgerUsage(t, stack.Client(), id, closed.Usage)
 }
