@@ -316,7 +316,7 @@ func TestMailForAMemberTendedSeedWakesTheTender(t *testing.T) {
 			t.Fatal(err)
 		}
 		sent := sendAgentMessage(t, cli, "sender", seed, "the deployment is ready")
-		if sent.TargetSessionID == "" || !strings.Contains(sent.Detail, "woke Trellis") {
+		if sent.TargetSessionID == "" || sent.TargetSessionID == initialID {
 			t.Fatalf("seed send=%+v", sent)
 		}
 		day := w.bootBubbleClaude(t, sent.TargetSessionID)
