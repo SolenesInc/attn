@@ -178,17 +178,23 @@ export function useSessionLedger({
       if (!lifecycleRef.current.connected
         || event.connectionGeneration !== lifecycleRef.current.generation) return;
       if (event.type === 'live') {
-        setRead((current) => ({ ...current, entries: current.entries.flatMap((entry) => {
-          if (entry.id !== event.session.id) return [entry];
-          if (filtersRef.current.scope === 'closed') return [];
-          const { closed_at: _at, closed_by: _by, close_reason: _reason, ...open } = entry;
+        setRead((current) => {
           const session = event.session;
-          const updated = { ...open, label: session.label, state: session.state,
+          const entry = current.entries.find((row) => row.id === session.id);
+          const { closed_at: _at, closed_by: _by, close_reason: _reason, ...open } = entry ?? {};
+          const updated = { ...open, id: session.id, agent: session.agent, codex_mode: session.codex_mode,
+            label: session.label, state: session.state,
             last_seen: session.last_seen, usage: session.usage, directory: session.directory,
             workspace_id: session.workspace_id, repository: session.repository, branch: session.branch,
             main_repo: session.main_repo, is_worktree: session.is_worktree };
-          return closeBelongsInView(updated, { ...filtersRef.current, scope: 'all' }, now()) ? [updated] : [];
-        }) }));
+          if (filtersRef.current.scope === 'closed'
+            || !closeBelongsInView(updated, { ...filtersRef.current, scope: 'all' }, now())) {
+            return { ...current, entries: current.entries.filter((row) => row.id !== session.id) };
+          }
+          return { ...current, entries: entry
+            ? current.entries.map((row) => row.id === session.id ? updated : row)
+            : [updated, ...current.entries] };
+        });
         return;
       }
       const entry = event.entry;

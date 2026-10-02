@@ -81,3 +81,22 @@ it.each(['workspace', 'repository'])('removes a reopened owner outside its %s fi
   expect(screen.queryByText('300 tokens')).not.toBeInTheDocument();
   expect(document.querySelector('.ledger-row[data-row-key="cost"]')).toBeNull();
 });
+
+it.each(['session_registered', 'session_state_changed'] as const)('inserts an absent live owner from %s without reloading', async (event) => {
+  const view = await openSessionsLedger(pages([page({ entries: [closedEntry('previous')] })]));
+  view.daemon.emit({ event, session: daemonSession('new-owner', { usage, label: 'new owner' }) });
+  await view.daemon.idle();
+  expect(document.querySelector('.ledger-row[data-row-key="new-owner"]')).toHaveTextContent('new owner');
+  fireEvent.click(document.querySelector('.ledger-row[data-row-key="new-owner"]')!);
+  expect(screen.getByText('300 tokens')).toBeInTheDocument();
+  expect(view.queries()).toHaveLength(1);
+});
+
+it('keeps an absent live owner outside the closed ledger', async () => {
+  const view = await openSessionsLedger(pages([page({ entries: [closedEntry('previous')] })]));
+  fireEvent.click(screen.getByRole('button', { name: 'Closed' }));
+  await view.daemon.idle();
+  view.daemon.emit({ event: 'session_registered', session: daemonSession('new-owner', { usage }) });
+  await view.daemon.idle();
+  expect(document.querySelector('.ledger-row[data-row-key="new-owner"]')).toBeNull();
+});
