@@ -26,6 +26,7 @@ func restorePreInboxFixture(t *testing.T, db *sql.DB) {
  bell_name TEXT NOT NULL DEFAULT '',CHECK(read_at='' OR notified_at!=''));
  INSERT INTO agent_mailbox_items SELECT id,substr(address,9),kind,source_id,coalesce_key,hint,text,created_at,notified_at,read_at,bell_name FROM inbox_items;
  DROP TABLE inbox_items;
+ DROP TABLE inbox_delivery;
  ALTER TABLE presentations DROP COLUMN address;
  CREATE INDEX idx_agent_mailbox_recipient_unread ON agent_mailbox_items(recipient_session_id,created_at,id) WHERE read_at='';
  CREATE INDEX idx_agent_mailbox_source ON agent_mailbox_items(kind,source_id,recipient_session_id);

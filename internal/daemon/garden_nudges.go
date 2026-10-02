@@ -195,7 +195,7 @@ func (d *Daemon) consumeSeedBell(sessionID, seedID string) {
 	}
 	d.lockGardenRoles()
 	err := d.discardIneligibleGardenSeedBellsLocked(inbox.ToSession(sessionID))
-	var consumed bool
+	var consumed []inbox.Address
 	if err == nil {
 		for _, address := range d.inboxAddressesOf(sessionID) {
 			if err = d.discardIneligibleGardenSeedBellsLocked(address); err != nil {
@@ -203,7 +203,9 @@ func (d *Daemon) consumeSeedBell(sessionID, seedID string) {
 			}
 			var read bool
 			read, err = d.store.ReadGardenSeedInboxItems(address, sessionID, seedID, time.Now())
-			consumed = consumed || read
+			if read {
+				consumed = append(consumed, address)
+			}
 			if err != nil {
 				break
 			}
@@ -214,7 +216,7 @@ func (d *Daemon) consumeSeedBell(sessionID, seedID string) {
 		d.logf("garden bell: consuming session=%s seed=%s: %v", sessionID, seedID, err)
 		return
 	}
-	if consumed {
-		d.sentToInbox(d.inboxAddressesOf(sessionID)...)
+	if len(consumed) > 0 {
+		d.sentToInbox(consumed...)
 	}
 }

@@ -26,11 +26,9 @@ func sessionReadsInboxDoorbells(session *protocol.Session) bool {
 }
 
 type inboxDeliveryState struct {
-	mu            sync.Mutex
-	timer         *time.Timer
-	wakingSession string
-	wakeIDs       []string
-	stopped       bool
+	mu      sync.Mutex
+	timer   *time.Timer
+	stopped bool
 }
 
 func (d *Daemon) inboxState(a inbox.Address) *inboxDeliveryState {
@@ -112,8 +110,6 @@ func (d *Daemon) deliverInboxLocked(a inbox.Address, state *inboxDeliveryState) 
 		return receipt, err
 	}
 	if attempt.Unread == 0 {
-		state.wakingSession = ""
-		state.wakeIDs = nil
 		d.inboxMu.Lock()
 		if d.inboxStates[a] == state {
 			delete(d.inboxStates, a)
@@ -122,10 +118,10 @@ func (d *Daemon) deliverInboxLocked(a inbox.Address, state *inboxDeliveryState) 
 		return receipt, nil
 	}
 	holder := d.inboxHolder(a)
-	finishingWake := state.wakingSession != "" && holder != nil && holder.ID == state.wakingSession
-	if state.wakingSession != "" && !finishingWake {
-		state.wakingSession = ""
-		state.wakeIDs = nil
+	var wakeIDs []string
+	finishingWake := false
+	if holder != nil {
+		wakeIDs, finishingWake = attempt.PendingWakes[holder.ID]
 	}
 	if !finishingWake {
 		if len(attempt.LiveIDs) == 0 {
@@ -133,26 +129,42 @@ func (d *Daemon) deliverInboxLocked(a inbox.Address, state *inboxDeliveryState) 
 			return receipt, nil
 		}
 		now := time.Now()
-		due := inbox.Due(attempt.Last, attempt.Read, now)
+		due := inbox.Due(attempt.Last, now)
 		if due.After(now) {
 			d.armInboxLocked(a, state, due.Sub(now))
+			receipt.Outstanding = holder != nil && a.MemberID() == ""
 			receipt.Detail = agentMessageQueuedDetail(errInboxDoorbellOutstanding)
 			return receipt, nil
 		}
 		if holder == nil {
 			if member := a.MemberID(); member != "" {
-				if err := d.store.StampInboxAttempt(attempt.LiveIDs, now); err != nil {
+				d.crewWakeMu.Lock()
+				if d.inboxHolder(a) != nil {
+					d.crewWakeMu.Unlock()
+					d.kickInbox(a)
+					return receipt, nil
+				}
+				wakeSession := uuid.NewString()
+				started, err := d.store.StampInboxAttempt(a, wakeSession, now)
+				if err != nil {
+					d.crewWakeMu.Unlock()
 					return receipt, err
 				}
-				result, err := d.crewWakeWithCharge(member, "", true)
+				if !started {
+					d.crewWakeMu.Unlock()
+					return receipt, nil
+				}
+				result, err := d.crewWakeDayWithChargeLocked(member, "", true, wakeSession)
+				d.crewWakeMu.Unlock()
 				if err != nil {
+					if clearErr := d.store.ClearInboxPendingWake(wakeSession); clearErr != nil {
+						return receipt, clearErr
+					}
 					d.logf("inbox: wake %s refused: %v", a, err)
 					receipt.Detail = err.Error()
 					d.armInboxLocked(a, state, inbox.AttemptDelay)
 					return receipt, nil
 				}
-				state.wakingSession = result.SessionID
-				state.wakeIDs = attempt.LiveIDs
 				receipt.Detail = fmt.Sprintf("woke %s in session %s; notification queued until it reaches a safe prompt", crew.DisplayName(member), shortSessionID(result.SessionID))
 				return receipt, nil
 			}
@@ -176,11 +188,9 @@ func (d *Daemon) deliverInboxLocked(a inbox.Address, state *inboxDeliveryState) 
 	if placement.err == nil && (placement.stage == sessionInputPlaced || placement.stage == sessionInputTaken) {
 		d.sessionInputs().forget(holder.ID, id)
 		now := time.Now()
-		if err := d.store.RingInbox(a, state.wakeIDs, now); err != nil {
+		if err := d.store.RingInbox(a, wakeIDs, now); err != nil {
 			return receipt, err
 		}
-		state.wakingSession = ""
-		state.wakeIDs = nil
 		d.armInboxLocked(a, state, inbox.AttemptDelay)
 		receipt.Rang = true
 		receipt.Detail = "notified " + sessionDisplayName(holder)

@@ -90,15 +90,12 @@ func TestAnInboxWakeDoesNotWakeAMemberTwiceAcrossAProcessRestart(t *testing.T) {
 	day.Prompted()
 	s.Stop()
 	s.Start()
-	app := s.App()
 	if bound := protocol.Deref(crewRoster(t, s)["trellis"].BindingSession); bound != sent.TargetSessionID {
 		t.Fatalf("restart woke a second day: %s, original %s", bound, sent.TargetSessionID)
 	}
 	day.Reply("Ready. <!-- attn:state=idle -->")
-	testworld.AwaitSession(app, sent.TargetSessionID, func(session protocol.Session) bool { return session.State == protocol.SessionStateIdle })
-	app.TypeLine(sent.TargetSessionID, "check the inbox yourself")
-	if prompt := day.Prompted(); prompt != "check the inbox yourself" {
-		t.Fatalf("restart completed a fresh attempt early: %q", prompt)
+	if prompt := day.Prompted(); !strings.Contains(prompt, inboxDoorbell) {
+		t.Fatalf("restart lost the wake completion: %q", prompt)
 	}
 	batch, err := s.Client().AgentInboxBatch(sent.TargetSessionID, 0)
 	if err != nil || len(batch.Items) != 1 || batch.Items[0].Address != "member:trellis" {

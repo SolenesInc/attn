@@ -34,7 +34,7 @@ func (d *Daemon) handleAgentInbox(conn net.Conn, msg *protocol.AgentInboxMessage
 		Ok: true, AgentInboxResult: d.peerMessageResult(record),
 	})
 	if readNow {
-		d.sentToInbox(d.inboxAddressesOf(recipient.ID)...)
+		d.sentToInbox(record.To)
 	}
 }
 
@@ -76,7 +76,9 @@ func (d *Daemon) handleAgentInboxBatch(conn net.Conn, recipientSessionID string,
 		}
 		items = append(items, item)
 	}
-	d.sentToInbox(d.inboxAddressesOf(recipientSessionID)...)
+	for _, delivery := range deliveries {
+		d.sentToInbox(delivery.Item.To)
+	}
 	_ = json.NewEncoder(conn).Encode(protocol.Response{
 		Ok: true,
 		AgentInboxBatchResult: &protocol.AgentInboxBatchResult{

@@ -14,6 +14,7 @@ func TestMigration162PreservesInboxHistoryAndWatchAddresses(t *testing.T) {
 	defer db.Close()
 	if _, err := db.Exec(`
  DROP TABLE inbox_items;
+ DROP TABLE inbox_delivery;
  ALTER TABLE presentations DROP COLUMN address;
  DROP TABLE pull_request_watches;
  CREATE TABLE agent_mailbox_items (
@@ -73,6 +74,10 @@ func TestMigration162PreservesInboxHistoryAndWatchAddresses(t *testing.T) {
 		if err := db.QueryRow("SELECT COUNT(*) FROM " + table + " WHERE kind IN ('reconcile','recover_legacy_closed_work')").Scan(&count); err != nil || count != 0 {
 			t.Fatalf("retired %s count=%d err=%v", table, count, err)
 		}
+	}
+	var outstanding string
+	if err := db.QueryRow("SELECT outstanding_at FROM inbox_delivery WHERE address='session:day-a'").Scan(&outstanding); err != nil || outstanding != "2026-09-12T12:01:00Z" {
+		t.Fatalf("migrated outstanding=%q err=%v", outstanding, err)
 	}
 	var version int
 	if err := db.QueryRow("SELECT MAX(version) FROM schema_migrations").Scan(&version); err != nil || version != 162 {

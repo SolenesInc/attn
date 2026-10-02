@@ -8,14 +8,15 @@ const (
 )
 
 type Receipt struct {
-	ItemID string
-	Rang   bool
-	Detail string
+	ItemID      string
+	Rang        bool
+	Outstanding bool
+	Detail      string
 }
 
-// Due returns the next attempt time; any read since the last attempt releases its outstanding ring.
-func Due(last, read, now time.Time) time.Time {
-	if last.IsZero() || !read.Before(last) || !now.Before(last.Add(AttemptDelay)) {
+// Due returns the next attempt time while an address has an outstanding attempt.
+func Due(last, now time.Time) time.Time {
+	if last.IsZero() || !now.Before(last.Add(AttemptDelay)) {
 		return now
 	}
 	return last.Add(AttemptDelay)

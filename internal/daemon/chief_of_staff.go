@@ -92,7 +92,7 @@ func (d *Daemon) nudgeChiefOfStaff(attemptKey, prompt string) bool {
 		d.logf("chief inbox: queue failed: %v", err)
 		return false
 	}
-	return receipt.Rang
+	return receipt.Rang || receipt.Outstanding
 }
 
 func (d *Daemon) maybeAssignChiefOnSpawn(sessionID, agent string, requested bool, existingSession *protocol.Session) bool {

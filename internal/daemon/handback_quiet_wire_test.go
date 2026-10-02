@@ -99,3 +99,26 @@ func TestAPresentationHandbackReachesItsMemberAfterThePresentingDayEnds(t *testi
 		}
 	})
 }
+
+func TestANotebookSendCoveredByTheChiefsOutstandingRingReportsNudged(t *testing.T) {
+	inBubbleWithAgents(t, func(t *testing.T, w *world) {
+		app := w.App()
+		chief := w.bubbleClaude(t, app, "chief")
+		if set := setChiefOfStaff(app, chief.id, true); !set.Success {
+			t.Fatal(protocol.Deref(set.Error))
+		}
+		synctest.Wait()
+		chief = w.bootBubbleClaude(t, chief.id)
+		first := notebookAskSendToChief(app, "notes/today.md", "first selection")
+		if !first.Success || first.Result == nil || !first.Result.Nudged {
+			t.Fatalf("first=%+v", first)
+		}
+		second := notebookAskSendToChief(app, "notes/today.md", "second selection")
+		if !second.Success || second.Result == nil || !second.Result.Nudged {
+			t.Fatalf("covered send=%+v", second)
+		}
+		if got := chief.promptsContaining(inboxDoorbell); got != 1 {
+			t.Fatalf("rings=%d", got)
+		}
+	})
+}

@@ -14,7 +14,7 @@
 - Address: who an item is for, a role (crew member or Chief) or a session. Unread role items reach whichever session holds the role next.
 - Send: save an item for an address; attn delivers it.
 - Ring: one prompt telling the session at an address it has unread items; it covers every unread item.
-- Attempt: one ring, preceded by a wake when the addressed member is asleep.
+- Attempt: one ring, preceded by a wake when the addressed member is asleep. The intended wake session is stored before launch, so a restart completes the same attempt. A separate address-wide record keeps the outstanding delay; reading items clears it for their addresses, independently of clock timestamps.
 - Delivered: read from the inbox.
 - Withdraw: a sender removes its unread item because it no longer applies.
 - Peer message: a message from one agent to another.

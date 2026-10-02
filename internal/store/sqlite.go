@@ -1219,6 +1219,7 @@ CREATE INDEX IF NOT EXISTS idx_automode_denials_recent ON automode_denials(id DE
  hint TEXT NOT NULL DEFAULT '', text TEXT NOT NULL DEFAULT '', bell_name TEXT NOT NULL DEFAULT '',
  created_at TEXT NOT NULL, attempts INTEGER NOT NULL DEFAULT 0, attempted_at TEXT NOT NULL DEFAULT '',
  notified_at TEXT NOT NULL DEFAULT '', read_at TEXT NOT NULL DEFAULT '', read_by TEXT NOT NULL DEFAULT '',
+ pending_wake_session TEXT NOT NULL DEFAULT '',
  CHECK(read_at = '' OR notified_at != ''));
  INSERT INTO inbox_items (id,address,kind,source_id,coalesce_key,hint,text,bell_name,created_at,
  attempts,attempted_at,notified_at,read_at,read_by)
@@ -1229,8 +1230,10 @@ CREATE INDEX IF NOT EXISTS idx_automode_denials_recent ON automode_denials(id DE
  DROP TABLE agent_mailbox_items;
  CREATE INDEX idx_inbox_unread ON inbox_items(address,created_at,id) WHERE read_at = '';
  CREATE INDEX idx_inbox_source ON inbox_items(kind,source_id,address);
- CREATE INDEX idx_inbox_attempt ON inbox_items(address,attempted_at);
- CREATE INDEX idx_inbox_read ON inbox_items(address,read_at);
+ CREATE TABLE inbox_delivery (address TEXT PRIMARY KEY, outstanding_at TEXT NOT NULL);
+ INSERT INTO inbox_delivery SELECT address,MAX(attempted_at) FROM inbox_items i
+ WHERE read_at='' AND attempted_at!='' GROUP BY address
+ HAVING MAX(attempted_at)>COALESCE((SELECT MAX(read_at) FROM inbox_items r WHERE r.address=i.address),'');
  CREATE UNIQUE INDEX idx_inbox_unread_key ON inbox_items(address,kind,coalesce_key)
  WHERE coalesce_key != '' AND read_at = '';
  ALTER TABLE pull_request_watches RENAME TO old_pull_request_watches;

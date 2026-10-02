@@ -197,7 +197,7 @@ func (s *Store) ReadInbox(addresses []inbox.Address, readBy string, limit int, a
 		res, err := tx.Exec(`
 			UPDATE inbox_items
 			SET notified_at = CASE WHEN notified_at = '' THEN ? ELSE notified_at END,
-			    read_at = ?, read_by = ?
+			    read_at = ?, read_by = ?, pending_wake_session = ''
 			WHERE id = ? AND address IN (SELECT value FROM json_each(?)) AND read_at = ''
 		`, stamp, stamp, readBy, deliveries[i].Item.ID, addressJSON)
 		if err != nil {
@@ -216,6 +216,15 @@ func (s *Store) ReadInbox(addresses []inbox.Address, readBy string, limit int, a
 		deliveries[i].Item.ReadAt = stamp
 	}
 
+	readAddresses := map[inbox.Address]bool{}
+	for _, delivery := range deliveries {
+		readAddresses[delivery.Item.To] = true
+	}
+	for address := range readAddresses {
+		if err := acknowledgeInbox(tx, address); err != nil {
+			return nil, 0, err
+		}
+	}
 	var remaining int
 	if err := tx.QueryRow(`
 		SELECT COUNT(*) FROM inbox_items
@@ -232,13 +241,26 @@ func (s *Store) ReadInbox(addresses []inbox.Address, readBy string, limit int, a
 func (s *Store) ReadGardenSeedInboxItems(to inbox.Address, readBy, seedID string, at time.Time) (bool, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
+	tx, err := s.db.Begin()
+	if err != nil {
+		return false, err
+	}
+	defer tx.Rollback()
 	stamp := at.UTC().Format(sortableTimeFormat)
-	result, err := s.db.Exec(`UPDATE inbox_items SET notified_at=CASE WHEN notified_at='' THEN ? ELSE notified_at END, read_at=?, read_by=? WHERE address=? AND kind=? AND coalesce_key=? AND read_at=''`, stamp, stamp, readBy, to.String(), inbox.SeedUpdate, seedID)
+	result, err := tx.Exec(`UPDATE inbox_items SET notified_at=CASE WHEN notified_at='' THEN ? ELSE notified_at END,read_at=?,read_by=?,pending_wake_session='' WHERE address=? AND kind=? AND coalesce_key=? AND read_at=''`, stamp, stamp, readBy, to.String(), inbox.SeedUpdate, seedID)
 	if err != nil {
 		return false, err
 	}
 	changed, err := result.RowsAffected()
-	return changed > 0, err
+	if err != nil {
+		return false, err
+	}
+	if changed > 0 {
+		if err := acknowledgeInbox(tx, to); err != nil {
+			return false, err
+		}
+	}
+	return changed > 0, tx.Commit()
 }
 
 func inboxAddressJSON(addresses []inbox.Address) string {
@@ -274,17 +296,16 @@ func putInbox(tx *sql.Tx, item inbox.Item, at time.Time) error {
 	if exists {
 		return nil
 	}
-	var last string
-	// Replacements get a fresh budget while preserving the outstanding ring.
+	var pending string
 	if item.Key != "" {
-		if err := tx.QueryRow("SELECT COALESCE(MAX(attempted_at),'') FROM inbox_items WHERE address=? AND kind=? AND coalesce_key=? AND read_at=''", item.To.String(), item.Kind, item.Key).Scan(&last); err != nil {
+		if err := tx.QueryRow("SELECT COALESCE(MAX(pending_wake_session),'') FROM inbox_items WHERE address=? AND kind=? AND coalesce_key=? AND read_at=''", item.To.String(), item.Kind, item.Key).Scan(&pending); err != nil {
 			return err
 		}
 		if _, err := tx.Exec("DELETE FROM inbox_items WHERE address=? AND kind=? AND coalesce_key=? AND read_at=''", item.To.String(), item.Kind, item.Key); err != nil {
 			return err
 		}
 	}
-	_, err := tx.Exec(`INSERT INTO inbox_items(id,address,kind,source_id,coalesce_key,hint,text,bell_name,created_at,attempted_at) VALUES(?,?,?,?,?,?,?,?,?,?)`, item.ID, item.To.String(), item.Kind, item.Source, item.Key, item.Hint, item.Text, item.BellName, at.UTC().Format(sortableTimeFormat), last)
+	_, err := tx.Exec(`INSERT INTO inbox_items(id,address,kind,source_id,coalesce_key,hint,text,bell_name,created_at,pending_wake_session) VALUES(?,?,?,?,?,?,?,?,?,?)`, item.ID, item.To.String(), item.Kind, item.Source, item.Key, item.Hint, item.Text, item.BellName, at.UTC().Format(sortableTimeFormat), pending)
 	return err
 }
 func (s *Store) WithdrawInbox(to inbox.Address, kind inbox.Kind, key string) error {
@@ -295,61 +316,110 @@ func (s *Store) WithdrawInbox(to inbox.Address, kind inbox.Kind, key string) err
 }
 
 type InboxAttempt struct {
-	LiveIDs    []string
-	Unread     int
-	Last, Read time.Time
+	LiveIDs      []string
+	PendingWakes map[string][]string
+	Unread       int
+	Last         time.Time
 }
 
 func (s *Store) InboxAttempt(to inbox.Address) (InboxAttempt, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	var result InboxAttempt
-	var last, read string
-	if err := s.db.QueryRow(`SELECT
- (SELECT COALESCE(MAX(attempted_at),'') FROM inbox_items WHERE address=?),
- (SELECT COALESCE(MAX(read_at),'') FROM inbox_items WHERE address=?)`, to.String(), to.String()).Scan(&last, &read); err != nil {
+	result := InboxAttempt{PendingWakes: map[string][]string{}}
+	var last string
+	if err := s.db.QueryRow(`SELECT COALESCE((SELECT outstanding_at FROM inbox_delivery WHERE address=?),'')`, to.String()).Scan(&last); err != nil {
 		return result, err
 	}
 	result.Last, _ = time.Parse(time.RFC3339Nano, last)
-	result.Read, _ = time.Parse(time.RFC3339Nano, read)
-	rows, err := s.db.Query("SELECT id,attempts FROM inbox_items WHERE address=? AND read_at=''", to.String())
+	rows, err := s.db.Query(`SELECT id,attempts,pending_wake_session FROM inbox_items WHERE address=? AND read_at=''`, to.String())
 	if err != nil {
 		return result, err
 	}
 	defer rows.Close()
 	for rows.Next() {
-		var id string
+		var id, pending string
 		var attempts int
-		if err := rows.Scan(&id, &attempts); err != nil {
+		if err := rows.Scan(&id, &attempts, &pending); err != nil {
 			return result, err
 		}
 		result.Unread++
 		if attempts < inbox.MaxAttempts {
 			result.LiveIDs = append(result.LiveIDs, id)
 		}
+		if pending != "" {
+			if _, ok := result.PendingWakes[pending]; !ok {
+				result.PendingWakes[pending] = nil
+			}
+			if attempts > 0 {
+				result.PendingWakes[pending] = append(result.PendingWakes[pending], id)
+			}
+		}
 	}
 	return result, rows.Err()
 }
-func (s *Store) StampInboxAttempt(ids []string, at time.Time) error {
+func (s *Store) StampInboxAttempt(to inbox.Address, wakeSession string, at time.Time) (bool, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	encoded, _ := json.Marshal(ids)
-	_, err := s.db.Exec(`UPDATE inbox_items SET attempts=attempts+1,attempted_at=? WHERE id IN (SELECT value FROM json_each(?)) AND read_at='' AND attempts<?`, at.UTC().Format(sortableTimeFormat), string(encoded), inbox.MaxAttempts)
+	tx, err := s.db.Begin()
+	if err != nil {
+		return false, err
+	}
+	defer tx.Rollback()
+	result, err := tx.Exec(`UPDATE inbox_items SET attempts=attempts+1,attempted_at=?,pending_wake_session=? WHERE address=? AND read_at='' AND attempts<?`, at.UTC().Format(sortableTimeFormat), wakeSession, to.String(), inbox.MaxAttempts)
+	if err != nil {
+		return false, err
+	}
+	changed, err := result.RowsAffected()
+	if err != nil || changed == 0 {
+		return false, err
+	}
+	if err := setInboxOutstanding(tx, to, at); err != nil {
+		return false, err
+	}
+	return true, tx.Commit()
+}
+func (s *Store) ClearInboxPendingWake(sessionID string) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	_, err := s.db.Exec(`UPDATE inbox_items SET pending_wake_session='' WHERE pending_wake_session=?`, sessionID)
 	return err
 }
 func (s *Store) RingInbox(to inbox.Address, wakeIDs []string, at time.Time) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
+	tx, err := s.db.Begin()
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback()
 	stamp := at.UTC().Format(sortableTimeFormat)
 	if wakeIDs == nil {
 		wakeIDs = []string{}
 	}
 	encoded, _ := json.Marshal(wakeIDs)
 	// A ring covers the unread batch at commit, including a concurrent replacement.
-	_, err := s.db.Exec(`UPDATE inbox_items SET
- attempts=attempts+CASE WHEN attempts<? AND id NOT IN (SELECT value FROM json_each(?)) THEN 1 ELSE 0 END,
- attempted_at=?, notified_at=CASE WHEN notified_at='' THEN ? ELSE notified_at END
- WHERE address=? AND read_at=''`, inbox.MaxAttempts, string(encoded), stamp, stamp, to.String())
+	result, err := tx.Exec(`UPDATE inbox_items SET attempts=attempts+CASE WHEN attempts<? AND id NOT IN (SELECT value FROM json_each(?)) THEN 1 ELSE 0 END,attempted_at=?,notified_at=CASE WHEN notified_at='' THEN ? ELSE notified_at END,pending_wake_session='' WHERE address=? AND read_at=''`, inbox.MaxAttempts, string(encoded), stamp, stamp, to.String())
+	if err != nil {
+		return err
+	}
+	changed, err := result.RowsAffected()
+	if err != nil {
+		return err
+	}
+	if changed == 0 {
+		return tx.Commit()
+	}
+	if err := setInboxOutstanding(tx, to, at); err != nil {
+		return err
+	}
+	return tx.Commit()
+}
+func setInboxOutstanding(tx *sql.Tx, to inbox.Address, at time.Time) error {
+	_, err := tx.Exec(`INSERT INTO inbox_delivery(address,outstanding_at) VALUES(?,?) ON CONFLICT(address) DO UPDATE SET outstanding_at=excluded.outstanding_at`, to.String(), at.UTC().Format(sortableTimeFormat))
+	return err
+}
+func acknowledgeInbox(tx *sql.Tx, to inbox.Address) error {
+	_, err := tx.Exec(`DELETE FROM inbox_delivery WHERE address=?`, to.String())
 	return err
 }
 func (s *Store) UnreadInboxAddresses() ([]inbox.Address, error) {

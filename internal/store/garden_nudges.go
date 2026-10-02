@@ -245,26 +245,3 @@ func (s *Store) UnreadGardenSeedMailboxSeeds(sessionID string) ([]string, error)
 	}
 	return seeds, nil
 }
-
-func (s *Store) DiscardGardenSeedMailboxItems(sessionID string, seedIDs []string, now time.Time) error {
-	if len(seedIDs) == 0 {
-		return nil
-	}
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	tx, err := s.db.Begin()
-	if err != nil {
-		return err
-	}
-	defer tx.Rollback()
-	stamp := now.UTC().Format(sortableTimeFormat)
-	for _, seedID := range seedIDs {
-		if _, err := tx.Exec(`UPDATE inbox_items
-   SET read_at = ?, notified_at = CASE WHEN notified_at = '' THEN ? ELSE notified_at END
-   WHERE address = ? AND kind = ? AND source_id = ? AND read_at = ''`,
-			stamp, stamp, inbox.ToSession(sessionID).String(), inbox.SeedUpdate, seedID); err != nil {
-			return fmt.Errorf("discard uncovered Garden update: %w", err)
-		}
-	}
-	return tx.Commit()
-}
