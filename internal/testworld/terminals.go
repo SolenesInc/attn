@@ -266,6 +266,13 @@ func (b *Terminals) ScreenSnapshot(_ context.Context, sessionID string) (pty.Scr
 	}, nil
 }
 
+func (t *Terminal) PaintScreen(text string) {
+	t.owner.mu.Lock()
+	defer t.owner.mu.Unlock()
+	t.screen = []string{text}
+	t.emitLocked("\x1b[2J\x1b[H" + text)
+}
+
 func (t *Terminal) OnSubmit(fn func(prompt string)) {
 	t.owner.mu.Lock()
 	defer t.owner.mu.Unlock()

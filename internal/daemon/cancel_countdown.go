@@ -16,9 +16,8 @@ func (d *Daemon) handleCancelCountdown(msg *protocol.CancelCountdownMessage) {
 	}
 
 	settleAnswered := d.answerAutoSettleByUser(sessionID)
-	nudgeCancelled := d.cancelNudgeCountdownByUser(sessionID)
 
-	if !settleAnswered && !nudgeCancelled {
+	if !settleAnswered {
 		return
 	}
 	d.broadcastSessionStateChanged(sessionID)

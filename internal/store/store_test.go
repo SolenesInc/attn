@@ -9,11 +9,12 @@ import (
 
 func TestMigration130CarriesLegacyIntentionalCloseMark(t *testing.T) {
 	dbPath := filepath.Join(t.TempDir(), "legacy-close.db")
-	s, err := newSeededStore(dbPath)
+	s, err := newStoreAtVersion(dbPath, 161)
 	if err != nil {
 		t.Fatalf("open: %v", err)
 	}
 	s.Add(&protocol.Session{ID: "legacy-close", Label: "legacy-close"})
+
 	if _, err := s.db.Exec(`UPDATE sessions SET closed_intentionally_at = '2026-09-01T12:00:00Z' WHERE id = 'legacy-close';
 		DROP TABLE session_teardown_tombstones;
 		DELETE FROM schema_migrations WHERE version = 130`); err != nil {
@@ -23,7 +24,7 @@ func TestMigration130CarriesLegacyIntentionalCloseMark(t *testing.T) {
 		t.Fatalf("close pre-130 store: %v", err)
 	}
 
-	reopened, err := newSeededStore(dbPath)
+	reopened, err := newStoreAtVersion(dbPath, 161)
 	if err != nil {
 		t.Fatalf("reopen with migration 130: %v", err)
 	}

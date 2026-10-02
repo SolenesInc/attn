@@ -179,18 +179,6 @@ func IsRotatingBackupName(name string) bool {
 	return true
 }
 
-func IsPremigrationBackupName(name string) bool {
-	if !strings.HasPrefix(name, premigrationNamePrefix) || !strings.HasSuffix(name, backupNameSuffix) {
-		return false
-	}
-	stem := strings.TrimSuffix(name, backupNameSuffix)
-	if len(stem) < premigrationTimestampLen {
-		return false
-	}
-	_, err := time.Parse(backupNameLayout, stem[len(stem)-premigrationTimestampLen:])
-	return err == nil
-}
-
 func PremigrationBackupKeep() int { return backupPremigrationKeep }
 
 func BackupDirForDatabase(dbPath string) string {

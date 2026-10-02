@@ -4,8 +4,8 @@ import (
 	"fmt"
 	"testing"
 
-	"github.com/victorarias/attn/internal/agentmailbox"
 	"github.com/victorarias/attn/internal/automation"
+	"github.com/victorarias/attn/internal/inbox"
 	"github.com/victorarias/attn/internal/prompts"
 	"github.com/victorarias/attn/internal/prompttest"
 	"github.com/victorarias/attn/internal/protocol"
@@ -17,7 +17,7 @@ func TestLegacyPromptCompatibility(t *testing.T) {
 	out := map[string]string{
 		"wake": crewWakePrompt, "successor": crewNapPrompt, "sleep-requested": crewRequestedSleepPrompt,
 		"heartbeat": crewHeartbeatPrompt, "sleep-away": crewSleepPrompt,
-		"ticket-nudge": ticketNudgePrompt, "chief-inbox": chiefInboxNudgePrompt("/tmp/book {{literal}}"),
+		"chief-inbox": chiefInboxNudgePrompt("/tmp/book {{literal}}"),
 	}
 	for _, body := range []string{"", " Brief λ {{literal}}\nnext line "} {
 		for _, seed := range []string{"", "s-example"} {
@@ -44,9 +44,8 @@ func TestLegacyPromptCompatibility(t *testing.T) {
 			s.AgentTurns = []string{"Status one", "Status two"}
 		}
 		out[fmt.Sprint("title/", mask)] = sessionTitleInstructions + "\n\n" + prompts.RenderText("session-title", "generate", prompts.Values{"conversation": s.Render()})
-		out[fmt.Sprint("reconcile/", mask)] = buildTicketReconcilePrompt(ticketReconcileInputs{TicketID: "s-example", Title: "Task", Brief: "Brief", StatusAtClaim: store.TicketStatus("open"), CloseContext: "Reason"}, s)
 	}
-	out["inbox-notification"] = agentMailboxDoorbellText
+	out["inbox-notification"] = inboxRingText
 	for _, kind := range []string{"comment", "global", "deletion"} {
 		for mask := 0; mask < 8; mask++ {
 			a := protocol.MarkdownAnnotation{ID: "a", Type: kind, Anchor: mdAnchor(2, 4, 0, "quote λ\n{{literal}}"), Text: protocol.Ptr("comment")}
@@ -71,6 +70,6 @@ func TestLegacyPromptCompatibility(t *testing.T) {
 			out["handover/"+body+"/"+handoff] = prompts.RenderText("delegation", "handover", prompts.Values{"seed_id": "s-example"})
 		}
 	}
-	out["garden-update"] = mailboxItemContent(agentmailbox.Delivery{Item: agentmailbox.Item{Kind: agentmailbox.KindGardenSeed, SourceID: "s-example", Hint: "note"}})
+	out["garden-update"] = mailboxItemContent(store.InboxDelivery{Item: store.InboxItem{Item: inbox.Item{Kind: inbox.SeedUpdate, Source: "s-example", Hint: "note"}}})
 	prompttest.Equal(t, "daemon", out)
 }

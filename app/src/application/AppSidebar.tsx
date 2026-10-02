@@ -53,7 +53,6 @@ export function AppSidebar() {
     sendRenameWorkspace,
     sendSettleTurn,
     sendWakeTurn,
-    sendTriggerNudge,
   } = useDaemonApi();
   const {
     sidebarCollapsed,
@@ -157,7 +156,6 @@ export function AppSidebar() {
         onWakeTurn={sendWakeTurn}
         onScreenSessionIds={onScreenSessionIds}
         onSelectSession={handleSelectSession}
-        onTriggerNudge={sendTriggerNudge}
         onSelectWorkspace={handleSelectWorkspace}
         onSelectTile={handleSelectTile}
         onCloseTile={handleCloseTile}

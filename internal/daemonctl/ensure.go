@@ -519,17 +519,6 @@ func isSocketLive(path string) bool {
 	return true
 }
 
-func ResolveAppOwnedBinary() (string, error) {
-	if override := strings.TrimSpace(os.Getenv("ATTN_DAEMON_BINARY")); override != "" {
-		return override, nil
-	}
-	exe, err := os.Executable()
-	if err != nil {
-		return "", fmt.Errorf("resolve executable: %w", err)
-	}
-	return filepath.Join(filepath.Dir(exe), "attn"), nil
-}
-
 func strconvAtoi(value string) (int, error) {
 	sign := 1
 	if strings.HasPrefix(value, "-") {

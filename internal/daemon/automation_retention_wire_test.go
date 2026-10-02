@@ -2,13 +2,11 @@ package daemon_test
 
 import (
 	"fmt"
-	"path/filepath"
 	"slices"
 	"testing"
 	"time"
 
 	"github.com/victorarias/attn/internal/protocol"
-	"github.com/victorarias/attn/internal/store"
 )
 
 func TestRetentionPrunesOnlySettledRunsPastTheKeepCountAndMinimumAge(t *testing.T) {
@@ -121,56 +119,4 @@ func automationRunIDs(runs []protocol.AutomationRunSummary) []string {
 		ids = append(ids, run.ID)
 	}
 	return ids
-}
-
-func TestSettledAutomationTicketsFromAnOlderVersionArePrunedOnceTheirRetentionLapses(t *testing.T) {
-	t.Setenv("ATTN_AUTOMATION_TICKET_RETENTION_TTL", "1h")
-	t.Setenv("ATTN_AUTOMATION_TICKET_RETENTION_SWEEP_INTERVAL", "1m")
-	start := time.Date(2000, 1, 1, 0, 0, 0, 0, time.UTC)
-	legacyRecoveryUpgrade(t, func(dir string) {
-		database := filepath.Join(t.TempDir(), "attn.db")
-		t.Setenv("ATTN_DB_PATH", database)
-		older, err := store.NewWithDB(database)
-		if err != nil {
-			t.Fatal(err)
-		}
-		for _, ticket := range []struct {
-			id     string
-			status store.TicketStatus
-			at     time.Time
-		}{
-			{"stale-run", store.TicketStatusDone, start.Add(-4 * time.Hour)},
-			{"recent-run", store.TicketStatusFailed, start.Add(-30 * time.Minute)},
-			{"working-run", store.TicketStatusWorking, start.Add(-4 * time.Hour)},
-		} {
-			if _, err := older.EnsureAutomationTicket(store.Ticket{ID: ticket.id, Title: ticket.id, Status: ticket.status, AutomationRunID: "run-" + ticket.id},
-				"automation:nightly", store.TicketRoleChiefOfStaff, ticket.at); err != nil {
-				t.Fatal(err)
-			}
-		}
-		if _, err := older.CreateTicket(store.Ticket{ID: "user-work", Title: "user-work"}, "you", start.Add(-5*time.Hour)); err != nil {
-			t.Fatal(err)
-		}
-		if _, err := older.SetTicketStatus("user-work", store.TicketStatusDone, "agent", "done", start.Add(-4*time.Hour)); err != nil {
-			t.Fatal(err)
-		}
-		if err := older.Close(); err != nil {
-			t.Fatal(err)
-		}
-	}, func(t *testing.T, w *world) {
-		cli := w.Client()
-		kept := func(when string, want ...string) {
-			t.Helper()
-			for _, id := range []string{"stale-run", "recent-run", "working-run", "user-work"} {
-				_, err := cli.ShowTicket("", id)
-				if present := err == nil; present != slices.Contains(want, id) {
-					t.Errorf("%s ticket %s is present=%t (%v), want %t", when, id, present, err, !present)
-				}
-			}
-		}
-		w.advance(2 * time.Minute)
-		kept("after the first sweep", "recent-run", "working-run", "user-work")
-		w.advance(30 * time.Minute)
-		kept("once the recent run's retention lapsed", "working-run", "user-work")
-	})
 }

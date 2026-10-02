@@ -405,9 +405,7 @@ async function main() {
       runner.log('schedule_delivery_receipt', { which: 'P1 initial', waitedMs: Date.now() - anchorSeenAt });
       runner.assert(Boolean(run1.seed_id) && Boolean(run1.session_id), 'P1 delivery reserves a seed and session', run1);
       runner.assert(!run1.last_error, 'P1 delivery has no error', run1);
-      const legacyTickets = (runJSON(binary, ['ticket', 'list', '--all', '--json'], daemonEnv) || [])
-        .filter((ticket) => ticket.automation?.definition_id === editID);
-      runner.assert(legacyTickets.length === 0, 'automation delivery creates no legacy tickets', { legacyTickets });
+
 
       fs.writeFileSync(editDefinitionFile, editRebindDefinitionYAML({ id: editID, locationPath: editFixture, executable: probe.executable, prompt: PROMPT_P2 }));
       const editedAt = Date.now();

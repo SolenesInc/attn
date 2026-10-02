@@ -4,15 +4,15 @@ import (
 	"database/sql"
 	"encoding/json"
 	"errors"
-	"fmt"
 	"strings"
 	"time"
 
-	"github.com/victorarias/attn/internal/agentmailbox"
+	"github.com/victorarias/attn/internal/inbox"
 	"github.com/victorarias/attn/internal/prreadiness"
 )
 
 type PullRequestWatch struct {
+	To            inbox.Address
 	SessionID     string
 	PRID          string
 	Mode          prreadiness.Mode
@@ -25,14 +25,14 @@ type PullRequestWatch struct {
 	OutageActive  bool
 }
 
-const pullRequestWatchColumns = `session_id, pr_id, mode, reviewer, created_at,
+const pullRequestWatchColumns = `address, session_id, pr_id, mode, reviewer, created_at,
 	cursor_json, last_success_at, last_error, feedback_error, outage_active`
 
 func PullRequestWatchCoalesceKey(prID string) string { return "pull-request-watch:" + prID }
 
 func PullRequestWatchOutageCoalesceKey(prID string) string { return "pull-request-outage:" + prID }
 
-func (s *Store) WatchPullRequest(rec SessionPullRequestRecord, mode prreadiness.Mode, reviewer string, at time.Time) (bool, bool, error) {
+func (s *Store) WatchPullRequest(rec SessionPullRequestRecord, to inbox.Address, mode prreadiness.Mode, reviewer string, at time.Time) (bool, bool, error) {
 	if err := prreadiness.ValidateConfig(mode, reviewer); err != nil {
 		return false, false, err
 	}
@@ -52,7 +52,7 @@ func (s *Store) WatchPullRequest(rec SessionPullRequestRecord, mode prreadiness.
 	}
 
 	var currentMode, currentReviewer, cursorJSON string
-	err = tx.QueryRow(`SELECT mode, reviewer, cursor_json FROM pull_request_watches WHERE session_id=? AND pr_id=?`, rec.SessionID, rec.PRID).Scan(&currentMode, &currentReviewer, &cursorJSON)
+	err = tx.QueryRow(`SELECT mode, reviewer, cursor_json FROM pull_request_watches WHERE address=? AND pr_id=?`, to.String(), rec.PRID).Scan(&currentMode, &currentReviewer, &cursorJSON)
 	if err == nil && currentMode == string(mode) && strings.EqualFold(currentReviewer, reviewer) {
 		if err := tx.Commit(); err != nil {
 			return false, false, err
@@ -75,22 +75,22 @@ func (s *Store) WatchPullRequest(rec SessionPullRequestRecord, mode prreadiness.
 	}
 	stamp := at.UTC().Format(sortableTimeFormat)
 	if _, err := tx.Exec(`
-		INSERT INTO pull_request_watches(session_id,pr_id,mode,reviewer,created_at,cursor_json)
-		VALUES(?,?,?,?,?,?)
-		ON CONFLICT(session_id,pr_id) DO UPDATE SET
+		INSERT INTO pull_request_watches(address,session_id,pr_id,mode,reviewer,created_at,cursor_json)
+		VALUES(?,?,?,?,?,?,?)
+		ON CONFLICT(address,pr_id) DO UPDATE SET
 			mode=excluded.mode, reviewer=excluded.reviewer, created_at=excluded.created_at,
 			cursor_json=excluded.cursor_json, last_success_at='', last_error='', feedback_error='', outage_active=0
-	`, rec.SessionID, rec.PRID, string(mode), strings.TrimSpace(reviewer), stamp, string(encoded)); err != nil {
+	`, to.String(), rec.SessionID, rec.PRID, string(mode), strings.TrimSpace(reviewer), stamp, string(encoded)); err != nil {
 		return false, false, err
 	}
-	if err := clearUnreadPullRequestStateItems(tx, rec.SessionID, rec.PRID); err != nil {
+	if err := clearUnreadPullRequestStateItems(tx, to, rec.PRID); err != nil {
 		return false, false, err
 	}
 	if _, err := tx.Exec(`
 		UPDATE session_pull_requests SET readiness_state='', readiness_reason='', settling_until='',
 			watch_health='', watch_error='', watch_last_checked_at='', status_checked_at=''
-		WHERE session_id=? AND pr_id=?
-	`, rec.SessionID, rec.PRID); err != nil {
+		WHERE session_id=(SELECT session_id FROM pull_request_watches WHERE address=? AND pr_id=?) AND pr_id=?
+	`, to.String(), rec.PRID, rec.PRID); err != nil {
 		return false, false, err
 	}
 	if err := tx.Commit(); err != nil {
@@ -99,7 +99,7 @@ func (s *Store) WatchPullRequest(rec SessionPullRequestRecord, mode prreadiness.
 	return recorded, true, nil
 }
 
-func (s *Store) StopPullRequestWatch(sessionID, prID string) (bool, error) {
+func (s *Store) StopPullRequestWatch(to inbox.Address, prID string) (bool, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	if s.db == nil {
@@ -110,10 +110,16 @@ func (s *Store) StopPullRequestWatch(sessionID, prID string) (bool, error) {
 		return false, err
 	}
 	defer tx.Rollback()
-	if err := clearUnreadPullRequestItems(tx, sessionID, prID); err != nil {
+	var sessionID string
+	if err := tx.QueryRow(`SELECT session_id FROM pull_request_watches WHERE address=? AND pr_id=?`, to.String(), prID).Scan(&sessionID); errors.Is(err, sql.ErrNoRows) {
+		return false, nil
+	} else if err != nil {
 		return false, err
 	}
-	result, err := tx.Exec(`DELETE FROM pull_request_watches WHERE session_id=? AND pr_id=?`, sessionID, prID)
+	if err := clearUnreadPullRequestItems(tx, to, prID); err != nil {
+		return false, err
+	}
+	result, err := tx.Exec(`DELETE FROM pull_request_watches WHERE address=? AND pr_id=?`, to.String(), prID)
 	if err != nil {
 		return false, err
 	}
@@ -131,20 +137,20 @@ func (s *Store) StopPullRequestWatch(sessionID, prID string) (bool, error) {
 	return true, tx.Commit()
 }
 
-func clearUnreadPullRequestItems(tx *sql.Tx, sessionID, prID string) error {
+func clearUnreadPullRequestItems(tx *sql.Tx, to inbox.Address, prID string) error {
 	_, err := tx.Exec(`
-		DELETE FROM agent_mailbox_items
-		WHERE recipient_session_id=? AND kind=? AND source_id=? AND read_at=''
-	`, sessionID, agentmailbox.KindMaintenancePrompt, prID)
+		DELETE FROM inbox_items
+		WHERE address=? AND kind=? AND source_id=? AND read_at=''
+	`, to.String(), inbox.Notice, prID)
 	return err
 }
 
-func clearUnreadPullRequestStateItems(tx *sql.Tx, sessionID, prID string) error {
+func clearUnreadPullRequestStateItems(tx *sql.Tx, to inbox.Address, prID string) error {
 	_, err := tx.Exec(`
-		DELETE FROM agent_mailbox_items
-		WHERE recipient_session_id=? AND kind=? AND source_id=? AND read_at=''
+		DELETE FROM inbox_items
+		WHERE address=? AND kind=? AND source_id=? AND read_at=''
 			AND coalesce_key IN (?, ?)
-	`, sessionID, agentmailbox.KindMaintenancePrompt, prID,
+	`, to.String(), inbox.Notice, prID,
 		PullRequestWatchCoalesceKey(prID), PullRequestWatchOutageCoalesceKey(prID))
 	return err
 }
@@ -164,13 +170,13 @@ func (s *Store) PullRequestWatches() []PullRequestWatch {
 	return watches
 }
 
-func (s *Store) PullRequestWatch(sessionID, prID string) (PullRequestWatch, bool) {
+func (s *Store) PullRequestWatch(to inbox.Address, prID string) (PullRequestWatch, bool) {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 	if s.db == nil {
 		return PullRequestWatch{}, false
 	}
-	watch, err := scanPullRequestWatch(s.db.QueryRow(`SELECT `+pullRequestWatchColumns+` FROM pull_request_watches WHERE session_id=? AND pr_id=?`, sessionID, prID))
+	watch, err := scanPullRequestWatch(s.db.QueryRow(`SELECT `+pullRequestWatchColumns+` FROM pull_request_watches WHERE address=? AND pr_id=?`, to.String(), prID))
 	return watch, err == nil
 }
 
@@ -212,6 +218,7 @@ func (s *Store) SessionPullRequestSessionIDs(prID string) ([]string, error) {
 }
 
 type PullRequestWatchReconcile struct {
+	To            inbox.Address
 	SessionID     string
 	PRID          string
 	CreatedAt     string
@@ -225,11 +232,11 @@ type PullRequestWatchReconcile struct {
 	FeedbackError string
 	ClearAction   bool
 	Terminal      bool
-	MailboxItems  []agentmailbox.Item
+	MailboxItems  []inbox.Item
 	At            time.Time
 }
 
-func (s *Store) ReconcilePullRequestWatch(update PullRequestWatchReconcile) ([]agentmailbox.Delivery, bool, error) {
+func (s *Store) ReconcilePullRequestWatch(update PullRequestWatchReconcile) ([]InboxDelivery, bool, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	encoded, err := json.Marshal(update.Cursor)
@@ -242,7 +249,7 @@ func (s *Store) ReconcilePullRequestWatch(update PullRequestWatchReconcile) ([]a
 	}
 	defer tx.Rollback()
 	var mode, reviewer, createdAt string
-	if err := tx.QueryRow(`SELECT mode, reviewer, created_at FROM pull_request_watches WHERE session_id=? AND pr_id=?`, update.SessionID, update.PRID).Scan(&mode, &reviewer, &createdAt); err != nil {
+	if err := tx.QueryRow(`SELECT mode, reviewer, created_at FROM pull_request_watches WHERE address=? AND pr_id=?`, update.To.String(), update.PRID).Scan(&mode, &reviewer, &createdAt); err != nil {
 		return nil, false, err
 	}
 	if mode != string(update.Mode) || !strings.EqualFold(reviewer, update.Reviewer) || createdAt != update.CreatedAt {
@@ -274,8 +281,8 @@ func (s *Store) ReconcilePullRequestWatch(update PullRequestWatchReconcile) ([]a
 		UPDATE pull_request_watches SET cursor_json=?, last_success_at=?,
 			last_error=CASE WHEN ? THEN '' ELSE last_error END,
 			feedback_error=?, outage_active=CASE WHEN ? THEN 0 ELSE outage_active END
-		WHERE session_id=? AND pr_id=?
-	`, string(encoded), stamp, recovered, update.FeedbackError, recovered, update.SessionID, update.PRID); err != nil {
+		WHERE address=? AND pr_id=?
+	`, string(encoded), stamp, recovered, update.FeedbackError, recovered, update.To.String(), update.PRID); err != nil {
 		return nil, false, err
 	}
 	if _, err := tx.Exec(`
@@ -291,38 +298,28 @@ func (s *Store) ReconcilePullRequestWatch(update PullRequestWatchReconcile) ([]a
 	}
 	if recovered {
 		if _, err := tx.Exec(`
-			DELETE FROM agent_mailbox_items WHERE recipient_session_id=? AND kind=? AND coalesce_key=? AND read_at=''
-		`, update.SessionID, agentmailbox.KindMaintenancePrompt, PullRequestWatchOutageCoalesceKey(update.PRID)); err != nil {
+			DELETE FROM inbox_items WHERE address=? AND kind=? AND coalesce_key=? AND read_at=''
+		`, update.To.String(), inbox.Notice, PullRequestWatchOutageCoalesceKey(update.PRID)); err != nil {
 			return nil, false, err
 		}
 	}
 	if update.ClearAction {
 		if _, err := tx.Exec(`
-			DELETE FROM agent_mailbox_items WHERE recipient_session_id=? AND kind=? AND coalesce_key=? AND read_at=''
-		`, update.SessionID, agentmailbox.KindMaintenancePrompt, PullRequestWatchCoalesceKey(update.PRID)); err != nil {
+			DELETE FROM inbox_items WHERE address=? AND kind=? AND coalesce_key=? AND read_at=''
+		`, update.To.String(), inbox.Notice, PullRequestWatchCoalesceKey(update.PRID)); err != nil {
 			return nil, false, err
 		}
 	}
-	deliveries := make([]agentmailbox.Delivery, 0, len(update.MailboxItems))
+	deliveries := make([]InboxDelivery, 0, len(update.MailboxItems))
 	for _, item := range update.MailboxItems {
-		if item.CoalesceKey != "" {
-			if _, err := tx.Exec(`
-				DELETE FROM agent_mailbox_items
-				WHERE recipient_session_id=? AND kind=? AND coalesce_key=? AND id<>? AND read_at=''
-			`, item.RecipientSessionID, item.Kind, item.CoalesceKey, item.ID); err != nil {
-				return nil, false, err
-			}
-		}
-		inserted, err := insertPullRequestMailboxItem(tx, item)
-		if err != nil {
+		if err := putInbox(tx, item, update.At); err != nil {
 			return nil, false, err
 		}
-		if inserted {
-			deliveries = append(deliveries, agentmailbox.Delivery{Item: item})
-		}
+		deliveries = append(deliveries, InboxDelivery{Item: InboxItem{Item: item}})
 	}
+
 	if update.Terminal {
-		if _, err := tx.Exec(`DELETE FROM pull_request_watches WHERE session_id=? AND pr_id=?`, update.SessionID, update.PRID); err != nil {
+		if _, err := tx.Exec(`DELETE FROM pull_request_watches WHERE address=? AND pr_id=?`, update.To.String(), update.PRID); err != nil {
 			return nil, false, err
 		}
 	}
@@ -332,7 +329,7 @@ func (s *Store) ReconcilePullRequestWatch(update PullRequestWatchReconcile) ([]a
 	return deliveries, projectionChanged, nil
 }
 
-func (s *Store) RecordPullRequestWatchFailure(sessionID, prID, createdAt string, mode prreadiness.Mode, reviewer, message string, outage agentmailbox.Item, at time.Time) (*agentmailbox.Delivery, error) {
+func (s *Store) RecordPullRequestWatchFailure(to inbox.Address, sessionID, prID, createdAt string, mode prreadiness.Mode, reviewer, message string, outage inbox.Item, at time.Time) (*InboxDelivery, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	tx, err := s.db.Begin()
@@ -342,14 +339,14 @@ func (s *Store) RecordPullRequestWatchFailure(sessionID, prID, createdAt string,
 	defer tx.Rollback()
 	var currentMode, currentReviewer, currentCreatedAt string
 	var active bool
-	if err := tx.QueryRow(`SELECT mode, reviewer, created_at, outage_active FROM pull_request_watches WHERE session_id=? AND pr_id=?`, sessionID, prID).Scan(&currentMode, &currentReviewer, &currentCreatedAt, &active); err != nil {
+	if err := tx.QueryRow(`SELECT mode, reviewer, created_at, outage_active FROM pull_request_watches WHERE address=? AND pr_id=?`, to.String(), prID).Scan(&currentMode, &currentReviewer, &currentCreatedAt, &active); err != nil {
 		return nil, err
 	}
 	if currentMode != string(mode) || !strings.EqualFold(currentReviewer, reviewer) || currentCreatedAt != createdAt {
 		return nil, sql.ErrNoRows
 	}
 	stamp := at.UTC().Format(sortableTimeFormat)
-	if _, err := tx.Exec(`UPDATE pull_request_watches SET last_error=?, outage_active=1 WHERE session_id=? AND pr_id=?`, message, sessionID, prID); err != nil {
+	if _, err := tx.Exec(`UPDATE pull_request_watches SET last_error=?, outage_active=1 WHERE address=? AND pr_id=?`, message, to.String(), prID); err != nil {
 		return nil, err
 	}
 	if _, err := tx.Exec(`
@@ -358,15 +355,13 @@ func (s *Store) RecordPullRequestWatchFailure(sessionID, prID, createdAt string,
 	`, message, stamp, stamp, sessionID, prID); err != nil {
 		return nil, err
 	}
-	var delivery *agentmailbox.Delivery
+	var delivery *InboxDelivery
 	if !active {
-		inserted, err := insertPullRequestMailboxItem(tx, outage)
-		if err != nil {
+		if err := putInbox(tx, outage, at); err != nil {
 			return nil, err
 		}
-		if inserted {
-			delivery = &agentmailbox.Delivery{Item: outage}
-		}
+		delivery = &InboxDelivery{Item: InboxItem{Item: outage}}
+
 	}
 	if err := tx.Commit(); err != nil {
 		return nil, err
@@ -374,26 +369,18 @@ func (s *Store) RecordPullRequestWatchFailure(sessionID, prID, createdAt string,
 	return delivery, nil
 }
 
-func insertPullRequestMailboxItem(tx *sql.Tx, item agentmailbox.Item) (bool, error) {
-	result, err := tx.Exec(`
-		INSERT OR IGNORE INTO agent_mailbox_items
-			(id, recipient_session_id, kind, source_id, coalesce_key, hint, prompt, created_at)
-		VALUES(?,?,?,?,?,?,?,?)
-	`, item.ID, item.RecipientSessionID, item.Kind, item.SourceID, item.CoalesceKey, item.Hint, item.Prompt, item.CreatedAt)
-	if err != nil {
-		return false, fmt.Errorf("enqueue pull request mailbox item: %w", err)
-	}
-	count, err := result.RowsAffected()
-	return count == 1, err
-}
-
 type pullRequestWatchScanner interface{ Scan(...any) error }
 
 func scanPullRequestWatch(row pullRequestWatchScanner) (PullRequestWatch, error) {
 	var watch PullRequestWatch
-	var mode, cursorJSON string
-	if err := row.Scan(&watch.SessionID, &watch.PRID, &mode, &watch.Reviewer, &watch.CreatedAt,
+	var address, mode, cursorJSON string
+	if err := row.Scan(&address, &watch.SessionID, &watch.PRID, &mode, &watch.Reviewer, &watch.CreatedAt,
 		&cursorJSON, &watch.LastSuccessAt, &watch.LastError, &watch.FeedbackError, &watch.OutageActive); err != nil {
+		return PullRequestWatch{}, err
+	}
+	var err error
+	watch.To, err = inbox.ParseAddress(address)
+	if err != nil {
 		return PullRequestWatch{}, err
 	}
 	watch.Mode = prreadiness.Mode(mode)

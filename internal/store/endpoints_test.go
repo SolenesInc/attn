@@ -69,11 +69,12 @@ func TestEndpointMigration34BackfillsBlankInstance(t *testing.T) {
 
 func TestMigration151CarriesProfileColumnsIntoInstances(t *testing.T) {
 	dbPath := filepath.Join(t.TempDir(), "test.db")
-	s, err := newSeededStore(dbPath)
+	s, err := newStoreAtVersion(dbPath, 161)
 	if err != nil {
 		t.Fatal(err)
 	}
 	defer s.Close()
+
 	if _, err := s.db.Exec(`
 		ALTER TABLE endpoints RENAME COLUMN instance TO profile;
 		ALTER TABLE instance_roles RENAME TO profile_roles;
@@ -84,7 +85,7 @@ func TestMigration151CarriesProfileColumnsIntoInstances(t *testing.T) {
 	`); err != nil {
 		t.Fatal(err)
 	}
-	if err := migrateDB(s.db, dbPath); err != nil {
+	if err := migrateDBThrough(s.db, dbPath, 161); err != nil {
 		t.Fatal(err)
 	}
 	if got := s.GetEndpoint("endpoint-1"); got == nil || got.Instance != "dev" {

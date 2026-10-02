@@ -113,28 +113,6 @@ func TestTheCommandsAnAgentRunsFromItsSessionActOnThatSession(t *testing.T) {
 		refused(t, inSession("journal", "append"), 2, "--entry or --entry-file is required")
 	})
 
-	t.Run("ticket show", func(t *testing.T) {
-		if _, err := s.Client().CreateTicket(session, "Price the order", "", "pricing"); err != nil {
-			t.Fatal(err)
-		}
-		var ticket struct {
-			ID    string `json:"id"`
-			Title string `json:"title"`
-		}
-		inSession("ticket", "show", "pricing", "--session", other, "--json").JSON(t, &ticket)
-		if ticket.ID != "pricing" || ticket.Title != "Price the order" {
-			t.Errorf("ticket show --json printed %+v", ticket)
-		}
-		shown := inSession("ticket", "show", "--session", other, "pricing")
-		if lines := strings.Split(shown.Stdout, "\n"); !strings.HasPrefix(lines[0], "pricing\t") || len(lines) < 2 || lines[1] != "Price the order" {
-			t.Errorf("ticket show with --session first printed:\n%s", shown.Stdout)
-		}
-
-		refused(t, inSession("ticket", "show"), 2, "expected exactly one ticket id")
-		refused(t, inSession("ticket", "show", "pricing", "extra"), 2, "expected exactly one ticket id")
-		refused(t, inSession("ticket", "show", "pricing", "--bogus"), 2, "-bogus")
-	})
-
 	t.Run("open", func(t *testing.T) {
 		readme := s.Path("shop", "README.md")
 		notes := s.Path("shop", "s-notes.md")

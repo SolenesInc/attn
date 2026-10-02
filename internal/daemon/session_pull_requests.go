@@ -6,11 +6,13 @@ import (
 	"errors"
 	"fmt"
 	"net"
+	"slices"
 	"strconv"
 	"strings"
 	"time"
 
 	"github.com/victorarias/attn/internal/automation"
+	"github.com/victorarias/attn/internal/inbox"
 	"github.com/victorarias/attn/internal/protocol"
 	"github.com/victorarias/attn/internal/prreadiness"
 	"github.com/victorarias/attn/internal/store"
@@ -140,12 +142,19 @@ func (d *Daemon) watchSessionPullRequest(rec store.SessionPullRequestRecord, mod
 	if err := prreadiness.ValidateConfig(mode, reviewer); err != nil {
 		return err
 	}
-	recorded, changed, err := d.store.WatchPullRequest(rec, mode, reviewer, time.Now())
+	address := d.inboxAddressOf(rec.SessionID)
+	for _, held := range d.inboxRoleAddresses(rec.SessionID) {
+		if _, exists := d.store.PullRequestWatch(held, rec.PRID); exists {
+			address = held
+			break
+		}
+	}
+	recorded, changed, err := d.store.WatchPullRequest(rec, address, mode, reviewer, time.Now())
 	if err != nil {
 		return fmt.Errorf("watch pull request %s: %w", rec.PRID, err)
 	}
 	if changed {
-		d.refreshAgentMailboxUnread(rec.SessionID)
+		d.kickInboxAfterCommit(address)
 		d.publishSessionPullRequestMembershipChanged(rec.PRID, rec.SessionID)
 		d.schedulePullRequestRefreshNow(rec.SessionID, rec.PRID)
 	} else if recorded {
@@ -155,14 +164,19 @@ func (d *Daemon) watchSessionPullRequest(rec store.SessionPullRequestRecord, mod
 }
 
 func (d *Daemon) unwatchSessionPullRequest(rec store.SessionPullRequestRecord) error {
-	changed, err := d.store.StopPullRequestWatch(rec.SessionID, rec.PRID)
-	if err != nil {
-		return fmt.Errorf("unwatch pull request %s: %w", rec.PRID, err)
+	addresses := d.inboxRoleAddresses(rec.SessionID)
+	changed := false
+	for _, address := range addresses {
+		stopped, err := d.store.StopPullRequestWatch(address, rec.PRID)
+		if err != nil {
+			return fmt.Errorf("unwatch pull request %s: %w", rec.PRID, err)
+		}
+		changed = changed || stopped
 	}
 	if !changed {
 		return fmt.Errorf("session %s is not watching pull request %s", rec.SessionID, rec.PRID)
 	}
-	d.refreshAgentMailboxUnread(rec.SessionID)
+	d.kickInboxAfterCommit(addresses...)
 	d.publishSessionPullRequestMembershipChanged(rec.PRID, rec.SessionID)
 	return nil
 }
@@ -194,14 +208,19 @@ func (d *Daemon) recordSessionPullRequest(rec store.SessionPullRequestRecord) er
 }
 
 func (d *Daemon) forgetSessionPullRequest(rec store.SessionPullRequestRecord) error {
-	forgotten, err := d.store.ForgetSessionPullRequest(rec.SessionID, rec.PRID)
-	if err != nil {
-		return fmt.Errorf("forget pull request %s: %w", rec.PRID, err)
+	addresses := d.inboxRoleAddresses(rec.SessionID)
+	forgotten := false
+	for _, address := range addresses {
+		removed, err := d.store.ForgetSessionPullRequest(rec.SessionID, address, rec.PRID)
+		if err != nil {
+			return fmt.Errorf("forget pull request %s: %w", rec.PRID, err)
+		}
+		forgotten = forgotten || removed
 	}
 	if !forgotten {
 		return fmt.Errorf("session %s has no pull request %s recorded", rec.SessionID, rec.PRID)
 	}
-	d.refreshAgentMailboxUnread(rec.SessionID)
+	d.kickInboxAfterCommit(addresses...)
 	d.publishSessionPullRequestMembershipChanged(rec.PRID, rec.SessionID)
 	return nil
 }
@@ -237,7 +256,7 @@ func (d *Daemon) pullRequestWatchesByPR() map[string][]store.PullRequestWatch {
 	return byPR
 }
 
-func (d *Daemon) sessionPullRequestsForBroadcast(records []store.SessionPullRequestRecord, watchesByPR map[string][]store.PullRequestWatch) []protocol.SessionPullRequest {
+func (d *Daemon) sessionPullRequestsForBroadcast(records []store.SessionPullRequestRecord, addresses []inbox.Address, watchesByPR map[string][]store.PullRequestWatch) []protocol.SessionPullRequest {
 	if len(records) == 0 {
 		return nil
 	}
@@ -268,7 +287,7 @@ func (d *Daemon) sessionPullRequestsForBroadcast(records []store.SessionPullRequ
 		watches := watchesByPR[rec.PRID]
 		if len(watches) > 0 {
 			for _, watch := range watches {
-				if watch.SessionID == rec.SessionID {
+				if slices.Contains(addresses, watch.To) {
 					entry.Watching = protocol.Ptr(true)
 					entry.WatchMode = protocol.Ptr(protocol.PullRequestWatchMode(watch.Mode))
 					entry.WatchReviewer = pullRequestField(watch.Reviewer)
@@ -294,8 +313,16 @@ func pullRequestField(value string) *string {
 	return protocol.Ptr(value)
 }
 
-func (d *Daemon) sessionPullRequestsForSession(sessionID string) []protocol.SessionPullRequest {
-	return d.sessionPullRequestsForBroadcast(d.store.ListSessionPullRequests(sessionID), d.pullRequestWatchesByPR())
+func (d *Daemon) sessionPullRequestsForSession(session *protocol.Session) []protocol.SessionPullRequest {
+	addresses := []inbox.Address{inbox.ToSession(session.ID)}
+	if member := protocol.Deref(session.CrewMember); member != "" {
+		addresses = append(addresses, inbox.ToMember(member))
+	}
+	if protocol.Deref(session.ChiefOfStaff) {
+		addresses = append(addresses, inbox.ToChief())
+	}
+	byPR := d.pullRequestWatchesByPR()
+	return d.sessionPullRequestsForBroadcast(d.sessionPullRequestRecords(session.ID, addresses, d.store.ListSessionPullRequestsBySession(), byPR), addresses, byPR)
 }
 
 func (d *Daemon) forwardedToSessionOwner(conn net.Conn, sessionID string, msg any) bool {
@@ -325,4 +352,33 @@ func (d *Daemon) sessionOwnerEndpoint(sessionID string) string {
 		return ""
 	}
 	return endpointID
+}
+
+func (d *Daemon) sessionPullRequestRecords(sessionID string, addresses []inbox.Address, bySession map[string][]store.SessionPullRequestRecord, byPR map[string][]store.PullRequestWatch) []store.SessionPullRequestRecord {
+	records := append([]store.SessionPullRequestRecord(nil), bySession[sessionID]...)
+	for prID, watches := range byPR {
+		for _, watch := range watches {
+			if !slices.Contains(addresses, watch.To) {
+				continue
+			}
+			for _, rec := range bySession[watch.SessionID] {
+				if rec.PRID != prID {
+					continue
+				}
+				rec.SessionID = sessionID
+				replaced := false
+				for i := range records {
+					if records[i].PRID == prID {
+						records[i] = rec
+						replaced = true
+						break
+					}
+				}
+				if !replaced {
+					records = append(records, rec)
+				}
+			}
+		}
+	}
+	return records
 }

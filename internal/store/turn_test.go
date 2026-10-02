@@ -27,10 +27,11 @@ func addTurnSession(t *testing.T, s *Store, id string, state protocol.SessionSta
 
 func TestMigration81BackfillsOpenTurnsFromStateSince(t *testing.T) {
 	dbPath := filepath.Join(t.TempDir(), "migration-81.db")
-	db, err := openSeededDB(dbPath)
+	db, err := openDBAtVersion(dbPath, 161)
 	if err != nil {
 		t.Fatalf("OpenDB setup: %v", err)
 	}
+
 	if _, err := db.Exec(`
 		INSERT INTO sessions (id, label, directory, state, state_since, state_updated_at, last_seen) VALUES
 			('waiting',  'Waiting',  '/tmp/a', 'waiting_input',    '2026-07-26T10:00:00Z', '2026-07-26T10:00:00Z', '2026-07-26T10:00:00Z'),
@@ -48,7 +49,7 @@ func TestMigration81BackfillsOpenTurnsFromStateSince(t *testing.T) {
 		t.Fatalf("close pre-81 database: %v", err)
 	}
 
-	migrated, err := newSeededStore(dbPath)
+	migrated, err := newStoreAtVersion(dbPath, 161)
 	if err != nil {
 		t.Fatalf("migrate: %v", err)
 	}

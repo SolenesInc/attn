@@ -274,32 +274,47 @@ func TestCrewLettersNeverLeaveTheMemberHome(t *testing.T) {
 	crewErrorContains(t, err, linked, "symlink")
 }
 
-func TestAutonomousWakesStopAtTheWakeLimit(t *testing.T) {
-	w := newCrewWorld(t, fakeagent.Claude)
-	app := w.App()
-	cli := w.Client()
-	setSetting(t, app, "crew.wake_limit", "2")
-	if err := cli.Register("sender", "sender", w.Path("sender")); err != nil {
-		t.Fatal(err)
-	}
-
-	for _, request := range []string{"please look at #901", "please look at #902"} {
-		sent, err := cli.AgentMsg("trellis", "sender", request)
-		if err != nil || sent.Status != protocol.AgentMsgStatusQueued {
-			t.Fatalf("message to asleep trellis = %+v, %v; want it woken and queued", sent, err)
+func TestDeliveryWakesChargeTheLimitAndReportAnAlreadyUsedLimit(t *testing.T) {
+	inBubbleWithAgents(t, func(t *testing.T, w *world) {
+		writeCrewCharter(t, w, "trellis")
+		w.restart()
+		app, cli := w.App(), w.Client()
+		setSetting(t, app, "crew.wake_limit", "2")
+		setSetting(t, app, "crew.heartbeat_enabled", "false")
+		setSetting(t, app, "crew.autosleep_enabled", "false")
+		registerSessions(t, w, cli, "sender")
+		sent := sendAgentMessage(t, cli, "sender", "trellis", "read across days")
+		for attempt := 1; attempt <= 2; attempt++ {
+			id := protocol.Deref(crewRosterMember(t, cli, "trellis").BindingSession)
+			day := w.bootBubbleClaude(t, id)
+			day.reply("Ready. <!-- attn:state=idle -->")
+			if day.promptsContaining(inboxDoorbell) != 1 {
+				t.Fatalf("day %d did not ring", attempt)
+			}
+			if _, err := cli.CrewHandoff(id, "sleep unread", false, protocol.CrewDayCloseSleep); err != nil {
+				t.Fatal(err)
+			}
+			if attempt == 1 {
+				w.advance(5 * time.Minute)
+			}
 		}
-		w.Launched(sent.TargetSessionID)
-		if err := cli.Unregister(sent.TargetSessionID); err != nil {
-			t.Fatal(err)
+		before := crewSessionCount(t, cli)
+		fresh := sendAgentMessage(t, cli, "sender", "trellis", "a new item while the limit is used")
+		if fresh.Status != protocol.AgentMsgStatusQueued || !strings.Contains(fresh.Detail, "crew.wake_limit=2") {
+			t.Fatalf("used limit receipt=%+v", fresh)
 		}
-	}
-	before := crewSessionCount(t, cli)
-	_, err := cli.AgentMsg("trellis", "sender", "please look at #903")
-	crewErrorContains(t, err, "Trellis", "crew.wake_limit=2")
-	if binding := crewRosterMember(t, cli, "trellis").BindingSession; binding != nil {
-		t.Fatalf("a refused wake bound trellis to %s", *binding)
-	}
-	if got := crewSessionCount(t, cli); got != before {
-		t.Fatalf("a refused wake changed the sessions from %d to %d", before, got)
-	}
+		w.advance(5 * time.Minute)
+		if binding := crewRosterMember(t, cli, "trellis").BindingSession; binding != nil {
+			t.Fatalf("limit woke %s", *binding)
+		}
+		if got := crewSessionCount(t, cli); got != before {
+			t.Fatalf("limit changed session count from %d to %d", before, got)
+		}
+		day := w.bootBubbleClaude(t, wakeCrew(t, cli, "trellis", "").SessionID)
+		day.reply("Ready. <!-- attn:state=idle -->")
+		mail := readInbox(t, cli, day.id, 0).Items
+		if len(mail) != 2 || mail[0].ItemID != sent.MessageID {
+			t.Fatalf("manual wake lost mail=%+v", mail)
+		}
+	})
 }

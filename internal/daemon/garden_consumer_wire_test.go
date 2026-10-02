@@ -1,6 +1,8 @@
 package daemon_test
 
 import (
+	"os"
+	"path/filepath"
 	"strconv"
 	"strings"
 	"testing"
@@ -10,6 +12,49 @@ import (
 	"github.com/victorarias/attn/internal/protocol"
 	"github.com/victorarias/attn/internal/testworld"
 )
+
+func TestAGardenBellRetriesAfterACrewRosterPathFailureIsRepaired(t *testing.T) {
+	inBubbleWithAgents(t, func(t *testing.T, w *world) {
+		cli := w.Client()
+		registerSessions(t, w, cli, "sender")
+		seed := plantSeedAs(t, cli, "sender", "review the build")
+		if _, err := cli.SeedTransition("", seed, "tend", "", "trellis", false, client.SeedTransitionOptions{}); err != nil {
+			t.Fatal(err)
+		}
+		writeCrewCharter(t, w, "trellis")
+		writeCrewCharter(t, w, "alder")
+		w.restart()
+		cli = w.Client()
+		home := filepath.Join(w.Dir, "crew", "alder")
+		saved := home + "-saved"
+		if err := os.Rename(home, saved); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.Symlink(t.TempDir(), home); err != nil {
+			t.Fatal(err)
+		}
+		if _, err := cli.SeedNote("sender", seed, "the deployment is ready", "", "", true, nil); err != nil {
+			t.Fatal(err)
+		}
+		w.advance(0)
+		if err := os.Remove(home); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.Rename(saved, home); err != nil {
+			t.Fatal(err)
+		}
+		w.advance(bus.DefaultPollInterval)
+		dayID := protocol.Deref(crewRosterMember(t, cli, "trellis").BindingSession)
+		if dayID == "" {
+			t.Fatal("Garden event was lost during the roster failure")
+		}
+		day := w.bootBubbleClaude(t, dayID)
+		day.reply("Ready. <!-- attn:state=idle -->")
+		if mail := readInbox(t, cli, day.id, 0).Items; len(mail) != 1 || !strings.Contains(mail[0].Content, seed) {
+			t.Fatalf("recovered Garden mail=%+v; want the failed event delivered", mail)
+		}
+	})
+}
 
 func TestALateSeedBellRingsWhoeverTendsTheSeedNow(t *testing.T) {
 	inBubble(t, func(t *testing.T, w *world) {

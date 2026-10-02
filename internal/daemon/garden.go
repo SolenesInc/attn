@@ -1328,14 +1328,11 @@ func (d *Daemon) handleSeedTransition(conn net.Conn, msg *protocol.SeedTransitio
 		d.sendGardenResponse(conn, protocol.Response{Ok: true, SeedTransitionResult: result})
 		return
 	}
-	seed, doc, notes, err := d.applySeedTransitionDetailed(
+	seed, doc, _, err := d.applySeedTransitionDetailed(
 		msg.SeedID, verb, ask, protocol.Deref(msg.Comment))
 	if err != nil {
 		d.sendGardenError(conn, string(verb), err)
 		return
-	}
-	for _, note := range notes.all() {
-		d.mirrorSeedNoteOntoTicket(sessionID, seed.ID, note.Body)
 	}
 	result := &protocol.SeedTransitionResult{Seed: d.seedTransitionWire(seed, doc)}
 	if verb == garden.VerbTend {
@@ -1344,7 +1341,7 @@ func (d *Daemon) handleSeedTransition(conn net.Conn, msg *protocol.SeedTransitio
 	if garden.Closed(seed.Status) {
 		_, result.Unblocked = d.seedUnblocked(seed.ID)
 	}
-	d.mirrorSeedMoveOntoTicket(sessionID, seed.ID, verb, protocol.Deref(msg.Reason))
+
 	d.sendGardenResponse(conn, protocol.Response{Ok: true, SeedTransitionResult: result})
 }
 
@@ -1386,17 +1383,6 @@ func (d *Daemon) applySeedTransition(id string, verb garden.Verb, ask garden.Ask
 type seedTransitionNotes struct {
 	Audit   *protocol.SeedNote
 	Comment *protocol.SeedNote
-}
-
-func (n seedTransitionNotes) all() []*protocol.SeedNote {
-	var notes []*protocol.SeedNote
-	if n.Audit != nil {
-		notes = append(notes, n.Audit)
-	}
-	if n.Comment != nil {
-		notes = append(notes, n.Comment)
-	}
-	return notes
 }
 
 func (d *Daemon) applySeedTransitionDetailed(
@@ -1740,7 +1726,7 @@ func (d *Daemon) handleSeedNote(conn net.Conn, msg *protocol.SeedNoteMessage) {
 		d.sendGardenError(conn, "note", err)
 		return
 	}
-	d.mirrorSeedNoteOntoTicket(authorSession, msg.SeedID, note.Body)
+
 	d.sendGardenResponse(conn, protocol.Response{
 		Ok:             true,
 		SeedNoteResult: &protocol.SeedNoteResult{Note: note},

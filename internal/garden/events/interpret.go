@@ -80,6 +80,11 @@ func (m *Model) Recipients(seedID string, decision Interpreted, resolver RoleRes
 	excluded := map[string]bool{}
 	for _, sessionID := range decision.excluded {
 		excluded[sessionID] = true
+		if addresses, ok := resolver.(interface{ AddressesOfSession(string) []string }); ok {
+			for _, address := range addresses.AddressesOfSession(sessionID) {
+				excluded[address] = true
+			}
+		}
 	}
 	out := recipients[:0]
 	for _, recipient := range recipients {

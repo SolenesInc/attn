@@ -79,7 +79,7 @@ export function BackgroundTasksSettings({
         <h3>Durable task runner</h3>
         <p className="settings-description">
           Background work attn runs for you — context compaction, session summaries, workspace
-          narration, and ticket reconciliation. A task that exhausts its retries becomes a
+          and narration. A task that exhausts its retries becomes a
           notification you can retry from here.
         </p>
       </div>

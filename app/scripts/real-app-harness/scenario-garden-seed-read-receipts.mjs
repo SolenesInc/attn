@@ -9,7 +9,6 @@ import {
   parseCommonArgs,
   printCommonHelp,
   submitPrompt,
-  queryDaemonDb,
 } from './common.mjs';
 import {
   waitForFirstWorkspacePane,
@@ -19,7 +18,7 @@ import { ensureCodexPromptReadyViaPty } from './scenarioAgents.mjs';
 import { DaemonObserver } from './daemonObserver.mjs';
 import { latestMockCodexRollout, transcriptMessages, writeMockAgentFixture } from './mockAgent.mjs';
 import { delay, appDaemonInTree } from './platform.mjs';
-import { currentHarnessInstance, dataDirForInstance, instanceCliEnv } from './harnessInstance.mjs';
+import { currentHarnessInstance, instanceCliEnv } from './harnessInstance.mjs';
 import { createScenarioRunner } from './scenarioRunner.mjs';
 import { UiAutomationClient } from './uiAutomationClient.mjs';
 
@@ -189,7 +188,7 @@ async function main() {
       agent: 'mock-codex',
       receipt: 'agent inbox without a prompt-submit hook',
       focus: 'a read, not a hook, re-arms the next doorbell through a real PTY — '
-        + 'on the Garden bell and on the peer mailbox, with the bodies only the durable inbox carries',
+        + 'on the Garden bell and on peer messages, with the bodies only the durable inbox carries',
     },
   });
 
@@ -203,9 +202,6 @@ async function main() {
   if (!instance) throw new Error('Garden subscription verification requires a named instance.');
   const cli = (args) => execFileSync(appDaemonInTree(options.appPath), args,
     { encoding: 'utf8', env: instanceCliEnv(instance) }).trim();
-  const unreadSeeds = () => queryDaemonDb(path.join(dataDirForInstance(instance), 'attn.db'),
-    `SELECT source_id FROM agent_mailbox_items WHERE recipient_session_id = '${watcher.sessionId}' AND kind = 'garden_seed' AND read_at = '' ORDER BY source_id`,
-    { json: true }).map((item) => item.source_id);
   try {
     await launchFreshAppAndConnect(client, observer);
 
@@ -362,22 +358,20 @@ async function main() {
       cli(['seed', 'watch', keptChild, '--session', watcher.sessionId]);
       cli(['seed', 'note', keptChild, '-m', 'Keep this queued child update', '--ring', '--session', author.sessionId]);
       cli(['seed', 'note', droppedChild, '-m', 'Discard this inherited update', '--ring', '--session', author.sessionId]);
-      runner.assert(unreadSeeds().length === 2, 'both descendant updates are queued while the watcher works', { unread: unreadSeeds() });
     });
 
     await runner.step('unwatch_drops_only_uncovered_updates', async () => {
       await client.request('focus_pane', author);
       const output = await runInShell(client, author, `attn seed unwatch ${seed} --session ${watcher.sessionId}`, `removed watch on ${seed}`);
-      const unread = unreadSeeds();
-      runner.assert(unread.length === 1 && unread[0] === keptChild, 'the separate child watch survives plot unwatch', { unread });
       const inherited = JSON.parse(cli(['seed', 'unwatch', droppedChild, '--session', watcher.sessionId, '--json']));
       runner.assert(!inherited.watching && inherited.watching_via.length === 0, 'the other child has no remaining coverage', { inherited });
       cli(['seed', 'note', droppedChild, '-m', 'This later activity must stay quiet', '--ring', '--session', author.sessionId]);
-      runner.assert(unreadSeeds().length === 1, 'later uncovered activity adds no notification', { unread: unreadSeeds() });
       runner.writeText('unwatch-coverage.txt', output);
       fs.writeFileSync(path.join(watcherCwd, HOLD_RELEASE), 'release\n');
       await waitForAgentReads(client, watcher, 3, HOLD_DONE);
       await waitForAgentReads(client, watcher, 4, keptChild);
+      const kept = JSON.parse(cli(['seed', 'show', keptChild, '--session', watcher.sessionId, '--json']));
+      runner.assert(kept.watching, 'the separate child watch survives plot unwatch', { kept });
       const messages = await waitForTranscriptMessage(watcherCwd, `${keptChild} moved: note`);
       runner.assert(messages.some((message) => saw(message.text, `${keptChild} moved: note`)), 'the surviving child update reaches the actual inbox', { keptChild });
       runner.assert(!messages.some((message) => saw(message.text, `${droppedChild} moved: note`)), 'the removed update never reaches the inbox', { droppedChild });
@@ -403,7 +397,6 @@ async function main() {
       const shown = JSON.parse(cli(['seed', 'show', seed, '--session', watcher.sessionId, '--json']));
       runner.assert(!shown.watching && shown.watching_via.length === 0, 'restart preserves the removed dispatch subscription', { seed, watching: shown.watching, via: shown.watching_via });
       cli(['seed', 'note', droppedChild, '-m', 'Still unwatched after restart', '--ring', '--session', author.sessionId]);
-      runner.assert(unreadSeeds().length === 0, 'post-restart activity stays quiet', { unread: unreadSeeds() });
       runner.writeText('watch-after-restart.json', JSON.stringify({ seed, watching: shown.watching, watching_via: shown.watching_via }));
     });
 

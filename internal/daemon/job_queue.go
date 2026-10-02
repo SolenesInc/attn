@@ -61,24 +61,6 @@ func (d *Daemon) startJobQueueWithStore(queueStore jobs.Store) error {
 		}
 		if err := d.registerTaskWithFailureRenderer(
 			runner,
-			reconcileKind,
-			d.reconcileJobHandler,
-			jobs.HandlerConfig{
-				Timeout:       ticketReconcileTimeout(),
-				MaxConcurrent: ticketReconcileConcurrency,
-			}, d.renderReconcileFailure,
-		); err != nil {
-			d.logf("ticket reconcile: register reconcile: %v", err)
-		}
-		if err := runner.RegisterWith(
-			legacyTicketRecoveryKind,
-			d.legacyTicketRecoveryHandler,
-			jobs.HandlerConfig{Timeout: legacyTicketRecoveryTimeout},
-		); err != nil {
-			d.logf("legacy ticket recovery: register: %v", err)
-		}
-		if err := d.registerTaskWithFailureRenderer(
-			runner,
 			sessionTitleKind,
 			d.sessionTitleHandler,
 			jobs.HandlerConfig{Timeout: sessionTitleTimeout}, d.renderSessionTitleFailure,

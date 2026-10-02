@@ -8,6 +8,9 @@ import (
 	"slices"
 	"strings"
 	"testing"
+	"testing/synctest"
+
+	"github.com/victorarias/attn/internal/testworld"
 
 	_ "github.com/mattn/go-sqlite3"
 )
@@ -21,7 +24,7 @@ func TestTheDaemonBacksUpOnStartKeepingTheNewestRotationAndPreMigrationSnapshots
 	t.Setenv("ATTN_INSTANCE", "backups")
 	var backups string
 	var rotating, premigration []string
-	legacyRecoveryUpgrade(t, func(dir string) {
+	preparedBackupUpgrade(t, func(dir string) {
 		backups = filepath.Join(dir, "backups")
 		for day := 1; day <= backupRotationKeep+1; day++ {
 			rotating = append(rotating, plantBackup(t, backups, fmt.Sprintf("attn-199912%02d-000000.db", day)))
@@ -86,4 +89,22 @@ func assertUsableDatabase(t *testing.T, path string) {
 	if err := db.QueryRow(`SELECT COUNT(*) FROM sqlite_master WHERE type = 'table'`).Scan(&tables); err != nil || tables == 0 {
 		t.Errorf("the backup %s holds %d tables (%v), want the daemon's database", path, tables, err)
 	}
+}
+func preparedBackupUpgrade(t *testing.T, before func(dir string), script func(t *testing.T, w *world)) {
+	t.Helper()
+	prepared := prepareWorld(t)
+	before(prepared.Dir)
+	preparedBackupStart(t, prepared, script)
+}
+
+func preparedBackupStart(t *testing.T, prepared *testworld.World, script func(t *testing.T, w *world)) {
+	t.Helper()
+	synctest.Test(t, func(t *testing.T) {
+		bubbled := *prepared
+		bubbled.T = t
+		w := &world{World: &bubbled, bubbled: true}
+		w.start()
+		w.finishStartupWork()
+		script(t, w)
+	})
 }

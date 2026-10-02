@@ -18,7 +18,6 @@ func TestTaskFailureRenderersDescribeEachTrigger(t *testing.T) {
 		{"session activity", d.renderSessionActivityFailure, []string{notificationActionOpenSession, notificationActionRetryTask}},
 		{"session title", d.renderSessionTitleFailure, []string{notificationActionOpenSession, notificationActionRetryTask}},
 		{"snooze wake", d.renderSnoozeWakeFailure, []string{notificationActionOpenSession, notificationActionRetryTask}},
-		{"reconcile", d.renderReconcileFailure, []string{notificationActionRetryTask}},
 		{"Garden review", d.renderGardenReviewFailure, []string{notificationActionRetryTask}},
 	}
 	for _, test := range tests {

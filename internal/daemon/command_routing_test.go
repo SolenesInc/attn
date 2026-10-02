@@ -67,9 +67,6 @@ var sessionCommandsAnsweredWhereTheyLand = map[string]string{
 	protocol.CmdAgentClose:          "arrives from the agent process over the unix socket",
 	protocol.CmdAgentInbox:          "arrives from the agent process over the unix socket",
 	protocol.CmdAgentMsgStatus:      "arrives from the agent process over the unix socket",
-	protocol.CmdTicketCreate:        "arrives from the agent process over the unix socket",
-	protocol.CmdTicketInbox:         "arrives from the agent process over the unix socket",
-	protocol.CmdSetTicketStatus:     "arrives from the agent process over the unix socket",
 	protocol.CmdOpenSentFiles:       "arrives from the agent process over the unix socket",
 
 	protocol.CmdUnregister: "handleUnregisterWS forwards to the endpoint itself",
@@ -78,7 +75,6 @@ var sessionCommandsAnsweredWhereTheyLand = map[string]string{
 	protocol.CmdSessionShow:   sessionLedgerIsPerDaemon,
 	protocol.CmdSessionReopen: sessionLedgerIsPerDaemon,
 
-	protocol.CmdTicketAttach:   "the ticket board is the hub's own store",
 	protocol.CmdBrowserControl: "handleRemoteBrowserControl resolves the browser host itself",
 }
 

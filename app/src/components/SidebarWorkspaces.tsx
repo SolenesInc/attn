@@ -398,14 +398,13 @@ function WorkspaceTileRow({
 function WorkspaceSessionRow(
   props: Omit<
     ComponentProps<typeof SidebarSessionRow>,
-    'selected' | 'onSelect' | 'onOpenActions' | 'onTriggerNudge' | 'showSettling' | 'delegates'
+    'selected' | 'onSelect' | 'onOpenActions' | 'showSettling' | 'delegates'
   >,
 ) {
   const {
     selectedId,
     onSelectSession,
     openSessionActions,
-    onTriggerNudge,
     onScreenSessionIds,
     rowDelegation,
   } = useSidebarContext();
@@ -416,7 +415,6 @@ function WorkspaceSessionRow(
       selected={selectedId === session.id}
       onSelect={() => onSelectSession(session.id)}
       onOpenActions={(event) => openSessionActions(session, event)}
-      onTriggerNudge={() => onTriggerNudge?.(session.id)}
       showSettling={!onScreenSessionIds?.has(session.id)}
       {...rowDelegation(session)}
     />

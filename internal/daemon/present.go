@@ -11,6 +11,7 @@ import (
 
 	"github.com/victorarias/attn/internal/bus"
 	attngit "github.com/victorarias/attn/internal/git"
+	"github.com/victorarias/attn/internal/inbox"
 	"github.com/victorarias/attn/internal/present"
 	"github.com/victorarias/attn/internal/prompts"
 	"github.com/victorarias/attn/internal/protocol"
@@ -28,9 +29,6 @@ func presentationToProto(p *store.Presentation) protocol.Presentation {
 		CreatedAt:            p.CreatedAt,
 		LatestRoundSeq:       p.LatestRoundSeq,
 		LatestRoundSubmitted: p.LatestRoundSubmitted,
-	}
-	if p.TicketID != nil {
-		out.TicketID = p.TicketID
 	}
 	return out
 }
@@ -176,14 +174,8 @@ func (d *Daemon) handlePresentOpen(conn net.Conn, msg *protocol.PresentOpenMessa
 		}
 		pres = existing
 	} else {
-		var ticketID *string
-		if msg.TicketID != nil && strings.TrimSpace(*msg.TicketID) != "" {
-			t := strings.TrimSpace(*msg.TicketID)
-			ticketID = &t
-		} else if ticket, tErr := d.store.ActiveTicketForSession(sourceSessionID); tErr == nil && ticket != nil {
-			ticketID = protocol.Ptr(ticket.ID)
-		}
-		created, err := d.store.CreatePresentation(sourceSessionID, ticketID, m.Title, m.Kind, m.Frame.Repo, now)
+
+		created, err := d.store.CreatePresentation(sourceSessionID, d.inboxAddressOf(sourceSessionID), m.Title, m.Kind, m.Frame.Repo, now)
 		if err != nil {
 			d.sendError(conn, "present open: "+err.Error())
 			return
@@ -550,38 +542,12 @@ func (d *Daemon) handlePresentSubmitRound(client *wsClient, msg *protocol.Presen
 
 func (d *Daemon) handbackPresentationRound(pres *store.Presentation, seq int, verdict string) {
 	values := prompts.Values{"round": fmt.Sprint(seq), "title": fmt.Sprintf("%q", pres.Title), "presentation_id": pres.ID, "approved": fmt.Sprint(verdict == "approved")}
-	notice := prompts.RenderText("session", "present-feedback", values)
-
-	if pres.TicketID != nil && strings.TrimSpace(*pres.TicketID) != "" {
-		ticketID := strings.TrimSpace(*pres.TicketID)
-		_, err := d.store.AddTicketComment(ticketID, "attn", notice, time.Now())
-		d.afterTicketMutation(ticketID, err)
-		if err != nil {
-			d.logf("present handback: failed to comment on ticket %s: %v", ticketID, err)
-		}
-		return
-	}
-
-	session := d.store.Get(pres.SessionID)
-	if session == nil {
-		d.logf("present handback: session %s is gone; presentation %s remains updated", pres.SessionID, pres.ID)
-		return
-	}
-	delivery, _, err := d.store.EnqueueMaintenancePromptOnce(
-		fmt.Sprintf("present-handback/%s/%d", pres.ID, seq),
-		pres.SessionID,
-		pres.ID,
-		"",
-		prompts.RenderText("session", "present-handback", values),
-		time.Now(),
-	)
+	_, err := d.sendToInbox(inbox.Item{ID: fmt.Sprintf("present-handback/%s/%d", pres.ID, seq), To: pres.To, Kind: inbox.Notice, Source: pres.ID, Text: prompts.RenderText("session", "present-handback", values)})
 	if err != nil {
 		d.logf("present handback: failed to queue presentation %s round %d: %v", pres.ID, seq, err)
 		return
 	}
-	if err := d.deliverAgentMailboxItem(delivery); err != nil {
-		d.logf("present handback: inbox doorbell deferred for session %s: %v", pres.SessionID, err)
-	}
+
 }
 
 func (d *Daemon) handlePresentClose(client *wsClient, msg *protocol.PresentCloseMessage) {

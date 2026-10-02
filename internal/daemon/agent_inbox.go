@@ -7,7 +7,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/victorarias/attn/internal/agentmailbox"
+	"github.com/victorarias/attn/internal/inbox"
 	"github.com/victorarias/attn/internal/prompts"
 	"github.com/victorarias/attn/internal/protocol"
 	"github.com/victorarias/attn/internal/store"
@@ -23,8 +23,29 @@ func (d *Daemon) handleAgentInbox(conn net.Conn, msg *protocol.AgentInboxMessage
 		d.handleAgentInboxBatch(conn, recipient.ID, protocol.Deref(msg.Limit))
 		return
 	}
+	addresses, err := d.inboxAddressesOf(recipient.ID)
+	if err != nil {
+		d.replyPeerMessageError(conn, err)
+		return
+	}
+	messageID := strings.TrimSpace(protocol.Deref(msg.MessageID))
+	stored, err := d.store.PeerMessageRecord(messageID)
+	if err != nil {
+		d.replyPeerMessageError(conn, err)
+		return
+	}
+	if stored.To.SeedID() != "" {
+		holder, _, err := d.inboxRecipient(stored.To)
+		if err != nil {
+			d.replyPeerMessageError(conn, err)
+			return
+		}
+		if holder != nil && holder.ID == recipient.ID {
+			addresses = append(addresses, stored.To)
+		}
+	}
 	record, readNow, err := d.store.ReadPeerMessage(
-		strings.TrimSpace(protocol.Deref(msg.MessageID)), recipient.ID, time.Now(),
+		messageID, recipient.ID, addresses, time.Now(),
 	)
 	if err != nil {
 		d.replyPeerMessageError(conn, err)
@@ -34,23 +55,22 @@ func (d *Daemon) handleAgentInbox(conn net.Conn, msg *protocol.AgentInboxMessage
 		Ok: true, AgentInboxResult: d.peerMessageResult(record),
 	})
 	if readNow {
-		remaining := 0
-		if unread, unreadErr := d.store.HasUnreadAgentMailboxItems(recipient.ID); unreadErr != nil {
-			d.logf("agent inbox remaining check: session=%s err=%v", recipient.ID, unreadErr)
-		} else if unread {
-			remaining = 1
-		}
-		d.noteAgentMailboxRead(recipient.ID, remaining)
+		d.kickInboxAfterCommit(record.To)
 	}
 }
 
 func (d *Daemon) handleAgentInboxBatch(conn net.Conn, recipientSessionID string, limit int) {
 	d.lockGardenRoles()
-	err := d.discardUncoveredSeedBells(recipientSessionID)
-	var deliveries []agentmailbox.Delivery
+	addresses, err := d.inboxAddressesOf(recipientSessionID)
+	for _, address := range addresses {
+		if err = d.discardIneligibleGardenSeedBellsLocked(address); err != nil {
+			break
+		}
+	}
+	var deliveries []store.InboxDelivery
 	var remaining int
 	if err == nil {
-		deliveries, remaining, err = d.store.ReadAgentMailbox(recipientSessionID, limit, time.Now())
+		deliveries, remaining, err = d.store.ReadInbox(addresses, recipientSessionID, limit, time.Now())
 	}
 	d.unlockGardenRoles()
 	if err != nil {
@@ -62,12 +82,12 @@ func (d *Daemon) handleAgentInboxBatch(conn net.Conn, recipientSessionID string,
 	d.noteCrewRestartMailboxRead(deliveries)
 	for _, delivery := range deliveries {
 		item := protocol.AgentInboxItem{
-			ItemID: delivery.Item.ID, Kind: string(delivery.Item.Kind),
+			Address: delivery.Item.To.String(), ItemID: delivery.Item.ID, Kind: string(delivery.Item.Kind),
 			Content: mailboxItemContent(delivery), CreatedAt: delivery.Item.CreatedAt,
 			NotifiedAt: delivery.Item.NotifiedAt, ReadAt: delivery.Item.ReadAt,
 		}
-		if delivery.Item.SourceID != "" {
-			item.SourceID = protocol.Ptr(delivery.Item.SourceID)
+		if delivery.Item.Source != "" {
+			item.SourceID = protocol.Ptr(delivery.Item.Source)
 		}
 		if delivery.Item.Hint != "" {
 			item.Hint = protocol.Ptr(delivery.Item.Hint)
@@ -82,7 +102,7 @@ func (d *Daemon) handleAgentInboxBatch(conn net.Conn, recipientSessionID string,
 		}
 		items = append(items, item)
 	}
-	d.noteAgentMailboxRead(recipientSessionID, remaining)
+	d.kickInboxAfterCommit(addresses...)
 	_ = json.NewEncoder(conn).Encode(protocol.Response{
 		Ok: true,
 		AgentInboxBatchResult: &protocol.AgentInboxBatchResult{
@@ -91,19 +111,19 @@ func (d *Daemon) handleAgentInboxBatch(conn net.Conn, recipientSessionID string,
 	})
 }
 
-func mailboxItemContent(delivery agentmailbox.Delivery) string {
+func mailboxItemContent(delivery store.InboxDelivery) string {
 	switch delivery.Item.Kind {
-	case agentmailbox.KindGardenSeed:
-		return prompts.RenderText("session", "garden-update", prompts.Values{"seed_id": delivery.Item.SourceID, "event_kind": delivery.Item.Hint})
-	case agentmailbox.KindPeerMessage:
+	case inbox.SeedUpdate:
+		return prompts.RenderText("session", "garden-update", prompts.Values{"seed_id": delivery.Item.Source, "event_kind": delivery.Item.Hint})
+	case inbox.PeerMessage:
 		if delivery.Peer != nil {
 			return delivery.Peer.Body
 		}
-	case agentmailbox.KindMaintenancePrompt:
-		return delivery.Item.Prompt
+	case inbox.Notice:
+		return delivery.Item.Text
 	}
-	if delivery.Item.Prompt != "" {
-		return delivery.Item.Prompt
+	if delivery.Item.Text != "" {
+		return delivery.Item.Text
 	}
 	return delivery.Item.Hint
 }
@@ -139,14 +159,21 @@ func (d *Daemon) replyPeerMessageError(conn net.Conn, err error) {
 	}
 }
 
-func (d *Daemon) peerMessageResult(record agentmailbox.PeerRecord) *protocol.AgentPeerMessage {
+func (d *Daemon) peerMessageResult(record inbox.PeerRecord) *protocol.AgentPeerMessage {
 	senderLabel := shortSessionID(record.Message.SenderSessionID)
 	if sender := d.store.Get(record.Message.SenderSessionID); sender != nil {
 		senderLabel = d.sessionOriginName(sender)
 	}
+	target := record.ReadBy
+	if target == "" {
+		target = record.To.SessionID()
+		if holder := d.inboxHolder(record.To); holder != nil {
+			target = holder.ID
+		}
+	}
 	result := &protocol.AgentPeerMessage{
 		MessageID: record.Message.ID, SenderSessionID: record.Message.SenderSessionID,
-		SenderLabel: senderLabel, TargetSessionID: record.RecipientSessionID,
+		SenderLabel: senderLabel, TargetSessionID: target,
 		Content: record.Message.Body, State: protocol.AgentMessageState(record.State()),
 		CreatedAt: record.Message.CreatedAt,
 	}

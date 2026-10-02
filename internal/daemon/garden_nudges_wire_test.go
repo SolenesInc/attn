@@ -272,3 +272,103 @@ func gardenNudgeOneBell(t *testing.T, cli *client.Client, session, seedID, event
 		t.Errorf("%s's inbox holds %q, want one %s bell for %s", session, inboxContents(items), event, seedID)
 	}
 }
+
+func TestASeedBellWakesItsAsleepMemberTenderAndStaysWithTheMember(t *testing.T) {
+	inBubbleWithAgents(t, func(t *testing.T, w *world) {
+		writeCrewCharter(t, w, "trellis")
+		w.restart()
+		cli := w.Client()
+		registerSessions(t, w, cli, "sender", "watcher")
+		seed := plantSeedAs(t, cli, "sender", "review the deployment")
+		if _, err := cli.SeedTransition("", seed, "tend", "", "trellis", false, client.SeedTransitionOptions{}); err != nil {
+			t.Fatal(err)
+		}
+		w.advance(0)
+		first := w.bootBubbleClaude(t, protocol.Deref(crewRosterMember(t, cli, "trellis").BindingSession))
+		first.reply("Ready. <!-- attn:state=idle -->")
+		readInbox(t, cli, first.id, 0)
+		if _, err := cli.CrewHandoff(first.id, "done for now", false, protocol.CrewDayCloseSleep); err != nil {
+			t.Fatal(err)
+		}
+		gardenNudgeWatch(t, cli, "watcher", seed, false)
+		gardenNudgeNote(t, cli, "sender", seed, "the deployment is ready", true)
+		w.advance(0)
+		member := crewRosterMember(t, cli, "trellis")
+		day := w.bootBubbleClaude(t, protocol.Deref(member.BindingSession))
+		day.reply("Ready. <!-- attn:state=idle -->")
+		if rings := day.promptsContaining(inboxDoorbell); rings != 1 {
+			t.Fatalf("rings=%d", rings)
+		}
+		mail := readInbox(t, cli, day.id, 0).Items
+		if len(mail) != 1 || mail[0].Address != "member:trellis" || !strings.Contains(mail[0].Content, seed+" moved: note.added") {
+			t.Fatalf("member inbox=%+v", mail)
+		}
+		watched := readInbox(t, cli, "watcher", 0).Items
+		if len(watched) != 1 || watched[0].Address != "session:watcher" {
+			t.Fatalf("watcher inbox=%+v", watched)
+		}
+		gardenNudgeNote(t, cli, day.id, seed, "my own progress", true)
+		w.advance(0)
+		gardenNudgeInboxIsEmpty(t, cli, day.id, "after its own note")
+	})
+}
+
+func TestAMemberTenderAndItsDayWatchKeepIndependentInboxItems(t *testing.T) {
+	inBubbleWithAgents(t, func(t *testing.T, w *world) {
+		app, day := crewDayInBubble(t, w, map[string]string{"crew.heartbeat_enabled": "false", "crew.autosleep_enabled": "false"})
+		cli := w.Client()
+		registerSessions(t, w, cli, "sender")
+		seed := plantSeedAs(t, cli, "sender", "review the deployment")
+		if _, err := cli.SeedTransition(day.id, seed, "tend", "", "", false, client.SeedTransitionOptions{}); err != nil {
+			t.Fatal(err)
+		}
+		gardenNudgeWatch(t, cli, day.id, seed, false)
+		app.TypeLine(day.id, "finish the current review")
+		gardenNudgeNote(t, cli, "sender", seed, "the deployment is ready", true)
+		mail := readInbox(t, cli, day.id, 0).Items
+		addresses := map[string]bool{}
+		for _, item := range mail {
+			addresses[item.Address] = true
+		}
+		if len(mail) != 2 || !addresses["member:trellis"] || !addresses["session:"+day.id] {
+			t.Fatalf("overlapping subscriptions inbox=%+v", mail)
+		}
+		gardenNudgeNote(t, cli, "sender", seed, "keep the watcher informed", true)
+		if _, err := cli.SeedTransition(day.id, seed, "park", "", "", false, client.SeedTransitionOptions{}); err != nil {
+			t.Fatal(err)
+		}
+		watcherMail := readInbox(t, cli, day.id, 0).Items
+		if len(watcherMail) != 1 || watcherMail[0].Address != "session:"+day.id || !strings.Contains(watcherMail[0].Content, seed+" moved: note.added") {
+			t.Fatalf("watcher inbox after tender parks=%+v", watcherMail)
+		}
+	})
+}
+
+func TestReadingAnEmptyInboxAcknowledgesAWithdrawnSeedRing(t *testing.T) {
+	inBubbleWithAgents(t, func(t *testing.T, w *world) {
+		_, day := crewDayInBubble(t, w, map[string]string{"crew.heartbeat_enabled": "false", "crew.autosleep_enabled": "false"})
+		cli := w.Client()
+		registerSessions(t, w, cli, "sender")
+		seed := plantSeedAs(t, cli, "sender", "review the deployment")
+		if _, err := cli.SeedTransition(day.id, seed, "tend", "", "", false, client.SeedTransitionOptions{}); err != nil {
+			t.Fatal(err)
+		}
+		gardenNudgeNote(t, cli, "sender", seed, "the deployment is ready", true)
+		w.advance(0)
+		if got := day.promptsContaining(inboxDoorbell); got != 1 {
+			t.Fatalf("seed rings=%d", got)
+		}
+		day.reply("Later. <!-- attn:state=idle -->")
+		if _, err := cli.SeedTransition(day.id, seed, "park", "", "", false, client.SeedTransitionOptions{}); err != nil {
+			t.Fatal(err)
+		}
+		if got := readInbox(t, cli, day.id, 0).Items; len(got) != 0 {
+			t.Fatalf("withdrawn inbox=%+v", got)
+		}
+		sendAgentMessage(t, cli, "sender", "trellis", "new work after the inbox check")
+		w.advance(0)
+		if got := day.promptsContaining(inboxDoorbell); got != 2 {
+			t.Fatalf("new work did not ring after empty read: %d", got)
+		}
+	})
+}

@@ -2,10 +2,11 @@ package daemon_test
 
 import (
 	"fmt"
-	"github.com/victorarias/attn/internal/testworld"
 	"strings"
 	"testing"
 	"time"
+
+	"github.com/victorarias/attn/internal/testworld"
 
 	"github.com/victorarias/attn/internal/client"
 	"github.com/victorarias/attn/internal/fakeagent"
@@ -123,8 +124,9 @@ func TestAgentMessageIsReadableByIDOnlyByItsRecipientAndSurvivesARestart(t *test
 		m.ID = recipient
 		m.ResumeSessionID = protocol.Ptr(recipient)
 	})
-	if got := w.Launched(recipient).Prompted(); !strings.Contains(got, inboxDoorbell) {
-		t.Fatalf("after the restart the recipient was prompted with %q, want the doorbell again", got)
+	app.TypeLine(recipient, "what changed?")
+	if got := w.Launched(recipient).Prompted(); got != "what changed?" {
+		t.Fatalf("restart renewed an outstanding ring: %q", got)
 	}
 
 	read, err := cli.AgentInbox(sent.MessageID, recipient)

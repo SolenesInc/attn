@@ -1,0 +1,4 @@
+kind: changed
+area: agents
+change: Inbox items follow crew members and the Chief across sessions, with at most three rings five minutes apart.
+notes: Legacy tickets are retired; work lives in the Garden.

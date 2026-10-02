@@ -311,7 +311,7 @@ export interface RateLimitState {
 }
 
 // Protocol version - must match daemon's ProtocolVersion
-export const PROTOCOL_VERSION = '327';
+export const PROTOCOL_VERSION = '328';
 const MAX_PENDING_ATTACH_OUTPUTS = 512;
 
 const CLIENT_INSTANCE_ID =
@@ -4984,11 +4984,6 @@ export function useDaemonSocket({
     ws.send(JSON.stringify({ cmd: 'workspace_selected', workspace_id: workspaceId }));
   }, []);
 
-  const sendTriggerNudge = useCallback((sessionId: string) => {
-    const ws = wsRef.current;
-    if (!ws || ws.readyState !== WebSocket.OPEN) return;
-    ws.send(JSON.stringify({ cmd: 'trigger_nudge', session_id: sessionId }));
-  }, []);
 
   const sendSettleTurn = useCallback((sessionId: string) => {
     const ws = wsRef.current;
@@ -5463,7 +5458,6 @@ export function useDaemonSocket({
     sendAutoModeEnvSlot,
     sendAutoModeEnvNotes,
     sendBusSetConsumerEnabled,
-    sendTriggerNudge,
     sendSettleTurn,
     sendSnoozeTurn,
     sendWakeTurn,

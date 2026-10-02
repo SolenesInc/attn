@@ -60,3 +60,27 @@ func TestSendingASeedToTheChiefHandsItOverUnlessItChanged(t *testing.T) {
 		}
 	})
 }
+
+func TestAChiefSeedAssignmentStaysWithItsTenderWhenTheChiefRoleTransfers(t *testing.T) {
+	inBubble(t, func(t *testing.T, w *world) {
+		app, cli := w.App(), w.Client()
+		registerSessions(t, w, cli, "chief", "sender", "next-chief")
+		if result := setChiefOfStaff(app, "chief", true); !result.Success {
+			t.Fatal(protocol.Deref(result.Error))
+		}
+		seed := plantSeedAs(t, cli, "sender", "place this work")
+		if _, err := cli.SeedSendToChief("sender", lifeShow(t, cli, seed).Seed, ""); err != nil {
+			t.Fatal(err)
+		}
+		if result := setChiefOfStaff(app, "next-chief", true); !result.Success {
+			t.Fatal(protocol.Deref(result.Error))
+		}
+		if items := readInbox(t, cli, "next-chief", 0).Items; len(items) != 0 {
+			t.Fatalf("new Chief received another session's assignment: %+v", items)
+		}
+		items := readInbox(t, cli, "chief", 0).Items
+		if len(items) != 1 || items[0].Address != "seed:"+seed || !strings.Contains(items[0].Content, "attn seed show "+seed) {
+			t.Fatalf("actual tender assignment=%+v", items)
+		}
+	})
+}

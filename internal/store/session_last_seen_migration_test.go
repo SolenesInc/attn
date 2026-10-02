@@ -17,7 +17,7 @@ func TestMigration155MovesLastSeenStampsToUTC(t *testing.T) {
 	}
 
 	dbPath := filepath.Join(t.TempDir(), "migration-155.db")
-	db, err := OpenDB(dbPath)
+	db, err := openDBAtVersion(dbPath, 161)
 	if err != nil {
 		t.Fatalf("OpenDB setup: %v", err)
 	}
@@ -27,6 +27,7 @@ func TestMigration155MovesLastSeenStampsToUTC(t *testing.T) {
 			t.Fatalf("seed %s: %v", stamp.id, err)
 		}
 	}
+
 	if _, err := db.Exec(`DELETE FROM schema_migrations WHERE version >= 155`); err != nil {
 		t.Fatalf("rewind to schema 154: %v", err)
 	}
@@ -34,7 +35,7 @@ func TestMigration155MovesLastSeenStampsToUTC(t *testing.T) {
 		t.Fatalf("close pre-155 database: %v", err)
 	}
 
-	migrated, err := NewWithDB(dbPath)
+	migrated, err := newStoreAtVersion(dbPath, 161)
 	if err != nil {
 		t.Fatalf("migrate: %v", err)
 	}

@@ -26,8 +26,6 @@ export interface LocalSession {
   endpointStatus?: string;
   chiefOfStaff?: boolean;
   delegatedFromChief?: boolean;
-  ticketUnread?: boolean;
-  nudgeFiresAt?: string;
   autoSettleFiresAt?: string;
   autoSettleHeld?: boolean;
   state_reason?: string;
@@ -117,7 +115,6 @@ export interface SidebarProps {
     nextWorkspaceId?: string;
   }) => void;
   onSelectSession: (id: string) => void;
-  onTriggerNudge?: (id: string) => void;
   onSelectWorkspace: (id: string) => void;
   onSelectTile?: (workspaceId: string, tileId: string) => void;
   onCloseTile?: (workspaceId: string, tileId: string) => void;

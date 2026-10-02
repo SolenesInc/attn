@@ -7,7 +7,7 @@ import (
 	"time"
 )
 
-const ProtocolVersion = "327"
+const ProtocolVersion = "328"
 
 const (
 	ErrorCodeConflict             = "conflict"
@@ -53,16 +53,6 @@ const (
 	CmdDelegationPreferencesHistory          = "delegation_preferences_history"
 	CmdDelegationPreferencesRollback         = "delegation_preferences_rollback"
 	CmdDelegateStatus                        = "delegate_status"
-	CmdSetTicketStatus                       = "set_ticket_status"
-	CmdTicketInbox                           = "ticket_inbox"
-	CmdTicketList                            = "ticket_list"
-	CmdTicketShow                            = "ticket_show"
-	CmdTicketSubscribe                       = "ticket_subscribe"
-	CmdTicketUnsubscribe                     = "ticket_unsubscribe"
-	CmdTicketTake                            = "ticket_take"
-	CmdTicketAttach                          = "ticket_attach"
-	CmdTicketCreate                          = "ticket_create"
-	CmdTicketComment                         = "ticket_comment"
 	CmdDocDefine                             = "doc_define"
 	CmdDocUndefine                           = "doc_undefine"
 	CmdDocCollections                        = "doc_collections"
@@ -161,7 +151,6 @@ const (
 	CmdHeartbeat                             = "heartbeat"
 	CmdSessionSelected                       = "session_selected"
 	CmdWorkspaceSelected                     = "workspace_selected"
-	CmdTriggerNudge                          = "trigger_nudge"
 	CmdSettleTurn                            = "settle_turn"
 	CmdSnoozeTurn                            = "snooze_turn"
 	CmdWakeTurn                              = "wake_turn"
@@ -354,7 +343,6 @@ const (
 	EventCrewSleepResult                 = "crew_sleep_result"
 	EventCrewSetResult                   = "crew_set_result"
 	EventCrewRestartResult               = "crew_restart_result"
-	EventTicketAttachResult              = "ticket_attach_result"
 	EventGetPresentationsResult          = "get_presentations_result"
 	EventGetPresentationRoundResult      = "get_presentation_round_result"
 	EventPresentSubmitRoundResult        = "present_submit_round_result"
@@ -693,62 +681,6 @@ func ParseMessage(data []byte) (string, interface{}, error) {
 		}
 		return peek.Cmd, &msg, nil
 
-	case CmdSetTicketStatus:
-		var msg SetTicketStatusMessage
-		if err := json.Unmarshal(data, &msg); err != nil {
-			return "", nil, err
-		}
-		return peek.Cmd, &msg, nil
-
-	case CmdTicketInbox:
-		var msg TicketInboxMessage
-		if err := json.Unmarshal(data, &msg); err != nil {
-			return "", nil, err
-		}
-		return peek.Cmd, &msg, nil
-
-	case CmdTicketList:
-		var msg TicketListMessage
-		if err := json.Unmarshal(data, &msg); err != nil {
-			return "", nil, err
-		}
-		return peek.Cmd, &msg, nil
-
-	case CmdTicketShow:
-		var msg TicketShowMessage
-		if err := json.Unmarshal(data, &msg); err != nil {
-			return "", nil, err
-		}
-		return peek.Cmd, &msg, nil
-
-	case CmdTicketSubscribe:
-		var msg TicketSubscribeMessage
-		if err := json.Unmarshal(data, &msg); err != nil {
-			return "", nil, err
-		}
-		return peek.Cmd, &msg, nil
-
-	case CmdTicketUnsubscribe:
-		var msg TicketUnsubscribeMessage
-		if err := json.Unmarshal(data, &msg); err != nil {
-			return "", nil, err
-		}
-		return peek.Cmd, &msg, nil
-
-	case CmdTicketTake:
-		var msg TicketTakeMessage
-		if err := json.Unmarshal(data, &msg); err != nil {
-			return "", nil, err
-		}
-		return peek.Cmd, &msg, nil
-
-	case CmdTicketAttach:
-		var msg TicketAttachMessage
-		if err := json.Unmarshal(data, &msg); err != nil {
-			return "", nil, err
-		}
-		return peek.Cmd, &msg, nil
-
 	case CmdDocDefine:
 		var msg DocDefineMessage
 		if err := json.Unmarshal(data, &msg); err != nil {
@@ -849,20 +781,6 @@ func ParseMessage(data []byte) (string, interface{}, error) {
 
 	case CmdAutoModeDenials:
 		var msg AutoModeDenialsMessage
-		if err := json.Unmarshal(data, &msg); err != nil {
-			return "", nil, err
-		}
-		return peek.Cmd, &msg, nil
-
-	case CmdTicketCreate:
-		var msg TicketCreateMessage
-		if err := json.Unmarshal(data, &msg); err != nil {
-			return "", nil, err
-		}
-		return peek.Cmd, &msg, nil
-
-	case CmdTicketComment:
-		var msg TicketCommentMessage
 		if err := json.Unmarshal(data, &msg); err != nil {
 			return "", nil, err
 		}
@@ -1479,13 +1397,6 @@ func ParseMessage(data []byte) (string, interface{}, error) {
 
 	case CmdWorkspaceSelected:
 		var msg WorkspaceSelectedMessage
-		if err := json.Unmarshal(data, &msg); err != nil {
-			return "", nil, err
-		}
-		return peek.Cmd, &msg, nil
-
-	case CmdTriggerNudge:
-		var msg TriggerNudgeMessage
 		if err := json.Unmarshal(data, &msg); err != nil {
 			return "", nil, err
 		}

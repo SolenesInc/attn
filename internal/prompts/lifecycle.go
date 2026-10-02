@@ -21,17 +21,6 @@ func lifecycleRecipients() []Recipient {
 				template("session-title.generate", "content/session-title/generate.md",
 					TextField("conversation", "Conversation")))}},
 
-		{ID: "ticket-reconciler",
-			Description: "Ticket reconciler",
-			Events: []Event{On("reconcile", "headless_prompt", "internal/daemon/ticket_reconcile.go: buildTicketReconcilePrompt",
-				template("ticket-reconciler.reconcile", "content/ticket-reconciler/reconcile.md",
-					TextField("ticket_id", "Ticket id"),
-					TextField("title", "Title"),
-					TextField("brief", "Brief"),
-					TextField("status", "Status"),
-					TextField("close_context", "Close context"),
-					TextField("conversation", "Conversation")))}},
-
 		{ID: "workflow-agent",
 			Description: "Workflow agent",
 			Events: []Event{On("run", "headless_prompt", "User task followed by the structured-result contract or its retry.", Join("", Input(brief), Choose(Enabled(FlagField("retry", "A previous attempt produced no valid result.")),
@@ -41,9 +30,4 @@ func lifecycleRecipients() []Recipient {
 				On("retry-instruction", "user_message", "internal/workflow/driveragent.go: correctiveInstruction",
 					template("workflow-agent.retry-instruction", "content/workflow-agent/retry-instruction.md"))}},
 	}
-}
-
-func sessionNudges() []Event {
-	return []Event{On("legacy-ticket-nudge", "user_message", "internal/daemon/ticket_notify.go: ticketNudgePrompt",
-		template("session.legacy-ticket-nudge", "content/session/legacy-ticket-nudge.md"))}
 }

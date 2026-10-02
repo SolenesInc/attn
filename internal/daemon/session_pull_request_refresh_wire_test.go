@@ -19,6 +19,7 @@ import (
 	"github.com/victorarias/attn/internal/client"
 	"github.com/victorarias/attn/internal/protocol"
 	"github.com/victorarias/attn/internal/prreadiness"
+	"github.com/victorarias/attn/internal/testworld"
 )
 
 type refreshedPullRequest struct {
@@ -28,6 +29,7 @@ type refreshedPullRequest struct {
 	reviews                    []string
 	reviewsFail, snapshotFails bool
 	readinessFails             bool
+	readinessGate              <-chan struct{}
 	keepAlive                  bool
 	codexThumbsUp              bool
 	limitedUntil               time.Time
@@ -89,6 +91,9 @@ func (gh *refreshedPullRequest) serve(rw http.ResponseWriter, r *http.Request) {
 		answer = reviews
 	case strings.Contains(string(body), "PullRequestReadiness"):
 		gh.readinessReads++
+		if gh.readinessGate != nil {
+			<-gh.readinessGate
+		}
 		if gh.readinessFails {
 			rw.WriteHeader(http.StatusBadGateway)
 			return
@@ -499,4 +504,178 @@ func TestAWatchRetriesAReusedConnectionResetBeforeReportingDelay(t *testing.T) {
 			})
 		}
 	}
+}
+
+func TestAMembersPullRequestWatchSurvivesItsCreatingDayAndCanBeStoppedFromTheNext(t *testing.T) {
+	gh := serveRefreshedPullRequest(t)
+	inBubbleWithAgents(t, func(t *testing.T, w *world) {
+		writeCrewCharter(t, w, "trellis")
+		w.restart()
+		cli := w.Client()
+		first := w.bootBubbleClaude(t, wakeCrew(t, cli, "trellis", "").SessionID)
+		first.reply("Ready. <!-- attn:state=idle -->")
+		watchPullRequestOn(t, cli, first.id, protocol.PullRequestWatchModeGreen)
+		w.advance(time.Second)
+		readInbox(t, cli, first.id, 0)
+		if _, err := cli.CrewHandoff(first.id, "next day please", false, protocol.CrewDayCloseSleep); err != nil {
+			t.Fatal(err)
+		}
+		if err := cli.Unregister(first.id); err != nil {
+			t.Fatal(err)
+		}
+		gh.set(func(gh *refreshedPullRequest) { gh.readinessFails = true })
+		w.advance(protocol.HeatHotInterval)
+		nextID := protocol.Deref(crewRosterMember(t, cli, "trellis").BindingSession)
+		if nextID == "" || nextID == first.id {
+			t.Fatalf("watch did not wake next day: %q", nextID)
+		}
+		next := w.bootBubbleClaude(t, nextID)
+		next.reply("Ready. <!-- attn:state=idle -->")
+		items := readInbox(t, cli, next.id, 0).Items
+		if len(items) != 1 || items[0].Address != "member:trellis" || !strings.Contains(inboxContents(items), "monitoring is delayed") {
+			t.Fatalf("next day inbox=%+v", items)
+		}
+
+		snapshot := []protocol.Session{queriedSession(t, cli, next.id)}
+		found := false
+		for _, session := range snapshot {
+			if session.ID == next.id {
+				for _, pr := range session.PullRequests {
+					if pr.Number == 71 && protocol.Deref(pr.Watching) && protocol.Deref(pr.WatchHealth) == "delayed" {
+						found = true
+					}
+				}
+			}
+		}
+		if !found {
+			t.Fatalf("successor cannot inspect inherited watch: %+v", snapshot)
+		}
+		observer := w.App()
+		gh.set(func(gh *refreshedPullRequest) { gh.readinessFails = false })
+		w.advance(protocol.HeatHotInterval)
+		testworld.AwaitSession(observer, next.id, func(session protocol.Session) bool {
+			for _, pr := range session.PullRequests {
+				if pr.Number == 71 && protocol.Deref(pr.WatchHealth) == "current" {
+					return true
+				}
+			}
+			return false
+		})
+		if err := cli.UnwatchSessionPullRequest(next.id, shopPull(71)); err != nil {
+			t.Fatal(err)
+		}
+		gh.set(func(gh *refreshedPullRequest) { gh.readinessFails = true })
+		w.advance(protocol.HeatHotInterval)
+		if items := readInbox(t, cli, next.id, 0).Items; len(items) != 0 {
+			t.Fatalf("mail after unwatch=%+v", items)
+		}
+	})
+}
+
+func TestAMemberCanForgetItsWatchFromTheNextDay(t *testing.T) {
+	gh := serveRefreshedPullRequest(t)
+	inBubbleWithAgents(t, func(t *testing.T, w *world) {
+		writeCrewCharter(t, w, "trellis")
+		w.restart()
+		cli := w.Client()
+		first := w.bootBubbleClaude(t, wakeCrew(t, cli, "trellis", "").SessionID)
+		first.reply("Ready. <!-- attn:state=idle -->")
+		watchPullRequestOn(t, cli, first.id, protocol.PullRequestWatchModeGreen)
+		w.advance(time.Second)
+		readInbox(t, cli, first.id, 0)
+		if _, err := cli.CrewHandoff(first.id, "next day", false, protocol.CrewDayCloseSleep); err != nil {
+			t.Fatal(err)
+		}
+		if err := cli.Unregister(first.id); err != nil {
+			t.Fatal(err)
+		}
+		next := w.bootBubbleClaude(t, wakeCrew(t, cli, "trellis", "").SessionID)
+		next.reply("Ready. <!-- attn:state=idle -->")
+		if err := cli.ForgetSessionPullRequest(next.id, shopPull(71)); err != nil {
+			t.Fatal(err)
+		}
+		if err := cli.UnwatchSessionPullRequest(next.id, shopPull(71)); err == nil {
+			t.Fatal("forgotten watch remains")
+		}
+		gh.set(func(gh *refreshedPullRequest) { gh.readinessFails = true })
+		w.advance(protocol.HeatHotInterval)
+		if items := readInbox(t, cli, next.id, 0).Items; len(items) != 0 {
+			t.Fatalf("forgotten watch sent mail=%+v", items)
+		}
+	})
+}
+
+func TestAPullRequestWatchCreatedBeforeTheChiefRoleStaysVisibleAndStoppable(t *testing.T) {
+	gh := serveRefreshedPullRequest(t)
+	inBubble(t, func(t *testing.T, w *world) {
+		app, cli := w.App(), w.Client()
+		registerSessions(t, w, cli, "watcher")
+		watchPullRequestOn(t, cli, "watcher", protocol.PullRequestWatchModeGreen)
+		w.advance(time.Second)
+		readInbox(t, cli, "watcher", 0)
+		if result := setChiefOfStaff(app, "watcher", true); !result.Success {
+			t.Fatalf("Chief=%+v", result)
+		}
+		synctest.Wait()
+		session := queriedSession(t, cli, "watcher")
+		if len(session.PullRequests) != 1 || !protocol.Deref(session.PullRequests[0].Watching) {
+			t.Fatalf("hidden watch=%+v", session.PullRequests)
+		}
+		watchPullRequestOn(t, cli, "watcher", protocol.PullRequestWatchModeGreen)
+		gh.set(func(gh *refreshedPullRequest) { gh.readinessFails = true })
+		w.advance(protocol.HeatHotInterval)
+		items := readInbox(t, cli, "watcher", 0).Items
+		if len(items) != 1 || items[0].Address != "session:watcher" {
+			t.Fatalf("rewatch duplicated or rewrote the watch: %+v", items)
+		}
+		if err := cli.UnwatchSessionPullRequest("watcher", shopPull(71)); err != nil {
+			t.Fatal(err)
+		}
+		session = queriedSession(t, cli, "watcher")
+		if len(session.PullRequests) != 1 || protocol.Deref(session.PullRequests[0].Watching) {
+			t.Fatalf("watch after unwatch=%+v", session.PullRequests)
+		}
+		w.advance(protocol.HeatHotInterval)
+		if items := readInbox(t, cli, "watcher", 0).Items; len(items) != 0 {
+			t.Fatalf("mail after unwatch=%+v", items)
+		}
+		watchPullRequestOn(t, cli, "watcher", protocol.PullRequestWatchModeGreen)
+		if err := cli.ForgetSessionPullRequest("watcher", shopPull(71)); err != nil {
+			t.Fatal(err)
+		}
+		if session := queriedSession(t, cli, "watcher"); len(session.PullRequests) != 0 {
+			t.Fatalf("forgotten watch=%+v", session.PullRequests)
+		}
+	})
+}
+
+func TestANextDayWatchModeChangeClearsThePreviousReadiness(t *testing.T) {
+	gh := serveRefreshedPullRequest(t)
+	gate := make(chan struct{})
+	inBubbleWithAgents(t, func(t *testing.T, w *world) {
+		writeCrewCharter(t, w, "trellis")
+		w.restart()
+		cli := w.Client()
+		first := w.bootBubbleClaude(t, wakeCrew(t, cli, "trellis", "").SessionID)
+		first.reply("Ready. <!-- attn:state=idle -->")
+		watchPullRequestOn(t, cli, first.id, protocol.PullRequestWatchModeGreen)
+		w.advance(time.Second)
+		if pr := onlyPullRequest(t, cli, first.id); protocol.Deref(pr.ReadinessState) != "ready" {
+			t.Fatalf("initial readiness=%+v", pr)
+		}
+		readInbox(t, cli, first.id, 0)
+		if _, err := cli.CrewHandoff(first.id, "next day", false, protocol.CrewDayCloseSleep); err != nil {
+			t.Fatal(err)
+		}
+		next := w.bootBubbleClaude(t, wakeCrew(t, cli, "trellis", "").SessionID)
+		gh.set(func(gh *refreshedPullRequest) { gh.readinessGate = gate })
+		defer close(gate)
+		if err := cli.WatchSessionPullRequest(next.id, shopPull(71), protocol.PullRequestWatchModeCodex, ""); err != nil {
+			t.Fatal(err)
+		}
+		pr := onlyPullRequest(t, cli, next.id)
+		if protocol.Deref(pr.WatchMode) != protocol.PullRequestWatchModeCodex || pr.ReadinessState != nil || pr.WatchHealth != nil {
+			t.Fatalf("mode change retained old readiness: %+v", pr)
+		}
+	})
 }

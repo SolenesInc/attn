@@ -55,13 +55,6 @@ func (s *Store) transitionSessionConversation(sessionID, nativeID, transcriptPat
 		&current.TranscriptPath,
 	)
 	if err == sql.ErrNoRows {
-		if _, err := tx.Exec(
-			`UPDATE tickets SET resume_session_id = ? WHERE assignee = ?`,
-			nativeID,
-			sessionID,
-		); err != nil {
-			return false, fmt.Errorf("mirror closed-session conversation binding for %s: %w", sessionID, err)
-		}
 		if err := tx.Commit(); err != nil {
 			return false, fmt.Errorf("commit closed-session conversation binding for %s: %w", sessionID, err)
 		}
@@ -106,13 +99,6 @@ func (s *Store) transitionSessionConversation(sessionID, nativeID, transcriptPat
 	}
 	if _, err := tx.Exec(query, nativeID, transcriptPath, sessionID); err != nil {
 		return false, fmt.Errorf("update conversation binding for session %s: %w", sessionID, err)
-	}
-	if _, err := tx.Exec(
-		`UPDATE tickets SET resume_session_id = ? WHERE assignee = ?`,
-		nativeID,
-		sessionID,
-	); err != nil {
-		return false, fmt.Errorf("mirror conversation binding for session %s: %w", sessionID, err)
 	}
 	if err := tx.Commit(); err != nil {
 		return false, fmt.Errorf("commit conversation transition for session %s: %w", sessionID, err)

@@ -33,19 +33,7 @@ func (d *Daemon) transferCrewBinding(memberID, from, to string) error {
 	if err != nil {
 		return err
 	}
-	if err := d.migrateCrewTicketIdentity(memberID, from, to); err != nil {
-		_, rollbackErr := d.updateCrewMember(memberID, func(member *crew.Member) (bool, error) {
-			if member.BindingSession != to {
-				return false, nil
-			}
-			member.BindingSession = from
-			return true, nil
-		})
-		if rollbackErr != nil {
-			return errors.Join(err, fmt.Errorf("restore %s's binding after ticket migration refusal: %w", crew.DisplayName(memberID), rollbackErr))
-		}
-		return err
-	}
+
 	d.invalidateGardenSeedParties("crew handoff")
 	d.publishFact(FactCrewBound, memberID, nil)
 	d.logf("crew: %s's binding moved from session %s to %s", crew.DisplayName(memberID), from, to)

@@ -28,7 +28,7 @@ func chronologicalRaggedIDs() []string {
 
 func TestASnoozeWrittenInTheOldEncodingIsStillWakeable(t *testing.T) {
 	dbPath := filepath.Join(t.TempDir(), "test.db")
-	s, err := newSeededStore(dbPath)
+	s, err := newStoreAtVersion(dbPath, 161)
 	if err != nil {
 		t.Fatalf("NewWithDB: %v", err)
 	}
@@ -40,6 +40,7 @@ func TestASnoozeWrittenInTheOldEncodingIsStillWakeable(t *testing.T) {
 		until.Format(time.RFC3339Nano)); err != nil {
 		t.Fatalf("plant old snooze stamp: %v", err)
 	}
+
 	if _, err := s.db.Exec(`DELETE FROM schema_migrations WHERE version >= 95`); err != nil {
 		t.Fatalf("unrecord migration 95: %v", err)
 	}
@@ -48,7 +49,7 @@ func TestASnoozeWrittenInTheOldEncodingIsStillWakeable(t *testing.T) {
 		t.Fatalf("the planted stamp already matches; this test would pass without the migration")
 	}
 
-	if err := migrateDB(s.db, dbPath); err != nil {
+	if err := migrateDBThrough(s.db, dbPath, 161); err != nil {
 		t.Fatalf("migrateDB: %v", err)
 	}
 	if got := s.SnoozedSessions()["s1"]; !got.Equal(until) {
@@ -61,7 +62,7 @@ func TestASnoozeWrittenInTheOldEncodingIsStillWakeable(t *testing.T) {
 
 func TestMigration95RewritesTurnCursorAndListingStampsThatDoNotSort(t *testing.T) {
 	dbPath := filepath.Join(t.TempDir(), "test.db")
-	s, err := newSeededStore(dbPath)
+	s, err := newStoreAtVersion(dbPath, 161)
 	if err != nil {
 		t.Fatalf("NewWithDB: %v", err)
 	}
@@ -92,6 +93,7 @@ func TestMigration95RewritesTurnCursorAndListingStampsThatDoNotSort(t *testing.T
 		`UPDATE delegation_operations SET updated_at = 'not a timestamp' WHERE request_id = ?`, "r5"); err != nil {
 		t.Fatalf("plant unreadable stamp: %v", err)
 	}
+
 	if _, err := s.db.Exec(`DELETE FROM schema_migrations WHERE version >= 95`); err != nil {
 		t.Fatalf("unrecord migration 95: %v", err)
 	}
@@ -100,16 +102,17 @@ func TestMigration95RewritesTurnCursorAndListingStampsThatDoNotSort(t *testing.T
 		t.Fatalf("the planted turn stamps already reopen correctly; this test would pass without the migration")
 	}
 
-	if err := migrateDB(s.db, dbPath); err != nil {
+	if err := migrateDBThrough(s.db, dbPath, 161); err != nil {
 		t.Fatalf("migrateDB: %v", err)
 	}
 	assertMigration95Applied(t, s)
 
 	before := stampDigest(t, s)
+
 	if _, err := s.db.Exec(`DELETE FROM schema_migrations WHERE version >= 95`); err != nil {
 		t.Fatalf("unrecord migration 95 again: %v", err)
 	}
-	if err := migrateDB(s.db, dbPath); err != nil {
+	if err := migrateDBThrough(s.db, dbPath, 161); err != nil {
 		t.Fatalf("re-run migrateDB: %v", err)
 	}
 	if after := stampDigest(t, s); after != before {

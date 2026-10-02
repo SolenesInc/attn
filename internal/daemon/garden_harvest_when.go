@@ -134,7 +134,7 @@ func (d *Daemon) armHarvestWhenMerged(
 		}
 
 		d.lockGardenRoles()
-		written, wireNotes, err := d.writeSeedMoveWithNotes(*schema, next, doc.Rev, occurrences, notes)
+		written, _, err := d.writeSeedMoveWithNotes(*schema, next, doc.Rev, occurrences, notes)
 		if err == nil {
 			err = d.discardAllIneligibleGardenSeedBellsLocked()
 		}
@@ -144,12 +144,6 @@ func (d *Daemon) armHarvestWhenMerged(
 				continue
 			}
 			return garden.Seed{}, docstore.Document{}, err
-		}
-		for _, note := range wireNotes {
-			d.mirrorSeedNoteOntoTicket(sessionID, seed.ID, note.Body)
-		}
-		if seed.Status == garden.StatusGrowing {
-			d.mirrorSeedMoveOntoTicket(sessionID, seed.ID, garden.VerbPark, "")
 		}
 		return d.settleFreshlyArmed(next, written, sessionID)
 	}
@@ -209,7 +203,6 @@ func (d *Daemon) fulfilHarvestWhen(
 	}
 	var harvested garden.Seed
 	var doc docstore.Document
-	var notes seedTransitionNotes
 	const attempts = 3
 	for attempt := range attempts {
 		current, read, err := d.readSeed(seed.ID)
@@ -219,7 +212,7 @@ func (d *Daemon) fulfilHarvestWhen(
 		if err != nil {
 			return garden.Seed{}, docstore.Document{}, err
 		}
-		harvested, doc, notes, err = d.applySeedTransitionDetailedAsAtRevision(
+		harvested, doc, _, err = d.applySeedTransitionDetailedAsAtRevision(
 			current.ID, garden.VerbHarvest, ask, "", d.sessionExists, read.Rev)
 		if errors.Is(err, errSeedRevisionMoved) && attempt+1 < attempts {
 			continue
@@ -229,10 +222,7 @@ func (d *Daemon) fulfilHarvestWhen(
 		}
 		break
 	}
-	for _, note := range notes.all() {
-		d.mirrorSeedNoteOntoTicket("", seed.ID, note.Body)
-	}
-	d.mirrorSeedMoveOntoTicket("", seed.ID, garden.VerbHarvest, reason)
+
 	return harvested, doc, nil
 }
 
@@ -291,7 +281,7 @@ func (d *Daemon) clearHarvestWhenRequested(
 	if err != nil {
 		return garden.Seed{}, docstore.Document{}, err
 	}
-	d.mirrorSeedNoteOntoTicket(sessionID, seed.ID, harvestWhenClearedNote)
+
 	return seed, doc, nil
 }
 

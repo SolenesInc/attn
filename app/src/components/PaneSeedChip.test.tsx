@@ -49,10 +49,10 @@ describe('PaneSeedChip', () => {
   });
 
   it('falls back to the reporting seed id when the seed is not in the pushed list', async () => {
-    await openAgent([], { seed_id: 's-late11', ticket_unread: true });
+    await openAgent([], { seed_id: 's-late11' });
 
     expect(within(chip()).getByText('s-late11')).toBeInTheDocument();
-    expect(screen.getByTestId('seed-chip-unread-s1')).toBeInTheDocument();
+    expect(screen.queryByTestId('seed-chip-unread-s1')).not.toBeInTheDocument();
   });
 
   it('shows the plot with its progress and pins the popover on click', async () => {

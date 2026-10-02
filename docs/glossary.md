@@ -9,8 +9,14 @@
 - Run: one prompt and response.
 - Parked run: a finished response whose background work is still running.
 - Quiet window: time after the user's last keystroke when automated input must wait.
-- Agent mailbox: notifications addressed to an agent.
-- Inbox doorbell: a prompt telling an agent it has unread mailbox items.
+- Inbox: the items waiting for an address; agents read theirs with `attn agent inbox`.
+- Item: anything an agent reads from its inbox: peer message, seed update, user message, PR watch update, notice.
+- Address: who an item is for, a role (crew member, Chief or seed tender) or a session. A seed address follows its current or next tender. Unread role items reach whichever session holds the role next.
+- Send: save an item for an address; attn delivers it.
+- Ring: one prompt telling the session at an address it has unread items; it covers every unread item.
+- Attempt: one ring, preceded by a wake when the addressed member is asleep.
+- Delivered: read from the inbox.
+- Withdraw: a sender removes its unread item because it no longer applies.
 - Peer message: a message from one agent to another.
 - Turn: attention owed to an agent. Viewing the agent does not settle it.
 - Auto-settle: closes a turn after the user's response and a period of uninterrupted agent work.
@@ -36,7 +42,7 @@
 - Session repository: the repository where a session ran.
 - Launch prompt: the opening message sent to a new agent.
 - Session pull request: a PR an agent opened during a session.
-- [PR watch](../README.md#watching-pull-requests): a durable, mode-configured subscription delivering PR readiness and feedback updates to a session's agent mailbox.
+- [PR watch](../README.md#watching-pull-requests): a durable, mode-configured subscription delivering PR readiness and feedback updates to an inbox address; a role watch follows its next holder.
   A reset on a reused GitHub connection gets one retry on a fresh connection
   before the watch reports that monitoring is delayed.
 - PR inbox: pull requests waiting on the user.
@@ -106,7 +112,7 @@ intended it for the next turn.
 - Wake: starts a crew member's day.
 - Sleep request: asks a crew member to file a handoff and stop.
 - Restart request: asks the current day to file its handoff and nap. It completes when the successor starts; an asleep member wakes directly.
-- Wake limit: the cap on a crew member's autonomous starts.
+- Wake limit: the cap on a crew member's delivery wakes. Every delivery wake counts; manual wakes remain uncharged.
 - Sleep: a crew member has no active day.
 - Nap: replaces the current day using its handoff.
 - Heartbeat: refreshes a crew member's working context.

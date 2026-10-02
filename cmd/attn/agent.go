@@ -4,16 +4,17 @@ import (
 	"errors"
 	"flag"
 	"fmt"
-	"github.com/victorarias/attn/internal/prompts"
 	"io"
 	"os"
 	"sort"
 	"strings"
 	"time"
 
-	"github.com/victorarias/attn/internal/agentmailbox"
+	"github.com/victorarias/attn/internal/prompts"
+
 	"github.com/victorarias/attn/internal/client"
 	"github.com/victorarias/attn/internal/crew"
+	"github.com/victorarias/attn/internal/inbox"
 	"github.com/victorarias/attn/internal/protocol"
 )
 
@@ -508,7 +509,7 @@ type agentInboxArgs struct {
 
 func parseAgentInboxArgs(args []string, envSessionID string) (agentInboxArgs, error) {
 	const usage = "usage: attn agent inbox [message-id] [--limit <count>] [--session <id>] [--json]"
-	parsed := agentInboxArgs{limit: agentmailbox.DefaultInboxLimit}
+	parsed := agentInboxArgs{limit: inbox.DefaultInboxLimit}
 	if len(args) > 0 && !strings.HasPrefix(args[0], "-") {
 		parsed.messageID = strings.TrimSpace(args[0])
 		if parsed.messageID == "" {
@@ -519,7 +520,7 @@ func parseAgentInboxArgs(args []string, envSessionID string) (agentInboxArgs, er
 	fs := flag.NewFlagSet("agent inbox", flag.ContinueOnError)
 	fs.SetOutput(io.Discard)
 	sessionID := fs.String("session", "", "authorized session id (defaults to ATTN_SESSION_ID)")
-	fs.IntVar(&parsed.limit, "limit", agentmailbox.DefaultInboxLimit, "maximum unread items to return")
+	fs.IntVar(&parsed.limit, "limit", inbox.DefaultInboxLimit, "maximum unread items to return")
 	fs.BoolVar(&parsed.json, "json", false, "print the machine result as JSON")
 	if err := fs.Parse(args); err != nil {
 		return agentInboxArgs{}, err
@@ -533,8 +534,8 @@ func parseAgentInboxArgs(args []string, envSessionID string) (agentInboxArgs, er
 			return agentInboxArgs{}, errors.New(usage)
 		}
 	}
-	if parsed.limit < 1 || parsed.limit > agentmailbox.MaxInboxLimit {
-		return agentInboxArgs{}, fmt.Errorf("--limit must be between 1 and %d", agentmailbox.MaxInboxLimit)
+	if parsed.limit < 1 || parsed.limit > inbox.MaxInboxLimit {
+		return agentInboxArgs{}, fmt.Errorf("--limit must be between 1 and %d", inbox.MaxInboxLimit)
 	}
 	limitSet := false
 	fs.Visit(func(f *flag.Flag) {
@@ -653,8 +654,8 @@ func printAgentInboxBatch(w io.Writer, result *protocol.AgentInboxBatchResult) {
 				content += " " + sourceID
 			}
 		}
-		if item.Kind != string(agentmailbox.KindPeerMessage) {
-			if item.Kind == string(agentmailbox.KindMaintenancePrompt) {
+		if item.Kind != string(inbox.PeerMessage) {
+			if item.Kind == string(inbox.Notice) {
 				fmt.Fprintln(w, content)
 			} else {
 				fmt.Fprintln(w, prompts.RenderText("session", "inbox-item", prompts.Values{"content": content}))
@@ -703,12 +704,12 @@ commands:
         agent never notices. The target is a crew name, full session id, or
         unique session id prefix. A sleeping crew member stays asleep.
   msg <session-or-member-or-seed> "text" [--source-session <id>] [--json]
-        send a session or crew member a message. The body stays in the mailbox;
+        send a session, crew member or seed a message. The body stays in the inbox;
         the recipient gets a generic inbox notification. A target that cannot take
         input safely keeps it queued. The result says queued, notified, or refused.
         A sleeping member wakes before the notification is placed. The sender defaults to this session
         (ATTN_SESSION_ID); pass --source-session when running outside one.
-        A seed id reaches whoever is tending it.
+        A seed id reaches its current or next tender, waiting when none is reachable.
         A message that starts with - goes after --, as: agent msg -- <target> "-text"
   close <session-or-seed> -m "reason" [--source-session <id>] [--json]
         close a session for good. A session may close itself and the sessions it

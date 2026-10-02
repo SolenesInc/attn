@@ -7,6 +7,7 @@ import (
 
 	"github.com/victorarias/attn/internal/garden"
 	"github.com/victorarias/attn/internal/hub"
+	"github.com/victorarias/attn/internal/inbox"
 	"github.com/victorarias/attn/internal/protocol"
 )
 
@@ -72,7 +73,7 @@ func watchSeed(t *testing.T, d *Daemon, sessionID, seedID string, unwatch bool) 
 
 func queuedSeedBells(t *testing.T, d *Daemon, sessionID string) []string {
 	t.Helper()
-	messages, err := d.store.UnreadAgentMailboxDeliveries(sessionID)
+	messages, err := d.store.UnreadInboxDeliveries(inbox.ToSession(sessionID))
 	if err != nil {
 		t.Fatalf("queued bells for %s: %v", sessionID, err)
 	}

@@ -1,15 +1,13 @@
 package daemon
 
 import (
-	"errors"
 	"fmt"
 	"sort"
 	"strings"
-	"time"
 
 	"github.com/google/uuid"
+	"github.com/victorarias/attn/internal/inbox"
 	"github.com/victorarias/attn/internal/protocol"
-	"github.com/victorarias/attn/internal/store"
 )
 
 const instanceRoleChiefOfStaff = "chief_of_staff"
@@ -44,10 +42,7 @@ func (d *Daemon) delegatedFromChiefSessionIDs() map[string]bool {
 	if d.store == nil {
 		return nil
 	}
-	delegated := d.store.TicketAssigneesOwnedByRole(store.TicketRoleChiefOfStaff)
-	if delegated == nil {
-		delegated = map[string]bool{}
-	}
+	delegated := map[string]bool{}
 	for sessionID := range d.gardenDispatchesFromChief() {
 		delegated[sessionID] = true
 	}
@@ -88,34 +83,16 @@ func (d *Daemon) nudgeChiefOfStaff(attemptKey, prompt string) bool {
 	if d.store == nil {
 		return false
 	}
-	sessionID := d.chiefOfStaffSessionID()
-	if sessionID == "" {
-		return false
-	}
-	session := d.store.Get(sessionID)
-	if session == nil {
-		return false
-	}
-	if d.chiefOfStaffSessionID() != sessionID {
-		return false
-	}
 	itemID := "chief-inbox/" + strings.TrimSpace(attemptKey)
 	if strings.TrimSpace(attemptKey) == "" {
 		itemID = "chief-inbox/" + uuid.NewString()
 	}
-	delivery, _, err := d.store.EnqueueMaintenancePromptOnce(
-		itemID, sessionID, "notebook-inbox", "", prompt, time.Now(),
-	)
+	receipt, err := d.sendToInbox(inbox.Item{ID: itemID, To: inbox.ToChief(), Kind: inbox.Notice, Source: "notebook-inbox", Text: prompt})
 	if err != nil {
-		d.logf("chief nudge: queue failed for %s: %v", sessionID, err)
+		d.logf("chief inbox: queue failed: %v", err)
 		return false
 	}
-	err = d.deliverAgentMailboxItem(delivery)
-	if err != nil && !errors.Is(err, errAgentMailboxDoorbellOutstanding) && !errors.Is(err, errAgentMailboxDoorbellInFlight) {
-		d.logf("chief nudge: doorbell deferred for %s: %v", sessionID, err)
-		return false
-	}
-	return true
+	return receipt.Rang || receipt.Outstanding
 }
 
 func (d *Daemon) maybeAssignChiefOnSpawn(sessionID, agent string, requested bool, existingSession *protocol.Session) bool {
@@ -232,30 +209,28 @@ func (d *Daemon) handleSetChiefOfStaff(client *wsClient, msg *protocol.SetChiefO
 	}
 	abortPrepared = false
 
-	d.publishFact(FactSessionChiefRoleChanged, sessionID, nil)
+	var reloadIDs []string
 	if roleChanged {
-		newChiefSessionID := ""
-		if msg.ChiefOfStaff {
-			newChiefSessionID = sessionID
-		}
-		d.retargetChiefTicketDelivery(previousSessionID, newChiefSessionID)
 		if !preparedSessions[sessionID] {
-			d.life.Go("reloadSessionAgent", func() { d.reloadSessionAgent(sessionID) })
+			reloadIDs = append(reloadIDs, sessionID)
 		}
 		if msg.ChiefOfStaff && previousSessionID != "" && !preparedSessions[previousSessionID] {
-			d.life.Go("reloadSessionAgent", func() { d.reloadSessionAgent(previousSessionID) })
+			reloadIDs = append(reloadIDs, previousSessionID)
 		}
 	}
-	d.sendChiefOfStaffResult(client, sessionID, msg.ChiefOfStaff, previousSessionID, reloadErr)
-}
+	if len(reloadIDs) == 0 {
+		d.publishFact(FactSessionChiefRoleChanged, sessionID, nil)
+	} else {
+		d.life.Go("reloadChiefGuidance", func() {
+			for _, id := range reloadIDs {
+				d.reloadSessionAgent(id)
+			}
+			// The completed role change kicks the new holder’s inbox.
+			d.publishFact(FactSessionChiefRoleChanged, sessionID, nil)
+		})
+	}
 
-func (d *Daemon) retargetChiefTicketDelivery(previousSessionID, newSessionID string) {
-	if previousSessionID != "" {
-		d.refreshTicketUnread(previousSessionID)
-	}
-	if newSessionID != "" {
-		d.notifyUnreadTicketSession(newSessionID, time.Now())
-	}
+	d.sendChiefOfStaffResult(client, sessionID, msg.ChiefOfStaff, previousSessionID, reloadErr)
 }
 
 func (d *Daemon) sendChiefOfStaffResult(

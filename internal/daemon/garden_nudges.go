@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/victorarias/attn/internal/garden"
+	"github.com/victorarias/attn/internal/inbox"
 	"github.com/victorarias/attn/internal/protocol"
 	"github.com/victorarias/attn/internal/store"
 )
@@ -184,7 +185,7 @@ func (d *Daemon) seedWatchCoverage(sessionID, seedID string) ([]string, error) {
 }
 
 func (d *Daemon) discardUncoveredSeedBells(sessionID string) error {
-	return d.discardIneligibleGardenSeedBellsLocked(sessionID)
+	return d.discardIneligibleGardenSeedBellsLocked(inbox.ToSession(sessionID))
 }
 
 func (d *Daemon) consumeSeedBell(sessionID, seedID string) {
@@ -193,18 +194,29 @@ func (d *Daemon) consumeSeedBell(sessionID, seedID string) {
 		return
 	}
 	d.lockGardenRoles()
-	err := d.discardIneligibleGardenSeedBellsLocked(sessionID)
-	var consumed bool
-	var remaining int
+	err := d.discardIneligibleGardenSeedBellsLocked(inbox.ToSession(sessionID))
+	var consumed []inbox.Address
 	if err == nil {
-		consumed, remaining, err = d.store.ReadGardenSeedMailboxItems(sessionID, seedID, time.Now())
+		for _, address := range d.inboxRoleAddresses(sessionID) {
+			if err = d.discardIneligibleGardenSeedBellsLocked(address); err != nil {
+				break
+			}
+			var read bool
+			read, err = d.store.ReadGardenSeedInboxItems(address, sessionID, seedID, time.Now())
+			if read {
+				consumed = append(consumed, address)
+			}
+			if err != nil {
+				break
+			}
+		}
 	}
 	d.unlockGardenRoles()
 	if err != nil {
 		d.logf("garden bell: consuming session=%s seed=%s: %v", sessionID, seedID, err)
 		return
 	}
-	if consumed {
-		d.noteAgentMailboxRead(sessionID, remaining)
+	if len(consumed) > 0 {
+		d.kickInboxAfterCommit(consumed...)
 	}
 }

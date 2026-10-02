@@ -14,7 +14,7 @@ import (
 
 var (
 	ErrDelegationRequestConflict = errors.New("delegation request id already has different inputs")
-	ErrTicketDelegationReserved  = errors.New("ticket already has a delegation being prepared")
+	ErrSeedDelegationReserved    = errors.New("seed already has a delegation being prepared")
 )
 
 type DelegationOperationRecord struct {
@@ -38,15 +38,15 @@ type DelegationHandoverSnapshot struct {
 	TenderMember  string
 }
 
-func (s *Store) ClaimDelegationOperation(requestID, operationID, sessionID, chiefSessionID, ticketID, requestJSON string, now time.Time) (*DelegationOperationRecord, bool, error) {
-	return s.ClaimDelegationOperationWithPreferences(requestID, operationID, sessionID, chiefSessionID, ticketID, requestJSON, "", now)
+func (s *Store) ClaimDelegationOperation(requestID, operationID, sessionID, chiefSessionID, seedID, requestJSON string, now time.Time) (*DelegationOperationRecord, bool, error) {
+	return s.ClaimDelegationOperationWithPreferences(requestID, operationID, sessionID, chiefSessionID, seedID, requestJSON, "", now)
 }
 
-func (s *Store) ClaimDelegationOperationWithPreferences(requestID, operationID, sessionID, chiefSessionID, ticketID, requestJSON, resolvedPreferences string, now time.Time) (*DelegationOperationRecord, bool, error) {
-	return s.ClaimDelegationOperationWithHandoverSnapshot(requestID, operationID, sessionID, chiefSessionID, ticketID, requestJSON, resolvedPreferences, "", "", DelegationHandoverSnapshot{}, now)
+func (s *Store) ClaimDelegationOperationWithPreferences(requestID, operationID, sessionID, chiefSessionID, seedID, requestJSON, resolvedPreferences string, now time.Time) (*DelegationOperationRecord, bool, error) {
+	return s.ClaimDelegationOperationWithHandoverSnapshot(requestID, operationID, sessionID, chiefSessionID, seedID, requestJSON, resolvedPreferences, "", "", DelegationHandoverSnapshot{}, now)
 }
 
-func (s *Store) ClaimDelegationOperationWithHandoverSnapshot(requestID, operationID, sessionID, chiefSessionID, ticketID, requestJSON, resolvedPreferences, baseCommit, parentSeedID string, handover DelegationHandoverSnapshot, now time.Time) (*DelegationOperationRecord, bool, error) {
+func (s *Store) ClaimDelegationOperationWithHandoverSnapshot(requestID, operationID, sessionID, chiefSessionID, seedID, requestJSON, resolvedPreferences, baseCommit, parentSeedID string, handover DelegationHandoverSnapshot, now time.Time) (*DelegationOperationRecord, bool, error) {
 	if strings.HasPrefix(requestID, "op-") {
 		return nil, false, fmt.Errorf("request id uses reserved operation prefix op-")
 	}
@@ -82,11 +82,11 @@ func (s *Store) ClaimDelegationOperationWithHandoverSnapshot(requestID, operatio
 		 base_commit, parent_seed_id, handover_seed_rev, handover_tender_session, handover_tender_member, created_at, updated_at)
 		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
 		ON CONFLICT(request_id) DO NOTHING`, requestID, operationID, requestJSON,
-		string(protocol.DelegationOperationStateAccepted), "accepted by daemon", sessionID, chiefSessionID, ticketID, resolvedPreferences,
+		string(protocol.DelegationOperationStateAccepted), "accepted by daemon", sessionID, chiefSessionID, seedID, resolvedPreferences,
 		baseCommit, parentSeedID, handover.SeedRev, handover.TenderSession, handover.TenderMember, stamp, stamp)
 	if err != nil {
-		if ticketID != "" && strings.Contains(err.Error(), "delegation_operations.ticket_id") {
-			return nil, false, fmt.Errorf("%w: %s", ErrTicketDelegationReserved, ticketID)
+		if seedID != "" && strings.Contains(err.Error(), "delegation_operations.ticket_id") {
+			return nil, false, fmt.Errorf("%w: %s", ErrSeedDelegationReserved, seedID)
 		}
 		return nil, false, fmt.Errorf("claim delegation operation: %w", err)
 	}
@@ -151,14 +151,14 @@ func (s *Store) SessionDelegationRoles() (map[string]*protocol.SessionDelegation
 
 func getDelegationOperation(db *sql.DB, id string) (*DelegationOperationRecord, error) {
 	var rec DelegationOperationRecord
-	var state, workspaceID, ticketID, directory, branch, baseCommit, handoffNoteID, worktreePath, worktreeToken, chiefSessionID, resultJSON, errorText, failureCode string
+	var state, workspaceID, seedID, directory, branch, baseCommit, handoffNoteID, worktreePath, worktreeToken, chiefSessionID, resultJSON, errorText, failureCode string
 	var worktreeOwned int
 	err := db.QueryRow(`SELECT request_id, operation_id, request_json, state, progress,
 		session_id, workspace_id, ticket_id, directory, branch, base_commit, parent_seed_id, handoff_note_id, worktree_path, worktree_owned, worktree_token, chief_session_id,
 		handover_seed_rev, handover_tender_session, handover_tender_member, result_json, error, failure_code, resolved_preferences, created_at, updated_at
 		FROM delegation_operations WHERE request_id = ? OR operation_id = ?`, id, id).Scan(
 		&rec.Operation.RequestID, &rec.Operation.OperationID, &rec.RequestJSON, &state,
-		&rec.Operation.Progress, &rec.Operation.SessionID, &workspaceID, &ticketID,
+		&rec.Operation.Progress, &rec.Operation.SessionID, &workspaceID, &seedID,
 		&directory, &branch, &baseCommit, &rec.ParentSeedID, &handoffNoteID, &worktreePath, &worktreeOwned, &worktreeToken, &chiefSessionID,
 		&rec.HandoverSeedRev, &rec.HandoverTenderSession, &rec.HandoverTenderMember,
 		&resultJSON, &errorText, &failureCode, &rec.ResolvedPreferences, &rec.Operation.CreatedAt, &rec.Operation.UpdatedAt)
@@ -174,11 +174,9 @@ func getDelegationOperation(db *sql.DB, id string) (*DelegationOperationRecord, 
 	if workspaceID != "" {
 		rec.Operation.WorkspaceID = protocol.Ptr(workspaceID)
 	}
-	if ticketID != "" {
+	if seedID != "" {
 		if delegationRequestUsesSeed(rec.RequestJSON) {
-			rec.Operation.SeedID = protocol.Ptr(ticketID)
-		} else {
-			rec.Operation.TicketID = protocol.Ptr(ticketID)
+			rec.Operation.SeedID = protocol.Ptr(seedID)
 		}
 	}
 	if directory != "" {
@@ -245,7 +243,7 @@ func (s *Store) MarkDelegationWorktreeOwned(id, path, token string, now time.Tim
 	return err
 }
 
-func (s *Store) UpdateDelegationOperation(id string, state protocol.DelegationOperationState, progress, workspaceID, ticketID, worktreePath string, result *protocol.DelegateResult, operationErr error, now time.Time) error {
+func (s *Store) UpdateDelegationOperation(id string, state protocol.DelegationOperationState, progress, workspaceID, seedID, worktreePath string, result *protocol.DelegateResult, operationErr error, now time.Time) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	if s.db == nil {
@@ -271,8 +269,8 @@ func (s *Store) UpdateDelegationOperation(id string, state protocol.DelegationOp
 		failureCode = delegationFailureCode(errorText)
 	}
 	if result != nil {
-		if ticketID == "" {
-			ticketID = result.SeedID
+		if seedID == "" {
+			seedID = result.SeedID
 		}
 		resultDirectory = result.Directory
 		resultBranch = protocol.Deref(result.Branch)
@@ -284,7 +282,7 @@ func (s *Store) UpdateDelegationOperation(id string, state protocol.DelegationOp
 		branch = CASE WHEN ? = '' THEN branch ELSE ? END,
 		worktree_path = CASE WHEN ? = '' THEN worktree_path ELSE ? END,
 		result_json = ?, error = ?, failure_code = ?, updated_at = ? WHERE request_id = ? OR operation_id = ?`,
-		string(state), progress, workspaceID, workspaceID, ticketID, ticketID,
+		string(state), progress, workspaceID, workspaceID, seedID, seedID,
 		resultDirectory, resultDirectory, resultBranch, resultBranch,
 		worktreePath, worktreePath, resultJSON, errorText, failureCode, stamp, id, id)
 	return err

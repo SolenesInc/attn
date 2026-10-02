@@ -159,8 +159,8 @@ func TestACompletedSeedDelegationReportsItsSeedAndTheWorktreeRoot(t *testing.T) 
 	if root == "" || filepath.Join(root, "web") != result.Result.Directory {
 		t.Errorf("the operation reports worktree %q for a session working in %q; want the worktree root", root, result.Result.Directory)
 	}
-	if protocol.Deref(operation.SeedID) != seed.ID || operation.TicketID != nil {
-		t.Errorf("the operation names seed %q and ticket %q; want only seed %s", protocol.Deref(operation.SeedID), protocol.Deref(operation.TicketID), seed.ID)
+	if protocol.Deref(operation.SeedID) != seed.ID {
+		t.Errorf("the operation names seed %q; want only seed %s", protocol.Deref(operation.SeedID), seed.ID)
 	}
 }
 

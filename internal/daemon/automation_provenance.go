@@ -42,42 +42,29 @@ func automationProvenance(record store.AutomationProvenanceRecord) (*protocol.Au
 	return provenance, nil
 }
 
-func (d *Daemon) latestAutomationProvenance() (map[string]*protocol.AutomationProvenance, map[string]*protocol.AutomationProvenance) {
+func (d *Daemon) latestAutomationProvenance() map[string]*protocol.AutomationProvenance {
 	bySession := make(map[string]*protocol.AutomationProvenance)
-	byTicket := make(map[string]*protocol.AutomationProvenance)
 	records, err := d.store.ListLatestAutomationProvenanceRecords()
 	if err != nil {
 		d.logf("list automation provenance: %v", err)
-		return bySession, byTicket
+		return bySession
 	}
 	for _, record := range records {
-		_, sessionSeen := bySession[record.SessionID]
-		_, ticketSeen := byTicket[record.TicketID]
-		if sessionSeen && ticketSeen {
+		if record.SessionID == "" || bySession[record.SessionID] != nil {
 			continue
 		}
-		provenance, buildErr := automationProvenance(record)
-		if buildErr != nil {
-			d.logf("automation provenance: %v", buildErr)
+		provenance, err := automationProvenance(record)
+		if err != nil {
+			d.logf("automation provenance: %v", err)
 		}
-		if record.SessionID != "" && !sessionSeen {
-			bySession[record.SessionID] = provenance
-		}
-		if record.TicketID != "" && !ticketSeen {
-			byTicket[record.TicketID] = provenance
-		}
+		bySession[record.SessionID] = provenance
 	}
-	return bySession, byTicket
+	return bySession
 }
 
 func (d *Daemon) automationProvenanceForSession(sessionID string) *protocol.AutomationProvenance {
 	record, err := d.store.GetLatestAutomationProvenanceRecordForSession(sessionID)
 	return d.automationProvenanceFromRecord("session", sessionID, record, err)
-}
-
-func (d *Daemon) automationProvenanceForTicket(ticketID string) *protocol.AutomationProvenance {
-	record, err := d.store.GetLatestAutomationProvenanceRecordForTicket(ticketID)
-	return d.automationProvenanceFromRecord("ticket", ticketID, record, err)
 }
 
 func (d *Daemon) automationProvenanceFromRecord(kind, id string, record *store.AutomationProvenanceRecord, err error) *protocol.AutomationProvenance {

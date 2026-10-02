@@ -1,6 +1,6 @@
 // To parse this data:
 //
-//   import { Convert, ActivityStatusMessage, ActivityStatusResult, ActivityStatusSession, AddEndpointMessage, AgentCloseMessage, AgentCloseResult, AgentCloseRule, AgentInboxBatchResult, AgentInboxItem, AgentInboxMessage, AgentMessageState, AgentMsgMessage, AgentMsgResult, AgentMsgStatus, AgentMsgStatusMessage, AgentPeekExit, AgentPeekMessage, AgentPeekResult, AgentPeekScreen, AgentPeerMessage, ApprovePRMessage, AttachBlock, AttachPolicy, AttachResultMessage, AttachSessionMessage, AttachSnapshot, AuthorState, AuthorsUpdatedMessage, AutoModeConfigInfo, AutoModeConfigResult, AutoModeConfigResultMessage, AutoModeDenialInfo, AutoModeDenialsMessage, AutoModeDenialsResult, AutoModeDiscardMessage, AutoModeDiscardResultMessage, AutoModeEnvNotesMessage, AutoModeEnvResult, AutoModeEnvSetResultMessage, AutoModeEnvSlotMessage, AutoModeEnvironmentInfo, AutoModeEnvironmentSlot, AutoModeEnvironmentSlotValue, AutoModeGetMessage, AutoModeHostAddMessage, AutoModeHostRemoveMessage, AutoModeLegacyDismissMessage, AutoModeNetworkInfo, AutoModePolicySetMessage, AutoModePresetInfo, AutoModePromoteMessage, AutoModePromoteResultMessage, AutoModeProposalInfo, AutoModeProposeMessage, AutoModeProposeResult, AutoModeRuleAddMessage, AutoModeRuleInfo, AutoModeRuleRemoveMessage, AutoModeShowMessage, AutoModeShowResult, AutoModeStateChangedMessage, AutoModeStateResultMessage, AutomationApplyMessage, AutomationApplyResultMessage, AutomationCleanupMessage, AutomationCleanupResultMessage, AutomationDefinitionGetMessage, AutomationDefinitionResultMessage, AutomationDefinitionSummary, AutomationDefinitionsGetMessage, AutomationDefinitionsResultMessage, AutomationDeleteMessage, AutomationDeleteResultMessage, AutomationProvenance, AutomationRunMessage, AutomationRunResultMessage, AutomationRunSummary, AutomationRunsGetMessage, AutomationRunsResultMessage, AutomationSetEnabledMessage, AutomationSetEnabledResultMessage, AutomationValidateMessage, AutomationValidateResultMessage, AutomationsChangedMessage, BootstrapEndpointMessage, Branch, BranchChangedMessage, BranchesResultMessage, BrowseDirectoryMessage, BrowseDirectoryResultMessage, BrowserControlMessage, BrowserControlRequestMessage, BrowserControlResponseMessage, BrowserControlResultMessage, BuiltinDelegationRole, BusConsumerStatus, BusHealthEntry, BusProducerStatus, BusSetConsumerEnabledMessage, BusSetConsumerEnabledResultMessage, BusStatusGetMessage, BusStatusResultMessage, CancelCountdownMessage, ChiefOfStaffResultMessage, ClearSessionActivityMessage, ClearWarningsMessage, ClientEvictionNoticeMessage, ClientHelloMessage, CollapseRepoMessage, CommandErrorMessage, CreateWorktreeFromBranchMessage, CreateWorktreeMessage, CreateWorktreeResultMessage, CrewCharterDocument, CrewCharterGetMessage, CrewCharterGetResult, CrewCharterGetResultMessage, CrewCharterSetMessage, CrewCharterSetResult, CrewCharterSetResultMessage, CrewDayClose, CrewHandoffDocument, CrewHandoffGetMessage, CrewHandoffGetResult, CrewHandoffGetResultMessage, CrewHandoffMessage, CrewHandoffResult, CrewHandoffSummary, CrewHandoffsGetMessage, CrewHandoffsGetResult, CrewHandoffsGetResultMessage, CrewListMessage, CrewListResult, CrewMember, CrewPrimeMessage, CrewPrimeResult, CrewRestart, CrewRestartMessage, CrewRestartResult, CrewRestartResultMessage, CrewRestartState, CrewSetMessage, CrewSetResult, CrewSetResultMessage, CrewSleepMessage, CrewSleepResult, CrewSleepResultMessage, CrewUpdatedMessage, CrewWakeMessage, CrewWakeResult, CrewWakeResultMessage, DaemonWarning, DelegateAssignment, DelegateAssignmentKind, DelegateCheckout, DelegateCheckoutKind, DelegateHandover, DelegateMessage, DelegateResult, DelegateResultMessage, DelegateStatusMessage, DelegateWorktreeRequest, DelegationChoice, DelegationFailure, DelegationFallback, DelegationHarness, DelegationModel, DelegationModelsMessage, DelegationModelsResultMessage, DelegationOperation, DelegationOperationMessage, DelegationOperationState, DelegationPreferences, DelegationPreferencesChangedMessage, DelegationPreferencesCommitMessage, DelegationPreferencesGetMessage, DelegationPreferencesHistoryMessage, DelegationPreferencesHistoryResult, DelegationPreferencesOrigin, DelegationPreferencesResultMessage, DelegationPreferencesRevision, DelegationPreferencesRollbackMessage, DelegationPreferencesSaveMessage, DelegationPreferencesShowMessage, DelegationRole, DelegationRolesMessage, DelegationRolesResult, DelegationSelection, DeleteWorktreeMessage, DeleteWorktreeResultMessage, DetachSessionMessage, DirectoryEntry, DispatchWorkState, DocCollectionsMessage, DocCollectionsResult, DocCountMessage, DocCountResult, DocDefineMessage, DocDefineResult, DocDeleteMessage, DocDeleteResult, DocGetMessage, DocGetResult, DocPutMessage, DocPutResult, DocQueryMessage, DocQueryResult, DocSubscribeMessage, DocSubscribeResult, DocSubscriptionDeliveryMessage, DocSubscriptionEndedMessage, DocUndefineMessage, DocUndefineResult, DocUnsubscribeMessage, DocumentCollectionSchema, DocumentConflict, DocumentFieldSpec, DocumentFilter, DocumentQuery, DocumentRevision, DocumentSort, EndpointActionResultMessage, EndpointCapabilities, EndpointInfo, EndpointStatusChangedMessage, EndpointsUpdatedMessage, EnsureRepoMessage, EnsureRepoResultMessage, EvidenceExcerpt, ExternalProcess, FetchPRDetailsMessage, FetchPRDetailsResultMessage, FetchRemotesMessage, FetchRemotesResultMessage, FileActivity, FileDiffResultMessage, FilesEditedMessage, FSChangedMessage, FSDeleteMessage, FSDeleteResult, FSDeleteResultMessage, FSEntry, FSExistsMessage, FSExistsResult, FSExistsResultMessage, FSIndexMessage, FSIndexResultMessage, FSListMessage, FSListResultMessage, FSReadAssetMessage, FSReadAssetResult, FSReadAssetResultMessage, FSReadMessage, FSReadResult, FSReadResultMessage, FSRenameMessage, FSRenameResult, FSRenameResultMessage, FSUnwatchMessage, FSUnwatchResultMessage, FSWatchMessage, FSWatchResultMessage, FSWriteMessage, FSWriteResult, FSWriteResultMessage, GardenReview, GardenReviewEvidence, GardenReviewItem, GardenReviewRecipe, GardenReviewRun, GardenReviewUpdatedMessage, GardenSeedsUpdatedMessage, GetDefaultBranchMessage, GetDefaultBranchResultMessage, GetFileDiffMessage, GetKittyImageMessage, GetPresentationRoundMessage, GetPresentationRoundResultMessage, GetPresentationsMessage, GetPresentationsResultMessage, GetRecentLocationsMessage, GetRepoInfoMessage, GetRepoInfoResultMessage, GetScreenSnapshotMessage, GetScreenSnapshotResultMessage, GetSettingsMessage, GitFileChange, GitHubHostsUpdatedMessage, GitOperation, GitOperationFinishedMessage, GitOperationKind, GitOperationStartedMessage, GitOperationStatus, GitStatusUpdateMessage, GuardianSelection, HeartbeatMessage, HeatState, HookCompactionMessage, HookNotificationMessage, HookStopFailureMessage, InitialStateMessage, InjectTestPRMessage, InjectTestSessionMessage, InspectPathMessage, InspectPathResultMessage, InstallBundledPluginMessage, InstallPluginMessage, JournalAppendMessage, JournalAppendResult, KeptConversation, KeptConversationDeletedBy, KeptConversationForgetMessage, KeptConversationForgetResultEvent, KeptConversationKeepMessage, KeptConversationKeepResultEvent, KeptConversationListMessage, KeptConversationListResult, KeptConversationListResultEvent, KeptConversationRow, KeptConversationSeed, KeptConversationsChangedEvent, KillSessionMessage, KittyImageResultMessage, KittyPlacement, KittyPlacementsMessage, ListBranchesMessage, ListEndpointsMessage, ListPluginsMessage, ListRemoteBranchesMessage, ListRemoteBranchesResultMessage, ListWorktreesMessage, MarkdownAnnotation, MarkdownAnnotationAnchor, MarkdownAnnotationsClearMessage, MarkdownAnnotationsClearResultMessage, MarkdownAnnotationsGetMessage, MarkdownAnnotationsGetResultMessage, MarkdownAnnotationsSaveMessage, MarkdownAnnotationsSaveResultMessage, MarkdownAnnotationsSubmitMessage, MarkdownAnnotationsSubmitResultMessage, MergePRMessage, ModelCapabilitySupport, MuteAuthorMessage, MutePRMessage, MuteRepoMessage, MuteWorkspaceMessage, NotebookBacklinksMessage, NotebookBacklinksResultMessage, NotebookChangedMessage, NotebookEntry, NotebookGuideMessage, NotebookGuideResult, NotebookListMessage, NotebookListResultMessage, NotebookReadMessage, NotebookReadResult, NotebookReadResultMessage, NotebookSendToChiefMessage, NotebookSendToChiefResult, NotebookSendToChiefResultMessage, NotebookWriteMessage, NotebookWriteResult, NotebookWriteResultMessage, Notification, NotificationAction, NotificationListMessage, NotificationListResultMessage, NotificationMarkReadMessage, NotificationMarkReadResultMessage, NotificationSeverity, NotificationsUpdatedMessage, OpenBrowserMessage, OpenMarkdownMessage, OpenMarkdownResultMessage, OpenSeedMessage, OpenSeedResultMessage, OpenSentFilesMessage, PR, PRActionResultMessage, PRRole, PRVisitedMessage, PRsUpdatedMessage, PathInspection, PinSessionMessage, PinWorkspaceMessage, PluginActionResultMessage, PluginInfo, PluginIssue, PluginsUpdatedMessage, PresentAnnotation, PresentCloseMessage, PresentCloseResultMessage, PresentCommentInput, PresentFeedbackMessage, PresentFeedbackResult, PresentFile, PresentManifestView, PresentOpenMessage, PresentOpenResult, PresentSubmitRoundMessage, PresentSubmitRoundResultMessage, Presentation, PresentationAddedMessage, PresentationComment, PresentationRound, PresentationUpdatedMessage, PtyDesyncMessage, PtyInputMessage, PtyInputProbeResultMessage, PtyOutputMessage, PtyResizeMessage, PtyResizedMessage, PullRequestCreatedMessage, PullRequestForgetMessage, PullRequestProvenance, PullRequestUnwatchMessage, PullRequestUnwatchResultMessage, PullRequestWatchMessage, PullRequestWatchMode, PullRequestWatchResultMessage, QueryAuthorsMessage, QueryMessage, QueryPRsMessage, QueryReposMessage, RateLimitedMessage, RecentFilesMessage, RecentFilesResultMessage, RecentLocation, RecentLocationsResultMessage, RefreshPRsMessage, RefreshPRsResultMessage, RegisterMessage, RegisterWorkspaceMessage, ReloadSessionMessage, ReloadSessionResultMessage, RemoveEndpointMessage, RemovePluginMessage, RenameResultMessage, RenameSessionMessage, RenameWorkspaceMessage, RepoInfo, RepoState, ReposUpdatedMessage, Response, ReviewComment, RuntimeRespawnedMessage, Seed, SeedArtifact, SeedArtifactReference, SeedArtifactTargetMessage, SeedArtifactTargetResult, SeedArtifactTargetResultMessage, SeedArtifactTransferMessage, SeedArtifactTransferResult, SeedArtifactTransferResultMessage, SeedContinuation, SeedDocument, SeedDocumentGetMessage, SeedDocumentGetResultMessage, SeedEdge, SeedEditMessage, SeedEditResult, SeedHandoverRequest, SeedHarvestCondition, SeedHarvestWhenMerged, SeedLinkMessage, SeedLinkResult, SeedListMessage, SeedListResult, SeedNote, SeedNoteMessage, SeedNoteResult, SeedNoteResultMessage, SeedNotesMessage, SeedNotesResult, SeedPlantMessage, SeedPlantResult, SeedPlotChild, SeedPlotMessage, SeedPlotProgress, SeedPlotResult, SeedReadyMessage, SeedReadyResult, SeedRelation, SeedResumeMessage, SeedResumeResultMessage, SeedReviewActionContext, SeedReviewCancelMessage, SeedReviewDraftMessage, SeedReviewDraftResultMessage, SeedReviewKeepMessage, SeedReviewResult, SeedReviewResultMessage, SeedReviewRetryMessage, SeedReviewShowMessage, SeedReviewStartMessage, SeedSearchHit, SeedSearchMessage, SeedSearchResult, SeedSendToChiefMessage, SeedSendToChiefResult, SeedSendToChiefResultMessage, SeedShowMessage, SeedShowResult, SeedTransitionMessage, SeedTransitionResult, SeedTransitionResultMessage, SeedVar, SeedWatchMessage, SeedWatchResult, Session, SessionAnnotation, SessionAnnotationsClearMessage, SessionAnnotationsClearResultMessage, SessionAnnotationsGetMessage, SessionAnnotationsGetResultMessage, SessionAnnotationsSaveMessage, SessionAnnotationsSaveResultMessage, SessionAnnotationsSubmitMessage, SessionAnnotationsSubmitResultMessage, SessionCloseResultMessage, SessionClosedMessage, SessionContextWindowCapResultMessage, SessionDelegationRole, SessionExitedMessage, SessionInstructionsMessage, SessionInstructionsResult, SessionLedgerEntry, SessionLedgerFacet, SessionLedgerFacets, SessionListMessage, SessionListResult, SessionListResultMessage, SessionMessage, SessionMessageWindowStatus, SessionMessagesChangedMessage, SessionMessagesGetMessage, SessionMessagesGetResultMessage, SessionPullRequest, SessionRegisteredMessage, SessionReopen, SessionReopenAction, SessionReopenEntry, SessionReopenMessage, SessionReopenResult, SessionReopenResultMessage, SessionSelectedMessage, SessionShowMessage, SessionShowResult, SessionShowResultMessage, SessionState, SessionStateChangedMessage, SessionTranscriptEvent, SessionTranscriptMessage, SessionTranscriptResult, SessionUnregisteredMessage, SessionUsage, SessionUsageModel, SessionsUpdatedMessage, SetChiefOfStaffMessage, SetClientPresenceMessage, SetEndpointRemoteWebMessage, SetPluginPriorityMessage, SetSessionContextWindowCapMessage, SetSessionResumeIDMessage, SetSettingMessage, SetTerminalThemeMessage, SetTicketStatusMessage, SetWorkspaceRankMessage, SettingsUpdatedMessage, SettleTurnMessage, SnoozeTurnMessage, SpawnResultMessage, SpawnSessionMessage, StateExplainEntry, StateExplainMessage, StateExplainResult, StateMessage, StopBackgroundTask, StopMessage, StoredDocument, SubscribeGitStatusMessage, SupportInputTrace, SupportRuntimeEvidence, SupportSnapshotMessage, SupportSnapshotResultMessage, Task, TaskListMessage, TaskListResultMessage, TaskRetryMessage, TaskRetryResultMessage, TasksChangedMessage, TerminalPointerActivityMessage, Ticket, TicketActivity, TicketActivityKind, TicketArtifact, TicketAttachFile, TicketAttachMessage, TicketAttachResult, TicketAttachResultMessage, TicketCommentMessage, TicketCommentResult, TicketCreateMessage, TicketCreateResult, TicketEvent, TicketEventBundle, TicketEventKind, TicketInboxMessage, TicketInboxMode, TicketInboxResult, TicketListMessage, TicketListResult, TicketShowMessage, TicketShowResult, TicketStatus, TicketStatusResult, TicketSubscribeMessage, TicketSubscribeResult, TicketTakeMessage, TicketTakeResult, TicketUnsubscribeMessage, TicketUnsubscribeResult, TriggerNudgeMessage, UninstallPluginMessage, UnregisterMessage, UnregisterWorkspaceMessage, UnsubscribeGitStatusMessage, UpdateEndpointMessage, WakeTurnMessage, WebSocketEvent, WorkflowActionResultMessage, WorkflowAgentCall, WorkflowAgentCallStatus, WorkflowCallUpsertMessage, WorkflowRun, WorkflowRunCancelMessage, WorkflowRunGetMessage, WorkflowRunListMessage, WorkflowRunStatus, WorkflowRunUpdatedMessage, WorkflowRunUpsertMessage, Workspace, WorkspaceLayout, WorkspaceLayoutActionResultMessage, WorkspaceLayoutAddSessionPaneMessage, WorkspaceLayoutClosePaneMessage, WorkspaceLayoutDockEdge, WorkspaceLayoutDockTileMessage, WorkspaceLayoutFocusPaneMessage, WorkspaceLayoutGetMessage, WorkspaceLayoutMessage, WorkspaceLayoutMoveLeafMessage, WorkspaceLayoutMoveLeafToNewWorkspaceMessage, WorkspaceLayoutMoveLeafToWorkspaceMessage, WorkspaceLayoutPane, WorkspaceLayoutPaneKind, WorkspaceLayoutPaneStatus, WorkspaceLayoutRenamePaneMessage, WorkspaceLayoutSetSplitRatioMessage, WorkspaceLayoutSplitDirection, WorkspaceLayoutUndockTileMessage, WorkspaceLayoutUpdateTileMessage, WorkspaceLayoutUpdatedMessage, WorkspaceRegisteredMessage, WorkspaceSelectedMessage, WorkspaceStateChangedMessage, WorkspaceStatus, WorkspaceTileContentGetMessage, WorkspaceTileContentMessage, WorkspaceUnregisteredMessage, Worktree, WorktreeCreatedEvent, WorktreeDeletedEvent, WorktreeKeepMessage, WorktreeKeepResult, WorktreeKeepResultEvent, WorktreeListMessage, WorktreeListResult, WorktreeListResultEvent, WorktreeRefreshMessage, WorktreeRefreshResult, WorktreeRefreshResultEvent, WorktreeRepository, WorktreeStateChangedEvent, WorktreeSweepEntry, WorktreeSweepLogMessage, WorktreeSweepLogResult, WorktreeSweepLogResultEvent, WorktreeSweptEvent, WorktreesUpdatedMessage } from "./generated";
+//   import { Convert, ActivityStatusMessage, ActivityStatusResult, ActivityStatusSession, AddEndpointMessage, AgentCloseMessage, AgentCloseResult, AgentCloseRule, AgentInboxBatchResult, AgentInboxItem, AgentInboxMessage, AgentMessageState, AgentMsgMessage, AgentMsgResult, AgentMsgStatus, AgentMsgStatusMessage, AgentPeekExit, AgentPeekMessage, AgentPeekResult, AgentPeekScreen, AgentPeerMessage, ApprovePRMessage, AttachBlock, AttachPolicy, AttachResultMessage, AttachSessionMessage, AttachSnapshot, AuthorState, AuthorsUpdatedMessage, AutoModeConfigInfo, AutoModeConfigResult, AutoModeConfigResultMessage, AutoModeDenialInfo, AutoModeDenialsMessage, AutoModeDenialsResult, AutoModeDiscardMessage, AutoModeDiscardResultMessage, AutoModeEnvNotesMessage, AutoModeEnvResult, AutoModeEnvSetResultMessage, AutoModeEnvSlotMessage, AutoModeEnvironmentInfo, AutoModeEnvironmentSlot, AutoModeEnvironmentSlotValue, AutoModeGetMessage, AutoModeHostAddMessage, AutoModeHostRemoveMessage, AutoModeLegacyDismissMessage, AutoModeNetworkInfo, AutoModePolicySetMessage, AutoModePresetInfo, AutoModePromoteMessage, AutoModePromoteResultMessage, AutoModeProposalInfo, AutoModeProposeMessage, AutoModeProposeResult, AutoModeRuleAddMessage, AutoModeRuleInfo, AutoModeRuleRemoveMessage, AutoModeShowMessage, AutoModeShowResult, AutoModeStateChangedMessage, AutoModeStateResultMessage, AutomationApplyMessage, AutomationApplyResultMessage, AutomationCleanupMessage, AutomationCleanupResultMessage, AutomationDefinitionGetMessage, AutomationDefinitionResultMessage, AutomationDefinitionSummary, AutomationDefinitionsGetMessage, AutomationDefinitionsResultMessage, AutomationDeleteMessage, AutomationDeleteResultMessage, AutomationProvenance, AutomationRunMessage, AutomationRunResultMessage, AutomationRunSummary, AutomationRunsGetMessage, AutomationRunsResultMessage, AutomationSetEnabledMessage, AutomationSetEnabledResultMessage, AutomationValidateMessage, AutomationValidateResultMessage, AutomationsChangedMessage, BootstrapEndpointMessage, Branch, BranchChangedMessage, BranchesResultMessage, BrowseDirectoryMessage, BrowseDirectoryResultMessage, BrowserControlMessage, BrowserControlRequestMessage, BrowserControlResponseMessage, BrowserControlResultMessage, BuiltinDelegationRole, BusConsumerStatus, BusHealthEntry, BusProducerStatus, BusSetConsumerEnabledMessage, BusSetConsumerEnabledResultMessage, BusStatusGetMessage, BusStatusResultMessage, CancelCountdownMessage, ChiefOfStaffResultMessage, ClearSessionActivityMessage, ClearWarningsMessage, ClientEvictionNoticeMessage, ClientHelloMessage, CollapseRepoMessage, CommandErrorMessage, CreateWorktreeFromBranchMessage, CreateWorktreeMessage, CreateWorktreeResultMessage, CrewCharterDocument, CrewCharterGetMessage, CrewCharterGetResult, CrewCharterGetResultMessage, CrewCharterSetMessage, CrewCharterSetResult, CrewCharterSetResultMessage, CrewDayClose, CrewHandoffDocument, CrewHandoffGetMessage, CrewHandoffGetResult, CrewHandoffGetResultMessage, CrewHandoffMessage, CrewHandoffResult, CrewHandoffSummary, CrewHandoffsGetMessage, CrewHandoffsGetResult, CrewHandoffsGetResultMessage, CrewListMessage, CrewListResult, CrewMember, CrewPrimeMessage, CrewPrimeResult, CrewRestart, CrewRestartMessage, CrewRestartResult, CrewRestartResultMessage, CrewRestartState, CrewSetMessage, CrewSetResult, CrewSetResultMessage, CrewSleepMessage, CrewSleepResult, CrewSleepResultMessage, CrewUpdatedMessage, CrewWakeMessage, CrewWakeResult, CrewWakeResultMessage, DaemonWarning, DelegateAssignment, DelegateAssignmentKind, DelegateCheckout, DelegateCheckoutKind, DelegateHandover, DelegateMessage, DelegateResult, DelegateResultMessage, DelegateStatusMessage, DelegateWorktreeRequest, DelegationChoice, DelegationFailure, DelegationFallback, DelegationHarness, DelegationModel, DelegationModelsMessage, DelegationModelsResultMessage, DelegationOperation, DelegationOperationMessage, DelegationOperationState, DelegationPreferences, DelegationPreferencesChangedMessage, DelegationPreferencesCommitMessage, DelegationPreferencesGetMessage, DelegationPreferencesHistoryMessage, DelegationPreferencesHistoryResult, DelegationPreferencesOrigin, DelegationPreferencesResultMessage, DelegationPreferencesRevision, DelegationPreferencesRollbackMessage, DelegationPreferencesSaveMessage, DelegationPreferencesShowMessage, DelegationRole, DelegationRolesMessage, DelegationRolesResult, DelegationSelection, DeleteWorktreeMessage, DeleteWorktreeResultMessage, DetachSessionMessage, DirectoryEntry, DocCollectionsMessage, DocCollectionsResult, DocCountMessage, DocCountResult, DocDefineMessage, DocDefineResult, DocDeleteMessage, DocDeleteResult, DocGetMessage, DocGetResult, DocPutMessage, DocPutResult, DocQueryMessage, DocQueryResult, DocSubscribeMessage, DocSubscribeResult, DocSubscriptionDeliveryMessage, DocSubscriptionEndedMessage, DocUndefineMessage, DocUndefineResult, DocUnsubscribeMessage, DocumentCollectionSchema, DocumentConflict, DocumentFieldSpec, DocumentFilter, DocumentQuery, DocumentRevision, DocumentSort, EndpointActionResultMessage, EndpointCapabilities, EndpointInfo, EndpointStatusChangedMessage, EndpointsUpdatedMessage, EnsureRepoMessage, EnsureRepoResultMessage, EvidenceExcerpt, ExternalProcess, FetchPRDetailsMessage, FetchPRDetailsResultMessage, FetchRemotesMessage, FetchRemotesResultMessage, FileActivity, FileDiffResultMessage, FilesEditedMessage, FSChangedMessage, FSDeleteMessage, FSDeleteResult, FSDeleteResultMessage, FSEntry, FSExistsMessage, FSExistsResult, FSExistsResultMessage, FSIndexMessage, FSIndexResultMessage, FSListMessage, FSListResultMessage, FSReadAssetMessage, FSReadAssetResult, FSReadAssetResultMessage, FSReadMessage, FSReadResult, FSReadResultMessage, FSRenameMessage, FSRenameResult, FSRenameResultMessage, FSUnwatchMessage, FSUnwatchResultMessage, FSWatchMessage, FSWatchResultMessage, FSWriteMessage, FSWriteResult, FSWriteResultMessage, GardenReview, GardenReviewEvidence, GardenReviewItem, GardenReviewRecipe, GardenReviewRun, GardenReviewUpdatedMessage, GardenSeedsUpdatedMessage, GetDefaultBranchMessage, GetDefaultBranchResultMessage, GetFileDiffMessage, GetKittyImageMessage, GetPresentationRoundMessage, GetPresentationRoundResultMessage, GetPresentationsMessage, GetPresentationsResultMessage, GetRecentLocationsMessage, GetRepoInfoMessage, GetRepoInfoResultMessage, GetScreenSnapshotMessage, GetScreenSnapshotResultMessage, GetSettingsMessage, GitFileChange, GitHubHostsUpdatedMessage, GitOperation, GitOperationFinishedMessage, GitOperationKind, GitOperationStartedMessage, GitOperationStatus, GitStatusUpdateMessage, GuardianSelection, HeartbeatMessage, HeatState, HookCompactionMessage, HookNotificationMessage, HookStopFailureMessage, InitialStateMessage, InjectTestPRMessage, InjectTestSessionMessage, InspectPathMessage, InspectPathResultMessage, InstallBundledPluginMessage, InstallPluginMessage, JournalAppendMessage, JournalAppendResult, KeptConversation, KeptConversationDeletedBy, KeptConversationForgetMessage, KeptConversationForgetResultEvent, KeptConversationKeepMessage, KeptConversationKeepResultEvent, KeptConversationListMessage, KeptConversationListResult, KeptConversationListResultEvent, KeptConversationRow, KeptConversationSeed, KeptConversationsChangedEvent, KillSessionMessage, KittyImageResultMessage, KittyPlacement, KittyPlacementsMessage, ListBranchesMessage, ListEndpointsMessage, ListPluginsMessage, ListRemoteBranchesMessage, ListRemoteBranchesResultMessage, ListWorktreesMessage, MarkdownAnnotation, MarkdownAnnotationAnchor, MarkdownAnnotationsClearMessage, MarkdownAnnotationsClearResultMessage, MarkdownAnnotationsGetMessage, MarkdownAnnotationsGetResultMessage, MarkdownAnnotationsSaveMessage, MarkdownAnnotationsSaveResultMessage, MarkdownAnnotationsSubmitMessage, MarkdownAnnotationsSubmitResultMessage, MergePRMessage, ModelCapabilitySupport, MuteAuthorMessage, MutePRMessage, MuteRepoMessage, MuteWorkspaceMessage, NotebookBacklinksMessage, NotebookBacklinksResultMessage, NotebookChangedMessage, NotebookEntry, NotebookGuideMessage, NotebookGuideResult, NotebookListMessage, NotebookListResultMessage, NotebookReadMessage, NotebookReadResult, NotebookReadResultMessage, NotebookSendToChiefMessage, NotebookSendToChiefResult, NotebookSendToChiefResultMessage, NotebookWriteMessage, NotebookWriteResult, NotebookWriteResultMessage, Notification, NotificationAction, NotificationListMessage, NotificationListResultMessage, NotificationMarkReadMessage, NotificationMarkReadResultMessage, NotificationSeverity, NotificationsUpdatedMessage, OpenBrowserMessage, OpenMarkdownMessage, OpenMarkdownResultMessage, OpenSeedMessage, OpenSeedResultMessage, OpenSentFilesMessage, PR, PRActionResultMessage, PRRole, PRVisitedMessage, PRsUpdatedMessage, PathInspection, PinSessionMessage, PinWorkspaceMessage, PluginActionResultMessage, PluginInfo, PluginIssue, PluginsUpdatedMessage, PresentAnnotation, PresentCloseMessage, PresentCloseResultMessage, PresentCommentInput, PresentFeedbackMessage, PresentFeedbackResult, PresentFile, PresentManifestView, PresentOpenMessage, PresentOpenResult, PresentSubmitRoundMessage, PresentSubmitRoundResultMessage, Presentation, PresentationAddedMessage, PresentationComment, PresentationRound, PresentationUpdatedMessage, PtyDesyncMessage, PtyInputMessage, PtyInputProbeResultMessage, PtyOutputMessage, PtyResizeMessage, PtyResizedMessage, PullRequestCreatedMessage, PullRequestForgetMessage, PullRequestProvenance, PullRequestUnwatchMessage, PullRequestUnwatchResultMessage, PullRequestWatchMessage, PullRequestWatchMode, PullRequestWatchResultMessage, QueryAuthorsMessage, QueryMessage, QueryPRsMessage, QueryReposMessage, RateLimitedMessage, RecentFilesMessage, RecentFilesResultMessage, RecentLocation, RecentLocationsResultMessage, RefreshPRsMessage, RefreshPRsResultMessage, RegisterMessage, RegisterWorkspaceMessage, ReloadSessionMessage, ReloadSessionResultMessage, RemoveEndpointMessage, RemovePluginMessage, RenameResultMessage, RenameSessionMessage, RenameWorkspaceMessage, RepoInfo, RepoState, ReposUpdatedMessage, Response, ReviewComment, RuntimeRespawnedMessage, Seed, SeedArtifact, SeedArtifactReference, SeedArtifactTargetMessage, SeedArtifactTargetResult, SeedArtifactTargetResultMessage, SeedArtifactTransferMessage, SeedArtifactTransferResult, SeedArtifactTransferResultMessage, SeedContinuation, SeedDocument, SeedDocumentGetMessage, SeedDocumentGetResultMessage, SeedEdge, SeedEditMessage, SeedEditResult, SeedHandoverRequest, SeedHarvestCondition, SeedHarvestWhenMerged, SeedLinkMessage, SeedLinkResult, SeedListMessage, SeedListResult, SeedNote, SeedNoteMessage, SeedNoteResult, SeedNoteResultMessage, SeedNotesMessage, SeedNotesResult, SeedPlantMessage, SeedPlantResult, SeedPlotChild, SeedPlotMessage, SeedPlotProgress, SeedPlotResult, SeedReadyMessage, SeedReadyResult, SeedRelation, SeedResumeMessage, SeedResumeResultMessage, SeedReviewActionContext, SeedReviewCancelMessage, SeedReviewDraftMessage, SeedReviewDraftResultMessage, SeedReviewKeepMessage, SeedReviewResult, SeedReviewResultMessage, SeedReviewRetryMessage, SeedReviewShowMessage, SeedReviewStartMessage, SeedSearchHit, SeedSearchMessage, SeedSearchResult, SeedSendToChiefMessage, SeedSendToChiefResult, SeedSendToChiefResultMessage, SeedShowMessage, SeedShowResult, SeedTransitionMessage, SeedTransitionResult, SeedTransitionResultMessage, SeedVar, SeedWatchMessage, SeedWatchResult, Session, SessionAnnotation, SessionAnnotationsClearMessage, SessionAnnotationsClearResultMessage, SessionAnnotationsGetMessage, SessionAnnotationsGetResultMessage, SessionAnnotationsSaveMessage, SessionAnnotationsSaveResultMessage, SessionAnnotationsSubmitMessage, SessionAnnotationsSubmitResultMessage, SessionCloseResultMessage, SessionClosedMessage, SessionContextWindowCapResultMessage, SessionDelegationRole, SessionExitedMessage, SessionInstructionsMessage, SessionInstructionsResult, SessionLedgerEntry, SessionLedgerFacet, SessionLedgerFacets, SessionListMessage, SessionListResult, SessionListResultMessage, SessionMessage, SessionMessageWindowStatus, SessionMessagesChangedMessage, SessionMessagesGetMessage, SessionMessagesGetResultMessage, SessionPullRequest, SessionRegisteredMessage, SessionReopen, SessionReopenAction, SessionReopenEntry, SessionReopenMessage, SessionReopenResult, SessionReopenResultMessage, SessionSelectedMessage, SessionShowMessage, SessionShowResult, SessionShowResultMessage, SessionState, SessionStateChangedMessage, SessionTranscriptEvent, SessionTranscriptMessage, SessionTranscriptResult, SessionUnregisteredMessage, SessionUsage, SessionUsageModel, SessionsUpdatedMessage, SetChiefOfStaffMessage, SetClientPresenceMessage, SetEndpointRemoteWebMessage, SetPluginPriorityMessage, SetSessionContextWindowCapMessage, SetSessionResumeIDMessage, SetSettingMessage, SetTerminalThemeMessage, SetWorkspaceRankMessage, SettingsUpdatedMessage, SettleTurnMessage, SnoozeTurnMessage, SpawnResultMessage, SpawnSessionMessage, StateExplainEntry, StateExplainMessage, StateExplainResult, StateMessage, StopBackgroundTask, StopMessage, StoredDocument, SubscribeGitStatusMessage, SupportInputTrace, SupportRuntimeEvidence, SupportSnapshotMessage, SupportSnapshotResultMessage, Task, TaskListMessage, TaskListResultMessage, TaskRetryMessage, TaskRetryResultMessage, TasksChangedMessage, TerminalPointerActivityMessage, UninstallPluginMessage, UnregisterMessage, UnregisterWorkspaceMessage, UnsubscribeGitStatusMessage, UpdateEndpointMessage, WakeTurnMessage, WebSocketEvent, WorkflowActionResultMessage, WorkflowAgentCall, WorkflowAgentCallStatus, WorkflowCallUpsertMessage, WorkflowRun, WorkflowRunCancelMessage, WorkflowRunGetMessage, WorkflowRunListMessage, WorkflowRunStatus, WorkflowRunUpdatedMessage, WorkflowRunUpsertMessage, Workspace, WorkspaceLayout, WorkspaceLayoutActionResultMessage, WorkspaceLayoutAddSessionPaneMessage, WorkspaceLayoutClosePaneMessage, WorkspaceLayoutDockEdge, WorkspaceLayoutDockTileMessage, WorkspaceLayoutFocusPaneMessage, WorkspaceLayoutGetMessage, WorkspaceLayoutMessage, WorkspaceLayoutMoveLeafMessage, WorkspaceLayoutMoveLeafToNewWorkspaceMessage, WorkspaceLayoutMoveLeafToWorkspaceMessage, WorkspaceLayoutPane, WorkspaceLayoutPaneKind, WorkspaceLayoutPaneStatus, WorkspaceLayoutRenamePaneMessage, WorkspaceLayoutSetSplitRatioMessage, WorkspaceLayoutSplitDirection, WorkspaceLayoutUndockTileMessage, WorkspaceLayoutUpdateTileMessage, WorkspaceLayoutUpdatedMessage, WorkspaceRegisteredMessage, WorkspaceSelectedMessage, WorkspaceStateChangedMessage, WorkspaceStatus, WorkspaceTileContentGetMessage, WorkspaceTileContentMessage, WorkspaceUnregisteredMessage, Worktree, WorktreeCreatedEvent, WorktreeDeletedEvent, WorktreeKeepMessage, WorktreeKeepResult, WorktreeKeepResultEvent, WorktreeListMessage, WorktreeListResult, WorktreeListResultEvent, WorktreeRefreshMessage, WorktreeRefreshResult, WorktreeRefreshResultEvent, WorktreeRepository, WorktreeStateChangedEvent, WorktreeSweepEntry, WorktreeSweepLogMessage, WorktreeSweepLogResult, WorktreeSweepLogResultEvent, WorktreeSweptEvent, WorktreesUpdatedMessage } from "./generated";
 //
 //   const activityStatusMessage = Convert.toActivityStatusMessage(json);
 //   const activityStatusResult = Convert.toActivityStatusResult(json);
@@ -194,7 +194,6 @@
 //   const deleteWorktreeResultMessage = Convert.toDeleteWorktreeResultMessage(json);
 //   const detachSessionMessage = Convert.toDetachSessionMessage(json);
 //   const directoryEntry = Convert.toDirectoryEntry(json);
-//   const dispatchWorkState = Convert.toDispatchWorkState(json);
 //   const docCollectionsMessage = Convert.toDocCollectionsMessage(json);
 //   const docCollectionsResult = Convert.toDocCollectionsResult(json);
 //   const docCountMessage = Convert.toDocCountMessage(json);
@@ -570,7 +569,6 @@
 //   const setSessionResumeIDMessage = Convert.toSetSessionResumeIDMessage(json);
 //   const setSettingMessage = Convert.toSetSettingMessage(json);
 //   const setTerminalThemeMessage = Convert.toSetTerminalThemeMessage(json);
-//   const setTicketStatusMessage = Convert.toSetTicketStatusMessage(json);
 //   const setWorkspaceRankMessage = Convert.toSetWorkspaceRankMessage(json);
 //   const settingsUpdatedMessage = Convert.toSettingsUpdatedMessage(json);
 //   const settleTurnMessage = Convert.toSettleTurnMessage(json);
@@ -596,37 +594,6 @@
 //   const taskRetryResultMessage = Convert.toTaskRetryResultMessage(json);
 //   const tasksChangedMessage = Convert.toTasksChangedMessage(json);
 //   const terminalPointerActivityMessage = Convert.toTerminalPointerActivityMessage(json);
-//   const ticket = Convert.toTicket(json);
-//   const ticketActivity = Convert.toTicketActivity(json);
-//   const ticketActivityKind = Convert.toTicketActivityKind(json);
-//   const ticketArtifact = Convert.toTicketArtifact(json);
-//   const ticketAttachFile = Convert.toTicketAttachFile(json);
-//   const ticketAttachMessage = Convert.toTicketAttachMessage(json);
-//   const ticketAttachResult = Convert.toTicketAttachResult(json);
-//   const ticketAttachResultMessage = Convert.toTicketAttachResultMessage(json);
-//   const ticketCommentMessage = Convert.toTicketCommentMessage(json);
-//   const ticketCommentResult = Convert.toTicketCommentResult(json);
-//   const ticketCreateMessage = Convert.toTicketCreateMessage(json);
-//   const ticketCreateResult = Convert.toTicketCreateResult(json);
-//   const ticketEvent = Convert.toTicketEvent(json);
-//   const ticketEventBundle = Convert.toTicketEventBundle(json);
-//   const ticketEventKind = Convert.toTicketEventKind(json);
-//   const ticketInboxMessage = Convert.toTicketInboxMessage(json);
-//   const ticketInboxMode = Convert.toTicketInboxMode(json);
-//   const ticketInboxResult = Convert.toTicketInboxResult(json);
-//   const ticketListMessage = Convert.toTicketListMessage(json);
-//   const ticketListResult = Convert.toTicketListResult(json);
-//   const ticketShowMessage = Convert.toTicketShowMessage(json);
-//   const ticketShowResult = Convert.toTicketShowResult(json);
-//   const ticketStatus = Convert.toTicketStatus(json);
-//   const ticketStatusResult = Convert.toTicketStatusResult(json);
-//   const ticketSubscribeMessage = Convert.toTicketSubscribeMessage(json);
-//   const ticketSubscribeResult = Convert.toTicketSubscribeResult(json);
-//   const ticketTakeMessage = Convert.toTicketTakeMessage(json);
-//   const ticketTakeResult = Convert.toTicketTakeResult(json);
-//   const ticketUnsubscribeMessage = Convert.toTicketUnsubscribeMessage(json);
-//   const ticketUnsubscribeResult = Convert.toTicketUnsubscribeResult(json);
-//   const triggerNudgeMessage = Convert.toTriggerNudgeMessage(json);
 //   const uninstallPluginMessage = Convert.toUninstallPluginMessage(json);
 //   const unregisterMessage = Convert.toUnregisterMessage(json);
 //   const unregisterWorkspaceMessage = Convert.toUnregisterWorkspaceMessage(json);
@@ -780,6 +747,7 @@ export interface AgentInboxBatchResult {
 }
 
 export interface ItemElement {
+    address:            string;
     content:            string;
     created_at:         string;
     hint?:              string;
@@ -794,6 +762,7 @@ export interface ItemElement {
 }
 
 export interface AgentInboxItem {
+    address:            string;
     content:            string;
     created_at:         string;
     hint?:              string;
@@ -1907,7 +1876,6 @@ export interface SessionObject {
     last_model_request_at?:     string;
     last_seen:                  string;
     main_repo?:                 string;
-    nudge_fires_at?:            string;
     parent_session_id?:         string;
     pinned_at?:                 string;
     pull_requests?:             PullRequestElement[];
@@ -1918,7 +1886,6 @@ export interface SessionObject {
     state_since:                string;
     state_updated_at:           string;
     terminal_build_stale?:      boolean;
-    ticket_unread?:             boolean;
     turn_opened_at?:            string;
     turn_owed?:                 boolean;
     turn_snoozed_until?:        string;
@@ -3113,7 +3080,6 @@ export interface DelegationOperation {
     seed_id?:       string;
     session_id:     string;
     state:          DelegationOperationState;
-    ticket_id?:     string;
     updated_at:     string;
     workspace_id?:  string;
     worktree_path?: string;
@@ -3158,7 +3124,6 @@ export interface DelegationOperationObject {
     seed_id?:       string;
     session_id:     string;
     state:          DelegationOperationState;
-    ticket_id?:     string;
     updated_at:     string;
     workspace_id?:  string;
     worktree_path?: string;
@@ -4676,7 +4641,6 @@ export interface PresentationElement {
     repo_path:              string;
     session_id:             string;
     status:                 string;
-    ticket_id?:             string;
     title:                  string;
     [property: string]: any;
 }
@@ -6386,7 +6350,6 @@ export interface PresentOpenMessage {
     manifest_yaml:     string;
     presentation_id?:  string;
     source_session_id: string;
-    ticket_id?:        string;
     [property: string]: any;
 }
 
@@ -6448,7 +6411,6 @@ export interface Presentation {
     repo_path:              string;
     session_id:             string;
     status:                 string;
-    ticket_id?:             string;
     title:                  string;
     [property: string]: any;
 }
@@ -7012,16 +6974,6 @@ export interface Response {
     session_transcript_result?:       SessionTranscriptResultObject;
     sessions?:                        SessionObject[];
     state_explain_result?:            StateExplainResultObject;
-    ticket_attach_result?:            TicketAttachResultObject;
-    ticket_comment_result?:           TicketCommentResultObject;
-    ticket_create_result?:            TicketCreateResultObject;
-    ticket_inbox_result?:             TicketInboxResultObject;
-    ticket_list_result?:              TicketListResultObject;
-    ticket_show_result?:              TicketShowResultObject;
-    ticket_status_result?:            TicketStatusResultObject;
-    ticket_subscribe_result?:         TicketSubscribeResultObject;
-    ticket_take_result?:              TicketTakeResultObject;
-    ticket_unsubscribe_result?:       TicketUnsubscribeResultObject;
     workspaces?:                      WorkspaceElement[];
     worktree_keep_result?:            WorktreeKeepResultObject;
     worktree_list_result?:            WorktreeListResultObject;
@@ -7617,156 +7569,6 @@ export interface ObservationElement {
     recorded_at: string;
     repeats?:    number;
     source:      string;
-    [property: string]: any;
-}
-
-export interface TicketAttachResultObject {
-    applied:      boolean;
-    artifacts:    ArtifactElement[];
-    catch_up?:    CatchUp;
-    deduplicated: boolean;
-    event_seq:    number;
-    fingerprint:  string;
-    state:        TicketStatus;
-    ticket_id:    string;
-    [property: string]: any;
-}
-
-export interface ArtifactElement {
-    filename:      string;
-    notebook_path: string;
-    path:          string;
-    [property: string]: any;
-}
-
-export interface CatchUp {
-    events:    EventObject[];
-    ticket_id: string;
-    [property: string]: any;
-}
-
-export interface EventObject {
-    author:       string;
-    comment?:     string;
-    created_at:   string;
-    detail?:      string;
-    from_status?: TicketStatus;
-    kind:         TicketEventKind;
-    ticket_id:    string;
-    to_status?:   TicketStatus;
-    [property: string]: any;
-}
-
-export enum TicketStatus {
-    Blocked = "blocked",
-    Crashed = "crashed",
-    Done = "done",
-    Failed = "failed",
-    InReview = "in_review",
-    Todo = "todo",
-    Working = "working",
-}
-
-export enum TicketEventKind {
-    Assigned = "assigned",
-    AttachSubmitted = "attach_submitted",
-    Commented = "commented",
-    Created = "created",
-    DescriptionEdited = "description_edited",
-    StatusChanged = "status_changed",
-}
-
-export interface TicketCommentResultObject {
-    applied:   boolean;
-    catch_up?: CatchUp;
-    ticket_id: string;
-    [property: string]: any;
-}
-
-export interface TicketCreateResultObject {
-    status:    TicketStatus;
-    ticket_id: string;
-    title:     string;
-    [property: string]: any;
-}
-
-export interface TicketInboxResultObject {
-    bundles:                CatchUp[];
-    last_user_activity_at?: string;
-    [property: string]: any;
-}
-
-export interface TicketListResultObject {
-    tickets: TicketElement[];
-    [property: string]: any;
-}
-
-export interface TicketElement {
-    activity:          ActivityElement[];
-    archived_at?:      string;
-    artifacts:         ArtifactElement[];
-    assignee:          string;
-    automation?:       Automation;
-    closed_at?:        string;
-    created_at:        string;
-    cwd:               string;
-    description:       string;
-    id:                string;
-    last_agent_id:     string;
-    latest_event_seq?: number;
-    project_id:        string;
-    reconciled_at?:    string;
-    status:            TicketStatus;
-    title:             string;
-    updated_at:        string;
-    [property: string]: any;
-}
-
-export interface ActivityElement {
-    author:       string;
-    comment?:     string;
-    created_at:   string;
-    from_status?: TicketStatus;
-    id:           number;
-    kind:         TicketActivityKind;
-    to_status?:   TicketStatus;
-    [property: string]: any;
-}
-
-export enum TicketActivityKind {
-    Attach = "attach",
-    Comment = "comment",
-    StatusChange = "status_change",
-}
-
-export interface TicketShowResultObject {
-    ticket: TicketElement;
-    [property: string]: any;
-}
-
-export interface TicketStatusResultObject {
-    applied:   boolean;
-    catch_up?: CatchUp;
-    status:    TicketStatus;
-    ticket_id: string;
-    [property: string]: any;
-}
-
-export interface TicketSubscribeResultObject {
-    ticket_id:     string;
-    unread_count?: number;
-    [property: string]: any;
-}
-
-export interface TicketTakeResultObject {
-    previous_assignee: string;
-    ticket_id:         string;
-    unread_count?:     number;
-    [property: string]: any;
-}
-
-export interface TicketUnsubscribeResultObject {
-    ticket_id: string;
     [property: string]: any;
 }
 
@@ -8601,7 +8403,6 @@ export interface Session {
     last_model_request_at?:     string;
     last_seen:                  string;
     main_repo?:                 string;
-    nudge_fires_at?:            string;
     parent_session_id?:         string;
     pinned_at?:                 string;
     pull_requests?:             PullRequestElement[];
@@ -8612,7 +8413,6 @@ export interface Session {
     state_since:                string;
     state_updated_at:           string;
     terminal_build_stale?:      boolean;
-    ticket_unread?:             boolean;
     turn_opened_at?:            string;
     turn_owed?:                 boolean;
     turn_snoozed_until?:        string;
@@ -9266,27 +9066,6 @@ export enum SetTerminalThemeMessageCmd {
     SetTerminalTheme = "set_terminal_theme",
 }
 
-export interface SetTicketStatusMessage {
-    cmd:               SetTicketStatusMessageCmd;
-    comment?:          string;
-    source_session_id: string;
-    ticket_id?:        string;
-    work_state:        DispatchWorkState;
-    [property: string]: any;
-}
-
-export enum SetTicketStatusMessageCmd {
-    SetTicketStatus = "set_ticket_status",
-}
-
-export enum DispatchWorkState {
-    Completed = "completed",
-    Failed = "failed",
-    InProgress = "in_progress",
-    NeedsInput = "needs_input",
-    ReadyForReview = "ready_for_review",
-}
-
 export interface SetWorkspaceRankMessage {
     cmd:                SetWorkspaceRankMessageCmd;
     next_workspace_id?: string;
@@ -9657,281 +9436,6 @@ export enum TerminalPointerActivityMessageCmd {
     TerminalPointerActivity = "terminal_pointer_activity",
 }
 
-export interface Ticket {
-    activity:          ActivityElement[];
-    archived_at?:      string;
-    artifacts:         ArtifactElement[];
-    assignee:          string;
-    automation?:       Automation;
-    closed_at?:        string;
-    created_at:        string;
-    cwd:               string;
-    description:       string;
-    id:                string;
-    last_agent_id:     string;
-    latest_event_seq?: number;
-    project_id:        string;
-    reconciled_at?:    string;
-    status:            TicketStatus;
-    title:             string;
-    updated_at:        string;
-    [property: string]: any;
-}
-
-export interface TicketActivity {
-    author:       string;
-    comment?:     string;
-    created_at:   string;
-    from_status?: TicketStatus;
-    id:           number;
-    kind:         TicketActivityKind;
-    to_status?:   TicketStatus;
-    [property: string]: any;
-}
-
-export interface TicketArtifact {
-    filename:      string;
-    notebook_path: string;
-    path:          string;
-    [property: string]: any;
-}
-
-export interface TicketAttachFile {
-    filename:    string;
-    source_path: string;
-    [property: string]: any;
-}
-
-export interface TicketAttachMessage {
-    cmd:                 TicketAttachMessageCmd;
-    comment?:            string;
-    expected_event_seq?: number;
-    files:               TicketAttachMessageFile[];
-    request_id?:         string;
-    source_session_id:   string;
-    state?:              DispatchWorkState;
-    ticket_id?:          string;
-    [property: string]: any;
-}
-
-export enum TicketAttachMessageCmd {
-    TicketAttach = "ticket_attach",
-}
-
-export interface TicketAttachMessageFile {
-    filename:    string;
-    source_path: string;
-    [property: string]: any;
-}
-
-export interface TicketAttachResult {
-    applied:      boolean;
-    artifacts:    ArtifactElement[];
-    catch_up?:    CatchUp;
-    deduplicated: boolean;
-    event_seq:    number;
-    fingerprint:  string;
-    state:        TicketStatus;
-    ticket_id:    string;
-    [property: string]: any;
-}
-
-export interface TicketAttachResultMessage {
-    error?:     string;
-    event:      TicketAttachResultMessageEvent;
-    request_id: string;
-    result?:    TicketAttachResultObject;
-    success:    boolean;
-    [property: string]: any;
-}
-
-export enum TicketAttachResultMessageEvent {
-    TicketAttachResult = "ticket_attach_result",
-}
-
-export interface TicketCommentMessage {
-    cmd:               TicketCommentMessageCmd;
-    comment:           string;
-    source_session_id: string;
-    ticket_id:         string;
-    [property: string]: any;
-}
-
-export enum TicketCommentMessageCmd {
-    TicketComment = "ticket_comment",
-}
-
-export interface TicketCommentResult {
-    applied:   boolean;
-    catch_up?: CatchUp;
-    ticket_id: string;
-    [property: string]: any;
-}
-
-export interface TicketCreateMessage {
-    cmd:               TicketCreateMessageCmd;
-    description?:      string;
-    id?:               string;
-    source_session_id: string;
-    title:             string;
-    [property: string]: any;
-}
-
-export enum TicketCreateMessageCmd {
-    TicketCreate = "ticket_create",
-}
-
-export interface TicketCreateResult {
-    status:    TicketStatus;
-    ticket_id: string;
-    title:     string;
-    [property: string]: any;
-}
-
-export interface TicketEvent {
-    author:       string;
-    comment?:     string;
-    created_at:   string;
-    detail?:      string;
-    from_status?: TicketStatus;
-    kind:         TicketEventKind;
-    ticket_id:    string;
-    to_status?:   TicketStatus;
-    [property: string]: any;
-}
-
-export interface TicketEventBundle {
-    events:    EventObject[];
-    ticket_id: string;
-    [property: string]: any;
-}
-
-export interface TicketInboxMessage {
-    cmd:                TicketInboxMessageCmd;
-    mode?:              TicketInboxMode;
-    source_session_id:  string;
-    watch_interval_ms?: string;
-    [property: string]: any;
-}
-
-export enum TicketInboxMessageCmd {
-    TicketInbox = "ticket_inbox",
-}
-
-export enum TicketInboxMode {
-    Explicit = "explicit",
-    Watch = "watch",
-}
-
-export interface TicketInboxResult {
-    bundles:                CatchUp[];
-    last_user_activity_at?: string;
-    [property: string]: any;
-}
-
-export interface TicketListMessage {
-    cmd:                TicketListMessageCmd;
-    include_archived?:  boolean;
-    source_session_id?: string;
-    status?:            string;
-    [property: string]: any;
-}
-
-export enum TicketListMessageCmd {
-    TicketList = "ticket_list",
-}
-
-export interface TicketListResult {
-    tickets: TicketElement[];
-    [property: string]: any;
-}
-
-export interface TicketShowMessage {
-    cmd:                TicketShowMessageCmd;
-    source_session_id?: string;
-    ticket_id:          string;
-    [property: string]: any;
-}
-
-export enum TicketShowMessageCmd {
-    TicketShow = "ticket_show",
-}
-
-export interface TicketShowResult {
-    ticket: TicketElement;
-    [property: string]: any;
-}
-
-export interface TicketStatusResult {
-    applied:   boolean;
-    catch_up?: CatchUp;
-    status:    TicketStatus;
-    ticket_id: string;
-    [property: string]: any;
-}
-
-export interface TicketSubscribeMessage {
-    cmd:               TicketSubscribeMessageCmd;
-    source_session_id: string;
-    ticket_id:         string;
-    [property: string]: any;
-}
-
-export enum TicketSubscribeMessageCmd {
-    TicketSubscribe = "ticket_subscribe",
-}
-
-export interface TicketSubscribeResult {
-    ticket_id:     string;
-    unread_count?: number;
-    [property: string]: any;
-}
-
-export interface TicketTakeMessage {
-    cmd:               TicketTakeMessageCmd;
-    confirm?:          boolean;
-    source_session_id: string;
-    ticket_id:         string;
-    [property: string]: any;
-}
-
-export enum TicketTakeMessageCmd {
-    TicketTake = "ticket_take",
-}
-
-export interface TicketTakeResult {
-    previous_assignee: string;
-    ticket_id:         string;
-    unread_count?:     number;
-    [property: string]: any;
-}
-
-export interface TicketUnsubscribeMessage {
-    cmd:               TicketUnsubscribeMessageCmd;
-    source_session_id: string;
-    ticket_id:         string;
-    [property: string]: any;
-}
-
-export enum TicketUnsubscribeMessageCmd {
-    TicketUnsubscribe = "ticket_unsubscribe",
-}
-
-export interface TicketUnsubscribeResult {
-    ticket_id: string;
-    [property: string]: any;
-}
-
-export interface TriggerNudgeMessage {
-    cmd:        TriggerNudgeMessageCmd;
-    session_id: string;
-    [property: string]: any;
-}
-
-export enum TriggerNudgeMessageCmd {
-    TriggerNudge = "trigger_nudge",
-}
-
 export interface UninstallPluginMessage {
     cmd:  UninstallPluginMessageCmd;
     name: string;
@@ -10061,7 +9565,6 @@ export interface WebSocketEvent {
     success?:                       boolean;
     sweep_entry?:                   SweepEntry;
     target_path?:                   string;
-    ticket?:                        TicketElement;
     tile_id?:                       string;
     tile_kind?:                     string;
     total?:                         number;
@@ -12306,14 +11809,6 @@ export class Convert {
 
     public static directoryEntryToJson(value: DirectoryEntry): string {
         return JSON.stringify(uncast(value, r("DirectoryEntry")), null, 2);
-    }
-
-    public static toDispatchWorkState(json: string): DispatchWorkState {
-        return cast(JSON.parse(json), r("DispatchWorkState"));
-    }
-
-    public static dispatchWorkStateToJson(value: DispatchWorkState): string {
-        return JSON.stringify(uncast(value, r("DispatchWorkState")), null, 2);
     }
 
     public static toDocCollectionsMessage(json: string): DocCollectionsMessage {
@@ -15316,14 +14811,6 @@ export class Convert {
         return JSON.stringify(uncast(value, r("SetTerminalThemeMessage")), null, 2);
     }
 
-    public static toSetTicketStatusMessage(json: string): SetTicketStatusMessage {
-        return cast(JSON.parse(json), r("SetTicketStatusMessage"));
-    }
-
-    public static setTicketStatusMessageToJson(value: SetTicketStatusMessage): string {
-        return JSON.stringify(uncast(value, r("SetTicketStatusMessage")), null, 2);
-    }
-
     public static toSetWorkspaceRankMessage(json: string): SetWorkspaceRankMessage {
         return cast(JSON.parse(json), r("SetWorkspaceRankMessage"));
     }
@@ -15522,254 +15009,6 @@ export class Convert {
 
     public static terminalPointerActivityMessageToJson(value: TerminalPointerActivityMessage): string {
         return JSON.stringify(uncast(value, r("TerminalPointerActivityMessage")), null, 2);
-    }
-
-    public static toTicket(json: string): Ticket {
-        return cast(JSON.parse(json), r("Ticket"));
-    }
-
-    public static ticketToJson(value: Ticket): string {
-        return JSON.stringify(uncast(value, r("Ticket")), null, 2);
-    }
-
-    public static toTicketActivity(json: string): TicketActivity {
-        return cast(JSON.parse(json), r("TicketActivity"));
-    }
-
-    public static ticketActivityToJson(value: TicketActivity): string {
-        return JSON.stringify(uncast(value, r("TicketActivity")), null, 2);
-    }
-
-    public static toTicketActivityKind(json: string): TicketActivityKind {
-        return cast(JSON.parse(json), r("TicketActivityKind"));
-    }
-
-    public static ticketActivityKindToJson(value: TicketActivityKind): string {
-        return JSON.stringify(uncast(value, r("TicketActivityKind")), null, 2);
-    }
-
-    public static toTicketArtifact(json: string): TicketArtifact {
-        return cast(JSON.parse(json), r("TicketArtifact"));
-    }
-
-    public static ticketArtifactToJson(value: TicketArtifact): string {
-        return JSON.stringify(uncast(value, r("TicketArtifact")), null, 2);
-    }
-
-    public static toTicketAttachFile(json: string): TicketAttachFile {
-        return cast(JSON.parse(json), r("TicketAttachFile"));
-    }
-
-    public static ticketAttachFileToJson(value: TicketAttachFile): string {
-        return JSON.stringify(uncast(value, r("TicketAttachFile")), null, 2);
-    }
-
-    public static toTicketAttachMessage(json: string): TicketAttachMessage {
-        return cast(JSON.parse(json), r("TicketAttachMessage"));
-    }
-
-    public static ticketAttachMessageToJson(value: TicketAttachMessage): string {
-        return JSON.stringify(uncast(value, r("TicketAttachMessage")), null, 2);
-    }
-
-    public static toTicketAttachResult(json: string): TicketAttachResult {
-        return cast(JSON.parse(json), r("TicketAttachResult"));
-    }
-
-    public static ticketAttachResultToJson(value: TicketAttachResult): string {
-        return JSON.stringify(uncast(value, r("TicketAttachResult")), null, 2);
-    }
-
-    public static toTicketAttachResultMessage(json: string): TicketAttachResultMessage {
-        return cast(JSON.parse(json), r("TicketAttachResultMessage"));
-    }
-
-    public static ticketAttachResultMessageToJson(value: TicketAttachResultMessage): string {
-        return JSON.stringify(uncast(value, r("TicketAttachResultMessage")), null, 2);
-    }
-
-    public static toTicketCommentMessage(json: string): TicketCommentMessage {
-        return cast(JSON.parse(json), r("TicketCommentMessage"));
-    }
-
-    public static ticketCommentMessageToJson(value: TicketCommentMessage): string {
-        return JSON.stringify(uncast(value, r("TicketCommentMessage")), null, 2);
-    }
-
-    public static toTicketCommentResult(json: string): TicketCommentResult {
-        return cast(JSON.parse(json), r("TicketCommentResult"));
-    }
-
-    public static ticketCommentResultToJson(value: TicketCommentResult): string {
-        return JSON.stringify(uncast(value, r("TicketCommentResult")), null, 2);
-    }
-
-    public static toTicketCreateMessage(json: string): TicketCreateMessage {
-        return cast(JSON.parse(json), r("TicketCreateMessage"));
-    }
-
-    public static ticketCreateMessageToJson(value: TicketCreateMessage): string {
-        return JSON.stringify(uncast(value, r("TicketCreateMessage")), null, 2);
-    }
-
-    public static toTicketCreateResult(json: string): TicketCreateResult {
-        return cast(JSON.parse(json), r("TicketCreateResult"));
-    }
-
-    public static ticketCreateResultToJson(value: TicketCreateResult): string {
-        return JSON.stringify(uncast(value, r("TicketCreateResult")), null, 2);
-    }
-
-    public static toTicketEvent(json: string): TicketEvent {
-        return cast(JSON.parse(json), r("TicketEvent"));
-    }
-
-    public static ticketEventToJson(value: TicketEvent): string {
-        return JSON.stringify(uncast(value, r("TicketEvent")), null, 2);
-    }
-
-    public static toTicketEventBundle(json: string): TicketEventBundle {
-        return cast(JSON.parse(json), r("TicketEventBundle"));
-    }
-
-    public static ticketEventBundleToJson(value: TicketEventBundle): string {
-        return JSON.stringify(uncast(value, r("TicketEventBundle")), null, 2);
-    }
-
-    public static toTicketEventKind(json: string): TicketEventKind {
-        return cast(JSON.parse(json), r("TicketEventKind"));
-    }
-
-    public static ticketEventKindToJson(value: TicketEventKind): string {
-        return JSON.stringify(uncast(value, r("TicketEventKind")), null, 2);
-    }
-
-    public static toTicketInboxMessage(json: string): TicketInboxMessage {
-        return cast(JSON.parse(json), r("TicketInboxMessage"));
-    }
-
-    public static ticketInboxMessageToJson(value: TicketInboxMessage): string {
-        return JSON.stringify(uncast(value, r("TicketInboxMessage")), null, 2);
-    }
-
-    public static toTicketInboxMode(json: string): TicketInboxMode {
-        return cast(JSON.parse(json), r("TicketInboxMode"));
-    }
-
-    public static ticketInboxModeToJson(value: TicketInboxMode): string {
-        return JSON.stringify(uncast(value, r("TicketInboxMode")), null, 2);
-    }
-
-    public static toTicketInboxResult(json: string): TicketInboxResult {
-        return cast(JSON.parse(json), r("TicketInboxResult"));
-    }
-
-    public static ticketInboxResultToJson(value: TicketInboxResult): string {
-        return JSON.stringify(uncast(value, r("TicketInboxResult")), null, 2);
-    }
-
-    public static toTicketListMessage(json: string): TicketListMessage {
-        return cast(JSON.parse(json), r("TicketListMessage"));
-    }
-
-    public static ticketListMessageToJson(value: TicketListMessage): string {
-        return JSON.stringify(uncast(value, r("TicketListMessage")), null, 2);
-    }
-
-    public static toTicketListResult(json: string): TicketListResult {
-        return cast(JSON.parse(json), r("TicketListResult"));
-    }
-
-    public static ticketListResultToJson(value: TicketListResult): string {
-        return JSON.stringify(uncast(value, r("TicketListResult")), null, 2);
-    }
-
-    public static toTicketShowMessage(json: string): TicketShowMessage {
-        return cast(JSON.parse(json), r("TicketShowMessage"));
-    }
-
-    public static ticketShowMessageToJson(value: TicketShowMessage): string {
-        return JSON.stringify(uncast(value, r("TicketShowMessage")), null, 2);
-    }
-
-    public static toTicketShowResult(json: string): TicketShowResult {
-        return cast(JSON.parse(json), r("TicketShowResult"));
-    }
-
-    public static ticketShowResultToJson(value: TicketShowResult): string {
-        return JSON.stringify(uncast(value, r("TicketShowResult")), null, 2);
-    }
-
-    public static toTicketStatus(json: string): TicketStatus {
-        return cast(JSON.parse(json), r("TicketStatus"));
-    }
-
-    public static ticketStatusToJson(value: TicketStatus): string {
-        return JSON.stringify(uncast(value, r("TicketStatus")), null, 2);
-    }
-
-    public static toTicketStatusResult(json: string): TicketStatusResult {
-        return cast(JSON.parse(json), r("TicketStatusResult"));
-    }
-
-    public static ticketStatusResultToJson(value: TicketStatusResult): string {
-        return JSON.stringify(uncast(value, r("TicketStatusResult")), null, 2);
-    }
-
-    public static toTicketSubscribeMessage(json: string): TicketSubscribeMessage {
-        return cast(JSON.parse(json), r("TicketSubscribeMessage"));
-    }
-
-    public static ticketSubscribeMessageToJson(value: TicketSubscribeMessage): string {
-        return JSON.stringify(uncast(value, r("TicketSubscribeMessage")), null, 2);
-    }
-
-    public static toTicketSubscribeResult(json: string): TicketSubscribeResult {
-        return cast(JSON.parse(json), r("TicketSubscribeResult"));
-    }
-
-    public static ticketSubscribeResultToJson(value: TicketSubscribeResult): string {
-        return JSON.stringify(uncast(value, r("TicketSubscribeResult")), null, 2);
-    }
-
-    public static toTicketTakeMessage(json: string): TicketTakeMessage {
-        return cast(JSON.parse(json), r("TicketTakeMessage"));
-    }
-
-    public static ticketTakeMessageToJson(value: TicketTakeMessage): string {
-        return JSON.stringify(uncast(value, r("TicketTakeMessage")), null, 2);
-    }
-
-    public static toTicketTakeResult(json: string): TicketTakeResult {
-        return cast(JSON.parse(json), r("TicketTakeResult"));
-    }
-
-    public static ticketTakeResultToJson(value: TicketTakeResult): string {
-        return JSON.stringify(uncast(value, r("TicketTakeResult")), null, 2);
-    }
-
-    public static toTicketUnsubscribeMessage(json: string): TicketUnsubscribeMessage {
-        return cast(JSON.parse(json), r("TicketUnsubscribeMessage"));
-    }
-
-    public static ticketUnsubscribeMessageToJson(value: TicketUnsubscribeMessage): string {
-        return JSON.stringify(uncast(value, r("TicketUnsubscribeMessage")), null, 2);
-    }
-
-    public static toTicketUnsubscribeResult(json: string): TicketUnsubscribeResult {
-        return cast(JSON.parse(json), r("TicketUnsubscribeResult"));
-    }
-
-    public static ticketUnsubscribeResultToJson(value: TicketUnsubscribeResult): string {
-        return JSON.stringify(uncast(value, r("TicketUnsubscribeResult")), null, 2);
-    }
-
-    public static toTriggerNudgeMessage(json: string): TriggerNudgeMessage {
-        return cast(JSON.parse(json), r("TriggerNudgeMessage"));
-    }
-
-    public static triggerNudgeMessageToJson(value: TriggerNudgeMessage): string {
-        return JSON.stringify(uncast(value, r("TriggerNudgeMessage")), null, 2);
     }
 
     public static toUninstallPluginMessage(json: string): UninstallPluginMessage {
@@ -16510,6 +15749,7 @@ const typeMap: any = {
         { json: "remaining", js: "remaining", typ: 0 },
     ], "any"),
     "ItemElement": o([
+        { json: "address", js: "address", typ: "" },
         { json: "content", js: "content", typ: "" },
         { json: "created_at", js: "created_at", typ: "" },
         { json: "hint", js: "hint", typ: u(undefined, "") },
@@ -16522,6 +15762,7 @@ const typeMap: any = {
         { json: "source_id", js: "source_id", typ: u(undefined, "") },
     ], "any"),
     "AgentInboxItem": o([
+        { json: "address", js: "address", typ: "" },
         { json: "content", js: "content", typ: "" },
         { json: "created_at", js: "created_at", typ: "" },
         { json: "hint", js: "hint", typ: u(undefined, "") },
@@ -17228,7 +16469,6 @@ const typeMap: any = {
         { json: "last_model_request_at", js: "last_model_request_at", typ: u(undefined, "") },
         { json: "last_seen", js: "last_seen", typ: "" },
         { json: "main_repo", js: "main_repo", typ: u(undefined, "") },
-        { json: "nudge_fires_at", js: "nudge_fires_at", typ: u(undefined, "") },
         { json: "parent_session_id", js: "parent_session_id", typ: u(undefined, "") },
         { json: "pinned_at", js: "pinned_at", typ: u(undefined, "") },
         { json: "pull_requests", js: "pull_requests", typ: u(undefined, a(r("PullRequestElement"))) },
@@ -17239,7 +16479,6 @@ const typeMap: any = {
         { json: "state_since", js: "state_since", typ: "" },
         { json: "state_updated_at", js: "state_updated_at", typ: "" },
         { json: "terminal_build_stale", js: "terminal_build_stale", typ: u(undefined, true) },
-        { json: "ticket_unread", js: "ticket_unread", typ: u(undefined, true) },
         { json: "turn_opened_at", js: "turn_opened_at", typ: u(undefined, "") },
         { json: "turn_owed", js: "turn_owed", typ: u(undefined, true) },
         { json: "turn_snoozed_until", js: "turn_snoozed_until", typ: u(undefined, "") },
@@ -17994,7 +17233,6 @@ const typeMap: any = {
         { json: "seed_id", js: "seed_id", typ: u(undefined, "") },
         { json: "session_id", js: "session_id", typ: "" },
         { json: "state", js: "state", typ: r("DelegationOperationState") },
-        { json: "ticket_id", js: "ticket_id", typ: u(undefined, "") },
         { json: "updated_at", js: "updated_at", typ: "" },
         { json: "workspace_id", js: "workspace_id", typ: u(undefined, "") },
         { json: "worktree_path", js: "worktree_path", typ: u(undefined, "") },
@@ -18022,7 +17260,6 @@ const typeMap: any = {
         { json: "seed_id", js: "seed_id", typ: u(undefined, "") },
         { json: "session_id", js: "session_id", typ: "" },
         { json: "state", js: "state", typ: r("DelegationOperationState") },
-        { json: "ticket_id", js: "ticket_id", typ: u(undefined, "") },
         { json: "updated_at", js: "updated_at", typ: "" },
         { json: "workspace_id", js: "workspace_id", typ: u(undefined, "") },
         { json: "worktree_path", js: "worktree_path", typ: u(undefined, "") },
@@ -18974,7 +18211,6 @@ const typeMap: any = {
         { json: "repo_path", js: "repo_path", typ: "" },
         { json: "session_id", js: "session_id", typ: "" },
         { json: "status", js: "status", typ: "" },
-        { json: "ticket_id", js: "ticket_id", typ: u(undefined, "") },
         { json: "title", js: "title", typ: "" },
     ], "any"),
     "Round": o([
@@ -20014,7 +19250,6 @@ const typeMap: any = {
         { json: "manifest_yaml", js: "manifest_yaml", typ: "" },
         { json: "presentation_id", js: "presentation_id", typ: u(undefined, "") },
         { json: "source_session_id", js: "source_session_id", typ: "" },
-        { json: "ticket_id", js: "ticket_id", typ: u(undefined, "") },
     ], "any"),
     "PresentOpenResult": o([
         { json: "base_sha", js: "base_sha", typ: "" },
@@ -20054,7 +19289,6 @@ const typeMap: any = {
         { json: "repo_path", js: "repo_path", typ: "" },
         { json: "session_id", js: "session_id", typ: "" },
         { json: "status", js: "status", typ: "" },
-        { json: "ticket_id", js: "ticket_id", typ: u(undefined, "") },
         { json: "title", js: "title", typ: "" },
     ], "any"),
     "PresentationAddedMessage": o([
@@ -20394,16 +19628,6 @@ const typeMap: any = {
         { json: "session_transcript_result", js: "session_transcript_result", typ: u(undefined, r("SessionTranscriptResultObject")) },
         { json: "sessions", js: "sessions", typ: u(undefined, a(r("SessionObject"))) },
         { json: "state_explain_result", js: "state_explain_result", typ: u(undefined, r("StateExplainResultObject")) },
-        { json: "ticket_attach_result", js: "ticket_attach_result", typ: u(undefined, r("TicketAttachResultObject")) },
-        { json: "ticket_comment_result", js: "ticket_comment_result", typ: u(undefined, r("TicketCommentResultObject")) },
-        { json: "ticket_create_result", js: "ticket_create_result", typ: u(undefined, r("TicketCreateResultObject")) },
-        { json: "ticket_inbox_result", js: "ticket_inbox_result", typ: u(undefined, r("TicketInboxResultObject")) },
-        { json: "ticket_list_result", js: "ticket_list_result", typ: u(undefined, r("TicketListResultObject")) },
-        { json: "ticket_show_result", js: "ticket_show_result", typ: u(undefined, r("TicketShowResultObject")) },
-        { json: "ticket_status_result", js: "ticket_status_result", typ: u(undefined, r("TicketStatusResultObject")) },
-        { json: "ticket_subscribe_result", js: "ticket_subscribe_result", typ: u(undefined, r("TicketSubscribeResultObject")) },
-        { json: "ticket_take_result", js: "ticket_take_result", typ: u(undefined, r("TicketTakeResultObject")) },
-        { json: "ticket_unsubscribe_result", js: "ticket_unsubscribe_result", typ: u(undefined, r("TicketUnsubscribeResultObject")) },
         { json: "workspaces", js: "workspaces", typ: u(undefined, a(r("WorkspaceElement"))) },
         { json: "worktree_keep_result", js: "worktree_keep_result", typ: u(undefined, r("WorktreeKeepResultObject")) },
         { json: "worktree_list_result", js: "worktree_list_result", typ: u(undefined, r("WorktreeListResultObject")) },
@@ -20846,101 +20070,6 @@ const typeMap: any = {
         { json: "recorded_at", js: "recorded_at", typ: "" },
         { json: "repeats", js: "repeats", typ: u(undefined, 0) },
         { json: "source", js: "source", typ: "" },
-    ], "any"),
-    "TicketAttachResultObject": o([
-        { json: "applied", js: "applied", typ: true },
-        { json: "artifacts", js: "artifacts", typ: a(r("ArtifactElement")) },
-        { json: "catch_up", js: "catch_up", typ: u(undefined, r("CatchUp")) },
-        { json: "deduplicated", js: "deduplicated", typ: true },
-        { json: "event_seq", js: "event_seq", typ: 0 },
-        { json: "fingerprint", js: "fingerprint", typ: "" },
-        { json: "state", js: "state", typ: r("TicketStatus") },
-        { json: "ticket_id", js: "ticket_id", typ: "" },
-    ], "any"),
-    "ArtifactElement": o([
-        { json: "filename", js: "filename", typ: "" },
-        { json: "notebook_path", js: "notebook_path", typ: "" },
-        { json: "path", js: "path", typ: "" },
-    ], "any"),
-    "CatchUp": o([
-        { json: "events", js: "events", typ: a(r("EventObject")) },
-        { json: "ticket_id", js: "ticket_id", typ: "" },
-    ], "any"),
-    "EventObject": o([
-        { json: "author", js: "author", typ: "" },
-        { json: "comment", js: "comment", typ: u(undefined, "") },
-        { json: "created_at", js: "created_at", typ: "" },
-        { json: "detail", js: "detail", typ: u(undefined, "") },
-        { json: "from_status", js: "from_status", typ: u(undefined, r("TicketStatus")) },
-        { json: "kind", js: "kind", typ: r("TicketEventKind") },
-        { json: "ticket_id", js: "ticket_id", typ: "" },
-        { json: "to_status", js: "to_status", typ: u(undefined, r("TicketStatus")) },
-    ], "any"),
-    "TicketCommentResultObject": o([
-        { json: "applied", js: "applied", typ: true },
-        { json: "catch_up", js: "catch_up", typ: u(undefined, r("CatchUp")) },
-        { json: "ticket_id", js: "ticket_id", typ: "" },
-    ], "any"),
-    "TicketCreateResultObject": o([
-        { json: "status", js: "status", typ: r("TicketStatus") },
-        { json: "ticket_id", js: "ticket_id", typ: "" },
-        { json: "title", js: "title", typ: "" },
-    ], "any"),
-    "TicketInboxResultObject": o([
-        { json: "bundles", js: "bundles", typ: a(r("CatchUp")) },
-        { json: "last_user_activity_at", js: "last_user_activity_at", typ: u(undefined, "") },
-    ], "any"),
-    "TicketListResultObject": o([
-        { json: "tickets", js: "tickets", typ: a(r("TicketElement")) },
-    ], "any"),
-    "TicketElement": o([
-        { json: "activity", js: "activity", typ: a(r("ActivityElement")) },
-        { json: "archived_at", js: "archived_at", typ: u(undefined, "") },
-        { json: "artifacts", js: "artifacts", typ: a(r("ArtifactElement")) },
-        { json: "assignee", js: "assignee", typ: "" },
-        { json: "automation", js: "automation", typ: u(undefined, r("Automation")) },
-        { json: "closed_at", js: "closed_at", typ: u(undefined, "") },
-        { json: "created_at", js: "created_at", typ: "" },
-        { json: "cwd", js: "cwd", typ: "" },
-        { json: "description", js: "description", typ: "" },
-        { json: "id", js: "id", typ: "" },
-        { json: "last_agent_id", js: "last_agent_id", typ: "" },
-        { json: "latest_event_seq", js: "latest_event_seq", typ: u(undefined, 0) },
-        { json: "project_id", js: "project_id", typ: "" },
-        { json: "reconciled_at", js: "reconciled_at", typ: u(undefined, "") },
-        { json: "status", js: "status", typ: r("TicketStatus") },
-        { json: "title", js: "title", typ: "" },
-        { json: "updated_at", js: "updated_at", typ: "" },
-    ], "any"),
-    "ActivityElement": o([
-        { json: "author", js: "author", typ: "" },
-        { json: "comment", js: "comment", typ: u(undefined, "") },
-        { json: "created_at", js: "created_at", typ: "" },
-        { json: "from_status", js: "from_status", typ: u(undefined, r("TicketStatus")) },
-        { json: "id", js: "id", typ: 0 },
-        { json: "kind", js: "kind", typ: r("TicketActivityKind") },
-        { json: "to_status", js: "to_status", typ: u(undefined, r("TicketStatus")) },
-    ], "any"),
-    "TicketShowResultObject": o([
-        { json: "ticket", js: "ticket", typ: r("TicketElement") },
-    ], "any"),
-    "TicketStatusResultObject": o([
-        { json: "applied", js: "applied", typ: true },
-        { json: "catch_up", js: "catch_up", typ: u(undefined, r("CatchUp")) },
-        { json: "status", js: "status", typ: r("TicketStatus") },
-        { json: "ticket_id", js: "ticket_id", typ: "" },
-    ], "any"),
-    "TicketSubscribeResultObject": o([
-        { json: "ticket_id", js: "ticket_id", typ: "" },
-        { json: "unread_count", js: "unread_count", typ: u(undefined, 0) },
-    ], "any"),
-    "TicketTakeResultObject": o([
-        { json: "previous_assignee", js: "previous_assignee", typ: "" },
-        { json: "ticket_id", js: "ticket_id", typ: "" },
-        { json: "unread_count", js: "unread_count", typ: u(undefined, 0) },
-    ], "any"),
-    "TicketUnsubscribeResultObject": o([
-        { json: "ticket_id", js: "ticket_id", typ: "" },
     ], "any"),
     "WorktreeKeepResultObject": o([
         { json: "worktree", js: "worktree", typ: r("WorktreeElement") },
@@ -21489,7 +20618,6 @@ const typeMap: any = {
         { json: "last_model_request_at", js: "last_model_request_at", typ: u(undefined, "") },
         { json: "last_seen", js: "last_seen", typ: "" },
         { json: "main_repo", js: "main_repo", typ: u(undefined, "") },
-        { json: "nudge_fires_at", js: "nudge_fires_at", typ: u(undefined, "") },
         { json: "parent_session_id", js: "parent_session_id", typ: u(undefined, "") },
         { json: "pinned_at", js: "pinned_at", typ: u(undefined, "") },
         { json: "pull_requests", js: "pull_requests", typ: u(undefined, a(r("PullRequestElement"))) },
@@ -21500,7 +20628,6 @@ const typeMap: any = {
         { json: "state_since", js: "state_since", typ: "" },
         { json: "state_updated_at", js: "state_updated_at", typ: "" },
         { json: "terminal_build_stale", js: "terminal_build_stale", typ: u(undefined, true) },
-        { json: "ticket_unread", js: "ticket_unread", typ: u(undefined, true) },
         { json: "turn_opened_at", js: "turn_opened_at", typ: u(undefined, "") },
         { json: "turn_owed", js: "turn_owed", typ: u(undefined, true) },
         { json: "turn_snoozed_until", js: "turn_snoozed_until", typ: u(undefined, "") },
@@ -21892,13 +21019,6 @@ const typeMap: any = {
         { json: "cursor", js: "cursor", typ: "" },
         { json: "foreground", js: "foreground", typ: "" },
     ], "any"),
-    "SetTicketStatusMessage": o([
-        { json: "cmd", js: "cmd", typ: r("SetTicketStatusMessageCmd") },
-        { json: "comment", js: "comment", typ: u(undefined, "") },
-        { json: "source_session_id", js: "source_session_id", typ: "" },
-        { json: "ticket_id", js: "ticket_id", typ: u(undefined, "") },
-        { json: "work_state", js: "work_state", typ: r("DispatchWorkState") },
-    ], "any"),
     "SetWorkspaceRankMessage": o([
         { json: "cmd", js: "cmd", typ: r("SetWorkspaceRankMessageCmd") },
         { json: "next_workspace_id", js: "next_workspace_id", typ: u(undefined, "") },
@@ -22139,176 +21259,6 @@ const typeMap: any = {
         { json: "cmd", js: "cmd", typ: r("TerminalPointerActivityMessageCmd") },
         { json: "id", js: "id", typ: "" },
     ], "any"),
-    "Ticket": o([
-        { json: "activity", js: "activity", typ: a(r("ActivityElement")) },
-        { json: "archived_at", js: "archived_at", typ: u(undefined, "") },
-        { json: "artifacts", js: "artifacts", typ: a(r("ArtifactElement")) },
-        { json: "assignee", js: "assignee", typ: "" },
-        { json: "automation", js: "automation", typ: u(undefined, r("Automation")) },
-        { json: "closed_at", js: "closed_at", typ: u(undefined, "") },
-        { json: "created_at", js: "created_at", typ: "" },
-        { json: "cwd", js: "cwd", typ: "" },
-        { json: "description", js: "description", typ: "" },
-        { json: "id", js: "id", typ: "" },
-        { json: "last_agent_id", js: "last_agent_id", typ: "" },
-        { json: "latest_event_seq", js: "latest_event_seq", typ: u(undefined, 0) },
-        { json: "project_id", js: "project_id", typ: "" },
-        { json: "reconciled_at", js: "reconciled_at", typ: u(undefined, "") },
-        { json: "status", js: "status", typ: r("TicketStatus") },
-        { json: "title", js: "title", typ: "" },
-        { json: "updated_at", js: "updated_at", typ: "" },
-    ], "any"),
-    "TicketActivity": o([
-        { json: "author", js: "author", typ: "" },
-        { json: "comment", js: "comment", typ: u(undefined, "") },
-        { json: "created_at", js: "created_at", typ: "" },
-        { json: "from_status", js: "from_status", typ: u(undefined, r("TicketStatus")) },
-        { json: "id", js: "id", typ: 0 },
-        { json: "kind", js: "kind", typ: r("TicketActivityKind") },
-        { json: "to_status", js: "to_status", typ: u(undefined, r("TicketStatus")) },
-    ], "any"),
-    "TicketArtifact": o([
-        { json: "filename", js: "filename", typ: "" },
-        { json: "notebook_path", js: "notebook_path", typ: "" },
-        { json: "path", js: "path", typ: "" },
-    ], "any"),
-    "TicketAttachFile": o([
-        { json: "filename", js: "filename", typ: "" },
-        { json: "source_path", js: "source_path", typ: "" },
-    ], "any"),
-    "TicketAttachMessage": o([
-        { json: "cmd", js: "cmd", typ: r("TicketAttachMessageCmd") },
-        { json: "comment", js: "comment", typ: u(undefined, "") },
-        { json: "expected_event_seq", js: "expected_event_seq", typ: u(undefined, 0) },
-        { json: "files", js: "files", typ: a(r("TicketAttachMessageFile")) },
-        { json: "request_id", js: "request_id", typ: u(undefined, "") },
-        { json: "source_session_id", js: "source_session_id", typ: "" },
-        { json: "state", js: "state", typ: u(undefined, r("DispatchWorkState")) },
-        { json: "ticket_id", js: "ticket_id", typ: u(undefined, "") },
-    ], "any"),
-    "TicketAttachMessageFile": o([
-        { json: "filename", js: "filename", typ: "" },
-        { json: "source_path", js: "source_path", typ: "" },
-    ], "any"),
-    "TicketAttachResult": o([
-        { json: "applied", js: "applied", typ: true },
-        { json: "artifacts", js: "artifacts", typ: a(r("ArtifactElement")) },
-        { json: "catch_up", js: "catch_up", typ: u(undefined, r("CatchUp")) },
-        { json: "deduplicated", js: "deduplicated", typ: true },
-        { json: "event_seq", js: "event_seq", typ: 0 },
-        { json: "fingerprint", js: "fingerprint", typ: "" },
-        { json: "state", js: "state", typ: r("TicketStatus") },
-        { json: "ticket_id", js: "ticket_id", typ: "" },
-    ], "any"),
-    "TicketAttachResultMessage": o([
-        { json: "error", js: "error", typ: u(undefined, "") },
-        { json: "event", js: "event", typ: r("TicketAttachResultMessageEvent") },
-        { json: "request_id", js: "request_id", typ: "" },
-        { json: "result", js: "result", typ: u(undefined, r("TicketAttachResultObject")) },
-        { json: "success", js: "success", typ: true },
-    ], "any"),
-    "TicketCommentMessage": o([
-        { json: "cmd", js: "cmd", typ: r("TicketCommentMessageCmd") },
-        { json: "comment", js: "comment", typ: "" },
-        { json: "source_session_id", js: "source_session_id", typ: "" },
-        { json: "ticket_id", js: "ticket_id", typ: "" },
-    ], "any"),
-    "TicketCommentResult": o([
-        { json: "applied", js: "applied", typ: true },
-        { json: "catch_up", js: "catch_up", typ: u(undefined, r("CatchUp")) },
-        { json: "ticket_id", js: "ticket_id", typ: "" },
-    ], "any"),
-    "TicketCreateMessage": o([
-        { json: "cmd", js: "cmd", typ: r("TicketCreateMessageCmd") },
-        { json: "description", js: "description", typ: u(undefined, "") },
-        { json: "id", js: "id", typ: u(undefined, "") },
-        { json: "source_session_id", js: "source_session_id", typ: "" },
-        { json: "title", js: "title", typ: "" },
-    ], "any"),
-    "TicketCreateResult": o([
-        { json: "status", js: "status", typ: r("TicketStatus") },
-        { json: "ticket_id", js: "ticket_id", typ: "" },
-        { json: "title", js: "title", typ: "" },
-    ], "any"),
-    "TicketEvent": o([
-        { json: "author", js: "author", typ: "" },
-        { json: "comment", js: "comment", typ: u(undefined, "") },
-        { json: "created_at", js: "created_at", typ: "" },
-        { json: "detail", js: "detail", typ: u(undefined, "") },
-        { json: "from_status", js: "from_status", typ: u(undefined, r("TicketStatus")) },
-        { json: "kind", js: "kind", typ: r("TicketEventKind") },
-        { json: "ticket_id", js: "ticket_id", typ: "" },
-        { json: "to_status", js: "to_status", typ: u(undefined, r("TicketStatus")) },
-    ], "any"),
-    "TicketEventBundle": o([
-        { json: "events", js: "events", typ: a(r("EventObject")) },
-        { json: "ticket_id", js: "ticket_id", typ: "" },
-    ], "any"),
-    "TicketInboxMessage": o([
-        { json: "cmd", js: "cmd", typ: r("TicketInboxMessageCmd") },
-        { json: "mode", js: "mode", typ: u(undefined, r("TicketInboxMode")) },
-        { json: "source_session_id", js: "source_session_id", typ: "" },
-        { json: "watch_interval_ms", js: "watch_interval_ms", typ: u(undefined, "") },
-    ], "any"),
-    "TicketInboxResult": o([
-        { json: "bundles", js: "bundles", typ: a(r("CatchUp")) },
-        { json: "last_user_activity_at", js: "last_user_activity_at", typ: u(undefined, "") },
-    ], "any"),
-    "TicketListMessage": o([
-        { json: "cmd", js: "cmd", typ: r("TicketListMessageCmd") },
-        { json: "include_archived", js: "include_archived", typ: u(undefined, true) },
-        { json: "source_session_id", js: "source_session_id", typ: u(undefined, "") },
-        { json: "status", js: "status", typ: u(undefined, "") },
-    ], "any"),
-    "TicketListResult": o([
-        { json: "tickets", js: "tickets", typ: a(r("TicketElement")) },
-    ], "any"),
-    "TicketShowMessage": o([
-        { json: "cmd", js: "cmd", typ: r("TicketShowMessageCmd") },
-        { json: "source_session_id", js: "source_session_id", typ: u(undefined, "") },
-        { json: "ticket_id", js: "ticket_id", typ: "" },
-    ], "any"),
-    "TicketShowResult": o([
-        { json: "ticket", js: "ticket", typ: r("TicketElement") },
-    ], "any"),
-    "TicketStatusResult": o([
-        { json: "applied", js: "applied", typ: true },
-        { json: "catch_up", js: "catch_up", typ: u(undefined, r("CatchUp")) },
-        { json: "status", js: "status", typ: r("TicketStatus") },
-        { json: "ticket_id", js: "ticket_id", typ: "" },
-    ], "any"),
-    "TicketSubscribeMessage": o([
-        { json: "cmd", js: "cmd", typ: r("TicketSubscribeMessageCmd") },
-        { json: "source_session_id", js: "source_session_id", typ: "" },
-        { json: "ticket_id", js: "ticket_id", typ: "" },
-    ], "any"),
-    "TicketSubscribeResult": o([
-        { json: "ticket_id", js: "ticket_id", typ: "" },
-        { json: "unread_count", js: "unread_count", typ: u(undefined, 0) },
-    ], "any"),
-    "TicketTakeMessage": o([
-        { json: "cmd", js: "cmd", typ: r("TicketTakeMessageCmd") },
-        { json: "confirm", js: "confirm", typ: u(undefined, true) },
-        { json: "source_session_id", js: "source_session_id", typ: "" },
-        { json: "ticket_id", js: "ticket_id", typ: "" },
-    ], "any"),
-    "TicketTakeResult": o([
-        { json: "previous_assignee", js: "previous_assignee", typ: "" },
-        { json: "ticket_id", js: "ticket_id", typ: "" },
-        { json: "unread_count", js: "unread_count", typ: u(undefined, 0) },
-    ], "any"),
-    "TicketUnsubscribeMessage": o([
-        { json: "cmd", js: "cmd", typ: r("TicketUnsubscribeMessageCmd") },
-        { json: "source_session_id", js: "source_session_id", typ: "" },
-        { json: "ticket_id", js: "ticket_id", typ: "" },
-    ], "any"),
-    "TicketUnsubscribeResult": o([
-        { json: "ticket_id", js: "ticket_id", typ: "" },
-    ], "any"),
-    "TriggerNudgeMessage": o([
-        { json: "cmd", js: "cmd", typ: r("TriggerNudgeMessageCmd") },
-        { json: "session_id", js: "session_id", typ: "" },
-    ], "any"),
     "UninstallPluginMessage": o([
         { json: "cmd", js: "cmd", typ: r("UninstallPluginMessageCmd") },
         { json: "name", js: "name", typ: "" },
@@ -22402,7 +21352,6 @@ const typeMap: any = {
         { json: "success", js: "success", typ: u(undefined, true) },
         { json: "sweep_entry", js: "sweep_entry", typ: u(undefined, r("SweepEntry")) },
         { json: "target_path", js: "target_path", typ: u(undefined, "") },
-        { json: "ticket", js: "ticket", typ: u(undefined, r("TicketElement")) },
         { json: "tile_id", js: "tile_id", typ: u(undefined, "") },
         { json: "tile_kind", js: "tile_kind", typ: u(undefined, "") },
         { json: "total", js: "total", typ: u(undefined, 0) },
@@ -23806,28 +22755,6 @@ const typeMap: any = {
         "start_fresh_elsewhere",
         "start_fresh_same_place",
     ],
-    "TicketStatus": [
-        "blocked",
-        "crashed",
-        "done",
-        "failed",
-        "in_review",
-        "todo",
-        "working",
-    ],
-    "TicketEventKind": [
-        "assigned",
-        "attach_submitted",
-        "commented",
-        "created",
-        "description_edited",
-        "status_changed",
-    ],
-    "TicketActivityKind": [
-        "attach",
-        "comment",
-        "status_change",
-    ],
     "RuntimeRespawnedMessageEvent": [
         "runtime_respawned",
     ],
@@ -24040,16 +22967,6 @@ const typeMap: any = {
     "SetTerminalThemeMessageCmd": [
         "set_terminal_theme",
     ],
-    "SetTicketStatusMessageCmd": [
-        "set_ticket_status",
-    ],
-    "DispatchWorkState": [
-        "completed",
-        "failed",
-        "in_progress",
-        "needs_input",
-        "ready_for_review",
-    ],
     "SetWorkspaceRankMessageCmd": [
         "set_workspace_rank",
     ],
@@ -24103,43 +23020,6 @@ const typeMap: any = {
     ],
     "TerminalPointerActivityMessageCmd": [
         "terminal_pointer_activity",
-    ],
-    "TicketAttachMessageCmd": [
-        "ticket_attach",
-    ],
-    "TicketAttachResultMessageEvent": [
-        "ticket_attach_result",
-    ],
-    "TicketCommentMessageCmd": [
-        "ticket_comment",
-    ],
-    "TicketCreateMessageCmd": [
-        "ticket_create",
-    ],
-    "TicketInboxMessageCmd": [
-        "ticket_inbox",
-    ],
-    "TicketInboxMode": [
-        "explicit",
-        "watch",
-    ],
-    "TicketListMessageCmd": [
-        "ticket_list",
-    ],
-    "TicketShowMessageCmd": [
-        "ticket_show",
-    ],
-    "TicketSubscribeMessageCmd": [
-        "ticket_subscribe",
-    ],
-    "TicketTakeMessageCmd": [
-        "ticket_take",
-    ],
-    "TicketUnsubscribeMessageCmd": [
-        "ticket_unsubscribe",
-    ],
-    "TriggerNudgeMessageCmd": [
-        "trigger_nudge",
     ],
     "UninstallPluginMessageCmd": [
         "uninstall_plugin",

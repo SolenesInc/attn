@@ -11,7 +11,7 @@ import (
 
 func TestMigration126RecomputesStoredSlugs(t *testing.T) {
 	dbPath := filepath.Join(t.TempDir(), "test.db")
-	s, err := newSeededStore(dbPath)
+	s, err := newStoreAtVersion(dbPath, 161)
 	if err != nil {
 		t.Fatalf("NewWithDB: %v", err)
 	}
@@ -32,10 +32,11 @@ func TestMigration126RecomputesStoredSlugs(t *testing.T) {
 	if err != nil {
 		t.Fatalf("read the seed before the migration: %v", err)
 	}
+
 	if _, err := s.db.Exec(`DELETE FROM schema_migrations WHERE version >= 126`); err != nil {
 		t.Fatalf("unrecord migration 126: %v", err)
 	}
-	if err := migrateDB(s.db, dbPath); err != nil {
+	if err := migrateDBThrough(s.db, dbPath, 161); err != nil {
 		t.Fatalf("migrateDB: %v", err)
 	}
 

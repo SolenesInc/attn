@@ -7,7 +7,6 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"golang.org/x/sync/singleflight"
 	"io"
 	"net"
 	"net/http"
@@ -18,9 +17,10 @@ import (
 	"strconv"
 	"strings"
 	"sync"
-	"sync/atomic"
 	"syscall"
 	"time"
+
+	"golang.org/x/sync/singleflight"
 
 	agentdriver "github.com/victorarias/attn/internal/agent"
 	"github.com/victorarias/attn/internal/buildinfo"
@@ -36,6 +36,7 @@ import (
 	"github.com/victorarias/attn/internal/github"
 	"github.com/victorarias/attn/internal/headless"
 	"github.com/victorarias/attn/internal/hub"
+	"github.com/victorarias/attn/internal/inbox"
 	"github.com/victorarias/attn/internal/jobs"
 	"github.com/victorarias/attn/internal/logging"
 	"github.com/victorarias/attn/internal/notebook"
@@ -149,11 +150,6 @@ type Daemon struct {
 	worktreeMaintenance               worktreeMaintenanceCoordinator
 	warnings                          []protocol.DaemonWarning
 	warningsMu                        sync.RWMutex
-	legacyTicketRecoveryFinishOnce    sync.Once
-	backlogAtStart                    map[string]struct{}
-	legacyTicketSnapshotIdentity      func(string) (store.LegacyTicketRecoverySource, error)
-	legacyTicketSnapshotRead          func(string) (store.LegacyTicketSnapshotRead, error)
-	legacyRecoveryArtifactWrite       func(string, []byte) error
 	ptyBackend                        ptybackend.Backend
 	ptySettingsMu                     sync.Mutex
 	ptySettingsChangeMu               sync.Mutex
@@ -174,14 +170,10 @@ type Daemon struct {
 	forcedStop                        map[string]time.Time
 	pendingConversationMu             sync.Mutex
 	pendingConversation               map[string]agentConversationObservation
-	ticketReconcileMu                 sync.Mutex
-	ticketReconcileExec               func(ctx context.Context, in ticketReconcileInputs) (agentdriver.HeadlessTaskResult, error)
-	ticketOrphanFirstSeen             map[string]time.Time
 	sessionTitleMu                    sync.Mutex
 	sessionTitleExec                  func(ctx context.Context, session *protocol.Session, conversation string) (string, error)
 	sessionTitleAttempted             map[string]struct{}
 	sessionTitleInitialPrompt         map[string][sha256.Size]byte
-	ticketArtifactMu                  sync.Mutex
 	seedArtifactMu                    sync.Mutex
 	delegationModelQueries            singleflight.Group
 	delegationMu                      sync.Mutex
@@ -203,10 +195,9 @@ type Daemon struct {
 	externalRegistrations             sync.Map
 	sessionInputOnce                  sync.Once
 	sessionInputState                 *sessionInputModule
-	agentMailboxMu                    sync.Mutex
-	agentMailboxDoorbells             map[string]*agentMailboxDoorbellState
-	agentMailboxCooldownOverride      time.Duration
-	agentMailboxDrainHook             func(sessionID string, delivered int)
+	inboxMu                           sync.Mutex
+	inboxStates                       map[inbox.Address]*inboxDeliveryState
+	inboxUnsubscribe                  func()
 	crewWakeMu                        sync.Mutex
 	crewExitedMu                      sync.Mutex
 	crewExitedSessions                map[string]string
@@ -225,15 +216,6 @@ type Daemon struct {
 	sessionStateReason                *sessionStateReasons
 	supportInputTraceOnce             sync.Once
 	supportInputTrace                 *supportInputTraceRing
-	nudgeMu                           sync.Mutex
-	nudgeCountdowns                   map[string]*nudgeCountdown
-	unreadCache                       map[string]bool
-	nudgeSuppressedThrough            map[string]int64
-	deliveryMu                        sync.Mutex
-	watchLeaseUntil                   map[string]time.Time
-	nudgeWindowOverride               time.Duration
-	ticketBundleWindowOverride        time.Duration
-	nudgeFireHook                     func(sessionID, action string)
 	lastInputMu                       sync.Mutex
 	lastUserInputAt                   map[string]time.Time
 	lastAutoSettleActivityAt          map[string]time.Time
@@ -296,8 +278,6 @@ type Daemon struct {
 	selectedWorkspaceID string
 
 	openTileMu sync.Mutex
-
-	lastUserActivityAtNano atomic.Int64
 
 	markdownSeenMu sync.Mutex
 	markdownSeen   map[string]tileContentSig
@@ -594,7 +574,6 @@ func New(socketPath string) *Daemon {
 	}
 	d.wireGitExecution(productionGitExecutorConfig)
 	d.delegationWaitsForFirstTurn = true
-	d.ticketReconcileExec = d.execTicketReconcileClassifier
 	d.ensureEventBus()
 	d.sessionTitleExec = d.execSessionTitle
 	return d
@@ -708,16 +687,9 @@ func (d *Daemon) Start() error {
 		return fmt.Errorf("ensure enrollment record: %w", err)
 	}
 	d.ensureGardenCollections()
-	waitForLegacyTicketRecovery, err := d.prepareLegacyTicketRecovery()
-	if err != nil {
-		return fmt.Errorf("prepare legacy ticket recovery: %w", err)
-	}
-	d.backlogAtStart = d.snapshotBacklogAtStart()
 	d.ensureCrewCollections()
 	d.importCrewHomes()
-	if err := d.migrateCrewTicketIdentities(); err != nil {
-		return fmt.Errorf("migrate crew ticket identities: %w", err)
-	}
+
 	if d.hubManager == nil {
 		d.hubManager = hub.NewManager(
 			d.store,
@@ -887,8 +859,6 @@ func (d *Daemon) Start() error {
 
 	d.life.Go("monitorBranches", d.monitorBranches)
 
-	d.life.Go("runTicketReconcileSweep", d.runTicketReconcileSweep)
-
 	d.life.Go("runModelCaptureLoop", d.runModelCaptureLoop)
 
 	queueStarted := make(chan error, 1)
@@ -906,13 +876,6 @@ func (d *Daemon) Start() error {
 	}
 	if err := <-queueStarted; err != nil {
 		return err
-	}
-	if waitForLegacyTicketRecovery {
-		if err := d.enqueueLegacyTicketRecovery(); err != nil {
-			return fmt.Errorf("enqueue legacy ticket recovery: %w", err)
-		}
-	} else {
-		d.finishLegacyTicketRecoveryUpgrade()
 	}
 	d.startPermanentMaintenance()
 
@@ -947,7 +910,7 @@ func (d *Daemon) Start() error {
 		if gardenBellErr != nil {
 			d.logf("Garden seed mailbox startup reconciliation failed; queued updates remain undelivered: %v", gardenBellErr)
 		} else {
-			d.seedQueuedAgentMailboxItems()
+			d.recoverInbox()
 		}
 		if !recoverAutomationsAfterGitHubReady(githubHostsReady, d.life.Done(), d.recoverAutomations) {
 			return
@@ -1088,7 +1051,7 @@ func (d *Daemon) pluginDriverReportsState(agent protocol.SessionAgent) bool {
 }
 
 func (d *Daemon) performStartupPTYRecovery(previousRunSessions map[string]struct{}, recoveryStartedAt time.Time) {
-	defer d.rebuildTicketDeliverySchedules()
+
 	recoveryReport, recoverErr := d.recoverPTYBackend(10 * time.Second)
 	if recoverErr != nil {
 		d.logf("PTY backend recovery failed: %v", recoverErr)
@@ -1128,18 +1091,6 @@ func (d *Daemon) performStartupPTYRecovery(previousRunSessions map[string]struct
 	d.reconcileWorkspaceLayoutsWithPTYBackend(context.Background())
 	d.restoreTranscriptWatchers()
 	d.reseedWorkspaceStatuses()
-}
-
-func (d *Daemon) rebuildTicketDeliverySchedules() {
-	if d.store == nil {
-		return
-	}
-	now := time.Now()
-	for _, session := range d.store.List("") {
-		if session != nil {
-			d.notifyUnreadTicketSession(session.ID, now)
-		}
-	}
 }
 
 func (d *Daemon) recoverPTYBackend(timeout time.Duration) (ptybackend.RecoveryReport, error) {
@@ -1348,7 +1299,7 @@ func (d *Daemon) reconcileSessionsWithWorkerBackendState(ctx context.Context, al
 
 		d.store.Touch(sessionID)
 		d.store.ClearSessionIntentionalClose(sessionID)
-		d.reviveCrashedTicketsForSession(sessionID)
+
 		if existing.State == protocol.SessionStateScheduled {
 			continue
 		}
@@ -1631,8 +1582,8 @@ func (d *Daemon) stop() {
 	d.stopEventBus()
 	d.stopInstalledPlugins()
 	d.stopAllTranscriptWatchers()
-	d.stopNudgeCountdowns()
-	d.stopAgentMailboxDoorbells()
+
+	d.stopInbox()
 	d.pluginDriverSilence().stop()
 	d.stopAutoSettleTimers()
 	// Store.Close drains connections and checkpoints the WAL so attn.db alone holds every commit.
@@ -1676,7 +1627,6 @@ func (d *Daemon) handlePTYExit(info ptybackend.ExitInfo) bool {
 			return false
 		}
 	}
-	sessionAtExit := d.store.Get(info.ID)
 	d.sessionInputs().forgetSession(info.ID)
 	d.stopTranscriptWatcher(info.ID)
 	d.closePluginDriverSession(info.ID, "exited", &info.ExitCode, info.Signal)
@@ -1687,10 +1637,6 @@ func (d *Daemon) handlePTYExit(info ptybackend.ExitInfo) bool {
 		if err := d.removePTYSession(info.ID); err != nil {
 			d.logf("pty backend remove on exit failed for %s: %v", info.ID, err)
 		}
-	}
-
-	if sessionAtExit != nil {
-		d.reconcileTicketsOnSessionEnd(info.ID, string(sessionAtExit.State))
 	}
 	d.releaseExitedCrewBinding(info.ID)
 
@@ -2023,13 +1969,14 @@ func (d *Daemon) removeReapedSession(sessionID string) {
 func (d *Daemon) forgetSessionRuntime(sessionID string) {
 	d.externalRegistrations.Delete(sessionID)
 	d.stopTranscriptWatcher(sessionID)
-	if session := d.store.Get(sessionID); session != nil {
-		d.reconcileTicketsOnSessionEnd(sessionID, string(session.State))
-	}
-	d.clearNudgeState(sessionID)
-	d.forgetAgentMailboxDoorbell(sessionID)
+
+	d.kickInboxAfterCommit(inbox.ToSession(sessionID))
 	d.forgetSessionTitleInitialPrompt(sessionID)
 	d.clearAutoSettleState(sessionID)
+	d.lastInputMu.Lock()
+	delete(d.lastUserInputAt, sessionID)
+	delete(d.lastAutoSettleActivityAt, sessionID)
+	d.lastInputMu.Unlock()
 	d.clearSnoozeState(sessionID)
 	d.sessionInputs().forgetSession(sessionID)
 	d.forgetPluginDriverSilenceWatch(sessionID)
@@ -2519,24 +2466,12 @@ func (d *Daemon) handleConnection(conn net.Conn) {
 		d.handleDelegationPreferencesRollback(conn, msg.(*protocol.DelegationPreferencesRollbackMessage))
 	case protocol.CmdDelegateStatus:
 		d.handleDelegateStatus(conn, msg.(*protocol.DelegateStatusMessage))
-	case protocol.CmdSetTicketStatus:
-		d.handleSetTicketStatus(conn, msg.(*protocol.SetTicketStatusMessage))
-	case protocol.CmdTicketInbox:
-		d.handleTicketInbox(conn, msg.(*protocol.TicketInboxMessage))
-	case protocol.CmdTicketList:
-		d.handleTicketList(conn, msg.(*protocol.TicketListMessage))
-	case protocol.CmdTicketShow:
-		d.handleTicketShow(conn, msg.(*protocol.TicketShowMessage))
+
 	case protocol.CmdActivityStatus:
 		d.handleActivityStatus(conn, msg.(*protocol.ActivityStatusMessage))
 	case protocol.CmdClearSessionActivity:
 		d.handleClearSessionActivity(conn, msg.(*protocol.ClearSessionActivityMessage))
-	case protocol.CmdTicketSubscribe:
-		d.handleTicketSubscribe(conn, msg.(*protocol.TicketSubscribeMessage))
-	case protocol.CmdTicketUnsubscribe:
-		d.handleTicketUnsubscribe(conn, msg.(*protocol.TicketUnsubscribeMessage))
-	case protocol.CmdTicketAttach:
-		d.handleTicketAttach(conn, msg.(*protocol.TicketAttachMessage))
+
 	case protocol.CmdDocDefine:
 		d.handleDocDefine(conn, msg.(*protocol.DocDefineMessage))
 	case protocol.CmdDocUndefine:
@@ -2565,16 +2500,12 @@ func (d *Daemon) handleConnection(conn net.Conn) {
 		d.handleAutoModePropose(conn, msg.(*protocol.AutoModeProposeMessage))
 	case protocol.CmdAutoModeDenials:
 		d.handleAutoModeDenials(conn, msg.(*protocol.AutoModeDenialsMessage))
-	case protocol.CmdTicketCreate:
-		d.handleTicketCreate(conn, msg.(*protocol.TicketCreateMessage))
-	case protocol.CmdTicketComment:
-		d.handleTicketComment(conn, msg.(*protocol.TicketCommentMessage))
+
 	case protocol.CmdPresentOpen:
 		d.handlePresentOpen(conn, msg.(*protocol.PresentOpenMessage))
 	case protocol.CmdPresentFeedback:
 		d.handlePresentFeedback(conn, msg.(*protocol.PresentFeedbackMessage))
-	case protocol.CmdTicketTake:
-		d.handleTicketTake(conn, msg.(*protocol.TicketTakeMessage))
+
 	case protocol.CmdNotebookGuide:
 		d.handleNotebookGuide(conn, msg.(*protocol.NotebookGuideMessage))
 	case protocol.CmdJournalAppend:
@@ -2868,10 +2799,7 @@ func (d *Daemon) handleRegisterProtected(protection foregroundCleanupProtection,
 	if pending, ok := d.consumePendingAgentConversation(session.ID); ok {
 		d.observeAgentConversation(pending)
 	}
-	if err := d.store.ClearTicketReconciliationForAssignee(session.ID); err != nil {
-		d.logf("clear ticket reconciliation on register for %s: %v", session.ID, err)
-	}
-	d.reviveCrashedTicketsForSession(session.ID)
+
 	d.associateSessionWithWorkspace(session.ID, workspaceID)
 	if _, err := d.ensureWorkspaceLayout(workspaceID); err != nil {
 		d.logf("workspace layout bootstrap failed for workspace %s: %v", workspaceID, err)
@@ -3212,7 +3140,7 @@ func (d *Daemon) sessionForBroadcast(session *protocol.Session) *protocol.Sessio
 	if decorated != nil {
 		decorated.DelegationRole = d.sessionDelegationRoles()[decorated.ID]
 		decorated.Automation = d.automationProvenanceForSession(decorated.ID)
-		decorated.PullRequests = d.sessionPullRequestsForSession(decorated.ID)
+		decorated.PullRequests = d.sessionPullRequestsForSession(decorated)
 	}
 	return decorated
 }
@@ -3230,7 +3158,7 @@ func (d *Daemon) sessionForBroadcastWithChiefOfStaff(
 		return nil
 	}
 	d.decorateSessionWithStateReason(clone)
-	d.decorateSessionWithNudge(clone)
+
 	d.decorateSessionWithAutoSettle(clone)
 	d.decorateSessionWithSnooze(clone)
 	d.decorateChiefOfStaffWithSessionID(clone, chiefOfStaffSessionID)
@@ -3256,7 +3184,7 @@ func (d *Daemon) sessionsForBroadcast(sessions []*protocol.Session) []protocol.S
 	seedBySession := d.gardenDispatchSeedsBySession()
 	dispatcherBySession := d.gardenDispatchersBySession()
 	rolesBySession := d.sessionDelegationRoles()
-	bySession, _ := d.latestAutomationProvenance()
+	bySession := d.latestAutomationProvenance()
 	pullRequestsBySession := d.store.ListSessionPullRequestsBySession()
 	pullRequestWatchesByPR := d.pullRequestWatchesByPR()
 	out := make([]protocol.Session, 0, len(sessions))
@@ -3264,7 +3192,14 @@ func (d *Daemon) sessionsForBroadcast(sessions []*protocol.Session) []protocol.S
 		if decorated := d.sessionForBroadcastWithChiefOfStaff(session, chiefOfStaffSessionID, delegatedFromChief, crewBySession, seedBySession, dispatcherBySession); decorated != nil {
 			decorated.DelegationRole = rolesBySession[decorated.ID]
 			decorated.Automation = bySession[decorated.ID]
-			decorated.PullRequests = d.sessionPullRequestsForBroadcast(pullRequestsBySession[decorated.ID], pullRequestWatchesByPR)
+			addresses := []inbox.Address{inbox.ToSession(decorated.ID)}
+			if member := crewBySession[decorated.ID]; member != "" {
+				addresses = append(addresses, inbox.ToMember(member))
+			}
+			if decorated.ID == chiefOfStaffSessionID {
+				addresses = append(addresses, inbox.ToChief())
+			}
+			decorated.PullRequests = d.sessionPullRequestsForBroadcast(d.sessionPullRequestRecords(decorated.ID, addresses, pullRequestsBySession, pullRequestWatchesByPR), addresses, pullRequestWatchesByPR)
 			out = append(out, *decorated)
 		}
 	}

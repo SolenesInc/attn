@@ -11,12 +11,13 @@ import (
 
 func TestDelegationPreferencesMigrationCarriesTheSavedTableIntoHistory(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "attn.db")
-	s, err := newSeededStore(path)
+	s, err := newStoreAtVersion(path, 161)
 	if err != nil {
 		t.Fatal(err)
 	}
 	saved := delegationprefs.Config{Enabled: true, Revision: 3, Roles: []delegationprefs.Role{{ID: "build", Name: "Build", Enabled: true, Description: "Implement changes", Instructions: "Keep {{literal}} intact", DefaultChoiceID: "default", Choices: []delegationprefs.Choice{{ID: "default", Name: "Everyday", Selection: delegationprefs.Selection{Harness: "codex", Model: "test-model", Effort: "medium"}}}}}, Fallback: delegationprefs.Fallback{Selection: delegationprefs.Selection{Harness: "copilot"}}}
 	raw, _ := json.Marshal(saved)
+
 	if _, err := s.db.Exec(`
 		DROP TABLE delegation_preference_revisions;
 		CREATE TABLE delegation_preferences (id INTEGER PRIMARY KEY CHECK (id = 1), config TEXT NOT NULL);
@@ -34,7 +35,7 @@ func TestDelegationPreferencesMigrationCarriesTheSavedTableIntoHistory(t *testin
 		t.Fatal(err)
 	}
 
-	migrated, err := newSeededStore(path)
+	migrated, err := newStoreAtVersion(path, 161)
 	if err != nil {
 		t.Fatal(err)
 	}

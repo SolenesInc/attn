@@ -3887,24 +3887,6 @@ export function useUiAutomationBridge({
         await settleUi(3);
         return collectAutoModeUiState();
       }
-      case 'click_nudge_trigger': {
-        // The deliver-now trigger renders only in NudgeIndicator's paused mode. The header chip and
-        // the sidebar button issue the same trigger_nudge; 'tile' is a legacy alias for the header.
-        const requested = typeof payload.surface === 'string' ? payload.surface : 'any';
-        const header = document.querySelector('.nudge-header-trigger');
-        const sidebar = document.querySelector('[aria-label="Deliver the pending ticket nudge now"]');
-        const wantsHeader = requested === 'header' || requested === 'tile';
-        const target =
-          requested === 'sidebar' ? sidebar : wantsHeader ? header : (header ?? sidebar);
-        if (!(target instanceof HTMLElement)) {
-          throw new Error(
-            `Nudge trigger button not found (surface=${requested}); the session must be selected, have unread ticket activity, and not be stopped at an approval prompt`,
-          );
-        }
-        clickElement(target);
-        await settleUi(2);
-        return { clicked: true, surface: target === header ? 'header' : 'sidebar' };
-      }
       case 'capture_structured_snapshot':
         return collectVisualSnapshot(
           sessions,

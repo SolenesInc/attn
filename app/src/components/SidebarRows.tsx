@@ -8,7 +8,6 @@ import { ChiefOfStaffBadge } from './ChiefOfStaffBadge';
 import { DelegatedFromChiefBadge } from './DelegatedFromChiefBadge';
 import { DelegationChainTrigger } from './DelegationChain';
 import { HarnessIcon } from './HarnessIcon';
-import { SidebarNudgeBar, deriveNudgeMode } from './NudgeIndicator';
 import { SessionLabel } from './SessionLabel';
 import { SessionProvenance } from './SessionProvenance';
 import { SidebarSettlingBar } from './SettlingIndicator';
@@ -146,32 +145,16 @@ export function SidebarSessionBadges({ session }: { session: LocalSession }) {
 
 export function SidebarSessionCountdowns({
   session,
-  selected,
   showSettling,
-  onTriggerNudge,
 }: {
   session: LocalSession;
   selected: boolean;
   showSettling: boolean;
-  onTriggerNudge?: () => void;
 }) {
-  const nudgeMode = deriveNudgeMode({
-    ticketUnread: session.ticketUnread,
-    nudgeFiresAt: session.nudgeFiresAt,
-    state: session.state,
-    isActive: selected,
-  });
   return (
     <>
       {showSettling && (session.autoSettleFiresAt || session.autoSettleHeld) ? (
         <SidebarSettlingBar firesAt={session.autoSettleFiresAt} held={session.autoSettleHeld} />
-      ) : null}
-      {nudgeMode ? (
-        <SidebarNudgeBar
-          mode={nudgeMode}
-          firesAt={session.nudgeFiresAt}
-          onTrigger={onTriggerNudge ?? (() => {})}
-        />
       ) : null}
     </>
   );
@@ -186,7 +169,6 @@ export function SidebarSessionRow({
   onClickCapture,
   onPointerDown,
   onOpenActions,
-  onTriggerNudge,
   showSettling,
   delegates,
 }: {
@@ -198,7 +180,6 @@ export function SidebarSessionRow({
   onClickCapture?: (event: ReactMouseEvent) => void;
   onPointerDown?: (event: ReactPointerEvent<HTMLButtonElement>) => void;
   onOpenActions: (event: ReactMouseEvent) => void;
-  onTriggerNudge?: () => void;
   showSettling: boolean;
   delegates: readonly LocalSession[];
 }) {
@@ -243,7 +224,6 @@ export function SidebarSessionRow({
         session={session}
         selected={selected}
         showSettling={showSettling}
-        onTriggerNudge={onTriggerNudge}
       />
     </div>
   );

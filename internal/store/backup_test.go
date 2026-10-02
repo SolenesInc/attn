@@ -9,16 +9,11 @@ import (
 
 func TestMigrateDB_PreMigrationBackup(t *testing.T) {
 	dbPath := filepath.Join(t.TempDir(), "attn.db")
-	s, err := newSeededStore(dbPath)
+	s, err := newStoreAtVersion(dbPath, 161)
 	if err != nil {
 		t.Fatalf("NewWithDB error: %v", err)
 	}
 	defer s.Close()
-
-	latest := latestSchemaVersion()
-	if _, err := s.db.Exec(`DELETE FROM schema_migrations WHERE version = ?`, latest); err != nil {
-		t.Fatalf("unrecord latest migration: %v", err)
-	}
 
 	if err := migrateDB(s.db, dbPath); err != nil {
 		t.Fatalf("migrateDB error: %v", err)

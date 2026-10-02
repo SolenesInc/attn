@@ -146,8 +146,8 @@ HANDOFFS AND STEERING
 
     attn seed note <id> -m "…" --handoff   for the next tender; attn seed show prints
                                             it first, attn seed tend prints it on the claim
-    attn agent msg <seed-id> "…"            reaches whoever tends it now; an
-                                            untended seed refuses by name
+    attn agent msg <seed-id> "…"            reaches its current or next tender;
+                                            waits when none is reachable
 
 Leave a handoff whenever you park a seed, or stop mid-thread and do not
 intend to continue: outcome, evidence, next action. Long reasoning goes in an

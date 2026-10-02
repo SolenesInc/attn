@@ -47,7 +47,7 @@ func (d *Daemon) handleSeedTransitionWS(client *wsClient, msg *protocol.SeedTran
 		}
 		expectedRev = item.SeedRev
 	}
-	seed, doc, notes, err := d.applySeedTransitionDetailedAtRevision(
+	seed, doc, _, err := d.applySeedTransitionDetailedAtRevision(
 		msg.SeedID, verb, ask, protocol.Deref(msg.Comment), expectedRev)
 	if err != nil {
 		fail(err)
@@ -56,11 +56,8 @@ func (d *Daemon) handleSeedTransitionWS(client *wsClient, msg *protocol.SeedTran
 	if err := d.resolveGardenReviewAction(msg.Review, msg.SeedID, string(verb)); err != nil {
 		d.logf("Garden review: settle %s after %s: %v", msg.SeedID, verb, err)
 	}
-	for _, note := range notes.all() {
-		d.mirrorSeedNoteOntoTicket(sessionID, seed.ID, note.Body)
-	}
 	wire := d.seedTransitionWire(seed, doc)
-	d.mirrorSeedMoveOntoTicket(sessionID, seed.ID, verb, protocol.Deref(msg.Reason))
+
 	result.Seed = &wire
 	result.Success = true
 	d.sendToClient(client, result)
@@ -94,7 +91,7 @@ func (d *Daemon) handleSeedNoteWS(client *wsClient, msg *protocol.SeedNoteMessag
 		fail(err)
 		return
 	}
-	d.mirrorSeedNoteOntoTicket(authorSession, msg.SeedID, note.Body)
+
 	result.Note = &note
 	result.Success = true
 	d.sendToClient(client, result)

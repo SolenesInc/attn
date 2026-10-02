@@ -159,9 +159,6 @@ model SessionPullRequest {
   watch_last_checked_at?: string;
 }
 
-// AutomationProvenance is a derived read model. The daemon joins existing
-// definition/run/occurrence rows when it builds wire snapshots; sessions and
-// tickets do not persist a second copy.
 model AutomationProvenance {
   run_id: string;
   definition_id: string;
@@ -218,13 +215,11 @@ model Session {
   state_reason?: string;        // Why the resolver reached this state (e.g. "stuck", "classifier_verdict"); absent for states it does not own
   chief_of_staff?: boolean;     // True when this session holds the instance-wide coordinator role
   crew_member?: string;         // The crew member whose active binding this session is — "this session is trellis today". Stamped by the daemon at launch, judged live at broadcast, absent for every unbound session.
-  delegated_from_chief?: boolean; // True when this session was delegated from the chief of staff (assignee of a chief-authored ticket)
-  ticket_unread?: boolean;      // True when this session has unread ticket events (drives the incoming-nudge indicator)
+  delegated_from_chief?: boolean; // True when this session was delegated from the chief of staff (recorded by the Garden dispatch)
   seed_id?: string;             // The seed this session reports to: the crown a delegation was dispatched at, or the seed planted for it. Read from the session's dispatch record at broadcast, never stored on the session — the record is the single answer to what a session reports to. Absent for a session no delegation bound.
   dispatcher_session_id?: string; // The live session for this session's dispatcher, resolved from its dispatch record at broadcast and never stored on the session. Absent when nothing resolves.
   dispatcher_member?: string;   // The crew member whose day dispatched this session. Read from the dispatch record and present even when no live session resolves.
   delegation_role?: SessionDelegationRole;
-  nudge_fires_at?: string;      // ISO timestamp a pending ticket-nudge countdown will fire; absent when paused (active session) or no countdown
   turn_owed?: boolean;          // True when the user owes this session a turn. Derived at broadcast from the turn stamps plus the queue's exclusions (shell, chief, pinned, muted); never stored, and never recomputed by a client.
   turn_opened_at?: string;      // ISO timestamp the outstanding turn opened; the queue's sort key. Absent when nothing is owed.
   turn_snoozed_until?: string;  // ISO timestamp a live snooze runs to. Present only while the deferral holds; its presence is what puts the row in the sidebar's snoozed section, and while it is set no state can open a turn for this session except one that breaks through.
@@ -294,7 +289,6 @@ model PresentManifestView {
 model Presentation {
   id: string;
   session_id: string;
-  ticket_id?: string;
   title: string;
   kind: string;
   repo_path: string;
@@ -340,147 +334,6 @@ model PresentationComment {
   content: string;
   author: string;
   created_at: string;
-}
-
-// DispatchWorkState is the agent-reported work state carried on a set_ticket_status
-// command (and mapped onto a TicketStatus). It is the one Dispatch-named symbol
-// retained after the chief-of-staff dispatch namespace was retired.
-enum DispatchWorkState {
-  in_progress,
-  needs_input,
-  ready_for_review,
-  completed,
-  failed,
-}
-
-// TicketStatus is the column a ticket lives in on the work-tracker board.
-// `crashed` is attn-authored only (an agent that died without reporting); the
-// rest are reachable by the chief or the agent's own self-report.
-enum TicketStatus {
-  todo,
-  working,
-  blocked,
-  in_review,
-  done,
-  failed,
-  crashed,
-}
-
-// TicketEventKind is the type of a ticket activity event in the notification log.
-enum TicketEventKind {
-  created,
-  status_changed,
-  commented,
-  assigned,
-  description_edited,
-  attach_submitted,
-}
-
-// TicketEvent is one entry in a ticket's append-only event log, as delivered to an
-// observer reading its unread queue. The store's per-ticket sequence is the cursor
-// key and stays server-side; the wire event is for display. from_status /
-// to_status are present only on a status_changed event; comment / detail are
-// present when the kind carries them.
-model TicketEvent {
-  ticket_id: string;
-  kind: TicketEventKind;
-  author: string;
-  from_status?: TicketStatus;
-  to_status?: TicketStatus;
-  comment?: string;
-  detail?: string;
-  created_at: string;
-}
-
-// TicketEventBundle groups an observer's unread events for a single ticket,
-// oldest-first — the consume's "bundle by ticket".
-model TicketEventBundle {
-  ticket_id: string;
-  events: TicketEvent[];
-}
-
-// TicketInboxResult is the calling identity's unread events, bundled by ticket.
-// Reading the inbox advances the identity's per-ticket cursors past everything
-// returned, so a second read is empty until new events land.
-model TicketInboxResult {
-  bundles: TicketEventBundle[];
-  // last_user_activity_at is the RFC3339 timestamp of the most recent UI-origin
-  // websocket command the daemon observed (session/workspace selection, PR/file
-  // views, terminal input/resize) — a proxy for "the user is at the app right
-  // now". A watching agent can use it to decide whether to push a notification
-  // immediately or hold it until the user is away. Absent when the daemon has
-  // seen no user activity since it started.
-  last_user_activity_at?: string;
-}
-
-// TicketInboxMode distinguishes a deliberate catch-up from a long-lived polling
-// watch. Explicit reads drain immediately; watches share the buffered delivery
-// eligibility used by nudges.
-enum TicketInboxMode {
-  explicit,
-  watch,
-}
-
-// TicketActivityKind is the type of a human-facing history entry in a ticket's
-// detail view: a status change (column move, optional note) or a freeform comment.
-// It is the display subset of the richer event log (TicketEventKind).
-enum TicketActivityKind {
-  status_change,
-  comment,
-  attach,
-}
-
-// TicketActivity is one entry in a ticket's history thread, as shown in the detail
-// view. from_status / to_status are present only on a status_change; comment is
-// present when the entry carries a note (a comment, or a note on a status change).
-model TicketActivity {
-  id: int32;
-  kind: TicketActivityKind;
-  author: string;
-  from_status?: TicketStatus;
-  to_status?: TicketStatus;
-  comment?: string;
-  created_at: string;
-}
-
-// TicketArtifact is a current file in the ticket's visible Notebook
-// directory. The filesystem is authoritative, so the shape carries paths rather
-// than a database identity or lifecycle metadata.
-model TicketArtifact {
-  filename: string;
-  notebook_path: string;
-  path: string;
-}
-
-// Ticket is the wire shape of a durable tracked-work record — a read by id
-// (ticket_show) or the agent's board read (ticket_list), which carries the
-// brief. `activity` and `artifacts` are the full history thread and current
-// attach files: populated on a full record, left empty on the ticket_list rows.
-// Nothing pushes tickets: the app reads the garden, and every ticket read is an
-// agent pulling one over its socket.
-model Ticket {
-  id: string;
-  title: string;
-  description: string;
-  status: TicketStatus;
-  assignee: string;
-  cwd: string;
-  last_agent_id: string;
-  project_id: string;
-  created_at: string;
-  updated_at: string;
-  closed_at?: string;
-  archived_at?: string;
-  // Machine-reconciliation provenance: set when a dead owning session's outcome
-  // was judged by the reconciliation classifier (the verdict lands as an
-  // attn-authored comment). Non-terminal + reconciled_at set = the orphan badge.
-  reconciled_at?: string;
-  // Highest event sequence for this ticket at detail-read time. App mutations
-  // echo it as expected_event_seq and must refresh when it is stale.
-  latest_event_seq?: int32;
-  automation?: AutomationProvenance;
-  activity: TicketActivity[];
-  artifacts: TicketArtifact[];
 }
 
 model PR {
@@ -1290,80 +1143,11 @@ model DelegateStatusMessage {
   id: string; // Request id or daemon-issued operation id
 }
 
-// SetTicketStatusMessage moves a ticket to the column for a reported work
-// state. Without ticket_id, the daemon resolves the ticket from the calling
-// session (the assignee) — an agent self-reporting its own bound ticket. With
-// ticket_id, it moves that ticket directly instead, regardless of who is bound
-// to it. `comment` is an optional note recorded on the change.
-model SetTicketStatusMessage {
-  cmd: "set_ticket_status";
-  source_session_id: string;
-  work_state: DispatchWorkState;
-  comment?: string;
-  ticket_id?: string; // moves this ticket by id instead of the session's bound ticket — any ticket, no ownership gate
-}
-
-// TicketStatusResult echoes the resolved ticket id and the column it now sits in
-// after a status change, so the caller can confirm what moved.
-model TicketStatusResult {
-  ticket_id: string;
-  status: TicketStatus;
-  catch_up?: TicketEventBundle;
-  applied: boolean; // false when catch_up had to be read first and the move did not run
-}
-
-// TicketCreateMessage mints a standalone backlog ticket — unbound (no assignee, no
-// session), starting in todo. Unlike delegation, nothing is dispatched: this is the
-// chief/user capturing work to do later. source_session_id is the author of record;
-// title is the ticket's name (its slug is derived from it); description is the
-// optional brief. An explicit id pins the slug instead of deriving it.
-model TicketCreateMessage {
-  cmd: "ticket_create";
-  source_session_id: string;
-  title: string;
-  description?: string;
-  id?: string;
-}
-
-// TicketCreateResult echoes the resolved ticket id (the derived-or-pinned slug), the
-// column it landed in (todo), and the title, so the caller learns the final slug.
-model TicketCreateResult {
-  ticket_id: string;
-  status: TicketStatus;
-  title: string;
-}
-
-// TicketCommentMessage posts a one-shot comment from the calling agent onto ANY
-// ticket by id — not just the one bound to its session. The daemon records the
-// comment authored by the session, which informs that ticket's participants but
-// does NOT enroll the commenter in the ticket's future notifications (comment
-// authorship confers no participation; standing interest is opt-in via take or
-// subscribe). This is the agent equivalent of the app's ticket_add_comment, which
-// authors as "you".
-model TicketCommentMessage {
-  cmd: "ticket_comment";
-  source_session_id: string;
-  ticket_id: string;
-  comment: string;
-}
-
-// TicketCommentResult echoes the ticket the comment landed on, so the caller can
-// confirm which ticket it posted to.
-model TicketCommentResult {
-  ticket_id: string;
-  catch_up?: TicketEventBundle;
-  applied: boolean; // false when catch_up had to be read first and the comment did not post
-}
-
-// PresentOpenMessage opens a new presentation (or a new round on an existing
-// one, when presentation_id is set) from a raw manifest YAML the agent wrote.
-// The daemon parses and pins the manifest and the base/head SHAs at open time.
 model PresentOpenMessage {
   cmd: "present_open";
   source_session_id: string;
   manifest_yaml: string;
   presentation_id?: string;
-  ticket_id?: string;
 }
 
 // PresentOpenResult echoes the round the daemon created, so the caller can
@@ -1403,159 +1187,6 @@ model PresentFeedbackResult {
   presentation_status: string;
 }
 
-// TicketInboxMessage reads (and consumes) the calling session's unread ticket
-// events. The daemon resolves the observer identity from the session, so the agent
-// names nothing — it just asks for what it has not yet seen.
-model TicketInboxMessage {
-  cmd: "ticket_inbox";
-  source_session_id: string;
-  mode?: TicketInboxMode;
-  // Watch polls report their cadence so the daemon can distinguish a live slow
-  // watcher from an abandoned one without narrowing the CLI's interval support.
-  watch_interval_ms?: int64;
-}
-
-// TicketListMessage reads the board — every ticket, optionally filtered by status —
-// the whole board, pulled over the agent socket. This is the read foundation the
-// write verbs depend on:
-// an agent finds a ticket-id here before it can comment on (or take/subscribe to) it.
-// Unlike the write verbs it is NOT identity-scoped — it is a global board read, so
-// source_session_id is optional and unused, present only for command-shape uniformity.
-// Rows carry the description (the brief) but not the activity thread.
-model TicketListMessage {
-  cmd: "ticket_list";
-  source_session_id?: string;
-  status?: string;
-  include_archived?: boolean;
-}
-
-// TicketListResult is the board snapshot — bare ticket rows, newest first.
-model TicketListResult {
-  tickets: Ticket[];
-}
-
-// TicketShowMessage reads one ticket's full record — metadata, description, and the
-// complete activity thread (with full bodies) plus current artifacts — pulled over the
-// agent socket. Unlike ticket_inbox
-// this is non-consuming: it never advances the calling session's unread cursor, so
-// it can be re-read at will. Like ticket_list it is NOT identity-scoped — a global
-// read of a ticket by id, so source_session_id is optional and unused, present only
-// for command-shape uniformity.
-model TicketShowMessage {
-  cmd: "ticket_show";
-  source_session_id?: string;
-  ticket_id: string;
-}
-
-// TicketShowResult is the full ticket record, with Activity and Artifacts
-// populated.
-model TicketShowResult {
-  ticket: Ticket;
-}
-
-// TicketSubscribeMessage opts the calling session into a ticket's notifications —
-// an explicit, opt-in standing interest in a ticket it is not assigned to. The
-// daemon records the subscription authored by the session (identity = session), so
-// the agent names only the ticket. Subscribing makes the session a participant
-// (nudged about activity, the ticket delivered in its inbox) without advancing its
-// cursor, so the first inbox after subscribing delivers the ticket's history.
-model TicketSubscribeMessage {
-  cmd: "ticket_subscribe";
-  source_session_id: string;
-  ticket_id: string;
-}
-
-// TicketSubscribeResult echoes the ticket the subscription landed on.
-model TicketSubscribeResult {
-  ticket_id: string;
-  unread_count?: int32;
-}
-
-// TicketUnsubscribeMessage opts the calling session back out of a ticket's
-// notifications. It is idempotent — opting out when not subscribed succeeds — so it
-// does not require the ticket to still exist.
-model TicketUnsubscribeMessage {
-  cmd: "ticket_unsubscribe";
-  source_session_id: string;
-  ticket_id: string;
-}
-
-// TicketUnsubscribeResult echoes the ticket the session unsubscribed from.
-model TicketUnsubscribeResult {
-  ticket_id: string;
-}
-
-// TicketTakeMessage claims a ticket for the calling session — it becomes the
-// assignee, the way a delegated agent is the assignee of its bound ticket, so the
-// ticket's notifications now route to it. Taking a ticket already assigned to
-// someone else requires confirm=true, a guard against silently stealing another
-// agent's active work; taking an unassigned ticket (a backlog todo) or one already
-// yours does not. Taking does NOT advance the taker's cursor, so its first inbox
-// after this delivers the ticket's history (it is picking up unseen work).
-model TicketTakeMessage {
-  cmd: "ticket_take";
-  source_session_id: string;
-  ticket_id: string;
-  confirm?: boolean;
-}
-
-// TicketTakeResult echoes the ticket and the assignee it was taken FROM (empty when
-// it was unassigned), so the caller can report what changed.
-model TicketTakeResult {
-  ticket_id: string;
-  previous_assignee: string;
-  unread_count?: int32;
-}
-
-model TicketAttachFile {
-  source_path: string;
-  filename: string;
-}
-
-// TicketAttachMessage copies one or more artifact files into a ticket's
-// visible Notebook directory and records one durable attach receipt. Without a
-// ticket_id the daemon resolves the caller's bound ticket; with one it follows the
-// same permissive by-id authorization as ticket status and comment.
-model TicketAttachMessage {
-  cmd: "ticket_attach";
-  source_session_id: string;
-  ticket_id?: string;
-  files: TicketAttachFile[];
-  state?: DispatchWorkState;
-  comment?: string;
-  request_id?: string;
-  expected_event_seq?: int32;
-}
-
-// TicketAttachResult is the durable receipt returned for a new submission and
-// for an idempotent retry of the same fingerprint.
-model TicketAttachResult {
-  ticket_id: string;
-  artifacts: TicketArtifact[];
-  fingerprint: string;
-  event_seq: int32;
-  state: TicketStatus;
-  deduplicated: boolean;
-  catch_up?: TicketEventBundle;
-  applied: boolean; // false when catch_up had to be read first and nothing was attached
-}
-
-model TicketAttachResultMessage {
-  event: "ticket_attach_result";
-  request_id: string;
-  success: boolean;
-  error?: string;
-  result?: TicketAttachResult;
-}
-
-
-// ============================================================================
-// Notebook (durable, instance-wide markdown: a dated journal + a PARA knowledge
-// base).
-// Filesystem-canonical: edits use hash-CAS on file bytes, not a revision table.
-// These messages are the frontend's WebSocket path; the user-facing `attn
-// notebook …` CLI was removed (only notebook_guide remains, for the launcher).
-// ============================================================================
 
 model NotebookListMessage {
   cmd: "notebook_list";
@@ -1604,13 +1235,6 @@ model NotebookGuideMessage {
   session_id?: string; // when set, session_is_chief reflects this session's role
 }
 
-// JournalAppendMessage appends one markdown block to the notebook's dated daily
-// journal (journal/<date>.md) through the daemon's serialized notebook.Store
-// writer, instead of an agent editing the file directly with its own file-edit
-// tools. Routing through the daemon's single cached Store per root serializes
-// all writers through one append, which never conflicts (unlike a hash-CAS note edit). Not identity-scoped (like
-// notebook_guide); source_session_id is optional and unused, present only for
-// command-shape uniformity with the ticket verbs.
 model JournalAppendMessage {
   cmd: "journal_append";
   source_session_id?: string;
@@ -1793,17 +1417,6 @@ model WorkspaceSelectedMessage {
   workspace_id: string;
 }
 
-// TriggerNudgeMessage is the user clicking the incoming-nudge indicator to deliver
-// the pending ticket doorbell immediately, bypassing the countdown. Fire-and-forget.
-model TriggerNudgeMessage {
-  cmd: "trigger_nudge";
-  session_id: string;
-}
-
-// SettleTurnMessage closes the turn a session opened. It is the only way a turn
-// ever ends: no state transition removes a session from the queue, so an agent
-// stays there — running or not — until the user says they are done with it.
-// Fire-and-forget; the daemon broadcasts the session afterwards.
 model SettleTurnMessage {
   cmd: "settle_turn";
   session_id: string;
@@ -1831,22 +1444,6 @@ model WakeTurnMessage {
   session_id: string;
 }
 
-// CancelCountdownMessage is the user calling off whatever attn is counting down
-// to on this session. attn runs two such countdowns and both are things about to
-// happen *to* an agent without being asked for, so one verb calls off either:
-//
-//   - auto-settle, about to close a turn the user still wants;
-//   - the ticket nudge, about to doorbell the agent with pending ticket activity.
-//
-// The daemon cancels every countdown the session has, because the sender is
-// acting on what it can see and both indicators live in the same pane header. A
-// session with neither is a no-op.
-//
-// Neither cancel re-arms on the state the session is already in — re-arming
-// seconds later would make the cancel meaningless — and each stays cancelled
-// until something genuinely new happens: for auto-settle, the session leaving
-// `working` and being steered again; for the nudge, ticket activity newer than
-// what was pending when the user said no. Fire-and-forget.
 model CancelCountdownMessage {
   cmd: "cancel_countdown";
   session_id: string;
@@ -2436,9 +2033,6 @@ model SupportRuntimeEvidence {
   info_error_class?: string;
 }
 
-// Reports genuine pointer movement inside a terminal pane. No bytes are written
-// to the PTY: this is user engagement for auto-settle only, and deliberately
-// does not participate in the keyboard-only ticket-nudge splice guard.
 model TerminalPointerActivityMessage {
   cmd: "terminal_pointer_activity";
   id: string;
@@ -5953,22 +5547,12 @@ model Response {
   notebook_write?: NotebookWriteResult;
   notebook_guide?: NotebookGuideResult;
   journal_append_result?: JournalAppendResult;
-  ticket_status_result?: TicketStatusResult;
-  ticket_inbox_result?: TicketInboxResult;
-  ticket_list_result?: TicketListResult;
-  ticket_show_result?: TicketShowResult;
   activity_status_result?: ActivityStatusResult;
   kept_conversation_list_result?: KeptConversationListResult;
   worktree_list_result?: WorktreeListResult;
   worktree_keep_result?: WorktreeKeepResult;
   worktree_sweep_log_result?: WorktreeSweepLogResult;
   worktree_refresh_result?: WorktreeRefreshResult;
-  ticket_attach_result?: TicketAttachResult;
-  ticket_create_result?: TicketCreateResult;
-  ticket_comment_result?: TicketCommentResult;
-  ticket_subscribe_result?: TicketSubscribeResult;
-  ticket_unsubscribe_result?: TicketUnsubscribeResult;
-  ticket_take_result?: TicketTakeResult;
   present_open_result?: PresentOpenResult;
   present_feedback_result?: PresentFeedbackResult;
   session_instructions_result?: SessionInstructionsResult;
@@ -6499,6 +6083,7 @@ model AgentPeerMessage {
 // One durable notification consumed by a bounded inbox read. Content is the
 // peer body or the daemon-authored action text for another mailbox kind.
 model AgentInboxItem {
+  address: string;
   item_id: string;
   kind: string;
   source_id?: string;
@@ -6702,7 +6287,6 @@ model DelegationOperation {
   failure?: DelegationFailure;
   // Historical operation fields remain readable after the protocol upgrade.
   workspace_id?: string;
-  ticket_id?: string;
   error?: string;
   created_at: string;
   updated_at: string;
@@ -7234,7 +6818,6 @@ model WebSocketEvent {
   reason?: string;
   signal?: string;
 
-  ticket?: Ticket;
   seeds?: Seed[];
   total?: int32;
 }
@@ -7276,7 +6859,6 @@ alias DaemonEvent =
   | CrewSleepResultMessage
   | CrewSetResultMessage
   | CrewRestartResultMessage
-  | TicketAttachResultMessage
   | WorkspaceTileContentMessage
   | OpenSeedResultMessage
   | BrowserControlResponseMessage

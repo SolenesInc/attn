@@ -103,6 +103,9 @@ type AgentInboxBatchResult struct {
 }
 
 type AgentInboxItem struct {
+	// Address corresponds to the JSON schema field "address".
+	Address string `json:"address"`
+
 	// Content corresponds to the JSON schema field "content".
 	Content string `json:"content"`
 
@@ -2782,9 +2785,6 @@ type DelegationOperation struct {
 	// State corresponds to the JSON schema field "state".
 	State DelegationOperationState `json:"state"`
 
-	// TicketID corresponds to the JSON schema field "ticket_id".
-	TicketID *string `json:"ticket_id,omitempty,omitzero"`
-
 	// UpdatedAt corresponds to the JSON schema field "updated_at".
 	UpdatedAt string `json:"updated_at"`
 
@@ -3079,14 +3079,6 @@ type DirectoryEntry struct {
 	// Path corresponds to the JSON schema field "path".
 	Path string `json:"path"`
 }
-
-type DispatchWorkState string
-
-const DispatchWorkStateCompleted DispatchWorkState = "completed"
-const DispatchWorkStateFailed DispatchWorkState = "failed"
-const DispatchWorkStateInProgress DispatchWorkState = "in_progress"
-const DispatchWorkStateNeedsInput DispatchWorkState = "needs_input"
-const DispatchWorkStateReadyForReview DispatchWorkState = "ready_for_review"
 
 type DocCollectionsMessage struct {
 	// Cmd corresponds to the JSON schema field "cmd".
@@ -6284,9 +6276,6 @@ type PresentOpenMessage struct {
 
 	// SourceSessionID corresponds to the JSON schema field "source_session_id".
 	SourceSessionID string `json:"source_session_id"`
-
-	// TicketID corresponds to the JSON schema field "ticket_id".
-	TicketID *string `json:"ticket_id,omitempty,omitzero"`
 }
 
 type PresentOpenResult struct {
@@ -6368,9 +6357,6 @@ type Presentation struct {
 
 	// Status corresponds to the JSON schema field "status".
 	Status string `json:"status"`
-
-	// TicketID corresponds to the JSON schema field "ticket_id".
-	TicketID *string `json:"ticket_id,omitempty,omitzero"`
 
 	// Title corresponds to the JSON schema field "title".
 	Title string `json:"title"`
@@ -7207,39 +7193,6 @@ type Response struct {
 
 	// StateExplainResult corresponds to the JSON schema field "state_explain_result".
 	StateExplainResult *StateExplainResult `json:"state_explain_result,omitempty,omitzero"`
-
-	// TicketAttachResult corresponds to the JSON schema field "ticket_attach_result".
-	TicketAttachResult *TicketAttachResult `json:"ticket_attach_result,omitempty,omitzero"`
-
-	// TicketCommentResult corresponds to the JSON schema field
-	// "ticket_comment_result".
-	TicketCommentResult *TicketCommentResult `json:"ticket_comment_result,omitempty,omitzero"`
-
-	// TicketCreateResult corresponds to the JSON schema field "ticket_create_result".
-	TicketCreateResult *TicketCreateResult `json:"ticket_create_result,omitempty,omitzero"`
-
-	// TicketInboxResult corresponds to the JSON schema field "ticket_inbox_result".
-	TicketInboxResult *TicketInboxResult `json:"ticket_inbox_result,omitempty,omitzero"`
-
-	// TicketListResult corresponds to the JSON schema field "ticket_list_result".
-	TicketListResult *TicketListResult `json:"ticket_list_result,omitempty,omitzero"`
-
-	// TicketShowResult corresponds to the JSON schema field "ticket_show_result".
-	TicketShowResult *TicketShowResult `json:"ticket_show_result,omitempty,omitzero"`
-
-	// TicketStatusResult corresponds to the JSON schema field "ticket_status_result".
-	TicketStatusResult *TicketStatusResult `json:"ticket_status_result,omitempty,omitzero"`
-
-	// TicketSubscribeResult corresponds to the JSON schema field
-	// "ticket_subscribe_result".
-	TicketSubscribeResult *TicketSubscribeResult `json:"ticket_subscribe_result,omitempty,omitzero"`
-
-	// TicketTakeResult corresponds to the JSON schema field "ticket_take_result".
-	TicketTakeResult *TicketTakeResult `json:"ticket_take_result,omitempty,omitzero"`
-
-	// TicketUnsubscribeResult corresponds to the JSON schema field
-	// "ticket_unsubscribe_result".
-	TicketUnsubscribeResult *TicketUnsubscribeResult `json:"ticket_unsubscribe_result,omitempty,omitzero"`
 
 	// Workspaces corresponds to the JSON schema field "workspaces".
 	Workspaces []Workspace `json:"workspaces,omitempty,omitzero"`
@@ -8487,9 +8440,6 @@ type Session struct {
 	// MainRepo corresponds to the JSON schema field "main_repo".
 	MainRepo *string `json:"main_repo,omitempty,omitzero"`
 
-	// NudgeFiresAt corresponds to the JSON schema field "nudge_fires_at".
-	NudgeFiresAt *string `json:"nudge_fires_at,omitempty,omitzero"`
-
 	// ParentSessionID corresponds to the JSON schema field "parent_session_id".
 	ParentSessionID *string `json:"parent_session_id,omitempty,omitzero"`
 
@@ -8519,9 +8469,6 @@ type Session struct {
 
 	// TerminalBuildStale corresponds to the JSON schema field "terminal_build_stale".
 	TerminalBuildStale *bool `json:"terminal_build_stale,omitempty,omitzero"`
-
-	// TicketUnread corresponds to the JSON schema field "ticket_unread".
-	TicketUnread *bool `json:"ticket_unread,omitempty,omitzero"`
 
 	// TurnOpenedAt corresponds to the JSON schema field "turn_opened_at".
 	TurnOpenedAt *string `json:"turn_opened_at,omitempty,omitzero"`
@@ -9473,23 +9420,6 @@ type SetTerminalThemeMessage struct {
 	Foreground string `json:"foreground"`
 }
 
-type SetTicketStatusMessage struct {
-	// Cmd corresponds to the JSON schema field "cmd".
-	Cmd string `json:"cmd"`
-
-	// Comment corresponds to the JSON schema field "comment".
-	Comment *string `json:"comment,omitempty,omitzero"`
-
-	// SourceSessionID corresponds to the JSON schema field "source_session_id".
-	SourceSessionID string `json:"source_session_id"`
-
-	// TicketID corresponds to the JSON schema field "ticket_id".
-	TicketID *string `json:"ticket_id,omitempty,omitzero"`
-
-	// WorkState corresponds to the JSON schema field "work_state".
-	WorkState DispatchWorkState `json:"work_state"`
-}
-
 type SetWorkspaceRankMessage struct {
 	// Cmd corresponds to the JSON schema field "cmd".
 	Cmd string `json:"cmd"`
@@ -9987,428 +9917,6 @@ type TerminalPointerActivityMessage struct {
 	ID string `json:"id"`
 }
 
-type Ticket struct {
-	// Activity corresponds to the JSON schema field "activity".
-	Activity []TicketActivity `json:"activity"`
-
-	// ArchivedAt corresponds to the JSON schema field "archived_at".
-	ArchivedAt *string `json:"archived_at,omitempty,omitzero"`
-
-	// Artifacts corresponds to the JSON schema field "artifacts".
-	Artifacts []TicketArtifact `json:"artifacts"`
-
-	// Assignee corresponds to the JSON schema field "assignee".
-	Assignee string `json:"assignee"`
-
-	// Automation corresponds to the JSON schema field "automation".
-	Automation *AutomationProvenance `json:"automation,omitempty,omitzero"`
-
-	// ClosedAt corresponds to the JSON schema field "closed_at".
-	ClosedAt *string `json:"closed_at,omitempty,omitzero"`
-
-	// CreatedAt corresponds to the JSON schema field "created_at".
-	CreatedAt string `json:"created_at"`
-
-	// Cwd corresponds to the JSON schema field "cwd".
-	Cwd string `json:"cwd"`
-
-	// Description corresponds to the JSON schema field "description".
-	Description string `json:"description"`
-
-	// ID corresponds to the JSON schema field "id".
-	ID string `json:"id"`
-
-	// LastAgentID corresponds to the JSON schema field "last_agent_id".
-	LastAgentID string `json:"last_agent_id"`
-
-	// LatestEventSeq corresponds to the JSON schema field "latest_event_seq".
-	LatestEventSeq *int `json:"latest_event_seq,omitempty,omitzero"`
-
-	// ProjectID corresponds to the JSON schema field "project_id".
-	ProjectID string `json:"project_id"`
-
-	// ReconciledAt corresponds to the JSON schema field "reconciled_at".
-	ReconciledAt *string `json:"reconciled_at,omitempty,omitzero"`
-
-	// Status corresponds to the JSON schema field "status".
-	Status TicketStatus `json:"status"`
-
-	// Title corresponds to the JSON schema field "title".
-	Title string `json:"title"`
-
-	// UpdatedAt corresponds to the JSON schema field "updated_at".
-	UpdatedAt string `json:"updated_at"`
-}
-
-type TicketActivity struct {
-	// Author corresponds to the JSON schema field "author".
-	Author string `json:"author"`
-
-	// Comment corresponds to the JSON schema field "comment".
-	Comment *string `json:"comment,omitempty,omitzero"`
-
-	// CreatedAt corresponds to the JSON schema field "created_at".
-	CreatedAt string `json:"created_at"`
-
-	// FromStatus corresponds to the JSON schema field "from_status".
-	FromStatus *TicketStatus `json:"from_status,omitempty,omitzero"`
-
-	// ID corresponds to the JSON schema field "id".
-	ID int `json:"id"`
-
-	// Kind corresponds to the JSON schema field "kind".
-	Kind TicketActivityKind `json:"kind"`
-
-	// ToStatus corresponds to the JSON schema field "to_status".
-	ToStatus *TicketStatus `json:"to_status,omitempty,omitzero"`
-}
-
-type TicketActivityKind string
-
-const TicketActivityKindAttach TicketActivityKind = "attach"
-const TicketActivityKindComment TicketActivityKind = "comment"
-const TicketActivityKindStatusChange TicketActivityKind = "status_change"
-
-type TicketArtifact struct {
-	// Filename corresponds to the JSON schema field "filename".
-	Filename string `json:"filename"`
-
-	// NotebookPath corresponds to the JSON schema field "notebook_path".
-	NotebookPath string `json:"notebook_path"`
-
-	// Path corresponds to the JSON schema field "path".
-	Path string `json:"path"`
-}
-
-type TicketAttachFile struct {
-	// Filename corresponds to the JSON schema field "filename".
-	Filename string `json:"filename"`
-
-	// SourcePath corresponds to the JSON schema field "source_path".
-	SourcePath string `json:"source_path"`
-}
-
-type TicketAttachMessage struct {
-	// Cmd corresponds to the JSON schema field "cmd".
-	Cmd string `json:"cmd"`
-
-	// Comment corresponds to the JSON schema field "comment".
-	Comment *string `json:"comment,omitempty,omitzero"`
-
-	// ExpectedEventSeq corresponds to the JSON schema field "expected_event_seq".
-	ExpectedEventSeq *int `json:"expected_event_seq,omitempty,omitzero"`
-
-	// Files corresponds to the JSON schema field "files".
-	Files []TicketAttachFile `json:"files"`
-
-	// RequestID corresponds to the JSON schema field "request_id".
-	RequestID *string `json:"request_id,omitempty,omitzero"`
-
-	// SourceSessionID corresponds to the JSON schema field "source_session_id".
-	SourceSessionID string `json:"source_session_id"`
-
-	// State corresponds to the JSON schema field "state".
-	State *DispatchWorkState `json:"state,omitempty,omitzero"`
-
-	// TicketID corresponds to the JSON schema field "ticket_id".
-	TicketID *string `json:"ticket_id,omitempty,omitzero"`
-}
-
-type TicketAttachResult struct {
-	// Applied corresponds to the JSON schema field "applied".
-	Applied bool `json:"applied"`
-
-	// Artifacts corresponds to the JSON schema field "artifacts".
-	Artifacts []TicketArtifact `json:"artifacts"`
-
-	// CatchUp corresponds to the JSON schema field "catch_up".
-	CatchUp *TicketEventBundle `json:"catch_up,omitempty,omitzero"`
-
-	// Deduplicated corresponds to the JSON schema field "deduplicated".
-	Deduplicated bool `json:"deduplicated"`
-
-	// EventSeq corresponds to the JSON schema field "event_seq".
-	EventSeq int `json:"event_seq"`
-
-	// Fingerprint corresponds to the JSON schema field "fingerprint".
-	Fingerprint string `json:"fingerprint"`
-
-	// State corresponds to the JSON schema field "state".
-	State TicketStatus `json:"state"`
-
-	// TicketID corresponds to the JSON schema field "ticket_id".
-	TicketID string `json:"ticket_id"`
-}
-
-type TicketAttachResultMessage struct {
-	// Error corresponds to the JSON schema field "error".
-	Error *string `json:"error,omitempty,omitzero"`
-
-	// Event corresponds to the JSON schema field "event".
-	Event string `json:"event"`
-
-	// RequestID corresponds to the JSON schema field "request_id".
-	RequestID string `json:"request_id"`
-
-	// Result corresponds to the JSON schema field "result".
-	Result *TicketAttachResult `json:"result,omitempty,omitzero"`
-
-	// Success corresponds to the JSON schema field "success".
-	Success bool `json:"success"`
-}
-
-type TicketCommentMessage struct {
-	// Cmd corresponds to the JSON schema field "cmd".
-	Cmd string `json:"cmd"`
-
-	// Comment corresponds to the JSON schema field "comment".
-	Comment string `json:"comment"`
-
-	// SourceSessionID corresponds to the JSON schema field "source_session_id".
-	SourceSessionID string `json:"source_session_id"`
-
-	// TicketID corresponds to the JSON schema field "ticket_id".
-	TicketID string `json:"ticket_id"`
-}
-
-type TicketCommentResult struct {
-	// Applied corresponds to the JSON schema field "applied".
-	Applied bool `json:"applied"`
-
-	// CatchUp corresponds to the JSON schema field "catch_up".
-	CatchUp *TicketEventBundle `json:"catch_up,omitempty,omitzero"`
-
-	// TicketID corresponds to the JSON schema field "ticket_id".
-	TicketID string `json:"ticket_id"`
-}
-
-type TicketCreateMessage struct {
-	// Cmd corresponds to the JSON schema field "cmd".
-	Cmd string `json:"cmd"`
-
-	// Description corresponds to the JSON schema field "description".
-	Description *string `json:"description,omitempty,omitzero"`
-
-	// ID corresponds to the JSON schema field "id".
-	ID *string `json:"id,omitempty,omitzero"`
-
-	// SourceSessionID corresponds to the JSON schema field "source_session_id".
-	SourceSessionID string `json:"source_session_id"`
-
-	// Title corresponds to the JSON schema field "title".
-	Title string `json:"title"`
-}
-
-type TicketCreateResult struct {
-	// Status corresponds to the JSON schema field "status".
-	Status TicketStatus `json:"status"`
-
-	// TicketID corresponds to the JSON schema field "ticket_id".
-	TicketID string `json:"ticket_id"`
-
-	// Title corresponds to the JSON schema field "title".
-	Title string `json:"title"`
-}
-
-type TicketEvent struct {
-	// Author corresponds to the JSON schema field "author".
-	Author string `json:"author"`
-
-	// Comment corresponds to the JSON schema field "comment".
-	Comment *string `json:"comment,omitempty,omitzero"`
-
-	// CreatedAt corresponds to the JSON schema field "created_at".
-	CreatedAt string `json:"created_at"`
-
-	// Detail corresponds to the JSON schema field "detail".
-	Detail *string `json:"detail,omitempty,omitzero"`
-
-	// FromStatus corresponds to the JSON schema field "from_status".
-	FromStatus *TicketStatus `json:"from_status,omitempty,omitzero"`
-
-	// Kind corresponds to the JSON schema field "kind".
-	Kind TicketEventKind `json:"kind"`
-
-	// TicketID corresponds to the JSON schema field "ticket_id".
-	TicketID string `json:"ticket_id"`
-
-	// ToStatus corresponds to the JSON schema field "to_status".
-	ToStatus *TicketStatus `json:"to_status,omitempty,omitzero"`
-}
-
-type TicketEventBundle struct {
-	// Events corresponds to the JSON schema field "events".
-	Events []TicketEvent `json:"events"`
-
-	// TicketID corresponds to the JSON schema field "ticket_id".
-	TicketID string `json:"ticket_id"`
-}
-
-type TicketEventKind string
-
-const TicketEventKindAssigned TicketEventKind = "assigned"
-const TicketEventKindAttachSubmitted TicketEventKind = "attach_submitted"
-const TicketEventKindCommented TicketEventKind = "commented"
-const TicketEventKindCreated TicketEventKind = "created"
-const TicketEventKindDescriptionEdited TicketEventKind = "description_edited"
-const TicketEventKindStatusChanged TicketEventKind = "status_changed"
-
-type TicketInboxMessage struct {
-	// Cmd corresponds to the JSON schema field "cmd".
-	Cmd string `json:"cmd"`
-
-	// Mode corresponds to the JSON schema field "mode".
-	Mode *TicketInboxMode `json:"mode,omitempty,omitzero"`
-
-	// SourceSessionID corresponds to the JSON schema field "source_session_id".
-	SourceSessionID string `json:"source_session_id"`
-
-	// WatchIntervalMs corresponds to the JSON schema field "watch_interval_ms".
-	WatchIntervalMs *string `json:"watch_interval_ms,omitempty,omitzero"`
-}
-
-type TicketInboxMode string
-
-const TicketInboxModeExplicit TicketInboxMode = "explicit"
-const TicketInboxModeWatch TicketInboxMode = "watch"
-
-type TicketInboxResult struct {
-	// Bundles corresponds to the JSON schema field "bundles".
-	Bundles []TicketEventBundle `json:"bundles"`
-
-	// LastUserActivityAt corresponds to the JSON schema field
-	// "last_user_activity_at".
-	LastUserActivityAt *string `json:"last_user_activity_at,omitempty,omitzero"`
-}
-
-type TicketListMessage struct {
-	// Cmd corresponds to the JSON schema field "cmd".
-	Cmd string `json:"cmd"`
-
-	// IncludeArchived corresponds to the JSON schema field "include_archived".
-	IncludeArchived *bool `json:"include_archived,omitempty,omitzero"`
-
-	// SourceSessionID corresponds to the JSON schema field "source_session_id".
-	SourceSessionID *string `json:"source_session_id,omitempty,omitzero"`
-
-	// Status corresponds to the JSON schema field "status".
-	Status *string `json:"status,omitempty,omitzero"`
-}
-
-type TicketListResult struct {
-	// Tickets corresponds to the JSON schema field "tickets".
-	Tickets []Ticket `json:"tickets"`
-}
-
-type TicketShowMessage struct {
-	// Cmd corresponds to the JSON schema field "cmd".
-	Cmd string `json:"cmd"`
-
-	// SourceSessionID corresponds to the JSON schema field "source_session_id".
-	SourceSessionID *string `json:"source_session_id,omitempty,omitzero"`
-
-	// TicketID corresponds to the JSON schema field "ticket_id".
-	TicketID string `json:"ticket_id"`
-}
-
-type TicketShowResult struct {
-	// Ticket corresponds to the JSON schema field "ticket".
-	Ticket Ticket `json:"ticket"`
-}
-
-type TicketStatus string
-
-const TicketStatusBlocked TicketStatus = "blocked"
-const TicketStatusCrashed TicketStatus = "crashed"
-const TicketStatusDone TicketStatus = "done"
-const TicketStatusFailed TicketStatus = "failed"
-const TicketStatusInReview TicketStatus = "in_review"
-
-type TicketStatusResult struct {
-	// Applied corresponds to the JSON schema field "applied".
-	Applied bool `json:"applied"`
-
-	// CatchUp corresponds to the JSON schema field "catch_up".
-	CatchUp *TicketEventBundle `json:"catch_up,omitempty,omitzero"`
-
-	// Status corresponds to the JSON schema field "status".
-	Status TicketStatus `json:"status"`
-
-	// TicketID corresponds to the JSON schema field "ticket_id".
-	TicketID string `json:"ticket_id"`
-}
-
-const TicketStatusTodo TicketStatus = "todo"
-const TicketStatusWorking TicketStatus = "working"
-
-type TicketSubscribeMessage struct {
-	// Cmd corresponds to the JSON schema field "cmd".
-	Cmd string `json:"cmd"`
-
-	// SourceSessionID corresponds to the JSON schema field "source_session_id".
-	SourceSessionID string `json:"source_session_id"`
-
-	// TicketID corresponds to the JSON schema field "ticket_id".
-	TicketID string `json:"ticket_id"`
-}
-
-type TicketSubscribeResult struct {
-	// TicketID corresponds to the JSON schema field "ticket_id".
-	TicketID string `json:"ticket_id"`
-
-	// UnreadCount corresponds to the JSON schema field "unread_count".
-	UnreadCount *int `json:"unread_count,omitempty,omitzero"`
-}
-
-type TicketTakeMessage struct {
-	// Cmd corresponds to the JSON schema field "cmd".
-	Cmd string `json:"cmd"`
-
-	// Confirm corresponds to the JSON schema field "confirm".
-	Confirm *bool `json:"confirm,omitempty,omitzero"`
-
-	// SourceSessionID corresponds to the JSON schema field "source_session_id".
-	SourceSessionID string `json:"source_session_id"`
-
-	// TicketID corresponds to the JSON schema field "ticket_id".
-	TicketID string `json:"ticket_id"`
-}
-
-type TicketTakeResult struct {
-	// PreviousAssignee corresponds to the JSON schema field "previous_assignee".
-	PreviousAssignee string `json:"previous_assignee"`
-
-	// TicketID corresponds to the JSON schema field "ticket_id".
-	TicketID string `json:"ticket_id"`
-
-	// UnreadCount corresponds to the JSON schema field "unread_count".
-	UnreadCount *int `json:"unread_count,omitempty,omitzero"`
-}
-
-type TicketUnsubscribeMessage struct {
-	// Cmd corresponds to the JSON schema field "cmd".
-	Cmd string `json:"cmd"`
-
-	// SourceSessionID corresponds to the JSON schema field "source_session_id".
-	SourceSessionID string `json:"source_session_id"`
-
-	// TicketID corresponds to the JSON schema field "ticket_id".
-	TicketID string `json:"ticket_id"`
-}
-
-type TicketUnsubscribeResult struct {
-	// TicketID corresponds to the JSON schema field "ticket_id".
-	TicketID string `json:"ticket_id"`
-}
-
-type TriggerNudgeMessage struct {
-	// Cmd corresponds to the JSON schema field "cmd".
-	Cmd string `json:"cmd"`
-
-	// SessionID corresponds to the JSON schema field "session_id".
-	SessionID string `json:"session_id"`
-}
-
 type UninstallPluginMessage struct {
 	// Cmd corresponds to the JSON schema field "cmd".
 	Cmd string `json:"cmd"`
@@ -10663,9 +10171,6 @@ type WebSocketEvent struct {
 
 	// TargetPath corresponds to the JSON schema field "target_path".
 	TargetPath *string `json:"target_path,omitempty,omitzero"`
-
-	// Ticket corresponds to the JSON schema field "ticket".
-	Ticket *Ticket `json:"ticket,omitempty,omitzero"`
 
 	// TileID corresponds to the JSON schema field "tile_id".
 	TileID *string `json:"tile_id,omitempty,omitzero"`

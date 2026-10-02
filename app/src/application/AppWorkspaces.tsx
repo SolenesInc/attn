@@ -69,7 +69,6 @@ export function AppWorkspaces() {
   const seeds = useDaemonStore((state) => state.seeds);
   const { handleOpenSeedTile, handleRevealSeedInGarden } = useAppGardenActionsContext();
   const {
-    sendTriggerNudge,
     sendCancelCountdown,
     sendTerminalPointerActivity,
     sendOpenMarkdown,
@@ -135,8 +134,6 @@ export function AppWorkspaces() {
                   cwd: entry.cwd,
                   endpointId: entry.endpointId,
                   state: entry.state,
-                  ticketUnread: entry.ticketUnread,
-                  nudgeFiresAt: entry.nudgeFiresAt,
                   autoSettleFiresAt: entry.autoSettleFiresAt,
                   autoSettleHeld: entry.autoSettleHeld,
                   autoSettleDismissArmed: entry.autoSettleDismissArmed,
@@ -166,7 +163,6 @@ export function AppWorkspaces() {
                 seedPopoverRequest={seedPopoverRequest}
                 usagePopoverRequest={usagePopoverRequest}
                 annotationApi={annotationApi}
-                onTriggerNudge={sendTriggerNudge}
                 onCancelCountdown={sendCancelCountdown}
                 onTerminalPointerActivity={sendTerminalPointerActivity}
                 onOpenPresentation={handleOpenPresentationWindow}

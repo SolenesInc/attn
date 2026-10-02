@@ -1,6 +1,6 @@
 import './SettlingIndicator.css';
 import { CountdownFill } from './CountdownFill';
-import { CountdownCancelHint } from './CountdownCancelHint';
+import { formatShortcut } from '../shortcuts/formatShortcut';
 
 // The daemon owns the timer and broadcasts `auto_settle_fires_at` exactly while it
 // runs; its absence ends the animation. `auto_settle_held` is frozen with no deadline.
@@ -32,7 +32,7 @@ export function HeaderSettlingIndicator({
       >
         <span className="settling-dot" aria-hidden="true" />
         <span className="settling-header-label">{held ? 'Settling paused' : 'Settling…'}</span>
-        <CountdownCancelHint verb="keep" />
+        <SettleCancelHint verb="keep" />
       </button>
       <div className="settling-header-track" aria-hidden="true">
         {firesAt ? (
@@ -65,7 +65,7 @@ export function HeaderSettleKeptChip({ onDisarm }: { onDisarm?: () => void }) {
     >
       <span className="settling-kept-mark" aria-hidden="true" />
       <span className="settling-header-label">Turn kept</span>
-      <CountdownCancelHint verb="undo" />
+      <SettleCancelHint verb="undo" />
     </button>
   );
 }
@@ -86,4 +86,9 @@ export function SidebarSettlingBar({ firesAt, held }: { firesAt?: string; held?:
       )}
     </div>
   );
+}
+
+function SettleCancelHint({ verb }: { verb: string }) {
+ const combo = formatShortcut('session.cancelCountdown');
+ return combo ? <span className="settle-cancel-hint"><kbd className="settle-cancel-hint-key">{combo}</kbd><span className="settle-cancel-hint-verb">{verb}</span></span> : null;
 }

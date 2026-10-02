@@ -12,7 +12,6 @@ import (
 	"time"
 
 	"github.com/google/uuid"
-	"github.com/victorarias/attn/internal/agentmailbox"
 	"github.com/victorarias/attn/internal/crew"
 	"github.com/victorarias/attn/internal/docstore"
 	"github.com/victorarias/attn/internal/garden"
@@ -67,10 +66,6 @@ func (d *Daemon) crewAgentAvailable(agent string) bool {
 var crewWakePrompt = prompts.RenderText("crew", "wake", prompts.Values{})
 
 func crewWorkspaceID(memberID string) string { return "workspace-crew-" + memberID }
-
-type crewWakeDelivery struct {
-	Message *agentmailbox.PeerMessage
-}
 
 func (d *Daemon) crewMember(name string) (crew.Member, docstore.Document, error) {
 	if err := d.requireHome(crew.Surface); err != nil {
@@ -231,16 +226,19 @@ func (d *Daemon) handleCrewWakeWS(client *wsClient, msg *protocol.CrewWakeMessag
 }
 
 func (d *Daemon) crewWake(name, agent string) (*protocol.CrewWakeResult, error) {
-	return d.crewWakeWithDelivery(name, agent, false, nil)
+	return d.crewWakeWithCharge(name, agent, false)
 }
 
-func (d *Daemon) crewWakeWithDelivery(name, agent string, autonomous bool, delivery *crewWakeDelivery) (*protocol.CrewWakeResult, error) {
+func (d *Daemon) crewWakeWithCharge(name, agent string, autonomous bool) (*protocol.CrewWakeResult, error) {
 	d.crewWakeMu.Lock()
 	defer d.crewWakeMu.Unlock()
-	return d.crewWakeWithDeliveryLocked(name, agent, autonomous, delivery)
+	return d.crewWakeWithChargeLocked(name, agent, autonomous)
 }
 
-func (d *Daemon) crewWakeWithDeliveryLocked(name, agent string, autonomous bool, delivery *crewWakeDelivery) (*protocol.CrewWakeResult, error) {
+func (d *Daemon) crewWakeWithChargeLocked(name, agent string, autonomous bool) (*protocol.CrewWakeResult, error) {
+	return d.crewWakeDayWithChargeLocked(name, agent, autonomous, nil)
+}
+func (d *Daemon) crewWakeDayWithChargeLocked(name, agent string, autonomous bool, beforeWake func() error) (*protocol.CrewWakeResult, error) {
 	member, _, err := d.crewMember(name)
 	if err != nil {
 		return nil, err
@@ -266,6 +264,11 @@ func (d *Daemon) crewWakeWithDeliveryLocked(name, agent string, autonomous bool,
 				awake.WorkspaceID = session.WorkspaceID
 			}
 			return awake, nil
+		}
+	}
+	if beforeWake != nil {
+		if err := beforeWake(); err != nil {
+			return nil, err
 		}
 	}
 	if agent == "" {
@@ -300,17 +303,6 @@ func (d *Daemon) crewWakeWithDeliveryLocked(name, agent string, autonomous bool,
 	}
 
 	initialPrompt := crewWakePrompt
-	if delivery != nil {
-		if delivery.Message != nil {
-			if _, err := d.store.EnqueuePeerMessage(*delivery.Message, sessionID); err != nil {
-				d.removeWorkspaceLayoutPaneForSession(sessionID)
-				d.releaseCrewBindingIfSession(sessionID)
-				return nil, err
-			}
-			d.noteQueuedAgentMailboxItem(sessionID)
-		}
-	}
-
 	spawnClient := newInternalWSClient()
 	d.handleSpawnSession(spawnClient, &protocol.SpawnSessionMessage{
 		Cmd:           protocol.CmdSpawnSession,
@@ -326,9 +318,6 @@ func (d *Daemon) crewWakeWithDeliveryLocked(name, agent string, autonomous bool,
 		InitialPrompt: protocol.Ptr(initialPrompt),
 	})
 	if _, err := readInternalActionResult(spawnClient); err != nil {
-		if delivery != nil && delivery.Message != nil {
-			d.rollbackQueuedPeerMessage(sessionID, delivery.Message.ID)
-		}
 		d.removeWorkspaceLayoutPaneForSession(sessionID)
 		d.releaseCrewBindingIfSession(sessionID)
 		return nil, fmt.Errorf("wake %s: %w", crew.DisplayName(member.ID), err)

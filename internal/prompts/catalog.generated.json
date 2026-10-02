@@ -206,16 +206,6 @@
           }
         },
         {
-          "id": "legacy-ticket-nudge",
-          "delivery": "user_message",
-          "description": "internal/daemon/ticket_notify.go: ticketNudgePrompt",
-          "body": {
-            "kind": "text",
-            "id": "session.legacy-ticket-nudge",
-            "source": "content/session/legacy-ticket-nudge.md"
-          }
-        },
-        {
           "id": "garden-ready",
           "delivery": "hook_context",
           "description": "Garden readiness appended by session-start hooks and attn seed prime.",
@@ -3039,90 +3029,6 @@
       ]
     },
     {
-      "id": "ticket-reconciler",
-      "description": "Ticket reconciler",
-      "events": [
-        {
-          "id": "reconcile",
-          "delivery": "headless_prompt",
-          "description": "internal/daemon/ticket_reconcile.go: buildTicketReconcilePrompt",
-          "body": {
-            "kind": "text",
-            "id": "ticket-reconciler.reconcile",
-            "source": "content/ticket-reconciler/reconcile.md",
-            "bindings": [
-              {
-                "name": "ticket_id",
-                "node": {
-                  "kind": "input",
-                  "field": {
-                    "name": "ticket_id",
-                    "kind": "text",
-                    "description": "Ticket id"
-                  }
-                }
-              },
-              {
-                "name": "title",
-                "node": {
-                  "kind": "input",
-                  "field": {
-                    "name": "title",
-                    "kind": "text",
-                    "description": "Title"
-                  }
-                }
-              },
-              {
-                "name": "brief",
-                "node": {
-                  "kind": "input",
-                  "field": {
-                    "name": "brief",
-                    "kind": "text",
-                    "description": "Brief"
-                  }
-                }
-              },
-              {
-                "name": "status",
-                "node": {
-                  "kind": "input",
-                  "field": {
-                    "name": "status",
-                    "kind": "text",
-                    "description": "Status"
-                  }
-                }
-              },
-              {
-                "name": "close_context",
-                "node": {
-                  "kind": "input",
-                  "field": {
-                    "name": "close_context",
-                    "kind": "text",
-                    "description": "Close context"
-                  }
-                }
-              },
-              {
-                "name": "conversation",
-                "node": {
-                  "kind": "input",
-                  "field": {
-                    "name": "conversation",
-                    "kind": "text",
-                    "description": "Conversation"
-                  }
-                }
-              }
-            ]
-          }
-        }
-      ]
-    },
-    {
       "id": "workflow-agent",
       "description": "Workflow agent",
       "events": [
@@ -3321,18 +3227,6 @@
             "kind": "text",
             "id": "attn-skill.showing",
             "source": "content/skills/attn/references/showing.md",
-            "verbatim": true,
-            "keep_final_newline": true
-          }
-        },
-        {
-          "id": "tickets",
-          "delivery": "reference",
-          "description": "Loaded on demand through attn skill show or the installed skill directory.",
-          "body": {
-            "kind": "text",
-            "id": "attn-skill.tickets",
-            "source": "content/skills/attn/references/tickets.md",
             "verbatim": true,
             "keep_final_newline": true
           }
@@ -4947,5 +4841,5 @@
       ]
     }
   ],
-  "definitions_hash": "87590e3250a5e9a11ea3dad7ee79fae53c3739a63230369e351bf6d71ce2c19f"
+  "definitions_hash": "dacd4da058a7ece025dd645bf32579926fa76aff0fc441e36fa16005821b028a"
 }

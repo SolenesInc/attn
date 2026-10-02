@@ -7,8 +7,8 @@ import (
 	"time"
 
 	"github.com/google/uuid"
-	"github.com/victorarias/attn/internal/agentmailbox"
 	"github.com/victorarias/attn/internal/crew"
+	"github.com/victorarias/attn/internal/inbox"
 	"github.com/victorarias/attn/internal/prompts"
 	"github.com/victorarias/attn/internal/protocol"
 	"github.com/victorarias/attn/internal/store"
@@ -84,7 +84,8 @@ func (d *Daemon) crewSleep(name string) (*protocol.CrewSleepResult, error) {
 
 	now := time.Now()
 	deliveryID := uuid.NewString()
-	var delivery agentmailbox.Delivery
+	item := inbox.Item{ID: deliveryID, To: inbox.ToSession(sessionID), Kind: inbox.Notice, Text: crewRequestedSleepPrompt}
+	var receipt inbox.Receipt
 	if _, pending := pendingCrewRestartFor(member, sessionID); pending {
 		member.Restart.State = crew.RestartFailed
 		member.Restart.Withdrawn = true
@@ -98,27 +99,27 @@ func (d *Daemon) crewSleep(name string) (*protocol.CrewSleepResult, error) {
 			return nil, encodeErr
 		}
 		fact := documentChangedFact(crew.Namespace, crew.CollectionMembers, member.ID, false)
-		written, committed, commitErr := d.store.CommitDocumentWriteWithMaintenancePrompt(
+		written, commitErr := d.store.CommitDocumentWriteWithInbox(
 			store.DocumentWrite{Schema: *schema, ID: member.ID, Body: body, Expected: &doc.Rev},
-			fact, deliveryID, sessionID, crewRequestedSleepPrompt, now,
+			fact, item, now,
 		)
 		if commitErr != nil {
 			return nil, fmt.Errorf("record %s's sleep request: %w", crew.DisplayName(member.ID), commitErr)
 		}
 		d.announceCommittedWrite(fact, written.Seq)
 		d.publishFact(FactCrewUpdated, member.ID, nil)
-		delivery = committed
+		receipt = d.deliverSavedInbox(item.To, deliveryID)
 	} else {
-		delivery, err = d.store.EnqueueMaintenancePrompt(deliveryID, sessionID, crewRequestedSleepPrompt, now)
+		receipt, err = d.sendToInbox(item)
 	}
 	if err != nil {
 		return nil, fmt.Errorf("record %s's sleep request: %w", crew.DisplayName(member.ID), err)
 	}
 	status := protocol.AgentMsgStatusNotified
 	detail := fmt.Sprintf("asked %s in session %s to write its handoff and file it with `attn handoff --sleep`", crew.DisplayName(member.ID), shortSessionID(sessionID))
-	if err := d.deliverAgentMailboxItem(delivery); err != nil {
+	if !receipt.Rang {
 		status = protocol.AgentMsgStatusQueued
-		detail = agentMessageQueuedDetail(err)
+		detail = receipt.Detail
 	}
 	return &protocol.CrewSleepResult{
 		Member:         member.ID,
