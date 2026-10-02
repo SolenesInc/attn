@@ -2285,7 +2285,7 @@ model SpawnSessionMessage {
   cwd: string;
   endpoint_id?: string;
   profile_id: string;       // The profile the session belongs to; empty over WebSocket means the connection's selected profile. Refused before any side effect when it resolves to nothing or to a deleted profile
-  placement?: SessionPlacement; // Absent leaves a new session unplaced and an existing one where it is
+  placement?: SessionPlacement; // Absent places a new session on its current desktop and keeps an existing placement
   agent: string;            // Built-in ID, "shell", or registered plugin driver ID
   cols: int32;
   rows: int32;
@@ -3116,7 +3116,7 @@ model ProfileDeleteMessage {
 }
 
 // Moves a live agent to another profile. It loses its placement and shows up
-// unplaced in the destination's queue; its runtime and session id stay. A
+// on the destination's current desktop; its runtime and session id stay. A
 // profile's chief moved out stops being its chief, and a crew member's agent
 // takes the member along. expected_profile_id is the profile the client saw
 // the agent in: another one answers stale_revision, and an agent already in
@@ -4246,7 +4246,7 @@ model SpawnResultMessage {
   error?: string;
   // The pane a requested placement produced. A spawn that asked for a
   // placement and got none reports why in placement_error; the agent then
-  // runs unplaced in its profile.
+  // runs on its profile's current desktop.
   desktop_id?: string;
   pane_id?: string;
   placement_error?: string;
@@ -6521,6 +6521,8 @@ model CrewWakeResultMessage {
   request_id: string;
   success: boolean;
   error?: string;
+  // The wake succeeded, but showing its session failed.
+  show_error?: string;
   member?: string;
   session_id?: string;
   profile_id?: string;
@@ -6913,7 +6915,7 @@ model SessionReopen {
   directory_state: string;
   // local | remote_only | gone | merged | unknown
   branch_state?: string;
-  // The profile the session reopens into, unplaced: its recorded profile.
+  // The recorded profile, on its last desktop or the current desktop.
   profile_id: string;
   // True when the recorded profile was deleted, so reopening needs an
   // explicit destination profile.
@@ -6943,10 +6945,10 @@ model DelegateResult {
   `model`: string;
   effort: string;
   predecessor_session_id?: string;
-  // Where the delegated agent sits. Absent when it runs unplaced.
+  // Where the delegated agent sits when placement is reported.
   desktop_id?: string;
   pane_id?: string;
-  // Why the agent stayed unplaced when a placement beside its source was asked for.
+  // Why placement beside its source failed; the agent uses its current desktop.
   placement_error?: string;
   // When the harness first reported a turn (hook, transcript or plugin driver).
   // Absent when the delegation completed without that: the first turn is unconfirmed.

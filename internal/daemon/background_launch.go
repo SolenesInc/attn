@@ -7,15 +7,6 @@ import (
 	"github.com/victorarias/attn/internal/protocol"
 )
 
-func (d *Daemon) crewWakeUserStarted(msg *protocol.CrewWakeMessage) bool {
-	source := protocol.Deref(msg.SourceSessionID)
-	if source == "" {
-		return true
-	}
-	session := d.store.Get(source)
-	return session != nil && string(session.Agent) == protocol.AgentShellValue
-}
-
 func (d *Daemon) launchRequester(sessionID, fallback string) string {
 	if session := d.store.Get(sessionID); session != nil && session.Label != "" {
 		return session.Label

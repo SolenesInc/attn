@@ -50,6 +50,10 @@ func TestLaunchDesktopsAreInstallSettingsVisibleThroughTheCLI(t *testing.T) {
 			t.Fatal("install setting leaked into definition YAML")
 		}
 	}
+	rejected := s.Attn("automation", "set", "check", "--launch-desktop", "1", "--desktop-name", "Ignored")
+	if rejected.Code == 0 || !strings.Contains(rejected.Stderr, "--desktop-name needs --launch-desktop own") {
+		t.Fatalf("existing desktop accepted ignored name: %+v", rejected)
+	}
 	assert()
 	s.Stop()
 	s.Start()

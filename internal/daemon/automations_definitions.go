@@ -120,12 +120,9 @@ func (d *Daemon) automationApplyLocked(ctx context.Context, spec automation.Defi
 		if existing != nil && existing.DeletedAt == nil {
 			owner = existing.ProfileID
 		}
-		chosen, err := d.launchDesktopFromRef(owner, "automation", *launch.ref)
+		chosen, err := d.namedLaunchDesktopFromRef(owner, "automation", *launch.ref, launch.name)
 		if err != nil {
 			return nil, err
-		}
-		if launch.name != nil {
-			chosen.DesktopName = *launch.name
 		}
 		setting = &chosen
 	}

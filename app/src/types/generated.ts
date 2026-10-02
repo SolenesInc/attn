@@ -2912,6 +2912,7 @@ export interface CrewWakeResultMessage {
     released_session_id?: string;
     request_id:           string;
     session_id?:          string;
+    show_error?:          string;
     success:              boolean;
     [property: string]: any;
 }
@@ -18389,6 +18390,7 @@ const typeMap: any = {
         { json: "released_session_id", js: "released_session_id", typ: u(undefined, "") },
         { json: "request_id", js: "request_id", typ: "" },
         { json: "session_id", js: "session_id", typ: u(undefined, "") },
+        { json: "show_error", js: "show_error", typ: u(undefined, "") },
         { json: "success", js: "success", typ: true },
     ], "any"),
     "DaemonWarning": o([

@@ -36,12 +36,6 @@ const capture = async (name) => {
   await captureFrontWindowScreenshot(path.join(runner.runDir, name), { client, driver });
   if (process.env.ATTN_HARNESS_RECORD === '1') await delay(1200);
 };
-const request = (cmd, fields, event) => {
-  const requestId = `${cmd}-${crypto.randomUUID()}`;
-  const result = observer.waitForMessage((message) => message.event === event && message.request_id === requestId && message, cmd);
-  observer.send({ cmd, request_id: requestId, ...fields });
-  return result;
-};
 runner.registerCleanup('restore_fixture', async () => {
   await client.quitApp().catch(() => {});
   cli('daemon', 'stop');
@@ -129,15 +123,19 @@ try {
     await capture('05-launch-settings.png');
   });
   await runner.step('a_user_wake_goes_there_and_background_wake_is_an_actionable_row', async () => {
-    const output = cli('crew', 'wake', members[0].item_id, '--json');
-    const userWake = JSON.parse(output.slice(output.indexOf('{')));
+    const userLaunched = observer.waitForMessage((message) => message.event === 'crew_updated' && message.members?.find((member) => member.id === members[0].item_id && member.binding_session), 'app crew wake');
+    await click('[data-testid="crew-restart"]');
+    await click('[data-testid="crew-confirm-restart"]');
+    const launched = await userLaunched;
+    const userWake = { session_id: launched.binding_session };
     await observer.waitForSession({ id: userWake.session_id });
     await wait('dialog[aria-labelledby="crew-panel-title"][open]', { absent: true });
     const userState = await client.request('get_state');
-    runner.assert(shownAgentId(userState) === userWake.session_id, 'A shell wake shows the member in the app', { view: userState.view, activeLeaf: userState.activeLeaf });
+    runner.assert(shownAgentId(userState) === userWake.session_id, 'An app wake shows the member in the app', { view: userState.view, activeLeaf: userState.activeLeaf });
     await click('[data-testid="manage-crew"]');
-    const arrival = await request('crew_wake', { member: members[1].item_id, source_session_id: userWake.session_id }, 'crew_wake_result');
-    runner.assert(arrival.success, 'The agent wake succeeds', arrival);
+    const output = cli('crew', 'wake', members[1].item_id, '--json');
+    const arrival = JSON.parse(output.slice(output.indexOf('{')));
+    runner.assert(Boolean(arrival.session_id), 'The CLI wake succeeds', arrival);
     await wait('.toast-row button', { textIncludes: members[1].name });
     await wait('.toast:popover-open');
     runner.writeJson('toast-viewport-bounds.json', await client.request('dom_bounds', { selector: '.toast' }));

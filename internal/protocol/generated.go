@@ -2504,6 +2504,9 @@ type CrewWakeResultMessage struct {
 	// SessionID corresponds to the JSON schema field "session_id".
 	SessionID *string `json:"session_id,omitempty,omitzero"`
 
+	// ShowError corresponds to the JSON schema field "show_error".
+	ShowError *string `json:"show_error,omitempty,omitzero"`
+
 	// Success corresponds to the JSON schema field "success".
 	Success bool `json:"success"`
 }

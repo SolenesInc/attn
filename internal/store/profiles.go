@@ -811,9 +811,12 @@ func (s *Store) editDesktopRow(id string, expectedRevision int64, edit func(tx *
 }
 
 func (s *Store) RenameDesktop(id, name string, expectedRevision int64) (profiles.Desktop, error) {
-	return s.editDesktopRow(id, expectedRevision, func(_ *sql.Tx, desktop *profiles.Desktop) error {
+	return s.editDesktopRow(id, expectedRevision, func(tx *sql.Tx, desktop *profiles.Desktop) error {
+		if desktop.Name == strings.TrimSpace(name) {
+			return nil
+		}
 		desktop.Name = strings.TrimSpace(name)
-		return nil
+		return appendBoundLaunchDesktopFacts(tx, desktop.ID)
 	})
 }
 
@@ -825,8 +828,11 @@ func (s *Store) SetDesktopShortcutSlot(id string, slot int, expectedRevision int
 		if err := ensureShortcutSlotFree(tx, desktop.ProfileID, slot, id); err != nil {
 			return err
 		}
+		if desktop.ShortcutSlot == slot {
+			return nil
+		}
 		desktop.ShortcutSlot = slot
-		return nil
+		return appendBoundLaunchDesktopFacts(tx, desktop.ID)
 	})
 }
 
@@ -911,6 +917,9 @@ func (s *Store) DeleteDesktop(id string, expectedRevision int64) (DesktopDeletio
 			return profiles.Errorf(profiles.CodeLastDesktop, "desktop %s is the last desktop of profile %q and cannot be deleted", id, profile.Name)
 		}
 		repointCurrentDesktop(&profile, siblings, id)
+		if err := appendBoundLaunchDesktopFacts(tx, id); err != nil {
+			return err
+		}
 		if err := deleteDesktop(tx, id); err != nil {
 			return err
 		}

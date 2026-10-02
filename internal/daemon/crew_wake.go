@@ -201,11 +201,15 @@ func (d *Daemon) primeCrewGarden(priming *crew.Priming, memberID string) {
 }
 
 func (d *Daemon) crewWakeAsked(msg *protocol.CrewWakeMessage) (*protocol.CrewWakeResult, error) {
+	return d.crewWakeAskedFor(msg, false)
+}
+
+func (d *Daemon) crewWakeAskedFor(msg *protocol.CrewWakeMessage, userStarted bool) (*protocol.CrewWakeResult, error) {
 	name := strings.TrimSpace(msg.Member)
 	if err := d.refuseCrossProfileWake(name, protocol.Deref(msg.ProfileID), protocol.Deref(msg.SourceSessionID)); err != nil {
 		return nil, err
 	}
-	delivery := &crewWakeDelivery{UserStarted: d.crewWakeUserStarted(msg), RequestedBy: d.launchRequester(protocol.Deref(msg.SourceSessionID), "another agent")}
+	delivery := &crewWakeDelivery{UserStarted: userStarted, RequestedBy: d.launchRequester(protocol.Deref(msg.SourceSessionID), "another agent")}
 	return d.crewWakeWithDelivery(name, strings.TrimSpace(strings.ToLower(protocol.Deref(msg.Agent))), false, delivery)
 }
 
@@ -240,19 +244,15 @@ func (d *Daemon) handleCrewWake(conn net.Conn, msg *protocol.CrewWakeMessage) {
 		d.sendCrewError(conn, "wake", err)
 		return
 	}
-	if d.crewWakeUserStarted(msg) {
-		if err := d.showCrewWake(result, nil, ""); err != nil {
-			d.sendCrewError(conn, "wake", err)
-			return
-		}
-	}
 	d.sendGardenResponse(conn, protocol.Response{Ok: true, CrewWakeResult: result})
 }
 
 func (d *Daemon) handleCrewWakeWS(client *wsClient, msg *protocol.CrewWakeMessage) {
-	result, err := d.crewWakeAsked(msg)
-	if err == nil && d.crewWakeUserStarted(msg) {
-		err = d.showCrewWake(result, client, protocol.Deref(msg.RequestID))
+	userStarted := protocol.Deref(msg.SourceSessionID) == ""
+	result, err := d.crewWakeAskedFor(msg, userStarted)
+	var showErr error
+	if err == nil && userStarted {
+		showErr = d.showCrewWake(result, client, protocol.Deref(msg.RequestID))
 	}
 	response := protocol.CrewWakeResultMessage{
 		Event:     protocol.EventCrewWakeResult,
@@ -269,6 +269,9 @@ func (d *Daemon) handleCrewWakeWS(client *wsClient, msg *protocol.CrewWakeMessag
 			response.AlreadyAwake = protocol.Ptr(true)
 		}
 		response.ReleasedSessionID = result.ReleasedSessionID
+		if showErr != nil {
+			response.ShowError = protocol.Ptr(showErr.Error())
+		}
 	}
 	d.sendToClient(client, response)
 }
@@ -524,12 +527,9 @@ func (d *Daemon) crewSet(msg *protocol.CrewSetMessage) (*protocol.CrewMember, bo
 			setting = &chosen
 		}
 		if msg.LaunchDesktop != nil {
-			chosen, err := d.launchDesktopFromRef(d.crewProfileID(member.ID), "crew", *msg.LaunchDesktop)
+			chosen, err := d.namedLaunchDesktopFromRef(d.crewProfileID(member.ID), "crew", *msg.LaunchDesktop, msg.LaunchDesktopName)
 			if err != nil {
 				return nil, false, err
-			}
-			if msg.LaunchDesktopName != nil {
-				chosen.DesktopName = *msg.LaunchDesktopName
 			}
 			setting = &chosen
 		}

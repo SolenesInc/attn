@@ -2,6 +2,7 @@ package daemon
 
 import (
 	"encoding/json"
+	"fmt"
 	"net"
 
 	"github.com/victorarias/attn/internal/protocol"
@@ -66,7 +67,7 @@ func (d *Daemon) launchDesktopResult(action, requestID, kind, id string, setting
 		item, err = d.store.LaunchDesktopItem(kind, id)
 		if err == nil {
 			var chosen store.LaunchDesktopSetting
-			chosen, err = d.launchDesktopFromRef(item.ProfileID, kind, *ref)
+			chosen, err = d.namedLaunchDesktopFromRef(item.ProfileID, kind, *ref, setting.DesktopName)
 			setting = &protocol.LaunchDesktopSetting{Mode: protocol.LaunchDesktopMode(chosen.Mode), DesktopID: protocol.Ptr(chosen.DesktopID), ShortcutSlot: protocol.Ptr(chosen.ShortcutSlot), DesktopName: setting.DesktopName}
 		}
 	}
@@ -159,4 +160,18 @@ func (d *Daemon) handleLaunchDesktopCommand(conn net.Conn, cmd string, message a
 		result = d.launchDesktopResult(msg.Cmd, msg.RequestID, string(msg.Kind), msg.ItemID, &msg.Setting, msg.DesktopRef)
 	}
 	_ = json.NewEncoder(conn).Encode(result)
+}
+
+func (d *Daemon) namedLaunchDesktopFromRef(profileID, kind, ref string, name *string) (store.LaunchDesktopSetting, error) {
+	setting, err := d.launchDesktopFromRef(profileID, kind, ref)
+	if err != nil {
+		return setting, err
+	}
+	if name != nil {
+		if setting.Mode != "own" {
+			return setting, fmt.Errorf("--desktop-name needs --launch-desktop own or an empty slot 5–9")
+		}
+		setting.DesktopName = *name
+	}
+	return setting, nil
 }

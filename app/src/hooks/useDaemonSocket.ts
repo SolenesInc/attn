@@ -306,7 +306,7 @@ export interface RateLimitState {
 }
 
 // Protocol version - must match daemon's ProtocolVersion
-export const PROTOCOL_VERSION = '341';
+export const PROTOCOL_VERSION = '342';
 const MAX_PENDING_ATTACH_OUTPUTS = 512;
 
 const CLIENT_INSTANCE_ID =
@@ -1666,6 +1666,9 @@ export function useDaemonSocket({
             }
             pendingActionsRef.current.delete(key);
             if (data.success && typeof data.session_id === 'string') {
+              if (data.show_error) {
+                callbacksRef.current.onSettingError?.(`Member is awake, but showing it failed: ${data.show_error}`);
+              }
               pending.resolve({
                 sessionId: data.session_id,
               });

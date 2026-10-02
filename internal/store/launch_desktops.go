@@ -97,6 +97,10 @@ func loadLaunchItem(tx *sql.Tx, kind, id string) (LaunchDesktopItem, error) {
 			return item, err
 		}
 		slot = desktop.ShortcutSlot
+		setting.Label, err = launchDesktopName(tx, desktop)
+		if err != nil {
+			return item, err
+		}
 	}
 	if slot != 0 {
 		setting.Label = fmt.Sprintf("%d · %s", slot, setting.Label)
@@ -112,6 +116,7 @@ func saveLaunchSetting(tx *sql.Tx, kind, id string, setting LaunchDesktopSetting
 		return item, err
 	}
 	destination := setting.DestinationID
+	changed := false
 	if destination != "" {
 		var profileID string
 		if err := tx.QueryRow(`SELECT profile_id FROM launch_destinations WHERE id = ?`, destination).Scan(&profileID); err != nil {
@@ -128,12 +133,52 @@ func saveLaunchSetting(tx *sql.Tx, kind, id string, setting LaunchDesktopSetting
 		if setting.ShortcutSlot != 0 && (setting.ShortcutSlot < 5 || setting.ShortcutSlot > 9) {
 			return item, profiles.Errorf(profiles.CodeInvalid, "launch shortcut_slot must be 0 or an explicit empty slot 5–9, asked for %d", setting.ShortcutSlot)
 		}
-		if err := ensureShortcutSlotFree(tx, item.ProfileID, setting.ShortcutSlot, ""); err != nil {
-			return item, err
+		binding := ""
+		if item.Setting.Mode == "own" {
+			destination = item.Setting.DestinationID
+			binding = item.Setting.DesktopID
 		}
-		destination = newProfileEntityID("launch")
-		if _, err := tx.Exec(`INSERT INTO launch_destinations(id,profile_id,name,requested_slot) VALUES (?,?,?,?)`, destination, item.ProfileID, name, setting.ShortcutSlot); err != nil {
-			return item, err
+		slotChanged := setting.ShortcutSlot != item.Setting.ShortcutSlot
+		if destination == "" || slotChanged {
+			if err := ensureShortcutSlotFree(tx, item.ProfileID, setting.ShortcutSlot, binding); err != nil {
+				return item, err
+			}
+		}
+		if destination == "" {
+			destination = newProfileEntityID("launch")
+			if _, err := tx.Exec(`INSERT INTO launch_destinations(id,profile_id,name,requested_slot) VALUES (?,?,?,?)`, destination, item.ProfileID, name, setting.ShortcutSlot); err != nil {
+				return item, err
+			}
+		} else {
+			changed = name != item.Setting.DesktopName || setting.ShortcutSlot != item.Setting.ShortcutSlot
+			if _, err := tx.Exec(`UPDATE launch_destinations SET name = ?,requested_slot = ? WHERE id = ?`, name, setting.ShortcutSlot, destination); err != nil {
+				return item, err
+			}
+			if binding != "" {
+				desktop, err := loadDesktop(tx, binding)
+				if err != nil {
+					return item, err
+				}
+				liveSlot := desktop.ShortcutSlot
+				if slotChanged {
+					liveSlot = setting.ShortcutSlot
+				}
+				if desktop.Name != name || desktop.ShortcutSlot != liveSlot {
+					changed = true
+					desktop.Name, desktop.ShortcutSlot = name, liveSlot
+					if err := saveDesktop(tx, time.Now().UTC().Format(sortableTimeFormat), &desktop); err != nil {
+						return item, err
+					}
+					if _, err := appendBusEventWith(tx, BusEvent{Name: "profile.arrangement.changed", Subject: item.ProfileID}, time.Now()); err != nil {
+						return item, err
+					}
+				}
+			}
+			if changed {
+				if err := appendLaunchDestinationFacts(tx, destination); err != nil {
+					return item, err
+				}
+			}
 		}
 	} else if setting.Mode == "desktop" {
 		desktop, err := loadLaunchDesktop(tx, profiles.Profile{ID: item.ProfileID}, setting.DesktopID)
@@ -157,17 +202,24 @@ func saveLaunchSetting(tx *sql.Tx, kind, id string, setting LaunchDesktopSetting
 	} else {
 		return item, profiles.Errorf(profiles.CodeInvalid, "unknown launch desktop mode %q; choose own or desktop", setting.Mode)
 	}
-	if item.Setting.DestinationID != destination {
+	if item.Setting.DestinationID != destination || changed {
 		if kind == "automation" && bumpAutomationRevision {
 			if _, err := tx.Exec(`UPDATE automation_definitions SET revision = revision + 1 WHERE id = ?`, id); err != nil {
 				return item, err
 			}
 		}
+	}
+	if item.Setting.DestinationID != destination {
 		if _, err := tx.Exec(`DELETE FROM launch_desktops WHERE kind = ? AND item_id = ?`, kind, id); err != nil {
 			return item, err
 		}
 		if _, err := tx.Exec(`INSERT INTO launch_desktops(kind,item_id,destination_id,confirmed) VALUES (?,?,?,1)`, kind, id, destination); err != nil {
 			return item, err
+		}
+		for _, changedDestination := range []string{item.Setting.DestinationID, destination} {
+			if err := appendLaunchDestinationFacts(tx, changedDestination); err != nil {
+				return item, err
+			}
 		}
 	} else if _, err := tx.Exec(`UPDATE launch_desktops SET confirmed = 1 WHERE kind = ? AND item_id = ?`, kind, id); err != nil {
 		return item, err
@@ -290,6 +342,9 @@ func (s *Store) PrepareLaunchMigration(crewIDs []string) error {
 				}
 			}
 		}
+		if _, err := tx.Exec(`DELETE FROM launch_destinations WHERE NOT EXISTS (SELECT 1 FROM launch_desktops WHERE destination_id = launch_destinations.id)`); err != nil {
+			return err
+		}
 		for _, id := range crewIDs {
 			destination := newProfileEntityID("launch")
 			if _, err := tx.Exec(`INSERT INTO launch_destinations(id,profile_id,name) SELECT ?,profile_id,member_id FROM crew_profiles WHERE member_id = ? AND NOT EXISTS(SELECT 1 FROM launch_desktops WHERE kind = 'crew' AND item_id = member_id); INSERT OR IGNORE INTO launch_desktops(kind,item_id,destination_id) SELECT 'crew',?,id FROM launch_destinations WHERE id = ?`, destination, id, id, destination); err != nil {
@@ -343,7 +398,7 @@ func launchItemDesktop(tx *sql.Tx, now string, profile *profiles.Profile, kind, 
 	if _, err := tx.Exec(`UPDATE launch_destinations SET live_desktop_id = ? WHERE id = ?`, desktop.ID, item.Setting.DestinationID); err != nil {
 		return desktop, err
 	}
-	return desktop, nil
+	return desktop, appendLaunchDestinationFacts(tx, item.Setting.DestinationID)
 }
 
 func (s *Store) PlaceBackgroundSession(sessionID, kind, id string, reopen bool) (profiles.Desktop, string, error) {
@@ -521,6 +576,9 @@ func pruneEmptyDesktops(tx *sql.Tx) error {
 		return err
 	}
 	for _, id := range ids {
+		if err := appendBoundLaunchDesktopFacts(tx, id); err != nil {
+			return err
+		}
 		if err := deleteDesktop(tx, id); err != nil {
 			return err
 		}
@@ -535,4 +593,50 @@ func (s *Store) profilesArrangementTx(fn func(tx *sql.Tx, now string) error) err
 		}
 		return pruneEmptyDesktops(tx)
 	})
+}
+
+func appendLaunchDestinationFacts(tx *sql.Tx, destinationID string) error {
+	rows, err := tx.Query(`SELECT kind,item_id FROM launch_desktops WHERE destination_id = ? ORDER BY joined_order`, destinationID)
+	if err != nil {
+		return err
+	}
+	var items [][2]string
+	for rows.Next() {
+		var item [2]string
+		if err := rows.Scan(&item[0], &item[1]); err != nil {
+			rows.Close()
+			return err
+		}
+		items = append(items, item)
+	}
+	if err := rows.Err(); err != nil {
+		rows.Close()
+		return err
+	}
+	if err := rows.Close(); err != nil {
+		return err
+	}
+	for _, item := range items {
+		name := "crew.updated"
+		if item[0] == "automation" {
+			name = "automation.changed"
+		}
+		if _, err := appendBusEventWith(tx, BusEvent{Name: name, Subject: item[1]}, time.Now()); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func appendBoundLaunchDesktopFacts(tx *sql.Tx, desktopID string) error {
+	ids, err := queryColumn[string](tx, `SELECT id FROM launch_destinations WHERE live_desktop_id = ?`, desktopID)
+	if err != nil {
+		return err
+	}
+	for _, id := range ids {
+		if err := appendLaunchDestinationFacts(tx, id); err != nil {
+			return err
+		}
+	}
+	return nil
 }
