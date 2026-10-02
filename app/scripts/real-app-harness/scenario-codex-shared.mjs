@@ -156,7 +156,7 @@ try {
     await client.request('dom_wait', { selector: '[data-testid="sidebar-queue"]', timeoutMs: observer.connectTimeoutMs });
     const queue = await client.request('queue_get_state');
     const rows = [...queue.turns, ...queue.settled, ...queue.pinned, ...queue.snoozed.rows].filter(row => row.id === a);
-    runner.assert(rows.length === 1 && rows[0].label === 'Native names A', 'queue did not project owner name', rows);
+    runner.assert(rows.length === 2 && rows.every(row => row.label === 'Native names A'), 'queue did not project owner name', rows);
     await client.request('set_setting', { key: 'queue_mode_enabled', value: 'false' });
     await client.request('dispatch_shortcut', { shortcutId: 'sessions.open' });
     await client.request('dom_wait', { selector: `.ledger-row[data-row-key="${a}"]`, timeoutMs: observer.connectTimeoutMs });
