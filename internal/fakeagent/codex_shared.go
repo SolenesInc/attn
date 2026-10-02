@@ -39,6 +39,7 @@ type sharedFakeRoot struct {
 	approval        atomic.Bool
 	failed          atomic.Bool
 	snapshotOnly    atomic.Bool
+	statusMu        sync.Mutex
 	archiveUsage    string
 	name            string
 	nameError       bool
@@ -590,6 +591,9 @@ func (s *sharedFakeCodex) approvalRequest(root *sharedFakeRoot) []byte {
 }
 
 func (s *sharedFakeCodex) broadcastStatus(root *sharedFakeRoot) {
+	// Compute and deliver together so a delayed busy payload cannot follow approval.
+	root.statusMu.Lock()
+	defer root.statusMu.Unlock()
 	if root.snapshotOnly.Load() {
 		return
 	}
