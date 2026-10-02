@@ -13,6 +13,7 @@ import (
 	"github.com/victorarias/attn/internal/procreap"
 	"github.com/victorarias/attn/internal/ptybackend"
 	"github.com/victorarias/attn/internal/ptyhost"
+	"github.com/victorarias/attn/internal/ptyworker"
 )
 
 func TestInstanceCleanStopsSharedHostGenerationsAndChildren(t *testing.T) {
@@ -152,4 +153,19 @@ func writeHostRegistry(path string, entry ptyhost.HostRegistry) error {
 		return err
 	}
 	return os.WriteFile(path, data, 0o600)
+}
+
+func TestInstanceCleanPreservesUnreachableWorkerRegistry(t *testing.T) {
+	r := stoppedInstance(t)
+	path := filepath.Join(r.DataDir, "workers", "d-unknown", "registry", "unreachable.json")
+	if err := ptyworker.WriteRegistryAtomic(path, ptyworker.RegistryEntry{Version: 1, SessionID: "unreachable", WorkerPID: os.Getpid(), SocketPath: filepath.Join(r.DataDir, "absent.sock")}); err != nil {
+		t.Fatal(err)
+	}
+	var out bytes.Buffer
+	if err := cleanInstance(&out, r); err == nil {
+		t.Fatalf("cleanup accepted an unreachable live worker: %s", out.String())
+	}
+	if _, err := os.Stat(path); err != nil {
+		t.Fatalf("cleanup destroyed the unreaped registry: %v", err)
+	}
 }
