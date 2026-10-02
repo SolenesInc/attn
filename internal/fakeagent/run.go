@@ -138,3 +138,37 @@ func (r *Run) call(method string, params, result any) {
 		r.t.Fatalf("%s %s for session %s: %v", r.Harness, method, r.SessionID, err)
 	}
 }
+
+func (r *Run) NativeName(name string)         { r.call("native_name", textParams{Text: name}, nil) }
+func (r *Run) GenerateNativeName(name string) { r.call("generate_name", textParams{Text: name}, nil) }
+func (r *Run) RejectNativeNameWrites(reject bool) {
+	text := "off"
+	if reject {
+		text = "on"
+	}
+	r.call("name_error", textParams{Text: text}, nil)
+}
+func (r *Run) ReadNativeName() string {
+	var result struct {
+		Name string `json:"name"`
+	}
+	r.call("read_name", nil, &result)
+	return result.Name
+}
+
+func (r *Run) NativeNameDuringResume(name string) {
+	r.call("name_on_resume", textParams{Text: name}, nil)
+}
+
+func (r *Run) HoldNativeNameReplies()    { r.call("hold_name_replies", nil, nil) }
+func (r *Run) AwaitNativeNameReplyHeld() { r.call("name_reply_held", nil, nil) }
+func (r *Run) ReleaseNativeNameReplies() { r.call("release_name_replies", nil, nil) }
+
+// ForeignNativeRootRenamedDuringRead models another native client's conversation.
+func (r *Run) ForeignNativeRootRenamedDuringRead() string {
+	var result struct {
+		Root string `json:"root"`
+	}
+	r.call("foreign_root_rename_during_read", nil, &result)
+	return result.Root
+}

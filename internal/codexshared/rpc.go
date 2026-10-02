@@ -152,13 +152,13 @@ func (c *Client) Respond(ctx context.Context, id json.RawMessage, result any) er
 
 // Proxy preserves connection-local IDs and approvals, transforming lifecycle
 // requests before forwarding and observing replies without claiming foreground.
-func Proxy(ctx context.Context, down, up *websocket.Conn, prepare func(*Message) (func(Message), error), observe func(Message)) {
+func Proxy(ctx context.Context, down, up *websocket.Conn, prepare func(*Message) (func(*Message), error), observe func(Message)) {
 	ctx, cancel := context.WithCancel(ctx)
 	defer cancel()
 	defer down.CloseNow()
 	defer up.CloseNow()
 	var mu sync.Mutex
-	pending := make(map[string]func(Message))
+	pending := make(map[string]func(*Message))
 	done := make(chan struct{})
 	go func() {
 		defer close(done)
@@ -176,7 +176,19 @@ func Proxy(ctx context.Context, down, up *websocket.Conn, prepare func(*Message)
 					delete(pending, string(m.ID))
 					mu.Unlock()
 					if callback != nil {
-						callback(m)
+						callback(&m)
+						var envelope map[string]json.RawMessage
+						if json.Unmarshal(data, &envelope) == nil {
+							delete(envelope, "result")
+							delete(envelope, "error")
+							if len(m.Result) > 0 {
+								envelope["result"] = m.Result
+							}
+							if len(m.Error) > 0 {
+								envelope["error"] = m.Error
+							}
+							data, _ = json.Marshal(envelope)
+						}
 					}
 				}
 				if observe != nil {

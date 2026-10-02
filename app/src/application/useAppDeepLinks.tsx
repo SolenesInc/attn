@@ -11,7 +11,7 @@ interface Options {
     agent?: SessionAgent,
     endpointId?: string,
     yoloMode?: boolean,
-    options?: { chiefOfStaff?: boolean; autoMode?: boolean },
+    options?: { chiefOfStaff?: boolean; autoMode?: boolean; labelIsExplicit?: boolean },
   ) => Promise<string>;
   selectCreatedSession: (sessionId: string) => boolean;
 }
@@ -40,7 +40,9 @@ export function useAppDeepLinks({
             if (existingSession) {
               selectAgent(existingSession.id);
             } else {
-              void createWorkspaceSession(label, cwd).then(selectCreatedSession);
+              void createWorkspaceSession(label, cwd, undefined, undefined, undefined, false, {
+                labelIsExplicit: !!url.searchParams.get('label'),
+              }).then(selectCreatedSession);
             }
           }
         }

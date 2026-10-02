@@ -161,3 +161,35 @@ func (s *Store) UpdateCodexContext(id string, context json.RawMessage) error {
 	_, err := s.db.Exec(`UPDATE codex_owners SET context_json=? WHERE session_id=?`, string(context), id)
 	return err
 }
+
+// A correction replaces existing initialization intent without creating new intent.
+func (s *Store) ReplacePendingCodexName(id, root, name string) error {
+	result, err := s.db.Exec(`UPDATE codex_owners SET context_json=CASE WHEN COALESCE(json_extract(context_json,'$.InitialName'),'')<>'' THEN json_set(context_json,'$.InitialName',?) ELSE context_json END WHERE session_id=? AND native_root_id=? AND archived=0`, name, id, root)
+	if err != nil {
+		return err
+	}
+	n, err := result.RowsAffected()
+	if err != nil {
+		return err
+	}
+	if n != 1 {
+		return fmt.Errorf("codex owner %s is no longer live on root %s", id, root)
+	}
+	return nil
+}
+
+// Consume only the confirmed pending value; newer corrections and other context survive.
+func (s *Store) ConsumeCodexInitialName(id, root, name string) error {
+	result, err := s.db.Exec(`UPDATE codex_owners SET context_json=CASE WHEN json_extract(context_json,'$.InitialName')=? THEN json_remove(context_json,'$.InitialName') ELSE context_json END WHERE session_id=? AND native_root_id=? AND archived=0`, name, id, root)
+	if err != nil {
+		return err
+	}
+	n, err := result.RowsAffected()
+	if err != nil {
+		return err
+	}
+	if n != 1 {
+		return fmt.Errorf("codex owner %s is no longer live on root %s", id, root)
+	}
+	return nil
+}

@@ -40,6 +40,19 @@ try {
   await runner.step('launch', () => launchFreshAppAndConnect(client, observer));
   observer.send({ cmd: 'set_setting', key: 'codex_shared_enabled', value: 'true' });
   await observer.waitFor(() => observer.getSetting('codex_shared_enabled') === 'true', 'shared launch default');
+
+  await runner.step('synthesized_app_label_allows_native_generated_name', async () => {
+    const cwd = path.join(runner.sessionDir, 'ordinary-launch'); fs.mkdirSync(cwd, { recursive: true });
+    writeMockAgentFixture(cwd, { agent: 'codex', resumable: true, turns: [], defaultActions: [{ type: 'reply', text: 'ordinary reply' }] });
+    const { sessionId } = await client.request('create_session', { cwd, agent: 'codex', label: 'ordinary-launch', label_is_explicit: false });
+    const pane = await resolved(sessionId, sessionId);
+    await waitForPaneText(client, sessionId, pane.pane_id, text => text.includes('Root '), 'ordinary launch root');
+    await type(sessionId, pane.pane_id, 'name this conversation\r');
+    await observer.waitFor(() => observer.getSession(sessionId)?.label === 'Generated ordinary-launch', 'generated ordinary app name');
+    const header = await client.request('dom_text', { selector: `[data-pane-id="${pane.pane_id}"] .workspace-pane-header` });
+    runner.assert(header.text.includes('Generated ordinary-launch'), 'ordinary app name missing from header', header);
+    await closePane(observer.getSession(sessionId).workspace_id, pane.pane_id);
+  });
   const roots = [];
   for (const name of ['exo', 'foo']) {
     const cwd = path.join(runner.sessionDir, name); fs.mkdirSync(cwd, { recursive: true });
@@ -87,6 +100,67 @@ try {
     const draft = await client.request('read_pane_text', { sessionId: a, paneId: paneA.pane_id });
     runner.assert(draft.text.includes('draft about B'), 'attachment lost another view draft', draft);
     await type(a, paneA.pane_id, `\x15/agents ${roots[0]}\r`); await resolved(a, a);
+  });
+  await runner.step('shared_names_converge_in_views_queue_and_ledger', async () => {
+    const rename = async (id, label, success = true) => {
+      await client.request('dom_click', { selector: `[aria-label="Rename session ${observer.getSession(id).label}"]` });
+      await client.request('dom_type', { selector: '.rename-popover-input', text: label });
+      await client.request('dom_click', { selector: '.rename-popover-btn.save' });
+      if (success) {
+        await observer.waitFor(() => observer.getSession(id)?.label === label, 'confirmed rename');
+        await client.request('dom_wait', { selector: '.rename-popover', absent: true, timeoutMs: observer.connectTimeoutMs });
+      } else {
+        await client.request('dom_wait', { selector: '.rename-popover-error', timeoutMs: observer.connectTimeoutMs });
+        const error = await client.request('dom_text', { selector: '.rename-popover-error' });
+        runner.assert(error.text.includes('fixture name write rejected'), 'native write error is not visible', error);
+        await client.request('dom_click', { selector: '.rename-popover-btn.cancel' });
+      }
+    };
+    await rename(a, 'Attn names A');
+    await observer.waitFor(() => observer.getSession(a)?.label === 'Attn names A', 'Attn name projection');
+    await type(a, paneA.pane_id, '/agents\r');
+    await waitForPaneText(client, a, paneA.pane_id, text => /Attn names\s+A/.test(text), 'native picker name');
+    await type(a, paneA.pane_id, '/rename Native names A\r');
+    await observer.waitFor(() => observer.getSession(a)?.label === 'Native names A', 'native rename projection');
+    await rename(a, 'fixture rejected name', false);
+    runner.assert(observer.getSession(a)?.label === 'Native names A', 'failed write replaced confirmed name');
+    await client.request('set_setting', { key: 'queue_mode_enabled', value: 'true' });
+    await client.request('dom_wait', { selector: '[data-testid="sidebar-queue"]', timeoutMs: observer.connectTimeoutMs });
+    const queue = await client.request('queue_get_state');
+    const rows = [...queue.turns, ...queue.settled, ...queue.pinned, ...queue.snoozed.rows].filter(row => row.id === a);
+    runner.assert(rows.length === 1 && rows[0].label === 'Native names A', 'queue did not project owner name', rows);
+    await client.request('set_setting', { key: 'queue_mode_enabled', value: 'false' });
+    await client.request('dispatch_shortcut', { shortcutId: 'sessions.open' });
+    await client.request('dom_wait', { selector: `.ledger-row[data-row-key="${a}"]`, timeoutMs: observer.connectTimeoutMs });
+    const ledger = await client.request('dom_text', { selector: `.ledger-row[data-row-key="${a}"]` });
+    runner.assert(ledger.text.includes('Native names A'), 'ledger did not project native name', ledger);
+    await client.request('dispatch_shortcut', { shortcutId: 'sessions.open' });
+  });
+  await runner.step('initial_name_failure_keeps_creation_and_rename_recovers', async () => {
+    const cwd = path.join(runner.sessionDir, 'name-recovery'); fs.mkdirSync(cwd, { recursive: true });
+    writeMockAgentFixture(cwd, { agent: 'codex', resumable: true, turns: [], defaultActions: [{ type: 'reply', text: 'recovered work' }] });
+    const { sessionId: id } = await client.request('create_session', { cwd, agent: 'codex', label: 'fixture rejected name' });
+    owners.push(id);
+    const pane = await resolved(id, id);
+    await type(id, pane.pane_id, 'blocked work\r');
+    await waitForPaneText(client, id, pane.pane_id, text => text.includes('fixture name write rejected'), 'pending name refuses work');
+    await client.request('dom_click', { selector: '[aria-label="Show Notifications"]' });
+    await client.request('dom_wait', { selector: '.notification-row-head', timeoutMs: observer.connectTimeoutMs });
+    await client.request('dom_click', { selector: '.notification-row-head' });
+    const notice = await client.request('dom_text', { selector: '.notifications-panel' });
+    runner.assert(notice.text.includes('Could not set the Codex agent name') && notice.text.includes('Rename the agent'), 'naming recovery warning is not visible', notice);
+    await driver.screenshot(path.join(runner.runDir, 'initial-name-recovery-warning.png'), { windowId: await driver.mainWindowId() });
+    await client.request('dom_click', { selector: '.notifications-panel-close' });
+    await client.request('dom_click', { selector: `[aria-label="Rename session ${observer.getSession(id).label}"]` });
+    await client.request('dom_type', { selector: '.rename-popover-input', text: 'Recovered name' });
+    await client.request('dom_click', { selector: '.rename-popover-btn.save' });
+    await observer.waitFor(() => observer.getSession(id)?.label === 'Recovered name', 'rename recovers pending name');
+    await client.request('dom_wait', { selector: '.rename-popover', absent: true, timeoutMs: observer.connectTimeoutMs });
+    await type(id, pane.pane_id, 'retry work\r');
+    await waitForPaneText(client, id, pane.pane_id, text => text.includes('recovered work'), 'same owner receives recovered work');
+    await resolved(id, id);
+    await closePane(observer.getSession(id).workspace_id, pane.pane_id);
+    await client.request('focus_pane', { sessionId: a, paneId: paneA.pane_id });
   });
   await runner.step('hidden_approval_queue_attaches_native_view', async () => {
     const second = [...panes.values()].find(pane => pane.session_id === a && pane.runtime_id !== a);
@@ -140,7 +214,7 @@ try {
     observer.send({ cmd: 'pty_input', id: a, source: 'automation', data: `/agents ${roots[1]}\r` });
     await resolved(a, b);
     const title = await client.request('dom_text', { selector: '.anno-panel-title' });
-    runner.assert(title.text.includes('Annotations for exo'), 'open editor silently changed recipient', title);
+    runner.assert(title.text.includes('Annotations for Native names A'), 'open editor silently changed recipient', title);
     const sent = observer.waitForMessage(message => message.event === 'session_messages_changed' && message.session_id === a ? message : null, 'A records its feedback reply');
     await client.request('dom_click', { selector: '.anno-panel-send' });
     await sent;

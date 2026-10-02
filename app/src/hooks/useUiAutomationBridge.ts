@@ -81,7 +81,7 @@ interface UseUiAutomationBridgeArgs {
   daemonReady?: boolean;
   connectionError?: string | null;
   getActivePaneIdForSession: (session: Session | undefined | null) => string;
-  createSession: (label: string, cwd: string, id?: string, agent?: SessionAgent, endpointId?: string, yoloMode?: boolean, options?: { chiefOfStaff?: boolean }) => Promise<string>;
+  createSession: (label: string, cwd: string, id?: string, agent?: SessionAgent, endpointId?: string, yoloMode?: boolean, options?: { chiefOfStaff?: boolean; labelIsExplicit?: boolean }) => Promise<string>;
   selectSession: (sessionId: string) => void;
   selectWorkspace: (workspaceId: string) => void;
   moveWorkspaceLeafToWorkspace: (
@@ -2772,6 +2772,7 @@ export function useUiAutomationBridge({
         }
         const sessionId = await createSession(label, cwd, providedSessionId, agent, endpointId, undefined, {
           chiefOfStaff,
+          labelIsExplicit: typeof payload.label_is_explicit === 'boolean' ? payload.label_is_explicit : typeof payload.label === 'string' && payload.label.length > 0,
         });
         await settleUi();
         window.setTimeout(() => {

@@ -19,6 +19,7 @@ const (
 	crashAfterCodexClosePersisted   = "codex-owner-close-persisted"
 	crashAfterCodexAttachView       = "codex-attach-view-persisted"
 	crashAfterCodexViewRemoved      = "codex-view-removed"
+	crashAfterCodexNameWritten      = "codex-name-written"
 )
 
 func crashAt(point string) {

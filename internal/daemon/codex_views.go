@@ -80,7 +80,7 @@ func (r *codexRuntime) addViewLocked(v store.CodexView) error {
 			down.Close(websocket.StatusInternalError, err.Error())
 			return
 		}
-		codexshared.Proxy(r.d.life.Context(), down, up, func(m *codexshared.Message) (func(codexshared.Message), error) { return r.prepareRPC(v.RuntimeID, m) }, func(m codexshared.Message) {
+		codexshared.Proxy(r.d.life.Context(), down, up, func(m *codexshared.Message) (func(*codexshared.Message), error) { return r.prepareRPC(v.RuntimeID, m) }, func(m codexshared.Message) {
 			if m.Method == "thread/status/changed" || m.Method == "turn/started" || m.Method == "turn/completed" || m.Method == "" {
 				r.reconcileViewControl(v.RuntimeID, launch)
 			}

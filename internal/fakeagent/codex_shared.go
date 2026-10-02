@@ -30,17 +30,30 @@ type sharedFakeCodex struct {
 	controlUnavailable atomic.Bool
 }
 type sharedFakeRoot struct {
-	c            *codex
-	a            *agent
-	owner        string
-	archived     bool
-	hasTurn      atomic.Bool
-	active       atomic.Bool
-	approval     atomic.Bool
-	failed       atomic.Bool
-	snapshotOnly atomic.Bool
-	archiveUsage string
-	livePath     string
+	c                *codex
+	a                *agent
+	owner            string
+	archived         bool
+	hasTurn          atomic.Bool
+	active           atomic.Bool
+	approval         atomic.Bool
+	failed           atomic.Bool
+	snapshotOnly     atomic.Bool
+	archiveUsage     string
+	name             string
+	nameError        bool
+	nameOnResume     string
+	nameOnRead       string
+	rejectResumeOnce bool
+	holdNameReplies  bool
+	nameHeld         chan struct{}
+	nameReplies      []heldCodexNameReply
+	livePath         string
+}
+
+type heldCodexNameReply struct {
+	conn *websocket.Conn
+	data []byte
 }
 
 func runSharedCodexServer(cfg config) int {
@@ -116,6 +129,24 @@ func (s *sharedFakeCodex) serve(w http.ResponseWriter, req *http.Request) {
 		}
 		if len(m.ID) > 0 {
 			data, _ := json.Marshal(reply)
+			if m.Method == "thread/name/set" && err == nil {
+				var p struct {
+					ThreadID string `json:"threadId"`
+					Name     string `json:"name"`
+				}
+				_ = json.Unmarshal(m.Params, &p)
+				s.mu.Lock()
+				root := s.roots[p.ThreadID]
+				if root != nil && (root.holdNameReplies || p.Name == "Held initial name") {
+					root.nameReplies = append(root.nameReplies, heldCodexNameReply{conn, data})
+					if len(root.nameReplies) == 1 {
+						close(root.nameHeld)
+					}
+					s.mu.Unlock()
+					continue
+				}
+				s.mu.Unlock()
+			}
 			if conn.Write(context.Background(), websocket.MessageText, data) != nil {
 				return
 			}
@@ -137,6 +168,8 @@ func (s *sharedFakeCodex) serve(w http.ResponseWriter, req *http.Request) {
 
 func (s *sharedFakeCodex) handle(conn *websocket.Conn, m codexshared.Message) (any, error) {
 	var p struct {
+		Ephemeral      bool            `json:"ephemeral"`
+		Name           string          `json:"name"`
 		ThreadID       string          `json:"threadId"`
 		ExpectedTurnID string          `json:"expectedTurnId"`
 		ViewArgv       []string        `json:"fixture_view_argv"`
@@ -173,6 +206,9 @@ func (s *sharedFakeCodex) handle(conn *websocket.Conn, m codexshared.Message) (a
 		s.mu.Unlock()
 		return map[string]any{}, nil
 	case "thread/start", "thread/fork":
+		if p.Ephemeral {
+			return map[string]any{"thread": map[string]any{"id": "utility-thread", "ephemeral": true, "source": "cli"}}, nil
+		}
 		if m.Method == "thread/start" && os.Getenv("ATTN_FAKE_CODEX_REJECT_INITIAL_START_ONCE") == "1" && !s.rejectedStart.Swap(true) {
 			return nil, fmt.Errorf("fixture initial creation rejected")
 		}
@@ -197,13 +233,57 @@ func (s *sharedFakeCodex) handle(conn *websocket.Conn, m codexshared.Message) (a
 		for key, value := range cfg.ShellEnvironmentPolicy.Set {
 			c.hooks.env = withEnv(c.hooks.env, key, value)
 		}
-		root := &sharedFakeRoot{c: c, owner: cfg.ShellEnvironmentPolicy.Set["ATTN_SESSION_ID"], livePath: c.transcript}
+		root := &sharedFakeRoot{c: c, owner: cfg.ShellEnvironmentPolicy.Set["ATTN_SESSION_ID"], livePath: c.transcript, nameHeld: make(chan struct{})}
 		if root.owner == "" {
 			return nil, fmt.Errorf("shared root missing owner config")
 		}
 		a := &agent{term: c.term, conv: c, prompts: make(chan promptSubmission, 16)}
 		root.a = a
 		control, err := dialControl(s.cfg, func(peer *rpcPeer, method string, params json.RawMessage) (any, error) {
+			if method == "foreign_root_rename_during_read" {
+				var config codexConfig
+				config.ShellEnvironmentPolicy.Set = map[string]string{"ATTN_SESSION_ID": "foreign-" + c.conversation}
+				params, _ := json.Marshal(map[string]any{"cwd": c.cwd, "config": config})
+				result, err := s.handle(nil, codexshared.Message{Method: "thread/start", Params: params})
+				if err != nil {
+					return nil, err
+				}
+				id := result.(map[string]any)["thread"].(map[string]any)["id"].(string)
+				s.mu.Lock()
+				foreign := s.roots[id]
+				foreign.name = "Older foreign name"
+				foreign.nameOnRead = "Latest foreign name"
+				foreign.rejectResumeOnce = true
+				s.mu.Unlock()
+				return map[string]any{"root": id}, nil
+			}
+			if method == "hold_name_replies" {
+				s.mu.Lock()
+				root.holdNameReplies = true
+				s.mu.Unlock()
+				return struct{}{}, nil
+			}
+			if method == "name_reply_held" {
+				s.mu.Lock()
+				held := root.nameHeld
+				s.mu.Unlock()
+				<-held
+				return struct{}{}, nil
+			}
+			if method == "release_name_replies" {
+				s.mu.Lock()
+				replies := root.nameReplies
+				root.nameReplies = nil
+				root.holdNameReplies = false
+				root.nameHeld = make(chan struct{})
+				s.mu.Unlock()
+				for _, reply := range replies {
+					if err := reply.conn.Write(context.Background(), websocket.MessageText, reply.data); err != nil {
+						return nil, err
+					}
+				}
+				return struct{}{}, nil
+			}
 			if method == "usage_on_archive" {
 				var input textParams
 				if err := json.Unmarshal(params, &input); err != nil {
@@ -213,6 +293,26 @@ func (s *sharedFakeCodex) handle(conn *websocket.Conn, m codexshared.Message) (a
 				root.archiveUsage = input.Text
 				root.a.turn.Unlock()
 				return struct{}{}, nil
+			}
+			if method == "name_on_resume" || method == "native_name" || method == "generate_name" || method == "name_error" || method == "read_name" {
+				var input textParams
+				_ = json.Unmarshal(params, &input)
+				s.mu.Lock()
+				if method == "name_on_resume" {
+					root.nameOnResume = input.Text
+				}
+				if method == "name_error" {
+					root.nameError = input.Text == "on"
+				}
+				if method == "native_name" || method == "generate_name" && root.name == "" {
+					root.name = input.Text
+				}
+				name := root.name
+				s.mu.Unlock()
+				if method == "native_name" || method == "generate_name" {
+					s.broadcast("thread/name/updated", map[string]any{"threadId": c.conversation, "threadName": name})
+				}
+				return map[string]any{"name": name}, nil
 			}
 			if method == "broadcast_usage" {
 				s.broadcast("thread/tokenUsage/updated", map[string]any{"threadId": c.conversation, "turnId": c.turnID, "tokenUsage": map[string]any{"total": map[string]any{"totalTokens": 999}, "last": map[string]any{"totalTokens": 999}}})
@@ -296,6 +396,12 @@ func (s *sharedFakeCodex) handle(conn *websocket.Conn, m codexshared.Message) (a
 		s.mu.Lock()
 		s.roots[c.conversation] = root
 		s.mu.Unlock()
+		var beforeBinding any
+		if os.Getenv("ATTN_FAKE_CODEX_NAME_BEFORE_BIND") != "" {
+			beforeBinding = s.metadata(root)
+			root.name = os.Getenv("ATTN_FAKE_CODEX_NAME_BEFORE_BIND")
+			s.broadcast("thread/name/updated", map[string]any{"threadId": c.conversation, "threadName": root.name})
+		}
 		if err := c.hooks.run("SessionStart", "startup", c.hookInput("SessionStart", map[string]any{"source": "startup"})); err != nil {
 			return nil, err
 		}
@@ -313,6 +419,9 @@ func (s *sharedFakeCodex) handle(conn *websocket.Conn, m codexshared.Message) (a
 		}
 		s.broadcast("thread/started", map[string]any{"thread": s.metadata(root)})
 		s.broadcastStatus(root)
+		if beforeBinding != nil {
+			return map[string]any{"thread": beforeBinding}, nil
+		}
 		return map[string]any{"thread": s.metadata(root)}, nil
 	case "thread/resume", "thread/read", "thread/unarchive", "thread/archive":
 		s.mu.Lock()
@@ -324,6 +433,15 @@ func (s *sharedFakeCodex) handle(conn *websocket.Conn, m codexshared.Message) (a
 		s.mu.Lock()
 		isControl := conn == s.control
 		s.mu.Unlock()
+		s.mu.Lock()
+		rejectResume := m.Method == "thread/resume" && root.rejectResumeOnce
+		if rejectResume {
+			root.rejectResumeOnce = false
+		}
+		s.mu.Unlock()
+		if rejectResume {
+			return nil, fmt.Errorf("fixture foreign resume rejected")
+		}
 		if m.Method == "thread/resume" && isControl && root.snapshotOnly.Load() {
 			return nil, fmt.Errorf("fixture control resume rejected")
 		}
@@ -384,7 +502,41 @@ func (s *sharedFakeCodex) handle(conn *websocket.Conn, m codexshared.Message) (a
 				return nil, err
 			}
 		}
-		return map[string]any{"thread": s.metadata(root)}, nil
+		snapshot := s.metadata(root)
+		s.mu.Lock()
+		if m.Method == "thread/read" && root.nameOnRead != "" {
+			name := root.nameOnRead
+			root.name = name
+			root.nameOnRead = ""
+			s.mu.Unlock()
+			s.broadcast("thread/name/updated", map[string]any{"threadId": p.ThreadID, "threadName": name})
+			return map[string]any{"thread": snapshot}, nil
+		}
+		name := root.nameOnResume
+		if m.Method == "thread/resume" {
+			root.nameOnResume = ""
+		}
+		if m.Method == "thread/resume" && name != "" {
+			root.name = name
+		}
+		s.mu.Unlock()
+		if m.Method == "thread/resume" && name != "" {
+			s.broadcast("thread/name/updated", map[string]any{"threadId": p.ThreadID, "threadName": name})
+		}
+		return map[string]any{"thread": snapshot}, nil
+	case "thread/name/set":
+		s.mu.Lock()
+		root := s.roots[p.ThreadID]
+		if root == nil || root.nameError || p.Name == "fixture rejected name" {
+			s.mu.Unlock()
+			return nil, fmt.Errorf("fixture name write rejected for %s", p.ThreadID)
+		}
+		root.name = p.Name
+		s.mu.Unlock()
+		if os.Getenv("ATTN_FAKE_CODEX_DROP_NAME_EVENTS") != "1" {
+			s.broadcast("thread/name/updated", map[string]any{"threadId": p.ThreadID, "threadName": p.Name})
+		}
+		return map[string]any{}, nil
 	case "thread/loaded/list":
 		s.mu.Lock()
 		var ids []string
@@ -412,11 +564,17 @@ func (s *sharedFakeCodex) handle(conn *websocket.Conn, m codexshared.Message) (a
 		for _, input := range p.Input {
 			texts = append(texts, input.Text)
 		}
+		text := strings.Join(texts, "\n")
 		if m.Method == "turn/start" {
 			if root.active.Load() {
 				return nil, fmt.Errorf("turn already active")
 			}
-			root.a.submit(strings.Join(texts, "\n"))
+			root.a.turn.Lock()
+			err := root.c.submit(text)
+			root.a.turn.Unlock()
+			if err != nil {
+				return nil, err
+			}
 			root.hasTurn.Store(true)
 			root.active.Store(true)
 		} else {
@@ -425,16 +583,16 @@ func (s *sharedFakeCodex) handle(conn *websocket.Conn, m codexshared.Message) (a
 				root.a.turn.Unlock()
 				return nil, fmt.Errorf("steer expected an active matching turn")
 			}
-			text := strings.Join(texts, "\n")
 			err := appendLines(root.c.transcript, codexEvent("user_message", text))
 			root.a.turn.Unlock()
 			if err != nil {
 				return nil, err
 			}
-			root.a.prompts <- promptSubmission{text: text, conversation: root.c.conversation}
 		}
 		s.broadcast("turn/started", map[string]any{"threadId": p.ThreadID, "turn": map[string]any{"id": root.c.turnID}})
 		s.broadcastStatus(root)
+		// Prompted acknowledges native acceptance after its state has reached every peer.
+		root.a.prompts <- promptSubmission{text: text, conversation: root.c.conversation}
 		return map[string]any{"turn": map[string]any{"id": root.c.turnID}}, nil
 	default:
 		return map[string]any{}, nil
@@ -448,7 +606,10 @@ func (s *sharedFakeCodex) metadata(root *sharedFakeRoot) any {
 	if root.active.Load() {
 		turns = append(turns, map[string]any{"id": root.c.turnID, "status": "inProgress"})
 	}
-	return map[string]any{"id": root.c.conversation, "cwd": root.c.cwd, "path": root.c.transcript, "source": "cli", "ephemeral": false, "turns": turns, "status": s.status(root)}
+	s.mu.Lock()
+	name := root.name
+	s.mu.Unlock()
+	return map[string]any{"name": name, "id": root.c.conversation, "cwd": root.c.cwd, "path": root.c.transcript, "source": "cli", "ephemeral": false, "turns": turns, "status": s.status(root)}
 }
 
 func (s *sharedFakeCodex) status(root *sharedFakeRoot) any {
@@ -604,6 +765,17 @@ func runSharedCodexView(cfg config) int {
 	}
 	submit := func(text string) {
 		switch {
+		case strings.HasPrefix(text, "/rename "):
+			mu.Lock()
+			id := current
+			mu.Unlock()
+			_, err := client.Call(context.Background(), "thread/name/set", map[string]any{"threadId": id, "name": strings.TrimPrefix(text, "/rename ")})
+			if err != nil {
+				term.print(err.Error())
+			}
+		case text == "/utility":
+			_, _ = client.Call(context.Background(), "thread/start", map[string]any{"ephemeral": true})
+			term.print("Utility complete")
 		case text == "/loaded":
 			result, err := client.Call(context.Background(), "thread/loaded/list", map[string]any{})
 			if err != nil {
