@@ -169,7 +169,7 @@ func TestEveryOpenTicketOfASessionThatDiesMidFlightCrashesAndSettledOnesStay(t *
 }
 
 func TestASessionThatJoinsTheCrewKeepsItsTicketThreadsWithoutReplayingThem(t *testing.T) {
-	for _, mode := range []string{"external", "managed"} {
+	for _, mode := range []string{"external", "legacy", "managed"} {
 		t.Run(mode, func(t *testing.T) {
 			inBubbleWithAgents(t, func(t *testing.T, w *world) {
 				w.finishStartupWork()
@@ -182,7 +182,13 @@ func TestASessionThatJoinsTheCrewKeepsItsTicketThreadsWithoutReplayingThem(t *te
 					dayB = w.Spawn(app, fakeagent.Claude, w.Path("day-b"))
 				} else {
 					for _, day := range []string{dayA, dayB} {
-						if err := cli.RegisterAsMember(day, day, w.Path(day), "", ""); err != nil {
+						var err error
+						if mode == "legacy" {
+							err = cli.Register(day, day, w.Path(day))
+						} else {
+							err = cli.RegisterAsMember(day, day, w.Path(day), "", "")
+						}
+						if err != nil {
 							t.Fatal(err)
 						}
 					}

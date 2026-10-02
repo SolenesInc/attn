@@ -393,7 +393,15 @@ func (d *Daemon) crewSessionActuallyLive(sessionID string) (bool, error) {
 		return info.Running, nil
 	}
 	if errors.Is(err, pty.ErrSessionNotFound) || errors.Is(err, os.ErrNotExist) {
-		return d.externalSessionAlive(sessionID)
+		process, readErr := d.store.ExternalProcess(sessionID)
+		if readErr != nil {
+			return false, readErr
+		}
+		if process != nil {
+			return procreap.MatchesProcess(process.Pid, process.StartToken)
+		}
+		_, legacy := d.externalRegistrations.Load(sessionID)
+		return legacy, nil
 	}
 	return false, err
 }
@@ -668,6 +676,7 @@ func (d *Daemon) externalSessionAlive(sessionID string) (bool, error) {
 }
 
 func (d *Daemon) clearExternalProcess(sessionID string) {
+	d.externalRegistrations.Delete(sessionID)
 	if err := d.store.ClearExternalProcess(sessionID); err != nil {
 		d.logf("clear external wrapper identity for %s: %v", sessionID, err)
 	}

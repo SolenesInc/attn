@@ -200,6 +200,7 @@ type Daemon struct {
 	sessionLifecycleLocks             map[string]*sessionLifecycleLockEntry
 	spawnLocksMu                      sync.Mutex
 	spawnLocks                        map[string]*spawnLock
+	externalRegistrations             sync.Map
 	sessionInputOnce                  sync.Once
 	sessionInputState                 *sessionInputModule
 	agentMailboxMu                    sync.Mutex
@@ -2020,6 +2021,7 @@ func (d *Daemon) removeReapedSession(sessionID string) {
 }
 
 func (d *Daemon) forgetSessionRuntime(sessionID string) {
+	d.externalRegistrations.Delete(sessionID)
 	d.stopTranscriptWatcher(sessionID)
 	if session := d.store.Get(sessionID); session != nil {
 		d.reconcileTicketsOnSessionEnd(sessionID, string(session.State))
@@ -2842,8 +2844,14 @@ func (d *Daemon) handleRegisterProtected(protection foregroundCleanupProtection,
 		d.releaseCrewBindingIfSession(msg.ID)
 	}
 	session.WorkspaceID = workspaceID
+	if existing == nil && msg.ExternalProcess == nil {
+		d.externalRegistrations.Store(session.ID, struct{}{})
+	}
 	persistErr := d.store.AddRegisteredSession(session, msg.ExternalProcess)
 	if persistErr != nil {
+		if existing == nil {
+			d.externalRegistrations.Delete(session.ID)
+		}
 		d.releaseCrewBindingIfSession(session.ID)
 		d.sendError(conn, persistErr.Error())
 		return
