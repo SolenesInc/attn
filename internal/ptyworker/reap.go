@@ -122,7 +122,10 @@ func requestWorkerRemove(entry RegistryEntry) error {
 	if err := writeReapRequest(enc, "reap-remove", MethodRemove, map[string]any{}); err != nil {
 		return err
 	}
-	return awaitOK(dec, "reap-remove")
+	if err := awaitOK(dec, "reap-remove"); err != nil {
+		return fmt.Errorf("worker removal response (timeout %s): %w", TeardownRPCTimeout, err)
+	}
+	return nil
 }
 
 func writeReapRequest(enc *json.Encoder, id, method string, params any) error {
