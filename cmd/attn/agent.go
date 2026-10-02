@@ -704,12 +704,12 @@ commands:
         agent never notices. The target is a crew name, full session id, or
         unique session id prefix. A sleeping crew member stays asleep.
   msg <session-or-member-or-seed> "text" [--source-session <id>] [--json]
-        send a session or crew member a message. The body stays in the mailbox;
+        send a session, crew member or seed a message. The body stays in the inbox;
         the recipient gets a generic inbox notification. A target that cannot take
         input safely keeps it queued. The result says queued, notified, or refused.
         A sleeping member wakes before the notification is placed. The sender defaults to this session
         (ATTN_SESSION_ID); pass --source-session when running outside one.
-        A seed id reaches whoever is tending it.
+        A seed id reaches its current or next tender, waiting when none is reachable.
         A message that starts with - goes after --, as: agent msg -- <target> "-text"
   close <session-or-seed> -m "reason" [--source-session <id>] [--json]
         close a session for good. A session may close itself and the sessions it

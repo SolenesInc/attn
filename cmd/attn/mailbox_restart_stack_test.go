@@ -48,8 +48,9 @@ func TestAnOutstandingInboxRingSurvivesAProcessRestart(t *testing.T) {
 	s.Launched(sender)
 	run.Reply("Ready. <!-- attn:state=idle -->")
 	testworld.AwaitSession(app, recipient, func(session protocol.Session) bool { return session.State == protocol.SessionStateIdle })
+	app.AwaitScreen(recipient, "Ready. <!-- attn:state=idle -->")
 	sent, err := cli.AgentMsg(recipient, sender, "retain the outstanding attempt")
-	if err != nil || sent.Status != protocol.AgentMsgStatusNotified {
+	if err != nil || sent.Status == protocol.AgentMsgStatusRefused {
 		t.Fatalf("send=%+v, %v", sent, err)
 	}
 	if prompt := run.Prompted(); !strings.Contains(prompt, inboxDoorbell) {

@@ -148,13 +148,23 @@ func (s *Store) PeerMessageGuardCounts(sender string, to inbox.Address, body str
 	return counts, nil
 }
 
-func (s *Store) SavePeerMessage(message inbox.Message) error {
+func (s *Store) PutPeerMessage(message inbox.Message, to inbox.Address) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	at, err := time.Parse(time.RFC3339Nano, message.CreatedAt)
 	if err != nil {
 		return err
 	}
-	_, err = s.db.Exec("INSERT INTO peer_messages(id,sender_session_id,body,created_at) VALUES(?,?,?,?)", message.ID, message.SenderSessionID, message.Body, at.UTC().Format(sortableTimeFormat))
-	return err
+	tx, err := s.db.Begin()
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback()
+	if _, err = tx.Exec("INSERT INTO peer_messages(id,sender_session_id,body,created_at) VALUES(?,?,?,?)", message.ID, message.SenderSessionID, message.Body, at.UTC().Format(sortableTimeFormat)); err != nil {
+		return err
+	}
+	if err := putInbox(tx, inbox.Item{ID: message.ID, To: to, Kind: inbox.PeerMessage, Source: message.ID}, at); err != nil {
+		return err
+	}
+	return tx.Commit()
 }

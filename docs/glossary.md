@@ -11,7 +11,7 @@
 - Quiet window: time after the user's last keystroke when automated input must wait.
 - Inbox: the items waiting for an address; agents read theirs with `attn agent inbox`.
 - Item: anything an agent reads from its inbox: peer message, seed update, user message, PR watch update, notice.
-- Address: who an item is for, a role (crew member or Chief) or a session. Unread role items reach whichever session holds the role next.
+- Address: who an item is for, a role (crew member, Chief or seed tender) or a session. A seed address follows its current or next tender. Unread role items reach whichever session holds the role next.
 - Send: save an item for an address; attn delivers it.
 - Ring: one prompt telling the session at an address it has unread items; it covers every unread item.
 - Attempt: one ring, preceded by a wake when the addressed member is asleep.

@@ -63,7 +63,7 @@ func chiefSeedAssignmentPrompt(seedID string) string {
 }
 
 func (d *Daemon) deliverChiefSeedAssignment(chiefSessionID, seedID string) (protocol.AgentMsgStatus, string) {
-	receipt, err := d.sendToInbox(inbox.Item{To: inbox.ToChief(), Kind: inbox.Notice, Text: chiefSeedAssignmentPrompt(seedID)})
+	receipt, err := d.sendToInbox(inbox.Item{To: inbox.ToSeed(seedID), Kind: inbox.Notice, Text: chiefSeedAssignmentPrompt(seedID)})
 	if err != nil {
 		d.logf("seed send to Chief: queue %s for %s: %v", seedID, chiefSessionID, err)
 		return protocol.AgentMsgStatusRefused, "Chief now tends the seed, but its inbox item could not be recorded; the assignment remains on the seed log"

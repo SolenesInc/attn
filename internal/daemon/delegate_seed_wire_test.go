@@ -164,7 +164,7 @@ func TestASeedBeingDelegatedRefusesOtherClaimsWhileItsDelegateBoots(t *testing.T
 	}
 }
 
-func TestAMessageToASeedReachesItsTenderOrIsRefusedByName(t *testing.T) {
+func TestAMessageToASeedReachesItsCurrentOrNextTender(t *testing.T) {
 	w := newWorld(t, fakeagent.Codex)
 	cli := w.Client()
 	cwd := registerDelegationCaller(t, w, cli, "caller")
@@ -178,11 +178,12 @@ func TestAMessageToASeedReachesItsTenderOrIsRefusedByName(t *testing.T) {
 	if inbox := inboxContents(readInbox(t, cli, delegated.SessionID, 0).Items); !strings.Contains(inbox, "the schema moved") {
 		t.Errorf("the seed's tender received %q; want the message sent to its seed", inbox)
 	}
-	_, err = cli.AgentMsg(untended, "caller", "anyone there?")
-	for _, want := range []string{"nobody is tending", untended, "attn seed note"} {
-		if err == nil || !strings.Contains(err.Error(), want) {
-			t.Errorf("messaging untended seed %s = %v; want a refusal naming %q", untended, err, want)
-		}
+	sendAgentMessage(t, cli, "caller", untended, "anyone there?")
+	if _, err := cli.SeedTransition(delegated.SessionID, untended, "tend", "", "", false, client.SeedTransitionOptions{}); err != nil {
+		t.Fatal(err)
+	}
+	if mail := inboxContents(readInbox(t, cli, delegated.SessionID, 0).Items); !strings.Contains(mail, "anyone there?") {
+		t.Fatalf("next tender inbox=%q", mail)
 	}
 }
 

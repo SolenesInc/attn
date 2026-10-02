@@ -1,41 +1,14 @@
 package daemon
 
 import (
-	"errors"
 	"testing"
 	"time"
 
-	"github.com/victorarias/attn/internal/bus"
 	"github.com/victorarias/attn/internal/garden"
 	seedEvents "github.com/victorarias/attn/internal/garden/events"
 	"github.com/victorarias/attn/internal/hub"
 	"github.com/victorarias/attn/internal/protocol"
 )
-
-type gardenCursorAttempt struct {
-	cursor int64
-	err    error
-}
-
-type failFirstGardenCursorStore struct {
-	bus.Store
-	attempts chan gardenCursorAttempt
-	failed   bool
-}
-
-func (s *failFirstGardenCursorStore) SetCursor(name string, cursor int64, now time.Time) (bool, error) {
-	if name == gardenSeedBellConsumer && !s.failed {
-		s.failed = true
-		err := errors.New("cursor unavailable")
-		s.attempts <- gardenCursorAttempt{cursor: cursor, err: err}
-		return false, err
-	}
-	applied, err := s.Store.SetCursor(name, cursor, now)
-	if name == gardenSeedBellConsumer {
-		s.attempts <- gardenCursorAttempt{cursor: cursor, err: err}
-	}
-	return applied, err
-}
 
 func TestGardenSeedEventForARemoteTenderDoesNotBlockLaterLocalBell(t *testing.T) {
 	d := newGardenDaemon(t)
@@ -87,5 +60,3 @@ func TestGardenSeedEventForARemoteTenderDoesNotBlockLaterLocalBell(t *testing.T)
 	}
 	assertOneSeedBell(t, d, "local-watcher", local.ID, "note.added")
 }
-
-var _ bus.Store = (*failFirstGardenCursorStore)(nil)

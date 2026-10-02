@@ -22,7 +22,7 @@ func (d *Daemon) noteUserInput(sessionID, source string, data []byte) bool {
 	d.lastAutoSettleActivityAt[sessionID] = now
 	d.lastInputMu.Unlock()
 	if wasQuiet {
-		d.kickInboxAfterCommit(d.inboxAddressesOf(sessionID)...)
+		d.kickSessionInboxAddresses(sessionID)
 	}
 	return true
 }

@@ -13,7 +13,6 @@ import (
 	"sync"
 	"time"
 
-	"github.com/victorarias/attn/internal/config"
 	"github.com/victorarias/attn/internal/git"
 	"github.com/victorarias/attn/internal/launchcontract"
 	"github.com/victorarias/attn/internal/protocol"
@@ -181,19 +180,6 @@ func (s *Store) DatabasePath() string {
 		return ""
 	}
 	return s.dbPath
-}
-
-func NewWithPersistence(path string) *Store {
-	dbPath := config.DBPath()
-	store, err := NewWithDB(dbPath)
-	if err != nil {
-		return New()
-	}
-	return store
-}
-
-func DefaultStatePath() string {
-	return config.StatePath()
 }
 
 func (s *Store) execLog(query string, args ...interface{}) {

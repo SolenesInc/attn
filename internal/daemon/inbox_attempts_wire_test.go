@@ -297,33 +297,71 @@ func TestBusyAndApprovalBlockedInboxesKeepTheirFullAttemptBudget(t *testing.T) {
 	}
 }
 
-func TestMailForASeedTendedByAnUnregisteredMemberIsRefused(t *testing.T) {
+func TestMailForAnUntendedSeedWaitsForItsNextTender(t *testing.T) {
+	inBubbleWithAgents(t, func(t *testing.T, w *world) {
+		app, cli := w.App(), w.Client()
+		registerSessions(t, w, cli, "sender")
+		seed := plantSeedAs(t, cli, "sender", "review the build")
+		sent := sendAgentMessage(t, cli, "sender", seed, "the deployment is ready")
+		if sent.Status != protocol.AgentMsgStatusQueued || sent.TargetSessionID != "" {
+			t.Fatalf("untended send=%+v", sent)
+		}
+		w.advance(2 * time.Hour)
+		next := w.bubbleClaude(t, app, "next")
+		if _, err := cli.SeedTransition(next.id, seed, "tend", "", "", false, client.SeedTransitionOptions{}); err != nil {
+			t.Fatal(err)
+		}
+		synctest.Wait()
+		if next.promptsContaining(inboxDoorbell) != 1 {
+			t.Fatal("new tender was not rung")
+		}
+		mail := readInbox(t, cli, next.id, 0).Items
+		if len(mail) != 1 || mail[0].Address != "seed:"+seed || mail[0].Content != "the deployment is ready" {
+			t.Fatalf("seed mail=%+v", mail)
+		}
+	})
+}
+func TestMailForASeedTendedByAnUnregisteredMemberWaitsForANewTender(t *testing.T) {
 	inBubble(t, func(t *testing.T, w *world) {
 		cli := w.Client()
-		registerSessions(t, w, cli, "sender")
+		registerSessions(t, w, cli, "sender", "next")
 		seed := plantSeedAs(t, cli, "sender", "review the build")
 		if _, err := cli.SeedTransition("", seed, "tend", "", "some-worker", false, client.SeedTransitionOptions{}); err != nil {
 			t.Fatal(err)
 		}
-		if sent, err := cli.AgentMsg(seed, "sender", "the deployment is ready"); client.ErrorCode(err) != "seed_untended" || !strings.Contains(err.Error(), "some-worker") {
-			t.Fatalf("seed send=%+v, error=%v; want unregistered member refusal", sent, err)
+		sent := sendAgentMessage(t, cli, "sender", seed, "the deployment is ready")
+		if sent.TargetSessionID != "" || sent.Status != protocol.AgentMsgStatusQueued {
+			t.Fatalf("seed send=%+v", sent)
+		}
+		w.advance(2 * time.Hour)
+		if _, err := cli.SeedTransition("next", seed, "tend", "", "", true, client.SeedTransitionOptions{}); err != nil {
+			t.Fatal(err)
+		}
+		mail := readInbox(t, cli, "next", 0).Items
+		if len(mail) != 1 || mail[0].Address != "seed:"+seed || mail[0].Content != "the deployment is ready" {
+			t.Fatalf("seed mail=%+v", mail)
 		}
 	})
 }
-
-func TestMailForASeedWhoseTenderSessionWasRemovedIsRefused(t *testing.T) {
+func TestMailForASeedFollowsItsNextTenderAfterTheSessionIsRemoved(t *testing.T) {
 	inBubble(t, func(t *testing.T, w *world) {
 		cli := w.Client()
-		registerSessions(t, w, cli, "sender", "tender")
+		registerSessions(t, w, cli, "sender", "tender", "next")
 		seed := plantSeedAs(t, cli, "sender", "review the build")
 		if _, err := cli.SeedTransition("tender", seed, "tend", "", "", false, client.SeedTransitionOptions{}); err != nil {
 			t.Fatal(err)
 		}
+		sendAgentMessage(t, cli, "sender", seed, "the deployment is ready")
 		if err := cli.Unregister("tender"); err != nil {
 			t.Fatal(err)
 		}
-		if sent, err := cli.AgentMsg(seed, "sender", "the deployment is ready"); client.ErrorCode(err) != "seed_untended" || !strings.Contains(err.Error(), "tender") {
-			t.Fatalf("seed send=%+v, error=%v; want removed tender refusal", sent, err)
+		w.advance(2 * time.Hour)
+		if _, err := cli.SeedTransition("next", seed, "tend", "", "", false, client.SeedTransitionOptions{}); err != nil {
+			t.Fatal(err)
+		}
+		mail := readInbox(t, cli, "next", 0).Items
+		if len(mail) != 1 || mail[0].Address != "seed:"+seed || mail[0].Content != "the deployment is ready" {
+			t.Fatalf("seed mail=%+v", mail)
 		}
 	})
 }
@@ -381,7 +419,7 @@ func TestMailForAMemberTendedSeedWakesTheTender(t *testing.T) {
 		day := w.bootBubbleClaude(t, sent.TargetSessionID)
 		day.reply("Ready. <!-- attn:state=idle -->")
 		mail := readInbox(t, cli, day.id, 0).Items
-		if len(mail) != 1 || mail[0].Address != "member:trellis" || mail[0].Content != "the deployment is ready" {
+		if len(mail) != 1 || mail[0].Address != "seed:"+seed || mail[0].Content != "the deployment is ready" {
 			t.Fatalf("seed mail=%+v", mail)
 		}
 	})

@@ -75,28 +75,10 @@ func (d *Daemon) handleAgentMsg(conn net.Conn, msg *protocol.AgentMsgMessage) {
 		}
 		seed, _, err := d.readSeed(seedID)
 		if err != nil {
-			d.replyAgentMsgError(conn, "seed_untended", err.Error())
+			d.replyAgentMsgError(conn, "seed_not_found", err.Error())
 			return
 		}
-		tender := seed.Tender()
-		if tender.Member != "" {
-			member, _, err := d.crewMember(tender.Member)
-			if err != nil {
-				d.replyAgentMsgError(conn, "seed_untended", err.Error())
-				return
-			}
-			address = inbox.ToMember(member.ID)
-		} else if tender.Session != "" {
-			if d.store.Get(tender.Session) == nil {
-				d.replyAgentMsgError(conn, "seed_untended", fmt.Sprintf("tender session %s is no longer registered; leave it on the log instead: attn seed note %s -m \"…\"", tender.Session, seed.ID))
-				return
-			}
-			address = d.inboxAddressOf(tender.Session)
-		} else {
-			_, err := d.seedTenderSession(seedID)
-			d.replyAgentMsgError(conn, "seed_untended", err.Error())
-			return
-		}
+		address = inbox.ToSeed(seed.ID)
 	} else {
 		member, found, memberErr := d.resolveCrewMember(targetRef)
 		if found {
@@ -140,16 +122,11 @@ func (d *Daemon) handleAgentMsg(conn net.Conn, msg *protocol.AgentMsgMessage) {
 		return
 	}
 	message := inbox.Message{ID: uuid.NewString(), SenderSessionID: sender.ID, Body: content, CreatedAt: now.UTC().Format(time.RFC3339Nano)}
-	if err := d.store.SavePeerMessage(message); err != nil {
+	if err := d.store.PutPeerMessage(message, address); err != nil {
 		d.sendError(conn, "internal_error")
 		return
 	}
-	receipt, err := d.sendToInbox(inbox.Item{ID: message.ID, To: address, Kind: inbox.PeerMessage, Source: message.ID})
-	if err != nil {
-		d.logf("agent msg send: %v", err)
-		d.sendError(conn, "internal_error")
-		return
-	}
+	receipt := d.deliverSavedInbox(address, message.ID)
 	result.MessageID = receipt.ItemID
 	result.Status = protocol.AgentMsgStatusQueued
 	if receipt.Rang {
@@ -220,26 +197,4 @@ func shortSessionID(id string) string {
 		return id
 	}
 	return id[:agentShortIDLength]
-}
-
-func (d *Daemon) seedTenderSession(seedID string) (string, error) {
-	if err := d.requireHome(garden.Surface); err != nil {
-		return "", err
-	}
-	seed, _, err := d.readSeed(seedID)
-	if err != nil {
-		return "", err
-	}
-	tender := seed.Tender()
-	if session := strings.TrimSpace(tender.Session); session != "" {
-		return session, nil
-	}
-	if tender.Named() {
-		return "", fmt.Errorf(
-			"%s is tended by %s, who is not in an attn session; message them by name: attn agent msg %s \"…\"",
-			seed.ID, tender.DisplayName(), tender.Name())
-	}
-	return "", fmt.Errorf(
-		"nobody is tending %s, so there is nobody to reach; leave it on the log instead: attn seed note %s -m \"…\"",
-		seed.ID, seed.ID)
 }

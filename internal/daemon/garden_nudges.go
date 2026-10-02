@@ -197,7 +197,7 @@ func (d *Daemon) consumeSeedBell(sessionID, seedID string) {
 	err := d.discardIneligibleGardenSeedBellsLocked(inbox.ToSession(sessionID))
 	var consumed []inbox.Address
 	if err == nil {
-		for _, address := range d.inboxAddressesOf(sessionID) {
+		for _, address := range d.inboxRoleAddresses(sessionID) {
 			if err = d.discardIneligibleGardenSeedBellsLocked(address); err != nil {
 				break
 			}

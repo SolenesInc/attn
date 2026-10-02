@@ -219,3 +219,25 @@ func agentCloseSeedNote(target, caller *protocol.Session, rule protocol.AgentClo
 			"takes it or parks it. `attn session show %s` reads the closed row back.",
 		agentCloseSessionRef(target), closer, reason, shortSessionID(target.ID))
 }
+
+func (d *Daemon) seedTenderSession(seedID string) (string, error) {
+	if err := d.requireHome(garden.Surface); err != nil {
+		return "", err
+	}
+	seed, _, err := d.readSeed(seedID)
+	if err != nil {
+		return "", err
+	}
+	tender := seed.Tender()
+	if session := strings.TrimSpace(tender.Session); session != "" {
+		return session, nil
+	}
+	if tender.Named() {
+		return "", fmt.Errorf(
+			"%s is tended by %s, who is not in an attn session; message them by name: attn agent msg %s \"…\"",
+			seed.ID, tender.DisplayName(), tender.Name())
+	}
+	return "", fmt.Errorf(
+		"nobody is tending %s, so there is nobody to reach; leave it on the log instead: attn seed note %s -m \"…\"",
+		seed.ID, seed.ID)
+}

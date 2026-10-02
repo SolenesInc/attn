@@ -143,7 +143,7 @@ func (d *Daemon) watchSessionPullRequest(rec store.SessionPullRequestRecord, mod
 		return err
 	}
 	address := d.inboxAddressOf(rec.SessionID)
-	for _, held := range d.inboxAddressesOf(rec.SessionID) {
+	for _, held := range d.inboxRoleAddresses(rec.SessionID) {
 		if _, exists := d.store.PullRequestWatch(held, rec.PRID); exists {
 			address = held
 			break
@@ -164,7 +164,7 @@ func (d *Daemon) watchSessionPullRequest(rec store.SessionPullRequestRecord, mod
 }
 
 func (d *Daemon) unwatchSessionPullRequest(rec store.SessionPullRequestRecord) error {
-	addresses := d.inboxAddressesOf(rec.SessionID)
+	addresses := d.inboxRoleAddresses(rec.SessionID)
 	changed := false
 	for _, address := range addresses {
 		stopped, err := d.store.StopPullRequestWatch(address, rec.PRID)
@@ -208,7 +208,7 @@ func (d *Daemon) recordSessionPullRequest(rec store.SessionPullRequestRecord) er
 }
 
 func (d *Daemon) forgetSessionPullRequest(rec store.SessionPullRequestRecord) error {
-	addresses := d.inboxAddressesOf(rec.SessionID)
+	addresses := d.inboxRoleAddresses(rec.SessionID)
 	forgotten := false
 	for _, address := range addresses {
 		removed, err := d.store.ForgetSessionPullRequest(rec.SessionID, address, rec.PRID)

@@ -1,6 +1,9 @@
 package daemon
 
 import (
+	"github.com/victorarias/attn/internal/docstore"
+	"github.com/victorarias/attn/internal/garden"
+	"strings"
 	"time"
 
 	"github.com/google/uuid"
@@ -48,7 +51,7 @@ func (d *Daemon) inboxAddressOf(sessionID string) inbox.Address {
 	}
 	return inbox.ToSession(sessionID)
 }
-func (d *Daemon) inboxAddressesOf(sessionID string) []inbox.Address {
+func (d *Daemon) inboxRoleAddresses(sessionID string) []inbox.Address {
 	addresses := []inbox.Address{inbox.ToSession(sessionID)}
 	if member := d.crewMemberBoundTo(sessionID); member != "" {
 		addresses = append(addresses, inbox.ToMember(member))
@@ -57,4 +60,60 @@ func (d *Daemon) inboxAddressesOf(sessionID string) []inbox.Address {
 		addresses = append(addresses, inbox.ToChief())
 	}
 	return addresses
+}
+
+func (d *Daemon) inboxAddressesOf(sessionID string) ([]inbox.Address, error) {
+	addresses := []inbox.Address{inbox.ToSession(sessionID)}
+	if d.isChiefOfStaffSession(sessionID) {
+		addresses = append(addresses, inbox.ToChief())
+	}
+	status, err := d.enrollmentStatus()
+	if err != nil {
+		return nil, err
+	}
+	if !status.IsHome() {
+		return addresses, nil
+	}
+	members, _, err := d.readCrewMembers()
+	if err != nil {
+		return nil, err
+	}
+	member := ""
+	for _, candidate := range members {
+		if candidate.BindingSession == sessionID && d.crewBindingLive(candidate) {
+			member = candidate.ID
+			addresses = append(addresses, inbox.ToMember(member))
+			break
+		}
+	}
+	after := ""
+	for {
+		read, _, err := d.runDocQuery(docstore.Query{Namespace: garden.Namespace, Collection: garden.CollectionSeeds,
+			Filters: []docstore.Filter{{Field: "status", Op: docstore.OpEq, Value: garden.StatusGrowing}}, Limit: docstore.MaxLimit, After: after})
+		if err != nil {
+			return nil, err
+		}
+		for _, doc := range read.Documents {
+			seed, err := garden.Decode(doc.Body)
+			if err != nil {
+				return nil, err
+			}
+			tender := seed.Tender()
+			if tender.Session == sessionID || (member != "" && strings.EqualFold(tender.Member, member)) {
+				addresses = append(addresses, inbox.ToSeed(seed.ID))
+			}
+		}
+		if len(read.Documents) < docstore.MaxLimit {
+			return addresses, nil
+		}
+		after = read.Documents[len(read.Documents)-1].ID
+	}
+}
+func (d *Daemon) kickSessionInboxAddresses(sessionID string) {
+	addresses, err := d.inboxAddressesOf(sessionID)
+	if err != nil {
+		d.logf("inbox: addresses of %s: %v", sessionID, err)
+		return
+	}
+	d.kickInboxAfterCommit(addresses...)
 }

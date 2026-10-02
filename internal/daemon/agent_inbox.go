@@ -23,8 +23,13 @@ func (d *Daemon) handleAgentInbox(conn net.Conn, msg *protocol.AgentInboxMessage
 		d.handleAgentInboxBatch(conn, recipient.ID, protocol.Deref(msg.Limit))
 		return
 	}
+	addresses, err := d.inboxAddressesOf(recipient.ID)
+	if err != nil {
+		d.replyPeerMessageError(conn, err)
+		return
+	}
 	record, readNow, err := d.store.ReadPeerMessage(
-		strings.TrimSpace(protocol.Deref(msg.MessageID)), recipient.ID, d.inboxAddressesOf(recipient.ID), time.Now(),
+		strings.TrimSpace(protocol.Deref(msg.MessageID)), recipient.ID, addresses, time.Now(),
 	)
 	if err != nil {
 		d.replyPeerMessageError(conn, err)
@@ -40,8 +45,7 @@ func (d *Daemon) handleAgentInbox(conn net.Conn, msg *protocol.AgentInboxMessage
 
 func (d *Daemon) handleAgentInboxBatch(conn net.Conn, recipientSessionID string, limit int) {
 	d.lockGardenRoles()
-	addresses := d.inboxAddressesOf(recipientSessionID)
-	var err error
+	addresses, err := d.inboxAddressesOf(recipientSessionID)
 	for _, address := range addresses {
 		if err = d.discardIneligibleGardenSeedBellsLocked(address); err != nil {
 			break

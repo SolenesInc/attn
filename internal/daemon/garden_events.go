@@ -379,7 +379,7 @@ func (d *Daemon) invalidateGardenSeedParties(reason string) {
 }
 
 func (r gardenEventRoles) AddressesOfSession(sessionID string) []string {
-	addresses := r.daemon.inboxAddressesOf(sessionID)
+	addresses := r.daemon.inboxRoleAddresses(sessionID)
 	values := make([]string, len(addresses))
 	for i, address := range addresses {
 		values[i] = address.String()
