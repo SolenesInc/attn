@@ -1,6 +1,7 @@
 import { expect, it } from 'vitest';
 import { fireEvent, screen } from '@testing-library/react';
-import { openSessionsLedger, page, pages } from './testSupport';
+import { namedWorkspaces, openSessionsLedger, page, pages } from './testSupport';
+import { SESSION_FILTERS_SETTING_KEY } from '../../hooks/sessionFiltersSetting';
 import { closedEntry, liveEntry } from '../../test/sessionLedgerFixtures';
 import { daemonSession } from '../../test/daemonFixtures';
 import type { SessionUsage } from '../../types/generated';
@@ -50,4 +51,33 @@ it('reopens the displayed ledger owner and accepts its subsequent usage events',
   await view.daemon.idle();
   expect(screen.getByText('500 tokens')).toBeInTheDocument();
   expect(screen.queryByText('Closed', { selector: '.ledger-field-label' })).not.toBeInTheDocument();
+});
+
+it('refreshes a reopened owner location from the daemon', async () => {
+  const view = await openSessionsLedger(pages([page({ entries: [closedEntry('cost', { usage,
+    directory: '/old', repository: 'old-repository', branch: 'old-branch', is_worktree: true, main_repo: '/old-main' })] })]));
+  fireEvent.click(screen.getByRole('button', { name: 'All' }));
+  await view.daemon.idle();
+  view.daemon.emit({ event: 'session_state_changed', session: daemonSession('cost', { usage,
+    directory: '/replacement', workspace_id: 'replacement-workspace', repository: 'replacement-repository',
+    branch: 'replacement-branch', is_worktree: false, main_repo: undefined }) });
+  await view.daemon.idle();
+  expect(screen.getAllByText('/replacement').length).toBeGreaterThan(0);
+  expect(screen.getAllByText('replacement-branch').length).toBeGreaterThan(0);
+  expect(screen.queryByText('/old')).not.toBeInTheDocument();
+  expect(screen.queryByText('old-branch')).not.toBeInTheDocument();
+});
+
+it.each(['workspace', 'repository'])('removes a reopened owner outside its %s filter', async (filter) => {
+  const view = await openSessionsLedger(pages([page({ entries: [closedEntry('cost', { usage, repository: 'old-repository' })] })]), {
+    initialState: { workspaces: namedWorkspaces({ 'ws-1': 'old-workspace', 'ws-2': 'replacement-workspace' }),
+      settings: { [SESSION_FILTERS_SETTING_KEY]: JSON.stringify({ scope: 'all', range: 'any', customFrom: '', customTo: '',
+        workspaceId: filter === 'workspace' ? 'ws-1' : '', repository: filter === 'repository' ? 'old-repository' : '' }) } },
+  });
+  expect(screen.getByText('300 tokens')).toBeInTheDocument();
+  view.daemon.emit({ event: 'session_state_changed', session: daemonSession('cost', { usage,
+    workspace_id: 'ws-2', repository: 'replacement-repository' }) });
+  await view.daemon.idle();
+  expect(screen.queryByText('300 tokens')).not.toBeInTheDocument();
+  expect(document.querySelector('.ledger-row[data-row-key="cost"]')).toBeNull();
 });

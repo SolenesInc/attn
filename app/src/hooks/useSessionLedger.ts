@@ -182,8 +182,12 @@ export function useSessionLedger({
           if (entry.id !== event.session.id) return [entry];
           if (filtersRef.current.scope === 'closed') return [];
           const { closed_at: _at, closed_by: _by, close_reason: _reason, ...open } = entry;
-          return [{ ...open, label: event.session.label, state: event.session.state,
-            last_seen: event.session.last_seen, usage: event.session.usage }];
+          const session = event.session;
+          const updated = { ...open, label: session.label, state: session.state,
+            last_seen: session.last_seen, usage: session.usage, directory: session.directory,
+            workspace_id: session.workspace_id, repository: session.repository, branch: session.branch,
+            main_repo: session.main_repo, is_worktree: session.is_worktree };
+          return closeBelongsInView(updated, { ...filtersRef.current, scope: 'all' }, now()) ? [updated] : [];
         }) }));
         return;
       }
