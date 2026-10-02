@@ -18,8 +18,8 @@ import (
 
 	"github.com/victorarias/attn/internal/client"
 	"github.com/victorarias/attn/internal/protocol"
-"github.com/victorarias/attn/internal/testworld"
 	"github.com/victorarias/attn/internal/prreadiness"
+	"github.com/victorarias/attn/internal/testworld"
 )
 
 type refreshedPullRequest struct {

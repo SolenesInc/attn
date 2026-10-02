@@ -1,9 +1,10 @@
 package main_test
 
 import (
-	"github.com/victorarias/attn/internal/testworld"
 	"strings"
 	"testing"
+
+	"github.com/victorarias/attn/internal/testworld"
 )
 
 func TestRetiredTicketCommandsOnlyNameGardenCommands(t *testing.T) {
