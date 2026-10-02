@@ -328,6 +328,34 @@ func TestMailForASeedWhoseTenderSessionWasRemovedIsRefused(t *testing.T) {
 	})
 }
 
+func TestAGardenBellForACaseVariantTenderReachesTheRegisteredMember(t *testing.T) {
+	inBubbleWithAgents(t, func(t *testing.T, w *world) {
+		cli := w.Client()
+		registerSessions(t, w, cli, "sender")
+		seed := plantSeedAs(t, cli, "sender", "review the build")
+		if _, err := cli.SeedTransition("", seed, "tend", "", "Trellis", false, client.SeedTransitionOptions{}); err != nil {
+			t.Fatal(err)
+		}
+		writeCrewCharter(t, w, "trellis")
+		w.restart()
+		cli = w.Client()
+		if _, err := cli.SeedNote("sender", seed, "the deployment is ready", "", "", true, nil); err != nil {
+			t.Fatal(err)
+		}
+		synctest.Wait()
+		dayID := protocol.Deref(crewRosterMember(t, cli, "trellis").BindingSession)
+		if dayID == "" {
+			t.Fatal("Garden bell did not wake the registered tender")
+		}
+		day := w.bootBubbleClaude(t, dayID)
+		day.reply("Ready. <!-- attn:state=idle -->")
+		mail := readInbox(t, cli, day.id, 0).Items
+		if len(mail) != 1 || mail[0].Address != "member:trellis" || !strings.Contains(mail[0].Content, seed) {
+			t.Fatalf("Garden mail=%+v; want canonical member address and seed update", mail)
+		}
+	})
+}
+
 func TestMailForAMemberTendedSeedWakesTheTender(t *testing.T) {
 	inBubbleWithAgents(t, func(t *testing.T, w *world) {
 		writeCrewCharter(t, w, "trellis")
