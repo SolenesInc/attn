@@ -432,8 +432,14 @@ describe('CrewPanel', () => {
     expect(panel().queryByText(/New day started/)).not.toBeInTheDocument();
   });
 
-  it('closes with Escape and wakes an asleep member through the guarded restart action', async () => {
-    const { daemon, openCrew, closeWithEscape } = await renderPanel({ members: [member('keel', 5)] });
+  it('closes with Escape and an app wake shows the sleeping member’s day', async () => {
+    const { daemon, openCrew, closeWithEscape } = await renderPanel({
+      members: [member('keel', 5)],
+      sessions: [daemonSession('session-keel')],
+    });
+    daemon.on('crew_wake', () => ({
+      event: 'crew_wake_result', success: true, member: 'keel', session_id: 'session-keel',
+    }));
 
     await closeWithEscape();
     expect(isPanelOpen()).toBe(false);
@@ -442,7 +448,11 @@ describe('CrewPanel', () => {
     fireEvent.click(panel().getByRole('button', { name: 'Wake' }));
     const dialog = panel().getByRole('alertdialog');
     await gesture(daemon, () => fireEvent.click(within(dialog).getByRole('button', { name: 'Wake member' })));
-    expect(restartGuards(daemon)).toEqual([expect.objectContaining({ member: 'keel', expected_session_id: '', expected_revision: 5 })]);
+    expect(daemon.sentOf('crew_wake')).toEqual([expect.objectContaining({ member: 'keel' })]);
+    expect(daemon.sentOf('crew_restart')).toEqual([]);
+    expect(isPanelOpen()).toBe(false);
+    expect(document.querySelector('.session-terminal-desktop[data-session-visible="1"]'))
+      .toHaveAttribute('data-desktop-id', 'desktop-session-keel');
   });
 
   it('keeps roster navigation while async harness discovery settles', async () => {
