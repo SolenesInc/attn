@@ -225,6 +225,11 @@ func (s *Store) ReadInbox(addresses []inbox.Address, readBy string, limit int, a
 			return nil, 0, err
 		}
 	}
+	if _, err := tx.Exec(`DELETE FROM inbox_delivery
+		WHERE address IN (SELECT value FROM json_each(?))
+		AND NOT EXISTS (SELECT 1 FROM inbox_items i WHERE i.address=inbox_delivery.address AND i.read_at='')`, addressJSON); err != nil {
+		return nil, 0, fmt.Errorf("acknowledge empty inbox addresses: %w", err)
+	}
 	var remaining int
 	if err := tx.QueryRow(`
 		SELECT COUNT(*) FROM inbox_items

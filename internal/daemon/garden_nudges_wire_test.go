@@ -343,3 +343,32 @@ func TestAMemberTenderAndItsDayWatchKeepIndependentInboxItems(t *testing.T) {
 		}
 	})
 }
+
+func TestReadingAnEmptyInboxAcknowledgesAWithdrawnSeedRing(t *testing.T) {
+	inBubbleWithAgents(t, func(t *testing.T, w *world) {
+		_, day := crewDayInBubble(t, w, map[string]string{"crew.heartbeat_enabled": "false", "crew.autosleep_enabled": "false"})
+		cli := w.Client()
+		registerSessions(t, w, cli, "sender")
+		seed := plantSeedAs(t, cli, "sender", "review the deployment")
+		if _, err := cli.SeedTransition(day.id, seed, "tend", "", "", false, client.SeedTransitionOptions{}); err != nil {
+			t.Fatal(err)
+		}
+		gardenNudgeNote(t, cli, "sender", seed, "the deployment is ready", true)
+		w.advance(0)
+		if got := day.promptsContaining(inboxDoorbell); got != 1 {
+			t.Fatalf("seed rings=%d", got)
+		}
+		day.reply("Later. <!-- attn:state=idle -->")
+		if _, err := cli.SeedTransition(day.id, seed, "park", "", "", false, client.SeedTransitionOptions{}); err != nil {
+			t.Fatal(err)
+		}
+		if got := readInbox(t, cli, day.id, 0).Items; len(got) != 0 {
+			t.Fatalf("withdrawn inbox=%+v", got)
+		}
+		sendAgentMessage(t, cli, "sender", "trellis", "new work after the inbox check")
+		w.advance(0)
+		if got := day.promptsContaining(inboxDoorbell); got != 2 {
+			t.Fatalf("new work did not ring after empty read: %d", got)
+		}
+	})
+}
