@@ -1,5 +1,10 @@
 import type { AutomationFormValues } from './automationFormModel';
 
+type AutomationFormAutomationValues = Omit<AutomationFormValues, 'repositoriesInclude' | 'repositoriesExclude'> & {
+  repositoriesInclude: string[];
+  repositoriesExclude: string[];
+};
+
 export interface AutomationFormAutomationState {
   present: boolean;
   mode: 'create' | 'edit';
@@ -7,7 +12,7 @@ export interface AutomationFormAutomationState {
   revision: number;
   status: 'loading' | 'ready' | 'load-error';
   loadError: string;
-  values: AutomationFormValues;
+  values: AutomationFormAutomationValues;
   errors: Record<string, string>;
   saving: boolean;
   saveError: string;
@@ -19,7 +24,7 @@ export interface AutomationFormAutomationState {
 
 export interface AutomationFormAutomationHandle {
   getState(): AutomationFormAutomationState;
-  setValues(partial: Partial<AutomationFormValues>): void;
+  setValues(partial: Partial<AutomationFormAutomationValues>): void;
   submit(): void;
   reload(): void;
   armDelete(): void;

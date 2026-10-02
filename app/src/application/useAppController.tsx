@@ -328,6 +328,7 @@ export function useAppController({
     setSessionsOpen(false);
     setPalette(null);
     if (gardenHoldsWindow) closeGarden();
+    if (!previous.intent.focusOwner?.closest('.toast')) return;
     if (settingsOpen) void settingsModalRef.current?.close();
     setShortcutsOpen(false);
     setShortcutEditorOpen(false);

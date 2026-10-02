@@ -1079,7 +1079,11 @@ export function AutomationForm({
         revision,
         status,
         loadError,
-        values: getValues(),
+        values: {
+          ...getValues(),
+          repositoriesInclude: getValues('repositoriesInclude').map((entry) => entry.repository),
+          repositoriesExclude: getValues('repositoriesExclude').map((entry) => entry.repository),
+        },
         errors: flattenFieldErrors(errors as Record<string, unknown>),
         saving,
         saveError,
@@ -1090,7 +1094,12 @@ export function AutomationForm({
       }),
       setValues: (partial) => {
         (Object.keys(partial) as (keyof AutomationFormValues)[]).forEach((key) => {
-          setValue(key, partial[key] as never, { shouldDirty: true, shouldValidate: true });
+          const value = partial[key];
+          if (key === 'repositoriesInclude' || key === 'repositoriesExclude') {
+            setValue(key, partial[key]!.map(repositoryEntry), { shouldDirty: true, shouldValidate: true });
+          } else {
+            setValue(key, value as never, { shouldDirty: true, shouldValidate: true });
+          }
         });
       },
       submit: () => {

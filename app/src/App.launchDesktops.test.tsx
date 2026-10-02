@@ -117,10 +117,38 @@ describe('launch desktops', () => {
     fireEvent.change(model, { target: { value: 'sonnet' } });
     await daemon.emit({ event: 'background_launch', session_id: 's1', profile_id: 'profile-default', desktop_id: 'review', name: 'Keel', requested_by: 'Alder', desktop_label: 'Review', kind: LaunchDesktopKind.Crew });
     await daemon.idle();
-    await gesture(daemon, () => fireEvent.click(screen.getByRole('button', { name: /Keel.*Click to go/ })));
+    await gesture(daemon, () => {
+      const action = screen.getByRole('button', { name: /Keel.*Click to go/ });
+      action.focus();
+      fireEvent.click(action);
+    });
     expect(screen.queryByTestId('settings-modal')).not.toBeInTheDocument();
     expect(savedSettings(daemon)).toEqual([['default_model_claude', 'sonnet']]);
     expect(daemon.sentOf('desktop_show_session').map(({ session_id }) => session_id)).toEqual(['s1']);
+    expect(screen.getByText('✓ Done')).toBeInTheDocument();
+  });
+
+  it('preserves a snooze chooser across requested selection and dismisses it for a toast action', async () => {
+    const { daemon } = await renderApp({ initialState: {
+      settings: { queue_mode_enabled: 'true' },
+      sessions: ['s1', 's2'].map((id) => daemonSession(id, { state: 'idle', turn_owed: true })),
+      desktops: ['s1', 's2'].map((id) => soloDesktop(id)),
+    } });
+    await daemon.emit({ event: 'session_show_requested', session_id: 's1' });
+    await daemon.idle();
+    await gesture(daemon, () => pressShortcut('session.snooze'));
+    expect(screen.getByRole('menu', { name: 'Snooze s1' })).toBeInTheDocument();
+    await daemon.emit({ event: 'session_show_requested', session_id: 's2' });
+    await daemon.idle();
+    expect(screen.getByRole('menu', { name: 'Snooze s1' })).toBeInTheDocument();
+    await daemon.emit({ event: 'background_launch', session_id: 's1', profile_id: 'profile-default', desktop_id: 'review', name: 'Keel', requested_by: 'Alder', desktop_label: 'Review', kind: LaunchDesktopKind.Crew });
+    await daemon.idle();
+    await gesture(daemon, () => {
+      const action = screen.getByRole('button', { name: /Keel.*Click to go/ });
+      action.focus();
+      fireEvent.click(action);
+    });
+    expect(screen.queryByRole('menu', { name: 'Snooze s1' })).not.toBeInTheDocument();
     expect(screen.getByText('✓ Done')).toBeInTheDocument();
   });
 
