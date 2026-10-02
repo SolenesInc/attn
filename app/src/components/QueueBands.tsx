@@ -55,13 +55,15 @@ interface QueueBandsProps {
   onSleepCrewMember?: (member: string) => void;
   onOpenCrewMemberActions?: (member: string, event: ReactMouseEvent<HTMLButtonElement>) => void;
   selectedId: string | null;
-  onSelectSession: (id: string) => void;
+  selectedPaneId?: string | null;
+  onSelectSession: (id: string, paneId?: string) => void;
   onSettleTurn: (id: string) => void;
   onScreenSessionIds?: ReadonlySet<string>;
   onPinSession?: (sessionId: string, pinned: boolean) => void;
   onOpenActions?: (
     session: { id: string; label: string; chiefOfStaff?: boolean },
     event: ReactMouseEvent,
+    paneId?: string,
   ) => void;
   onOpenSnooze?: (session: { id: string; label: string }, event: ReactMouseEvent) => void;
   allSessions: readonly QueueBandSessionView[];
@@ -219,6 +221,7 @@ function QueueRowView({
       data-testid={`${testIdPrefix}-${session.id}`}
       data-state={session.state}
       data-workspace-id={row.workspaceId}
+      data-view-pane-id={row.paneId}
     >
       <QueueSessionSelection
         session={session}
@@ -264,6 +267,7 @@ export function QueueBands({
   onSleepCrewMember,
   onOpenCrewMemberActions,
   selectedId,
+  selectedPaneId,
   onSelectSession,
   onSettleTurn,
   onScreenSessionIds,
@@ -289,16 +293,17 @@ export function QueueBands({
 
   return (
     <div className="queue-bands" data-testid="sidebar-queue">
-      {bands.chief && (
+      {bands.chiefs.map((row) => (
         <QueueRowView
-          row={bands.chief}
-          selected={selectedId === bands.chief.session.id}
-          onSelect={() => onSelectSession(bands.chief!.session.id)}
-          onOpenActions={onOpenActions && ((event) => onOpenActions(bands.chief!.session, event))}
-          {...rowDelegation(bands.chief.session)}
+          key={row.paneId ?? row.session.id}
+          row={row}
+          selected={selectedId === row.session.id && (!row.paneId || selectedPaneId === row.paneId)}
+          onSelect={() => onSelectSession(row.session.id, row.paneId)}
+          onOpenActions={onOpenActions && ((event) => onOpenActions(row.session, event, row.paneId))}
+          {...rowDelegation(row.session)}
           testIdPrefix="queue-chief"
         />
-      )}
+      ))}
       <div className="queue-band-header">
         <span>Your turn</span>
         {bands.turns.length > 0 && <span className="queue-band-count">{bands.turns.length}</span>}
@@ -310,15 +315,15 @@ export function QueueBands({
       ) : (
         bands.turns.map((row) => (
           <QueueRowView
-            key={row.session.id}
+            key={row.paneId ?? row.session.id}
             row={row}
-            selected={selectedId === row.session.id}
+            selected={selectedId === row.session.id && (!row.paneId || selectedPaneId === row.paneId)}
             age={formatTurnAge(row.session.turnOpenedAt, now)}
-            onSelect={() => onSelectSession(row.session.id)}
+            onSelect={() => onSelectSession(row.session.id, row.paneId)}
             onSettle={() => onSettleTurn(row.session.id)}
             onSnooze={snoozeHandler(row.session)}
             onPin={onPinSession && (() => onPinSession(row.session.id, true))}
-            onOpenActions={onOpenActions && ((event) => onOpenActions(row.session, event))}
+            onOpenActions={onOpenActions && ((event) => onOpenActions(row.session, event, row.paneId))}
             showSettling={offScreen(row.session.id)}
             {...rowDelegation(row.session)}
             testIdPrefix="queue-turn"
@@ -332,13 +337,13 @@ export function QueueBands({
           </div>
           {bands.settled.map((row) => (
             <QueueRowView
-              key={row.session.id}
+              key={row.paneId ?? row.session.id}
               row={row}
-              selected={selectedId === row.session.id}
-              onSelect={() => onSelectSession(row.session.id)}
+              selected={selectedId === row.session.id && (!row.paneId || selectedPaneId === row.paneId)}
+              onSelect={() => onSelectSession(row.session.id, row.paneId)}
               onSnooze={snoozeHandler(row.session)}
               onPin={onPinSession && (() => onPinSession(row.session.id, true))}
-              onOpenActions={onOpenActions && ((event) => onOpenActions(row.session, event))}
+              onOpenActions={onOpenActions && ((event) => onOpenActions(row.session, event, row.paneId))}
               {...rowDelegation(row.session)}
               testIdPrefix="queue-settled"
             />
@@ -353,11 +358,11 @@ export function QueueBands({
           </div>
           {crewRows.map((crewRow) => (
             <CrewRowView
-              key={crewRow.member}
+              key={crewRow.row?.paneId ?? crewRow.member}
               member={crewRow.member}
               row={crewRow.row}
-              selected={crewRow.row ? selectedId === crewRow.row.session.id : false}
-              onSelect={crewRow.row ? () => onSelectSession(crewRow.row!.session.id) : undefined}
+              selected={crewRow.row ? selectedId === crewRow.row.session.id && (!crewRow.row.paneId || selectedPaneId === crewRow.row.paneId) : false}
+              onSelect={crewRow.row ? () => onSelectSession(crewRow.row!.session.id, crewRow.row!.paneId) : undefined}
               onWake={onWakeCrewMember && (() => onWakeCrewMember(crewRow.member))}
               onSleep={
                 crewRow.row && onSleepCrewMember
@@ -366,7 +371,7 @@ export function QueueBands({
               }
               onOpenActions={
                 crewRow.row && onOpenActions
-                  ? (event) => onOpenActions(crewRow.row!.session, event)
+                  ? (event) => onOpenActions(crewRow.row!.session, event, crewRow.row!.paneId)
                   : undefined
               }
               delegates={crewRow.row ? (delegates.get(crewRow.row.session.id) ?? []) : []}
@@ -377,12 +382,12 @@ export function QueueBands({
           ))}
           {bands.pinned.map((row) => (
             <QueueRowView
-              key={row.session.id}
+              key={row.paneId ?? row.session.id}
               row={row}
-              selected={selectedId === row.session.id}
-              onSelect={() => onSelectSession(row.session.id)}
+              selected={selectedId === row.session.id && (!row.paneId || selectedPaneId === row.paneId)}
+              onSelect={() => onSelectSession(row.session.id, row.paneId)}
               onUnpin={onPinSession && (() => onPinSession(row.session.id, false))}
-              onOpenActions={onOpenActions && ((event) => onOpenActions(row.session, event))}
+              onOpenActions={onOpenActions && ((event) => onOpenActions(row.session, event, row.paneId))}
               {...rowDelegation(row.session)}
               testIdPrefix="queue-pinned"
             />
@@ -398,16 +403,16 @@ function buildCrewRows(
   awake: QueueRow<QueueBandSessionView>[],
   membersInOtherBands: ReadonlySet<string>,
 ): { member: string; row?: QueueRow<QueueBandSessionView> }[] {
-  const byMember = new Map<string, QueueRow<QueueBandSessionView>>();
+  const byMember = new Map<string, QueueRow<QueueBandSessionView>[]>();
   for (const row of awake) {
     const member = row.session.crewMember;
-    if (member && !byMember.has(member)) byMember.set(member, row);
+    if (member) byMember.set(member, [...(byMember.get(member) ?? []), row]);
   }
   const members = new Set<string>([...(crew ?? []).map((entry) => entry.id), ...byMember.keys()]);
   return [...members]
     .filter((member) => !membersInOtherBands.has(member))
     .sort((a, b) => (a < b ? -1 : a > b ? 1 : 0))
-    .map((member) => ({ member, row: byMember.get(member) }));
+    .flatMap((member) => byMember.get(member)?.map(row => ({ member, row })) ?? [{ member }]);
 }
 
 interface CrewRowProps {
@@ -525,6 +530,7 @@ function AwakeCrewRow({
       data-crew-state="awake"
       data-state={session.state}
       data-workspace-id={row.workspaceId}
+      data-view-pane-id={row.paneId}
     >
       <QueueSessionSelection
         session={session}
@@ -573,9 +579,10 @@ function AwakeCrewRow({
 interface QueueSnoozedSectionProps {
   rows: QueueRow<QueueBandSessionView>[];
   selectedId: string | null;
+  selectedPaneId?: string | null;
   expanded: boolean;
   onToggleExpanded: () => void;
-  onSelectSession: (id: string) => void;
+  onSelectSession: (id: string, paneId?: string) => void;
   onWakeTurn: (id: string) => void;
   allSessions: readonly QueueBandSessionView[];
 }
@@ -583,6 +590,7 @@ interface QueueSnoozedSectionProps {
 export function QueueSnoozedSection({
   rows,
   selectedId,
+  selectedPaneId,
   expanded,
   onToggleExpanded,
   onSelectSession,
@@ -609,11 +617,11 @@ export function QueueSnoozedSection({
         <div className="muted-sessions-list">
           {rows.map((row) => (
             <QueueRowView
-              key={row.session.id}
+              key={row.paneId ?? row.session.id}
               row={row}
-              selected={selectedId === row.session.id}
+              selected={selectedId === row.session.id && (!row.paneId || selectedPaneId === row.paneId)}
               wake={formatWakeTime(row.session.turnSnoozedUntil, now)}
-              onSelect={() => onSelectSession(row.session.id)}
+              onSelect={() => onSelectSession(row.session.id, row.paneId)}
               onWake={() => onWakeTurn(row.session.id)}
               delegates={delegates.get(row.session.id) ?? []}
               testIdPrefix="queue-snoozed"

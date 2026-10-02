@@ -23,8 +23,10 @@ prompts before expecting the terminal to display a resolved agent.
 
 Use native `/agents` to select an agent. The pane header follows the committed
 native selection while the terminal and its drafts survive. An agent can keep
-working after you switch away from its last view. The queue still lists that
-agent once; selecting it opens a view when needed.
+working after you switch away from its last view. The sidebar and queue follow
+the terminal views: switching A to B replaces that row with B. An agent with no
+view stays in the ledger. Two terminals displaying A have two separately
+selectable A rows.
 
 Open **Sessions and worktrees** (Command-Shift-L on macOS), find a live shared
 agent, and choose **Open another view**. Both views show the same conversation.

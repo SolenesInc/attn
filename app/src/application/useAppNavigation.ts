@@ -23,7 +23,6 @@ import { useAppSessions } from './useAppSessions';
 import type { useAttentionQueue } from './useAttentionQueue';
 
 interface Options {
-  showError: (message: string) => void;
   activeSessionId: string | null;
   daemonSessions: AppContentProps['daemonSessions'];
   daemonWorkspaces: AppContentProps['daemonWorkspaces'];
@@ -33,7 +32,6 @@ interface Options {
   focusWorkspaceLeaf: ReturnType<typeof useSessionWorkspaceController>['focusWorkspaceLeaf'];
 }
 export function useAppNavigation({
-  showError,
   activeSessionId,
   daemonSessions,
   daemonWorkspaces,
@@ -55,14 +53,12 @@ export function useAppNavigation({
     requestTerminalFocus,
     goToDashboard,
     goHomeAwaitingNextTurn,
-    pendingSelection,
   } = useSessionStore();
   const {
     sendSessionSelected,
     sendWorkspaceSelected,
     sendWorkspaceUndockTile,
     sendSetWorkspaceRank,
-    sendSessionReopen,
   } = useDaemonApi();
   const activeWorkspaceIdRef = useRef<string | null>(null);
 
@@ -76,31 +72,6 @@ export function useAppNavigation({
 
   const handleSelectSession = selectAgent;
   const selectCreatedSession = selectAgent;
-
-  const attachingOwner = useRef<string | null>(null);
-  useEffect(() => {
-    const id = pendingSelection?.sessionId;
-    if (!id || attachingOwner.current === id || !daemonSessions.some(session => session.id === id && session.codex_mode === 'shared')) return;
-    const panes = daemonWorkspaces.flatMap(workspace => workspace.layout?.panes ?? []);
-    if (panes.some(pane => pane.session_id === id && pane.codex_resolution === 'resolved')) return;
-    const existingView = panes.find(pane =>
-      pane.codex_launch_owner_id === id && pane.codex_resolution !== 'resolved');
-    if (existingView) {
-      selectAgentPane(id, existingView.pane_id);
-      return;
-    }
-    attachingOwner.current = id;
-    void sendSessionReopen(id).then(result => {
-      if (useSessionStore.getState().pendingSelection?.sessionId !== id) return;
-      if (result.pane_id) selectAgentPane(id, result.pane_id);
-      else selectAgent(id);
-    }).catch((error: unknown) => {
-      if (useSessionStore.getState().pendingSelection?.sessionId === id) cancelPendingSelection();
-      showError(`Could not open the agent: ${error instanceof Error ? error.message : String(error)}`);
-    }).finally(() => {
-      if (attachingOwner.current === id) attachingOwner.current = null;
-    });
-  }, [pendingSelection?.sessionId, daemonSessions, daemonWorkspaces, sendSessionReopen, selectAgentPane, selectAgent, cancelPendingSelection, showError]);
 
   useEffect(() => {
     if (view === 'session' && activeSessionId) {

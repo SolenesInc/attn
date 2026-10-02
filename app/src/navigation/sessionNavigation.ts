@@ -100,7 +100,7 @@ export function selectAgent(
 ): SessionNavigationState {
   const session = sessions.find((entry) => entry.id === sessionId);
   const queue = state.navigationQueue;
-  const row = queue && [queue.chief, ...queue.turns, ...queue.settled, ...queue.pinned, ...queue.crew, ...queue.snoozed]
+  const row = queue && [...queue.chiefs, ...queue.turns, ...queue.settled, ...queue.pinned, ...queue.crew, ...queue.snoozed]
     .find(entry => entry?.session.id === sessionId);
   const preferredWorkspaceId = row?.workspaceId ?? session?.workspaceId;
   const placements = Object.entries(state.daemonWorkspaceLayouts ?? {}).filter(([, snapshot]) =>

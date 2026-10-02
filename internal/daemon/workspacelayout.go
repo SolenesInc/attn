@@ -101,7 +101,6 @@ func protocolWorkspaceLayout(snapshot workspacelayout.WorkspaceLayout) (*protoco
 		if pane.CodexResolution != "" {
 			next.CodexResolution = protocol.Ptr(protocol.CodexViewResolution(pane.CodexResolution))
 			next.CodexRevision = protocol.Ptr(strconv.FormatUint(pane.CodexRevision, 10))
-			next.CodexLaunchOwnerID = protocol.Ptr(pane.CodexLaunchOwnerID)
 		}
 		if next.Status == "" {
 			next.Status = protocol.WorkspaceLayoutPaneStatusReady

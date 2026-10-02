@@ -50,16 +50,15 @@ const (
 )
 
 type Pane struct {
-	CodexLaunchOwnerID string
-	CodexResolution    string
-	CodexRevision      uint64
-	PaneID             string
-	RuntimeID          string
-	SessionID          string
-	Kind               PaneKind
-	Title              string
-	Status             PaneStatus
-	Error              string
+	CodexResolution string
+	CodexRevision   uint64
+	PaneID          string
+	RuntimeID       string
+	SessionID       string
+	Kind            PaneKind
+	Title           string
+	Status          PaneStatus
+	Error           string
 }
 
 type Node struct {
@@ -158,16 +157,15 @@ func NormalizeWorkspaceLayout(snapshot WorkspaceLayout) WorkspaceLayout {
 			status = PaneStatusReady
 		}
 		panesByID[paneID] = Pane{
-			CodexLaunchOwnerID: pane.CodexLaunchOwnerID,
-			CodexResolution:    pane.CodexResolution,
-			CodexRevision:      pane.CodexRevision,
-			PaneID:             paneID,
-			RuntimeID:          runtimeID,
-			SessionID:          sessionID,
-			Kind:               PaneKindAgent,
-			Title:              title,
-			Status:             status,
-			Error:              strings.TrimSpace(pane.Error),
+			CodexResolution: pane.CodexResolution,
+			CodexRevision:   pane.CodexRevision,
+			PaneID:          paneID,
+			RuntimeID:       runtimeID,
+			SessionID:       sessionID,
+			Kind:            PaneKindAgent,
+			Title:           title,
+			Status:          status,
+			Error:           strings.TrimSpace(pane.Error),
 		}
 	}
 

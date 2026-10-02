@@ -131,7 +131,11 @@ export function useSessionLifecycle({
   );
 
   const handleRequestCloseSession = useCallback(
-    (id: string) => {
+    (id: string, paneId?: string) => {
+      if (paneId) {
+        void handleClosePane(id, paneId).catch(console.error);
+        return;
+      }
       const session = sessions.find((entry) => entry.id === id);
       if (!session) {
         return;

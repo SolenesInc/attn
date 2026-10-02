@@ -154,7 +154,7 @@ describe('buildQueueBands', () => {
     const bands = buildQueueBands(tree, { now: NOW, crewInQueue });
 
     expect({
-      chief: bands.chief?.session.id,
+      chief: bands.chiefs[0]?.session.id,
       turns: bands.turns.map((row) => row.session.id),
       settled: bands.settled.map((row) => row.session.id),
       pinned: bands.pinned.map((row) => row.session.id),

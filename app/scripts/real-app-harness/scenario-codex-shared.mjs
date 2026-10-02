@@ -53,7 +53,7 @@ try {
     runner.assert(header.text.includes('Generated ordinary-launch'), 'ordinary app name missing from header', header);
     await closePane(observer.getSession(sessionId).workspace_id, pane.pane_id);
   });
-  await runner.step('failed_attachment_sidebar_selection_reuses_its_pane', async () => {
+  await runner.step('failed_attachment_has_no_hidden_owner_sidebar_row', async () => {
     const cwd = path.join(runner.sessionDir, 'blank-resume'); fs.mkdirSync(cwd, { recursive: true });
     writeMockAgentFixture(cwd, { agent: 'codex', rejectBlankResume: true, turns: [] });
     const { sessionId: id } = await client.request('create_session', { cwd, agent: 'codex', label: 'blank-resume' });
@@ -64,18 +64,13 @@ try {
     await observer.waitFor(() => [...observer.layoutsByWorkspaceId.values()].flatMap(layout => layout.panes || []).find(pane => pane.runtime_id === id && pane.session_id && pane.session_id !== id && pane.codex_resolution === 'resolved'), 'blank owner hidden by native New');
     const attached = (await request('session_reopen', 'session_reopen_result', { session_id: id })).result;
     const failed = await observer.waitFor(() => [...observer.layoutsByWorkspaceId.values()].flatMap(layout => layout.panes || []).find(pane => pane.pane_id === attached.pane_id && pane.codex_resolution === 'disconnected'), 'blank resume attachment fails');
-    runner.assert(failed.codex_launch_owner_id === id && !failed.session_id, 'failed pane lost launch identity or retained input ownership', failed);
+    runner.assert(!failed.session_id, 'failed pane retained input ownership', failed);
     await waitForPaneText(client, id, failed.pane_id, text => text.includes('no rollout found for thread id'), 'native blank-thread error remains visible');
     const before = [...observer.layoutsByWorkspaceId.values()].flatMap(layout => layout.panes || []).map(pane => pane.runtime_id);
     await client.request('set_setting', { key: 'queue_mode_enabled', value: 'true' });
-    const rowSelector = `[data-testid="sidebar-queue"] [data-testid$="-${id}"] .queue-row-select`;
-    await client.request('dom_wait', { selector: rowSelector, timeoutMs: observer.connectTimeoutMs });
-    for (const click of ['first', 'repeat']) {
-      await client.request('dom_click', { selector: rowSelector });
-      await client.request('dom_wait', { selector: `[data-pane-id="${failed.pane_id}"].active`, timeoutMs: observer.connectTimeoutMs });
-      const state = await client.request('get_state');
-      runner.assert(!state.activeSessionId, `${click} failed pane selection attributed an owner`, state);
-    }
+    await client.request('dom_wait', { selector: `[data-testid="sidebar-queue"] [data-testid$="-${id}"]`, absent: true, timeoutMs: observer.connectTimeoutMs });
+    const state = await client.request('get_state');
+    runner.assert(!state.activeSessionId, 'failed pane selection attributed an owner', state);
     const after = [...observer.layoutsByWorkspaceId.values()].flatMap(layout => layout.panes || []).map(pane => pane.runtime_id);
     runner.assert(JSON.stringify(before) === JSON.stringify(after), 'sidebar accumulated failed PTY views', { before, after, root });
     await driver.screenshot(path.join(runner.runDir, 'failed-resume-sidebar.png'), { windowId: await driver.mainWindowId() });
@@ -106,15 +101,16 @@ try {
     runner.assert(text.text.includes('OpenAI Codex shared mock'), 'foreign owner removed the terminal', text);
     await type(a, paneA.pane_id, 'draft about B');
   });
-  await runner.step('queue_lists_shared_owner_once_and_opens_its_workspace', async () => {
+  await runner.step('queue_follows_each_displayed_view', async () => {
     await client.request('set_setting', { key: 'queue_mode_enabled', value: 'true' });
     await client.request('dom_wait', { selector: '[data-testid="sidebar-queue"]', timeoutMs: observer.connectTimeoutMs });
     const queue = await client.request('queue_get_state');
-    const rows = [...queue.turns, ...queue.settled, ...queue.pinned, ...queue.snoozed.rows].filter(row => row.id === b);
-    const workspaceId = observer.sessionsById.get(b).workspace_id;
-    runner.assert(rows.length === 1 && rows[0].workspaceId === workspaceId, 'shared owner has duplicate or misplaced queue rows', { queue, workspaceId });
-    await client.request('dom_click', { selector: `[data-testid="queue-${queue.turns.some(row => row.id === b) ? 'turn' : 'settled'}-${b}"] .queue-row-select` });
-    await client.request('dom_wait', { selector: `[data-session-terminal-workspace="${workspaceId}"][data-session-visible="1"]`, timeoutMs: observer.connectTimeoutMs });
+    const rows = [...queue.turns, ...queue.settled, ...queue.pinned, ...queue.snoozed.rows];
+    runner.assert(rows.filter(row => row.id === b).length === 2 && !rows.some(row => row.id === a), 'queue does not follow both B views', queue);
+    for (const pane of [paneA, panes.get(b)]) {
+      await client.request('dom_click', { selector: `[data-testid="sidebar-queue"] [data-view-pane-id="${pane.pane_id}"] .queue-row-select` });
+      await client.request('dom_wait', { selector: `[data-pane-id="${pane.pane_id}"].active`, timeoutMs: observer.connectTimeoutMs });
+    }
     await client.request('set_setting', { key: 'queue_mode_enabled', value: 'false' });
     await client.request('select_workspace', { workspaceId: observer.sessionsById.get(a).workspace_id });
   });
@@ -193,16 +189,18 @@ try {
     await closePane(observer.getSession(id).workspace_id, pane.pane_id);
     await client.request('focus_pane', { sessionId: a, paneId: paneA.pane_id });
   });
-  await runner.step('hidden_approval_queue_attaches_native_view', async () => {
+  await runner.step('hidden_approval_stays_in_ledger_until_explicit_attachment', async () => {
     const second = [...panes.values()].find(pane => pane.session_id === a && pane.runtime_id !== a);
     await closePane(observer.sessionsById.get(a).workspace_id, second.pane_id);
     await type(a, paneA.pane_id, `/agents ${roots[1]}\r`); await resolved(a, b);
     await request('session_annotations_submit', 'session_annotations_submit_result', { session_id: a, text: 'A needs approval' });
     await observer.waitFor(() => observer.getSession(a)?.state === 'pending_approval', 'hidden A requires approval');
     await client.request('set_setting', { key: 'queue_mode_enabled', value: 'true' });
-    await client.request('dom_wait', { selector: `[data-testid="queue-turn-${a}"] .queue-row-select`, timeoutMs: observer.connectTimeoutMs });
-    await client.request('dom_click', { selector: `[data-testid="queue-turn-${a}"] .queue-row-select` });
-    const attached = await observer.waitFor(() => [...observer.layoutsByWorkspaceId.values()].flatMap(layout => layout.panes || []).find(pane => pane.session_id === a && pane.runtime_id !== a && pane.codex_resolution === 'resolved'), 'queue attached hidden A');
+    await client.request('dom_wait', { selector: `[data-testid="queue-turn-${a}"]`, absent: true, timeoutMs: observer.connectTimeoutMs });
+    await client.request('dispatch_shortcut', { shortcutId: 'sessions.open' });
+    await client.request('dom_wait', { selector: `.ledger-row[data-row-key="${a}"]`, timeoutMs: observer.connectTimeoutMs });
+    await client.request('sessions_row_action', { sessionId: a, action: 'Open another view' });
+    const attached = await observer.waitFor(() => [...observer.layoutsByWorkspaceId.values()].flatMap(layout => layout.panes || []).find(pane => pane.session_id === a && pane.runtime_id !== a && pane.codex_resolution === 'resolved'), 'ledger attached hidden A');
     await waitForPaneText(client, a, attached.pane_id, text => text.includes('Allow the command to run?'), 'attached native approval');
     await client.request('set_setting', { key: 'queue_mode_enabled', value: 'false' });
     await client.request('focus_pane', { sessionId: a, paneId: paneA.pane_id });
@@ -293,6 +291,8 @@ try {
     await type(a, paneA.pane_id, '/new\r');
     const changed = await observer.waitFor(() => [...observer.layoutsByWorkspaceId.values()].flatMap(layout => layout.panes || []).find(pane => pane.runtime_id === a && pane.session_id && !owners.includes(pane.session_id) && pane.codex_resolution === 'resolved'), 'new native owner');
     owners.push(changed.session_id);
+    await client.request('dom_wait', { selector: `[data-testid="sidebar-session-${changed.session_id}"][data-view-pane-id="${paneA.pane_id}"]`, timeoutMs: observer.connectTimeoutMs });
+    await client.request('dom_wait', { selector: `[data-testid="sidebar-session-${a}"]`, absent: true, timeoutMs: observer.connectTimeoutMs });
   });
   await runner.step('native_resume_restores_placement_after_workspace_removal', async () => {
     await client.request('set_setting', { key: 'codex_shared_enabled', value: 'true' });

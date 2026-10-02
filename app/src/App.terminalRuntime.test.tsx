@@ -194,10 +194,13 @@ describe('App terminal runtime', () => {
     workspace.layout!.panes = workspace.layout!.panes.map(pane => ({
       ...pane, session_id: 's1', runtime_id: pane.session_id!, codex_resolution: 'resolved', codex_revision: '1',
     }));
-    const { daemon } = await openAttachedTerminals({
+    const { daemon } = await renderApp({ initialState: {
       sessions: [daemonSession('s1', { agent: 'codex', state: 'idle', chief_of_staff: true })],
       workspaces: [workspace],
-    });
+    } });
+    daemon.on('attach_session', ({ id }) => ({ event: 'attach_result', id, success: true, cols: 80, rows: 24, running: true }));
+    fireEvent.click(screen.getAllByRole('button', { name: 'Open s1' })[0]);
+    await daemon.idle();
     fireEvent.mouseDown(document.querySelector('[data-pane-id="pane-s1"]')!);
     await daemon.idle();
     pressShortcut('session.close');
