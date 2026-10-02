@@ -67,7 +67,7 @@ export function useWorkspaceCreation({
       agent?: SessionAgent,
       endpointId?: string,
       yoloMode = false,
-      options?: { chiefOfStaff?: boolean; autoMode?: boolean },
+      options?: { chiefOfStaff?: boolean; autoMode?: boolean; labelIsExplicit?: boolean },
     ) => {
       const sessionId = providedSessionId || crypto.randomUUID();
       const workspaceId = `workspace-${sessionId}`;
@@ -94,7 +94,7 @@ export function useWorkspaceCreation({
         }
         await sendWorkspaceAddSessionPane(workspaceId, sessionId, label, { paneId });
         paneAdded = true;
-        await ptySpawn({ args: spawnArgs });
+        await ptySpawn({ args: { ...spawnArgs, label_is_explicit: options?.labelIsExplicit } });
         return createdSessionId;
       } catch (error) {
         if (localCreated) {

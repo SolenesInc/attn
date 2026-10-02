@@ -2565,14 +2565,12 @@ func openAppWithDeepLink() {
 			break
 		}
 	}
-	if label == "" {
-		label = filepath.Base(cwd)
-	}
-
-	deepLink := fmt.Sprintf("%s://spawn?cwd=%s&label=%s",
+	deepLink := fmt.Sprintf("%s://spawn?cwd=%s",
 		config.DeepLinkScheme(),
-		url.QueryEscape(cwd),
-		url.QueryEscape(label))
+		url.QueryEscape(cwd))
+	if label != "" {
+		deepLink += "&label=" + url.QueryEscape(label)
+	}
 
 	if err := launchDeepLink(deepLink); err != nil {
 		fmt.Fprintf(os.Stderr, "error opening app: %v\n", err)

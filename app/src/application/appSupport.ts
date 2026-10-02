@@ -56,6 +56,7 @@ export interface SplitSessionOptions {
   cwd?: string;
   endpointId?: string | null;
   label?: string;
+  labelIsExplicit?: boolean;
   yoloMode?: boolean;
   autoMode?: boolean;
 }

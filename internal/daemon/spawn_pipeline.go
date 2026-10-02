@@ -384,7 +384,11 @@ func (d *Daemon) executeSpawn(req *spawnRequest, plan *spawnPlan) *spawnOutcome 
 				return &spawnOutcome{err: err}
 			}
 		}
-		if err := d.codexRuntime().prepareLaunch(&plan.spawnOpts, session, strings.TrimSpace(protocol.Deref(msg.Label))); err != nil {
+		initialName := strings.TrimSpace(protocol.Deref(msg.Label))
+		if msg.LabelIsExplicit != nil && !*msg.LabelIsExplicit {
+			initialName = ""
+		}
+		if err := d.codexRuntime().prepareLaunch(&plan.spawnOpts, session, initialName); err != nil {
 			plan.rollback(d, msg.ID)
 			return &spawnOutcome{err: err}
 		}

@@ -126,6 +126,8 @@ one Attn label, including hidden owners and repeated views. Pane headers, queue,
 CLI and ledger use that label. OSC titles still identify roots independently.
 Shared owners never run Attn's headless title generator; legacy and other harnesses
 keep their existing naming paths. Ephemeral title threads create no ledger owners.
+Only bound live owners retain name state. Existing native read/resume snapshots
+recover names emitted before binding; unknown and helper roots are not cached.
 
 Attn rename writes through `thread/name/set` and reports native rejection through
 the existing rename result. Failed writes retain the confirmed label. Explicit
@@ -134,6 +136,12 @@ the native root before first work. Successful application consumes that pending
 name, so restart/reopen cannot overwrite a later manual rename. Native New/fork
 clears the inherited launch name. Names in native read/resume snapshots reconcile
 on binding and restart; newer name events take precedence over older snapshots.
+
+Launchers mark synthesized display labels with `label_is_explicit: false`.
+Ordinary app launches, splits, worktrees and unnamed deep links keep their initial
+display labels while allowing native generation. Omitted flags preserve explicit
+CLI, crew, PR and named deep-link labels; legacy and other harnesses ignore the
+flag for naming. The decision comes from the launcher, not a label pattern.
 
 If initial naming fails after creation, the successful native creation remains
 successful. A warning links to the agent and explains how to rename it. Work is

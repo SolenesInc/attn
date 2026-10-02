@@ -1,7 +1,7 @@
 import { act, fireEvent, screen, within } from '@testing-library/react';
 import { describe, expect, it, vi } from 'vitest';
 import { agentWorkspace, daemonSession } from './test/daemonFixtures';
-import { chosenRow, destinationMemory, HOME, launchedAt, openPicker, pathInput, press, repoInfo, submitPath, serveMachine } from './test/locations';
+import { chosenRow, destinationMemory, HOME, launchedAt, openPicker, pathInput, press, repoInfo, submitPath, serveMachine, serveLaunches } from './test/locations';
 import { gesture, pressShortcut, renderApp } from './test/renderApp';
 import type { ScriptedDaemon } from './test/scriptedDaemon';
 import { openSection } from './test/settings';
@@ -50,12 +50,19 @@ async function inChooser(daemon: ScriptedDaemon, key: string) {
 }
 
 describe('App new session', () => {
+  it('marks a synthesized workspace label as display-only for native naming', async () => {
+    const { daemon } = await openPicker({}, { settings: { new_session_agent: 'codex', codex_shared_enabled: 'true' } });
+    await submitPath(daemon, '/tmp/plain');
+    expect(daemon.sentOf('spawn_session')).toEqual([expect.objectContaining({ agent: 'codex', label: 'plain', label_is_explicit: false })]);
+  });
+
   it.each(['unresolved', 'disconnected'] as const)('splits the selected workspace from a %s shared pane', async (resolution) => {
     const workspace = agentWorkspace('s1');
     const pane = workspace.layout!.panes[0];
     workspace.layout!.panes = [{ ...pane, runtime_id: 's1', codex_resolution: 'resolved', codex_revision: '1' }];
-    const { daemon } = await renderApp({ initialState: { sessions: [daemonSession('s1', { agent: 'codex', state: 'idle' })], workspaces: [workspace] } });
+    const { daemon } = await renderApp({ initialState: { settings: { new_session_agent: 'codex' }, sessions: [daemonSession('s1', { agent: 'codex', state: 'idle' })], workspaces: [workspace] } });
     serveMachine(daemon);
+    serveLaunches(daemon);
     await gesture(daemon, () => fireEvent.click(screen.getByRole('button', { name: 'Open s1' })));
     await gesture(daemon, () => daemon.emit({ event: 'workspace_layout_updated', workspace_layout: {
       ...workspace.layout!, panes: [{ ...workspace.layout!.panes[0], session_id: undefined, codex_resolution: resolution, codex_revision: '2' }],
@@ -63,6 +70,7 @@ describe('App new session', () => {
     await gesture(daemon, () => pressShortcut('session.new'));
     expect(screen.getByTestId('location-picker-title')).toHaveTextContent('New Session Location');
     await submitPath(daemon, '/tmp/plain');
+    expect(daemon.sentOf('spawn_session')).toEqual([expect.objectContaining({ agent: 'codex', label: 'plain', label_is_explicit: false })]);
     expect(daemon.sentOf('register_workspace')).toEqual([]);
     expect(daemon.sentOf('workspace_layout_add_session_pane')).toEqual([
       expect.objectContaining({ workspace_id: workspace.id, target_pane_id: pane.pane_id }),
@@ -195,6 +203,7 @@ describe('App new session', () => {
         { branch: 'feature-3', starting_from: 'feature' },
       ]);
       expect(launchedAt(daemon).map(({ cwd }) => cwd)).toEqual([`${REPO}--feature-2`, `${REPO}--feature-3`]);
+      expect(daemon.sentOf('spawn_session').map(({ label_is_explicit }) => label_is_explicit)).toEqual([false, false]);
     });
 
     it.each([

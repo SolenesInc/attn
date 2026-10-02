@@ -33,6 +33,9 @@ func (r *codexRuntime) projectNativeName(root string, name *string, revision uin
 		delete(r.names, root)
 		return
 	}
+	if owner == nil {
+		return
+	}
 	state := r.names[root]
 	if notification || state.Revision == revision {
 		state.Name = name
@@ -40,9 +43,6 @@ func (r *codexRuntime) projectNativeName(root string, name *string, revision uin
 		r.names[root] = state
 	}
 	if state.Name == nil || strings.TrimSpace(*state.Name) == "" {
-		return
-	}
-	if owner == nil {
 		return
 	}
 	if notification {

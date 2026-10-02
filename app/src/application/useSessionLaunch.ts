@@ -149,7 +149,7 @@ export function useSessionLaunch({
         });
         paneAdded = true;
         if (spawnArgs) {
-          await ptySpawn({ args: { ...spawnArgs, spawned_from: activeSession?.id } });
+          await ptySpawn({ args: { ...spawnArgs, label_is_explicit: options.labelIsExplicit ?? !!options.label, spawned_from: activeSession?.id } });
         } else {
           throw new Error('Session spawn arguments were not prepared.');
         }
@@ -239,6 +239,7 @@ export function useSessionLaunch({
           cwd: path,
           endpointId: endpointId ?? null,
           label: folderName,
+          labelIsExplicit: false,
           yoloMode,
           autoMode,
         });
@@ -259,7 +260,7 @@ export function useSessionLaunch({
           selectedAgent,
           endpointId,
           yoloMode,
-          { chiefOfStaff, autoMode },
+          { chiefOfStaff, autoMode, labelIsExplicit: false },
         );
         selectCreatedSession(sessionId);
         setSessionCreationJob((current) =>
@@ -336,6 +337,7 @@ export function useSessionLaunch({
               cwd: worktreePath,
               endpointId: endpointId ?? null,
               label: folderName,
+              labelIsExplicit: false,
               yoloMode,
               autoMode,
             });
@@ -349,7 +351,7 @@ export function useSessionLaunch({
             agent,
             endpointId,
             yoloMode,
-            { autoMode },
+            { autoMode, labelIsExplicit: false },
           );
           selectCreatedSession(sessionId);
           setSessionCreationJob((current) =>

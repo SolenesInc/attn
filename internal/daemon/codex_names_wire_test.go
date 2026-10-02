@@ -11,6 +11,27 @@ import (
 	"github.com/victorarias/attn/internal/testworld"
 )
 
+func TestSharedCodexSynthesizedLaunchLabelDoesNotPreventNativeGeneration(t *testing.T) {
+	w := newWorld(t, fakeagent.Codex)
+	app := w.App()
+	sharedCodexSetting(t, app, true)
+	a := w.Spawn(app, fakeagent.Codex, w.Path("same"), func(m *protocol.SpawnSessionMessage) {
+		m.Label = protocol.Ptr("same")
+		m.LabelIsExplicit = protocol.Ptr(false)
+		m.InitialPrompt = protocol.Ptr("name this conversation")
+	})
+	agent := w.Launched(a)
+	awaitSharedView(app, a, a)
+	if got := agent.Prompted(); got != "name this conversation" {
+		t.Fatal(got)
+	}
+	if got := agent.ReadNativeName(); got != "" {
+		t.Fatalf("display label became explicit native name: %q", got)
+	}
+	agent.GenerateNativeName("Native generated conversation")
+	awaitLabel(app, a, "Native generated conversation")
+}
+
 func TestSharedCodexHeldInitialNameDoesNotBlockOtherOwnerAndManualRenameWins(t *testing.T) {
 	w := newWorld(t, fakeagent.Codex)
 	app := w.App()

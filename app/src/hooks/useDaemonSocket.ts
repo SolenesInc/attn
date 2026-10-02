@@ -310,7 +310,7 @@ export interface RateLimitState {
 }
 
 // Protocol version - must match daemon's ProtocolVersion
-export const PROTOCOL_VERSION = '328';
+export const PROTOCOL_VERSION = '329';
 const MAX_PENDING_ATTACH_OUTPUTS = 512;
 
 const CLIENT_INSTANCE_ID =
@@ -2931,6 +2931,7 @@ export function useDaemonSocket({
       cols: args.cols,
       rows: args.rows,
       ...(args.label && { label: args.label }),
+      ...(args.label_is_explicit !== undefined && { label_is_explicit: args.label_is_explicit }),
       ...(args.resume_session_id && { resume_session_id: args.resume_session_id }),
       ...(args.resume_picker && { resume_picker: args.resume_picker }),
       ...(args.yolo_mode && { yolo_mode: args.yolo_mode }),

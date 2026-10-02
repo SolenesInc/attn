@@ -2317,6 +2317,8 @@ model SpawnSessionMessage {
   cols: int32;
   rows: int32;
   label?: string;
+  // False marks a synthesized display label; absent preserves explicit launch naming.
+  label_is_explicit?: boolean;
   resume_session_id?: string;
   resume_picker?: boolean;
   yolo_mode?: boolean;

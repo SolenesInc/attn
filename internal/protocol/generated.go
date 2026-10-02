@@ -9612,6 +9612,9 @@ type SpawnSessionMessage struct {
 	// Label corresponds to the JSON schema field "label".
 	Label *string `json:"label,omitempty,omitzero"`
 
+	// LabelIsExplicit corresponds to the JSON schema field "label_is_explicit".
+	LabelIsExplicit *bool `json:"label_is_explicit,omitempty,omitzero"`
+
 	// Model corresponds to the JSON schema field "model".
 	Model *string `json:"model,omitempty,omitzero"`
 

@@ -40,6 +40,19 @@ try {
   await runner.step('launch', () => launchFreshAppAndConnect(client, observer));
   observer.send({ cmd: 'set_setting', key: 'codex_shared_enabled', value: 'true' });
   await observer.waitFor(() => observer.getSetting('codex_shared_enabled') === 'true', 'shared launch default');
+
+  await runner.step('synthesized_app_label_allows_native_generated_name', async () => {
+    const cwd = path.join(runner.sessionDir, 'ordinary-launch'); fs.mkdirSync(cwd, { recursive: true });
+    writeMockAgentFixture(cwd, { agent: 'codex', resumable: true, turns: [], defaultActions: [{ type: 'reply', text: 'ordinary reply' }] });
+    const { sessionId } = await client.request('create_session', { cwd, agent: 'codex', label: 'ordinary-launch', label_is_explicit: false });
+    const pane = await resolved(sessionId, sessionId);
+    await waitForPaneText(client, sessionId, pane.pane_id, text => text.includes('Root '), 'ordinary launch root');
+    await type(sessionId, pane.pane_id, 'name this conversation\r');
+    await observer.waitFor(() => observer.getSession(sessionId)?.label === 'Generated ordinary-launch', 'generated ordinary app name');
+    const header = await client.request('dom_text', { selector: `[data-pane-id="${pane.pane_id}"] .workspace-pane-header` });
+    runner.assert(header.text.includes('Generated ordinary-launch'), 'ordinary app name missing from header', header);
+    await closePane(observer.getSession(sessionId).workspace_id, pane.pane_id);
+  });
   const roots = [];
   for (const name of ['exo', 'foo']) {
     const cwd = path.join(runner.sessionDir, name); fs.mkdirSync(cwd, { recursive: true });

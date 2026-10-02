@@ -9365,6 +9365,7 @@ export interface SpawnSessionMessage {
     id:                  string;
     initial_prompt?:     string;
     label?:              string;
+    label_is_explicit?:  boolean;
     model?:              string;
     resume_picker?:      boolean;
     resume_session_id?:  string;
@@ -21950,6 +21951,7 @@ const typeMap: any = {
         { json: "id", js: "id", typ: "" },
         { json: "initial_prompt", js: "initial_prompt", typ: u(undefined, "") },
         { json: "label", js: "label", typ: u(undefined, "") },
+        { json: "label_is_explicit", js: "label_is_explicit", typ: u(undefined, true) },
         { json: "model", js: "model", typ: u(undefined, "") },
         { json: "resume_picker", js: "resume_picker", typ: u(undefined, true) },
         { json: "resume_session_id", js: "resume_session_id", typ: u(undefined, "") },

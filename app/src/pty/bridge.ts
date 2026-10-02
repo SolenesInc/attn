@@ -23,6 +23,7 @@ export interface PtySpawnArgs {
   spawned_from?: string;
   agent?: string;
   label?: string;
+  label_is_explicit?: boolean;
   executable?: string;
   claude_executable?: string;
   codex_executable?: string;
