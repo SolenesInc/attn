@@ -6,7 +6,7 @@ keeps each agent's history, inbox, name, attention and costs in its own session.
 
 ## Turn it on
 
-In Settings, enable **Shared Codex (experimental)** before launching a new Codex
+In Settings → Experimental, enable **Shared Codex (experimental)** before launching a new Codex
 agent. It starts off. Attn uses your configured stock Codex executable and ordinary
 Codex home, including its account, model, permissions, guidance and extensions.
 Choose the project or worktree through Attn's usual launch flow.

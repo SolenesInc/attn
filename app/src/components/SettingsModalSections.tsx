@@ -718,19 +718,15 @@ export function WorkflowsSettings({
   );
 }
 
-export function TerminalSettings({
-  ptyBackendHint,
+export function ExperimentalSettings({
   ptyBackendMode,
-  ptyBackendLabel,
   sharedPtyHostActive,
   sharedPtyHostEnabled,
   codexSharedEnabled,
   onSetSetting,
 }: Pick<
   SettingsModalState,
-  | 'ptyBackendHint'
   | 'ptyBackendMode'
-  | 'ptyBackendLabel'
   | 'sharedPtyHostActive'
   | 'sharedPtyHostEnabled'
   | 'codexSharedEnabled'
@@ -739,20 +735,13 @@ export function TerminalSettings({
   return (
     <section className="settings-block">
       <div className="settings-block-intro">
-        <div className="settings-kicker">Terminal</div>
-        <h3>PTY Backend</h3>
+        <div className="settings-kicker">Experimental</div>
+        <h3>Experimental features</h3>
         <p className="settings-description">
-          Shows whether terminal sessions run in external worker processes or directly in the daemon.
+          Try features that are still being developed.
         </p>
       </div>
       <div className="settings-block-body">
-        <div className="settings-row-card compact">
-          <div>
-            <p className="settings-row-title">Runtime mode</p>
-            <p className="settings-row-copy">{ptyBackendHint}</p>
-          </div>
-          <span className={`settings-status mode-${ptyBackendMode}`}>{ptyBackendLabel}</span>
-        </div>
         <div className="settings-row-card">
           <div>
             <p className="settings-row-title">Shared Codex (experimental)</p>

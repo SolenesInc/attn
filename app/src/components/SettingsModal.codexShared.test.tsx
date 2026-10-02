@@ -5,7 +5,7 @@ import { gesture } from '../test/renderApp';
 
 describe('shared Codex launch default', () => {
   it('starts disabled and persists on/off without sending session commands', async () => {
-    const daemon = await openSection('terminal');
+    const daemon = await openSection('experimental');
     const toggle = screen.getByRole('switch', { name: 'Shared Codex (experimental)' });
     expect(toggle).toHaveAttribute('aria-checked', 'false');
     expect(screen.getByText(/Existing agents keep their mode when reopened/)).toBeVisible();
