@@ -157,3 +157,17 @@ it('keeps successor events when a superseded read resolves', async () => {
   expect(screen.getByText('300 tokens')).toBeInTheDocument();
   expect(document.querySelector('.ledger-row[data-row-key="cost"]')).not.toHaveAttribute('data-state', 'closed');
 });
+
+it.each(['during read', 'after read'])('paginates from the oldest displayed row when the cursor moves %s', async (timing) => {
+  const first = page({ entries: [liveEntry('newer'), { ...liveEntry('cursor'), last_seen: '2026-09-05T12:00:00Z' }], next_before: 'cursor', omitted: 1 });
+  const view = await openSessionsLedger((_query, index) => index === 0
+    ? timing === 'during read' ? 'hold' : first
+    : page({ entries: [closedEntry('older')] }));
+  view.daemon.emit({ event: 'session_state_changed', session: daemonSession('cursor', { usage, last_seen: '2026-09-05T14:15:00Z' }) });
+  await view.daemon.idle();
+  if (timing === 'during read') await view.release(0, first);
+  fireEvent.click(screen.getByRole('button', { name: '1 older ↓' }));
+  await view.daemon.idle();
+  expect(view.queries()[1].before).toBe('newer');
+  expect(document.querySelector('.ledger-row[data-row-key="older"]')).toBeInTheDocument();
+});

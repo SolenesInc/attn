@@ -272,6 +272,7 @@ export function useSessionLedger({
 
   const loadMore = useCallback(() => {
     if (pendingUpdates.current || !nextBefore || loading || loadingMore || filterError || !lifecycleRef.current.connected) return;
+    const before = read.entries[read.entries.length - 1]?.id ?? nextBefore;
     const epoch = readEpoch.current;
     const generation = lifecycleRef.current.generation;
     const token = {};
@@ -279,7 +280,7 @@ export function useSessionLedger({
     pendingUpdates.current = updates;
     const superseded = () => epoch !== readEpoch.current || generation !== lifecycleRef.current.generation;
     setLoadingMoreRead(token);
-    connection.list({ ...(sessionLedgerQuery(filtersRef.current, now()) as SessionLedgerQuery), limit: pageSize, before: nextBefore })
+    connection.list({ ...(sessionLedgerQuery(filtersRef.current, now()) as SessionLedgerQuery), limit: pageSize, before })
       .then((page) => {
         if (superseded()) return;
         const snapshot = new Map(updates);
@@ -297,7 +298,7 @@ export function useSessionLedger({
         if (pendingUpdates.current === updates) pendingUpdates.current = null;
         setLoadingMoreRead((current) => current === token ? null : current);
       });
-  }, [nextBefore, loading, loadingMore, filterError, connection.list, pageSize, now]);
+  }, [nextBefore, read.entries, loading, loadingMore, filterError, connection.list, pageSize, now]);
 
   const { entries, facets, error } = read.query === queryKey ? read : NO_READ;
 
