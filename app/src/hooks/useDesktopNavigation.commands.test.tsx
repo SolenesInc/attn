@@ -43,7 +43,6 @@ function renderNavigation() {
     sendDesktopSetCurrent: vi.fn().mockResolvedValue(ok),
     sendDesktopSetActivePane: vi.fn().mockResolvedValue(ok),
     sendDesktopMoveLeaf: vi.fn().mockResolvedValue(ok),
-    sendDesktopDelete: vi.fn().mockResolvedValue(ok),
     sendDesktopSetShortcutSlot: vi.fn().mockResolvedValue(ok),
     sendDesktopCreate: vi.fn().mockResolvedValue(ok),
     sendDesktopRename: vi.fn().mockResolvedValue(ok),

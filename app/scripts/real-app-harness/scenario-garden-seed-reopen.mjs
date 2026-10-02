@@ -253,7 +253,6 @@ async function main() {
       // so the dispatcher's next command reads from a newly attached terminal.
       for (const label of ['away', 'further']) {
         const desktop = await observer.createDesktop(`harness-${runner.runId}-${label}`);
-        runner.registerCleanup(`delete ${label} desktop`, () => observer.deleteDesktop(desktop.id));
         await client.request('select_desktop', { desktopId: desktop.id });
       }
       const dispatcher = await pollFor(async () => {

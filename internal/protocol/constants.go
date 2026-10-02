@@ -2,7 +2,7 @@ package protocol
 
 import "time"
 
-const ProtocolVersion = "342"
+const ProtocolVersion = "343"
 
 const (
 	ErrorCodeConflict             = "conflict"
@@ -270,7 +270,6 @@ const (
 	CmdDesktopRename          = "desktop_rename"
 	CmdDesktopSetShortcutSlot = "desktop_set_shortcut_slot"
 	CmdDesktopReorder         = "desktop_reorder"
-	CmdDesktopDelete          = "desktop_delete"
 	CmdDesktopSetCurrent      = "desktop_set_current"
 	CmdDesktopSetActivePane   = "desktop_set_active_pane"
 	CmdDesktopPlaceSession    = "desktop_place_session"
@@ -297,7 +296,6 @@ const (
 
 const (
 	EventBackgroundLaunch          = "background_launch"
-	EventSessionShowRequested      = "session_show_requested"
 	EventLaunchDesktopResult       = "launch_desktop_result"
 	EventProfileActionResult       = "profile_action_result"
 	EventProfilesChanged           = "profiles_changed"

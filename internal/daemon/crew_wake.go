@@ -209,7 +209,7 @@ func (d *Daemon) crewWakeAskedFor(msg *protocol.CrewWakeMessage, userStarted boo
 	if err := d.refuseCrossProfileWake(name, protocol.Deref(msg.ProfileID), protocol.Deref(msg.SourceSessionID)); err != nil {
 		return nil, err
 	}
-	delivery := &crewWakeDelivery{UserStarted: userStarted, RequestedBy: d.launchRequester(protocol.Deref(msg.SourceSessionID), "another agent")}
+	delivery := &crewWakeDelivery{UserStarted: userStarted, RequestedBy: d.launchRequester(protocol.Deref(msg.SourceSessionID), "attn crew wake")}
 	return d.crewWakeWithDelivery(name, strings.TrimSpace(strings.ToLower(protocol.Deref(msg.Agent))), false, delivery)
 }
 
@@ -248,10 +248,9 @@ func (d *Daemon) handleCrewWake(conn net.Conn, msg *protocol.CrewWakeMessage) {
 }
 
 func (d *Daemon) handleCrewWakeWS(client *wsClient, msg *protocol.CrewWakeMessage) {
-	userStarted := protocol.Deref(msg.SourceSessionID) == ""
-	result, err := d.crewWakeAskedFor(msg, userStarted)
+	result, err := d.crewWakeAskedFor(msg, true)
 	var showErr error
-	if err == nil && userStarted {
+	if err == nil {
 		showErr = d.showCrewWake(result, client, protocol.Deref(msg.RequestID))
 	}
 	response := protocol.CrewWakeResultMessage{

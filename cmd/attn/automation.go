@@ -44,7 +44,7 @@ func runAutomationCommand() {
 				name = desktopName
 			}
 		})
-		result, err = c.SetAutomationLaunchDesktopWithName(os.Args[3], *desktop, name)
+		result, err = c.SetAutomationLaunchDesktop(os.Args[3], *desktop, name)
 		if err == nil {
 			printJSON(result.Item)
 		}
@@ -67,15 +67,12 @@ func runAutomationCommand() {
 			break
 		}
 		var result *protocol.AutomationApplyResultMessage
-		var desktopRef *string
+		var desktopRef, name *string
 		fs.Visit(func(f *flag.Flag) {
-			if f.Name == "launch-desktop" {
+			switch f.Name {
+			case "launch-desktop":
 				desktopRef = desktop
-			}
-		})
-		var name *string
-		fs.Visit(func(f *flag.Flag) {
-			if f.Name == "desktop-name" {
+			case "desktop-name":
 				name = desktopName
 			}
 		})

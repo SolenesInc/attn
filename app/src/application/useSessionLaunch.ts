@@ -119,7 +119,6 @@ export function useSessionLaunch({
       const launch = desktop.id === current.id
         ? useSessionStore.getState().beginIntent({ kind: 'session', sessionId: spawn.sessionId })
         : null;
-      let placementError: string | undefined;
       try {
         await createSession(
           spawn.label,
@@ -135,13 +134,13 @@ export function useSessionLaunch({
         if (!spawnArgs) {
           throw new Error('Session spawn arguments were not prepared.');
         }
-        ({ placementError } = await ptySpawn({
+        await ptySpawn({
           args: {
             ...spawnArgs,
             placement: target.placement,
             ...(spawn.spawnedFrom ? { spawned_from: spawn.spawnedFrom } : {}),
           },
-        }));
+        });
       } catch (error) {
         if (launch) useSessionStore.getState().intentFailed(launch);
         closeSession(spawn.sessionId);
@@ -150,12 +149,10 @@ export function useSessionLaunch({
       const { intent } = useSessionStore.getState();
       if (launch && intent?.id === launch) {
         selectCreatedSession(spawn.sessionId, intent.focusOwner);
-      } else if (placementError) {
-        showError(`${spawn.label} started without a pane on this desktop: ${placementError}`);
       }
       return spawn.sessionId;
     },
-    [closeSession, createSession, selectCreatedSession, showError, takeSessionSpawnArgs],
+    [closeSession, createSession, selectCreatedSession, takeSessionSpawnArgs],
   );
 
   const launchAgent = useCallback(

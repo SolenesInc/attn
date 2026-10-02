@@ -1,15 +1,9 @@
 import type { BackgroundLaunchMessage, LaunchDesktopResultMessage } from '../types/generated';
 import { useToastStore } from '../store/toasts';
 import { useLaunchDesktopStore } from '../store/launchDesktops';
-import { useSessionStore } from '../store/sessions';
-import type { SessionShowRequestedMessage } from '../types/generated';
 import { settlePendingRequest, type PendingRequests } from './daemonPendingRequests';
 
 export function handleLaunchDesktopEvent(event: { event?: string }, pending: PendingRequests): boolean {
-  if (event.event === 'session_show_requested') {
-    useSessionStore.getState().selectAgent((event as SessionShowRequestedMessage).session_id);
-    return true;
-  }
   if (event.event === 'background_launch') {
     const arrival = event as BackgroundLaunchMessage;
     useToastStore.getState().append({

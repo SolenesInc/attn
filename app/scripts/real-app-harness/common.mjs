@@ -318,22 +318,10 @@ export async function launchFreshAppAndConnect(client, observer, {
   await pinMockAgentExecutables(client, observer, agentExecutables);
   if (sweepStaleSessions) {
     await sweepStaleHarnessSessions(observer);
-    await sweepEmptyHarnessDesktops(observer);
   }
 }
 
 const HARNESS_DESKTOP_PREFIX = 'harness-';
-
-export async function sweepEmptyHarnessDesktops(observer, { log = (m) => console.log(`[harness] ${m}`) } = {}) {
-  const empty = observer.desktops.filter((desktop) =>
-    desktop.name.startsWith(HARNESS_DESKTOP_PREFIX)
-    && desktop.panes.length === 0
-    && desktop.id !== observer.currentDesktopId());
-  for (const desktop of empty) {
-    await observer.deleteDesktop(desktop.id).catch((error) => log(`could not delete desktop ${desktop.id}: ${error}`));
-  }
-  return { swept: empty.length };
-}
 
 export async function waitForAppCurrentDesktop(client, desktopId, timeoutMs = 15_000) {
   const startedAt = Date.now();

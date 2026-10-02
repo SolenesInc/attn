@@ -1342,11 +1342,7 @@ func (d *Daemon) reconcileSessionsWithWorkerBackendState(ctx context.Context, al
 				if err := d.store.AddChecked(recoveredSession); err != nil {
 					return err
 				}
-				if placed := d.placeLaunchedSession(recoveredSession, &launchPlacement{reopen: true}); placed.err != nil {
-					d.store.Remove(sessionID)
-					return placed.err
-				}
-				return nil
+				return d.placeLaunchedSession(recoveredSession, &launchPlacement{reopen: true}).err
 			}); err != nil {
 				d.logf("worker reconciliation could not adopt runtime %s: %v", sessionID, err)
 				report.MissingMetadata++

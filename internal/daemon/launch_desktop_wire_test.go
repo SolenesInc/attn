@@ -51,12 +51,6 @@ func assertBackgroundPlacement(t *testing.T, w *world, profileID, sessionID, tar
 	}
 }
 
-func deleteLaunchDesktop(app *testworld.Peer, desktop protocol.Desktop) {
-	app.T.Helper()
-	req := protocol.DesktopDeleteMessage{Cmd: protocol.CmdDesktopDelete, RequestID: "delete-" + desktop.ID, DesktopID: desktop.ID, ExpectedRevision: desktop.Revision}
-	mustProfileRequest(app, req, req.RequestID)
-}
-
 func writeLaunchChoice(app *testworld.Peer, kind, id string, setting protocol.LaunchDesktopSetting) protocol.LaunchDesktopItem {
 	req := protocol.LaunchDesktopSetMessage{Cmd: protocol.CmdLaunchDesktopSet, RequestID: "choice-" + kind + id, Kind: protocol.LaunchDesktopKind(kind), ItemID: id, Setting: setting}
 	result := testworld.Request(app, req, protocol.EventLaunchDesktopResult, func(r protocol.LaunchDesktopResultMessage) bool { return r.RequestID == req.RequestID })
@@ -156,11 +150,6 @@ func TestNamedCrewDesktopsShareRecreateAndUserWakeTakesFocus(t *testing.T) {
 	user := wakeCrew(t, cli, "alder", "")
 	if !user.AlreadyAwake {
 		t.Fatal("user wake started an awake member again")
-	}
-	assertBackgroundPlacement(t, w, profile, again.SessionID, recreated.ID, current, active)
-	background := testworld.Request(app, protocol.CrewWakeMessage{Cmd: protocol.CmdCrewWake, Member: "alder", SourceSessionID: protocol.Ptr(caller), RequestID: protocol.Ptr("ws-agent-wake")}, protocol.EventCrewWakeResult, func(r protocol.CrewWakeResultMessage) bool { return r.RequestID == "ws-agent-wake" })
-	if !background.Success || !protocol.Deref(background.AlreadyAwake) {
-		t.Fatalf("WS agent wake: %+v", background)
 	}
 	assertBackgroundPlacement(t, w, profile, again.SessionID, recreated.ID, current, active)
 	_, pane := viewProfile(t, w, profile).paneOf(t, again.SessionID)
@@ -388,62 +377,6 @@ func TestUpgradingAnInstallWithOnlyAutomationsRequiresLaunchReviewAndPlacesExist
 	}
 	if got := readLaunchSetting(app, "automation", "check"); !got.Confirmed {
 		t.Fatal("finish did not confirm automation")
-	}
-}
-
-func TestALaunchWhoseDesktopDisappearsDuringDriverPreparationLeavesNoAgentOrActiveRun(t *testing.T) {
-	w := newWorld(t)
-	app, control := w.App(), w.App()
-	driver := connectDriver(t, w, "snipe-plugin", "snipe", map[string]bool{"state_reporting": true, "resume": true})
-	awaitDriverAvailable(app, "snipe")
-	w.Spawn(app, shellHarness, w.Path("keep-source"))
-	target := createDesktop(control, control.SelectedProfile())
-	dir := w.Path("launch")
-	if err := os.MkdirAll(dir, 0o755); err != nil {
-		t.Fatal(err)
-	}
-	driver.mu.Lock()
-	driver.holdLaunch = true
-	driver.mu.Unlock()
-	request := protocol.SpawnSessionMessage{Cmd: protocol.CmdSpawnSession, ID: "missing-destination", Cwd: dir, Agent: "snipe", ProfileID: app.SelectedProfile(), Placement: &protocol.SessionPlacement{DesktopID: protocol.Ptr(target.ID)}, Cols: 80, Rows: 24}
-	app.Send(request)
-	var launch driverLaunch
-	reply := driver.asked("driver.spawn", &launch)
-	deleteLaunchDesktop(control, target)
-	driver.answer(reply, map[string]any{"argv": []string{"/bin/cat"}})
-	driver.launched()
-	result := testworld.Await(app, protocol.EventSpawnResult, func(r protocol.SpawnResultMessage) bool { return r.ID == request.ID })
-	if result.Success || !strings.Contains(protocol.Deref(result.Error), target.ID) {
-		t.Fatalf("vanished destination = %+v", result)
-	}
-	if closed := driver.closed(); closed.Reason != "launch_failed" || closed.RunID != launch.RunID {
-		t.Fatalf("driver close = %+v", closed)
-	}
-	fresh := w.App()
-	for _, session := range fresh.Initial.Sessions {
-		if session.ID == request.ID {
-			t.Fatalf("failed launch retained agent: %+v", session)
-		}
-	}
-	for _, desktop := range fresh.Initial.Desktops {
-		for _, pane := range desktop.Panes {
-			if pane.SessionID == request.ID {
-				t.Fatal("failed launch retained a pane")
-			}
-		}
-	}
-	driver.register("snipe", map[string]bool{"state_reporting": true, "resume": true})
-	for _, run := range driver.registered.ActiveRuns {
-		if run.SessionID == request.ID {
-			t.Fatal("failed launch retained an active driver run")
-		}
-	}
-	driver.mu.Lock()
-	driver.holdLaunch = false
-	driver.mu.Unlock()
-	retry, _ := spawnDriven(w, fresh, driver, dir, func(m *protocol.SpawnSessionMessage) { m.ID = request.ID })
-	if retry != request.ID {
-		t.Fatal("retry changed session identity")
 	}
 }
 

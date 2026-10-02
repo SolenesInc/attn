@@ -1286,7 +1286,7 @@ CREATE INDEX IF NOT EXISTS idx_automode_denials_recent ON automode_denials(id DE
 	{167, "place background launches and remember named destinations", `
  CREATE TABLE IF NOT EXISTS launch_destinations (
  id TEXT PRIMARY KEY, profile_id TEXT NOT NULL, name TEXT NOT NULL,
- requested_slot INTEGER NOT NULL DEFAULT 0 CHECK(requested_slot = 0 OR requested_slot BETWEEN 5 AND 9),
+ requested_slot INTEGER NOT NULL DEFAULT 0,
  live_desktop_id TEXT NOT NULL DEFAULT '', own INTEGER NOT NULL DEFAULT 1
  );
  CREATE UNIQUE INDEX IF NOT EXISTS launch_destination_binding ON launch_destinations(live_desktop_id) WHERE live_desktop_id != '';

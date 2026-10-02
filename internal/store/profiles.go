@@ -32,11 +32,6 @@ type ProfileDeletionOptions struct {
 	RemoteLiveDispatches int
 }
 
-type DesktopDeletion struct {
-	Profile profiles.Profile
-	Deleted profiles.Desktop
-}
-
 type LeafMove struct {
 	Source      profiles.Desktop
 	Target      profiles.Desktop
@@ -871,82 +866,12 @@ func (s *Store) ReorderDesktop(id, previousID, nextID string, expectedRevision i
 	})
 }
 
-func repointCurrentDesktop(profile *profiles.Profile, siblings []profiles.Desktop, removedID string) {
-	if profile.CurrentDesktopID != removedID {
-		return
-	}
-	for i, sibling := range siblings {
-		if sibling.ID != removedID {
-			continue
-		}
-		if i+1 < len(siblings) {
-			profile.CurrentDesktopID = siblings[i+1].ID
-		} else {
-			profile.CurrentDesktopID = siblings[i-1].ID
-		}
-	}
-}
-
 func deleteDesktop(tx *sql.Tx, id string) error {
 	if _, err := tx.Exec(`DELETE FROM desktop_panes WHERE desktop_id = ?`, id); err != nil {
 		return err
 	}
 	_, err := tx.Exec(`DELETE FROM desktops WHERE id = ?`, id)
 	return err
-}
-
-func (s *Store) DeleteDesktop(id string, expectedRevision int64) (DesktopDeletion, error) {
-	var result DesktopDeletion
-	err := s.profilesArrangementTx(func(tx *sql.Tx, now string) error {
-		desktop, err := loadDesktop(tx, id)
-		if err != nil {
-			return err
-		}
-		if err := requireRevision("desktop", id, expectedRevision, desktop.Revision); err != nil {
-			return err
-		}
-		profile, err := loadLiveProfile(tx, desktop.ProfileID)
-		if err != nil {
-			return err
-		}
-		siblings, err := listDesktops(tx, desktop.ProfileID)
-		if err != nil {
-			return err
-		}
-		if len(siblings) <= 1 {
-			return profiles.Errorf(profiles.CodeLastDesktop, "desktop %s is the last desktop of profile %q and cannot be deleted", id, profile.Name)
-		}
-		repointCurrentDesktop(&profile, siblings, id)
-		if err := appendBoundLaunchDesktopFacts(tx, id); err != nil {
-			return err
-		}
-		if err := deleteDesktop(tx, id); err != nil {
-			return err
-		}
-		destination, err := loadLaunchDesktop(tx, profile, "")
-		if err != nil {
-			return err
-		}
-		for _, pane := range desktop.Panes {
-			if pane.SessionID == "" {
-				continue
-			}
-			destination, err = placeSessionInTree(destination, SessionPlacementRequest{SessionID: pane.SessionID, Title: pane.Title, Status: pane.Status, Direction: layouttree.DirectionVertical}, pane.PaneID)
-			if err != nil {
-				return err
-			}
-		}
-		if err := writeDesktopArrangement(tx, now, &destination); err != nil {
-			return err
-		}
-		if err := bumpProfile(tx, &profile); err != nil {
-			return err
-		}
-		result.Profile = profile
-		result.Deleted = desktop
-		return nil
-	})
-	return result, err
 }
 
 func (s *Store) SetCurrentDesktop(profileID, desktopID string) (profiles.Profile, error) {

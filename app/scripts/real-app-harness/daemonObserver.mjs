@@ -183,12 +183,6 @@ export class DaemonObserver {
     return this.waitFor(() => this.desktop(created.id), `arrangement with desktop ${created.id}`);
   }
 
-  async deleteDesktop(desktopId) {
-    const desktop = this.desktop(desktopId);
-    if (!desktop) return;
-    await this.profileCommand('desktop_delete', { desktop_id: desktopId, expected_revision: desktop.revision });
-  }
-
   setCurrentDesktop(desktopId) {
     return this.profileCommand('desktop_set_current', { profile_id: this.profileId, desktop_id: desktopId });
   }

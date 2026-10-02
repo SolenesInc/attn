@@ -81,7 +81,6 @@ const (
 	CodeNameTaken       Code = "name_taken"
 	CodeSlotTaken       Code = "slot_taken"
 	CodeLastProfile     Code = "last_profile"
-	CodeLastDesktop     Code = "last_desktop"
 	CodeProfileDeleted  Code = "profile_deleted"
 	CodeCrossProfile    Code = "cross_profile"
 	CodeAlreadyPlaced   Code = "already_placed"

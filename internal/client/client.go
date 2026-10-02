@@ -56,10 +56,7 @@ func (c *Client) sendAutomation(msg any, out any) error {
 }
 
 func (c *Client) AutomationApply(raw string) (*protocol.AutomationApplyResultMessage, error) {
-	return c.AutomationApplyWithDesktop(raw, nil)
-}
-func (c *Client) AutomationApplyWithDesktop(raw string, desktop *string) (*protocol.AutomationApplyResultMessage, error) {
-	return c.AutomationApplyWithNamedDesktop(raw, desktop, nil)
+	return c.AutomationApplyWithNamedDesktop(raw, nil, nil)
 }
 func (c *Client) AutomationApplyWithNamedDesktop(raw string, desktop, name *string) (*protocol.AutomationApplyResultMessage, error) {
 	var result protocol.AutomationApplyResultMessage
@@ -1339,10 +1336,7 @@ func socketLive(path string) bool {
 	return true
 }
 
-func (c *Client) SetAutomationLaunchDesktop(id, desktop string) (*protocol.LaunchDesktopResultMessage, error) {
-	return c.SetAutomationLaunchDesktopWithName(id, desktop, nil)
-}
-func (c *Client) SetAutomationLaunchDesktopWithName(id, desktop string, name *string) (*protocol.LaunchDesktopResultMessage, error) {
+func (c *Client) SetAutomationLaunchDesktop(id, desktop string, name *string) (*protocol.LaunchDesktopResultMessage, error) {
 	var result protocol.LaunchDesktopResultMessage
 	msg := protocol.LaunchDesktopSetMessage{Cmd: protocol.CmdLaunchDesktopSet, Kind: protocol.LaunchDesktopKindAutomation, ItemID: id, DesktopRef: &desktop, DesktopName: name, Setting: protocol.LaunchDesktopSetting{Mode: protocol.LaunchDesktopModeDesktop}}
 	if err := c.sendAutomation(msg, &result); err != nil {

@@ -1057,8 +1057,6 @@ func (d *Daemon) handleClientMessage(client *wsClient, data []byte) {
 		d.handleDesktopSetShortcutSlot(client, msg.(*protocol.DesktopSetShortcutSlotMessage))
 	case protocol.CmdDesktopReorder:
 		d.handleDesktopReorder(client, msg.(*protocol.DesktopReorderMessage))
-	case protocol.CmdDesktopDelete:
-		d.handleDesktopDelete(client, msg.(*protocol.DesktopDeleteMessage))
 	case protocol.CmdDesktopSetCurrent:
 		d.handleDesktopSetCurrent(client, msg.(*protocol.DesktopSetCurrentMessage))
 	case protocol.CmdDesktopSetActivePane:

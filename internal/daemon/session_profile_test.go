@@ -276,7 +276,7 @@ func TestSpawnBesideAFocusedTileDocksTheAgentBesideIt(t *testing.T) {
 	d.handleSpawnSession(client, spawn)
 
 	result := expectSpawnResult(t, client, spawn.ID, true)
-	if result.PlacementError != nil || result.PaneID == nil {
+	if result.PaneID == nil {
 		t.Fatalf("spawn_result = %+v, want the agent placed beside the tile", result)
 	}
 	tree := desktopTree(t, d, desktop.ID)

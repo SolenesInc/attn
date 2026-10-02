@@ -150,20 +150,16 @@ func (d *Daemon) validateSpawnPrelock(msg *protocol.SpawnSessionMessage, policy 
 		return nil, &spawnRejection{err: err}
 	}
 	placement := requestedLaunchPlacement(msg.Placement)
-	if policy.launchPlacement != nil {
+	if policy.launchPlacement != nil || placement == nil {
 		_, placed, err := d.store.SessionPlacement(msg.ID)
 		if err != nil {
 			return nil, &spawnRejection{err: err}
 		}
 		if !placed {
 			placement = policy.launchPlacement
-		}
-	}
-	if placement == nil {
-		if _, placed, err := d.store.SessionPlacement(msg.ID); err != nil {
-			return nil, &spawnRejection{err: err}
-		} else if !placed {
-			placement = &launchPlacement{direction: layouttree.DirectionVertical}
+			if placement == nil {
+				placement = &launchPlacement{direction: layouttree.DirectionVertical}
+			}
 		}
 	}
 	if placement != nil {

@@ -103,18 +103,11 @@ async function main() {
   const observer = new DaemonObserver({ wsUrl: options.wsUrl });
   const driver = createWindowDriver({ appPath: options.appPath, client });
   const createdSessionIds = [];
-  const createdDesktopIds = [];
 
   runner.registerCleanup('close_observer', () => observer.close());
   runner.registerCleanup('quit_app', () => client.quitApp());
-  runner.registerCleanup('delete_desktops', async () => {
+  runner.registerCleanup('unregister_sessions', async () => {
     await observer.unregisterMatchingSessions((session) => createdSessionIds.includes(session.id)).catch(() => {});
-    for (const desktopId of createdDesktopIds) {
-      await observer
-        .waitFor(() => observer.desktop(desktopId)?.panes.length === 0, `desktop ${desktopId} to empty`, 10_000)
-        .then(() => observer.deleteDesktop(desktopId))
-        .catch((error) => runner.log('desktop cleanup failed', { desktopId, error: String(error) }));
-    }
   });
 
   try {
@@ -142,10 +135,8 @@ async function main() {
     };
     await runner.step('create_two_slotted_desktops', async () => {
       desktopA = await observer.createDesktop(`harness-a-${runner.runId}`);
-      createdDesktopIds.push(desktopA.id);
       await holdDesktop(desktopA);
       desktopB = await observer.createDesktop(`harness-b-${runner.runId}`);
-      createdDesktopIds.push(desktopB.id);
       await holdDesktop(desktopB);
       runner.assert(
         desktopA.shortcut_slot && desktopB.shortcut_slot,
@@ -315,7 +306,6 @@ async function main() {
       runner.assert(Boolean(slot), `The run needs a third free desktop shortcut:\n${observer.describeArrangement()}`, observer.describeArrangement());
       await pressShortcutKeys(client, driver, `desktop.send${slot}`);
       desktopC = await observer.waitFor(() => observer.desktops.find((desktop) => desktop.shortcut_slot === slot), `a desktop created on slot ${slot}`);
-      createdDesktopIds.push(desktopC.id);
       const state = await waitForDesktopUi(
         client,
         desktopC.id,

@@ -306,7 +306,7 @@ export interface RateLimitState {
 }
 
 // Protocol version - must match daemon's ProtocolVersion
-export const PROTOCOL_VERSION = '342';
+export const PROTOCOL_VERSION = '343';
 const MAX_PENDING_ATTACH_OUTPUTS = 512;
 
 const CLIENT_INSTANCE_ID =
@@ -417,7 +417,6 @@ interface EndpointActionResult {
 interface SpawnResult {
   success: boolean;
   error?: string;
-  placementError?: string;
 }
 
 type AttachResult = AttachResultData & {
@@ -1837,7 +1836,7 @@ export function useDaemonSocket({
               if (pending) {
                 pendingActionsRef.current.delete(key);
                 if (data.success) {
-                  pending.resolve({ success: true, placementError: data.placement_error });
+                  pending.resolve({ success: true });
                 } else {
                   pending.reject(new Error(data.error || 'Failed to spawn session'));
                 }
@@ -3305,13 +3304,11 @@ export function useDaemonSocket({
     setPtyBackend({
       spawn: async (args: PtySpawnArgs) => {
         // The mounted pane owns attachment, including replay of startup output.
-        if (ptyTransportRef.current.hasAttachedRuntime(args.id)) return {};
+        if (ptyTransportRef.current.hasAttachedRuntime(args.id)) return;
         try {
-          const { placementError } = await sendSpawnSession(args);
-          return { placementError };
+          await sendSpawnSession(args);
         } catch (error) {
           if (!isAlreadyExistsError(error)) throw error;
-          return {};
         }
       },
       attach: async (args: PtyAttachArgs, options?: { forceResizeBeforeAttach?: boolean }) => {
@@ -4697,12 +4694,6 @@ export function useDaemonSocket({
     [sendProfileCommand],
   );
 
-  const sendDesktopDelete = useCallback(
-    (desktopId: string, expectedRevision: number) =>
-      sendProfileCommand('desktop_delete', { desktop_id: desktopId, expected_revision: expectedRevision }),
-    [sendProfileCommand],
-  );
-
   const sendDesktopRename = useCallback(
     (desktopId: string, name: string, expectedRevision: number) =>
       sendProfileCommand('desktop_rename', { desktop_id: desktopId, name, expected_revision: expectedRevision }),
@@ -4911,7 +4902,6 @@ export function useDaemonSocket({
     sendProfileDelete,
     sendSessionMove,
     sendDesktopCreate,
-    sendDesktopDelete,
     sendDesktopRename,
     sendDesktopReorder,
     sendDesktopSetShortcutSlot,

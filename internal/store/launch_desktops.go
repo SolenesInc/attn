@@ -54,6 +54,28 @@ func launchDesktopName(tx *sql.Tx, desktop profiles.Desktop) (string, error) {
 	return profiles.DesktopLabel(desktop, siblings), rows.Err()
 }
 
+func launchDesktopLabel(name string, slot int) string {
+	if slot != 0 {
+		return fmt.Sprintf("%d · %s", slot, name)
+	}
+	return name + " (no ⌘ number)"
+}
+
+// LaunchDesktopLabel names a desktop the way launch settings show it.
+func (s *Store) LaunchDesktopLabel(desktopID string) (string, error) {
+	var label string
+	err := s.profilesTx(func(tx *sql.Tx, _ string) error {
+		desktop, err := loadDesktop(tx, desktopID)
+		if err != nil {
+			return err
+		}
+		name, err := launchDesktopName(tx, desktop)
+		label = launchDesktopLabel(name, desktop.ShortcutSlot)
+		return err
+	})
+	return label, err
+}
+
 func loadLaunchItem(tx *sql.Tx, kind, id string) (LaunchDesktopItem, error) {
 	item := LaunchDesktopItem{Kind: kind, ID: id}
 	var err error
@@ -102,11 +124,7 @@ func loadLaunchItem(tx *sql.Tx, kind, id string) (LaunchDesktopItem, error) {
 			return item, err
 		}
 	}
-	if slot != 0 {
-		setting.Label = fmt.Sprintf("%d · %s", slot, setting.Label)
-	} else {
-		setting.Label += " (no ⌘ number)"
-	}
+	setting.Label = launchDesktopLabel(setting.Label, slot)
 	return item, nil
 }
 
@@ -118,12 +136,8 @@ func saveLaunchSetting(tx *sql.Tx, kind, id string, setting LaunchDesktopSetting
 	destination := setting.DestinationID
 	changed := false
 	if destination != "" {
-		var profileID string
-		if err := tx.QueryRow(`SELECT profile_id FROM launch_destinations WHERE id = ?`, destination).Scan(&profileID); err != nil {
+		if err := tx.QueryRow(`SELECT 1 FROM launch_destinations WHERE id = ?`, destination).Scan(new(int)); err != nil {
 			return item, profiles.Errorf(profiles.CodeNotFound, "launch destination %q does not exist", destination)
-		}
-		if profileID != item.ProfileID {
-			return item, profiles.Errorf(profiles.CodeCrossProfile, "launch destination %s belongs to profile %s, not %s", destination, profileID, item.ProfileID)
 		}
 	} else if setting.Mode == "own" {
 		name := strings.TrimSpace(setting.DesktopName)
@@ -303,25 +317,24 @@ func (s *Store) PrepareLaunchMigration(crewIDs []string) error {
 		if err := tx.QueryRow(`SELECT launch_review_complete FROM profile_migration WHERE id = 1`).Scan(&complete); err != nil {
 			return err
 		}
-
-		profileIDs, err := queryColumn[string](tx, `SELECT id FROM profiles WHERE deleted_at = ''`)
-		if err != nil {
-			return err
-		}
 		var phase string
 		if err := tx.QueryRow(`SELECT phase FROM profile_migration WHERE id = 1`).Scan(&phase); err != nil {
 			return err
 		}
-		for _, id := range profileIDs {
-			if phase == profilemigration.PhasePlacementRequired {
-				continue
-			}
-			profile, err := loadLiveProfile(tx, id)
+		// Only an upgrade leaves agents without a pane; later, one would be a placement bug.
+		if !complete && phase != profilemigration.PhasePlacementRequired {
+			profileIDs, err := queryColumn[string](tx, `SELECT id FROM profiles WHERE deleted_at = ''`)
 			if err != nil {
 				return err
 			}
-			if err := placeMigrationRemainder(tx, now, profile); err != nil {
-				return err
+			for _, id := range profileIDs {
+				profile, err := loadLiveProfile(tx, id)
+				if err != nil {
+					return err
+				}
+				if err := placeMigrationRemainder(tx, now, profile); err != nil {
+					return err
+				}
 			}
 		}
 		if _, err := tx.Exec(`UPDATE launch_destinations SET profile_id = (SELECT profile_id FROM automation_definitions WHERE launch_destinations.id = 'automation:' || id) WHERE profile_id = '' AND id IN (SELECT 'automation:' || id FROM automation_definitions)`); err != nil {
@@ -374,9 +387,6 @@ func launchItemDesktop(tx *sql.Tx, now string, profile *profiles.Profile, kind, 
 	item, err := loadLaunchItem(tx, kind, id)
 	if err != nil {
 		return profiles.Desktop{}, err
-	}
-	if item.ProfileID != profile.ID {
-		return profiles.Desktop{}, profiles.Errorf(profiles.CodeCrossProfile, "%s %s belongs to profile %s, not %s", kind, id, item.ProfileID, profile.ID)
 	}
 	if item.Setting.DesktopID != "" {
 		return loadDesktop(tx, item.Setting.DesktopID)

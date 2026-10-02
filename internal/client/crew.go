@@ -48,10 +48,7 @@ func (c *Client) CrewSleep(member string) (*protocol.CrewSleepResult, error) {
 }
 
 func (c *Client) CrewSet(member string, cwd, agent, model, effort *string, awarenessDirs []string) (*protocol.CrewSetResult, error) {
-	return c.CrewSetWithDesktop(member, cwd, agent, model, effort, awarenessDirs, nil)
-}
-func (c *Client) CrewSetWithDesktop(member string, cwd, agent, model, effort *string, awarenessDirs []string, desktop *string) (*protocol.CrewSetResult, error) {
-	return c.CrewSetWithNamedDesktop(member, cwd, agent, model, effort, awarenessDirs, desktop, nil)
+	return c.CrewSetWithNamedDesktop(member, cwd, agent, model, effort, awarenessDirs, nil, nil)
 }
 func (c *Client) CrewSetWithNamedDesktop(member string, cwd, agent, model, effort *string, awarenessDirs []string, desktop, name *string) (*protocol.CrewSetResult, error) {
 	msg := protocol.CrewSetMessage{

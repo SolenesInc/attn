@@ -432,8 +432,6 @@ func TestStaleRevisionFromASecondWriterIsRefused(t *testing.T) {
 	wantCode(t, err, profiles.CodeStaleRevision)
 	_, err = s.RenameDesktop(desktop.ID, "Main", seenByBoth)
 	wantCode(t, err, profiles.CodeStaleRevision)
-	_, err = s.DeleteDesktop(desktop.ID, seenByBoth)
-	wantCode(t, err, profiles.CodeStaleRevision)
 }
 
 func TestProfileIDsSurviveRenameAndDeletedNamesAreReusable(t *testing.T) {

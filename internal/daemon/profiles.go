@@ -557,15 +557,6 @@ func (d *Daemon) handleDesktopReorder(client *wsClient, msg *protocol.DesktopReo
 	})
 }
 
-func (d *Daemon) handleDesktopDelete(client *wsClient, msg *protocol.DesktopDeleteMessage) {
-	d.runProfileAction(client, msg.Cmd, msg.RequestID, func() (profileActionOutcome, error) {
-		deletion, err := d.store.DeleteDesktop(msg.DesktopID, int64(msg.ExpectedRevision))
-		return profileActionOutcome{profile: &deletion.Profile, arranges: true, publish: func() {
-			d.publishArrangementChanged(deletion.Profile.ID)
-		}}, err
-	})
-}
-
 func (d *Daemon) handleDesktopSetCurrent(client *wsClient, msg *protocol.DesktopSetCurrentMessage) {
 	d.runProfileAction(client, msg.Cmd, msg.RequestID, func() (profileActionOutcome, error) {
 		profile, err := d.store.SetCurrentDesktop(msg.ProfileID, msg.DesktopID)

@@ -2654,9 +2654,6 @@ type DelegateResult struct {
 	// PaneID corresponds to the JSON schema field "pane_id".
 	PaneID *string `json:"pane_id,omitempty,omitzero"`
 
-	// PlacementError corresponds to the JSON schema field "placement_error".
-	PlacementError *string `json:"placement_error,omitempty,omitzero"`
-
 	// PredecessorSessionID corresponds to the JSON schema field
 	// "predecessor_session_id".
 	PredecessorSessionID *string `json:"predecessor_session_id,omitempty,omitzero"`
@@ -3192,20 +3189,6 @@ type DesktopCreateMessage struct {
 
 	// ShortcutSlot corresponds to the JSON schema field "shortcut_slot".
 	ShortcutSlot *int `json:"shortcut_slot,omitempty,omitzero"`
-}
-
-type DesktopDeleteMessage struct {
-	// Cmd corresponds to the JSON schema field "cmd".
-	Cmd string `json:"cmd"`
-
-	// DesktopID corresponds to the JSON schema field "desktop_id".
-	DesktopID string `json:"desktop_id"`
-
-	// ExpectedRevision corresponds to the JSON schema field "expected_revision".
-	ExpectedRevision int `json:"expected_revision"`
-
-	// RequestID corresponds to the JSON schema field "request_id".
-	RequestID string `json:"request_id"`
 }
 
 type DesktopDockTileMessage struct {
@@ -7334,7 +7317,6 @@ const ProfileErrorCodeCrossProfile ProfileErrorCode = "cross_profile"
 const ProfileErrorCodeDestinationSame ProfileErrorCode = "destination_same"
 const ProfileErrorCodeInternal ProfileErrorCode = "internal"
 const ProfileErrorCodeInvalid ProfileErrorCode = "invalid"
-const ProfileErrorCodeLastDesktop ProfileErrorCode = "last_desktop"
 const ProfileErrorCodeLastProfile ProfileErrorCode = "last_profile"
 const ProfileErrorCodeNameTaken ProfileErrorCode = "name_taken"
 const ProfileErrorCodeNotFound ProfileErrorCode = "not_found"
@@ -10220,14 +10202,6 @@ type SessionShowMessage struct {
 	SessionID string `json:"session_id"`
 }
 
-type SessionShowRequestedMessage struct {
-	// Event corresponds to the JSON schema field "event".
-	Event string `json:"event"`
-
-	// SessionID corresponds to the JSON schema field "session_id".
-	SessionID string `json:"session_id"`
-}
-
 type SessionShowResult struct {
 	// Entry corresponds to the JSON schema field "entry".
 	Entry SessionLedgerEntry `json:"entry"`
@@ -10572,9 +10546,6 @@ type SpawnResultMessage struct {
 
 	// PaneID corresponds to the JSON schema field "pane_id".
 	PaneID *string `json:"pane_id,omitempty,omitzero"`
-
-	// PlacementError corresponds to the JSON schema field "placement_error".
-	PlacementError *string `json:"placement_error,omitempty,omitzero"`
 
 	// Success corresponds to the JSON schema field "success".
 	Success bool `json:"success"`

@@ -3,6 +3,7 @@ import { describe, expect, it } from 'vitest';
 import { gesture, pressShortcut, renderApp } from './test/renderApp';
 import { defaultProfile, emptyDesktop, crewMember, daemonSession, soloDesktop } from './test/daemonFixtures';
 import { savedSettings, serveSettings } from './test/settings';
+import { openSession } from './test/appFixtures';
 import { LaunchDesktopKind, LaunchDesktopMode, MigrationPhase } from './types/generated';
 
 const crewItem = (id: string): NonNullable<import('./test/protocol').EventMessage<'launch_desktop_result'>['item']> => ({ kind: LaunchDesktopKind.Crew, item_id: id, name: id, profile_id: 'default', confirmed: false, setting: { mode: LaunchDesktopMode.Own, desktop_name: id, destination_id: id, label: `${id} (no ⌘ number)`, pending: true } });
@@ -67,15 +68,6 @@ describe('launch desktops', () => {
     expect(screen.queryByRole('dialog', { name: 'Manage crew' })).not.toBeInTheDocument();
   });
 
-  it('shows a requested agent while leaving background arrangements alone', async () => {
-    const { daemon } = await renderApp({ initialState: { crew: [crewMember('alder')], sessions: [daemonSession('s1')], desktops: [soloDesktop('s1')] } });
-    await gesture(daemon, () => fireEvent.click(screen.getByTestId('manage-crew')));
-    await daemon.emit({ event: 'session_show_requested', session_id: 's1' });
-    await daemon.idle();
-    expect(screen.queryByRole('dialog', { name: 'Manage crew' })).not.toBeInTheDocument();
-    expect(daemon.sentOf('desktop_show_session').map(({ session_id }) => session_id)).toEqual(['s1']);
-  });
-
   it.each([
     ['agent palette', 'ui.actionMenu', 'Agents'],
     ['command palette', 'ui.commandPalette', 'Commands'],
@@ -127,18 +119,14 @@ describe('launch desktops', () => {
     expect(screen.getByText('✓ Done')).toBeInTheDocument();
   });
 
-  it('preserves a snooze chooser across requested selection and dismisses it for a toast action', async () => {
+  it('dismisses a snooze chooser for a toast action', async () => {
     const { daemon } = await renderApp({ initialState: {
       settings: { queue_mode_enabled: 'true' },
       sessions: ['s1', 's2'].map((id) => daemonSession(id, { state: 'idle', turn_owed: true })),
       desktops: ['s1', 's2'].map((id) => soloDesktop(id)),
     } });
-    await daemon.emit({ event: 'session_show_requested', session_id: 's1' });
-    await daemon.idle();
+    await openSession(daemon, 's1');
     await gesture(daemon, () => pressShortcut('session.snooze'));
-    expect(screen.getByRole('menu', { name: 'Snooze s1' })).toBeInTheDocument();
-    await daemon.emit({ event: 'session_show_requested', session_id: 's2' });
-    await daemon.idle();
     expect(screen.getByRole('menu', { name: 'Snooze s1' })).toBeInTheDocument();
     await daemon.emit({ event: 'background_launch', session_id: 's1', profile_id: 'profile-default', desktop_id: 'review', name: 'Keel', requested_by: 'Alder', desktop_label: 'Review', kind: LaunchDesktopKind.Crew });
     await daemon.idle();
