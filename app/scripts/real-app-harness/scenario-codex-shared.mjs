@@ -7,10 +7,12 @@ import { DaemonObserver } from './daemonObserver.mjs';
 import { createScenarioRunner } from './scenarioRunner.mjs';
 import { waitForPaneText } from './scenarioAssertions.mjs';
 import { writeMockAgentFixture } from './mockAgent.mjs';
+import { createWindowDriver } from './platform.mjs';
 
 const options = parseCommonArgs(process.argv.slice(2));
 const runner = createScenarioRunner(options, { scenarioId: 'CODEX-SHARED', tier: 'tier2-local-mock-agent', prefix: 'scenario-codex-shared' });
 const client = new UiAutomationClient(options);
+const driver = createWindowDriver({ appPath: options.appPath, client });
 const observer = new DaemonObserver({ wsUrl: options.wsUrl });
 const owners = [];
 const panes = new Map();
@@ -74,6 +76,7 @@ try {
   });
   await runner.step('ledger_attach_focuses_the_new_view', async () => {
     await client.request('dispatch_shortcut', { shortcutId: 'sessions.open' });
+    await client.request('dom_wait', { selector: `.ledger-row[data-row-key="${a}"]`, timeoutMs: observer.connectTimeoutMs });
     await client.request('sessions_row_action', { sessionId: a, action: 'Open another view' });
     const second = await observer.waitFor(() => [...observer.layoutsByWorkspaceId.values()].flatMap(layout => layout.panes || []).find(pane => pane.session_id === a && pane.runtime_id !== a && pane.codex_resolution === 'resolved'), 'second native A view');
     panes.set(second.runtime_id, second);
@@ -106,6 +109,22 @@ try {
     await waitForPaneText(client, a, paneA.pane_id, text => text.includes('approved exo'), 'approval reply in original view');
     await recordedReply;
     await closePane(observer.sessionsById.get(a).workspace_id, attached.pane_id);
+  });
+  await runner.step('owner_usage_agrees_with_live_and_ledger_surfaces', async () => {
+    const owner = await observer.waitFor(() => observer.getSession(a)?.usage?.total_tokens > 0 && observer.getSession(a), 'owner usage after approval');
+    const shown = await request('session_show', 'session_show_result', { session_id: a });
+    runner.assert(JSON.stringify(shown.entry.usage) === JSON.stringify(owner.usage), 'ledger usage differs from live owner', { shown, owner });
+    await client.request('dispatch_shortcut', { shortcutId: 'sessions.open' });
+    await client.request('dom_wait', { selector: `.ledger-row[data-row-key="${a}"]`, timeoutMs: observer.connectTimeoutMs });
+    await client.request('dom_click', { selector: `.ledger-row[data-row-key="${a}"]` });
+    await client.request('dom_wait', { selector: `.ledger-inspector [data-testid="session-usage-${a}"]`, timeoutMs: observer.connectTimeoutMs });
+    await client.request('dom_click', { selector: `.ledger-inspector [data-testid="session-usage-${a}"]` });
+    await client.request('dom_wait', { selector: '[aria-label="Session usage breakdown"]', timeoutMs: observer.connectTimeoutMs });
+    const detail = await client.request('dom_text', { selector: '[aria-label="Session usage breakdown"]' });
+    await driver.screenshot(path.join(runner.runDir, 'owner-cost-inspector.png'), { windowId: await driver.mainWindowId() });
+    runner.assert(detail.text.includes(owner.usage.total_tokens.toLocaleString('en-US') + ' tokens'), 'ledger breakdown omits owner tokens', { detail, owner });
+    await client.request('dom_key', { selector: '[aria-label="Session usage breakdown"]', key: 'Escape' });
+    await client.request('dom_key', { selector: '[aria-label="Sessions and worktrees"]', key: 'Escape' });
   });
   await runner.step('annotation_editor_keeps_A_when_native_view_switches_to_B', async () => {
     const messages = await request('session_messages_get', 'session_messages_get_result', { session_id: a });
@@ -158,6 +177,7 @@ try {
     await client.request('dom_click', { selector: `[data-testid="queue-${queue.turns.some(row => row.id === b) ? 'turn' : 'settled'}-${b}"] .queue-row-select` });
     await client.request('dom_wait', { selector: `[data-session-terminal-workspace="${destination}"][data-session-visible="1"]`, timeoutMs: observer.connectTimeoutMs });
     await client.request('set_setting', { key: 'queue_mode_enabled', value: 'false' });
+    await client.request('dom_wait', { selector: `[data-testid="sidebar-session-${b}"]`, timeoutMs: observer.connectTimeoutMs });
     const tree = await client.request('queue_get_state');
     runner.assert(tree.treeSessionIds.filter(id => id === b).length === 1, 'moved owner has a phantom source row', tree);
     await client.request('focus_pane', { sessionId: a, paneId: paneA.pane_id });

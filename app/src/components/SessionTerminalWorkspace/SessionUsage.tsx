@@ -36,11 +36,12 @@ function usageBadge(usage: SessionUsage): string {
   return formatCompactTokens(usage.total_tokens);
 }
 
-export function HeaderSessionUsage({ usage, sessionId, pinned, onPopoverClosed }: {
+export function HeaderSessionUsage({ usage, sessionId, pinned, onPopoverClosed, popoverClassName }: {
   usage?: SessionUsage;
   sessionId: string;
   pinned: boolean;
   onPopoverClosed: () => void;
+  popoverClassName?: string;
 }) {
   const popover = useAnchoredPopover(pinned, onPopoverClosed);
   if (!usage || usage.measurement_incomplete || usage.total_tokens <= 0 || usage.models.length === 0) {
@@ -89,6 +90,7 @@ export function HeaderSessionUsage({ usage, sessionId, pinned, onPopoverClosed }
           anchor={popover.anchor}
           anchorRef={popover.anchorRef}
           pinned={popover.pinned}
+          className={popoverClassName}
           onClose={popover.close}
           onPointerEnter={popover.cancelClose}
           onPointerLeave={popover.scheduleClose}
@@ -98,7 +100,7 @@ export function HeaderSessionUsage({ usage, sessionId, pinned, onPopoverClosed }
   );
 }
 
-function SessionUsagePopover({ usage, anchor, anchorRef, pinned, onClose, onPointerEnter, onPointerLeave }: {
+function SessionUsagePopover({ usage, anchor, anchorRef, pinned, onClose, onPointerEnter, onPointerLeave, className }: {
   usage: SessionUsage;
   anchor: { top: number; right: number };
   anchorRef: RefObject<HTMLElement | null>;
@@ -106,6 +108,7 @@ function SessionUsagePopover({ usage, anchor, anchorRef, pinned, onClose, onPoin
   onClose: () => void;
   onPointerEnter: () => void;
   onPointerLeave: () => void;
+  className?: string;
 }) {
   const containerRef = useRef<HTMLDivElement>(null);
   const [position, setPosition] = useState<{ top: number; left: number } | null>(null);
@@ -153,7 +156,7 @@ function SessionUsagePopover({ usage, anchor, anchorRef, pinned, onClose, onPoin
   const content = (
     <div
       ref={containerRef}
-      className="session-usage-popover"
+      className={`session-usage-popover${className ? ` ${className}` : ''}`}
       role="dialog"
       aria-label="Session usage breakdown"
       tabIndex={-1}

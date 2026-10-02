@@ -8,6 +8,7 @@ import (
 	"net/http"
 	"os"
 	"os/exec"
+	"path/filepath"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -17,15 +18,16 @@ import (
 )
 
 type sharedFakeCodex struct {
-	cfg           config
-	mu            sync.Mutex
-	roots         map[string]*sharedFakeRoot
-	peers         map[*websocket.Conn]bool
-	control       *websocket.Conn
-	archiveError  bool
-	archiveErrors map[string]bool
-	rejectedStart atomic.Bool
-	rejectedInput atomic.Bool
+	cfg                config
+	mu                 sync.Mutex
+	roots              map[string]*sharedFakeRoot
+	peers              map[*websocket.Conn]bool
+	control            *websocket.Conn
+	archiveError       bool
+	archiveErrors      map[string]bool
+	rejectedStart      atomic.Bool
+	rejectedInput      atomic.Bool
+	controlUnavailable atomic.Bool
 }
 type sharedFakeRoot struct {
 	c            *codex
@@ -37,6 +39,8 @@ type sharedFakeRoot struct {
 	approval     atomic.Bool
 	failed       atomic.Bool
 	snapshotOnly atomic.Bool
+	archiveUsage string
+	livePath     string
 }
 
 func runSharedCodexServer(cfg config) int {
@@ -86,13 +90,6 @@ func (s *sharedFakeCodex) serve(w http.ResponseWriter, req *http.Request) {
 		}
 		if m.Method == "initialized" {
 			continue
-		}
-		if m.Method == "initialize" {
-			s.mu.Lock()
-			if s.control == nil {
-				s.control = conn
-			}
-			s.mu.Unlock()
 		}
 		if m.Method == "" && len(m.Result) > 0 {
 			var rootID string
@@ -165,6 +162,15 @@ func (s *sharedFakeCodex) handle(conn *websocket.Conn, m codexshared.Message) (a
 		s.mu.Unlock()
 		return map[string]any{}, nil
 	case "initialize":
+		s.mu.Lock()
+		if s.controlUnavailable.Load() {
+			s.mu.Unlock()
+			return nil, fmt.Errorf("fixture native control unavailable")
+		}
+		if s.control == nil {
+			s.control = conn
+		}
+		s.mu.Unlock()
 		return map[string]any{}, nil
 	case "thread/start", "thread/fork":
 		if m.Method == "thread/start" && os.Getenv("ATTN_FAKE_CODEX_REJECT_INITIAL_START_ONCE") == "1" && !s.rejectedStart.Swap(true) {
@@ -191,16 +197,43 @@ func (s *sharedFakeCodex) handle(conn *websocket.Conn, m codexshared.Message) (a
 		for key, value := range cfg.ShellEnvironmentPolicy.Set {
 			c.hooks.env = withEnv(c.hooks.env, key, value)
 		}
-		root := &sharedFakeRoot{c: c, owner: cfg.ShellEnvironmentPolicy.Set["ATTN_SESSION_ID"]}
+		root := &sharedFakeRoot{c: c, owner: cfg.ShellEnvironmentPolicy.Set["ATTN_SESSION_ID"], livePath: c.transcript}
 		if root.owner == "" {
 			return nil, fmt.Errorf("shared root missing owner config")
 		}
 		a := &agent{term: c.term, conv: c, prompts: make(chan promptSubmission, 16)}
 		root.a = a
 		control, err := dialControl(s.cfg, func(peer *rpcPeer, method string, params json.RawMessage) (any, error) {
+			if method == "usage_on_archive" {
+				var input textParams
+				if err := json.Unmarshal(params, &input); err != nil {
+					return nil, err
+				}
+				root.a.turn.Lock()
+				root.archiveUsage = input.Text
+				root.a.turn.Unlock()
+				return struct{}{}, nil
+			}
+			if method == "broadcast_usage" {
+				s.broadcast("thread/tokenUsage/updated", map[string]any{"threadId": c.conversation, "turnId": c.turnID, "tokenUsage": map[string]any{"total": map[string]any{"totalTokens": 999}, "last": map[string]any{"totalTokens": 999}}})
+				return struct{}{}, nil
+			}
 			if method == "native_snapshots_only" {
 				root.snapshotOnly.Store(true)
 				return struct{}{}, nil
+			}
+			if method == "control_available" {
+				var input struct {
+					Available bool `json:"available"`
+				}
+				if err := json.Unmarshal(params, &input); err != nil {
+					return nil, err
+				}
+				s.controlUnavailable.Store(!input.Available)
+				if input.Available {
+					return struct{}{}, nil
+				}
+				method = "disconnect_control"
 			}
 			if method == "disconnect_control" {
 				s.mu.Lock()
@@ -305,11 +338,42 @@ func (s *sharedFakeCodex) handle(conn *websocket.Conn, m codexshared.Message) (a
 			}
 			root.archived = true
 			s.mu.Unlock()
+			root.a.turn.Lock()
+			if root.archiveUsage != "" {
+				if err := appendLines(root.c.transcript, root.c.usageLines(root.archiveUsage)...); err != nil {
+					root.a.turn.Unlock()
+					return nil, err
+				}
+				root.archiveUsage = ""
+			}
 			_ = root.c.halt()
+			archivedPath := filepath.Join(filepath.Dir(root.c.sessionsDir()), "archived_sessions", filepath.Base(root.c.transcript))
+			if err := os.MkdirAll(filepath.Dir(archivedPath), 0o755); err != nil {
+				root.a.turn.Unlock()
+				return nil, err
+			}
+			if root.c.transcript != archivedPath {
+				if err := os.Rename(root.c.transcript, archivedPath); err != nil {
+					root.a.turn.Unlock()
+					return nil, err
+				}
+				root.c.transcript = archivedPath
+			}
+			root.a.turn.Unlock()
+			root.active.Store(false)
 			s.broadcast("thread/archived", map[string]any{"threadId": p.ThreadID})
 			return map[string]any{}, nil
 		}
 		if m.Method == "thread/unarchive" {
+			root.a.turn.Lock()
+			if root.c.transcript != root.livePath {
+				if err := os.Rename(root.c.transcript, root.livePath); err != nil {
+					root.a.turn.Unlock()
+					return nil, err
+				}
+				root.c.transcript = root.livePath
+			}
+			root.a.turn.Unlock()
 			root.archived = false
 			return map[string]any{}, nil
 		}

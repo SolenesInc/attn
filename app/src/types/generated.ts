@@ -7512,6 +7512,7 @@ export interface Entry {
     main_repo?:              string;
     repository?:             string;
     state:                   SessionState;
+    usage?:                  Usage;
     workspace_id:            string;
     [property: string]: any;
 }
@@ -8844,6 +8845,7 @@ export interface SessionLedgerEntry {
     main_repo?:              string;
     repository?:             string;
     state:                   SessionState;
+    usage?:                  Usage;
     workspace_id:            string;
     [property: string]: any;
 }
@@ -20771,6 +20773,7 @@ const typeMap: any = {
         { json: "main_repo", js: "main_repo", typ: u(undefined, "") },
         { json: "repository", js: "repository", typ: u(undefined, "") },
         { json: "state", js: "state", typ: r("SessionState") },
+        { json: "usage", js: "usage", typ: u(undefined, r("Usage")) },
         { json: "workspace_id", js: "workspace_id", typ: "" },
     ], "any"),
     "Facets": o([
@@ -21645,6 +21648,7 @@ const typeMap: any = {
         { json: "main_repo", js: "main_repo", typ: u(undefined, "") },
         { json: "repository", js: "repository", typ: u(undefined, "") },
         { json: "state", js: "state", typ: r("SessionState") },
+        { json: "usage", js: "usage", typ: u(undefined, r("Usage")) },
         { json: "workspace_id", js: "workspace_id", typ: "" },
     ], "any"),
     "SessionLedgerFacet": o([

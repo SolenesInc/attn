@@ -24,6 +24,10 @@
   -webkit-font-smoothing: antialiased;
 }
 
+.session-usage-popover.ledger-usage-popover {
+  z-index: 401;
+}
+
 @keyframes ledger-fade {
   from { opacity: 0; }
   to { opacity: 1; }

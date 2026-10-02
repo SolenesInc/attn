@@ -148,6 +148,9 @@ func (d *Daemon) resolveExactTranscriptPathForWatcher(w *transcriptWatcher) stri
 		if path == "" {
 			continue
 		}
+		if d.sharedCodexOwner(w.sessionID) {
+			path = transcript.ResolveCodexRolloutPath(path)
+		}
 		if _, err := os.Stat(path); err == nil {
 			return path
 		}
@@ -343,7 +346,7 @@ func (d *Daemon) restoreTranscriptWatchers() {
 		if session == nil || session.Agent == protocol.SessionAgentShell {
 			continue
 		}
-		if _, ok := live[session.ID]; !ok {
+		if _, ok := live[session.ID]; !ok && !d.sharedCodexOwner(session.ID) {
 			continue
 		}
 		binding := d.store.GetSessionConversation(session.ID)

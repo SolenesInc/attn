@@ -133,6 +133,10 @@ func (d *Daemon) rebindTranscriptWatcherForConversation(event bus.Event) {
 	if err := event.Decode(&observation); err != nil {
 		d.logf("agent conversation: decode fact for session %s: %v", event.Subject, err)
 	}
+	if d.sharedCodexOwner(session.ID) {
+		d.ensureTranscriptWatcherAtPath(session.ID, observation.TranscriptPath)
+		return
+	}
 	d.startTranscriptWatcherAtPath(
 		session.ID,
 		session.Agent,

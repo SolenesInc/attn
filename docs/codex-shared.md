@@ -89,8 +89,9 @@ and reports failure rather than selecting another installation.
 explicit close
   lock view/attach/title coordination
   another resolved view of this owner -> remove requested runtime only
-  last resolved view -> native thread/archive
-    await transcript watcher's final available-record reconciliation
+  last resolved view -> drain transcript watcher
+    native thread/archive
+    reconcile final available transcript records
     atomically save archived owner and closed ledger
     release native turn state and publish closed owner
   remove requested runtime and view
@@ -118,8 +119,50 @@ archiving foreign owners. Native archive and runtime removal must succeed before
 ledger finalization. Cleanup failures name the owner and let the caller retry
 deletion of the already-removed path; the removal audit remains recorded.
 
-Final accounting guarantees and naming reconciliation have separate follow-up
-work. They use these owner/view contracts and the same awaited close pipeline.
+Naming reconciliation has separate follow-up work using these owner/view contracts.
+
+## Accounting
+
+Each owner has one bound transcript watcher and the existing persisted usage
+source cursors. Tracking initializes before initial creation or native New/fork;
+binding the native path never baselines away the first turn. Hidden owners retain
+their watcher across switches, attachments and daemon restart. Native child and
+guardian usage keeps its existing root attribution. Native token broadcasts are
+observations and never add per-view usage to the ledger.
+
+Final close drains the watcher before archive moves its rollout, then reconciles
+the bound source from its persisted cursor before saving the closed row. Tracking
+resumes after the move until final close succeeds, so a failed view cleanup or
+ledger close keeps the open owner observable, including after restart. An archive
+failure restores the watcher. This also covers a close before the watcher's first
+poll. Records available at reconciliation are included, with the existing
+model/cache/pricing policy. Native archive has no demonstrated disk-flush guarantee;
+records arriving afterward are outside this settlement guarantee. Native server
+exit marks open owners' measurement incomplete, including owners with no usage yet.
+
+Live headers, the ledger inspector, `session show` and `session list --json` read
+the same usage ledger. Reopen retains its source history and resumes its cursors;
+repeated reads, views and native notifications cannot multiply usage. The inspector
+names incomplete measurement and reuses the live header's model breakdown for
+complete measurements. Ledger page reads retain newer live and close events received
+while the request is pending, including filter removals. Updated rows follow the
+daemon’s timestamp and ID ordering. Older-page requests use the last displayed
+row because the daemon resolves cursor IDs against their current timestamps.
+Price and billed-as setting changes refresh open ledger views, including closed
+rows and their displayed model breakdown.
+
+Stock Codex 0.159.3 moves a root rollout into `archived_sessions` before archive
+success. The usage resolver follows this relocation, retains the original dated
+live path as root source identity, and discovers native children in both trees.
+Unarchive restores that same live path, so the saved cursor remains valid.
+
+Archive discovery retains only this owner's matched descendants and partial
+metadata awaiting completion. It scans on first discovery, archive directory
+membership changes, or expanded descendant lineage; unchanged reconciliation
+checks the directory stamp and retained sources. A failed metadata read does not
+certify the scan. Cold and membership-change scans still read archive metadata
+to recover parent links. Native filenames use local wall time, so creation-date
+cutoffs would lose valid children across clock changes.
 
 ## Attention and input
 

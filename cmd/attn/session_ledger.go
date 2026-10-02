@@ -348,6 +348,19 @@ func fprintSessionShow(w io.Writer, result protocol.SessionShowResult) {
 	}
 	fmt.Fprintf(w, "workspace  %s\n", orDash(entry.WorkspaceID))
 	fmt.Fprintf(w, "last seen  %s\n", shortStamp(entry.LastSeen))
+	if usage := entry.Usage; usage != nil {
+		fmt.Fprintf(w, "usage      %d tokens", usage.TotalTokens)
+		if usage.CostUsd != nil {
+			fmt.Fprintf(w, ", $%.6f", *usage.CostUsd)
+		}
+		if usage.HasUnpricedUsage {
+			fmt.Fprint(w, ", some usage has no price")
+		}
+		if protocol.Deref(usage.MeasurementIncomplete) {
+			fmt.Fprint(w, ", measurement incomplete")
+		}
+		fmt.Fprintln(w)
+	}
 	if closedAt := protocol.Deref(entry.ClosedAt); closedAt != "" {
 		fmt.Fprintf(w, "closed     %s by %s\n", shortStamp(closedAt), orDash(protocol.Deref(entry.ClosedBy)))
 		if reason := strings.TrimSpace(protocol.Deref(entry.CloseReason)); reason != "" {

@@ -3,6 +3,7 @@ import type {
   SessionLedgerFacets,
   SessionReopen,
   SessionReopenResult,
+  Session,
 } from '../types/generated';
 import { reopenVerdictView } from '../components/sessionsLedger';
 import type { ReopenVerdictView } from '../components/sessionsLedger';
@@ -39,10 +40,13 @@ export class SessionReopenRefusal extends Error {
   }
 }
 
-export type SessionLedgerUpdate = { type: 'closed'; entry: SessionLedgerEntry };
+export type SessionLedgerUpdate =
+  | { type: 'closed'; entry: SessionLedgerEntry }
+  | { type: 'live'; session: Session };
 
 export type SessionLedgerConnectionEvent =
   | { type: 'connection'; connected: boolean; connectionGeneration: number }
+  | { type: 'invalidate'; connectionGeneration: number }
   | (SessionLedgerUpdate & { connectionGeneration: number });
 
 export interface SessionLedgerEventContext {

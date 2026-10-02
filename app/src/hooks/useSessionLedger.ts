@@ -5,6 +5,7 @@ import type {
   SessionLedgerConnectionEvent,
   SessionLedgerPage,
   SessionLedgerQuery,
+  SessionLedgerUpdate,
 } from './daemonSessionLedgerEvents';
 import {
   customSessionRange,
@@ -111,18 +112,58 @@ export function closeBelongsInView(
   return true;
 }
 
-function applyClose(
+function applyUpdate(
   entries: SessionLedgerEntry[],
-  entry: SessionLedgerEntry,
+  event: SessionLedgerUpdate,
   filters: SessionLedgerFilters,
   at: Date,
 ): SessionLedgerEntry[] {
-  if (!entries.some((row) => row.id === entry.id)) {
-    return closeBelongsInView(entry, filters, at) ? [entry, ...entries] : entries;
+  let updated: SessionLedgerEntry;
+  if (event.type === 'closed') {
+    updated = event.entry;
+  } else {
+    const session = event.session;
+    const entry = entries.find((row) => row.id === session.id);
+    const { closed_at: _at, closed_by: _by, close_reason: _reason, ...open } = entry ?? {};
+    updated = { ...open, id: session.id, agent: session.agent, codex_mode: session.codex_mode,
+      label: session.label, state: session.state,
+      last_seen: session.last_seen, usage: session.usage, directory: session.directory,
+      workspace_id: session.workspace_id, repository: session.repository, branch: session.branch,
+      main_repo: session.main_repo, is_worktree: session.is_worktree };
   }
-  return filters.scope === 'live'
-    ? entries.filter((row) => row.id !== entry.id)
-    : entries.map((row) => (row.id === entry.id ? entry : row));
+  const remaining = entries.filter((row) => row.id !== updated.id);
+  const belongs = event.type === 'closed'
+    ? closeBelongsInView(updated, filters, at)
+    : filters.scope !== 'closed' && closeBelongsInView(updated, { ...filters, scope: 'all' }, at);
+  if (!belongs) return remaining;
+  return sortEntries([...remaining, updated]);
+}
+
+function sortEntries(entries: SessionLedgerEntry[]): SessionLedgerEntry[] {
+  return [...entries].sort((a, b) => {
+    const left = ledgerInstant(a);
+    const right = ledgerInstant(b);
+    return left < right ? 1 : left > right ? -1 : a.id < b.id ? 1 : a.id > b.id ? -1 : 0;
+  });
+}
+
+type ReadUpdates = Map<string, SessionLedgerUpdate>;
+
+function overlayUpdates(entries: SessionLedgerEntry[], updates: ReadUpdates, filters: SessionLedgerFilters, at: Date) {
+  for (const update of updates.values()) entries = applyUpdate(entries, update, filters, at);
+  return sortEntries(entries);
+}
+
+function missingUpdateFacets(facets: SessionLedgerFacets | null | undefined, updates: Iterable<SessionLedgerUpdate>, filters: SessionLedgerFilters, at: Date): boolean {
+  if (!facets) return false;
+  for (const event of updates) {
+    // Facet queries follow scope and time but ignore location filters.
+    const [entry] = applyUpdate([], event, { ...filters, workspaceId: '', repository: '' }, at);
+    if (!entry) continue;
+    if (entry.workspace_id && !facets.workspaces.some((facet) => facet.value === entry.workspace_id)) return true;
+    if (entry.repository && !facets.repositories.some((facet) => facet.value === entry.repository)) return true;
+  }
+  return false;
 }
 
 interface LedgerRead {
@@ -144,6 +185,10 @@ export function useSessionLedger({
 }: UseSessionLedgerOptions): SessionLedgerView {
   const [filters, setFilters] = useState<SessionLedgerFilters>(initialFilters);
   const [read, setRead] = useState<LedgerRead>(NO_READ);
+  const facetsRef = useRef(read.facets);
+  useEffect(() => {
+    facetsRef.current = read.facets;
+  }, [read.facets]);
   const [omitted, setOmitted] = useState(0);
   const [nextBefore, setNextBefore] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
@@ -152,6 +197,7 @@ export function useSessionLedger({
   const [lifecycle, setLifecycle] = useState({ connected: false, generation: 0 });
   const lifecycleRef = useRef(lifecycle);
   const readEpoch = useRef(0);
+  const pendingUpdates = useRef<ReadUpdates | null>(null);
   const loadingMore = loadingMoreRead !== null;
 
   const filtersRef = useRef(filters);
@@ -170,6 +216,7 @@ export function useSessionLedger({
           : next);
         if (!event.connected) {
           readEpoch.current += 1;
+          pendingUpdates.current = null;
           setLoading(false);
           setLoadingMoreRead(null);
         }
@@ -177,9 +224,18 @@ export function useSessionLedger({
       }
       if (!lifecycleRef.current.connected
         || event.connectionGeneration !== lifecycleRef.current.generation) return;
-      const entry = event.entry;
-      const at = now();
-      setRead((current) => ({ ...current, entries: applyClose(current.entries, entry, filtersRef.current, at) }));
+      if (event.type === 'invalidate') {
+        readEpoch.current += 1;
+        pendingUpdates.current = null;
+        setReloadNonce((n) => n + 1);
+        return;
+      }
+      const id = event.type === 'live' ? event.session.id : event.entry.id;
+      pendingUpdates.current?.set(id, event);
+      if (!pendingUpdates.current && missingUpdateFacets(facetsRef.current, [event], filtersRef.current, now())) {
+        setReloadNonce((n) => n + 1);
+      }
+      setRead((current) => ({ ...current, entries: applyUpdate(current.entries, event, filtersRef.current, now()) }));
     });
   }, [connection.subscribe, enabled, now]);
 
@@ -196,6 +252,7 @@ export function useSessionLedger({
 
   useEffect(() => {
     const epoch = ++readEpoch.current;
+    pendingUpdates.current = null;
     setLoadingMoreRead(null);
     setNextBefore(null);
     setOmitted(0);
@@ -209,12 +266,15 @@ export function useSessionLedger({
     }
     const generation = lifecycle.generation;
     const superseded = () => epoch !== readEpoch.current || generation !== lifecycleRef.current.generation;
+    const updates: ReadUpdates = new Map();
+    pendingUpdates.current = updates;
     setLoading(true);
     setRead((current) => (current.query === queryKey ? { ...current, error: null } : current));
     connection.list({ ...(query as SessionLedgerQuery), limit: pageSize })
       .then((page) => {
         if (superseded()) return;
-        setRead({ query: queryKey, entries: page.entries ?? [], facets: page.facets ?? null, error: null });
+        setRead({ query: queryKey, entries: overlayUpdates(page.entries ?? [], updates, filtersRef.current, now()), facets: page.facets ?? null, error: null });
+        if (missingUpdateFacets(page.facets, updates.values(), filtersRef.current, now())) setReloadNonce((n) => n + 1);
         setOmitted(page.omitted ?? 0);
         setNextBefore(page.next_before ?? null);
       })
@@ -225,9 +285,11 @@ export function useSessionLedger({
           : { ...NO_READ, query: queryKey, error: failure.message }));
       })
       .finally(() => {
+        if (pendingUpdates.current === updates) pendingUpdates.current = null;
         if (epoch === readEpoch.current) setLoading(false);
       });
     return () => {
+      if (pendingUpdates.current === updates) pendingUpdates.current = null;
       if (readEpoch.current === epoch) readEpoch.current += 1;
     };
   }, [enabled, query, queryKey, filterError, connection.list, lifecycle, pageSize, reloadNonce]);
@@ -235,18 +297,23 @@ export function useSessionLedger({
   const reload = useCallback(() => setReloadNonce((n) => n + 1), []);
 
   const loadMore = useCallback(() => {
-    if (!nextBefore || loading || loadingMore || filterError || !lifecycleRef.current.connected) return;
+    if (pendingUpdates.current || !nextBefore || loading || loadingMore || filterError || !lifecycleRef.current.connected) return;
+    const before = read.entries[read.entries.length - 1]?.id ?? nextBefore;
     const epoch = readEpoch.current;
     const generation = lifecycleRef.current.generation;
     const token = {};
+    const updates: ReadUpdates = new Map();
+    pendingUpdates.current = updates;
     const superseded = () => epoch !== readEpoch.current || generation !== lifecycleRef.current.generation;
     setLoadingMoreRead(token);
-    connection.list({ ...(sessionLedgerQuery(filtersRef.current, now()) as SessionLedgerQuery), limit: pageSize, before: nextBefore })
+    connection.list({ ...(sessionLedgerQuery(filtersRef.current, now()) as SessionLedgerQuery), limit: pageSize, before })
       .then((page) => {
         if (superseded()) return;
+        const snapshot = new Map(updates);
+        if (missingUpdateFacets(facetsRef.current, snapshot.values(), filtersRef.current, now())) setReloadNonce((n) => n + 1);
         setRead((current) => {
           const present = new Set(current.entries.map((entry) => entry.id));
-          return { ...current, entries: [...current.entries, ...(page.entries ?? []).filter((entry) => !present.has(entry.id))] };
+          return { ...current, entries: overlayUpdates([...current.entries, ...(page.entries ?? []).filter((entry) => !present.has(entry.id))], snapshot, filtersRef.current, now()) };
         });
         setOmitted(page.omitted ?? 0);
         setNextBefore(page.next_before ?? null);
@@ -255,9 +322,10 @@ export function useSessionLedger({
         if (epoch === readEpoch.current) setRead((current) => ({ ...current, error: failure.message }));
       })
       .finally(() => {
+        if (pendingUpdates.current === updates) pendingUpdates.current = null;
         setLoadingMoreRead((current) => current === token ? null : current);
       });
-  }, [nextBefore, loading, loadingMore, filterError, connection.list, pageSize, now]);
+  }, [nextBefore, read.entries, loading, loadingMore, filterError, connection.list, pageSize, now]);
 
   const { entries, facets, error } = read.query === queryKey ? read : NO_READ;
 

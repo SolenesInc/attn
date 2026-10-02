@@ -15,6 +15,7 @@ const (
 	crashAfterWorktreeOwned         = "delegation-worktree-owned"
 	crashAfterGardenAdvice          = "garden-advice-received"
 	crashAfterCodexReservation      = "codex-launch-reserved"
+	crashAfterCodexNativeArchive    = "codex-owner-native-archived"
 	crashAfterCodexClosePersisted   = "codex-owner-close-persisted"
 	crashAfterCodexAttachView       = "codex-attach-view-persisted"
 	crashAfterCodexViewRemoved      = "codex-view-removed"

@@ -76,7 +76,7 @@ describe('App sessions ledger', () => {
     expect(view.queries()).toHaveLength(2);
     expect(olderButton()).toBeNull();
 
-    await view.release(0, page({ entries: [closedEntry('s1')], omitted: 1, next_before: 'newer' }));
+    await view.release(0, page({ entries: [closedEntry('newer')], omitted: 1, next_before: 'newer' }));
     fireEvent.click(olderButton()!);
     await view.daemon.idle();
 

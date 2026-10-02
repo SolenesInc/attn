@@ -8859,6 +8859,9 @@ type SessionLedgerEntry struct {
 	// State corresponds to the JSON schema field "state".
 	State SessionState `json:"state"`
 
+	// Usage corresponds to the JSON schema field "usage".
+	Usage *SessionUsage `json:"usage,omitempty,omitzero"`
+
 	// WorkspaceID corresponds to the JSON schema field "workspace_id".
 	WorkspaceID string `json:"workspace_id"`
 }

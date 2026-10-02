@@ -102,6 +102,7 @@ import {
 import { handleFsDaemonEvent } from './daemonFsEvents';
 import { handleSeedArtifactDaemonEvent } from './daemonSeedArtifactEvents';
 import { handleSessionLedgerDaemonEvent } from './daemonSessionLedgerEvents';
+import { SESSION_COST_PRICE_PREFIX, SESSION_COST_BILLED_AS_PREFIX } from '../components/SessionCostPriceSettings';
 import type {
   SessionLedgerConnectionEvent,
   SessionLedgerPage,
@@ -309,7 +310,7 @@ export interface RateLimitState {
 }
 
 // Protocol version - must match daemon's ProtocolVersion
-export const PROTOCOL_VERSION = '327';
+export const PROTOCOL_VERSION = '328';
 const MAX_PENDING_ATTACH_OUTPUTS = 512;
 
 const CLIENT_INSTANCE_ID =
@@ -926,7 +927,7 @@ export function useDaemonSocket({
   const [disconnectExplanation, setDisconnectExplanation] = useState<string | null>(null);
   const [connectionGeneration, setConnectionGeneration] = useState(0);
   const connectionGenerationRef = useRef(0);
-  const emitSessionLedger = useCallback((event: SessionLedgerUpdate | { type: 'connection'; connected: boolean }) => {
+  const emitSessionLedger = useCallback((event: SessionLedgerUpdate | { type: 'connection'; connected: boolean } | { type: 'invalidate' }) => {
     const stamped: SessionLedgerConnectionEvent = { ...event, connectionGeneration: connectionGenerationRef.current };
     for (const listener of sessionLedgerListenersRef.current) listener(stamped);
   }, []);
@@ -2290,6 +2291,7 @@ export function useDaemonSocket({
 
           case 'session_registered':
             if (data.session) {
+              emitSessionLedger({ type: 'live', session: data.session });
               sessionsRef.current = upsertSessionByID(sessionsRef.current, data.session);
               callbacksRef.current.onSessionsUpdate(sessionsRef.current);
             }
@@ -2326,6 +2328,7 @@ export function useDaemonSocket({
 
           case 'session_state_changed':
             if (data.session) {
+              emitSessionLedger({ type: 'live', session: data.session });
               sessionsRef.current = upsertSessionByID(sessionsRef.current, data.session);
               callbacksRef.current.onSessionsUpdate(sessionsRef.current);
             }
@@ -2374,6 +2377,10 @@ export function useDaemonSocket({
             if (data.settings) {
               settingsRef.current = data.settings;
               callbacksRef.current.onSettingsUpdate?.(data.settings);
+              if (data.success !== false && (data.changed_key?.startsWith(SESSION_COST_PRICE_PREFIX)
+                || data.changed_key?.startsWith(SESSION_COST_BILLED_AS_PREFIX))) {
+                emitSessionLedger({ type: 'invalidate' });
+              }
             }
             if (data.success === false && data.error) {
               callbacksRef.current.onSettingError?.(data.error);

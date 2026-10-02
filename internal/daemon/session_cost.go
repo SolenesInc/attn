@@ -19,7 +19,7 @@ func (d *Daemon) decorateSessionWithCost(session *protocol.Session) {
 		return
 	}
 	summary := sessioncost.Summarize(state.Ledger, d.store.GetAllSettings())
-	if !summary.HasUsage || !summary.Valid {
+	if (!summary.HasUsage && !state.MeasurementIncomplete) || !summary.Valid {
 		return
 	}
 	usage := &protocol.SessionUsage{
@@ -55,6 +55,12 @@ func (d *Daemon) decorateSessionWithCost(session *protocol.Session) {
 		usage.Models = append(usage.Models, model)
 	}
 	session.Usage = usage
+}
+
+func (d *Daemon) decorateLedgerEntryWithCost(entry *protocol.SessionLedgerEntry) {
+	session := &protocol.Session{ID: entry.ID}
+	d.decorateSessionWithCost(session)
+	entry.Usage = session.Usage
 }
 
 func isSessionCostPriceSetting(key string) bool {

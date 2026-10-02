@@ -39,6 +39,17 @@ func (r *Run) ReplyAfterStop(text string) {
 	r.call(methodReplyLate, textParams{Text: text}, nil)
 }
 
+// UsageOnArchive writes the final native usage only when archive stops the root.
+func (r *Run) UsageOnArchive(text string) {
+	r.t.Helper()
+	r.call("usage_on_archive", textParams{Text: text}, nil)
+}
+
+func (r *Run) BroadcastUsage() {
+	r.t.Helper()
+	r.call("broadcast_usage", struct{}{}, nil)
+}
+
 func (r *Run) Stream(text string) {
 	r.t.Helper()
 	r.call(methodStream, textParams{Text: text}, nil)
@@ -98,6 +109,12 @@ func (r *Run) NativeSystemError() {
 
 func (r *Run) DisconnectNativeControl() {
 	r.call("disconnect_control", nil, nil)
+}
+
+func (r *Run) SetNativeControlAvailable(available bool) {
+	r.call("control_available", struct {
+		Available bool `json:"available"`
+	}{available}, nil)
 }
 
 func (r *Run) NativeSnapshotsOnly() {

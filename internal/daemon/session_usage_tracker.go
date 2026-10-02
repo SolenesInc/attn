@@ -109,6 +109,9 @@ func (t *sessionUsageTracker) Reconcile() {
 			state.Sources[source.ID] = sourceState
 		}
 		tracked := t.sources[source.ID]
+		if tracked != nil && tracked.source.Path != source.Path {
+			tracked = nil
+		}
 		if tracked == nil {
 			tracked = &trackedUsageSource{source: source}
 			tracked.follower, err = usageFollowerAt(source.Path, t.agent, sourceState.Cursor)
