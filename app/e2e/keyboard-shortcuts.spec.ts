@@ -188,6 +188,7 @@ test.describe('Keyboard Shortcuts', () => {
       await createSession(page, daemon, { id: 's3', label: 'Third', state: 'working', cwd: '/tmp/test/s3' });
       await page.keyboard.press('Meta+g');
       await page.getByRole('button', { name: '+ New desktop' }).click();
+      await createSession(page, daemon, { id: 's4', label: 'Fourth', state: 'working', cwd: '/tmp/test/s4' });
       await expect(page.locator('.desktop-rule')).toHaveCount(2);
 
       await expect(page.locator('[data-testid="session-s1"]')).toBeVisible();

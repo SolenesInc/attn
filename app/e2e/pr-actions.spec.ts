@@ -161,33 +161,4 @@ test.describe('PR Actions', () => {
     await expect(pr70).toBeVisible();
   });
 
-  test('undo mute PR restores the PR', async ({ page, mockGitHub, startDaemonWithPRs }) => {
-    mockGitHub.addPR({
-      repo: 'test/repo',
-      number: 80,
-      title: 'Undo Test PR',
-      role: 'reviewer',
-    });
-
-    await startDaemonWithPRs();
-
-    await page.goto('/');
-
-    const prCard = page.locator('[data-testid="pr-card"]').filter({ hasText: 'Undo Test PR' });
-    await expect(prCard).toBeVisible();
-
-    await prCard.hover();
-    const muteButton = prCard.locator('[data-testid="mute-button"]');
-    await muteButton.click();
-
-    await expect(prCard).not.toBeVisible();
-
-    const undoToast = page.locator('.undo-toast');
-    await expect(undoToast).toBeVisible();
-
-    const undoButton = undoToast.locator('.toast-undo-btn');
-    await undoButton.click();
-
-    await expect(prCard).toBeVisible();
-  });
 });
