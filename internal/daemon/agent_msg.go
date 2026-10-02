@@ -80,8 +80,17 @@ func (d *Daemon) handleAgentMsg(conn net.Conn, msg *protocol.AgentMsgMessage) {
 		}
 		tender := seed.Tender()
 		if tender.Member != "" {
-			address = inbox.ToMember(tender.Member)
+			member, _, err := d.crewMember(tender.Member)
+			if err != nil {
+				d.replyAgentMsgError(conn, "seed_untended", err.Error())
+				return
+			}
+			address = inbox.ToMember(member.ID)
 		} else if tender.Session != "" {
+			if d.store.Get(tender.Session) == nil {
+				d.replyAgentMsgError(conn, "seed_untended", fmt.Sprintf("tender session %s is no longer registered; leave it on the log instead: attn seed note %s -m \"…\"", tender.Session, seed.ID))
+				return
+			}
 			address = d.inboxAddressOf(tender.Session)
 		} else {
 			_, err := d.seedTenderSession(seedID)

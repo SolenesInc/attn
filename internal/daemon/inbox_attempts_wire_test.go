@@ -297,6 +297,37 @@ func TestBusyAndApprovalBlockedInboxesKeepTheirFullAttemptBudget(t *testing.T) {
 	}
 }
 
+func TestMailForASeedTendedByAnUnregisteredMemberIsRefused(t *testing.T) {
+	inBubble(t, func(t *testing.T, w *world) {
+		cli := w.Client()
+		registerSessions(t, w, cli, "sender")
+		seed := plantSeedAs(t, cli, "sender", "review the build")
+		if _, err := cli.SeedTransition("", seed, "tend", "", "some-worker", false, client.SeedTransitionOptions{}); err != nil {
+			t.Fatal(err)
+		}
+		if sent, err := cli.AgentMsg(seed, "sender", "the deployment is ready"); client.ErrorCode(err) != "seed_untended" || !strings.Contains(err.Error(), "some-worker") {
+			t.Fatalf("seed send=%+v, error=%v; want unregistered member refusal", sent, err)
+		}
+	})
+}
+
+func TestMailForASeedWhoseTenderSessionWasRemovedIsRefused(t *testing.T) {
+	inBubble(t, func(t *testing.T, w *world) {
+		cli := w.Client()
+		registerSessions(t, w, cli, "sender", "tender")
+		seed := plantSeedAs(t, cli, "sender", "review the build")
+		if _, err := cli.SeedTransition("tender", seed, "tend", "", "", false, client.SeedTransitionOptions{}); err != nil {
+			t.Fatal(err)
+		}
+		if err := cli.Unregister("tender"); err != nil {
+			t.Fatal(err)
+		}
+		if sent, err := cli.AgentMsg(seed, "sender", "the deployment is ready"); client.ErrorCode(err) != "seed_untended" || !strings.Contains(err.Error(), "tender") {
+			t.Fatalf("seed send=%+v, error=%v; want removed tender refusal", sent, err)
+		}
+	})
+}
+
 func TestMailForAMemberTendedSeedWakesTheTender(t *testing.T) {
 	inBubbleWithAgents(t, func(t *testing.T, w *world) {
 		writeCrewCharter(t, w, "trellis")
