@@ -48,6 +48,11 @@ try {
     const text = result.text.match(/Root ([0-9a-f-]{36})/)[1]; roots.push(text);
   }
   const [a, b] = owners; const paneA = panes.get(a);
+  await runner.step('new_shared_launch_reuses_its_initial_view', async () => {
+    const allPanes = [...observer.layoutsByWorkspaceId.values()].flatMap(layout => layout.panes || []);
+    const body = await client.request('dom_text', { selector: 'body' });
+    runner.assert(allPanes.length === owners.length && !body.text.includes('Could not open the agent'), 'new shared launch tried to attach before its root existed', { allPanes, body });
+  });
   await runner.step('switch_native_owner_without_replacing_pane', async () => {
     await client.request('select_session', { sessionId: a });
     await type(a, paneA.pane_id, `/agents ${roots[1]}\r`); await resolved(a, b);

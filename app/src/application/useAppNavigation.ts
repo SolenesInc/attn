@@ -81,6 +81,12 @@ export function useAppNavigation({
   useEffect(() => {
     const id = pendingSelection?.sessionId;
     if (!id || attachingOwner.current === id || !daemonSessions.some(session => session.id === id && session.codex_mode === 'shared')) return;
+    const initialView = daemonWorkspaces.flatMap(workspace => workspace.layout?.panes ?? []).find(pane =>
+      pane.runtime_id === id && pane.codex_resolution !== 'resolved' && pane.codex_revision === '0');
+    if (initialView) {
+      selectAgentPane(id, initialView.pane_id);
+      return;
+    }
     const hasView = daemonWorkspaces.some(workspace => workspace.layout?.panes.some(pane => pane.session_id === id && pane.codex_resolution === 'resolved'));
     if (hasView) return;
     attachingOwner.current = id;

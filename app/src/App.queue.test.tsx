@@ -61,6 +61,22 @@ async function press(daemon: ScriptedDaemon, name: string) {
 }
 
 describe('App queue', () => {
+  it('focuses a new shared launch pane before its first native title without attaching again', async () => {
+    const a = agent('a', { agent: 'codex', codex_mode: 'shared', state: 'launching', turn_owed: true });
+    const source = agentWorkspace('a');
+    source.layout!.panes[0] = { ...source.layout!.panes[0], session_id: '', codex_resolution: 'unresolved', codex_revision: '0' };
+    const { daemon } = await renderApp({ initialState: { settings: QUEUE, sessions: [a], workspaces: [source] } });
+    await press(daemon, 'Open a');
+    expect(daemon.sentOf('session_reopen')).toEqual([]);
+    expect(document.querySelector('[data-pane-id="pane-a"].active')).toBeInTheDocument();
+    expect(screen.queryByRole('alert')).toBeNull();
+    const layout = source.layout!;
+    daemon.emit({ event: 'workspace_layout_updated', workspace_layout: { ...layout, panes: [{ ...layout.panes[0], session_id: 'a', codex_resolution: 'resolved', codex_revision: '1' }] } });
+    await daemon.idle();
+    expect(daemon.sentOf('session_reopen')).toEqual([]);
+    expect(document.querySelector('[data-pane-id="pane-a"].active')).toBeInTheDocument();
+  });
+
   it('exposes a hidden shared owner and attaches a view when its approval row is selected', async () => {
     const a = agent('a', { agent: 'codex', codex_mode: 'shared', state: 'pending_approval', turn_owed: true, turn_opened_at: ago(HOUR) });
     const b = agent('b', { agent: 'codex', codex_mode: 'shared' });
