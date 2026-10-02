@@ -69,6 +69,7 @@ try {
     const before = [...observer.layoutsByWorkspaceId.values()].flatMap(layout => layout.panes || []).map(pane => pane.runtime_id);
     await client.request('set_setting', { key: 'queue_mode_enabled', value: 'true' });
     await client.request('dom_wait', { selector: `[data-testid="sidebar-queue"] [data-testid$="-${id}"]`, absent: true, timeoutMs: observer.connectTimeoutMs });
+    await client.request('dom_click', { selector: `[data-pane-id="${failed.pane_id}"] .workspace-pane-header` });
     const state = await client.request('get_state');
     runner.assert(!state.activeSessionId, 'failed pane selection attributed an owner', state);
     const after = [...observer.layoutsByWorkspaceId.values()].flatMap(layout => layout.panes || []).map(pane => pane.runtime_id);
