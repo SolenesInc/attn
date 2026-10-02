@@ -306,6 +306,14 @@ func TestMailForAMemberTendedSeedWakesTheTender(t *testing.T) {
 		if _, err := cli.SeedTransition("", seed, "tend", "", "trellis", false, client.SeedTransitionOptions{}); err != nil {
 			t.Fatal(err)
 		}
+		synctest.Wait()
+		initialID := protocol.Deref(crewRosterMember(t, cli, "trellis").BindingSession)
+		initial := w.bootBubbleClaude(t, initialID)
+		initial.reply("Ready. <!-- attn:state=idle -->")
+		readInbox(t, cli, initialID, 0)
+		if _, err := cli.CrewHandoff(initialID, "Sleep before the message", false, protocol.CrewDayCloseSleep); err != nil {
+			t.Fatal(err)
+		}
 		sent := sendAgentMessage(t, cli, "sender", seed, "the deployment is ready")
 		if sent.TargetSessionID == "" || !strings.Contains(sent.Detail, "woke Trellis") {
 			t.Fatalf("seed send=%+v", sent)
@@ -313,7 +321,7 @@ func TestMailForAMemberTendedSeedWakesTheTender(t *testing.T) {
 		day := w.bootBubbleClaude(t, sent.TargetSessionID)
 		day.reply("Ready. <!-- attn:state=idle -->")
 		mail := readInbox(t, cli, day.id, 0).Items
-		if len(mail) != 2 || mail[0].Address != "member:trellis" || mail[0].Content != "the deployment is ready" || mail[1].Kind != "garden_seed" {
+		if len(mail) != 1 || mail[0].Address != "member:trellis" || mail[0].Content != "the deployment is ready" {
 			t.Fatalf("seed mail=%+v", mail)
 		}
 	})
