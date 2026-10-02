@@ -182,7 +182,7 @@ func TestASessionThatJoinsTheCrewKeepsItsTicketThreadsWithoutReplayingThem(t *te
 					dayB = w.Spawn(app, fakeagent.Claude, w.Path("day-b"))
 				} else {
 					for _, day := range []string{dayA, dayB} {
-						if err := cli.Register(day, day, w.Path(day)); err != nil {
+						if err := cli.RegisterAsMember(day, day, w.Path(day), "", ""); err != nil {
 							t.Fatal(err)
 						}
 					}
