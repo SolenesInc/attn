@@ -65,7 +65,7 @@ try {
     await client.request('dom_click', { selector: `[data-testid="queue-${queue.turns.some(row => row.id === b) ? 'turn' : 'settled'}-${b}"] .queue-row-select` });
     await client.request('dom_wait', { selector: `[data-session-terminal-workspace="${workspaceId}"][data-session-visible="1"]`, timeoutMs: observer.connectTimeoutMs });
     await client.request('set_setting', { key: 'queue_mode_enabled', value: 'false' });
-    await client.request('select_session', { sessionId: a });
+    await client.request('select_workspace', { workspaceId: observer.sessionsById.get(a).workspace_id });
   });
   await runner.step('ledger_attach_focuses_the_new_view', async () => {
     await client.request('dispatch_shortcut', { shortcutId: 'sessions.open' });
@@ -119,7 +119,6 @@ try {
     await client.request('dom_click', { selector: '.anno-panel-send' });
     runner.assert((await sent).success, 'annotation did not submit to captured owner A');
     await observer.waitFor(() => observer.getSession(a)?.state === 'waiting_input', 'A feedback completes');
-    await client.request('focus_pane', { sessionId: a, paneId: paneA.pane_id });
     await type(a, paneA.pane_id, `/agents ${roots[0]}\r`); await resolved(a, a);
   });
   await runner.step('new_session_from_an_unresolved_shared_pane', async () => {
