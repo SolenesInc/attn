@@ -1,5 +1,5 @@
 import { useMemo, useState } from 'react';
-import FocusTrap from 'focus-trap-react';
+import FocusTrap from './AppFocusTrap';
 import { useEscapeStack } from '../hooks/useEscapeStack';
 import type { DiagnosticPaneDescriptor, PendingDiagnosticCapture } from '../utils/diagnosticReport';
 import './DiagnosticReportPrompt.css';

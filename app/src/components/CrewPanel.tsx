@@ -1,4 +1,4 @@
-import FocusTrap from 'focus-trap-react';
+import FocusTrap from './AppFocusTrap';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useDaemonApi } from '../contexts/DaemonApiContext';
 import { useCrewCharterAutosave, type CrewCharterAutosave, type CrewCharterEdit } from '../hooks/useCrewCharterAutosave';

@@ -1,5 +1,5 @@
 import { useMemo, useState, type KeyboardEvent } from 'react';
-import FocusTrap from 'focus-trap-react';
+import FocusTrap from '../AppFocusTrap';
 import type { Desktop } from '../../types/generated';
 import { formatShortcut } from '../../shortcuts/formatShortcut';
 import { isChord, matchesShortcut, type ShortcutId } from '../../shortcuts/registry';
