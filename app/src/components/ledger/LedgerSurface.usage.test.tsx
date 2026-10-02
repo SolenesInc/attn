@@ -171,3 +171,17 @@ it.each(['during read', 'after read'])('paginates from the oldest displayed row 
   expect(view.queries()[1].before).toBe('newer');
   expect(document.querySelector('.ledger-row[data-row-key="older"]')).toBeInTheDocument();
 });
+
+it.each(['session_cost.price.gpt-6.1-sol', 'session_cost.billed_as.codex-auto-review'])('refreshes displayed closed costs after %s changes', async (key) => {
+  const repriced = { ...usage, cost_usd: 0.24, models: usage.models?.map((model) => ({ ...model, cost_usd: 0.24 })) };
+  const view = await openSessionsLedger(pages([
+    page({ entries: [closedEntry('cost', { usage })] }),
+    page({ entries: [closedEntry('cost', { usage: repriced })] }),
+  ]));
+  fireEvent.click(screen.getByTestId('session-usage-cost'));
+  expect(screen.getByRole('dialog', { name: 'Session usage breakdown' })).toHaveTextContent('$0.12');
+  view.daemon.emit({ event: 'settings_updated', success: true, changed_key: key, settings: { [key]: 'updated' } });
+  await view.daemon.idle();
+  expect(screen.getByRole('dialog', { name: 'Session usage breakdown' })).toHaveTextContent('$0.24');
+  expect(view.queries()).toHaveLength(2);
+});

@@ -46,6 +46,7 @@ export type SessionLedgerUpdate =
 
 export type SessionLedgerConnectionEvent =
   | { type: 'connection'; connected: boolean; connectionGeneration: number }
+  | { type: 'invalidate'; connectionGeneration: number }
   | (SessionLedgerUpdate & { connectionGeneration: number });
 
 export interface SessionLedgerEventContext {

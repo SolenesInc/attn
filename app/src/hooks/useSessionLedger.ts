@@ -208,6 +208,12 @@ export function useSessionLedger({
       }
       if (!lifecycleRef.current.connected
         || event.connectionGeneration !== lifecycleRef.current.generation) return;
+      if (event.type === 'invalidate') {
+        readEpoch.current += 1;
+        pendingUpdates.current = null;
+        setReloadNonce((n) => n + 1);
+        return;
+      }
       const id = event.type === 'live' ? event.session.id : event.entry.id;
       pendingUpdates.current?.set(id, event);
       setRead((current) => ({ ...current, entries: applyUpdate(current.entries, event, filtersRef.current, now()) }));

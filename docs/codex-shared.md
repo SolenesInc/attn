@@ -148,6 +148,8 @@ complete measurements. Ledger page reads retain newer live and close events rece
 while the request is pending, including filter removals. Updated rows follow the
 daemon’s timestamp and ID ordering. Older-page requests use the last displayed
 row because the daemon resolves cursor IDs against their current timestamps.
+Price and billed-as setting changes refresh open ledger views, including closed
+rows and their displayed model breakdown.
 
 Stock Codex 0.159.3 moves a root rollout into `archived_sessions` before archive
 success. The usage resolver follows this relocation, retains the original dated
