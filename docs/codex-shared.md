@@ -262,3 +262,11 @@ interrupted attachment stays visible and closable as disconnected. Startup
 layout reconciliation drops Codex panes whose view has already been removed,
 without closing the live owner. Last-pane close publishes an empty layout when
 the workspace remains registered, so the running app clears the pane immediately.
+
+Pane snapshots retain `codex_launch_owner_id` separately from the displayed
+`session_id`. Sidebar selection prefers a resolved view; otherwise it focuses an
+existing unresolved or disconnected terminal launched for that owner. This keeps
+failed bootstrap panes reachable without accumulating attachments. Launch identity
+is navigation context only and never supplies an input recipient. A terminal that
+switched owners before disconnect may still be reached through its launch owner.
+The ledger's explicit Open another view action still creates an attachment.

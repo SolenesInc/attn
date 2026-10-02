@@ -56,6 +56,7 @@ export async function runSharedMockServer() {
         }
         case 'thread/resume': {
           if (!root) throw new Error(`unknown root ${p.threadId}`);
+          if (readMockAgentConfig(root.cwd).rejectBlankResume && root.turns.length === 0) throw new Error(`no rollout found for thread id ${root.id}`);
           root.config = p.config || root.config; hook(root, 'SessionStart', { source: 'resume' }); result = { thread: metadata(root) }; break;
         }
         case 'thread/name/set':

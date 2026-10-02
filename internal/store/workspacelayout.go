@@ -116,7 +116,8 @@ func (s *Store) GetWorkspaceLayout(workspaceID string) *workspacelayout.Workspac
  CASE WHEN v.runtime_id IS NOT NULL THEN v.session_id ELSE p.session_id END,
  p.kind, p.title, p.status, p.error,
  CASE WHEN v.runtime_id IS NOT NULL THEN v.resolution ELSE p.codex_resolution END,
- CASE WHEN v.runtime_id IS NOT NULL THEN v.revision ELSE p.codex_revision END
+ CASE WHEN v.runtime_id IS NOT NULL THEN v.revision ELSE p.codex_revision END,
+ COALESCE(v.launch_owner_id, '')
  FROM workspace_layout_panes p
  LEFT JOIN codex_views v ON v.runtime_id=p.runtime_id
  WHERE p.workspace_id = ?
@@ -136,7 +137,7 @@ func (s *Store) GetWorkspaceLayout(workspaceID string) *workspacelayout.Workspac
 	for rows.Next() {
 		var pane workspacelayout.Pane
 		var sessionID sql.NullString
-		if err := rows.Scan(&pane.PaneID, &pane.RuntimeID, &sessionID, &pane.Kind, &pane.Title, &pane.Status, &pane.Error, &pane.CodexResolution, &pane.CodexRevision); err != nil {
+		if err := rows.Scan(&pane.PaneID, &pane.RuntimeID, &sessionID, &pane.Kind, &pane.Title, &pane.Status, &pane.Error, &pane.CodexResolution, &pane.CodexRevision, &pane.CodexLaunchOwnerID); err != nil {
 			log.Printf("[store] GetWorkspaceLayout: failed to scan pane for workspace %s: %v", workspaceID, err)
 			continue
 		}

@@ -5071,16 +5071,17 @@ export interface Layout {
 }
 
 export interface PaneElement {
-    codex_resolution?: CodexViewResolution;
-    codex_revision?:   string;
-    error?:            string;
-    kind:              WorkspaceLayoutPaneKind;
-    pane_id:           string;
-    runtime_id?:       string;
-    session_id?:       string;
-    status:            WorkspaceLayoutPaneStatus;
-    title:             string;
-    workspace_id:      string;
+    codex_launch_owner_id?: string;
+    codex_resolution?:      CodexViewResolution;
+    codex_revision?:        string;
+    error?:                 string;
+    kind:                   WorkspaceLayoutPaneKind;
+    pane_id:                string;
+    runtime_id?:            string;
+    session_id?:            string;
+    status:                 WorkspaceLayoutPaneStatus;
+    title:                  string;
+    workspace_id:           string;
     [property: string]: any;
 }
 
@@ -10425,16 +10426,17 @@ export enum WorkspaceLayoutMoveLeafToWorkspaceMessageCmd {
 }
 
 export interface WorkspaceLayoutPane {
-    codex_resolution?: CodexViewResolution;
-    codex_revision?:   string;
-    error?:            string;
-    kind:              WorkspaceLayoutPaneKind;
-    pane_id:           string;
-    runtime_id?:       string;
-    session_id?:       string;
-    status:            WorkspaceLayoutPaneStatus;
-    title:             string;
-    workspace_id:      string;
+    codex_launch_owner_id?: string;
+    codex_resolution?:      CodexViewResolution;
+    codex_revision?:        string;
+    error?:                 string;
+    kind:                   WorkspaceLayoutPaneKind;
+    pane_id:                string;
+    runtime_id?:            string;
+    session_id?:            string;
+    status:                 WorkspaceLayoutPaneStatus;
+    title:                  string;
+    workspace_id:           string;
     [property: string]: any;
 }
 
@@ -19225,6 +19227,7 @@ const typeMap: any = {
         { json: "workspace_id", js: "workspace_id", typ: "" },
     ], "any"),
     "PaneElement": o([
+        { json: "codex_launch_owner_id", js: "codex_launch_owner_id", typ: u(undefined, "") },
         { json: "codex_resolution", js: "codex_resolution", typ: u(undefined, r("CodexViewResolution")) },
         { json: "codex_revision", js: "codex_revision", typ: u(undefined, "") },
         { json: "error", js: "error", typ: u(undefined, "") },
@@ -22628,6 +22631,7 @@ const typeMap: any = {
         { json: "target_workspace_id", js: "target_workspace_id", typ: "" },
     ], "any"),
     "WorkspaceLayoutPane": o([
+        { json: "codex_launch_owner_id", js: "codex_launch_owner_id", typ: u(undefined, "") },
         { json: "codex_resolution", js: "codex_resolution", typ: u(undefined, r("CodexViewResolution")) },
         { json: "codex_revision", js: "codex_revision", typ: u(undefined, "") },
         { json: "error", js: "error", typ: u(undefined, "") },

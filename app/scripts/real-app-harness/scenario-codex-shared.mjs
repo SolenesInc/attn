@@ -53,6 +53,36 @@ try {
     runner.assert(header.text.includes('Generated ordinary-launch'), 'ordinary app name missing from header', header);
     await closePane(observer.getSession(sessionId).workspace_id, pane.pane_id);
   });
+  await runner.step('failed_attachment_sidebar_selection_reuses_its_pane', async () => {
+    const cwd = path.join(runner.sessionDir, 'blank-resume'); fs.mkdirSync(cwd, { recursive: true });
+    writeMockAgentFixture(cwd, { agent: 'codex', rejectBlankResume: true, turns: [] });
+    const { sessionId: id } = await client.request('create_session', { cwd, agent: 'codex', label: 'blank-resume' });
+    const original = await resolved(id, id);
+    const rootText = await waitForPaneText(client, id, original.pane_id, text => /Root ([0-9a-f-]{36})/.test(text), 'blank native root');
+    const root = rootText.text.match(/Root ([0-9a-f-]{36})/)[1];
+    await type(id, original.pane_id, '/new\r');
+    await observer.waitFor(() => [...observer.layoutsByWorkspaceId.values()].flatMap(layout => layout.panes || []).find(pane => pane.runtime_id === id && pane.session_id && pane.session_id !== id && pane.codex_resolution === 'resolved'), 'blank owner hidden by native New');
+    const attached = await request('session_reopen', 'session_reopen_result', { session_id: id });
+    const failed = await observer.waitFor(() => [...observer.layoutsByWorkspaceId.values()].flatMap(layout => layout.panes || []).find(pane => pane.pane_id === attached.pane_id && pane.codex_resolution === 'disconnected'), 'blank resume attachment fails');
+    runner.assert(failed.codex_launch_owner_id === id && !failed.session_id, 'failed pane lost launch identity or retained input ownership', failed);
+    await waitForPaneText(client, id, failed.pane_id, text => text.includes('no rollout found for thread id ' + root), 'native blank-thread error remains visible');
+    const before = [...observer.layoutsByWorkspaceId.values()].flatMap(layout => layout.panes || []).map(pane => pane.runtime_id);
+    await client.request('set_setting', { key: 'queue_mode_enabled', value: 'true' });
+    await client.request('dom_wait', { selector: `[data-testid="queue-settled-${id}"] .queue-row-select`, timeoutMs: observer.connectTimeoutMs });
+    for (const click of ['first', 'repeat']) {
+      await client.request('dom_click', { selector: `[data-testid="queue-settled-${id}"] .queue-row-select` });
+      await client.request('dom_wait', { selector: `[data-pane-id="${failed.pane_id}"].active`, timeoutMs: observer.connectTimeoutMs });
+      const state = await client.request('get_state');
+      runner.assert(!state.activeSessionId, `${click} failed pane selection attributed an owner`, state);
+    }
+    const after = [...observer.layoutsByWorkspaceId.values()].flatMap(layout => layout.panes || []).map(pane => pane.runtime_id);
+    runner.assert(JSON.stringify(before) === JSON.stringify(after), 'sidebar accumulated failed PTY views', { before, after, root });
+    await driver.screenshot(path.join(runner.runDir, 'failed-resume-sidebar.png'), { windowId: await driver.mainWindowId() });
+    await client.request('set_setting', { key: 'queue_mode_enabled', value: 'false' });
+    await closePane(attached.workspace_id, failed.pane_id);
+    await closePane(attached.workspace_id, original.pane_id);
+    observer.send({ cmd: 'unregister_session', id });
+  });
   const roots = [];
   for (const name of ['exo', 'foo']) {
     const cwd = path.join(runner.sessionDir, name); fs.mkdirSync(cwd, { recursive: true });
