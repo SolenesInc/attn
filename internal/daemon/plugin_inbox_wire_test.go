@@ -113,3 +113,49 @@ func TestASeedTransferredDuringAPluginRingNotifiesItsNewTenderImmediately(t *tes
 		}
 	})
 }
+
+func TestAMemberWhoseDayChangesDuringAPluginRingNotifiesItsNextDayImmediately(t *testing.T) {
+	inBubbleWithAgents(t, func(t *testing.T, w *world) {
+		writeCrewCharter(t, w, "trellis")
+		w.restart()
+		w.finishStartupWork()
+		app, cli := w.App(), w.Client()
+		driver := connectDriver(t, w, "snipe-plugin", "snipe", map[string]bool{"initial_prompt": true, "state_reporting": true, "message_delivery": true})
+		awaitDriverAvailable(app, "snipe")
+		author, authorRun := spawnDriven(w, app, driver, w.Path("author"))
+		awaitingInput(t, app, driver, authorRun)
+		previous, err := cli.CrewWake("trellis", "snipe")
+		if err != nil {
+			t.Fatal(err)
+		}
+		awaitingInput(t, app, driver, driver.launched())
+		sent := make(chan error, 1)
+		go func() { _, err := cli.AgentMsg("trellis", author, "take a look"); sent <- err }()
+		var message deliveredMessage
+		held := driver.asked("driver.deliver_message", &message)
+		if message.SessionID != previous.SessionID {
+			t.Fatalf("first delivery=%+v", message)
+		}
+		if _, err := cli.CrewHandoff(previous.SessionID, "sleep before the next day", false, protocol.CrewDayCloseSleep); err != nil {
+			t.Fatal(err)
+		}
+		next, err := cli.CrewWake("trellis", "snipe")
+		if err != nil {
+			t.Fatal(err)
+		}
+		awaitingInput(t, app, driver, driver.launched())
+		driver.answer(held, map[string]bool{"ok": true})
+		before := time.Now()
+		held = driver.asked("driver.deliver_message", &message)
+		if message.SessionID != next.SessionID || !strings.Contains(message.Text, inboxDoorbell) || time.Since(before) != 0 {
+			t.Fatalf("next delivery=%+v after %s", message, time.Since(before))
+		}
+		driver.answer(held, map[string]bool{"ok": true})
+		if err := <-sent; err != nil {
+			t.Fatal(err)
+		}
+		if got := inboxContents(readInbox(t, cli, next.SessionID, 0).Items); got != "take a look" {
+			t.Fatalf("next day inbox=%q", got)
+		}
+	})
+}
