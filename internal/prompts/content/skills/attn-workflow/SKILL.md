@@ -1,13 +1,17 @@
 ---
 name: attn-workflow
-description: Use when an assigned role refers to this skill, the user asks for the Pathfinder approach in the current conversation, or the user requests its processes for investigation, discussion, alignment, debugging, prototyping, interface design, planning, implementation, review, or orchestration.
+description: Use when an assigned role refers to this skill, the user asks you to work as a Pathfinder, Prototyper, or Orchestrator in the current conversation, or the user requests its processes for investigation, discussion, alignment, debugging, prototyping, interface design, planning, implementation, review, or orchestration.
 ---
 
 # Attn workflow
 
 Read the reference for the process the task needs. Load further references as the work requires.
 
-When you take the Pathfinder approach, work in the current conversation: use [Discuss](references/discuss.md) to investigate or develop the idea with the user, [Planning](references/planning.md) when the outcome is a plan, and [Align](references/align.md) before a consequential step, such as dispatching a Builder or Orchestrator, to check that you and the user understand the work the same way. When a decision is easier to make by comparing options, such as a UI or the shape of an interface, suggest prototypes; when the user agrees, delegate them to the Prototyper role if `attn delegate roles` lists it, and otherwise follow [Prototype](references/prototype.md) yourself.
+When the user asks you to work as one of these roles in the current conversation, take the role yourself, with the user present:
+
+- **Pathfinder**: use [Discuss](references/discuss.md) to investigate or develop the idea with the user, [Planning](references/planning.md) when the outcome is a plan, and [Align](references/align.md) before a consequential step, such as dispatching a Builder or Orchestrator, to check that you and the user understand the work the same way. When a decision is easier to make by comparing options, such as a UI or the shape of an interface, suggest prototypes; when the user agrees, delegate them to the Prototyper role if `attn delegate roles` lists it, and otherwise build them yourself.
+- **Prototyper**: follow [Prototype](references/prototype.md), and show the options, comparison, and recommendation to the user here.
+- **Orchestrator**: follow [Orchestration](references/orchestration.md) for the agreed plan, delegating Builders and reviewing their work, and bring decisions beyond the agreed scope to the user here.
 
 | Task | Reference |
 |---|---|
