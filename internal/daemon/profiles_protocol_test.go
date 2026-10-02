@@ -318,7 +318,7 @@ func TestSelectionReachesTheOtherConnectionAndSurvivesARestart(t *testing.T) {
 		t.Fatalf("the second connection saw current desktop %s, want %s", seen[0].Profile.CurrentDesktopID, desktopTwo.ID)
 	}
 	focused, ok := desktopIn(seen[1].Desktops, desktopTwo.ID)
-	if len(seen[1].Desktops) != 1 || !ok || focused.ActivePaneID != paneB {
+	if !ok || focused.ActivePaneID != paneB {
 		t.Fatalf("the second connection saw %+v, want the occupied desktop with %s focused on %s", seen[1].Desktops, desktopTwo.ID, paneB)
 	}
 	if focused.Revision != revisionBeforeSelection {

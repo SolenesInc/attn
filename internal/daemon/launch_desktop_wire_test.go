@@ -633,6 +633,7 @@ func TestRestoringASharedAutomationOwnerInAnotherProfileKeepsDestinationsIndepen
 }
 
 func TestOwnReselectionKeepsSharingAndPublishesLiveLabelChanges(t *testing.T) {
+	t.Setenv("ATTN_EMPTY_DESKTOP_GRACE", "0")
 	w := newCrewWorld(t, fakeagent.Claude)
 	app, cli := w.App(), w.Client()
 	profile := app.SelectedProfile()
@@ -697,6 +698,7 @@ func TestOwnReselectionKeepsSharingAndPublishesLiveLabelChanges(t *testing.T) {
 	awaitLabel("5 · Renamed")
 	crewHandoff(t, cli, wake.SessionID, "Day complete.", false, protocol.CrewDayCloseSleep)
 	awaitClosed(app, wake.SessionID)
+	awaitDesktopRemoved(t, w, profile, desktop.ID)
 	awaitLabel("5 · Renamed")
 	pending := readLaunchSetting(app, "crew", "trellis")
 	if !protocol.Deref(pending.Setting.Pending) || protocol.Deref(pending.Setting.OwnerID) != "alder" {

@@ -39,6 +39,11 @@ function legacyWorkspacesSql(fixtureDir) {
     'DELETE FROM desktops;',
     'DELETE FROM profiles;',
     'DELETE FROM profile_migration;',
+    // A pre-profile install has no launch rows and no crew or automation profiles.
+    'DELETE FROM launch_desktops;',
+    'DELETE FROM launch_destinations;',
+    'DELETE FROM crew_profiles;',
+    "UPDATE automation_definitions SET profile_id = '';",
     'ALTER TABLE sessions ADD COLUMN workspace_id TEXT;',
     "CREATE TABLE workspaces (id TEXT PRIMARY KEY, title TEXT NOT NULL, directory TEXT NOT NULL, created_at TEXT NOT NULL, muted INTEGER NOT NULL DEFAULT 0, rank TEXT NOT NULL DEFAULT '', pinned INTEGER NOT NULL DEFAULT 0);",
     'CREATE TABLE workspace_layouts (workspace_id TEXT PRIMARY KEY, active_pane_id TEXT NOT NULL, layout_json TEXT NOT NULL, updated_at TEXT NOT NULL);',
