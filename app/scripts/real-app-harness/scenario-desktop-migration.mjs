@@ -33,6 +33,14 @@ function agentsOf(index) {
   return PAIRED.has(index) ? [`mig-agent-${index}`, `mig-agent-${index}b`] : [`mig-agent-${index}`];
 }
 
+function migrationCheckSpec(directory) {
+  return {
+    api_version: 'attn.dev/automations/v1alpha1', id: 'mig-check', name: 'Migration check',
+    trigger: { type: 'manual', repositories: {} }, prompt: 'Check locally.', launch: { driver: 'claude' },
+    location: { type: 'directory', path: directory, repository_sources: { default: { type: '' } } },
+  };
+}
+
 function legacyWorkspacesSql(fixtureDir) {
   const statements = [
     'DELETE FROM desktop_panes;',
@@ -44,6 +52,9 @@ function legacyWorkspacesSql(fixtureDir) {
     'DELETE FROM launch_destinations;',
     'DELETE FROM crew_profiles;',
     "UPDATE automation_definitions SET profile_id = '';",
+    // A disabled automation makes the launch step follow placement on every run.
+    `INSERT OR REPLACE INTO automation_definitions (id, name, enabled, revision, spec_json, profile_id, created_at, updated_at, deleted_at)
+      VALUES ('mig-check', 'Migration check', 0, 1, ${sql(JSON.stringify(migrationCheckSpec(fixtureDir)))}, '', 'now', 'now', '');`,
     'ALTER TABLE sessions ADD COLUMN workspace_id TEXT;',
     "CREATE TABLE workspaces (id TEXT PRIMARY KEY, title TEXT NOT NULL, directory TEXT NOT NULL, created_at TEXT NOT NULL, muted INTEGER NOT NULL DEFAULT 0, rank TEXT NOT NULL DEFAULT '', pinned INTEGER NOT NULL DEFAULT 0);",
     'CREATE TABLE workspace_layouts (workspace_id TEXT PRIMARY KEY, active_pane_id TEXT NOT NULL, layout_json TEXT NOT NULL, updated_at TEXT NOT NULL);',
@@ -173,7 +184,9 @@ async function main() {
       fs.mkdirSync(runner.runDir, { recursive: true });
       execFileSync('sqlite3', [dbPath, `.backup ${snapshotPath}`]);
       seeded = true;
-      sqlite(dbPath, legacyWorkspacesSql(path.join(runner.sessionDir, 'legacy')));
+      const legacyDir = path.join(runner.sessionDir, 'legacy');
+      fs.mkdirSync(legacyDir, { recursive: true });
+      sqlite(dbPath, legacyWorkspacesSql(fs.realpathSync(legacyDir)));
     });
 
     await runner.step('startup_converts_and_the_app_opens_on_the_intro', async () => {
@@ -320,12 +333,9 @@ async function main() {
       await waitForDraft((migration) => migration.groups.every((entry) => entry.confirmed), 'every group confirmed');
       await client.request('dom_wait', { selector: '.mp-bottom-right .mp-button.primary:not([disabled])', timeoutMs: 10_000 });
       await client.request('dom_click', { selector: '.mp-bottom-right .mp-button.primary' });
-      const phase = await poll(() => queryDaemonDb(dbPath, 'SELECT phase FROM profile_migration;'), (value) => value !== 'placement_required', 'placement finish');
-      // Crew homes and automations left by earlier scenarios on this instance add the launch step.
-      if (phase === 'launch_required') {
-        await client.request('dom_wait', { selector: '.mp-launch-footer .primary:not([disabled])', timeoutMs: 10_000 });
-        await client.request('dom_click', { selector: '.mp-launch-footer .primary' });
-      }
+      await client.request('dom_wait', { selector: '.mp-launch-row[data-launch-item="mig-check"]', timeoutMs: 10_000 });
+      runner.assert(queryDaemonDb(dbPath, 'SELECT phase FROM profile_migration;') === 'launch_required', 'Placement finish did not open the launch step');
+      await client.request('dom_click', { selector: '.mp-launch-footer .primary' });
       await waitForText('main', 'Your Default profile is ready.');
       runner.assert(queryDaemonDb(dbPath, 'SELECT phase FROM profile_migration;') === 'complete', 'Finish did not commit');
       const shell = await client.request('dom_wait', { selector: '.app', absent: true, timeoutMs: 2_000 });
