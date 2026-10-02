@@ -108,7 +108,7 @@ func (d *Daemon) crewSleep(name string) (*protocol.CrewSleepResult, error) {
 		}
 		d.announceCommittedWrite(fact, written.Seq)
 		d.publishFact(FactCrewUpdated, member.ID, nil)
-		receipt, err = d.deliverInbox(item.To)
+		receipt = d.deliverSavedInbox(item.To, deliveryID)
 	} else {
 		receipt, err = d.sendToInbox(item)
 	}

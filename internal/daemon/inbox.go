@@ -15,12 +15,7 @@ func (d *Daemon) sendToInbox(item inbox.Item) (inbox.Receipt, error) {
 	if err != nil {
 		return inbox.Receipt{}, err
 	}
-	receipt, err := d.deliverInbox(item.To)
-	receipt.ItemID = id
-	if err != nil {
-		d.logf("inbox: item %s saved for %s; delivery deferred: %v", id, item.To, err)
-		receipt.Detail = "queued (item saved; delivery deferred)"
-	}
+	receipt := d.deliverSavedInbox(item.To, id)
 	if memberID := item.To.MemberID(); memberID != "" && d.inboxHolder(item.To) == nil {
 		if member, _, lookupErr := d.crewMember(memberID); lookupErr == nil {
 			ledger := d.crewWakeLedger()
@@ -31,6 +26,15 @@ func (d *Daemon) sendToInbox(item inbox.Item) (inbox.Receipt, error) {
 		}
 	}
 	return receipt, nil
+}
+func (d *Daemon) deliverSavedInbox(to inbox.Address, id string) inbox.Receipt {
+	receipt, err := d.deliverInbox(to)
+	receipt.ItemID = id
+	if err != nil {
+		d.logf("inbox: item %s saved for %s; delivery deferred: %v", id, to, err)
+		receipt.Detail = "queued (item saved; delivery deferred)"
+	}
+	return receipt
 }
 func (d *Daemon) sentToInbox(addresses ...inbox.Address) {
 	for _, a := range addresses {
