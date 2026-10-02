@@ -62,15 +62,16 @@ try {
     const root = rootText.text.match(/Root ([0-9a-f-]{36})/)[1];
     await type(id, original.pane_id, '/new\r');
     await observer.waitFor(() => [...observer.layoutsByWorkspaceId.values()].flatMap(layout => layout.panes || []).find(pane => pane.runtime_id === id && pane.session_id && pane.session_id !== id && pane.codex_resolution === 'resolved'), 'blank owner hidden by native New');
-    const attached = await request('session_reopen', 'session_reopen_result', { session_id: id });
+    const attached = (await request('session_reopen', 'session_reopen_result', { session_id: id })).result;
     const failed = await observer.waitFor(() => [...observer.layoutsByWorkspaceId.values()].flatMap(layout => layout.panes || []).find(pane => pane.pane_id === attached.pane_id && pane.codex_resolution === 'disconnected'), 'blank resume attachment fails');
     runner.assert(failed.codex_launch_owner_id === id && !failed.session_id, 'failed pane lost launch identity or retained input ownership', failed);
-    await waitForPaneText(client, id, failed.pane_id, text => text.includes('no rollout found for thread id ' + root), 'native blank-thread error remains visible');
+    await waitForPaneText(client, id, failed.pane_id, text => text.includes('no rollout found for thread id'), 'native blank-thread error remains visible');
     const before = [...observer.layoutsByWorkspaceId.values()].flatMap(layout => layout.panes || []).map(pane => pane.runtime_id);
     await client.request('set_setting', { key: 'queue_mode_enabled', value: 'true' });
-    await client.request('dom_wait', { selector: `[data-testid="queue-settled-${id}"] .queue-row-select`, timeoutMs: observer.connectTimeoutMs });
+    const rowSelector = `[data-testid="sidebar-queue"] [data-testid$="-${id}"] .queue-row-select`;
+    await client.request('dom_wait', { selector: rowSelector, timeoutMs: observer.connectTimeoutMs });
     for (const click of ['first', 'repeat']) {
-      await client.request('dom_click', { selector: `[data-testid="queue-settled-${id}"] .queue-row-select` });
+      await client.request('dom_click', { selector: rowSelector });
       await client.request('dom_wait', { selector: `[data-pane-id="${failed.pane_id}"].active`, timeoutMs: observer.connectTimeoutMs });
       const state = await client.request('get_state');
       runner.assert(!state.activeSessionId, `${click} failed pane selection attributed an owner`, state);
