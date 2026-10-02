@@ -144,7 +144,9 @@ Live headers, the ledger inspector, `session show` and `session list --json` rea
 the same usage ledger. Reopen retains its source history and resumes its cursors;
 repeated reads, views and native notifications cannot multiply usage. The inspector
 names incomplete measurement and reuses the live header's model breakdown for
-complete measurements.
+complete measurements. Ledger page reads retain newer live and close events received
+while the request is pending, including filter removals. Updated rows follow the
+daemon’s timestamp and ID ordering without changing its pagination cursor.
 
 Stock Codex 0.159.3 moves a root rollout into `archived_sessions` before archive
 success. The usage resolver follows this relocation, retains the original dated

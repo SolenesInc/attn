@@ -100,3 +100,60 @@ it('keeps an absent live owner outside the closed ledger', async () => {
   await view.daemon.idle();
   expect(document.querySelector('.ledger-row[data-row-key="new-owner"]')).toBeNull();
 });
+
+it.each(['session_registered', 'session_state_changed'] as const)('preserves %s while an older initial page is pending', async (event) => {
+  const view = await openSessionsLedger(() => 'hold');
+  view.daemon.emit({ event, session: daemonSession('cost', { usage, label: 'current owner' }) });
+  await view.daemon.idle();
+  await view.release(0, page({ entries: event === 'session_registered' ? [] : [closedEntry('cost', { usage: { ...usage, total_tokens: 1 } })] }));
+  expect(document.querySelector('.ledger-row[data-row-key="cost"]')).toHaveTextContent('current owner');
+  expect(screen.getByText('300 tokens')).toBeInTheDocument();
+  expect(screen.queryByText('Closed', { selector: '.ledger-field-label' })).not.toBeInTheDocument();
+});
+
+it('keeps a close received during an initial ledger read', async () => {
+  const view = await openSessionsLedger(() => 'hold');
+  await view.closed(closedEntry('cost', { usage }));
+  await view.release(0, page({ entries: [liveEntry('cost')] }));
+  expect(document.querySelector('.ledger-row[data-row-key="cost"]')).toHaveAttribute('data-state', 'closed');
+  expect(screen.getByText('300 tokens')).toBeInTheDocument();
+});
+
+it('does not restore a filtered-out owner from a pending older page', async () => {
+  const view = await openSessionsLedger((_query, index) => index === 0
+    ? page({ entries: [closedEntry('current')], next_before: 'older', omitted: 1 }) : 'hold', {
+    initialState: { settings: { [SESSION_FILTERS_SETTING_KEY]: JSON.stringify({ scope: 'all', range: 'any', customFrom: '', customTo: '', workspaceId: 'ws-1', repository: '' }) } },
+  });
+  fireEvent.click(screen.getByRole('button', { name: '1 older ↓' }));
+  await view.daemon.idle();
+  view.daemon.emit({ event: 'session_state_changed', session: daemonSession('cost', { usage, workspace_id: 'ws-2' }) });
+  await view.daemon.idle();
+  await view.release(0, page({ entries: [closedEntry('cost', { usage, workspace_id: 'ws-1' })] }));
+  expect(document.querySelector('.ledger-row[data-row-key="cost"]')).toBeNull();
+});
+
+it('orders updated rows by the daemon ledger timestamp and id', async () => {
+  const view = await openSessionsLedger(pages([page({ entries: [
+    closedEntry('newest', { closed_at: '2026-09-05T14:00:00Z' }),
+    liveEntry('z-owner'), liveEntry('a-owner'),
+  ] })]));
+  const ids = () => [...document.querySelectorAll('.ledger-row[data-row-key]')].map((row) => row.getAttribute('data-row-key'));
+  view.daemon.emit({ event: 'session_state_changed', session: daemonSession('a-owner', { usage, last_seen: '2026-09-05T14:15:00Z' }) });
+  await view.daemon.idle();
+  expect(ids()).toEqual(['a-owner', 'newest', 'z-owner']);
+  view.daemon.emit({ event: 'session_state_changed', session: daemonSession('z-owner', { usage, last_seen: '2026-09-05T14:15:00Z' }) });
+  await view.daemon.idle();
+  expect(ids()).toEqual(['z-owner', 'a-owner', 'newest']);
+});
+
+it('keeps successor events when a superseded read resolves', async () => {
+  const view = await openSessionsLedger(() => 'hold');
+  fireEvent.click(screen.getByRole('button', { name: 'All' }));
+  await view.daemon.idle();
+  view.daemon.emit({ event: 'session_state_changed', session: daemonSession('cost', { usage }) });
+  await view.daemon.idle();
+  await view.release(0, page({ entries: [] }));
+  await view.release(1, page({ entries: [closedEntry('cost')] }));
+  expect(screen.getByText('300 tokens')).toBeInTheDocument();
+  expect(document.querySelector('.ledger-row[data-row-key="cost"]')).not.toHaveAttribute('data-state', 'closed');
+});
