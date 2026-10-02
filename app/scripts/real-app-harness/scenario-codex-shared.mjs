@@ -41,7 +41,7 @@ try {
   const roots = [];
   for (const name of ['exo', 'foo']) {
     const cwd = path.join(runner.sessionDir, name); fs.mkdirSync(cwd, { recursive: true });
-    writeMockAgentFixture(cwd, { agent: 'codex', resumable: true, turns: [{ match: { contains: 'needs approval' }, actions: [{ type: 'reply', approval: true, text: `approved ${name}` }] }], defaultActions: [{ type: 'reply', text: `reply ${name}` }] });
+    writeMockAgentFixture(cwd, { agent: 'codex', resumable: true, turns: [{ includes: 'needs approval', actions: [{ type: 'reply', approval: true, text: `approved ${name}` }] }], defaultActions: [{ type: 'reply', text: `reply ${name}` }] });
     const { sessionId } = await client.request('create_session', { cwd, agent: 'codex', label: name }); owners.push(sessionId);
     const pane = await resolved(sessionId, sessionId); panes.set(sessionId, pane);
     const result = await waitForPaneText(client, sessionId, pane.pane_id, text => /Root ([0-9a-f-]{36})/.test(text), `native root ${name}`);
