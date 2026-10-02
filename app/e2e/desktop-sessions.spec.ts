@@ -127,6 +127,10 @@ test.describe('Desktop Sessions', () => {
     for (let created = 0; created < 2; created++) {
       await page.keyboard.press('Meta+g');
       await page.getByRole('button', { name: '+ New desktop' }).click();
+      const id = `arranged-${created}`;
+      await injectSessions(page, daemon, [{ id, label: id, cwd: `/tmp/desktop-arrange-${created}` }]);
+      await page.getByTestId(`sidebar-session-${id}`).getByRole('button', { name: `Open ${id}`, exact: true }).click();
+      await expect(currentDesktop(page).locator(paneOf(id))).toBeVisible();
     }
     const rules = page.locator('.desktop-rule');
     const headerNames = () => rules.locator('.sidebar-row-select').evaluateAll((buttons) => buttons.map((button) => button.getAttribute('aria-label')?.replace(/^Open /, '')));

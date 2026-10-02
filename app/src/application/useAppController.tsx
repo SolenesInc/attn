@@ -244,6 +244,7 @@ export function useAppController({
     closeAgentList,
     workflowRunPanelOpen,
     gardenHoldsWindow,
+    closeGarden,
     toggleGardenFrame,
     openNotebookBrowser,
   } = appPanels;
@@ -253,7 +254,9 @@ export function useAppController({
     closeCrewPanel();
     setNotebookOpen(false);
     setSessionsOpen(false);
-  }), [closeCrewPanel, setNotebookOpen, setSessionsOpen]);
+    setPalette(null);
+    if (gardenHoldsWindow) closeGarden();
+  }), [closeCrewPanel, setNotebookOpen, setSessionsOpen, setPalette, closeGarden, gardenHoldsWindow]);
 
   const desktopTiles = useDesktopTiles({
     settings,

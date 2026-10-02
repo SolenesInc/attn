@@ -1,6 +1,6 @@
 import { fireEvent, screen, within } from '@testing-library/react';
 import { describe, expect, it } from 'vitest';
-import { gesture, renderApp } from './test/renderApp';
+import { gesture, pressShortcut, renderApp } from './test/renderApp';
 import { defaultProfile, emptyDesktop, crewMember, daemonSession, soloDesktop } from './test/daemonFixtures';
 import { LaunchDesktopKind, LaunchDesktopMode, MigrationPhase } from './types/generated';
 
@@ -74,6 +74,26 @@ describe('launch desktops', () => {
     await daemon.idle();
     expect(screen.queryByRole('dialog', { name: 'Manage crew' })).not.toBeInTheDocument();
     expect(daemon.sentOf('desktop_show_session').map(({ session_id }) => session_id)).toEqual(['s1']);
+  });
+
+  it.each([
+    ['agent palette', 'ui.actionMenu', 'Agents'],
+    ['command palette', 'ui.commandPalette', 'Commands'],
+    ['fullscreen Garden', 'board.open', 'The garden'],
+  ] as const)('shows an arrival above the %s and closes it when navigating', async (_surface, shortcut, title) => {
+    const { daemon } = await renderApp({ initialState: { sessions: [daemonSession('s1')], desktops: [soloDesktop('s1')] } });
+    await gesture(daemon, () => pressShortcut(shortcut));
+    if (title === 'The garden') await gesture(daemon, () => fireEvent.click(screen.getByRole('button', { name: 'Expand the garden' })));
+    expect(screen.getByRole('dialog', { name: title })).toBeInTheDocument();
+    await daemon.emit({ event: 'background_launch', session_id: 's1', profile_id: 'profile-default', desktop_id: 'review', name: 'Keel', requested_by: 'Alder', desktop_label: 'Review', kind: LaunchDesktopKind.Crew });
+    await daemon.idle();
+    const action = screen.getByRole('button', { name: /Keel.*Click to go/ });
+    action.focus();
+    expect(document.activeElement).toBe(action);
+    await gesture(daemon, () => fireEvent.click(action));
+    expect(screen.queryByRole('dialog', { name: title })).not.toBeInTheDocument();
+    expect(daemon.sentOf('desktop_show_session').map(({ session_id }) => session_id)).toEqual(['s1']);
+    expect(screen.getByText('✓ Done')).toBeInTheDocument();
   });
 
   it('groups background arrivals, names the requester and goes only when clicked', async () => {
