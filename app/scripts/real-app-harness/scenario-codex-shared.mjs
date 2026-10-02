@@ -119,7 +119,7 @@ try {
     await client.request('dom_click', { selector: `.ledger-inspector [data-testid="session-usage-${a}"]` });
     await client.request('dom_wait', { selector: '[aria-label="Session usage breakdown"]', timeoutMs: observer.connectTimeoutMs });
     const detail = await client.request('dom_text', { selector: '[aria-label="Session usage breakdown"]' });
-    const shot = await client.request('capture_screenshot_data', { selector: 'body' });
+    const shot = await client.request('capture_screenshot_data', { selector: '[aria-label="Session usage breakdown"]' });
     fs.writeFileSync(path.join(runner.runDir, 'owner-cost-inspector.png'), Buffer.from(shot.pngBase64, 'base64'));
     runner.assert(detail.text.includes(owner.usage.total_tokens.toLocaleString('en-US') + ' tokens'), 'ledger breakdown omits owner tokens', { detail, owner });
     await client.request('dom_key', { selector: '[aria-label="Session usage breakdown"]', key: 'Escape' });
