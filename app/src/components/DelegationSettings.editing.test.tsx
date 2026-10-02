@@ -128,14 +128,15 @@ it('deletes a role with undo and reloads after a conflict', async () => {
   expect(screen.queryByText('Off', { selector: '.delegation-tag' })).not.toBeInTheDocument();
 });
 
-it('renders a configured maintained role by built-in kind when a template shares its id', async () => {
+it('renders a maintained role by built-in kind and offers a missing one by name', async () => {
   const configured: Role = { ...structuredClone(template), id: 'orchestrator', builtin: 'pathfinder' };
   const pathfinderView: Role = { ...configured, name: 'Pathfinder', icon: 'search', description: 'Investigate the path', instructions: 'Find the path', stopping_point: 'Return a plan' };
   const orchestratorView: Role = { ...structuredClone(template), id: 'orchestrator', builtin: 'orchestrator', name: 'Orchestrator', icon: 'spark', description: 'Coordinate work', instructions: 'Coordinate', stopping_point: 'Return the outcome' };
-  await openDelegation({ roles: [configured], templates: [orchestratorView], expanded: () => [pathfinderView, orchestratorView], harnesses: [] });
+  const { daemon, saves } = await openDelegation({ roles: [configured], templates: [orchestratorView], expanded: () => [pathfinderView, orchestratorView], harnesses: [] });
   expect(screen.getByRole('button', { name: 'Pathfinder' })).toBeInTheDocument();
   expect(screen.queryByRole('button', { name: 'Orchestrator' })).not.toBeInTheDocument();
-  expect(screen.getByRole('button', { name: 'Restore Attn roles (1)' })).toBeInTheDocument();
+  await gesture(daemon, () => fireEvent.click(screen.getByRole('button', { name: '+ Orchestrator' })));
+  expect(saves()[0].preferences.roles.map(role => role.builtin)).toEqual(['pathfinder', 'orchestrator']);
 });
 
 it('withdraws undo when a change made elsewhere reloads the table', async () => {

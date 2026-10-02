@@ -33,7 +33,8 @@ func Validate(c Config) error {
 		if role.Builtin != nil {
 			switch *role.Builtin {
 			case protocol.BuiltinDelegationRolePathfinder, protocol.BuiltinDelegationRoleBuilder,
-				protocol.BuiltinDelegationRoleReviewer, protocol.BuiltinDelegationRoleOrchestrator:
+				protocol.BuiltinDelegationRoleReviewer, protocol.BuiltinDelegationRoleOrchestrator,
+				protocol.BuiltinDelegationRolePrototyper:
 			default:
 				return fmt.Errorf("role %q has unknown built-in %q", role.ID, *role.Builtin)
 			}

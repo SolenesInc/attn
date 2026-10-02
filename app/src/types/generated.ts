@@ -1939,6 +1939,7 @@ export enum BuiltinDelegationRole {
     Builder = "builder",
     Orchestrator = "orchestrator",
     Pathfinder = "pathfinder",
+    Prototyper = "prototyper",
     Reviewer = "reviewer",
 }
 
@@ -22988,6 +22989,7 @@ const typeMap: any = {
         "builder",
         "orchestrator",
         "pathfinder",
+        "prototyper",
         "reviewer",
     ],
     "PullRequestWatchMode": [

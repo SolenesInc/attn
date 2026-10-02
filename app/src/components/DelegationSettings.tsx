@@ -11,7 +11,7 @@ import './DelegationSettings.css';
 type PopoverTarget = { key: string; anchor: Anchor };
 type Undo = { label: string; previous: DelegationPreferences; generation: number };
 
-const DELEGATION_ICONS = ['search', 'diamond', 'code', 'arrow', 'list', 'bug', 'spark', 'circle'] as const;
+const DELEGATION_ICONS = ['search', 'diamond', 'code', 'arrow', 'list', 'bug', 'spark', 'circle', 'layers'] as const;
 const plural = (n: number, word: string) => `${n} ${word}${n === 1 ? '' : 's'}`;
 const leadText = (enabled: boolean) => enabled
   ? 'Roles guide agents that delegate. Each role has a model; an agent reads this table and picks the row that fits the work.'
@@ -223,7 +223,7 @@ function FallbackRow({ fallback, harnesses, open, popoverOpen, onToggle, onOpenP
 function EmptyPanel({ canAdopt, onAdopt, onAdd }: { canAdopt: boolean; onAdopt: () => void; onAdd: () => void }) {
   return <div className="delegation-empty">
     <h3>No roles yet</h3>
-    <p>Start with Attn's four maintained roles, then pick a model for each. Attn keeps their instructions current; the model choices stay yours.</p>
+    <p>Start with Attn's maintained roles, then pick a model for each. Attn keeps their instructions current; the model choices stay yours.</p>
     <div className="delegation-actions center">
       <button type="button" className="settings-action primary" disabled={!canAdopt} onClick={onAdopt}>Add Attn roles</button>
       <button type="button" className="settings-action" onClick={onAdd}>+ Custom role</button>
@@ -231,11 +231,11 @@ function EmptyPanel({ canAdopt, onAdopt, onAdd }: { canAdopt: boolean; onAdopt: 
   </div>;
 }
 
-function AddRow({ config, missing, onAdd, onAdopt }: { config: DelegationPreferences; missing: DelegationRole[]; onAdd: () => void; onAdopt: () => void }) {
-  const restore = config.roles.some(role => role.builtin);
+function AddRow({ config, missing, onAdd, onAdopt }: { config: DelegationPreferences; missing: string[]; onAdd: () => void; onAdopt: () => void }) {
+  const some = config.roles.some(role => role.builtin);
   return <div className="delegation-addrow">
     <button type="button" className="settings-action quiet" onClick={onAdd}>+ Custom role</button>
-    {missing.length > 0 && <button type="button" className="settings-action quiet" onClick={onAdopt}>{restore ? `Restore Attn roles (${missing.length})` : 'Add Attn roles'}</button>}
+    {missing.length > 0 && <button type="button" className="settings-action quiet" onClick={onAdopt}>{!some ? 'Add Attn roles' : missing.length === 1 ? `+ ${missing[0]}` : `Add Attn roles: ${missing.join(', ')}`}</button>}
   </div>;
 }
 
@@ -343,7 +343,7 @@ export function DelegationSettings({ policy, loadModels }: { policy: DelegationP
       {config.roles.map(role => <RoleRow key={role.id} role={role} view={view(role)} harnesses={state.harnesses} open={rows.expanded === role.id} expandedAlt={rows.expandedAlt} popoverKey={picker.key}
         onToggle={() => rows.toggle(role.id)} onExpandAlt={rows.setExpandedAlt} onOpenPopover={picker.open} onUpdate={updateRole} onCopy={() => copyRole(role)} onDelete={() => deleteRole(role)} onMakeDefault={alt => makeDefault(role, alt)} onRemoveAlt={alt => removeAlternative(role, alt)} />)}
       <FallbackRow fallback={config.fallback} harnesses={state.harnesses} open={rows.expanded === FALLBACK} popoverOpen={picker.key === FALLBACK} onToggle={() => rows.toggle(FALLBACK)} onOpenPopover={anchor => picker.open(FALLBACK, anchor)} onChange={fallback => commit({ ...config, fallback })} />
-      {config.roles.length > 0 && <AddRow config={config} missing={missing} onAdd={addRole} onAdopt={adopt} />}
+      {config.roles.length > 0 && <AddRow config={config} missing={missing.map(templateName)} onAdd={addRole} onAdopt={adopt} />}
     </div>
     {adoption && <AdoptionPanel config={config} templates={missing} names={templateName} adoption={adoption} onChange={setAdoption} onCancel={() => setAdoption(null)} onConfirm={confirmAdoption} />}
     {undo && <div role="status" className="delegation-undo"><span>{undo.label}.</span><button type="button" className="settings-action quiet" onClick={() => { void save(undo.previous); forget(); }}>Undo</button></div>}

@@ -16,6 +16,7 @@ var delegationRoleSpecs = []struct {
 	{protocol.BuiltinDelegationRoleBuilder, "Builder", "code"},
 	{protocol.BuiltinDelegationRoleReviewer, "Reviewer", "list"},
 	{protocol.BuiltinDelegationRoleOrchestrator, "Orchestrator", "spark"},
+	{protocol.BuiltinDelegationRolePrototyper, "Prototyper", "layers"},
 }
 
 func delegationPreferencesRecipient() Recipient {

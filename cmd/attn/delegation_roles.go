@@ -92,7 +92,7 @@ reading:
 changing (each accepts -m TEXT, the reason recorded in history):
   add <role> --name NAME [guidance] [model]
         a custom role. Its default model comes from the model flags.
-  add <role> --builtin pathfinder|builder|reviewer|orchestrator [model]
+  add <role> --builtin pathfinder|builder|reviewer|orchestrator|prototyper [model]
         one of Attn's maintained roles (needs Add Attn roles in Settings once).
   add <role>/<alt> [--when TEXT] [--name NAME] [model]
         an alternative model for a role, starting from its default model.

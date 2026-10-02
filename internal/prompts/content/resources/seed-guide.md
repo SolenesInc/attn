@@ -99,7 +99,8 @@ Adapt the assignment and its completion check to the work:
                experience. What it taught is written as findings into the plan
                it informs, or below the task in its own body until a plan
                exists. State what it should teach; its code is disposable
-               unless the user decides to keep it.
+               unless the user decides to keep it. A prototype is a spike
+               whose result is options for the user to choose between.
 
 Harvest when the outcome and required verification in the body are complete.
 When the only thing left is a pull request merging, say so once and let attn

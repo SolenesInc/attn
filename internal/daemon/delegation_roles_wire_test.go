@@ -44,7 +44,7 @@ func TestAddingAttnRolesInstallsTheWorkflowSkillBeforeSavingThem(t *testing.T) {
 	for _, template := range loaded.Templates {
 		templates = append(templates, template.ID)
 	}
-	for _, want := range []string{"pathfinder", "builder", "reviewer", "orchestrator"} {
+	for _, want := range []string{"pathfinder", "builder", "reviewer", "orchestrator", "prototyper"} {
 		if !slices.Contains(templates, want) {
 			t.Errorf("the offered templates %v lack %s", templates, want)
 		}
