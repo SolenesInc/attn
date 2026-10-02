@@ -449,7 +449,7 @@ function SessionInspector({
       {entry.usage && (
         <Field label="Usage">
           {entry.usage.total_tokens.toLocaleString('en-US')} tokens{' '}
-          <HeaderSessionUsage usage={entry.usage} sessionId={entry.id} pinned={false} onPopoverClosed={() => {}} />
+          <HeaderSessionUsage usage={entry.usage} sessionId={entry.id} pinned={false} onPopoverClosed={() => {}} popoverClassName="ledger-usage-popover" />
           {entry.usage.measurement_incomplete && <div className="ledger-muted">Measurement incomplete; native usage may be missing.</div>}
         </Field>
       )}

@@ -24,7 +24,7 @@
   -webkit-font-smoothing: antialiased;
 }
 
-body:has(.ledger-shell) .session-usage-popover {
+.session-usage-popover.ledger-usage-popover {
   z-index: 401;
 }
 
