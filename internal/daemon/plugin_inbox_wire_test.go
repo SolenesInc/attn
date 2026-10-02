@@ -1,6 +1,7 @@
 package daemon_test
 
 import (
+	"github.com/victorarias/attn/internal/client"
 	"github.com/victorarias/attn/internal/protocol"
 	"github.com/victorarias/attn/internal/testworld"
 	"strings"
@@ -69,4 +70,46 @@ func TestAnInboxHeldForApprovalRingsOnceTheDriverReportsIdle(t *testing.T) {
 	if got := inboxContents(readInbox(t, cli, asking, 0).Items); got != "take a look" {
 		t.Fatalf("inbox=%q", got)
 	}
+}
+
+func TestASeedTransferredDuringAPluginRingNotifiesItsNewTenderImmediately(t *testing.T) {
+	inBubbleWithAgents(t, func(t *testing.T, w *world) {
+		w.finishStartupWork()
+		app, cli := w.App(), w.Client()
+		driver := connectDriver(t, w, "snipe-plugin", "snipe", map[string]bool{"state_reporting": true, "message_delivery": true})
+		awaitDriverAvailable(app, "snipe")
+		author, authorRun := spawnDriven(w, app, driver, w.Path("author"))
+		previous, previousRun := spawnDriven(w, app, driver, w.Path("previous"))
+		next, nextRun := spawnDriven(w, app, driver, w.Path("next"))
+		awaitingInput(t, app, driver, authorRun)
+		awaitingInput(t, app, driver, previousRun)
+		awaitingInput(t, app, driver, nextRun)
+		seed := plantSeedAs(t, cli, author, "review the build")
+		if _, err := cli.SeedTransition(previous, seed, "tend", "", "", false, client.SeedTransitionOptions{}); err != nil {
+			t.Fatal(err)
+		}
+		sent := make(chan error, 1)
+		go func() { _, err := cli.AgentMsg(seed, author, "take a look"); sent <- err }()
+		var message deliveredMessage
+		held := driver.asked("driver.deliver_message", &message)
+		if message.SessionID != previous || !strings.Contains(message.Text, inboxDoorbell) {
+			t.Fatalf("first delivery=%+v", message)
+		}
+		if _, err := cli.SeedTransition(next, seed, "tend", "", "", true, client.SeedTransitionOptions{}); err != nil {
+			t.Fatal(err)
+		}
+		driver.answer(held, map[string]bool{"ok": true})
+		before := time.Now()
+		held = driver.asked("driver.deliver_message", &message)
+		if message.SessionID != next || !strings.Contains(message.Text, inboxDoorbell) || time.Since(before) != 0 {
+			t.Fatalf("next delivery=%+v after %s", message, time.Since(before))
+		}
+		driver.answer(held, map[string]bool{"ok": true})
+		if err := <-sent; err != nil {
+			t.Fatal(err)
+		}
+		if got := inboxContents(readInbox(t, cli, next, 0).Items); got != "take a look" {
+			t.Fatalf("next tender inbox=%q", got)
+		}
+	})
 }

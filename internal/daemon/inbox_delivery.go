@@ -247,7 +247,25 @@ func (d *Daemon) deliverInboxLocked(a inbox.Address, state *inboxDeliveryState) 
 	if placement.err == nil && (placement.stage == sessionInputPlaced || placement.stage == sessionInputTaken) {
 		d.sessionInputs().forget(holder.ID, id)
 		now := time.Now()
-		if err := d.store.RingInbox(a, finishingWake, now); err != nil {
+		if a.SeedID() != "" {
+			d.lockGardenRoles()
+			current, _, err := d.inboxRecipient(a)
+			if err != nil {
+				d.unlockGardenRoles()
+				return receipt, err
+			}
+			if current == nil || current.ID != holder.ID {
+				d.unlockGardenRoles()
+				state.wakeSession = ""
+				d.kickInbox(a)
+				return receipt, nil
+			}
+			err = d.store.RingInbox(a, finishingWake, now)
+			d.unlockGardenRoles()
+			if err != nil {
+				return receipt, err
+			}
+		} else if err := d.store.RingInbox(a, finishingWake, now); err != nil {
 			return receipt, err
 		}
 		state.wakeSession = ""
