@@ -1,0 +1,3 @@
+kind: changed
+area: settings
+change: Shared Codex and Shared PTY host controls now live in Experimental settings; the Terminal tab and Runtime mode display have been removed.
