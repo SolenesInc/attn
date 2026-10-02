@@ -18,7 +18,6 @@ type LaunchDesktopSetting struct {
 	DestinationID string
 	DesktopID     string
 	DesktopName   string
-	ShortcutSlot  int
 	Pending       bool
 	OwnerKind     string
 	OwnerID       string
@@ -99,7 +98,7 @@ func loadLaunchItem(tx *sql.Tx, kind, id string) (LaunchDesktopItem, error) {
 	}
 	setting := &item.Setting
 	var own bool
-	err = tx.QueryRow(`SELECT d.id,d.name,d.requested_slot,d.live_desktop_id,d.own,a.confirmed FROM launch_desktops a JOIN launch_destinations d ON d.id = a.destination_id WHERE a.kind = ? AND a.item_id = ?`, kind, id).Scan(&setting.DestinationID, &setting.DesktopName, &setting.ShortcutSlot, &setting.DesktopID, &own, &item.Confirmed)
+	err = tx.QueryRow(`SELECT d.id,d.name,d.desktop_id,d.own,a.confirmed FROM launch_desktops a JOIN launch_destinations d ON d.id = a.destination_id WHERE a.kind = ? AND a.item_id = ?`, kind, id).Scan(&setting.DestinationID, &setting.DesktopName, &setting.DesktopID, &own, &item.Confirmed)
 	if err != nil {
 		return item, err
 	}
@@ -110,22 +109,36 @@ func loadLaunchItem(tx *sql.Tx, kind, id string) (LaunchDesktopItem, error) {
 	if own && setting.OwnerKind == kind && setting.OwnerID == id {
 		setting.Mode = "own"
 	}
-	setting.Pending = setting.DesktopID == ""
+	slot := profiles.DesktopSlot(setting.DesktopID)
 	setting.Label = setting.DesktopName
-	slot := setting.ShortcutSlot
+	if setting.Label == "" && slot != 0 {
+		setting.Label = fmt.Sprintf("Desktop %d", slot)
+	}
+	setting.Pending = true
 	if setting.DesktopID != "" {
-		desktop, err := loadDesktop(tx, setting.DesktopID)
+		desktop, found, err := findDesktop(tx, setting.DesktopID)
 		if err != nil {
 			return item, err
 		}
-		slot = desktop.ShortcutSlot
-		setting.Label, err = launchDesktopName(tx, desktop)
-		if err != nil {
-			return item, err
+		if found {
+			setting.Pending = false
+			if setting.Label, err = launchDesktopName(tx, desktop); err != nil {
+				return item, err
+			}
 		}
 	}
 	setting.Label = launchDesktopLabel(setting.Label, slot)
 	return item, nil
+}
+
+// findDesktop reports a missing desktop as not found; a numbered launch destination outlives its desktop.
+func findDesktop(tx *sql.Tx, id string) (profiles.Desktop, bool, error) {
+	desktop, err := loadDesktop(tx, id)
+	var missing *profiles.Error
+	if errors.As(err, &missing) && missing.Code == profiles.CodeNotFound {
+		return desktop, false, nil
+	}
+	return desktop, err == nil, err
 }
 
 func saveLaunchSetting(tx *sql.Tx, kind, id string, setting LaunchDesktopSetting, bumpAutomationRevision bool) (LaunchDesktopItem, error) {
@@ -144,48 +157,42 @@ func saveLaunchSetting(tx *sql.Tx, kind, id string, setting LaunchDesktopSetting
 		if name == "" {
 			name = item.Name
 		}
-		if setting.ShortcutSlot != 0 && (setting.ShortcutSlot < 5 || setting.ShortcutSlot > 9) {
-			return item, profiles.Errorf(profiles.CodeInvalid, "launch shortcut_slot must be 0 or an explicit empty slot 5–9, asked for %d", setting.ShortcutSlot)
-		}
-		binding := ""
+		desktopID := setting.DesktopID
 		if item.Setting.Mode == "own" {
 			destination = item.Setting.DestinationID
-			binding = item.Setting.DesktopID
-		}
-		slotChanged := setting.ShortcutSlot != item.Setting.ShortcutSlot
-		if destination == "" || slotChanged {
-			if err := ensureShortcutSlotFree(tx, item.ProfileID, setting.ShortcutSlot, binding); err != nil {
-				return item, err
+			if desktopID == "" && profiles.DesktopSlot(item.Setting.DesktopID) == 0 {
+				desktopID = item.Setting.DesktopID
 			}
 		}
-		if destination == "" {
+		var holder string
+		held, err := rowFound(tx.QueryRow(`SELECT id FROM launch_destinations WHERE desktop_id = ? AND desktop_id != '' AND id != ?`, desktopID, destination), &holder)
+		if err != nil {
+			return item, err
+		}
+		switch {
+		case held:
+			destination = holder
+		case destination == "":
 			destination = newProfileEntityID("launch")
-			if _, err := tx.Exec(`INSERT INTO launch_destinations(id,profile_id,name,requested_slot) VALUES (?,?,?,?)`, destination, item.ProfileID, name, setting.ShortcutSlot); err != nil {
+			if _, err := tx.Exec(`INSERT INTO launch_destinations(id,profile_id,name,desktop_id) VALUES (?,?,?,?)`, destination, item.ProfileID, name, desktopID); err != nil {
 				return item, err
 			}
-		} else {
-			changed = name != item.Setting.DesktopName || setting.ShortcutSlot != item.Setting.ShortcutSlot
-			if _, err := tx.Exec(`UPDATE launch_destinations SET name = ?,requested_slot = ? WHERE id = ?`, name, setting.ShortcutSlot, destination); err != nil {
+		default:
+			changed = name != item.Setting.DesktopName || desktopID != item.Setting.DesktopID
+			if _, err := tx.Exec(`UPDATE launch_destinations SET name = ?,desktop_id = ? WHERE id = ?`, name, desktopID, destination); err != nil {
 				return item, err
 			}
-			if binding != "" {
-				desktop, err := loadDesktop(tx, binding)
-				if err != nil {
+			desktop, found, err := findDesktop(tx, desktopID)
+			if err != nil {
+				return item, err
+			}
+			if found && desktop.Name != name {
+				desktop.Name = name
+				if err := saveDesktop(tx, time.Now().UTC().Format(sortableTimeFormat), &desktop); err != nil {
 					return item, err
 				}
-				liveSlot := desktop.ShortcutSlot
-				if slotChanged {
-					liveSlot = setting.ShortcutSlot
-				}
-				if desktop.Name != name || desktop.ShortcutSlot != liveSlot {
-					changed = true
-					desktop.Name, desktop.ShortcutSlot = name, liveSlot
-					if err := saveDesktop(tx, time.Now().UTC().Format(sortableTimeFormat), &desktop); err != nil {
-						return item, err
-					}
-					if _, err := appendBusEventWith(tx, BusEvent{Name: "profile.arrangement.changed", Subject: item.ProfileID}, time.Now()); err != nil {
-						return item, err
-					}
+				if _, err := appendBusEventWith(tx, BusEvent{Name: "profile.arrangement.changed", Subject: item.ProfileID}, time.Now()); err != nil {
+					return item, err
 				}
 			}
 			if changed {
@@ -199,17 +206,19 @@ func saveLaunchSetting(tx *sql.Tx, kind, id string, setting LaunchDesktopSetting
 		if err != nil {
 			return item, err
 		}
-		found, err := rowFound(tx.QueryRow(`SELECT id FROM launch_destinations WHERE live_desktop_id = ?`, desktop.ID), &destination)
+		found, err := rowFound(tx.QueryRow(`SELECT id FROM launch_destinations WHERE desktop_id = ?`, desktop.ID), &destination)
 		if err != nil {
 			return item, err
 		}
 		if !found {
-			name, err := launchDesktopName(tx, desktop)
-			if err != nil {
-				return item, err
+			name := desktop.Name
+			if desktop.ShortcutSlot == 0 {
+				if name, err = launchDesktopName(tx, desktop); err != nil {
+					return item, err
+				}
 			}
 			destination = newProfileEntityID("launch")
-			if _, err := tx.Exec(`INSERT INTO launch_destinations(id,profile_id,name,live_desktop_id,own) VALUES (?,?,?,?,0)`, destination, item.ProfileID, name, desktop.ID); err != nil {
+			if _, err := tx.Exec(`INSERT INTO launch_destinations(id,profile_id,name,desktop_id,own) VALUES (?,?,?,?,0)`, destination, item.ProfileID, name, desktop.ID); err != nil {
 				return item, err
 			}
 		}
@@ -388,24 +397,14 @@ func launchItemDesktop(tx *sql.Tx, now string, profile *profiles.Profile, kind, 
 	if err != nil {
 		return profiles.Desktop{}, err
 	}
-	if item.Setting.DesktopID != "" {
-		return loadDesktop(tx, item.Setting.DesktopID)
+	if desktop, found, err := findDesktop(tx, item.Setting.DesktopID); found || err != nil {
+		return desktop, err
 	}
-	slot := item.Setting.ShortcutSlot
-	if slot != 0 {
-		var occupied bool
-		if err := tx.QueryRow(`SELECT EXISTS(SELECT 1 FROM desktops WHERE profile_id = ? AND shortcut_slot = ?)`, profile.ID, slot).Scan(&occupied); err != nil {
-			return profiles.Desktop{}, err
-		}
-		if occupied {
-			slot = 0
-		}
-	}
-	desktop, err := insertDesktop(tx, now, profile.ID, item.Setting.DesktopName, slot)
+	desktop, err := insertDesktop(tx, now, profile.ID, item.Setting.DesktopName, profiles.DesktopSlot(item.Setting.DesktopID))
 	if err != nil {
 		return desktop, err
 	}
-	if _, err := tx.Exec(`UPDATE launch_destinations SET live_desktop_id = ? WHERE id = ?`, desktop.ID, item.Setting.DestinationID); err != nil {
+	if _, err := tx.Exec(`UPDATE launch_destinations SET desktop_id = ? WHERE id = ?`, desktop.ID, item.Setting.DestinationID); err != nil {
 		return desktop, err
 	}
 	return desktop, appendLaunchDestinationFacts(tx, item.Setting.DestinationID)
@@ -428,12 +427,14 @@ func (s *Store) PlaceBackgroundSession(sessionID, kind, id string, reopen bool) 
 			if err := tx.QueryRow(`SELECT last_desktop_id FROM sessions WHERE id = ?`, sessionID).Scan(&last); err != nil {
 				return err
 			}
-			desktop, err = loadDesktop(tx, last)
-			var missing *profiles.Error
-			if err != nil && (!errors.As(err, &missing) || missing.Code != profiles.CodeNotFound) {
-				return err
-			}
-			if err != nil || desktop.ProfileID != profile.ID {
+			var found bool
+			desktop, found, err = findDesktop(tx, last)
+			slot := profiles.DesktopSlot(last)
+			switch {
+			case err != nil:
+			case !found && slot != 0 && last == profiles.NumberedDesktopID(profile.ID, slot):
+				desktop, err = insertDesktop(tx, now, profile.ID, "", slot)
+			case !found || desktop.ProfileID != profile.ID:
 				desktop, err = loadLaunchDesktop(tx, profile, "")
 			}
 		} else {
@@ -564,34 +565,50 @@ func (s *Store) LaunchDesktopItems(profileID string) ([]LaunchDesktopItem, error
 
 func moveLaunchItemProfile(tx *sql.Tx, kind, id, profileID string) error {
 	var destination, owner, name, binding string
-	var slot int
 	var own bool
-	err := tx.QueryRow(`SELECT d.id,d.profile_id,d.name,d.requested_slot,d.live_desktop_id,d.own FROM launch_desktops a JOIN launch_destinations d ON d.id = a.destination_id WHERE a.kind = ? AND a.item_id = ?`, kind, id).Scan(&destination, &owner, &name, &slot, &binding, &own)
+	err := tx.QueryRow(`SELECT d.id,d.profile_id,d.name,d.desktop_id,d.own FROM launch_desktops a JOIN launch_destinations d ON d.id = a.destination_id WHERE a.kind = ? AND a.item_id = ?`, kind, id).Scan(&destination, &owner, &name, &binding, &own)
 	if errors.Is(err, sql.ErrNoRows) {
 		return nil
 	}
 	if err != nil || owner == profileID {
 		return err
 	}
+	moved := ""
+	if slot := profiles.DesktopSlot(binding); slot != 0 {
+		moved = profiles.NumberedDesktopID(profileID, slot)
+	}
+	var holder string
+	held, err := rowFound(tx.QueryRow(`SELECT id FROM launch_destinations WHERE desktop_id = ? AND desktop_id != ''`, moved), &holder)
+	if err != nil {
+		return err
+	}
 	var count int
 	if err := tx.QueryRow(`SELECT COUNT(*) FROM launch_desktops WHERE destination_id = ?`, destination).Scan(&count); err != nil {
 		return err
 	}
-	if count == 1 {
-		_, err = tx.Exec(`UPDATE launch_destinations SET profile_id = ?,live_desktop_id = '' WHERE id = ?`, profileID, destination)
+	switch {
+	case held:
+		_, err = tx.Exec(`UPDATE launch_desktops SET destination_id = ? WHERE kind = ? AND item_id = ?`, holder, kind, id)
+	case count == 1:
+		_, err = tx.Exec(`UPDATE launch_destinations SET profile_id = ?,desktop_id = ? WHERE id = ?`, profileID, moved, destination)
+		return err
+	default:
+		replacement := newProfileEntityID("launch")
+		if _, err := tx.Exec(`INSERT INTO launch_destinations(id,profile_id,name,desktop_id,own) VALUES (?,?,?,?,?)`, replacement, profileID, name, moved, own); err != nil {
+			return err
+		}
+		_, err = tx.Exec(`UPDATE launch_desktops SET destination_id = ? WHERE kind = ? AND item_id = ?`, replacement, kind, id)
+	}
+	if err != nil {
 		return err
 	}
-	replacement := newProfileEntityID("launch")
-	if _, err := tx.Exec(`INSERT INTO launch_destinations(id,profile_id,name,requested_slot,own) VALUES (?,?,?,?,?)`, replacement, profileID, name, slot, own); err != nil {
-		return err
-	}
-	_, err = tx.Exec(`UPDATE launch_desktops SET destination_id = ? WHERE kind = ? AND item_id = ?`, replacement, kind, id)
+	_, err = tx.Exec(`DELETE FROM launch_destinations WHERE NOT EXISTS (SELECT 1 FROM launch_desktops WHERE destination_id = launch_destinations.id)`)
 	return err
 }
 
-const removableDesktop = `tree_json = '' AND id != (SELECT current_desktop_id FROM profiles WHERE id = desktops.profile_id) AND NOT EXISTS (SELECT 1 FROM profile_migration WHERE phase = 'placement_required')`
+const removableDesktop = `tree_json = '' AND name = '' AND id != (SELECT current_desktop_id FROM profiles WHERE id = desktops.profile_id) AND NOT EXISTS (SELECT 1 FROM profile_migration WHERE phase = 'placement_required')`
 
-// stampEmptyDesktops records when each desktop became empty and not current; true when one just did.
+// stampEmptyDesktops records when each unnamed desktop became empty and not current; true when one just did.
 // It reads first so a read-only profiles transaction never takes SQLite's write lock.
 func stampEmptyDesktops(tx *sql.Tx, now string) (bool, error) {
 	var stale bool
@@ -609,7 +626,7 @@ func stampEmptyDesktops(tx *sql.Tx, now string) (bool, error) {
 	return count > 0, err
 }
 
-// OnEmptyDesktop tells fn when a desktop just became empty and not current.
+// OnEmptyDesktop tells fn when an unnamed desktop just became empty and not current.
 func (s *Store) OnEmptyDesktop(fn func(emptiedAt time.Time)) {
 	s.emptyDesktop = fn
 }
@@ -620,7 +637,7 @@ func (s *Store) announceEmptyDesktop(emptiedAt time.Time) {
 	}
 }
 
-// RemoveEmptyDesktops deletes desktops empty and not current for at least grace. It names their
+// RemoveEmptyDesktops deletes unnamed desktops empty and not current for at least grace. It names their
 // profiles and when the next remaining one is due, zero when none is.
 func (s *Store) RemoveEmptyDesktops(grace time.Duration) ([]string, time.Time, error) {
 	var profileIDs []string
@@ -695,7 +712,7 @@ func appendLaunchDestinationFacts(tx *sql.Tx, destinationID string) error {
 }
 
 func appendBoundLaunchDesktopFacts(tx *sql.Tx, desktopID string) error {
-	ids, err := queryColumn[string](tx, `SELECT id FROM launch_destinations WHERE live_desktop_id = ?`, desktopID)
+	ids, err := queryColumn[string](tx, `SELECT id FROM launch_destinations WHERE desktop_id = ?`, desktopID)
 	if err != nil {
 		return err
 	}

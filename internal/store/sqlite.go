@@ -1286,10 +1286,9 @@ CREATE INDEX IF NOT EXISTS idx_automode_denials_recent ON automode_denials(id DE
 	{167, "place background launches and remember named destinations", `
  CREATE TABLE IF NOT EXISTS launch_destinations (
  id TEXT PRIMARY KEY, profile_id TEXT NOT NULL, name TEXT NOT NULL,
- requested_slot INTEGER NOT NULL DEFAULT 0,
- live_desktop_id TEXT NOT NULL DEFAULT '', own INTEGER NOT NULL DEFAULT 1
+ desktop_id TEXT NOT NULL DEFAULT '', own INTEGER NOT NULL DEFAULT 1
  );
- CREATE UNIQUE INDEX IF NOT EXISTS launch_destination_binding ON launch_destinations(live_desktop_id) WHERE live_desktop_id != '';
+ CREATE UNIQUE INDEX IF NOT EXISTS launch_destination_binding ON launch_destinations(desktop_id) WHERE desktop_id != '';
  CREATE TABLE IF NOT EXISTS launch_desktops (
  joined_order INTEGER PRIMARY KEY AUTOINCREMENT,
  kind TEXT NOT NULL CHECK(kind IN ('automation', 'crew')), item_id TEXT NOT NULL,
@@ -1306,10 +1305,11 @@ CREATE INDEX IF NOT EXISTS idx_automode_denials_recent ON automode_denials(id DE
  BEGIN UPDATE profile_migration SET revision = revision + 1 WHERE phase = 'launch_required'; END;
  CREATE TRIGGER IF NOT EXISTS launch_review_destination_update AFTER UPDATE ON launch_destinations
  BEGIN UPDATE profile_migration SET revision = revision + 1 WHERE phase = 'launch_required'; END;
- CREATE TRIGGER IF NOT EXISTS launch_destination_unbind AFTER DELETE ON desktops
- BEGIN UPDATE launch_destinations SET live_desktop_id = '' WHERE live_desktop_id = OLD.id; END;
- CREATE TRIGGER IF NOT EXISTS launch_destination_rename AFTER UPDATE OF name ON desktops WHEN NEW.name != '' AND NEW.name != OLD.name
- BEGIN UPDATE launch_destinations SET name = NEW.name WHERE live_desktop_id = NEW.id; END;
+ CREATE TRIGGER IF NOT EXISTS launch_destination_unbind AFTER DELETE ON desktops WHEN OLD.shortcut_slot IS NULL
+ BEGIN UPDATE launch_destinations SET desktop_id = '' WHERE desktop_id = OLD.id; END;
+ CREATE TRIGGER IF NOT EXISTS launch_destination_rename AFTER UPDATE OF name ON desktops
+ WHEN NEW.name != OLD.name AND (NEW.name != '' OR NEW.shortcut_slot IS NOT NULL)
+ BEGIN UPDATE launch_destinations SET name = NEW.name WHERE desktop_id = NEW.id; END;
  CREATE TRIGGER IF NOT EXISTS launch_review_definition_update AFTER UPDATE OF name, profile_id, deleted_at ON automation_definitions
  WHEN OLD.name != NEW.name OR OLD.profile_id != NEW.profile_id OR OLD.deleted_at != NEW.deleted_at
  BEGIN UPDATE profile_migration SET revision = revision + 1 WHERE phase = 'launch_required'; END;

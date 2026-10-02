@@ -266,7 +266,6 @@ var messageDecoders = map[string]func([]byte) (any, error){
 	CmdMigrationFinish:               decodeInto[MigrationFinishMessage],
 	CmdDesktopCreate:                 decodeInto[DesktopCreateMessage],
 	CmdDesktopRename:                 decodeInto[DesktopRenameMessage],
-	CmdDesktopSetShortcutSlot:        decodeInto[DesktopSetShortcutSlotMessage],
 	CmdDesktopReorder:                decodeInto[DesktopReorderMessage],
 	CmdDesktopSetCurrent:             decodeInto[DesktopSetCurrentMessage],
 	CmdDesktopSetActivePane:          decodeInto[DesktopSetActivePaneMessage],

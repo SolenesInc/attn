@@ -674,14 +674,14 @@ model DesktopPane {
   error?: string;
 }
 
-// revision counts changes to the desktop's name, shortcut slot, order, tree and
-// panes. active_pane_id is selection and never moves it; it names a leaf of
+// revision counts changes to the desktop's name, order, tree and panes. A
+// desktop on a shortcut slot has the id <profile_id>/desktop_<slot> and never changes slot. active_pane_id is selection and never moves it; it names a leaf of
 // this desktop, an agent pane or a tile, or is empty when the desktop has no leaves.
 model Desktop {
   id: string;
   profile_id: string;
   name: string;
-  shortcut_slot?: int32;        // 1-9; absent for a desktop past the shortcut range
+  shortcut_slot?: int32;        // 1-9; absent for an unnumbered desktop
   order_key: string;
   tree_json: string;            // Split tree of pane and tile leaves; empty for an empty desktop
   active_pane_id: string;
@@ -3153,15 +3153,6 @@ model DesktopRenameMessage {
   expected_revision: safeint;
 }
 
-// Absent shortcut_slot clears the slot. A slot held by another desktop is refused.
-model DesktopSetShortcutSlotMessage {
-  cmd: "desktop_set_shortcut_slot";
-  request_id: string;
-  desktop_id: string;
-  shortcut_slot?: int32;
-  expected_revision: safeint;
-}
-
 // Places the desktop between two neighbours of the same profile; an absent
 // neighbour means the start or the end.
 model DesktopReorderMessage {
@@ -3389,13 +3380,13 @@ model BackgroundLaunchMessage {
 
 enum LaunchDesktopKind { automation, crew }
 enum LaunchDesktopMode { own, desktop }
+// desktop_id may name a numbered desktop that does not exist yet; a launch creates it.
 model LaunchDesktopSetting {
   label?: string;
   mode: LaunchDesktopMode;
   desktop_id?: string;
   destination_id?: string;
   desktop_name?: string;
-  shortcut_slot?: safeint;
   pending?: boolean;
   owner_kind?: LaunchDesktopKind;
   owner_id?: string;

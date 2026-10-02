@@ -98,7 +98,7 @@ func applyProfileConversion(tx *sql.Tx) error {
 	if err != nil {
 		return err
 	}
-	result, err := convertLegacyWorkspaces(input, newProfileEntityID)
+	result, err := convertLegacyWorkspaces(input, newProfileEntityID("profile"), newProfileEntityID)
 	if err != nil {
 		return err
 	}
@@ -306,8 +306,9 @@ func newestPlacements(candidates []placementCandidate) (map[string]placementCand
 	return kept, dropped
 }
 
-func convertLegacyWorkspaces(input legacyInput, newID func(string) string) (convertedWorkspaces, error) {
+func convertLegacyWorkspaces(input legacyInput, profileID string, newID func(string) string) (convertedWorkspaces, error) {
 	var result convertedWorkspaces
+	result.Manifest.ProfileID = profileID
 	var retained []workspaceConversion
 	var candidates []placementCandidate
 	for rank, ws := range input.Workspaces {
@@ -357,7 +358,11 @@ func (c convertedWorkspaces) buildDesktops(input legacyInput, retained []workspa
 		if len(c.Desktops) < profiles.LastShortcutSlot {
 			slot = len(c.Desktops) + 1
 		}
-		desktop := profiles.Desktop{ID: newID("desktop"), ShortcutSlot: slot, Tree: conversion.tree, ActivePaneID: conversion.active, Revision: 1}
+		id := newID("desktop")
+		if slot != 0 {
+			id = profiles.NumberedDesktopID(c.Manifest.ProfileID, slot)
+		}
+		desktop := profiles.Desktop{ID: id, ShortcutSlot: slot, Tree: conversion.tree, ActivePaneID: conversion.active, Revision: 1}
 		for _, legacyID := range layouttree.PaneIDs(conversion.tree) {
 			pane := input.Panes[ws.ID][legacyID]
 			paneID := legacyID
@@ -390,7 +395,7 @@ func (c convertedWorkspaces) buildDesktops(input legacyInput, retained []workspa
 	}
 	sort.Strings(c.Manifest.UnplacedSessions)
 	if len(c.Desktops) == 0 {
-		c.Desktops = append(c.Desktops, profiles.Desktop{ID: newID("desktop"), ShortcutSlot: profiles.FirstShortcutSlot, Revision: 1})
+		c.Desktops = append(c.Desktops, profiles.Desktop{ID: profiles.NumberedDesktopID(c.Manifest.ProfileID, profiles.FirstShortcutSlot), ShortcutSlot: profiles.FirstShortcutSlot, Revision: 1})
 	}
 	return c, nil
 }
@@ -411,8 +416,7 @@ func legacyDesktopPane(desktopID, paneID string, pane legacyPane, session legacy
 
 func writeProfileConversion(tx *sql.Tx, result convertedWorkspaces) error {
 	now := time.Now().UTC().Format(sortableTimeFormat)
-	profileID := newProfileEntityID("profile")
-	result.Manifest.ProfileID = profileID
+	profileID := result.Manifest.ProfileID
 	if _, err := tx.Exec(`
 		INSERT INTO profiles (id, name, current_desktop_id, last_used_at, revision, created_at, deleted_at)
 		VALUES (?, ?, ?, '', 1, ?, '')`, profileID, DefaultProfileName, result.Desktops[0].ID, now); err != nil {

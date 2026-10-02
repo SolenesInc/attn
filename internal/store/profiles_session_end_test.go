@@ -161,15 +161,13 @@ func TestAMoveWhoseTargetWriteFailsLeavesTheSourceUntouched(t *testing.T) {
 
 func TestShortcutSlotsOutsideOneToNineAreRefusedByName(t *testing.T) {
 	s, _ := openProfileStore(t)
-	profile, desktop := mustCreateProfile(t, s, "attn")
+	profile, _ := mustCreateProfile(t, s, "attn")
 	for _, slot := range []int{-1, 10} {
 		_, _, err := s.CreateDesktop(profile.ID, "", slot, false)
 		refusal := wantCode(t, err, profiles.CodeInvalid)
 		if refusal.Message != profiles.ValidateShortcutSlot(slot).Error() {
 			t.Fatalf("slot %d refused with %q", slot, refusal.Message)
 		}
-		_, err = s.SetDesktopShortcutSlot(desktop.ID, slot, desktop.Revision)
-		wantCode(t, err, profiles.CodeInvalid)
 	}
 	if err := profiles.ValidateShortcutSlot(10); err == nil || err.Error() != "shortcut slot 10 is outside 1-9" {
 		t.Fatalf("slot 10 refusal = %v, want it to name the slot and the 1-9 range", err)

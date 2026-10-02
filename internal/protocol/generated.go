@@ -3422,23 +3422,6 @@ type DesktopSetCurrentMessage struct {
 	RequestID string `json:"request_id"`
 }
 
-type DesktopSetShortcutSlotMessage struct {
-	// Cmd corresponds to the JSON schema field "cmd".
-	Cmd string `json:"cmd"`
-
-	// DesktopID corresponds to the JSON schema field "desktop_id".
-	DesktopID string `json:"desktop_id"`
-
-	// ExpectedRevision corresponds to the JSON schema field "expected_revision".
-	ExpectedRevision int `json:"expected_revision"`
-
-	// RequestID corresponds to the JSON schema field "request_id".
-	RequestID string `json:"request_id"`
-
-	// ShortcutSlot corresponds to the JSON schema field "shortcut_slot".
-	ShortcutSlot *int `json:"shortcut_slot,omitempty,omitzero"`
-}
-
 type DesktopSetSplitRatioMessage struct {
 	// Cmd corresponds to the JSON schema field "cmd".
 	Cmd string `json:"cmd"`
@@ -5616,9 +5599,6 @@ type LaunchDesktopSetting struct {
 
 	// Pending corresponds to the JSON schema field "pending".
 	Pending *bool `json:"pending,omitempty,omitzero"`
-
-	// ShortcutSlot corresponds to the JSON schema field "shortcut_slot".
-	ShortcutSlot *int `json:"shortcut_slot,omitempty,omitzero"`
 }
 
 type LayoutDockEdge string

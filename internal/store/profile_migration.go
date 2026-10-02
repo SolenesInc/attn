@@ -226,7 +226,7 @@ func writeMigrationOutcome(tx *sql.Tx, now string, profile *profiles.Profile, cu
 		if desktop.ID == "" {
 			lastKey = rankkey.After(lastKey)
 			desktop.OrderKey = lastKey
-			desktop.ID, desktop.ProfileID, desktop.Revision = newProfileEntityID("desktop"), profile.ID, 0
+			desktop.ID, desktop.ProfileID, desktop.Revision = newDesktopID(profile.ID, desktop.ShortcutSlot), profile.ID, 0
 			if _, err := tx.Exec(`
 				INSERT INTO desktops (id, profile_id, name, shortcut_slot, order_key, tree_json, active_pane_id, revision, created_at, updated_at)
 				VALUES (?, ?, '', ?, ?, '', '', 0, ?, ?)`,

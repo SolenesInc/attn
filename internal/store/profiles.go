@@ -294,11 +294,11 @@ func insertDesktop(tx *sql.Tx, now, profileID, name string, slot int) (profiles.
 	if err := tx.QueryRow(`SELECT COALESCE(MAX(order_key), '') FROM desktops WHERE profile_id = ?`, profileID).Scan(&lastKey); err != nil {
 		return profiles.Desktop{}, err
 	}
-	if err := ensureShortcutSlotFree(tx, profileID, slot, ""); err != nil {
+	if err := ensureShortcutSlotFree(tx, profileID, slot); err != nil {
 		return profiles.Desktop{}, err
 	}
 	desktop := profiles.Desktop{
-		ID:           newProfileEntityID("desktop"),
+		ID:           newDesktopID(profileID, slot),
 		ProfileID:    profileID,
 		Name:         strings.TrimSpace(name),
 		ShortcutSlot: slot,
@@ -312,6 +312,13 @@ func insertDesktop(tx *sql.Tx, now, profileID, name string, slot int) (profiles.
 	return desktop, err
 }
 
+func newDesktopID(profileID string, slot int) string {
+	if slot == 0 {
+		return newProfileEntityID("desktop")
+	}
+	return profiles.NumberedDesktopID(profileID, slot)
+}
+
 func slotValue(slot int) any {
 	if slot == 0 {
 		return nil
@@ -319,12 +326,12 @@ func slotValue(slot int) any {
 	return slot
 }
 
-func ensureShortcutSlotFree(tx *sql.Tx, profileID string, slot int, exceptDesktopID string) error {
+func ensureShortcutSlotFree(tx *sql.Tx, profileID string, slot int) error {
 	if slot == 0 {
 		return nil
 	}
 	var holder string
-	taken, err := rowFound(tx.QueryRow(`SELECT id FROM desktops WHERE profile_id = ? AND shortcut_slot = ? AND id != ?`, profileID, slot, exceptDesktopID), &holder)
+	taken, err := rowFound(tx.QueryRow(`SELECT id FROM desktops WHERE profile_id = ? AND shortcut_slot = ?`, profileID, slot), &holder)
 	if err != nil {
 		return err
 	}
@@ -823,22 +830,6 @@ func (s *Store) RenameDesktop(id, name string, expectedRevision int64) (profiles
 			return nil
 		}
 		desktop.Name = strings.TrimSpace(name)
-		return appendBoundLaunchDesktopFacts(tx, desktop.ID)
-	})
-}
-
-func (s *Store) SetDesktopShortcutSlot(id string, slot int, expectedRevision int64) (profiles.Desktop, error) {
-	return s.editDesktopRow(id, expectedRevision, func(tx *sql.Tx, desktop *profiles.Desktop) error {
-		if err := profiles.ValidateShortcutSlot(slot); err != nil {
-			return err
-		}
-		if err := ensureShortcutSlotFree(tx, desktop.ProfileID, slot, id); err != nil {
-			return err
-		}
-		if desktop.ShortcutSlot == slot {
-			return nil
-		}
-		desktop.ShortcutSlot = slot
 		return appendBoundLaunchDesktopFacts(tx, desktop.ID)
 	})
 }

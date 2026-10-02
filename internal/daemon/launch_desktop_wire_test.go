@@ -153,15 +153,14 @@ func TestNamedCrewDesktopsShareRecreateAndUserWakeTakesFocus(t *testing.T) {
 	}
 	crewHandoff(t, cli, day.SessionID, "Day complete.", false, protocol.CrewDayCloseSleep)
 	awaitClosed(app, day.SessionID)
-	awaitDesktopRemoved(t, w, profile, placed.ID)
 	again, err := cli.CrewWake("alder", "", caller)
 	if err != nil {
 		t.Fatal(err)
 	}
 	w.Launched(again.SessionID)
 	recreated, _ := viewProfile(t, w, profile).paneOf(t, again.SessionID)
-	if recreated.ID == placed.ID || recreated.Name != "Review" || protocol.Deref(recreated.ShortcutSlot) != 0 {
-		t.Fatalf("recreation: %+v", recreated)
+	if recreated.ID != placed.ID || recreated.Name != "Review" {
+		t.Fatalf("the named desktop did not outlive its emptiness: %+v", recreated)
 	}
 	assertBackgroundPlacement(t, w, profile, again.SessionID, recreated.ID, current, active)
 	user := wakeCrew(t, cli, "alder", "")
@@ -180,7 +179,7 @@ func TestNamedCrewDesktopsShareRecreateAndUserWakeTakesFocus(t *testing.T) {
 
 }
 
-func TestAutomationOwnDesktopUsesOnlyExplicitSlotsAndKeepsFocus(t *testing.T) {
+func TestAutomationLaunchesRecreateAMissingNumberedDesktopWithItsIdAndKeepFocus(t *testing.T) {
 	t.Setenv("ATTN_EMPTY_DESKTOP_GRACE", "0")
 	w := newWorld(t, fakeagent.Claude)
 	app, cli := w.App(), w.Client()
@@ -215,32 +214,34 @@ func TestAutomationOwnDesktopUsesOnlyExplicitSlotsAndKeepsFocus(t *testing.T) {
 	}
 	second := launch("second")
 	assertBackgroundPlacement(t, w, profile, second, desktop.ID, current, active)
-	launchSetting(app, "automation", "nightly", "desktop", current)
-	writeLaunchChoice(app, "automation", "nightly", protocol.LaunchDesktopSetting{Mode: protocol.LaunchDesktopModeOwn, DesktopName: protocol.Ptr("Checks"), ShortcutSlot: protocol.Ptr(5)})
+	slot5 := profile + "/desktop_5"
+	chosen := writeLaunchChoice(app, "automation", "nightly", protocol.LaunchDesktopSetting{Mode: protocol.LaunchDesktopModeOwn, DesktopName: protocol.Ptr("Checks"), DesktopID: protocol.Ptr(slot5)})
+	if !protocol.Deref(chosen.Setting.Pending) || protocol.Deref(chosen.Setting.Label) != "5 · Checks" {
+		t.Fatalf("own desktop on an empty slot: %+v", chosen.Setting)
+	}
 	third := launch("third")
 	numbered, _ := viewProfile(t, w, profile).paneOf(t, third)
-	if protocol.Deref(numbered.ShortcutSlot) != 5 {
-		t.Fatal("explicit slot was not used")
+	if numbered.ID != slot5 || protocol.Deref(numbered.ShortcutSlot) != 5 || numbered.Name != "Checks" {
+		t.Fatalf("own desktop on ⌘5: %+v", numbered)
 	}
+	assertBackgroundPlacement(t, w, profile, third, slot5, current, active)
 	closeSession(t, cli, third, "finished")
 	awaitClosed(app, third)
-	awaitDesktopRemoved(t, w, profile, numbered.ID)
-	occupied := mustProfileRequest(app, protocol.DesktopCreateMessage{Cmd: protocol.CmdDesktopCreate, RequestID: "occupy-slot", ProfileID: profile, Name: protocol.Ptr("Taken"), ShortcutSlot: protocol.Ptr(5)}, "occupy-slot").Desktops[0]
-	occupant := w.Spawn(app, fakeagent.Claude, w.Path("occupant"))
-	w.Launched(occupant)
-	switchDesktop(app, profile, current)
+	numbered = viewProfile(t, w, profile).desktops[slot5]
+	mustProfileRequest(app, protocol.DesktopRenameMessage{Cmd: protocol.CmdDesktopRename, RequestID: "unname", DesktopID: slot5, Name: "", ExpectedRevision: numbered.Revision}, "unname")
+	awaitDesktopRemoved(t, w, profile, slot5)
+	if got := readLaunchSetting(app, "automation", "nightly"); protocol.Deref(got.Setting.DesktopID) != slot5 || !protocol.Deref(got.Setting.Pending) {
+		t.Fatalf("the setting lost its numbered desktop: %+v", got.Setting)
+	}
 	fourth := launch("fourth")
-	withoutSlot, _ := viewProfile(t, w, profile).paneOf(t, fourth)
-	if withoutSlot.ID == occupied.ID || protocol.Deref(withoutSlot.ShortcutSlot) != 0 || withoutSlot.Name != "Checks" {
-		t.Fatalf("occupied slot recreation: %+v", withoutSlot)
+	recreated, _ := viewProfile(t, w, profile).paneOf(t, fourth)
+	if recreated.ID != slot5 || protocol.Deref(recreated.ShortcutSlot) != 5 || recreated.Name != "" {
+		t.Fatalf("recreated ⌘5: %+v", recreated)
 	}
-	assertBackgroundPlacement(t, w, profile, fourth, withoutSlot.ID, current, active)
-	if got := readLaunchSetting(app, "automation", "nightly"); protocol.Deref(got.Setting.ShortcutSlot) != 5 {
-		t.Fatal("occupied slot discarded saved preference")
-	}
+	assertBackgroundPlacement(t, w, profile, fourth, slot5, current, active)
 }
 
-func TestReopenReturnsToTheLastDesktopAndFallsBackAfterItIsDeleted(t *testing.T) {
+func TestReopenReturnsToItsNumberedDesktopEvenAfterItWasRemoved(t *testing.T) {
 	t.Setenv("ATTN_EMPTY_DESKTOP_GRACE", "0")
 	w := newWorld(t, fakeagent.Codex)
 	app, cli := w.App(), w.Client()
@@ -255,6 +256,9 @@ func TestReopenReturnsToTheLastDesktopAndFallsBackAfterItIsDeleted(t *testing.T)
 	agent.Prompted()
 	agent.Reply("Ready. <!-- attn:state=idle -->")
 	target := createDesktop(app, profile)
+	if target.ID != fmt.Sprintf("%s/desktop_%d", profile, protocol.Deref(target.ShortcutSlot)) {
+		t.Fatalf("a desktop on ⌘%d has id %s", protocol.Deref(target.ShortcutSlot), target.ID)
+	}
 	targetAnchor := w.Spawn(app, fakeagent.Codex, w.Path("target-anchor"))
 	w.Launched(targetAnchor)
 	switchDesktop(app, profile, current.ID)
@@ -263,13 +267,6 @@ func TestReopenReturnsToTheLastDesktopAndFallsBackAfterItIsDeleted(t *testing.T)
 	}
 	closeSession(t, cli, session, "done")
 	awaitClosed(app, session)
-	if _, err := cli.SessionReopen(client.SessionReopenOptions{SessionID: session}); err != nil {
-		t.Fatal(err)
-	}
-	w.Launched(session)
-	assertBackgroundPlacement(t, w, profile, session, target.ID, current.ID, active)
-	closeSession(t, cli, session, "done again")
-	awaitClosed(app, session)
 	closeSession(t, cli, targetAnchor, "empty the desktop")
 	awaitClosed(app, targetAnchor)
 	awaitDesktopRemoved(t, w, profile, target.ID)
@@ -277,7 +274,31 @@ func TestReopenReturnsToTheLastDesktopAndFallsBackAfterItIsDeleted(t *testing.T)
 		t.Fatal(err)
 	}
 	w.Launched(session)
-	assertBackgroundPlacement(t, w, profile, session, current.ID, current.ID, active)
+	assertBackgroundPlacement(t, w, profile, session, target.ID, current.ID, active)
+}
+
+func TestANamedDesktopIsNeverRemovedUntilItsNameIsCleared(t *testing.T) {
+	inBubble(t, func(t *testing.T, w *world) {
+		app := w.App()
+		profile := app.SelectedProfile()
+		named := createDesktop(app, profile)
+		mustProfileRequest(app, protocol.DesktopRenameMessage{Cmd: protocol.CmdDesktopRename, RequestID: "name", DesktopID: named.ID, Name: "Notes", ExpectedRevision: named.Revision}, "name")
+		createDesktop(app, profile)
+		w.advance(time.Hour)
+		kept, exists := viewProfile(t, w, profile).desktops[named.ID]
+		if !exists {
+			t.Fatal("an empty named desktop was removed")
+		}
+		mustProfileRequest(app, protocol.DesktopRenameMessage{Cmd: protocol.CmdDesktopRename, RequestID: "unname", DesktopID: named.ID, Name: "", ExpectedRevision: kept.Revision}, "unname")
+		w.advance(29 * time.Second)
+		if _, exists := viewProfile(t, w, profile).desktops[named.ID]; !exists {
+			t.Fatal("a desktop unnamed 29s ago was removed")
+		}
+		w.advance(time.Second)
+		testworld.Await(app, protocol.EventProfileArrangementChanged, func(m protocol.ProfileArrangementChangedMessage) bool {
+			return !slices.ContainsFunc(m.Desktops, func(d protocol.Desktop) bool { return d.ID == named.ID })
+		})
+	})
 }
 
 func TestLaunchMigrationNeedsEveryChoiceAndKeepsConfirmedChoicesAcrossRestart(t *testing.T) {
@@ -640,7 +661,8 @@ func TestOwnReselectionKeepsSharingAndPublishesLiveLabelChanges(t *testing.T) {
 	anchor := w.Spawn(app, fakeagent.Claude, w.Path("anchor"))
 	w.Launched(anchor)
 	focusAgent(t, w, app, anchor)
-	owner := writeLaunchChoice(app, "crew", "alder", protocol.LaunchDesktopSetting{Mode: protocol.LaunchDesktopModeOwn, DesktopName: protocol.Ptr("Review"), ShortcutSlot: protocol.Ptr(5)})
+	slot5 := profile + "/desktop_5"
+	owner := writeLaunchChoice(app, "crew", "alder", protocol.LaunchDesktopSetting{Mode: protocol.LaunchDesktopModeOwn, DesktopName: protocol.Ptr("Review"), DesktopID: protocol.Ptr(slot5)})
 	writeLaunchChoice(app, "crew", "trellis", protocol.LaunchDesktopSetting{Mode: protocol.LaunchDesktopModeDesktop, DestinationID: owner.Setting.DestinationID})
 	dir := w.Path("check")
 	if err := os.MkdirAll(dir, 0o755); err != nil {
@@ -680,7 +702,7 @@ func TestOwnReselectionKeepsSharingAndPublishesLiveLabelChanges(t *testing.T) {
 	w.Launched(wake.SessionID)
 	awaitLabel("5 · Review")
 	desktop, _ := viewProfile(t, w, profile).paneOf(t, wake.SessionID)
-	updated := writeLaunchChoice(app, "crew", "alder", protocol.LaunchDesktopSetting{Mode: protocol.LaunchDesktopModeOwn, DesktopName: protocol.Ptr("Shared"), ShortcutSlot: protocol.Ptr(5)})
+	updated := writeLaunchChoice(app, "crew", "alder", protocol.LaunchDesktopSetting{Mode: protocol.LaunchDesktopModeOwn, DesktopName: protocol.Ptr("Shared"), DesktopID: protocol.Ptr(slot5)})
 	if protocol.Deref(updated.Setting.DestinationID) != protocol.Deref(owner.Setting.DestinationID) || protocol.Deref(updated.Setting.DesktopID) != desktop.ID {
 		t.Fatal("own reselection lost its destination or live binding")
 	}
@@ -698,36 +720,22 @@ func TestOwnReselectionKeepsSharingAndPublishesLiveLabelChanges(t *testing.T) {
 	awaitLabel("5 · Renamed")
 	crewHandoff(t, cli, wake.SessionID, "Day complete.", false, protocol.CrewDayCloseSleep)
 	awaitClosed(app, wake.SessionID)
+	desktop = viewProfile(t, w, profile).desktops[desktop.ID]
+	mustProfileRequest(app, protocol.DesktopRenameMessage{Cmd: protocol.CmdDesktopRename, RequestID: "clear-shared-name", DesktopID: desktop.ID, Name: "", ExpectedRevision: desktop.Revision}, "clear-shared-name")
+	awaitLabel("5 · Desktop 5")
 	awaitDesktopRemoved(t, w, profile, desktop.ID)
-	awaitLabel("5 · Renamed")
 	pending := readLaunchSetting(app, "crew", "trellis")
-	if !protocol.Deref(pending.Setting.Pending) || protocol.Deref(pending.Setting.OwnerID) != "alder" {
+	if !protocol.Deref(pending.Setting.Pending) || protocol.Deref(pending.Setting.OwnerID) != "alder" || protocol.Deref(pending.Setting.Label) != "5 · Desktop 5" {
 		t.Fatalf("pruned shared destination: %+v", pending)
 	}
-	mustProfileRequest(app, protocol.DesktopCreateMessage{Cmd: protocol.CmdDesktopCreate, RequestID: "slot-taken", ProfileID: profile, Name: protocol.Ptr("Taken"), ShortcutSlot: protocol.Ptr(5)}, "slot-taken")
-	occupied := w.Spawn(app, fakeagent.Claude, w.Path("occupant"))
-	w.Launched(occupied)
-	focusAgent(t, w, app, anchor)
 	recreated := wakeCrew(t, cli, "trellis", "")
 	w.Launched(recreated.SessionID)
-	awaitLabel("Renamed (no ⌘ number)")
-	renamedOwn := writeLaunchChoice(app, "crew", "alder", protocol.LaunchDesktopSetting{Mode: protocol.LaunchDesktopModeOwn, DesktopName: protocol.Ptr("Still shared"), ShortcutSlot: protocol.Ptr(5)})
-	if protocol.Deref(renamedOwn.Setting.ShortcutSlot) != 5 || protocol.Deref(renamedOwn.Setting.DestinationID) != protocol.Deref(owner.Setting.DestinationID) {
-		t.Fatalf("saved preference changed: %+v", renamedOwn)
-	}
-	awaitLabel("Still shared (no ⌘ number)")
 	live, _ := viewProfile(t, w, profile).paneOf(t, recreated.SessionID)
-	if protocol.Deref(live.ShortcutSlot) != 0 {
-		t.Fatal("reselection took an occupied remembered slot")
+	if live.ID != slot5 || live.Name != "" {
+		t.Fatalf("recreated shared ⌘5: %+v", live)
 	}
-	mustProfileRequest(app, protocol.DesktopRenameMessage{Cmd: protocol.CmdDesktopRename, RequestID: "clear-shared-name", DesktopID: live.ID, Name: "", ExpectedRevision: live.Revision}, "clear-shared-name")
-	cleared := readLaunchSetting(app, "crew", "alder")
-	if strings.Contains(protocol.Deref(cleared.Setting.Label), "Still shared") {
-		t.Fatalf("cleared name retains old live label: %+v", cleared)
-	}
-	awaitLabel(protocol.Deref(cleared.Setting.Label))
 	retained := readLaunchSetting(app, "crew", "alder")
-	if protocol.Deref(retained.Setting.DestinationID) != protocol.Deref(owner.Setting.DestinationID) || retained.Setting.Mode != protocol.LaunchDesktopModeOwn {
+	if protocol.Deref(retained.Setting.DestinationID) != protocol.Deref(owner.Setting.DestinationID) || retained.Setting.Mode != protocol.LaunchDesktopModeOwn || protocol.Deref(retained.Setting.Pending) {
 		t.Fatalf("recreation changed ownership: %+v", retained)
 	}
 }

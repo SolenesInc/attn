@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"net"
 
+	"github.com/victorarias/attn/internal/profiles"
 	"github.com/victorarias/attn/internal/protocol"
 	"github.com/victorarias/attn/internal/store"
 )
@@ -16,7 +17,7 @@ type launchDesktopWrite struct {
 }
 
 func protocolLaunchItem(item store.LaunchDesktopItem) protocol.LaunchDesktopItem {
-	setting := protocol.LaunchDesktopSetting{Label: protocol.Ptr(item.Setting.Label), Mode: protocol.LaunchDesktopMode(item.Setting.Mode), DestinationID: protocol.Ptr(item.Setting.DestinationID), DesktopName: protocol.Ptr(item.Setting.DesktopName), ShortcutSlot: protocol.Ptr(item.Setting.ShortcutSlot), Pending: protocol.Ptr(item.Setting.Pending), OwnerKind: protocol.Ptr(protocol.LaunchDesktopKind(item.Setting.OwnerKind)), OwnerID: protocol.Ptr(item.Setting.OwnerID)}
+	setting := protocol.LaunchDesktopSetting{Label: protocol.Ptr(item.Setting.Label), Mode: protocol.LaunchDesktopMode(item.Setting.Mode), DestinationID: protocol.Ptr(item.Setting.DestinationID), DesktopName: protocol.Ptr(item.Setting.DesktopName), Pending: protocol.Ptr(item.Setting.Pending), OwnerKind: protocol.Ptr(protocol.LaunchDesktopKind(item.Setting.OwnerKind)), OwnerID: protocol.Ptr(item.Setting.OwnerID)}
 	if item.Setting.DesktopID != "" {
 		setting.DesktopID = protocol.Ptr(item.Setting.DesktopID)
 	}
@@ -68,7 +69,7 @@ func (d *Daemon) launchDesktopResult(action, requestID, kind, id string, setting
 		if err == nil {
 			var chosen store.LaunchDesktopSetting
 			chosen, err = d.namedLaunchDesktopFromRef(item.ProfileID, kind, *ref, setting.DesktopName)
-			setting = &protocol.LaunchDesktopSetting{Mode: protocol.LaunchDesktopMode(chosen.Mode), DesktopID: protocol.Ptr(chosen.DesktopID), ShortcutSlot: protocol.Ptr(chosen.ShortcutSlot), DesktopName: setting.DesktopName}
+			setting = &protocol.LaunchDesktopSetting{Mode: protocol.LaunchDesktopMode(chosen.Mode), DesktopID: protocol.Ptr(chosen.DesktopID), DesktopName: setting.DesktopName}
 		}
 	}
 	if err == nil && setting != nil {
@@ -125,7 +126,7 @@ func (d *Daemon) handleLaunchDesktopSet(client *wsClient, msg *protocol.LaunchDe
 }
 
 func storeLaunchSetting(setting protocol.LaunchDesktopSetting) store.LaunchDesktopSetting {
-	return store.LaunchDesktopSetting{Mode: string(setting.Mode), DesktopID: protocol.Deref(setting.DesktopID), DestinationID: protocol.Deref(setting.DestinationID), DesktopName: protocol.Deref(setting.DesktopName), ShortcutSlot: protocol.Deref(setting.ShortcutSlot)}
+	return store.LaunchDesktopSetting{Mode: string(setting.Mode), DesktopID: protocol.Deref(setting.DesktopID), DestinationID: protocol.Deref(setting.DestinationID), DesktopName: protocol.Deref(setting.DesktopName)}
 }
 
 func (d *Daemon) launchDesktopFromRef(profileID, kind, ref string) (store.LaunchDesktopSetting, error) {
@@ -141,7 +142,7 @@ func (d *Daemon) launchDesktopFromRef(profileID, kind, ref string) (store.Launch
 		return store.LaunchDesktopSetting{Mode: "desktop", DesktopID: desktop.ID}, nil
 	}
 	if len(ref) == 1 && ref[0] >= '5' && ref[0] <= '9' {
-		return store.LaunchDesktopSetting{Mode: "own", ShortcutSlot: int(ref[0] - '0')}, nil
+		return store.LaunchDesktopSetting{Mode: "own", DesktopID: profiles.NumberedDesktopID(profileID, int(ref[0]-'0'))}, nil
 	}
 	return store.LaunchDesktopSetting{}, err
 }

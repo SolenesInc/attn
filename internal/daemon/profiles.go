@@ -543,13 +543,6 @@ func (d *Daemon) handleDesktopRename(client *wsClient, msg *protocol.DesktopRena
 	})
 }
 
-func (d *Daemon) handleDesktopSetShortcutSlot(client *wsClient, msg *protocol.DesktopSetShortcutSlotMessage) {
-	d.runProfileAction(client, msg.Cmd, msg.RequestID, func() (profileActionOutcome, error) {
-		desktop, err := d.store.SetDesktopShortcutSlot(msg.DesktopID, protocol.Deref(msg.ShortcutSlot), int64(msg.ExpectedRevision))
-		return d.desktopChanged(desktop), err
-	})
-}
-
 func (d *Daemon) handleDesktopReorder(client *wsClient, msg *protocol.DesktopReorderMessage) {
 	d.runProfileAction(client, msg.Cmd, msg.RequestID, func() (profileActionOutcome, error) {
 		desktop, err := d.store.ReorderDesktop(msg.DesktopID, protocol.Deref(msg.PreviousDesktopID), protocol.Deref(msg.NextDesktopID), int64(msg.ExpectedRevision))

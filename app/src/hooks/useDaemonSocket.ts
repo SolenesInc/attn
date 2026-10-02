@@ -306,7 +306,7 @@ export interface RateLimitState {
 }
 
 // Protocol version - must match daemon's ProtocolVersion
-export const PROTOCOL_VERSION = '343';
+export const PROTOCOL_VERSION = '344';
 const MAX_PENDING_ATTACH_OUTPUTS = 512;
 
 const CLIENT_INSTANCE_ID =
@@ -4711,16 +4711,6 @@ export function useDaemonSocket({
     [sendProfileCommand],
   );
 
-  const sendDesktopSetShortcutSlot = useCallback(
-    (desktopId: string, shortcutSlot: number | null, expectedRevision: number) =>
-      sendProfileCommand('desktop_set_shortcut_slot', {
-        desktop_id: desktopId,
-        expected_revision: expectedRevision,
-        ...(shortcutSlot === null ? {} : { shortcut_slot: shortcutSlot }),
-      }),
-    [sendProfileCommand],
-  );
-
   const sendDesktopSetCurrent = useCallback(
     (profileId: string, desktopId: string) =>
       sendProfileCommand('desktop_set_current', { profile_id: profileId, desktop_id: desktopId }),
@@ -4904,7 +4894,6 @@ export function useDaemonSocket({
     sendDesktopCreate,
     sendDesktopRename,
     sendDesktopReorder,
-    sendDesktopSetShortcutSlot,
     sendDesktopSetCurrent,
     sendDesktopSetActivePane,
     sendDesktopShowSession,

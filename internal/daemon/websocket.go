@@ -1053,8 +1053,6 @@ func (d *Daemon) handleClientMessage(client *wsClient, data []byte) {
 		d.handleDesktopCreate(client, msg.(*protocol.DesktopCreateMessage))
 	case protocol.CmdDesktopRename:
 		d.handleDesktopRename(client, msg.(*protocol.DesktopRenameMessage))
-	case protocol.CmdDesktopSetShortcutSlot:
-		d.handleDesktopSetShortcutSlot(client, msg.(*protocol.DesktopSetShortcutSlotMessage))
 	case protocol.CmdDesktopReorder:
 		d.handleDesktopReorder(client, msg.(*protocol.DesktopReorderMessage))
 	case protocol.CmdDesktopSetCurrent:
