@@ -28,14 +28,15 @@ type sharedFakeCodex struct {
 	rejectedInput atomic.Bool
 }
 type sharedFakeRoot struct {
-	c        *codex
-	a        *agent
-	owner    string
-	archived bool
-	hasTurn  atomic.Bool
-	active   atomic.Bool
-	approval atomic.Bool
-	failed   atomic.Bool
+	c            *codex
+	a            *agent
+	owner        string
+	archived     bool
+	hasTurn      atomic.Bool
+	active       atomic.Bool
+	approval     atomic.Bool
+	failed       atomic.Bool
+	snapshotOnly atomic.Bool
 }
 
 func runSharedCodexServer(cfg config) int {
@@ -106,7 +107,7 @@ func (s *sharedFakeCodex) serve(w http.ResponseWriter, req *http.Request) {
 			}
 			continue
 		}
-		result, err := s.handle(m)
+		result, err := s.handle(conn, m)
 		if err == nil && (m.Method == "turn/start" || m.Method == "turn/steer") && os.Getenv("ATTN_FAKE_CODEX_DROP_TURN_REPLY") == "1" {
 			continue
 		}
@@ -137,7 +138,7 @@ func (s *sharedFakeCodex) serve(w http.ResponseWriter, req *http.Request) {
 	}
 }
 
-func (s *sharedFakeCodex) handle(m codexshared.Message) (any, error) {
+func (s *sharedFakeCodex) handle(conn *websocket.Conn, m codexshared.Message) (any, error) {
 	var p struct {
 		ThreadID       string          `json:"threadId"`
 		ExpectedTurnID string          `json:"expectedTurnId"`
@@ -197,6 +198,10 @@ func (s *sharedFakeCodex) handle(m codexshared.Message) (any, error) {
 		a := &agent{term: c.term, conv: c, prompts: make(chan promptSubmission, 16)}
 		root.a = a
 		control, err := dialControl(s.cfg, func(peer *rpcPeer, method string, params json.RawMessage) (any, error) {
+			if method == "native_snapshots_only" {
+				root.snapshotOnly.Store(true)
+				return struct{}{}, nil
+			}
 			if method == "disconnect_control" {
 				s.mu.Lock()
 				conn := s.control
@@ -282,6 +287,12 @@ func (s *sharedFakeCodex) handle(m codexshared.Message) (any, error) {
 		s.mu.Unlock()
 		if root == nil {
 			return nil, fmt.Errorf("no rollout found for %s", p.ThreadID)
+		}
+		s.mu.Lock()
+		isControl := conn == s.control
+		s.mu.Unlock()
+		if m.Method == "thread/resume" && isControl && root.snapshotOnly.Load() {
+			return nil, fmt.Errorf("fixture control resume rejected")
 		}
 		if m.Method == "thread/resume" && os.Getenv("ATTN_FAKE_CODEX_REJECT_BLANK_ATTACH") == "1" && !root.hasTurn.Load() {
 			return nil, fmt.Errorf("cannot resume a blank thread %s", p.ThreadID)
@@ -396,6 +407,9 @@ func (s *sharedFakeCodex) approvalRequest(root *sharedFakeRoot) []byte {
 }
 
 func (s *sharedFakeCodex) broadcastStatus(root *sharedFakeRoot) {
+	if root.snapshotOnly.Load() {
+		return
+	}
 	s.broadcast("thread/status/changed", map[string]any{"threadId": root.c.conversation, "status": s.status(root)})
 }
 func (s *sharedFakeCodex) broadcast(method string, params any) {

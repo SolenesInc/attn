@@ -138,6 +138,7 @@ func TestSharedCodexControlDisconnectReconcilesHiddenBusyAndApprovalClaims(t *te
 				if got := agentA.Answered(); got != "accepted" {
 					t.Fatal(got)
 				}
+				testworld.AwaitSession(app, a, func(s protocol.Session) bool { return s.State == protocol.SessionStateWorking })
 			}
 			result := sharedAnnotationSubmit(app, a, "reconnect-A", "reconnect and steer A")
 			if !result.Success {
@@ -285,4 +286,38 @@ func TestSharedCodexMaintenanceDoesNotSettleAttentionButOwnerTypingAndSteeringDo
 	testworld.AwaitSession(app, a, func(s protocol.Session) bool { return s.AutoSettleFiresAt != nil })
 	agentA.Reply("A finished <!-- attn:state=idle -->")
 	agentB.Reply("B finished <!-- attn:state=idle -->")
+}
+
+func TestSharedCodexViewResumeProjectsSnapshotWhenControlResumeFails(t *testing.T) {
+	for _, approval := range []bool{false, true} {
+		t.Run(map[bool]string{false: "working", true: "approval"}[approval], func(t *testing.T) {
+			w := newWorld(t, fakeagent.Codex)
+			app := w.App()
+			sharedCodexSetting(t, app, true)
+			a := w.Spawn(app, fakeagent.Codex, w.Path("a"))
+			agentA := w.Launched(a)
+			awaitSharedView(app, a, a)
+			b := w.Spawn(app, fakeagent.Codex, w.Path("b"))
+			agentB := w.Launched(b)
+			awaitSharedView(app, b, b)
+			agentA.NativeSnapshotsOnly()
+			app.TypeLine(a, "work on A")
+			agentA.Prompted()
+			app.TypeLine(a, "/agents "+agentB.ConversationID)
+			awaitSharedView(app, a, b)
+			if approval {
+				agentA.AskApproval()
+			}
+			app.TypeLine(a, "/agents "+agentA.ConversationID)
+			awaitSharedView(app, a, a)
+			want := protocol.SessionStateWorking
+			if approval {
+				want = protocol.SessionStatePendingApproval
+			}
+			testworld.AwaitSession(app, a, func(s protocol.Session) bool { return s.State == want })
+			if got := queriedSession(t, w.Client(), a); got.State != want || !protocol.Deref(got.TurnOwed) {
+				t.Fatalf("resumed owner lost native snapshot: %+v", got)
+			}
+		})
+	}
 }

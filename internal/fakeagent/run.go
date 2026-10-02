@@ -100,6 +100,10 @@ func (r *Run) DisconnectNativeControl() {
 	r.call("disconnect_control", nil, nil)
 }
 
+func (r *Run) NativeSnapshotsOnly() {
+	r.call("native_snapshots_only", nil, nil)
+}
+
 func (r *Run) ToolShell(command string) string {
 	r.t.Helper()
 	var result struct {

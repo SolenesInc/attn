@@ -215,6 +215,9 @@ func (r *codexRuntime) prepareRPC(runtimeID string, m *codexshared.Message) (fun
 		return nil, err
 	}
 	method := m.Method
+	r.activeMu.Lock()
+	revision := r.activeTurns[owner.NativeRootID].Revision
+	r.activeMu.Unlock()
 	prepared = true
 	return func(reply codexshared.Message) {
 		if len(reply.Error) > 0 {
@@ -239,7 +242,7 @@ func (r *codexRuntime) prepareRPC(runtimeID string, m *codexshared.Message) (fun
 			}
 			r.mu.Unlock()
 		}
-		r.bindOwner(owner.SessionID, result.Thread)
+		r.bindOwner(owner.SessionID, result.Thread, revision)
 	}, nil
 }
 
@@ -257,6 +260,9 @@ type codexNativeThread struct {
 }
 
 func (r *codexRuntime) adoptRoot(root string, v store.CodexView) (*store.CodexOwner, error) {
+	r.activeMu.Lock()
+	revision := r.activeTurns[root].Revision
+	r.activeMu.Unlock()
 	result, err := r.control.Call(r.d.life.Context(), "thread/read", map[string]any{"threadId": root, "includeTurns": false})
 	if err != nil {
 		return nil, err
@@ -279,6 +285,7 @@ func (r *codexRuntime) adoptRoot(root string, v store.CodexView) (*store.CodexOw
 	}
 	owner.NativeRootID = root
 	r.d.observeOrQueueAgentConversation(agentConversationObservation{SessionID: owner.SessionID, NativeID: root, TranscriptPath: read.Thread.Path})
+	r.projectNativeSnapshot(read.Thread, revision)
 	return owner, nil
 }
 
@@ -331,7 +338,7 @@ func (d *Daemon) wrapperExecutable() string {
 	return path
 }
 
-func (r *codexRuntime) bindOwner(id string, t codexNativeThread) {
+func (r *codexRuntime) bindOwner(id string, t codexNativeThread, revision uint64) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	if err := r.d.store.BindCodexRoot(id, t.ID); err != nil {
@@ -362,7 +369,7 @@ func (r *codexRuntime) bindOwner(id string, t codexNativeThread) {
 		}
 	}
 	r.d.observeOrQueueAgentConversation(agentConversationObservation{SessionID: id, NativeID: t.ID, TranscriptPath: t.Path})
-	r.projectNativeStatus(t.ID)
+	r.projectNativeSnapshot(t, revision)
 	if session := r.d.store.Get(id); session != nil && session.State == protocol.SessionStateLaunching {
 		r.d.applyState(sessionStateChange{sessionID: id, state: string(protocol.SessionStateIdle), cause: liveSignal{}, origin: stateOrigin{source: "codex", detail: "native root bound"}})
 	}
@@ -382,6 +389,10 @@ func (r *codexRuntime) bindOwner(id string, t codexNativeThread) {
 		}
 		launch, err := r.ownerContext(owner)
 		if err != nil {
+			return
+		}
+		if err := r.ensureServer(r.d.life.Context(), launch); err != nil {
+			r.d.logf("Codex hold root %s: %v", id, err)
 			return
 		}
 		injectCodexOwner(params, id, r.d.socketPath, r.d.wrapperExecutable(), launch)
@@ -441,24 +452,28 @@ func (r *codexRuntime) resumeOwner(ctx context.Context, control *codexshared.Cli
 	if err := json.Unmarshal(result, &reply); err != nil {
 		return nil, err
 	}
+	r.projectNativeSnapshot(reply.Thread, revision)
+	return result, nil
+}
+
+func (r *codexRuntime) projectNativeSnapshot(thread codexNativeThread, revision uint64) {
 	var activeID string
-	for _, turn := range reply.Thread.Turns {
+	for _, turn := range thread.Turns {
 		if turn.Status == "inProgress" {
 			activeID = turn.ID
 		}
 	}
 	r.activeMu.Lock()
-	state = r.activeTurns[root]
-	// A native notification received during resume is newer than its snapshot.
+	state := r.activeTurns[thread.ID]
+	// A native notification received during the request is newer than its snapshot.
 	if state.Revision == revision {
 		state.ID = activeID
-		state.Status = reply.Thread.Status
+		state.Status = thread.Status
 		state.Revision++
-		r.activeTurns[root] = state
+		r.activeTurns[thread.ID] = state
 	}
 	r.activeMu.Unlock()
-	r.projectNativeStatus(root)
-	return result, nil
+	r.projectNativeStatus(thread.ID)
 }
 
 type codexNativeStatus struct {
