@@ -132,6 +132,8 @@ View connections do not duplicate this state projection.
 Losing the control connection replaces its claims with attention needing input
 and clears the active turn. The next explicit operation reconnects and reconciles
 native root snapshots; it does not replay input.
+Traffic from a surviving native view also wakes that reconciliation, so ordinary
+prompts and approval answers restore attention without an unrelated app action.
 
 The queue retains hidden shared owners once. Selecting one attaches its native
 root through the existing reopen operation; an attachment error appears to the

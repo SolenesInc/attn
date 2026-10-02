@@ -73,12 +73,30 @@ func (r *codexRuntime) addViewLocked(v store.CodexView) error {
 			down.Close(websocket.StatusInternalError, err.Error())
 			return
 		}
-		codexshared.Proxy(r.d.life.Context(), down, up, func(m *codexshared.Message) (func(codexshared.Message), error) { return r.prepareRPC(v.RuntimeID, m) }, nil)
+		codexshared.Proxy(r.d.life.Context(), down, up, func(m *codexshared.Message) (func(codexshared.Message), error) { return r.prepareRPC(v.RuntimeID, m) }, func(m codexshared.Message) {
+			if m.Method == "thread/status/changed" || m.Method == "turn/started" || m.Method == "turn/completed" || m.Method == "" {
+				r.reconcileViewControl(v.RuntimeID, launch)
+			}
+		})
 	})}
 	r.views[v.RuntimeID] = v
 	r.servers[v.RuntimeID] = server
 	r.d.life.Go("codexViewProxy", func() { _ = server.Serve(listener) })
 	return nil
+}
+
+func (r *codexRuntime) reconcileViewControl(runtimeID string, launch codexLaunchContext) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	if r.control != nil && r.control.Connected() {
+		return
+	}
+	if _, ok := r.views[runtimeID]; !ok {
+		return
+	}
+	if err := r.ensureServer(r.d.life.Context(), launch); err != nil {
+		r.d.logf("Codex view %s control reconciliation: %v", runtimeID, err)
+	}
 }
 
 func (r *codexRuntime) observeTitle(runtimeID string, obs pty.Observation) bool {

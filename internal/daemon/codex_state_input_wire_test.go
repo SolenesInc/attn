@@ -321,3 +321,45 @@ func TestSharedCodexViewResumeProjectsSnapshotWhenControlResumeFails(t *testing.
 		})
 	}
 }
+
+func TestSharedCodexSurvivingViewTrafficReconcilesControlLoss(t *testing.T) {
+	for _, approval := range []bool{false, true} {
+		t.Run(map[bool]string{false: "prompt", true: "approval_answer"}[approval], func(t *testing.T) {
+			w := newWorld(t, fakeagent.Codex)
+			app := w.App()
+			sharedCodexSetting(t, app, true)
+			a := w.Spawn(app, fakeagent.Codex, w.Path("a"))
+			agentA := w.Launched(a)
+			awaitSharedView(app, a, a)
+			if approval {
+				app.TypeLine(a, "work on A")
+				agentA.Prompted()
+				agentA.AskApproval()
+				app.AwaitScreen(a, "Allow the command to run?")
+				testworld.AwaitSession(app, a, func(s protocol.Session) bool { return s.State == protocol.SessionStatePendingApproval })
+			}
+			agentA.DisconnectNativeControl()
+			testworld.AwaitSession(app, a, func(s protocol.Session) bool { return s.State == protocol.SessionStateWaitingInput })
+			if approval {
+				app.Send(protocol.PtyInputMessage{Cmd: protocol.CmdPtyInput, ID: a, Data: "\r"})
+				if got := agentA.Answered(); got != "accepted" {
+					t.Fatal(got)
+				}
+			} else {
+				app.TypeLine(a, "prompt through surviving view")
+				if got := agentA.Prompted(); got != "prompt through surviving view" {
+					t.Fatal(got)
+				}
+			}
+			testworld.AwaitSession(app, a, func(s protocol.Session) bool { return s.State == protocol.SessionStateWorking })
+			if result := sharedAnnotationSubmit(app, a, "active-A", "steer after reconnect"); !result.Success {
+				t.Fatal(result)
+			}
+			if got := agentA.Prompted(); got != "steer after reconnect" {
+				t.Fatal(got)
+			}
+			agentA.Reply("A finished <!-- attn:state=idle -->")
+			testworld.AwaitSession(app, a, func(s protocol.Session) bool { return s.State == protocol.SessionStateIdle })
+		})
+	}
+}
