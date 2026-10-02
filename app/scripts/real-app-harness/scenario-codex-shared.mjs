@@ -117,9 +117,12 @@ try {
     await resolved(a, b);
     const title = await client.request('dom_text', { selector: '.anno-panel-title' });
     runner.assert(title.text.includes('Annotations for exo'), 'open editor silently changed recipient', title);
-    const sent = observer.waitForMessage(message => message.event === 'session_annotations_submit_result' && message.session_id === a ? message : null, 'annotation still submitted to A');
+    const sent = observer.waitForMessage(message => message.event === 'session_messages_changed' && message.session_id === a ? message : null, 'A records its feedback reply');
     await client.request('dom_click', { selector: '.anno-panel-send' });
-    runner.assert((await sent).success, 'annotation did not submit to captured owner A');
+    await sent;
+    const afterA = await request('session_messages_get', 'session_messages_get_result', { session_id: a });
+    const afterB = await request('session_messages_get', 'session_messages_get_result', { session_id: b });
+    runner.assert(afterA.messages.at(-1)?.markdown === 'reply exo' && afterB.messages.length === 0, 'annotation did not submit to captured owner A', { afterA, afterB });
     await observer.waitFor(() => observer.getSession(a)?.state === 'waiting_input', 'A feedback completes');
     await type(a, paneA.pane_id, `/agents ${roots[0]}\r`); await resolved(a, a);
   });
