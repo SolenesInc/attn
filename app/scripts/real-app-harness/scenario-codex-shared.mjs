@@ -95,9 +95,11 @@ try {
     await client.request('focus_pane', { sessionId: a, paneId: paneA.pane_id });
     await type(a, paneA.pane_id, `/agents ${roots[0]}\r`); await resolved(a, a);
     await waitForPaneText(client, a, paneA.pane_id, text => text.includes('Allow the command to run?'), 'same approval in both views');
+    const recordedReply = observer.waitForMessage(message => message.event === 'session_messages_changed' && message.session_id === a ? message : null, 'approval reply recorded for annotations');
     await type(a, attached.pane_id, '\r');
     await observer.waitFor(() => observer.getSession(a)?.state === 'waiting_input', 'one native approval resolves both views');
     await waitForPaneText(client, a, paneA.pane_id, text => text.includes('approved exo'), 'approval reply in original view');
+    await recordedReply;
     await closePane(observer.sessionsById.get(a).workspace_id, attached.pane_id);
   });
   await runner.step('annotation_editor_keeps_A_when_native_view_switches_to_B', async () => {
