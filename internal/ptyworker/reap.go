@@ -115,8 +115,8 @@ func requestWorkerRemove(entry RegistryEntry) error {
 	if err := awaitOK(dec, "reap-hello"); err != nil {
 		return err
 	}
-	// Removal acknowledges the child's completed teardown, including escalation.
-	if err := conn.SetDeadline(time.Time{}); err != nil {
+	// Allow escalation while bounding a stuck child exit after SIGKILL.
+	if err := conn.SetDeadline(time.Now().Add(TeardownRPCTimeout)); err != nil {
 		return err
 	}
 	if err := writeReapRequest(enc, "reap-remove", MethodRemove, map[string]any{}); err != nil {

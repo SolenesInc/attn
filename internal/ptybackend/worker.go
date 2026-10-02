@@ -34,7 +34,7 @@ import (
 
 const (
 	defaultRPCTimeout       = 5 * time.Second
-	killRPCTimeout          = 15 * time.Second
+	killRPCTimeout          = ptyworker.TeardownRPCTimeout
 	livenessRPCTimeout      = 2 * time.Second
 	pollerInterval          = 5 * time.Second
 	monitorRetryInterval    = 1 * time.Second

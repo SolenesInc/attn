@@ -17,6 +17,9 @@ const (
 
 const MinCompatibleRPCMinor = 0
 
+// Existing teardown allowance covers escalation; active native cleanup measured 10.66s.
+const TeardownRPCTimeout = 15 * time.Second
+
 const (
 	MethodHello          = "hello"
 	MethodInfo           = "info"
