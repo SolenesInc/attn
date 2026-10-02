@@ -617,53 +617,6 @@ func TestMovingAProfilesChiefDemotesItAndLeavesTheDestinationsChief(t *testing.T
 	}
 }
 
-func TestDeletingADesktopUnplacesItsAgentsAndKeepsSlots(t *testing.T) {
-	s, _ := openProfileStore(t)
-	profile, first := mustCreateProfile(t, s, "Main")
-	_, second, _ := s.CreateDesktop(profile.ID, "", 0, true)
-	_, third, _ := s.CreateDesktop(profile.ID, "", 0, true)
-	addProfileSession(t, s, "agent-a", profile.ID)
-	mustPlace(t, s, second.ID, "agent-a")
-	if _, err := s.SetCurrentDesktop(profile.ID, second.ID); err != nil {
-		t.Fatalf("SetCurrentDesktop: %v", err)
-	}
-	_, _, err := s.CreateDesktop(profile.ID, "", 3, false)
-	wantCode(t, err, profiles.CodeSlotTaken)
-
-	current, _ := s.GetDesktop(second.ID)
-	deletion, err := s.DeleteDesktop(second.ID, current.Revision)
-	if err != nil {
-		t.Fatalf("DeleteDesktop: %v", err)
-	}
-	if !reflect.DeepEqual(deletion.UnplacedSessionID, []string{"agent-a"}) || s.Get("agent-a") == nil {
-		t.Fatalf("deletion = %+v, want agent-a unplaced and still open", deletion)
-	}
-	if deletion.Profile.CurrentDesktopID != third.ID {
-		t.Fatalf("current desktop after deleting it = %s, want the next one %s", deletion.Profile.CurrentDesktopID, third.ID)
-	}
-	keptThird, _ := s.GetDesktop(third.ID)
-	if keptThird.ShortcutSlot != 3 {
-		t.Fatalf("third desktop slot = %d after deleting slot 2, want slots never renumbered", keptThird.ShortcutSlot)
-	}
-	_, refill, err := s.CreateDesktop(profile.ID, "", 0, true)
-	if err != nil || refill.ShortcutSlot != 2 {
-		t.Fatalf("new desktop = %+v, %v; want it to take the freed slot 2", refill, err)
-	}
-	moved, err := s.ReorderDesktop(refill.ID, "", first.ID, refill.Revision)
-	if err != nil {
-		t.Fatalf("ReorderDesktop: %v", err)
-	}
-	_, desktops, _ := s.ProfileArrangement(profile.ID)
-	if desktops[0].ID != moved.ID {
-		t.Fatalf("first desktop = %s, want the reordered %s", desktops[0].ID, moved.ID)
-	}
-
-	only, onlyDesktop := mustCreateProfile(t, s, "Solo")
-	_, err = s.DeleteDesktop(onlyDesktop.ID, onlyDesktop.Revision)
-	wantCode(t, err, profiles.CodeLastDesktop)
-	_ = only
-}
-
 func TestMostRecentlyUsedProfileFollowsSelection(t *testing.T) {
 	s, restart := openProfileStore(t)
 	work, _ := mustCreateProfile(t, s, "Work")

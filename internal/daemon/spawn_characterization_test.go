@@ -100,10 +100,4 @@ func TestSpawnCharacterizationStampsTheProfileAndPlacesBesideTheAnchor(t *testin
 		t.Fatalf("desktop panes = %v active=%s, want the second agent split beside the first and focused", got, desktop.ActivePaneID)
 	}
 
-	unplaced := spawnCharacterizationMessage("unplaced", profileID, cwd)
-	d.handleSpawnSession(client, unplaced)
-	expectSpawnResult(t, client, unplaced.ID, true)
-	if _, placed, _ := d.store.SessionPlacement(unplaced.ID); placed {
-		t.Fatal("a spawn without a placement was placed")
-	}
 }

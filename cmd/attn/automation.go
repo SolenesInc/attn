@@ -11,7 +11,7 @@ import (
 )
 
 func automationUsage() {
-	fmt.Fprint(os.Stderr, "usage: attn automation <apply|validate|list|show|run|runs|enable|disable|delete|cleanup>\n")
+	fmt.Fprint(os.Stderr, "usage: attn automation <apply|set|validate|list|show|run|runs|enable|disable|delete|cleanup>\n")
 }
 
 func runAutomationCommand() {
@@ -22,8 +22,29 @@ func runAutomationCommand() {
 	c := client.New(client.DefaultSocketPath())
 	var err error
 	switch os.Args[2] {
+	case "set":
+		if len(os.Args) < 4 {
+			err = fmt.Errorf("usage: attn automation set <definition-id> --launch-desktop <current|dedicated|desktop>")
+			break
+		}
+		fs := flag.NewFlagSet("automation set", flag.ContinueOnError)
+		desktop := fs.String("launch-desktop", "", "current, dedicated, or a desktop digit, name or id")
+		if e := fs.Parse(os.Args[4:]); e != nil {
+			os.Exit(2)
+		}
+		if *desktop == "" || len(fs.Args()) != 0 {
+			err = fmt.Errorf("--launch-desktop is required")
+			break
+		}
+		var result *protocol.LaunchDesktopResultMessage
+		result, err = c.SetAutomationLaunchDesktop(os.Args[3], *desktop)
+		if err == nil {
+			printJSON(result.Item)
+		}
+
 	case "apply":
 		fs := flag.NewFlagSet("automation apply", flag.ContinueOnError)
+		desktop := fs.String("launch-desktop", "", "current, dedicated, or a desktop digit, name or id of the automation profile")
 		file := fs.String("file", "", "definition YAML")
 		if e := fs.Parse(os.Args[3:]); e != nil {
 			os.Exit(2)
@@ -38,7 +59,13 @@ func runAutomationCommand() {
 			break
 		}
 		var result *protocol.AutomationApplyResultMessage
-		result, err = c.AutomationApply(string(raw))
+		var desktopRef *string
+		fs.Visit(func(f *flag.Flag) {
+			if f.Name == "launch-desktop" {
+				desktopRef = desktop
+			}
+		})
+		result, err = c.AutomationApplyWithDesktop(string(raw), desktopRef)
 		if err == nil {
 			printJSON(result.Definition)
 		}
@@ -74,6 +101,7 @@ func runAutomationCommand() {
 		var result *protocol.AutomationDefinitionResultMessage
 		result, err = c.AutomationDefinition(os.Args[3])
 		if err == nil && result.SpecYaml != nil {
+			fmt.Printf("# Profile: %s\n# Launch desktop: %s\n", protocol.Deref(result.Definition.ProfileName), launchDesktopText(result.Definition.LaunchDesktop))
 			fmt.Print(*result.SpecYaml)
 		}
 	case "run":

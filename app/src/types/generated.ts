@@ -1,6 +1,6 @@
 // To parse this data:
 //
-//   import { Convert, ActivityStatusMessage, ActivityStatusResult, ActivityStatusSession, AddEndpointMessage, AgentCloseMessage, AgentCloseResult, AgentCloseRule, AgentInboxBatchResult, AgentInboxItem, AgentInboxMessage, AgentMessageState, AgentMsgMessage, AgentMsgResult, AgentMsgStatus, AgentMsgStatusMessage, AgentPeekExit, AgentPeekMessage, AgentPeekResult, AgentPeekScreen, AgentPeerMessage, ApprovePRMessage, AttachBlock, AttachPolicy, AttachResultMessage, AttachSessionMessage, AttachSnapshot, AuthorState, AuthorsUpdatedMessage, AutoModeConfigInfo, AutoModeConfigResult, AutoModeConfigResultMessage, AutoModeDenialInfo, AutoModeDenialsMessage, AutoModeDenialsResult, AutoModeDiscardMessage, AutoModeDiscardResultMessage, AutoModeEnvNotesMessage, AutoModeEnvResult, AutoModeEnvSetResultMessage, AutoModeEnvSlotMessage, AutoModeEnvironmentInfo, AutoModeEnvironmentSlot, AutoModeEnvironmentSlotValue, AutoModeGetMessage, AutoModeHostAddMessage, AutoModeHostRemoveMessage, AutoModeLegacyDismissMessage, AutoModeNetworkInfo, AutoModePolicySetMessage, AutoModePresetInfo, AutoModePromoteMessage, AutoModePromoteResultMessage, AutoModeProposalInfo, AutoModeProposeMessage, AutoModeProposeResult, AutoModeRuleAddMessage, AutoModeRuleInfo, AutoModeRuleRemoveMessage, AutoModeShowMessage, AutoModeShowResult, AutoModeStateChangedMessage, AutoModeStateResultMessage, AutomationApplyMessage, AutomationApplyResultMessage, AutomationCleanupMessage, AutomationCleanupResultMessage, AutomationDefinitionGetMessage, AutomationDefinitionResultMessage, AutomationDefinitionSummary, AutomationDefinitionsGetMessage, AutomationDefinitionsResultMessage, AutomationDeleteMessage, AutomationDeleteResultMessage, AutomationProvenance, AutomationRunMessage, AutomationRunResultMessage, AutomationRunSummary, AutomationRunsGetMessage, AutomationRunsResultMessage, AutomationSetEnabledMessage, AutomationSetEnabledResultMessage, AutomationValidateMessage, AutomationValidateResultMessage, AutomationsChangedMessage, BootstrapEndpointMessage, Branch, BranchChangedMessage, BranchesResultMessage, BrowseDirectoryMessage, BrowseDirectoryResultMessage, BrowserControlMessage, BrowserControlRequestMessage, BrowserControlResponseMessage, BrowserControlResultMessage, BuiltinDelegationRole, BusConsumerStatus, BusHealthEntry, BusProducerStatus, BusSetConsumerEnabledMessage, BusSetConsumerEnabledResultMessage, BusStatusGetMessage, BusStatusResultMessage, CancelCountdownMessage, ChiefOfStaffResultMessage, ClearSessionActivityMessage, ClearWarningsMessage, ClientEvictionNoticeMessage, ClientHelloMessage, CollapseRepoMessage, CommandErrorMessage, CreateWorktreeFromBranchMessage, CreateWorktreeMessage, CreateWorktreeResultMessage, CrewCharterDocument, CrewCharterGetMessage, CrewCharterGetResult, CrewCharterGetResultMessage, CrewCharterSetMessage, CrewCharterSetResult, CrewCharterSetResultMessage, CrewDayClose, CrewHandoffDocument, CrewHandoffGetMessage, CrewHandoffGetResult, CrewHandoffGetResultMessage, CrewHandoffMessage, CrewHandoffResult, CrewHandoffSummary, CrewHandoffsGetMessage, CrewHandoffsGetResult, CrewHandoffsGetResultMessage, CrewListMessage, CrewListResult, CrewMember, CrewPrimeMessage, CrewPrimeResult, CrewRestart, CrewRestartMessage, CrewRestartResult, CrewRestartResultMessage, CrewRestartState, CrewSetMessage, CrewSetResult, CrewSetResultMessage, CrewSleepMessage, CrewSleepResult, CrewSleepResultMessage, CrewUpdatedMessage, CrewWakeMessage, CrewWakeResult, CrewWakeResultMessage, DaemonWarning, DelegateAssignment, DelegateAssignmentKind, DelegateCheckout, DelegateCheckoutKind, DelegateHandover, DelegateMessage, DelegateResult, DelegateResultMessage, DelegateStatusMessage, DelegateWorktreeRequest, DelegationChoice, DelegationFailure, DelegationFallback, DelegationHarness, DelegationModel, DelegationModelsMessage, DelegationModelsResultMessage, DelegationOperation, DelegationOperationMessage, DelegationOperationState, DelegationPreferences, DelegationPreferencesChangedMessage, DelegationPreferencesCommitMessage, DelegationPreferencesGetMessage, DelegationPreferencesHistoryMessage, DelegationPreferencesHistoryResult, DelegationPreferencesOrigin, DelegationPreferencesResultMessage, DelegationPreferencesRevision, DelegationPreferencesRollbackMessage, DelegationPreferencesSaveMessage, DelegationPreferencesShowMessage, DelegationRole, DelegationRolesMessage, DelegationRolesResult, DelegationSelection, DeleteWorktreeMessage, DeleteWorktreeResultMessage, Desktop, DesktopCreateMessage, DesktopDeleteMessage, DesktopDockTileMessage, DesktopMoveLeafMessage, DesktopMoveSessionMessage, DesktopMoveSessionResult, DesktopPane, DesktopPlaceSessionMessage, DesktopRemoveLeafMessage, DesktopRenameMessage, DesktopReorderMessage, DesktopSetActivePaneMessage, DesktopSetCurrentMessage, DesktopSetShortcutSlotMessage, DesktopSetSplitRatioMessage, DesktopShowLeafMessage, DesktopShowSessionMessage, DesktopTileContentMessage, DesktopUpdateTileMessage, DetachSessionMessage, DirectoryEntry, DispatchWorkState, DocCollectionsMessage, DocCollectionsResult, DocCountMessage, DocCountResult, DocDefineMessage, DocDefineResult, DocDeleteMessage, DocDeleteResult, DocGetMessage, DocGetResult, DocPutMessage, DocPutResult, DocQueryMessage, DocQueryResult, DocSubscribeMessage, DocSubscribeResult, DocSubscriptionDeliveryMessage, DocSubscriptionEndedMessage, DocUndefineMessage, DocUndefineResult, DocUnsubscribeMessage, DocumentCollectionSchema, DocumentConflict, DocumentFieldSpec, DocumentFilter, DocumentQuery, DocumentRevision, DocumentSort, EndpointActionResultMessage, EndpointCapabilities, EndpointInfo, EndpointStatusChangedMessage, EndpointsUpdatedMessage, EnsureRepoMessage, EnsureRepoResultMessage, EvidenceExcerpt, FetchPRDetailsMessage, FetchPRDetailsResultMessage, FetchRemotesMessage, FetchRemotesResultMessage, FileActivity, FileDiffResultMessage, FilesEditedMessage, FSChangedMessage, FSDeleteMessage, FSDeleteResult, FSDeleteResultMessage, FSEntry, FSExistsMessage, FSExistsResult, FSExistsResultMessage, FSIndexMessage, FSIndexResultMessage, FSListMessage, FSListResultMessage, FSReadAssetMessage, FSReadAssetResult, FSReadAssetResultMessage, FSReadMessage, FSReadResult, FSReadResultMessage, FSRenameMessage, FSRenameResult, FSRenameResultMessage, FSUnwatchMessage, FSUnwatchResultMessage, FSWatchMessage, FSWatchResultMessage, FSWriteMessage, FSWriteResult, FSWriteResultMessage, GardenReview, GardenReviewEvidence, GardenReviewItem, GardenReviewRecipe, GardenReviewRun, GardenReviewUpdatedMessage, GardenSeedsUpdatedMessage, GetDefaultBranchMessage, GetDefaultBranchResultMessage, GetFileDiffMessage, GetKittyImageMessage, GetPresentationRoundMessage, GetPresentationRoundResultMessage, GetPresentationsMessage, GetPresentationsResultMessage, GetRecentLocationsMessage, GetRepoInfoMessage, GetRepoInfoResultMessage, GetScreenSnapshotMessage, GetScreenSnapshotResultMessage, GetSettingsMessage, GitFileChange, GitHubHostsUpdatedMessage, GitOperation, GitOperationFinishedMessage, GitOperationKind, GitOperationStartedMessage, GitOperationStatus, GitStatusUpdateMessage, GuardianSelection, HeartbeatMessage, HeatState, HookCompactionMessage, HookNotificationMessage, HookStopFailureMessage, InitialStateMessage, InjectTestPRMessage, InjectTestSessionMessage, InspectPathMessage, InspectPathResultMessage, InstallBundledPluginMessage, InstallPluginMessage, JournalAppendMessage, JournalAppendResult, KeptConversation, KeptConversationDeletedBy, KeptConversationForgetMessage, KeptConversationForgetResultEvent, KeptConversationKeepMessage, KeptConversationKeepResultEvent, KeptConversationListMessage, KeptConversationListResult, KeptConversationListResultEvent, KeptConversationRow, KeptConversationSeed, KeptConversationsChangedEvent, KillSessionMessage, KittyImageResultMessage, KittyPlacement, KittyPlacementsMessage, LayoutDockEdge, LayoutPaneKind, LayoutPaneStatus, LayoutSplitDirection, LeafMoved, ListBranchesMessage, ListEndpointsMessage, ListPluginsMessage, ListRemoteBranchesMessage, ListRemoteBranchesResultMessage, ListWorktreesMessage, MarkdownAnnotation, MarkdownAnnotationAnchor, MarkdownAnnotationsClearMessage, MarkdownAnnotationsClearResultMessage, MarkdownAnnotationsGetMessage, MarkdownAnnotationsGetResultMessage, MarkdownAnnotationsSaveMessage, MarkdownAnnotationsSaveResultMessage, MarkdownAnnotationsSubmitMessage, MarkdownAnnotationsSubmitResultMessage, MergePRMessage, MigrationChangedMessage, MigrationDraftDesktop, MigrationFinishMessage, MigrationGetMessage, MigrationGroup, MigrationKeepMessage, MigrationMoveMessage, MigrationPhase, MigrationResultMessage, MigrationState, MigrationSuggestMessage, MigrationUndoMessage, ModelCapabilitySupport, MuteAuthorMessage, MutePRMessage, MuteRepoMessage, NotebookBacklinksMessage, NotebookBacklinksResultMessage, NotebookChangedMessage, NotebookEntry, NotebookGuideMessage, NotebookGuideResult, NotebookListMessage, NotebookListResultMessage, NotebookReadMessage, NotebookReadResult, NotebookReadResultMessage, NotebookSendToChiefMessage, NotebookSendToChiefResult, NotebookSendToChiefResultMessage, NotebookWriteMessage, NotebookWriteResult, NotebookWriteResultMessage, Notification, NotificationAction, NotificationListMessage, NotificationListResultMessage, NotificationMarkReadMessage, NotificationMarkReadResultMessage, NotificationSeverity, NotificationsUpdatedMessage, OpenBrowserMessage, OpenMarkdownMessage, OpenMarkdownResultMessage, OpenSeedMessage, OpenSeedResultMessage, OpenSentFilesMessage, PR, PRActionResultMessage, PRRole, PRVisitedMessage, PRsUpdatedMessage, PathInspection, PluginActionResultMessage, PluginInfo, PluginIssue, PluginsUpdatedMessage, PresentAnnotation, PresentCloseMessage, PresentCloseResultMessage, PresentCommentInput, PresentFeedbackMessage, PresentFeedbackResult, PresentFile, PresentManifestView, PresentOpenMessage, PresentOpenResult, PresentSubmitRoundMessage, PresentSubmitRoundResultMessage, Presentation, PresentationAddedMessage, PresentationComment, PresentationRound, PresentationUpdatedMessage, Profile, ProfileActionResultMessage, ProfileArrangementChangedMessage, ProfileCreateMessage, ProfileDeleteMessage, ProfileErrorCode, ProfileRenameMessage, ProfileSelectMessage, ProfilesChangedMessage, PtyDesyncMessage, PtyInputMessage, PtyInputProbeResultMessage, PtyOutputMessage, PtyResizeMessage, PtyResizedMessage, PullRequestCreatedMessage, PullRequestForgetMessage, PullRequestProvenance, PullRequestUnwatchMessage, PullRequestUnwatchResultMessage, PullRequestWatchMessage, PullRequestWatchMode, PullRequestWatchResultMessage, QueryAuthorsMessage, QueryMessage, QueryPRsMessage, QueryReposMessage, RateLimitedMessage, RecentFilesMessage, RecentFilesResultMessage, RecentLocation, RecentLocationsResultMessage, RefreshPRsMessage, RefreshPRsResultMessage, ReloadSessionMessage, ReloadSessionResultMessage, RemoveEndpointMessage, RemovePluginMessage, RenameResultMessage, RenameSessionMessage, RepoInfo, RepoState, ReposUpdatedMessage, Response, ReviewComment, RuntimeRespawnedMessage, Seed, SeedArtifact, SeedArtifactReference, SeedArtifactTargetMessage, SeedArtifactTargetResult, SeedArtifactTargetResultMessage, SeedArtifactTransferMessage, SeedArtifactTransferResult, SeedArtifactTransferResultMessage, SeedContinuation, SeedDocument, SeedDocumentGetMessage, SeedDocumentGetResultMessage, SeedEdge, SeedEditMessage, SeedEditResult, SeedHandoverRequest, SeedHarvestCondition, SeedHarvestWhenMerged, SeedLinkMessage, SeedLinkResult, SeedListMessage, SeedListResult, SeedNote, SeedNoteMessage, SeedNoteResult, SeedNoteResultMessage, SeedNotesMessage, SeedNotesResult, SeedPlantMessage, SeedPlantResult, SeedPlotChild, SeedPlotMessage, SeedPlotProgress, SeedPlotResult, SeedReadyMessage, SeedReadyResult, SeedRelation, SeedResumeMessage, SeedResumeResultMessage, SeedReviewActionContext, SeedReviewCancelMessage, SeedReviewDraftMessage, SeedReviewDraftResultMessage, SeedReviewKeepMessage, SeedReviewResult, SeedReviewResultMessage, SeedReviewRetryMessage, SeedReviewShowMessage, SeedReviewStartMessage, SeedSearchHit, SeedSearchMessage, SeedSearchResult, SeedSendToChiefMessage, SeedSendToChiefResult, SeedSendToChiefResultMessage, SeedShowMessage, SeedShowResult, SeedTransitionMessage, SeedTransitionResult, SeedTransitionResultMessage, SeedVar, SeedWatchMessage, SeedWatchResult, Session, SessionAnnotation, SessionAnnotationsClearMessage, SessionAnnotationsClearResultMessage, SessionAnnotationsGetMessage, SessionAnnotationsGetResultMessage, SessionAnnotationsSaveMessage, SessionAnnotationsSaveResultMessage, SessionAnnotationsSubmitMessage, SessionAnnotationsSubmitResultMessage, SessionCloseResultMessage, SessionClosedMessage, SessionContextWindowCapResultMessage, SessionDelegationRole, SessionExitedMessage, SessionInstructionsMessage, SessionInstructionsResult, SessionLedgerEntry, SessionLedgerFacet, SessionLedgerFacets, SessionLedgerProfileFacet, SessionListMessage, SessionListResult, SessionListResultMessage, SessionMessage, SessionMessageWindowStatus, SessionMessagesChangedMessage, SessionMessagesGetMessage, SessionMessagesGetResultMessage, SessionMoveMessage, SessionPlacement, SessionPullRequest, SessionRegisteredMessage, SessionReopen, SessionReopenAction, SessionReopenEntry, SessionReopenMessage, SessionReopenResult, SessionReopenResultMessage, SessionShowMessage, SessionShowResult, SessionShowResultMessage, SessionState, SessionStateChangedMessage, SessionTranscriptEvent, SessionTranscriptMessage, SessionTranscriptResult, SessionUnregisteredMessage, SessionUsage, SessionUsageModel, SessionsUpdatedMessage, SetChiefOfStaffMessage, SetClientPresenceMessage, SetEndpointRemoteWebMessage, SetPluginPriorityMessage, SetSessionContextWindowCapMessage, SetSessionResumeIDMessage, SetSettingMessage, SetTerminalThemeMessage, SetTicketStatusMessage, SettingsUpdatedMessage, SettleTurnMessage, SnoozeTurnMessage, SpawnResultMessage, SpawnSessionMessage, StateExplainEntry, StateExplainMessage, StateExplainResult, StateMessage, StopBackgroundTask, StopMessage, StoredDocument, SubscribeGitStatusMessage, SupportInputTrace, SupportRuntimeEvidence, SupportSnapshotMessage, SupportSnapshotResultMessage, Task, TaskListMessage, TaskListResultMessage, TaskRetryMessage, TaskRetryResultMessage, TasksChangedMessage, TerminalPointerActivityMessage, Ticket, TicketActivity, TicketActivityKind, TicketArtifact, TicketAttachFile, TicketAttachMessage, TicketAttachResult, TicketAttachResultMessage, TicketCommentMessage, TicketCommentResult, TicketCreateMessage, TicketCreateResult, TicketEvent, TicketEventBundle, TicketEventKind, TicketInboxMessage, TicketInboxMode, TicketInboxResult, TicketListMessage, TicketListResult, TicketShowMessage, TicketShowResult, TicketStatus, TicketStatusResult, TicketSubscribeMessage, TicketSubscribeResult, TicketTakeMessage, TicketTakeResult, TicketUnsubscribeMessage, TicketUnsubscribeResult, TriggerNudgeMessage, UninstallPluginMessage, UnregisterMessage, UnsubscribeGitStatusMessage, UpdateEndpointMessage, WakeTurnMessage, WebSocketEvent, WorkflowActionResultMessage, WorkflowAgentCall, WorkflowAgentCallStatus, WorkflowCallUpsertMessage, WorkflowRun, WorkflowRunCancelMessage, WorkflowRunGetMessage, WorkflowRunListMessage, WorkflowRunStatus, WorkflowRunUpdatedMessage, WorkflowRunUpsertMessage, Worktree, WorktreeCreatedEvent, WorktreeDeletedEvent, WorktreeKeepMessage, WorktreeKeepResult, WorktreeKeepResultEvent, WorktreeListMessage, WorktreeListResult, WorktreeListResultEvent, WorktreeRefreshMessage, WorktreeRefreshResult, WorktreeRefreshResultEvent, WorktreeRepository, WorktreeStateChangedEvent, WorktreeSweepEntry, WorktreeSweepLogMessage, WorktreeSweepLogResult, WorktreeSweepLogResultEvent, WorktreeSweptEvent, WorktreesUpdatedMessage } from "./generated";
+//   import { Convert, ActivityStatusMessage, ActivityStatusResult, ActivityStatusSession, AddEndpointMessage, AgentCloseMessage, AgentCloseResult, AgentCloseRule, AgentInboxBatchResult, AgentInboxItem, AgentInboxMessage, AgentMessageState, AgentMsgMessage, AgentMsgResult, AgentMsgStatus, AgentMsgStatusMessage, AgentPeekExit, AgentPeekMessage, AgentPeekResult, AgentPeekScreen, AgentPeerMessage, ApprovePRMessage, AttachBlock, AttachPolicy, AttachResultMessage, AttachSessionMessage, AttachSnapshot, AuthorState, AuthorsUpdatedMessage, AutoModeConfigInfo, AutoModeConfigResult, AutoModeConfigResultMessage, AutoModeDenialInfo, AutoModeDenialsMessage, AutoModeDenialsResult, AutoModeDiscardMessage, AutoModeDiscardResultMessage, AutoModeEnvNotesMessage, AutoModeEnvResult, AutoModeEnvSetResultMessage, AutoModeEnvSlotMessage, AutoModeEnvironmentInfo, AutoModeEnvironmentSlot, AutoModeEnvironmentSlotValue, AutoModeGetMessage, AutoModeHostAddMessage, AutoModeHostRemoveMessage, AutoModeLegacyDismissMessage, AutoModeNetworkInfo, AutoModePolicySetMessage, AutoModePresetInfo, AutoModePromoteMessage, AutoModePromoteResultMessage, AutoModeProposalInfo, AutoModeProposeMessage, AutoModeProposeResult, AutoModeRuleAddMessage, AutoModeRuleInfo, AutoModeRuleRemoveMessage, AutoModeShowMessage, AutoModeShowResult, AutoModeStateChangedMessage, AutoModeStateResultMessage, AutomationApplyMessage, AutomationApplyResultMessage, AutomationCleanupMessage, AutomationCleanupResultMessage, AutomationDefinitionGetMessage, AutomationDefinitionResultMessage, AutomationDefinitionSummary, AutomationDefinitionsGetMessage, AutomationDefinitionsResultMessage, AutomationDeleteMessage, AutomationDeleteResultMessage, AutomationProvenance, AutomationRunMessage, AutomationRunResultMessage, AutomationRunSummary, AutomationRunsGetMessage, AutomationRunsResultMessage, AutomationSetEnabledMessage, AutomationSetEnabledResultMessage, AutomationValidateMessage, AutomationValidateResultMessage, AutomationsChangedMessage, BootstrapEndpointMessage, Branch, BranchChangedMessage, BranchesResultMessage, BrowseDirectoryMessage, BrowseDirectoryResultMessage, BrowserControlMessage, BrowserControlRequestMessage, BrowserControlResponseMessage, BrowserControlResultMessage, BuiltinDelegationRole, BusConsumerStatus, BusHealthEntry, BusProducerStatus, BusSetConsumerEnabledMessage, BusSetConsumerEnabledResultMessage, BusStatusGetMessage, BusStatusResultMessage, CancelCountdownMessage, ChiefOfStaffResultMessage, ClearSessionActivityMessage, ClearWarningsMessage, ClientEvictionNoticeMessage, ClientHelloMessage, CollapseRepoMessage, CommandErrorMessage, CreateWorktreeFromBranchMessage, CreateWorktreeMessage, CreateWorktreeResultMessage, CrewCharterDocument, CrewCharterGetMessage, CrewCharterGetResult, CrewCharterGetResultMessage, CrewCharterSetMessage, CrewCharterSetResult, CrewCharterSetResultMessage, CrewDayClose, CrewHandoffDocument, CrewHandoffGetMessage, CrewHandoffGetResult, CrewHandoffGetResultMessage, CrewHandoffMessage, CrewHandoffResult, CrewHandoffSummary, CrewHandoffsGetMessage, CrewHandoffsGetResult, CrewHandoffsGetResultMessage, CrewListMessage, CrewListResult, CrewMember, CrewPrimeMessage, CrewPrimeResult, CrewRestart, CrewRestartMessage, CrewRestartResult, CrewRestartResultMessage, CrewRestartState, CrewSetMessage, CrewSetResult, CrewSetResultMessage, CrewSleepMessage, CrewSleepResult, CrewSleepResultMessage, CrewUpdatedMessage, CrewWakeMessage, CrewWakeResult, CrewWakeResultMessage, DaemonWarning, DelegateAssignment, DelegateAssignmentKind, DelegateCheckout, DelegateCheckoutKind, DelegateHandover, DelegateMessage, DelegateResult, DelegateResultMessage, DelegateStatusMessage, DelegateWorktreeRequest, DelegationChoice, DelegationFailure, DelegationFallback, DelegationHarness, DelegationModel, DelegationModelsMessage, DelegationModelsResultMessage, DelegationOperation, DelegationOperationMessage, DelegationOperationState, DelegationPreferences, DelegationPreferencesChangedMessage, DelegationPreferencesCommitMessage, DelegationPreferencesGetMessage, DelegationPreferencesHistoryMessage, DelegationPreferencesHistoryResult, DelegationPreferencesOrigin, DelegationPreferencesResultMessage, DelegationPreferencesRevision, DelegationPreferencesRollbackMessage, DelegationPreferencesSaveMessage, DelegationPreferencesShowMessage, DelegationRole, DelegationRolesMessage, DelegationRolesResult, DelegationSelection, DeleteWorktreeMessage, DeleteWorktreeResultMessage, Desktop, DesktopCreateMessage, DesktopDeleteMessage, DesktopDockTileMessage, DesktopMoveLeafMessage, DesktopMoveSessionMessage, DesktopMoveSessionResult, DesktopPane, DesktopPlaceSessionMessage, DesktopRemoveLeafMessage, DesktopRenameMessage, DesktopReorderMessage, DesktopSetActivePaneMessage, DesktopSetCurrentMessage, DesktopSetShortcutSlotMessage, DesktopSetSplitRatioMessage, DesktopShowLeafMessage, DesktopShowSessionMessage, DesktopTileContentMessage, DesktopUpdateTileMessage, DetachSessionMessage, DirectoryEntry, DispatchWorkState, DocCollectionsMessage, DocCollectionsResult, DocCountMessage, DocCountResult, DocDefineMessage, DocDefineResult, DocDeleteMessage, DocDeleteResult, DocGetMessage, DocGetResult, DocPutMessage, DocPutResult, DocQueryMessage, DocQueryResult, DocSubscribeMessage, DocSubscribeResult, DocSubscriptionDeliveryMessage, DocSubscriptionEndedMessage, DocUndefineMessage, DocUndefineResult, DocUnsubscribeMessage, DocumentCollectionSchema, DocumentConflict, DocumentFieldSpec, DocumentFilter, DocumentQuery, DocumentRevision, DocumentSort, EndpointActionResultMessage, EndpointCapabilities, EndpointInfo, EndpointStatusChangedMessage, EndpointsUpdatedMessage, EnsureRepoMessage, EnsureRepoResultMessage, EvidenceExcerpt, FetchPRDetailsMessage, FetchPRDetailsResultMessage, FetchRemotesMessage, FetchRemotesResultMessage, FileActivity, FileDiffResultMessage, FilesEditedMessage, FSChangedMessage, FSDeleteMessage, FSDeleteResult, FSDeleteResultMessage, FSEntry, FSExistsMessage, FSExistsResult, FSExistsResultMessage, FSIndexMessage, FSIndexResultMessage, FSListMessage, FSListResultMessage, FSReadAssetMessage, FSReadAssetResult, FSReadAssetResultMessage, FSReadMessage, FSReadResult, FSReadResultMessage, FSRenameMessage, FSRenameResult, FSRenameResultMessage, FSUnwatchMessage, FSUnwatchResultMessage, FSWatchMessage, FSWatchResultMessage, FSWriteMessage, FSWriteResult, FSWriteResultMessage, GardenReview, GardenReviewEvidence, GardenReviewItem, GardenReviewRecipe, GardenReviewRun, GardenReviewUpdatedMessage, GardenSeedsUpdatedMessage, GetDefaultBranchMessage, GetDefaultBranchResultMessage, GetFileDiffMessage, GetKittyImageMessage, GetPresentationRoundMessage, GetPresentationRoundResultMessage, GetPresentationsMessage, GetPresentationsResultMessage, GetRecentLocationsMessage, GetRepoInfoMessage, GetRepoInfoResultMessage, GetScreenSnapshotMessage, GetScreenSnapshotResultMessage, GetSettingsMessage, GitFileChange, GitHubHostsUpdatedMessage, GitOperation, GitOperationFinishedMessage, GitOperationKind, GitOperationStartedMessage, GitOperationStatus, GitStatusUpdateMessage, GuardianSelection, HeartbeatMessage, HeatState, HookCompactionMessage, HookNotificationMessage, HookStopFailureMessage, InitialStateMessage, InjectTestPRMessage, InjectTestSessionMessage, InspectPathMessage, InspectPathResultMessage, InstallBundledPluginMessage, InstallPluginMessage, JournalAppendMessage, JournalAppendResult, KeptConversation, KeptConversationDeletedBy, KeptConversationForgetMessage, KeptConversationForgetResultEvent, KeptConversationKeepMessage, KeptConversationKeepResultEvent, KeptConversationListMessage, KeptConversationListResult, KeptConversationListResultEvent, KeptConversationRow, KeptConversationSeed, KeptConversationsChangedEvent, KillSessionMessage, KittyImageResultMessage, KittyPlacement, KittyPlacementsMessage, LaunchDesktopGetMessage, LaunchDesktopItem, LaunchDesktopKind, LaunchDesktopMode, LaunchDesktopResultMessage, LaunchDesktopSetMessage, LaunchDesktopSetting, LayoutDockEdge, LayoutPaneKind, LayoutPaneStatus, LayoutSplitDirection, LeafMoved, ListBranchesMessage, ListEndpointsMessage, ListPluginsMessage, ListRemoteBranchesMessage, ListRemoteBranchesResultMessage, ListWorktreesMessage, MarkdownAnnotation, MarkdownAnnotationAnchor, MarkdownAnnotationsClearMessage, MarkdownAnnotationsClearResultMessage, MarkdownAnnotationsGetMessage, MarkdownAnnotationsGetResultMessage, MarkdownAnnotationsSaveMessage, MarkdownAnnotationsSaveResultMessage, MarkdownAnnotationsSubmitMessage, MarkdownAnnotationsSubmitResultMessage, MergePRMessage, MigrationChangedMessage, MigrationDraftDesktop, MigrationFinishMessage, MigrationGetMessage, MigrationGroup, MigrationKeepMessage, MigrationMoveMessage, MigrationPhase, MigrationResultMessage, MigrationState, MigrationSuggestMessage, MigrationUndoMessage, ModelCapabilitySupport, MuteAuthorMessage, MutePRMessage, MuteRepoMessage, NotebookBacklinksMessage, NotebookBacklinksResultMessage, NotebookChangedMessage, NotebookEntry, NotebookGuideMessage, NotebookGuideResult, NotebookListMessage, NotebookListResultMessage, NotebookReadMessage, NotebookReadResult, NotebookReadResultMessage, NotebookSendToChiefMessage, NotebookSendToChiefResult, NotebookSendToChiefResultMessage, NotebookWriteMessage, NotebookWriteResult, NotebookWriteResultMessage, Notification, NotificationAction, NotificationListMessage, NotificationListResultMessage, NotificationMarkReadMessage, NotificationMarkReadResultMessage, NotificationSeverity, NotificationsUpdatedMessage, OpenBrowserMessage, OpenMarkdownMessage, OpenMarkdownResultMessage, OpenSeedMessage, OpenSeedResultMessage, OpenSentFilesMessage, PR, PRActionResultMessage, PRRole, PRVisitedMessage, PRsUpdatedMessage, PathInspection, PluginActionResultMessage, PluginInfo, PluginIssue, PluginsUpdatedMessage, PresentAnnotation, PresentCloseMessage, PresentCloseResultMessage, PresentCommentInput, PresentFeedbackMessage, PresentFeedbackResult, PresentFile, PresentManifestView, PresentOpenMessage, PresentOpenResult, PresentSubmitRoundMessage, PresentSubmitRoundResultMessage, Presentation, PresentationAddedMessage, PresentationComment, PresentationRound, PresentationUpdatedMessage, Profile, ProfileActionResultMessage, ProfileArrangementChangedMessage, ProfileCreateMessage, ProfileDeleteMessage, ProfileErrorCode, ProfileRenameMessage, ProfileSelectMessage, ProfilesChangedMessage, PtyDesyncMessage, PtyInputMessage, PtyInputProbeResultMessage, PtyOutputMessage, PtyResizeMessage, PtyResizedMessage, PullRequestCreatedMessage, PullRequestForgetMessage, PullRequestProvenance, PullRequestUnwatchMessage, PullRequestUnwatchResultMessage, PullRequestWatchMessage, PullRequestWatchMode, PullRequestWatchResultMessage, QueryAuthorsMessage, QueryMessage, QueryPRsMessage, QueryReposMessage, RateLimitedMessage, RecentFilesMessage, RecentFilesResultMessage, RecentLocation, RecentLocationsResultMessage, RefreshPRsMessage, RefreshPRsResultMessage, ReloadSessionMessage, ReloadSessionResultMessage, RemoveEndpointMessage, RemovePluginMessage, RenameResultMessage, RenameSessionMessage, RepoInfo, RepoState, ReposUpdatedMessage, Response, ReviewComment, RuntimeRespawnedMessage, Seed, SeedArtifact, SeedArtifactReference, SeedArtifactTargetMessage, SeedArtifactTargetResult, SeedArtifactTargetResultMessage, SeedArtifactTransferMessage, SeedArtifactTransferResult, SeedArtifactTransferResultMessage, SeedContinuation, SeedDocument, SeedDocumentGetMessage, SeedDocumentGetResultMessage, SeedEdge, SeedEditMessage, SeedEditResult, SeedHandoverRequest, SeedHarvestCondition, SeedHarvestWhenMerged, SeedLinkMessage, SeedLinkResult, SeedListMessage, SeedListResult, SeedNote, SeedNoteMessage, SeedNoteResult, SeedNoteResultMessage, SeedNotesMessage, SeedNotesResult, SeedPlantMessage, SeedPlantResult, SeedPlotChild, SeedPlotMessage, SeedPlotProgress, SeedPlotResult, SeedReadyMessage, SeedReadyResult, SeedRelation, SeedResumeMessage, SeedResumeResultMessage, SeedReviewActionContext, SeedReviewCancelMessage, SeedReviewDraftMessage, SeedReviewDraftResultMessage, SeedReviewKeepMessage, SeedReviewResult, SeedReviewResultMessage, SeedReviewRetryMessage, SeedReviewShowMessage, SeedReviewStartMessage, SeedSearchHit, SeedSearchMessage, SeedSearchResult, SeedSendToChiefMessage, SeedSendToChiefResult, SeedSendToChiefResultMessage, SeedShowMessage, SeedShowResult, SeedTransitionMessage, SeedTransitionResult, SeedTransitionResultMessage, SeedVar, SeedWatchMessage, SeedWatchResult, Session, SessionAnnotation, SessionAnnotationsClearMessage, SessionAnnotationsClearResultMessage, SessionAnnotationsGetMessage, SessionAnnotationsGetResultMessage, SessionAnnotationsSaveMessage, SessionAnnotationsSaveResultMessage, SessionAnnotationsSubmitMessage, SessionAnnotationsSubmitResultMessage, SessionCloseResultMessage, SessionClosedMessage, SessionContextWindowCapResultMessage, SessionDelegationRole, SessionExitedMessage, SessionInstructionsMessage, SessionInstructionsResult, SessionLedgerEntry, SessionLedgerFacet, SessionLedgerFacets, SessionLedgerProfileFacet, SessionListMessage, SessionListResult, SessionListResultMessage, SessionMessage, SessionMessageWindowStatus, SessionMessagesChangedMessage, SessionMessagesGetMessage, SessionMessagesGetResultMessage, SessionMoveMessage, SessionPlacement, SessionPullRequest, SessionRegisteredMessage, SessionReopen, SessionReopenAction, SessionReopenEntry, SessionReopenMessage, SessionReopenResult, SessionReopenResultMessage, SessionShowMessage, SessionShowResult, SessionShowResultMessage, SessionState, SessionStateChangedMessage, SessionTranscriptEvent, SessionTranscriptMessage, SessionTranscriptResult, SessionUnregisteredMessage, SessionUsage, SessionUsageModel, SessionsUpdatedMessage, SetChiefOfStaffMessage, SetClientPresenceMessage, SetEndpointRemoteWebMessage, SetPluginPriorityMessage, SetSessionContextWindowCapMessage, SetSessionResumeIDMessage, SetSettingMessage, SetTerminalThemeMessage, SetTicketStatusMessage, SettingsUpdatedMessage, SettleTurnMessage, SnoozeTurnMessage, SpawnResultMessage, SpawnSessionMessage, StateExplainEntry, StateExplainMessage, StateExplainResult, StateMessage, StopBackgroundTask, StopMessage, StoredDocument, SubscribeGitStatusMessage, SupportInputTrace, SupportRuntimeEvidence, SupportSnapshotMessage, SupportSnapshotResultMessage, Task, TaskListMessage, TaskListResultMessage, TaskRetryMessage, TaskRetryResultMessage, TasksChangedMessage, TerminalPointerActivityMessage, Ticket, TicketActivity, TicketActivityKind, TicketArtifact, TicketAttachFile, TicketAttachMessage, TicketAttachResult, TicketAttachResultMessage, TicketCommentMessage, TicketCommentResult, TicketCreateMessage, TicketCreateResult, TicketEvent, TicketEventBundle, TicketEventKind, TicketInboxMessage, TicketInboxMode, TicketInboxResult, TicketListMessage, TicketListResult, TicketShowMessage, TicketShowResult, TicketStatus, TicketStatusResult, TicketSubscribeMessage, TicketSubscribeResult, TicketTakeMessage, TicketTakeResult, TicketUnsubscribeMessage, TicketUnsubscribeResult, TriggerNudgeMessage, UninstallPluginMessage, UnregisterMessage, UnsubscribeGitStatusMessage, UpdateEndpointMessage, WakeTurnMessage, WebSocketEvent, WorkflowActionResultMessage, WorkflowAgentCall, WorkflowAgentCallStatus, WorkflowCallUpsertMessage, WorkflowRun, WorkflowRunCancelMessage, WorkflowRunGetMessage, WorkflowRunListMessage, WorkflowRunStatus, WorkflowRunUpdatedMessage, WorkflowRunUpsertMessage, Worktree, WorktreeCreatedEvent, WorktreeDeletedEvent, WorktreeKeepMessage, WorktreeKeepResult, WorktreeKeepResultEvent, WorktreeListMessage, WorktreeListResult, WorktreeListResultEvent, WorktreeRefreshMessage, WorktreeRefreshResult, WorktreeRefreshResultEvent, WorktreeRepository, WorktreeStateChangedEvent, WorktreeSweepEntry, WorktreeSweepLogMessage, WorktreeSweepLogResult, WorktreeSweepLogResultEvent, WorktreeSweptEvent, WorktreesUpdatedMessage } from "./generated";
 //
 //   const activityStatusMessage = Convert.toActivityStatusMessage(json);
 //   const activityStatusResult = Convert.toActivityStatusResult(json);
@@ -346,6 +346,13 @@
 //   const kittyImageResultMessage = Convert.toKittyImageResultMessage(json);
 //   const kittyPlacement = Convert.toKittyPlacement(json);
 //   const kittyPlacementsMessage = Convert.toKittyPlacementsMessage(json);
+//   const launchDesktopGetMessage = Convert.toLaunchDesktopGetMessage(json);
+//   const launchDesktopItem = Convert.toLaunchDesktopItem(json);
+//   const launchDesktopKind = Convert.toLaunchDesktopKind(json);
+//   const launchDesktopMode = Convert.toLaunchDesktopMode(json);
+//   const launchDesktopResultMessage = Convert.toLaunchDesktopResultMessage(json);
+//   const launchDesktopSetMessage = Convert.toLaunchDesktopSetMessage(json);
+//   const launchDesktopSetting = Convert.toLaunchDesktopSetting(json);
 //   const layoutDockEdge = Convert.toLayoutDockEdge(json);
 //   const layoutPaneKind = Convert.toLayoutPaneKind(json);
 //   const layoutPaneStatus = Convert.toLayoutPaneStatus(json);
@@ -1546,6 +1553,7 @@ export interface AutomationApplyMessage {
     definition_yaml:    string;
     expected_id?:       string;
     expected_revision?: number;
+    launch_desktop?:    string;
     profile_id?:        string;
     request_id?:        string;
     [property: string]: any;
@@ -1570,7 +1578,10 @@ export interface Items {
     enabled:             boolean;
     id:                  string;
     last_run?:           LastRun;
+    launch_desktop?:     LaunchDesktop;
     name:                string;
+    profile_id:          string;
+    profile_name?:       string;
     revision:            number;
     schedule_cron?:      string;
     schedule_time_zone?: string;
@@ -1611,6 +1622,20 @@ export interface PullRequest {
     title?:     string;
     url:        string;
     [property: string]: any;
+}
+
+export interface LaunchDesktop {
+    desktop_id?: string;
+    fallback?:   boolean;
+    label?:      string;
+    mode:        LaunchDesktopMode;
+    [property: string]: any;
+}
+
+export enum LaunchDesktopMode {
+    Current = "current",
+    Dedicated = "dedicated",
+    Desktop = "desktop",
 }
 
 export enum AutomationApplyResultMessageEvent {
@@ -1673,7 +1698,10 @@ export interface AutomationDefinitionSummary {
     enabled:             boolean;
     id:                  string;
     last_run?:           LastRun;
+    launch_desktop?:     LaunchDesktop;
     name:                string;
+    profile_id:          string;
+    profile_name?:       string;
     revision:            number;
     schedule_cron?:      string;
     schedule_time_zone?: string;
@@ -2620,8 +2648,10 @@ export interface Member {
     effort?:          string;
     home_dir:         string;
     id:               string;
+    launch_desktop?:  LaunchDesktop;
     model?:           string;
     profile_id:       string;
+    profile_name?:    string;
     resolved_agent:   string;
     resolved_effort?: string;
     resolved_model?:  string;
@@ -2658,8 +2688,10 @@ export interface CrewMember {
     effort?:          string;
     home_dir:         string;
     id:               string;
+    launch_desktop?:  LaunchDesktop;
     model?:           string;
     profile_id:       string;
+    profile_name?:    string;
     resolved_agent:   string;
     resolved_effort?: string;
     resolved_model?:  string;
@@ -2740,6 +2772,7 @@ export interface CrewSetMessage {
     cwd?:                  string;
     effort?:               string;
     expected_revision?:    number;
+    launch_desktop?:       string;
     member:                string;
     model?:                string;
     request_id?:           string;
@@ -5374,6 +5407,7 @@ export enum InitialStateMessageEvent {
 
 export enum MigrationPhase {
     Complete = "complete",
+    LaunchRequired = "launch_required",
     PlacementRequired = "placement_required",
 }
 
@@ -5703,6 +5737,80 @@ export enum KittyPlacementsMessageEvent {
     KittyPlacements = "kitty_placements",
 }
 
+export interface LaunchDesktopGetMessage {
+    cmd:        LaunchDesktopGetMessageCmd;
+    item_id:    string;
+    kind:       LaunchDesktopKind;
+    request_id: string;
+    [property: string]: any;
+}
+
+export enum LaunchDesktopGetMessageCmd {
+    LaunchDesktopGet = "launch_desktop_get",
+}
+
+export enum LaunchDesktopKind {
+    Automation = "automation",
+    Crew = "crew",
+}
+
+export interface LaunchDesktopItem {
+    confirmed:  boolean;
+    item_id:    string;
+    kind:       LaunchDesktopKind;
+    name:       string;
+    profile_id: string;
+    setting:    LaunchDesktop;
+    [property: string]: any;
+}
+
+export interface LaunchDesktopResultMessage {
+    action:     string;
+    desktops?:  DesktopElement[];
+    error?:     string;
+    event:      LaunchDesktopResultMessageEvent;
+    item?:      Item;
+    request_id: string;
+    success:    boolean;
+    [property: string]: any;
+}
+
+export enum LaunchDesktopResultMessageEvent {
+    LaunchDesktopResult = "launch_desktop_result",
+}
+
+export interface Item {
+    confirmed:  boolean;
+    item_id:    string;
+    kind:       LaunchDesktopKind;
+    name:       string;
+    profile_id: string;
+    setting:    LaunchDesktop;
+    [property: string]: any;
+}
+
+export interface LaunchDesktopSetMessage {
+    cmd:          LaunchDesktopSetMessageCmd;
+    desktop_ref?: string;
+    item_id:      string;
+    kind:         LaunchDesktopKind;
+    request_id:   string;
+    setting:      LaunchDesktop;
+    [property: string]: any;
+}
+
+export enum LaunchDesktopSetMessageCmd {
+    LaunchDesktopSet = "launch_desktop_set",
+}
+
+export interface LaunchDesktopSetting {
+    desktop_id?: string;
+    fallback?:   boolean;
+    label?:      string;
+    mode:        LaunchDesktopMode;
+    [property: string]: any;
+}
+
 export interface LeafMoved {
     from_desktop_id: string;
     from_leaf_id:    string;
@@ -5981,6 +6089,8 @@ export interface State {
     can_undo:             boolean;
     desktops:             DesktopObject[];
     groups:               GroupElement[];
+    launch_desktops?:     DesktopElement[];
+    launch_items?:        Item[];
     phase:                MigrationPhase;
     profile_id:           string;
     revision:             number;
@@ -6111,6 +6221,8 @@ export interface MigrationState {
     can_undo:             boolean;
     desktops:             DesktopObject[];
     groups:               GroupElement[];
+    launch_desktops?:     DesktopElement[];
+    launch_items?:        Item[];
     phase:                MigrationPhase;
     profile_id:           string;
     revision:             number;
@@ -13760,6 +13872,62 @@ export class Convert {
         return JSON.stringify(uncast(value, r("KittyPlacementsMessage")), null, 2);
     }
 
+    public static toLaunchDesktopGetMessage(json: string): LaunchDesktopGetMessage {
+        return cast(JSON.parse(json), r("LaunchDesktopGetMessage"));
+    }
+
+    public static launchDesktopGetMessageToJson(value: LaunchDesktopGetMessage): string {
+        return JSON.stringify(uncast(value, r("LaunchDesktopGetMessage")), null, 2);
+    }
+
+    public static toLaunchDesktopItem(json: string): LaunchDesktopItem {
+        return cast(JSON.parse(json), r("LaunchDesktopItem"));
+    }
+
+    public static launchDesktopItemToJson(value: LaunchDesktopItem): string {
+        return JSON.stringify(uncast(value, r("LaunchDesktopItem")), null, 2);
+    }
+
+    public static toLaunchDesktopKind(json: string): LaunchDesktopKind {
+        return cast(JSON.parse(json), r("LaunchDesktopKind"));
+    }
+
+    public static launchDesktopKindToJson(value: LaunchDesktopKind): string {
+        return JSON.stringify(uncast(value, r("LaunchDesktopKind")), null, 2);
+    }
+
+    public static toLaunchDesktopMode(json: string): LaunchDesktopMode {
+        return cast(JSON.parse(json), r("LaunchDesktopMode"));
+    }
+
+    public static launchDesktopModeToJson(value: LaunchDesktopMode): string {
+        return JSON.stringify(uncast(value, r("LaunchDesktopMode")), null, 2);
+    }
+
+    public static toLaunchDesktopResultMessage(json: string): LaunchDesktopResultMessage {
+        return cast(JSON.parse(json), r("LaunchDesktopResultMessage"));
+    }
+
+    public static launchDesktopResultMessageToJson(value: LaunchDesktopResultMessage): string {
+        return JSON.stringify(uncast(value, r("LaunchDesktopResultMessage")), null, 2);
+    }
+
+    public static toLaunchDesktopSetMessage(json: string): LaunchDesktopSetMessage {
+        return cast(JSON.parse(json), r("LaunchDesktopSetMessage"));
+    }
+
+    public static launchDesktopSetMessageToJson(value: LaunchDesktopSetMessage): string {
+        return JSON.stringify(uncast(value, r("LaunchDesktopSetMessage")), null, 2);
+    }
+
+    public static toLaunchDesktopSetting(json: string): LaunchDesktopSetting {
+        return cast(JSON.parse(json), r("LaunchDesktopSetting"));
+    }
+
+    public static launchDesktopSettingToJson(value: LaunchDesktopSetting): string {
+        return JSON.stringify(uncast(value, r("LaunchDesktopSetting")), null, 2);
+    }
+
     public static toLayoutDockEdge(json: string): LayoutDockEdge {
         return cast(JSON.parse(json), r("LayoutDockEdge"));
     }
@@ -17315,6 +17483,7 @@ const typeMap: any = {
         { json: "definition_yaml", js: "definition_yaml", typ: "" },
         { json: "expected_id", js: "expected_id", typ: u(undefined, "") },
         { json: "expected_revision", js: "expected_revision", typ: u(undefined, 0) },
+        { json: "launch_desktop", js: "launch_desktop", typ: u(undefined, "") },
         { json: "profile_id", js: "profile_id", typ: u(undefined, "") },
         { json: "request_id", js: "request_id", typ: u(undefined, "") },
     ], "any"),
@@ -17331,7 +17500,10 @@ const typeMap: any = {
         { json: "enabled", js: "enabled", typ: true },
         { json: "id", js: "id", typ: "" },
         { json: "last_run", js: "last_run", typ: u(undefined, r("LastRun")) },
+        { json: "launch_desktop", js: "launch_desktop", typ: u(undefined, r("LaunchDesktop")) },
         { json: "name", js: "name", typ: "" },
+        { json: "profile_id", js: "profile_id", typ: "" },
+        { json: "profile_name", js: "profile_name", typ: u(undefined, "") },
         { json: "revision", js: "revision", typ: 0 },
         { json: "schedule_cron", js: "schedule_cron", typ: u(undefined, "") },
         { json: "schedule_time_zone", js: "schedule_time_zone", typ: u(undefined, "") },
@@ -17366,6 +17538,12 @@ const typeMap: any = {
         { json: "title", js: "title", typ: u(undefined, "") },
         { json: "url", js: "url", typ: "" },
     ], "any"),
+    "LaunchDesktop": o([
+        { json: "desktop_id", js: "desktop_id", typ: u(undefined, "") },
+        { json: "fallback", js: "fallback", typ: u(undefined, true) },
+        { json: "label", js: "label", typ: u(undefined, "") },
+        { json: "mode", js: "mode", typ: r("LaunchDesktopMode") },
+    ], "any"),
     "AutomationCleanupMessage": o([
         { json: "cmd", js: "cmd", typ: r("AutomationCleanupMessageCmd") },
         { json: "definition_id", js: "definition_id", typ: "" },
@@ -17398,7 +17576,10 @@ const typeMap: any = {
         { json: "enabled", js: "enabled", typ: true },
         { json: "id", js: "id", typ: "" },
         { json: "last_run", js: "last_run", typ: u(undefined, r("LastRun")) },
+        { json: "launch_desktop", js: "launch_desktop", typ: u(undefined, r("LaunchDesktop")) },
         { json: "name", js: "name", typ: "" },
+        { json: "profile_id", js: "profile_id", typ: "" },
+        { json: "profile_name", js: "profile_name", typ: u(undefined, "") },
         { json: "revision", js: "revision", typ: 0 },
         { json: "schedule_cron", js: "schedule_cron", typ: u(undefined, "") },
         { json: "schedule_time_zone", js: "schedule_time_zone", typ: u(undefined, "") },
@@ -17976,8 +18157,10 @@ const typeMap: any = {
         { json: "effort", js: "effort", typ: u(undefined, "") },
         { json: "home_dir", js: "home_dir", typ: "" },
         { json: "id", js: "id", typ: "" },
+        { json: "launch_desktop", js: "launch_desktop", typ: u(undefined, r("LaunchDesktop")) },
         { json: "model", js: "model", typ: u(undefined, "") },
         { json: "profile_id", js: "profile_id", typ: "" },
+        { json: "profile_name", js: "profile_name", typ: u(undefined, "") },
         { json: "resolved_agent", js: "resolved_agent", typ: "" },
         { json: "resolved_effort", js: "resolved_effort", typ: u(undefined, "") },
         { json: "resolved_model", js: "resolved_model", typ: u(undefined, "") },
@@ -18003,8 +18186,10 @@ const typeMap: any = {
         { json: "effort", js: "effort", typ: u(undefined, "") },
         { json: "home_dir", js: "home_dir", typ: "" },
         { json: "id", js: "id", typ: "" },
+        { json: "launch_desktop", js: "launch_desktop", typ: u(undefined, r("LaunchDesktop")) },
         { json: "model", js: "model", typ: u(undefined, "") },
         { json: "profile_id", js: "profile_id", typ: "" },
+        { json: "profile_name", js: "profile_name", typ: u(undefined, "") },
         { json: "resolved_agent", js: "resolved_agent", typ: "" },
         { json: "resolved_effort", js: "resolved_effort", typ: u(undefined, "") },
         { json: "resolved_model", js: "resolved_model", typ: u(undefined, "") },
@@ -18059,6 +18244,7 @@ const typeMap: any = {
         { json: "cwd", js: "cwd", typ: u(undefined, "") },
         { json: "effort", js: "effort", typ: u(undefined, "") },
         { json: "expected_revision", js: "expected_revision", typ: u(undefined, 0) },
+        { json: "launch_desktop", js: "launch_desktop", typ: u(undefined, "") },
         { json: "member", js: "member", typ: "" },
         { json: "model", js: "model", typ: u(undefined, "") },
         { json: "request_id", js: "request_id", typ: u(undefined, "") },
@@ -19899,6 +20085,51 @@ const typeMap: any = {
         { json: "placements", js: "placements", typ: a(r("PlacementElement")) },
         { json: "seq", js: "seq", typ: 0 },
     ], "any"),
+    "LaunchDesktopGetMessage": o([
+        { json: "cmd", js: "cmd", typ: r("LaunchDesktopGetMessageCmd") },
+        { json: "item_id", js: "item_id", typ: "" },
+        { json: "kind", js: "kind", typ: r("LaunchDesktopKind") },
+        { json: "request_id", js: "request_id", typ: "" },
+    ], "any"),
+    "LaunchDesktopItem": o([
+        { json: "confirmed", js: "confirmed", typ: true },
+        { json: "item_id", js: "item_id", typ: "" },
+        { json: "kind", js: "kind", typ: r("LaunchDesktopKind") },
+        { json: "name", js: "name", typ: "" },
+        { json: "profile_id", js: "profile_id", typ: "" },
+        { json: "setting", js: "setting", typ: r("LaunchDesktop") },
+    ], "any"),
+    "LaunchDesktopResultMessage": o([
+        { json: "action", js: "action", typ: "" },
+        { json: "desktops", js: "desktops", typ: u(undefined, a(r("DesktopElement"))) },
+        { json: "error", js: "error", typ: u(undefined, "") },
+        { json: "event", js: "event", typ: r("LaunchDesktopResultMessageEvent") },
+        { json: "item", js: "item", typ: u(undefined, r("Item")) },
+        { json: "request_id", js: "request_id", typ: "" },
+        { json: "success", js: "success", typ: true },
+    ], "any"),
+    "Item": o([
+        { json: "confirmed", js: "confirmed", typ: true },
+        { json: "item_id", js: "item_id", typ: "" },
+        { json: "kind", js: "kind", typ: r("LaunchDesktopKind") },
+        { json: "name", js: "name", typ: "" },
+        { json: "profile_id", js: "profile_id", typ: "" },
+        { json: "setting", js: "setting", typ: r("LaunchDesktop") },
+    ], "any"),
+    "LaunchDesktopSetMessage": o([
+        { json: "cmd", js: "cmd", typ: r("LaunchDesktopSetMessageCmd") },
+        { json: "desktop_ref", js: "desktop_ref", typ: u(undefined, "") },
+        { json: "item_id", js: "item_id", typ: "" },
+        { json: "kind", js: "kind", typ: r("LaunchDesktopKind") },
+        { json: "request_id", js: "request_id", typ: "" },
+        { json: "setting", js: "setting", typ: r("LaunchDesktop") },
+    ], "any"),
+    "LaunchDesktopSetting": o([
+        { json: "desktop_id", js: "desktop_id", typ: u(undefined, "") },
+        { json: "fallback", js: "fallback", typ: u(undefined, true) },
+        { json: "label", js: "label", typ: u(undefined, "") },
+        { json: "mode", js: "mode", typ: r("LaunchDesktopMode") },
+    ], "any"),
     "LeafMoved": o([
         { json: "from_desktop_id", js: "from_desktop_id", typ: "" },
         { json: "from_leaf_id", js: "from_leaf_id", typ: "" },
@@ -20071,6 +20302,8 @@ const typeMap: any = {
         { json: "can_undo", js: "can_undo", typ: true },
         { json: "desktops", js: "desktops", typ: a(r("DesktopObject")) },
         { json: "groups", js: "groups", typ: a(r("GroupElement")) },
+        { json: "launch_desktops", js: "launch_desktops", typ: u(undefined, a(r("DesktopElement"))) },
+        { json: "launch_items", js: "launch_items", typ: u(undefined, a(r("Item"))) },
         { json: "phase", js: "phase", typ: r("MigrationPhase") },
         { json: "profile_id", js: "profile_id", typ: "" },
         { json: "revision", js: "revision", typ: 0 },
@@ -20144,6 +20377,8 @@ const typeMap: any = {
         { json: "can_undo", js: "can_undo", typ: true },
         { json: "desktops", js: "desktops", typ: a(r("DesktopObject")) },
         { json: "groups", js: "groups", typ: a(r("GroupElement")) },
+        { json: "launch_desktops", js: "launch_desktops", typ: u(undefined, a(r("DesktopElement"))) },
+        { json: "launch_items", js: "launch_items", typ: u(undefined, a(r("Item"))) },
         { json: "phase", js: "phase", typ: r("MigrationPhase") },
         { json: "profile_id", js: "profile_id", typ: "" },
         { json: "revision", js: "revision", typ: 0 },
@@ -23414,6 +23649,11 @@ const typeMap: any = {
     "AutomationApplyMessageCmd": [
         "automation_apply",
     ],
+    "LaunchDesktopMode": [
+        "current",
+        "dedicated",
+        "desktop",
+    ],
     "AutomationApplyResultMessageEvent": [
         "automation_apply_result",
     ],
@@ -24017,6 +24257,7 @@ const typeMap: any = {
     ],
     "MigrationPhase": [
         "complete",
+        "launch_required",
         "placement_required",
     ],
     "InjectTestPRMessageCmd": [
@@ -24069,6 +24310,19 @@ const typeMap: any = {
     ],
     "KittyPlacementsMessageEvent": [
         "kitty_placements",
+    ],
+    "LaunchDesktopGetMessageCmd": [
+        "launch_desktop_get",
+    ],
+    "LaunchDesktopKind": [
+        "automation",
+        "crew",
+    ],
+    "LaunchDesktopResultMessageEvent": [
+        "launch_desktop_result",
+    ],
+    "LaunchDesktopSetMessageCmd": [
+        "launch_desktop_set",
     ],
     "ListBranchesMessageCmd": [
         "list_branches",

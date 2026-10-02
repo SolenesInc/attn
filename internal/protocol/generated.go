@@ -966,6 +966,9 @@ type AutomationApplyMessage struct {
 	// ExpectedRevision corresponds to the JSON schema field "expected_revision".
 	ExpectedRevision *int `json:"expected_revision,omitempty,omitzero"`
 
+	// LaunchDesktop corresponds to the JSON schema field "launch_desktop".
+	LaunchDesktop *string `json:"launch_desktop,omitempty,omitzero"`
+
 	// ProfileID corresponds to the JSON schema field "profile_id".
 	ProfileID *string `json:"profile_id,omitempty,omitzero"`
 
@@ -1074,8 +1077,17 @@ type AutomationDefinitionSummary struct {
 	// LastRun corresponds to the JSON schema field "last_run".
 	LastRun *AutomationRunSummary `json:"last_run,omitempty,omitzero"`
 
+	// LaunchDesktop corresponds to the JSON schema field "launch_desktop".
+	LaunchDesktop *LaunchDesktopSetting `json:"launch_desktop,omitempty,omitzero"`
+
 	// Name corresponds to the JSON schema field "name".
 	Name string `json:"name"`
+
+	// ProfileID corresponds to the JSON schema field "profile_id".
+	ProfileID string `json:"profile_id"`
+
+	// ProfileName corresponds to the JSON schema field "profile_name".
+	ProfileName *string `json:"profile_name,omitempty,omitzero"`
 
 	// Revision corresponds to the JSON schema field "revision".
 	Revision int `json:"revision"`
@@ -2134,11 +2146,17 @@ type CrewMember struct {
 	// ID corresponds to the JSON schema field "id".
 	ID string `json:"id"`
 
+	// LaunchDesktop corresponds to the JSON schema field "launch_desktop".
+	LaunchDesktop *LaunchDesktopSetting `json:"launch_desktop,omitempty,omitzero"`
+
 	// Model corresponds to the JSON schema field "model".
 	Model *string `json:"model,omitempty,omitzero"`
 
 	// ProfileID corresponds to the JSON schema field "profile_id".
 	ProfileID string `json:"profile_id"`
+
+	// ProfileName corresponds to the JSON schema field "profile_name".
+	ProfileName *string `json:"profile_name,omitempty,omitzero"`
 
 	// ResolvedAgent corresponds to the JSON schema field "resolved_agent".
 	ResolvedAgent string `json:"resolved_agent"`
@@ -2280,6 +2298,9 @@ type CrewSetMessage struct {
 
 	// ExpectedRevision corresponds to the JSON schema field "expected_revision".
 	ExpectedRevision *int `json:"expected_revision,omitempty,omitzero"`
+
+	// LaunchDesktop corresponds to the JSON schema field "launch_desktop".
+	LaunchDesktop *string `json:"launch_desktop,omitempty,omitzero"`
 
 	// Member corresponds to the JSON schema field "member".
 	Member string `json:"member"`
@@ -5452,6 +5473,108 @@ type KittyPlacementsMessage struct {
 	Seq int `json:"seq"`
 }
 
+type LaunchDesktopGetMessage struct {
+	// Cmd corresponds to the JSON schema field "cmd".
+	Cmd string `json:"cmd"`
+
+	// ItemID corresponds to the JSON schema field "item_id".
+	ItemID string `json:"item_id"`
+
+	// Kind corresponds to the JSON schema field "kind".
+	Kind LaunchDesktopKind `json:"kind"`
+
+	// RequestID corresponds to the JSON schema field "request_id".
+	RequestID string `json:"request_id"`
+}
+
+type LaunchDesktopItem struct {
+	// Confirmed corresponds to the JSON schema field "confirmed".
+	Confirmed bool `json:"confirmed"`
+
+	// ItemID corresponds to the JSON schema field "item_id".
+	ItemID string `json:"item_id"`
+
+	// Kind corresponds to the JSON schema field "kind".
+	Kind LaunchDesktopKind `json:"kind"`
+
+	// Name corresponds to the JSON schema field "name".
+	Name string `json:"name"`
+
+	// ProfileID corresponds to the JSON schema field "profile_id".
+	ProfileID string `json:"profile_id"`
+
+	// Setting corresponds to the JSON schema field "setting".
+	Setting LaunchDesktopSetting `json:"setting"`
+}
+
+type LaunchDesktopKind string
+
+const LaunchDesktopKindAutomation LaunchDesktopKind = "automation"
+const LaunchDesktopKindCrew LaunchDesktopKind = "crew"
+
+type LaunchDesktopMode string
+
+const LaunchDesktopModeCurrent LaunchDesktopMode = "current"
+const LaunchDesktopModeDedicated LaunchDesktopMode = "dedicated"
+const LaunchDesktopModeDesktop LaunchDesktopMode = "desktop"
+
+type LaunchDesktopResultMessage struct {
+	// Action corresponds to the JSON schema field "action".
+	Action string `json:"action"`
+
+	// Desktops corresponds to the JSON schema field "desktops".
+	Desktops []Desktop `json:"desktops,omitempty,omitzero"`
+
+	// Error corresponds to the JSON schema field "error".
+	Error *string `json:"error,omitempty,omitzero"`
+
+	// Event corresponds to the JSON schema field "event".
+	Event string `json:"event"`
+
+	// Item corresponds to the JSON schema field "item".
+	Item *LaunchDesktopItem `json:"item,omitempty,omitzero"`
+
+	// RequestID corresponds to the JSON schema field "request_id".
+	RequestID string `json:"request_id"`
+
+	// Success corresponds to the JSON schema field "success".
+	Success bool `json:"success"`
+}
+
+type LaunchDesktopSetMessage struct {
+	// Cmd corresponds to the JSON schema field "cmd".
+	Cmd string `json:"cmd"`
+
+	// DesktopRef corresponds to the JSON schema field "desktop_ref".
+	DesktopRef *string `json:"desktop_ref,omitempty,omitzero"`
+
+	// ItemID corresponds to the JSON schema field "item_id".
+	ItemID string `json:"item_id"`
+
+	// Kind corresponds to the JSON schema field "kind".
+	Kind LaunchDesktopKind `json:"kind"`
+
+	// RequestID corresponds to the JSON schema field "request_id".
+	RequestID string `json:"request_id"`
+
+	// Setting corresponds to the JSON schema field "setting".
+	Setting LaunchDesktopSetting `json:"setting"`
+}
+
+type LaunchDesktopSetting struct {
+	// DesktopID corresponds to the JSON schema field "desktop_id".
+	DesktopID *string `json:"desktop_id,omitempty,omitzero"`
+
+	// Fallback corresponds to the JSON schema field "fallback".
+	Fallback *bool `json:"fallback,omitempty,omitzero"`
+
+	// Label corresponds to the JSON schema field "label".
+	Label *string `json:"label,omitempty,omitzero"`
+
+	// Mode corresponds to the JSON schema field "mode".
+	Mode LaunchDesktopMode `json:"mode"`
+}
+
 type LayoutDockEdge string
 
 const LayoutDockEdgeBottom LayoutDockEdge = "bottom"
@@ -5938,6 +6061,7 @@ type MigrationMoveMessage struct {
 type MigrationPhase string
 
 const MigrationPhaseComplete MigrationPhase = "complete"
+const MigrationPhaseLaunchRequired MigrationPhase = "launch_required"
 const MigrationPhasePlacementRequired MigrationPhase = "placement_required"
 
 type MigrationResultMessage struct {
@@ -5972,6 +6096,12 @@ type MigrationState struct {
 
 	// Groups corresponds to the JSON schema field "groups".
 	Groups []MigrationGroup `json:"groups"`
+
+	// LaunchDesktops corresponds to the JSON schema field "launch_desktops".
+	LaunchDesktops []Desktop `json:"launch_desktops,omitempty,omitzero"`
+
+	// LaunchItems corresponds to the JSON schema field "launch_items".
+	LaunchItems []LaunchDesktopItem `json:"launch_items,omitempty,omitzero"`
 
 	// Phase corresponds to the JSON schema field "phase".
 	Phase MigrationPhase `json:"phase"`

@@ -48,8 +48,12 @@ func (c *Client) CrewSleep(member string) (*protocol.CrewSleepResult, error) {
 }
 
 func (c *Client) CrewSet(member string, cwd, agent, model, effort *string, awarenessDirs []string) (*protocol.CrewSetResult, error) {
+	return c.CrewSetWithDesktop(member, cwd, agent, model, effort, awarenessDirs, nil)
+}
+func (c *Client) CrewSetWithDesktop(member string, cwd, agent, model, effort *string, awarenessDirs []string, desktop *string) (*protocol.CrewSetResult, error) {
 	msg := protocol.CrewSetMessage{
-		Cmd: protocol.CmdCrewSet, Member: member, Cwd: cwd, Agent: agent, Model: model, Effort: effort, AwarenessDirs: awarenessDirs,
+		LaunchDesktop: desktop,
+		Cmd:           protocol.CmdCrewSet, Member: member, Cwd: cwd, Agent: agent, Model: model, Effort: effort, AwarenessDirs: awarenessDirs,
 	}
 	if awarenessDirs != nil && len(awarenessDirs) == 0 {
 		msg.ClearAwarenessDirs = protocol.Ptr(true)

@@ -50,11 +50,11 @@
 - Desktop: one arrangement of panes and tiles inside a profile. A profile always has at least one, and up to nine hold a shortcut slot.
 - Desktop ref: how the CLI names a desktop of the caller's profile: its shortcut digit (1-9), its label as shown (the name, or "Desktop N" when unnamed; case-insensitive), or its id. `attn delegate --desktop` and `attn session move` take one.
 - Pane: an agent's place on a desktop. An agent has at most one pane.
-- Unplaced agent: an agent of a profile with no pane. Crew wakes, automation runs and reopened sessions start unplaced; the queue (or, for runs, the automations section) surfaces them and opening one places it.
+- Launch desktop: an automation definition's or crew member's saved destination in its profile. A launch lands beside its active leaf without changing focus. The choice can follow the current desktop or name a specific one. New automations create a dedicated desktop on first run; new crew members follow current. A deleted destination falls back to current and stays visible in the setting. Install state lives in SQLite.
 - Current desktop: the desktop a profile shows. Every client on that profile shares it.
 - Empty desktop launcher: the New Session picker shown inline on a current desktop with no leaves. Launches land there; New Session (Cmd+N) focuses it instead of opening the dialog, and Escape never dismisses it.
 - Active leaf (active pane on the wire): the agent pane or tile a desktop has selected. The daemon owns it and every client on the profile shares it. The app stores no current agent: the shown agent is the active leaf of the current desktop when it is an agent pane. With a tile active, agent-only actions are unavailable; opens and placements land beside that tile.
-- Show: one request that selects an agent (`desktop_show_session`) or a leaf (`desktop_show_leaf`). The daemon switches the requesting client's profile if needed, places an unplaced agent beside the active leaf, sets the active leaf and makes its desktop current, in one transaction with one broadcast.
+- Show: one request that selects an agent (`desktop_show_session`) or a leaf (`desktop_show_leaf`). The daemon switches the requesting client's profile if needed, places an agent beside the active leaf if it has no pane, sets the active leaf and makes its desktop current, in one transaction with one broadcast.
 - Own answer: the arrangement the daemon sends a client for that client's own request, marked with its request id (a launch's session id), before the result and before any broadcast that includes the change. The daemon never sends a client an arrangement older than, or identical to, the one it already has.
 - Intent: a window's latest gesture that changes what is shown (a show, a desktop or profile switch, an open, a dock, a launch, a history step, or any other command that can change it, until its own answer). There is at most one, and while it is live the queue does not move the user. An arrival that shows its target confirms it: the view becomes the session, history records it and the keyboard moves there. Another client's change supersedes it; an own answer never does, so a superseded request of the same window is not read as moving on.
 - View: Home or the session surface. It is local to each app window; Home leaves the daemon's active leaf untouched.
@@ -118,7 +118,7 @@ intended it for the next turn.
 - `attn`: the reserved member name the daemon uses when it moves a seed by itself. No crew home may claim it.
 - Registry: the index of crew member files.
 - Binding: a crew member's active session. Daemon-managed days use terminal liveness; bare CLI days remain live while registered, until their wrapper unregisters. The daemon tracks external registrations during its lifetime; recovered managed days never become external merely by registering again.
-- Launch settings: a member's optional harness, model and effort pins. Blanks resolve through daemon and harness defaults.
+- Launch settings: a member's harness, model, effort and launch desktop choices. Blank harness, model and effort pins resolve through daemon and harness defaults.
 - Charter token: the receipt for the exact charter bytes read. A replacement needs it and advances it, so a stale write cannot overwrite a newer one.
 - Chief of staff: the agent coordinating the work of one profile. Each profile has at most one; all chiefs share the Notebook.
 - Day: a crew member's current session.

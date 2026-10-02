@@ -51,8 +51,8 @@ commands:
         Show all members and their active sessions, if any.
 
   wake <member> [--agent <name>] [--json]
-        Start a session using the member's saved launch settings, unplaced
-        in the member's profile. Asked from an agent of another profile, it
+        Start a session using the member's saved launch settings, on its chosen
+        desktop in the member's profile without moving your focus. Asked from an agent of another profile, it
         refuses.
         Include its charter location, latest handoff, home instructions,
         held seeds with handoff notes, and ready counts for their plots.
@@ -70,8 +70,9 @@ commands:
         Reuse --request-id when retrying a request whose result was not received.
 
   set <member> [--cwd <dir>] [--agent <name>] [--model <name>] [--effort <level>]
-               [--awareness-dir <dir>]...
+               [--launch-desktop <current|desktop>] [--awareness-dir <dir>]...
         Save launch settings without changing the member's markdown files.
+        --launch-desktop selects current, or a desktop digit, name or id.
         --cwd sets the working directory; --model selects the model.
         --agent accepts claude, codex, or an installed plugin driver.
         --agent "" restores the crew default; --model "" the harness default.
@@ -334,6 +335,7 @@ type crewSetArgs struct {
 	agent     *string
 	model     *string
 	effort    *string
+	desktop   *string
 	awareness []string
 	json      bool
 }
@@ -345,6 +347,7 @@ func parseCrewSetArgs(args []string) (crewSetArgs, error) {
 	agent := fs.String("agent", "", "the harness the member's days run on; empty goes back to the default")
 	model := fs.String("model", "", "the model the member's days run on; empty goes back to the configured default")
 	effort := fs.String("effort", "", "the reasoning effort the member's days run on; empty goes back to the harness default")
+	desktop := fs.String("launch-desktop", "", "current, or a desktop digit, name or id in this member profile")
 	var dirs crewDirList
 	fs.Var(&dirs, "awareness-dir", "a directory the member's charter is about; repeat for several")
 	jsonOut := fs.Bool("json", false, "print the machine result as JSON")
@@ -363,6 +366,8 @@ func parseCrewSetArgs(args []string) (crewSetArgs, error) {
 			parsed.model = model
 		case "effort":
 			parsed.effort = effort
+		case "launch-desktop":
+			parsed.desktop = desktop
 		}
 	})
 	if dirs.set {
@@ -371,8 +376,8 @@ func parseCrewSetArgs(args []string) (crewSetArgs, error) {
 			parsed.awareness = []string{}
 		}
 	}
-	if parsed.cwd == nil && parsed.agent == nil && parsed.model == nil && parsed.effort == nil && !dirs.set {
-		return crewSetArgs{}, errors.New("nothing to set — pass --cwd, --agent, --model, --effort, --awareness-dir, or any of them together")
+	if parsed.cwd == nil && parsed.agent == nil && parsed.model == nil && parsed.effort == nil && parsed.desktop == nil && !dirs.set {
+		return crewSetArgs{}, errors.New("nothing to set — pass --cwd, --agent, --model, --effort, --launch-desktop, --awareness-dir, or any of them together")
 	}
 	return parsed, nil
 }
@@ -384,7 +389,7 @@ func runCrewSet(args []string) {
 		writeCrewHelp(os.Stderr)
 		os.Exit(2)
 	}
-	result, err := client.New("").CrewSet(parsed.member, parsed.cwd, parsed.agent, parsed.model, parsed.effort, parsed.awareness)
+	result, err := client.New("").CrewSetWithDesktop(parsed.member, parsed.cwd, parsed.agent, parsed.model, parsed.effort, parsed.awareness, parsed.desktop)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "crew set: %v\n", err)
 		os.Exit(1)
@@ -395,6 +400,7 @@ func runCrewSet(args []string) {
 	}
 	record := result.Member
 	fmt.Printf("%s launches in %s on %s, model %s, effort %s\n", crew.DisplayName(record.ID), valueOrDash(protocol.Deref(record.Cwd)), valueOrDash(record.ResolvedAgent), valueOrDash(protocol.Deref(record.ResolvedModel)), valueOrDash(protocol.Deref(record.ResolvedEffort)))
+	fmt.Printf("profile: %s\nlaunch desktop: %s\n", protocol.Deref(record.ProfileName), launchDesktopText(record.LaunchDesktop))
 	fmt.Printf("awareness dirs: %s\n", valueOrDash(strings.Join(record.AwarenessDirs, ", ")))
 }
 
@@ -410,13 +416,29 @@ func printCrewList(w io.Writer, members []protocol.CrewMember) {
 		fmt.Fprintln(w, "No crew members are registered. A <name>/CHARTER.md home in the active instance's crew directory joins the roster at the daemon's next start.")
 		return
 	}
-	fmt.Fprintf(w, "%-12s  %-8s  %-8s  %-20s  %-8s  %-10s  %s\n", "MEMBER", "STATE", "AGENT", "MODEL", "EFFORT", "SESSION", "HOME")
+	fmt.Fprintf(w, "%-12s  %-8s  %-8s  %-20s  %-8s  %-10s  %-22s  %s\n", "MEMBER", "STATE", "AGENT", "MODEL", "EFFORT", "SESSION", "LAUNCH DESKTOP", "HOME")
 	for _, member := range members {
 		state, session := "asleep", "-"
 		if id := strings.TrimSpace(protocol.Deref(member.BindingSession)); id != "" {
 			state, session = "awake", agentShortID(id)
 		}
-		fmt.Fprintf(w, "%-12s  %-8s  %-8s  %-20s  %-8s  %-10s  %s\n", crew.DisplayName(member.ID), state, valueOrDash(member.ResolvedAgent), valueOrDash(protocol.Deref(member.ResolvedModel)), valueOrDash(protocol.Deref(member.ResolvedEffort)), session, member.HomeDir)
+		fmt.Fprintf(w, "%-12s  %-8s  %-8s  %-20s  %-8s  %-10s  %-22s  %s\n", crew.DisplayName(member.ID), state, valueOrDash(member.ResolvedAgent), valueOrDash(protocol.Deref(member.ResolvedModel)), valueOrDash(protocol.Deref(member.ResolvedEffort)), session, protocol.Deref(member.ProfileName)+" › "+launchDesktopText(member.LaunchDesktop), member.HomeDir)
 	}
 	fmt.Fprintf(w, "\nAn awake MEMBER or SESSION works with `attn agent peek <target>`.\n")
+}
+
+func launchDesktopText(setting *protocol.LaunchDesktopSetting) string {
+	if setting == nil {
+		return "current"
+	}
+	if setting.Label != nil {
+		return *setting.Label
+	}
+	if setting.Mode != protocol.LaunchDesktopModeDesktop {
+		return string(setting.Mode)
+	}
+	if protocol.Deref(setting.Fallback) {
+		return protocol.Deref(setting.DesktopID) + " (using current)"
+	}
+	return protocol.Deref(setting.DesktopID)
 }

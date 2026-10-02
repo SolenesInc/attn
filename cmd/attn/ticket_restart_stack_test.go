@@ -16,6 +16,8 @@ func TestADaemonRestartKeepsTicketNudgesCountingDown(t *testing.T) {
 	writeCharter(t, s, "alder")
 	s.Start()
 	app, cli := s.App(), s.Client()
+	anchor := s.Spawn(app, fakeagent.Claude, s.Path("anchor"))
+	s.Launched(anchor)
 	if _, err := cli.CreateTicket("planner", "watched", "", "watched"); err != nil {
 		t.Fatal(err)
 	}

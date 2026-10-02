@@ -761,6 +761,7 @@ func (d *Daemon) reopenSessionRuntimeProtected(
 	if resumeID := strings.TrimSpace(d.store.GetResumeSessionID(plan.SessionID)); !plan.FreshConversation && resumeID != "" {
 		spawn.ResumeSessionID = protocol.Ptr(resumeID)
 	}
+	policy.launchPlacement = &launchPlacement{reopen: true}
 	spawnClient := newInternalWSClient()
 	d.handleSpawnSessionWithPolicyProtected(protection, spawnClient, spawn, policy)
 	if _, err := readInternalActionResult(spawnClient); err != nil {
@@ -781,7 +782,7 @@ func (d *Daemon) reopenSessionRuntimeProtected(
 		}
 	}
 	rollback.abandon()
-	d.logf("reopen: session %s is back in %s, unplaced in profile %s", plan.SessionID, directory, profileID)
+	d.logf("reopen: session %s is back in %s in profile %s", plan.SessionID, directory, profileID)
 	return &sessionRuntimeReopened{SessionID: plan.SessionID, ProfileID: profileID}, nil
 }
 

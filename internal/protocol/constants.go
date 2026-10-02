@@ -2,7 +2,7 @@ package protocol
 
 import "time"
 
-const ProtocolVersion = "338"
+const ProtocolVersion = "339"
 
 const (
 	ErrorCodeConflict             = "conflict"
@@ -285,6 +285,8 @@ const (
 )
 
 const (
+	CmdLaunchDesktopGet = "launch_desktop_get"
+	CmdLaunchDesktopSet = "launch_desktop_set"
 	CmdMigrationGet     = "migration_get"
 	CmdMigrationKeep    = "migration_keep"
 	CmdMigrationMove    = "migration_move"
@@ -294,6 +296,7 @@ const (
 )
 
 const (
+	EventLaunchDesktopResult       = "launch_desktop_result"
 	EventProfileActionResult       = "profile_action_result"
 	EventProfilesChanged           = "profiles_changed"
 	EventProfileArrangementChanged = "profile_arrangement_changed"

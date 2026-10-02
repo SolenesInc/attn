@@ -2501,6 +2501,8 @@ func (d *Daemon) handleConnection(conn net.Conn) {
 	}
 
 	switch cmd {
+	case protocol.CmdLaunchDesktopGet, protocol.CmdLaunchDesktopSet:
+		d.handleLaunchDesktopCommand(conn, cmd, msg)
 	case protocol.CmdDelegate:
 		d.handleDelegate(conn, msg.(*protocol.DelegateMessage))
 	case protocol.CmdAutomationApply, protocol.CmdAutomationValidate, protocol.CmdAutomationDefinitionsGet, protocol.CmdAutomationDefinitionGet, protocol.CmdAutomationRun, protocol.CmdAutomationRunsGet, protocol.CmdAutomationSetEnabled, protocol.CmdAutomationDelete, protocol.CmdAutomationCleanup:

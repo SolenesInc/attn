@@ -20,6 +20,7 @@ import (
 	"github.com/victorarias/attn/internal/protocol"
 	"github.com/victorarias/attn/internal/pty"
 	"github.com/victorarias/attn/internal/ptybackend"
+	"github.com/victorarias/attn/internal/store"
 )
 
 const crewWakeAgent = crew.DefaultAgent
@@ -347,7 +348,7 @@ func (d *Daemon) crewWakeWithDeliveryLocked(name, agent string, autonomous bool,
 		Rows:          24,
 		Label:         protocol.Ptr(crew.DisplayName(member.ID)),
 		InitialPrompt: protocol.Ptr(initialPrompt),
-	}, internalSpawnPolicy{})
+	}, internalSpawnPolicy{launchPlacement: &launchPlacement{kind: "crew", itemID: member.ID}})
 	if _, err := readInternalActionResult(spawnClient); err != nil {
 		if delivery != nil && delivery.Message != nil {
 			d.rollbackQueuedPeerMessage(sessionID, delivery.Message.ID)
@@ -495,11 +496,22 @@ func (d *Daemon) crewSet(msg *protocol.CrewSetMessage) (*protocol.CrewMember, bo
 			wire := d.crewMemberWire(member, doc.Rev)
 			return &wire, true, nil
 		}
+		var setting *store.LaunchDesktopSetting
+		if msg.LaunchDesktop != nil {
+			chosen, err := d.launchDesktopFromRef(d.crewProfileID(member.ID), "crew", *msg.LaunchDesktop)
+			if err != nil {
+				return nil, false, err
+			}
+			setting = &chosen
+		}
 		if err := d.applyCrewSettings(&member, msg); err != nil {
 			return nil, false, err
 		}
-		revision, err := d.writeCrewMember(*schema, member, doc.Rev)
+		revision, err := d.writeCrewMemberWithLaunch(*schema, member, doc.Rev, setting)
 		if err == nil {
+			if setting != nil {
+				d.publishMigrationChanged(d.crewProfileID(member.ID))
+			}
 			wire := d.crewMemberWire(member, revision)
 			return &wire, false, nil
 		}

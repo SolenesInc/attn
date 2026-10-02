@@ -212,7 +212,7 @@ func TestAnOutpostRefusesToCreateOrRunAutomations(t *testing.T) {
 	const home = "d-cccccccccccccccccccccccccccccccc"
 	d := newEnrolledDaemon(t, home)
 	var fenced *enrollment.FencedError
-	if _, err := d.automationApplyWithGuards(context.Background(), "id: nightly\nname: Nightly\n", defaultProfileID(t, d.store), nil, nil); !errors.As(err, &fenced) || !strings.Contains(err.Error(), home) {
+	if _, err := d.automationApplyWithGuards(context.Background(), "id: nightly\nname: Nightly\n", defaultProfileID(t, d.store), nil, nil, nil); !errors.As(err, &fenced) || !strings.Contains(err.Error(), home) {
 		t.Fatalf("apply on an outpost = %v, want a refusal naming the home %s", err, home)
 	}
 	if defs, err := d.store.ListAutomationDefinitions(); err != nil || len(defs) != 0 {

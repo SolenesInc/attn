@@ -10,10 +10,12 @@ import (
 )
 
 type ProfileMigrationView struct {
-	State    profiles.MigrationState
-	Manifest profilemigration.Manifest
-	Plan     profilemigration.Plan
-	Live     []profilemigration.GroupState
+	State          profiles.MigrationState
+	Manifest       profilemigration.Manifest
+	Plan           profilemigration.Plan
+	Live           []profilemigration.GroupState
+	LaunchItems    []LaunchDesktopItem
+	LaunchDesktops []profiles.Desktop
 }
 
 func (v ProfileMigrationView) PlacementRequired() bool {
@@ -39,6 +41,23 @@ func loadProfileMigration(tx *sql.Tx) (ProfileMigrationView, error) {
 	}
 	if view.Manifest, err = profilemigration.DecodeManifest(state.ImportedGroups); err != nil {
 		return view, err
+	}
+	if state.Phase == profilemigration.PhaseLaunchRequired {
+		if view.LaunchItems, err = migrationLaunchItems(tx); err != nil {
+			return view, err
+		}
+		seen := map[string]bool{}
+		for _, item := range view.LaunchItems {
+			if seen[item.ProfileID] {
+				continue
+			}
+			seen[item.ProfileID] = true
+			desktops, err := listDesktops(tx, item.ProfileID)
+			if err != nil {
+				return view, err
+			}
+			view.LaunchDesktops = append(view.LaunchDesktops, desktops...)
+		}
 	}
 	if !view.PlacementRequired() {
 		return view, nil
@@ -117,6 +136,16 @@ func (s *Store) FinishProfileMigration(expectedRevision int64) (ProfileMigration
 		if view.State.Phase == profilemigration.PhaseComplete {
 			return nil
 		}
+		if view.State.Phase == profilemigration.PhaseLaunchRequired {
+			if err := requireRevision("migration", "draft", expectedRevision, view.State.Revision); err != nil {
+				return err
+			}
+			if err := finishLaunchMigration(tx, &view); err != nil {
+				return err
+			}
+			result = ProfileMigrationFinish{View: view, Finished: true}
+			return nil
+		}
 		if err := requirePlacement(view, expectedRevision); err != nil {
 			return err
 		}
@@ -136,7 +165,21 @@ func (s *Store) FinishProfileMigration(expectedRevision int64) (ProfileMigration
 			return err
 		}
 		view.State.Phase = profilemigration.PhaseComplete
+		items, err := migrationLaunchItems(tx)
+		if err != nil {
+			return err
+		}
+		if len(items) > 0 {
+			view.State.Phase = profilemigration.PhaseLaunchRequired
+		}
+		if err := placeMigrationRemainder(tx, now, profile); err != nil {
+			return err
+		}
 		if err := saveMigrationRow(tx, &view); err != nil {
+			return err
+		}
+		view, err = loadProfileMigration(tx)
+		if err != nil {
 			return err
 		}
 		result = ProfileMigrationFinish{View: view, Finished: true, Profile: profile}

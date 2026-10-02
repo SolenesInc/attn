@@ -56,10 +56,10 @@ func (d *Daemon) validateAutomationSpec(raw string) (automation.DefinitionSpec, 
 }
 
 func (d *Daemon) automationApply(raw string) (*store.AutomationDefinition, error) {
-	return d.automationApplyWithGuards(context.Background(), raw, "", nil, nil)
+	return d.automationApplyWithGuards(context.Background(), raw, "", nil, nil, nil)
 }
 
-func (d *Daemon) automationApplyWithGuards(ctx context.Context, raw, profileID string, expectedID *string, expectedRevision *int) (*store.AutomationDefinition, error) {
+func (d *Daemon) automationApplyWithGuards(ctx context.Context, raw, profileID string, expectedID *string, expectedRevision *int, desktopRef *string) (*store.AutomationDefinition, error) {
 	if err := d.requireHome(automation.Surface); err != nil {
 		return nil, err
 	}
@@ -92,10 +92,10 @@ func (d *Daemon) automationApplyWithGuards(ctx context.Context, raw, profileID s
 	if err != nil {
 		return nil, &automationRefusal{Code: automationErrCodeValidation, Err: err}
 	}
-	return d.automationApplyLocked(ctx, spec, canonical, profile.ID, guard)
+	return d.automationApplyLocked(ctx, spec, canonical, profile.ID, guard, desktopRef)
 }
 
-func (d *Daemon) automationApplyLocked(ctx context.Context, spec automation.DefinitionSpec, canonical []byte, profileID string, guard func(*store.AutomationDefinition) error) (*store.AutomationDefinition, error) {
+func (d *Daemon) automationApplyLocked(ctx context.Context, spec automation.DefinitionSpec, canonical []byte, profileID string, guard func(*store.AutomationDefinition) error, desktopRef *string) (*store.AutomationDefinition, error) {
 	d.automationMu.Lock()
 	defer d.automationMu.Unlock()
 	if err := ctx.Err(); err != nil {
@@ -110,7 +110,19 @@ func (d *Daemon) automationApplyLocked(ctx context.Context, spec automation.Defi
 			return nil, err
 		}
 	}
-	definition, err := d.store.UpsertAutomationDefinition(spec.ID, spec.Name, string(canonical), profileID, time.Now())
+	var setting *store.LaunchDesktopSetting
+	if desktopRef != nil {
+		owner := profileID
+		if existing != nil && existing.DeletedAt == nil {
+			owner = existing.ProfileID
+		}
+		chosen, err := d.launchDesktopFromRef(owner, "automation", *desktopRef)
+		if err != nil {
+			return nil, err
+		}
+		setting = &chosen
+	}
+	definition, err := d.store.UpsertAutomationDefinitionWithLaunch(spec.ID, spec.Name, string(canonical), profileID, time.Now(), setting)
 	if err != nil {
 		return definition, err
 	}

@@ -33,9 +33,8 @@ type ProfileDeletionOptions struct {
 }
 
 type DesktopDeletion struct {
-	Profile           profiles.Profile
-	Deleted           profiles.Desktop
-	UnplacedSessionID []string
+	Profile profiles.Profile
+	Deleted profiles.Desktop
 }
 
 type LeafMove struct {
@@ -515,10 +514,19 @@ func loadDeletionDestination(tx *sql.Tx, profile profiles.Profile, destinationID
 }
 
 func deleteProfileDesktops(tx *sql.Tx, profileID string) error {
+	desktops, err := listDesktops(tx, profileID)
+	if err != nil {
+		return err
+	}
+	for _, desktop := range desktops {
+		if _, err := tx.Exec(`UPDATE launch_desktops SET desktop_name = ? WHERE desktop_id = ?`, profiles.DesktopLabel(desktop, desktops), desktop.ID); err != nil {
+			return err
+		}
+	}
 	if _, err := tx.Exec(`DELETE FROM desktop_panes WHERE desktop_id IN (SELECT id FROM desktops WHERE profile_id = ?)`, profileID); err != nil {
 		return err
 	}
-	_, err := tx.Exec(`DELETE FROM desktops WHERE profile_id = ?`, profileID)
+	_, err = tx.Exec(`DELETE FROM desktops WHERE profile_id = ?`, profileID)
 	return err
 }
 
@@ -592,6 +600,9 @@ func (s *Store) DeleteProfile(id string, expectedRevision int64, destinationID s
 			return err
 		}
 		if err := deleteProfileDesktops(tx, id); err != nil {
+			return err
+		}
+		if err := placeMigrationRemainder(tx, now, destination); err != nil {
 			return err
 		}
 		result.DemotedChiefID = profile.ChiefSessionID
@@ -874,25 +885,28 @@ func repointCurrentDesktop(profile *profiles.Profile, siblings []profiles.Deskto
 	}
 }
 
-func paneSessionIDs(panes []profiles.Pane) []string {
-	var ids []string
-	for _, pane := range panes {
-		ids = append(ids, pane.SessionID)
-	}
-	return ids
-}
-
 func deleteDesktop(tx *sql.Tx, id string) error {
+	desktop, err := loadDesktop(tx, id)
+	if err != nil {
+		return err
+	}
+	name, err := launchDesktopName(tx, desktop)
+	if err != nil {
+		return err
+	}
+	if _, err := tx.Exec(`UPDATE launch_desktops SET desktop_name = ? WHERE desktop_id = ?`, name, id); err != nil {
+		return err
+	}
 	if _, err := tx.Exec(`DELETE FROM desktop_panes WHERE desktop_id = ?`, id); err != nil {
 		return err
 	}
-	_, err := tx.Exec(`DELETE FROM desktops WHERE id = ?`, id)
+	_, err = tx.Exec(`DELETE FROM desktops WHERE id = ?`, id)
 	return err
 }
 
 func (s *Store) DeleteDesktop(id string, expectedRevision int64) (DesktopDeletion, error) {
 	var result DesktopDeletion
-	err := s.profilesTx(func(tx *sql.Tx, _ string) error {
+	err := s.profilesTx(func(tx *sql.Tx, now string) error {
 		desktop, err := loadDesktop(tx, id)
 		if err != nil {
 			return err
@@ -912,8 +926,23 @@ func (s *Store) DeleteDesktop(id string, expectedRevision int64) (DesktopDeletio
 			return profiles.Errorf(profiles.CodeLastDesktop, "desktop %s is the last desktop of profile %q and cannot be deleted", id, profile.Name)
 		}
 		repointCurrentDesktop(&profile, siblings, id)
-		result.UnplacedSessionID = paneSessionIDs(desktop.Panes)
 		if err := deleteDesktop(tx, id); err != nil {
+			return err
+		}
+		destination, err := loadLaunchDesktop(tx, profile, "")
+		if err != nil {
+			return err
+		}
+		for _, pane := range desktop.Panes {
+			if pane.SessionID == "" {
+				continue
+			}
+			destination, err = placeSessionInTree(destination, SessionPlacementRequest{SessionID: pane.SessionID, Title: pane.Title, Status: pane.Status, Direction: layouttree.DirectionVertical}, pane.PaneID)
+			if err != nil {
+				return err
+			}
+		}
+		if err := writeDesktopArrangement(tx, now, &destination); err != nil {
 			return err
 		}
 		if err := bumpProfile(tx, &profile); err != nil {

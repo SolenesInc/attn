@@ -256,6 +256,8 @@ var messageDecoders = map[string]func([]byte) (any, error){
 	CmdProfileDelete:                 decodeInto[ProfileDeleteMessage],
 	CmdSessionMove:                   decodeInto[SessionMoveMessage],
 	CmdProfileSelect:                 decodeInto[ProfileSelectMessage],
+	CmdLaunchDesktopGet:              decodeInto[LaunchDesktopGetMessage],
+	CmdLaunchDesktopSet:              decodeInto[LaunchDesktopSetMessage],
 	CmdMigrationGet:                  decodeInto[MigrationGetMessage],
 	CmdMigrationKeep:                 decodeInto[MigrationKeepMessage],
 	CmdMigrationMove:                 decodeInto[MigrationMoveMessage],

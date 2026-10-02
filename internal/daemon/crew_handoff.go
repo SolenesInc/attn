@@ -315,9 +315,8 @@ func (d *Daemon) crewNapSpawn(member crew.Member, session *protocol.Session) (*p
 	}
 
 	spawnMsg.ResumeSessionID = nil
-	if placement := d.placementBeside(session.ID); placement != nil {
-		spawnMsg.Placement = &protocol.SessionPlacement{DesktopID: protocol.Ptr(placement.desktopID), AnchorPaneID: protocol.Ptr(placement.anchorPaneID)}
-	}
+	spawnMsg.Placement = nil
+	policy.launchPlacement = &launchPlacement{kind: "crew", itemID: member.ID}
 	if strings.TrimSpace(spawnMsg.Cwd) == "" {
 		spawnMsg.Cwd = member.HomeDir
 	}

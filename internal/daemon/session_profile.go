@@ -22,6 +22,9 @@ type launchPlacement struct {
 	anchorPaneID string
 	direction    layouttree.Direction
 	focus        bool
+	kind         string
+	itemID       string
+	reopen       bool
 }
 
 func (p *launchPlacement) targetDesktop(profile profiles.Profile) string {
@@ -58,7 +61,7 @@ func (d *Daemon) requestedOrRecentProfile(profileID string) (profiles.Profile, e
 }
 
 func (d *Daemon) checkLaunchPlacement(profile profiles.Profile, placement *launchPlacement) error {
-	if placement == nil {
+	if placement == nil || placement.kind != "" || placement.reopen {
 		return nil
 	}
 	desktop, err := d.store.LaunchDesktop(profile.ID, placement.desktopID)
@@ -88,17 +91,24 @@ func (d *Daemon) placeLaunchedSession(session *protocol.Session, placement *laun
 	if placement == nil {
 		return placementOutcome{}
 	}
-	desktop, paneID, err := d.store.PlaceLaunchedSession(store.SessionPlacementRequest{
-		DesktopID:    placement.desktopID,
-		SessionID:    session.ID,
-		AnchorPaneID: placement.anchorPaneID,
-		Direction:    placement.direction,
-		Title:        session.Label,
-		Status:       profiles.PaneStatusReady,
-		Focus:        placement.focus,
-	})
+	var desktop profiles.Desktop
+	var paneID string
+	var err error
+	if placement.kind != "" || placement.reopen {
+		desktop, paneID, err = d.store.PlaceBackgroundSession(session.ID, placement.kind, placement.itemID, placement.reopen)
+	} else {
+		desktop, paneID, err = d.store.PlaceLaunchedSession(store.SessionPlacementRequest{
+			DesktopID:    placement.desktopID,
+			SessionID:    session.ID,
+			AnchorPaneID: placement.anchorPaneID,
+			Direction:    placement.direction,
+			Title:        session.Label,
+			Status:       profiles.PaneStatusReady,
+			Focus:        placement.focus,
+		})
+	}
 	if err != nil {
-		err = fmt.Errorf("session %s stays unplaced in profile %s: placing it on desktop %q beside pane %q failed: %w",
+		err = fmt.Errorf("cannot place session %s in profile %s: placing it on desktop %q beside pane %q failed: %w",
 			session.ID, session.ProfileID, placement.desktopID, placement.anchorPaneID, err)
 		d.logf("%v", err)
 		return placementOutcome{err: err}

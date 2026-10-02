@@ -2202,6 +2202,7 @@ model WorkflowRunCancelMessage {
 // Both are absent/zero when creating. request_id is optional, used only by
 // WS for correlation, like automation_delete's below.
 model AutomationApplyMessage {
+  launch_desktop?: string; // current, dedicated, or a desktop ref of the owning profile
   cmd: "automation_apply";
   definition_yaml: string;
   request_id?: string;
@@ -3363,6 +3364,7 @@ model ProfileArrangementChangedMessage {
 
 enum MigrationPhase {
   placement_required,
+  launch_required,
   complete,
 }
 
@@ -3383,6 +3385,46 @@ model MigrationDraftDesktop {
   tree_json: string;            // Split tree of {"group": id} leaves; ratio is the first child's share; empty when nothing is placed
 }
 
+enum LaunchDesktopKind { automation, crew }
+enum LaunchDesktopMode { current, dedicated, desktop }
+model LaunchDesktopSetting {
+  label?: string;
+  mode: LaunchDesktopMode;
+  desktop_id?: string;
+  fallback?: boolean;
+}
+model LaunchDesktopItem {
+  kind: LaunchDesktopKind;
+  item_id: string;
+  name: string;
+  profile_id: string;
+  setting: LaunchDesktopSetting;
+  confirmed: boolean;
+}
+model LaunchDesktopGetMessage {
+  cmd: "launch_desktop_get";
+  request_id: string;
+  kind: LaunchDesktopKind;
+  item_id: string;
+}
+model LaunchDesktopSetMessage {
+  desktop_ref?: string;
+  cmd: "launch_desktop_set";
+  request_id: string;
+  kind: LaunchDesktopKind;
+  item_id: string;
+  setting: LaunchDesktopSetting;
+}
+model LaunchDesktopResultMessage {
+  event: "launch_desktop_result";
+  request_id: string;
+  action: string;
+  success: boolean;
+  error?: string;
+  item?: LaunchDesktopItem;
+  desktops?: Desktop[];
+}
+
 model MigrationState {
   phase: MigrationPhase;
   revision: safeint;
@@ -3391,6 +3433,8 @@ model MigrationState {
   desktops: MigrationDraftDesktop[];
   can_undo: boolean;
   suggestion_available: boolean;
+  launch_items?: LaunchDesktopItem[];
+  launch_desktops?: Desktop[];
 }
 
 model MigrationGetMessage {
@@ -4023,6 +4067,9 @@ model WorkflowActionResultMessage {
 // the definition's single most-recent run (Store.LatestAutomationRunPerDefinition),
 // embedded so the panel's list badge never needs a per-definition runs fetch.
 model AutomationDefinitionSummary {
+  profile_name?: string;
+  profile_id: string;
+  launch_desktop?: LaunchDesktopSetting;
   id: string;
   name: string;
   enabled: boolean;
@@ -6288,6 +6335,8 @@ model CrewListMessage {
 
 // One registered crew member. Paths point at the canonical files.
 model CrewMember {
+  profile_name?: string;
+  launch_desktop?: LaunchDesktopSetting;
   id: string;
   profile_id: string; // The profile the member belongs to; it wakes only there
   revision: safeint;
@@ -6508,6 +6557,7 @@ model CrewSleepResult {
 // about. Registry state, not prose: the home's markdown is never rewritten, and
 // an omitted field is left as it was.
 model CrewSetMessage {
+  launch_desktop?: string; // current, or a desktop ref of the member profile
   cmd: "crew_set";
   member: string;
   cwd?: string;
@@ -7449,6 +7499,7 @@ alias DaemonEvent =
   | ProfilesChangedMessage
   | ProfileArrangementChangedMessage
   | DesktopTileContentMessage
+  | LaunchDesktopResultMessage
   | MigrationResultMessage
   | MigrationChangedMessage
   | RenameResultMessage

@@ -10,7 +10,7 @@ type Definition = NonNullable<EventMessage<'automation_definitions_result'>['def
 const API_VERSION = 'attn.dev/automations/v1alpha1';
 
 function definition(id: string, over: Partial<Definition> = {}): Definition {
-  return { id, name: 'PR reviewer', enabled: true, revision: 1, trigger_type: 'manual', updated_at: '2026-01-01T00:00:00Z', ...over };
+  return { id, profile_id: 'default', name: 'PR reviewer', enabled: true, revision: 1, trigger_type: 'manual', updated_at: '2026-01-01T00:00:00Z', ...over };
 }
 
 const manualSpec = (name = 'PR reviewer', id = 'd1') => ({

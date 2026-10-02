@@ -11,7 +11,7 @@ type Run = NonNullable<EventMessage<'automation_runs_result'>['runs']>[number];
 const AT = '2026-01-01T00:00:00Z';
 
 function definition(id: string, name: string, over: Partial<Definition> = {}): Definition {
-  return { id, name, enabled: true, revision: 1, trigger_type: 'manual', updated_at: AT, ...over };
+  return { id, profile_id: 'default', name, enabled: true, revision: 1, trigger_type: 'manual', updated_at: AT, ...over };
 }
 
 function run(id: string, over: Partial<Run> = {}): Run {

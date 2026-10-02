@@ -137,7 +137,7 @@ func (d *Daemon) actionAutomationApply(ctx context.Context, msg *protocol.Automa
 		Event:     protocol.EventAutomationApplyResult,
 		RequestID: msg.RequestID,
 	}
-	definition, err := d.automationApplyWithGuards(ctx, msg.DefinitionYaml, protocol.Deref(msg.ProfileID), msg.ExpectedID, msg.ExpectedRevision)
+	definition, err := d.automationApplyWithGuards(ctx, msg.DefinitionYaml, protocol.Deref(msg.ProfileID), msg.ExpectedID, msg.ExpectedRevision, msg.LaunchDesktop)
 	if err != nil {
 		result.Error = protocol.Ptr(err.Error())
 		var refusal *automationRefusal
@@ -232,11 +232,19 @@ func (d *Daemon) actionAutomationRun(ctx context.Context, msg *protocol.Automati
 
 func (d *Daemon) buildAutomationDefinitionSummary(def store.AutomationDefinition, lastRun *store.AutomationRunWithOccurrenceKey) protocol.AutomationDefinitionSummary {
 	summary := protocol.AutomationDefinitionSummary{
+		ProfileID: def.ProfileID,
 		ID:        def.ID,
 		Name:      def.Name,
 		Enabled:   def.Enabled,
 		Revision:  def.Revision,
 		UpdatedAt: string(protocol.NewTimestamp(def.UpdatedAt)),
+	}
+	if item, err := d.store.LaunchDesktopItem("automation", def.ID); err == nil {
+		setting := protocolLaunchItem(item).Setting
+		summary.LaunchDesktop = &setting
+		summary.ProfileName = protocol.Ptr(item.ProfileName)
+	} else {
+		d.logf("automation launch desktop %s: %v", def.ID, err)
 	}
 	if lastRun != nil {
 		runSummary := d.automationRunSummary(*lastRun)

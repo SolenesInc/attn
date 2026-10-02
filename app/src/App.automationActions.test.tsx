@@ -7,6 +7,7 @@ type Definition = NonNullable<EventMessage<'automation_definitions_result'>['def
 
 const REVIEWER: Definition = {
   id: 'd1',
+  profile_id: 'default',
   name: 'PR reviewer',
   enabled: true,
   revision: 1,
