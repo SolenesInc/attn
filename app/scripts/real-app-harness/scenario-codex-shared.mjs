@@ -106,7 +106,7 @@ try {
     await rename(a, 'Attn names A');
     await observer.waitFor(() => observer.getSession(a)?.label === 'Attn names A', 'Attn name projection');
     await type(a, paneA.pane_id, '/agents\r');
-    await waitForPaneText(client, a, paneA.pane_id, text => text.includes('Attn names A'), 'native picker name');
+    await waitForPaneText(client, a, paneA.pane_id, text => /Attn names\s+A/.test(text), 'native picker name');
     await type(a, paneA.pane_id, '/rename Native names A\r');
     await observer.waitFor(() => observer.getSession(a)?.label === 'Native names A', 'native rename projection');
     await rename(a, 'fixture rejected name', false);
