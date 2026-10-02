@@ -486,6 +486,9 @@ func (d *Daemon) handleSessionMove(client *wsClient, msg *protocol.SessionMoveMe
 		if move.SourceDesktop != nil {
 			outcome.desktops = []profiles.Desktop{*move.SourceDesktop}
 		}
+		if move.DestinationDesktop != nil {
+			outcome.desktops = append(outcome.desktops, *move.DestinationDesktop)
+		}
 		return outcome, nil
 	})
 }
@@ -514,6 +517,7 @@ func (d *Daemon) publishSessionMoved(move store.SessionProfileMove) {
 		if move.SourceDesktop != nil {
 			d.publishArrangementChanged(move.FromProfileID)
 		}
+		d.publishArrangementChanged(move.ToProfileID)
 		if move.MovedCrewID != "" {
 			d.publishFact(FactCrewUpdated, move.MovedCrewID, nil)
 		}

@@ -171,6 +171,8 @@ func (s *Store) FinishProfileMigration(expectedRevision int64) (ProfileMigration
 		}
 		if len(items) > 0 {
 			view.State.Phase = profilemigration.PhaseLaunchRequired
+		} else if _, err := tx.Exec(`UPDATE profile_migration SET launch_review_complete = 1 WHERE id = 1`); err != nil {
+			return err
 		}
 		if err := placeMigrationRemainder(tx, now, profile); err != nil {
 			return err

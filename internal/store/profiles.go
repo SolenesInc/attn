@@ -76,12 +76,13 @@ type SessionProfileMoveRequest struct {
 }
 
 type SessionProfileMove struct {
-	SessionID      string
-	FromProfileID  string
-	ToProfileID    string
-	SourceDesktop  *profiles.Desktop
-	DemotedChiefID string
-	MovedCrewID    string
+	SessionID          string
+	FromProfileID      string
+	ToProfileID        string
+	SourceDesktop      *profiles.Desktop
+	DestinationDesktop *profiles.Desktop
+	DemotedChiefID     string
+	MovedCrewID        string
 }
 
 func (m SessionProfileMove) Changed() bool {
@@ -1663,7 +1664,8 @@ func (s *Store) MoveSessionToProfile(request SessionProfileMoveRequest) (Session
 		if strings.TrimSpace(request.ExpectedProfileID) == "" {
 			return profiles.Errorf(profiles.CodeInvalid, "moving session %s needs the profile it was seen in", sessionID)
 		}
-		if _, err := loadLiveProfile(tx, destinationID); err != nil {
+		destination, err := loadLiveProfile(tx, destinationID)
+		if err != nil {
 			return err
 		}
 		from, err := openSessionProfileID(tx, sessionID)
@@ -1693,6 +1695,14 @@ func (s *Store) MoveSessionToProfile(request SessionProfileMoveRequest) (Session
 			return err
 		}
 		move.MovedCrewID, err = moveCrewMember(tx, request.CrewMemberID, destinationID)
+		if err != nil {
+			return err
+		}
+		if err := placeMigrationRemainder(tx, now, destination); err != nil {
+			return err
+		}
+		desktop, err := loadLaunchDesktop(tx, destination, "")
+		move.DestinationDesktop = &desktop
 		return err
 	})
 	return move, err

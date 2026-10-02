@@ -316,7 +316,10 @@ func (d *Daemon) crewNapSpawn(member crew.Member, session *protocol.Session) (*p
 
 	spawnMsg.ResumeSessionID = nil
 	spawnMsg.Placement = nil
-	policy.launchPlacement = &launchPlacement{kind: "crew", itemID: member.ID}
+	policy.launchPlacement = d.placementBeside(session.ID)
+	if policy.launchPlacement == nil {
+		policy.launchPlacement = &launchPlacement{kind: "crew", itemID: member.ID}
+	}
 	if strings.TrimSpace(spawnMsg.Cwd) == "" {
 		spawnMsg.Cwd = member.HomeDir
 	}

@@ -1,6 +1,7 @@
 package daemon_test
 
 import (
+	"context"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -10,7 +11,9 @@ import (
 	"github.com/victorarias/attn/internal/automation"
 	"github.com/victorarias/attn/internal/client"
 	"github.com/victorarias/attn/internal/fakeagent"
+	"github.com/victorarias/attn/internal/profilemigration"
 	"github.com/victorarias/attn/internal/protocol"
+	"github.com/victorarias/attn/internal/ptybackend"
 	"github.com/victorarias/attn/internal/store"
 	"github.com/victorarias/attn/internal/testworld"
 )
@@ -80,6 +83,7 @@ func TestCrewLaunchDesktopPreservesFocusAndFallsBackAfterDeletion(t *testing.T) 
 	day := wakeCrew(t, cli, "trellis", "")
 	w.Launched(day.SessionID)
 	assertBackgroundPlacement(t, w, profile, day.SessionID, target.ID, current, active)
+	launchSetting(app, "crew", "trellis", "current", "")
 	targetActive := viewProfile(t, w, profile).desktops[target.ID].ActivePaneID
 	successor := protocol.Deref(crewHandoff(t, cli, day.SessionID, "Continue on the chosen desktop.", false, protocol.CrewDayCloseNap).SessionID)
 	next := w.Launched(successor)
@@ -88,6 +92,7 @@ func TestCrewLaunchDesktopPreservesFocusAndFallsBackAfterDeletion(t *testing.T) 
 		t.Fatalf("nap changed target active pane: %s, want %s", got, targetActive)
 	}
 	day.SessionID = successor
+	launchSetting(app, "crew", "trellis", "desktop", target.ID)
 	deleteLaunchDesktop(app, viewProfile(t, w, profile).desktops[target.ID])
 	assertBackgroundPlacement(t, w, profile, day.SessionID, current, current, active)
 	setting := readLaunchSetting(app, "crew", "trellis")
@@ -368,5 +373,128 @@ func TestALaunchWhoseDesktopDisappearsDuringDriverPreparationLeavesNoAgentOrActi
 	retry, _ := spawnDriven(w, fresh, driver, dir, func(m *protocol.SpawnSessionMessage) { m.ID = request.ID })
 	if retry != request.ID {
 		t.Fatal("retry changed session identity")
+	}
+}
+
+func TestMovingAnAgentBetweenProfilesPlacesItWithoutTakingFocus(t *testing.T) {
+	w := &world{World: prepareWorld(t), terms: testworld.NewTerminals()}
+	w.start()
+	app := w.App()
+	source := app.SelectedProfile()
+	moving := w.Spawn(app, fakeagent.Claude, w.Path("moving"))
+	destination := createProfile(app, "Destination")
+	app = w.AppOn(destination.ID)
+	w.Spawn(app, fakeagent.Claude, w.Path("destination-anchor"))
+	before := viewProfile(t, w, destination.ID)
+	current := before.profile.CurrentDesktopID
+	active := before.desktops[current].ActivePaneID
+	observer := w.AppOn(destination.ID)
+	result := mustProfileRequest(app, protocol.SessionMoveMessage{Cmd: protocol.CmdSessionMove, RequestID: "move", SessionID: moving, ExpectedProfileID: source, DestinationProfileID: destination.ID}, "move")
+	var returned bool
+	for _, desktop := range result.Desktops {
+		for _, pane := range desktop.Panes {
+			if pane.SessionID == moving {
+				returned = true
+			}
+		}
+	}
+	if !returned {
+		t.Fatal("move result omitted destination placement")
+	}
+	testworld.Await(observer, protocol.EventProfileArrangementChanged, func(r protocol.ProfileArrangementChangedMessage) bool {
+		for _, desktop := range r.Desktops {
+			for _, pane := range desktop.Panes {
+				if pane.SessionID == moving {
+					return true
+				}
+			}
+		}
+		return false
+	})
+	assertBackgroundPlacement(t, w, destination.ID, moving, current, current, active)
+	w.restart()
+	assertBackgroundPlacement(t, w, destination.ID, moving, current, current, active)
+}
+
+func TestAdoptingAnOrphanRuntimePlacesItOnTheCurrentDesktop(t *testing.T) {
+	w := &world{World: prepareWorld(t), terms: testworld.NewTerminals()}
+	w.start()
+	app := w.App()
+	profile := app.SelectedProfile()
+	anchor := w.Spawn(app, fakeagent.Claude, w.Path("anchor"))
+	focusAgent(t, w, app, anchor)
+	before := viewProfile(t, w, profile)
+	current := before.profile.CurrentDesktopID
+	active := before.desktops[current].ActivePaneID
+	w.stop()
+	if err := w.terms.Spawn(context.Background(), ptybackend.SpawnOptions{ID: "orphan-runtime", Agent: "claude", CWD: w.Path("orphan"), Cols: 80, Rows: 24}); err != nil {
+		t.Fatal(err)
+	}
+	w.start()
+	assertBackgroundPlacement(t, w, profile, "orphan-runtime", current, current, active)
+	w.restart()
+	assertBackgroundPlacement(t, w, profile, "orphan-runtime", current, current, active)
+}
+
+func TestFinishingMigrationWithoutLaunchItemsDoesNotReopenForALaterAutomation(t *testing.T) {
+	w := &world{World: prepareWorld(t)}
+	directory := w.Path("check")
+	if err := os.MkdirAll(directory, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	definition := fmt.Sprintf("api_version: attn.dev/automations/v1alpha1\nid: check\nname: Local check\ntrigger: {type: manual}\nprompt: Check locally.\nlaunch: {driver: claude}\nlocation: {type: directory, path: %q}\n", directory)
+	_, canonical, err := automation.ParseDefinitionYAML([]byte(definition))
+	if err != nil {
+		t.Fatal(err)
+	}
+	db, err := store.OpenDBAtSchemaVersion(filepath.Join(w.Dir, "attn.db"), 166)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var profileID string
+	if err := db.QueryRow(`SELECT id FROM profiles WHERE deleted_at = '' LIMIT 1`).Scan(&profileID); err != nil {
+		t.Fatal(err)
+	}
+	manifest := profilemigration.Manifest{ProfileID: profileID}
+	imported, err := profilemigration.EncodeManifest(manifest)
+	if err != nil {
+		t.Fatal(err)
+	}
+	plan, err := profilemigration.EncodePlan(profilemigration.InitialPlan(manifest))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := db.Exec(`UPDATE profile_migration SET phase = 'placement_required', imported_groups = ?, draft = ? WHERE id = 1;
+ INSERT INTO automation_definitions(id,name,enabled,revision,spec_json,created_at,updated_at,profile_id) VALUES ('check','Local check',1,1,?,'now','now',?);`, imported, plan, string(canonical), profileID); err != nil {
+		t.Fatal(err)
+	}
+	if err := db.Close(); err != nil {
+		t.Fatal(err)
+	}
+	w.start()
+	app, cli := w.App(), w.Client()
+	read := func(app *testworld.Peer) protocol.MigrationState {
+		result := testworld.Request(app, protocol.MigrationGetMessage{Cmd: protocol.CmdMigrationGet, RequestID: "read"}, protocol.EventMigrationResult, func(r protocol.MigrationResultMessage) bool { return r.RequestID == "read" })
+		if !result.Success || result.State == nil {
+			t.Fatalf("migration read: %+v", result)
+		}
+		return *result.State
+	}
+	state := read(app)
+	if state.Phase != protocol.MigrationPhasePlacementRequired {
+		t.Fatalf("initial phase: %s", state.Phase)
+	}
+	if err := cli.AutomationDelete("check"); err != nil {
+		t.Fatal(err)
+	}
+	state = read(app)
+	done := testworld.Request(app, protocol.MigrationFinishMessage{Cmd: protocol.CmdMigrationFinish, RequestID: "finish", ExpectedRevision: state.Revision}, protocol.EventMigrationResult, func(r protocol.MigrationResultMessage) bool { return r.RequestID == "finish" })
+	if !done.Success || done.State == nil || done.State.Phase != protocol.MigrationPhaseComplete {
+		t.Fatalf("finish: %+v", done)
+	}
+	applyAutomation(t, cli, strings.Replace(definition, "id: check", "id: later", 1))
+	w.restart()
+	if got := read(w.App()); got.Phase != protocol.MigrationPhaseComplete {
+		t.Fatalf("later automation reopened migration: %+v", got)
 	}
 }

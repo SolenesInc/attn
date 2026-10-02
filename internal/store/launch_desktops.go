@@ -33,7 +33,7 @@ func launchDesktopName(tx *sql.Tx, desktop profiles.Desktop) (string, error) {
 	if desktop.Name != "" {
 		return desktop.Name, nil
 	}
-	rows, err := tx.Query(`SELECT id, shortcut_slot, order_key FROM desktops WHERE profile_id = ? ORDER BY order_key`, desktop.ProfileID)
+	rows, err := tx.Query(`SELECT id, COALESCE(shortcut_slot, 0), order_key FROM desktops WHERE profile_id = ? ORDER BY order_key`, desktop.ProfileID)
 	if err != nil {
 		return "", err
 	}

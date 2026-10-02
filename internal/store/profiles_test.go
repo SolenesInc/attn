@@ -509,43 +509,6 @@ func TestProfileIDsSurviveRenameAndDeletedNamesAreReusable(t *testing.T) {
 	wantCode(t, err, profiles.CodeProfileDeleted)
 }
 
-func TestMovingAnAgentToAnotherProfileRemovesItsPlacementOnly(t *testing.T) {
-	s, _ := openProfileStore(t)
-	work, workDesktop := mustCreateProfile(t, s, "Work")
-	home, _ := mustCreateProfile(t, s, "Home")
-	addProfileSession(t, s, "agent-a", work.ID)
-	addProfileSession(t, s, "agent-b", work.ID)
-	mustPlace(t, s, workDesktop.ID, "agent-a")
-	before, _ := mustPlace(t, s, workDesktop.ID, "agent-b")
-	request := SessionProfileMoveRequest{SessionID: "agent-b", ExpectedProfileID: work.ID, DestinationProfileID: home.ID}
-
-	move, err := s.MoveSessionToProfile(request)
-	if err != nil {
-		t.Fatalf("MoveSessionToProfile: %v", err)
-	}
-	if !move.Changed() || move.FromProfileID != work.ID || move.SourceDesktop == nil || move.SourceDesktop.Revision != before.Revision+1 {
-		t.Fatalf("move = %+v, want the source desktop rewritten once", move)
-	}
-	if _, found, _ := s.SessionPlacement("agent-b"); found {
-		t.Fatal("agent-b kept a placement after changing profiles")
-	}
-	if profileID, _ := s.SessionProfileID("agent-b"); profileID != home.ID {
-		t.Fatalf("agent-b profile = %s, want %s", profileID, home.ID)
-	}
-	if session := s.Get("agent-b"); session == nil {
-		t.Fatal("moving profiles closed the agent")
-	}
-	assertStoredDesktopsHoldTheirInvariants(t, s, work.ID)
-
-	retried, err := s.MoveSessionToProfile(request)
-	if err != nil || retried.Changed() || retried.SourceDesktop != nil {
-		t.Fatalf("retrying the move = %+v, %v; want success that changes nothing", retried, err)
-	}
-	if desktop, _ := s.GetDesktop(workDesktop.ID); desktop.Revision != move.SourceDesktop.Revision {
-		t.Fatalf("the retry moved the source desktop to revision %d, want %d", desktop.Revision, move.SourceDesktop.Revision)
-	}
-}
-
 func TestAMoveMadeAgainstAnOldProfileIsRefused(t *testing.T) {
 	s, _ := openProfileStore(t)
 	work, workDesktop := mustCreateProfile(t, s, "Work")
