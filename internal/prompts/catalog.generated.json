@@ -512,6 +512,40 @@
           }
         },
         {
+          "id": "user-message",
+          "delivery": "cli_output",
+          "description": "User-authored Quick Capture inbox content.",
+          "body": {
+            "kind": "text",
+            "id": "session.user-message",
+            "source": "content/session/user-message.md",
+            "bindings": [
+              {
+                "name": "message",
+                "node": {
+                  "kind": "input",
+                  "field": {
+                    "name": "message",
+                    "kind": "text",
+                    "description": "User message"
+                  }
+                }
+              },
+              {
+                "name": "files",
+                "node": {
+                  "kind": "input",
+                  "field": {
+                    "name": "files",
+                    "kind": "text",
+                    "description": "File retrieval instructions"
+                  }
+                }
+              }
+            ]
+          }
+        },
+        {
           "id": "inbox-notification",
           "delivery": "user_message",
           "description": "Generic notification directing the recipient to the durable inbox.",
@@ -4841,5 +4875,5 @@
       ]
     }
   ],
-  "definitions_hash": "dacd4da058a7ece025dd645bf32579926fa76aff0fc441e36fa16005821b028a"
+  "definitions_hash": "c969cbf93ef043b88a309e6f48bc10419299a83b64852d7d12296ddff2f8ace7"
 }

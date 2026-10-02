@@ -197,6 +197,7 @@ type Daemon struct {
 	sessionInputState                 *sessionInputModule
 	terminalsOnce                     sync.Once
 	terminalState                     *terminalRegistry
+	captureAssetMu                    sync.Mutex
 	inboxMu                           sync.Mutex
 	inboxStates                       map[inbox.Address]*inboxDeliveryState
 	inboxUnsubscribe                  func()
@@ -679,6 +680,9 @@ func (d *Daemon) Start() error {
 	}
 	if err := d.ensureEnrollment(); err != nil {
 		return fmt.Errorf("ensure enrollment record: %w", err)
+	}
+	if err := d.recoverCaptureAssets(); err != nil {
+		return fmt.Errorf("recover capture assets: %w", err)
 	}
 	d.ensureGardenCollections()
 	d.ensureCrewCollections()
@@ -2597,6 +2601,10 @@ func (d *Daemon) handleConnection(conn net.Conn) {
 		d.handleAgentMsg(conn, msg.(*protocol.AgentMsgMessage))
 	case protocol.CmdAgentClose:
 		d.handleAgentClose(conn, msg.(*protocol.AgentCloseMessage))
+	case protocol.CmdCaptureAttachmentGet:
+		d.handleCapture(conn, msg)
+	case protocol.CmdCaptureSend, protocol.CmdCaptureGet, protocol.CmdCaptureList, protocol.CmdCaptureAttachmentPut, protocol.CmdCaptureAttachmentDiscard:
+		d.sendError(conn, "capture authoring and history are app-only; use the authenticated app WebSocket channel")
 	case protocol.CmdAgentInbox:
 		d.handleAgentInbox(conn, msg.(*protocol.AgentInboxMessage))
 	case protocol.CmdAgentMsgStatus:

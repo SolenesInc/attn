@@ -1,15 +1,18 @@
 import crypto from 'node:crypto';
+import fs from 'node:fs';
+import path from 'node:path';
 import WebSocket from 'ws';
-import { assertProductionRunAllowed, defaultWSURLForInstance, harnessClientHello } from './harnessInstance.mjs';
+import { assertProductionRunAllowed, defaultWSURLForInstance, harnessClientHello, dataDirForInstance } from './harnessInstance.mjs';
 
 function delay(ms) {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
-function sendClientHello(ws) {
+function sendClientHello(ws, trustedApp = false) {
   ws.send(
     JSON.stringify({
-      ...harnessClientHello('harness-observer'),
+      ...harnessClientHello(trustedApp ? 'tauri-app' : 'harness-observer'),
+...(trustedApp ? { browser_host_token: fs.readFileSync(path.join(dataDirForInstance(), 'browser-host-token'), 'utf8').trim() } : {}),
     }),
   );
 }
@@ -18,9 +21,11 @@ export class DaemonObserver {
   constructor({
     wsUrl = defaultWSURLForInstance(),
     connectTimeoutMs = 45_000,
+trustedApp = false,
   } = {}) {
     assertProductionRunAllowed({ wsUrl });
     this.wsUrl = wsUrl;
+this.trustedApp = trustedApp;
     this.connectTimeoutMs = connectTimeoutMs;
     this.ws = null;
     this.sessionsById = new Map();
@@ -379,7 +384,7 @@ export class DaemonObserver {
 
   #connectOnce() {
     return new Promise((resolve, reject) => {
-      const ws = new WebSocket(this.wsUrl);
+      const ws = new WebSocket(this.wsUrl, this.trustedApp ? { headers: { Origin: 'tauri://localhost' } } : undefined);
       let settled = false;
 
       const fail = (error) => {
@@ -411,7 +416,7 @@ export class DaemonObserver {
 
       ws.once('open', () => {
         clearTimeout(timeout);
-        sendClientHello(ws);
+        sendClientHello(ws, this.trustedApp);
         succeed();
       });
 
