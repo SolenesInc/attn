@@ -36,7 +36,7 @@ function parseArgs(argv) {
 
 
 function run(binary, args, env, options = {}) {
-  return execFileSync(binary, args, {
+  return execFileSync(binary, args.map(String), {
     encoding: 'utf8',
     env,
     stdio: options.stdio || ['ignore', 'pipe', 'pipe'],
@@ -89,7 +89,7 @@ function sqliteRow(dbPath, sql) {
 }
 
 function sqlEscape(value) {
-  return value.replaceAll("'", "''");
+  return String(value).replaceAll("'", "''");
 }
 
 function gitConfigIdentity(repoDir) {
@@ -173,8 +173,7 @@ const API_VERSION = 'attn.dev/automations/v1alpha1';
 // rejected outright (errEnabledManagedOutsideSpec).
 function cleanupDefinitionYAML({ id, locationPath }) {
   return `api_version: ${API_VERSION}
-id: ${id}
-name: Slice 5 packaged scheduled cleanup proof
+${id ? `id: ${id}\n` : ''}name: Slice 5 packaged scheduled cleanup proof
 trigger:
   type: scheduled
   schedule:
@@ -195,8 +194,7 @@ location:
 
 function stormGuardDefinitionYAML({ id, locationPath, executable }) {
   return `api_version: ${API_VERSION}
-id: ${id}
-name: Slice 5 scheduler storm-guard probe
+${id ? `id: ${id}\n` : ''}name: Slice 5 scheduler storm-guard probe
 trigger:
   type: scheduled
   schedule:
@@ -285,9 +283,8 @@ async function main() {
     },
   });
 
-  const suffix = Date.now().toString(36);
-  const cleanupID = `scheduled-cleanup-${suffix}`;
-  const stormGuardID = `scheduled-storm-guard-${suffix}`;
+  let cleanupID = 0;
+  let stormGuardID = 0;
   const fixtureRoot = fs.realpathSync(fs.mkdtempSync(path.join(runner.sessionDir, 'scheduled-cleanup-')));
   const cleanupDefinitionFile = path.join(runner.sessionDir, 'scheduled-cleanup.yml');
   const stormGuardDefinitionFile = path.join(runner.sessionDir, 'scheduled-storm-guard.yml');
@@ -321,7 +318,7 @@ async function main() {
 
     await runner.step('leg1_apply_and_anchor', async () => {
       fs.writeFileSync(cleanupDefinitionFile, cleanupDefinitionYAML({ id: cleanupID, locationPath: fixtureRoot }));
-      runJSON(binary, ['automation', 'apply', '--file', cleanupDefinitionFile], daemonEnv);
+      cleanupID = runJSON(binary, ['automation', 'apply', '--file', cleanupDefinitionFile], daemonEnv).id;
       cleanupApplied = true;
       await waitForScheduleAnchor(dbPath, cleanupID);
       const rows = runJSON(binary, ['automation', 'runs', cleanupID], daemonEnv) || [];
@@ -412,7 +409,7 @@ async function main() {
         stormGuardDefinitionFile,
         stormGuardDefinitionYAML({ id: stormGuardID, locationPath: fixtureRoot, executable: probe.executable }),
       );
-      runJSON(binary, ['automation', 'apply', '--file', stormGuardDefinitionFile], daemonEnv);
+      stormGuardID = runJSON(binary, ['automation', 'apply', '--file', stormGuardDefinitionFile], daemonEnv).id;
       stormGuardApplied = true;
       await waitForScheduleAnchor(dbPath, stormGuardID);
       disableDefinition(binary, stormGuardID, daemonEnv);

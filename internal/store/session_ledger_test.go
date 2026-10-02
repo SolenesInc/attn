@@ -107,7 +107,9 @@ func TestTheLedgerNamesEachRowsProfileAndKeepsItAfterTheProfileIsDeleted(t *test
 	addLedgerSession(t, s, "live-in-work", work.ID, "/repos/attn", at.Add(time.Minute))
 	addLedgerSession(t, s, "live-in-home", home.ID, "/repos/attn", at.Add(2*time.Minute))
 	closeAt(t, s, "closed-in-work", SessionClose{By: SessionClosedByUser}, at.Add(3*time.Minute))
-	if _, err := s.DeleteProfile(work.ID, work.Revision, home.ID); err != nil {
+	closeAt(t, s, "live-in-work", SessionClose{By: SessionClosedByUser}, at.Add(3*time.Minute))
+
+	if _, err := s.DeleteProfile(work.ID, work.Revision, 0, 0); err != nil {
 		t.Fatal(err)
 	}
 
@@ -122,12 +124,12 @@ func TestTheLedgerNamesEachRowsProfileAndKeepsItAfterTheProfileIsDeleted(t *test
 	if closed := rows["closed-in-work"]; closed.ProfileID != work.ID || closed.ProfileName != "Work" || !protocol.Deref(closed.ProfileDeleted) {
 		t.Errorf("closed row = %s %q deleted=%v, want its deleted profile Work kept as history", closed.ProfileID, closed.ProfileName, closed.ProfileDeleted)
 	}
-	if moved := rows["live-in-work"]; moved.ProfileID != home.ID || moved.ProfileName != "Home" || moved.ProfileDeleted != nil {
-		t.Errorf("live row = %s %q deleted=%v, want it in the destination Home", moved.ProfileID, moved.ProfileName, moved.ProfileDeleted)
+	if moved := rows["live-in-work"]; moved.ProfileID != work.ID || moved.ProfileName != "Work" || !protocol.Deref(moved.ProfileDeleted) {
+		t.Errorf("live row = %s %q deleted=%v, want its original deleted profile Work", moved.ProfileID, moved.ProfileName, moved.ProfileDeleted)
 	}
 	want := []protocol.SessionLedgerProfileFacet{
-		{ProfileID: home.ID, Name: "Home", Count: 2},
-		{ProfileID: work.ID, Name: "Work", Deleted: protocol.Ptr(true), Count: 1},
+		{ProfileID: home.ID, Name: "Home", Count: 1},
+		{ProfileID: work.ID, Name: "Work", Deleted: protocol.Ptr(true), Count: 2},
 	}
 	if !reflect.DeepEqual(page.Facets.Profiles, want) {
 		t.Errorf("profile facets = %+v, want %+v", page.Facets.Profiles, want)
@@ -137,7 +139,7 @@ func TestTheLedgerNamesEachRowsProfileAndKeepsItAfterTheProfileIsDeleted(t *test
 	if err != nil {
 		t.Fatal(err)
 	}
-	if got := ledgerIDs(history); !slices.Equal(got, []string{"closed-in-work"}) {
+	if got := ledgerIDs(history); !slices.Equal(got, []string{"live-in-work", "closed-in-work"}) {
 		t.Errorf("filtering by the deleted profile = %v, want its closed history", got)
 	}
 	if shown := s.SessionLedgerEntry("closed-in-work"); shown == nil || shown.ProfileName != "Work" || !protocol.Deref(shown.ProfileDeleted) {

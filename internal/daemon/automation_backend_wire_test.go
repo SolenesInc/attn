@@ -27,15 +27,14 @@ func TestAnAutomationAgentGetsItsLaunchContractOnEveryPtyBackend(t *testing.T) {
 				t.Fatal(err)
 			}
 			applyAutomation(t, cli, fmt.Sprintf(`api_version: attn.dev/automations/v1alpha1
-id: nightly
 name: Nightly check
 trigger: {type: manual}
 prompt: Report.
 launch: {driver: claude, model: sonnet, effort: high}
 location: {type: directory, path: %q}
 `, w.Path("check")))
-			awaitAutomationChanged(app, "nightly")
-			run := testworld.Request(app, protocol.AutomationRunMessage{Cmd: protocol.CmdAutomationRun, DefinitionID: "nightly", RequestID: "now"},
+			awaitAutomationChanged(app, 1)
+			run := testworld.Request(app, protocol.AutomationRunMessage{Cmd: protocol.CmdAutomationRun, DefinitionID: 1, RequestID: "now"},
 				protocol.EventAutomationRunResult, automationAnswer[protocol.AutomationRunResultMessage]("now"))
 			if !run.Success || protocol.Deref(run.Run.SessionID) == "" {
 				t.Fatalf("automation_run = %+v, want a delivered run with a session", run)

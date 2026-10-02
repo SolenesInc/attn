@@ -39,7 +39,7 @@ func testAutomationLaunch(agent string) automation.EffectiveLaunch {
 	}
 }
 
-func baselineGitHubReviewAutomation(t *testing.T, s *store.Store, definitionID, host string, at time.Time) {
+func baselineGitHubReviewAutomation(t *testing.T, s *store.Store, definitionID int, host string, at time.Time) {
 	t.Helper()
 	if candidates, err := s.ReconcileAutomationReviewRequests(definitionID, host, nil, at); err != nil || len(candidates) != 0 {
 		t.Fatalf("establish review automation baseline: candidates=%#v err=%v", candidates, err)
@@ -74,7 +74,7 @@ func setupContinuationWorktree(t *testing.T) (*Daemon, automation.WorkRequest, s
 	d.dataRoot = filepath.Join(root, "instance")
 	enrollHomeForTest(t, d)
 	now := time.Date(2026, 7, 20, 10, 0, 0, 0, time.UTC)
-	def, err := d.store.UpsertAutomationDefinition("review", "Review", `{}`, defaultProfileID(t, d.store), now)
+	def, err := d.store.UpsertAutomationDefinition(0, "Review", `{}`, defaultProfileID(t, d.store), now)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -141,7 +141,7 @@ func TestWithdrawnBeforeLaunchReRequestCreatesFirstWorktree(t *testing.T) {
 func TestReRequestCanStartReviewerWhenWithdrawnOriginNeverLaunched(t *testing.T) {
 	s := store.New()
 	now := time.Date(2026, 7, 19, 18, 0, 0, 0, time.UTC)
-	def, err := s.UpsertAutomationDefinition("review", "Review", `{}`, defaultProfileID(t, s), now)
+	def, err := s.UpsertAutomationDefinition(0, "Review", `{}`, defaultProfileID(t, s), now)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -200,7 +200,6 @@ func enrollHomeForTest(t *testing.T, d *Daemon) {
 }
 
 const manualAutomationYAML = `api_version: attn.dev/automations/v1alpha1
-id: manual-check
 name: Manual check
 trigger: {type: manual}
 prompt: Check locally.
@@ -218,7 +217,7 @@ func TestAnOutpostRefusesToCreateOrRunAutomations(t *testing.T) {
 	if defs, err := d.store.ListAutomationDefinitions(); err != nil || len(defs) != 0 {
 		t.Fatalf("definitions after a refused apply = %v, %v; want none", defs, err)
 	}
-	def, err := d.store.UpsertAutomationDefinition("legacy", "Legacy", `{}`, defaultProfileID(t, d.store), time.Now())
+	def, err := d.store.UpsertAutomationDefinition(0, "Legacy", `{}`, defaultProfileID(t, d.store), time.Now())
 	if err != nil {
 		t.Fatal(err)
 	}

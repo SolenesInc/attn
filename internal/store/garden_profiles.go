@@ -80,14 +80,13 @@ func countOpenProfileSeeds(tx *sql.Tx, profileID string) (int, error) {
 	return count, err
 }
 
-func countLiveProfileDispatches(tx *sql.Tx, profileID string) (int, error) {
-	_, table, found, err := readCollectionTx(tx, garden.Namespace, garden.CollectionDispatches)
+func countRunningProfileReviews(tx *sql.Tx, profileID string) (int, error) {
+	_, table, found, err := readCollectionTx(tx, garden.Namespace, garden.CollectionReviewRuns)
 	if err != nil || !found {
 		return 0, err
 	}
 	var count int
-	err = tx.QueryRow(`SELECT count(*) FROM sessions s JOIN `+table+` d ON d.id = s.id
-		WHERE s.profile_id = ? AND s.closed_at = '' AND coalesce(json_extract(d.body, '$.crown'), '') != ''`, profileID).Scan(&count)
+	err = tx.QueryRow(fmt.Sprintf(`SELECT count(*) FROM %s WHERE json_extract(body, '$.profile_id') = ? AND json_extract(body, '$.status') = 'running'`, table), profileID).Scan(&count)
 	return count, err
 }
 
@@ -97,31 +96,6 @@ func countPendingProfileDelegations(tx *sql.Tx, profileID string) (int, error) {
 		WHERE json_extract(request_json, '$.profile_id') = ? AND state IN (?, ?)`, profileID,
 		string(protocol.DelegationOperationStateAccepted), string(protocol.DelegationOperationStatePreparing)).Scan(&count)
 	return count, err
-}
-
-func cancelProfileGardenReviews(tx *sql.Tx, profileID, now string) ([]string, []string, error) {
-	_, runsTable, found, err := readCollectionTx(tx, garden.Namespace, garden.CollectionReviewRuns)
-	if err != nil || !found {
-		return nil, nil, err
-	}
-	running := `SELECT id FROM ` + runsTable + ` WHERE json_extract(body, '$.profile_id') = ? AND json_extract(body, '$.status') = ?`
-	runs, err := queryColumn[string](tx, running, profileID, garden.ReviewRunStatusRunning)
-	if err != nil || len(runs) == 0 {
-		return runs, nil, err
-	}
-	var items []string
-	_, itemsTable, found, err := readCollectionTx(tx, garden.Namespace, garden.CollectionReviewItems)
-	if err != nil {
-		return nil, nil, err
-	}
-	if found {
-		items, err = queryColumn[string](tx, `SELECT id FROM `+itemsTable+` WHERE json_extract(body, '$.run_id') IN (`+running+`)`, profileID, garden.ReviewRunStatusRunning)
-		if err != nil {
-			return nil, nil, err
-		}
-	}
-	_, err = tx.Exec(`UPDATE `+runsTable+` SET body = json_set(body, '$.status', ?, '$.completed_at', ?), rev = rev + 1, updated_at = ? WHERE json_extract(body, '$.profile_id') = ? AND json_extract(body, '$.status') = ?`, garden.ReviewRunStatusCanceled, now, now, profileID, garden.ReviewRunStatusRunning)
-	return runs, items, err
 }
 
 func checkSeedProfileWrite(q rowQuerier, schema docstore.CollectionSchema, table, id string, body []byte) error {
@@ -197,42 +171,4 @@ func checkSeedProfileWrite(q rowQuerier, schema docstore.CollectionSchema, table
 		}
 	}
 	return nil
-}
-
-func refuseMovingGardenWork(tx *sql.Tx, sessionID, memberID, from, to string) error {
-	owner, err := loadProfile(tx, from)
-	if err != nil {
-		return err
-	}
-	target, err := loadProfile(tx, to)
-	if err != nil {
-		return err
-	}
-	_, dispatchTable, dispatchFound, err := readCollectionTx(tx, garden.Namespace, garden.CollectionDispatches)
-	if err != nil {
-		return err
-	}
-	if dispatchFound {
-		var crown string
-		err := tx.QueryRow(`SELECT json_extract(body, '$.crown') FROM `+dispatchTable+` WHERE id = ? AND coalesce(json_extract(body, '$.crown'), '') != ''`, sessionID).Scan(&crown)
-		if err != nil && err != sql.ErrNoRows {
-			return err
-		}
-		if err == nil {
-			return fmt.Errorf("session %s was dispatched for seed %s in profile %q; cannot move it to profile %q: close it and delegate afresh in the destination profile", sessionID, crown, owner.Name, target.Name)
-		}
-	}
-	_, table, found, err := readCollectionTx(tx, garden.Namespace, garden.CollectionSeeds)
-	if err != nil || !found {
-		return err
-	}
-	var seedID string
-	query := `SELECT id FROM ` + table + ` WHERE json_extract(body, '$.status') IN ('planted', 'growing', 'dormant') AND (json_extract(body, '$.tender_session') = ? OR (json_extract(body, '$.profile_id') = ? AND ? != '' AND json_extract(body, '$.tender_member') = ?)`
-	query += `) ORDER BY id LIMIT 1`
-	if err := tx.QueryRow(query, sessionID, from, memberID, memberID).Scan(&seedID); err == sql.ErrNoRows {
-		return nil
-	} else if err != nil {
-		return err
-	}
-	return fmt.Errorf("session %s tends open seed %s in profile %q; cannot move it to profile %q: park or finish the work first", sessionID, seedID, owner.Name, target.Name)
 }

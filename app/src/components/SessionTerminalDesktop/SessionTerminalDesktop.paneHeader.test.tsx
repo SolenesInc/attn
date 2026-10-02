@@ -94,7 +94,7 @@ describe('SessionTerminalDesktop pane header', () => {
         cwd: '/tmp/project',
         automation: {
           run_id: 'run-1',
-          definition_id: 'review-sol',
+          definition_id: 1,
           definition_name: 'Requested PR review - GPT Sol medium',
           trigger_type: 'github_review_requested',
           pull_request: {

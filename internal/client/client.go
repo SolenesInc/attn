@@ -79,7 +79,7 @@ func (c *Client) AutomationDefinitions() (*protocol.AutomationDefinitionsResultM
 	return &result, nil
 }
 
-func (c *Client) AutomationDefinition(id string) (*protocol.AutomationDefinitionResultMessage, error) {
+func (c *Client) AutomationDefinition(id int) (*protocol.AutomationDefinitionResultMessage, error) {
 	var result protocol.AutomationDefinitionResultMessage
 	if err := c.sendAutomation(protocol.AutomationDefinitionGetMessage{Cmd: protocol.CmdAutomationDefinitionGet, DefinitionID: id}, &result); err != nil {
 		return nil, err
@@ -87,7 +87,7 @@ func (c *Client) AutomationDefinition(id string) (*protocol.AutomationDefinition
 	return &result, nil
 }
 
-func (c *Client) AutomationRun(id, requestID, input string) (*protocol.AutomationRunResultMessage, error) {
+func (c *Client) AutomationRun(id int, requestID, input string) (*protocol.AutomationRunResultMessage, error) {
 	var result protocol.AutomationRunResultMessage
 	if err := c.sendAutomation(protocol.AutomationRunMessage{Cmd: protocol.CmdAutomationRun, DefinitionID: id, RequestID: requestID, InputJson: protocol.Ptr(input)}, &result); err != nil {
 		return nil, err
@@ -95,7 +95,7 @@ func (c *Client) AutomationRun(id, requestID, input string) (*protocol.Automatio
 	return &result, nil
 }
 
-func (c *Client) AutomationRunPullRequest(id, requestID, prURL string) (*protocol.AutomationRunResultMessage, error) {
+func (c *Client) AutomationRunPullRequest(id int, requestID, prURL string) (*protocol.AutomationRunResultMessage, error) {
 	var result protocol.AutomationRunResultMessage
 	if err := c.sendAutomation(protocol.AutomationRunMessage{Cmd: protocol.CmdAutomationRun, DefinitionID: id, RequestID: requestID, PRURL: protocol.Ptr(prURL)}, &result); err != nil {
 		return nil, err
@@ -103,7 +103,7 @@ func (c *Client) AutomationRunPullRequest(id, requestID, prURL string) (*protoco
 	return &result, nil
 }
 
-func (c *Client) AutomationRuns(id string) (*protocol.AutomationRunsResultMessage, error) {
+func (c *Client) AutomationRuns(id int) (*protocol.AutomationRunsResultMessage, error) {
 	var result protocol.AutomationRunsResultMessage
 	if err := c.sendAutomation(protocol.AutomationRunsGetMessage{Cmd: protocol.CmdAutomationRunsGet, DefinitionID: id}, &result); err != nil {
 		return nil, err
@@ -111,7 +111,7 @@ func (c *Client) AutomationRuns(id string) (*protocol.AutomationRunsResultMessag
 	return &result, nil
 }
 
-func (c *Client) AutomationSetEnabled(id string, enabled bool) (*protocol.AutomationSetEnabledResultMessage, error) {
+func (c *Client) AutomationSetEnabled(id int, enabled bool) (*protocol.AutomationSetEnabledResultMessage, error) {
 	var result protocol.AutomationSetEnabledResultMessage
 	if err := c.sendAutomation(protocol.AutomationSetEnabledMessage{Cmd: protocol.CmdAutomationSetEnabled, DefinitionID: id, Enabled: enabled}, &result); err != nil {
 		return nil, err
@@ -119,12 +119,12 @@ func (c *Client) AutomationSetEnabled(id string, enabled bool) (*protocol.Automa
 	return &result, nil
 }
 
-func (c *Client) AutomationDelete(id string) error {
+func (c *Client) AutomationDelete(id int) error {
 	var result protocol.AutomationDeleteResultMessage
 	return c.sendAutomation(protocol.AutomationDeleteMessage{Cmd: protocol.CmdAutomationDelete, DefinitionID: id}, &result)
 }
 
-func (c *Client) AutomationCleanup(id string) (*protocol.AutomationCleanupResultMessage, error) {
+func (c *Client) AutomationCleanup(id int) (*protocol.AutomationCleanupResultMessage, error) {
 	var result protocol.AutomationCleanupResultMessage
 	if err := c.sendAutomation(protocol.AutomationCleanupMessage{Cmd: protocol.CmdAutomationCleanup, DefinitionID: id}, &result); err != nil {
 		return nil, err
@@ -424,7 +424,6 @@ type SessionReopenOptions struct {
 	SessionID string
 	Action    string
 	Directory string
-	ProfileID string
 }
 
 func (c *Client) SessionReopen(opts SessionReopenOptions) (*protocol.SessionReopenResult, error) {
@@ -437,9 +436,6 @@ func (c *Client) SessionReopen(opts SessionReopenOptions) (*protocol.SessionReop
 	}
 	if directory := strings.TrimSpace(opts.Directory); directory != "" {
 		msg.Directory = protocol.Ptr(directory)
-	}
-	if profileID := strings.TrimSpace(opts.ProfileID); profileID != "" {
-		msg.ProfileID = protocol.Ptr(profileID)
 	}
 	resp, err := c.send(msg)
 	if err != nil {
@@ -1336,9 +1332,9 @@ func socketLive(path string) bool {
 	return true
 }
 
-func (c *Client) SetAutomationLaunchDesktop(id, desktop string, name *string) (*protocol.LaunchDesktopResultMessage, error) {
+func (c *Client) SetAutomationLaunchDesktop(id int, desktop string, name *string) (*protocol.LaunchDesktopResultMessage, error) {
 	var result protocol.LaunchDesktopResultMessage
-	msg := protocol.LaunchDesktopSetMessage{Cmd: protocol.CmdLaunchDesktopSet, Kind: protocol.LaunchDesktopKindAutomation, ItemID: id, DesktopRef: &desktop, DesktopName: name}
+	msg := protocol.LaunchDesktopSetMessage{Cmd: protocol.CmdLaunchDesktopSet, Kind: protocol.LaunchDesktopKindAutomation, ItemID: strconv.Itoa(id), DesktopRef: &desktop, DesktopName: name}
 	if err := c.sendAutomation(msg, &result); err != nil {
 		return nil, err
 	}

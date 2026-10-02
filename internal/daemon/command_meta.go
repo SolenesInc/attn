@@ -175,7 +175,6 @@ var CommandMeta = map[string]CommandMetadata{
 	protocol.CmdProfileRename:                 commandMetadata(ScopeHubLocal, false, true),
 	protocol.CmdProfileDelete:                 commandMetadata(ScopeHubLocal, false, true),
 	protocol.CmdProfileSelect:                 commandMetadata(ScopeHubLocal, false, true),
-	protocol.CmdSessionMove:                   commandMetadata(ScopeHubLocal, false, true),
 	protocol.CmdLaunchDesktopGet:              commandMetadata(ScopeHubLocal, false, false),
 	protocol.CmdLaunchDesktopSet:              commandMetadata(ScopeHubLocal, false, true),
 	protocol.CmdMigrationGet:                  commandMetadata(ScopeHubLocal, false, false),

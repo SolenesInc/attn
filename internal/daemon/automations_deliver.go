@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"strconv"
 	"os"
 	"path/filepath"
 	"strings"
@@ -656,7 +657,7 @@ func (d *Daemon) continueAutomationSessionForeground(req automation.WorkRequest,
 	if err := d.verifyUnattendedLaunch(req); err != nil {
 		return err
 	}
-	d.announceBackgroundLaunch("automation", req.DefinitionID, req.IDs.SessionID, "automation")
+	d.announceBackgroundLaunch("automation", strconv.Itoa(req.DefinitionID), req.IDs.SessionID, "automation")
 	return nil
 }
 
@@ -666,7 +667,7 @@ func (d *Daemon) automationSessionLaunch(req automation.WorkRequest, directory, 
 	if pullRequestErr == nil {
 		pullRequestTarget = &pullRequest
 	}
-	definitionName := req.DefinitionID
+	definitionName := fmt.Sprintf("Automation %d", req.DefinitionID)
 	if definition, err := d.store.GetAutomationDefinition(req.DefinitionID); err == nil && definition != nil {
 		definitionName = definition.Name
 	}
@@ -686,14 +687,14 @@ func (d *Daemon) startAutomationSession(req automation.WorkRequest, directory, i
 	label, prompt := d.automationSessionLaunch(req, directory, inputPath)
 	client := newInternalWSClient()
 	message := &protocol.SpawnSessionMessage{Cmd: protocol.CmdSpawnSession, ID: req.IDs.SessionID, Cwd: directory, ProfileID: req.IDs.ProfileID, Agent: req.Launch.Agent, Cols: 80, Rows: 24, Label: protocol.Ptr(label), InitialPrompt: protocol.Ptr(prompt), Model: protocol.Ptr(req.Launch.Model), Effort: protocol.Ptr(req.Launch.Effort), Executable: protocol.Ptr(req.Launch.Executable)}
-	d.handleSpawnSessionWithPolicy(client, message, internalSpawnPolicy{unattendedLaunch: req.Launch, launchPlacement: &launchPlacement{kind: "automation", itemID: req.DefinitionID}})
+	d.handleSpawnSessionWithPolicy(client, message, internalSpawnPolicy{unattendedLaunch: req.Launch, launchPlacement: &launchPlacement{kind: "automation", itemID: strconv.Itoa(req.DefinitionID)}})
 	if _, err := readInternalActionResult(client); err != nil {
 		return err
 	}
 	if err := d.verifyUnattendedLaunch(req); err != nil {
 		return err
 	}
-	d.announceBackgroundLaunch("automation", req.DefinitionID, req.IDs.SessionID, "automation")
+	d.announceBackgroundLaunch("automation", strconv.Itoa(req.DefinitionID), req.IDs.SessionID, "automation")
 	return nil
 }
 func canStartWithdrawnUndeliveredReviewer(origin *store.AutomationRun) bool {

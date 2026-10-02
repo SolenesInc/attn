@@ -4,24 +4,17 @@ import (
 	"crypto/sha256"
 	"encoding/json"
 	"errors"
-	"fmt"
+	"github.com/victorarias/attn/internal/crew"
+	"path/filepath"
 	"strings"
 
 	"github.com/victorarias/attn/internal/bus"
-	"github.com/victorarias/attn/internal/config"
-	"github.com/victorarias/attn/internal/docstore"
 	"github.com/victorarias/attn/internal/enrollment"
-	"github.com/victorarias/attn/internal/garden"
 	"github.com/victorarias/attn/internal/layouttree"
 	"github.com/victorarias/attn/internal/profiles"
 	"github.com/victorarias/attn/internal/protocol"
 	"github.com/victorarias/attn/internal/store"
 )
-
-type sessionProfileChange struct {
-	FromProfileID string `json:"from_profile_id"`
-	ToProfileID   string `json:"to_profile_id"`
-}
 
 type profileActionOutcome struct {
 	profile  *profiles.Profile
@@ -380,67 +373,48 @@ func (d *Daemon) handleProfileRename(client *wsClient, msg *protocol.ProfileRena
 
 func (d *Daemon) handleProfileDelete(client *wsClient, msg *protocol.ProfileDeleteMessage) {
 	d.runProfileAction(client, msg.Cmd, msg.RequestID, func() (profileActionOutcome, error) {
-		options := store.ProfileDeletionOptions{AllowGardenWork: config.Instance() != ""}
-		if !options.AllowGardenWork {
-			var err error
-			options.RemoteLiveDispatches, err = d.countRemoteProfileDispatches(msg.ProfileID)
+		remote, err := d.countRemoteProfileSessions(msg.ProfileID)
+		if err != nil {
+			return profileActionOutcome{}, err
+		}
+		homes, err := crew.ScanHomes(filepath.Join(d.dataRoot, crew.HomesDirName), d.logf)
+		if err != nil {
+			return profileActionOutcome{}, err
+		}
+		members := 0
+		for _, member := range homes {
+			owner, err := d.store.CrewProfile(member.ID)
 			if err != nil {
 				return profileActionOutcome{}, err
 			}
+			if owner == msg.ProfileID {
+				members++
+			}
 		}
 		d.automationMu.Lock()
-		d.gardenReviewMu.Lock()
-		deletion, err := d.store.DeleteProfile(msg.ProfileID, int64(msg.ExpectedRevision), msg.DestinationProfileID, options)
-		d.gardenReviewMu.Unlock()
+		deleted, err := d.store.DeleteProfile(msg.ProfileID, int64(msg.ExpectedRevision), remote, members)
 		d.automationMu.Unlock()
 		if err != nil {
 			return profileActionOutcome{}, err
 		}
-		if len(deletion.MovedSessionIDs) > 0 {
-			d.invalidateGardenSeedParties("profile deletion")
+		remaining, err := d.store.MostRecentlyUsedProfile()
+		if err != nil {
+			return profileActionOutcome{}, err
 		}
-		if runner := d.jobQueueRef(); runner != nil {
-			for _, itemID := range deletion.CanceledGardenReviewItemIDs {
-				runner.RemoveByKey(gardenReviewClassifyKind, itemID)
-			}
-		}
-		d.logf("profile delete: %q moved %d automation definitions to %q, canceled %d pending runs and released continuity bindings; the next event starts fresh work", deletion.Deleted.Name, len(deletion.MovedAutomationIDs), deletion.Destination.Name, len(deletion.CanceledAutomationRunIDs))
 		d.wsHub.ForEachClient(func(scoped *wsClient) {
-			if scoped.selectedProfile() == deletion.Deleted.ID {
-				scoped.selectProfile(deletion.Destination.ID)
+			if scoped.selectedProfile() == deleted.ID {
+				scoped.selectProfile(remaining.ID)
 				if scoped != client {
 					d.sendArrangement(scoped, "", nil)
 					d.sendGardenProfile(scoped)
 				}
 			}
 		})
-		return profileActionOutcome{arranges: true, publish: func() {
-			d.coalesceSnapshots(func() {
-				for _, runID := range deletion.CanceledGardenReviewIDs {
-					d.publishFact(FactDocumentChanged, docstore.Address(garden.Namespace, garden.CollectionReviewRuns, runID), documentChanged{Namespace: garden.Namespace, Collection: garden.CollectionReviewRuns, ID: runID})
-				}
-				d.publishFact(FactProfileDeleted, deletion.Deleted.ID, nil)
-				d.publishArrangementChanged(deletion.Destination.ID)
-				for _, sessionID := range deletion.MovedSessionIDs {
-					d.publishFact(FactSessionProfileChanged, sessionID, sessionProfileChange{FromProfileID: deletion.Deleted.ID, ToProfileID: deletion.Destination.ID})
-				}
-				for _, memberID := range deletion.MovedCrewIDs {
-					d.publishFact(FactCrewUpdated, memberID, nil)
-				}
-			})
-			if len(deletion.MovedAutomationIDs) > 0 {
-				d.broadcastAutomationsChanged(deletion.MovedAutomationIDs...)
-			}
-			if demoted := deletion.DemotedChiefID; demoted != "" {
-				d.publishFact(FactSessionChiefRoleChanged, demoted, nil)
-				d.retargetChiefTicketDelivery(demoted, "")
-				d.life.Go("reloadSessionAgent", func() { d.reloadSessionAgent(demoted) })
-			}
-		}}, nil
+		return profileActionOutcome{arranges: true, publish: func() { d.publishFact(FactProfileDeleted, deleted.ID, nil) }}, nil
 	})
 }
 
-func (d *Daemon) countRemoteProfileDispatches(profileID string) (int, error) {
+func (d *Daemon) countRemoteProfileSessions(profileID string) (int, error) {
 	if d.hubManager == nil {
 		return 0, nil
 	}
@@ -456,9 +430,7 @@ func (d *Daemon) countRemoteProfileDispatches(profileID string) (int, error) {
 		if owner != profileID {
 			continue
 		}
-		if dispatch, ok := d.gardenDispatch(session.ID); ok && strings.TrimSpace(dispatch.Crown) != "" {
-			counted[session.ID] = true
-		}
+		counted[session.ID] = true
 	}
 	return len(counted), nil
 }
@@ -474,59 +446,6 @@ func (d *Daemon) handleProfileSelect(client *wsClient, msg *protocol.ProfileSele
 			d.publishArrangementChanged(profile.ID)
 		}}, nil
 	})
-}
-
-func (d *Daemon) handleSessionMove(client *wsClient, msg *protocol.SessionMoveMessage) {
-	d.runProfileAction(client, msg.Cmd, msg.RequestID, func() (profileActionOutcome, error) {
-		move, err := d.moveSessionWithItsCrewMember(msg)
-		if err != nil || !move.Changed() {
-			return profileActionOutcome{}, err
-		}
-		outcome := profileActionOutcome{arranges: true, publish: func() { d.publishSessionMoved(move) }}
-		if move.SourceDesktop != nil {
-			outcome.desktops = []profiles.Desktop{*move.SourceDesktop}
-		}
-		if move.DestinationDesktop != nil {
-			outcome.desktops = append(outcome.desktops, *move.DestinationDesktop)
-		}
-		return outcome, nil
-	})
-}
-
-func (d *Daemon) moveSessionWithItsCrewMember(msg *protocol.SessionMoveMessage) (store.SessionProfileMove, error) {
-	d.crewWakeMu.Lock()
-	defer d.crewWakeMu.Unlock()
-	member, _, err := d.boundCrewMember(msg.SessionID)
-	if err != nil {
-		return store.SessionProfileMove{}, fmt.Errorf("moving session %s needs the crew roster to know whether a member is bound to it, and reading it failed: %w", msg.SessionID, err)
-	}
-	return d.store.MoveSessionToProfile(store.SessionProfileMoveRequest{
-		SessionID:            msg.SessionID,
-		ExpectedProfileID:    msg.ExpectedProfileID,
-		DestinationProfileID: msg.DestinationProfileID,
-		CrewMemberID:         member.ID,
-	})
-}
-
-func (d *Daemon) publishSessionMoved(move store.SessionProfileMove) {
-	if move.FromProfileID != move.ToProfileID {
-		d.invalidateGardenSeedParties("session profile move")
-	}
-	d.coalesceSnapshots(func() {
-		d.publishFact(FactSessionProfileChanged, move.SessionID, sessionProfileChange{FromProfileID: move.FromProfileID, ToProfileID: move.ToProfileID})
-		if move.SourceDesktop != nil {
-			d.publishArrangementChanged(move.FromProfileID)
-		}
-		d.publishArrangementChanged(move.ToProfileID)
-		if move.MovedCrewID != "" {
-			d.publishFact(FactCrewUpdated, move.MovedCrewID, nil)
-		}
-	})
-	if demoted := move.DemotedChiefID; demoted != "" {
-		d.publishFact(FactSessionChiefRoleChanged, demoted, nil)
-		d.retargetChiefTicketDelivery(demoted, "")
-		d.life.Go("reloadSessionAgent", func() { d.reloadSessionAgent(demoted) })
-	}
 }
 
 func (d *Daemon) handleDesktopCreate(client *wsClient, msg *protocol.DesktopCreateMessage) {

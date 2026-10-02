@@ -113,37 +113,6 @@ func TestAChiefsTicketIdentityCarriesItsProfile(t *testing.T) {
 	}
 }
 
-func TestDeletingAProfileDemotesItsChiefAndKeepsTheDestinations(t *testing.T) {
-	d := newEnrolledDaemon(t, "")
-	d.ptyBackend = &fakeSpawnBackend{}
-	client := newProtocolTestClient()
-	home := defaultProfileID(t, d.store)
-	work := createTestProfile(t, d.store, "Work")
-	spawnChiefCandidate(t, d, client, "home-chief", home)
-	spawnChiefCandidate(t, d, client, "work-chief", work.ID)
-	current, err := d.store.GetProfile(work.ID)
-	if err != nil {
-		t.Fatal(err)
-	}
-
-	d.handleProfileDelete(client, &protocol.ProfileDeleteMessage{
-		Cmd: protocol.CmdProfileDelete, RequestID: "delete-work", ProfileID: work.ID, ExpectedRevision: int(current.Revision), DestinationProfileID: home,
-	})
-
-	if profileID, _ := d.store.SessionProfileID("work-chief"); profileID != home {
-		t.Fatalf("Work's chief moved to %q, want %s", profileID, home)
-	}
-	if d.chiefOfProfile(home) != "home-chief" {
-		t.Fatalf("the destination's chief is %q, want home-chief kept", d.chiefOfProfile(home))
-	}
-	if d.isChiefOfStaffSession("work-chief") {
-		t.Fatal("the deleted profile's chief kept the role in the destination")
-	}
-	if decorated := d.sessionForBroadcast(d.store.Get("work-chief")); decorated.ChiefOfStaff != nil {
-		t.Fatalf("the deleted profile's chief broadcasts chief_of_staff = %v", *decorated.ChiefOfStaff)
-	}
-}
-
 func TestAChiefClosesOnlyAgentsOfItsProfile(t *testing.T) {
 	d := NewForTesting(filepath.Join(t.TempDir(), "test.sock"))
 	t.Cleanup(func() { _ = d.store.Close() })
@@ -163,36 +132,5 @@ func TestAChiefClosesOnlyAgentsOfItsProfile(t *testing.T) {
 	}
 	if rule, err := d.agentCloseRule(chief, d.store.Get("work-agent")); err == nil {
 		t.Fatalf("home chief closing a Work agent was allowed by %q", rule)
-	}
-}
-
-func TestMovingAProfilesChiefOutDemotesItAndKeepsTheDestinationsChief(t *testing.T) {
-	d := newEnrolledDaemon(t, "")
-	d.ptyBackend = &fakeSpawnBackend{}
-	client := newProtocolTestClient()
-	home := defaultProfileID(t, d.store)
-	work := createTestProfile(t, d.store, "Work")
-	spawnChiefCandidate(t, d, client, "home-chief", home)
-	spawnChiefCandidate(t, d, client, "work-chief", work.ID)
-	drainClientPayloads(t, client)
-
-	d.handleSessionMove(client, &protocol.SessionMoveMessage{
-		Cmd: protocol.CmdSessionMove, RequestID: "move-work-chief", SessionID: "work-chief", ExpectedProfileID: work.ID, DestinationProfileID: home,
-	})
-
-	if profileID, _ := d.store.SessionProfileID("work-chief"); profileID != home {
-		t.Fatalf("Work's chief moved to %q, want %s", profileID, home)
-	}
-	if d.chiefOfProfile(work.ID) != "" {
-		t.Fatalf("Work still names %q as its chief after it moved out", d.chiefOfProfile(work.ID))
-	}
-	if d.chiefOfProfile(home) != "home-chief" {
-		t.Fatalf("the destination's chief is %q, want home-chief kept", d.chiefOfProfile(home))
-	}
-	if d.isChiefOfStaffSession("work-chief") {
-		t.Fatal("the moved chief kept the role in the destination")
-	}
-	if got := d.ticketSessionForIdentity(store.TicketChiefIdentity(work.ID)); got != "" {
-		t.Fatalf("Work's chief tickets still reach %q", got)
 	}
 }

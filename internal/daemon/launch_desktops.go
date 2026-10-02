@@ -112,7 +112,7 @@ func (d *Daemon) launchDesktopResult(action, requestID, kind, id string, setting
 		if kind == "crew" {
 			d.publishFact(FactCrewUpdated, id, nil)
 		} else {
-			d.broadcastAutomationsChanged(id)
+			d.publishFact(FactAutomationChanged, id, nil)
 		}
 	}
 	return result

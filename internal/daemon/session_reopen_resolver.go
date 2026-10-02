@@ -38,6 +38,10 @@ func (d *Daemon) resolveReopen(
 		verdict.Reason = fmt.Sprintf("session %s is running; focus it instead of reopening it", entry.ID)
 		return verdict, nil
 	}
+	if verdict.ProfileDeleted {
+		verdict.Reason = fmt.Sprintf("profile %s was deleted; this session cannot reopen in another profile", verdict.ProfileID)
+		return verdict, nil
+	}
 	if !decideReopenHost(&verdict, d.endpointInfos()) {
 		return verdict, nil
 	}

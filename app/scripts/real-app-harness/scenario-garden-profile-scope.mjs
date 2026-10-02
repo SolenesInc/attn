@@ -86,7 +86,7 @@ async function main() {
       const profiles = (await state()).profiles;
       await Promise.all(created.map((id) => {
         const profile = profiles.find((p) => p.id === id);
-        return profile && observer.profileCommand('profile_delete', { profile_id: id, expected_revision: profile.revision, destination_profile_id: home });
+        return profile && observer.profileCommand('profile_delete', { profile_id: id, expected_revision: profile.revision});
       }));
     }
   });
@@ -183,7 +183,7 @@ async function main() {
       await selectProfile(empty.id);
       await waitDom({ selector: '.garden-empty' });
       const current = (await state()).profiles.find((p) => p.id === empty.id);
-      await observer.profileCommand('profile_delete', { profile_id: empty.id, expected_revision: current.revision, destination_profile_id: work.profile.id });
+      await observer.profileCommand('profile_delete', { profile_id: empty.id, expected_revision: current.revision});
       await waitDom({ selector: `[data-seed-row="${work.seed.id}"]` });
       runner.assert((await state()).selectedProfileId === work.profile.id, 'deleting the selected profile falls back with its Garden');
       runner.writeJson('fallback-garden.json', await client.request('garden_get_state'));

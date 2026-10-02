@@ -61,7 +61,7 @@ function run(id: string, definition: string, needsYou = false): TestSession {
     turnOpenedAt: needsYou ? '2026-07-26T08:00:00Z' : undefined,
     desktopId: 'ws-a',
     automation: {
-      definition_id: definition,
+      definition_id: definition === 'nightly' ? 1 : 2,
       definition_name: definition === 'nightly' ? 'Nightly docs sweep' : 'PR reviewer',
       run_id: `run-${id}`,
       trigger_type: 'schedule',
@@ -349,9 +349,9 @@ describe('the runs chip', () => {
     hover('queue-bar-runs');
 
     const peek = screen.getByTestId('queue-bar-runs-peek');
-    const nightly = within(peek).getByTestId('queue-bar-runs-group-nightly');
+    const nightly = within(peek).getByTestId('queue-bar-runs-group-1');
     expect(nightly.querySelector('.queue-bar-peek-group')!.textContent).toBe('Nightly docs sweep1 need you · 2 runs');
-    expect(within(peek).getByTestId('queue-bar-runs-group-reviewer').textContent).toContain('1 need you · 1 run');
+    expect(within(peek).getByTestId('queue-bar-runs-group-2').textContent).toContain('1 need you · 1 run');
     expect(screen.getByTestId('queue-bar-peek-run-p1').querySelector('.unified-palette-tag kbd')).toBeTruthy();
     expect(screen.getByTestId('queue-bar-peek-run-n1').querySelector('.unified-palette-tag kbd')).toBeNull();
     expect(peek.textContent).toContain('Automation runs never join the queue');

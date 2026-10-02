@@ -2,7 +2,6 @@ package daemon
 
 import (
 	"context"
-	"net"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -11,30 +10,7 @@ import (
 
 	"github.com/victorarias/attn/internal/enrollment"
 	"github.com/victorarias/attn/internal/git"
-	"github.com/victorarias/attn/internal/protocol"
 )
-
-func addTurnSession(t *testing.T, d *Daemon, id string, agent protocol.SessionAgent) {
-	t.Helper()
-	now := string(protocol.TimestampNow())
-	d.store.Add(&protocol.Session{
-		ID:             id,
-		Agent:          agent,
-		Label:          id,
-		Directory:      "/tmp/" + id,
-		ProfileID:      defaultProfileID(t, d.store),
-		State:          protocol.StateLaunching,
-		StateSince:     now,
-		StateUpdatedAt: now,
-		LastSeen:       now,
-	})
-}
-
-func crewSet(t *testing.T, d *Daemon, msg protocol.CrewSetMessage) protocol.Response {
-	t.Helper()
-	msg.Cmd = protocol.CmdCrewSet
-	return gardenCall(t, func(c net.Conn) { d.handleCrewSet(c, &msg) })
-}
 
 func decidedReopenVerdict(t *testing.T, d *Daemon, sessionID string) *sessionReopenVerdict {
 	t.Helper()

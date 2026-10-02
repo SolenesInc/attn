@@ -52,7 +52,6 @@ export function AppLibrarySurfaces() {
     refreshWorktrees,
     gitOperations,
     sendSessionList,
-    sendSessionMove,
     subscribeSessionLedger,
     getWorktreeSweepLog,
     setWorktreeKeep,
@@ -108,14 +107,12 @@ export function AppLibrarySurfaces() {
             subscribe: subscribeSessionLedger,
           },
           profileNames,
-          currentProfileId: selectedProfileId,
           profileMembership,
           liveSessionIds: liveGardenSessions,
           seedForSession,
           onFocusSession: handleSelectSession,
           onOpenSeed: handleOpenSeedTile,
           onReopen: handleReopenSession,
-          onMoveSession: sendSessionMove,
         }}
         worktrees={{
           listWorktrees,

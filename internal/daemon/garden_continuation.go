@@ -507,22 +507,6 @@ func (d *Daemon) continuationForSeedWithResumeCheck(seed garden.Seed, checkResum
 		DirectoryState:    inspectContinuationDirectory(execution),
 		HandoverPlacement: handoverNeedsPlacement,
 	}
-	var profileID string
-	foreign := false
-	if entry != nil {
-		profileID = entry.ProfileID
-		foreign = profileID != seed.ProfileID
-	} else if live := d.gardenSession(execution.SessionID); live != nil {
-		profileID = live.ProfileID
-		foreign = profileID != seed.ProfileID
-	}
-	if foreign {
-		owner, _ := d.store.GetProfile(seed.ProfileID)
-		caller, _ := d.store.GetProfile(profileID)
-		continuation.ResumeReason = fmt.Sprintf("the original agent moved from profile %q to profile %q; hand this seed to a new agent in its own profile", owner.Name, caller.Name)
-		d.planSeedHandoverPlacement(continuation)
-		return continuation
-	}
 	if live := d.gardenSession(execution.SessionID); live != nil &&
 		(strings.TrimSpace(protocol.Deref(live.EndpointID)) != "" || d.sessionHasLiveWorker(live.ID)) {
 		continuation.SessionLive = true

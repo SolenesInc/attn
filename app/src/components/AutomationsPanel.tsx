@@ -11,24 +11,24 @@ export interface AutomationsPanelProps {
   isOpen: boolean;
   onClose: () => void;
   fetchDefinitions: () => Promise<AutomationDefinitionSummary[]>;
-  fetchRuns: (definitionId: string) => Promise<AutomationRunSummary[]>;
-  setEnabled: (definitionId: string, enabled: boolean) => Promise<void>;
-  runNow: (definitionId: string, requestId: string) => Promise<AutomationRunSummary | undefined>;
+  fetchRuns: (definitionId: number) => Promise<AutomationRunSummary[]>;
+  setEnabled: (definitionId: number, enabled: boolean) => Promise<void>;
+  runNow: (definitionId: number, requestId: string) => Promise<AutomationRunSummary | undefined>;
   getDefinition: (
-    definitionId: string,
+    definitionId: number,
   ) => Promise<{ specYaml: string; specJson: string; definition?: AutomationDefinitionSummary }>;
   applyDefinition: (
     definitionYaml: string,
-    expectedId: string,
+    expectedId: number,
     expectedRevision: number,
     launchDesktop?: LaunchDesktopSetting,
     profileId?: string,
   ) => Promise<{ definition: AutomationDefinitionSummary; specYaml: string }>;
-  deleteDefinition: (definitionId: string) => Promise<void>;
+  deleteDefinition: (definitionId: number) => Promise<void>;
   onSelectSession: (sessionId: string) => void;
 }
 
-type EditorTarget = { definitionId: string | null } | null;
+type EditorTarget = { definitionId: number | null } | null;
 
 // session_id is always present on AutomationRunSummary but "" means absent,
 // so a plain truthiness check is the correct emptiness test.
@@ -43,7 +43,7 @@ function runNavigationTarget(run: AutomationRunSummary): RunNavigationTarget {
 
 // A pending run keeps its request key, so a re-click reuses the same request_id.
 // pendingRunRequests is in-memory, so after a relaunch identity comes from run history.
-function reconcilePendingRunRequest(definitionId: string, runs: AutomationRunSummary[]) {
+function reconcilePendingRunRequest(definitionId: number, runs: AutomationRunSummary[]) {
   const key = useAutomationsStore.getState().pendingRunRequests[definitionId];
   if (key) {
     const occurrenceKey = `manual:${key}`;
@@ -95,7 +95,7 @@ export function AutomationsPanel({
   const runsByDefinition = useAutomationsStore((state) => state.runsByDefinition);
   const changedTick = useAutomationsStore((state) => state.changedTick);
 
-  const [selectedDefinitionId, setSelectedDefinitionId] = useState<string | null>(null);
+  const [selectedDefinitionId, setSelectedDefinitionId] = useState<number | null>(null);
   const [definitionsLoaded, setDefinitionsLoaded] = useState(false);
   const [definitionsError, setDefinitionsError] = useState<string | null>(null);
   const [runsError, setRunsError] = useState<string | null>(null);
@@ -152,7 +152,7 @@ export function AutomationsPanel({
 
   const selectedDefinition = selectDefinitionById(definitions, selectedDefinitionId);
 
-  function handleToggle(definitionId: string, nextEnabled: boolean) {
+  function handleToggle(definitionId: number, nextEnabled: boolean) {
     setToggleInFlight((prev) => ({ ...prev, [definitionId]: true }));
     setToggleErrors((prev) => {
       if (!(definitionId in prev)) return prev;
@@ -172,7 +172,7 @@ export function AutomationsPanel({
       });
   }
 
-  function handleRunNow(definitionId: string) {
+  function handleRunNow(definitionId: number) {
     const requestId = useAutomationsStore.getState().ensureRunRequest(definitionId);
     setRunInFlight((prev) => ({ ...prev, [definitionId]: true }));
     setRunErrors((prev) => {

@@ -3,6 +3,7 @@ package daemon
 import (
 	"bytes"
 	"encoding/json"
+	"strconv"
 	"sync"
 
 	"github.com/victorarias/attn/internal/bus"
@@ -25,7 +26,6 @@ const (
 	FactSessionChiefRoleChanged       = "session.chief_role.changed"
 	FactSessionReconciled             = "session.reconciled"
 	FactSessionPTYExited              = "session.pty.exited"
-	FactSessionProfileChanged         = "session.profile.changed"
 	FactSessionCapChanged             = "session.cap.changed"
 	FactSessionActivityChanged        = "session.activity.changed"
 	FactSessionCostChanged            = "session.cost.changed"
@@ -273,12 +273,6 @@ func buildWireProjections() []projection {
 			apply:  func(d *Daemon, ev bus.Event) { d.projectSessionPTYExited(ev) },
 		},
 		{
-			filter: bus.Filter{FactSessionProfileChanged},
-			apply: func(d *Daemon, ev bus.Event) {
-				d.projectSessionEvent(protocol.EventSessionStateChanged, ev.Subject)
-			},
-		},
-		{
 			filter: bus.Filter{FactWorktreeCreated},
 			apply:  func(d *Daemon, ev bus.Event) { d.projectWorktreeCreated(ev) },
 		},
@@ -361,7 +355,12 @@ func buildWireProjections() []projection {
 		},
 		{
 			filter: bus.Filter{FactAutomationChanged},
-			apply:  func(d *Daemon, ev bus.Event) { d.projectAutomationsChanged(ev.Subject) },
+			apply: func(d *Daemon, ev bus.Event) {
+				id, err := strconv.Atoi(ev.Subject)
+				if err == nil {
+					d.projectAutomationsChanged(id)
+				}
+			},
 		},
 		{
 			filter: bus.Filter{FactWorkflowRunUpdated},

@@ -50,7 +50,7 @@ export interface QueueBandSession extends DesktopViewSession {
   crewMember?: string;
   dispatcher_session_id?: string;
   dispatcher_member?: string;
-  automation?: { definition_id: string };
+  automation?: { definition_id: number };
 }
 
 export interface QueueBandOptions {

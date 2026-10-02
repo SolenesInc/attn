@@ -57,7 +57,7 @@ func (d *Daemon) observeDueSchedules(now time.Time) {
 		}
 		var spec automation.DefinitionSpec
 		if err := json.Unmarshal([]byte(definition.SpecJSON), &spec); err != nil {
-			d.logf("automation schedule observation parse %s: %v", definition.ID, err)
+			d.logf("automation schedule observation parse %d: %v", definition.ID, err)
 			continue
 		}
 		if spec.Trigger.Type != "scheduled" {
@@ -69,30 +69,30 @@ func (d *Daemon) observeDueSchedules(now time.Time) {
 
 func (d *Daemon) observeDueSchedule(definition store.AutomationDefinition, spec automation.DefinitionSpec, now time.Time) {
 	if spec.Trigger.Schedule == nil {
-		d.logf("automation schedule observation %s: scheduled trigger has no schedule", definition.ID)
+		d.logf("automation schedule observation %d: scheduled trigger has no schedule", definition.ID)
 		return
 	}
 	compiled, err := automation.CompileSchedule(*spec.Trigger.Schedule)
 	if err != nil {
-		d.logf("automation schedule observation compile %s: %v", definition.ID, err)
+		d.logf("automation schedule observation compile %d: %v", definition.ID, err)
 		return
 	}
 	cursor, ok, err := d.store.GetAutomationScheduleCursor(definition.ID)
 	if err != nil {
-		d.logf("automation schedule observation cursor %s: %v", definition.ID, err)
+		d.logf("automation schedule observation cursor %d: %v", definition.ID, err)
 		return
 	}
 	if !ok {
 		if err := d.store.SetAutomationScheduleCursor(definition.ID, now); err != nil {
-			d.logf("automation schedule observation anchor %s: %v", definition.ID, err)
+			d.logf("automation schedule observation anchor %d: %v", definition.ID, err)
 		}
 		return
 	}
 	instants, ok := compiled.DueInstants(cursor, now, scheduleDueInstantCap)
 	if !ok {
-		d.logf("automation schedule observation %s: replay storm guard hit, cursor advanced to now", definition.ID)
+		d.logf("automation schedule observation %d: replay storm guard hit, cursor advanced to now", definition.ID)
 		if err := d.store.SetAutomationScheduleCursor(definition.ID, now); err != nil {
-			d.logf("automation schedule observation advance %s: %v", definition.ID, err)
+			d.logf("automation schedule observation advance %d: %v", definition.ID, err)
 		}
 		return
 	}
@@ -110,7 +110,7 @@ func (d *Daemon) observeDueSchedule(definition store.AutomationDefinition, spec 
 		}
 	}
 	if err := d.store.SetAutomationScheduleCursor(definition.ID, now); err != nil {
-		d.logf("automation schedule observation advance %s: %v", definition.ID, err)
+		d.logf("automation schedule observation advance %d: %v", definition.ID, err)
 	}
 }
 
@@ -120,19 +120,19 @@ func (d *Daemon) claimAndDeliverScheduledRun(definition store.AutomationDefiniti
 	payload, err := json.Marshal(automation.NewScheduledInput(intended, observedAt))
 	if err != nil {
 		observationLock.Unlock()
-		d.logf("automation schedule observation payload %s: %v", definition.ID, err)
+		d.logf("automation schedule observation payload %d: %v", definition.ID, err)
 		return err
 	}
 	effective, err := automation.Effective(spec, definition.Revision)
 	if err != nil {
 		observationLock.Unlock()
-		d.logf("automation schedule observation snapshot %s: %v", definition.ID, err)
+		d.logf("automation schedule observation snapshot %d: %v", definition.ID, err)
 		return err
 	}
 	snapshotJSON, err := json.Marshal(effective)
 	if err != nil {
 		observationLock.Unlock()
-		d.logf("automation schedule observation snapshot marshal %s: %v", definition.ID, err)
+		d.logf("automation schedule observation snapshot marshal %d: %v", definition.ID, err)
 		return err
 	}
 	continuityKey := ""
@@ -148,7 +148,7 @@ func (d *Daemon) claimAndDeliverScheduledRun(definition store.AutomationDefiniti
 	run, _, claimErr := d.store.ClaimScheduledAutomationRun(definition.ID, automation.ScheduledOccurrenceKey(intended), continuityKey, definition.Revision, string(payload), string(snapshotJSON), observedAt, reservation)
 	observationLock.Unlock()
 	if claimErr != nil {
-		d.logf("automation schedule observation claim %s: %v", definition.ID, claimErr)
+		d.logf("automation schedule observation claim %d: %v", definition.ID, claimErr)
 		return claimErr
 	}
 	d.broadcastAutomationsChanged(definition.ID)
@@ -162,7 +162,7 @@ func (d *Daemon) claimAndDeliverScheduledRun(definition store.AutomationDefiniti
 	}
 	d.automationMu.Unlock()
 	if loadErr != nil {
-		d.logf("automation schedule observation deliver %s: %v", definition.ID, loadErr)
+		d.logf("automation schedule observation deliver %d: %v", definition.ID, loadErr)
 	}
 	return nil
 }

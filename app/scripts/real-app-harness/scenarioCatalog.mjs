@@ -90,7 +90,7 @@ export const scenarioCatalog = [
   {
     id: 'profile-lifecycle',
     runnerId: 'PROFILE-LIFECYCLE',
-    label: 'Profiles are created, renamed and deleted from the switcher, and the ledger moves and reopens agents between them',
+    label: 'Profiles are created, renamed and deleted from the switcher, and agents keep their original profile and deleted profiles cannot reopen sessions',
     command: ['pnpm', 'run', 'real-app:scenario-profile-lifecycle'],
   },
   {
@@ -207,14 +207,14 @@ export const scenarioCatalog = [
   {
     id: 'automation-lifecycle',
     runnerId: 'AUTOMATION-LIFECYCLE',
-    label: 'Automation lifecycle: edit-rebind, delete-resurrect, cleanup-dirty-safe',
+    label: 'Automation lifecycle: edits, permanent deletion and cleanup of finished work',
     command: ['pnpm', 'run', 'real-app:scenario-automation-lifecycle'],
     timeoutMs: 600_000,
   },
   {
     id: 'automation-form',
     runnerId: 'AUTOMATION-FORM',
-    label: 'Automation form: validation, create, edit, collision, schedule and persistence',
+    label: 'Automation form: validation, automatic IDs, edits, schedules and persistence',
     command: ['pnpm', 'run', 'real-app:scenario-automation-form'],
     timeoutMs: 240_000,
   },

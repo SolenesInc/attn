@@ -5,7 +5,6 @@ import (
 	"path/filepath"
 	"reflect"
 	"sort"
-	"strings"
 	"testing"
 	"time"
 
@@ -442,7 +441,7 @@ func TestProfileIDsSurviveRenameAndDeletedNamesAreReusable(t *testing.T) {
 	if err != nil || converted.Name != DefaultProfileName {
 		t.Fatalf("converted profile = %+v, %v; want %s", converted, err, DefaultProfileName)
 	}
-	if _, err := s.DeleteProfile(converted.ID, converted.Revision, home.ID); err != nil {
+	if _, err := s.DeleteProfile(converted.ID, converted.Revision, 0, 0); err != nil {
 		t.Fatalf("deleting the converted Default profile: %v", err)
 	}
 	addProfileSession(t, s, "live-agent", work.ID)
@@ -468,21 +467,19 @@ func TestProfileIDsSurviveRenameAndDeletedNamesAreReusable(t *testing.T) {
 		t.Fatalf("live-agent profile after rename = %s, want %s", profileID, work.ID)
 	}
 
-	_, err = s.DeleteProfile(work.ID, renamed.Revision, "")
-	wantCode(t, err, profiles.CodeInvalid)
-	_, err = s.DeleteProfile(work.ID, renamed.Revision, work.ID)
-	wantCode(t, err, profiles.CodeDestinationSame)
-	deletion, err := s.DeleteProfile(work.ID, renamed.Revision, home.ID)
-	if err != nil {
-		t.Fatalf("DeleteProfile: %v", err)
+	if _, err := s.DeleteProfile(work.ID, renamed.Revision, 0, 0); err == nil {
+		t.Fatal("deleted a profile with a live agent")
 	}
-	if !reflect.DeepEqual(deletion.MovedSessionIDs, []string{"live-agent"}) {
-		t.Fatalf("moved sessions = %v, want only the live agent", deletion.MovedSessionIDs)
+	if _, err := s.CloseSession("live-agent", SessionClose{}, time.Now()); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := s.DeleteProfile(work.ID, renamed.Revision, 0, 0); err != nil {
+		t.Fatal(err)
 	}
 	if profileID, _ := s.SessionProfileID("closed-agent"); profileID != work.ID {
 		t.Fatalf("closed-agent profile = %s, want its history kept at %s", profileID, work.ID)
 	}
-	_, err = s.DeleteProfile(home.ID, home.Revision, work.ID)
+	_, err = s.DeleteProfile(home.ID, home.Revision, 0, 0)
 	wantCode(t, err, profiles.CodeLastProfile)
 
 	s = restart()
@@ -508,77 +505,6 @@ func TestProfileIDsSurviveRenameAndDeletedNamesAreReusable(t *testing.T) {
 	}
 	_, err = s.RenameProfile(work.ID, "Back", tombstone.Revision)
 	wantCode(t, err, profiles.CodeProfileDeleted)
-}
-
-func TestAMoveMadeAgainstAnOldProfileIsRefused(t *testing.T) {
-	s, _ := openProfileStore(t)
-	work, workDesktop := mustCreateProfile(t, s, "Work")
-	home, _ := mustCreateProfile(t, s, "Home")
-	office, _ := mustCreateProfile(t, s, "Office")
-	addProfileSession(t, s, "agent", work.ID)
-	mustPlace(t, s, workDesktop.ID, "agent")
-	if _, err := s.MoveSessionToProfile(SessionProfileMoveRequest{SessionID: "agent", ExpectedProfileID: work.ID, DestinationProfileID: home.ID}); err != nil {
-		t.Fatal(err)
-	}
-
-	_, err := s.MoveSessionToProfile(SessionProfileMoveRequest{SessionID: "agent", ExpectedProfileID: work.ID, DestinationProfileID: office.ID})
-	refused := wantCode(t, err, profiles.CodeStaleRevision)
-	if !strings.Contains(refused.Message, home.ID) {
-		t.Fatalf("stale refusal %q does not name the agent's current profile %s", refused.Message, home.ID)
-	}
-	if profileID, _ := s.SessionProfileID("agent"); profileID != home.ID {
-		t.Fatalf("a stale move left the agent in %s, want %s", profileID, home.ID)
-	}
-	_, err = s.MoveSessionToProfile(SessionProfileMoveRequest{SessionID: "agent", DestinationProfileID: office.ID})
-	wantCode(t, err, profiles.CodeInvalid)
-
-	if _, err := s.DeleteProfile(office.ID, office.Revision, work.ID); err != nil {
-		t.Fatal(err)
-	}
-	_, err = s.MoveSessionToProfile(SessionProfileMoveRequest{SessionID: "agent", ExpectedProfileID: home.ID, DestinationProfileID: office.ID})
-	wantCode(t, err, profiles.CodeProfileDeleted)
-
-	if _, err := s.CloseSession("agent", SessionClose{}, time.Now()); err != nil {
-		t.Fatal(err)
-	}
-	_, err = s.MoveSessionToProfile(SessionProfileMoveRequest{SessionID: "agent", ExpectedProfileID: home.ID, DestinationProfileID: work.ID})
-	wantCode(t, err, profiles.CodeSessionClosed)
-}
-
-func TestMovingAProfilesChiefDemotesItAndLeavesTheDestinationsChief(t *testing.T) {
-	s, _ := openProfileStore(t)
-	home, _ := mustCreateProfile(t, s, "Home")
-	work, _ := mustCreateProfile(t, s, "Work")
-	addProfileSession(t, s, "home-chief", home.ID)
-	addProfileSession(t, s, "work-chief", work.ID)
-	for _, id := range []string{"home-chief", "work-chief"} {
-		if _, _, err := s.SetProfileChief(id); err != nil {
-			t.Fatal(err)
-		}
-	}
-
-	move, err := s.MoveSessionToProfile(SessionProfileMoveRequest{SessionID: "work-chief", ExpectedProfileID: work.ID, DestinationProfileID: home.ID, CrewMemberID: "trellis"})
-	if err != nil {
-		t.Fatal(err)
-	}
-	if move.DemotedChiefID != "work-chief" || move.MovedCrewID != "trellis" {
-		t.Fatalf("move = %+v, want work-chief demoted and trellis moved", move)
-	}
-	chiefs, err := s.ProfileChiefs()
-	if err != nil || len(chiefs) != 1 || chiefs[home.ID] != "home-chief" {
-		t.Fatalf("chiefs after the move = %v, %v; want only Home's own chief", chiefs, err)
-	}
-	if member, err := s.CrewProfile("trellis"); err != nil || member != home.ID {
-		t.Fatalf("crew member trellis belongs to %q, %v; want %s with its agent", member, err, home.ID)
-	}
-
-	plain, err := s.MoveSessionToProfile(SessionProfileMoveRequest{SessionID: "work-chief", ExpectedProfileID: home.ID, DestinationProfileID: work.ID})
-	if err != nil || plain.DemotedChiefID != "" || plain.MovedCrewID != "" {
-		t.Fatalf("moving a non-chief back = %+v, %v; want nothing demoted or moved besides the agent", plain, err)
-	}
-	if chiefs, _ := s.ProfileChiefs(); chiefs[home.ID] != "home-chief" {
-		t.Fatalf("moving another agent out of Home demoted its chief: %v", chiefs)
-	}
 }
 
 func TestMostRecentlyUsedProfileFollowsSelection(t *testing.T) {
@@ -659,75 +585,5 @@ func TestReAddingASessionNeverChangesItsProfile(t *testing.T) {
 	}
 	if got := s.Get("agent").ProfileID; got != home.ID {
 		t.Fatalf("profile after re-adds = %q, want %s: membership changes only through a move", got, home.ID)
-	}
-}
-
-func TestReopeningIntoAnotherProfileIsUndoneWithTheClose(t *testing.T) {
-	s, _ := openProfileStore(t)
-	home, _ := mustCreateProfile(t, s, "Home")
-	work, _ := mustCreateProfile(t, s, "Work")
-	addProfileSession(t, s, "agent", home.ID)
-	if _, err := s.CloseSession("agent", SessionClose{By: SessionClosedByUser}, time.Now()); err != nil {
-		t.Fatal(err)
-	}
-
-	lifted, reopened, err := s.ReopenSession("agent", work.ID)
-	if err != nil || !reopened || lifted.ProfileID != home.ID {
-		t.Fatalf("reopen lifted=%+v reopened=%v err=%v, want the recorded profile %s lifted", lifted, reopened, err, home.ID)
-	}
-	if got := s.Get("agent").ProfileID; got != work.ID {
-		t.Fatalf("reopened profile = %q, want %s", got, work.ID)
-	}
-	if restored, err := s.RestoreSessionClose("agent", lifted); err != nil || !restored {
-		t.Fatalf("restore close restored=%v err=%v", restored, err)
-	}
-	if got, err := s.SessionProfileID("agent"); err != nil || got != home.ID {
-		t.Fatalf("closed row profile = %q err=%v, want %s back as history", got, err, home.ID)
-	}
-}
-
-func TestNothingJoinsADeletedProfileAndItsCrewMoveWithIt(t *testing.T) {
-	s, _ := openProfileStore(t)
-	doomed, _ := mustCreateProfile(t, s, "Doomed")
-	kept, _ := mustCreateProfile(t, s, "Kept")
-	if assigned, err := s.EnsureCrewProfile("mira", doomed.ID); err != nil || assigned != doomed.ID {
-		t.Fatalf("EnsureCrewProfile = %q, %v; want %s", assigned, err, doomed.ID)
-	}
-	if assigned, err := s.EnsureCrewProfile("mira", kept.ID); err != nil || assigned != doomed.ID {
-		t.Fatalf("a second EnsureCrewProfile = %q, %v; want the first assignment %s kept", assigned, err, doomed.ID)
-	}
-	addProfileSession(t, s, "closed-agent", doomed.ID)
-	if _, err := s.CloseSession("closed-agent", SessionClose{}, time.Now()); err != nil {
-		t.Fatal(err)
-	}
-
-	deletion, err := s.DeleteProfile(doomed.ID, doomed.Revision, kept.ID)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if !reflect.DeepEqual(deletion.MovedCrewIDs, []string{"mira"}) {
-		t.Fatalf("moved crew = %v, want [mira]", deletion.MovedCrewIDs)
-	}
-	if profileID, _ := s.CrewProfile("mira"); profileID != kept.ID {
-		t.Fatalf("mira's profile after the delete = %q, want %s", profileID, kept.ID)
-	}
-
-	_, err = s.EnsureCrewProfile("nell", doomed.ID)
-	wantCode(t, err, profiles.CodeProfileDeleted)
-	now := string(protocol.TimestampNow())
-	err = s.AddChecked(&protocol.Session{
-		ID: "late-spawn", Label: "late", Agent: protocol.SessionAgentCodex, Directory: "/tmp/project", ProfileID: doomed.ID,
-		State: protocol.SessionStateLaunching, StateSince: now, StateUpdatedAt: now, LastSeen: now,
-	})
-	wantCode(t, err, profiles.CodeProfileDeleted)
-	if s.Get("late-spawn") != nil {
-		t.Fatal("a session joined the deleted profile")
-	}
-	_, err = s.UpsertAutomationDefinition("late-automation", "Late", `{}`, doomed.ID, time.Now())
-	wantCode(t, err, profiles.CodeProfileDeleted)
-	_, _, err = s.ReopenSession("closed-agent", "")
-	wantCode(t, err, profiles.CodeProfileDeleted)
-	if _, reopened, err := s.ReopenSession("closed-agent", kept.ID); err != nil || !reopened {
-		t.Fatalf("reopening into the kept profile: reopened=%v err=%v", reopened, err)
 	}
 }

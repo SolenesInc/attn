@@ -5,10 +5,12 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"strconv"
 	"strings"
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/victorarias/attn/internal/automation"
 	"github.com/victorarias/attn/internal/docstore"
 )
 
@@ -31,7 +33,6 @@ const (
 	AutomationCancelReasonReviewWithdrawn    = "review_withdrawn"
 	AutomationCancelReasonDefinitionDisabled = "definition_disabled"
 	AutomationCancelReasonDefinitionDeleted  = "definition_deleted"
-	AutomationCancelReasonProfileDeleted     = "profile_deleted"
 )
 
 const (
@@ -42,11 +43,11 @@ const (
 	AutomationBindingReleasedContractRotated   = "contract_rotated"
 	AutomationBindingReleasedTicketSwept       = "ticket_swept"
 	AutomationBindingReleasedDefinitionDeleted = "definition_deleted"
-	AutomationBindingReleasedProfileDeleted    = "profile_deleted"
 )
 
 type AutomationDefinition struct {
-	ID, Name, SpecJSON   string
+	ID                   int
+	Name, SpecJSON       string
 	ProfileID            string
 	Enabled              bool
 	Revision             int
@@ -55,7 +56,8 @@ type AutomationDefinition struct {
 }
 
 type AutomationRun struct {
-	ID, DefinitionID, OccurrenceID    string
+	ID, OccurrenceID                  string
+	DefinitionID                      int
 	DefinitionRevision                int
 	SnapshotJSON, State, CancelReason string
 	Attempts                          int
@@ -68,7 +70,8 @@ type AutomationRun struct {
 }
 
 type AutomationContinuityBinding struct {
-	ID, DefinitionID, ContinuityKey     string
+	ID, ContinuityKey                   string
+	DefinitionID                        int
 	SeedID, OriginRunID, LegacyTicketID string
 	SessionID, ProfileID                string
 	Status, ReleasedReason              string
@@ -77,15 +80,17 @@ type AutomationContinuityBinding struct {
 }
 
 type AutomationOccurrence struct {
-	ID, DefinitionID, Provider, OccurrenceKey, SubjectKey, PayloadJSON string
-	ObservedAt, CreatedAt                                              time.Time
+	ID, Provider, OccurrenceKey, SubjectKey, PayloadJSON string
+	DefinitionID                                         int
+	ObservedAt, CreatedAt                                time.Time
 }
 
 type AutomationProvenanceRecord struct {
-	RunID, DefinitionID, DefinitionName, DefinitionSpecJSON string
-	SessionID, SeedID, TicketID                             string
-	Provider, SubjectKey, PayloadJSON                       string
-	CreatedAt                                               time.Time
+	RunID, DefinitionName, DefinitionSpecJSON string
+	DefinitionID                              int
+	SessionID, SeedID, TicketID               string
+	Provider, SubjectKey, PayloadJSON         string
+	CreatedAt                                 time.Time
 }
 
 type AutomationRunReservation struct {
@@ -103,11 +108,11 @@ type AutomationReviewRequestObservation struct {
 	HeadSHA    string
 }
 
-func (s *Store) AutomationReviewRequestNeedsClaim(definitionID, subjectKey string, cycle int) (bool, error) {
+func (s *Store) AutomationReviewRequestNeedsClaim(definitionID int, subjectKey string, cycle int) (bool, error) {
 	return s.AutomationReviewRequestHeadNeedsClaim(definitionID, subjectKey, cycle, "")
 }
 
-func (s *Store) AutomationReviewRequestHeadNeedsClaim(definitionID, subjectKey string, cycle int, headSHA string) (bool, error) {
+func (s *Store) AutomationReviewRequestHeadNeedsClaim(definitionID int, subjectKey string, cycle int, headSHA string) (bool, error) {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 	if s.db == nil {
@@ -155,7 +160,7 @@ func githubReviewPayloadHead(payloadJSON string) string {
 	return strings.ToLower(strings.TrimSpace(payload.HeadSHA))
 }
 
-func githubReviewCycleStatus(q automationReviewQueryer, definitionID, subjectKey string, cycle int, headSHA string) (hasOccurrence, hasPending, matchesHead bool, err error) {
+func githubReviewCycleStatus(q automationReviewQueryer, definitionID int, subjectKey string, cycle int, headSHA string) (hasOccurrence, hasPending, matchesHead bool, err error) {
 	base := githubReviewOccurrenceBase(subjectKey, cycle)
 	prefix := base + ":"
 	headSHA = strings.ToLower(strings.TrimSpace(headSHA))
@@ -189,17 +194,12 @@ func githubReviewCycleStatus(q automationReviewQueryer, definitionID, subjectKey
 	return hasOccurrence, hasPending, matchesHead, rows.Err()
 }
 
-func (s *Store) UpsertAutomationDefinition(id, name, specJSON, profileID string, now time.Time) (*AutomationDefinition, error) {
+func (s *Store) UpsertAutomationDefinition(id int, name, specJSON, profileID string, now time.Time) (*AutomationDefinition, error) {
 	return s.UpsertAutomationDefinitionWithLaunch(id, name, specJSON, profileID, now, nil)
 }
-func (s *Store) UpsertAutomationDefinitionWithLaunch(id, name, specJSON, profileID string, now time.Time, launch *LaunchDesktopSetting) (*AutomationDefinition, error) {
+func (s *Store) UpsertAutomationDefinitionWithLaunch(id int, name, specJSON, profileID string, now time.Time, launch *LaunchDesktopSetting) (*AutomationDefinition, error) {
 	s.mu.Lock()
-	locked := true
-	defer func() {
-		if locked {
-			s.mu.Unlock()
-		}
-	}()
+	defer s.mu.Unlock()
 	if s.db == nil {
 		return nil, errors.New("automation persistence unavailable")
 	}
@@ -208,44 +208,52 @@ func (s *Store) UpsertAutomationDefinitionWithLaunch(id, name, specJSON, profile
 		return nil, err
 	}
 	defer tx.Rollback()
-	var revision, oldEnabled int
-	var oldSpec, deletedAt string
-	err = tx.QueryRow(`SELECT revision, spec_json, enabled, deleted_at FROM automation_definitions WHERE id=?`, id).Scan(&revision, &oldSpec, &oldEnabled, &deletedAt)
+	activation := id == 0
+	revision := 1
 	enabled := true
-	activation := err == sql.ErrNoRows
-	if joining := activation || (err == nil && deletedAt != ""); joining && profileID != "" {
-		if _, liveErr := loadLiveProfile(tx, profileID); liveErr != nil {
-			return nil, liveErr
+	var oldSpec string
+	if activation {
+		if _, err := loadLiveProfile(tx, profileID); err != nil {
+			return nil, err
 		}
-	}
-	switch err {
-	case sql.ErrNoRows:
-		revision = 1
-		_, err = tx.Exec(`INSERT INTO automation_definitions(id,name,enabled,revision,spec_json,profile_id,created_at,updated_at,deleted_at) VALUES(?,?,?,?,?,?,?,?,'')`, id, name, enabled, revision, specJSON, profileID, formatTicketTime(now), formatTicketTime(now))
-	case nil:
-		wasDeleted := deletedAt != ""
-		if wasDeleted {
+		result, err := tx.Exec(`INSERT INTO automation_definitions(name,enabled,revision,spec_json,profile_id,created_at,updated_at,deleted_at) VALUES(?,1,1,?,?,?,?,'')`, name, specJSON, profileID, formatTicketTime(now), formatTicketTime(now))
+		if err != nil {
+			return nil, err
+		}
+		assigned, err := result.LastInsertId()
+		if err != nil {
+			return nil, err
+		}
+		id = int(assigned)
+	} else {
+		err := tx.QueryRow(`SELECT revision, spec_json, enabled FROM automation_definitions WHERE id=? AND deleted_at=''`, id).Scan(&revision, &oldSpec, &enabled)
+		if errors.Is(err, sql.ErrNoRows) {
+			return nil, fmt.Errorf("automation %d does not exist or was deleted; create a new automation without an id", id)
+		}
+		if err != nil {
+			return nil, err
+		}
+		if oldSpec != specJSON {
 			revision++
-			_, err = tx.Exec(`UPDATE automation_definitions SET profile_id=? WHERE id=?`, profileID, id)
-		} else {
-			enabled = oldEnabled != 0
-			if oldSpec != specJSON {
-				revision++
-			}
 		}
-		if err == nil {
-			_, err = tx.Exec(`UPDATE automation_definitions SET name=?, enabled=?, revision=?, spec_json=?, updated_at=?, deleted_at='' WHERE id=?`, name, enabled, revision, specJSON, formatTicketTime(now), id)
-		}
-		activation = wasDeleted
 	}
+	var spec automation.DefinitionSpec
+	if err := json.Unmarshal([]byte(specJSON), &spec); err != nil {
+		return nil, err
+	}
+	spec.ID = id
+	canonical, err := json.Marshal(spec)
 	if err != nil {
 		return nil, err
 	}
-	stamp := now.UTC().Format(sortableTimeFormat)
+	if _, err := tx.Exec(`UPDATE automation_definitions SET name=?,enabled=?,revision=?,spec_json=?,updated_at=? WHERE id=?`, name, enabled, revision, string(canonical), formatTicketTime(now), id); err != nil {
+		return nil, err
+	}
+	stamp, itemID := now.UTC().Format(sortableTimeFormat), strconv.Itoa(id)
 	if launch != nil {
-		err = saveLaunchSetting(tx, stamp, "automation", id, *launch, !activation && oldSpec == specJSON)
+		err = saveLaunchSetting(tx, stamp, "automation", itemID, *launch, !activation && oldSpec == specJSON)
 	} else if activation {
-		err = startOnOwnDesktop(tx, stamp, "automation", id)
+		err = startOnOwnDesktop(tx, stamp, "automation", itemID)
 	}
 	if err != nil {
 		return nil, err
@@ -259,15 +267,17 @@ func (s *Store) UpsertAutomationDefinitionWithLaunch(id, name, specJSON, profile
 			return nil, err
 		}
 	}
+	definition, err := scanAutomationDefinition(tx.QueryRow(`SELECT id,name,enabled,revision,spec_json,profile_id,created_at,updated_at,deleted_at FROM automation_definitions WHERE id=?`, id))
+	if err != nil {
+		return nil, err
+	}
 	if err := tx.Commit(); err != nil {
 		return nil, err
 	}
-	s.mu.Unlock()
-	locked = false
-	return s.GetAutomationDefinition(id)
+	return definition, nil
 }
 
-func activateAutomationReviewRequestsTx(tx *sql.Tx, definitionID string, now time.Time) error {
+func activateAutomationReviewRequestsTx(tx *sql.Tx, definitionID int, now time.Time) error {
 	if _, err := tx.Exec(`UPDATE automation_review_request_edges SET active=0,updated_at=? WHERE definition_id=?`, formatTicketTime(now), definitionID); err != nil {
 		return err
 	}
@@ -277,13 +287,13 @@ func activateAutomationReviewRequestsTx(tx *sql.Tx, definitionID string, now tim
 	return fenceAutomationProviderCursorsTx(tx, definitionID, now)
 }
 
-func fenceAutomationProviderCursorsTx(tx *sql.Tx, definitionID string, now time.Time) error {
+func fenceAutomationProviderCursorsTx(tx *sql.Tx, definitionID int, now time.Time) error {
 	fence := now.UTC().Format(sortableTimeFormat)
 	_, err := tx.Exec(`INSERT INTO automation_provider_cursors(definition_id,provider,scope,observed_at) VALUES(?,'github_review_requested','*',?) ON CONFLICT(definition_id,provider,scope) DO UPDATE SET observed_at=excluded.observed_at`, definitionID, fence)
 	return err
 }
 
-func (s *Store) SetAutomationEnabled(id string, enabled bool, now time.Time) (*AutomationDefinition, bool, error) {
+func (s *Store) SetAutomationEnabled(id int, enabled bool, now time.Time) (*AutomationDefinition, bool, error) {
 	s.mu.Lock()
 	locked := true
 	defer func() {
@@ -346,7 +356,7 @@ func scanAutomationDefinition(scanner interface{ Scan(...any) error }) (*Automat
 	return &d, nil
 }
 
-func (s *Store) GetAutomationDefinition(id string) (*AutomationDefinition, error) {
+func (s *Store) GetAutomationDefinition(id int) (*AutomationDefinition, error) {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 	if s.db == nil {
@@ -359,7 +369,7 @@ func (s *Store) GetAutomationDefinition(id string) (*AutomationDefinition, error
 	return d, err
 }
 
-func (s *Store) GetAutomationDefinitionIncludingDeleted(id string) (*AutomationDefinition, error) {
+func (s *Store) GetAutomationDefinitionIncludingDeleted(id int) (*AutomationDefinition, error) {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 	if s.db == nil {
@@ -386,7 +396,7 @@ func scanAutomationContinuityBinding(scanner interface{ Scan(...any) error }) (*
 	return &b, nil
 }
 
-func (s *Store) GetActiveAutomationContinuityBinding(definitionID, continuityKey string) (*AutomationContinuityBinding, error) {
+func (s *Store) GetActiveAutomationContinuityBinding(definitionID int, continuityKey string) (*AutomationContinuityBinding, error) {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 	if s.db == nil {
@@ -399,7 +409,7 @@ func (s *Store) GetActiveAutomationContinuityBinding(definitionID, continuityKey
 	return b, err
 }
 
-func (s *Store) OriginAutomationRunIDForSeed(definitionID, seedID string) (string, error) {
+func (s *Store) OriginAutomationRunIDForSeed(definitionID int, seedID string) (string, error) {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 	if s.db == nil {
@@ -413,7 +423,7 @@ func (s *Store) OriginAutomationRunIDForSeed(definitionID, seedID string) (strin
 	return origin, err
 }
 
-func (s *Store) ReleaseAutomationContinuityBinding(definitionID, continuityKey, reason string, now time.Time) error {
+func (s *Store) ReleaseAutomationContinuityBinding(definitionID int, continuityKey, reason string, now time.Time) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	if s.db == nil {
@@ -426,7 +436,7 @@ func (s *Store) ReleaseAutomationContinuityBinding(definitionID, continuityKey, 
 	return err
 }
 
-func (s *Store) ReleaseAutomationContinuityBindings(definitionID, reason string, now time.Time) error {
+func (s *Store) ReleaseAutomationContinuityBindings(definitionID int, reason string, now time.Time) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	if s.db == nil {
@@ -439,7 +449,7 @@ func (s *Store) ReleaseAutomationContinuityBindings(definitionID, reason string,
 	return err
 }
 
-func pendingAutomationRunInThreadTx(tx *sql.Tx, definitionID, provider, subjectKey string) (bool, error) {
+func pendingAutomationRunInThreadTx(tx *sql.Tx, definitionID int, provider, subjectKey string) (bool, error) {
 	var pending int
 	err := tx.QueryRow(`
 		SELECT EXISTS(
@@ -452,25 +462,18 @@ func pendingAutomationRunInThreadTx(tx *sql.Tx, definitionID, provider, subjectK
 	return pending != 0, err
 }
 
-const AutomationBindingReleasedAgentMoved = "agent_moved_profile"
-
-func getOrCreateActiveAutomationContinuityBindingTx(tx *sql.Tx, definitionID, continuityKey, profileID string, ids *AutomationRunReservation, now time.Time) error {
+func getOrCreateActiveAutomationContinuityBindingTx(tx *sql.Tx, definitionID int, continuityKey, profileID string, ids *AutomationRunReservation, now time.Time) error {
 	var bound AutomationRunReservation
-	var bindingID, liveSessionProfileID string
+
 	err := tx.QueryRow(
-		`SELECT b.id,b.seed_id,b.session_id,COALESCE(p.id,'') FROM automation_continuity_bindings b LEFT JOIN sessions s ON s.id=b.session_id LEFT JOIN profiles p ON p.id=s.profile_id AND p.deleted_at='' WHERE b.definition_id=? AND b.continuity_key=? AND b.status=?`,
+		`SELECT seed_id,session_id FROM automation_continuity_bindings WHERE definition_id=? AND continuity_key=? AND status=?`,
 		definitionID, continuityKey, AutomationBindingStatusActive,
-	).Scan(&bindingID, &bound.SeedID, &bound.SessionID, &liveSessionProfileID)
+	).Scan(&bound.SeedID, &bound.SessionID)
 	nowRaw := formatTicketTime(now)
 	switch {
-	case err == nil && (liveSessionProfileID == "" || liveSessionProfileID == profileID):
+	case err == nil:
 		ids.SeedID, ids.SessionID = bound.SeedID, bound.SessionID
 		return nil
-	case err == nil:
-		if _, err := tx.Exec(`UPDATE automation_continuity_bindings SET status=?,released_reason=?,released_at=?,updated_at=? WHERE id=?`,
-			AutomationBindingStatusReleased, AutomationBindingReleasedAgentMoved, nowRaw, nowRaw, bindingID); err != nil {
-			return err
-		}
 	case err != sql.ErrNoRows:
 		return err
 	}
@@ -498,7 +501,7 @@ func (s *Store) AutomationSessionHasContinuityBinding(sessionID string) (bool, e
 	return exists != 0, nil
 }
 
-func (s *Store) DeactivateAutomationReviewRequestEdges(definitionID string, now time.Time) error {
+func (s *Store) DeactivateAutomationReviewRequestEdges(definitionID int, now time.Time) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	if s.db == nil {
@@ -508,7 +511,7 @@ func (s *Store) DeactivateAutomationReviewRequestEdges(definitionID string, now 
 	return err
 }
 
-func (s *Store) FenceAutomationProviderCursors(definitionID string, now time.Time) error {
+func (s *Store) FenceAutomationProviderCursors(definitionID int, now time.Time) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	if s.db == nil {
@@ -525,7 +528,7 @@ func (s *Store) FenceAutomationProviderCursors(definitionID string, now time.Tim
 	return tx.Commit()
 }
 
-func (s *Store) DeleteAutomationDefinition(id string, now time.Time) error {
+func (s *Store) DeleteAutomationDefinition(id int, now time.Time) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	if s.db == nil {
@@ -540,7 +543,7 @@ func (s *Store) DeleteAutomationDefinition(id string, now time.Time) error {
 		return err
 	}
 	if affected == 0 {
-		return fmt.Errorf("automation %q not found or already deleted", id)
+		return fmt.Errorf("automation %d not found or already deleted", id)
 	}
 	return nil
 }
@@ -567,7 +570,7 @@ func (s *Store) ListAutomationDefinitions() ([]AutomationDefinition, error) {
 	return out, rows.Err()
 }
 
-func (s *Store) ListAutomationDefinitionIDsIncludingDeleted() ([]string, error) {
+func (s *Store) ListAutomationDefinitionIDsIncludingDeleted() ([]int, error) {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 	if s.db == nil {
@@ -578,9 +581,9 @@ func (s *Store) ListAutomationDefinitionIDsIncludingDeleted() ([]string, error) 
 		return nil, err
 	}
 	defer rows.Close()
-	var out []string
+	var out []int
 	for rows.Next() {
-		var id string
+		var id int
 		if err := rows.Scan(&id); err != nil {
 			return nil, err
 		}
@@ -589,7 +592,7 @@ func (s *Store) ListAutomationDefinitionIDsIncludingDeleted() ([]string, error) 
 	return out, rows.Err()
 }
 
-func (s *Store) ClaimManualAutomationRun(definitionID, requestID, subjectKey, payloadJSON string, expectedRevision int, snapshotJSON string, observedAt time.Time, ids AutomationRunReservation) (*AutomationRun, bool, error) {
+func (s *Store) ClaimManualAutomationRun(definitionID int, requestID, subjectKey, payloadJSON string, expectedRevision int, snapshotJSON string, observedAt time.Time, ids AutomationRunReservation) (*AutomationRun, bool, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	if s.db == nil {
@@ -621,7 +624,7 @@ func (s *Store) ClaimManualAutomationRun(definitionID, requestID, subjectKey, pa
 		return nil, false, fmt.Errorf("automation definition changed while starting run")
 	}
 	if enabled == 0 {
-		return nil, false, fmt.Errorf("automation %q is disabled", definitionID)
+		return nil, false, fmt.Errorf("automation %d is disabled", definitionID)
 	}
 	now := formatTicketTime(observedAt)
 	if _, err = tx.Exec(`INSERT INTO automation_occurrences(id,definition_id,provider,occurrence_key,subject_key,observed_at,payload_json,created_at) VALUES(?,?, 'manual',?,?,?,?,?)`, ids.OccurrenceID, definitionID, key, subjectKey, now, payloadJSON, now); err != nil {
@@ -637,7 +640,7 @@ func (s *Store) ClaimManualAutomationRun(definitionID, requestID, subjectKey, pa
 	return run, true, e
 }
 
-func (s *Store) ClaimScheduledAutomationRun(definitionID, occurrenceKey, continuityKey string, expectedRevision int, payloadJSON, snapshotJSON string, observedAt time.Time, reservation AutomationRunReservation) (*AutomationRun, bool, error) {
+func (s *Store) ClaimScheduledAutomationRun(definitionID int, occurrenceKey, continuityKey string, expectedRevision int, payloadJSON, snapshotJSON string, observedAt time.Time, reservation AutomationRunReservation) (*AutomationRun, bool, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	if s.db == nil {
@@ -667,7 +670,7 @@ func (s *Store) ClaimScheduledAutomationRun(definitionID, occurrenceKey, continu
 		return nil, false, errors.New("automation definition changed while accepting observation")
 	}
 	if enabled == 0 {
-		return nil, false, fmt.Errorf("automation %q is disabled", definitionID)
+		return nil, false, fmt.Errorf("automation %d is disabled", definitionID)
 	}
 	ids := reservation
 	if continuityKey != "" {
@@ -696,7 +699,7 @@ func (s *Store) ClaimScheduledAutomationRun(definitionID, occurrenceKey, continu
 	return run, true, e
 }
 
-func (s *Store) GetAutomationScheduleCursor(definitionID string) (time.Time, bool, error) {
+func (s *Store) GetAutomationScheduleCursor(definitionID int) (time.Time, bool, error) {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 	if s.db == nil {
@@ -717,7 +720,7 @@ func (s *Store) GetAutomationScheduleCursor(definitionID string) (time.Time, boo
 	return at, true, nil
 }
 
-func (s *Store) SetAutomationScheduleCursor(definitionID string, at time.Time) error {
+func (s *Store) SetAutomationScheduleCursor(definitionID int, at time.Time) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	if s.db == nil {
@@ -727,7 +730,7 @@ func (s *Store) SetAutomationScheduleCursor(definitionID string, at time.Time) e
 	return err
 }
 
-func (s *Store) ReconcileAutomationReviewRequests(definitionID, host string, subjectKeys []string, observedAt time.Time) ([]AutomationReviewRequestCandidate, error) {
+func (s *Store) ReconcileAutomationReviewRequests(definitionID int, host string, subjectKeys []string, observedAt time.Time) ([]AutomationReviewRequestCandidate, error) {
 	observations := make([]AutomationReviewRequestObservation, 0, len(subjectKeys))
 	for _, subjectKey := range subjectKeys {
 		observations = append(observations, AutomationReviewRequestObservation{SubjectKey: subjectKey})
@@ -735,7 +738,7 @@ func (s *Store) ReconcileAutomationReviewRequests(definitionID, host string, sub
 	return s.ReconcileAutomationReviewRequestHeads(definitionID, host, observations, observedAt)
 }
 
-func (s *Store) ReconcileAutomationReviewRequestHeads(definitionID, host string, observations []AutomationReviewRequestObservation, observedAt time.Time) ([]AutomationReviewRequestCandidate, error) {
+func (s *Store) ReconcileAutomationReviewRequestHeads(definitionID int, host string, observations []AutomationReviewRequestObservation, observedAt time.Time) ([]AutomationReviewRequestCandidate, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	if s.db == nil {
@@ -867,7 +870,7 @@ func (s *Store) ReconcileAutomationReviewRequestHeads(definitionID, host string,
 	return candidates, nil
 }
 
-func (s *Store) ListWithdrawnGitHubReviewUndeliveredRuns(definitionID, host string) ([]AutomationRun, error) {
+func (s *Store) ListWithdrawnGitHubReviewUndeliveredRuns(definitionID int, host string) ([]AutomationRun, error) {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 	if s.db == nil {
@@ -903,7 +906,7 @@ func (s *Store) ListWithdrawnGitHubReviewUndeliveredRuns(definitionID, host stri
 	return out, rows.Err()
 }
 
-func (s *Store) ClaimGitHubReviewAutomationRun(definitionID, subjectKey string, cycle, expectedRevision int, payloadJSON, snapshotJSON string, observedAt time.Time, reserved AutomationRunReservation) (*AutomationRun, bool, error) {
+func (s *Store) ClaimGitHubReviewAutomationRun(definitionID int, subjectKey string, cycle, expectedRevision int, payloadJSON, snapshotJSON string, observedAt time.Time, reserved AutomationRunReservation) (*AutomationRun, bool, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	if s.db == nil {
@@ -979,7 +982,7 @@ func (s *Store) ClaimGitHubReviewAutomationRun(definitionID, subjectKey string, 
 		return nil, false, errors.New("automation definition changed while accepting observation")
 	}
 	if enabled == 0 {
-		return nil, false, fmt.Errorf("automation %q is disabled", definitionID)
+		return nil, false, fmt.Errorf("automation %d is disabled", definitionID)
 	}
 	blocked, err := pendingAutomationRunInThreadTx(tx, definitionID, "github", subjectKey)
 	if err != nil {
@@ -1038,7 +1041,7 @@ func (s *Store) GetAutomationRun(id string) (*AutomationRun, error) {
 	}
 	return s.getAutomationRunUnlocked(id)
 }
-func (s *Store) GetManualAutomationRun(definitionID, requestID string) (*AutomationRun, error) {
+func (s *Store) GetManualAutomationRun(definitionID int, requestID string) (*AutomationRun, error) {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 	if s.db == nil {
@@ -1054,7 +1057,7 @@ func (s *Store) GetManualAutomationRun(definitionID, requestID string) (*Automat
 	}
 	return s.getAutomationRunUnlocked(runID)
 }
-func (s *Store) ListAutomationRuns(definitionID string) ([]AutomationRun, error) {
+func (s *Store) ListAutomationRuns(definitionID int) ([]AutomationRun, error) {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 	if s.db == nil {
@@ -1082,7 +1085,7 @@ type AutomationRunWithOccurrenceKey struct {
 	Provenance    AutomationProvenanceRecord
 }
 
-func (s *Store) ListAutomationRunsWithOccurrenceKeys(definitionID string, limit int) ([]AutomationRunWithOccurrenceKey, error) {
+func (s *Store) ListAutomationRunsWithOccurrenceKeys(definitionID int, limit int) ([]AutomationRunWithOccurrenceKey, error) {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 	if s.db == nil {
@@ -1124,7 +1127,7 @@ func (s *Store) ListAutomationRunsWithOccurrenceKeys(definitionID string, limit 
 	return out, rows.Err()
 }
 
-func (s *Store) LatestAutomationRunPerDefinition() (map[string]AutomationRunWithOccurrenceKey, error) {
+func (s *Store) LatestAutomationRunPerDefinition() (map[int]AutomationRunWithOccurrenceKey, error) {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 	if s.db == nil {
@@ -1148,7 +1151,7 @@ func (s *Store) LatestAutomationRunPerDefinition() (map[string]AutomationRunWith
 		return nil, err
 	}
 	defer rows.Close()
-	out := make(map[string]AutomationRunWithOccurrenceKey)
+	out := make(map[int]AutomationRunWithOccurrenceKey)
 	for rows.Next() {
 		var r AutomationRun
 		var created, updated, delivered, occurrenceKey string
@@ -1376,7 +1379,7 @@ func (s *Store) MarkAutomationRunCancelled(id, reason string, now time.Time) err
 	return err
 }
 
-func (s *Store) ListPrunableAutomationRuns(definitionID string, keep int, olderThan time.Time) ([]AutomationRun, error) {
+func (s *Store) ListPrunableAutomationRuns(definitionID int, keep int, olderThan time.Time) ([]AutomationRun, error) {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 	if s.db == nil {
@@ -1410,7 +1413,7 @@ func (s *Store) ListPrunableAutomationRuns(definitionID string, keep int, olderT
 	return out, rows.Err()
 }
 
-func (s *Store) ListTerminalAutomationRuns(definitionID string) ([]AutomationRun, error) {
+func (s *Store) ListTerminalAutomationRuns(definitionID int) ([]AutomationRun, error) {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 	if s.db == nil {

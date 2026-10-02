@@ -175,7 +175,7 @@ describe('App queue', () => {
       await gesture(daemon, () => daemon.emit({
         event: 'session_state_changed',
         session: agent('working', { automation: {
-          definition_id: 'review', definition_name: 'Review', run_id: 'run-1', trigger_type: 'manual',
+          definition_id: 1, definition_name: 'Review', run_id: 'run-1', trigger_type: 'manual',
         } }),
       }));
       const automationBlock = screen.getByTestId('sidebar-automation-runs');

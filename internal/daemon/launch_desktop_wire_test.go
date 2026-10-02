@@ -6,7 +6,6 @@ import (
 	"os"
 	"path/filepath"
 	"slices"
-	"strings"
 	"testing"
 	"time"
 
@@ -145,13 +144,13 @@ func TestANewAutomationStartsOnItsOwnNamedDesktopWithoutTakingFocus(t *testing.T
 	if err := os.MkdirAll(dir, 0o755); err != nil {
 		t.Fatal(err)
 	}
-	spec := fmt.Sprintf("api_version: attn.dev/automations/v1alpha1\nid: nightly\nname: Nightly check\ntrigger: {type: manual}\nprompt: Check locally.\nlaunch: {driver: claude}\nlocation: {type: directory, path: %q}\n", dir)
+	spec := fmt.Sprintf("api_version: attn.dev/automations/v1alpha1\nname: Nightly check\ntrigger: {type: manual}\nprompt: Check locally.\nlaunch: {driver: claude}\nlocation: {type: directory, path: %q}\n", dir)
 	defined := applyAutomation(t, cli, spec)
 	own := protocol.Deref(defined.LaunchDesktop.DesktopID)
 	if desktop, exists := viewProfile(t, w, profile).desktops[own]; !exists || desktop.Name != "Nightly check" || desktop.ShortcutSlot != nil || protocol.Deref(defined.LaunchDesktop.Label) != "Nightly check (no ⌘ number)" {
 		t.Fatalf("default desktop %+v for %+v", desktop, defined.LaunchDesktop)
 	}
-	run, err := cli.AutomationRun("nightly", "first", "")
+	run, err := cli.AutomationRun(defined.ID, "first", "")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -161,13 +160,6 @@ func TestANewAutomationStartsOnItsOwnNamedDesktopWithoutTakingFocus(t *testing.T
 	arrival := testworld.Await(app, protocol.EventBackgroundLaunch, func(event protocol.BackgroundLaunchMessage) bool { return event.SessionID == session })
 	if arrival.Name != "Nightly check" || arrival.RequestedBy != "automation" || arrival.DesktopLabel != "Nightly check (no ⌘ number)" {
 		t.Fatalf("automation arrival: %+v", arrival)
-	}
-	if err := cli.AutomationDelete("nightly"); err != nil {
-		t.Fatal(err)
-	}
-	restored := applyAutomation(t, cli, spec)
-	if again := protocol.Deref(restored.LaunchDesktop.DesktopID); again == "" || again == own {
-		t.Fatalf("a restored automation reused or lacks a desktop: %+v", restored.LaunchDesktop)
 	}
 }
 
@@ -238,7 +230,7 @@ func TestUpgradingAnInstallWithOnlyAutomationsRequiresLaunchReviewAndPlacesExist
 	if err := os.MkdirAll(dir, 0o755); err != nil {
 		t.Fatal(err)
 	}
-	_, canonical, err := automation.ParseDefinitionYAML([]byte(fmt.Sprintf("api_version: attn.dev/automations/v1alpha1\nid: check\nname: Local check\ntrigger: {type: manual}\nprompt: Check locally.\nlaunch: {driver: claude}\nlocation: {type: directory, path: %q}\n", dir)))
+	_, canonical, err := automation.ParseDefinitionYAML([]byte(fmt.Sprintf("api_version: attn.dev/automations/v1alpha1\nname: Local check\ntrigger: {type: manual}\nprompt: Check locally.\nlaunch: {driver: claude}\nlocation: {type: directory, path: %q}\n", dir)))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -250,7 +242,7 @@ func TestUpgradingAnInstallWithOnlyAutomationsRequiresLaunchReviewAndPlacesExist
 	if err := db.QueryRow(`SELECT id FROM profiles WHERE deleted_at = '' LIMIT 1`).Scan(&profileID); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := db.Exec(`INSERT INTO automation_definitions(id, name, enabled, revision, spec_json, created_at, updated_at, profile_id) VALUES ('check', 'Local check', 1, 1, ?, 'now', 'now', ?);
+	if _, err := db.Exec(`INSERT INTO automation_definitions(id, name, enabled, revision, spec_json, created_at, updated_at, profile_id) VALUES (1, 'Local check', 1, 1, json_set(?, '$.id', 1), 'now', 'now', ?);
  INSERT INTO sessions(id, label, directory, state_since, state_updated_at, last_seen, profile_id, agent, launch_intent) VALUES ('existing', 'Existing agent', '/fixture', 'now', 'now', 'now', ?, 'shell', '{}');`, string(canonical), profileID, profileID); err != nil {
 		t.Fatal(err)
 	}
@@ -264,11 +256,11 @@ func TestUpgradingAnInstallWithOnlyAutomationsRequiresLaunchReviewAndPlacesExist
 		t.Fatalf("automation-only migration = %+v", result)
 	}
 	item := result.State.LaunchItems[0]
-	if item.Kind != protocol.LaunchDesktopKindAutomation || item.ItemID != "check" || item.Confirmed || protocol.Deref(item.Setting.Label) != "Local check (new)" {
+	if item.Kind != protocol.LaunchDesktopKindAutomation || item.ItemID != "1" || item.Confirmed || protocol.Deref(item.Setting.Label) != "Local check (new)" {
 		t.Fatalf("existing automation = %+v", item)
 	}
 	current, active := placedPane(t, w, "existing")
-	run, err := w.Client().AutomationRun("check", "during-review", "")
+	run, err := w.Client().AutomationRun(1, "during-review", "")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -279,7 +271,7 @@ func TestUpgradingAnInstallWithOnlyAutomationsRequiresLaunchReviewAndPlacesExist
 	if !finished.Success || finished.State.Phase != protocol.MigrationPhaseComplete {
 		t.Fatalf("accept suggestions = %+v", finished)
 	}
-	got := readLaunchSetting(app, "automation", "check")
+	got := readLaunchSetting(app, "automation", "1")
 	if !got.Confirmed || protocol.Deref(got.Setting.Label) != "Local check (no ⌘ number)" {
 		t.Fatalf("finish did not give the automation its desktop: %+v", got)
 	}
@@ -410,46 +402,6 @@ func TestALaunchWhoseDesktopWasRemovedLandsOnTheCurrentDesktopWithoutFocus(t *te
 	})
 }
 
-func TestMovingAnAgentBetweenProfilesPlacesItWithoutTakingFocus(t *testing.T) {
-	w := &world{World: prepareWorld(t), terms: testworld.NewTerminals()}
-	w.start()
-	app := w.App()
-	source := app.SelectedProfile()
-	moving := w.Spawn(app, fakeagent.Claude, w.Path("moving"))
-	destination := createProfile(app, "Destination")
-	app = w.AppOn(destination.ID)
-	w.Spawn(app, fakeagent.Claude, w.Path("destination-anchor"))
-	before := viewProfile(t, w, destination.ID)
-	current := before.profile.CurrentDesktopID
-	active := before.desktops[current].ActivePaneID
-	observer := w.AppOn(destination.ID)
-	result := mustProfileRequest(app, protocol.SessionMoveMessage{Cmd: protocol.CmdSessionMove, RequestID: "move", SessionID: moving, ExpectedProfileID: source, DestinationProfileID: destination.ID}, "move")
-	var returned bool
-	for _, desktop := range result.Desktops {
-		for _, pane := range desktop.Panes {
-			if pane.SessionID == moving {
-				returned = true
-			}
-		}
-	}
-	if !returned {
-		t.Fatal("move result omitted destination placement")
-	}
-	testworld.Await(observer, protocol.EventProfileArrangementChanged, func(r protocol.ProfileArrangementChangedMessage) bool {
-		for _, desktop := range r.Desktops {
-			for _, pane := range desktop.Panes {
-				if pane.SessionID == moving {
-					return true
-				}
-			}
-		}
-		return false
-	})
-	assertBackgroundPlacement(t, w, destination.ID, moving, current, current, active)
-	w.restart()
-	assertBackgroundPlacement(t, w, destination.ID, moving, current, current, active)
-}
-
 func TestAdoptingAnOrphanRuntimePlacesItOnTheCurrentDesktop(t *testing.T) {
 	w := &world{World: prepareWorld(t), terms: testworld.NewTerminals()}
 	w.start()
@@ -476,7 +428,7 @@ func TestFinishingMigrationWithoutLaunchItemsDoesNotReopenForALaterAutomation(t 
 	if err := os.MkdirAll(directory, 0o755); err != nil {
 		t.Fatal(err)
 	}
-	definition := fmt.Sprintf("api_version: attn.dev/automations/v1alpha1\nid: check\nname: Local check\ntrigger: {type: manual}\nprompt: Check locally.\nlaunch: {driver: claude}\nlocation: {type: directory, path: %q}\n", directory)
+	definition := fmt.Sprintf("api_version: attn.dev/automations/v1alpha1\nname: Local check\ntrigger: {type: manual}\nprompt: Check locally.\nlaunch: {driver: claude}\nlocation: {type: directory, path: %q}\n", directory)
 	_, canonical, err := automation.ParseDefinitionYAML([]byte(definition))
 	if err != nil {
 		t.Fatal(err)
@@ -499,7 +451,7 @@ func TestFinishingMigrationWithoutLaunchItemsDoesNotReopenForALaterAutomation(t 
 		t.Fatal(err)
 	}
 	if _, err := db.Exec(`UPDATE profile_migration SET phase = 'placement_required', imported_groups = ?, draft = ? WHERE id = 1;
- INSERT INTO automation_definitions(id,name,enabled,revision,spec_json,created_at,updated_at,profile_id) VALUES ('check','Local check',1,1,?,'now','now',?);`, imported, plan, string(canonical), profileID); err != nil {
+ INSERT INTO automation_definitions(id,name,enabled,revision,spec_json,created_at,updated_at,profile_id) VALUES (1,'Local check',1,1,json_set(?, '$.id', 1),'now','now',?);`, imported, plan, string(canonical), profileID); err != nil {
 		t.Fatal(err)
 	}
 	if err := db.Close(); err != nil {
@@ -518,7 +470,7 @@ func TestFinishingMigrationWithoutLaunchItemsDoesNotReopenForALaterAutomation(t 
 	if state.Phase != protocol.MigrationPhasePlacementRequired {
 		t.Fatalf("initial phase: %s", state.Phase)
 	}
-	if err := cli.AutomationDelete("check"); err != nil {
+	if err := cli.AutomationDelete(1); err != nil {
 		t.Fatal(err)
 	}
 	state = read(app)
@@ -526,7 +478,7 @@ func TestFinishingMigrationWithoutLaunchItemsDoesNotReopenForALaterAutomation(t 
 	if !done.Success || done.State == nil || done.State.Phase != protocol.MigrationPhaseComplete {
 		t.Fatalf("finish: %+v", done)
 	}
-	applyAutomation(t, cli, strings.Replace(definition, "id: check", "id: later", 1))
+	applyAutomation(t, cli, definition)
 	w.restart()
 	if got := read(w.App()); got.Phase != protocol.MigrationPhaseComplete {
 		t.Fatalf("later automation reopened migration: %+v", got)

@@ -300,7 +300,7 @@ func TestMigration75DefaultsExistingRowsToEmptySpecYAML(t *testing.T) {
 	now := time.Now().UTC().Format(time.RFC3339)
 	if _, err := db.Exec(
 		`INSERT INTO automation_definitions (id, name, enabled, revision, spec_json, created_at, updated_at, deleted_at) VALUES (?, ?, 1, 1, ?, ?, ?, '')`,
-		"legacy-def", "Legacy", `{"id":"legacy-def","name":"Legacy"}`, now, now,
+		1, "Legacy", `{"id":1,"name":"Legacy"}`, now, now,
 	); err != nil {
 		db.Close()
 		t.Fatalf("seed legacy row: %v", err)
@@ -356,21 +356,21 @@ func TestMigration76ClearsAutomationStateAndDropsSpecYAML(t *testing.T) {
 
 	if _, err := db.Exec(
 		`INSERT INTO automation_definitions (id, name, enabled, revision, spec_json, spec_yaml, created_at, updated_at, deleted_at) VALUES (?, ?, 1, 1, ?, ?, ?, ?, '')`,
-		"legacy-def", "Legacy", `{"id":"legacy-def","name":"Legacy"}`, "id: legacy-def\nname: Legacy\n", now, now,
+		1, "Legacy", `{"id":1,"name":"Legacy"}`, "id: legacy-def\nname: Legacy\n", now, now,
 	); err != nil {
 		db.Close()
 		t.Fatalf("seed automation_definitions: %v", err)
 	}
 	if _, err := db.Exec(
 		`INSERT INTO automation_occurrences (id, definition_id, provider, occurrence_key, observed_at, payload_json, created_at) VALUES (?, ?, 'manual', 'request-1', ?, '{}', ?)`,
-		"occ-1", "legacy-def", now, now,
+		"occ-1", 1, now, now,
 	); err != nil {
 		db.Close()
 		t.Fatalf("seed automation_occurrences: %v", err)
 	}
 	if _, err := db.Exec(
 		`INSERT INTO automation_runs (id, definition_id, occurrence_id, definition_revision, snapshot_json, state, ticket_id, session_id, created_at, updated_at) VALUES (?, ?, ?, 1, '{}', 'delivered', ?, 'session-1', ?, ?)`,
-		"run-1", "legacy-def", "occ-1", "legacy-ticket", now, now,
+		"run-1", 1, "occ-1", "legacy-ticket", now, now,
 	); err != nil {
 		db.Close()
 		t.Fatalf("seed automation_runs: %v", err)
@@ -384,21 +384,21 @@ func TestMigration76ClearsAutomationStateAndDropsSpecYAML(t *testing.T) {
 	}
 	if _, err := db.Exec(
 		`INSERT INTO automation_continuity_bindings (definition_id, continuity_key, ticket_id, session_id, created_at, updated_at) VALUES (?, 'fresh', ?, 'session-1', ?, ?)`,
-		"legacy-def", "legacy-ticket", now, now,
+		1, "legacy-ticket", now, now,
 	); err != nil {
 		db.Close()
 		t.Fatalf("seed automation_continuity_bindings: %v", err)
 	}
 	if _, err := db.Exec(
 		`INSERT INTO automation_review_request_edges (definition_id, subject_key, host, active, cycle, accepted_cycle, last_observed_at, updated_at) VALUES (?, 'subject-1', 'github.com', 1, 1, 1, ?, ?)`,
-		"legacy-def", now, now,
+		1, now, now,
 	); err != nil {
 		db.Close()
 		t.Fatalf("seed automation_review_request_edges: %v", err)
 	}
 	if _, err := db.Exec(
 		`INSERT INTO automation_provider_cursors (definition_id, provider, scope, observed_at) VALUES (?, 'github', 'repo', ?)`,
-		"legacy-def", now,
+		1, now,
 	); err != nil {
 		db.Close()
 		t.Fatalf("seed automation_provider_cursors: %v", err)
@@ -528,21 +528,21 @@ func TestMigration77ClearsRunsBindingsAndEdges(t *testing.T) {
 
 	if _, err := db.Exec(
 		`INSERT INTO automation_definitions (id, name, enabled, revision, spec_json, created_at, updated_at, deleted_at) VALUES (?, ?, 1, 1, ?, ?, ?, '')`,
-		"legacy-def", "Legacy", `{"id":"legacy-def","name":"Legacy"}`, now, now,
+		1, "Legacy", `{"id":1,"name":"Legacy"}`, now, now,
 	); err != nil {
 		db.Close()
 		t.Fatalf("seed automation_definitions: %v", err)
 	}
 	if _, err := db.Exec(
 		`INSERT INTO automation_occurrences (id, definition_id, provider, occurrence_key, observed_at, payload_json, created_at) VALUES (?, ?, 'manual', 'request-1', ?, '{}', ?)`,
-		"occ-1", "legacy-def", now, now,
+		"occ-1", 1, now, now,
 	); err != nil {
 		db.Close()
 		t.Fatalf("seed automation_occurrences: %v", err)
 	}
 	if _, err := db.Exec(
 		`INSERT INTO automation_runs (id, definition_id, occurrence_id, definition_revision, snapshot_json, state, ticket_id, session_id, workspace_id, pane_id, created_at, updated_at) VALUES (?, ?, ?, 1, '{}', 'delivered', ?, 'session-1', 'workspace-1', 'pane-1', ?, ?)`,
-		"run-1", "legacy-def", "occ-1", "legacy-ticket", now, now,
+		"run-1", 1, "occ-1", "legacy-ticket", now, now,
 	); err != nil {
 		db.Close()
 		t.Fatalf("seed automation_runs: %v", err)
@@ -556,21 +556,21 @@ func TestMigration77ClearsRunsBindingsAndEdges(t *testing.T) {
 	}
 	if _, err := db.Exec(
 		`INSERT INTO automation_continuity_bindings (definition_id, continuity_key, ticket_id, session_id, workspace_id, pane_id, created_at, updated_at) VALUES (?, 'fresh', ?, 'session-1', 'workspace-1', 'pane-1', ?, ?)`,
-		"legacy-def", "legacy-ticket", now, now,
+		1, "legacy-ticket", now, now,
 	); err != nil {
 		db.Close()
 		t.Fatalf("seed automation_continuity_bindings: %v", err)
 	}
 	if _, err := db.Exec(
 		`INSERT INTO automation_review_request_edges (definition_id, subject_key, host, active, cycle, accepted_cycle, last_observed_at, updated_at) VALUES (?, 'subject-1', 'github.com', 1, 1, 1, ?, ?)`,
-		"legacy-def", now, now,
+		1, now, now,
 	); err != nil {
 		db.Close()
 		t.Fatalf("seed automation_review_request_edges: %v", err)
 	}
 	if _, err := db.Exec(
 		`INSERT INTO automation_provider_cursors (definition_id, provider, scope, observed_at) VALUES (?, 'github', 'repo', ?)`,
-		"legacy-def", now,
+		1, now,
 	); err != nil {
 		db.Close()
 		t.Fatalf("seed automation_provider_cursors: %v", err)
@@ -1524,7 +1524,8 @@ func TestMigration145AdoptsGardenDispatchForAutomationContinuity(t *testing.T) {
 	defer s.Close()
 
 	now := time.Date(2026, 9, 8, 10, 0, 0, 0, time.UTC)
-	def, err := s.UpsertAutomationDefinition("review", "Review", `{}`, "", now)
+	profile, _ := s.MostRecentlyUsedProfile()
+	def, err := s.UpsertAutomationDefinition(0, "Review", `{}`, profile.ID, now)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -1549,7 +1550,7 @@ func TestMigration145AdoptsGardenDispatchForAutomationContinuity(t *testing.T) {
 	}
 	if _, err := s.db.Exec(`
 		UPDATE automation_runs SET seed_id='',ticket_id='legacy-ticket' WHERE id='run-1';
-		UPDATE automation_continuity_bindings SET seed_id='',origin_run_id='',ticket_id='legacy-ticket' WHERE definition_id='review';
+		UPDATE automation_continuity_bindings SET seed_id='',origin_run_id='',ticket_id='legacy-ticket' WHERE definition_id=1;
 		DELETE FROM schema_migrations WHERE version>=145;
 	`); err != nil {
 		t.Fatalf("rewind migration 145: %v", err)

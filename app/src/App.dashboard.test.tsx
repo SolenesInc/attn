@@ -58,7 +58,7 @@ describe('App dashboard', () => {
           label: 'feed-nexus-web#101 · gpt-5.6-sol',
           automation: {
             run_id: 'run-1',
-            definition_id: 'review-sol',
+            definition_id: 1,
             definition_name: 'Requested PR review - GPT Sol medium',
             trigger_type: 'github_review_requested',
             pull_request: {
@@ -150,7 +150,7 @@ describe('App dashboard', () => {
     });
 
     it('keeps automation and crew sessions out of the turns unless crew joins the queue', async () => {
-      const automation = { run_id: 'run-1', definition_id: 'review-sol', definition_name: 'Review with Sol', trigger_type: 'schedule' };
+      const automation = { run_id: 'run-1', definition_id: 1, definition_name: 'Review with Sol', trigger_type: 'schedule' };
       const sessions = [
         agent('automation-owed', { state: 'waiting_input', turn_owed: true, turn_opened_at: '2026-07-29T08:00:00Z', automation }),
         agent('automation-settled', { state: 'working', automation: { ...automation, run_id: 'run-2' } }),

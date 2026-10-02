@@ -447,3 +447,32 @@ func reopenWorktree(t *testing.T, repo, branch string) string {
 	runGit(t, repo, "worktree", "add", "-q", "-b", branch, worktree)
 	return worktree
 }
+
+func TestADeletedProfilesSessionOffersNoReopenOrFreshStart(t *testing.T) {
+	w := newWorld(t, fakeagent.Codex)
+	app, cli := w.App(), w.Client()
+	side := createProfile(app, "Archived")
+	app = w.AppOn(side.ID)
+	session := w.Spawn(app, fakeagent.Codex, w.Path("archived"))
+	w.Launched(session)
+	closeSession(t, cli, session, "finished")
+	awaitClosed(app, session)
+	for _, current := range w.AppOn(side.ID).Initial.Profiles {
+		if current.ID == side.ID {
+			side = current
+		}
+	}
+	deleted := profileRequest(app, protocol.ProfileDeleteMessage{Cmd: protocol.CmdProfileDelete, RequestID: "archive-profile", ProfileID: side.ID, ExpectedRevision: side.Revision}, "archive-profile")
+	if !deleted.Success {
+		t.Fatalf("delete empty profile: %+v", deleted)
+	}
+	verdict := reopenVerdict(t, cli, session)
+	if verdict.Reopenable || len(verdict.Actions) != 0 || verdict.ProfileID != side.ID || !verdict.ProfileDeleted {
+		t.Fatalf("deleted profile verdict: %+v", verdict)
+	}
+	for _, action := range []string{"reopen", "start_fresh_same_place", "start_fresh_elsewhere"} {
+		if _, err := cli.SessionReopen(client.SessionReopenOptions{SessionID: session, Action: action, Directory: w.Path("fresh")}); err == nil {
+			t.Fatalf("deleted profile accepted %s", action)
+		}
+	}
+}

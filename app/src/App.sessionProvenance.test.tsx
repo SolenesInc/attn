@@ -10,7 +10,7 @@ type Automation = NonNullable<DaemonSession['automation']>;
 
 const reviewRun: Automation = {
   run_id: 'run-1',
-  definition_id: 'requested-pr-review-sol-medium',
+  definition_id: 1,
   definition_name: 'Requested PR review - GPT Sol medium',
   trigger_type: 'github_review_requested',
   pull_request: {

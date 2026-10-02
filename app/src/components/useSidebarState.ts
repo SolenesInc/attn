@@ -89,7 +89,7 @@ export function useSidebarState({
 
   const [agentFilter, setAgentFilter] = useState('');
   if (!agentListOpen && agentFilter) setAgentFilter('');
-  const [expandedAutomationGroups, setExpandedAutomationGroups] = useState<Set<string>>(
+  const [expandedAutomationGroups, setExpandedAutomationGroups] = useState<Set<number>>(
     () => new Set(),
   );
   const [renameTarget, setRenameTarget] = useState<{
@@ -183,7 +183,7 @@ export function useSidebarState({
   const rowDelegation = (session: LocalSession) => ({
     delegates: delegates.get(session.id) ?? [],
   });
-  const toggleAutomationGroup = (definitionId: string) => {
+  const toggleAutomationGroup = (definitionId: number) => {
     setExpandedAutomationGroups((current) => {
       const next = new Set(current);
       if (next.has(definitionId)) {

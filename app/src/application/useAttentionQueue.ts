@@ -72,7 +72,7 @@ export function useAttentionQueue({
       state: UISessionState;
       turnOwed?: boolean;
       crewMember?: string;
-      automation?: { definition_id: string };
+      automation?: { definition_id: number };
     }) =>
       queueModeEnabled
         ? sessionParticipatesInQueue(session, crewQueueEnabled) && Boolean(session.turnOwed)

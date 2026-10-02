@@ -49,7 +49,7 @@ function parseArgs(argv) {
 
 
 function run(binary, args, env, options = {}) {
-  return execFileSync(binary, args, {
+  return execFileSync(binary, args.map(String), {
     encoding: 'utf8',
     env,
     stdio: options.stdio || ['ignore', 'pipe', 'pipe'],
@@ -82,7 +82,7 @@ function sqliteRow(dbPath, sql) {
 }
 
 function sqlEscape(value) {
-  return value.replaceAll("'", "''");
+  return String(value).replaceAll("'", "''");
 }
 
 async function waitForDaemonReady(binary, daemonEnv) {
@@ -127,8 +127,7 @@ const API_VERSION = 'attn.dev/automations/v1alpha1';
 // (errEnabledManagedOutsideSpec).
 function editRebindDefinitionYAML({ id, locationPath, executable, prompt }) {
   return `api_version: ${API_VERSION}
-id: ${id}
-name: Slice 7 packaged edit-rebind proof
+${id ? `id: ${id}\n` : ''}name: Slice 7 packaged edit-rebind proof
 trigger:
   type: scheduled
   schedule:
@@ -149,18 +148,17 @@ location:
 `;
 }
 
-function deleteResurrectDefinitionYAML({ id, locationPath, executable }) {
+function deleteDefinitionYAML({ id, locationPath, executable }) {
   return `api_version: ${API_VERSION}
-id: ${id}
-name: Slice 7 packaged delete-resurrect proof
+${id ? `id: ${id}\n` : ''}name: Slice 7 packaged deletion proof
 trigger:
   type: manual
 prompt: |
-  Slice 7 packaged delete-resurrect proof. Do nothing; this executable is a test double.
+  Slice 7 packaged deletion proof. Do nothing; this executable is a test double.
 launch:
   driver: codex
   executable: ${JSON.stringify(executable)}
-  model: slice7-delete-resurrect-probe
+  model: slice7-deletion-probe
   effort: high
 location:
   type: directory
@@ -172,8 +170,7 @@ const CLEANUP_IDENTITY = 'mock.github.local/owner/repo';
 
 function cleanupLifecycleDefinitionYAML({ id, executable, repoPath, prompt }) {
   return `api_version: ${API_VERSION}
-id: ${id}
-name: Slice 7 packaged cleanup-dirty-safe proof
+${id ? `id: ${id}\n` : ''}name: Slice 7 packaged cleanup-dirty-safe proof
 trigger:
   type: github_review_requested
   repositories:
@@ -327,12 +324,11 @@ async function main() {
   const client = new UiAutomationClient(options);
   const observer = new DaemonObserver({ wsUrl: options.wsUrl });
 
-  const suffix = Date.now().toString(36);
-  const editID = `automation-lifecycle-edit-${suffix}`;
-  const deleteID = `automation-lifecycle-delete-${suffix}`;
-  const cleanupID = `automation-lifecycle-cleanup-${suffix}`;
+  let editID = 0;
+  let deleteID = 0;
+  let cleanupID = 0;
   const editDefinitionFile = path.join(runner.sessionDir, 'edit-rebind.yml');
-  const deleteDefinitionFile = path.join(runner.sessionDir, 'delete-resurrect.yml');
+  const deleteDefinitionFile = path.join(runner.sessionDir, 'deletion.yml');
   const cleanupDefinitionFile = path.join(runner.sessionDir, 'cleanup-dirty-safe.yml');
 
   const PROMPT_P1 = 'Edit-rebind proof P1: initial contract.';
@@ -354,7 +350,7 @@ async function main() {
   try {
     await runner.step('setup_fixtures', async () => {
       editFixture = fs.realpathSync(fs.mkdtempSync(path.join(runner.sessionDir, 'edit-rebind-')));
-      deleteFixture = fs.realpathSync(fs.mkdtempSync(path.join(runner.sessionDir, 'delete-resurrect-')));
+      deleteFixture = fs.realpathSync(fs.mkdtempSync(path.join(runner.sessionDir, 'deletion-')));
       cleanupFixture = createCleanupFixture(runner.sessionDir);
       probe = createCodexProbe(runner.sessionDir);
       mock = await startMock(cleanupFixture.sha);
@@ -383,6 +379,7 @@ async function main() {
     await runner.step('leg1_edit_rebind', async () => {
       fs.writeFileSync(editDefinitionFile, editRebindDefinitionYAML({ id: editID, locationPath: editFixture, executable: probe.executable, prompt: PROMPT_P1 }));
       const created = runJSON(binary, ['automation', 'apply', '--file', editDefinitionFile], daemonEnv);
+      editID = created.id;
       editApplied = true;
       runner.assert(created && created.enabled === true, 'sanity: a brand-new definition is inserted enabled by default', created);
       const appliedAt = Date.now();
@@ -450,16 +447,16 @@ async function main() {
     });
 
     let deleteRunID = '';
-    await runner.step('leg2_delete_resurrect', async () => {
-      fs.writeFileSync(deleteDefinitionFile, deleteResurrectDefinitionYAML({ id: deleteID, locationPath: deleteFixture, executable: probe.executable }));
-      runJSON(binary, ['automation', 'apply', '--file', deleteDefinitionFile], daemonEnv);
+    await runner.step('leg2_deleted_ids_stay_deleted', async () => {
+      fs.writeFileSync(deleteDefinitionFile, deleteDefinitionYAML({ id: deleteID, locationPath: deleteFixture, executable: probe.executable }));
+      deleteID = runJSON(binary, ['automation', 'apply', '--file', deleteDefinitionFile], daemonEnv).id;
       deleteApplied = true;
 
       await client.request('automations_open_panel');
       await poll(async () => {
         const current = await client.request('automations_get_state');
         return findDefinitionRow(current, deleteID) ? current : null;
-      }, `delete-resurrect definition ${deleteID} to appear in the panel`, PANEL_TIMEOUT_MS);
+      }, `deletion definition ${deleteID} to appear in the panel`, PANEL_TIMEOUT_MS);
 
       await client.request('automations_select_definition', { definitionId: deleteID });
       await client.request('automations_run_now', { definitionId: deleteID });
@@ -467,7 +464,7 @@ async function main() {
         const current = await client.request('automations_get_state');
         const runs = (current?.runs || []).filter((r) => r.state === 'delivered');
         return runs.length >= 1 ? runs[0] : null;
-      }, 'delete-resurrect run-now to reach delivered', RUN_DELIVERED_TIMEOUT_MS);
+      }, 'deletion run-now to reach delivered', RUN_DELIVERED_TIMEOUT_MS);
       deleteRunID = delivered.id;
 
       run(binary, ['automation', 'delete', deleteID], daemonEnv);
@@ -486,29 +483,24 @@ async function main() {
       const listedAfterDelete = runJSON(binary, ['automation', 'list'], daemonEnv) || [];
       runner.assert(!listedAfterDelete.some((definition) => definition.id === deleteID), 'the CLI no longer lists the deleted definition', { listedAfterDelete });
 
-      fs.writeFileSync(deleteDefinitionFile, deleteResurrectDefinitionYAML({ id: deleteID, locationPath: deleteFixture, executable: probe.executable }));
-      runJSON(binary, ['automation', 'apply', '--file', deleteDefinitionFile], daemonEnv);
-
-      await poll(async () => {
-        const current = await client.request('automations_get_state');
-        return findDefinitionRow(current, deleteID) ? current : null;
-      }, 'resurrected definition to reappear in the panel', PANEL_TIMEOUT_MS);
-
-      const runsAfterResurrect = runJSON(binary, ['automation', 'runs', deleteID], daemonEnv) || [];
-      runner.assert(
-        runsAfterResurrect.some((row) => row.id === deleteRunID),
-        'old run history survives resurrection',
-        runsAfterResurrect,
-      );
-      const listedAfterResurrect = runJSON(binary, ['automation', 'list'], daemonEnv) || [];
-      runner.assert(listedAfterResurrect.some((definition) => definition.id === deleteID), 'the CLI lists the resurrected definition again', { listedAfterResurrect });
-
+      fs.writeFileSync(deleteDefinitionFile, deleteDefinitionYAML({ id: deleteID, locationPath: deleteFixture, executable: probe.executable }));
+      let refusal = '';
+      try { runJSON(binary, ['automation', 'apply', '--file', deleteDefinitionFile], daemonEnv); }
+      catch (error) { refusal = String(error.stderr || error.message); }
+      runner.assert(refusal.includes('deleted'), 'applying the deleted ID is refused', refusal);
+      const listed = runJSON(binary, ['automation', 'list'], daemonEnv) || [];
+      runner.assert(!listed.some((row) => row.id === deleteID), 'the deleted definition stays deleted', listed);
+      fs.writeFileSync(deleteDefinitionFile, deleteDefinitionYAML({ id: 0, locationPath: deleteFixture, executable: probe.executable }));
+      const replacement = runJSON(binary, ['automation', 'apply', '--file', deleteDefinitionFile], daemonEnv);
+      runner.assert(replacement.id > deleteID, 'a new definition gets a different number', replacement);
+      deleteID = replacement.id;
       disableDefinition(binary, deleteID, daemonEnv);
+
     });
 
     await runner.step('leg3_cleanup_dirty_safe', async () => {
       fs.writeFileSync(cleanupDefinitionFile, cleanupLifecycleDefinitionYAML({ id: cleanupID, executable: probe.executable, repoPath: cleanupFixture.repo, prompt: CLEANUP_PROMPT_V1 }));
-      runJSON(binary, ['automation', 'apply', '--file', cleanupDefinitionFile], daemonEnv);
+      cleanupID = runJSON(binary, ['automation', 'apply', '--file', cleanupDefinitionFile], daemonEnv).id;
       cleanupApplied = true;
 
       await wsRequest(options.wsUrl, { cmd: 'refresh_prs' }, 'refresh_prs_result');

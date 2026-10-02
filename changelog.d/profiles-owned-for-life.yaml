@@ -1,0 +1,3 @@
+kind: changed
+area: profiles
+change: Agents, crew, automations and seeds keep their original profile for life. Deleting a profile requires cleaning up its contents first; a deleted profile's sessions cannot be reopened. Automations receive numeric IDs automatically, and deleted IDs cannot be reused.

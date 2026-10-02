@@ -196,10 +196,10 @@ export function useDesktopNavigation(showNotice: ShowNotice) {
   );
 
   const deleteProfile = useCallback(
-    async (profileId: string, destinationProfileId: string): Promise<void> => {
+    async (profileId: string): Promise<void> => {
       const profile = useProfilesStore.getState().profiles.find((entry) => entry.id === profileId);
       if (!profile) return;
-      await sendProfileDelete(profileId, profile.revision, destinationProfileId);
+      await sendProfileDelete(profileId, profile.revision);
     },
     [sendProfileDelete],
   );

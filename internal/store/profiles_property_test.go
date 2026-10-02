@@ -130,14 +130,6 @@ func TestArrangementInvariantsHoldUnderRandomOperations(t *testing.T) {
 				_, err = s.SetCurrentDesktop(profile.ID, desktop.ID)
 				refusal(err)
 			},
-			"change_profile": func(t *rapid.T) {
-				sessionID := rapid.SampledFrom(sessionIDs).Draw(t, "session")
-				seen, _ := s.SessionProfileID(sessionID)
-				expected := rapid.SampledFrom([]string{seen, profile.ID, other.ID}).Draw(t, "expected")
-				destination := rapid.SampledFrom([]string{profile.ID, other.ID}).Draw(t, "destination")
-				_, err := s.MoveSessionToProfile(SessionProfileMoveRequest{SessionID: sessionID, ExpectedProfileID: expected, DestinationProfileID: destination})
-				refusal(err)
-			},
 			"": func(t *rapid.T) {
 				current, desktops, err := s.ProfileArrangement(profile.ID)
 				if err != nil {

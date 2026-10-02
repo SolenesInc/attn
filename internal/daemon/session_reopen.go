@@ -117,28 +117,6 @@ func (d *Daemon) planReopenProfile(verdict *sessionReopenVerdict) {
 	verdict.ProfileDeleted = err != nil || profile.Deleted()
 }
 
-type profileDestination struct {
-	requested           string
-	whenRecordedDeleted string
-}
-
-func (v *sessionReopenVerdict) destinationProfile(destination profileDestination) (string, error) {
-	requested := strings.TrimSpace(destination.requested)
-	if requested == "" && v.ProfileDeleted {
-		requested = strings.TrimSpace(destination.whenRecordedDeleted)
-	}
-	switch {
-	case v.ProfileDeleted && requested == "":
-		return "", fmt.Errorf("session %s belonged to profile %q, which is gone; name the profile to reopen it into (attn session reopen --profile <id>)", v.SessionID, v.ProfileID)
-	case v.ProfileDeleted:
-		return requested, nil
-	case requested != "" && requested != v.ProfileID:
-		return "", fmt.Errorf("session %s belongs to profile %s; it reopens there, and moves to %s only through a move", v.SessionID, v.ProfileID, requested)
-	default:
-		return v.ProfileID, nil
-	}
-}
-
 func decideReopenHost(verdict *sessionReopenVerdict, endpoints []protocol.EndpointInfo) bool {
 	if strings.TrimSpace(verdict.Execution.HostKind) != garden.HostRemote {
 		return true
@@ -368,12 +346,12 @@ type sessionReopenOutcome struct {
 }
 
 func (d *Daemon) reopenSession(
-	sessionID string, action protocol.SessionReopenAction, directory string, destination profileDestination,
+	sessionID string, action protocol.SessionReopenAction, directory string,
 ) (*sessionReopenOutcome, error) {
 	var outcome *sessionReopenOutcome
 	err := d.worktreeMaintenance.ProtectFromAutomaticCleanup(context.Background(), func(protection foregroundCleanupProtection) error {
 		var reopenErr error
-		outcome, reopenErr = d.reopenSessionProtected(protection, sessionID, action, directory, destination)
+		outcome, reopenErr = d.reopenSessionProtected(protection, sessionID, action, directory)
 		return reopenErr
 	})
 	return outcome, err
@@ -381,7 +359,6 @@ func (d *Daemon) reopenSession(
 
 func (d *Daemon) reopenSessionProtected(
 	protection foregroundCleanupProtection, sessionID string, action protocol.SessionReopenAction, directory string,
-	destination profileDestination,
 ) (*sessionReopenOutcome, error) {
 	sessionID = strings.TrimSpace(sessionID)
 	if sessionID == "" {
@@ -416,7 +393,7 @@ func (d *Daemon) reopenSessionProtected(
 	if !verdict.offers(action) {
 		return nil, &reopenRefusedError{verdict: &verdict, action: action}
 	}
-	return d.performReopenLocked(protection, &verdict, action, directory, destination)
+	return d.performReopenLocked(protection, &verdict, action, directory)
 }
 
 type reopenRefusedError struct {
@@ -445,12 +422,8 @@ func (d *Daemon) performReopenLocked(
 	verdict *sessionReopenVerdict,
 	action protocol.SessionReopenAction,
 	directory string,
-	destination profileDestination,
 ) (*sessionReopenOutcome, error) {
-	profileID, err := verdict.destinationProfile(destination)
-	if err != nil {
-		return nil, err
-	}
+	profileID := verdict.ProfileID
 	if _, err := d.liveLaunchProfile(profileID); err != nil {
 		return nil, fmt.Errorf("reopen %s: %w", verdict.SessionID, err)
 	}
@@ -727,7 +700,7 @@ func (d *Daemon) reopenSessionRuntimeProtected(
 	d.waitForSessionTeardown(plan.SessionID)
 	d.store.ClearSessionIntentionalClose(plan.SessionID)
 
-	lifted, reopened, err := d.store.ReopenSession(plan.SessionID, profileID)
+	lifted, reopened, err := d.store.ReopenSession(plan.SessionID)
 	if err != nil {
 		return fail(err)
 	}
@@ -848,7 +821,7 @@ func (d *Daemon) handleSessionReopen(conn net.Conn, msg *protocol.SessionReopenM
 	if msg.Action != nil {
 		action = *msg.Action
 	}
-	outcome, err := d.reopenSession(msg.SessionID, action, protocol.Deref(msg.Directory), profileDestination{requested: protocol.Deref(msg.ProfileID)})
+	outcome, err := d.reopenSession(msg.SessionID, action, protocol.Deref(msg.Directory))
 	if err != nil {
 		d.sendError(conn, err.Error())
 		return

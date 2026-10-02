@@ -961,7 +961,7 @@ type AutomationApplyMessage struct {
 	DefinitionYaml string `json:"definition_yaml"`
 
 	// ExpectedID corresponds to the JSON schema field "expected_id".
-	ExpectedID *string `json:"expected_id,omitempty,omitzero"`
+	ExpectedID *int `json:"expected_id,omitempty,omitzero"`
 
 	// ExpectedRevision corresponds to the JSON schema field "expected_revision".
 	ExpectedRevision *int `json:"expected_revision,omitempty,omitzero"`
@@ -1011,7 +1011,7 @@ type AutomationCleanupMessage struct {
 	Cmd string `json:"cmd"`
 
 	// DefinitionID corresponds to the JSON schema field "definition_id".
-	DefinitionID string `json:"definition_id"`
+	DefinitionID int `json:"definition_id"`
 
 	// RequestID corresponds to the JSON schema field "request_id".
 	RequestID *string `json:"request_id,omitempty,omitzero"`
@@ -1045,7 +1045,7 @@ type AutomationDefinitionGetMessage struct {
 	Cmd string `json:"cmd"`
 
 	// DefinitionID corresponds to the JSON schema field "definition_id".
-	DefinitionID string `json:"definition_id"`
+	DefinitionID int `json:"definition_id"`
 
 	// RequestID corresponds to the JSON schema field "request_id".
 	RequestID *string `json:"request_id,omitempty,omitzero"`
@@ -1079,7 +1079,7 @@ type AutomationDefinitionSummary struct {
 	Enabled bool `json:"enabled"`
 
 	// ID corresponds to the JSON schema field "id".
-	ID string `json:"id"`
+	ID int `json:"id"`
 
 	// LastRun corresponds to the JSON schema field "last_run".
 	LastRun *AutomationRunSummary `json:"last_run,omitempty,omitzero"`
@@ -1142,7 +1142,7 @@ type AutomationDeleteMessage struct {
 	Cmd string `json:"cmd"`
 
 	// DefinitionID corresponds to the JSON schema field "definition_id".
-	DefinitionID string `json:"definition_id"`
+	DefinitionID int `json:"definition_id"`
 
 	// RequestID corresponds to the JSON schema field "request_id".
 	RequestID *string `json:"request_id,omitempty,omitzero"`
@@ -1164,7 +1164,7 @@ type AutomationDeleteResultMessage struct {
 
 type AutomationProvenance struct {
 	// DefinitionID corresponds to the JSON schema field "definition_id".
-	DefinitionID string `json:"definition_id"`
+	DefinitionID int `json:"definition_id"`
 
 	// DefinitionName corresponds to the JSON schema field "definition_name".
 	DefinitionName string `json:"definition_name"`
@@ -1184,7 +1184,7 @@ type AutomationRunMessage struct {
 	Cmd string `json:"cmd"`
 
 	// DefinitionID corresponds to the JSON schema field "definition_id".
-	DefinitionID string `json:"definition_id"`
+	DefinitionID int `json:"definition_id"`
 
 	// InputJson corresponds to the JSON schema field "input_json".
 	InputJson *string `json:"input_json,omitempty,omitzero"`
@@ -1224,7 +1224,7 @@ type AutomationRunSummary struct {
 	CreatedAt string `json:"created_at"`
 
 	// DefinitionID corresponds to the JSON schema field "definition_id".
-	DefinitionID string `json:"definition_id"`
+	DefinitionID int `json:"definition_id"`
 
 	// DeliveredAt corresponds to the JSON schema field "delivered_at".
 	DeliveredAt *string `json:"delivered_at,omitempty,omitzero"`
@@ -1256,7 +1256,7 @@ type AutomationRunsGetMessage struct {
 	Cmd string `json:"cmd"`
 
 	// DefinitionID corresponds to the JSON schema field "definition_id".
-	DefinitionID string `json:"definition_id"`
+	DefinitionID int `json:"definition_id"`
 
 	// RequestID corresponds to the JSON schema field "request_id".
 	RequestID *string `json:"request_id,omitempty,omitzero"`
@@ -1264,7 +1264,7 @@ type AutomationRunsGetMessage struct {
 
 type AutomationRunsResultMessage struct {
 	// DefinitionID corresponds to the JSON schema field "definition_id".
-	DefinitionID string `json:"definition_id"`
+	DefinitionID int `json:"definition_id"`
 
 	// Error corresponds to the JSON schema field "error".
 	Error *string `json:"error,omitempty,omitzero"`
@@ -1290,7 +1290,7 @@ type AutomationSetEnabledMessage struct {
 	Cmd string `json:"cmd"`
 
 	// DefinitionID corresponds to the JSON schema field "definition_id".
-	DefinitionID string `json:"definition_id"`
+	DefinitionID int `json:"definition_id"`
 
 	// Enabled corresponds to the JSON schema field "enabled".
 	Enabled bool `json:"enabled"`
@@ -1343,7 +1343,7 @@ type AutomationValidateResultMessage struct {
 
 type AutomationsChangedMessage struct {
 	// DefinitionIds corresponds to the JSON schema field "definition_ids".
-	DefinitionIds []string `json:"definition_ids"`
+	DefinitionIds []int `json:"definition_ids"`
 
 	// Event corresponds to the JSON schema field "event".
 	Event string `json:"event"`
@@ -7256,10 +7256,6 @@ type ProfileDeleteMessage struct {
 	// Cmd corresponds to the JSON schema field "cmd".
 	Cmd string `json:"cmd"`
 
-	// DestinationProfileID corresponds to the JSON schema field
-	// "destination_profile_id".
-	DestinationProfileID string `json:"destination_profile_id"`
-
 	// ExpectedRevision corresponds to the JSON schema field "expected_revision".
 	ExpectedRevision int `json:"expected_revision"`
 
@@ -7274,7 +7270,6 @@ type ProfileErrorCode string
 
 const ProfileErrorCodeAlreadyPlaced ProfileErrorCode = "already_placed"
 const ProfileErrorCodeCrossProfile ProfileErrorCode = "cross_profile"
-const ProfileErrorCodeDestinationSame ProfileErrorCode = "destination_same"
 const ProfileErrorCodeInternal ProfileErrorCode = "internal"
 const ProfileErrorCodeInvalid ProfileErrorCode = "invalid"
 const ProfileErrorCodeLastProfile ProfileErrorCode = "last_profile"
@@ -8865,9 +8860,6 @@ type SeedResumeMessage struct {
 	// Cmd corresponds to the JSON schema field "cmd".
 	Cmd string `json:"cmd"`
 
-	// ProfileID corresponds to the JSON schema field "profile_id".
-	ProfileID *string `json:"profile_id,omitempty,omitzero"`
-
 	// RequestID corresponds to the JSON schema field "request_id".
 	RequestID *string `json:"request_id,omitempty,omitzero"`
 
@@ -9951,24 +9943,6 @@ type SessionMessagesGetResultMessage struct {
 	Truncated bool `json:"truncated"`
 }
 
-type SessionMoveMessage struct {
-	// Cmd corresponds to the JSON schema field "cmd".
-	Cmd string `json:"cmd"`
-
-	// DestinationProfileID corresponds to the JSON schema field
-	// "destination_profile_id".
-	DestinationProfileID string `json:"destination_profile_id"`
-
-	// ExpectedProfileID corresponds to the JSON schema field "expected_profile_id".
-	ExpectedProfileID string `json:"expected_profile_id"`
-
-	// RequestID corresponds to the JSON schema field "request_id".
-	RequestID string `json:"request_id"`
-
-	// SessionID corresponds to the JSON schema field "session_id".
-	SessionID string `json:"session_id"`
-}
-
 type SessionPlacement struct {
 	// AnchorPaneID corresponds to the JSON schema field "anchor_pane_id".
 	AnchorPaneID *string `json:"anchor_pane_id,omitempty,omitzero"`
@@ -10100,9 +10074,6 @@ type SessionReopenMessage struct {
 
 	// Directory corresponds to the JSON schema field "directory".
 	Directory *string `json:"directory,omitempty,omitzero"`
-
-	// ProfileID corresponds to the JSON schema field "profile_id".
-	ProfileID *string `json:"profile_id,omitempty,omitzero"`
 
 	// RequestID corresponds to the JSON schema field "request_id".
 	RequestID *string `json:"request_id,omitempty,omitzero"`

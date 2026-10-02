@@ -19,7 +19,7 @@ func automationProvenance(record store.AutomationProvenanceRecord) (*protocol.Au
 	}
 	var spec automation.DefinitionSpec
 	if err := json.Unmarshal([]byte(record.DefinitionSpecJSON), &spec); err != nil {
-		return provenance, fmt.Errorf("parse automation definition %s provenance: %w", record.DefinitionID, err)
+		return provenance, fmt.Errorf("parse automation definition %d provenance: %w", record.DefinitionID, err)
 	}
 	provenance.TriggerType = spec.Trigger.Type
 	if record.Provider != "github" {

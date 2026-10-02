@@ -385,7 +385,6 @@ func TestARescopedClientGetsTheContentOfItsNewProfileOnly(t *testing.T) {
 
 	doomed := w.mustSend(w.client, map[string]any{"cmd": protocol.CmdProfileCreate, "name": "doomed"})
 	w.mustSend(w.client, map[string]any{"cmd": protocol.CmdProfileSelect, "profile_id": doomed.Profile.ID})
-	oldProfile := w.profileID
 	w.profileID, w.desktop = doomed.Profile.ID, doomed.Desktops[0]
 	w.dockMarkdown("tile-doomed", "# doomed profile")
 	drainClientPayloads(t, w.client)
@@ -394,12 +393,18 @@ func TestARescopedClientGetsTheContentOfItsNewProfileOnly(t *testing.T) {
 		t.Fatalf("after profile_select the client received %v, want only the new profile's tile", got)
 	}
 
+	refused := w.send(w.client, map[string]any{"cmd": protocol.CmdProfileDelete, "profile_id": doomed.Profile.ID, "expected_revision": doomed.Profile.Revision})
+	if refused.Success {
+		t.Fatal("deletion must refuse a profile with a tile")
+	}
+	w.apply(map[string]any{"cmd": protocol.CmdDesktopRemoveLeaf, "leaf_id": "tile-doomed"})
+
 	current, err := w.d.store.GetProfile(doomed.Profile.ID)
 	if err != nil {
 		t.Fatal(err)
 	}
 	w.mustSend(w.client, map[string]any{
-		"cmd": protocol.CmdProfileDelete, "profile_id": doomed.Profile.ID, "expected_revision": current.Revision, "destination_profile_id": oldProfile,
+		"cmd": protocol.CmdProfileDelete, "profile_id": doomed.Profile.ID, "expected_revision": current.Revision,
 	})
 	drainClientPayloads(t, w.client)
 	w.d.deliverDesktopTileContent()
