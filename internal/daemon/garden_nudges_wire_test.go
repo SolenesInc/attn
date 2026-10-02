@@ -312,3 +312,34 @@ func TestASeedBellWakesItsAsleepMemberTenderAndStaysWithTheMember(t *testing.T) 
 		gardenNudgeInboxIsEmpty(t, cli, day.id, "after its own note")
 	})
 }
+
+func TestAMemberTenderAndItsDayWatchKeepIndependentInboxItems(t *testing.T) {
+	inBubbleWithAgents(t, func(t *testing.T, w *world) {
+		app, day := crewDayInBubble(t, w, map[string]string{"crew.heartbeat_enabled": "false", "crew.autosleep_enabled": "false"})
+		cli := w.Client()
+		registerSessions(t, w, cli, "sender")
+		seed := plantSeedAs(t, cli, "sender", "review the deployment")
+		if _, err := cli.SeedTransition(day.id, seed, "tend", "", "", false, client.SeedTransitionOptions{}); err != nil {
+			t.Fatal(err)
+		}
+		gardenNudgeWatch(t, cli, day.id, seed, false)
+		app.TypeLine(day.id, "finish the current review")
+		gardenNudgeNote(t, cli, "sender", seed, "the deployment is ready", true)
+		mail := readInbox(t, cli, day.id, 0).Items
+		addresses := map[string]bool{}
+		for _, item := range mail {
+			addresses[item.Address] = true
+		}
+		if len(mail) != 2 || !addresses["member:trellis"] || !addresses["session:"+day.id] {
+			t.Fatalf("overlapping subscriptions inbox=%+v", mail)
+		}
+		gardenNudgeNote(t, cli, "sender", seed, "keep the watcher informed", true)
+		if _, err := cli.SeedTransition(day.id, seed, "park", "", "", false, client.SeedTransitionOptions{}); err != nil {
+			t.Fatal(err)
+		}
+		watcherMail := readInbox(t, cli, day.id, 0).Items
+		if len(watcherMail) != 1 || watcherMail[0].Address != "session:"+day.id || !strings.Contains(watcherMail[0].Content, seed+" moved: note.added") {
+			t.Fatalf("watcher inbox after tender parks=%+v", watcherMail)
+		}
+	})
+}
