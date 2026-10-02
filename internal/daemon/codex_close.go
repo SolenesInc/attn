@@ -149,6 +149,9 @@ func (r *codexRuntime) finishOwnerCloseLocked(owner *store.CodexOwner, closed st
 	r.activeMu.Lock()
 	delete(r.activeTurns, owner.NativeRootID)
 	r.activeMu.Unlock()
+	r.nameMu.Lock()
+	delete(r.names, owner.NativeRootID)
+	r.nameMu.Unlock()
 	if session != nil {
 		r.d.publishSessionUnregistered(session)
 	}

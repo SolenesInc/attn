@@ -88,6 +88,41 @@ try {
     runner.assert(draft.text.includes('draft about B'), 'attachment lost another view draft', draft);
     await type(a, paneA.pane_id, `\x15/agents ${roots[0]}\r`); await resolved(a, a);
   });
+  await runner.step('shared_names_converge_in_views_queue_and_ledger', async () => {
+    const rename = async (id, label, success = true) => {
+      await client.request('dom_click', { selector: `[aria-label="Rename session ${observer.getSession(id).label}"]` });
+      await client.request('dom_type', { selector: '.rename-popover-input', text: label });
+      await client.request('dom_click', { selector: '.rename-popover-btn.save' });
+      if (success) {
+        await observer.waitFor(() => observer.getSession(id)?.label === label, 'confirmed rename');
+        await client.request('dom_wait', { selector: '.rename-popover', absent: true, timeoutMs: observer.connectTimeoutMs });
+      } else {
+        await client.request('dom_wait', { selector: '.rename-popover-error', timeoutMs: observer.connectTimeoutMs });
+        const error = await client.request('dom_text', { selector: '.rename-popover-error' });
+        runner.assert(error.text.includes('fixture name write rejected'), 'native write error is not visible', error);
+        await client.request('dom_click', { selector: '.rename-popover-btn.cancel' });
+      }
+    };
+    await rename(a, 'Attn names A');
+    await observer.waitFor(() => observer.getSession(a)?.label === 'Attn names A', 'Attn name projection');
+    await type(a, paneA.pane_id, '/agents\r');
+    await waitForPaneText(client, a, paneA.pane_id, text => text.includes('Attn names A'), 'native picker name');
+    await type(a, paneA.pane_id, '/rename Native names A\r');
+    await observer.waitFor(() => observer.getSession(a)?.label === 'Native names A', 'native rename projection');
+    await rename(a, 'fixture rejected name', false);
+    runner.assert(observer.getSession(a)?.label === 'Native names A', 'failed write replaced confirmed name');
+    await client.request('set_setting', { key: 'queue_mode_enabled', value: 'true' });
+    await client.request('dom_wait', { selector: '[data-testid="sidebar-queue"]', timeoutMs: observer.connectTimeoutMs });
+    const queue = await client.request('queue_get_state');
+    const rows = [...queue.turns, ...queue.settled, ...queue.pinned, ...queue.snoozed.rows].filter(row => row.id === a);
+    runner.assert(rows.length === 1 && rows[0].label === 'Native names A', 'queue did not project owner name', rows);
+    await client.request('set_setting', { key: 'queue_mode_enabled', value: 'false' });
+    await client.request('dispatch_shortcut', { shortcutId: 'sessions.open' });
+    await client.request('dom_wait', { selector: `.ledger-row[data-row-key="${a}"]`, timeoutMs: observer.connectTimeoutMs });
+    const ledger = await client.request('dom_text', { selector: `.ledger-row[data-row-key="${a}"]` });
+    runner.assert(ledger.text.includes('Native names A'), 'ledger did not project native name', ledger);
+    await client.request('dispatch_shortcut', { shortcutId: 'sessions.open' });
+  });
   await runner.step('hidden_approval_queue_attaches_native_view', async () => {
     const second = [...panes.values()].find(pane => pane.session_id === a && pane.runtime_id !== a);
     await closePane(observer.sessionsById.get(a).workspace_id, second.pane_id);

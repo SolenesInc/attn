@@ -180,6 +180,9 @@ func (d *Daemon) sessionTitleHandler(ctx context.Context, job *jobs.Job) (any, e
 }
 
 func (d *Daemon) sessionMayBeAutoTitled(session *protocol.Session) bool {
+	if d.sharedCodexOwner(session.ID) {
+		return false
+	}
 	if !sessionLabelIsPlaceholder(session.Label, session.Directory, session.ID) {
 		return false
 	}

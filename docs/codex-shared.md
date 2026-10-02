@@ -119,7 +119,25 @@ archiving foreign owners. Native archive and runtime removal must succeed before
 ledger finalization. Cleanup failures name the owner and let the caller retry
 deletion of the already-removed path; the removal audit remains recorded.
 
-Naming reconciliation has separate follow-up work using these owner/view contracts.
+## Names
+
+Native generated names and `/rename` updates project through the root binding into
+one Attn label, including hidden owners and repeated views. Pane headers, queue,
+CLI and ledger use that label. OSC titles still identify roots independently.
+Shared owners never run Attn's headless title generator; legacy and other harnesses
+keep their existing naming paths. Ephemeral title threads create no ledger owners.
+
+Attn rename writes through `thread/name/set` and reports native rejection through
+the existing rename result. Failed writes retain the confirmed label. Explicit
+launch and crew names are saved in the existing launch context until applied to
+the native root before first work. Successful application consumes that pending
+name, so restart/reopen cannot overwrite a later manual rename. Native New/fork
+clears the inherited launch name. Names in native read/resume snapshots reconcile
+on binding and restart; newer name events take precedence over older snapshots.
+
+Stock Codex 0.159.3 retained an explicit name on the first turn and a manual
+`/rename` while its generated title response was delayed. Native precedence owns
+that decision; Attn does not classify name events as manual or automatic.
 
 ## Accounting
 

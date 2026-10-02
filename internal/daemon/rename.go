@@ -51,6 +51,9 @@ func (d *Daemon) renameSession(msg *protocol.RenameSessionMessage) error {
 	if session == nil {
 		return fmt.Errorf("session not found: %s", sessionID)
 	}
+	if d.sharedCodexOwner(sessionID) {
+		return d.codexRuntime().rename(d.life.Context(), sessionID, label)
+	}
 	d.store.UpdateSessionLabel(sessionID, label)
 	session.Label = label
 	d.publishFact(FactSessionRenamed, sessionID, nil)

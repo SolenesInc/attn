@@ -38,7 +38,7 @@ func (r *codexRuntime) rollbackLaunch(id string) {
 	r.cleanupReservation(id)
 }
 
-func (r *codexRuntime) prepareLaunch(opts *ptybackend.SpawnOptions, session *protocol.Session) error {
+func (r *codexRuntime) prepareLaunch(opts *ptybackend.SpawnOptions, session *protocol.Session, initialName string) error {
 	if _, err := r.d.ensureWorkspaceSessionPane(session.WorkspaceID, session.ID, session.Label); err != nil {
 		return err
 	}
@@ -50,7 +50,7 @@ func (r *codexRuntime) prepareLaunch(opts *ptybackend.SpawnOptions, session *pro
 	}
 	view := store.CodexView{RuntimeID: opts.ID, ServerID: r.serverID, LaunchOwnerID: session.ID, Generation: codexViewGenerationPrefix + uuid.NewString(), Resolution: "unresolved"}
 	if owner == nil {
-		launch := codexLaunchContext{CWD: opts.CWD, WorkspaceID: session.WorkspaceID, Executable: opts.Executable, Model: opts.Model, Effort: opts.Effort, Yolo: opts.YoloMode, AutoApprove: opts.AutoApprove, TrustWorkingDirectory: opts.TrustWorkingDirectory, Guidance: hooks.Launch{Garden: r.d.requireHome(garden.Surface) == nil, InjectWorkflow: opts.WorkflowGuidanceEnabled, Crew: r.d.crewPrimeForLaunch(session.ID)}}
+		launch := codexLaunchContext{InitialName: initialName, CWD: opts.CWD, WorkspaceID: session.WorkspaceID, Executable: opts.Executable, Model: opts.Model, Effort: opts.Effort, Yolo: opts.YoloMode, AutoApprove: opts.AutoApprove, TrustWorkingDirectory: opts.TrustWorkingDirectory, Guidance: hooks.Launch{Garden: r.d.requireHome(garden.Surface) == nil, InjectWorkflow: opts.WorkflowGuidanceEnabled, Crew: r.d.crewPrimeForLaunch(session.ID)}}
 		if unattended := opts.UnattendedLaunch; !unattended.IsZero() {
 			launch.Model, launch.Effort, launch.Executable = unattended.Model, unattended.Effort, unattended.Executable
 			launch.AutoApprove = unattended.ApprovalDriverMode == "auto_review"
@@ -115,6 +115,7 @@ func (r *codexRuntime) reserveNativeOwner(v store.CodexView, params map[string]a
 	if cwd, ok := params["cwd"].(string); ok && cwd != "" {
 		launch.CWD = cwd
 	}
+	launch.InitialName = ""
 	launch.Guidance.NotebookRoot = ""
 	launch.Guidance.Crew = ""
 	id := uuid.NewString()
@@ -146,7 +147,22 @@ func (r *codexRuntime) reserveNativeOwner(v store.CodexView, params map[string]a
 	return owner, nil
 }
 
-func (r *codexRuntime) prepareRPC(runtimeID string, m *codexshared.Message) (func(codexshared.Message), error) {
+func (r *codexRuntime) prepareRPC(runtimeID string, m *codexshared.Message) (func(*codexshared.Message), error) {
+	if m.Method == "turn/start" {
+		var p struct {
+			ThreadID string `json:"threadId"`
+		}
+		if err := json.Unmarshal(m.Params, &p); err != nil {
+			return nil, err
+		}
+		r.mu.Lock()
+		owner, err := r.d.store.CodexOwnerByRoot(r.serverID, p.ThreadID)
+		if err == nil && owner != nil {
+			err = r.applyInitialNameLocked(r.d.life.Context(), owner)
+		}
+		r.mu.Unlock()
+		return nil, err
+	}
 	if m.Method != "thread/start" && m.Method != "thread/resume" && m.Method != "thread/fork" {
 		return nil, nil
 	}
@@ -215,11 +231,12 @@ func (r *codexRuntime) prepareRPC(runtimeID string, m *codexshared.Message) (fun
 		return nil, err
 	}
 	method := m.Method
+	nameRevision := r.nameRevision(owner.NativeRootID)
 	r.activeMu.Lock()
 	revision := r.activeTurns[owner.NativeRootID].Revision
 	r.activeMu.Unlock()
 	prepared = true
-	return func(reply codexshared.Message) {
+	return func(reply *codexshared.Message) {
 		if len(reply.Error) > 0 {
 			r.d.logf("Codex %s for owner %s in view %s: %s", method, owner.SessionID, runtimeID, reply.Error)
 			if creation {
@@ -243,10 +260,37 @@ func (r *codexRuntime) prepareRPC(runtimeID string, m *codexshared.Message) (fun
 			r.mu.Unlock()
 		}
 		r.bindOwner(owner.SessionID, result.Thread, revision)
+		r.projectNativeName(result.Thread.ID, result.Thread.Name, nameRevision, false)
+		if creation {
+			r.mu.Lock()
+			bound, err := r.d.store.CodexOwner(owner.SessionID)
+			if err == nil && bound != nil {
+				err = r.applyInitialNameLocked(r.d.life.Context(), bound)
+			}
+			r.mu.Unlock()
+			if err != nil {
+				reply.Result = nil
+				reply.Error, _ = json.Marshal(map[string]any{"code": -32603, "message": err.Error()})
+				return
+			}
+			r.nameMu.Lock()
+			name := r.names[result.Thread.ID].Name
+			r.nameMu.Unlock()
+			if name != nil {
+				var raw map[string]json.RawMessage
+				var thread map[string]json.RawMessage
+				if json.Unmarshal(reply.Result, &raw) == nil && json.Unmarshal(raw["thread"], &thread) == nil {
+					thread["name"], _ = json.Marshal(name)
+					raw["thread"], _ = json.Marshal(thread)
+					reply.Result, _ = json.Marshal(raw)
+				}
+			}
+		}
 	}, nil
 }
 
 type codexNativeThread struct {
+	Name      *string           `json:"name"`
 	ID        string            `json:"id"`
 	Path      string            `json:"path"`
 	CWD       string            `json:"cwd"`
@@ -263,6 +307,7 @@ func (r *codexRuntime) adoptRoot(root string, v store.CodexView) (*store.CodexOw
 	r.activeMu.Lock()
 	revision := r.activeTurns[root].Revision
 	r.activeMu.Unlock()
+	nameRevision := r.nameRevision(root)
 	result, err := r.control.Call(r.d.life.Context(), "thread/read", map[string]any{"threadId": root, "includeTurns": false})
 	if err != nil {
 		return nil, err
@@ -286,6 +331,7 @@ func (r *codexRuntime) adoptRoot(root string, v store.CodexView) (*store.CodexOw
 	owner.NativeRootID = root
 	r.d.observeOrQueueAgentConversation(agentConversationObservation{SessionID: owner.SessionID, NativeID: root, TranscriptPath: read.Thread.Path})
 	r.projectNativeSnapshot(read.Thread, revision)
+	r.projectNativeName(root, read.Thread.Name, nameRevision, false)
 	return owner, nil
 }
 
@@ -437,11 +483,25 @@ type codexTurnState struct {
 
 func (r *codexRuntime) resumeOwner(ctx context.Context, control *codexshared.Client, params map[string]any) (json.RawMessage, error) {
 	root, _ := params["threadId"].(string)
+	owner, err := r.d.store.CodexOwnerByRoot(r.serverID, root)
+	if err != nil {
+		return nil, err
+	}
+	if owner != nil {
+		launch, err := r.ownerContext(owner)
+		if err != nil {
+			return nil, err
+		}
+		if err := r.applyInitialName(ctx, control, owner, launch); err != nil {
+			return nil, err
+		}
+	}
 	r.activeMu.Lock()
 	state := r.activeTurns[root]
 	r.activeTurns[root] = state
 	revision := state.Revision
 	r.activeMu.Unlock()
+	nameRevision := r.nameRevision(root)
 	result, err := control.Call(ctx, "thread/resume", params)
 	if err != nil {
 		return nil, err
@@ -453,6 +513,7 @@ func (r *codexRuntime) resumeOwner(ctx context.Context, control *codexshared.Cli
 		return nil, err
 	}
 	r.projectNativeSnapshot(reply.Thread, revision)
+	r.projectNativeName(reply.Thread.ID, reply.Thread.Name, nameRevision, false)
 	return result, nil
 }
 
@@ -508,6 +569,7 @@ func (r *codexRuntime) controlDisconnected() {
 
 func (r *codexRuntime) observeControl(m codexshared.Message) {
 	r.observeNative(m)
+	r.observeNativeName(m)
 	if m.Method != "thread/status/changed" {
 		return
 	}
@@ -615,6 +677,9 @@ func (r *codexRuntime) send(ctx context.Context, id, text string, active bool) e
 			return nil, "", err
 		}
 		if err := r.ensureServer(ctx, launch); err != nil {
+			return nil, "", err
+		}
+		if err := r.applyInitialNameLocked(ctx, owner); err != nil {
 			return nil, "", err
 		}
 		return r.control, owner.NativeRootID, nil

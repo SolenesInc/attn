@@ -138,3 +138,24 @@ func (r *Run) call(method string, params, result any) {
 		r.t.Fatalf("%s %s for session %s: %v", r.Harness, method, r.SessionID, err)
 	}
 }
+
+func (r *Run) NativeName(name string)         { r.call("native_name", textParams{Text: name}, nil) }
+func (r *Run) GenerateNativeName(name string) { r.call("generate_name", textParams{Text: name}, nil) }
+func (r *Run) RejectNativeNameWrites(reject bool) {
+	text := "off"
+	if reject {
+		text = "on"
+	}
+	r.call("name_error", textParams{Text: text}, nil)
+}
+func (r *Run) ReadNativeName() string {
+	var result struct {
+		Name string `json:"name"`
+	}
+	r.call("read_name", nil, &result)
+	return result.Name
+}
+
+func (r *Run) NativeNameDuringResume(name string) {
+	r.call("name_on_resume", textParams{Text: name}, nil)
+}

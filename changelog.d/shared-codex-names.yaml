@@ -1,0 +1,3 @@
+kind: fixed
+area: sessions
+change: Shared Codex agents use the same names in native /agents, pane headers, queue, CLI and ledger. Renaming in attn also renames the native thread.

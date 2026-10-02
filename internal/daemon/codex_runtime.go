@@ -29,6 +29,7 @@ const codexViewGenerationPrefix = "codex-view:"
 const SettingCodexSharedEnabled = "codex_shared_enabled"
 
 type codexLaunchContext struct {
+	InitialName           string `json:",omitempty"`
 	CWD                   string
 	WorkspaceID           string
 	Executable            string
@@ -55,13 +56,15 @@ type codexRuntime struct {
 	views           map[string]store.CodexView
 	servers         map[string]*http.Server
 	initialConsumed map[string]bool
+	nameMu          sync.Mutex
+	names           map[string]codexNameState
 	activeMu        sync.Mutex
 	activeTurns     map[string]codexTurnState
 }
 
 func (d *Daemon) codexRuntime() *codexRuntime {
 	d.codexOnce.Do(func() {
-		d.codex = &codexRuntime{d: d, serverID: "codex", views: make(map[string]store.CodexView), servers: make(map[string]*http.Server), initialConsumed: make(map[string]bool), activeTurns: make(map[string]codexTurnState)}
+		d.codex = &codexRuntime{d: d, serverID: "codex", views: make(map[string]store.CodexView), servers: make(map[string]*http.Server), initialConsumed: make(map[string]bool), names: make(map[string]codexNameState), activeTurns: make(map[string]codexTurnState)}
 	})
 	return d.codex
 }

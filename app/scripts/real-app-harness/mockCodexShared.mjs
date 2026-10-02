@@ -21,7 +21,7 @@ export async function runSharedMockServer() {
   const server = http.createServer();
   const peers = new WebSocketServer({ server });
   const broadcast = (method, params) => { for (const peer of peers.clients) if (peer.readyState === WebSocket.OPEN) peer.send(JSON.stringify({ method, params })); };
-  const metadata = (root) => ({ id: root.id, cwd: root.cwd, path: root.path, source: 'cli', ephemeral: false, status: root.status });
+  const metadata = (root) => ({ id: root.id, name: root.name || null, cwd: root.cwd, path: root.path, source: 'cli', ephemeral: false, status: root.status });
   const status = (root, type, activeFlags = []) => { root.status = { type, activeFlags }; broadcast('thread/status/changed', { threadId: root.id, status: root.status }); };
   const approval = (root) => ({ id: `approval:${root.id}`, method: 'item/commandExecution/requestApproval', params: { threadId: root.id, turnId: root.pending.turnId, itemId: 'command', command: 'fixture command' } });
   const finish = (root, turnId, text, reply) => {
@@ -49,7 +49,7 @@ export async function runSharedMockServer() {
         case 'initialize': break;
         case 'thread/start': case 'thread/fork': {
           const id = randomUUID(); const cwd = p.cwd || process.cwd();
-          root = { id, cwd, path: path.join(cwd, '.attn-shared-mock', `${id}.jsonl`), config: p.config || {}, archived: false, turns: [], status: { type: 'idle' } };
+          root = { id, cwd, path: path.join(cwd, '.attn-shared-mock', `${id}.jsonl`), config: p.config || {}, name: '', archived: false, turns: [], status: { type: 'idle' } };
           fs.mkdirSync(path.dirname(root.path), { recursive: true });
           fs.writeFileSync(root.path, conversationHeaderRecords({ agent: 'codex', id, cwd, launch: { argv: [] } }).join('\n') + '\n');
           roots.set(id, root); hook(root, 'SessionStart', { source: 'startup' }); result = { thread: metadata(root) }; break;
@@ -58,11 +58,15 @@ export async function runSharedMockServer() {
           if (!root) throw new Error(`unknown root ${p.threadId}`);
           root.config = p.config || root.config; hook(root, 'SessionStart', { source: 'resume' }); result = { thread: metadata(root) }; break;
         }
+        case 'thread/name/set':
+          if (p.name === 'fixture rejected name') throw new Error('fixture name write rejected');
+          root.name = p.name; broadcast('thread/name/updated', { threadId: root.id, threadName: root.name }); break;
         case 'thread/read': result = { thread: { ...metadata(root), turns: root.turns } }; break;
         case 'thread/archive': root.archived = true; broadcast('thread/archived', { threadId: root.id }); break;
         case 'thread/unarchive': root.archived = false; break;
         case 'thread/loaded/list': result = { data: [...roots.values()].filter(r => !r.archived).map(r => r.id) }; break;
         case 'turn/start': case 'turn/steer': {
+          if (!root.name) { root.name = 'Generated ' + path.basename(root.cwd); broadcast('thread/name/updated', { threadId: root.id, threadName: root.name }); }
           const text = p.input.map(item => item.text || '').join('\n'); const turnId = randomUUID();
           hook(root, 'UserPromptSubmit', { prompt: text }); broadcast('turn/started', { threadId: root.id, turn: { id: turnId } }); status(root, 'active');
           const fixture = readMockAgentConfig(root.cwd);
@@ -111,6 +115,11 @@ export async function runSharedMockView() {
         selected = input.split(' ')[1]; if (input.startsWith('/agents ')) await call('thread/resume', { threadId: selected }); title();
       } else if (input === '/new' || input === '/fork') {
         const result = await call(input === '/new' ? 'thread/start' : 'thread/fork', { threadId: selected, cwd: process.cwd() }); selected = result.thread.id; title();
+      } else if (input.startsWith('/rename ')) {
+        await call('thread/name/set', { threadId: selected, name: input.slice(8) });
+      } else if (input === '/agents') {
+        const loaded = await call('thread/loaded/list', {});
+        for (const id of loaded.data) { const { thread } = await call('thread/read', { threadId: id }); process.stdout.write(`Agent ${id} ${thread.name || '(unnamed)'}\r\n`); }
       } else if (input.startsWith('/title ')) process.stdout.write(`\x1b]0;${input.slice(7)}\x07`);
       else await call('turn/start', { threadId: selected, input: [{ type: 'text', text: input }] });
       prompt();
