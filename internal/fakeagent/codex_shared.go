@@ -18,15 +18,16 @@ import (
 )
 
 type sharedFakeCodex struct {
-	cfg           config
-	mu            sync.Mutex
-	roots         map[string]*sharedFakeRoot
-	peers         map[*websocket.Conn]bool
-	control       *websocket.Conn
-	archiveError  bool
-	archiveErrors map[string]bool
-	rejectedStart atomic.Bool
-	rejectedInput atomic.Bool
+	cfg                config
+	mu                 sync.Mutex
+	roots              map[string]*sharedFakeRoot
+	peers              map[*websocket.Conn]bool
+	control            *websocket.Conn
+	archiveError       bool
+	archiveErrors      map[string]bool
+	rejectedStart      atomic.Bool
+	rejectedInput      atomic.Bool
+	controlUnavailable atomic.Bool
 }
 type sharedFakeRoot struct {
 	c            *codex
@@ -89,13 +90,6 @@ func (s *sharedFakeCodex) serve(w http.ResponseWriter, req *http.Request) {
 		}
 		if m.Method == "initialized" {
 			continue
-		}
-		if m.Method == "initialize" {
-			s.mu.Lock()
-			if s.control == nil {
-				s.control = conn
-			}
-			s.mu.Unlock()
 		}
 		if m.Method == "" && len(m.Result) > 0 {
 			var rootID string
@@ -168,6 +162,15 @@ func (s *sharedFakeCodex) handle(conn *websocket.Conn, m codexshared.Message) (a
 		s.mu.Unlock()
 		return map[string]any{}, nil
 	case "initialize":
+		s.mu.Lock()
+		if s.controlUnavailable.Load() {
+			s.mu.Unlock()
+			return nil, fmt.Errorf("fixture native control unavailable")
+		}
+		if s.control == nil {
+			s.control = conn
+		}
+		s.mu.Unlock()
 		return map[string]any{}, nil
 	case "thread/start", "thread/fork":
 		if m.Method == "thread/start" && os.Getenv("ATTN_FAKE_CODEX_REJECT_INITIAL_START_ONCE") == "1" && !s.rejectedStart.Swap(true) {
@@ -218,6 +221,19 @@ func (s *sharedFakeCodex) handle(conn *websocket.Conn, m codexshared.Message) (a
 			if method == "native_snapshots_only" {
 				root.snapshotOnly.Store(true)
 				return struct{}{}, nil
+			}
+			if method == "control_available" {
+				var input struct {
+					Available bool `json:"available"`
+				}
+				if err := json.Unmarshal(params, &input); err != nil {
+					return nil, err
+				}
+				s.controlUnavailable.Store(!input.Available)
+				if input.Available {
+					return struct{}{}, nil
+				}
+				method = "disconnect_control"
 			}
 			if method == "disconnect_control" {
 				s.mu.Lock()

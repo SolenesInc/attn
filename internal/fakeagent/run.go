@@ -111,6 +111,12 @@ func (r *Run) DisconnectNativeControl() {
 	r.call("disconnect_control", nil, nil)
 }
 
+func (r *Run) SetNativeControlAvailable(available bool) {
+	r.call("control_available", struct {
+		Available bool `json:"available"`
+	}{available}, nil)
+}
+
 func (r *Run) NativeSnapshotsOnly() {
 	r.call("native_snapshots_only", nil, nil)
 }

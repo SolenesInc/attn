@@ -125,20 +125,24 @@ func TestSharedCodexControlDisconnectReconcilesHiddenBusyAndApprovalClaims(t *te
 				agentA.AskApproval()
 				testworld.AwaitSession(app, a, func(s protocol.Session) bool { return s.State == protocol.SessionStatePendingApproval })
 			}
-			agentA.DisconnectNativeControl()
+			agentA.SetNativeControlAvailable(false)
 			failed := testworld.AwaitSession(app, a, func(s protocol.Session) bool { return s.State == protocol.SessionStateWaitingInput })
 			if !protocol.Deref(failed.TurnOwed) {
 				t.Fatal("control disconnect lost its owed attention turn")
 			}
+			agentA.SetNativeControlAvailable(true)
 			app.TypeLine(a, "/agents "+agentA.ConversationID)
 			awaitSharedView(app, a, a)
 			if approval {
+				recovered := testworld.AwaitStateAfter(app, failed, func(s protocol.Session) bool { return s.State == protocol.SessionStatePendingApproval })
 				app.AwaitScreen(a, "Allow the command to run?")
 				app.Send(protocol.PtyInputMessage{Cmd: protocol.CmdPtyInput, ID: a, Data: "\r"})
 				if got := agentA.Answered(); got != "accepted" {
 					t.Fatal(got)
 				}
-				testworld.AwaitSession(app, a, func(s protocol.Session) bool { return s.State == protocol.SessionStateWorking })
+				testworld.AwaitStateAfter(app, recovered, func(s protocol.Session) bool { return s.State == protocol.SessionStateWorking })
+			} else {
+				testworld.AwaitStateAfter(app, failed, func(s protocol.Session) bool { return s.State == protocol.SessionStateWorking })
 			}
 			result := sharedAnnotationSubmit(app, a, "reconnect-A", "reconnect and steer A")
 			if !result.Success {
@@ -338,8 +342,9 @@ func TestSharedCodexSurvivingViewTrafficReconcilesControlLoss(t *testing.T) {
 				app.AwaitScreen(a, "Allow the command to run?")
 				testworld.AwaitSession(app, a, func(s protocol.Session) bool { return s.State == protocol.SessionStatePendingApproval })
 			}
-			agentA.DisconnectNativeControl()
-			testworld.AwaitSession(app, a, func(s protocol.Session) bool { return s.State == protocol.SessionStateWaitingInput })
+			agentA.SetNativeControlAvailable(false)
+			failed := testworld.AwaitSession(app, a, func(s protocol.Session) bool { return s.State == protocol.SessionStateWaitingInput })
+			agentA.SetNativeControlAvailable(true)
 			if approval {
 				app.Send(protocol.PtyInputMessage{Cmd: protocol.CmdPtyInput, ID: a, Data: "\r"})
 				if got := agentA.Answered(); got != "accepted" {
@@ -351,7 +356,7 @@ func TestSharedCodexSurvivingViewTrafficReconcilesControlLoss(t *testing.T) {
 					t.Fatal(got)
 				}
 			}
-			testworld.AwaitSession(app, a, func(s protocol.Session) bool { return s.State == protocol.SessionStateWorking })
+			testworld.AwaitStateAfter(app, failed, func(s protocol.Session) bool { return s.State == protocol.SessionStateWorking })
 			if result := sharedAnnotationSubmit(app, a, "active-A", "steer after reconnect"); !result.Success {
 				t.Fatal(result)
 			}
