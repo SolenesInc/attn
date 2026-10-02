@@ -199,6 +199,8 @@ export function useAppController({
   });
   const {
     sessionCreationJob,
+    setSessionCreationJob,
+    closeLocationPicker,
     launchAgent,
     createSessionForUiAutomation,
     locationPickerOpen,
@@ -208,7 +210,7 @@ export function useAppController({
   } = sessionLaunch;
 
   const prLauncher = usePRLauncher({ settings, launchAgent });
-  const { openPRLauncherJob, handleRefreshPRs } = prLauncher;
+  const { openPRLauncherJob, setOpenPRLauncherJob, handleRefreshPRs } = prLauncher;
 
   const appAppearance = useAppAppearance({ settings });
   const { increaseScale, decreaseScale, resetScale } = appAppearance;
@@ -249,15 +251,6 @@ export function useAppController({
     openNotebookBrowser,
   } = appPanels;
 
-  useEffect(() => useSessionStore.subscribe((state, previous) => {
-    if (previous.intent?.target.kind !== 'session' || state.view !== 'session' || !state.focusRequest || state.focusRequest.id === previous.focusRequest?.id) return;
-    closeCrewPanel();
-    setNotebookOpen(false);
-    setSessionsOpen(false);
-    setPalette(null);
-    if (gardenHoldsWindow) closeGarden();
-  }), [closeCrewPanel, setNotebookOpen, setSessionsOpen, setPalette, closeGarden, gardenHoldsWindow]);
-
   const desktopTiles = useDesktopTiles({
     settings,
     sessions,
@@ -266,6 +259,7 @@ export function useAppController({
   });
   const {
     markdownOpenerOpen,
+    setMarkdownOpenerOpen,
     handleOpenMarkdownFile,
     handleOpenNotebookTile,
   } = desktopTiles;
@@ -310,10 +304,10 @@ export function useAppController({
     sendSupportSnapshot,
     getPaneText,
   });
-  const { diagnosticCapture, paletteOriginRef } = appDiagnostics;
+  const { diagnosticCapture, setDiagnosticCapture, paletteOriginRef } = appDiagnostics;
 
   const chiefOfStaff = useChiefOfStaff({ enrichedLocalSessions, daemonSessions, showError });
-  const { chiefTransferTarget } = chiefOfStaff;
+  const { chiefTransferTarget, setChiefTransferTarget } = chiefOfStaff;
 
   const [contextCapPromptSession, setContextCapPromptSession] = useState<{
     id: string;
@@ -325,6 +319,36 @@ export function useAppController({
 
   const [desktopOverviewOpen, setDesktopOverviewOpen] = useState(false);
   const [profileSwitcherOpen, setProfileSwitcherOpen] = useState(false);
+  const { setSnoozeMenu } = attentionQueue;
+  const { isOpen: whatsNewOpen, dismiss: dismissWhatsNew } = whatsNew;
+  useEffect(() => useSessionStore.subscribe((state, previous) => {
+    if (previous.intent?.target.kind !== 'session' || state.view !== 'session' || !state.focusRequest || state.focusRequest.id === previous.focusRequest?.id) return;
+    closeCrewPanel();
+    setNotebookOpen(false);
+    setSessionsOpen(false);
+    setPalette(null);
+    if (gardenHoldsWindow) closeGarden();
+    if (settingsOpen) void settingsModalRef.current?.close();
+    setShortcutsOpen(false);
+    setShortcutEditorOpen(false);
+    if (whatsNewOpen) dismissWhatsNew();
+    closeLocationPicker();
+    setSnoozeMenu(null);
+    delegationChainRef.current?.dismiss();
+    setChiefTransferTarget(null);
+    setContextCapPromptSession(null);
+    setSessionCreationJob(null);
+    setOpenPRLauncherJob(null);
+    setDiagnosticCapture(null);
+    setMarkdownOpenerOpen(false);
+    setDesktopOverviewOpen(false);
+    setProfileSwitcherOpen(false);
+    closeAgentList();
+  }), [closeCrewPanel, setNotebookOpen, setSessionsOpen, setPalette, closeGarden, gardenHoldsWindow,
+    settingsOpen, settingsModalRef, setShortcutsOpen, setShortcutEditorOpen, whatsNewOpen, dismissWhatsNew,
+    closeLocationPicker, setSnoozeMenu, delegationChainRef, setChiefTransferTarget, setSessionCreationJob,
+    setOpenPRLauncherJob, setDiagnosticCapture, setMarkdownOpenerOpen, closeAgentList]);
+
   const { blockingOverlayOpen, windowCovered, paletteBlocked, appShortcutsEnabled } = appOverlayPolicy({
     desktopOverviewOpen,
     profileSwitcherOpen,

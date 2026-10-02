@@ -124,11 +124,29 @@ async function main() {
 
     let desktopA;
     let desktopB;
+    const fixtureNotes = path.join(runner.sessionDir, 'desktop-fixture.md');
+    fs.writeFileSync(fixtureNotes, '# Desktop switching fixture\n');
+    const holdDesktop = async (desktop) => {
+      const tileId = `fixture-${desktop.id}`;
+      await observer.profileCommand('desktop_dock_tile', {
+        desktop_id: desktop.id, expected_revision: observer.desktop(desktop.id).revision,
+        tile_id: tileId, tile_kind: 'markdown', tile_params: fixtureNotes, edge: 'right',
+      });
+      await observer.waitFor(() => observer.desktop(desktop.id)?.panes.some((pane) => pane.pane_id === tileId), 'fixture tile docked');
+    };
+    const releaseDesktop = async (desktop) => {
+      await observer.profileCommand('desktop_remove_leaf', {
+        desktop_id: desktop.id, expected_revision: observer.desktop(desktop.id).revision,
+        leaf_id: `fixture-${desktop.id}`,
+      });
+    };
     await runner.step('create_two_slotted_desktops', async () => {
       desktopA = await observer.createDesktop(`harness-a-${runner.runId}`);
       createdDesktopIds.push(desktopA.id);
+      await holdDesktop(desktopA);
       desktopB = await observer.createDesktop(`harness-b-${runner.runId}`);
       createdDesktopIds.push(desktopB.id);
+      await holdDesktop(desktopB);
       runner.assert(
         desktopA.shortcut_slot && desktopB.shortcut_slot,
         `The run needs two free desktop shortcuts; the profile has none left:\n${observer.describeArrangement()}`,
@@ -162,7 +180,8 @@ async function main() {
         (state) => desktopHolding(state, firstSessionId)?.id === desktopA.id,
         'the first shell placed on desktop A',
       );
-      first = { sessionId: firstSessionId, paneId: desktopHolding(placed, firstSessionId).panes[0].paneId };
+      first = { sessionId: firstSessionId, paneId: desktopHolding(placed, firstSessionId).panes.find((pane) => pane.sessionId === firstSessionId).paneId };
+      await releaseDesktop(desktopA);
       await client.request('select_session', { sessionId: first.sessionId });
       await waitForPaneAttached(client, first.sessionId, first.paneId, 20_000);
       await waitForPaneShellReady(client, first.sessionId, first.paneId, { timeoutMs: 20_000, description: 'first shell ready' });
@@ -195,6 +214,7 @@ async function main() {
         (state) => desktopHolding(state, split.sessionId)?.id === desktopB.id,
         'the split pane on desktop B',
       );
+      await releaseDesktop(desktopB);
       runner.assert(
         moved.arrangement.currentDesktopId === desktopA.id && desktopHolding(moved, first.sessionId)?.id === desktopA.id,
         `Moving a pane with shift moved the user or the other pane:\n${JSON.stringify(moved.arrangement, null, 2)}`,

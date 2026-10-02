@@ -2,6 +2,7 @@ import { fireEvent, screen, within } from '@testing-library/react';
 import { describe, expect, it } from 'vitest';
 import { gesture, pressShortcut, renderApp } from './test/renderApp';
 import { defaultProfile, emptyDesktop, crewMember, daemonSession, soloDesktop } from './test/daemonFixtures';
+import { savedSettings, serveSettings } from './test/settings';
 import { LaunchDesktopKind, LaunchDesktopMode, MigrationPhase } from './types/generated';
 
 const crewItem = (id: string): NonNullable<import('./test/protocol').EventMessage<'launch_desktop_result'>['item']> => ({ kind: LaunchDesktopKind.Crew, item_id: id, name: id, profile_id: 'default', confirmed: false, setting: { mode: LaunchDesktopMode.Own, desktop_name: id, destination_id: id, label: `${id} (no ⌘ number)`, pending: true } });
@@ -67,7 +68,7 @@ describe('launch desktops', () => {
     expect(screen.queryByRole('dialog', { name: 'Manage crew' })).not.toBeInTheDocument();
   });
 
-  it('shows a shell-woken agent while leaving background arrangements alone', async () => {
+  it('shows a requested agent while leaving background arrangements alone', async () => {
     const { daemon } = await renderApp({ initialState: { crew: [crewMember('alder')], sessions: [daemonSession('s1')], desktops: [soloDesktop('s1')] } });
     await gesture(daemon, () => fireEvent.click(screen.getByTestId('manage-crew')));
     await daemon.emit({ event: 'session_show_requested', session_id: 's1' });
@@ -80,9 +81,18 @@ describe('launch desktops', () => {
     ['agent palette', 'ui.actionMenu', 'Agents'],
     ['command palette', 'ui.commandPalette', 'Commands'],
     ['fullscreen Garden', 'board.open', 'The garden'],
+    ['shortcuts', 'ui.showShortcuts', 'Keyboard Shortcuts'],
+    ['shortcut editor', 'ui.showShortcuts', 'Customize Shortcuts'],
+    ['release notes', 'ui.commandPalette', "What's new"],
   ] as const)('shows an arrival above the %s and closes it when navigating', async (_surface, shortcut, title) => {
     const { daemon } = await renderApp({ initialState: { sessions: [daemonSession('s1')], desktops: [soloDesktop('s1')] } });
     await gesture(daemon, () => pressShortcut(shortcut));
+    if (title === 'Customize Shortcuts') await gesture(daemon, () => fireEvent.click(screen.getByRole('button', { name: 'Edit shortcuts' })));
+    if (title === "What's new") {
+      const search = screen.getByRole('combobox');
+      fireEvent.change(search, { target: { value: ">What's new" } });
+      await gesture(daemon, () => fireEvent.keyDown(search, { key: 'Enter' }));
+    }
     if (title === 'The garden') await gesture(daemon, () => fireEvent.click(screen.getByRole('button', { name: 'Expand the garden' })));
     expect(screen.getByRole('dialog', { name: title })).toBeInTheDocument();
     await daemon.emit({ event: 'background_launch', session_id: 's1', profile_id: 'profile-default', desktop_id: 'review', name: 'Keel', requested_by: 'Alder', desktop_label: 'Review', kind: LaunchDesktopKind.Crew });
@@ -92,6 +102,24 @@ describe('launch desktops', () => {
     expect(document.activeElement).toBe(action);
     await gesture(daemon, () => fireEvent.click(action));
     expect(screen.queryByRole('dialog', { name: title })).not.toBeInTheDocument();
+    expect(daemon.sentOf('desktop_show_session').map(({ session_id }) => session_id)).toEqual(['s1']);
+    expect(screen.getByText('✓ Done')).toBeInTheDocument();
+  });
+
+  it('closes Settings through its draft-saving close action when navigating an arrival', async () => {
+    const { daemon } = await renderApp({ initialState: { sessions: [daemonSession('s1')], desktops: [soloDesktop('s1')] } });
+    await gesture(daemon, () => pressShortcut('ui.openSettings'));
+    expect(screen.getByTestId('settings-modal')).toBeInTheDocument();
+    serveSettings(daemon);
+    await gesture(daemon, () => fireEvent.click(screen.getByTestId('settings-nav-agents')));
+    const model = screen.getByTestId('settings-default-model-claude');
+    model.focus();
+    fireEvent.change(model, { target: { value: 'sonnet' } });
+    await daemon.emit({ event: 'background_launch', session_id: 's1', profile_id: 'profile-default', desktop_id: 'review', name: 'Keel', requested_by: 'Alder', desktop_label: 'Review', kind: LaunchDesktopKind.Crew });
+    await daemon.idle();
+    await gesture(daemon, () => fireEvent.click(screen.getByRole('button', { name: /Keel.*Click to go/ })));
+    expect(screen.queryByTestId('settings-modal')).not.toBeInTheDocument();
+    expect(savedSettings(daemon)).toEqual([['default_model_claude', 'sonnet']]);
     expect(daemon.sentOf('desktop_show_session').map(({ session_id }) => session_id)).toEqual(['s1']);
     expect(screen.getByText('✓ Done')).toBeInTheDocument();
   });

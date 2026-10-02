@@ -144,11 +144,14 @@ describe('App what’s new', () => {
   });
 
   it('keeps its arrow keys away from the terminal underneath', async () => {
-    localStorage.setItem(WHATS_NEW_STORAGE_KEY, 'an-earlier-release');
     const { daemon } = await openAttachedTerminals({
       sessions: [daemonSession('s1', { state: 'idle' })],
       desktops: [soloDesktop('s1', { shortcut_slot: 1 })],
     });
+    await gesture(daemon, () => pressShortcut('ui.commandPalette'));
+    const search = screen.getByRole('combobox');
+    fireEvent.change(search, { target: { value: ">What's new" } });
+    await gesture(daemon, () => fireEvent.keyDown(search, { key: 'Enter' }));
     const before = daemon.sentOf('pty_input').length;
 
     await press(daemon, 'ArrowRight');

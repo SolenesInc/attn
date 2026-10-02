@@ -32,6 +32,12 @@ let members = [];
 let saved = false;
 const wait = (selector, conditions = {}) => client.request('dom_wait', { selector, timeoutMs: 30000, ...conditions });
 const click = (selector) => client.request('dom_click', { selector });
+const openCrew = async () => {
+  await client.request('dispatch_shortcut', { shortcutId: 'ui.commandPalette' });
+  await client.request('dom_type', { selector: '.unified-palette-input', text: '>Manage crew' });
+  await client.request('dom_key', { selector: '.unified-palette-input', key: 'Enter' });
+  await wait('[data-testid="crew-panel"]');
+};
 const capture = async (name) => {
   await captureFrontWindowScreenshot(path.join(runner.runDir, name), { client, driver });
   if (process.env.ATTN_HARNESS_RECORD === '1') await delay(1200);
@@ -116,7 +122,7 @@ try {
       writeMockAgentFixture(home, { version: 1, defaultActions: [{ type: 'reply', text: 'Launch placement verified.', state: 'idle' }], turns: [] });
       cli('crew', 'set', member.item_id, '--cwd', home, '--agent', 'claude', '--model', 'claude-haiku-4-5');
     }
-    await click('[data-testid="manage-crew"]');
+    await openCrew();
     await click(`[data-testid="crew-roster-${members[0].item_id}"]`);
     await click('[data-testid="crew-tab-launch"]');
     await wait('.launch-desktop-field', { textIncludes: 'Launch review' });
@@ -132,7 +138,7 @@ try {
     await wait('dialog[aria-labelledby="crew-panel-title"][open]', { absent: true });
     const userState = await client.request('get_state');
     runner.assert(shownAgentId(userState) === userWake.session_id, 'An app wake shows the member in the app', { view: userState.view, activeLeaf: userState.activeLeaf });
-    await click('[data-testid="manage-crew"]');
+    await openCrew();
     const output = cli('crew', 'wake', members[1].item_id, '--json');
     const arrival = JSON.parse(output.slice(output.indexOf('{')));
     runner.assert(Boolean(arrival.session_id), 'The CLI wake succeeds', arrival);

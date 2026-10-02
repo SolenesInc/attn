@@ -294,7 +294,11 @@ async function main() {
         'the re-read YAML is the canonical rendering of the saved spec — same id/name/prompt content',
         shownYAML,
       );
-      runner.assert(!shownYAML.includes('#'), 'the canonical rendering carries no comments', shownYAML);
+      runner.assert(
+        shownYAML.startsWith(`# Profile: ${shownRow.profile_name}\n# Launch desktop: ${shownRow.launch_desktop.label}\n`),
+        'CLI show names the profile and launch desktop before the canonical spec',
+        shownYAML,
+      );
       runner.assert(!shownYAML.includes('enabled:'), 'the canonical rendering carries no enabled key — column-only', shownYAML);
       leg3Revision = shownRow.revision;
       leg3SpecYAML = shownYAML;
