@@ -234,7 +234,7 @@ func TestSharedCodexOlderNameReplyCannotConsumeNewerRejectedNativeCorrection(t *
 			agent.ReleaseNativeNameReplies()
 			if initial {
 				awaitSharedView(app, a, a)
-				app.AwaitScreen(a, "fixture name write rejected for "+agent.ConversationID)
+				app.AwaitScreen(a, "set initial Codex name for ")
 			} else if err := <-renamed; err != nil {
 				t.Fatal(err)
 			}
