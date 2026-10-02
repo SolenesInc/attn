@@ -22,7 +22,7 @@ The body has six sections in this order. Each design part is required; a part th
 - **Findings**: what spikes and investigation established that the design depends on, written as described under Findings below. When nothing was learned beyond what the code shows, one line saying so.
 - **Design**, in four parts:
   - **Ownership**: each file or package that changes, as a shallow file tree with one comment per entry saying what it is responsible for.
-  - **Interfaces**: the types, signatures, wire messages and persisted data the change adds or alters, sketched in the codebase's language, with the schema, generation and migration steps a wire or storage change requires.
+  - **Interfaces**: the types, signatures, wire messages and persisted data the change adds or alters, sketched in the codebase's language, with the schema, generation and migration steps a wire or storage change requires. For an interface the change adds or reshapes, include a representative call site and check it with [Design](design.md).
   - **Behavior**: how control and data flow through the changed parts, as a sequence for messages between processes, a call tree within one process, or pseudocode for a rule.
   - **State**: each piece of state with its owner, what sets it, what reads it, what happens on failure and what happens on restart. In-memory state counts as state and has the same entry.
 - **Execution**: for a plot, the children, which changes belong to each pull request, and their order; for a single seed, one line saying so; without pull requests, the delivery step.
@@ -58,8 +58,6 @@ Choose the smallest view that explains the point:
 - component interaction or data flow as labeled arrows
 - messages between processes as a sequence
 - a UI layout or state comparison as an ASCII wireframe
-
-When the design adds or reshapes an interface, show its call sites and check it with [Design](design.md).
 
 ## Template
 

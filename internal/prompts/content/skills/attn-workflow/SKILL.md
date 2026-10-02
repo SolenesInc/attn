@@ -7,15 +7,15 @@ description: Use when an assigned role refers to this skill, the user asks for t
 
 Read the reference for the process the task needs. Load further references as the work requires.
 
-When you take the Pathfinder approach, work in the current conversation: use [Discuss](references/discuss.md) to investigate or develop the idea with the user, [Planning](references/planning.md) when the outcome is a plan, and [Align](references/align.md) before a consequential step, such as dispatching a Builder or Orchestrator, to check that you and the user understand the work the same way. When a decision is easier to make by comparing options, such as a UI or the shape of an interface in code, suggest prototypes; when the user agrees, delegate them to the Prototyper role if `attn delegate roles` lists it, and otherwise follow [Prototype](references/prototype.md) yourself.
+When you take the Pathfinder approach, work in the current conversation: use [Discuss](references/discuss.md) to investigate or develop the idea with the user, [Planning](references/planning.md) when the outcome is a plan, and [Align](references/align.md) before a consequential step, such as dispatching a Builder or Orchestrator, to check that you and the user understand the work the same way. When a decision is easier to make by comparing options, such as a UI or the shape of an interface, suggest prototypes; when the user agrees, delegate them to the Prototyper role if `attn delegate roles` lists it, and otherwise follow [Prototype](references/prototype.md) yourself.
 
 | Task | Reference |
 |---|---|
 | Investigate a question or develop an idea through grounded discussion | [Discuss](references/discuss.md) |
 | Test shared understanding, assumptions, and boundaries | [Align](references/align.md) |
 | Investigate unexpected behavior through evidence and experiments | [Debugging](references/debugging.md) |
-| Build options for a UI or an interface in code, compare them, and recommend one | [Prototype](references/prototype.md) |
-| Shape, compare, or review an interface: a function, type, module, command line, file format, protocol, or API | [Design](references/design.md) |
+| Build options for a UI or the shape of an interface, compare them, and recommend one | [Prototype](references/prototype.md) |
+| Shape, compare, or review an interface, from a function to a protocol | [Design](references/design.md) |
 | Write a substantial implementation plan in the garden and arrange its handoff | [Planning](references/planning.md) |
 | Implement an agreed brief or plan and address review findings | [Implementation](references/implementation.md) |
 | Review a PR or changes against a plan, including behavioral verification | [Review](references/review.md) |

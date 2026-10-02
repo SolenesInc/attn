@@ -1,6 +1,6 @@
 # Design
 
-Use this reference to shape, compare, or review an interface: any boundary one piece of code offers another, such as a function, type, module, package, command line, file format, protocol, or web API. The checks are the same inside a codebase and across organizations; what changes is the cost of a mistake, which grows with the number of callers and how hard they are to change.
+Use this reference to shape, compare, or review an interface: any boundary through which people, agents, or other code use what you build, such as a function, type, module, package, command line, file format, protocol, or web API. The checks are the same inside a codebase and across organizations; what changes is the cost of a mistake, which grows with the number of callers and how hard they are to change.
 
 ## Start from the caller
 
@@ -13,7 +13,7 @@ Apply each check to the call sites. Skip a check that does not fit the interface
 - **Deep, not shallow.** Count the parameters and concepts a caller must handle against what the implementation hides; the first should be much smaller. A layer whose signature is as wide as the thing it wraps adds a concept without removing one. Pull complexity down into the implementation instead of pushing it onto every caller. (Ousterhout, *A Philosophy of Software Design*)
 - **Hide the decisions likely to change.** Each module owns a design decision that callers cannot observe, so the decision can change without them. (Parnas, "On the Criteria To Be Used in Decomposing Systems into Modules")
 - **Common case short, rare case possible.** The typical call states only what is essential and takes defaults for the rest; full control stays reachable through the same interface. (Bloch: "easy to do simple things; possible to do complex things")
-- **Hard to misuse.** Prefer designs in which a wrong call cannot be written: types that carry the invariant, distinct types for values that must not mix, required arguments instead of rules about call order. When misuse is only detectable at runtime, fail at the first point it is detectable. (Bloch: "Fail fast… Compile-time is best"; parse, don't validate)
+- **Hard to misuse.** Prefer designs in which a wrong call cannot be written: types that carry the invariant, distinct types for values that must not mix, required arguments instead of rules about call order. When misuse is only detectable at runtime, fail at the first point it is detectable. (Bloch: "Fail fast… Compile-time is best"; the skill's engineering judgment: parse, don't validate)
 - **Useful from the start.** A new value works without a setup ritual. An initialization step that callers must remember is an error waiting to happen. (Go proverb: "Make the zero value useful")
 - **Define errors out of existence.** Redefine an operation so the edge case is ordinary: removing something absent succeeds, a range past the end is clamped. The errors that remain name what failed, the value or limit involved, and what the caller can do; whoever fixes the call, a person or an agent, often sees only the message. (Ousterhout; Bloch, *Effective Java*: "Include failure-capture information in detail messages")
 - **Small pieces that compose.** Narrow interfaces that combine beat a broad one that anticipates every combination. Small interfaces and uniform data at the boundary let unrelated parts work together. (The Unix philosophy; Go's `io.Reader` and `io.Writer`)
@@ -26,4 +26,4 @@ Apply each check to the call sites. Skip a check that does not fit the interface
 
 ## Weigh the result
 
-The checks pull against each other: a deep module against small composable ones, a constrained vocabulary against a general one. Match the effort to the interface's reach. A private helper with one caller needs a good name and little else; a boundary that many callers or other teams depend on deserves the full pass. Prefer the design whose call sites read clearly with the fewest concepts, and say which checks decided it.
+The checks pull against each other: a deep module against small composable ones, a constrained vocabulary against a general one. Match the effort to the interface's reach, as the skill's engineering judgment matches rigor to consequences. A private helper with one caller needs a good name and little else; a boundary that many callers or other teams depend on deserves the full pass. Prefer the design whose call sites read clearly with the fewest concepts, and say which checks decided it.
