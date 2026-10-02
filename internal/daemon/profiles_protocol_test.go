@@ -426,8 +426,8 @@ func TestMoveBetweenDesktopsArrivesAsOneMessageAndFailsWhole(t *testing.T) {
 		t.Fatalf("the move result carries %d desktops, want source and target", len(moved.Desktops))
 	}
 	seen := arrangementChanges(t, watcher)
-	if len(seen) != 1 || len(seen[0].Desktops) != 1 || seen[0].Desktops[0].ID != target.ID {
-		t.Fatalf("the move arrived as %d messages, want one carrying the occupied target", len(seen))
+	if len(seen) != 1 || len(seen[0].Desktops) != 2 {
+		t.Fatalf("the move arrived as %d messages, want one carrying the emptied source and the occupied target", len(seen))
 	}
 	for _, desktop := range seen[0].Desktops {
 		tree, err := layouttree.DecodeLayout(desktop.TreeJson)

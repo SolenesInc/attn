@@ -65,6 +65,11 @@ func (d *Daemon) checkLaunchPlacement(profile profiles.Profile, placement *launc
 		return nil
 	}
 	desktop, err := d.store.LaunchDesktop(profile.ID, placement.desktopID)
+	var missing *profiles.Error
+	if placement.desktopID != "" && errors.As(err, &missing) && missing.Code == profiles.CodeNotFound {
+		*placement = launchPlacement{direction: placement.direction}
+		return nil
+	}
 	if err != nil {
 		return err
 	}

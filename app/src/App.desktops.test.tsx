@@ -146,7 +146,7 @@ vi.mock('./components/LocationPicker', () => ({ LocationPicker: () => null }));
 const { mockShowError, mockShowNotice } = vi.hoisted(() => ({ mockShowError: vi.fn(), mockShowNotice: vi.fn() }));
 vi.mock('./components/Toast', () => ({
   Toast: () => null,
-  useToast: () => ({ toast: null, showError: mockShowError, showNotice: mockShowNotice, clearToast: vi.fn() }),
+  useToast: () => ({ showError: mockShowError, showNotice: mockShowNotice }),
 }));
 vi.mock('./hooks/useKeyboardShortcuts', () => ({ useKeyboardShortcuts: vi.fn() }));
 vi.mock('./hooks/useUIScale', () => ({

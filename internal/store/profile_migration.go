@@ -143,7 +143,7 @@ func (s *Store) EditProfileMigration(expectedRevision int64, edit func(plan prof
 
 func (s *Store) FinishProfileMigration(expectedRevision int64) (ProfileMigrationFinish, error) {
 	var result ProfileMigrationFinish
-	err := s.profilesArrangementTx(func(tx *sql.Tx, now string) error {
+	err := s.profilesTx(func(tx *sql.Tx, now string) error {
 		view, err := loadProfileMigration(tx)
 		if err != nil {
 			return err

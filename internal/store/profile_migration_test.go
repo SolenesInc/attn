@@ -146,9 +146,6 @@ func TestAClosedImportRetiresAndFinishDoesNotBringItBack(t *testing.T) {
 			}
 		}
 	}
-	if len(desktops) != 2 {
-		t.Fatalf("desktops = %+v, want only the two occupied desktops", desktops)
-	}
 }
 
 func TestTheProfileHoldingAPendingMigrationCannotBeDeleted(t *testing.T) {
@@ -201,7 +198,7 @@ func TestFinishKeepsADesktopOrderChangedDuringThePicker(t *testing.T) {
 	for _, d := range desktops {
 		order = append(order, d.ShortcutSlot)
 	}
-	if !reflect.DeepEqual(order, []int{3, 1, 4}) {
-		t.Fatalf("slots in desktop order = %v, want the reorder kept and the new slot-4 desktop last", order)
+	if !reflect.DeepEqual(order, []int{3, 1, 2, 4}) {
+		t.Fatalf("slots in desktop order = %v, want the reorder kept, the emptied slot-2 desktop kept for now, and the new slot-4 desktop last", order)
 	}
 }

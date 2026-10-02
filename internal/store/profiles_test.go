@@ -154,10 +154,10 @@ func TestProfileArrangementSurvivesRestart(t *testing.T) {
 	if gotProfile.CurrentDesktopID != second.ID {
 		t.Fatalf("current desktop after restart = %s, want %s", gotProfile.CurrentDesktopID, second.ID)
 	}
-	if len(desktops) != 1 || desktops[0].ID != second.ID {
-		t.Fatalf("desktops after restart = %+v, want the occupied desktop retained", desktops)
+	if len(desktops) != 2 || desktops[1].ID != second.ID {
+		t.Fatalf("desktops after restart = %+v, want both desktops retained", desktops)
 	}
-	got := desktops[0]
+	got := desktops[1]
 	if got.ActivePaneID != paneA {
 		t.Fatalf("active pane after restart = %s, want %s", got.ActivePaneID, paneA)
 	}

@@ -238,6 +238,8 @@ type Daemon struct {
 	lastAutoSettleActivityAt          map[string]time.Time
 	autoSettleFireMu                  sync.Mutex
 
+	emptyDesktops emptyDesktopRemoval
+
 	autoSettleMu         sync.Mutex
 	autoSettleTimers     map[string]*autoSettleTimer
 	autoSettleDismissals map[string]bool
@@ -677,6 +679,8 @@ func (d *Daemon) Start() error {
 	if err := d.openStore(); err != nil {
 		return err
 	}
+	d.emptyDesktops.grace = emptyDesktopGraceFromEnv()
+	d.store.OnEmptyDesktop(d.desktopEmptied)
 	d.removeLegacyStateFile()
 	d.ensurePluginSupervisor()
 	d.applyHeadlessContextWindowCap()
@@ -702,6 +706,7 @@ func (d *Daemon) Start() error {
 	d.backlogAtStart = d.snapshotBacklogAtStart()
 	d.ensureCrewCollections()
 	d.importCrewHomes()
+	d.removeEmptyDesktops()
 	d.refreshCurrentAgent()
 	if err := d.migrateCrewTicketIdentities(); err != nil {
 		return fmt.Errorf("migrate crew ticket identities: %w", err)

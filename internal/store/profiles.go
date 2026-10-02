@@ -117,10 +117,22 @@ func (s *Store) profilesTxSeq(fn func(tx *sql.Tx, now string) error) (int64, err
 		return 0, err
 	}
 	defer tx.Rollback()
-	if err := fn(tx, time.Now().UTC().Format(sortableTimeFormat)); err != nil {
+	at := time.Now().UTC()
+	now := at.Format(sortableTimeFormat)
+	if err := fn(tx, now); err != nil {
 		return 0, err
 	}
-	return seq, tx.Commit()
+	emptied, err := stampEmptyDesktops(tx, now)
+	if err != nil {
+		return 0, err
+	}
+	if err := tx.Commit(); err != nil {
+		return 0, err
+	}
+	if emptied {
+		s.announceEmptyDesktop(at)
+	}
+	return seq, nil
 }
 
 const profileColumns = `id, name, current_desktop_id, last_used_at, revision, deleted_at, chief_session_id`
@@ -523,7 +535,7 @@ func (s *Store) DeleteProfile(id string, expectedRevision int64, destinationID s
 		opts = options[0]
 	}
 	var result ProfileDeletion
-	err := s.profilesArrangementTx(func(tx *sql.Tx, now string) error {
+	err := s.profilesTx(func(tx *sql.Tx, now string) error {
 		profile, err := loadLiveProfile(tx, id)
 		if err != nil {
 			return err
@@ -741,7 +753,7 @@ func moveProfileAutomations(tx *sql.Tx, from, to, now string) ([]string, error) 
 func (s *Store) CreateDesktop(profileID, name string, shortcutSlot int, takeFreeSlot bool) (profiles.Profile, profiles.Desktop, error) {
 	var profile profiles.Profile
 	var desktop profiles.Desktop
-	err := s.profilesArrangementTx(func(tx *sql.Tx, now string) error {
+	err := s.profilesTx(func(tx *sql.Tx, now string) error {
 		var err error
 		if profile, err = loadLiveProfile(tx, profileID); err != nil {
 			return err
@@ -876,7 +888,7 @@ func deleteDesktop(tx *sql.Tx, id string) error {
 
 func (s *Store) SetCurrentDesktop(profileID, desktopID string) (profiles.Profile, error) {
 	var profile profiles.Profile
-	err := s.profilesArrangementTx(func(tx *sql.Tx, now string) error {
+	err := s.profilesTx(func(tx *sql.Tx, now string) error {
 		var err error
 		if profile, err = loadLiveProfile(tx, profileID); err != nil {
 			return err
@@ -937,7 +949,7 @@ func (s *Store) ShowLeaf(desktopID, leafID string) (profiles.Profile, profiles.D
 	desktopID, leafID = strings.TrimSpace(desktopID), strings.TrimSpace(leafID)
 	var profile profiles.Profile
 	var desktop profiles.Desktop
-	err := s.profilesArrangementTx(func(tx *sql.Tx, now string) error {
+	err := s.profilesTx(func(tx *sql.Tx, now string) error {
 		if desktopID == "" || leafID == "" {
 			return profiles.Errorf(profiles.CodeInvalid, "showing a leaf needs desktop_id and leaf_id")
 		}
@@ -958,7 +970,7 @@ func (s *Store) ShowSession(sessionID string) (profiles.Profile, profiles.Deskto
 	var profile profiles.Profile
 	var desktop profiles.Desktop
 	var leafID string
-	err := s.profilesArrangementTx(func(tx *sql.Tx, now string) error {
+	err := s.profilesTx(func(tx *sql.Tx, now string) error {
 		if sessionID == "" {
 			return profiles.Errorf(profiles.CodeInvalid, "showing a session needs session_id")
 		}
@@ -1153,7 +1165,7 @@ func writeDesktopArrangement(tx *sql.Tx, now string, desktop *profiles.Desktop) 
 
 func (s *Store) UpdateDesktopArrangement(id string, expectedRevision int64, edit func(desktop profiles.Desktop) (profiles.Desktop, error)) (profiles.Desktop, error) {
 	var desktop profiles.Desktop
-	err := s.profilesArrangementTx(func(tx *sql.Tx, now string) error {
+	err := s.profilesTx(func(tx *sql.Tx, now string) error {
 		current, err := loadDesktop(tx, id)
 		if err != nil {
 			return err
@@ -1257,7 +1269,7 @@ func (s *Store) LaunchDesktop(profileID, desktopID string) (profiles.Desktop, er
 func (s *Store) PlaceLaunchedSession(request SessionPlacementRequest) (profiles.Desktop, string, error) {
 	paneID := newProfileEntityID("pane")
 	var desktop profiles.Desktop
-	err := s.profilesArrangementTx(func(tx *sql.Tx, now string) error {
+	err := s.profilesTx(func(tx *sql.Tx, now string) error {
 		profileID, err := openSessionProfileID(tx, request.SessionID)
 		if err != nil {
 			return err
@@ -1267,6 +1279,11 @@ func (s *Store) PlaceLaunchedSession(request SessionPlacementRequest) (profiles.
 			return err
 		}
 		current, err := loadLaunchDesktop(tx, profile, request.DesktopID)
+		var missing *profiles.Error
+		if request.DesktopID != "" && errors.As(err, &missing) && missing.Code == profiles.CodeNotFound {
+			request.AnchorPaneID, request.Focus = "", false
+			current, err = loadLaunchDesktop(tx, profile, "")
+		}
 		if err != nil {
 			return err
 		}
@@ -1363,7 +1380,7 @@ func (s *Store) MoveLeaf(request LeafMoveRequest) (LeafMove, error) {
 		return s.moveLeafWithinDesktop(request)
 	}
 	var result LeafMove
-	err := s.profilesArrangementTx(func(tx *sql.Tx, now string) error {
+	err := s.profilesTx(func(tx *sql.Tx, now string) error {
 		source, target, err := loadMoveEnds(tx, request)
 		if err != nil {
 			return err
@@ -1405,7 +1422,7 @@ type SessionDesktopMove struct {
 // only a moved active pane, onto a desktop not on screen, takes that leaf.
 func (s *Store) MoveSessionToDesktop(sessionID, targetDesktopID, title string) (SessionDesktopMove, error) {
 	var result SessionDesktopMove
-	err := s.profilesArrangementTx(func(tx *sql.Tx, now string) error {
+	err := s.profilesTx(func(tx *sql.Tx, now string) error {
 		profileID, err := openSessionProfileID(tx, sessionID)
 		if err != nil {
 			return err
@@ -1539,19 +1556,27 @@ func removeSessionPlacement(tx *sql.Tx, now, sessionID string) (*profiles.Deskto
 	return &desktop, nil
 }
 
-func (s *Store) unplaceSessionLocked(now, sessionID string) error {
+func (s *Store) unplaceSessionLocked(at time.Time, sessionID string) error {
 	tx, err := s.db.Begin()
 	if err != nil {
 		return err
 	}
 	defer tx.Rollback()
+	now := at.Format(sortableTimeFormat)
 	if _, err := removeSessionPlacement(tx, now, sessionID); err != nil {
 		return err
 	}
-	if err := pruneEmptyDesktops(tx); err != nil {
+	emptied, err := stampEmptyDesktops(tx, now)
+	if err != nil {
 		return err
 	}
-	return tx.Commit()
+	if err := tx.Commit(); err != nil {
+		return err
+	}
+	if emptied {
+		s.announceEmptyDesktop(at)
+	}
+	return nil
 }
 
 func (s *Store) unplaceSessionsLocked(reason, where string, args ...any) {
@@ -1560,9 +1585,9 @@ func (s *Store) unplaceSessionsLocked(reason, where string, args ...any) {
 		log.Printf("[store] %s: listing placed sessions: %v", reason, err)
 		return
 	}
-	now := time.Now().UTC().Format(sortableTimeFormat)
+	at := time.Now().UTC()
 	for _, id := range sessionIDs {
-		if err := s.unplaceSessionLocked(now, id); err != nil {
+		if err := s.unplaceSessionLocked(at, id); err != nil {
 			log.Printf("[store] %s: removing the pane of session %s: %v", reason, id, err)
 		}
 	}
@@ -1570,7 +1595,7 @@ func (s *Store) unplaceSessionsLocked(reason, where string, args ...any) {
 
 func (s *Store) RemoveSessionPlacement(sessionID string) (*profiles.Desktop, error) {
 	var desktop *profiles.Desktop
-	err := s.profilesArrangementTx(func(tx *sql.Tx, now string) error {
+	err := s.profilesTx(func(tx *sql.Tx, now string) error {
 		var err error
 		desktop, err = removeSessionPlacement(tx, now, sessionID)
 		return err
@@ -1581,7 +1606,7 @@ func (s *Store) RemoveSessionPlacement(sessionID string) (*profiles.Desktop, err
 func (s *Store) MoveSessionToProfile(request SessionProfileMoveRequest) (SessionProfileMove, error) {
 	sessionID, destinationID := request.SessionID, request.DestinationProfileID
 	move := SessionProfileMove{SessionID: sessionID, ToProfileID: destinationID}
-	err := s.profilesArrangementTx(func(tx *sql.Tx, now string) error {
+	err := s.profilesTx(func(tx *sql.Tx, now string) error {
 		if strings.TrimSpace(request.ExpectedProfileID) == "" {
 			return profiles.Errorf(profiles.CodeInvalid, "moving session %s needs the profile it was seen in", sessionID)
 		}

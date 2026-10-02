@@ -503,6 +503,15 @@ func applyMigration167(tx *sql.Tx, migrationSQL string) error {
 			return err
 		}
 	}
+	has, err = columnExists(tx, "desktops", "empty_since")
+	if err != nil {
+		return err
+	}
+	if !has {
+		if _, err := tx.Exec(`ALTER TABLE desktops ADD COLUMN empty_since TEXT NOT NULL DEFAULT ''`); err != nil {
+			return err
+		}
+	}
 	has, err = columnExists(tx, "profile_migration", "launch_review_complete")
 	if err != nil {
 		return err
@@ -580,29 +589,76 @@ func moveLaunchItemProfile(tx *sql.Tx, kind, id, profileID string) error {
 	return err
 }
 
-func pruneEmptyDesktops(tx *sql.Tx) error {
-	ids, err := queryColumn[string](tx, `SELECT d.id FROM desktops d JOIN profiles p ON p.id = d.profile_id WHERE d.tree_json = '' AND d.id != p.current_desktop_id AND NOT EXISTS (SELECT 1 FROM profile_migration WHERE phase = 'placement_required')`)
+const removableDesktop = `tree_json = '' AND id != (SELECT current_desktop_id FROM profiles WHERE id = desktops.profile_id) AND NOT EXISTS (SELECT 1 FROM profile_migration WHERE phase = 'placement_required')`
+
+// stampEmptyDesktops records when each desktop became empty and not current; true when one just did.
+// It reads first so a read-only profiles transaction never takes SQLite's write lock.
+func stampEmptyDesktops(tx *sql.Tx, now string) (bool, error) {
+	var stale bool
+	if err := tx.QueryRow(`SELECT EXISTS(SELECT 1 FROM desktops WHERE (empty_since = '') = (` + removableDesktop + `))`).Scan(&stale); err != nil || !stale {
+		return false, err
+	}
+	if _, err := tx.Exec(`UPDATE desktops SET empty_since = '' WHERE empty_since != '' AND NOT (` + removableDesktop + `)`); err != nil {
+		return false, err
+	}
+	stamped, err := tx.Exec(`UPDATE desktops SET empty_since = ? WHERE empty_since = '' AND `+removableDesktop, now)
 	if err != nil {
-		return err
+		return false, err
 	}
-	for _, id := range ids {
-		if err := appendBoundLaunchDesktopFacts(tx, id); err != nil {
-			return err
-		}
-		if err := deleteDesktop(tx, id); err != nil {
-			return err
-		}
-	}
-	return nil
+	count, err := stamped.RowsAffected()
+	return count > 0, err
 }
 
-func (s *Store) profilesArrangementTx(fn func(tx *sql.Tx, now string) error) error {
-	return s.profilesTx(func(tx *sql.Tx, now string) error {
-		if err := fn(tx, now); err != nil {
+// OnEmptyDesktop tells fn when a desktop just became empty and not current.
+func (s *Store) OnEmptyDesktop(fn func(emptiedAt time.Time)) {
+	s.emptyDesktop = fn
+}
+
+func (s *Store) announceEmptyDesktop(emptiedAt time.Time) {
+	if s.emptyDesktop != nil {
+		s.emptyDesktop(emptiedAt)
+	}
+}
+
+// RemoveEmptyDesktops deletes desktops empty and not current for at least grace. It names their
+// profiles and when the next remaining one is due, zero when none is.
+func (s *Store) RemoveEmptyDesktops(grace time.Duration) ([]string, time.Time, error) {
+	var profileIDs []string
+	var next time.Time
+	err := s.profilesTx(func(tx *sql.Tx, now string) error {
+		if _, err := stampEmptyDesktops(tx, now); err != nil {
 			return err
 		}
-		return pruneEmptyDesktops(tx)
+		at, err := time.Parse(sortableTimeFormat, now)
+		if err != nil {
+			return err
+		}
+		const due = `empty_since != '' AND empty_since <= ?`
+		cutoff := at.Add(-grace).Format(sortableTimeFormat)
+		if profileIDs, err = queryColumn[string](tx, `SELECT DISTINCT profile_id FROM desktops WHERE `+due, cutoff); err != nil {
+			return err
+		}
+		ids, err := queryColumn[string](tx, `SELECT id FROM desktops WHERE `+due, cutoff)
+		if err != nil {
+			return err
+		}
+		for _, id := range ids {
+			if err := appendBoundLaunchDesktopFacts(tx, id); err != nil {
+				return err
+			}
+			if err := deleteDesktop(tx, id); err != nil {
+				return err
+			}
+		}
+		var earliest string
+		if err := tx.QueryRow(`SELECT COALESCE(MIN(empty_since), '') FROM desktops WHERE empty_since != ''`).Scan(&earliest); err != nil || earliest == "" {
+			return err
+		}
+		since, err := time.Parse(sortableTimeFormat, earliest)
+		next = since.Add(grace)
+		return err
 	})
+	return profileIDs, next, err
 }
 
 func appendLaunchDestinationFacts(tx *sql.Tx, destinationID string) error {

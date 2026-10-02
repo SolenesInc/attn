@@ -140,7 +140,7 @@ export function useDesktopNavigation(showNotice: ShowNotice) {
       if (!desktop || desktop.shortcut_slot) return;
       const slot = firstFreeSlot(state.desktops);
       if (slot === null) {
-        showNotice(`Every shortcut ${slotShortcut(1)} to ${slotShortcut(9)} is taken. Delete an empty desktop to free one.`);
+        showNotice(`Every shortcut ${slotShortcut(1)} to ${slotShortcut(9)} is taken.`);
         return;
       }
       report(sendDesktopSetShortcutSlot(desktop.id, slot, desktop.revision));

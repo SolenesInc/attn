@@ -5,8 +5,10 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/victorarias/attn/internal/automation"
 	"github.com/victorarias/attn/internal/client"
@@ -40,6 +42,22 @@ func readLaunchSetting(app *testworld.Peer, kind, id string) protocol.LaunchDesk
 		app.T.Fatalf("read launch setting: %+v", result)
 	}
 	return *result.Item
+}
+
+// awaitDesktopRemoved waits, on a client that saw the desktop, for the arrangement without it.
+func awaitDesktopRemoved(t *testing.T, w *world, profileID, desktopID string) {
+	t.Helper()
+	observer := w.AppOn(profileID)
+	defer observer.Close()
+	gone := func(desktops []protocol.Desktop) bool {
+		return !slices.ContainsFunc(desktops, func(d protocol.Desktop) bool { return d.ID == desktopID })
+	}
+	if gone(observer.Initial.Desktops) {
+		return
+	}
+	testworld.Await(observer, protocol.EventProfileArrangementChanged, func(m protocol.ProfileArrangementChangedMessage) bool {
+		return m.Profile.ID == profileID && gone(m.Desktops)
+	})
 }
 
 func assertBackgroundPlacement(t *testing.T, w *world, profileID, sessionID, target, current, active string) {
@@ -77,6 +95,7 @@ func TestNewAutomationCanReadPendingLaunchDestinationsBeforeItExists(t *testing.
 }
 
 func TestNamedCrewDesktopsShareRecreateAndUserWakeTakesFocus(t *testing.T) {
+	t.Setenv("ATTN_EMPTY_DESKTOP_GRACE", "0")
 	w := newCrewWorld(t, fakeagent.Claude)
 	app, cli := w.App(), w.Client()
 	profile := app.SelectedProfile()
@@ -134,9 +153,7 @@ func TestNamedCrewDesktopsShareRecreateAndUserWakeTakesFocus(t *testing.T) {
 	}
 	crewHandoff(t, cli, day.SessionID, "Day complete.", false, protocol.CrewDayCloseSleep)
 	awaitClosed(app, day.SessionID)
-	if _, exists := viewProfile(t, w, profile).desktops[placed.ID]; exists {
-		t.Fatal("empty noncurrent desktop survived")
-	}
+	awaitDesktopRemoved(t, w, profile, placed.ID)
 	again, err := cli.CrewWake("alder", "", caller)
 	if err != nil {
 		t.Fatal(err)
@@ -164,6 +181,7 @@ func TestNamedCrewDesktopsShareRecreateAndUserWakeTakesFocus(t *testing.T) {
 }
 
 func TestAutomationOwnDesktopUsesOnlyExplicitSlotsAndKeepsFocus(t *testing.T) {
+	t.Setenv("ATTN_EMPTY_DESKTOP_GRACE", "0")
 	w := newWorld(t, fakeagent.Claude)
 	app, cli := w.App(), w.Client()
 	profile := app.SelectedProfile()
@@ -206,9 +224,7 @@ func TestAutomationOwnDesktopUsesOnlyExplicitSlotsAndKeepsFocus(t *testing.T) {
 	}
 	closeSession(t, cli, third, "finished")
 	awaitClosed(app, third)
-	if _, exists := viewProfile(t, w, profile).desktops[numbered.ID]; exists {
-		t.Fatal("empty numbered desktop survived")
-	}
+	awaitDesktopRemoved(t, w, profile, numbered.ID)
 	occupied := mustProfileRequest(app, protocol.DesktopCreateMessage{Cmd: protocol.CmdDesktopCreate, RequestID: "occupy-slot", ProfileID: profile, Name: protocol.Ptr("Taken"), ShortcutSlot: protocol.Ptr(5)}, "occupy-slot").Desktops[0]
 	occupant := w.Spawn(app, fakeagent.Claude, w.Path("occupant"))
 	w.Launched(occupant)
@@ -225,6 +241,7 @@ func TestAutomationOwnDesktopUsesOnlyExplicitSlotsAndKeepsFocus(t *testing.T) {
 }
 
 func TestReopenReturnsToTheLastDesktopAndFallsBackAfterItIsDeleted(t *testing.T) {
+	t.Setenv("ATTN_EMPTY_DESKTOP_GRACE", "0")
 	w := newWorld(t, fakeagent.Codex)
 	app, cli := w.App(), w.Client()
 	profile := app.SelectedProfile()
@@ -255,6 +272,7 @@ func TestReopenReturnsToTheLastDesktopAndFallsBackAfterItIsDeleted(t *testing.T)
 	awaitClosed(app, session)
 	closeSession(t, cli, targetAnchor, "empty the desktop")
 	awaitClosed(app, targetAnchor)
+	awaitDesktopRemoved(t, w, profile, target.ID)
 	if _, err := cli.SessionReopen(client.SessionReopenOptions{SessionID: session}); err != nil {
 		t.Fatal(err)
 	}
@@ -378,6 +396,71 @@ func TestUpgradingAnInstallWithOnlyAutomationsRequiresLaunchReviewAndPlacesExist
 	if got := readLaunchSetting(app, "automation", "check"); !got.Confirmed {
 		t.Fatal("finish did not confirm automation")
 	}
+}
+
+func TestAnEmptyDesktopTheUserLeftIsRemovedThirtySecondsLaterAndTheCurrentOneNever(t *testing.T) {
+	inBubble(t, func(t *testing.T, w *world) {
+		app := w.App()
+		profile := app.SelectedProfile()
+		left := viewProfile(t, w, profile).profile.CurrentDesktopID
+		shown := createDesktop(app, profile)
+		w.advance(29 * time.Second)
+		if _, exists := viewProfile(t, w, profile).desktops[left]; !exists {
+			t.Fatal("an empty desktop the user left 29s ago was removed")
+		}
+		w.advance(time.Second)
+		testworld.Await(app, protocol.EventProfileArrangementChanged, func(m protocol.ProfileArrangementChangedMessage) bool {
+			return !slices.ContainsFunc(m.Desktops, func(d protocol.Desktop) bool { return d.ID == left })
+		})
+		w.advance(time.Hour)
+		view := viewProfile(t, w, profile)
+		if _, exists := view.desktops[left]; exists || len(view.desktops) != 1 || view.profile.CurrentDesktopID != shown.ID {
+			t.Fatalf("after an hour the profile holds %v with %s current, want only the empty current desktop %s", view.desktops, view.profile.CurrentDesktopID, shown.ID)
+		}
+	})
+}
+
+func TestALaunchWhoseDesktopWasRemovedLandsOnTheCurrentDesktopWithoutFocus(t *testing.T) {
+	inBubbleWithAgents(t, func(t *testing.T, w *world) {
+		app := w.App()
+		profile := app.SelectedProfile()
+		driver := connectDriver(t, w, "snipe-plugin", "snipe", map[string]bool{"state_reporting": true})
+		awaitDriverAvailable(app, "snipe")
+		dir := w.Path("launch")
+		if err := os.MkdirAll(dir, 0o755); err != nil {
+			t.Fatal(err)
+		}
+		anchor, _ := spawnDriven(w, app, driver, dir)
+		current, active := placedPane(t, w, anchor)
+		target := createDesktop(app, profile)
+		switchDesktop(app, profile, current.ID)
+		w.advance(20 * time.Second)
+
+		driver.mu.Lock()
+		driver.holdLaunch = true
+		driver.mu.Unlock()
+		request := protocol.SpawnSessionMessage{Cmd: protocol.CmdSpawnSession, ID: "late-launch", Cwd: dir, Agent: "snipe", ProfileID: profile, Placement: &protocol.SessionPlacement{DesktopID: protocol.Ptr(target.ID)}, Cols: 80, Rows: 24}
+		app.Send(request)
+		reply := driver.asked("driver.spawn", nil)
+		w.advance(10 * time.Second)
+		if _, exists := viewProfile(t, w, profile).desktops[target.ID]; exists {
+			t.Fatal("the launch's empty target desktop outlived 30s")
+		}
+		driver.answer(reply, map[string]any{"argv": []string{"/bin/cat"}})
+		driver.launched()
+		if result := testworld.Await(app, protocol.EventSpawnResult, func(r protocol.SpawnResultMessage) bool { return r.ID == request.ID }); !result.Success {
+			t.Fatalf("a launch whose desktop vanished = %+v", result)
+		}
+		assertBackgroundPlacement(t, w, profile, request.ID, current.ID, current.ID, active)
+
+		driver.mu.Lock()
+		driver.holdLaunch = false
+		driver.mu.Unlock()
+		later, _ := spawnDriven(w, app, driver, dir, func(m *protocol.SpawnSessionMessage) {
+			m.Placement = &protocol.SessionPlacement{DesktopID: protocol.Ptr(target.ID)}
+		})
+		assertBackgroundPlacement(t, w, profile, later, current.ID, current.ID, active)
+	})
 }
 
 func TestMovingAnAgentBetweenProfilesPlacesItWithoutTakingFocus(t *testing.T) {
