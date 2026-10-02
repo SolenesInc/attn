@@ -220,6 +220,8 @@ type Daemon struct {
 	lastAutoSettleActivityAt          map[string]time.Time
 	autoSettleFireMu                  sync.Mutex
 
+	emptyDesktops emptyDesktopRemoval
+
 	autoSettleMu         sync.Mutex
 	autoSettleTimers     map[string]*autoSettleTimer
 	autoSettleDismissals map[string]bool
@@ -656,6 +658,8 @@ func (d *Daemon) Start() error {
 	if err := d.openStore(); err != nil {
 		return err
 	}
+	d.emptyDesktops.grace = emptyDesktopGraceFromEnv()
+	d.store.OnEmptyDesktop(d.desktopEmptied)
 	d.removeLegacyStateFile()
 	d.ensurePluginSupervisor()
 	d.applyHeadlessContextWindowCap()
@@ -676,6 +680,7 @@ func (d *Daemon) Start() error {
 	d.ensureGardenCollections()
 	d.ensureCrewCollections()
 	d.importCrewHomes()
+	d.removeEmptyDesktops()
 	d.refreshCurrentAgent()
 	if d.hubManager == nil {
 		d.hubManager = hub.NewManager(
@@ -1294,10 +1299,16 @@ func (d *Daemon) reconcileSessionsWithWorkerBackendState(ctx context.Context, al
 				StateUpdatedAt: now,
 				LastSeen:       now,
 			}
-			_ = d.worktreeMaintenance.ProtectFromAutomaticCleanup(context.Background(), func(foregroundCleanupProtection) error {
-				d.store.Add(recoveredSession)
-				return nil
-			})
+			if err := d.worktreeMaintenance.ProtectFromAutomaticCleanup(context.Background(), func(foregroundCleanupProtection) error {
+				if err := d.store.AddChecked(recoveredSession); err != nil {
+					return err
+				}
+				return d.placeLaunchedSession(recoveredSession, &launchPlacement{reopen: true}).err
+			}); err != nil {
+				d.logf("worker reconciliation could not adopt runtime %s: %v", sessionID, err)
+				report.MissingMetadata++
+				continue
+			}
 			report.Created++
 			report.markChanged(sessionID)
 			continue
@@ -2459,6 +2470,8 @@ func (d *Daemon) handleConnection(conn net.Conn) {
 	}
 
 	switch cmd {
+	case protocol.CmdLaunchDesktopGet, protocol.CmdLaunchDesktopSet:
+		d.handleLaunchDesktopCommand(conn, cmd, msg)
 	case protocol.CmdDelegate:
 		d.handleDelegate(conn, msg.(*protocol.DelegateMessage))
 	case protocol.CmdAutomationApply, protocol.CmdAutomationValidate, protocol.CmdAutomationDefinitionsGet, protocol.CmdAutomationDefinitionGet, protocol.CmdAutomationRun, protocol.CmdAutomationRunsGet, protocol.CmdAutomationSetEnabled, protocol.CmdAutomationDelete, protocol.CmdAutomationCleanup:

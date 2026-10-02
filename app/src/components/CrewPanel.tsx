@@ -1,4 +1,4 @@
-import FocusTrap from 'focus-trap-react';
+import FocusTrap from './AppFocusTrap';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useDaemonApi } from '../contexts/DaemonApiContext';
 import { useCrewCharterAutosave, type CrewCharterAutosave, type CrewCharterEdit } from '../hooks/useCrewCharterAutosave';
@@ -30,6 +30,7 @@ interface CrewPanelProps {
   seeds: Seed[];
   seedsTotal: number;
   onClose: () => void;
+  onWakeMember: (member: string) => void;
   onOpenSeed: (seedId: string, placementSessionId?: string) => void;
 }
 
@@ -187,6 +188,7 @@ function CrewPanelSurface({
   seeds,
   seedsTotal,
   onClose,
+  onWakeMember,
   onOpenSeed,
   stores,
 }: Omit<CrewPanelProps, 'visit'> & { stores: CrewPanelStores }) {
@@ -230,7 +232,8 @@ function CrewPanelSurface({
   const confirmRestart = () => {
     if (!member || edit?.state !== 'saved') return;
     setConfirming(false);
-    restarts.start(member);
+    if (member.binding_session) restarts.start(member);
+    else onWakeMember(member.id);
   };
 
   return (

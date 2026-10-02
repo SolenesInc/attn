@@ -1,3 +1,4 @@
+import { handleLaunchDesktopEvent } from './daemonLaunchDesktopEvents';
 import { handleDelegationDaemonEvent, type DelegationSettingsState, type DelegationModelCatalog } from './daemonDelegationEvents';
 import {
   handleCrewDaemonEvent,
@@ -197,6 +198,7 @@ export interface CrewSleepResult {
   detail?: string;
 }
 export interface CrewSetOptions {
+  launchDesktop?: import('../types/generated').LaunchDesktopSetting;
   member: string;
   expectedRevision: number;
   agent: string;
@@ -306,7 +308,7 @@ export interface RateLimitState {
 }
 
 // Protocol version - must match daemon's ProtocolVersion
-export const PROTOCOL_VERSION = '338';
+export const PROTOCOL_VERSION = '345';
 const MAX_PENDING_ATTACH_OUTPUTS = 512;
 
 const CLIENT_INSTANCE_ID =
@@ -417,7 +419,6 @@ interface EndpointActionResult {
 interface SpawnResult {
   success: boolean;
   error?: string;
-  placementError?: string;
 }
 
 type AttachResult = AttachResultData & {
@@ -1667,6 +1668,9 @@ export function useDaemonSocket({
             }
             pendingActionsRef.current.delete(key);
             if (data.success && typeof data.session_id === 'string') {
+              if (data.show_error) {
+                callbacksRef.current.onSettingError?.(`Member is awake, but showing it failed: ${data.show_error}`);
+              }
               pending.resolve({
                 sessionId: data.session_id,
               });
@@ -1835,7 +1839,7 @@ export function useDaemonSocket({
               if (pending) {
                 pendingActionsRef.current.delete(key);
                 if (data.success) {
-                  pending.resolve({ success: true, placementError: data.placement_error });
+                  pending.resolve({ success: true });
                 } else {
                   pending.reject(new Error(data.error || 'Failed to spawn session'));
                 }
@@ -2575,6 +2579,7 @@ export function useDaemonSocket({
             if (handleDelegationDaemonEvent(data, pending)) break;
             if (handleCrewDaemonEvent(data, pending)) break;
             if (handleProfileDaemonEvent(data, pending)) break;
+            if (handleLaunchDesktopEvent(data, pending)) break;
             if (handleAutoModeDaemonEvent(data, pending)) break;
             if (handleConversationDaemonEvent(data, pending, () => setKeptConversationsChangeSignal((signal) => signal + 1))) break;
             if (handleWorktreeDaemonEvent(data, pending, {
@@ -3303,13 +3308,11 @@ export function useDaemonSocket({
     setPtyBackend({
       spawn: async (args: PtySpawnArgs) => {
         // The mounted pane owns attachment, including replay of startup output.
-        if (ptyTransportRef.current.hasAttachedRuntime(args.id)) return {};
+        if (ptyTransportRef.current.hasAttachedRuntime(args.id)) return;
         try {
-          const { placementError } = await sendSpawnSession(args);
-          return { placementError };
+          await sendSpawnSession(args);
         } catch (error) {
           if (!isAlreadyExistsError(error)) throw error;
-          return {};
         }
       },
       attach: async (args: PtyAttachArgs, options?: { forceResizeBeforeAttach?: boolean }) => {
@@ -4014,6 +4017,7 @@ export function useDaemonSocket({
         agent: options.agent,
         model: options.model,
         effort: options.effort,
+        ...(options.launchDesktop ? { launch_desktop_setting: options.launchDesktop } : {}),
       },
       `Saving ${crewDisplayName(options.member)}'s launch settings timed out`,
       MODEL_DISCOVERY_TIMEOUT_MS,
@@ -4526,6 +4530,8 @@ export function useDaemonSocket({
       definitionYaml: string,
       expectedId: string,
       expectedRevision: number,
+      launchDesktop?: import('../types/generated').LaunchDesktopSetting,
+      profileId?: string,
     ): Promise<{ definition: AutomationDefinitionSummary; specYaml: string }> => {
       return new Promise((resolve, reject) => {
         const ws = wsRef.current;
@@ -4547,8 +4553,10 @@ export function useDaemonSocket({
           JSON.stringify({
             cmd: 'automation_apply',
             definition_yaml: definitionYaml,
+            ...(profileId ? { profile_id: profileId } : {}),
             expected_id: expectedId,
             expected_revision: expectedRevision,
+            ...(launchDesktop ? { launch_desktop_setting: launchDesktop } : {}),
             request_id: requestId,
           }),
         );
@@ -4697,12 +4705,6 @@ export function useDaemonSocket({
     [sendProfileCommand],
   );
 
-  const sendDesktopDelete = useCallback(
-    (desktopId: string, expectedRevision: number) =>
-      sendProfileCommand('desktop_delete', { desktop_id: desktopId, expected_revision: expectedRevision }),
-    [sendProfileCommand],
-  );
-
   const sendDesktopRename = useCallback(
     (desktopId: string, name: string, expectedRevision: number) =>
       sendProfileCommand('desktop_rename', { desktop_id: desktopId, name, expected_revision: expectedRevision }),
@@ -4716,16 +4718,6 @@ export function useDaemonSocket({
         ...(reorder.previousDesktopId ? { previous_desktop_id: reorder.previousDesktopId } : {}),
         ...(reorder.nextDesktopId ? { next_desktop_id: reorder.nextDesktopId } : {}),
         expected_revision: reorder.expectedRevision,
-      }),
-    [sendProfileCommand],
-  );
-
-  const sendDesktopSetShortcutSlot = useCallback(
-    (desktopId: string, shortcutSlot: number | null, expectedRevision: number) =>
-      sendProfileCommand('desktop_set_shortcut_slot', {
-        desktop_id: desktopId,
-        expected_revision: expectedRevision,
-        ...(shortcutSlot === null ? {} : { shortcut_slot: shortcutSlot }),
       }),
     [sendProfileCommand],
   );
@@ -4842,6 +4834,11 @@ export function useDaemonSocket({
     [sendRequest],
   );
 
+  const sendLaunchDesktopGet = useCallback((kind: import('../types/generated').LaunchDesktopKind, itemId: string) =>
+    sendRequest<import('../types/generated').LaunchDesktopResultMessage>('launch_desktop_get', { kind, item_id: itemId }, 'The daemon did not answer the desktop request'), [sendRequest]);
+  const sendLaunchDesktopSet = useCallback((kind: import('../types/generated').LaunchDesktopKind, itemId: string, setting: import('../types/generated').LaunchDesktopSetting) =>
+    sendRequest<import('../types/generated').LaunchDesktopResultMessage>('launch_desktop_set', { kind, item_id: itemId, setting }, 'The daemon did not save the desktop'), [sendRequest]);
+
   const sendMigrationGet = useCallback(() => sendMigrationCommand('migration_get'), [sendMigrationCommand]);
 
   const sendMigrationKeep = useCallback(
@@ -4906,10 +4903,8 @@ export function useDaemonSocket({
     sendProfileDelete,
     sendSessionMove,
     sendDesktopCreate,
-    sendDesktopDelete,
     sendDesktopRename,
     sendDesktopReorder,
-    sendDesktopSetShortcutSlot,
     sendDesktopSetCurrent,
     sendDesktopSetActivePane,
     sendDesktopShowSession,
@@ -4921,6 +4916,8 @@ export function useDaemonSocket({
     sendDesktopRemoveLeaf,
     sendDesktopSetSplitRatio,
     sendMigrationGet,
+    sendLaunchDesktopGet,
+    sendLaunchDesktopSet,
     sendMigrationKeep,
     sendMigrationMove,
     sendMigrationSuggest,

@@ -191,6 +191,20 @@ describe('CrewPanel', () => {
     expect(daemon.sentOf('delegation_preferences_get')).toHaveLength(1);
   });
 
+  it('keeps the acknowledged new desktop when another launch field changes during its save', async () => {
+    const { daemon, answer } = await renderPanel({ members: [member('keel', 5, { resolved_agent: 'codex' })], script: { crew_set: [HOLD] } });
+    await gesture(daemon, () => fireEvent.change(panel().getByLabelText('Desktop'), { target: { value: '__new' } }));
+    const dialog = screen.getByRole('dialog', { name: 'A new desktop' });
+    fireEvent.change(within(dialog).getByRole('textbox', { name: 'Name' }), { target: { value: 'Review' } });
+    await gesture(daemon, () => fireEvent.click(within(dialog).getByRole('button', { name: 'Use this name' })));
+    fireEvent.change(panel().getByLabelText('Model'), { target: { value: 'openai/gpt-6-astra' } });
+    const launch_desktop = { desktop_id: 'desktop-review', label: 'Review (no ⌘ number)' };
+    await answer(daemon.sentOf('crew_set')[0], saved({ member: member('keel', 6, { resolved_agent: 'codex', launch_desktop }) }));
+    expect(daemon.sentOf('crew_set')).toHaveLength(2);
+    expect(daemon.sentOf('crew_set')[1].launch_desktop_setting).toEqual(launch_desktop);
+    expect(daemon.sentOf('crew_set')[1].model).toBe('openai/gpt-6-astra');
+  });
+
   it('saves a full atomic selection, blocks restart until acknowledgment, and clears to defaults', async () => {
     const { daemon, answer } = await renderPanel({
       script: { crew_set: [HOLD] },
@@ -418,8 +432,14 @@ describe('CrewPanel', () => {
     expect(panel().queryByText(/New day started/)).not.toBeInTheDocument();
   });
 
-  it('closes with Escape and wakes an asleep member through the guarded restart action', async () => {
-    const { daemon, openCrew, closeWithEscape } = await renderPanel({ members: [member('keel', 5)] });
+  it('closes with Escape and an app wake shows the sleeping member’s day', async () => {
+    const { daemon, openCrew, closeWithEscape } = await renderPanel({
+      members: [member('keel', 5)],
+      sessions: [daemonSession('session-keel')],
+    });
+    daemon.on('crew_wake', () => ({
+      event: 'crew_wake_result', success: true, member: 'keel', session_id: 'session-keel',
+    }));
 
     await closeWithEscape();
     expect(isPanelOpen()).toBe(false);
@@ -428,7 +448,11 @@ describe('CrewPanel', () => {
     fireEvent.click(panel().getByRole('button', { name: 'Wake' }));
     const dialog = panel().getByRole('alertdialog');
     await gesture(daemon, () => fireEvent.click(within(dialog).getByRole('button', { name: 'Wake member' })));
-    expect(restartGuards(daemon)).toEqual([expect.objectContaining({ member: 'keel', expected_session_id: '', expected_revision: 5 })]);
+    expect(daemon.sentOf('crew_wake')).toEqual([expect.objectContaining({ member: 'keel' })]);
+    expect(daemon.sentOf('crew_restart')).toEqual([]);
+    expect(isPanelOpen()).toBe(false);
+    expect(document.querySelector('.session-terminal-desktop[data-session-visible="1"]'))
+      .toHaveAttribute('data-desktop-id', 'desktop-session-keel');
   });
 
   it('keeps roster navigation while async harness discovery settles', async () => {

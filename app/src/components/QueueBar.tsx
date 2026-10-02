@@ -8,7 +8,6 @@ import { slotShortcut } from '../utils/desktops';
 import { deriveTileTitle } from '../utils/tilePresentation';
 import { useDaemonStore } from '../store/daemonSessions';
 import { clampIntoViewport } from '../utils/viewportClamp';
-import { UNPLACED_GROUP_ID } from '../utils/desktopViewModels';
 import { CriticalNotificationStrip } from './CriticalNotificationStrip';
 import { AgentRowView, AgentSessionRow, type SlotOf } from './palette/AgentRows';
 import { agentPaletteRows, type AgentPaletteRow } from './palette/agentPaletteRows';
@@ -112,7 +111,7 @@ function useSlotOf(): SlotOf {
   }, [desktops]);
   return (desktopId, sessionId) => {
     const id = sessionId ? desktopOfSession.get(sessionId) : desktopId;
-    if (!id || id === UNPLACED_GROUP_ID) return '—';
+    if (!id) return '—';
     const index = visualIndexOfDesktop(id);
     return index >= 0 ? slotShortcut(index + 1) : '·';
   };
@@ -323,11 +322,10 @@ function DesktopChips() {
   const { desktops, queue, selectedDesktopId, visualIndexOfDesktop, onSelectDesktop, onOpenOverview } =
     useSidebarContext();
   const chipDrop = useDesktopChipDrop();
-  const placed = desktops.filter((desktop) => desktop.id !== UNPLACED_GROUP_ID);
-  const slotted = placed
+  const slotted = desktops
     .filter((desktop) => visualIndexOfDesktop(desktop.id) >= 0)
     .sort((a, b) => visualIndexOfDesktop(a.id) - visualIndexOfDesktop(b.id));
-  const extras = placed.filter((desktop) => visualIndexOfDesktop(desktop.id) < 0);
+  const extras = desktops.filter((desktop) => visualIndexOfDesktop(desktop.id) < 0);
   const waitingOn = new Map<string, number>();
   for (const row of queue?.turns ?? []) waitingOn.set(row.desktopId, (waitingOn.get(row.desktopId) ?? 0) + 1);
   const extrasWaiting = extras.reduce((total, desktop) => total + (waitingOn.get(desktop.id) ?? 0), 0);

@@ -42,6 +42,7 @@ type Store struct {
 	costMu                 sync.Mutex
 	liveCosts              map[string]*sessionCostEntry
 	profilesSeq            int64
+	emptyDesktop           func(emptiedAt time.Time)
 }
 
 // touchResolution bounds how stale last_seen may be; its tightest reader, the Claude

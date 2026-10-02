@@ -91,6 +91,17 @@ func (d *Daemon) inboxRecipient(a inbox.Address) (*protocol.Session, string, err
 	}
 	return d.store.Get(id), memberID, nil
 }
+// inboxWakeRequester names who a wake for this address answers: the oldest unread message's sender.
+func (d *Daemon) inboxWakeRequester(a inbox.Address) string {
+	deliveries, err := d.store.UnreadInboxDeliveries(a)
+	if err != nil || len(deliveries) == 0 {
+		return ""
+	}
+	if peer := deliveries[0].Peer; peer != nil {
+		return d.launchRequester(peer.SenderSessionID, "another agent")
+	}
+	return ""
+}
 func (d *Daemon) inboxHolder(a inbox.Address) *protocol.Session {
 	holder, _, _ := d.inboxRecipient(a)
 	return holder
@@ -194,7 +205,7 @@ func (d *Daemon) deliverInboxLocked(a inbox.Address, state *inboxDeliveryState) 
 					}
 					d.logInboxExhaustion(a)
 					return nil
-				})
+				}, crewWakeRequest{RequestedBy: d.inboxWakeRequester(a)})
 				d.crewWakeMu.Unlock()
 				if errors.Is(err, errInboxNoUnread) {
 					return receipt, nil

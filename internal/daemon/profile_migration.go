@@ -62,6 +62,18 @@ func protocolMigrationState(view store.ProfileMigrationView) (protocol.Migration
 		CanUndo:             view.Plan.CanUndo(),
 		SuggestionAvailable: view.Plan.SuggestionAvailable(),
 	}
+	if view.State.Phase == profilemigration.PhaseLaunchRequired {
+		for _, item := range view.LaunchItems {
+			state.LaunchItems = append(state.LaunchItems, protocolLaunchItem(item))
+		}
+		for _, desktop := range view.LaunchDesktops {
+			wire, err := protocolDesktop(desktop)
+			if err != nil {
+				return state, err
+			}
+			state.LaunchDesktops = append(state.LaunchDesktops, wire)
+		}
+	}
 	if !view.PlacementRequired() {
 		state.CanUndo, state.SuggestionAvailable = false, false
 		return state, nil
@@ -193,8 +205,13 @@ func (d *Daemon) handleMigrationFinish(client *wsClient, msg *protocol.Migration
 			return finish.View, nil, err
 		}
 		return finish.View, func() {
-			d.publishArrangementChanged(finish.Profile.ID)
-			d.publishMigrationChanged(finish.Profile.ID)
+			if finish.Profile.ID != "" {
+				d.publishArrangementChanged(finish.Profile.ID)
+			}
+			for _, profileID := range finish.LaunchProfileIDs {
+				d.publishArrangementChanged(profileID)
+			}
+			d.publishMigrationChanged(finish.View.Manifest.ProfileID)
 		}, nil
 	})
 }
@@ -202,7 +219,7 @@ func (d *Daemon) handleMigrationFinish(client *wsClient, msg *protocol.Migration
 func (d *Daemon) projectMigrationChanged(ev bus.Event) {
 	if ev.Name != FactProfileMigrationChanged {
 		view, err := d.store.ProfileMigration()
-		if err != nil || !view.PlacementRequired() {
+		if err != nil || view.State.Phase == profilemigration.PhaseComplete {
 			return
 		}
 	}

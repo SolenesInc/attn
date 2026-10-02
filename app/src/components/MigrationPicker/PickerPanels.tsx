@@ -75,7 +75,10 @@ interface DesktopCardProps {
 
 function DesktopCard({ desktop, board, onActivate, onKeep }: DesktopCardProps) {
   const titles = groupTitles(board.view, desktop.groupIds);
-  const leaves = desktop.groupIds.reduce((sum, id) => sum + (board.view.groupById.get(id)?.leaves.length ?? 0), 0);
+  const groups = desktop.groupIds.map((id) => board.view.groupById.get(id));
+  const agents = groups.reduce((sum, group) => sum + (group?.agents ?? 0), 0);
+  const tiles = groups.reduce((sum, group) => sum + (group?.tiles ?? 0), 0);
+  const counts = [agents ? plural(agents, 'agent') : '', tiles ? plural(tiles, 'tile') : ''].filter(Boolean).join(' · ');
   const slot = desktop.desktop.shortcut_slot;
   return (
     <div
@@ -97,7 +100,7 @@ function DesktopCard({ desktop, board, onActivate, onKeep }: DesktopCardProps) {
           {slot ? <kbd>{slot}</kbd> : <span className="mp-extra-mark" aria-hidden="true">◌</span>}
           {desktop.label}
         </span>
-        <span className="mp-deskmeta">{leaves ? plural(leaves, 'tile') : ''}</span>
+        <span className="mp-deskmeta">{counts}</span>
       </div>
       <div className="mp-desk-preview">
         <DraftPreview

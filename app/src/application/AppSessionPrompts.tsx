@@ -2,7 +2,6 @@ import { ChiefOfStaffTransferPrompt } from '../components/ChiefOfStaffTransferPr
 import { LocationPicker } from '../components/LocationPicker';
 import { SessionContextCapPrompt } from '../components/SessionContextCapPrompt';
 import { SessionCreationProgress } from '../components/SessionCreationProgress';
-import { UndoToast } from '../components/UndoToast';
 import { useDaemonApi } from '../contexts/DaemonApiContext';
 import {
   useAppErrorsContext,
@@ -61,7 +60,6 @@ export function AppSessionPrompts() {
         endpoints={daemonEndpoints}
         chiefExists={hasChiefOfStaff}
       />
-      <UndoToast />
       <SessionCreationProgress
         isVisible={sessionCreationJob !== null}
         label={sessionCreationJob?.label || ''}

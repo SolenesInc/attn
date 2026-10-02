@@ -1,7 +1,21 @@
+import { LaunchDesktopKind } from '../../types/generated';
+import { LaunchDesktopSelect } from '../LaunchDesktopSelect';
+import { useProfilesStore } from '../../store/profiles';
+import type { LaunchDesktopSetting } from '../../types/generated';
 // The host remounts on a fresh key per target, so mount already means an explicit
 // load: edit mode reads once on mount and never re-fetches on definitionId churn.
-import { useCallback, useEffect, useRef, useState } from 'react';
-import { useFieldArray, useForm } from 'react-hook-form';
+import { useCallback, useEffect, useRef, useState, type ComponentProps, type ReactNode, type RefObject } from 'react';
+import {
+  useFieldArray,
+  useForm,
+  type UseFormGetValues,
+  type UseFormSetValue,
+  type UseFormRegister,
+  type UseFormRegisterReturn,
+  type FieldArrayWithId,
+  type UseFieldArrayAppend,
+  type UseFieldArrayRemove,
+} from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { AutomationDefinitionSummary } from '../../types/generated';
 import {
@@ -9,6 +23,7 @@ import {
   AutomationTrigger,
   automationFormSchema,
   slugFromName,
+  repositoryEntry,
   specJSONString,
   specToFormValues,
 } from './automationFormModel';
@@ -24,6 +39,8 @@ export interface AutomationFormProps {
     specJson: string,
     expectedId: string,
     expectedRevision: number,
+    launchDesktop?: LaunchDesktopSetting,
+    profileId?: string,
   ) => Promise<{ definition: AutomationDefinitionSummary }>;
   deleteDefinition: (definitionId: string) => Promise<void>;
   setEnabled: (definitionId: string, enabled: boolean) => Promise<void>;
@@ -92,6 +109,717 @@ function flattenFieldErrors(errors: Record<string, unknown>, prefix = ''): Recor
   return out;
 }
 
+function useModelSelection(
+  getValues: UseFormGetValues<AutomationFormValues>,
+  setValue: UseFormSetValue<AutomationFormValues>,
+  setModelMode: (mode: ModelMode) => void,
+) {
+  const handleAgentChange = useCallback(
+    (event: React.ChangeEvent<HTMLSelectElement>) => {
+      const nextAgent = event.target.value as AutomationAgent;
+      const catalog = LAUNCH_CATALOG[nextAgent];
+      const firstModel = catalog.models[0];
+      setValue('agent', nextAgent, { shouldDirty: true, shouldValidate: true });
+      setValue('model', firstModel.id, { shouldDirty: true, shouldValidate: true });
+      setValue('effort', firstModel.defaultEffort, { shouldDirty: true, shouldValidate: true });
+      setModelMode('preset');
+    },
+    [setValue, setModelMode],
+  );
+
+  const handleModelSelectChange = useCallback(
+    (event: React.ChangeEvent<HTMLSelectElement>) => {
+      const next = event.target.value;
+      const agent = getValues('agent');
+      const catalog = LAUNCH_CATALOG[agent];
+      if (next === '__custom__') {
+        setModelMode('custom');
+        setValue('model', '', { shouldDirty: true, shouldValidate: true });
+        setValue('effort', catalog.customDefaultEffort, { shouldDirty: true, shouldValidate: true });
+        return;
+      }
+      if (next === '') {
+        setModelMode('preset');
+        setValue('model', '', { shouldDirty: true, shouldValidate: true });
+        setValue('effort', '', { shouldDirty: true, shouldValidate: true });
+        return;
+      }
+      setModelMode('preset');
+      const preset = catalog.models.find((candidate) => candidate.id === next);
+      setValue('model', next, { shouldDirty: true, shouldValidate: true });
+      const currentEffort = getValues('effort');
+      if (currentEffort === '') return;
+      const { efforts, defaultEffort } = effortOptionsFor(agent, next);
+      if (!efforts.includes(currentEffort)) {
+        setValue('effort', preset?.defaultEffort ?? defaultEffort, { shouldDirty: true, shouldValidate: true });
+      }
+    },
+    [getValues, setValue, setModelMode],
+  );
+
+  return { handleAgentChange, handleModelSelectChange };
+}
+
+function AutomationNameFields({
+  mode,
+  values,
+  fieldError,
+  nameRegister,
+  idRegister,
+  onNameChange,
+  onCustomizeId,
+}: {
+  mode: 'create' | 'edit';
+  values: AutomationFormValues;
+  fieldError: (field: keyof AutomationFormValues) => string | undefined;
+  nameRegister: ComponentProps<'input'>;
+  idRegister: ComponentProps<'input'>;
+  onNameChange: ComponentProps<'input'>['onChange'];
+  onCustomizeId: () => void;
+}) {
+  return (
+    <section className="automation-form__section">
+      <span className="automation-form__section-label">Name</span>
+      <input
+        className={
+          fieldError('name') ? 'automation-form__input automation-form__input--invalid' : 'automation-form__input'
+        }
+        data-testid="automation-form-name"
+        placeholder="Automation name"
+        name={nameRegister.name}
+        ref={nameRegister.ref}
+        onBlur={nameRegister.onBlur}
+        onChange={onNameChange}
+      />
+      {fieldError('name') && (
+        <p className="automation-form__field-error" data-testid="automation-form-error-name">
+          {fieldError('name')}
+        </p>
+      )}
+
+      {mode === 'create' ? (
+        <div className="automation-form__id-row">
+          <input
+            className={
+              fieldError('id') ? 'automation-form__input automation-form__input--invalid' : 'automation-form__input'
+            }
+            data-testid="automation-form-id"
+            readOnly={!values.idCustomized}
+            {...idRegister}
+          />
+          {!values.idCustomized && (
+            <button
+              type="button"
+              className="automation-form__id-customize"
+              onClick={onCustomizeId}
+              data-testid="automation-form-id-customize"
+            >
+              Customize
+            </button>
+          )}
+        </div>
+      ) : (
+        <p className="automation-form__id-static" data-testid="automation-form-id-static">
+          ID: {values.id} · fixed after creation
+        </p>
+      )}
+      {fieldError('id') && (
+        <p className="automation-form__field-error" data-testid="automation-form-error-id">
+          {fieldError('id')}
+        </p>
+      )}
+    </section>
+  );
+}
+
+interface AutomationFields {
+  values: AutomationFormValues;
+  fieldError: (field: keyof AutomationFormValues) => string | undefined;
+  regField: (field: keyof AutomationFormValues) => Omit<UseFormRegisterReturn, 'onChange'> & {
+    onChange: (event: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement>) => void;
+  };
+  setValue: UseFormSetValue<AutomationFormValues>;
+  register: UseFormRegister<AutomationFormValues>;
+}
+
+function AutomationDirectoryField({ fields }: { fields: AutomationFields }) {
+  const { regField, fieldError } = fields;
+  return (
+    <div className="automation-form__field">
+      <label className="automation-form__label" htmlFor="automation-form-directory-path">
+        Directory
+      </label>
+      <input
+        id="automation-form-directory-path"
+        className={
+          fieldError('directoryPath')
+            ? 'automation-form__input automation-form__input--invalid'
+            : 'automation-form__input'
+        }
+        data-testid="automation-form-directory-path"
+        placeholder="/absolute/path"
+        {...regField('directoryPath')}
+      />
+      {fieldError('directoryPath') && (
+        <p className="automation-form__field-error" data-testid="automation-form-error-directoryPath">
+          {fieldError('directoryPath')}
+        </p>
+      )}
+    </div>
+  );
+}
+
+function AutomationGitHubFields({
+  fields,
+  includeInput,
+  setIncludeInput,
+  excludeInput,
+  setExcludeInput,
+  addRepository,
+  removeRepository,
+  overrides,
+}: {
+  fields: AutomationFields;
+  includeInput: string;
+  setIncludeInput: (value: string) => void;
+  excludeInput: string;
+  setExcludeInput: (value: string) => void;
+  addRepository: (field: 'repositoriesInclude' | 'repositoriesExclude', value: string) => void;
+  removeRepository: (field: 'repositoriesInclude' | 'repositoriesExclude', index: number) => void;
+  overrides: {
+    fields: FieldArrayWithId<AutomationFormValues, 'repositoryOverrides'>[];
+    append: UseFieldArrayAppend<AutomationFormValues, 'repositoryOverrides'>;
+    remove: UseFieldArrayRemove;
+  };
+}) {
+  const { values, register } = fields;
+  const { fields: overrideFields, append: appendOverride, remove: removeOverride } = overrides;
+  return (
+    <div className="automation-form__trigger-section">
+      <div className="automation-form__field">
+        <label className="automation-form__label" htmlFor="automation-form-repositories-include-input">
+          Include repositories
+        </label>
+        <div className="automation-form__chip-input" data-testid="automation-form-repositories-include">
+          {values.repositoriesInclude.map((entry, index) => (
+            <span
+              className="automation-form__chip"
+              key={entry.id}
+              data-testid={`automation-form-repositories-include-chip-${index}`}
+            >
+              {entry.repository}
+              <button
+                type="button"
+                aria-label={`Remove ${entry.repository}`}
+                onClick={() => removeRepository('repositoriesInclude', index)}
+                data-testid={`automation-form-repositories-include-remove-${index}`}
+              >
+                ✕
+              </button>
+            </span>
+          ))}
+          <input
+            id="automation-form-repositories-include-input"
+            className="automation-form__chip-input-field"
+            value={includeInput}
+            onChange={(event) => setIncludeInput(event.target.value)}
+            onKeyDown={(event) => {
+              if (event.key === 'Enter') {
+                event.preventDefault();
+                addRepository('repositoriesInclude', includeInput);
+                setIncludeInput('');
+              } else if (event.key === 'Backspace' && includeInput === '' && values.repositoriesInclude.length > 0) {
+                removeRepository('repositoriesInclude', values.repositoriesInclude.length - 1);
+              }
+            }}
+            placeholder="host/owner/repository"
+            data-testid="automation-form-repositories-include-input"
+          />
+        </div>
+      </div>
+
+      <div className="automation-form__field">
+        <label className="automation-form__label" htmlFor="automation-form-repositories-exclude-input">
+          Exclude repositories
+        </label>
+        <div className="automation-form__chip-input" data-testid="automation-form-repositories-exclude">
+          {values.repositoriesExclude.map((entry, index) => (
+            <span
+              className="automation-form__chip"
+              key={entry.id}
+              data-testid={`automation-form-repositories-exclude-chip-${index}`}
+            >
+              {entry.repository}
+              <button
+                type="button"
+                aria-label={`Remove ${entry.repository}`}
+                onClick={() => removeRepository('repositoriesExclude', index)}
+                data-testid={`automation-form-repositories-exclude-remove-${index}`}
+              >
+                ✕
+              </button>
+            </span>
+          ))}
+          <input
+            id="automation-form-repositories-exclude-input"
+            className="automation-form__chip-input-field"
+            value={excludeInput}
+            onChange={(event) => setExcludeInput(event.target.value)}
+            onKeyDown={(event) => {
+              if (event.key === 'Enter') {
+                event.preventDefault();
+                addRepository('repositoriesExclude', excludeInput);
+                setExcludeInput('');
+              } else if (event.key === 'Backspace' && excludeInput === '' && values.repositoriesExclude.length > 0) {
+                removeRepository('repositoriesExclude', values.repositoriesExclude.length - 1);
+              }
+            }}
+            placeholder="host/owner/repository"
+            data-testid="automation-form-repositories-exclude-input"
+          />
+        </div>
+      </div>
+
+      <span className="automation-form__fact-chip">One reviewer per PR — later request cycles return to it</span>
+      <span className="automation-form__fact-chip">Existing requests are left alone when enabled</span>
+      <span className="automation-form__fact-chip">Missed while attn was off: latest request still runs</span>
+      <p className="automation-form__invariant">
+        Reviews always run in a fresh worktree checked out at the PR&apos;s head commit — your existing clone is never
+        touched.
+      </p>
+
+      <details className="automation-form__advanced">
+        <summary>Advanced</summary>
+        <div className="automation-form__overrides">
+          {overrideFields.map((field, index) => (
+            <div className="automation-form__override-row" key={field.id}>
+              <input
+                className="automation-form__input"
+                placeholder="host/owner/repository"
+                data-testid={`automation-form-override-repository-${index}`}
+                {...register(`repositoryOverrides.${index}.repository` as const)}
+              />
+              <input
+                className="automation-form__input"
+                placeholder="/absolute/path"
+                data-testid={`automation-form-override-path-${index}`}
+                {...register(`repositoryOverrides.${index}.path` as const)}
+              />
+              <button
+                type="button"
+                onClick={() => removeOverride(index)}
+                data-testid={`automation-form-overrides-remove-${index}`}
+              >
+                Remove
+              </button>
+            </div>
+          ))}
+          <button
+            type="button"
+            onClick={() => appendOverride({ repository: '', path: '' })}
+            data-testid="automation-form-overrides-add"
+          >
+            Add override
+          </button>
+        </div>
+      </details>
+    </div>
+  );
+}
+
+function AutomationTriggerFields({
+  fields,
+  onTriggerChange,
+  github,
+}: {
+  fields: AutomationFields;
+  onTriggerChange: (trigger: AutomationTrigger) => void;
+  github: ReactNode;
+}) {
+  const { values, regField, fieldError, setValue } = fields;
+  return (
+    <section className="automation-form__section">
+      <span className="automation-form__section-label">Trigger</span>
+      <div className="automation-form__trigger-cards">
+        <button
+          type="button"
+          className={
+            values.trigger === 'manual'
+              ? 'automation-form__trigger-card automation-form__trigger-card--selected'
+              : 'automation-form__trigger-card'
+          }
+          onClick={() => onTriggerChange('manual')}
+          data-testid="automation-form-trigger-manual"
+        >
+          Manual
+        </button>
+        <button
+          type="button"
+          className={
+            values.trigger === 'scheduled'
+              ? 'automation-form__trigger-card automation-form__trigger-card--selected'
+              : 'automation-form__trigger-card'
+          }
+          onClick={() => onTriggerChange('scheduled')}
+          data-testid="automation-form-trigger-scheduled"
+        >
+          Scheduled
+        </button>
+        <button
+          type="button"
+          className={
+            values.trigger === 'github_review_requested'
+              ? 'automation-form__trigger-card automation-form__trigger-card--selected'
+              : 'automation-form__trigger-card'
+          }
+          onClick={() => onTriggerChange('github_review_requested')}
+          data-testid="automation-form-trigger-github"
+        >
+          PR review requested
+        </button>
+      </div>
+
+      {values.trigger === 'manual' && (
+        <div className="automation-form__trigger-section">
+          <span className="automation-form__fact-chip">Fresh worker each run</span>
+          <AutomationDirectoryField fields={fields} />
+        </div>
+      )}
+
+      {values.trigger === 'scheduled' && (
+        <div className="automation-form__trigger-section">
+          <div className="automation-form__field">
+            <label className="automation-form__label" htmlFor="automation-form-cron">
+              Schedule (cron)
+            </label>
+            <input
+              id="automation-form-cron"
+              className={
+                fieldError('scheduleCron')
+                  ? 'automation-form__input automation-form__input--invalid'
+                  : 'automation-form__input'
+              }
+              data-testid="automation-form-cron"
+              placeholder="0 9 * * *"
+              {...regField('scheduleCron')}
+            />
+            <p className="automation-form__cron-phrase" data-testid="automation-form-cron-phrase">
+              {cronPhrase(values.scheduleCron) ?? 'not set yet'}
+            </p>
+            {fieldError('scheduleCron') && (
+              <p className="automation-form__field-error" data-testid="automation-form-error-scheduleCron">
+                {fieldError('scheduleCron')}
+              </p>
+            )}
+          </div>
+
+          <div className="automation-form__field">
+            <span className="automation-form__label">Worker</span>
+            <div className="automation-form__segmented">
+              <button
+                type="button"
+                className={
+                  values.continuity === 'fresh'
+                    ? 'automation-form__segment automation-form__segment--selected'
+                    : 'automation-form__segment'
+                }
+                onClick={() => setValue('continuity', 'fresh', { shouldDirty: true, shouldValidate: true })}
+                data-testid="automation-form-continuity-fresh"
+              >
+                Fresh
+              </button>
+              <button
+                type="button"
+                className={
+                  values.continuity === 'singleton'
+                    ? 'automation-form__segment automation-form__segment--selected'
+                    : 'automation-form__segment'
+                }
+                onClick={() => setValue('continuity', 'singleton', { shouldDirty: true, shouldValidate: true })}
+                data-testid="automation-form-continuity-singleton"
+              >
+                Singleton
+              </button>
+            </div>
+          </div>
+
+          <div className="automation-form__field">
+            <span className="automation-form__label">Missed runs</span>
+            <div className="automation-form__segmented">
+              <button
+                type="button"
+                className={
+                  values.catchUp === 'skip'
+                    ? 'automation-form__segment automation-form__segment--selected'
+                    : 'automation-form__segment'
+                }
+                onClick={() => setValue('catchUp', 'skip', { shouldDirty: true, shouldValidate: true })}
+                data-testid="automation-form-catchup-skip"
+              >
+                Skip
+              </button>
+              <button
+                type="button"
+                className={
+                  values.catchUp === 'latest'
+                    ? 'automation-form__segment automation-form__segment--selected'
+                    : 'automation-form__segment'
+                }
+                onClick={() => setValue('catchUp', 'latest', { shouldDirty: true, shouldValidate: true })}
+                data-testid="automation-form-catchup-latest"
+              >
+                Latest
+              </button>
+            </div>
+            {fieldError('catchUp') && (
+              <p className="automation-form__field-error" data-testid="automation-form-error-catchUp">
+                {fieldError('catchUp')}
+              </p>
+            )}
+          </div>
+
+          <AutomationDirectoryField fields={fields} />
+        </div>
+      )}
+
+      {values.trigger === 'github_review_requested' && github}
+    </section>
+  );
+}
+
+function AutomationLaunchFields({
+  fields,
+  modelMode,
+  onAgentChange,
+  onModelChange,
+  desktop,
+}: {
+  fields: AutomationFields;
+  modelMode: ModelMode;
+  onAgentChange: ComponentProps<'select'>['onChange'];
+  onModelChange: ComponentProps<'select'>['onChange'];
+  desktop: ReactNode;
+}) {
+  const { values, regField, fieldError, setValue } = fields;
+  const { efforts } = effortOptionsFor(values.agent, values.model);
+  const catalog = LAUNCH_CATALOG[values.agent];
+  return (
+    <section className="automation-form__section">
+      <span className="automation-form__section-label">Runs as</span>
+      {desktop}
+      <div className="automation-form__field">
+        <label className="automation-form__label" htmlFor="automation-form-agent">
+          Agent
+        </label>
+        <select
+          id="automation-form-agent"
+          className="automation-form__input"
+          value={values.agent}
+          onChange={onAgentChange}
+          data-testid="automation-form-agent"
+        >
+          <option value="codex">Codex</option>
+          <option value="claude">Claude</option>
+        </select>
+      </div>
+
+      <div className="automation-form__field">
+        <label className="automation-form__label" htmlFor="automation-form-model">
+          Model
+        </label>
+        <select
+          id="automation-form-model"
+          className="automation-form__input"
+          value={modelMode === 'custom' ? '__custom__' : values.model}
+          onChange={onModelChange}
+          data-testid="automation-form-model"
+        >
+          <option value="">Agent default</option>
+          {catalog.models.map((option) => (
+            <option key={option.id} value={option.id}>
+              {option.label}
+            </option>
+          ))}
+          <option value="__custom__">Custom…</option>
+        </select>
+        {modelMode === 'custom' && (
+          <input
+            className="automation-form__input"
+            placeholder="Model name"
+            data-testid="automation-form-model-custom"
+            {...regField('model')}
+          />
+        )}
+        {fieldError('model') && (
+          <p className="automation-form__field-error" data-testid="automation-form-error-model">
+            {fieldError('model')}
+          </p>
+        )}
+      </div>
+
+      <div className="automation-form__field">
+        <label className="automation-form__label" htmlFor="automation-form-effort">
+          Effort
+        </label>
+        <select
+          id="automation-form-effort"
+          className="automation-form__input"
+          value={values.effort}
+          onChange={(event) => setValue('effort', event.target.value, { shouldDirty: true, shouldValidate: true })}
+          data-testid="automation-form-effort"
+        >
+          <option value="">Agent default</option>
+          {efforts.map((effort) => (
+            <option key={effort} value={effort}>
+              {effort}
+            </option>
+          ))}
+        </select>
+        {fieldError('effort') && (
+          <p className="automation-form__field-error" data-testid="automation-form-error-effort">
+            {fieldError('effort')}
+          </p>
+        )}
+      </div>
+
+      <p className="automation-form__invariant">
+        Automation sessions always run unattended with the agent&apos;s automatic approval mode.
+      </p>
+
+      <details className="automation-form__advanced">
+        <summary>Advanced</summary>
+        <div className="automation-form__field">
+          <label className="automation-form__label" htmlFor="automation-form-executable">
+            Executable override
+          </label>
+          <input
+            id="automation-form-executable"
+            className="automation-form__input"
+            placeholder="Default from PATH"
+            data-testid="automation-form-executable"
+            {...regField('executable')}
+          />
+        </div>
+      </details>
+    </section>
+  );
+}
+
+function AutomationSentence({ values }: { values: AutomationFormValues }) {
+  const sentenceSegments = compiledSentenceSegments(values);
+  return (
+    <p
+      className="automation-form__sentence"
+      aria-live="polite"
+      aria-label="This automation, in plain words"
+      data-testid="automation-form-sentence"
+    >
+      {sentenceSegments.map((segment, index) => {
+        const className =
+          segment.emphasis === 'accent'
+            ? 'automation-form__sentence-accent'
+            : segment.emphasis === 'strong'
+              ? 'automation-form__sentence-strong'
+              : segment.emphasis === 'mono'
+                ? 'automation-form__sentence-mono'
+                : undefined;
+        return className ? (
+          <span className={className} key={index}>
+            {segment.text}
+          </span>
+        ) : (
+          <span key={index}>{segment.text}</span>
+        );
+      })}
+    </p>
+  );
+}
+
+function AutomationFormActions({
+  mode,
+  saving,
+  saveError,
+  saveErrorCode,
+  deleteArmed,
+  deleteContainerRef,
+  onReload,
+  onDelete,
+  onCancel,
+}: {
+  mode: 'create' | 'edit';
+  saving: boolean;
+  saveError: string;
+  saveErrorCode: string;
+  deleteArmed: boolean;
+  deleteContainerRef: RefObject<HTMLDivElement | null>;
+  onReload: () => void;
+  onDelete: () => void;
+  onCancel: () => void;
+}) {
+  return (
+    <>
+      {saveErrorCode === 'revision_conflict' && (
+        <div
+          className="automation-form__banner automation-form__banner--stale"
+          data-testid="automation-form-stale-banner"
+        >
+          <p>
+            This automation changed elsewhere while you were editing. Reload to pick up the latest revision — your
+            unsaved edits will be replaced.
+          </p>
+          <button type="button" onClick={onReload} data-testid="automation-form-reload">
+            Reload
+          </button>
+        </div>
+      )}
+
+      {saveError !== '' && saveErrorCode !== 'revision_conflict' && (
+        <p className="automation-form__banner automation-form__banner--error" data-testid="automation-form-save-error">
+          {saveError}
+        </p>
+      )}
+
+      <div className="automation-form__actions">
+        {mode === 'edit' ? (
+          <div className="automation-form__delete" ref={deleteContainerRef}>
+            <button
+              type="button"
+              className={
+                deleteArmed
+                  ? 'automation-form__delete-button automation-form__delete-button--armed'
+                  : 'automation-form__delete-button'
+              }
+              onClick={onDelete}
+              data-testid="automation-form-delete"
+            >
+              {deleteArmed ? 'Confirm delete' : 'Delete'}
+            </button>
+            {deleteArmed && (
+              <span className="automation-form__delete-note">Existing seeds and run history are kept.</span>
+            )}
+          </div>
+        ) : (
+          <span />
+        )}
+
+        <div className="automation-form__actions-primary">
+          <button
+            type="button"
+            className="automation-form__cancel"
+            onClick={onCancel}
+            data-testid="automation-form-cancel"
+          >
+            Cancel
+          </button>
+          <button type="submit" className="automation-form__save" disabled={saving} data-testid="automation-form-save">
+            {saving ? 'Saving…' : 'Save'}
+          </button>
+        </div>
+      </div>
+    </>
+  );
+}
+
 export function AutomationForm({
   definitionId,
   getDefinition,
@@ -123,7 +851,11 @@ export function AutomationForm({
     defaultValues: makeCreateDefaults(),
   });
 
-  const { fields: overrideFields, append: appendOverride, remove: removeOverride } = useFieldArray({
+  const {
+    fields: overrideFields,
+    append: appendOverride,
+    remove: removeOverride,
+  } = useFieldArray({
     control,
     name: 'repositoryOverrides',
   });
@@ -132,6 +864,9 @@ export function AutomationForm({
   const [loadError, setLoadError] = useState('');
   const [loadedId, setLoadedId] = useState<string | null>(definitionId);
   const [revision, setRevision] = useState(0);
+  const [launchDesktop, setLaunchDesktop] = useState<LaunchDesktopSetting>();
+  const selectedProfile = useProfilesStore((state) => state.selectedProfileId);
+  const [profileId, setProfileId] = useState(selectedProfile ?? '');
   const [enabled, setEnabledState] = useState<boolean | null>(null);
   const [modelMode, setModelMode] = useState<ModelMode>('preset');
 
@@ -163,6 +898,8 @@ export function AutomationForm({
         setModelMode(modelModeFor(parsed.agent, parsed.model));
         setLoadedId(result.definition?.id ?? definitionId);
         setRevision(result.definition?.revision ?? 0);
+        setLaunchDesktop(result.definition?.launch_desktop);
+        setProfileId(result.definition?.profile_id ?? selectedProfile ?? '');
         setEnabledState(result.definition?.enabled ?? null);
         setStatus('ready');
       })
@@ -182,11 +919,12 @@ export function AutomationForm({
       setSaving(true);
       setSaveError('');
       setSaveErrorCode('');
-      applyDefinition(specJSONString(values), loadedId ?? '', revision)
+      applyDefinition(specJSONString(values), loadedId ?? '', revision, launchDesktop, profileId)
         .then((result) => {
           setSaving(false);
           setLoadedId(result.definition.id);
           setRevision(result.definition.revision);
+          setLaunchDesktop(result.definition.launch_desktop);
           setEnabledState(result.definition.enabled);
           onSaved(result.definition);
         })
@@ -202,7 +940,7 @@ export function AutomationForm({
           setSaveError(message);
         });
     },
-    [applyDefinition, loadedId, revision, onSaved, setError],
+    [applyDefinition, loadedId, revision, launchDesktop, profileId, onSaved, setError],
   );
 
   const onSubmit = handleSubmit(doSave);
@@ -222,6 +960,8 @@ export function AutomationForm({
         reset(parsed);
         setModelMode(modelModeFor(parsed.agent, parsed.model));
         setRevision(result.definition?.revision ?? revision);
+        setLaunchDesktop(result.definition?.launch_desktop);
+        setProfileId(result.definition?.profile_id ?? profileId);
         setEnabledState(result.definition?.enabled ?? enabled);
         setSaveError('');
         setSaveErrorCode('');
@@ -230,7 +970,7 @@ export function AutomationForm({
         setSaveErrorCode('');
         setSaveError(messageOf(error, 'Failed to reload automation definition'));
       });
-  }, [getDefinition, loadedId, reset, revision, enabled]);
+  }, [getDefinition, loadedId, reset, revision, enabled, profileId]);
 
   const performDelete = useCallback(() => {
     if (loadedId === null) return;
@@ -314,53 +1054,12 @@ export function AutomationForm({
     setFocus('id');
   }, [setValue, setFocus]);
 
-  const handleAgentChange = useCallback(
-    (event: React.ChangeEvent<HTMLSelectElement>) => {
-      const nextAgent = event.target.value as AutomationAgent;
-      const catalog = LAUNCH_CATALOG[nextAgent];
-      const firstModel = catalog.models[0];
-      setValue('agent', nextAgent, { shouldDirty: true, shouldValidate: true });
-      setValue('model', firstModel.id, { shouldDirty: true, shouldValidate: true });
-      setValue('effort', firstModel.defaultEffort, { shouldDirty: true, shouldValidate: true });
-      setModelMode('preset');
-    },
-    [setValue],
-  );
-
-  const handleModelSelectChange = useCallback(
-    (event: React.ChangeEvent<HTMLSelectElement>) => {
-      const next = event.target.value;
-      const agent = getValues('agent');
-      const catalog = LAUNCH_CATALOG[agent];
-      if (next === '__custom__') {
-        setModelMode('custom');
-        setValue('model', '', { shouldDirty: true, shouldValidate: true });
-        setValue('effort', catalog.customDefaultEffort, { shouldDirty: true, shouldValidate: true });
-        return;
-      }
-      if (next === '') {
-        setModelMode('preset');
-        setValue('model', '', { shouldDirty: true, shouldValidate: true });
-        setValue('effort', '', { shouldDirty: true, shouldValidate: true });
-        return;
-      }
-      setModelMode('preset');
-      const preset = catalog.models.find((candidate) => candidate.id === next);
-      setValue('model', next, { shouldDirty: true, shouldValidate: true });
-      const currentEffort = getValues('effort');
-      if (currentEffort === '') return;
-      const { efforts, defaultEffort } = effortOptionsFor(agent, next);
-      if (!efforts.includes(currentEffort)) {
-        setValue('effort', preset?.defaultEffort ?? defaultEffort, { shouldDirty: true, shouldValidate: true });
-      }
-    },
-    [getValues, setValue],
-  );
+  const { handleAgentChange, handleModelSelectChange } = useModelSelection(getValues, setValue, setModelMode);
 
   function addRepository(field: 'repositoriesInclude' | 'repositoriesExclude', raw: string) {
     const canonical = raw.trim().toLowerCase();
     if (canonical === '') return;
-    setValue(field, [...getValues(field), canonical], { shouldDirty: true, shouldValidate: true });
+    setValue(field, [...getValues(field), repositoryEntry(canonical)], { shouldDirty: true, shouldValidate: true });
   }
 
   function removeRepository(field: 'repositoriesInclude' | 'repositoriesExclude', index: number) {
@@ -381,7 +1080,11 @@ export function AutomationForm({
         revision,
         status,
         loadError,
-        values: getValues(),
+        values: {
+          ...getValues(),
+          repositoriesInclude: getValues('repositoriesInclude').map((entry) => entry.repository),
+          repositoriesExclude: getValues('repositoriesExclude').map((entry) => entry.repository),
+        },
         errors: flattenFieldErrors(errors as Record<string, unknown>),
         saving,
         saveError,
@@ -392,7 +1095,12 @@ export function AutomationForm({
       }),
       setValues: (partial) => {
         (Object.keys(partial) as (keyof AutomationFormValues)[]).forEach((key) => {
-          setValue(key, partial[key] as never, { shouldDirty: true, shouldValidate: true });
+          const value = partial[key];
+          if (key === 'repositoriesInclude' || key === 'repositoriesExclude') {
+            setValue(key, partial[key]!.map(repositoryEntry), { shouldDirty: true, shouldValidate: true });
+          } else {
+            setValue(key, value as never, { shouldDirty: true, shouldValidate: true });
+          }
         });
       },
       submit: () => {
@@ -465,38 +1173,13 @@ export function AutomationForm({
   }
 
   const values = watch();
-  const idCustomized = values.idCustomized;
-  const { efforts } = effortOptionsFor(values.agent, values.model);
-  const catalog = LAUNCH_CATALOG[values.agent];
-  const sentenceSegments = compiledSentenceSegments(values);
 
   function fieldError(field: keyof AutomationFormValues): string | undefined {
     const entry = errors[field] as { message?: string } | undefined;
     return entry?.message;
   }
 
-  function renderDirectoryField() {
-    return (
-      <div className="automation-form__field">
-        <label className="automation-form__label" htmlFor="automation-form-directory-path">
-          Directory
-        </label>
-        <input
-          id="automation-form-directory-path"
-          className={fieldError('directoryPath') ? 'automation-form__input automation-form__input--invalid' : 'automation-form__input'}
-          data-testid="automation-form-directory-path"
-          placeholder="/absolute/path"
-          {...regField('directoryPath')}
-        />
-        {fieldError('directoryPath') && (
-          <p className="automation-form__field-error" data-testid="automation-form-error-directoryPath">
-            {fieldError('directoryPath')}
-          </p>
-        )}
-      </div>
-    );
-  }
-
+  const fields: AutomationFields = { values, fieldError, regField, setValue, register };
   return (
     <form className="automation-form" data-testid="automation-form" onSubmit={onSubmit}>
       <div className="automation-form__header">
@@ -531,423 +1214,65 @@ export function AutomationForm({
           </p>
         )}
 
-        <section className="automation-form__section">
-          <span className="automation-form__section-label">Name</span>
-          <input
-            className={fieldError('name') ? 'automation-form__input automation-form__input--invalid' : 'automation-form__input'}
-            data-testid="automation-form-name"
-            placeholder="Automation name"
-            name={nameRegister.name}
-            ref={nameRegister.ref}
-            onBlur={nameRegister.onBlur}
-            onChange={handleNameChange}
-          />
-          {fieldError('name') && (
-            <p className="automation-form__field-error" data-testid="automation-form-error-name">
-              {fieldError('name')}
-            </p>
-          )}
+        <AutomationNameFields
+          mode={mode}
+          values={values}
+          fieldError={fieldError}
+          nameRegister={nameRegister}
+          idRegister={regField('id')}
+          onNameChange={handleNameChange}
+          onCustomizeId={handleCustomizeId}
+        />
 
-          {mode === 'create' ? (
-            <div className="automation-form__id-row">
-              <input
-                className={fieldError('id') ? 'automation-form__input automation-form__input--invalid' : 'automation-form__input'}
-                data-testid="automation-form-id"
-                readOnly={!idCustomized}
-                {...regField('id')}
-              />
-              {!idCustomized && (
-                <button
-                  type="button"
-                  className="automation-form__id-customize"
-                  onClick={handleCustomizeId}
-                  data-testid="automation-form-id-customize"
-                >
-                  Customize
-                </button>
-              )}
-            </div>
-          ) : (
-            <p className="automation-form__id-static" data-testid="automation-form-id-static">
-              ID: {values.id} · fixed after creation
-            </p>
-          )}
-          {fieldError('id') && (
-            <p className="automation-form__field-error" data-testid="automation-form-error-id">
-              {fieldError('id')}
-            </p>
-          )}
-        </section>
+        <AutomationTriggerFields
+          fields={fields}
+          onTriggerChange={handleTriggerChange}
+          github={
+            <AutomationGitHubFields
+              fields={fields}
+              includeInput={includeInput}
+              setIncludeInput={setIncludeInput}
+              excludeInput={excludeInput}
+              setExcludeInput={setExcludeInput}
+              addRepository={addRepository}
+              removeRepository={removeRepository}
+              overrides={{ fields: overrideFields, append: appendOverride, remove: removeOverride }}
+            />
+          }
+        />
 
-        <section className="automation-form__section">
-          <span className="automation-form__section-label">Trigger</span>
-          <div className="automation-form__trigger-cards">
-            <button
-              type="button"
-              className={
-                values.trigger === 'manual' ? 'automation-form__trigger-card automation-form__trigger-card--selected' : 'automation-form__trigger-card'
-              }
-              onClick={() => handleTriggerChange('manual')}
-              data-testid="automation-form-trigger-manual"
-            >
-              Manual
-            </button>
-            <button
-              type="button"
-              className={
-                values.trigger === 'scheduled'
-                  ? 'automation-form__trigger-card automation-form__trigger-card--selected'
-                  : 'automation-form__trigger-card'
-              }
-              onClick={() => handleTriggerChange('scheduled')}
-              data-testid="automation-form-trigger-scheduled"
-            >
-              Scheduled
-            </button>
-            <button
-              type="button"
-              className={
-                values.trigger === 'github_review_requested'
-                  ? 'automation-form__trigger-card automation-form__trigger-card--selected'
-                  : 'automation-form__trigger-card'
-              }
-              onClick={() => handleTriggerChange('github_review_requested')}
-              data-testid="automation-form-trigger-github"
-            >
-              PR review requested
-            </button>
-          </div>
-
-          {values.trigger === 'manual' && (
-            <div className="automation-form__trigger-section">
-              <span className="automation-form__fact-chip">Fresh worker each run</span>
-              {renderDirectoryField()}
-            </div>
-          )}
-
-          {values.trigger === 'scheduled' && (
-            <div className="automation-form__trigger-section">
-              <div className="automation-form__field">
-                <label className="automation-form__label" htmlFor="automation-form-cron">
-                  Schedule (cron)
-                </label>
-                <input
-                  id="automation-form-cron"
-                  className={
-                    fieldError('scheduleCron') ? 'automation-form__input automation-form__input--invalid' : 'automation-form__input'
-                  }
-                  data-testid="automation-form-cron"
-                  placeholder="0 9 * * *"
-                  {...regField('scheduleCron')}
-                />
-                <p className="automation-form__cron-phrase" data-testid="automation-form-cron-phrase">
-                  {cronPhrase(values.scheduleCron) ?? "not set yet"}
-                </p>
-                {fieldError('scheduleCron') && (
-                  <p className="automation-form__field-error" data-testid="automation-form-error-scheduleCron">
-                    {fieldError('scheduleCron')}
-                  </p>
-                )}
-              </div>
-
-              <div className="automation-form__field">
-                <span className="automation-form__label">Worker</span>
-                <div className="automation-form__segmented">
-                  <button
-                    type="button"
-                    className={
-                      values.continuity === 'fresh'
-                        ? 'automation-form__segment automation-form__segment--selected'
-                        : 'automation-form__segment'
-                    }
-                    onClick={() => setValue('continuity', 'fresh', { shouldDirty: true, shouldValidate: true })}
-                    data-testid="automation-form-continuity-fresh"
-                  >
-                    Fresh
-                  </button>
-                  <button
-                    type="button"
-                    className={
-                      values.continuity === 'singleton'
-                        ? 'automation-form__segment automation-form__segment--selected'
-                        : 'automation-form__segment'
-                    }
-                    onClick={() => setValue('continuity', 'singleton', { shouldDirty: true, shouldValidate: true })}
-                    data-testid="automation-form-continuity-singleton"
-                  >
-                    Singleton
-                  </button>
-                </div>
-              </div>
-
-              <div className="automation-form__field">
-                <span className="automation-form__label">Missed runs</span>
-                <div className="automation-form__segmented">
-                  <button
-                    type="button"
-                    className={
-                      values.catchUp === 'skip' ? 'automation-form__segment automation-form__segment--selected' : 'automation-form__segment'
-                    }
-                    onClick={() => setValue('catchUp', 'skip', { shouldDirty: true, shouldValidate: true })}
-                    data-testid="automation-form-catchup-skip"
-                  >
-                    Skip
-                  </button>
-                  <button
-                    type="button"
-                    className={
-                      values.catchUp === 'latest' ? 'automation-form__segment automation-form__segment--selected' : 'automation-form__segment'
-                    }
-                    onClick={() => setValue('catchUp', 'latest', { shouldDirty: true, shouldValidate: true })}
-                    data-testid="automation-form-catchup-latest"
-                  >
-                    Latest
-                  </button>
-                </div>
-                {fieldError('catchUp') && (
-                  <p className="automation-form__field-error" data-testid="automation-form-error-catchUp">
-                    {fieldError('catchUp')}
-                  </p>
-                )}
-              </div>
-
-              {renderDirectoryField()}
-            </div>
-          )}
-
-          {values.trigger === 'github_review_requested' && (
-            <div className="automation-form__trigger-section">
-              <div className="automation-form__field">
-                <label className="automation-form__label" htmlFor="automation-form-repositories-include-input">
-                  Include repositories
-                </label>
-                <div className="automation-form__chip-input" data-testid="automation-form-repositories-include">
-                  {values.repositoriesInclude.map((entry, index) => (
-                    <span className="automation-form__chip" key={`${entry}-${index}`} data-testid={`automation-form-repositories-include-chip-${index}`}>
-                      {entry}
-                      <button
-                        type="button"
-                        aria-label={`Remove ${entry}`}
-                        onClick={() => removeRepository('repositoriesInclude', index)}
-                        data-testid={`automation-form-repositories-include-remove-${index}`}
-                      >
-                        ✕
-                      </button>
-                    </span>
-                  ))}
-                  <input
-                    id="automation-form-repositories-include-input"
-                    className="automation-form__chip-input-field"
-                    value={includeInput}
-                    onChange={(event) => setIncludeInput(event.target.value)}
-                    onKeyDown={(event) => {
-                      if (event.key === 'Enter') {
-                        event.preventDefault();
-                        addRepository('repositoriesInclude', includeInput);
-                        setIncludeInput('');
-                      } else if (event.key === 'Backspace' && includeInput === '' && values.repositoriesInclude.length > 0) {
-                        removeRepository('repositoriesInclude', values.repositoriesInclude.length - 1);
-                      }
-                    }}
-                    placeholder="host/owner/repository"
-                    data-testid="automation-form-repositories-include-input"
-                  />
-                </div>
-              </div>
-
-              <div className="automation-form__field">
-                <label className="automation-form__label" htmlFor="automation-form-repositories-exclude-input">
-                  Exclude repositories
-                </label>
-                <div className="automation-form__chip-input" data-testid="automation-form-repositories-exclude">
-                  {values.repositoriesExclude.map((entry, index) => (
-                    <span className="automation-form__chip" key={`${entry}-${index}`} data-testid={`automation-form-repositories-exclude-chip-${index}`}>
-                      {entry}
-                      <button
-                        type="button"
-                        aria-label={`Remove ${entry}`}
-                        onClick={() => removeRepository('repositoriesExclude', index)}
-                        data-testid={`automation-form-repositories-exclude-remove-${index}`}
-                      >
-                        ✕
-                      </button>
-                    </span>
-                  ))}
-                  <input
-                    id="automation-form-repositories-exclude-input"
-                    className="automation-form__chip-input-field"
-                    value={excludeInput}
-                    onChange={(event) => setExcludeInput(event.target.value)}
-                    onKeyDown={(event) => {
-                      if (event.key === 'Enter') {
-                        event.preventDefault();
-                        addRepository('repositoriesExclude', excludeInput);
-                        setExcludeInput('');
-                      } else if (event.key === 'Backspace' && excludeInput === '' && values.repositoriesExclude.length > 0) {
-                        removeRepository('repositoriesExclude', values.repositoriesExclude.length - 1);
-                      }
-                    }}
-                    placeholder="host/owner/repository"
-                    data-testid="automation-form-repositories-exclude-input"
-                  />
-                </div>
-              </div>
-
-              <span className="automation-form__fact-chip">One reviewer per PR — later request cycles return to it</span>
-              <span className="automation-form__fact-chip">Existing requests are left alone when enabled</span>
-              <span className="automation-form__fact-chip">Missed while attn was off: latest request still runs</span>
-              <p className="automation-form__invariant">
-                Reviews always run in a fresh worktree checked out at the PR&apos;s head commit — your existing clone
-                is never touched.
-              </p>
-
-              <details className="automation-form__advanced">
-                <summary>Advanced</summary>
-                <div className="automation-form__overrides">
-                  {overrideFields.map((field, index) => (
-                    <div className="automation-form__override-row" key={field.id}>
-                      <input
-                        className="automation-form__input"
-                        placeholder="host/owner/repository"
-                        data-testid={`automation-form-override-repository-${index}`}
-                        {...register(`repositoryOverrides.${index}.repository` as const)}
-                      />
-                      <input
-                        className="automation-form__input"
-                        placeholder="/absolute/path"
-                        data-testid={`automation-form-override-path-${index}`}
-                        {...register(`repositoryOverrides.${index}.path` as const)}
-                      />
-                      <button
-                        type="button"
-                        onClick={() => removeOverride(index)}
-                        data-testid={`automation-form-overrides-remove-${index}`}
-                      >
-                        Remove
-                      </button>
-                    </div>
-                  ))}
-                  <button
-                    type="button"
-                    onClick={() => appendOverride({ repository: '', path: '' })}
-                    data-testid="automation-form-overrides-add"
-                  >
-                    Add override
-                  </button>
-                </div>
-              </details>
-            </div>
-          )}
-        </section>
-
-        <section className="automation-form__section">
-          <span className="automation-form__section-label">Runs as</span>
-          <div className="automation-form__field">
-            <label className="automation-form__label" htmlFor="automation-form-agent">
-              Agent
-            </label>
-            <select
-              id="automation-form-agent"
-              className="automation-form__input"
-              value={values.agent}
-              onChange={handleAgentChange}
-              data-testid="automation-form-agent"
-            >
-              <option value="codex">Codex</option>
-              <option value="claude">Claude</option>
-            </select>
-          </div>
-
-          <div className="automation-form__field">
-            <label className="automation-form__label" htmlFor="automation-form-model">
-              Model
-            </label>
-            <select
-              id="automation-form-model"
-              className="automation-form__input"
-              value={modelMode === 'custom' ? '__custom__' : values.model}
-              onChange={handleModelSelectChange}
-              data-testid="automation-form-model"
-            >
-              <option value="">Agent default</option>
-              {catalog.models.map((option) => (
-                <option key={option.id} value={option.id}>
-                  {option.label}
-                </option>
-              ))}
-              <option value="__custom__">Custom…</option>
-            </select>
-            {modelMode === 'custom' && (
-              <input
-                className="automation-form__input"
-                placeholder="Model name"
-                data-testid="automation-form-model-custom"
-                {...regField('model')}
-              />
-            )}
-            {fieldError('model') && (
-              <p className="automation-form__field-error" data-testid="automation-form-error-model">
-                {fieldError('model')}
-              </p>
-            )}
-          </div>
-
-          <div className="automation-form__field">
-            <label className="automation-form__label" htmlFor="automation-form-effort">
-              Effort
-            </label>
-            <select
-              id="automation-form-effort"
-              className="automation-form__input"
-              value={values.effort}
-              onChange={(event) => setValue('effort', event.target.value, { shouldDirty: true, shouldValidate: true })}
-              data-testid="automation-form-effort"
-            >
-              <option value="">Agent default</option>
-              {efforts.map((effort) => (
-                <option key={effort} value={effort}>
-                  {effort}
-                </option>
-              ))}
-            </select>
-            {fieldError('effort') && (
-              <p className="automation-form__field-error" data-testid="automation-form-error-effort">
-                {fieldError('effort')}
-              </p>
-            )}
-          </div>
-
-          <p className="automation-form__invariant">
-            Automation sessions always run unattended with the agent&apos;s automatic approval mode.
-          </p>
-
-          <details className="automation-form__advanced">
-            <summary>Advanced</summary>
-            <div className="automation-form__field">
-              <label className="automation-form__label" htmlFor="automation-form-executable">
-                Executable override
-              </label>
-              <input
-                id="automation-form-executable"
-                className="automation-form__input"
-                placeholder="Default from PATH"
-                data-testid="automation-form-executable"
-                {...regField('executable')}
-              />
-            </div>
-          </details>
-        </section>
+        <AutomationLaunchFields
+          fields={fields}
+          modelMode={modelMode}
+          onAgentChange={handleAgentChange}
+          onModelChange={handleModelSelectChange}
+          desktop={
+            <LaunchDesktopSelect
+              kind={LaunchDesktopKind.Automation}
+              itemId={loadedId}
+              profileId={profileId}
+              defaultName={values.name}
+              value={launchDesktop}
+              onChange={setLaunchDesktop}
+              disabled={saving}
+            />
+          }
+        />
 
         <section className="automation-form__section">
           <span className="automation-form__section-label">Prompt</span>
           <textarea
-            className={fieldError('prompt') ? 'automation-form__textarea automation-form__textarea--invalid' : 'automation-form__textarea'}
+            className={
+              fieldError('prompt')
+                ? 'automation-form__textarea automation-form__textarea--invalid'
+                : 'automation-form__textarea'
+            }
             data-testid="automation-form-prompt"
             {...regField('prompt')}
           />
           <p className="automation-form__hint">
-            This is the instruction the agent receives. Trigger details arrive separately as structured context —
-            they can never rewrite this prompt.
+            This is the instruction the agent receives. Trigger details arrive separately as structured context — they
+            can never rewrite this prompt.
           </p>
           {fieldError('prompt') && (
             <p className="automation-form__field-error" data-testid="automation-form-error-prompt">
@@ -957,72 +1282,19 @@ export function AutomationForm({
         </section>
       </fieldset>
 
-      <p className="automation-form__sentence" aria-live="polite" aria-label="This automation, in plain words" data-testid="automation-form-sentence">
-        {sentenceSegments.map((segment, index) => {
-          const className =
-            segment.emphasis === 'accent'
-              ? 'automation-form__sentence-accent'
-              : segment.emphasis === 'strong'
-                ? 'automation-form__sentence-strong'
-                : segment.emphasis === 'mono'
-                  ? 'automation-form__sentence-mono'
-                  : undefined;
-          return className ? (
-            <span className={className} key={index}>
-              {segment.text}
-            </span>
-          ) : (
-            <span key={index}>{segment.text}</span>
-          );
-        })}
-      </p>
+      <AutomationSentence values={values} />
 
-      {saveErrorCode === 'revision_conflict' && (
-        <div className="automation-form__banner automation-form__banner--stale" data-testid="automation-form-stale-banner">
-          <p>
-            This automation changed elsewhere while you were editing. Reload to pick up the latest revision — your
-            unsaved edits will be replaced.
-          </p>
-          <button type="button" onClick={handleReload} data-testid="automation-form-reload">
-            Reload
-          </button>
-        </div>
-      )}
-
-      {saveError !== '' && saveErrorCode !== 'revision_conflict' && (
-        <p className="automation-form__banner automation-form__banner--error" data-testid="automation-form-save-error">
-          {saveError}
-        </p>
-      )}
-
-      <div className="automation-form__actions">
-        {mode === 'edit' ? (
-          <div className="automation-form__delete" ref={deleteContainerRef}>
-            <button
-              type="button"
-              className={
-                deleteArmed ? 'automation-form__delete-button automation-form__delete-button--armed' : 'automation-form__delete-button'
-              }
-              onClick={handleDeleteClick}
-              data-testid="automation-form-delete"
-            >
-              {deleteArmed ? 'Confirm delete' : 'Delete'}
-            </button>
-            {deleteArmed && <span className="automation-form__delete-note">Existing seeds and run history are kept.</span>}
-          </div>
-        ) : (
-          <span />
-        )}
-
-        <div className="automation-form__actions-primary">
-          <button type="button" className="automation-form__cancel" onClick={onCancel} data-testid="automation-form-cancel">
-            Cancel
-          </button>
-          <button type="submit" className="automation-form__save" disabled={saving} data-testid="automation-form-save">
-            {saving ? 'Saving…' : 'Save'}
-          </button>
-        </div>
-      </div>
+      <AutomationFormActions
+        mode={mode}
+        saving={saving}
+        saveError={saveError}
+        saveErrorCode={saveErrorCode}
+        deleteArmed={deleteArmed}
+        deleteContainerRef={deleteContainerRef}
+        onReload={handleReload}
+        onDelete={handleDeleteClick}
+        onCancel={onCancel}
+      />
     </form>
   );
 }

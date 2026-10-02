@@ -33,12 +33,27 @@ function agentsOf(index) {
   return PAIRED.has(index) ? [`mig-agent-${index}`, `mig-agent-${index}b`] : [`mig-agent-${index}`];
 }
 
+function migrationCheckSpec(directory) {
+  return {
+    api_version: 'attn.dev/automations/v1alpha1', id: 'mig-check', name: 'Migration check',
+    trigger: { type: 'manual', repositories: {} }, prompt: 'Check locally.', launch: { driver: 'claude' },
+    location: { type: 'directory', path: directory, repository_sources: { default: { type: '' } } },
+  };
+}
+
 function legacyWorkspacesSql(fixtureDir) {
   const statements = [
     'DELETE FROM desktop_panes;',
     'DELETE FROM desktops;',
     'DELETE FROM profiles;',
     'DELETE FROM profile_migration;',
+    // A pre-profile install has no launch rows and no crew or automation profiles.
+    'DELETE FROM launch_desktops;',
+    'DELETE FROM crew_profiles;',
+    "UPDATE automation_definitions SET profile_id = '';",
+    // A disabled automation makes the launch step follow placement on every run.
+    `INSERT OR REPLACE INTO automation_definitions (id, name, enabled, revision, spec_json, profile_id, created_at, updated_at, deleted_at)
+      VALUES ('mig-check', 'Migration check', 0, 1, ${sql(JSON.stringify(migrationCheckSpec(fixtureDir)))}, '', 'now', 'now', '');`,
     'ALTER TABLE sessions ADD COLUMN workspace_id TEXT;',
     "CREATE TABLE workspaces (id TEXT PRIMARY KEY, title TEXT NOT NULL, directory TEXT NOT NULL, created_at TEXT NOT NULL, muted INTEGER NOT NULL DEFAULT 0, rank TEXT NOT NULL DEFAULT '', pinned INTEGER NOT NULL DEFAULT 0);",
     'CREATE TABLE workspace_layouts (workspace_id TEXT PRIMARY KEY, active_pane_id TEXT NOT NULL, layout_json TEXT NOT NULL, updated_at TEXT NOT NULL);',
@@ -168,7 +183,9 @@ async function main() {
       fs.mkdirSync(runner.runDir, { recursive: true });
       execFileSync('sqlite3', [dbPath, `.backup ${snapshotPath}`]);
       seeded = true;
-      sqlite(dbPath, legacyWorkspacesSql(path.join(runner.sessionDir, 'legacy')));
+      const legacyDir = path.join(runner.sessionDir, 'legacy');
+      fs.mkdirSync(legacyDir, { recursive: true });
+      sqlite(dbPath, legacyWorkspacesSql(fs.realpathSync(legacyDir)));
     });
 
     await runner.step('startup_converts_and_the_app_opens_on_the_intro', async () => {
@@ -315,14 +332,20 @@ async function main() {
       await waitForDraft((migration) => migration.groups.every((entry) => entry.confirmed), 'every group confirmed');
       await client.request('dom_wait', { selector: '.mp-bottom-right .mp-button.primary:not([disabled])', timeoutMs: 10_000 });
       await client.request('dom_click', { selector: '.mp-bottom-right .mp-button.primary' });
+      await client.request('dom_wait', { selector: '.mp-launch-row[data-launch-item="mig-check"]', timeoutMs: 10_000 });
+      runner.assert(queryDaemonDb(dbPath, 'SELECT phase FROM profile_migration;') === 'launch_required', 'Placement finish did not open the launch step');
+      const suggested = "SELECT d.name FROM launch_desktops l JOIN desktops d ON d.id = l.desktop_id WHERE l.kind = 'automation' AND l.item_id = 'mig-check';";
+      runner.assert(queryDaemonDb(dbPath, suggested) === '', 'The suggested desktop existed before Finish');
+      await client.request('dom_click', { selector: '.mp-launch-footer .primary' });
       await waitForText('main', 'Your Default profile is ready.');
       runner.assert(queryDaemonDb(dbPath, 'SELECT phase FROM profile_migration;') === 'complete', 'Finish did not commit');
+      runner.assert(queryDaemonDb(dbPath, suggested) === 'Migration check', 'Finish did not start mig-check on a new desktop named after it');
       const shell = await client.request('dom_wait', { selector: '.app', absent: true, timeoutMs: 2_000 });
       runner.assert(Boolean(shell), 'The normal shell mounted before Continue');
       await screenshot('05-done.png');
       await driver.pressKey('Enter');
       await client.waitForFrontendResponsive(30_000);
-      const rows = queryDaemonDb(dbPath, `SELECT d.shortcut_slot || ':' || p.session_id FROM desktop_panes p JOIN desktops d ON d.id = p.desktop_id WHERE p.session_id LIKE 'mig-agent-%' ORDER BY 1;`);
+      const rows = queryDaemonDb(dbPath, `SELECT replace(substr(d.id, instr(d.id, '/') + 1), 'desktop_', '') || ':' || p.session_id FROM desktop_panes p JOIN desktops d ON d.id = p.desktop_id WHERE p.session_id LIKE 'mig-agent-%' ORDER BY 1;`);
       for (const agent of [...agentsOf(1), ...agentsOf(2)]) {
         runner.assert(rows.includes(`1:${agent}`), `${agent} is not on Desktop 1 after finish:\n${rows}`);
       }

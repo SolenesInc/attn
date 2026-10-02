@@ -32,12 +32,6 @@ type ProfileDeletionOptions struct {
 	RemoteLiveDispatches int
 }
 
-type DesktopDeletion struct {
-	Profile           profiles.Profile
-	Deleted           profiles.Desktop
-	UnplacedSessionID []string
-}
-
 type LeafMove struct {
 	Source      profiles.Desktop
 	Target      profiles.Desktop
@@ -77,12 +71,13 @@ type SessionProfileMoveRequest struct {
 }
 
 type SessionProfileMove struct {
-	SessionID      string
-	FromProfileID  string
-	ToProfileID    string
-	SourceDesktop  *profiles.Desktop
-	DemotedChiefID string
-	MovedCrewID    string
+	SessionID          string
+	FromProfileID      string
+	ToProfileID        string
+	SourceDesktop      *profiles.Desktop
+	DestinationDesktop *profiles.Desktop
+	DemotedChiefID     string
+	MovedCrewID        string
 }
 
 func (m SessionProfileMove) Changed() bool {
@@ -122,10 +117,22 @@ func (s *Store) profilesTxSeq(fn func(tx *sql.Tx, now string) error) (int64, err
 		return 0, err
 	}
 	defer tx.Rollback()
-	if err := fn(tx, time.Now().UTC().Format(sortableTimeFormat)); err != nil {
+	at := time.Now().UTC()
+	now := at.Format(sortableTimeFormat)
+	if err := fn(tx, now); err != nil {
 		return 0, err
 	}
-	return seq, tx.Commit()
+	emptied, err := stampEmptyDesktops(tx, now)
+	if err != nil {
+		return 0, err
+	}
+	if err := tx.Commit(); err != nil {
+		return 0, err
+	}
+	if emptied {
+		s.announceEmptyDesktop(at)
+	}
+	return seq, nil
 }
 
 const profileColumns = `id, name, current_desktop_id, last_used_at, revision, deleted_at, chief_session_id`
@@ -202,14 +209,15 @@ func ensureLiveProfileNameFree(tx *sql.Tx, name, exceptID string) error {
 	return nil
 }
 
-const desktopColumns = `id, profile_id, name, COALESCE(shortcut_slot, 0), order_key, tree_json, active_pane_id, revision`
+const desktopColumns = `id, profile_id, name, order_key, tree_json, active_pane_id, revision`
 
 func scanDesktopRow(row rowScanner) (profiles.Desktop, error) {
 	var desktop profiles.Desktop
 	var treeJSON string
-	if err := row.Scan(&desktop.ID, &desktop.ProfileID, &desktop.Name, &desktop.ShortcutSlot, &desktop.OrderKey, &treeJSON, &desktop.ActivePaneID, &desktop.Revision); err != nil {
+	if err := row.Scan(&desktop.ID, &desktop.ProfileID, &desktop.Name, &desktop.OrderKey, &treeJSON, &desktop.ActivePaneID, &desktop.Revision); err != nil {
 		return profiles.Desktop{}, err
 	}
+	desktop.ShortcutSlot = profiles.DesktopSlot(desktop.ID)
 	tree, err := layouttree.DecodeLayout(treeJSON)
 	if err != nil {
 		return profiles.Desktop{}, profiles.Errorf(profiles.CodeInvalid, "desktop %s has a stored tree that does not decode: %v", desktop.ID, err)
@@ -287,11 +295,11 @@ func insertDesktop(tx *sql.Tx, now, profileID, name string, slot int) (profiles.
 	if err := tx.QueryRow(`SELECT COALESCE(MAX(order_key), '') FROM desktops WHERE profile_id = ?`, profileID).Scan(&lastKey); err != nil {
 		return profiles.Desktop{}, err
 	}
-	if err := ensureShortcutSlotFree(tx, profileID, slot, ""); err != nil {
+	if err := ensureShortcutSlotFree(tx, profileID, slot); err != nil {
 		return profiles.Desktop{}, err
 	}
 	desktop := profiles.Desktop{
-		ID:           newProfileEntityID("desktop"),
+		ID:           newDesktopID(profileID, slot),
 		ProfileID:    profileID,
 		Name:         strings.TrimSpace(name),
 		ShortcutSlot: slot,
@@ -299,25 +307,25 @@ func insertDesktop(tx *sql.Tx, now, profileID, name string, slot int) (profiles.
 		Revision:     1,
 	}
 	_, err := tx.Exec(`
-		INSERT INTO desktops (id, profile_id, name, shortcut_slot, order_key, tree_json, active_pane_id, revision, created_at, updated_at)
-		VALUES (?, ?, ?, ?, ?, '', '', 1, ?, ?)`,
-		desktop.ID, profileID, desktop.Name, slotValue(slot), desktop.OrderKey, now, now)
+		INSERT INTO desktops (id, profile_id, name, order_key, tree_json, active_pane_id, revision, created_at, updated_at)
+		VALUES (?, ?, ?, ?, '', '', 1, ?, ?)`,
+		desktop.ID, profileID, desktop.Name, desktop.OrderKey, now, now)
 	return desktop, err
 }
 
-func slotValue(slot int) any {
+func newDesktopID(profileID string, slot int) string {
 	if slot == 0 {
-		return nil
+		return newProfileEntityID("desktop")
 	}
-	return slot
+	return profiles.NumberedDesktopID(profileID, slot)
 }
 
-func ensureShortcutSlotFree(tx *sql.Tx, profileID string, slot int, exceptDesktopID string) error {
+func ensureShortcutSlotFree(tx *sql.Tx, profileID string, slot int) error {
 	if slot == 0 {
 		return nil
 	}
-	var holder string
-	taken, err := rowFound(tx.QueryRow(`SELECT id FROM desktops WHERE profile_id = ? AND shortcut_slot = ? AND id != ?`, profileID, slot, exceptDesktopID), &holder)
+	holder := profiles.NumberedDesktopID(profileID, slot)
+	taken, err := rowFound(tx.QueryRow(`SELECT 1 FROM desktops WHERE id = ?`, holder), new(int))
 	if err != nil {
 		return err
 	}
@@ -328,13 +336,13 @@ func ensureShortcutSlotFree(tx *sql.Tx, profileID string, slot int, exceptDeskto
 }
 
 func lowestFreeShortcutSlot(tx *sql.Tx, profileID string) (int, error) {
-	slots, err := queryColumn[int](tx, `SELECT shortcut_slot FROM desktops WHERE profile_id = ? AND shortcut_slot IS NOT NULL`, profileID)
+	ids, err := queryColumn[string](tx, `SELECT id FROM desktops WHERE profile_id = ?`, profileID)
 	if err != nil {
 		return 0, err
 	}
-	taken := make(map[int]bool, len(slots))
-	for _, slot := range slots {
-		taken[slot] = true
+	taken := make(map[int]bool, len(ids))
+	for _, id := range ids {
+		taken[profiles.DesktopSlot(id)] = true
 	}
 	for slot := profiles.FirstShortcutSlot; slot <= profiles.LastShortcutSlot; slot++ {
 		if !taken[slot] {
@@ -518,6 +526,9 @@ func deleteProfileDesktops(tx *sql.Tx, profileID string) error {
 	if _, err := tx.Exec(`DELETE FROM desktop_panes WHERE desktop_id IN (SELECT id FROM desktops WHERE profile_id = ?)`, profileID); err != nil {
 		return err
 	}
+	if _, err := tx.Exec(`DELETE FROM launch_desktops WHERE desktop_id IN (SELECT id FROM desktops WHERE profile_id = ?)`, profileID); err != nil {
+		return err
+	}
 	_, err := tx.Exec(`DELETE FROM desktops WHERE profile_id = ?`, profileID)
 	return err
 }
@@ -592,6 +603,9 @@ func (s *Store) DeleteProfile(id string, expectedRevision int64, destinationID s
 			return err
 		}
 		if err := deleteProfileDesktops(tx, id); err != nil {
+			return err
+		}
+		if err := placeMigrationRemainder(tx, now, destination); err != nil {
 			return err
 		}
 		result.DemotedChiefID = profile.ChiefSessionID
@@ -708,7 +722,7 @@ func (s *Store) CrewProfile(memberID string) (string, error) {
 
 func (s *Store) EnsureCrewProfile(memberID, profileID string) (string, error) {
 	var assigned string
-	err := s.profilesTx(func(tx *sql.Tx, _ string) error {
+	err := s.profilesTx(func(tx *sql.Tx, now string) error {
 		err := tx.QueryRow(`SELECT profile_id FROM crew_profiles WHERE member_id = ?`, memberID).Scan(&assigned)
 		if !errors.Is(err, sql.ErrNoRows) {
 			return err
@@ -717,8 +731,10 @@ func (s *Store) EnsureCrewProfile(memberID, profileID string) (string, error) {
 			return err
 		}
 		assigned = profileID
-		_, err = tx.Exec(`INSERT INTO crew_profiles(member_id, profile_id) VALUES (?, ?)`, memberID, profileID)
-		return err
+		if _, err = tx.Exec(`INSERT INTO crew_profiles(member_id, profile_id) VALUES (?, ?)`, memberID, profileID); err != nil {
+			return err
+		}
+		return startOnOwnDesktop(tx, now, "crew", memberID)
 	})
 	return assigned, err
 }
@@ -753,6 +769,7 @@ func (s *Store) CreateDesktop(profileID, name string, shortcutSlot int, takeFree
 		if desktop, err = insertDesktop(tx, now, profileID, name, shortcutSlot); err != nil {
 			return err
 		}
+		profile.CurrentDesktopID = desktop.ID
 		return bumpProfile(tx, &profile)
 	})
 	return profile, desktop, err
@@ -779,9 +796,9 @@ func saveDesktop(tx *sql.Tx, now string, desktop *profiles.Desktop) error {
 	}
 	desktop.Revision++
 	_, err := tx.Exec(`
-		UPDATE desktops SET name = ?, shortcut_slot = ?, order_key = ?, tree_json = ?, active_pane_id = ?, revision = ?, updated_at = ?
+		UPDATE desktops SET name = ?, order_key = ?, tree_json = ?, active_pane_id = ?, revision = ?, updated_at = ?
 		WHERE id = ?`,
-		desktop.Name, slotValue(desktop.ShortcutSlot), desktop.OrderKey, treeJSON, desktop.ActivePaneID, desktop.Revision, now, desktop.ID)
+		desktop.Name, desktop.OrderKey, treeJSON, desktop.ActivePaneID, desktop.Revision, now, desktop.ID)
 	return err
 }
 
@@ -804,22 +821,12 @@ func (s *Store) editDesktopRow(id string, expectedRevision int64, edit func(tx *
 }
 
 func (s *Store) RenameDesktop(id, name string, expectedRevision int64) (profiles.Desktop, error) {
-	return s.editDesktopRow(id, expectedRevision, func(_ *sql.Tx, desktop *profiles.Desktop) error {
-		desktop.Name = strings.TrimSpace(name)
-		return nil
-	})
-}
-
-func (s *Store) SetDesktopShortcutSlot(id string, slot int, expectedRevision int64) (profiles.Desktop, error) {
 	return s.editDesktopRow(id, expectedRevision, func(tx *sql.Tx, desktop *profiles.Desktop) error {
-		if err := profiles.ValidateShortcutSlot(slot); err != nil {
-			return err
+		if desktop.Name == strings.TrimSpace(name) {
+			return nil
 		}
-		if err := ensureShortcutSlotFree(tx, desktop.ProfileID, slot, id); err != nil {
-			return err
-		}
-		desktop.ShortcutSlot = slot
-		return nil
+		desktop.Name = strings.TrimSpace(name)
+		return appendLaunchDesktopFacts(tx, desktop.ID)
 	})
 }
 
@@ -858,72 +865,12 @@ func (s *Store) ReorderDesktop(id, previousID, nextID string, expectedRevision i
 	})
 }
 
-func repointCurrentDesktop(profile *profiles.Profile, siblings []profiles.Desktop, removedID string) {
-	if profile.CurrentDesktopID != removedID {
-		return
-	}
-	for i, sibling := range siblings {
-		if sibling.ID != removedID {
-			continue
-		}
-		if i+1 < len(siblings) {
-			profile.CurrentDesktopID = siblings[i+1].ID
-		} else {
-			profile.CurrentDesktopID = siblings[i-1].ID
-		}
-	}
-}
-
-func paneSessionIDs(panes []profiles.Pane) []string {
-	var ids []string
-	for _, pane := range panes {
-		ids = append(ids, pane.SessionID)
-	}
-	return ids
-}
-
 func deleteDesktop(tx *sql.Tx, id string) error {
 	if _, err := tx.Exec(`DELETE FROM desktop_panes WHERE desktop_id = ?`, id); err != nil {
 		return err
 	}
 	_, err := tx.Exec(`DELETE FROM desktops WHERE id = ?`, id)
 	return err
-}
-
-func (s *Store) DeleteDesktop(id string, expectedRevision int64) (DesktopDeletion, error) {
-	var result DesktopDeletion
-	err := s.profilesTx(func(tx *sql.Tx, _ string) error {
-		desktop, err := loadDesktop(tx, id)
-		if err != nil {
-			return err
-		}
-		if err := requireRevision("desktop", id, expectedRevision, desktop.Revision); err != nil {
-			return err
-		}
-		profile, err := loadLiveProfile(tx, desktop.ProfileID)
-		if err != nil {
-			return err
-		}
-		siblings, err := listDesktops(tx, desktop.ProfileID)
-		if err != nil {
-			return err
-		}
-		if len(siblings) <= 1 {
-			return profiles.Errorf(profiles.CodeLastDesktop, "desktop %s is the last desktop of profile %q and cannot be deleted", id, profile.Name)
-		}
-		repointCurrentDesktop(&profile, siblings, id)
-		result.UnplacedSessionID = paneSessionIDs(desktop.Panes)
-		if err := deleteDesktop(tx, id); err != nil {
-			return err
-		}
-		if err := bumpProfile(tx, &profile); err != nil {
-			return err
-		}
-		result.Profile = profile
-		result.Deleted = desktop
-		return nil
-	})
-	return result, err
 }
 
 func (s *Store) SetCurrentDesktop(profileID, desktopID string) (profiles.Profile, error) {
@@ -1319,6 +1266,11 @@ func (s *Store) PlaceLaunchedSession(request SessionPlacementRequest) (profiles.
 			return err
 		}
 		current, err := loadLaunchDesktop(tx, profile, request.DesktopID)
+		var missing *profiles.Error
+		if request.DesktopID != "" && errors.As(err, &missing) && missing.Code == profiles.CodeNotFound {
+			request.AnchorPaneID, request.Focus = "", false
+			current, err = loadLaunchDesktop(tx, profile, "")
+		}
 		if err != nil {
 			return err
 		}
@@ -1591,16 +1543,27 @@ func removeSessionPlacement(tx *sql.Tx, now, sessionID string) (*profiles.Deskto
 	return &desktop, nil
 }
 
-func (s *Store) unplaceSessionLocked(now, sessionID string) error {
+func (s *Store) unplaceSessionLocked(at time.Time, sessionID string) error {
 	tx, err := s.db.Begin()
 	if err != nil {
 		return err
 	}
 	defer tx.Rollback()
+	now := at.Format(sortableTimeFormat)
 	if _, err := removeSessionPlacement(tx, now, sessionID); err != nil {
 		return err
 	}
-	return tx.Commit()
+	emptied, err := stampEmptyDesktops(tx, now)
+	if err != nil {
+		return err
+	}
+	if err := tx.Commit(); err != nil {
+		return err
+	}
+	if emptied {
+		s.announceEmptyDesktop(at)
+	}
+	return nil
 }
 
 func (s *Store) unplaceSessionsLocked(reason, where string, args ...any) {
@@ -1609,9 +1572,9 @@ func (s *Store) unplaceSessionsLocked(reason, where string, args ...any) {
 		log.Printf("[store] %s: listing placed sessions: %v", reason, err)
 		return
 	}
-	now := time.Now().UTC().Format(sortableTimeFormat)
+	at := time.Now().UTC()
 	for _, id := range sessionIDs {
-		if err := s.unplaceSessionLocked(now, id); err != nil {
+		if err := s.unplaceSessionLocked(at, id); err != nil {
 			log.Printf("[store] %s: removing the pane of session %s: %v", reason, id, err)
 		}
 	}
@@ -1634,7 +1597,8 @@ func (s *Store) MoveSessionToProfile(request SessionProfileMoveRequest) (Session
 		if strings.TrimSpace(request.ExpectedProfileID) == "" {
 			return profiles.Errorf(profiles.CodeInvalid, "moving session %s needs the profile it was seen in", sessionID)
 		}
-		if _, err := loadLiveProfile(tx, destinationID); err != nil {
+		destination, err := loadLiveProfile(tx, destinationID)
+		if err != nil {
 			return err
 		}
 		from, err := openSessionProfileID(tx, sessionID)
@@ -1664,6 +1628,14 @@ func (s *Store) MoveSessionToProfile(request SessionProfileMoveRequest) (Session
 			return err
 		}
 		move.MovedCrewID, err = moveCrewMember(tx, request.CrewMemberID, destinationID)
+		if err != nil {
+			return err
+		}
+		if err := placeMigrationRemainder(tx, now, destination); err != nil {
+			return err
+		}
+		desktop, err := loadLaunchDesktop(tx, destination, "")
+		move.DestinationDesktop = &desktop
 		return err
 	})
 	return move, err

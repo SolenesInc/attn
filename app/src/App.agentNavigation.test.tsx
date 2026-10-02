@@ -184,15 +184,6 @@ describe('agent selection', () => {
     expect(shows(daemon)).toEqual(['session:s1', 'session:s2']);
   });
 
-  it('asks the daemon to place an agent that has no pane, and shows it', async () => {
-    const { daemon } = await renderAgents({ s1: {}, s2: {} }, { laidOut: ['s1'] });
-
-    await open(daemon, 's2');
-
-    expect(shows(daemon)).toEqual(['session:s2']);
-    expect(ladder(daemon)).toEqual([]);
-    expect(selectedAgent()).toBe('s2');
-  });
 
   it('sends a show for an agent that is already shown and changes nothing', async () => {
     const { daemon } = await renderAgents();
@@ -321,19 +312,6 @@ describe('agent selection', () => {
     expect(selectedAgent()).toBe('s2');
   });
 
-  it('drops a pending show when its agent ends and never places it again', async () => {
-    const { daemon } = await renderAgents({ s1: {}, s2: {} }, { laidOut: ['s1'] });
-    await open(daemon, 's1');
-    const hold = holdShows(daemon);
-
-    await open(daemon, 's2');
-    await gesture(daemon, () => daemon.emit({ event: 'session_unregistered', session: queueSession('s2', 10) }));
-    await hold.refuse();
-
-    expect(shows(daemon)).toEqual(['session:s1', 'session:s2']);
-    expect(daemon.sentOf('desktop_place_session')).toEqual([]);
-    expect(selectedAgent()).toBe('s1');
-  });
 
   it('shows an agent a deep link names with one request', async () => {
     const { daemon } = await renderAgents({ s1: {}, s2: {} }, { laidOut: ['s1'] });

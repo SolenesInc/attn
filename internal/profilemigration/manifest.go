@@ -9,6 +9,7 @@ import (
 const (
 	PhasePlacementRequired = "placement_required"
 	PhaseComplete          = "complete"
+	PhaseLaunchRequired    = "launch_required"
 )
 
 type Manifest struct {

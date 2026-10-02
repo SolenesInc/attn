@@ -190,6 +190,9 @@ func githubReviewCycleStatus(q automationReviewQueryer, definitionID, subjectKey
 }
 
 func (s *Store) UpsertAutomationDefinition(id, name, specJSON, profileID string, now time.Time) (*AutomationDefinition, error) {
+	return s.UpsertAutomationDefinitionWithLaunch(id, name, specJSON, profileID, now, nil)
+}
+func (s *Store) UpsertAutomationDefinitionWithLaunch(id, name, specJSON, profileID string, now time.Time, launch *LaunchDesktopSetting) (*AutomationDefinition, error) {
 	s.mu.Lock()
 	locked := true
 	defer func() {
@@ -234,6 +237,15 @@ func (s *Store) UpsertAutomationDefinition(id, name, specJSON, profileID string,
 			_, err = tx.Exec(`UPDATE automation_definitions SET name=?, enabled=?, revision=?, spec_json=?, updated_at=?, deleted_at='' WHERE id=?`, name, enabled, revision, specJSON, formatStoredTime(now), id)
 		}
 		activation = wasDeleted
+	}
+	if err != nil {
+		return nil, err
+	}
+	stamp := now.UTC().Format(sortableTimeFormat)
+	if launch != nil {
+		err = saveLaunchSetting(tx, stamp, "automation", id, *launch, !activation && oldSpec == specJSON)
+	} else if activation {
+		err = startOnOwnDesktop(tx, stamp, "automation", id)
 	}
 	if err != nil {
 		return nil, err

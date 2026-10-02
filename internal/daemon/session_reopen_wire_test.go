@@ -235,7 +235,7 @@ func TestEachReopenActionPutsTheWorkBackAsOffered(t *testing.T) {
 	}
 }
 
-func TestAReopenComesBackUnplacedInItsOwnProfile(t *testing.T) {
+func TestAReopenComesBackPlacedInItsOwnProfile(t *testing.T) {
 	w := newWorld(t, fakeagent.Codex)
 	app, cli := w.App(), w.Client()
 	profile := app.SelectedProfile()
@@ -259,11 +259,11 @@ func TestAReopenComesBackUnplacedInItsOwnProfile(t *testing.T) {
 		}
 		w.Launched(session)
 	}
-	for _, desktop := range w.App().Initial.Desktops {
-		for _, pane := range desktop.Panes {
-			if pane.SessionID == kept || pane.SessionID == lone.ID {
-				t.Errorf("the reopened %s landed on desktop %s, want it unplaced", pane.SessionID, desktop.ID)
-			}
+	view := viewProfile(t, w, profile)
+	for _, session := range []string{kept, lone.ID} {
+		desktop, _ := view.paneOf(t, session)
+		if desktop.ProfileID != profile {
+			t.Errorf("reopened %s placed in profile %s, want %s", session, desktop.ProfileID, profile)
 		}
 	}
 }

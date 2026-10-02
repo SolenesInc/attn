@@ -34,12 +34,14 @@ export function desktopInSlot(desktops: Desktop[], slot: number): Desktop | unde
   return desktops.find((desktop) => desktop.shortcut_slot === slot);
 }
 
-export function firstFreeSlot(desktops: Desktop[]): number | null {
-  return SHORTCUT_SLOTS.find((slot) => !desktopInSlot(desktops, slot)) ?? null;
+// The daemon names a desktop on a shortcut slot <profile id>/desktop_<slot>.
+export function numberedDesktopId(profileId: string, slot: number): string {
+  return `${profileId}/desktop_${slot}`;
 }
 
-export function isEmptyDesktop(desktop: Desktop): boolean {
-  return desktop.tree_json.trim() === '';
+export function desktopIdSlot(desktopId: string | undefined): number {
+  const match = /\/desktop_(\d+)$/.exec(desktopId ?? '');
+  return match ? Number(match[1]) : 0;
 }
 
 export function slotShortcut(slot: number): string {

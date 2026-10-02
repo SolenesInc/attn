@@ -352,6 +352,8 @@ func TestAShowThatFailsChangesNothing(t *testing.T) {
 		home := app.SelectedProfile()
 		injectAgent(t, w, "a")
 		other := createDesktop(app, home)
+		injectAgent(t, w, "other-anchor")
+		requestShowSession(app, "a")
 		away := createProfile(app, "away")
 		selectProfile(app, away.ID)
 		injectAgent(t, w, "gone")

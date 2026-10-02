@@ -74,12 +74,8 @@ export interface PtyPixelGeometry {
   ypixel?: number;
 }
 
-export interface PtySpawnOutcome {
-  placementError?: string;
-}
-
 export interface PtyBackend {
-  spawn: (args: PtySpawnArgs) => Promise<PtySpawnOutcome>;
+  spawn: (args: PtySpawnArgs) => Promise<void>;
   attach: (
     args: PtyAttachArgs,
     options?: { forceResizeBeforeAttach?: boolean }
@@ -149,7 +145,7 @@ export async function listenPtyEvents(handler: PtyEventHandler) {
   };
 }
 
-export async function ptySpawn(request: { args: PtySpawnArgs }): Promise<PtySpawnOutcome> {
+export async function ptySpawn(request: { args: PtySpawnArgs }): Promise<void> {
   if (mockEnabled()) {
     const id = request.args.id;
     mockSessions.add(id);
@@ -157,7 +153,7 @@ export async function ptySpawn(request: { args: PtySpawnArgs }): Promise<PtySpaw
     setTimeout(() => {
       emitPtyEvent({ event: 'data', id, data: encodeBase64(banner) });
     }, 30);
-    return {};
+    return;
   }
   if (!backend) {
     throw new Error('PTY backend is not configured');

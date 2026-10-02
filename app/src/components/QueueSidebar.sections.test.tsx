@@ -157,8 +157,8 @@ describe('the queue sidebar', () => {
   });
 
   it('counts only the rows hidden below the list toggle', () => {
-    const unplaced: TestSession = { id: 'loose', label: 'loose', state: 'idle', desktopId: 'nowhere' };
-    const shell: TestSession = { id: 'loose-shell', label: 'shell', state: 'idle', desktopId: 'nowhere', parentSessionId: 'loose' };
+    const unplaced: TestSession = { id: 'loose', label: 'loose', state: 'idle', desktopId: 'ws-b' };
+    const shell: TestSession = { id: 'loose-shell', label: 'shell', state: 'idle', desktopId: 'ws-b', parentSessionId: 'loose' };
     const later: TestSession = {
       id: 'later', label: 'later', state: 'idle', desktopId: 'ws-a',
       turnSnoozedUntil: new Date(Date.now() + 3600_000).toISOString(),
@@ -203,7 +203,7 @@ describe('the queue sidebar', () => {
 
   it('marks each row with the desktop slot it lives on', () => {
     renderSidebar(
-      [...sessions, { id: 'loose', label: 'loose', state: 'idle', desktopId: 'nowhere' }],
+      [...sessions, { id: 'loose', label: 'loose', state: 'idle', desktopId: 'ws-b' }],
       true,
       { agentListOpen: true },
     );
@@ -212,8 +212,8 @@ describe('the queue sidebar', () => {
     expect(where('queue-turn-older')).toHaveTextContent('2');
     expect(where('queue-turn-older')).toHaveAttribute('title', 'beta');
     expect(where('queue-turn-newer')).toHaveTextContent('1');
-    expect(where('queue-settled-loose')).toHaveTextContent('—');
-    expect(screen.getByTestId('queue-select-loose')).toHaveAttribute('title', expect.stringContaining('Not on a desktop'));
+    expect(where('queue-settled-loose')).toHaveTextContent('2');
+    expect(screen.getByTestId('queue-select-loose')).toHaveAttribute('title', expect.stringContaining('beta'));
   });
 
   it('offers the delegation chain without repeating the dispatcher below the title', () => {

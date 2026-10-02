@@ -259,6 +259,7 @@ func (d *Daemon) crewNap(member crew.Member, oldSessionID string, teardown *sess
 
 	d.closeNappedSession(oldSessionID, teardown)
 	committed = true
+	d.announceBackgroundLaunch("crew", member.ID, newSessionID, crew.DisplayName(member.ID)+" handoff")
 	d.logf("crew: %s napped — session %s ended, session %s is the new day", crew.DisplayName(member.ID), oldSessionID, newSessionID)
 	return newSessionID, nil
 }
@@ -303,8 +304,10 @@ func (d *Daemon) crewNapSpawn(member crew.Member, session *protocol.Session) (*p
 	}
 
 	spawnMsg.ResumeSessionID = nil
-	if placement := d.placementBeside(session.ID); placement != nil {
-		spawnMsg.Placement = &protocol.SessionPlacement{DesktopID: protocol.Ptr(placement.desktopID), AnchorPaneID: protocol.Ptr(placement.anchorPaneID)}
+	spawnMsg.Placement = nil
+	policy.launchPlacement = d.placementBeside(session.ID)
+	if policy.launchPlacement == nil {
+		policy.launchPlacement = &launchPlacement{kind: "crew", itemID: member.ID}
 	}
 	if strings.TrimSpace(spawnMsg.Cwd) == "" {
 		spawnMsg.Cwd = member.HomeDir

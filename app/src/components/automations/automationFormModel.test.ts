@@ -4,6 +4,7 @@ import {
   automationFormSchema,
   formValuesToSpec,
   slugFromName,
+  repositoryEntry,
   specToFormValues,
 } from './automationFormModel';
 import { effortOptionsFor } from './launchCatalog';
@@ -50,15 +51,13 @@ const githubFixture = baseValues({
   id: 'pr-pre-review',
   trigger: 'github_review_requested',
   directoryPath: '',
-  repositoriesInclude: ['GitHub.com/VictorArias/Attn', 'github.com/victorarias/attn-web'],
-  repositoriesExclude: ['github.com/victorarias/attn-private'],
+  repositoriesInclude: ['GitHub.com/VictorArias/Attn', 'github.com/victorarias/attn-web'].map(repositoryEntry),
+  repositoriesExclude: ['github.com/victorarias/attn-private'].map(repositoryEntry),
   agent: 'codex',
   model: 'gpt-5.4-codex',
   effort: 'high',
   executable: '/usr/local/bin/codex',
-  repositoryOverrides: [
-    { repository: 'GitHub.com/VictorArias/Attn', path: '/Users/victor/projects/victor/attn' },
-  ],
+  repositoryOverrides: [{ repository: 'GitHub.com/VictorArias/Attn', path: '/Users/victor/projects/victor/attn' }],
   prompt: 'Review the pull request.',
 });
 
@@ -152,7 +151,11 @@ describe('validation matrix', () => {
 
   it('rejects a malformed github repository entry', () => {
     const paths = issuePaths(
-      baseValues({ trigger: 'github_review_requested', directoryPath: '', repositoriesInclude: ['not-a-repo'] }),
+      baseValues({
+        trigger: 'github_review_requested',
+        directoryPath: '',
+        repositoriesInclude: ['not-a-repo'].map(repositoryEntry),
+      }),
     );
     expect(paths).toContain('repositoriesInclude.0');
   });
@@ -162,7 +165,7 @@ describe('validation matrix', () => {
       baseValues({
         trigger: 'github_review_requested',
         directoryPath: '',
-        repositoriesInclude: ['github.com/victorarias/attn', 'github.com/victorarias/attn'],
+        repositoriesInclude: ['github.com/victorarias/attn', 'github.com/victorarias/attn'].map(repositoryEntry),
       }),
     );
     expect(result.success).toBe(false);
@@ -176,8 +179,8 @@ describe('validation matrix', () => {
       baseValues({
         trigger: 'github_review_requested',
         directoryPath: '',
-        repositoriesInclude: ['github.com/victorarias/attn'],
-        repositoriesExclude: ['github.com/victorarias/attn'],
+        repositoriesInclude: ['github.com/victorarias/attn'].map(repositoryEntry),
+        repositoriesExclude: ['github.com/victorarias/attn'].map(repositoryEntry),
       }),
     );
     expect(paths).toContain('repositoriesExclude.0');

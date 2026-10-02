@@ -11,7 +11,6 @@ import (
 
 	"github.com/victorarias/attn/internal/profiles"
 	"github.com/victorarias/attn/internal/protocol"
-	"github.com/victorarias/attn/internal/ptybackend"
 	"github.com/victorarias/attn/internal/store"
 )
 
@@ -101,6 +100,9 @@ func focusTestAgent(t testing.TB, d *Daemon, sessionID string) {
 			t.Fatalf("read the placement of %s: %v", sessionID, err)
 		}
 	}
+	if _, err := d.store.SetCurrentDesktop(placement.ProfileID, placement.DesktopID); err != nil {
+		t.Fatal(err)
+	}
 	profile, _, err := d.store.SetActivePane(placement.DesktopID, placement.PaneID)
 	if err != nil {
 		t.Fatalf("focus %s: %v", sessionID, err)
@@ -125,60 +127,6 @@ func injectTestSession(t testing.TB, d *Daemon, session protocol.Session) {
 	}
 	if !response.Ok {
 		t.Fatalf("inject %s: %s", session.ID, protocol.Deref(response.Error))
-	}
-}
-
-func TestDelegationFromAnUnplacedSourceStartsUnplacedInTheSourcesProfile(t *testing.T) {
-	d := NewForTesting(filepath.Join(t.TempDir(), "test.sock"))
-	backend := &fakeSpawnBackend{}
-	d.ptyBackend = backend
-	setupDelegationGarden(t, d)
-	consumeDelegatedPrompt(t, backend)
-	work := createTestProfile(t, d.store, "Work")
-	client := spawnTestClient()
-	d.handleSpawnSession(client, &protocol.SpawnSessionMessage{
-		Cmd: protocol.CmdSpawnSession, ID: "work-source", Cwd: t.TempDir(), Agent: protocol.AgentShellValue,
-		ProfileID: work.ID, Cols: 80, Rows: 24, Label: protocol.Ptr("Source"),
-	})
-	expectSpawnResult(t, client, "work-source", true)
-
-	result, err := d.delegateResolved(&resolvedDelegationLaunch{
-		Cmd: protocol.CmdDelegate, SourceSessionID: protocol.Ptr("work-source"),
-		Brief: protocol.Ptr("Stay in my profile."), Agent: protocol.Ptr("codex"),
-	})
-	if err != nil {
-		t.Fatalf("delegate: %v", err)
-	}
-	if protocol.Deref(result.ProfileID) != work.ID || d.store.Get(result.SessionID).ProfileID != work.ID {
-		t.Fatalf("child profile = %q (row %q), want the source's %s", protocol.Deref(result.ProfileID), d.store.Get(result.SessionID).ProfileID, work.ID)
-	}
-	if desktop := desktopOf(t, d, result.SessionID); desktop != "" {
-		t.Fatalf("child placed on %s, want it unplaced like its source", desktop)
-	}
-}
-
-func TestDelegationWithoutASourceStartsUnplacedInTheExplicitProfile(t *testing.T) {
-	d := NewForTesting(filepath.Join(t.TempDir(), "test.sock"))
-	backend := &fakeSpawnBackend{}
-	d.ptyBackend = backend
-	setupDelegationGarden(t, d)
-	consumeDelegatedPrompt(t, backend)
-	work := createTestProfile(t, d.store, "Work")
-	if _, err := d.store.SelectProfile(work.ID); err != nil {
-		t.Fatal(err)
-	}
-
-	result, err := d.delegateResolved(&resolvedDelegationLaunch{
-		Cmd: protocol.CmdDelegate, ProfileID: protocol.Ptr(work.ID), Brief: protocol.Ptr("Nobody sent me."), Agent: protocol.Ptr("codex"), Cwd: t.TempDir(),
-	})
-	if err != nil {
-		t.Fatalf("delegate: %v", err)
-	}
-	if protocol.Deref(result.ProfileID) != work.ID {
-		t.Fatalf("child profile = %q, want the explicitly selected %s", protocol.Deref(result.ProfileID), work.ID)
-	}
-	if desktop := desktopOf(t, d, result.SessionID); desktop != "" {
-		t.Fatalf("child placed on %s, want it unplaced", desktop)
 	}
 }
 
@@ -208,6 +156,11 @@ func TestDeletingAProfileAnnouncesEveryMovedAgent(t *testing.T) {
 	if !found {
 		t.Fatalf("no session_state_changed carried mover into %s; events=%v", kept.ID, seen)
 	}
+	placement, placed, err := w.d.store.SessionPlacement("mover")
+	if err != nil || !placed || placement.DesktopID != kept.CurrentDesktopID {
+		t.Fatalf("moved agent placement = %+v placed=%v err=%v, want destination desktop %s", placement, placed, err, kept.CurrentDesktopID)
+	}
+
 }
 
 func TestInjectedSessionsLandOnTheCurrentDesktopOfTheirProfile(t *testing.T) {
@@ -232,62 +185,6 @@ func TestImportedCrewJoinTheMostRecentlyUsedProfile(t *testing.T) {
 		if member.ProfileID != profileID {
 			t.Fatalf("imported member %s has profile %q, want %s", member.ID, member.ProfileID, profileID)
 		}
-	}
-}
-
-func TestSpawnResultReportsWhereTheAgentLandedOrWhyItDidNot(t *testing.T) {
-	d, backend, client, cwd := newSpawnCharacterizationDaemon(t)
-	profile, err := d.store.MostRecentlyUsedProfile()
-	if err != nil {
-		t.Fatal(err)
-	}
-	first := spawnCharacterizationMessage("landed", profile.ID, cwd)
-	first.Placement = &protocol.SessionPlacement{}
-	d.handleSpawnSession(client, first)
-	landed := expectSpawnResult(t, client, first.ID, true)
-	placement, _, _ := d.store.SessionPlacement(first.ID)
-	if protocol.Deref(landed.DesktopID) != profile.CurrentDesktopID || protocol.Deref(landed.PaneID) != placement.PaneID || landed.PlacementError != nil {
-		t.Fatalf("spawn_result = %+v, want the desktop and pane it landed in (%+v)", landed, placement)
-	}
-
-	second := spawnCharacterizationMessage("anchor-vanished", profile.ID, cwd)
-	second.Placement = &protocol.SessionPlacement{AnchorPaneID: protocol.Ptr(placement.PaneID)}
-	backend.onSpawn = func(opts ptybackend.SpawnOptions) {
-		if opts.ID == second.ID {
-			if _, err := d.store.RemoveSessionPlacement(first.ID); err != nil {
-				t.Errorf("remove the anchor: %v", err)
-			}
-		}
-	}
-	d.handleSpawnSession(client, second)
-	unplaced := expectSpawnResult(t, client, second.ID, true)
-	if unplaced.PaneID != nil || !strings.Contains(protocol.Deref(unplaced.PlacementError), placement.PaneID) {
-		t.Fatalf("spawn_result = %+v, want no pane and an error naming the missing anchor %s", unplaced, placement.PaneID)
-	}
-	if session := d.store.Get(second.ID); session == nil || session.ProfileID != profile.ID {
-		t.Fatalf("the agent whose placement failed = %+v, want it running unplaced in its profile", session)
-	}
-
-	_, doomed, err := d.store.CreateDesktop(profile.ID, "doomed", 0, false)
-	if err != nil {
-		t.Fatal(err)
-	}
-	third := spawnCharacterizationMessage("desktop-vanished", profile.ID, cwd)
-	third.Placement = &protocol.SessionPlacement{DesktopID: protocol.Ptr(doomed.ID)}
-	backend.onSpawn = func(opts ptybackend.SpawnOptions) {
-		if opts.ID == third.ID {
-			if _, err := d.store.DeleteDesktop(doomed.ID, doomed.Revision); err != nil {
-				t.Errorf("delete the target desktop: %v", err)
-			}
-		}
-	}
-	d.handleSpawnSession(client, third)
-	orphaned := expectSpawnResult(t, client, third.ID, true)
-	if orphaned.PaneID != nil || !strings.Contains(protocol.Deref(orphaned.PlacementError), doomed.ID) {
-		t.Fatalf("spawn_result = %+v, want no pane and an error naming the deleted desktop %s", orphaned, doomed.ID)
-	}
-	if _, placed, _ := d.store.SessionPlacement(third.ID); placed {
-		t.Fatal("the agent whose desktop was deleted was placed anyway")
 	}
 }
 
@@ -379,7 +276,7 @@ func TestSpawnBesideAFocusedTileDocksTheAgentBesideIt(t *testing.T) {
 	d.handleSpawnSession(client, spawn)
 
 	result := expectSpawnResult(t, client, spawn.ID, true)
-	if result.PlacementError != nil || result.PaneID == nil {
+	if result.PaneID == nil {
 		t.Fatalf("spawn_result = %+v, want the agent placed beside the tile", result)
 	}
 	tree := desktopTree(t, d, desktop.ID)

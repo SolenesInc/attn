@@ -2,7 +2,7 @@ package protocol
 
 import "time"
 
-const ProtocolVersion = "338"
+const ProtocolVersion = "345"
 
 const (
 	ErrorCodeConflict             = "conflict"
@@ -250,30 +250,30 @@ const (
 )
 
 const (
-	CmdProfileCreate          = "profile_create"
-	CmdProfileRename          = "profile_rename"
-	CmdProfileDelete          = "profile_delete"
-	CmdProfileSelect          = "profile_select"
-	CmdSessionMove            = "session_move"
-	CmdDesktopCreate          = "desktop_create"
-	CmdDesktopRename          = "desktop_rename"
-	CmdDesktopSetShortcutSlot = "desktop_set_shortcut_slot"
-	CmdDesktopReorder         = "desktop_reorder"
-	CmdDesktopDelete          = "desktop_delete"
-	CmdDesktopSetCurrent      = "desktop_set_current"
-	CmdDesktopSetActivePane   = "desktop_set_active_pane"
-	CmdDesktopPlaceSession    = "desktop_place_session"
-	CmdDesktopShowSession     = "desktop_show_session"
-	CmdDesktopMoveSession     = "desktop_move_session"
-	CmdDesktopShowLeaf        = "desktop_show_leaf"
-	CmdDesktopMoveLeaf        = "desktop_move_leaf"
-	CmdDesktopRemoveLeaf      = "desktop_remove_leaf"
-	CmdDesktopSetSplitRatio   = "desktop_set_split_ratio"
-	CmdDesktopDockTile        = "desktop_dock_tile"
-	CmdDesktopUpdateTile      = "desktop_update_tile"
+	CmdProfileCreate        = "profile_create"
+	CmdProfileRename        = "profile_rename"
+	CmdProfileDelete        = "profile_delete"
+	CmdProfileSelect        = "profile_select"
+	CmdSessionMove          = "session_move"
+	CmdDesktopCreate        = "desktop_create"
+	CmdDesktopRename        = "desktop_rename"
+	CmdDesktopReorder       = "desktop_reorder"
+	CmdDesktopSetCurrent    = "desktop_set_current"
+	CmdDesktopSetActivePane = "desktop_set_active_pane"
+	CmdDesktopPlaceSession  = "desktop_place_session"
+	CmdDesktopShowSession   = "desktop_show_session"
+	CmdDesktopMoveSession   = "desktop_move_session"
+	CmdDesktopShowLeaf      = "desktop_show_leaf"
+	CmdDesktopMoveLeaf      = "desktop_move_leaf"
+	CmdDesktopRemoveLeaf    = "desktop_remove_leaf"
+	CmdDesktopSetSplitRatio = "desktop_set_split_ratio"
+	CmdDesktopDockTile      = "desktop_dock_tile"
+	CmdDesktopUpdateTile    = "desktop_update_tile"
 )
 
 const (
+	CmdLaunchDesktopGet = "launch_desktop_get"
+	CmdLaunchDesktopSet = "launch_desktop_set"
 	CmdMigrationGet     = "migration_get"
 	CmdMigrationKeep    = "migration_keep"
 	CmdMigrationMove    = "migration_move"
@@ -283,6 +283,8 @@ const (
 )
 
 const (
+	EventBackgroundLaunch          = "background_launch"
+	EventLaunchDesktopResult       = "launch_desktop_result"
 	EventProfileActionResult       = "profile_action_result"
 	EventProfilesChanged           = "profiles_changed"
 	EventProfileArrangementChanged = "profile_arrangement_changed"

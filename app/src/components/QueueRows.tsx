@@ -37,6 +37,7 @@ export interface QueueBandSessionView {
 }
 
 export interface CrewMemberView {
+  launch_desktop?: { label?: string };
   id: string;
   binding_session?: string;
 }
@@ -205,6 +206,7 @@ export interface RowWhere {
 }
 
 interface CrewRowProps {
+  desktopLabel?: string;
   member: string;
   row?: QueueRow<QueueBandSessionView>;
   where?: RowWhere;
@@ -223,6 +225,7 @@ export function CrewRowView(props: CrewRowProps) {
   ) : (
     <SleepingCrewRow
       member={props.member}
+      desktopLabel={props.desktopLabel}
       selected={props.selected}
       onWake={props.onWake}
       onOpenMemberActions={props.onOpenMemberActions}
@@ -232,10 +235,11 @@ export function CrewRowView(props: CrewRowProps) {
 
 function SleepingCrewRow({
   member,
+  desktopLabel,
   selected,
   onWake,
   onOpenMemberActions,
-}: Pick<CrewRowProps, 'member' | 'selected' | 'onWake' | 'onOpenMemberActions'>) {
+}: Pick<CrewRowProps, 'member' | 'selected' | 'onWake' | 'onOpenMemberActions' | 'desktopLabel'>) {
   const { phase, trigger, rowRef } = useWakeConfirm(onWake);
   const armed = phase === 'armed';
   const name = crewDisplayName(member);
@@ -269,6 +273,7 @@ function SleepingCrewRow({
         <CrewWakeSun phase={phase} />
       </button>
       <SessionLabel label={name} />
+      {desktopLabel && <span className="queue-crew-desktop" title={desktopLabel}>{desktopLabel}</span>}
       <span className="session-trailing" />
       {(onWake || onOpenMemberActions) && (
         <div className="session-actions">

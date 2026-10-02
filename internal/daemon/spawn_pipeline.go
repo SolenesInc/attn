@@ -14,6 +14,7 @@ import (
 	agentdriver "github.com/victorarias/attn/internal/agent"
 	"github.com/victorarias/attn/internal/automode"
 	"github.com/victorarias/attn/internal/launchcontract"
+	"github.com/victorarias/attn/internal/layouttree"
 	"github.com/victorarias/attn/internal/profiles"
 	"github.com/victorarias/attn/internal/protocol"
 	"github.com/victorarias/attn/internal/ptybackend"
@@ -22,6 +23,7 @@ import (
 )
 
 type internalSpawnPolicy struct {
+	launchPlacement       *launchPlacement
 	unattendedLaunch      launchcontract.UnattendedLaunchSpec
 	approvalRoute         launchcontract.ApprovalRoute
 	preserveApprovalRoute bool
@@ -148,6 +150,18 @@ func (d *Daemon) validateSpawnPrelock(msg *protocol.SpawnSessionMessage, policy 
 		return nil, &spawnRejection{err: err}
 	}
 	placement := requestedLaunchPlacement(msg.Placement)
+	if policy.launchPlacement != nil || placement == nil {
+		_, placed, err := d.store.SessionPlacement(msg.ID)
+		if err != nil {
+			return nil, &spawnRejection{err: err}
+		}
+		if !placed {
+			placement = policy.launchPlacement
+			if placement == nil {
+				placement = &launchPlacement{direction: layouttree.DirectionVertical}
+			}
+		}
+	}
 	if placement != nil {
 		placement.focus = policy.userStarted
 	}
@@ -490,6 +504,26 @@ func (d *Daemon) commitSpawn(req *spawnRequest, plan *spawnPlan) *spawnOutcome {
 		plan.rollback(d, msg.ID)
 		return &spawnOutcome{err: persistErr}
 	}
+	fact := FactSessionRegistered
+	if req.existingSession != nil {
+		fact = FactSessionReregistered
+	}
+	req.placed = d.placeAnsweringRequester(session, req.placement, req.policy.requester)
+	if req.placed.err != nil {
+		if req.hasPluginDriver {
+			d.abortPluginSessionLaunch(msg.ID, "launch_failed")
+		}
+		cleanupErr := errors.Join(d.killSessionRuntime(msg.ID), d.removeSessionRuntime(msg.ID))
+		if req.existingSession == nil {
+			d.store.Remove(session.ID)
+			d.forgetSessionTrace(session.ID)
+		} else {
+			cleanupErr = errors.Join(cleanupErr, d.store.AddCheckedUnlessTeardown(req.existingSession))
+			plan.restoreLaunchIntent(d, msg.ID)
+		}
+		plan.rollback(d, msg.ID)
+		return &spawnOutcome{err: errors.Join(req.placed.err, cleanupErr)}
+	}
 	if !req.isShell && req.existingSession == nil && req.resumeSessionID == "" {
 		if err := d.store.InitializeSessionCostTracking(session.ID); err != nil {
 			d.logf("initialize session cost tracking for %s: %v", session.ID, err)
@@ -506,7 +540,14 @@ func (d *Daemon) commitSpawn(req *spawnRequest, plan *spawnPlan) *spawnOutcome {
 			d.store.Remove(session.ID)
 			d.forgetSessionTrace(session.ID)
 		} else {
+			if req.placed.paneID != "" {
+				_, _ = d.store.RemoveSessionPlacement(session.ID)
+			}
+			_ = d.store.AddCheckedUnlessTeardown(req.existingSession)
 			plan.restoreLaunchIntent(d, msg.ID)
+		}
+		if req.placed.paneID != "" {
+			d.publishArrangementChanged(session.ProfileID)
 		}
 		cursorErr := fmt.Errorf("initialize plugin driver run cursor")
 		if killErr != nil {
@@ -530,12 +571,7 @@ func (d *Daemon) commitSpawn(req *spawnRequest, plan *spawnPlan) *spawnOutcome {
 		d.observeAgentConversation(pending)
 	}
 	d.store.UpsertRecentLocation(req.cwd)
-	fact := FactSessionRegistered
-	if req.existingSession != nil {
-		fact = FactSessionReregistered
-	}
 	d.publishFact(fact, session.ID, nil)
-	req.placed = d.placeAnsweringRequester(session, req.placement, req.policy.requester)
 	if req.hasPluginDriver {
 		if exit := d.finishPluginSessionLaunch(msg.ID, true); exit != nil {
 			d.handlePTYExit(*exit)

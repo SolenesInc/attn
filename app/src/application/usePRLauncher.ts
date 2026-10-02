@@ -134,5 +134,5 @@ export function usePRLauncher({ settings, launchAgent }: Options) {
     }
   }, [sendRefreshPRs]);
 
-  return { openPRLauncherJob, handleOpenPR, isRefreshingPRs, refreshError, handleRefreshPRs };
+  return { openPRLauncherJob, setOpenPRLauncherJob, handleOpenPR, isRefreshingPRs, refreshError, handleRefreshPRs };
 }

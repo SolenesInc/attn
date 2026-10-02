@@ -55,8 +55,11 @@ func (c *Client) sendAutomation(msg any, out any) error {
 }
 
 func (c *Client) AutomationApply(raw string) (*protocol.AutomationApplyResultMessage, error) {
+	return c.AutomationApplyWithNamedDesktop(raw, nil, nil)
+}
+func (c *Client) AutomationApplyWithNamedDesktop(raw string, desktop, name *string) (*protocol.AutomationApplyResultMessage, error) {
 	var result protocol.AutomationApplyResultMessage
-	if err := c.sendAutomation(protocol.AutomationApplyMessage{Cmd: protocol.CmdAutomationApply, DefinitionYaml: raw}, &result); err != nil {
+	if err := c.sendAutomation(protocol.AutomationApplyMessage{Cmd: protocol.CmdAutomationApply, DefinitionYaml: raw, LaunchDesktop: desktop, LaunchDesktopName: name}, &result); err != nil {
 		return nil, err
 	}
 	return &result, nil
@@ -1136,4 +1139,13 @@ func socketLive(path string) bool {
 	}
 	_ = conn.Close()
 	return true
+}
+
+func (c *Client) SetAutomationLaunchDesktop(id, desktop string, name *string) (*protocol.LaunchDesktopResultMessage, error) {
+	var result protocol.LaunchDesktopResultMessage
+	msg := protocol.LaunchDesktopSetMessage{Cmd: protocol.CmdLaunchDesktopSet, Kind: protocol.LaunchDesktopKindAutomation, ItemID: id, DesktopRef: &desktop, DesktopName: name}
+	if err := c.sendAutomation(msg, &result); err != nil {
+		return nil, err
+	}
+	return &result, nil
 }

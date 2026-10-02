@@ -496,7 +496,6 @@ enum ProfileErrorCode {
   name_taken,
   slot_taken,
   last_profile,
-  last_desktop,
   profile_deleted,
   cross_profile,
   already_placed,
@@ -528,14 +527,14 @@ model DesktopPane {
   error?: string;
 }
 
-// revision counts changes to the desktop's name, shortcut slot, order, tree and
-// panes. active_pane_id is selection and never moves it; it names a leaf of
+// revision counts changes to the desktop's name, order, tree and panes. A
+// desktop on a shortcut slot has the id <profile_id>/desktop_<slot> and never changes slot. active_pane_id is selection and never moves it; it names a leaf of
 // this desktop, an agent pane or a tile, or is empty when the desktop has no leaves.
 model Desktop {
   id: string;
   profile_id: string;
   name: string;
-  shortcut_slot?: int32;        // 1-9; absent for a desktop past the shortcut range
+  shortcut_slot?: int32;        // 1-9; absent for an unnumbered desktop
   order_key: string;
   tree_json: string;            // Split tree of pane and tile leaves; empty for an empty desktop
   active_pane_id: string;
@@ -1804,6 +1803,7 @@ model WorkflowRunCancelMessage {
 // Both are absent/zero when creating. request_id is optional, used only by
 // WS for correlation, like automation_delete's below.
 model AutomationApplyMessage {
+  launch_desktop?: string; // own, an empty slot 5–9, or a desktop ref of the item's profile
   cmd: "automation_apply";
   definition_yaml: string;
   request_id?: string;
@@ -1813,6 +1813,8 @@ model AutomationApplyMessage {
   profile_id?: string;
   expected_id?: string;
   expected_revision?: int32;
+  launch_desktop_name?: string;
+  launch_desktop_setting?: LaunchDesktopSetting;
 }
 model AutomationRunMessage { cmd: "automation_run"; definition_id: string; request_id: string; input_json?: string; pr_url?: string; }
 
@@ -1884,7 +1886,7 @@ model SpawnSessionMessage {
   cwd: string;
   endpoint_id?: string;
   profile_id: string;       // The profile the session belongs to; empty over WebSocket means the connection's selected profile. Refused before any side effect when it resolves to nothing or to a deleted profile
-  placement?: SessionPlacement; // Absent leaves a new session unplaced and an existing one where it is
+  placement?: SessionPlacement; // Absent places a new session on its current desktop and keeps an existing placement
   agent: string;            // Built-in ID, "shell", or registered plugin driver ID
   cols: int32;
   rows: int32;
@@ -2712,7 +2714,7 @@ model ProfileDeleteMessage {
 }
 
 // Moves a live agent to another profile. It loses its placement and shows up
-// unplaced in the destination's queue; its runtime and session id stay. A
+// on the destination's current desktop; its runtime and session id stay. A
 // profile's chief moved out stops being its chief, and a crew member's agent
 // takes the member along. expected_profile_id is the profile the client saw
 // the agent in: another one answers stale_revision, and an agent already in
@@ -2750,15 +2752,6 @@ model DesktopRenameMessage {
   expected_revision: safeint;
 }
 
-// Absent shortcut_slot clears the slot. A slot held by another desktop is refused.
-model DesktopSetShortcutSlotMessage {
-  cmd: "desktop_set_shortcut_slot";
-  request_id: string;
-  desktop_id: string;
-  shortcut_slot?: int32;
-  expected_revision: safeint;
-}
-
 // Places the desktop between two neighbours of the same profile; an absent
 // neighbour means the start or the end.
 model DesktopReorderMessage {
@@ -2767,15 +2760,6 @@ model DesktopReorderMessage {
   desktop_id: string;
   previous_desktop_id?: string;
   next_desktop_id?: string;
-  expected_revision: safeint;
-}
-
-// Agents placed on the desktop lose their placement and stay open. The last
-// desktop of a profile cannot be deleted.
-model DesktopDeleteMessage {
-  cmd: "desktop_delete";
-  request_id: string;
-  desktop_id: string;
   expected_revision: safeint;
 }
 
@@ -2796,10 +2780,10 @@ model DesktopSetActivePaneMessage {
   pane_id: string;
 }
 
-// Shows an open agent of any live profile in one transaction: an unplaced
-// agent is placed beside the active leaf of its profile's current desktop.
-// Its pane becomes the active leaf, its desktop current, its profile the
-// requesting client's. Every client on that profile gets one arrangement.
+// Shows an open agent of any live profile in one transaction. Every open
+// agent has a pane: it becomes the active leaf, its desktop current, its
+// profile the requesting client's. Every client on that profile gets one
+// arrangement.
 model DesktopShowSessionMessage {
   cmd: "desktop_show_session";
   request_id: string;
@@ -2807,8 +2791,7 @@ model DesktopShowSessionMessage {
 }
 
 // Moves a session's pane to another desktop of its profile, beside that
-// desktop's active leaf; an unplaced session is placed there. `desktop` is a
-// desktop ref: shortcut digit, label as shown (case-insensitive) or id. A
+// desktop's active leaf. `desktop` is a desktop ref: shortcut digit, label as shown (case-insensitive) or id. A
 // session may move itself and the sessions it dispatched; its profile's chief
 // may move any of its sessions; a request without a caller comes from the user.
 // The moved pane becomes its new desktop's active leaf only when it was its old
@@ -2825,7 +2808,7 @@ model DesktopMoveSessionResult {
   session_id: string;
   desktop_id: string;
   pane_id: string;
-  from_desktop_id?: string; // absent when the session was unplaced
+  from_desktop_id?: string; // absent when unchanged
   unchanged?: boolean; // the session already was on that desktop
 }
 
@@ -2838,7 +2821,7 @@ model DesktopShowLeafMessage {
   leaf_id: string;
 }
 
-// Gives an unplaced agent of the desktop's profile a pane, split beside
+// Gives a pane to an agent of the desktop's profile that has none, split beside
 // anchor_pane_id or, absent, beside the active leaf. The new pane becomes active.
 model DesktopPlaceSessionMessage {
   cmd: "desktop_place_session";
@@ -2962,6 +2945,7 @@ model ProfileArrangementChangedMessage {
 
 enum MigrationPhase {
   placement_required,
+  launch_required,
   complete,
 }
 
@@ -2982,6 +2966,59 @@ model MigrationDraftDesktop {
   tree_json: string;            // Split tree of {"group": id} leaves; ratio is the first child's share; empty when nothing is placed
 }
 
+model BackgroundLaunchMessage {
+ event: "background_launch";
+ session_id: string;
+ profile_id: string;
+ desktop_id: string;
+ name: string;
+ requested_by: string;
+ desktop_label: string;
+ kind: LaunchDesktopKind;
+}
+
+enum LaunchDesktopKind { automation, crew }
+// desktop_id is where the item starts; desktop_name chooses a new desktop (on ⌘N when desktop_id is
+// <profile_id>/desktop_N). Neither chooses nothing: an item the launch review has yet to give a desktop.
+model LaunchDesktopSetting {
+  desktop_id?: string;
+  desktop_name?: string;
+  label?: string;
+}
+model LaunchDesktopItem {
+  kind: LaunchDesktopKind;
+  item_id: string;
+  name: string;
+  profile_id: string;
+  setting: LaunchDesktopSetting;
+  confirmed: boolean;
+}
+model LaunchDesktopGetMessage {
+  cmd: "launch_desktop_get";
+  request_id: string;
+  kind: LaunchDesktopKind;
+  item_id: string;
+}
+model LaunchDesktopSetMessage {
+  desktop_ref?: string;
+  cmd: "launch_desktop_set";
+  request_id: string;
+  kind: LaunchDesktopKind;
+  item_id: string;
+  setting?: LaunchDesktopSetting;
+  desktop_name?: string;
+}
+model LaunchDesktopResultMessage {
+  event: "launch_desktop_result";
+  request_id: string;
+  action: string;
+  success: boolean;
+  error?: string;
+  item?: LaunchDesktopItem;
+  desktops?: Desktop[];
+  items?: LaunchDesktopItem[];
+}
+
 model MigrationState {
   phase: MigrationPhase;
   revision: safeint;
@@ -2990,6 +3027,8 @@ model MigrationState {
   desktops: MigrationDraftDesktop[];
   can_undo: boolean;
   suggestion_available: boolean;
+  launch_items?: LaunchDesktopItem[];
+  launch_desktops?: Desktop[];
 }
 
 model MigrationGetMessage {
@@ -3622,6 +3661,9 @@ model WorkflowActionResultMessage {
 // the definition's single most-recent run (Store.LatestAutomationRunPerDefinition),
 // embedded so the panel's list badge never needs a per-definition runs fetch.
 model AutomationDefinitionSummary {
+  profile_name?: string;
+  profile_id: string;
+  launch_desktop?: LaunchDesktopSetting;
   id: string;
   name: string;
   enabled: boolean;
@@ -3771,12 +3813,10 @@ model SpawnResultMessage {
   id: string;
   success: boolean;
   error?: string;
-  // The pane a requested placement produced. A spawn that asked for a
-  // placement and got none reports why in placement_error; the agent then
-  // runs unplaced in its profile.
+  // The pane the agent was placed in. A spawn whose placement fails fails
+  // as a whole and reports why in error.
   desktop_id?: string;
   pane_id?: string;
-  placement_error?: string;
 }
 
 model ReloadSessionResultMessage {
@@ -5877,6 +5917,8 @@ model CrewListMessage {
 
 // One registered crew member. Paths point at the canonical files.
 model CrewMember {
+  profile_name?: string;
+  launch_desktop?: LaunchDesktopSetting;
   id: string;
   profile_id: string; // The profile the member belongs to; it wakes only there
   revision: safeint;
@@ -6036,6 +6078,8 @@ model CrewWakeResultMessage {
   request_id: string;
   success: boolean;
   error?: string;
+  // The wake succeeded, but showing its session failed.
+  show_error?: string;
   member?: string;
   session_id?: string;
   profile_id?: string;
@@ -6097,6 +6141,7 @@ model CrewSleepResult {
 // about. Registry state, not prose: the home's markdown is never rewritten, and
 // an omitted field is left as it was.
 model CrewSetMessage {
+  launch_desktop?: string; // own, an empty slot 5–9, or a desktop ref of the item's profile
   cmd: "crew_set";
   member: string;
   cwd?: string;
@@ -6115,6 +6160,8 @@ model CrewSetMessage {
   // optional, so an empty list marshals away and reaches the daemon as absent,
   // which is how "leave it alone" is said.
   clear_awareness_dirs?: boolean;
+  launch_desktop_name?: string;
+  launch_desktop_setting?: LaunchDesktopSetting;
 }
 
 model CrewSetResult {
@@ -6426,7 +6473,7 @@ model SessionReopen {
   directory_state: string;
   // local | remote_only | gone | merged | unknown
   branch_state?: string;
-  // The profile the session reopens into, unplaced: its recorded profile.
+  // The recorded profile, on its last desktop or the current desktop.
   profile_id: string;
   // True when the recorded profile was deleted, so reopening needs an
   // explicit destination profile.
@@ -6456,11 +6503,9 @@ model DelegateResult {
   `model`: string;
   effort: string;
   predecessor_session_id?: string;
-  // Where the delegated agent sits. Absent when it runs unplaced.
+  // Where the delegated agent sits when placement is reported.
   desktop_id?: string;
   pane_id?: string;
-  // Why the agent stayed unplaced when a placement beside its source was asked for.
-  placement_error?: string;
   // When the harness first reported a turn (hook, transcript or plugin driver).
   // Absent when the delegation completed without that: the first turn is unconfirmed.
   first_turn_at?: string;
@@ -7037,6 +7082,8 @@ alias DaemonEvent =
   | ProfilesChangedMessage
   | ProfileArrangementChangedMessage
   | DesktopTileContentMessage
+  | BackgroundLaunchMessage
+  | LaunchDesktopResultMessage
   | MigrationResultMessage
   | MigrationChangedMessage
   | RenameResultMessage

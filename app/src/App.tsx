@@ -1,3 +1,4 @@
+import { Toast } from './components/Toast';
 import { invoke } from '@tauri-apps/api/core';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import './App.css';
@@ -233,6 +234,7 @@ function App() {
               registerSessionExitHandler={registerSessionExitHandler}
             />
           </MigrationGate>
+          <Toast />
         </DaemonApiProvider>
       </KeybindingsProvider>
     </SettingsProvider>

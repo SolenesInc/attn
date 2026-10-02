@@ -34,7 +34,6 @@ func TestASpawnTheDaemonRefusesRegistersNothing(t *testing.T) {
 		name, profile, desktop, refusal string
 	}{
 		{"an unknown profile", "profile-missing", "", `profile "profile-missing" does not exist`},
-		{"an unknown desktop", app.SelectedProfile(), "desktop-missing", `desktop "desktop-missing" does not exist`},
 	} {
 		id := uuid.NewString()
 		refused := testworld.Request(app, protocol.SpawnSessionMessage{

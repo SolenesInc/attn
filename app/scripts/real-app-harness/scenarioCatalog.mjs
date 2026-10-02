@@ -2,6 +2,12 @@ const REMOTE_ENDPOINTS_OFF = 'remote endpoints are off in this release, so the a
 
 export const scenarioCatalog = [
   {
+    id: 'launch-desktops',
+    runnerId: 'LAUNCH-DESKTOPS',
+    label: 'Launch desktops: mandatory review, named pending sharing, settings and actionable arrivals',
+    command: ['node', 'scripts/real-app-harness/scenario-launch-desktops.mjs'],
+  },
+  {
     id: 'snooze-keyboard',
     runnerId: 'SNOOZE-KEYBOARD',
     label: 'Snooze from the palette: agent-centered picker, native keys, focus handover and wake',

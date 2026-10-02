@@ -127,7 +127,7 @@ describe('SessionsTab reopens on demand', () => {
     expect(within(refusedRow).getByRole('button', { name: 'Start fresh on the default branch' })).toBeTruthy();
     expect(within(inspector()).getByText('directory is gone')).toBeTruthy();
     expect(within(inspector()).getByText('branch is gone everywhere')).toBeTruthy();
-    expect(within(inspector()).getByText('lands unplaced in its profile')).toBeTruthy();
+    expect(within(inspector()).getByText('lands on its last or current desktop')).toBeTruthy();
     expect(within(inspector()).getByRole('button', { name: /Start fresh elsewhere/ })).toBeTruthy();
   });
 

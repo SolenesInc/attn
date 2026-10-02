@@ -50,8 +50,6 @@ function renderOverview(overrides: Partial<Parameters<typeof DesktopOverview>[0]
     canSendActivePane: true,
     onSwitch: vi.fn(),
     onSendActivePane: vi.fn(),
-    onDelete: vi.fn(),
-    onGiveShortcutSlot: vi.fn(),
     onCreate: vi.fn(),
     onClose: vi.fn(),
     ...overrides,
@@ -116,46 +114,14 @@ describe('DesktopOverview', () => {
     expect(props.onSwitch).toHaveBeenCalledWith('d2');
   });
 
-  it('deletes the highlighted empty desktop but never the current one', () => {
-    const { props, dialog } = renderOverview();
-
-    fireEvent.keyDown(dialog, { key: 'Delete' });
-    fireEvent.keyDown(dialog, { key: 'ArrowRight' });
-    fireEvent.keyDown(dialog, { key: 'Delete' });
-
-    expect(props.onDelete).toHaveBeenCalledTimes(1);
-    expect(props.onDelete).toHaveBeenCalledWith('d10');
-  });
-
-  it('offers a shortcut slot only to extra desktops', () => {
-    const { props } = renderOverview();
-
-    const giveButtons = screen.getAllByRole('button', { name: 'Give a shortcut' });
-    expect(giveButtons).toHaveLength(2);
-    fireEvent.click(giveButtons[0]);
-
-    expect(props.onGiveShortcutSlot).toHaveBeenCalledWith('d10');
-    expect(props.onSwitch).not.toHaveBeenCalled();
-  });
-
-  it('keeps the keyboard working after a non-closing action', () => {
-    const { props, dialog } = renderOverview();
-
-    fireEvent.click(screen.getAllByRole('button', { name: 'Give a shortcut' })[0]);
-    expect(document.activeElement).toBe(dialog);
-    fireEvent.keyDown(document.activeElement!, { key: 'ArrowRight' });
-    fireEvent.keyDown(document.activeElement!, { key: 'Enter' });
-
-    expect(props.onSwitch).toHaveBeenCalledWith('d10');
-  });
 
   it('leaves Enter on a focused action button to that button', () => {
     const { props } = renderOverview();
-    const deleteButton = screen.getAllByRole('button', { name: 'Delete' })[0];
+    const sendButton = screen.getAllByRole('button', { name: 'Send focused pane here ⇧↵' })[0];
 
-    deleteButton.focus();
-    fireEvent.keyDown(deleteButton, { key: 'ArrowRight' });
-    fireEvent.keyDown(deleteButton, { key: 'Enter' });
+    sendButton.focus();
+    fireEvent.keyDown(sendButton, { key: 'ArrowRight' });
+    fireEvent.keyDown(sendButton, { key: 'Enter' });
 
     expect(props.onSwitch).not.toHaveBeenCalled();
   });

@@ -5,6 +5,7 @@ import { useUIScale } from '../../hooks/useUIScale';
 import { useShortcut } from '../../shortcuts/useShortcut';
 import { useProfilesStore } from '../../store/profiles';
 import { MigrationPhase } from '../../types/generated';
+import { LaunchDesktopPicker } from './LaunchDesktopPicker';
 import { MigrationPicker } from './MigrationPicker';
 import './MigrationPicker.css';
 
@@ -45,14 +46,16 @@ export function MigrationGate({ children }: { children: ReactNode }) {
     const id = state.migration?.profile_id;
     return state.profiles.find((profile) => profile.id === id)?.name ?? 'Default';
   });
+  const launching = phase === MigrationPhase.LaunchRequired;
   const placing = phase === MigrationPhase.PlacementRequired;
-  const [sawPlacement, setSawPlacement] = useState(placing);
+  const [sawPlacement, setSawPlacement] = useState(placing || launching);
   const [continued, setContinued] = useState(false);
-  if (placing && !sawPlacement) setSawPlacement(true);
+  if ((placing || launching) && !sawPlacement) setSawPlacement(true);
 
   if (phase === null && !hasReceivedInitialState) {
     return <MigrationScreen><Connecting connectionError={connectionError} /></MigrationScreen>;
   }
+  if (launching) return <MigrationScreen><LaunchDesktopPicker /></MigrationScreen>;
   if (placing) return <MigrationScreen><MigrationPicker /></MigrationScreen>;
   if (sawPlacement && !continued) {
     return (

@@ -238,8 +238,8 @@ func TestADelegationNamesItsSession(t *testing.T) {
 		if err != nil {
 			t.Fatalf("%s: %v", row.name, err)
 		}
-		if result.Directory != cwd || protocol.Deref(result.DesktopID) != "" {
-			t.Errorf("%s: a delegation without a caller runs at %s on desktop %q; want %s, unplaced", row.name, result.Directory, protocol.Deref(result.DesktopID), cwd)
+		if result.Directory != cwd || protocol.Deref(result.DesktopID) == "" {
+			t.Errorf("%s: a delegation without a caller runs at %s on desktop %q; want %s, placed", row.name, result.Directory, protocol.Deref(result.DesktopID), cwd)
 		}
 		if label := sessionOfDelegate(t, w, result.SessionID).Label; label != row.want {
 			t.Errorf("%s: the delegate is labelled %q; want %q", row.name, label, row.want)

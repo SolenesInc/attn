@@ -195,6 +195,7 @@ export function SidebarCrewManage() {
 
 export function SidebarPopovers() {
   const {
+    crew,
     onRenameSession,
     onRenameDesktop,
     onChangeChiefOfStaff,
@@ -261,6 +262,7 @@ export function SidebarPopovers() {
       {crewActionsTarget && (
         <CrewMemberActionsPopover
           memberName={crewDisplayName(crewActionsTarget.member)}
+          desktopLabel={crew?.find((member) => member.id === crewActionsTarget.member)?.launch_desktop?.label}
           anchor={crewActionsTarget.anchor}
           onOpenDetails={() => {
             const target = crewActionsTarget;

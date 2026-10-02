@@ -46,6 +46,19 @@ describe('App crew wake and sleep', () => {
     expect(shownDesktops()).toEqual(['desktop-sess-keel']);
   });
 
+  it('reports a show error separately from a successful wake', async () => {
+    const { daemon } = await renderCrewQueue({ label: 'keel day' });
+    daemon.on('crew_wake', () => ({
+      event: 'crew_wake_result', success: true, member: 'keel', session_id: 'sess-keel',
+      show_error: 'Session closed before it could be shown',
+    }));
+
+    await wakeKeel(daemon);
+
+    expect(screen.getByRole('alert')).toHaveTextContent('Member is awake, but showing it failed: Session closed before it could be shown');
+    expect(daemon.sentOf('crew_wake')).toHaveLength(1);
+  });
+
   it('shows what the daemon said when it refuses a wake', async () => {
     const { daemon } = await renderCrewQueue({ label: 'keel day' });
     daemon.on('crew_wake', () => ({

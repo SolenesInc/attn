@@ -19,7 +19,10 @@ func TestADelegateLandsOnTheDesktopItsCallerNames(t *testing.T) {
 	profile := app.SelectedProfile()
 	id := "create-ops"
 	ops := mustProfileRequest(app, protocol.DesktopCreateMessage{Cmd: protocol.CmdDesktopCreate, RequestID: id, ProfileID: profile, Name: protocol.Ptr("Ops")}, id).Desktops[0]
+	w.Spawn(app, fakeagent.Codex, w.Path("ops-anchor"))
 	unnamed := createDesktop(app, profile)
+	w.Spawn(app, fakeagent.Codex, w.Path("unnamed-anchor"))
+	focusAgent(t, w, app, source)
 	side := createProfile(app, "Side")
 
 	delegate := func(name, desktop string) (*protocol.DelegateResult, error) {
@@ -35,10 +38,10 @@ func TestADelegateLandsOnTheDesktopItsCallerNames(t *testing.T) {
 		name, ref, want string
 		wantPanes       int
 	}{
-		{name: "by shortcut digit onto an empty desktop", ref: fmt.Sprint(protocol.Deref(ops.ShortcutSlot)), want: ops.ID, wantPanes: 1},
-		{name: "by name, in any case, beside the active pane", ref: "oPS", want: ops.ID, wantPanes: 2},
-		{name: "by id", ref: unnamed.ID, want: unnamed.ID, wantPanes: 1},
-		{name: "by the label an unnamed desktop shows", ref: fmt.Sprintf("desktop %d", protocol.Deref(unnamed.ShortcutSlot)), want: unnamed.ID, wantPanes: 2},
+		{name: "by shortcut digit onto another desktop", ref: fmt.Sprint(protocol.Deref(ops.ShortcutSlot)), want: ops.ID, wantPanes: 2},
+		{name: "by name, in any case, beside the active pane", ref: "oPS", want: ops.ID, wantPanes: 3},
+		{name: "by id", ref: unnamed.ID, want: unnamed.ID, wantPanes: 2},
+		{name: "by the label an unnamed desktop shows", ref: fmt.Sprintf("desktop %d", protocol.Deref(unnamed.ShortcutSlot)), want: unnamed.ID, wantPanes: 3},
 		{name: "by the caller's own desktop, beside the caller", ref: "1", want: sourceDesktop, wantPanes: 2},
 	} {
 		result, err := delegate(fmt.Sprintf("d%d", i), row.ref)

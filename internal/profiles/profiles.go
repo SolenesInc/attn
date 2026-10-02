@@ -2,6 +2,7 @@ package profiles
 
 import (
 	"fmt"
+	"strconv"
 	"strings"
 
 	"github.com/victorarias/attn/internal/layouttree"
@@ -81,7 +82,6 @@ const (
 	CodeNameTaken       Code = "name_taken"
 	CodeSlotTaken       Code = "slot_taken"
 	CodeLastProfile     Code = "last_profile"
-	CodeLastDesktop     Code = "last_desktop"
 	CodeProfileDeleted  Code = "profile_deleted"
 	CodeCrossProfile    Code = "cross_profile"
 	CodeAlreadyPlaced   Code = "already_placed"
@@ -119,6 +119,26 @@ func ValidateShortcutSlot(slot int) error {
 		return nil
 	}
 	return Errorf(CodeInvalid, "shortcut slot %d is outside %d-%d", slot, FirstShortcutSlot, LastShortcutSlot)
+}
+
+const numberedDesktopPrefix = "desktop_"
+
+// NumberedDesktopID is the stable id of a profile's desktop on ⌘slot; its number never changes.
+func NumberedDesktopID(profileID string, slot int) string {
+	return fmt.Sprintf("%s/%s%d", profileID, numberedDesktopPrefix, slot)
+}
+
+// DesktopSlot is the ⌘ number a desktop id carries, 0 for an unnumbered desktop.
+func DesktopSlot(id string) int {
+	suffix := id[strings.LastIndex(id, "/")+1:]
+	if !strings.HasPrefix(suffix, numberedDesktopPrefix) {
+		return 0
+	}
+	slot, err := strconv.Atoi(strings.TrimPrefix(suffix, numberedDesktopPrefix))
+	if err != nil {
+		return 0
+	}
+	return slot
 }
 
 func checkPaneRows(desktop Desktop, inTree map[string]struct{}) (map[string]struct{}, error) {
