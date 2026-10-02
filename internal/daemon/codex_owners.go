@@ -11,10 +11,12 @@ import (
 	"github.com/victorarias/attn/internal/hooks"
 	"github.com/victorarias/attn/internal/protocol"
 	"github.com/victorarias/attn/internal/ptybackend"
+	"github.com/victorarias/attn/internal/sessionstate"
 	"github.com/victorarias/attn/internal/store"
 	"os"
 	"path/filepath"
 	"strings"
+	"time"
 )
 
 func (r *codexRuntime) ownerContext(owner *store.CodexOwner) (codexLaunchContext, error) {
@@ -242,11 +244,12 @@ func (r *codexRuntime) prepareRPC(runtimeID string, m *codexshared.Message) (fun
 }
 
 type codexNativeThread struct {
-	ID        string          `json:"id"`
-	Path      string          `json:"path"`
-	CWD       string          `json:"cwd"`
-	Source    json.RawMessage `json:"source"`
-	Ephemeral bool            `json:"ephemeral"`
+	ID        string            `json:"id"`
+	Path      string            `json:"path"`
+	CWD       string            `json:"cwd"`
+	Source    json.RawMessage   `json:"source"`
+	Ephemeral bool              `json:"ephemeral"`
+	Status    codexNativeStatus `json:"status"`
 	Turns     []struct {
 		ID     string `json:"id"`
 		Status string `json:"status"`
@@ -359,6 +362,7 @@ func (r *codexRuntime) bindOwner(id string, t codexNativeThread) {
 		}
 	}
 	r.d.observeOrQueueAgentConversation(agentConversationObservation{SessionID: id, NativeID: t.ID, TranscriptPath: t.Path})
+	r.projectNativeStatus(t.ID)
 	if session := r.d.store.Get(id); session != nil && session.State == protocol.SessionStateLaunching {
 		r.d.applyState(sessionStateChange{sessionID: id, state: string(protocol.SessionStateIdle), cause: liveSignal{}, origin: stateOrigin{source: "codex", detail: "native root bound"}})
 	}
@@ -417,6 +421,7 @@ func (r *codexRuntime) cleanupReservation(id string) {
 type codexTurnState struct {
 	ID       string
 	Revision uint64
+	Status   codexNativeStatus
 }
 
 func (r *codexRuntime) resumeOwner(ctx context.Context, control *codexshared.Client, params map[string]any) (json.RawMessage, error) {
@@ -447,11 +452,75 @@ func (r *codexRuntime) resumeOwner(ctx context.Context, control *codexshared.Cli
 	// A native notification received during resume is newer than its snapshot.
 	if state.Revision == revision {
 		state.ID = activeID
+		state.Status = reply.Thread.Status
 		state.Revision++
 		r.activeTurns[root] = state
 	}
 	r.activeMu.Unlock()
+	r.projectNativeStatus(root)
 	return result, nil
+}
+
+type codexNativeStatus struct {
+	Type        string   `json:"type"`
+	ActiveFlags []string `json:"activeFlags"`
+}
+
+func (r *codexRuntime) observeControl(m codexshared.Message) {
+	r.observeNative(m)
+	if m.Method != "thread/status/changed" {
+		return
+	}
+	var params struct {
+		ThreadID string            `json:"threadId"`
+		Status   codexNativeStatus `json:"status"`
+	}
+	if json.Unmarshal(m.Params, &params) != nil || params.ThreadID == "" {
+		return
+	}
+	r.activeMu.Lock()
+	state := r.activeTurns[params.ThreadID]
+	state.Status = params.Status
+	state.Revision++
+	r.activeTurns[params.ThreadID] = state
+	r.activeMu.Unlock()
+	r.projectNativeStatus(params.ThreadID)
+}
+
+func (r *codexRuntime) projectNativeStatus(root string) {
+	owner, err := r.d.store.CodexOwnerByRoot(r.serverID, root)
+	if err != nil || owner == nil || owner.Archived {
+		return
+	}
+	r.activeMu.Lock()
+	defer r.activeMu.Unlock()
+	status := r.activeTurns[root].Status
+	var claim sessionstate.Claim
+	switch status.Type {
+	case "active":
+		claim = sessionstate.ClaimBusy
+		for _, flag := range status.ActiveFlags {
+			if flag == "waitingOnApproval" {
+				claim = sessionstate.ClaimApprovalPending
+				break
+			}
+			if flag == "waitingOnUserInput" {
+				claim = sessionstate.ClaimNeedsInput
+			}
+		}
+	case "idle":
+		claim = sessionstate.ClaimIdle
+	default:
+		return
+	}
+	at := time.Now()
+	r.d.traceStateEvidence(owner.SessionID, stateOrigin{source: "codex_native", detail: status.Type, observedAt: at}, string(claim))
+	r.d.recordEvidence(owner.SessionID, at, func(e *sessionstate.Evidence) {
+		e.NativeRoot = &sessionstate.Observation{Source: sessionstate.SourceNative, Claim: claim, Detail: status.Type, ObservedAt: at}
+		if claim == sessionstate.ClaimBusy {
+			e.LastBusyAt = at
+		}
+	})
 }
 
 func (r *codexRuntime) observeNative(m codexshared.Message) {

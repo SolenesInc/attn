@@ -145,7 +145,7 @@ func (r *codexRuntime) ensureServer(ctx context.Context, launch codexLaunchConte
 	var control *codexshared.Client
 	var err error
 	for {
-		control, err = codexshared.Connect(r.d.life.Context(), r.socket(""), r.observeNative)
+		control, err = codexshared.Connect(r.d.life.Context(), r.socket(""), r.observeControl)
 		if !errors.Is(err, syscall.ECONNREFUSED) && !errors.Is(err, os.ErrNotExist) {
 			break
 		}
@@ -297,6 +297,7 @@ func (r *codexRuntime) noteServerExit(info ptybackend.ExitInfo) {
 		}
 		for _, owner := range owners {
 			if !owner.Archived {
+				r.d.updateEvidence(owner.SessionID, nil, func(e *sessionstate.Evidence) { e.NativeRoot = nil })
 				r.d.applyState(sessionStateChange{sessionID: owner.SessionID, state: string(protocol.SessionStateRecoverable), cause: startupRecovery{}, origin: stateOrigin{source: "codex", detail: "native server exited; interrupted input is not replayed"}})
 			}
 		}

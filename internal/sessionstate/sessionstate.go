@@ -15,6 +15,7 @@ const (
 	SourceHarnessEvent Source = "harness_event"
 	SourceClassifier   Source = "classifier"
 	SourceProcess      Source = "process"
+	SourceNative       Source = "native_root"
 )
 
 type Claim string
@@ -43,6 +44,7 @@ type Evidence struct {
 	LastHarnessEvent *Observation
 	LastClassifier   *Observation
 	Process          *Observation
+	NativeRoot       *Observation
 
 	TurnOpen       bool
 	TurnEverOpened bool
@@ -134,6 +136,7 @@ const (
 	ReasonPromptOwed        Reason = "prompt_owed"
 	ReasonStuck             Reason = "stuck"
 	ReasonNoEvidence        Reason = "no_evidence"
+	ReasonNativeRoot        Reason = "native_root"
 )
 
 type Resolution struct {
@@ -146,6 +149,20 @@ type Resolution struct {
 func Resolve(e Evidence, policy Policy, now time.Time) Resolution {
 	if e.Process != nil && e.Process.Claim == ClaimExited {
 		return Resolution{State: protocol.SessionStateIdle, Reason: ReasonProcessExited, Detail: e.Process.Detail}
+	}
+	if native := e.NativeRoot; native != nil {
+		switch native.Claim {
+		case ClaimBusy:
+			return Resolution{State: protocol.SessionStateWorking, Reason: ReasonNativeRoot, Detail: native.Detail}
+		case ClaimApprovalPending:
+			return Resolution{State: protocol.SessionStatePendingApproval, Reason: ReasonApprovalOpen, Detail: native.Detail}
+		case ClaimNeedsInput:
+			return Resolution{State: protocol.SessionStateWaitingInput, Reason: ReasonQuestionOpen, Detail: native.Detail}
+		case ClaimIdle:
+			if !supersededByBusy(native, e) {
+				return settled(e, ReasonNativeRoot, policy, now)
+			}
+		}
 	}
 
 	if fresh(e.Heartbeat, ClaimBusy, now, policy.HeartbeatTTL) {

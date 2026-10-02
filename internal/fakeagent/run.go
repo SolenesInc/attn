@@ -92,6 +92,15 @@ func (r *Run) StopReadingTerminal() {
 	r.call(methodStopRead, struct{}{}, nil)
 }
 
+func (r *Run) ToolShell(command string) string {
+	r.t.Helper()
+	var result struct {
+		Stdout string `json:"stdout"`
+	}
+	r.call("tool_shell", textParams{Text: command}, &result)
+	return result.Stdout
+}
+
 func (r *Run) call(method string, params, result any) {
 	r.t.Helper()
 	ctx, cancel := context.WithTimeout(context.Background(), HangGuard)

@@ -16,6 +16,14 @@ const owners = [];
 const panes = new Map();
 let resumeViewer;
 let resumeViewerPane;
+async function request(cmd, event, fields) {
+  const request_id = `${cmd}-${crypto.randomUUID()}`;
+  const reply = observer.waitForMessage(message => message.event === event && message.request_id === request_id ? message : null, event);
+  observer.send({ cmd, request_id, ...fields });
+  const result = await reply;
+  runner.assert(result.success, `${cmd} failed`, result);
+  return result;
+}
 async function type(id, paneId, text) { await client.request('type_pane_via_ui', { sessionId: id, paneId, text }); }
 async function closePane(workspaceId, paneId) {
   const pending = observer.waitForMessage(event => event.event === 'workspace_layout_action_result' && event.action === 'workspace_layout_close_pane' && event.workspace_id === workspaceId && event.pane_id === paneId ? event : null, 'shared pane close result');
@@ -33,7 +41,7 @@ try {
   const roots = [];
   for (const name of ['exo', 'foo']) {
     const cwd = path.join(runner.sessionDir, name); fs.mkdirSync(cwd, { recursive: true });
-    writeMockAgentFixture(cwd, { agent: 'codex', resumable: true, turns: [], defaultActions: [{ type: 'reply', text: `reply ${name}` }] });
+    writeMockAgentFixture(cwd, { agent: 'codex', resumable: true, turns: [{ match: { contains: 'needs approval' }, actions: [{ type: 'reply', approval: true, text: `approved ${name}` }] }], defaultActions: [{ type: 'reply', text: `reply ${name}` }] });
     const { sessionId } = await client.request('create_session', { cwd, agent: 'codex', label: name }); owners.push(sessionId);
     const pane = await resolved(sessionId, sessionId); panes.set(sessionId, pane);
     const result = await waitForPaneText(client, sessionId, pane.pane_id, text => /Root ([0-9a-f-]{36})/.test(text), `native root ${name}`);
@@ -71,6 +79,48 @@ try {
     const draft = await client.request('read_pane_text', { sessionId: a, paneId: paneA.pane_id });
     runner.assert(draft.text.includes('draft about B'), 'attachment lost another view draft', draft);
     await type(a, paneA.pane_id, `\x15/agents ${roots[0]}\r`); await resolved(a, a);
+  });
+  await runner.step('hidden_approval_queue_attaches_native_view', async () => {
+    const second = [...panes.values()].find(pane => pane.session_id === a && pane.runtime_id !== a);
+    await closePane(observer.sessionsById.get(a).workspace_id, second.pane_id);
+    await type(a, paneA.pane_id, `/agents ${roots[1]}\r`); await resolved(a, b);
+    await request('session_annotations_submit', 'session_annotations_submit_result', { session_id: a, text: 'A needs approval' });
+    await observer.waitFor(() => observer.getSession(a)?.state === 'pending_approval', 'hidden A requires approval');
+    await client.request('set_setting', { key: 'queue_mode_enabled', value: 'true' });
+    await client.request('dom_wait', { selector: `[data-testid="queue-turn-${a}"] .queue-row-select`, timeoutMs: observer.connectTimeoutMs });
+    await client.request('dom_click', { selector: `[data-testid="queue-turn-${a}"] .queue-row-select` });
+    const attached = await observer.waitFor(() => [...observer.layoutsByWorkspaceId.values()].flatMap(layout => layout.panes || []).find(pane => pane.session_id === a && pane.runtime_id !== a && pane.codex_resolution === 'resolved'), 'queue attached hidden A');
+    await waitForPaneText(client, a, attached.pane_id, text => text.includes('Allow the command to run?'), 'attached native approval');
+    await client.request('set_setting', { key: 'queue_mode_enabled', value: 'false' });
+    await client.request('focus_pane', { sessionId: a, paneId: paneA.pane_id });
+    await type(a, paneA.pane_id, `/agents ${roots[0]}\r`); await resolved(a, a);
+    await waitForPaneText(client, a, paneA.pane_id, text => text.includes('Allow the command to run?'), 'same approval in both views');
+    await type(a, attached.pane_id, '\r');
+    await observer.waitFor(() => observer.getSession(a)?.state === 'waiting_input', 'one native approval resolves both views');
+    await waitForPaneText(client, a, paneA.pane_id, text => text.includes('approved exo'), 'approval reply in original view');
+    await closePane(observer.sessionsById.get(a).workspace_id, attached.pane_id);
+  });
+  await runner.step('annotation_editor_keeps_A_when_native_view_switches_to_B', async () => {
+    const messages = await request('session_messages_get', 'session_messages_get_result', { session_id: a });
+    const message = messages.messages.find(message => message.markdown.includes('approved exo'));
+    runner.assert(message, 'approval reply has no annotatable owner message', messages);
+    await request('session_annotations_save', 'session_annotations_save_result', { session_id: a, generation: 1, annotations: [{ id: 'shared-A-mark', message_key: message.key, start: 0, end: 8, quote: 'approved', comment: '' }] });
+    await type(a, paneA.pane_id, `/agents ${roots[1]}\r`); await resolved(a, b);
+    await type(a, paneA.pane_id, `/agents ${roots[0]}\r`); await resolved(a, a);
+    await client.request('dom_wait', { selector: '.anno-card-open', timeoutMs: observer.connectTimeoutMs });
+    await client.request('dom_click', { selector: '.anno-card-open' });
+    await client.request('dom_click', { selector: '[aria-label="Write a comment"]' });
+    await client.request('dom_type', { selector: '.anno-popup-text', text: 'keep this feedback on A' });
+    observer.send({ cmd: 'pty_input', id: a, source: 'automation', data: `/agents ${roots[1]}\r` });
+    await resolved(a, b);
+    const title = await client.request('dom_text', { selector: '.anno-panel-title' });
+    runner.assert(title.text.includes('Annotations for exo'), 'open editor silently changed recipient', title);
+    const sent = observer.waitForMessage(message => message.event === 'session_annotations_submit_result' && message.session_id === a ? message : null, 'annotation still submitted to A');
+    await client.request('dom_click', { selector: '.anno-panel-send' });
+    runner.assert((await sent).success, 'annotation did not submit to captured owner A');
+    await observer.waitFor(() => observer.getSession(a)?.state === 'waiting_input', 'A feedback completes');
+    await client.request('focus_pane', { sessionId: a, paneId: paneA.pane_id });
+    await type(a, paneA.pane_id, `/agents ${roots[0]}\r`); await resolved(a, a);
   });
   await runner.step('new_session_from_an_unresolved_shared_pane', async () => {
     await type(a, paneA.pane_id, '/title unknown-root\r');

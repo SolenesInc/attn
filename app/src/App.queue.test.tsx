@@ -61,6 +61,38 @@ async function press(daemon: ScriptedDaemon, name: string) {
 }
 
 describe('App queue', () => {
+  it('exposes a hidden shared owner and attaches a view when its approval row is selected', async () => {
+    const a = agent('a', { agent: 'codex', codex_mode: 'shared', state: 'pending_approval', turn_owed: true, turn_opened_at: ago(HOUR) });
+    const b = agent('b', { agent: 'codex', codex_mode: 'shared' });
+    const source = agentWorkspace('a');
+    source.layout!.panes[0] = { ...source.layout!.panes[0], session_id: 'b', codex_resolution: 'resolved', codex_revision: '2' };
+    const { daemon } = await renderApp({ initialState: { settings: QUEUE, sessions: [a, b], workspaces: [source, agentWorkspace('b')] } });
+    daemon.on('session_reopen', ({ session_id }) => {
+      const layout = source.layout!;
+      const pane = { ...layout.panes[0], pane_id: 'pane-attached-a', runtime_id: 'view-a', session_id: 'a', codex_resolution: 'resolved' as const, codex_revision: '1' };
+      daemon.emit({ event: 'workspace_layout_updated', workspace_layout: { ...layout, layout_json: JSON.stringify({ type: 'split', split_id: 'two', direction: 'vertical', ratio: 0.5, children: [{ type: 'pane', pane_id: 'pane-a' }, { type: 'pane', pane_id: pane.pane_id }] }), panes: [layout.panes[0], pane] } });
+      return { event: 'session_reopen_result', session_id, success: true, workspace_id: source.id, pane_id: pane.pane_id };
+    });
+    expect(bandRows()).toEqual(['queue-turn-a', 'queue-settled-b']);
+    await press(daemon, 'Open a');
+    expect(daemon.sentOf('session_reopen')).toEqual([expect.objectContaining({ session_id: 'a' })]);
+    expect(document.querySelector('[data-pane-id="pane-attached-a"].active')).toBeInTheDocument();
+  });
+
+  it('reports a failed hidden-owner attachment and does not retry on unrelated snapshots', async () => {
+    const a = agent('a', { agent: 'codex', codex_mode: 'shared', turn_owed: true });
+    const source = agentWorkspace('a');
+    source.layout!.panes = [];
+    source.layout!.layout_json = '';
+    const { daemon } = await renderApp({ initialState: { settings: QUEUE, sessions: [a], workspaces: [source] } });
+    daemon.on('session_reopen', ({ session_id }) => ({ event: 'session_reopen_result', session_id, success: false, error: 'native connection unavailable' }));
+    await press(daemon, 'Open a');
+    expect(screen.getByRole('alert')).toHaveTextContent('native connection unavailable');
+    daemon.emit({ event: 'sessions_updated', sessions: [a] });
+    await daemon.idle();
+    expect(daemon.sentOf('session_reopen')).toHaveLength(1);
+  });
+
   it('replaces the workspace tree with the chief, the owed turns oldest first, then the settled rest', async () => {
     await launch();
 

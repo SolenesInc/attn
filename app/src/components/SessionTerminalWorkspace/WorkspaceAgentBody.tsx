@@ -53,6 +53,7 @@ export function WorkspaceAgentBody({ agentPane, paneSession, paneTitle }: Worksp
           ref={terminalRefForPane(agentPane.id)}
           workspaceId={workspaceId}
           sessionId={agentPane.sessionId}
+          sessionLabel={paneTitle}
           annotationApi={annotationApi}
           // At most one pane owns ⌘Enter for the annotation send shortcut.
           paneActive={isActiveSession && sessionVisible && shortcutsEnabled && activeLeafId === agentPane.id}

@@ -73,7 +73,7 @@ func (r *codexRuntime) addViewLocked(v store.CodexView) error {
 			down.Close(websocket.StatusInternalError, err.Error())
 			return
 		}
-		codexshared.Proxy(r.d.life.Context(), down, up, func(m *codexshared.Message) (func(codexshared.Message), error) { return r.prepareRPC(v.RuntimeID, m) }, r.observeNative)
+		codexshared.Proxy(r.d.life.Context(), down, up, func(m *codexshared.Message) (func(codexshared.Message), error) { return r.prepareRPC(v.RuntimeID, m) }, nil)
 	})}
 	r.views[v.RuntimeID] = v
 	r.servers[v.RuntimeID] = server
@@ -164,6 +164,19 @@ func (r *codexRuntime) loadViews() ([]store.CodexView, error) {
 		r.views[v.RuntimeID] = v
 	}
 	return views, nil
+}
+
+func (d *Daemon) terminalInputOwner(runtimeID string) string {
+	r := d.codexRuntime()
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	if view, shared := r.views[runtimeID]; shared {
+		if view.Resolution == "resolved" {
+			return view.SessionID
+		}
+		return ""
+	}
+	return runtimeID
 }
 
 func (r *codexRuntime) disconnectView(id string, generation ...string) {

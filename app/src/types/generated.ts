@@ -1893,6 +1893,7 @@ export interface SessionObject {
     automation?:                Automation;
     branch?:                    string;
     chief_of_staff?:            boolean;
+    codex_mode?:                string;
     context_window_cap?:        number;
     crew_member?:               string;
     delegated_from_chief?:      boolean;
@@ -8583,6 +8584,7 @@ export interface Session {
     automation?:                Automation;
     branch?:                    string;
     chief_of_staff?:            boolean;
+    codex_mode?:                string;
     context_window_cap?:        number;
     crew_member?:               string;
     delegated_from_chief?:      boolean;
@@ -17214,6 +17216,7 @@ const typeMap: any = {
         { json: "automation", js: "automation", typ: u(undefined, r("Automation")) },
         { json: "branch", js: "branch", typ: u(undefined, "") },
         { json: "chief_of_staff", js: "chief_of_staff", typ: u(undefined, true) },
+        { json: "codex_mode", js: "codex_mode", typ: u(undefined, "") },
         { json: "context_window_cap", js: "context_window_cap", typ: u(undefined, 0) },
         { json: "crew_member", js: "crew_member", typ: u(undefined, "") },
         { json: "delegated_from_chief", js: "delegated_from_chief", typ: u(undefined, true) },
@@ -21470,6 +21473,7 @@ const typeMap: any = {
         { json: "automation", js: "automation", typ: u(undefined, r("Automation")) },
         { json: "branch", js: "branch", typ: u(undefined, "") },
         { json: "chief_of_staff", js: "chief_of_staff", typ: u(undefined, true) },
+        { json: "codex_mode", js: "codex_mode", typ: u(undefined, "") },
         { json: "context_window_cap", js: "context_window_cap", typ: u(undefined, 0) },
         { json: "crew_member", js: "crew_member", typ: u(undefined, "") },
         { json: "delegated_from_chief", js: "delegated_from_chief", typ: u(undefined, true) },

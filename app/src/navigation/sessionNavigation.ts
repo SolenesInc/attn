@@ -204,6 +204,7 @@ export function reconcilePendingSelection(
 
 export function sessionAttentionFields(session: DaemonSessionSnapshot | undefined) {
   return {
+    codexMode: session?.codex_mode,
     chiefOfStaff: session?.chief_of_staff ?? false,
     turnOwed: session?.turn_owed ?? false,
     turnOpenedAt: session?.turn_opened_at,

@@ -1,0 +1,4 @@
+kind: fixed
+area: sessions
+change: Shared Codex views route attention, typing, annotations and inbox notifications to the correct native agent after switching.
+notes: Hidden agents remain in the queue and can open a native view to answer approvals. Shared Codex remains opt-in.

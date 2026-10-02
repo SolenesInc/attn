@@ -656,7 +656,6 @@ func (d *Daemon) handlePtyInput(client *wsClient, msg *protocol.PtyInputMessage)
 	if probeID != "" {
 		probeStartedAt = time.Now()
 	}
-	userTyped := isComposerKeystroke(source, []byte(msg.Data))
 	if d.debugLogging {
 		d.logf(
 			"pty_input: id=%s bytes=%d preview=%q source=%s",
@@ -665,10 +664,6 @@ func (d *Daemon) handlePtyInput(client *wsClient, msg *protocol.PtyInputMessage)
 			previewBinaryForLog([]byte(msg.Data)),
 			strings.TrimSpace(protocol.Deref(msg.Source)),
 		)
-	}
-	if userTyped {
-		// Hold the existing timer before the agent can take this input and arm a new one.
-		d.holdAutoSettle(msg.ID)
 	}
 	writeErr := d.writeSessionPTY(msg.ID, []byte(msg.Data), source)
 	d.recordSupportInputTrace(msg, receivedAt, time.Since(receivedAt), writeErr)
@@ -695,8 +690,9 @@ func (d *Daemon) handlePtyInput(client *wsClient, msg *protocol.PtyInputMessage)
 }
 
 func (d *Daemon) handleTerminalPointerActivity(msg *protocol.TerminalPointerActivityMessage) {
-	if d.noteAutoSettleActivity(msg.ID) {
-		d.holdAutoSettle(msg.ID)
+	ownerID := d.terminalInputOwner(msg.ID)
+	if d.noteAutoSettleActivity(ownerID) {
+		d.holdAutoSettle(ownerID)
 	}
 }
 

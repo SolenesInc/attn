@@ -5,6 +5,8 @@ import {
 } from '../types/workspace';
 
 export interface WorkspaceViewSession {
+  codexMode?: string;
+  codex_mode?: string;
   id: string;
   label: string;
   workspaceId?: string;
@@ -284,6 +286,9 @@ export function filterSessionsRepresentedInWorkspaceLayouts<TSession extends Wor
     const workspaceId = sessionWorkspaceId(session, workspaceIdBySessionId);
     if (!workspaceId) {
       return false;
+    }
+    if ((session.codexMode || session.codex_mode) === 'shared' && !sharedViewOwnerIds.has(session.id)) {
+      return true;
     }
     if (!workspaceIdsWithLayout.has(workspaceId)) {
       return !sharedViewOwnerIds.has(session.id);

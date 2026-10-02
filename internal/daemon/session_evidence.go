@@ -211,6 +211,9 @@ func (d *Daemon) recordBracketEvidence(sessionID, state string) {
 	d.recordEvidence(sessionID, at, func(e *sessionstate.Evidence) {
 		switch state {
 		case protocol.StateWorking:
+			if e.NativeRoot != nil && e.NativeRoot.Claim == sessionstate.ClaimIdle {
+				e.NativeRoot = nil
+			}
 			e.TurnOpen = true
 			e.TurnEverOpened = true
 			e.InitialPromptOwed = false

@@ -644,6 +644,14 @@ func (m *sessionInputModule) try(ctx context.Context, delivery sessionInputDeliv
 	candidate := sessionInputCandidate{inputID: inputID, attempt: delivery.id, text: delivery.text, origin: delivery.origin}
 
 	if m.daemon.sharedCodexOwner(delivery.sessionID) {
+		if !delivery.allowUserComposer {
+			if remaining := m.daemon.userInputQuietRemaining(delivery.sessionID, sessionInputQuietWindow); remaining > 0 {
+				delete(lane.attempts, key)
+				err := &sessionInputQuietError{retryAfter: remaining}
+				m.armRetryLocked(lane, delivery, err)
+				return sessionInputAttempt{id: delivery.id, stage: sessionInputDeferred, reason: sessionInputReasonUserComposerDirty, err: err}
+			}
+		}
 		attempt.route = sessionInputRouteCodex
 		lane.pending = append(lane.pending, candidate)
 		lane.placing = true
@@ -796,16 +804,23 @@ func (m *sessionInputModule) ptySafetyLocked(ctx context.Context, sessionID stri
 	return sessionInputReasonNone, nil
 }
 
-func (m *sessionInputModule) writePTY(ctx context.Context, sessionID string, data []byte, source string) error {
+func (m *sessionInputModule) writePTY(ctx context.Context, runtimeID string, data []byte, source string) error {
+	if m.daemon.ptyBackend == nil {
+		return errors.New("session has no PTY backend")
+	}
+	sessionID := m.daemon.terminalInputOwner(runtimeID)
+	if sessionID == "" {
+		return m.daemon.ptyBackend.Input(ctx, runtimeID, data)
+	}
+	if isComposerKeystroke(source, data) {
+		m.daemon.holdAutoSettle(sessionID)
+	}
 	lane := m.lane(sessionID)
 	if !lane.mu.TryLock() {
 		pausepoint.At(pausepoint.SessionInputLaneContended)
 		lane.mu.Lock()
 	}
 	defer lane.mu.Unlock()
-	if m.daemon.ptyBackend == nil {
-		return errors.New("session has no PTY backend")
-	}
 	if lane.phase == "" && m.daemon.store != nil {
 		if session := m.daemon.store.Get(sessionID); session != nil {
 			lane.phase = session.State
@@ -813,7 +828,7 @@ func (m *sessionInputModule) writePTY(ctx context.Context, sessionID string, dat
 	}
 	if m.daemon.noteUserInput(sessionID, source, data) {
 		if lane.heldEnter && m.promptShowingLocked(ctx, sessionID) {
-			return m.daemon.ptyBackend.Input(ctx, sessionID, data)
+			return m.daemon.ptyBackend.Input(ctx, runtimeID, data)
 		}
 		m.dropHeldEnterLocked(lane)
 		lane.userGeneration++
@@ -834,7 +849,7 @@ func (m *sessionInputModule) writePTY(ctx context.Context, sessionID string, dat
 			lane.userSubmit = true
 		}
 	}
-	return m.daemon.ptyBackend.Input(ctx, sessionID, data)
+	return m.daemon.ptyBackend.Input(ctx, runtimeID, data)
 }
 
 func (m *sessionInputModule) observePromptTaken(sessionID, prompt string, at time.Time) sessionInputEffects {

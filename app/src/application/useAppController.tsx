@@ -162,6 +162,7 @@ export function useAppController({
   } = attentionQueue;
 
   const navigation = useAppNavigation({
+    showError,
     activeSessionId,
     daemonSessions,
     daemonWorkspaces,
