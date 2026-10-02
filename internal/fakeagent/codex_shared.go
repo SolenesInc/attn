@@ -438,7 +438,7 @@ func (s *sharedFakeCodex) handle(conn *websocket.Conn, m codexshared.Message) (a
 	case "thread/name/set":
 		s.mu.Lock()
 		root := s.roots[p.ThreadID]
-		if root == nil || root.nameError {
+		if root == nil || root.nameError || p.Name == "fixture rejected name" {
 			s.mu.Unlock()
 			return nil, fmt.Errorf("fixture name write rejected for %s", p.ThreadID)
 		}

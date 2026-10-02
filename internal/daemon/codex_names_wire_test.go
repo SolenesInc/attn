@@ -2,6 +2,7 @@ package daemon_test
 
 import (
 	"os"
+	"strings"
 	"testing"
 
 	"github.com/victorarias/attn/internal/client"
@@ -9,6 +10,49 @@ import (
 	"github.com/victorarias/attn/internal/protocol"
 	"github.com/victorarias/attn/internal/testworld"
 )
+
+func TestSharedCodexInitialNameFailureKeepsCreatedRootAndRenameRecoversWork(t *testing.T) {
+	w := newWorld(t, fakeagent.Codex)
+	app, cli := w.App(), w.Client()
+	sharedCodexSetting(t, app, true)
+	a := w.Spawn(app, fakeagent.Codex, w.Path("same"), func(m *protocol.SpawnSessionMessage) {
+		m.Label = protocol.Ptr("fixture rejected name")
+		m.InitialPrompt = protocol.Ptr("blocked initial work")
+	})
+	agent := w.Launched(a)
+	root := agent.ConversationID
+	awaitSharedView(app, a, a)
+	app.AwaitScreen(a, "Showing "+root)
+	app.AwaitScreen(a, "fixture name write rejected")
+	listed := listNotifications(app)
+	var visible bool
+	for _, notice := range listed.Notifications {
+		if notice.SourceID == a && strings.Contains(notice.Detail, "fixture name write rejected") && strings.Contains(notice.Body, "Rename the agent") {
+			visible = true
+		}
+	}
+	if !visible {
+		t.Fatalf("initial naming failure has no recovery notice: %+v", listed)
+	}
+	if err := cli.RenameSession(a, "Recovered name"); err != nil {
+		t.Fatal(err)
+	}
+	awaitLabel(app, a, "Recovered name")
+	app.TypeLine(a, "retry work")
+	if got := agent.Prompted(); got != "retry work" {
+		t.Fatalf("work passed naming failure: %q", got)
+	}
+	if got := agent.ReadNativeName(); got != "Recovered name" {
+		t.Fatalf("pending rejected name survived correction: %q", got)
+	}
+	if agent.ConversationID != root {
+		t.Fatalf("recovery replaced created root %s with %s", root, agent.ConversationID)
+	}
+	owners, err := cli.SessionList(client.SessionListOptions{})
+	if err != nil || len(owners.Entries) != 1 {
+		t.Fatalf("naming failure left extra owners: %+v %v", owners, err)
+	}
+}
 
 func TestSharedCodexNativeNamesFollowHiddenOwnersAndBothRenameDirections(t *testing.T) {
 	w := newTitlingWorld(t, fakeagent.Codex)

@@ -269,8 +269,7 @@ func (r *codexRuntime) prepareRPC(runtimeID string, m *codexshared.Message) (fun
 			}
 			r.mu.Unlock()
 			if err != nil {
-				reply.Result = nil
-				reply.Error, _ = json.Marshal(map[string]any{"code": -32603, "message": err.Error()})
+				r.notifyInitialNameFailure(owner.SessionID, err)
 				return
 			}
 			r.nameMu.Lock()

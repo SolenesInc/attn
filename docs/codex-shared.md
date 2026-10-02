@@ -135,6 +135,11 @@ name, so restart/reopen cannot overwrite a later manual rename. Native New/fork
 clears the inherited launch name. Names in native read/resume snapshots reconcile
 on binding and restart; newer name events take precedence over older snapshots.
 
+If initial naming fails after creation, the successful native creation remains
+successful. A warning links to the agent and explains how to rename it. Work is
+refused while the launch name remains pending; a successful rename clears it and
+lets the same conversation receive work.
+
 Stock Codex 0.159.3 retained an explicit name on the first turn and a manual
 `/rename` while its generated title response was delayed. Native precedence owns
 that decision; Attn does not classify name events as manual or automatic.

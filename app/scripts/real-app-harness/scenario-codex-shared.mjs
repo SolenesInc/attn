@@ -123,6 +123,32 @@ try {
     runner.assert(ledger.text.includes('Native names A'), 'ledger did not project native name', ledger);
     await client.request('dispatch_shortcut', { shortcutId: 'sessions.open' });
   });
+  await runner.step('initial_name_failure_keeps_creation_and_rename_recovers', async () => {
+    const cwd = path.join(runner.sessionDir, 'name-recovery'); fs.mkdirSync(cwd, { recursive: true });
+    writeMockAgentFixture(cwd, { agent: 'codex', resumable: true, defaultActions: [{ type: 'reply', text: 'recovered work' }] });
+    const { sessionId: id } = await client.request('create_session', { cwd, agent: 'codex', label: 'fixture rejected name' });
+    owners.push(id);
+    const pane = await resolved(id, id);
+    await type(id, pane.pane_id, 'blocked work\r');
+    await waitForPaneText(client, id, pane.pane_id, text => text.includes('fixture name write rejected'), 'pending name refuses work');
+    await client.request('dom_click', { selector: '[aria-label="Show Notifications"]' });
+    await client.request('dom_wait', { selector: '.notification-row-head', timeoutMs: observer.connectTimeoutMs });
+    await client.request('dom_click', { selector: '.notification-row-head' });
+    const notice = await client.request('dom_text', { selector: '.notifications-panel' });
+    runner.assert(notice.text.includes('Could not set the Codex agent name') && notice.text.includes('Rename the agent'), 'naming recovery warning is not visible', notice);
+    await driver.screenshot(path.join(runner.runDir, 'initial-name-recovery-warning.png'), { windowId: await driver.mainWindowId() });
+    await client.request('dom_click', { selector: '.notifications-panel-close' });
+    await client.request('dom_click', { selector: `[aria-label="Rename session ${observer.getSession(id).label}"]` });
+    await client.request('dom_type', { selector: '.rename-popover-input', text: 'Recovered name' });
+    await client.request('dom_click', { selector: '.rename-popover-btn.save' });
+    await observer.waitFor(() => observer.getSession(id)?.label === 'Recovered name', 'rename recovers pending name');
+    await client.request('dom_wait', { selector: '.rename-popover', absent: true, timeoutMs: observer.connectTimeoutMs });
+    await type(id, pane.pane_id, 'retry work\r');
+    await waitForPaneText(client, id, pane.pane_id, text => text.includes('recovered work'), 'same owner receives recovered work');
+    await resolved(id, id);
+    await closePane(observer.getSession(id).workspace_id, pane.pane_id);
+    await client.request('focus_pane', { sessionId: a, paneId: paneA.pane_id });
+  });
   await runner.step('hidden_approval_queue_attaches_native_view', async () => {
     const second = [...panes.values()].find(pane => pane.session_id === a && pane.runtime_id !== a);
     await closePane(observer.sessionsById.get(a).workspace_id, second.pane_id);

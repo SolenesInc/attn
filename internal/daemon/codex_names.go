@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"strings"
+	"time"
 
 	"github.com/victorarias/attn/internal/codexshared"
 	"github.com/victorarias/attn/internal/store"
@@ -104,6 +105,25 @@ func (r *codexRuntime) applyInitialName(ctx context.Context, control *codexshare
 		return err
 	}
 	return r.d.store.UpdateCodexContext(owner.SessionID, raw)
+}
+
+func (r *codexRuntime) notifyInitialNameFailure(id string, nameErr error) {
+	r.d.logf("Codex initial name for %s: %v", id, nameErr)
+	record, err := r.d.store.AddNotification(store.NotificationRecord{
+		Kind:       "codex_initial_name_failed",
+		Severity:   store.NotificationWarning,
+		Title:      "Could not set the Codex agent name",
+		Body:       "The conversation was created. Rename the agent to correct its name before sending work.",
+		Detail:     nameErr.Error(),
+		SourceKind: "session",
+		SourceID:   id,
+		Actions:    []store.NotificationAction{{Kind: notificationActionOpenSession, Label: "Open agent", TargetID: id}},
+	}, time.Now())
+	if err != nil {
+		r.d.logf("notifications: initial Codex name for %s: %v", id, err)
+		return
+	}
+	r.d.publishFact(FactNotificationCreated, record.ID, nil)
 }
 
 func (r *codexRuntime) rename(ctx context.Context, id, name string) error {
