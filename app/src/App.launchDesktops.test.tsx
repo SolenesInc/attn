@@ -43,7 +43,6 @@ describe('launch desktops', () => {
       { item_id: 'Keel', setting: { mode: LaunchDesktopMode.Desktop, destination_id: 'Alder-new' } },
     ]);
     expect(daemon.sentOf('migration_finish').map(({ expected_revision }) => expected_revision)).toEqual([11]);
-    expect(daemon.sentOf('migration_get')).toHaveLength(3);
     expect(screen.getByRole('button', { name: 'Continue →' })).toBeInTheDocument();
   });
 

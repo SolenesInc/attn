@@ -322,11 +322,10 @@ function DesktopChips() {
   const { desktops, queue, selectedDesktopId, visualIndexOfDesktop, onSelectDesktop, onOpenOverview } =
     useSidebarContext();
   const chipDrop = useDesktopChipDrop();
-  const placed = desktops;
-  const slotted = placed
+  const slotted = desktops
     .filter((desktop) => visualIndexOfDesktop(desktop.id) >= 0)
     .sort((a, b) => visualIndexOfDesktop(a.id) - visualIndexOfDesktop(b.id));
-  const extras = placed.filter((desktop) => visualIndexOfDesktop(desktop.id) < 0);
+  const extras = desktops.filter((desktop) => visualIndexOfDesktop(desktop.id) < 0);
   const waitingOn = new Map<string, number>();
   for (const row of queue?.turns ?? []) waitingOn.set(row.desktopId, (waitingOn.get(row.desktopId) ?? 0) + 1);
   const extrasWaiting = extras.reduce((total, desktop) => total + (waitingOn.get(desktop.id) ?? 0), 0);

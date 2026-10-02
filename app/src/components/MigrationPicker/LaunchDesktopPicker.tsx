@@ -13,6 +13,8 @@ import { useMigrationActions } from './useMigrationActions';
 import './LaunchDesktopPicker.css';
 import { Intro, StepNav } from './MigrationIntro';
 
+const key = (item: LaunchDesktopItem) => `${item.kind}:${item.item_id}`;
+
 function CrewDesktopHelp() {
   const [open, setOpen] = useState(false);
   return (
@@ -65,9 +67,13 @@ export function LaunchDesktopPicker() {
     );
   }, [sendMigrationGet]);
   const items = migration?.launch_items ?? [];
+  const ledgerOpen = items.length > 0 && !showIntro;
+  useEffect(() => {
+    if (ledgerOpen) rows.current.get(key(items[selected]))?.focus();
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- focus once when the ledger opens
+  }, [ledgerOpen]);
   const desktops = migration?.launch_desktops ?? [];
   const busy = saving || actions.busy;
-  const key = (item: LaunchDesktopItem) => `${item.kind}:${item.item_id}`;
   const choose = async (item: LaunchDesktopItem, setting: LaunchDesktopSetting) => {
     setSaving(true);
     setError('');
@@ -244,7 +250,7 @@ export function LaunchDesktopPicker() {
           return;
         }
         const item = items[selected];
-        if (!item) return;
+        if (!item || event.metaKey || event.ctrlKey || event.altKey) return;
         if (event.key.toLowerCase() === 'n') {
           event.preventDefault();
           own(item);

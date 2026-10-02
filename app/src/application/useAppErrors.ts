@@ -11,7 +11,7 @@ interface Options {
 export function useAppErrors({ settingError, clearSettingError }: Options) {
   const { disconnectExplanation, clearDisconnectExplanation, sendBootstrapEndpoint } =
     useDaemonApi();
-  const { toast, showError, showNotice, clearToast } = useToast();
+  const { showError, showNotice } = useToast();
   const handleTerminalModelRecovered = useCallback(() => {
     showError(
       `Terminal issue recovered. We reloaded it for you. Diagnostics were saved to ${UI_DIAGNOSTICS_FILE_DISPLAY}; please send this file to Victor so he can troubleshoot it.`,
@@ -45,10 +45,8 @@ export function useAppErrors({ settingError, clearSettingError }: Options) {
   }, [clearDisconnectExplanation, disconnectExplanation, showError]);
 
   return {
-    toast,
     showError,
     showNotice,
-    clearToast,
     handleTerminalModelRecovered,
     handleRebootstrapEndpoint,
   };

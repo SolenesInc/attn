@@ -38,10 +38,6 @@ export function firstFreeSlot(desktops: Desktop[]): number | null {
   return SHORTCUT_SLOTS.find((slot) => !desktopInSlot(desktops, slot)) ?? null;
 }
 
-export function isEmptyDesktop(desktop: Desktop): boolean {
-  return desktop.tree_json.trim() === '';
-}
-
 export function slotShortcut(slot: number): string {
   return formatShortcut(`desktop.select${slot}` as ShortcutId);
 }

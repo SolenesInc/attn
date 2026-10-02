@@ -93,6 +93,7 @@ function SleepingMember({ member }: { member: string }) {
   return <div className="unified-palette-row">
     <span className="unified-palette-dot is-asleep" />
     <span className="unified-palette-name">{crewDisplayName(member)} <span className="unified-palette-muted">· crew{label ? ` · ${label}` : ''}</span></span>
+    <kbd className="unified-palette-slot" />
     <span className="unified-palette-pill">asleep</span>
     <span className="unified-palette-age">wake</span>
     <span className="unified-palette-tag" />

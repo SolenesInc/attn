@@ -1,4 +1,4 @@
-import { useEffect, useId, useMemo, useState } from 'react';
+import { useCallback, useEffect, useId, useMemo, useState } from 'react';
 import { useOptionalDaemonApi } from '../contexts/DaemonApiContext';
 import { useProfilesStore } from '../store/profiles';
 import { useLaunchDesktopStore } from '../store/launchDesktops';
@@ -83,7 +83,7 @@ export function LaunchDesktopSelect({
   const [error, setError] = useState('');
   const [naming, setNaming] = useState<DesktopNameRequest | null>(null);
   const get = api?.sendLaunchDesktopGet;
-  const refresh = () => {
+  const refresh = useCallback(() => {
     if (!get) return;
     void get(kind, itemId || '')
       .then((result) => {
@@ -91,24 +91,8 @@ export function LaunchDesktopSelect({
         setError('');
       })
       .catch((reason: unknown) => setError(reason instanceof Error ? reason.message : String(reason)));
-  };
-  useEffect(() => {
-    if (!get) return;
-    let live = true;
-    void get(kind, itemId || '')
-      .then((result) => {
-        if (live) {
-          setChoices(result.desktops ?? []);
-          setError('');
-        }
-      })
-      .catch((reason: unknown) => {
-        if (live) setError(reason instanceof Error ? reason.message : String(reason));
-      });
-    return () => {
-      live = false;
-    };
   }, [get, kind, itemId]);
+  useEffect(refresh, [refresh]);
   const available = useMemo(
     () => (choices ?? desktops).filter((desktop) => desktop.profile_id === profileId),
     [choices, desktops, profileId],

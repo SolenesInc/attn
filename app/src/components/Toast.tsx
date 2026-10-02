@@ -52,6 +52,7 @@ function ToastContent() {
       });
     }
   };
+  const actionable = rows.some((row) => row.sessionId || row.action);
   const error = rows.some((row) => row.tone === 'error');
   return (
     <div
@@ -81,7 +82,7 @@ function ToastContent() {
             />
           ))}
         </div>
-        <NotificationFooter multiple={rows.length > 1} paused={hovered || focused} clear={clear} />
+        <NotificationFooter hint={actionable ? (rows.length > 1 ? 'click a row to go' : 'click to go') : null} paused={hovered || focused} clear={clear} />
       </div>
     </div>
   );
@@ -97,10 +98,10 @@ function NotificationGlyph({ row, error }: { row: ToastRow; error: boolean }) {
   );
 }
 
-function NotificationFooter({ multiple, paused, clear }: { multiple: boolean; paused: boolean; clear: () => void }) {
+function NotificationFooter({ hint, paused, clear }: { hint: string | null; paused: boolean; clear: () => void }) {
   return (
     <div className="toast-footer">
-      <span>{multiple ? 'click a row to go' : 'click to go'}</span>
+      {hint && <span>{hint}</span>}
       <span>{paused ? 'paused' : 'fades 6s after the last notification'}</span>
       <button className="toast-close" type="button" aria-label="Dismiss notifications" onClick={clear}>
         Dismiss
@@ -127,7 +128,7 @@ function NotificationRow({
       {single && row.desktopLabel && (
         <span>
           {' '}
-          {row.launchKind === 'crew' ? 'woke' : 'started'} on its desktop “{row.desktopLabel}”
+          {row.launchKind === 'crew' ? 'woke' : 'started'} on {row.desktopLabel}
         </span>
       )}
       <span className="toast-source">{row.source}</span>
@@ -155,10 +156,7 @@ function NotificationRow({
 
 export function useToast() {
   const append = useToastStore((state) => state.append);
-  const clearToast = useToastStore((state) => state.clear);
   return {
-    toast: null,
-    clearToast,
     showError: useCallback((message: string) => append({ message, tone: 'error', source: 'attn' }), [append]),
     showNotice: useCallback((message: string) => append({ message, tone: 'notice', source: 'attn' }), [append]),
   };

@@ -419,13 +419,12 @@ function DesktopStrip() {
     onOpenOverview,
   } = useSidebarContext();
   const chipDrop = useDesktopChipDrop();
-  const placed = desktops;
-  const slotted = placed
+  const slotted = desktops
     .filter((desktop) => visualIndexOfDesktop(desktop.id) >= 0)
     .sort((a, b) => visualIndexOfDesktop(a.id) - visualIndexOfDesktop(b.id));
-  const extras = placed.filter((desktop) => visualIndexOfDesktop(desktop.id) < 0);
+  const extras = desktops.filter((desktop) => visualIndexOfDesktop(desktop.id) < 0);
   const waitingOn = new Set((queue?.turns ?? []).map((row) => row.desktopId));
-  const current = placed.find((desktop) => desktop.id === selectedDesktopId);
+  const current = desktops.find((desktop) => desktop.id === selectedDesktopId);
   const currentIsExtra = Boolean(current && visualIndexOfDesktop(current.id) < 0);
 
   return (

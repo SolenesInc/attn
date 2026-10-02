@@ -1,6 +1,5 @@
 import { useToastStore } from '../store/toasts';
 import { useCallback, useRef, useState } from 'react';
-import { useSavedFlash } from '../components/useSavedFlash';
 import type { useDaemonApi } from '../contexts/DaemonApiContext';
 import type { AppView } from '../navigation/sessionNavigation';
 import { useProfilesStore } from '../store/profiles';
@@ -33,7 +32,6 @@ export function useAppDiagnostics({
   sendSupportSnapshot,
   getPaneText,
 }: Options) {
-  const diagnosticReportSaved = useSavedFlash();
   const [diagnosticCapture, setDiagnosticCapture] = useState<{
     capture: PendingDiagnosticCapture;
     affectedPaneId: string | null;
@@ -139,17 +137,15 @@ export function useAppDiagnostics({
         },
       );
       await saveDiagnosticReport(report);
-      diagnosticReportSaved.flash('saved');
       useToastStore.getState().append({ message: 'Diagnostic report saved', source: 'Diagnostics', tone: 'notice' });
     },
-    [diagnosticCapture, diagnosticReportSaved.flash, getPaneSize, getPaneText],
+    [diagnosticCapture, getPaneSize, getPaneText],
   );
 
   return {
     diagnosticCapture,
     handleCreateDiagnosticReport,
     paletteOriginRef,
-    diagnosticReportSaved,
     handleSaveDiagnosticReport,
     setDiagnosticCapture,
   };
