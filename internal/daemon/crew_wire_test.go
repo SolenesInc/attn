@@ -521,7 +521,7 @@ func TestADaemonOnACopiedDatabaseFencesAnotherInstancesCrew(t *testing.T) {
 }
 
 func TestSeedTendersResolveToTheMemberTheyName(t *testing.T) {
-	w := newCrewWorld(t)
+	w := newCrewWorld(t, fakeagent.Claude)
 	cli := w.Client()
 	for _, session := range []string{"sess-keel", "sess-a", "sess-b"} {
 		member := ""
