@@ -209,6 +209,15 @@ runner.registerCleanup('archive_crew_files', () => {
 runner.registerCleanup('settle_seeds', () => {
   for (const id of plantedSeeds) runAttn(['seed', 'wither', id, '--force', '-m', 'Harness fixture cleanup']);
 });
+const tendBetweenDays = async (seed) => {
+  let sawBinding = false;
+  const asleepAgain = waitForCrew(asleep, (member) => {
+    if (member.binding_session) sawBinding = true;
+    return sawBinding && !member.binding_session;
+  }, 'the member reads its claim update and returns between days');
+  json(['seed', 'tend', seed, '--member', asleep, '--json']);
+  await asleepAgain;
+};
 const plant = (args) => {
   const seed = json(['seed', 'plant', ...args, '--json']);
   plantedSeeds.add(seed.id);
@@ -240,7 +249,16 @@ try {
       ] },
     ],
   });
-  writeMockAgentFixture(asleepHome, { version: 1, turns: [] });
+  writeMockAgentFixture(asleepHome, {
+    version: 1,
+    turns: [
+      { includes: 'You have been woken', actions: [{ type: 'reply', text: 'ASLEEP_MEMBER_READY', state: 'idle' }] },
+      { includes: '📬 You have unread items', submitHook: false, actions: [
+        { type: 'attn', args: ['agent', 'inbox'] },
+        { type: 'attn', args: ['handoff', '--sleep', '-m', 'Read the Garden claim update'] },
+      ] },
+    ],
+  });
   await launchFreshAppAndConnect(client, observer, {
     agentExecutables: { codex: wrapper, claude: wrapper },
   });
@@ -281,7 +299,7 @@ try {
   json(['seed', 'tend', crewChild, '--session', firstSession, '--json']);
   const held = plant([`Crew asleep claim ${memberSuffix}`, '-m', 'A permanent member claim remains visible between days.', '--member', asleep]);
   asleepHeld = held.id;
-  json(['seed', 'tend', asleepHeld, '--member', asleep, '--json']);
+  await tendBetweenDays(asleepHeld);
 
   await runner.step('seed_lists_follow_durable_attribution_and_native_tile_navigation', async () => {
     await click('[data-testid="manage-crew"]');
@@ -310,7 +328,7 @@ try {
 
     json(['seed', 'park', asleepHeld, '--member', asleep, '--json']);
     await waitForDom('[data-testid="crew-panel"]', { textIncludes: `${asleep[0].toUpperCase()}${asleep.slice(1)} isn't tending a seed.` });
-    json(['seed', 'tend', asleepHeld, '--member', asleep, '--json']);
+    await tendBetweenDays(asleepHeld);
     await waitForDom(`[data-testid="crew-seed-${asleepHeld}"]`);
 
     await click(`[data-testid="crew-roster-${awake}"]`);
