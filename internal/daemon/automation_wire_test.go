@@ -383,10 +383,10 @@ location: {type: directory, path: %q}
 		t.Errorf("tickets = %+v (%v), want none", tickets, err)
 	}
 
-	if _, err := cli.AutomationRun(1, "first", ""); err == nil || !strings.Contains(err.Error(), "limit is") {
+	if _, err := cli.AutomationRun(2, "first", ""); err == nil || !strings.Contains(err.Error(), "limit is") {
 		t.Fatalf("a run whose name exceeds the seed title limit = %v, want it refused naming the limit", err)
 	}
-	refused := automationRuns(t, cli, 1)
+	refused := automationRuns(t, cli, 2)
 	if len(refused) != 1 || refused[0].State != "failed" {
 		t.Fatalf("runs = %+v, want the over-long run failed", refused)
 	}

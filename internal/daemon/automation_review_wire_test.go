@@ -282,7 +282,7 @@ func TestCleanupRemovesOnlyFinishedCleanReviewCheckoutsAndKeepsTheirHistory(t *t
 	if again := cleanup(2); len(again.Cleaned) != 0 {
 		t.Errorf("a second cleanup removed %v again", again.Cleaned)
 	}
-	runs := automationRuns(t, r.cli, 1)
+	runs := automationRuns(t, r.cli, 2)
 	if len(runs) != 3 || automationRunState(runs, checkouts["clean"].ID) != "delivered" {
 		t.Errorf("after cleanup the runs are %+v, want all three kept as delivered", runs)
 	}

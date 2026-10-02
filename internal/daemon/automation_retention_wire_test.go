@@ -57,7 +57,7 @@ location: {type: directory, path: %q}
 		record("cancelled", 2)
 		record("pending", 2)
 		record("deleted", 2)
-		setAutomationEnabled(t, cli, 1, false)
+		setAutomationEnabled(t, cli, definitions["cancelled"], false)
 		if err := cli.AutomationDelete(definitions["deleted"]); err != nil {
 			t.Fatal(err)
 		}

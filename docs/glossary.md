@@ -170,4 +170,4 @@ intended it for the next turn.
 - Keep pin: the user's instruction to preserve a worktree.
 - Sweep log: a record of worktree removals and their reasons.
 
-- Automation ID: an automatically assigned number, unique across profiles and never reused. Creation omits the ID; edits include an existing ID and keep its original profile. A deleted automation cannot be restored by applying its old definition.
+- Automation ID: an automatically assigned number, unique across profiles and never reused. Each ID-less apply creates a new automation, including when repeated; edits include an existing ID and keep its original profile. A deleted automation cannot be restored by applying its old definition.
