@@ -125,7 +125,7 @@ try {
   });
   await runner.step('initial_name_failure_keeps_creation_and_rename_recovers', async () => {
     const cwd = path.join(runner.sessionDir, 'name-recovery'); fs.mkdirSync(cwd, { recursive: true });
-    writeMockAgentFixture(cwd, { agent: 'codex', resumable: true, defaultActions: [{ type: 'reply', text: 'recovered work' }] });
+    writeMockAgentFixture(cwd, { agent: 'codex', resumable: true, turns: [], defaultActions: [{ type: 'reply', text: 'recovered work' }] });
     const { sessionId: id } = await client.request('create_session', { cwd, agent: 'codex', label: 'fixture rejected name' });
     owners.push(id);
     const pane = await resolved(id, id);
