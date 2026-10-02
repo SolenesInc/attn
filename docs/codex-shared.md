@@ -1,5 +1,8 @@
 # Shared Codex runtime
 
+For launch, switching, another view and close/reopen instructions, see
+[Using shared Codex](using-shared-codex.md).
+
 Settings has a temporary shared-Codex launch default, initially off. Existing
 sessions retain their stored mode when the default changes. Headless tasks and
 legacy sessions keep their existing launch path. Shared interactive sessions use
