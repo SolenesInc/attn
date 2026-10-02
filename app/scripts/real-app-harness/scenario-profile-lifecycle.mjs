@@ -168,7 +168,7 @@ async function main() {
       runner.assert(rowFor(ledger, sessionId).profile === home.id, 'the agent keeps its original profile', ledger);
       await client.request('dom_key', { selector: '.ledger-panel', key: 'Escape' });
       await client.request('close_session', { sessionId });
-      sessionId = await createSessionAndWaitForInitialPane({ client, observer, cwd: directory, label: `profile-lifecycle-work-${runner.runId}`, agent: 'codex', sessionWaitMs: 30_000 });
+      sessionId = await createSessionAndWaitForInitialPane({ client, observer, cwd: directory, label: `profile-lifecycle-work-${runner.runId}`, agent: 'codex', sessionWaitMs: 30_000, ownDesktop: false });
       await waitForBoundConversation(dbPath, sessionId, 60_000);
       runner.assert(observer.getSession(sessionId)?.profile_id === work.id, 'the new agent starts in Work');
     });
