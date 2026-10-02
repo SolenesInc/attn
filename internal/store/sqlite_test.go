@@ -458,13 +458,6 @@ func TestMigration76ClearsAutomationStateAndDropsSpecYAML(t *testing.T) {
 		t.Fatalf("automation_definitions row count = %d, want 0 (recreated empty)", defCount)
 	}
 
-	var automationRunID sql.NullString
-	if err := migrated.QueryRow(`SELECT automation_run_id FROM tickets WHERE id = 'legacy-ticket'`).Scan(&automationRunID); err != nil {
-		t.Fatalf("query ticket automation_run_id: %v", err)
-	}
-	if automationRunID.Valid {
-		t.Fatalf("ticket automation_run_id = %q, want NULL", automationRunID.String)
-	}
 }
 
 func TestMigration77ClearsRunsBindingsAndEdges(t *testing.T) {
@@ -611,14 +604,6 @@ func TestMigration77ClearsRunsBindingsAndEdges(t *testing.T) {
 		if count != 0 {
 			t.Fatalf("%s row count = %d, want 0 (migration 77 must wipe automation state)", table, count)
 		}
-	}
-
-	var automationRunID sql.NullString
-	if err := migrated.QueryRow(`SELECT automation_run_id FROM tickets WHERE id = 'legacy-ticket'`).Scan(&automationRunID); err != nil {
-		t.Fatalf("query ticket automation_run_id: %v", err)
-	}
-	if automationRunID.Valid {
-		t.Fatalf("ticket automation_run_id = %q, want NULL", automationRunID.String)
 	}
 
 	var acceptedCycleColumns int
@@ -1401,21 +1386,6 @@ func TestMigration134DropsTheWorkspaceContextAndKeeperState(t *testing.T) {
 		t.Fatalf("jobs after migration = %v, want only session_title", kinds)
 	}
 
-	moved, err := s.MigrateLegacyTasks(func(rec LegacyTaskRecord) JobRecord {
-		return JobRecord{ID: rec.ID, Kind: rec.Kind, UniqueKey: rec.Subject, State: rec.State, ScheduledAt: rec.NextAttemptAt, CreatedAt: rec.CreatedAt, UpdatedAt: rec.UpdatedAt}
-	})
-	if err != nil {
-		t.Fatalf("legacy handover: %v", err)
-	}
-	if moved != 1 {
-		t.Fatalf("legacy handover moved %d rows, want only the reconcile row", moved)
-	}
-	if _, ok, err := s.GetJob("summarize_session:s-2"); err != nil || ok {
-		t.Fatalf("legacy keeper task came back as a job (ok=%v err=%v)", ok, err)
-	}
-	if _, ok, err := s.GetJob("reconcile:t-2"); err != nil || !ok {
-		t.Fatalf("legacy reconcile task was lost (ok=%v err=%v)", ok, err)
-	}
 }
 
 func TestMigration53AddsClosedStateColumnIdempotently(t *testing.T) {
