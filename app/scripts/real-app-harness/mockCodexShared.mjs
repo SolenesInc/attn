@@ -56,6 +56,7 @@ export async function runSharedMockServer() {
         }
         case 'thread/resume': {
           if (!root) throw new Error(`unknown root ${p.threadId}`);
+          if (readMockAgentConfig(root.cwd).rejectBlankResume && root.turns.length === 0) throw new Error(`no rollout found for thread id ${root.id}`);
           root.config = p.config || root.config; hook(root, 'SessionStart', { source: 'resume' }); result = { thread: metadata(root) }; break;
         }
         case 'thread/name/set':
@@ -104,7 +105,15 @@ export async function runSharedMockView() {
   const call = (method, params) => new Promise((resolve, reject) => { const id = ++seq; pending.set(id, { resolve, reject }); peer.send(JSON.stringify({ id, method, params })); });
   await call('initialize', { clientInfo: { name: 'mock-tui', version: '1' } }); peer.send(JSON.stringify({ method: 'initialized' }));
   const resume = process.argv.indexOf('resume');
-  const first = resume >= 0 ? await call('thread/resume', { threadId: process.argv[resume + 1] }) : await call('thread/start', { cwd: process.cwd() });
+  let first;
+  try {
+    first = resume >= 0 ? await call('thread/resume', { threadId: process.argv[resume + 1] }) : await call('thread/start', { cwd: process.cwd() });
+  } catch (error) {
+    console.error(error.message);
+    peer.close();
+    process.exitCode = 1;
+    return;
+  }
   selected = first.thread.id;
   process.stdout.write(mockAgentSplash({ header: 'OpenAI Codex shared mock', cwd: process.cwd(), cols: process.stdout.columns }).join('\r\n') + '\r\n'); title(); process.stdout.write(`Root ${selected}\r\n`); prompt();
   let turns = Promise.resolve();

@@ -1,0 +1,3 @@
+kind: fixed
+area: sessions
+change: Selecting a shared Codex agent with a failed terminal focuses that pane without opening another failed attachment.

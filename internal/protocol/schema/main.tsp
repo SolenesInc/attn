@@ -676,6 +676,7 @@ enum CodexViewResolution { resolved, unresolved, disconnected }
 model WorkspaceLayoutPane {
   codex_resolution?: CodexViewResolution;
   codex_revision?: uint64;
+  codex_launch_owner_id?: string;
   pane_id: string;
   runtime_id?: string;
   workspace_id: string;

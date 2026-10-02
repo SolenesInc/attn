@@ -64,7 +64,7 @@ describe('App queue', () => {
   it('focuses a new shared launch pane before its first native title without attaching again', async () => {
     const a = agent('a', { agent: 'codex', codex_mode: 'shared', state: 'launching', turn_owed: true });
     const source = agentWorkspace('a');
-    source.layout!.panes[0] = { ...source.layout!.panes[0], session_id: '', codex_resolution: 'unresolved', codex_revision: '0' };
+    source.layout!.panes[0] = { ...source.layout!.panes[0], session_id: '', codex_resolution: 'unresolved', codex_revision: '0', codex_launch_owner_id: 'a' };
     const { daemon } = await renderApp({ initialState: { settings: QUEUE, sessions: [a], workspaces: [source] } });
     await press(daemon, 'Open a');
     expect(daemon.sentOf('session_reopen')).toEqual([]);
@@ -77,11 +77,46 @@ describe('App queue', () => {
     expect(document.querySelector('[data-pane-id="pane-a"].active')).toBeInTheDocument();
   });
 
+  it.each([[true, 'a'], [true, 'extra-view'], [false, 'a'], [false, 'extra-view']] as const)('focuses a failed shared view (queue %s, runtime %s) on repeated sidebar selections', async (queueOn, runtimeId) => {
+    const a = agent('a', { agent: 'codex', codex_mode: 'shared', turn_owed: true });
+    const source = agentWorkspace('a');
+    source.layout!.panes[0] = {
+      ...source.layout!.panes[0], runtime_id: runtimeId, session_id: '',
+      codex_resolution: 'unresolved', codex_revision: '0', codex_launch_owner_id: 'a',
+    };
+    const { daemon } = await renderApp({ initialState: { settings: queueOn ? QUEUE : {}, sessions: [a], workspaces: [source] } });
+    const layout = source.layout!;
+    daemon.emit({ event: 'workspace_layout_updated', workspace_layout: {
+      ...layout, panes: [{ ...layout.panes[0], codex_resolution: 'disconnected', codex_revision: '1' }],
+    } });
+    await daemon.idle();
+    await press(daemon, 'Open a');
+    await press(daemon, 'Open a');
+    expect(daemon.sentOf('session_reopen')).toEqual([]);
+    expect(daemon.sentOf('session_selected')).toEqual([]);
+    expect(document.querySelector('[data-pane-id="pane-a"].active')).toBeInTheDocument();
+    expect(shownWorkspaces()).toEqual([source.id]);
+  });
+
+  it('prefers a resolved view over a disconnected launch-owner view', async () => {
+    const a = agent('a', { agent: 'codex', codex_mode: 'shared', turn_owed: true });
+    const source = splitWorkspace('workspace-a', ['failed', 'live']);
+    source.layout!.panes = source.layout!.panes.map((pane, i) => ({
+      ...pane, session_id: i === 0 ? '' : 'a', codex_launch_owner_id: 'a',
+      codex_resolution: i === 0 ? 'disconnected' : 'resolved', codex_revision: '1',
+    }));
+    const { daemon } = await renderApp({ initialState: { settings: QUEUE, sessions: [a], workspaces: [source] } });
+    await press(daemon, 'Open a');
+    expect(daemon.sentOf('session_reopen')).toEqual([]);
+    expect(document.querySelector('[data-pane-id="pane-live"].active')).toBeInTheDocument();
+    expect(daemon.sentOf('session_selected')).toEqual([{ cmd: 'session_selected', id: 'a' }]);
+  });
+
   it('exposes a hidden shared owner and attaches a view when its approval row is selected', async () => {
     const a = agent('a', { agent: 'codex', codex_mode: 'shared', state: 'pending_approval', turn_owed: true, turn_opened_at: ago(HOUR) });
     const b = agent('b', { agent: 'codex', codex_mode: 'shared' });
     const source = agentWorkspace('a');
-    source.layout!.panes[0] = { ...source.layout!.panes[0], session_id: 'b', codex_resolution: 'resolved', codex_revision: '2' };
+    source.layout!.panes[0] = { ...source.layout!.panes[0], session_id: 'b', codex_resolution: 'resolved', codex_revision: '2', codex_launch_owner_id: 'a' };
     const { daemon } = await renderApp({ initialState: { settings: QUEUE, sessions: [a, b], workspaces: [source, agentWorkspace('b')] } });
     daemon.on('session_reopen', ({ session_id }) => {
       const layout = source.layout!;
