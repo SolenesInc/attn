@@ -448,7 +448,7 @@ func TestMailArrivingDuringPrimingSharesTheRingAndItsThreeAttemptBudget(t *testi
 	})
 }
 
-func TestAnInboxWakeCompletesOnceAcrossRestartAndKeepsBothRemainingRings(t *testing.T) {
+func TestRestartDuringAnInboxWakeWaitsAndSpendsAnotherAttempt(t *testing.T) {
 	inBubbleWithAgents(t, func(t *testing.T, w *world) {
 		writeCrewCharter(t, w, "trellis")
 		w.restart()
@@ -461,11 +461,10 @@ func TestAnInboxWakeCompletesOnceAcrossRestartAndKeepsBothRemainingRings(t *test
 		w.restart()
 		day.cli = w.Client()
 		day.reply("Ready. <!-- attn:state=idle -->")
-		if got := day.promptsContaining(inboxDoorbell); got != 1 {
-			t.Fatalf("wake completion=%d", got)
+		if got := day.promptsContaining(inboxDoorbell); got != 0 {
+			t.Fatalf("ring before wake delay=%d", got)
 		}
-		day.reply("Later. <!-- attn:state=idle -->")
-		for want := 2; want <= 3; want++ {
+		for want := 1; want <= 2; want++ {
 			w.advance(5 * time.Minute)
 			if got := day.promptsContaining(inboxDoorbell); got != want {
 				t.Fatalf("ring=%d want=%d", got, want)
@@ -473,43 +472,8 @@ func TestAnInboxWakeCompletesOnceAcrossRestartAndKeepsBothRemainingRings(t *test
 			day.reply("Later. <!-- attn:state=idle -->")
 		}
 		w.advance(time.Hour)
-		if got := day.promptsContaining(inboxDoorbell); got != 3 {
+		if got := day.promptsContaining(inboxDoorbell); got != 2 {
 			t.Fatalf("renewed budget=%d", got)
-		}
-	})
-}
-
-func TestTheThirdInboxWakeCanCompleteItsRingAcrossRestart(t *testing.T) {
-	inBubbleWithAgents(t, func(t *testing.T, w *world) {
-		writeCrewCharter(t, w, "trellis")
-		w.restart()
-		cli := w.Client()
-		registerSessions(t, w, cli, "sender")
-		sendAgentMessage(t, cli, "sender", "trellis", "read after the third wake")
-		synctest.Wait()
-		id := protocol.Deref(crewRosterMember(t, cli, "trellis").BindingSession)
-		for attempt := 1; attempt < 3; attempt++ {
-			day := w.bootBubbleClaude(t, id)
-			if _, err := cli.CrewHandoff(day.id, "Sleep before ringing", false, protocol.CrewDayCloseSleep); err != nil {
-				t.Fatal(err)
-			}
-			w.advance(5 * time.Minute)
-			id = protocol.Deref(crewRosterMember(t, cli, "trellis").BindingSession)
-			if id == "" || id == day.id {
-				t.Fatalf("wake %d did not start", attempt+1)
-			}
-		}
-		day := w.bootBubbleClaude(t, id)
-		w.restart()
-		day.cli = w.Client()
-		day.reply("Ready. <!-- attn:state=idle -->")
-		if got := day.promptsContaining(inboxDoorbell); got != 1 {
-			t.Fatalf("third wake's ring=%d", got)
-		}
-		day.reply("Later. <!-- attn:state=idle -->")
-		w.advance(time.Hour)
-		if got := day.promptsContaining(inboxDoorbell); got != 1 {
-			t.Fatalf("fourth attempt rang=%d", got)
 		}
 	})
 }
@@ -537,7 +501,7 @@ func TestRereadingAnOldPeerMessageDoesNotReleaseANewerOutstandingRing(t *testing
 	})
 }
 
-func TestAPartialInboxReadReleasesOnlyTheAddressesItActuallyReads(t *testing.T) {
+func TestAPartialInboxReadAcknowledgesEveryHeldAddress(t *testing.T) {
 	inBubbleWithAgents(t, func(t *testing.T, w *world) {
 		writeCrewCharter(t, w, "trellis")
 		w.restart()
@@ -545,31 +509,32 @@ func TestAPartialInboxReadReleasesOnlyTheAddressesItActuallyReads(t *testing.T) 
 		registerSessions(t, w, cli, "sender")
 		day := w.bootBubbleClaude(t, wakeCrew(t, cli, "trellis", "").SessionID)
 		day.reply("Ready. <!-- attn:state=idle -->")
-		sendAgentMessage(t, cli, "sender", "trellis", "member first")
+		seed := plantSeedAs(t, cli, "sender", "Session watch")
+		gardenNudgeWatch(t, cli, day.id, seed, false)
+		gardenNudgeNote(t, cli, "sender", seed, "Watch update", true)
+		synctest.Wait()
 		day.reply("Later. <!-- attn:state=idle -->")
 		w.advance(time.Millisecond)
-		sendAgentMessage(t, cli, "sender", day.id, "session first")
+		sendAgentMessage(t, cli, "sender", "trellis", "member first")
 		day.reply("Later. <!-- attn:state=idle -->")
 		if got := day.promptsContaining(inboxDoorbell); got != 2 {
 			t.Fatalf("separate address rings=%d", got)
 		}
 		items := readInbox(t, cli, day.id, 1).Items
-		if len(items) != 1 || items[0].Address != "member:trellis" {
+		if len(items) != 1 || items[0].Address != "session:"+day.id {
 			t.Fatalf("partial read=%+v", items)
 		}
-		sendAgentMessage(t, cli, "sender", "trellis", "member after read")
-		day.reply("Later. <!-- attn:state=idle -->")
-		sendAgentMessage(t, cli, "sender", day.id, "session stays covered")
 		synctest.Wait()
 		if got := day.promptsContaining(inboxDoorbell); got != 3 {
-			t.Fatalf("partial read released wrong address: %d", got)
+			t.Fatalf("unread member address was not acknowledged: %d", got)
 		}
 	})
 }
 
 func TestAnInboxRingsAfterASelectorClearsWithoutAnotherTurn(t *testing.T) {
 	inBubbleWithAgents(t, func(t *testing.T, w *world) {
-		recipient := w.bubbleClaude(t, w.App(), "recipient")
+		app := w.App()
+		recipient := w.bubbleClaude(t, app, "recipient")
 		cli := w.Client()
 		registerSessions(t, w, cli, "sender")
 		recipient.term.PaintScreen("Which should I keep?\n❯ 1. The old import path\nEnter to select · Esc to cancel")
@@ -581,8 +546,14 @@ func TestAnInboxRingsAfterASelectorClearsWithoutAnotherTurn(t *testing.T) {
 		if got := recipient.promptsContaining(inboxDoorbell); got != 0 {
 			t.Fatalf("selector rings=%d", got)
 		}
+		app.Send(protocol.PtyInputMessage{Cmd: protocol.CmdPtyInput, ID: recipient.id, Data: "\x1b"})
+		w.advance(0)
 		recipient.term.PaintScreen("❯ ")
-		w.advance(3 * time.Second)
+		w.advance(29 * time.Second)
+		if got := recipient.promptsContaining(inboxDoorbell); got != 0 {
+			t.Fatalf("ring inside quiet window=%d", got)
+		}
+		w.advance(time.Second)
 		if got := recipient.promptsContaining(inboxDoorbell); got != 1 {
 			t.Fatalf("cleared selector rings=%d", got)
 		}
@@ -592,6 +563,26 @@ func TestAnInboxRingsAfterASelectorClearsWithoutAnotherTurn(t *testing.T) {
 			if got := recipient.promptsContaining(inboxDoorbell); got != want {
 				t.Fatalf("ring=%d want=%d", got, want)
 			}
+		}
+	})
+}
+
+func TestAMessageToACrewDaysSessionIDFollowsTheMemberIntoItsNextDay(t *testing.T) {
+	inBubbleWithAgents(t, func(t *testing.T, w *world) {
+		writeCrewCharter(t, w, "trellis")
+		w.restart()
+		cli := w.Client()
+		registerSessions(t, w, cli, "sender")
+		first := w.bootBubbleClaude(t, wakeCrew(t, cli, "trellis", "").SessionID)
+		first.reply("Ready. <!-- attn:state=idle -->")
+		sent := sendAgentMessage(t, cli, "sender", first.id, "Reply for the next day")
+		if _, err := cli.CrewHandoff(first.id, "sleep unread", false, protocol.CrewDayCloseSleep); err != nil {
+			t.Fatal(err)
+		}
+		next := w.bootBubbleClaude(t, wakeCrew(t, cli, "trellis", "").SessionID)
+		items := readInbox(t, cli, next.id, 0).Items
+		if len(items) != 1 || items[0].ItemID != sent.MessageID || items[0].Address != "member:trellis" {
+			t.Fatalf("successor inbox=%+v", items)
 		}
 	})
 }

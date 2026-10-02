@@ -495,7 +495,7 @@ func (d *Daemon) recordPullRequestWatchFailures(group *sessionPullRequestGroup, 
 	for _, watch := range group.watches {
 		item := pullRequestWatchMailboxItem(
 			watch, "outage:"+now.UTC().Format(time.RFC3339Nano), store.PullRequestWatchOutageCoalesceKey(watch.PRID),
-			"monitoring is delayed", []string{fetchErr.Error()}, now,
+			"monitoring is delayed", []string{fetchErr.Error()},
 		)
 		delivery, err := d.store.RecordPullRequestWatchFailure(
 			watch.To, watch.SessionID, watch.PRID, watch.CreatedAt, watch.Mode, watch.Reviewer,
@@ -554,7 +554,7 @@ func (d *Daemon) processPullRequestWatches(
 				}
 				details = []string{strings.TrimSpace(action.Feedback.Author + ": " + detail)}
 			}
-			items = append(items, pullRequestWatchMailboxItem(watch, action.ID, coalesceKey, kind, details, now))
+			items = append(items, pullRequestWatchMailboxItem(watch, action.ID, coalesceKey, kind, details))
 		}
 		terminal := transition.Evaluation.State == prreadiness.StateMerged || transition.Evaluation.State == prreadiness.StateClosed
 		deliveries, projectionChanged, err := d.store.ReconcilePullRequestWatch(store.PullRequestWatchReconcile{
@@ -588,8 +588,8 @@ func (d *Daemon) processPullRequestWatches(
 	return changed
 }
 
-func (d *Daemon) deliverPullRequestMailbox(delivery inbox.Delivery) {
-	d.sentToInbox(delivery.Item.To)
+func (d *Daemon) deliverPullRequestMailbox(delivery store.InboxDelivery) {
+	d.kickInboxAfterCommit(delivery.Item.To)
 }
 
 func (d *Daemon) schedulePullRequestSettle(watch store.PullRequestWatch, deadline, now time.Time) {
@@ -629,7 +629,6 @@ func pullRequestWatchMailboxItem(
 	watch store.PullRequestWatch,
 	eventID, coalesceKey, kind string,
 	details []string,
-	now time.Time,
 ) inbox.Item {
 	id := uuid.NewSHA1(uuid.NameSpaceURL, []byte(strings.Join([]string{
 		"pull-request-watch", watch.To.String(), watch.PRID, watch.CreatedAt, eventID,
@@ -647,7 +646,6 @@ func pullRequestWatchMailboxItem(
 		ID: id, To: watch.To, Kind: inbox.Notice,
 		Source: watch.PRID, Key: coalesceKey,
 		Hint: "pull request update", Text: prompt,
-		CreatedAt: now.UTC().Format(docstore.TimeFormat),
 	}
 }
 

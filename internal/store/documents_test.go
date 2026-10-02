@@ -65,11 +65,11 @@ func rev(n int64) *int64 { return &n }
 
 func seedV88DocumentStore(t *testing.T, dbPath string) {
 	t.Helper()
-	db, err := openSeededDB(dbPath)
+	db, err := openDBAtVersion(dbPath, 161)
 	if err != nil {
 		t.Fatalf("open for seeding: %v", err)
 	}
-	restorePreInboxFixture(t, db)
+
 	if _, err := db.Exec(`
 		DROP TABLE document_collections;
 		CREATE TABLE documents (
@@ -186,7 +186,7 @@ func TestAPopulatedV88StoreIsCarriedIntoItsOwnTables(t *testing.T) {
 
 func seedPreRevisionDocuments(t *testing.T, dbPath string) {
 	t.Helper()
-	s, err := newSeededStore(dbPath)
+	s, err := newStoreAtVersion(dbPath, 161)
 	if err != nil {
 		t.Fatalf("open for seeding: %v", err)
 	}
@@ -203,7 +203,7 @@ func seedPreRevisionDocuments(t *testing.T, dbPath string) {
 			t.Fatalf("seed %s: %v", doc.id, err)
 		}
 	}
-	restorePreInboxFixture(t, s.db)
+
 	if _, err := s.db.Exec(`ALTER TABLE ` + schema.Table + ` DROP COLUMN rev;
 		DELETE FROM schema_migrations WHERE version >= 90;`); err != nil {
 		t.Fatalf("rewind to migration 89: %v", err)

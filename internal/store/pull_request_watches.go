@@ -89,8 +89,8 @@ func (s *Store) WatchPullRequest(rec SessionPullRequestRecord, to inbox.Address,
 	if _, err := tx.Exec(`
 		UPDATE session_pull_requests SET readiness_state='', readiness_reason='', settling_until='',
 			watch_health='', watch_error='', watch_last_checked_at='', status_checked_at=''
-		WHERE session_id=? AND pr_id=?
-	`, rec.SessionID, rec.PRID); err != nil {
+		WHERE session_id=(SELECT session_id FROM pull_request_watches WHERE address=? AND pr_id=?) AND pr_id=?
+	`, to.String(), rec.PRID, rec.PRID); err != nil {
 		return false, false, err
 	}
 	if err := tx.Commit(); err != nil {
@@ -236,7 +236,7 @@ type PullRequestWatchReconcile struct {
 	At            time.Time
 }
 
-func (s *Store) ReconcilePullRequestWatch(update PullRequestWatchReconcile) ([]inbox.Delivery, bool, error) {
+func (s *Store) ReconcilePullRequestWatch(update PullRequestWatchReconcile) ([]InboxDelivery, bool, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	encoded, err := json.Marshal(update.Cursor)
@@ -310,12 +310,12 @@ func (s *Store) ReconcilePullRequestWatch(update PullRequestWatchReconcile) ([]i
 			return nil, false, err
 		}
 	}
-	deliveries := make([]inbox.Delivery, 0, len(update.MailboxItems))
+	deliveries := make([]InboxDelivery, 0, len(update.MailboxItems))
 	for _, item := range update.MailboxItems {
 		if err := putInbox(tx, item, update.At); err != nil {
 			return nil, false, err
 		}
-		deliveries = append(deliveries, inbox.Delivery{Item: item})
+		deliveries = append(deliveries, InboxDelivery{Item: InboxItem{Item: item}})
 	}
 
 	if update.Terminal {
@@ -329,7 +329,7 @@ func (s *Store) ReconcilePullRequestWatch(update PullRequestWatchReconcile) ([]i
 	return deliveries, projectionChanged, nil
 }
 
-func (s *Store) RecordPullRequestWatchFailure(to inbox.Address, sessionID, prID, createdAt string, mode prreadiness.Mode, reviewer, message string, outage inbox.Item, at time.Time) (*inbox.Delivery, error) {
+func (s *Store) RecordPullRequestWatchFailure(to inbox.Address, sessionID, prID, createdAt string, mode prreadiness.Mode, reviewer, message string, outage inbox.Item, at time.Time) (*InboxDelivery, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	tx, err := s.db.Begin()
@@ -355,12 +355,12 @@ func (s *Store) RecordPullRequestWatchFailure(to inbox.Address, sessionID, prID,
 	`, message, stamp, stamp, sessionID, prID); err != nil {
 		return nil, err
 	}
-	var delivery *inbox.Delivery
+	var delivery *InboxDelivery
 	if !active {
 		if err := putInbox(tx, outage, at); err != nil {
 			return nil, err
 		}
-		delivery = &inbox.Delivery{Item: outage}
+		delivery = &InboxDelivery{Item: InboxItem{Item: outage}}
 
 	}
 	if err := tx.Commit(); err != nil {

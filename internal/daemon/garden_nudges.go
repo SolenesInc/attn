@@ -217,6 +217,6 @@ func (d *Daemon) consumeSeedBell(sessionID, seedID string) {
 		return
 	}
 	if len(consumed) > 0 {
-		d.sentToInbox(consumed...)
+		d.kickInboxAfterCommit(consumed...)
 	}
 }

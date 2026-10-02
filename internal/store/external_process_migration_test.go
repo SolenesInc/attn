@@ -38,7 +38,7 @@ func TestExternalWrapperMigrationPreservesManagedDaysAndProcessReceiptsOnReplay(
 	if _, err := db.Exec("UPDATE sessions SET external_process=? WHERE id='external'", receipt); err != nil {
 		t.Fatal(err)
 	}
-	restorePreInboxFixture(t, db)
+
 	if _, err := db.Exec("DELETE FROM schema_migrations WHERE version=161"); err != nil {
 		t.Fatal(err)
 	}

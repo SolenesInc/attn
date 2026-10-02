@@ -146,7 +146,10 @@ func (s *Store) HandleGardenSeedEvent(
 		var existingID string
 		err := tx.QueryRow(`SELECT id FROM inbox_items WHERE address=? AND kind=? AND coalesce_key=? AND read_at=''`, delivery.To.String(), inbox.SeedUpdate, seedID).Scan(&existingID)
 		if err == sql.ErrNoRows {
-			if err := putInbox(tx, inbox.Item{ID: delivery.ItemID, To: delivery.To, Kind: inbox.SeedUpdate, Source: seedID, Key: seedID, Hint: eventName, BellName: bellName}, now); err != nil {
+			if err := putInbox(tx, inbox.Item{ID: delivery.ItemID, To: delivery.To, Kind: inbox.SeedUpdate, Source: seedID, Key: seedID, Hint: eventName}, now); err != nil {
+				return nil, false, err
+			}
+			if _, err := tx.Exec("UPDATE inbox_items SET bell_name=? WHERE id=?", bellName, delivery.ItemID); err != nil {
 				return nil, false, err
 			}
 			created = append(created, delivery.To.String())

@@ -16,7 +16,6 @@ func stopDaemonBackground(t *testing.T, d *Daemon) {
 		d.sessionInputs().stopRetries()
 		d.stopAllTranscriptWatchers()
 		d.stopInbox()
-		d.stopInbox()
 		d.stopAutoSettleTimers()
 		d.stopNotebookWatcher()
 		d.stopFsWatchers()

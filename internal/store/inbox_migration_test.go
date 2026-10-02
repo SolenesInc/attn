@@ -7,26 +7,12 @@ import (
 
 func TestMigration162PreservesInboxHistoryAndWatchAddresses(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "inbox-upgrade.db")
-	db, err := OpenDB(path)
+	db, err := openDBAtVersion(path, 161)
 	if err != nil {
 		t.Fatal(err)
 	}
 	defer db.Close()
 	if _, err := db.Exec(`
- DROP TABLE inbox_items;
- DROP TABLE inbox_delivery;
- ALTER TABLE presentations DROP COLUMN address;
- DROP TABLE pull_request_watches;
- CREATE TABLE agent_mailbox_items (
- id TEXT PRIMARY KEY, recipient_session_id TEXT NOT NULL,kind TEXT NOT NULL,
- source_id TEXT NOT NULL DEFAULT '',coalesce_key TEXT NOT NULL DEFAULT '',hint TEXT NOT NULL DEFAULT '',
- prompt TEXT NOT NULL DEFAULT '',created_at TEXT NOT NULL,notified_at TEXT NOT NULL DEFAULT '',
- read_at TEXT NOT NULL DEFAULT '',bell_name TEXT NOT NULL DEFAULT '',CHECK(read_at='' OR notified_at!=''));
- CREATE TABLE pull_request_watches (
- session_id TEXT NOT NULL,pr_id TEXT NOT NULL,mode TEXT NOT NULL,reviewer TEXT NOT NULL DEFAULT '',
- created_at TEXT NOT NULL,cursor_json TEXT NOT NULL DEFAULT '{}',last_success_at TEXT NOT NULL DEFAULT '',
- last_error TEXT NOT NULL DEFAULT '',feedback_error TEXT NOT NULL DEFAULT '',outage_active INTEGER NOT NULL DEFAULT 0,
- PRIMARY KEY(session_id,pr_id));
  INSERT INTO agent_mailbox_items(id,recipient_session_id,kind,source_id,coalesce_key,hint,prompt,created_at,notified_at,read_at,bell_name) VALUES
  ('queued','day-a','peer_message','queued','','','', '2026-09-12T12:00:00Z','','',''),
  ('rung','day-a','garden_seed','s-work','s-work','note','', '2026-09-12T12:00:01Z','2026-09-12T12:01:00Z','','seed activity'),
@@ -34,11 +20,7 @@ func TestMigration162PreservesInboxHistoryAndWatchAddresses(t *testing.T) {
  INSERT INTO pull_request_watches VALUES('day-a','github.com/repo#1','readiness','','2026-09-12T12:00:00Z','{}','2026-09-12T12:01:00Z','','',0);
  INSERT INTO jobs(id,kind,state,scheduled_at,created_at,updated_at) VALUES('old-reconcile','reconcile','pending','','',''),('old-recovery','recover_legacy_closed_work','pending','','','');
  INSERT INTO tasks(id,kind,subject,state,next_attempt_at,created_at,updated_at) VALUES('old-reconcile','reconcile','unlinked','pending','','',''),('old-recovery','recover_legacy_closed_work','unlinked','pending','','','');
- DELETE FROM schema_migrations WHERE version>=162;
  `); err != nil {
-		t.Fatal(err)
-	}
-	if _, err := db.Exec(preInboxTicketSchema); err != nil {
 		t.Fatal(err)
 	}
 	if _, err := db.Exec(`INSERT INTO tickets(id,title,status,created_at,updated_at) VALUES('unlinked','Historical work','working','2026-09-12T12:00:00Z','2026-09-12T12:00:00Z'); INSERT INTO ticket_activity(ticket_id,kind,author,comment,created_at) VALUES('unlinked','comment','day-a','In progress','2026-09-12T12:01:00Z')`); err != nil {

@@ -90,7 +90,7 @@ func (s *Store) ReadPeerMessage(id, readBy string, addresses []inbox.Address, at
 	}
 	stamp := at.UTC().Format(sortableTimeFormat)
 	res, err := tx.Exec(`
-		UPDATE inbox_items SET read_at = ?, read_by = ?, pending_wake_session = ''
+		UPDATE inbox_items SET read_at = ?, read_by = ?
 		WHERE id = ? AND kind = ? AND notified_at != '' AND read_at = ''
 	`, stamp, readBy, id, inbox.PeerMessage)
 	if err != nil {

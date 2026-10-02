@@ -9,6 +9,7 @@ import (
 	"github.com/victorarias/attn/internal/prompts"
 	"github.com/victorarias/attn/internal/prompttest"
 	"github.com/victorarias/attn/internal/protocol"
+	"github.com/victorarias/attn/internal/store"
 	"github.com/victorarias/attn/internal/transcript"
 )
 
@@ -69,6 +70,6 @@ func TestLegacyPromptCompatibility(t *testing.T) {
 			out["handover/"+body+"/"+handoff] = prompts.RenderText("delegation", "handover", prompts.Values{"seed_id": "s-example"})
 		}
 	}
-	out["garden-update"] = mailboxItemContent(inbox.Delivery{Item: inbox.Item{Kind: inbox.SeedUpdate, Source: "s-example", Hint: "note"}})
+	out["garden-update"] = mailboxItemContent(store.InboxDelivery{Item: store.InboxItem{Item: inbox.Item{Kind: inbox.SeedUpdate, Source: "s-example", Hint: "note"}}})
 	prompttest.Equal(t, "daemon", out)
 }

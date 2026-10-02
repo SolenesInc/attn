@@ -236,9 +236,9 @@ func (d *Daemon) crewWakeWithCharge(name, agent string, autonomous bool) (*proto
 }
 
 func (d *Daemon) crewWakeWithChargeLocked(name, agent string, autonomous bool) (*protocol.CrewWakeResult, error) {
-	return d.crewWakeDayWithChargeLocked(name, agent, autonomous, "")
+	return d.crewWakeDayWithChargeLocked(name, agent, autonomous, nil)
 }
-func (d *Daemon) crewWakeDayWithChargeLocked(name, agent string, autonomous bool, sessionID string) (*protocol.CrewWakeResult, error) {
+func (d *Daemon) crewWakeDayWithChargeLocked(name, agent string, autonomous bool, beforeWake func() error) (*protocol.CrewWakeResult, error) {
 	member, _, err := d.crewMember(name)
 	if err != nil {
 		return nil, err
@@ -266,6 +266,11 @@ func (d *Daemon) crewWakeDayWithChargeLocked(name, agent string, autonomous bool
 			return awake, nil
 		}
 	}
+	if beforeWake != nil {
+		if err := beforeWake(); err != nil {
+			return nil, err
+		}
+	}
 	if agent == "" {
 		agent = member.LaunchAgent()
 	}
@@ -282,9 +287,7 @@ func (d *Daemon) crewWakeDayWithChargeLocked(name, agent string, autonomous bool
 		}
 	}
 
-	if sessionID == "" {
-		sessionID = uuid.NewString()
-	}
+	sessionID := uuid.NewString()
 	if _, err := d.claimCrewBinding(member.ID, sessionID); err != nil {
 		return nil, err
 	}

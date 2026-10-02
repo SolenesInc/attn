@@ -5,13 +5,6 @@ import (
 	"testing"
 )
 
-func newAgentMailboxStore(t *testing.T) *Store {
-	t.Helper()
-	s := New()
-	t.Cleanup(func() { _ = s.Close() })
-	return s
-}
-
 func TestMigration132SeparatesMailboxReceiptsAndPayloads(t *testing.T) {
 	dbPath := filepath.Join(t.TempDir(), "test.db")
 	s, err := newSeededStore(dbPath)

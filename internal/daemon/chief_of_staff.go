@@ -152,15 +152,6 @@ func (d *Daemon) handleSetChiefOfStaff(client *wsClient, msg *protocol.SetChiefO
 		}
 	}
 
-	var roleState *inboxDeliveryState
-	if roleChanged {
-		roleState = d.lockInboxState(inbox.ToChief())
-	}
-	defer func() {
-		if roleState != nil {
-			roleState.mu.Unlock()
-		}
-	}()
 	prepared := make([]*preparedPluginRoleReload, 0, 2)
 	preparedSessions := make(map[string]bool)
 	if roleChanged {
@@ -230,18 +221,13 @@ func (d *Daemon) handleSetChiefOfStaff(client *wsClient, msg *protocol.SetChiefO
 	if len(reloadIDs) == 0 {
 		d.publishFact(FactSessionChiefRoleChanged, sessionID, nil)
 	} else {
-		reloadState := roleState
-		roleState = nil
-		if !d.life.Go("reloadChiefGuidance", func() {
-			defer reloadState.mu.Unlock()
+		d.life.Go("reloadChiefGuidance", func() {
 			for _, id := range reloadIDs {
 				d.reloadSessionAgent(id)
 			}
-			// Ring the new holder only after its guidance reload finishes.
+			// The completed role change kicks the new holder’s inbox.
 			d.publishFact(FactSessionChiefRoleChanged, sessionID, nil)
-		}) {
-			reloadState.mu.Unlock()
-		}
+		})
 	}
 
 	d.sendChiefOfStaffResult(client, sessionID, msg.ChiefOfStaff, previousSessionID, reloadErr)

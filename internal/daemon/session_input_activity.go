@@ -17,9 +17,13 @@ func (d *Daemon) noteUserInput(sessionID, source string, data []byte) bool {
 	if d.lastAutoSettleActivityAt == nil {
 		d.lastAutoSettleActivityAt = make(map[string]time.Time)
 	}
+	wasQuiet := d.userInputQuietRemainingLocked(sessionID, sessionInputQuietWindow) == 0
 	d.lastUserInputAt[sessionID] = now
 	d.lastAutoSettleActivityAt[sessionID] = now
 	d.lastInputMu.Unlock()
+	if wasQuiet {
+		d.kickInboxAfterCommit(d.inboxAddressesOf(sessionID)...)
+	}
 	return true
 }
 

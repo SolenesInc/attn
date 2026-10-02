@@ -10,7 +10,7 @@ import (
 
 func TestAppsRetirementKeepsCoreStateAcrossUpgradeAndRestart(t *testing.T) {
 	dbPath := filepath.Join(t.TempDir(), "attn.db")
-	s, err := NewWithDB(dbPath)
+	s, err := newStoreAtVersion(dbPath, 161)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -45,7 +45,7 @@ func TestAppsRetirementKeepsCoreStateAcrossUpgradeAndRestart(t *testing.T) {
 			t.Fatal(err)
 		}
 	}
-	restorePreInboxFixture(t, s.db)
+
 	for _, query := range []string{
 		`INSERT INTO bus_consumers(name, cursor, filter, enabled, updated_at) VALUES ('app:obsolete', 7, '*', 1, 'now'), ('garden-seed-bells', 11, 'garden.*', 1, 'now')`,
 		`INSERT INTO supervised_parks(child, parked_at, restart_attempt, exit_at, exit_code, exit_signal, exit_error) VALUES ('runtime', 'now', 1, 'now', 1, '', ''), ('plugin:pi', 'now', 2, 'now', 2, '', '')`,

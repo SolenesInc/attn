@@ -6083,7 +6083,7 @@ model AgentPeerMessage {
 // One durable notification consumed by a bounded inbox read. Content is the
 // peer body or the daemon-authored action text for another mailbox kind.
 model AgentInboxItem {
- address: string;
+  address: string;
   item_id: string;
   kind: string;
   source_id?: string;

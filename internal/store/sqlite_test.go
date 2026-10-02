@@ -198,11 +198,11 @@ func TestMigration148PreservesPendingGardenMailboxReceiptsAndNamesItsBell(t *tes
 
 func TestMigration73RepairsAutomationInstanceMigration70Collision(t *testing.T) {
 	dbPath := filepath.Join(t.TempDir(), "migration-73-collision.db")
-	db, err := OpenDB(dbPath)
+	db, err := openDBAtVersion(dbPath, 161)
 	if err != nil {
 		t.Fatalf("OpenDB() setup error = %v", err)
 	}
-	restorePreInboxFixture(t, db)
+
 	if _, err := db.Exec(`
 		DROP TABLE delegation_operations;
 		DELETE FROM schema_migrations WHERE version >= 71;
@@ -214,7 +214,7 @@ func TestMigration73RepairsAutomationInstanceMigration70Collision(t *testing.T) 
 		t.Fatalf("close seeded db: %v", err)
 	}
 
-	migrated, err := OpenDB(dbPath)
+	migrated, err := openDBAtVersion(dbPath, 161)
 	if err != nil {
 		t.Fatalf("OpenDB() repair migration 70 collision: %v", err)
 	}
@@ -236,7 +236,7 @@ func TestMigration73RepairsAutomationInstanceMigration70Collision(t *testing.T) 
 
 func TestMigration143AddsDelegationHandoverSnapshot(t *testing.T) {
 	dbPath := filepath.Join(t.TempDir(), "migration-143.db")
-	db, err := OpenDB(dbPath)
+	db, err := openDBAtVersion(dbPath, 161)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -246,7 +246,7 @@ func TestMigration143AddsDelegationHandoverSnapshot(t *testing.T) {
 			t.Fatalf("drop delegation_operations.%s: %v", column, err)
 		}
 	}
-	restorePreInboxFixture(t, db)
+
 	if _, err := db.Exec(`DELETE FROM schema_migrations WHERE version >= 143`); err != nil {
 		db.Close()
 		t.Fatal(err)
@@ -254,7 +254,7 @@ func TestMigration143AddsDelegationHandoverSnapshot(t *testing.T) {
 	if err := db.Close(); err != nil {
 		t.Fatal(err)
 	}
-	migrated, err := OpenDB(dbPath)
+	migrated, err := openDBAtVersion(dbPath, 161)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -269,7 +269,7 @@ func TestMigration143AddsDelegationHandoverSnapshot(t *testing.T) {
 
 func TestMigration144AddsDelegationParentSnapshot(t *testing.T) {
 	dbPath := filepath.Join(t.TempDir(), "migration-144.db")
-	db, err := OpenDB(dbPath)
+	db, err := openDBAtVersion(dbPath, 161)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -277,7 +277,7 @@ func TestMigration144AddsDelegationParentSnapshot(t *testing.T) {
 		db.Close()
 		t.Fatal(err)
 	}
-	restorePreInboxFixture(t, db)
+
 	if _, err := db.Exec(`DELETE FROM schema_migrations WHERE version >= 144`); err != nil {
 		db.Close()
 		t.Fatal(err)
@@ -285,7 +285,7 @@ func TestMigration144AddsDelegationParentSnapshot(t *testing.T) {
 	if err := db.Close(); err != nil {
 		t.Fatal(err)
 	}
-	migrated, err := OpenDB(dbPath)
+	migrated, err := openDBAtVersion(dbPath, 161)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -298,7 +298,7 @@ func TestMigration144AddsDelegationParentSnapshot(t *testing.T) {
 
 func TestMigration75DefaultsExistingRowsToEmptySpecYAML(t *testing.T) {
 	dbPath := filepath.Join(t.TempDir(), "migration-75.db")
-	db, err := OpenDB(dbPath)
+	db, err := openDBAtVersion(dbPath, 161)
 	if err != nil {
 		t.Fatalf("OpenDB() setup error = %v", err)
 	}
@@ -310,7 +310,7 @@ func TestMigration75DefaultsExistingRowsToEmptySpecYAML(t *testing.T) {
 		db.Close()
 		t.Fatalf("seed legacy row: %v", err)
 	}
-	restorePreInboxFixture(t, db)
+
 	if _, err := db.Exec(`DELETE FROM schema_migrations WHERE version >= 75`); err != nil {
 		db.Close()
 		t.Fatalf("roll back to pre-migration-75 schema: %v", err)
@@ -319,7 +319,7 @@ func TestMigration75DefaultsExistingRowsToEmptySpecYAML(t *testing.T) {
 		t.Fatalf("close seeded db: %v", err)
 	}
 
-	migrated, err := OpenDB(dbPath)
+	migrated, err := openDBAtVersion(dbPath, 161)
 	if err != nil {
 		t.Fatalf("OpenDB() migration 75/76 = %v", err)
 	}
@@ -345,13 +345,12 @@ func TestMigration75DefaultsExistingRowsToEmptySpecYAML(t *testing.T) {
 
 func TestMigration76ClearsAutomationStateAndDropsSpecYAML(t *testing.T) {
 	dbPath := filepath.Join(t.TempDir(), "migration-76.db")
-	db, err := OpenDB(dbPath)
+	db, err := openDBAtVersion(dbPath, 161)
 	if err != nil {
 		t.Fatalf("OpenDB() setup error = %v", err)
 	}
 	now := time.Now().UTC().Format(time.RFC3339)
 
-	restorePreInboxFixture(t, db)
 	if _, err := db.Exec(`
 		ALTER TABLE automation_definitions ADD COLUMN spec_yaml TEXT NOT NULL DEFAULT '';
 		ALTER TABLE automation_review_request_edges ADD COLUMN accepted_cycle INTEGER NOT NULL DEFAULT 0;
@@ -421,7 +420,7 @@ func TestMigration76ClearsAutomationStateAndDropsSpecYAML(t *testing.T) {
 		t.Fatalf("close seeded db: %v", err)
 	}
 
-	migrated, err := OpenDB(dbPath)
+	migrated, err := openDBAtVersion(dbPath, 161)
 	if err != nil {
 		t.Fatalf("OpenDB() migration 76 = %v", err)
 	}
@@ -462,13 +461,12 @@ func TestMigration76ClearsAutomationStateAndDropsSpecYAML(t *testing.T) {
 
 func TestMigration77ClearsRunsBindingsAndEdges(t *testing.T) {
 	dbPath := filepath.Join(t.TempDir(), "migration-77.db")
-	db, err := OpenDB(dbPath)
+	db, err := openDBAtVersion(dbPath, 161)
 	if err != nil {
 		t.Fatalf("OpenDB() setup error = %v", err)
 	}
 	now := time.Now().UTC().Format(time.RFC3339)
 
-	restorePreInboxFixture(t, db)
 	if _, err := db.Exec(`
 		DROP TABLE automation_runs;
 		CREATE TABLE automation_runs (
@@ -587,7 +585,7 @@ func TestMigration77ClearsRunsBindingsAndEdges(t *testing.T) {
 		t.Fatalf("close seeded db: %v", err)
 	}
 
-	migrated, err := OpenDB(dbPath)
+	migrated, err := openDBAtVersion(dbPath, 161)
 	if err != nil {
 		t.Fatalf("OpenDB() migration 77 = %v", err)
 	}
@@ -687,7 +685,7 @@ func TestMigration131_RepairsPartialAgentDriverCursorSchemas(t *testing.T) {
 		}
 		t.Run(name, func(t *testing.T) {
 			dbPath := filepath.Join(t.TempDir(), "migration-131.db")
-			db, err := OpenDB(dbPath)
+			db, err := openDBAtVersion(dbPath, 161)
 			if err != nil {
 				t.Fatalf("OpenDB setup: %v", err)
 			}
@@ -713,7 +711,7 @@ func TestMigration131_RepairsPartialAgentDriverCursorSchemas(t *testing.T) {
 					t.Fatalf("drop %s column: %v", column.name, err)
 				}
 			}
-			restorePreInboxFixture(t, db)
+
 			if _, err := db.Exec(`DELETE FROM schema_migrations WHERE version >= 131`); err != nil {
 				db.Close()
 				t.Fatalf("rewind migration 131: %v", err)
@@ -722,7 +720,7 @@ func TestMigration131_RepairsPartialAgentDriverCursorSchemas(t *testing.T) {
 				t.Fatalf("close partial database: %v", err)
 			}
 
-			migrated, err := OpenDB(dbPath)
+			migrated, err := openDBAtVersion(dbPath, 161)
 			if err != nil {
 				t.Fatalf("OpenDB migrate: %v", err)
 			}
@@ -769,11 +767,11 @@ func TestMigration131_RepairsPartialAgentDriverCursorSchemas(t *testing.T) {
 
 func TestMigration79_ConvertsRecoverableFlagToState(t *testing.T) {
 	dbPath := filepath.Join(t.TempDir(), "migration-79.db")
-	db, err := OpenDB(dbPath)
+	db, err := openDBAtVersion(dbPath, 161)
 	if err != nil {
 		t.Fatalf("OpenDB setup: %v", err)
 	}
-	restorePreInboxFixture(t, db)
+
 	if _, err := db.Exec(`
 		INSERT INTO sessions (id, label, directory, state, state_since, state_updated_at, last_seen)
 		VALUES ('recoverable-session', 'Recoverable', '/tmp/recoverable', 'idle', '2026-07-24T00:00:00Z', '2026-07-24T00:00:00Z', '2026-07-24T00:00:00Z');
@@ -787,7 +785,7 @@ func TestMigration79_ConvertsRecoverableFlagToState(t *testing.T) {
 		t.Fatalf("close pre-79 database: %v", err)
 	}
 
-	migrated, err := OpenDB(dbPath)
+	migrated, err := openDBAtVersion(dbPath, 161)
 	if err != nil {
 		t.Fatalf("OpenDB migrate: %v", err)
 	}
@@ -800,7 +798,7 @@ func TestMigration79_ConvertsRecoverableFlagToState(t *testing.T) {
 	if state != "recoverable" {
 		t.Fatalf("state = %q, want recoverable", state)
 	}
-	restorePreInboxFixture(t, migrated)
+
 	if _, err := migrated.Exec(`SELECT recoverable FROM sessions LIMIT 1`); err == nil {
 		t.Fatal("recoverable column still exists after migration")
 	}
@@ -810,7 +808,7 @@ func TestMigration79_ConvertsRecoverableFlagToState(t *testing.T) {
 	if err := migrated.Close(); err != nil {
 		t.Fatalf("close migrated database: %v", err)
 	}
-	migrated, err = OpenDB(dbPath)
+	migrated, err = openDBAtVersion(dbPath, 161)
 	if err != nil {
 		t.Fatalf("rerun migration 79 without column: %v", err)
 	}
@@ -821,12 +819,11 @@ func TestMigration79_ConvertsRecoverableFlagToState(t *testing.T) {
 
 func TestMigration37_ConvertsSessionLayoutToWorkspaceLayout(t *testing.T) {
 	dbPath := filepath.Join(t.TempDir(), "migration-37.db")
-	db, err := OpenDB(dbPath)
+	db, err := openDBAtVersion(dbPath, 161)
 	if err != nil {
 		t.Fatalf("OpenDB() setup error = %v", err)
 	}
 
-	restorePreInboxFixture(t, db)
 	if _, err := db.Exec(`
 		DROP TABLE workspace_layout_panes;
 		DROP TABLE workspace_layouts;
@@ -865,7 +862,7 @@ func TestMigration37_ConvertsSessionLayoutToWorkspaceLayout(t *testing.T) {
 	}
 	db.Close()
 
-	migrated, err := OpenDB(dbPath)
+	migrated, err := openDBAtVersion(dbPath, 161)
 	if err != nil {
 		t.Fatalf("OpenDB() migrate error = %v", err)
 	}
@@ -1169,18 +1166,17 @@ func TestMigration20_IdempotentWhenHostColumnAlreadyExists(t *testing.T) {
 	tmpDir := t.TempDir()
 	dbPath := filepath.Join(tmpDir, "test.db")
 
-	db, err := OpenDB(dbPath)
+	db, err := openDBAtVersion(dbPath, 161)
 	if err != nil {
 		t.Fatalf("OpenDB() setup error = %v", err)
 	}
 	db.Close()
 
-	raw, err := OpenDB(dbPath)
+	raw, err := openDBAtVersion(dbPath, 161)
 	if err != nil {
 		t.Fatalf("OpenDB() reopen setup error = %v", err)
 	}
 
-	restorePreInboxFixture(t, raw)
 	if _, err := raw.Exec("DELETE FROM schema_migrations WHERE version >= 20"); err != nil {
 		raw.Close()
 		t.Fatalf("DELETE migration >=20 markers error = %v", err)
@@ -1190,7 +1186,7 @@ func TestMigration20_IdempotentWhenHostColumnAlreadyExists(t *testing.T) {
 	}
 	raw.Close()
 
-	db2, err := OpenDB(dbPath)
+	db2, err := openDBAtVersion(dbPath, 161)
 	if err != nil {
 		t.Fatalf("OpenDB() should handle existing prs.host in migration 20, got error = %v", err)
 	}
@@ -1200,8 +1196,8 @@ func TestMigration20_IdempotentWhenHostColumnAlreadyExists(t *testing.T) {
 	if err != nil {
 		t.Fatalf("GetSchemaVersion() error = %v", err)
 	}
-	if version != latestSchemaVersion() {
-		t.Fatalf("schema version = %d, want %d", version, latestSchemaVersion())
+	if version != 161 {
+		t.Fatalf("schema version = %d, want %d", version, 161)
 	}
 
 	var idxName string
@@ -1230,18 +1226,17 @@ func TestMigration21_IdempotentWhenAgentColumnAlreadyExists(t *testing.T) {
 	tmpDir := t.TempDir()
 	dbPath := filepath.Join(tmpDir, "test.db")
 
-	db, err := OpenDB(dbPath)
+	db, err := openDBAtVersion(dbPath, 161)
 	if err != nil {
 		t.Fatalf("OpenDB() setup error = %v", err)
 	}
 	db.Close()
 
-	raw, err := OpenDB(dbPath)
+	raw, err := openDBAtVersion(dbPath, 161)
 	if err != nil {
 		t.Fatalf("OpenDB() reopen setup error = %v", err)
 	}
 
-	restorePreInboxFixture(t, raw)
 	if _, err := raw.Exec("DELETE FROM schema_migrations WHERE version >= 21"); err != nil {
 		raw.Close()
 		t.Fatalf("DELETE migration >=21 markers error = %v", err)
@@ -1251,7 +1246,7 @@ func TestMigration21_IdempotentWhenAgentColumnAlreadyExists(t *testing.T) {
 	}
 	raw.Close()
 
-	db2, err := OpenDB(dbPath)
+	db2, err := openDBAtVersion(dbPath, 161)
 	if err != nil {
 		t.Fatalf("OpenDB() should handle existing sessions.agent in migration 21, got error = %v", err)
 	}
@@ -1261,8 +1256,8 @@ func TestMigration21_IdempotentWhenAgentColumnAlreadyExists(t *testing.T) {
 	if err != nil {
 		t.Fatalf("GetSchemaVersion() error = %v", err)
 	}
-	if version != latestSchemaVersion() {
-		t.Fatalf("schema version = %d, want %d", version, latestSchemaVersion())
+	if version != 161 {
+		t.Fatalf("schema version = %d, want %d", version, 161)
 	}
 
 	var count int
@@ -1278,18 +1273,17 @@ func TestMigration31_IdempotentWhenEndpointIDColumnAlreadyExists(t *testing.T) {
 	tmpDir := t.TempDir()
 	dbPath := filepath.Join(tmpDir, "test.db")
 
-	db, err := OpenDB(dbPath)
+	db, err := openDBAtVersion(dbPath, 161)
 	if err != nil {
 		t.Fatalf("OpenDB() setup error = %v", err)
 	}
 	db.Close()
 
-	raw, err := OpenDB(dbPath)
+	raw, err := openDBAtVersion(dbPath, 161)
 	if err != nil {
 		t.Fatalf("OpenDB() reopen setup error = %v", err)
 	}
 
-	restorePreInboxFixture(t, raw)
 	if _, err := raw.Exec("DELETE FROM schema_migrations WHERE version >= 31"); err != nil {
 		raw.Close()
 		t.Fatalf("DELETE migration >=31 markers error = %v", err)
@@ -1299,7 +1293,7 @@ func TestMigration31_IdempotentWhenEndpointIDColumnAlreadyExists(t *testing.T) {
 	}
 	raw.Close()
 
-	db2, err := OpenDB(dbPath)
+	db2, err := openDBAtVersion(dbPath, 161)
 	if err != nil {
 		t.Fatalf("OpenDB() should handle existing sessions.endpoint_id in migration 31, got error = %v", err)
 	}
@@ -1309,8 +1303,8 @@ func TestMigration31_IdempotentWhenEndpointIDColumnAlreadyExists(t *testing.T) {
 	if err != nil {
 		t.Fatalf("GetSchemaVersion() error = %v", err)
 	}
-	if version != latestSchemaVersion() {
-		t.Fatalf("schema version = %d, want %d", version, latestSchemaVersion())
+	if version != 161 {
+		t.Fatalf("schema version = %d, want %d", version, 161)
 	}
 
 	var count int
@@ -1324,13 +1318,12 @@ func TestMigration31_IdempotentWhenEndpointIDColumnAlreadyExists(t *testing.T) {
 
 func TestMigration134DropsTheWorkspaceContextAndKeeperState(t *testing.T) {
 	dbPath := filepath.Join(t.TempDir(), "test.db")
-	s, err := NewWithDB(dbPath)
+	s, err := newStoreAtVersion(dbPath, 161)
 	if err != nil {
 		t.Fatalf("NewWithDB error: %v", err)
 	}
 	defer s.Close()
 
-	restorePreInboxFixture(t, s.db)
 	statements := []string{
 		`CREATE TABLE workspace_contexts (workspace_id TEXT PRIMARY KEY, content TEXT NOT NULL)`,
 		`CREATE TABLE workspace_keeper_compact_backups (workspace_id TEXT PRIMARY KEY, source_content TEXT NOT NULL)`,
@@ -1346,7 +1339,7 @@ func TestMigration134DropsTheWorkspaceContextAndKeeperState(t *testing.T) {
 		}
 	}
 
-	if err := migrateDB(s.db, dbPath); err != nil {
+	if err := migrateDBThrough(s.db, dbPath, 161); err != nil {
 		t.Fatalf("migrateDB error: %v", err)
 	}
 
@@ -1390,7 +1383,7 @@ func TestMigration134DropsTheWorkspaceContextAndKeeperState(t *testing.T) {
 
 func TestMigration53AddsClosedStateColumnIdempotently(t *testing.T) {
 	dbPath := filepath.Join(t.TempDir(), "test.db")
-	s, err := NewWithDB(dbPath)
+	s, err := newStoreAtVersion(dbPath, 161)
 	if err != nil {
 		t.Fatalf("NewWithDB error: %v", err)
 	}
@@ -1425,11 +1418,10 @@ func TestMigration53AddsClosedStateColumnIdempotently(t *testing.T) {
 		t.Fatal("closed_state column missing after migrations")
 	}
 
-	restorePreInboxFixture(t, s.db)
 	if _, err := s.db.Exec(`DELETE FROM schema_migrations WHERE version >= 53`); err != nil {
 		t.Fatalf("unrecord migration 53: %v", err)
 	}
-	if err := migrateDB(s.db, dbPath); err != nil {
+	if err := migrateDBThrough(s.db, dbPath, 161); err != nil {
 		t.Fatalf("re-run migrateDB after unrecording 53: %v", err)
 	}
 	if !hasClosedState() {
@@ -1452,7 +1444,7 @@ func tableExistsForTest(t *testing.T, db *sql.DB, name string) bool {
 
 func TestMigration121BackfillsTheRequestClockAndIsRewindSafe(t *testing.T) {
 	dbPath := filepath.Join(t.TempDir(), "test.db")
-	s, err := NewWithDB(dbPath)
+	s, err := newStoreAtVersion(dbPath, 161)
 	if err != nil {
 		t.Fatalf("NewWithDB: %v", err)
 	}
@@ -1466,15 +1458,15 @@ func TestMigration121BackfillsTheRequestClockAndIsRewindSafe(t *testing.T) {
 	if _, err := s.db.Exec(`UPDATE sessions SET last_model_request_at = NULL WHERE id = 'legacy-session'`); err != nil {
 		t.Fatalf("clear request clock: %v", err)
 	}
-	restorePreInboxFixture(t, s.db)
+
 	if _, err := s.db.Exec(`DELETE FROM schema_migrations WHERE version >= 121`); err != nil {
 		t.Fatalf("rewind through migration 121: %v", err)
 	}
 
-	if err := migrateDB(s.db, dbPath); err != nil {
+	if err := migrateDBThrough(s.db, dbPath, 161); err != nil {
 		t.Fatalf("first migrateDB: %v", err)
 	}
-	if err := migrateDB(s.db, dbPath); err != nil {
+	if err := migrateDBThrough(s.db, dbPath, 161); err != nil {
 		t.Fatalf("second migrateDB: %v", err)
 	}
 	var requestAt string
@@ -1488,7 +1480,7 @@ func TestMigration121BackfillsTheRequestClockAndIsRewindSafe(t *testing.T) {
 
 func TestMigration123AddsTranscriptPathAndIsRewindSafe(t *testing.T) {
 	dbPath := filepath.Join(t.TempDir(), "test.db")
-	s, err := NewWithDB(dbPath)
+	s, err := newStoreAtVersion(dbPath, 161)
 	if err != nil {
 		t.Fatalf("NewWithDB: %v", err)
 	}
@@ -1496,7 +1488,7 @@ func TestMigration123AddsTranscriptPathAndIsRewindSafe(t *testing.T) {
 
 	s.Add(&protocol.Session{ID: "legacy-session", Agent: protocol.SessionAgentCodex})
 	s.SetResumeSessionID("legacy-session", "native-legacy")
-	restorePreInboxFixture(t, s.db)
+
 	if _, err := s.db.Exec(`
 		ALTER TABLE sessions DROP COLUMN transcript_path;
 		DELETE FROM schema_migrations WHERE version >= 123;
@@ -1504,14 +1496,14 @@ func TestMigration123AddsTranscriptPathAndIsRewindSafe(t *testing.T) {
 		t.Fatalf("rewind migration 123: %v", err)
 	}
 
-	if err := migrateDB(s.db, dbPath); err != nil {
+	if err := migrateDBThrough(s.db, dbPath, 161); err != nil {
 		t.Fatalf("first migrateDB: %v", err)
 	}
-	restorePreInboxFixture(t, s.db)
+
 	if _, err := s.db.Exec(`DELETE FROM schema_migrations WHERE version >= 123`); err != nil {
 		t.Fatalf("unrecord migration 123: %v", err)
 	}
-	if err := migrateDB(s.db, dbPath); err != nil {
+	if err := migrateDBThrough(s.db, dbPath, 161); err != nil {
 		t.Fatalf("second migrateDB: %v", err)
 	}
 
@@ -1522,7 +1514,7 @@ func TestMigration123AddsTranscriptPathAndIsRewindSafe(t *testing.T) {
 
 func TestMigration145AdoptsGardenDispatchForAutomationContinuity(t *testing.T) {
 	dbPath := filepath.Join(t.TempDir(), "test.db")
-	s, err := NewWithDB(dbPath)
+	s, err := newStoreAtVersion(dbPath, 161)
 	if err != nil {
 		t.Fatalf("NewWithDB: %v", err)
 	}
@@ -1539,7 +1531,7 @@ func TestMigration145AdoptsGardenDispatchForAutomationContinuity(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	restorePreInboxFixture(t, s.db)
+
 	if _, err := s.db.Exec(`INSERT INTO tickets(id,title,status,assignee,automation_run_id,created_at,updated_at) VALUES(?,?,?,?,?,?,?)`, "legacy-ticket", "Review", "working", run.SessionID, run.ID, formatStoredTime(now), formatStoredTime(now)); err != nil {
 		t.Fatal(err)
 	}
@@ -1554,7 +1546,7 @@ func TestMigration145AdoptsGardenDispatchForAutomationContinuity(t *testing.T) {
 	if _, err := s.PutDocument(*dispatches, run.SessionID, []byte(`{"session_id":"session-1","crown":"s-live01"}`), now, nil); err != nil {
 		t.Fatal(err)
 	}
-	restorePreInboxFixture(t, s.db)
+
 	if _, err := s.db.Exec(`
 		UPDATE automation_runs SET seed_id='',ticket_id='legacy-ticket' WHERE id='run-1';
 		UPDATE automation_continuity_bindings SET seed_id='',origin_run_id='',ticket_id='legacy-ticket' WHERE definition_id='review';
@@ -1563,7 +1555,7 @@ func TestMigration145AdoptsGardenDispatchForAutomationContinuity(t *testing.T) {
 		t.Fatalf("rewind migration 145: %v", err)
 	}
 
-	if err := migrateDB(s.db, dbPath); err != nil {
+	if err := migrateDBThrough(s.db, dbPath, 161); err != nil {
 		t.Fatalf("migrateDB: %v", err)
 	}
 	migratedRun, err := s.GetAutomationRun(run.ID)

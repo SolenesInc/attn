@@ -7,6 +7,7 @@ import (
 	"github.com/victorarias/attn/internal/inbox"
 )
 
+// sendToInbox is the way to put something in front of an agent.
 func (d *Daemon) sendToInbox(item inbox.Item) (inbox.Receipt, error) {
 	if item.ID == "" {
 		item.ID = uuid.NewString()
@@ -15,17 +16,7 @@ func (d *Daemon) sendToInbox(item inbox.Item) (inbox.Receipt, error) {
 	if err != nil {
 		return inbox.Receipt{}, err
 	}
-	receipt := d.deliverSavedInbox(item.To, id)
-	if memberID := item.To.MemberID(); memberID != "" && d.inboxHolder(item.To) == nil {
-		if member, _, lookupErr := d.crewMember(memberID); lookupErr == nil {
-			ledger := d.crewWakeLedger()
-			ledger.Stamps = parseWakeStamps(member.AutonomousWakes)
-			if _, refusal := ledger.Allows(memberID, time.Now()); refusal != nil {
-				receipt.Detail = refusal.Error()
-			}
-		}
-	}
-	return receipt, nil
+	return d.deliverSavedInbox(item.To, id), nil
 }
 func (d *Daemon) deliverSavedInbox(to inbox.Address, id string) inbox.Receipt {
 	receipt, err := d.deliverInbox(to)
@@ -36,7 +27,7 @@ func (d *Daemon) deliverSavedInbox(to inbox.Address, id string) inbox.Receipt {
 	}
 	return receipt
 }
-func (d *Daemon) sentToInbox(addresses ...inbox.Address) {
+func (d *Daemon) kickInboxAfterCommit(addresses ...inbox.Address) {
 	for _, a := range addresses {
 		d.kickInbox(a)
 	}

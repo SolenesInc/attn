@@ -106,7 +106,7 @@ func (d *Daemon) handleAgentMsg(conn net.Conn, msg *protocol.AgentMsgMessage) {
 				}
 				return
 			}
-			address = inbox.ToSession(target.ID)
+			address = d.inboxAddressOf(target.ID)
 		}
 	}
 	target := d.inboxHolder(address)

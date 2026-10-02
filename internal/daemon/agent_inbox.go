@@ -34,17 +34,23 @@ func (d *Daemon) handleAgentInbox(conn net.Conn, msg *protocol.AgentInboxMessage
 		Ok: true, AgentInboxResult: d.peerMessageResult(record),
 	})
 	if readNow {
-		d.sentToInbox(record.To)
+		d.kickInboxAfterCommit(record.To)
 	}
 }
 
 func (d *Daemon) handleAgentInboxBatch(conn net.Conn, recipientSessionID string, limit int) {
 	d.lockGardenRoles()
-	err := d.discardUncoveredSeedBells(recipientSessionID)
-	var deliveries []inbox.Delivery
+	addresses := d.inboxAddressesOf(recipientSessionID)
+	var err error
+	for _, address := range addresses {
+		if err = d.discardIneligibleGardenSeedBellsLocked(address); err != nil {
+			break
+		}
+	}
+	var deliveries []store.InboxDelivery
 	var remaining int
 	if err == nil {
-		deliveries, remaining, err = d.store.ReadInbox(d.inboxAddressesOf(recipientSessionID), recipientSessionID, limit, time.Now())
+		deliveries, remaining, err = d.store.ReadInbox(addresses, recipientSessionID, limit, time.Now())
 	}
 	d.unlockGardenRoles()
 	if err != nil {
@@ -76,9 +82,7 @@ func (d *Daemon) handleAgentInboxBatch(conn net.Conn, recipientSessionID string,
 		}
 		items = append(items, item)
 	}
-	for _, delivery := range deliveries {
-		d.sentToInbox(delivery.Item.To)
-	}
+	d.kickInboxAfterCommit(addresses...)
 	_ = json.NewEncoder(conn).Encode(protocol.Response{
 		Ok: true,
 		AgentInboxBatchResult: &protocol.AgentInboxBatchResult{
@@ -87,7 +91,7 @@ func (d *Daemon) handleAgentInboxBatch(conn net.Conn, recipientSessionID string,
 	})
 }
 
-func mailboxItemContent(delivery inbox.Delivery) string {
+func mailboxItemContent(delivery store.InboxDelivery) string {
 	switch delivery.Item.Kind {
 	case inbox.SeedUpdate:
 		return prompts.RenderText("session", "garden-update", prompts.Values{"seed_id": delivery.Item.Source, "event_kind": delivery.Item.Hint})

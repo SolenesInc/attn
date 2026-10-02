@@ -1970,7 +1970,7 @@ func (d *Daemon) forgetSessionRuntime(sessionID string) {
 	d.externalRegistrations.Delete(sessionID)
 	d.stopTranscriptWatcher(sessionID)
 
-	d.sentToInbox(inbox.ToSession(sessionID))
+	d.kickInboxAfterCommit(inbox.ToSession(sessionID))
 	d.forgetSessionTitleInitialPrompt(sessionID)
 	d.clearAutoSettleState(sessionID)
 	d.lastInputMu.Lock()
@@ -3140,7 +3140,7 @@ func (d *Daemon) sessionForBroadcast(session *protocol.Session) *protocol.Sessio
 	if decorated != nil {
 		decorated.DelegationRole = d.sessionDelegationRoles()[decorated.ID]
 		decorated.Automation = d.automationProvenanceForSession(decorated.ID)
-		decorated.PullRequests = d.sessionPullRequestsForSession(decorated.ID)
+		decorated.PullRequests = d.sessionPullRequestsForSession(decorated)
 	}
 	return decorated
 }
@@ -3192,7 +3192,14 @@ func (d *Daemon) sessionsForBroadcast(sessions []*protocol.Session) []protocol.S
 		if decorated := d.sessionForBroadcastWithChiefOfStaff(session, chiefOfStaffSessionID, delegatedFromChief, crewBySession, seedBySession, dispatcherBySession); decorated != nil {
 			decorated.DelegationRole = rolesBySession[decorated.ID]
 			decorated.Automation = bySession[decorated.ID]
-			decorated.PullRequests = d.sessionPullRequestsForBroadcast(d.sessionPullRequestRecords(decorated.ID, pullRequestsBySession, pullRequestWatchesByPR), pullRequestWatchesByPR)
+			addresses := []inbox.Address{inbox.ToSession(decorated.ID)}
+			if member := crewBySession[decorated.ID]; member != "" {
+				addresses = append(addresses, inbox.ToMember(member))
+			}
+			if decorated.ID == chiefOfStaffSessionID {
+				addresses = append(addresses, inbox.ToChief())
+			}
+			decorated.PullRequests = d.sessionPullRequestsForBroadcast(d.sessionPullRequestRecords(decorated.ID, addresses, pullRequestsBySession, pullRequestWatchesByPR), addresses, pullRequestWatchesByPR)
 			out = append(out, *decorated)
 		}
 	}

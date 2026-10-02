@@ -242,7 +242,7 @@ func (d *Daemon) handleGardenSeedEventWithoutRoleLock(_ context.Context, event b
 		if err != nil {
 			return err
 		}
-		d.sentToInbox(to)
+		d.kickInboxAfterCommit(to)
 	}
 	return nil
 }
@@ -285,6 +285,9 @@ func (r gardenEventRoles) ResolveSeedRole(seedID string, role events.Role) ([]st
 			return nil, nil
 		}
 		if member := seed.Tender().Member; member != "" {
+			if _, _, err := r.daemon.crewMember(member); err != nil {
+				return nil, nil
+			}
 			return []string{inbox.ToMember(member).String()}, nil
 		}
 		sessionID, err := r.daemon.localGardenTenderSession(seed.Tender())

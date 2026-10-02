@@ -14,20 +14,13 @@ const (
 )
 
 type Item struct {
-	ID          string
-	To          Address
-	Text        string
-	Source      string
-	Key         string
-	Attempts    int
-	AttemptedAt string
-	ReadBy      string
-	Kind        Kind
-	BellName    string
-	Hint        string
-	CreatedAt   string
-	NotifiedAt  string
-	ReadAt      string
+	ID     string
+	To     Address
+	Kind   Kind
+	Text   string
+	Hint   string
+	Source string
+	Key    string
 }
 
 type Message struct {
@@ -61,11 +54,6 @@ func (r PeerRecord) State() State {
 		return StateNotified
 	}
 	return StateQueued
-}
-
-type Delivery struct {
-	Item Item
-	Peer *Message
 }
 
 type PeerGuardCounts struct {

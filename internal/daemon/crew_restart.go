@@ -560,7 +560,7 @@ func (d *Daemon) completeCrewRestartWithDetail(memberID, requestID, sessionID, l
 	}
 }
 
-func (d *Daemon) noteCrewRestartMailboxRead(deliveries []inbox.Delivery) {
+func (d *Daemon) noteCrewRestartMailboxRead(deliveries []store.InboxDelivery) {
 	for _, delivery := range deliveries {
 		if delivery.Item.Kind != inbox.Notice || delivery.Item.Source == "" || !strings.HasPrefix(delivery.Item.Key, "crew-restart-") {
 			continue

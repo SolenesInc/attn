@@ -57,7 +57,7 @@ func stampQuery(sort *docstore.Sort) docstore.Query {
 
 func TestMigration91RewritesStampsThatDoNotSort(t *testing.T) {
 	dbPath := filepath.Join(t.TempDir(), "test.db")
-	s, err := newSeededStore(dbPath)
+	s, err := newStoreAtVersion(dbPath, 161)
 	if err != nil {
 		t.Fatalf("NewWithDB: %v", err)
 	}
@@ -85,7 +85,7 @@ func TestMigration91RewritesStampsThatDoNotSort(t *testing.T) {
 	if _, err := s.db.Exec(`UPDATE document_collections SET updated_at = 'not a timestamp'`); err != nil {
 		t.Fatalf("plant unreadable stamp: %v", err)
 	}
-	restorePreInboxFixture(t, s.db)
+
 	if _, err := s.db.Exec(`DELETE FROM schema_migrations WHERE version >= 91`); err != nil {
 		t.Fatalf("unrecord migration 91: %v", err)
 	}
@@ -96,7 +96,7 @@ func TestMigration91RewritesStampsThatDoNotSort(t *testing.T) {
 		t.Fatalf("the planted stamps already sort correctly as %v; this test would pass without the migration", got)
 	}
 
-	if err := migrateDB(s.db, dbPath); err != nil {
+	if err := migrateDBThrough(s.db, dbPath, 161); err != nil {
 		t.Fatalf("migrateDB: %v", err)
 	}
 
@@ -108,11 +108,10 @@ func TestMigration91RewritesStampsThatDoNotSort(t *testing.T) {
 		t.Fatalf("after migration 91 the stamps sort as %v, want %v", got, want)
 	}
 
-	restorePreInboxFixture(t, s.db)
 	if _, err := s.db.Exec(`DELETE FROM schema_migrations WHERE version >= 91`); err != nil {
 		t.Fatalf("unrecord migration 91 again: %v", err)
 	}
-	if err := migrateDB(s.db, dbPath); err != nil {
+	if err := migrateDBThrough(s.db, dbPath, 161); err != nil {
 		t.Fatalf("re-run migrateDB: %v", err)
 	}
 	got, err = readIDs(t, s, stampQuery(&docstore.Sort{Field: docstore.FieldCreatedAt}))

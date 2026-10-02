@@ -17,6 +17,7 @@ import (
 )
 
 var inboxRingText = prompts.RenderText("session", "inbox-notification", nil)
+var errInboxNoUnread = errors.New("agent inbox has no unread items to wake for")
 var errInboxNoPromptReader = errors.New("agent inbox recipient is a shell pane")
 var errInboxDoorbellOutstanding = errors.New("agent inbox ring already outstanding")
 var errInboxDoorbellInFlight = errors.New("agent inbox ring already being placed")
@@ -26,9 +27,10 @@ func sessionReadsInboxDoorbells(session *protocol.Session) bool {
 }
 
 type inboxDeliveryState struct {
-	mu      sync.Mutex
-	timer   *time.Timer
-	stopped bool
+	mu          sync.Mutex
+	timer       *time.Timer
+	stopped     bool
+	wakeSession string
 }
 
 func (d *Daemon) inboxState(a inbox.Address) *inboxDeliveryState {
@@ -91,7 +93,7 @@ func (d *Daemon) deliverInbox(a inbox.Address) (inbox.Receipt, error) {
 func (d *Daemon) deliverInboxLocked(a inbox.Address, state *inboxDeliveryState) (inbox.Receipt, error) {
 	receipt := inbox.Receipt{}
 	defer func() {
-		if state.timer != nil {
+		if state.timer != nil || state.wakeSession != "" {
 			return
 		}
 		d.inboxMu.Lock()
@@ -120,17 +122,16 @@ func (d *Daemon) deliverInboxLocked(a inbox.Address, state *inboxDeliveryState) 
 		return receipt, err
 	}
 	if attempt.Unread == 0 {
+		state.wakeSession = ""
 		return receipt, nil
 	}
 	holder := d.inboxHolder(a)
-	var wakeIDs []string
-	finishingWake := false
-	if holder != nil {
-		wakeIDs, finishingWake = attempt.PendingWakes[holder.ID]
+	finishingWake := holder != nil && holder.ID == state.wakeSession
+	if holder == nil || !finishingWake {
+		state.wakeSession = ""
 	}
 	if !finishingWake {
-		if len(attempt.LiveIDs) == 0 {
-			d.logf("inbox: stopped ringing %s after %d attempts (inbox.MaxAttempts=%d); %d unread wait for a read or a new item", a, inbox.MaxAttempts, inbox.MaxAttempts, attempt.Unread)
+		if attempt.Live == 0 {
 			return receipt, nil
 		}
 		now := time.Now()
@@ -139,6 +140,15 @@ func (d *Daemon) deliverInboxLocked(a inbox.Address, state *inboxDeliveryState) 
 			d.armInboxLocked(a, state, due.Sub(now))
 			receipt.Outstanding = holder != nil && a.MemberID() == ""
 			receipt.Detail = agentMessageQueuedDetail(errInboxDoorbellOutstanding)
+			if memberID := a.MemberID(); memberID != "" && holder == nil {
+				if member, _, err := d.crewMember(memberID); err == nil {
+					ledger := d.crewWakeLedger()
+					ledger.Stamps = parseWakeStamps(member.AutonomousWakes)
+					if _, refusal := ledger.Allows(memberID, now); refusal != nil {
+						receipt.Detail = refusal.Error()
+					}
+				}
+			}
 			return receipt, nil
 		}
 		if holder == nil {
@@ -149,27 +159,34 @@ func (d *Daemon) deliverInboxLocked(a inbox.Address, state *inboxDeliveryState) 
 					d.kickInbox(a)
 					return receipt, nil
 				}
-				wakeSession := uuid.NewString()
-				started, err := d.store.StampInboxAttempt(a, wakeSession, now)
-				if err != nil {
-					d.crewWakeMu.Unlock()
-					return receipt, err
-				}
-				if !started {
-					d.crewWakeMu.Unlock()
+				result, err := d.crewWakeDayWithChargeLocked(member, "", true, func() error {
+					started, err := d.store.StampInboxAttempt(a, now)
+					if err != nil {
+						return err
+					}
+					if !started {
+						return errInboxNoUnread
+					}
+					d.logInboxExhaustion(a)
+					return nil
+				})
+				d.crewWakeMu.Unlock()
+				if errors.Is(err, errInboxNoUnread) {
 					return receipt, nil
 				}
-				result, err := d.crewWakeDayWithChargeLocked(member, "", true, wakeSession)
-				d.crewWakeMu.Unlock()
 				if err != nil {
-					if clearErr := d.store.ClearInboxPendingWake(wakeSession); clearErr != nil {
-						return receipt, clearErr
-					}
+					state.wakeSession = ""
 					d.logf("inbox: wake %s refused: %v", a, err)
 					receipt.Detail = err.Error()
 					d.armInboxLocked(a, state, inbox.AttemptDelay)
 					return receipt, nil
 				}
+				if result.AlreadyAwake {
+					state.wakeSession = ""
+					d.kickInbox(a)
+					return receipt, nil
+				}
+				state.wakeSession = result.SessionID
 				receipt.Detail = fmt.Sprintf("woke %s in session %s; notification queued until it reaches a safe prompt", crew.DisplayName(member), shortSessionID(result.SessionID))
 				return receipt, nil
 			}
@@ -193,8 +210,12 @@ func (d *Daemon) deliverInboxLocked(a inbox.Address, state *inboxDeliveryState) 
 	if placement.err == nil && (placement.stage == sessionInputPlaced || placement.stage == sessionInputTaken) {
 		d.sessionInputs().forget(holder.ID, id)
 		now := time.Now()
-		if err := d.store.RingInbox(a, wakeIDs, now); err != nil {
+		if err := d.store.RingInbox(a, finishingWake, now); err != nil {
 			return receipt, err
+		}
+		state.wakeSession = ""
+		if !finishingWake {
+			d.logInboxExhaustion(a)
 		}
 		d.armInboxLocked(a, state, inbox.AttemptDelay)
 		receipt.Rang = true
@@ -203,13 +224,16 @@ func (d *Daemon) deliverInboxLocked(a inbox.Address, state *inboxDeliveryState) 
 	}
 	receipt.Detail = agentMessageQueuedDetail(placement.err)
 	delay, retry := sessionInputRetryDelay(placement.err)
-	if errors.Is(placement.err, errSessionInputBlockedBySelector) || errors.Is(placement.err, errSessionInputScreenUnavailable) {
-		delay, retry = sessionInputComposerRetry, true
-	}
 	if retry {
 		d.armInboxLocked(a, state, delay)
 	}
 	return receipt, nil
+}
+func (d *Daemon) logInboxExhaustion(a inbox.Address) {
+	attempt, err := d.store.InboxAttempt(a)
+	if err == nil && attempt.Unread > 0 && attempt.Live == 0 {
+		d.logf("inbox: stopped ringing %s after %d attempts (inbox.MaxAttempts=%d); %d unread wait for a read or a new item", a, inbox.MaxAttempts, inbox.MaxAttempts, attempt.Unread)
+	}
 }
 func (d *Daemon) armInboxLocked(a inbox.Address, state *inboxDeliveryState, delay time.Duration) {
 	if state.timer != nil {
@@ -241,7 +265,7 @@ func (d *Daemon) recoverInbox() {
 }
 func (d *Daemon) kickSessionInbox(sessionID, state string) {
 	if sessionInputPhaseAllows(sessionInputWhenPromptReady, protocol.SessionState(state)) {
-		d.sentToInbox(d.inboxAddressesOf(sessionID)...)
+		d.kickInboxAfterCommit(d.inboxAddressesOf(sessionID)...)
 	}
 }
 func (d *Daemon) subscribeInboxFacts() {
@@ -254,7 +278,7 @@ func (d *Daemon) subscribeInboxFacts() {
 			d.kickInbox(inbox.ToChief())
 		default:
 			// Holder resolution runs outside publishMu, through lifetime work.
-			d.life.Go("inbox-holder-change", func() { d.sentToInbox(d.inboxAddressesOf(ev.Subject)...); d.kickInbox(inbox.ToChief()) })
+			d.life.Go("inbox-holder-change", func() { d.kickInboxAfterCommit(d.inboxAddressesOf(ev.Subject)...); d.kickInbox(inbox.ToChief()) })
 		}
 	})
 }

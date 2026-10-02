@@ -1219,7 +1219,6 @@ CREATE INDEX IF NOT EXISTS idx_automode_denials_recent ON automode_denials(id DE
  hint TEXT NOT NULL DEFAULT '', text TEXT NOT NULL DEFAULT '', bell_name TEXT NOT NULL DEFAULT '',
  created_at TEXT NOT NULL, attempts INTEGER NOT NULL DEFAULT 0, attempted_at TEXT NOT NULL DEFAULT '',
  notified_at TEXT NOT NULL DEFAULT '', read_at TEXT NOT NULL DEFAULT '', read_by TEXT NOT NULL DEFAULT '',
- pending_wake_session TEXT NOT NULL DEFAULT '',
  CHECK(read_at = '' OR notified_at != ''));
  INSERT INTO inbox_items (id,address,kind,source_id,coalesce_key,hint,text,bell_name,created_at,
  attempts,attempted_at,notified_at,read_at,read_by)

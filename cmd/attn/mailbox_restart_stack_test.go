@@ -73,7 +73,7 @@ func TestAnOutstandingInboxRingSurvivesAProcessRestart(t *testing.T) {
 	}
 }
 
-func TestAnInboxWakeDoesNotWakeAMemberTwiceAcrossAProcessRestart(t *testing.T) {
+func TestRestartDuringInboxPrimingKeepsTheDayAndOutstandingDelay(t *testing.T) {
 	t.Parallel()
 	s := testworld.NewStack(t, testworld.WithAgents(fakeagent.Claude))
 	writeCharter(t, s, "trellis")
@@ -94,8 +94,9 @@ func TestAnInboxWakeDoesNotWakeAMemberTwiceAcrossAProcessRestart(t *testing.T) {
 		t.Fatalf("restart woke a second day: %s, original %s", bound, sent.TargetSessionID)
 	}
 	day.Reply("Ready. <!-- attn:state=idle -->")
-	if prompt := day.Prompted(); !strings.Contains(prompt, inboxDoorbell) {
-		t.Fatalf("restart lost the wake completion: %q", prompt)
+	s.App().TypeLine(sent.TargetSessionID, "continue without reading")
+	if prompt := day.Prompted(); prompt != "continue without reading" {
+		t.Fatalf("restart renewed the outstanding wake attempt: %q", prompt)
 	}
 	batch, err := s.Client().AgentInboxBatch(sent.TargetSessionID, 0)
 	if err != nil || len(batch.Items) != 1 || batch.Items[0].Address != "member:trellis" {

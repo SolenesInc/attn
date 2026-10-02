@@ -9,11 +9,11 @@ const testAnnotations = `[{"id":"a1","message_key":"turn-1","start":4,"end":10,"
 
 func TestMigration93KeepsDraftsWrittenBeforeTheNoteExisted(t *testing.T) {
 	dbPath := filepath.Join(t.TempDir(), "pre-93.db")
-	db, err := openSeededDB(dbPath)
+	db, err := openDBAtVersion(dbPath, 161)
 	if err != nil {
 		t.Fatalf("OpenDB setup: %v", err)
 	}
-	restorePreInboxFixture(t, db)
+
 	if _, err := db.Exec(`
 		ALTER TABLE session_annotation_drafts DROP COLUMN note;
 		INSERT INTO session_annotation_drafts
@@ -27,7 +27,7 @@ func TestMigration93KeepsDraftsWrittenBeforeTheNoteExisted(t *testing.T) {
 		t.Fatalf("close pre-93 database: %v", err)
 	}
 
-	migrated, err := newSeededStore(dbPath)
+	migrated, err := newStoreAtVersion(dbPath, 161)
 	if err != nil {
 		t.Fatalf("migrate: %v", err)
 	}
