@@ -3379,17 +3379,12 @@ model BackgroundLaunchMessage {
 }
 
 enum LaunchDesktopKind { automation, crew }
-enum LaunchDesktopMode { own, desktop }
-// desktop_id may name a numbered desktop that does not exist yet; a launch creates it.
+// desktop_id is where the item starts; desktop_name chooses a new desktop (on ⌘N when desktop_id is
+// <profile_id>/desktop_N). Neither chooses nothing: an item the launch review has yet to give a desktop.
 model LaunchDesktopSetting {
-  label?: string;
-  mode: LaunchDesktopMode;
   desktop_id?: string;
-  destination_id?: string;
   desktop_name?: string;
-  pending?: boolean;
-  owner_kind?: LaunchDesktopKind;
-  owner_id?: string;
+  label?: string;
 }
 model LaunchDesktopItem {
   kind: LaunchDesktopKind;
@@ -3411,7 +3406,7 @@ model LaunchDesktopSetMessage {
   request_id: string;
   kind: LaunchDesktopKind;
   item_id: string;
-  setting: LaunchDesktopSetting;
+  setting?: LaunchDesktopSetting;
   desktop_name?: string;
 }
 model LaunchDesktopResultMessage {

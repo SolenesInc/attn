@@ -20,7 +20,6 @@ import (
 	"github.com/victorarias/attn/internal/protocol"
 	"github.com/victorarias/attn/internal/pty"
 	"github.com/victorarias/attn/internal/ptybackend"
-	"github.com/victorarias/attn/internal/store"
 )
 
 const crewWakeAgent = crew.DefaultAgent
@@ -520,13 +519,9 @@ func (d *Daemon) crewSet(msg *protocol.CrewSetMessage) (*protocol.CrewMember, bo
 			wire := d.crewMemberWire(member, doc.Rev)
 			return &wire, true, nil
 		}
-		var setting *store.LaunchDesktopSetting
-		if msg.LaunchDesktopSetting != nil {
-			chosen := storeLaunchSetting(*msg.LaunchDesktopSetting)
-			setting = &chosen
-		}
+		setting := storeLaunchSetting(msg.LaunchDesktopSetting)
 		if msg.LaunchDesktop != nil {
-			chosen, err := d.namedLaunchDesktopFromRef(d.crewProfileID(member.ID), "crew", *msg.LaunchDesktop, msg.LaunchDesktopName)
+			chosen, err := d.launchDesktopFromRef(d.crewProfileID(member.ID), member.ID, *msg.LaunchDesktop, msg.LaunchDesktopName)
 			if err != nil {
 				return nil, false, err
 			}
@@ -538,6 +533,7 @@ func (d *Daemon) crewSet(msg *protocol.CrewSetMessage) (*protocol.CrewMember, bo
 		revision, err := d.writeCrewMemberWithLaunch(*schema, member, doc.Rev, setting)
 		if err == nil {
 			if setting != nil {
+				d.publishArrangementChanged(d.crewProfileID(member.ID))
 				d.publishMigrationChanged(d.crewProfileID(member.ID))
 			}
 			wire := d.crewMemberWire(member, revision)

@@ -3,6 +3,7 @@ package store
 import (
 	"database/sql"
 	"errors"
+	"slices"
 
 	"github.com/victorarias/attn/internal/profilemigration"
 	"github.com/victorarias/attn/internal/profiles"
@@ -26,6 +27,8 @@ type ProfileMigrationFinish struct {
 	View     ProfileMigrationView
 	Finished bool
 	Profile  profiles.Profile
+	// LaunchProfileIDs gained the desktops the launch review created.
+	LaunchProfileIDs []string
 }
 
 func loadProfileMigration(tx *sql.Tx) (ProfileMigrationView, error) {
@@ -43,7 +46,7 @@ func loadProfileMigration(tx *sql.Tx) (ProfileMigrationView, error) {
 		return view, err
 	}
 	if state.Phase == profilemigration.PhaseLaunchRequired {
-		if view.LaunchItems, err = migrationLaunchItems(tx); err != nil {
+		if view.LaunchItems, err = launchItems(tx); err != nil {
 			return view, err
 		}
 		seen := map[string]bool{}
@@ -93,7 +96,7 @@ func loadLaunchPreview(tx *sql.Tx, view *ProfileMigrationView) error {
 		return nil
 	}
 	var err error
-	view.LaunchItems, err = migrationLaunchItems(tx)
+	view.LaunchItems, err = launchItems(tx)
 	return err
 }
 
@@ -156,10 +159,16 @@ func (s *Store) FinishProfileMigration(expectedRevision int64) (ProfileMigration
 			if err := requireRevision("migration", "draft", expectedRevision, view.State.Revision); err != nil {
 				return err
 			}
-			if err := finishLaunchMigration(tx, &view); err != nil {
+			result = ProfileMigrationFinish{View: view, Finished: true}
+			for _, item := range view.LaunchItems {
+				if item.DesktopID == "" && !slices.Contains(result.LaunchProfileIDs, item.ProfileID) {
+					result.LaunchProfileIDs = append(result.LaunchProfileIDs, item.ProfileID)
+				}
+			}
+			if err := finishLaunchMigration(tx, now, &view); err != nil {
 				return err
 			}
-			result = ProfileMigrationFinish{View: view, Finished: true}
+			result.View = view
 			return nil
 		}
 		if err := requirePlacement(view, expectedRevision); err != nil {
@@ -181,7 +190,7 @@ func (s *Store) FinishProfileMigration(expectedRevision int64) (ProfileMigration
 			return err
 		}
 		view.State.Phase = profilemigration.PhaseComplete
-		items, err := migrationLaunchItems(tx)
+		items, err := launchItems(tx)
 		if err != nil {
 			return err
 		}
@@ -228,9 +237,9 @@ func writeMigrationOutcome(tx *sql.Tx, now string, profile *profiles.Profile, cu
 			desktop.OrderKey = lastKey
 			desktop.ID, desktop.ProfileID, desktop.Revision = newDesktopID(profile.ID, desktop.ShortcutSlot), profile.ID, 0
 			if _, err := tx.Exec(`
-				INSERT INTO desktops (id, profile_id, name, shortcut_slot, order_key, tree_json, active_pane_id, revision, created_at, updated_at)
-				VALUES (?, ?, '', ?, ?, '', '', 0, ?, ?)`,
-				desktop.ID, profile.ID, slotValue(desktop.ShortcutSlot), desktop.OrderKey, now, now); err != nil {
+				INSERT INTO desktops (id, profile_id, name, order_key, tree_json, active_pane_id, revision, created_at, updated_at)
+				VALUES (?, ?, '', ?, '', '', 0, ?, ?)`,
+				desktop.ID, profile.ID, desktop.OrderKey, now, now); err != nil {
 				return err
 			}
 		}

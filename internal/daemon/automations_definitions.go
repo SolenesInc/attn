@@ -111,16 +111,15 @@ func (d *Daemon) automationApplyLocked(ctx context.Context, spec automation.Defi
 		}
 	}
 	var setting *store.LaunchDesktopSetting
-	if launch != nil && launch.setting != nil {
-		chosen := storeLaunchSetting(*launch.setting)
-		setting = &chosen
+	if launch != nil {
+		setting = storeLaunchSetting(launch.setting)
 	}
 	if launch != nil && launch.ref != nil {
 		owner := profileID
 		if existing != nil && existing.DeletedAt == nil {
 			owner = existing.ProfileID
 		}
-		chosen, err := d.namedLaunchDesktopFromRef(owner, "automation", *launch.ref, launch.name)
+		chosen, err := d.launchDesktopFromRef(owner, spec.Name, *launch.ref, launch.name)
 		if err != nil {
 			return nil, err
 		}
@@ -132,6 +131,9 @@ func (d *Daemon) automationApplyLocked(ctx context.Context, spec automation.Defi
 	}
 	if err := d.rotateContinuityBindingsIfContractChanged(existing, spec, definition); err != nil {
 		return definition, err
+	}
+	if setting != nil || existing == nil || existing.DeletedAt != nil {
+		d.publishArrangementChanged(definition.ProfileID)
 	}
 	d.broadcastAutomationsChanged(spec.ID)
 	if definition.Enabled {

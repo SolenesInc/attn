@@ -208,6 +208,9 @@ func (d *Daemon) handleMigrationFinish(client *wsClient, msg *protocol.Migration
 			if finish.Profile.ID != "" {
 				d.publishArrangementChanged(finish.Profile.ID)
 			}
+			for _, profileID := range finish.LaunchProfileIDs {
+				d.publishArrangementChanged(profileID)
+			}
 			d.publishMigrationChanged(finish.View.Manifest.ProfileID)
 		}, nil
 	})

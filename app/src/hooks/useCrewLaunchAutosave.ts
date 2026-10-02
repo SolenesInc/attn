@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo } from 'react';
 import type { CrewMember, LaunchDesktopSetting } from '../types/generated';
 import type { CrewMutationOutcome } from './daemonCrewEvents';
 import { useAutosave, type AutosaveSpec, type AutosaveState } from './useAutosave';
+import { desktopIdSlot } from '../utils/desktops';
 
 export interface CrewLaunchSelection {
   agent: string;
@@ -35,14 +36,17 @@ const selectionFromMember = (member: CrewMember): CrewLaunchSelection => ({
   launchDesktop: member.launch_desktop,
 });
 
+// A new desktop choice is saved once the member starts on a desktop of that name and number.
+const savedLabel = (wanted: LaunchDesktopSetting) => {
+  const slot = desktopIdSlot(wanted.desktop_id);
+  return slot ? `${slot} · ${wanted.desktop_name}` : `${wanted.desktop_name} (no ⌘ number)`;
+};
+
 const merge = (pending: Partial<CrewLaunchSelection>, member: CrewMember): CrewLaunchSelection => {
   const wanted = pending.launchDesktop;
   const saved = member.launch_desktop;
-  const sameDesktop = wanted && saved && (
-    wanted.destination_id ? wanted.destination_id === saved.destination_id
-      : wanted.desktop_id ? wanted.desktop_id === saved.desktop_id
-      : wanted.mode === saved.mode && wanted.desktop_name === saved.desktop_name
-        && (wanted.shortcut_slot ?? 0) === (saved.shortcut_slot ?? 0)
+  const sameDesktop = wanted && saved?.desktop_id && (
+    wanted.desktop_name ? saved.label === savedLabel(wanted) : wanted.desktop_id === saved.desktop_id
   );
   return { ...selectionFromMember(member), ...pending, ...(sameDesktop ? { launchDesktop: saved } : {}) };
 };

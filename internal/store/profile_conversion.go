@@ -440,9 +440,9 @@ func writeProfileConversion(tx *sql.Tx, result convertedWorkspaces) error {
 		desktop.ProfileID = profileID
 		desktop.OrderKey = orderKeys[i]
 		if _, err := tx.Exec(`
-			INSERT INTO desktops (id, profile_id, name, shortcut_slot, order_key, tree_json, active_pane_id, revision, created_at, updated_at)
-			VALUES (?, ?, '', ?, ?, '', '', 1, ?, ?)`,
-			desktop.ID, profileID, slotValue(desktop.ShortcutSlot), desktop.OrderKey, now, now); err != nil {
+			INSERT INTO desktops (id, profile_id, name, order_key, tree_json, active_pane_id, revision, created_at, updated_at)
+			VALUES (?, ?, '', ?, '', '', 1, ?, ?)`,
+			desktop.ID, profileID, desktop.OrderKey, now, now); err != nil {
 			return fmt.Errorf("creating desktop for slot %d: %w", desktop.ShortcutSlot, err)
 		}
 		desktop.Revision = 0

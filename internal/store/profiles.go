@@ -209,14 +209,15 @@ func ensureLiveProfileNameFree(tx *sql.Tx, name, exceptID string) error {
 	return nil
 }
 
-const desktopColumns = `id, profile_id, name, COALESCE(shortcut_slot, 0), order_key, tree_json, active_pane_id, revision`
+const desktopColumns = `id, profile_id, name, order_key, tree_json, active_pane_id, revision`
 
 func scanDesktopRow(row rowScanner) (profiles.Desktop, error) {
 	var desktop profiles.Desktop
 	var treeJSON string
-	if err := row.Scan(&desktop.ID, &desktop.ProfileID, &desktop.Name, &desktop.ShortcutSlot, &desktop.OrderKey, &treeJSON, &desktop.ActivePaneID, &desktop.Revision); err != nil {
+	if err := row.Scan(&desktop.ID, &desktop.ProfileID, &desktop.Name, &desktop.OrderKey, &treeJSON, &desktop.ActivePaneID, &desktop.Revision); err != nil {
 		return profiles.Desktop{}, err
 	}
+	desktop.ShortcutSlot = profiles.DesktopSlot(desktop.ID)
 	tree, err := layouttree.DecodeLayout(treeJSON)
 	if err != nil {
 		return profiles.Desktop{}, profiles.Errorf(profiles.CodeInvalid, "desktop %s has a stored tree that does not decode: %v", desktop.ID, err)
@@ -306,9 +307,9 @@ func insertDesktop(tx *sql.Tx, now, profileID, name string, slot int) (profiles.
 		Revision:     1,
 	}
 	_, err := tx.Exec(`
-		INSERT INTO desktops (id, profile_id, name, shortcut_slot, order_key, tree_json, active_pane_id, revision, created_at, updated_at)
-		VALUES (?, ?, ?, ?, ?, '', '', 1, ?, ?)`,
-		desktop.ID, profileID, desktop.Name, slotValue(slot), desktop.OrderKey, now, now)
+		INSERT INTO desktops (id, profile_id, name, order_key, tree_json, active_pane_id, revision, created_at, updated_at)
+		VALUES (?, ?, ?, ?, '', '', 1, ?, ?)`,
+		desktop.ID, profileID, desktop.Name, desktop.OrderKey, now, now)
 	return desktop, err
 }
 
@@ -319,19 +320,12 @@ func newDesktopID(profileID string, slot int) string {
 	return profiles.NumberedDesktopID(profileID, slot)
 }
 
-func slotValue(slot int) any {
-	if slot == 0 {
-		return nil
-	}
-	return slot
-}
-
 func ensureShortcutSlotFree(tx *sql.Tx, profileID string, slot int) error {
 	if slot == 0 {
 		return nil
 	}
-	var holder string
-	taken, err := rowFound(tx.QueryRow(`SELECT id FROM desktops WHERE profile_id = ? AND shortcut_slot = ?`, profileID, slot), &holder)
+	holder := profiles.NumberedDesktopID(profileID, slot)
+	taken, err := rowFound(tx.QueryRow(`SELECT 1 FROM desktops WHERE id = ?`, holder), new(int))
 	if err != nil {
 		return err
 	}
@@ -342,13 +336,13 @@ func ensureShortcutSlotFree(tx *sql.Tx, profileID string, slot int) error {
 }
 
 func lowestFreeShortcutSlot(tx *sql.Tx, profileID string) (int, error) {
-	slots, err := queryColumn[int](tx, `SELECT shortcut_slot FROM desktops WHERE profile_id = ? AND shortcut_slot IS NOT NULL`, profileID)
+	ids, err := queryColumn[string](tx, `SELECT id FROM desktops WHERE profile_id = ?`, profileID)
 	if err != nil {
 		return 0, err
 	}
-	taken := make(map[int]bool, len(slots))
-	for _, slot := range slots {
-		taken[slot] = true
+	taken := make(map[int]bool, len(ids))
+	for _, id := range ids {
+		taken[profiles.DesktopSlot(id)] = true
 	}
 	for slot := profiles.FirstShortcutSlot; slot <= profiles.LastShortcutSlot; slot++ {
 		if !taken[slot] {
@@ -532,6 +526,9 @@ func deleteProfileDesktops(tx *sql.Tx, profileID string) error {
 	if _, err := tx.Exec(`DELETE FROM desktop_panes WHERE desktop_id IN (SELECT id FROM desktops WHERE profile_id = ?)`, profileID); err != nil {
 		return err
 	}
+	if _, err := tx.Exec(`DELETE FROM launch_desktops WHERE desktop_id IN (SELECT id FROM desktops WHERE profile_id = ?)`, profileID); err != nil {
+		return err
+	}
 	_, err := tx.Exec(`DELETE FROM desktops WHERE profile_id = ?`, profileID)
 	return err
 }
@@ -585,9 +582,6 @@ func (s *Store) DeleteProfile(id string, expectedRevision int64, destinationID s
 			return err
 		}
 		if _, err := tx.Exec(`UPDATE sessions SET profile_id = ? WHERE profile_id = ? AND closed_at = ''`, destinationID, id); err != nil {
-			return err
-		}
-		if _, err := tx.Exec(`UPDATE launch_destinations SET profile_id = ? WHERE profile_id = ?`, destinationID, id); err != nil {
 			return err
 		}
 		if result.MovedAutomationIDs, err = moveProfileAutomations(tx, id, destinationID, now); err != nil {
@@ -728,7 +722,7 @@ func (s *Store) CrewProfile(memberID string) (string, error) {
 
 func (s *Store) EnsureCrewProfile(memberID, profileID string) (string, error) {
 	var assigned string
-	err := s.profilesTx(func(tx *sql.Tx, _ string) error {
+	err := s.profilesTx(func(tx *sql.Tx, now string) error {
 		err := tx.QueryRow(`SELECT profile_id FROM crew_profiles WHERE member_id = ?`, memberID).Scan(&assigned)
 		if !errors.Is(err, sql.ErrNoRows) {
 			return err
@@ -737,8 +731,10 @@ func (s *Store) EnsureCrewProfile(memberID, profileID string) (string, error) {
 			return err
 		}
 		assigned = profileID
-		_, err = tx.Exec(`INSERT INTO crew_profiles(member_id, profile_id) VALUES (?, ?)`, memberID, profileID)
-		return err
+		if _, err = tx.Exec(`INSERT INTO crew_profiles(member_id, profile_id) VALUES (?, ?)`, memberID, profileID); err != nil {
+			return err
+		}
+		return startOnOwnDesktop(tx, now, "crew", memberID)
 	})
 	return assigned, err
 }
@@ -800,9 +796,9 @@ func saveDesktop(tx *sql.Tx, now string, desktop *profiles.Desktop) error {
 	}
 	desktop.Revision++
 	_, err := tx.Exec(`
-		UPDATE desktops SET name = ?, shortcut_slot = ?, order_key = ?, tree_json = ?, active_pane_id = ?, revision = ?, updated_at = ?
+		UPDATE desktops SET name = ?, order_key = ?, tree_json = ?, active_pane_id = ?, revision = ?, updated_at = ?
 		WHERE id = ?`,
-		desktop.Name, slotValue(desktop.ShortcutSlot), desktop.OrderKey, treeJSON, desktop.ActivePaneID, desktop.Revision, now, desktop.ID)
+		desktop.Name, desktop.OrderKey, treeJSON, desktop.ActivePaneID, desktop.Revision, now, desktop.ID)
 	return err
 }
 
@@ -830,7 +826,7 @@ func (s *Store) RenameDesktop(id, name string, expectedRevision int64) (profiles
 			return nil
 		}
 		desktop.Name = strings.TrimSpace(name)
-		return appendBoundLaunchDesktopFacts(tx, desktop.ID)
+		return appendLaunchDesktopFacts(tx, desktop.ID)
 	})
 }
 
@@ -1662,8 +1658,5 @@ func moveCrewMember(tx *sql.Tx, memberID, profileID string) (string, error) {
 	}
 	_, err := tx.Exec(`INSERT INTO crew_profiles(member_id, profile_id) VALUES (?, ?)
 		ON CONFLICT(member_id) DO UPDATE SET profile_id = excluded.profile_id`, memberID, profileID)
-	if err == nil {
-		err = moveLaunchItemProfile(tx, "crew", memberID, profileID)
-	}
 	return memberID, err
 }

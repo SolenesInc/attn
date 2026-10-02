@@ -924,6 +924,7 @@ export function AutomationForm({
           setSaving(false);
           setLoadedId(result.definition.id);
           setRevision(result.definition.revision);
+          setLaunchDesktop(result.definition.launch_desktop);
           setEnabledState(result.definition.enabled);
           onSaved(result.definition);
         })

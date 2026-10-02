@@ -5521,11 +5521,6 @@ type LaunchDesktopKind string
 const LaunchDesktopKindAutomation LaunchDesktopKind = "automation"
 const LaunchDesktopKindCrew LaunchDesktopKind = "crew"
 
-type LaunchDesktopMode string
-
-const LaunchDesktopModeDesktop LaunchDesktopMode = "desktop"
-const LaunchDesktopModeOwn LaunchDesktopMode = "own"
-
 type LaunchDesktopResultMessage struct {
 	// Action corresponds to the JSON schema field "action".
 	Action string `json:"action"`
@@ -5572,7 +5567,7 @@ type LaunchDesktopSetMessage struct {
 	RequestID string `json:"request_id"`
 
 	// Setting corresponds to the JSON schema field "setting".
-	Setting LaunchDesktopSetting `json:"setting"`
+	Setting *LaunchDesktopSetting `json:"setting,omitempty,omitzero"`
 }
 
 type LaunchDesktopSetting struct {
@@ -5582,23 +5577,8 @@ type LaunchDesktopSetting struct {
 	// DesktopName corresponds to the JSON schema field "desktop_name".
 	DesktopName *string `json:"desktop_name,omitempty,omitzero"`
 
-	// DestinationID corresponds to the JSON schema field "destination_id".
-	DestinationID *string `json:"destination_id,omitempty,omitzero"`
-
 	// Label corresponds to the JSON schema field "label".
 	Label *string `json:"label,omitempty,omitzero"`
-
-	// Mode corresponds to the JSON schema field "mode".
-	Mode LaunchDesktopMode `json:"mode"`
-
-	// OwnerID corresponds to the JSON schema field "owner_id".
-	OwnerID *string `json:"owner_id,omitempty,omitzero"`
-
-	// OwnerKind corresponds to the JSON schema field "owner_kind".
-	OwnerKind *LaunchDesktopKind `json:"owner_kind,omitempty,omitzero"`
-
-	// Pending corresponds to the JSON schema field "pending".
-	Pending *bool `json:"pending,omitempty,omitzero"`
 }
 
 type LayoutDockEdge string

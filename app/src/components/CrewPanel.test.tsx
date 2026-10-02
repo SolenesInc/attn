@@ -1,6 +1,6 @@
 import { act, fireEvent, screen, within } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { CrewRestartState, LaunchDesktopMode, type CrewMember } from '../types/generated';
+import { CrewRestartState, type CrewMember } from '../types/generated';
 import {
   agentPane,
   soloDesktop,
@@ -191,14 +191,14 @@ describe('CrewPanel', () => {
     expect(daemon.sentOf('delegation_preferences_get')).toHaveLength(1);
   });
 
-  it('keeps the acknowledged own destination when another launch field changes during its save', async () => {
+  it('keeps the acknowledged new desktop when another launch field changes during its save', async () => {
     const { daemon, answer } = await renderPanel({ members: [member('keel', 5, { resolved_agent: 'codex' })], script: { crew_set: [HOLD] } });
-    await gesture(daemon, () => fireEvent.change(panel().getByLabelText('Desktop'), { target: { value: '__own' } }));
-    const dialog = screen.getByRole('dialog', { name: 'Its own desktop' });
+    await gesture(daemon, () => fireEvent.change(panel().getByLabelText('Desktop'), { target: { value: '__new' } }));
+    const dialog = screen.getByRole('dialog', { name: 'A new desktop' });
     fireEvent.change(within(dialog).getByRole('textbox', { name: 'Name' }), { target: { value: 'Review' } });
     await gesture(daemon, () => fireEvent.click(within(dialog).getByRole('button', { name: 'Use this name' })));
     fireEvent.change(panel().getByLabelText('Model'), { target: { value: 'openai/gpt-6-astra' } });
-    const launch_desktop = { mode: LaunchDesktopMode.Own, desktop_name: 'Review', destination_id: 'review-destination', pending: true, label: 'Review (no ⌘ number)' };
+    const launch_desktop = { desktop_id: 'desktop-review', label: 'Review (no ⌘ number)' };
     await answer(daemon.sentOf('crew_set')[0], saved({ member: member('keel', 6, { resolved_agent: 'codex', launch_desktop }) }));
     expect(daemon.sentOf('crew_set')).toHaveLength(2);
     expect(daemon.sentOf('crew_set')[1].launch_desktop_setting).toEqual(launch_desktop);

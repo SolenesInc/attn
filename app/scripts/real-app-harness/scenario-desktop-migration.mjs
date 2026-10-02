@@ -49,7 +49,6 @@ function legacyWorkspacesSql(fixtureDir) {
     'DELETE FROM profile_migration;',
     // A pre-profile install has no launch rows and no crew or automation profiles.
     'DELETE FROM launch_desktops;',
-    'DELETE FROM launch_destinations;',
     'DELETE FROM crew_profiles;',
     "UPDATE automation_definitions SET profile_id = '';",
     // A disabled automation makes the launch step follow placement on every run.
@@ -335,15 +334,18 @@ async function main() {
       await client.request('dom_click', { selector: '.mp-bottom-right .mp-button.primary' });
       await client.request('dom_wait', { selector: '.mp-launch-row[data-launch-item="mig-check"]', timeoutMs: 10_000 });
       runner.assert(queryDaemonDb(dbPath, 'SELECT phase FROM profile_migration;') === 'launch_required', 'Placement finish did not open the launch step');
+      const suggested = "SELECT d.name FROM launch_desktops l JOIN desktops d ON d.id = l.desktop_id WHERE l.kind = 'automation' AND l.item_id = 'mig-check';";
+      runner.assert(queryDaemonDb(dbPath, suggested) === '', 'The suggested desktop existed before Finish');
       await client.request('dom_click', { selector: '.mp-launch-footer .primary' });
       await waitForText('main', 'Your Default profile is ready.');
       runner.assert(queryDaemonDb(dbPath, 'SELECT phase FROM profile_migration;') === 'complete', 'Finish did not commit');
+      runner.assert(queryDaemonDb(dbPath, suggested) === 'Migration check', 'Finish did not start mig-check on a new desktop named after it');
       const shell = await client.request('dom_wait', { selector: '.app', absent: true, timeoutMs: 2_000 });
       runner.assert(Boolean(shell), 'The normal shell mounted before Continue');
       await screenshot('05-done.png');
       await driver.pressKey('Enter');
       await client.waitForFrontendResponsive(30_000);
-      const rows = queryDaemonDb(dbPath, `SELECT d.shortcut_slot || ':' || p.session_id FROM desktop_panes p JOIN desktops d ON d.id = p.desktop_id WHERE p.session_id LIKE 'mig-agent-%' ORDER BY 1;`);
+      const rows = queryDaemonDb(dbPath, `SELECT replace(substr(d.id, instr(d.id, '/') + 1), 'desktop_', '') || ':' || p.session_id FROM desktop_panes p JOIN desktops d ON d.id = p.desktop_id WHERE p.session_id LIKE 'mig-agent-%' ORDER BY 1;`);
       for (const agent of [...agentsOf(1), ...agentsOf(2)]) {
         runner.assert(rows.includes(`1:${agent}`), `${agent} is not on Desktop 1 after finish:\n${rows}`);
       }

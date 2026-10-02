@@ -1,6 +1,5 @@
 import type { BackgroundLaunchMessage, LaunchDesktopResultMessage } from '../types/generated';
 import { useToastStore } from '../store/toasts';
-import { useLaunchDesktopStore } from '../store/launchDesktops';
 import { settlePendingRequest, type PendingRequests } from './daemonPendingRequests';
 
 export function handleLaunchDesktopEvent(event: { event?: string }, pending: PendingRequests): boolean {
@@ -19,12 +18,6 @@ export function handleLaunchDesktopEvent(event: { event?: string }, pending: Pen
   }
   if (event.event !== 'launch_desktop_result') return false;
   const result = event as LaunchDesktopResultMessage;
-  if (result.success && result.item && result.items) {
-    useLaunchDesktopStore.getState().receiveItems(result.items, result.item.profile_id);
-  }
-  if (result.success && !result.item && result.action === 'launch_desktop_get') {
-    useLaunchDesktopStore.getState().receiveCatalog(result.items ?? []);
-  }
   settlePendingRequest(
     pending,
     result.action,

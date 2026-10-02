@@ -1338,7 +1338,7 @@ func socketLive(path string) bool {
 
 func (c *Client) SetAutomationLaunchDesktop(id, desktop string, name *string) (*protocol.LaunchDesktopResultMessage, error) {
 	var result protocol.LaunchDesktopResultMessage
-	msg := protocol.LaunchDesktopSetMessage{Cmd: protocol.CmdLaunchDesktopSet, Kind: protocol.LaunchDesktopKindAutomation, ItemID: id, DesktopRef: &desktop, DesktopName: name, Setting: protocol.LaunchDesktopSetting{Mode: protocol.LaunchDesktopModeDesktop}}
+	msg := protocol.LaunchDesktopSetMessage{Cmd: protocol.CmdLaunchDesktopSet, Kind: protocol.LaunchDesktopKindAutomation, ItemID: id, DesktopRef: &desktop, DesktopName: name}
 	if err := c.sendAutomation(msg, &result); err != nil {
 		return nil, err
 	}

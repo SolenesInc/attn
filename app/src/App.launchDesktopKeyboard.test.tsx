@@ -2,7 +2,7 @@ import { fireEvent, screen, within } from '@testing-library/react';
 import { describe, expect, it } from 'vitest';
 import { gesture, renderApp } from './test/renderApp';
 import { emptyDesktop } from './test/daemonFixtures';
-import { LaunchDesktopKind, LaunchDesktopMode, MigrationPhase } from './types/generated';
+import { LaunchDesktopKind, MigrationPhase } from './types/generated';
 
 const crewItem = (id: string) => ({
   kind: LaunchDesktopKind.Crew,
@@ -10,7 +10,7 @@ const crewItem = (id: string) => ({
   name: id,
   profile_id: 'default',
   confirmed: false,
-  setting: { mode: LaunchDesktopMode.Own, desktop_name: id, destination_id: id, label: `${id} (no ⌘ number)`, pending: true },
+  setting: { label: `${id} (new)` },
 });
 
 async function openLedger() {
@@ -22,7 +22,7 @@ async function openLedger() {
   const { daemon } = await renderApp({ initialState: { migration_phase: MigrationPhase.LaunchRequired }, script(daemon) {
     daemon.on('migration_get', () => ({ event: 'migration_result', action: 'migration_get', success: true, state }));
     daemon.on('launch_desktop_set', ({ kind, item_id, setting }) => {
-      const item = { ...state.launch_items!.find((candidate) => candidate.item_id === item_id)!, confirmed: true, setting: { ...setting, pending: false, label: 'Desktop 1' } };
+      const item = { ...state.launch_items!.find((candidate) => candidate.item_id === item_id)!, confirmed: true, setting: { desktop_id: setting?.desktop_id ?? 'created', label: 'Desktop 1' } };
       state = { ...state, revision: state.revision + 1, launch_items: state.launch_items!.map((candidate) => candidate.item_id === item_id ? item : candidate) };
       return { event: 'launch_desktop_result', action: 'launch_desktop_set', kind, item_id, success: true, item, items: state.launch_items };
     });
@@ -47,21 +47,24 @@ describe('launch desktop ledger keyboard', () => {
     await press({ key: 'Enter', metaKey: true });
 
     expect(daemon.sentOf('launch_desktop_set').map(({ item_id, setting }) => ({ item_id, setting }))).toEqual([
-      { item_id: 'Keel', setting: { mode: LaunchDesktopMode.Desktop, desktop_id: 'd1' } },
+      { item_id: 'Keel', setting: { desktop_id: 'd1' } },
     ]);
     expect(daemon.sentOf('migration_finish').map(({ expected_revision }) => expected_revision)).toEqual([10]);
   });
 
-  it('gives the selected agent its own desktop on an empty slot by that slot\'s desktop id', async () => {
+  it('gives the selected agent a new desktop on an empty slot by that slot\'s desktop id, created on finish', async () => {
     const daemon = await openLedger();
 
     await gesture(daemon, () => fireEvent.keyDown(document.activeElement!, { key: '5' }));
-    const dialog = screen.getByRole('dialog', { name: 'Its own desktop' });
+    const dialog = screen.getByRole('dialog', { name: 'A new desktop' });
     expect(dialog).toHaveTextContent('On ⌘5.');
     await gesture(daemon, () => fireEvent.click(within(dialog).getByRole('button', { name: 'Use this name' })));
+    expect(daemon.sentOf('launch_desktop_set')).toEqual([]);
+    await gesture(daemon, () => fireEvent.keyDown(document.activeElement!, { key: 'Enter', metaKey: true }));
 
     expect(daemon.sentOf('launch_desktop_set').map(({ item_id, setting }) => ({ item_id, setting }))).toEqual([
-      { item_id: 'Alder', setting: { mode: LaunchDesktopMode.Own, desktop_name: 'Alder', desktop_id: 'default/desktop_5' } },
+      { item_id: 'Alder', setting: { desktop_name: 'Alder', desktop_id: 'default/desktop_5' } },
     ]);
+    expect(daemon.sentOf('migration_finish').map(({ expected_revision }) => expected_revision)).toEqual([10]);
   });
 });

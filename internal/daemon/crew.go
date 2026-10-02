@@ -34,16 +34,10 @@ func (d *Daemon) ensureCrewCollections() {
 func (d *Daemon) importCrewHomes() {
 	d.registerCrewHomes()
 	d.assignCrewProfiles()
-	members, _, err := d.readCrewMembersRaw()
-	if err != nil {
-		d.logf("crew: reading launch review roster: %v", err)
+	if d.store == nil || d.requireHome(crew.Surface) != nil {
 		return
 	}
-	ids := make([]string, 0, len(members))
-	for _, member := range members {
-		ids = append(ids, member.ID)
-	}
-	if err := d.store.PrepareLaunchMigration(ids); err != nil {
+	if err := d.store.PrepareLaunchMigration(); err != nil {
 		d.logf("launch desktop migration: %v", err)
 	}
 }

@@ -348,7 +348,7 @@ func parseCrewSetArgs(args []string) (crewSetArgs, error) {
 	agent := fs.String("agent", "", "the harness the member's days run on; empty goes back to the default")
 	model := fs.String("model", "", "the model the member's days run on; empty goes back to the configured default")
 	effort := fs.String("effort", "", "the reasoning effort the member's days run on; empty goes back to the harness default")
-	desktopName := fs.String("desktop-name", "", "name for its own desktop (defaults to the member name)")
+	desktopName := fs.String("desktop-name", "", "name for the new desktop of own or an empty slot (defaults to the member name)")
 	desktop := fs.String("launch-desktop", "", "own, an empty slot (5–9), or a desktop digit, name or id in this member profile")
 	var dirs crewDirList
 	fs.Var(&dirs, "awareness-dir", "a directory the member's charter is about; repeat for several")
@@ -436,10 +436,7 @@ func printCrewList(w io.Writer, members []protocol.CrewMember) {
 
 func launchDesktopText(setting *protocol.LaunchDesktopSetting) string {
 	if setting == nil {
-		return "its own desktop"
+		return "-"
 	}
-	if setting.Label != nil {
-		return *setting.Label
-	}
-	return protocol.Deref(setting.DesktopName)
+	return protocol.Deref(setting.Label)
 }

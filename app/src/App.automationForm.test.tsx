@@ -190,34 +190,22 @@ describe('App automation form', () => {
   });
 
   describe('creating', () => {
-    it('offers confirmed pending destinations before the new automation exists', async () => {
+    it('offers the profile\'s desktops before the new automation exists', async () => {
       const daemon = await openNew({ definitions: [] }, (scripted) => {
         scripted.on('launch_desktop_get', () => ({
           event: 'launch_desktop_result',
           action: 'launch_desktop_get',
           success: true,
-          desktops: [],
-          items: [
-            {
-              kind: 'crew',
-              item_id: 'reviewer',
-              name: 'Reviewer',
-              profile_id: 'profile-default',
-              confirmed: true,
-              setting: { mode: 'own', destination_id: 'pending-review', desktop_name: 'Review', pending: true },
-            },
+          desktops: [
+            { id: 'review', profile_id: 'profile-default', name: 'Review', order_key: 'a', tree_json: '', active_pane_id: '', panes: [], revision: 1 },
           ],
         }));
       });
       expect(daemon.sentOf('launch_desktop_get').some(({ item_id }) => item_id === '')).toBe(true);
-      expect(screen.getByRole('option', { name: 'Review (new)' })).toBeInTheDocument();
-      fireEvent.change(screen.getByLabelText('Desktop'), { target: { value: 'destination:pending-review' } });
+      fireEvent.change(screen.getByLabelText('Desktop'), { target: { value: 'desktop:review' } });
       fillManual();
       await press(daemon, 'save');
-      expect(daemon.sentOf('automation_apply')[0].launch_desktop_setting).toEqual({
-        mode: 'desktop',
-        destination_id: 'pending-review',
-      });
+      expect(daemon.sentOf('automation_apply')[0].launch_desktop_setting).toEqual({ desktop_id: 'review' });
     });
 
     it('derives the id from the name until the user sets one', async () => {
@@ -346,15 +334,15 @@ describe('App automation form', () => {
       expect(field('sentence')).not.toHaveTextContent('effort');
     });
 
-    it('saves a named launch destination beside the definition without putting it in the spec', async () => {
+    it('saves a new named desktop beside the definition without putting it in the spec', async () => {
       const daemon = await openEdit({ definitions: [definition('d1', { profile_id: 'work' })] });
-      fireEvent.change(screen.getByLabelText('Desktop'), { target: { value: '__own' } });
-      const dialog = screen.getByRole('dialog', { name: 'Its own desktop' });
+      fireEvent.change(screen.getByLabelText('Desktop'), { target: { value: '__new' } });
+      const dialog = screen.getByRole('dialog', { name: 'A new desktop' });
       fireEvent.change(within(dialog).getByRole('textbox', { name: 'Name' }), { target: { value: 'Checks' } });
       await gesture(daemon, () => fireEvent.click(within(dialog).getByRole('button', { name: 'Use this name' })));
       await press(daemon, 'save');
       const request = daemon.sentOf('automation_apply')[0];
-      expect(request.launch_desktop_setting).toEqual({ mode: 'own', desktop_name: 'Checks' });
+      expect(request.launch_desktop_setting).toEqual({ desktop_name: 'Checks' });
       expect(request.profile_id).toBe('work');
       expect(JSON.parse(request.definition_yaml)).not.toHaveProperty('launch_desktop');
     });
@@ -377,7 +365,7 @@ describe('App automation form', () => {
       scene.definitions = [
         definition('d1', {
           revision: 4,
-          launch_desktop: { mode: 'own', desktop_name: 'New checks', label: 'New checks' },
+          launch_desktop: { desktop_id: 'desktop-checks', label: 'New checks' },
         }),
       ];
       scene.spec = manualSpec('Changed elsewhere');

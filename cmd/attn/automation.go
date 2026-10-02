@@ -28,7 +28,7 @@ func runAutomationCommand() {
 			break
 		}
 		fs := flag.NewFlagSet("automation set", flag.ContinueOnError)
-		desktopName := fs.String("desktop-name", "", "name for its own desktop (defaults to the automation name)")
+		desktopName := fs.String("desktop-name", "", "name for the new desktop of own or an empty slot (defaults to the automation name)")
 		desktop := fs.String("launch-desktop", "", "own, an empty slot (5–9), or a desktop digit, name or id")
 		if e := fs.Parse(os.Args[4:]); e != nil {
 			os.Exit(2)
@@ -51,7 +51,7 @@ func runAutomationCommand() {
 
 	case "apply":
 		fs := flag.NewFlagSet("automation apply", flag.ContinueOnError)
-		desktopName := fs.String("desktop-name", "", "name for its own desktop (defaults to the automation name)")
+		desktopName := fs.String("desktop-name", "", "name for the new desktop of own or an empty slot (defaults to the automation name)")
 		desktop := fs.String("launch-desktop", "", "own, an empty slot (5–9), or a desktop digit, name or id of the automation profile")
 		file := fs.String("file", "", "definition YAML")
 		if e := fs.Parse(os.Args[3:]); e != nil {

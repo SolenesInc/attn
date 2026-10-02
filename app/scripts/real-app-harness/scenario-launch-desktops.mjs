@@ -95,27 +95,30 @@ try {
     await capture('02-where-to-change.png');
     await click('.mp-crew-help button');
   });
-  await runner.step('name_and_explicitly_join_one_pending_desktop', async () => {
-    const [owner, joiner] = members;
-    await click(`.mp-launch-row[data-launch-item="${owner.item_id}"] .mp-launch-choice`);
+  await runner.step('name_one_new_desktop_share_it_and_create_it_on_finish', async () => {
+    const [first, second] = members;
+    await click(`.mp-launch-row[data-launch-item="${first.item_id}"] .mp-launch-choice`);
     await wait('dialog input');
     await client.request('dom_type', { selector: 'dialog input', text: 'Launch review' });
     await click('dialog .primary');
-    await wait(`select[aria-label="New desktops for ${joiner.name}"]`);
-    const state = await client.request('migration_get_state');
-    const chosen = state.migration.launch_items.find((item) => item.item_id === owner.item_id);
-    await client.request('dom_select', { selector: `select[aria-label="New desktops for ${joiner.name}"]`, value: chosen.setting.destination_id });
-    await wait(`.mp-launch-row[data-launch-item="${joiner.item_id}"] .mp-launch-result`, { textIncludes: 'Launch review' });
+    await wait(`select[aria-label="New desktops for ${second.name}"]`);
+    await client.request('dom_select', { selector: `select[aria-label="New desktops for ${second.name}"]`, value: '|Launch review' });
+    await wait(`.mp-launch-row[data-launch-item="${second.item_id}"] .mp-launch-result`, { textIncludes: 'Launch review' });
+    const before = (await client.request('migration_get_state')).migration;
+    runner.assert(!before.launch_desktops.some((desktop) => desktop.name === 'Launch review'), 'The new desktop exists only after Finish', before.launch_desktops);
     await wait('.mp-launch-footer .primary:not(:disabled)');
-    await capture('03-shared-pending.png');
+    await capture('03-shared-new-desktop.png');
     await click('.mp-launch-footer .primary');
     await wait('.mp-done');
+    const starts = crew().filter((member) => members.some((item) => item.item_id === member.id)).map((member) => member.launch_desktop);
+    runner.assert(starts.length === 2 && starts[0]?.desktop_id && starts[0].desktop_id === starts[1]?.desktop_id && starts[0].label.includes('Launch review'),
+      'Both members start on the one desktop Finish created', starts);
     await capture('04-finished.png');
     await click('.mp-done .primary');
     await wait('.app');
     await client.request('dismiss_whats_new', {}).catch(() => {});
   });
-  await runner.step('settings_show_the_saved_destination', async () => {
+  await runner.step('settings_show_the_saved_desktop', async () => {
     await launchFreshAppAndConnect(client, observer, { sweepStaleSessions: false });
     for (const member of members) {
       const home = path.join(resources.dataDir, 'crew', member.item_id);

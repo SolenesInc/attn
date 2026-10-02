@@ -4,16 +4,17 @@ import { gesture, pressShortcut, renderApp } from './test/renderApp';
 import { defaultProfile, emptyDesktop, crewMember, daemonSession, soloDesktop } from './test/daemonFixtures';
 import { savedSettings, serveSettings } from './test/settings';
 import { openSession } from './test/appFixtures';
-import { LaunchDesktopKind, LaunchDesktopMode, MigrationPhase } from './types/generated';
+import { LaunchDesktopKind, MigrationPhase } from './types/generated';
 
-const crewItem = (id: string): NonNullable<import('./test/protocol').EventMessage<'launch_desktop_result'>['item']> => ({ kind: LaunchDesktopKind.Crew, item_id: id, name: id, profile_id: 'default', confirmed: false, setting: { mode: LaunchDesktopMode.Own, desktop_name: id, destination_id: id, label: `${id} (no ⌘ number)`, pending: true } });
+const crewItem = (id: string): NonNullable<import('./test/protocol').EventMessage<'launch_desktop_result'>['item']> => ({ kind: LaunchDesktopKind.Crew, item_id: id, name: id, profile_id: 'default', confirmed: false, setting: { label: `${id} (new)` } });
 
 async function openMigration(items: ReturnType<typeof crewItem>[]) {
   let state: import('./test/protocol').EventMessage<'migration_result'>['state'] & {} = { groups: [], desktops: [], can_undo: false, suggestion_available: false, profile_id: 'default', phase: MigrationPhase.LaunchRequired, revision: 9, launch_items: items, launch_desktops: [{ ...emptyDesktop('d1', { shortcut_slot: 1 }), panes: [] }] };
   const view = await renderApp({ initialState: { migration_phase: MigrationPhase.LaunchRequired }, script(daemon) {
     daemon.on('migration_get', () => ({ event: 'migration_result', action: 'migration_get', success: true, state }));
     daemon.on('launch_desktop_set', ({ kind, item_id, setting }) => {
-      const item = { ...state.launch_items!.find((candidate) => candidate.item_id === item_id)!, confirmed: true, setting: { ...setting, destination_id: setting.destination_id || `${item_id}-new`, pending: true, label: `${setting.desktop_name || 'Review'} (no ⌘ number)` } };
+      const desktopId = setting?.desktop_id ?? `desktop-${setting?.desktop_name}`;
+      const item = { ...state.launch_items!.find((candidate) => candidate.item_id === item_id)!, confirmed: true, setting: { desktop_id: desktopId, label: `${desktopId} (no ⌘ number)` } };
       state = { ...state, revision: state.revision + 1, launch_items: state.launch_items!.map((candidate) => candidate.item_id === item_id ? item : candidate) };
       return { event: 'launch_desktop_result', action: 'launch_desktop_set', kind, item_id, success: true, item, items: state.launch_items };
     });
@@ -25,23 +26,25 @@ async function openMigration(items: ReturnType<typeof crewItem>[]) {
 }
 
 describe('launch desktops', () => {
-  it('names an own desktop, explicitly shares it and finishes against the shown revision', async () => {
+  it('names a new desktop, shares it and creates it only when finishing', async () => {
     const { daemon } = await openMigration([crewItem('Alder'), crewItem('Keel')]);
     expect(screen.getByText('Change later in Manage crew')).toBeInTheDocument();
     expect(within(screen.getByRole('navigation', { name: 'Migration steps' })).getByText('Launch desktops')).toHaveAttribute('aria-current', 'step');
     expect(screen.queryByRole('heading', { name: 'Automations' })).not.toBeInTheDocument();
     expect(screen.queryByLabelText('New desktops for Keel')).not.toBeInTheDocument();
-    await gesture(daemon, () => fireEvent.click(screen.getAllByRole('button', { name: 'Its own desktop…' })[0]));
-    const dialog = screen.getByRole('dialog', { name: 'Its own desktop' });
+    await gesture(daemon, () => fireEvent.click(screen.getAllByRole('button', { name: 'A new desktop…' })[0]));
+    const dialog = screen.getByRole('dialog', { name: 'A new desktop' });
     fireEvent.change(within(dialog).getByRole('textbox', { name: 'Name' }), { target: { value: 'Review' } });
     await gesture(daemon, () => fireEvent.click(within(dialog).getByRole('button', { name: 'Use this name' })));
-    expect(screen.getByLabelText('New desktops for Keel')).toBeInTheDocument();
-    await gesture(daemon, () => fireEvent.change(screen.getByLabelText('New desktops for Keel'), { target: { value: 'Alder-new' } }));
-    expect(screen.getByLabelText('New desktops for Keel')).toHaveValue('Alder-new');
+    expect(daemon.sentOf('launch_desktop_set')).toEqual([]);
+    await gesture(daemon, () => fireEvent.change(screen.getByLabelText('New desktops for Keel'), { target: { value: '|Review' } }));
+    const keel = screen.getByText('Keel').closest('[data-launch-item]') as HTMLElement;
+    expect(within(keel).getByText('Review (new)')).toBeInTheDocument();
+    expect(within(keel).getByText('also used by Alder')).toBeInTheDocument();
     await gesture(daemon, () => fireEvent.click(screen.getByRole('button', { name: /Finish setup/ })));
     expect(daemon.sentOf('launch_desktop_set').map(({ item_id, setting }) => ({ item_id, setting }))).toEqual([
-      { item_id: 'Alder', setting: { mode: LaunchDesktopMode.Own, desktop_name: 'Review' } },
-      { item_id: 'Keel', setting: { mode: LaunchDesktopMode.Desktop, destination_id: 'Alder-new' } },
+      { item_id: 'Alder', setting: { desktop_name: 'Review' } },
+      { item_id: 'Keel', setting: { desktop_id: 'desktop-Review' } },
     ]);
     expect(daemon.sentOf('migration_finish').map(({ expected_revision }) => expected_revision)).toEqual([11]);
     expect(screen.getByRole('button', { name: 'Continue →' })).toBeInTheDocument();

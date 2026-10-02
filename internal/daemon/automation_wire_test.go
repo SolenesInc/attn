@@ -65,11 +65,11 @@ func TestAutomationDesktopEditsAdvanceTheRevisionAndRefuseStaleEditors(t *testin
 			ExpectedRevision: protocol.Ptr(revision), LaunchDesktopSetting: &setting, RequestID: protocol.Ptr(request),
 		}, protocol.EventAutomationApplyResult, automationAnswer[protocol.AutomationApplyResultMessage](request))
 	}
-	changed := apply("desktop-edit", created.Revision, protocol.LaunchDesktopSetting{Mode: protocol.LaunchDesktopModeOwn, DesktopName: protocol.Ptr("Checks")})
+	changed := apply("desktop-edit", created.Revision, protocol.LaunchDesktopSetting{DesktopName: protocol.Ptr("Checks")})
 	if !changed.Success || changed.Definition.Revision != created.Revision+1 {
 		t.Fatalf("desktop edit = %+v", changed)
 	}
-	stale := apply("stale-desktop-edit", created.Revision, protocol.LaunchDesktopSetting{Mode: protocol.LaunchDesktopModeOwn, DesktopName: protocol.Ptr("Stale")})
+	stale := apply("stale-desktop-edit", created.Revision, protocol.LaunchDesktopSetting{DesktopName: protocol.Ptr("Stale")})
 	if stale.Success || protocol.Deref(stale.ErrorCode) != "revision_conflict" {
 		t.Fatalf("stale edit = %+v", stale)
 	}
@@ -78,13 +78,13 @@ func TestAutomationDesktopEditsAdvanceTheRevisionAndRefuseStaleEditors(t *testin
 	if !unchanged.Success || unchanged.Definition.Revision != changed.Definition.Revision {
 		t.Fatalf("unchanged desktop = %+v", unchanged)
 	}
-	writeLaunchChoice(app, "automation", created.ID, protocol.LaunchDesktopSetting{Mode: protocol.LaunchDesktopModeOwn, DesktopName: protocol.Ptr("CLI checks")})
+	writeLaunchChoice(app, "automation", created.ID, protocol.LaunchDesktopSetting{DesktopName: protocol.Ptr("CLI checks")})
 	stale = apply("stale-after-cli", changed.Definition.Revision, saved.Setting)
 	if stale.Success || protocol.Deref(stale.ErrorCode) != "revision_conflict" {
 		t.Fatalf("stale after separate desktop write = %+v", stale)
 	}
 	current, err := cli.AutomationDefinition(created.ID)
-	if err != nil || current.Definition.Revision != changed.Definition.Revision+1 || protocol.Deref(current.Definition.LaunchDesktop.DesktopName) != "CLI checks" {
+	if err != nil || current.Definition.Revision != changed.Definition.Revision+1 || protocol.Deref(current.Definition.LaunchDesktop.Label) != "CLI checks (no ⌘ number)" {
 		t.Fatalf("current = %+v (%v)", current, err)
 	}
 }

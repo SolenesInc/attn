@@ -241,10 +241,14 @@ func (s *Store) UpsertAutomationDefinitionWithLaunch(id, name, specJSON, profile
 	if err != nil {
 		return nil, err
 	}
+	stamp := now.UTC().Format(sortableTimeFormat)
 	if launch != nil {
-		if _, err := saveLaunchSetting(tx, "automation", id, *launch, !activation && oldSpec == specJSON); err != nil {
-			return nil, err
-		}
+		err = saveLaunchSetting(tx, stamp, "automation", id, *launch, !activation && oldSpec == specJSON)
+	} else if activation {
+		err = startOnOwnDesktop(tx, stamp, "automation", id)
+	}
+	if err != nil {
+		return nil, err
 	}
 	if enabled && activation {
 		if err := activateAutomationReviewRequestsTx(tx, id, now); err != nil {

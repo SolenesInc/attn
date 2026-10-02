@@ -12,24 +12,23 @@ import (
 	"github.com/victorarias/attn/internal/profiles"
 )
 
+// LaunchDesktopSetting names an existing desktop, or with DesktopName a new desktop to create;
+// a numbered DesktopID then gives the new desktop that ⌘ slot.
 type LaunchDesktopSetting struct {
-	Label         string
-	Mode          string
-	DestinationID string
-	DesktopID     string
-	DesktopName   string
-	Pending       bool
-	OwnerKind     string
-	OwnerID       string
+	DesktopID   string
+	DesktopName string
 }
 
+// LaunchDesktopItem is a crew member or automation and the desktop it starts on. DesktopID is
+// empty only during the launch review, before Finish creates the suggested desktop.
 type LaunchDesktopItem struct {
 	Kind        string
 	ID          string
 	Name        string
 	ProfileID   string
 	ProfileName string
-	Setting     LaunchDesktopSetting
+	DesktopID   string
+	Label       string
 	Confirmed   bool
 }
 
@@ -37,7 +36,7 @@ func launchDesktopName(tx *sql.Tx, desktop profiles.Desktop) (string, error) {
 	if desktop.Name != "" {
 		return desktop.Name, nil
 	}
-	rows, err := tx.Query(`SELECT id, COALESCE(shortcut_slot, 0), order_key FROM desktops WHERE profile_id = ? ORDER BY order_key`, desktop.ProfileID)
+	rows, err := tx.Query(`SELECT id, order_key FROM desktops WHERE profile_id = ?`, desktop.ProfileID)
 	if err != nil {
 		return "", err
 	}
@@ -45,9 +44,10 @@ func launchDesktopName(tx *sql.Tx, desktop profiles.Desktop) (string, error) {
 	var siblings []profiles.Desktop
 	for rows.Next() {
 		var sibling profiles.Desktop
-		if err := rows.Scan(&sibling.ID, &sibling.ShortcutSlot, &sibling.OrderKey); err != nil {
+		if err := rows.Scan(&sibling.ID, &sibling.OrderKey); err != nil {
 			return "", err
 		}
+		sibling.ShortcutSlot = profiles.DesktopSlot(sibling.ID)
 		siblings = append(siblings, sibling)
 	}
 	return profiles.DesktopLabel(desktop, siblings), rows.Err()
@@ -96,161 +96,68 @@ func loadLaunchItem(tx *sql.Tx, kind, id string) (LaunchDesktopItem, error) {
 	if err := tx.QueryRow(`SELECT name FROM profiles WHERE id = ?`, item.ProfileID).Scan(&item.ProfileName); err != nil {
 		return item, err
 	}
-	setting := &item.Setting
-	var own bool
-	err = tx.QueryRow(`SELECT d.id,d.name,d.desktop_id,d.own,a.confirmed FROM launch_desktops a JOIN launch_destinations d ON d.id = a.destination_id WHERE a.kind = ? AND a.item_id = ?`, kind, id).Scan(&setting.DestinationID, &setting.DesktopName, &setting.DesktopID, &own, &item.Confirmed)
+	found, err := rowFound(tx.QueryRow(`SELECT desktop_id,confirmed FROM launch_desktops WHERE kind = ? AND item_id = ?`, kind, id), &item.DesktopID, &item.Confirmed)
 	if err != nil {
 		return item, err
 	}
-	if err := tx.QueryRow(`SELECT kind,item_id FROM launch_desktops WHERE destination_id = ? ORDER BY joined_order LIMIT 1`, setting.DestinationID).Scan(&setting.OwnerKind, &setting.OwnerID); err != nil {
+	if !found {
+		item.Label = item.Name + " (new)"
+		return item, nil
+	}
+	desktop, err := loadDesktop(tx, item.DesktopID)
+	if err != nil {
 		return item, err
 	}
-	setting.Mode = "desktop"
-	if own && setting.OwnerKind == kind && setting.OwnerID == id {
-		setting.Mode = "own"
-	}
-	slot := profiles.DesktopSlot(setting.DesktopID)
-	setting.Label = setting.DesktopName
-	if setting.Label == "" && slot != 0 {
-		setting.Label = fmt.Sprintf("Desktop %d", slot)
-	}
-	setting.Pending = true
-	if setting.DesktopID != "" {
-		desktop, found, err := findDesktop(tx, setting.DesktopID)
-		if err != nil {
-			return item, err
-		}
-		if found {
-			setting.Pending = false
-			if setting.Label, err = launchDesktopName(tx, desktop); err != nil {
-				return item, err
-			}
-		}
-	}
-	setting.Label = launchDesktopLabel(setting.Label, slot)
-	return item, nil
+	name, err := launchDesktopName(tx, desktop)
+	item.Label = launchDesktopLabel(name, desktop.ShortcutSlot)
+	return item, err
 }
 
-// findDesktop reports a missing desktop as not found; a numbered launch destination outlives its desktop.
-func findDesktop(tx *sql.Tx, id string) (profiles.Desktop, bool, error) {
-	desktop, err := loadDesktop(tx, id)
-	var missing *profiles.Error
-	if errors.As(err, &missing) && missing.Code == profiles.CodeNotFound {
-		return desktop, false, nil
-	}
-	return desktop, err == nil, err
-}
-
-func saveLaunchSetting(tx *sql.Tx, kind, id string, setting LaunchDesktopSetting, bumpAutomationRevision bool) (LaunchDesktopItem, error) {
+func saveLaunchSetting(tx *sql.Tx, now string, kind, id string, setting LaunchDesktopSetting, bumpAutomationRevision bool) error {
 	item, err := loadLaunchItem(tx, kind, id)
 	if err != nil {
-		return item, err
+		return err
 	}
-	destination := setting.DestinationID
-	changed := false
-	if destination != "" {
-		if err := tx.QueryRow(`SELECT 1 FROM launch_destinations WHERE id = ?`, destination).Scan(new(int)); err != nil {
-			return item, profiles.Errorf(profiles.CodeNotFound, "launch destination %q does not exist", destination)
-		}
-	} else if setting.Mode == "own" {
-		name := strings.TrimSpace(setting.DesktopName)
-		if name == "" {
-			name = item.Name
-		}
-		desktopID := setting.DesktopID
-		if item.Setting.Mode == "own" {
-			destination = item.Setting.DestinationID
-			if desktopID == "" && profiles.DesktopSlot(item.Setting.DesktopID) == 0 {
-				desktopID = item.Setting.DesktopID
-			}
-		}
-		var holder string
-		held, err := rowFound(tx.QueryRow(`SELECT id FROM launch_destinations WHERE desktop_id = ? AND desktop_id != '' AND id != ?`, desktopID, destination), &holder)
+	desktopID := setting.DesktopID
+	if name := strings.TrimSpace(setting.DesktopName); name != "" {
+		desktop, err := insertDesktop(tx, now, item.ProfileID, name, profiles.DesktopSlot(desktopID))
 		if err != nil {
-			return item, err
+			return err
 		}
-		switch {
-		case held:
-			destination = holder
-		case destination == "":
-			destination = newProfileEntityID("launch")
-			if _, err := tx.Exec(`INSERT INTO launch_destinations(id,profile_id,name,desktop_id) VALUES (?,?,?,?)`, destination, item.ProfileID, name, desktopID); err != nil {
-				return item, err
-			}
-		default:
-			changed = name != item.Setting.DesktopName || desktopID != item.Setting.DesktopID
-			if _, err := tx.Exec(`UPDATE launch_destinations SET name = ?,desktop_id = ? WHERE id = ?`, name, desktopID, destination); err != nil {
-				return item, err
-			}
-			desktop, found, err := findDesktop(tx, desktopID)
-			if err != nil {
-				return item, err
-			}
-			if found && desktop.Name != name {
-				desktop.Name = name
-				if err := saveDesktop(tx, time.Now().UTC().Format(sortableTimeFormat), &desktop); err != nil {
-					return item, err
-				}
-				if _, err := appendBusEventWith(tx, BusEvent{Name: "profile.arrangement.changed", Subject: item.ProfileID}, time.Now()); err != nil {
-					return item, err
-				}
-			}
-			if changed {
-				if err := appendLaunchDestinationFacts(tx, destination); err != nil {
-					return item, err
-				}
-			}
-		}
-	} else if setting.Mode == "desktop" {
-		desktop, err := loadLaunchDesktop(tx, profiles.Profile{ID: item.ProfileID}, setting.DesktopID)
-		if err != nil {
-			return item, err
-		}
-		found, err := rowFound(tx.QueryRow(`SELECT id FROM launch_destinations WHERE desktop_id = ?`, desktop.ID), &destination)
-		if err != nil {
-			return item, err
-		}
-		if !found {
-			name := desktop.Name
-			if desktop.ShortcutSlot == 0 {
-				if name, err = launchDesktopName(tx, desktop); err != nil {
-					return item, err
-				}
-			}
-			destination = newProfileEntityID("launch")
-			if _, err := tx.Exec(`INSERT INTO launch_destinations(id,profile_id,name,desktop_id,own) VALUES (?,?,?,?,0)`, destination, item.ProfileID, name, desktop.ID); err != nil {
-				return item, err
-			}
-		}
-	} else {
-		return item, profiles.Errorf(profiles.CodeInvalid, "unknown launch desktop mode %q; choose own or desktop", setting.Mode)
+		desktopID = desktop.ID
+	} else if _, err := loadLaunchDesktop(tx, profiles.Profile{ID: item.ProfileID}, desktopID); err != nil {
+		return err
 	}
-	if item.Setting.DestinationID != destination || changed {
-		if kind == "automation" && bumpAutomationRevision {
-			if _, err := tx.Exec(`UPDATE automation_definitions SET revision = revision + 1 WHERE id = ?`, id); err != nil {
-				return item, err
-			}
+	if kind == "automation" && bumpAutomationRevision && desktopID != item.DesktopID {
+		if _, err := tx.Exec(`UPDATE automation_definitions SET revision = revision + 1 WHERE id = ?`, id); err != nil {
+			return err
 		}
 	}
-	if item.Setting.DestinationID != destination {
-		if _, err := tx.Exec(`DELETE FROM launch_desktops WHERE kind = ? AND item_id = ?`, kind, id); err != nil {
-			return item, err
-		}
-		if _, err := tx.Exec(`INSERT INTO launch_desktops(kind,item_id,destination_id,confirmed) VALUES (?,?,?,1)`, kind, id, destination); err != nil {
-			return item, err
-		}
-		for _, changedDestination := range []string{item.Setting.DestinationID, destination} {
-			if err := appendLaunchDestinationFacts(tx, changedDestination); err != nil {
-				return item, err
-			}
-		}
-	} else if _, err := tx.Exec(`UPDATE launch_desktops SET confirmed = 1 WHERE kind = ? AND item_id = ?`, kind, id); err != nil {
-		return item, err
+	_, err = tx.Exec(`INSERT INTO launch_desktops(kind,item_id,desktop_id,confirmed) VALUES (?,?,?,1)
+		ON CONFLICT(kind,item_id) DO UPDATE SET desktop_id = excluded.desktop_id, confirmed = 1`, kind, id, desktopID)
+	return err
+}
+
+// startOnOwnDesktop gives a new item a desktop named after it. During the launch review Finish does it instead.
+func startOnOwnDesktop(tx *sql.Tx, now, kind, id string) error {
+	var reviewed bool
+	if err := tx.QueryRow(`SELECT launch_review_complete FROM profile_migration WHERE id = 1`).Scan(&reviewed); err != nil || !reviewed {
+		return err
 	}
-	if _, err := tx.Exec(`DELETE FROM launch_destinations WHERE NOT EXISTS (SELECT 1 FROM launch_desktops WHERE destination_id = launch_destinations.id)`); err != nil {
-		return item, err
+	return createOwnLaunchDesktop(tx, now, kind, id, false)
+}
+
+func createOwnLaunchDesktop(tx *sql.Tx, now, kind, id string, confirmed bool) error {
+	item, err := loadLaunchItem(tx, kind, id)
+	if err != nil || item.DesktopID != "" {
+		return err
 	}
-	return loadLaunchItem(tx, kind, id)
+	desktop, err := insertDesktop(tx, now, item.ProfileID, item.Name, 0)
+	if err != nil {
+		return err
+	}
+	_, err = tx.Exec(`INSERT INTO launch_desktops(kind,item_id,desktop_id,confirmed) VALUES (?,?,?,?)`, kind, id, desktop.ID, confirmed)
+	return err
 }
 
 func (s *Store) LaunchDesktopItem(kind, id string) (LaunchDesktopItem, error) {
@@ -274,64 +181,45 @@ func (s *Store) LaunchDesktopChoices(kind, id string) (LaunchDesktopItem, []prof
 	return item, desktops, err
 }
 
-func (s *Store) SetLaunchDesktop(kind, id string, setting LaunchDesktopSetting) (LaunchDesktopItem, error) {
-	var item LaunchDesktopItem
-	err := s.profilesTx(func(tx *sql.Tx, _ string) error {
-		var err error
-		item, err = saveLaunchSetting(tx, kind, id, setting, true)
-		if err != nil {
-			return err
-		}
-		return nil
+func (s *Store) SetLaunchDesktop(kind, id string, setting LaunchDesktopSetting) error {
+	return s.profilesTx(func(tx *sql.Tx, now string) error {
+		return saveLaunchSetting(tx, now, kind, id, setting, true)
 	})
-	return item, err
 }
 
-func migrationLaunchItems(tx *sql.Tx) ([]LaunchDesktopItem, error) {
-	rows, err := tx.Query(`SELECT kind, item_id FROM launch_desktops ORDER BY kind, item_id`)
-	if err != nil {
-		return nil, err
-	}
-	var keys [][2]string
-	for rows.Next() {
-		var key [2]string
-		if err := rows.Scan(&key[0], &key[1]); err != nil {
-			rows.Close()
-			return nil, err
-		}
-		keys = append(keys, key)
-	}
-	if err := rows.Close(); err != nil {
-		return nil, err
-	}
+var launchItemQueries = [][2]string{
+	{"automation", `SELECT id FROM automation_definitions WHERE deleted_at = '' AND profile_id IN (SELECT id FROM profiles WHERE deleted_at = '') ORDER BY id`},
+	{"crew", `SELECT member_id FROM crew_profiles WHERE profile_id IN (SELECT id FROM profiles WHERE deleted_at = '') ORDER BY member_id`},
+}
+
+func launchItems(tx *sql.Tx) ([]LaunchDesktopItem, error) {
 	items := []LaunchDesktopItem{}
-	for _, key := range keys {
-		item, err := loadLaunchItem(tx, key[0], key[1])
-		var missing *profiles.Error
-		if errors.As(err, &missing) && missing.Code == profiles.CodeNotFound {
-			continue
-		}
+	for _, query := range launchItemQueries {
+		ids, err := queryColumn[string](tx, query[1])
 		if err != nil {
 			return nil, err
 		}
-		items = append(items, item)
+		for _, id := range ids {
+			item, err := loadLaunchItem(tx, query[0], id)
+			if err != nil {
+				return nil, err
+			}
+			items = append(items, item)
+		}
 	}
 	return items, nil
 }
 
-// Crew files are imported after SQL upgrades, so finalize the review roster at startup.
-func (s *Store) PrepareLaunchMigration(crewIDs []string) error {
+// PrepareLaunchMigration opens the launch review once crew files are imported, which happens after SQL upgrades.
+func (s *Store) PrepareLaunchMigration() error {
 	return s.profilesTx(func(tx *sql.Tx, now string) error {
 		var complete bool
-		if err := tx.QueryRow(`SELECT launch_review_complete FROM profile_migration WHERE id = 1`).Scan(&complete); err != nil {
-			return err
-		}
 		var phase string
-		if err := tx.QueryRow(`SELECT phase FROM profile_migration WHERE id = 1`).Scan(&phase); err != nil {
+		if err := tx.QueryRow(`SELECT launch_review_complete, phase FROM profile_migration WHERE id = 1`).Scan(&complete, &phase); err != nil || complete {
 			return err
 		}
 		// Only an upgrade leaves agents without a pane; later, one would be a placement bug.
-		if !complete && phase != profilemigration.PhasePlacementRequired {
+		if phase != profilemigration.PhasePlacementRequired {
 			profileIDs, err := queryColumn[string](tx, `SELECT id FROM profiles WHERE deleted_at = ''`)
 			if err != nil {
 				return err
@@ -346,37 +234,7 @@ func (s *Store) PrepareLaunchMigration(crewIDs []string) error {
 				}
 			}
 		}
-		if _, err := tx.Exec(`UPDATE launch_destinations SET profile_id = (SELECT profile_id FROM automation_definitions WHERE launch_destinations.id = 'automation:' || id) WHERE profile_id = '' AND id IN (SELECT 'automation:' || id FROM automation_definitions)`); err != nil {
-			return err
-		}
-		known := map[string]bool{}
-		for _, id := range crewIDs {
-			known[id] = true
-		}
-		recorded, err := queryColumn[string](tx, `SELECT item_id FROM launch_desktops WHERE kind = 'crew'`)
-		if err != nil {
-			return err
-		}
-		for _, id := range recorded {
-			if !known[id] {
-				if _, err := tx.Exec(`DELETE FROM launch_desktops WHERE kind = 'crew' AND item_id = ?`, id); err != nil {
-					return err
-				}
-			}
-		}
-		if _, err := tx.Exec(`DELETE FROM launch_destinations WHERE NOT EXISTS (SELECT 1 FROM launch_desktops WHERE destination_id = launch_destinations.id)`); err != nil {
-			return err
-		}
-		for _, id := range crewIDs {
-			destination := newProfileEntityID("launch")
-			if _, err := tx.Exec(`INSERT INTO launch_destinations(id,profile_id,name) SELECT ?,profile_id,member_id FROM crew_profiles WHERE member_id = ? AND NOT EXISTS(SELECT 1 FROM launch_desktops WHERE kind = 'crew' AND item_id = member_id); INSERT OR IGNORE INTO launch_desktops(kind,item_id,destination_id) SELECT 'crew',?,id FROM launch_destinations WHERE id = ?`, destination, id, id, destination); err != nil {
-				return err
-			}
-		}
-		if complete {
-			return nil
-		}
-		items, err := migrationLaunchItems(tx)
+		items, err := launchItems(tx)
 		if err != nil {
 			return err
 		}
@@ -389,25 +247,22 @@ func (s *Store) PrepareLaunchMigration(crewIDs []string) error {
 	})
 }
 
-func launchItemDesktop(tx *sql.Tx, now string, profile *profiles.Profile, kind, id string) (profiles.Desktop, error) {
-	if kind == "" {
-		return loadLaunchDesktop(tx, *profile, "")
-	}
-	item, err := loadLaunchItem(tx, kind, id)
-	if err != nil {
+func launchItemDesktop(tx *sql.Tx, profile profiles.Profile, kind, id string) (profiles.Desktop, error) {
+	var desktopID string
+	if _, err := rowFound(tx.QueryRow(`SELECT desktop_id FROM launch_desktops WHERE kind = ? AND item_id = ?`, kind, id), &desktopID); err != nil {
 		return profiles.Desktop{}, err
 	}
-	if desktop, found, err := findDesktop(tx, item.Setting.DesktopID); found || err != nil {
-		return desktop, err
+	return loadLaunchDesktop(tx, profile, desktopID)
+}
+
+// findDesktop reports a missing desktop as not found; a reopened session's last desktop may be gone.
+func findDesktop(tx *sql.Tx, id string) (profiles.Desktop, bool, error) {
+	desktop, err := loadDesktop(tx, id)
+	var missing *profiles.Error
+	if errors.As(err, &missing) && missing.Code == profiles.CodeNotFound {
+		return desktop, false, nil
 	}
-	desktop, err := insertDesktop(tx, now, profile.ID, item.Setting.DesktopName, profiles.DesktopSlot(item.Setting.DesktopID))
-	if err != nil {
-		return desktop, err
-	}
-	if _, err := tx.Exec(`UPDATE launch_destinations SET desktop_id = ? WHERE id = ?`, desktop.ID, item.Setting.DestinationID); err != nil {
-		return desktop, err
-	}
-	return desktop, appendLaunchDestinationFacts(tx, item.Setting.DestinationID)
+	return desktop, err == nil, err
 }
 
 func (s *Store) PlaceBackgroundSession(sessionID, kind, id string, reopen bool) (profiles.Desktop, string, error) {
@@ -438,7 +293,7 @@ func (s *Store) PlaceBackgroundSession(sessionID, kind, id string, reopen bool) 
 				desktop, err = loadLaunchDesktop(tx, profile, "")
 			}
 		} else {
-			desktop, err = launchItemDesktop(tx, now, &profile, kind, id)
+			desktop, err = launchItemDesktop(tx, profile, kind, id)
 		}
 		if err != nil {
 			return err
@@ -456,7 +311,12 @@ func (s *Store) PlaceBackgroundSession(sessionID, kind, id string, reopen bool) 
 	return desktop, paneID, err
 }
 
-func finishLaunchMigration(tx *sql.Tx, view *ProfileMigrationView) error {
+func finishLaunchMigration(tx *sql.Tx, now string, view *ProfileMigrationView) error {
+	for _, item := range view.LaunchItems {
+		if err := createOwnLaunchDesktop(tx, now, item.Kind, item.ID, true); err != nil {
+			return err
+		}
+	}
 	if _, err := tx.Exec(`UPDATE launch_desktops SET confirmed = 1`); err != nil {
 		return err
 	}
@@ -532,12 +392,12 @@ func (s *Store) CommitCrewSettings(w DocumentWrite, fact BusEvent, now time.Time
 		return DocumentWriteResult{}, err
 	}
 	var result DocumentWriteResult
-	err = s.profilesTx(func(tx *sql.Tx, _ string) error {
+	err = s.profilesTx(func(tx *sql.Tx, stamp string) error {
 		results, _, err := commitDocumentWritesWith(tx, []DocumentCommit{{Write: w, Fact: fact}}, []string{table}, now)
 		if err != nil {
 			return err
 		}
-		if _, err := saveLaunchSetting(tx, "crew", w.ID, setting, false); err != nil {
+		if err := saveLaunchSetting(tx, stamp, "crew", w.ID, setting, false); err != nil {
 			return err
 		}
 		result = results[0]
@@ -549,67 +409,21 @@ func (s *Store) CommitCrewSettings(w DocumentWrite, fact BusEvent, now time.Time
 func (s *Store) LaunchDesktopItems(profileID string) ([]LaunchDesktopItem, error) {
 	var items []LaunchDesktopItem
 	err := s.profilesTx(func(tx *sql.Tx, _ string) error {
-		all, err := migrationLaunchItems(tx)
-		if err != nil {
-			return err
-		}
+		all, err := launchItems(tx)
 		for _, item := range all {
 			if item.ProfileID == profileID {
 				items = append(items, item)
 			}
 		}
-		return nil
+		return err
 	})
 	return items, err
 }
 
-func moveLaunchItemProfile(tx *sql.Tx, kind, id, profileID string) error {
-	var destination, owner, name, binding string
-	var own bool
-	err := tx.QueryRow(`SELECT d.id,d.profile_id,d.name,d.desktop_id,d.own FROM launch_desktops a JOIN launch_destinations d ON d.id = a.destination_id WHERE a.kind = ? AND a.item_id = ?`, kind, id).Scan(&destination, &owner, &name, &binding, &own)
-	if errors.Is(err, sql.ErrNoRows) {
-		return nil
-	}
-	if err != nil || owner == profileID {
-		return err
-	}
-	moved := ""
-	if slot := profiles.DesktopSlot(binding); slot != 0 {
-		moved = profiles.NumberedDesktopID(profileID, slot)
-	}
-	var holder string
-	held, err := rowFound(tx.QueryRow(`SELECT id FROM launch_destinations WHERE desktop_id = ? AND desktop_id != ''`, moved), &holder)
-	if err != nil {
-		return err
-	}
-	var count int
-	if err := tx.QueryRow(`SELECT COUNT(*) FROM launch_desktops WHERE destination_id = ?`, destination).Scan(&count); err != nil {
-		return err
-	}
-	switch {
-	case held:
-		_, err = tx.Exec(`UPDATE launch_desktops SET destination_id = ? WHERE kind = ? AND item_id = ?`, holder, kind, id)
-	case count == 1:
-		_, err = tx.Exec(`UPDATE launch_destinations SET profile_id = ?,desktop_id = ? WHERE id = ?`, profileID, moved, destination)
-		return err
-	default:
-		replacement := newProfileEntityID("launch")
-		if _, err := tx.Exec(`INSERT INTO launch_destinations(id,profile_id,name,desktop_id,own) VALUES (?,?,?,?,?)`, replacement, profileID, name, moved, own); err != nil {
-			return err
-		}
-		_, err = tx.Exec(`UPDATE launch_desktops SET destination_id = ? WHERE kind = ? AND item_id = ?`, replacement, kind, id)
-	}
-	if err != nil {
-		return err
-	}
-	_, err = tx.Exec(`DELETE FROM launch_destinations WHERE NOT EXISTS (SELECT 1 FROM launch_desktops WHERE destination_id = launch_destinations.id)`)
-	return err
-}
+const removableDesktop = `tree_json = '' AND name = '' AND id != (SELECT current_desktop_id FROM profiles WHERE id = desktops.profile_id) AND NOT EXISTS (SELECT 1 FROM profile_migration WHERE phase = 'placement_required') AND NOT EXISTS (SELECT 1 FROM launch_desktops WHERE desktop_id = desktops.id)`
 
-const removableDesktop = `tree_json = '' AND name = '' AND id != (SELECT current_desktop_id FROM profiles WHERE id = desktops.profile_id) AND NOT EXISTS (SELECT 1 FROM profile_migration WHERE phase = 'placement_required')`
-
-// stampEmptyDesktops records when each unnamed desktop became empty and not current; true when one just did.
-// It reads first so a read-only profiles transaction never takes SQLite's write lock.
+// stampEmptyDesktops records when each unnamed desktop no item starts on became empty and not current;
+// true when one just did. It reads first so a read-only profiles transaction never takes SQLite's write lock.
 func stampEmptyDesktops(tx *sql.Tx, now string) (bool, error) {
 	var stale bool
 	if err := tx.QueryRow(`SELECT EXISTS(SELECT 1 FROM desktops WHERE (empty_since = '') = (` + removableDesktop + `))`).Scan(&stale); err != nil || !stale {
@@ -626,7 +440,7 @@ func stampEmptyDesktops(tx *sql.Tx, now string) (bool, error) {
 	return count > 0, err
 }
 
-// OnEmptyDesktop tells fn when an unnamed desktop just became empty and not current.
+// OnEmptyDesktop tells fn when a removable desktop just became empty and not current.
 func (s *Store) OnEmptyDesktop(fn func(emptiedAt time.Time)) {
 	s.emptyDesktop = fn
 }
@@ -637,7 +451,7 @@ func (s *Store) announceEmptyDesktop(emptiedAt time.Time) {
 	}
 }
 
-// RemoveEmptyDesktops deletes unnamed desktops empty and not current for at least grace. It names their
+// RemoveEmptyDesktops deletes removable desktops empty and not current for at least grace. It names their
 // profiles and when the next remaining one is due, zero when none is.
 func (s *Store) RemoveEmptyDesktops(grace time.Duration) ([]string, time.Time, error) {
 	var profileIDs []string
@@ -660,9 +474,6 @@ func (s *Store) RemoveEmptyDesktops(grace time.Duration) ([]string, time.Time, e
 			return err
 		}
 		for _, id := range ids {
-			if err := appendBoundLaunchDesktopFacts(tx, id); err != nil {
-				return err
-			}
 			if err := deleteDesktop(tx, id); err != nil {
 				return err
 			}
@@ -678,8 +489,9 @@ func (s *Store) RemoveEmptyDesktops(grace time.Duration) ([]string, time.Time, e
 	return profileIDs, next, err
 }
 
-func appendLaunchDestinationFacts(tx *sql.Tx, destinationID string) error {
-	rows, err := tx.Query(`SELECT kind,item_id FROM launch_desktops WHERE destination_id = ? ORDER BY joined_order`, destinationID)
+// appendLaunchDesktopFacts refreshes the items that start on desktopID, whose labels name it.
+func appendLaunchDesktopFacts(tx *sql.Tx, desktopID string) error {
+	rows, err := tx.Query(`SELECT kind,item_id FROM launch_desktops WHERE desktop_id = ?`, desktopID)
 	if err != nil {
 		return err
 	}
@@ -692,10 +504,6 @@ func appendLaunchDestinationFacts(tx *sql.Tx, destinationID string) error {
 		}
 		items = append(items, item)
 	}
-	if err := rows.Err(); err != nil {
-		rows.Close()
-		return err
-	}
 	if err := rows.Close(); err != nil {
 		return err
 	}
@@ -705,19 +513,6 @@ func appendLaunchDestinationFacts(tx *sql.Tx, destinationID string) error {
 			name = "automation.changed"
 		}
 		if _, err := appendBusEventWith(tx, BusEvent{Name: name, Subject: item[1]}, time.Now()); err != nil {
-			return err
-		}
-	}
-	return nil
-}
-
-func appendBoundLaunchDesktopFacts(tx *sql.Tx, desktopID string) error {
-	ids, err := queryColumn[string](tx, `SELECT id FROM launch_destinations WHERE desktop_id = ?`, desktopID)
-	if err != nil {
-		return err
-	}
-	for _, id := range ids {
-		if err := appendLaunchDestinationFacts(tx, id); err != nil {
 			return err
 		}
 	}
