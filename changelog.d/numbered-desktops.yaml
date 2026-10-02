@@ -1,0 +1,3 @@
+kind: changed
+area: desktops
+change: Cmd+1–9 on a digit with no desktop creates one there and shows its launcher. A numbered desktop keeps its number for life, so launch settings and reopened agents return to it even after it was removed; to number a desktop, move its contents to the digit. Named desktops are never removed for being empty.

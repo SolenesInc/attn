@@ -176,8 +176,9 @@ export class DaemonObserver {
     return this.profile?.current_desktop_id ?? null;
   }
 
-  async createDesktop(name) {
-    const result = await this.profileCommand('desktop_create', { profile_id: this.profileId, name });
+  // Unnamed, so the daemon removes it once it is empty and not current.
+  async createDesktop() {
+    const result = await this.profileCommand('desktop_create', { profile_id: this.profileId });
     const created = result.desktops?.[0];
     if (!created) throw new Error(`desktop_create returned no desktop: ${JSON.stringify(result)}`);
     return this.waitFor(() => this.desktop(created.id), `arrangement with desktop ${created.id}`);

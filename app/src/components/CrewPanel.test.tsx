@@ -198,7 +198,7 @@ describe('CrewPanel', () => {
     fireEvent.change(within(dialog).getByRole('textbox', { name: 'Name' }), { target: { value: 'Review' } });
     await gesture(daemon, () => fireEvent.click(within(dialog).getByRole('button', { name: 'Use this name' })));
     fireEvent.change(panel().getByLabelText('Model'), { target: { value: 'openai/gpt-6-astra' } });
-    const launch_desktop = { mode: LaunchDesktopMode.Own, desktop_name: 'Review', shortcut_slot: 0, destination_id: 'review-destination', pending: true, label: 'Review (no ⌘ number)' };
+    const launch_desktop = { mode: LaunchDesktopMode.Own, desktop_name: 'Review', destination_id: 'review-destination', pending: true, label: 'Review (no ⌘ number)' };
     await answer(daemon.sentOf('crew_set')[0], saved({ member: member('keel', 6, { resolved_agent: 'codex', launch_desktop }) }));
     expect(daemon.sentOf('crew_set')).toHaveLength(2);
     expect(daemon.sentOf('crew_set')[1].launch_desktop_setting).toEqual(launch_desktop);

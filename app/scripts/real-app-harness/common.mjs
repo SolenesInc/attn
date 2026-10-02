@@ -321,8 +321,6 @@ export async function launchFreshAppAndConnect(client, observer, {
   }
 }
 
-const HARNESS_DESKTOP_PREFIX = 'harness-';
-
 export async function waitForAppCurrentDesktop(client, desktopId, timeoutMs = 15_000) {
   const startedAt = Date.now();
   let last = null;
@@ -334,8 +332,8 @@ export async function waitForAppCurrentDesktop(client, desktopId, timeoutMs = 15
   throw new Error(`Timed out waiting for the app to show desktop ${desktopId}. Last arrangement:\n${JSON.stringify(last?.arrangement, null, 2)}`);
 }
 
-export async function openHarnessDesktop(client, observer, label) {
-  const desktop = await observer.createDesktop(`${HARNESS_DESKTOP_PREFIX}${label}`);
+export async function openHarnessDesktop(client, observer) {
+  const desktop = await observer.createDesktop();
   await observer.setCurrentDesktop(desktop.id);
   await waitForAppCurrentDesktop(client, desktop.id);
   return desktop;
@@ -364,7 +362,7 @@ export async function createSessionAndWaitForInitialPane({
 }) {
   const shouldWaitForInitialPane = waitForInitialPaneVisible ?? true;
   if (ownDesktop) {
-    await openHarnessDesktop(client, observer, label);
+    await openHarnessDesktop(client, observer);
   }
   const paneWaitMs = initialPaneWaitMs ?? 20_000;
   const result = await client.request('create_session', {

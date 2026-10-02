@@ -14,7 +14,6 @@ interface DesktopOverviewProps {
   canSendActivePane: boolean;
   onSwitch: (desktopId: string) => void;
   onSendActivePane: (desktopId: string) => void;
-  onGiveShortcutSlot: (desktopId: string) => void;
   onCreate: () => void;
   onClose: () => void;
 }
@@ -49,7 +48,6 @@ export function DesktopOverview({
   canSendActivePane,
   onSwitch,
   onSendActivePane,
-  onGiveShortcutSlot,
   onCreate,
   onClose,
 }: DesktopOverviewProps) {
@@ -67,11 +65,6 @@ export function DesktopOverview({
   const act = (run: () => void) => {
     run();
     onClose();
-  };
-
-  const stay = (run: () => void) => {
-    run();
-    dialogRef.current?.focus({ preventScroll: true });
   };
 
   const canSendTo = (desktop: Desktop) => canSendActivePane && desktop.id !== currentDesktopId;
@@ -156,11 +149,6 @@ export function DesktopOverview({
           {canSendTo(desktop) && (
             <button type="button" onClick={() => act(() => onSendActivePane(desktop.id))}>
               Send focused pane here ⇧↵
-            </button>
-          )}
-          {!desktop.shortcut_slot && (
-            <button type="button" onClick={() => stay(() => onGiveShortcutSlot(desktop.id))}>
-              Give a shortcut
             </button>
           )}
         </div>

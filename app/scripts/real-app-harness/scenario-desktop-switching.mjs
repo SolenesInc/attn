@@ -134,9 +134,9 @@ async function main() {
       });
     };
     await runner.step('create_two_slotted_desktops', async () => {
-      desktopA = await observer.createDesktop(`harness-a-${runner.runId}`);
+      desktopA = await observer.createDesktop();
       await holdDesktop(desktopA);
-      desktopB = await observer.createDesktop(`harness-b-${runner.runId}`);
+      desktopB = await observer.createDesktop();
       await holdDesktop(desktopB);
       runner.assert(
         desktopA.shortcut_slot && desktopB.shortcut_slot,

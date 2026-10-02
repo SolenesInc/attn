@@ -13,7 +13,6 @@ export function AppDesktopNavigation() {
     currentDesktop,
     switchToDesktop,
     moveActiveLeafToDesktop,
-    giveShortcutSlot,
     createDesktop,
     selectProfile,
     createProfile,
@@ -33,7 +32,6 @@ export function AppDesktopNavigation() {
             switchToDesktop(desktopId);
           }}
           onSendActivePane={(desktopId) => moveActiveLeafToDesktop(desktopId, false)}
-          onGiveShortcutSlot={giveShortcutSlot}
           onCreate={createDesktop}
           onClose={() => setDesktopOverviewOpen(false)}
         />

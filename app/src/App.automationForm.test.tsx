@@ -354,7 +354,7 @@ describe('App automation form', () => {
       await gesture(daemon, () => fireEvent.click(within(dialog).getByRole('button', { name: 'Use this name' })));
       await press(daemon, 'save');
       const request = daemon.sentOf('automation_apply')[0];
-      expect(request.launch_desktop_setting).toEqual({ mode: 'own', desktop_name: 'Checks', shortcut_slot: 0 });
+      expect(request.launch_desktop_setting).toEqual({ mode: 'own', desktop_name: 'Checks' });
       expect(request.profile_id).toBe('work');
       expect(JSON.parse(request.definition_yaml)).not.toHaveProperty('launch_desktop');
     });

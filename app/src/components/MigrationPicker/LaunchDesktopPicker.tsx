@@ -1,4 +1,5 @@
 import { pendingDestinations } from '../../utils/launchDesktops';
+import { desktopIdSlot, numberedDesktopId } from '../../utils/desktops';
 import { useEffect, useRef, useState } from 'react';
 import { useDaemonApi } from '../../contexts/DaemonApiContext';
 import { useProfilesStore } from '../../store/profiles';
@@ -95,7 +96,7 @@ export function LaunchDesktopPicker() {
       items,
       item.profile_id,
       item.setting.mode === LaunchDesktopMode.Own ? item.setting.destination_id : undefined,
-    ).find((candidate) => candidate.setting.shortcut_slot === slot);
+    ).find((candidate) => desktopIdSlot(candidate.setting.desktop_id) === slot);
     if (desktop) void choose(item, { mode: LaunchDesktopMode.Desktop, desktop_id: desktop.id });
     else if (pending)
       void choose(item, { mode: LaunchDesktopMode.Desktop, destination_id: pending.setting.destination_id });
@@ -154,12 +155,8 @@ export function LaunchDesktopPicker() {
           {[1, 2, 3, 4, 5, 6, 7, 8, 9].map((slot) => {
             const desktop = available.find((candidate) => candidate.shortcut_slot === slot);
             if (!desktop && slot < 5) return null;
-            const shared = pending.find((candidate) => candidate.setting.shortcut_slot === slot);
-            const active = desktop
-              ? item.setting.desktop_id === desktop.id
-              : shared
-                ? item.setting.destination_id === shared.setting.destination_id
-                : item.setting.shortcut_slot === slot;
+            const shared = pending.find((candidate) => desktopIdSlot(candidate.setting.desktop_id) === slot);
+            const active = item.setting.desktop_id === numberedDesktopId(item.profile_id, slot);
             return (
               <button
                 key={slot}
@@ -333,7 +330,9 @@ export function LaunchDesktopPicker() {
                 void choose(naming.item, {
                   mode: LaunchDesktopMode.Own,
                   desktop_name: name,
-                  shortcut_slot: naming.request.slot,
+                  ...(naming.request.slot
+                    ? { desktop_id: numberedDesktopId(naming.item.profile_id, naming.request.slot) }
+                    : {}),
                 });
                 setNaming(null);
               }}

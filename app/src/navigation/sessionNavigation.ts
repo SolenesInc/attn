@@ -132,7 +132,7 @@ export function selectAgent(
 
 // Commands that never change what a window shows; everything else the user sends does.
 const LAYOUT_ONLY_COMMANDS = new Set([
-  'desktop_create', 'desktop_rename', 'desktop_reorder', 'desktop_set_shortcut_slot', 'desktop_set_split_ratio',
+  'desktop_create', 'desktop_rename', 'desktop_reorder', 'desktop_set_split_ratio',
   'desktop_update_tile', 'profile_create', 'profile_rename',
 ]);
 

@@ -184,7 +184,8 @@ export function serveArrangement(daemon: ScriptedDaemon, arrangement: Arrangemen
     const slot = command.shortcut_slot ?? [1, 2, 3, 4, 5, 6, 7, 8, 9].find((candidate) => !held(candidate));
     const holder = arrangement.desktops.find((desktop) => desktop.profile_id === command.profile_id && slot && desktop.shortcut_slot === slot);
     if (holder) return refused(command, 'slot_taken', `shortcut slot ${slot} is held by desktop ${holder.id}`);
-    const created = emptyDesktop(`desktop-new-${arrangement.desktops.length + 1}`, { profile_id: command.profile_id, shortcut_slot: slot, order_key: 'z' });
+    const id = slot ? `${command.profile_id}/desktop_${slot}` : `desktop-new-${arrangement.desktops.length + 1}`;
+    const created = emptyDesktop(id, { profile_id: command.profile_id, shortcut_slot: slot, order_key: 'z' });
     arrangement.desktops = [...arrangement.desktops, created];
     const [changed, result] = accepted(command, arrangement);
     return [changed, { ...(result as object), desktops: [created] } as Reply];

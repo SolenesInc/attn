@@ -251,8 +251,8 @@ async function main() {
         'the Handover session reports to the same seed', { chip, seed });
       // Only the current and previous desktops stay mounted. Visit two others
       // so the dispatcher's next command reads from a newly attached terminal.
-      for (const label of ['away', 'further']) {
-        const desktop = await observer.createDesktop(`harness-${runner.runId}-${label}`);
+      for (let visit = 0; visit < 2; visit += 1) {
+        const desktop = await observer.createDesktop();
         await client.request('select_desktop', { desktopId: desktop.id });
       }
       const dispatcher = await pollFor(async () => {

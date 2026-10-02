@@ -5,6 +5,7 @@ import { useLaunchDesktopStore } from '../store/launchDesktops';
 import { LaunchDesktopMode, type Desktop, type LaunchDesktopKind, type LaunchDesktopSetting } from '../types/generated';
 import { ModalDialog } from './MigrationPicker/ModalDialog';
 import { pendingDestinations } from '../utils/launchDesktops';
+import { desktopIdSlot, numberedDesktopId } from '../utils/desktops';
 import './LaunchDesktopSelect.css';
 
 export interface DesktopNameRequest {
@@ -43,7 +44,7 @@ export function DesktopNameDialog({
         </label>
         <p className="launch-name-hint">
           {request.slot
-            ? `Use ⌘${request.slot} when that slot is free.`
+            ? `On ⌘${request.slot}. It appears when the agent starts.`
             : 'No ⌘ number. It appears when the agent starts.'}
         </p>
         <div className="mp-dialog-actions">
@@ -102,7 +103,10 @@ export function LaunchDesktopSelect({
     profileId,
     value?.mode === LaunchDesktopMode.Own ? value.destination_id : undefined,
   );
-  const occupied = new Set(available.map((desktop) => desktop.shortcut_slot));
+  const occupied = new Set([
+    ...available.map((desktop) => desktop.shortcut_slot),
+    ...pending.map((item) => desktopIdSlot(item.setting.desktop_id)),
+  ]);
   const selected = value?.destination_id
     ? `destination:${value.destination_id}`
     : value?.desktop_id
@@ -159,7 +163,11 @@ export function LaunchDesktopSelect({
           request={naming}
           onCancel={() => setNaming(null)}
           onChoose={(name) => {
-            onChange({ mode: LaunchDesktopMode.Own, desktop_name: name, shortcut_slot: naming.slot });
+            onChange({
+              mode: LaunchDesktopMode.Own,
+              desktop_name: name,
+              ...(naming.slot ? { desktop_id: numberedDesktopId(profileId, naming.slot) } : {}),
+            });
             setNaming(null);
           }}
         />

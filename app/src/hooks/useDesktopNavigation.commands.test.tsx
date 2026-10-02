@@ -43,7 +43,6 @@ function renderNavigation() {
     sendDesktopSetCurrent: vi.fn().mockResolvedValue(ok),
     sendDesktopSetActivePane: vi.fn().mockResolvedValue(ok),
     sendDesktopMoveLeaf: vi.fn().mockResolvedValue(ok),
-    sendDesktopSetShortcutSlot: vi.fn().mockResolvedValue(ok),
     sendDesktopCreate: vi.fn().mockResolvedValue(ok),
     sendDesktopRename: vi.fn().mockResolvedValue(ok),
     sendDesktopReorder: vi.fn().mockResolvedValue(ok),
@@ -104,16 +103,6 @@ describe('useDesktopNavigation', () => {
 
     expect(vi.mocked(api.sendDesktopSetCurrent).mock.calls.map((call) => call[1])).toEqual(['d1']);
     expect(showNotice).not.toHaveBeenCalled();
-  });
-
-  it('says so when no desktop holds the slot', () => {
-    seedStore([desktop('d1', { shortcut_slot: 1 })]);
-    const { api, showNotice, result } = renderNavigation();
-
-    act(() => result.current.switchToSlot(5));
-
-    expect(api.sendDesktopSetCurrent).not.toHaveBeenCalled();
-    expect(showNotice).toHaveBeenCalledWith(expect.stringContaining('No desktop on'));
   });
 
   it('moves the active leaf beside the target active leaf and stays on the source desktop', async () => {
@@ -217,26 +206,6 @@ describe('useDesktopNavigation', () => {
 
     expect(api.sendDesktopMoveLeaf).not.toHaveBeenCalled();
     expect(showNotice).toHaveBeenCalledWith('Nothing is active to move.');
-  });
-
-  it('gives an extra desktop the first free shortcut slot', () => {
-    seedStore([desktop('d1', { shortcut_slot: 1 }), desktop('d3', { shortcut_slot: 3 }), desktop('d10', { revision: 5 })]);
-    const { api, result } = renderNavigation();
-
-    act(() => result.current.giveShortcutSlot('d10'));
-
-    expect(api.sendDesktopSetShortcutSlot.mock.calls).toEqual([['d10', 2, 5]]);
-  });
-
-  it('names the limit when every shortcut slot is taken', () => {
-    const slotted = [1, 2, 3, 4, 5, 6, 7, 8, 9].map((slot) => desktop(`d${slot}`, { shortcut_slot: slot }));
-    seedStore([...slotted, desktop('d10')]);
-    const { api, showNotice, result } = renderNavigation();
-
-    act(() => result.current.giveShortcutSlot('d10'));
-
-    expect(api.sendDesktopSetShortcutSlot).not.toHaveBeenCalled();
-    expect(showNotice).toHaveBeenCalledWith(expect.stringContaining('is taken'));
   });
 
 

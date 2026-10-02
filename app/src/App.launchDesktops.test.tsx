@@ -40,7 +40,7 @@ describe('launch desktops', () => {
     expect(screen.getByLabelText('New desktops for Keel')).toHaveValue('Alder-new');
     await gesture(daemon, () => fireEvent.click(screen.getByRole('button', { name: /Finish setup/ })));
     expect(daemon.sentOf('launch_desktop_set').map(({ item_id, setting }) => ({ item_id, setting }))).toEqual([
-      { item_id: 'Alder', setting: { mode: LaunchDesktopMode.Own, desktop_name: 'Review', shortcut_slot: 0 } },
+      { item_id: 'Alder', setting: { mode: LaunchDesktopMode.Own, desktop_name: 'Review' } },
       { item_id: 'Keel', setting: { mode: LaunchDesktopMode.Desktop, destination_id: 'Alder-new' } },
     ]);
     expect(daemon.sentOf('migration_finish').map(({ expected_revision }) => expected_revision)).toEqual([11]);

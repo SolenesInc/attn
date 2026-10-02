@@ -31,6 +31,18 @@ describe('App empty desktop launcher', () => {
     expect(screen.getByRole('radiogroup', { name: /agent/i })).toBeInTheDocument();
   });
 
+  it('creates a desktop on a slot that has none, switches to it and offers its launcher', async () => {
+    const { daemon } = await onAgentBesideEmptyDesktop();
+
+    await gesture(daemon, () => pressShortcut('desktop.select5'));
+
+    const profileId = daemon.arrangement.profile.id;
+    expect(daemon.sentOf('desktop_create')).toEqual([expect.objectContaining({ profile_id: profileId, shortcut_slot: 5 })]);
+    expect(daemon.arrangement.profile.current_desktop_id).toBe(`${profileId}/desktop_5`);
+    expect(screen.getByTestId('location-picker-title')).toHaveTextContent('New agent on Desktop 5');
+    expect(pathInput()).toHaveFocus();
+  });
+
   it('launches onto the empty desktop and gives way to the new pane', async () => {
     const { daemon } = await onAgentBesideEmptyDesktop();
     await gesture(daemon, () => pressShortcut('desktop.select2'));
