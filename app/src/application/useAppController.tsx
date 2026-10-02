@@ -343,11 +343,10 @@ export function useAppController({
     setMarkdownOpenerOpen(false);
     setDesktopOverviewOpen(false);
     setProfileSwitcherOpen(false);
-    closeAgentList();
   }), [closeCrewPanel, setNotebookOpen, setSessionsOpen, setPalette, closeGarden, gardenHoldsWindow,
     settingsOpen, settingsModalRef, setShortcutsOpen, setShortcutEditorOpen, whatsNewOpen, dismissWhatsNew,
     closeLocationPicker, setSnoozeMenu, delegationChainRef, setChiefTransferTarget, setSessionCreationJob,
-    setOpenPRLauncherJob, setDiagnosticCapture, setMarkdownOpenerOpen, closeAgentList]);
+    setOpenPRLauncherJob, setDiagnosticCapture, setMarkdownOpenerOpen]);
 
   const { blockingOverlayOpen, windowCovered, paletteBlocked, appShortcutsEnabled } = appOverlayPolicy({
     desktopOverviewOpen,
