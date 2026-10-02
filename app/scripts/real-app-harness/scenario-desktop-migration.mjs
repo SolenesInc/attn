@@ -320,6 +320,12 @@ async function main() {
       await waitForDraft((migration) => migration.groups.every((entry) => entry.confirmed), 'every group confirmed');
       await client.request('dom_wait', { selector: '.mp-bottom-right .mp-button.primary:not([disabled])', timeoutMs: 10_000 });
       await client.request('dom_click', { selector: '.mp-bottom-right .mp-button.primary' });
+      const phase = await poll(() => queryDaemonDb(dbPath, 'SELECT phase FROM profile_migration;'), (value) => value !== 'placement_required', 'placement finish');
+      // Crew homes and automations left by earlier scenarios on this instance add the launch step.
+      if (phase === 'launch_required') {
+        await client.request('dom_wait', { selector: '.mp-launch-footer .primary:not([disabled])', timeoutMs: 10_000 });
+        await client.request('dom_click', { selector: '.mp-launch-footer .primary' });
+      }
       await waitForText('main', 'Your Default profile is ready.');
       runner.assert(queryDaemonDb(dbPath, 'SELECT phase FROM profile_migration;') === 'complete', 'Finish did not commit');
       const shell = await client.request('dom_wait', { selector: '.app', absent: true, timeoutMs: 2_000 });
