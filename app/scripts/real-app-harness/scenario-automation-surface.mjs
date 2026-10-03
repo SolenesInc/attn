@@ -317,12 +317,15 @@ async function main() {
       await client.request('dom_wait', { selector: queueRunSelector, timeoutMs: PANEL_APPEAR_TIMEOUT_MS });
       const expanded = await client.request('queue_get_state');
       runner.assert(expanded.automations.some((group) => group.id === manualID && group.expanded && group.sessionIds.includes(manualSessionID)), 'the expanded queue sidebar keeps the selected run in its automation group', expanded.automations);
-      runner.assert(!expanded.turns.some((row) => row.id === manualSessionID) && !expanded.settled.some((row) => row.id === manualSessionID), 'runs stay out of queue bands in the expanded sidebar', expanded);
+      if (!expanded.agentList.expanded) await client.request('dom_click', { selector: '[data-testid="queue-agents-toggle"]' });
+      const allAgents = await client.request('queue_get_state');
+      runner.assert(!allAgents.turns.some((row) => row.id === manualSessionID) && !allAgents.settled.some((row) => row.id === manualSessionID), 'runs stay out of queue bands in the expanded sidebar', allAgents);
+      if (!expanded.agentList.expanded) await client.request('dom_click', { selector: '[data-testid="queue-agents-toggle"]' });
       await captureScreenshotData(path.join(runner.runDir, 'run-queue-sidebar.png'), { client });
       await client.request('dispatch_shortcut', { shortcutId: 'session.toggleSidebar' });
       await client.request('dom_wait', { selector: '[data-testid="queue-bar-runs"][data-runs="1"][data-needing="1"]', timeoutMs: PANEL_APPEAR_TIMEOUT_MS });
       const queue = await client.request('queue_get_state');
-      runner.assert(queue.bar.waiting === expanded.turns.length && queue.bar.runs.count === 1, 'automation stays out of the queue and remains in the runs summary', queue.bar);
+      runner.assert(queue.bar.waiting === allAgents.turns.length && queue.bar.runs.count === 1, 'automation stays out of the queue and remains in the runs summary', queue.bar);
       await client.request('dom_hover', { selector: '[data-testid="queue-bar-runs"]' });
       await client.request('dom_wait', { selector: `[data-testid="queue-bar-peek-run-${manualSessionID}"]`, timeoutMs: PANEL_APPEAR_TIMEOUT_MS });
       await captureScreenshotData(path.join(runner.runDir, 'run-queue-bar.png'), { client });
