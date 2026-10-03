@@ -62,3 +62,19 @@ func TestASettingIsAcknowledgedOnlyOnceItPersistsAndRefusalsLeaveItUnchanged(t *
 		}
 	}
 }
+
+func TestQuickCaptureShortcutIsDurableAndCanBeDisabled(t *testing.T) {
+	w := newWorld(t)
+	for _, binding := range []string{"Control+Alt+B", ""} {
+		app := w.App()
+		ack := gardenAdvisorSetSetting(app, "capture.shortcut", binding)
+		if !protocol.Deref(ack.Success) || protocol.Deref(ack.ChangedKey) != "capture.shortcut" {
+			t.Fatalf("capture shortcut %q was refused: %+v", binding, ack)
+		}
+		w.restart()
+		got, exists := w.App().Initial.Settings["capture.shortcut"]
+		if !exists || got != binding {
+			t.Fatalf("restarted shortcut = %q (present=%v), want %q", got, exists, binding)
+		}
+	}
+}

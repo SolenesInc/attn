@@ -9,13 +9,14 @@ edition = "2021"
 # that calls it, so this crate recompiles on every frontend change and app-core does not.
 [workspace]
 members = ["core"]
+exclude = ["vendor/global-hotkey"]
 default-members = [".", "core"]
 
 [build-dependencies]
 tauri-build = { version = "2", features = [] }
 
 [dependencies]
-tauri = { version = "=2.11.2", features = ["protocol-asset", "unstable"] }
+tauri = { version = "=2.11.2", features = ["protocol-asset", "unstable", "macos-private-api"] }
 app-core = { path = "core" }
 # `generate_context!` expands to code that names serde_json in the calling crate.
 serde_json = "1"
