@@ -345,10 +345,10 @@ export function QuickCapture({ client: suppliedClient, hostState, workQueue: sup
       {files.length > 0 && <div className="capture-files">{files.map(file => <CaptureAttachmentPreview key={file.id} file={file} onSettled={onSettled} onMotion={onMotion} onRemove={removeFile} disabled={uncertain || submitting} />)}</div>}
     </>}
     {(host.connectionError || error || host.shortcutError) && <p role="alert" className="capture-error">{host.connectionError || error || host.shortcutError}</p>}
-    {(!recent || receipt) && <footer className="capture-footer">
+    {!recent && <footer className="capture-footer">
       {receipt && <span className="capture-receipt" aria-live="polite"><i />{receipt}</span>}
-      {!recent && <span className="capture-keys"><kbd>⇧↵</kbd> new line</span>}
-      {!recent && <button className="send-button" disabled={!restored || submitting || resolving || files.some(file => !file.ready) || (!text.trim() && !files.length)} onClick={() => void send()}>{uncertain ? 'Retry' : 'Send'} <kbd>↵</kbd></button>}
+      <span className="capture-keys"><kbd>⇧↵</kbd> new line</span>
+      <button className="send-button" disabled={!restored || submitting || resolving || files.some(file => !file.ready) || (!text.trim() && !files.length)} onClick={() => void send()}>{uncertain ? 'Retry' : 'Send'} <kbd>↵</kbd></button>
     </footer>}
     {picker && <div ref={recipientMenu} className="capture-menu" role="listbox" aria-label="Choose recipient" tabIndex={-1} aria-activedescendant={`recipient-${pick}`} onKeyDown={event => {
       if (['ArrowDown', 'ArrowUp', 'Home', 'End', 'Enter', ' '].includes(event.key)) {
