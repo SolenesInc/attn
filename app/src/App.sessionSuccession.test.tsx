@@ -123,17 +123,22 @@ describe('App session succession', () => {
     expect(attachesAndDetaches(daemon).slice(attachments)).toEqual([]);
   });
 
-  it('follows the terminal through successions that happened while the app was away', async () => {
-    const s1 = daemonSession('s1');
+  it.each([
+    ['', {}],
+    [' in queue mode', QUEUE],
+  ])('follows the terminal through successions that happened while the app was away%s', async (_, settings) => {
+    const s1 = daemonSession('s1', { state: 'waiting_input', ...OWED });
+    const s4 = daemonSession('s4', { state: 'waiting_input', ...OWED });
     const { daemon } = await renderApp({
-      initialState: { sessions: [daemonSession('s4'), s1], workspaces: [agentWorkspace('s4'), terminalWorkspace('s1', 'terminal-1')] },
+      initialState: { settings, sessions: [s4, s1], workspaces: [agentWorkspace('s4'), terminalWorkspace('s1', 'terminal-1')] },
     });
     await open(daemon, 's4');
     await open(daemon, 's1');
 
-    const s3 = daemonSession('s3', { workspace_id: s1.workspace_id, state: 'idle', succeeds: 's2' });
+    const s3 = daemonSession('s3', { workspace_id: s1.workspace_id, state: 'waiting_input', ...OWED, succeeds: 's2' });
     daemon.on('client_hello', () => initialState({
-      sessions: [daemonSession('s4'), s3],
+      settings,
+      sessions: [s4, s3],
       workspaces: [agentWorkspace('s4'), showing(s1, 's3', 'terminal-1')],
     }));
     await daemon.reconnect();
