@@ -566,11 +566,14 @@ pub async fn capture_image_read(path: String) -> Result<String, String> {
     tauri::async_runtime::spawn_blocking(move || {
         use base64::Engine;
         let bytes = std::fs::read(&path).map_err(|error| format!("Cannot read {path}: {error}"))?;
-        let format = image::guess_format(&bytes)
-            .map_err(|error| format!("Unsupported image {path}: {error}"))?;
+        let media = tauri::utils::mime_type::MimeType::parse_with_fallback(
+            &bytes,
+            &path,
+            tauri::utils::mime_type::MimeType::OctetStream,
+        );
         Ok(format!(
             "data:{};base64,{}",
-            format.to_mime_type(),
+            media,
             base64::engine::general_purpose::STANDARD.encode(bytes)
         ))
     })

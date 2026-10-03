@@ -4,8 +4,6 @@ import { emitTo, listen } from '@tauri-apps/api/event';
 import type { DaemonApi } from '../contexts/DaemonApiContext';
 import { useDaemonStore } from '../store/daemonSessions';
 import { captureDaemonClient } from '../quickCapture/daemonClient';
-import { useSessionStore } from '../store/sessions';
-import { getCurrentWebviewWindow } from '@tauri-apps/api/webviewWindow';
 import { crewDisplayName } from '../utils/crewName';
 import { isMacLikePlatform } from '../shortcuts/platform';
 import {
@@ -17,11 +15,7 @@ import {
 interface NativeStatus { binding: string | null; active: string | null; error?: string }
 
 export function useQuickCaptureHost(daemon: DaemonApi, settings: Record<string, string>, captureRevision = 0) {
-  const delivery = useMemo(() => captureDaemonClient(daemon, async sessionId => {
-    if (!useSessionStore.getState().selectAgent(sessionId)) throw new Error('The recipient session is unavailable.');
-    await invoke('capture_hide');
-    const main = getCurrentWebviewWindow(); await main.show(); await main.setFocus();
-  }), [daemon.sendCaptureRequest]);
+  const delivery = useMemo(() => captureDaemonClient(daemon), [daemon.sendCaptureRequest]);
   const supported = isMacLikePlatform() && isTauri();
   const crew = useDaemonStore(store => store.crew);
   const [native, setNative] = useState<NativeStatus>({ binding: null, active: null });
@@ -90,9 +84,7 @@ export function useQuickCaptureHost(daemon: DaemonApi, settings: Record<string, 
             case 'resolve': value = await api.resolve(payload.captureId); break;
             case 'recent': value = await api.recent(payload.cursor); break;
             case 'image': value = await api.image(payload.captureId, payload.attachmentId, payload.mediaType); break;
-            case 'update': value = await api.update(payload.captureId, payload.update, payload.recipient); break;
             case 'discard': await api.discard(payload.captureId, payload.imageIds); break;
-            case 'open': await api.openRecipient(payload.sessionId); break;
           }
         }
       } catch (failure) { error = String(failure); }
