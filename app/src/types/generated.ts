@@ -6796,6 +6796,10 @@ export interface ReloadSessionMessage {
     cols: number;
     id:   string;
     rows: number;
+    /**
+     * The terminal (runtime id) to reload; the session's primary terminal when absent.
+     */
+    terminal?: string;
     [property: string]: any;
 }
 
@@ -19505,6 +19509,7 @@ const typeMap: any = {
         { json: "cols", js: "cols", typ: 0 },
         { json: "id", js: "id", typ: "" },
         { json: "rows", js: "rows", typ: 0 },
+        { json: "terminal", js: "terminal", typ: u(undefined, "") },
     ], "any"),
     "ReloadSessionResultMessage": o([
         { json: "error", js: "error", typ: u(undefined, "") },

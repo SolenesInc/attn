@@ -59,7 +59,7 @@ type spawnPlan struct {
 	chiefAssignmentCommitted     bool
 	priorIntent                  store.LaunchIntent
 	hadPriorIntent               bool
-	addedPane                    bool
+	addedTerminal                harness.TerminalID
 	launchedConversation         string
 	priorConversation            store.SessionConversation
 	conversationPersisted        bool
@@ -95,9 +95,11 @@ func (plan *spawnPlan) rollback(d *Daemon, sessionID string) {
 	if plan.chiefAssigned && !plan.chiefAssignmentCommitted {
 		d.clearChiefOfStaffIfSession(sessionID)
 	}
-	if plan.addedPane {
-		plan.addedPane = false
-		d.removeWorkspaceLayoutPaneForSession(sessionID)
+	if plan.addedTerminal != "" {
+		if err := d.removeTerminalPane(plan.addedTerminal); err != nil {
+			d.logf("spawn rollback: dropping the pane of terminal %s: %v", plan.addedTerminal, err)
+		}
+		plan.addedTerminal = ""
 	}
 }
 
@@ -284,7 +286,10 @@ func (d *Daemon) executeSpawn(req *spawnRequest, plan *spawnPlan) *spawnOutcome 
 		plan.rollback(d, msg.ID)
 		return &spawnOutcome{err: err}
 	}
-	plan.spawnOpts.ID, plan.addedPane = terminal, added
+	plan.spawnOpts.ID = terminal
+	if added {
+		plan.addedTerminal = terminal
+	}
 	if req.hasPluginDriver {
 		plan.pluginRunID = uuid.NewString()
 		plan.spawnOpts.LifecycleID = plan.pluginRunID

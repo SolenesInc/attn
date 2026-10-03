@@ -6829,6 +6829,10 @@ type ReloadSessionMessage struct {
 
 	// Rows corresponds to the JSON schema field "rows".
 	Rows int `json:"rows"`
+
+	// The terminal (runtime id) to reload; the session's primary terminal when
+	// absent.
+	Terminal *string `json:"terminal,omitempty,omitzero"`
 }
 
 type ReloadSessionResultMessage struct {

@@ -109,7 +109,7 @@ export interface SessionStore extends SessionNavigationState, SessionNavigationA
   closeSession: (id: string) => void;
   removeSessionLocalState: (id: string) => void;
   takeSessionSpawnArgs: (id: string, cols: number, rows: number) => PtySpawnArgs | null;
-  reloadSession: (id: string, size?: { cols: number; rows: number }) => Promise<void>;
+  reloadSession: (id: string, size?: { cols: number; rows: number }, terminal?: string) => Promise<void>;
   setLauncherConfig: (config: LauncherConfig) => void;
   syncFromDaemonSessions: (daemonSessions: DaemonSessionSnapshot[]) => void;
   syncFromDaemonWorkspaces: (daemonWorkspaces: DaemonWorkspace[]) => void;
@@ -354,7 +354,7 @@ export const useSessionStore = create<SessionStore>((set, get) => ({
     };
   },
 
-  reloadSession: async (id: string, size?: { cols: number; rows: number }) => {
+  reloadSession: async (id: string, size?: { cols: number; rows: number }, terminal?: string) => {
     const { sessions } = get();
     const session = sessions.find((s) => s.id === id);
     if (!session) return;
@@ -366,7 +366,7 @@ export const useSessionStore = create<SessionStore>((set, get) => ({
     }
     reloadingSessionIds.add(id);
     try {
-      await ptyReload({ id, cols, rows });
+      await ptyReload({ id, cols, rows, terminal });
     } finally {
       reloadingSessionIds.delete(id);
     }

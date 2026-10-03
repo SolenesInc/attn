@@ -447,7 +447,7 @@ describe('App terminal runtime', () => {
     };
 
     await reload();
-    expect(daemon.sentOf('reload_session')).toEqual([{ cmd: 'reload_session', id: 's1', cols: 80, rows: 24 }]);
+    expect(daemon.sentOf('reload_session')).toEqual([{ cmd: 'reload_session', id: 's1', cols: 80, rows: 24, terminal: 's1' }]);
     expect(screen.queryByText(/Failed to reload session/)).toBeNull();
 
     refusal = 'reload denied';

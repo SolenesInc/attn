@@ -258,7 +258,7 @@ func (d *Daemon) crewNap(member crew.Member, oldSessionID string, teardown *sess
 	}
 
 	if rejection := d.runSpawnPipeline(spawnMsg, policy); rejection != nil {
-		d.removeWorkspaceLayoutPaneForSession(newSessionID)
+		d.removeWorkspaceLayoutPanesForSession(newSessionID)
 		undoBinding()
 		return "", fmt.Errorf("wake %s's successor: %w", crew.DisplayName(member.ID), rejection.reason())
 	}
@@ -342,7 +342,7 @@ func (d *Daemon) closeNappedSession(sessionID string, teardown *sessionTeardown)
 	if teardown.session != nil {
 		d.publishSessionUnregistered(teardown.session)
 		d.dissociateSessionFromWorkspace(teardown.session.ID)
-		d.removeWorkspaceLayoutPaneForSession(teardown.session.ID)
+		d.removeWorkspaceLayoutPanesForSession(teardown.session.ID)
 		d.publishFact(FactSessionTerminated, teardown.session.ID, nil)
 	}
 	d.terminateSessionAsync(sessionID, syscall.SIGTERM, teardown)

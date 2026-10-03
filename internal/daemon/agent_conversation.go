@@ -1,7 +1,6 @@
 package daemon
 
 import (
-	"context"
 	"errors"
 	"net"
 	"strings"
@@ -91,17 +90,13 @@ func (d *Daemon) conversationIn(t harness.TerminalID, observation agentConversat
 // there, or only in a bare-CLI wrapper; t's session then takes the conversation over in place.
 func (d *Daemon) showableIn(t harness.TerminalID, owner string) bool {
 	r := d.terminals()
-	live := d.liveTerminals(context.Background())
-	running := false
-	for _, id := range d.terminalsOf(owner) {
-		if _, ok := live[id]; ok {
-			if r.workspaceOf(id) != r.workspaceOf(t) {
-				return false
-			}
-			running = true
+	running := d.liveTerminalsOf(owner)
+	for _, id := range running {
+		if r.workspaceOf(id) != r.workspaceOf(t) {
+			return false
 		}
 	}
-	return running || !d.wrapperLive(owner)
+	return len(running) > 0 || !d.wrapperLive(owner)
 }
 
 func (d *Daemon) wrapperLive(owner string) bool {

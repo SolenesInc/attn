@@ -17,6 +17,7 @@ import (
 	"github.com/victorarias/attn/internal/config"
 	"github.com/victorarias/attn/internal/fakeagent"
 	"github.com/victorarias/attn/internal/protocol"
+	"github.com/victorarias/attn/internal/ptyworker"
 )
 
 type World struct {
@@ -233,6 +234,20 @@ func (w *World) HeadlessTask() *fakeagent.HeadlessTask {
 
 func (w *World) HoldNextBoot() (boot func()) {
 	return w.kit.HoldNextBoot()
+}
+
+// LoseTerminal ends a terminal's PTY worker behind the daemon's back, as a crash would, so the
+// terminal is gone when a daemon next recovers its workers.
+func (w *World) LoseTerminal(terminal string) {
+	w.T.Helper()
+	path := filepath.Join(w.Dir, "workers", "*", "registry", terminal+".json")
+	paths, err := filepath.Glob(path)
+	if err != nil || len(paths) != 1 {
+		w.T.Fatalf("no single worker registry matches %s: %v %v", path, paths, err)
+	}
+	if res, ok := ptyworker.ReapRegistry(paths[0]); !ok || res.Err != nil {
+		w.T.Fatalf("ending the worker of terminal %s: %+v", terminal, res)
+	}
 }
 
 func (w *World) LogDaemonTail() {

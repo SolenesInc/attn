@@ -168,6 +168,18 @@ func (p *Peer) Terminal(sessionID string) string {
 	return protocol.Deref(pane.RuntimeID)
 }
 
+// AwaitPanes waits until the panes of every layout this peer received, as it last heard them, match.
+func (p *Peer) AwaitPanes(awaiting string, match func([]protocol.WorkspaceLayoutPane) bool) {
+	p.T.Helper()
+	p.until(func() string { return awaiting }, func() (bool, error) {
+		var all []protocol.WorkspaceLayoutPane
+		for _, panes := range p.panes {
+			all = append(all, panes...)
+		}
+		return match(all), nil
+	})
+}
+
 func (p *Peer) paneShowing(sessionID string) (protocol.WorkspaceLayoutPane, bool) {
 	p.mu.Lock()
 	defer p.mu.Unlock()

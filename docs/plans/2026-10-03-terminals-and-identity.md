@@ -20,7 +20,7 @@ Step 4 adds:
 
 - no terminal table: panes already persist `runtime_id → session_id`;
 - one column, `sessions.succeeds`;
-- one protocol bump, 331, which skips the epic's 329 and 330.
+- protocol 331, which skips the epic's 329 and 330, and 332 in PR 4 for reload's terminal.
 
 New terminals get their own ids from the registry PR onwards, so the existing suites check the identity split before any feature depends on it.
 
@@ -55,7 +55,7 @@ references the home holds move, in PR 6.
    - `sessions.succeeds` points at it.
    - The successor gets a new name, as any new session in that pane would.
 5. **The daemon resolves caller ids.** It tries a terminal, then an open session. A closed session's id is not followed to its successor: a message to a cleared agent is refused as for any closed session, not rerouted to an agent without its context. There is no new CLI command and no extra round trip, and hooks already resolve on the daemon side.
-6. **One protocol bump for the step, 331.** Every wire change lands in PR 1.
+6. **Protocol 331 for the step.** Every wire change lands in PR 1, except reload's terminal, which PR 4 adds as 332 once sessions run in several terminals.
 7. **Codex's `/clear` and `/new` follow the same rule as Claude's `/clear`** (PR 3). Codex reports the new thread on the first turn of the new chat (SessionStart, then UserPromptSubmit), so the pane switches when the user first prompts it. **Unchanged in step 4:** Copilot, shell sessions, and bare-CLI wrapper sessions.
 
 ---
@@ -80,7 +80,7 @@ func (r *terminals) Primary(s harness.SessionID) (harness.TerminalID, bool) // l
 
 **Lifecycle.**
 - Spawn places the terminal before the worker starts. It uses the session's placed terminal if that terminal has no live worker (revive, reload, reopen into its pane). Otherwise it adds a pane.
-- Closing a pane closes its terminal. If that was the session's last terminal, the session ends, as today.
+- Closing a pane closes its terminal. If that was the session's last live terminal, the session ends, as today; otherwise it runs on in the others. A terminal's exit is the same.
 - At recovery, every live worker that no pane places is an orphan and is pruned.
 - A session is live if any of its terminals is live.
 
@@ -153,7 +153,7 @@ These steps run under `lifecycle(cur)`, then `terminal(t)`, plus `lifecycle(owne
    - dissociate it; the workspace keeps the successor, so it is never torn down;
    - publish in this order: `SessionRegistered(successor)` → layout updated → `SessionClosed` and `SessionUnregistered(predecessor)`.
 
-**Shows only.** A closed owner reopens in place; an open one's dead panes are dropped. Either way the owner moves to t's workspace, keeps its own name and launch intent, and gets `succeeds = cur`, so the app follows the terminal. An owner live in another terminal of t's workspace (Codex `/agents`, or `/resume` of a session running elsewhere) keeps it and dead panes alone drop, so it runs in two terminals and t, shown most recently, is its primary. When either terminal later moves on, the session stays open in the other: the succession skips the close and every step 5 does to the predecessor. A session belongs to one workspace, so for an owner live in another workspace, or kept alive only by its bare-CLI wrapper, t's session takes the conversation over in place, as before PR 4.
+**Shows only.** A closed owner reopens in place; an open one's dead panes are dropped. Either way the owner moves to t's workspace, keeps its own name and launch intent, and gets `succeeds = cur`, so the app follows the terminal. An owner live in another terminal of t's workspace (Codex `/agents`, or `/resume` of a session running elsewhere) keeps it and dead panes alone drop, so it runs in two terminals and t, shown most recently, is its primary. When either terminal later moves on, the session stays open in the other: the succession skips the close and every step 5 does to the predecessor. Closing either pane, or either process exiting, likewise ends only that terminal and drops its pane, as the shared-Codex epic's views do; the last terminal closes or exits the session as before. Session close removes every pane showing the session; a kill ends every terminal and, like a one-pane kill, leaves the last terminal's pane showing the exited session. Reload takes the pane's terminal (protocol 332), and a restart drops the panes of terminals that did not come back while another runs the session. A session belongs to one workspace, so for an owner live in another workspace, or kept alive only by its bare-CLI wrapper, t's session takes the conversation over in place, as before PR 4.
 
 ### 3.6 Resolution by category (PR 2)
 
@@ -219,7 +219,7 @@ CREATE INDEX idx_sessions_succeeds ON sessions(succeeds) WHERE succeeds != '';
 - There is no terminal table, and pane rows are unchanged. A database from before the upgrade needs no rewrite, and an older daemon can still read it.
 - `sessions.agent_driver_*` stays on the session row and moves in the identity transaction.
 
-**Protocol 331 (PR 1).** This number skips the epic's 329 and 330, as the plan's durable-promise rule requires.
+**Protocol 331 (PR 1).** This number skips the epic's 329 and 330, as the plan's durable-promise rule requires. PR 4 bumps to 332 for `ReloadSessionMessage.terminal?`.
 
 - `SessionExitedMessage.session_id: string`: the session the terminal showed when it exited.
 - `Session.succeeds?: string`: the session this one replaced in its terminal.
@@ -283,7 +283,7 @@ CREATE INDEX idx_sessions_succeeds ON sessions(succeeds) WHERE succeeds != '';
 2. **What follows a new conversation?** **Decided: nothing but the terminal.** Clearing clears the identity; the agent after `/clear` knows nothing of the old one's obligations, so they stay with the closed predecessor and come back with it on Reopen. A crew member's `/clear` ends its day.
 3. **No `terminal_views` in step 4.** The plan names it as the neutral table. **Default: panes persist the map.** `terminal_views` lands in step 6, when a terminal needs state a pane cannot hold: resolution, raw title, generation.
 4. **Contract.** **Default:** `Events.Conversation(t, c)` plus typed ids in step 4. `Opened`, `Shows`, `Up`, `Down` and `End` move to step 6, which has their callers.
-5. **Protocol.** **Default: one bump to 331 for the whole step, with every wire change in PR 1.** `succeeds` lands one PR ahead of its daemon producer but has a tested app consumer.
+5. **Protocol.** **Default: one bump to 331 for the whole step, with every wire change in PR 1;** PR 4 adds 332 for reload's terminal. `succeeds` lands one PR ahead of its daemon producer but has a tested app consumer.
 6. **Remote verification and release gating.** **Default:** PR 6 builds the two-daemon stack with a fake `ssh`, and lands before the first release cut after PR 3. If the hub's bootstrap makes the harness too costly, verify on a real Linux endpoint and ask before merging.
 7. **Bare-CLI wrapper sessions.** **Default: a follow-up after step 4.** Until then they keep moving the conversation within the session. The terminal mapping rides on the `external_process` receipt that already persists, so no table is needed.
 8. **Codex `/new`.** **Decided: same as `/clear`, in PR 3.**

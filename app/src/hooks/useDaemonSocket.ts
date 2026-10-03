@@ -311,7 +311,7 @@ export interface RateLimitState {
 }
 
 // Protocol version - must match daemon's ProtocolVersion
-export const PROTOCOL_VERSION = '331';
+export const PROTOCOL_VERSION = '332';
 const MAX_PENDING_ATTACH_OUTPUTS = 512;
 
 const CLIENT_INSTANCE_ID =
@@ -2944,9 +2944,9 @@ export function useDaemonSocket({
     }, 'Spawn session timed out', 30000);
   }, [sendKeyedRequest]);
 
-  const sendReloadSession = useCallback((id: string, cols: number, rows: number): Promise<void> => {
+  const sendReloadSession = useCallback((id: string, cols: number, rows: number, terminal?: string): Promise<void> => {
     const key = `reload_session:${id}`;
-    return sendKeyedRequest<void>(key, { cmd: 'reload_session', id, cols, rows }, 'Reload session timed out', 30000);
+    return sendKeyedRequest<void>(key, { cmd: 'reload_session', id, cols, rows, ...(terminal && { terminal }) }, 'Reload session timed out', 30000);
   }, [sendKeyedRequest]);
 
   const sendAttachSessionNow = useCallback((id: string, context?: AttachRequestContext): Promise<AttachResult> => {
@@ -3821,8 +3821,8 @@ export function useDaemonSocket({
       detach: async (id: string) => {
         sendDetachSession(id);
       },
-      reload: async (id: string, cols: number, rows: number) => {
-        await sendReloadSession(id, cols, rows);
+      reload: async (id: string, cols: number, rows: number, terminal?: string) => {
+        await sendReloadSession(id, cols, rows, terminal);
       },
     });
 

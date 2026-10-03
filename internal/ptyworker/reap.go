@@ -42,17 +42,24 @@ func ReapDataDir(dataDir string) []ReapResult {
 
 	var results []ReapResult
 	for _, path := range paths {
-		entry, err := ReadRegistry(path)
-		if err != nil {
-			continue
+		if res, ok := ReapRegistry(path); ok {
+			results = append(results, res)
 		}
-		res := reapEntry(entry, path)
-		if res.Outcome == ReapRemoved || res.Outcome == ReapAlreadyGone || res.Outcome == ReapSignalled {
-			RemoveHandoff(path, entry.SessionID)
-		}
-		results = append(results, res)
 	}
 	return results
+}
+
+// ReapRegistry stops the worker one registry file names; ok is false when the file is unreadable.
+func ReapRegistry(path string) (res ReapResult, ok bool) {
+	entry, err := ReadRegistry(path)
+	if err != nil {
+		return ReapResult{}, false
+	}
+	res = reapEntry(entry, path)
+	if res.Outcome == ReapRemoved || res.Outcome == ReapAlreadyGone || res.Outcome == ReapSignalled {
+		RemoveHandoff(path, entry.SessionID)
+	}
+	return res, true
 }
 
 const workerExitGrace = 500 * time.Millisecond

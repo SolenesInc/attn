@@ -189,8 +189,8 @@ type Daemon struct {
 	prepareSessionTeardownHook        func(string) error
 	teardownMu                        sync.Mutex
 	tearingDown                       map[string]chan struct{}
-	sessionLifecycleLocksMu           sync.Mutex
-	sessionLifecycleLocks             map[string]*sessionLifecycleLockEntry
+	sessionLifecycleLocks             sessionLockTable
+	terminalEndLocks                  sessionLockTable
 	spawnLocksMu                      sync.Mutex
 	spawnLocks                        map[string]*spawnLock
 	externalRegistrations             sync.Map
@@ -1305,6 +1305,9 @@ func (d *Daemon) reconcileSessionsWithWorkerBackendState(ctx context.Context, al
 
 		d.store.Touch(sessionID)
 		d.store.ClearSessionIntentionalClose(sessionID)
+		if allowTombstoneCleanup {
+			d.dropDeadTerminalPanes(sessionID)
+		}
 
 		if existing.State == protocol.SessionStateScheduled {
 			continue
@@ -1410,6 +1413,29 @@ func (d *Daemon) reconcileSessionsWithWorkerBackendState(ctx context.Context, al
 	}
 
 	return report
+}
+
+// dropDeadTerminalPanes drops the panes of a session's terminals that did not come back, while
+// another of its terminals runs it. It reads liveness afresh: clients may act while it runs.
+func (d *Daemon) dropDeadTerminalPanes(sessionID string) {
+	defer d.lockTerminalEnds(sessionID)()
+	live := d.liveTerminals(context.Background())
+	terminals := d.terminals().Of(harness.SessionID(sessionID))
+	var dead []harness.TerminalID
+	for _, t := range terminals {
+		if _, ok := live[t]; !ok {
+			dead = append(dead, t)
+		}
+	}
+	if len(dead) == len(terminals) {
+		return
+	}
+	for _, t := range dead {
+		d.logf("terminal %s of session %s did not come back; dropping its pane", t, sessionID)
+		if err := d.removeTerminalPane(t); err != nil {
+			d.logf("dropping the pane of terminal %s: %v", t, err)
+		}
+	}
 }
 
 func (d *Daemon) scheduleDeferredWorkerReconciliation(previousRunSessions map[string]struct{}, recoveryStartedAt time.Time) {
@@ -1644,25 +1670,38 @@ func (d *Daemon) handlePTYExit(info ptybackend.ExitInfo) bool {
 			return false
 		}
 	}
+	screen := d.snapshotExitScreen(sessionID, info)
+	exited := ptyExit{Terminal: string(info.ID), ExitCode: info.ExitCode, Signal: info.Signal}
+	if d.endTerminal(sessionID, info.ID) {
+		d.publishFact(FactSessionPTYExited, sessionID, exited)
+		d.logf("terminal %s exited; session %s runs on in its other terminals", info.ID, sessionID)
+		return true
+	}
 	d.sessionInputs().forgetSession(sessionID)
 	d.stopTranscriptWatcher(sessionID)
 	d.closePluginDriverSession(sessionID, "exited", &info.ExitCode, info.Signal)
-	d.captureExitScreen(sessionID, info)
+	d.keepExitScreen(screen)
 	d.noteLaunchExited(sessionID, info)
-
-	if d.ptyBackend != nil {
-		if err := d.removePTYSession(info.ID); err != nil {
-			d.logf("pty backend remove on exit failed for %s: %v", info.ID, err)
-		}
-	}
 	d.releaseExitedCrewBinding(sessionID)
 
-	d.publishFact(FactSessionPTYExited, sessionID, ptyExit{
-		Terminal: string(info.ID),
-		ExitCode: info.ExitCode,
-		Signal:   info.Signal,
-	})
+	d.publishFact(FactSessionPTYExited, sessionID, exited)
 	d.recordProcessEvidence(sessionID, true)
+	return true
+}
+
+// endTerminal removes an exited terminal's runtime and, while another terminal still runs its session,
+// its pane, so a runtime whose removal failed no longer counts for the session's last exit.
+func (d *Daemon) endTerminal(sessionID string, t harness.TerminalID) (othersRun bool) {
+	defer d.lockTerminalEnds(sessionID)()
+	if err := d.removePTYSession(t); err != nil {
+		d.logf("pty backend remove on exit failed for %s: %v", t, err)
+	}
+	if !d.othersLive(sessionID, t) {
+		return false
+	}
+	if err := d.removeTerminalPane(t); err != nil {
+		d.logf("dropping the pane of exited terminal %s: %v", t, err)
+	}
 	return true
 }
 
@@ -1729,7 +1768,7 @@ type sessionTeardown struct {
 	// Captured before the pane closes: teardown kills the terminals the session showed.
 	terminals        []harness.TerminalID
 	driverRun        store.AgentDriverReportCursor
-	lifecycleLock    *sessionLifecycleLockLease
+	lifecycleLock    *sessionLockLease
 	lifecycleRelease sync.Once
 }
 
@@ -2003,7 +2042,7 @@ func (d *Daemon) removeReapedSession(sessionID string) {
 	d.clearChiefOfStaffIfSession(sessionID)
 	d.releaseCrewBindingIfSession(sessionID)
 	d.dissociateSessionFromWorkspace(sessionID)
-	d.removeWorkspaceLayoutPaneForSession(sessionID)
+	d.removeWorkspaceLayoutPanesForSession(sessionID)
 }
 
 func (d *Daemon) forgetSessionRuntime(sessionID string) {
@@ -2903,7 +2942,7 @@ func (d *Daemon) handleUnregister(conn net.Conn, msg *protocol.UnregisterMessage
 	if teardown != nil && teardown.session != nil {
 		d.publishSessionUnregistered(teardown.session)
 		d.dissociateSessionFromWorkspace(teardown.session.ID)
-		d.removeWorkspaceLayoutPaneForSession(teardown.session.ID)
+		d.removeWorkspaceLayoutPanesForSession(teardown.session.ID)
 	}
 	if teardown != nil {
 		d.terminateSessionAsync(msg.ID, syscall.SIGTERM, teardown)

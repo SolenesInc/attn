@@ -84,12 +84,15 @@ export function useSessionLifecycle({
 
   const handleClosePane = useCallback(
     (sessionId: string, paneId: string, workspaceIdHint?: string) => {
-      const closeProtection = sessionCloseProtectionHint(daemonSessions, sessionId);
+      const session = enrichedLocalSessions.find((entry) => entry.id === sessionId);
+      const runsElsewhere = session?.workspace.agents.some(
+        (pane) => pane.sessionId === sessionId && pane.id !== paneId,
+      );
+      const closeProtection = runsElsewhere ? null : sessionCloseProtectionHint(daemonSessions, sessionId);
       if (closeProtection) {
         showError(closeProtection);
         return Promise.resolve();
       }
-      const session = enrichedLocalSessions.find((entry) => entry.id === sessionId);
       const fallbackPaneId = prepareClosePaneFocus(sessionId, paneId);
       const fallbackSessionId = session?.workspace.agents.find(
         (pane) => pane.id === fallbackPaneId && pane.id !== paneId,
@@ -125,21 +128,18 @@ export function useSessionLifecycle({
     ],
   );
 
+  // A lone pane closes through close_pane, which keeps its focus handling; several panes close the session whole.
   const handleRequestCloseSession = useCallback(
-    (id: string, runtimeId?: string) => {
+    (id: string) => {
       const session = sessions.find((entry) => entry.id === id);
       if (!session) {
         return;
       }
-
       const sessionPanes = session.workspace.agents.filter((pane) => pane.sessionId === session.id);
-      const sessionPane =
-        sessionPanes.find((pane) => pane.runtimeId === runtimeId) ?? sessionPanes[0];
-      if (sessionPane) {
-        void handleClosePane(session.id, sessionPane.id).catch(console.error);
+      if (sessionPanes.length === 1) {
+        void handleClosePane(session.id, sessionPanes[0].id).catch(console.error);
         return;
       }
-
       void handleCloseSession(id);
     },
     [handleClosePane, handleCloseSession, sessions],
@@ -154,9 +154,15 @@ export function useSessionLifecycle({
       if (isSessionReloading(info.sessionId)) {
         return;
       }
-      handleRequestCloseSession(info.sessionId, info.runtimeId);
+      const session = sessions.find((entry) => entry.id === info.sessionId);
+      const pane = session?.workspace.agents.find(
+        (entry) => entry.sessionId === info.sessionId && entry.runtimeId === info.runtimeId,
+      );
+      if (pane) {
+        void handleClosePane(info.sessionId, pane.id).catch(console.error);
+      }
     },
-    [handleRequestCloseSession],
+    [handleClosePane, sessions],
   );
 
   useEffect(() => {
@@ -167,14 +173,16 @@ export function useSessionLifecycle({
   const handleReloadSession = useCallback(
     (id: string) => {
       const session = sessions.find((entry) => entry.id === id);
-      const paneId = session?.workspace.agents.find((pane) => pane.sessionId === id)?.id;
-      const size = paneId ? getPaneSize(id, paneId) || undefined : undefined;
-      void reloadSession(id, size).catch((error) => {
+      const panes = session?.workspace.agents.filter((pane) => pane.sessionId === id) ?? [];
+      const activePaneId = session ? getActivePaneIdForSession(session) : '';
+      const pane = panes.find((entry) => entry.id === activePaneId) ?? panes[0];
+      const size = pane ? getPaneSize(id, pane.id) || undefined : undefined;
+      void reloadSession(id, size, pane?.runtimeId).catch((error) => {
         const message = error instanceof Error ? error.message : String(error);
         showError(`Failed to reload session: ${message}`);
       });
     },
-    [getPaneSize, reloadSession, sessions, showError],
+    [getActivePaneIdForSession, getPaneSize, reloadSession, sessions, showError],
   );
 
   const handleReopenSession = useCallback(

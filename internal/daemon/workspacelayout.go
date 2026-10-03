@@ -2,14 +2,19 @@ package daemon
 
 import (
 	"context"
+	"errors"
 	"fmt"
+	"slices"
 	"strings"
 	"syscall"
+	"time"
 
 	"github.com/google/uuid"
 	"github.com/victorarias/attn/internal/bus"
 	"github.com/victorarias/attn/internal/garden"
+	"github.com/victorarias/attn/internal/harness"
 	"github.com/victorarias/attn/internal/protocol"
+	"github.com/victorarias/attn/internal/pty"
 	"github.com/victorarias/attn/internal/rankkey"
 	"github.com/victorarias/attn/internal/store"
 	"github.com/victorarias/attn/internal/workspacelayout"
@@ -1072,19 +1077,15 @@ func (d *Daemon) handleWorkspaceLayoutClosePane(client *wsClient, msg *protocol.
 		return
 	}
 
-	sessionID := ""
-	nextPanes := make([]workspacelayout.Pane, 0, len(snapshot.Panes))
-	found := false
-	for _, pane := range snapshot.Panes {
-		if pane.PaneID == msg.PaneID {
-			sessionID = pane.SessionID
-			found = true
-			continue
-		}
-		nextPanes = append(nextPanes, pane)
-	}
-	if !found {
+	i := slices.IndexFunc(snapshot.Panes, func(p workspacelayout.Pane) bool { return p.PaneID == msg.PaneID })
+	if i < 0 {
 		d.sendWorkspaceLayoutActionResult(client, protocol.CmdWorkspaceLayoutClosePane, msg.WorkspaceID, protocol.Ptr(msg.PaneID), fmt.Errorf("pane not found: %s", msg.PaneID))
+		return
+	}
+	sessionID, closing := snapshot.Panes[i].SessionID, harness.TerminalID(snapshot.Panes[i].RuntimeID)
+
+	if closed, err := d.closeTerminalOnly(sessionID, closing); closed {
+		d.sendWorkspaceLayoutActionResult(client, protocol.CmdWorkspaceLayoutClosePane, msg.WorkspaceID, protocol.Ptr(msg.PaneID), err)
 		return
 	}
 
@@ -1094,11 +1095,6 @@ func (d *Daemon) handleWorkspaceLayoutClosePane(client *wsClient, msg *protocol.
 		return
 	}
 
-	layout, _ := workspacelayout.Remove(snapshot.Layout, msg.PaneID)
-	snapshot.Layout = layout
-	snapshot.Panes = nextPanes
-	normalized := workspacelayout.NormalizeWorkspaceLayout(*snapshot)
-	layoutEmpty := workspacelayout.LayoutEmpty(normalized.Layout)
 	var teardown *sessionTeardown
 	trackedSession := d.store.Get(sessionID) != nil || d.sessionHasLiveWorker(sessionID)
 	if !trackedSession && d.hubManager != nil {
@@ -1113,14 +1109,27 @@ func (d *Daemon) handleWorkspaceLayoutClosePane(client *wsClient, msg *protocol.
 		}
 	}
 
-	if layoutEmpty {
-		d.removeWorkspaceLayout(msg.WorkspaceID)
-	} else if err := d.saveWorkspaceLayout(normalized); err != nil {
+	// A closing session takes every pane showing it; the layouts are read afresh, as exits drop panes too.
+	workspaces := []string{msg.WorkspaceID}
+	closes := func(p workspacelayout.Pane) bool { return p.PaneID == msg.PaneID }
+	if teardown != nil {
+		workspaces = append(workspaces, d.store.WorkspaceLayoutIDsForSession(sessionID)...)
+		closes = func(p workspacelayout.Pane) bool { return p.PaneID == msg.PaneID || p.SessionID == sessionID }
+	}
+	changed, err := d.dropWorkspaceLayoutPanes(workspaces, closes)
+	if err != nil {
 		if teardown != nil {
 			d.cancelSessionTeardown(sessionID, teardown)
 		}
 		d.sendWorkspaceLayoutActionResult(client, protocol.CmdWorkspaceLayoutClosePane, msg.WorkspaceID, protocol.Ptr(msg.PaneID), err)
 		return
+	}
+	var normalized workspacelayout.WorkspaceLayout
+	layoutEmpty := false
+	for _, layout := range changed {
+		if layout.WorkspaceID == msg.WorkspaceID {
+			normalized, layoutEmpty = layout, workspacelayout.LayoutEmpty(layout.Layout)
+		}
 	}
 
 	if teardown != nil {
@@ -1149,8 +1158,11 @@ func (d *Daemon) handleWorkspaceLayoutClosePane(client *wsClient, msg *protocol.
 			}
 			d.broadcastWorkspaceLayoutSnapshotUpdated(emptyLayout)
 		}
-	} else if !layoutEmpty {
-		d.broadcastWorkspaceLayoutUpdated(msg.WorkspaceID)
+	}
+	for _, layout := range changed {
+		if layout.WorkspaceID != msg.WorkspaceID || !layoutEmpty {
+			d.broadcastWorkspaceLayoutUpdated(layout.WorkspaceID)
+		}
 	}
 
 	if teardown != nil {
@@ -1158,35 +1170,91 @@ func (d *Daemon) handleWorkspaceLayoutClosePane(client *wsClient, msg *protocol.
 	}
 }
 
-func (d *Daemon) removeWorkspaceLayoutPaneForSession(sessionID string) {
-	workspaceID, paneID, ok := d.store.FindWorkspaceLayoutPaneBySessionID(sessionID)
-	if !ok || paneID == "" {
-		return
+// closeTerminalOnly closes a pane whose session another live terminal still runs: it drops the pane
+// and ends only that pane's terminal. It reports whether the session runs on, so the pane was its to close.
+func (d *Daemon) closeTerminalOnly(sessionID string, t harness.TerminalID) (bool, error) {
+	if sessionID == "" || t == "" {
+		return false, nil
 	}
-	snapshot := d.store.GetWorkspaceLayout(workspaceID)
-	if snapshot == nil {
-		return
+	defer d.lockTerminalEnds(sessionID)()
+	if !d.othersLive(sessionID, t) {
+		return false, nil
 	}
+	if err := d.removeTerminalPane(t); err != nil {
+		return true, err
+	}
+	d.life.Go("closeTerminal", func() {
+		ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+		defer cancel()
+		if err := d.ptyBackend.Kill(ctx, t, syscall.SIGTERM); err != nil && !errors.Is(err, pty.ErrSessionNotFound) {
+			d.logf("closing terminal %s of session %s: %v", t, sessionID, err)
+		}
+		if err := d.removePTYSession(t); err != nil {
+			d.logf("removing closed terminal %s: %v", t, err)
+		}
+	})
+	d.logf("closed terminal %s; session %s runs on in its other terminals", t, sessionID)
+	return true, nil
+}
 
-	layout, _ := workspacelayout.Remove(snapshot.Layout, paneID)
-	nextPanes := make([]workspacelayout.Pane, 0, len(snapshot.Panes))
-	for _, pane := range snapshot.Panes {
-		if pane.PaneID != paneID {
-			nextPanes = append(nextPanes, pane)
-		}
+// removeWorkspaceLayoutPanesForSession removes every pane that shows the session.
+func (d *Daemon) removeWorkspaceLayoutPanesForSession(sessionID string) {
+	err := d.removeWorkspaceLayoutPanes(d.store.WorkspaceLayoutIDsForSession(sessionID), func(p workspacelayout.Pane) bool {
+		return p.SessionID == sessionID
+	})
+	if err != nil {
+		d.logf("removing the panes of session %s: %v", sessionID, err)
 	}
-	snapshot.Layout = layout
-	snapshot.Panes = nextPanes
-	normalized := workspacelayout.NormalizeWorkspaceLayout(*snapshot)
-	if workspacelayout.LayoutEmpty(normalized.Layout) {
-		d.removeWorkspaceLayout(workspaceID)
-	} else {
-		if err := d.saveWorkspaceLayout(normalized); err != nil {
-			d.logf("workspace layout session unregister save failed for session %s: %v", sessionID, err)
-			return
-		}
+}
+
+func (d *Daemon) removeTerminalPane(t harness.TerminalID) error {
+	workspaceID := d.terminals().workspaceOf(t)
+	if workspaceID == "" {
+		return nil
 	}
-	d.broadcastWorkspaceLayoutUpdated(workspaceID)
+	return d.removeWorkspaceLayoutPanes([]string{workspaceID}, func(p workspacelayout.Pane) bool {
+		return p.RuntimeID == string(t)
+	})
+}
+
+func (d *Daemon) removeWorkspaceLayoutPanes(workspaceIDs []string, match func(workspacelayout.Pane) bool) error {
+	changed, err := d.dropWorkspaceLayoutPanes(workspaceIDs, match)
+	for _, layout := range changed {
+		d.broadcastWorkspaceLayoutUpdated(layout.WorkspaceID)
+	}
+	return err
+}
+
+// dropWorkspaceLayoutPanes removes the matching panes from the workspaces' current layouts in one
+// commit, and a layout they leave empty. It returns the layouts it changed, unbroadcast.
+func (d *Daemon) dropWorkspaceLayoutPanes(workspaceIDs []string, match func(workspacelayout.Pane) bool) ([]workspacelayout.WorkspaceLayout, error) {
+	var changed []workspacelayout.WorkspaceLayout
+	var saveErr error
+	_ = d.commitWorkspaceLayouts(func() ([]workspacelayout.WorkspaceLayout, error) {
+		for _, workspaceID := range workspaceIDs {
+			snapshot := d.store.GetWorkspaceLayout(workspaceID)
+			if snapshot == nil || !slices.ContainsFunc(snapshot.Panes, match) {
+				continue
+			}
+			for _, pane := range snapshot.Panes {
+				if match(pane) {
+					snapshot.Layout, _ = workspacelayout.Remove(snapshot.Layout, pane.PaneID)
+				}
+			}
+			snapshot.Panes = slices.DeleteFunc(snapshot.Panes, match)
+			normalized := workspacelayout.NormalizeWorkspaceLayout(*snapshot)
+			if workspacelayout.LayoutEmpty(normalized.Layout) {
+				d.store.RemoveWorkspaceLayout(workspaceID)
+				normalized.Panes = nil
+			} else if err := d.store.SaveWorkspaceLayout(normalized); err != nil {
+				saveErr = errors.Join(saveErr, fmt.Errorf("save layout of workspace %s: %w", workspaceID, err))
+				continue
+			}
+			changed = append(changed, normalized)
+		}
+		return changed, nil
+	})
+	return changed, saveErr
 }
 
 func (d *Daemon) reconcileWorkspaceLayoutsWithPTYBackend(ctx context.Context) {

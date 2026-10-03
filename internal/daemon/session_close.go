@@ -37,7 +37,7 @@ func (d *Daemon) beginSessionClose(
 	if teardown != nil && teardown.session != nil {
 		d.publishSessionUnregistered(teardown.session)
 		d.dissociateSessionFromWorkspace(teardown.session.ID)
-		d.removeWorkspaceLayoutPaneForSession(teardown.session.ID)
+		d.removeWorkspaceLayoutPanesForSession(teardown.session.ID)
 		d.publishFact(FactSessionTerminated, teardown.session.ID, nil)
 	}
 	return sessionCloseInFlight{teardown: teardown}, nil

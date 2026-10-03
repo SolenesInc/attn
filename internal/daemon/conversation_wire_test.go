@@ -404,38 +404,9 @@ func TestCodexResumeReopensTheClosedSessionOnTheNextPrompt(t *testing.T) {
 func TestCodexResumeFromAFreshPaneToASessionRunningInAnotherPaneShowsItInBoth(t *testing.T) {
 	w := newWorld(t, fakeagent.Codex)
 	app := w.App()
-	cwd := w.Path("shop")
-	owner := w.Spawn(app, fakeagent.Codex, cwd)
-	elsewhere := app.Terminal(owner)
-	running := w.Launched(owner)
-	app.TypeLine(owner, "find the flaky test")
-	running.Prompted()
-	running.Reply("It races the tax lookup. <!-- attn:state=idle -->")
-	flaky := running.ConversationID
-
-	current := w.Spawn(app, fakeagent.Codex, cwd)
-	terminal := app.Terminal(current)
-	codex := w.Launched(current)
-	app.TypeLineIn(terminal, "/resume "+flaky)
-	codex.Prompted()
-	app.TypeLineIn(terminal, "now fix it")
-	if got := codex.Prompted(); got != "now fix it" || codex.ConversationID != flaky {
-		t.Fatalf("codex took %q in conversation %s, want it in %s", got, codex.ConversationID, flaky)
-	}
-	if shown := awaitSuccessor(app, current); shown.ID != owner {
-		t.Fatalf("/resume %s showed session %s, want %s, which runs it in another pane", flaky, shown.ID, owner)
-	}
-	awaitClosed(app, current)
-	testworld.Await(app, protocol.EventWorkspaceLayoutUpdated, func(e protocol.WebSocketEvent) bool {
-		return e.WorkspaceLayout != nil && slices.ContainsFunc(e.WorkspaceLayout.Panes, func(p protocol.WorkspaceLayoutPane) bool {
-			return protocol.Deref(p.RuntimeID) == terminal && protocol.Deref(p.SessionID) == owner
-		}) && slices.ContainsFunc(e.WorkspaceLayout.Panes, func(p protocol.WorkspaceLayoutPane) bool {
-			return protocol.Deref(p.RuntimeID) == elsewhere && protocol.Deref(p.SessionID) == owner
-		})
-	})
-	testworld.AwaitSession(app, owner, func(s protocol.Session) bool { return s.State == protocol.SessionStateWorking })
-	codex.Reply("Which lock? <!-- attn:state=waiting_input -->")
-	testworld.AwaitSession(app, owner, func(s protocol.Session) bool { return s.State == protocol.SessionStateWaitingInput })
+	shared := runInTwoTerminals(w, app)
+	shared.secondRun.Reply("Which lock? <!-- attn:state=waiting_input -->")
+	testworld.AwaitSession(app, shared.id, func(s protocol.Session) bool { return s.State == protocol.SessionStateWaitingInput })
 }
 
 func TestASessionLaunchedToResumeAConversationKeepsResumingIt(t *testing.T) {

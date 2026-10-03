@@ -269,7 +269,7 @@ func (r *delegationRollback) onWorkspaceCreated(workspaceID string) {
 
 func (r *delegationRollback) onPaneCreated(sessionID string) {
 	r.undo = append(r.undo, func(foregroundCleanupProtection) error {
-		r.d.removeWorkspaceLayoutPaneForSession(sessionID)
+		r.d.removeWorkspaceLayoutPanesForSession(sessionID)
 		return nil
 	})
 }

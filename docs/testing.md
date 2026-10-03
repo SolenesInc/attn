@@ -102,7 +102,9 @@ The world:
   `w.restart()` replaces it with a new daemon over the same data.
 - `w.App()` connects as the app. `w.Client()` returns a CLI client.
 - `testworld.Await`, `testworld.Request` and `testworld.AwaitSession` read what
-  the daemon sends.
+  the daemon sends. `p.AwaitPanes` waits for the panes a peer last heard of.
+- With the worker PTY backend (`ATTN_PTY_BACKEND=worker`), `w.LoseTerminal`
+  ends a terminal's worker while the daemon is stopped, as a crash would.
 
 Agents:
 

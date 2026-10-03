@@ -318,7 +318,7 @@ func (d *Daemon) crewWakeDayWithChargeLocked(name, agent string, autonomous bool
 		InitialPrompt: protocol.Ptr(initialPrompt),
 	})
 	if _, err := readInternalActionResult(spawnClient); err != nil {
-		d.removeWorkspaceLayoutPaneForSession(sessionID)
+		d.removeWorkspaceLayoutPanesForSession(sessionID)
 		d.releaseCrewBindingIfSession(sessionID)
 		return nil, fmt.Errorf("wake %s: %w", crew.DisplayName(member.ID), err)
 	}

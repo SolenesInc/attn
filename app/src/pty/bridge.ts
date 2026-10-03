@@ -88,7 +88,7 @@ export interface PtyBackend {
     pixels?: PtyPixelGeometry,
   ) => Promise<void>;
   detach: (id: string) => Promise<void>;
-  reload: (id: string, cols: number, rows: number) => Promise<void>;
+  reload: (id: string, cols: number, rows: number, terminal?: string) => Promise<void>;
 }
 
 const listeners = new Set<PtyEventHandler>();
@@ -242,7 +242,7 @@ export async function ptyDetach(request: { id: string }) {
   await backend.detach(request.id);
 }
 
-export async function ptyReload(request: { id: string; cols: number; rows: number }) {
+export async function ptyReload(request: { id: string; cols: number; rows: number; terminal?: string }) {
   if (mockEnabled()) {
     if (!mockSessions.has(request.id)) {
       return;
@@ -254,5 +254,5 @@ export async function ptyReload(request: { id: string; cols: number; rows: numbe
   if (!backend) {
     throw new Error('PTY backend is not configured');
   }
-  await backend.reload(request.id, request.cols, request.rows);
+  await backend.reload(request.id, request.cols, request.rows, request.terminal);
 }

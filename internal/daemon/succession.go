@@ -40,11 +40,9 @@ func (d *Daemon) shows(t harness.TerminalID, from *protocol.Session, owner strin
 
 // succeed moves t on from from to sc.To. A from that another live terminal still runs stays open there.
 func (d *Daemon) succeed(t harness.TerminalID, from *protocol.Session, sc store.Succession, observation agentConversationObservation) error {
+	unlockEnds := d.lockTerminalEnds(from.ID)
+	sc.KeepFrom = d.othersLive(from.ID, t)
 	live := d.liveTerminals(context.Background())
-	sc.KeepFrom = slices.ContainsFunc(d.terminals().Of(harness.SessionID(from.ID)), func(id harness.TerminalID) bool {
-		_, running := live[id]
-		return running && id != t
-	})
 	if !sc.KeepFrom {
 		d.drainTranscriptWatcher(from.ID)
 		if _, err := d.captureGardenSessionSnapshot(from); err != nil {
@@ -60,6 +58,7 @@ func (d *Daemon) succeed(t harness.TerminalID, from *protocol.Session, sc store.
 		}
 		return layouts, d.store.CommitSuccession(sc, layouts, time.Now())
 	})
+	unlockEnds()
 	if err != nil {
 		d.ensureTranscriptWatcherAtPath(from.ID, d.store.GetSessionConversation(from.ID).TranscriptPath)
 		return err

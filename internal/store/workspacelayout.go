@@ -194,6 +194,39 @@ func (s *Store) FindWorkspaceLayoutPaneBySessionID(sessionID string) (workspaceI
 	return rowWorkspaceID, rowPaneID, true
 }
 
+// WorkspaceLayoutIDsForSession lists the workspaces whose layouts hold a pane for the session.
+func (s *Store) WorkspaceLayoutIDsForSession(sessionID string) []string {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+
+	var ids []string
+	if s.db == nil {
+		for workspaceID, snapshot := range s.workspaces {
+			for _, pane := range snapshot.Panes {
+				if pane.SessionID == sessionID {
+					ids = append(ids, workspaceID)
+					break
+				}
+			}
+		}
+		return ids
+	}
+
+	rows, err := s.db.Query(`SELECT DISTINCT workspace_id FROM workspace_layout_panes WHERE session_id = ?`, sessionID)
+	if err != nil {
+		log.Printf("[store] WorkspaceLayoutIDsForSession: query failed for session %s: %v", sessionID, err)
+		return nil
+	}
+	defer rows.Close()
+	for rows.Next() {
+		var id string
+		if err := rows.Scan(&id); err == nil {
+			ids = append(ids, id)
+		}
+	}
+	return ids
+}
+
 func (s *Store) WorkspaceLayoutIDs() []string {
 	s.mu.RLock()
 	defer s.mu.RUnlock()

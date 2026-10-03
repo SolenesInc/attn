@@ -5,8 +5,10 @@ change: >
   another attn pane in the same workspace is running now shows that session in
   this pane too, under its own name, instead of moving the conversation into the
   current session. Both panes show the same session, and the session this pane
-  left closes into the ledger. When one of the two panes later moves on, the
-  session stays open in the other. This also works from a pane that has not had
+  left closes into the ledger. When one of the two panes later moves on, is
+  closed, or its agent exits, the session stays open and running in the other;
+  closing the session itself ends it in both panes, and reloading from a pane
+  restarts only that pane's agent. This also works from a pane that has not had
   a prompt yet.
 notes: >
   A session running in another workspace, or kept alive only by the bare `attn`

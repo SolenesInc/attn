@@ -155,6 +155,29 @@ func (d *Daemon) sessionLive(ctx context.Context, sessionID string) bool {
 	return false
 }
 
+// liveTerminalsOf lists the session's terminals with a registered runtime. An exited runtime counts
+// until it is removed, so an exit removes its own before asking about its siblings.
+func (d *Daemon) liveTerminalsOf(sessionID string) []harness.TerminalID {
+	live := d.liveTerminals(context.Background())
+	return slices.DeleteFunc(d.terminalsOf(sessionID), func(id harness.TerminalID) bool {
+		_, ok := live[id]
+		return !ok
+	})
+}
+
+// othersLive is true when a terminal of the session other than t still runs it.
+func (d *Daemon) othersLive(sessionID string, t harness.TerminalID) bool {
+	return slices.ContainsFunc(d.liveTerminalsOf(sessionID), func(id harness.TerminalID) bool { return id != t })
+}
+
+// lockTerminalEnds is held by whatever changes which of a session's terminals run it, so a terminal
+// ending asks othersLive only between such changes. Take it after the session's lifecycle lock.
+func (d *Daemon) lockTerminalEnds(sessionID string) (unlock func()) {
+	lease := d.terminalEndLocks.lease(sessionID)
+	lease.Lock()
+	return lease.Unlock
+}
+
 func (d *Daemon) liveSessions(ctx context.Context) map[string]struct{} {
 	sessions := make(map[string]struct{})
 	for id := range d.liveTerminals(ctx) {

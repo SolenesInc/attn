@@ -15,8 +15,13 @@ const exitScreenMaxBytes = 256 * 1024
 const exitScreenSnapshotTimeout = modelCaptureSnapshotTimeout
 
 func (d *Daemon) captureExitScreen(sessionID string, info ptybackend.ExitInfo) {
+	d.keepExitScreen(d.snapshotExitScreen(sessionID, info))
+}
+
+// snapshotExitScreen reads an exited terminal's last screen; its runtime must not be removed yet.
+func (d *Daemon) snapshotExitScreen(sessionID string, info ptybackend.ExitInfo) *store.SessionExitScreen {
 	if d.store == nil || d.store.Get(sessionID) == nil {
-		return
+		return nil
 	}
 	rec := store.SessionExitScreen{SessionID: sessionID, ExitCode: info.ExitCode, ExitSignal: info.Signal}
 	if provider, ok := d.ptyBackend.(ptybackend.ScreenSnapshotProvider); ok {
@@ -32,11 +37,18 @@ func (d *Daemon) captureExitScreen(sessionID string, info ptybackend.ExitInfo) {
 			rec.Rows = int(snapshot.Screen.Rows)
 		}
 	}
-	if err := d.store.SaveSessionExitScreen(rec, time.Now()); err != nil {
-		d.logf("exit screen not kept: session=%s err=%v", sessionID, err)
+	return &rec
+}
+
+func (d *Daemon) keepExitScreen(rec *store.SessionExitScreen) {
+	if rec == nil {
 		return
 	}
-	d.logf("exit screen kept: session=%s code=%d signal=%q text_bytes=%d", sessionID, info.ExitCode, info.Signal, len(rec.Text))
+	if err := d.store.SaveSessionExitScreen(*rec, time.Now()); err != nil {
+		d.logf("exit screen not kept: session=%s err=%v", rec.SessionID, err)
+		return
+	}
+	d.logf("exit screen kept: session=%s code=%d signal=%q text_bytes=%d", rec.SessionID, rec.ExitCode, rec.ExitSignal, len(rec.Text))
 }
 
 func clampExitScreenText(text string) string {

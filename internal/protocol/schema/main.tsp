@@ -2262,6 +2262,8 @@ model ReloadSessionMessage {
   id: string;
   cols: int32;
   rows: int32;
+  /** The terminal (runtime id) to reload; the session's primary terminal when absent. */
+  terminal?: string;
 }
 
 model WorkspaceLayoutGetMessage {
