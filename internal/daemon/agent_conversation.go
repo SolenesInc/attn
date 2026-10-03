@@ -5,7 +5,9 @@ import (
 	"net"
 	"strings"
 
+	agentdriver "github.com/victorarias/attn/internal/agent"
 	"github.com/victorarias/attn/internal/bus"
+	"github.com/victorarias/attn/internal/harness"
 	"github.com/victorarias/attn/internal/protocol"
 	"github.com/victorarias/attn/internal/store"
 )
@@ -17,12 +19,12 @@ type agentConversationObservation struct {
 }
 
 func (d *Daemon) handleObserveAgentConversation(conn net.Conn, msg *protocol.SetSessionResumeIDMessage) {
+	terminal := harness.TerminalID(strings.TrimSpace(msg.ID))
 	observation := agentConversationObservation{
-		SessionID:      strings.TrimSpace(msg.ID),
 		NativeID:       strings.TrimSpace(msg.ResumeSessionID),
 		TranscriptPath: strings.TrimSpace(protocol.Deref(msg.TranscriptPath)),
 	}
-	if observation.SessionID == "" {
+	if terminal == "" {
 		d.sendError(conn, "missing id")
 		return
 	}
@@ -31,12 +33,49 @@ func (d *Daemon) handleObserveAgentConversation(conn net.Conn, msg *protocol.Set
 		return
 	}
 	if observation.TranscriptPath == "" {
-		d.logf("agent conversation: ignored pathless observation session=%s native=%s", observation.SessionID, observation.NativeID)
+		d.logf("agent conversation: ignored pathless observation terminal=%s native=%s", terminal, observation.NativeID)
 		d.sendOK(conn)
 		return
 	}
-	d.observeOrQueueAgentConversation(observation)
+	d.conversationIn(terminal, observation)
 	d.sendOK(conn)
+}
+
+// conversationIn routes a conversation the harness in terminal t reports from SessionStart or
+// UserPromptSubmit. Those arrive in order, so only they may open a session.
+func (d *Daemon) conversationIn(t harness.TerminalID, observation agentConversationObservation) {
+	cur, placed := d.terminals().Showing(t)
+	if current := d.store.Get(string(cur)); !placed || (current != nil && !conversationIsSession(current.Agent)) {
+		observation.SessionID = d.callerID(string(t))
+		d.observeOrQueueAgentConversation(observation)
+		return
+	}
+	lock := d.sessionLifecycleLockFor(string(cur))
+	lock.Lock()
+	defer lock.Unlock()
+	session := d.store.Get(string(cur))
+	if shown, _ := d.terminals().Showing(t); shown != cur || session == nil || !d.terminalLive(t) {
+		d.logf("agent conversation: dropped %s from terminal %s, which no longer runs session %s", observation.NativeID, t, cur)
+		return
+	}
+	observation.SessionID = session.ID
+	held := d.store.GetSessionConversation(session.ID).NativeID
+	// A conversation another session holds still moves within this one, until a terminal can show that session.
+	if held == "" || held == observation.NativeID || d.store.ConversationHeldElsewhere(session.ID, observation.NativeID) {
+		d.observeAgentConversation(observation)
+		return
+	}
+	if err := d.opened(t, session, observation); err != nil {
+		d.logf("agent conversation: opening a session for %s in terminal %s failed; %s keeps it: %v", observation.NativeID, t, session.ID, err)
+	}
+}
+
+func conversationIsSession(agent protocol.SessionAgent) bool {
+	return conversationDecidesIdentity(agentdriver.Get(string(agent)))
+}
+
+func conversationDecidesIdentity(driver agentdriver.Driver) bool {
+	return agentdriver.EffectiveCapabilities(driver).ConversationIsSession
 }
 
 func (d *Daemon) observeOrQueueAgentConversation(observation agentConversationObservation) {

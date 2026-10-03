@@ -9,7 +9,7 @@ import (
 	"github.com/victorarias/attn/internal/fakeagent"
 )
 
-func TestCodexUsageCountsNestedSubagentsAndGuardianReviewsAndSurvivesANewConversation(t *testing.T) {
+func TestCodexUsageCountsNestedSubagentsAndGuardianReviewsAndANewConversationCountsItsOwn(t *testing.T) {
 	w := newWorld(t, fakeagent.Codex)
 	app := w.App()
 	session := w.Spawn(app, fakeagent.Codex, w.Path("shop"))
@@ -37,10 +37,11 @@ func TestCodexUsageCountsNestedSubagentsAndGuardianReviewsAndSurvivesANewConvers
 	}
 	app.TypeLine(session, "now fix it")
 	codex.Prompted()
+	next := awaitSuccessor(app, session)
 	fixed := "Fixed with a lock. <!-- attn:state=idle -->"
 	codex.Reply(fixed)
-	if usage := awaitUsageTokens(app, session, counted+claudeTokens(fixed)); usage.MeasurementIncomplete != nil {
-		t.Errorf("usage across the new conversation = %+v, want it complete", usage)
+	if usage := awaitUsageTokens(app, next.ID, claudeTokens(fixed)); usage.MeasurementIncomplete != nil {
+		t.Errorf("usage of the session /new opened = %+v, want it complete", usage)
 	}
 	if after, err := os.ReadFile(rollout); err != nil || !bytes.Equal(after, before) {
 		t.Errorf("the previous conversation's rollout after /new = %q (%v), want it untouched", after, err)

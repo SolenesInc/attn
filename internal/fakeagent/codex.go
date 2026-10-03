@@ -34,6 +34,7 @@ type codex struct {
 	prompt       string
 	turnID       string
 	lastThread   string
+	newChat      string
 }
 
 var codexExecFlags = flagSpec{
@@ -196,10 +197,25 @@ func (c *codex) hookInput(event string, extra map[string]any) map[string]any {
 	return input
 }
 
+// Like real Codex, /new and /clear start the new thread on its first turn, which reports it
+// through SessionStart before UserPromptSubmit.
 func (c *codex) submit(prompt string) error {
-	if strings.TrimSpace(prompt) == "/new" {
-		c.resumed, c.lastThread = false, ""
-		return c.startRollout()
+	switch strings.TrimSpace(prompt) {
+	case "/new":
+		c.newChat = "startup"
+		return nil
+	case "/clear":
+		c.newChat = "clear"
+		return nil
+	}
+	if source := c.newChat; source != "" {
+		c.resumed, c.lastThread, c.newChat = false, "", ""
+		if err := c.startRollout(); err != nil {
+			return err
+		}
+		if err := c.hooks.run("SessionStart", source, c.hookInput("SessionStart", map[string]any{"source": source})); err != nil {
+			return err
+		}
 	}
 	c.turnID = uuid.NewString()
 	c.term.title(codexBusyGlyph + c.restingTitle())

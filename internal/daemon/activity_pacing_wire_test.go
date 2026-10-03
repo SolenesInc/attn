@@ -58,7 +58,7 @@ func TestAWorkingSessionsActivityLineIsWrittenOnlyForNewOutputAndAtMostOncePerIn
 		if err := os.MkdirAll(cwd, 0o755); err != nil {
 			t.Fatal(err)
 		}
-		transcript := fakeagent.WriteClaudeTranscript(t, cwd)
+		transcript := fakeagent.WriteClaudeTranscript(t, cwd, "")
 		transcript.Answer("Reading the checkout plan.")
 		if err := cli.RegisterWithAgent("s1", "checkout work", cwd, string(protocol.SessionAgentClaude)); err != nil {
 			t.Fatalf("register: %v", err)

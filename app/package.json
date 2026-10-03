@@ -53,6 +53,7 @@
     "real-app:scenario-close-pane-nonblocking": "node scripts/real-app-harness/scenario-close-pane-nonblocking.mjs",
     "real-app:scenario-agent-close": "node scripts/real-app-harness/scenario-agent-close.mjs",
     "real-app:scenario-session-close-ledger": "node scripts/real-app-harness/scenario-session-close-ledger.mjs",
+    "real-app:scenario-clear-opens-session": "node scripts/real-app-harness/scenario-clear-opens-session.mjs",
     "real-app:scenario-session-reopen": "node scripts/real-app-harness/scenario-session-reopen.mjs",
     "real-app:scenario-sessions-surface": "node scripts/real-app-harness/scenario-sessions-surface.mjs",
     "real-app:scenario-tile-only-workspace-select": "node scripts/real-app-harness/scenario-tile-only-workspace-select.mjs",

@@ -1263,6 +1263,10 @@ CREATE INDEX IF NOT EXISTS idx_automode_denials_recent ON automode_denials(id DE
  ALTER TABLE presentations ADD COLUMN address TEXT NOT NULL DEFAULT '';
  UPDATE presentations SET address = 'session:' || session_id;
 `},
+	{163, "record the session a successor replaced in its terminal, and whether a session was ever prompted", `
+ ALTER TABLE sessions ADD COLUMN succeeds TEXT NOT NULL DEFAULT '';
+ CREATE INDEX idx_sessions_succeeds ON sessions(succeeds) WHERE succeeds != '';
+`},
 }
 
 const migration99SQL = `

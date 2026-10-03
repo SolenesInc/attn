@@ -235,7 +235,7 @@ model Session {
   automation?: AutomationProvenance; // Present when this session was launched by an automation; latest run wins for a continuity thread.
   pull_requests?: SessionPullRequest[]; // Pull requests this session's agent opened, newest first. Joined at broadcast from the session_pull_requests table, never stored on the session row.
   terminal_build_stale?: boolean; // True when this session's pty-worker was built against a different libghostty-vt than the daemon, which happens when the app updates under a running session. The two then hold different terminal implementations and stop agreeing about the grid, so the app offers a reload. Derived at broadcast from the format tag the worker reports at its handshake; never stored, and absent for every same-build session, which is all of them outside an upgrade window.
-  succeeds?: string;            // Not yet sent by the daemon (lands with Claude /clear). The session this one replaced in its terminal, when the harness there moved to another conversation. The replaced session is closed or removed, so a client moves what it holds for it (selection, history, sidebar place) to this one. Durable: it stays set after the predecessor is reopened, so only its first appearance on a session marks a handover.
+  succeeds?: string;            // The session this one replaced in its terminal, when the harness there moved to another conversation; that session closed into the ledger. Durable: it stays set after the predecessor is reopened.
   last_seen: string;            // ISO timestamp, always set
 }
 

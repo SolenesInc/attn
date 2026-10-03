@@ -231,6 +231,23 @@ func (m *sessionInputModule) forgetSession(sessionID string) {
 	m.mu.Unlock()
 }
 
+// handOverSubmit gives the session a terminal now shows the prompt the user typed while it showed the
+// old one: Codex reports a new chat on its first prompt. attn's own pastes stay with the old session.
+func (m *sessionInputModule) handOverSubmit(from, to string) {
+	src := m.lane(from)
+	src.mu.Lock()
+	typed := src.userSubmit
+	src.userSubmit = false
+	src.mu.Unlock()
+	if !typed {
+		return
+	}
+	dst := m.lane(to)
+	dst.mu.Lock()
+	dst.userSubmit = true
+	dst.mu.Unlock()
+}
+
 func (m *sessionInputModule) fenceSession(sessionID string) {
 	m.closeLane(sessionID)
 }

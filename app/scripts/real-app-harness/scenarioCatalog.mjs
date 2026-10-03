@@ -59,6 +59,12 @@ export const scenarioCatalog = [
     command: ['pnpm', 'run', 'real-app:scenario-session-close-ledger'],
   },
   {
+    id: 'clear-opens-session',
+    runnerId: 'CLEAR-OPENS-SESSION',
+    label: '/clear in a focused Claude pane opens a new session in place, keeps focus and the terminal, and closes the old one into the ledger',
+    command: ['pnpm', 'run', 'real-app:scenario-clear-opens-session'],
+  },
+  {
     id: 'session-reopen',
     runnerId: 'SESSION-REOPEN',
     label: 'A closed worktree session reopens under its own id, recreating a deleted worktree only when asked',

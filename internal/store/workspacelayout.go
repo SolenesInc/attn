@@ -20,18 +20,23 @@ func (s *Store) SaveWorkspaceLayout(snapshot workspacelayout.WorkspaceLayout) er
 		return nil
 	}
 
-	layoutJSON, err := workspacelayout.EncodeLayout(snapshot.Layout)
-	if err != nil {
-		return err
-	}
-
-	now := time.Now().UTC().Format(sortableTimeFormat)
 	tx, err := s.db.Begin()
 	if err != nil {
 		return err
 	}
 	defer tx.Rollback()
+	if err := saveWorkspaceLayoutTx(tx, snapshot); err != nil {
+		return err
+	}
+	return tx.Commit()
+}
 
+func saveWorkspaceLayoutTx(tx *sql.Tx, snapshot workspacelayout.WorkspaceLayout) error {
+	layoutJSON, err := workspacelayout.EncodeLayout(snapshot.Layout)
+	if err != nil {
+		return err
+	}
+	now := time.Now().UTC().Format(sortableTimeFormat)
 	createdAtByPane := make(map[string]string, len(snapshot.Panes))
 	rows, err := tx.Query(`SELECT pane_id, created_at FROM workspace_layout_panes WHERE workspace_id = ?`, snapshot.WorkspaceID)
 	if err == nil {
@@ -76,8 +81,7 @@ func (s *Store) SaveWorkspaceLayout(snapshot workspacelayout.WorkspaceLayout) er
 			return err
 		}
 	}
-
-	return tx.Commit()
+	return nil
 }
 
 func (s *Store) GetWorkspaceLayout(workspaceID string) *workspacelayout.WorkspaceLayout {

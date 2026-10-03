@@ -55,6 +55,8 @@ type Capabilities struct {
 	HasModelPin bool
 
 	HasEffortPin bool
+
+	ConversationIsSession bool
 }
 
 type HarnessSignalKind string

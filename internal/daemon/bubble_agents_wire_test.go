@@ -60,7 +60,11 @@ func (w *world) bootBubbleClaude(t *testing.T, id string) *bubbleClaude {
 	if err := os.MkdirAll(cwd, 0o755); err != nil {
 		t.Fatal(err)
 	}
-	agent := &bubbleClaude{t: t, id: id, self: string(term.Options.ID), cli: w.Client(), term: term, transcript: fakeagent.WriteClaudeTranscript(t, cwd)}
+	conversation := term.Options.ResumeSessionID
+	if conversation == "" {
+		conversation = string(term.Options.ID)
+	}
+	agent := &bubbleClaude{t: t, id: id, self: string(term.Options.ID), cli: w.Client(), term: term, transcript: fakeagent.WriteClaudeTranscript(t, cwd, conversation)}
 	term.OnSubmit(agent.take)
 	if err := agent.cli.ObserveAgentConversation(agent.self, agent.transcript.ConversationID, agent.transcript.Path); err != nil {
 		t.Fatalf("session start of %s: %v", id, err)

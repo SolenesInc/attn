@@ -1,0 +1,14 @@
+kind: changed
+area: daemon
+change: >
+  `/clear` in Claude or Codex, and Codex's `/new`, open a new session with a new
+  name in the same pane, which keeps its focus and terminal. The session that was
+  there closes into the ledger with its name, conversation, usage, seeds, inbox
+  and pull request watches, and Reopen brings it back in a new pane with its
+  conversation and whatever queued for it while closed. Codex opens the new
+  session on the new chat's first prompt.
+notes: >
+  A crew member's `/clear` ends its day, and the Chief's ends the Chief role; the
+  new session is unbound. A Codex `/resume` to a thread no attn session holds also opens a new
+  session. Copilot and bare CLI sessions still start a new conversation within
+  the session.

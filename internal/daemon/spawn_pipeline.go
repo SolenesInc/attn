@@ -466,7 +466,7 @@ func (d *Daemon) launchedHere(sessionID, resumeID string) bool {
 func (d *Daemon) persistLaunchedConversation(req *spawnRequest, plan *spawnPlan) {
 	sessionID := req.msg.ID
 	conversation := agentdriver.SpawnResumeSessionID(req.driver, string(plan.spawnOpts.ID), req.resumeSessionID, plan.spawnOpts.ResumePicker)
-	clearPicker := conversation == "" && plan.spawnOpts.ResumePicker && !req.hasPluginDriver
+	clearPicker := conversation == "" && !req.hasPluginDriver && (plan.spawnOpts.ResumePicker || conversationDecidesIdentity(req.driver))
 	if conversation == "" && !clearPicker {
 		return
 	}

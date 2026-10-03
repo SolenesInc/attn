@@ -27,14 +27,13 @@ const CAPTURE_SOURCES = ['prompt'];
 const MOCK_AGENT_FLAVORS = {
   // harness_signals.go reads claude's resting title by its ✳; any other leading
   // rune is unclassified, and an unsettled heartbeat never reaches idle.
-  claude: { header: 'Claude Code mock agent', prompt: '❯ ', resting: '✳ ' },
-  codex: { header: 'OpenAI Codex mock agent', prompt: '› ', resting: '' },
+  claude: { header: 'Claude Code mock agent', prompt: '❯ ', resting: '✳ ', newConversation: '/clear' },
+  codex: { header: 'OpenAI Codex mock agent', prompt: '› ', resting: '', newConversation: '/new' },
 };
 
 export const MOCK_AGENT_AGENTS = Object.keys(MOCK_AGENT_FLAVORS);
 export const MOCK_AGENT_EXECUTABLE = executablePath;
 export const MOCK_AGENT_MODEL = 'mock-agent-1';
-export const MOCK_AGENT_NEW_CONVERSATION = '/new';
 
 export function mockAgentName(agent) {
   const name = String(agent || '').trim().toLowerCase();
@@ -67,7 +66,8 @@ export function codexTranscriptPath(id, startedAt = new Date(), env = process.en
 }
 
 export function mockTranscriptPath({ agent, cwd, id, resumable, startedAt = new Date(), env = process.env }) {
-  if (!resumable) return path.join(cwd, '.attn-mock-agent', `rollout-${id}.jsonl`);
+  // attn reads a Claude conversation's id from its transcript's name, as `<id>.jsonl`.
+  if (!resumable) return path.join(cwd, '.attn-mock-agent', mockAgentName(agent) === 'claude' ? `${id}.jsonl` : `rollout-${id}.jsonl`);
   return mockAgentName(agent) === 'claude'
     ? claudeTranscriptPath(cwd, id, env)
     : codexTranscriptPath(id, startedAt, env);
@@ -609,7 +609,7 @@ async function runMockAgent() {
       prompt();
       return;
     }
-    if (agent === 'codex' && input === MOCK_AGENT_NEW_CONVERSATION) {
+    if (input === flavor.newConversation) {
       blocks.length = 0;
       startConversation('');
       notice(`started a new conversation ${conversation.id}`);

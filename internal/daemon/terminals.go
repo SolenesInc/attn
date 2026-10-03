@@ -38,12 +38,19 @@ func (d *Daemon) terminals() *terminalRegistry {
 	return d.terminalState
 }
 
-// saveWorkspaceLayout is the one writer of a layout's pane rows, so the registry follows every save.
 func (d *Daemon) saveWorkspaceLayout(snapshot workspacelayout.WorkspaceLayout) error {
+	return d.commitWorkspaceLayout(func() (workspacelayout.WorkspaceLayout, error) {
+		return snapshot, d.store.SaveWorkspaceLayout(snapshot)
+	})
+}
+
+// commitWorkspaceLayout is the one writer of a layout's pane rows, so the registry follows every save.
+func (d *Daemon) commitWorkspaceLayout(commit func() (workspacelayout.WorkspaceLayout, error)) error {
 	r := d.terminals()
 	r.write.Lock()
 	defer r.write.Unlock()
-	if err := d.store.SaveWorkspaceLayout(snapshot); err != nil {
+	snapshot, err := commit()
+	if err != nil {
 		return err
 	}
 	r.place(snapshot.WorkspaceID, snapshot.Panes)
@@ -131,6 +138,11 @@ func (d *Daemon) liveTerminals(ctx context.Context) map[harness.TerminalID]struc
 	return live
 }
 
+func (d *Daemon) terminalLive(t harness.TerminalID) bool {
+	_, live := d.liveTerminals(context.Background())[t]
+	return live
+}
+
 func (d *Daemon) sessionLive(ctx context.Context, sessionID string) bool {
 	live := d.liveTerminals(ctx)
 	for _, id := range d.terminalsOf(sessionID) {
@@ -194,6 +206,15 @@ func (r *terminalRegistry) Showing(t harness.TerminalID) (harness.SessionID, boo
 		return "", false
 	}
 	return entry.shows, true
+}
+
+func (r *terminalRegistry) workspaceOf(t harness.TerminalID) string {
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+	if entry := r.byID[t]; entry != nil {
+		return entry.workspace
+	}
+	return ""
 }
 
 func (r *terminalRegistry) Of(s harness.SessionID) []harness.TerminalID {

@@ -72,6 +72,7 @@ func (c *Claude) Capabilities() Capabilities {
 		HasLaunchInstructions: true,
 		HasModelPin:           true,
 		HasEffortPin:          true,
+		ConversationIsSession: true,
 	}
 }
 
