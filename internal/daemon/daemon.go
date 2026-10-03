@@ -2942,6 +2942,7 @@ func (d *Daemon) handleStop(conn net.Conn, msg *protocol.StopMessage) {
 		d.logf("handleStop: ignored transcript path for session=%s: reported=%s bound=%s", msg.ID, reportedTranscriptPath, msg.TranscriptPath)
 	}
 	d.logf("handleStop: session=%s, transcript_path=%s", msg.ID, msg.TranscriptPath)
+	d.store.MarkPrompted(msg.ID, time.Now())
 
 	relaxBackgroundWork := d.isChiefOfStaffSession(msg.ID)
 	classifies := !d.consumeForcedStopClassification(msg.ID)

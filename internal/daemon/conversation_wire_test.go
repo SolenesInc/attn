@@ -255,6 +255,22 @@ func TestOnlyClearedSessionsThatTookATurnStayInTheLedger(t *testing.T) {
 	}
 }
 
+func TestATurnNoPromptOpenedKeepsTheClearedSessionInTheLedger(t *testing.T) {
+	w := newWorld(t, fakeagent.Claude)
+	app, cli := w.App(), w.Client()
+	session := w.Spawn(app, fakeagent.Claude, w.Path("shop"))
+	claude := w.Launched(session)
+	proceeded := "Plan carried out. <!-- attn:state=idle -->"
+	claude.Reply(proceeded)
+	awaitUsageTokens(app, session, claudeTokens(proceeded))
+
+	clearClaude(app, claude, session)
+	awaitClosed(app, session)
+	if got := ledgerIDs(ledger(t, cli, client.SessionListOptions{Closed: true})); !slices.Equal(got, []string{session}) {
+		t.Errorf("closed ledger = %v, want %s, which worked without a prompt", got, session)
+	}
+}
+
 func TestCodexNewOpensANewSessionOnTheNewChatsFirstPrompt(t *testing.T) {
 	w := newWorld(t, fakeagent.Codex)
 	app, cli := w.App(), w.Client()
