@@ -142,9 +142,11 @@ async function recordHostedStep(name, action) {
   let stderr = '';
   child.stderr.on('data', chunk => { stderr += chunk; });
   const exit = new Promise((resolve, reject) => { child.once('error', reject); child.once('exit', (code, signal) => resolve({ code, signal })); });
-  await action();
+  let actionError;
+  try { await action(); } catch (error) { actionError = error; }
   const result = await exit;
   runner.writeJson(`${name}-recording.json`, { ...result, windowId, output, stderr });
+  if (actionError) throw actionError;
   assert.equal(result.code, 0, stderr);
   assert.ok(fs.statSync(output).size > 0, 'Native recording must contain bytes');
 }
