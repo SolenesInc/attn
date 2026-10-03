@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"github.com/victorarias/attn/internal/buildinfo"
+	"github.com/victorarias/attn/internal/harness"
 	"github.com/victorarias/attn/internal/protocol"
 	"github.com/victorarias/attn/internal/ptybackend"
 )
@@ -18,8 +19,12 @@ func inplaceUpgradeEnabled() bool {
 	return os.Getenv(inplaceUpgradeEnvVar) != "0"
 }
 
-func (d *Daemon) handleTerminalBuildChanged(sessionID, workerFormat string) {
-	if d.sessionCanReplayTerminalBuild(sessionID) {
+func (d *Daemon) handleTerminalBuildChanged(terminal harness.TerminalID, workerFormat string) {
+	sessionID, shown := d.shownIn(terminal)
+	if !shown {
+		return
+	}
+	if d.terminalCanReplayBuild(terminal) {
 		d.publishFact(FactSessionTerminalBuildChanged, sessionID, nil)
 		return
 	}
@@ -28,40 +33,40 @@ func (d *Daemon) handleTerminalBuildChanged(sessionID, workerFormat string) {
 		d.publishFact(FactSessionTerminalBuildChanged, sessionID, nil)
 		return
 	}
-	if !d.claimWorkerUpgrade(sessionID) {
+	if !d.claimWorkerUpgrade(terminal) {
 		return
 	}
-	d.logf("terminal build: session=%s worker=%q daemon=%s; upgrading in place",
-		sessionID, workerFormat, buildinfo.SnapshotFormat)
-	if !d.life.Go("upgradeStaleWorker", func() { d.upgradeStaleWorker(sessionID, upgrader) }) {
-		d.releaseWorkerUpgrade(sessionID)
+	d.logf("terminal build: session=%s terminal=%s worker=%q daemon=%s; upgrading in place",
+		sessionID, terminal, workerFormat, buildinfo.SnapshotFormat)
+	if !d.life.Go("upgradeStaleWorker", func() { d.upgradeStaleWorker(sessionID, terminal, upgrader) }) {
+		d.releaseWorkerUpgrade(terminal)
 	}
 }
 
-func (d *Daemon) claimWorkerUpgrade(sessionID string) bool {
+func (d *Daemon) claimWorkerUpgrade(terminal harness.TerminalID) bool {
 	d.upgradingMu.Lock()
 	defer d.upgradingMu.Unlock()
-	if d.upgradingWorkers[sessionID] {
+	if d.upgradingWorkers[terminal] {
 		return false
 	}
 	if d.upgradingWorkers == nil {
-		d.upgradingWorkers = make(map[string]bool)
+		d.upgradingWorkers = make(map[harness.TerminalID]bool)
 	}
-	d.upgradingWorkers[sessionID] = true
+	d.upgradingWorkers[terminal] = true
 	return true
 }
 
-func (d *Daemon) releaseWorkerUpgrade(sessionID string) {
+func (d *Daemon) releaseWorkerUpgrade(terminal harness.TerminalID) {
 	d.upgradingMu.Lock()
 	defer d.upgradingMu.Unlock()
-	delete(d.upgradingWorkers, sessionID)
+	delete(d.upgradingWorkers, terminal)
 }
 
-func (d *Daemon) upgradeStaleWorker(sessionID string, upgrader ptybackend.WorkerUpgrader) {
-	defer d.releaseWorkerUpgrade(sessionID)
+func (d *Daemon) upgradeStaleWorker(sessionID string, terminal harness.TerminalID, upgrader ptybackend.WorkerUpgrader) {
+	defer d.releaseWorkerUpgrade(terminal)
 	ctx, cancel := context.WithTimeout(context.Background(), terminalUpgradeTimeout)
 	defer cancel()
-	if err := upgrader.UpgradeWorker(ctx, sessionID); err != nil {
+	if err := upgrader.UpgradeWorker(ctx, terminal); err != nil {
 		d.logf("terminal upgrade: session=%s failed within %s (%v); offering a reload instead",
 			sessionID, terminalUpgradeTimeout, err)
 		d.publishFact(FactSessionTerminalBuildChanged, sessionID, nil)
@@ -79,13 +84,14 @@ func (d *Daemon) decorateSessionWithTerminalBuild(clone *protocol.Session) {
 	if !ok {
 		return
 	}
-	format, known := provider.SessionTerminalBuild(clone.ID)
-	if known && format != buildinfo.SnapshotFormat && !d.sessionCanReplayTerminalBuild(clone.ID) {
+	terminal := d.primaryTerminal(clone.ID)
+	format, known := provider.SessionTerminalBuild(terminal)
+	if known && format != buildinfo.SnapshotFormat && !d.terminalCanReplayBuild(terminal) {
 		clone.TerminalBuildStale = protocol.Ptr(true)
 	}
 }
 
-func (d *Daemon) sessionCanReplayTerminalBuild(sessionID string) bool {
+func (d *Daemon) terminalCanReplayBuild(terminal harness.TerminalID) bool {
 	provider, ok := d.ptyBackend.(ptybackend.TerminalBuildCompatibilityProvider)
-	return ok && provider.SessionCanReplayWithFormat(sessionID, buildinfo.SnapshotFormat)
+	return ok && provider.SessionCanReplayWithFormat(terminal, buildinfo.SnapshotFormat)
 }

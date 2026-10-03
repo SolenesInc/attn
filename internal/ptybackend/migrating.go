@@ -5,10 +5,11 @@ import (
 	"errors"
 	"fmt"
 	"os"
-	"sort"
+	"slices"
 	"sync"
 	"syscall"
 
+	"github.com/victorarias/attn/internal/harness"
 	"github.com/victorarias/attn/internal/pty"
 )
 
@@ -24,8 +25,8 @@ type MigratingBackend struct {
 	shared Backend
 
 	mu           sync.RWMutex
-	owners       map[string]runtimeOwner
-	pendingSpawn map[string]struct{}
+	owners       map[harness.TerminalID]runtimeOwner
+	pendingSpawn map[harness.TerminalID]struct{}
 	useShared    bool
 }
 
@@ -39,8 +40,8 @@ func NewMigrating(legacy, shared Backend, useSharedForNewSessions bool) (*Migrat
 	return &MigratingBackend{
 		legacy:       legacy,
 		shared:       shared,
-		owners:       make(map[string]runtimeOwner),
-		pendingSpawn: make(map[string]struct{}),
+		owners:       make(map[harness.TerminalID]runtimeOwner),
+		pendingSpawn: make(map[harness.TerminalID]struct{}),
 		useShared:    useSharedForNewSessions,
 	}, nil
 }
@@ -77,7 +78,7 @@ func (b *MigratingBackend) SetExitHandler(handler func(ExitInfo)) {
 	}
 }
 
-func (b *MigratingBackend) SetStateHandler(handler func(sessionID string, obs pty.Observation)) {
+func (b *MigratingBackend) SetStateHandler(handler func(id harness.TerminalID, obs pty.Observation)) {
 	for _, backend := range []Backend{b.legacy, b.shared} {
 		if hooks, ok := backend.(LifecycleHooks); ok {
 			hooks.SetStateHandler(handler)
@@ -118,68 +119,68 @@ func (b *MigratingBackend) Spawn(ctx context.Context, opts SpawnOptions) error {
 	return err
 }
 
-func (b *MigratingBackend) Attach(ctx context.Context, sessionID, subscriberID string, opts ...AttachOptions) (AttachInfo, Stream, error) {
-	backend, err := b.backendFor(sessionID)
+func (b *MigratingBackend) Attach(ctx context.Context, id harness.TerminalID, subscriberID string, opts ...AttachOptions) (AttachInfo, Stream, error) {
+	backend, err := b.backendFor(id)
 	if err != nil {
 		return AttachInfo{}, nil, err
 	}
-	return backend.Attach(ctx, sessionID, subscriberID, opts...)
+	return backend.Attach(ctx, id, subscriberID, opts...)
 }
 
-func (b *MigratingBackend) Input(ctx context.Context, sessionID string, data []byte) error {
-	backend, err := b.backendFor(sessionID)
+func (b *MigratingBackend) Input(ctx context.Context, id harness.TerminalID, data []byte) error {
+	backend, err := b.backendFor(id)
 	if err != nil {
 		return err
 	}
-	return backend.Input(ctx, sessionID, data)
+	return backend.Input(ctx, id, data)
 }
 
-func (b *MigratingBackend) Resize(ctx context.Context, sessionID string, cols, rows, xpixel, ypixel uint16) (ResizeResult, error) {
-	backend, err := b.backendFor(sessionID)
+func (b *MigratingBackend) Resize(ctx context.Context, id harness.TerminalID, cols, rows, xpixel, ypixel uint16) (ResizeResult, error) {
+	backend, err := b.backendFor(id)
 	if err != nil {
 		return ResizeResult{}, err
 	}
-	return backend.Resize(ctx, sessionID, cols, rows, xpixel, ypixel)
+	return backend.Resize(ctx, id, cols, rows, xpixel, ypixel)
 }
 
-func (b *MigratingBackend) SetTheme(ctx context.Context, sessionID string, theme pty.TerminalTheme) error {
-	backend, err := b.backendFor(sessionID)
+func (b *MigratingBackend) SetTheme(ctx context.Context, id harness.TerminalID, theme pty.TerminalTheme) error {
+	backend, err := b.backendFor(id)
 	if err != nil {
 		return err
 	}
-	return backend.SetTheme(ctx, sessionID, theme)
+	return backend.SetTheme(ctx, id, theme)
 }
 
-func (b *MigratingBackend) Kill(ctx context.Context, sessionID string, sig syscall.Signal) error {
-	backend, err := b.backendFor(sessionID)
+func (b *MigratingBackend) Kill(ctx context.Context, id harness.TerminalID, sig syscall.Signal) error {
+	backend, err := b.backendFor(id)
 	if err != nil {
 		return err
 	}
-	return backend.Kill(ctx, sessionID, sig)
+	return backend.Kill(ctx, id, sig)
 }
 
-func (b *MigratingBackend) Remove(ctx context.Context, sessionID string) error {
-	backend, err := b.backendFor(sessionID)
+func (b *MigratingBackend) Remove(ctx context.Context, id harness.TerminalID) error {
+	backend, err := b.backendFor(id)
 	if err != nil {
 		return err
 	}
-	err = backend.Remove(ctx, sessionID)
+	err = backend.Remove(ctx, id)
 	if err == nil || errors.Is(err, pty.ErrSessionNotFound) || errors.Is(err, os.ErrNotExist) {
 		b.mu.Lock()
-		delete(b.owners, sessionID)
+		delete(b.owners, id)
 		b.mu.Unlock()
 	}
 	return err
 }
 
-func (b *MigratingBackend) SessionIDs(_ context.Context) []string {
+func (b *MigratingBackend) TerminalIDs(_ context.Context) []harness.TerminalID {
 	b.mu.RLock()
-	ids := make([]string, 0, len(b.owners))
+	ids := make([]harness.TerminalID, 0, len(b.owners))
 	for id := range b.owners {
 		ids = append(ids, id)
 	}
 	b.mu.RUnlock()
-	sort.Strings(ids)
+	slices.Sort(ids)
 	return ids
 }
 
@@ -188,8 +189,8 @@ func (b *MigratingBackend) Recover(ctx context.Context) (RecoveryReport, error) 
 	sharedReport, sharedErr := b.shared.Recover(ctx)
 	report := addRecoveryReports(legacyReport, sharedReport)
 
-	owners := make(map[string]runtimeOwner)
-	var conflicts []string
+	owners := make(map[harness.TerminalID]runtimeOwner)
+	var conflicts []harness.TerminalID
 	for _, recovered := range []struct {
 		owner   runtimeOwner
 		backend Backend
@@ -197,7 +198,7 @@ func (b *MigratingBackend) Recover(ctx context.Context) (RecoveryReport, error) 
 		{owner: ownerLegacy, backend: b.legacy},
 		{owner: ownerShared, backend: b.shared},
 	} {
-		for _, id := range recovered.backend.SessionIDs(ctx) {
+		for _, id := range recovered.backend.TerminalIDs(ctx) {
 			if _, exists := owners[id]; exists {
 				delete(owners, id)
 				conflicts = append(conflicts, id)
@@ -213,7 +214,7 @@ func (b *MigratingBackend) Recover(ctx context.Context) (RecoveryReport, error) 
 
 	var conflictErr error
 	if len(conflicts) > 0 {
-		sort.Strings(conflicts)
+		slices.Sort(conflicts)
 		report.Failed += len(conflicts)
 		conflictErr = fmt.Errorf("PTY sessions claimed by both runtimes: %v", conflicts)
 	}
@@ -233,40 +234,40 @@ func (b *MigratingBackend) Shutdown(ctx context.Context) error {
 	return errors.Join(b.shared.Shutdown(ctx), b.legacy.Shutdown(ctx))
 }
 
-func (b *MigratingBackend) SessionInfo(ctx context.Context, sessionID string) (SessionInfo, error) {
-	provider, err := sessionProvider[SessionInfoProvider](b, sessionID)
+func (b *MigratingBackend) SessionInfo(ctx context.Context, id harness.TerminalID) (SessionInfo, error) {
+	provider, err := sessionProvider[SessionInfoProvider](b, id)
 	if err != nil {
 		return SessionInfo{}, err
 	}
-	return provider.SessionInfo(ctx, sessionID)
+	return provider.SessionInfo(ctx, id)
 }
 
-func (b *MigratingBackend) SessionLaunchParams(ctx context.Context, sessionID string) (SessionLaunchParams, error) {
-	provider, err := sessionProvider[SessionLaunchParamsProvider](b, sessionID)
+func (b *MigratingBackend) SessionLaunchParams(ctx context.Context, id harness.TerminalID) (SessionLaunchParams, error) {
+	provider, err := sessionProvider[SessionLaunchParamsProvider](b, id)
 	if err != nil {
 		return SessionLaunchParams{}, err
 	}
-	return provider.SessionLaunchParams(ctx, sessionID)
+	return provider.SessionLaunchParams(ctx, id)
 }
 
-func (b *MigratingBackend) ScreenSnapshot(ctx context.Context, sessionID string) (pty.ScreenSnapshotInfo, error) {
-	provider, err := sessionProvider[ScreenSnapshotProvider](b, sessionID)
+func (b *MigratingBackend) ScreenSnapshot(ctx context.Context, id harness.TerminalID) (pty.ScreenSnapshotInfo, error) {
+	provider, err := sessionProvider[ScreenSnapshotProvider](b, id)
 	if err != nil {
 		return pty.ScreenSnapshotInfo{}, err
 	}
-	return provider.ScreenSnapshot(ctx, sessionID)
+	return provider.ScreenSnapshot(ctx, id)
 }
 
-func (b *MigratingBackend) KittyImage(ctx context.Context, sessionID string, imageID uint32) (pty.KittyImage, error) {
-	provider, err := sessionProvider[KittyImageProvider](b, sessionID)
+func (b *MigratingBackend) KittyImage(ctx context.Context, id harness.TerminalID, imageID uint32) (pty.KittyImage, error) {
+	provider, err := sessionProvider[KittyImageProvider](b, id)
 	if err != nil {
 		return pty.KittyImage{}, err
 	}
-	return provider.KittyImage(ctx, sessionID, imageID)
+	return provider.KittyImage(ctx, id, imageID)
 }
 
-func (b *MigratingBackend) SessionTerminalBuild(sessionID string) (string, bool) {
-	backend, err := b.backendFor(sessionID)
+func (b *MigratingBackend) SessionTerminalBuild(id harness.TerminalID) (string, bool) {
+	backend, err := b.backendFor(id)
 	if err != nil {
 		return "", false
 	}
@@ -274,34 +275,34 @@ func (b *MigratingBackend) SessionTerminalBuild(sessionID string) (string, bool)
 	if !ok {
 		return "", false
 	}
-	return provider.SessionTerminalBuild(sessionID)
+	return provider.SessionTerminalBuild(id)
 }
 
-func (b *MigratingBackend) SessionCanReplayWithFormat(sessionID, format string) bool {
-	backend, err := b.backendFor(sessionID)
+func (b *MigratingBackend) SessionCanReplayWithFormat(id harness.TerminalID, format string) bool {
+	backend, err := b.backendFor(id)
 	if err != nil {
 		return false
 	}
 	provider, ok := backend.(TerminalBuildCompatibilityProvider)
-	return ok && provider.SessionCanReplayWithFormat(sessionID, format)
+	return ok && provider.SessionCanReplayWithFormat(id, format)
 }
 
-func (b *MigratingBackend) UpgradeWorker(ctx context.Context, sessionID string) error {
-	provider, err := sessionProvider[WorkerUpgrader](b, sessionID)
+func (b *MigratingBackend) UpgradeWorker(ctx context.Context, id harness.TerminalID) error {
+	provider, err := sessionProvider[WorkerUpgrader](b, id)
 	if err != nil {
 		return err
 	}
-	return provider.UpgradeWorker(ctx, sessionID)
+	return provider.UpgradeWorker(ctx, id)
 }
 
-func (b *MigratingBackend) SessionLikelyAlive(ctx context.Context, sessionID string) (bool, error) {
-	backend, err := b.backendFor(sessionID)
+func (b *MigratingBackend) SessionLikelyAlive(ctx context.Context, id harness.TerminalID) (bool, error) {
+	backend, err := b.backendFor(id)
 	if err == nil {
 		provider, ok := backend.(SessionLivenessProber)
 		if !ok {
 			return false, nil
 		}
-		return provider.SessionLikelyAlive(ctx, sessionID)
+		return provider.SessionLikelyAlive(ctx, id)
 	}
 
 	var probeErrs []error
@@ -310,7 +311,7 @@ func (b *MigratingBackend) SessionLikelyAlive(ctx context.Context, sessionID str
 		if !ok {
 			continue
 		}
-		alive, probeErr := provider.SessionLikelyAlive(ctx, sessionID)
+		alive, probeErr := provider.SessionLikelyAlive(ctx, id)
 		if alive {
 			return true, nil
 		}
@@ -335,12 +336,12 @@ func (b *MigratingBackend) WorkerPIDs(ctx context.Context) map[string]int {
 	return result
 }
 
-func (b *MigratingBackend) backendFor(sessionID string) (Backend, error) {
+func (b *MigratingBackend) backendFor(id harness.TerminalID) (Backend, error) {
 	b.mu.RLock()
-	owner, ok := b.owners[sessionID]
+	owner, ok := b.owners[id]
 	b.mu.RUnlock()
 	if !ok {
-		return nil, fmt.Errorf("%w: %s", pty.ErrSessionNotFound, sessionID)
+		return nil, fmt.Errorf("%w: %s", pty.ErrSessionNotFound, id)
 	}
 	if owner == ownerShared {
 		return b.shared, nil
@@ -348,15 +349,15 @@ func (b *MigratingBackend) backendFor(sessionID string) (Backend, error) {
 	return b.legacy, nil
 }
 
-func sessionProvider[T any](b *MigratingBackend, sessionID string) (T, error) {
+func sessionProvider[T any](b *MigratingBackend, id harness.TerminalID) (T, error) {
 	var zero T
-	backend, err := b.backendFor(sessionID)
+	backend, err := b.backendFor(id)
 	if err != nil {
 		return zero, err
 	}
 	provider, ok := backend.(T)
 	if !ok {
-		return zero, fmt.Errorf("PTY runtime for session %s does not support this operation", sessionID)
+		return zero, fmt.Errorf("PTY runtime for session %s does not support this operation", id)
 	}
 	return provider, nil
 }

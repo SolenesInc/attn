@@ -215,7 +215,7 @@ func TestAttnLaunchedAsAMemberWearsTheMembersNameUnlessGivenAnother(t *testing.T
 	} {
 		id := uuid.NewString()
 		launch := s.LaunchInTerminal(testworld.Invocation{Args: tc.args, Dir: work, Env: []string{"ATTN_INSIDE_APP=1", "ATTN_AGENT=claude", "ATTN_SESSION_ID=" + id}})
-		claude := s.Launched(id)
+		claude := s.LaunchedCarrying(id)
 		type row struct {
 			ID     string  `json:"id"`
 			Label  string  `json:"label"`

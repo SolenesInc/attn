@@ -53,7 +53,7 @@ func TestMailForAnAgentUnderAFreshDraftRingsOnceTheUserIsQuiet(t *testing.T) {
 		recipient := w.bubbleClaude(t, app, "shop")
 		registerSessions(t, w, cli, "sender")
 
-		app.Send(protocol.PtyInputMessage{Cmd: protocol.CmdPtyInput, ID: recipient.id, Data: "half a thought"})
+		app.Send(protocol.PtyInputMessage{Cmd: protocol.CmdPtyInput, ID: recipient.self, Data: "half a thought"})
 		w.advance(10 * time.Second)
 		held := sendAgentMessage(t, cli, "sender", recipient.id, "the build is green")
 		if held.Status != protocol.AgentMsgStatusQueued || !strings.Contains(held.Detail, "typed") {
@@ -79,7 +79,7 @@ func TestAReminderHeldByAFreshDraftRingsOnceTheUserIsQuiet(t *testing.T) {
 		sendAgentMessage(t, cli, "sender", recipient.id, "the build is green")
 		recipient.reply("Later. <!-- attn:state=idle -->")
 		w.advance(5*time.Minute - 15*time.Second)
-		app.Send(protocol.PtyInputMessage{Cmd: protocol.CmdPtyInput, ID: recipient.id, Data: "half a thought"})
+		app.Send(protocol.PtyInputMessage{Cmd: protocol.CmdPtyInput, ID: recipient.self, Data: "half a thought"})
 
 		w.advance(29 * time.Second)
 		if got := recipient.promptsContaining(inboxDoorbell); got != 1 || len(recipient.term.Pasted()) != 1 {
@@ -646,7 +646,7 @@ func TestAnInboxRingsAfterASelectorClearsWithoutAnotherTurn(t *testing.T) {
 		if got := recipient.promptsContaining(inboxDoorbell); got != 0 {
 			t.Fatalf("selector rings=%d", got)
 		}
-		app.Send(protocol.PtyInputMessage{Cmd: protocol.CmdPtyInput, ID: recipient.id, Data: "\x1b"})
+		app.Send(protocol.PtyInputMessage{Cmd: protocol.CmdPtyInput, ID: recipient.self, Data: "\x1b"})
 		w.advance(0)
 		recipient.term.PaintScreen("❯ ")
 		w.advance(29 * time.Second)

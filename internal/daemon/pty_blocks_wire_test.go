@@ -30,14 +30,15 @@ func TestEveryAttachDuringABlockBurstGetsBlocksThatPointAtTheirOwnPrompts(t *tes
 		t.Fatal(err)
 	}
 
+	terminal := app.Terminal(shell)
 	app.TypeLine(shell, "sh "+burst)
 	var attaches []protocol.AttachResultMessage
 	for i := range 20 {
-		app.Send(protocol.PtyResizeMessage{Cmd: protocol.CmdPtyResize, ID: shell, Cols: 60 + 20*(i%3), Rows: 30})
-		attaches = append(attaches, kittyAttach(transportPeer(w), shell))
+		app.Send(protocol.PtyResizeMessage{Cmd: protocol.CmdPtyResize, ID: terminal, Cols: 60 + 20*(i%3), Rows: 30})
+		attaches = append(attaches, kittyAttach(transportPeer(w), terminal))
 	}
 	app.AwaitScreen(shell, "burst-2")
-	settled := kittyAttach(transportPeer(w), shell)
+	settled := kittyAttach(transportPeer(w), terminal)
 
 	for i, attached := range append(attaches, settled) {
 		lines := restoredSnapshotLines(t, attached)
@@ -58,7 +59,7 @@ func TestEveryAttachDuringABlockBurstGetsBlocksThatPointAtTheirOwnPrompts(t *tes
 	}
 
 	closing := transportPeer(w)
-	closing.Send(protocol.AttachSessionMessage{Cmd: protocol.CmdAttachSession, ID: shell})
+	closing.Send(protocol.AttachSessionMessage{Cmd: protocol.CmdAttachSession, ID: terminal})
 	closed := workspaceLayoutAction(app, protocol.WorkspaceLayoutClosePaneMessage{
 		Cmd: protocol.CmdWorkspaceLayoutClosePane, WorkspaceID: ws, PaneID: pane,
 	}, protocol.CmdWorkspaceLayoutClosePane, ws)

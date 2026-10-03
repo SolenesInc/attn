@@ -295,13 +295,5 @@ func (d *Daemon) hasAutomationSession(sessionID string) bool {
 	if d.store.Get(sessionID) != nil {
 		return true
 	}
-	if d.ptyBackend == nil {
-		return false
-	}
-	for _, liveSessionID := range d.ptyBackend.SessionIDs(context.Background()) {
-		if liveSessionID == sessionID {
-			return true
-		}
-	}
-	return false
+	return d.sessionLive(context.Background(), sessionID)
 }

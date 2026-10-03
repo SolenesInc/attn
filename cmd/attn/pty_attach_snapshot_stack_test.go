@@ -24,12 +24,13 @@ func TestReopeningATerminalWhileItPrintsShowsEveryLineExactlyOnce(t *testing.T) 
 	app.AwaitScreen(shell, "before-03")
 
 	reopened := s.App()
-	reopened.Send(protocol.AttachSessionMessage{Cmd: protocol.CmdAttachSession, ID: shell, AttachPolicy: protocol.Ptr(protocol.AttachPolicyRelaunchRestore)})
+	terminal := reopened.Terminal(shell)
+	reopened.Send(protocol.AttachSessionMessage{Cmd: protocol.CmdAttachSession, ID: terminal, AttachPolicy: protocol.Ptr(protocol.AttachPolicyRelaunchRestore)})
 	snapshot.Await()
 	app.TypeLine(shell, `printf 'during-%02d\n' 1 2 3`)
 	app.AwaitScreen(shell, "during-03")
 	snapshot.Release()
-	if result := testworld.Await(reopened, protocol.EventAttachResult, func(r protocol.AttachResultMessage) bool { return r.ID == shell }); !result.Success {
+	if result := testworld.Await(reopened, protocol.EventAttachResult, func(r protocol.AttachResultMessage) bool { return r.ID == terminal }); !result.Success {
 		t.Fatalf("reopening the terminal was refused: %s", protocol.Deref(result.Error))
 	}
 	app.TypeLine(shell, `printf 'after-%02d\n' 1 2 3`)
@@ -52,8 +53,9 @@ func TestReopeningATerminalWhileItPrintsShowsEveryLineExactlyOnce(t *testing.T) 
 
 func attachWithPolicy(t *testing.T, p *testworld.Peer, session string, policy protocol.AttachPolicy) {
 	t.Helper()
-	result := testworld.Request(p, protocol.AttachSessionMessage{Cmd: protocol.CmdAttachSession, ID: session, AttachPolicy: protocol.Ptr(policy)},
-		protocol.EventAttachResult, func(r protocol.AttachResultMessage) bool { return r.ID == session })
+	terminal := p.Terminal(session)
+	result := testworld.Request(p, protocol.AttachSessionMessage{Cmd: protocol.CmdAttachSession, ID: terminal, AttachPolicy: protocol.Ptr(policy)},
+		protocol.EventAttachResult, func(r protocol.AttachResultMessage) bool { return r.ID == terminal })
 	if !result.Success {
 		t.Fatalf("attach %s refused: %s", session, protocol.Deref(result.Error))
 	}
@@ -70,8 +72,9 @@ func TestATileSeededFromAScreenSnapshotMissesNoOutput(t *testing.T) {
 	attachWithPolicy(t, app, shell, protocol.AttachPolicyFreshSpawn)
 	tile := s.App()
 	attachWithPolicy(t, tile, shell, protocol.AttachPolicyFreshSpawn)
-	testworld.Request(tile, protocol.GetScreenSnapshotMessage{Cmd: protocol.CmdGetScreenSnapshot, ID: shell},
-		protocol.EventGetScreenSnapshotResult, func(r protocol.GetScreenSnapshotResultMessage) bool { return r.ID == shell && r.Success })
+	terminal := tile.Terminal(shell)
+	testworld.Request(tile, protocol.GetScreenSnapshotMessage{Cmd: protocol.CmdGetScreenSnapshot, ID: terminal},
+		protocol.EventGetScreenSnapshotResult, func(r protocol.GetScreenSnapshotResultMessage) bool { return r.ID == terminal && r.Success })
 	sequenced.Release()
 	app.TypeLine(shell, `printf 'tile-%02d\n' 1 2 3`)
 	app.AwaitScreen(shell, "tile-03")

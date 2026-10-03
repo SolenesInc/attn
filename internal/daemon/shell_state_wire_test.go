@@ -17,8 +17,9 @@ func TestAShellIsWorkingOnlyWhileACommandRunsWhateverItsWorkerClaims(t *testing.
 	app, cli := w.App(), w.Client()
 	shell := w.Spawn(app, workspaceShell, w.Path("shop"))
 	testworld.AwaitSession(app, shell, func(s protocol.Session) bool { return s.State == protocol.SessionStateIdle })
-	attached := testworld.Request(app, protocol.AttachSessionMessage{Cmd: protocol.CmdAttachSession, ID: shell},
-		protocol.EventAttachResult, func(r protocol.AttachResultMessage) bool { return r.ID == shell })
+	terminal := app.Terminal(shell)
+	attached := testworld.Request(app, protocol.AttachSessionMessage{Cmd: protocol.CmdAttachSession, ID: terminal},
+		protocol.EventAttachResult, func(r protocol.AttachResultMessage) bool { return r.ID == terminal })
 	if !attached.Success {
 		t.Fatalf("attach %s refused: %s", shell, protocol.Deref(attached.Error))
 	}
@@ -26,7 +27,7 @@ func TestAShellIsWorkingOnlyWhileACommandRunsWhateverItsWorkerClaims(t *testing.
 
 	app.TypeLine(shell, "cat")
 	testworld.AwaitSession(app, shell, func(s protocol.Session) bool { return s.State == protocol.SessionStateWorking })
-	app.Send(protocol.PtyInputMessage{Cmd: protocol.CmdPtyInput, ID: shell, Data: "\x04"})
+	app.Send(protocol.PtyInputMessage{Cmd: protocol.CmdPtyInput, ID: terminal, Data: "\x04"})
 	testworld.AwaitSession(app, shell, func(s protocol.Session) bool {
 		return s.State == protocol.SessionStateIdle && protocol.Deref(s.StateReason) == "at_prompt"
 	})

@@ -122,7 +122,7 @@ func (d *Daemon) agentPeekScreen(sessionID string) *protocol.AgentPeekScreen {
 	}
 	ctx, cancel := context.WithTimeout(context.Background(), agentPeekSnapshotTimeout)
 	defer cancel()
-	snapshot, err := provider.ScreenSnapshot(ctx, sessionID)
+	snapshot, err := provider.ScreenSnapshot(ctx, d.primaryTerminal(sessionID))
 	if err != nil {
 		d.logf("agent peek snapshot unavailable: session=%s err=%v", sessionID, err)
 		return nil

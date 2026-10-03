@@ -14,18 +14,18 @@ const exitScreenMaxBytes = 256 * 1024
 
 const exitScreenSnapshotTimeout = modelCaptureSnapshotTimeout
 
-func (d *Daemon) captureExitScreen(info ptybackend.ExitInfo) {
-	if d.store == nil || d.store.Get(info.ID) == nil {
+func (d *Daemon) captureExitScreen(sessionID string, info ptybackend.ExitInfo) {
+	if d.store == nil || d.store.Get(sessionID) == nil {
 		return
 	}
-	rec := store.SessionExitScreen{SessionID: info.ID, ExitCode: info.ExitCode, ExitSignal: info.Signal}
+	rec := store.SessionExitScreen{SessionID: sessionID, ExitCode: info.ExitCode, ExitSignal: info.Signal}
 	if provider, ok := d.ptyBackend.(ptybackend.ScreenSnapshotProvider); ok {
 		ctx, cancel := context.WithTimeout(context.Background(), exitScreenSnapshotTimeout)
 		snapshot, err := provider.ScreenSnapshot(ctx, info.ID)
 		cancel()
 		switch {
 		case err != nil:
-			d.logf("exit screen unavailable: session=%s err=%v", info.ID, err)
+			d.logf("exit screen unavailable: session=%s err=%v", sessionID, err)
 		case snapshot.Screen != nil && snapshot.Screen.HasText:
 			rec.Text = clampExitScreenText(snapshot.Screen.Text)
 			rec.Cols = int(snapshot.Screen.Cols)
@@ -33,10 +33,10 @@ func (d *Daemon) captureExitScreen(info ptybackend.ExitInfo) {
 		}
 	}
 	if err := d.store.SaveSessionExitScreen(rec, time.Now()); err != nil {
-		d.logf("exit screen not kept: session=%s err=%v", info.ID, err)
+		d.logf("exit screen not kept: session=%s err=%v", sessionID, err)
 		return
 	}
-	d.logf("exit screen kept: session=%s code=%d signal=%q text_bytes=%d", info.ID, info.ExitCode, info.Signal, len(rec.Text))
+	d.logf("exit screen kept: session=%s code=%d signal=%q text_bytes=%d", sessionID, info.ExitCode, info.Signal, len(rec.Text))
 }
 
 func clampExitScreenText(text string) string {

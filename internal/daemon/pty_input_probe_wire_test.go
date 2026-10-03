@@ -11,15 +11,16 @@ func TestOnlyProbedPtyInputIsAcknowledged(t *testing.T) {
 	w := newWorld(t)
 	app := w.App()
 	session := w.Spawn(app, workspaceShell, w.Path("shop"))
-	testworld.Request(app, protocol.AttachSessionMessage{Cmd: protocol.CmdAttachSession, ID: session},
-		protocol.EventAttachResult, func(r protocol.AttachResultMessage) bool { return r.ID == session })
+	terminal := app.Terminal(session)
+	testworld.Request(app, protocol.AttachSessionMessage{Cmd: protocol.CmdAttachSession, ID: terminal},
+		protocol.EventAttachResult, func(r protocol.AttachResultMessage) bool { return r.ID == terminal })
 
 	for _, input := range []struct{ data, probe string }{
 		{"printf 'mark%s\\n' er-probed\r", "probe-1"},
 		{"printf 'mark%s\\n' er-plain\r", ""},
 		{"printf 'mark%s\\n' er-again\r", "probe-2"},
 	} {
-		msg := protocol.PtyInputMessage{Cmd: protocol.CmdPtyInput, ID: session, Data: input.data, Source: protocol.Ptr("automation")}
+		msg := protocol.PtyInputMessage{Cmd: protocol.CmdPtyInput, ID: terminal, Data: input.data, Source: protocol.Ptr("automation")}
 		if input.probe != "" {
 			msg.ProbeID = protocol.Ptr(input.probe)
 		}
@@ -39,8 +40,8 @@ func TestOnlyProbedPtyInputIsAcknowledged(t *testing.T) {
 		t.Fatalf("three inputs, two of them probed, drew %d probe results, want 2", len(acknowledged))
 	}
 	for _, result := range []protocol.PtyInputProbeResultMessage{first, second} {
-		if result.ID != session || !result.Success || result.WriteDurationUs < 0 {
-			t.Errorf("probe result %+v, want a successful write to %s with its duration", result, session)
+		if result.ID != terminal || !result.Success || result.WriteDurationUs < 0 {
+			t.Errorf("probe result %+v, want a successful write to %s with its duration", result, terminal)
 		}
 	}
 }

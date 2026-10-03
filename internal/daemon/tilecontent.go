@@ -483,7 +483,7 @@ func (d *Daemon) openSeedTile(seedID, placementSessionID string) (workspaceID, t
 					return "", "", fmt.Errorf("tile not found: %s", tileID)
 				}
 				snapshot.Layout = layout
-				if err := d.store.SaveWorkspaceLayout(*snapshot); err != nil {
+				if err := d.saveWorkspaceLayout(*snapshot); err != nil {
 					return "", "", err
 				}
 				d.broadcastWorkspaceLayoutUpdated(candidateID)
@@ -503,7 +503,7 @@ func (d *Daemon) openSeedTile(seedID, placementSessionID string) (workspaceID, t
 				TileSessionID: bindingSessionID,
 			},
 		})
-		if err := d.store.SaveWorkspaceLayout(snapshot); err != nil {
+		if err := d.saveWorkspaceLayout(snapshot); err != nil {
 			d.unregisterWorkspaceIfEmpty(workspaceID)
 			return "", "", err
 		}
@@ -538,7 +538,7 @@ func (d *Daemon) rebindTileSession(workspaceID, tileID, sessionID string) error 
 		return fmt.Errorf("tile not found: %s", tileID)
 	}
 	snapshot.Layout = layout
-	if err := d.store.SaveWorkspaceLayout(*snapshot); err != nil {
+	if err := d.saveWorkspaceLayout(*snapshot); err != nil {
 		return err
 	}
 	d.broadcastWorkspaceLayoutUpdated(workspaceID)

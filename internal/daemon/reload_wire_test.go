@@ -24,9 +24,10 @@ func TestReloadResumesALiveConversationWithTheSameLaunch(t *testing.T) {
 	talked := w.Spawn(app, fakeagent.Claude, w.Path("shop"), pinned)
 	first := w.Launched(talked)
 	reloadConverse(t, app, talked, first)
-	app.Send(protocol.PtyResizeMessage{Cmd: protocol.CmdPtyResize, ID: talked, Cols: 91, Rows: 33})
+	talkedTerminal := app.Terminal(talked)
+	app.Send(protocol.PtyResizeMessage{Cmd: protocol.CmdPtyResize, ID: talkedTerminal, Cols: 91, Rows: 33})
 	testworld.Await(app, protocol.EventPtyResized, func(e protocol.WebSocketEvent) bool {
-		return protocol.Deref(e.ID) == talked && protocol.Deref(e.Cols) == 91
+		return protocol.Deref(e.ID) == talkedTerminal && protocol.Deref(e.Cols) == 91
 	})
 	reloadRespawned(t, app, talked)
 	reloaded := w.Launched(talked)
@@ -38,7 +39,7 @@ func TestReloadResumesALiveConversationWithTheSameLaunch(t *testing.T) {
 	if reloaded.Argv[0] != executable || !slices.Contains(reloaded.Argv, "--dangerously-skip-permissions") || model != "claude-sonnet-5" || effort != "high" {
 		t.Errorf("the reload ran claude %q, want the pinned executable skipping permissions with model claude-sonnet-5 and effort high", reloaded.Argv)
 	}
-	if attached := kittyAttach(app, talked); protocol.Deref(attached.Cols) != 91 || protocol.Deref(attached.Rows) != 33 {
+	if attached := kittyAttach(app, talkedTerminal); protocol.Deref(attached.Cols) != 91 || protocol.Deref(attached.Rows) != 33 {
 		t.Errorf("the reloaded session is %dx%d, want the live 91x33 it had before the reload", protocol.Deref(attached.Cols), protocol.Deref(attached.Rows))
 	}
 
@@ -51,7 +52,7 @@ func TestReloadResumesALiveConversationWithTheSameLaunch(t *testing.T) {
 
 	for _, e := range app.Received() {
 		if e.Event == protocol.EventSessionExited {
-			t.Errorf("a reload told the app session %s exited", protocol.Deref(e.ID))
+			t.Errorf("a reload told the app session %s exited", protocol.Deref(e.SessionID))
 		}
 	}
 }
@@ -65,7 +66,7 @@ func TestReloadRelaunchesAnExitedSessionAtTheClientsGeometry(t *testing.T) {
 		m.Effort = protocol.Ptr("high")
 	})
 	w.Launched(session).Exit(0)
-	testworld.Await(app, protocol.EventSessionExited, func(e protocol.SessionExitedMessage) bool { return e.ID == session })
+	testworld.Await(app, protocol.EventSessionExited, func(e protocol.SessionExitedMessage) bool { return e.SessionID == session })
 
 	for _, tc := range []struct {
 		name, id, refusal string
@@ -91,7 +92,7 @@ func TestReloadRelaunchesAnExitedSessionAtTheClientsGeometry(t *testing.T) {
 	if !slices.Contains(relaunched.Argv, "--dangerously-skip-permissions") || model != "claude-sonnet-5" || effort != "high" {
 		t.Errorf("the relaunch ran claude %q, want it skipping permissions with model claude-sonnet-5 and effort high", relaunched.Argv)
 	}
-	if attached := kittyAttach(app, session); protocol.Deref(attached.Cols) != 91 || protocol.Deref(attached.Rows) != 33 {
+	if attached := kittyAttach(app, app.Terminal(session)); protocol.Deref(attached.Cols) != 91 || protocol.Deref(attached.Rows) != 33 {
 		t.Errorf("the relaunched session is %dx%d, want the client's 91x33", protocol.Deref(attached.Cols), protocol.Deref(attached.Rows))
 	}
 }
@@ -122,7 +123,7 @@ func TestReloadKeepsTheApprovalItStartedWith(t *testing.T) {
 	} {
 		if tc.exit {
 			reloadedRuns[tc.session].Exit(0)
-			testworld.Await(app, protocol.EventSessionExited, func(e protocol.SessionExitedMessage) bool { return e.ID == tc.session })
+			testworld.Await(app, protocol.EventSessionExited, func(e protocol.SessionExitedMessage) bool { return e.SessionID == tc.session })
 			launchIntentReload(t, app, tc.session)
 		} else {
 			reloadRespawned(t, app, tc.session)
@@ -151,11 +152,12 @@ func TestChangingTheChiefRelaunchesExactlyTheAffectedAgents(t *testing.T) {
 	alice, bob, carol := conversing("alice"), conversing("bob"), conversing("carol")
 	shell := w.Spawn(app, workspaceShell, w.Path("dora"))
 	runs[carol].Exit(0)
-	testworld.Await(app, protocol.EventSessionExited, func(e protocol.SessionExitedMessage) bool { return e.ID == carol })
+	testworld.Await(app, protocol.EventSessionExited, func(e protocol.SessionExitedMessage) bool { return e.SessionID == carol })
 
 	relaunchedAs := func(what, session string, chief bool) {
 		t.Helper()
-		testworld.Await(app, protocol.EventRuntimeRespawned, func(e protocol.WebSocketEvent) bool { return protocol.Deref(e.ID) == session })
+		terminal := app.Terminal(session)
+		testworld.Await(app, protocol.EventRuntimeRespawned, func(e protocol.WebSocketEvent) bool { return protocol.Deref(e.ID) == terminal })
 		run := w.Launched(session)
 		instructions, _ := flagValue(run.Argv, "--append-system-prompt")
 		if !run.Resumed || run.ConversationID != runs[session].ConversationID || strings.Contains(instructions, "You are the chief of staff") != chief {
@@ -184,8 +186,9 @@ func TestChangingTheChiefRelaunchesExactlyTheAffectedAgents(t *testing.T) {
 			respawns[protocol.Deref(e.ID)]++
 		}
 	}
-	if respawns[alice] != 3 || respawns[bob] != 2 || respawns[carol] != 0 || respawns[shell] != 0 {
-		t.Errorf("runtime respawns alice=%d bob=%d carol=%d shell=%d, want 3, 2 and none for the exited carol or the shell", respawns[alice], respawns[bob], respawns[carol], respawns[shell])
+	respawned := func(session string) int { return respawns[app.Terminal(session)] }
+	if respawned(alice) != 3 || respawned(bob) != 2 || respawned(carol) != 0 || respawned(shell) != 0 {
+		t.Errorf("runtime respawns alice=%d bob=%d carol=%d shell=%d, want 3, 2 and none for the exited carol or the shell", respawned(alice), respawned(bob), respawned(carol), respawned(shell))
 	}
 }
 
@@ -204,7 +207,8 @@ func reloadRespawned(t *testing.T, app *testworld.Peer, session string) {
 	if !reloaded.Success {
 		t.Fatalf("reload %s: %s", session, protocol.Deref(reloaded.Error))
 	}
-	testworld.Await(app, protocol.EventRuntimeRespawned, func(e protocol.WebSocketEvent) bool { return protocol.Deref(e.ID) == session })
+	terminal := app.Terminal(session)
+	testworld.Await(app, protocol.EventRuntimeRespawned, func(e protocol.WebSocketEvent) bool { return protocol.Deref(e.ID) == terminal })
 }
 
 func reloadSetChief(t *testing.T, app *testworld.Peer, session string, chief bool) {

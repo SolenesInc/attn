@@ -21,8 +21,9 @@ var linkTurnStates = map[harness.Turn]string{
 	harness.TurnEnded:    protocol.StateIdle,
 }
 
-func (e linkEventSink) Turn(sessionID string, at time.Time, event harness.TurnEvent) {
+func (e linkEventSink) Turn(s harness.SessionID, at time.Time, event harness.TurnEvent) {
 	d := e.daemon
+	sessionID := string(s)
 	state := linkTurnStates[event.Turn]
 	if event.Restated {
 		if session := d.store.Get(sessionID); session == nil || session.State != protocol.SessionStateUnknown {

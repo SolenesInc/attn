@@ -377,7 +377,7 @@ func (d *Daemon) crewSessionActuallyLive(sessionID string) (bool, error) {
 		}
 		return true, nil
 	}
-	info, err := provider.SessionInfo(context.Background(), sessionID)
+	info, err := provider.SessionInfo(context.Background(), d.primaryTerminal(sessionID))
 	if err == nil {
 		return info.Running, nil
 	}

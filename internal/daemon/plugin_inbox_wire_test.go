@@ -16,13 +16,13 @@ func TestAPluginApprovalReportDoesNotWaitForAnotherSessionsInboxReply(t *testing
 		awaitDriverAvailable(app, "snipe")
 		recipient, recipientRun := spawnDriven(w, app, driver, w.Path("recipient"))
 		asking, askingRun := spawnDriven(w, app, driver, w.Path("asking"))
-		awaitingInput(t, app, driver, recipientRun)
-		awaitingInput(t, app, driver, askingRun)
+		awaitingInput(t, app, driver, recipient, recipientRun)
+		awaitingInput(t, app, driver, asking, askingRun)
 		sent := make(chan error, 1)
 		go func() { _, err := cli.AgentMsg(recipient, asking, "take a look"); sent <- err }()
 		var message deliveredMessage
 		held := driver.asked("driver.deliver_message", &message)
-		if message.SessionID != recipient || !strings.Contains(message.Text, inboxDoorbell) {
+		if message.SessionID != recipientRun.SessionID || !strings.Contains(message.Text, inboxDoorbell) {
 			t.Fatalf("delivery=%+v", message)
 		}
 		before := time.Now()

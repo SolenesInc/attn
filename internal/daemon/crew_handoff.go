@@ -324,7 +324,7 @@ func (d *Daemon) crewSessionGeometry(sessionID string) (int, int) {
 	if !ok {
 		return cols, rows
 	}
-	info, err := provider.SessionInfo(context.Background(), sessionID)
+	info, err := provider.SessionInfo(context.Background(), d.primaryTerminal(sessionID))
 	if err != nil {
 		return cols, rows
 	}

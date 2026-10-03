@@ -72,7 +72,7 @@ func TestInputTheUserTypesOverNoLongerHoldsABootingSessionOutOfIdle(t *testing.T
 	session := w.Spawn(app, fakeagent.Claude, w.Path("shop"))
 	app.AwaitScreen(session, "? for shortcuts")
 	annotate(app, session, "the cart total is off by one")
-	testworld.Request(app, protocol.PtyInputMessage{Cmd: protocol.CmdPtyInput, ID: session, Data: "actually", ProbeID: protocol.Ptr("takeover")},
+	testworld.Request(app, protocol.PtyInputMessage{Cmd: protocol.CmdPtyInput, ID: app.Terminal(session), Data: "actually", ProbeID: protocol.Ptr("takeover")},
 		protocol.EventPtyInputProbeResult, func(r protocol.PtyInputProbeResultMessage) bool { return r.ProbeID == "takeover" })
 
 	boot()

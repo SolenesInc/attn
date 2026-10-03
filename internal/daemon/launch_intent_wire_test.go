@@ -43,7 +43,7 @@ func TestARelaunchedSessionKeepsTheChoicesItWasSpawnedWith(t *testing.T) {
 	check("at spawn", w.Launched(session))
 
 	app.Send(protocol.KillSessionMessage{Cmd: protocol.CmdKillSession, ID: session})
-	testworld.Await(app, protocol.EventSessionExited, func(e protocol.SessionExitedMessage) bool { return e.ID == session })
+	testworld.Await(app, protocol.EventSessionExited, func(e protocol.SessionExitedMessage) bool { return e.SessionID == session })
 	launchIntentReload(t, app, session)
 	reloaded := w.Launched(session)
 	check("reloaded after it exited", reloaded)

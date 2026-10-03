@@ -83,9 +83,13 @@ func (d *Daemon) modelCapturePass(recorder *modelcapture.Recorder, now time.Time
 	}
 	interval := d.modelCaptureInterval()
 	maxBytes := d.modelCaptureMaxBytes()
-	for _, sessionID := range d.ptyBackend.SessionIDs(context.Background()) {
+	for _, terminal := range d.ptyBackend.TerminalIDs(context.Background()) {
 		if d.stopping() {
 			return
+		}
+		sessionID, shown := d.shownIn(terminal)
+		if !shown {
+			continue
 		}
 		session := d.store.Get(sessionID)
 		if session == nil || !isModelCaptureAgent(session.Agent) {
@@ -97,7 +101,7 @@ func (d *Daemon) modelCapturePass(recorder *modelcapture.Recorder, now time.Time
 			continue
 		}
 		ctx, cancel := context.WithTimeout(context.Background(), modelCaptureSnapshotTimeout)
-		snapshot, err := provider.ScreenSnapshot(ctx, sessionID)
+		snapshot, err := provider.ScreenSnapshot(ctx, terminal)
 		cancel()
 		if err != nil {
 			d.logf("model capture snapshot failed: session=%s err=%v", sessionID, err)

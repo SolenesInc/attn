@@ -7,6 +7,7 @@ import (
 	"fmt"
 
 	"github.com/victorarias/attn/internal/ghosttyvt"
+	"github.com/victorarias/attn/internal/harness"
 	"github.com/victorarias/attn/internal/protocol"
 	"github.com/victorarias/attn/internal/pty"
 	"github.com/victorarias/attn/internal/ptybackend"
@@ -71,7 +72,7 @@ func (d *Daemon) handleGetKittyImage(client *wsClient, msg *protocol.GetKittyIma
 		return
 	}
 
-	image, err := provider.KittyImage(context.Background(), msg.ID, uint32(msg.ImageID))
+	image, err := provider.KittyImage(context.Background(), harness.TerminalID(msg.ID), uint32(msg.ImageID))
 	if err != nil {
 		d.sendKittyImageFailure(client, msg.ID, msg.ImageID, err.Error())
 		return

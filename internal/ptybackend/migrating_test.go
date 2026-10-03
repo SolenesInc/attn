@@ -10,14 +10,15 @@ import (
 	"syscall"
 	"testing"
 
+	"github.com/victorarias/attn/internal/harness"
 	"github.com/victorarias/attn/internal/pty"
 )
 
 type migrationTestBackend struct {
 	mu          sync.Mutex
-	ids         map[string]struct{}
-	spawned     []string
-	inputs      map[string][][]byte
+	ids         map[harness.TerminalID]struct{}
+	spawned     []harness.TerminalID
+	inputs      map[harness.TerminalID][][]byte
 	report      RecoveryReport
 	recover     error
 	shutdown    error
@@ -26,8 +27,8 @@ type migrationTestBackend struct {
 	removeErr   error
 }
 
-func newMigrationTestBackend(ids ...string) *migrationTestBackend {
-	b := &migrationTestBackend{ids: make(map[string]struct{}), inputs: make(map[string][][]byte)}
+func newMigrationTestBackend(ids ...harness.TerminalID) *migrationTestBackend {
+	b := &migrationTestBackend{ids: make(map[harness.TerminalID]struct{}), inputs: make(map[harness.TerminalID][][]byte)}
 	for _, id := range ids {
 		b.ids[id] = struct{}{}
 	}
@@ -76,12 +77,12 @@ func TestMigratingBackendToggleKeepsExistingAndPendingOwners(t *testing.T) {
 	if err := backend.Spawn(context.Background(), SpawnOptions{ID: "legacy"}); err != nil {
 		t.Fatal(err)
 	}
-	for _, id := range []string{"pending-legacy", "shared", "legacy"} {
+	for _, id := range []harness.TerminalID{"pending-legacy", "shared", "legacy"} {
 		if err := backend.Input(context.Background(), id, []byte(id)); err != nil {
 			t.Fatal(err)
 		}
 	}
-	if !reflect.DeepEqual(legacy.spawned, []string{"pending-legacy", "legacy"}) || !reflect.DeepEqual(shared.spawned, []string{"shared"}) {
+	if !reflect.DeepEqual(legacy.spawned, []harness.TerminalID{"pending-legacy", "legacy"}) || !reflect.DeepEqual(shared.spawned, []harness.TerminalID{"shared"}) {
 		t.Fatalf("unexpected launches: legacy=%v shared=%v", legacy.spawned, shared.spawned)
 	}
 	if len(legacy.inputs["pending-legacy"]) != 1 || len(legacy.inputs["legacy"]) != 1 || len(shared.inputs["shared"]) != 1 {
@@ -89,30 +90,30 @@ func TestMigratingBackendToggleKeepsExistingAndPendingOwners(t *testing.T) {
 	}
 }
 
-func (b *migrationTestBackend) Attach(context.Context, string, string, ...AttachOptions) (AttachInfo, Stream, error) {
+func (b *migrationTestBackend) Attach(context.Context, harness.TerminalID, string, ...AttachOptions) (AttachInfo, Stream, error) {
 	return AttachInfo{}, nil, nil
 }
 
-func (b *migrationTestBackend) Input(_ context.Context, id string, data []byte) error {
+func (b *migrationTestBackend) Input(_ context.Context, id harness.TerminalID, data []byte) error {
 	b.mu.Lock()
 	defer b.mu.Unlock()
 	b.inputs[id] = append(b.inputs[id], append([]byte(nil), data...))
 	return nil
 }
 
-func (b *migrationTestBackend) Resize(context.Context, string, uint16, uint16, uint16, uint16) (ResizeResult, error) {
+func (b *migrationTestBackend) Resize(context.Context, harness.TerminalID, uint16, uint16, uint16, uint16) (ResizeResult, error) {
 	return ResizeResult{Changed: true}, nil
 }
 
-func (b *migrationTestBackend) SetTheme(context.Context, string, pty.TerminalTheme) error {
+func (b *migrationTestBackend) SetTheme(context.Context, harness.TerminalID, pty.TerminalTheme) error {
 	return nil
 }
 
-func (b *migrationTestBackend) Kill(context.Context, string, syscall.Signal) error {
+func (b *migrationTestBackend) Kill(context.Context, harness.TerminalID, syscall.Signal) error {
 	return nil
 }
 
-func (b *migrationTestBackend) Remove(_ context.Context, id string) error {
+func (b *migrationTestBackend) Remove(_ context.Context, id harness.TerminalID) error {
 	b.mu.Lock()
 	defer b.mu.Unlock()
 	if b.removeErr != nil {
@@ -145,13 +146,13 @@ func TestMigratingBackendMissingLegacySocketDoesNotBlockReplacement(t *testing.T
 	if err := backend.Remove(ctx, id); !errors.Is(err, os.ErrNotExist) {
 		t.Fatalf("Remove() = %v, want missing worker socket", err)
 	}
-	if ids := legacy.SessionIDs(ctx); len(ids) != 0 {
+	if ids := legacy.TerminalIDs(ctx); len(ids) != 0 {
 		t.Fatalf("legacy still owns %v", ids)
 	}
 	if err := backend.Spawn(ctx, SpawnOptions{ID: id}); err != nil {
 		t.Fatalf("replacement spawn: %v", err)
 	}
-	if !reflect.DeepEqual(shared.spawned, []string{id}) {
+	if !reflect.DeepEqual(shared.spawned, []harness.TerminalID{id}) {
 		t.Fatalf("replacement launches = %v", shared.spawned)
 	}
 }
@@ -182,10 +183,10 @@ func TestMigratingBackendFailedRemovalKeepsOwner(t *testing.T) {
 	}
 }
 
-func (b *migrationTestBackend) SessionIDs(context.Context) []string {
+func (b *migrationTestBackend) TerminalIDs(context.Context) []harness.TerminalID {
 	b.mu.Lock()
 	defer b.mu.Unlock()
-	ids := make([]string, 0, len(b.ids))
+	ids := make([]harness.TerminalID, 0, len(b.ids))
 	for id := range b.ids {
 		ids = append(ids, id)
 	}
@@ -200,31 +201,31 @@ func (b *migrationTestBackend) Shutdown(context.Context) error {
 	return b.shutdown
 }
 
-func (b *migrationTestBackend) SessionInfo(_ context.Context, id string) (SessionInfo, error) {
-	return SessionInfo{SessionID: id}, nil
+func (b *migrationTestBackend) SessionInfo(_ context.Context, id harness.TerminalID) (SessionInfo, error) {
+	return SessionInfo{SessionID: string(id)}, nil
 }
 
-func (b *migrationTestBackend) SessionLaunchParams(context.Context, string) (SessionLaunchParams, error) {
+func (b *migrationTestBackend) SessionLaunchParams(context.Context, harness.TerminalID) (SessionLaunchParams, error) {
 	return SessionLaunchParams{Recorded: true}, nil
 }
 
-func (b *migrationTestBackend) ScreenSnapshot(context.Context, string) (pty.ScreenSnapshotInfo, error) {
+func (b *migrationTestBackend) ScreenSnapshot(context.Context, harness.TerminalID) (pty.ScreenSnapshotInfo, error) {
 	return pty.ScreenSnapshotInfo{Running: true}, nil
 }
 
-func (b *migrationTestBackend) KittyImage(context.Context, string, uint32) (pty.KittyImage, error) {
+func (b *migrationTestBackend) KittyImage(context.Context, harness.TerminalID, uint32) (pty.KittyImage, error) {
 	return pty.KittyImage{}, nil
 }
 
-func (b *migrationTestBackend) SessionTerminalBuild(string) (string, bool) {
+func (b *migrationTestBackend) SessionTerminalBuild(harness.TerminalID) (string, bool) {
 	return "test-format", true
 }
 
-func (b *migrationTestBackend) UpgradeWorker(context.Context, string) error {
+func (b *migrationTestBackend) UpgradeWorker(context.Context, harness.TerminalID) error {
 	return nil
 }
 
-func (b *migrationTestBackend) SessionLikelyAlive(_ context.Context, id string) (bool, error) {
+func (b *migrationTestBackend) SessionLikelyAlive(_ context.Context, id harness.TerminalID) (bool, error) {
 	b.mu.Lock()
 	defer b.mu.Unlock()
 	_, ok := b.ids[id]
@@ -236,7 +237,7 @@ func (b *migrationTestBackend) WorkerPIDs(context.Context) map[string]int {
 	defer b.mu.Unlock()
 	result := make(map[string]int, len(b.ids))
 	for id := range b.ids {
-		result[id] = 42
+		result[string(id)] = 42
 	}
 	return result
 }
@@ -290,11 +291,11 @@ func TestMigratingBackendRoutesOnlyNewSessionsToShared(t *testing.T) {
 	if len(legacy.spawned) != 0 {
 		t.Fatalf("legacy spawned = %v, want none", legacy.spawned)
 	}
-	if !reflect.DeepEqual(shared.spawned, []string{"created-now"}) {
+	if !reflect.DeepEqual(shared.spawned, []harness.TerminalID{"created-now"}) {
 		t.Fatalf("shared spawned = %v, want [created-now]", shared.spawned)
 	}
-	if got := backend.SessionIDs(context.Background()); !reflect.DeepEqual(got, []string{"already-running", "created-now"}) {
-		t.Fatalf("SessionIDs() = %v", got)
+	if got := backend.TerminalIDs(context.Background()); !reflect.DeepEqual(got, []harness.TerminalID{"already-running", "created-now"}) {
+		t.Fatalf("TerminalIDs() = %v", got)
 	}
 }
 
@@ -308,7 +309,7 @@ func TestMigratingBackendCanKeepNewSessionsOnLegacyWhenSharedProbeFails(t *testi
 	if err := backend.Spawn(context.Background(), SpawnOptions{ID: "fallback"}); err != nil {
 		t.Fatal(err)
 	}
-	if !reflect.DeepEqual(legacy.spawned, []string{"fallback"}) {
+	if !reflect.DeepEqual(legacy.spawned, []harness.TerminalID{"fallback"}) {
 		t.Fatalf("legacy spawned = %v, want [fallback]", legacy.spawned)
 	}
 	if len(shared.spawned) != 0 {

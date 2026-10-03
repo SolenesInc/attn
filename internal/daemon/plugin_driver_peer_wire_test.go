@@ -284,8 +284,8 @@ func spawnDriven(w *world, app *testworld.Peer, driver *driverPeer, cwd string, 
 	w.T.Helper()
 	session := w.Spawn(app, fakeagent.Harness(driver.agent), cwd, opts...)
 	launch := driver.launched()
-	if launch.SessionID != session {
-		w.T.Fatalf("plugin %s was asked to launch session %s, want %s", driver.name, launch.SessionID, session)
+	if terminal := app.Terminal(session); launch.SessionID != terminal {
+		w.T.Fatalf("plugin %s was asked to launch %s, want terminal %s of session %s", driver.name, launch.SessionID, terminal, session)
 	}
 	return session, launch
 }

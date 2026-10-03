@@ -30,12 +30,12 @@ func feedbackResult(app *testworld.Peer, requestID string) protocol.SessionAnnot
 	return testworld.Await(app, protocol.EventSessionAnnotationsSubmitResult, func(r protocol.SessionAnnotationsSubmitResultMessage) bool { return r.RequestID == requestID })
 }
 
-func awaitingInput(t *testing.T, app *testworld.Peer, driver *driverPeer, run driverLaunch) {
+func awaitingInput(t *testing.T, app *testworld.Peer, driver *driverPeer, session string, run driverLaunch) {
 	t.Helper()
 	if err := driver.state(run, 1, protocol.StateWaitingInput); err != nil {
 		t.Fatal(err)
 	}
-	testworld.AwaitSession(app, run.SessionID, func(s protocol.Session) bool { return s.State == protocol.SessionStateWaitingInput })
+	testworld.AwaitSession(app, session, func(s protocol.Session) bool { return s.State == protocol.SessionStateWaitingInput })
 }
 
 func settledScreen(t *testing.T, app *testworld.Peer, session string) string {
@@ -63,12 +63,12 @@ func TestAMessageDeliveringDriverCarriesAttnsInputInsteadOfItsTerminal(t *testin
 	driver := connectDriver(t, w, "snipe-plugin", "snipe", map[string]bool{"state_reporting": true, "message_delivery": true})
 	awaitDriverAvailable(app, "snipe")
 	session, run := spawnDriven(w, app, driver, w.Path("shop"))
-	awaitingInput(t, app, driver, run)
+	awaitingInput(t, app, driver, session, run)
 
 	submitted := sendFeedback(app, session, "check the rounding")
 	var message deliveredMessage
 	driver.answer(driver.asked("driver.deliver_message", &message), map[string]bool{"ok": true})
-	if message.SessionID != session || message.RunID != run.RunID || message.Text != "check the rounding" || message.InputID == "" {
+	if message.SessionID != run.SessionID || message.RunID != run.RunID || message.Text != "check the rounding" || message.InputID == "" {
 		t.Errorf("the driver was handed %+v, want the feedback for run %s with an input id", message, run.RunID)
 	}
 	if result := feedbackResult(app, submitted); !result.Success || result.Status != "delivered" {
@@ -83,7 +83,7 @@ func TestADriverWithoutMessageDeliveryHasAttnsInputPastedIntoItsTerminal(t *test
 	driver := connectDriver(t, w, "snipe-plugin", "snipe", map[string]bool{"state_reporting": true})
 	awaitDriverAvailable(app, "snipe")
 	session, run := spawnDriven(w, app, driver, w.Path("shop"))
-	awaitingInput(t, app, driver, run)
+	awaitingInput(t, app, driver, session, run)
 
 	if result := feedbackResult(app, sendFeedback(app, session, "check the rounding")); !result.Success || result.Status != "delivered" {
 		t.Fatalf("the feedback was answered %+v, want it delivered", result)
@@ -99,7 +99,7 @@ func TestADeliveryTheDriverDeclinesFailsWithoutTypingIntoTheTerminal(t *testing.
 	driver := connectDriver(t, w, "snipe-plugin", "snipe", map[string]bool{"state_reporting": true, "message_delivery": true})
 	awaitDriverAvailable(app, "snipe")
 	session, run := spawnDriven(w, app, driver, w.Path("shop"))
-	awaitingInput(t, app, driver, run)
+	awaitingInput(t, app, driver, session, run)
 
 	submitted := sendFeedback(app, session, "check the rounding")
 	driver.answer(driver.asked("driver.deliver_message", nil), map[string]bool{"ok": false})
@@ -115,7 +115,7 @@ func TestTheUsersKeystrokesReachTheTerminalWhileTheDriverHoldsADelivery(t *testi
 	driver := connectDriver(t, w, "snipe-plugin", "snipe", map[string]bool{"state_reporting": true, "message_delivery": true})
 	awaitDriverAvailable(app, "snipe")
 	session, run := spawnDriven(w, app, driver, w.Path("shop"))
-	awaitingInput(t, app, driver, run)
+	awaitingInput(t, app, driver, session, run)
 
 	submitted := sendFeedback(app, session, "check the rounding")
 	held := driver.asked("driver.deliver_message", nil)
@@ -134,7 +134,7 @@ func TestAUserTurnCarriedByTheDriverTitlesTheSession(t *testing.T) {
 	driver := connectDriver(t, w, "snipe-plugin", "snipe", map[string]bool{"state_reporting": true, "message_delivery": true})
 	awaitDriverAvailable(app, "snipe")
 	session, run := spawnDriven(w, app, driver, w.Path("shop"))
-	awaitingInput(t, app, driver, run)
+	awaitingInput(t, app, driver, session, run)
 
 	submitted := sendFeedback(app, session, "investigate the retry queue")
 	driver.answer(driver.asked("driver.deliver_message", nil), map[string]bool{"ok": true})

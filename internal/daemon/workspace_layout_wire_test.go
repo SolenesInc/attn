@@ -215,6 +215,7 @@ func TestClosingAPaneAnswersAtOnceEvenWhenItsProcessIgnoresSIGTERM(t *testing.T)
 	remaining := w.Spawn(app, workspaceShell, cwd)
 	app.TypeLine(stubborn.ID, "trap '' TERM HUP; echo stubborn-$((6*7))")
 	app.AwaitScreen(stubborn.ID, "stubborn-42")
+	stubbornTerminal := app.Terminal(stubborn.ID)
 
 	closed := workspaceLayoutAction(app, protocol.WorkspaceLayoutClosePaneMessage{
 		Cmd: protocol.CmdWorkspaceLayoutClosePane, WorkspaceID: ws, PaneID: stubbornPane,
@@ -228,7 +229,11 @@ func TestClosingAPaneAnswersAtOnceEvenWhenItsProcessIgnoresSIGTERM(t *testing.T)
 	if len(layout.Panes) != 1 || protocol.Deref(layout.Panes[0].SessionID) != remaining {
 		t.Errorf("after the close the layout has panes %+v, want only %s", layout.Panes, remaining)
 	}
-	exitWorkspaceShells(app, remaining, stubborn.ID)
+	exitWorkspaceShells(app, remaining)
+	app.Send(protocol.PtyInputMessage{Cmd: protocol.CmdPtyInput, ID: stubbornTerminal, Data: "exit\r"})
+	testworld.Await(app, protocol.EventSessionExited, func(e protocol.SessionExitedMessage) bool {
+		return e.ID == stubbornTerminal && e.SessionID == stubborn.ID
+	})
 }
 
 func TestPanesWhoseSessionDidNotSurviveARestartAreDropped(t *testing.T) {
@@ -777,6 +782,6 @@ func exitWorkspaceShells(app *testworld.Peer, ids ...string) {
 	app.T.Helper()
 	for _, id := range ids {
 		app.TypeLine(id, "exit")
-		testworld.Await(app, protocol.EventSessionExited, func(e protocol.SessionExitedMessage) bool { return e.ID == id })
+		testworld.Await(app, protocol.EventSessionExited, func(e protocol.SessionExitedMessage) bool { return e.SessionID == id })
 	}
 }

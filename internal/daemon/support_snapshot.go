@@ -10,6 +10,7 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/victorarias/attn/internal/harness"
 	"github.com/victorarias/attn/internal/protocol"
 	"github.com/victorarias/attn/internal/pty"
 	"github.com/victorarias/attn/internal/ptybackend"
@@ -136,8 +137,8 @@ func (d *Daemon) handleSupportSnapshot(client *wsClient, msg *protocol.SupportSn
 	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
 	defer cancel()
 	if msg.RuntimeIds == nil && d.ptyBackend != nil {
-		for _, runtimeID := range d.ptyBackend.SessionIDs(ctx) {
-			runtimeIDs[runtimeID] = struct{}{}
+		for _, runtimeID := range d.ptyBackend.TerminalIDs(ctx) {
+			runtimeIDs[string(runtimeID)] = struct{}{}
 			if len(runtimeIDs) >= supportInputTraceCapacity {
 				break
 			}
@@ -184,7 +185,7 @@ func (d *Daemon) supportRuntimeEvidence(ctx context.Context, runtimeID string, a
 		Attached:  attached,
 	}
 	if buildProvider, ok := d.ptyBackend.(ptybackend.TerminalBuildProvider); ok {
-		format, known := buildProvider.SessionTerminalBuild(runtimeID)
+		format, known := buildProvider.SessionTerminalBuild(harness.TerminalID(runtimeID))
 		evidence.TerminalBuildKnown = known
 		if known {
 			evidence.TerminalBuild = protocol.Ptr(format)
@@ -194,7 +195,7 @@ func (d *Daemon) supportRuntimeEvidence(ctx context.Context, runtimeID string, a
 	if !ok {
 		return evidence
 	}
-	info, err := infoProvider.SessionInfo(ctx, runtimeID)
+	info, err := infoProvider.SessionInfo(ctx, harness.TerminalID(runtimeID))
 	if err != nil {
 		evidence.InfoErrorClass = protocol.Ptr(supportErrorClass(err))
 		return evidence

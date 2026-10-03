@@ -20,11 +20,12 @@ import (
 
 func exitDriven(app *testworld.Peer, driver *driverPeer, session string) {
 	app.T.Helper()
-	app.Send(protocol.PtyInputMessage{Cmd: protocol.CmdPtyInput, ID: session, Data: "\x04"})
-	if closed := driver.closed(); closed.SessionID != session || closed.Reason != "exited" {
-		app.T.Fatalf("the driver was told %+v, want %s to have exited", closed, session)
+	terminal := app.Terminal(session)
+	app.Send(protocol.PtyInputMessage{Cmd: protocol.CmdPtyInput, ID: terminal, Data: "\x04"})
+	if closed := driver.closed(); closed.SessionID != terminal || closed.Reason != "exited" {
+		app.T.Fatalf("the driver was told %+v, want terminal %s of %s to have exited", closed, terminal, session)
 	}
-	testworld.Await(app, protocol.EventSessionExited, func(e protocol.SessionExitedMessage) bool { return e.ID == session })
+	testworld.Await(app, protocol.EventSessionExited, func(e protocol.SessionExitedMessage) bool { return e.SessionID == session })
 }
 
 func relaunchDriven(w *world, driver *driverPeer, session, cwd string) driverLaunch {

@@ -11,7 +11,7 @@ import (
 
 func (d *Daemon) recoveredApprovalRoute(sessionID string) (launchcontract.ApprovalRoute, bool) {
 	if provider, ok := d.ptyBackend.(ptybackend.SessionLaunchParamsProvider); ok {
-		params, err := provider.SessionLaunchParams(context.Background(), sessionID)
+		params, err := provider.SessionLaunchParams(context.Background(), d.primaryTerminal(sessionID))
 		if err == nil && params.Recorded {
 			route, known, routeErr := recordedApprovalRoute(params.ApprovalRoute, params.YoloMode, params.UnattendedLaunch)
 			if routeErr != nil {

@@ -26,6 +26,7 @@ func TestAFreshSpawnAttachGetsNoReplayWhileARemountDoes(t *testing.T) {
 
 func attachWithPolicy(p *testworld.Peer, session string, policy protocol.AttachPolicy) protocol.AttachResultMessage {
 	p.T.Helper()
-	return testworld.Request(p, protocol.AttachSessionMessage{Cmd: protocol.CmdAttachSession, ID: session, AttachPolicy: protocol.Ptr(policy)},
-		protocol.EventAttachResult, func(r protocol.AttachResultMessage) bool { return r.ID == session })
+	terminal := p.Terminal(session)
+	return testworld.Request(p, protocol.AttachSessionMessage{Cmd: protocol.CmdAttachSession, ID: terminal, AttachPolicy: protocol.Ptr(policy)},
+		protocol.EventAttachResult, func(r protocol.AttachResultMessage) bool { return r.ID == terminal })
 }

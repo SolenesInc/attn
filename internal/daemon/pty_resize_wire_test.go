@@ -11,6 +11,7 @@ import (
 func TestAPtyResizeIsEchoedOnceInStreamOrderKeepingTheCellSizeWhenPixelsAreUnusable(t *testing.T) {
 	w := newWorld(t)
 	session := w.Spawn(w.App(), workspaceShell, w.Path("shop"))
+	terminal := w.Terminal(session)
 	plain := transportPeer(w)
 
 	for i, tc := range []struct {
@@ -26,16 +27,16 @@ func TestAPtyResizeIsEchoedOnceInStreamOrderKeepingTheCellSizeWhenPixelsAreUnusa
 		cols, rows := 90+i, 20+i
 		before, after := fmt.Sprintf("before-%d", i), fmt.Sprintf("after-%d", i)
 		plain.TypeLine(session, fmt.Sprintf(`printf 'be%%s\n' fore-%d`, i))
-		transportAwaitOutput(plain, session, before)
+		transportAwaitOutput(plain, terminal, before)
 
-		plain.Send(protocol.PtyResizeMessage{Cmd: protocol.CmdPtyResize, ID: session, Cols: cols, Rows: rows, Xpixel: tc.xpixel, Ypixel: tc.ypixel})
+		plain.Send(protocol.PtyResizeMessage{Cmd: protocol.CmdPtyResize, ID: terminal, Cols: cols, Rows: rows, Xpixel: tc.xpixel, Ypixel: tc.ypixel})
 		plain.TypeLine(session, fmt.Sprintf(`stty size; printf 'af%%s\n' ter-%d`, i))
-		transportAwaitOutput(plain, session, after)
+		transportAwaitOutput(plain, terminal, after)
 
 		events := plain.Received()
 		var echoes []int
 		for index, e := range events {
-			if e.Event == protocol.EventPtyResized && protocol.Deref(e.ID) == session && protocol.Deref(e.Cols) == cols {
+			if e.Event == protocol.EventPtyResized && protocol.Deref(e.ID) == terminal && protocol.Deref(e.Cols) == cols {
 				echoes = append(echoes, index)
 			}
 		}
@@ -44,7 +45,7 @@ func TestAPtyResizeIsEchoedOnceInStreamOrderKeepingTheCellSizeWhenPixelsAreUnusa
 			continue
 		}
 		echo := events[echoes[0]]
-		if at, from, to := echoes[0], transportOutputIndex(t, events, session, before), transportOutputIndex(t, events, session, after); at < from || at > to {
+		if at, from, to := echoes[0], transportOutputIndex(t, events, terminal, before), transportOutputIndex(t, events, terminal, after); at < from || at > to {
 			t.Errorf("%s: pty_resized arrived at %d, want it between the output before it (%d) and after it (%d)", tc.name, at, from, to)
 		}
 		if protocol.Deref(echo.Rows) != rows {
@@ -56,7 +57,7 @@ func TestAPtyResizeIsEchoedOnceInStreamOrderKeepingTheCellSizeWhenPixelsAreUnusa
 		case !tc.cellSize && (echo.Xpixel != nil || echo.Ypixel != nil):
 			t.Errorf("%s: pty_resized echoed %d x %d pixels, want both left off", tc.name, protocol.Deref(echo.Xpixel), protocol.Deref(echo.Ypixel))
 		}
-		if transportOutputIndex(t, events, session, fmt.Sprintf("%d %d", rows, cols)) < 0 {
+		if transportOutputIndex(t, events, terminal, fmt.Sprintf("%d %d", rows, cols)) < 0 {
 			t.Errorf("%s: stty in the session does not report %d rows and %d cols", tc.name, rows, cols)
 		}
 	}
@@ -68,7 +69,7 @@ func TestAProgramReadsThePixelGeometryOfItsLastResize(t *testing.T) {
 	session := w.Spawn(app, workspaceShell, w.Path("shop"))
 	winsize := fakeagent.InstallWinsize(t, w.Dir)
 
-	app.Send(protocol.PtyResizeMessage{Cmd: protocol.CmdPtyResize, ID: session, Cols: 40, Rows: 12, Xpixel: protocol.Ptr(40 * 18), Ypixel: protocol.Ptr(12 * 45)})
+	app.Send(protocol.PtyResizeMessage{Cmd: protocol.CmdPtyResize, ID: app.Terminal(session), Cols: 40, Rows: 12, Xpixel: protocol.Ptr(40 * 18), Ypixel: protocol.Ptr(12 * 45)})
 	app.TypeLine(session, winsize)
 	app.AwaitScreen(session, "winsize cols=40 rows=12 xpixel=720 ypixel=540")
 }

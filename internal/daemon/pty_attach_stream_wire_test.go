@@ -30,6 +30,7 @@ func TestAClientAttachingMidFloodContinuesFromItsSnapshotWithoutAGapOrARepeat(t 
 	w := newWorld(t)
 	app := w.App()
 	shell := w.Spawn(app, workspaceShell, w.Path("shop"))
+	terminal := w.Terminal(shell)
 	flood := filepath.Join(w.Dir, "flood.sh")
 	if err := os.WriteFile(flood, []byte(lineFlood), 0o755); err != nil {
 		t.Fatal(err)
@@ -45,17 +46,17 @@ func TestAClientAttachingMidFloodContinuesFromItsSnapshotWithoutAGapOrARepeat(t 
 	var clients []attached
 	for range 12 {
 		peer := transportPeer(w)
-		clients = append(clients, attached{peer, kittyAttach(peer, shell)})
+		clients = append(clients, attached{peer, kittyAttach(peer, terminal)})
 	}
 	if err := os.WriteFile(stop, nil, 0o644); err != nil {
 		t.Fatal(err)
 	}
 
 	for i, client := range clients {
-		client.result = floodAwaitEnd(t, client.peer, shell, client.result)
+		client.result = floodAwaitEnd(t, client.peer, terminal, client.result)
 		stream := []byte(floodSnapshot(t, client.result))
 		for _, e := range client.peer.Received() {
-			if e.Event == protocol.EventPtyOutput && protocol.Deref(e.ID) == shell && protocol.Deref(e.Seq) > protocol.Deref(client.result.LastSeq) {
+			if e.Event == protocol.EventPtyOutput && protocol.Deref(e.ID) == terminal && protocol.Deref(e.Seq) > protocol.Deref(client.result.LastSeq) {
 				stream = append(stream, transportDecodeOutput(t, e)...)
 			}
 		}
@@ -103,7 +104,7 @@ func floodSnapshot(t *testing.T, result protocol.AttachResultMessage) string {
 	return strings.Join(lines[first:last+1], "\n")
 }
 
-func floodAwaitEnd(t *testing.T, p *testworld.Peer, session string, result protocol.AttachResultMessage) protocol.AttachResultMessage {
+func floodAwaitEnd(t *testing.T, p *testworld.Peer, terminal string, result protocol.AttachResultMessage) protocol.AttachResultMessage {
 	t.Helper()
 	for {
 		seen := []byte(floodSnapshot(t, result))
@@ -111,7 +112,7 @@ func floodAwaitEnd(t *testing.T, p *testworld.Peer, session string, result proto
 			return result
 		}
 		e := testworld.AwaitEvent(p, "the flood's end or a desync", func(e protocol.WebSocketEvent) bool {
-			if protocol.Deref(e.ID) != session {
+			if protocol.Deref(e.ID) != terminal {
 				return false
 			}
 			if e.Event == protocol.EventPtyOutput {
@@ -122,6 +123,6 @@ func floodAwaitEnd(t *testing.T, p *testworld.Peer, session string, result proto
 		if e.Event != protocol.EventPtyDesync {
 			return result
 		}
-		result = kittyAttach(p, session)
+		result = kittyAttach(p, terminal)
 	}
 }

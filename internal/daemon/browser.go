@@ -244,7 +244,7 @@ func (d *Daemon) handleOpenBrowser(conn net.Conn, msg *protocol.OpenBrowserMessa
 					return
 				}
 				snapshot.Layout = layout
-				if err := d.store.SaveWorkspaceLayout(workspacelayout.NormalizeWorkspaceLayout(*snapshot)); err != nil {
+				if err := d.saveWorkspaceLayout(workspacelayout.NormalizeWorkspaceLayout(*snapshot)); err != nil {
 					d.sendError(conn, fmt.Sprintf("open_browser: %v", err))
 					return
 				}

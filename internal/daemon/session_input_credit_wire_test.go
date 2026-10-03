@@ -60,7 +60,7 @@ func TestAnApprovalKeypressEarnsNoCreditAndDoesNotHoldAttnsDoorbell(t *testing.T
 			t.Fatalf("the agent is %s, want pending_approval", s.State)
 		}
 
-		app.Send(protocol.PtyInputMessage{Cmd: protocol.CmdPtyInput, ID: agent.id, Data: "y"})
+		app.Send(protocol.PtyInputMessage{Cmd: protocol.CmdPtyInput, ID: agent.self, Data: "y"})
 		w.advance(0)
 		if err := cli.UpdateStateFromHookEvidence(agent.id, protocol.StateWorking, "", "", ""); err != nil {
 			t.Fatal(err)
@@ -84,7 +84,7 @@ func TestAnAnnotationArmsAutoSettleOnTheTurnThatTakesItButNotOnAttnsTurnAfterThe
 	}{
 		{"the agent takes the annotation", func(*testing.T, *world, *testworld.Peer, *client.Client, *bubbleClaude) {}, true},
 		{"the user types over it and the doorbell's turn follows", func(t *testing.T, w *world, app *testworld.Peer, cli *client.Client, agent *bubbleClaude) {
-			app.Send(protocol.PtyInputMessage{Cmd: protocol.CmdPtyInput, ID: agent.id, Data: "x"})
+			app.Send(protocol.PtyInputMessage{Cmd: protocol.CmdPtyInput, ID: agent.self, Data: "x"})
 			w.advance(0)
 			agent.term.OnSubmit(agent.take)
 			registerSessions(t, w, cli, "sender")

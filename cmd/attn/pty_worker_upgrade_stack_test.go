@@ -19,7 +19,7 @@ func TestAWorkerUpgradedInPlaceKeepsItsProgramBlocksAndTerminalSettings(t *testi
 	app := s.App()
 	app.Send(protocol.SetTerminalThemeMessage{Cmd: protocol.CmdSetTerminalTheme, Foreground: "#405060", Background: "#102030", Cursor: "#708090"})
 	shell := s.Spawn(app, fakeagent.Harness(protocol.SessionAgentShell), s.Path("shop"))
-	app.Send(protocol.PtyResizeMessage{Cmd: protocol.CmdPtyResize, ID: shell, Cols: 91, Rows: 23})
+	app.Send(protocol.PtyResizeMessage{Cmd: protocol.CmdPtyResize, ID: app.Terminal(shell), Cols: 91, Rows: 23})
 	pidFile := filepath.Join(s.Dir, "shell.pid")
 	app.TypeLine(shell, `printf '\033]133;A\007$ \033]133;C;cmdline=before-upgrade\007\033]133;D;0\007'; echo $$ > `+pidFile+`; echo recorded-$((1+1))`)
 	app.AwaitScreen(shell, "recorded-2")
@@ -31,9 +31,10 @@ func TestAWorkerUpgradedInPlaceKeepsItsProgramBlocksAndTerminalSettings(t *testi
 
 	s.StartBinary(next)
 	app = s.App()
+	terminal := app.Terminal(shell)
 	attach := func() protocol.AttachResultMessage {
-		return testworld.Request(app, protocol.AttachSessionMessage{Cmd: protocol.CmdAttachSession, ID: shell},
-			protocol.EventAttachResult, func(r protocol.AttachResultMessage) bool { return r.ID == shell })
+		return testworld.Request(app, protocol.AttachSessionMessage{Cmd: protocol.CmdAttachSession, ID: terminal},
+			protocol.EventAttachResult, func(r protocol.AttachResultMessage) bool { return r.ID == terminal })
 	}
 	for _, x := range app.Initial.Sessions {
 		if x.ID == shell && x.TerminalBuildStale != nil {
@@ -70,12 +71,12 @@ printf 'bg=%s=\n' "${bg#??}"
 		t.Errorf("the shell was pid %s before the upgrade and %s after, want the same process", before, after)
 	}
 	app.AwaitScreen(shell, "23 91")
-	if image := testworld.Request(app, protocol.GetKittyImageMessage{Cmd: protocol.CmdGetKittyImage, ID: shell, ImageID: 77},
+	if image := testworld.Request(app, protocol.GetKittyImageMessage{Cmd: protocol.CmdGetKittyImage, ID: terminal, ImageID: 77},
 		protocol.EventKittyImageResult, func(r protocol.KittyImageResultMessage) bool { return r.ImageID == 77 }); image.Success {
 		t.Errorf("the upgraded worker stored image 77, want images still off as the session was launched")
 	}
 	app.TypeLine(shell, "exit 7")
-	exited := testworld.Await(app, protocol.EventSessionExited, func(e protocol.SessionExitedMessage) bool { return e.ID == shell })
+	exited := testworld.Await(app, protocol.EventSessionExited, func(e protocol.SessionExitedMessage) bool { return e.SessionID == shell })
 	if exited.ExitCode != 7 {
 		t.Errorf("the shell exited %d under the upgraded worker, want 7", exited.ExitCode)
 	}
@@ -133,8 +134,9 @@ func TestWithInPlaceUpgradesOffAnUpdatedTerminalKeepsItsOldWorkerAndShowsTheRelo
 	if came := initialSession(t, app, shell); !protocol.Deref(came.TerminalBuildStale) {
 		t.Errorf("the terminal came back without the reload notice, want it offered while in-place upgrades are off")
 	}
-	attached := testworld.Request(app, protocol.AttachSessionMessage{Cmd: protocol.CmdAttachSession, ID: shell},
-		protocol.EventAttachResult, func(r protocol.AttachResultMessage) bool { return r.ID == shell })
+	terminal := app.Terminal(shell)
+	attached := testworld.Request(app, protocol.AttachSessionMessage{Cmd: protocol.CmdAttachSession, ID: terminal},
+		protocol.EventAttachResult, func(r protocol.AttachResultMessage) bool { return r.ID == terminal })
 	if attached.Snapshot == nil || protocol.Deref(attached.Snapshot.Format) == "next-format" {
 		t.Fatalf("the terminal attached with snapshot %+v, want its worker still on the old build", attached.Snapshot)
 	}
@@ -182,8 +184,9 @@ func TestASharedHostTerminalShowsNoReloadNoticeAfterAnUpdate(t *testing.T) {
 	if came := initialSession(t, app, shell); came.TerminalBuildStale != nil {
 		t.Errorf("the shared-host terminal came back with terminal_build_stale=%t, want it replayed without a reload notice", *came.TerminalBuildStale)
 	}
-	testworld.Request(app, protocol.AttachSessionMessage{Cmd: protocol.CmdAttachSession, ID: shell},
-		protocol.EventAttachResult, func(r protocol.AttachResultMessage) bool { return r.ID == shell })
+	terminal := app.Terminal(shell)
+	testworld.Request(app, protocol.AttachSessionMessage{Cmd: protocol.CmdAttachSession, ID: terminal},
+		protocol.EventAttachResult, func(r protocol.AttachResultMessage) bool { return r.ID == terminal })
 	app.TypeLine(shell, "echo still-$((2+2))")
 	app.AwaitScreen(shell, "still-4")
 }

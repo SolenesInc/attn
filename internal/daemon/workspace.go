@@ -485,7 +485,7 @@ func (d *Daemon) setWorkspacePinned(workspaceID string, pinned bool) (protocol.W
 
 func (d *Daemon) tearDownRemovedWorkspace(snapshot protocol.Workspace) {
 	id := snapshot.ID
-	d.store.RemoveWorkspace(id)
+	d.removeWorkspaceRecord(id)
 	d.pruneTileContentSubscriptionsForLayout(id, nil)
 	d.publishFact(FactWorkspaceUnregistered, id, snapshot)
 }
@@ -550,7 +550,7 @@ func (d *Daemon) loadWorkspacesFromStore() []string {
 				!ws.Pinned &&
 				!d.workspaceHasPendingSpawn(ws.ID) &&
 				!d.workspaceHasSessionlessContent(ws.ID) {
-				d.store.RemoveWorkspace(ws.ID)
+				d.removeWorkspaceRecord(ws.ID)
 				reaped = append(reaped, ws.ID)
 				continue
 			}

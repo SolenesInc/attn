@@ -190,7 +190,7 @@ func TestADayThatEndsDuringARestartIsSucceeded(t *testing.T) {
 func exitCrewDay(w *world, day *fakeagent.Run) *testworld.Peer {
 	app := w.App()
 	day.Exit(0)
-	testworld.Await(app, protocol.EventSessionExited, func(e protocol.SessionExitedMessage) bool { return e.ID == day.SessionID })
+	testworld.Await(app, protocol.EventSessionExited, func(e protocol.SessionExitedMessage) bool { return e.SessionID == day.SessionID })
 	return app
 }
 

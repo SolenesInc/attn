@@ -753,7 +753,7 @@ func (d *Daemon) reopenSessionRuntimeProtected(
 	_, paneCreated, err := d.addWorkspaceSessionPane(&protocol.WorkspaceLayoutAddSessionPaneMessage{
 		Cmd:         protocol.CmdWorkspaceLayoutAddSessionPane,
 		WorkspaceID: workspaceID,
-		PaneID:      protocol.Ptr("pane-" + plan.SessionID),
+		PaneID:      protocol.Ptr(d.reopenPaneID(workspaceID, plan.SessionID)),
 		SessionID:   plan.SessionID,
 		Title:       protocol.Ptr(plan.Title),
 	})
@@ -807,6 +807,27 @@ func (d *Daemon) reopenSessionRuntimeProtected(
 	return &sessionRuntimeReopened{SessionID: plan.SessionID, WorkspaceID: workspaceID}, nil
 }
 
+// reopenPaneID keeps pane-<id> unless another session's pane or a tile already holds it.
+func (d *Daemon) reopenPaneID(workspaceID, sessionID string) string {
+	paneID := "pane-" + sessionID
+	layout := d.store.GetWorkspaceLayout(workspaceID)
+	if layout == nil {
+		return paneID
+	}
+	for _, pane := range layout.Panes {
+		if pane.PaneID == paneID {
+			if pane.SessionID == sessionID {
+				return paneID
+			}
+			return newWorkspaceLayoutEntityID("pane")
+		}
+	}
+	if workspaceLayoutHasLeaf(layout.Layout, paneID) {
+		return newWorkspaceLayoutEntityID("pane")
+	}
+	return paneID
+}
+
 func (r *delegationRollback) onSessionReopened(sessionID string, closed store.SessionCloseRecord) {
 	r.undo = append(r.undo, func(foregroundCleanupProtection) error {
 		r.d.terminateSession(sessionID, syscall.SIGTERM)
@@ -822,7 +843,7 @@ func (r *delegationRollback) onSessionRespawned(
 	hadPriorIntent bool,
 ) {
 	r.undo = append(r.undo, func(foregroundCleanupProtection) error {
-		if err := r.d.terminateSessionRuntimeChecked(prior.ID, syscall.SIGTERM); err != nil {
+		if err := r.d.terminateSessionRuntimeChecked(prior.ID, r.d.terminalsOf(prior.ID), syscall.SIGTERM); err != nil {
 			return err
 		}
 		r.d.closePluginDriverSession(prior.ID, "launch_failed", nil, "")

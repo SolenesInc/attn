@@ -26,7 +26,7 @@ func TestShellPanesRecordEachCommandAsABlockUnlessTheUserOptsOut(t *testing.T) {
 			}
 			app.AwaitScreen(shell, "probed-42")
 
-			attached := kittyAttach(transportPeer(w), shell)
+			attached := kittyAttach(transportPeer(w), w.Terminal(shell))
 			exits := map[string]int{}
 			if attached.Snapshot != nil {
 				for _, block := range attached.Snapshot.Blocks {

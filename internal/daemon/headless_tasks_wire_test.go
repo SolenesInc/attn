@@ -47,7 +47,7 @@ func TestWithHeadlessTasksOffNoModelRunsAndSessionsStillSettle(t *testing.T) {
 	t.Setenv("ATTN_HEADLESS_TASKS", "off")
 
 	agent.Exit(0)
-	testworld.Await(watcher, protocol.EventSessionExited, func(e protocol.SessionExitedMessage) bool { return e.ID == session })
+	testworld.Await(watcher, protocol.EventSessionExited, func(e protocol.SessionExitedMessage) bool { return e.SessionID == session })
 }
 
 func TestTheHeadlessTasksSettingIsReportedApartFromItsEnvOverride(t *testing.T) {

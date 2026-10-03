@@ -65,11 +65,11 @@ func TestOnlyProgramsSubscribedToMode2031HearTheColorSchemeChange(t *testing.T) 
 			shell := w.Spawn(app, workspaceShell, w.Path("shop"))
 			program := transportPeer(w)
 			program.TypeLine(shell, "bash "+writeTerminalQueryScript(w, colorSchemeQueries, `"${a}n|${b}n|$d"`)+" "+mode)
-			transportAwaitOutput(program, shell, "armed-"+mode)
+			transportAwaitOutput(program, program.Terminal(shell), "armed-"+mode)
 			for _, background := range []string{"#ffffff", "#fefefe"} {
 				app.Send(protocol.SetTerminalThemeMessage{Cmd: protocol.CmdSetTerminalTheme, Background: background})
 			}
-			app.Send(protocol.PtyInputMessage{Cmd: protocol.CmdPtyInput, ID: shell, Data: "c"})
+			app.Send(protocol.PtyInputMessage{Cmd: protocol.CmdPtyInput, ID: app.Terminal(shell), Data: "c"})
 
 			want := "\x1b[?997;1n|\x1b[?997;1n|"
 			if mode == "subscribed" {
@@ -105,10 +105,11 @@ var terminalQueryResult = regexp.MustCompile(`replies=([0-9a-f]*)=`)
 
 func awaitTerminalQueryResult(p *testworld.Peer, session string) string {
 	p.T.Helper()
+	terminal := p.Terminal(session)
 	var seen []byte
 	var match [][]byte
 	testworld.Await(p, protocol.EventPtyOutput, func(e protocol.WebSocketEvent) bool {
-		if protocol.Deref(e.ID) != session {
+		if protocol.Deref(e.ID) != terminal {
 			return false
 		}
 		seen = append(seen, transportDecodeOutput(p.T, e)...)

@@ -60,7 +60,7 @@ func TestAttnRunInsideAClaudeSessionKeepsTheUsersTuningButNotItsIdentity(t *test
 		"ATTN_INSIDE_APP=1", "ATTN_AGENT=claude", "ATTN_SESSION_ID=" + id,
 		"CLAUDECODE=1", "CLAUDE_CODE_SESSION_ID=leaked", "CLAUDE_CODE_ENTRYPOINT=cli", "CLAUDE_EFFORT=xhigh", "CLAUDE_CODE_NO_FLICKER=1",
 	}})
-	claude := s.Launched(id)
+	claude := s.LaunchedCarrying(id)
 	for _, key := range []string{"CLAUDECODE", "CLAUDE_CODE_SESSION_ID", "CLAUDE_CODE_ENTRYPOINT"} {
 		if value, found := envValue(claude.Env, key); found && slices.Contains([]string{"1", "leaked", "cli"}, value) {
 			t.Errorf("claude inherited the outer session's %s=%s", key, value)

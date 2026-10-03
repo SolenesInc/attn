@@ -33,7 +33,7 @@ func TestARespawnWhoseAgentCannotStartKeepsTheSessionAndItsLaunch(t *testing.T) 
 	})
 	w.Launched(session)
 	app.Send(protocol.KillSessionMessage{Cmd: protocol.CmdKillSession, ID: session})
-	testworld.Await(app, protocol.EventSessionExited, func(e protocol.SessionExitedMessage) bool { return e.ID == session })
+	testworld.Await(app, protocol.EventSessionExited, func(e protocol.SessionExitedMessage) bool { return e.SessionID == session })
 
 	if err := os.RemoveAll(cwd); err != nil {
 		t.Fatal(err)

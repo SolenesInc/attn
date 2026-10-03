@@ -69,6 +69,7 @@ done
 	}
 	var workers = make(map[int]bool)
 	agentPIDs := make(map[string]int)
+	terminals := make(map[string]string)
 	t.Cleanup(func() {
 		for pid := range workers {
 			process, _ := os.FindProcess(pid)
@@ -79,6 +80,7 @@ done
 		d := startUpgradeDaemon(t, root, binary, host)
 		d.workers = workers
 		d.agentPIDs = agentPIDs
+		d.terminals = terminals
 		return d
 	}
 	old := start(oldBinary, "")
@@ -181,7 +183,7 @@ done
 	}
 	current.probe("next-agent", next.ChildPID, "next-host")
 	assertAll(current, "all-generations-alive")
-	current.command(map[string]any{"cmd": "pty_resize", "id": "legacy-shell", "cols": 97, "rows": 31}, "pty_resized", "legacy-shell")
+	current.command(map[string]any{"cmd": "pty_resize", "id": terminals["legacy-shell"], "cols": 97, "rows": 31}, "pty_resized", terminals["legacy-shell"])
 	current.probe("legacy-shell", identities["legacy-shell"].ChildPID, "resized")
 	current.stop()
 
@@ -249,6 +251,7 @@ type upgradeDaemon struct {
 	ws         *websocket.Conn
 	workers    map[int]bool
 	agentPIDs  map[string]int
+	terminals  map[string]string
 	stopped    bool
 }
 
@@ -534,10 +537,11 @@ func (d *upgradeDaemon) spawn(id, agent, executable string) {
 	d.t.Helper()
 	d.command(map[string]any{"cmd": "workspace_layout_add_session_pane", "workspace_id": "upgrade", "session_id": id, "pane_id": "pane-" + id}, "workspace_layout_action_result", "")
 	d.command(map[string]any{"cmd": "spawn_session", "id": id, "workspace_id": "upgrade", "cwd": d.root, "agent": agent, "codex_executable": executable, "cols": 80, "rows": 24}, "spawn_result", id)
+	d.terminals[id] = d.paneTerminal(id)
 	for _, shared := range []bool{false, true} {
-		path := filepath.Join(d.root, "workers", d.instanceID, "registry", id+".json")
+		path := filepath.Join(d.root, "workers", d.instanceID, "registry", d.terminals[id]+".json")
 		if shared {
-			path = ptyhost.SessionRegistryPath(d.root, d.instanceID, id)
+			path = ptyhost.SessionRegistryPath(d.root, d.instanceID, d.terminals[id])
 		}
 		if entry, err := ptyworker.ReadRegistry(path); err == nil {
 			d.workers[entry.WorkerPID] = true
@@ -545,11 +549,36 @@ func (d *upgradeDaemon) spawn(id, agent, executable string) {
 	}
 }
 
+// paneTerminal reads the terminal the session's pane places: its id before the upgrade, a new one after.
+func (d *upgradeDaemon) paneTerminal(id string) string {
+	d.t.Helper()
+	var layout struct {
+		WorkspaceLayout struct {
+			Panes []struct {
+				SessionID string `json:"session_id"`
+				RuntimeID string `json:"runtime_id"`
+			} `json:"panes"`
+		} `json:"workspace_layout"`
+	}
+	event := d.command(map[string]any{"cmd": "workspace_layout_get", "workspace_id": "upgrade"}, "workspace_layout", "")
+	data, _ := json.Marshal(event)
+	if err := json.Unmarshal(data, &layout); err != nil {
+		d.t.Fatalf("decode the upgrade layout: %v", err)
+	}
+	for _, pane := range layout.WorkspaceLayout.Panes {
+		if pane.SessionID == id && pane.RuntimeID != "" {
+			return pane.RuntimeID
+		}
+	}
+	d.t.Fatalf("no pane places session %s: %v", id, event)
+	return ""
+}
+
 func (d *upgradeDaemon) identity(id string, shared bool) ptyworker.RegistryEntry {
 	d.t.Helper()
-	path := filepath.Join(d.root, "workers", d.instanceID, "registry", id+".json")
+	path := filepath.Join(d.root, "workers", d.instanceID, "registry", d.terminals[id]+".json")
 	if shared {
-		path = ptyhost.SessionRegistryPath(d.root, d.instanceID, id)
+		path = ptyhost.SessionRegistryPath(d.root, d.instanceID, d.terminals[id])
 	}
 	entry, err := ptyworker.ReadRegistry(path)
 	if err != nil {
@@ -573,19 +602,20 @@ func (d *upgradeDaemon) assertIdentity(id string, shared bool, want ptyworker.Re
 
 func (d *upgradeDaemon) probe(id string, pid int, phase string) string {
 	d.t.Helper()
-	attached := d.command(map[string]any{"cmd": "attach_session", "id": id, "attach_policy": "same_app_remount"}, "attach_result", id)
+	terminal := d.terminals[id]
+	attached := d.command(map[string]any{"cmd": "attach_session", "id": terminal, "attach_policy": "same_app_remount"}, "attach_result", terminal)
 	if attached["running"] != true || int(attached["pid"].(float64)) != pid {
 		d.t.Fatalf("%s attached to the wrong process: %v", id, attached)
 	}
 	input := phase + "\n"
 	want := fmt.Sprintf("__ACK_%d_%s__", pid, phase)
 	if id != "legacy-shell" {
-		want = "__ACK_" + id + "_" + phase + "_"
+		want = "__ACK_" + terminal + "_" + phase + "_"
 	}
 	if id == "legacy-shell" {
 		input = fmt.Sprintf("stty -echo; printf '__ACK_%%s_%%s__\\n' '%d' '%s'\n", pid, phase)
 	}
-	d.write(map[string]any{"cmd": "pty_input", "id": id, "data": input})
+	d.write(map[string]any{"cmd": "pty_input", "id": terminal, "data": input})
 	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
 	defer cancel()
 	var output strings.Builder
@@ -599,7 +629,7 @@ func (d *upgradeDaemon) probe(id string, pid int, phase string) string {
 	}
 	for !complete() {
 		_, outputID, data := d.read(ctx)
-		if outputID == id {
+		if outputID == terminal {
 			output.Write(data)
 		}
 	}

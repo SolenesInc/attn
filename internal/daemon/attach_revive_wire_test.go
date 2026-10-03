@@ -134,7 +134,8 @@ func TestAttachRefusesToReviveWhatItShouldNot(t *testing.T) {
 	app = attachReviveMakeRecoverable(t, w, app, recoverable, w.Launched(recoverable), false)
 	exited := w.Spawn(app, fakeagent.Claude, w.Path("blog"))
 	w.Launched(exited).Exit(0)
-	testworld.Await(app, protocol.EventSessionExited, func(e protocol.SessionExitedMessage) bool { return e.ID == exited })
+	testworld.Await(app, protocol.EventSessionExited, func(e protocol.SessionExitedMessage) bool { return e.SessionID == exited })
+	recoverableTerminal, exitedTerminal := app.Terminal(recoverable), app.Terminal(exited)
 
 	for _, tc := range []struct {
 		name    string
@@ -143,18 +144,18 @@ func TestAttachRefusesToReviveWhatItShouldNot(t *testing.T) {
 	}{
 		{
 			name:    "without the revive policy",
-			attach:  protocol.AttachSessionMessage{Cmd: protocol.CmdAttachSession, ID: recoverable},
+			attach:  protocol.AttachSessionMessage{Cmd: protocol.CmdAttachSession, ID: recoverableTerminal},
 			refusal: "session not found",
 		},
 		{
 			name: "without geometry",
-			attach: protocol.AttachSessionMessage{Cmd: protocol.CmdAttachSession, ID: recoverable,
+			attach: protocol.AttachSessionMessage{Cmd: protocol.CmdAttachSession, ID: recoverableTerminal,
 				AttachPolicy: protocol.Ptr(protocol.AttachPolicyRevive), Cols: protocol.Ptr(0), Rows: protocol.Ptr(24)},
 			refusal: "revive requires pty geometry",
 		},
 		{
 			name: "a session that is not recoverable",
-			attach: protocol.AttachSessionMessage{Cmd: protocol.CmdAttachSession, ID: exited,
+			attach: protocol.AttachSessionMessage{Cmd: protocol.CmdAttachSession, ID: exitedTerminal,
 				AttachPolicy: protocol.Ptr(protocol.AttachPolicyRevive), Cols: protocol.Ptr(80), Rows: protocol.Ptr(24)},
 			refusal: "session not recoverable",
 		},
@@ -180,7 +181,7 @@ func TestAFailedReviveLeavesTheSessionRecoverableAndTheConnectionResponsive(t *t
 	run.Prompted()
 	run.Reply("Error: the registry refused the push <!-- attn:state=idle -->")
 	run.Exit(1)
-	testworld.Await(app, protocol.EventSessionExited, func(e protocol.SessionExitedMessage) bool { return e.ID == session })
+	testworld.Await(app, protocol.EventSessionExited, func(e protocol.SessionExitedMessage) bool { return e.SessionID == session })
 	w.restart()
 	app = w.App()
 	cli := w.Client()
@@ -196,10 +197,11 @@ func TestAFailedReviveLeavesTheSessionRecoverableAndTheConnectionResponsive(t *t
 		t.Fatal(err)
 	}
 
-	app.Send(protocol.AttachSessionMessage{Cmd: protocol.CmdAttachSession, ID: session,
+	terminal := app.Terminal(session)
+	app.Send(protocol.AttachSessionMessage{Cmd: protocol.CmdAttachSession, ID: terminal,
 		AttachPolicy: protocol.Ptr(protocol.AttachPolicyRevive), Cols: protocol.Ptr(80), Rows: protocol.Ptr(24)})
 	listing := browseForPicker(app, browsed+string(os.PathSeparator), nil)
-	failed := testworld.Await(app, protocol.EventAttachResult, func(r protocol.AttachResultMessage) bool { return r.ID == session })
+	failed := testworld.Await(app, protocol.EventAttachResult, func(r protocol.AttachResultMessage) bool { return r.ID == terminal })
 
 	if failed.Success || !strings.Contains(protocol.Deref(failed.Error), cwd) {
 		t.Errorf("reviving in a removed directory answered %+v, want a failure naming %s", failed, cwd)
@@ -236,9 +238,10 @@ func attachReviveMakeRecoverable(t *testing.T, w *world, app *testworld.Peer, se
 
 func attachRevive(app *testworld.Peer, session string, cols, rows int) protocol.AttachResultMessage {
 	app.T.Helper()
-	return testworld.Request(app, protocol.AttachSessionMessage{Cmd: protocol.CmdAttachSession, ID: session,
+	terminal := app.Terminal(session)
+	return testworld.Request(app, protocol.AttachSessionMessage{Cmd: protocol.CmdAttachSession, ID: terminal,
 		AttachPolicy: protocol.Ptr(protocol.AttachPolicyRevive), Cols: protocol.Ptr(cols), Rows: protocol.Ptr(rows)},
-		protocol.EventAttachResult, func(r protocol.AttachResultMessage) bool { return r.ID == session })
+		protocol.EventAttachResult, func(r protocol.AttachResultMessage) bool { return r.ID == terminal })
 }
 
 func attachRevivePinnedClaude(t *testing.T, w *world) string {

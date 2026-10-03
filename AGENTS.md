@@ -177,7 +177,7 @@ Never hand-edit `internal/protocol/generated.go` or `app/src/types/generated.ts`
 ## Diagnostics
 
 - Daemon: `<data-dir>/daemon.log`.
-- PTY: `<data-dir>/workers/<daemon-instance>/log/<session>.log`.
+- PTY: `<data-dir>/workers/<daemon-instance>/log/<terminal>.log`, the pane's `runtime_id`.
 - Daemon code uses `d.logf(...)` or injected `LogFunc`; background stderr is lost.
 - To debug an isolated daemon, quit its app, then `DEBUG=debug attn daemon ensure`.
 
