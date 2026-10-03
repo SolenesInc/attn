@@ -184,8 +184,7 @@ export class UiAutomationClient {
     const startedAt = Date.now();
     while (Date.now() - startedAt < timeoutMs) {
       const stillOwned = this.#ownedPids(manifestPid).pids;
-      const appPids = await this.listAppPids();
-      if (!stillOwned.some(processExists) && appPids.length === 0) {
+      if (!stillOwned.some(processExists)) {
         this.launch = null;
         return;
       }
@@ -193,14 +192,14 @@ export class UiAutomationClient {
     }
 
     let escalating = this.#stillOwnedPids(manifestPid, ownedPids);
-    for (const pid of livePids([...escalating, ...await this.listAppPids()])) {
+    for (const pid of livePids(escalating)) {
       try {
         process.kill(pid, 'SIGTERM');
       } catch {}
     }
     await delay(500);
     escalating = this.#stillOwnedPids(manifestPid, escalating);
-    for (const pid of livePids([...escalating, ...await this.listAppPids()])) {
+    for (const pid of livePids(escalating)) {
       try {
         process.kill(pid, 'SIGKILL');
       } catch {}
@@ -344,7 +343,7 @@ export class UiAutomationClient {
       const cleanup = () => {
         clearTimeout(timeout);
         socket.removeAllListeners();
-        socket.end();
+        socket.destroy();
       };
 
       socket.on('connect', () => {

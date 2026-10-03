@@ -16,6 +16,12 @@ async function boot() {
   const ReactDOM = await import("react-dom/client");
   const root = ReactDOM.createRoot(document.getElementById("root") as HTMLElement);
 
+  if (new URLSearchParams(window.location.search).get("window") === "capture") {
+    const { QuickCapture } = await import("./components/QuickCapture");
+    root.render(<QuickCapture />);
+    return;
+  }
+
   if (isPresentWindow) {
     dbg('boot: loading PresentRoot');
     const { PresentRoot } = await import("./components/PresentRoot");
