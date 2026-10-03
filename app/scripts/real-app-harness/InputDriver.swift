@@ -56,7 +56,7 @@ func parseOptions() throws -> Options {
     while index < args.count {
         let arg = args[index]
         switch arg {
-        case "activate", "activate_background", "frontmost", "display_state", "windowid", "windowlist", "text", "key", "keycode", "move", "click", "right_click", "drag", "menu", "window_park", "scroll":
+        case "activate", "activate_background", "quit_wait", "frontmost", "display_state", "windowid", "windowlist", "windowstack", "text", "key", "keycode", "move", "click", "right_click", "drag", "menu", "window_park", "scroll", "global_key", "global_text", "global_capture", "drag_between", "permissions", "wait_frontmost", "wait_hidden":
             options.command = arg
         case "--window-title":
             index += 1
@@ -295,6 +295,30 @@ func axPressMenuItem(bundleId: String, path: [String]) throws {
     }
 }
 
+func waitForFrontmost(bundleId: String) {
+    let loop = CFRunLoopGetCurrent()
+    let center = NSWorkspace.shared.notificationCenter
+    let observer = center.addObserver(forName: NSWorkspace.didActivateApplicationNotification, object: nil, queue: .main) { _ in
+        if frontmostBundleIdentifier() == bundleId { CFRunLoopStop(loop) }
+    }
+    defer { center.removeObserver(observer) }
+    if frontmostBundleIdentifier() != bundleId { CFRunLoopRun() }
+}
+
+func waitForHidden(bundleId: String) throws {
+    guard let app = findRunningApp(bundleId: bundleId) else {
+        throw DriverError.appNotRunning(bundleId)
+    }
+    let loop = CFRunLoopGetCurrent()
+    let center = NSWorkspace.shared.notificationCenter
+    let observer = center.addObserver(forName: NSWorkspace.didHideApplicationNotification, object: nil, queue: .main) { notification in
+        if let hidden = notification.userInfo?[NSWorkspace.applicationUserInfoKey] as? NSRunningApplication,
+           hidden.bundleIdentifier == bundleId { CFRunLoopStop(loop) }
+    }
+    defer { center.removeObserver(observer) }
+    if !app.isHidden { CFRunLoopRun() }
+}
+
 func frontmostBundleIdentifier() -> String {
     NSWorkspace.shared.frontmostApplication?.bundleIdentifier ?? ""
 }
@@ -433,6 +457,38 @@ func resolveWindow(bundleId: String, titleSubstring: String? = nil) throws -> (C
     return (best.0, best.1)
 }
 
+func quitAndWait(bundleId: String) throws {
+    guard let app = NSRunningApplication.runningApplications(withBundleIdentifier: bundleId).first else { return }
+    let runLoop = CFRunLoopGetCurrent()
+    var terminated = app.isTerminated
+    let observer = app.observe(\.isTerminated, options: [.initial, .new]) { application, _ in
+        if application.isTerminated { terminated = true; CFRunLoopStop(runLoop) }
+    }
+    defer { observer.invalidate() }
+    if terminated { return }
+    guard app.terminate() else { throw DriverError.eventCreationFailed("Application \(bundleId) refused to quit.") }
+    while !terminated && !app.isTerminated { _ = RunLoop.current.run(mode: .default, before: .distantFuture) }
+}
+
+func windowStack() throws -> [[String: Any]] {
+    guard let windows = CGWindowListCopyWindowInfo([.optionOnScreenOnly, .excludeDesktopElements], kCGNullWindowID) as? [[String: Any]] else {
+        throw DriverError.eventCreationFailed("Failed to read window stack.")
+    }
+    return windows.filter { (($0[kCGWindowLayer as String] as? Int) ?? 0) < CGWindowLevelForKey(.cursorWindow) }.compactMap { entry in
+        guard let number = entry[kCGWindowNumber as String] as? CGWindowID,
+              let bounds = entry[kCGWindowBounds as String] as? NSDictionary,
+              let rect = CGRect(dictionaryRepresentation: bounds) else { return nil }
+        let pid = entry[kCGWindowOwnerPID as String] as? pid_t ?? -1
+        let bundle = NSRunningApplication(processIdentifier: pid)?.bundleIdentifier ?? ""
+        let systemOwner = entry[kCGWindowOwnerName as String] as? String == "WindowServer" ||
+            ["com.apple.dock", "com.apple.systemuiserver", "com.apple.controlcenter"].contains(bundle)
+        return ["id": number, "pid": entry[kCGWindowOwnerPID as String] ?? -1,
+                "layer": entry[kCGWindowLayer as String] ?? 0, "alpha": entry[kCGWindowAlpha as String] ?? 1,
+                "systemUI": systemOwner && ((entry[kCGWindowLayer as String] as? Int) ?? 0) >= CGWindowLevelForKey(.dockWindow),
+                "x": rect.minX, "y": rect.minY, "width": rect.width, "height": rect.height]
+    }
+}
+
 func mainWindowBounds(bundleId: String, titleSubstring: String? = nil) throws -> CGRect {
     try resolveWindow(bundleId: bundleId, titleSubstring: titleSubstring).1
 }
@@ -510,7 +566,7 @@ func virtualKeyCode(for key: String) throws -> CGKeyCode {
         "3": 20, "4": 21, "6": 22, "5": 23, "=": 24, "9": 25, "7": 26, "-": 27, "8": 28,
         "0": 29, "]": 30, "o": 31, "u": 32, "[": 33, "i": 34, "p": 35, "l": 37, "j": 38,
         "'": 39, "k": 40, ";": 41, "\\": 42, ",": 43, "/": 44, "n": 45, "m": 46, ".": 47,
-        "`": 50, "enter": 36, "return": 36, "escape": 53,
+        "tab": 48, "space": 49, "`": 50, "enter": 36, "return": 36, "escape": 53,
         "arrowleft": 123, "arrowright": 124, "arrowdown": 125, "arrowup": 126
     ]
 
@@ -640,6 +696,13 @@ func keystroke(for character: Character) throws -> (CGKeyCode, [String]) {
     case ")": return (29, ["shift"])
     default:
         throw DriverError.invalidArgument("Unsupported text character for keycode typing: \(character)")
+    }
+}
+
+func postTypedText(_ text: String) throws {
+    for character in text {
+        let (code, modifiers) = try keystroke(for: character)
+        try postKeyCode(code, modifiers: modifiers)
     }
 }
 
@@ -805,9 +868,11 @@ func dragWindow(
     toRelativeX: Double,
     toRelativeY: Double,
     steps: Int,
-    titleSubstring: String? = nil
+    titleSubstring: String? = nil,
+    targetBundleId: String? = nil
 ) throws {
     let bounds = try mainWindowBounds(bundleId: bundleId, titleSubstring: titleSubstring)
+    let targetBounds = try targetBundleId.map { try mainWindowBounds(bundleId: $0, titleSubstring: "Quick Capture") } ?? bounds
     func point(_ rx: Double, _ ry: Double) -> CGPoint {
         CGPoint(
             x: bounds.origin.x + bounds.width * min(max(rx, 0), 1),
@@ -815,7 +880,7 @@ func dragWindow(
         )
     }
     let from = point(relativeX, relativeY)
-    let to = point(toRelativeX, toRelativeY)
+    let to = CGPoint(x: targetBounds.origin.x + targetBounds.width * toRelativeX, y: targetBounds.origin.y + targetBounds.height * toRelativeY)
     let stepCount = max(steps, 2)
 
     guard let move = CGEvent(mouseEventSource: nil, mouseType: .mouseMoved, mouseCursorPosition: from, mouseButton: .left),
@@ -913,7 +978,7 @@ do {
     // and observation-only commands work fine against a sleeping display and
     // are deliberately left alone.
     switch options.command {
-    case "activate", "text", "key", "keycode", "move", "click", "right_click", "scroll", "drag":
+    case "activate", "text", "key", "keycode", "global_key", "global_text", "global_capture", "drag_between", "move", "click", "right_click", "scroll", "drag":
         try requireLiveDisplay()
     default:
         break
@@ -935,6 +1000,15 @@ do {
         // Resolve the app without changing frontmost. If the app is not
         // running, surface a clear error; otherwise this is a no-op.
         _ = try axApplication(bundleId: options.bundleId)
+    case "quit_wait":
+        try quitAndWait(bundleId: options.bundleId)
+    case "permissions":
+        print("{\"accessibility\":\(AXIsProcessTrusted()),\"screenCapture\":\(CGPreflightScreenCaptureAccess())}")
+    case "wait_frontmost":
+        waitForFrontmost(bundleId: options.bundleId)
+        print(frontmostBundleIdentifier())
+    case "wait_hidden":
+        try waitForHidden(bundleId: options.bundleId)
     case "frontmost":
         print(frontmostBundleIdentifier())
     case "display_state":
@@ -947,6 +1021,9 @@ do {
         let windows = try listWindows(bundleId: options.bundleId)
         let data = try JSONSerialization.data(withJSONObject: windows, options: [])
         print(String(data: data, encoding: .utf8) ?? "[]")
+    case "windowstack":
+        let data = try JSONSerialization.data(withJSONObject: windowStack(), options: [.sortedKeys])
+        print(String(data: data, encoding: .utf8) ?? "[]")
     case "menu":
         try ensureAccessibility(prompt: options.promptAccessibility)
         try axPressMenuItem(bundleId: options.bundleId, path: options.menuPath)
@@ -956,6 +1033,23 @@ do {
             throw DriverError.invalidArgument("Missing --text value")
         }
         try postText(text)
+    case "global_capture":
+        try ensureAccessibility(prompt: options.promptAccessibility)
+        let postedAtMs = Int64(Date().timeIntervalSince1970 * 1000)
+        try postKeyCode(try virtualKeyCode(for: options.key ?? "space"), modifiers: options.modifiers.isEmpty ? ["control", "option"] : options.modifiers)
+        try postTypedText(options.text ?? "")
+        print("{\"postedAtMs\":\(postedAtMs)}")
+    case "drag_between":
+        try ensureAccessibility(prompt: options.promptAccessibility)
+        try dragWindow(bundleId: options.bundleId, relativeX: options.relativeX ?? 0.5, relativeY: options.relativeY ?? 0.5, toRelativeX: 0.5, toRelativeY: 0.5, steps: 30, targetBundleId: options.text)
+    case "global_text":
+        try ensureAccessibility(prompt: options.promptAccessibility)
+        guard let text = options.text else { throw DriverError.invalidArgument("Missing --text") }
+        try postTypedText(text)
+    case "global_key":
+        try ensureAccessibility(prompt: options.promptAccessibility)
+        guard let key = options.key else { throw DriverError.invalidArgument("Missing --key") }
+        try postKeyCode(try virtualKeyCode(for: key), modifiers: options.modifiers)
     case "key":
         try ensureAccessibility(prompt: options.promptAccessibility)
         guard let key = options.key else {

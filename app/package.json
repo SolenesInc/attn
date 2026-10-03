@@ -82,6 +82,7 @@
     "real-app:scenario-webgl-recovery": "node scripts/real-app-harness/scenario-webgl-recovery.mjs",
     "real-app:scenario-reveal-overflow": "node scripts/real-app-harness/scenario-reveal-overflow.mjs",
     "real-app:scenario-present-submit-closes-window": "node scripts/real-app-harness/scenario-present-submit-closes-window.mjs",
+    "real-app:scenario-quick-capture": "node scripts/real-app-harness/scenario-quick-capture.mjs",
     "real-app:serial-matrix": "node scripts/real-app-harness/run-serial-matrix.mjs",
     "real-app:soak": "node scripts/real-app-harness/run-soak.mjs",
     "real-app:mock-github": "node scripts/real-app-harness/mock-github-cli.mjs",

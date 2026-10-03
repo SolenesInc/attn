@@ -1,4 +1,5 @@
 import type { HarnessProps } from '../types';
+import { QuickCaptureHistoryHarness } from './QuickCaptureHistoryHarness';
 import { BrokenLinksHarness } from './BrokenLinksHarness';
 import { DiffViewHarness } from './DiffViewHarness';
 import { FileTreeHarness } from './FileTreeHarness';
@@ -19,6 +20,7 @@ import { DelegationChainHarness } from './DelegationChainHarness';
 import { AgentHeaderHarness } from './AgentHeaderHarness';
 
 export const harnesses: Record<string, React.ComponentType<HarnessProps>> = {
+  QuickCaptureHistory: QuickCaptureHistoryHarness,
   AgentHeader: AgentHeaderHarness,
   BrokenLinks: BrokenLinksHarness,
   DiffView: DiffViewHarness,
