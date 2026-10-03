@@ -71,7 +71,11 @@ func (d *Daemon) conversationIn(t harness.TerminalID, observation agentConversat
 }
 
 func conversationIsSession(agent protocol.SessionAgent) bool {
-	return agentdriver.EffectiveCapabilities(agentdriver.Get(string(agent))).ConversationIsSession
+	return conversationDecidesIdentity(agentdriver.Get(string(agent)))
+}
+
+func conversationDecidesIdentity(driver agentdriver.Driver) bool {
+	return agentdriver.EffectiveCapabilities(driver).ConversationIsSession
 }
 
 func (d *Daemon) observeOrQueueAgentConversation(observation agentConversationObservation) {

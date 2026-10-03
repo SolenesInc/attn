@@ -199,6 +199,23 @@ func (d *Daemon) reloadSessionForClient(sessionID string, cols, rows int) error 
 	return nil
 }
 
+// persistReloadedConversation records the conversation a reload launches before it runs, or clears a
+// stale one when the harness names it, so its report reads as this session's and opens no successor.
+func (d *Daemon) persistReloadedConversation(sessionID string, opts ptybackend.SpawnOptions) {
+	driver := agentdriver.Get(opts.Agent)
+	conversation := agentdriver.SpawnResumeSessionID(driver, string(opts.ID), opts.ResumeSessionID, opts.ResumePicker)
+	if conversation == d.store.GetResumeSessionID(sessionID) || (conversation == "" && !conversationDecidesIdentity(driver)) {
+		return
+	}
+	if conversation == "" {
+		d.store.SetResumeSessionID(sessionID, "")
+		return
+	}
+	if _, err := d.store.TransitionSessionResumeID(sessionID, conversation); err != nil {
+		d.logf("reload: persist launched conversation for session %s: %v", sessionID, err)
+	}
+}
+
 // ptyRespawn names the terminal whose process a respawn replaced; the fact's subject is its session.
 type ptyRespawn struct {
 	Terminal string `json:"terminal,omitempty"`
@@ -233,6 +250,7 @@ func (d *Daemon) executePreparedSessionReload(sessionID string, opts ptybackend.
 		d.logf("reload: remove returned error for %s (continuing): %v", sessionID, removeErr)
 	}
 
+	d.persistReloadedConversation(sessionID, opts)
 	opts.DaemonEnv = d.spawnRoutingEnv()
 	if spawnErr := d.ptyBackend.Spawn(ctx, opts); spawnErr != nil {
 		d.logf("reload: respawn failed for %s: %v; finalizing as exited", sessionID, spawnErr)

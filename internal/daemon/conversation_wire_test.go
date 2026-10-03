@@ -1,6 +1,7 @@
 package daemon_test
 
 import (
+	"os"
 	"slices"
 	"strings"
 	"testing"
@@ -9,6 +10,7 @@ import (
 	"github.com/victorarias/attn/internal/fakeagent"
 	"github.com/victorarias/attn/internal/protocol"
 	"github.com/victorarias/attn/internal/testworld"
+	"github.com/victorarias/attn/internal/transcript"
 )
 
 func respawn(w *world, app *testworld.Peer, agent fakeagent.Harness, session, cwd string) *fakeagent.Run {
@@ -307,5 +309,46 @@ func TestASessionLaunchedToResumeAConversationKeepsResumingIt(t *testing.T) {
 	}
 	if resumed := respawn(w, app, fakeagent.Codex, session, cwd); !resumed.Resumed || resumed.ConversationID != conversation {
 		t.Fatalf("respawn ran codex %q, want it to resume %s", resumed.Argv, conversation)
+	}
+}
+
+func TestARelaunchThatCannotResumeKeepsTheSessionAndAdoptsItsNewConversation(t *testing.T) {
+	w := newWorld(t, fakeagent.Codex)
+	app := w.App()
+	session := w.Spawn(app, fakeagent.Codex, w.Path("shop"))
+	codex := w.Launched(session)
+	app.TypeLine(session, "find the flaky test")
+	codex.Prompted()
+	codex.Reply("It races the tax lookup. <!-- attn:state=idle -->")
+	testworld.AwaitSession(app, session, func(s protocol.Session) bool { return s.State == protocol.SessionStateIdle })
+	lost := transcript.FindCodexTranscriptForResume(codex.ConversationID)
+	if lost == "" {
+		t.Fatalf("no rollout for codex conversation %s", codex.ConversationID)
+	}
+	if err := os.Remove(lost); err != nil {
+		t.Fatal(err)
+	}
+
+	reloaded := testworld.Request(app, protocol.ReloadSessionMessage{Cmd: protocol.CmdReloadSession, ID: session, Cols: 100, Rows: 30},
+		protocol.EventReloadSessionResult, func(r protocol.ReloadSessionResultMessage) bool { return r.ID == session })
+	if !reloaded.Success {
+		t.Fatalf("reload failed: %s", protocol.Deref(reloaded.Error))
+	}
+	fresh := w.Launched(session)
+	if fresh.Resumed {
+		t.Fatalf("the reload resumed %q although its rollout is gone", fresh.Argv)
+	}
+	app.TypeLine(session, "run the tests")
+	fresh.Prompted()
+	fresh.Reply("Green. <!-- attn:state=waiting_input -->")
+	testworld.AwaitSession(app, session, func(s protocol.Session) bool { return s.State == protocol.SessionStateWaitingInput })
+	for _, e := range app.Received() {
+		if e.Event == protocol.EventSessionRegistered && e.Session != nil && protocol.Deref(e.Session.Succeeds) == session {
+			t.Fatalf("a relaunch of %s opened session %s after it", session, e.Session.ID)
+		}
+	}
+	resumed := respawn(w, app, fakeagent.Codex, session, w.Path("shop"))
+	if !resumed.Resumed || resumed.ConversationID != fresh.ConversationID {
+		t.Fatalf("respawn ran codex %q; want it to resume %s, the conversation the relaunch started", resumed.Argv, fresh.ConversationID)
 	}
 }

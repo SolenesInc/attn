@@ -66,7 +66,8 @@ export function codexTranscriptPath(id, startedAt = new Date(), env = process.en
 }
 
 export function mockTranscriptPath({ agent, cwd, id, resumable, startedAt = new Date(), env = process.env }) {
-  if (!resumable) return path.join(cwd, '.attn-mock-agent', `rollout-${id}.jsonl`);
+  // attn reads a Claude conversation's id from its transcript's name, as `<id>.jsonl`.
+  if (!resumable) return path.join(cwd, '.attn-mock-agent', mockAgentName(agent) === 'claude' ? `${id}.jsonl` : `rollout-${id}.jsonl`);
   return mockAgentName(agent) === 'claude'
     ? claudeTranscriptPath(cwd, id, env)
     : codexTranscriptPath(id, startedAt, env);
