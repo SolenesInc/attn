@@ -22,10 +22,15 @@ function saved(result: CaptureResultObject) {
   if (!result.record) throw new Error('The daemon did not return a saved capture receipt. Your draft is retained.');
   return item(result.record);
 }
-function encode(bytes: Uint8Array): string {
-  let binary = '';
-  for (const byte of bytes) binary += String.fromCharCode(byte);
-  return btoa(binary);
+function attachmentBytes(url: string) {
+  const start = url.indexOf(',') + 1;
+  const length = (url.length - start) / 4 * 3 - (url.endsWith('==') ? 2 : url.endsWith('=') ? 1 : 0);
+  return { length, chunk(offset: number) {
+    const end = Math.min(offset + UPLOAD_CHUNK_BYTES, length);
+    // FileReader and the native cache produce base64 data URLs; decode only this transport range.
+    const decoded = atob(url.slice(start + Math.floor(offset / 3) * 4, start + Math.ceil(end / 3) * 4));
+    return { end, data: btoa(decoded.slice(offset % 3, offset % 3 + end - offset)) };
+  } };
 }
 
 export function captureDaemonClient(daemon: Pick<DaemonApi, 'sendCaptureRequest'>): CaptureClient {
@@ -48,13 +53,13 @@ export function captureDaemonClient(daemon: Pick<DaemonApi, 'sendCaptureRequest'
           const assets = (await reconciliation).list?.draft_assets ?? [];
           const asset = assets.find(asset => asset.capture_id === draft.id && asset.attachment_id === image.id);
           if (asset?.state === 'ready') { ready.add(identity); return; }
-          const bytes = new Uint8Array(await (await fetch(image.url)).arrayBuffer());
+          const bytes = attachmentBytes(image.url);
           let offset = asset?.next_offset ?? 0;
           do {
-            const chunk = bytes.subarray(offset, offset + UPLOAD_CHUNK_BYTES);
+            const chunk = bytes.chunk(offset);
             const result = await request({ cmd: CaptureAttachmentPutMessageCmd.CaptureAttachmentPut,
               capture_id: draft.id, attachment_id: image.id, name: image.name,
-              offset, data_base64: encode(chunk), final: offset + chunk.length === bytes.length });
+              offset, data_base64: chunk.data, final: chunk.end === bytes.length });
             if (!result.upload) throw new Error(`No upload receipt for ${image.name}. Your draft is retained.`);
             offset = result.upload.next_offset;
           } while (offset < bytes.length);
