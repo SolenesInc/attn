@@ -203,7 +203,7 @@ func TestAnAgentThatDiesMidTurnReportsItsExitBeforeItsIdle(t *testing.T) {
 	testworld.Await(app, protocol.EventSessionStateChanged, func(e protocol.WebSocketEvent) bool {
 		return e.Session != nil && e.Session.ID == session && protocol.Deref(e.Session.StateReason) == "process_exited"
 	})
-	testworld.Await(app, protocol.EventSessionExited, func(e protocol.WebSocketEvent) bool { return protocol.Deref(e.ID) == session })
+	testworld.Await(app, protocol.EventSessionExited, func(e protocol.WebSocketEvent) bool { return protocol.Deref(e.SessionID) == session })
 	if order := exitOrderOf(app, session); order != "exited, idle" {
 		t.Fatalf("the app heard of the death as %q, want the exit before the idle it causes", order)
 	}
@@ -213,7 +213,7 @@ func exitOrderOf(p *testworld.Peer, id string) string {
 	var order []string
 	for _, e := range p.Received() {
 		switch {
-		case e.Event == protocol.EventSessionExited && protocol.Deref(e.ID) == id:
+		case e.Event == protocol.EventSessionExited && protocol.Deref(e.SessionID) == id:
 			order = append(order, "exited")
 		case e.Event == protocol.EventSessionStateChanged && e.Session != nil && e.Session.ID == id &&
 			protocol.Deref(e.Session.StateReason) == "process_exited":

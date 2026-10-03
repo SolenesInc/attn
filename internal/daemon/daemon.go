@@ -1659,9 +1659,10 @@ func (d *Daemon) projectSessionPTYExited(ev bus.Event) {
 		return
 	}
 	event := &protocol.WebSocketEvent{
-		Event:    protocol.EventSessionExited,
-		ID:       protocol.Ptr(ev.Subject),
-		ExitCode: protocol.Ptr(exit.ExitCode),
+		Event:     protocol.EventSessionExited,
+		ID:        protocol.Ptr(ev.Subject),
+		SessionID: protocol.Ptr(ev.Subject),
+		ExitCode:  protocol.Ptr(exit.ExitCode),
 	}
 	if exit.Signal != "" {
 		event.Signal = protocol.Ptr(exit.Signal)

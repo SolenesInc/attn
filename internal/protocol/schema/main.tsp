@@ -235,6 +235,7 @@ model Session {
   automation?: AutomationProvenance; // Present when this session was launched by an automation; latest run wins for a continuity thread.
   pull_requests?: SessionPullRequest[]; // Pull requests this session's agent opened, newest first. Joined at broadcast from the session_pull_requests table, never stored on the session row.
   terminal_build_stale?: boolean; // True when this session's pty-worker was built against a different libghostty-vt than the daemon, which happens when the app updates under a running session. The two then hold different terminal implementations and stop agreeing about the grid, so the app offers a reload. Derived at broadcast from the format tag the worker reports at its handshake; never stored, and absent for every same-build session, which is all of them outside an upgrade window.
+  succeeds?: string;            // Not yet sent by the daemon (lands with Claude /clear). The session this one replaced in its terminal, when the harness there moved to another conversation. The replaced session is closed or removed, so a client moves what it holds for it (selection, history, sidebar place) to this one. Durable: it stays set after the predecessor is reopened, so only its first appearance on a session marks a handover.
   last_seen: string;            // ISO timestamp, always set
 }
 
@@ -1942,9 +1943,11 @@ model SpawnSessionMessage {
   effort?: string;             // Pin the launched agent's reasoning effort; empty = agent default
 }
 
+// PTY commands and events address a terminal: their `id` is the pane's
+// runtime_id, which can differ from the id of the session the terminal shows.
 model AttachSessionMessage {
   cmd: "attach_session";
-  id: string;
+  id: string; // The terminal (pane runtime_id)
   attach_policy?: AttachPolicy;
   // PTY geometry for revive; required when attach_policy is "revive"
   cols?: int32;
@@ -1953,15 +1956,15 @@ model AttachSessionMessage {
 
 model DetachSessionMessage {
   cmd: "detach_session";
-  id: string;
+  id: string; // The terminal (pane runtime_id)
 }
 
-// Read-only request for a session's current rendered screen. Unlike
+// Read-only request for a terminal's current rendered screen. Unlike
 // attach_session it registers no subscriber and claims no PTY geometry; used to
 // seed observers (e.g. grid tiles) that then dedup live output against last_seq.
 model GetScreenSnapshotMessage {
   cmd: "get_screen_snapshot";
-  id: string;
+  id: string; // The terminal (pane runtime_id)
 }
 
 // Pulls the pixels behind a placement. Images are pulled on miss, never pushed:
@@ -1981,7 +1984,7 @@ model GetKittyImageMessage {
 
 model PtyInputMessage {
   cmd: "pty_input";
-  id: string;
+  id: string; // The terminal (pane runtime_id)
   data: string;
   // Who produced these bytes. Absent or "user" is a keystroke and stamps the
   // daemon's composer clock; "pointer" (mouse reports), "response" (terminal
@@ -2035,7 +2038,7 @@ model SupportRuntimeEvidence {
 
 model TerminalPointerActivityMessage {
   cmd: "terminal_pointer_activity";
-  id: string;
+  id: string; // The terminal (pane runtime_id)
 }
 
 // Asks for the durable event bus's operator picture: what the log holds, which
@@ -2167,7 +2170,7 @@ model BusSetConsumerEnabledResultMessage {
 // derived rather than reporting a lie.
 model PtyResizeMessage {
   cmd: "pty_resize";
-  id: string;
+  id: string; // The terminal (pane runtime_id)
   cols: int32;
   rows: int32;
   xpixel?: int32;
@@ -3743,7 +3746,7 @@ model AttachSnapshot {
 
 model AttachResultMessage {
   event: "attach_result";
-  id: string;
+  id: string; // The terminal (pane runtime_id)
   success: boolean;
   // The server-authoritative restore. Present whenever the attach restores prior
   // terminal state; the client decodes a terminal from snapshot.snapshot_b64.
@@ -3775,7 +3778,7 @@ model GetScreenSnapshotResultMessage {
 
 model PtyOutputMessage {
   event: "pty_output";
-  id: string;
+  id: string; // The terminal (pane runtime_id)
   data: string; // base64 bytes
   seq: int32;
 }
@@ -3810,20 +3813,21 @@ model SupportSnapshotResultMessage {
 
 model SessionExitedMessage {
   event: "session_exited";
-  id: string;
+  id: string;          // The terminal whose process exited
+  session_id: string;  // The session that terminal showed when it exited
   exit_code: int32;
   signal?: string;
 }
 
 model PtyDesyncMessage {
   event: "pty_desync";
-  id: string;
+  id: string; // The terminal (pane runtime_id)
   reason: string;
 }
 
-// The session's WHOLE kitty placement set as of the chunk stamped seq, sent
+// The terminal's WHOLE kitty placement set as of the chunk stamped seq, sent
 // only to clients that advertised the "kitty_images" capability. Rides the same
-// per-session path as pty_output and arrives after the bytes of the same seq,
+// per-terminal path as pty_output and arrives after the bytes of the same seq,
 // because the positions were measured on the grid those bytes produce.
 //
 // placements is REQUIRED and may be empty. The empty set is the one message
@@ -3875,14 +3879,14 @@ model KittyImageResultMessage {
   error?: string;
 }
 
-// runtime_respawned: the daemon killed and re-spawned a session's agent process
-// in place (e.g. chief-of-staff assign/demote reload). The session id is
-// unchanged and the transcript is resumed; the client must tear down its dead PTY
-// stream and reattach to the new runtime. Distinct from session_exited (which
-// drops the session to a dead pane) — the runtime was replaced, not closed.
+// runtime_respawned: the daemon killed and re-spawned the agent process in a
+// terminal in place (e.g. chief-of-staff assign/demote reload). `id` is that
+// terminal, which keeps its id; the transcript is resumed; the client must tear
+// down its dead PTY stream and reattach to the new process. Distinct from
+// session_exited (which leaves a dead pane) — the process was replaced, not closed.
 model RuntimeRespawnedMessage {
   event: "runtime_respawned";
-  id: string;
+  id: string; // The terminal (pane runtime_id)
 }
 
 // Echoes the geometry the resizing client sent, pixels included, so the other
@@ -3890,7 +3894,7 @@ model RuntimeRespawnedMessage {
 // unknown" rule as PtyResizeMessage.
 model PtyResizedMessage {
   event: "pty_resized";
-  id: string;
+  id: string; // The terminal (pane runtime_id)
   cols: integer;
   rows: integer;
   xpixel?: int32;

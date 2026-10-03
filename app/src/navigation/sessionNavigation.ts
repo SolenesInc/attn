@@ -2,6 +2,7 @@ import type { DaemonSessionSnapshot, Session } from '../store/sessions';
 import type { DaemonWorkspace } from '../hooks/useDaemonSocket';
 import {
   createAgentHistory,
+  followAgentHistory,
   moveAgentHistory,
   recordAgentVisit,
   type AgentHistoryDirection,
@@ -109,6 +110,51 @@ export function selectAgent(
     focusRequest: { sessionId, paneId: pane.id },
     utilityFocusRequestToken: state.utilityFocusRequestToken + 1,
   };
+}
+
+// A successor is the session its predecessor's terminal now shows, so everything the
+// user held on the predecessor moves to it without a visit, a view change or a queue step.
+export function followSuccessions<T extends SessionNavigationState>(
+  state: T,
+  successorOf: ReadonlyMap<string, string>,
+): T {
+  if (successorOf.size === 0) return state;
+  const follow = (id: string) => successorOf.get(id) ?? id;
+  const activeSessionId = state.activeSessionId && follow(state.activeSessionId);
+  return {
+    ...state,
+    activeSessionId,
+    recentSessionIds: [...new Set(state.recentSessionIds.map(follow))].filter(
+      (id) => id !== activeSessionId,
+    ),
+    agentHistory: followAgentHistory(state.agentHistory, follow),
+    pendingSelection: state.pendingSelection && {
+      ...state.pendingSelection,
+      sessionId: follow(state.pendingSelection.sessionId),
+    },
+    focusRequest: state.focusRequest && {
+      ...state.focusRequest,
+      sessionId: follow(state.focusRequest.sessionId),
+    },
+  };
+}
+
+// Session.succeeds stays set after a predecessor is reopened, so only its first
+// appearance on a session hands the predecessor over.
+export function successionsIn(
+  previous: readonly DaemonSessionSnapshot[],
+  next: readonly DaemonSessionSnapshot[],
+  known: readonly { id: string }[],
+): Map<string, string> {
+  const successorOf = new Map<string, string>();
+  const previousSucceeds = new Map(previous.map((session) => [session.id, session.succeeds]));
+  for (const session of next) {
+    const predecessor = session.succeeds;
+    if (!predecessor) continue;
+    if (previousSucceeds.get(session.id) === predecessor) continue;
+    if (known.some((entry) => entry.id === predecessor)) successorOf.set(predecessor, session.id);
+  }
+  return successorOf;
 }
 
 export function enterHome(

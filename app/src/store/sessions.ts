@@ -1,5 +1,10 @@
 import { create } from 'zustand';
-import { initialSessionNavigation, type SessionNavigationState } from '../navigation/sessionNavigation';
+import {
+  followSuccessions,
+  initialSessionNavigation,
+  successionsIn,
+  type SessionNavigationState,
+} from '../navigation/sessionNavigation';
 import { createSessionNavigationActions, reconcileSessionNavigation, type SessionNavigationActions } from './sessionNavigationSlice';
 import type { QueueBands, QueueBandSession } from '../utils/queueBands';
 import type { UISessionState } from '../types/sessionState';
@@ -59,6 +64,7 @@ export interface DaemonSessionSnapshot {
   pinned_at?: string;
   crew_member?: string;
   parent_session_id?: string;
+  succeeds?: string;
   id: string;
   label: string;
   agent?: string;
@@ -360,7 +366,11 @@ export const useSessionStore = create<SessionStore>((set, get) => ({
   },
 
   syncFromDaemonSessions: (daemonSessions: DaemonSessionSnapshot[]) => {
-    set((state) => {
+    set((current) => {
+      const state = followSuccessions(
+        current,
+        successionsIn(current.navigationSessions, daemonSessions, current.sessions),
+      );
       const existingByID = new Map(state.sessions.map((session) => [session.id, session]));
 
       const syncedSessions = daemonSessions.map((daemonSession) => {

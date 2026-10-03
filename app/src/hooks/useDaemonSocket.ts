@@ -311,7 +311,7 @@ export interface RateLimitState {
 }
 
 // Protocol version - must match daemon's ProtocolVersion
-export const PROTOCOL_VERSION = '328';
+export const PROTOCOL_VERSION = '331';
 const MAX_PENDING_ATTACH_OUTPUTS = 512;
 
 const CLIENT_INSTANCE_ID =
@@ -488,7 +488,8 @@ export interface FileDiffResult {
 }
 
 export interface SessionExitInfo {
-  id: string;
+  runtimeId: string;
+  sessionId: string;
   exitCode: number;
   signal?: string;
 }
@@ -648,7 +649,7 @@ function invalidateWorkspaceLayoutsForSession(
   let changed = false;
   const nextWorkspaces = workspaces.map((workspace) => {
     const referencesSession = (workspace.layout?.panes || []).some(
-      (pane) => pane.session_id === sessionID || pane.runtime_id === sessionID,
+      (pane) => pane.session_id === sessionID,
     );
     if (!referencesSession) {
       return workspace;
@@ -2255,9 +2256,10 @@ export function useDaemonSocket({
                 code: data.exit_code ?? 0,
                 signal: data.signal,
               });
-              if (callbacksRef.current.onSessionExited) {
+              if (callbacksRef.current.onSessionExited && data.session_id) {
                 callbacksRef.current.onSessionExited({
-                  id: data.id,
+                  runtimeId: data.id,
+                  sessionId: data.session_id,
                   exitCode: data.exit_code ?? 0,
                   signal: data.signal,
                 });
@@ -2306,7 +2308,6 @@ export function useDaemonSocket({
                 pendingActionsRef.current.delete(unregisterKey);
                 pendingUnregister.resolve(undefined);
               }
-              ptyTransportRef.current.clearRuntime(data.session.id);
               sessionsRef.current = sessionsRef.current.filter(
                 (s) => s.id !== data.session!.id
               );
@@ -3349,12 +3350,9 @@ export function useDaemonSocket({
       forceResizeBeforeAttach?: boolean;
     },
   ): Promise<void> => {
-    const sessionAgent = args.agent
-      ?? sessionsRef.current.find((entry) => entry.id === args.id)?.agent
-      ?? null;
     const attachContext = createAttachRequestContext({
       ...args,
-      agent: sessionAgent,
+      agent: args.agent ?? null,
     }, options.policy);
     if (options?.forceResizeBeforeAttach) {
       sendPtyResize(args.id, args.cols, args.rows, args.reason || 'remount_hydrate', {

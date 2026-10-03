@@ -1,0 +1,3 @@
+kind: internal
+area: app
+change: The app keys terminal attachment to panes and PTY events, closes a cleanly exited session by the `session_id` its exit names, and moves selection and history to a session that succeeds another in its terminal (protocol 331).
