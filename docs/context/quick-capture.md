@@ -97,6 +97,12 @@ the native instance cache restores the acknowledged binding before reconnection.
 survives daemon restart. The Mac host validates native registration before the
 daemon accepts the preference. Named instances default to no binding.
 
+A composer-owned queue covers file reads, image decoding and per-file staging
+through the main App's completion receipt. Overlapping additions and uploads
+share that queue. Staging reads each transport-sized byte range directly from
+the copied file's base64 data URL. Delayed staging persists the current draft,
+so newer edits and removals survive restart.
+
 Draft metadata and copied file data live in the instance cache. Files stage
 while composing. Send waits for remaining uploads, persists an uncertain draft
 identity, then requests acceptance with attachment IDs. Only an acceptance receipt clears it. Reconnection resolves that identity before

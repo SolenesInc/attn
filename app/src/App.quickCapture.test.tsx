@@ -359,7 +359,7 @@ describe('Quick Capture app wire behavior', () => {
     expect(retained.images.map(file => file.name)).toEqual(['second.pdf']);
   });
 
-  it('keeps an upload slot through daemon disconnect until the host finishes reading its bytes', async () => {
+  it('retains the draft and resumes file staging after a disconnect drains the upload queue', async () => {
     const reads: string[] = [];
     const url = 'data:application/pdf;base64,JVBERi0xLjQK';
     const nativeInvoke = vi.mocked(invoke).getMockImplementation()!;
@@ -367,21 +367,10 @@ describe('Quick Capture app wire behavior', () => {
       if (command !== 'capture_image_read') return nativeInvoke(command, args);
       reads.push((args as { path: string }).path); return url;
     });
-    let releaseFetch!: (response: Response) => void;
-    let fetchSeen!: () => void;
-    const reading = new Promise<void>(resolve => { fetchSeen = resolve; });
-    const held = new Promise<Response>(resolve => { releaseFetch = resolve; });
-    let firstFetch = true;
+    let held = true;
     const { daemon } = await captureApp(daemon => {
-      vi.stubGlobal('fetch', (input: RequestInfo | URL, init?: RequestInit) => {
-        if (String(input).startsWith('data:')) {
-          if (firstFetch) { firstFetch = false; fetchSeen(); return held; }
-          return localFetch(input, init);
-        }
-        throw new Error('app wire tests reach no network');
-      });
       daemon.on('capture_list', () => ({ event: 'capture_result', success: true, result: { list: { items: [], draft_assets: [] } } }));
-      daemon.on('capture_attachment_put', command => ({ event: 'capture_result', success: true,
+      daemon.on('capture_attachment_put', command => held ? undefined : ({ event: 'capture_result', success: true,
         result: { upload: { next_offset: command.offset + atob(command.data_base64).length } } }));
     });
     await act(async () => {
@@ -390,18 +379,50 @@ describe('Quick Capture app wire behavior', () => {
       } });
       await native.onDrop!({ payload: { type: 'drop', paths: ['/first.pdf'], position: { x: 100, y: 100 } } });
     });
-    await reading;
-    await act(async () => daemon.disconnect());
-    await act(async () => { await native.onDrop!({ payload: { type: 'drop', paths: ['/second.pdf'], position: { x: 100, y: 100 } } }); });
+    await daemon.received('capture_attachment_put');
+    await act(async () => {
+      await native.onDrop!({ payload: { type: 'drop', paths: ['/second.pdf'], position: { x: 100, y: 100 } } });
+      daemon.disconnect();
+    });
     await daemon.idle();
-    expect(reads).toEqual(['/first.pdf']);
-    await daemon.reconnect();
-    await act(async () => { releaseFetch(new Response('%PDF-1.4\n')); });
-    await daemon.received('capture_attachment_put', command => command.name === 'second.pdf');
-    await daemon.idle();
+    expect(screen.getByRole('alert')).toBeInTheDocument();
+    expect(editor()).toBeInTheDocument();
     expect(reads).toEqual(['/first.pdf', '/second.pdf']);
-    expect(daemon.sentOf('capture_attachment_put').filter(command => command.name === 'first.pdf')).toHaveLength(1);
+    expect((native.draft as CaptureDraft).images.map(file => file.name)).toEqual(['first.pdf', 'second.pdf']);
+    held = false;
+    await daemon.reconnect();
+    await daemon.received('capture_attachment_put', command => command.name === 'second.pdf');
+    await act(async () => {
+      for (const listener of native.listeners.get('attn://capture/automation') ?? []) await listener({ payload: {
+        request_id: crypto.randomUUID(), action: 'capture_state', payload: { staged: true },
+      } });
+    });
+    expect(daemon.sentOf('capture_attachment_put').filter(command => command.name === 'first.pdf')).toHaveLength(2);
+    expect(daemon.sentOf('capture_attachment_put').filter(command => command.name === 'second.pdf')).toHaveLength(1);
   });
+
+  it.each([{ length: 0, offset: 0 }, { length: 524291, offset: 0 }, { length: 524292, offset: 1 }, { length: 524293, offset: 2 }])(
+    'uploads exact retained bytes (length=$length, resumed offset=$offset) without a whole-file URL fetch', async ({ length, offset }) => {
+      const captureId = crypto.randomUUID(), attachmentId = crypto.randomUUID();
+      const bytes = Uint8Array.from({ length }, (_, index) => index % 256);
+      const binary = Array.from(bytes, byte => String.fromCharCode(byte)).join('');
+      native.draft = { id: captureId, text: 'Binary attachment', recipient: 'chief', uncertain: false,
+        images: [{ id: attachmentId, name: 'retained.bin', url: `data:application/octet-stream;base64,${btoa(binary)}` }] };
+      const { daemon } = await captureApp(daemon => {
+        vi.stubGlobal('fetch', () => { throw new Error('retained files upload directly from their base64 bytes'); });
+        daemon.on('capture_list', () => ({ event: 'capture_result', success: true, result: { list: { items: [],
+          draft_assets: offset ? [{ capture_id: captureId, attachment_id: attachmentId, name: 'retained.bin', state: 'staged', next_offset: offset }] : [] } } }));
+        daemon.on('capture_attachment_put', command => ({ event: 'capture_result', success: true,
+          result: { upload: { next_offset: command.offset + atob(command.data_base64).length } } }));
+        daemon.on('capture_send', command => ({ event: 'capture_result', success: true, result: { record: record(command) } }));
+      });
+      await gesture(daemon, () => fireEvent.keyDown(editor(), { key: 'Enter' }));
+      const uploads = daemon.sentOf('capture_attachment_put');
+      expect(uploads[0].offset).toBe(offset);
+      expect(uploads.map(command => atob(command.data_base64)).join('')).toBe(binary.slice(offset));
+      expect(uploads[uploads.length - 1].final).toBe(true);
+      expect(daemon.sentOf('capture_send')[0].attachment_ids).toEqual([attachmentId]);
+    });
 
   it('Recent shows sent/read history and files without delivery actions or inbox reads', async () => {
     const { daemon } = await captureApp(daemon => {
