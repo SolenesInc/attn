@@ -137,6 +137,7 @@ type sessionInputLane struct {
 	// user's own typing clears it: nothing confirms the harness took the paste.
 	occupied      bool
 	creditNextRun bool
+	titleNext     *sessionInputDelivery
 	epoch         uint64
 	userSubmit    bool
 	heldEnter     bool
@@ -406,14 +407,39 @@ func (m *sessionInputModule) tookLocked(lane *sessionInputLane, delivery session
 	if delivery.origin.kind != sessionInputOriginUserConversation {
 		return sessionInputRunRef{}
 	}
-	sessionID, text, origin := delivery.sessionID, delivery.text, delivery.origin
-	m.daemon.life.Go("maybeGenerateSessionTitleFromPrompt", func() { m.daemon.maybeGenerateSessionTitleFromPrompt(sessionID, text, origin) })
 	if lane.run == nil || lane.occupied {
 		lane.creditNextRun = true
+		if lane.occupied || lane.heldEnter {
+			lane.titleNext = &delivery
+		} else {
+			m.titleLocked(delivery)
+		}
 		return sessionInputRunRef{}
 	}
+	m.titleLocked(delivery)
 	lane.run.credited = true
 	return lane.run.ref
+}
+
+func (m *sessionInputModule) titleLocked(delivery sessionInputDelivery) {
+	sessionID, text, origin := delivery.sessionID, delivery.text, delivery.origin
+	m.daemon.life.Go("maybeGenerateSessionTitleFromPrompt", func() { m.daemon.maybeGenerateSessionTitleFromPrompt(sessionID, text, origin) })
+}
+
+// claimNextLocked hands a turn start the credit and title of words still waiting in the composer.
+func (m *sessionInputModule) claimNextLocked(lane *sessionInputLane) bool {
+	credit := lane.creditNextRun
+	lane.creditNextRun = false
+	if next := lane.titleNext; next != nil {
+		lane.titleNext = nil
+		m.titleLocked(*next)
+	}
+	return credit
+}
+
+func (lane *sessionInputLane) forfeitNextLocked() {
+	lane.creditNextRun = false
+	lane.titleNext = nil
 }
 
 func (m *sessionInputModule) recordOwedLocked(lane *sessionInputLane, sessionID string) {
@@ -451,9 +477,8 @@ func (m *sessionInputModule) observePromptSubmitted(sessionID string) (run sessi
 	m.daemon.forgetUserInput(sessionID)
 	m.releaseComposerLocked(lane, sessionID)
 	current := m.ensureRunLocked(lane, sessionID)
-	if typed || lane.creditNextRun {
+	if m.claimNextLocked(lane) || typed {
 		current.credited = true
-		lane.creditNextRun = false
 	}
 	return current.ref, current.credited, typed
 }
@@ -463,8 +488,7 @@ func (m *sessionInputModule) ensureRunLocked(lane *sessionInputLane, sessionID s
 		return lane.run
 	}
 	lane.epoch++
-	lane.run = &sessionInputRunState{ref: sessionInputRunRef{sessionID: sessionID, epoch: lane.epoch}, credited: lane.creditNextRun}
-	lane.creditNextRun = false
+	lane.run = &sessionInputRunState{ref: sessionInputRunRef{sessionID: sessionID, epoch: lane.epoch}, credited: m.claimNextLocked(lane)}
 	return lane.run
 }
 

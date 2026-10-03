@@ -363,6 +363,10 @@ func (d *Daemon) handlePluginDriverMethod(plugin *pluginConnection, msg jsonRPCM
 			d.applyPluginReportedMetadata(params)
 		}
 		return struct{}{}, true, nil
+	case "session.report_input_taken":
+		// Acknowledge and drop: pi drivers from before custody-only input still send this,
+		// and an error makes their relay reconnect and resend it in a loop.
+		return struct{}{}, true, nil
 	case "session.report_pull_request":
 		var params pluginReportPullRequestParams
 		if err := json.Unmarshal(msg.Params, &params); err != nil {

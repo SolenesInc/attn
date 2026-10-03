@@ -284,3 +284,11 @@ func TestAStopIsClassifiedOnlyForItsOwnRunAndAFailedVerdictIsUnknown(t *testing.
 		t.Errorf("a stop whose classifier failed was answered %q, want unknown", got)
 	}
 }
+
+func TestADriverFromBeforeCustodyOnlyInputCanStillReportItsInputTaken(t *testing.T) {
+	w := newWorld(t)
+	app := w.App()
+	driver := connectDriver(t, w, "old-pi-plugin", "oldpi", map[string]bool{"state_reporting": true, "message_delivery": true})
+	session, run := spawnDriven(w, app, driver, w.Path("shop"))
+	driver.mustReport("session.report_input_taken", map[string]any{"session_id": session, "run_id": run.RunID, "input_id": "inbox-ring/1"})
+}

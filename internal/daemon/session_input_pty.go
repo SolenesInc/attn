@@ -103,7 +103,7 @@ func (m *sessionInputModule) writePTY(ctx context.Context, sessionID string, dat
 		}
 		m.dropHeldEnterLocked(lane)
 		m.releaseComposerLocked(lane, sessionID)
-		lane.creditNextRun = false
+		lane.forfeitNextLocked()
 		if bytes.ContainsAny(data, "\r\n") {
 			lane.userSubmit = true
 		}

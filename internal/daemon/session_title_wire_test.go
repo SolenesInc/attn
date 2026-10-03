@@ -3,6 +3,7 @@ package daemon_test
 import (
 	"strings"
 	"testing"
+	"testing/synctest"
 
 	"github.com/google/uuid"
 
@@ -219,4 +220,32 @@ func TestACrewMembersDayKeepsTheMembersName(t *testing.T) {
 	if settled.Label != named.Label {
 		t.Errorf("the member's day is named %q, want %q", settled.Label, named.Label)
 	}
+}
+
+func TestAnAnnotationTheUserTypedOverDoesNotTitleTheSession(t *testing.T) {
+	prepared := prepareWorld(t, fakeagent.Claude)
+	t.Setenv("ATTN_PTY_BACKEND", "embedded")
+	t.Setenv("ATTN_HEADLESS_TASKS", "on")
+	synctest.Test(t, func(t *testing.T) {
+		bubbled := *prepared
+		bubbled.T = t
+		w := &world{World: &bubbled, bubbled: true, terms: testworld.NewTerminals()}
+		w.start()
+		app := w.App()
+		agent := w.bubbleClaude(t, app, "shop")
+		agent.term.OnSubmit(nil)
+		if got := submitSessionAnnotationFeedback(app, agent.id, sessionAnnotationFeedback); got.status != "delivered" {
+			t.Fatalf("submit = %+v, want delivered", got)
+		}
+		app.Send(protocol.PtyInputMessage{Cmd: protocol.CmdPtyInput, ID: agent.id, Data: "x"})
+		w.advance(0)
+		agent.term.OnSubmit(agent.take)
+		app.TypeLine(agent.id, "the login form rejects valid passwords")
+		task := w.HeadlessTask()
+		task.Answer("Fix login flow")
+		if !strings.Contains(task.Prompt, "the login form rejects valid passwords") || strings.Contains(task.Prompt, "the parser already handles this") {
+			t.Fatalf("the title task asked %q, want the user's prompt and not the annotation they typed over", task.Prompt)
+		}
+		awaitLabel(app, agent.id, "Fix login flow")
+	})
 }
