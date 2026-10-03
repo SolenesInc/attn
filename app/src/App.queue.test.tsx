@@ -97,35 +97,7 @@ describe('App queue', () => {
       disconnect() { this.connected = false; }
       trigger(node?: Element) { if (this.connected && (!node || this.nodes.has(node))) this.callback([], this); }
     }
-    const NativeMutationObserver = MutationObserver;
-    const mutations: Array<{ trigger: (node: Node) => void }> = [];
-    class FitMutationObserver implements MutationObserver {
-      private readonly native: MutationObserver;
-      private body = false;
-      constructor(private readonly callback: MutationCallback) {
-        this.native = new NativeMutationObserver(callback);
-      }
-      observe(target: Node, options?: MutationObserverInit) {
-        this.native.observe(target, options);
-        if (target instanceof HTMLElement && target.classList.contains('queue-sidebar-body')) {
-          this.body = true;
-          mutations.push(this);
-        }
-      }
-      disconnect() { this.native.disconnect(); }
-      takeRecords() { return this.native.takeRecords(); }
-      trigger(node: Node) {
-        if (!this.body) return;
-        this.callback([{
-          type: 'childList', target: node.parentNode ?? node,
-          addedNodes: document.querySelectorAll('[data-testid="sidebar-automation-runs"]'),
-          removedNodes: document.querySelectorAll('.no-removed-sidebar-block'),
-          attributeName: null, attributeNamespace: null, nextSibling: null, oldValue: null, previousSibling: null,
-        }], this);
-      }
-    }
     vi.stubGlobal('ResizeObserver', FitObserver);
-    vi.stubGlobal('MutationObserver', FitMutationObserver);
     vi.spyOn(HTMLElement.prototype, 'clientHeight', 'get').mockImplementation(function (this: HTMLElement) {
       return this.classList.contains('queue-sidebar-body') ? height : 0;
     });
@@ -133,7 +105,6 @@ describe('App queue', () => {
       if (this.classList.contains('queue-waiting-lead')) return this.children.length * 33 - 1;
       if (this.classList.contains('queue-waiting-card')) return 90 + (this.querySelector('.queue-waiting-lead')?.children.length ?? 0) * 33;
       if (this.classList.contains('queue-crew-block')) return 120;
-      if (this.classList.contains('automation-runs')) return 130;
       if (this.classList.contains('sidebar-home-row')) return 30;
       if (this.classList.contains('queue-row')) return 32;
       return 0;
@@ -172,19 +143,6 @@ describe('App queue', () => {
 
       await gesture(daemon, () => fireEvent.click(screen.getByTestId('queue-agents-toggle')));
       expect(screen.getAllByTestId(/queue-turn-owed-/)).toHaveLength(5);
-      await gesture(daemon, () => daemon.emit({
-        event: 'session_state_changed',
-        session: agent('working', { automation: {
-          definition_id: 1, definition_name: 'Review', run_id: 'run-1', trigger_type: 'manual',
-        } }),
-      }));
-      const automationBlock = screen.getByTestId('sidebar-automation-runs');
-      await act(async () => {
-        mutations.forEach((observer) => observer.trigger(automationBlock));
-        observers.forEach((observer) => observer.trigger(automationBlock));
-      });
-      expect(screen.getAllByTestId(/queue-turn-owed-/)).toHaveLength(4);
-      expect(screen.getByTestId('queue-agents-toggle')).toHaveTextContent('3 more agents');
     } finally {
       vi.restoreAllMocks();
       vi.unstubAllGlobals();

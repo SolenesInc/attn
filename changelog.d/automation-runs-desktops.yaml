@@ -1,0 +1,3 @@
+kind: changed
+area: automations
+change: Automation runs appear on their launch desktop and as ordinary agent rows in the palette.

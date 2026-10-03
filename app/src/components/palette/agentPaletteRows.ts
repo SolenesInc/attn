@@ -4,19 +4,18 @@ import { headOfQueue, type QueueBandSession, type QueueBands } from '../../utils
 import { crewDisplayName } from '../../utils/crewName';
 import { isSnoozed } from '../../utils/snoozeDurations';
 import type { DesktopWithSessions } from '../../utils/desktopViewModels';
-import { automationRunGroups, type AutomationRunSession } from '../../utils/automationRuns';
 import { tileKindLabel } from '../../utils/tilePresentation';
 
-export interface PaletteSession extends Omit<QueueBandSession, 'automation'>, AutomationRunSession {
+export interface PaletteSession extends QueueBandSession {
   state: UISessionState;
+  automation?: { definition_id: number; definition_name: string };
 }
 
 export type AgentPaletteRow<S extends PaletteSession> =
   | { kind: 'agent'; key: string; session: S; anchored: boolean; queueHead: boolean }
   | { kind: 'member'; key: string; member: string }
   | { kind: 'tile'; key: string; desktopId: string; tile: TileLeaf; title: string }
-  | { kind: 'divider'; key: string }
-  | { kind: 'runs'; key: string; name: string; runs: number; needYou: number };
+  | { kind: 'divider'; key: string };
 
 export interface AgentPaletteInput<S extends PaletteSession> {
   bands: QueueBands<S>;
@@ -55,7 +54,7 @@ function matches(terms: readonly string[], ...texts: (string | undefined)[]): bo
 }
 
 export function agentPaletteRows<S extends PaletteSession>(
-  { bands, crewRoster, desktops, tileTitle, now }: AgentPaletteInput<S>,
+  { bands, crewRoster, desktops, tileTitle }: AgentPaletteInput<S>,
   query: string,
 ): AgentPaletteRow<S>[] {
   const terms = queryTerms(query);
@@ -68,7 +67,7 @@ export function agentPaletteRows<S extends PaletteSession>(
     return [{ kind: 'agent', key: `agent:${session.id}`, session, anchored, queueHead: session.id === headId }];
   };
   const bandRow = (session: S, anchored: boolean) =>
-    agentRow(session, anchored, matches(terms, session.label, session.crewMember));
+    agentRow(session, anchored, matches(terms, session.label, session.crewMember, session.automation?.definition_name));
 
   const anchored: AgentPaletteRow<S>[] = bands.chief ? bandRow(bands.chief.session, true) : [];
   const awakeByMember = new Map<string, typeof bands.crew>();
@@ -86,7 +85,14 @@ export function agentPaletteRows<S extends PaletteSession>(
     }
   }
 
-  const rest = [...bands.turns, ...bands.settled, ...bands.snoozed].flatMap((row) => bandRow(row.session, false));
+  const settledIds = new Set(bands.settled.map((row) => row.session.id));
+  const plain = desktops.flatMap((desktop) => desktop.sessions)
+    .filter((session) => settledIds.has(session.id) || session.automation);
+  const rest = [
+    ...bands.turns.flatMap((row) => bandRow(row.session, false)),
+    ...plain.flatMap((session) => bandRow(session, false)),
+    ...bands.snoozed.flatMap((row) => bandRow(row.session, false)),
+  ];
 
   const tiles: AgentPaletteRow<S>[] = [];
   for (const desktop of desktops) {
@@ -98,22 +104,7 @@ export function agentPaletteRows<S extends PaletteSession>(
     }
   }
 
-  const runs: AgentPaletteRow<S>[] = [];
-  for (const group of automationRunGroups(desktops, now)) {
-    const byName = matches(terms, group.name);
-    const shown = group.runs.flatMap((session) => agentRow(session, false, byName || matches(terms, session.label)));
-    if (shown.length === 0) continue;
-    runs.push({
-      kind: 'runs',
-      key: `runs:${group.id}`,
-      name: group.name,
-      runs: group.runs.length,
-      needYou: group.needingYou.length,
-    });
-    runs.push(...shown);
-  }
-
-  const following = [...rest, ...tiles, ...runs];
+  const following = [...rest, ...tiles];
   const divider: AgentPaletteRow<S>[] =
     anchored.length > 0 && following.length > 0 ? [{ kind: 'divider', key: 'divider' }] : [];
   return [...anchored, ...divider, ...following];

@@ -364,16 +364,15 @@ async function main() {
     });
     await runner.step('assert_visible_provenance', async () => {
       await client.request('select_session', { sessionId: sessionID });
-      const openGroupHeader = `[data-testid="sidebar-automation-${definitionID}"][data-runs="1"] [data-testid="sidebar-automation-header-${definitionID}"][aria-expanded="true"]`;
-      const header = await poll(
-        () => client.request('dom_text', { selector: openGroupHeader }).catch(() => null),
-        'the selected reviewer\'s automation group, open in the sidebar with one run',
+      const launchDesktop = runJSON(binary, ['automation', 'list'], daemonEnv)
+        .find((definition) => definition.id === definitionID).launch_desktop;
+      const runSelector = `[data-testid="sidebar-desktop-${launchDesktop.desktop_id}"] [data-testid="sidebar-session-${sessionID}"]`;
+      const runRow = await poll(
+        () => client.request('dom_text', { selector: runSelector }).catch(() => null),
+        'the reviewer row on its automation launch desktop',
       );
-      runner.assert(
-        header.text.includes('Slice 4 packaged continuity proof'),
-        'the sidebar groups the reviewer under its automation, named and counted, and opens it on selection',
-        header,
-      );
+      runner.assert(runRow.text.length > 0, 'the reviewer appears on its launch desktop', runRow);
+      await client.request('dom_wait', { selector: '[data-testid="sidebar-automation-runs"]', absent: true, timeoutMs: 30_000 });
       let lastUi = null;
       const sessionUi = await poll(async () => {
         lastUi = await client.request('get_session_ui_state', { sessionId: sessionID });

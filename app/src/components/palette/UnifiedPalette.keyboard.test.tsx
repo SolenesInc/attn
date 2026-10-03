@@ -98,7 +98,7 @@ describe('UnifiedPalette keyboard flow', () => {
     fireEvent.keyDown(palette.input(), { key: 'ArrowDown' });
     fireEvent.keyDown(palette.input(), { key: 'ArrowDown' });
     expect(palette.highlighted()).toContain('nightly-run');
-    expect(screen.getByText(/1 need you · 1 run · never in the queue/)).toBeInTheDocument();
+    expect(screen.queryByText(/never in the queue/)).toBeNull();
     fireEvent.keyDown(palette.input(), { key: 'Enter' });
     expect(palette.onOpenAgent).toHaveBeenCalledWith(expect.objectContaining({ id: 'nightly-run' }));
     expect(palette.onClose).toHaveBeenCalled();

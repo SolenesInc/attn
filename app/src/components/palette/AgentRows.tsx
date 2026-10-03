@@ -22,16 +22,6 @@ export function AgentRowView<S extends PaletteSession>({
   switch (row.kind) {
     case 'divider':
       return <hr className="unified-palette-divider" />;
-    case 'runs':
-      return (
-        <div className="unified-palette-runs" data-testid={`palette-runs-${row.key}`}>
-          <span className="unified-palette-name">{row.name}</span>
-          <span className="unified-palette-runs-count">
-            {row.needYou > 0 ? `${row.needYou} need you · ` : ''}
-            {row.runs} run{row.runs === 1 ? '' : 's'} · never in the queue
-          </span>
-        </div>
-      );
     case 'member':
       return <SleepingMember member={row.member} />;
     case 'tile':

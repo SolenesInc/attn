@@ -52,7 +52,6 @@ export interface SidebarProps {
   desktops: SidebarDesktop[];
   visualIndexByDesktopId: Map<string, number>;
   selectedId: string | null;
-  selectionRequest?: { id: number } | null;
   selectedDesktopId: string | null;
   selectedTile?: SelectedTile | null;
   tileContents?: Record<string, TileContentState>;
