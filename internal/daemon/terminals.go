@@ -19,7 +19,8 @@ type terminalRegistry struct {
 	mu    sync.RWMutex
 	byID  map[harness.TerminalID]*terminal
 	shown uint64
-	// A session's close kills its terminals after their panes are gone; their exits still name it.
+	// A terminal that leaves its pane can still exit, killed by its session's close or on its own;
+	// that exit still names the session it showed.
 	ending map[harness.TerminalID]endingTerminal
 }
 
@@ -172,9 +173,11 @@ func (r *terminalRegistry) place(workspaceID string, panes []workspacelayout.Pan
 		}
 		entry.workspace = workspaceID
 	}
+	now := time.Now()
 	for id, entry := range r.byID {
 		if _, kept := placed[id]; !kept && entry.workspace == workspaceID {
 			delete(r.byID, id)
+			r.endLocked(id, entry.shows, now)
 		}
 	}
 }
@@ -249,7 +252,7 @@ func (r *terminalRegistry) forgetKey(t harness.TerminalID) {
 	}
 }
 
-// An exit owed to a teardown lands within milliseconds (embedded) or never (worker),
+// An exit owed to a closed pane lands within milliseconds (embedded) or never (worker),
 // so a minute bounds the notes without racing a late exit.
 const endingGrace = time.Minute
 
@@ -261,6 +264,10 @@ type endingTerminal struct {
 func (r *terminalRegistry) noteEnding(t harness.TerminalID, s harness.SessionID, now time.Time) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
+	r.endLocked(t, s, now)
+}
+
+func (r *terminalRegistry) endLocked(t harness.TerminalID, s harness.SessionID, now time.Time) {
 	for id, note := range r.ending {
 		if now.Sub(note.at) > endingGrace {
 			delete(r.ending, id)
