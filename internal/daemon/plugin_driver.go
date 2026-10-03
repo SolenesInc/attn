@@ -853,24 +853,6 @@ func (d *Daemon) resolvePluginDriverLaunch(reg pluginDriverRegistration, params 
 	return result, nil
 }
 
-func (d *Daemon) deliverSessionInputViaPluginDriver(session *protocol.Session, inputID, prompt string) (bool, error) {
-	if !d.sessionUsesPluginMessageDelivery(session) {
-		return false, nil
-	}
-	cursor := d.store.GetAgentDriverRun(session.ID)
-	ctx, cancel := context.WithTimeout(context.Background(), pluginDeliverMessageTimeout)
-	defer cancel()
-	var result pluginDeliverMessageResult
-	params := pluginDeliverMessageParams{SessionID: session.ID, RunID: cursor.RunID, InputID: inputID, Text: prompt}
-	if err := d.callPlugin(ctx, cursor.PluginName, "driver.deliver_message", params, &result); err != nil {
-		return true, fmt.Errorf("deliver message via plugin %q: %w", cursor.PluginName, err)
-	}
-	if !result.OK {
-		return true, fmt.Errorf("plugin %q declined message delivery for session %s", cursor.PluginName, session.ID)
-	}
-	return true, nil
-}
-
 func (d *Daemon) sessionUsesPluginMessageDelivery(session *protocol.Session) bool {
 	if session == nil {
 		return false
