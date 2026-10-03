@@ -2005,14 +2005,13 @@ func (d *Daemon) handlePTYState(sessionID string, obs pty.Observation) {
 		d.traceStateVeto(sessionID, origin, state, "session_not_found")
 		return
 	}
-	driverRun := d.store.GetAgentDriverRun(sessionID)
-	if driverRun.RunID != "" && d.pluginDriverReportsState(session.Agent) {
-		d.traceStateVeto(sessionID, origin, state, "plugin_driver_owns_state")
+	if d.linkOwnsState(sessionID) {
+		d.traceStateVeto(sessionID, origin, state, "link_owns_state")
 		return
 	}
 	if session.State != protocol.SessionStateLaunching {
 		reason := "resolver_owned"
-		if driverRun.RunID != "" {
+		if d.store.GetAgentDriverRun(sessionID).RunID != "" {
 			reason = "plugin_driver_not_registered"
 		}
 		d.traceStateVeto(sessionID, origin, state, reason)

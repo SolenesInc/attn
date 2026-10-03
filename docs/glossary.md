@@ -9,7 +9,8 @@
 - Run: one prompt and response.
 - Parked run: a finished response whose background work is still running.
 - Quiet window: time after the user's last keystroke when automated input must wait.
-- Harness link: a channel that delivers input to a harness without typing into its terminal. Sessions without one use the PTY. pi's plugin message delivery is the first.
+- Harness link: a channel that delivers input to a harness without typing into its terminal, and can report the agent's state, which then outranks hooks and the screen. Sessions without one use the PTY. pi's plugin is the first.
+- Turn event: a harness link's report of where the agent's turn stands (running, waiting on an approval or a question, ended). It is the agent's turn, not the attention Turn below; an epoch is one launch of the harness, ordering its reports.
 - Voice: whose words an input carries, the user's (annotations, conversation) or attn's (rings, heartbeats, nudges). A harness link declares the voices it delivers.
 - Custody: the answer, at delivery, that the harness took an input: a harness link's reply, or on the PTY the paste and its Enter written. It is a delivery's only result; attn never confirms an input afterwards.
 - Inbox: the items waiting for an address; agents read theirs with `attn agent inbox`.
