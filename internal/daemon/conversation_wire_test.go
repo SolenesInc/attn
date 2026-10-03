@@ -74,7 +74,7 @@ func TestClearOpensANewSessionInTheSameTerminalAndClosesTheOldOneWhole(t *testin
 	testworld.Await(app, protocol.EventSessionUnregistered, func(e protocol.WebSocketEvent) bool {
 		return e.Session != nil && e.Session.ID == first
 	})
-	if got, want := handoverEvents(app, first, next.ID), []string{
+	if got, want := handoverEvents(app.Received(), first, next.ID), []string{
 		protocol.EventSessionRegistered, protocol.EventWorkspaceLayoutUpdated, protocol.EventSessionClosed, protocol.EventSessionUnregistered,
 	}; !slices.Equal(got, want) {
 		t.Errorf("the app heard the handover as %v, want %v so it never shows the terminal without a session", got, want)
@@ -117,9 +117,9 @@ func TestClearOpensANewSessionInTheSameTerminalAndClosesTheOldOneWhole(t *testin
 }
 
 // handoverEvents lists, in order, the first event of each step of from's terminal moving on to to.
-func handoverEvents(app *testworld.Peer, from, to string) []string {
+func handoverEvents(events []protocol.WebSocketEvent, from, to string) []string {
 	var heard []string
-	for _, e := range app.Received() {
+	for _, e := range events {
 		var step bool
 		switch e.Event {
 		case protocol.EventSessionRegistered:
@@ -138,6 +138,108 @@ func handoverEvents(app *testworld.Peer, from, to string) []string {
 		}
 	}
 	return heard
+}
+
+func resumeClaude(app *testworld.Peer, claude *fakeagent.Run, session, conversation string) {
+	app.T.Helper()
+	app.TypeLine(session, "/resume "+conversation)
+	if got := claude.Prompted(); got != "/resume "+conversation {
+		app.T.Fatalf("claude received %q, want /resume %s", got, conversation)
+	}
+}
+
+func TestResumeToAClosedSessionsConversationReopensItInThePane(t *testing.T) {
+	w := newWorld(t, fakeagent.Claude)
+	app, cli := w.App(), w.Client()
+	first := w.Spawn(app, fakeagent.Claude, w.Path("shop"), func(m *protocol.SpawnSessionMessage) {
+		m.Label = protocol.Ptr("checkout")
+	})
+	terminal := app.Terminal(first)
+	claude := w.Launched(first)
+	app.TypeLine(first, "add a discount field")
+	claude.Prompted()
+	added := "Added. <!-- attn:state=idle -->"
+	claude.Reply(added)
+	awaitUsageTokens(app, first, claudeTokens(added))
+	checkout := claude.ConversationID
+	cleared := clearClaude(app, claude, first)
+	awaitClosed(app, first)
+
+	heard := len(app.Received())
+	resumeClaude(app, claude, cleared.ID, checkout)
+	back := awaitSuccessor(app, cleared.ID)
+	if back.ID != first || back.Label != "checkout" {
+		t.Fatalf("/resume %s brought back %s named %q, want %s, the closed session that holds it", checkout, back.ID, back.Label, first)
+	}
+	if got := app.Terminal(first); got != terminal {
+		t.Errorf("%s came back in terminal %s, want %s, the one /resume ran in", first, got, terminal)
+	}
+	awaitClosed(app, cleared.ID)
+	testworld.Await(app, protocol.EventSessionUnregistered, func(e protocol.WebSocketEvent) bool {
+		return e.Session != nil && e.Session.ID == cleared.ID
+	})
+	if got, want := handoverEvents(app.Received()[heard:], cleared.ID, first), []string{
+		protocol.EventSessionRegistered, protocol.EventWorkspaceLayoutUpdated, protocol.EventSessionClosed, protocol.EventSessionUnregistered,
+	}; !slices.Equal(got, want) {
+		t.Errorf("the app heard the handover as %v, want %v so it follows the terminal", got, want)
+	}
+	if ids := queriedIDs(t, cli, ""); !slices.Equal(ids, []string{first}) {
+		t.Errorf("after /clear and /resume back the sessions are %v, want only %s", ids, first)
+	}
+
+	app.TypeLine(first, "now the tests")
+	if got := claude.Prompted(); got != "now the tests" || claude.ConversationID != checkout {
+		t.Fatalf("typing after /resume reached claude as %q in conversation %s, want it in %s", got, claude.ConversationID, checkout)
+	}
+	testworld.AwaitSession(app, first, func(s protocol.Session) bool { return s.State == protocol.SessionStateWorking })
+	tested := "Which framework? <!-- attn:state=waiting_input -->"
+	claude.Reply(tested)
+	testworld.AwaitSession(app, first, func(s protocol.Session) bool {
+		return s.State == protocol.SessionStateWaitingInput && s.Usage != nil &&
+			s.Usage.TotalTokens == claudeTokens(added)+claudeTokens(tested)
+	})
+}
+
+func TestResumeToARecoverableSessionsConversationMovesItIntoThePane(t *testing.T) {
+	w := newWorld(t, fakeagent.Claude)
+	app := w.App()
+	cwd := w.Path("shop")
+	earlier := w.Spawn(app, fakeagent.Claude, cwd)
+	dead := app.Terminal(earlier)
+	before := w.Launched(earlier)
+	app.TypeLine(earlier, "find the flaky test")
+	before.Prompted()
+	before.Reply("It races the tax lookup. <!-- attn:state=idle -->")
+	flaky := before.ConversationID
+	before.Exit(1)
+	testworld.AwaitSession(app, earlier, func(s protocol.Session) bool { return protocol.Deref(s.StateReason) == "process_exited" })
+
+	current := w.Spawn(app, fakeagent.Claude, cwd)
+	terminal := app.Terminal(current)
+	claude := w.Launched(current)
+	resumeClaude(app, claude, current, flaky)
+	if moved := awaitSuccessor(app, current); moved.ID != earlier {
+		t.Fatalf("/resume %s showed session %s, want %s, the recoverable session that holds it", flaky, moved.ID, earlier)
+	}
+	awaitClosed(app, current)
+	layout := testworld.Await(app, protocol.EventWorkspaceLayoutUpdated, func(e protocol.WebSocketEvent) bool {
+		return e.WorkspaceLayout != nil && slices.ContainsFunc(e.WorkspaceLayout.Panes, func(p protocol.WorkspaceLayoutPane) bool {
+			return protocol.Deref(p.RuntimeID) == terminal && protocol.Deref(p.SessionID) == earlier
+		})
+	}).WorkspaceLayout
+	for _, pane := range layout.Panes {
+		if protocol.Deref(pane.RuntimeID) == dead {
+			t.Errorf("after %s moved into terminal %s its dead pane %s stayed: %+v", earlier, terminal, pane.PaneID, layout.Panes)
+		}
+	}
+
+	app.TypeLine(earlier, "fix it")
+	if got := claude.Prompted(); got != "fix it" {
+		t.Fatalf("typing after /resume reached claude as %q", got)
+	}
+	testworld.AwaitSession(app, earlier, func(s protocol.Session) bool { return s.State == protocol.SessionStateWorking })
+	claude.Reply("Fixed with a lock. <!-- attn:state=waiting_input -->")
+	testworld.AwaitSession(app, earlier, func(s protocol.Session) bool { return s.State == protocol.SessionStateWaitingInput })
 }
 
 func TestACrewMembersClearEndsItsDay(t *testing.T) {
@@ -260,6 +362,43 @@ func TestCodexNewOpensANewSessionOnTheNewChatsFirstPrompt(t *testing.T) {
 	if !resumed.Resumed || resumed.ConversationID != started {
 		t.Fatalf("respawn ran codex %q; want it to resume %s, the conversation /new started", resumed.Argv, started)
 	}
+}
+
+func TestCodexResumeReopensTheClosedSessionOnTheNextPrompt(t *testing.T) {
+	w := newWorld(t, fakeagent.Codex)
+	app := w.App()
+	first := w.Spawn(app, fakeagent.Codex, w.Path("shop"))
+	terminal := app.Terminal(first)
+	codex := w.Launched(first)
+	app.TypeLine(first, "find the flaky test")
+	codex.Prompted()
+	codex.Reply("It races the tax lookup. <!-- attn:state=idle -->")
+	flaky := codex.ConversationID
+	app.TypeLine(first, "/new")
+	codex.Prompted()
+	app.TypeLine(first, "write the changelog")
+	codex.Prompted()
+	next := awaitSuccessor(app, first)
+	awaitClosed(app, first)
+	codex.Reply("Written. <!-- attn:state=idle -->")
+	testworld.AwaitSession(app, next.ID, func(s protocol.Session) bool { return s.State == protocol.SessionStateIdle })
+
+	app.TypeLine(next.ID, "/resume "+flaky)
+	codex.Prompted()
+	app.TypeLine(next.ID, "now fix it")
+	if got := codex.Prompted(); got != "now fix it" || codex.ConversationID != flaky {
+		t.Fatalf("codex took %q in conversation %s, want it in %s", got, codex.ConversationID, flaky)
+	}
+	if back := awaitSuccessor(app, next.ID); back.ID != first {
+		t.Fatalf("/resume %s showed session %s, want %s, the closed session that holds it", flaky, back.ID, first)
+	}
+	if got := app.Terminal(first); got != terminal {
+		t.Errorf("%s came back in terminal %s, want %s", first, got, terminal)
+	}
+	awaitClosed(app, next.ID)
+	testworld.AwaitSession(app, first, func(s protocol.Session) bool { return s.State == protocol.SessionStateWorking })
+	codex.Reply("Fixed with a lock. <!-- attn:state=idle -->")
+	testworld.AwaitSession(app, first, func(s protocol.Session) bool { return s.State == protocol.SessionStateIdle })
 }
 
 func TestASessionLaunchedToResumeAConversationKeepsResumingIt(t *testing.T) {

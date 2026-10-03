@@ -34,7 +34,14 @@ type codex struct {
 	prompt       string
 	turnID       string
 	lastThread   string
-	newChat      string
+	nextThread   codexThread
+}
+
+// codexThread is the thread the next turn starts, with the SessionStart source that reports it;
+// an empty id is a new thread.
+type codexThread struct {
+	source string
+	id     string
 }
 
 var codexExecFlags = flagSpec{
@@ -197,23 +204,27 @@ func (c *codex) hookInput(event string, extra map[string]any) map[string]any {
 	return input
 }
 
-// Like real Codex, /new and /clear start the new thread on its first turn, which reports it
-// through SessionStart before UserPromptSubmit.
+// Like real Codex, /new and /clear start a thread on the next turn, which reports it through
+// SessionStart before UserPromptSubmit. /resume <id> switches threads the same way.
 func (c *codex) submit(prompt string) error {
-	switch strings.TrimSpace(prompt) {
-	case "/new":
-		c.newChat = "startup"
+	command := strings.TrimSpace(prompt)
+	switch {
+	case command == "/new":
+		c.nextThread = codexThread{source: "startup"}
 		return nil
-	case "/clear":
-		c.newChat = "clear"
+	case command == "/clear":
+		c.nextThread = codexThread{source: "clear"}
+		return nil
+	case strings.HasPrefix(command, "/resume "):
+		c.nextThread = codexThread{source: "resume", id: strings.TrimSpace(strings.TrimPrefix(command, "/resume "))}
 		return nil
 	}
-	if source := c.newChat; source != "" {
-		c.resumed, c.lastThread, c.newChat = false, "", ""
-		if err := c.startRollout(); err != nil {
+	if next := c.nextThread; next.source != "" {
+		c.nextThread = codexThread{}
+		if err := c.switchThread(next); err != nil {
 			return err
 		}
-		if err := c.hooks.run("SessionStart", source, c.hookInput("SessionStart", map[string]any{"source": source})); err != nil {
+		if err := c.hooks.run("SessionStart", next.source, c.hookInput("SessionStart", map[string]any{"source": next.source})); err != nil {
 			return err
 		}
 	}
@@ -223,6 +234,19 @@ func (c *codex) submit(prompt string) error {
 		return err
 	}
 	return appendLines(c.transcript, codexEvent("user_message", prompt))
+}
+
+func (c *codex) switchThread(next codexThread) error {
+	c.lastThread = ""
+	if next.id == "" {
+		c.resumed = false
+		return c.startRollout()
+	}
+	c.conversation, c.resumed = next.id, true
+	if c.transcript = c.findRollout(); c.transcript == "" {
+		return fmt.Errorf("codex /resume %s: no rollout under %s", c.conversation, c.sessionsDir())
+	}
+	return nil
 }
 
 func (c *codex) reply(text string, afterStop bool) error {

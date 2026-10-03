@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"os"
+	"slices"
 	"strings"
 	"sync"
 	"syscall"
@@ -86,6 +87,25 @@ func (d *Daemon) sessionLifecycleLockFor(sessionID string) *sessionLifecycleLock
 	}
 	entry.refs++
 	return &sessionLifecycleLockLease{d: d, sessionID: sessionID, entry: entry}
+}
+
+// lockSessionLifecycles takes the sessions' lifecycle locks in id order, so two handovers never wait on each other.
+func (d *Daemon) lockSessionLifecycles(ids ...string) (unlock func()) {
+	ids = slices.Compact(slices.Sorted(slices.Values(ids)))
+	leases := make([]*sessionLifecycleLockLease, 0, len(ids))
+	for _, id := range ids {
+		if id == "" {
+			continue
+		}
+		lease := d.sessionLifecycleLockFor(id)
+		lease.Lock()
+		leases = append(leases, lease)
+	}
+	return func() {
+		for _, lease := range slices.Backward(leases) {
+			lease.Unlock()
+		}
+	}
 }
 
 func (d *Daemon) sessionHasLiveWorker(sessionID string) bool {

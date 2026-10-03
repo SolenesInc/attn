@@ -145,19 +145,21 @@ func (s *Store) ConversationBoundToOtherSession(sessionID, nativeID string) bool
 	return bound
 }
 
-// ConversationHeldElsewhere reports whether a session other than sessionID, open or closed, holds nativeID.
-func (s *Store) ConversationHeldElsewhere(sessionID, nativeID string) bool {
+// ConversationOwner names the session other than sessionID that holds nativeID: an open one first,
+// else the one closed last. It is empty when none does.
+func (s *Store) ConversationOwner(sessionID, nativeID string) string {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 	if s.db == nil {
-		return false
+		return ""
 	}
-	var held bool
-	if err := s.db.QueryRow(`SELECT EXISTS(SELECT 1 FROM sessions WHERE resume_session_id = ? AND id != ?)`,
-		strings.TrimSpace(nativeID), strings.TrimSpace(sessionID)).Scan(&held); err != nil {
-		return false
+	var owner string
+	if err := s.db.QueryRow(`SELECT id FROM sessions WHERE resume_session_id = ? AND id != ?
+		ORDER BY closed_at = '' DESC, closed_at DESC LIMIT 1`,
+		strings.TrimSpace(nativeID), strings.TrimSpace(sessionID)).Scan(&owner); err != nil {
+		return ""
 	}
-	return held
+	return owner
 }
 
 func (s *Store) SetSessionLaunchedAt(sessionID string, launchedAt time.Time) {

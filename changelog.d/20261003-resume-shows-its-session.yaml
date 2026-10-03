@@ -1,0 +1,14 @@
+kind: changed
+area: daemon
+change: >
+  `/resume` in Claude or Codex to a conversation another attn session holds now
+  shows that session in the pane, under its own name, instead of moving the
+  conversation into the current one. A closed session reopens there with its
+  usage, seeds, inbox and watches, as on Reopen; an open session whose pane
+  had exited moves into this pane and its old pane closes. The session left
+  behind closes into the ledger, so `/clear` and then `/resume` back returns to
+  exactly the session you started with.
+notes: >
+  With Codex the pane switches once Codex reports the resumed chat, at the latest
+  on its first prompt. A session still running in another pane keeps it, and the
+  conversation moves within the current session as before.
