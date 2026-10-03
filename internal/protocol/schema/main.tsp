@@ -814,8 +814,111 @@ model AgentCloseResult {
   seed_ids: string[];           // the seeds the closed session tended, each of which got the note
 }
 
-// With a message id, the recipient reads one notified peer message through the
-// legacy adapter. Without one, it reads a bounded FIFO batch from its inbox.
+enum CaptureTargetKind { chief, crew }
+model CaptureTarget {
+  kind: CaptureTargetKind;
+  member_id?: string;
+}
+model CaptureAttachment {
+  id: string;
+  name: string;
+  media_type: string;
+  bytes: safeint;
+}
+model CaptureRecord {
+  id: string;
+  target: CaptureTarget;
+  content: string;
+  created_at: string;
+  attachments: CaptureAttachment[];
+  read_at?: string;
+}
+enum CaptureDraftState { staged, ready }
+model CaptureDraftAsset {
+  capture_id: string;
+  attachment_id: string;
+  name: string;
+  state: CaptureDraftState;
+  next_offset: safeint;
+}
+model CaptureListResult {
+  items: CaptureRecord[];
+  draft_assets: CaptureDraftAsset[];
+  next_cursor?: string;
+}
+model CaptureSendMessage {
+  cmd: "capture_send";
+  request_id?: string;
+  capture_id: string;
+  target: CaptureTarget;
+  content: string;
+  attachment_ids: string[];
+}
+model CaptureGetMessage {
+  cmd: "capture_get";
+  request_id?: string;
+  capture_id: string;
+}
+model CaptureListMessage {
+  cmd: "capture_list";
+  request_id?: string;
+  limit: safeint;
+  cursor?: string;
+}
+model CaptureAttachmentPutMessage {
+  cmd: "capture_attachment_put";
+  request_id?: string;
+  capture_id: string;
+  attachment_id: string;
+  name: string;
+  offset: safeint;
+  data_base64: string;
+  final: boolean;
+}
+model CaptureAttachmentGetMessage {
+  cmd: "capture_attachment_get";
+  request_id?: string;
+  capture_id: string;
+  attachment_id: string;
+  offset: safeint;
+}
+model CaptureAttachmentDiscardMessage {
+  cmd: "capture_attachment_discard";
+  request_id?: string;
+  capture_id: string;
+  attachment_id: string;
+}
+model CaptureAttachmentPutResult {
+  next_offset: safeint;
+  attachment?: CaptureAttachment;
+}
+model CaptureAttachmentGetResult {
+  data_base64: string;
+  next_offset: safeint;
+  eof: boolean;
+}
+model CaptureResult {
+  record?: CaptureRecord;
+  list?: CaptureListResult;
+  upload?: CaptureAttachmentPutResult;
+  download?: CaptureAttachmentGetResult;
+  discarded?: boolean;
+}
+model CaptureResultMessage {
+  event: "capture_result";
+  request_id: string;
+  success: boolean;
+  error?: string;
+  error_code?: string;
+  result?: CaptureResult;
+}
+model CaptureChangedMessage {
+  event: "capture_changed";
+  capture_id: string;
+}
+
+// With a message id, the recipient reads or rereads one user or peer message.
+// Without one, it reads a bounded FIFO batch from its inbox.
 model AgentInboxMessage {
   cmd: "agent_inbox";
   message_id?: string;
@@ -5568,7 +5671,9 @@ model Response {
   agent_peek_result?: AgentPeekResult;
   agent_msg_result?: AgentMsgResult;
   agent_close_result?: AgentCloseResult;
+  capture_result?: CaptureResult;
   agent_inbox_result?: AgentPeerMessage;
+  agent_inbox_item_result?: AgentInboxItem;
   agent_inbox_batch_result?: AgentInboxBatchResult;
   agent_msg_status_result?: AgentPeerMessage;
   crew_list_result?: CrewListResult;
@@ -6088,6 +6193,7 @@ model AgentPeerMessage {
 // peer body or the daemon-authored action text for another mailbox kind.
 model AgentInboxItem {
   address: string;
+  attachments?: CaptureAttachment[];
   item_id: string;
   kind: string;
   source_id?: string;

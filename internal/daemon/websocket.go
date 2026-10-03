@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
 	"net"
 	"net/http"
 	"net/url"
@@ -104,12 +105,6 @@ func websocketReadLimit(client *wsClient) int64 {
 		return maxBrowserHostWebSocketReadBytes
 	}
 	return defaultWebSocketReadBytes
-}
-
-func (c *wsClient) updateReadLimit() {
-	if c.conn != nil {
-		c.conn.SetReadLimit(websocketReadLimit(c))
-	}
 }
 
 func (c *wsClient) speaksWorkspaceProtocol() bool {
@@ -697,7 +692,8 @@ func (d *Daemon) handleWS(w http.ResponseWriter, r *http.Request) {
 		d.logf("WebSocket accept error: %v", err)
 		return
 	}
-	conn.SetReadLimit(defaultWebSocketReadBytes)
+	// The streaming reader below enforces the limit and reports the received byte count.
+	conn.SetReadLimit(-1)
 
 	client := &wsClient{
 		conn:               conn,
@@ -924,7 +920,18 @@ func (d *Daemon) wsReadPump(client *wsClient) {
 	}()
 
 	for {
-		_, data, err := client.conn.Read(context.Background())
+		_, reader, err := client.conn.Reader(context.Background())
+		var data []byte
+		limit := websocketReadLimit(client)
+		if err == nil {
+			data, err = io.ReadAll(io.LimitReader(reader, limit+1))
+		}
+		if err == nil && int64(len(data)) > limit {
+			reason := fmt.Sprintf("WebSocket frame limit=%d bytes, asked for at least %d bytes", limit, len(data))
+			d.logf("%s", reason)
+			_ = client.conn.Close(websocket.StatusMessageTooBig, reason)
+			return
+		}
 		if err != nil {
 			d.logf("WebSocket read error: %v", err)
 			return
@@ -1073,6 +1080,8 @@ func (d *Daemon) handleClientMessage(client *wsClient, data []byte) {
 		d.life.Go("handleSeedReviewKeepWS", func() { d.handleSeedReviewKeepWS(client, msg.(*protocol.SeedReviewKeepMessage)) })
 	case protocol.CmdSeedReviewDraft:
 		d.life.Go("handleSeedReviewDraftWS", func() { d.handleSeedReviewDraftWS(client, msg.(*protocol.SeedReviewDraftMessage)) })
+	case protocol.CmdCaptureSend, protocol.CmdCaptureGet, protocol.CmdCaptureList, protocol.CmdCaptureAttachmentPut, protocol.CmdCaptureAttachmentGet, protocol.CmdCaptureAttachmentDiscard:
+		d.life.Go("handleCaptureWS", func() { d.handleCaptureWS(client, msg) })
 	case protocol.CmdCrewWake:
 		d.life.Go("handleCrewWakeWS", func() { d.handleCrewWakeWS(client, msg.(*protocol.CrewWakeMessage)) })
 	case protocol.CmdCrewCharterGet:

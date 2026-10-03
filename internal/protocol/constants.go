@@ -7,9 +7,10 @@ import (
 	"time"
 )
 
-const ProtocolVersion = "331"
+const ProtocolVersion = "332"
 
 const (
+	ErrorCodeCaptureNotFound      = "capture_not_found"
 	ErrorCodeConflict             = "conflict"
 	ErrorCodeUndeclaredCollection = "undeclared_collection"
 	ErrorCodeInvalidQuery         = "invalid_query"
@@ -22,6 +23,8 @@ const (
 const DocSubscriptionsPerClient = 64
 
 const AgentMessageMaxChars = 32 * 1024
+
+const CommandFrameMaxBytes = 64 * 1024
 
 const CapabilityWorkspaceSessions = "workspace_sessions"
 
@@ -41,6 +44,12 @@ const (
 )
 
 const (
+	CmdCaptureAttachmentDiscard              = "capture_attachment_discard"
+	CmdCaptureAttachmentGet                  = "capture_attachment_get"
+	CmdCaptureAttachmentPut                  = "capture_attachment_put"
+	CmdCaptureList                           = "capture_list"
+	CmdCaptureGet                            = "capture_get"
+	CmdCaptureSend                           = "capture_send"
 	CmdClientHello                           = "client_hello"
 	CmdRegister                              = "register"
 	CmdDelegate                              = "delegate"
@@ -316,6 +325,8 @@ const (
 const EventAutomationsChanged = "automations_changed"
 
 const (
+	EventCaptureResult                   = "capture_result"
+	EventCaptureChanged                  = "capture_changed"
 	EventSessionRegistered               = "session_registered"
 	EventSessionUnregistered             = "session_unregistered"
 	EventSessionCloseResult              = "session_close_result"
@@ -1075,6 +1086,48 @@ func ParseMessage(data []byte) (string, interface{}, error) {
 
 	case CmdAgentClose:
 		var msg AgentCloseMessage
+		if err := json.Unmarshal(data, &msg); err != nil {
+			return "", nil, err
+		}
+		return peek.Cmd, &msg, nil
+
+	case CmdCaptureSend:
+		var msg CaptureSendMessage
+		if err := json.Unmarshal(data, &msg); err != nil {
+			return "", nil, err
+		}
+		return peek.Cmd, &msg, nil
+
+	case CmdCaptureGet:
+		var msg CaptureGetMessage
+		if err := json.Unmarshal(data, &msg); err != nil {
+			return "", nil, err
+		}
+		return peek.Cmd, &msg, nil
+
+	case CmdCaptureList:
+		var msg CaptureListMessage
+		if err := json.Unmarshal(data, &msg); err != nil {
+			return "", nil, err
+		}
+		return peek.Cmd, &msg, nil
+
+	case CmdCaptureAttachmentPut:
+		var msg CaptureAttachmentPutMessage
+		if err := json.Unmarshal(data, &msg); err != nil {
+			return "", nil, err
+		}
+		return peek.Cmd, &msg, nil
+
+	case CmdCaptureAttachmentGet:
+		var msg CaptureAttachmentGetMessage
+		if err := json.Unmarshal(data, &msg); err != nil {
+			return "", nil, err
+		}
+		return peek.Cmd, &msg, nil
+
+	case CmdCaptureAttachmentDiscard:
+		var msg CaptureAttachmentDiscardMessage
 		if err := json.Unmarshal(data, &msg); err != nil {
 			return "", nil, err
 		}

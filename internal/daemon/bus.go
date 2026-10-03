@@ -141,6 +141,9 @@ func wireProjections() []projection {
 
 func buildWireProjections() []projection {
 	return []projection{
+		{filter: bus.Filter{FactCaptureChanged}, apply: func(d *Daemon, ev bus.Event) {
+			d.broadcastMessage(protocol.CaptureChangedMessage{Event: protocol.EventCaptureChanged, CaptureID: ev.Subject})
+		}},
 		{
 			filter: bus.Filter{FactSessionStateChanged},
 			apply:  func(d *Daemon, ev bus.Event) { d.projectSessionStateChanged(ev.Subject) },

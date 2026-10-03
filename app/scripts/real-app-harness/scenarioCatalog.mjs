@@ -10,7 +10,7 @@ export const scenarioCatalog = [
   {
     id: 'prompt-composition',
     runnerId: 'PromptComposition',
-    label: 'Prompt delivery: ordinary/chief channels, peer attribution, crew wake/sleep and successor',
+    label: 'Prompt delivery: ordinary/chief channels, peer/user attribution, capture file retrieval, crew wake/sleep and successor',
     command: ['node', 'scripts/real-app-harness/scenario-prompt-composition.mjs'],
     timeoutMs: 240_000,
   },

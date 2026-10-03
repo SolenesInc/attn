@@ -29,6 +29,28 @@ func (d *Daemon) handleAgentInbox(conn net.Conn, msg *protocol.AgentInboxMessage
 		return
 	}
 	messageID := strings.TrimSpace(protocol.Deref(msg.MessageID))
+	storedItem, found, err := d.store.InboxItem(messageID)
+	if err != nil {
+		d.replyPeerMessageError(conn, err)
+		return
+	}
+	if found && storedItem.Kind == inbox.UserMessage {
+		item, err := d.store.ReadInboxItem(messageID, recipient.ID, addresses, time.Now())
+		if err != nil {
+			d.replyAgentMsgError(conn, "message_not_found", err.Error())
+			return
+		}
+		capture, err := d.store.Capture(item.Source)
+		if err != nil {
+			d.replyPeerMessageError(conn, err)
+			return
+		}
+		result := &protocol.AgentInboxItem{Address: item.To.String(), ItemID: item.ID, Kind: string(item.Kind), SourceID: protocol.Ptr(item.Source), Content: item.Text, CreatedAt: item.CreatedAt, NotifiedAt: item.NotifiedAt, ReadAt: item.ReadAt, Attachments: capture.Attachments}
+		_ = json.NewEncoder(conn).Encode(protocol.Response{Ok: true, AgentInboxItemResult: result})
+		d.publishFact(FactCaptureChanged, capture.ID, nil)
+		d.kickInboxAfterCommit(item.To)
+		return
+	}
 	stored, err := d.store.PeerMessageRecord(messageID)
 	if err != nil {
 		d.replyPeerMessageError(conn, err)
@@ -91,6 +113,15 @@ func (d *Daemon) handleAgentInboxBatch(conn net.Conn, recipientSessionID string,
 		}
 		if delivery.Item.Hint != "" {
 			item.Hint = protocol.Ptr(delivery.Item.Hint)
+		}
+		if delivery.Item.Kind == inbox.UserMessage {
+			record, err := d.store.Capture(delivery.Item.Source)
+			if err != nil {
+				d.logf("inbox capture assets: %v", err)
+			} else {
+				item.Attachments = record.Attachments
+			}
+			d.publishFact(FactCaptureChanged, delivery.Item.Source, nil)
 		}
 		if delivery.Peer != nil {
 			item.SenderSessionID = protocol.Ptr(delivery.Peer.SenderSessionID)
