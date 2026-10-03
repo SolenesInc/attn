@@ -13,20 +13,37 @@ func (d *Daemon) sendToInbox(item inbox.Item) (inbox.Receipt, error) {
 	if item.ID == "" {
 		item.ID = uuid.NewString()
 	}
-	id, err := d.store.PutInbox(item, time.Now())
+	savedAt := time.Now()
+	id, err := d.store.PutInbox(item, savedAt)
 	if err != nil {
 		return inbox.Receipt{}, err
 	}
-	return d.deliverSavedInbox(item.To, id), nil
+	return d.deliverSavedInbox(item.To, id, savedAt), nil
 }
-func (d *Daemon) deliverSavedInbox(to inbox.Address, id string) inbox.Receipt {
+func (d *Daemon) deliverSavedInbox(to inbox.Address, id string, savedAt time.Time) inbox.Receipt {
 	receipt, err := d.deliverInbox(to)
 	receipt.ItemID = id
 	if err != nil {
 		d.logf("inbox: item %s saved for %s; delivery deferred: %v", id, to, err)
 		receipt.Detail = "queued (item saved; delivery deferred)"
+		return receipt
+	}
+	// A concurrent delivery, such as the holder's prompt-ready kick, may place the ring that covers this item.
+	if !receipt.Rang && d.inboxItemRungSince(id, savedAt) {
+		receipt.Rang, receipt.Outstanding, receipt.Detail = true, false, "notified"
+		if holder := d.inboxHolder(to); holder != nil {
+			receipt.Detail = "notified " + sessionDisplayName(holder)
+		}
 	}
 	return receipt
+}
+func (d *Daemon) inboxItemRungSince(id string, since time.Time) bool {
+	item, found, err := d.store.InboxItem(id)
+	if err != nil || !found {
+		return false
+	}
+	notified, err := time.Parse(time.RFC3339Nano, item.NotifiedAt)
+	return err == nil && !notified.Before(since)
 }
 func (d *Daemon) kickInboxAfterCommit(addresses ...inbox.Address) {
 	for _, a := range addresses {

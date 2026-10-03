@@ -1,0 +1,3 @@
+kind: fixed
+area: daemon
+change: "`attn agent msg` reports a message as notified when a doorbell rung concurrently, such as the one an agent gets on turning idle, already covers it, instead of reporting it queued."
