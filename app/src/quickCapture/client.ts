@@ -14,7 +14,7 @@ export interface CaptureSubmission { id: string; text: string; recipient: string
 export interface CaptureRecipient { id: string; name: string; detail: string }
 export interface CaptureItem {
   id: string; text: string; recipient: string; createdAt: string; readAt?: string;
-  files: { id: string; name: string; mediaType?: string }[];
+  files: { id: string; name: string; mediaType?: string; bytes: number }[];
 }
 export interface CaptureHostState {
   connected: boolean; recipients: CaptureRecipient[]; binding: string | null;
