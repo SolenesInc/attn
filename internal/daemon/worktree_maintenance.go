@@ -14,6 +14,7 @@ type worktreeMaintenanceCoordinator struct {
 	mu          sync.Mutex
 	sweepCancel context.CancelCauseFunc
 	sweepID     uint64
+	afterSweep  []func()
 }
 
 type worktreeSweepLease struct {
@@ -80,6 +81,17 @@ func (c *worktreeMaintenanceCoordinator) TryBackgroundRemoval(
 	return c.tryRemoval(ctx, run)
 }
 
+// RunAfterSweep reports whether a sweep is active; if so, fn runs once it ends.
+func (c *worktreeMaintenanceCoordinator) RunAfterSweep(fn func()) bool {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	if c.sweepCancel == nil {
+		return false
+	}
+	c.afterSweep = append(c.afterSweep, fn)
+	return true
+}
+
 func (c *worktreeMaintenanceCoordinator) tryRemoval(
 	ctx context.Context,
 	run func(automaticWorktreeCleanupProtection) error,
@@ -121,10 +133,15 @@ func (c *worktreeMaintenanceCoordinator) RunSweep(
 	defer func() {
 		cancel(nil)
 		c.mu.Lock()
+		var after []func()
 		if c.sweepID == sweepID {
 			c.sweepCancel = nil
+			after, c.afterSweep = c.afterSweep, nil
 		}
 		c.mu.Unlock()
+		for _, fn := range after {
+			fn()
+		}
 	}()
 
 	return run(&worktreeSweepLease{coordinator: c, ctx: sweepCtx})
