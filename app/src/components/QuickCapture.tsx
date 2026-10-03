@@ -7,14 +7,15 @@ import { readImage } from '@tauri-apps/plugin-clipboard-manager';
 import { CaptureAttachmentPreview, type CaptureAttachment, type AttachmentOrigin, type AttachmentMotion } from './CaptureAttachmentPreview';
 import './QuickCapture.css';
 import { QuickCaptureHistory } from './QuickCaptureHistory';
-import { createCaptureBridge, EMPTY_HOST_STATE, type CaptureClient, type CaptureHostState, type CaptureItem, type CaptureDraft, type CaptureDraftAsset } from '../quickCapture/client';
+import { createCaptureBridge, EMPTY_HOST_STATE, type CaptureClient, type CaptureHostState, type CaptureItem, type CaptureDraft } from '../quickCapture/client';
+import { CaptureWorkQueue } from '../quickCapture/workQueue';
 import { captureDraftCache, newCaptureDraft } from '../quickCapture/draft';
 import { useShortcut } from '../shortcuts/useShortcut';
 import { parseKeybindingsConfig, setShortcutOverrides } from '../shortcuts/resolver';
 
 const automationEnabled = (window as { __ATTN_AUTOMATION_ENABLED?: boolean }).__ATTN_AUTOMATION_ENABLED === true;
 type Attachment = CaptureAttachment;
-type CaptureExpectation = { frame?: boolean; visible?: boolean; settled?: boolean; imageCount?: number; view?: 'compose' | 'recent'; composing?: boolean; recipient?: string; fontScale?: number };
+type CaptureExpectation = { frame?: boolean; visible?: boolean; settled?: boolean; imageCount?: number; attachmentCount?: number; view?: 'compose' | 'recent'; composing?: boolean; recipient?: string; fontScale?: number };
 
 
 export function QuickCapture({ client: suppliedClient, hostState }: { client?: CaptureClient; hostState?: CaptureHostState } = {}) {
@@ -22,6 +23,7 @@ export function QuickCapture({ client: suppliedClient, hostState }: { client?: C
   const bridge = useRef<ReturnType<typeof createCaptureBridge> | null>(null);
   const client = useRef(suppliedClient);
   const [draftCache] = useState(captureDraftCache);
+  const [workQueue] = useState(() => new CaptureWorkQueue());
   const cache = useRef(draftCache);
   const [initialDraft] = useState(newCaptureDraft);
   const identity = useRef(initialDraft);
@@ -38,7 +40,6 @@ export function QuickCapture({ client: suppliedClient, hostState }: { client?: C
   const [resolving, setResolving] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [recent, setRecent] = useState(false);
-  const [assets, setAssets] = useState<CaptureDraftAsset[]>([]);
   const recentGeneration = useRef(0);
   const loadingPage = useRef(false);
   const [loadingRecent, setLoadingRecent] = useState(false);
@@ -56,6 +57,7 @@ export function QuickCapture({ client: suppliedClient, hostState }: { client?: C
   const [picker, setPicker] = useState(false);
   const [pick, setPick] = useState(0);
   const recipientMenu = useRef<HTMLDivElement>(null);
+  const ingestion = useRef<{ startedAt: number; readyAt?: number; count: number }[]>([]);
   const motion = useRef<(AttachmentMotion | { kind: 'drop'; phase: 'start' | 'end'; at: number })[]>([]);
   const visible = useRef(false);
   const viewRecent = useRef(recent);
@@ -76,22 +78,27 @@ export function QuickCapture({ client: suppliedClient, hostState }: { client?: C
   useLayoutEffect(() => { state.current = { text, recipient, images, saved, binding, uncertain, restored }; }, [text, recipient, images, saved, binding, uncertain, restored]);
 
   function addImages(items: { name: string; load: () => Promise<string> }[], origin: AttachmentOrigin, silent = false) {
-    if (!state.current.restored) { setError('Draft is still loading. Try adding the image again when it is ready.'); return; }
+    if (!state.current.restored) { setError('Draft is still loading. Try adding the file again when it is ready.'); return; }
     setSaved([]);
     const generation = draftGeneration.current;
     const arrivals = items.map(item => ({ id: crypto.randomUUID(), name: item.name, url: '', origin, ready: false,
       arriving: visible.current && !viewRecent.current && !window.matchMedia?.('(prefers-reduced-motion: reduce)').matches }));
     arrivals.forEach(image => ownedImages.current.add(image.id));
     setImages(previous => [...previous, ...arrivals]);
+    const measurement = { startedAt: Date.now(), count: arrivals.length, readyAt: undefined as number | undefined };
+    let remaining = arrivals.length;
+    if (automationEnabled) ingestion.current.push(measurement);
     arrivals.forEach((image, index) => {
-      void items[index].load().then(async url => {
+      void workQueue.run(async () => {
+        if (draftGeneration.current !== generation || !ownedImages.current.has(image.id)) return;
+        const url = await items[index].load();
         if (draftGeneration.current !== generation || !ownedImages.current.has(image.id)) return;
         setImages(previous => previous.map(item => item.id === image.id ? { ...item, url } : item));
-        await ImagePromise(url);
+        const imagePreview = url.startsWith('data:image/') && await ImagePromise(url).then(() => true, () => false);
         if (draftGeneration.current !== generation || !ownedImages.current.has(image.id)) return;
-        setImages(previous => previous.map(item => item.id === image.id ? { ...item, url, ready: true,
+        setImages(previous => previous.map(item => item.id === image.id ? { ...item, url, ready: true, imagePreview,
           arriving: item.arriving && visible.current && !viewRecent.current } : item));
-      }).catch(error => {
+      }).finally(() => { if (--remaining === 0) measurement.readyAt = Date.now(); }).catch(error => {
         if (draftGeneration.current !== generation || !ownedImages.current.delete(image.id)) return;
         setImages(previous => previous.filter(item => item.id !== image.id));
         if (!silent) setError(`Cannot attach ${image.name}: ${error}`);
@@ -99,10 +106,7 @@ export function QuickCapture({ client: suppliedClient, hostState }: { client?: C
     });
   }
   function addFiles(files: File[]) {
-    const items = files.filter(file => {
-      if (file.type.startsWith('image/')) return true;
-      setError(`Unsupported image: ${file.name}`); return false;
-    }).map(file => ({ name: file.name, load: () => fileDataUrl(file) }));
+    const items = files.map(file => ({ name: file.name, load: () => fileDataUrl(file) }));
     addImages(items, { kind: 'paste' });
   }
   const removeImage = useCallback((id: string) => {
@@ -138,21 +142,22 @@ export function QuickCapture({ client: suppliedClient, hostState }: { client?: C
       const result = await client.current!.recent(cursor);
       if (generation !== recentGeneration.current) return;
       setHistory(previous => cursor ? [...previous, ...result.items.filter(item => !previous.some(saved => saved.id === item.id))] : result.items);
-      setNextCursor(result.nextCursor); setAssets(result.assets); setError('');
+      setNextCursor(result.nextCursor); setError('');
     } catch (error) { if (generation === recentGeneration.current) setError(String(error)); }
     finally { if (generation === recentGeneration.current) { loadingPage.current = false; setLoadingRecent(false); } }
   }
   function stageDraft(staged: CaptureDraft): Promise<void> {
     const fresh = staged.images.filter(image => !stagedImages.current.has(image.id));
-    if (fresh.length) {
-      const pending = cache.current.save(staged).then(() => {
-        if (identity.current.id !== staged.id) return;
-        const images = fresh.filter(image => ownedImages.current.has(image.id));
-        if (images.length) return client.current!.stage({ ...staged, images });
+    for (const image of fresh) {
+      const pending = workQueue.run(async () => {
+        if (identity.current.id !== staged.id || !ownedImages.current.has(image.id)) return;
+        await cache.current.save(draft());
+        if (identity.current.id !== staged.id || !ownedImages.current.has(image.id)) return;
+        await client.current!.stage({ ...staged, images: [image] });
       });
-      for (const image of fresh) stagedImages.current.set(image.id, pending);
+      stagedImages.current.set(image.id, pending);
       void pending.catch(() => {
-        for (const image of fresh) if (stagedImages.current.get(image.id) === pending) stagedImages.current.delete(image.id);
+        if (stagedImages.current.get(image.id) === pending) stagedImages.current.delete(image.id);
       });
     }
     return Promise.all(staged.images.map(image => stagedImages.current.get(image.id))).then(() => {});
@@ -229,7 +234,7 @@ export function QuickCapture({ client: suppliedClient, hostState }: { client?: C
   useEffect(() => { if (restored && uncertain && !submitting && host.connected) void resolveSubmission(); }, [restored, uncertain, submitting, host.connected]);
   useEffect(() => {
     if (!restored || !host.connected || uncertain || submitting || !images.length || images.some(image => !image.ready)) return;
-    void stageDraft(draft()).catch(error => setError(`Image upload: ${error}`));
+    void stageDraft(draft()).catch(error => setError(`File upload: ${error}`));
   }, [images, restored, host.connected, uncertain, submitting]);
   useEffect(() => { if (recent && host.connected) void refreshRecent(); }, [recent, host.connected, host.captureRevision]);
   useEffect(() => { if (hostState) setHost(hostState); }, [hostState]);
@@ -250,7 +255,7 @@ export function QuickCapture({ client: suppliedClient, hostState }: { client?: C
       // Wry 0.55.1's Mac host emits AppKit points despite the PhysicalPosition label.
       if (sending.current || state.current.uncertain) return;
       const origin: AttachmentOrigin = { kind: 'drop', x: event.payload.position.x, y: event.payload.position.y };
-      addImages(event.payload.paths.map(path => ({ name: path.split('/').pop() || 'Dropped image', load: () => invoke<string>('capture_image_read', { path })
+      addImages(event.payload.paths.map(path => ({ name: path.split('/').pop() || 'Dropped file', load: () => invoke<string>('capture_image_read', { path })
       })), origin);
     });
     const inputTrace: object[] = [];
@@ -259,17 +264,20 @@ export function QuickCapture({ client: suppliedClient, hostState }: { client?: C
       data: event instanceof InputEvent ? event.data : undefined, focused: document.activeElement === editor.current,
       readOnly: editor.current?.readOnly, value: editor.current?.value });
     if (automationEnabled) ['keydown', 'beforeinput', 'input'].forEach(type => document.addEventListener(type, traceInput, true));
-    const automation = automationEnabled ? listen<{ request_id: string; action: string; payload: { binding?: string } & CaptureExpectation }>('attn://capture/automation', async ({ payload }) => {
+    const automation = automationEnabled ? listen<{ request_id: string; action: string; payload: { binding?: string; batchSize?: number; staged?: boolean } & CaptureExpectation }>('attn://capture/automation', async ({ payload }) => {
       if (!payload.action.startsWith('capture_')) return;
       let result: unknown;
       let error: string | undefined;
       try {
         if (payload.action === 'capture_state') {
+          if (payload.payload.batchSize !== undefined) workQueue.setCapacity(payload.payload.batchSize);
           if (payload.payload.frame) await new Promise<void>(resolve => requestAnimationFrame(() => resolve()));
-          if (payload.payload.imageCount !== undefined || payload.payload.view || payload.payload.visible !== undefined || payload.payload.composing !== undefined || payload.payload.recipient !== undefined || payload.payload.fontScale !== undefined) await waitForCaptureView(payload.payload);
+          if (payload.payload.attachmentCount !== undefined || payload.payload.imageCount !== undefined || payload.payload.view || payload.payload.visible !== undefined || payload.payload.composing !== undefined || payload.payload.recipient !== undefined || payload.payload.fontScale !== undefined) await waitForCaptureView(payload.payload);
+          if (payload.payload.staged) { await stageDraft(draft()); await workQueue.whenIdle(); }
           const bounds = (element: Element | null) => { const rect = element?.getBoundingClientRect(); return rect ? { x: (rect.x + rect.width / 2) / window.innerWidth, y: (rect.y + rect.height / 2) / window.innerHeight } : null; };
           const nativeDiagnostics = await invoke<{ diagnostics?: string[] }>('capture_status');
-          result = { inputTrace, nativeDiagnostics: nativeDiagnostics.diagnostics, visibility: document.visibilityState, nativeFocused: await getCurrentWebviewWindow().isFocused(), fontScale: Number(document.querySelector<HTMLElement>('.capture')?.dataset.fontScale), editorFontSize: editor.current ? getComputedStyle(editor.current).fontSize : null, view: document.querySelector('.capture-history') ? 'recent' : 'compose', flyingImages: document.querySelectorAll('.capture-flight').length, controls: { recent: bounds(document.querySelector('[aria-label="Recent captures"]')), remove: bounds(document.querySelector('.capture-images button')), editor: bounds(editor.current), recipient: bounds(document.querySelector('[aria-label="Recipient"]')) }, ...state.current, composing: composing.current, images: state.current.images.map(({ name }) => ({ name })), motion: motion.current, reducedMotion: window.matchMedia?.('(prefers-reduced-motion: reduce)').matches ?? false, activeAnimations: document.getAnimations().filter(animation => animation.playState === 'running').length, latencyMs: latency.current, focused: document.activeElement === editor.current, visible: await getCurrentWebviewWindow().isVisible() };
+          result = { ingestion: ingestion.current, work: workQueue.snapshot(), recentRows: [...document.querySelectorAll('.capture-history-item')].map(row => ({ text: row.textContent, buttons: [...row.querySelectorAll('button')].map(button => button.textContent) })), inputTrace, nativeDiagnostics: nativeDiagnostics.diagnostics, visibility: document.visibilityState, nativeFocused: await getCurrentWebviewWindow().isFocused(), fontScale: Number(document.querySelector<HTMLElement>('.capture')?.dataset.fontScale), editorFontSize: editor.current ? getComputedStyle(editor.current).fontSize : null, view: document.querySelector('.capture-history') ? 'recent' : 'compose', flyingImages: document.querySelectorAll('.capture-flight').length, controls: { recent: bounds(document.querySelector('[aria-label="Recent captures"]')), remove: bounds(document.querySelector('.capture-images button')), editor: bounds(editor.current), recipient: bounds(document.querySelector('[aria-label="Recipient"]')) }, ...state.current, composing: composing.current, images: state.current.images.map(({ name }) => ({ name })), motion: motion.current, reducedMotion: window.matchMedia?.('(prefers-reduced-motion: reduce)').matches ?? false, activeAnimations: document.getAnimations().filter(animation => animation.playState === 'running').length, latencyMs: latency.current, focused: document.activeElement === editor.current, visible: await getCurrentWebviewWindow().isVisible() };
+
         } else if (payload.action === 'capture_binding') {
           await client.current!.setBinding(payload.payload.binding || null);
           result = { binding: payload.payload.binding || '' };
@@ -320,13 +328,10 @@ export function QuickCapture({ client: suppliedClient, hostState }: { client?: C
       }}>Recent</button>
       <button aria-label="Recipient" disabled={uncertain || submitting} title="Choose recipient · ⌘K" className="capture-recipient" aria-haspopup="listbox" aria-expanded={picker} onClick={openPicker}>{label(recipient)} <ChevronIcon /></button>
     </header>}
-    {recent ? <QuickCaptureHistory regionRef={historyView} client={client.current!} history={history} assets={assets}
-      roster={roster} currentDraftId={identity.current.id} hasDraft={!!text || images.length > 0} submitting={submitting}
-      loading={loadingRecent} nextCursor={nextCursor} label={label} onRefresh={refreshRecent} onError={setError}
-      onBack={() => setRecent(false)} onDiscard={() => void discardDraft()} onFollowUp={item => {
-        if (text || images.length) { setError('Keep or discard your current draft before composing a follow-up.'); return; }
-        setRecipient(item.recipient); setRecent(false);
-      }} /> : <>
+    {recent ? <QuickCaptureHistory regionRef={historyView} client={client.current!} history={history}
+      hasDraft={!!text || images.length > 0} submitting={submitting}
+      loading={loadingRecent} nextCursor={nextCursor} label={label} onRefresh={refreshRecent}
+      onBack={() => setRecent(false)} onDiscard={() => void discardDraft()} /> : <>
       <textarea autoFocus ref={editor} aria-label="Capture message" placeholder={`Message ${label(recipient)}`} value={text} readOnly={uncertain || submitting || !restored} onChange={event => { setSaved([]); setText(event.target.value); }} onCompositionStart={event => { composing.current = true; event.currentTarget.dataset.composing = "true"; }} onCompositionEnd={event => { composing.current = false; event.currentTarget.dataset.composing = "false"; }} onKeyDown={event => {
         if (event.key === 'Enter' && !event.shiftKey && !event.nativeEvent.isComposing && !composing.current && event.keyCode !== 229) { event.preventDefault(); void send(); }
       }} onPaste={event => {
@@ -366,13 +371,15 @@ function ImagePromise(url: string): Promise<void> {
   return new Promise((resolve, reject) => { const image = new Image(); image.onload = () => resolve(); image.onerror = reject; image.src = url; });
 }
 
-function waitForCaptureView({ imageCount: count, view, settled, visible, composing, recipient, fontScale }: CaptureExpectation): Promise<void> {
+function waitForCaptureView({ imageCount: count, attachmentCount, view, settled, visible, composing, recipient, fontScale }: CaptureExpectation): Promise<void> {
   return new Promise((resolve, reject) => {
     const finish = (error?: string) => { observer.disconnect(); document.removeEventListener('load', check, true); document.removeEventListener('error', check, true); document.removeEventListener('focusin', check, true); if (error) reject(new Error(error)); else resolve(); };
     const check = () => {
       const images = [...document.querySelectorAll<HTMLImageElement>('.capture-images img')];
       const error = document.querySelector('[role="alert"]')?.textContent;
       if (count !== undefined && (error || images.length > count)) { finish(`Expected ${count} decoded image previews, observed ${images.length}. ${error || ''}`); return; }
+      const files = [...document.querySelectorAll<HTMLElement>('.capture-images figure')];
+      const filesReady = attachmentCount === undefined || (files.length === attachmentCount && files.every(file => file.dataset.fileReady === 'true'));
       const target = document.querySelector('.capture textarea');
       const recentView = document.querySelector('.capture-history');
       const viewReady = !view || (view === 'recent' ? recentView?.contains(document.activeElement) : target && document.activeElement === target);
@@ -381,10 +388,10 @@ function waitForCaptureView({ imageCount: count, view, settled, visible, composi
       const visibleReady = visible === undefined || document.querySelector<HTMLElement>(".capture")!.dataset.captureVisible === String(visible);
       const recipientReady = recipient === undefined || document.querySelector<HTMLElement>('.capture')?.dataset.recipient === recipient;
       const fontReady = fontScale === undefined || Number(document.querySelector<HTMLElement>('.capture')?.dataset.fontScale) === fontScale;
-      if (fontReady && viewReady && imagesReady && motionReady && visibleReady && recipientReady && (composing === undefined || (document.querySelector<HTMLElement>(".capture textarea")?.dataset.composing === "true") === composing)) finish();
+      if (filesReady && fontReady && viewReady && imagesReady && motionReady && visibleReady && recipientReady && (composing === undefined || (document.querySelector<HTMLElement>(".capture textarea")?.dataset.composing === "true") === composing)) finish();
     };
     const observer = new MutationObserver(check);
-    observer.observe(document.querySelector('.capture')!, { childList: true, subtree: true, attributes: true, attributeFilter: ['class', 'data-capture-visible', 'data-composing', 'data-recipient', 'data-font-scale'] });
+    observer.observe(document.querySelector('.capture')!, { childList: true, subtree: true, attributes: true, attributeFilter: ['class', 'data-capture-visible', 'data-composing', 'data-recipient', 'data-font-scale', 'data-file-ready'] });
     document.addEventListener('load', check, true); document.addEventListener('error', check, true); document.addEventListener('focusin', check, true);
     check();
   });

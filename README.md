@@ -170,20 +170,20 @@ always-current list, and "Edit shortcuts" there to remap any of them.
 
 Press **Control+Option+Space** from another app to jot a note for your crew.
 Quick Capture opens over the current Space, including full-screen apps. Type,
-paste an image, or drop image files into the note. Remove an image with its
+paste an image or file, or drop files into the note. Remove a file with its
 preview's remove button. **Enter** sends; **Shift+Enter** inserts a newline.
 **Escape** or **Cmd+W** closes the window and keeps your draft.
 
 The Chief is the default recipient. **Cmd+1–4** selects the first four
 recipients, and **Cmd+K** opens the keyboard picker. A sleeping crew member
 wakes for the message. If the Chief is absent, the saved capture waits until
-a Chief is assigned. "Saved" means the daemon owns the note and image bytes.
+a Chief is assigned. "Saved" means the daemon owns the note and file bytes.
 An unconfirmed submission keeps its draft and checks its existing identity
 before another send.
 
-Open **Recent** to inspect content, destination and delivery state. Unread
-captures can be cancelled, restored or redirected; failed delivery can be
-retried. A read capture links to its recipient session for a follow-up.
+Open **Recent** to inspect what you sent, to whom and when. Each entry shows
+**Sent** or **Read**. Read means the recipient retrieved the message from its
+inbox; it does not mean the recipient understood or acted on it.
 Inspecting Recent does not mark a message as read.
 
 Use **Cmd+=**, **Cmd+-** and **Cmd+0** to resize or reset text in Quick Capture
