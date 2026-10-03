@@ -83,8 +83,8 @@ export function useQuickCaptureHost(daemon: DaemonApi, settings: Record<string, 
             case 'submit': value = await api.submit(payload.submission); break;
             case 'resolve': value = await api.resolve(payload.captureId); break;
             case 'recent': value = await api.recent(payload.cursor); break;
-            case 'image': value = await api.image(payload.captureId, payload.attachmentId, payload.mediaType); break;
-            case 'discard': await api.discard(payload.captureId, payload.imageIds); break;
+            case 'file': value = await api.file(payload.captureId, payload.attachmentId, payload.mediaType); break;
+            case 'discard': await api.discard(payload.captureId, payload.fileIds); break;
           }
         }
       } catch (failure) { error = String(failure); }
