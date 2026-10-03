@@ -179,6 +179,7 @@ export function SidebarSessionCountdowns({
 
 export function SidebarSessionRow({
   session,
+  paneId,
   selected,
   draggable = false,
   dragging = false,
@@ -192,6 +193,7 @@ export function SidebarSessionRow({
 }: {
   session: LocalSession;
   selected: boolean;
+  paneId?: string;
   draggable?: boolean;
   dragging?: boolean;
   onSelect: () => void;
@@ -208,6 +210,7 @@ export function SidebarSessionRow({
         .trim()
         .replace(/\s+/g, ' ')}
       data-testid={`sidebar-session-${session.id}`}
+      data-view-pane-id={paneId}
       data-state={session.state}
       title={session.state === 'recoverable' ? 'Session will be recovered when opened' : undefined}
     >

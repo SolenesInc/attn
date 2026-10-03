@@ -36,6 +36,7 @@ export interface SessionsTabProps {
   connection: SessionLedgerConnection;
   workspaceNames: Record<string, string>;
   liveSessionIds?: Set<string>;
+  displayedSessionIds?: Set<string>;
   seedForSession?: (sessionId: string) => SessionSeedLink | null;
   onFocusSession?: (sessionId: string) => void;
   onOpenSeed?: (seedId: string) => void;
@@ -60,6 +61,7 @@ export function SessionsTab({
   connection,
   workspaceNames,
   liveSessionIds,
+  displayedSessionIds,
   seedForSession,
   onFocusSession,
   onOpenSeed,
@@ -175,6 +177,10 @@ export function SessionsTab({
     [liveSessionIds],
   );
 
+  const canFocus = useCallback((entry: SessionLedgerEntry) => isLive(entry)
+    && (entry.codex_mode !== 'shared' || (displayedSessionIds?.has(entry.id) ?? true)),
+  [isLive, displayedSessionIds]);
+
   const labelsBySession = useMemo(() => new Map(entries.map((entry) => [entry.id, entry.label])), [entries]);
   const sessionLabel = useCallback((id: string) => labelsBySession.get(id) || id, [labelsBySession]);
   const nameText = useCallback((text: string) => nameIds(text, (id) => labelsBySession.get(id) || undefined), [labelsBySession]);
@@ -201,6 +207,7 @@ export function SessionsTab({
       verdict: attemptFor(entry)?.verdict,
       note: attemptFor(entry)?.note,
       live: isLive(entry),
+      focusable: canFocus(entry),
       seed: seedForSession?.(entry.id) ?? null,
       workspaceLabel: workspaceShown,
       sessionLabel,
@@ -209,7 +216,7 @@ export function SessionsTab({
       canShowWorktree: !!onShowWorktree && !!entry.is_worktree && attemptFor(entry)?.verdict?.directoryState !== 'missing',
       now: now(),
     }),
-  })), [visible, attemptFor, isLive, seedForSession, workspaceShown, sessionLabel, nameText, onReopen, onShowWorktree, now]);
+  })), [visible, attemptFor, isLive, canFocus, seedForSession, workspaceShown, sessionLabel, nameText, onReopen, onShowWorktree, now]);
 
   // Counts, not arrays, drive the status line: a parent that rerenders on status must not loop it.
   const shown = visible.length;
@@ -295,6 +302,7 @@ export function SessionsTab({
               verdict={attemptFor(selected)?.verdict}
               note={attemptFor(selected)?.note}
               live={isLive(selected)}
+              focusable={canFocus(selected)}
               seed={seedForSession?.(selected.id) ?? null}
               workspaceLabel={workspaceLabel}
               workspaceShown={workspaceShown}
@@ -332,6 +340,7 @@ interface RowContext {
   verdict: ReopenVerdictView | undefined;
   note: RowNote | undefined;
   live: boolean;
+  focusable: boolean;
   seed: SessionSeedLink | null;
   workspaceLabel: (id: string) => string | null;
   sessionLabel: (id: string) => string;
@@ -345,8 +354,8 @@ function sessionRow(entry: SessionLedgerEntry, context: RowContext): RowModel {
   const { verdict } = context;
   const verbs: RowVerb[] = [];
   if (context.live) {
-    verbs.push({ id: 'focus', label: 'Focus' });
-    if (entry.codex_mode === 'shared' && context.actionsAvailable) verbs.push({ id: 'act:reopen', label: 'Open another view' });
+    if (context.focusable) verbs.push({ id: 'focus', label: 'Focus' });
+    if (entry.codex_mode === 'shared' && context.actionsAvailable) verbs.push({ id: 'act:reopen', label: context.focusable ? 'Open another view' : 'Open' });
   }
   if (closed && context.actionsAvailable) {
     for (const action of verdict?.actions ?? [PLAIN_REOPEN]) verbs.push({ id: `act:${action.id}`, label: action.label });
@@ -395,6 +404,7 @@ interface SessionInspectorProps {
   verdict: ReopenVerdictView | undefined;
   note: RowNote | undefined;
   live: boolean;
+  focusable: boolean;
   seed: SessionSeedLink | null;
   workspaceLabel: (id: string) => string;
   workspaceShown: (id: string) => string | null;
@@ -408,7 +418,7 @@ interface SessionInspectorProps {
 }
 
 function SessionInspector({
-  entry, verdict, note, live, seed, workspaceLabel, workspaceShown, sessionLabel, nameText, now, copied, onCopy, onVerb, actionsAvailable,
+  entry, verdict, note, live, focusable, seed, workspaceLabel, workspaceShown, sessionLabel, nameText, now, copied, onCopy, onVerb, actionsAvailable,
 }: SessionInspectorProps) {
   const closed = isClosed(entry);
   const busy = note?.kind === 'busy';
@@ -491,10 +501,10 @@ function SessionInspector({
           )}
         </div>
       )}
-      {live && (
+      {live && (focusable || actionsAvailable) && (
         <div className="ledger-verdict-actions">
-          <button type="button" className="ledger-verb is-primary" onClick={() => onVerb('focus')}>
-            <kbd>⏎</kbd>Focus
+          <button type="button" className="ledger-verb is-primary" disabled={busy} onClick={() => onVerb(focusable ? 'focus' : 'act:reopen')}>
+            <kbd>⏎</kbd>{busy ? note?.text : focusable ? 'Focus' : 'Open'}
           </button>
         </div>
       )}

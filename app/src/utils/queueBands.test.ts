@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { buildQueueBands, type QueueBandSession } from './queueBands';
+import { buildQueueBands, compareTurnOrder, compareWakeOrder, type QueueBandSession } from './queueBands';
 import { buildWorkspaceViewModels } from './workspaceViewModels';
 
 const NOW = Date.parse('2026-07-26T12:00:00Z');
@@ -154,7 +154,7 @@ describe('buildQueueBands', () => {
     const bands = buildQueueBands(tree, { now: NOW, crewInQueue });
 
     expect({
-      chief: bands.chief?.session.id,
+      chief: bands.chiefs[0]?.session.id,
       turns: bands.turns.map((row) => row.session.id),
       settled: bands.settled.map((row) => row.session.id),
       pinned: bands.pinned.map((row) => row.session.id),
@@ -163,4 +163,9 @@ describe('buildQueueBands', () => {
     }).toEqual({ chief: undefined, turns: [], settled: [], pinned: [], crew: [], snoozed: [], ...expected });
     expect(JSON.stringify(tree)).toBe(treeBefore);
   });
+});
+
+it.each([compareTurnOrder, compareWakeOrder])('compares duplicate owners as equal for stable view ordering', (compare) => {
+  const owner = session('owner', 'ws-a', { turnOpenedAt: at(9), turnSnoozedUntil: LATER_TODAY });
+  expect(compare(owner, { ...owner })).toBe(0);
 });

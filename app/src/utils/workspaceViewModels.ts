@@ -238,9 +238,9 @@ function workspaceChildren<TSession extends WorkspaceViewSession>(
     }
     const sessionId = sessionIdByPaneId.get(leaf.paneId);
     const session = sessionId ? sessionById.get(sessionId) : undefined;
-    if (session && !representedSessionIds.has(session.id)) {
+    if (session) {
       representedSessionIds.add(session.id);
-      children.push({ kind: 'session', id: session.id, paneId: leaf.paneId, session });
+      children.push({ kind: 'session', id: leaf.paneId, paneId: leaf.paneId, session });
     }
   }
 
@@ -262,9 +262,6 @@ export function filterSessionsRepresentedInWorkspaceLayouts<TSession extends Wor
       .filter((workspace) => Boolean(workspace.layout))
       .map((workspace) => workspace.id),
   );
-  if (workspaceIdsWithLayout.size === 0) {
-    return sessions;
-  }
 
   const sessionIdsByWorkspaceId = new Map<string, Set<string>>();
   const sharedViewOwnerIds = new Set<string>();
@@ -288,7 +285,7 @@ export function filterSessionsRepresentedInWorkspaceLayouts<TSession extends Wor
       return false;
     }
     if ((session.codexMode || session.codex_mode) === 'shared' && !sharedViewOwnerIds.has(session.id)) {
-      return true;
+      return false;
     }
     if (!workspaceIdsWithLayout.has(workspaceId)) {
       return !sharedViewOwnerIds.has(session.id);

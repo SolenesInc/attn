@@ -1,0 +1,3 @@
+kind: fixed
+area: codex
+change: Shared Codex sidebar and queue rows follow each terminal’s displayed agent, including duplicate views, without opening terminals during sidebar navigation.

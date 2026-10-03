@@ -34,10 +34,11 @@ layout snapshot without rewriting placement, focus or pane status.
 distinguishes shared and legacy owners. Old rows remain legacy. The frontend
 reads placement from daemon workspace layouts and metadata from the global
 session lookup; it never rewrites an owner's workspace when its view switches.
-Workspace rows retain each view; the queue counts each owner once and prefers
-its saved workspace when that workspace contains a view and participates in the
-queue. Moving the only view leaves owner placement unchanged; the empty source
-workspace does not gain a fallback agent row. Queue navigation follows the view.
+Sidebar and queue rows represent terminal views. Native New or switching changes
+the existing row to its displayed owner; two views of one owner have two rows.
+An owner with no view disappears from both surfaces while remaining live and
+available in the ledger. Row selection and Close address the clicked pane.
+State, attention settlement, naming and usage still belong to the owner.
 
 ## Lifecycle contracts
 
@@ -226,10 +227,11 @@ native root snapshots; it does not replay input.
 Traffic from a surviving native view also wakes that reconciliation, so ordinary
 prompts and approval answers restore attention without an unrelated app action.
 
-The queue retains hidden shared owners once. Selecting one attaches its native
-root through the existing reopen operation; an attachment error appears to the
-user immediately. Native approval requests keep their original connection routing,
-so answering in either view resolves the same operation.
+Hidden shared owners remain available through the ledger's Open action. Explicit
+deep links and notification opens also attach a view when none displays the owner.
+Sidebar navigation only focuses existing views. Native approval
+requests keep their original connection routing, so answering in either view
+resolves the same operation.
 
 PTY bytes address the surviving runtime. Typing and pointer activity capture its
 resolved displayed owner for composition, quiet-window and attention credit.
@@ -263,10 +265,8 @@ layout reconciliation drops Codex panes whose view has already been removed,
 without closing the live owner. Last-pane close publishes an empty layout when
 the workspace remains registered, so the running app clears the pane immediately.
 
-Pane snapshots retain `codex_launch_owner_id` separately from the displayed
-`session_id`. Sidebar selection prefers a resolved view; otherwise it focuses an
-existing unresolved or disconnected terminal launched for that owner. This keeps
-failed bootstrap panes reachable without accumulating attachments. Launch identity
-is navigation context only and never supplies an input recipient. A terminal that
-switched owners before disconnect may still be reached through its launch owner.
-The ledger's explicit Open another view action still creates an attachment.
+Unresolved and disconnected panes remain visible and closable in their workspace.
+They have no displayed owner and do not create an agent row. Their runtime launch
+context remains durable for lifecycle handling; it is not projected as a sidebar
+identity. Explicit owner navigation attaches a view; the ledger offers Open when
+none displays the owner and Open another view when one already does.

@@ -1,4 +1,4 @@
-import type { LocalSession, SidebarWorkspace } from './sidebarTypes';
+import type { SidebarWorkspace } from './sidebarTypes';
 
 export function isSessionless(workspace: SidebarWorkspace): boolean {
   return workspace.sessions.length === 0;
@@ -7,23 +7,25 @@ export function isSessionless(workspace: SidebarWorkspace): boolean {
 interface AutomationSessionGroup {
   id: string;
   name: string;
-  sessions: LocalSession[];
+  views: Extract<SidebarWorkspace['children'][number], { kind: 'session' }>[];
 }
 
 export function groupAutomationSessions(workspaces: SidebarWorkspace[]): AutomationSessionGroup[] {
   const groups = new Map<string, AutomationSessionGroup>();
   for (const workspace of workspaces) {
-    for (const session of workspace.sessions) {
+    for (const child of workspace.children) {
+      if (child.kind !== 'session') continue;
+      const { session } = child;
       const automation = session.automation;
       if (!automation) continue;
       const existing = groups.get(automation.definition_id);
       if (existing) {
-        existing.sessions.push(session);
+        existing.views.push(child);
       } else {
         groups.set(automation.definition_id, {
           id: automation.definition_id,
           name: automation.definition_name,
-          sessions: [session],
+          views: [child],
         });
       }
     }

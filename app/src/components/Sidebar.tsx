@@ -26,6 +26,7 @@ export function Sidebar(props: SidebarProps) {
 function SidebarExpanded() {
   const {
     selectedId,
+    selectedPaneId,
     criticalNotifications,
     onOpenNotifications,
     queue,
@@ -91,6 +92,7 @@ function SidebarExpanded() {
           onSleepCrewMember={onSleepCrewMember}
           onOpenCrewMemberActions={openCrewMemberActions}
           selectedId={selectedId}
+          selectedPaneId={selectedPaneId}
           onSelectSession={onSelectSession}
           onSettleTurn={(id) => onSettleTurn?.(id)}
           onScreenSessionIds={onScreenSessionIds}
@@ -135,6 +137,7 @@ function SidebarExpanded() {
         <QueueSnoozedSection
           rows={queue.snoozed}
           selectedId={selectedId}
+          selectedPaneId={selectedPaneId}
           expanded={snoozedExpanded}
           onToggleExpanded={() => setSnoozedExpanded(!snoozedExpanded)}
           onSelectSession={onSelectSession}

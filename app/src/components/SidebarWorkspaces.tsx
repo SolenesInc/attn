@@ -136,8 +136,9 @@ export function SidebarWorkspaceList() {
                 const draggable = Boolean(paneId && onSessionDragStart);
                 return (
                   <WorkspaceSessionRow
-                    key={session.id}
+                    key={child.id}
                     session={session}
+                    paneId={paneId}
                     draggable={draggable}
                     dragging={draggingSessionId === session.id}
                     onClickCapture={draggable ? handleSessionClickCapture : undefined}
@@ -189,13 +190,13 @@ export function SidebarAutomationGroups() {
               <span className={`automation-session-chevron ${expanded ? 'expanded' : ''}`}>▸</span>
               <span className="automation-session-name">{group.name}</span>
               <span className="automation-session-count">
-                {group.sessions.length} {group.sessions.length === 1 ? 'agent' : 'agents'}
+                {group.views.length} {group.views.length === 1 ? 'agent' : 'agents'}
               </span>
             </button>
             {expanded && (
               <div className="automation-session-list">
-                {group.sessions.map((session) => (
-                  <WorkspaceSessionRow key={session.id} session={session} />
+                {group.views.map((view) => (
+                  <WorkspaceSessionRow key={view.id} session={view.session} paneId={view.paneId} />
                 ))}
               </div>
             )}
@@ -209,6 +210,7 @@ export function SidebarAutomationGroups() {
 export function SidebarMutedWorkspaces() {
   const {
     selectedId,
+    selectedPaneId,
     onMuteWorkspace,
     onSelectSession,
     onSelectWorkspace,
@@ -283,8 +285,9 @@ export function SidebarMutedWorkspaces() {
                         const session = child.session;
                         return (
                           <div
-                            key={session.id}
-                            className={`session-item grouped muted-session ${selectedId === session.id ? 'selected' : ''}`.trim()}
+                            key={child.id}
+                            data-view-pane-id={child.paneId}
+                            className={`session-item grouped muted-session ${selectedId === session.id && (!child.paneId || selectedPaneId === child.paneId) ? 'selected' : ''}`.trim()}
                             data-testid={`sidebar-session-${session.id}`}
                             data-state={session.state}
                           >
@@ -292,7 +295,7 @@ export function SidebarMutedWorkspaces() {
                               type="button"
                               className="sidebar-row-select"
                               aria-label={`Open ${session.label}`}
-                              onClick={() => onSelectSession(session.id)}
+                              onClick={() => onSelectSession(session.id, child.paneId)}
                             />
                             <StateIndicator
                               state={session.state}
@@ -403,19 +406,20 @@ function WorkspaceSessionRow(
 ) {
   const {
     selectedId,
+    selectedPaneId,
     onSelectSession,
     openSessionActions,
     onTriggerNudge,
     onScreenSessionIds,
     rowDelegation,
   } = useSidebarContext();
-  const { session } = props;
+  const { session, paneId } = props;
   return (
     <SidebarSessionRow
       {...props}
-      selected={selectedId === session.id}
-      onSelect={() => onSelectSession(session.id)}
-      onOpenActions={(event) => openSessionActions(session, event)}
+      selected={selectedId === session.id && (!paneId || selectedPaneId === paneId)}
+      onSelect={() => onSelectSession(session.id, paneId)}
+      onOpenActions={(event) => openSessionActions(session, event, paneId)}
       onTriggerNudge={() => onTriggerNudge?.(session.id)}
       showSettling={!onScreenSessionIds?.has(session.id)}
       {...rowDelegation(session)}

@@ -36,6 +36,7 @@ export function AppSidebar() {
     handleWorkspaceSelectionStyleChange,
     handleWorkspaceReorder,
     handleSelectSession,
+    selectAgentPane,
     handleSelectWorkspace,
     handleSelectTile,
     handleCloseTile,
@@ -43,6 +44,7 @@ export function AppSidebar() {
     goToDashboard,
     view,
   } = useNavigationContext();
+  const selectedPaneId = useSessionStore((state) => state.selectedWorkspacePane?.paneId ?? (activeWorkspaceId ? state.workspacePaneSelections[activeWorkspaceId]?.activePaneId : null));
   const activeSessionId = useSessionStore((state) => state.activeSessionId);
   const {
     tileContents,
@@ -98,6 +100,7 @@ export function AppSidebar() {
         visualOrder={visualWorkspaces}
         visualIndexByWorkspaceId={visualIndexByWorkspaceId}
         selectedId={activeSessionId}
+        selectedPaneId={selectedPaneId}
         selectedWorkspaceId={activeWorkspaceId}
         selectedTile={selectedTile}
         tileContents={tileContents}
@@ -156,7 +159,7 @@ export function AppSidebar() {
         onOpenSnooze={openSnoozeMenu}
         onWakeTurn={sendWakeTurn}
         onScreenSessionIds={onScreenSessionIds}
-        onSelectSession={handleSelectSession}
+        onSelectSession={(id, paneId) => paneId ? selectAgentPane(id, paneId) : handleSelectSession(id)}
         onTriggerNudge={sendTriggerNudge}
         onSelectWorkspace={handleSelectWorkspace}
         onSelectTile={handleSelectTile}

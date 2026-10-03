@@ -1,6 +1,7 @@
 import { act, fireEvent, screen, within } from '@testing-library/react';
 import { describe, expect, it, vi } from 'vitest';
 import { openSessionsLedger, page, pages, rows, type LedgerAnswer } from './components/ledger/testSupport';
+import { agentWorkspace, daemonSession } from './test/daemonFixtures';
 import { closedEntry, entry } from './test/sessionLedgerFixtures';
 
 async function openLedger(answer: LedgerAnswer) {
@@ -29,6 +30,27 @@ const olderButton = () => ledger().queryByRole('button', { name: /older ↓|load
 const showClosed = () => fireEvent.click(ledger().getByRole('button', { name: 'Closed' }));
 
 describe('App sessions ledger', () => {
+  it('offers Open for a live shared agent after its last view switches away', async () => {
+    const a = daemonSession('a', { agent: 'codex', codex_mode: 'shared' });
+    const b = daemonSession('b', { agent: 'codex', codex_mode: 'shared' });
+    const source = agentWorkspace('b');
+    source.layout!.panes[0] = { ...source.layout!.panes[0], codex_resolution: 'resolved' };
+    const view = await openSessionsLedger(pages([page({ entries: [entry({ id: 'b', agent: 'codex', codex_mode: 'shared' })] })]), {
+      initialState: { sessions: [a, b], workspaces: [agentWorkspace('a'), source] },
+    });
+    const row = rows().getByText('run b').closest<HTMLElement>('.ledger-row')!;
+    expect(within(row).getByRole('button', { name: 'Focus' })).toBeInTheDocument();
+    await view.daemon.emit({ event: 'workspace_layout_updated', workspace_layout: { ...source.layout!, panes: [{ ...source.layout!.panes[0], session_id: 'a', codex_revision: '2' }] } });
+    expect(within(row).queryByRole('button', { name: 'Focus' })).toBeNull();
+    expect(within(row).getByRole('button', { name: 'Open' })).toBeInTheDocument();
+    const inspector = within(screen.getByRole('complementary', { name: 'Details' }));
+    expect(inspector.queryByRole('button', { name: /Focus/ })).toBeNull();
+    view.daemon.on('session_reopen', () => ({ event: 'session_reopen_result', success: false, error: 'fixture attachment refused' }));
+    fireEvent.click(inspector.getByRole('button', { name: /Open/ }));
+    await view.daemon.idle();
+    expect(view.daemon.sentOf('session_reopen')).toEqual([expect.objectContaining({ session_id: 'b', action: 'reopen' })]);
+  });
+
   it('re-reads the page after a reconnect', async () => {
     const view = await openLedger(pages([page({ entries: [closedEntry('s1')] })]));
     expect(rows().getByText('run s1')).toBeInTheDocument();
