@@ -142,7 +142,10 @@ or Mission Control probe; those two cases are not verified by the hosted scenari
 ## Attachment work capacity
 
 The composer shares two work slots between reading/decoding files and staging
-individual attachments through the main App's completion receipt. More files
+individual attachments through the main App's completion receipt. Queue capacity
+overrides, peak samples, snapshots and idle waiters live in a separate module
+loaded only when native automation is enabled. Normal windows instantiate the
+queue with just its two slots and pending work. More files
 wait in arrival order. Removing a queued file prevents its read/upload; a failed
 operation releases its slot and leaves a visible error with the retained draft.
 
@@ -174,7 +177,9 @@ sample.
 The retained-file workload is a 20-page screenshot PDF containing 142,323,707
 bytes. Native drop, save, process restart, restore and recipient CLI retrieval
 preserved SHA-256 `85175cbd833db887ce3ab269e8f4a0c7a85670902b4417d4700d5db6c2cb4943`.
-The instance's per-file data URL cache remains in place. Upload reads bounded
+The instance's per-file data URL cache remains in place. Window objects use
+`files`; the native cache adapter preserves its existing `images` field and
+commands so retained drafts survive upgrades. Upload reads bounded
 base64 ranges directly, avoiding the whole-file URL fetch that failed on this
 workload. Files have no configured size or count cap; read, retention and upload
 failures remain visible and do not produce a saved receipt.

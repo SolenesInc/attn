@@ -7,7 +7,7 @@ import '../../src/components/QuickCapture.css';
 
 const history: CaptureItem[] = Array.from({ length: 4 }, (_, index) => ({
   id: `capture-${index}`, text: `Saved note ${index}`, recipient: 'chief', readAt: '2026-10-03T12:00:00Z', createdAt: '2026-10-03T11:00:00Z',
-  images: [0, 1].map(image => ({ id: `image-${index}-${image}`, name: `Preview ${index}-${image}`, mediaType: 'image/png' })),
+  files: [0, 1].map(image => ({ id: `image-${index}-${image}`, name: `Preview ${index}-${image}`, mediaType: 'image/png' })),
 }));
 
 export function QuickCaptureHistoryHarness({ onReady }: HarnessProps) {
