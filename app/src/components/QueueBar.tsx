@@ -131,7 +131,7 @@ function WaitingPeek() {
     return agentPaletteRows<LocalSession>(
       { bands: queue, crewRoster: (crew ?? []).map((member) => member.id), desktops, tileTitle, now },
       '',
-    ).filter((row) => row.kind !== 'runs' && !(row.kind === 'agent' && row.session.automation));
+    ).filter((row) => !(row.kind === 'agent' && row.session.automation));
   }, [crew, now, queue, tileContents, desktops, seeds]);
 
   const shown: AgentPaletteRow<LocalSession>[] = [];

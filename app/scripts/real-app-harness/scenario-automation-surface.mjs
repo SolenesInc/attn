@@ -9,7 +9,10 @@ import { currentHarnessInstance, dataDirForInstance, resolveHarnessResources, in
 import { UiAutomationClient } from './uiAutomationClient.mjs';
 import { DaemonObserver } from './daemonObserver.mjs';
 import { captureScreenshotData } from './nativeWindowCapture.mjs';
-import { appDaemonInTree } from './platform.mjs';
+import { writeMockAgentFixture } from './mockAgent.mjs';
+import { fileURLToPath } from 'node:url';
+import { pressShortcutKeys, shownAgentId } from './common.mjs';
+import { appDaemonInTree, createWindowDriver } from './platform.mjs';
 import { cleanupSessionViaAppClose } from './scenarioCleanup.mjs';
 import { registeredAgentPid } from './workerRegistry.mjs';
 
@@ -224,6 +227,10 @@ async function main() {
     daemonEnv = instanceEnv(instance);
     fixturePath = createFixture(runner.sessionDir);
     probe = createCodexProbe(runner.sessionDir);
+    writeMockAgentFixture(fixturePath, { name: 'automation desktop proof', turns: [{
+      includes: 'Slice 6 packaged automations-panel proof',
+      actions: [{ type: 'reply', text: 'Which change should I review next?', state: 'waiting_input' }],
+    }] });
 
     await runner.step('restart_isolated_daemon', async () => {
       try { run(binary, ['daemon', 'stop'], daemonEnv); } catch {}
@@ -238,9 +245,9 @@ async function main() {
     await runner.step('leg1_apply_manual_and_panel_shows_it', async () => {
       fs.writeFileSync(
         manualDefinitionFile,
-        manualDefinitionYAML({ id: manualID, locationPath: fixturePath, executable: probe.executable }),
+        manualDefinitionYAML({ id: manualID, locationPath: fixturePath, executable: fileURLToPath(new URL('./mockAgent.mjs', import.meta.url)) }),
       );
-      manualID = runJSON(binary, ['automation', 'apply', '--file', manualDefinitionFile], daemonEnv).id;
+      manualID = runJSON(binary, ['automation', 'apply', '--file', manualDefinitionFile, '--launch-desktop', 'own', '--desktop-name', 'Testing automations'], daemonEnv).id;
       manualApplied = true;
 
       await client.request('automations_open_panel');
@@ -275,6 +282,63 @@ async function main() {
       const reopenedRuns = currentRuns(reopened);
       runner.assert(reopenedRuns.length === 1, 'reopening the panel does not duplicate the run row', reopenedRuns);
       runner.assert(reopenedRuns[0].id === firstRunId, 'reopening the panel shows the same run id', reopenedRuns);
+    });
+
+    await runner.step('run_on_desktop_and_in_palette_and_queue_bar', async () => {
+      await client.request('dom_click', { selector: '.automations-panel__close' });
+      await client.request('set_setting', { key: 'queue_mode_enabled', value: 'false' });
+      const definition = runJSON(binary, ['automation', 'list'], daemonEnv).find((row) => row.id === manualID);
+      const desktopId = definition.launch_desktop.desktop_id;
+      const selector = `[data-testid="sidebar-desktop-${desktopId}"] [data-testid="sidebar-session-${manualSessionID}"]`;
+      await client.request('dom_wait', { selector, timeoutMs: PANEL_APPEAR_TIMEOUT_MS });
+      await client.request('dom_wait', { selector: '[data-testid="sidebar-automation-runs"]', absent: true, timeoutMs: PANEL_APPEAR_TIMEOUT_MS });
+      const row = await client.request('dom_text', { selector });
+      runner.assert(row.text.includes('⚡'), 'the desktop row keeps the automation marker', row);
+      const desktop = await client.request('dom_text', { selector: `[data-testid="sidebar-desktop-${desktopId}"]` });
+      runner.assert(desktop.text.includes('Testing automations'), 'the named launch desktop contains the run', desktop);
+      await captureScreenshotData(path.join(runner.runDir, 'run-desktop.png'), { client });
+
+      await client.request('dispatch_shortcut', { shortcutId: 'ui.actionMenu' });
+      await client.request('dom_wait', { selector: `[data-testid="palette-agent-${manualSessionID}"]`, timeoutMs: PANEL_APPEAR_TIMEOUT_MS });
+      await client.request('dom_wait', { selector: '.unified-palette-runs', absent: true, timeoutMs: PANEL_APPEAR_TIMEOUT_MS });
+      await captureScreenshotData(path.join(runner.runDir, 'run-palette.png'), { client });
+      await client.request('dom_key', { selector: '[role="combobox"]', key: 'Escape' });
+
+      await client.request('dom_wait', { selector: `[data-testid="session-settle-${manualSessionID}"]`, timeoutMs: RUN_DELIVERED_TIMEOUT_MS });
+      const driver = createWindowDriver({ appPath: options.appPath, client });
+      await pressShortcutKeys(client, driver, 'session.goToDashboard');
+      await client.request('dom_wait', { selector: '.view-container.visible > .dashboard', timeoutMs: PANEL_APPEAR_TIMEOUT_MS });
+      runner.assert(shownAgentId(await client.request('get_state')) === null, 'the native Home shortcut leaves the run before walking back');
+      await pressShortcutKeys(client, driver, 'session.nextRun');
+      await client.request('dom_wait', { selector: '.view-container.visible > .dashboard', absent: true, timeoutMs: PANEL_APPEAR_TIMEOUT_MS });
+      runner.assert(shownAgentId(await client.request('get_state')) === manualSessionID, 'native next-run shortcut shows the waiting run in tree mode');
+      await client.request('set_setting', { key: 'queue_mode_enabled', value: 'true' });
+      const queueRunSelector = `[data-testid="sidebar-automation-${manualID}"] [data-testid="sidebar-session-${manualSessionID}"]`;
+      await client.request('dom_wait', { selector: queueRunSelector, timeoutMs: PANEL_APPEAR_TIMEOUT_MS });
+      const expanded = await client.request('queue_get_state');
+      runner.assert(expanded.automations.some((group) => group.id === manualID && group.expanded && group.sessionIds.includes(manualSessionID)), 'the expanded queue sidebar keeps the selected run in its automation group', expanded.automations);
+      if (!expanded.agentList.expanded) await client.request('dom_click', { selector: '[data-testid="queue-agents-toggle"]' });
+      const allAgents = await client.request('queue_get_state');
+      runner.assert(!allAgents.turns.some((row) => row.id === manualSessionID) && !allAgents.settled.some((row) => row.id === manualSessionID), 'runs stay out of queue bands in the expanded sidebar', allAgents);
+      if (!expanded.agentList.expanded) await client.request('dom_click', { selector: '[data-testid="queue-agents-toggle"]' });
+      await captureScreenshotData(path.join(runner.runDir, 'run-queue-sidebar.png'), { client });
+      await client.request('dispatch_shortcut', { shortcutId: 'session.toggleSidebar' });
+      await client.request('dom_wait', { selector: '[data-testid="queue-bar-runs"][data-runs="1"][data-needing="1"]', timeoutMs: PANEL_APPEAR_TIMEOUT_MS });
+      const queue = await client.request('queue_get_state');
+      runner.assert(queue.bar.waiting === allAgents.turns.length && queue.bar.runs.count === 1, 'automation stays out of the queue and remains in the runs summary', queue.bar);
+      await client.request('dom_hover', { selector: '[data-testid="queue-bar-runs"]' });
+      await client.request('dom_wait', { selector: `[data-testid="queue-bar-peek-run-${manualSessionID}"]`, timeoutMs: PANEL_APPEAR_TIMEOUT_MS });
+      await captureScreenshotData(path.join(runner.runDir, 'run-queue-bar.png'), { client });
+      await client.request('dom_hover', { selector: '[data-testid="queue-bar-runs"]', leave: true });
+      await pressShortcutKeys(client, driver, 'session.goToDashboard');
+      await client.request('dom_wait', { selector: '.view-container.visible > .dashboard', timeoutMs: PANEL_APPEAR_TIMEOUT_MS });
+      runner.assert(shownAgentId(await client.request('get_state')) === null, 'the native Home shortcut leaves the run before walking back');
+      await pressShortcutKeys(client, driver, 'session.nextRun');
+      await client.request('dom_wait', { selector: '.view-container.visible > .dashboard', absent: true, timeoutMs: PANEL_APPEAR_TIMEOUT_MS });
+      runner.assert(shownAgentId(await client.request('get_state')) === manualSessionID, 'native next-run shortcut shows the waiting run in queue mode');
+      await client.request('set_setting', { key: 'queue_mode_enabled', value: 'false' });
+      await client.request('dispatch_shortcut', { shortcutId: 'session.toggleSidebar' });
+      await client.request('automations_open_panel');
     });
 
     await runner.step('leg3_failure_shown_not_hidden', async () => {

@@ -194,15 +194,7 @@ export function useSidebarState({
     });
   };
 
-  const withoutAutomationRows = (desktopView: SidebarDesktop): SidebarDesktop => ({
-    ...desktopView,
-    sessions: desktopView.sessions.filter((session) => !session.automation),
-    children: desktopView.children.filter(
-      (child) => child.kind === 'tile' || !child.session.automation,
-    ),
-  });
-
-  const visibleDesktops = desktops.map(withoutAutomationRows);
+  const visibleDesktops = desktops;
   const canAcceptLeafDrag = (desktopView: SidebarDesktop) =>
     Boolean(
       leafDrag &&

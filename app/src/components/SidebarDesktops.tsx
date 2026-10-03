@@ -5,7 +5,7 @@ import { tileContentKey } from '../types/desktop';
 import './Sidebar.css';
 import { useSidebarContext } from './SidebarContext';
 import { formatShortcut } from '../shortcuts/formatShortcut';
-import { runCount, runsNeedingYouCount } from '../utils/automationRuns';
+import { runCount, runsNeedingYouCount, runNeedsYou } from '../utils/automationRuns';
 import { hasNoLeaves, desktopShortcut } from './sidebarModel';
 import { SidebarSessionRow, TileSidebarRow } from './SidebarRows';
 
@@ -163,7 +163,7 @@ export function SidebarDesktopList() {
 }
 
 export function SidebarAutomationGroups() {
-  const { expandedAutomationGroups, automationGroups, toggleAutomationGroup, onSettleTurn, onWalkRuns } =
+  const { expandedAutomationGroups, automationGroups, toggleAutomationGroup, onWalkRuns } =
     useSidebarContext();
   if (automationGroups.length === 0) return null;
   const runs = runCount(automationGroups);
@@ -195,7 +195,6 @@ export function SidebarAutomationGroups() {
       {automationGroups.map((group) => {
         const expanded = expandedAutomationGroups.has(group.id);
         const asking = group.needingYou.length;
-        const needingYouIds = new Set(group.needingYou.map((run) => run.id));
         return (
           <div
             className="automation-session-group"
@@ -226,14 +225,7 @@ export function SidebarAutomationGroups() {
             {expanded && (
               <div className="automation-session-list">
                 {group.runs.map((run) => (
-                  <DesktopSessionRow
-                    key={run.id}
-                    session={run}
-                    grouped
-                    onSettle={
-                      onSettleTurn && needingYouIds.has(run.id) ? () => onSettleTurn(run.id) : undefined
-                    }
-                  />
+                  <DesktopSessionRow key={run.id} session={run} grouped />
                 ))}
               </div>
             )}
@@ -318,11 +310,14 @@ function DesktopSessionRow(
     openSessionActions,
     onScreenSessionIds,
     rowDelegation,
+    onSettleTurn,
   } = useSidebarContext();
   const { session } = props;
   return (
     <SidebarSessionRow
       {...props}
+      onSettle={onSettleTurn && session.automation && runNeedsYou(session, Date.now())
+        ? () => onSettleTurn(session.id) : undefined}
       selected={selectedId === session.id}
       onSelect={() => onSelectSession(session.id)}
       onOpenActions={(event) => openSessionActions(session, event)}

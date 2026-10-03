@@ -62,8 +62,6 @@ function describeRow(row: AgentPaletteRow<PaletteSession>): string {
       return `tile ${row.title}`;
     case 'divider':
       return '---';
-    case 'runs':
-      return `[${row.name}: ${row.needYou} need you, ${row.runs} runs]`;
   }
 }
 
@@ -88,7 +86,7 @@ const fixture = [
 ];
 
 describe('agentPaletteRows', () => {
-  it('orders the crew block, then the queue bands, tiles and automation runs under their definition', () => {
+  it('orders the crew block, then turns, plain agents including runs, snoozed agents and tiles', () => {
     expect(rows(fixture, '', { crewRoster: ['figgy', 'gardener'] }).map(describeRow)).toEqual([
       '*chief',
       '*figgy-day',
@@ -97,13 +95,11 @@ describe('agentPaletteRows', () => {
       'older-turn ⌘J',
       'newer-turn',
       'settled-agent',
-      'snoozed-agent',
-      'tile release notes',
-      '[Nightly: 1 need you, 2 runs]',
       'nightly-1',
       'nightly-2',
-      '[Triage: 0 need you, 1 runs]',
       'triage-1',
+      'snoozed-agent',
+      'tile release notes',
     ]);
   });
 
@@ -113,16 +109,15 @@ describe('agentPaletteRows', () => {
     expect(described.filter((entry) => entry.includes('⌘J'))).toEqual(['older-turn ⌘J']);
   });
 
-  it('filters every kind of row and drops the ⌘J tag and empty groups', () => {
+  it('filters every kind of row and drops the ⌘J tag', () => {
     expect(rows(fixture, 'turn').map(describeRow)).toEqual(['older-turn', 'newer-turn']);
     expect(rows(fixture, 'garden', { crewRoster: ['gardener'] }).map(describeRow)).toEqual(['asleep gardener']);
     expect(rows(fixture, 'release').map(describeRow)).toEqual(['tile release notes']);
     expect(rows(fixture, 'nightly').map(describeRow)).toEqual([
-      '[Nightly: 1 need you, 2 runs]',
       'nightly-1',
       'nightly-2',
     ]);
-    expect(rows(fixture, 'triage-1').map(describeRow)).toEqual(['[Triage: 0 need you, 1 runs]', 'triage-1']);
+    expect(rows(fixture, 'triage-1').map(describeRow)).toEqual(['triage-1']);
   });
 
   it('keeps the runs of an automation whose name matches when their labels do not', () => {
@@ -133,15 +128,14 @@ describe('agentPaletteRows', () => {
       ]),
     ];
     expect(rows(reviews, 'requested').map(describeRow)).toEqual([
-      '[Requested PR review: 0 need you, 2 runs]',
       'review-a',
       'review-b',
     ]);
-    expect(rows(reviews, 'review b').map(describeRow)).toEqual(['[Requested PR review: 0 need you, 2 runs]', 'review-b']);
+    expect(rows(reviews, 'review b').map(describeRow)).toEqual(['review-b']);
   });
 
   it('counts only selectable rows', () => {
     const all = rows(fixture, '', { crewRoster: ['gardener'] });
-    expect(selectableCount(all)).toBe(all.length - 3);
+    expect(selectableCount(all)).toBe(all.length - 1);
   });
 });

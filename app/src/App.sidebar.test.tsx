@@ -212,36 +212,60 @@ describe('App sidebar', () => {
   });
 
   describe('automations', () => {
-    it('gathers an automation’s sessions under one collapsed group after ordinary rows', async () => {
-      const second = { ...REVIEW_RUN, run_id: 'run-2' };
+    it('lists runs on their desktop with provenance and settle, without an Automations section', async () => {
       const { daemon } = await launch({
         sessions: [
           daemonSession('manual'),
           daemonSession('run-a', { label: 'feed-nexus-web', automation: REVIEW_RUN }),
-          daemonSession('run-b', { label: 'review B', automation: second }),
+          daemonSession('run-b', { label: 'review B', automation: { ...REVIEW_RUN, run_id: 'run-2' }, turn_owed: true }),
         ],
-        desktops: [soloDesktop('manual'), soloDesktop('run-a'), soloDesktop('run-b')],
+        desktops: [splitDesktop('testing', ['manual', 'run-a', 'run-b'], { name: 'Testing automations' })],
       });
-      const header = screen.getByTestId('sidebar-automation-header-1');
-
-      expect(header).toHaveAttribute('aria-expanded', 'false');
-      expect(header).toHaveTextContent('Requested PR review - GPT Sol medium');
-      expect(header.querySelector('.automation-session-count')).toHaveTextContent('2');
-      expect(screen.queryByTestId('sidebar-session-run-a')).toBeNull();
-      expect(screen.getByTestId('sidebar-session-manual').compareDocumentPosition(header) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
-
-      await gesture(daemon, () => fireEvent.click(header));
-
+      const desktop = desktopGroup('testing');
+      expect(within(desktop).getAllByTestId(/^sidebar-session-/).map((row) => row.dataset.testid)).toEqual([
+        'sidebar-session-manual', 'sidebar-session-run-a', 'sidebar-session-run-b',
+      ]);
+      expect(screen.queryByTestId('sidebar-automation-runs')).toBeNull();
       expect(row('run-a').getByText('GPT Sol medium')).toBeInTheDocument();
       expect(row('run-a').getByText('#101')).toBeInTheDocument();
-      expect(screen.getByTestId('sidebar-session-run-b')).toBeInTheDocument();
-    });
+      expect(screen.queryByTestId('session-settle-run-a')).toBeNull();
+      await gesture(daemon, () => fireEvent.click(screen.getByTestId('session-settle-run-b')));
+      expect(daemon.sentOf('settle_turn')).toEqual([{ cmd: 'settle_turn', session_id: 'run-b' }]);
 
-    it('counts a lone automation session as one agent', async () => {
-      await launch({ sessions: [daemonSession('run-a', { automation: REVIEW_RUN })] });
-
-      expect(screen.getByTestId('sidebar-automation-header-1').querySelector('.automation-session-count')).toHaveTextContent('1');
+      await gesture(daemon, () => pressShortcut('ui.actionMenu'));
+      const palette = screen.getByRole('dialog', { name: 'Agents' });
+      expect(within(palette).getAllByRole('option').map((option) => option.querySelector('[data-testid]')?.getAttribute('data-testid'))).toEqual([
+        'palette-agent-manual', 'palette-agent-run-a', 'palette-agent-run-b',
+      ]);
+      expect(palette).not.toHaveTextContent('never in the queue');
     });
+  });
+
+  it('keeps grouped runs in the queue sidebar, opens the selected run group and settles a run', async () => {
+    const { daemon } = await launch({
+      settings: { queue_mode_enabled: 'true' },
+      sessions: [
+        daemonSession('manual'),
+        daemonSession('run-a', { automation: REVIEW_RUN, turn_owed: true }),
+        daemonSession('run-b', { automation: { ...REVIEW_RUN, run_id: 'run-2' }, turn_owed: true }),
+      ],
+    });
+    const header = screen.getByTestId('sidebar-automation-header-1');
+    expect(header).toHaveAttribute('aria-expanded', 'false');
+    expect(header.querySelector('.automation-session-count')).toHaveTextContent('2');
+    expect(screen.queryByTestId('sidebar-session-run-a')).toBeNull();
+    await gesture(daemon, () => pressShortcut('session.nextRun'));
+    expect(header).toHaveAttribute('aria-expanded', 'true');
+    expect(row('run-a').getByText('GPT Sol medium')).toBeInTheDocument();
+    expect(screen.queryByTestId('queue-turn-run-a')).toBeNull();
+    expect(screen.queryByTestId('queue-settled-run-a')).toBeNull();
+    await gesture(daemon, () => fireEvent.click(screen.getByTestId('session-settle-run-b')));
+    expect(daemon.sentOf('settle_turn')).toEqual([{ cmd: 'settle_turn', session_id: 'run-b' }]);
+    await gesture(daemon, () => fireEvent.click(header));
+    expect(header).toHaveAttribute('aria-expanded', 'false');
+    await gesture(daemon, () => fireEvent.click(screen.getByTestId('sidebar-runs-needing-you')));
+    expect(header).toHaveAttribute('aria-expanded', 'true');
+    expect(screen.getByTestId('sidebar-session-run-a')).toBeInTheDocument();
   });
 
   describe('desktops', () => {

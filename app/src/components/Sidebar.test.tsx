@@ -2,7 +2,6 @@ import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { describe, it, expect, vi } from 'vitest';
 import { Sidebar, type DockItem } from './Sidebar';
 import { type SessionDelegationRole } from '../types/generated';
-import { formatShortcut } from '../shortcuts/formatShortcut';
 import { type DesktopWithSessions } from '../utils/desktopViewModels';
 import { desktopGroups, groupIndexes } from '../test/desktops';
 import { useEscapeStack } from '../hooks/useEscapeStack';
@@ -98,84 +97,6 @@ const baseProps = {
 };
 
 describe('Sidebar', () => {
-
-  it('flags runs that stopped with a question, and settles or walks them from the sidebar', () => {
-    const automation = {
-      run_id: 'run-1',
-      definition_id: 1,
-      definition_name: 'Requested PR review - GPT Sol medium',
-      trigger_type: 'github_review_requested',
-    };
-    const sessions: TestSession[] = [
-      { id: 'run-a', label: 'review A', state: 'working', cwd: '/repo/a', automation },
-      {
-        id: 'run-b',
-        label: 'review B',
-        state: 'waiting_input',
-        cwd: '/repo/b',
-        turnOwed: true,
-        turnOpenedAt: '2026-09-26T09:00:00Z',
-        automation: { ...automation, run_id: 'run-2' },
-      },
-    ];
-    const onSettleTurn = vi.fn();
-    const onWalkRuns = vi.fn();
-
-    render(
-      <Sidebar
-        {...baseProps}
-        {...buildSidebarData(sessions)}
-        onSettleTurn={onSettleTurn}
-        onWalkRuns={onWalkRuns}
-      />,
-    );
-
-    expect(screen.getByTestId('sidebar-automation-1')).toHaveAttribute('data-needing', '1');
-    expect(screen.getByTestId('sidebar-automation-header-1')).toHaveTextContent(/GPT Sol medium12$/);
-    const batch = screen.getByTestId('sidebar-runs-needing-you');
-    expect(batch).toHaveTextContent(`1 run needs you${formatShortcut('session.nextRun')}`);
-    fireEvent.click(batch);
-    expect(onWalkRuns).toHaveBeenCalledTimes(1);
-
-    fireEvent.click(screen.getByTestId('sidebar-automation-header-1'));
-    expect(screen.queryByTestId('session-settle-run-a')).toBeNull();
-    fireEvent.click(screen.getByTestId('session-settle-run-b'));
-    expect(onSettleTurn).toHaveBeenCalledWith('run-b');
-  });
-
-  it('opens the group of a run when that run is selected', () => {
-    const sessions: TestSession[] = [
-      { id: 'manual', label: 'manual', state: 'working', cwd: '/repo/manual' },
-      {
-        id: 'run-a',
-        label: 'review A',
-        state: 'idle',
-        cwd: '/repo/a',
-        automation: {
-          run_id: 'run-1',
-          definition_id: 1,
-          definition_name: 'Requested PR review - GPT Sol medium',
-          trigger_type: 'github_review_requested',
-        },
-      },
-    ];
-    const data = buildSidebarData(sessions);
-    const { rerender } = render(<Sidebar {...baseProps} {...data} selectedId="manual" />);
-    expect(screen.getByTestId('sidebar-automation-header-1')).toHaveAttribute('aria-expanded', 'false');
-
-    rerender(<Sidebar {...baseProps} {...data} selectedId="run-a" />);
-    const header = screen.getByTestId('sidebar-automation-header-1');
-    expect(header).toHaveAttribute('aria-expanded', 'true');
-
-    fireEvent.click(header);
-    expect(header).toHaveAttribute('aria-expanded', 'false');
-
-    rerender(<Sidebar {...baseProps} {...data} selectedId="run-a" />);
-    expect(header).toHaveAttribute('aria-expanded', 'false');
-
-    rerender(<Sidebar {...baseProps} {...data} selectedId="run-a" selectionRequest={{ id: 1 }} />);
-    expect(header).toHaveAttribute('aria-expanded', 'true');
-  });
 
   it('ends a session drag on Escape without dropping it', () => {
     const desktop = desktopWithBrowserTile();

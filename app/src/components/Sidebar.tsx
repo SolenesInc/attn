@@ -8,7 +8,6 @@ import { SidebarContext, useSidebarContext } from './SidebarContext';
 import { HomeIcon } from './SidebarIcons';
 import type { SidebarProps } from './sidebarTypes';
 import {
-  SidebarAutomationGroups,
   SidebarDesktopList,
   SidebarDesktopOverview,
 } from './SidebarDesktops';
@@ -72,7 +71,6 @@ function SidebarExpanded() {
 
       <div className={`session-list ${reorderDrag ? 'session-list--reordering' : ''}`.trim()}>
         <SidebarDesktopList />
-        <SidebarAutomationGroups />
         {leafDrag && (
           <div
             className={`new-desktop-dropzone${newDesktopDropActive ? ' new-desktop-dropzone--active' : ''}`}

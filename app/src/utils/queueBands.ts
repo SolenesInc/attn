@@ -58,7 +58,7 @@ export interface QueueBandOptions {
   now?: number;
 }
 
-/** Automation sessions have their own sidebar groups. Crew days only join the
+/** Automation runs are browsed separately from the queue. Crew days only join the
  * queue when the user opts them in. */
 export function sessionParticipatesInQueue(
   session: Pick<QueueBandSession, 'automation' | 'crewMember'>,
