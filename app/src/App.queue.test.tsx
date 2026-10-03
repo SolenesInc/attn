@@ -81,6 +81,19 @@ describe('App queue', () => {
     expect(screen.queryByTestId('attention-session-a')).toBeNull();
   });
 
+  it('Command-J finds a shared agent displayed outside its original workspace', async () => {
+    const a = agent('a', { agent: 'codex', codex_mode: 'shared', state: 'waiting_input', turn_owed: true });
+    const b = agent('b', { agent: 'codex', codex_mode: 'shared' });
+    const original = agentWorkspace('a');
+    original.layout!.panes[0] = { ...original.layout!.panes[0], session_id: 'b', codex_resolution: 'resolved' };
+    const other = agentWorkspace('b');
+    other.layout!.panes[0] = { ...other.layout!.panes[0], session_id: 'a', codex_resolution: 'resolved' };
+    const { daemon } = await renderApp({ initialState: { sessions: [a, b], workspaces: [original, other] } });
+    await gesture(daemon, () => pressShortcut('session.jumpToWaiting'));
+    expect(document.querySelector('[data-pane-id="pane-b"].workspace-pane.active')).toBeInTheDocument();
+    expect(shownWorkspaces()).toEqual([other.id]);
+  });
+
   it.each(['jump', 'handoff', 'arrival'] as const)('keeps the queue row pane during %s with rearranged duplicate views', async (action) => {
     const a = agent('a', { turn_owed: action !== 'jump', turn_opened_at: ago(2 * HOUR) });
     const b = agent('b', { agent: 'codex', codex_mode: 'shared', workspace_id: 'workspace-pair', turn_owed: action !== 'arrival', turn_opened_at: ago(HOUR) });

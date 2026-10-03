@@ -166,7 +166,6 @@ export function useAppController({
     daemonSessions,
     daemonWorkspaces,
     workspaceViews,
-    unmutedEnrichedSessions,
     attentionQueue,
     focusWorkspaceLeaf,
   });

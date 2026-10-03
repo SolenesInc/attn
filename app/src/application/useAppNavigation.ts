@@ -8,7 +8,6 @@ import { useSessionStore, type TerminalWorkspaceState } from '../store/sessions'
 import { hasLeaf, workspaceSnapshotFromDaemonWorkspace } from '../types/workspace';
 import { dispatcherOf } from '../utils/delegationLinks';
 import { headOfQueue, oldestWantedTurn } from '../utils/queueBands';
-import { filterSessionsRepresentedInWorkspaceLayouts } from '../utils/workspaceViewModels';
 import { probeUiAfterSwitch } from '../utils/uiDiagnosticsLog';
 import {
   persistWorkspaceSelectionStyle,
@@ -28,7 +27,6 @@ interface Options {
   daemonSessions: AppContentProps['daemonSessions'];
   daemonWorkspaces: AppContentProps['daemonWorkspaces'];
   workspaceViews: ReturnType<typeof useAppSessions>['workspaceViews'];
-  unmutedEnrichedSessions: ReturnType<typeof useAppSessions>['unmutedEnrichedSessions'];
   attentionQueue: ReturnType<typeof useAttentionQueue>;
   focusWorkspaceLeaf: ReturnType<typeof useSessionWorkspaceController>['focusWorkspaceLeaf'];
 }
@@ -37,7 +35,6 @@ export function useAppNavigation({
   daemonSessions,
   daemonWorkspaces,
   workspaceViews,
-  unmutedEnrichedSessions,
   attentionQueue,
   focusWorkspaceLeaf,
 }: Options) {
@@ -80,7 +77,7 @@ export function useAppNavigation({
     }
   }, [activeSessionId, sendSessionSelected, view]);
 
-  const { wantsAttention, queueModeEnabled, queueBands } = attentionQueue;
+  const { wantsAttention, queueModeEnabled, queueBands, waitingLocalSessions } = attentionQueue;
 
   const handleJumpToWaiting = useCallback(() => {
     if (queueModeEnabled) {
@@ -89,10 +86,9 @@ export function useAppNavigation({
       else if (waiting) handleSelectSession(waiting.session.id);
       return;
     }
-    const displayed = filterSessionsRepresentedInWorkspaceLayouts(daemonWorkspaces, unmutedEnrichedSessions);
-    const waiting = oldestWantedTurn(displayed, wantsAttention);
+    const waiting = oldestWantedTurn(waitingLocalSessions, wantsAttention);
     if (waiting) handleSelectSession(waiting.id);
-  }, [queueModeEnabled, queueBands, selectAgentPane, daemonWorkspaces, unmutedEnrichedSessions, handleSelectSession, wantsAttention]);
+  }, [queueModeEnabled, queueBands, selectAgentPane, waitingLocalSessions, handleSelectSession, wantsAttention]);
 
   const toggleGridMode = useCallback(() => {
     setView((prev) => (prev === 'grid' ? (activeSessionId ? 'session' : 'dashboard') : 'grid'));
