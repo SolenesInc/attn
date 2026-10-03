@@ -156,6 +156,18 @@ async function dropFiles(files) {
   try { await fixture.runInputDriver(['drag_between', '--relative-x', '0.1', '--text', driver.bundleId]); }
   finally { fs.rmSync(manifest); }
 }
+function taggedScreenshot(source, index) {
+  const text = Buffer.from(`Capture\0${index}`);
+  const chunk = Buffer.alloc(text.length + 12);
+  chunk.writeUInt32BE(text.length); chunk.write('tEXt', 4); text.copy(chunk, 8);
+  let crc = -1;
+  for (const byte of chunk.subarray(4, -4)) {
+    crc ^= byte;
+    for (let bit = 0; bit < 8; bit++) crc = (crc >>> 1) ^ ((crc & 1) ? 0xedb88320 : 0);
+  }
+  chunk.writeUInt32BE((crc ^ -1) >>> 0, chunk.length - 4);
+  return Buffer.concat([source.subarray(0, -12), chunk, source.subarray(-12)]);
+}
 function screenshotPdf(source, pages) {
   const image = PNG.sync.read(fs.readFileSync(source));
   const rgb = Buffer.alloc(image.width * image.height * 3);
@@ -663,11 +675,13 @@ try {
   await runner.step('measure_attachment_batches', async () => {
     const source = path.resolve('../docs/banner.png');
     const files = Array.from({ length: 20 }, (_, index) => path.join(runner.runDir, `large-screenshot-${String(index + 1).padStart(2, '0')}.png`));
-    for (const file of files) fs.copyFileSync(source, file);
+    const original = fs.readFileSync(source);
+    files.forEach((file, index) => fs.writeFileSync(file, taggedScreenshot(original, index)));
     const { width, height } = PNG.sync.read(fs.readFileSync(source));
     const measurements = [];
-    runner.writeJson('attachment-batch-fixture.json', { files: files.map(file => ({ name: path.basename(file), bytes: fs.statSync(file).size })),
+    runner.writeJson('attachment-batch-fixture.json', { files: files.map(file => ({ name: path.basename(file), bytes: fs.statSync(file).size, sha256: crypto.createHash('sha256').update(fs.readFileSync(file)).digest('hex') })),
       width, height, sha256: crypto.createHash('sha256').update(fs.readFileSync(source)).digest('hex'),
+      note: 'Each PNG has an individual tEXt identifier so data URLs are distinct; screenshot pixels are unchanged.',
       machine: execFileSync('sysctl', ['-n', 'hw.model'], { encoding: 'utf8' }).trim(),
       os: execFileSync('sw_vers', ['-productVersion'], { encoding: 'utf8' }).trim(), build: runAttn(['--version']).trim() });
     for (const batchSize of [1, 2, 4, 8]) {
