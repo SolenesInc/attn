@@ -100,10 +100,10 @@ conversationIn(t, c, transcript):
   if !t.live || !open(cur) || Showing(t) != cur → drop and log; return  // late hook after an exit or close
   switch {
   case conv(cur) == c:   ensure the watcher path                         // startup, compact, reload, reconnect
-  case conv(cur) == "":  adopt c (exclusive claim, as PR 3 built it)   // picker launch, fresh pi
+  case owner(c) == "" && conv(cur) == "":  adopt c     // picker launch, fresh pi, a fresh Codex chat's first turn
+  case owner(c) == "":   opened(t, cur, c)
   case !showable(owner): move c within cur           // live in another workspace, or only in a bare-CLI wrapper
-  case owner(c) != "":   shows(t, cur, owner)        // open owner first, else the most recently closed; a live one keeps its terminals
-  default:               opened(t, cur, c)
+  default:               shows(t, cur, owner)        // open owner first, else the most recently closed; a live one keeps its terminals
   }
 ```
 

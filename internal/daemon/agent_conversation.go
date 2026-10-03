@@ -53,7 +53,7 @@ func (d *Daemon) conversationIn(t harness.TerminalID, observation agentConversat
 	}
 	held := d.store.GetSessionConversation(string(cur)).NativeID
 	owner := ""
-	if held != "" && held != observation.NativeID {
+	if held != observation.NativeID {
 		owner = d.store.ConversationOwner(string(cur), observation.NativeID)
 	}
 	defer d.lockSessionLifecycles(string(cur), owner)()
@@ -63,7 +63,7 @@ func (d *Daemon) conversationIn(t harness.TerminalID, observation agentConversat
 		return
 	}
 	observation.SessionID = session.ID
-	if held = d.store.GetSessionConversation(session.ID).NativeID; held == "" || held == observation.NativeID {
+	if held = d.store.GetSessionConversation(session.ID).NativeID; held == observation.NativeID {
 		d.observeAgentConversation(observation)
 		return
 	}
@@ -73,6 +73,8 @@ func (d *Daemon) conversationIn(t harness.TerminalID, observation agentConversat
 	}
 	var err error
 	switch {
+	case owner == "" && held == "":
+		d.observeAgentConversation(observation)
 	case owner == "":
 		err = d.opened(t, session, observation)
 	case !d.showableIn(t, owner):

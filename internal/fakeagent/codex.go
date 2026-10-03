@@ -35,6 +35,7 @@ type codex struct {
 	turnID       string
 	lastThread   string
 	nextThread   codexThread
+	unstarted    bool
 }
 
 // codexThread is the thread the next turn starts, with the SessionStart source that reports it;
@@ -127,8 +128,13 @@ func (c *codex) begin(term *terminal) error {
 		}
 	} else if err := c.startRollout(); err != nil {
 		return err
+	} else {
+		c.unstarted = true
 	}
 	term.title(c.restingTitle())
+	if c.unstarted {
+		return nil
+	}
 	return c.hooks.run("SessionStart", source, c.hookInput("SessionStart", map[string]any{"source": source}))
 }
 
@@ -204,8 +210,8 @@ func (c *codex) hookInput(event string, extra map[string]any) map[string]any {
 	return input
 }
 
-// Like real Codex, /new and /clear start a thread on the next turn, which reports it through
-// SessionStart before UserPromptSubmit. /resume <id> switches threads the same way.
+// Like real Codex, a fresh launch, /new and /clear start a thread on the next turn, which reports it
+// through SessionStart before UserPromptSubmit. /resume <id> switches threads the same way.
 func (c *codex) submit(prompt string) error {
 	command := strings.TrimSpace(prompt)
 	switch {
@@ -219,11 +225,15 @@ func (c *codex) submit(prompt string) error {
 		c.nextThread = codexThread{source: "resume", id: strings.TrimSpace(strings.TrimPrefix(command, "/resume "))}
 		return nil
 	}
-	if next := c.nextThread; next.source != "" {
-		c.nextThread = codexThread{}
+	next := c.nextThread
+	if c.nextThread = (codexThread{}); next.source != "" {
 		if err := c.switchThread(next); err != nil {
 			return err
 		}
+	} else if c.unstarted {
+		next.source = "startup"
+	}
+	if c.unstarted = false; next.source != "" {
 		if err := c.hooks.run("SessionStart", next.source, c.hookInput("SessionStart", map[string]any{"source": next.source})); err != nil {
 			return err
 		}

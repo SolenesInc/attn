@@ -6,7 +6,8 @@ change: >
   this pane too, under its own name, instead of moving the conversation into the
   current session. Both panes show the same session, and the session this pane
   left closes into the ledger. When one of the two panes later moves on, the
-  session stays open in the other.
+  session stays open in the other. This also works from a pane that has not had
+  a prompt yet.
 notes: >
   A session running in another workspace, or kept alive only by the bare `attn`
   CLI wrapper outside any attn pane, still hands its conversation over within

@@ -401,7 +401,7 @@ func TestCodexResumeReopensTheClosedSessionOnTheNextPrompt(t *testing.T) {
 	testworld.AwaitSession(app, first, func(s protocol.Session) bool { return s.State == protocol.SessionStateIdle })
 }
 
-func TestCodexResumeToASessionRunningInAnotherPaneShowsItInBoth(t *testing.T) {
+func TestCodexResumeFromAFreshPaneToASessionRunningInAnotherPaneShowsItInBoth(t *testing.T) {
 	w := newWorld(t, fakeagent.Codex)
 	app := w.App()
 	cwd := w.Path("shop")
@@ -416,11 +416,6 @@ func TestCodexResumeToASessionRunningInAnotherPaneShowsItInBoth(t *testing.T) {
 	current := w.Spawn(app, fakeagent.Codex, cwd)
 	terminal := app.Terminal(current)
 	codex := w.Launched(current)
-	app.TypeLine(current, "write the changelog")
-	codex.Prompted()
-	codex.Reply("Written. <!-- attn:state=idle -->")
-	testworld.AwaitSession(app, current, func(s protocol.Session) bool { return s.State == protocol.SessionStateIdle })
-
 	app.TypeLineIn(terminal, "/resume "+flaky)
 	codex.Prompted()
 	app.TypeLineIn(terminal, "now fix it")
