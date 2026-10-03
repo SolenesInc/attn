@@ -8,11 +8,11 @@ export interface AutomationRunSession {
   turnOpenedAt?: string;
   turnSnoozedUntil?: string;
   stateSince?: string;
-  automation?: { definition_id: string; definition_name: string };
+  automation?: { definition_id: number; definition_name: string };
 }
 
 export interface AutomationRunGroup<S extends AutomationRunSession> {
-  id: string;
+  id: number;
   name: string;
   runs: S[];
   needingYou: S[];
@@ -59,7 +59,7 @@ export function automationRunGroups<S extends AutomationRunSession>(
   desktops: readonly { sessions: readonly S[] }[],
   now: number,
 ): AutomationRunGroup<S>[] {
-  const groups = new Map<string, AutomationRunGroup<S>>();
+  const groups = new Map<number, AutomationRunGroup<S>>();
   const seen = new Set<string>();
   for (const desktop of desktops) {
     for (const session of desktop.sessions) {
@@ -77,7 +77,7 @@ export function automationRunGroups<S extends AutomationRunSession>(
       const runs = group.runs.sort(order);
       return { ...group, runs, needingYou: runs.filter((run) => runNeedsYou(run, now)) };
     })
-    .sort((a, b) => a.name.localeCompare(b.name) || a.id.localeCompare(b.id));
+    .sort((a, b) => a.name.localeCompare(b.name) || a.id - b.id);
 }
 
 export function runCount(groups: readonly AutomationRunGroup<AutomationRunSession>[]): number {

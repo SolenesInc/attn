@@ -23,7 +23,7 @@ type Automation = NonNullable<DaemonSession['automation']>;
 
 const REVIEW_RUN: Automation = {
   run_id: 'run-1',
-  definition_id: 'review-sol',
+  definition_id: 1,
   definition_name: 'Requested PR review - GPT Sol medium',
   trigger_type: 'github_review_requested',
   pull_request: {
@@ -222,7 +222,7 @@ describe('App sidebar', () => {
         ],
         desktops: [soloDesktop('manual'), soloDesktop('run-a'), soloDesktop('run-b')],
       });
-      const header = screen.getByTestId('sidebar-automation-header-review-sol');
+      const header = screen.getByTestId('sidebar-automation-header-1');
 
       expect(header).toHaveAttribute('aria-expanded', 'false');
       expect(header).toHaveTextContent('Requested PR review - GPT Sol medium');
@@ -240,7 +240,7 @@ describe('App sidebar', () => {
     it('counts a lone automation session as one agent', async () => {
       await launch({ sessions: [daemonSession('run-a', { automation: REVIEW_RUN })] });
 
-      expect(screen.getByTestId('sidebar-automation-header-review-sol').querySelector('.automation-session-count')).toHaveTextContent('1');
+      expect(screen.getByTestId('sidebar-automation-header-1').querySelector('.automation-session-count')).toHaveTextContent('1');
     });
   });
 

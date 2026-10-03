@@ -25,7 +25,7 @@ import { fullStamp, nameIds, relativeStamp, shortPath, tildePath } from './ledge
 import { formatQuery, matchesDir, matchesWords, parseQuery, profileChoices, removeToken, renameProfileTokens } from './ledgerQuery';
 import type { ParsedQuery, ProfileChoice } from './ledgerQuery';
 import { Field, Inspector, LedgerList, QueryBar, Segmented, useCopied } from './LedgerPrimitives';
-import type { Chip, LedgerMenu, ListItem, RowChoice, RowGlyph, RowModel, RowNote, RowVerb } from './LedgerPrimitives';
+import type { Chip, LedgerMenu, ListItem, RowGlyph, RowModel, RowNote, RowVerb } from './LedgerPrimitives';
 
 export interface SessionSeedLink {
   id: string;
@@ -35,14 +35,12 @@ export interface SessionSeedLink {
 export interface SessionsTabProps {
   connection: SessionLedgerConnection;
   profileNames: Record<string, string>;
-  currentProfileId?: string | null;
   profileMembership: string;
   liveSessionIds?: Set<string>;
   seedForSession?: (sessionId: string) => SessionSeedLink | null;
   onFocusSession?: (sessionId: string) => void;
   onOpenSeed?: (seedId: string) => void;
-  onReopen?: (sessionId: string, actionId: string, profileId?: string) => Promise<boolean | void> | boolean | void;
-  onMoveSession?: (sessionId: string, expectedProfileId: string, destinationProfileId: string) => Promise<unknown>;
+  onReopen?: (sessionId: string, actionId: string) => Promise<boolean | void> | boolean | void;
   setConversationKeep?: (sessionId: string, keep: boolean) => Promise<boolean>;
   conversationChangeSignal?: number;
   onShowWorktree?: (path: string) => void;
@@ -64,14 +62,12 @@ const WAITING_STATES = new Set(['waiting', 'attention', 'needs_attention', 'idle
 export function SessionsTab({
   connection,
   profileNames,
-  currentProfileId,
   profileMembership,
   liveSessionIds,
   seedForSession,
   onFocusSession,
   onOpenSeed,
   onReopen,
-  onMoveSession,
   onShowWorktree,
   setConversationKeep,
   conversationChangeSignal = 0,
@@ -118,7 +114,6 @@ export function SessionsTab({
     const attempt = attempts[entry.id];
     return attempt && attempt.closedAt === (entry.closed_at ?? '') ? attempt : undefined;
   }, [attempts]);
-  const profileOptions = useMemo(() => liveProfileOptions(profileNames, currentProfileId), [profileNames, currentProfileId]);
   const [copied, copy] = useCopied();
 
   const recordAttempt = useCallback((entry: SessionLedgerEntry, change: Partial<Omit<ReopenAttempt, 'closedAt'>>) => {
@@ -129,7 +124,7 @@ export function SessionsTab({
     });
   }, []);
 
-  const fire = useCallback((entry: SessionLedgerEntry, actionId: string, profileId?: string) => {
+  const fire = useCallback((entry: SessionLedgerEntry, actionId: string) => {
     if (!onReopen) return;
     setMenu(null);
     const refuse = (failure: unknown) => {
@@ -143,7 +138,7 @@ export function SessionsTab({
     recordAttempt(entry, { note: { kind: 'busy', text: 'reopening…' } });
     let outcome: ReturnType<typeof onReopen>;
     try {
-      outcome = onReopen(entry.id, actionId, profileId);
+      outcome = onReopen(entry.id, actionId);
     } catch (failure) {
       refuse(failure);
       return;
@@ -159,29 +154,18 @@ export function SessionsTab({
   const labelsBySession = useMemo(() => new Map(entries.map((entry) => [entry.id, entry.label])), [entries]);
   const sessionLabel = useCallback((id: string) => labelsBySession.get(id) || id, [labelsBySession]);
   const nameText = useCallback((text: string) => nameIds(text, (id) => labelsBySession.get(id) || undefined), [labelsBySession]);
-  const moveSession = useCallback((entry: SessionLedgerEntry, destinationProfileId: string) => {
-    if (!onMoveSession) return;
-    recordAttempt(entry, { note: { kind: 'busy', text: 'moving…' } });
-    onMoveSession(entry.id, entry.profile_id, destinationProfileId)
-      .then(() => recordAttempt(entry, { note: undefined }))
-      .catch((failure) => recordAttempt(entry, { note: { kind: 'refused', text: compactVerdictText(failureText(failure)) } }));
-  }, [onMoveSession, recordAttempt]);
-
-  const runVerb = useCallback((key: string, verbId: string, choiceId?: string) => {
+  const runVerb = useCallback((key: string, verbId: string) => {
     const entry = visible.find((row) => row.id === key);
     if (!entry) return;
     setSelectedId(entry.id);
-    const needsDestination = verbId === 'move' || (verbId.startsWith('act:') && !!entry.profile_deleted);
-    if (needsDestination && !choiceId) { setMenu({ key: entry.id, choosing: verbId }); return; }
     setMenu(null);
     if (verbId === 'focus') { onFocusSession?.(entry.id); return; }
     if (verbId === 'seed') { const seed = seedForSession?.(entry.id); if (seed) onOpenSeed?.(seed.id); return; }
     if (runKeepVerb(entry.id, verbId)) return;
     if (verbId === 'worktree') { onShowWorktree?.(entry.directory); return; }
-    if (verbId === 'move' && choiceId) { moveSession(entry, choiceId); return; }
     clearKeepNotice(entry.id);
-    fire(entry, verdictId(verbId), choiceId);
-  }, [visible, onFocusSession, seedForSession, onOpenSeed, onShowWorktree, moveSession, fire, runKeepVerb, clearKeepNotice]);
+    fire(entry, verdictId(verbId));
+  }, [visible, onFocusSession, seedForSession, onOpenSeed, onShowWorktree, fire, runKeepVerb, clearKeepNotice]);
 
   const items = useMemo<ListItem[]>(() => visible.map((entry) => ({
     kind: 'row',
@@ -195,11 +179,9 @@ export function SessionsTab({
       canKeepConversation: !!setConversationKeep,
       actionsAvailable: !!onReopen,
       canShowWorktree: !!onShowWorktree && !!entry.is_worktree && attemptFor(entry)?.verdict?.directoryState !== 'missing',
-      moveTargets: onMoveSession ? profileOptions.filter((option) => option.id !== entry.profile_id) : [],
-      reopenTargets: profileOptions,
       now: now(),
     }),
-  })), [visible, attemptFor, isLive, seedForSession, sessionLabel, nameText, onReopen, onMoveSession, onShowWorktree, profileOptions, now, setConversationKeep, keepNotices]);
+  })), [visible, attemptFor, isLive, seedForSession, sessionLabel, nameText, onReopen, onShowWorktree, now, setConversationKeep, keepNotices]);
 
   // Counts, not arrays, drive the status line: a parent that rerenders on status must not loop it.
   const shown = visible.length;
@@ -284,7 +266,6 @@ export function SessionsTab({
               onVerb={(verbId) => runVerb(selected.id, verbId)}
               canKeepConversation={!!setConversationKeep}
               actionsAvailable={!!onReopen}
-              canMove={!!onMoveSession && profileOptions.some((option) => option.id !== selected.profile_id)}
             />
           )
           : <Inspector title="Nothing selected"><p className="ledger-muted">Pick a row to read it here.</p></Inspector>}
@@ -382,12 +363,6 @@ function failureText(failure: unknown): string {
   return failure instanceof Error ? failure.message : String(failure);
 }
 
-function liveProfileOptions(profileNames: Record<string, string>, currentProfileId: string | null | undefined): RowChoice[] {
-  return Object.entries(profileNames)
-    .map(([id, name]) => ({ id, label: name }))
-    .sort((a, b) => Number(b.id === currentProfileId) - Number(a.id === currentProfileId) || a.label.localeCompare(b.label));
-}
-
 interface ReopenAttempt {
   closedAt: string;
   note?: RowNote;
@@ -410,8 +385,6 @@ interface RowContext {
   canKeepConversation: boolean;
   actionsAvailable: boolean;
   canShowWorktree: boolean;
-  moveTargets: RowChoice[];
-  reopenTargets: RowChoice[];
   now: Date;
 }
 
@@ -420,15 +393,11 @@ function sessionRow(entry: SessionLedgerEntry, context: RowContext): RowModel {
   const { verdict } = context;
   const verbs: RowVerb[] = [];
   if (context.live) verbs.push({ id: 'focus', label: 'Focus' });
-  if (context.live && context.moveTargets.length > 0) {
-    verbs.push({ id: 'move', label: 'Move to…', choices: { title: 'Move to', options: context.moveTargets } });
-  }
-  if (closed && context.actionsAvailable) {
+  if (closed && context.actionsAvailable && !entry.profile_deleted) {
     for (const action of verdict?.actions ?? [PLAIN_REOPEN]) {
       verbs.push({
         id: `act:${action.id}`,
         label: action.label,
-        choices: entry.profile_deleted ? { title: `${action.label} into`, options: context.reopenTargets } : undefined,
       });
     }
   }
@@ -483,6 +452,7 @@ function sessionGlyph(entry: SessionLedgerEntry, live: boolean): RowGlyph {
 }
 
 interface ReopenVerdictProps {
+  profileDeleted: boolean;
   verdict: ReopenVerdictView | undefined;
   note: RowNote | undefined;
   nameText: (text: string) => string;
@@ -490,13 +460,14 @@ interface ReopenVerdictProps {
   actionsAvailable: boolean;
 }
 
-function ReopenVerdict({ verdict, note, nameText, onVerb, actionsAvailable }: ReopenVerdictProps) {
+function ReopenVerdict({ profileDeleted, verdict, note, nameText, onVerb, actionsAvailable }: ReopenVerdictProps) {
   const busy = note?.kind === 'busy';
-  const actions = verdict?.actions ?? [PLAIN_REOPEN];
+  const actions = profileDeleted ? [] : verdict?.actions ?? [PLAIN_REOPEN];
   return (
     <div className={`ledger-verdict${verdict ? (verdict.reopenable ? ' is-ok' : ' is-no') : ''}`}>
       <div className="ledger-field-label">Reopen</div>
-      {verdict && (
+      {profileDeleted && <div className="ledger-verdict-text">Its profile was deleted. This session cannot be reopened.</div>}
+      {verdict && !profileDeleted && (
         <>
           <div className="ledger-verdict-text" title={verdict.reason ?? verdict.summary}>
             {nameText(compactVerdictText(verdict.reason ?? 'It can be reopened where it ran.'))}
@@ -542,7 +513,6 @@ interface SessionInspectorProps {
   onVerb: (verbId: string) => void;
   canKeepConversation: boolean;
   actionsAvailable: boolean;
-  canMove: boolean;
 }
 
 function SessionKicker({ entry, live }: { entry: SessionLedgerEntry; live: boolean }) {
@@ -597,7 +567,7 @@ function InstantField({ entry, now, sessionLabel, nameText }: {
 }
 
 function SessionInspector({
-  entry, verdict, note, live, seed, sessionLabel, nameText, now, copied, onCopy, onVerb, actionsAvailable, canMove, canKeepConversation,
+  entry, verdict, note, live, seed, sessionLabel, nameText, now, copied, onCopy, onVerb, actionsAvailable, canKeepConversation,
 }: SessionInspectorProps) {
   return (
     <Inspector title={entry.label || 'untitled session'} kicker={<SessionKicker entry={entry} live={live} />}>
@@ -611,7 +581,7 @@ function SessionInspector({
         </Field>
       )}
       {isClosed(entry) && (
-        <ReopenVerdict verdict={verdict} note={note} nameText={nameText} onVerb={onVerb} actionsAvailable={actionsAvailable} />
+        <ReopenVerdict profileDeleted={!!entry.profile_deleted} verdict={verdict} note={note} nameText={nameText} onVerb={onVerb} actionsAvailable={actionsAvailable} />
       )}
       <ConversationPinAction available={canKeepConversation} entry={entry} note={note} closed={closed} onVerb={onVerb} />
       {live && (
@@ -619,11 +589,6 @@ function SessionInspector({
           <button type="button" className="ledger-verb is-primary" onClick={() => onVerb('focus')}>
             <kbd>⏎</kbd>Focus
           </button>
-          {canMove && (
-            <button type="button" className="ledger-verb" disabled={note?.kind === 'busy'} onClick={() => onVerb('move')}>
-              Move to…
-            </button>
-          )}
         </div>
       )}
     </Inspector>

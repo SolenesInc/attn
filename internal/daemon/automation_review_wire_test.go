@@ -27,7 +27,7 @@ func TestAReviewRequestStartsOneReviewerOnTheHeadGitHubNames(t *testing.T) {
 	r.github.request(42, r.head, false)
 	r.refresh()
 
-	first := r.awaitNewRun("review", "delivered")
+	first := r.awaitNewRun(1, "delivered")
 	session, seed := protocol.Deref(first.SessionID), protocol.Deref(first.SeedID)
 	if pr := first.Automation.PullRequest; first.Automation.TriggerType != "github_review_requested" || pr == nil ||
 		pr.Repository != "github.test/acme/shop" || pr.Number != 42 || pr.HeadSHA != r.head || protocol.Deref(pr.Title) != automationReviewTitle {
@@ -55,7 +55,7 @@ func TestAReviewRequestStartsOneReviewerOnTheHeadGitHubNames(t *testing.T) {
 	r.refresh()
 	r.github.request(42, r.head, false)
 	r.refresh()
-	again := r.awaitNewRun("review", "delivered", first)
+	again := r.awaitNewRun(1, "delivered", first)
 	if protocol.Deref(again.SessionID) != session || protocol.Deref(again.SeedID) != seed {
 		t.Errorf("the re-requested review ran on %s/%s, want the live reviewer %s/%s", protocol.Deref(again.SessionID), protocol.Deref(again.SeedID), session, seed)
 	}
@@ -75,10 +75,10 @@ func TestAReviewWhoseCodeIsOutOfReachWaitsForItAcrossARestartOrFails(t *testing.
 	r.github.request(45, unfetched, false)
 	r.refresh()
 
-	held := r.awaitRuns("review", func(runs []protocol.AutomationRunSummary) bool {
+	held := r.awaitRuns(1, func(runs []protocol.AutomationRunSummary) bool {
 		return len(runs) == 2 && runs[0].State == "pending" && runs[1].State == "pending"
 	})
-	failed := r.awaitRuns("stray", func(runs []protocol.AutomationRunSummary) bool {
+	failed := r.awaitRuns(2, func(runs []protocol.AutomationRunSummary) bool {
 		return len(runs) == 2 && runs[0].State == "failed" && runs[1].State == "failed"
 	})
 	for _, run := range failed {
@@ -92,7 +92,7 @@ func TestAReviewWhoseCodeIsOutOfReachWaitsForItAcrossARestartOrFails(t *testing.
 
 	r.w.restart()
 	r.app, r.cli = r.w.App(), r.w.Client()
-	if after := automationRuns(t, r.cli, "review"); len(after) != 2 || after[0].State != "pending" || after[1].State != "pending" {
+	if after := automationRuns(t, r.cli, 1); len(after) != 2 || after[0].State != "pending" || after[1].State != "pending" {
 		t.Fatalf("after a restart the held reviews are %+v, want both still pending", after)
 	}
 	byNumber := map[int]protocol.AutomationRunSummary{}
@@ -101,7 +101,7 @@ func TestAReviewWhoseCodeIsOutOfReachWaitsForItAcrossARestartOrFails(t *testing.
 	}
 	r.github.withdraw(45)
 	r.refresh()
-	withdrawn := r.awaitRuns("review", func(runs []protocol.AutomationRunSummary) bool {
+	withdrawn := r.awaitRuns(1, func(runs []protocol.AutomationRunSummary) bool {
 		return automationRunState(runs, byNumber[45].ID) == "cancelled"
 	})
 	// Drain review retries before fetching; Git reads worktree HEADs while worktree add writes them.
@@ -110,7 +110,7 @@ func TestAReviewWhoseCodeIsOutOfReachWaitsForItAcrossARestartOrFails(t *testing.
 	r.w.start()
 	r.app, r.cli = r.w.App(), r.w.Client()
 	r.refresh()
-	r.awaitRuns("review", func(runs []protocol.AutomationRunSummary) bool {
+	r.awaitRuns(1, func(runs []protocol.AutomationRunSummary) bool {
 		return automationRunState(runs, byNumber[44].ID) == "delivered"
 	})
 	r.w.Launched(protocol.Deref(byNumber[44].SessionID))
@@ -121,36 +121,11 @@ func TestAReviewWhoseCodeIsOutOfReachWaitsForItAcrossARestartOrFails(t *testing.
 	}
 }
 
-func TestADeletedReviewAutomationClaimsOnlyRequestsMadeAfterItReturns(t *testing.T) {
-	t.Setenv("GIT_SSH_COMMAND", "false")
-	r := newAutomationReviewWorld(t)
-	upstream := newRepo(t, "upstream")
-	unfetched := commitFile(t, upstream, "later.go", "package later\n")
-	r.github.request(46, unfetched, false)
-	r.refresh()
-	deleted := r.awaitNewRun("review", "pending")
-
-	if err := r.cli.AutomationDelete("review"); err != nil {
-		t.Fatal(err)
-	}
-	applyAutomation(t, r.cli, automationReviewSpec("review", "github_review_requested", automationReviewOverride(r.clone)))
-	r.refresh()
-	r.github.withdraw(46)
-	r.refresh()
-	r.github.request(46, unfetched, false)
-	r.refresh()
-
-	r.awaitNewRun("review", "pending", deleted)
-	if runs := automationRuns(t, r.cli, "review"); automationRunState(runs, deleted.ID) != "cancelled" {
-		t.Errorf("runs = %+v, want the pre-delete run %s cancelled by the deletion", runs, deleted.ID)
-	}
-}
-
 func TestAStoppedReviewerResumesItsConversationOnlyWhileItsTranscriptAndContractHold(t *testing.T) {
 	r := newAutomationReviewWorld(t)
 	r.github.request(42, r.head, false)
 	r.refresh()
-	first := r.awaitNewRun("review", "delivered")
+	first := r.awaitNewRun(1, "delivered")
 	session := protocol.Deref(first.SessionID)
 	reviewer := r.w.Launched(session)
 	reviewer.Prompted()
@@ -158,7 +133,7 @@ func TestAStoppedReviewerResumesItsConversationOnlyWhileItsTranscriptAndContract
 	r.stop(reviewer)
 
 	r.rerequest(42)
-	second := r.awaitNewRun("review", "delivered", first)
+	second := r.awaitNewRun(1, "delivered", first)
 	resumed := r.w.Launched(session)
 	if !resumed.Resumed || resumed.ConversationID != reviewer.ConversationID || !containsAutomationFlag(resumed.Argv, "--model", "sonnet") || protocol.Deref(second.SeedID) != protocol.Deref(first.SeedID) {
 		t.Errorf("the stopped reviewer came back as %+v on seed %s, want its conversation %s resumed with --model sonnet on seed %s",
@@ -174,14 +149,14 @@ func TestAStoppedReviewerResumesItsConversationOnlyWhileItsTranscriptAndContract
 		t.Fatal(err)
 	}
 	r.rerequest(42)
-	blind := r.awaitNewRun("review", "failed", first, second)
+	blind := r.awaitNewRun(1, "failed", first, second)
 	if !strings.Contains(protocol.Deref(blind.LastError), "transcript is unavailable") {
 		t.Errorf("continuing without a transcript failed with %q, want it refused as unavailable", protocol.Deref(blind.LastError))
 	}
 
-	applyAutomation(t, r.cli, strings.Replace(automationReviewSpec("review", "github_review_requested", automationReviewOverride(r.clone)), "Review this pull request.", "Review this pull request for security.", 1))
+	applyAutomation(t, r.cli, automationEditSpec(1, strings.Replace(automationReviewSpec("review", "github_review_requested", automationReviewOverride(r.clone)), "Review this pull request.", "Review this pull request for security.", 1)))
 	r.rerequest(42)
-	fresh := r.awaitNewRun("review", "delivered", first, second, blind)
+	fresh := r.awaitNewRun(1, "delivered", first, second, blind)
 	if protocol.Deref(fresh.SessionID) == session || protocol.Deref(fresh.SeedID) == protocol.Deref(first.SeedID) {
 		t.Errorf("after the prompt changed the review ran on %s/%s, want a reviewer of its own", protocol.Deref(fresh.SessionID), protocol.Deref(fresh.SeedID))
 	}
@@ -195,7 +170,7 @@ func TestAContinuationNotesItsOccurrenceOnceAndLeavesTheThreadOpenWhenItFails(t 
 	r := newAutomationReviewWorld(t)
 	r.github.request(42, r.head, false)
 	r.refresh()
-	first := r.awaitNewRun("review", "delivered")
+	first := r.awaitNewRun(1, "delivered")
 	seed := protocol.Deref(first.SeedID)
 	r.w.Launched(protocol.Deref(first.SessionID))
 	upstream := newRepo(t, "upstream")
@@ -205,11 +180,11 @@ func TestAContinuationNotesItsOccurrenceOnceAndLeavesTheThreadOpenWhenItFails(t 
 	r.refresh()
 	r.github.request(42, later, false)
 	r.refresh()
-	retried := r.awaitNewRun("review", "pending", first)
+	retried := r.awaitNewRun(1, "pending", first)
 	r.refresh()
 	runGit(t, r.clone, "fetch", upstream, "main")
 	r.refresh()
-	delivered := r.awaitNewRun("review", "delivered", first)
+	delivered := r.awaitNewRun(1, "delivered", first)
 	if accepted := automationSeedNotesMentioning(t, r.cli, seed, "Accepted automation occurrence "+retried.ID); accepted != 1 {
 		t.Errorf("the thread noted the retried occurrence %d times, want once", accepted)
 	}
@@ -219,10 +194,10 @@ func TestAContinuationNotesItsOccurrenceOnceAndLeavesTheThreadOpenWhenItFails(t 
 	r.refresh()
 	r.github.request(42, latest, false)
 	r.refresh()
-	orphaned := r.awaitNewRun("review", "pending", first, delivered)
-	applyAutomation(t, r.cli, strings.Replace(automationReviewSpec("review", "github_review_requested", automationReviewOverride(r.clone)), "Review this pull request.", "Review this pull request for security.", 1))
+	orphaned := r.awaitNewRun(1, "pending", first, delivered)
+	applyAutomation(t, r.cli, automationEditSpec(1, strings.Replace(automationReviewSpec("review", "github_review_requested", automationReviewOverride(r.clone)), "Review this pull request.", "Review this pull request for security.", 1)))
 	r.refresh()
-	r.awaitRuns("review", func(runs []protocol.AutomationRunSummary) bool {
+	r.awaitRuns(1, func(runs []protocol.AutomationRunSummary) bool {
 		return automationRunState(runs, orphaned.ID) == "failed" && automationSeedNotesMentioning(t, r.cli, seed, "(automation run "+orphaned.ID+")") > 0
 	})
 	r.refresh()
@@ -244,7 +219,7 @@ func TestEachManualReviewChecksOutItsOwnHead(t *testing.T) {
 	applyAutomation(t, r.cli, automationReviewSpec("manual-review", "manual", automationReviewOverride(r.clone)))
 	next := commitFile(t, r.clone, "next.go", "package next\n")
 	for i, head := range []string{r.head, next} {
-		run, err := r.cli.AutomationRun("manual-review", fmt.Sprint("head-", i), automationReviewInput(42, head))
+		run, err := r.cli.AutomationRun(2, fmt.Sprint("head-", i), automationReviewInput(42, head))
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -261,7 +236,7 @@ func TestCleanupRemovesOnlyFinishedCleanReviewCheckoutsAndKeepsTheirHistory(t *t
 	applyAutomation(t, r.cli, automationReviewSpec("manual-review", "manual", automationReviewOverride(r.clone)))
 	checkouts := map[string]protocol.AutomationRunSummary{}
 	for i, name := range []string{"clean", "dirty", "live"} {
-		run, err := r.cli.AutomationRun("manual-review", name, automationReviewInput(51+i, r.head))
+		run, err := r.cli.AutomationRun(2, name, automationReviewInput(51+i, r.head))
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -270,7 +245,7 @@ func TestCleanupRemovesOnlyFinishedCleanReviewCheckoutsAndKeepsTheirHistory(t *t
 	}
 	r.github.request(42, r.head, false)
 	r.refresh()
-	bound := r.awaitNewRun("review", "delivered")
+	bound := r.awaitNewRun(1, "delivered")
 	r.w.Launched(protocol.Deref(bound.SessionID))
 	for _, run := range []protocol.AutomationRunSummary{checkouts["clean"], checkouts["dirty"], bound} {
 		if err := r.cli.Unregister(protocol.Deref(run.SessionID)); err != nil {
@@ -284,15 +259,15 @@ func TestCleanupRemovesOnlyFinishedCleanReviewCheckoutsAndKeepsTheirHistory(t *t
 		t.Fatal(err)
 	}
 
-	cleanup := func(id string) *protocol.AutomationCleanupResultMessage {
+	cleanup := func(id int) *protocol.AutomationCleanupResultMessage {
 		t.Helper()
 		result, err := r.cli.AutomationCleanup(id)
 		if err != nil {
-			t.Fatalf("cleanup %s: %v", id, err)
+			t.Fatalf("cleanup %d: %v", id, err)
 		}
 		return result
 	}
-	first := cleanup("manual-review")
+	first := cleanup(2)
 	if !slices.Equal(first.Cleaned, []string{checkouts["clean"].ID}) || !slices.Equal(first.KeptDirty, []string{checkouts["dirty"].ID}) || !slices.Equal(first.KeptActive, []string{checkouts["live"].ID}) {
 		t.Errorf("cleanup = cleaned %v, dirty %v, active %v; want the clean, dirty and live runs in that order", first.Cleaned, first.KeptDirty, first.KeptActive)
 	}
@@ -301,13 +276,13 @@ func TestCleanupRemovesOnlyFinishedCleanReviewCheckoutsAndKeepsTheirHistory(t *t
 			t.Errorf("after cleanup the %s checkout exists=%t, want %t", name, err == nil, want)
 		}
 	}
-	if threads := cleanup("review"); len(threads.Cleaned) != 0 || !slices.Equal(threads.KeptActive, []string{bound.ID}) {
+	if threads := cleanup(1); len(threads.Cleaned) != 0 || !slices.Equal(threads.KeptActive, []string{bound.ID}) {
 		t.Errorf("cleanup of the review automation = %+v, want its thread's checkout kept active", threads)
 	}
-	if again := cleanup("manual-review"); len(again.Cleaned) != 0 {
+	if again := cleanup(2); len(again.Cleaned) != 0 {
 		t.Errorf("a second cleanup removed %v again", again.Cleaned)
 	}
-	runs := automationRuns(t, r.cli, "manual-review")
+	runs := automationRuns(t, r.cli, 2)
 	if len(runs) != 3 || automationRunState(runs, checkouts["clean"].ID) != "delivered" {
 		t.Errorf("after cleanup the runs are %+v, want all three kept as delivered", runs)
 	}
@@ -315,19 +290,19 @@ func TestCleanupRemovesOnlyFinishedCleanReviewCheckoutsAndKeepsTheirHistory(t *t
 		t.Errorf("cleanup removed the cleaned run's occurrence input: %v", err)
 	}
 
-	if err := r.cli.AutomationDelete("manual-review"); err != nil {
+	if err := r.cli.AutomationDelete(2); err != nil {
 		t.Fatal(err)
 	}
 	if err := os.Remove(filepath.Join(worktree(checkouts["dirty"]), "notes.txt")); err != nil {
 		t.Fatal(err)
 	}
-	if deleted := cleanup("manual-review"); !slices.Equal(deleted.Cleaned, []string{checkouts["dirty"].ID}) {
+	if deleted := cleanup(2); !slices.Equal(deleted.Cleaned, []string{checkouts["dirty"].ID}) {
 		t.Errorf("cleanup of the deleted automation cleaned %v, want the now-clean checkout %s", deleted.Cleaned, checkouts["dirty"].ID)
 	}
-	if err := r.cli.AutomationDelete("review"); err != nil {
+	if err := r.cli.AutomationDelete(1); err != nil {
 		t.Fatal(err)
 	}
-	if retired := cleanup("review"); !slices.Equal(retired.Cleaned, []string{bound.ID}) {
+	if retired := cleanup(1); !slices.Equal(retired.Cleaned, []string{bound.ID}) {
 		t.Errorf("once its automation is deleted, cleanup of the thread's checkout = %+v, want it reclaimed", retired)
 	}
 	if _, err := os.Stat(worktree(bound)); !os.IsNotExist(err) {
@@ -390,7 +365,7 @@ func (r *automationReviewWorld) stop(agent *fakeagent.Run) {
 	testworld.Await(r.app, protocol.EventSessionExited, func(e protocol.WebSocketEvent) bool { return protocol.Deref(e.ID) == agent.SessionID })
 }
 
-func (r *automationReviewWorld) awaitRuns(id string, match func([]protocol.AutomationRunSummary) bool) []protocol.AutomationRunSummary {
+func (r *automationReviewWorld) awaitRuns(id int, match func([]protocol.AutomationRunSummary) bool) []protocol.AutomationRunSummary {
 	r.t.Helper()
 	for {
 		if runs := automationRuns(r.t, r.cli, id); match(runs) {
@@ -400,7 +375,7 @@ func (r *automationReviewWorld) awaitRuns(id string, match func([]protocol.Autom
 	}
 }
 
-func (r *automationReviewWorld) awaitNewRun(id, state string, earlier ...protocol.AutomationRunSummary) protocol.AutomationRunSummary {
+func (r *automationReviewWorld) awaitNewRun(id int, state string, earlier ...protocol.AutomationRunSummary) protocol.AutomationRunSummary {
 	r.t.Helper()
 	var found protocol.AutomationRunSummary
 	r.awaitRuns(id, func(runs []protocol.AutomationRunSummary) bool {

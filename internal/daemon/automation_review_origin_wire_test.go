@@ -55,7 +55,7 @@ func TestAReviewFetchHandsGitTheGitHubTokenOnlyThroughItsEnvironment(t *testing.
 	runGit(t, clone, "remote", "add", "origin", "https://github.test/acme/shop.git")
 	applyAutomation(t, cli, automationReviewSpec("review", "manual", automationReviewOverride(clone)))
 
-	_, _ = cli.AutomationRun("review", "unfetched", automationReviewInput(42, strings.Repeat("a", 40)))
+	_, _ = cli.AutomationRun(1, "unfetched", automationReviewInput(42, strings.Repeat("a", 40)))
 	log, err := os.ReadFile(calls)
 	if err != nil {
 		t.Fatal(err)

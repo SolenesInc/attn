@@ -13,7 +13,7 @@ function run(
   return {
     id,
     state,
-    automation: { definition_id: definition, definition_name: definition === 'docs' ? 'nightly docs' : 'pr reviewer' },
+    automation: { definition_id: definition === 'docs' ? 1 : 2, definition_name: definition === 'docs' ? 'nightly docs' : 'pr reviewer' },
     ...extra,
   };
 }

@@ -15,23 +15,6 @@ import (
 	"github.com/victorarias/attn/internal/rankkey"
 )
 
-type ProfileDeletion struct {
-	Deleted                     profiles.Profile
-	Destination                 profiles.Profile
-	MovedSessionIDs             []string
-	MovedAutomationIDs          []string
-	CanceledAutomationRunIDs    []string
-	CanceledGardenReviewIDs     []string
-	CanceledGardenReviewItemIDs []string
-	MovedCrewIDs                []string
-	DemotedChiefID              string
-}
-
-type ProfileDeletionOptions struct {
-	AllowGardenWork      bool
-	RemoteLiveDispatches int
-}
-
 type LeafMove struct {
 	Source      profiles.Desktop
 	Target      profiles.Desktop
@@ -61,27 +44,6 @@ type SessionPlacementRequest struct {
 	Title            string
 	Status           profiles.PaneStatus
 	Focus            bool
-}
-
-type SessionProfileMoveRequest struct {
-	SessionID            string
-	ExpectedProfileID    string
-	DestinationProfileID string
-	CrewMemberID         string
-}
-
-type SessionProfileMove struct {
-	SessionID          string
-	FromProfileID      string
-	ToProfileID        string
-	SourceDesktop      *profiles.Desktop
-	DestinationDesktop *profiles.Desktop
-	DemotedChiefID     string
-	MovedCrewID        string
-}
-
-func (m SessionProfileMove) Changed() bool {
-	return m.FromProfileID != m.ToProfileID
 }
 
 func firstChildRatio(leafShare float64, leafIsFirst bool) float64 {
@@ -512,16 +474,6 @@ func ensureNotLastProfile(tx *sql.Tx, profile profiles.Profile) error {
 	return nil
 }
 
-func loadDeletionDestination(tx *sql.Tx, profile profiles.Profile, destinationID string) (profiles.Profile, error) {
-	if strings.TrimSpace(destinationID) == "" {
-		return profiles.Profile{}, profiles.Errorf(profiles.CodeInvalid, "deleting profile %q needs a destination profile for its agents", profile.Name)
-	}
-	if destinationID == profile.ID {
-		return profiles.Profile{}, profiles.Errorf(profiles.CodeDestinationSame, "profile %s cannot be its own destination", profile.ID)
-	}
-	return loadLiveProfile(tx, destinationID)
-}
-
 func deleteProfileDesktops(tx *sql.Tx, profileID string) error {
 	if _, err := tx.Exec(`DELETE FROM desktop_panes WHERE desktop_id IN (SELECT id FROM desktops WHERE profile_id = ?)`, profileID); err != nil {
 		return err
@@ -533,15 +485,11 @@ func deleteProfileDesktops(tx *sql.Tx, profileID string) error {
 	return err
 }
 
-func (s *Store) DeleteProfile(id string, expectedRevision int64, destinationID string, options ...ProfileDeletionOptions) (ProfileDeletion, error) {
-	var opts ProfileDeletionOptions
-	if len(options) > 0 {
-		opts = options[0]
-	}
-	var result ProfileDeletion
+func (s *Store) DeleteProfile(id string, expectedRevision int64, remoteLiveSessions, members int) (profiles.Profile, error) {
+	var profile profiles.Profile
 	err := s.profilesTx(func(tx *sql.Tx, now string) error {
-		profile, err := loadLiveProfile(tx, id)
-		if err != nil {
+		var err error
+		if profile, err = loadLiveProfile(tx, id); err != nil {
 			return err
 		}
 		if err := requireRevision("profile", id, expectedRevision, profile.Revision); err != nil {
@@ -553,74 +501,48 @@ func (s *Store) DeleteProfile(id string, expectedRevision int64, destinationID s
 		if err := ensureNoPendingMigration(tx, profile); err != nil {
 			return err
 		}
-		destination, err := loadDeletionDestination(tx, profile, destinationID)
+		var sessions, automations, tiles int
+		if err := tx.QueryRow(`SELECT count(*) FROM sessions WHERE profile_id = ? AND closed_at = ''`, id).Scan(&sessions); err != nil {
+			return err
+		}
+		if err := tx.QueryRow(`SELECT count(*) FROM automation_definitions WHERE profile_id = ? AND deleted_at = ''`, id).Scan(&automations); err != nil {
+			return err
+		}
+		desktops, err := listDesktops(tx, id)
 		if err != nil {
 			return err
 		}
-		if !opts.AllowGardenWork {
-			count, err := countOpenProfileSeeds(tx, profile.ID)
-			if err != nil {
-				return err
-			}
-			dispatched, err := countLiveProfileDispatches(tx, profile.ID)
-			if err != nil {
-				return err
-			}
-			dispatched += opts.RemoteLiveDispatches
-			pending, err := countPendingProfileDelegations(tx, profile.ID)
-			if err != nil {
-				return err
-			}
-			if count != 0 || dispatched != 0 || pending != 0 {
-				return fmt.Errorf("profile %q has %d open seeds and %d live dispatched sessions, plus %d pending delegations; wait for the delegations to finish, then ask an agent to harvest or wither the seeds and close the delegated agents before deleting the profile", profile.Name, count, dispatched, pending)
-			}
+		for _, desktop := range desktops {
+			tiles += len(layouttree.TileIDs(desktop.Tree))
 		}
-		if result.MovedSessionIDs, err = queryColumn[string](tx, `SELECT id FROM sessions WHERE profile_id = ? AND closed_at = '' ORDER BY id`, id); err != nil {
+
+		seeds, err := countOpenProfileSeeds(tx, id)
+		if err != nil {
 			return err
 		}
-		if _, err := tx.Exec(`DELETE FROM garden_seed_watches WHERE watcher_session_id IN (SELECT id FROM sessions WHERE profile_id = ? AND closed_at = '')`, id); err != nil {
+		pending, err := countPendingProfileDelegations(tx, id)
+		if err != nil {
 			return err
 		}
-		if _, err := tx.Exec(`UPDATE sessions SET profile_id = ? WHERE profile_id = ? AND closed_at = ''`, destinationID, id); err != nil {
+		reviews, err := countRunningProfileReviews(tx, id)
+		if err != nil {
 			return err
 		}
-		if result.MovedAutomationIDs, err = moveProfileAutomations(tx, id, destinationID, now); err != nil {
-			return err
-		}
-		if result.CanceledAutomationRunIDs, err = queryColumn[string](tx, `SELECT id FROM automation_runs WHERE profile_id = ? AND state = ? ORDER BY id`, id, AutomationRunStatePending); err != nil {
-			return err
-		}
-		if _, err := tx.Exec(`UPDATE automation_runs SET state = ?, cancel_reason = ?, updated_at = ? WHERE profile_id = ? AND state = ?`, AutomationRunStateCancelled, AutomationCancelReasonProfileDeleted, now, id, AutomationRunStatePending); err != nil {
-			return err
-		}
-		if result.CanceledGardenReviewIDs, result.CanceledGardenReviewItemIDs, err = cancelProfileGardenReviews(tx, id, now); err != nil {
-			return err
-		}
-		if result.MovedCrewIDs, err = queryColumn[string](tx, `SELECT member_id FROM crew_profiles WHERE profile_id = ? ORDER BY member_id`, id); err != nil {
-			return err
-		}
-		if _, err := tx.Exec(`UPDATE crew_profiles SET profile_id = ? WHERE profile_id = ?`, destinationID, id); err != nil {
-			return err
+		sessions += remoteLiveSessions
+		if sessions != 0 || members != 0 || automations != 0 || tiles != 0 || seeds != 0 || pending != 0 || reviews != 0 {
+			return fmt.Errorf("profile %q is not empty: %d live agents, %d crew members, %d automations, %d tiles, %d open seeds and %d pending delegations and %d running Garden reviews; clean up the profile yourself or ask your agent before deleting it", profile.Name, sessions, members, automations, tiles, seeds, pending, reviews)
 		}
 		if err := deleteProfileDesktops(tx, id); err != nil {
 			return err
 		}
-		if err := placeMigrationRemainder(tx, now, destination); err != nil {
-			return err
-		}
-		result.DemotedChiefID = profile.ChiefSessionID
 		profile.CurrentDesktopID = ""
 		profile.ChiefSessionID = ""
 		profile.DeletedAt = now
 		profile.Revision++
-		if _, err := tx.Exec(`UPDATE profiles SET current_desktop_id = '', chief_session_id = '', deleted_at = ?, revision = ? WHERE id = ?`, now, profile.Revision, id); err != nil {
-			return err
-		}
-		result.Deleted = profile
-		result.Destination = destination
-		return nil
+		_, err = tx.Exec(`UPDATE profiles SET current_desktop_id = '', chief_session_id = '', deleted_at = ?, revision = ? WHERE id = ?`, now, profile.Revision, id)
+		return err
 	})
-	return result, err
+	return profile, err
 }
 
 func (s *Store) SetProfileChief(sessionID string) (profiles.Profile, string, error) {
@@ -737,20 +659,6 @@ func (s *Store) EnsureCrewProfile(memberID, profileID string) (string, error) {
 		return startOnOwnDesktop(tx, now, "crew", memberID)
 	})
 	return assigned, err
-}
-
-func moveProfileAutomations(tx *sql.Tx, from, to, now string) ([]string, error) {
-	moved, err := queryColumn[string](tx, `SELECT id FROM automation_definitions WHERE profile_id = ? ORDER BY id`, from)
-	if err != nil {
-		return nil, err
-	}
-	if _, err := tx.Exec(`UPDATE automation_definitions SET profile_id = ? WHERE profile_id = ?`, to, from); err != nil {
-		return nil, err
-	}
-	if _, err := tx.Exec(`UPDATE automation_continuity_bindings SET status = ?, released_reason = ?, released_at = ?, updated_at = ? WHERE profile_id = ? AND status = ?`, AutomationBindingStatusReleased, AutomationBindingReleasedProfileDeleted, now, now, from, AutomationBindingStatusActive); err != nil {
-		return nil, err
-	}
-	return moved, nil
 }
 
 func (s *Store) CreateDesktop(profileID, name string, shortcutSlot int, takeFreeSlot bool) (profiles.Profile, profiles.Desktop, error) {
@@ -1475,23 +1383,6 @@ func openSessionProfileID(tx *sql.Tx, sessionID string) (string, error) {
 	return profileID, nil
 }
 
-func (s *Store) AssignSessionProfile(sessionID, profileID string) error {
-	return s.profilesTx(func(tx *sql.Tx, _ string) error {
-		if _, err := loadLiveProfile(tx, profileID); err != nil {
-			return err
-		}
-		current, err := openSessionProfileID(tx, sessionID)
-		if err != nil {
-			return err
-		}
-		if current != "" && current != profileID {
-			return profiles.Errorf(profiles.CodeCrossProfile, "session %s already belongs to profile %s; membership changes only through a move", sessionID, current)
-		}
-		_, err = tx.Exec(`UPDATE sessions SET profile_id = ? WHERE id = ? AND closed_at = ''`, profileID, sessionID)
-		return err
-	})
-}
-
 func (s *Store) SessionProfileID(sessionID string) (string, error) {
 	var profileID string
 	err := s.profilesTx(func(tx *sql.Tx, _ string) error {
@@ -1588,75 +1479,4 @@ func (s *Store) RemoveSessionPlacement(sessionID string) (*profiles.Desktop, err
 		return err
 	})
 	return desktop, err
-}
-
-func (s *Store) MoveSessionToProfile(request SessionProfileMoveRequest) (SessionProfileMove, error) {
-	sessionID, destinationID := request.SessionID, request.DestinationProfileID
-	move := SessionProfileMove{SessionID: sessionID, ToProfileID: destinationID}
-	err := s.profilesTx(func(tx *sql.Tx, now string) error {
-		if strings.TrimSpace(request.ExpectedProfileID) == "" {
-			return profiles.Errorf(profiles.CodeInvalid, "moving session %s needs the profile it was seen in", sessionID)
-		}
-		destination, err := loadLiveProfile(tx, destinationID)
-		if err != nil {
-			return err
-		}
-		from, err := openSessionProfileID(tx, sessionID)
-		if err != nil {
-			return err
-		}
-		move.FromProfileID = from
-		if !move.Changed() {
-			return nil
-		}
-		if from != request.ExpectedProfileID {
-			return profiles.Errorf(profiles.CodeStaleRevision, "session %s belongs to profile %s now, the move was made against profile %s; re-read and retry", sessionID, from, request.ExpectedProfileID)
-		}
-		if err := refuseMovingGardenWork(tx, sessionID, request.CrewMemberID, from, destinationID); err != nil {
-			return err
-		}
-		if _, err := tx.Exec(`DELETE FROM garden_seed_watches WHERE watcher_session_id = ?`, sessionID); err != nil {
-			return err
-		}
-		if move.SourceDesktop, err = removeSessionPlacement(tx, now, sessionID); err != nil {
-			return err
-		}
-		if _, err := tx.Exec(`UPDATE sessions SET profile_id = ? WHERE id = ? AND closed_at = ''`, destinationID, sessionID); err != nil {
-			return err
-		}
-		if move.DemotedChiefID, err = clearChiefOf(tx, from, sessionID); err != nil {
-			return err
-		}
-		move.MovedCrewID, err = moveCrewMember(tx, request.CrewMemberID, destinationID)
-		if err != nil {
-			return err
-		}
-		if err := placeMigrationRemainder(tx, now, destination); err != nil {
-			return err
-		}
-		desktop, err := loadLaunchDesktop(tx, destination, "")
-		move.DestinationDesktop = &desktop
-		return err
-	})
-	return move, err
-}
-
-func clearChiefOf(tx *sql.Tx, profileID, sessionID string) (string, error) {
-	result, err := tx.Exec(`UPDATE profiles SET chief_session_id = '' WHERE id = ? AND chief_session_id = ?`, profileID, sessionID)
-	if err != nil {
-		return "", err
-	}
-	if affected, err := result.RowsAffected(); err != nil || affected == 0 {
-		return "", err
-	}
-	return sessionID, nil
-}
-
-func moveCrewMember(tx *sql.Tx, memberID, profileID string) (string, error) {
-	if memberID == "" {
-		return "", nil
-	}
-	_, err := tx.Exec(`INSERT INTO crew_profiles(member_id, profile_id) VALUES (?, ?)
-		ON CONFLICT(member_id) DO UPDATE SET profile_id = excluded.profile_id`, memberID, profileID)
-	return memberID, err
 }

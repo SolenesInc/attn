@@ -25,7 +25,7 @@ function parseArgs(argv) {
 }
 
 function run(binary, args, env, options = {}) {
-  return execFileSync(binary, args, {
+  return execFileSync(binary, args.map(String), {
     encoding: 'utf8',
     env,
     stdio: options.stdio || ['ignore', 'pipe', 'pipe'],
@@ -112,7 +112,6 @@ function manualValues({ id, name, prompt, directoryPath }) {
   return {
     name,
     id,
-    idCustomized: true,
     trigger: 'manual',
     directoryPath,
     prompt,
@@ -123,7 +122,6 @@ function githubValues({ id, name, prompt, repositoriesInclude }) {
   return {
     name,
     id,
-    idCustomized: true,
     trigger: 'github_review_requested',
     directoryPath: '',
     repositoriesInclude,
@@ -181,11 +179,10 @@ async function main() {
   const observer = new DaemonObserver({ wsUrl: options.wsUrl });
 
   const suffix = Date.now().toString(36);
-  const primaryID = `automation-form-${suffix}`;
-  const renamedID = `automation-form-renamed-${suffix}`;
-  const githubID = `automation-form-github-${suffix}`;
-  const toggleID = `automation-form-toggle-${suffix}`;
-  const deleteID = `automation-form-delete-${suffix}`;
+  let primaryID = 0;
+  let githubID = 0;
+  let toggleID = 0;
+  let deleteID = 0;
   const primaryName = `Automation form proof ${suffix}`;
   const createdDefinitions = new Set();
 
@@ -243,8 +240,7 @@ async function main() {
         values: {
           name: primaryName,
           id: primaryID,
-          idCustomized: true,
-          directoryPath: 'relative/path',
+                directoryPath: 'relative/path',
           prompt: '',
         },
       });
@@ -274,15 +270,16 @@ async function main() {
     });
 
     let leg3Revision = null;
-    let leg3SpecYAML = null;
     const promptV1 = 'Automation form proof: initial create.';
     await runner.step('leg3_create_then_reopen_canonical', async () => {
       await client.request('automation_form_set_values', {
         values: manualValues({ id: primaryID, name: primaryName, prompt: promptV1, directoryPath: fixturePath }),
       });
-      createdDefinitions.add(primaryID);
       await client.request('automation_form_submit');
       await pollForm(client, (state) => state.present === false, 'the create submit to close the form');
+      primaryID = (runJSON(binary, ['automation', 'list'], daemonEnv) || []).find((row) => row.name === primaryName)?.id;
+      runner.assert(Number.isInteger(primaryID) && primaryID > 0, 'the daemon assigned a numeric ID', { id: primaryID });
+      createdDefinitions.add(primaryID);
       await captureEvidenceScreenshot(runner, client, 'leg3-after-save.png');
 
       const shownRow = findListRow(binary, primaryID, daemonEnv);
@@ -301,7 +298,6 @@ async function main() {
       );
       runner.assert(!shownYAML.includes('enabled:'), 'the canonical rendering carries no enabled key — column-only', shownYAML);
       leg3Revision = shownRow.revision;
-      leg3SpecYAML = shownYAML;
 
       const opened = await client.request('automation_form_open', { definitionId: primaryID });
       runner.assert(opened.mode === 'edit', 'opening an existing definition starts in edit mode', opened);
@@ -313,84 +309,6 @@ async function main() {
 
       const afterCancel = await client.request('automation_form_click', { button: 'cancel' });
       runner.assert(afterCancel.present === false, 'Cancel closes the reopened form back to the list', afterCancel);
-    });
-
-    await runner.step('leg4_create_collision_refused', async () => {
-      await client.request('automation_form_open', {});
-      await client.request('automation_form_set_values', {
-        values: manualValues({
-          id: primaryID,
-          name: 'Attempted collision create',
-          prompt: 'Attempted collision create — must be refused.',
-          directoryPath: fixturePath,
-        }),
-      });
-      await client.request('automation_form_submit');
-
-      const afterSubmit = await pollForm(
-        client,
-        (state) => Boolean(state.errors && state.errors.id),
-        'an id-field error after submitting a colliding id',
-      );
-      runner.assert(
-        afterSubmit.errors.id.includes('already exists'),
-        'the id field error names the collision',
-        afterSubmit,
-      );
-      runner.assert(
-        afterSubmit.saveError === '',
-        'id_collision routes to the field error, not the saveError banner',
-        afterSubmit,
-      );
-      runner.assert(afterSubmit.present === true, 'the form stays open after a refused collision create', afterSubmit);
-
-      const afterCollisionRow = findListRow(binary, primaryID, daemonEnv);
-      const afterCollisionYAML = showSpecYAML(binary, primaryID, daemonEnv);
-      runner.assert(
-        afterCollisionRow.revision === leg3Revision && afterCollisionYAML === leg3SpecYAML,
-        "the original definition's revision and content are unchanged by the refused collision",
-        {
-          before: { revision: leg3Revision, specYaml: leg3SpecYAML },
-          after: { revision: afterCollisionRow.revision, specYaml: afterCollisionYAML },
-        },
-      );
-
-      const afterCancel = await client.request('automation_form_click', { button: 'cancel' });
-      runner.assert(afterCancel.present === false, 'Cancel closes the collision attempt back to the list', afterCancel);
-    });
-
-    await runner.step('leg5_id_mismatch_guard_via_forceset', async () => {
-      const reopened = await client.request('automation_form_open', { definitionId: primaryID });
-      runner.assert(reopened.mode === 'edit', 'opening the shared definition for edit starts in edit mode', reopened);
-      runner.assert(reopened.revision === leg3Revision, "the form's revision matches the definition's current revision", { reopened, leg3Revision });
-
-      await client.request('automation_form_set_values', { values: { id: renamedID, idCustomized: true } });
-      await client.request('automation_form_submit');
-
-      const afterSubmit = await pollForm(
-        client,
-        (state) => state.saveErrorCode === 'id_mismatch',
-        'the daemon id_mismatch error after a forced id change',
-      );
-      runner.assert(
-        afterSubmit.saveError.includes('does not match'),
-        'the saveError names the mismatch',
-        afterSubmit,
-      );
-      runner.assert(afterSubmit.saveError.includes(renamedID) && afterSubmit.saveError.includes(primaryID), 'the saveError names both ids', afterSubmit);
-      runner.assert(afterSubmit.present === true, 'the form stays open after the refused id-change save', afterSubmit);
-      runner.assert(afterSubmit.mode === 'edit', 'the form remains in edit mode for the original definition', afterSubmit);
-
-      const listAfter = runJSON(binary, ['automation', 'list'], daemonEnv) || [];
-      runner.assert(!listAfter.some((row) => row.id === renamedID), 'no definition was created under the renamed id', listAfter);
-      runner.assert(
-        listAfter.filter((row) => row.id === primaryID).length === 1,
-        'the original still exists exactly once',
-        listAfter,
-      );
-
-      const afterCancel = await client.request('automation_form_click', { button: 'cancel' });
-      runner.assert(afterCancel.present === false, 'Cancel closes the mismatch attempt back to the list', afterCancel);
     });
 
     let outOfBandRevision = null;
@@ -480,9 +398,11 @@ async function main() {
           repositoriesInclude: ['github.com/acme/widgets'],
         }),
       });
-      createdDefinitions.add(githubID);
       await client.request('automation_form_submit');
       await pollForm(client, (state) => state.present === false, 'the github-trigger create to save and close the form');
+      githubID = (runJSON(binary, ['automation', 'list'], daemonEnv) || []).find((row) => row.name === `Automation form github proof ${suffix}`)?.id;
+      runner.assert(Number.isInteger(githubID) && githubID > 0, 'the daemon assigned a numeric ID', { id: githubID });
+      createdDefinitions.add(githubID);
 
       const shownYAML = showSpecYAML(binary, githubID, daemonEnv);
       runner.assert(shownYAML.includes('github.com/acme/widgets'), 'the stored YAML carries the included repository', shownYAML);
@@ -549,9 +469,11 @@ async function main() {
           directoryPath: fixturePath,
         }),
       });
-      createdDefinitions.add(toggleID);
       await client.request('automation_form_submit');
       await pollForm(client, (state) => state.present === false, 'the toggle-fixture create to save and close the form');
+      toggleID = (runJSON(binary, ['automation', 'list'], daemonEnv) || []).find((row) => row.name === `Automation form toggle proof ${suffix}`)?.id;
+      runner.assert(Number.isInteger(toggleID) && toggleID > 0, 'the daemon assigned a numeric ID', { id: toggleID });
+      createdDefinitions.add(toggleID);
 
       const createdRow = findListRow(binary, toggleID, daemonEnv);
       runner.assert(createdRow && createdRow.enabled === true, 'sanity: a brand-new definition starts enabled by default', createdRow);
@@ -593,9 +515,11 @@ async function main() {
           directoryPath: fixturePath,
         }),
       });
-      createdDefinitions.add(deleteID);
       await client.request('automation_form_submit');
       await pollForm(client, (state) => state.present === false, 'the delete-fixture create to save and close the form');
+      deleteID = (runJSON(binary, ['automation', 'list'], daemonEnv) || []).find((row) => row.name === `Automation form delete proof ${suffix}`)?.id;
+      runner.assert(Number.isInteger(deleteID) && deleteID > 0, 'the daemon assigned a numeric ID', { id: deleteID });
+      createdDefinitions.add(deleteID);
 
       await client.request('automation_form_open', { definitionId: deleteID });
       const afterArm = await client.request('automation_form_click', { button: 'delete' });
@@ -609,10 +533,10 @@ async function main() {
       createdDefinitions.delete(deleteID);
     });
 
-    await runner.finishSuccess({ instance, primaryID, renamedID, githubID, toggleID, deleteID, leg3Revision, appBuild, protocolVersion });
+    await runner.finishSuccess({ instance, primaryID, githubID, toggleID, deleteID, leg3Revision, appBuild, protocolVersion });
   } catch (error) {
     await captureFailureEvidence(runner, client).catch(() => {});
-    await runner.finishFailure(error, { instance, primaryID, renamedID, appBuild, protocolVersion });
+    await runner.finishFailure(error, { instance, primaryID, appBuild, protocolVersion });
     throw error;
   } finally {
     if (daemonEnv) {

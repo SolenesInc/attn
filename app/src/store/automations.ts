@@ -6,22 +6,22 @@ interface AutomationsStore {
 
   // Runs keyed by definition_id. A definition with no entry has not been fetched yet, which is
   // distinct from an entry of []: no runs exist.
-  runsByDefinition: Record<string, AutomationRunSummary[]>;
+  runsByDefinition: Record<number, AutomationRunSummary[]>;
 
   changedTick: number;
 
   // The daemon persists this as ClaimManualAutomationRun's dedup key, so a retry of the
   // same click must reuse it or a timed-out-but-delivered run re-triggers as a duplicate.
-  pendingRunRequests: Record<string, string>;
+  pendingRunRequests: Record<number, string>;
 
   setDefinitions: (definitions: AutomationDefinitionSummary[] | undefined) => void;
-  setRuns: (definitionId: string, runs: AutomationRunSummary[]) => void;
+  setRuns: (definitionId: number, runs: AutomationRunSummary[]) => void;
   bumpChanged: () => void;
-  ensureRunRequest: (definitionId: string) => string;
-  clearRunRequest: (definitionId: string) => void;
+  ensureRunRequest: (definitionId: number) => string;
+  clearRunRequest: (definitionId: number) => void;
 
   // Never overwrites a stored key: one already in flight is more current than a later fetch.
-  adoptRunRequest: (definitionId: string, requestId: string) => void;
+  adoptRunRequest: (definitionId: number, requestId: string) => void;
 }
 
 export const useAutomationsStore = create<AutomationsStore>((set, get) => ({
@@ -65,7 +65,7 @@ export const useAutomationsStore = create<AutomationsStore>((set, get) => ({
 
 export function selectDefinitionById(
   definitions: AutomationDefinitionSummary[],
-  definitionId: string | null | undefined,
+  definitionId: number | null | undefined,
 ): AutomationDefinitionSummary | null {
   if (!definitionId) return null;
   return definitions.find((definition) => definition.id === definitionId) ?? null;

@@ -24,7 +24,7 @@ const APIVersion = "attn.dev/automations/v1alpha1"
 
 type DefinitionSpec struct {
 	APIVersion string       `yaml:"api_version" json:"api_version"`
-	ID         string       `yaml:"id" json:"id"`
+	ID         int          `yaml:"id,omitempty" json:"id,omitempty"`
 	Name       string       `yaml:"name" json:"name"`
 	Trigger    TriggerSpec  `yaml:"trigger" json:"trigger"`
 	Prompt     string       `yaml:"prompt" json:"prompt"`
@@ -77,8 +77,6 @@ type Snapshot struct {
 	CatchUp            string          `json:"catch_up,omitempty"`
 }
 
-var idPattern = regexp.MustCompile(`^[a-z0-9][a-z0-9-]*$`)
-
 var errEnabledManagedOutsideSpec = errors.New("enabled is managed outside the spec; use 'attn automation enable' or 'attn automation disable'")
 
 var errPolicyRemoved = errors.New("policy has been removed; scheduled triggers take continuity and catch_up directly")
@@ -113,7 +111,6 @@ func MarshalDefinitionYAML(spec DefinitionSpec) ([]byte, error) {
 
 var StarterDefinition = DefinitionSpec{
 	APIVersion: APIVersion,
-	ID:         "my-automation",
 	Name:       "My automation",
 	Trigger:    TriggerSpec{Type: "manual"},
 	Prompt:     "Describe what the agent should do when this automation runs.",
@@ -132,8 +129,8 @@ func ValidateDefinition(s *DefinitionSpec) error {
 	if s.APIVersion != APIVersion {
 		return fmt.Errorf("api_version must be %q", APIVersion)
 	}
-	if !idPattern.MatchString(s.ID) {
-		return errors.New("id must be a lowercase slug")
+	if s.ID < 0 {
+		return errors.New("id must be a positive automation number, or omitted when creating")
 	}
 	if strings.TrimSpace(s.Name) == "" {
 		return errors.New("name is required")
@@ -503,12 +500,13 @@ func (c ContinuationContract) Equal(other ContinuationContract) bool {
 
 type DeliveryIDs struct{ SeedID, SessionID, ProfileID string }
 type WorkRequest struct {
-	RunID, DefinitionID, SubjectKey, ContinuityKey, Provider string
-	Prompt                                                   string
-	Context                                                  json.RawMessage
-	Launch                                                   EffectiveLaunch
-	Location                                                 LocationSpec
-	IDs                                                      DeliveryIDs
+	RunID, SubjectKey, ContinuityKey, Provider string
+	DefinitionID                               int
+	Prompt                                     string
+	Context                                    json.RawMessage
+	Launch                                     EffectiveLaunch
+	Location                                   LocationSpec
+	IDs                                        DeliveryIDs
 }
 type PreparedLocation struct {
 	Directory string          `json:"directory"`

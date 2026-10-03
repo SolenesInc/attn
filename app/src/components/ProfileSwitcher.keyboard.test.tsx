@@ -95,17 +95,15 @@ describe('ProfileSwitcher', () => {
     expect((screen.getByLabelText('Rename work') as HTMLInputElement).value).toBe('home');
   });
 
-  it('deletes the highlighted profile into the destination picked with the arrows', async () => {
+  it('confirms deletion after asking the user to clean up the profile', async () => {
     const onDelete = vi.fn(async () => undefined);
     render(<ProfileSwitcher {...props({ onDelete })} />);
 
     fireEvent.keyDown(menu(), { key: 'Backspace' });
-    expect(screen.getByText(/Delete work\. Its agents, crew and automations move to:/)).toBeTruthy();
-    expect(screen.getByRole('menuitemradio', { name: 'home' }).getAttribute('aria-checked')).toBe('true');
-    fireEvent.keyDown(menu(), { key: 'ArrowDown' });
+    expect(screen.getByText(/Clean up its agents, crew, automations and tiles first/)).toBeTruthy();
     fireEvent.keyDown(menu(), { key: 'Enter' });
 
-    await waitFor(() => expect(onDelete).toHaveBeenCalledWith('work', 'side'));
+    await waitFor(() => expect(onDelete).toHaveBeenCalledWith('work'));
     await screen.findByRole('menuitem', { name: /work/ });
   });
 

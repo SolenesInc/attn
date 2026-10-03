@@ -8,7 +8,7 @@ type AutomationFormAutomationValues = Omit<AutomationFormValues, 'repositoriesIn
 export interface AutomationFormAutomationState {
   present: boolean;
   mode: 'create' | 'edit';
-  definitionId: string | null;
+  definitionId: number | null;
   revision: number;
   status: 'loading' | 'ready' | 'load-error';
   loadError: string;

@@ -66,7 +66,7 @@ async function sweepHarnessProfiles(client, observer) {
   if (!keeper) throw new Error(`every profile is a harness leftover: ${JSON.stringify(state.profiles)}`);
   const leftovers = state.profiles.filter((entry) => entry.name.startsWith(HARNESS_PROFILE_PREFIX));
   await Promise.all(leftovers.map((profile) => observer.profileCommand('profile_delete', {
-    profile_id: profile.id, expected_revision: profile.revision, destination_profile_id: keeper.id,
+    profile_id: profile.id, expected_revision: profile.revision,
   })));
   return waitForArrangement(client,
     (s) => s.profiles.every((profile) => !profile.name.startsWith(HARNESS_PROFILE_PREFIX))
@@ -104,7 +104,7 @@ async function main() {
     prefix: 'profile-lifecycle',
     metadata: {
       agent: 'codex',
-      focus: 'profiles are created, renamed and deleted from the switcher; the ledger moves a live agent between them and reopens a session whose profile was deleted into a chosen one',
+      focus: 'profiles are created, renamed and deleted from the switcher; agents keep their original profile and cannot reopen after that profile is deleted',
       instance,
     },
   });
@@ -161,17 +161,16 @@ async function main() {
       return profileNamed(state, workName);
     });
 
-    await runner.step('the_ledger_moves_the_agent_into_work', async () => {
+    await runner.step('the_ledger_has_no_cross_profile_move', async () => {
       await pressShortcutKeys(client, driver, 'sessions.open');
-      await waitForSessions(client, (s) => s.open && !!rowFor(s, sessionId), 'the ledger to list the agent');
-      await client.request('sessions_row_action', { sessionId, action: 'Move to…', choice: workName });
-      await observer.waitFor(() => observer.getSession(sessionId)?.profile_id === work.id,
-        `session ${sessionId} to belong to Work`, 15_000);
-      const moved = await waitForSessions(client, (s) => rowFor(s, sessionId)?.profile === work.id,
-        'the ledger row to read Work');
-      runner.assert(rowFor(moved, sessionId).profileLabel === workName, 'the row names its new profile', { row: rowFor(moved, sessionId) });
-      runner.writeJson('moved.json', moved);
+      const ledger = await waitForSessions(client, (state) => state.open && !!rowFor(state, sessionId), 'the ledger to list the original agent');
+      runner.assert(!rowFor(ledger, sessionId).actions.includes('Move to…'), 'the ledger offers no profile move', ledger);
+      runner.assert(rowFor(ledger, sessionId).profile === home.id, 'the agent keeps its original profile', ledger);
       await client.request('dom_key', { selector: '.ledger-panel', key: 'Escape' });
+      await client.request('close_session', { sessionId });
+      sessionId = await createSessionAndWaitForInitialPane({ client, observer, cwd: directory, label: `profile-lifecycle-work-${runner.runId}`, agent: 'codex', sessionWaitMs: 30_000, ownDesktop: false });
+      await waitForBoundConversation(dbPath, sessionId, 60_000);
+      runner.assert(observer.getSession(sessionId)?.profile_id === work.id, 'the new agent starts in Work');
     });
 
     await runner.step('r_renames_the_profile_everywhere', async () => {
@@ -190,12 +189,12 @@ async function main() {
       await observer.waitFor(() => !observer.sessionsById.has(sessionId), `session ${sessionId} unregistered`, 15_000);
     });
 
-    await runner.step('delete_asks_for_a_destination_and_the_last_profile_stays', async () => {
+    await runner.step('delete_requires_cleanup_and_the_last_profile_stays', async () => {
       await openSwitcher(client, driver);
       await client.request('dom_key', { selector: '.profile-switcher', key: 'Backspace' });
       const prompt = await client.request('dom_text', { selector: '.profile-switcher' });
-      runner.assert(prompt.text.includes(`Delete ${studioName}. Its agents, crew and automations move to:`),
-        'delete names what moves and asks where', { prompt });
+      runner.assert(prompt.text.includes(`Delete ${studioName}? Clean up its agents, crew, automations and tiles first.`),
+        'delete asks the user to clean up first', { prompt });
       await client.request('dom_click', { selector: '.profile-switcher .is-danger' });
       const state = await waitForArrangement(client,
         (s) => !profileNamed(s, studioName) && s.selectedProfileId === home.id,
@@ -208,20 +207,16 @@ async function main() {
       runner.writeJson('deleted.json', { state, refusal });
     });
 
-    await runner.step('reopening_into_the_deleted_profile_asks_where', async () => {
+    await runner.step('a_deleted_profiles_session_cannot_reopen', async () => {
       await pressShortcutKeys(client, driver, 'sessions.open');
       await client.request('sessions_set_filter', { scope: 'Closed' });
-      const closed = await waitForSessions(client,
-        (s) => rowFor(s, sessionId)?.profileLabel === `${studioName} (deleted)` && rowFor(s, sessionId).actions.includes('Reopen'),
-        'the closed row to keep its deleted profile and offer Reopen', 30_000);
+      const closed = await waitForSessions(client, (state) => rowFor(state, sessionId)?.profileLabel === `${studioName} (deleted)`, 'the row to retain its deleted profile', 30_000);
+      runner.assert(!rowFor(closed, sessionId).actions.includes('Reopen'), 'a deleted profile offers no reopening', closed);
       runner.writeJson('closed-row.json', closed);
-      await client.request('sessions_row_action', { sessionId, action: 'Reopen', choice: home.name });
-      await observer.waitFor(() => observer.getSession(sessionId)?.profile_id === home.id,
-        `session ${sessionId} back in ${home.name}`, 60_000);
     });
 
     const summary = await runner.finishSuccess({ sessionId, home: home.id, work: work.id });
-    console.log('[RealAppHarness] Profiles were created, renamed and deleted; the ledger moved and reopened the agent between them.');
+    console.log('[RealAppHarness] Profiles were created, renamed and deleted; agents retained their original profiles.');
     console.log(JSON.stringify(summary, null, 2));
   } catch (error) {
     const summary = await runner.finishFailure(error, { sessionId });

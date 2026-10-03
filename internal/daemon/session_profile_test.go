@@ -6,7 +6,6 @@ import (
 	"net"
 	"path/filepath"
 	"strings"
-	"sync"
 	"testing"
 
 	"github.com/victorarias/attn/internal/profiles"
@@ -57,13 +56,13 @@ func createTestProfile(t testing.TB, s *store.Store, name string) profiles.Profi
 	return profile
 }
 
-func deleteTestProfile(t testing.TB, s *store.Store, profileID, destinationID string) {
+func deleteTestProfile(t testing.TB, s *store.Store, profileID string) {
 	t.Helper()
 	profile, err := s.GetProfile(profileID)
 	if err != nil {
 		t.Fatalf("read profile %s: %v", profileID, err)
 	}
-	if _, err := s.DeleteProfile(profileID, profile.Revision, destinationID); err != nil {
+	if _, err := s.DeleteProfile(profileID, profile.Revision, 0, 0); err != nil {
 		t.Fatalf("delete profile %s: %v", profileID, err)
 	}
 }
@@ -90,9 +89,10 @@ func focusTestAgent(t testing.TB, d *Daemon, sessionID string) {
 		if err != nil {
 			t.Fatalf("read the most recent profile: %v", err)
 		}
-		if profileID, _ := d.store.SessionProfileID(sessionID); profileID == "" {
-			if err := d.store.AssignSessionProfile(sessionID, profile.ID); err != nil {
-				t.Fatalf("give %s a profile: %v", sessionID, err)
+		if session := d.store.Get(sessionID); session != nil && session.ProfileID == "" {
+			session.ProfileID = profile.ID
+			if err := d.store.AddChecked(session); err != nil {
+				t.Fatalf("give %s its initial profile: %v", sessionID, err)
 			}
 		}
 		placeTestSession(t, d, sessionID, profile.CurrentDesktopID)
@@ -128,39 +128,6 @@ func injectTestSession(t testing.TB, d *Daemon, session protocol.Session) {
 	if !response.Ok {
 		t.Fatalf("inject %s: %s", session.ID, protocol.Deref(response.Error))
 	}
-}
-
-func TestDeletingAProfileAnnouncesEveryMovedAgent(t *testing.T) {
-	w := newProfilesTestDaemon(t)
-	client, _ := w.connect("")
-	doomed := w.mustSend(client, map[string]any{"cmd": protocol.CmdProfileCreate, "name": "doomed"}).Profile
-	kept := w.mustSend(client, map[string]any{"cmd": protocol.CmdProfileCreate, "name": "kept"}).Profile
-	w.agent("mover", doomed.ID)
-	var mu sync.Mutex
-	var seen []string
-	found := false
-	w.d.wsHub.broadcastListener = func(event *protocol.WebSocketEvent) {
-		mu.Lock()
-		defer mu.Unlock()
-		seen = append(seen, event.Event)
-		if event.Event == protocol.EventSessionStateChanged && event.Session != nil && event.Session.ID == "mover" && event.Session.ProfileID == kept.ID {
-			found = true
-		}
-	}
-
-	w.mustSend(client, map[string]any{
-		"cmd": protocol.CmdProfileDelete, "profile_id": doomed.ID, "expected_revision": doomed.Revision, "destination_profile_id": kept.ID,
-	})
-	mu.Lock()
-	defer mu.Unlock()
-	if !found {
-		t.Fatalf("no session_state_changed carried mover into %s; events=%v", kept.ID, seen)
-	}
-	placement, placed, err := w.d.store.SessionPlacement("mover")
-	if err != nil || !placed || placement.DesktopID != kept.CurrentDesktopID {
-		t.Fatalf("moved agent placement = %+v placed=%v err=%v, want destination desktop %s", placement, placed, err, kept.CurrentDesktopID)
-	}
-
 }
 
 func TestInjectedSessionsLandOnTheCurrentDesktopOfTheirProfile(t *testing.T) {
@@ -242,8 +209,9 @@ func setTestChief(d *Daemon, sessionID string) error {
 		now := string(protocol.TimestampNow())
 		d.store.Add(&protocol.Session{ID: sessionID, Label: sessionID, State: protocol.SessionStateIdle, StateSince: now, StateUpdatedAt: now, LastSeen: now})
 	}
-	if profileID, _ := d.store.SessionProfileID(sessionID); profileID == "" {
-		if err := d.store.AssignSessionProfile(sessionID, profile.ID); err != nil {
+	if session := d.store.Get(sessionID); session.ProfileID == "" {
+		session.ProfileID = profile.ID
+		if err := d.store.AddChecked(session); err != nil {
 			return err
 		}
 	}

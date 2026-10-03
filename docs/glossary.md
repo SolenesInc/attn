@@ -51,8 +51,8 @@
 - PR inbox: pull requests waiting on the user.
 - Provenance line: shows where a session came from and what it produced.
 
-- Profile: the user's named grouping of agents, crew, automation definitions, Garden and the desktops that arrange them. It belongs to the daemon. Every agent belongs to one profile. Renaming keeps its identity.
-- Profile deletion: production refuses while open seeds, live dispatched sessions or accepted/preparing delegations remain. Delegation acceptance checks the owning profile under the same store lock as deletion. Automation definitions move to the destination, pending source runs and running Garden reviews cancel, and continuity bindings release so the next event starts fresh work. Named instances bypass the Garden deletion guards.
+- Profile: the user's named grouping of agents, crew, automation definitions, Garden and the desktops that arrange them. It belongs to the daemon. Every agent, crew member, automation and seed belongs to its original profile for life. Nothing moves across profiles. Renaming keeps its identity.
+- Profile deletion: refuses while live agents, crew files, active automation definitions, tiles, open seeds pending delegations or running Garden reviews remain. Users or their agents clean up those contents first. Deletion never transfers or cascades work, on production or named instances.
 - Desktop: one arrangement of panes and tiles inside a profile. A profile always has at least one, and up to nine hold a shortcut slot. A numbered desktop's id is `<profile id>/desktop_N` and its number never changes: the user numbers contents by moving them to ⌘N, and ⌘N on a slot with no desktop creates one there. The daemon removes an unnamed desktop once it has held no pane or tile and been not current for 30 seconds; named desktops and desktops a crew member or automation starts on stay. Reopen recreates a removed numbered desktop under its id; any other launch aimed at a removed desktop lands on the current one without taking focus.
 - Desktop ref: how the CLI names a desktop of the caller's profile: its shortcut digit (1-9), its label as shown (the name, or "Desktop N" when unnamed; case-insensitive), or its id. `attn delegate --desktop` and `attn session move` take one.
 - Pane: an agent's place on a desktop. An agent has at most one pane.
@@ -175,3 +175,5 @@ intended it for the next turn.
 - Kept reason: why the sweep left a worktree alone.
 - Keep pin: the user's instruction to preserve a worktree.
 - Sweep log: a record of worktree removals and their reasons.
+
+- Automation ID: an automatically assigned number, unique across profiles and never reused. Each ID-less apply creates a new automation, including when repeated; edits include an existing ID and keep its original profile. A deleted automation cannot be restored by applying its old definition.

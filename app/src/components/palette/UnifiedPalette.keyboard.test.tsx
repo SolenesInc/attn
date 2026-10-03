@@ -32,7 +32,7 @@ const FIXTURE = [
   session('chief', { chiefOfStaff: true }),
   session('owed', { turnOwed: true, turnOpenedAt: new Date(NOW - 120_000).toISOString() }),
   session('quiet'),
-  session('nightly-run', { automation: { definition_id: 'nightly', definition_name: 'Nightly' }, turnOwed: true }),
+  session('nightly-run', { automation: { definition_id: 1, definition_name: 'Nightly' }, turnOwed: true }),
 ];
 
 function renderPalette({

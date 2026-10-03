@@ -596,3 +596,42 @@ func TestAFailedUpgradeOfAnUnversionedLegacyDatabaseRecordsNoVersion(t *testing.
 		}
 	}
 }
+
+func TestProfileConversionNumbersEveryAutomationReferenceAndReservesDeletedIDs(t *testing.T) {
+	for _, order := range [][]string{{"alpha", "retired", "zeta"}, {"zeta", "alpha", "retired"}} {
+		t.Run(strings.Join(order, "-"), func(t *testing.T) {
+			f := newLegacyFixture(t)
+			for _, id := range order {
+				deleted := ""
+				if id == "retired" {
+					deleted = "2026-09-02T00:00:00Z"
+				}
+				f.exec(`INSERT INTO automation_definitions(id,name,enabled,revision,spec_json,created_at,updated_at,deleted_at) VALUES(?,?,1,7,?,'now','now',?)`, id, id, fmt.Sprintf(`{"id":%q,"name":%q}`, id, id), deleted)
+				f.exec(`INSERT INTO automation_occurrences(id,definition_id,provider,occurrence_key,observed_at,payload_json,created_at) VALUES(?,?,'manual','one','now','{}','now')`, "occ-"+id, id)
+				f.exec(`INSERT INTO automation_runs(id,definition_id,occurrence_id,definition_revision,snapshot_json,state,ticket_id,session_id,workspace_id,pane_id,created_at,updated_at) VALUES(?,?,?,7,'{}','delivered','','','','','now','now')`, "run-"+id, id, "occ-"+id)
+				f.exec(`INSERT INTO automation_provider_cursors(definition_id,provider,scope,observed_at) VALUES(?,'schedule','*','now')`, id)
+				f.exec(`INSERT INTO automation_review_request_edges(definition_id,subject_key,host,active,cycle,last_observed_at,updated_at) VALUES(?,'repo#1','github.com',1,2,'now','now')`, id)
+				f.exec(`INSERT INTO automation_continuity_bindings(id,definition_id,continuity_key,ticket_id,session_id,workspace_id,pane_id,created_at,updated_at) VALUES(?,?,'singleton','','','','','now','now')`, "binding-"+id, id)
+			}
+			s, view, _ := f.mustConvert()
+			for index, oldID := range []string{"alpha", "retired", "zeta"} {
+				want := index + 1
+				var id, specID, revision int
+				var deleted string
+				if err := s.db.QueryRow(`SELECT id,json_extract(spec_json,'$.id'),revision,deleted_at FROM automation_definitions WHERE name=?`, oldID).Scan(&id, &specID, &revision, &deleted); err != nil || id != want || specID != want || revision != 7 || (deleted != "") != (oldID == "retired") {
+					t.Fatalf("definition %s: id=%d spec=%d revision=%d deleted=%q error=%v", oldID, id, specID, revision, deleted, err)
+				}
+				for _, table := range []string{"automation_occurrences", "automation_runs", "automation_provider_cursors", "automation_review_request_edges", "automation_continuity_bindings"} {
+					var count int
+					if err := s.db.QueryRow(`SELECT count(*) FROM `+table+` WHERE definition_id=? AND typeof(definition_id)='integer'`, want).Scan(&count); err != nil || count != 1 {
+						t.Fatalf("%s lost reference %s: count=%d error=%v", table, oldID, count, err)
+					}
+				}
+			}
+			created, err := s.UpsertAutomationDefinition(0, "New", `{}`, view.Manifest.ProfileID, time.Now())
+			if err != nil || created.ID <= 3 {
+				t.Fatalf("next ID after tombstones: %+v %v", created, err)
+			}
+		})
+	}
+}

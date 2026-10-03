@@ -35,7 +35,7 @@ function agentsOf(index) {
 
 function migrationCheckSpec(directory) {
   return {
-    api_version: 'attn.dev/automations/v1alpha1', id: 'mig-check', name: 'Migration check',
+    api_version: 'attn.dev/automations/v1alpha1', id: 1, name: 'Migration check',
     trigger: { type: 'manual', repositories: {} }, prompt: 'Check locally.', launch: { driver: 'claude' },
     location: { type: 'directory', path: directory, repository_sources: { default: { type: '' } } },
   };
@@ -53,7 +53,7 @@ function legacyWorkspacesSql(fixtureDir) {
     "UPDATE automation_definitions SET profile_id = '';",
     // A disabled automation makes the launch step follow placement on every run.
     `INSERT OR REPLACE INTO automation_definitions (id, name, enabled, revision, spec_json, profile_id, created_at, updated_at, deleted_at)
-      VALUES ('mig-check', 'Migration check', 0, 1, ${sql(JSON.stringify(migrationCheckSpec(fixtureDir)))}, '', 'now', 'now', '');`,
+      VALUES (1, 'Migration check', 0, 1, ${sql(JSON.stringify(migrationCheckSpec(fixtureDir)))}, '', 'now', 'now', '');`,
     'ALTER TABLE sessions ADD COLUMN workspace_id TEXT;',
     "CREATE TABLE workspaces (id TEXT PRIMARY KEY, title TEXT NOT NULL, directory TEXT NOT NULL, created_at TEXT NOT NULL, muted INTEGER NOT NULL DEFAULT 0, rank TEXT NOT NULL DEFAULT '', pinned INTEGER NOT NULL DEFAULT 0);",
     'CREATE TABLE workspace_layouts (workspace_id TEXT PRIMARY KEY, active_pane_id TEXT NOT NULL, layout_json TEXT NOT NULL, updated_at TEXT NOT NULL);',
@@ -332,14 +332,14 @@ async function main() {
       await waitForDraft((migration) => migration.groups.every((entry) => entry.confirmed), 'every group confirmed');
       await client.request('dom_wait', { selector: '.mp-bottom-right .mp-button.primary:not([disabled])', timeoutMs: 10_000 });
       await client.request('dom_click', { selector: '.mp-bottom-right .mp-button.primary' });
-      await client.request('dom_wait', { selector: '.mp-launch-row[data-launch-item="mig-check"]', timeoutMs: 10_000 });
+      await client.request('dom_wait', { selector: '.mp-launch-row[data-launch-item="1"]', timeoutMs: 10_000 });
       runner.assert(queryDaemonDb(dbPath, 'SELECT phase FROM profile_migration;') === 'launch_required', 'Placement finish did not open the launch step');
-      const suggested = "SELECT d.name FROM launch_desktops l JOIN desktops d ON d.id = l.desktop_id WHERE l.kind = 'automation' AND l.item_id = 'mig-check';";
+      const suggested = "SELECT d.name FROM launch_desktops l JOIN desktops d ON d.id = l.desktop_id WHERE l.kind = 'automation' AND l.item_id = '1';";
       runner.assert(queryDaemonDb(dbPath, suggested) === '', 'The suggested desktop existed before Finish');
       await client.request('dom_click', { selector: '.mp-launch-footer .primary' });
       await waitForText('main', 'Your Default profile is ready.');
       runner.assert(queryDaemonDb(dbPath, 'SELECT phase FROM profile_migration;') === 'complete', 'Finish did not commit');
-      runner.assert(queryDaemonDb(dbPath, suggested) === 'Migration check', 'Finish did not start mig-check on a new desktop named after it');
+      runner.assert(queryDaemonDb(dbPath, suggested) === 'Migration check', 'Finish did not start the automation on a new desktop named after it');
       const shell = await client.request('dom_wait', { selector: '.app', absent: true, timeoutMs: 2_000 });
       runner.assert(Boolean(shell), 'The normal shell mounted before Continue');
       await screenshot('05-done.png');

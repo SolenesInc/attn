@@ -102,7 +102,7 @@ describe('Sidebar', () => {
   it('flags runs that stopped with a question, and settles or walks them from the sidebar', () => {
     const automation = {
       run_id: 'run-1',
-      definition_id: 'review-sol',
+      definition_id: 1,
       definition_name: 'Requested PR review - GPT Sol medium',
       trigger_type: 'github_review_requested',
     };
@@ -130,14 +130,14 @@ describe('Sidebar', () => {
       />,
     );
 
-    expect(screen.getByTestId('sidebar-automation-review-sol')).toHaveAttribute('data-needing', '1');
-    expect(screen.getByTestId('sidebar-automation-header-review-sol')).toHaveTextContent(/GPT Sol medium12$/);
+    expect(screen.getByTestId('sidebar-automation-1')).toHaveAttribute('data-needing', '1');
+    expect(screen.getByTestId('sidebar-automation-header-1')).toHaveTextContent(/GPT Sol medium12$/);
     const batch = screen.getByTestId('sidebar-runs-needing-you');
     expect(batch).toHaveTextContent(`1 run needs you${formatShortcut('session.nextRun')}`);
     fireEvent.click(batch);
     expect(onWalkRuns).toHaveBeenCalledTimes(1);
 
-    fireEvent.click(screen.getByTestId('sidebar-automation-header-review-sol'));
+    fireEvent.click(screen.getByTestId('sidebar-automation-header-1'));
     expect(screen.queryByTestId('session-settle-run-a')).toBeNull();
     fireEvent.click(screen.getByTestId('session-settle-run-b'));
     expect(onSettleTurn).toHaveBeenCalledWith('run-b');
@@ -153,7 +153,7 @@ describe('Sidebar', () => {
         cwd: '/repo/a',
         automation: {
           run_id: 'run-1',
-          definition_id: 'review-sol',
+          definition_id: 1,
           definition_name: 'Requested PR review - GPT Sol medium',
           trigger_type: 'github_review_requested',
         },
@@ -161,10 +161,10 @@ describe('Sidebar', () => {
     ];
     const data = buildSidebarData(sessions);
     const { rerender } = render(<Sidebar {...baseProps} {...data} selectedId="manual" />);
-    expect(screen.getByTestId('sidebar-automation-header-review-sol')).toHaveAttribute('aria-expanded', 'false');
+    expect(screen.getByTestId('sidebar-automation-header-1')).toHaveAttribute('aria-expanded', 'false');
 
     rerender(<Sidebar {...baseProps} {...data} selectedId="run-a" />);
-    const header = screen.getByTestId('sidebar-automation-header-review-sol');
+    const header = screen.getByTestId('sidebar-automation-header-1');
     expect(header).toHaveAttribute('aria-expanded', 'true');
 
     fireEvent.click(header);

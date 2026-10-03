@@ -67,7 +67,7 @@ function describeRow(row: AgentPaletteRow<PaletteSession>): string {
   }
 }
 
-const automation = (definition_id: string, definition_name: string) => ({ definition_id, definition_name });
+const automation = (definition_id: number, definition_name: string) => ({ definition_id, definition_name });
 
 const fixture = [
   desktop(
@@ -79,12 +79,12 @@ const fixture = [
       session('newer-turn', { turnOwed: true, turnOpenedAt: minutesAgo(2) }),
       session('older-turn', { turnOwed: true, turnOpenedAt: minutesAgo(9) }),
       session('snoozed-agent', { turnSnoozedUntil: new Date(NOW + 3_600_000).toISOString() }),
-      session('nightly-1', { automation: automation('nightly', 'Nightly'), turnOwed: true }),
-      session('nightly-2', { automation: automation('nightly', 'Nightly') }),
+      session('nightly-1', { automation: automation(1, 'Nightly'), turnOwed: true }),
+      session('nightly-2', { automation: automation(1, 'Nightly') }),
     ],
     [tile('t1', 'release notes')],
   ),
-  desktop('d2', [session('triage-1', { automation: automation('triage', 'Triage') })]),
+  desktop('d2', [session('triage-1', { automation: automation(2, 'Triage') })]),
 ];
 
 describe('agentPaletteRows', () => {
@@ -128,8 +128,8 @@ describe('agentPaletteRows', () => {
   it('keeps the runs of an automation whose name matches when their labels do not', () => {
     const reviews = [
       desktop('d3', [
-        session('review-a', { label: 'review A', automation: automation('review', 'Requested PR review') }),
-        session('review-b', { label: 'review B', automation: automation('review', 'Requested PR review') }),
+        session('review-a', { label: 'review A', automation: automation(2, 'Requested PR review') }),
+        session('review-b', { label: 'review B', automation: automation(2, 'Requested PR review') }),
       ]),
     ];
     expect(rows(reviews, 'requested').map(describeRow)).toEqual([

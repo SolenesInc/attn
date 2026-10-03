@@ -9,14 +9,14 @@ interface ProfileSwitcherProps {
   onSelect: (profileId: string) => void;
   onCreate: (name: string) => Promise<void>;
   onRename: (profileId: string, name: string) => Promise<void>;
-  onDelete: (profileId: string, destinationProfileId: string) => Promise<void>;
+  onDelete: (profileId: string) => Promise<void>;
   onClose: () => void;
 }
 
 type Mode =
   | { kind: 'list' }
   | { kind: 'name'; profileId: string | null; draft: string }
-  | { kind: 'delete'; profileId: string; destinationId: string };
+  | { kind: 'delete'; profileId: string };
 
 function byMostRecentUse(a: Profile, b: Profile): number {
   return (b.last_used_at ?? '').localeCompare(a.last_used_at ?? '');
@@ -72,13 +72,12 @@ export function ProfileSwitcher({ profiles, selectedProfileId, onSelect, onCreat
   const startRename = () => focused && setMode({ kind: 'name', profileId: focused.id, draft: focused.name });
   const startDelete = () => {
     if (!focused) return;
-    const destination = ordered.find((profile) => profile.id !== focused.id);
-    if (!destination) {
+    if (ordered.length === 1) {
       setError(`${focused.name} is the last profile, and attn always keeps one.`);
       return;
     }
     setError(null);
-    setMode({ kind: 'delete', profileId: focused.id, destinationId: destination.id });
+    setMode({ kind: 'delete', profileId: focused.id });
   };
 
   const submitName = (profileId: string | null, draft: string) => {
@@ -104,16 +103,9 @@ export function ProfileSwitcher({ profiles, selectedProfileId, onSelect, onCreat
   };
 
   const handleDeleteKey = (event: KeyboardEvent<HTMLDivElement>, deleting: Extract<Mode, { kind: 'delete' }>) => {
-    const destinations = ordered.filter((profile) => profile.id !== deleting.profileId);
-    if (event.key === 'ArrowDown' || event.key === 'ArrowUp') {
-      event.preventDefault();
-      const next = stepThrough(destinations, deleting.destinationId, event.key);
-      if (next) setMode({ ...deleting, destinationId: next });
-      return;
-    }
     if (event.key === 'Enter' && event.target === menuRef.current && !busy) {
       event.preventDefault();
-      run(() => onDelete(deleting.profileId, deleting.destinationId), backToList);
+      run(() => onDelete(deleting.profileId), backToList);
     }
   };
 
@@ -148,11 +140,8 @@ export function ProfileSwitcher({ profiles, selectedProfileId, onSelect, onCreat
         {mode.kind === 'delete' && (
           <ProfileDeleteForm
             deleting={ordered.find((profile) => profile.id === mode.profileId)?.name ?? ''}
-            destinations={ordered.filter((profile) => profile.id !== mode.profileId)}
-            destinationId={mode.destinationId}
             busy={busy}
-            onPick={(destinationId) => setMode({ ...mode, destinationId })}
-            onConfirm={() => run(() => onDelete(mode.profileId, mode.destinationId), backToList)}
+            onConfirm={() => run(() => onDelete(mode.profileId), backToList)}
           />
         )}
         {error && <div className="profile-switcher-error" role="alert">{error}</div>}
@@ -230,29 +219,14 @@ function ProfileNameForm({ renaming, draft, busy, onDraft, onSubmit }: {
   );
 }
 
-function ProfileDeleteForm({ deleting, destinations, destinationId, busy, onPick, onConfirm }: {
+function ProfileDeleteForm({ deleting, busy, onConfirm }: {
   deleting: string;
-  destinations: Profile[];
-  destinationId: string;
   busy: boolean;
-  onPick: (destinationId: string) => void;
   onConfirm: () => void;
 }) {
   return (
     <>
-      <div className="profile-switcher-label">Delete {deleting}. Its agents, crew and automations move to:</div>
-      {destinations.map((profile) => (
-        <button
-          key={profile.id}
-          type="button"
-          role="menuitemradio"
-          aria-checked={profile.id === destinationId}
-          className={`profile-switcher-item ${profile.id === destinationId ? 'focused' : ''}`}
-          onClick={() => onPick(profile.id)}
-        >
-          <span className="profile-switcher-name">{profile.name}</span>
-        </button>
-      ))}
+      <div className="profile-switcher-label">Delete {deleting}? Clean up its agents, crew, automations and tiles first.</div>
       <div className="profile-switcher-actions">
         <button type="button" className="is-danger" disabled={busy} onClick={onConfirm}><kbd>⏎</kbd>Delete {deleting}</button>
       </div>

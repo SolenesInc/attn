@@ -118,7 +118,9 @@ func TestConversationPinCopiesUnreferencedClosedSessionAndUnkeepExpires(t *testi
 	if released.Rows[0].Kept.PinnedAt != nil || released.Rows[0].Kept.DeleteAfter == nil || protocol.Deref(released.NextDeleteAfter) != *released.Rows[0].Kept.DeleteAfter {
 		t.Fatalf("unkeep grace: %+v", released)
 	}
-	plantSeedAs(t, cli, "", "trigger next keep pass")
+	if _, err := cli.SeedNote("", delegated.SeedID, "trigger next keep pass", "", "", false, nil); err != nil {
+		t.Fatal(err)
+	}
 	testworld.AwaitTaskDone(app, "conversation_keep")
 	if rows := conversationRows(t, cli, false); rows.Count != 0 || len(rows.Rows) != 0 || rows.StoredBytes != 0 || rows.NextDeleteAfter != nil {
 		t.Fatalf("expired totals: %+v", rows)

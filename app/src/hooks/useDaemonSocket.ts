@@ -308,7 +308,7 @@ export interface RateLimitState {
 }
 
 // Protocol version - must match daemon's ProtocolVersion
-export const PROTOCOL_VERSION = '345';
+export const PROTOCOL_VERSION = '346';
 const MAX_PENDING_ATTACH_OUTPUTS = 512;
 
 const CLIENT_INSTANCE_ID =
@@ -2860,12 +2860,10 @@ export function useDaemonSocket({
     sessionId: string,
     action?: string,
     directory?: string,
-    profileId?: string,
   ): Promise<SessionReopenResult> => {
     const body: Record<string, unknown> = { session_id: sessionId };
     if (action) body.action = action;
     if (directory) body.directory = directory;
-    if (profileId) body.profile_id = profileId;
     return sendRequest<SessionReopenResult>('session_reopen', body, 'Reopening the session timed out', SESSION_REOPEN_TIMEOUT_MS);
   }, [sendRequest]);
 
@@ -4420,7 +4418,7 @@ export function useDaemonSocket({
     });
   }, [nextRequestID]);
 
-  const listAutomationRuns = useCallback((definitionId: string): Promise<AutomationRunSummary[]> => {
+  const listAutomationRuns = useCallback((definitionId: number): Promise<AutomationRunSummary[]> => {
     return new Promise((resolve, reject) => {
       const ws = wsRef.current;
       if (!ws || ws.readyState !== WebSocket.OPEN) {
@@ -4443,7 +4441,7 @@ export function useDaemonSocket({
     });
   }, [nextRequestID]);
 
-  const setAutomationEnabled = useCallback((definitionId: string, enabled: boolean): Promise<void> => {
+  const setAutomationEnabled = useCallback((definitionId: number, enabled: boolean): Promise<void> => {
     return new Promise((resolve, reject) => {
       const ws = wsRef.current;
       if (!ws || ws.readyState !== WebSocket.OPEN) {
@@ -4466,7 +4464,7 @@ export function useDaemonSocket({
   }, [nextRequestID]);
 
   const runAutomationNow = useCallback(
-    (definitionId: string, requestId: string): Promise<AutomationRunSummary | undefined> => {
+    (definitionId: number, requestId: string): Promise<AutomationRunSummary | undefined> => {
       return new Promise((resolve, reject) => {
         const ws = wsRef.current;
         if (!ws || ws.readyState !== WebSocket.OPEN) {
@@ -4492,7 +4490,7 @@ export function useDaemonSocket({
 
   const getAutomationDefinition = useCallback(
     (
-      definitionId: string,
+      definitionId: number,
     ): Promise<{ specYaml: string; specJson: string; definition?: AutomationDefinitionSummary }> => {
       return new Promise((resolve, reject) => {
         const ws = wsRef.current;
@@ -4528,7 +4526,7 @@ export function useDaemonSocket({
   const applyAutomationDefinition = useCallback(
     (
       definitionYaml: string,
-      expectedId: string,
+      expectedId: number,
       expectedRevision: number,
       launchDesktop?: import('../types/generated').LaunchDesktopSetting,
       profileId?: string,
@@ -4572,7 +4570,7 @@ export function useDaemonSocket({
   );
 
   const deleteAutomationDefinition = useCallback(
-    (definitionId: string): Promise<void> => {
+    (definitionId: number): Promise<void> => {
       return new Promise((resolve, reject) => {
         const ws = wsRef.current;
         if (!ws || ws.readyState !== WebSocket.OPEN) {
@@ -4680,21 +4678,10 @@ export function useDaemonSocket({
   );
 
   const sendProfileDelete = useCallback(
-    (profileId: string, expectedRevision: number, destinationProfileId: string) =>
+    (profileId: string, expectedRevision: number) =>
       sendProfileCommand('profile_delete', {
         profile_id: profileId,
         expected_revision: expectedRevision,
-        destination_profile_id: destinationProfileId,
-      }),
-    [sendProfileCommand],
-  );
-
-  const sendSessionMove = useCallback(
-    (sessionId: string, expectedProfileId: string, destinationProfileId: string) =>
-      sendProfileCommand('session_move', {
-        session_id: sessionId,
-        expected_profile_id: expectedProfileId,
-        destination_profile_id: destinationProfileId,
       }),
     [sendProfileCommand],
   );
@@ -4901,7 +4888,6 @@ export function useDaemonSocket({
     sendProfileCreate,
     sendProfileRename,
     sendProfileDelete,
-    sendSessionMove,
     sendDesktopCreate,
     sendDesktopRename,
     sendDesktopReorder,

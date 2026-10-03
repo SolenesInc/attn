@@ -30,7 +30,7 @@ function parseArgs(argv) {
 
 
 function run(binary, args, env, options = {}) {
-  return execFileSync(binary, args, {
+  return execFileSync(binary, args.map(String), {
     encoding: 'utf8',
     env,
     stdio: options.stdio || ['ignore', 'pipe', 'pipe'],
@@ -114,8 +114,7 @@ const API_VERSION = 'attn.dev/automations/v1alpha1';
 // in internal/automation/automation.go), so no template below emits it.
 function manualDefinitionYAML({ id, locationPath, executable }) {
   return `api_version: ${API_VERSION}
-id: ${id}
-name: Slice 6 packaged automations-panel proof (manual)
+${id ? `id: ${id}\n` : ''}name: Slice 6 packaged automations-panel proof (manual)
 trigger:
   type: manual
 prompt: |
@@ -133,8 +132,7 @@ location:
 
 function scheduledDefinitionYAML({ id, locationPath, executable }) {
   return `api_version: ${API_VERSION}
-id: ${id}
-name: Slice 6 packaged automations-panel proof (non-manual)
+${id ? `id: ${id}\n` : ''}name: Slice 6 packaged automations-panel proof (non-manual)
 trigger:
   type: scheduled
   schedule:
@@ -207,9 +205,8 @@ async function main() {
   const client = new UiAutomationClient(options);
   const observer = new DaemonObserver({ wsUrl: options.wsUrl });
 
-  const suffix = Date.now().toString(36);
-  const manualID = `automations-surface-manual-${suffix}`;
-  const scheduledID = `automations-surface-scheduled-${suffix}`;
+  let manualID = 0;
+  let scheduledID = 0;
   const manualDefinitionFile = path.join(runner.sessionDir, 'manual.yml');
   const scheduledDefinitionFile = path.join(runner.sessionDir, 'scheduled.yml');
 
@@ -243,7 +240,7 @@ async function main() {
         manualDefinitionFile,
         manualDefinitionYAML({ id: manualID, locationPath: fixturePath, executable: probe.executable }),
       );
-      runJSON(binary, ['automation', 'apply', '--file', manualDefinitionFile], daemonEnv);
+      manualID = runJSON(binary, ['automation', 'apply', '--file', manualDefinitionFile], daemonEnv).id;
       manualApplied = true;
 
       await client.request('automations_open_panel');
@@ -285,7 +282,7 @@ async function main() {
         scheduledDefinitionFile,
         scheduledDefinitionYAML({ id: scheduledID, locationPath: fixturePath, executable: probe.executable }),
       );
-      runJSON(binary, ['automation', 'apply', '--file', scheduledDefinitionFile], daemonEnv);
+      scheduledID = runJSON(binary, ['automation', 'apply', '--file', scheduledDefinitionFile], daemonEnv).id;
       scheduledApplied = true;
       const withScheduled = await poll(async () => {
         const current = await client.request('automations_get_state');

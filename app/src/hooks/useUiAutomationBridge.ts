@@ -1521,7 +1521,7 @@ function collectAutomationsUiState() {
     panel.querySelectorAll('[data-testid="automation-definition-row"]'),
   );
   const definitions = definitionRows.map((row) => {
-    const id = row.getAttribute('data-definition-id') ?? '';
+    const id = Number(row.getAttribute('data-definition-id'));
     const toggle = row.querySelector(`[data-testid="automation-toggle-${id}"]`);
     return {
       id,
@@ -1565,8 +1565,7 @@ const INACTIVE_AUTOMATION_FORM_STATE: AutomationFormAutomationState = {
   loadError: '',
   values: {
     name: '',
-    id: '',
-    idCustomized: false,
+    id: 0,
     trigger: 'manual',
     scheduleCron: '',
     continuity: 'fresh',
@@ -2277,7 +2276,7 @@ export function useUiAutomationBridge({
               .map((row) => readRow(row, 'queue-snoozed-')),
           },
           automations: automationGroups.map((group) => ({
-            id: group.getAttribute('data-automation-id') || '',
+            id: Number(group.getAttribute('data-automation-id')),
             header: group.querySelector('.automation-session-header')?.textContent?.trim() || '',
             expanded: group.querySelector('.automation-session-header')?.getAttribute('aria-expanded') === 'true',
             sessionIds: Array.from(group.querySelectorAll('[data-testid^="sidebar-session-"]'))
@@ -3382,7 +3381,7 @@ export function useUiAutomationBridge({
       case 'automations_get_state':
         return collectAutomationsUiState();
       case 'automations_toggle_enabled': {
-        const definitionId = typeof payload.definitionId === 'string' ? payload.definitionId : '';
+        const definitionId = typeof payload.definitionId === 'number' ? payload.definitionId : 0;
         if (!definitionId) {
           throw new Error('automations_toggle_enabled requires definitionId');
         }
@@ -3391,7 +3390,7 @@ export function useUiAutomationBridge({
         return collectAutomationsUiState();
       }
       case 'automations_run_now': {
-        const definitionId = typeof payload.definitionId === 'string' ? payload.definitionId : '';
+        const definitionId = typeof payload.definitionId === 'number' ? payload.definitionId : 0;
         if (!definitionId) {
           throw new Error('automations_run_now requires definitionId');
         }
@@ -3400,7 +3399,7 @@ export function useUiAutomationBridge({
         return collectAutomationsUiState();
       }
       case 'automations_select_definition': {
-        const definitionId = typeof payload.definitionId === 'string' ? payload.definitionId : '';
+        const definitionId = typeof payload.definitionId === 'number' ? payload.definitionId : 0;
         if (!definitionId) {
           throw new Error('automations_select_definition requires definitionId');
         }
@@ -3409,7 +3408,7 @@ export function useUiAutomationBridge({
         return collectAutomationsUiState();
       }
       case 'automation_form_open': {
-        const definitionId = typeof payload.definitionId === 'string' ? payload.definitionId : '';
+        const definitionId = typeof payload.definitionId === 'number' ? payload.definitionId : 0;
         clickTestId(definitionId ? `automation-edit-${definitionId}` : 'automation-new');
         await settleUi(3);
         return collectAutomationFormUiState();

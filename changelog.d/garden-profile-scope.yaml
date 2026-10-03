@@ -1,4 +1,4 @@
 kind: changed
 area: garden
 change: Each profile keeps its own Garden, including seed claims, delegations, search and reviews.
-notes: Existing work belongs to Default. Production profiles with open seeds must finish or abandon that work before deletion.
+notes: Existing work belongs to Default. Profiles with open seeds must finish or abandon that work before deletion.

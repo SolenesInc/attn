@@ -24,8 +24,7 @@ export function repositoryEntry(repository: string): AutomationRepositoryEntry {
 
 export interface AutomationFormValues {
   name: string;
-  id: string;
-  idCustomized: boolean;
+  id: number;
   trigger: AutomationTrigger;
   scheduleCron: string;
   continuity: 'fresh' | 'singleton';
@@ -41,14 +40,6 @@ export interface AutomationFormValues {
   prompt: string;
 }
 
-export function slugFromName(name: string): string {
-  return name
-    .toLowerCase()
-    .replace(/[^a-z0-9]+/g, '-')
-    .replace(/^-+|-+$/g, '');
-}
-
-const ID_PATTERN = /^[a-z0-9][a-z0-9-]*$/;
 const REPO_HOST_PATTERN = /^[a-z0-9][a-z0-9.-]*$/;
 const REPO_COMPONENT_PATTERN = /^[a-z0-9_.-]+$/;
 const REPOSITORY_MESSAGE = 'Use host/owner/repository, e.g. github.com/victorarias/attn.';
@@ -140,8 +131,7 @@ function validateOverrides(overrides: AutomationRepositoryOverride[], ctx: z.Ref
 
 const baseFormSchema = z.object({
   name: z.string(),
-  id: z.string(),
-  idCustomized: z.boolean(),
+  id: z.number(),
   trigger: z.enum(['manual', 'scheduled', 'github_review_requested']),
   scheduleCron: z.string(),
   continuity: z.enum(['fresh', 'singleton']),
@@ -160,13 +150,6 @@ const baseFormSchema = z.object({
 export const automationFormSchema = baseFormSchema.superRefine((values, ctx) => {
   if (values.name.trim() === '') {
     ctx.addIssue({ code: z.ZodIssueCode.custom, path: ['name'], message: 'A name is required.' });
-  }
-  if (!ID_PATTERN.test(values.id)) {
-    ctx.addIssue({
-      code: z.ZodIssueCode.custom,
-      path: ['id'],
-      message: 'ID must be a lowercase slug (a–z, 0–9, dashes).',
-    });
   }
   if (values.prompt.trim() === '') {
     ctx.addIssue({ code: z.ZodIssueCode.custom, path: ['prompt'], message: 'A prompt is required.' });
@@ -301,7 +284,7 @@ function buildLocation(values: AutomationFormValues): Record<string, unknown> {
 export function formValuesToSpec(values: AutomationFormValues): Record<string, unknown> {
   return {
     api_version: AUTOMATION_API_VERSION,
-    id: values.id,
+    ...(values.id ? { id: values.id } : {}),
     name: values.name,
     trigger: buildTrigger(values),
     prompt: values.prompt,
@@ -347,7 +330,7 @@ export function specToFormValues(specJson: string): AutomationFormValues {
   }
 
   const name = asString(root.name);
-  const id = asString(root.id);
+  const id = typeof root.id === 'number' ? root.id : 0;
   const prompt = asString(root.prompt);
 
   const trigger = asRecord(root.trigger);
@@ -402,7 +385,6 @@ export function specToFormValues(specJson: string): AutomationFormValues {
   return {
     name,
     id,
-    idCustomized: id !== slugFromName(name),
     trigger: triggerType as AutomationTrigger,
     scheduleCron,
     continuity,

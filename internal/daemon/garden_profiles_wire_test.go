@@ -3,6 +3,7 @@ package daemon_test
 import (
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/google/uuid"
 	"github.com/victorarias/attn/internal/client"
@@ -13,10 +14,9 @@ import (
 	"github.com/victorarias/attn/internal/testworld"
 )
 
-func TestDeletingAProfileCancelsItsGardenReviewAndAdvisorJobs(t *testing.T) {
+func TestProfileDeletionRefusesARunningGardenReview(t *testing.T) {
 	w := newWorld(t, fakeagent.Claude)
 	app, cli := w.App(), w.Client()
-	home := app.SelectedProfile()
 	side := createProfile(app, "Side")
 	selectProfile(app, side.ID)
 	scoped := cli.WithGardenProfile(side.ID, "")
@@ -24,79 +24,23 @@ func TestDeletingAProfileCancelsItsGardenReviewAndAdvisorJobs(t *testing.T) {
 	setSetting(t, app, "garden.advisor", `{"agent":"claude"}`)
 	t.Setenv("ATTN_HEADLESS_TASKS", "on")
 	review := gardenReviewStart(t, scoped)
-	if len(review.Items) != 1 || review.Run.Status != "running" {
-		t.Fatalf("review must advise the Side candidate: %+v", review)
-	}
-	w.HeadlessTask()
+	task := w.HeadlessTask()
 	lifeMove(t, scoped, "", seed, "harvest", "completed outside the review", "")
-	selectProfile(app, home)
-	gardenReviewAbandonedSeed(t, w, app, cli, "home-review", "Default review candidate")
-	other := gardenReviewStart(t, cli.WithGardenProfile(home, ""))
-	w.HeadlessTask()
 	for _, current := range w.AppOn(side.ID).Initial.Profiles {
 		if current.ID == side.ID {
 			side = current
 		}
 	}
 	id := uuid.NewString()
-	deleted := profileRequest(app, protocol.ProfileDeleteMessage{Cmd: protocol.CmdProfileDelete, RequestID: id, ProfileID: side.ID, ExpectedRevision: side.Revision, DestinationProfileID: home}, id)
-	if !deleted.Success {
-		t.Fatalf("delete profile while its review advises closed work: %+v", deleted)
+	result := profileRequest(app, protocol.ProfileDeleteMessage{Cmd: protocol.CmdProfileDelete, RequestID: id, ProfileID: side.ID, ExpectedRevision: side.Revision}, id)
+	if result.Success || !strings.Contains(protocol.Deref(result.Error), "1 running Garden reviews") {
+		t.Fatalf("running review deletion: %+v", result)
 	}
-	check := func(app *testworld.Peer, cli *client.Client) {
-		t.Helper()
-		id := uuid.NewString()
-		listed := testworld.Request(app, protocol.TaskListMessage{Cmd: protocol.CmdTaskList, RequestID: protocol.Ptr(id)}, protocol.EventTaskListResult, func(r protocol.TaskListResultMessage) bool { return r.RequestID == id })
-		foundOther := false
-		for _, task := range listed.Tasks {
-			if task.Kind == "garden_review_classify" && task.Subject == review.Items[0].ID {
-				t.Fatalf("deleted profile retains an advisor job: %+v", task)
-			}
-			foundOther = foundOther || task.Subject == other.Items[0].ID
-		}
-		shown, err := cli.WithGardenProfile(home, "").SeedReviewShow(other.Run.ID)
-		if !foundOther || err != nil || shown.Review.Run.Status != "running" {
-			t.Fatalf("the other profile's review must keep running: %+v %v, job present=%v", shown, err, foundOther)
-		}
+	shown, err := scoped.SeedReviewShow(review.Run.ID)
+	if err != nil || shown.Review.Run.Status != "running" {
+		t.Fatalf("refusal changed review: %+v %v", shown, err)
 	}
-	check(app, cli)
-	w.restart()
-	w.HeadlessTask()
-	check(w.App(), w.Client())
-}
-
-func TestDeletingAProfileDropsMovedAgentsGardenWatchesAndBells(t *testing.T) {
-	inBubble(t, func(t *testing.T, w *world) {
-		app, cli := w.App(), w.Client()
-		home := app.SelectedProfile()
-		side := createProfile(app, "Side")
-		selectProfile(app, side.ID)
-		registerSessions(t, w, cli, "watcher", "worker")
-		seed := plantSeedAs(t, cli, "worker", "Closed work in a deleted profile")
-		if _, err := cli.SeedWatch("watcher", seed, false); err != nil {
-			t.Fatal(err)
-		}
-		lifeMove(t, cli, "worker", seed, "harvest", "finished", "")
-		if _, err := cli.SeedNote("worker", seed, "a final update", "", "", true, nil); err != nil {
-			t.Fatal(err)
-		}
-		w.advance(0)
-		id := uuid.NewString()
-		deleted := profileRequest(app, protocol.ProfileDeleteMessage{Cmd: protocol.CmdProfileDelete, RequestID: id, ProfileID: side.ID, ExpectedRevision: side.Revision, DestinationProfileID: home}, id)
-		if !deleted.Success {
-			t.Fatalf("delete a profile containing closed work and user-launched agents: %+v", deleted)
-		}
-		if queriedSession(t, cli, "watcher").ProfileID != home {
-			t.Fatal("deletion did not move the watcher to the destination profile")
-		}
-		shown, err := cli.SeedShow("watcher", seed)
-		if err != nil || shown.Watching || len(shown.WatchingVia) != 0 {
-			t.Fatalf("the moved agent still watches archived work: %+v %v", shown, err)
-		}
-		if items := readInbox(t, cli, "watcher", 0).Items; len(items) != 0 {
-			t.Fatalf("the moved agent retains bells for its deleted profile: %+v", items)
-		}
-	})
+	task.Fail("done checking deletion")
 }
 
 func TestFreeTenderNamesStayInsideTheirSeedsProfile(t *testing.T) {
@@ -110,6 +54,7 @@ func TestFreeTenderNamesStayInsideTheirSeedsProfile(t *testing.T) {
 			t.Fatal(err)
 		}
 		side := createProfile(app, "Side")
+		w.advance(time.Second)
 		selectProfile(app, side.ID)
 		registerSessions(t, w, cli, "side-worker")
 		other := plantSeedAs(t, cli, "side-worker", "free worker in Side")
@@ -122,13 +67,10 @@ func TestFreeTenderNamesStayInsideTheirSeedsProfile(t *testing.T) {
 		if err := w.InjectCrewSession("registered-keel", "Keel", w.Path("keel"), "keel"); err != nil {
 			t.Fatal(err)
 		}
-		selectProfile(w.App(), home)
+		homeApp := w.App()
+		w.advance(time.Second)
+		selectProfile(homeApp, home)
 		registerSessions(t, w, cli, "default-worker")
-		id := uuid.NewString()
-		moved := profileRequest(w.App(), protocol.SessionMoveMessage{Cmd: protocol.CmdSessionMove, RequestID: id, SessionID: "default-worker", ExpectedProfileID: side.ID, DestinationProfileID: home}, id)
-		if !moved.Success {
-			t.Fatalf("return the newly registered worker to Default: %+v", moved)
-		}
 		if _, err := cli.WithGardenProfile("", "default-worker").SeedEdit(original, "the existing free claim stays editable after registration"); err != nil {
 			t.Fatal(err)
 		}
@@ -145,11 +87,7 @@ func TestFreeTenderNamesStayInsideTheirSeedsProfile(t *testing.T) {
 		if err == nil || !strings.Contains(err.Error(), "Default") || !strings.Contains(err.Error(), "Side") {
 			t.Fatalf("registered foreign member claim must name both profiles: %v", err)
 		}
-		id = uuid.NewString()
-		moved = profileRequest(w.App(), protocol.SessionMoveMessage{Cmd: protocol.CmdSessionMove, RequestID: id, SessionID: "registered-keel", ExpectedProfileID: side.ID, DestinationProfileID: home}, id)
-		if !moved.Success {
-			t.Fatalf("a foreign free alias must not hold the registered member in Side: %+v", moved)
-		}
+
 	})
 }
 
@@ -281,10 +219,10 @@ func TestProfileDeletionKeepsSeedsInTheirOriginalProfile(t *testing.T) {
 		seed := plantSeedAs(t, cli, "side-worker", "unfinished profile work")
 		request := func() protocol.ProfileActionResultMessage {
 			id := uuid.NewString()
-			return profileRequest(app, protocol.ProfileDeleteMessage{Cmd: protocol.CmdProfileDelete, RequestID: id, ProfileID: side.ID, ExpectedRevision: side.Revision, DestinationProfileID: original}, id)
+			return profileRequest(app, protocol.ProfileDeleteMessage{Cmd: protocol.CmdProfileDelete, RequestID: id, ProfileID: side.ID, ExpectedRevision: side.Revision}, id)
 		}
 		refused := request()
-		if refused.Success || !strings.Contains(protocol.Deref(refused.Error), "1 open seeds") || !strings.Contains(protocol.Deref(refused.Error), "harvest or wither") {
+		if refused.Success || !strings.Contains(protocol.Deref(refused.Error), "1 open seeds") || !strings.Contains(protocol.Deref(refused.Error), "clean up") {
 			t.Fatalf("delete with open seed: %+v", refused)
 		}
 		child, err := cli.SeedPlant("side-worker", "completed archived child", "", seed, "", "")
@@ -293,6 +231,10 @@ func TestProfileDeletionKeepsSeedsInTheirOriginalProfile(t *testing.T) {
 		}
 		lifeMove(t, cli, "side-worker", child.Seed.ID, "harvest", "finished", "")
 		lifeMove(t, cli, "side-worker", seed, "wither", "work abandoned", "")
+		if _, err := cli.AgentClose("side-worker", "side-worker", "finished"); err != nil {
+			t.Fatal(err)
+		}
+
 		if deleted := request(); !deleted.Success {
 			t.Fatalf("delete closed garden: %+v", deleted)
 		}
@@ -321,101 +263,23 @@ func TestProfileDeletionKeepsSeedsInTheirOriginalProfile(t *testing.T) {
 	})
 }
 
-func TestMovingAnAgentToAnotherProfileRequiresDetachedGardenWork(t *testing.T) {
-	inBubble(t, func(t *testing.T, w *world) {
-		app, cli := w.App(), w.Client()
-		original := app.SelectedProfile()
-		registerSessions(t, w, cli, "worker")
-		planted := plantSeedAs(t, cli, "worker", "leave work in its profile")
-		lifeMove(t, cli, "worker", planted, "tend", "", "")
-		if _, err := cli.SeedWatch("worker", planted, false); err != nil {
-			t.Fatal(err)
-		}
-		side := createProfile(app, "Side")
-		move := func() protocol.ProfileActionResultMessage {
-			id := uuid.NewString()
-			return profileRequest(app, protocol.SessionMoveMessage{Cmd: protocol.CmdSessionMove, RequestID: id, SessionID: "worker", ExpectedProfileID: original, DestinationProfileID: side.ID}, id)
-		}
-		if result := move(); result.Success || !strings.Contains(protocol.Deref(result.Error), planted) || !strings.Contains(protocol.Deref(result.Error), "Default") || !strings.Contains(protocol.Deref(result.Error), "Side") {
-			t.Fatalf("move while tending: %+v", result)
-		}
-		lifeMove(t, cli, "worker", planted, "park", "paused", "")
-		if result := move(); !result.Success {
-			t.Fatalf("move parked worker: %+v", result)
-		}
-		shown, err := cli.SeedShow("worker", planted)
-		if err == nil {
-			t.Fatalf("moved worker still sees old work: %+v", shown)
-		}
-		ready, err := cli.SeedReady("worker", "", false)
-		if err != nil || len(ready.Seeds) != 0 {
-			t.Fatalf("moved worker prime: %+v %v", ready, err)
-		}
-		session := queriedSession(t, cli, "worker")
-		if protocol.Deref(session.SeedID) != "" {
-			t.Fatalf("moved worker displays old seed: %+v", session)
-		}
-		next := plantSeedAs(t, cli, "worker", "new profile work")
-		lifeMove(t, cli, "worker", next, "tend", "", "")
-		former, err := cli.WithGardenProfile(original, "").SeedShow("", planted)
-		if err != nil || former.Seed.ProfileID != original {
-			t.Fatalf("former seed after new work: %+v %v", former, err)
-		}
-		if continuation := former.Seed.Continuation; continuation != nil && (continuation.Cwd != "" || continuation.ResumeAvailable) {
-			t.Fatalf("former seed exposes the moved agent's execution: %+v", continuation)
-		}
-	})
-}
-
-func TestNamedInstanceCanDeleteAProfileWithOpenSeeds(t *testing.T) {
+func TestNamedInstanceAlsoRefusesToDeleteAProfileWithOpenSeeds(t *testing.T) {
 	t.Setenv("ATTN_INSTANCE", "scope-wire")
 	inBubble(t, func(t *testing.T, w *world) {
 		app, cli := w.App(), w.Client()
-		original := app.SelectedProfile()
 		side := createProfile(app, "Side")
 		selectProfile(app, side.ID)
 		registerSessions(t, w, cli, "worker")
 		planted := plantSeedAs(t, cli, "worker", "throwaway instance work")
 		id := uuid.NewString()
-		result := profileRequest(app, protocol.ProfileDeleteMessage{Cmd: protocol.CmdProfileDelete, RequestID: id, ProfileID: side.ID, ExpectedRevision: side.Revision, DestinationProfileID: original}, id)
-		if !result.Success {
+		result := profileRequest(app, protocol.ProfileDeleteMessage{Cmd: protocol.CmdProfileDelete, RequestID: id, ProfileID: side.ID, ExpectedRevision: side.Revision}, id)
+		if result.Success {
 			t.Fatalf("named instance deletion: %+v %s", result, protocol.Deref(result.Error))
 		}
-		if _, err := cli.SeedShow("worker", planted); err == nil {
-			t.Fatal("deleted profile open seed entered destination garden")
+		if _, err := cli.SeedShow("worker", planted); err != nil {
+			t.Fatal("refused deletion lost its seed")
 		}
 	})
-}
-
-func TestDispatchedAgentsStayInTheirOriginalProfileAfterTheirSeedCloses(t *testing.T) {
-	w := newWorld(t, fakeagent.Codex)
-	app, cli := w.App(), w.Client()
-	original := app.SelectedProfile()
-	cwd := registerDelegationCaller(t, w, cli, "caller")
-	worker, err := cli.Delegate(delegateFrom("caller", cwd, "Work stays in its profile", fakeagent.Codex))
-	if err != nil {
-		t.Fatal(err)
-	}
-	side := createProfile(app, "Side")
-	for _, verb := range []string{"park", "harvest"} {
-		if verb == "harvest" {
-			lifeMove(t, cli, worker.SessionID, worker.SeedID, "tend", "", "")
-		}
-		lifeMove(t, cli, worker.SessionID, worker.SeedID, verb, "finished this turn", "")
-		id := uuid.NewString()
-		result := profileRequest(app, protocol.SessionMoveMessage{Cmd: protocol.CmdSessionMove, RequestID: id, SessionID: worker.SessionID, ExpectedProfileID: original, DestinationProfileID: side.ID}, id)
-		if result.Success || !strings.Contains(protocol.Deref(result.Error), worker.SeedID) || !strings.Contains(protocol.Deref(result.Error), "Default") || !strings.Contains(protocol.Deref(result.Error), "Side") || !strings.Contains(protocol.Deref(result.Error), "delegate afresh") {
-			t.Fatalf("move dispatched agent after %s: %+v", verb, result)
-		}
-	}
-	sideWorker, err := cli.WithGardenProfile("Side", "").Delegate(delegateFrom("", cwd, "Fresh work in Side", fakeagent.Codex))
-	if err != nil {
-		t.Fatalf("delegate through an explicitly scoped client: %v", err)
-	}
-	shown, err := cli.WithGardenProfile(side.ID, "").SeedShow("", sideWorker.SeedID)
-	if err != nil || shown.Seed.ProfileID != side.ID || queriedSession(t, cli, sideWorker.SessionID).ProfileID != side.ID {
-		t.Fatalf("fresh Side delegation: %+v %v", shown, err)
-	}
 }
 
 func TestDeletingAProfileWithAClosedSeedAndALiveDelegate(t *testing.T) {
@@ -426,7 +290,6 @@ func TestDeletingAProfileWithAClosedSeedAndALiveDelegate(t *testing.T) {
 			}
 			inBubbleWithAgents(t, func(t *testing.T, w *world) {
 				app, cli := w.App(), w.Client()
-				home := app.SelectedProfile()
 				side := createProfile(app, "Side")
 				selectProfile(app, side.ID)
 				cwd := registerDelegationCaller(t, w, cli, "caller")
@@ -442,23 +305,20 @@ func TestDeletingAProfileWithAClosedSeedAndALiveDelegate(t *testing.T) {
 						}
 					}
 					id := uuid.NewString()
-					return profileRequest(app, protocol.ProfileDeleteMessage{Cmd: protocol.CmdProfileDelete, RequestID: id, ProfileID: side.ID, ExpectedRevision: side.Revision, DestinationProfileID: home}, id)
+					return profileRequest(app, protocol.ProfileDeleteMessage{Cmd: protocol.CmdProfileDelete, RequestID: id, ProfileID: side.ID, ExpectedRevision: side.Revision}, id)
 				}
 				deleted := remove()
-				if named {
-					if !deleted.Success {
-						t.Fatalf("named deletion with a live delegate: %+v", deleted)
-					}
-				} else if deleted.Success || !strings.Contains(protocol.Deref(deleted.Error), "0 open seeds and 1 live dispatched sessions") || !strings.Contains(protocol.Deref(deleted.Error), "close the delegated agents") {
-					t.Fatalf("production deletion must count the live delegate: %+v", deleted)
+				if deleted.Success || !strings.Contains(protocol.Deref(deleted.Error), "live agents") {
+					t.Fatalf("live delegate must prevent deletion: %+v", deleted)
 				}
 				if _, err := cli.AgentClose(worker.SessionID, worker.SessionID, "finished my work"); err != nil {
 					t.Fatalf("the delegate must always be able to close itself: %v", err)
 				}
-				if !named {
-					if deleted := remove(); !deleted.Success {
-						t.Fatalf("deletion after closing the delegate: %+v", deleted)
-					}
+				if _, err := cli.AgentClose("caller", "caller", "finished dispatching"); err != nil {
+					t.Fatal(err)
+				}
+				if deleted := remove(); !deleted.Success {
+					t.Fatalf("deletion after cleanup: %+v", deleted)
 				}
 			})
 		})
@@ -486,39 +346,4 @@ func TestGardenReviewsBelongToTheRequestingProfile(t *testing.T) {
 			t.Fatalf("Default latest: %+v %v", shown, err)
 		}
 	})
-}
-
-func TestMovingADispatcherCannotCloseItsFormerProfilesWorkerBySessionID(t *testing.T) {
-	w := newWorld(t, fakeagent.Codex)
-	app, cli := w.App(), w.Client()
-	original := app.SelectedProfile()
-	cwd := registerDelegationCaller(t, w, cli, "caller")
-	worker, err := cli.Delegate(delegateFrom("caller", cwd, "Stay inside Default", fakeagent.Codex))
-	if err != nil {
-		t.Fatal(err)
-	}
-	w.Launched(worker.SessionID)
-	before, err := cli.SeedNotes("caller", worker.SeedID, 0)
-	if err != nil {
-		t.Fatal(err)
-	}
-	side := createProfile(app, "Side")
-	id := uuid.NewString()
-	moved := profileRequest(app, protocol.SessionMoveMessage{Cmd: protocol.CmdSessionMove, RequestID: id, SessionID: "caller", ExpectedProfileID: original, DestinationProfileID: side.ID}, id)
-	if !moved.Success {
-		t.Fatalf("move dispatcher: %+v", moved)
-	}
-	for _, target := range []string{worker.SeedID, worker.SessionID} {
-		_, err := cli.AgentClose(target, "caller", "finished")
-		if err == nil || !strings.Contains(err.Error(), "Default") || !strings.Contains(err.Error(), "Side") {
-			t.Fatalf("cross-profile close by %s: %v", target, err)
-		}
-	}
-	if shown := showSession(t, cli, worker.SessionID); protocol.Deref(shown.ClosedAt) != "" {
-		t.Fatalf("refused close ended the worker: %+v", shown)
-	}
-	after, err := cli.WithGardenProfile(original, "").SeedNotes("", worker.SeedID, 0)
-	if err != nil || len(after.Notes) != len(before.Notes) {
-		t.Fatalf("refused close wrote a seed note: %+v %v", after, err)
-	}
 }

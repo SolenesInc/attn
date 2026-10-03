@@ -76,19 +76,18 @@ type Placement struct {
 type Code string
 
 const (
-	CodeInvalid         Code = "invalid"
-	CodeNotFound        Code = "not_found"
-	CodeStaleRevision   Code = "stale_revision"
-	CodeNameTaken       Code = "name_taken"
-	CodeSlotTaken       Code = "slot_taken"
-	CodeLastProfile     Code = "last_profile"
-	CodeProfileDeleted  Code = "profile_deleted"
-	CodeCrossProfile    Code = "cross_profile"
-	CodeAlreadyPlaced   Code = "already_placed"
-	CodeSessionClosed   Code = "session_closed"
-	CodeDestinationSame Code = "destination_same"
-	CodeUnavailable     Code = "unavailable"
-	CodeInternal        Code = "internal"
+	CodeInvalid        Code = "invalid"
+	CodeNotFound       Code = "not_found"
+	CodeStaleRevision  Code = "stale_revision"
+	CodeNameTaken      Code = "name_taken"
+	CodeSlotTaken      Code = "slot_taken"
+	CodeLastProfile    Code = "last_profile"
+	CodeProfileDeleted Code = "profile_deleted"
+	CodeCrossProfile   Code = "cross_profile"
+	CodeAlreadyPlaced  Code = "already_placed"
+	CodeSessionClosed  Code = "session_closed"
+	CodeUnavailable    Code = "unavailable"
+	CodeInternal       Code = "internal"
 )
 
 type Error struct {

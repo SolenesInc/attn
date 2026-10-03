@@ -138,7 +138,7 @@ model SessionPullRequest {
 
 model AutomationProvenance {
   run_id: string;
-  definition_id: string;
+  definition_id: safeint;
   definition_name: string;
   trigger_type: string;
   pull_request?: PullRequestProvenance;
@@ -179,7 +179,7 @@ model Session {
   agent: string;                // Built-in ID or registered plugin driver ID
   directory: string;
   endpoint_id?: string;         // Optional: owning endpoint for remote/session-aware routing
-  profile_id: string;           // The profile this agent belongs to; set at creation and changed only by a move
+  profile_id: string;           // The profile this agent belongs to; set at creation for life
   branch?: string;              // Optional: might not be in git repo
   is_worktree?: boolean;        // Optional: false if not worktree
   main_repo?: string;           // Optional: only set if worktree
@@ -500,7 +500,6 @@ enum ProfileErrorCode {
   cross_profile,
   already_placed,
   session_closed,
-  destination_same,
   unavailable,
   internal,
 }
@@ -733,12 +732,7 @@ model SessionReopenMessage {
   action?: SessionReopenAction;
   // Where to start, for `start_fresh_elsewhere`.
   directory?: string;
-  // The profile to reopen into. Required when the session's recorded profile
-  // was deleted, and refused when it names another profile than a live
-  // recorded one: membership changes only through a move. Over WebSocket, an
-  // absent profile_id for a deleted recorded profile means the connection's
-  // selected profile.
-  profile_id?: string;
+
 }
 
 // Replays the daemon's per-session ring of state observations so a wrong color
@@ -1811,12 +1805,12 @@ model AutomationApplyMessage {
   // selected profile over WebSocket and the most recently used profile over
   // the socket. An existing definition keeps its profile.
   profile_id?: string;
-  expected_id?: string;
+  expected_id?: safeint;
   expected_revision?: int32;
   launch_desktop_name?: string;
   launch_desktop_setting?: LaunchDesktopSetting;
 }
-model AutomationRunMessage { cmd: "automation_run"; definition_id: string; request_id: string; input_json?: string; pr_url?: string; }
+model AutomationRunMessage { cmd: "automation_run"; definition_id: safeint; request_id: string; input_json?: string; pr_url?: string; }
 
 // Dual-surface (unix-socket `attn automation validate` + WS "Validate"
 // button): runs exactly the checks automation_apply runs before persisting
@@ -1836,7 +1830,7 @@ model AutomationValidateMessage {
 // doesn't need one.
 model AutomationDeleteMessage {
   cmd: "automation_delete";
-  definition_id: string;
+  definition_id: safeint;
   request_id?: string;
 }
 
@@ -1845,7 +1839,7 @@ model AutomationDeleteMessage {
 // see AutomationCleanupResultMessage's cleaned/kept_dirty/kept_active fields.
 model AutomationCleanupMessage {
   cmd: "automation_cleanup";
-  definition_id: string;
+  definition_id: safeint;
   request_id?: string;
 }
 
@@ -1858,24 +1852,24 @@ model AutomationDefinitionsGetMessage {
 }
 
 // WS-only: the editor's load-for-edit and load-for-create-template call, in
-// one request. definition_id "" returns the starter template
+// one request. definition_id 0 returns the starter template
 // (automation.StarterTemplateYAML) at revision 0, so create and edit share
 // one frontend code path and the template can never structurally drift from
-// what ParseDefinitionYAML accepts. A non-empty, unknown definition_id
+// what ParseDefinitionYAML accepts. An unknown nonzero definition_id
 // surfaces as success=false with an error, like the other WS lookups above.
 model AutomationDefinitionGetMessage {
   cmd: "automation_definition_get";
-  definition_id: string;
+  definition_id: safeint;
   request_id?: string;
 }
 model AutomationRunsGetMessage {
   cmd: "automation_runs_get";
-  definition_id: string;
+  definition_id: safeint;
   request_id?: string;
 }
 model AutomationSetEnabledMessage {
   cmd: "automation_set_enabled";
-  definition_id: string;
+  definition_id: safeint;
   enabled: boolean;
   request_id?: string;
 }
@@ -2703,28 +2697,12 @@ model ProfileRenameMessage {
   expected_revision: safeint;
 }
 
-// Live agents of the deleted profile move to destination_profile_id without a
-// placement. The last profile cannot be deleted.
+// Refuses until the profile has been cleaned up. The last profile cannot be deleted.
 model ProfileDeleteMessage {
   cmd: "profile_delete";
   request_id: string;
   profile_id: string;
   expected_revision: safeint;
-  destination_profile_id: string;
-}
-
-// Moves a live agent to another profile. It loses its placement and shows up
-// on the destination's current desktop; its runtime and session id stay. A
-// profile's chief moved out stops being its chief, and a crew member's agent
-// takes the member along. expected_profile_id is the profile the client saw
-// the agent in: another one answers stale_revision, and an agent already in
-// the destination answers success without a change, so a retry is safe.
-model SessionMoveMessage {
-  cmd: "session_move";
-  request_id: string;
-  session_id: string;
-  expected_profile_id: string;
-  destination_profile_id: string;
 }
 
 // Scopes this connection to a profile and records it as the most recently used.
@@ -3664,7 +3642,7 @@ model AutomationDefinitionSummary {
   profile_name?: string;
   profile_id: string;
   launch_desktop?: LaunchDesktopSetting;
-  id: string;
+  id: safeint;
   name: string;
   enabled: boolean;
   revision: int32;
@@ -3677,7 +3655,7 @@ model AutomationDefinitionSummary {
 
 model AutomationRunSummary {
   id: string;
-  definition_id: string;
+  definition_id: safeint;
   state: string;
   last_error?: string;
   cancel_reason?: string;
@@ -3707,7 +3685,7 @@ model AutomationApplyResultMessage {
   // (automationDefinitionYAML), not an echo of the input.
   spec_yaml?: string;
   // error_code: machine-readable failure class for the app form. One of
-  // "revision_conflict" | "id_collision" | "deleted_elsewhere" |
+  // "revision_conflict" | "deleted_elsewhere" |
   // "id_mismatch" | "validation"; absent on success and on failures with no
   // specific class.
   error_code?: string;
@@ -3728,7 +3706,7 @@ model AutomationDefinitionsResultMessage {
   definitions?: AutomationDefinitionSummary[];
 }
 
-// definition_id "" returns the starter template YAML (automation.StarterTemplateYAML)
+// definition_id 0 returns the starter template YAML (automation.StarterTemplateYAML)
 // with no definition — the client treats a missing definition as revision 0 /
 // new, so create and edit share one frontend code path.
 model AutomationDefinitionResultMessage {
@@ -3740,7 +3718,7 @@ model AutomationDefinitionResultMessage {
   spec_yaml?: string;
   // spec_json: canonical JSON encoding of the definition spec (same
   // canonical bytes family the store persists), present on success including
-  // the definition_id "" starter-template case; the app form edits
+  // the definition_id 0 starter-template case; the app form edits
   // structured spec and never parses spec_yaml.
   spec_json?: string;
 }
@@ -3750,7 +3728,7 @@ model AutomationRunsResultMessage {
   request_id?: string;
   success: boolean;
   error?: string;
-  definition_id: string;
+  definition_id: safeint;
   runs?: AutomationRunSummary[];
   truncated?: boolean;
 }
@@ -3804,7 +3782,7 @@ model AutomationCleanupResultMessage {
 // trusting a broadcast payload.
 model AutomationsChangedMessage {
   event: "automations_changed";
-  definition_ids: string[];
+  definition_ids: safeint[];
 }
 
 // Reviewer agent streaming events
@@ -5171,11 +5149,7 @@ model SeedResumeMessage {
   "seed_id": string;
   // Present only when Resume resolves one captured Review garden item.
   "review"?: SeedReviewActionContext;
-  // Where the agent resumes when its recorded profile was deleted. Required then;
-  // otherwise it must name the recorded profile or be absent. Over WebSocket, an
-  // absent profile_id for a deleted recorded profile means the connection's
-  // selected profile.
-  "profile_id"?: string;
+
 }
 
 // SeedResumeResultMessage replies to seed_resume, correlated by request_id.

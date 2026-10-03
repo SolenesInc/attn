@@ -31,12 +31,12 @@ func TestLaunchDesktopsAreInstallSettingsVisibleThroughTheCLI(t *testing.T) {
 		t.Fatal(err)
 	}
 	file := s.Path("check.yaml")
-	yaml := fmt.Sprintf("api_version: attn.dev/automations/v1alpha1\nid: check\nname: Local check\ntrigger: {type: manual}\nprompt: Check locally.\nlaunch: {driver: claude}\nlocation: {type: directory, path: %q}\n", dir)
+	yaml := fmt.Sprintf("api_version: attn.dev/automations/v1alpha1\nname: Local check\ntrigger: {type: manual}\nprompt: Check locally.\nlaunch: {driver: claude}\nlocation: {type: directory, path: %q}\n", dir)
 	if err := os.WriteFile(file, []byte(yaml), 0o600); err != nil {
 		t.Fatal(err)
 	}
 	requireStdout(t, s.Attn("automation", "apply", "--file", file, "--launch-desktop", "own"), "Local check (no ⌘ number)")
-	requireStdout(t, s.Attn("automation", "set", "check", "--launch-desktop", "own", "--desktop-name", "Review"), "Review (no ⌘ number)")
+	requireStdout(t, s.Attn("automation", "set", "1", "--launch-desktop", "own", "--desktop-name", "Review"), "Review (no ⌘ number)")
 	assert := func() {
 		t.Helper()
 		var definitions []protocol.AutomationDefinitionSummary
@@ -44,13 +44,13 @@ func TestLaunchDesktopsAreInstallSettingsVisibleThroughTheCLI(t *testing.T) {
 		if len(definitions) != 1 || definitions[0].LaunchDesktop == nil || protocol.Deref(definitions[0].LaunchDesktop.Label) != "Review (no ⌘ number)" || protocol.Deref(definitions[0].ProfileName) != *member.ProfileName {
 			t.Fatalf("automation list = %+v", definitions)
 		}
-		shown := s.Attn("automation", "show", "check")
+		shown := s.Attn("automation", "show", "1")
 		requireStdout(t, shown, "# Profile: "+*member.ProfileName, "# Launch desktop: Review (no ⌘ number)")
 		if strings.Contains(shown.Stdout, "launch_desktop:") {
 			t.Fatal("install setting leaked into definition YAML")
 		}
 	}
-	rejected := s.Attn("automation", "set", "check", "--launch-desktop", "1", "--desktop-name", "Ignored")
+	rejected := s.Attn("automation", "set", "1", "--launch-desktop", "1", "--desktop-name", "Ignored")
 	if rejected.Code == 0 || !strings.Contains(rejected.Stderr, "--desktop-name needs --launch-desktop own") {
 		t.Fatalf("existing desktop accepted ignored name: %+v", rejected)
 	}

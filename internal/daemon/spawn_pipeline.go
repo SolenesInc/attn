@@ -177,7 +177,7 @@ func (d *Daemon) checkExistingSessionMembership(req *spawnRequest) *spawnRejecti
 		return nil
 	}
 	if existing.ProfileID != "" && existing.ProfileID != req.profile.ID {
-		return &spawnRejection{err: fmt.Errorf("session %s belongs to profile %s, not %s; membership changes only through a move", existing.ID, existing.ProfileID, req.profile.ID)}
+		return &spawnRejection{err: fmt.Errorf("session %s belongs to profile %s, not %s; profile ownership cannot change", existing.ID, existing.ProfileID, req.profile.ID)}
 	}
 	if req.placement == nil {
 		return nil

@@ -18,7 +18,6 @@ func TestProfileDeletionAccountsForDelegationsStillPreparingTheirCheckout(t *tes
 			}
 			w := newWorld(t, fakeagent.Codex)
 			app, cli := w.App(), w.Client()
-			home := app.SelectedProfile()
 			side := createProfile(app, "Side")
 			selectProfile(app, side.ID)
 			repo := newRepo(t, "shop")
@@ -65,18 +64,16 @@ func TestProfileDeletionAccountsForDelegationsStillPreparingTheirCheckout(t *tes
 					}
 				}
 				id := uuid.NewString()
-				return profileRequest(app, protocol.ProfileDeleteMessage{Cmd: protocol.CmdProfileDelete, RequestID: id, ProfileID: side.ID, ExpectedRevision: side.Revision, DestinationProfileID: home}, id)
+				return profileRequest(app, protocol.ProfileDeleteMessage{Cmd: protocol.CmdProfileDelete, RequestID: id, ProfileID: side.ID, ExpectedRevision: side.Revision}, id)
 			}
 			deleted := remove()
+			if deleted.Success || !strings.Contains(protocol.Deref(deleted.Error), "1 pending delegations") {
+				t.Fatalf("pending operation must block deletion: %+v %s", deleted, protocol.Deref(deleted.Error))
+			}
 			if named {
-				if !deleted.Success {
-					t.Fatalf("named deletion bypass: %+v %s", deleted, protocol.Deref(deleted.Error))
-				}
 				return
 			}
-			if deleted.Success || !strings.Contains(protocol.Deref(deleted.Error), "0 open seeds and 0 live dispatched sessions, plus 1 pending delegations") || !strings.Contains(protocol.Deref(deleted.Error), "wait for the delegations to finish") {
-				t.Fatalf("pending operation must block production deletion: %+v %s", deleted, protocol.Deref(deleted.Error))
-			}
+
 			if owner := queriedSession(t, cli, source).ProfileID; owner != side.ID {
 				t.Fatalf("refused deletion moved the source to %s", owner)
 			}
@@ -90,42 +87,13 @@ func TestProfileDeletionAccountsForDelegationsStillPreparingTheirCheckout(t *tes
 			if _, err := cli.AgentClose(worker.SessionID, worker.SessionID, "finished my work"); err != nil {
 				t.Fatal(err)
 			}
+			if _, err := cli.AgentClose(source, source, "finished dispatching"); err != nil {
+				t.Fatal(err)
+			}
+
 			if deleted := remove(); !deleted.Success {
 				t.Fatalf("finished delegation must permit deletion: %+v %s", deleted, protocol.Deref(deleted.Error))
 			}
 		})
-	}
-}
-
-func TestDelegationCannotBeAcceptedIntoAProfileDeletedWhileResolvingItsCheckout(t *testing.T) {
-	w := newWorld(t, fakeagent.Codex)
-	app, cli := w.App(), w.Client()
-	home := app.SelectedProfile()
-	side := createProfile(app, "Side")
-	selectProfile(app, side.ID)
-	repo := newRepo(t, "shop")
-	source := w.Spawn(w.AppOn(side.ID), fakeagent.Codex, repo)
-	if queriedSession(t, cli, source).ProfileID != side.ID {
-		t.Fatal("delegation source must belong to Side")
-	}
-	gate := newMaintenanceGitGate(t, "rev-parse --verify main^{commit}")
-	gate.arm(t)
-	request := delegateCheckoutAt(repo, delegateNewWorktree("pending", "main"))
-	request.RequestID = uuid.NewString()
-	request.SourceSessionID = protocol.Ptr(source)
-	done := make(chan error, 1)
-	go func() {
-		_, err := cli.WithGardenProfile(side.ID, source).StartDelegation(request)
-		done <- err
-	}()
-	gate.awaitBlocked(t)
-	id := uuid.NewString()
-	deleted := profileRequest(app, protocol.ProfileDeleteMessage{Cmd: protocol.CmdProfileDelete, RequestID: id, ProfileID: side.ID, ExpectedRevision: side.Revision, DestinationProfileID: home}, id)
-	gate.release(t)
-	if !deleted.Success {
-		t.Fatalf("unaccepted request must not reserve the profile: %+v %s", deleted, protocol.Deref(deleted.Error))
-	}
-	if err := <-done; err == nil || !strings.Contains(err.Error(), "deleted") {
-		t.Fatalf("request must refuse its deleted owning profile before acceptance: %v", err)
 	}
 }

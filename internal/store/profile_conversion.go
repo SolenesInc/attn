@@ -91,6 +91,9 @@ func applyProfileConversion(tx *sql.Tx) error {
 	if existing > 0 {
 		return fmt.Errorf("the workspace conversion expects no profiles, but %d already exist without a recorded conversion", existing)
 	}
+	if err := migrateAutomationIDs(tx); err != nil {
+		return fmt.Errorf("assigning numeric automation identities: %w", err)
+	}
 	if err := addProfileStampColumns(tx); err != nil {
 		return err
 	}

@@ -130,14 +130,12 @@ func (w *profilesTestDaemon) agent(sessionID, profileID string) {
 	w.t.Helper()
 	w.d.store.Add(&protocol.Session{
 		ID:        sessionID,
+		ProfileID: profileID,
 		Label:     sessionID,
 		Directory: w.t.TempDir(),
 		State:     protocol.SessionStateIdle,
 		Agent:     protocol.SessionAgentClaude,
 	})
-	if err := w.d.store.AssignSessionProfile(sessionID, profileID); err != nil {
-		w.t.Fatalf("assign %s to profile %s: %v", sessionID, profileID, err)
-	}
 }
 
 func eventName(t *testing.T, payload []byte) string {
@@ -275,7 +273,7 @@ func TestHelloScopesTheClientToItsRememberedProfile(t *testing.T) {
 	}
 
 	w.mustSend(bootstrap, map[string]any{
-		"cmd": protocol.CmdProfileDelete, "profile_id": work.ID, "expected_revision": work.Revision, "destination_profile_id": home.ID,
+		"cmd": protocol.CmdProfileDelete, "profile_id": work.ID, "expected_revision": work.Revision,
 	})
 	_, deleted := w.connect(work.ID)
 	if protocol.Deref(deleted.SelectedProfileID) != home.ID || len(deleted.Profiles) != 2 {
@@ -493,7 +491,7 @@ func TestProfileNamesAreUniqueWhileLiveAndReusableAfterDelete(t *testing.T) {
 		t.Fatalf("renaming changed the profile id from %s to %s", attn.ID, renamed.ID)
 	}
 	w.mustSend(client, map[string]any{
-		"cmd": protocol.CmdProfileDelete, "profile_id": renamed.ID, "expected_revision": renamed.Revision, "destination_profile_id": side.ID,
+		"cmd": protocol.CmdProfileDelete, "profile_id": renamed.ID, "expected_revision": renamed.Revision,
 	})
 	reborn := w.mustSend(client, map[string]any{"cmd": protocol.CmdProfileCreate, "name": "attention"}).Profile
 	if reborn.ID == attn.ID {
@@ -503,9 +501,6 @@ func TestProfileNamesAreUniqueWhileLiveAndReusableAfterDelete(t *testing.T) {
 	if err != nil || len(live) != 3 {
 		t.Fatalf("%d live profiles (err %v), want Default, side and attention", len(live), err)
 	}
-	wantErrorCode(t, w.send(client, map[string]any{
-		"cmd": protocol.CmdProfileDelete, "profile_id": reborn.ID, "expected_revision": reborn.Revision, "destination_profile_id": reborn.ID,
-	}), protocol.ProfileErrorCodeDestinationSame)
 }
 
 func TestProfileCommandWithoutARequestIDIsRefused(t *testing.T) {
@@ -546,17 +541,19 @@ func TestSelectingAProfileTellsEveryClientItWasUsed(t *testing.T) {
 	}
 }
 
-func TestDeletingAProfileLandsItsClientsOnTheDestination(t *testing.T) {
+func TestDeletingAProfileSelectsTheMostRecentlyUsedRemainingProfile(t *testing.T) {
 	w := newProfilesTestDaemon(t)
 	deleter, _ := w.connect("")
 	doomed := w.mustSend(deleter, map[string]any{"cmd": protocol.CmdProfileCreate, "name": "doomed"}).Profile
 	kept := w.mustSend(deleter, map[string]any{"cmd": protocol.CmdProfileCreate, "name": "kept"})
+	w.mustSend(deleter, map[string]any{"cmd": protocol.CmdProfileSelect, "profile_id": kept.Profile.ID})
+
 	w.mustSend(deleter, map[string]any{"cmd": protocol.CmdProfileSelect, "profile_id": doomed.ID})
 	bystander, _ := w.connect(doomed.ID)
 	drainClientPayloads(t, deleter)
 
 	deleted := w.mustSend(deleter, map[string]any{
-		"cmd": protocol.CmdProfileDelete, "profile_id": doomed.ID, "expected_revision": doomed.Revision, "destination_profile_id": kept.Profile.ID,
+		"cmd": protocol.CmdProfileDelete, "profile_id": doomed.ID, "expected_revision": doomed.Revision,
 	})
 	if deleted.Profile != nil || deleted.Desktops != nil {
 		t.Fatalf("profile_delete answered %+v, want success alone", deleted)

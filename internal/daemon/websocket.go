@@ -1028,8 +1028,6 @@ func (d *Daemon) handleClientMessage(client *wsClient, data []byte) {
 		d.handleProfileDelete(client, msg.(*protocol.ProfileDeleteMessage))
 	case protocol.CmdProfileSelect:
 		d.handleProfileSelect(client, msg.(*protocol.ProfileSelectMessage))
-	case protocol.CmdSessionMove:
-		d.handleSessionMove(client, msg.(*protocol.SessionMoveMessage))
 	case protocol.CmdLaunchDesktopGet:
 		d.handleLaunchDesktopGet(client, msg.(*protocol.LaunchDesktopGetMessage))
 	case protocol.CmdLaunchDesktopSet:

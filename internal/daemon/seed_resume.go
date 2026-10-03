@@ -20,12 +20,11 @@ type seedResumeOutcome struct {
 func (d *Daemon) resumeSeedFromReview(
 	seedID string,
 	review *protocol.SeedReviewActionContext,
-	destination profileDestination,
 ) (*seedResumeOutcome, error) {
 	var outcome *seedResumeOutcome
 	err := d.worktreeMaintenance.ProtectFromAutomaticCleanup(context.Background(), func(protection foregroundCleanupProtection) error {
 		var resumeErr error
-		outcome, resumeErr = d.resumeSeedFromReviewProtected(protection, seedID, review, destination)
+		outcome, resumeErr = d.resumeSeedFromReviewProtected(protection, seedID, review)
 		return resumeErr
 	})
 	return outcome, err
@@ -35,7 +34,6 @@ func (d *Daemon) resumeSeedFromReviewProtected(
 	protection foregroundCleanupProtection,
 	seedID string,
 	review *protocol.SeedReviewActionContext,
-	destination profileDestination,
 ) (*seedResumeOutcome, error) {
 	seedID = strings.TrimSpace(seedID)
 	if seedID == "" {
@@ -105,10 +103,10 @@ func (d *Daemon) resumeSeedFromReviewProtected(
 	}
 	recorded := sessionReopenVerdict{SessionID: sessionID}
 	d.planReopenProfile(&recorded)
-	profileID, err := recorded.destinationProfile(destination)
-	if err != nil {
-		return nil, fmt.Errorf("%s cannot resume: %w; reopen its session from the Sessions ledger to choose where it lands", seedID, err)
+	if recorded.ProfileDeleted {
+		return nil, fmt.Errorf("%s cannot resume: its profile was deleted", seedID)
 	}
+	profileID := recorded.ProfileID
 	if profileID != seed.ProfileID {
 		owner, _ := d.store.GetProfile(seed.ProfileID)
 		target, _ := d.store.GetProfile(profileID)
@@ -238,10 +236,7 @@ func (d *Daemon) bindResumedSeed(
 
 func (d *Daemon) handleSeedResume(client *wsClient, msg *protocol.SeedResumeMessage) {
 	requestID := protocol.Deref(msg.RequestID)
-	outcome, err := d.resumeSeedFromReview(msg.SeedID, msg.Review, profileDestination{
-		requested:           protocol.Deref(msg.ProfileID),
-		whenRecordedDeleted: client.selectedProfile(),
-	})
+	outcome, err := d.resumeSeedFromReview(msg.SeedID, msg.Review)
 	response := protocol.SeedResumeResultMessage{
 		Event:     protocol.EventSeedResumeResult,
 		RequestID: requestID,

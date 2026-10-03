@@ -22,11 +22,10 @@ var sessionReopenActions = []protocol.SessionReopenAction{
 }
 
 type sessionReopenArgs struct {
-	target  string
-	action  string
-	cwd     string
-	profile string
-	json    bool
+	target string
+	action string
+	cwd    string
+	json   bool
 }
 
 func parseSessionReopenArgs(args []string) (sessionReopenArgs, error) {
@@ -39,7 +38,6 @@ func parseSessionReopenArgs(args []string) (sessionReopenArgs, error) {
 	fs.SetOutput(io.Discard)
 	action := fs.String("action", "", "the action to perform; `attn session show` lists the ones offered")
 	cwd := fs.String("cwd", "", "where to start, for --action start_fresh_elsewhere")
-	profile := fs.String("profile", "", "the profile to reopen into, when the session's own profile is gone")
 	jsonOut := fs.Bool("json", false, "print the result as JSON")
 	if err := fs.Parse(args[1:]); err != nil {
 		return sessionReopenArgs{}, err
@@ -52,7 +50,7 @@ func parseSessionReopenArgs(args []string) (sessionReopenArgs, error) {
 		return sessionReopenArgs{}, fmt.Errorf("%q is not a reopen action; the actions are %s",
 			named, strings.Join(sessionReopenActionNames(), ", "))
 	}
-	return sessionReopenArgs{target: target, action: named, cwd: strings.TrimSpace(*cwd), profile: strings.TrimSpace(*profile), json: *jsonOut}, nil
+	return sessionReopenArgs{target: target, action: named, cwd: strings.TrimSpace(*cwd), json: *jsonOut}, nil
 }
 
 func knownSessionReopenAction(name string) bool {
@@ -84,7 +82,6 @@ func runSessionReopen(args []string) {
 		SessionID: parsed.target,
 		Action:    parsed.action,
 		Directory: parsed.cwd,
-		ProfileID: parsed.profile,
 	})
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "session reopen: %v\n", err)
@@ -125,7 +122,7 @@ func fprintSessionReopenVerdict(w io.Writer, sessionID string, reopen *protocol.
 		fmt.Fprintf(w, "warning    %s\n", warning)
 	}
 	if reopen.ProfileDeleted {
-		fmt.Fprintf(w, "lands in   profile %s is gone; pass --profile <id> to choose where\n", reopen.ProfileID)
+		fmt.Fprintf(w, "lands in   profile %s is gone; this session cannot reopen\n", reopen.ProfileID)
 	} else {
 		fmt.Fprintf(w, "lands in   profile %s, last or current desktop\n", reopen.ProfileID)
 	}

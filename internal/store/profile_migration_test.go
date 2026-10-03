@@ -150,7 +150,7 @@ func TestAClosedImportRetiresAndFinishDoesNotBringItBack(t *testing.T) {
 
 func TestTheProfileHoldingAPendingMigrationCannotBeDeleted(t *testing.T) {
 	_, s, view := convertAgentWorkspaces(t, 2)
-	other, _, err := s.CreateProfile("Work")
+	_, _, err := s.CreateProfile("Work")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -158,7 +158,7 @@ func TestTheProfileHoldingAPendingMigrationCannotBeDeleted(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	_, err = s.DeleteProfile(converted.ID, converted.Revision, other.ID)
+	_, err = s.DeleteProfile(converted.ID, converted.Revision, 0, 0)
 	wantCode(t, err, profiles.CodeInvalid)
 
 	view = edit(t, s, view.State.Revision, keepAll)
@@ -169,7 +169,11 @@ func TestTheProfileHoldingAPendingMigrationCannotBeDeleted(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if _, err := s.DeleteProfile(converted.ID, converted.Revision, other.ID); err != nil {
+	for _, session := range s.List("") {
+		s.CloseSession(session.ID, SessionClose{By: SessionClosedByUser}, time.Now())
+	}
+
+	if _, err := s.DeleteProfile(converted.ID, converted.Revision, 0, 0); err != nil {
 		t.Fatalf("deleting Default after the migration finished: %v", err)
 	}
 }

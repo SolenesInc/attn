@@ -22,7 +22,6 @@ import {
   AutomationFormValues,
   AutomationTrigger,
   automationFormSchema,
-  slugFromName,
   repositoryEntry,
   specJSONString,
   specToFormValues,
@@ -33,17 +32,17 @@ import { setAutomationFormAutomationHandle } from './automationFormAutomation';
 import './AutomationForm.css';
 
 export interface AutomationFormProps {
-  definitionId: string | null;
-  getDefinition: (definitionId: string) => Promise<{ specJson: string; definition?: AutomationDefinitionSummary }>;
+  definitionId: number | null;
+  getDefinition: (definitionId: number) => Promise<{ specJson: string; definition?: AutomationDefinitionSummary }>;
   applyDefinition: (
     specJson: string,
-    expectedId: string,
+    expectedId: number,
     expectedRevision: number,
     launchDesktop?: LaunchDesktopSetting,
     profileId?: string,
   ) => Promise<{ definition: AutomationDefinitionSummary }>;
-  deleteDefinition: (definitionId: string) => Promise<void>;
-  setEnabled: (definitionId: string, enabled: boolean) => Promise<void>;
+  deleteDefinition: (definitionId: number) => Promise<void>;
+  setEnabled: (definitionId: number, enabled: boolean) => Promise<void>;
   onCancel: () => void;
   onSaved: (definition: AutomationDefinitionSummary) => void;
   onDeleted: () => void;
@@ -70,8 +69,7 @@ function makeCreateDefaults(): AutomationFormValues {
   const firstModel = LAUNCH_CATALOG.codex.models[0];
   return {
     name: '',
-    id: '',
-    idCustomized: false,
+    id: 0,
     trigger: 'manual',
     scheduleCron: '',
     continuity: 'fresh',
@@ -162,20 +160,14 @@ function useModelSelection(
 
 function AutomationNameFields({
   mode,
-  values,
+  loadedId,
   fieldError,
   nameRegister,
-  idRegister,
-  onNameChange,
-  onCustomizeId,
 }: {
   mode: 'create' | 'edit';
-  values: AutomationFormValues;
+  loadedId: number | null;
   fieldError: (field: keyof AutomationFormValues) => string | undefined;
   nameRegister: ComponentProps<'input'>;
-  idRegister: ComponentProps<'input'>;
-  onNameChange: ComponentProps<'input'>['onChange'];
-  onCustomizeId: () => void;
 }) {
   return (
     <section className="automation-form__section">
@@ -189,7 +181,7 @@ function AutomationNameFields({
         name={nameRegister.name}
         ref={nameRegister.ref}
         onBlur={nameRegister.onBlur}
-        onChange={onNameChange}
+        onChange={nameRegister.onChange}
       />
       {fieldError('name') && (
         <p className="automation-form__field-error" data-testid="automation-form-error-name">
@@ -197,37 +189,7 @@ function AutomationNameFields({
         </p>
       )}
 
-      {mode === 'create' ? (
-        <div className="automation-form__id-row">
-          <input
-            className={
-              fieldError('id') ? 'automation-form__input automation-form__input--invalid' : 'automation-form__input'
-            }
-            data-testid="automation-form-id"
-            readOnly={!values.idCustomized}
-            {...idRegister}
-          />
-          {!values.idCustomized && (
-            <button
-              type="button"
-              className="automation-form__id-customize"
-              onClick={onCustomizeId}
-              data-testid="automation-form-id-customize"
-            >
-              Customize
-            </button>
-          )}
-        </div>
-      ) : (
-        <p className="automation-form__id-static" data-testid="automation-form-id-static">
-          ID: {values.id} · fixed after creation
-        </p>
-      )}
-      {fieldError('id') && (
-        <p className="automation-form__field-error" data-testid="automation-form-error-id">
-          {fieldError('id')}
-        </p>
-      )}
+      {mode === 'edit' && <p className="automation-form__id-static">ID: {loadedId}</p>}
     </section>
   );
 }
@@ -838,8 +800,6 @@ export function AutomationForm({
     watch,
     getValues,
     setValue,
-    setError,
-    setFocus,
     trigger,
     reset,
     control,
@@ -862,7 +822,7 @@ export function AutomationForm({
 
   const [status, setStatus] = useState<LoadStatus>(mode === 'edit' ? 'loading' : 'ready');
   const [loadError, setLoadError] = useState('');
-  const [loadedId, setLoadedId] = useState<string | null>(definitionId);
+  const [loadedId, setLoadedId] = useState<number | null>(definitionId);
   const [revision, setRevision] = useState(0);
   const [launchDesktop, setLaunchDesktop] = useState<LaunchDesktopSetting>();
   const selectedProfile = useProfilesStore((state) => state.selectedProfileId);
@@ -919,7 +879,7 @@ export function AutomationForm({
       setSaving(true);
       setSaveError('');
       setSaveErrorCode('');
-      applyDefinition(specJSONString(values), loadedId ?? '', revision, launchDesktop, profileId)
+      applyDefinition(specJSONString(values), loadedId ?? 0, revision, launchDesktop, profileId)
         .then((result) => {
           setSaving(false);
           setLoadedId(result.definition.id);
@@ -932,15 +892,11 @@ export function AutomationForm({
           setSaving(false);
           const code = errorCode(error);
           const message = messageOf(error, 'Failed to save automation');
-          if (code === 'id_collision') {
-            setError('id', { message });
-            return;
-          }
           setSaveErrorCode(code);
           setSaveError(message);
         });
     },
-    [applyDefinition, loadedId, revision, launchDesktop, profileId, onSaved, setError],
+    [applyDefinition, loadedId, revision, launchDesktop, profileId, onSaved],
   );
 
   const onSubmit = handleSubmit(doSave);
@@ -1039,21 +995,6 @@ export function AutomationForm({
   );
 
   const nameRegister = regField('name');
-  const handleNameChange = useCallback(
-    (event: React.ChangeEvent<HTMLInputElement>) => {
-      nameRegister.onChange(event);
-      if (mode === 'create' && !getValues('idCustomized')) {
-        setValue('id', slugFromName(event.target.value), { shouldDirty: true, shouldValidate: true });
-      }
-    },
-    [nameRegister, mode, getValues, setValue],
-  );
-
-  const handleCustomizeId = useCallback(() => {
-    setValue('idCustomized', true, { shouldDirty: true, shouldValidate: true });
-    setFocus('id');
-  }, [setValue, setFocus]);
-
   const { handleAgentChange, handleModelSelectChange } = useModelSelection(getValues, setValue, setModelMode);
 
   function addRepository(field: 'repositoriesInclude' | 'repositoriesExclude', raw: string) {
@@ -1214,15 +1155,7 @@ export function AutomationForm({
           </p>
         )}
 
-        <AutomationNameFields
-          mode={mode}
-          values={values}
-          fieldError={fieldError}
-          nameRegister={nameRegister}
-          idRegister={regField('id')}
-          onNameChange={handleNameChange}
-          onCustomizeId={handleCustomizeId}
-        />
+        <AutomationNameFields mode={mode} loadedId={loadedId} fieldError={fieldError} nameRegister={nameRegister} />
 
         <AutomationTriggerFields
           fields={fields}
@@ -1249,7 +1182,7 @@ export function AutomationForm({
           desktop={
             <LaunchDesktopSelect
               kind={LaunchDesktopKind.Automation}
-              itemId={loadedId}
+              itemId={loadedId === null ? null : String(loadedId)}
               profileId={profileId}
               defaultName={values.name}
               value={launchDesktop}
@@ -1299,6 +1232,6 @@ export function AutomationForm({
   );
 }
 
-export function automationFormKey(definitionId: string | null): string {
-  return definitionId ?? '__new__';
+export function automationFormKey(definitionId: number | null): string {
+  return definitionId === null ? '__new__' : String(definitionId);
 }

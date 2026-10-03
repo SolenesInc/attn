@@ -215,7 +215,7 @@ describe('what the active leaf offers', () => {
   });
 
   it('walks the automation runs that need the user and settles the one shown, but nothing on a tile', async () => {
-    const docs = { run_id: 'r', definition_id: 'docs', definition_name: 'nightly docs', trigger_type: 'schedule' };
+    const docs = { run_id: 'r', definition_id: 1, definition_name: 'nightly docs', trigger_type: 'schedule' };
     const run = (id: string, hour: number, owed: boolean) =>
       daemonSession(id, { automation: docs, turn_owed: owed, turn_opened_at: `2026-09-26T${String(hour).padStart(2, '0')}:00:00Z`, state: 'waiting_input' });
     const { daemon } = await renderApp({ initialState: {

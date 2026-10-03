@@ -40,7 +40,7 @@ func assertNoSpawnCharacterizationSession(t *testing.T, d *Daemon, backend *fake
 func TestSpawnCharacterizationRefusesAMissingOrDeletedProfileBeforeAnySideEffect(t *testing.T) {
 	d, backend, client, cwd := newSpawnCharacterizationDaemon(t)
 	work := createTestProfile(t, d.store, "Work")
-	deleteTestProfile(t, d.store, work.ID, defaultProfileID(t, d.store))
+	deleteTestProfile(t, d.store, work.ID)
 	for _, tt := range []struct {
 		name, profileID, want string
 	}{

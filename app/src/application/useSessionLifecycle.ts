@@ -96,14 +96,14 @@ export function useSessionLifecycle({
   );
 
   const handleReopenSession = useCallback(
-    async (sessionId: string, actionId: string, profileId?: string): Promise<boolean> => {
+    async (sessionId: string, actionId: string): Promise<boolean> => {
       let directory: string | undefined;
       if (actionId === 'start_fresh_elsewhere') {
         const chosen = await chooseReopenDirectory();
         if (!chosen) return false;
         directory = chosen;
       }
-      const result = await sendSessionReopen(sessionId, actionId, directory, profileId);
+      const result = await sendSessionReopen(sessionId, actionId, directory);
       handleSelectSession(result.session_id);
       onReopened();
       return true;

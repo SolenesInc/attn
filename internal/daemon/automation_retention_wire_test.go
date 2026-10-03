@@ -15,20 +15,20 @@ func TestRetentionPrunesOnlySettledRunsPastTheKeepCountAndMinimumAge(t *testing.
 	t.Setenv("ATTN_AUTOMATION_RETENTION_SWEEP_INTERVAL", "2m")
 	inBubble(t, func(t *testing.T, w *world) {
 		cli := w.Client()
+		definitions := map[string]int{}
 		automationUnreachableFolder(t, w, "gone", func() {
 			for _, id := range []string{"failing", "deleted"} {
-				applyAutomation(t, cli, fmt.Sprintf(`api_version: attn.dev/automations/v1alpha1
-id: %s
+				definitions[id] = applyAutomation(t, cli, fmt.Sprintf(`api_version: attn.dev/automations/v1alpha1
 name: %s
 trigger: {type: manual}
 prompt: Check the folder.
 launch: {driver: claude}
 location: {type: directory, path: %q}
-`, id, id, w.Path("gone")))
+`, id, w.Path("gone"))).ID
 			}
 		})
 		for _, id := range []string{"cancelled", "pending"} {
-			applyAutomation(t, cli, automationReviewSpec(id, "manual", ""))
+			definitions[id] = applyAutomation(t, cli, automationReviewSpec(id, "manual", "")).ID
 		}
 		runs := map[string][]string{}
 		record := func(id string, n int) {
@@ -38,8 +38,8 @@ location: {type: directory, path: %q}
 				if id == "cancelled" || id == "pending" {
 					input = automationReviewInput(len(runs[id])+1, "0123456789abcdef0123456789abcdef01234567")
 				}
-				_, err := cli.AutomationRun(id, request, input)
-				all := automationRuns(t, cli, id)
+				_, err := cli.AutomationRun(definitions[id], request, input)
+				all := automationRuns(t, cli, definitions[id])
 				if len(all) != len(runs[id])+1 {
 					t.Fatalf("run request %s left runs %+v (err %v), want one new run", request, all, err)
 				}
@@ -55,8 +55,8 @@ location: {type: directory, path: %q}
 		record("cancelled", 2)
 		record("pending", 2)
 		record("deleted", 2)
-		setAutomationEnabled(t, cli, "cancelled", false)
-		if err := cli.AutomationDelete("deleted"); err != nil {
+		setAutomationEnabled(t, cli, definitions["cancelled"], false)
+		if err := cli.AutomationDelete(definitions["deleted"]); err != nil {
 			t.Fatal(err)
 		}
 		w.advance(2*time.Minute + 20*time.Second)
@@ -70,7 +70,7 @@ location: {type: directory, path: %q}
 			"pending":   {runs["pending"][1], runs["pending"][0]},
 			"deleted":   {runs["deleted"][1]},
 		} {
-			if got := automationRunIDs(automationRuns(t, cli, id)); !slices.Equal(got, want) {
+			if got := automationRunIDs(automationRuns(t, cli, definitions[id])); !slices.Equal(got, want) {
 				t.Errorf("%s keeps runs %v, want %v", id, got, want)
 			}
 		}
@@ -86,22 +86,21 @@ func TestRetentionKeepsAContinuingThreadsRunsWhilePruningFreshOnes(t *testing.T)
 		automationUnreachableFolder(t, w, "gone", func() {
 			for _, continuity := range []string{"singleton", "fresh"} {
 				applyAutomation(t, cli, fmt.Sprintf(`api_version: attn.dev/automations/v1alpha1
-id: %s
 name: %s
 trigger: {type: scheduled, schedule: {cron: "*/2 * * * *", time_zone: UTC}, continuity: %s, catch_up: latest}
 prompt: Continue the thread.
 launch: {driver: claude}
 location: {type: directory, path: %q}
-`, continuity, continuity, continuity, w.Path("gone")))
+`, continuity, continuity, w.Path("gone")))
 			}
 		})
 
 		w.advance(6*time.Minute + 30*time.Second)
 
-		if got, want := automationOccurrenceKeys(automationRuns(t, cli, "fresh")), []string{"scheduled:2000-01-01T00:06:00Z"}; !slices.Equal(got, want) {
+		if got, want := automationOccurrenceKeys(automationRuns(t, cli, 2)), []string{"scheduled:2000-01-01T00:06:00Z"}; !slices.Equal(got, want) {
 			t.Errorf("the fresh automation keeps %v after the sweep, want only the run since %v", got, want)
 		}
-		thread := automationRuns(t, cli, "singleton")
+		thread := automationRuns(t, cli, 1)
 		if got, want := automationOccurrenceKeys(thread), []string{"scheduled:2000-01-01T00:06:00Z", "scheduled:2000-01-01T00:04:00Z", "scheduled:2000-01-01T00:02:00Z"}; !slices.Equal(got, want) {
 			t.Fatalf("the continuing thread keeps %v after the sweep, want every run %v", got, want)
 		}

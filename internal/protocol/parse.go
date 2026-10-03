@@ -243,7 +243,6 @@ var messageDecoders = map[string]func([]byte) (any, error){
 	CmdProfileCreate:                 decodeInto[ProfileCreateMessage],
 	CmdProfileRename:                 decodeInto[ProfileRenameMessage],
 	CmdProfileDelete:                 decodeInto[ProfileDeleteMessage],
-	CmdSessionMove:                   decodeInto[SessionMoveMessage],
 	CmdProfileSelect:                 decodeInto[ProfileSelectMessage],
 	CmdLaunchDesktopGet:              decodeInto[LaunchDesktopGetMessage],
 	CmdLaunchDesktopSet:              decodeInto[LaunchDesktopSetMessage],
