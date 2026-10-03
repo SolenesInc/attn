@@ -184,3 +184,9 @@ commands so retained drafts survive upgrades. Upload reads bounded
 base64 ranges directly, avoiding the whole-file URL fetch that failed on this
 workload. Files have no configured size or count cap; read, retention and upload
 failures remain visible and do not produce a saved receipt.
+
+Recent opens at the newest note in a chronological, day-grouped timeline.
+Up/Down select notes; Esc returns to the composer. Loading an older page keeps
+the visible note in place. Read updates refresh the entire loaded range rather
+than removing older pages or moving the selection. File metadata carries its
+own name and byte count; image previews remain lazy and serial.

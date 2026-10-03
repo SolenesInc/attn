@@ -181,8 +181,9 @@ a Chief is assigned. "Saved" means the daemon owns the note and file bytes.
 An unconfirmed submission keeps its draft and checks its existing identity
 before another send.
 
-Open **Recent** to inspect what you sent, to whom and when. Each entry shows
-**Sent** or **Read**. Read means the recipient retrieved the message from its
+Open **Recent** to inspect what you sent, to whom and when. Notes are grouped
+by day, with the newest at the bottom. Use **Up/Down** to move between notes
+and **Esc** to return to your draft. Each entry shows **Sent** or **Read**. Read means the recipient retrieved the message from its
 inbox; it does not mean the recipient understood or acted on it.
 Inspecting Recent does not mark a message as read.
 
