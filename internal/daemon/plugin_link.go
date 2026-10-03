@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"slices"
+	"time"
 
 	"github.com/victorarias/attn/internal/harness"
 	"github.com/victorarias/attn/internal/protocol"
@@ -30,7 +31,7 @@ func (l pluginLink) Deliver(_ context.Context, in harness.Input) harness.Custody
 	if !result.OK {
 		return harness.Custody{Reason: fmt.Sprintf("plugin %q declined message delivery for session %s", cursor.PluginName, in.Session)}
 	}
-	return harness.Custody{Taken: true}
+	return harness.Custody{Taken: true, At: time.Now()}
 }
 
 func (d *Daemon) sessionLink(session *protocol.Session, voice harness.Voice) harness.Link {

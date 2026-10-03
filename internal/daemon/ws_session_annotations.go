@@ -86,7 +86,7 @@ func (d *Daemon) handleSessionAnnotationsSubmit(client *wsClient, msg *protocol.
 	}
 	delivery := annotationSessionInput(msg.RequestID, sessionID, msg.Text)
 	attempt := d.sessionInputs().try(context.Background(), delivery)
-	if attempt.err != nil {
+	if attempt.stage != sessionInputPlaced {
 		if sessionInputDeferredError(attempt.err) {
 			result.Status = annotationSubmitStatusSkipped
 			d.sendToClient(client, result)
@@ -96,7 +96,6 @@ func (d *Daemon) handleSessionAnnotationsSubmit(client *wsClient, msg *protocol.
 		fail(attempt.err.Error())
 		return
 	}
-	d.sessionInputs().release(sessionID, delivery.id)
 	result.Success = true
 	result.Status = annotationSubmitStatusDelivered
 	d.sendToClient(client, result)

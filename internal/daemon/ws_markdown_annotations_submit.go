@@ -79,7 +79,7 @@ func (d *Daemon) handleMarkdownAnnotationsSubmit(client *wsClient, msg *protocol
 		}
 		delivery := annotationSessionInput(msg.RequestID, targetSession, payload)
 		attempt := d.sessionInputs().try(context.Background(), delivery)
-		if attempt.err != nil {
+		if attempt.stage != sessionInputPlaced {
 			if sessionInputDeferredError(attempt.err) {
 				result.Status = annotationSubmitStatusSkipped
 				d.sendToClient(client, result)
@@ -89,7 +89,6 @@ func (d *Daemon) handleMarkdownAnnotationsSubmit(client *wsClient, msg *protocol
 			fail(attempt.err.Error())
 			return
 		}
-		d.sessionInputs().release(targetSession, delivery.id)
 		result.Status = annotationSubmitStatusDelivered
 	} else {
 		if _, err := d.appendSeedNote(targetSeed, payload, "", "", "", nil, false, ""); err != nil {

@@ -146,6 +146,16 @@ describe("RelayServer wire behavior", () => {
     suite.close();
   });
 
+  test("a taken-input report from a suite loaded before an upgrade is acknowledged, not refused", async () => {
+    const { relay, socketPath } = await buildBareRelay();
+    const suite = await FakeSuiteClient.connect(socketPath);
+
+    await expect(suite.request("suite.report_input_taken", { token: "t", input_id: "ring/1" })).resolves.toEqual({ ok: true });
+
+    suite.close();
+    relay.close();
+  });
+
   test("a handler failure answers the suite and names itself in the driver's log", async () => {
     const socketPath = nextSocketPath();
     const lines: string[] = [];

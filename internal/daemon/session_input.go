@@ -17,32 +17,7 @@ type sessionInputStage uint8
 const (
 	sessionInputDeferred sessionInputStage = iota
 	sessionInputPlaced
-	sessionInputTaken
-	sessionInputIndeterminate
-)
-
-type sessionInputReason uint8
-
-const (
-	sessionInputReasonNone sessionInputReason = iota
-	sessionInputReasonInitialPrompt
-	sessionInputReasonApproval
-	sessionInputReasonSelector
-	sessionInputReasonUserComposerDirty
-	sessionInputReasonBusy
-	sessionInputReasonScreenUnavailable
-	sessionInputReasonGone
-	sessionInputReasonUnsupported
-	sessionInputReasonIDConflict
-	sessionInputReasonTransport
-)
-
-type sessionInputRoute uint8
-
-const (
-	sessionInputRouteNone sessionInputRoute = iota
-	sessionInputRouteLink
-	sessionInputRoutePTY
+	sessionInputFailed
 )
 
 type sessionInputPlacement uint8
@@ -140,69 +115,34 @@ type sessionInputRunRef struct {
 
 func (r sessionInputRunRef) valid() bool { return r.sessionID != "" && r.epoch > 0 }
 
-type sessionInputReceipt struct {
-	id      sessionInputAttemptID
-	run     sessionInputRunRef
-	takenAt time.Time
-}
-
+// Custody is a delivery's only result: never confirm afterwards that the harness used it.
 type sessionInputAttempt struct {
-	id      sessionInputAttemptID
-	stage   sessionInputStage
-	route   sessionInputRoute
-	reason  sessionInputReason
-	receipt *sessionInputReceipt
-	wait    <-chan struct{}
-	err     error
-}
-
-type sessionInputFingerprint struct {
-	sessionID         string
-	text              string
-	origin            sessionInputOrigin
-	placement         sessionInputPlacement
-	allowUserComposer bool
-	bypassInitialGate bool
-}
-
-type sessionInputAttemptState struct {
-	fingerprint    sessionInputFingerprint
-	stage          sessionInputStage
-	route          sessionInputRoute
-	receipt        *sessionInputReceipt
-	wait           chan struct{}
-	composer       bool
-	userGeneration uint64
-	released       bool
-}
-
-type sessionInputCandidate struct {
-	inputID string
-	attempt sessionInputAttemptID
-	text    string
-	origin  sessionInputOrigin
+	stage sessionInputStage
+	at    time.Time
+	err   error
 }
 
 type sessionInputRunState struct {
-	ref       sessionInputRunRef
-	userTaken bool
+	ref      sessionInputRunRef
+	credited bool
 }
 
 type sessionInputLane struct {
 	mu sync.Mutex
 
-	attempts       map[string]*sessionInputAttemptState
-	retries        map[string]*sessionInputRetry
-	pending        []sessionInputCandidate
-	run            *sessionInputRunState
-	placing        bool
-	epoch          uint64
-	userGeneration uint64
-	userSubmit     bool
-	heldEnter      bool
-	phase          protocol.SessionState
-	stopped        bool
-	running        sync.WaitGroup
+	retries map[string]*sessionInputRetry
+	run     *sessionInputRunState
+	placing bool
+	// attn's paste may still sit in the composer. Only a turn start or the
+	// user's own typing clears it: nothing confirms the harness took the paste.
+	occupied      bool
+	creditNextRun bool
+	epoch         uint64
+	userSubmit    bool
+	heldEnter     bool
+	phase         protocol.SessionState
+	stopped       bool
+	running       sync.WaitGroup
 }
 
 type sessionInputModule struct {
@@ -210,19 +150,6 @@ type sessionInputModule struct {
 	mu      sync.Mutex
 	lanes   map[string]*sessionInputLane
 	stopped bool
-}
-
-type sessionInputTakenEffect struct {
-	inputID string
-	origin  sessionInputOrigin
-	run     sessionInputRunRef
-	at      time.Time
-}
-
-type sessionInputEffects struct {
-	taken          *sessionInputTakenEffect
-	receipt        *sessionInputReceipt
-	requestStarted *time.Time
 }
 
 var (
@@ -235,8 +162,6 @@ var (
 	errSessionInputScreenUnavailable = errors.New("session input blocked because the screen is unavailable")
 	errSessionInputInitialPrompt     = errors.New("session input blocked while the initial prompt is pending")
 )
-
-var sessionInputTakenWindow = 3 * time.Second
 
 var sessionInputQuietWindow = 30 * time.Second
 
@@ -253,7 +178,7 @@ type sessionInputRetry struct {
 	resend func()
 }
 
-var sessionInputComposerRetry = sessionInputTakenWindow
+var sessionInputComposerRetry = 3 * time.Second
 
 func sessionInputRetryDelay(err error) (time.Duration, bool) {
 	var quiet *sessionInputQuietError
@@ -287,102 +212,10 @@ func (m *sessionInputModule) lane(sessionID string) *sessionInputLane {
 	defer m.mu.Unlock()
 	lane := m.lanes[sessionID]
 	if lane == nil {
-		lane = &sessionInputLane{attempts: make(map[string]*sessionInputAttemptState), stopped: m.stopped}
+		lane = &sessionInputLane{stopped: m.stopped}
 		m.lanes[sessionID] = lane
 	}
 	return lane
-}
-
-func (m *sessionInputModule) release(sessionID string, id sessionInputAttemptID) {
-	key := id.String()
-	if key == "" || strings.TrimSpace(sessionID) == "" {
-		return
-	}
-	m.mu.Lock()
-	lane := m.lanes[sessionID]
-	m.mu.Unlock()
-	if lane == nil {
-		return
-	}
-	lane.mu.Lock()
-	if state := lane.attempts[key]; state != nil {
-		if state.stage == sessionInputTaken {
-			delete(lane.attempts, key)
-		} else {
-			state.released = true
-		}
-	}
-	lane.mu.Unlock()
-}
-
-func (m *sessionInputModule) forget(sessionID string, id sessionInputAttemptID) {
-	key := id.String()
-	if key == "" || strings.TrimSpace(sessionID) == "" {
-		return
-	}
-	m.mu.Lock()
-	lane := m.lanes[sessionID]
-	m.mu.Unlock()
-	if lane == nil {
-		return
-	}
-	lane.mu.Lock()
-	delete(lane.attempts, key)
-	lane.removePending(id)
-	m.recordOwedLocked(lane, sessionID)
-	lane.mu.Unlock()
-}
-
-func (m *sessionInputModule) relinquishComposer(sessionID string, id sessionInputAttemptID) {
-	key := id.String()
-	if key == "" || strings.TrimSpace(sessionID) == "" {
-		return
-	}
-	m.mu.Lock()
-	lane := m.lanes[sessionID]
-	m.mu.Unlock()
-	if lane == nil {
-		return
-	}
-	lane.mu.Lock()
-	if state := lane.attempts[key]; state != nil && state.stage == sessionInputPlaced {
-		state.composer = false
-	}
-	m.recordOwedLocked(lane, sessionID)
-	lane.mu.Unlock()
-}
-
-func (m *sessionInputModule) forgetSuperseded(sessionID string, current sessionInputAttemptID, origin sessionInputOrigin) {
-	currentKey := current.String()
-	if currentKey == "" || strings.TrimSpace(sessionID) == "" {
-		return
-	}
-	m.mu.Lock()
-	lane := m.lanes[sessionID]
-	m.mu.Unlock()
-	if lane == nil {
-		return
-	}
-	lane.mu.Lock()
-	defer lane.mu.Unlock()
-	for key, state := range lane.attempts {
-		if key == currentKey || state.fingerprint.origin != origin || state.composer {
-			continue
-		}
-		for i := 0; i < len(lane.pending); {
-			if lane.pending[i].attempt.String() == key {
-				lane.pending = append(lane.pending[:i], lane.pending[i+1:]...)
-				continue
-			}
-			i++
-		}
-		select {
-		case <-state.wait:
-		default:
-			close(state.wait)
-		}
-		delete(lane.attempts, key)
-	}
 }
 
 func (m *sessionInputModule) forgetSession(sessionID string) {
@@ -489,283 +322,140 @@ func (lane *sessionInputLane) stopRetriesLocked() {
 }
 
 func (m *sessionInputModule) try(ctx context.Context, delivery sessionInputDelivery) sessionInputAttempt {
-	key := delivery.id.String()
-	if key == "" || strings.TrimSpace(delivery.sessionID) == "" || strings.TrimSpace(delivery.text) == "" {
-		return sessionInputAttempt{id: delivery.id, stage: sessionInputIndeterminate, reason: sessionInputReasonUnsupported, err: errors.New("session input needs an attempt id, session id, and text")}
+	if delivery.id.String() == "" || strings.TrimSpace(delivery.sessionID) == "" || strings.TrimSpace(delivery.text) == "" {
+		return sessionInputAttempt{stage: sessionInputFailed, err: errors.New("session input needs an attempt id, session id, and text")}
 	}
 	ctx, cancel := context.WithCancel(ctx)
 	defer cancel()
 	defer context.AfterFunc(m.daemon.life.Context(), cancel)()
+	attempt, credited := m.place(ctx, delivery)
+	if credited.valid() {
+		m.daemon.armAutoSettleForUserInput(credited)
+	}
+	return attempt
+}
+
+func (m *sessionInputModule) place(ctx context.Context, delivery sessionInputDelivery) (sessionInputAttempt, sessionInputRunRef) {
 	lane := m.lane(delivery.sessionID)
 	lane.mu.Lock()
 	defer lane.mu.Unlock()
-	defer m.recordOwedLocked(lane, delivery.sessionID)
+	deferred := func(err error) (sessionInputAttempt, sessionInputRunRef) {
+		return sessionInputAttempt{stage: sessionInputDeferred, err: err}, sessionInputRunRef{}
+	}
 	if lane.stopped {
-		return sessionInputAttempt{id: delivery.id, stage: sessionInputDeferred, reason: sessionInputReasonGone, err: errSessionInputLaneClosed}
-	}
-
-	fingerprint := sessionInputFingerprint{
-		sessionID:         delivery.sessionID,
-		text:              delivery.text,
-		origin:            delivery.origin,
-		placement:         delivery.placement,
-		allowUserComposer: delivery.allowUserComposer,
-		bypassInitialGate: delivery.bypassInitialGate,
-	}
-	if existing := lane.attempts[key]; existing != nil {
-		if existing.fingerprint != fingerprint {
-			return sessionInputAttempt{id: delivery.id, stage: sessionInputIndeterminate, reason: sessionInputReasonIDConflict, err: fmt.Errorf("session input attempt %s was reused with different content", key)}
-		}
-		if existing.stage == sessionInputTaken {
-			return attemptFromState(delivery.id, existing)
-		}
-		if (existing.stage == sessionInputPlaced || existing.stage == sessionInputIndeterminate) &&
-			existing.route == sessionInputRoutePTY && existing.composer {
-			return m.resubmitPTYLocked(ctx, lane, delivery, existing)
-		}
-		return attemptFromState(delivery.id, existing)
+		return deferred(errSessionInputLaneClosed)
 	}
 	if lane.placing {
 		m.armRetryLocked(lane, delivery, errSessionInputPlacingAnother)
-		return sessionInputAttempt{id: delivery.id, stage: sessionInputDeferred, reason: sessionInputReasonBusy, err: errSessionInputPlacingAnother}
+		return deferred(errSessionInputPlacingAnother)
 	}
-	if lane.heldEnter {
+	if lane.heldEnter || lane.occupied {
 		m.armRetryLocked(lane, delivery, errSessionInputComposerOccupied)
-		return sessionInputAttempt{id: delivery.id, stage: sessionInputDeferred, reason: sessionInputReasonBusy, err: errSessionInputComposerOccupied}
-	}
-	for _, existing := range lane.attempts {
-		if existing.composer && (existing.stage == sessionInputPlaced || existing.stage == sessionInputIndeterminate) {
-			m.armRetryLocked(lane, delivery, errSessionInputComposerOccupied)
-			return sessionInputAttempt{id: delivery.id, stage: sessionInputDeferred, reason: sessionInputReasonBusy, err: errSessionInputComposerOccupied}
-		}
+		return deferred(errSessionInputComposerOccupied)
 	}
 
 	state := m.daemon.store.Get(delivery.sessionID)
 	if state == nil {
-		return sessionInputAttempt{id: delivery.id, stage: sessionInputDeferred, reason: sessionInputReasonGone, err: fmt.Errorf("session %s is gone", delivery.sessionID)}
+		return deferred(fmt.Errorf("session %s is gone", delivery.sessionID))
 	}
 	if !delivery.bypassInitialGate && m.daemon.initialPromptPending(delivery.sessionID) {
-		return sessionInputAttempt{id: delivery.id, stage: sessionInputDeferred, reason: sessionInputReasonInitialPrompt, err: errSessionInputInitialPrompt}
+		return deferred(errSessionInputInitialPrompt)
 	}
-	if reason, ok := deliveryAllowedForPhase(delivery.placement, state.State); !ok {
-		err := errSessionInputBlockedByApproval
-		if reason == sessionInputReasonBusy {
-			err = fmt.Errorf("session input requires a prompt-ready session, got %s", state.State)
-		}
-		return sessionInputAttempt{id: delivery.id, stage: sessionInputDeferred, reason: reason, err: err}
+	if err := deliveryAllowedForPhase(delivery.placement, state.State); err != nil {
+		return deferred(err)
 	}
 
-	attempt := &sessionInputAttemptState{fingerprint: fingerprint, wait: make(chan struct{}), userGeneration: lane.userGeneration}
-	lane.attempts[key] = attempt
-	candidate := sessionInputCandidate{inputID: key, attempt: delivery.id, text: delivery.text, origin: delivery.origin}
-
+	var attempt sessionInputAttempt
+	handled := false
 	if m.daemon.sessionLink(state, delivery.origin.voice()) != nil {
-		if placed, ok := m.placeOverLinkLocked(ctx, lane, delivery, state, attempt, candidate); ok {
-			return placed
-		}
+		attempt, handled = m.placeOverLinkLocked(ctx, lane, delivery, state)
 	}
-	return m.placePTYLocked(ctx, lane, delivery, attempt, candidate)
+	if !handled {
+		attempt = m.placePTYLocked(ctx, lane, delivery)
+	}
+	if attempt.stage != sessionInputPlaced {
+		return attempt, sessionInputRunRef{}
+	}
+	return attempt, m.tookLocked(lane, delivery)
 }
 
-func (m *sessionInputModule) placeOverLinkLocked(ctx context.Context, lane *sessionInputLane, delivery sessionInputDelivery, state *protocol.Session, attempt *sessionInputAttemptState, candidate sessionInputCandidate) (sessionInputAttempt, bool) {
-	key := delivery.id.String()
+func (m *sessionInputModule) placeOverLinkLocked(ctx context.Context, lane *sessionInputLane, delivery sessionInputDelivery, state *protocol.Session) (sessionInputAttempt, bool) {
 	voice := delivery.origin.voice()
-	attempt.route = sessionInputRouteLink
-	lane.pending = append(lane.pending, candidate)
 	lane.placing = true
 	lane.mu.Unlock()
 	// Resolve again after unlocking: a link gone meanwhile hands the input to the PTY.
 	link := m.daemon.sessionLink(state, voice)
 	var custody harness.Custody
 	if link != nil {
-		custody = link.Deliver(ctx, harness.Input{Session: state.ID, ID: key, Text: delivery.text, Voice: voice})
+		custody = link.Deliver(ctx, harness.Input{Session: state.ID, ID: delivery.id.String(), Text: delivery.text, Voice: voice})
 	}
 	lane.mu.Lock()
 	lane.placing = false
 	if link == nil {
-		lane.removePending(delivery.id)
-		attempt.route = sessionInputRouteNone
 		return sessionInputAttempt{}, false
 	}
-	if !custody.Taken && attempt.stage != sessionInputTaken {
-		lane.removePending(delivery.id)
-		delete(lane.attempts, key)
-		return sessionInputAttempt{id: delivery.id, stage: sessionInputDeferred, route: sessionInputRouteLink, reason: sessionInputReasonTransport, err: errors.New(custody.Reason)}, true
+	if !custody.Taken {
+		return sessionInputAttempt{stage: sessionInputDeferred, err: errors.New(custody.Reason)}, true
 	}
-	if attempt.stage != sessionInputTaken {
-		attempt.stage = sessionInputPlaced
+	return sessionInputAttempt{stage: sessionInputPlaced, at: custody.At}, true
+}
+
+// tookLocked credits the user's words to the run going, or, while the paste waits in the
+// composer, to the next turn start. The user typing over the paste forfeits that credit.
+func (m *sessionInputModule) tookLocked(lane *sessionInputLane, delivery sessionInputDelivery) sessionInputRunRef {
+	if delivery.origin.kind != sessionInputOriginUserConversation {
+		return sessionInputRunRef{}
 	}
 	sessionID, text, origin := delivery.sessionID, delivery.text, delivery.origin
 	m.daemon.life.Go("maybeGenerateSessionTitleFromPrompt", func() { m.daemon.maybeGenerateSessionTitleFromPrompt(sessionID, text, origin) })
-	return attemptFromState(delivery.id, attempt), true
-}
-
-func (lane *sessionInputLane) owesPrompt() bool {
-	for _, attempt := range lane.attempts {
-		if attempt.composer && attempt.stage == sessionInputPlaced {
-			return true
-		}
+	if lane.run == nil || lane.occupied {
+		lane.creditNextRun = true
+		return sessionInputRunRef{}
 	}
-	return false
+	lane.run.credited = true
+	return lane.run.ref
 }
 
 func (m *sessionInputModule) recordOwedLocked(lane *sessionInputLane, sessionID string) {
-	m.daemon.recordPlacedInputOwed(sessionID, lane.owesPrompt() && reportsPromptsTaken(string(m.daemon.sessionAgent(sessionID))))
+	m.daemon.recordPlacedInputOwed(sessionID, lane.occupied && reportsTurnStarts(string(m.daemon.sessionAgent(sessionID))))
 }
 
-func (lane *sessionInputLane) removePending(id sessionInputAttemptID) {
-	for i := 0; i < len(lane.pending); {
-		if lane.pending[i].attempt == id {
-			lane.pending = append(lane.pending[:i], lane.pending[i+1:]...)
-			continue
-		}
-		i++
+func (m *sessionInputModule) releaseComposerLocked(lane *sessionInputLane, sessionID string) {
+	if !lane.occupied {
+		return
 	}
+	lane.occupied = false
+	m.recordOwedLocked(lane, sessionID)
 }
 
-func attemptFromState(id sessionInputAttemptID, state *sessionInputAttemptState) sessionInputAttempt {
-	return sessionInputAttempt{id: id, stage: state.stage, route: state.route, receipt: state.receipt, wait: state.wait}
-}
-
-func deliveryAllowedForPhase(placement sessionInputPlacement, state protocol.SessionState) (sessionInputReason, bool) {
+func deliveryAllowedForPhase(placement sessionInputPlacement, state protocol.SessionState) error {
 	if state == protocol.SessionStatePendingApproval {
-		return sessionInputReasonApproval, false
+		return errSessionInputBlockedByApproval
 	}
-	switch placement {
-	case sessionInputWhenPromptReady:
-		if state == protocol.SessionStateIdle || state == protocol.SessionStateWaitingInput {
-			return sessionInputReasonNone, true
-		}
-		return sessionInputReasonBusy, false
-	case sessionInputAtTurnBoundary:
-		return sessionInputReasonNone, true
-	default:
-		return sessionInputReasonUnsupported, false
+	if placement == sessionInputWhenPromptReady && state != protocol.SessionStateIdle && state != protocol.SessionStateWaitingInput {
+		return fmt.Errorf("session input requires a prompt-ready session, got %s", state)
 	}
+	return nil
 }
 
 func sessionInputPhaseAllows(placement sessionInputPlacement, state protocol.SessionState) bool {
-	_, ok := deliveryAllowedForPhase(placement, state)
-	return ok
+	return deliveryAllowedForPhase(placement, state) == nil
 }
 
-func (m *sessionInputModule) observePromptTaken(sessionID, prompt string, at time.Time) sessionInputEffects {
-	if at.IsZero() {
-		at = time.Now()
-	}
+func (m *sessionInputModule) observePromptSubmitted(sessionID string) (run sessionInputRunRef, credited, typed bool) {
 	lane := m.lane(sessionID)
 	lane.mu.Lock()
 	defer lane.mu.Unlock()
-
-	var candidate *sessionInputCandidate
-	matchIndexes := make([]int, 0, 1)
-	for i := range lane.pending {
-		if strings.HasSuffix(prompt, lane.pending[i].text) {
-			matchIndexes = append(matchIndexes, i)
-		}
-	}
-	plausible := len(matchIndexes)
-	if lane.userSubmit {
-		plausible++
-	}
-	if plausible == 1 && len(matchIndexes) == 1 {
-		i := matchIndexes[0]
-		copy := lane.pending[i]
-		candidate = &copy
-		lane.pending = append(lane.pending[:i], lane.pending[i+1:]...)
-	} else if plausible == 1 {
-		candidate = &sessionInputCandidate{
-			inputID: fmt.Sprintf("user/%d", lane.userGeneration),
-			text:    prompt,
-			origin:  userConversationInput(),
-		}
-	} else if plausible > 1 {
-		for i := len(matchIndexes) - 1; i >= 0; i-- {
-			index := matchIndexes[i]
-			matched := lane.pending[index]
-			if state := lane.attempts[matched.attempt.String()]; state != nil {
-				state.stage = sessionInputIndeterminate
-				state.composer = false
-				select {
-				case <-state.wait:
-				default:
-					close(state.wait)
-				}
-				if state.released {
-					delete(lane.attempts, matched.attempt.String())
-				}
-			}
-			lane.pending = append(lane.pending[:index], lane.pending[index+1:]...)
-		}
-	}
-	if lane.userSubmit {
-		kept := lane.pending[:0]
-		for _, pending := range lane.pending {
-			state := lane.attempts[pending.attempt.String()]
-			if state == nil || state.stage != sessionInputIndeterminate {
-				kept = append(kept, pending)
-			}
-		}
-		lane.pending = kept
-	}
-	m.daemon.forgetUserInput(sessionID)
+	typed = lane.userSubmit
 	lane.userSubmit = false
-	effects := m.takeLocked(lane, sessionID, candidate, at)
-	m.recordOwedLocked(lane, sessionID)
-	return effects
-}
-
-func (m *sessionInputModule) observeInputTaken(sessionID, inputID string, at time.Time) sessionInputEffects {
-	if at.IsZero() {
-		at = time.Now()
+	m.daemon.forgetUserInput(sessionID)
+	m.releaseComposerLocked(lane, sessionID)
+	current := m.ensureRunLocked(lane, sessionID)
+	if typed || lane.creditNextRun {
+		current.credited = true
+		lane.creditNextRun = false
 	}
-	lane := m.lane(sessionID)
-	lane.mu.Lock()
-	defer lane.mu.Unlock()
-	var candidate *sessionInputCandidate
-	for i := range lane.pending {
-		if lane.pending[i].inputID == inputID {
-			copy := lane.pending[i]
-			candidate = &copy
-			lane.pending = append(lane.pending[:i], lane.pending[i+1:]...)
-			break
-		}
-	}
-	if candidate == nil {
-		return sessionInputEffects{}
-	}
-	return m.takeLocked(lane, sessionID, candidate, at)
-}
-
-func (m *sessionInputModule) takeLocked(lane *sessionInputLane, sessionID string, candidate *sessionInputCandidate, at time.Time) sessionInputEffects {
-	if laneRun := m.ensureRunLocked(lane, sessionID); laneRun != nil {
-		effects := sessionInputEffects{requestStarted: &at}
-		if candidate == nil {
-			return effects
-		}
-		taken := &sessionInputTakenEffect{inputID: candidate.inputID, origin: candidate.origin, run: laneRun.ref, at: at}
-		if candidate.origin.kind == sessionInputOriginUserConversation {
-			laneRun.userTaken = true
-		}
-		effects.taken = taken
-		if state := lane.attempts[candidate.attempt.String()]; state != nil {
-			receipt := &sessionInputReceipt{id: candidate.attempt, run: laneRun.ref, takenAt: at}
-			state.stage = sessionInputTaken
-			state.receipt = receipt
-			state.composer = false
-			select {
-			case <-state.wait:
-			default:
-				close(state.wait)
-			}
-			effects.receipt = receipt
-			if state.released {
-				delete(lane.attempts, candidate.attempt.String())
-			}
-		}
-		return effects
-	}
-	return sessionInputEffects{requestStarted: &at}
+	return current.ref, current.credited, typed
 }
 
 func (m *sessionInputModule) ensureRunLocked(lane *sessionInputLane, sessionID string) *sessionInputRunState {
@@ -773,7 +463,8 @@ func (m *sessionInputModule) ensureRunLocked(lane *sessionInputLane, sessionID s
 		return lane.run
 	}
 	lane.epoch++
-	lane.run = &sessionInputRunState{ref: sessionInputRunRef{sessionID: sessionID, epoch: lane.epoch}}
+	lane.run = &sessionInputRunState{ref: sessionInputRunRef{sessionID: sessionID, epoch: lane.epoch}, credited: lane.creditNextRun}
+	lane.creditNextRun = false
 	return lane.run
 }
 
@@ -787,94 +478,40 @@ func (m *sessionInputModule) observePhase(sessionID string, phase protocol.Sessi
 		m.holdEnterLocked(lane, sessionID, 0)
 	}
 	if phase == protocol.SessionStateWorking {
-		m.ensureRunLocked(lane, sessionID)
 		if previous == protocol.SessionStatePendingApproval {
-			lane.clearConsumedUserInputLocked()
+			lane.userSubmit = false
 			m.daemon.forgetUserInput(sessionID)
+		} else if lane.run == nil {
+			m.releaseComposerLocked(lane, sessionID)
 		}
+		m.ensureRunLocked(lane, sessionID)
 		return
 	}
 	if previous == protocol.SessionStateWorking && lane.userSubmit {
-		lane.clearConsumedUserInputLocked()
+		lane.userSubmit = false
 		m.daemon.forgetUserInput(sessionID)
 	}
 	lane.run = nil
-}
-
-func (lane *sessionInputLane) clearConsumedUserInputLocked() {
-	kept := lane.pending[:0]
-	for _, pending := range lane.pending {
-		state := lane.attempts[pending.attempt.String()]
-		if state == nil || state.stage != sessionInputIndeterminate {
-			kept = append(kept, pending)
-		} else if state.released {
-			delete(lane.attempts, pending.attempt.String())
-		}
-	}
-	lane.pending = kept
-	lane.userSubmit = false
 }
 
 func (m *sessionInputModule) currentUserRun(sessionID string) (sessionInputRunRef, bool) {
 	lane := m.lane(sessionID)
 	lane.mu.Lock()
 	defer lane.mu.Unlock()
-	if lane.run == nil || !lane.run.userTaken {
+	if lane.run == nil || !lane.run.credited {
 		return sessionInputRunRef{}, false
 	}
 	return lane.run.ref, true
 }
 
-func (m *sessionInputModule) await(sessionID string, id sessionInputAttemptID, wait <-chan struct{}, window time.Duration) sessionInputAttempt {
-	if wait == nil || window <= 0 {
-		return m.lookup(sessionID, id)
+// attn's own words earned credit at custody; this hook never matches prompt text.
+func (d *Daemon) observePromptSubmitted(sessionID string, at time.Time) bool {
+	run, credited, typed := d.sessionInputs().observePromptSubmitted(sessionID)
+	d.markModelRequestStarted(sessionID, at)
+	if credited {
+		d.armAutoSettleForUserInput(run)
 	}
-	timer := time.NewTimer(window)
-	defer timer.Stop()
-	select {
-	case <-wait:
-	case <-timer.C:
-	}
-	return m.lookup(sessionID, id)
-}
-
-func (m *sessionInputModule) lookup(sessionID string, id sessionInputAttemptID) sessionInputAttempt {
-	key := id.String()
-	m.mu.Lock()
-	lane := m.lanes[sessionID]
-	m.mu.Unlock()
-	if lane != nil {
-		lane.mu.Lock()
-		if state := lane.attempts[key]; state != nil {
-			attempt := attemptFromState(id, state)
-			lane.mu.Unlock()
-			return attempt
-		}
-		lane.mu.Unlock()
-	}
-	return sessionInputAttempt{id: id, stage: sessionInputDeferred, reason: sessionInputReasonGone}
-}
-
-func (d *Daemon) observePromptTaken(sessionID, prompt string, at time.Time) sessionInputEffects {
-	effects := d.sessionInputs().observePromptTaken(sessionID, prompt, at)
-	if effects.requestStarted != nil {
-		d.markModelRequestStarted(sessionID, *effects.requestStarted)
-	}
-	if effects.taken != nil && effects.taken.origin.kind == sessionInputOriginUserConversation {
-		d.armAutoSettleForUserInput(effects.taken.run)
-	}
-	return effects
-}
-
-func (d *Daemon) observeStructuredInputTaken(sessionID, inputID string, at time.Time) sessionInputEffects {
-	effects := d.sessionInputs().observeInputTaken(sessionID, inputID, at)
-	if effects.requestStarted != nil {
-		d.markModelRequestStarted(sessionID, *effects.requestStarted)
-	}
-	if effects.taken != nil && effects.taken.origin.kind == sessionInputOriginUserConversation {
-		d.armAutoSettleForUserInput(effects.taken.run)
-	}
-	return effects
+	return typed
 }
 
 func (d *Daemon) markModelRequestStarted(sessionID string, at time.Time) bool {

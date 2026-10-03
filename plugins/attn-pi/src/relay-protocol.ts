@@ -19,7 +19,6 @@ export type RelayHelloState = "idle" | "working" | "pending_approval";
 export type RelayHelloResult = { ok: true };
 export type RelaySuiteState = "working" | "pending_approval";
 export type RelayReportStateParams = { token: string; state: RelaySuiteState };
-export type RelayReportInputTakenParams = { token: string; input_id: string };
 export type RelayReportStopParams = { token: string; assistant_text: string; aborted?: boolean };
 export type RelayReportPullRequestParams = { token: string; url: string };
 export type RelayReportSessionFileParams = { token: string; path: string };
@@ -57,7 +56,6 @@ export const relayMethods = {
   reportProxyCommands: "suite.report_proxy_commands",
   reportStop: "suite.report_stop",
   reportDenial: "suite.report_denial",
-  reportInputTaken: "suite.report_input_taken",
   reportPullRequest: "suite.report_pull_request",
   reportSessionFile: "suite.report_session_file",
   reportExecPolicyAmendment: "suite.report_execpolicy_amendment",

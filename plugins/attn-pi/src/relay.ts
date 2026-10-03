@@ -29,7 +29,6 @@ export type RelayDelegate = {
   suiteReportProxyCommands(params: unknown): Promise<void>;
   suiteReportStop(params: unknown): Promise<void>;
   suiteReportDenial(params: unknown): Promise<void>;
-  suiteReportInputTaken(params: unknown): Promise<void>;
   suiteReportPullRequest(params: unknown): Promise<void>;
   suiteReportSessionFile(params: unknown): Promise<void>;
   suiteReportExecPolicyAmendment(params: unknown): Promise<void>;
@@ -40,12 +39,15 @@ export type RelayDelegate = {
  * so it can only be built after it. */
 export type RelayDelegateSource = RelayDelegate | (() => RelayDelegate);
 
+// Suites loaded before attn stopped confirming deliveries still send this. Refusing it makes
+// them redial and resend it forever, so the relay acknowledges and drops it.
+const retiredReportInputTaken = "suite.report_input_taken";
+
 export const suiteReports: Record<string, Exclude<keyof RelayDelegate, "suiteHello">> = {
   [relayMethods.reportState]: "suiteReportState",
   [relayMethods.reportProxyCommands]: "suiteReportProxyCommands",
   [relayMethods.reportStop]: "suiteReportStop",
   [relayMethods.reportDenial]: "suiteReportDenial",
-  [relayMethods.reportInputTaken]: "suiteReportInputTaken",
   [relayMethods.reportPullRequest]: "suiteReportPullRequest",
   [relayMethods.reportSessionFile]: "suiteReportSessionFile",
   [relayMethods.reportExecPolicyAmendment]: "suiteReportExecPolicyAmendment",
@@ -168,6 +170,7 @@ export class RelayConnection {
 
   private handlerFor(method: string): ((params: unknown) => Promise<unknown>) | undefined {
     if (method === relayMethods.hello) return (params) => this.delegate.suiteHello(this, params);
+    if (method === retiredReportInputTaken) return async () => ({ ok: true });
     const report = suiteReports[method];
     if (report === undefined) return undefined;
     return async (params) => {

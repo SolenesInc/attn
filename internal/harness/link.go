@@ -1,7 +1,10 @@
 // Package harness is the contract between attn and the agent harnesses it hosts.
 package harness
 
-import "context"
+import (
+	"context"
+	"time"
+)
 
 // Voice says whose words an input carries; a link declares the voices it can deliver.
 type Voice uint8
@@ -21,9 +24,10 @@ type Input struct {
 	Voice   Voice
 }
 
-// Custody is a delivery's only result: whether the harness took the input.
+// Custody is a delivery's only result: whether the harness took the input, and when.
 type Custody struct {
 	Taken  bool
+	At     time.Time
 	Reason string
 }
 

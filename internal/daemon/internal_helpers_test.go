@@ -164,7 +164,6 @@ func TestMain(m *testing.M) {
 		os.Exit(m.Run())
 	}
 	sessionInputSubmitDelay = 0
-	sessionInputTakenWindow = 0
 	os.Exit(testworld.Main(m,
 		"ATTN_PTY_BACKEND=embedded",
 		"ATTN_PTY_SKIP_STARTUP_PROBE=1",

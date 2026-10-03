@@ -39,7 +39,8 @@ to "did the harness take custody of this input?" After that attn does nothing
 for it: no echo matching, transcript correlation or acknowledgement timers.
 A receipt only earns its keep if attn can act on a failure better than the
 user can, and it cannot. The user sees what arrived and resends an annotation;
-an unread inbox re-rings; a missed heartbeat is retried next cycle. A harness
+an unread inbox re-rings; a heartbeat not taken into custody is tried again,
+and one taken is not repeated for the same cache generation. A harness
 mechanism qualifies as a link only if it answers custody synchronously. An
 uncertain input is never resent automatically.
 
@@ -157,12 +158,11 @@ Core rules. These are the only places harness behaviour reaches core.
    *placed*; not taken becomes *deferred*, and core's existing cadences (ring,
    heartbeat) decide the next try. The call is bounded by
    `pluginDeliverMessageTimeout`; that bound is not an ack timer, and expiry
-   means not taken. This is the target. Step 1 keeps today's behavior: the
-   quiet window is checked only on the PTY route, as pi's route never had it
-   (see Decisions taken, 2), and pi's input still joins `lane.pending` with
-   `Input.ID` as the key that `report_input_taken` echoes. After step 5 the
-   link path never touches `lane.pending`, `observePromptTaken`, the
-   indeterminate stage or owed input.
+   means not taken. This is the target. Today the quiet window is checked
+   only on the PTY route, as pi's route never had it (see Decisions taken,
+   2). Since step 5 nothing follows custody. For auto-settle, a user-voice
+   input credits the turn that takes it: the run going, or the next turn
+   start when it waits in the composer or no run is going.
 4. **Evidence.** Turn events become one `link` evidence source (the epic's
    `NativeRoot`, renamed, with its precedence). One rule: for each kind a link
    provides, link evidence wins while the link is Up; hooks and title signals
@@ -202,19 +202,22 @@ harness needs only a driver entry. Designed for, deferred (step 8).
 | attn Codex fork | many | both | `link.deliver` reply | declared at hello | yes |
 
 **PTY fallback.** Not a `Link`: it is what a session uses when no link
-takes its voice. Today's path moved unchanged into `session_input_pty.go`
-as `sessionInputModule` methods (`placePTYLocked`, `resubmitPTYLocked`,
-`ptySafetyLocked`), keeping the checks that protect the user. Echo matching
-goes in step 5. When `End` lands in step 4, ending a PTY session closes its
-terminal.
+takes its voice. Step 1 moved today's path into `session_input_pty.go`
+as `sessionInputModule` methods (`placePTYLocked`, `ptySafetyLocked`),
+keeping the checks that protect the user. Step 5 retired echo matching:
+custody is the paste and Enter written, or Enter held for a prompt that
+appeared after the paste. A turn-boundary paste occupies the composer until
+the next turn start or the user's typing. When `End` lands in step 4, ending
+a PTY session closes its terminal.
 
 **pi.** The attn-pi plugin's `message_delivery` becomes the first link. The
 plugin connection is one link carrying every pi session, with `Up(s)` and
 `Down(s)` driven by each pi process's suite connecting and disconnecting.
 `report_state` and `report_stop` become `Turn` events,
 `report_metadata.resume_session_id` becomes `Opened` or `Shows`, and
-`report_input_taken` is retired. `driver.spawn`, `classify_stop` and the
-auto-mode and amendment reports stay plugin-driver methods.
+`report_input_taken` is retired (step 5; the plugin relay still acknowledges
+it from suites loaded before an upgrade). `driver.spawn`, `classify_stop`
+and the auto-mode and amendment reports stay plugin-driver methods.
 
 **Codex shared app-server (stock).** An in-process adapter in
 `internal/harness/codexapp`. One link per (driver, executable) and instance;
@@ -309,11 +312,11 @@ Each step is PR-sized unless noted. Verification follows `docs/instances.md`.
 
 | # | Step | Behavior change |
 |---|---|---|
-| 1 | **In progress.** `internal/harness` with `Voice`, `Input`, `Custody` and `Link`; the PTY path moved unchanged into `session_input_pty.go`; pi's plugin delivery as the first link, chosen per delivery from the session's plugin driver run record and the plugin registry, with the PTY as the fallback when no link takes the voice; any error maps to deferred. Pending candidates, receipt matching and the PTY-only quiet window are unchanged. | None |
+| 1 | **In progress.** `internal/harness` with `Voice`, `Input`, `Custody` and `Link`; the PTY path moved unchanged into `session_input_pty.go`; pi's plugin delivery as the first link, chosen per delivery from the session's plugin driver run record and the plugin registry, with the PTY as the fallback when no link takes the voice; any error maps to deferred. Pending candidates, receipt matching and the PTY-only quiet window are unchanged (step 5 retired the receipt matching). | None |
 | 2 | The epic's neutral wins, one PR each, parallel to 1: PTY worker teardown hardening (`instance clean` refuses to wipe while a worker survives); `SessionLedgerEntry.usage` with the inspector and `attn session show` lines (protocol bump); the ledger focus-trap fix; a decision on the PTY Backend settings card the epic deleted. | `instance clean` exits non-zero and keeps data when a worker cannot be reaped; ledger and CLI show usage for every harness |
 | 3 | `link` evidence source and the precedence rule; pi's `report_state` and `report_stop` move to `Turn`; `Shape.Provides` drops hooks at launch. Needs 1. | None intended; a pi session's state origin reads `link` |
 | 4 | The identity rule: terminal registry with ids distinct from session ids; `Opened` and `Shows` for single-session links, with Claude `/clear` and `/resume` and pi as consumers; terminal-to-session resolution for PTY exit, state, input and layout. Existing rows keep `runtime_id` = session id. Daemon and app may split. Needs 1. | Claude `/clear` opens a new session; the old one becomes recoverable |
-| 5 | Retire receipts on the PTY route: `observePromptTaken` matching, pending candidates, `sessionInputTakenWindow`, `await`, the indeterminate stage, `report_input_taken`. Crew heartbeat records `Custody.At` with no wait; owed input clears on the next turn start. Needs 1. | Heartbeats stop waiting up to 3 s; annotation results are taken or not taken |
+| 5 | **Done.** Retire receipts on the PTY route: `observePromptTaken` matching, pending candidates, `sessionInputTakenWindow`, `await`, the indeterminate stage, `report_input_taken`. Crew heartbeat records `Custody.At` with no wait; owed input clears on the next turn start. Needs 1. | Heartbeats stop waiting up to 3 s; annotation results are taken or not taken |
 | 6 | Rebase the epic; refactor in place (several reviewable commits, one merge): neutral names and migration (see below); Codex into `codexapp`; the capabilities with a consumer (`Attacher`, `TitleObserver`, `Views`, `Names`, `Reconfigure`, `Transcripts`, Multi `Opened` and `Shows`); core owns registry, close rule and attach-view command; app gets 0..n terminals per session; name write failures warn and retry, never blocking delivery; the quiet window keyed to terminals; setting under Experimental; docs and glossary neutral. Needs 1, 3, 4. | Opt-in shared Codex becomes available, default off |
 | 7 | Claude inbox link under Experimental. Needs 1; parallel to 4 to 6. | Opted-in Claude rings, heartbeats and nudges leave the PTY |
 | 8 | Link wire protocol, `attn link relay`, the Claude mod with its version gate; pi's deliver and state subset moves to `link.*` under an `attn_api_version` bump (migrate attn-pi in the same PR). Deferred. | Opted-in Claude gets both voices and turn state; hooks remain the fallback |

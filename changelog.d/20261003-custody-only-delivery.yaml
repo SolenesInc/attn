@@ -1,0 +1,3 @@
+kind: internal
+area: daemon
+change: Session input reports only whether the harness took custody of it. attn no longer matches submitted prompts against its own pastes, crew heartbeats no longer wait up to 3 seconds for a model request, and pi no longer reports taken inputs.

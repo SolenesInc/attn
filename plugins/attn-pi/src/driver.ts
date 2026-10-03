@@ -15,7 +15,6 @@ import type {
   RelayNetworkDecideResult,
   RelayReportDenialParams,
   RelayReportExecPolicyAmendmentParams,
-  RelayReportInputTakenParams,
   RelayReportNetworkAmendmentParams,
   RelayReportPullRequestParams,
   RelayReportSessionFileParams,
@@ -418,17 +417,6 @@ export class PiDriver implements RelayDelegate {
       run_id: run.runID,
       host: params.host,
       decision: params.decision,
-    });
-  }
-
-  async suiteReportInputTaken(rawParams: unknown): Promise<void> {
-    const params = parseRelayReportInputTaken(rawParams);
-    const run = this.requireRunByToken(params.token);
-    await this.rpc.request("session.report_input_taken", {
-      session_id: run.sessionID,
-      run_id: run.runID,
-      seq: this.nextSeq(run),
-      input_id: params.input_id,
     });
   }
 
@@ -865,16 +853,6 @@ function parseDeliverMessageParams(value: unknown): { session_id: string; run_id
   if (typeof inputID !== "string" || inputID.trim() === "") throw new Error("driver.deliver_message is missing input_id");
   if (typeof text !== "string") throw new Error("driver.deliver_message is missing text");
   return { session_id: sessionID.trim(), run_id: runID.trim(), input_id: inputID.trim(), text };
-}
-
-function parseRelayReportInputTaken(value: unknown): RelayReportInputTakenParams {
-  if (typeof value !== "object" || value === null) throw new Error("suite.report_input_taken params must be an object");
-  const record = value as Record<string, unknown>;
-  const token = record.token;
-  const inputID = record.input_id;
-  if (typeof token !== "string" || token.trim() === "") throw new Error("suite.report_input_taken is missing token");
-  if (typeof inputID !== "string" || inputID.trim() === "") throw new Error("suite.report_input_taken is missing input_id");
-  return { token: token.trim(), input_id: inputID.trim() };
 }
 
 function thinkingFor(effort: string | undefined): string | undefined {

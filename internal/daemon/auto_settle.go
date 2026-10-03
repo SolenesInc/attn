@@ -260,8 +260,8 @@ func (d *Daemon) runAutoSettleFor(sessionID string, phase, resume autoSettlePhas
 	if string(session.State) != protocol.StateWorking {
 		return "not-working"
 	}
-	currentRun, userTaken := d.sessionInputs().currentUserRun(sessionID)
-	if !userTaken || currentRun != armedRun {
+	currentRun, credited := d.sessionInputs().currentUserRun(sessionID)
+	if !credited || currentRun != armedRun {
 		return "wrong-run"
 	}
 	if opened := d.store.TurnStamps(sessionID).OpenedAt; opened.IsZero() || !opened.Equal(armedTurn) {

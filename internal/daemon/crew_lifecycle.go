@@ -53,28 +53,34 @@ const crewSleepPromptGrace = 10 * time.Minute
 
 type crewLifecycleMemo struct {
 	mu                     sync.Mutex
-	lastHeartbeat          map[string]time.Time
+	lastHeartbeat          map[string]crewHeartbeat
 	lastSleepPromptAttempt map[string]time.Time
+}
+
+type crewHeartbeat struct {
+	generation string
+	at         time.Time
 }
 
 func newCrewLifecycleMemo() *crewLifecycleMemo {
 	return &crewLifecycleMemo{
-		lastHeartbeat:          make(map[string]time.Time),
+		lastHeartbeat:          make(map[string]crewHeartbeat),
 		lastSleepPromptAttempt: make(map[string]time.Time),
 	}
 }
 
-func (m *crewLifecycleMemo) heartbeatDue(sessionID string, now time.Time, grace time.Duration) bool {
+// heartbeatDue never sends one cache generation a second heartbeat: attn cannot tell whether the agent missed the first.
+func (m *crewLifecycleMemo) heartbeatDue(sessionID, generation string, now time.Time, grace time.Duration) bool {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	last, ok := m.lastHeartbeat[sessionID]
-	return !ok || now.Sub(last) >= grace
+	return !ok || (last.generation != generation && now.Sub(last.at) >= grace)
 }
 
-func (m *crewLifecycleMemo) recordHeartbeat(sessionID string, at time.Time) {
+func (m *crewLifecycleMemo) recordHeartbeat(sessionID, generation string, at time.Time) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
-	m.lastHeartbeat[sessionID] = at
+	m.lastHeartbeat[sessionID] = crewHeartbeat{generation: generation, at: at}
 }
 
 func (m *crewLifecycleMemo) mayPromptSleep(sessionID string, now time.Time, grace time.Duration) bool {
@@ -230,16 +236,7 @@ func (d *Daemon) crewLifecycleTick(now time.Time) {
 			HeartbeatEnabled: heartbeat,
 			AutoSleepEnabled: autoSleep,
 		})
-		switch action {
-		case crew.ActionHeartbeat:
-			if !d.crewMemo().heartbeatDue(session.ID, now, lead) {
-				continue
-			}
-		case crew.ActionSleep:
-			if !d.crewMemo().mayPromptSleep(session.ID, now, crewSleepPromptGrace) {
-				continue
-			}
-		default:
+		if action == crew.ActionSleep && !d.crewMemo().mayPromptSleep(session.ID, now, crewSleepPromptGrace) {
 			continue
 		}
 		d.actOnCrewMember(member, session.ID, action, cache, now)
@@ -254,29 +251,19 @@ func (d *Daemon) actOnCrewMember(member crew.Member, sessionID string, action cr
 			return
 		}
 		generation := protocol.Deref(session.LastModelRequestAt)
-		id := inputAttemptID("crew-heartbeat", sessionID+"/"+generation)
+		if !d.crewMemo().heartbeatDue(sessionID, generation, now, d.crewHeartbeatLead()) {
+			return
+		}
 		delivery := maintenanceSessionInput("crew-heartbeat", sessionID+"/"+generation, sessionID, crewHeartbeatPrompt, sessionInputWhenPromptReady)
-		d.sessionInputs().forgetSuperseded(sessionID, id, delivery.origin)
 		delivery.resend = func() {
 			d.actOnCrewMember(member, sessionID, action, cache, time.Now())
 		}
 		attempt := d.sessionInputs().try(context.Background(), delivery)
-		if attempt.err != nil {
+		if attempt.stage != sessionInputPlaced {
 			d.logf("crew: %s's heartbeat did not reach session %s: %v", crew.DisplayName(member.ID), sessionID, attempt.err)
 			return
 		}
-		if attempt.stage != sessionInputTaken && sessionInputTakenWindow > 0 {
-			attempt = d.sessionInputs().await(sessionID, id, attempt.wait, sessionInputTakenWindow)
-		}
-		if attempt.stage != sessionInputTaken {
-			if attempt.stage == sessionInputPlaced {
-				d.sessionInputs().relinquishComposer(sessionID, id)
-			}
-			d.logf("crew: %s's heartbeat was placed in session %s but no model request took it", crew.DisplayName(member.ID), sessionID)
-			return
-		}
-		d.crewMemo().recordHeartbeat(sessionID, attempt.receipt.takenAt)
-		d.sessionInputs().release(sessionID, id)
+		d.crewMemo().recordHeartbeat(sessionID, generation, attempt.at)
 		d.logf("crew: warmed %s's context in session %s (cache estimated %s old against a %s assumption)",
 			crew.DisplayName(member.ID), sessionID, cache.Age.Round(time.Second), cache.TTL)
 	case crew.ActionSleep:

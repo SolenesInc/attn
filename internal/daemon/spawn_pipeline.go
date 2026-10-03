@@ -373,7 +373,7 @@ func (d *Daemon) executeSpawn(req *spawnRequest, plan *spawnPlan) *spawnOutcome 
 	hasInitialPrompt := strings.TrimSpace(req.initialPrompt) != ""
 	priorEvidence, _ := d.evidenceTable().snapshot(msg.ID)
 	d.startEvidence(msg.ID, sessionstate.Evidence{
-		InitialPromptOwed: hasInitialPrompt && reportsPromptsTaken(req.agent),
+		InitialPromptOwed: hasInitialPrompt && reportsTurnStarts(req.agent),
 		ReviewerInLoop:    plan.spawnOpts.ApprovalRoute.ReviewerInLoop(),
 	})
 	if err := d.spawnSessionRuntime(req, plan.spawnOpts); err != nil {
