@@ -9,7 +9,7 @@ The core speaks one harness-neutral contract; adapters translate it to each
 harness's own mechanism; a harness built for attn implements it directly.
 
 Status: plan, revised after a review against the `epic/shared-codex` branch
-and the GA Claude Mods API. Step 1 is in progress. Opt-in per harness; the PTY
+and the GA Claude Mods API. Steps 1, 3 and 5 are done. Opt-in per harness; the PTY
 route stays the default.
 
 ## Goals
@@ -75,18 +75,20 @@ can start a new conversation; a new conversation is a new session.
 `internal/harness` imports nothing from `internal/daemon`, `internal/store`
 or `internal/protocol`. Step 1 lands only `Voice`, `Input{Session, ID, Text,
 Voice}`, `Custody{Taken, Reason}` and `Link{Voices, Deliver}`. Every other
-part lands with its first consumer: `Events` with `Turn`, and
-`Shape.Provides`, in step 3; the session and terminal ids, `Opened`,
-`Shows`, `Up`, `Down` and `End` in step 4; `Custody.At` in step 5; `Shaper`
-and the Multi parts with the Codex adapter in step 6; `Placement` with the
-first link that places at a turn boundary itself (the Claude mod, step 8).
-Until then core's phase gate applies placement before the route choice, and
-placement stays daemon-side.
+part lands with its first consumer: `Events` with only its `Turn` method,
+and the `Turn` and `TurnEvent` types, in step 3; the session and terminal
+ids, `Opened`, `Shows`, `Up`, `Down` and `End` in step 4; `Custody.At` in
+step 5; `Shaper`, `Shape.Provides` and the Multi parts with the Codex
+adapter in step 6 (pi installs no hooks for `Provides` to drop);
+`Placement` with the first link that places at a turn boundary itself (the
+Claude mod, step 8). Until then core's phase gate applies placement before
+the route choice, and placement stays daemon-side.
 
 ```go
 type SessionID, TerminalID, ConversationID string
 type Voice uint8     // VoiceUser | VoiceAttn
 type Placement uint8 // WhenPromptReady | AtTurnBoundary (today's sessionInputPlacement)
+type Turn uint8      // where the agent's turn stands (not the glossary's attention Turn): TurnUnknown | TurnRunning | TurnApproval | TurnQuestion | TurnEnded
 
 type Input struct {
 	ID, Text  string // a link may pass ID on; after step 5 core never matches on it
@@ -98,6 +100,12 @@ type Custody struct { // the only result a delivery has
 	Taken  bool
 	At     time.Time
 	Reason string // when not taken; shown as is
+}
+type TurnEvent struct {
+	Turn     Turn
+	Epoch    string // one launch of the harness; Epoch and Seq order the reports of a link that can reorder them (pi)
+	Seq      uint64
+	Restated bool   // repeated after a reconnect; taken only while the state is unknown
 }
 type Link interface {
 	Voices() []Voice
@@ -133,7 +141,7 @@ type Events interface {
 	Down(s SessionID, err error)       // link-wide loss: one Down per carried session
 	Opened(from SessionID, t TerminalID, c ConversationID) (SessionID, Launch, func(commit bool), error)
 	Shows(t TerminalID, s SessionID, st ViewState) // shown | unknown | detached
-	Turn(s SessionID, at time.Time, e TurnEvent)   // Started | Ended{completed|interrupted|failed, answer} | Approval | Question
+	Turn(s SessionID, at time.Time, e TurnEvent)   // Ended's outcome and answer land with Codex and the Claude mod
 	Named(s SessionID, name string, rev uint64)    // Names links only
 }
 ```
@@ -170,6 +178,13 @@ Core rules. These are the only places harness behaviour reaches core.
    no hooks for it (Codex). `Up(provides)` is declared at connect, so hooks
    stay installed and are masked while Up (the Claude mod, available only at
    runtime). Hooks the link does not replace stay (transcript path, edits).
+   Step 3 lands the rule for a link whose turn events carry every state (pi,
+   `linkOwnsState`): while the session has a driver run whose plugin reports
+   state, its `Turn` events set the state outright through the store's epoch
+   and sequence fence, and the resolver and terminal claims stand aside (see
+   Decisions taken, 6). The resolver's
+   `link` slot, the epic's `NativeRoot` renamed, lands with Codex in step 6,
+   whose turns must combine with hooks and the classifier.
 5. **Close.** Closing the last terminal that resolvably shows a session ends
    it: drain the transcript watcher, call `End`, close the ledger entry.
    Other terminals showing it are only detached. `End` is refused while any
@@ -213,7 +228,11 @@ a PTY session closes its terminal.
 **pi.** The attn-pi plugin's `message_delivery` becomes the first link. The
 plugin connection is one link carrying every pi session, with `Up(s)` and
 `Down(s)` driven by each pi process's suite connecting and disconnecting.
-`report_state` and `report_stop` become `Turn` events,
+`report_state` and `report_stop` became `Turn` events in step 3; the
+driver's `unknown` for a run no suite backs and its restatement on reconnect
+stay `Turn` events (`TurnUnknown`, `Restated`) until `Up` and `Down` land.
+The driver's two-minute silence declaration keeps origin `plugin_driver`:
+it is the plugin driver's watch, not a link report, and `Down` replaces it.
 `report_metadata.resume_session_id` becomes `Opened` or `Shows`, and
 `report_input_taken` is retired (step 5; the plugin relay still acknowledges
 it from suites loaded before an upgrade). `driver.spawn`, `classify_stop`
@@ -312,12 +331,12 @@ Each step is PR-sized unless noted. Verification follows `docs/instances.md`.
 
 | # | Step | Behavior change |
 |---|---|---|
-| 1 | **In progress.** `internal/harness` with `Voice`, `Input`, `Custody` and `Link`; the PTY path moved unchanged into `session_input_pty.go`; pi's plugin delivery as the first link, chosen per delivery from the session's plugin driver run record and the plugin registry, with the PTY as the fallback when no link takes the voice; any error maps to deferred. Pending candidates, receipt matching and the PTY-only quiet window are unchanged (step 5 retired the receipt matching). | None |
+| 1 | **Done.** `internal/harness` with `Voice`, `Input`, `Custody` and `Link`; the PTY path moved unchanged into `session_input_pty.go`; pi's plugin delivery as the first link, chosen per delivery from the session's plugin driver run record and the plugin registry, with the PTY as the fallback when no link takes the voice; any error maps to deferred. Pending candidates, receipt matching and the PTY-only quiet window are unchanged (step 5 retired the receipt matching). | None |
 | 2 | The epic's neutral wins, one PR each, parallel to 1: PTY worker teardown hardening (`instance clean` refuses to wipe while a worker survives); `SessionLedgerEntry.usage` with the inspector and `attn session show` lines (protocol bump); the ledger focus-trap fix; a decision on the PTY Backend settings card the epic deleted. | `instance clean` exits non-zero and keeps data when a worker cannot be reaped; ledger and CLI show usage for every harness |
-| 3 | `link` evidence source and the precedence rule; pi's `report_state` and `report_stop` move to `Turn`; `Shape.Provides` drops hooks at launch. Needs 1. | None intended; a pi session's state origin reads `link` |
+| 3 | **Done.** `Turn`, `TurnEvent{Turn, Epoch, Seq, Restated}` and `Events{Turn}`; pi's `report_state` and `report_stop` reach core as `Turn` events, applied as before (the store's epoch and sequence fence, `only_if_unknown` as `Restated`); the precedence rule is `linkOwnsState`, today's plugin-driver ownership under a neutral name. Deferred to step 6: the resolver's `link` slot, `Ended`'s outcome, and `Shape.Provides`, since pi installs no hooks to drop. Needs 1. | None; a pi session's state origin reads `link`, its cause `link_turn`, and the resolver and terminal vetoes `link_owns_state`; the silence declaration keeps `plugin_driver` |
 | 4 | The identity rule: terminal registry with ids distinct from session ids; `Opened` and `Shows` for single-session links, with Claude `/clear` and `/resume` and pi as consumers; terminal-to-session resolution for PTY exit, state, input and layout. Existing rows keep `runtime_id` = session id. Daemon and app may split. Needs 1. | Claude `/clear` opens a new session; the old one becomes recoverable |
 | 5 | **Done.** Retire receipts on the PTY route: `observePromptTaken` matching, pending candidates, `sessionInputTakenWindow`, `await`, the indeterminate stage, `report_input_taken`. Crew heartbeat records `Custody.At` with no wait; owed input clears on the next turn start. Needs 1. | Heartbeats stop waiting up to 3 s; annotation results are taken or not taken |
-| 6 | Rebase the epic; refactor in place (several reviewable commits, one merge): neutral names and migration (see below); Codex into `codexapp`; the capabilities with a consumer (`Attacher`, `TitleObserver`, `Views`, `Names`, `Reconfigure`, `Transcripts`, Multi `Opened` and `Shows`); core owns registry, close rule and attach-view command; app gets 0..n terminals per session; name write failures warn and retry, never blocking delivery; the quiet window keyed to terminals; setting under Experimental; docs and glossary neutral. Needs 1, 3, 4. | Opt-in shared Codex becomes available, default off |
+| 6 | Rebase the epic; refactor in place (several reviewable commits, one merge): neutral names and migration (see below); Codex into `codexapp`; Codex's `Turn` events into the resolver's `link` slot with the epic's precedence, and `Shape.Provides` dropping the hooks they replace; the capabilities with a consumer (`Attacher`, `TitleObserver`, `Views`, `Names`, `Reconfigure`, `Transcripts`, Multi `Opened` and `Shows`); core owns registry, close rule and attach-view command; app gets 0..n terminals per session; name write failures warn and retry, never blocking delivery; the quiet window keyed to terminals; setting under Experimental; docs and glossary neutral. Needs 1, 3, 4. | Opt-in shared Codex becomes available, default off |
 | 7 | Claude inbox link under Experimental. Needs 1; parallel to 4 to 6. | Opted-in Claude rings, heartbeats and nudges leave the PTY |
 | 8 | Link wire protocol, `attn link relay`, the Claude mod with its version gate; pi's deliver and state subset moves to `link.*` under an `attn_api_version` bump (migrate attn-pi in the same PR). Deferred. | Opted-in Claude gets both voices and turn state; hooks remain the fallback |
 | 9 | Later: content delivery, the fork, a hidden-session budget, removing the quiet window. | |
@@ -343,6 +362,13 @@ and 8 do not gate it.
    `next`-based builds. Production `~/.attn` is never touched.
 5. A Claude link declares what it provides when it connects. Hooks remain the
    approval source wherever the mod cannot see them, as on a managed machine.
+6. pi's turns stay outside the resolver. Its reports arrive classified
+   (`classify_stop` runs before `report_stop`), and the store checks epoch and
+   sequence in the write that sets the state. Through the resolver they would
+   apply asynchronously, lose the touch and the model-request stamp, need an
+   unknown claim, and split the fence from the write. A `TurnEvent` says where
+   the turn stands, not which edge it crossed: pi reports `working` both for a
+   start and for an approval resolved, and `unknown` is no edge.
 
 ## Open questions
 

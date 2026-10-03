@@ -16,6 +16,7 @@ const (
 	stateSourceClassifier      = "classifier"
 	stateSourceTranscript      = "transcript_watcher"
 	stateSourcePluginDriver    = "plugin_driver"
+	stateSourceLink            = "link"
 	stateSourceHookNotify      = "hook_notify"
 	stateSourceHookStopFailure = "hook_stop_failure"
 	stateSourceHookCompaction  = "hook_compaction"

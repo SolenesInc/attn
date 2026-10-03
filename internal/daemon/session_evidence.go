@@ -442,8 +442,8 @@ var resolverOwnedStates = map[protocol.SessionState]bool{
 }
 
 func (d *Daemon) publishResolution(sessionID string, current protocol.SessionState, resolution sessionstate.Resolution, dwell time.Duration, now time.Time) (resolverOwnsState bool) {
-	pluginOwnsState := d.pluginDriverOwnsState(sessionID)
-	resolverOwnsState = resolverOwnedStates[current] && !pluginOwnsState
+	linkOwns := d.linkOwnsState(sessionID)
+	resolverOwnsState = resolverOwnedStates[current] && !linkOwns
 	if resolution.Hold {
 		d.traceResolutionSkip(sessionID, resolution, string(resolution.Reason))
 		return resolverOwnsState
@@ -451,8 +451,8 @@ func (d *Daemon) publishResolution(sessionID string, current protocol.SessionSta
 	if resolution.Reason == sessionstate.ReasonNoEvidence {
 		return resolverOwnsState
 	}
-	if pluginOwnsState {
-		d.traceResolutionSkip(sessionID, resolution, "plugin_driver_owns_state")
+	if linkOwns {
+		d.traceResolutionSkip(sessionID, resolution, "link_owns_state")
 		return false
 	}
 	if !resolverOwnedStates[current] || resolution.State == current {
@@ -477,14 +477,6 @@ func (d *Daemon) publishResolution(sessionID string, current protocol.SessionSta
 		},
 	})
 	return true
-}
-
-func (d *Daemon) pluginDriverOwnsState(sessionID string) bool {
-	if run := d.store.GetAgentDriverRun(sessionID); run.RunID == "" {
-		return false
-	}
-	session := d.store.Get(sessionID)
-	return session != nil && d.pluginDriverReportsState(session.Agent)
 }
 
 func resolutionDetail(resolution sessionstate.Resolution) string {

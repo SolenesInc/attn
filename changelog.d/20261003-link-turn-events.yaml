@@ -1,0 +1,3 @@
+kind: internal
+area: daemon
+change: pi's state and stop reports reach the daemon as harness link turn events, applied as before; state explanations name their source `link`.

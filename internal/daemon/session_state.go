@@ -16,9 +16,9 @@ type liveSignal struct{}
 
 type resolverObservation struct{}
 
-type pluginReport struct {
-	runID string
-	seq   uint64
+type linkTurn struct {
+	run string
+	seq uint64
 }
 
 type startupRecovery struct{}
@@ -30,7 +30,7 @@ type pluginDriverSilent struct{}
 func (liveSignal) isSessionStateCause()          {}
 func (pluginDriverSilent) isSessionStateCause()  {}
 func (resolverObservation) isSessionStateCause() {}
-func (pluginReport) isSessionStateCause()        {}
+func (linkTurn) isSessionStateCause()            {}
 func (startupRecovery) isSessionStateCause()     {}
 func (hostExitRecovery) isSessionStateCause()    {}
 
@@ -60,7 +60,7 @@ func stateEffectInstanceFor(cause sessionStateCause) (stateEffectInstance, bool)
 		return stateEffectInstance{touch: true, syncInputLane: true, broadcast: true}, true
 	case resolverObservation:
 		return stateEffectInstance{syncInputLane: true, broadcast: true}, true
-	case pluginReport:
+	case linkTurn:
 		return stateEffectInstance{touch: true, syncInputLane: true, broadcast: true}, true
 	case startupRecovery:
 		return stateEffectInstance{}, true
@@ -79,8 +79,8 @@ func sessionStateCauseName(cause sessionStateCause) string {
 		return "live_signal"
 	case resolverObservation:
 		return "resolver_observation"
-	case pluginReport:
-		return "plugin_report"
+	case linkTurn:
+		return "link_turn"
 	case startupRecovery:
 		return "startup_recovery"
 	case hostExitRecovery:
@@ -152,10 +152,10 @@ func (d *Daemon) commitSessionState(change sessionStateChange, opening store.Tur
 	switch cause := change.cause.(type) {
 	case liveSignal, startupRecovery, resolverObservation, hostExitRecovery, pluginDriverSilent:
 		return d.store.UpdateStateOpeningTurn(change.sessionID, change.state, opening)
-	case pluginReport:
+	case linkTurn:
 		return d.store.ApplyAgentDriverStateOpeningTurn(
 			change.sessionID,
-			cause.runID,
+			cause.run,
 			cause.seq,
 			change.state,
 			change.requestStartedAt,

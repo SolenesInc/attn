@@ -12,6 +12,7 @@ import (
 
 	agentdriver "github.com/victorarias/attn/internal/agent"
 	"github.com/victorarias/attn/internal/automode"
+	"github.com/victorarias/attn/internal/harness"
 	"github.com/victorarias/attn/internal/protocol"
 	"github.com/victorarias/attn/internal/ptybackend"
 )
@@ -518,10 +519,16 @@ func (d *Daemon) handlePluginClassifyStop(plugin *pluginConnection, msg jsonRPCM
 	})
 }
 
+var pluginReportedTurns = map[string]harness.Turn{
+	protocol.StateUnknown:         harness.TurnUnknown,
+	protocol.StateWorking:         harness.TurnRunning,
+	protocol.StatePendingApproval: harness.TurnApproval,
+	protocol.StateWaitingInput:    harness.TurnQuestion,
+	protocol.StateIdle:            harness.TurnEnded,
+}
+
 func validatePluginReportedState(params pluginReportStateParams) error {
-	switch strings.TrimSpace(params.State) {
-	case protocol.StateWorking, protocol.StateWaitingInput, protocol.StatePendingApproval, protocol.StateIdle, protocol.StateUnknown:
-	default:
+	if _, ok := pluginReportedTurns[strings.TrimSpace(params.State)]; !ok {
 		return fmt.Errorf("unsupported session state %q", params.State)
 	}
 	return validatePluginReportCursor(params.RunID, params.Seq)
@@ -537,33 +544,14 @@ func validatePluginReportCursor(runID string, seq uint64) error {
 	return nil
 }
 
-func (d *Daemon) applyPluginReportedState(params pluginReportStateParams) bool {
+func (d *Daemon) applyPluginReportedState(params pluginReportStateParams) {
 	d.notePluginDriverReport(params.SessionID)
-	state := strings.TrimSpace(params.State)
-	if params.OnlyIfUnknown {
-		if session := d.store.Get(params.SessionID); session == nil || session.State != protocol.SessionStateUnknown {
-			return false
-		}
-		d.logf("plugin driver restates session=%s run=%s as %s after unknown", params.SessionID, params.RunID, state)
-	}
-	var requestStartedAt time.Time
-	if state == protocol.StateWorking {
-		requestStartedAt = time.Now()
-	}
-	if !d.applyState(sessionStateChange{
-		sessionID:        params.SessionID,
-		state:            state,
-		requestStartedAt: requestStartedAt,
-		cause: pluginReport{
-			runID: params.RunID,
-			seq:   params.Seq,
-		},
-		origin: stateOrigin{source: stateSourcePluginDriver, detail: params.RunID},
-	}) {
-		d.logf("plugin state report discarded: session=%s run=%s seq=%d state=%s", params.SessionID, params.RunID, params.Seq, state)
-		return false
-	}
-	return true
+	d.linkEvents().Turn(params.SessionID, time.Now(), harness.TurnEvent{
+		Turn:     pluginReportedTurns[strings.TrimSpace(params.State)],
+		Epoch:    params.RunID,
+		Seq:      params.Seq,
+		Restated: params.OnlyIfUnknown,
+	})
 }
 
 func validatePluginReportedStop(params pluginReportStopParams) error {

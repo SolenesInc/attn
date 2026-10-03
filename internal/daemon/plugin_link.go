@@ -44,3 +44,13 @@ func (d *Daemon) sessionLink(session *protocol.Session, voice harness.Voice) har
 	}
 	return link
 }
+
+// linkOwnsState is core rule 4 for a link whose turn events carry every state: while the
+// session has a driver run whose plugin reports state, the resolver and terminal stand aside.
+func (d *Daemon) linkOwnsState(sessionID string) bool {
+	if d.store.GetAgentDriverRun(sessionID).RunID == "" {
+		return false
+	}
+	session := d.store.Get(sessionID)
+	return session != nil && d.pluginDriverReportsState(session.Agent)
+}
