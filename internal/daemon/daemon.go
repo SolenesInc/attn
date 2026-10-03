@@ -691,7 +691,7 @@ func (d *Daemon) Start() error {
 		return fmt.Errorf("ensure enrollment record: %w", err)
 	}
 	if err := d.recoverCaptureAssets(); err != nil {
-		return fmt.Errorf("recover capture assets: %w", err)
+		d.logf("capture asset recovery incomplete: %v", err)
 	}
 	d.ensureGardenCollections()
 	d.ensureCrewCollections()
