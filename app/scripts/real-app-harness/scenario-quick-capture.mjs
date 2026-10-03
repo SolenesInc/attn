@@ -247,15 +247,15 @@ try {
     runAttn(['daemon', 'stop']);
     const previousDraft = path.join(dataDirForInstance(instance), 'capture-draft.json');
     if (fs.existsSync(previousDraft)) {
-      const images = path.join(dataDirForInstance(instance), 'capture-draft-images');
-      const backup = path.join(runner.runDir, 'previous-draft-images');
+      const files = path.join(dataDirForInstance(instance), 'capture-draft-files');
+      const backup = path.join(runner.runDir, 'previous-draft-files');
       const metadata = path.join(runner.runDir, 'previous-synthetic-draft.json');
-      if (fs.existsSync(images)) fs.cpSync(images, backup, { recursive: true });
+      if (fs.existsSync(files)) fs.cpSync(files, backup, { recursive: true });
       fs.renameSync(previousDraft, metadata);
       runner.registerCleanup('previous-draft', async () => {
         await client.quitApp();
-        fs.rmSync(images, { recursive: true, force: true });
-        if (fs.existsSync(backup)) fs.cpSync(backup, images, { recursive: true });
+        fs.rmSync(files, { recursive: true, force: true });
+        if (fs.existsSync(backup)) fs.cpSync(backup, files, { recursive: true });
         fs.copyFileSync(metadata, previousDraft);
       });
     }
@@ -456,14 +456,14 @@ try {
     await openCapture();
     await key('v', ['command']);
     const actual = await client.request('capture_state', { imageCount: 1, settled: true });
-    assert.equal(actual.images.length, 1);
+    assert.equal(actual.files.length, 1);
     if (!actual.reducedMotion) {
-      assert.ok(actual.motion.some(event => event.kind === 'image' && event.phase === 'start'));
-      assert.ok(actual.motion.some(event => event.kind === 'image' && event.phase === 'end'));
+      assert.ok(actual.motion.some(event => event.kind === 'file' && event.phase === 'start'));
+      assert.ok(actual.motion.some(event => event.kind === 'file' && event.phase === 'end'));
     }
-    assert.equal(actual.flyingImages, 0, 'Paste removes its temporary flying preview');
+    assert.equal(actual.flyingFiles, 0, 'Paste removes its temporary flying preview');
     if (!actual.reducedMotion) {
-      const flight = actual.motion.find(event => event.kind === 'image' && event.phase === 'start');
+      const flight = actual.motion.find(event => event.kind === 'file' && event.phase === 'start');
       assert.equal(flight.source.kind, 'paste');
       assert.ok(flight.source.x !== flight.target.x || flight.source.y !== flight.target.y, 'Paste visibly travels into its slot');
     }
@@ -474,14 +474,14 @@ try {
   await runner.step('native_file_drop', async () => {
     await fixture.runInputDriver(['drag_between', '--relative-x', '0.1', '--text', driver.bundleId]);
     const actual = await client.request('capture_state', { imageCount: 2, settled: true });
-    assert.equal(actual.images.length, 2);
+    assert.equal(actual.files.length, 2);
     if (!actual.reducedMotion) {
-      assert.equal(actual.motion.filter(event => event.kind === 'image' && event.phase === 'end').length, 2);
+      assert.equal(actual.motion.filter(event => event.kind === 'file' && event.phase === 'end').length, 2);
       assert.ok(actual.motion.some(event => event.kind === 'drop' && event.phase === 'start'));
     }
-    assert.equal(actual.flyingImages, 0, 'Drop removes its temporary flying preview');
+    assert.equal(actual.flyingFiles, 0, 'Drop removes its temporary flying preview');
     if (!actual.reducedMotion) {
-      const flight = actual.motion.find(event => event.kind === 'image' && event.phase === 'start' && event.source?.kind === 'drop');
+      const flight = actual.motion.find(event => event.kind === 'file' && event.phase === 'start' && event.source?.kind === 'drop');
       const window = (await driver.windowList()).find(window => window.name.includes('Quick Capture'));
       // Wry truncates AppKit coordinates; the native capture height is 391 points.
       assert.equal(flight.source.x, Math.trunc(window.width / 2), 'Native drop flight starts at the known release point in CSS pixels');
@@ -495,9 +495,9 @@ try {
   await runner.step('native_pdf_drop', () => recordHostedStep('pdf-drop', async () => {
     await dropFiles([pdfPath]);
     const actual = await state({ attachmentCount: 3, imageCount: 2, settled: true, staged: true });
-    assert.equal(actual.images[2].name, path.basename(pdfPath));
+    assert.equal(actual.files[2].name, path.basename(pdfPath));
     assert.equal(actual.nativeFocused, true, 'PDF drop keeps keyboard focus in the note');
-    assert.equal(actual.flyingImages, 0);
+    assert.equal(actual.flyingFiles, 0);
     assert.equal(actual.activeAnimations, 0);
     runner.writeJson('pdf-drop.json', actual);
     await screenshot('dropped-pdf.png');
@@ -505,7 +505,7 @@ try {
   await runner.step('remove_image_and_keyboard_recipient', async () => {
     const remove = (await state()).controls.remove;
     await driver.clickWindow(remove.x, remove.y, { windowTitle: 'Quick Capture' });
-    assert.equal((await state()).images.length, 2);
+    assert.equal((await state()).files.length, 2);
     await key('2', ['command']);
     assert.equal((await state({ recipient })).recipient, recipient);
     await key('1', ['command']);
@@ -527,7 +527,7 @@ try {
     const actual = await hidden();
     assert.equal(actual.saved.length, 1);
     assert.equal(actual.saved[0].recipient, recipient);
-    assert.equal(actual.saved[0].images.length, 2);
+    assert.equal(actual.saved[0].files.length, 2);
     assert.equal(actual.visible, false);
     assert.equal(actual.text, '');
     assert.equal(actual.recipient, 'chief');
@@ -548,6 +548,42 @@ try {
     await key('escape');
     await key('escape'); await hidden();
   });
+  if (process.env.CI === 'true') await runner.step('quick_capture_walkthrough', async () => {
+    await openCapture('Keep the release checklist handy');
+    await key('enter'); await hidden();
+    await fixture.pressKey('c', { command: true });
+    const walkthroughPdf = path.join(runner.runDir, 'launch-notes.pdf');
+    fs.writeFileSync(walkthroughPdf, screenshotPdf(path.join(runner.runDir, 'synthetic-screenshot.png'), 1));
+    await openCapture();
+    await recordHostedStep('quick-capture-walkthrough', async () => {
+      await key('escape'); await hidden();
+      await openCapture('Check the launch notes');
+      await key('v', ['command']);
+      await state({ imageCount: 1, attachmentCount: 1, settled: true });
+      await dropFiles([walkthroughPdf]);
+      await state({ imageCount: 1, attachmentCount: 2, settled: true, staged: true });
+      await key('k', ['command']);
+      await key('arrowdown'); await key('enter');
+      await state({ recipient });
+      await screenshot('walkthrough-compose.png');
+      await fixtureSignal('recipient-image-receipt.json', () => key('enter'));
+      await hidden();
+      const receipts = JSON.parse(fs.readFileSync(path.join(runner.runDir, 'recipient-image-receipt.json')));
+      assert.ok(receipts.some(file => file.name === path.basename(walkthroughPdf)));
+      await openCapture();
+      const recent = (await state()).controls.recent;
+      await driver.clickWindow(recent.x, recent.y, { windowTitle: 'Quick Capture' });
+      await state({ view: 'recent', recentText: path.basename(walkthroughPdf) });
+      await key('=', ['command']); await state({ fontScale: 1.1 });
+      await key('-', ['command']);
+      const actual = await state({ view: 'recent', fontScale: 1 });
+      assert.ok(actual.recentRows.some(row => row.text.includes('Sent') && row.text.includes('Keep the release checklist handy')));
+      assert.ok(actual.recentRows.some(row => row.text.includes('Read') && row.text.includes(path.basename(walkthroughPdf))));
+      runner.writeJson('quick-capture-walkthrough.json', { ...actual, receipts });
+      await screenshot('walkthrough-recent.png');
+    });
+    await key('escape'); await key('escape'); await hidden();
+  });
   await runner.step('image_only_capture', async () => {
     await fixture.pressKey('c', { command: true });
     await openCapture();
@@ -558,8 +594,8 @@ try {
     await key('enter');
     const accepted = await hidden();
     assert.equal(accepted.saved[0].text, '');
-    assert.equal(accepted.saved[0].images.length, 1);
-    assert.equal(accepted.images.length, 0);
+    assert.equal(accepted.saved[0].files.length, 1);
+    assert.equal(accepted.files.length, 0);
     await fixture.runInputDriver(['wait_frontmost']);
   });
   await runner.step('restart_restores_draft_image_and_binding', async () => {
@@ -578,7 +614,7 @@ try {
     await client.waitForFrontendResponsive();
     await openCapture();
     const restored = await state({ imageCount: 1, attachmentCount: 2, settled: true, staged: true });
-    assert.equal(restored.images[1].name, path.basename(pdfPath));
+    assert.equal(restored.files[1].name, path.basename(pdfPath));
     assert.equal(restored.text, 'Retained after restart plus dropped image');
     assert.equal(restored.binding, testBinding);
     await screenshot('restored-draft.png');
@@ -687,7 +723,7 @@ try {
     for (const batchSize of [1, 2, 4, 8]) {
       await client.launchFreshApp(); await client.waitForFrontendResponsive();
       await openCapture();
-      assert.equal((await state()).images.length, 0, 'Each capacity starts with a fresh process and empty draft');
+      assert.equal((await state()).files.length, 0, 'Each capacity starts with a fresh process and empty draft');
       await state({ batchSize });
       const sampler = await memorySampler();
       try {
@@ -696,7 +732,7 @@ try {
         const ingestion = previews.ingestion.at(-1);
         assert.equal(ingestion.count, files.length);
         assert.ok(ingestion.readyAt >= ingestion.startedAt);
-        assert.deepEqual(previews.images.map(file => file.name), files.map(file => path.basename(file)));
+        assert.deepEqual(previews.files.map(file => file.name), files.map(file => path.basename(file)));
         const staged = await state({ staged: true });
         assert.equal(staged.work.active, 0); assert.equal(staged.work.pending, 0);
         assert.equal(staged.work.peak, batchSize);
@@ -709,7 +745,7 @@ try {
       } catch (error) { runner.writeJson(`attachment-batch-${batchSize}-failure.json`, { memory: await sampler.stop(), error: String(error) }); throw error; }
       await key('enter');
       const accepted = await hidden();
-      assert.equal(accepted.saved[0].images.length, files.length);
+      assert.equal(accepted.saved[0].files.length, files.length);
     }
     for (const file of files) fs.rmSync(file);
   });

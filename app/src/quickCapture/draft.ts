@@ -1,29 +1,34 @@
 import { invoke } from '@tauri-apps/api/core';
-import type { CaptureDraft } from './client';
+import type { CaptureDraft, DraftAttachment } from './client';
+
+export type CachedCaptureDraft = Omit<CaptureDraft, 'files'> & { images: DraftAttachment[] };
 
 export function newCaptureDraft(): CaptureDraft {
-  return { id: crypto.randomUUID(), text: '', recipient: 'chief', images: [], uncertain: false };
+  return { id: crypto.randomUUID(), text: '', recipient: 'chief', files: [], uncertain: false };
 }
 
-// Native cache belongs to this instance. Images are written once; typing writes only draft metadata.
+// The native cache keeps its existing images field and commands so retained drafts survive upgrades.
 export function captureDraftCache() {
   let writes = Promise.resolve();
-  const savedImages = new Map<string, string>();
+  const savedFiles = new Map<string, string>();
   return {
-    async read() {
-      const draft = await invoke<CaptureDraft | null>('capture_draft_read');
-      for (const image of draft?.images ?? []) savedImages.set(image.id, image.url);
-      return draft;
+    async read(): Promise<CaptureDraft | null> {
+      const stored = await invoke<CachedCaptureDraft | null>('capture_draft_read');
+      if (!stored) return null;
+      const { images: files, ...draft } = stored;
+      for (const file of files) savedFiles.set(file.id, file.url);
+      return { ...draft, files };
     },
     save(draft: CaptureDraft): Promise<void> {
       const next = writes.catch(() => {}).then(async () => {
-        for (const image of draft.images) {
-          if (savedImages.get(image.id) === image.url) continue;
-          await invoke('capture_draft_image_write', { id: image.id, url: image.url });
-          savedImages.set(image.id, image.url);
+        for (const file of draft.files) {
+          if (savedFiles.get(file.id) === file.url) continue;
+          await invoke('capture_draft_image_write', { id: file.id, url: file.url });
+          savedFiles.set(file.id, file.url);
         }
-        await invoke('capture_draft_write', { draft: { ...draft, images: draft.images.map(({ id, name }) => ({ id, name })) } });
-        for (const id of savedImages.keys()) if (!draft.images.some(image => image.id === id)) savedImages.delete(id);
+        const { files, ...metadata } = draft;
+        await invoke('capture_draft_write', { draft: { ...metadata, images: files.map(({ id, name }) => ({ id, name })) } });
+        for (const id of savedFiles.keys()) if (!files.some(file => file.id === id)) savedFiles.delete(id);
       });
       writes = next;
       return next;

@@ -16,7 +16,7 @@ function target(recipient: string) {
 }
 function item(record: CaptureRecord): CaptureItem {
   return { id: record.id, text: record.content, recipient: record.target.kind === 'chief' ? 'chief' : record.target.member_id!,
-    createdAt: record.created_at, readAt: record.read_at, images: record.attachments.map(({ id, name, media_type }) => ({ id, name, mediaType: media_type })) };
+    createdAt: record.created_at, readAt: record.read_at, files: record.attachments.map(({ id, name, media_type }) => ({ id, name, mediaType: media_type })) };
 }
 function saved(result: CaptureResultObject) {
   if (!result.record) throw new Error('The daemon did not return a saved capture receipt. Your draft is retained.');
@@ -37,13 +37,13 @@ export function captureDaemonClient(daemon: Pick<DaemonApi, 'sendCaptureRequest'
   const request = daemon.sendCaptureRequest;
   const uploading = new Map<string, Promise<void>>();
   const ready = new Set<string>();
-  const key = (captureId: string, imageId: string) => `${captureId}:${imageId}`;
+  const key = (captureId: string, fileId: string) => `${captureId}:${fileId}`;
   async function stage(draft: Parameters<CaptureClient['stage']>[0]) {
-    if (draft.images.every(image => ready.has(key(draft.id, image.id)))) return;
+    if (draft.files.every(file => ready.has(key(draft.id, file.id)))) return;
     let history: Promise<CaptureResultObject> | undefined;
     const pending: Promise<void>[] = [];
-    for (const image of draft.images) {
-      const identity = key(draft.id, image.id);
+    for (const file of draft.files) {
+      const identity = key(draft.id, file.id);
       if (ready.has(identity)) continue;
       let upload = uploading.get(identity);
       if (!upload) {
@@ -51,16 +51,16 @@ export function captureDaemonClient(daemon: Pick<DaemonApi, 'sendCaptureRequest'
         const reconciliation = history;
         upload = (async () => {
           const assets = (await reconciliation).list?.draft_assets ?? [];
-          const asset = assets.find(asset => asset.capture_id === draft.id && asset.attachment_id === image.id);
+          const asset = assets.find(asset => asset.capture_id === draft.id && asset.attachment_id === file.id);
           if (asset?.state === 'ready') { ready.add(identity); return; }
-          const bytes = attachmentBytes(image.url);
+          const bytes = attachmentBytes(file.url);
           let offset = asset?.next_offset ?? 0;
           do {
             const chunk = bytes.chunk(offset);
             const result = await request({ cmd: CaptureAttachmentPutMessageCmd.CaptureAttachmentPut,
-              capture_id: draft.id, attachment_id: image.id, name: image.name,
+              capture_id: draft.id, attachment_id: file.id, name: file.name,
               offset, data_base64: chunk.data, final: chunk.end === bytes.length });
-            if (!result.upload) throw new Error(`No upload receipt for ${image.name}. Your draft is retained.`);
+            if (!result.upload) throw new Error(`No upload receipt for ${file.name}. Your draft is retained.`);
             offset = result.upload.next_offset;
           } while (offset < bytes.length);
           ready.add(identity);
@@ -76,8 +76,8 @@ export function captureDaemonClient(daemon: Pick<DaemonApi, 'sendCaptureRequest'
     stage,
     async submit(draft) {
       const accepted = saved(await request({ cmd: CaptureSendMessageCmd.CaptureSend, capture_id: draft.id,
-        target: target(draft.recipient), content: draft.text, attachment_ids: draft.imageIds }));
-      for (const imageId of draft.imageIds) ready.delete(key(draft.id, imageId));
+        target: target(draft.recipient), content: draft.text, attachment_ids: draft.fileIds }));
+      for (const fileId of draft.fileIds) ready.delete(key(draft.id, fileId));
       return accepted;
     },
     async resolve(captureId) {
@@ -99,8 +99,8 @@ export function captureDaemonClient(daemon: Pick<DaemonApi, 'sendCaptureRequest'
         captureId: asset.capture_id, id: asset.attachment_id, name: asset.name, state: asset.state,
       })) };
     },
-    async discard(captureId, imageIds) {
-      for (const attachmentId of imageIds) {
+    async discard(captureId, fileIds) {
+      for (const attachmentId of fileIds) {
         const identity = key(captureId, attachmentId);
         await uploading.get(identity)?.catch(() => {});
         ready.delete(identity);
@@ -108,7 +108,7 @@ export function captureDaemonClient(daemon: Pick<DaemonApi, 'sendCaptureRequest'
           capture_id: captureId, attachment_id: attachmentId });
       }
     },
-    async image(captureId, attachmentId, mediaType) {
+    async file(captureId, attachmentId, mediaType) {
       const pieces: Uint8Array[] = [];
       let offset = 0;
       for (;;) {
