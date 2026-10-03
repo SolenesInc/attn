@@ -54,14 +54,12 @@ button { cursor: pointer; }
 }
 
 .capture-recent-toggle { order: 2; margin-left: auto; background: transparent; border: 0; color: var(--muted); font-size: calc(12px * var(--ui-scale, 1)); }
-.capture-recent-toggle[aria-pressed=true] { color: var(--text); }
 .capture-history { flex: 1; overflow: auto; min-height: 0; padding: 12px 2px 6px 0; scrollbar-width: thin; scrollbar-color: var(--line) transparent; font-size: calc(13px * var(--ui-scale, 1)); outline: none; }
 .capture-history-heading { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: 16px; }
 .capture-history h1 { font-size: calc(18px * var(--ui-scale, 1)); line-height: 1.3; letter-spacing: -.3px; font-weight: 600; margin: 0; }
-.capture-history button, .capture-history select { font: inherit; line-height: 1.4; color: var(--muted); background: transparent; border: 1px solid var(--line); border-radius: 6px; padding: 5px 9px; }
-.capture-history button:hover, .capture-history select:hover { color: var(--text); background: var(--chip); }
+.capture-history button { font: inherit; line-height: 1.4; color: var(--muted); background: transparent; border: 1px solid var(--line); border-radius: 6px; padding: 5px 9px; }
+.capture-history button:hover { color: var(--text); background: var(--chip); }
 .capture-history button:disabled { color: var(--quiet); cursor: default; }
-.capture-history select:focus-visible { outline: 2px solid var(--focus); outline-offset: 1px; }
 .capture-history .capture-history-back { display: flex; align-items: center; gap: 8px; border-color: transparent; padding-right: 0; font-size: calc(12px * var(--ui-scale, 1)); white-space: nowrap; }
 .capture-history-back kbd { color: var(--quiet); }
 .capture-history-draft { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 9px 11px; margin-bottom: 6px; background: var(--chip); border-radius: 7px; font-size: calc(12px * var(--ui-scale, 1)); color: var(--muted); }
@@ -70,23 +68,9 @@ button { cursor: pointer; }
 .capture-history-item { padding: 15px 0; border-bottom: 1px solid var(--line); }
 .capture-history-item header { display: flex; align-items: baseline; justify-content: space-between; gap: 14px; }
 .capture-history-item header strong { font-size: calc(12px * var(--ui-scale, 1)); font-weight: 600; }
-.capture-history-state { color: var(--quiet); font-size: calc(11px * var(--ui-scale, 1)); text-align: right; }
-.capture-history-state::first-letter { text-transform: uppercase; }
-.capture-history-state[data-state=needs_attention] { color: var(--error); }
-.capture-history-state[data-state=unread] { color: var(--accent); }
 .capture-history-note { font-size: calc(14px * var(--ui-scale, 1)); line-height: 1.55; white-space: pre-wrap; overflow-wrap: anywhere; margin: 7px 0 10px; }
-.capture-history-detail { font-size: calc(12px * var(--ui-scale, 1)); line-height: 1.5; color: var(--muted); overflow-wrap: anywhere; margin: 7px 0 10px; }
-.capture-history-actions { display: flex; flex-wrap: wrap; align-items: center; gap: 7px; margin-top: 10px; font-size: calc(11px * var(--ui-scale, 1)); }
-.capture-history-actions select { max-width: 100%; }
-.capture-history .capture-history-retry { color: var(--accent); }
 .capture-history .capture-history-older { display: block; width: 100%; margin-top: 14px; border-color: transparent; font-size: calc(12px * var(--ui-scale, 1)); }
 .capture-history-empty { color: var(--muted); line-height: 1.5; padding: 28px 0; margin: 0; }
-.capture-history-uploads { border-top: 1px solid var(--line); margin-top: 18px; padding-top: 14px; }
-.capture-history-uploads h2 { margin: 0 0 10px; font-size: calc(11px * var(--ui-scale, 1)); font-weight: 500; color: var(--quiet); }
-.capture-history-upload { display: flex; align-items: center; gap: 12px; padding: 8px 0; font-size: calc(12px * var(--ui-scale, 1)); }
-.capture-history-upload-name { min-width: 0; flex: 1; overflow-wrap: anywhere; }
-.capture-history-upload-name small { display: block; color: var(--quiet); font-size: calc(11px * var(--ui-scale, 1)); margin-top: 3px; }
-.capture-history-upload button { flex-shrink: 0; font-size: calc(11px * var(--ui-scale, 1)); }
 .capture-history-files { display: flex; flex-wrap: wrap; gap: 10px; margin: 10px 0; }
 .capture-history-image { margin: 0; min-width: 0; width: 100px; max-width: 100%; }
 .capture-history-image-preview { height: 100px; display: grid; place-items: center; }
