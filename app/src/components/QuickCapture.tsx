@@ -15,7 +15,7 @@ import { parseKeybindingsConfig, setShortcutOverrides } from '../shortcuts/resol
 
 const automationEnabled = (window as { __ATTN_AUTOMATION_ENABLED?: boolean }).__ATTN_AUTOMATION_ENABLED === true;
 type Attachment = CaptureAttachment;
-type CaptureExpectation = { frame?: boolean; visible?: boolean; settled?: boolean; imageCount?: number; attachmentCount?: number; view?: 'compose' | 'recent'; composing?: boolean; recipient?: string; fontScale?: number };
+type CaptureExpectation = { frame?: boolean; visible?: boolean; settled?: boolean; imageCount?: number; attachmentCount?: number; view?: 'compose' | 'recent'; recentText?: string; composing?: boolean; recipient?: string; fontScale?: number };
 
 
 export function QuickCapture({ client: suppliedClient, hostState }: { client?: CaptureClient; hostState?: CaptureHostState } = {}) {
@@ -272,7 +272,7 @@ export function QuickCapture({ client: suppliedClient, hostState }: { client?: C
         if (payload.action === 'capture_state') {
           if (payload.payload.batchSize !== undefined) workQueue.setCapacity(payload.payload.batchSize);
           if (payload.payload.frame) await new Promise<void>(resolve => requestAnimationFrame(() => resolve()));
-          if (payload.payload.attachmentCount !== undefined || payload.payload.imageCount !== undefined || payload.payload.view || payload.payload.visible !== undefined || payload.payload.composing !== undefined || payload.payload.recipient !== undefined || payload.payload.fontScale !== undefined) await waitForCaptureView(payload.payload);
+          if (payload.payload.attachmentCount !== undefined || payload.payload.imageCount !== undefined || payload.payload.view || payload.payload.recentText || payload.payload.visible !== undefined || payload.payload.composing !== undefined || payload.payload.recipient !== undefined || payload.payload.fontScale !== undefined) await waitForCaptureView(payload.payload);
           if (payload.payload.staged) { await stageDraft(draft()); await workQueue.whenIdle(); }
           const bounds = (element: Element | null) => { const rect = element?.getBoundingClientRect(); return rect ? { x: (rect.x + rect.width / 2) / window.innerWidth, y: (rect.y + rect.height / 2) / window.innerHeight } : null; };
           const nativeDiagnostics = await invoke<{ diagnostics?: string[] }>('capture_status');
@@ -371,7 +371,7 @@ function ImagePromise(url: string): Promise<void> {
   return new Promise((resolve, reject) => { const image = new Image(); image.onload = () => resolve(); image.onerror = reject; image.src = url; });
 }
 
-function waitForCaptureView({ imageCount: count, attachmentCount, view, settled, visible, composing, recipient, fontScale }: CaptureExpectation): Promise<void> {
+function waitForCaptureView({ imageCount: count, attachmentCount, view, recentText, settled, visible, composing, recipient, fontScale }: CaptureExpectation): Promise<void> {
   return new Promise((resolve, reject) => {
     const finish = (error?: string) => { observer.disconnect(); document.removeEventListener('load', check, true); document.removeEventListener('error', check, true); document.removeEventListener('focusin', check, true); if (error) reject(new Error(error)); else resolve(); };
     const check = () => {
@@ -383,12 +383,13 @@ function waitForCaptureView({ imageCount: count, attachmentCount, view, settled,
       const target = document.querySelector('.capture textarea');
       const recentView = document.querySelector('.capture-history');
       const viewReady = !view || (view === 'recent' ? recentView?.contains(document.activeElement) : target && document.activeElement === target);
+      const recentReady = !recentText || Boolean(document.querySelector('.capture-history-list')?.textContent?.includes(recentText));
       const imagesReady = count === undefined || (images.length === count && images.every(image => image.complete && image.naturalWidth > 0));
       const motionReady = !settled || !document.querySelector('.capture-images .arriving');
       const visibleReady = visible === undefined || document.querySelector<HTMLElement>(".capture")!.dataset.captureVisible === String(visible);
       const recipientReady = recipient === undefined || document.querySelector<HTMLElement>('.capture')?.dataset.recipient === recipient;
       const fontReady = fontScale === undefined || Number(document.querySelector<HTMLElement>('.capture')?.dataset.fontScale) === fontScale;
-      if (filesReady && fontReady && viewReady && imagesReady && motionReady && visibleReady && recipientReady && (composing === undefined || (document.querySelector<HTMLElement>(".capture textarea")?.dataset.composing === "true") === composing)) finish();
+      if (filesReady && recentReady && fontReady && viewReady && imagesReady && motionReady && visibleReady && recipientReady && (composing === undefined || (document.querySelector<HTMLElement>(".capture textarea")?.dataset.composing === "true") === composing)) finish();
     };
     const observer = new MutationObserver(check);
     observer.observe(document.querySelector('.capture')!, { childList: true, subtree: true, attributes: true, attributeFilter: ['class', 'data-capture-visible', 'data-composing', 'data-recipient', 'data-font-scale', 'data-file-ready'] });

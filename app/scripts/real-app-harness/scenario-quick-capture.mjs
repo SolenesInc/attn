@@ -527,7 +527,7 @@ try {
     const recent = (await state()).controls.recent;
     await driver.clickWindow(recent.x, recent.y, { windowTitle: 'Quick Capture' });
     await recordHostedStep('plain-recent', async () => {
-    const actual = await state({ view: 'recent' });
+    const actual = await state({ view: 'recent', recentText: path.basename(pdfPath) });
     assert.ok(actual.recentRows.some(row => row.text.includes('Read') && row.text.includes(path.basename(pdfPath))));
     assert.ok(actual.recentRows.every(row => row.buttons.every(button => button === 'Retry image')));
     runner.writeJson('plain-recent.json', actual);
