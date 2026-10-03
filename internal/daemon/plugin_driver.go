@@ -137,13 +137,6 @@ type pluginDeliverMessageResult struct {
 	OK bool `json:"ok"`
 }
 
-type pluginReportInputTakenParams struct {
-	SessionID string `json:"session_id"`
-	RunID     string `json:"run_id"`
-	Seq       uint64 `json:"seq"`
-	InputID   string `json:"input_id"`
-}
-
 type pluginReportPullRequestParams struct {
 	SessionID string `json:"session_id"`
 	RunID     string `json:"run_id"`
@@ -371,21 +364,8 @@ func (d *Daemon) handlePluginDriverMethod(plugin *pluginConnection, msg jsonRPCM
 		}
 		return struct{}{}, true, nil
 	case "session.report_input_taken":
-		var params pluginReportInputTakenParams
-		if err := json.Unmarshal(msg.Params, &params); err != nil {
-			return nil, true, fmt.Errorf("decode session.report_input_taken params: %w", err)
-		}
-		if strings.TrimSpace(params.InputID) == "" {
-			return nil, true, errors.New("session.report_input_taken input_id is required")
-		}
-		if err := validatePluginReportCursor(params.RunID, params.Seq); err != nil {
-			return nil, true, err
-		}
-		if err := d.authorizePluginSessionReport(plugin, params.SessionID, params.RunID); err != nil {
-			return nil, true, err
-		}
-		d.notePluginDriverReport(params.SessionID)
-		d.observeStructuredInputTaken(params.SessionID, strings.TrimSpace(params.InputID), time.Now())
+		// Acknowledge and drop: pi drivers from before custody-only input still send this,
+		// and an error makes their relay reconnect and resend it in a loop.
 		return struct{}{}, true, nil
 	case "session.report_pull_request":
 		var params pluginReportPullRequestParams

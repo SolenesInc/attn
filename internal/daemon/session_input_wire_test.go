@@ -80,3 +80,44 @@ func TestResendingAnAnnotationBatchNeverPressesEnterOnAnApprovalThatOpenedSince(
 		}
 	})
 }
+
+func TestAnAnnotationLeftInTheComposerHoldsAttnsDoorbellUntilATurnTakesItOrTheUserTypes(t *testing.T) {
+	for _, tc := range []struct {
+		name    string
+		release func(w *world, app *testworld.Peer, agent *bubbleClaude)
+	}{
+		{"the agent takes it", func(_ *world, _ *testworld.Peer, agent *bubbleClaude) {
+			agent.take(sessionAnnotationFeedback)
+			agent.reply("Verified. <!-- attn:state=idle -->")
+		}},
+		{"the user types over it", func(w *world, app *testworld.Peer, agent *bubbleClaude) {
+			app.Send(protocol.PtyInputMessage{Cmd: protocol.CmdPtyInput, ID: agent.id, Data: "x"})
+			w.advance(30 * time.Second)
+		}},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			inBubbleWithAgents(t, func(t *testing.T, w *world) {
+				app, cli := w.App(), w.Client()
+				agent := w.bubbleClaude(t, app, "shop")
+				registerSessions(t, w, cli, "sender")
+				agent.term.OnSubmit(nil)
+				if got := submitSessionAnnotationFeedback(app, agent.id, sessionAnnotationFeedback); got.status != "delivered" {
+					t.Fatalf("submit = %+v, want delivered", got)
+				}
+
+				if sent := sendAgentMessage(t, cli, "sender", agent.id, "the build is green"); sent.Status != protocol.AgentMsgStatusQueued {
+					t.Errorf("mail while attn's annotation sits untaken = %+v, want it held", sent)
+				}
+				w.advance(10 * time.Second)
+				if got := pastedContaining(agent.term, inboxDoorbell); got != 0 {
+					t.Fatalf("attn pasted its doorbell onto the untaken annotation: %q", agent.term.Pasted())
+				}
+				tc.release(w, app, agent)
+				w.advance(0)
+				if got := pastedContaining(agent.term, inboxDoorbell); got != 1 {
+					t.Fatalf("once %s attn pasted %q, want the doorbell once", tc.name, agent.term.Pasted())
+				}
+			})
+		})
+	}
+}

@@ -113,10 +113,6 @@ class RecordingDelegate implements RelayDelegate {
     this.calls.push({ method: relayMethods.reportDenial, params });
   }
 
-  async suiteReportInputTaken(params: unknown): Promise<void> {
-    this.calls.push({ method: relayMethods.reportInputTaken, params });
-  }
-
   async suiteReportPullRequest(params: unknown): Promise<void> {
     this.calls.push({ method: relayMethods.reportPullRequest, params });
   }
@@ -137,13 +133,6 @@ class RecordingDelegate implements RelayDelegate {
 class StallingDelegate extends RecordingDelegate {
   async suiteReportStop(params: unknown): Promise<void> {
     this.calls.push({ method: relayMethods.reportStop, params });
-    await new Promise(() => {});
-  }
-}
-
-class StallingInputReceiptDelegate extends RecordingDelegate {
-  async suiteReportInputTaken(params: unknown): Promise<void> {
-    this.calls.push({ method: relayMethods.reportInputTaken, params });
     await new Promise(() => {});
   }
 }
@@ -441,61 +430,8 @@ describe("AttnPiSuite: driver.deliver_message", () => {
     expect(pi2.sentMessages).toEqual([{ content: "after resume", options: undefined }]);
     expect(pi1.sentMessages).toHaveLength(2);
 
-    pi2.fire("message_start", {
-      type: "message_start",
-      message: { role: "user", content: [{ type: "text", text: "after resume" }] },
-    }, ctx2);
-    await waitFor(() => delegate.calls.some((call) => call.method === relayMethods.reportInputTaken));
-    expect(delegate.calls.find((call) => call.method === relayMethods.reportInputTaken)?.params).toEqual({
-      token: "tok-5",
-      input_id: "nudge/resume",
-    });
-
     suite.close();
     relay.close();
-  });
-
-  test("replays an input-taken receipt after the driver connection is replaced", async () => {
-    const socketPath = nextSocketPath();
-    const delegate = new StallingInputReceiptDelegate();
-    const relay = new RelayServer({ socketPath, delegate });
-    await relay.listen();
-    const suite = new AttnPiSuite({ socketPath, token: "tok-receipt", piVersion: "0.80.10" });
-    const pi = new FakePi();
-    suite.register(pi);
-    const ctx = new FakeContext("native-receipt");
-    pi.fire("session_start", { type: "session_start", reason: "startup" }, ctx);
-    await waitFor(() => delegate.connections.length === 1);
-
-    const placed = await relay.deliverMessage<RelayDeliverMessageParams, RelayDeliverMessageResult>(
-      delegate.connections[0]!,
-      { input_id: "heartbeat/generation-1", text: "heartbeat" },
-      2_000,
-    );
-    expect(placed).toEqual({ delivered: true });
-
-    pi.fire(
-      "message_start",
-      { type: "message_start", message: { role: "user", content: [{ type: "text", text: "heartbeat" }] } },
-      ctx,
-    );
-    await waitFor(() => delegate.calls.some((call) => call.method === relayMethods.reportInputTaken));
-    relay.close();
-
-    const replacementDelegate = new RecordingDelegate();
-    const replacement = new RelayServer({ socketPath, delegate: replacementDelegate });
-    await replacement.listen();
-    await waitFor(
-      () => replacementDelegate.calls.some((call) => call.method === relayMethods.reportInputTaken),
-      5_000,
-    );
-    expect(replacementDelegate.calls.find((call) => call.method === relayMethods.reportInputTaken)?.params).toEqual({
-      token: "tok-receipt",
-      input_id: "heartbeat/generation-1",
-    });
-
-    suite.close();
-    replacement.close();
   });
 });
 

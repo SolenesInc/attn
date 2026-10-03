@@ -197,7 +197,7 @@ func (d *Daemon) recordPlacedInputOwed(sessionID string, owed bool) {
 	})
 }
 
-func reportsPromptsTaken(agent string) bool {
+func reportsTurnStarts(agent string) bool {
 	return agentdriver.EffectiveCapabilities(agentdriver.Get(agent)).HasHooks
 }
 

@@ -229,13 +229,10 @@ func (d *Daemon) deliverInboxLocked(a inbox.Address, state *inboxDeliveryState) 
 		receipt.Detail = agentMessageQueuedDetail(errInboxNoPromptReader)
 		return receipt, nil
 	}
-	key := uuid.NewString()
-	id := inputAttemptID("inbox-ring", key)
-	input := maintenanceSessionInput("inbox-ring", key, holder.ID, inboxRingText, sessionInputWhenPromptReady)
+	input := maintenanceSessionInput("inbox-ring", uuid.NewString(), holder.ID, inboxRingText, sessionInputWhenPromptReady)
 	input.bypassInitialGate = true
 	placement := d.sessionInputs().try(context.Background(), input)
-	if placement.err == nil && (placement.stage == sessionInputPlaced || placement.stage == sessionInputTaken) {
-		d.sessionInputs().forget(holder.ID, id)
+	if placement.stage == sessionInputPlaced {
 		now := time.Now()
 		if err := d.store.RingInbox(a, finishingWake, now); err != nil {
 			return receipt, err

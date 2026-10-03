@@ -11,7 +11,7 @@
 - Quiet window: time after the user's last keystroke when automated input must wait.
 - Harness link: a channel that delivers input to a harness without typing into its terminal. Sessions without one use the PTY. pi's plugin message delivery is the first.
 - Voice: whose words an input carries, the user's (annotations, conversation) or attn's (rings, heartbeats, nudges). A harness link declares the voices it delivers.
-- Custody: a harness link's answer, at delivery, that the harness took an input.
+- Custody: the answer, at delivery, that the harness took an input: a harness link's reply, or on the PTY the paste and its Enter written. It is a delivery's only result; attn never confirms an input afterwards.
 - Inbox: the items waiting for an address; agents read theirs with `attn agent inbox`.
 - Item: anything an agent reads from its inbox: peer message, seed update, user message, PR watch update, notice.
 - Address: who an item is for, a role (crew member, Chief or seed tender) or a session. A seed address follows its current or next tender. Unread role items reach whichever session holds the role next.

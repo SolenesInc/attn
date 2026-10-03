@@ -69,7 +69,6 @@ async function buildDriver(options: DriverOptions = {}): Promise<BuiltDriver> {
       suiteReportProxyCommands: (params: unknown) => driver.suiteReportProxyCommands(params),
       suiteReportStop: (params: unknown) => driver.suiteReportStop(params),
       suiteReportDenial: (params: unknown) => driver.suiteReportDenial(params),
-      suiteReportInputTaken: (params: unknown) => driver.suiteReportInputTaken(params),
       suiteReportPullRequest: (params: unknown) => driver.suiteReportPullRequest(params),
     },
   });
@@ -398,7 +397,6 @@ class CollectingDelegate implements RelayDelegate {
   }
   async suiteReportStop(): Promise<void> {}
   async suiteReportDenial(): Promise<void> {}
-  async suiteReportInputTaken(): Promise<void> {}
   async suiteReportPullRequest(): Promise<void> {}
   async suiteReportExecPolicyAmendment(): Promise<void> {}
   async suiteReportNetworkAmendment(): Promise<void> {}

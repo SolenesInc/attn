@@ -59,7 +59,6 @@ function noopRelay(): RelayServer {
       async suiteReportState() {},
       async suiteReportStop() {},
       async suiteReportDenial() {},
-      async suiteReportInputTaken() {},
       async suiteReportPullRequest() {},
     },
   });

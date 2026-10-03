@@ -2875,10 +2875,9 @@ func (d *Daemon) handleState(conn net.Conn, msg *protocol.StateMessage) {
 	d.recordBracketEvidence(msg.ID, msg.State)
 	if strings.EqualFold(strings.TrimSpace(protocol.Deref(msg.HookEvent)), "user_prompt_submit") &&
 		strings.TrimSpace(protocol.Deref(msg.Prompt)) != "" {
-		effects := d.observePromptTaken(msg.ID, protocol.Deref(msg.Prompt), time.Now())
 		origin := sessionInputOrigin{}
-		if effects.taken != nil {
-			origin = effects.taken.origin
+		if d.observePromptSubmitted(msg.ID, time.Now()) {
+			origin = userConversationInput()
 		}
 		d.life.Go("maybeGenerateSessionTitleFromPrompt", func() { d.maybeGenerateSessionTitleFromPrompt(msg.ID, protocol.Deref(msg.Prompt), origin) })
 	}

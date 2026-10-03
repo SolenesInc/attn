@@ -36,7 +36,6 @@ export type ToolResultEvent = {
   input: Record<string, unknown>;
   content: AgentMessageContentBlock[];
 };
-export type MessageStartEvent = { type: "message_start"; message: AgentMessageLike };
 
 // getSessionFile is absent on pi builds before 0.83 and empty until the session
 // file exists, so the report is skipped rather than sent as a guess.
@@ -52,7 +51,6 @@ export type ExtensionHandler<TEvent> = (event: TEvent, ctx: ExtensionContextLike
 export type ExtensionAPILike = {
   on(event: "session_start", handler: ExtensionHandler<SessionStartEvent>): void;
   on(event: "agent_start", handler: ExtensionHandler<AgentStartEvent>): void;
-  on(event: "message_start", handler: ExtensionHandler<MessageStartEvent>): void;
   on(event: "agent_end", handler: ExtensionHandler<AgentEndEvent>): void;
   on(event: "agent_settled", handler: ExtensionHandler<AgentSettledEvent>): void;
   on(event: "tool_result", handler: (event: ToolResultEvent, ctx: ExtensionContextLike) => undefined): void;
@@ -369,7 +367,6 @@ export class AttnPiSuite {
   private cachedAssistantText = "";
   private cachedAborted = false;
   private approvalOpen = false;
-  private readonly pendingInputs: Array<{ inputID: string; text: string }> = [];
 
   constructor(env: SuiteEnv) {
     this.piVersion = env.piVersion;
@@ -431,20 +428,6 @@ export class AttnPiSuite {
     pi.on("agent_start", (_event, ctx) => {
       this.currentContext = ctx;
       relay.client.report(relayMethods.reportState, { token: relay.token, state: "working" });
-    });
-
-    pi.on("message_start", (event, ctx) => {
-      this.currentContext = ctx;
-      if (event.message.role !== "user") return;
-      const text = messageText(event.message);
-      const index = this.pendingInputs.findIndex((candidate) => candidate.text === text);
-      if (index < 0) return;
-      const [candidate] = this.pendingInputs.splice(index, 1);
-      if (!candidate) return;
-      relay.client.reportFact(candidate.inputID, relayMethods.reportInputTaken, {
-        token: relay.token,
-        input_id: candidate.inputID,
-      });
     });
 
     pi.on("agent_end", (event, ctx) => {
@@ -576,14 +559,10 @@ export class AttnPiSuite {
     const pi = this.currentPi;
     const ctx = this.currentContext;
     if (!pi || !ctx) return { delivered: false };
-    const candidate = { inputID: params.input_id, text: params.text };
-    this.pendingInputs.push(candidate);
     try {
       pi.sendUserMessage(params.text, ctx.isIdle() ? undefined : { deliverAs: "steer" });
       return { delivered: true };
     } catch {
-      const index = this.pendingInputs.indexOf(candidate);
-      if (index >= 0) this.pendingInputs.splice(index, 1);
       // A stale pi/ctx from a superseded session generation throws here on any use:
       // an ordinary "can't deliver right now", not a bug to rethrow across the wire.
       return { delivered: false };
@@ -608,13 +587,6 @@ function assistantText(message: AgentMessageLike): string {
 
 function toolResultText(event: ToolResultEvent): string {
   return event.content
-    .filter((block) => block.type === "text" && typeof block.text === "string")
-    .map((block) => block.text)
-    .join("\n");
-}
-
-function messageText(message: AgentMessageLike): string {
-  return message.content
     .filter((block) => block.type === "text" && typeof block.text === "string")
     .map((block) => block.text)
     .join("\n");

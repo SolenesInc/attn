@@ -57,7 +57,7 @@ func screenLacks(t *testing.T, app *testworld.Peer, session, text string) {
 	}
 }
 
-func TestAMessageDeliveringDriverCarriesAttnsInputAndItsReceiptStartsTheTurn(t *testing.T) {
+func TestAMessageDeliveringDriverCarriesAttnsInputInsteadOfItsTerminal(t *testing.T) {
 	w := newWorld(t)
 	app := w.App()
 	driver := connectDriver(t, w, "snipe-plugin", "snipe", map[string]bool{"state_reporting": true, "message_delivery": true})
@@ -73,26 +73,6 @@ func TestAMessageDeliveringDriverCarriesAttnsInputAndItsReceiptStartsTheTurn(t *
 	}
 	if result := feedbackResult(app, submitted); !result.Success || result.Status != "delivered" {
 		t.Fatalf("the feedback was answered %+v, want it delivered", result)
-	}
-	launched := listedState(t, w, session)
-
-	receipt := func(runID string) error {
-		return driver.report("session.report_input_taken", map[string]any{"session_id": session, "run_id": runID, "seq": 2, "input_id": message.InputID})
-	}
-	if err := receipt("run-stale"); !errorSays(err, "does not own active run") {
-		t.Errorf("a receipt from another run was answered %v, want an ownership refusal", err)
-	}
-	if err := receipt(run.RunID); err != nil {
-		t.Fatal(err)
-	}
-	taken := testworld.AwaitSession(app, session, func(s protocol.Session) bool {
-		return protocol.Deref(s.LastModelRequestAt) != protocol.Deref(launched.LastModelRequestAt)
-	})
-	if err := receipt(run.RunID); err != nil {
-		t.Fatal(err)
-	}
-	if again := listedState(t, w, session); protocol.Deref(again.LastModelRequestAt) != protocol.Deref(taken.LastModelRequestAt) {
-		t.Errorf("a repeated receipt moved the model request from %s to %s", protocol.Deref(taken.LastModelRequestAt), protocol.Deref(again.LastModelRequestAt))
 	}
 	screenLacks(t, app, session, "check the rounding")
 }
@@ -157,10 +137,8 @@ func TestAUserTurnCarriedByTheDriverTitlesTheSession(t *testing.T) {
 	awaitingInput(t, app, driver, run)
 
 	submitted := sendFeedback(app, session, "investigate the retry queue")
-	var message deliveredMessage
-	driver.answer(driver.asked("driver.deliver_message", &message), map[string]bool{"ok": true})
+	driver.answer(driver.asked("driver.deliver_message", nil), map[string]bool{"ok": true})
 	feedbackResult(app, submitted)
-	driver.mustReport("session.report_input_taken", map[string]any{"session_id": session, "run_id": run.RunID, "seq": 2, "input_id": message.InputID})
 
 	task := w.HeadlessTask()
 	if !strings.Contains(task.Prompt, "investigate the retry queue") {

@@ -4,7 +4,6 @@ import (
 	"bytes"
 	"context"
 	"errors"
-	"fmt"
 	"strings"
 	"time"
 
@@ -42,7 +41,7 @@ func (m *sessionInputModule) pressHeldEnter(sessionID string) {
 		return
 	}
 	ctx := m.daemon.life.Context()
-	if _, blocked := m.promptInTheWayLocked(ctx, sessionID); blocked {
+	if m.promptInTheWayLocked(ctx, sessionID) {
 		m.holdEnterLocked(lane, sessionID, sessionInputComposerRetry)
 		return
 	}
@@ -54,18 +53,11 @@ func (m *sessionInputModule) pressHeldEnter(sessionID string) {
 	m.dropHeldEnterLocked(lane)
 }
 
-func (m *sessionInputModule) promptInTheWayLocked(ctx context.Context, sessionID string) (sessionInputReason, bool) {
+func (m *sessionInputModule) promptInTheWayLocked(ctx context.Context, sessionID string) bool {
 	if state := m.daemon.store.Get(sessionID); state != nil && state.State == protocol.SessionStatePendingApproval {
-		return sessionInputReasonApproval, true
+		return true
 	}
-	_, known, selector := m.daemon.sessionInputScreen(ctx, sessionID)
-	switch {
-	case !known:
-		return sessionInputReasonScreenUnavailable, true
-	case selector:
-		return sessionInputReasonSelector, true
-	}
-	return sessionInputReasonNone, false
+	return m.promptShowingLocked(ctx, sessionID)
 }
 
 func (m *sessionInputModule) promptShowingLocked(ctx context.Context, sessionID string) bool {
@@ -73,21 +65,21 @@ func (m *sessionInputModule) promptShowingLocked(ctx context.Context, sessionID 
 	return !known || selector
 }
 
-func (m *sessionInputModule) ptySafetyLocked(ctx context.Context, sessionID string, lane *sessionInputLane, allowUserComposer bool) (sessionInputReason, error) {
+func (m *sessionInputModule) ptySafetyLocked(ctx context.Context, sessionID string, lane *sessionInputLane, allowUserComposer bool) error {
 	if !allowUserComposer {
 		if remaining := m.daemon.userInputQuietRemaining(sessionID, sessionInputQuietWindow); remaining > 0 {
-			return sessionInputReasonUserComposerDirty, &sessionInputQuietError{retryAfter: remaining}
+			return &sessionInputQuietError{retryAfter: remaining}
 		}
 	}
 	line, known, selector := m.daemon.sessionInputScreen(ctx, sessionID)
 	if !known {
-		return sessionInputReasonScreenUnavailable, errSessionInputScreenUnavailable
+		return errSessionInputScreenUnavailable
 	}
 	if selector {
 		m.daemon.logf("session input held off session=%s: the screen is waiting on a keypress (%q)", sessionID, line)
-		return sessionInputReasonSelector, errSessionInputBlockedBySelector
+		return errSessionInputBlockedBySelector
 	}
-	return sessionInputReasonNone, nil
+	return nil
 }
 
 func (m *sessionInputModule) writePTY(ctx context.Context, sessionID string, data []byte, source string) error {
@@ -110,20 +102,8 @@ func (m *sessionInputModule) writePTY(ctx context.Context, sessionID string, dat
 			return m.daemon.ptyBackend.Input(ctx, sessionID, data)
 		}
 		m.dropHeldEnterLocked(lane)
-		lane.userGeneration++
-		for _, attempt := range lane.attempts {
-			if !attempt.composer || (attempt.stage != sessionInputPlaced && attempt.stage != sessionInputIndeterminate) {
-				continue
-			}
-			attempt.stage = sessionInputIndeterminate
-			attempt.composer = false
-			select {
-			case <-attempt.wait:
-			default:
-				close(attempt.wait)
-			}
-		}
-		m.recordOwedLocked(lane, sessionID)
+		m.releaseComposerLocked(lane, sessionID)
+		lane.forfeitNextLocked()
 		if bytes.ContainsAny(data, "\r\n") {
 			lane.userSubmit = true
 		}
@@ -143,73 +123,38 @@ func (d *Daemon) writeSessionPTY(sessionID string, data []byte, source string) e
 	return d.sessionInputs().writePTY(context.Background(), sessionID, data, strings.TrimSpace(source))
 }
 
-func (m *sessionInputModule) resubmitPTYLocked(ctx context.Context, lane *sessionInputLane, delivery sessionInputDelivery, existing *sessionInputAttemptState) sessionInputAttempt {
-	if lane.userGeneration != existing.userGeneration {
-		existing.stage = sessionInputIndeterminate
-		return sessionInputAttempt{id: delivery.id, stage: sessionInputIndeterminate, route: existing.route, reason: sessionInputReasonUserComposerDirty, wait: existing.wait, err: errSessionInputComposerDirty}
-	}
-	state := m.daemon.store.Get(delivery.sessionID)
-	if state == nil {
-		return sessionInputAttempt{id: delivery.id, stage: sessionInputPlaced, route: existing.route, reason: sessionInputReasonGone, wait: existing.wait, err: fmt.Errorf("session %s is gone", delivery.sessionID)}
-	}
-	if reason, ok := deliveryAllowedForPhase(delivery.placement, state.State); !ok {
-		err := errSessionInputBlockedByApproval
-		if reason == sessionInputReasonBusy {
-			err = fmt.Errorf("session input requires a prompt-ready session, got %s", state.State)
-		}
-		return sessionInputAttempt{id: delivery.id, stage: sessionInputPlaced, route: existing.route, reason: reason, wait: existing.wait, err: err}
-	}
-	if reason, err := m.ptySafetyLocked(ctx, delivery.sessionID, lane, delivery.allowUserComposer); err != nil {
-		m.armRetryLocked(lane, delivery, err)
-		return sessionInputAttempt{id: delivery.id, stage: sessionInputPlaced, route: existing.route, reason: reason, wait: existing.wait, err: err}
-	}
-	m.clearUnstartedUserSubmitLocked(lane, delivery.sessionID)
-	m.dropHeldEnterLocked(lane)
-	existing.stage = sessionInputPlaced
-	m.recordOwedLocked(lane, delivery.sessionID)
-	if err := m.daemon.ptyBackend.Input(ctx, delivery.sessionID, []byte("\r")); err != nil {
-		existing.stage = sessionInputIndeterminate
-		return sessionInputAttempt{id: delivery.id, stage: sessionInputIndeterminate, route: existing.route, reason: sessionInputReasonTransport, wait: existing.wait, err: err}
-	}
-	return attemptFromState(delivery.id, existing)
-}
-
-func (m *sessionInputModule) placePTYLocked(ctx context.Context, lane *sessionInputLane, delivery sessionInputDelivery, attempt *sessionInputAttemptState, candidate sessionInputCandidate) sessionInputAttempt {
-	key := delivery.id.String()
+// A held Enter still counts as custody: the paste already sits in the harness's composer.
+func (m *sessionInputModule) placePTYLocked(ctx context.Context, lane *sessionInputLane, delivery sessionInputDelivery) sessionInputAttempt {
 	if m.daemon.ptyBackend == nil {
-		delete(lane.attempts, key)
-		return sessionInputAttempt{id: delivery.id, stage: sessionInputDeferred, reason: sessionInputReasonUnsupported, err: errors.New("session has no input route")}
+		return sessionInputAttempt{stage: sessionInputDeferred, err: errors.New("session has no input route")}
 	}
-	if reason, err := m.ptySafetyLocked(ctx, delivery.sessionID, lane, delivery.allowUserComposer); err != nil {
-		delete(lane.attempts, key)
+	if err := m.ptySafetyLocked(ctx, delivery.sessionID, lane, delivery.allowUserComposer); err != nil {
 		m.armRetryLocked(lane, delivery, err)
-		return sessionInputAttempt{id: delivery.id, stage: sessionInputDeferred, route: sessionInputRoutePTY, reason: reason, err: err}
+		return sessionInputAttempt{stage: sessionInputDeferred, err: err}
 	}
 	m.clearUnstartedUserSubmitLocked(lane, delivery.sessionID)
 
-	lane.pending = append(lane.pending, candidate)
-	attempt.route = sessionInputRoutePTY
-	attempt.composer = true
-	attempt.stage = sessionInputPlaced
-	m.recordOwedLocked(lane, delivery.sessionID)
 	input := make([]byte, 0, len(sessionInputPasteStart)+len(delivery.text)+len(sessionInputPasteEnd))
 	input = append(input, sessionInputPasteStart...)
 	input = append(input, delivery.text...)
 	input = append(input, sessionInputPasteEnd...)
 	if err := m.daemon.ptyBackend.Input(ctx, delivery.sessionID, input); err != nil {
-		attempt.stage = sessionInputIndeterminate
-		return sessionInputAttempt{id: delivery.id, stage: sessionInputIndeterminate, route: sessionInputRoutePTY, reason: sessionInputReasonTransport, wait: attempt.wait, err: err}
+		return sessionInputAttempt{stage: sessionInputFailed, err: err}
 	}
+	// A busy harness may hold a turn-boundary paste unsubmitted; a prompt-ready one takes it on Enter.
+	lane.occupied = delivery.placement == sessionInputAtTurnBoundary
+	m.recordOwedLocked(lane, delivery.sessionID)
 	pausepoint.At(pausepoint.SessionInputPasteGap)
 	time.Sleep(sessionInputSubmitDelay)
-	if reason, blocked := m.promptInTheWayLocked(ctx, delivery.sessionID); blocked {
+	if m.promptInTheWayLocked(ctx, delivery.sessionID) {
 		m.daemon.logf("session input holding Enter session=%s: a prompt appeared after the paste", delivery.sessionID)
 		m.holdEnterLocked(lane, delivery.sessionID, sessionInputComposerRetry)
-		return sessionInputAttempt{id: delivery.id, stage: sessionInputPlaced, route: sessionInputRoutePTY, reason: reason, wait: attempt.wait}
+		return sessionInputAttempt{stage: sessionInputPlaced, at: time.Now()}
 	}
 	if err := m.daemon.ptyBackend.Input(ctx, delivery.sessionID, []byte("\r")); err != nil {
-		attempt.stage = sessionInputIndeterminate
-		return sessionInputAttempt{id: delivery.id, stage: sessionInputIndeterminate, route: sessionInputRoutePTY, reason: sessionInputReasonTransport, wait: attempt.wait, err: err}
+		lane.occupied = true
+		m.recordOwedLocked(lane, delivery.sessionID)
+		return sessionInputAttempt{stage: sessionInputFailed, err: err}
 	}
-	return attemptFromState(delivery.id, attempt)
+	return sessionInputAttempt{stage: sessionInputPlaced, at: time.Now()}
 }
