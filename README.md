@@ -54,15 +54,13 @@ support is in our plans. Soon!
 **Color-coded status.** Every session in one window; the one that needs you
 glows. Green = working. Yellow = "hey, I need you." Gray = done.
 
-**Workspaces in one sidebar.** The sidebar groups your work into workspaces,
-each holding the sessions and terminals for one task. Drag to reorder, drag a
-session out into its own workspace, rename anything inline.
+**Profiles and desktops.** A profile groups your agents, crew and automations,
+say one for work and one for personal projects. Inside it, desktops hold your
+panes and tiles; Cmd+1–9 switches between them and Cmd+Option+1–9 sends the
+focused pane over. Every window on the same profile shows the same desktop and
+the same focused pane.
 
-**Grid view.** Hit Cmd+G to see every session as a live terminal tile at once;
-the ones waiting on you flash. Click a tile to zoom in and type straight into
-it. Pick the layout, drop tiles you don't care about; it sticks across restarts.
-
-**Panes, splits, and first-class shells.** A workspace can hold several sessions
+**Panes, splits, and first-class shells.** A desktop can hold several sessions
 side by side. Split a pane, open a plain shell as its own session from the same
 dialog you use for agents, and move focus between panes with the keyboard.
 
@@ -115,6 +113,13 @@ brew update && brew upgrade --cask victorarias/attn/attn
 
 The app nudges you when a new release exists.
 
+The daemon upgrades its database when it starts, in one transaction after a
+snapshot in `~/.attn/backups/`. If the upgrade fails, the daemon exits, leaves
+the database and its schema version as they were, and writes
+`~/.attn/migration-failure.json` naming the error, the database, the snapshot
+and the log; the next successful start removes it. Other `attn` commands never
+upgrade the database and refuse to open one the daemon has not upgraded yet.
+
 ## Prerequisites
 
 - macOS (Apple Silicon)
@@ -124,9 +129,8 @@ The app nudges you when a new release exists.
 ## Quick start
 
 1. Launch **attn** from Applications.
-2. **Cmd+T** starts a workspace: pick an
-agent (or a plain shell), pick a directory, go. **Cmd+N** adds another session
-to the workspace you're in.
+2. **Cmd+N** starts an agent beside the focused pane: pick an
+agent (or a plain shell), pick a directory, go.
 3. Watch the sidebar. Colors tell you who needs you.
 4. Too many concurrent agents? Enable queue mode!
 5. Press **Cmd+/** any time for the full shortcuts list.
@@ -148,16 +152,19 @@ to the workspace you're in.
 
 | Shortcut | What it does |
 |---|---|
-| Cmd+T | New workspace (with an initial session) |
-| Cmd+N | New session in current workspace |
+| Cmd+N | New session beside the focused pane |
 | Cmd+Shift+N | New session, split sideways |
 | Cmd+D / Cmd+Shift+D | Split pane down / sideways |
-| Cmd+Option+←↑→↓ | Move between panes (cross into the next workspace at an edge) |
-| Cmd+1–9 | Jump to a workspace |
+| Cmd+Option+←↑→↓ | Move between panes (steps to the next desktop at an edge) |
+| Cmd+1–9 | Switch to desktop 1–9 |
+| Cmd+Option+1–9 | Send the focused pane to desktop 1–9 |
+| Cmd+G | Desktop overview |
+| Cmd+Shift+U | Switch profile |
 | Cmd+Up / Down | Jump between sessions |
-| Cmd+G | Grid view |
 | Cmd+F | Find in terminal |
-| Cmd+K | Action menu |
+| Cmd+K | Agent palette (crew, agents, tiles, runs) |
+| Cmd+Shift+K | Command palette (or type `>` in the agent palette) |
+| Cmd+Shift+A | All agents: the list in the queue sidebar, the agent palette elsewhere |
 | Cmd+Shift+P | Attention drawer (who needs me?) |
 | Cmd+\` | Utility terminal |
 | Cmd+R | Refresh PRs |

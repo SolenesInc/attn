@@ -1,3 +1,4 @@
+import { LaunchDesktopKind } from '../types/generated';
 import { useEffect, useRef, useState, type InputHTMLAttributes } from 'react';
 import type { CrewLaunchEdit, CrewLaunchSelection, useCrewLaunchAutosave } from '../hooks/useCrewLaunchAutosave';
 import type { CrewRestartAttempt } from '../hooks/useCrewRestart';
@@ -14,6 +15,8 @@ import {
   restartBusy,
   restartNotice,
 } from './crewLaunchPresentation';
+
+import { LaunchDesktopSelect } from './LaunchDesktopSelect';
 
 type LaunchAutosave = ReturnType<typeof useCrewLaunchAutosave>;
 
@@ -116,6 +119,7 @@ function LaunchFields({ member, selection, harnesses, harness, effectiveAgent, c
   };
   return (
     <div className="crew-launch-fields">
+      <LaunchDesktopSelect kind={LaunchDesktopKind.Crew} itemId={member.id} profileId={member.profile_id ?? ''} defaultName={member.name || member.id} value={selection.launchDesktop} onChange={(launchDesktop) => update({ launchDesktop })} disabled={catalogLoading} />
       <label>
         <span>Harness</span>
         <select

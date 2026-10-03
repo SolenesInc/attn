@@ -11,7 +11,7 @@ import (
 
 func TestMigration126RecomputesStoredSlugs(t *testing.T) {
 	dbPath := filepath.Join(t.TempDir(), "test.db")
-	s, err := newStoreAtVersion(dbPath, 161)
+	s, err := newStoreAtVersion(dbPath, 167)
 	if err != nil {
 		t.Fatalf("NewWithDB: %v", err)
 	}
@@ -25,6 +25,19 @@ func TestMigration126RecomputesStoredSlugs(t *testing.T) {
 		t.Fatalf("read the seeds declaration: %v", err)
 	}
 	body := []byte(`{"id":"s-e5zefj","title":"Mermaid rendered in the grid, in Rust","body":"","status":"planted","step_slug":"mermaid-rendered-in-the-grid-in-rust","edges":[],"vars":[]}`)
+	profile, err := s.ProfileMigration()
+	if err != nil {
+		t.Fatal(err)
+	}
+	var fixture garden.Seed
+	if err := json.Unmarshal(body, &fixture); err != nil {
+		t.Fatal(err)
+	}
+	fixture.ProfileID = profile.Manifest.ProfileID
+	body, err = fixture.Encode()
+	if err != nil {
+		t.Fatal(err)
+	}
 	if _, err := s.PutDocument(*schema, "s-e5zefj", body, time.Now(), nil); err != nil {
 		t.Fatalf("plant the old-slug seed: %v", err)
 	}
@@ -36,7 +49,7 @@ func TestMigration126RecomputesStoredSlugs(t *testing.T) {
 	if _, err := s.db.Exec(`DELETE FROM schema_migrations WHERE version >= 126`); err != nil {
 		t.Fatalf("unrecord migration 126: %v", err)
 	}
-	if err := migrateDBThrough(s.db, dbPath, 161); err != nil {
+	if err := migrateDBThrough(s.db, dbPath, 167); err != nil {
 		t.Fatalf("migrateDB: %v", err)
 	}
 

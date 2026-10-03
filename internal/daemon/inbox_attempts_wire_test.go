@@ -379,7 +379,9 @@ func TestAGardenBellForACaseVariantTenderReachesTheRegisteredMember(t *testing.T
 		}
 		writeCrewCharter(t, w, "trellis")
 		w.restart()
+		w.App() // Initial state waits for startup recovery, which drops injected sessions.
 		cli = w.Client()
+		registerSessions(t, w, cli, "sender")
 		if _, err := cli.SeedNote("sender", seed, "the deployment is ready", "", "", true, nil); err != nil {
 			t.Fatal(err)
 		}

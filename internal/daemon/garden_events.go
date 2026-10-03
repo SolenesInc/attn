@@ -284,8 +284,8 @@ func (r gardenEventRoles) ResolveSeedRole(seedID string, role events.Role) ([]st
 		if !exists {
 			return nil, nil
 		}
-		if memberName := seed.Tender().Member; memberName != "" {
-			member, found, err := r.daemon.resolveCrewMember(memberName)
+		if seed.Tender().Member != "" {
+			member, found, err := r.daemon.seedTenderMember(seed)
 			if err != nil {
 				return nil, err
 			}
@@ -294,7 +294,7 @@ func (r gardenEventRoles) ResolveSeedRole(seedID string, role events.Role) ([]st
 			}
 			return []string{inbox.ToMember(member.ID).String()}, nil
 		}
-		sessionID, err := r.daemon.localGardenTenderSession(seed.Tender())
+		sessionID, err := r.daemon.localGardenTenderSession(seed)
 		if errors.Is(err, errRemoteGardenTender) {
 			return nil, nil
 		}

@@ -39,7 +39,7 @@ describe('SettingsModal drafts', () => {
   });
 
   it('keeps a half-typed field when some other setting changes underneath it', async () => {
-    const daemon = await openSection('workspace');
+    const daemon = await openSection('desktop');
     fireEvent.change(screen.getByTestId('settings-projects-directory-input'), { target: { value: '/Users/you/half-typed' } });
 
     daemon.emit({ event: 'settings_updated', settings: { default_model_claude: 'sonnet' } });
@@ -49,7 +49,7 @@ describe('SettingsModal drafts', () => {
   });
 
   it('reseeds a field when its own value changes', async () => {
-    const daemon = await openSection('workspace');
+    const daemon = await openSection('desktop');
 
     daemon.emit({ event: 'settings_updated', settings: { projects_directory: '/Users/you/code' } });
     await daemon.idle();
@@ -58,7 +58,7 @@ describe('SettingsModal drafts', () => {
   });
 
   it('saves a typed draft when Escape closes settings and shows it on reopen', async () => {
-    const daemon = await openSection('workspace', { settings: { projects_directory: '/Users/you/code' } });
+    const daemon = await openSection('desktop', { settings: { projects_directory: '/Users/you/code' } });
     fireEvent.change(screen.getByTestId('settings-projects-directory-input'), { target: { value: '/Users/you/half-typed' } });
 
     await gesture(daemon, () => fireEvent.keyDown(window, { key: 'Escape' }));

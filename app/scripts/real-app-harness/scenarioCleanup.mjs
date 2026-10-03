@@ -11,7 +11,7 @@ export async function cleanupSessionViaAppClose(client, observer, sessionId, tim
 
   try {
     await observer.waitFor(
-      () => !observer.getSession(sessionId) && !observer.getWorkspace(sessionId),
+      () => !observer.getSession(sessionId) && !observer.desktopOf(sessionId),
       `session ${sessionId} to disappear after close_session`,
       timeoutMs,
     );

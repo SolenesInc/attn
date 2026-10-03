@@ -9,81 +9,38 @@ import (
 	"time"
 
 	"github.com/victorarias/attn/internal/harness"
-	"github.com/victorarias/attn/internal/workspacelayout"
+	"github.com/victorarias/attn/internal/store"
 )
 
 // terminalRegistry is the in-memory copy of the terminal-to-session map pane rows persist.
-// Readers never touch SQLite; pane rows reach it only through the layout writers below.
+// Readers never touch SQLite; the store syncs it after every commit that can move a pane.
 type terminalRegistry struct {
-	write sync.Mutex
 	mu    sync.RWMutex
 	byID  map[harness.TerminalID]*terminal
 	shown uint64
 	// A terminal that leaves its pane can still exit, killed by its session's close or on its own;
 	// that exit still names the session it showed.
 	ending map[harness.TerminalID]endingTerminal
+	// A launch's terminal starts before its pane exists; its hooks still name its session.
+	expected map[harness.TerminalID]harness.SessionID
 }
 
 type terminal struct {
-	shows     harness.SessionID
-	workspace string
-	shownSeq  uint64
-	lastKey   time.Time
+	shows    harness.SessionID
+	shownSeq uint64
+	lastKey  time.Time
 }
 
 func (d *Daemon) terminals() *terminalRegistry {
 	d.terminalsOnce.Do(func() {
-		d.terminalState = &terminalRegistry{byID: make(map[harness.TerminalID]*terminal), ending: make(map[harness.TerminalID]endingTerminal)}
+		d.terminalState = &terminalRegistry{byID: make(map[harness.TerminalID]*terminal), ending: make(map[harness.TerminalID]endingTerminal), expected: make(map[harness.TerminalID]harness.SessionID)}
 	})
 	return d.terminalState
 }
 
-func (d *Daemon) saveWorkspaceLayout(snapshot workspacelayout.WorkspaceLayout) error {
-	return d.commitWorkspaceLayouts(func() ([]workspacelayout.WorkspaceLayout, error) {
-		return []workspacelayout.WorkspaceLayout{snapshot}, d.store.SaveWorkspaceLayout(snapshot)
-	})
-}
-
-// commitWorkspaceLayouts is the one writer of layouts' pane rows, so the registry follows every save.
-func (d *Daemon) commitWorkspaceLayouts(commit func() ([]workspacelayout.WorkspaceLayout, error)) error {
-	r := d.terminals()
-	r.write.Lock()
-	defer r.write.Unlock()
-	snapshots, err := commit()
-	if err != nil {
-		return err
-	}
-	for _, snapshot := range snapshots {
-		r.place(snapshot.WorkspaceID, snapshot.Panes)
-	}
-	return nil
-}
-
-func (d *Daemon) removeWorkspaceLayout(workspaceID string) {
-	r := d.terminals()
-	r.write.Lock()
-	defer r.write.Unlock()
-	d.store.RemoveWorkspaceLayout(workspaceID)
-	r.unplaceWorkspace(workspaceID)
-}
-
-func (d *Daemon) removeWorkspaceRecord(workspaceID string) {
-	r := d.terminals()
-	r.write.Lock()
-	defer r.write.Unlock()
-	d.store.RemoveWorkspace(workspaceID)
-	r.unplaceWorkspace(workspaceID)
-}
-
+// loadTerminals feeds the registry from the store, which hands it every pane row after each commit.
 func (d *Daemon) loadTerminals() {
-	r := d.terminals()
-	r.write.Lock()
-	defer r.write.Unlock()
-	for _, workspaceID := range d.store.WorkspaceLayoutIDs() {
-		if layout := d.store.GetWorkspaceLayout(workspaceID); layout != nil {
-			r.place(workspaceID, layout.Panes)
-		}
-	}
+	d.store.OnPaneTerminals(d.terminals().sync)
 }
 
 // shownIn resolves a terminal to its session. A runtime no pane places is its own session
@@ -165,7 +122,8 @@ func (d *Daemon) liveSessions(ctx context.Context) map[string]struct{} {
 	return sessions
 }
 
-func (r *terminalRegistry) place(workspaceID string, panes []workspacelayout.Pane) {
+// sync replaces the registry's placements with panes; a terminal no pane holds any more is ending.
+func (r *terminalRegistry) sync(panes []store.PaneTerminal) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	placed := make(map[harness.TerminalID]struct{}, len(panes))
@@ -176,6 +134,7 @@ func (r *terminalRegistry) place(workspaceID string, panes []workspacelayout.Pan
 			continue
 		}
 		placed[id] = struct{}{}
+		delete(r.expected, id)
 		entry := r.byID[id]
 		if entry == nil {
 			entry = &terminal{}
@@ -185,19 +144,14 @@ func (r *terminalRegistry) place(workspaceID string, panes []workspacelayout.Pan
 			r.shown++
 			entry.shows, entry.shownSeq = session, r.shown
 		}
-		entry.workspace = workspaceID
 	}
 	now := time.Now()
 	for id, entry := range r.byID {
-		if _, kept := placed[id]; !kept && entry.workspace == workspaceID {
+		if _, kept := placed[id]; !kept {
 			delete(r.byID, id)
 			r.endLocked(id, entry.shows, now)
 		}
 	}
-}
-
-func (r *terminalRegistry) unplaceWorkspace(workspaceID string) {
-	r.place(workspaceID, nil)
 }
 
 func (r *terminalRegistry) Showing(t harness.TerminalID) (harness.SessionID, bool) {
@@ -205,18 +159,23 @@ func (r *terminalRegistry) Showing(t harness.TerminalID) (harness.SessionID, boo
 	defer r.mu.RUnlock()
 	entry := r.byID[t]
 	if entry == nil {
-		return "", false
+		s, ok := r.expected[t]
+		return s, ok
 	}
 	return entry.shows, true
 }
 
-func (r *terminalRegistry) workspaceOf(t harness.TerminalID) string {
-	r.mu.RLock()
-	defer r.mu.RUnlock()
-	if entry := r.byID[t]; entry != nil {
-		return entry.workspace
-	}
-	return ""
+func (r *terminalRegistry) expect(t harness.TerminalID, s harness.SessionID) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	r.expected[t] = s
+}
+
+// unexpect drops a launch's terminal whose pane never came.
+func (r *terminalRegistry) unexpect(t harness.TerminalID) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	delete(r.expected, t)
 }
 
 func (r *terminalRegistry) Of(s harness.SessionID) []harness.TerminalID {
@@ -231,6 +190,11 @@ func (r *terminalRegistry) Of(s harness.SessionID) []harness.TerminalID {
 	slices.SortFunc(ids, func(a, b harness.TerminalID) int {
 		return cmp.Compare(r.byID[b].shownSeq, r.byID[a].shownSeq)
 	})
+	for id, shows := range r.expected {
+		if shows == s {
+			ids = append(ids, id)
+		}
+	}
 	return ids
 }
 

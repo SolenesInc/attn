@@ -10,7 +10,7 @@ const shikiMock = vi.hoisted(() => ({
 }));
 vi.mock('shiki', () => shikiMock);
 
-const FILE_SOURCE = fileMarkdownSource('workspace-1', '/tmp/project/README.md');
+const FILE_SOURCE = fileMarkdownSource('/tmp/project/README.md');
 
 type Facts = Record<string, string | boolean | null>;
 
@@ -190,6 +190,14 @@ describe('MarkdownReader rendering', () => {
     }
     for (const text of shows) expect(container.textContent).toContain(text);
     for (const text of never) expect(container.innerHTML).not.toContain(text);
+  });
+
+  it('blocks local images when local targets are disallowed', async () => {
+    const { container } = render(<MarkdownReader content="![diagram](docs/pic.png)" source={FILE_SOURCE} allowLocalTargets={false} />);
+    await act(async () => {});
+
+    expect(container.querySelector('img')).toBeNull();
+    expect(container.textContent).toContain('[blocked image: diagram]');
   });
 });
 

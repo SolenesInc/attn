@@ -8,6 +8,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/victorarias/attn/internal/crew"
 	"github.com/victorarias/attn/internal/garden"
 	"github.com/victorarias/attn/internal/inbox"
 	"github.com/victorarias/attn/internal/protocol"
@@ -29,7 +30,17 @@ func (d *Daemon) seedUnblocked(seedID string) ([]garden.Seed, []protocol.Seed) {
 	return unblocked, read.wire(unblocked)
 }
 
-func (d *Daemon) localGardenTenderSession(tender garden.Tender) (string, error) {
+// seedTenderMember resolves a seed's tender name to a crew member of the seed's own profile.
+func (d *Daemon) seedTenderMember(seed garden.Seed) (crew.Member, bool, error) {
+	member, found, err := d.resolveCrewMember(seed.Tender().Member)
+	if err != nil || !found || d.crewProfileID(member.ID) != seed.ProfileID {
+		return crew.Member{}, false, err
+	}
+	return member, true, nil
+}
+
+func (d *Daemon) localGardenTenderSession(seed garden.Seed) (string, error) {
+	tender := seed.Tender()
 	sessionID := strings.TrimSpace(tender.Session)
 	if sessionID == "" {
 		if member := strings.TrimSpace(tender.Member); member != "" {
@@ -44,6 +55,13 @@ func (d *Daemon) localGardenTenderSession(tender garden.Tender) (string, error) 
 		return "", nil
 	}
 	if d.store != nil && (d.store.Get(sessionID) != nil || d.store.DelegationSessionReserved(sessionID)) {
+		profileID, err := d.store.GardenSessionProfileID(sessionID)
+		if err != nil {
+			return "", err
+		}
+		if profileID != seed.ProfileID {
+			return "", nil
+		}
 		return sessionID, nil
 	}
 	if d.hubManager != nil {
@@ -166,7 +184,25 @@ func (d *Daemon) readGardenSubscriptions() (gardenSubscriptions, error) {
 	if err != nil {
 		return gardenSubscriptions{}, err
 	}
-	return newGardenSubscriptions(read.seeds, watches), nil
+	eligible := watches[:0]
+	for _, watch := range watches {
+		seed, ok := read.docs[watch.SeedID]
+		if !ok {
+			continue
+		}
+		owner, err := garden.Decode(seed.Body)
+		if err != nil {
+			return gardenSubscriptions{}, err
+		}
+		profileID, err := d.store.GardenSessionProfileID(watch.WatcherSessionID)
+		if err != nil {
+			return gardenSubscriptions{}, err
+		}
+		if profileID == owner.ProfileID {
+			eligible = append(eligible, watch)
+		}
+	}
+	return newGardenSubscriptions(read.seeds, eligible), nil
 }
 
 func (d *Daemon) seedWatchCoverage(sessionID, seedID string) ([]string, error) {

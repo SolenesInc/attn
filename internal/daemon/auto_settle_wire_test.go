@@ -86,7 +86,7 @@ func TestAutoSettleNeverArmsWithoutAnOwedTurnOrWithTheFeatureOff(t *testing.T) {
 		{"no turn is owed", func(t *testing.T, w *world) (*testworld.Peer, *client.Client) {
 			app, cli := w.App(), w.Client()
 			setSetting(t, app, "auto_settle_enabled", "true")
-			if err := cli.Register("s1", "s1", w.Path("s1")); err != nil {
+			if err := w.InjectSession("s1", "s1", w.Path("s1"), protocol.SessionAgentClaude); err != nil {
 				t.Fatalf("register: %v", err)
 			}
 			return app, cli
@@ -465,7 +465,7 @@ func autoSettleOwingSession(t *testing.T, w *world) (*testworld.Peer, *client.Cl
 	t.Helper()
 	app, cli := w.App(), w.Client()
 	setSetting(t, app, "auto_settle_enabled", "true")
-	if err := cli.Register("s1", "s1", w.Path("s1")); err != nil {
+	if err := w.InjectSession("s1", "s1", w.Path("s1"), protocol.SessionAgentClaude); err != nil {
 		t.Fatalf("register: %v", err)
 	}
 	if err := cli.UpdateState("s1", protocol.StateWaitingInput); err != nil {

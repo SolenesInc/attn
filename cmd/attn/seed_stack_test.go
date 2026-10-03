@@ -13,6 +13,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/victorarias/attn/internal/crew"
 	"github.com/victorarias/attn/internal/fakeagent"
 	"github.com/victorarias/attn/internal/protocol"
 	"github.com/victorarias/attn/internal/testworld"
@@ -62,6 +63,15 @@ func lineOf(t *testing.T, text, id string) (int, string) {
 func TestTheGardenCommandsPrintWhatAgentsActOn(t *testing.T) {
 	t.Parallel()
 	s := testworld.NewStack(t, testworld.WithAgents(fakeagent.Claude))
+	for _, member := range []string{"alder", "keel", "trellis"} {
+		home := filepath.Join(s.Dir, crew.HomesDirName, member)
+		if err := os.MkdirAll(home, 0o755); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(filepath.Join(home, crew.CharterFileName), []byte("# "+member+"\n"), 0o644); err != nil {
+			t.Fatal(err)
+		}
+	}
 	for _, row := range []struct {
 		args []string
 		want string
@@ -372,7 +382,7 @@ func TestTheGardenCommandsPrintWhatAgentsActOn(t *testing.T) {
 			t.Fatalf("review start --json = %+v", started)
 		}
 		requireLines(t, "review show", seedAs(t, s, "", "review", "show", started.Review.Run.ID),
-			"\n"+seed.ID+"  Drifted work\n", "\nactions\tkeep_growing, park, harvest, wither\n")
+			"\n"+seed.ID+"  Drifted work\n", "\nactions\tsend_to_chief, keep_growing, park, harvest, wither\n")
 	})
 }
 

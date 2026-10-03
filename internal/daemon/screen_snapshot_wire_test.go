@@ -13,7 +13,7 @@ func TestScreenSnapshotRendersThePaneAtItsSize(t *testing.T) {
 	w := newWorld(t)
 	app := w.App()
 
-	shell := w.Spawn(app, workspaceShell, w.Path("shop"))
+	shell := w.Spawn(app, shellHarness, w.Path("shop"))
 	app.TypeLine(shell, `printf 'mark%s\n' er-painted`)
 	app.AwaitScreen(shell, "marker-painted")
 	painted := screenSnapshot(app, shell)

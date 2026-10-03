@@ -1,4 +1,4 @@
-import FocusTrap from 'focus-trap-react';
+import FocusTrap from './AppFocusTrap';
 import { useEffect, useLayoutEffect, useRef, useState } from 'react';
 import type { Seed, SeedHandoverOptions, SeedSendToChiefOptions } from '../hooks/useDaemonSocket';
 import type { SeedReviewActionContext, SeedReviewOverview } from '../hooks/useDaemonSocket';
@@ -257,7 +257,7 @@ export function GardenFrame({
                 onResumeSeed={(seedId, review) => onResumeSeed(seedId, review)}
                 onKeepSeed={keepReviewItem}
                 onHandoverSeed={onHandoverSeed}
-                onSendSeedToChief={onSendSeedToChief}
+                onSendSeedToChief={chiefAvailable ? onSendSeedToChief : undefined}
                 onRetry={retryReviewItem}
                 onDraft={draftReviewHandover}
                 onRefresh={showReview}

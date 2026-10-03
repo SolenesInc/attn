@@ -81,7 +81,7 @@ func TestCreatingASessionAsChiefAssignsTheRoleOnlyWhenItCan(t *testing.T) {
 	failed := uuid.NewString()
 	missingDirectory := w.Path("gone")
 	if result := testworld.Request(app, protocol.SpawnSessionMessage{
-		Cmd: protocol.CmdSpawnSession, ID: failed, Agent: string(fakeagent.Claude), Cwd: missingDirectory, WorkspaceID: "workspace-plain",
+		Cmd: protocol.CmdSpawnSession, ID: failed, Agent: string(fakeagent.Claude), Cwd: missingDirectory, ProfileID: app.SelectedProfile(),
 		Cols: 100, Rows: 30, ChiefOfStaff: protocol.Ptr(true),
 	}, protocol.EventSpawnResult, func(r protocol.SpawnResultMessage) bool { return r.ID == failed }); result.Success {
 		t.Fatalf("a spawn into missing directory %s succeeded", missingDirectory)

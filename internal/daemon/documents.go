@@ -409,6 +409,10 @@ func expectedRev(wire *int) *int64 {
 }
 
 func (d *Daemon) handleDocGet(conn net.Conn, msg *protocol.DocGetMessage) {
+	if err := rejectGenericGardenDocumentMutation(msg.Namespace); err != nil {
+		d.sendDocError(conn, err)
+		return
+	}
 	if d.store == nil {
 		d.sendError(conn, "no database")
 		return
@@ -473,7 +477,7 @@ func rejectGenericGardenDocumentMutation(namespace string) error {
 		return nil
 	}
 	return fmt.Errorf(
-		"the generic document API cannot mutate namespace %q; use attn seed commands so the Garden change and its event commit together",
+		"the generic document API cannot access namespace %q; use attn seed commands to read or change work in your profile",
 		garden.Namespace,
 	)
 }
@@ -481,6 +485,10 @@ func rejectGenericGardenDocumentMutation(namespace string) error {
 func (d *Daemon) handleDocQuery(conn net.Conn, msg *protocol.DocQueryMessage) {
 	q, err := documentQueryFromProtocol(msg.Query)
 	if err != nil {
+		d.sendDocError(conn, err)
+		return
+	}
+	if err := rejectGenericGardenDocumentMutation(q.Namespace); err != nil {
 		d.sendDocError(conn, err)
 		return
 	}
@@ -499,6 +507,10 @@ func (d *Daemon) handleDocQuery(conn net.Conn, msg *protocol.DocQueryMessage) {
 func (d *Daemon) handleDocCount(conn net.Conn, msg *protocol.DocCountMessage) {
 	q, err := documentQueryFromProtocol(msg.Query)
 	if err != nil {
+		d.sendDocError(conn, err)
+		return
+	}
+	if err := rejectGenericGardenDocumentMutation(q.Namespace); err != nil {
 		d.sendDocError(conn, err)
 		return
 	}
@@ -536,6 +548,9 @@ type docSink struct {
 }
 
 func docSubscriptionQuery(msg *protocol.DocSubscribeMessage) (docstore.Query, error) {
+	if err := rejectGenericGardenDocumentMutation(msg.Query.Namespace); err != nil {
+		return docstore.Query{}, err
+	}
 	q, err := documentQueryFromProtocol(msg.Query)
 	if err != nil {
 		return docstore.Query{}, err

@@ -1,6 +1,6 @@
 import { fireEvent, screen, within } from '@testing-library/react';
 import {
-  agentWorkspace,
+  soloDesktop,
   daemonSeed,
   daemonSession,
   seedDocument,
@@ -47,7 +47,7 @@ export async function renderGarden(
   { sessions = [daemonSession('s1')], total, initial = {} }: { sessions?: DaemonSession[]; total?: number; initial?: Partial<InitialState> } = {},
 ): Promise<Garden> {
   const { daemon, unmount } = await renderApp({
-    initialState: { sessions, workspaces: sessions.map((session) => agentWorkspace(session.id)), seeds, seeds_total: total, ...initial },
+    initialState: { sessions, desktops: sessions.map((session) => soloDesktop(session.id)), seeds, seeds_total: total, ...initial },
   });
   const garden: Garden = {
     daemon,
@@ -56,7 +56,7 @@ export async function renderGarden(
     documents: {},
     push(next, pushedTotal = next.length) {
       garden.seeds = next;
-      daemon.emit({ event: 'garden_seeds_updated', seeds: next, total: pushedTotal });
+      daemon.emit({ event: 'garden_seeds_updated', profile_id: 'profile-default', seeds: next, total: pushedTotal });
     },
     answer({ seed_id, request_id }) {
       const seed = garden.seeds.find((candidate) => candidate.id === seed_id);

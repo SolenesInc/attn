@@ -6,7 +6,8 @@ import { renderApp } from './test/renderApp';
 type Definition = NonNullable<EventMessage<'automation_definitions_result'>['definitions']>[number];
 
 const REVIEWER: Definition = {
-  id: 'd1',
+  id: 1,
+  profile_id: 'default',
   name: 'PR reviewer',
   enabled: true,
   revision: 1,
@@ -34,7 +35,7 @@ describe('App automation actions', () => {
       event: 'automation_definitions_result',
       request_id: 'another-request',
       success: true,
-      definitions: [{ ...REVIEWER, id: 'wrong', name: 'Not asked for' }],
+      definitions: [{ ...REVIEWER, id: 99, name: 'Not asked for' }],
     });
     await daemon.idle();
     expect(screen.queryByText('Not asked for')).toBeNull();
@@ -53,14 +54,14 @@ describe('App automation actions', () => {
       error: 'automation definition is disabled elsewhere',
     }));
 
-    fireEvent.click(screen.getByTestId('automation-toggle-d1'));
+    fireEvent.click(screen.getByTestId('automation-toggle-1'));
     await daemon.idle();
 
     expect(daemon.sentOf('automation_set_enabled')).toEqual([
-      expect.objectContaining({ definition_id: 'd1', enabled: false }),
+      expect.objectContaining({ definition_id: 1, enabled: false }),
     ]);
-    expect(screen.getByTestId('automation-toggle-error-d1')).toHaveTextContent('automation definition is disabled elsewhere');
-    expect(screen.getByTestId('automation-toggle-d1')).toBeChecked();
+    expect(screen.getByTestId('automation-toggle-error-1')).toHaveTextContent('automation definition is disabled elsewhere');
+    expect(screen.getByTestId('automation-toggle-1')).toBeChecked();
   });
 
   it('runs a manual automation and is ready to run it again once the daemon answers', async () => {
@@ -77,24 +78,24 @@ describe('App automation actions', () => {
       },
     }));
 
-    fireEvent.click(screen.getByTestId('automation-run-now-d1'));
+    fireEvent.click(screen.getByTestId('automation-run-now-1'));
     await daemon.idle();
 
     expect(daemon.sentOf('automation_run')).toEqual([
-      expect.objectContaining({ definition_id: 'd1', request_id: expect.any(String) }),
+      expect.objectContaining({ definition_id: 1, request_id: expect.any(String) }),
     ]);
-    expect(screen.getByTestId('automation-run-now-d1')).toBeEnabled();
-    expect(screen.queryByTestId('automation-run-error-d1')).toBeNull();
+    expect(screen.getByTestId('automation-run-now-1')).toBeEnabled();
+    expect(screen.queryByTestId('automation-run-error-1')).toBeNull();
   });
 
   it('says a run is still in flight when the daemon has not answered within thirty seconds', async () => {
     const { daemon } = await renderAutomations();
 
-    fireEvent.click(screen.getByTestId('automation-run-now-d1'));
+    fireEvent.click(screen.getByTestId('automation-run-now-1'));
     await daemon.idle();
     await act(() => vi.advanceTimersByTimeAsync(30_000));
 
-    expect(screen.getByTestId('automation-run-error-d1')).toHaveTextContent(
+    expect(screen.getByTestId('automation-run-error-1')).toHaveTextContent(
       'Run request is still in flight — it will appear in run history; clicking again retries the same run.',
     );
   });

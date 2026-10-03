@@ -70,7 +70,7 @@ func hookedClaudeAtWork(t *testing.T, w *world, app *testworld.Peer, cli *client
 		t.Fatal(err)
 	}
 	transcript := fakeagent.WriteClaudeTranscript(t, cwd, "")
-	if err := cli.RegisterWithAgent("s1", "checkout work", cwd, string(protocol.SessionAgentClaude)); err != nil {
+	if err := w.InjectSession("s1", "checkout work", cwd, protocol.SessionAgentClaude); err != nil {
 		t.Fatalf("register: %v", err)
 	}
 	if err := cli.ObserveAgentConversation("s1", transcript.ConversationID, transcript.Path); err != nil {

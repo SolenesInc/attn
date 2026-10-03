@@ -1,0 +1,60 @@
+.queue-lead-badge {
+  display: block;
+  min-width: 8px;
+  padding: 1px 1px 0 2px;
+  border-radius: 3px;
+  background: var(--color-bg-panel);
+  color: var(--color-text-dimmed);
+  font-family: 'JetBrains Mono', 'DejaVu Sans Mono', monospace;
+  font-size: 8px;
+  line-height: 1;
+  text-align: center;
+}
+
+.queue-row:hover .queue-lead-badge,
+.queue-row.selected .queue-lead-badge {
+  background: var(--color-bg-elevated);
+}
+
+.queue-row .session-trailing {
+  font-family: 'JetBrains Mono', 'DejaVu Sans Mono', monospace;
+  font-size: 10px;
+  font-variant-numeric: tabular-nums;
+}
+
+.queue-row .queue-row-age,
+.queue-row .queue-row-wake-at {
+  margin: 0;
+  color: inherit;
+  font-size: inherit;
+}
+
+.queue-chief-glyph {
+  color: var(--accent);
+  font-family: inherit;
+  font-size: 12px;
+}
+
+.queue-crew-sun {
+  position: relative;
+  z-index: 1;
+  display: grid;
+  place-items: center;
+  width: 14px;
+  height: 20px;
+  padding: 0;
+  border: 0;
+  background: none;
+  color: var(--color-text-dimmed);
+  cursor: pointer;
+}
+
+.queue-crew-sun .crew-sun {
+  width: 14px;
+  height: 14px;
+}
+
+.queue-row--crew[data-crew-wake] > .session-actions {
+  opacity: 1;
+  pointer-events: auto;
+}

@@ -1,21 +1,21 @@
+import { useToastStore } from '../store/toasts';
 import { useCallback, useRef, useState } from 'react';
-import { useSavedFlash } from '../components/useSavedFlash';
 import type { useDaemonApi } from '../contexts/DaemonApiContext';
 import type { AppView } from '../navigation/sessionNavigation';
-import type { DaemonWorkspace } from '../hooks/useDaemonSocket';
+import { useProfilesStore } from '../store/profiles';
 import type { Session } from '../store/sessions';
 import {
   type DiagnosticCaptureContext,
   type DiagnosticPaneDescriptor,
   type PendingDiagnosticCapture,
 } from '../utils/diagnosticReport';
-import { collectWorkspaceLayoutDiagnostics } from '../utils/workspaceDiagnostics';
+import { desktopLabel, desktopTerminalState } from '../utils/desktops';
+import { collectDesktopLayoutDiagnostics } from '../utils/desktopDiagnostics';
 import { diagnosticFocusKind, shortenDiagnosticPath } from './appSupport';
 interface Options {
   sessions: Session[];
-  daemonWorkspaces: DaemonWorkspace[];
   getPaneSize: (sessionId: string, paneId: string) => { cols: number; rows: number } | null;
-  activeSessionId: string | null;
+  contextSessionId: string | null;
   getActivePaneIdForSession: (session: Session | undefined | null) => string;
   view: AppView;
   settings: Record<string, string>;
@@ -24,55 +24,48 @@ interface Options {
 }
 export function useAppDiagnostics({
   sessions,
-  daemonWorkspaces,
   getPaneSize,
-  activeSessionId,
+  contextSessionId,
   getActivePaneIdForSession,
   view,
   settings,
   sendSupportSnapshot,
   getPaneText,
 }: Options) {
-  const diagnosticReportSaved = useSavedFlash();
   const [diagnosticCapture, setDiagnosticCapture] = useState<{
     capture: PendingDiagnosticCapture;
     affectedPaneId: string | null;
   } | null>(null);
-  const actionMenuOriginRef = useRef<DiagnosticCaptureContext | null>(null);
+  const paletteOriginRef = useRef<DiagnosticCaptureContext | null>(null);
 
   const diagnosticPanes = useCallback((): DiagnosticPaneDescriptor[] => {
     const sessionById = new Map(sessions.map((session) => [session.id, session]));
-    const workspaceById = new Map(daemonWorkspaces.map((workspace) => [workspace.id, workspace]));
-    const panes = new Map<string, DiagnosticPaneDescriptor>();
-    for (const session of sessions) {
-      for (const pane of session.workspace.agents) {
-        if (panes.has(pane.id)) continue;
-        panes.set(pane.id, {
-          paneId: pane.id,
-          runtimeId: pane.runtimeId,
-          sessionId: pane.sessionId,
-          title: pane.title,
-          sessionLabel: sessionById.get(pane.sessionId)?.label || pane.title,
-          workspaceId: session.workspaceId,
-          workspaceLabel: workspaceById.get(session.workspaceId)?.title || session.workspaceId,
-          available: getPaneSize(pane.sessionId, pane.id) !== null,
-        });
-      }
-    }
-    return [...panes.values()];
-  }, [daemonWorkspaces, getPaneSize, sessions]);
+    const { desktops } = useProfilesStore.getState();
+    return desktops.flatMap((desktop) =>
+      desktopTerminalState(desktop).agents.map((pane) => ({
+        paneId: pane.id,
+        runtimeId: pane.runtimeId,
+        sessionId: pane.sessionId,
+        title: pane.title,
+        sessionLabel: sessionById.get(pane.sessionId)?.label || pane.title,
+        desktopId: desktop.id,
+        desktopLabel: desktopLabel(desktop, desktops),
+        available: getPaneSize(pane.sessionId, pane.id) !== null,
+      })),
+    );
+  }, [getPaneSize, sessions]);
 
   const handleCreateDiagnosticReport = useCallback(async () => {
-    const fallbackSession = activeSessionId
-      ? sessions.find((session) => session.id === activeSessionId)
+    const fallbackSession = contextSessionId
+      ? sessions.find((session) => session.id === contextSessionId)
       : null;
     const fallbackPaneId = fallbackSession
       ? getActivePaneIdForSession(fallbackSession) || null
       : null;
-    const context = actionMenuOriginRef.current ?? {
+    const context = paletteOriginRef.current ?? {
       capturedAtUnixMs: Date.now(),
       view,
-      activeSessionId,
+      activeSessionId: contextSessionId,
       activePaneId: fallbackPaneId,
       activeElement: diagnosticFocusKind(document.activeElement),
       documentFocused: document.hasFocus(),
@@ -83,26 +76,18 @@ export function useAppDiagnostics({
         devicePixelRatio: window.devicePixelRatio,
       },
     };
-    const workspaceById = new Map(daemonWorkspaces.map((workspace) => [workspace.id, workspace]));
-    const workspaces = new Map<
-      string,
-      {
-        id: string;
-        label: string;
-        directory: string;
-        layout: unknown;
-      }
-    >();
-    for (const session of sessions) {
-      if (workspaces.has(session.workspaceId)) continue;
-      const workspace = workspaceById.get(session.workspaceId);
-      workspaces.set(session.workspaceId, {
-        id: session.workspaceId,
-        label: workspace?.title || session.workspaceId,
-        directory: shortenDiagnosticPath(workspace?.directory || session.cwd),
-        layout: collectWorkspaceLayoutDiagnostics(session.workspace.layoutTree),
-      });
-    }
+    const { desktops } = useProfilesStore.getState();
+    const sessionById = new Map(sessions.map((session) => [session.id, session]));
+    const desktopSnapshots = desktops.map((desktop) => {
+      const state = desktopTerminalState(desktop);
+      const activeSessionOnDesktop = state.agents.find((pane) => pane.id === desktop.active_pane_id)?.sessionId;
+      return {
+        id: desktop.id,
+        label: desktopLabel(desktop, desktops),
+        directory: shortenDiagnosticPath(sessionById.get(activeSessionOnDesktop ?? '')?.cwd ?? ''),
+        layout: collectDesktopLayoutDiagnostics(state.layoutTree),
+      };
+    });
     const { beginDiagnosticCapture } = await import('../utils/diagnosticReport');
     const capture = beginDiagnosticCapture({
       context,
@@ -113,19 +98,18 @@ export function useAppDiagnostics({
         state: session.state,
         agent: session.agent,
         cwd: shortenDiagnosticPath(session.cwd),
-        workspaceId: session.workspaceId,
+        desktopId: session.desktopId,
         endpoint: session.endpointId ? 'remote' : 'local',
         ...(session.endpointId ? { endpointId: session.endpointId } : {}),
         active: session.id === context.activeSessionId,
       })),
-      workspaces: [...workspaces.values()],
+      desktops: desktopSnapshots,
       settings,
       sendSupportSnapshot,
     });
     setDiagnosticCapture({ capture, affectedPaneId: context.activePaneId });
   }, [
-    activeSessionId,
-    daemonWorkspaces,
+    contextSessionId,
     diagnosticPanes,
     getActivePaneIdForSession,
     sendSupportSnapshot,
@@ -153,16 +137,15 @@ export function useAppDiagnostics({
         },
       );
       await saveDiagnosticReport(report);
-      diagnosticReportSaved.flash('saved');
+      useToastStore.getState().append({ message: 'Diagnostic report saved', source: 'Diagnostics', tone: 'notice' });
     },
-    [diagnosticCapture, diagnosticReportSaved.flash, getPaneSize, getPaneText],
+    [diagnosticCapture, getPaneSize, getPaneText],
   );
 
   return {
     diagnosticCapture,
     handleCreateDiagnosticReport,
-    actionMenuOriginRef,
-    diagnosticReportSaved,
+    paletteOriginRef,
     handleSaveDiagnosticReport,
     setDiagnosticCapture,
   };

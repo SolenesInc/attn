@@ -30,7 +30,7 @@ func TestGardenReviewOffersResumeOnlyWithUsableContinuation(t *testing.T) {
 	}
 	d.store.Remove("sess-a")
 	d.store.Add(&protocol.Session{
-		ID: "sess-a", Directory: cwd, Agent: protocol.SessionAgentCopilot, State: protocol.SessionStateIdle,
+		ID: "sess-a", Directory: cwd, Agent: protocol.SessionAgentCopilot, State: protocol.SessionStateIdle, ProfileID: defaultProfileID(t, d.store),
 	})
 	d.store.SetResumeSessionID("sess-a", "native-1")
 	d.store.SetLaunchIntent("sess-a", store.LaunchIntent{})
@@ -44,7 +44,7 @@ func TestGardenReviewOffersResumeOnlyWithUsableContinuation(t *testing.T) {
 		t.Fatalf("captureGardenReview: %v", err)
 	}
 	item := capture.items[seed.ID]
-	if !slices.Equal(item.Actions, []string{"resume", "handover", "keep_growing", "park", "harvest", "wither"}) {
+	if !slices.Equal(item.Actions, []string{"resume", "handover", "send_to_chief", "keep_growing", "park", "harvest", "wither"}) {
 		t.Fatalf("resumable actions = %v", item.Actions)
 	}
 }

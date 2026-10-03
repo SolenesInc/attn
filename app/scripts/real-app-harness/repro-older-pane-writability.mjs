@@ -13,7 +13,7 @@ import {
 } from './common.mjs';
 import {
   compactTerminalText,
-  waitForFirstWorkspacePane,
+  waitForFirstDesktopPane,
   waitForNewShellPane,
   waitForPaneInputFocus,
   waitForPaneState,
@@ -90,9 +90,9 @@ async function main() {
     }
     console.log(`[RealAppHarness] session=${session.id} agent=${session.agent} state=${session.state}`);
 
-    const wsBeforeFirstSplit = await client.request('get_workspace', { sessionId });
+    const wsBeforeFirstSplit = await client.request('get_desktop', { sessionId });
     const paneIdsBeforeFirstSplit = new Set((wsBeforeFirstSplit.panes || []).map((pane) => pane.paneId));
-    const initialPane = await waitForFirstWorkspacePane(client, sessionId, `initial pane for session ${sessionId}`, 20_000);
+    const initialPane = await waitForFirstDesktopPane(client, sessionId, `initial pane for session ${sessionId}`, 20_000);
     await client.request('split_pane', { sessionId, targetPaneId: initialPane.paneId, direction: 'vertical' });
     const firstUtilityPane = await waitForNewShellPane(
       client,
@@ -111,7 +111,7 @@ async function main() {
     const firstScrollback = await typeAndWaitForEcho(client, sessionId, firstUtilityPane.paneId, firstToken);
     fs.writeFileSync(path.join(runDir, 'utility-1-scrollback.txt'), firstScrollback, 'utf8');
 
-    const wsBeforeSecondSplit = await client.request('get_workspace', { sessionId });
+    const wsBeforeSecondSplit = await client.request('get_desktop', { sessionId });
     const paneIdsBeforeSecondSplit = new Set((wsBeforeSecondSplit.panes || []).map((pane) => pane.paneId));
     await client.request('split_pane', {
       sessionId,

@@ -1,6 +1,6 @@
 import { fireEvent, screen } from '@testing-library/react';
 import { describe, expect, it } from 'vitest';
-import { agentWorkspace, daemonSession } from './test/daemonFixtures';
+import { soloDesktop, daemonSession } from './test/daemonFixtures';
 import { renderApp } from './test/renderApp';
 
 describe('App chief of staff', () => {
@@ -8,7 +8,7 @@ describe('App chief of staff', () => {
     const { daemon } = await renderApp({
       initialState: {
         sessions: [daemonSession('chief', { chief_of_staff: true }), daemonSession('s1', { state: 'idle' })],
-        workspaces: [agentWorkspace('chief'), agentWorkspace('s1')],
+        desktops: [soloDesktop('chief'), soloDesktop('s1')],
       },
     });
 

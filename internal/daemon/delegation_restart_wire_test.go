@@ -25,11 +25,11 @@ func TestADelegationInterruptedByARestartFinishesOnItsSessionInTheWorktreeItCrea
 	w.stop()
 	boot()
 	w.start()
-	w.Launched(accepted.SessionID)
 	result, err := w.Client().Delegate(request)
 	if err != nil || result.SessionID != accepted.SessionID || result.Directory != worktree || result.Checkout != "created" {
 		t.Fatalf("after the restart the delegation = %+v, %v; want it finished on %s in the worktree it created at %s", result, err, accepted.SessionID, worktree)
 	}
+	w.Launched(accepted.SessionID)
 	if _, err := os.Stat(worktree); err != nil {
 		t.Errorf("the restart took away the worktree the delegation created: %v", err)
 	}

@@ -41,6 +41,27 @@ type BinaryMismatchError struct {
 
 func (e *BinaryMismatchError) Error() string { return e.Message }
 
+const StatusUnsupported = "unsupported"
+
+const UnsupportedReason = "Remote endpoints are off in this release. attn keeps this endpoint saved and never connects to it, installs on it or restarts it; sessions on that host keep running there."
+
+var ErrOutpostsOff = errors.New("remote endpoints are off in this release")
+
+type UnsupportedEndpointError struct {
+	EndpointID string
+	Name       string
+}
+
+func (e *UnsupportedEndpointError) Error() string {
+	who := strings.TrimSpace(e.Name)
+	if who == "" {
+		who = e.EndpointID
+	}
+	return fmt.Sprintf("refused for endpoint %s: %s", who, UnsupportedReason)
+}
+
+func (e *UnsupportedEndpointError) Unwrap() error { return ErrOutpostsOff }
+
 const (
 	settingProjectsDirectory = "projects_directory"
 	settingPTYBackendMode    = "pty_backend_mode"
@@ -63,8 +84,7 @@ type endpointRuntime struct {
 	pendingRemoteWeb *pendingRemoteWebAction
 	pendingBootstrap bool
 
-	sessions   map[string]protocol.Session
-	workspaces map[string]protocol.Workspace
+	sessions map[string]protocol.Session
 }
 
 type pendingRemoteWebAction struct {
@@ -138,10 +158,9 @@ func NewManager(
 	}
 	for _, record := range endpointStore.ListEndpoints() {
 		m.runtimes[record.ID] = &endpointRuntime{
-			record:     record,
-			info:       infoFromRecord(record),
-			sessions:   make(map[string]protocol.Session),
-			workspaces: make(map[string]protocol.Workspace),
+			record:   record,
+			info:     infoFromRecord(record),
+			sessions: make(map[string]protocol.Session),
 		}
 	}
 	return m
@@ -149,11 +168,12 @@ func NewManager(
 
 func infoFromRecord(record store.EndpointRecord) protocol.EndpointInfo {
 	info := protocol.EndpointInfo{
-		ID:        record.ID,
-		Name:      record.Name,
-		SshTarget: record.SSHTarget,
-		Status:    "disconnected",
-		Enabled:   protocol.Ptr(record.Enabled),
+		ID:            record.ID,
+		Name:          record.Name,
+		SshTarget:     record.SSHTarget,
+		Status:        StatusUnsupported,
+		StatusMessage: protocol.Ptr(UnsupportedReason),
+		Enabled:       protocol.Ptr(record.Enabled),
 	}
 	if strings.TrimSpace(record.Instance) != "" {
 		info.Instance = protocol.Ptr(record.Instance)
@@ -188,7 +208,7 @@ func (m *Manager) Stop() {
 		m.cancel()
 	}
 	for _, runtime := range m.runtimes {
-		if target := isolatedRemoteShutdownTarget(runtime.record); target.Target != "" {
+		if target := isolatedRemoteShutdownTarget(runtime); target.Target != "" {
 			key := target.Target + "|" + target.Instance
 			if _, exists := seenTargets[key]; !exists {
 				seenTargets[key] = struct{}{}
@@ -233,36 +253,8 @@ func (m *Manager) List() []protocol.EndpointInfo {
 	return out
 }
 
-func (m *Manager) AddEndpoint(name, sshTarget, instance string) (*store.EndpointRecord, error) {
-	name = strings.TrimSpace(name)
-	sshTarget = strings.TrimSpace(sshTarget)
-	instance = strings.TrimSpace(instance)
-	if name == "" {
-		return nil, fmt.Errorf("endpoint name is required")
-	}
-	if sshTarget == "" {
-		return nil, fmt.Errorf("ssh target is required")
-	}
-
-	record, err := m.store.AddEndpoint(name, sshTarget, instance)
-	if err != nil {
-		return nil, err
-	}
-
-	m.mu.Lock()
-	m.runtimes[record.ID] = &endpointRuntime{
-		record:     *record,
-		info:       infoFromRecord(*record),
-		sessions:   make(map[string]protocol.Session),
-		workspaces: make(map[string]protocol.Workspace),
-	}
-	if m.started && record.Enabled {
-		m.startRuntimeLocked(record.ID)
-	}
-	m.mu.Unlock()
-
-	m.publishStatus(record.ID)
-	return record, nil
+func (m *Manager) AddEndpoint(name string) error {
+	return &UnsupportedEndpointError{Name: strings.TrimSpace(name)}
 }
 
 func (m *Manager) BootstrapEndpoint(id string) error {
@@ -271,6 +263,9 @@ func (m *Manager) BootstrapEndpoint(id string) error {
 	rt, ok := m.runtimes[id]
 	if !ok {
 		return fmt.Errorf("endpoint %s not found", id)
+	}
+	if err := rt.unsupported(); err != nil {
+		return err
 	}
 	rt.pendingBootstrap = true
 	m.stopRuntimeLocked(rt)
@@ -303,8 +298,8 @@ func (m *Manager) UpdateEndpoint(id string, update store.EndpointUpdate) (*store
 	runtime, ok := m.runtimes[id]
 	if !ok {
 		runtime = &endpointRuntime{
-			sessions:   make(map[string]protocol.Session),
-			workspaces: make(map[string]protocol.Workspace),
+			info:     infoFromRecord(*record),
+			sessions: make(map[string]protocol.Session),
 		}
 		m.runtimes[id] = runtime
 	}
@@ -343,7 +338,7 @@ func (m *Manager) RemoveEndpoint(id string) error {
 	m.mu.Lock()
 	if runtime, ok := m.runtimes[id]; ok {
 		changed = len(runtime.sessions) > 0
-		shutdownTarget = isolatedRemoteShutdownTarget(runtime.record)
+		shutdownTarget = isolatedRemoteShutdownTarget(runtime)
 		m.stopRuntimeLocked(runtime)
 		delete(m.runtimes, id)
 	}
@@ -362,10 +357,11 @@ type isolatedShutdownTarget struct {
 	Instance string
 }
 
-func isolatedRemoteShutdownTarget(record store.EndpointRecord) isolatedShutdownTarget {
-	if !remoteHarnessCleanupEnabled() {
+func isolatedRemoteShutdownTarget(runtime *endpointRuntime) isolatedShutdownTarget {
+	if !remoteHarnessCleanupEnabled() || runtime.unsupported() != nil {
 		return isolatedShutdownTarget{}
 	}
+	record := runtime.record
 	target := strings.TrimSpace(record.SSHTarget)
 	if target == "" {
 		return isolatedShutdownTarget{}
@@ -392,7 +388,7 @@ func (m *Manager) stopIsolatedRemoteDaemons(targets []isolatedShutdownTarget) {
 
 func (m *Manager) startRuntimeLocked(id string) {
 	runtime, ok := m.runtimes[id]
-	if !ok || !runtime.record.Enabled || m.ctx == nil {
+	if !ok || !runtime.record.Enabled || m.ctx == nil || runtime.unsupported() != nil {
 		return
 	}
 	if runtime.cancel != nil {
@@ -427,7 +423,6 @@ func (m *Manager) stopRuntimeLocked(runtime *endpointRuntime) {
 		runtime.cmd = nil
 	}
 	runtime.sessions = make(map[string]protocol.Session)
-	runtime.workspaces = make(map[string]protocol.Workspace)
 	m.clearPendingRoutesLocked(runtime.record.ID)
 	zero := 0
 	runtime.info.SessionCount = protocol.Ptr(zero)
@@ -491,7 +486,6 @@ func (m *Manager) runEndpointLoop(ctx context.Context, id string) {
 		if m.clearRemoteSessions(id) {
 			m.publishSessionsChanged(id)
 		}
-		m.clearRemoteWorkspaceLayouts(id)
 
 		if ctx.Err() != nil {
 			return
@@ -551,7 +545,6 @@ func sendClientHello(ctx context.Context, conn *websocket.Conn, clientToken stri
 		Version:     "protocol-" + protocol.ProtocolVersion,
 		ClientToken: protocol.Ptr(clientToken),
 		Capabilities: []string{
-			protocol.CapabilityWorkspaceSessions,
 			protocol.CapabilityKittyImages,
 		},
 	})
@@ -600,7 +593,6 @@ func (m *Manager) consumeRemote(ctx context.Context, id string, conn *websocket.
 				return false, &VersionMismatchError{RemoteVersion: remoteProtocol, LocalVersion: protocol.ProtocolVersion}
 			}
 			changed := m.ReplaceRemoteSessions(id, msg.Sessions)
-			m.replaceRemoteWorkspaces(id, msg.Workspaces)
 			caps := capabilitiesFromInitialState(&msg)
 			sessionCount := int32(len(msg.Sessions))
 			if fingerMismatch, fingerMsg := fingerprintMismatch(msg.SourceFingerprint); fingerMismatch {
@@ -668,33 +660,6 @@ func (m *Manager) consumeRemote(ctx context.Context, id string, conn *websocket.
 			if changed {
 				m.publishSessionsChanged(id)
 			}
-		case protocol.EventWorkspaceLayout, protocol.EventWorkspaceLayoutUpdated:
-			var msg struct {
-				WorkspaceLayout *protocol.WorkspaceLayout `json:"workspace_layout"`
-			}
-			if err := json.Unmarshal(data, &msg); err != nil || msg.WorkspaceLayout == nil {
-				continue
-			}
-			m.upsertRemoteWorkspaceLayout(id, *msg.WorkspaceLayout)
-			m.publishRawEvent(data)
-		case protocol.EventWorkspaceRegistered, protocol.EventWorkspaceStateChanged:
-			var msg struct {
-				Workspace *protocol.Workspace `json:"workspace"`
-			}
-			if err := json.Unmarshal(data, &msg); err != nil || msg.Workspace == nil {
-				continue
-			}
-			m.upsertRemoteWorkspace(id, *msg.Workspace)
-			m.publishRawEvent(data)
-		case protocol.EventWorkspaceUnregistered:
-			var msg struct {
-				Workspace *protocol.Workspace `json:"workspace"`
-			}
-			if err := json.Unmarshal(data, &msg); err != nil || msg.Workspace == nil {
-				continue
-			}
-			m.removeRemoteWorkspace(id, msg.Workspace.ID)
-			m.publishRawEvent(data)
 		case protocol.EventBrowserControlResponse:
 			m.resolveBrowserControl(id, data)
 		case protocol.EventRenameResult:
@@ -784,8 +749,6 @@ func forwardsRawEvent(event string) bool {
 		protocol.EventKittyPlacements,
 		protocol.EventKittyImageResult,
 		protocol.EventSessionExited,
-		protocol.EventWorkspaceLayoutActionResult,
-		protocol.EventWorkspaceTileContent,
 		protocol.EventMarkdownAnnotationsGetResult,
 		protocol.EventMarkdownAnnotationsSaveResult,
 		protocol.EventMarkdownAnnotationsClearResult,
@@ -827,47 +790,6 @@ func (m *Manager) RemoteSessions() []protocol.Session {
 	return out
 }
 
-func (m *Manager) RemoteWorkspaces() []protocol.Workspace {
-	m.mu.RLock()
-	defer m.mu.RUnlock()
-
-	total := 0
-	for _, runtime := range m.runtimes {
-		total += len(runtime.workspaces)
-	}
-	if total == 0 {
-		return nil
-	}
-
-	out := make([]protocol.Workspace, 0, total)
-	for _, runtime := range m.runtimes {
-		for _, workspace := range runtime.workspaces {
-			out = append(out, workspace)
-		}
-	}
-	sort.Slice(out, func(i, j int) bool {
-		return out[i].ID < out[j].ID
-	})
-	return out
-}
-
-func (m *Manager) RemoteWorkspace(workspaceID string) *protocol.Workspace {
-	m.mu.RLock()
-	defer m.mu.RUnlock()
-	for _, runtime := range m.runtimes {
-		if workspace, ok := runtime.workspaces[workspaceID]; ok {
-			copy := workspace
-			if workspace.Layout != nil {
-				layoutCopy := *workspace.Layout
-				layoutCopy.Panes = append([]protocol.WorkspaceLayoutPane(nil), workspace.Layout.Panes...)
-				copy.Layout = &layoutCopy
-			}
-			return &copy
-		}
-	}
-	return nil
-}
-
 func (m *Manager) EndpointIDForSession(sessionID string) (string, bool) {
 	m.mu.RLock()
 	defer m.mu.RUnlock()
@@ -878,17 +800,6 @@ func (m *Manager) EndpointIDForSession(sessionID string) (string, bool) {
 	}
 	if pending, ok := m.pendingSessionRouteLocked(sessionID, time.Now()); ok {
 		return pending.endpointID, true
-	}
-	return "", false
-}
-
-func (m *Manager) EndpointIDForWorkspace(workspaceID string) (string, bool) {
-	m.mu.RLock()
-	defer m.mu.RUnlock()
-	for endpointID, runtime := range m.runtimes {
-		if _, ok := runtime.workspaces[workspaceID]; ok {
-			return endpointID, true
-		}
 	}
 	return "", false
 }
@@ -940,16 +851,6 @@ func (m *Manager) EndpointIDForPTYTarget(targetID string) (string, bool) {
 		if _, ok := runtime.sessions[targetID]; ok {
 			return endpointID, true
 		}
-		for _, layout := range runtime.workspaces {
-			if layout.Layout == nil {
-				continue
-			}
-			for _, pane := range layout.Layout.Panes {
-				if protocol.Deref(pane.RuntimeID) == targetID {
-					return endpointID, true
-				}
-			}
-		}
 	}
 	if pending, ok := m.pendingSessionRouteLocked(targetID, time.Now()); ok {
 		return pending.endpointID, true
@@ -990,17 +891,14 @@ func (m *Manager) ReservePendingSessionRoute(endpointID, sessionID string) {
 	}
 }
 
-func (m *Manager) HasEndpoint(endpointID string) bool {
+func (m *Manager) EndpointRefusal(endpointID string) error {
 	m.mu.RLock()
 	defer m.mu.RUnlock()
-	_, ok := m.runtimes[endpointID]
-	return ok
-}
-
-func (m *Manager) HasConfiguredEndpoints() bool {
-	m.mu.RLock()
-	defer m.mu.RUnlock()
-	return len(m.runtimes) > 0
+	runtime, ok := m.runtimes[endpointID]
+	if !ok {
+		return fmt.Errorf("endpoint not found: %s", endpointID)
+	}
+	return refusalLocked(endpointID, runtime)
 }
 
 var parkedStatuses = map[string]bool{
@@ -1028,7 +926,17 @@ func (e *ParkedEndpointError) Error() string {
 	return fmt.Sprintf("endpoint %s is parked: %s", who, detail)
 }
 
-func parkedErrorLocked(endpointID string, runtime *endpointRuntime) error {
+func (runtime *endpointRuntime) unsupported() error {
+	if runtime.info.Status != StatusUnsupported {
+		return nil
+	}
+	return &UnsupportedEndpointError{EndpointID: runtime.record.ID, Name: runtime.record.Name}
+}
+
+func refusalLocked(endpointID string, runtime *endpointRuntime) error {
+	if err := runtime.unsupported(); err != nil {
+		return err
+	}
 	if !parkedStatuses[runtime.info.Status] {
 		return nil
 	}
@@ -1058,9 +966,9 @@ func (m *Manager) ForwardEndpointCommand(ctx context.Context, endpointID string,
 		m.mu.RUnlock()
 		return fmt.Errorf("endpoint not found: %s", endpointID)
 	}
-	if parked := parkedErrorLocked(endpointID, runtime); parked != nil {
+	if refused := refusalLocked(endpointID, runtime); refused != nil {
 		m.mu.RUnlock()
-		return parked
+		return refused
 	}
 	conn := runtime.conn
 	m.mu.RUnlock()
@@ -1391,90 +1299,6 @@ func (m *Manager) clearPendingRoutesLocked(endpointID string) {
 	}
 }
 
-func (m *Manager) replaceRemoteWorkspaces(id string, workspaces []protocol.Workspace) bool {
-	m.mu.Lock()
-	defer m.mu.Unlock()
-	runtime, ok := m.runtimes[id]
-	if !ok {
-		return false
-	}
-	next := make(map[string]protocol.Workspace, len(workspaces))
-	for _, workspace := range workspaces {
-		workspace.EndpointID = protocol.Ptr(id)
-		next[workspace.ID] = workspace
-	}
-	if workspaceLayoutsEqual(runtime.workspaces, next) {
-		return false
-	}
-	runtime.workspaces = next
-	return true
-}
-
-func (m *Manager) upsertRemoteWorkspaceLayout(id string, workspace protocol.WorkspaceLayout) bool {
-	m.mu.Lock()
-	defer m.mu.Unlock()
-	runtime, ok := m.runtimes[id]
-	if !ok {
-		return false
-	}
-	if runtime.workspaces == nil {
-		runtime.workspaces = make(map[string]protocol.Workspace)
-	}
-	current, ok := runtime.workspaces[workspace.WorkspaceID]
-	if !ok {
-		return false
-	}
-	if current.Layout != nil && workspaceLayoutsMatch(*current.Layout, workspace) {
-		return false
-	}
-	current.Layout = &workspace
-	runtime.workspaces[workspace.WorkspaceID] = current
-	return true
-}
-
-func (m *Manager) upsertRemoteWorkspace(id string, workspace protocol.Workspace) bool {
-	m.mu.Lock()
-	defer m.mu.Unlock()
-	runtime, ok := m.runtimes[id]
-	if !ok {
-		return false
-	}
-	if runtime.workspaces == nil {
-		runtime.workspaces = make(map[string]protocol.Workspace)
-	}
-	if current, ok := runtime.workspaces[workspace.ID]; ok && workspace.Layout == nil {
-		workspace.Layout = current.Layout
-	}
-	workspace.EndpointID = protocol.Ptr(id)
-	runtime.workspaces[workspace.ID] = workspace
-	return true
-}
-
-func (m *Manager) removeRemoteWorkspace(id, workspaceID string) bool {
-	m.mu.Lock()
-	defer m.mu.Unlock()
-	runtime, ok := m.runtimes[id]
-	if !ok || runtime.workspaces == nil {
-		return false
-	}
-	if _, ok := runtime.workspaces[workspaceID]; !ok {
-		return false
-	}
-	delete(runtime.workspaces, workspaceID)
-	return true
-}
-
-func (m *Manager) clearRemoteWorkspaceLayouts(id string) bool {
-	m.mu.Lock()
-	defer m.mu.Unlock()
-	runtime, ok := m.runtimes[id]
-	if !ok || len(runtime.workspaces) == 0 {
-		return false
-	}
-	runtime.workspaces = make(map[string]protocol.Workspace)
-	return true
-}
-
 func (m *Manager) publishSessionsChanged(endpointID string) {
 	if m.onSessions != nil {
 		m.onSessions(endpointID)
@@ -1510,6 +1334,7 @@ func sessionsEqual(left, right map[string]protocol.Session) bool {
 
 func sessionsMatch(left, right protocol.Session) bool {
 	return left.ID == right.ID &&
+		left.ProfileID == right.ProfileID &&
 		left.Label == right.Label &&
 		left.Agent == right.Agent &&
 		left.Directory == right.Directory &&
@@ -1524,45 +1349,8 @@ func sessionsMatch(left, right protocol.Session) bool {
 		protocol.Deref(left.TurnOwed) == protocol.Deref(right.TurnOwed) &&
 		protocol.Deref(left.TurnOpenedAt) == protocol.Deref(right.TurnOpenedAt) &&
 		protocol.Deref(left.TurnSnoozedUntil) == protocol.Deref(right.TurnSnoozedUntil) &&
-		protocol.Deref(left.PinnedAt) == protocol.Deref(right.PinnedAt) &&
 		protocol.Deref(left.ParentSessionID) == protocol.Deref(right.ParentSessionID) &&
 		left.LastSeen == right.LastSeen
-}
-
-func workspaceLayoutsEqual(left, right map[string]protocol.Workspace) bool {
-	if len(left) != len(right) {
-		return false
-	}
-	for id, leftWorkspace := range left {
-		rightWorkspace, ok := right[id]
-		if !ok || leftWorkspace.ID != rightWorkspace.ID || leftWorkspace.Title != rightWorkspace.Title ||
-			leftWorkspace.Directory != rightWorkspace.Directory || leftWorkspace.Status != rightWorkspace.Status {
-			return false
-		}
-		if (leftWorkspace.Layout == nil) != (rightWorkspace.Layout == nil) {
-			return false
-		}
-		if leftWorkspace.Layout != nil && !workspaceLayoutsMatch(*leftWorkspace.Layout, *rightWorkspace.Layout) {
-			return false
-		}
-	}
-	return true
-}
-
-func workspaceLayoutsMatch(left, right protocol.WorkspaceLayout) bool {
-	if left.WorkspaceID != right.WorkspaceID ||
-		left.ActivePaneID != right.ActivePaneID ||
-		left.LayoutJson != right.LayoutJson ||
-		protocol.Deref(left.UpdatedAt) != protocol.Deref(right.UpdatedAt) ||
-		len(left.Panes) != len(right.Panes) {
-		return false
-	}
-	for i := range left.Panes {
-		if left.Panes[i] != right.Panes[i] {
-			return false
-		}
-	}
-	return true
 }
 
 func foreignHomeNotice(homeDaemonID string, msg *protocol.InitialStateMessage) string {
@@ -1804,9 +1592,9 @@ func (m *Manager) SetEndpointRemoteWeb(ctx context.Context, endpointID string, e
 		m.mu.Unlock()
 		return fmt.Errorf("endpoint not found: %s", endpointID)
 	}
-	if parked := parkedErrorLocked(endpointID, runtime); parked != nil {
+	if refused := refusalLocked(endpointID, runtime); refused != nil {
 		m.mu.Unlock()
-		return parked
+		return refused
 	}
 	if runtime.conn == nil {
 		m.mu.Unlock()

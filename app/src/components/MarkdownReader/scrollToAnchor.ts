@@ -1,5 +1,5 @@
 
-const SCROLL_CONTAINER_SELECTOR = '.workspace-dock-tile-body';
+const SCROLL_CONTAINER_SELECTOR = '.desktop-dock-tile-body';
 
 function findScrollContainer(start: HTMLElement): HTMLElement | null {
   const tileBody = start.closest<HTMLElement>(SCROLL_CONTAINER_SELECTOR);

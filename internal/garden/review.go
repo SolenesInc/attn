@@ -33,6 +33,7 @@ type ReviewRecipe struct {
 }
 
 type ReviewRun struct {
+	ProfileID    string       `json:"profile_id"`
 	ID           string       `json:"id"`
 	CandidateIDs []string     `json:"candidate_ids"`
 	Recipe       ReviewRecipe `json:"recipe"`
@@ -78,7 +79,7 @@ type ReviewItem struct {
 func ReviewRunsSchema() docstore.CollectionSchema {
 	return docstore.CollectionSchema{
 		Namespace: Namespace, Collection: CollectionReviewRuns,
-		Fields: []docstore.FieldSpec{{Name: "status", Type: docstore.FieldString}},
+		Fields: []docstore.FieldSpec{{Name: "profile_id", Type: docstore.FieldString}, {Name: "status", Type: docstore.FieldString}},
 	}
 }
 
@@ -146,7 +147,6 @@ type ReviewObservation struct {
 	DirectoryState    ReviewDirectoryState
 	ResumeAvailable   bool
 	HandoverAvailable bool
-	ChiefAvailable    bool
 	ReviewAgainAt     time.Time
 }
 
@@ -159,7 +159,6 @@ type ReviewCandidate struct {
 	SubtreeActivityAt time.Time
 	ResumeAvailable   bool
 	HandoverAvailable bool
-	ChiefAvailable    bool
 	Plot              bool
 	SubtreeIDs        []string
 }
@@ -202,7 +201,6 @@ func ReviewCandidates(observations []ReviewObservation, window time.Duration, no
 			LifecycleExact:    exact,
 			ResumeAvailable:   observation.ResumeAvailable,
 			HandoverAvailable: observation.HandoverAvailable,
-			ChiefAvailable:    observation.ChiefAvailable,
 			Plot:              isPlot,
 			SubtreeIDs:        subtree,
 		}

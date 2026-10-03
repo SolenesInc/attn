@@ -29,7 +29,7 @@ var (
 func TestAClientAttachingMidFloodContinuesFromItsSnapshotWithoutAGapOrARepeat(t *testing.T) {
 	w := newWorld(t)
 	app := w.App()
-	shell := w.Spawn(app, workspaceShell, w.Path("shop"))
+	shell := w.Spawn(app, shellHarness, w.Path("shop"))
 	terminal := w.Terminal(shell)
 	flood := filepath.Join(w.Dir, "flood.sh")
 	if err := os.WriteFile(flood, []byte(lineFlood), 0o755); err != nil {
@@ -83,7 +83,7 @@ func TestAClientAttachingMidFloodContinuesFromItsSnapshotWithoutAGapOrARepeat(t 
 			t.Errorf("client %d stopped at line %d, want %d", i, previous, total-1)
 		}
 	}
-	exitWorkspaceShells(app, shell)
+	exitShells(app, shell)
 }
 
 func floodSnapshot(t *testing.T, result protocol.AttachResultMessage) string {

@@ -86,7 +86,6 @@ func (d *Daemon) agentPeekResult(session *protocol.Session) *protocol.AgentPeekR
 		SessionID:   decorated.ID,
 		Label:       decorated.Label,
 		Agent:       string(decorated.Agent),
-		WorkspaceID: decorated.WorkspaceID,
 		State:       string(decorated.State),
 		StateSince:  decorated.StateSince,
 		LastSeen:    decorated.LastSeen,
@@ -94,8 +93,8 @@ func (d *Daemon) agentPeekResult(session *protocol.Session) *protocol.AgentPeekR
 		TurnOwed:    decorated.TurnOwed,
 		CrewMember:  decorated.CrewMember,
 	}
-	if workspace := d.store.GetWorkspace(decorated.WorkspaceID); workspace != nil {
-		result.WorkspaceTitle = protocol.Ptr(workspace.Title)
+	if profile, err := d.store.GetProfile(decorated.ProfileID); err == nil {
+		result.ProfileName = protocol.Ptr(profile.Name)
 	}
 	if path := d.inspectableTranscriptPath(session); path != "" {
 		if message, err := transcript.ExtractLastAssistantMessage(path, agentPeekMessageMaxChars); err == nil && strings.TrimSpace(message) != "" {

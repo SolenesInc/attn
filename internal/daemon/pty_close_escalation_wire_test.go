@@ -26,15 +26,14 @@ func TestClosingAPaneEndsItsProcessWhateverSignalsItIgnores(t *testing.T) {
 		err  error
 	}
 	gone := map[string]chan ended{}
-	panes := map[string]string{}
-	var ws string
+	sessions := map[string]string{}
 	for name, traps := range programs {
-		result, workspace, pane := w.RequestSpawn(app, workspaceShell, cwd)
-		ws, panes[name] = workspace, pane
+		result, _, _ := w.RequestSpawn(app, shellHarness, cwd)
+		sessions[name] = result.ID
 		if !result.Success {
 			t.Fatalf("spawn for %q failed: %s", name, protocol.Deref(result.Error))
 		}
-		held := filepath.Join(w.Dir, "held-"+pane)
+		held := filepath.Join(w.Dir, "held-"+result.ID)
 		if err := syscall.Mkfifo(held, 0o600); err != nil {
 			t.Fatal(err)
 		}
@@ -52,12 +51,10 @@ func TestClosingAPaneEndsItsProcessWhateverSignalsItIgnores(t *testing.T) {
 		app.TypeLine(result.ID, `exec bash -c '`+traps+`; echo held-$((6*7)); while :; do sleep 1; done' 3>`+held)
 		app.AwaitScreen(result.ID, "held-42")
 	}
-	for name, pane := range panes {
-		closed := workspaceLayoutAction(app, protocol.WorkspaceLayoutClosePaneMessage{
-			Cmd: protocol.CmdWorkspaceLayoutClosePane, WorkspaceID: ws, PaneID: pane,
-		}, protocol.CmdWorkspaceLayoutClosePane, ws)
-		if !closed.Success {
-			t.Fatalf("closing the pane that %s failed: %s", name, protocol.Deref(closed.Error))
+	for name, session := range sessions {
+		closed := closeFromApp(app, session)
+		if !closed.Accepted {
+			t.Fatalf("closing the session that %s failed: %s", name, protocol.Deref(closed.Error))
 		}
 	}
 	for name, done := range gone {

@@ -27,8 +27,8 @@ func TestAgentPeekShowsStateWorkspaceLatestReplyAndScreen(t *testing.T) {
 	if err != nil {
 		t.Fatalf("peek: %v", err)
 	}
-	if peek.SessionID != session || peek.State != string(protocol.SessionStateWaitingInput) || peek.WorkspaceID != "workspace-shop" {
-		t.Errorf("peek = %+v, want %s waiting for input in workspace-shop", peek, session)
+	if peek.SessionID != session || peek.State != string(protocol.SessionStateWaitingInput) || protocol.Deref(peek.ProfileName) != "Default" {
+		t.Errorf("peek = %+v, want %s waiting for input in the Default profile", peek, session)
 	}
 	if last := protocol.Deref(peek.LastAssistantMessage); !strings.Contains(last, "latest answer") || strings.Contains(last, "first answer") {
 		t.Errorf("last assistant message = %q, want the latest reply", last)

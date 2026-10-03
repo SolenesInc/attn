@@ -1,102 +1,186 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { useErrorToast } from '../components/ErrorToast';
+import { useToast } from '../components/Toast';
 import { useDaemonApi } from '../contexts/DaemonApiContext';
-import { useSessionWorkspaceController } from '../hooks/useSessionWorkspaceController';
 import { ptySpawn } from '../pty/bridge';
+import { currentDesktopIn, useProfilesStore } from '../store/profiles';
 import { useSessionStore } from '../store/sessions';
 import { normalizeSessionAgent, type SessionAgent } from '../types/sessionAgent';
-import { type TerminalSplitDirection } from '../types/workspace';
+import { type TerminalSplitDirection } from '../types/desktop';
 import {
   agentLabel,
   getAgentAvailability,
   hasAnyAvailableAgents,
   resolvePreferredAgent,
 } from '../utils/agentAvailability';
+import { launchTarget } from '../utils/launchPlacement';
 import {
   AppContentProps,
   LocationPickerPurpose,
-  paneIdForSession,
   SessionCreationJob,
   SplitSessionOptions,
   TERMINAL_AGENT,
 } from './appSupport';
-import { useWorkspaceCreation } from './useWorkspaceCreation';
 
 interface Options {
   settings: AppContentProps['settings'];
-  daemonSessions: AppContentProps['daemonSessions'];
   daemonEndpoints: AppContentProps['daemonEndpoints'];
   sessions: ReturnType<typeof useSessionStore.getState>['sessions'];
-  activeSessionId: string | null;
-  getActivePaneIdForSession: ReturnType<
-    typeof useSessionWorkspaceController
-  >['getActivePaneIdForSession'];
-  selectCreatedSession: (id: string) => boolean;
-  showError: ReturnType<typeof useErrorToast>['showError'];
+  shownAgentId: string | null;
+  selectCreatedSession: (id: string, focusOwner?: Element | null) => boolean;
+  showError: ReturnType<typeof useToast>['showError'];
+}
+
+function localDesktopForLaunch(endpointId: string | undefined) {
+  if (endpointId) {
+    throw new Error('Agents on remote endpoints cannot be started or split in this release: remote endpoints are off.');
+  }
+  const desktop = currentDesktopIn(useProfilesStore.getState());
+  if (!desktop) {
+    throw new Error('No desktop is open yet; choose a profile before starting an agent.');
+  }
+  return desktop;
 }
 export function useSessionLaunch({
   settings,
-  daemonSessions,
   daemonEndpoints,
   sessions,
-  activeSessionId,
-  getActivePaneIdForSession,
+  shownAgentId,
   selectCreatedSession,
   showError,
 }: Options) {
-  const {
-    sendWorkspaceClosePane,
-    sendUnregisterWorkspace,
-    sendRegisterWorkspace,
-    sendWorkspaceAddSessionPane,
-    sendCreateWorktree,
-  } = useDaemonApi();
+  const { sendCreateWorktree } = useDaemonApi();
   const { closeSession, createSession, takeSessionSpawnArgs } = useSessionStore();
-  const activeLocalSession = sessions.find((session) => session.id === activeSessionId) ?? null;
+  const activeLocalSession = sessions.find((session) => session.id === shownAgentId) ?? null;
+  const currentDesktop = useProfilesStore(
+    (state) => state.desktops.find((desktop) => desktop.id === state.currentDesktopId) ?? null,
+  );
   const agentAvailability = useMemo(() => getAgentAvailability(settings), [settings]);
   const hasAvailableAgents = hasAnyAvailableAgents(agentAvailability);
   const [sessionCreationJob, setSessionCreationJob] = useState<SessionCreationJob | null>(null);
   const sessionCreationJobIdRef = useRef(0);
   const worktreeSessionCreateEndpointsRef = useRef<Set<string>>(new Set());
-  const { createWorkspaceSession, rollbackSessionCreation, createSessionForUiAutomation } =
-    useWorkspaceCreation({
-      sendWorkspaceClosePane,
-      closeSession,
-      sendUnregisterWorkspace,
-      sendRegisterWorkspace,
-      createSession,
-      takeSessionSpawnArgs,
-      sendWorkspaceAddSessionPane,
-      selectCreatedSession,
-      sessionCreationJob,
-      daemonSessions,
-      setSessionCreationJob,
-    });
 
   const [locationPickerOpen, setLocationPickerOpen] = useState(false);
   const [locationPickerPurpose, setLocationPickerPurpose] =
-    useState<LocationPickerPurpose>('workspace');
+    useState<LocationPickerPurpose>('session');
   const locationPickerSessionDirection = useRef<TerminalSplitDirection>('vertical');
   const reopenPickRef = useRef<{ settle: (path?: string) => void } | null>(null);
 
-  const handleNewWorkspace = useCallback(() => {
-    setLocationPickerPurpose('workspace');
-    setLocationPickerOpen(true);
-  }, []);
-
   const nextSplitSessionLabel = useCallback(
-    (workspaceId: string, agent: SessionAgent) => {
+    (agent: SessionAgent) => {
       const normalizedAgent = normalizeSessionAgent(agent, 'codex');
       const base = normalizedAgent === 'shell' ? 'shell' : normalizedAgent;
+      const onDesktop = new Set(currentDesktop?.panes.map((pane) => pane.session_id));
       const matchingCount = sessions.filter(
         (session) =>
-          session.workspaceId === workspaceId &&
-          normalizeSessionAgent(session.agent, 'codex') === normalizedAgent,
+          onDesktop.has(session.id) && normalizeSessionAgent(session.agent, 'codex') === normalizedAgent,
       ).length;
       return matchingCount === 0 ? base : `${base} ${matchingCount + 1}`;
     },
-    [sessions],
+    [currentDesktop, sessions],
   );
+
+  // The empty desktop's inline launcher is the new-session surface while it shows.
+  const inlineLauncherFocusRef = useRef<(() => void) | null>(null);
+  const registerInlineLauncher = useCallback((focus: (() => void) | null) => {
+    inlineLauncherFocusRef.current = focus;
+  }, []);
+
+  const handleNewSession = useCallback((direction: TerminalSplitDirection = 'vertical') => {
+    if (inlineLauncherFocusRef.current) {
+      inlineLauncherFocusRef.current();
+      return;
+    }
+    setLocationPickerPurpose('session');
+    locationPickerSessionDirection.current = direction;
+    setLocationPickerOpen(true);
+  }, []);
+
+  const spawnOnCurrentDesktop = useCallback(
+    async (spawn: {
+      sessionId: string;
+      label: string;
+      cwd: string;
+      agent: SessionAgent;
+      endpointId?: string;
+      yoloMode?: boolean;
+      autoMode?: boolean;
+      chiefOfStaff?: boolean;
+      direction: TerminalSplitDirection;
+      anchorPaneId?: string;
+      spawnedFrom?: string;
+      desktopId?: string;
+    }) => {
+      // A pick lands on the desktop it was made for, even when it answers after the user moved on;
+      // then it starts in the background instead of pulling the user back.
+      const current = localDesktopForLaunch(spawn.endpointId);
+      const desktop = useProfilesStore.getState().desktops.find((entry) => entry.id === spawn.desktopId) ?? current;
+      const target = launchTarget(desktop, spawn.direction, spawn.anchorPaneId);
+      const launch = desktop.id === current.id
+        ? useSessionStore.getState().beginIntent({ kind: 'session', sessionId: spawn.sessionId })
+        : null;
+      try {
+        await createSession(
+          spawn.label,
+          spawn.cwd,
+          spawn.sessionId,
+          spawn.agent,
+          spawn.endpointId,
+          spawn.agent === 'shell' ? false : spawn.yoloMode,
+          spawn.chiefOfStaff,
+          spawn.agent === 'shell' ? undefined : spawn.autoMode,
+        );
+        const spawnArgs = takeSessionSpawnArgs(spawn.sessionId, 80, 24);
+        if (!spawnArgs) {
+          throw new Error('Session spawn arguments were not prepared.');
+        }
+        await ptySpawn({
+          args: {
+            ...spawnArgs,
+            placement: target.placement,
+            ...(spawn.spawnedFrom ? { spawned_from: spawn.spawnedFrom } : {}),
+          },
+        });
+      } catch (error) {
+        if (launch) useSessionStore.getState().intentFailed(launch);
+        closeSession(spawn.sessionId);
+        throw error;
+      }
+      const { intent } = useSessionStore.getState();
+      if (launch && intent?.id === launch) {
+        selectCreatedSession(spawn.sessionId, intent.focusOwner);
+      }
+      return spawn.sessionId;
+    },
+    [closeSession, createSession, selectCreatedSession, takeSessionSpawnArgs],
+  );
+
+  const launchAgent = useCallback(
+    (
+      label: string,
+      cwd: string,
+      providedSessionId?: string,
+      agent: SessionAgent = 'claude',
+      endpointId?: string,
+      yoloMode = false,
+      options?: { chiefOfStaff?: boolean; autoMode?: boolean; desktopId?: string },
+    ) =>
+      spawnOnCurrentDesktop({
+        sessionId: providedSessionId || crypto.randomUUID(),
+        label,
+        cwd,
+        agent,
+        endpointId,
+        yoloMode,
+        autoMode: options?.autoMode,
+        chiefOfStaff: options?.chiefOfStaff,
+        direction: 'vertical',
+        desktopId: options?.desktopId,
+      }),
+    [spawnOnCurrentDesktop],
+  );
+
+  const createSessionForUiAutomation = launchAgent;
 
   const createSplitSession = useCallback(
     async (
@@ -105,85 +189,84 @@ export function useSessionLaunch({
       targetPaneId?: string,
       options: SplitSessionOptions = {},
     ) => {
-      const activeSession = options.baseSessionId
-        ? sessions.find((session) => session.id === options.baseSessionId)
-        : activeLocalSession;
-      if (!activeSession?.workspaceId) {
-        handleNewWorkspace();
+      if (!currentDesktop) {
+        showError('No desktop is open yet; choose a profile before starting an agent.');
         return;
       }
-      const sessionId = crypto.randomUUID();
-      const workspaceId = activeSession.workspaceId;
-      const paneId = targetPaneId || getActivePaneIdForSession(activeSession);
-      const newPaneId = paneIdForSession(sessionId);
-      const label = options.label || nextSplitSessionLabel(workspaceId, agent);
-      const endpointId =
-        options.endpointId === null ? undefined : (options.endpointId ?? activeSession.endpointId);
-      let paneAdded = false;
-
+      const focusedSessionId = launchTarget(currentDesktop, direction, targetPaneId).focusedSessionId;
+      const baseId = options.baseSessionId ?? activeLocalSession?.id ?? focusedSessionId;
+      const base = sessions.find((session) => session.id === baseId) ?? null;
+      const cwd = options.cwd || base?.cwd;
+      if (!cwd) {
+        handleNewSession(direction);
+        return;
+      }
       try {
-        await createSession(
-          label,
-          options.cwd || activeSession.cwd,
-          sessionId,
+        await spawnOnCurrentDesktop({
+          sessionId: crypto.randomUUID(),
+          label: options.label || nextSplitSessionLabel(agent),
+          cwd,
           agent,
-          endpointId,
-          agent === 'shell' ? false : (options.yoloMode ?? activeSession.yoloMode),
-          workspaceId,
-          undefined,
-          agent === 'shell' ? undefined : options.autoMode,
-        );
-        const spawnArgs = takeSessionSpawnArgs(sessionId, 80, 24);
-        await sendWorkspaceAddSessionPane(workspaceId, sessionId, label, {
-          paneId: newPaneId,
-          targetPaneId: paneId,
+          endpointId: options.endpointId === null ? undefined : (options.endpointId ?? base?.endpointId),
+          yoloMode: options.yoloMode ?? base?.yoloMode,
+          autoMode: options.autoMode,
           direction,
+          anchorPaneId: targetPaneId,
+          spawnedFrom: base?.id,
+          desktopId: options.desktopId,
         });
-        paneAdded = true;
-        if (spawnArgs) {
-          await ptySpawn({ args: { ...spawnArgs, spawned_from: activeSession.id } });
-        } else {
-          throw new Error('Session spawn arguments were not prepared.');
-        }
-        selectCreatedSession(sessionId);
       } catch (error) {
-        await rollbackSessionCreation({
-          sessionId,
-          workspaceId,
-          paneId: paneAdded ? newPaneId : undefined,
-        });
-        showError(error instanceof Error ? error.message : 'Failed to create session split');
+        showError(error instanceof Error ? error.message : 'Failed to start the agent');
       }
     },
     [
       activeLocalSession,
-      createSession,
-      getActivePaneIdForSession,
-      handleNewWorkspace,
+      currentDesktop,
+      handleNewSession,
       nextSplitSessionLabel,
-      rollbackSessionCreation,
-      sendWorkspaceAddSessionPane,
       sessions,
-      selectCreatedSession,
       showError,
-      takeSessionSpawnArgs,
+      spawnOnCurrentDesktop,
     ],
   );
 
-  const handleNewSession = useCallback(
-    (direction: TerminalSplitDirection = 'vertical') => {
-      if (!activeLocalSession?.workspaceId) {
-        handleNewWorkspace();
-        return;
+  const launchPicked = useCallback(
+    async (pick: {
+      label: string;
+      cwd: string;
+      agent: SessionAgent;
+      endpointId?: string;
+      yoloMode: boolean;
+      autoMode?: boolean;
+      chiefOfStaff: boolean;
+      desktopId?: string;
+    }): Promise<string | null> => {
+      if (!pick.chiefOfStaff) {
+        await createSplitSession(pick.agent, locationPickerSessionDirection.current, undefined, {
+          cwd: pick.cwd,
+          endpointId: pick.endpointId ?? null,
+          label: pick.label,
+          yoloMode: pick.yoloMode,
+          autoMode: pick.autoMode,
+          desktopId: pick.desktopId,
+        });
+        return null;
       }
-      setLocationPickerPurpose('session');
-      locationPickerSessionDirection.current = direction;
-      setLocationPickerOpen(true);
+      const sessionId = await launchAgent(
+        pick.label,
+        pick.cwd,
+        undefined,
+        pick.agent,
+        pick.endpointId,
+        pick.yoloMode,
+        { chiefOfStaff: true, autoMode: pick.autoMode, desktopId: pick.desktopId },
+      );
+      return sessionId;
     },
-    [activeLocalSession?.workspaceId, handleNewWorkspace],
+    [createSplitSession, launchAgent],
   );
 
-  const handleLocationSelect = useCallback(
+  const launchLocation = useCallback(
     async (
       path: string,
       agent: SessionAgent,
@@ -191,12 +274,8 @@ export function useSessionLaunch({
       yoloMode = false,
       chiefOfStaff = false,
       autoMode?: boolean,
+      desktopId?: string,
     ) => {
-      if (locationPickerPurpose === 'reopen') {
-        reopenPickRef.current?.settle(path);
-        reopenPickRef.current = null;
-        return;
-      }
       const jobId = sessionCreationJobIdRef.current + 1;
       sessionCreationJobIdRef.current = jobId;
       let selectedAgent: SessionAgent;
@@ -207,7 +286,7 @@ export function useSessionLaunch({
           return;
         }
         if (endpoint.status !== 'connected') {
-          showError(`Endpoint ${endpoint.name} is ${endpoint.status}.`);
+          showError(endpoint.status_message || `Endpoint ${endpoint.name} is ${endpoint.status}.`);
           return;
         }
         if (agent !== TERMINAL_AGENT && !endpoint.capabilities?.agents_available.includes(agent)) {
@@ -226,14 +305,9 @@ export function useSessionLaunch({
             : resolvePreferredAgent(agent, agentAvailability, 'codex');
       }
       const folderName = path.split('/').pop() || 'session';
-      if (locationPickerPurpose === 'session' && activeLocalSession?.workspaceId) {
-        await createSplitSession(selectedAgent, locationPickerSessionDirection.current, undefined, {
-          cwd: path,
-          endpointId: endpointId ?? null,
-          label: folderName,
-          yoloMode,
-          autoMode,
-        });
+      const pick = { label: folderName, cwd: path, agent: selectedAgent, endpointId, yoloMode, autoMode, chiefOfStaff, desktopId };
+      if (!chiefOfStaff) {
+        await launchPicked(pick);
         return;
       }
       setSessionCreationJob({
@@ -244,19 +318,8 @@ export function useSessionLaunch({
         error: null,
       });
       try {
-        const sessionId = await createWorkspaceSession(
-          folderName,
-          path,
-          undefined,
-          selectedAgent,
-          endpointId,
-          yoloMode,
-          { chiefOfStaff, autoMode },
-        );
-        selectCreatedSession(sessionId);
-        setSessionCreationJob((current) =>
-          current?.id === jobId ? { ...current, sessionId, phase: 'starting_session' } : current,
-        );
+        await launchPicked(pick);
+        setSessionCreationJob((current) => (current?.id === jobId ? null : current));
       } catch (err) {
         setSessionCreationJob((current) =>
           current?.id === jobId
@@ -265,17 +328,19 @@ export function useSessionLaunch({
         );
       }
     },
-    [
-      activeLocalSession?.workspaceId,
-      agentAvailability,
-      createSplitSession,
-      createWorkspaceSession,
-      daemonEndpoints,
-      hasAvailableAgents,
-      locationPickerPurpose,
-      selectCreatedSession,
-      showError,
-    ],
+    [agentAvailability, daemonEndpoints, hasAvailableAgents, launchPicked, showError],
+  );
+
+  const handleLocationSelect = useCallback(
+    async (...pick: Parameters<typeof launchLocation>) => {
+      if (locationPickerPurpose === 'reopen') {
+        reopenPickRef.current?.settle(pick[0]);
+        reopenPickRef.current = null;
+        return;
+      }
+      await launchLocation(...pick);
+    },
+    [launchLocation, locationPickerPurpose],
   );
 
   const handleCreateWorktreeSession = useCallback(
@@ -287,7 +352,16 @@ export function useSessionLaunch({
       agent: SessionAgent,
       yoloMode: boolean,
       autoMode?: boolean,
+      chiefOfStaff = false,
+      pickedOnDesktopId?: string,
     ) => {
+      let desktopId: string;
+      try {
+        desktopId = pickedOnDesktopId ?? localDesktopForLaunch(endpointId).id;
+      } catch (error) {
+        showError(error instanceof Error ? error.message : 'Failed to start the agent');
+        return;
+      }
       const endpointKey = endpointId || 'local';
       if (worktreeSessionCreateEndpointsRef.current.has(endpointKey)) {
         showError('A worktree session is already being created for this target.');
@@ -323,38 +397,17 @@ export function useSessionLaunch({
               : current,
           );
           const folderName = worktreePath.split('/').pop() || branchName || 'session';
-          if (locationPickerPurpose === 'session' && activeLocalSession?.workspaceId) {
-            await createSplitSession(agent, locationPickerSessionDirection.current, undefined, {
-              cwd: worktreePath,
-              endpointId: endpointId ?? null,
-              label: folderName,
-              yoloMode,
-              autoMode,
-            });
-            setSessionCreationJob((current) => (current?.id === jobId ? null : current));
-            return;
-          }
-          const sessionId = await createWorkspaceSession(
-            folderName,
-            worktreePath,
-            undefined,
+          await launchPicked({
+            label: folderName,
+            cwd: worktreePath,
             agent,
             endpointId,
             yoloMode,
-            { autoMode },
-          );
-          selectCreatedSession(sessionId);
-          setSessionCreationJob((current) =>
-            current?.id === jobId
-              ? {
-                  ...current,
-                  label: folderName,
-                  path: worktreePath,
-                  phase: 'starting_session',
-                  sessionId,
-                }
-              : current,
-          );
+            autoMode,
+            chiefOfStaff,
+            desktopId,
+          });
+          setSessionCreationJob((current) => (current?.id === jobId ? null : current));
         } catch (err) {
           setSessionCreationJob((current) =>
             current?.id === jobId
@@ -369,15 +422,7 @@ export function useSessionLaunch({
         }
       })();
     },
-    [
-      activeLocalSession?.workspaceId,
-      createSplitSession,
-      createWorkspaceSession,
-      locationPickerPurpose,
-      selectCreatedSession,
-      sendCreateWorktree,
-      showError,
-    ],
+    [launchPicked, sendCreateWorktree, showError],
   );
 
   const closeLocationPicker = useCallback(() => {
@@ -403,17 +448,19 @@ export function useSessionLaunch({
     [],
   );
 
+
   return {
     sessionCreationJob,
     setSessionCreationJob,
-    createWorkspaceSession,
+    launchAgent,
     createSessionForUiAutomation,
     locationPickerOpen,
     locationPickerPurpose,
     closeLocationPicker,
     handleLocationSelect,
+    launchLocation,
+    registerInlineLauncher,
     handleCreateWorktreeSession,
-    handleNewWorkspace,
     handleNewSession,
     createSplitSession,
     chooseReopenDirectory,

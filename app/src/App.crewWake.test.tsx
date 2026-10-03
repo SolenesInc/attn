@@ -1,7 +1,7 @@
 import { act, fireEvent, screen, within } from '@testing-library/react';
 import { describe, expect, it, vi } from 'vitest';
 import { WAKE_ARM_TIMEOUT_MS } from './components/CrewWake';
-import { agentWorkspace, crewMember, daemonSession, type DaemonSession } from './test/daemonFixtures';
+import { soloDesktop, crewMember, daemonSession, type DaemonSession } from './test/daemonFixtures';
 import { gesture, renderApp } from './test/renderApp';
 import type { ScriptedDaemon } from './test/scriptedDaemon';
 
@@ -13,7 +13,7 @@ function renderCrewQueue(keelDay: Partial<DaemonSession>) {
       settings: { queue_mode_enabled: 'true' },
       crew: [keel],
       sessions: [daemonSession('s1'), daemonSession('sess-keel', keelDay)],
-      workspaces: [agentWorkspace('s1'), agentWorkspace('sess-keel')],
+      desktops: [soloDesktop('s1'), soloDesktop('sess-keel')],
     },
   });
 }
@@ -28,9 +28,9 @@ async function askKeelToSleep(daemon: ScriptedDaemon) {
   await gesture(daemon, () => fireEvent.click(screen.getByRole('button', { name: 'Ask Keel to sleep' })));
 }
 
-function shownWorkspaces() {
-  return Array.from(document.querySelectorAll('.session-terminal-workspace[data-session-visible="1"]'))
-    .map((workspace) => workspace.getAttribute('data-workspace-id'));
+function shownDesktops() {
+  return Array.from(document.querySelectorAll('.session-terminal-desktop[data-session-visible="1"]'))
+    .map((desktop) => desktop.getAttribute('data-desktop-id'));
 }
 
 describe('App crew wake and sleep', () => {
@@ -43,7 +43,20 @@ describe('App crew wake and sleep', () => {
     await wakeKeel(daemon);
 
     expect(daemon.sentOf('crew_wake')).toEqual([expect.objectContaining({ member: 'keel' })]);
-    expect(shownWorkspaces()).toEqual(['workspace-sess-keel']);
+    expect(shownDesktops()).toEqual(['desktop-sess-keel']);
+  });
+
+  it('reports a show error separately from a successful wake', async () => {
+    const { daemon } = await renderCrewQueue({ label: 'keel day' });
+    daemon.on('crew_wake', () => ({
+      event: 'crew_wake_result', success: true, member: 'keel', session_id: 'sess-keel',
+      show_error: 'Session closed before it could be shown',
+    }));
+
+    await wakeKeel(daemon);
+
+    expect(screen.getByRole('alert')).toHaveTextContent('Member is awake, but showing it failed: Session closed before it could be shown');
+    expect(daemon.sentOf('crew_wake')).toHaveLength(1);
   });
 
   it('shows what the daemon said when it refuses a wake', async () => {
@@ -55,7 +68,7 @@ describe('App crew wake and sleep', () => {
     await wakeKeel(daemon);
 
     expect(screen.getByRole('alert')).toHaveTextContent('keel launches in /gone, which is not there');
-    expect(shownWorkspaces()).toEqual([]);
+    expect(shownDesktops()).toEqual([]);
   });
 
   it('asks an awake member to sleep', async () => {
@@ -87,7 +100,7 @@ const ROSTER = [crewMember('alder'), crewMember('keel'), crewMember('trellis')];
 function renderRoster({ days = [] as DaemonSession[], settings = { queue_mode_enabled: 'true' } as Record<string, string> } = {}) {
   const sessions = [daemonSession('s1', { state: 'idle' }), ...days];
   return renderApp({
-    initialState: { settings, crew: ROSTER, sessions, workspaces: sessions.map((session) => agentWorkspace(session.id)) },
+    initialState: { settings, crew: ROSTER, sessions, desktops: sessions.map((session) => soloDesktop(session.id)) },
   });
 }
 
@@ -112,12 +125,12 @@ async function rosterWithWake() {
 }
 
 describe('App crew in the queue', () => {
-  it('draws every member at the top of the pinned band by name, awake or asleep', async () => {
+  it('draws every member in the crew block by name, awake or asleep, with crew management above them', async () => {
     await renderRoster({ days: [keelDay()] });
 
     expect(queueRows().filter((id) => id.startsWith('queue-crew-')))
       .toEqual(['queue-crew-alder', 'queue-crew-keel', 'queue-crew-trellis']);
-    expect(screen.getByTestId('sidebar-queue')).toHaveTextContent(/Pinned3/);
+    expect(screen.getByTestId('manage-crew')).toHaveTextContent('manage');
     expect(crewRow('keel')).toHaveAttribute('data-crew-state', 'awake');
     expect(crewRow('alder')).toHaveAttribute('data-crew-state', 'asleep');
     expect(crewRow('trellis')).toHaveTextContent('Trellis');
@@ -133,14 +146,14 @@ describe('App crew in the queue', () => {
     expect(queueRows().filter((id) => id.includes('keel'))).toEqual(['queue-crew-keel']);
   });
 
-  it('queues an awake member when crew joins the queue, and keeps the sleeping ones pinned', async () => {
+  it('queues an awake member owing a turn when crew joins the queue, and keeps every crew row', async () => {
     await renderRoster({
       days: [keelDay({ turn_owed: true, turn_opened_at: '2026-07-26T08:00:00Z' })],
       settings: { queue_mode_enabled: 'true', queue_crew_enabled: 'true' },
     });
 
     expect(screen.getByTestId('queue-turn-sess-keel')).toBeInTheDocument();
-    expect(screen.queryByTestId('queue-crew-keel')).toBeNull();
+    expect(crewRow('keel')).toHaveAttribute('data-crew-state', 'awake');
     expect(crewRow('alder')).toHaveAttribute('data-crew-state', 'asleep');
   });
 
@@ -161,7 +174,7 @@ describe('App crew in the queue', () => {
 
     await gesture(daemon, () => fireEvent.click(screen.getByTestId('queue-crew-select-keel')));
 
-    expect(shownWorkspaces()).toEqual(['workspace-sess-keel']);
+    expect(shownDesktops()).toEqual(['desktop-sess-keel']);
   });
 
   it.each([

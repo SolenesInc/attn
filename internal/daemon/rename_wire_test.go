@@ -1,7 +1,6 @@
 package daemon_test
 
 import (
-	"slices"
 	"strings"
 	"testing"
 
@@ -59,43 +58,24 @@ func TestARenamedSessionKeepsItsNameAcrossRespawn(t *testing.T) {
 	}
 }
 
-func TestARenamedWorkspaceKeepsItsTitle(t *testing.T) {
+func TestARenamedDesktopKeepsItsNameAcrossARestart(t *testing.T) {
 	w := newWorld(t, fakeagent.Claude)
 	app := w.App()
-	cwd := w.Path("shop")
-	spawned, workspace, _ := w.RequestSpawn(app, fakeagent.Claude, cwd)
+	spawned, desktopID, _ := w.RequestSpawn(app, fakeagent.Claude, w.Path("shop"))
 	if !spawned.Success {
 		t.Fatalf("spawn: %s", protocol.Deref(spawned.Error))
 	}
-	session := spawned.ID
-	run := w.Launched(session)
-	app.TypeLine(session, "add a discount field")
-	run.Prompted()
-	run.Reply("Added. <!-- attn:state=idle -->")
-	testworld.AwaitSession(app, session, func(s protocol.Session) bool { return s.State == protocol.SessionStateIdle })
-	register := protocol.RegisterWorkspaceMessage{
-		Cmd: protocol.CmdRegisterWorkspace, ID: workspace, Title: "Storefront", Directory: cwd,
-	}
+	desktop := desktopOfDelegate(t, w, desktopID)
 
-	renamed := renameFromApp(app, protocol.RenameWorkspaceMessage{Cmd: protocol.CmdRenameWorkspace, WorkspaceID: register.ID, Title: "User Renamed"}, register.ID)
+	renamed := testworld.Request(app, protocol.DesktopRenameMessage{
+		Cmd: protocol.CmdDesktopRename, DesktopID: desktop.ID, Name: "User Renamed", ExpectedRevision: desktop.Revision, RequestID: "rename",
+	}, protocol.EventProfileActionResult, func(r protocol.ProfileActionResultMessage) bool { return r.RequestID == "rename" })
 	if !renamed.Success {
-		t.Fatalf("rename workspace: %s", protocol.Deref(renamed.Error))
+		t.Fatalf("rename desktop: %s", protocol.Deref(renamed.Error))
 	}
-	testworld.Await(app, protocol.EventWorkspaceStateChanged, func(e protocol.WorkspaceStateChangedMessage) bool {
-		return e.Workspace.ID == register.ID && e.Workspace.Title == "User Renamed"
-	})
 
 	w.restart()
-	app = w.App()
-	if !slices.ContainsFunc(app.Initial.Workspaces, func(ws protocol.Workspace) bool { return ws.ID == register.ID && ws.Title == "User Renamed" }) {
-		t.Errorf("workspaces after a restart = %+v, want %s titled User Renamed", app.Initial.Workspaces, register.ID)
-	}
-
-	app.Send(register)
-	reregistered := testworld.Await(app, protocol.EventWorkspaceStateChanged, func(e protocol.WorkspaceStateChangedMessage) bool {
-		return e.Workspace.ID == register.ID
-	})
-	if reregistered.Workspace.Title != "User Renamed" {
-		t.Errorf("title after the app re-registered the workspace as %q = %q, want User Renamed", register.Title, reregistered.Workspace.Title)
+	if got := desktopOfDelegate(t, w, desktop.ID); got.Name != "User Renamed" {
+		t.Errorf("desktop after a restart = %+v, want it named User Renamed", got)
 	}
 }

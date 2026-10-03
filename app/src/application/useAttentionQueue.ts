@@ -2,7 +2,10 @@ import type { MouseEvent as ReactMouseEvent } from 'react';
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import type { SnoozePlacement } from '../components/SnoozeMenu';
 import { useSessionStore } from '../store/sessions';
+import { sameLeaf, type ActiveLeaf } from '../navigation/activeLeaf';
+import { focusedQueueRow } from '../components/focusedQueueRow';
 import { useDaemonApi } from '../contexts/DaemonApiContext';
+import { useAgentOnScreen, currentActiveLeaf } from '../hooks/useDesktopSelectionBridge';
 import { isAttentionSessionState, type UISessionState } from '../types/sessionState';
 import {
   buildQueueBands,
@@ -10,31 +13,30 @@ import {
   isQueueModeEnabled,
   QUEUE_CREW_SETTING,
   QUEUE_MODE_SETTING,
+  queueActions,
   sessionParticipatesInQueue,
 } from '../utils/queueBands';
 import { AppContentProps } from './appSupport';
 import { useAppSessions } from './useAppSessions';
 
-import type { WorkspaceWithSessions } from '../utils/workspaceViewModels';
+import type { DesktopWithSessions } from '../utils/desktopViewModels';
 type EnrichedSession = ReturnType<typeof useAppSessions>['enrichedLocalSessions'][number];
 
 interface Options {
   settings: AppContentProps['settings'];
-  unmutedWorkspaceViews: WorkspaceWithSessions<EnrichedSession>[];
-  workspaceViews: WorkspaceWithSessions<EnrichedSession>[];
-  unmutedEnrichedSessions: EnrichedSession[];
+  desktopViews: DesktopWithSessions<EnrichedSession>[];
+  profileSessions: EnrichedSession[];
   enrichedLocalSessions: EnrichedSession[];
-  activeSessionId: string | null;
+  shownAgentId: string | null;
 }
 export function useAttentionQueue({
   settings,
-  unmutedWorkspaceViews,
-  workspaceViews,
-  unmutedEnrichedSessions,
+  desktopViews,
+  profileSessions,
   enrichedLocalSessions,
-  activeSessionId,
+  shownAgentId,
 }: Options) {
-  const { sendSetSetting, sendSettleTurn } = useDaemonApi();
+  const { sendSetSetting, sendSettleTurn, sendWakeTurn } = useDaemonApi();
   const handleToggleQueueMode = useCallback(() => {
     sendSetSetting(QUEUE_MODE_SETTING, isQueueModeEnabled(settings) ? 'false' : 'true');
   }, [sendSetSetting, settings]);
@@ -46,27 +48,23 @@ export function useAttentionQueue({
   const queueBands = useMemo(
     () =>
       queueModeEnabled
-        ? buildQueueBands(unmutedWorkspaceViews, { crewInQueue: crewQueueEnabled })
+        ? buildQueueBands(desktopViews, { crewInQueue: crewQueueEnabled })
         : null,
-    [queueModeEnabled, crewQueueEnabled, unmutedWorkspaceViews],
+    [queueModeEnabled, crewQueueEnabled, desktopViews],
   );
 
-  const activeWorkspaceForCommands = useMemo(
+  const activeGroupForCommands = useMemo(
     () =>
-      workspaceViews.find((workspace) =>
-        workspace.sessions.some((session) => session.id === activeSessionId),
+      desktopViews.find((group) =>
+        group.sessions.some((session) => session.id === shownAgentId),
       ) ?? null,
-    [workspaceViews, activeSessionId],
+    [desktopViews, shownAgentId],
   );
   const activeSessionForCommands = useMemo(
     () =>
-      activeWorkspaceForCommands?.sessions.find((session) => session.id === activeSessionId) ??
+      activeGroupForCommands?.sessions.find((session) => session.id === shownAgentId) ??
       null,
-    [activeWorkspaceForCommands, activeSessionId],
-  );
-  const activeSessionQueueEligible = Boolean(
-    activeSessionForCommands &&
-      sessionParticipatesInQueue(activeSessionForCommands, crewQueueEnabled),
+    [activeGroupForCommands, shownAgentId],
   );
 
   const wantsAttention = useCallback(
@@ -74,7 +72,7 @@ export function useAttentionQueue({
       state: UISessionState;
       turnOwed?: boolean;
       crewMember?: string;
-      automation?: { definition_id: string };
+      automation?: { definition_id: number };
     }) =>
       queueModeEnabled
         ? sessionParticipatesInQueue(session, crewQueueEnabled) && Boolean(session.turnOwed)
@@ -82,24 +80,14 @@ export function useAttentionQueue({
     [queueModeEnabled, crewQueueEnabled],
   );
 
-  const waitingLocalSessions = unmutedEnrichedSessions.filter(wantsAttention);
-
-  const handleSettleActiveTurn = useMemo(
-    () =>
-      queueModeEnabled && activeSessionQueueEligible
-        ? () => {
-            if (!activeSessionId) return;
-            sendSettleTurn(activeSessionId);
-          }
-        : undefined,
-    [queueModeEnabled, activeSessionQueueEligible, activeSessionId, sendSettleTurn],
-  );
+  const waitingLocalSessions = profileSessions.filter(wantsAttention);
 
   const [snoozeMenu, setSnoozeMenu] = useState<{
     session: { id: string; label: string };
     placement: SnoozePlacement;
     origin: HTMLElement | null;
-    activeSessionId: string | null;
+    leaf: ActiveLeaf | null;
+    view: string;
   } | null>(null);
 
   const openSnoozeMenu = useCallback(
@@ -109,32 +97,87 @@ export function useAttentionQueue({
         session,
         placement: { kind: 'anchor', top: rect.bottom + 4, left: rect.left },
         origin: event.currentTarget as HTMLElement,
-        activeSessionId,
+        leaf: currentActiveLeaf(),
+        view: useSessionStore.getState().view,
       });
     },
-    [activeSessionId],
+    [],
+  );
+
+  const openSnoozeForSession = useCallback((session: { id: string; label: string }, row?: HTMLElement, opener?: HTMLElement | null) => {
+    const origin = opener ?? (document.activeElement instanceof HTMLElement ? document.activeElement : null);
+    const rect = row?.getBoundingClientRect();
+    const pane = document.querySelector<HTMLElement>(`.terminal-wrapper.active [data-pane-session-id="${session.id}"]`);
+    setSnoozeMenu({
+      session: { id: session.id, label: session.label },
+      placement: rect ? { kind: 'anchor', top: rect.bottom + 4, left: rect.left } : { kind: 'center', pane },
+      origin,
+      leaf: currentActiveLeaf(),
+      view: useSessionStore.getState().view,
+    });
+  }, []);
+
+  const actionsFor = useCallback(
+    (session: EnrichedSession) =>
+      queueActions(session, { queueMode: queueModeEnabled, crewInQueue: crewQueueEnabled, now: Date.now() }),
+    [queueModeEnabled, crewQueueEnabled],
+  );
+
+  const agentOnScreenId = useAgentOnScreen();
+  const agentOnScreen = enrichedLocalSessions.find((session) => session.id === agentOnScreenId) ?? null;
+  const agentOnScreenActions = agentOnScreen ? actionsFor(agentOnScreen) : null;
+
+  const handleSettleActiveTurn = useMemo(
+    () =>
+      agentOnScreen && agentOnScreenActions?.settle ? () => sendSettleTurn(agentOnScreen.id) : undefined,
+    [agentOnScreen, agentOnScreenActions?.settle, sendSettleTurn],
   );
 
   const handleSnoozeActiveSession = useMemo(
     () =>
-      queueModeEnabled && activeSessionQueueEligible
-        ? (origin: HTMLElement | null = document.activeElement instanceof HTMLElement ? document.activeElement : null) => {
-            if (!activeSessionId) return;
-            const session = enrichedLocalSessions.find((s) => s.id === activeSessionId);
-            if (!session) return;
-            const agentPane = document.querySelector<HTMLElement>(
-              `.terminal-wrapper.active [data-pane-session-id="${activeSessionId}"]`,
-            );
-            const pane = document.querySelector<HTMLElement>('.grid-view-stage') ?? agentPane;
-            setSnoozeMenu({
-              session: { id: session.id, label: session.label },
-              placement: { kind: 'center', pane },
-              origin,
-              activeSessionId,
-            });
+      agentOnScreen && agentOnScreenActions?.snooze ? (opener?: HTMLElement | null) => openSnoozeForSession(agentOnScreen, undefined, opener) : undefined,
+    [agentOnScreen, agentOnScreenActions?.snooze, openSnoozeForSession],
+  );
+
+  const handleWakeActiveSession = useMemo(
+    () =>
+      queueModeEnabled &&
+      agentOnScreen?.turnSnoozedUntil &&
+      sessionParticipatesInQueue(agentOnScreen, crewQueueEnabled)
+        ? () => sendWakeTurn(agentOnScreen.id)
+        : undefined,
+    [queueModeEnabled, crewQueueEnabled, agentOnScreen, sendWakeTurn],
+  );
+
+  const shortcutTarget = useCallback(() => {
+    const focused = focusedQueueRow();
+    if (focused.kind === 'other') return null;
+    const id = focused.kind === 'session' ? focused.sessionId : agentOnScreenId;
+    const session = enrichedLocalSessions.find((entry) => entry.id === id);
+    if (!session) return null;
+    return { session, actions: actionsFor(session), row: focused.kind === 'session' ? focused.row : undefined };
+  }, [agentOnScreenId, enrichedLocalSessions, actionsFor]);
+
+  const handleSettleShortcut = useMemo(
+    () =>
+      queueModeEnabled || handleSettleActiveTurn
+        ? () => {
+            const target = shortcutTarget();
+            if (target?.actions.settle) sendSettleTurn(target.session.id);
           }
         : undefined,
-    [queueModeEnabled, activeSessionQueueEligible, activeSessionId, enrichedLocalSessions],
+    [queueModeEnabled, handleSettleActiveTurn, shortcutTarget, sendSettleTurn],
+  );
+
+  const handleSnoozeShortcut = useMemo(
+    () =>
+      queueModeEnabled
+        ? () => {
+            const target = shortcutTarget();
+            if (target?.actions.snooze) openSnoozeForSession(target.session, target.row);
+          }
+        : undefined,
+    [queueModeEnabled, shortcutTarget, openSnoozeForSession],
   );
 
   useEffect(() => {
@@ -144,21 +187,20 @@ export function useAttentionQueue({
   }, [enrichedLocalSessions, snoozeMenu]);
 
   const restoreSnoozeFocus = useCallback((reason: 'cancel' | 'choose' | 'removed') => {
-    const selectionUnchanged = snoozeMenu?.activeSessionId === useSessionStore.getState().activeSessionId;
+    const selectionUnchanged = snoozeMenu?.view === useSessionStore.getState().view && sameLeaf(snoozeMenu.leaf, currentActiveLeaf());
     if (reason === 'cancel' && selectionUnchanged && snoozeMenu?.origin?.isConnected) {
       snoozeMenu.origin.focus({ preventScroll: true });
       return;
     }
     const workspace = document.querySelector<HTMLElement>(
-      '.terminal-wrapper.active .session-terminal-workspace[data-session-visible="1"]',
+      '.terminal-wrapper.active .session-terminal-desktop[data-session-visible="1"]',
     );
     const leaf = workspace?.querySelector<HTMLElement>(`[data-pane-id="${workspace.dataset.activeLeafId}"]`);
     const terminal = leaf?.querySelector<HTMLElement>('.terminal-container');
     const editor = leaf?.querySelector<HTMLElement>('[role="textbox"], textarea, [contenteditable="true"]');
-    const tile = leaf?.querySelector<HTMLElement>('.workspace-dock-tile-body');
-    const grid = document.querySelector<HTMLElement>('.grid-view-stage');
+    const tile = leaf?.querySelector<HTMLElement>('.desktop-dock-tile-body');
     const home = document.querySelector<HTMLElement>('[data-testid="sidebar-home"]');
-    const destination = [terminal, editor, tile, grid, home].find((element) => element && element.getClientRects().length > 0);
+    const destination = [terminal, editor, tile, home].find((element) => element && element.getClientRects().length > 0);
     destination?.focus({ preventScroll: true });
   }, [snoozeMenu]);
 
@@ -166,9 +208,9 @@ export function useAttentionQueue({
     queueModeEnabled,
     crewQueueEnabled,
     queueBands,
-    activeWorkspaceForCommands,
+    activeGroupForCommands,
     activeSessionForCommands,
-    activeSessionQueueEligible,
+    handleWakeActiveSession,
     wantsAttention,
     waitingLocalSessions,
     handleSettleActiveTurn,
@@ -177,6 +219,8 @@ export function useAttentionQueue({
     restoreSnoozeFocus,
     openSnoozeMenu,
     handleSnoozeActiveSession,
+    handleSettleShortcut,
+    handleSnoozeShortcut,
     handleToggleQueueMode,
     handleToggleCrewQueue,
   };

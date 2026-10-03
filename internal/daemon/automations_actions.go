@@ -5,6 +5,8 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"slices"
+	"strconv"
 	"strings"
 
 	"github.com/victorarias/attn/internal/automation"
@@ -15,18 +17,18 @@ import (
 func automationDefinitionYAML(def store.AutomationDefinition) (string, error) {
 	var spec automation.DefinitionSpec
 	if err := json.Unmarshal([]byte(def.SpecJSON), &spec); err != nil {
-		return "", fmt.Errorf("parse stored definition %s: %w", def.ID, err)
+		return "", fmt.Errorf("parse stored definition %d: %w", def.ID, err)
 	}
 	rendered, err := automation.MarshalDefinitionYAML(spec)
 	if err != nil {
-		return "", fmt.Errorf("render definition %s: %w", def.ID, err)
+		return "", fmt.Errorf("render definition %d: %w", def.ID, err)
 	}
 	return string(rendered), nil
 }
 
 const automationRunSummaryListCap = 100
 
-func (d *Daemon) actionAutomationDefinitionsGet(msg *protocol.AutomationDefinitionsGetMessage) protocol.AutomationDefinitionsResultMessage {
+func (d *Daemon) actionAutomationDefinitionsGet(msg *protocol.AutomationDefinitionsGetMessage, scope string) protocol.AutomationDefinitionsResultMessage {
 	result := protocol.AutomationDefinitionsResultMessage{
 		Event:     protocol.EventAutomationDefinitionsResult,
 		RequestID: msg.RequestID,
@@ -35,6 +37,9 @@ func (d *Daemon) actionAutomationDefinitionsGet(msg *protocol.AutomationDefiniti
 	if err != nil {
 		result.Error = protocol.Ptr(err.Error())
 		return result
+	}
+	if scope != "" {
+		definitions = slices.DeleteFunc(definitions, func(def store.AutomationDefinition) bool { return def.ProfileID != scope })
 	}
 	lastRuns, err := d.store.LatestAutomationRunPerDefinition()
 	if err != nil {
@@ -53,12 +58,12 @@ func (d *Daemon) actionAutomationDefinitionsGet(msg *protocol.AutomationDefiniti
 	return result
 }
 
-func (d *Daemon) actionAutomationDefinitionGet(msg *protocol.AutomationDefinitionGetMessage) protocol.AutomationDefinitionResultMessage {
+func (d *Daemon) actionAutomationDefinitionGet(msg *protocol.AutomationDefinitionGetMessage, scope string) protocol.AutomationDefinitionResultMessage {
 	result := protocol.AutomationDefinitionResultMessage{
 		Event:     protocol.EventAutomationDefinitionResult,
 		RequestID: msg.RequestID,
 	}
-	if msg.DefinitionID == "" {
+	if msg.DefinitionID == 0 {
 		template, err := automation.StarterTemplateYAML()
 		if err != nil {
 			result.Error = protocol.Ptr(err.Error())
@@ -79,7 +84,7 @@ func (d *Daemon) actionAutomationDefinitionGet(msg *protocol.AutomationDefinitio
 		result.Error = protocol.Ptr(err.Error())
 		return result
 	}
-	if definition == nil {
+	if definition == nil || d.automationOutOfScope(msg.DefinitionID, scope) {
 		result.Error = protocol.Ptr("automation definition not found")
 		return result
 	}
@@ -96,11 +101,16 @@ func (d *Daemon) actionAutomationDefinitionGet(msg *protocol.AutomationDefinitio
 	return result
 }
 
-func (d *Daemon) actionAutomationRunsGet(msg *protocol.AutomationRunsGetMessage) protocol.AutomationRunsResultMessage {
+func (d *Daemon) actionAutomationRunsGet(msg *protocol.AutomationRunsGetMessage, scope string) protocol.AutomationRunsResultMessage {
 	result := protocol.AutomationRunsResultMessage{
 		Event:        protocol.EventAutomationRunsResult,
 		RequestID:    msg.RequestID,
 		DefinitionID: msg.DefinitionID,
+	}
+	if d.automationOutOfScope(msg.DefinitionID, scope) {
+		result.Success = true
+		result.Runs = []protocol.AutomationRunSummary{}
+		return result
 	}
 	runs, err := d.store.ListAutomationRunsWithOccurrenceKeys(msg.DefinitionID, automationRunSummaryListCap+1)
 	if err != nil {
@@ -132,12 +142,15 @@ func (d *Daemon) actionAutomationValidate(msg *protocol.AutomationValidateMessag
 	return result
 }
 
-func (d *Daemon) actionAutomationApply(ctx context.Context, msg *protocol.AutomationApplyMessage) protocol.AutomationApplyResultMessage {
+func (d *Daemon) actionAutomationApply(ctx context.Context, msg *protocol.AutomationApplyMessage, scope string) protocol.AutomationApplyResultMessage {
 	result := protocol.AutomationApplyResultMessage{
 		Event:     protocol.EventAutomationApplyResult,
 		RequestID: msg.RequestID,
 	}
-	definition, err := d.automationApplyWithGuards(ctx, msg.DefinitionYaml, msg.ExpectedID, msg.ExpectedRevision)
+	if scope != "" && protocol.Deref(msg.ProfileID) == "" {
+		msg.ProfileID = protocol.Ptr(scope)
+	}
+	definition, err := d.automationApplyWithGuards(ctx, msg.DefinitionYaml, protocol.Deref(msg.ProfileID), scope, msg.ExpectedID, msg.ExpectedRevision, &launchDesktopWrite{ref: msg.LaunchDesktop, name: msg.LaunchDesktopName, setting: msg.LaunchDesktopSetting})
 	if err != nil {
 		result.Error = protocol.Ptr(err.Error())
 		var refusal *automationRefusal
@@ -156,10 +169,14 @@ func (d *Daemon) actionAutomationApply(ctx context.Context, msg *protocol.Automa
 	return result
 }
 
-func (d *Daemon) actionAutomationSetEnabled(ctx context.Context, msg *protocol.AutomationSetEnabledMessage) protocol.AutomationSetEnabledResultMessage {
+func (d *Daemon) actionAutomationSetEnabled(ctx context.Context, msg *protocol.AutomationSetEnabledMessage, scope string) protocol.AutomationSetEnabledResultMessage {
 	result := protocol.AutomationSetEnabledResultMessage{
 		Event:     protocol.EventAutomationSetEnabledResult,
 		RequestID: msg.RequestID,
+	}
+	if d.automationOutOfScope(msg.DefinitionID, scope) {
+		result.Error = protocol.Ptr(automationNotFound(msg.DefinitionID))
+		return result
 	}
 	definition, err := d.automationSetEnabled(ctx, msg.DefinitionID, msg.Enabled)
 	if err != nil {
@@ -172,10 +189,14 @@ func (d *Daemon) actionAutomationSetEnabled(ctx context.Context, msg *protocol.A
 	return result
 }
 
-func (d *Daemon) actionAutomationDelete(ctx context.Context, msg *protocol.AutomationDeleteMessage) protocol.AutomationDeleteResultMessage {
+func (d *Daemon) actionAutomationDelete(ctx context.Context, msg *protocol.AutomationDeleteMessage, scope string) protocol.AutomationDeleteResultMessage {
 	result := protocol.AutomationDeleteResultMessage{
 		Event:     protocol.EventAutomationDeleteResult,
 		RequestID: msg.RequestID,
+	}
+	if d.automationOutOfScope(msg.DefinitionID, scope) {
+		result.Error = protocol.Ptr(automationNotFound(msg.DefinitionID))
+		return result
 	}
 	if err := d.automationDelete(ctx, msg.DefinitionID); err != nil {
 		result.Error = protocol.Ptr(err.Error())
@@ -185,10 +206,14 @@ func (d *Daemon) actionAutomationDelete(ctx context.Context, msg *protocol.Autom
 	return result
 }
 
-func (d *Daemon) actionAutomationCleanup(ctx context.Context, msg *protocol.AutomationCleanupMessage) protocol.AutomationCleanupResultMessage {
+func (d *Daemon) actionAutomationCleanup(ctx context.Context, msg *protocol.AutomationCleanupMessage, scope string) protocol.AutomationCleanupResultMessage {
 	result := protocol.AutomationCleanupResultMessage{
 		Event:     protocol.EventAutomationCleanupResult,
 		RequestID: msg.RequestID,
+	}
+	if d.automationOutOfScope(msg.DefinitionID, scope) {
+		result.Error = protocol.Ptr(automationNotFound(msg.DefinitionID))
+		return result
 	}
 	cleaned, keptDirty, keptActive, err := d.automationCleanup(ctx, msg.DefinitionID)
 	if err != nil {
@@ -202,7 +227,7 @@ func (d *Daemon) actionAutomationCleanup(ctx context.Context, msg *protocol.Auto
 	return result
 }
 
-func (d *Daemon) actionAutomationRun(ctx context.Context, msg *protocol.AutomationRunMessage) protocol.AutomationRunResultMessage {
+func (d *Daemon) actionAutomationRun(ctx context.Context, msg *protocol.AutomationRunMessage, scope string) protocol.AutomationRunResultMessage {
 	result := protocol.AutomationRunResultMessage{
 		Event:     protocol.EventAutomationRunResult,
 		RequestID: protocol.Ptr(msg.RequestID),
@@ -211,6 +236,10 @@ func (d *Daemon) actionAutomationRun(ctx context.Context, msg *protocol.Automati
 	inputJSON := strings.TrimSpace(protocol.Deref(msg.InputJson))
 	if prURL != "" && inputJSON != "" {
 		result.Error = protocol.Ptr("pr_url and input_json are mutually exclusive")
+		return result
+	}
+	if d.automationOutOfScope(msg.DefinitionID, scope) {
+		result.Error = protocol.Ptr(automationNotFound(msg.DefinitionID))
 		return result
 	}
 	var run *store.AutomationRun
@@ -232,11 +261,19 @@ func (d *Daemon) actionAutomationRun(ctx context.Context, msg *protocol.Automati
 
 func (d *Daemon) buildAutomationDefinitionSummary(def store.AutomationDefinition, lastRun *store.AutomationRunWithOccurrenceKey) protocol.AutomationDefinitionSummary {
 	summary := protocol.AutomationDefinitionSummary{
+		ProfileID: def.ProfileID,
 		ID:        def.ID,
 		Name:      def.Name,
 		Enabled:   def.Enabled,
 		Revision:  def.Revision,
 		UpdatedAt: string(protocol.NewTimestamp(def.UpdatedAt)),
+	}
+	if item, err := d.store.LaunchDesktopItem("automation", strconv.Itoa(def.ID)); err == nil {
+		setting := protocolLaunchItem(item).Setting
+		summary.LaunchDesktop = &setting
+		summary.ProfileName = protocol.Ptr(item.ProfileName)
+	} else {
+		d.logf("automation launch desktop %d: %v", def.ID, err)
 	}
 	if lastRun != nil {
 		runSummary := d.automationRunSummary(*lastRun)
@@ -244,7 +281,7 @@ func (d *Daemon) buildAutomationDefinitionSummary(def store.AutomationDefinition
 	}
 	var spec automation.DefinitionSpec
 	if err := json.Unmarshal([]byte(def.SpecJSON), &spec); err != nil {
-		d.logf("automation definition summary parse %s: %v", def.ID, err)
+		d.logf("automation definition summary parse %d: %v", def.ID, err)
 		return summary
 	}
 	summary.TriggerType = spec.Trigger.Type
@@ -262,7 +299,6 @@ func (d *Daemon) automationRunSummary(run store.AutomationRunWithOccurrenceKey) 
 		State:         run.State,
 		SeedID:        protocol.Ptr(run.SeedID),
 		SessionID:     protocol.Ptr(run.SessionID),
-		PaneID:        protocol.Ptr(run.PaneID),
 		CreatedAt:     string(protocol.NewTimestamp(run.CreatedAt)),
 		UpdatedAt:     string(protocol.NewTimestamp(run.UpdatedAt)),
 		OccurrenceKey: protocol.Ptr(run.OccurrenceKey),
@@ -293,4 +329,36 @@ func (d *Daemon) automationRunSummary(run store.AutomationRunWithOccurrenceKey) 
 		summary.Automation = provenance
 	}
 	return summary
+}
+
+// automationOutOfScope reports a definition of a profile other than scope, which the request treats as unknown.
+func (d *Daemon) automationOutOfScope(id int, scope string) bool {
+	if scope == "" || id == 0 {
+		return false
+	}
+	definition, err := d.store.GetAutomationDefinitionIncludingDeleted(id)
+	return err == nil && definition != nil && definition.ProfileID != scope
+}
+
+func automationNotFound(id int) string {
+	return fmt.Sprintf("automation %d not found", id)
+}
+
+// automationSocketScope is the profile of the agent a socket request names, or no scope for the user's own terminal.
+func (d *Daemon) automationSocketScope(msg any) string {
+	raw, err := json.Marshal(msg)
+	if err != nil {
+		return ""
+	}
+	var caller struct {
+		SourceSessionID string `json:"source_session_id"`
+	}
+	if json.Unmarshal(raw, &caller) != nil || strings.TrimSpace(caller.SourceSessionID) == "" {
+		return ""
+	}
+	profileID, err := d.sessionProfileID(caller.SourceSessionID)
+	if err != nil {
+		return ""
+	}
+	return profileID
 }

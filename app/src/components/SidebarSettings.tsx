@@ -9,12 +9,8 @@ export function SidebarSettings({
   onToggleCrewQueue,
   harnessLogosEnabled,
   onToggleHarnessLogos,
-  workspaceSelectionStyle,
-  onWorkspaceSelectionStyleChange,
-  showSessionless,
-  onToggleShowSessionless,
-  displayMode,
-  setDisplayMode,
+  desktopSelectionStyle,
+  onDesktopSelectionStyleChange,
 }: Pick<
   SidebarProps,
   | 'queueModeEnabled'
@@ -23,14 +19,9 @@ export function SidebarSettings({
   | 'onToggleCrewQueue'
   | 'harnessLogosEnabled'
   | 'onToggleHarnessLogos'
-  | 'workspaceSelectionStyle'
-  | 'onWorkspaceSelectionStyleChange'
-  | 'showSessionless'
-  | 'onToggleShowSessionless'
-> & {
-  displayMode: 'open' | 'tight' | 'boxed';
-  setDisplayMode: (mode: 'open' | 'tight' | 'boxed') => void;
-}) {
+  | 'desktopSelectionStyle'
+  | 'onDesktopSelectionStyleChange'
+>) {
   const [settingsOpen, setSettingsOpen] = useState(false);
   const anchorRef = useRef<HTMLDivElement>(null);
   const triggerRef = useRef<HTMLButtonElement>(null);
@@ -111,20 +102,6 @@ export function SidebarSettings({
               aria-hidden="true"
             />
           </button>
-          <span className="sidebar-settings-label">Display</span>
-          <div className="sidebar-display-toggle" role="group" aria-label="Sidebar display">
-            {(['open', 'tight', 'boxed'] as const).map((mode) => (
-              <button
-                key={mode}
-                className={displayMode === mode ? 'active' : ''}
-                onClick={() => {
-                  setDisplayMode(mode);
-                }}
-              >
-                {mode}
-              </button>
-            ))}
-          </div>
           <span className="sidebar-settings-sub-label">Tile focus</span>
           <div
             className="sidebar-display-toggle sidebar-display-toggle--selection"
@@ -135,28 +112,14 @@ export function SidebarSettings({
               <button
                 type="button"
                 key={style}
-                className={workspaceSelectionStyle === style ? 'active' : ''}
-                aria-pressed={workspaceSelectionStyle === style}
-                onClick={() => onWorkspaceSelectionStyleChange?.(style)}
+                className={desktopSelectionStyle === style ? 'active' : ''}
+                aria-pressed={desktopSelectionStyle === style}
+                onClick={() => onDesktopSelectionStyleChange?.(style)}
               >
                 {style}
               </button>
             ))}
           </div>
-          <button
-            type="button"
-            className="sidebar-settings-switch-row"
-            role="switch"
-            aria-checked={showSessionless}
-            data-testid="toggle-show-sessionless"
-            onClick={() => onToggleShowSessionless?.()}
-          >
-            <span className="sidebar-settings-switch-label">Tile-only workspaces</span>
-            <span
-              className={`sidebar-settings-switch ${showSessionless ? 'on' : ''}`}
-              aria-hidden="true"
-            />
-          </button>
         </dialog>
       )}
     </div>

@@ -22,7 +22,7 @@ func TestAHaltRecordedBeforeTheSessionStartedDoesNotEndItsTurn(t *testing.T) {
 		transcript.Halt()
 		w.advance(time.Hour)
 
-		if err := cli.RegisterWithAgent("s1", "checkout essay", cwd, string(protocol.SessionAgentClaude)); err != nil {
+		if err := w.InjectSession("s1", "checkout essay", cwd, protocol.SessionAgentClaude); err != nil {
 			t.Fatalf("register: %v", err)
 		}
 		if err := cli.ObserveAgentConversation("s1", transcript.ConversationID, transcript.Path); err != nil {

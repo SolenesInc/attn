@@ -1,12 +1,16 @@
 package daemon
 
 import (
+	"path/filepath"
 	"slices"
 	"strings"
 	"testing"
 
 	"github.com/victorarias/attn/internal/garden"
+	"github.com/victorarias/attn/internal/hub"
+	"github.com/victorarias/attn/internal/launchcontract"
 	"github.com/victorarias/attn/internal/protocol"
+	"github.com/victorarias/attn/internal/store"
 )
 
 func actionNames(actions []protocol.SessionReopenAction) []string {
@@ -32,18 +36,77 @@ func wantReopenVerdict(
 	}
 }
 
-func TestReopenVerdictSendsARemoteSessionToItsOwnDaemon(t *testing.T) {
+type reopenSession struct {
+	ID         string
+	Directory  string
+	Branch     string
+	Repo       string
+	Agent      string
+	Resume     string
+	ClosedBy   string
+	Reason     string
+	CostCursor string
+	NoIntent   bool
+	Intent     *store.LaunchIntent
+	ProfileID  string
+}
+
+func closeReopenSession(t *testing.T, d *Daemon, session reopenSession) {
+	t.Helper()
+	now := protocol.TimestampNow().String()
+	if session.ProfileID == "" {
+		session.ProfileID = defaultProfileID(t, d.store)
+	}
+	entry := &protocol.Session{
+		ID: session.ID, Label: session.ID,
+		Agent:     protocol.SessionAgent(session.Agent),
+		Directory: session.Directory, ProfileID: session.ProfileID,
+		State:      protocol.SessionStateIdle,
+		StateSince: now, StateUpdatedAt: now, LastSeen: now,
+	}
+	if session.Branch != "" {
+		entry.Branch = protocol.Ptr(session.Branch)
+	}
+	if session.Repo != "" {
+		entry.IsWorktree = protocol.Ptr(true)
+		entry.MainRepo = protocol.Ptr(session.Repo)
+	}
+	d.store.Add(entry)
+	if !session.NoIntent {
+		intent := store.LaunchIntent{ApprovalRoute: launchcontract.ApprovalRouteUser}
+		if session.Intent != nil {
+			intent = *session.Intent
+		}
+		d.store.SetLaunchIntent(session.ID, intent)
+	}
+	if session.Resume != "" {
+		d.persistResumeSessionID(session.ID, session.Resume)
+	}
+	if session.CostCursor != "" {
+		if err := d.store.SetSessionCostCursor(session.ID, session.CostCursor); err != nil {
+			t.Fatalf("set the cost cursor of %s: %v", session.ID, err)
+		}
+	}
+	closedBy := session.ClosedBy
+	if closedBy == "" {
+		closedBy = store.SessionClosedByUser
+	}
+	d.closeSession(session.ID, store.SessionClose{By: closedBy, Reason: session.Reason})
+	if !d.store.SessionClosed(session.ID) {
+		t.Fatalf("session %s did not close into the ledger", session.ID)
+	}
+}
+
+func TestReopenVerdictRefusesEveryRemoteSessionWithTheReleaseReason(t *testing.T) {
 	endpoints := []protocol.EndpointInfo{
-		{ID: "outpost-7", Name: "big-linux", Status: "connected"},
-		{ID: "outpost-8", Name: "sleepy-linux", Status: "disconnected"},
+		{ID: "outpost-7", Name: "big-linux", Status: hub.StatusUnsupported},
 	}
 	cases := map[string]struct {
 		endpointID string
-		wantTail   string
+		wantHost   string
 	}{
-		"reachable":   {endpointID: "outpost-7", wantTail: "reopen it there"},
-		"unreachable": {endpointID: "outpost-8", wantTail: "retry when it is"},
-		"forgotten":   {endpointID: "outpost-nobody-configured", wantTail: "retry when it is"},
+		"saved":   {endpointID: "outpost-7", wantHost: "big-linux"},
+		"removed": {endpointID: "outpost-nobody-configured", wantHost: "outpost-nobody-configured"},
 	}
 	for name, tc := range cases {
 		t.Run(name, func(t *testing.T) {
@@ -55,14 +118,40 @@ func TestReopenVerdictSendsARemoteSessionToItsOwnDaemon(t *testing.T) {
 				t.Fatal("a remote session went on being decided on this daemon")
 			}
 			wantReopenVerdict(t, verdict, false, nil)
-			if !strings.Contains(verdict.Reason, tc.endpointID) &&
-				!strings.Contains(verdict.Reason, "big-linux") &&
-				!strings.Contains(verdict.Reason, "sleepy-linux") {
-				t.Errorf("reason = %q, want the host named", verdict.Reason)
+			if !strings.Contains(verdict.Reason, tc.wantHost) || !strings.Contains(verdict.Reason, hub.UnsupportedReason) {
+				t.Errorf("reason = %q, want %s named with the release reason", verdict.Reason, tc.wantHost)
 			}
-			if !strings.Contains(verdict.Reason, tc.wantTail) {
-				t.Errorf("reason = %q, want it to end with %q", verdict.Reason, tc.wantTail)
+			if strings.Contains(verdict.Reason, "retry") {
+				t.Errorf("reason = %q offers a retry that cannot succeed", verdict.Reason)
 			}
 		})
+	}
+}
+
+func TestReopenVerdictLandsInTheRecordedProfile(t *testing.T) {
+	d := NewForTesting(filepath.Join(t.TempDir(), "attn.sock"))
+	writeCodexRolloutFixture(t, "conv-profile")
+	closeReopenSession(t, d, reopenSession{
+		ID: "in-profile", Directory: t.TempDir(), Agent: "codex", Resume: "conv-profile",
+	})
+
+	verdict := decidedReopenVerdict(t, d, "in-profile")
+	if verdict.ProfileID != defaultProfileID(t, d.store) || verdict.ProfileDeleted {
+		t.Errorf("profile = %q (deleted %v), want the recorded default profile", verdict.ProfileID, verdict.ProfileDeleted)
+	}
+}
+
+func TestReopenVerdictNamesADeletedProfile(t *testing.T) {
+	d := NewForTesting(filepath.Join(t.TempDir(), "attn.sock"))
+	writeCodexRolloutFixture(t, "conv-gone-profile")
+	work := createTestProfile(t, d.store, "Work")
+	closeReopenSession(t, d, reopenSession{
+		ID: "gone-profile", Directory: t.TempDir(), Agent: "codex", Resume: "conv-gone-profile", ProfileID: work.ID,
+	})
+	deleteTestProfile(t, d.store, work.ID)
+
+	verdict := decidedReopenVerdict(t, d, "gone-profile")
+	if verdict.ProfileID != work.ID || !verdict.ProfileDeleted {
+		t.Errorf("profile = %q (deleted %v), want the deleted Work profile named", verdict.ProfileID, verdict.ProfileDeleted)
 	}
 }

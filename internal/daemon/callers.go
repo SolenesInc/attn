@@ -1,6 +1,18 @@
 package daemon
 
-import "github.com/victorarias/attn/internal/protocol"
+import (
+	"reflect"
+	"strings"
+
+	"github.com/victorarias/attn/internal/protocol"
+)
+
+// callerFields name the caller in every command that carries one; a command whose caller travels
+// in id or session_id is listed in resolveCallers.
+var callerFields = map[string]bool{
+	"source_session_id": true, "sender_session_id": true, "recipient_session_id": true,
+	"caller_session_id": true, "caller_id": true, "proposed_by": true,
+}
 
 // resolveCallers maps the id a hook or CLI process sends for itself, ATTN_SESSION_ID, from its terminal
 // to the session that terminal shows. Targets, and conversation reports for the router, keep their id.
@@ -10,9 +22,22 @@ func (d *Daemon) resolveCallers(msg any) {
 			*id = d.callerID(*id)
 		}
 	}
+	if v := reflect.ValueOf(msg); v.Kind() == reflect.Pointer && v.Elem().Kind() == reflect.Struct {
+		v = v.Elem()
+		for i := range v.NumField() {
+			name, _, _ := strings.Cut(v.Type().Field(i).Tag.Get("json"), ",")
+			if !callerFields[name] {
+				continue
+			}
+			switch field := v.Field(i); {
+			case field.Kind() == reflect.String:
+				field.SetString(d.callerID(field.String()))
+			case field.Kind() == reflect.Pointer && !field.IsNil() && field.Elem().Kind() == reflect.String:
+				field.Elem().SetString(d.callerID(field.Elem().String()))
+			}
+		}
+	}
 	switch m := msg.(type) {
-	case *protocol.RegisterMessage:
-		self(&m.ID)
 	case *protocol.StateMessage:
 		self(&m.ID)
 	case *protocol.StopMessage:
@@ -35,38 +60,6 @@ func (d *Daemon) resolveCallers(msg any) {
 		self(&m.ID)
 	case *protocol.PullRequestUnwatchMessage:
 		self(&m.ID)
-	case *protocol.AgentMsgMessage:
-		self(&m.SourceSessionID)
-	case *protocol.AgentCloseMessage:
-		self(&m.SourceSessionID)
-	case *protocol.AgentInboxMessage:
-		self(&m.RecipientSessionID)
-	case *protocol.AgentMsgStatusMessage:
-		self(&m.SenderSessionID)
-	case *protocol.SeedPlantMessage:
-		self(m.SourceSessionID)
-	case *protocol.SeedPlotMessage:
-		self(m.SourceSessionID)
-	case *protocol.SeedListMessage:
-		self(m.SourceSessionID)
-	case *protocol.SeedSearchMessage:
-		self(m.SourceSessionID)
-	case *protocol.SeedShowMessage:
-		self(m.SourceSessionID)
-	case *protocol.SeedArtifactTransferMessage:
-		self(m.SourceSessionID)
-	case *protocol.SeedTransitionMessage:
-		self(m.SourceSessionID)
-	case *protocol.SeedNoteMessage:
-		self(m.SourceSessionID)
-	case *protocol.SeedNotesMessage:
-		self(m.SourceSessionID)
-	case *protocol.SeedWatchMessage:
-		self(&m.SourceSessionID)
-	case *protocol.SeedReadyMessage:
-		self(m.SourceSessionID)
-	case *protocol.SeedSendToChiefMessage:
-		self(m.SourceSessionID)
 	case *protocol.CrewPrimeMessage:
 		self(&m.SessionID)
 	case *protocol.CrewHandoffMessage:
@@ -75,14 +68,8 @@ func (d *Daemon) resolveCallers(msg any) {
 		self(m.Run.SessionID)
 	case *protocol.WorkflowRunListMessage:
 		self(m.SessionID)
-	case *protocol.DelegateMessage:
-		self(m.SourceSessionID)
 	case *protocol.NotebookGuideMessage:
 		self(m.SessionID)
-	case *protocol.JournalAppendMessage:
-		self(m.SourceSessionID)
-	case *protocol.PresentOpenMessage:
-		self(&m.SourceSessionID)
 	case *protocol.OpenMarkdownMessage:
 		self(m.SessionID)
 	case *protocol.OpenSeedMessage:
@@ -93,7 +80,5 @@ func (d *Daemon) resolveCallers(msg any) {
 		self(m.SessionID)
 	case *protocol.RenameSessionMessage:
 		self(&m.SessionID)
-	case *protocol.AutoModeProposeMessage:
-		self(m.ProposedBy)
 	}
 }

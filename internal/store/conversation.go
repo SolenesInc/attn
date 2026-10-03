@@ -155,8 +155,9 @@ func (s *Store) ConversationOwner(sessionID, nativeID string) string {
 	}
 	var owner string
 	if err := s.db.QueryRow(`SELECT id FROM sessions WHERE resume_session_id = ? AND id != ?
+		AND profile_id = (SELECT profile_id FROM sessions WHERE id = ?)
 		ORDER BY closed_at = '' DESC, closed_at DESC LIMIT 1`,
-		strings.TrimSpace(nativeID), strings.TrimSpace(sessionID)).Scan(&owner); err != nil {
+		strings.TrimSpace(nativeID), strings.TrimSpace(sessionID), strings.TrimSpace(sessionID)).Scan(&owner); err != nil {
 		return ""
 	}
 	return owner

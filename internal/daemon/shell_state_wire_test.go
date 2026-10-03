@@ -15,7 +15,7 @@ func TestAShellIsWorkingOnlyWhileACommandRunsWhateverItsWorkerClaims(t *testing.
 	w := newWorld(t)
 	t.Cleanup(func() { ptyworker.ReapDataDir(w.Dir) })
 	app, cli := w.App(), w.Client()
-	shell := w.Spawn(app, workspaceShell, w.Path("shop"))
+	shell := w.Spawn(app, shellHarness, w.Path("shop"))
 	testworld.AwaitSession(app, shell, func(s protocol.Session) bool { return s.State == protocol.SessionStateIdle })
 	terminal := app.Terminal(shell)
 	attached := testworld.Request(app, protocol.AttachSessionMessage{Cmd: protocol.CmdAttachSession, ID: terminal},
@@ -71,7 +71,7 @@ func TestAShellIsWorkingOnlyWhileACommandRunsWhateverItsWorkerClaims(t *testing.
 	if workerClaims == 0 {
 		t.Errorf("the worker never claimed the shell was working:\n%s", describeStateExplain(observations))
 	}
-	exitWorkspaceShells(app, shell)
+	exitShells(app, shell)
 }
 
 func countShellStateStretches(stretches []protocol.SessionState, state protocol.SessionState) int {

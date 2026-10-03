@@ -265,15 +265,14 @@ func attachReviveAutomationSession(t *testing.T, w *world, app *testworld.Peer) 
 		t.Fatal(err)
 	}
 	applyAutomation(t, w.Client(), fmt.Sprintf(`api_version: attn.dev/automations/v1alpha1
-id: nightly
 name: Nightly check
 trigger: {type: manual}
 prompt: Check the build.
 launch: {driver: claude, model: sonnet, effort: high}
 location: {type: directory, path: %q}
 `, w.Path("check")))
-	awaitAutomationChanged(app, "nightly")
-	run := testworld.Request(app, protocol.AutomationRunMessage{Cmd: protocol.CmdAutomationRun, DefinitionID: "nightly", RequestID: "tonight"},
+	awaitAutomationChanged(app, 1)
+	run := testworld.Request(app, protocol.AutomationRunMessage{Cmd: protocol.CmdAutomationRun, DefinitionID: 1, RequestID: "tonight"},
 		protocol.EventAutomationRunResult, automationAnswer[protocol.AutomationRunResultMessage]("tonight"))
 	if !run.Success || protocol.Deref(run.Run.SessionID) == "" {
 		t.Fatalf("automation_run = %+v, want a delivered run with its session", run)

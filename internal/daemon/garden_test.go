@@ -31,11 +31,9 @@ func newGardenDaemon(t *testing.T) *Daemon {
 	d.ensureGardenCollections()
 	now := string(protocol.TimestampNow())
 	d.store.Add(&protocol.Session{
-		ID: "sess-a", Label: "a",
+		ID: "sess-a", Label: "a", ProfileID: defaultProfileID(t, d.store),
 		State: "idle", StateSince: now, StateUpdatedAt: now, LastSeen: now,
 	})
-	d.workspaces.register("ws-1", "a", "/tmp/a", "a0", false, false)
-	d.workspaces.associateSession("sess-a", "ws-1", "a")
 	return d
 }
 
@@ -53,10 +51,9 @@ func addGardenSession(t *testing.T, d *Daemon, id string) {
 	t.Helper()
 	now := string(protocol.TimestampNow())
 	d.store.Add(&protocol.Session{
-		ID: id, Label: id, State: "idle",
+		ID: id, Label: id, State: "idle", ProfileID: defaultProfileID(t, d.store),
 		StateSince: now, StateUpdatedAt: now, LastSeen: now,
 	})
-	d.workspaces.associateSession(id, "ws-1", id)
 }
 
 func move(t *testing.T, d *Daemon, session, seedID string, verb garden.Verb, reason, member string) protocol.Seed {

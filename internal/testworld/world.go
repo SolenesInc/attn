@@ -3,6 +3,8 @@ package testworld
 import (
 	"bytes"
 	"context"
+	"encoding/json"
+	"errors"
 	"net"
 	"net/http"
 	"os"
@@ -20,16 +22,15 @@ import (
 )
 
 type World struct {
-	T          testing.TB
-	Dir        string
-	Socket     string
-	Vars       []string
-	kit        *fakeagent.Kit
-	Dial       func(ctx context.Context) (net.Conn, error)
-	DialUnix   func() (net.Conn, error)
-	WSAddr     string
-	peers      []*Peer
-	workspaces map[string]string
+	T        testing.TB
+	Dir      string
+	Socket   string
+	Vars     []string
+	kit      *fakeagent.Kit
+	Dial     func(ctx context.Context) (net.Conn, error)
+	DialUnix func() (net.Conn, error)
+	WSAddr   string
+	peers    []*Peer
 }
 
 func Prepare(t testing.TB, wrapper string, harnesses ...fakeagent.Harness) *World {
@@ -78,7 +79,16 @@ func (w *World) Client() *client.Client {
 
 func (w *World) App() *Peer {
 	w.T.Helper()
-	p := w.ConnectApp()
+	return w.AppOn("")
+}
+
+func (w *World) AppOn(profileID string) *Peer {
+	w.T.Helper()
+	hello := w.appHello()
+	if profileID != "" {
+		hello.ProfileID = protocol.Ptr(profileID)
+	}
+	p := w.Connect(hello, nil)
 	p.Initial = Await[protocol.InitialStateMessage](p, protocol.EventInitialState, nil)
 	if got := protocol.Deref(p.Initial.ProtocolVersion); got != protocol.ProtocolVersion {
 		w.T.Fatalf("daemon speaks protocol %q, want %q", got, protocol.ProtocolVersion)
@@ -101,7 +111,7 @@ func (w *World) appHello() protocol.ClientHelloMessage {
 		Cmd:          protocol.CmdClientHello,
 		ClientKind:   "tauri-app",
 		Version:      "protocol-" + protocol.ProtocolVersion,
-		Capabilities: []string{protocol.CapabilityWorkspaceSessions, protocol.CapabilityBinaryPtyOutput, protocol.CapabilityKittyImages},
+		Capabilities: []string{protocol.CapabilityBinaryPtyOutput, protocol.CapabilityKittyImages},
 		ClientToken:  protocol.Ptr(strings.TrimSpace(string(token))),
 	}
 }
@@ -135,7 +145,15 @@ func (w *World) dial(hello protocol.ClientHelloMessage, header http.Header) *Pee
 
 func (w *World) Terminal(sessionID string) string {
 	w.T.Helper()
-	p := w.dial(w.appHello(), nil)
+	hello := w.appHello()
+	if sessions, err := w.Client().Query(""); err == nil {
+		for _, session := range sessions {
+			if session.ID == sessionID && session.ProfileID != "" {
+				hello.ProfileID = protocol.Ptr(session.ProfileID)
+			}
+		}
+	}
+	p := w.dial(hello, nil)
 	defer p.Close()
 	return p.Terminal(sessionID)
 }
@@ -159,56 +177,29 @@ func (w *World) Spawn(p *Peer, h fakeagent.Harness, cwd string, opts ...func(*pr
 	return result.ID
 }
 
-func (w *World) RequestSpawn(p *Peer, h fakeagent.Harness, cwd string, opts ...func(*protocol.SpawnSessionMessage)) (result protocol.SpawnResultMessage, workspaceID, paneID string) {
+func (w *World) RequestSpawn(p *Peer, h fakeagent.Harness, cwd string, opts ...func(*protocol.SpawnSessionMessage)) (result protocol.SpawnResultMessage, desktopID, paneID string) {
 	w.T.Helper()
 	if err := os.MkdirAll(cwd, 0o755); err != nil {
 		w.T.Fatal(err)
 	}
 	msg := protocol.SpawnSessionMessage{
-		Cmd:         protocol.CmdSpawnSession,
-		ID:          uuid.NewString(),
-		Agent:       string(h),
-		Cwd:         cwd,
-		WorkspaceID: w.workspace(p, cwd),
-		Cols:        100,
-		Rows:        30,
+		Cmd:       protocol.CmdSpawnSession,
+		ID:        uuid.NewString(),
+		Agent:     string(h),
+		Cwd:       cwd,
+		ProfileID: p.SelectedProfile(),
+		Placement: &protocol.SessionPlacement{},
+		Cols:      100,
+		Rows:      30,
 	}
 	for _, opt := range opts {
 		opt(&msg)
 	}
-	paneID = "pane-" + msg.ID
-	// A session a pane already shows relaunches there; only a new session gets a pane, as in the app.
-	if pane, placed := p.paneShowing(msg.ID); placed {
-		paneID = pane.PaneID
-	} else {
-		Request(p, protocol.WorkspaceLayoutAddSessionPaneMessage{
-			Cmd:         protocol.CmdWorkspaceLayoutAddSessionPane,
-			WorkspaceID: msg.WorkspaceID,
-			SessionID:   msg.ID,
-			PaneID:      protocol.Ptr(paneID),
-		}, protocol.EventWorkspaceLayoutActionResult, func(protocol.WorkspaceLayoutActionResultMessage) bool { return true })
+	if msg.Placement != nil && protocol.Deref(msg.Placement.DesktopID) == "" && p.Placed(msg.ID) {
+		msg.Placement = nil
 	}
 	result = Request(p, msg, protocol.EventSpawnResult, func(r protocol.SpawnResultMessage) bool { return r.ID == msg.ID })
-	return result, msg.WorkspaceID, paneID
-}
-
-func (w *World) workspace(p *Peer, dir string) string {
-	w.T.Helper()
-	if id, ok := w.workspaces[dir]; ok {
-		return id
-	}
-	id := "workspace-" + filepath.Base(dir)
-	Request(p, protocol.RegisterWorkspaceMessage{
-		Cmd:       protocol.CmdRegisterWorkspace,
-		ID:        id,
-		Title:     filepath.Base(dir),
-		Directory: dir,
-	}, protocol.EventWorkspaceRegistered, func(protocol.WebSocketEvent) bool { return true })
-	if w.workspaces == nil {
-		w.workspaces = map[string]string{}
-	}
-	w.workspaces[dir] = id
-	return id
+	return result, protocol.Deref(result.DesktopID), protocol.Deref(result.PaneID)
 }
 
 // Launched returns the next run of the agent in the terminal that shows the session; the run's
@@ -243,4 +234,41 @@ func (w *World) LogDaemonTail() {
 	lines := bytes.Split(bytes.TrimRight(log, "\n"), []byte("\n"))
 	lines = lines[max(0, len(lines)-80):]
 	w.T.Logf("daemon.log tail:\n%s", boundedDiagnostic(string(bytes.Join(lines, []byte("\n")))))
+}
+
+func (w *World) InjectSession(id, label, dir string, agent protocol.SessionAgent) error {
+	return w.inject(protocol.Session{ID: id, Label: label, Directory: dir, Agent: agent, State: protocol.SessionStateLaunching})
+}
+
+func (w *World) InjectCrewSession(id, label, dir, member string) error {
+	return w.inject(protocol.Session{ID: id, Label: label, Directory: dir, Agent: protocol.SessionAgentClaude, State: protocol.SessionStateLaunching, CrewMember: protocol.Ptr(member)})
+}
+
+// InjectUnplacedSession registers a session no pane places, so reports under its id route as an unplaced terminal's.
+func (w *World) InjectUnplacedSession(id, label, dir string, agent protocol.SessionAgent) error {
+	return w.send(protocol.InjectTestSessionMessage{Cmd: protocol.CmdInjectTestSession, Unplaced: protocol.Ptr(true),
+		Session: protocol.Session{ID: id, Label: label, Directory: dir, Agent: agent, State: protocol.SessionStateLaunching}})
+}
+
+func (w *World) inject(session protocol.Session) error {
+	return w.send(protocol.InjectTestSessionMessage{Cmd: protocol.CmdInjectTestSession, Session: session})
+}
+
+func (w *World) send(msg protocol.InjectTestSessionMessage) error {
+	conn, err := w.DialUnix()
+	if err != nil {
+		return err
+	}
+	defer conn.Close()
+	if err := json.NewEncoder(conn).Encode(msg); err != nil {
+		return err
+	}
+	var resp protocol.Response
+	if err := json.NewDecoder(conn).Decode(&resp); err != nil {
+		return err
+	}
+	if !resp.Ok {
+		return errors.New(protocol.Deref(resp.Error))
+	}
+	return nil
 }

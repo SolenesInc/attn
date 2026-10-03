@@ -24,7 +24,6 @@ import (
 	"github.com/victorarias/attn/internal/buildinfo"
 	"github.com/victorarias/attn/internal/client"
 	"github.com/victorarias/attn/internal/config"
-	"github.com/victorarias/attn/internal/crew"
 	"github.com/victorarias/attn/internal/daemon"
 	"github.com/victorarias/attn/internal/daemonctl"
 	"github.com/victorarias/attn/internal/hooks"
@@ -654,7 +653,7 @@ commands:
   automation <command>              manage and run durable automations
   preflight                         diagnose tools, paths, routing, and launch settings
   pr <command>                      watch or inspect pull request readiness
-  list                              list sessions and workspaces
+  list                              list sessions and profiles
   activity [clear <id>]             what each agent is doing right now
   conversation <command>            list, keep forever or forget attn's conversation copies
   worktree <command>                every tracked worktree, the sweep and the keep pin
@@ -688,11 +687,13 @@ func runDelegate() {
 		return
 	}
 	if len(os.Args) >= 3 && os.Args[2] == "status" {
-		if len(os.Args) != 4 || strings.TrimSpace(os.Args[3]) == "" {
-			fmt.Fprintln(os.Stderr, "delegate status: usage: attn delegate status <request-or-operation-id>")
+		f := newSeedFlags("delegate status")
+		positionals := f.parse("delegate status", os.Args[3:])
+		if len(positionals) != 1 {
+			fmt.Fprintln(os.Stderr, "delegate status: usage: attn delegate status <request-or-operation-id> [--profile <name|id>]")
 			os.Exit(2)
 		}
-		result, err := client.New("").DelegationStatus(os.Args[3])
+		result, err := f.client().DelegationStatus(positionals[0])
 		if err != nil {
 			fmt.Fprintf(os.Stderr, "delegate status: %v\n", err)
 			os.Exit(1)
@@ -700,13 +701,14 @@ func runDelegate() {
 		printJSON(result)
 		return
 	}
+
 	args, err := parseDelegateArgs(os.Args[2:])
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "delegate: %v\n", err)
 		os.Exit(2)
 	}
 	warnIfDaemonVersionMismatch()
-	c := client.New("")
+	c := client.New("").WithGardenProfile(protocol.Deref(args.request.ProfileID), protocol.Deref(args.request.SourceSessionID))
 	fmt.Fprintf(os.Stderr, "delegation request: request_id=%s\n", args.request.RequestID)
 	operation, err := c.StartDelegation(args.request)
 	if err != nil {
@@ -797,6 +799,12 @@ session options:
                              medium, high, xhigh); defaults to medium for agents
                              that support reasoning effort
   --name <text>              session name (max 16 chars; defaults from cwd)
+  --desktop <ref>            desktop of your profile for the new agent: its
+                             shortcut digit (1-9), its name as shown
+                             (case-insensitive) or its id; the agent opens
+                             beside that desktop's active pane without changing
+                             what you see. Defaults to beside the source
+                             session.
   --source-session <id>      source session (defaults to ATTN_SESSION_ID)
   --yolo                     bypass agent approval prompts
 
@@ -1256,6 +1264,7 @@ type delegateCLIArgs struct {
 
 func parseDelegateArgs(args []string) (delegateCLIArgs, error) {
 	fs := flag.NewFlagSet("delegate", flag.ContinueOnError)
+	profile := fs.String("profile", "", "profile name or id outside an attn session")
 	fs.SetOutput(io.Discard)
 	briefText := fs.String("brief", "", "delegated task brief")
 	briefFile := fs.String("brief-file", "", "file containing the delegated task brief")
@@ -1271,7 +1280,8 @@ func parseDelegateArgs(args []string) (delegateCLIArgs, error) {
 	provider := fs.String("provider", "", "plugin model provider")
 	model := fs.String("model", "", "pin the delegated agent's model (alias or full id)")
 	effort := fs.String("effort", "", "pin the delegated agent's reasoning effort")
-	name := fs.String("name", "", "name for the agent and, when a new workspace is created, the workspace")
+	name := fs.String("name", "", "name for the agent")
+	desktop := fs.String("desktop", "", "desktop of the caller's profile: shortcut digit, name or id")
 	sourceSessionID := fs.String("source-session", "", "source session id (defaults to ATTN_SESSION_ID)")
 	yolo := fs.Bool("yolo", false, "launch the target agent in yolo mode")
 	cwd := fs.String("cwd", "", "working folder or repository")
@@ -1452,7 +1462,7 @@ func parseDelegateArgs(args []string) (delegateCLIArgs, error) {
 			}
 		}
 	}
-	request := protocol.DelegateMessage{Cmd: protocol.CmdDelegate, RequestID: stableRequestID, Assignment: assignment, Cwd: customCWD, Checkout: checkout}
+	request := protocol.DelegateMessage{Cmd: protocol.CmdDelegate, ProfileID: protocol.Ptr(strings.TrimSpace(*profile)), RequestID: stableRequestID, Assignment: assignment, Cwd: customCWD, Checkout: checkout}
 	if source != "" {
 		request.SourceSessionID = protocol.Ptr(source)
 	}
@@ -1474,6 +1484,13 @@ func parseDelegateArgs(args []string) (delegateCLIArgs, error) {
 	if value := strings.TrimSpace(*name); value != "" {
 		request.Label = protocol.Ptr(value)
 	}
+	if present["desktop"] {
+		value := strings.TrimSpace(*desktop)
+		if value == "" {
+			return delegateCLIArgs{}, errors.New("--desktop needs a shortcut digit (1-9), a desktop name or a desktop id")
+		}
+		request.Desktop = protocol.Ptr(value)
+	}
 	if *yolo {
 		request.YoloMode = protocol.Ptr(true)
 	}
@@ -1483,16 +1500,17 @@ func parseDelegateArgs(args []string) (delegateCLIArgs, error) {
 	return delegateCLIArgs{request: request}, nil
 }
 
-func parseOpenArgs(args []string) (rawPath string, sessionFlag string, err error) {
+func parseOpenArgs(args []string) (rawPath string, sessionFlag string, profileFlag string, err error) {
 	fs := flag.NewFlagSet("open", flag.ContinueOnError)
 	fs.SetOutput(io.Discard)
 	sessionID := fs.String("session", "", "session id (defaults to ATTN_SESSION_ID, then the selected session)")
 
+	profileID := fs.String("profile", "", "profile name or id for a seed outside attn")
 	var positionals []string
 	rest := args
 	for {
 		if perr := fs.Parse(rest); perr != nil {
-			return "", "", perr
+			return "", "", "", perr
 		}
 		rest = fs.Args()
 		if len(rest) == 0 {
@@ -1503,12 +1521,12 @@ func parseOpenArgs(args []string) (rawPath string, sessionFlag string, err error
 	}
 
 	if len(positionals) == 0 {
-		return "", "", fmt.Errorf("missing <file.md|seed-id> argument")
+		return "", "", "", fmt.Errorf("missing <file.md|seed-id> argument")
 	}
 	if len(positionals) > 1 {
-		return "", "", fmt.Errorf("unexpected extra arguments: %v", positionals[1:])
+		return "", "", "", fmt.Errorf("unexpected extra arguments: %v", positionals[1:])
 	}
-	return strings.TrimSpace(positionals[0]), strings.TrimSpace(*sessionID), nil
+	return strings.TrimSpace(positionals[0]), strings.TrimSpace(*sessionID), strings.TrimSpace(*profileID), nil
 }
 
 func isSeedOpenTarget(target string) bool {
@@ -1517,7 +1535,7 @@ func isSeedOpenTarget(target string) bool {
 
 func runOpen() {
 	warnIfDaemonVersionMismatch()
-	rawPath, sessionFlag, err := parseOpenArgs(os.Args[2:])
+	rawPath, sessionFlag, profileFlag, err := parseOpenArgs(os.Args[2:])
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "attn open: %v\nusage: attn open <file.md|seed-id> [--session <id>]\n", err)
 		os.Exit(1)
@@ -1530,7 +1548,7 @@ func runOpen() {
 
 	c := client.New(strings.TrimSpace(os.Getenv("ATTN_SOCKET_PATH")))
 	if isSeedOpenTarget(rawPath) {
-		if err := c.OpenSeed(rawPath, resolvedSession); err != nil {
+		if err := c.WithGardenProfile(profileFlag, "").OpenSeed(rawPath, resolvedSession); err != nil {
 			fmt.Fprintf(os.Stderr, "open: %v\n", err)
 			os.Exit(1)
 		}
@@ -1889,7 +1907,7 @@ func fprintJSON(w io.Writer, v interface{}) error {
 }
 
 func runWrapper() {
-	if os.Getenv("ATTN_INSIDE_APP") == "1" {
+	if os.Getenv("ATTN_DAEMON_MANAGED") == "1" {
 		agentName := strings.TrimSpace(strings.ToLower(os.Getenv("ATTN_AGENT")))
 		if agentName == "" {
 			agentName = "codex"
@@ -1907,7 +1925,6 @@ type directLaunchArgs struct {
 	resumePicker      bool
 	yoloMode          bool
 	initialPromptFile string
-	member            string
 }
 
 func readInitialPromptFile(path string) (string, error) {
@@ -1940,12 +1957,6 @@ func parseDirectLaunchArgs(args []string) (directLaunchArgs, error) {
 			}
 		case "--yolo":
 			parsed.yoloMode = true
-		case "--member":
-			if i+1 >= len(args) {
-				return directLaunchArgs{}, fmt.Errorf("flag --member needs a value: the crew member this session launches as (`attn crew list` names the roster)")
-			}
-			parsed.member = args[i+1]
-			i++
 		case "--initial-prompt-file":
 			if i+1 >= len(args) {
 				return directLaunchArgs{}, fmt.Errorf("flag --initial-prompt-file needs a value")
@@ -1957,11 +1968,7 @@ func parseDirectLaunchArgs(args []string) (directLaunchArgs, error) {
 		}
 	}
 	if label == "" {
-		if parsed.member != "" {
-			label = crew.DisplayName(parsed.member)
-		} else {
-			label = wrapper.DefaultLabel()
-		}
+		label = wrapper.DefaultLabel()
 	}
 	parsed.label = label
 	return parsed, nil
@@ -2032,30 +2039,10 @@ func runAgentDirectly(requestedAgent string) {
 	}
 
 	c := client.New("")
-	managedMode := os.Getenv("ATTN_DAEMON_MANAGED") == "1"
-	if !managedMode && !c.IsRunning() {
-		if err := startDaemonBackground(); err != nil {
-			fmt.Fprintf(os.Stderr, "warning: could not start daemon: %v\n", err)
-		}
-	}
-
-	sessionID := os.Getenv("ATTN_SESSION_ID")
+	sessionID := strings.TrimSpace(os.Getenv("ATTN_SESSION_ID"))
 	if sessionID == "" {
-		sessionID = wrapper.GenerateSessionID()
-	}
-	if managedMode && parsed.member != "" {
-		fmt.Fprintf(os.Stderr, "attn: --member names a member to launch as; a daemon-managed launch is already bound by `attn crew wake`\n")
+		fmt.Fprintf(os.Stderr, "attn: a daemon-managed launch needs ATTN_SESSION_ID; the daemon sets it for every agent it starts\n")
 		os.Exit(1)
-	}
-	if !managedMode {
-		err := c.RegisterAsMember(sessionID, parsed.label, cwd, driver.Name(), parsed.member)
-		switch {
-		case err != nil && parsed.member != "":
-			fmt.Fprintf(os.Stderr, "attn: %v\n", err)
-			os.Exit(1)
-		case err != nil:
-			fmt.Fprintf(os.Stderr, "warning: could not register session: %v\n", err)
-		}
 	}
 
 	opts := agentdriver.SpawnOpts{
@@ -2081,9 +2068,6 @@ func runAgentDirectly(requestedAgent string) {
 	cleanup := func() {
 		for i := len(cleanupFns) - 1; i >= 0; i-- {
 			cleanupFns[i]()
-		}
-		if !managedMode {
-			c.Unregister(sessionID)
 		}
 	}
 
@@ -2241,24 +2225,6 @@ func openAppWithDeepLink() {
 		fmt.Fprintf(os.Stderr, "error opening app: %v\n", err)
 		os.Exit(1)
 	}
-}
-
-func startDaemonBackground() error {
-	executable, err := os.Executable()
-	if err != nil {
-		return err
-	}
-
-	cmd := exec.Command(executable, "daemon")
-	cmd.Stdout = nil
-	cmd.Stderr = nil
-	cmd.Stdin = nil
-
-	cmd.SysProcAttr = &syscall.SysProcAttr{
-		Setsid: true,
-	}
-
-	return cmd.Start()
 }
 
 func runHookStop() {

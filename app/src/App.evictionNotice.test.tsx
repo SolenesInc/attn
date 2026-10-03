@@ -20,7 +20,7 @@ describe('App eviction notice', () => {
     });
   });
 
-  it('tells the user, in their terms, that the app fell behind and reconnected, once, for eight seconds', async () => {
+  it('tells the user, in their terms, that the app fell behind and reconnected, once, with the shared six-second fade', async () => {
     const { daemon } = await renderApp();
     expect(screen.queryByRole('alert')).toBeNull();
 
@@ -31,9 +31,10 @@ describe('App eviction notice', () => {
     expect(alert).toHaveTextContent('Reconnected');
     expect(alert).not.toHaveTextContent('client too slow');
 
-    await act(() => vi.advanceTimersByTimeAsync(7_900));
+    await act(() => vi.advanceTimersByTimeAsync(5_900));
     expect(screen.getByRole('alert')).toHaveTextContent('fell behind on updates');
 
+    await act(() => vi.advanceTimersByTimeAsync(300));
     await act(() => vi.advanceTimersByTimeAsync(300));
     expect(screen.queryByRole('alert')).toBeNull();
   });

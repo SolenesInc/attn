@@ -40,7 +40,7 @@ func TestARespawnWhoseAgentCannotStartKeepsTheSessionAndItsLaunch(t *testing.T) 
 	}
 	failed := testworld.Request(app, protocol.SpawnSessionMessage{
 		Cmd: protocol.CmdSpawnSession, ID: session, Agent: string(fakeagent.Claude), Cwd: cwd,
-		WorkspaceID: "workspace-shop", Cols: 100, Rows: 30, Model: protocol.Ptr("claude-haiku-5"),
+		ProfileID: app.SelectedProfile(), Cols: 100, Rows: 30, Model: protocol.Ptr("claude-haiku-5"),
 	}, protocol.EventSpawnResult, func(r protocol.SpawnResultMessage) bool { return r.ID == session })
 	if failed.Success {
 		t.Fatal("a respawn into a deleted directory succeeded")

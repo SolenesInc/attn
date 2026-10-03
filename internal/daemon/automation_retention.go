@@ -77,7 +77,7 @@ func (d *Daemon) automationRetentionSweepPass(now time.Time) {
 	for _, defID := range ids {
 		candidates, err := d.store.ListPrunableAutomationRuns(defID, keep, cutoff)
 		if err != nil {
-			d.logf("automation retention sweep: list prunable runs for %s: %v", defID, err)
+			d.logf("automation retention sweep: list prunable runs for %d: %v", defID, err)
 			continue
 		}
 		for _, run := range candidates {
@@ -234,7 +234,7 @@ func (d *Daemon) removeAutomationOccurrenceArtifact(runID string) error {
 	return nil
 }
 
-func (d *Daemon) automationCleanup(ctx context.Context, id string) (cleaned, keptDirty, keptActive []string, err error) {
+func (d *Daemon) automationCleanup(ctx context.Context, id int) (cleaned, keptDirty, keptActive []string, err error) {
 	if err := ctx.Err(); err != nil {
 		return nil, nil, nil, fmt.Errorf("deadline exceeded waiting to run automation cleanup: %w", err)
 	}
@@ -243,7 +243,7 @@ func (d *Daemon) automationCleanup(ctx context.Context, id string) (cleaned, kep
 		return nil, nil, nil, err
 	}
 	if definition == nil {
-		return nil, nil, nil, fmt.Errorf("automation %q not found", id)
+		return nil, nil, nil, fmt.Errorf("automation %d not found", id)
 	}
 	runs, err := d.store.ListTerminalAutomationRuns(id)
 	if err != nil {
@@ -252,7 +252,7 @@ func (d *Daemon) automationCleanup(ctx context.Context, id string) (cleaned, kep
 	for _, run := range runs {
 		worktree, werr := automationRunWorktreePath(run)
 		if werr != nil {
-			d.logf("automation cleanup %s: run %s: %v", id, run.ID, werr)
+			d.logf("automation cleanup %d: run %s: %v", id, run.ID, werr)
 			continue
 		}
 		if worktree == "" {
@@ -263,16 +263,16 @@ func (d *Daemon) automationCleanup(ctx context.Context, id string) (cleaned, kep
 		}
 		block, safetyErr := d.automationRunCleanupSafety(run)
 		if safetyErr != nil {
-			d.logf("automation cleanup %s: run %s: %v", id, run.ID, safetyErr)
+			d.logf("automation cleanup %d: run %s: %v", id, run.ID, safetyErr)
 			continue
 		}
 		switch block {
 		case automationRunCleanupLiveSession:
-			d.logf("automation cleanup %s: run %s: kept active (live session)", id, run.ID)
+			d.logf("automation cleanup %d: run %s: kept active (live session)", id, run.ID)
 			keptActive = append(keptActive, run.ID)
 			continue
 		case automationRunCleanupBoundThread:
-			d.logf("automation cleanup %s: run %s: kept active (bound continuity thread)", id, run.ID)
+			d.logf("automation cleanup %d: run %s: kept active (bound continuity thread)", id, run.ID)
 			keptActive = append(keptActive, run.ID)
 			continue
 		case automationRunCleanupDirtyWorktree:
@@ -280,13 +280,13 @@ func (d *Daemon) automationCleanup(ctx context.Context, id string) (cleaned, kep
 			continue
 		}
 		if removeErr := d.removeAutomationRunWorktree(run); removeErr != nil {
-			d.logf("automation cleanup %s: run %s: %v", id, run.ID, removeErr)
+			d.logf("automation cleanup %d: run %s: %v", id, run.ID, removeErr)
 			continue
 		}
 		cleaned = append(cleaned, run.ID)
 	}
 	if len(cleaned) > 0 || len(keptDirty) > 0 || len(keptActive) > 0 {
-		d.logf("automation cleanup %s: cleaned %d worktree(s), kept %d dirty, %d active", id, len(cleaned), len(keptDirty), len(keptActive))
+		d.logf("automation cleanup %d: cleaned %d worktree(s), kept %d dirty, %d active", id, len(cleaned), len(keptDirty), len(keptActive))
 	}
 	return cleaned, keptDirty, keptActive, nil
 }

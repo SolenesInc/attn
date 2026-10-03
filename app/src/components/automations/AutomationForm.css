@@ -148,23 +148,12 @@
   margin: 0;
 }
 
-.automation-form__id-row {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-}
-
-.automation-form__id-row .automation-form__input {
-  flex: 1 1 auto;
-}
-
 .automation-form__id-static {
   color: var(--color-text-tertiary);
   font-size: var(--font-size-xs);
   margin: 0;
 }
 
-.automation-form__id-customize,
 .automation-form__advanced button,
 .automation-form__overrides button {
   background: var(--color-bg-button);

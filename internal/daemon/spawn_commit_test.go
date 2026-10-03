@@ -14,25 +14,24 @@ func newSpawnCommitTestDaemon(t *testing.T) (*Daemon, *fakeSpawnBackend, string)
 	backend := &fakeSpawnBackend{}
 	d.ptyBackend = backend
 	cwd := t.TempDir()
-	addTestWorkspace(d, "workspace", cwd)
 	return d, backend, cwd
 }
 
-func spawnCommitMessage(id, cwd string) *protocol.SpawnSessionMessage {
+func spawnCommitMessage(id, profileID, cwd string) *protocol.SpawnSessionMessage {
 	return &protocol.SpawnSessionMessage{
-		Cmd:         protocol.CmdSpawnSession,
-		ID:          id,
-		Cwd:         cwd,
-		Agent:       protocol.AgentShellValue,
-		WorkspaceID: "workspace",
-		Cols:        80,
-		Rows:        24,
+		Cmd:       protocol.CmdSpawnSession,
+		ID:        id,
+		Cwd:       cwd,
+		Agent:     protocol.AgentShellValue,
+		ProfileID: profileID,
+		Cols:      80,
+		Rows:      24,
 	}
 }
 
 func TestSpawnCommitPersistsEndpointID(t *testing.T) {
 	d, _, cwd := newSpawnCommitTestDaemon(t)
-	msg := spawnCommitMessage("endpoint-explicit", cwd)
+	msg := spawnCommitMessage("endpoint-explicit", defaultProfileID(t, d.store), cwd)
 	msg.EndpointID = protocol.Ptr("ep-1")
 
 	if rejection := d.runSpawnPipeline(msg, internalSpawnPolicy{}); rejection != nil {
@@ -45,14 +44,14 @@ func TestSpawnCommitPersistsEndpointID(t *testing.T) {
 
 func TestSpawnCommitPreservesExistingEndpointID(t *testing.T) {
 	d, _, cwd := newSpawnCommitTestDaemon(t)
-	msg := spawnCommitMessage("endpoint-respawn", cwd)
+	msg := spawnCommitMessage("endpoint-respawn", defaultProfileID(t, d.store), cwd)
 	now := string(protocol.TimestampNow())
 	d.store.Add(&protocol.Session{
 		ID:             msg.ID,
 		Label:          msg.ID,
 		Agent:          protocol.SessionAgentShell,
 		Directory:      cwd,
-		WorkspaceID:    msg.WorkspaceID,
+		ProfileID:      msg.ProfileID,
 		State:          protocol.SessionStateIdle,
 		StateSince:     now,
 		StateUpdatedAt: now,

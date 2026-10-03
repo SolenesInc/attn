@@ -28,7 +28,7 @@ func requireRefusals(t *testing.T, s *testworld.Stack, rows []argvRefusal) {
 
 func register(t *testing.T, s *testworld.Stack, id, label string) {
 	t.Helper()
-	if err := s.Client().Register(id, label, s.Path(label)); err != nil {
+	if err := s.InjectSession(id, label, s.Path(label), protocol.SessionAgentClaude); err != nil {
 		t.Fatalf("register %s: %v", id, err)
 	}
 }
@@ -74,7 +74,7 @@ func TestAgentPeekShowsASessionWithoutInterruptingIt(t *testing.T) {
 	peek := s.Attn("agent", "peek", builder[:8])
 	requireLines(t, "peek", peek.Stdout,
 		"session "+builder+" (claude) — builder\n",
-		"workspace: shop\n",
+		"profile: Default\n",
 		"state: waiting_input (",
 		"turn: owed to this session\n",
 		"last assistant message:\n  working on it\n  second line",

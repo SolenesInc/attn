@@ -31,7 +31,7 @@ IFS= read -rs -d c d
 
 func TestProgramsGetCursorAndDeviceRepliesInTheOrderTheyAsked(t *testing.T) {
 	w := newWorld(t)
-	shell := w.Spawn(w.App(), workspaceShell, w.Path("shop"))
+	shell := w.Spawn(w.App(), shellHarness, w.Path("shop"))
 
 	got := runTerminalQueries(w, transportPeer(w), shell, cursorAndDeviceQueries, `"${a}R|${b}c|${d}c|${e}R"`)
 	if want := "\x1b[5;7R|\x1b[?1;2c|\x1b[?1;2c|\x1b[3;4R"; got != want {
@@ -42,7 +42,7 @@ func TestProgramsGetCursorAndDeviceRepliesInTheOrderTheyAsked(t *testing.T) {
 func TestColorQueriesAreAnsweredOnceEachInOrderFromTheAppTheme(t *testing.T) {
 	w := newWorld(t)
 	app := w.App()
-	shell := w.Spawn(app, workspaceShell, w.Path("shop"))
+	shell := w.Spawn(app, shellHarness, w.Path("shop"))
 	program := transportPeer(w)
 
 	defaults := runTerminalQueries(w, program, shell, colorQueries, `"$a"`)
@@ -62,7 +62,7 @@ func TestOnlyProgramsSubscribedToMode2031HearTheColorSchemeChange(t *testing.T) 
 		t.Run(mode, func(t *testing.T) {
 			w := newWorld(t)
 			app := w.App()
-			shell := w.Spawn(app, workspaceShell, w.Path("shop"))
+			shell := w.Spawn(app, shellHarness, w.Path("shop"))
 			program := transportPeer(w)
 			program.TypeLine(shell, "bash "+writeTerminalQueryScript(w, colorSchemeQueries, `"${a}n|${b}n|$d"`)+" "+mode)
 			transportAwaitOutput(program, program.Terminal(shell), "armed-"+mode)

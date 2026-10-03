@@ -16,6 +16,7 @@ var errLegacyDelegationRequest = errors.New("this pending delegation used the re
 type resolvedDelegationLaunch struct {
 	Cmd                string
 	RequestID          string
+	ProfileID          *string
 	SourceSessionID    *string
 	Assignment         protocol.DelegateAssignment
 	Checkout           *protocol.DelegateCheckout
@@ -31,9 +32,9 @@ type resolvedDelegationLaunch struct {
 	Fallback           *bool
 	Provider           *string
 	Review             *protocol.SeedReviewActionContext
+	Desktop            *string
 
 	Brief                 *string
-	Placement             *string
 	Worktree              *protocol.DelegateWorktreeRequest
 	Plot                  *string
 	Handover              *protocol.SeedHandoverRequest
@@ -45,23 +46,23 @@ type resolvedDelegationLaunch struct {
 
 func resolveLaunchInput(msg *protocol.DelegateMessage) resolvedDelegationLaunch {
 	return resolvedDelegationLaunch{
-		RequestID: msg.RequestID, SourceSessionID: msg.SourceSessionID,
+		ProfileID: msg.ProfileID, RequestID: msg.RequestID, SourceSessionID: msg.SourceSessionID,
 		Assignment: msg.Assignment, Checkout: msg.Checkout, Cwd: msg.Cwd,
 		Agent: msg.Agent, Label: msg.Label, YoloMode: msg.YoloMode,
 		Model: msg.Model, Effort: msg.Effort, AllowWorktreeReuse: msg.AllowWorktreeReuse,
 		Role: msg.Role, Choice: msg.Choice, Fallback: msg.Fallback, Provider: msg.Provider,
-		Review: msg.Review,
+		Review: msg.Review, Desktop: msg.Desktop,
 	}
 }
 
 func (msg *resolvedDelegationLaunch) preferenceRequest() *protocol.DelegateMessage {
 	return &protocol.DelegateMessage{
 		Cmd: protocol.CmdDelegate, RequestID: msg.RequestID,
-		SourceSessionID: msg.SourceSessionID, Assignment: msg.Assignment,
+		ProfileID: msg.ProfileID, SourceSessionID: msg.SourceSessionID, Assignment: msg.Assignment,
 		Cwd: msg.Cwd, Checkout: msg.Checkout, Agent: msg.Agent, Label: msg.Label,
 		YoloMode: msg.YoloMode, Model: msg.Model, Effort: msg.Effort,
 		AllowWorktreeReuse: msg.AllowWorktreeReuse, Role: msg.Role, Choice: msg.Choice,
-		Fallback: msg.Fallback, Provider: msg.Provider, Review: msg.Review,
+		Fallback: msg.Fallback, Provider: msg.Provider, Review: msg.Review, Desktop: msg.Desktop,
 	}
 }
 
@@ -155,7 +156,6 @@ func (d *Daemon) resolveDelegateRuntimeWithHandoverSnapshot(
 		return nil, err
 	}
 	runtime := resolveLaunchInput(msg)
-	runtime.Placement = protocol.Ptr(delegationPlacementNew)
 	runtime.Brief = nil
 	runtime.Plot = nil
 	runtime.Handover = nil

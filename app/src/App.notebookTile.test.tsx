@@ -27,14 +27,10 @@ function serveFolders(daemon: ScriptedDaemon, resolve: (root: string) => string 
   daemon.on('fs_index', ({ root }) => ({ event: 'fs_index_result', success: true, root: root ?? NOTEBOOK_ROOT, files: ['plan.md'], truncated: false }));
   daemon.on('fs_watch', ({ root }) => ({ event: 'fs_watch_result', success: true, root: resolve(root!) }));
   daemon.on('fs_unwatch', ({ root }) => ({ event: 'fs_unwatch_result', success: true, root }));
-  daemon.on('workspace_layout_update_tile', ({ workspace_id, tile_id }) => ({
-    event: 'workspace_layout_action_result', action: 'workspace_layout_update_tile', workspace_id, tile_id, success: true,
-  }));
 }
 
 async function openNotebookTiles(tiles: NotebookTileSpec[], script: (daemon: ScriptedDaemon) => void = serveFolders, { persisted = false } = {}) {
   const view = await openTiles(tiles.map(notebookTile), {
-    workspace: { directory: '/repo' },
     session: { directory: '/repo' },
     initialState: { settings: { 'notebook.root.effective': NOTEBOOK_ROOT } },
     persisted,
@@ -188,7 +184,7 @@ describe('App notebook tile root', () => {
   }
 
   const retargets = (daemon: ScriptedDaemon) =>
-    daemon.sentOf('workspace_layout_update_tile').filter((update) => update.tile_params === JSON.stringify({ root: '/repo' }));
+    daemon.sentOf('desktop_update_tile').filter((update) => update.tile_params === JSON.stringify({ root: '/repo' }));
 
   it('saves an unsaved edit to the old folder before switching the tile to another', async () => {
     const { daemon, tile } = await openNotebookTiles([{ id: 'tile-notes' }]);

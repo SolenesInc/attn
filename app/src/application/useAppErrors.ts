@@ -1,5 +1,5 @@
 import { useCallback, useEffect } from 'react';
-import { useErrorToast } from '../components/ErrorToast';
+import { useToast } from '../components/Toast';
 import { useDaemonApi } from '../contexts/DaemonApiContext';
 import { UI_DIAGNOSTICS_FILE_DISPLAY } from '../utils/uiDiagnosticsLog';
 import { AppContentProps } from './appSupport';
@@ -11,16 +11,10 @@ interface Options {
 export function useAppErrors({ settingError, clearSettingError }: Options) {
   const { disconnectExplanation, clearDisconnectExplanation, sendBootstrapEndpoint } =
     useDaemonApi();
-  const {
-    message: errorMessage,
-    durationMs: errorDurationMs,
-    showError,
-    clearError,
-  } = useErrorToast();
+  const { showError, showNotice } = useToast();
   const handleTerminalModelRecovered = useCallback(() => {
     showError(
       `Terminal issue recovered. We reloaded it for you. Diagnostics were saved to ${UI_DIAGNOSTICS_FILE_DISPLAY}; please send this file to Victor so he can troubleshoot it.`,
-      { durationMs: 12_000 },
     );
   }, [showError]);
 
@@ -46,15 +40,13 @@ export function useAppErrors({ settingError, clearSettingError }: Options) {
     if (!disconnectExplanation) {
       return;
     }
-    showError(disconnectExplanation, { durationMs: 8000 });
+    showError(disconnectExplanation);
     clearDisconnectExplanation();
   }, [clearDisconnectExplanation, disconnectExplanation, showError]);
 
   return {
-    errorMessage,
-    errorDurationMs,
     showError,
-    clearError,
+    showNotice,
     handleTerminalModelRecovered,
     handleRebootstrapEndpoint,
   };

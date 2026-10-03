@@ -85,16 +85,8 @@ func (d *Daemon) conversationIn(t harness.TerminalID, observation agentConversat
 	}
 }
 
-// ownerLive counts a bare-CLI wrapper's process too: it runs in the user's own terminal.
 func (d *Daemon) ownerLive(owner string) bool {
-	if d.sessionHasLiveWorker(owner) {
-		return true
-	}
-	alive, err := d.externalSessionAlive(owner)
-	if err != nil {
-		d.logf("agent conversation: treating %s as live; its wrapper process could not be checked: %v", owner, err)
-	}
-	return alive || err != nil
+	return d.sessionHasLiveWorker(owner)
 }
 
 func conversationIsSession(agent protocol.SessionAgent) bool {

@@ -10,40 +10,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/google/uuid"
-
 	"github.com/victorarias/attn/internal/protocol"
-	"github.com/victorarias/attn/internal/testworld"
 )
-
-func TestADaemonThatCannotOpenItsDatabaseRunsInMemoryAndWarnsUntilCleared(t *testing.T) {
-	w := newWorld(t)
-	t.Setenv("ATTN_DB_PATH", "/dev/null/attn.db")
-	w.restart()
-	app, cli := w.App(), w.Client()
-
-	i := slices.IndexFunc(app.Initial.Warnings, func(warning protocol.DaemonWarning) bool { return warning.Code == "persistence_degraded" })
-	if i < 0 {
-		t.Fatalf("the app's warnings are %+v, want persistence_degraded", app.Initial.Warnings)
-	}
-	for _, want := range []string{"Running in-memory only", "/dev/null/attn.db", filepath.Join(w.Dir, "daemon.log")} {
-		if !strings.Contains(app.Initial.Warnings[i].Message, want) {
-			t.Errorf("the persistence warning %q does not name %q", app.Initial.Warnings[i].Message, want)
-		}
-	}
-	registerSessions(t, w, cli, "scratch")
-	if got := queriedSession(t, cli, "scratch"); got.ID != "scratch" {
-		t.Fatalf("the in-memory daemon lost a session it just registered: %+v", got)
-	}
-
-	app.Send(protocol.ClearWarningsMessage{Cmd: protocol.CmdClearWarnings})
-	requestID := uuid.NewString()
-	testworld.Request(app, protocol.TaskListMessage{Cmd: protocol.CmdTaskList, RequestID: protocol.Ptr(requestID)},
-		protocol.EventTaskListResult, func(r protocol.TaskListResultMessage) bool { return r.RequestID == requestID })
-	if again := w.App(); len(again.Initial.Warnings) != 0 {
-		t.Fatalf("an app connecting after the warnings were cleared got %+v, want none", again.Initial.Warnings)
-	}
-}
 
 func TestTheAppIsToldWhichDaemonInstanceItReached(t *testing.T) {
 	w := newWorld(t)

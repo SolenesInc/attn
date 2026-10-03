@@ -285,7 +285,7 @@ export async function removeStaleHarnessScenarioSessions(observer, timeoutMs = 6
   if (staleSessions.length === 0) {
     return {
       sessions: [],
-      lingeringWorkspaceSessionIds: [],
+      lingeringDesktopSessionIds: [],
     };
   }
 
@@ -312,7 +312,7 @@ export async function removeStaleHarnessScenarioSessions(observer, timeoutMs = 6
 
   return {
     sessions: staleSessions,
-    lingeringWorkspaceSessionIds: [...observer.workspacesBySessionId.keys()].filter((sessionId) => targetIds.has(sessionId)),
+    lingeringDesktopSessionIds: [...observer.desktopsBySessionId.keys()].filter((sessionId) => targetIds.has(sessionId)),
   };
 }
 

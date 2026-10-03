@@ -5,8 +5,9 @@ import { save } from '@tauri-apps/plugin-dialog';
 import { exists, readTextFile, writeTextFile } from '@tauri-apps/plugin-fs';
 import { revealItemInDir } from '@tauri-apps/plugin-opener';
 import { beforeEach, describe, expect, it, onTestFinished, vi } from 'vitest';
-import { openAttachedTerminals } from './test/appFixtures';
-import { daemonEndpoint, daemonSession, splitWorkspace, type DaemonSession } from './test/daemonFixtures';
+import { openActionMenu, openAttachedTerminals } from './test/appFixtures';
+import { pane, relayOut } from './test/desktopLayouts';
+import { daemonEndpoint, daemonSession, splitDesktop, type DaemonSession } from './test/daemonFixtures';
 import { pressShortcut } from './test/renderApp';
 import type { ScriptedDaemon } from './test/scriptedDaemon';
 
@@ -31,14 +32,14 @@ function answerSnapshots(daemon: ScriptedDaemon) {
 }
 
 async function openTerminals({
-  sessions = [daemonSession('s1', { workspace_id: 'ws', state: 'idle' }), daemonSession('s2', { workspace_id: 'ws', state: 'idle' })] as DaemonSession[],
-  workspaces = [splitWorkspace('ws', ['s1', 's2'])],
+  sessions = [daemonSession('s1', { state: 'idle' }), daemonSession('s2', { state: 'idle' })] as DaemonSession[],
+  desktops = [splitDesktop('ws', ['s1', 's2'])],
 } = {}) {
   const endpoints = [...new Set(sessions.flatMap((session) => session.endpoint_id ? [session.endpoint_id] : []))]
     .map((id) => daemonEndpoint(id, { name: id }));
   return openAttachedTerminals({
     sessions,
-    workspaces,
+    desktops,
     initialState: endpoints.length ? { endpoints } : {},
     output: { s1: FIRST_OUTPUT, s2: SECOND_OUTPUT },
     script: answerSnapshots,
@@ -73,9 +74,9 @@ async function settleImports(daemon: ScriptedDaemon) {
 }
 
 async function createReport(daemon: ScriptedDaemon) {
-  pressShortcut('ui.actionMenu');
-  await daemon.idle();
-  fireEvent.click(screen.getByText('Create diagnostic report'));
+  const search = await openActionMenu(daemon);
+  fireEvent.change(search, { target: { value: '>diagnostic report' } });
+  fireEvent.keyDown(search, { key: 'Enter' });
   await settleImports(daemon);
 }
 
@@ -138,7 +139,7 @@ describe('App diagnostic report', () => {
     await createReport(daemon);
     fireEvent.click(paneChoice('s2'));
 
-    daemon.emit({ event: 'workspace_layout_updated', workspace_layout: splitWorkspace('ws', ['s1']).layout! });
+    relayOut(daemon, pane('s1'), ['s1']);
     await daemon.idle();
     await saveReport(daemon);
 
@@ -148,26 +149,6 @@ describe('App diagnostic report', () => {
       { paneId: 'pane-s2', runtimeId: 's2', available: false },
     ]);
     expect(report.omissions).toEqual(expect.arrayContaining([{ section: 'paneContent:pane-s2', reason: 'pane_not_mounted' }]));
-  });
-
-  it('asks the home daemon and each remote endpoint once for a snapshot of their own runtimes', async () => {
-    const { daemon } = await openTerminals({
-      sessions: [
-        daemonSession('s1', { workspace_id: 'ws', state: 'idle' }),
-        daemonSession('r1', { workspace_id: 'wr', state: 'idle', endpoint_id: 'ep-1' }),
-        daemonSession('r2', { workspace_id: 'wr2', state: 'idle', endpoint_id: 'ep-1' }),
-        daemonSession('r3', { workspace_id: 'wr3', state: 'idle', endpoint_id: 'ep-2' }),
-      ],
-      workspaces: [splitWorkspace('ws', ['s1']), { ...splitWorkspace('wr', ['r1']), endpoint_id: 'ep-1' }],
-    });
-
-    await createReport(daemon);
-
-    expect(daemon.sentOf('support_snapshot').map(({ endpoint_id, runtime_ids }) => ({ endpoint_id, runtime_ids }))).toEqual([
-      { endpoint_id: undefined, runtime_ids: ['s1'] },
-      { endpoint_id: 'ep-1', runtime_ids: ['r1'] },
-      { endpoint_id: 'ep-2', runtime_ids: [] },
-    ]);
   });
 
   it('saves a partial report naming what it could not collect when the daemon never answers', async () => {
@@ -252,7 +233,7 @@ describe('App diagnostic report privacy', () => {
     await saveReport(daemon);
 
     const events = savedReport().diagnostics.input.frontend.events;
-    const { traceId } = events.filter((event) => event.stage === 'document').slice(-1)[0];
+    const traceId = daemon.sentOf('pty_input').slice(-1)[0].trace_id;
     expect(events.filter((event) => event.traceId === traceId).map((event) => event.stage)).toEqual(['document', 'terminal', 'transport']);
     expect(savedText()).not.toContain('ẞ');
     expect(savedText()).not.toContain('IntlRo');

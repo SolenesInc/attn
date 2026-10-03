@@ -96,14 +96,14 @@ func runSessionReopen(args []string) {
 
 func fprintSessionReopen(w io.Writer, result *protocol.SessionReopenResult) {
 	if protocol.Deref(result.AlreadyRunning) {
-		fmt.Fprintf(w, "%s is already running in workspace %s\n", result.SessionID, result.WorkspaceID)
+		fmt.Fprintf(w, "%s is already running in profile %s\n", result.SessionID, result.ProfileID)
 		return
 	}
 	if created := protocol.Deref(result.WorktreeCreated); created != "" {
 		fmt.Fprintf(w, "recreated worktree %s\n", created)
 	}
-	fmt.Fprintf(w, "%s reopened in %s (workspace %s, %s)\n",
-		result.SessionID, result.Directory, result.WorkspaceID, result.Action)
+	fmt.Fprintf(w, "%s reopened in %s (profile %s, last or current desktop, %s)\n",
+		result.SessionID, result.Directory, result.ProfileID, result.Action)
 }
 
 func fprintSessionReopenVerdict(w io.Writer, sessionID string, reopen *protocol.SessionReopen) {
@@ -121,8 +121,11 @@ func fprintSessionReopenVerdict(w io.Writer, sessionID string, reopen *protocol.
 	if warning := strings.TrimSpace(protocol.Deref(reopen.Warning)); warning != "" {
 		fmt.Fprintf(w, "warning    %s\n", warning)
 	}
-	fmt.Fprintf(w, "lands in   workspace %s (%s), pane %s\n",
-		reopen.WorkspaceID, reopen.WorkspacePlan, reopen.PanePlan)
+	if reopen.ProfileDeleted {
+		fmt.Fprintf(w, "lands in   profile %s is gone; this session cannot reopen\n", reopen.ProfileID)
+	} else {
+		fmt.Fprintf(w, "lands in   profile %s, last or current desktop\n", reopen.ProfileID)
+	}
 	fmt.Fprintf(w, "place      directory %s", reopen.DirectoryState)
 	if branch := strings.TrimSpace(protocol.Deref(reopen.BranchState)); branch != "" {
 		fmt.Fprintf(w, ", branch %s", branch)

@@ -23,6 +23,10 @@ Run commands from the repository root.
 ## Writing scenarios
 
 - Exercise actual app actions/order; update scenarios when product flows change.
+- `runShellCommandInPane` requires a shell. For a mock agent, submit a prompt
+  matched by its fixture and wait for the resulting reply.
+- `profileCommand` awaits `profile_action_result`; CLI commands such as
+  `desktop_move_session` use their CLI response contract instead.
 - The mock agent is the default agent. An armed scenario launches `mockAgent.mjs`
   for `claude` and `codex`: the tripwire pins both `ATTN_<AGENT>_EXECUTABLE` at it
   and `launchFreshAppAndConnect` writes the matching `<agent>_executable` setting,

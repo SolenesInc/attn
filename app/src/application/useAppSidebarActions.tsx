@@ -1,5 +1,4 @@
-import { invoke } from '@tauri-apps/api/core';
-import { useCallback, useMemo } from 'react';
+import { useMemo } from 'react';
 import {
   EditorIcon,
   NotebookIcon,
@@ -11,13 +10,10 @@ import {
 import { formatShortcut } from '../shortcuts/formatShortcut';
 import { dockShortcutLabel } from '../shortcuts/metadata';
 import type { ShortcutId } from '../shortcuts/registry';
-import { useSessionStore } from '../store/sessions';
 import {
   useAppAppearanceContext,
-  useAppErrorsContext,
   useAppInputs,
   useAppPanelsContext,
-  useAppSessionsContext,
   useAppShell,
   useNavigationContext,
 } from './AppContexts';
@@ -28,11 +24,11 @@ import {
   SessionsIcon,
   WorktreesIcon,
 } from './AppIcons';
+import { useOpenInEditor } from './useOpenInEditor';
+import { useAgentOnScreen, useSessionBehindScreen } from '../hooks/useDesktopSelectionBridge';
 export function useAppSidebarActions() {
-  const { settings, notificationsUnread } = useAppInputs();
+  const { notificationsUnread } = useAppInputs();
   const { attentionCount, hasCriticalNotification, zoomModeBySessionId } = useAppShell();
-  const { activeEndpoint, activeRemoteSession } = useAppSessionsContext();
-  const { showError } = useAppErrorsContext();
   const {
     workflowRunPanelOpen,
     toggleDockPanel,
@@ -50,87 +46,30 @@ export function useAppSidebarActions() {
     gardenPanelOpen,
   } = useAppPanelsContext();
   const { keybindings } = useAppAppearanceContext();
-  const sessions = useSessionStore((state) => state.sessions);
-  const activeSessionId = useSessionStore((state) => state.activeSessionId);
-  const { activeWorkspaceId } = useNavigationContext();
-  const isZedEditorConfigured = useMemo(() => {
-    const editor = (settings.editor_executable || '').trim().toLowerCase();
-    if (!editor) {
-      return false;
-    }
-    return editor.includes('zed');
-  }, [settings.editor_executable]);
-
-  const handleOpenEditor = useCallback(
-    async (cwd: string, filePath?: string, remoteTarget?: string) => {
-      try {
-        await invoke('open_in_editor', {
-          cwd,
-          filePath,
-          editor: settings.editor_executable || '',
-          remoteTarget,
-        });
-      } catch (err) {
-        const message = err instanceof Error ? err.message : String(err);
-        showError(message || 'Failed to open editor');
-      }
-    },
-    [settings.editor_executable, showError],
-  );
-
-  const handleOpenEditorForSession = useCallback(() => {
-    const activeSession = sessions.find((s) => s.id === activeSessionId);
-    if (!activeSession?.cwd) {
-      showError('No active session directory');
-      return;
-    }
-    if (activeSession.endpointId) {
-      if (!activeEndpoint) {
-        showError('Remote endpoint not available.');
-        return;
-      }
-      if (!isZedEditorConfigured) {
-        showError('Remote open-in-editor currently requires Zed.');
-        return;
-      }
-      handleOpenEditor(activeSession.cwd, undefined, activeEndpoint.ssh_target);
-      return;
-    }
-    handleOpenEditor(activeSession.cwd);
-  }, [
-    sessions,
-    activeSessionId,
-    activeEndpoint,
-    handleOpenEditor,
-    isZedEditorConfigured,
-    showError,
-  ]);
-
-  const remoteEditorAvailable = Boolean(
-    activeRemoteSession && activeEndpoint && isZedEditorConfigured,
-  );
+  const shownAgentId = useAgentOnScreen();
+  const contextSessionId = useSessionBehindScreen();
+  const { currentDesktopId } = useNavigationContext();
+  const { openActiveSessionInEditor, activeSessionIsRemote, editorUnavailableReason } = useOpenInEditor();
 
   const sidebarHeaderActions = useMemo<SidebarHeaderAction[]>(
     () => [
       {
         id: 'editor',
-        title: !activeSessionId
-          ? 'Open in Editor (No active session)'
-          : activeRemoteSession
-            ? remoteEditorAvailable
-              ? 'Open in Zed Remote'
-              : 'Open in Editor (Remote requires Zed)'
+        title: editorUnavailableReason
+          ? `Open in Editor (${editorUnavailableReason})`
+          : activeSessionIsRemote
+            ? 'Open in Zed Remote'
             : 'Open in Editor',
         icon: <EditorIcon />,
-        disabled: !activeSessionId || (activeRemoteSession && !remoteEditorAvailable),
-        onClick: handleOpenEditorForSession,
+        disabled: editorUnavailableReason !== null,
+        onClick: openActiveSessionInEditor,
       },
       {
         id: 'workflowRun',
-        title: activeSessionId ? 'Workflow Runs' : 'Workflow Runs (No active session)',
+        title: contextSessionId ? 'Workflow Runs' : 'Workflow Runs (No active session)',
         icon: <WorkflowIcon />,
         active: workflowRunPanelOpen,
-        disabled: !activeSessionId,
+        disabled: !contextSessionId,
         onClick: () => toggleDockPanel('workflowRun'),
       },
       {
@@ -187,12 +126,12 @@ export function useAppSidebarActions() {
       },
     ],
     [
-      activeSessionId,
-      activeRemoteSession,
-      remoteEditorAvailable,
+      contextSessionId,
+      activeSessionIsRemote,
+      editorUnavailableReason,
       attentionCount,
       attentionPanelOpen,
-      handleOpenEditorForSession,
+      openActiveSessionInEditor,
       workflowRunPanelOpen,
       toggleDockPanel,
       notebookOpen,
@@ -211,8 +150,8 @@ export function useAppSidebarActions() {
     ],
   );
 
-  const activeSessionZoomed = activeWorkspaceId
-    ? Boolean(zoomModeBySessionId[activeWorkspaceId])
+  const activeSessionZoomed = currentDesktopId
+    ? Boolean(zoomModeBySessionId[currentDesktopId])
     : false;
 
   const dockActions = useMemo<
@@ -232,12 +171,12 @@ export function useAppSidebarActions() {
         run: () => toggleDockPanel('attention'),
         isActive: attentionPanelOpen,
       },
-      'terminal.splitVertical': { available: Boolean(activeSessionId) },
-      'terminal.splitHorizontal': { available: Boolean(activeSessionId) },
-      'session.newHorizontal': { available: Boolean(activeSessionId) },
-      'terminal.toggleZoom': { isActive: activeSessionZoomed, available: Boolean(activeSessionId) },
+      'terminal.splitVertical': { available: Boolean(shownAgentId) },
+      'terminal.splitHorizontal': { available: Boolean(shownAgentId) },
+      'session.newHorizontal': { available: Boolean(shownAgentId) },
+      'terminal.toggleZoom': { isActive: activeSessionZoomed, available: Boolean(shownAgentId) },
     }),
-    [activeSessionId, attentionPanelOpen, activeSessionZoomed, toggleDockPanel],
+    [shownAgentId, attentionPanelOpen, activeSessionZoomed, toggleDockPanel],
   );
 
   const dockItems = useMemo<DockItem[]>(

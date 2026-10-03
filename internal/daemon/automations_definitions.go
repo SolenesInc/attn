@@ -23,7 +23,6 @@ func (r *automationRefusal) Unwrap() error { return r.Err }
 
 const (
 	automationErrCodeRevisionConflict = "revision_conflict"
-	automationErrCodeIDCollision      = "id_collision"
 	automationErrCodeDeletedElsewhere = "deleted_elsewhere"
 	automationErrCodeIDMismatch       = "id_mismatch"
 	automationErrCodeValidation       = "validation"
@@ -56,24 +55,30 @@ func (d *Daemon) validateAutomationSpec(raw string) (automation.DefinitionSpec, 
 }
 
 func (d *Daemon) automationApply(raw string) (*store.AutomationDefinition, error) {
-	return d.automationApplyWithGuards(context.Background(), raw, nil, nil)
+	return d.automationApplyWithGuards(context.Background(), raw, "", "", nil, nil, nil)
 }
 
-func (d *Daemon) automationApplyWithGuards(ctx context.Context, raw string, expectedID *string, expectedRevision *int) (*store.AutomationDefinition, error) {
+func (d *Daemon) automationApplyWithGuards(ctx context.Context, raw, profileID, scope string, expectedID *int, expectedRevision *int, launch *launchDesktopWrite) (*store.AutomationDefinition, error) {
+	if err := d.requireHome(automation.Surface); err != nil {
+		return nil, err
+	}
 	spec, canonical, err := d.validateAutomationSpec(raw)
 	if err != nil {
 		return nil, &automationRefusal{Code: automationErrCodeValidation, Err: err}
 	}
-	if expectedID != nil && *expectedID != "" && spec.ID != *expectedID {
-		return nil, &automationRefusal{Code: automationErrCodeIDMismatch, Err: fmt.Errorf("definition id %q in the YAML does not match the definition being edited (%q) — apply is keyed on the id inside the YAML, so an id change must be made as a separate create", spec.ID, *expectedID)}
+	if expectedID != nil && *expectedID != 0 && spec.ID != *expectedID {
+		return nil, &automationRefusal{Code: automationErrCodeIDMismatch, Err: fmt.Errorf("definition id %d in the YAML does not match the definition being edited (%d) — apply is keyed on the id inside the YAML, so creation must omit the id", spec.ID, *expectedID)}
 	}
 	guard := func(existing *store.AutomationDefinition) error {
+		if scope != "" && existing != nil && existing.ProfileID != scope {
+			return fmt.Errorf("automation %d does not exist or was deleted; create a new automation without an id", spec.ID)
+		}
 		if expectedRevision == nil {
 			return nil
 		}
 		if *expectedRevision == 0 {
-			if existing != nil && existing.DeletedAt == nil {
-				return &automationRefusal{Code: automationErrCodeIDCollision, Err: fmt.Errorf("an automation with id %q already exists — edit it instead of creating a second one", spec.ID)}
+			if spec.ID != 0 {
+				return &automationRefusal{Code: automationErrCodeValidation, Err: errors.New("create an automation without an id; numeric ids are assigned automatically")}
 			}
 			return nil
 		}
@@ -81,14 +86,21 @@ func (d *Daemon) automationApplyWithGuards(ctx context.Context, raw string, expe
 			return &automationRefusal{Code: automationErrCodeRevisionConflict, Err: errors.New("automation definition changed elsewhere — reload before saving")}
 		}
 		if existing.DeletedAt != nil {
-			return &automationRefusal{Code: automationErrCodeDeletedElsewhere, Err: fmt.Errorf("automation %q was deleted elsewhere while you were editing it — your changes were not saved; close this editor and use New if you want to bring it back", spec.ID)}
+			return &automationRefusal{Code: automationErrCodeDeletedElsewhere, Err: fmt.Errorf("automation %d was deleted elsewhere while you were editing it — your changes were not saved; close this editor and create a new automation", spec.ID)}
 		}
 		return nil
 	}
-	return d.automationApplyLocked(ctx, spec, canonical, guard)
+	if spec.ID == 0 {
+		profile, err := d.requestedOrRecentProfile(profileID)
+		if err != nil {
+			return nil, &automationRefusal{Code: automationErrCodeValidation, Err: err}
+		}
+		profileID = profile.ID
+	}
+	return d.automationApplyLocked(ctx, spec, canonical, profileID, guard, launch)
 }
 
-func (d *Daemon) automationApplyLocked(ctx context.Context, spec automation.DefinitionSpec, canonical []byte, guard func(*store.AutomationDefinition) error) (*store.AutomationDefinition, error) {
+func (d *Daemon) automationApplyLocked(ctx context.Context, spec automation.DefinitionSpec, canonical []byte, profileID string, guard func(*store.AutomationDefinition) error, launch *launchDesktopWrite) (*store.AutomationDefinition, error) {
 	d.automationMu.Lock()
 	defer d.automationMu.Unlock()
 	if err := ctx.Err(); err != nil {
@@ -103,26 +115,44 @@ func (d *Daemon) automationApplyLocked(ctx context.Context, spec automation.Defi
 			return nil, err
 		}
 	}
-	definition, err := d.store.UpsertAutomationDefinition(spec.ID, spec.Name, string(canonical), time.Now())
+	var setting *store.LaunchDesktopSetting
+	if launch != nil {
+		setting = storeLaunchSetting(launch.setting)
+	}
+	if launch != nil && launch.ref != nil {
+		owner := profileID
+		if existing != nil {
+			owner = existing.ProfileID
+		}
+		chosen, err := d.launchDesktopFromRef(owner, spec.Name, *launch.ref, launch.name)
+		if err != nil {
+			return nil, err
+		}
+		setting = &chosen
+	}
+	definition, err := d.store.UpsertAutomationDefinitionWithLaunch(spec.ID, spec.Name, string(canonical), profileID, time.Now(), setting)
 	if err != nil {
 		return definition, err
 	}
 	if err := d.rotateContinuityBindingsIfContractChanged(existing, spec, definition); err != nil {
 		return definition, err
 	}
-	d.broadcastAutomationsChanged(spec.ID)
+	if setting != nil || existing == nil {
+		d.publishArrangementChanged(definition.ProfileID)
+	}
+	d.broadcastAutomationsChanged(definition.ID)
 	if definition.Enabled {
 		return definition, nil
 	}
-	return definition, d.cancelPendingAutomationRuns(spec.ID, store.AutomationCancelReasonDefinitionDisabled)
+	return definition, d.cancelPendingAutomationRuns(definition.ID, store.AutomationCancelReasonDefinitionDisabled)
 }
 
 func (d *Daemon) rotateContinuityBindingsIfContractChanged(existing *store.AutomationDefinition, spec automation.DefinitionSpec, updated *store.AutomationDefinition) error {
 	if existing == nil {
 		return nil
 	}
-	rotate := existing.DeletedAt != nil
-	if !rotate && existing.Revision != updated.Revision {
+	rotate := false
+	if existing.Revision != updated.Revision {
 		var oldSpec automation.DefinitionSpec
 		if err := json.Unmarshal([]byte(existing.SpecJSON), &oldSpec); err != nil {
 			rotate = true
@@ -140,7 +170,7 @@ func (d *Daemon) rotateContinuityBindingsIfContractChanged(existing *store.Autom
 	return d.store.ReleaseAutomationContinuityBindings(spec.ID, store.AutomationBindingReleasedContractRotated, time.Now())
 }
 
-func (d *Daemon) cancelPendingAutomationRuns(definitionID, reason string) error {
+func (d *Daemon) cancelPendingAutomationRuns(definitionID int, reason string) error {
 	pending, err := d.store.ListPendingAutomationRuns()
 	if err != nil {
 		return err
@@ -161,7 +191,12 @@ func (d *Daemon) cancelPendingAutomationRuns(definitionID, reason string) error 
 	return err
 }
 
-func (d *Daemon) automationSetEnabled(ctx context.Context, definitionID string, enabled bool) (*store.AutomationDefinition, error) {
+func (d *Daemon) automationSetEnabled(ctx context.Context, definitionID int, enabled bool) (*store.AutomationDefinition, error) {
+	if enabled {
+		if err := d.requireHome(automation.Surface); err != nil {
+			return nil, err
+		}
+	}
 	d.automationMu.Lock()
 	defer d.automationMu.Unlock()
 	if err := ctx.Err(); err != nil {
@@ -172,7 +207,7 @@ func (d *Daemon) automationSetEnabled(ctx context.Context, definitionID string, 
 		return nil, err
 	}
 	if definition == nil {
-		return nil, fmt.Errorf("automation %q not found", definitionID)
+		return nil, fmt.Errorf("automation %d not found", definitionID)
 	}
 	if !changed {
 		return definition, nil
@@ -184,7 +219,7 @@ func (d *Daemon) automationSetEnabled(ctx context.Context, definitionID string, 
 	return definition, err
 }
 
-func (d *Daemon) automationDelete(ctx context.Context, definitionID string) error {
+func (d *Daemon) automationDelete(ctx context.Context, definitionID int) error {
 	d.automationMu.Lock()
 	defer d.automationMu.Unlock()
 	if err := ctx.Err(); err != nil {
@@ -195,7 +230,7 @@ func (d *Daemon) automationDelete(ctx context.Context, definitionID string) erro
 		return err
 	}
 	if definition == nil {
-		return fmt.Errorf("automation %q not found", definitionID)
+		return fmt.Errorf("automation %d not found", definitionID)
 	}
 	now := time.Now()
 	if err := d.cancelPendingAutomationRuns(definitionID, store.AutomationCancelReasonDefinitionDeleted); err != nil {

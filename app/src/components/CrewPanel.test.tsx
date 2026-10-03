@@ -3,12 +3,14 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import { CrewRestartState, type CrewMember } from '../types/generated';
 import {
   agentPane,
-  agentWorkspace,
+  soloDesktop,
   daemonSeed,
   daemonSession,
-  daemonWorkspace,
+  daemonDesktop,
   type DaemonSeed,
   type DaemonSession,
+  DEFAULT_DESKTOP_ID,
+  DEFAULT_PROFILE_ID,
 } from '../test/daemonFixtures';
 import { gesture, renderApp } from '../test/renderApp';
 import type { CommandMessage } from '../test/protocol';
@@ -21,6 +23,7 @@ function member(id: string, revision: number, values: Partial<CrewMember> = {}):
     charter_path: `/crew/${id}/CHARTER.md`,
     home_dir: `/crew/${id}`,
     awareness_dirs: [],
+    profile_id: DEFAULT_PROFILE_ID,
     resolved_agent: 'claude',
     ...values,
   };
@@ -90,7 +93,7 @@ async function renderPanel({
 } = {}) {
   const everySession = [daemonSession('s1'), ...sessions];
   const { daemon } = await renderApp({
-    initialState: { crew: members, seeds, sessions: everySession, workspaces: everySession.map((session) => agentWorkspace(session.id)) },
+    initialState: { crew: members, seeds, sessions: everySession, desktops: everySession.map((session) => soloDesktop(session.id)) },
   });
   for (const [cmd, answers] of Object.entries({ ...defaults, ...script })) {
     answerInTurn(daemon, cmd as CrewCommand, answers, { repeatLast: true });
@@ -130,12 +133,12 @@ describe('CrewPanel', () => {
     expect(dialog.closest('.crew-panel-layer')).toBeInTheDocument();
   });
 
-  it('keeps member, tab, seed filter and search when a workspace seed returns to Crew', async () => {
+  it('keeps member, tab, seed filter and search when a desktop seed returns to Crew', async () => {
     const planted = daemonSeed('s-g9yxwv', { title: 'Artifact presence comes from the daemon', status: 'planted', planter_member: 'keel' });
     const members = [member('alder', 2), member('keel', 3, { binding_session: 'session-keel' })];
     const { daemon } = await renderPanel({ members, seeds: [planted], sessions: [daemonSession('session-keel')] });
-    daemon.on('open_seed', ({ seed_id, session_id }) => ({
-      event: 'open_seed_result', success: true, seed_id, workspace_id: `workspace-${session_id}`, tile_id: 'tile-seed',
+    daemon.on('open_seed', ({ seed_id }) => ({
+      event: 'open_seed_result', success: true, seed_id, desktop_id: DEFAULT_DESKTOP_ID, tile_id: 'tile-seed',
     }));
 
     expect(panel().getByLabelText('Harness')).toBeEnabled();
@@ -145,21 +148,19 @@ describe('CrewPanel', () => {
     fireEvent.change(panel().getByLabelText('Find a seed'), { target: { value: 'Artifact presence' } });
     await click(daemon, /Artifact presence comes from the daemon/);
     expect(openedSeeds(daemon)).toEqual([{ seed_id: planted.id, session_id: 'session-keel', standalone: undefined }]);
-    expect(isPanelOpen()).toBe(false);
 
-    daemon.emit({
-      event: 'workspace_state_changed',
-      workspace: daemonWorkspace('workspace-session-keel', {
-        root: {
-          type: 'split', split_id: 'split-seed', direction: 'vertical',
-          children: [
-            { type: 'pane', pane_id: 'pane-session-keel' },
-            { type: 'tile', tile_id: 'tile-seed', tile_kind: 'seed', tile_params: planted.id },
-          ],
-        },
-        panes: [agentPane('session-keel', 'workspace-session-keel')],
-      }, { title: 'session-keel', directory: '/tmp/session-keel' }),
-    });
+    daemon.arrange((desktops) => desktops.map((desktop) => (desktop.id === DEFAULT_DESKTOP_ID ? daemonDesktop(DEFAULT_DESKTOP_ID, {
+      root: {
+        type: 'split', split_id: 'split-seed', direction: 'vertical',
+        children: [
+          { type: 'pane', pane_id: 'pane-session-keel' },
+          { type: 'tile', tile_id: 'tile-seed', tile_kind: 'seed', tile_params: planted.id },
+        ],
+      },
+      panes: [agentPane('session-keel', DEFAULT_DESKTOP_ID)],
+    }, { revision: desktop.revision + 1 }) : desktop)));
+    await daemon.idle();
+    expect(isPanelOpen()).toBe(false);
     await gesture(daemon, () => fireEvent.click(screen.getByTestId('crew-seed-back')));
 
     expect(isPanelOpen()).toBe(true);
@@ -188,6 +189,20 @@ describe('CrewPanel', () => {
     expect(panel().getByRole('option', { name: 'openai / Astra' })).toBeInTheDocument();
     expect(daemon.sentOf('delegation_models').map((command) => command.harness)).toEqual(['codex']);
     expect(daemon.sentOf('delegation_preferences_get')).toHaveLength(1);
+  });
+
+  it('keeps the acknowledged new desktop when another launch field changes during its save', async () => {
+    const { daemon, answer } = await renderPanel({ members: [member('keel', 5, { resolved_agent: 'codex' })], script: { crew_set: [HOLD] } });
+    await gesture(daemon, () => fireEvent.change(panel().getByLabelText('Desktop'), { target: { value: '__new' } }));
+    const dialog = screen.getByRole('dialog', { name: 'A new desktop' });
+    fireEvent.change(within(dialog).getByRole('textbox', { name: 'Name' }), { target: { value: 'Review' } });
+    await gesture(daemon, () => fireEvent.click(within(dialog).getByRole('button', { name: 'Use this name' })));
+    fireEvent.change(panel().getByLabelText('Model'), { target: { value: 'openai/gpt-6-astra' } });
+    const launch_desktop = { desktop_id: 'desktop-review', label: 'Review (no ⌘ number)' };
+    await answer(daemon.sentOf('crew_set')[0], saved({ member: member('keel', 6, { resolved_agent: 'codex', launch_desktop }) }));
+    expect(daemon.sentOf('crew_set')).toHaveLength(2);
+    expect(daemon.sentOf('crew_set')[1].launch_desktop_setting).toEqual(launch_desktop);
+    expect(daemon.sentOf('crew_set')[1].model).toBe('openai/gpt-6-astra');
   });
 
   it('saves a full atomic selection, blocks restart until acknowledgment, and clears to defaults', async () => {
@@ -417,8 +432,14 @@ describe('CrewPanel', () => {
     expect(panel().queryByText(/New day started/)).not.toBeInTheDocument();
   });
 
-  it('closes with Escape and wakes an asleep member through the guarded restart action', async () => {
-    const { daemon, openCrew, closeWithEscape } = await renderPanel({ members: [member('keel', 5)] });
+  it('closes with Escape and an app wake shows the sleeping member’s day', async () => {
+    const { daemon, openCrew, closeWithEscape } = await renderPanel({
+      members: [member('keel', 5)],
+      sessions: [daemonSession('session-keel')],
+    });
+    daemon.on('crew_wake', () => ({
+      event: 'crew_wake_result', success: true, member: 'keel', session_id: 'session-keel',
+    }));
 
     await closeWithEscape();
     expect(isPanelOpen()).toBe(false);
@@ -427,7 +448,11 @@ describe('CrewPanel', () => {
     fireEvent.click(panel().getByRole('button', { name: 'Wake' }));
     const dialog = panel().getByRole('alertdialog');
     await gesture(daemon, () => fireEvent.click(within(dialog).getByRole('button', { name: 'Wake member' })));
-    expect(restartGuards(daemon)).toEqual([expect.objectContaining({ member: 'keel', expected_session_id: '', expected_revision: 5 })]);
+    expect(daemon.sentOf('crew_wake')).toEqual([expect.objectContaining({ member: 'keel' })]);
+    expect(daemon.sentOf('crew_restart')).toEqual([]);
+    expect(isPanelOpen()).toBe(false);
+    expect(document.querySelector('.session-terminal-desktop[data-session-visible="1"]'))
+      .toHaveAttribute('data-desktop-id', 'desktop-session-keel');
   });
 
   it('keeps roster navigation while async harness discovery settles', async () => {
@@ -833,7 +858,7 @@ describe('CrewPanel seeds', () => {
   }
 
   const pushSeeds = async (daemon: ScriptedDaemon, seeds: DaemonSeed[], total = seeds.length) => {
-    daemon.emit({ event: 'garden_seeds_updated', seeds, total });
+    daemon.emit({ event: 'garden_seeds_updated', profile_id: 'profile-default', seeds, total });
     await daemon.idle();
   };
 

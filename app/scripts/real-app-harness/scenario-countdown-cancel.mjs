@@ -22,7 +22,7 @@ import {
   writeQueueAgentFixture,
 } from './scenarioAgents.mjs';
 import {
-  waitForFirstWorkspacePane,
+  waitForFirstDesktopPane,
 } from './scenarioAssertions.mjs';
 
 const delay = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
@@ -141,7 +141,7 @@ async function main() {
         promptReadyTimeoutMs: 90_000,
       });
       runner.registerCleanup('close_agent_session', () => client.request('close_session', { sessionId: agentId }));
-      const pane = await waitForFirstWorkspacePane(client, agentId, `pane for ${agentId}`, 20_000);
+      const pane = await waitForFirstDesktopPane(client, agentId, `pane for ${agentId}`, 20_000);
       agentPaneId = pane.paneId;
       await client.request('select_session', { sessionId: agentId });
 

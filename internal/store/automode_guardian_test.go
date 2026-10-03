@@ -10,7 +10,7 @@ import (
 
 func TestMigration146AddsGuardianAndPreservesItOnReplay(t *testing.T) {
 	dbPath := filepath.Join(t.TempDir(), "test.db")
-	s, err := newStoreAtVersion(dbPath, 161)
+	s, err := newStoreAtVersion(dbPath, 167)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -19,7 +19,7 @@ func TestMigration146AddsGuardianAndPreservesItOnReplay(t *testing.T) {
 	if _, err := s.db.Exec(`ALTER TABLE automode_config DROP COLUMN guardian; DELETE FROM schema_migrations WHERE version >= 146;`); err != nil {
 		t.Fatal(err)
 	}
-	if err := migrateDBThrough(s.db, dbPath, 161); err != nil {
+	if err := migrateDBThrough(s.db, dbPath, 167); err != nil {
 		t.Fatal(err)
 	}
 	config, err := s.GetAutoModeConfig()
@@ -34,7 +34,7 @@ func TestMigration146AddsGuardianAndPreservesItOnReplay(t *testing.T) {
 	if _, err := s.db.Exec(`DELETE FROM schema_migrations WHERE version >= 146`); err != nil {
 		t.Fatal(err)
 	}
-	if err := migrateDBThrough(s.db, dbPath, 161); err != nil {
+	if err := migrateDBThrough(s.db, dbPath, 167); err != nil {
 		t.Fatal(err)
 	}
 	config, err = s.GetAutoModeConfig()

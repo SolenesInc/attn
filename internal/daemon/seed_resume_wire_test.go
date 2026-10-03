@@ -33,7 +33,7 @@ func TestResumingASeedRelaunchesItsTenderInItsOwnConversation(t *testing.T) {
 	}
 
 	before := lifeShow(t, cli, seed)
-	closePane(app, seedResumePane(t, w, protocol.Deref(delegated.WorkspaceID), session))
+	closePane(app, sessionPane{session: session})
 	if closed := showSession(t, cli, session); protocol.Deref(closed.ClosedAt) == "" {
 		t.Fatalf("the ledger shows %+v after the pane closed, want it closed", closed)
 	}
@@ -43,11 +43,8 @@ func TestResumingASeedRelaunchesItsTenderInItsOwnConversation(t *testing.T) {
 		t.Fatalf("resuming the closed tender = %+v, want %s relaunched", resumed, session)
 	}
 	seedResumeContinues(t, w, first, session)
-	if workspace := protocol.Deref(resumed.WorkspaceID); workspace != protocol.Deref(delegated.WorkspaceID) {
-		t.Errorf("the resume landed in workspace %s, want the tender's own %s", workspace, protocol.Deref(delegated.WorkspaceID))
-	}
-	if panes := delegatePaneSessions(workspaceOfDelegate(t, w, protocol.Deref(resumed.WorkspaceID))); !slices.Equal(panes, []string{session}) {
-		t.Errorf("the relaunched workspace holds panes for %q, want one pane for %s", panes, session)
+	if profile := protocol.Deref(resumed.ProfileID); profile != protocol.Deref(delegated.ProfileID) {
+		t.Errorf("the resume came back in profile %s, want the tender's own %s", profile, protocol.Deref(delegated.ProfileID))
 	}
 	if relaunched := sessionOfDelegate(t, w, session); relaunched.Directory != delegated.Directory {
 		t.Errorf("the relaunched session works in %s, want %s", relaunched.Directory, delegated.Directory)
@@ -61,7 +58,7 @@ func TestResumingASeedRelaunchesItsTenderInItsOwnConversation(t *testing.T) {
 	}
 
 	lifeMove(t, cli, session, seed, "park", "", "")
-	closePane(app, seedResumePane(t, w, protocol.Deref(resumed.WorkspaceID), session))
+	closePane(app, sessionPane{session: session})
 	reclaimed := seedResumeRequest(app, seed)
 	if !reclaimed.Success || protocol.Deref(reclaimed.SessionID) != session {
 		t.Fatalf("resuming the parked seed = %+v, want %s relaunched", reclaimed, session)
@@ -82,7 +79,7 @@ func TestAResumeThatCannotReachItsConversationIsRefusedAndCreatesNothing(t *test
 	if err := os.MkdirAll(outsider, 0o755); err != nil {
 		t.Fatal(err)
 	}
-	if err := cli.RegisterWithAgent("outsider", "outsider", outsider, "codex"); err != nil {
+	if err := w.InjectSession("outsider", "outsider", outsider, protocol.SessionAgentCodex); err != nil {
 		t.Fatal(err)
 	}
 	unlaunched := plantSeedAs(t, cli, "", "held by a session attn never launched")
@@ -93,17 +90,17 @@ func TestAResumeThatCannotReachItsConversationIsRefusedAndCreatesNothing(t *test
 
 	removed := seedResumeDelegate(t, w, fakeagent.Codex, "removed")
 	w.Launched(removed.SessionID)
-	closePane(app, seedResumePane(t, w, protocol.Deref(removed.WorkspaceID), removed.SessionID))
+	closePane(app, sessionPane{session: removed.SessionID})
 	if err := os.RemoveAll(removed.Directory); err != nil {
 		t.Fatal(err)
 	}
 
 	forgotten := seedResumeDelegate(t, w, fakeagent.Codex, "forgotten")
 	conversation := w.Launched(forgotten.SessionID).ConversationID
-	closePane(app, seedResumePane(t, w, protocol.Deref(forgotten.WorkspaceID), forgotten.SessionID))
+	closePane(app, sessionPane{session: forgotten.SessionID})
 	sessionRecoveryDeleteTranscript(t, conversation)
 
-	workspaces := seedResumeWorkspaceIDs(w)
+	desktops := seedResumeDesktops(w)
 	for _, refusal := range []struct {
 		name, seed string
 		wants      []string
@@ -134,8 +131,8 @@ func TestAResumeThatCannotReachItsConversationIsRefusedAndCreatesNothing(t *test
 			}
 		}
 	}
-	if after := seedResumeWorkspaceIDs(w); !slices.Equal(after, workspaces) {
-		t.Errorf("the refused resumes changed the workspaces from %v to %v", workspaces, after)
+	if after := seedResumeDesktops(w); !slices.Equal(after, desktops) {
+		t.Errorf("the refused resumes changed the desktops from %v to %v", desktops, after)
 	}
 	for _, s := range w.App().Initial.Sessions {
 		if s.ID == removed.SessionID || s.ID == forgotten.SessionID || s.ID == "outsider" {
@@ -166,17 +163,6 @@ func seedResumeRequest(app *testworld.Peer, seedID string) protocol.SeedResumeRe
 		protocol.EventSeedResumeResult, func(r protocol.SeedResumeResultMessage) bool { return r.RequestID == requestID })
 }
 
-func seedResumePane(t *testing.T, w *world, workspaceID, sessionID string) sessionPane {
-	t.Helper()
-	for _, pane := range workspaceOfDelegate(t, w, workspaceID).Layout.Panes {
-		if protocol.Deref(pane.SessionID) == sessionID {
-			return sessionPane{session: sessionID, workspace: workspaceID, pane: pane.PaneID}
-		}
-	}
-	t.Fatalf("workspace %s has no pane for %s", workspaceID, sessionID)
-	return sessionPane{}
-}
-
 func seedResumeContinues(t *testing.T, w *world, first *fakeagent.Run, sessionID string) {
 	t.Helper()
 	if relaunched := w.Launched(sessionID); !relaunched.Resumed || relaunched.ConversationID != first.ConversationID {
@@ -184,10 +170,10 @@ func seedResumeContinues(t *testing.T, w *world, first *fakeagent.Run, sessionID
 	}
 }
 
-func seedResumeWorkspaceIDs(w *world) []string {
+func seedResumeDesktops(w *world) []string {
 	var ids []string
-	for _, workspace := range w.App().Initial.Workspaces {
-		ids = append(ids, workspace.ID)
+	for _, desktop := range w.App().Initial.Desktops {
+		ids = append(ids, desktop.ID+":"+strings.Join(delegatePaneSessions(desktop), ","))
 	}
 	slices.Sort(ids)
 	return ids
@@ -199,7 +185,7 @@ func TestAResumeWhoseAgentCannotStartLeavesNoPaneBehind(t *testing.T) {
 	pluginDriverSettings(app, "pi")
 	delegated := seedResumeDelegate(t, w, fakeagent.Pi, "api")
 	w.Launched(delegated.SessionID)
-	closePane(app, seedResumePane(t, w, protocol.Deref(delegated.WorkspaceID), delegated.SessionID))
+	closePane(app, sessionPane{session: delegated.SessionID})
 	before := paneSessions(w)
 	seed := lifeShow(t, cli, delegated.SeedID).Seed
 
@@ -222,7 +208,7 @@ func TestPiResumeAndReopenRequireTheSavedConversation(t *testing.T) {
 	delegated := seedResumeDelegate(t, w, fakeagent.Pi, "api")
 	first := w.Launched(delegated.SessionID)
 	close := func() {
-		closePane(app, seedResumePane(t, w, protocol.Deref(delegated.WorkspaceID), delegated.SessionID))
+		closePane(app, sessionPane{session: delegated.SessionID})
 	}
 	close()
 
@@ -260,7 +246,7 @@ func TestPiResumeAndReopenRequireTheSavedConversation(t *testing.T) {
 	if verdict.Reopenable || !slices.Equal(verdict.Actions, []protocol.SessionReopenAction{protocol.SessionReopenActionStartFreshSamePlace}) {
 		t.Fatalf("Pi reopen after deletion = %+v, want only an explicit fresh start", verdict)
 	}
-	workspaces := seedResumeWorkspaceIDs(w)
+	desktops := seedResumeDesktops(w)
 	panes := paneSessions(w)
 	resumed := seedResumeRequest(app, delegated.SeedID)
 	reopened := reopenOverTheWebSocket(app, delegated.SessionID)
@@ -278,8 +264,8 @@ func TestPiResumeAndReopenRequireTheSavedConversation(t *testing.T) {
 	if after := lifeShow(t, cli, delegated.SeedID); after.Seed.Rev != before.Seed.Rev || after.NotesTotal != before.NotesTotal {
 		t.Errorf("refused Pi resume changed the seed: %+v -> %+v", before, after)
 	}
-	if after := seedResumeWorkspaceIDs(w); !slices.Equal(after, workspaces) {
-		t.Errorf("refusal changed workspaces: %v -> %v", workspaces, after)
+	if after := seedResumeDesktops(w); !slices.Equal(after, desktops) {
+		t.Errorf("refusal changed workspaces: %v -> %v", desktops, after)
 	}
 	if after := paneSessions(w); !slices.Equal(after, panes) {
 		t.Errorf("refusal changed panes: %v -> %v", panes, after)

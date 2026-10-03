@@ -8,7 +8,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/victorarias/attn/internal/workspacelayout"
+	"github.com/victorarias/attn/internal/profiles"
 )
 
 // Succession puts To in the terminal From showed: To takes From's place, process, driver run and
@@ -21,64 +21,77 @@ type Succession struct {
 	Close        SessionClose
 }
 
-// CommitSuccession opens sc.To, or reopens or moves it when it exists, in the workspace of layouts[0], whose
-// pane now shows it. It saves layouts and closes sc.From into the ledger in one transaction.
-func (s *Store) CommitSuccession(sc Succession, layouts []workspacelayout.WorkspaceLayout, now time.Time) error {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	if s.db == nil {
-		return errors.New("a succession needs the database")
-	}
-	tx, err := s.db.Begin()
-	if err != nil {
-		return err
-	}
-	defer tx.Rollback()
-
-	var open int
-	err = tx.QueryRow(`SELECT 1 FROM sessions WHERE id = ? AND closed_at = ''`, sc.From).Scan(&open)
-	if errors.Is(err, sql.ErrNoRows) {
-		return fmt.Errorf("succeed session %s: %w", sc.From, ErrSessionClosed)
-	}
-	if err != nil {
-		return fmt.Errorf("succeed session %s: %w", sc.From, err)
-	}
-	if strings.TrimSpace(sc.Close.By) == "" {
-		sc.Close.By = SessionClosedByUser
-	}
-	at := now.UTC().Format(time.RFC3339Nano)
-	var exists int
-	err = tx.QueryRow(`SELECT 1 FROM sessions WHERE id = ?`, sc.To).Scan(&exists)
-	switch {
-	case errors.Is(err, sql.ErrNoRows):
-		err = openSuccessorTx(tx, sc, layouts[0].WorkspaceID, at)
-	case err == nil:
-		err = takeOverTx(tx, sc, layouts[0].WorkspaceID, at)
-	}
-	if err != nil {
-		return fmt.Errorf("open successor %s: %w", sc.To, err)
-	}
-	for _, layout := range layouts {
-		if err := saveWorkspaceLayoutTx(tx, layout); err != nil {
+// CommitSuccession opens sc.To, or reopens it when it exists, in the pane that holds terminal; the pane now
+// shows it and To's other panes, whose terminals are dead, close. sc.From closes into the ledger in the same
+// transaction. It returns the desktops it changed, terminal's first.
+func (s *Store) CommitSuccession(sc Succession, terminal string) ([]profiles.Desktop, error) {
+	var changed []profiles.Desktop
+	err := s.profilesTx(func(tx *sql.Tx, now string) error {
+		var open int
+		err := tx.QueryRow(`SELECT 1 FROM sessions WHERE id = ? AND closed_at = ''`, sc.From).Scan(&open)
+		if errors.Is(err, sql.ErrNoRows) {
+			return fmt.Errorf("succeed session %s: %w", sc.From, ErrSessionClosed)
+		}
+		if err != nil {
+			return fmt.Errorf("succeed session %s: %w", sc.From, err)
+		}
+		if strings.TrimSpace(sc.Close.By) == "" {
+			sc.Close.By = SessionClosedByUser
+		}
+		at := time.Now().UTC().Format(time.RFC3339Nano)
+		var exists int
+		err = tx.QueryRow(`SELECT 1 FROM sessions WHERE id = ?`, sc.To).Scan(&exists)
+		switch {
+		case errors.Is(err, sql.ErrNoRows):
+			err = openSuccessorTx(tx, sc, at)
+		case err == nil:
+			err = takeOverTx(tx, sc, at)
+		}
+		if err != nil {
+			return fmt.Errorf("open successor %s: %w", sc.To, err)
+		}
+		var desktopID string
+		if err := tx.QueryRow(`SELECT desktop_id FROM desktop_panes WHERE runtime_id = ?`, terminal).Scan(&desktopID); err != nil {
+			return fmt.Errorf("no pane holds terminal %s: %w", terminal, err)
+		}
+		if dead, err := removeSessionPlacement(tx, now, sc.To); err != nil {
+			return fmt.Errorf("close the dead panes of %s: %w", sc.To, err)
+		} else if dead != nil && dead.ID != desktopID {
+			changed = append(changed, *dead)
+		}
+		desktop, err := loadDesktop(tx, desktopID)
+		if err != nil {
+			return err
+		}
+		for i := range desktop.Panes {
+			if desktop.Panes[i].RuntimeID == terminal {
+				desktop.Panes[i].SessionID = sc.To
+			}
+		}
+		if err := writeDesktopArrangement(tx, now, &desktop); err != nil {
 			return fmt.Errorf("show successor %s: %w", sc.To, err)
 		}
-	}
-	if _, err = s.closeSessionTx(tx, sc.From, sc.Close, at); err == nil {
-		_, err = tx.Exec(`UPDATE sessions SET agent_driver_plugin_name = '', agent_driver_run_id = '', agent_driver_report_seq = 0,
-			agent_driver_transcript_path = '' WHERE id = ?`, sc.From)
-	}
+		changed = append([]profiles.Desktop{desktop}, changed...)
+		if _, _, err = s.closeSessionTx(tx, sc.From, sc.Close, at); err == nil {
+			_, err = tx.Exec(`UPDATE sessions SET agent_driver_plugin_name = '', agent_driver_run_id = '', agent_driver_report_seq = 0,
+				agent_driver_transcript_path = '' WHERE id = ?`, sc.From)
+		}
+		if err != nil {
+			return fmt.Errorf("succeed session %s: %w", sc.From, err)
+		}
+		return nil
+	})
 	if err != nil {
-		return fmt.Errorf("succeed session %s: %w", sc.From, err)
-	}
-	if err := tx.Commit(); err != nil {
-		return fmt.Errorf("succeed session %s: %w", sc.From, err)
+		return nil, err
 	}
 	s.forgetSessionCost(sc.From)
+	s.mu.Lock()
 	delete(s.touchedAt, sc.From)
-	return nil
+	s.mu.Unlock()
+	return changed, nil
 }
 
-func openSuccessorTx(tx *sql.Tx, sc Succession, workspaceID, at string) error {
+func openSuccessorTx(tx *sql.Tx, sc Succession, at string) error {
 	launch, err := json.Marshal(sc.Launch)
 	if err != nil {
 		return err
@@ -88,16 +101,16 @@ func openSuccessorTx(tx *sql.Tx, sc Succession, workspaceID, at string) error {
 		return err
 	}
 	_, err = tx.Exec(`
-		INSERT INTO sessions (id, label, agent, directory, endpoint_id, workspace_id, branch, is_worktree, main_repo, repository,
+		INSERT INTO sessions (id, label, agent, directory, endpoint_id, profile_id, branch, is_worktree, main_repo, repository,
 			state, state_since, state_updated_at, last_model_request_at, last_seen, launched_at, context_window_cap,
 			resume_session_id, transcript_path, launch_intent, session_cost_json, succeeds,
 			agent_driver_plugin_name, agent_driver_run_id, agent_driver_report_seq, agent_driver_transcript_path)
-		SELECT ?, ?, agent, directory, endpoint_id, ?, branch, is_worktree, main_repo, repository,
+		SELECT ?, ?, agent, directory, endpoint_id, profile_id, branch, is_worktree, main_repo, repository,
 			'idle', ?, ?, ?, ?, launched_at, context_window_cap,
 			?, ?, ?, ?, id,
 			agent_driver_plugin_name, agent_driver_run_id, agent_driver_report_seq, agent_driver_transcript_path
 		FROM sessions WHERE id = ?`,
-		sc.To, sc.Label, workspaceID,
+		sc.To, sc.Label,
 		at, at, at, at,
 		sc.Conversation.NativeID, sc.Conversation.TranscriptPath, string(launch), string(cost),
 		sc.From,
@@ -107,16 +120,16 @@ func openSuccessorTx(tx *sql.Tx, sc Succession, workspaceID, at string) error {
 
 // takeOverTx brings an existing To back as Reopen would, into From's terminal. Its launch counts
 // from now, so the lines its transcript already holds predate it.
-func takeOverTx(tx *sql.Tx, sc Succession, workspaceID, at string) error {
+func takeOverTx(tx *sql.Tx, sc Succession, at string) error {
 	if _, err := tx.Exec(`
-		UPDATE sessions SET closed_at = '', closed_by = '', close_reason = '', workspace_id = ?,
+		UPDATE sessions SET closed_at = '', closed_by = '', close_reason = '',
 			state = 'idle', state_since = ?, state_updated_at = ?, last_seen = ?, launched_at = ?,
 			resume_session_id = ?, transcript_path = ?, succeeds = ?,
 			(agent_driver_plugin_name, agent_driver_run_id, agent_driver_report_seq, agent_driver_transcript_path) =
 				(SELECT agent_driver_plugin_name, agent_driver_run_id, agent_driver_report_seq, agent_driver_transcript_path
 				FROM sessions WHERE id = ?)
 		WHERE id = ?`,
-		workspaceID, at, at, at, at,
+		at, at, at, at,
 		sc.Conversation.NativeID, sc.Conversation.TranscriptPath, sc.From,
 		sc.From, sc.To,
 	); err != nil {

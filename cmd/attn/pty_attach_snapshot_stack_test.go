@@ -61,7 +61,7 @@ func attachWithPolicy(t *testing.T, p *testworld.Peer, session string, policy pr
 	}
 }
 
-func TestATileSeededFromAScreenSnapshotMissesNoOutput(t *testing.T) {
+func TestAnObserverSeededFromAScreenSnapshotMissesNoOutput(t *testing.T) {
 	t.Parallel()
 	s := testworld.NewStack(t)
 	sequenced := s.PauseAt(pausepoint.PtyOutputSequenced)
@@ -70,20 +70,20 @@ func TestATileSeededFromAScreenSnapshotMissesNoOutput(t *testing.T) {
 	shell := s.Spawn(app, fakeagent.Harness(protocol.SessionAgentShell), s.Path("shop"))
 	sequenced.Await()
 	attachWithPolicy(t, app, shell, protocol.AttachPolicyFreshSpawn)
-	tile := s.App()
-	attachWithPolicy(t, tile, shell, protocol.AttachPolicyFreshSpawn)
-	terminal := tile.Terminal(shell)
-	testworld.Request(tile, protocol.GetScreenSnapshotMessage{Cmd: protocol.CmdGetScreenSnapshot, ID: terminal},
+	observer := s.App()
+	attachWithPolicy(t, observer, shell, protocol.AttachPolicyFreshSpawn)
+	terminal := observer.Terminal(shell)
+	testworld.Request(observer, protocol.GetScreenSnapshotMessage{Cmd: protocol.CmdGetScreenSnapshot, ID: terminal},
 		protocol.EventGetScreenSnapshotResult, func(r protocol.GetScreenSnapshotResultMessage) bool { return r.ID == terminal && r.Success })
 	sequenced.Release()
-	app.TypeLine(shell, `printf 'tile-%02d\n' 1 2 3`)
-	app.AwaitScreen(shell, "tile-03")
-	tile.AwaitScreen(shell, "tile-03")
+	app.TypeLine(shell, `printf 'line-%02d\n' 1 2 3`)
+	app.AwaitScreen(shell, "line-03")
+	observer.AwaitScreen(shell, "line-03")
 
 	upToMarker := func(screen []byte) []byte {
-		return screen[:bytes.LastIndex(screen, []byte("tile-03"))]
+		return screen[:bytes.LastIndex(screen, []byte("line-03"))]
 	}
-	if stream, seeded := upToMarker(app.Screen(shell)), upToMarker(tile.Screen(shell)); !bytes.HasSuffix(seeded, stream) {
-		t.Errorf("the tile seeded from a screen snapshot shows %q, want it to end with everything the shell printed since the snapshot: %q", seeded, stream)
+	if stream, seeded := upToMarker(app.Screen(shell)), upToMarker(observer.Screen(shell)); !bytes.HasSuffix(seeded, stream) {
+		t.Errorf("the observer seeded from a screen snapshot shows %q, want it to end with everything the shell printed since the snapshot: %q", seeded, stream)
 	}
 }

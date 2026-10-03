@@ -193,19 +193,6 @@ func BranchesToValues(branches []*Branch) []Branch {
 	return result
 }
 
-func WorkspaceLayoutsToValues(layouts []*WorkspaceLayout) []WorkspaceLayout {
-	if layouts == nil {
-		return nil
-	}
-	result := make([]WorkspaceLayout, len(layouts))
-	for i, l := range layouts {
-		if l != nil {
-			result[i] = *l
-		}
-	}
-	return result
-}
-
 func ParsePRID(id string) (host, repo string, number int, err error) {
 	id = strings.TrimSpace(id)
 	if id == "" {

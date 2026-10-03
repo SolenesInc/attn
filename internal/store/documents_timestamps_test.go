@@ -57,7 +57,7 @@ func stampQuery(sort *docstore.Sort) docstore.Query {
 
 func TestMigration91RewritesStampsThatDoNotSort(t *testing.T) {
 	dbPath := filepath.Join(t.TempDir(), "test.db")
-	s, err := newStoreAtVersion(dbPath, 161)
+	s, err := newStoreAtVersion(dbPath, 167)
 	if err != nil {
 		t.Fatalf("NewWithDB: %v", err)
 	}
@@ -96,7 +96,7 @@ func TestMigration91RewritesStampsThatDoNotSort(t *testing.T) {
 		t.Fatalf("the planted stamps already sort correctly as %v; this test would pass without the migration", got)
 	}
 
-	if err := migrateDBThrough(s.db, dbPath, 161); err != nil {
+	if err := migrateDBThrough(s.db, dbPath, 167); err != nil {
 		t.Fatalf("migrateDB: %v", err)
 	}
 
@@ -111,7 +111,7 @@ func TestMigration91RewritesStampsThatDoNotSort(t *testing.T) {
 	if _, err := s.db.Exec(`DELETE FROM schema_migrations WHERE version >= 91`); err != nil {
 		t.Fatalf("unrecord migration 91 again: %v", err)
 	}
-	if err := migrateDBThrough(s.db, dbPath, 161); err != nil {
+	if err := migrateDBThrough(s.db, dbPath, 167); err != nil {
 		t.Fatalf("re-run migrateDB: %v", err)
 	}
 	got, err = readIDs(t, s, stampQuery(&docstore.Sort{Field: docstore.FieldCreatedAt}))

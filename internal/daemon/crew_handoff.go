@@ -41,22 +41,30 @@ func (d *Daemon) transferCrewBinding(memberID, from, to string) error {
 }
 
 func (d *Daemon) crewMemberForSession(sessionID string) (crew.Member, bool) {
+	member, bound, err := d.boundCrewMember(sessionID)
+	if err != nil {
+		d.logf("crew: reading roster for session %s: %v", sessionID, err)
+	}
+	return member, bound
+}
+
+func (d *Daemon) boundCrewMember(sessionID string) (crew.Member, bool, error) {
 	if sessionID == "" || d.store == nil {
-		return crew.Member{}, false
+		return crew.Member{}, false, nil
 	}
 	members, _, err := d.readCrewMembers()
+	if docstore.IsUndeclaredCollection(err) {
+		return crew.Member{}, false, nil
+	}
 	if err != nil {
-		if !docstore.IsUndeclaredCollection(err) {
-			d.logf("crew: reading roster for session %s: %v", sessionID, err)
-		}
-		return crew.Member{}, false
+		return crew.Member{}, false, err
 	}
 	for _, member := range members {
 		if member.BindingSession == sessionID {
-			return member, true
+			return member, true, nil
 		}
 	}
-	return crew.Member{}, false
+	return crew.Member{}, false, nil
 }
 
 func (d *Daemon) crewHandoff(sessionID, note string, retry bool, close protocol.CrewDayClose) (result *protocol.CrewHandoffResult, err error) {
@@ -244,27 +252,14 @@ func (d *Daemon) crewNap(member crew.Member, oldSessionID string, teardown *sess
 		}
 	}
 
-	paneClient := newInternalWSClient()
-	d.handleWorkspaceLayoutAddSessionPane(paneClient, &protocol.WorkspaceLayoutAddSessionPaneMessage{
-		Cmd:         protocol.CmdWorkspaceLayoutAddSessionPane,
-		WorkspaceID: spawnMsg.WorkspaceID,
-		PaneID:      protocol.Ptr("pane-" + newSessionID),
-		SessionID:   newSessionID,
-		Title:       protocol.Ptr(crew.DisplayName(member.ID)),
-	})
-	if _, err := readInternalActionResult(paneClient); err != nil {
-		undoBinding()
-		return "", fmt.Errorf("create %s's next pane: %w", crew.DisplayName(member.ID), err)
-	}
-
 	if rejection := d.runSpawnPipeline(spawnMsg, policy); rejection != nil {
-		d.removeWorkspaceLayoutPaneForSession(newSessionID)
 		undoBinding()
 		return "", fmt.Errorf("wake %s's successor: %w", crew.DisplayName(member.ID), rejection.reason())
 	}
 
 	d.closeNappedSession(oldSessionID, teardown)
 	committed = true
+	d.announceBackgroundLaunch("crew", member.ID, newSessionID, crew.DisplayName(member.ID)+" handoff")
 	d.logf("crew: %s napped — session %s ended, session %s is the new day", crew.DisplayName(member.ID), oldSessionID, newSessionID)
 	return newSessionID, nil
 }
@@ -278,13 +273,13 @@ func (d *Daemon) crewNapSpawn(member crew.Member, session *protocol.Session) (*p
 	} else {
 		d.logf("crew: no launch intent for %s's closing day; the successor launches with defaults", crew.DisplayName(member.ID))
 		spawnMsg = &protocol.SpawnSessionMessage{
-			Cmd:         protocol.CmdSpawnSession,
-			Cwd:         session.Directory,
-			Agent:       string(session.Agent),
-			WorkspaceID: session.WorkspaceID,
-			Label:       protocol.Ptr(crew.DisplayName(member.ID)),
-			Cols:        cols,
-			Rows:        rows,
+			Cmd:       protocol.CmdSpawnSession,
+			Cwd:       session.Directory,
+			Agent:     string(session.Agent),
+			ProfileID: session.ProfileID,
+			Label:     protocol.Ptr(crew.DisplayName(member.ID)),
+			Cols:      cols,
+			Rows:      rows,
 		}
 	}
 	spawnMsg.ID = uuid.NewString()
@@ -309,8 +304,10 @@ func (d *Daemon) crewNapSpawn(member crew.Member, session *protocol.Session) (*p
 	}
 
 	spawnMsg.ResumeSessionID = nil
-	if strings.TrimSpace(spawnMsg.WorkspaceID) == "" {
-		spawnMsg.WorkspaceID = crewWorkspaceID(member.ID)
+	spawnMsg.Placement = nil
+	policy.launchPlacement = d.placementBeside(session.ID)
+	if policy.launchPlacement == nil {
+		policy.launchPlacement = &launchPlacement{kind: "crew", itemID: member.ID}
 	}
 	if strings.TrimSpace(spawnMsg.Cwd) == "" {
 		spawnMsg.Cwd = member.HomeDir
@@ -341,8 +338,6 @@ func (d *Daemon) closeNappedSession(sessionID string, teardown *sessionTeardown)
 	d.commitSessionUnregister(sessionID, store.SessionClose{By: store.SessionClosedByUser, Reason: "crew member put to sleep"})
 	if teardown.session != nil {
 		d.publishSessionUnregistered(teardown.session)
-		d.dissociateSessionFromWorkspace(teardown.session.ID)
-		d.removeWorkspaceLayoutPaneForSession(teardown.session.ID)
 		d.publishFact(FactSessionTerminated, teardown.session.ID, nil)
 	}
 	d.terminateSessionAsync(sessionID, syscall.SIGTERM, teardown)

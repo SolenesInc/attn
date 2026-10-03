@@ -15,10 +15,10 @@ func TestASupportSnapshotCarriesBoundedEvidenceWithoutInputOrWarningText(t *test
 	t.Setenv("ATTN_PTY_BACKEND", "not-a-backend")
 	w := newWorld(t)
 	app := w.App()
-	shellSession := w.Spawn(app, workspaceShell, w.Path("shop"))
-	goneSession := w.Spawn(app, workspaceShell, w.Path("docs"))
+	shellSession := w.Spawn(app, shellHarness, w.Path("shop"))
+	goneSession := w.Spawn(app, shellHarness, w.Path("docs"))
 	shell, gone := app.Terminal(shellSession), app.Terminal(goneSession)
-	exitWorkspaceShells(app, goneSession)
+	exitShells(app, goneSession)
 
 	empty, _ := supportSnapshotRequest(app, "before", nil)
 	capacity := empty.TraceCapacity
@@ -82,32 +82,6 @@ func TestASupportSnapshotCarriesBoundedEvidenceWithoutInputOrWarningText(t *test
 	for _, leaked := range []string{"do not retain me", "lost secret", "not found", "not available in this build"} {
 		if strings.Contains(string(raw), leaked) {
 			t.Errorf("the snapshot carries %q", leaked)
-		}
-	}
-}
-
-func TestASupportSnapshotForANamedEndpointIsSentToThatEndpoint(t *testing.T) {
-	t.Setenv("ATTN_INSTANCE", "")
-	refuseSSH(t)
-	w := newWorld(t)
-	app := w.App()
-	remote := addEndpoint(t, app, "gpu-box", "user@example", nil)
-
-	for endpoint, want := range map[string]string{
-		remote:    "endpoint not connected: " + remote,
-		"missing": "endpoint not found: missing",
-	} {
-		app.Send(protocol.SupportSnapshotMessage{Cmd: protocol.CmdSupportSnapshot, RequestID: endpoint, EndpointID: protocol.Ptr(endpoint)})
-		refused := testworld.Await(app, protocol.EventCommandError, func(m protocol.CommandErrorMessage) bool {
-			return protocol.Deref(m.Cmd) == protocol.CmdSupportSnapshot && strings.Contains(m.Error, endpoint)
-		})
-		if refused.Error != want {
-			t.Errorf("a snapshot for endpoint %s was refused with %q, want %q", endpoint, refused.Error, want)
-		}
-	}
-	for _, e := range app.Received() {
-		if e.Event == protocol.EventSupportSnapshotResult {
-			t.Fatalf("the daemon answered a snapshot meant for another endpoint itself")
 		}
 	}
 }

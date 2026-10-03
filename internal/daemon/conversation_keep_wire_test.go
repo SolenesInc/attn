@@ -44,7 +44,7 @@ func TestKeptClaudeConversationRestoresForSeedResumeAndLedgerReopen(t *testing.T
 					t.Fatal(err)
 				}
 			}
-			closePane(app, seedResumePane(t, w, protocol.Deref(delegated.WorkspaceID), delegated.SessionID))
+			closePane(app, sessionPane{session: delegated.SessionID})
 			testworld.AwaitTaskDone(app, "conversation_keep")
 			kept := lifeShow(t, cli, delegated.SeedID).Seed.Continuation.KeptConversation
 			if kept == nil || kept.Bytes <= 0 || protocol.Deref(kept.DeleteAfter) != "" {
@@ -97,7 +97,7 @@ func TestKeptConversationReleaseReplantAndDeletionAreVisible(t *testing.T) {
 	}
 	first := w.Launched(delegated.SessionID)
 	first.Prompted()
-	closePane(app, seedResumePane(t, w, protocol.Deref(delegated.WorkspaceID), delegated.SessionID))
+	closePane(app, sessionPane{session: delegated.SessionID})
 	testworld.AwaitTaskDone(app, "conversation_keep")
 	lifeMove(t, cli, "", delegated.SeedID, "wither", "abandoned", "")
 	keepPass()
@@ -165,7 +165,7 @@ func TestLiveClaudeIsKeptOnlyWhenQuietAndNeverReplacedByASmallerSource(t *testin
 	if err := os.WriteFile(path, []byte("{}\n"), 0600); err != nil {
 		t.Fatal(err)
 	}
-	closePane(app, seedResumePane(t, w, protocol.Deref(delegated.WorkspaceID), delegated.SessionID))
+	closePane(app, sessionPane{session: delegated.SessionID})
 	testworld.AwaitTaskDone(app, "conversation_keep")
 	if next := lifeShow(t, cli, delegated.SeedID).Seed.Continuation.KeptConversation; next.CopiedAt != kept.CopiedAt {
 		t.Fatalf("smaller source replaced the copy: %+v", next)
@@ -177,7 +177,7 @@ func TestLiveClaudeIsKeptOnlyWhenQuietAndNeverReplacedByASmallerSource(t *testin
 	if got, err := os.ReadFile(path); err != nil || string(got) != "{}\n" {
 		t.Fatalf("existing transcript overwritten: %q, %v", got, err)
 	}
-	closePane(app, seedResumePane(t, w, protocol.Deref(delegated.WorkspaceID), delegated.SessionID))
+	closePane(app, sessionPane{session: delegated.SessionID})
 	testworld.AwaitTaskDone(app, "conversation_keep")
 	if err := os.Remove(path); err != nil {
 		t.Fatal(err)
@@ -197,7 +197,7 @@ func TestCodexConversationNeedsNoKeptCopy(t *testing.T) {
 	delegated := seedResumeDelegate(t, w, fakeagent.Codex, "api")
 	first := w.Launched(delegated.SessionID)
 	first.Prompted()
-	closePane(app, seedResumePane(t, w, protocol.Deref(delegated.WorkspaceID), delegated.SessionID))
+	closePane(app, sessionPane{session: delegated.SessionID})
 	testworld.AwaitTaskDone(app, "conversation_keep")
 	if kept := lifeShow(t, cli, delegated.SeedID).Seed.Continuation.KeptConversation; kept != nil {
 		t.Fatalf("Codex copied: %+v", kept)
@@ -225,9 +225,9 @@ func TestSessionsSharingAConversationKeepOneCopyUntilAllTheirWorkCloses(t *testi
 	if err != nil {
 		t.Fatal(err)
 	}
-	closePane(app, seedResumePane(t, w, protocol.Deref(delegated.WorkspaceID), delegated.SessionID))
+	closePane(app, sessionPane{session: delegated.SessionID})
 	testworld.AwaitTaskDone(app, "conversation_keep")
-	spawned, secondWorkspace, _ := w.RequestSpawn(app, fakeagent.Claude, w.Path("elsewhere"), func(msg *protocol.SpawnSessionMessage) {
+	spawned, _, _ := w.RequestSpawn(app, fakeagent.Claude, w.Path("elsewhere"), func(msg *protocol.SpawnSessionMessage) {
 		msg.ResumeSessionID = protocol.Ptr(first.ConversationID)
 	})
 	if !spawned.Success {
@@ -244,7 +244,7 @@ func TestSessionsSharingAConversationKeepOneCopyUntilAllTheirWorkCloses(t *testi
 	app.TypeLine(second, "continue the work")
 	resumed.Prompted()
 	resumed.Reply("second session's longer answer to keep with the original conversation <!-- attn:state=waiting_input -->")
-	closePane(app, seedResumePane(t, w, secondWorkspace, second))
+	closePane(app, sessionPane{session: second})
 	testworld.AwaitTaskDone(app, "conversation_keep")
 	firstCopy := lifeShow(t, cli, delegated.SeedID).Seed.Continuation.KeptConversation
 	secondCopy := lifeShow(t, cli, secondSeed).Seed.Continuation.KeptConversation
@@ -292,7 +292,7 @@ func TestSessionsSharingAConversationKeepOneCopyUntilAllTheirWorkCloses(t *testi
 	app.TypeLine(second, "continue after the original auxiliary files were pruned")
 	continued.Prompted()
 	continued.Reply("the new archive must retain missing old auxiliary files <!-- attn:state=waiting_input -->")
-	closePane(app, seedResumePane(t, w, protocol.Deref(partialRestore.WorkspaceID), second))
+	closePane(app, sessionPane{session: second})
 	testworld.AwaitTaskDone(app, "conversation_keep")
 	sessionRecoveryDeleteTranscript(t, first.ConversationID)
 	if err := os.RemoveAll(strings.TrimSuffix(originalPath, ".jsonl")); err != nil {
@@ -310,7 +310,7 @@ func TestSessionsSharingAConversationKeepOneCopyUntilAllTheirWorkCloses(t *testi
 	if err != nil {
 		t.Fatal(err)
 	}
-	closePane(app, seedResumePane(t, w, protocol.Deref(fullRestore.WorkspaceID), second))
+	closePane(app, sessionPane{session: second})
 	testworld.AwaitTaskDone(app, "conversation_keep")
 	if err := os.WriteFile(originalPath, older, 0600); err != nil {
 		t.Fatal(err)
@@ -346,9 +346,9 @@ func TestOpenWorkKeepsLatestClaudeHistoryFromAnUnassignedSession(t *testing.T) {
 			first.Prompted()
 			first.Reply("the seed's original history <!-- attn:state=waiting_input -->")
 			originalPath := transcript.FindClaudeTranscript(first.ConversationID)
-			closePane(app, seedResumePane(t, w, protocol.Deref(delegated.WorkspaceID), delegated.SessionID))
+			closePane(app, sessionPane{session: delegated.SessionID})
 			testworld.AwaitTaskDone(app, "conversation_keep")
-			spawned, workspace, _ := w.RequestSpawn(app, fakeagent.Claude, w.Path("unassigned-directory"), func(msg *protocol.SpawnSessionMessage) {
+			spawned, _, _ := w.RequestSpawn(app, fakeagent.Claude, w.Path("unassigned-directory"), func(msg *protocol.SpawnSessionMessage) {
 				msg.ResumeSessionID = protocol.Ptr(first.ConversationID)
 			})
 			if !spawned.Success {
@@ -385,7 +385,7 @@ func TestOpenWorkKeepsLatestClaudeHistoryFromAnUnassignedSession(t *testing.T) {
 					t.Fatal(err)
 				}
 			}
-			closePane(app, seedResumePane(t, w, workspace, spawned.ID))
+			closePane(app, sessionPane{session: spawned.ID})
 			testworld.AwaitTaskDone(app, "conversation_keep")
 			if seed := lifeShow(t, cli, delegated.SeedID).Seed; protocol.Deref(seed.LastExecutionID) != delegated.SessionID {
 				t.Fatalf("plain resume changed seed's execution: %+v", seed)
@@ -416,9 +416,9 @@ func TestOpenWorkKeepsDistinctClaudeConversationsInOneBatch(t *testing.T) {
 	w := newWorld(t, fakeagent.Claude)
 	app := w.App()
 	type conversation struct {
-		seed, session, workspace, native, original, latest, auxiliary string
-		continued                                                     string
-		mainBytes, auxiliaryBytes                                     []byte
+		seed, session, native, original, latest, auxiliary string
+		continued                                          string
+		mainBytes, auxiliaryBytes                          []byte
 	}
 	var conversations []conversation
 	for _, marker := range []string{"first", "second"} {
@@ -427,23 +427,23 @@ func TestOpenWorkKeepsDistinctClaudeConversationsInOneBatch(t *testing.T) {
 		first.Prompted()
 		first.Reply(marker + " conversation's original history <!-- attn:state=waiting_input -->")
 		conversations = append(conversations, conversation{
-			seed: delegated.SeedID, session: delegated.SessionID, workspace: protocol.Deref(delegated.WorkspaceID),
+			seed: delegated.SeedID, session: delegated.SessionID,
 			native: first.ConversationID, original: transcript.FindClaudeTranscript(first.ConversationID),
 		})
 	}
 	for _, c := range conversations {
-		closePane(app, seedResumePane(t, w, c.workspace, c.session))
+		closePane(app, sessionPane{session: c.session})
 		testworld.AwaitTaskDone(app, "conversation_keep")
 	}
 	for i := range conversations {
 		c := &conversations[i]
-		spawned, workspace, _ := w.RequestSpawn(app, fakeagent.Claude, w.Path("batch-newer"), func(msg *protocol.SpawnSessionMessage) {
+		spawned, _, _ := w.RequestSpawn(app, fakeagent.Claude, w.Path("batch-newer"), func(msg *protocol.SpawnSessionMessage) {
 			msg.ResumeSessionID = protocol.Ptr(c.native)
 		})
 		if !spawned.Success {
 			t.Fatalf("plain resume of %s: %+v", c.native, spawned)
 		}
-		c.continued, c.workspace = spawned.ID, workspace
+		c.continued = spawned.ID
 		second := w.Launched(spawned.ID)
 		app.TypeLine(spawned.ID, "continue the distinct conversation without tending a seed")
 		second.Prompted()
@@ -472,7 +472,7 @@ func TestOpenWorkKeepsDistinctClaudeConversationsInOneBatch(t *testing.T) {
 		}
 	}
 	for _, c := range conversations {
-		closePane(app, seedResumePane(t, w, c.workspace, c.continued))
+		closePane(app, sessionPane{session: c.continued})
 		testworld.AwaitTaskDone(app, "conversation_keep")
 	}
 	for _, c := range conversations {
@@ -512,7 +512,7 @@ func TestCrossDirectoryClaudeResumeIgnoresLargerSymlinkedTranscripts(t *testing.
 			if err != nil {
 				t.Fatal(err)
 			}
-			closePane(app, seedResumePane(t, w, protocol.Deref(delegated.WorkspaceID), delegated.SessionID))
+			closePane(app, sessionPane{session: delegated.SessionID})
 			testworld.AwaitTaskDone(app, "conversation_keep")
 			outside := w.Path("private-project")
 			if err := os.MkdirAll(outside, 0700); err != nil {
@@ -578,7 +578,7 @@ func TestKeptConversationRefusesSymlinkedProviderDirectories(t *testing.T) {
 				t.Fatal(err)
 			}
 			if stage != "copy" {
-				closePane(app, seedResumePane(t, w, protocol.Deref(delegated.WorkspaceID), delegated.SessionID))
+				closePane(app, sessionPane{session: delegated.SessionID})
 				testworld.AwaitTaskDone(app, "conversation_keep")
 				if lifeShow(t, cli, delegated.SeedID).Seed.Continuation.KeptConversation == nil {
 					t.Fatal("conversation was not kept")
@@ -604,7 +604,7 @@ func TestKeptConversationRefusesSymlinkedProviderDirectories(t *testing.T) {
 				t.Fatal(err)
 			}
 			if stage == "copy" {
-				closePane(app, seedResumePane(t, w, protocol.Deref(delegated.WorkspaceID), delegated.SessionID))
+				closePane(app, sessionPane{session: delegated.SessionID})
 				testworld.AwaitTaskDone(app, "conversation_keep")
 				if err := os.Remove(project); err != nil {
 					t.Fatal(err)
@@ -649,7 +649,7 @@ func TestConversationRetirementWaitsForAnActiveWorktreeSweep(t *testing.T) {
 	delegated := seedResumeDelegate(t, w, fakeagent.Claude, "api")
 	first := w.Launched(delegated.SessionID)
 	first.Prompted()
-	closePane(app, seedResumePane(t, w, protocol.Deref(delegated.WorkspaceID), delegated.SessionID))
+	closePane(app, sessionPane{session: delegated.SessionID})
 	testworld.AwaitTaskDone(app, "conversation_keep")
 	lifeMove(t, cli, "", delegated.SeedID, "wither", "finished", "")
 	testworld.AwaitTaskDone(app, "conversation_keep")

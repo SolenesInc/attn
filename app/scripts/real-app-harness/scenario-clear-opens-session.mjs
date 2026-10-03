@@ -11,7 +11,7 @@ import { writeMockAgentFixture } from './mockAgent.mjs';
 import { captureScreenshotData } from './nativeWindowCapture.mjs';
 import { appDaemonInTree, createWindowDriver } from './platform.mjs';
 import { ensureClaudePromptReadyViaPty } from './scenarioAgents.mjs';
-import { sleep, waitForFirstWorkspacePane, waitForPaneInputFocus, waitForPaneText } from './scenarioAssertions.mjs';
+import { sleep, waitForFirstDesktopPane, waitForPaneInputFocus, waitForPaneText } from './scenarioAssertions.mjs';
 import { createScenarioRunner } from './scenarioRunner.mjs';
 import { UiAutomationClient } from './uiAutomationClient.mjs';
 
@@ -66,7 +66,7 @@ async function main() {
       run.first = await createSessionAndWaitForInitialPane({
         client, observer, cwd, label, agent: 'claude', promptReadyFn: ensureClaudePromptReadyViaPty,
       });
-      run.paneId = (await waitForFirstWorkspacePane(client, run.first, 'agent pane')).paneId;
+      run.paneId = (await waitForFirstDesktopPane(client, run.first, 'agent pane')).paneId;
       run.terminal = observer.terminalOf(run.first);
       await client.request('select_session', { sessionId: run.first });
       await waitForPaneInputFocus(client, run.first, run.paneId);

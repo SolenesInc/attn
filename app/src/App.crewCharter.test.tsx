@@ -1,6 +1,6 @@
 import { act, fireEvent, screen, within } from '@testing-library/react';
 import { describe, expect, it, vi } from 'vitest';
-import { agentWorkspace, crewMember, daemonSession } from './test/daemonFixtures';
+import { soloDesktop, crewMember, daemonSession } from './test/daemonFixtures';
 import type { CommandMessage } from './test/protocol';
 import { gesture, renderApp } from './test/renderApp';
 import { type Answer, answerInTurn, HOLD, type Reply, type ScriptedDaemon } from './test/scriptedDaemon';
@@ -14,7 +14,7 @@ const refused = (error: string): Reply => ({ event: 'crew_charter_set_result', s
 
 async function openCharter({ reads = [charter('# One\n', 'one')], saves = [HOLD] }: { reads?: Answer[]; saves?: Answer[] } = {}) {
   const { daemon } = await renderApp({
-    initialState: { crew: [trellis], sessions: [daemonSession('s1')], workspaces: [agentWorkspace('s1')] },
+    initialState: { crew: [trellis], sessions: [daemonSession('s1')], desktops: [soloDesktop('s1')] },
   });
   answerInTurn(daemon, 'crew_charter_get', reads);
   answerInTurn(daemon, 'crew_charter_set', saves);

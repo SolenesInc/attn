@@ -4,7 +4,7 @@ import { buildIndex, parseQuery, searchGarden, type SearchEntry } from './garden
 
 const WORDS = (
   'reconnect socket daemon garden seed panel tender crown plot harvest wither ' +
-  'dormant terminal ghostty snapshot restore protocol migration workspace tile ' +
+  'dormant terminal ghostty snapshot restore protocol migration desktop tile ' +
   'notebook annotation delegate session queue attention badge shortcut theme ' +
   'scrollback keyboard focus escape pointer render paint frame budget latency'
 ).split(' ');
@@ -51,7 +51,8 @@ function corpus(count: number, bodyWords: (rand: () => number) => number): Seed[
       template: false,
       step_slug: '',
       planter_member: '',
-      planter_session: '',
+      profile_id: 'profile-default',
+    planter_session: '',
       tender_member: members[Math.floor(rand() * members.length)],
       tender_session: '',
       vars: [],

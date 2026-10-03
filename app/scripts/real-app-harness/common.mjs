@@ -3,7 +3,7 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import WebSocket from 'ws';
-import { waitForFirstWorkspacePane, waitForPaneVisible } from './scenarioAssertions.mjs';
+import { waitForFirstDesktopPane, waitForPaneVisible } from './scenarioAssertions.mjs';
 import { MOCK_AGENT_EXECUTABLE, mockPinnedAgents } from './mockAgent.mjs';
 import {
   assertProductionRunAllowed,
@@ -16,6 +16,10 @@ import {
 
 export const DEFAULT_REMOTE_SSH_TARGET =
   process.env.ATTN_HARNESS_REMOTE_SSH_TARGET || 'attn-remote@orb';
+
+export function shownAgentId(state) {
+  return state?.view === 'session' && state.activeLeaf?.kind === 'agent' ? state.activeLeaf.sessionId : null;
+}
 
 export function parseCommonArgs(argv) {
   const options = {
@@ -316,6 +320,24 @@ export async function launchFreshAppAndConnect(client, observer, {
   }
 }
 
+export async function waitForAppCurrentDesktop(client, desktopId, timeoutMs = 15_000) {
+  const startedAt = Date.now();
+  let last = null;
+  while (Date.now() - startedAt < timeoutMs) {
+    last = await client.request('get_state');
+    if (last.arrangement?.currentDesktopId === desktopId) return last;
+    await new Promise((resolve) => setTimeout(resolve, 100));
+  }
+  throw new Error(`Timed out waiting for the app to show desktop ${desktopId}. Last arrangement:\n${JSON.stringify(last?.arrangement, null, 2)}`);
+}
+
+export async function openHarnessDesktop(client, observer) {
+  const desktop = await observer.createDesktop();
+  await observer.setCurrentDesktop(desktop.id);
+  await waitForAppCurrentDesktop(client, desktop.id);
+  return desktop;
+}
+
 export async function relaunchAppAndConnect(client, observer, { agentExecutables = {} } = {}) {
   await client.quitApp();
   // Relaunch scenarios (e.g. tr205) depend on sessions surviving the
@@ -335,8 +357,12 @@ export async function createSessionAndWaitForInitialPane({
   promptReadyTimeoutMs = 45_000,
   waitForInitialPaneVisible,
   initialPaneWaitMs,
+  ownDesktop = true,
 }) {
   const shouldWaitForInitialPane = waitForInitialPaneVisible ?? true;
+  if (ownDesktop) {
+    await openHarnessDesktop(client, observer);
+  }
   const paneWaitMs = initialPaneWaitMs ?? 20_000;
   const result = await client.request('create_session', {
     cwd,
@@ -349,7 +375,7 @@ export async function createSessionAndWaitForInitialPane({
     await promptReadyFn(client, result.sessionId, promptReadyTimeoutMs);
   }
   if (shouldWaitForInitialPane) {
-    const pane = await waitForFirstWorkspacePane(client, result.sessionId, 'initial workspace pane', paneWaitMs);
+    const pane = await waitForFirstDesktopPane(client, result.sessionId, 'initial desktopState pane', paneWaitMs);
     await waitForPaneVisible(client, result.sessionId, pane.paneId, paneWaitMs);
   }
   return result.sessionId;

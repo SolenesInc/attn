@@ -18,12 +18,12 @@ var (
 )
 
 type sessionsFilters struct {
-	Scope       string `json:"scope"`
-	Range       string `json:"range"`
-	CustomFrom  string `json:"customFrom"`
-	CustomTo    string `json:"customTo"`
-	WorkspaceID string `json:"workspaceId"`
-	Repository  string `json:"repository"`
+	Scope      string `json:"scope"`
+	Range      string `json:"range"`
+	CustomFrom string `json:"customFrom"`
+	CustomTo   string `json:"customTo"`
+	ProfileID  string `json:"profileId"`
+	Repository string `json:"repository"`
 }
 
 func validateSessionsFilters(value string) error {

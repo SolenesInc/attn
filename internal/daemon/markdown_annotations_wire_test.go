@@ -2,6 +2,7 @@ package daemon_test
 
 import (
 	"net/url"
+	"strings"
 	"testing"
 
 	"github.com/google/uuid"
@@ -48,38 +49,38 @@ func TestClearingMarkdownAnnotationsNeverLowersTheFloorAndStaysWithItsFile(t *te
 	}
 }
 
-func annotationSource(path string) (documentURI string, workspaceID, filePath *string) {
-	return "attn://file/workspace-notes/" + url.PathEscape(path), protocol.Ptr("workspace-notes"), protocol.Ptr(path)
+func annotationSource(path string) (documentURI string, filePath *string) {
+	return "attn://file/" + strings.ReplaceAll(url.QueryEscape(path), "+", "%20"), protocol.Ptr(path)
 }
 
 func saveAnnotations(app *testworld.Peer, path string, generation int, text string) protocol.MarkdownAnnotationsSaveResultMessage {
 	app.T.Helper()
-	uri, workspaceID, filePath := annotationSource(path)
+	uri, filePath := annotationSource(path)
 	requestID := uuid.NewString()
 	return testworld.Request(app, protocol.MarkdownAnnotationsSaveMessage{
 		Cmd: protocol.CmdMarkdownAnnotationsSave, RequestID: requestID, DocumentUri: uri, SourceKind: "file",
-		WorkspaceID: workspaceID, Path: filePath, Generation: generation,
+		Path: filePath, Generation: generation,
 		Annotations: []protocol.MarkdownAnnotation{{ID: uuid.NewString(), Type: "global", Text: protocol.Ptr(text), CreatedAt: 1}},
 	}, protocol.EventMarkdownAnnotationsSaveResult, func(r protocol.MarkdownAnnotationsSaveResultMessage) bool { return r.RequestID == requestID })
 }
 
 func clearAnnotations(app *testworld.Peer, path string, generation int) protocol.MarkdownAnnotationsClearResultMessage {
 	app.T.Helper()
-	uri, workspaceID, filePath := annotationSource(path)
+	uri, filePath := annotationSource(path)
 	requestID := uuid.NewString()
 	return testworld.Request(app, protocol.MarkdownAnnotationsClearMessage{
 		Cmd: protocol.CmdMarkdownAnnotationsClear, RequestID: requestID, DocumentUri: uri, SourceKind: "file",
-		WorkspaceID: workspaceID, Path: filePath, Generation: generation,
+		Path: filePath, Generation: generation,
 	}, protocol.EventMarkdownAnnotationsClearResult, func(r protocol.MarkdownAnnotationsClearResultMessage) bool { return r.RequestID == requestID })
 }
 
 func getAnnotations(app *testworld.Peer, path string) protocol.MarkdownAnnotationsGetResultMessage {
 	app.T.Helper()
-	uri, workspaceID, filePath := annotationSource(path)
+	uri, filePath := annotationSource(path)
 	requestID := uuid.NewString()
 	got := testworld.Request(app, protocol.MarkdownAnnotationsGetMessage{
 		Cmd: protocol.CmdMarkdownAnnotationsGet, RequestID: requestID, DocumentUri: uri, SourceKind: "file",
-		WorkspaceID: workspaceID, Path: filePath,
+		Path: filePath,
 	}, protocol.EventMarkdownAnnotationsGetResult, func(r protocol.MarkdownAnnotationsGetResultMessage) bool { return r.RequestID == requestID })
 	if !got.Success {
 		app.T.Fatalf("get annotations for %s refused: %s", path, protocol.Deref(got.Error))

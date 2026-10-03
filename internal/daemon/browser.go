@@ -1,7 +1,6 @@
 package daemon
 
 import (
-	"context"
 	"crypto/rand"
 	"encoding/hex"
 	"encoding/json"
@@ -11,8 +10,9 @@ import (
 	"strings"
 	"time"
 
+	"github.com/victorarias/attn/internal/hub"
+	"github.com/victorarias/attn/internal/layouttree"
 	"github.com/victorarias/attn/internal/protocol"
-	"github.com/victorarias/attn/internal/workspacelayout"
 )
 
 const (
@@ -32,11 +32,10 @@ type browserControlPending struct {
 	result chan browserControlResult
 }
 
-type browserWorkspaceTarget struct {
-	workspaceID      string
-	anchorLeafID     string
-	layout           workspacelayout.Node
-	remoteEndpointID string
+type browserTarget struct {
+	desktopID string
+	location  agentLocation
+	layout    layouttree.Node
 }
 
 func browserControlTimeout(params map[string]any) (time.Duration, error) {
@@ -98,115 +97,27 @@ func validateBrowserURL(raw string) (string, error) {
 	return parsed.String(), nil
 }
 
-func browserTargetFromRemoteWorkspace(workspace *protocol.Workspace, endpointID string) (browserWorkspaceTarget, error) {
-	if workspace == nil || workspace.Layout == nil {
-		return browserWorkspaceTarget{}, fmt.Errorf("remote workspace has no layout")
-	}
-	layout, err := workspacelayout.DecodeLayout(workspace.Layout.LayoutJson)
-	if err != nil {
-		return browserWorkspaceTarget{}, fmt.Errorf("decode remote workspace layout: %w", err)
-	}
-	snapshot := workspacelayout.WorkspaceLayout{
-		WorkspaceID:  workspace.ID,
-		ActivePaneID: workspace.Layout.ActivePaneID,
-		Layout:       layout,
-	}
-	for _, pane := range workspace.Layout.Panes {
-		snapshot.Panes = append(snapshot.Panes, workspacelayout.Pane{PaneID: pane.PaneID})
-	}
-	return browserWorkspaceTarget{
-		workspaceID:      workspace.ID,
-		anchorLeafID:     firstWorkspaceLayoutPaneID(snapshot),
-		layout:           layout,
-		remoteEndpointID: endpointID,
-	}, nil
-}
-
-func (d *Daemon) browserTargetForWorkspace(workspaceID string) (browserWorkspaceTarget, error) {
-	workspaceID = strings.TrimSpace(workspaceID)
-	if snapshot := d.store.GetWorkspaceLayout(workspaceID); snapshot != nil {
-		return browserWorkspaceTarget{
-			workspaceID:  workspaceID,
-			anchorLeafID: firstWorkspaceLayoutPaneID(*snapshot),
-			layout:       snapshot.Layout,
-		}, nil
-	}
-	if d.hubManager != nil {
-		if endpointID, ok := d.hubManager.EndpointIDForWorkspace(workspaceID); ok {
-			return browserTargetFromRemoteWorkspace(d.hubManager.RemoteWorkspace(workspaceID), endpointID)
-		}
-	}
-	return browserWorkspaceTarget{}, fmt.Errorf("no workspace layout found for workspace %s", workspaceID)
-}
-
-func (d *Daemon) browserWorkspaceTarget(sessionID string) (browserWorkspaceTarget, error) {
+func (d *Daemon) browserTargetFor(sessionID string) (browserTarget, error) {
 	sessionID = strings.TrimSpace(sessionID)
-	if sessionID != "" {
-		if workspaceID, paneID, ok := d.store.FindWorkspaceLayoutPaneBySessionID(sessionID); ok {
-			target, err := d.browserTargetForWorkspace(workspaceID)
-			if err != nil {
-				return browserWorkspaceTarget{}, err
-			}
-			target.anchorLeafID = paneID
-			return target, nil
-		}
-		if d.hubManager != nil {
-			if session := d.hubManager.RemoteSession(sessionID); session != nil {
-				return d.browserTargetForWorkspace(session.WorkspaceID)
-			}
-		}
-		return browserWorkspaceTarget{}, fmt.Errorf("no workspace found for session %s", sessionID)
+	if sessionID != "" && d.store.Get(sessionID) == nil && d.hubManager != nil && d.hubManager.RemoteSession(sessionID) != nil {
+		return browserTarget{}, fmt.Errorf("agent %s runs on an outpost: %w", sessionID, hub.ErrOutpostsOff)
 	}
-
-	if workspaceID := d.currentlySelectedWorkspace(); workspaceID != "" {
-		return d.browserTargetForWorkspace(workspaceID)
-	}
-
-	sessionID = d.currentlySelectedSession()
-	if sessionID == "" {
-		return browserWorkspaceTarget{}, fmt.Errorf("no workspace selected; open a workspace in attn or pass --session")
-	}
-	return d.browserWorkspaceTarget(sessionID)
-}
-
-func (d *Daemon) forwardRemoteBrowserOpen(target browserWorkspaceTarget, targetURL string) error {
-	if d.hubManager == nil || target.remoteEndpointID == "" {
-		return fmt.Errorf("remote endpoint manager unavailable")
-	}
-	ctx, cancel := context.WithTimeout(context.Background(), browserControlDefaultTimeout)
-	defer cancel()
-
-	if !browserTileInWorkspace(target.layout) {
-		if target.anchorLeafID == "" {
-			return fmt.Errorf("workspace has no anchor leaf")
-		}
-		dockPayload, err := json.Marshal(protocol.WorkspaceLayoutDockTileMessage{
-			Cmd:          protocol.CmdWorkspaceLayoutDockTile,
-			WorkspaceID:  target.workspaceID,
-			AnchorPaneID: target.anchorLeafID,
-			Edge:         protocol.WorkspaceLayoutDockEdgeRight,
-			TileID:       browserTileID,
-			TileKind:     string(workspacelayout.TileKindBrowser),
-		})
-		if err != nil {
-			return err
-		}
-		if err := d.hubManager.ForwardEndpointCommand(ctx, target.remoteEndpointID, dockPayload); err != nil {
-			return err
-		}
-	}
-
-	updatePayload, err := json.Marshal(protocol.WorkspaceLayoutUpdateTileMessage{
-		Cmd:         protocol.CmdWorkspaceLayoutUpdateTile,
-		WorkspaceID: target.workspaceID,
-		TileID:      browserTileID,
-		TileParams:  targetURL,
-		RequestID:   fmt.Sprintf("browser-open-%d", time.Now().UnixNano()),
-	})
+	location, err := d.currentAgent(sessionID)
 	if err != nil {
-		return err
+		return browserTarget{}, err
 	}
-	return d.hubManager.ForwardEndpointCommand(ctx, target.remoteEndpointID, updatePayload)
+	if location.desktopID == "" {
+		return browserTarget{}, fmt.Errorf("profile %s has no current desktop to open the browser on", location.profileID)
+	}
+	desktop, err := d.store.GetDesktop(location.desktopID)
+	if err != nil {
+		return browserTarget{}, err
+	}
+	return browserTarget{
+		desktopID: desktop.ID,
+		location:  location,
+		layout:    desktop.Tree,
+	}, nil
 }
 
 func (d *Daemon) handleOpenBrowser(conn net.Conn, msg *protocol.OpenBrowserMessage) {
@@ -215,73 +126,45 @@ func (d *Daemon) handleOpenBrowser(conn net.Conn, msg *protocol.OpenBrowserMessa
 		d.sendError(conn, "open_browser: "+err.Error())
 		return
 	}
-	target, err := d.browserWorkspaceTarget(protocol.Deref(msg.SessionID))
+	target, err := d.browserTargetFor(protocol.Deref(msg.SessionID))
 	if err != nil {
 		d.sendError(conn, "open_browser: "+err.Error())
 		return
 	}
-	workspaceID := target.workspaceID
-	if target.remoteEndpointID != "" {
-		if err := d.forwardRemoteBrowserOpen(target, targetURL); err != nil {
-			d.sendError(conn, fmt.Sprintf("open_browser: %v", err))
-			return
-		}
-		d.sendBrowserNavigation(workspaceID, targetURL)
-		d.logf("open_browser: forwarded %s into remote workspace %s", targetURL, workspaceID)
-		d.sendOK(conn)
-		return
-	}
-	snapshot := d.store.GetWorkspaceLayout(workspaceID)
-	currentURL, browserTileExists := "", false
-	if snapshot != nil {
-		currentURL, browserTileExists = workspacelayout.TileParamsByID(snapshot.Layout, browserTileID)
-		if browserTileExists {
-			browserAlreadyAtTarget := currentURL == targetURL
-			if !browserAlreadyAtTarget {
-				layout, updated := workspacelayout.UpdateTileParams(snapshot.Layout, browserTileID, targetURL)
-				if !updated {
-					d.sendError(conn, "open_browser: browser tile could not be updated")
-					return
-				}
-				snapshot.Layout = layout
-				if err := d.saveWorkspaceLayout(workspacelayout.NormalizeWorkspaceLayout(*snapshot)); err != nil {
-					d.sendError(conn, fmt.Sprintf("open_browser: %v", err))
-					return
-				}
-				d.broadcastWorkspaceLayoutUpdated(workspaceID)
-			}
-			d.sendBrowserNavigation(workspaceID, targetURL)
-			d.logf("open_browser: retargeted %s in workspace %s", targetURL, workspaceID)
-			d.sendOK(conn)
-			return
-		}
-	}
-	if err := d.dockTile(workspaceID, target.anchorLeafID, browserTileID, string(workspacelayout.TileKindBrowser), targetURL, "", protocol.WorkspaceLayoutDockEdgeRight, nil); err != nil {
+	alreadyOpen := browserTileOn(target.layout)
+	if _, _, err := d.openAgentTile(target.location, agentTile{
+		tileID:   browserTileID,
+		tileKind: string(layouttree.TileKindBrowser),
+		params:   targetURL,
+	}); err != nil {
 		d.sendError(conn, fmt.Sprintf("open_browser: %v", err))
 		return
 	}
-	d.logf("open_browser: docked %s into workspace %s", targetURL, workspaceID)
+	if alreadyOpen {
+		d.sendBrowserNavigation(target, targetURL)
+	}
+	d.logf("open_browser: %s on desktop %s", targetURL, target.desktopID)
 	d.sendOK(conn)
 }
 
-func (d *Daemon) sendBrowserNavigation(workspaceID, targetURL string) {
+func (d *Daemon) sendBrowserNavigation(target browserTarget, targetURL string) {
 	if d.wsHub == nil {
 		return
 	}
 	request := &protocol.BrowserControlRequestMessage{
-		Event:       protocol.EventBrowserControlRequest,
-		RequestID:   fmt.Sprintf("browser-open-%d", time.Now().UnixNano()),
-		WorkspaceID: workspaceID,
-		TileID:      browserTileID,
-		Action:      "navigate",
-		Text:        protocol.Ptr(targetURL),
+		Event:     protocol.EventBrowserControlRequest,
+		RequestID: fmt.Sprintf("browser-open-%d", time.Now().UnixNano()),
+		DesktopID: target.desktopID,
+		TileID:    browserTileID,
+		Action:    "navigate",
+		Text:      protocol.Ptr(targetURL),
 	}
 	d.sendBrowserHostRequest(d.browserHost(), request)
 }
 
-func browserTileInWorkspace(layout workspacelayout.Node) bool {
-	for _, tile := range workspacelayout.TileLeaves(layout) {
-		if tile.TileID == browserTileID && tile.TileKind == string(workspacelayout.TileKindBrowser) {
+func browserTileOn(layout layouttree.Node) bool {
+	for _, tile := range layouttree.TileLeaves(layout) {
+		if tile.TileID == browserTileID && tile.TileKind == string(layouttree.TileKindBrowser) {
 			return true
 		}
 	}
@@ -317,13 +200,6 @@ func newBrowserControlRequestID() (string, error) {
 		return "", fmt.Errorf("generate browser control request id: %w", err)
 	}
 	return "browser-" + hex.EncodeToString(bytes), nil
-}
-
-func (d *Daemon) browserControlTarget(msg *protocol.BrowserControlMessage) (browserWorkspaceTarget, error) {
-	if workspaceID := strings.TrimSpace(protocol.Deref(msg.WorkspaceID)); workspaceID != "" {
-		return d.browserTargetForWorkspace(workspaceID)
-	}
-	return d.browserWorkspaceTarget(protocol.Deref(msg.SessionID))
 }
 
 func (d *Daemon) runBrowserControl(msg *protocol.BrowserControlMessage) browserControlResult {
@@ -371,39 +247,19 @@ func (d *Daemon) runBrowserControl(msg *protocol.BrowserControlMessage) browserC
 		}
 	}
 
-	target, err := d.browserControlTarget(msg)
+	target, err := d.browserTargetFor(protocol.Deref(msg.SessionID))
 	if err != nil {
 		return browserControlResult{err: err.Error()}
 	}
-	if !browserTileInWorkspace(target.layout) {
+	if !browserTileOn(target.layout) {
 		return browserControlResult{err: "no browser tile is open for that session"}
 	}
-	if target.remoteEndpointID != "" {
-		if d.hubManager == nil {
-			return browserControlResult{err: "remote endpoint manager unavailable"}
-		}
-		requestID, err := newBrowserControlRequestID()
-		if err != nil {
-			return browserControlResult{err: err.Error()}
-		}
-		forwarded := *msg
-		forwarded.RequestID = protocol.Ptr(requestID)
-		forwarded.WorkspaceID = protocol.Ptr(target.workspaceID)
-		forwarded.SessionID = nil
-		ctx, cancel := context.WithTimeout(context.Background(), controlTimeout)
-		defer cancel()
-		data, err := d.hubManager.ForwardBrowserControl(ctx, target.remoteEndpointID, forwarded)
-		if err != nil {
-			return browserControlResult{err: err.Error()}
-		}
-		return browserControlResult{data: data}
-	}
 
-	return d.runLocalBrowserControl(target.workspaceID, action, selector, msg, controlTimeout)
+	return d.runLocalBrowserControl(target, action, selector, msg, controlTimeout)
 }
 
 func (d *Daemon) runLocalBrowserControl(
-	workspaceID string,
+	target browserTarget,
 	action string,
 	selector string,
 	msg *protocol.BrowserControlMessage,
@@ -432,12 +288,12 @@ func (d *Daemon) runLocalBrowserControl(
 	}()
 
 	request := &protocol.BrowserControlRequestMessage{
-		Event:       protocol.EventBrowserControlRequest,
-		RequestID:   requestID,
-		WorkspaceID: workspaceID,
-		TileID:      browserTileID,
-		Action:      action,
-		Params:      msg.Params,
+		Event:     protocol.EventBrowserControlRequest,
+		RequestID: requestID,
+		DesktopID: target.desktopID,
+		TileID:    browserTileID,
+		Action:    action,
+		Params:    msg.Params,
 	}
 	if selector != "" {
 		request.Selector = protocol.Ptr(selector)

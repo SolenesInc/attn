@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/victorarias/attn/internal/client"
+	"github.com/victorarias/attn/internal/crew"
 	"github.com/victorarias/attn/internal/fakeagent"
 	"github.com/victorarias/attn/internal/protocol"
 	"github.com/victorarias/attn/internal/testworld"
@@ -321,9 +322,34 @@ func TestMailForAMemberWhoseLaunchFailsWaitsForItsNextDay(t *testing.T) {
 
 func paneSessions(w *world) []string {
 	var sessions []string
-	for _, workspace := range w.App().Initial.Workspaces {
-		sessions = append(sessions, delegatePaneSessions(workspace)...)
+	for _, desktop := range w.App().Initial.Desktops {
+		sessions = append(sessions, delegatePaneSessions(desktop)...)
 	}
 	slices.Sort(sessions)
 	return sessions
+}
+
+func TestAMessageToAnotherProfilesSessionOrMemberIsRefusedAsNotFound(t *testing.T) {
+	inBubble(t, func(t *testing.T, w *world) {
+		app := w.App()
+		home := app.SelectedProfile()
+		side := createProfile(app, "Side")
+		w.advance(time.Second)
+		selectProfile(app, side.ID)
+		writeCrewHomeFile(t, w, "keel", crew.CharterFileName, "# Keel\n\nA member of Side.\n")
+		w.restart()
+		cli := w.Client()
+		registerSessions(t, w, cli, "side-sender", "side-target")
+		app = w.App()
+		w.advance(time.Second)
+		selectProfile(app, home)
+		registerSessions(t, w, cli, "home-sender")
+
+		for _, target := range []string{"side-target", "keel"} {
+			if _, err := cli.AgentMsg(target, "home-sender", "hello"); client.ErrorCode(err) != "session_or_crew_member_not_found" {
+				t.Errorf("a message from Default to Side's %s = %v, want session_or_crew_member_not_found", target, err)
+			}
+		}
+		sendAgentMessage(t, cli, "side-sender", "side-target", "hello from Side")
+	})
 }

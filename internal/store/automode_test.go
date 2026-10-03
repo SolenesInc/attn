@@ -50,14 +50,14 @@ func plantPre140AutoModeConfig(t *testing.T, s *Store, dbPath, environment, allo
 	if _, err := s.db.Exec(`DELETE FROM schema_migrations WHERE version >= ?`, from); err != nil {
 		t.Fatalf("unrecord migration %d: %v", from, err)
 	}
-	if err := migrateDBThrough(s.db, dbPath, 161); err != nil {
+	if err := migrateDBThrough(s.db, dbPath, 167); err != nil {
 		t.Fatalf("migrateDB: %v", err)
 	}
 }
 
 func TestMigration140TurnsGlobsIntoRulesAndKeepsTheRest(t *testing.T) {
 	dbPath := filepath.Join(t.TempDir(), "test.db")
-	s, err := newStoreAtVersion(dbPath, 161)
+	s, err := newStoreAtVersion(dbPath, 167)
 	if err != nil {
 		t.Fatalf("NewWithDB: %v", err)
 	}
@@ -125,7 +125,7 @@ func TestMigration140TurnsGlobsIntoRulesAndKeepsTheRest(t *testing.T) {
 
 func TestMigration125KeepsTheOldProseAsNotes(t *testing.T) {
 	dbPath := filepath.Join(t.TempDir(), "test.db")
-	s, err := newStoreAtVersion(dbPath, 161)
+	s, err := newStoreAtVersion(dbPath, 167)
 	if err != nil {
 		t.Fatalf("NewWithDB: %v", err)
 	}

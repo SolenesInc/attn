@@ -1,6 +1,7 @@
 package daemon_test
 
 import (
+	"encoding/json"
 	"os"
 	"slices"
 	"strings"
@@ -74,8 +75,8 @@ func TestClearOpensANewSessionInTheSameTerminalAndClosesTheOldOneWhole(t *testin
 	testworld.Await(app, protocol.EventSessionUnregistered, func(e protocol.WebSocketEvent) bool {
 		return e.Session != nil && e.Session.ID == first
 	})
-	if got, want := handoverEvents(app.Received(), first, next.ID), []string{
-		protocol.EventSessionRegistered, protocol.EventWorkspaceLayoutUpdated, protocol.EventSessionClosed, protocol.EventSessionUnregistered,
+	if got, want := handoverEvents(app.Log(), first, next.ID), []string{
+		protocol.EventSessionRegistered, protocol.EventProfileArrangementChanged, protocol.EventSessionClosed, protocol.EventSessionUnregistered,
 	}; !slices.Equal(got, want) {
 		t.Errorf("the app heard the handover as %v, want %v so it never shows the terminal without a session", got, want)
 	}
@@ -117,17 +118,24 @@ func TestClearOpensANewSessionInTheSameTerminalAndClosesTheOldOneWhole(t *testin
 }
 
 // handoverEvents lists, in order, the first event of each step of from's terminal moving on to to.
-func handoverEvents(events []protocol.WebSocketEvent, from, to string) []string {
+func handoverEvents(log []json.RawMessage, from, to string) []string {
 	var heard []string
-	for _, e := range events {
+	for _, raw := range log {
+		var e struct {
+			Event              string                       `json:"event"`
+			Session            *protocol.Session            `json:"session"`
+			Desktops           []protocol.Desktop           `json:"desktops"`
+			SessionLedgerEntry *protocol.SessionLedgerEntry `json:"session_ledger_entry"`
+		}
+		if json.Unmarshal(raw, &e) != nil {
+			continue
+		}
 		var step bool
 		switch e.Event {
 		case protocol.EventSessionRegistered:
 			step = e.Session != nil && e.Session.ID == to
-		case protocol.EventWorkspaceLayoutUpdated:
-			step = e.WorkspaceLayout != nil && slices.ContainsFunc(e.WorkspaceLayout.Panes, func(p protocol.WorkspaceLayoutPane) bool {
-				return protocol.Deref(p.SessionID) == to
-			})
+		case protocol.EventProfileArrangementChanged:
+			step = paneShowing(e.Desktops, to) != nil
 		case protocol.EventSessionClosed:
 			step = e.SessionLedgerEntry != nil && e.SessionLedgerEntry.ID == from
 		case protocol.EventSessionUnregistered:
@@ -138,6 +146,17 @@ func handoverEvents(events []protocol.WebSocketEvent, from, to string) []string 
 		}
 	}
 	return heard
+}
+
+func paneShowing(desktops []protocol.Desktop, sessionID string) *protocol.DesktopPane {
+	for _, desktop := range desktops {
+		for i, pane := range desktop.Panes {
+			if pane.SessionID == sessionID {
+				return &desktop.Panes[i]
+			}
+		}
+	}
+	return nil
 }
 
 func resumeClaude(app *testworld.Peer, claude *fakeagent.Run, session, conversation string) {
@@ -165,7 +184,7 @@ func TestResumeToAClosedSessionsConversationReopensItInThePane(t *testing.T) {
 	cleared := clearClaude(app, claude, first)
 	awaitClosed(app, first)
 
-	heard := len(app.Received())
+	heard := len(app.Log())
 	resumeClaude(app, claude, cleared.ID, checkout)
 	back := awaitSuccessor(app, cleared.ID)
 	if back.ID != first || back.Label != "checkout" {
@@ -178,8 +197,8 @@ func TestResumeToAClosedSessionsConversationReopensItInThePane(t *testing.T) {
 	testworld.Await(app, protocol.EventSessionUnregistered, func(e protocol.WebSocketEvent) bool {
 		return e.Session != nil && e.Session.ID == cleared.ID
 	})
-	if got, want := handoverEvents(app.Received()[heard:], cleared.ID, first), []string{
-		protocol.EventSessionRegistered, protocol.EventWorkspaceLayoutUpdated, protocol.EventSessionClosed, protocol.EventSessionUnregistered,
+	if got, want := handoverEvents(app.Log()[heard:], cleared.ID, first), []string{
+		protocol.EventSessionRegistered, protocol.EventProfileArrangementChanged, protocol.EventSessionClosed, protocol.EventSessionUnregistered,
 	}; !slices.Equal(got, want) {
 		t.Errorf("the app heard the handover as %v, want %v so it follows the terminal", got, want)
 	}
@@ -222,14 +241,15 @@ func TestResumeToARecoverableSessionsConversationMovesItIntoThePane(t *testing.T
 		t.Fatalf("/resume %s showed session %s, want %s, the recoverable session that holds it", flaky, moved.ID, earlier)
 	}
 	awaitClosed(app, current)
-	layout := testworld.Await(app, protocol.EventWorkspaceLayoutUpdated, func(e protocol.WebSocketEvent) bool {
-		return e.WorkspaceLayout != nil && slices.ContainsFunc(e.WorkspaceLayout.Panes, func(p protocol.WorkspaceLayoutPane) bool {
-			return protocol.Deref(p.RuntimeID) == terminal && protocol.Deref(p.SessionID) == earlier
-		})
-	}).WorkspaceLayout
-	for _, pane := range layout.Panes {
-		if protocol.Deref(pane.RuntimeID) == dead {
-			t.Errorf("after %s moved into terminal %s its dead pane %s stayed: %+v", earlier, terminal, pane.PaneID, layout.Panes)
+	arrangement := testworld.Await(app, protocol.EventProfileArrangementChanged, func(e protocol.ProfileArrangementChangedMessage) bool {
+		pane := paneShowing(e.Desktops, earlier)
+		return pane != nil && pane.RuntimeID == terminal
+	})
+	for _, desktop := range arrangement.Desktops {
+		for _, pane := range desktop.Panes {
+			if pane.RuntimeID == dead {
+				t.Errorf("after %s moved into terminal %s its dead pane %s stayed: %+v", earlier, terminal, pane.PaneID, desktop.Panes)
+			}
 		}
 	}
 
@@ -459,5 +479,32 @@ func TestARelaunchThatCannotResumeKeepsTheSessionAndAdoptsItsNewConversation(t *
 	resumed := respawn(w, app, fakeagent.Codex, session, w.Path("shop"))
 	if !resumed.Resumed || resumed.ConversationID != fresh.ConversationID {
 		t.Fatalf("respawn ran codex %q; want it to resume %s, the conversation the relaunch started", resumed.Argv, fresh.ConversationID)
+	}
+}
+
+func TestResumeToAConversationHeldInAnotherProfileOpensANewSessionHere(t *testing.T) {
+	w := newWorld(t, fakeagent.Claude)
+	app, cli := w.App(), w.Client()
+	side := createProfile(app, "Side")
+	elsewhere := w.Spawn(w.AppOn(side.ID), fakeagent.Claude, w.Path("shop"))
+	sideClaude := w.Launched(elsewhere)
+	w.AppOn(side.ID).TypeLine(elsewhere, "plan the release")
+	sideClaude.Prompted()
+	sideClaude.Reply("Planned. <!-- attn:state=idle -->")
+	held := sideClaude.ConversationID
+
+	here := w.Spawn(app, fakeagent.Claude, w.Path("shop"))
+	terminal := app.Terminal(here)
+	claude := w.Launched(here)
+	resumeClaude(app, claude, here, held)
+	opened := awaitSuccessor(app, here)
+	if opened.ID == elsewhere || opened.ProfileID != app.SelectedProfile() {
+		t.Fatalf("/resume %s showed %s in profile %s, want a new session in this profile", held, opened.ID, opened.ProfileID)
+	}
+	if got := app.Terminal(opened.ID); got != terminal {
+		t.Errorf("the new session runs in terminal %s, want %s, the one /resume ran in", got, terminal)
+	}
+	if other := queriedSession(t, cli, elsewhere); other.ProfileID != side.ID {
+		t.Errorf("the session in the other profile became %+v, want it left alone", other)
 	}
 }

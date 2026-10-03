@@ -3,7 +3,6 @@ import { AutomationsPanel } from '../components/AutomationsPanel';
 import { RightDock } from '../components/RightDock';
 import { WorkflowRunView } from '../components/WorkflowRunView';
 import { useDaemonApi } from '../contexts/DaemonApiContext';
-import { useSessionStore } from '../store/sessions';
 import {
   useAppInputs,
   useAppPanelsContext,
@@ -12,6 +11,7 @@ import {
   useWorkflowPanelContext,
 } from './AppContexts';
 import { toneForDockPanel } from './appSupport';
+import { useSessionBehindScreen } from '../hooks/useDesktopSelectionBridge';
 
 export function AppDock() {
   const {
@@ -24,11 +24,11 @@ export function AppDock() {
     gardenHoldsWindow,
     gardenSlotRef,
   } = useAppPanelsContext();
-  const activeSessionId = useSessionStore((state) => state.activeSessionId);
+  const contextSessionId = useSessionBehindScreen();
   const { activeWorkflowRun } = useWorkflowPanelContext();
   const { waitingLocalSessions } = useAttentionQueueContext();
   const { prs } = useAppInputs();
-  const { handleSelectSession, selectAgentPane } = useNavigationContext();
+  const { handleSelectSession } = useNavigationContext();
   const {
     listAutomationDefinitions,
     listAutomationRuns,
@@ -45,11 +45,11 @@ export function AppDock() {
         panels={[
           {
             id: 'workflowRun',
-            isOpen: workflowRunPanelOpen && Boolean(activeSessionId),
+            isOpen: workflowRunPanelOpen && Boolean(contextSessionId),
             width: 'clamp(420px, 50vw, 680px)',
             tone: activeWorkflowRun ? toneForDockPanel(activeWorkflowRun.status) : 'default',
             className: 'dock-panel dock-panel--workflow-run',
-            children: activeSessionId ? (
+            children: contextSessionId ? (
               <WorkflowRunView
                 run={activeWorkflowRun}
                 onClose={() => closeDockPanel('workflowRun')}
@@ -87,7 +87,6 @@ export function AppDock() {
                 applyDefinition={applyAutomationDefinition}
                 deleteDefinition={deleteAutomationDefinition}
                 onSelectSession={handleSelectSession}
-                onFocusPane={(sessionId, paneId) => selectAgentPane(sessionId, paneId)}
               />
             ),
           },
