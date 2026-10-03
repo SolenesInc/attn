@@ -330,7 +330,6 @@ async function main() {
       await client.request('set_setting', { key: 'queue_mode_enabled', value: 'false' });
       await client.request('dispatch_shortcut', { shortcutId: 'session.toggleSidebar' });
       await client.request('automations_open_panel');
-      await client.request('automations_select_definition', { definitionId: manualID });
     });
 
     await runner.step('leg3_failure_shown_not_hidden', async () => {
