@@ -27,6 +27,9 @@ import (
 const conversationKeepKind = "conversation_keep"
 const factConversationKeptChanged = "conversation.kept.changed"
 
+// Gate holds outside a sweep are single operations; retry after about one runner tick.
+const conversationKeepRetry = time.Second
+
 func conversationKeepGrace() time.Duration {
 	if days, err := strconv.Atoi(strings.TrimSpace(os.Getenv("ATTN_CONVERSATION_KEEP_GRACE_DAYS"))); err == nil && days >= 0 {
 		return time.Duration(days) * 24 * time.Hour
@@ -63,11 +66,15 @@ func (d *Daemon) registerConversationKeepCron(runner *jobs.Runner) {
 }
 
 func (d *Daemon) queueConversationKeep() {
+	d.queueConversationKeepAfter(0)
+}
+
+func (d *Daemon) queueConversationKeepAfter(delay time.Duration) {
 	queue := d.jobQueueRef()
 	if queue == nil {
 		return
 	}
-	if _, err := queue.Enqueue(conversationKeepKind, jobs.EnqueueOptions{UniqueKey: "all"}); err != nil {
+	if _, err := queue.Enqueue(conversationKeepKind, jobs.EnqueueOptions{UniqueKey: "all", Delay: delay}); err != nil {
 		d.logf("conversation keep: enqueue: %v", err)
 	}
 }
@@ -273,7 +280,14 @@ func (d *Daemon) retireConversations(all []store.KeptConversation, liveFiles map
 		}
 		return nil
 	})
-	if err != nil && !errors.Is(err, errAutomaticWorktreeCleanupPreempted) {
+	if errors.Is(err, errAutomaticWorktreeCleanupPreempted) {
+		if d.worktreeMaintenance.RunAfterSweep(d.queueConversationKeep) {
+			d.logf("conversation keep: retiring copies waits for the worktree sweep")
+		} else {
+			d.logf("conversation keep: retiring copies yielded to a worktree hold; retrying in %s", conversationKeepRetry)
+			d.queueConversationKeepAfter(conversationKeepRetry)
+		}
+	} else if err != nil {
 		d.logf("conversation keep: retire copies: %v", err)
 	}
 }
