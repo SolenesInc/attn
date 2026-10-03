@@ -68,6 +68,8 @@ software. Nothing wrong with IKEA; it just doesn't spark passion in me.
   for independent pieces. Small changes can go straight to a PR.
 - Do not commit spikes; Victor decides what follows.
 - Protocol bumps and DB migrations are routine. Make and verify them.
+- Riskier changes, such as a new harness integration or PTY runtime, land first
+  behind an experimental setting, off by default, like the shared PTY host.
 - Comments explain directives, measured limits, or hidden traps. Maximum two
   lines per block, enforced by `make lint`. Delete unclear compressed comments.
 - Product prompts address the user, never "Victor". Distinguish the agent
