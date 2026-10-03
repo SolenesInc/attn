@@ -16,7 +16,7 @@ function target(recipient: string) {
 }
 function item(record: CaptureRecord): CaptureItem {
   return { id: record.id, text: record.content, recipient: record.target.kind === 'chief' ? 'chief' : record.target.member_id!,
-    createdAt: record.created_at, readAt: record.read_at, files: record.attachments.map(({ id, name, media_type }) => ({ id, name, mediaType: media_type })) };
+    createdAt: record.created_at, readAt: record.read_at, files: record.attachments.map(({ id, name, media_type, bytes }) => ({ id, name, mediaType: media_type, bytes })) };
 }
 function saved(result: CaptureResultObject) {
   if (!result.record) throw new Error('The daemon did not return a saved capture receipt. Your draft is retained.');

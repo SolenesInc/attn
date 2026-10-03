@@ -448,12 +448,18 @@ describe('Quick Capture app wire behavior', () => {
     expect(within(recent).getByText('Sent note')).toBeInTheDocument();
     expect(within(recent).getByText('Read note')).toBeInTheDocument();
     expect(within(recent).getByText('notes.pdf')).toBeInTheDocument();
-    expect(within(recent).getByText(/^Sent ·/)).toBeInTheDocument();
-    expect(within(recent).getByText(/^Read ·/)).toBeInTheDocument();
+    expect(within(recent).getByText('PDF', { exact: true })).toBeInTheDocument();
+    expect(within(recent).getByText('51 B')).toBeInTheDocument();
+    expect(within(recent).getByText(/^Sent /)).toBeInTheDocument();
+    expect(within(recent).getByText(/^Read /)).toBeInTheDocument();
     expect(within(recent).queryByRole('button', { name: /Cancel|Restore|Retry delivery|Open recipient|Follow up/ })).toBeNull();
     expect(within(recent).queryByRole('combobox')).toBeNull();
     expect(daemon.sentOf('agent_inbox')).toEqual([]);
     expect(captureTraffic(daemon).map(command => command.cmd)).toEqual(['capture_list']);
+    await act(async () => daemon.emit({ event: 'capture_changed', capture_id: crypto.randomUUID() }));
+    await daemon.idle();
+    expect(daemon.sentOf('capture_list')).toHaveLength(2);
+    expect(within(recent).getByText('Read note')).toBeInTheDocument();
   });
 
   it('resends retained image bytes after a failed draft discard', async () => {
