@@ -118,7 +118,7 @@ try {
   await runner.step('ledger_attach_focuses_the_new_view', async () => {
     await client.request('dispatch_shortcut', { shortcutId: 'sessions.open' });
     await client.request('dom_wait', { selector: `.ledger-row[data-row-key="${a}"]`, timeoutMs: observer.connectTimeoutMs });
-    await client.request('sessions_row_action', { sessionId: a, action: 'Open another view' });
+    await client.request('sessions_row_action', { sessionId: a, action: 'Open' });
     const second = await observer.waitFor(() => [...observer.layoutsByWorkspaceId.values()].flatMap(layout => layout.panes || []).find(pane => pane.session_id === a && pane.runtime_id !== a && pane.codex_resolution === 'resolved'), 'second native A view');
     panes.set(second.runtime_id, second);
     const state = await client.request('get_state'); runner.assert(state.activeSessionId === a, 'new view owner is not selected', state);
@@ -200,7 +200,7 @@ try {
     await client.request('dom_wait', { selector: `[data-testid="queue-turn-${a}"]`, absent: true, timeoutMs: observer.connectTimeoutMs });
     await client.request('dispatch_shortcut', { shortcutId: 'sessions.open' });
     await client.request('dom_wait', { selector: `.ledger-row[data-row-key="${a}"]`, timeoutMs: observer.connectTimeoutMs });
-    await client.request('sessions_row_action', { sessionId: a, action: 'Open another view' });
+    await client.request('sessions_row_action', { sessionId: a, action: 'Open' });
     const attached = await observer.waitFor(() => [...observer.layoutsByWorkspaceId.values()].flatMap(layout => layout.panes || []).find(pane => pane.session_id === a && pane.runtime_id !== a && pane.codex_resolution === 'resolved'), 'ledger attached hidden A');
     await waitForPaneText(client, a, attached.pane_id, text => text.includes('Allow the command to run?'), 'attached native approval');
     await client.request('set_setting', { key: 'queue_mode_enabled', value: 'false' });
