@@ -2,9 +2,11 @@
 import assert from 'node:assert/strict';
 import crypto from 'node:crypto';
 import { PNG } from 'pngjs';
+import { deflateSync } from 'node:zlib';
+import { promisify } from 'node:util';
 import fs from 'node:fs';
 import path from 'node:path';
-import { execFileSync, spawn } from 'node:child_process';
+import { execFile, execFileSync, spawn } from 'node:child_process';
 import { parseCommonArgs, launchFreshAppAndConnect, printCommonHelp } from './common.mjs';
 import { createScenarioRunner } from './scenarioRunner.mjs';
 import { UiAutomationClient } from './uiAutomationClient.mjs';
@@ -78,7 +80,8 @@ function saveNativeTrace(name) {
   if (fs.existsSync(log)) fs.copyFileSync(log, path.join(runner.runDir, name));
 }
 
-const state = (payload = {}) => client.request('capture_state', payload);
+// Large-file receipt waits use the native automation server's existing 120s deadline.
+const state = (payload = {}) => client.request('capture_state', payload, payload.staged ? { timeoutMs: 120_000 } : {});
 const hidden = () => state({ visible: false });
 const key = (key, modifiers = []) => driver.runInputDriver(['global_key', '--key', key, ...(modifiers.length ? ['--modifiers', modifiers.join(',')] : [])]);
 async function captureStack() {
@@ -108,10 +111,10 @@ const receipts = [];
 for (const item of batch.items) {
   if (item.kind !== 'user_message') continue;
   for (const attachment of item.attachments || []) {
-    const out = path.join(process.cwd(), attachment.id + '.png');
+    const out = path.join(process.cwd(), attachment.id + path.extname(attachment.name));
     execFileSync(attn, ['agent', 'attachment', item.source_id, attachment.id, '--out', out]);
-    const dimensions = execFileSync('sips', ['-g', 'pixelWidth', '-g', 'pixelHeight', out], { encoding: 'utf8' });
-    receipts.push({ captureId: item.source_id, attachmentId: attachment.id,
+    const dimensions = attachment.media_type.startsWith('image/') ? execFileSync('sips', ['-g', 'pixelWidth', '-g', 'pixelHeight', out], { encoding: 'utf8' }) : undefined;
+    receipts.push({ captureId: item.source_id, attachmentId: attachment.id, name: attachment.name, mediaType: attachment.media_type, bytes: fs.statSync(out).size,
       sha256: crypto.createHash('sha256').update(fs.readFileSync(out)).digest('hex'), dimensions });
   }
 }
@@ -128,6 +131,80 @@ async function openCapture(text = "") {
   runner.writeJson('opening-latency.json', openingReceipts);
   await captureStack();
   return actual;
+}
+async function recordHostedStep(name, action) {
+  if (process.env.CI !== 'true') return action();
+  const windowId = await driver.mainWindowId({ windowTitle: 'Quick Capture' });
+  assert.ok(windowId);
+  const output = path.join(runner.runDir, `${name}.mp4`);
+  // These visible-window clips use the same 20s duration as scripts/pr-evidence.sh.
+  const child = spawn('/usr/sbin/screencapture', ['-x', '-v', '-V', '20', '-l', String(windowId), output], { stdio: ['ignore', 'ignore', 'pipe'] });
+  let stderr = '';
+  child.stderr.on('data', chunk => { stderr += chunk; });
+  const exit = new Promise((resolve, reject) => { child.once('error', reject); child.once('exit', (code, signal) => resolve({ code, signal })); });
+  await action();
+  const result = await exit;
+  runner.writeJson(`${name}-recording.json`, { ...result, windowId, output, stderr });
+  assert.equal(result.code, 0, stderr);
+  assert.ok(fs.statSync(output).size > 0, 'Native recording must contain bytes');
+}
+async function dropFiles(files) {
+  const manifest = path.join(runner.runDir, 'drag-files.json');
+  fs.writeFileSync(manifest, JSON.stringify(files));
+  try { await fixture.runInputDriver(['drag_between', '--relative-x', '0.1', '--text', driver.bundleId]); }
+  finally { fs.rmSync(manifest); }
+}
+function screenshotPdf(source, pages) {
+  const image = PNG.sync.read(fs.readFileSync(source));
+  const rgb = Buffer.alloc(image.width * image.height * 3);
+  for (let pixel = 0; pixel < image.width * image.height; pixel++) image.data.copy(rgb, pixel * 3, pixel * 4, pixel * 4 + 3);
+  const compressed = deflateSync(rgb);
+  const objects = [Buffer.from('<< /Type /Catalog /Pages 2 0 R >>'), Buffer.alloc(0)];
+  const kids = [];
+  for (let page = 0; page < pages; page++) {
+    const pageId = objects.length + 1, contentId = pageId + 1, imageId = pageId + 2;
+    kids.push(`${pageId} 0 R`);
+    objects.push(Buffer.from(`<< /Type /Page /Parent 2 0 R /MediaBox [0 0 ${image.width} ${image.height}] /Resources << /XObject << /Screenshot ${imageId} 0 R >> >> /Contents ${contentId} 0 R >>`));
+    const content = Buffer.from(`q ${image.width} 0 0 ${image.height} 0 0 cm /Screenshot Do Q`);
+    objects.push(Buffer.concat([Buffer.from(`<< /Length ${content.length} >>\nstream\n`), content, Buffer.from('\nendstream')]));
+    objects.push(Buffer.concat([Buffer.from(`<< /Type /XObject /Subtype /Image /Width ${image.width} /Height ${image.height} /ColorSpace /DeviceRGB /BitsPerComponent 8 /Filter /FlateDecode /Length ${compressed.length} >>\nstream\n`), compressed, Buffer.from('\nendstream')]));
+  }
+  objects[1] = Buffer.from(`<< /Type /Pages /Count ${pages} /Kids [${kids.join(' ')}] >>`);
+  const chunks = [Buffer.from('%PDF-1.7\n')], offsets = [0];
+  let length = chunks[0].length;
+  objects.forEach((body, index) => { offsets.push(length); const chunk = Buffer.concat([Buffer.from(`${index + 1} 0 obj\n`), body, Buffer.from('\nendobj\n')]); chunks.push(chunk); length += chunk.length; });
+  chunks.push(Buffer.from(`xref\n0 ${objects.length + 1}\n0000000000 65535 f \n${offsets.slice(1).map(offset => `${String(offset).padStart(10, '0')} 00000 n \n`).join('')}trailer\n<< /Size ${objects.length + 1} /Root 1 0 R >>\nstartxref\n${length}\n%%EOF\n`));
+  return Buffer.concat(chunks);
+}
+const pdfPath = path.join(runner.runDir, 'screenshot-notes.pdf');
+fs.writeFileSync(pdfPath, screenshotPdf(path.resolve('../docs/banner.png'), 20));
+runner.writeJson('retained-file-workload.json', { name: path.basename(pdfPath), pages: 20, bytes: fs.statSync(pdfPath).size,
+  sha256: crypto.createHash('sha256').update(fs.readFileSync(pdfPath)).digest('hex'), source: 'docs/banner.png' });
+async function memorySampler() {
+  const appPid = client.readManifest().pid;
+  const domain = execFileSync('launchctl', ['print', `pid/${appPid}`], { encoding: 'utf8' });
+  const originator = domain.match(/originator = (.+)/)?.[1];
+  assert.equal(originator, options.appPath);
+  const services = [...domain.matchAll(/^\s+(\d+)\s+-\s+(com\.apple\.WebKit\.\S+)/gm)]
+    .map(([, pid, name]) => ({ pid: Number(pid), name })).filter(service => service.pid > 0);
+  assert.ok(services.length);
+  const pids = [appPid, ...services.map(service => service.pid)], samples = [];
+  let pending;
+  const sample = () => pending ??= promisify(execFile)('ps', ['-o', 'pid=,rss=', '-p', pids.join(',')])
+    .then(({ stdout }) => {
+      const rows = stdout.trim().split('\n').map(row => row.trim().split(/\s+/).map(Number));
+      const byPid = Object.fromEntries(rows);
+      samples.push({ at: Date.now(), appKiB: byPid[appPid], webKitKiB: services.reduce((sum, { pid }) => sum + (byPid[pid] ?? 0), 0), byPid });
+    }).finally(() => { pending = undefined; });
+  await sample();
+  // RSS samples are lower bounds on transient peaks; completion is awaited through upload receipts.
+  const interval = setInterval(sample, 50);
+  return { stop: async () => {
+    clearInterval(interval); await pending; await sample();
+    return { appPid, originator, services, sampleIntervalMs: 50, samples,
+      baselineWebKitKiB: samples[0].webKitKiB, peakWebKitKiB: Math.max(...samples.map(row => row.webKitKiB)),
+      peakAppKiB: Math.max(...samples.map(row => row.appKiB)) };
+  } };
 }
 let normalFixtureWindow;
 let fixtureLaunch;
@@ -401,10 +478,20 @@ try {
     runner.writeJson('drop-motion.json', actual.motion);
     await screenshot('dropped-image.png');
   });
+  await runner.step('native_pdf_drop', () => recordHostedStep('pdf-drop', async () => {
+    await dropFiles([pdfPath]);
+    const actual = await state({ attachmentCount: 3, imageCount: 2, settled: true, staged: true });
+    assert.equal(actual.images[2].name, path.basename(pdfPath));
+    assert.equal(actual.nativeFocused, true, 'PDF drop keeps keyboard focus in the note');
+    assert.equal(actual.flyingImages, 0);
+    assert.equal(actual.activeAnimations, 0);
+    runner.writeJson('pdf-drop.json', actual);
+    await screenshot('dropped-pdf.png');
+  }));
   await runner.step('remove_image_and_keyboard_recipient', async () => {
     const remove = (await state()).controls.remove;
     await driver.clickWindow(remove.x, remove.y, { windowTitle: 'Quick Capture' });
-    assert.equal((await state()).images.length, 1);
+    assert.equal((await state()).images.length, 2);
     await key('2', ['command']);
     assert.equal((await state({ recipient })).recipient, recipient);
     await key('1', ['command']);
@@ -415,19 +502,37 @@ try {
     assert.equal((await state({ recipient })).recipient, recipient);
     await fixtureSignal('recipient-image-receipt.json', () => key('enter'));
     const imageReceipt = JSON.parse(fs.readFileSync(path.join(runner.runDir, 'recipient-image-receipt.json')));
-    assert.equal(imageReceipt.length, 1);
-    assert.match(imageReceipt[0].dimensions, /pixelWidth:/);
-    assert.equal(imageReceipt[0].sha256, crypto.createHash('sha256').update(fs.readFileSync(path.join(runner.runDir, 'synthetic-screenshot.png'))).digest('hex'));
+    assert.equal(imageReceipt.length, 2);
+    const pngReceipt = imageReceipt.find(file => file.mediaType.startsWith('image/'));
+    const pdfReceipt = imageReceipt.find(file => file.mediaType === 'application/pdf');
+    assert.match(pngReceipt.dimensions, /pixelWidth:/);
+    assert.equal(pngReceipt.sha256, crypto.createHash('sha256').update(fs.readFileSync(path.join(runner.runDir, 'synthetic-screenshot.png'))).digest('hex'));
+    assert.equal(pdfReceipt.sha256, crypto.createHash('sha256').update(fs.readFileSync(pdfPath)).digest('hex'));
+    assert.equal(pdfReceipt.bytes, fs.statSync(pdfPath).size);
     await fixture.runInputDriver(['wait_frontmost']);
     const actual = await hidden();
     assert.equal(actual.saved.length, 1);
     assert.equal(actual.saved[0].recipient, recipient);
-    assert.equal(actual.saved[0].images.length, 1);
+    assert.equal(actual.saved[0].images.length, 2);
     assert.equal(actual.visible, false);
     assert.equal(actual.text, '');
     assert.equal(actual.recipient, 'chief');
     await fixture.runInputDriver(['wait_frontmost']);
     assert.equal(await fixture.frontmostBundleId(), fixtureId);
+  });
+  await runner.step('plain_recent_history', async () => {
+    await openCapture();
+    const recent = (await state()).controls.recent;
+    await driver.clickWindow(recent.x, recent.y, { windowTitle: 'Quick Capture' });
+    await recordHostedStep('plain-recent', async () => {
+    const actual = await state({ view: 'recent' });
+    assert.ok(actual.recentRows.some(row => row.text.includes('Read') && row.text.includes(path.basename(pdfPath))));
+    assert.ok(actual.recentRows.every(row => row.buttons.every(button => button === 'Retry image')));
+    runner.writeJson('plain-recent.json', actual);
+    await screenshot('plain-recent.png');
+    });
+    await key('escape');
+    await key('escape'); await hidden();
   });
   await runner.step('image_only_capture', async () => {
     await fixture.pressKey('c', { command: true });
@@ -446,7 +551,8 @@ try {
   await runner.step('restart_restores_draft_image_and_binding', async () => {
     await openCapture('Retained after restart');
     await fixture.runInputDriver(['drag_between', '--relative-x', '0.1', '--text', driver.bundleId]);
-    const beforeRestart = await state({ imageCount: 1, settled: true });
+    await dropFiles([pdfPath]);
+    const beforeRestart = await state({ imageCount: 1, attachmentCount: 2, settled: true, staged: true });
     runner.writeJson('drop-before-restart.json', beforeRestart);
     assert.equal(beforeRestart.nativeFocused, true, 'Native panel must retain keyboard focus after a file drop');
     await driver.runInputDriver(['global_text', '--text', ' plus dropped image']);
@@ -457,11 +563,16 @@ try {
     await client.launchFreshApp();
     await client.waitForFrontendResponsive();
     await openCapture();
-    const restored = await state({ imageCount: 1, settled: true });
+    const restored = await state({ imageCount: 1, attachmentCount: 2, settled: true, staged: true });
+    assert.equal(restored.images[1].name, path.basename(pdfPath));
     assert.equal(restored.text, 'Retained after restart plus dropped image');
     assert.equal(restored.binding, testBinding);
     await screenshot('restored-draft.png');
-    await key('enter'); await hidden();
+    await key('2', ['command']); await state({ recipient });
+    await fixtureSignal('recipient-image-receipt.json', () => key('enter')); await hidden();
+    const restoredReceipt = JSON.parse(fs.readFileSync(path.join(runner.runDir, 'recipient-image-receipt.json'))).find(file => file.mediaType === 'application/pdf');
+    assert.equal(restoredReceipt.sha256, crypto.createHash('sha256').update(fs.readFileSync(pdfPath)).digest('hex'));
+    runner.writeJson('restored-pdf-receipt.json', restoredReceipt);
   });
   await runner.step('repeat_hidden_and_minimized', async () => {
     await driver.activateApp();
@@ -547,6 +658,44 @@ try {
   });
   } catch (error) { nativeFindings.push(error); }
   if (nativeFindings.length) throw new AggregateError(nativeFindings, nativeFindings.map(error => error.message).join('; '));
+  await runner.step('measure_attachment_batches', async () => {
+    const source = path.resolve('../docs/banner.png');
+    const files = Array.from({ length: 20 }, (_, index) => path.join(runner.runDir, `large-screenshot-${String(index + 1).padStart(2, '0')}.png`));
+    for (const file of files) fs.copyFileSync(source, file);
+    const { width, height } = PNG.sync.read(fs.readFileSync(source));
+    const measurements = [];
+    runner.writeJson('attachment-batch-fixture.json', { files: files.map(file => ({ name: path.basename(file), bytes: fs.statSync(file).size })),
+      width, height, sha256: crypto.createHash('sha256').update(fs.readFileSync(source)).digest('hex'),
+      machine: execFileSync('sysctl', ['-n', 'hw.model'], { encoding: 'utf8' }).trim(),
+      os: execFileSync('sw_vers', ['-productVersion'], { encoding: 'utf8' }).trim(), build: runAttn(['--version']).trim() });
+    for (const batchSize of [1, 2, 4, 8]) {
+      await client.launchFreshApp(); await client.waitForFrontendResponsive();
+      await openCapture();
+      assert.equal((await state()).images.length, 0, 'Each capacity starts with a fresh process and empty draft');
+      await state({ batchSize });
+      const sampler = await memorySampler();
+      try {
+        await dropFiles(files);
+        const previews = await state({ attachmentCount: files.length, imageCount: files.length });
+        const ingestion = previews.ingestion.at(-1);
+        assert.equal(ingestion.count, files.length);
+        assert.ok(ingestion.readyAt >= ingestion.startedAt);
+        assert.deepEqual(previews.images.map(file => file.name), files.map(file => path.basename(file)));
+        const staged = await state({ staged: true });
+        assert.equal(staged.work.active, 0); assert.equal(staged.work.pending, 0);
+        assert.equal(staged.work.peak, batchSize);
+        const memory = await sampler.stop();
+        const result = { batchSize, previewMs: ingestion.readyAt - ingestion.startedAt,
+          allStagedMs: Date.now() - ingestion.startedAt, memory, work: staged.work };
+        measurements.push(result);
+        runner.writeJson(`attachment-batch-${batchSize}.json`, result);
+        runner.writeJson('attachment-batch-results.json', measurements);
+      } catch (error) { runner.writeJson(`attachment-batch-${batchSize}-failure.json`, { memory: await sampler.stop(), error: String(error) }); throw error; }
+      await key('enter');
+      const accepted = await hidden();
+      assert.equal(accepted.saved[0].images.length, files.length);
+    }
+  });
   if (process.env.CI === 'true') {
     await client.request('capture_dismiss');
     const processes = execFileSync('ps', ['-axo', 'pid,ppid,comm'], { encoding: 'utf8' });

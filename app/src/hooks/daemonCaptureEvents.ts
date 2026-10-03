@@ -6,7 +6,7 @@ export class CaptureRequestError extends Error {
 }
 
 export const CAPTURE_COMMANDS = [
-  'capture_send', 'capture_get', 'capture_list', 'capture_update',
+  'capture_send', 'capture_get', 'capture_list',
   'capture_attachment_put', 'capture_attachment_get', 'capture_attachment_discard',
 ] as const;
 

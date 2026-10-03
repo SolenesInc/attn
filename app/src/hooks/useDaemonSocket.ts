@@ -6,7 +6,7 @@ import { handleCommandUsageEvent } from './daemonCommandUsageEvents';
 import { handleLaunchDesktopEvent } from './daemonLaunchDesktopEvents';
 import { handleDelegationDaemonEvent, type DelegationSettingsState, type HarnessModelCatalog } from './daemonDelegationEvents';
 import { handleCaptureDaemonEvent } from './daemonCaptureEvents';
-import type { CaptureAttachmentDiscardMessage, CaptureAttachmentGetMessage, CaptureAttachmentPutMessage, CaptureGetMessage, CaptureListMessage, CaptureSendMessage, CaptureUpdateMessage, CaptureResultObject } from '../types/generated';
+import type { CaptureAttachmentDiscardMessage, CaptureAttachmentGetMessage, CaptureAttachmentPutMessage, CaptureGetMessage, CaptureListMessage, CaptureSendMessage, CaptureResultObject } from '../types/generated';
 import {
   handleCrewDaemonEvent,
   type CrewCharterGetOutcome,
@@ -4610,5 +4610,5 @@ export function useDaemonSocket({
   };
 }
 
-type CaptureWireCommand = CaptureAttachmentDiscardMessage | CaptureAttachmentGetMessage | CaptureAttachmentPutMessage | CaptureGetMessage | CaptureListMessage | CaptureSendMessage | CaptureUpdateMessage;
+type CaptureWireCommand = CaptureAttachmentDiscardMessage | CaptureAttachmentGetMessage | CaptureAttachmentPutMessage | CaptureGetMessage | CaptureListMessage | CaptureSendMessage;
 export type CaptureCommand = CaptureWireCommand extends infer Command ? Command extends { cmd: string } ? Omit<Command, 'request_id'> : never : never;

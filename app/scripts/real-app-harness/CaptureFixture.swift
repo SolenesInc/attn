@@ -4,9 +4,16 @@ import Carbon
 final class ScreenshotView: NSImageView, NSDraggingSource {
     var fileURL: URL!
     override func mouseDown(with event: NSEvent) {
-        let item = NSDraggingItem(pasteboardWriter: fileURL as NSURL)
-        item.setDraggingFrame(bounds, contents: image)
-        beginDraggingSession(with: [item], event: event, source: self)
+        let manifest = fileURL.deletingLastPathComponent().appendingPathComponent("drag-files.json")
+        let files = FileManager.default.fileExists(atPath: manifest.path)
+            ? (try! JSONSerialization.jsonObject(with: Data(contentsOf: manifest)) as! [String]).map { URL(fileURLWithPath: $0) }
+            : [fileURL!]
+        let items = files.map { url in
+            let item = NSDraggingItem(pasteboardWriter: url as NSURL)
+            item.setDraggingFrame(bounds, contents: image)
+            return item
+        }
+        beginDraggingSession(with: items, event: event, source: self)
     }
     func draggingSession(_ session: NSDraggingSession, sourceOperationMaskFor context: NSDraggingContext) -> NSDragOperation { .copy }
 }

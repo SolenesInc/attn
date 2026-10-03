@@ -1,7 +1,7 @@
-import { useLayoutEffect, useRef } from 'react';
+import { useLayoutEffect, useRef, useState } from 'react';
 
 export type AttachmentOrigin = { kind: 'drop'; x: number; y: number } | { kind: 'paste' };
-export type CaptureAttachment = { id: string; name: string; url: string; ready: boolean; arriving: boolean; origin: AttachmentOrigin };
+export type CaptureAttachment = { id: string; name: string; url: string; ready: boolean; imagePreview?: boolean; arriving: boolean; origin: AttachmentOrigin };
 export type AttachmentMotion = {
   kind: 'image'; phase: 'start' | 'end'; at: number; id: string;
   source?: { kind: 'drop' | 'paste'; x: number; y: number };
@@ -19,6 +19,8 @@ type Props = {
 
 export function CaptureAttachmentPreview({ image, onSettled, onMotion, onRemove, disabled }: Props) {
   const slot = useRef<HTMLElement>(null);
+  const [failed, setFailed] = useState(false);
+  const isImage = !failed && (image.imagePreview ?? image.url.startsWith('data:image/'));
   useLayoutEffect(() => {
     if (!image.ready || !image.arriving) return;
     if (window.matchMedia('(prefers-reduced-motion: reduce)').matches) {
@@ -42,9 +44,9 @@ export function CaptureAttachmentPreview({ image, onSettled, onMotion, onRemove,
     Object.assign(ghost.style, {
       left: `${target.x}px`, top: `${target.y}px`, width: `${target.width}px`, height: `${target.height}px`,
     });
-    const preview = document.createElement('img');
-    preview.src = image.url;
-    preview.alt = '';
+    const preview = document.createElement(isImage ? 'img' : 'span');
+    if (preview instanceof HTMLImageElement) { preview.src = image.url; preview.alt = ''; }
+    else { preview.textContent = image.name; Object.assign(preview.style, { display: 'grid', placeItems: 'center', height: '100%', padding: '8px', fontSize: '12px', color: '#fff', overflowWrap: 'anywhere' }); }
     ghost.append(preview);
     document.body.append(ghost);
     const paste = source.kind === 'paste';
@@ -71,10 +73,10 @@ export function CaptureAttachmentPreview({ image, onSettled, onMotion, onRemove,
     const reduceMotion = () => { if (reduce.matches) finish(true); };
     reduce.addEventListener('change', reduceMotion);
     return () => { reduce.removeEventListener('change', reduceMotion); finish(true); };
-  }, [image.id, image.url, image.ready, image.arriving, image.origin, onSettled, onMotion]);
+  }, [image.id, image.url, image.ready, image.arriving, image.origin, isImage, onSettled, onMotion]);
 
-  return <figure ref={slot} title={image.name} className={!image.ready || image.arriving ? 'arriving' : undefined}>
-    {image.ready && <img src={image.url} alt={image.name} />}
+  return <figure ref={slot} data-file-ready={image.ready} title={image.name} className={!image.ready || image.arriving ? 'arriving' : undefined}>
+    {image.ready && (isImage ? <img src={image.url} alt={image.name} onError={() => setFailed(true)} /> : <figcaption style={{ padding: '8px', fontSize: '12px', overflowWrap: 'anywhere', opacity: image.arriving ? 0 : 1 }}>{image.name}</figcaption>)}
     <button disabled={disabled} aria-label={`Remove ${image.name}`} onClick={() => onRemove(image.id)}><svg width="9" height="9" viewBox="0 0 10 10" stroke="currentColor" strokeWidth="1.6" aria-hidden="true"><path d="M2 2l6 6M8 2l-6 6" /></svg></button>
   </figure>;
 }
