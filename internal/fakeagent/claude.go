@@ -204,6 +204,9 @@ func (c *claude) submit(prompt string) error {
 	if strings.TrimSpace(prompt) == "/clear" {
 		return c.clear()
 	}
+	if conversation, ok := strings.CutPrefix(strings.TrimSpace(prompt), "/resume "); ok {
+		return c.resume(strings.TrimSpace(conversation))
+	}
 	c.term.title(claudeBusyTitle)
 	if err := c.hooks.run("UserPromptSubmit", "", c.hookInput("UserPromptSubmit", map[string]any{"prompt": prompt})); err != nil {
 		return err
@@ -221,6 +224,20 @@ func (c *claude) clear() error {
 		return err
 	}
 	return c.hooks.run("SessionStart", "clear", c.hookInput("SessionStart", map[string]any{"source": "clear"}))
+}
+
+// resume switches to another conversation as real Claude's /resume does: SessionEnd, then SessionStart
+// carrying the conversation it resumed.
+func (c *claude) resume(conversation string) error {
+	transcript := filepath.Join(filepath.Dir(c.transcript), conversation+".jsonl")
+	if _, err := os.Stat(transcript); err != nil {
+		return fmt.Errorf("no conversation found with session ID: %s", conversation)
+	}
+	if err := c.hooks.run("SessionEnd", "resume", c.hookInput("SessionEnd", map[string]any{"reason": "resume"})); err != nil {
+		return err
+	}
+	c.conversation, c.resumed, c.transcript = conversation, true, transcript
+	return c.hooks.run("SessionStart", "resume", c.hookInput("SessionStart", map[string]any{"source": "resume"}))
 }
 
 func (c *claude) reply(text string, afterStop bool) error {

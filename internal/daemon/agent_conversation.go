@@ -42,7 +42,7 @@ func (d *Daemon) handleObserveAgentConversation(conn net.Conn, msg *protocol.Set
 }
 
 // conversationIn routes a conversation the harness in terminal t reports from SessionStart or
-// UserPromptSubmit. Those arrive in order, so only they may open a session.
+// UserPromptSubmit. Those arrive in order, so only they may open or show a session.
 func (d *Daemon) conversationIn(t harness.TerminalID, observation agentConversationObservation) {
 	cur, placed := d.terminals().Showing(t)
 	if current := d.store.Get(string(cur)); !placed || (current != nil && !conversationIsSession(current.Agent)) {
@@ -50,24 +50,51 @@ func (d *Daemon) conversationIn(t harness.TerminalID, observation agentConversat
 		d.observeOrQueueAgentConversation(observation)
 		return
 	}
-	lock := d.sessionLifecycleLockFor(string(cur))
-	lock.Lock()
-	defer lock.Unlock()
+	held := d.store.GetSessionConversation(string(cur)).NativeID
+	owner := ""
+	if held != "" && held != observation.NativeID {
+		owner = d.store.ConversationOwner(string(cur), observation.NativeID)
+	}
+	defer d.lockSessionLifecycles(string(cur), owner)()
 	session := d.store.Get(string(cur))
 	if shown, _ := d.terminals().Showing(t); shown != cur || session == nil || !d.terminalLive(t) {
 		d.logf("agent conversation: dropped %s from terminal %s, which no longer runs session %s", observation.NativeID, t, cur)
 		return
 	}
 	observation.SessionID = session.ID
-	held := d.store.GetSessionConversation(session.ID).NativeID
-	// A conversation another session holds still moves within this one, until a terminal can show that session.
-	if held == "" || held == observation.NativeID || d.store.ConversationHeldElsewhere(session.ID, observation.NativeID) {
+	if held = d.store.GetSessionConversation(session.ID).NativeID; held == "" || held == observation.NativeID {
 		d.observeAgentConversation(observation)
 		return
 	}
-	if err := d.opened(t, session, observation); err != nil {
-		d.logf("agent conversation: opening a session for %s in terminal %s failed; %s keeps it: %v", observation.NativeID, t, session.ID, err)
+	if now := d.store.ConversationOwner(session.ID, observation.NativeID); now != owner {
+		d.logf("agent conversation: dropped %s from terminal %s; its owner changed from %q to %q meanwhile", observation.NativeID, t, owner, now)
+		return
 	}
+	var err error
+	switch {
+	case owner == "":
+		err = d.opened(t, session, observation)
+	case d.ownerLive(owner):
+		// A live owner keeps its terminal, so this session takes the conversation over in place.
+		d.observeAgentConversation(observation)
+	default:
+		err = d.shows(t, session, owner, observation)
+	}
+	if err != nil {
+		d.logf("agent conversation: terminal %s could not move on from session %s for %s; it keeps it: %v", t, session.ID, observation.NativeID, err)
+	}
+}
+
+// ownerLive counts a bare-CLI wrapper's process too: it runs in the user's own terminal.
+func (d *Daemon) ownerLive(owner string) bool {
+	if d.sessionHasLiveWorker(owner) {
+		return true
+	}
+	alive, err := d.externalSessionAlive(owner)
+	if err != nil {
+		d.logf("agent conversation: treating %s as live; its wrapper process could not be checked: %v", owner, err)
+	}
+	return alive || err != nil
 }
 
 func conversationIsSession(agent protocol.SessionAgent) bool {

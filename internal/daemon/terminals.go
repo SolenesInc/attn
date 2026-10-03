@@ -39,21 +39,23 @@ func (d *Daemon) terminals() *terminalRegistry {
 }
 
 func (d *Daemon) saveWorkspaceLayout(snapshot workspacelayout.WorkspaceLayout) error {
-	return d.commitWorkspaceLayout(func() (workspacelayout.WorkspaceLayout, error) {
-		return snapshot, d.store.SaveWorkspaceLayout(snapshot)
+	return d.commitWorkspaceLayouts(func() ([]workspacelayout.WorkspaceLayout, error) {
+		return []workspacelayout.WorkspaceLayout{snapshot}, d.store.SaveWorkspaceLayout(snapshot)
 	})
 }
 
-// commitWorkspaceLayout is the one writer of a layout's pane rows, so the registry follows every save.
-func (d *Daemon) commitWorkspaceLayout(commit func() (workspacelayout.WorkspaceLayout, error)) error {
+// commitWorkspaceLayouts is the one writer of layouts' pane rows, so the registry follows every save.
+func (d *Daemon) commitWorkspaceLayouts(commit func() ([]workspacelayout.WorkspaceLayout, error)) error {
 	r := d.terminals()
 	r.write.Lock()
 	defer r.write.Unlock()
-	snapshot, err := commit()
+	snapshots, err := commit()
 	if err != nil {
 		return err
 	}
-	r.place(snapshot.WorkspaceID, snapshot.Panes)
+	for _, snapshot := range snapshots {
+		r.place(snapshot.WorkspaceID, snapshot.Panes)
+	}
 	return nil
 }
 

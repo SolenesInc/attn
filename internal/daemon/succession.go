@@ -2,6 +2,7 @@ package daemon
 
 import (
 	"fmt"
+	"slices"
 	"time"
 
 	"github.com/google/uuid"
@@ -16,60 +17,114 @@ import (
 // opened opens a session in terminal t for a conversation no session holds; it takes only the terminal,
 // and from closes into the ledger whole. The caller holds from's lifecycle lock.
 func (d *Daemon) opened(t harness.TerminalID, from *protocol.Session, observation agentConversationObservation) error {
+	launch, _ := d.store.LaunchIntent(from.ID)
+	launch.ChiefOfStaff = false
+	to := uuid.NewString()
+	return d.succeed(t, from, store.Succession{
+		To:     to,
+		Label:  defaultSessionLabel(from.Directory, to),
+		Launch: launch,
+		Close:  store.SessionClose{Reason: "cleared; its terminal moved on to " + to},
+	}, observation)
+}
+
+// shows puts owner, which holds the conversation t reports and runs in no live terminal, in t: a closed
+// owner reopens in place, an open one leaves its dead panes. The caller holds both lifecycle locks.
+func (d *Daemon) shows(t harness.TerminalID, from *protocol.Session, owner string, observation agentConversationObservation) error {
+	return d.succeed(t, from, store.Succession{
+		To:    owner,
+		Close: store.SessionClose{Reason: "resumed; its terminal moved on to " + owner},
+	}, observation)
+}
+
+func (d *Daemon) succeed(t harness.TerminalID, from *protocol.Session, sc store.Succession, observation agentConversationObservation) error {
 	d.drainTranscriptWatcher(from.ID)
 	if _, err := d.captureGardenSessionSnapshot(from); err != nil {
 		d.logf("garden: preserving execution %s before its terminal moved on: %v", from.ID, err)
 	}
-	launch, _ := d.store.LaunchIntent(from.ID)
-	launch.ChiefOfStaff = false
-	to := uuid.NewString()
-	succession := store.Succession{
-		From:         from.ID,
-		To:           to,
-		Label:        defaultSessionLabel(from.Directory, to),
-		Conversation: store.SessionConversation{NativeID: observation.NativeID, TranscriptPath: observation.TranscriptPath},
-		Launch:       launch,
-		Close:        store.SessionClose{By: store.SessionClosedByUser, Reason: "cleared; its terminal moved on to " + to},
-	}
-	var workspaceID string
-	err := d.commitWorkspaceLayout(func() (workspacelayout.WorkspaceLayout, error) {
-		workspaceID = d.terminals().workspaceOf(t)
-		layout := d.store.GetWorkspaceLayout(workspaceID)
-		if layout == nil {
-			return workspacelayout.WorkspaceLayout{}, fmt.Errorf("no layout places terminal %s", t)
+	sc.From = from.ID
+	sc.Conversation = store.SessionConversation{NativeID: observation.NativeID, TranscriptPath: observation.TranscriptPath}
+	var layouts []workspacelayout.WorkspaceLayout
+	err := d.commitWorkspaceLayouts(func() (_ []workspacelayout.WorkspaceLayout, err error) {
+		if layouts, err = d.successionLayouts(t, sc.To); err != nil {
+			return nil, err
 		}
-		for i := range layout.Panes {
-			if layout.Panes[i].RuntimeID == string(t) {
-				layout.Panes[i].SessionID = to
-			}
-		}
-		return *layout, d.store.CommitSuccession(succession, *layout, time.Now())
+		return layouts, d.store.CommitSuccession(sc, layouts, time.Now())
 	})
 	if err != nil {
 		d.ensureTranscriptWatcherAtPath(from.ID, d.store.GetSessionConversation(from.ID).TranscriptPath)
 		return err
 	}
 
-	d.sessionInputs().handOverSubmit(from.ID, to)
-	d.associateSessionWithWorkspace(to, workspaceID)
+	workspaceID := layouts[0].WorkspaceID
+	d.sessionInputs().handOverSubmit(from.ID, sc.To)
+	if left := d.workspaces.workspaceIDForSession(sc.To); left != "" && left != workspaceID {
+		d.dissociateSessionFromWorkspace(sc.To)
+	}
+	d.associateSessionWithWorkspace(sc.To, workspaceID)
 	terminal, _ := d.evidenceTable().snapshot(from.ID)
-	d.startEvidence(to, sessionstate.Evidence{
+	d.startEvidence(sc.To, sessionstate.Evidence{
 		Heartbeat:      terminal.Heartbeat,
 		Process:        terminal.Process,
 		ReviewerInLoop: terminal.ReviewerInLoop,
 		LastBusyAt:     terminal.LastBusyAt,
 		LastMovement:   terminal.LastMovement,
 	})
-	d.startTranscriptWatcherAtPath(to, from.Agent, from.Directory, d.sessionStartedAt(to), observation.TranscriptPath)
-	d.publishFact(FactSessionRegistered, to, nil)
-	d.broadcastWorkspaceLayoutUpdated(workspaceID)
+	d.startTranscriptWatcherAtPath(sc.To, from.Agent, from.Directory, d.sessionStartedAt(sc.To), observation.TranscriptPath)
+	d.publishFact(FactSessionRegistered, sc.To, nil)
+	for _, layout := range layouts {
+		if d.store.GetWorkspace(layout.WorkspaceID) != nil {
+			d.broadcastWorkspaceLayoutUpdated(layout.WorkspaceID)
+		}
+	}
 
 	d.recordSessionClose(from.ID, func() (bool, error) { return true, nil })
 	d.publishSessionUnregistered(from)
 	d.dissociateSessionFromWorkspace(from.ID)
-	d.recomputeAndBroadcastWorkspaceForSession(to)
-	d.logf("terminal %s moved on from session %s to %s for conversation %s", t, from.ID, to, observation.NativeID)
+	d.recomputeAndBroadcastWorkspaceForSession(sc.To)
+	d.logf("terminal %s moved on from session %s to %s for conversation %s", t, from.ID, sc.To, observation.NativeID)
 	return nil
+}
+
+// successionLayouts points t's panes at to and drops the other panes that place to, whose terminals
+// are dead. It returns every layout it changed, t's first.
+func (d *Daemon) successionLayouts(t harness.TerminalID, to string) ([]workspacelayout.WorkspaceLayout, error) {
+	r := d.terminals()
+	var layouts []workspacelayout.WorkspaceLayout
+	edit := func(term harness.TerminalID, change func(*workspacelayout.WorkspaceLayout)) error {
+		workspaceID := r.workspaceOf(term)
+		i := slices.IndexFunc(layouts, func(l workspacelayout.WorkspaceLayout) bool { return l.WorkspaceID == workspaceID })
+		if i < 0 {
+			layout := d.store.GetWorkspaceLayout(workspaceID)
+			if layout == nil {
+				return fmt.Errorf("no layout places terminal %s", term)
+			}
+			layouts = append(layouts, *layout)
+			i = len(layouts) - 1
+		}
+		change(&layouts[i])
+		return nil
+	}
+	if err := edit(t, func(layout *workspacelayout.WorkspaceLayout) {
+		for i := range layout.Panes {
+			if layout.Panes[i].RuntimeID == string(t) {
+				layout.Panes[i].SessionID = to
+			}
+		}
+	}); err != nil {
+		return nil, err
+	}
+	for _, dead := range r.Of(harness.SessionID(to)) {
+		if err := edit(dead, func(layout *workspacelayout.WorkspaceLayout) {
+			layout.Panes = slices.DeleteFunc(layout.Panes, func(p workspacelayout.Pane) bool { return p.RuntimeID == string(dead) })
+		}); err != nil {
+			return nil, err
+		}
+	}
+	for i := range layouts {
+		layouts[i] = workspacelayout.NormalizeWorkspaceLayout(layouts[i])
+	}
+	return layouts, nil
 }
 
 // drainTranscriptWatcher stops a session's watcher and waits for its last usage reconcile.
