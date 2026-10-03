@@ -208,6 +208,15 @@ export class DaemonObserver {
     return this.sessionsById.get(sessionId) || null;
   }
 
+  // The PTY runtime a session's pane places; a session no pane places runs under its own id.
+  terminalOf(sessionId) {
+    for (const layout of this.layoutsByWorkspaceId.values()) {
+      const pane = (layout.panes || []).find((entry) => entry.session_id === sessionId && entry.runtime_id);
+      if (pane) return pane.runtime_id;
+    }
+    return sessionId;
+  }
+
   getEndpoint(endpointId) {
     return this.endpointsById.get(endpointId) || null;
   }

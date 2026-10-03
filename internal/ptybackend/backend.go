@@ -8,6 +8,7 @@ import (
 	"strings"
 	"syscall"
 
+	"github.com/victorarias/attn/internal/harness"
 	"github.com/victorarias/attn/internal/launchcontract"
 	"github.com/victorarias/attn/internal/pty"
 )
@@ -21,7 +22,7 @@ const (
 )
 
 type SpawnOptions struct {
-	ID    string
+	ID    harness.TerminalID
 	CWD   string
 	Agent string
 	Label string
@@ -150,6 +151,7 @@ type ResizeResult struct {
 }
 
 type SessionInfo struct {
+	// SessionID is the terminal id; the worker protocol predates terminals.
 	SessionID string
 	Agent     string
 	CWD       string
@@ -182,7 +184,7 @@ type RecoveryReport struct {
 }
 
 type ExitInfo struct {
-	ID          string
+	ID          harness.TerminalID
 	ExitCode    int
 	Signal      string
 	LifecycleID string
@@ -190,24 +192,24 @@ type ExitInfo struct {
 
 type Backend interface {
 	Spawn(ctx context.Context, opts SpawnOptions) error
-	Attach(ctx context.Context, sessionID, subscriberID string, opts ...AttachOptions) (AttachInfo, Stream, error)
-	Input(ctx context.Context, sessionID string, data []byte) error
-	Resize(ctx context.Context, sessionID string, cols, rows, xpixel, ypixel uint16) (ResizeResult, error)
-	SetTheme(ctx context.Context, sessionID string, theme pty.TerminalTheme) error
-	Kill(ctx context.Context, sessionID string, sig syscall.Signal) error
-	Remove(ctx context.Context, sessionID string) error
-	SessionIDs(ctx context.Context) []string
+	Attach(ctx context.Context, id harness.TerminalID, subscriberID string, opts ...AttachOptions) (AttachInfo, Stream, error)
+	Input(ctx context.Context, id harness.TerminalID, data []byte) error
+	Resize(ctx context.Context, id harness.TerminalID, cols, rows, xpixel, ypixel uint16) (ResizeResult, error)
+	SetTheme(ctx context.Context, id harness.TerminalID, theme pty.TerminalTheme) error
+	Kill(ctx context.Context, id harness.TerminalID, sig syscall.Signal) error
+	Remove(ctx context.Context, id harness.TerminalID) error
+	TerminalIDs(ctx context.Context) []harness.TerminalID
 	Recover(ctx context.Context) (RecoveryReport, error)
 	Shutdown(ctx context.Context) error
 }
 
 type LifecycleHooks interface {
 	SetExitHandler(func(ExitInfo))
-	SetStateHandler(func(sessionID string, obs pty.Observation))
+	SetStateHandler(func(id harness.TerminalID, obs pty.Observation))
 }
 
 type SessionInfoProvider interface {
-	SessionInfo(ctx context.Context, sessionID string) (SessionInfo, error)
+	SessionInfo(ctx context.Context, id harness.TerminalID) (SessionInfo, error)
 }
 
 type SessionLaunchParams struct {
@@ -224,7 +226,7 @@ type SessionLaunchParams struct {
 }
 
 type SessionLaunchParamsProvider interface {
-	SessionLaunchParams(ctx context.Context, sessionID string) (SessionLaunchParams, error)
+	SessionLaunchParams(ctx context.Context, id harness.TerminalID) (SessionLaunchParams, error)
 }
 
 type WorkerProcessProvider interface {
@@ -232,27 +234,27 @@ type WorkerProcessProvider interface {
 }
 
 type ScreenSnapshotProvider interface {
-	ScreenSnapshot(ctx context.Context, sessionID string) (pty.ScreenSnapshotInfo, error)
+	ScreenSnapshot(ctx context.Context, id harness.TerminalID) (pty.ScreenSnapshotInfo, error)
 }
 
 type KittyImageProvider interface {
-	KittyImage(ctx context.Context, sessionID string, imageID uint32) (pty.KittyImage, error)
+	KittyImage(ctx context.Context, id harness.TerminalID, imageID uint32) (pty.KittyImage, error)
 }
 
 type TerminalBuildProvider interface {
-	SessionTerminalBuild(sessionID string) (format string, known bool)
+	SessionTerminalBuild(id harness.TerminalID) (format string, known bool)
 }
 
 type TerminalBuildCompatibilityProvider interface {
-	SessionCanReplayWithFormat(sessionID, format string) bool
+	SessionCanReplayWithFormat(id harness.TerminalID, format string) bool
 }
 
 type WorkerUpgrader interface {
-	UpgradeWorker(ctx context.Context, sessionID string) error
+	UpgradeWorker(ctx context.Context, id harness.TerminalID) error
 }
 
 type SessionLivenessProber interface {
-	SessionLikelyAlive(ctx context.Context, sessionID string) (bool, error)
+	SessionLikelyAlive(ctx context.Context, id harness.TerminalID) (bool, error)
 }
 
 type RecoverableRuntime interface {
@@ -263,4 +265,12 @@ type RecoverableRuntime interface {
 
 type ModeProvider interface {
 	PTYBackendMode() string
+}
+
+func terminalIDs(ids []string) []harness.TerminalID {
+	terminals := make([]harness.TerminalID, len(ids))
+	for i, id := range ids {
+		terminals[i] = harness.TerminalID(id)
+	}
+	return terminals
 }

@@ -310,7 +310,7 @@ func TestClosingAWorkspaceClosesEachOfItsSessionsFirst(t *testing.T) {
 	testworld.Request(app, protocol.UnregisterWorkspaceMessage{Cmd: protocol.CmdUnregisterWorkspace, ID: ws},
 		protocol.EventWorkspaceUnregistered, func(e protocol.WorkspaceUnregisteredMessage) bool { return e.Workspace.ID == ws })
 	for _, id := range sessions {
-		testworld.Await(app, protocol.EventSessionExited, func(e protocol.SessionExitedMessage) bool { return e.ID == id })
+		testworld.Await(app, protocol.EventSessionExited, func(e protocol.SessionExitedMessage) bool { return e.SessionID == id })
 	}
 
 	for _, id := range sessions {

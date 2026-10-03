@@ -38,7 +38,7 @@ func TestCopilotRespawnResumesTheConversationItsTranscriptBound(t *testing.T) {
 	testworld.AwaitSession(app, session, func(s protocol.Session) bool { return s.State == protocol.SessionStateWaitingInput })
 
 	app.Send(protocol.KillSessionMessage{Cmd: protocol.CmdKillSession, ID: session})
-	testworld.Await(app, protocol.EventSessionExited, func(e protocol.SessionExitedMessage) bool { return e.ID == session })
+	testworld.Await(app, protocol.EventSessionExited, func(e protocol.SessionExitedMessage) bool { return e.SessionID == session })
 
 	w.Spawn(app, fakeagent.Copilot, cwd, func(m *protocol.SpawnSessionMessage) {
 		m.ID = session
@@ -86,7 +86,7 @@ func TestCopilotSessionsSharingADirectoryEachFollowTheirOwnConversation(t *testi
 	testworld.AwaitSession(app, first, func(s protocol.Session) bool { return s.State == protocol.SessionStateIdle })
 
 	app.Send(protocol.KillSessionMessage{Cmd: protocol.CmdKillSession, ID: second})
-	testworld.Await(app, protocol.EventSessionExited, func(e protocol.SessionExitedMessage) bool { return e.ID == second })
+	testworld.Await(app, protocol.EventSessionExited, func(e protocol.SessionExitedMessage) bool { return e.SessionID == second })
 	w.Spawn(app, fakeagent.Copilot, cwd, func(m *protocol.SpawnSessionMessage) {
 		m.ID = second
 		m.ResumeSessionID = protocol.Ptr(second)

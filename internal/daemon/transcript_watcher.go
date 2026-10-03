@@ -335,10 +335,7 @@ func (d *Daemon) restoreTranscriptWatchers() {
 	if d.store == nil || d.ptyBackend == nil {
 		return
 	}
-	live := make(map[string]struct{})
-	for _, id := range d.ptyBackend.SessionIDs(context.Background()) {
-		live[id] = struct{}{}
-	}
+	live := d.liveSessions(context.Background())
 	for _, session := range d.store.List("") {
 		if session == nil || session.Agent == protocol.SessionAgentShell {
 			continue

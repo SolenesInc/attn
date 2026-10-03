@@ -88,20 +88,32 @@ func (w *World) App() *Peer {
 
 func (w *World) ConnectApp() *Peer {
 	w.T.Helper()
+	return w.Connect(w.appHello(), nil)
+}
+
+func (w *World) appHello() protocol.ClientHelloMessage {
+	w.T.Helper()
 	token, err := os.ReadFile(filepath.Join(w.Dir, config.ClientTokenFile))
 	if err != nil {
 		w.T.Fatalf("read the client token the daemon minted: %v", err)
 	}
-	return w.Connect(protocol.ClientHelloMessage{
+	return protocol.ClientHelloMessage{
 		Cmd:          protocol.CmdClientHello,
 		ClientKind:   "tauri-app",
 		Version:      "protocol-" + protocol.ProtocolVersion,
 		Capabilities: []string{protocol.CapabilityWorkspaceSessions, protocol.CapabilityBinaryPtyOutput, protocol.CapabilityKittyImages},
 		ClientToken:  protocol.Ptr(strings.TrimSpace(string(token))),
-	}, nil)
+	}
 }
 
 func (w *World) Connect(hello protocol.ClientHelloMessage, header http.Header) *Peer {
+	w.T.Helper()
+	p := w.dial(hello, header)
+	w.peers = append(w.peers, p)
+	return p
+}
+
+func (w *World) dial(hello protocol.ClientHelloMessage, header http.Header) *Peer {
 	w.T.Helper()
 	ctx, cancel := context.WithTimeout(context.Background(), fakeagent.HangGuard)
 	defer cancel()
@@ -117,9 +129,15 @@ func (w *World) Connect(hello protocol.ClientHelloMessage, header http.Header) *
 	}
 	conn.SetReadLimit(-1)
 	p := newPeer(w.T, conn)
-	w.peers = append(w.peers, p)
 	p.Send(hello)
 	return p
+}
+
+func (w *World) Terminal(sessionID string) string {
+	w.T.Helper()
+	p := w.dial(w.appHello(), nil)
+	defer p.Close()
+	return p.Terminal(sessionID)
 }
 
 func (w *World) ClosePeers() {
@@ -159,12 +177,17 @@ func (w *World) RequestSpawn(p *Peer, h fakeagent.Harness, cwd string, opts ...f
 		opt(&msg)
 	}
 	paneID = "pane-" + msg.ID
-	Request(p, protocol.WorkspaceLayoutAddSessionPaneMessage{
-		Cmd:         protocol.CmdWorkspaceLayoutAddSessionPane,
-		WorkspaceID: msg.WorkspaceID,
-		SessionID:   msg.ID,
-		PaneID:      protocol.Ptr(paneID),
-	}, protocol.EventWorkspaceLayoutActionResult, func(protocol.WorkspaceLayoutActionResultMessage) bool { return true })
+	// A session a pane already shows relaunches there; only a new session gets a pane, as in the app.
+	if pane, placed := p.paneShowing(msg.ID); placed {
+		paneID = pane.PaneID
+	} else {
+		Request(p, protocol.WorkspaceLayoutAddSessionPaneMessage{
+			Cmd:         protocol.CmdWorkspaceLayoutAddSessionPane,
+			WorkspaceID: msg.WorkspaceID,
+			SessionID:   msg.ID,
+			PaneID:      protocol.Ptr(paneID),
+		}, protocol.EventWorkspaceLayoutActionResult, func(protocol.WorkspaceLayoutActionResultMessage) bool { return true })
+	}
 	result = Request(p, msg, protocol.EventSpawnResult, func(r protocol.SpawnResultMessage) bool { return r.ID == msg.ID })
 	return result, msg.WorkspaceID, paneID
 }
@@ -188,9 +211,19 @@ func (w *World) workspace(p *Peer, dir string) string {
 	return id
 }
 
+// Launched returns the next run of the agent in the terminal that shows the session; the run's
+// SessionID names that session, not the terminal id its process carries.
 func (w *World) Launched(sessionID string) *fakeagent.Run {
 	w.T.Helper()
-	return w.kit.Launched(sessionID)
+	run := w.kit.Launched(w.Terminal(sessionID))
+	run.SessionID = sessionID
+	return run
+}
+
+// LaunchedCarrying needs no daemon: id is the ATTN_SESSION_ID the process carries.
+func (w *World) LaunchedCarrying(id string) *fakeagent.Run {
+	w.T.Helper()
+	return w.kit.Launched(id)
 }
 
 func (w *World) HeadlessTask() *fakeagent.HeadlessTask {

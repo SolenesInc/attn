@@ -16,6 +16,8 @@ import (
 	"syscall"
 	"testing"
 	"time"
+
+	"github.com/victorarias/attn/internal/harness"
 )
 
 type hostResourceSample struct {
@@ -49,7 +51,7 @@ func TestSharedHostResourceExperiment(t *testing.T) {
 	defer backend.Shutdown(ctx)
 	var hostPID int
 	defer func() {
-		for _, id := range backend.SessionIDs(ctx) {
+		for _, id := range backend.TerminalIDs(ctx) {
 			_ = backend.Remove(ctx, id)
 		}
 		if hostPID > 0 {
@@ -83,7 +85,7 @@ func TestSharedHostResourceExperiment(t *testing.T) {
 			accepted <- conn
 		}()
 		if err := backend.Spawn(ctx, SpawnOptions{
-			ID: id, CWD: root, Agent: "perf", Cols: 80, Rows: 24,
+			ID: harness.TerminalID(id), CWD: root, Agent: "perf", Cols: 80, Rows: 24,
 			ExternalCommand: []string{probe, "--child", listener.Addr().String(), id},
 			LoginShellEnv:   []string{"PATH=/usr/bin:/bin"},
 		}); err != nil {
@@ -115,7 +117,7 @@ func TestSharedHostResourceExperiment(t *testing.T) {
 	streamClosed := make(chan struct{}, 32)
 	for _, attached := range []bool{false, true} {
 		if attached {
-			for _, id := range backend.SessionIDs(ctx) {
+			for _, id := range backend.TerminalIDs(ctx) {
 				_, stream, err := backend.Attach(ctx, id, "perf", AttachOptions{OmitReplay: true})
 				if err != nil {
 					t.Fatal(err)

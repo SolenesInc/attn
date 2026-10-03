@@ -6,6 +6,7 @@ import (
 	"syscall"
 
 	"github.com/victorarias/attn/internal/buildinfo"
+	"github.com/victorarias/attn/internal/harness"
 	"github.com/victorarias/attn/internal/pty"
 )
 
@@ -13,7 +14,7 @@ type EmbeddedBackend struct {
 	manager *pty.Manager
 }
 
-func (b *EmbeddedBackend) SessionTerminalBuild(string) (string, bool) {
+func (b *EmbeddedBackend) SessionTerminalBuild(harness.TerminalID) (string, bool) {
 	return buildinfo.SnapshotFormat, true
 }
 
@@ -30,12 +31,16 @@ func (b *EmbeddedBackend) SetExitHandler(handler func(ExitInfo)) {
 		return
 	}
 	b.manager.SetExitHandler(func(info pty.ExitInfo) {
-		handler(ExitInfo{ID: info.ID, ExitCode: info.ExitCode, Signal: info.Signal, LifecycleID: info.LifecycleID})
+		handler(ExitInfo{ID: harness.TerminalID(info.ID), ExitCode: info.ExitCode, Signal: info.Signal, LifecycleID: info.LifecycleID})
 	})
 }
 
-func (b *EmbeddedBackend) SetStateHandler(handler func(sessionID string, obs pty.Observation)) {
-	b.manager.SetStateHandler(handler)
+func (b *EmbeddedBackend) SetStateHandler(handler func(id harness.TerminalID, obs pty.Observation)) {
+	if handler == nil {
+		b.manager.SetStateHandler(nil)
+		return
+	}
+	b.manager.SetStateHandler(func(id string, obs pty.Observation) { handler(harness.TerminalID(id), obs) })
 }
 
 func (b *EmbeddedBackend) Spawn(_ context.Context, opts SpawnOptions) error {
@@ -45,7 +50,8 @@ func (b *EmbeddedBackend) Spawn(_ context.Context, opts SpawnOptions) error {
 	return b.manager.Spawn(toPTYSpawnOptions(opts))
 }
 
-func (b *EmbeddedBackend) Attach(_ context.Context, sessionID, subscriberID string, opts ...AttachOptions) (AttachInfo, Stream, error) {
+func (b *EmbeddedBackend) Attach(_ context.Context, id harness.TerminalID, subscriberID string, opts ...AttachOptions) (AttachInfo, Stream, error) {
+	sessionID := string(id)
 	events := make(chan OutputEvent, 128)
 	stream := &embeddedStream{
 		events: events,
@@ -117,38 +123,38 @@ func (b *EmbeddedBackend) Attach(_ context.Context, sessionID, subscriberID stri
 	}, stream, nil
 }
 
-func (b *EmbeddedBackend) KittyImage(_ context.Context, sessionID string, imageID uint32) (pty.KittyImage, error) {
-	return b.manager.KittyImage(sessionID, imageID)
+func (b *EmbeddedBackend) KittyImage(_ context.Context, id harness.TerminalID, imageID uint32) (pty.KittyImage, error) {
+	return b.manager.KittyImage(string(id), imageID)
 }
 
-func (b *EmbeddedBackend) ScreenSnapshot(_ context.Context, sessionID string) (pty.ScreenSnapshotInfo, error) {
-	return b.manager.ScreenSnapshot(sessionID)
+func (b *EmbeddedBackend) ScreenSnapshot(_ context.Context, id harness.TerminalID) (pty.ScreenSnapshotInfo, error) {
+	return b.manager.ScreenSnapshot(string(id))
 }
 
-func (b *EmbeddedBackend) Input(ctx context.Context, sessionID string, data []byte) error {
-	return b.manager.Input(ctx, sessionID, data)
+func (b *EmbeddedBackend) Input(ctx context.Context, id harness.TerminalID, data []byte) error {
+	return b.manager.Input(ctx, string(id), data)
 }
 
-func (b *EmbeddedBackend) Resize(_ context.Context, sessionID string, cols, rows, xpixel, ypixel uint16) (ResizeResult, error) {
-	changed, err := b.manager.Resize(sessionID, cols, rows, xpixel, ypixel)
+func (b *EmbeddedBackend) Resize(_ context.Context, id harness.TerminalID, cols, rows, xpixel, ypixel uint16) (ResizeResult, error) {
+	changed, err := b.manager.Resize(string(id), cols, rows, xpixel, ypixel)
 	return ResizeResult{Changed: changed, StreamOrdered: true}, err
 }
 
-func (b *EmbeddedBackend) SetTheme(_ context.Context, sessionID string, theme pty.TerminalTheme) error {
-	return b.manager.SetTheme(sessionID, theme)
+func (b *EmbeddedBackend) SetTheme(_ context.Context, id harness.TerminalID, theme pty.TerminalTheme) error {
+	return b.manager.SetTheme(string(id), theme)
 }
 
-func (b *EmbeddedBackend) Kill(_ context.Context, sessionID string, sig syscall.Signal) error {
-	return b.manager.Kill(sessionID, sig)
+func (b *EmbeddedBackend) Kill(_ context.Context, id harness.TerminalID, sig syscall.Signal) error {
+	return b.manager.Kill(string(id), sig)
 }
 
-func (b *EmbeddedBackend) Remove(_ context.Context, sessionID string) error {
-	b.manager.Remove(sessionID)
+func (b *EmbeddedBackend) Remove(_ context.Context, id harness.TerminalID) error {
+	b.manager.Remove(string(id))
 	return nil
 }
 
-func (b *EmbeddedBackend) SessionIDs(_ context.Context) []string {
-	return b.manager.SessionIDs()
+func (b *EmbeddedBackend) TerminalIDs(_ context.Context) []harness.TerminalID {
+	return terminalIDs(b.manager.SessionIDs())
 }
 
 func (b *EmbeddedBackend) Recover(_ context.Context) (RecoveryReport, error) {
@@ -160,7 +166,8 @@ func (b *EmbeddedBackend) Shutdown(_ context.Context) error {
 	return nil
 }
 
-func (b *EmbeddedBackend) SessionInfo(_ context.Context, sessionID string) (SessionInfo, error) {
+func (b *EmbeddedBackend) SessionInfo(_ context.Context, id harness.TerminalID) (SessionInfo, error) {
+	sessionID := string(id)
 	info, err := b.manager.SessionInfo(sessionID)
 	if err != nil {
 		return SessionInfo{}, err

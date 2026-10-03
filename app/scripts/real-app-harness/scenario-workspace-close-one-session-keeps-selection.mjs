@@ -264,7 +264,7 @@ async function main() {
 
     await runner.step('focusing_a_split_pane_selects_that_split_session', async () => {
       const split = await splitWithShortcut(client, keptSessionId, 'terminal.splitVertical', 2);
-      splitSessionId = split.pane.runtimeId;
+      splitSessionId = split.pane.sessionId;
       createdSessionIds.push(splitSessionId);
       await client.request('focus_pane', { sessionId: keptSessionId, paneId: split.pane.paneId });
       await waitForActiveSession(client, splitSessionId, 'split session selected before close');

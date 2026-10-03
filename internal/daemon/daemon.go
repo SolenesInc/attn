@@ -34,6 +34,7 @@ import (
 	"github.com/victorarias/attn/internal/garden"
 	"github.com/victorarias/attn/internal/git"
 	"github.com/victorarias/attn/internal/github"
+	"github.com/victorarias/attn/internal/harness"
 	"github.com/victorarias/attn/internal/headless"
 	"github.com/victorarias/attn/internal/hub"
 	"github.com/victorarias/attn/internal/inbox"
@@ -155,7 +156,7 @@ type Daemon struct {
 	ptySettingsChangeMu               sync.Mutex
 	sharedPTYHost                     *ptybackend.WorkerBackend
 	upgradingMu                       sync.Mutex
-	upgradingWorkers                  map[string]bool
+	upgradingWorkers                  map[harness.TerminalID]bool
 	watchersMu                        sync.Mutex
 	transcriptWatch                   map[string]*transcriptWatcher
 	pluginUsageWatch                  map[string]*pluginUsageWatcher
@@ -184,7 +185,7 @@ type Daemon struct {
 	launchWatches                     map[string]*launchWatch
 	recoveredLaunches                 map[string]*launchWatch
 	reloadingMu                       sync.Mutex
-	reloadingSessions                 map[string]bool
+	reloadingTerminals                map[harness.TerminalID]bool
 	prepareSessionTeardownHook        func(string) error
 	teardownMu                        sync.Mutex
 	tearingDown                       map[string]chan struct{}
@@ -195,6 +196,8 @@ type Daemon struct {
 	externalRegistrations             sync.Map
 	sessionInputOnce                  sync.Once
 	sessionInputState                 *sessionInputModule
+	terminalsOnce                     sync.Once
+	terminalState                     *terminalRegistry
 	inboxMu                           sync.Mutex
 	inboxStates                       map[inbox.Address]*inboxDeliveryState
 	inboxUnsubscribe                  func()
@@ -217,7 +220,6 @@ type Daemon struct {
 	supportInputTraceOnce             sync.Once
 	supportInputTrace                 *supportInputTraceRing
 	lastInputMu                       sync.Mutex
-	lastUserInputAt                   map[string]time.Time
 	lastAutoSettleActivityAt          map[string]time.Time
 	autoSettleFireMu                  sync.Mutex
 
@@ -668,6 +670,7 @@ func (d *Daemon) Start() error {
 	if err := d.startEventBus(); err != nil {
 		return fmt.Errorf("start event bus: %w", err)
 	}
+	d.loadTerminals()
 	d.loadWorkspacesFromStore()
 	if d.daemonInstanceID == "" {
 		instanceID, err := enrollment.EnsureDaemonID(d.dataRoot)
@@ -962,10 +965,7 @@ func (d *Daemon) pruneSessionsWithoutPTY(previousRunSessions map[string]struct{}
 		return 0
 	}
 
-	liveIDs := make(map[string]struct{})
-	for _, id := range d.liveRuntimeSessionIDs(context.Background()) {
-		liveIDs[id] = struct{}{}
-	}
+	liveIDs := d.liveSessions(context.Background())
 
 	sessions := d.store.List("")
 	removed := 0
@@ -1006,13 +1006,6 @@ func (d *Daemon) pruneSessionsWithoutPTY(previousRunSessions map[string]struct{}
 		d.logf("marked %d sessions as recoverable on startup", recoverable)
 	}
 	return removed
-}
-
-func (d *Daemon) liveRuntimeSessionIDs(ctx context.Context) []string {
-	if d.ptyBackend == nil {
-		return nil
-	}
-	return d.ptyBackend.SessionIDs(ctx)
 }
 
 func (d *Daemon) canReviveSession(session *protocol.Session) bool {
@@ -1209,15 +1202,24 @@ func (d *Daemon) reconcileSessionsWithWorkerBackendState(ctx context.Context, al
 		return report
 	}
 
-	liveIDs := make(map[string]struct{})
-	for _, id := range d.ptyBackend.SessionIDs(ctx) {
-		liveIDs[id] = struct{}{}
+	liveTerminals := d.liveTerminals(ctx)
+	liveIDs := make(map[string]struct{}, len(liveTerminals))
+	shownBy := make(map[string]harness.TerminalID, len(liveTerminals))
+	placed := make(map[harness.TerminalID]bool, len(liveTerminals))
+	for terminalID := range liveTerminals {
+		sessionID, isPlaced := d.terminals().Showing(terminalID)
+		if !isPlaced {
+			sessionID = harness.SessionID(terminalID)
+		}
+		liveIDs[string(sessionID)] = struct{}{}
+		shownBy[string(sessionID)] = terminalID
+		placed[terminalID] = isPlaced
 	}
 
 	infoProvider, _ := d.ptyBackend.(ptybackend.SessionInfoProvider)
 	livenessProber, _ := d.ptyBackend.(ptybackend.SessionLivenessProber)
 
-	for sessionID := range liveIDs {
+	for sessionID, terminalID := range shownBy {
 		existing := d.store.Get(sessionID)
 		intentionalClose, intentErr := d.store.SessionCloseIntentionalChecked(sessionID)
 		if intentErr != nil {
@@ -1245,7 +1247,7 @@ func (d *Daemon) reconcileSessionsWithWorkerBackendState(ctx context.Context, al
 		var info ptybackend.SessionInfo
 		var haveInfo bool
 		if infoProvider != nil {
-			fetched, err := infoProvider.SessionInfo(ctx, sessionID)
+			fetched, err := infoProvider.SessionInfo(ctx, terminalID)
 			if err == nil {
 				info = fetched
 				haveInfo = true
@@ -1253,6 +1255,10 @@ func (d *Daemon) reconcileSessionsWithWorkerBackendState(ctx context.Context, al
 		}
 
 		if existing == nil {
+			if !placed[terminalID] {
+				d.logf("worker reconciliation left runtime %s to the orphan prune: no pane places it", terminalID)
+				continue
+			}
 			if !haveInfo {
 				report.MissingMetadata++
 				continue
@@ -1338,7 +1344,7 @@ func (d *Daemon) reconcileSessionsWithWorkerBackendState(ctx context.Context, al
 			existing := d.store.Get(sessionID)
 			teardown := d.resumeSessionTeardown(sessionID)
 			if teardown != nil {
-				if !d.notifyPreparedPluginDriverSessionClosed(sessionID, teardown.driverRun, syscall.SIGTERM) {
+				if !d.notifyPreparedPluginDriverSessionClosed(sessionID, teardown, syscall.SIGTERM) {
 					continue
 				}
 				d.store.ClearSessionIntentionalClose(sessionID)
@@ -1368,7 +1374,7 @@ func (d *Daemon) reconcileSessionsWithWorkerBackendState(ctx context.Context, al
 			continue
 		}
 		if livenessProber != nil {
-			likelyAlive, probeErr := livenessProber.SessionLikelyAlive(ctx, session.ID)
+			likelyAlive, probeErr := livenessProber.SessionLikelyAlive(ctx, d.primaryTerminal(session.ID))
 			if probeErr != nil {
 				d.logf("worker liveness probe failed for session %s: %v", session.ID, probeErr)
 				report.LivenessUnknown++
@@ -1608,47 +1614,60 @@ func (d *Daemon) handlePTYExit(info ptybackend.ExitInfo) bool {
 	}
 	defer release()
 	if d.consumeReloading(info.ID) {
-		d.logf("suppressing exit for reloading session %s (runtime replaced in place)", info.ID)
+		d.logf("suppressing exit for reloading terminal %s (runtime replaced in place)", info.ID)
 		return false
 	}
-	if d.queueExitDuringPluginLaunch(info) {
+	sessionID, shown := d.shownIn(info.ID)
+	if ended, ending := d.terminals().takeEnding(info.ID); ending && !shown {
+		sessionID, shown = string(ended), true
+	}
+	if !shown {
+		d.logf("pty exit of terminal %s, which no session shows; removing its runtime", info.ID)
+		if err := d.removePTYSession(info.ID); err != nil {
+			d.logf("pty backend remove on exit failed for %s: %v", info.ID, err)
+		}
 		return false
 	}
-	if d.supersededExitDuringPluginLaunch(info) {
-		if activeRun := d.store.GetAgentDriverRun(info.ID); activeRun.RunID == info.LifecycleID {
-			d.closePluginDriverSession(info.ID, "exited", &info.ExitCode, info.Signal)
+	if d.queueExitDuringPluginLaunch(sessionID, info) {
+		return false
+	}
+	if d.supersededExitDuringPluginLaunch(sessionID, info) {
+		if activeRun := d.store.GetAgentDriverRun(sessionID); activeRun.RunID == info.LifecycleID {
+			d.closePluginDriverSession(sessionID, "exited", &info.ExitCode, info.Signal)
 		}
 		return false
 	}
 	if info.LifecycleID != "" {
-		activeRun := d.store.GetAgentDriverRun(info.ID)
+		activeRun := d.store.GetAgentDriverRun(sessionID)
 		if activeRun.RunID != "" && activeRun.RunID != info.LifecycleID {
-			d.logf("ignoring stale plugin PTY exit: session=%s exited_run=%s active_run=%s", info.ID, info.LifecycleID, activeRun.RunID)
+			d.logf("ignoring stale plugin PTY exit: session=%s exited_run=%s active_run=%s", sessionID, info.LifecycleID, activeRun.RunID)
 			return false
 		}
 	}
-	d.sessionInputs().forgetSession(info.ID)
-	d.stopTranscriptWatcher(info.ID)
-	d.closePluginDriverSession(info.ID, "exited", &info.ExitCode, info.Signal)
-	d.captureExitScreen(info)
-	d.noteLaunchExited(info)
+	d.sessionInputs().forgetSession(sessionID)
+	d.stopTranscriptWatcher(sessionID)
+	d.closePluginDriverSession(sessionID, "exited", &info.ExitCode, info.Signal)
+	d.captureExitScreen(sessionID, info)
+	d.noteLaunchExited(sessionID, info)
 
 	if d.ptyBackend != nil {
 		if err := d.removePTYSession(info.ID); err != nil {
 			d.logf("pty backend remove on exit failed for %s: %v", info.ID, err)
 		}
 	}
-	d.releaseExitedCrewBinding(info.ID)
+	d.releaseExitedCrewBinding(sessionID)
 
-	d.publishFact(FactSessionPTYExited, info.ID, ptyExit{
+	d.publishFact(FactSessionPTYExited, sessionID, ptyExit{
+		Terminal: string(info.ID),
 		ExitCode: info.ExitCode,
 		Signal:   info.Signal,
 	})
-	d.recordProcessEvidence(info.ID, true)
+	d.recordProcessEvidence(sessionID, true)
 	return true
 }
 
 type ptyExit struct {
+	Terminal string `json:"terminal,omitempty"`
 	ExitCode int    `json:"exit_code"`
 	Signal   string `json:"signal,omitempty"`
 }
@@ -1658,9 +1677,13 @@ func (d *Daemon) projectSessionPTYExited(ev bus.Event) {
 	if !ok {
 		return
 	}
+	terminal := exit.Terminal
+	if terminal == "" {
+		terminal = ev.Subject
+	}
 	event := &protocol.WebSocketEvent{
 		Event:     protocol.EventSessionExited,
-		ID:        protocol.Ptr(ev.Subject),
+		ID:        protocol.Ptr(terminal),
 		SessionID: protocol.Ptr(ev.Subject),
 		ExitCode:  protocol.Ptr(exit.ExitCode),
 	}
@@ -1670,13 +1693,13 @@ func (d *Daemon) projectSessionPTYExited(ev bus.Event) {
 	d.wsHub.Broadcast(event)
 }
 
-func (d *Daemon) removePTYSession(sessionID string) error {
+func (d *Daemon) removePTYSession(terminal harness.TerminalID) error {
 	if d.ptyBackend == nil {
 		return nil
 	}
 	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
 	defer cancel()
-	err := d.ptyBackend.Remove(ctx, sessionID)
+	err := d.ptyBackend.Remove(ctx, terminal)
 	if err == nil || errors.Is(err, pty.ErrSessionNotFound) || errors.Is(err, os.ErrNotExist) {
 		return nil
 	}
@@ -1689,20 +1712,22 @@ func (d *Daemon) removePTYSession(sessionID string) error {
 				return
 			}
 			ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
-			retryErr := d.ptyBackend.Remove(ctx, sessionID)
+			retryErr := d.ptyBackend.Remove(ctx, terminal)
 			cancel()
 			if retryErr == nil || errors.Is(retryErr, pty.ErrSessionNotFound) || errors.Is(retryErr, os.ErrNotExist) {
 				return
 			}
 			backoff *= 2
 		}
-		d.logf("pty backend remove still failing after retries for %s: %v", sessionID, err)
+		d.logf("pty backend remove still failing after retries for %s: %v", terminal, err)
 	})
 	return err
 }
 
 type sessionTeardown struct {
-	session          *protocol.Session
+	session *protocol.Session
+	// Captured before the pane closes: teardown kills the terminals the session showed.
+	terminals        []harness.TerminalID
 	driverRun        store.AgentDriverReportCursor
 	lifecycleLock    *sessionLifecycleLockLease
 	lifecycleRelease sync.Once
@@ -1726,7 +1751,9 @@ func (d *Daemon) terminateSession(sessionID string, sig syscall.Signal) {
 		}
 		d.stopTranscriptWatcher(sessionID)
 		if d.ptyBackend != nil {
-			_ = d.ptyBackend.Remove(context.Background(), sessionID)
+			for _, terminal := range d.terminalsOf(sessionID) {
+				_ = d.ptyBackend.Remove(context.Background(), terminal)
+			}
 		}
 	}
 }
@@ -1745,7 +1772,7 @@ func (d *Daemon) terminateSessionChecked(sessionID string, sig syscall.Signal) e
 	if err := d.markSessionTerminationIntent(sessionID); err != nil {
 		return err
 	}
-	if err := d.terminateSessionRuntimeChecked(sessionID, sig); err != nil {
+	if err := d.terminateSessionRuntimeChecked(sessionID, d.terminalsOf(sessionID), sig); err != nil {
 		d.clearForcedStopClassification(sessionID)
 		if d.store != nil {
 			d.store.ClearSessionIntentionalClose(sessionID)
@@ -1756,18 +1783,26 @@ func (d *Daemon) terminateSessionChecked(sessionID string, sig syscall.Signal) e
 	return nil
 }
 
-func (d *Daemon) terminateSessionRuntimeChecked(sessionID string, sig syscall.Signal) error {
+func (d *Daemon) terminateSessionRuntimeChecked(sessionID string, terminals []harness.TerminalID, sig syscall.Signal) error {
 	if d.ptyBackend == nil {
 		d.stopTranscriptWatcher(sessionID)
 		return nil
 	}
-	err := d.ptyBackend.Kill(context.Background(), sessionID, sig)
-	if err != nil && !errors.Is(err, pty.ErrSessionNotFound) {
-		return err
+	for _, terminal := range terminals {
+		d.terminals().noteEnding(terminal, harness.SessionID(sessionID), time.Now())
+		err := d.ptyBackend.Kill(context.Background(), terminal, sig)
+		if err != nil {
+			d.terminals().takeEnding(terminal)
+		}
+		if err != nil && !errors.Is(err, pty.ErrSessionNotFound) {
+			return err
+		}
 	}
 	d.stopTranscriptWatcher(sessionID)
-	if err := d.ptyBackend.Remove(context.Background(), sessionID); err != nil && !errors.Is(err, pty.ErrSessionNotFound) && !errors.Is(err, os.ErrNotExist) {
-		return err
+	for _, terminal := range terminals {
+		if err := d.ptyBackend.Remove(context.Background(), terminal); err != nil && !errors.Is(err, pty.ErrSessionNotFound) && !errors.Is(err, os.ErrNotExist) {
+			return err
+		}
 	}
 	return nil
 }
@@ -1813,7 +1848,7 @@ func (d *Daemon) prepareSessionTeardown(sessionID string) (*sessionTeardown, err
 		lifecycleLock.Unlock()
 		return nil, err
 	}
-	return &sessionTeardown{session: session, driverRun: driverRun, lifecycleLock: lifecycleLock}, nil
+	return &sessionTeardown{session: session, terminals: d.terminalsOf(sessionID), driverRun: driverRun, lifecycleLock: lifecycleLock}, nil
 }
 
 func (d *Daemon) commitSessionUnregister(sessionID string, closed store.SessionClose) {
@@ -1838,11 +1873,13 @@ func (d *Daemon) resumeSessionTeardown(sessionID string) *sessionTeardown {
 		return nil
 	}
 	session := d.store.Get(sessionID)
+	terminals := d.terminalsOf(sessionID)
 	d.closeSession(sessionID, store.SessionClose{By: store.SessionClosedByUser})
-	return &sessionTeardown{session: session, driverRun: driverRun}
+	return &sessionTeardown{session: session, terminals: terminals, driverRun: driverRun}
 }
 
-func (d *Daemon) notifyPreparedPluginDriverSessionClosed(sessionID string, run store.AgentDriverReportCursor, sig syscall.Signal) bool {
+func (d *Daemon) notifyPreparedPluginDriverSessionClosed(sessionID string, teardown *sessionTeardown, sig syscall.Signal) bool {
+	run := teardown.driverRun
 	if run.RunID == "" {
 		return true
 	}
@@ -1852,7 +1889,7 @@ func (d *Daemon) notifyPreparedPluginDriverSessionClosed(sessionID string, run s
 		return false
 	}
 	if claimed {
-		d.notifyPluginDriverSessionClosed(run.PluginName, sessionID, run.RunID, "killed", nil, signalName(sig))
+		d.notifyPluginDriverSessionClosed(run.PluginName, teardown.terminals[0], run.RunID, "killed", nil, signalName(sig))
 	}
 	return true
 }
@@ -1898,12 +1935,14 @@ func (d *Daemon) terminateSessionAsync(sessionID string, sig syscall.Signal, tea
 			d.terminateSession(sessionID, sig)
 			return
 		}
-		if err := d.terminateSessionRuntimeChecked(sessionID, sig); err != nil {
+		if err := d.terminateSessionRuntimeChecked(sessionID, teardown.terminals, sig); err != nil {
 			d.logf("session teardown failed for %s: requested=%s error=%v", sessionID, signalName(sig), err)
-			_ = d.removePTYSession(sessionID)
+			for _, terminal := range teardown.terminals {
+				_ = d.removePTYSession(terminal)
+			}
 			return
 		}
-		d.notifyPreparedPluginDriverSessionClosed(sessionID, teardown.driverRun, sig)
+		d.notifyPreparedPluginDriverSessionClosed(sessionID, teardown, sig)
 	}
 	// A close the user asked for still ends the session while the daemon stops, on the caller's goroutine.
 	if !d.life.Go("terminateSessionAsync", terminate) {
@@ -1975,7 +2014,6 @@ func (d *Daemon) forgetSessionRuntime(sessionID string) {
 	d.forgetSessionTitleInitialPrompt(sessionID)
 	d.clearAutoSettleState(sessionID)
 	d.lastInputMu.Lock()
-	delete(d.lastUserInputAt, sessionID)
 	delete(d.lastAutoSettleActivityAt, sessionID)
 	d.lastInputMu.Unlock()
 	d.clearSnoozeState(sessionID)
@@ -1991,7 +2029,11 @@ func (d *Daemon) forgetSessionTrace(sessionID string) {
 	d.dwellGate().clear(sessionID)
 }
 
-func (d *Daemon) handlePTYState(sessionID string, obs pty.Observation) {
+func (d *Daemon) handlePTYState(terminal harness.TerminalID, obs pty.Observation) {
+	sessionID, shown := d.shownIn(terminal)
+	if !shown {
+		return
+	}
 	state := obs.Claim
 	origin := stateOrigin{source: string(obs.Source), detail: obs.Detail, observedAt: obs.At}
 	evidenceChanged := d.recordPTYEvidence(sessionID, obs)
@@ -2123,7 +2165,7 @@ func (d *Daemon) diagStats() diag.Stats {
 		return stats
 	}
 	ctx := context.Background()
-	stats.Sessions = len(d.ptyBackend.SessionIDs(ctx))
+	stats.Sessions = len(d.ptyBackend.TerminalIDs(ctx))
 	if wp, ok := d.ptyBackend.(ptybackend.WorkerProcessProvider); ok {
 		stats.WorkerPIDs = wp.WorkerPIDs(ctx)
 	}
@@ -2440,6 +2482,7 @@ func (d *Daemon) handleConnection(conn net.Conn) {
 		d.sendError(conn, err.Error())
 		return
 	}
+	d.resolveCallers(msg)
 	release, held := d.life.Hold("handleConnection")
 	if !held {
 		d.sendError(conn, errDaemonStopping.Error())
@@ -3828,7 +3871,7 @@ func (d *Daemon) handleInjectTestSession(conn net.Conn, msg *protocol.InjectTest
 			layout = workspacelayout.NormalizeWorkspaceLayout(layout)
 		}
 	}
-	if err := d.store.SaveWorkspaceLayout(layout); err != nil {
+	if err := d.saveWorkspaceLayout(layout); err != nil {
 		d.sendError(conn, err.Error())
 		return
 	}

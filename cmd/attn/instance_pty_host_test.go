@@ -10,6 +10,7 @@ import (
 	"syscall"
 	"testing"
 
+	"github.com/victorarias/attn/internal/harness"
 	"github.com/victorarias/attn/internal/procreap"
 	"github.com/victorarias/attn/internal/ptybackend"
 	"github.com/victorarias/attn/internal/ptyhost"
@@ -55,11 +56,11 @@ func TestInstanceCleanStopsSharedHostGenerationsAndChildren(t *testing.T) {
 		}
 		for i := 0; i < 2; i++ {
 			id := fmt.Sprintf("session-%d-%d", generation, i)
-			if err := backend.Spawn(context.Background(), ptybackend.SpawnOptions{ID: id, Agent: "cleanup-fixture", CWD: root, Cols: 80, Rows: 24, ExternalCommand: []string{"/bin/cat"}}); err != nil {
+			if err := backend.Spawn(context.Background(), ptybackend.SpawnOptions{ID: harness.TerminalID(id), Agent: "cleanup-fixture", CWD: root, Cols: 80, Rows: 24, ExternalCommand: []string{"/bin/cat"}}); err != nil {
 				t.Fatal(err)
 			}
 			pids[backend.WorkerPIDs(context.Background())[id]] = true
-			info, err := backend.SessionInfo(context.Background(), id)
+			info, err := backend.SessionInfo(context.Background(), harness.TerminalID(id))
 			if err != nil {
 				t.Fatal(err)
 			}

@@ -237,7 +237,7 @@ func TestAnAnnotationTheUserTypedOverDoesNotTitleTheSession(t *testing.T) {
 		if got := submitSessionAnnotationFeedback(app, agent.id, sessionAnnotationFeedback); got.status != "delivered" {
 			t.Fatalf("submit = %+v, want delivered", got)
 		}
-		app.Send(protocol.PtyInputMessage{Cmd: protocol.CmdPtyInput, ID: agent.id, Data: "x"})
+		app.Send(protocol.PtyInputMessage{Cmd: protocol.CmdPtyInput, ID: agent.self, Data: "x"})
 		w.advance(0)
 		agent.term.OnSubmit(agent.take)
 		app.TypeLine(agent.id, "the login form rejects valid passwords")

@@ -567,7 +567,7 @@ func (b *WorkerBackend) spawnShared(ctx context.Context, opts SpawnOptions) erro
 	if err := validateSpawnOptions(opts); err != nil {
 		return err
 	}
-	if err := validateSessionID(opts.ID); err != nil {
+	if err := validateSessionID(string(opts.ID)); err != nil {
 		return err
 	}
 	if opts.Cols == 0 {
@@ -587,7 +587,7 @@ func (b *WorkerBackend) spawnShared(ctx context.Context, opts SpawnOptions) erro
 		return err
 	}
 	params := ptyhost.SpawnParams{
-		SessionID:   opts.ID,
+		SessionID:   string(opts.ID),
 		Agent:       prepared.Agent,
 		CWD:         opts.CWD,
 		Label:       opts.Label,

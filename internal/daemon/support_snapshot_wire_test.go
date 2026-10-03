@@ -15,9 +15,10 @@ func TestASupportSnapshotCarriesBoundedEvidenceWithoutInputOrWarningText(t *test
 	t.Setenv("ATTN_PTY_BACKEND", "not-a-backend")
 	w := newWorld(t)
 	app := w.App()
-	shell := w.Spawn(app, workspaceShell, w.Path("shop"))
-	gone := w.Spawn(app, workspaceShell, w.Path("docs"))
-	exitWorkspaceShells(app, gone)
+	shellSession := w.Spawn(app, workspaceShell, w.Path("shop"))
+	goneSession := w.Spawn(app, workspaceShell, w.Path("docs"))
+	shell, gone := app.Terminal(shellSession), app.Terminal(goneSession)
+	exitWorkspaceShells(app, goneSession)
 
 	empty, _ := supportSnapshotRequest(app, "before", nil)
 	capacity := empty.TraceCapacity

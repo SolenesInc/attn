@@ -136,7 +136,7 @@ func TestSessionsTheQueueSkipsNeverOweATurn(t *testing.T) {
 		}
 	}
 	app.TypeLine(shell, "exit")
-	testworld.Await(app, protocol.EventSessionExited, func(e protocol.SessionExitedMessage) bool { return e.ID == shell })
+	testworld.Await(app, protocol.EventSessionExited, func(e protocol.SessionExitedMessage) bool { return e.SessionID == shell })
 	for id, since := range map[string]int{shell: 0, chief: madeChief} {
 		for _, s := range sessionUpdatesOf(app, id)[since:] {
 			if protocol.Deref(s.TurnOwed) {

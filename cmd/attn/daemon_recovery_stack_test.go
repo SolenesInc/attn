@@ -15,6 +15,7 @@ func TestAnAppConnectingDuringRestartRecoveryWaitsForTheRecoveredSessions(t *tes
 	s.Start()
 	app := s.App()
 	shell := s.Spawn(app, fakeagent.Harness(protocol.SessionAgentShell), s.Path("shop"))
+	terminal := app.Terminal(shell)
 	attachWithPolicy(t, app, shell, protocol.AttachPolicyFreshSpawn)
 	app.TypeLine(shell, "echo before-$((1+1))")
 	app.AwaitScreen(shell, "before-2")
@@ -23,7 +24,7 @@ func TestAnAppConnectingDuringRestartRecoveryWaitsForTheRecoveredSessions(t *tes
 	recovery := s.PauseAt(pausepoint.DaemonStartupRecovery)
 	s.StartHeldAt(recovery)
 	app = s.ConnectApp()
-	app.Send(protocol.AttachSessionMessage{Cmd: protocol.CmdAttachSession, ID: shell, AttachPolicy: protocol.Ptr(protocol.AttachPolicyRelaunchRestore)})
+	app.Send(protocol.AttachSessionMessage{Cmd: protocol.CmdAttachSession, ID: terminal, AttachPolicy: protocol.Ptr(protocol.AttachPolicyRelaunchRestore)})
 	refused := testworld.Refused(app)
 	if protocol.Deref(refused.Cmd) != protocol.CmdAttachSession || protocol.Deref(refused.Error) != "daemon_recovering" {
 		t.Fatalf("opening a terminal mid-recovery answered %s %q, want attach_session refused as daemon_recovering", protocol.Deref(refused.Cmd), protocol.Deref(refused.Error))

@@ -208,7 +208,7 @@ func TestAMembersDayThatEndsIsReleasedAndTheNextWakeStartsFresh(t *testing.T) {
 
 	first := wakeCrew(t, cli, "alder", "")
 	w.Launched(first.SessionID).Exit(1)
-	testworld.Await(app, protocol.EventSessionExited, func(e protocol.SessionExitedMessage) bool { return e.ID == first.SessionID })
+	testworld.Await(app, protocol.EventSessionExited, func(e protocol.SessionExitedMessage) bool { return e.SessionID == first.SessionID })
 	if binding := crewRosterMember(t, cli, "alder").BindingSession; binding != nil {
 		t.Fatalf("the exited day still holds alder: %s", *binding)
 	}

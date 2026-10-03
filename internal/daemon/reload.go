@@ -14,6 +14,7 @@ import (
 	"github.com/google/uuid"
 
 	agentdriver "github.com/victorarias/attn/internal/agent"
+	"github.com/victorarias/attn/internal/harness"
 	"github.com/victorarias/attn/internal/launchcontract"
 	"github.com/victorarias/attn/internal/protocol"
 	"github.com/victorarias/attn/internal/pty"
@@ -22,29 +23,29 @@ import (
 
 const reloadStuckFlagGrace = 5 * time.Second
 
-func (d *Daemon) markReloading(sessionID string) {
+func (d *Daemon) markReloading(id harness.TerminalID) {
 	d.reloadingMu.Lock()
 	defer d.reloadingMu.Unlock()
-	if d.reloadingSessions == nil {
-		d.reloadingSessions = make(map[string]bool)
+	if d.reloadingTerminals == nil {
+		d.reloadingTerminals = make(map[harness.TerminalID]bool)
 	}
-	d.reloadingSessions[sessionID] = true
+	d.reloadingTerminals[id] = true
 }
 
-func (d *Daemon) consumeReloading(sessionID string) bool {
+func (d *Daemon) consumeReloading(id harness.TerminalID) bool {
 	d.reloadingMu.Lock()
 	defer d.reloadingMu.Unlock()
-	if d.reloadingSessions[sessionID] {
-		delete(d.reloadingSessions, sessionID)
+	if d.reloadingTerminals[id] {
+		delete(d.reloadingTerminals, id)
 		return true
 	}
 	return false
 }
 
-func (d *Daemon) clearReloading(sessionID string) {
+func (d *Daemon) clearReloading(id harness.TerminalID) {
 	d.reloadingMu.Lock()
 	defer d.reloadingMu.Unlock()
-	delete(d.reloadingSessions, sessionID)
+	delete(d.reloadingTerminals, id)
 }
 
 type sessionLifecycleLockEntry struct {
@@ -88,15 +89,7 @@ func (d *Daemon) sessionLifecycleLockFor(sessionID string) *sessionLifecycleLock
 }
 
 func (d *Daemon) sessionHasLiveWorker(sessionID string) bool {
-	if d.ptyBackend == nil {
-		return false
-	}
-	for _, liveID := range d.ptyBackend.SessionIDs(context.Background()) {
-		if liveID == sessionID {
-			return true
-		}
-	}
-	return false
+	return d.sessionLive(context.Background(), sessionID)
 }
 
 func (d *Daemon) agentSupportsChiefGuidance(agent string) bool {
@@ -202,8 +195,13 @@ func (d *Daemon) reloadSessionForClient(sessionID string, cols, rows int) error 
 	if rejection := d.runSpawnPipeline(spawnMsg, policy); rejection != nil {
 		return rejection.reason()
 	}
-	d.publishFact(FactSessionRespawned, sessionID, nil)
+	d.publishFact(FactSessionRespawned, sessionID, ptyRespawn{Terminal: string(d.primaryTerminal(sessionID))})
 	return nil
+}
+
+// ptyRespawn names the terminal whose process a respawn replaced; the fact's subject is its session.
+type ptyRespawn struct {
+	Terminal string `json:"terminal,omitempty"`
 }
 
 func (d *Daemon) handleReloadSession(client *wsClient, msg *protocol.ReloadSessionMessage) {
@@ -224,38 +222,39 @@ func (d *Daemon) executePreparedSessionReload(sessionID string, opts ptybackend.
 		defer pluginReload.abort()
 	}
 	ctx := context.Background()
-	d.markReloading(sessionID)
+	terminal := opts.ID
+	d.markReloading(terminal)
 	d.sessionInputs().fenceSession(sessionID)
 
-	if killErr := d.ptyBackend.Kill(ctx, sessionID, syscall.SIGTERM); killErr != nil {
+	if killErr := d.ptyBackend.Kill(ctx, terminal, syscall.SIGTERM); killErr != nil {
 		d.logf("reload: kill returned error for %s (continuing): %v", sessionID, killErr)
 	}
-	if removeErr := d.ptyBackend.Remove(ctx, sessionID); removeErr != nil {
+	if removeErr := d.ptyBackend.Remove(ctx, terminal); removeErr != nil {
 		d.logf("reload: remove returned error for %s (continuing): %v", sessionID, removeErr)
 	}
 
 	opts.DaemonEnv = d.spawnRoutingEnv()
 	if spawnErr := d.ptyBackend.Spawn(ctx, opts); spawnErr != nil {
 		d.logf("reload: respawn failed for %s: %v; finalizing as exited", sessionID, spawnErr)
-		d.clearReloading(sessionID)
-		d.handlePTYExit(ptybackend.ExitInfo{ID: sessionID, ExitCode: 1})
+		d.clearReloading(terminal)
+		d.handlePTYExit(ptybackend.ExitInfo{ID: terminal, ExitCode: 1})
 		return fmt.Errorf("respawn failed for %s: %w", sessionID, spawnErr)
 	}
 	if pluginReload != nil {
 		if commitErr := pluginReload.commit(); commitErr != nil {
 			d.logf("reload: activate plugin run failed for %s: %v; finalizing as exited", sessionID, commitErr)
-			_ = d.ptyBackend.Kill(ctx, sessionID, syscall.SIGTERM)
-			_ = d.ptyBackend.Remove(ctx, sessionID)
-			d.clearReloading(sessionID)
+			_ = d.ptyBackend.Kill(ctx, terminal, syscall.SIGTERM)
+			_ = d.ptyBackend.Remove(ctx, terminal)
+			d.clearReloading(terminal)
 			d.closePluginDriverSession(sessionID, "reload_failed", nil, "")
-			d.handlePTYExit(ptybackend.ExitInfo{ID: sessionID, ExitCode: 1})
+			d.handlePTYExit(ptybackend.ExitInfo{ID: terminal, ExitCode: 1})
 			return fmt.Errorf("activate plugin run failed for %s: %w", sessionID, commitErr)
 		}
 	}
 	d.sessionInputs().forgetSession(sessionID)
 	d.recordPlacedInputOwed(sessionID, false)
 
-	d.life.AfterFunc("clearReloading", reloadStuckFlagGrace, func() { d.clearReloading(sessionID) })
+	d.life.AfterFunc("clearReloading", reloadStuckFlagGrace, func() { d.clearReloading(terminal) })
 	intent := launchIntentFromSpawnOptions(opts, d.isChiefOfStaffSession(sessionID))
 	if prior, ok := d.store.LaunchIntent(sessionID); ok {
 		intent.AutoMode = prior.AutoMode
@@ -263,27 +262,28 @@ func (d *Daemon) executePreparedSessionReload(sessionID string, opts ptybackend.
 	}
 	d.store.SetLaunchIntent(sessionID, intent)
 	d.recordReviewerEvidence(sessionID, opts.ApprovalRoute.ReviewerInLoop())
-	d.publishFact(FactSessionRespawned, sessionID, nil)
+	d.publishFact(FactSessionRespawned, sessionID, ptyRespawn{Terminal: string(terminal)})
 	d.logf("reload: respawned %s (agent=%s resume=%t yolo=%t)", sessionID, opts.Agent, opts.ResumeSessionID != "", opts.YoloMode)
 	return nil
 }
 
 func (d *Daemon) buildReloadSpawnOptions(session *protocol.Session) (ptybackend.SpawnOptions, error) {
 	sessionID := session.ID
+	terminal := d.primaryTerminal(sessionID)
 	paramsProvider, ok := d.ptyBackend.(ptybackend.SessionLaunchParamsProvider)
 	if !ok {
-		return d.buildReloadSpawnOptionsFromStoredIntent(session, fmt.Errorf("backend does not record launch params"))
+		return d.buildReloadSpawnOptionsFromStoredIntent(session, terminal, fmt.Errorf("backend does not record launch params"))
 	}
-	params, err := paramsProvider.SessionLaunchParams(context.Background(), sessionID)
+	params, err := paramsProvider.SessionLaunchParams(context.Background(), terminal)
 	if err != nil {
 		registryErr := fmt.Errorf("read launch params: %w", err)
 		if errors.Is(err, pty.ErrSessionNotFound) || errors.Is(err, os.ErrNotExist) {
-			return d.buildReloadSpawnOptionsFromStoredIntent(session, registryErr)
+			return d.buildReloadSpawnOptionsFromStoredIntent(session, terminal, registryErr)
 		}
 		return ptybackend.SpawnOptions{}, registryErr
 	}
 	if !params.Recorded {
-		return d.buildReloadSpawnOptionsFromStoredIntent(session, fmt.Errorf("launch params not recorded (pre-reload worker)"))
+		return d.buildReloadSpawnOptionsFromStoredIntent(session, terminal, fmt.Errorf("launch params not recorded (pre-reload worker)"))
 	}
 	if _, known, routeErr := recordedApprovalRoute(params.ApprovalRoute, params.YoloMode, params.UnattendedLaunch); routeErr != nil {
 		return ptybackend.SpawnOptions{}, fmt.Errorf("read launch params: %w", routeErr)
@@ -292,16 +292,16 @@ func (d *Daemon) buildReloadSpawnOptions(session *protocol.Session) (ptybackend.
 			params.ApprovalRoute = intent.ApprovalRoute
 		}
 	}
-	return d.buildReloadSpawnOptionsFromLaunchParams(session, params)
+	return d.buildReloadSpawnOptionsFromLaunchParams(session, terminal, params)
 }
 
-func (d *Daemon) buildReloadSpawnOptionsFromStoredIntent(session *protocol.Session, registryErr error) (ptybackend.SpawnOptions, error) {
+func (d *Daemon) buildReloadSpawnOptionsFromStoredIntent(session *protocol.Session, terminal harness.TerminalID, registryErr error) (ptybackend.SpawnOptions, error) {
 	intent, ok := d.store.LaunchIntent(session.ID)
 	if !ok {
 		return ptybackend.SpawnOptions{}, fmt.Errorf("%w; no stored launch intent exists either", registryErr)
 	}
 	d.logf("reload: using stored launch intent for %s (worker registry unavailable)", session.ID)
-	return d.buildReloadSpawnOptionsFromLaunchParams(session, ptybackend.SessionLaunchParams{
+	return d.buildReloadSpawnOptionsFromLaunchParams(session, terminal, ptybackend.SessionLaunchParams{
 		Recorded:         true,
 		YoloMode:         intent.YoloMode,
 		ApprovalRoute:    intent.ApprovalRoute,
@@ -312,11 +312,11 @@ func (d *Daemon) buildReloadSpawnOptionsFromStoredIntent(session *protocol.Sessi
 	})
 }
 
-func (d *Daemon) buildReloadSpawnOptionsFromLaunchParams(session *protocol.Session, params ptybackend.SessionLaunchParams) (ptybackend.SpawnOptions, error) {
+func (d *Daemon) buildReloadSpawnOptionsFromLaunchParams(session *protocol.Session, terminal harness.TerminalID, params ptybackend.SessionLaunchParams) (ptybackend.SpawnOptions, error) {
 	sessionID := session.ID
 	cols, rows := uint16(80), uint16(24)
 	if infoProvider, ok := d.ptyBackend.(ptybackend.SessionInfoProvider); ok {
-		if info, err := infoProvider.SessionInfo(context.Background(), sessionID); err == nil {
+		if info, err := infoProvider.SessionInfo(context.Background(), terminal); err == nil {
 			if info.Cols > 0 {
 				cols = info.Cols
 			}
@@ -341,7 +341,7 @@ func (d *Daemon) buildReloadSpawnOptionsFromLaunchParams(session *protocol.Sessi
 	}
 
 	opts := ptybackend.SpawnOptions{
-		ID:                      sessionID,
+		ID:                      terminal,
 		CWD:                     session.Directory,
 		Agent:                   agent,
 		Label:                   session.Label,
@@ -418,7 +418,7 @@ func (p *preparedPluginReload) commit() error {
 		p.d.life.Go("handlePTYExit", func() { p.d.handlePTYExit(info) })
 	}
 	if oldRun.RunID != "" && oldRun.RunID != p.runID {
-		p.d.notifyPluginDriverSessionClosed(oldRun.PluginName, p.sessionID, oldRun.RunID, "reloaded", nil, "")
+		p.d.notifyPluginDriverSessionClosed(oldRun.PluginName, p.d.primaryTerminal(p.sessionID), oldRun.RunID, "reloaded", nil, "")
 	}
 	return nil
 }
@@ -448,7 +448,7 @@ func (d *Daemon) preparePluginReload(session *protocol.Session, opts *ptybackend
 	}
 	params := pluginDriverSpawnParams{
 		Agent:     reg.Agent,
-		SessionID: session.ID,
+		SessionID: string(opts.ID),
 		RunID:     runID,
 		CWD:       session.Directory,
 		Label:     session.Label,

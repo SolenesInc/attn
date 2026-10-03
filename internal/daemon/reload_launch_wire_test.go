@@ -69,7 +69,7 @@ func TestAReloadWhoseAgentCannotStartShowsTheSessionExited(t *testing.T) {
 	if reloaded.Success {
 		t.Fatal("a reload into a deleted directory succeeded")
 	}
-	testworld.Await(app, protocol.EventSessionExited, func(e protocol.SessionExitedMessage) bool { return e.ID == session })
+	testworld.Await(app, protocol.EventSessionExited, func(e protocol.SessionExitedMessage) bool { return e.SessionID == session })
 }
 
 func TestTwoReloadsAtOnceLeaveOneAgentRunning(t *testing.T) {
@@ -96,7 +96,7 @@ func TestTwoReloadsAtOnceLeaveOneAgentRunning(t *testing.T) {
 	}
 	testworld.AwaitSession(app, session, func(s protocol.Session) bool { return s.State == protocol.SessionStateWorking })
 	for _, e := range app.Received() {
-		if e.Event == protocol.EventSessionExited && protocol.Deref(e.ID) == session {
+		if e.Event == protocol.EventSessionExited && protocol.Deref(e.SessionID) == session {
 			t.Error("the concurrent reloads showed the session exited")
 		}
 	}

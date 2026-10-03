@@ -141,14 +141,16 @@ func recordOrForgetSessionPR(command, sessionID, url string, stdout, stderr io.W
 }
 
 func listSessionPRs(sessionID, url string, watchesOnly, asJSON bool, stdout, stderr io.Writer) int {
-	sessions, err := sessionPRClient().Query("")
+	listed, err := sessionPRClient().List("")
 	if err != nil {
 		fmt.Fprintf(stderr, "pr ls: %v\n", err)
 		return prWaitExitError
 	}
+	sessions := listed.Sessions
+	shown := sessionShownIn(listed.Workspaces, sessionID)
 	var found *protocol.Session
 	for i := range sessions {
-		if sessions[i].ID == sessionID {
+		if sessions[i].ID == shown {
 			found = &sessions[i]
 			break
 		}
@@ -157,6 +159,7 @@ func listSessionPRs(sessionID, url string, watchesOnly, asJSON bool, stdout, std
 		fmt.Fprintf(stderr, "pr ls: unknown session %s\n", sessionID)
 		return prWaitExitError
 	}
+	sessionID = found.ID
 
 	entries := make([]protocol.SessionPullRequest, 0, len(found.PullRequests))
 	for _, pr := range found.PullRequests {
@@ -200,4 +203,19 @@ func listSessionPRs(sessionID, url string, watchesOnly, asJSON bool, stdout, std
 	}
 	w.Flush()
 	return 0
+}
+
+// sessionShownIn maps a terminal id, which ATTN_SESSION_ID carries, to the session its pane shows.
+func sessionShownIn(workspaces []protocol.Workspace, id string) string {
+	for _, workspace := range workspaces {
+		if workspace.Layout == nil {
+			continue
+		}
+		for _, pane := range workspace.Layout.Panes {
+			if protocol.Deref(pane.RuntimeID) == id && protocol.Deref(pane.SessionID) != "" {
+				return protocol.Deref(pane.SessionID)
+			}
+		}
+	}
+	return id
 }

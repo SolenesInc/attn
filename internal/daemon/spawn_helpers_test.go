@@ -6,6 +6,7 @@ import (
 	"sync"
 	"syscall"
 
+	"github.com/victorarias/attn/internal/harness"
 	"github.com/victorarias/attn/internal/protocol"
 	"github.com/victorarias/attn/internal/pty"
 	"github.com/victorarias/attn/internal/ptybackend"
@@ -21,26 +22,34 @@ func (b *fakeWorkerReconcileBackend) Spawn(context.Context, ptybackend.SpawnOpti
 	return nil
 }
 
-func (b *fakeWorkerReconcileBackend) Attach(context.Context, string, string, ...ptybackend.AttachOptions) (ptybackend.AttachInfo, ptybackend.Stream, error) {
+func (b *fakeWorkerReconcileBackend) Attach(context.Context, harness.TerminalID, string, ...ptybackend.AttachOptions) (ptybackend.AttachInfo, ptybackend.Stream, error) {
 	return ptybackend.AttachInfo{}, nil, nil
 }
 
-func (b *fakeWorkerReconcileBackend) Input(context.Context, string, []byte) error { return nil }
-
-func (b *fakeWorkerReconcileBackend) Resize(context.Context, string, uint16, uint16, uint16, uint16) (ptybackend.ResizeResult, error) {
-	return ptybackend.ResizeResult{Changed: true}, nil
-}
-
-func (b *fakeWorkerReconcileBackend) SetTheme(context.Context, string, pty.TerminalTheme) error {
+func (b *fakeWorkerReconcileBackend) Input(context.Context, harness.TerminalID, []byte) error {
 	return nil
 }
 
-func (b *fakeWorkerReconcileBackend) Kill(context.Context, string, syscall.Signal) error { return nil }
+func (b *fakeWorkerReconcileBackend) Resize(context.Context, harness.TerminalID, uint16, uint16, uint16, uint16) (ptybackend.ResizeResult, error) {
+	return ptybackend.ResizeResult{Changed: true}, nil
+}
 
-func (b *fakeWorkerReconcileBackend) Remove(context.Context, string) error { return nil }
+func (b *fakeWorkerReconcileBackend) SetTheme(context.Context, harness.TerminalID, pty.TerminalTheme) error {
+	return nil
+}
 
-func (b *fakeWorkerReconcileBackend) SessionIDs(context.Context) []string {
-	return append([]string(nil), b.liveIDs...)
+func (b *fakeWorkerReconcileBackend) Kill(context.Context, harness.TerminalID, syscall.Signal) error {
+	return nil
+}
+
+func (b *fakeWorkerReconcileBackend) Remove(context.Context, harness.TerminalID) error { return nil }
+
+func (b *fakeWorkerReconcileBackend) TerminalIDs(context.Context) []harness.TerminalID {
+	ids := make([]harness.TerminalID, len(b.liveIDs))
+	for i, id := range b.liveIDs {
+		ids[i] = harness.TerminalID(id)
+	}
+	return ids
 }
 
 func (b *fakeWorkerReconcileBackend) Recover(context.Context) (ptybackend.RecoveryReport, error) {
@@ -49,7 +58,8 @@ func (b *fakeWorkerReconcileBackend) Recover(context.Context) (ptybackend.Recove
 
 func (b *fakeWorkerReconcileBackend) Shutdown(context.Context) error { return nil }
 
-func (b *fakeWorkerReconcileBackend) SessionInfo(_ context.Context, sessionID string) (ptybackend.SessionInfo, error) {
+func (b *fakeWorkerReconcileBackend) SessionInfo(_ context.Context, id harness.TerminalID) (ptybackend.SessionInfo, error) {
+	sessionID := string(id)
 	info, ok := b.info[sessionID]
 	if !ok {
 		return ptybackend.SessionInfo{}, fmt.Errorf("missing info for %s", sessionID)
@@ -57,8 +67,8 @@ func (b *fakeWorkerReconcileBackend) SessionInfo(_ context.Context, sessionID st
 	return info, nil
 }
 
-func (b *fakeWorkerReconcileBackend) SessionLaunchParams(_ context.Context, sessionID string) (ptybackend.SessionLaunchParams, error) {
-	params, ok := b.params[sessionID]
+func (b *fakeWorkerReconcileBackend) SessionLaunchParams(_ context.Context, id harness.TerminalID) (ptybackend.SessionLaunchParams, error) {
+	params, ok := b.params[string(id)]
 	if !ok {
 		return ptybackend.SessionLaunchParams{}, pty.ErrSessionNotFound
 	}
@@ -113,7 +123,7 @@ type fakeSpawnBackend struct {
 	onRecover         func()
 }
 
-func (b *fakeSpawnBackend) ScreenSnapshot(_ context.Context, _ string) (pty.ScreenSnapshotInfo, error) {
+func (b *fakeSpawnBackend) ScreenSnapshot(_ context.Context, _ harness.TerminalID) (pty.ScreenSnapshotInfo, error) {
 	b.mu.Lock()
 	defer b.mu.Unlock()
 	if b.screenUnavailable {
@@ -138,11 +148,12 @@ func (b *fakeSpawnBackend) Spawn(_ context.Context, opts ptybackend.SpawnOptions
 	return spawnErr
 }
 
-func (b *fakeSpawnBackend) Attach(context.Context, string, string, ...ptybackend.AttachOptions) (ptybackend.AttachInfo, ptybackend.Stream, error) {
+func (b *fakeSpawnBackend) Attach(context.Context, harness.TerminalID, string, ...ptybackend.AttachOptions) (ptybackend.AttachInfo, ptybackend.Stream, error) {
 	return ptybackend.AttachInfo{Running: true}, newFakeOutputStream(), nil
 }
 
-func (b *fakeSpawnBackend) Input(_ context.Context, id string, data []byte) error {
+func (b *fakeSpawnBackend) Input(_ context.Context, terminal harness.TerminalID, data []byte) error {
+	id := string(terminal)
 	b.mu.Lock()
 	onInput := b.onInput
 	onInputResult := b.onInputResult
@@ -156,21 +167,21 @@ func (b *fakeSpawnBackend) Input(_ context.Context, id string, data []byte) erro
 	return nil
 }
 
-func (b *fakeSpawnBackend) Resize(context.Context, string, uint16, uint16, uint16, uint16) (ptybackend.ResizeResult, error) {
+func (b *fakeSpawnBackend) Resize(context.Context, harness.TerminalID, uint16, uint16, uint16, uint16) (ptybackend.ResizeResult, error) {
 	return ptybackend.ResizeResult{Changed: true}, nil
 }
 
-func (b *fakeSpawnBackend) SetTheme(_ context.Context, id string, theme pty.TerminalTheme) error {
+func (b *fakeSpawnBackend) SetTheme(_ context.Context, id harness.TerminalID, theme pty.TerminalTheme) error {
 	b.mu.Lock()
 	defer b.mu.Unlock()
-	b.themeCallIDs = append(b.themeCallIDs, id)
+	b.themeCallIDs = append(b.themeCallIDs, string(id))
 	b.themeCalls = append(b.themeCalls, theme)
 	return b.setThemeErr
 }
 
-func (b *fakeSpawnBackend) Kill(_ context.Context, id string, _ syscall.Signal) error {
+func (b *fakeSpawnBackend) Kill(_ context.Context, id harness.TerminalID, _ syscall.Signal) error {
 	b.mu.Lock()
-	b.killed = append(b.killed, id)
+	b.killed = append(b.killed, string(id))
 	b.mu.Unlock()
 	if b.onKill != nil {
 		b.onKill()
@@ -178,17 +189,21 @@ func (b *fakeSpawnBackend) Kill(_ context.Context, id string, _ syscall.Signal) 
 	return nil
 }
 
-func (b *fakeSpawnBackend) Remove(_ context.Context, id string) error {
+func (b *fakeSpawnBackend) Remove(_ context.Context, id harness.TerminalID) error {
 	b.mu.Lock()
 	defer b.mu.Unlock()
-	b.removed = append(b.removed, id)
+	b.removed = append(b.removed, string(id))
 	return nil
 }
 
-func (b *fakeSpawnBackend) SessionIDs(context.Context) []string {
+func (b *fakeSpawnBackend) TerminalIDs(context.Context) []harness.TerminalID {
 	b.mu.Lock()
 	defer b.mu.Unlock()
-	return append([]string(nil), b.sessionIDs...)
+	ids := make([]harness.TerminalID, len(b.sessionIDs))
+	for i, id := range b.sessionIDs {
+		ids[i] = harness.TerminalID(id)
+	}
+	return ids
 }
 
 func (b *fakeSpawnBackend) Recover(context.Context) (ptybackend.RecoveryReport, error) {

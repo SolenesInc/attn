@@ -1,0 +1,3 @@
+kind: internal
+area: daemon
+change: A new pane's terminal gets its own id, which `ATTN_SESSION_ID`, hook calls, pi's run and the PTY log name carry; the daemon maps it to the session the pane shows. Panes from before the upgrade keep their session's id.

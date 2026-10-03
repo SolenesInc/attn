@@ -45,7 +45,7 @@ func (d *Daemon) sessionInputScreen(parent context.Context, sessionID string) (l
 	}
 	ctx, cancel := context.WithTimeout(parent, doorbellScreenTimeout)
 	defer cancel()
-	snapshot, err := provider.ScreenSnapshot(ctx, sessionID)
+	snapshot, err := provider.ScreenSnapshot(ctx, d.primaryTerminal(sessionID))
 	if err != nil || snapshot.Screen == nil || !snapshot.Screen.HasText {
 		return "", false, false
 	}

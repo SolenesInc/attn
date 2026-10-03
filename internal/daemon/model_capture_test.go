@@ -10,6 +10,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/victorarias/attn/internal/harness"
 	"github.com/victorarias/attn/internal/modelcapture"
 	"github.com/victorarias/attn/internal/protocol"
 	"github.com/victorarias/attn/internal/pty"
@@ -22,7 +23,8 @@ type modelCaptureBackend struct {
 	calls     map[string]int
 }
 
-func (b *modelCaptureBackend) ScreenSnapshot(_ context.Context, sessionID string) (pty.ScreenSnapshotInfo, error) {
+func (b *modelCaptureBackend) ScreenSnapshot(_ context.Context, id harness.TerminalID) (pty.ScreenSnapshotInfo, error) {
+	sessionID := string(id)
 	b.mu.Lock()
 	defer b.mu.Unlock()
 	b.calls[sessionID]++

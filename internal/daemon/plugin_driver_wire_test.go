@@ -93,7 +93,7 @@ func TestAPiSessionFollowsItsDriversReportsAndResumesItsConversationAfterItExits
 	testworld.AwaitSession(app, session, func(s protocol.Session) bool { return s.State == protocol.SessionStateWaitingInput })
 
 	first.Exit(7)
-	exited := testworld.Await(app, protocol.EventSessionExited, func(e protocol.SessionExitedMessage) bool { return e.ID == session })
+	exited := testworld.Await(app, protocol.EventSessionExited, func(e protocol.SessionExitedMessage) bool { return e.SessionID == session })
 	if exited.ExitCode != 7 {
 		t.Errorf("session_exited carries exit code %d, want pi's 7", exited.ExitCode)
 	}

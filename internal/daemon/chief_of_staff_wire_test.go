@@ -69,12 +69,12 @@ func TestCreatingASessionAsChiefAssignsTheRoleOnlyWhenItCan(t *testing.T) {
 
 	shell := w.Spawn(app, fakeagent.Harness(protocol.AgentShellValue), w.Path("shell"), asChief)
 	app.TypeLine(shell, "exit")
-	testworld.Await(app, protocol.EventSessionExited, func(e protocol.SessionExitedMessage) bool { return e.ID == shell })
+	testworld.Await(app, protocol.EventSessionExited, func(e protocol.SessionExitedMessage) bool { return e.SessionID == shell })
 
 	respawned := w.Spawn(app, fakeagent.Claude, w.Path("plain"))
 	w.Launched(respawned)
 	app.Send(protocol.KillSessionMessage{Cmd: protocol.CmdKillSession, ID: respawned})
-	testworld.Await(app, protocol.EventSessionExited, func(e protocol.SessionExitedMessage) bool { return e.ID == respawned })
+	testworld.Await(app, protocol.EventSessionExited, func(e protocol.SessionExitedMessage) bool { return e.SessionID == respawned })
 	w.Spawn(app, fakeagent.Claude, w.Path("plain"), asChief, func(m *protocol.SpawnSessionMessage) { m.ID = respawned })
 	w.Launched(respawned)
 

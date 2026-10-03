@@ -22,7 +22,7 @@ func TestAHandedBackReviewHeldByTheUsersTypingLandsOnceTheyAreQuiet(t *testing.T
 			t.Fatalf("present: %v", err)
 		}
 
-		app.Send(protocol.PtyInputMessage{Cmd: protocol.CmdPtyInput, ID: presenter.id, Data: "half a thought"})
+		app.Send(protocol.PtyInputMessage{Cmd: protocol.CmdPtyInput, ID: presenter.self, Data: "half a thought"})
 		approved := testworld.Request(app, protocol.PresentSubmitRoundMessage{Cmd: protocol.CmdPresentSubmitRound, RoundID: opened.RoundID, Verdict: "approved", Handback: true},
 			protocol.EventPresentSubmitRoundResult, func(r protocol.PresentSubmitRoundResultMessage) bool { return r.RoundID == opened.RoundID })
 		if !approved.Success {
@@ -49,7 +49,7 @@ func TestANotebookEntryForAChiefHeldByTheUsersTypingLandsOnceTheyAreQuiet(t *tes
 		synctest.Wait()
 		chief = w.bootBubbleClaude(t, chief.id)
 
-		app.Send(protocol.PtyInputMessage{Cmd: protocol.CmdPtyInput, ID: chief.id, Data: "half a thought"})
+		app.Send(protocol.PtyInputMessage{Cmd: protocol.CmdPtyInput, ID: chief.self, Data: "half a thought"})
 		sent := notebookAskSendToChief(app, "notes/today.md", "follow up on the release")
 		if !sent.Success || sent.Result == nil || sent.Result.Nudged {
 			t.Fatalf("sending to a chief the user is typing to = %+v, want it written and not nudged yet", sent)

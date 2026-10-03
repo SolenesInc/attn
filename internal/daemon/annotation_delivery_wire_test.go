@@ -54,7 +54,7 @@ func TestSubmittedAnnotationsReachTheAgentAfterWhatTheUserTyped(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			if tc.typed != "" {
 				probe := uuid.NewString()
-				testworld.Request(app, protocol.PtyInputMessage{Cmd: protocol.CmdPtyInput, ID: session, Data: tc.typed, ProbeID: protocol.Ptr(probe)},
+				testworld.Request(app, protocol.PtyInputMessage{Cmd: protocol.CmdPtyInput, ID: app.Terminal(session), Data: tc.typed, ProbeID: protocol.Ptr(probe)},
 					protocol.EventPtyInputProbeResult, func(r protocol.PtyInputProbeResultMessage) bool { return r.ProbeID == probe })
 			}
 			if got := tc.submit(); !got.success || got.status != "delivered" || got.err != "" || !reflect.DeepEqual(got.generation, tc.wantGeneration) {
@@ -240,7 +240,7 @@ func TestAnnotationsTheAgentsTerminalWillNotTakeKeepTheDraft(t *testing.T) {
 		t.Errorf("the undelivered draft = %+v, want it kept at generation 3", draft)
 	}
 	agent.Exit(0)
-	testworld.Await(app, protocol.EventSessionExited, func(e protocol.SessionExitedMessage) bool { return e.ID == session })
+	testworld.Await(app, protocol.EventSessionExited, func(e protocol.SessionExitedMessage) bool { return e.SessionID == session })
 }
 
 func TestSeedAnnotationsBecomeANoteOnThatSeedOnly(t *testing.T) {

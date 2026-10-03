@@ -80,15 +80,15 @@ func (d *Daemon) noteLaunchStarted(sessionID string) {
 	d.resolveLaunchWatch(sessionID, launchOutcome{startedAt: time.Now()})
 }
 
-func (d *Daemon) noteLaunchExited(info ptybackend.ExitInfo) {
-	d.resolveLaunchWatch(info.ID, launchOutcome{exit: d.exitScreenOrBare(info)})
+func (d *Daemon) noteLaunchExited(sessionID string, info ptybackend.ExitInfo) {
+	d.resolveLaunchWatch(sessionID, launchOutcome{exit: d.exitScreenOrBare(sessionID, info)})
 }
 
-func (d *Daemon) exitScreenOrBare(info ptybackend.ExitInfo) *store.SessionExitScreen {
-	if exit := d.store.GetSessionExitScreen(info.ID); exit != nil {
+func (d *Daemon) exitScreenOrBare(sessionID string, info ptybackend.ExitInfo) *store.SessionExitScreen {
+	if exit := d.store.GetSessionExitScreen(sessionID); exit != nil {
 		return exit
 	}
-	return &store.SessionExitScreen{SessionID: info.ID, ExitCode: info.ExitCode, ExitSignal: info.Signal}
+	return &store.SessionExitScreen{SessionID: sessionID, ExitCode: info.ExitCode, ExitSignal: info.Signal}
 }
 
 func (d *Daemon) awaitDelegatedLaunch(sessionID string, watch *launchWatch) launchOutcome {

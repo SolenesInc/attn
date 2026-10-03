@@ -7,12 +7,13 @@ import (
 	"io"
 	"os"
 	"reflect"
-	"sort"
+	"slices"
 	"strings"
 	"syscall"
 	"testing"
 	"time"
 
+	"github.com/victorarias/attn/internal/harness"
 	"github.com/victorarias/attn/internal/pty"
 	"github.com/victorarias/attn/internal/ptyhost"
 )
@@ -39,7 +40,7 @@ func TestSharedHost_MultipleSessionsAndBackendRecovery(t *testing.T) {
 
 	for _, id := range []string{"shared-one", "shared-two"} {
 		if err := backend.Spawn(context.Background(), SpawnOptions{
-			ID: id, CWD: t.TempDir(), Agent: "shell", Cols: 80, Rows: 24,
+			ID: harness.TerminalID(id), CWD: t.TempDir(), Agent: "shell", Cols: 80, Rows: 24,
 		}); err != nil {
 			t.Fatalf("Spawn(%s): %v", id, err)
 		}
@@ -89,9 +90,9 @@ func TestSharedHost_MultipleSessionsAndBackendRecovery(t *testing.T) {
 	if report.Recovered != 2 {
 		t.Fatalf("recovered = %+v, want two sessions", report)
 	}
-	ids := recovered.SessionIDs(context.Background())
-	sort.Strings(ids)
-	if !reflect.DeepEqual(ids, []string{"shared-one", "shared-two"}) {
+	ids := recovered.TerminalIDs(context.Background())
+	slices.Sort(ids)
+	if !reflect.DeepEqual(ids, []harness.TerminalID{"shared-one", "shared-two"}) {
 		t.Fatalf("session ids = %v", ids)
 	}
 	for _, id := range ids {
@@ -118,7 +119,7 @@ func TestSharedHost_InnerShellPromptSurvivesForegroundPolling(t *testing.T) {
 		t.Fatal(err)
 	}
 	observations := make(chan pty.Observation, 64)
-	backend.SetStateHandler(func(_ string, obs pty.Observation) { observations <- obs })
+	backend.SetStateHandler(func(_ harness.TerminalID, obs pty.Observation) { observations <- obs })
 	defer backend.Shutdown(context.Background())
 	const id = "inner-shell"
 	if err := backend.Spawn(context.Background(), SpawnOptions{
@@ -248,7 +249,7 @@ func TestMigratingHost_RecoversLegacyAndSharedSessionsWithoutMovingEither(t *tes
 	spawn := func(backend Backend, id string) {
 		t.Helper()
 		if err := backend.Spawn(context.Background(), SpawnOptions{
-			ID: id, CWD: root, Agent: "mixed-recovery-probe",
+			ID: harness.TerminalID(id), CWD: root, Agent: "mixed-recovery-probe",
 			ExternalCommand: []string{"/bin/cat"}, Cols: 80, Rows: 24,
 		}); err != nil {
 			t.Fatalf("Spawn(%s): %v", id, err)
@@ -302,17 +303,17 @@ func TestMigratingHost_RecoversLegacyAndSharedSessionsWithoutMovingEither(t *tes
 		t.Fatalf("shared host ownership changed: pids = %v", pids)
 	}
 	for _, id := range []string{"legacy-before-update", "shared-before-update", "shared-after-update"} {
-		_, stream, err := migrating.Attach(context.Background(), id, "mixed-"+id)
+		_, stream, err := migrating.Attach(context.Background(), harness.TerminalID(id), "mixed-"+id)
 		if err != nil {
 			t.Fatalf("Attach(%s): %v", id, err)
 		}
 		marker := "__ALIVE_" + id + "__"
-		if err := migrating.Input(context.Background(), id, []byte(marker+"\n")); err != nil {
+		if err := migrating.Input(context.Background(), harness.TerminalID(id), []byte(marker+"\n")); err != nil {
 			t.Fatalf("Input(%s): %v", id, err)
 		}
 		waitForStreamText(t, stream, marker)
 		_ = stream.Close()
-		if err := migrating.Remove(context.Background(), id); err != nil {
+		if err := migrating.Remove(context.Background(), harness.TerminalID(id)); err != nil {
 			t.Fatalf("Remove(%s): %v", id, err)
 		}
 	}
@@ -340,7 +341,7 @@ func TestSharedHost_OneLifecycleStreamCoversMultipleSessions(t *testing.T) {
 	ids := []string{"lifecycle-one", "lifecycle-two"}
 	for _, id := range ids {
 		if err := backend.Spawn(context.Background(), SpawnOptions{
-			ID: id, CWD: root, Agent: "lifecycle-probe",
+			ID: harness.TerminalID(id), CWD: root, Agent: "lifecycle-probe",
 			ExternalCommand: []string{"/bin/sh", "-c", "read release"},
 			Cols:            80,
 			Rows:            24,
@@ -376,7 +377,7 @@ func TestSharedHost_OneLifecycleStreamCoversMultipleSessions(t *testing.T) {
 		if perSessionMonitor {
 			t.Fatalf("session %s has a per-session lifecycle stream", id)
 		}
-		if err := backend.Input(context.Background(), id, []byte("\n")); err != nil {
+		if err := backend.Input(context.Background(), harness.TerminalID(id), []byte("\n")); err != nil {
 			t.Fatalf("Input(%s): %v", id, err)
 		}
 	}
@@ -386,7 +387,7 @@ func TestSharedHost_OneLifecycleStreamCoversMultipleSessions(t *testing.T) {
 	for len(got) < len(ids) {
 		select {
 		case info := <-exits:
-			got[info.ID] = info
+			got[string(info.ID)] = info
 		case <-deadline:
 			t.Fatalf("exit notifications = %+v, want %v", got, ids)
 		}
@@ -395,7 +396,7 @@ func TestSharedHost_OneLifecycleStreamCoversMultipleSessions(t *testing.T) {
 		if got[id].ExitCode != 0 {
 			t.Fatalf("exit notification for %s = %+v, want code 0", id, got[id])
 		}
-		if err := backend.Remove(context.Background(), id); err != nil {
+		if err := backend.Remove(context.Background(), harness.TerminalID(id)); err != nil {
 			t.Fatalf("Remove(%s): %v", id, err)
 		}
 	}
@@ -468,7 +469,7 @@ func TestSharedHost_CrashEvictsEverySessionAndRestartsCleanly(t *testing.T) {
 		"running-at-crash":    {"/bin/cat"},
 	} {
 		if err := backend.Spawn(context.Background(), SpawnOptions{
-			ID: id, CWD: root, Agent: "crash-probe", ExternalCommand: command, Cols: 80, Rows: 24,
+			ID: harness.TerminalID(id), CWD: root, Agent: "crash-probe", ExternalCommand: command, Cols: 80, Rows: 24,
 		}); err != nil {
 			t.Fatalf("Spawn(%s): %v", id, err)
 		}
@@ -568,7 +569,7 @@ func TestSharedHost_FailedExecLeavesOtherSessionsHealthy(t *testing.T) {
 	if err == nil {
 		t.Fatal("Spawn(failed-exec) succeeded")
 	}
-	if ids := backend.SessionIDs(context.Background()); !reflect.DeepEqual(ids, []string{"healthy-before-failure"}) {
+	if ids := backend.TerminalIDs(context.Background()); !reflect.DeepEqual(ids, []harness.TerminalID{"healthy-before-failure"}) {
 		t.Fatalf("session ids after failed exec = %v", ids)
 	}
 	registryPath := ptyhost.SessionRegistryPath(root, "d-host-exec-failure", "failed-exec")
@@ -732,10 +733,10 @@ func TestSharedHost_BinaryUpgradeLeavesOldSessionsOnOldHost(t *testing.T) {
 		t.Fatalf("host pids = %v, want old and new sessions on distinct hosts", pids)
 	}
 	for _, id := range []string{"before-upgrade", "after-upgrade"} {
-		if _, err := newBackend.SessionInfo(context.Background(), id); err != nil {
+		if _, err := newBackend.SessionInfo(context.Background(), harness.TerminalID(id)); err != nil {
 			t.Fatalf("SessionInfo(%s): %v", id, err)
 		}
-		if err := newBackend.Remove(context.Background(), id); err != nil {
+		if err := newBackend.Remove(context.Background(), harness.TerminalID(id)); err != nil {
 			t.Fatalf("Remove(%s): %v", id, err)
 		}
 	}
@@ -980,7 +981,7 @@ func waitForStreamText(t *testing.T, stream Stream, want string) OutputEvent {
 	}
 }
 
-func waitForExitInfo(t *testing.T, exits <-chan ExitInfo, id string, matches func(ExitInfo) bool) {
+func waitForExitInfo(t *testing.T, exits <-chan ExitInfo, id harness.TerminalID, matches func(ExitInfo) bool) {
 	t.Helper()
 	deadline := time.After(8 * time.Second)
 	for {
@@ -995,31 +996,31 @@ func waitForExitInfo(t *testing.T, exits <-chan ExitInfo, id string, matches fun
 	}
 }
 
-func waitForSessionIDs(t *testing.T, backend *WorkerBackend, want []string) {
+func waitForSessionIDs(t *testing.T, backend *WorkerBackend, want []harness.TerminalID) {
 	t.Helper()
 	deadline := time.Now().Add(8 * time.Second)
 	for time.Now().Before(deadline) {
-		ids := backend.SessionIDs(context.Background())
-		sort.Strings(ids)
+		ids := backend.TerminalIDs(context.Background())
+		slices.Sort(ids)
 		if len(ids) == 0 && len(want) == 0 || reflect.DeepEqual(ids, want) {
 			return
 		}
 		time.Sleep(10 * time.Millisecond)
 	}
-	t.Fatalf("session ids = %v, want %v", backend.SessionIDs(context.Background()), want)
+	t.Fatalf("session ids = %v, want %v", backend.TerminalIDs(context.Background()), want)
 }
 
 func waitForSessionExit(t *testing.T, backend *WorkerBackend, id string) {
 	t.Helper()
 	deadline := time.Now().Add(8 * time.Second)
 	for time.Now().Before(deadline) {
-		info, err := backend.SessionInfo(context.Background(), id)
+		info, err := backend.SessionInfo(context.Background(), harness.TerminalID(id))
 		if err == nil && !info.Running {
 			return
 		}
 		time.Sleep(10 * time.Millisecond)
 	}
 	hostLog, _ := os.ReadFile(ptyhost.LogPath(backend.cfg.DataRoot, backend.cfg.DaemonInstanceID))
-	info, infoErr := backend.SessionInfo(context.Background(), id)
+	info, infoErr := backend.SessionInfo(context.Background(), harness.TerminalID(id))
 	t.Fatalf("session %s did not exit: info=%+v err=%v\nhost log:\n%s", id, info, infoErr, hostLog)
 }

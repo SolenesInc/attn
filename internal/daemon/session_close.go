@@ -30,6 +30,9 @@ func (d *Daemon) beginSessionClose(
 	d.commitSessionUnregister(sessionID, closed)
 	if client != nil {
 		d.detachSession(client, sessionID)
+		for _, terminal := range teardown.terminals {
+			d.detachSession(client, string(terminal))
+		}
 	}
 	if teardown != nil && teardown.session != nil {
 		d.publishSessionUnregistered(teardown.session)

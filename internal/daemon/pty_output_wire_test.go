@@ -12,24 +12,24 @@ import (
 
 func TestPtyOutputArrivesInTheFormatEachClientAskedFor(t *testing.T) {
 	w := newWorld(t)
-	session := w.Spawn(w.App(), workspaceShell, w.Path("shop"))
+	terminal := w.Terminal(w.Spawn(w.App(), workspaceShell, w.Path("shop")))
 	framed := transportConnectRaw(t, w, protocol.CapabilityBinaryPtyOutput)
 	plain := transportConnectRaw(t, w)
 	for _, p := range []*transportRawPeer{framed, plain} {
-		p.send(protocol.AttachSessionMessage{Cmd: protocol.CmdAttachSession, ID: session})
+		p.send(protocol.AttachSessionMessage{Cmd: protocol.CmdAttachSession, ID: terminal})
 		p.next("attach_result", func(f transportFrame) bool { return f.event == protocol.EventAttachResult })
 	}
 
-	plain.send(protocol.PtyInputMessage{Cmd: protocol.CmdPtyInput, ID: session, Data: "printf 'mark%s\\n' er-one\r"})
+	plain.send(protocol.PtyInputMessage{Cmd: protocol.CmdPtyInput, ID: terminal, Data: "printf 'mark%s\\n' er-one\r"})
 
-	framedSeq := transportOutputInOneFormat(t, framed, session, "marker-one", true)
-	jsonSeq := transportOutputInOneFormat(t, plain, session, "marker-one", false)
+	framedSeq := transportOutputInOneFormat(t, framed, terminal, "marker-one", true)
+	jsonSeq := transportOutputInOneFormat(t, plain, terminal, "marker-one", false)
 	if jsonSeq != framedSeq {
 		t.Errorf("the output carrying marker-one reached the JSON client at seq %d and the binary client at seq %d, want the same", jsonSeq, framedSeq)
 	}
 }
 
-func transportOutputInOneFormat(t *testing.T, p *transportRawPeer, session, text string, binary bool) uint32 {
+func transportOutputInOneFormat(t *testing.T, p *transportRawPeer, terminal, text string, binary bool) uint32 {
 	t.Helper()
 	format := map[bool]string{true: "binary frames", false: "JSON pty_output"}
 	var output []byte
@@ -54,7 +54,7 @@ func transportOutputInOneFormat(t *testing.T, p *transportRawPeer, session, text
 	}
 	p.next(text+" as "+format[binary], func(f transportFrame) bool {
 		id, frameSeq, data, ok := outputFrame(f)
-		if !ok || id != session {
+		if !ok || id != terminal {
 			return false
 		}
 		if f.binary != binary {
@@ -83,24 +83,24 @@ type transportOutput struct {
 	index int
 }
 
-func transportAwaitOutput(p *testworld.Peer, session, text string) transportOutput {
+func transportAwaitOutput(p *testworld.Peer, terminal, text string) transportOutput {
 	p.T.Helper()
 	var seen []byte
 	found := testworld.Await(p, protocol.EventPtyOutput, func(e protocol.WebSocketEvent) bool {
-		if protocol.Deref(e.ID) != session {
+		if protocol.Deref(e.ID) != terminal {
 			return false
 		}
 		seen = append(seen, transportDecodeOutput(p.T, e)...)
 		return bytes.Contains(seen, []byte(text))
 	})
-	return transportOutput{seq: protocol.Deref(found.Seq), index: transportOutputIndex(p.T, p.Received(), session, text)}
+	return transportOutput{seq: protocol.Deref(found.Seq), index: transportOutputIndex(p.T, p.Received(), terminal, text)}
 }
 
-func transportOutputIndex(t testing.TB, events []protocol.WebSocketEvent, session, text string) int {
+func transportOutputIndex(t testing.TB, events []protocol.WebSocketEvent, terminal, text string) int {
 	t.Helper()
 	var seen []byte
 	for i, e := range events {
-		if e.Event != protocol.EventPtyOutput || protocol.Deref(e.ID) != session {
+		if e.Event != protocol.EventPtyOutput || protocol.Deref(e.ID) != terminal {
 			continue
 		}
 		seen = append(seen, transportDecodeOutput(t, e)...)

@@ -45,6 +45,7 @@ type Peer struct {
 	watermark map[string]uint32
 	empties   map[string]int
 	attached  map[string]bool
+	panes     map[string][]protocol.WorkspaceLayoutPane
 	closeErr  error
 	closing   bool
 }
@@ -59,6 +60,7 @@ func newPeer(t testing.TB, conn *websocket.Conn) *Peer {
 		watermark: map[string]uint32{},
 		empties:   map[string]int{},
 		attached:  map[string]bool{},
+		panes:     map[string][]protocol.WorkspaceLayoutPane{},
 	}
 	go p.read()
 	return p
@@ -125,7 +127,62 @@ func (p *Peer) recordEvent(data []byte) {
 		p.recordSnapshot(data)
 	case protocol.EventGetScreenSnapshotResult:
 		p.recordScreenSnapshot(data)
+	case protocol.EventInitialState, protocol.EventWorkspaceLayout, protocol.EventWorkspaceLayoutUpdated, protocol.EventWorkspaceUnregistered:
+		p.recordPanes(envelope.Event, data)
 	}
+}
+
+func (p *Peer) recordPanes(event string, data []byte) {
+	var carrier struct {
+		Workspaces      []protocol.Workspace      `json:"workspaces"`
+		Workspace       *protocol.Workspace       `json:"workspace"`
+		WorkspaceLayout *protocol.WorkspaceLayout `json:"workspace_layout"`
+	}
+	if err := json.Unmarshal(data, &carrier); err != nil {
+		return
+	}
+	switch {
+	case event == protocol.EventInitialState:
+		for _, workspace := range carrier.Workspaces {
+			if workspace.Layout != nil {
+				p.panes[workspace.ID] = workspace.Layout.Panes
+			}
+		}
+	case event == protocol.EventWorkspaceUnregistered && carrier.Workspace != nil:
+		delete(p.panes, carrier.Workspace.ID)
+	case carrier.WorkspaceLayout != nil:
+		p.panes[carrier.WorkspaceLayout.WorkspaceID] = carrier.WorkspaceLayout.Panes
+	}
+}
+
+// Terminal names the terminal a session's pane places, as the layouts this peer received show it.
+// It waits for a layout that places the session.
+func (p *Peer) Terminal(sessionID string) string {
+	p.T.Helper()
+	var pane protocol.WorkspaceLayoutPane
+	p.until(func() string { return "a pane that shows session " + sessionID }, func() (bool, error) {
+		var ok bool
+		pane, ok = p.paneShowingLocked(sessionID)
+		return ok, nil
+	})
+	return protocol.Deref(pane.RuntimeID)
+}
+
+func (p *Peer) paneShowing(sessionID string) (protocol.WorkspaceLayoutPane, bool) {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	return p.paneShowingLocked(sessionID)
+}
+
+func (p *Peer) paneShowingLocked(sessionID string) (protocol.WorkspaceLayoutPane, bool) {
+	for _, panes := range p.panes {
+		for _, pane := range panes {
+			if protocol.Deref(pane.SessionID) == sessionID && protocol.Deref(pane.RuntimeID) != "" {
+				return pane, true
+			}
+		}
+	}
+	return protocol.WorkspaceLayoutPane{}, false
 }
 
 func (p *Peer) recordSnapshot(data []byte) {
@@ -221,24 +278,27 @@ func (p *Peer) Close() {
 
 func (p *Peer) TypeLine(sessionID, text string) {
 	p.T.Helper()
-	p.attach(sessionID)
-	p.Send(protocol.PtyInputMessage{Cmd: protocol.CmdPtyInput, ID: sessionID, Data: text + "\r"})
+	terminal := p.Terminal(sessionID)
+	p.attach(terminal)
+	p.Send(protocol.PtyInputMessage{Cmd: protocol.CmdPtyInput, ID: terminal, Data: text + "\r"})
 }
 
 func (p *Peer) AwaitScreen(sessionID, text string) {
 	p.T.Helper()
-	p.attach(sessionID)
+	terminal := p.Terminal(sessionID)
+	p.attach(terminal)
 	p.until(func() string {
-		return "the screen of " + sessionID + " to show " + text + "; it shows " + strconv.Quote(string(p.screens[sessionID]))
+		return "the screen of " + sessionID + " to show " + text + "; it shows " + strconv.Quote(string(p.screens[terminal]))
 	}, func() (bool, error) {
-		return bytes.Contains(p.screens[sessionID], []byte(text)), nil
+		return bytes.Contains(p.screens[terminal], []byte(text)), nil
 	})
 }
 
 func (p *Peer) Screen(sessionID string) []byte {
+	terminal := p.Terminal(sessionID)
 	p.mu.Lock()
 	defer p.mu.Unlock()
-	return append([]byte(nil), p.screens[sessionID]...)
+	return append([]byte(nil), p.screens[terminal]...)
 }
 
 const screenLogTailBytes = 4096
@@ -249,28 +309,29 @@ func (p *Peer) LogScreens() {
 	for _, id := range slices.Sorted(maps.Keys(p.screens)) {
 		screen := p.screens[id]
 		tail := screen[max(0, len(screen)-screenLogTailBytes):]
-		p.T.Logf("output this peer received for session %s (last %d of %d bytes): %q", id, len(tail), len(screen), tail)
+		p.T.Logf("output this peer received for terminal %s (last %d of %d bytes): %q", id, len(tail), len(screen), tail)
 	}
 }
 
 func (p *Peer) EmptyOutputs(sessionID string) int {
+	terminal := p.Terminal(sessionID)
 	p.mu.Lock()
 	defer p.mu.Unlock()
-	return p.empties[sessionID]
+	return p.empties[terminal]
 }
 
-func (p *Peer) attach(sessionID string) {
+func (p *Peer) attach(terminal string) {
 	p.T.Helper()
 	p.mu.Lock()
-	attached := p.attached[sessionID]
+	attached := p.attached[terminal]
 	p.mu.Unlock()
 	if attached {
 		return
 	}
-	result := Request(p, protocol.AttachSessionMessage{Cmd: protocol.CmdAttachSession, ID: sessionID},
-		protocol.EventAttachResult, func(r protocol.AttachResultMessage) bool { return r.ID == sessionID })
+	result := Request(p, protocol.AttachSessionMessage{Cmd: protocol.CmdAttachSession, ID: terminal},
+		protocol.EventAttachResult, func(r protocol.AttachResultMessage) bool { return r.ID == terminal })
 	if !result.Success {
-		p.T.Fatalf("attach %s refused: %s", sessionID, protocol.Deref(result.Error))
+		p.T.Fatalf("attach %s refused: %s", terminal, protocol.Deref(result.Error))
 	}
 }
 

@@ -25,6 +25,7 @@ import (
 
 	"github.com/victorarias/attn/internal/buildinfo"
 	"github.com/victorarias/attn/internal/config"
+	"github.com/victorarias/attn/internal/harness"
 	"github.com/victorarias/attn/internal/launchcontract"
 	"github.com/victorarias/attn/internal/pausepoint"
 	"github.com/victorarias/attn/internal/pty"
@@ -79,7 +80,7 @@ type WorkerBackendConfig struct {
 	OwnerStartedAt   string
 	OwnerNonce       string
 	Logf             func(format string, args ...interface{})
-	OnTerminalBuild  func(sessionID, snapshotFormat string)
+	OnTerminalBuild  func(id harness.TerminalID, snapshotFormat string)
 
 	OnSharedArtifactRejected func(SharedArtifactRejection) error
 }
@@ -137,7 +138,7 @@ type WorkerBackend struct {
 
 	hooksMu sync.RWMutex
 	onExit  func(ExitInfo)
-	onState func(sessionID string, obs pty.Observation)
+	onState func(id harness.TerminalID, obs pty.Observation)
 
 	reqSeq atomic.Uint64
 
@@ -401,7 +402,8 @@ func (b *WorkerBackend) PTYBackendMode() string {
 	return "worker"
 }
 
-func (b *WorkerBackend) SessionCanReplayWithFormat(sessionID, format string) bool {
+func (b *WorkerBackend) SessionCanReplayWithFormat(id harness.TerminalID, format string) bool {
+	sessionID := string(id)
 	if b.kind != workerRuntimeSharedHost || strings.TrimSpace(format) == "" {
 		return false
 	}
@@ -411,7 +413,7 @@ func (b *WorkerBackend) SessionCanReplayWithFormat(sessionID, format string) boo
 	return ok
 }
 
-func (b *WorkerBackend) SetStateHandler(handler func(sessionID string, obs pty.Observation)) {
+func (b *WorkerBackend) SetStateHandler(handler func(id harness.TerminalID, obs pty.Observation)) {
 	b.hooksMu.Lock()
 	defer b.hooksMu.Unlock()
 	b.onState = handler
@@ -422,7 +424,7 @@ func (b *WorkerBackend) reportState(session *workerSession, observation pty.Obse
 	onState := b.onState
 	b.hooksMu.RUnlock()
 	if onState != nil {
-		onState(session.SessionID, observation)
+		onState(harness.TerminalID(session.SessionID), observation)
 	}
 }
 
@@ -431,7 +433,7 @@ func (b *WorkerBackend) reportExit(session *workerSession, exitCode int, signal 
 	onExit := b.onExit
 	b.hooksMu.RUnlock()
 	if onExit != nil {
-		go onExit(ExitInfo{ID: session.SessionID, ExitCode: exitCode, Signal: signal, LifecycleID: session.LifecycleID})
+		go onExit(ExitInfo{ID: harness.TerminalID(session.SessionID), ExitCode: exitCode, Signal: signal, LifecycleID: session.LifecycleID})
 	}
 }
 
@@ -452,7 +454,7 @@ func (b *WorkerBackend) Probe(ctx context.Context) error {
 	if err != nil {
 		return fmt.Errorf("generate probe session id: %w", err)
 	}
-	probeSessionID := "probe-" + suffix
+	probeSessionID := harness.TerminalID("probe-" + suffix)
 	spawnCtx, cancelSpawn := context.WithTimeout(ctx, probeTimeout)
 	defer cancelSpawn()
 	if err := b.Spawn(spawnCtx, SpawnOptions{
@@ -572,7 +574,7 @@ func (b *WorkerBackend) Spawn(ctx context.Context, opts SpawnOptions) error {
 	if err := validateSpawnOptions(opts); err != nil {
 		return err
 	}
-	if err := validateSessionID(opts.ID); err != nil {
+	if err := validateSessionID(string(opts.ID)); err != nil {
 		return err
 	}
 
@@ -580,7 +582,7 @@ func (b *WorkerBackend) Spawn(ctx context.Context, opts SpawnOptions) error {
 	if err != nil {
 		return err
 	}
-	sessionID := opts.ID
+	sessionID := string(opts.ID)
 	socketPath, err := b.expectedSocketPath(sessionID)
 	if err != nil {
 		return err
@@ -775,7 +777,8 @@ func withoutEnvironmentKeys(env []string, keys ...string) []string {
 	return filtered
 }
 
-func (b *WorkerBackend) Attach(ctx context.Context, sessionID, subscriberID string, opts ...AttachOptions) (AttachInfo, Stream, error) {
+func (b *WorkerBackend) Attach(ctx context.Context, id harness.TerminalID, subscriberID string, opts ...AttachOptions) (AttachInfo, Stream, error) {
+	sessionID := string(id)
 	session, err := b.getSession(sessionID)
 	if err != nil {
 		return AttachInfo{}, nil, err
@@ -884,7 +887,8 @@ func attachBlocksFromWire(blocks []ptyworker.AttachBlock) []pty.AttachBlockData 
 	return out
 }
 
-func (b *WorkerBackend) Input(ctx context.Context, sessionID string, data []byte) error {
+func (b *WorkerBackend) Input(ctx context.Context, id harness.TerminalID, data []byte) error {
+	sessionID := string(id)
 	session, err := b.getSession(sessionID)
 	if err != nil {
 		return err
@@ -909,7 +913,8 @@ func (b *WorkerBackend) inputSession(ctx context.Context, session *workerSession
 	return err
 }
 
-func (b *WorkerBackend) Resize(ctx context.Context, sessionID string, cols, rows, xpixel, ypixel uint16) (ResizeResult, error) {
+func (b *WorkerBackend) Resize(ctx context.Context, id harness.TerminalID, cols, rows, xpixel, ypixel uint16) (ResizeResult, error) {
+	sessionID := string(id)
 	session, err := b.getSession(sessionID)
 	if err != nil {
 		return ResizeResult{}, err
@@ -939,7 +944,8 @@ func resizeResultChanged(result ptyworker.ResizeResult) bool {
 	return *result.Changed
 }
 
-func (b *WorkerBackend) SetTheme(ctx context.Context, sessionID string, theme pty.TerminalTheme) error {
+func (b *WorkerBackend) SetTheme(ctx context.Context, id harness.TerminalID, theme pty.TerminalTheme) error {
+	sessionID := string(id)
 	session, err := b.getSession(sessionID)
 	if err != nil {
 		return err
@@ -960,7 +966,8 @@ func (b *WorkerBackend) SetTheme(ctx context.Context, sessionID string, theme pt
 	return err
 }
 
-func (b *WorkerBackend) Kill(ctx context.Context, sessionID string, sig syscall.Signal) error {
+func (b *WorkerBackend) Kill(ctx context.Context, id harness.TerminalID, sig syscall.Signal) error {
+	sessionID := string(id)
 	session, err := b.getSession(sessionID)
 	if err != nil {
 		return err
@@ -973,7 +980,8 @@ func (b *WorkerBackend) Kill(ctx context.Context, sessionID string, sig syscall.
 	return b.callSimple(ctx, session, ptyworker.MethodSignal, ptyworker.SignalParams{Signal: signalName(sig)})
 }
 
-func (b *WorkerBackend) Remove(ctx context.Context, sessionID string) error {
+func (b *WorkerBackend) Remove(ctx context.Context, id harness.TerminalID) error {
+	sessionID := string(id)
 	session, err := b.getSession(sessionID)
 	if err != nil {
 		return err
@@ -1010,12 +1018,12 @@ func (b *WorkerBackend) forgetSession(session *workerSession) {
 	}
 }
 
-func (b *WorkerBackend) SessionIDs(_ context.Context) []string {
+func (b *WorkerBackend) TerminalIDs(_ context.Context) []harness.TerminalID {
 	b.mu.RLock()
 	defer b.mu.RUnlock()
-	ids := make([]string, 0, len(b.sessions))
+	ids := make([]harness.TerminalID, 0, len(b.sessions))
 	for id := range b.sessions {
-		ids = append(ids, id)
+		ids = append(ids, harness.TerminalID(id))
 	}
 	return ids
 }
@@ -1179,7 +1187,8 @@ func (b *WorkerBackend) restoreSocketMismatchQuarantine() {
 	}
 }
 
-func (b *WorkerBackend) SessionInfo(ctx context.Context, sessionID string) (SessionInfo, error) {
+func (b *WorkerBackend) SessionInfo(ctx context.Context, id harness.TerminalID) (SessionInfo, error) {
+	sessionID := string(id)
 	session, err := b.getSession(sessionID)
 	if err != nil {
 		return SessionInfo{}, err
@@ -1216,7 +1225,8 @@ func (b *WorkerBackend) SessionInfo(ctx context.Context, sessionID string) (Sess
 	return result, nil
 }
 
-func (b *WorkerBackend) SessionTerminalBuild(sessionID string) (format string, known bool) {
+func (b *WorkerBackend) SessionTerminalBuild(id harness.TerminalID) (format string, known bool) {
+	sessionID := string(id)
 	b.mu.RLock()
 	session := b.sessions[sessionID]
 	b.mu.RUnlock()
@@ -1228,7 +1238,8 @@ func (b *WorkerBackend) SessionTerminalBuild(sessionID string) (format string, k
 	return session.snapshotFormat, session.snapshotFormatKnown
 }
 
-func (b *WorkerBackend) SessionLaunchParams(ctx context.Context, sessionID string) (SessionLaunchParams, error) {
+func (b *WorkerBackend) SessionLaunchParams(ctx context.Context, id harness.TerminalID) (SessionLaunchParams, error) {
+	sessionID := string(id)
 	session, err := b.getSession(sessionID)
 	if err != nil {
 		return SessionLaunchParams{}, err
@@ -1251,7 +1262,8 @@ func (b *WorkerBackend) SessionLaunchParams(ctx context.Context, sessionID strin
 	}, nil
 }
 
-func (b *WorkerBackend) ScreenSnapshot(ctx context.Context, sessionID string) (pty.ScreenSnapshotInfo, error) {
+func (b *WorkerBackend) ScreenSnapshot(ctx context.Context, id harness.TerminalID) (pty.ScreenSnapshotInfo, error) {
+	sessionID := string(id)
 	session, err := b.getSession(sessionID)
 	if err != nil {
 		return pty.ScreenSnapshotInfo{}, err
@@ -1280,7 +1292,8 @@ func (b *WorkerBackend) ScreenSnapshot(ctx context.Context, sessionID string) (p
 	return info, nil
 }
 
-func (b *WorkerBackend) KittyImage(ctx context.Context, sessionID string, imageID uint32) (pty.KittyImage, error) {
+func (b *WorkerBackend) KittyImage(ctx context.Context, id harness.TerminalID, imageID uint32) (pty.KittyImage, error) {
+	sessionID := string(id)
 	session, err := b.getSession(sessionID)
 	if err != nil {
 		return pty.KittyImage{}, err
@@ -1321,7 +1334,8 @@ func (b *WorkerBackend) KittyImage(ctx context.Context, sessionID string, imageI
 
 var errUpgradeUnsupported = errors.New("worker does not support in-place upgrade")
 
-func (b *WorkerBackend) UpgradeWorker(ctx context.Context, sessionID string) error {
+func (b *WorkerBackend) UpgradeWorker(ctx context.Context, id harness.TerminalID) error {
+	sessionID := string(id)
 	if _, err := b.upgrade(ctx, sessionID, b.resolveBinaryPath()); err != nil {
 		return err
 	}
@@ -1380,7 +1394,8 @@ func (b *WorkerBackend) upgrade(ctx context.Context, sessionID, executable strin
 	}
 }
 
-func (b *WorkerBackend) SessionLikelyAlive(ctx context.Context, sessionID string) (bool, error) {
+func (b *WorkerBackend) SessionLikelyAlive(ctx context.Context, id harness.TerminalID) (bool, error) {
+	sessionID := string(id)
 	if ctx == nil {
 		ctx = context.Background()
 	}
@@ -1877,7 +1892,7 @@ func (b *WorkerBackend) connectWithIdentity(
 		session.snapshotFormat = hello.SnapshotFormat
 		session.mu.Unlock()
 		if changed && session.SessionID != "" && b.cfg.OnTerminalBuild != nil {
-			b.cfg.OnTerminalBuild(session.SessionID, hello.SnapshotFormat)
+			b.cfg.OnTerminalBuild(harness.TerminalID(session.SessionID), hello.SnapshotFormat)
 		}
 		break
 	}
@@ -2165,7 +2180,7 @@ func (b *WorkerBackend) reapWorkerPID(pid int, sessionID string) {
 }
 
 func (b *WorkerBackend) workerProcessAlive(session *workerSession) bool {
-	alive, err := b.SessionLikelyAlive(context.Background(), session.SessionID)
+	alive, err := b.SessionLikelyAlive(context.Background(), harness.TerminalID(session.SessionID))
 	if err != nil {
 		b.cfg.Logf("worker backend liveness probe inconclusive for session %s: %v", session.SessionID, err)
 		return true
@@ -2379,7 +2394,7 @@ func (b *WorkerBackend) startSessionMonitor(session *workerSession) {
 			b.cfg.Logf("worker backend lifecycle watch disconnected for session %s: %v", session.SessionID, err)
 			if b.kind == workerRuntimeSharedHost {
 				probeCtx, cancel := context.WithTimeout(context.Background(), livenessRPCTimeout)
-				alive, probeErr := b.SessionLikelyAlive(probeCtx, session.SessionID)
+				alive, probeErr := b.SessionLikelyAlive(probeCtx, harness.TerminalID(session.SessionID))
 				cancel()
 				if probeErr == nil && !alive {
 					b.notifySharedHostSessionLost(session)

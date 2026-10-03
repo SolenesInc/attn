@@ -20,7 +20,7 @@ func TestABareCrewWrapperKeepsItsDayAcrossDaemonRestarts(t *testing.T) {
 	s.Start()
 	id := uuid.NewString()
 	launch := s.LaunchInTerminal(testworld.Invocation{Args: []string{"--member", "keel"}, Dir: s.Dir, Env: []string{"ATTN_INSIDE_APP=1", "ATTN_AGENT=claude", "ATTN_SESSION_ID=" + id}})
-	agent := s.Launched(id)
+	agent := s.LaunchedCarrying(id)
 	for range 2 {
 		s.Stop()
 		s.Start()
@@ -52,7 +52,7 @@ func TestACrashedBareCrewWrapperReleasesItsDay(t *testing.T) {
 				s.Start()
 				id := uuid.NewString()
 				launch := s.LaunchInTerminal(testworld.Invocation{Args: []string{"--member", "keel"}, Dir: s.Dir, Env: []string{"ATTN_INSIDE_APP=1", "ATTN_AGENT=claude", "ATTN_SESSION_ID=" + id}})
-				s.Launched(id)
+				s.LaunchedCarrying(id)
 				if got := launch.Crash(); got.Code == 0 {
 					t.Fatal("crashed wrapper exited successfully")
 				}
@@ -83,7 +83,7 @@ func TestACrashedBareCrewWrapperReleasesItsDay(t *testing.T) {
 				case "bare":
 					replacementID := uuid.NewString()
 					replacement := s.LaunchInTerminal(testworld.Invocation{Args: []string{"--member", "keel"}, Dir: s.Dir, Env: []string{"ATTN_INSIDE_APP=1", "ATTN_AGENT=claude", "ATTN_SESSION_ID=" + replacementID}})
-					agent := s.Launched(replacementID)
+					agent := s.LaunchedCarrying(replacementID)
 					awake, err := cli.CrewWake("keel", "claude")
 					if err != nil || !awake.AlreadyAwake || awake.SessionID != replacementID {
 						t.Fatalf("replacement bare wrapper = %+v, %v", awake, err)

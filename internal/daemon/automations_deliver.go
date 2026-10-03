@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"github.com/victorarias/attn/internal/ptybackend"
 	"os"
 	"path/filepath"
 	"strings"
@@ -18,7 +19,6 @@ import (
 	attngit "github.com/victorarias/attn/internal/git"
 	"github.com/victorarias/attn/internal/prompts"
 	"github.com/victorarias/attn/internal/protocol"
-	"github.com/victorarias/attn/internal/pty"
 	"github.com/victorarias/attn/internal/store"
 )
 
@@ -312,15 +312,7 @@ func (d *Daemon) validateAutomationContinuation(req automation.WorkRequest) erro
 	return err
 }
 func (d *Daemon) automationSessionIsLive(sessionID string) bool {
-	if d.ptyBackend == nil {
-		return false
-	}
-	for _, liveID := range d.ptyBackend.SessionIDs(context.Background()) {
-		if liveID == sessionID {
-			return true
-		}
-	}
-	return false
+	return d.sessionLive(context.Background(), sessionID)
 }
 func (d *Daemon) automationResumeSessionID(req automation.WorkRequest) (string, error) {
 	resumeID := strings.TrimSpace(d.store.GetResumeSessionID(req.IDs.SessionID))
@@ -862,16 +854,14 @@ func (d *Daemon) passUnattendedLaunchGate(req automation.WorkRequest) error {
 	if req.Launch.Agent != string(protocol.SessionAgentCodex) {
 		return nil
 	}
-	snapshots, ok := d.ptyBackend.(interface {
-		ScreenSnapshot(context.Context, string) (pty.ScreenSnapshotInfo, error)
-	})
+	snapshots, ok := d.ptyBackend.(ptybackend.ScreenSnapshotProvider)
 	if !ok {
 		return errors.New("automation launch cannot verify Codex directory trust gate")
 	}
 	deadline := time.Now().Add(10 * time.Second)
 	acknowledged := false
 	for time.Now().Before(deadline) && !d.stopping() {
-		info, err := snapshots.ScreenSnapshot(context.Background(), req.IDs.SessionID)
+		info, err := snapshots.ScreenSnapshot(context.Background(), d.primaryTerminal(req.IDs.SessionID))
 		if err == nil {
 			var payload []byte
 			if info.Screen != nil {

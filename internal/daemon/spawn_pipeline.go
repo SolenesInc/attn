@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"path/filepath"
+	"slices"
 	"strings"
 	"syscall"
 	"time"
@@ -13,6 +14,7 @@ import (
 	"github.com/google/uuid"
 	agentdriver "github.com/victorarias/attn/internal/agent"
 	"github.com/victorarias/attn/internal/automode"
+	"github.com/victorarias/attn/internal/harness"
 	"github.com/victorarias/attn/internal/launchcontract"
 	"github.com/victorarias/attn/internal/protocol"
 	"github.com/victorarias/attn/internal/ptybackend"
@@ -57,6 +59,10 @@ type spawnPlan struct {
 	chiefAssignmentCommitted     bool
 	priorIntent                  store.LaunchIntent
 	hadPriorIntent               bool
+	addedPane                    bool
+	launchedConversation         string
+	priorConversation            store.SessionConversation
+	conversationPersisted        bool
 }
 
 type spawnRejection struct {
@@ -89,9 +95,17 @@ func (plan *spawnPlan) rollback(d *Daemon, sessionID string) {
 	if plan.chiefAssigned && !plan.chiefAssignmentCommitted {
 		d.clearChiefOfStaffIfSession(sessionID)
 	}
+	if plan.addedPane {
+		plan.addedPane = false
+		d.removeWorkspaceLayoutPaneForSession(sessionID)
+	}
 }
 
 func (plan *spawnPlan) restoreLaunchIntent(d *Daemon, sessionID string) {
+	if plan.conversationPersisted {
+		plan.conversationPersisted = false
+		d.restoreSessionConversation(sessionID, plan.priorConversation)
+	}
 	if plan.hadPriorIntent {
 		d.store.SetLaunchIntent(sessionID, plan.priorIntent)
 		return
@@ -184,8 +198,8 @@ func (d *Daemon) resolveSpawnIntent(req *spawnRequest) (*spawnPlan, *spawnReject
 	}
 	if req.existingSession != nil && !req.hasPluginDriver {
 		req.resumeSessionID = agentdriver.ResolveSpawnResumeSessionID(req.driver, req.existingSession.ID, req.resumeSessionID, d.store.GetResumeSessionID(msg.ID))
-		if req.resumeSessionID == msg.ID && !d.conversationKnown(req.driver, req.resumeSessionID) {
-			d.logf("spawn: self-resume target %s has no transcript yet; fresh-spawning instead", msg.ID)
+		if d.launchedHere(msg.ID, req.resumeSessionID) && !d.conversationKnown(req.driver, req.resumeSessionID) {
+			d.logf("spawn: self-resume target %s has no transcript yet; fresh-spawning instead", req.resumeSessionID)
 			req.resumeSessionID = ""
 		}
 	}
@@ -208,7 +222,7 @@ func (d *Daemon) resolveSpawnIntent(req *spawnRequest) (*spawnPlan, *spawnReject
 		plan.cleanupInitialPromptOnReturn = initialPromptFile != ""
 		plan.spawnOpts.InitialPromptFile = initialPromptFile
 	}
-	plan.spawnOpts = ptybackend.SpawnOptions{ID: msg.ID, CWD: req.cwd, Agent: req.agent, Label: req.label, Cols: uint16(msg.Cols), Rows: uint16(msg.Rows), ResumeSessionID: req.resumeSessionID, ResumePicker: protocol.Deref(msg.ResumePicker), YoloMode: protocol.Deref(msg.YoloMode), InitialPromptFile: plan.spawnOpts.InitialPromptFile, Theme: d.currentTerminalTheme(), Executable: strings.TrimSpace(configuredExecutable), ClaudeExecutable: protocol.Deref(msg.ClaudeExecutable), CodexExecutable: protocol.Deref(msg.CodexExecutable), CopilotExecutable: protocol.Deref(msg.CopilotExecutable), LoginShellEnv: d.cachedLoginShellEnv(), WorkflowGuidanceEnabled: parseBooleanSetting(d.store.GetSetting(SettingWorkflowsEnabled)), AutoApprove: parseBooleanSetting(d.store.GetSetting(SettingAutoApproveEnabled)), Model: strings.TrimSpace(protocol.Deref(msg.Model)), Effort: strings.TrimSpace(protocol.Deref(msg.Effort))}
+	plan.spawnOpts = ptybackend.SpawnOptions{CWD: req.cwd, Agent: req.agent, Label: req.label, Cols: uint16(msg.Cols), Rows: uint16(msg.Rows), ResumeSessionID: req.resumeSessionID, ResumePicker: protocol.Deref(msg.ResumePicker), YoloMode: protocol.Deref(msg.YoloMode), InitialPromptFile: plan.spawnOpts.InitialPromptFile, Theme: d.currentTerminalTheme(), Executable: strings.TrimSpace(configuredExecutable), ClaudeExecutable: protocol.Deref(msg.ClaudeExecutable), CodexExecutable: protocol.Deref(msg.CodexExecutable), CopilotExecutable: protocol.Deref(msg.CopilotExecutable), LoginShellEnv: d.cachedLoginShellEnv(), WorkflowGuidanceEnabled: parseBooleanSetting(d.store.GetSetting(SettingWorkflowsEnabled)), AutoApprove: parseBooleanSetting(d.store.GetSetting(SettingAutoApproveEnabled)), Model: strings.TrimSpace(protocol.Deref(msg.Model)), Effort: strings.TrimSpace(protocol.Deref(msg.Effort))}
 	requestedChief := protocol.Deref(msg.ChiefOfStaff)
 	if req.hasPluginDriver && requestedChief && !req.pluginDriver.Capabilities["launch_instructions"] {
 		plan.rollback(d, msg.ID)
@@ -260,22 +274,24 @@ func (d *Daemon) resolveSpawnIntent(req *spawnRequest) (*spawnPlan, *spawnReject
 
 func (d *Daemon) executeSpawn(req *spawnRequest, plan *spawnPlan) *spawnOutcome {
 	msg := req.msg
-	if req.existingSession != nil {
-		for _, liveID := range d.liveRuntimeSessionIDs(context.Background()) {
-			if liveID == msg.ID {
-				d.clearExternalProcess(msg.ID)
-				plan.rollback(d, msg.ID)
-				return &spawnOutcome{alreadyLive: true}
-			}
-		}
+	if req.existingSession != nil && d.sessionLive(context.Background(), msg.ID) {
+		d.clearExternalProcess(msg.ID)
+		plan.rollback(d, msg.ID)
+		return &spawnOutcome{alreadyLive: true}
 	}
+	terminal, added, err := d.placeSpawnTerminal(req)
+	if err != nil {
+		plan.rollback(d, msg.ID)
+		return &spawnOutcome{err: err}
+	}
+	plan.spawnOpts.ID, plan.addedPane = terminal, added
 	if req.hasPluginDriver {
 		plan.pluginRunID = uuid.NewString()
 		plan.spawnOpts.LifecycleID = plan.pluginRunID
 		d.beginPluginSessionLaunch(msg.ID, req.pluginDriver.PluginName, plan.pluginRunID)
 		params := pluginDriverSpawnParams{
 			Agent:           req.agent,
-			SessionID:       msg.ID,
+			SessionID:       string(terminal),
 			RunID:           plan.pluginRunID,
 			CWD:             req.cwd,
 			Label:           req.label,
@@ -365,6 +381,7 @@ func (d *Daemon) executeSpawn(req *spawnRequest, plan *spawnPlan) *spawnOutcome 
 		intent.ApprovalPolicy, intent.SandboxMode = effectiveSpawnPolicyPair(msg)
 	}
 	d.store.SetLaunchIntent(session.ID, intent)
+	d.persistLaunchedConversation(req, plan)
 	d.rememberSessionTitleInitialPrompt(msg.ID, req.initialPrompt)
 	priorExit := d.store.GetSessionExitScreen(msg.ID)
 	if err := d.store.DeleteSessionExitScreen(msg.ID); err != nil {
@@ -376,7 +393,7 @@ func (d *Daemon) executeSpawn(req *spawnRequest, plan *spawnPlan) *spawnOutcome 
 		InitialPromptOwed: hasInitialPrompt && reportsTurnStarts(req.agent),
 		ReviewerInLoop:    plan.spawnOpts.ApprovalRoute.ReviewerInLoop(),
 	})
-	if err := d.spawnSessionRuntime(req, plan.spawnOpts); err != nil {
+	if err := d.spawnSessionRuntime(msg.ID, plan.spawnOpts); err != nil {
 		d.forgetSessionTitleInitialPrompt(msg.ID)
 		d.restoreExitScreen(msg.ID, priorExit)
 		if req.existingSession == nil {
@@ -408,22 +425,87 @@ func (d *Daemon) executeSpawn(req *spawnRequest, plan *spawnPlan) *spawnOutcome 
 	return &spawnOutcome{}
 }
 
-func (d *Daemon) spawnSessionRuntime(_ *spawnRequest, opts ptybackend.SpawnOptions) error {
+func (d *Daemon) spawnSessionRuntime(sessionID string, opts ptybackend.SpawnOptions) error {
 	opts.DaemonEnv = d.spawnRoutingEnv()
 	err := d.ptyBackend.Spawn(context.Background(), opts)
 	if err == nil {
-		d.clearExternalProcess(opts.ID)
-		d.sessionInputs().forgetSession(opts.ID)
+		d.clearExternalProcess(sessionID)
+		d.sessionInputs().forgetSession(sessionID)
 	}
 	return err
 }
 
-func (d *Daemon) killSessionRuntime(sessionID string) error {
-	return d.ptyBackend.Kill(context.Background(), sessionID, syscall.SIGTERM)
+// placeSpawnTerminal picks the terminal a launch runs in before its worker starts: the one a pane
+// already places for the session, else a new pane's. It reports whether it added that pane.
+func (d *Daemon) placeSpawnTerminal(req *spawnRequest) (harness.TerminalID, bool, error) {
+	session := harness.SessionID(req.msg.ID)
+	if terminal, ok := d.terminals().Primary(session); ok {
+		return terminal, false, nil
+	}
+	if _, err := d.ensureWorkspaceSessionPane(req.workspaceID, req.msg.ID, req.label); err != nil {
+		return "", false, fmt.Errorf("place a terminal for session %s: %w", req.msg.ID, err)
+	}
+	terminal, ok := d.terminals().Primary(session)
+	if !ok {
+		return "", false, fmt.Errorf("place a terminal for session %s: workspace %s holds no pane for it", req.msg.ID, req.workspaceID)
+	}
+	return terminal, true, nil
 }
 
-func (d *Daemon) removeSessionRuntime(sessionID string) error {
-	return d.ptyBackend.Remove(context.Background(), sessionID)
+// launchedHere reports whether a resume id names the conversation a launch of this session
+// created: the session's own id before terminals had ids, else one of its terminals.
+func (d *Daemon) launchedHere(sessionID, resumeID string) bool {
+	if resumeID == sessionID {
+		return true
+	}
+	return slices.Contains(d.terminals().Of(harness.SessionID(sessionID)), harness.TerminalID(resumeID))
+}
+
+// persistLaunchedConversation records the conversation a launch starts before its worker runs, so
+// the harness's first report of it is never a move: a fresh Claude's is its terminal id, a picker's none.
+func (d *Daemon) persistLaunchedConversation(req *spawnRequest, plan *spawnPlan) {
+	sessionID := req.msg.ID
+	conversation := agentdriver.SpawnResumeSessionID(req.driver, string(plan.spawnOpts.ID), req.resumeSessionID, plan.spawnOpts.ResumePicker)
+	clearPicker := conversation == "" && plan.spawnOpts.ResumePicker && !req.hasPluginDriver
+	if conversation == "" && !clearPicker {
+		return
+	}
+	plan.launchedConversation = conversation
+	plan.priorConversation = d.store.GetSessionConversation(sessionID)
+	if plan.priorConversation.NativeID == conversation {
+		return
+	}
+	plan.conversationPersisted = true
+	if clearPicker {
+		d.store.SetResumeSessionID(sessionID, "")
+		return
+	}
+	if _, err := d.store.TransitionSessionResumeID(sessionID, conversation); err != nil {
+		d.logf("spawn: persist launched conversation for session %s: %v", sessionID, err)
+	}
+}
+
+func (d *Daemon) restoreSessionConversation(sessionID string, prior store.SessionConversation) {
+	var err error
+	switch {
+	case prior.NativeID == "":
+		d.store.SetResumeSessionID(sessionID, "")
+	case prior.TranscriptPath != "":
+		_, err = d.store.TransitionSessionConversation(sessionID, prior.NativeID, prior.TranscriptPath)
+	default:
+		_, err = d.store.TransitionSessionResumeID(sessionID, prior.NativeID)
+	}
+	if err != nil {
+		d.logf("spawn: restore conversation for session %s: %v", sessionID, err)
+	}
+}
+
+func (d *Daemon) killSessionRuntime(terminal harness.TerminalID) error {
+	return d.ptyBackend.Kill(context.Background(), terminal, syscall.SIGTERM)
+}
+
+func (d *Daemon) removeSessionRuntime(terminal harness.TerminalID) error {
+	return d.ptyBackend.Remove(context.Background(), terminal)
 }
 
 func (d *Daemon) commitSpawn(req *spawnRequest, plan *spawnPlan) *spawnOutcome {
@@ -443,8 +525,8 @@ func (d *Daemon) commitSpawn(req *spawnRequest, plan *spawnPlan) *spawnOutcome {
 		if plan.chiefAssigned {
 			d.clearChiefOfStaffIfSession(msg.ID)
 		}
-		killErr := d.killSessionRuntime(msg.ID)
-		removeErr := d.removeSessionRuntime(msg.ID)
+		killErr := d.killSessionRuntime(plan.spawnOpts.ID)
+		removeErr := d.removeSessionRuntime(plan.spawnOpts.ID)
 		persistErr := fmt.Errorf("persist spawned session: %w", err)
 		if killErr != nil {
 			persistErr = fmt.Errorf("%w; kill spawned runtime: %v", persistErr, killErr)
@@ -468,8 +550,8 @@ func (d *Daemon) commitSpawn(req *spawnRequest, plan *spawnPlan) *spawnOutcome {
 		if plan.chiefAssigned {
 			d.clearChiefOfStaffIfSession(msg.ID)
 		}
-		killErr := d.killSessionRuntime(msg.ID)
-		removeErr := d.removeSessionRuntime(msg.ID)
+		killErr := d.killSessionRuntime(plan.spawnOpts.ID)
+		removeErr := d.removeSessionRuntime(plan.spawnOpts.ID)
 		if req.existingSession == nil {
 			d.store.Remove(session.ID)
 			d.forgetSessionTrace(session.ID)
@@ -486,8 +568,8 @@ func (d *Daemon) commitSpawn(req *spawnRequest, plan *spawnPlan) *spawnOutcome {
 		plan.rollback(d, msg.ID)
 		return &spawnOutcome{err: cursorErr}
 	}
-	if persistResumeID := agentdriver.SpawnResumeSessionID(req.driver, session.ID, req.resumeSessionID, protocol.Deref(msg.ResumePicker)); persistResumeID != "" {
-		d.persistResumeSessionID(session.ID, persistResumeID)
+	if plan.launchedConversation != "" {
+		d.rememberDispatchResume(session.ID, plan.launchedConversation)
 	}
 
 	d.store.SetSessionLaunchedAt(session.ID, req.spawnStartedAt)
@@ -499,11 +581,6 @@ func (d *Daemon) commitSpawn(req *spawnRequest, plan *spawnPlan) *spawnOutcome {
 	}
 	d.store.UpsertRecentLocation(req.cwd)
 	d.associateSessionWithWorkspace(session.ID, req.workspaceID)
-	if req.workspaceID != "" {
-		if _, err := d.ensureWorkspaceSessionPane(req.workspaceID, session.ID, session.Label); err != nil {
-			d.logf("ensure workspace pane for session %s: %v", session.ID, err)
-		}
-	}
 	d.setWorkspacePaneStatusForSession(session.ID, workspacelayout.PaneStatusReady, "")
 	fact := FactSessionRegistered
 	if req.existingSession != nil {

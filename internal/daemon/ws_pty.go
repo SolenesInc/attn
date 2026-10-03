@@ -17,6 +17,7 @@ import (
 	agentdriver "github.com/victorarias/attn/internal/agent"
 	"github.com/victorarias/attn/internal/bus"
 	"github.com/victorarias/attn/internal/git"
+	"github.com/victorarias/attn/internal/harness"
 	"github.com/victorarias/attn/internal/protocol"
 	"github.com/victorarias/attn/internal/pty"
 	"github.com/victorarias/attn/internal/ptybackend"
@@ -340,14 +341,15 @@ func buildStoredIntentSpawn(session *protocol.Session, intent store.LaunchIntent
 }
 
 func (d *Daemon) reviveSessionForAttach(msg *protocol.AttachSessionMessage) error {
-	session := d.store.Get(msg.ID)
+	sessionID, _ := d.shownIn(harness.TerminalID(msg.ID))
+	session := d.store.Get(sessionID)
 	if session == nil || session.State != protocol.SessionStateRecoverable {
 		return errors.New("session not recoverable")
 	}
 	if msg.Cols == nil || msg.Rows == nil || *msg.Cols <= 0 || *msg.Rows <= 0 {
 		return errors.New("revive requires pty geometry")
 	}
-	intent, ok := d.store.LaunchIntent(msg.ID)
+	intent, ok := d.store.LaunchIntent(sessionID)
 	if !ok {
 		return errors.New("no stored launch intent")
 	}
@@ -363,14 +365,15 @@ func (d *Daemon) handleAttachSession(client *wsClient, msg *protocol.AttachSessi
 	policy := protocol.Deref(msg.AttachPolicy)
 	attachOptions := ptybackend.AttachOptions{OmitReplay: !shouldIncludeAttachReplay(policy)}
 
-	info, stream, err := d.ptyBackend.Attach(context.Background(), msg.ID, subID, attachOptions)
+	terminal := harness.TerminalID(msg.ID)
+	info, stream, err := d.ptyBackend.Attach(context.Background(), terminal, subID, attachOptions)
 	revived := false
 	if err != nil && errors.Is(err, pty.ErrSessionNotFound) && protocol.Deref(msg.AttachPolicy) == protocol.AttachPolicyRevive {
 		attachErr := err
 		if reviveErr := d.reviveSessionForAttach(msg); reviveErr != nil {
 			err = errors.Join(attachErr, reviveErr)
 		} else {
-			info, stream, err = d.ptyBackend.Attach(context.Background(), msg.ID, subID, attachOptions)
+			info, stream, err = d.ptyBackend.Attach(context.Background(), terminal, subID, attachOptions)
 			if err == nil {
 				revived = true
 			}
@@ -481,7 +484,7 @@ func (d *Daemon) handleGetScreenSnapshot(client *wsClient, msg *protocol.GetScre
 		return
 	}
 
-	info, err := provider.ScreenSnapshot(context.Background(), msg.ID)
+	info, err := provider.ScreenSnapshot(context.Background(), harness.TerminalID(msg.ID))
 	if err != nil {
 		d.sendToClient(client, protocol.GetScreenSnapshotResultMessage{
 			Event:   protocol.EventGetScreenSnapshotResult,
@@ -666,11 +669,14 @@ func (d *Daemon) handlePtyInput(client *wsClient, msg *protocol.PtyInputMessage)
 			strings.TrimSpace(protocol.Deref(msg.Source)),
 		)
 	}
+	terminal := harness.TerminalID(msg.ID)
 	if userTyped {
 		// Hold the existing timer before the agent can take this input and arm a new one.
-		d.holdAutoSettle(msg.ID)
+		if sessionID, shown := d.shownIn(terminal); shown {
+			d.holdAutoSettle(sessionID)
+		}
 	}
-	writeErr := d.writeSessionPTY(msg.ID, []byte(msg.Data), source)
+	writeErr := d.writeTerminalPTY(terminal, []byte(msg.Data), source)
 	d.recordSupportInputTrace(msg, receivedAt, time.Since(receivedAt), writeErr)
 	if writeErr != nil {
 		if shouldLogPtyCommandError(writeErr) {
@@ -695,8 +701,9 @@ func (d *Daemon) handlePtyInput(client *wsClient, msg *protocol.PtyInputMessage)
 }
 
 func (d *Daemon) handleTerminalPointerActivity(msg *protocol.TerminalPointerActivityMessage) {
-	if d.noteAutoSettleActivity(msg.ID) {
-		d.holdAutoSettle(msg.ID)
+	sessionID, shown := d.shownIn(harness.TerminalID(msg.ID))
+	if shown && d.noteAutoSettleActivity(sessionID) {
+		d.holdAutoSettle(sessionID)
 	}
 }
 
@@ -739,7 +746,7 @@ func (d *Daemon) handlePtyResize(client *wsClient, msg *protocol.PtyResizeMessag
 		xpixel, ypixel = 0, 0
 	}
 	d.logf("pty_resize: id=%s cols=%d rows=%d xpixel=%d ypixel=%d", msg.ID, msg.Cols, msg.Rows, xpixel, ypixel)
-	result, err := d.ptyBackend.Resize(context.Background(), msg.ID, uint16(msg.Cols), uint16(msg.Rows), uint16(xpixel), uint16(ypixel))
+	result, err := d.ptyBackend.Resize(context.Background(), harness.TerminalID(msg.ID), uint16(msg.Cols), uint16(msg.Rows), uint16(xpixel), uint16(ypixel))
 	if err != nil {
 		if shouldLogPtyCommandError(err) {
 			d.logf("pty_resize failed for %s: %v", msg.ID, err)
@@ -790,9 +797,9 @@ func (d *Daemon) handleSetTerminalTheme(client *wsClient, msg *protocol.SetTermi
 	d.setCurrentTerminalTheme(theme)
 
 	ctx := context.Background()
-	for _, sessionID := range d.ptyBackend.SessionIDs(ctx) {
-		if err := d.ptyBackend.SetTheme(ctx, sessionID, theme); err != nil {
-			d.logf("set_terminal_theme: SetTheme failed for %s: %v", sessionID, err)
+	for _, terminal := range d.ptyBackend.TerminalIDs(ctx) {
+		if err := d.ptyBackend.SetTheme(ctx, terminal, theme); err != nil {
+			d.logf("set_terminal_theme: SetTheme failed for %s: %v", terminal, err)
 		}
 	}
 }
@@ -813,13 +820,22 @@ func parseSignal(name string) syscall.Signal {
 }
 
 func (d *Daemon) handleKillSession(client *wsClient, msg *protocol.KillSessionMessage) {
-	d.detachSession(client, msg.ID)
+	sessionID := d.callerID(msg.ID)
+	terminals := d.terminalsOf(sessionID)
+	for _, terminal := range terminals {
+		d.detachSession(client, string(terminal))
+	}
 	sig := parseSignal(protocol.Deref(msg.Signal))
-	d.life.Go("killSessionRuntimeAsync", func() { d.killSessionRuntimeAsync(msg.ID, sig) })
+	d.life.Go("killSessionRuntimeAsync", func() { d.killSessionRuntimeAsync(sessionID, terminals, sig) })
 }
 
-func (d *Daemon) killSessionRuntimeAsync(sessionID string, sig syscall.Signal) {
-	err := d.ptyBackend.Kill(context.Background(), sessionID, sig)
+func (d *Daemon) killSessionRuntimeAsync(sessionID string, terminals []harness.TerminalID, sig syscall.Signal) {
+	var err error
+	for _, terminal := range terminals {
+		if killErr := d.ptyBackend.Kill(context.Background(), terminal, sig); killErr != nil && (err == nil || errors.Is(err, pty.ErrSessionNotFound)) {
+			err = killErr
+		}
+	}
 	if err == nil || errors.Is(err, pty.ErrSessionNotFound) {
 		d.closePluginDriverSession(sessionID, "killed", nil, signalName(sig))
 	}

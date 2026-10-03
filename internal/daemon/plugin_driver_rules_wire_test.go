@@ -155,8 +155,8 @@ func TestAReconnectingDriverIsHandedItsOwnRunsAndTheAutoModeConfigItRuns(t *test
 	snipe.leave(w)
 	back := connectDriver(t, w, "snipe-plugin", "snipe", map[string]bool{"state_reporting": true, "auto_mode": true})
 	runs := back.registered.ActiveRuns
-	if len(runs) != 1 || runs[0].SessionID != session || runs[0].RunID != run.RunID || string(runs[0].Metadata) != `{"native_id":"abc"}` || runs[0].Seq != 1 {
-		t.Errorf("the reconnected driver was handed %+v, want only its run of %s with its metadata at cursor 1 (not %s)", runs, session, rivalSession)
+	if len(runs) != 1 || runs[0].SessionID != run.SessionID || runs[0].RunID != run.RunID || string(runs[0].Metadata) != `{"native_id":"abc"}` || runs[0].Seq != 1 {
+		t.Errorf("the reconnected driver was handed %+v, want only its run in terminal %s with its metadata at cursor 1 (not %s's)", runs, run.SessionID, rivalSession)
 	}
 	var config automode.Config
 	if err := json.Unmarshal(back.registered.AutoMode, &config); err != nil {
@@ -200,7 +200,9 @@ func TestTheOwningDriverIsToldWhenEachOfItsRunsEnds(t *testing.T) {
 		{name: "pane closed", run: paneClosedRun, reasons: []string{"killed", "exited"},
 			end: func() { closeSessionPane(app, w, paneClosed) }},
 		{name: "exited on its own", run: finishedRun, reasons: []string{"exited"},
-			end: func() { app.Send(protocol.PtyInputMessage{Cmd: protocol.CmdPtyInput, ID: finished, Data: "\x04"}) }},
+			end: func() {
+				app.Send(protocol.PtyInputMessage{Cmd: protocol.CmdPtyInput, ID: app.Terminal(finished), Data: "\x04"})
+			}},
 	} {
 		row.end()
 		got := driver.closed()
@@ -227,7 +229,7 @@ func TestAnEndedRunIsReportedToTheDriverThatLaunchedItEvenAfterAnotherTookTheAge
 	owner = dialDriver(t, w, "snipe-plugin")
 
 	app.Send(protocol.KillSessionMessage{Cmd: protocol.CmdKillSession, ID: session})
-	if got := owner.closed(); got.SessionID != session || got.RunID != run.RunID {
+	if got := owner.closed(); got.SessionID != run.SessionID || got.RunID != run.RunID {
 		t.Errorf("the launching plugin was told %+v, want the end of its run %s", got, run.RunID)
 	}
 	select {
@@ -245,7 +247,7 @@ func TestALaunchWhoseTerminalCannotStartClosesItsRun(t *testing.T) {
 	driver.launchWith(w.Path("no-such-snipe"))
 	refused := refuseSpawnLikeTheApp(w, app, scriptedAgent, w.Path("shop"))
 	launch := driver.launched()
-	if got := driver.closed(); got.SessionID != refused.ID || got.RunID != launch.RunID || got.Reason != "launch_failed" {
+	if got := driver.closed(); got.SessionID != launch.SessionID || got.RunID != launch.RunID || got.Reason != "launch_failed" {
 		t.Errorf("the driver was told %+v, want run %s of %s closed as launch_failed", got, launch.RunID, refused.ID)
 	}
 }

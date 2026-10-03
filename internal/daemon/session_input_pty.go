@@ -7,6 +7,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/victorarias/attn/internal/harness"
 	"github.com/victorarias/attn/internal/pausepoint"
 	"github.com/victorarias/attn/internal/protocol"
 )
@@ -45,7 +46,7 @@ func (m *sessionInputModule) pressHeldEnter(sessionID string) {
 		m.holdEnterLocked(lane, sessionID, sessionInputComposerRetry)
 		return
 	}
-	if err := m.daemon.ptyBackend.Input(ctx, sessionID, []byte("\r")); err != nil {
+	if err := m.daemon.ptyBackend.Input(ctx, m.daemon.primaryTerminal(sessionID), []byte("\r")); err != nil {
 		m.daemon.logf("session input held Enter failed session=%s: %v", sessionID, err)
 		m.holdEnterLocked(lane, sessionID, sessionInputComposerRetry)
 		return
@@ -82,7 +83,7 @@ func (m *sessionInputModule) ptySafetyLocked(ctx context.Context, sessionID stri
 	return nil
 }
 
-func (m *sessionInputModule) writePTY(ctx context.Context, sessionID string, data []byte, source string) error {
+func (m *sessionInputModule) writePTY(ctx context.Context, terminal harness.TerminalID, sessionID string, data []byte, source string) error {
 	lane := m.lane(sessionID)
 	if !lane.mu.TryLock() {
 		pausepoint.At(pausepoint.SessionInputLaneContended)
@@ -97,9 +98,9 @@ func (m *sessionInputModule) writePTY(ctx context.Context, sessionID string, dat
 			lane.phase = session.State
 		}
 	}
-	if m.daemon.noteUserInput(sessionID, source, data) {
+	if m.daemon.noteUserInput(terminal, sessionID, source, data) {
 		if lane.heldEnter && m.promptShowingLocked(ctx, sessionID) {
-			return m.daemon.ptyBackend.Input(ctx, sessionID, data)
+			return m.daemon.ptyBackend.Input(ctx, terminal, data)
 		}
 		m.dropHeldEnterLocked(lane)
 		m.releaseComposerLocked(lane, sessionID)
@@ -108,7 +109,7 @@ func (m *sessionInputModule) writePTY(ctx context.Context, sessionID string, dat
 			lane.userSubmit = true
 		}
 	}
-	return m.daemon.ptyBackend.Input(ctx, sessionID, data)
+	return m.daemon.ptyBackend.Input(ctx, terminal, data)
 }
 
 func (m *sessionInputModule) clearUnstartedUserSubmitLocked(lane *sessionInputLane, sessionID string) {
@@ -120,7 +121,18 @@ func (m *sessionInputModule) clearUnstartedUserSubmitLocked(lane *sessionInputLa
 }
 
 func (d *Daemon) writeSessionPTY(sessionID string, data []byte, source string) error {
-	return d.sessionInputs().writePTY(context.Background(), sessionID, data, strings.TrimSpace(source))
+	return d.sessionInputs().writePTY(context.Background(), d.primaryTerminal(sessionID), sessionID, data, strings.TrimSpace(source))
+}
+
+func (d *Daemon) writeTerminalPTY(terminal harness.TerminalID, data []byte, source string) error {
+	sessionID, shown := d.shownIn(terminal)
+	if !shown {
+		if d.ptyBackend == nil {
+			return errors.New("session has no PTY backend")
+		}
+		return d.ptyBackend.Input(context.Background(), terminal, data)
+	}
+	return d.sessionInputs().writePTY(context.Background(), terminal, sessionID, data, strings.TrimSpace(source))
 }
 
 // A held Enter still counts as custody: the paste already sits in the harness's composer.
@@ -138,7 +150,8 @@ func (m *sessionInputModule) placePTYLocked(ctx context.Context, lane *sessionIn
 	input = append(input, sessionInputPasteStart...)
 	input = append(input, delivery.text...)
 	input = append(input, sessionInputPasteEnd...)
-	if err := m.daemon.ptyBackend.Input(ctx, delivery.sessionID, input); err != nil {
+	terminal := m.daemon.primaryTerminal(delivery.sessionID)
+	if err := m.daemon.ptyBackend.Input(ctx, terminal, input); err != nil {
 		return sessionInputAttempt{stage: sessionInputFailed, err: err}
 	}
 	// A busy harness may hold a turn-boundary paste unsubmitted; a prompt-ready one takes it on Enter.
@@ -151,7 +164,7 @@ func (m *sessionInputModule) placePTYLocked(ctx context.Context, lane *sessionIn
 		m.holdEnterLocked(lane, delivery.sessionID, sessionInputComposerRetry)
 		return sessionInputAttempt{stage: sessionInputPlaced, at: time.Now()}
 	}
-	if err := m.daemon.ptyBackend.Input(ctx, delivery.sessionID, []byte("\r")); err != nil {
+	if err := m.daemon.ptyBackend.Input(ctx, terminal, []byte("\r")); err != nil {
 		lane.occupied = true
 		m.recordOwedLocked(lane, delivery.sessionID)
 		return sessionInputAttempt{stage: sessionInputFailed, err: err}

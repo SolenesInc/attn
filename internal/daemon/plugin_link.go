@@ -24,7 +24,7 @@ func (l pluginLink) Deliver(_ context.Context, in harness.Input) harness.Custody
 	ctx, cancel := context.WithTimeout(context.Background(), pluginDeliverMessageTimeout)
 	defer cancel()
 	var result pluginDeliverMessageResult
-	params := pluginDeliverMessageParams{SessionID: in.Session, RunID: cursor.RunID, InputID: in.ID, Text: in.Text}
+	params := pluginDeliverMessageParams{SessionID: string(l.daemon.primaryTerminal(in.Session)), RunID: cursor.RunID, InputID: in.ID, Text: in.Text}
 	if err := l.daemon.callPlugin(ctx, cursor.PluginName, "driver.deliver_message", params, &result); err != nil {
 		return harness.Custody{Reason: fmt.Sprintf("deliver message via plugin %q: %v", cursor.PluginName, err)}
 	}

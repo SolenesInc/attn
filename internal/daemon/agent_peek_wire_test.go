@@ -71,7 +71,7 @@ func TestAgentPeekResolvesItsAddress(t *testing.T) {
 	peekResolves("Keel", firstDay.SessionID)
 
 	firstDayAgent.Exit(1)
-	testworld.Await(app, protocol.EventSessionExited, func(e protocol.SessionExitedMessage) bool { return e.ID == firstDay.SessionID })
+	testworld.Await(app, protocol.EventSessionExited, func(e protocol.SessionExitedMessage) bool { return e.SessionID == firstDay.SessionID })
 	nextDay := wakeCrew(t, cli, "keel", "")
 	w.Launched(nextDay.SessionID)
 	peekResolves("keel", nextDay.SessionID)
@@ -98,7 +98,7 @@ func TestAgentPeekForgetsAnExitOnceARespawnSucceeds(t *testing.T) {
 	claude.Prompted()
 	claude.Reply("Error: Model \"gpt-5.6-sol\" is ambiguous across providers <!-- attn:state=idle -->")
 	claude.Exit(1)
-	testworld.Await(app, protocol.EventSessionExited, func(e protocol.SessionExitedMessage) bool { return e.ID == session })
+	testworld.Await(app, protocol.EventSessionExited, func(e protocol.SessionExitedMessage) bool { return e.SessionID == session })
 	exited, _ := peekExit(t, cli, session, "is ambiguous across providers")
 	if exited.Code != 1 || exited.Signal != nil || exited.At == "" {
 		t.Errorf("exit = %+v, want code 1 with its time", exited)
@@ -121,7 +121,7 @@ func TestAnOversizedExitScreenKeepsItsTailAndSaysSo(t *testing.T) {
 		m.Cols, m.Rows = 1000, 300
 	})
 	app.TypeLine(shell, `awk 'BEGIN { for (i = 0; i < 300; i++) { printf "%04d", i; for (j = 0; j < 990; j++) printf "x"; print "" } }'; exit 3`)
-	testworld.Await(app, protocol.EventSessionExited, func(e protocol.SessionExitedMessage) bool { return e.ID == shell })
+	testworld.Await(app, protocol.EventSessionExited, func(e protocol.SessionExitedMessage) bool { return e.SessionID == shell })
 
 	peek, err := cli.AgentPeek(shell)
 	if err != nil || peek.Exit == nil || peek.Exit.Code != 3 || peek.Screen == nil {

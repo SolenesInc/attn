@@ -393,7 +393,7 @@ func (r *automationReviewWorld) rerequest(number int) {
 func (r *automationReviewWorld) stop(agent *fakeagent.Run) {
 	r.t.Helper()
 	agent.Exit(0)
-	testworld.Await(r.app, protocol.EventSessionExited, func(e protocol.WebSocketEvent) bool { return protocol.Deref(e.ID) == agent.SessionID })
+	testworld.Await(r.app, protocol.EventSessionExited, func(e protocol.WebSocketEvent) bool { return protocol.Deref(e.SessionID) == agent.SessionID })
 }
 
 func (r *automationReviewWorld) awaitRuns(id string, match func([]protocol.AutomationRunSummary) bool) []protocol.AutomationRunSummary {

@@ -11,7 +11,7 @@ import (
 func respawn(w *world, app *testworld.Peer, agent fakeagent.Harness, session, cwd string) *fakeagent.Run {
 	w.T.Helper()
 	app.Send(protocol.KillSessionMessage{Cmd: protocol.CmdKillSession, ID: session})
-	testworld.Await(app, protocol.EventSessionExited, func(e protocol.SessionExitedMessage) bool { return e.ID == session })
+	testworld.Await(app, protocol.EventSessionExited, func(e protocol.SessionExitedMessage) bool { return e.SessionID == session })
 	w.Spawn(app, agent, cwd, func(m *protocol.SpawnSessionMessage) {
 		m.ID = session
 		m.ResumeSessionID = protocol.Ptr(session)
@@ -79,7 +79,7 @@ func TestASessionLaunchedToResumeAConversationKeepsResumingIt(t *testing.T) {
 	earlier := w.Spawn(app, fakeagent.Codex, cwd)
 	conversation := w.Launched(earlier).ConversationID
 	app.Send(protocol.KillSessionMessage{Cmd: protocol.CmdKillSession, ID: earlier})
-	testworld.Await(app, protocol.EventSessionExited, func(e protocol.SessionExitedMessage) bool { return e.ID == earlier })
+	testworld.Await(app, protocol.EventSessionExited, func(e protocol.SessionExitedMessage) bool { return e.SessionID == earlier })
 
 	session := w.Spawn(app, fakeagent.Codex, cwd, func(m *protocol.SpawnSessionMessage) {
 		m.ResumeSessionID = protocol.Ptr(conversation)

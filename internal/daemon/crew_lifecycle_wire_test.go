@@ -214,7 +214,7 @@ func TestDeliveryWakesResumeAfterTheWakeLimitWindow(t *testing.T) {
 		if first.TargetSessionID == "" || !strings.Contains(first.Detail, "woke Trellis") {
 			t.Fatalf("first wake=%+v", first)
 		}
-		w.terms.Terminal(first.TargetSessionID).Exit(0)
+		w.terminal(first.TargetSessionID).Exit(0)
 		w.advance(30 * time.Minute)
 		inside := sendAgentMessage(t, cli, "sender", "trellis", "the build broke again")
 		if inside.Status != protocol.AgentMsgStatusQueued || !strings.Contains(inside.Detail, "crew.wake_limit=1") {

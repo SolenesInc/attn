@@ -17,7 +17,7 @@ import (
 func TestAClientThatStopsReadingAFloodingTerminalIsToldToResyncWhenItReadsAgain(t *testing.T) {
 	inBubbleWithAgents(t, func(t *testing.T, w *world) {
 		app := w.App()
-		id := w.Spawn(app, fakeagent.Claude, w.Path("shop"))
+		id := app.Terminal(w.Spawn(app, fakeagent.Claude, w.Path("shop")))
 		ctx, cancel := context.WithTimeout(context.Background(), fakeagent.HangGuard)
 		defer cancel()
 		slow := transportDial(t, ctx, w)

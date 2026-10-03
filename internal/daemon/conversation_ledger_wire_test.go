@@ -327,6 +327,13 @@ func TestConversationIdentifiersRefuseAmbiguityAndListTotalsCountOnlyLiveCopies(
 			t.Fatalf("recopy retains tombstone: %+v", row)
 		}
 	}
+	if err := cli.KeptConversationKeep("session:"+originals[0], true); err == nil || !strings.Contains(err.Error(), "codex keeps its own conversations") {
+		t.Fatalf("session: scope picks the session: %v", err)
+	}
+	if err := cli.KeptConversationKeep("conversation:"+originals[0], true); err != nil {
+		t.Fatalf("conversation: scope picks the conversation: %v", err)
+	}
+	testworld.AwaitTaskDone(app, "conversation_keep")
 }
 
 func TestConversationLivePinIsVisibleBeforeCopyAndCanBeRemoved(t *testing.T) {
@@ -395,70 +402,32 @@ func TestConversationSeedReferenceIsVisibleBeforeCopy(t *testing.T) {
 }
 
 func TestConversationPendingPinCanBeUnkeptAfterClear(t *testing.T) {
-	for _, distinct := range []bool{false, true} {
-		t.Run(map[bool]string{false: "initial id is also session id", true: "distinct conversation id"}[distinct], func(t *testing.T) {
-			w := newWorld(t, fakeagent.Claude)
-			app, cli := w.App(), w.Client()
-			id := w.Spawn(app, fakeagent.Claude, w.Path("live"))
-			run := w.Launched(id)
-			app.TypeLine(id, "first")
-			run.Prompted()
-			run.Reply("first <!-- attn:state=waiting_input -->")
-			if distinct {
-				app.TypeLine(id, "/clear")
-				run.Prompted()
-				run.Reply("second <!-- attn:state=waiting_input -->")
-			}
-			pinnedID := run.ConversationID
-			if err := cli.KeptConversationKeep(id, true); err != nil {
-				t.Fatal(err)
-			}
-			testworld.AwaitTaskDone(app, "conversation_keep")
-			app.TypeLine(id, "/clear")
-			run.Prompted()
-			run.Reply("replacement <!-- attn:state=waiting_input -->")
-			if distinct {
-				if err := cli.KeptConversationKeep(pinnedID, false); err != nil {
-					t.Fatalf("pending pin should remain resolvable: %v", err)
-				}
-			} else {
-				if err := cli.KeptConversationKeep(pinnedID, false); err == nil || !strings.Contains(err.Error(), "ambiguous") || !strings.Contains(err.Error(), run.ConversationID) {
-					t.Fatalf("session/conversation collision must refuse: %v", err)
-				}
-				if err := cli.KeptConversationKeep("session:"+id, true); err != nil {
-					t.Fatal(err)
-				}
-				testworld.AwaitTaskDone(app, "conversation_keep")
-				if err := cli.KeptConversationKeep("conversation:"+pinnedID, false); err != nil {
-					t.Fatal(err)
-				}
-				testworld.AwaitTaskDone(app, "conversation_keep")
-				rows := conversationRows(t, cli, false)
-				if rows.PendingCount != 1 {
-					t.Fatalf("unkeep removed replacement pin: %+v", rows)
-				}
-				for _, row := range rows.Rows {
-					if row.ResumeID == pinnedID && row.PinnedAt != nil {
-						t.Fatalf("old pin survived: %+v", row)
-					}
-					if row.Kept == nil && row.ResumeID != run.ConversationID {
-						t.Fatalf("wrong pending pin: %+v", row)
-					}
-				}
-				if err := cli.KeptConversationKeep("session:"+id, false); err != nil {
-					t.Fatal(err)
-				}
-			}
-			testworld.AwaitTaskDone(app, "conversation_keep")
-			rows := conversationRows(t, cli, false)
-			if rows.PendingCount != 0 {
-				t.Fatalf("pending pin survived unkeep: %+v", rows)
-			}
-			for _, row := range rows.Rows {
-				if row.PinnedAt != nil || (row.Kept != nil && row.Kept.PinnedAt != nil) {
-					t.Fatalf("pin survived unkeep: %+v", row)
-				}
-			}
-		})
+	w := newWorld(t, fakeagent.Claude)
+	app, cli := w.App(), w.Client()
+	id := w.Spawn(app, fakeagent.Claude, w.Path("live"))
+	run := w.Launched(id)
+	app.TypeLine(id, "first")
+	run.Prompted()
+	run.Reply("first <!-- attn:state=waiting_input -->")
+	pinnedID := run.ConversationID
+	if err := cli.KeptConversationKeep(id, true); err != nil {
+		t.Fatal(err)
+	}
+	testworld.AwaitTaskDone(app, "conversation_keep")
+	app.TypeLine(id, "/clear")
+	run.Prompted()
+	run.Reply("replacement <!-- attn:state=waiting_input -->")
+	if err := cli.KeptConversationKeep(pinnedID, false); err != nil {
+		t.Fatalf("pending pin should remain resolvable: %v", err)
+	}
+	testworld.AwaitTaskDone(app, "conversation_keep")
+	rows := conversationRows(t, cli, false)
+	if rows.PendingCount != 0 {
+		t.Fatalf("pending pin survived unkeep: %+v", rows)
+	}
+	for _, row := range rows.Rows {
+		if row.PinnedAt != nil || (row.Kept != nil && row.Kept.PinnedAt != nil) {
+			t.Fatalf("pin survived unkeep: %+v", row)
+		}
 	}
 }

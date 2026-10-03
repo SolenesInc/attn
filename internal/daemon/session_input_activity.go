@@ -3,25 +3,23 @@ package daemon
 import (
 	"bytes"
 	"time"
+
+	"github.com/victorarias/attn/internal/harness"
 )
 
-func (d *Daemon) noteUserInput(sessionID, source string, data []byte) bool {
+func (d *Daemon) noteUserInput(terminal harness.TerminalID, sessionID, source string, data []byte) bool {
 	if sessionID == "" || !isComposerKeystroke(source, data) {
 		return false
 	}
 	now := time.Now()
+	previous, placed := d.terminals().noteKey(terminal, now)
 	d.lastInputMu.Lock()
-	if d.lastUserInputAt == nil {
-		d.lastUserInputAt = make(map[string]time.Time)
-	}
 	if d.lastAutoSettleActivityAt == nil {
 		d.lastAutoSettleActivityAt = make(map[string]time.Time)
 	}
-	wasQuiet := d.userInputQuietRemainingLocked(sessionID, sessionInputQuietWindow) == 0
-	d.lastUserInputAt[sessionID] = now
 	d.lastAutoSettleActivityAt[sessionID] = now
 	d.lastInputMu.Unlock()
-	if wasQuiet {
+	if placed && quietRemaining(previous, sessionInputQuietWindow) == 0 {
 		d.kickSessionInboxAddresses(sessionID)
 	}
 	return true
@@ -41,20 +39,17 @@ func (d *Daemon) noteAutoSettleActivity(sessionID string) bool {
 }
 
 func (d *Daemon) forgetUserInput(sessionID string) {
-	d.lastInputMu.Lock()
-	delete(d.lastUserInputAt, sessionID)
-	d.lastInputMu.Unlock()
+	for _, terminal := range d.terminals().Of(harness.SessionID(sessionID)) {
+		d.terminals().forgetKey(terminal)
+	}
 }
 
 func (d *Daemon) userInputQuietRemaining(sessionID string, within time.Duration) time.Duration {
-	d.lastInputMu.Lock()
-	defer d.lastInputMu.Unlock()
-	return d.userInputQuietRemainingLocked(sessionID, within)
+	return quietRemaining(d.terminals().lastKeyOf(d.primaryTerminal(sessionID)), within)
 }
 
-func (d *Daemon) userInputQuietRemainingLocked(sessionID string, within time.Duration) time.Duration {
-	last, ok := d.lastUserInputAt[sessionID]
-	if !ok {
+func quietRemaining(last time.Time, within time.Duration) time.Duration {
+	if last.IsZero() {
 		return 0
 	}
 	remaining := within - time.Since(last)

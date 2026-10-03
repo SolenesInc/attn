@@ -31,8 +31,9 @@ func TestATerminalWhoseDaemonFallsBehindAFloodIsToldToResync(t *testing.T) {
 	dropped.Await()
 	reading.Release()
 	dropped.Release()
+	terminal := app.Terminal(shell)
 	testworld.Await(app, protocol.EventPtyDesync, func(e protocol.WebSocketEvent) bool {
-		return protocol.Deref(e.ID) == shell && protocol.Deref(e.Reason) == "buffer_overflow"
+		return protocol.Deref(e.ID) == terminal && protocol.Deref(e.Reason) == "buffer_overflow"
 	})
 	if err := os.WriteFile(stop, nil, 0o644); err != nil {
 		t.Fatal(err)

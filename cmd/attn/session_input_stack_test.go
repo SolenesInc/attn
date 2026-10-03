@@ -25,7 +25,7 @@ func TestWhatTheUserTypesWhileAttnRingsTheDoorbellStaysInTheirDraft(t *testing.T
 
 	sent := s.Launch(testworld.Invocation{Args: []string{"agent", "msg", recipient, "the build is green"}, Session: reviewer})
 	gap.Await()
-	app.Send(protocol.PtyInputMessage{Cmd: protocol.CmdPtyInput, ID: recipient, Data: "half a thought"})
+	app.Send(protocol.PtyInputMessage{Cmd: protocol.CmdPtyInput, ID: app.Terminal(recipient), Data: "half a thought"})
 	waiting.Await()
 	waiting.Release()
 	gap.Release()
@@ -62,7 +62,7 @@ func TestAnApprovalPromptThatAppearsAfterAttnPastesItsMessageIsLeftForTheUser(t 
 		t.Fatalf("attn agent msg exited %d: %s", result.Code, result.Stderr)
 	}
 
-	app.Send(protocol.PtyInputMessage{Cmd: protocol.CmdPtyInput, ID: recipient, Data: "1"})
+	app.Send(protocol.PtyInputMessage{Cmd: protocol.CmdPtyInput, ID: app.Terminal(recipient), Data: "1"})
 	if answer := codex.Answered(); answer != "1" {
 		t.Fatalf("codex's approval prompt was answered with %q, want the user's %q", answer, "1")
 	}

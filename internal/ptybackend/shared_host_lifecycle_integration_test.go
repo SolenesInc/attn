@@ -14,6 +14,7 @@ import (
 	"time"
 
 	"github.com/victorarias/attn/internal/buildinfo"
+	"github.com/victorarias/attn/internal/harness"
 	"github.com/victorarias/attn/internal/pty"
 	"github.com/victorarias/attn/internal/ptyhost"
 )
@@ -82,7 +83,7 @@ func copyExecutable(t *testing.T, from, to string, suffix []byte) {
 func spawnCat(t *testing.T, backend *WorkerBackend, id, cwd string) {
 	t.Helper()
 	if err := backend.Spawn(context.Background(), SpawnOptions{
-		ID: id, CWD: cwd, Agent: "lifecycle-probe", ExternalCommand: []string{"/bin/cat"}, Cols: 80, Rows: 24,
+		ID: harness.TerminalID(id), CWD: cwd, Agent: "lifecycle-probe", ExternalCommand: []string{"/bin/cat"}, Cols: 80, Rows: 24,
 	}); err != nil {
 		t.Fatalf("Spawn(%s): %v", id, err)
 	}
@@ -269,7 +270,7 @@ func TestSharedHost_PromotionLeavesExistingSessionsUninterrupted(t *testing.T) {
 		t.Fatalf("an ordinary restart launches %s (%v), want the promoted candidate", pinned.ID, err)
 	}
 	for _, id := range []string{"before", "during", "after"} {
-		if err := second.Remove(context.Background(), id); err != nil {
+		if err := second.Remove(context.Background(), harness.TerminalID(id)); err != nil {
 			t.Fatalf("Remove(%s): %v", id, err)
 		}
 	}
@@ -489,7 +490,7 @@ func TestSharedHost_OperatesARetainedOlderArtifact(t *testing.T) {
 	}
 	waitForStreamText(t, stream, "__AFTER_REJECTION__")
 	for _, id := range []string{"retained", "retained-second"} {
-		if err := current.Remove(context.Background(), id); err != nil {
+		if err := current.Remove(context.Background(), harness.TerminalID(id)); err != nil {
 			t.Fatalf("Remove(%s): %v", id, err)
 		}
 	}
@@ -678,7 +679,7 @@ func TestSharedHost_ProbeChildThatExitsRejectsTheBuildWithoutReportingTheProbe(t
 	}
 	t.Cleanup(func() { _ = backend.Shutdown(context.Background()) })
 	exits := make(chan string, 8)
-	backend.SetExitHandler(func(info ExitInfo) { exits <- info.ID })
+	backend.SetExitHandler(func(info ExitInfo) { exits <- string(info.ID) })
 
 	if err := backend.ValidateSharedCandidate(context.Background(), false); err == nil {
 		t.Fatal("a build whose probe child never answers passed validation")

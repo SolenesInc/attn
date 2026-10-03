@@ -8,6 +8,7 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/victorarias/attn/internal/harness"
 	"github.com/victorarias/attn/internal/pty"
 	"github.com/victorarias/attn/internal/ptybackend"
 )
@@ -20,9 +21,9 @@ const (
 
 type Terminals struct {
 	mu        sync.Mutex
-	terminals map[string]*Terminal
+	terminals map[harness.TerminalID]*Terminal
 	onExit    func(ptybackend.ExitInfo)
-	onState   func(string, pty.Observation)
+	onState   func(harness.TerminalID, pty.Observation)
 }
 
 type TerminalInput struct {
@@ -52,13 +53,13 @@ type terminalStall struct {
 }
 
 func NewTerminals() *Terminals {
-	return &Terminals{terminals: map[string]*Terminal{}}
+	return &Terminals{terminals: map[harness.TerminalID]*Terminal{}}
 }
 
-func (b *Terminals) Terminal(sessionID string) *Terminal {
+func (b *Terminals) Terminal(id string) *Terminal {
 	b.mu.Lock()
 	defer b.mu.Unlock()
-	return b.terminals[sessionID]
+	return b.terminals[harness.TerminalID(id)]
 }
 
 func (b *Terminals) Spawn(_ context.Context, opts ptybackend.SpawnOptions) error {
@@ -73,18 +74,18 @@ func (b *Terminals) Spawn(_ context.Context, opts ptybackend.SpawnOptions) error
 	return nil
 }
 
-func (b *Terminals) lookup(sessionID string) (*Terminal, error) {
-	term := b.terminals[sessionID]
+func (b *Terminals) lookup(id harness.TerminalID) (*Terminal, error) {
+	term := b.terminals[id]
 	if term == nil {
-		return nil, fmt.Errorf("%w: %s", pty.ErrSessionNotFound, sessionID)
+		return nil, fmt.Errorf("%w: %s", pty.ErrSessionNotFound, id)
 	}
 	return term, nil
 }
 
-func (b *Terminals) Attach(_ context.Context, sessionID, _ string, _ ...ptybackend.AttachOptions) (ptybackend.AttachInfo, ptybackend.Stream, error) {
+func (b *Terminals) Attach(_ context.Context, id harness.TerminalID, _ string, _ ...ptybackend.AttachOptions) (ptybackend.AttachInfo, ptybackend.Stream, error) {
 	b.mu.Lock()
 	defer b.mu.Unlock()
-	term, err := b.lookup(sessionID)
+	term, err := b.lookup(id)
 	if err != nil {
 		return ptybackend.AttachInfo{}, nil, err
 	}
@@ -94,13 +95,13 @@ func (b *Terminals) Attach(_ context.Context, sessionID, _ string, _ ...ptybacke
 		&terminalStream{owner: b, term: term, events: events}, nil
 }
 
-func (b *Terminals) Input(_ context.Context, sessionID string, data []byte) error {
+func (b *Terminals) Input(_ context.Context, id harness.TerminalID, data []byte) error {
 	b.mu.Lock()
-	term, err := b.lookup(sessionID)
+	term, err := b.lookup(id)
 	if err != nil || !term.running {
 		b.mu.Unlock()
 		if err == nil {
-			err = fmt.Errorf("session %s has exited", sessionID)
+			err = fmt.Errorf("session %s has exited", id)
 		}
 		return err
 	}
@@ -148,10 +149,10 @@ func (t *Terminal) consume(input string) []string {
 	return submitted
 }
 
-func (b *Terminals) Resize(_ context.Context, sessionID string, cols, rows, _, _ uint16) (ptybackend.ResizeResult, error) {
+func (b *Terminals) Resize(_ context.Context, id harness.TerminalID, cols, rows, _, _ uint16) (ptybackend.ResizeResult, error) {
 	b.mu.Lock()
 	defer b.mu.Unlock()
-	term, err := b.lookup(sessionID)
+	term, err := b.lookup(id)
 	if err != nil {
 		return ptybackend.ResizeResult{}, err
 	}
@@ -160,11 +161,13 @@ func (b *Terminals) Resize(_ context.Context, sessionID string, cols, rows, _, _
 	return ptybackend.ResizeResult{Changed: changed}, nil
 }
 
-func (b *Terminals) SetTheme(context.Context, string, pty.TerminalTheme) error { return nil }
+func (b *Terminals) SetTheme(context.Context, harness.TerminalID, pty.TerminalTheme) error {
+	return nil
+}
 
-func (b *Terminals) Kill(_ context.Context, sessionID string, sig syscall.Signal) error {
+func (b *Terminals) Kill(_ context.Context, id harness.TerminalID, sig syscall.Signal) error {
 	b.mu.Lock()
-	term, err := b.lookup(sessionID)
+	term, err := b.lookup(id)
 	b.mu.Unlock()
 	if err != nil {
 		return err
@@ -173,10 +176,10 @@ func (b *Terminals) Kill(_ context.Context, sessionID string, sig syscall.Signal
 	return nil
 }
 
-func (b *Terminals) Remove(_ context.Context, sessionID string) error {
+func (b *Terminals) Remove(_ context.Context, id harness.TerminalID) error {
 	b.mu.Lock()
 	defer b.mu.Unlock()
-	term := b.terminals[sessionID]
+	term := b.terminals[id]
 	if term == nil {
 		return nil
 	}
@@ -185,14 +188,14 @@ func (b *Terminals) Remove(_ context.Context, sessionID string) error {
 	}
 	term.streams = nil
 	term.running = false
-	delete(b.terminals, sessionID)
+	delete(b.terminals, id)
 	return nil
 }
 
-func (b *Terminals) SessionIDs(context.Context) []string {
+func (b *Terminals) TerminalIDs(context.Context) []harness.TerminalID {
 	b.mu.Lock()
 	defer b.mu.Unlock()
-	ids := make([]string, 0, len(b.terminals))
+	ids := make([]harness.TerminalID, 0, len(b.terminals))
 	for id, term := range b.terminals {
 		if term.running && term.stall == nil {
 			ids = append(ids, id)
@@ -216,10 +219,10 @@ func (b *Terminals) Recover(ctx context.Context) (ptybackend.RecoveryReport, err
 	return report, nil
 }
 
-func (b *Terminals) SessionLikelyAlive(_ context.Context, sessionID string) (bool, error) {
+func (b *Terminals) SessionLikelyAlive(_ context.Context, id harness.TerminalID) (bool, error) {
 	b.mu.Lock()
 	defer b.mu.Unlock()
-	if term := b.terminals[sessionID]; term != nil && term.stall != nil {
+	if term := b.terminals[id]; term != nil && term.stall != nil {
 		return term.stall.alive, term.stall.err
 	}
 	return false, nil
@@ -233,29 +236,29 @@ func (b *Terminals) SetExitHandler(fn func(ptybackend.ExitInfo)) {
 	b.onExit = fn
 }
 
-func (b *Terminals) SetStateHandler(fn func(string, pty.Observation)) {
+func (b *Terminals) SetStateHandler(fn func(harness.TerminalID, pty.Observation)) {
 	b.mu.Lock()
 	defer b.mu.Unlock()
 	b.onState = fn
 }
 
-func (b *Terminals) SessionInfo(_ context.Context, sessionID string) (ptybackend.SessionInfo, error) {
+func (b *Terminals) SessionInfo(_ context.Context, id harness.TerminalID) (ptybackend.SessionInfo, error) {
 	b.mu.Lock()
 	defer b.mu.Unlock()
-	term, err := b.lookup(sessionID)
+	term, err := b.lookup(id)
 	if err != nil {
 		return ptybackend.SessionInfo{}, err
 	}
 	return ptybackend.SessionInfo{
-		SessionID: sessionID, Agent: term.Options.Agent, CWD: term.Options.CWD,
+		SessionID: string(id), Agent: term.Options.Agent, CWD: term.Options.CWD,
 		Running: term.running, Cols: term.Options.Cols, Rows: term.Options.Rows,
 	}, nil
 }
 
-func (b *Terminals) ScreenSnapshot(_ context.Context, sessionID string) (pty.ScreenSnapshotInfo, error) {
+func (b *Terminals) ScreenSnapshot(_ context.Context, id harness.TerminalID) (pty.ScreenSnapshotInfo, error) {
 	b.mu.Lock()
 	defer b.mu.Unlock()
-	term, err := b.lookup(sessionID)
+	term, err := b.lookup(id)
 	if err != nil {
 		return pty.ScreenSnapshotInfo{}, err
 	}

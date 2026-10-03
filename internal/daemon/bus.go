@@ -203,9 +203,14 @@ func buildWireProjections() []projection {
 		{
 			filter: bus.Filter{FactSessionRespawned},
 			apply: func(d *Daemon, ev bus.Event) {
+				respawn, _ := decodeFact[ptyRespawn](d, ev)
+				terminal := respawn.Terminal
+				if terminal == "" {
+					terminal = ev.Subject
+				}
 				d.wsHub.Broadcast(&protocol.WebSocketEvent{
 					Event: protocol.EventRuntimeRespawned,
-					ID:    protocol.Ptr(ev.Subject),
+					ID:    protocol.Ptr(terminal),
 				})
 				d.projectGardenSeeds()
 			},

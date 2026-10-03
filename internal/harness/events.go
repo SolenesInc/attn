@@ -30,5 +30,5 @@ type TurnEvent struct {
 
 // Events is core's side of a link: what the harness tells attn, addressed by session.
 type Events interface {
-	Turn(session string, at time.Time, e TurnEvent)
+	Turn(s SessionID, at time.Time, e TurnEvent)
 }

@@ -61,6 +61,6 @@ func TestAShellSplitFromAnAgentInItsWorkspaceBecomesItsSatellite(t *testing.T) {
 	}
 	for _, id := range shells {
 		app.TypeLine(id, "exit")
-		testworld.Await(app, protocol.EventSessionExited, func(e protocol.SessionExitedMessage) bool { return e.ID == id })
+		testworld.Await(app, protocol.EventSessionExited, func(e protocol.SessionExitedMessage) bool { return e.SessionID == id })
 	}
 }
