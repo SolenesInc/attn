@@ -2,7 +2,9 @@ import { act, fireEvent, render, screen, within } from '@testing-library/react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { invoke, isTauri } from '@tauri-apps/api/core';
 import { QuickCapture } from './components/QuickCapture';
-import { CAPTURE_READY, CAPTURE_REQUEST, type CaptureDraft } from './quickCapture/client';
+import { CAPTURE_READY, CAPTURE_REQUEST } from './quickCapture/client';
+import type { CachedCaptureDraft } from './quickCapture/draft';
+import { CaptureAutomationWorkQueue } from './quickCapture/workQueueAutomation';
 import { gesture, pressShortcut, renderApp } from './test/renderApp';
 import { serveSettings } from './test/settings';
 import type { EventMessage } from './test/protocol';
@@ -52,7 +54,7 @@ beforeEach(() => {
     if (command === 'capture_bind') { native.active = values!.binding; return; }
     if (command === 'capture_cache') { native.binding = values!.binding; return; }
     if (command === 'capture_draft_read') {
-      const draft = native.draft as CaptureDraft | null;
+      const draft = native.draft as CachedCaptureDraft | null;
       for (const image of draft?.images ?? []) if (image.url) native.images.set(image.id, image.url);
       return draft && { ...draft, images: draft.images.map(image => ({ ...image, url: image.url || native.images.get(image.id)! })) };
     }
@@ -67,7 +69,7 @@ async function captureApp(configure?: (daemon: ScriptedDaemon) => void, options:
   const view = await renderApp(options);
   serveSettings(view.daemon);
   configure?.(view.daemon);
-  const capture = render(<QuickCapture />);
+  const capture = render(<QuickCapture workQueue={new CaptureAutomationWorkQueue()} />);
   await act(async () => {
     for (const listener of native.listeners.get(CAPTURE_READY) ?? []) await listener({ payload: undefined });
   });
@@ -354,7 +356,7 @@ describe('Quick Capture app wire behavior', () => {
         request_id: crypto.randomUUID(), action: 'capture_state', payload: { staged: true },
       } });
     });
-    const retained = native.draft as CaptureDraft;
+    const retained = native.draft as CachedCaptureDraft;
     expect(retained.text).toBe('Edited while uploading');
     expect(retained.images.map(file => file.name)).toEqual(['second.pdf']);
   });
@@ -388,7 +390,7 @@ describe('Quick Capture app wire behavior', () => {
     expect(screen.getByRole('alert')).toBeInTheDocument();
     expect(editor()).toBeInTheDocument();
     expect(reads).toEqual(['/first.pdf', '/second.pdf']);
-    expect((native.draft as CaptureDraft).images.map(file => file.name)).toEqual(['first.pdf', 'second.pdf']);
+    expect((native.draft as CachedCaptureDraft).images.map(file => file.name)).toEqual(['first.pdf', 'second.pdf']);
     held = false;
     await daemon.reconnect();
     await daemon.received('capture_attachment_put', command => command.name === 'second.pdf');
@@ -470,7 +472,7 @@ describe('Quick Capture app wire behavior', () => {
     await gesture(daemon, () => fireEvent.click(screen.getByRole('button', { name: 'Discard draft' })));
     expect(screen.getByRole('alert')).toHaveTextContent('Discard acknowledgment lost');
     capture.unmount();
-    render(<QuickCapture />);
+    render(<QuickCapture workQueue={new CaptureAutomationWorkQueue()} />);
     await act(async () => {
       for (const listener of native.listeners.get(CAPTURE_READY) ?? []) await listener({ payload: undefined });
     });
@@ -490,7 +492,7 @@ describe('Quick Capture app wire behavior', () => {
       images: [{ id: imageId, name: 'kept.png', url: 'data:image/png;base64,iVBORw0KGgo=' }] };
     const originalInvoke = vi.mocked(invoke).getMockImplementation()!;
     vi.mocked(invoke).mockImplementation(async (command, args) => {
-      if (command === 'capture_draft_write' && (args as { draft: CaptureDraft }).draft.id !== captureId) {
+      if (command === 'capture_draft_write' && (args as { draft: CachedCaptureDraft }).draft.id !== captureId) {
         throw new Error('Local draft storage unavailable');
       }
       return originalInvoke(command, args);
@@ -511,11 +513,11 @@ describe('Quick Capture app wire behavior', () => {
 
   it.each(['paste', 'drop'])('blocks %s images until the retained draft is restored', async source => {
     const captureId = crypto.randomUUID(), imageId = crypto.randomUUID();
-    const stored: CaptureDraft = { id: captureId, text: 'Retained note', recipient: 'chief', uncertain: false,
+    const stored: CachedCaptureDraft = { id: captureId, text: 'Retained note', recipient: 'chief', uncertain: false,
       images: [{ id: imageId, name: 'saved.png', url: 'data:image/png;base64,iVBORw0KGgo=' }] };
     const originalInvoke = vi.mocked(invoke).getMockImplementation()!;
-    let finishRead!: (draft: CaptureDraft) => void;
-    const read = new Promise<CaptureDraft>(resolve => { finishRead = resolve; });
+    let finishRead!: (draft: CachedCaptureDraft) => void;
+    const read = new Promise<CachedCaptureDraft>(resolve => { finishRead = resolve; });
     vi.mocked(invoke).mockImplementation(async (command, args) => {
       if (command === 'capture_draft_read') return read;
       if (command === 'capture_image_read') throw new Error('Synthetic drop read failure');

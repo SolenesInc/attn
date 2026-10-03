@@ -9,12 +9,12 @@ export const CAPTURE_SHORTCUT_SETTING = 'capture.shortcut';
 export const DEFAULT_CAPTURE_SHORTCUT = 'Control+Alt+Space';
 
 export interface DraftAttachment { id: string; name: string; url: string }
-export interface CaptureDraft { id: string; text: string; recipient: string; images: DraftAttachment[]; uncertain: boolean }
-export interface CaptureSubmission { id: string; text: string; recipient: string; imageIds: string[] }
+export interface CaptureDraft { id: string; text: string; recipient: string; files: DraftAttachment[]; uncertain: boolean }
+export interface CaptureSubmission { id: string; text: string; recipient: string; fileIds: string[] }
 export interface CaptureRecipient { id: string; name: string; detail: string }
 export interface CaptureItem {
   id: string; text: string; recipient: string; createdAt: string; readAt?: string;
-  images: { id: string; name: string; mediaType?: string }[];
+  files: { id: string; name: string; mediaType?: string }[];
 }
 export interface CaptureHostState {
   connected: boolean; recipients: CaptureRecipient[]; binding: string | null;
@@ -28,8 +28,8 @@ export interface CaptureClient {
   submit(submission: CaptureSubmission): Promise<CaptureItem>;
   resolve(id: string): Promise<CaptureItem | null>;
   recent(cursor?: string): Promise<CaptureHistory>;
-  image(captureId: string, attachmentId: string, mediaType?: string): Promise<string>;
-  discard(id: string, imageIds: string[]): Promise<void>;
+  file(captureId: string, attachmentId: string, mediaType?: string): Promise<string>;
+  discard(id: string, fileIds: string[]): Promise<void>;
   setBinding(binding: string | null): Promise<void>;
   resizeText(action: 'increase' | 'decrease' | 'reset'): Promise<void>;
 }
@@ -38,8 +38,8 @@ export type CaptureRequest =
   | { id: string; action: 'stage'; draft: CaptureDraft }
   | { id: string; action: 'resolve'; captureId: string }
   | { id: string; action: 'recent'; cursor?: string }
-  | { id: string; action: 'image'; captureId: string; attachmentId: string; mediaType?: string }
-  | { id: string; action: 'discard'; captureId: string; imageIds: string[] }
+  | { id: string; action: 'file'; captureId: string; attachmentId: string; mediaType?: string }
+  | { id: string; action: 'discard'; captureId: string; fileIds: string[] }
   | { id: string; action: 'binding'; binding: string | null }
   | { id: string; action: 'font'; change: 'increase' | 'decrease' | 'reset' }
 export interface CaptureResult { id: string; value?: unknown; error?: string }
@@ -92,8 +92,8 @@ export function createCaptureBridge(onState: (state: CaptureHostState) => void) 
     submit: submission => call({ action: 'submit', submission }),
     resolve: captureId => call({ action: 'resolve', captureId }),
     recent: cursor => call({ action: 'recent', cursor }),
-    image: (captureId, attachmentId, mediaType) => call({ action: 'image', captureId, attachmentId, mediaType }),
-    discard: (captureId, imageIds) => call({ action: 'discard', captureId, imageIds }),
+    file: (captureId, attachmentId, mediaType) => call({ action: 'file', captureId, attachmentId, mediaType }),
+    discard: (captureId, fileIds) => call({ action: 'discard', captureId, fileIds }),
     setBinding: binding => call({ action: 'binding', binding }),
     resizeText: change => call({ action: 'font', change }),
   };

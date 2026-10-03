@@ -22,7 +22,7 @@ export function QuickCaptureHistory({ regionRef, client, history, hasDraft, subm
         {item.readAt ? 'Read' : 'Sent'} · <time dateTime={item.createdAt}>{new Date(item.createdAt).toLocaleString()}</time>
       </span></header>
       {item.text && <p className="capture-history-note">{item.text}</p>}
-      {item.images.length > 0 && <div className="capture-history-images">{item.images.map(file => file.mediaType?.startsWith('image/')
+      {item.files.length > 0 && <div className="capture-history-files">{item.files.map(file => file.mediaType?.startsWith('image/')
         ? <CaptureHistoryImage key={file.id} client={client} captureId={item.id} image={file} />
         : <span key={file.id} className="capture-history-image" title={file.name}>{file.name}</span>)}</div>}
     </article>)}</div>
@@ -52,7 +52,7 @@ function CaptureHistoryImage({ client, captureId, image }: { client: CaptureClie
     const load = (imageLoads.get(client) ?? Promise.resolve()).then(async () => {
       if (disposed) return;
       try {
-        const value = await client.image(captureId, image.id, image.mediaType);
+        const value = await client.file(captureId, image.id, image.mediaType);
         if (disposed) release(value); else { owned = value; setUrl(value); }
       } catch (error) { if (!disposed) setError(String(error)); }
     });
