@@ -48,7 +48,7 @@ func uploadCaptureChunks(t *testing.T, cli *testworld.Peer, capture, id string, 
 		offset = end
 	}
 }
-func TestUserCaptureRestartAndCLIImageRetrieval(t *testing.T) {
+func TestUserCaptureRestartAndCLIFileRetrieval(t *testing.T) {
 	t.Parallel()
 	s := testworld.NewStack(t)
 	s.Start()
@@ -124,7 +124,7 @@ func TestUserCaptureRestartAndCLIImageRetrieval(t *testing.T) {
 		t.Fatalf("read message redelivered after restart %+v", empty)
 	}
 }
-func TestCaptureInstalledImageRecoversAfterProcessCrash(t *testing.T) {
+func TestCaptureInstalledFileRecoversAfterProcessCrash(t *testing.T) {
 	t.Parallel()
 	s := testworld.NewStack(t)
 	s.StartCrashingAt("capture-attachment-installed")
@@ -173,4 +173,34 @@ func TestCapturePDFAttachmentRoundTripsThroughCLI(t *testing.T) {
 	if err != nil || !bytes.Equal(saved, data) {
 		t.Fatalf("PDF bytes changed: %v", err)
 	}
+}
+
+func TestDamagedCaptureDraftDoesNotBlockDaemonRestart(t *testing.T) {
+	t.Parallel()
+	s := testworld.NewStack(t)
+	s.StartCrashingAt("capture-attachment-installed")
+	capture, id := uuid.NewString(), uuid.NewString()
+	data := []byte("%PDF-1.4\nQuick Capture recovery fixture\n%%EOF\n")
+	if _, err := s.TrustedApp().Capture(protocol.CaptureAttachmentPutMessage{Cmd: protocol.CmdCaptureAttachmentPut, CaptureID: capture, AttachmentID: id, Name: "notes.pdf", DataBase64: base64.StdEncoding.EncodeToString(data), Final: true}); err == nil {
+		t.Fatal("crashed upload returned success")
+	}
+	s.AwaitCrash()
+	if err := os.Truncate(filepath.Join(s.Dir, "captures", capture, id), int64(len(data)-1)); err != nil {
+		t.Fatal(err)
+	}
+	s.Start()
+	app := s.TrustedApp()
+	list := captureCall(t, app, protocol.CaptureListMessage{Cmd: protocol.CmdCaptureList, Limit: 1})
+	if len(list.List.DraftAssets) != 1 || list.List.DraftAssets[0].State != "staged" {
+		t.Fatalf("damaged file lost its draft: %+v", list.List)
+	}
+	if _, err := app.Capture(protocol.CaptureSendMessage{Cmd: protocol.CmdCaptureSend, CaptureID: capture, Target: protocol.CaptureTarget{Kind: protocol.CaptureTargetKindChief}, AttachmentIds: []string{id}}); err == nil || !strings.Contains(err.Error(), "staged") {
+		t.Fatalf("damaged file was accepted: %v", err)
+	}
+	captureCall(t, app, protocol.CaptureAttachmentDiscardMessage{Cmd: protocol.CmdCaptureAttachmentDiscard, CaptureID: capture, AttachmentID: id})
+	list = captureCall(t, app, protocol.CaptureListMessage{Cmd: protocol.CmdCaptureList, Limit: 1})
+	if len(list.List.DraftAssets) != 0 {
+		t.Fatalf("discard retained the damaged draft: %+v", list.List)
+	}
+	captureCall(t, app, protocol.CaptureSendMessage{Cmd: protocol.CmdCaptureSend, CaptureID: uuid.NewString(), Target: protocol.CaptureTarget{Kind: protocol.CaptureTargetKindChief}, Content: "A damaged draft must not block other captures."})
 }

@@ -63,7 +63,7 @@ func uploadCapture(t *testing.T, cli *testworld.Peer, capture, id string, data [
 	}
 	return r.Upload
 }
-func TestCaptureImagesRequireFinalizationPreserveBytesAndDiscardOnlyDrafts(t *testing.T) {
+func TestCaptureFilesRequireFinalizationPreserveBytesAndDiscardOnlyDrafts(t *testing.T) {
 	w := newWorld(t)
 	app := w.TrustedApp()
 	capture, id := uuid.NewString(), uuid.NewString()
@@ -117,7 +117,7 @@ func TestCaptureImagesRequireFinalizationPreserveBytesAndDiscardOnlyDrafts(t *te
 	}
 }
 
-func TestConcurrentIdenticalImageCapturesReturnOneSavedIdentity(t *testing.T) {
+func TestConcurrentIdenticalFileCapturesReturnOneSavedIdentity(t *testing.T) {
 	w := newWorld(t)
 	app := w.TrustedApp()
 	id, asset := uuid.NewString(), uuid.NewString()
