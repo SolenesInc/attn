@@ -140,10 +140,12 @@ async function main() {
       const receipt = await observer.requestResult({ cmd: 'capture_get', capture_id: captureId }, 'capture_result');
       runner.assert(Boolean(receipt.result.record.read_at), 'recipient inbox fetch commits a read receipt');
       const text = transcripts(recipient.cwd)[0]?.text || '';
+      runner.writeText('user-capture.jsonl', text);
+      const spoken = transcriptTurns(text).map(turn => turn.text).join('\n');
       runner.assert(text.includes('Message from the user, sent through Quick Capture:') && text.includes('PROMPT_USER_CAPTURE'),
         'inbox output attributes capture content to the user');
       runner.assert(!text.includes('This message is from another agent'), 'user capture omits the peer disclaimer');
-      runner.assert(text.includes('File "notes.pdf" (application/pdf') && text.includes('Inspect the saved file with your tools.'),
+      runner.assert(spoken.includes('File "notes.pdf" (application/pdf') && spoken.includes('Inspect the saved file with your tools.'),
         'non-image attachment carries file inspection instructions');
       runner.assert(fs.readFileSync(pdfOut).equals(pdf), 'recipient host retrieves byte-exact PDF content');
       const received = fs.readFileSync(imageOut);
@@ -151,7 +153,6 @@ async function main() {
       const decoded = PNG.sync.read(received);
       runner.assert(decoded.width > 0 && decoded.height > 0 && decoded.data.length === decoded.width * decoded.height * 4,
         'recipient image has inspectable pixels', { width: decoded.width, height: decoded.height, bytes: received.length });
-      runner.writeText('user-capture.jsonl', text);
     });
     await runner.step('crew_wake_sleep_and_successor', async () => {
       cli(['crew', 'set', crewName, '--agent', 'codex', '--model', 'claude-haiku-4-5']);
