@@ -140,8 +140,8 @@ async function main() {
       const receipt = await observer.requestResult({ cmd: 'capture_get', capture_id: captureId }, 'capture_result');
       runner.assert(Boolean(receipt.result.record.read_at), 'recipient inbox fetch commits a read receipt');
       const text = transcripts(recipient.cwd)[0]?.text || '';
-      runner.writeText('user-capture.jsonl', text);
       const spoken = transcriptTurns(text).map(turn => turn.text).join('\n');
+      runner.writeText('user-capture.txt', spoken);
       runner.assert(text.includes('Message from the user, sent through Quick Capture:') && text.includes('PROMPT_USER_CAPTURE'),
         'inbox output attributes capture content to the user');
       runner.assert(!text.includes('This message is from another agent'), 'user capture omits the peer disclaimer');
