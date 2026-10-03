@@ -11,14 +11,13 @@ import (
 func (d *Daemon) handleMarkdownAnnotationsSubmit(client *wsClient, msg *protocol.MarkdownAnnotationsSubmitMessage) {
 	targetSession := strings.TrimSpace(protocol.Deref(msg.TargetSessionID))
 	targetSeed := strings.TrimSpace(protocol.Deref(msg.TargetSeedID))
-	source, sourceErr := d.resolveAnnotationDocumentSource(msg.DocumentUri, msg.SourceKind, msg.WorkspaceID, msg.Path, msg.SeedID)
-	workspaceID, path, seedID := annotationSourcePointers(source)
+	source, sourceErr := d.resolveAnnotationDocumentSource(msg.DocumentUri, msg.SourceKind, msg.Path, msg.SeedID)
+	path, seedID := annotationSourcePointers(source)
 	result := protocol.MarkdownAnnotationsSubmitResultMessage{
 		Event:       protocol.EventMarkdownAnnotationsSubmitResult,
 		RequestID:   msg.RequestID,
 		DocumentUri: source.documentURI,
 		SourceKind:  source.kind,
-		WorkspaceID: workspaceID,
 		Path:        path,
 		SeedID:      seedID,
 		Status:      annotationSubmitStatusError,
@@ -36,6 +35,12 @@ func (d *Daemon) handleMarkdownAnnotationsSubmit(client *wsClient, msg *protocol
 	if sourceErr != nil {
 		fail("markdown_annotations_submit: " + sourceErr.Error())
 		return
+	}
+	if source.seedID != "" {
+		if err := d.requireSeedInProfile(source.seedID, client.selectedProfile(), false); err != nil {
+			fail("markdown_annotations_submit: " + err.Error())
+			return
+		}
 	}
 	if (targetSession == "") == (targetSeed == "") {
 		fail("markdown_annotations_submit: exactly one of target_session_id or target_seed_id is required")

@@ -1,14 +1,12 @@
-import { useCallback, useEffect, useLayoutEffect, useRef } from 'react';
-import { emit, listen } from '@tauri-apps/api/event';
-import { invoke, isTauri } from '@tauri-apps/api/core';
-import { getCurrentWindow } from '@tauri-apps/api/window';
-import type { Session } from '../store/sessions';
+import { useCallback } from 'react';
+import { invoke } from '@tauri-apps/api/core';
+import { useSessionStore, type Session } from '../store/sessions';
+import { currentActiveLeaf } from './useDesktopSelectionBridge';
 import type { Presentation } from '../types/generated';
 import type { SessionAgent } from '../types/sessionAgent';
-import type { TerminalSplitDirection } from '../types/workspace';
+import type { TerminalSplitDirection } from '../types/desktop';
 import { SHORTCUTS, type ShortcutId, type Combo, isChord } from '../shortcuts/registry';
 import { resolveBinding } from '../shortcuts/resolver';
-import { getGridAutomationHandle, INACTIVE_GRID_STATE } from '../components/grid/gridAutomation';
 import {
   getAutomationFormAutomationHandle,
   type AutomationFormAutomationState,
@@ -21,83 +19,63 @@ import { getSettingsAutomationHandle, INACTIVE_SETTINGS_STATE } from '../compone
 import { getAutoModeAutomationHandle, INACTIVE_AUTOMODE_STATE } from '../components/autoModeAutomation';
 import { repositoryQueryToken } from '../components/ledger/ledgerQuery';
 import { getTerminalPerfSnapshot } from '../utils/terminalPerf';
-import { readWarmWorkspaceLimit } from '../utils/terminalVirtualization';
+import { useProfilesStore } from '../store/profiles';
 import { dumpTerminalGeometry } from '../utils/terminalDiagnosticsLog';
 import { clearPtyPerfSnapshot, getPtyPerfSnapshot, recordPtyDecode, recordWsJsonParse } from '../utils/ptyPerf';
 import { buildSessionRenderHealth } from '../utils/renderHealth';
-import { collectWorkspaceLayoutDiagnostics, projectWorkspaceBounds } from '../utils/workspaceDiagnostics';
+import { collectDesktopLayoutDiagnostics, projectDesktopBounds } from '../utils/desktopDiagnostics';
 import type { TerminalVisibleContentSnapshot } from '../utils/terminalVisibleContent';
 import type { TerminalVisibleStyleSnapshot } from '../utils/terminalStyleSummary';
 import type { BlockStateSnapshot, PlacementStateSnapshot } from '../components/GhosttyTerminal';
-import { isPresentWindowAction } from './usePresentAutomationBridge';
-import { waitForAutomationDom } from './uiAutomationDom';
+import { selectionShown } from './uiAutomationSelection';
 import {
-  armNativePointerWitness,
-  disarmNativePointerWitness,
-  waitForNativePointerWitness,
-} from './nativePointerWitness';
+  clickElementWithModifiers,
+  APP_BUILD_IDENTITY,
+  NOT_A_DOM_ACTION,
+  rectSnapshot,
+  runDomAutomationAction,
+  setControlValue,
+  setInputValue,
+  useAutomationRequestListener,
+  type AutomationRequest,
+  type ClickModifiers,
+} from './uiAutomationDomActions';
 import {
   afterFramePaints,
   nextAnimationFrame,
-  settleBeforeBridgeRequest,
   settleUi,
 } from './uiAutomationSettle';
 
-const UI_AUTOMATION_REQUEST_EVENT = 'attn://ui-automation/request';
-const UI_AUTOMATION_RESPONSE_EVENT = 'attn://ui-automation/response';
-const UI_AUTOMATION_READY_EVENT = 'attn://ui-automation/ready';
 
-function readBuildEnv(value: string | undefined): string | null {
-  if (typeof value !== 'string') {
-    return null;
-  }
-  const trimmed = value.trim();
-  return trimmed.length > 0 ? trimmed : null;
-}
 
-const APP_BUILD_IDENTITY = {
-  version: readBuildEnv(import.meta.env.VITE_ATTN_BUILD_VERSION),
-  sourceFingerprint: readBuildEnv(import.meta.env.VITE_ATTN_SOURCE_FINGERPRINT),
-  gitCommit: readBuildEnv(import.meta.env.VITE_ATTN_GIT_COMMIT),
-  buildTime: readBuildEnv(import.meta.env.VITE_ATTN_BUILD_TIME),
-};
 
-interface AutomationRequest {
-  request_id: string;
-  action: string;
-  payload?: Record<string, unknown> | null;
-}
-
-interface AutomationResponse {
-  request_id: string;
-  ok: boolean;
-  result?: unknown;
-  error?: string;
-}
 
 interface UseUiAutomationBridgeArgs {
   sessions: Session[];
-  activeSessionId: string | null;
+  shownAgentId: string | null;
   daemonReady?: boolean;
   connectionError?: string | null;
   getActivePaneIdForSession: (session: Session | undefined | null) => string;
   createSession: (label: string, cwd: string, id?: string, agent?: SessionAgent, endpointId?: string, yoloMode?: boolean, options?: { chiefOfStaff?: boolean }) => Promise<string>;
   selectSession: (sessionId: string) => void;
-  selectWorkspace: (workspaceId: string) => void;
-  moveWorkspaceLeafToWorkspace: (
-    sourceWorkspaceId: string,
-    targetWorkspaceId: string,
-    leafId: string,
-    options?: { anchorId?: string; edge?: 'left' | 'right' | 'top' | 'bottom'; ratio?: number },
-  ) => Promise<unknown>;
+  selectDesktop: (desktopId: string) => void;
+  moveDesktopLeaf: (move: {
+    sourceDesktopId: string;
+    targetDesktopId: string;
+    leafId: string;
+    anchorId?: string;
+    edge: 'left' | 'right' | 'top' | 'bottom';
+    expectedSourceRevision: number;
+    expectedTargetRevision: number;
+  }) => Promise<unknown>;
   closeSession: (sessionId: string) => Promise<void>;
   reloadSession?: (sessionId: string, size?: { cols: number; rows: number }) => Promise<void>;
   setSetting?: (key: string, value: string) => void;
   openDockPanel?: (panelId: string) => void;
   openShortcutEditor?: () => void;
   splitPane: (sessionId: string, targetPaneId: string, direction: TerminalSplitDirection) => Promise<unknown>;
-  closePane: (sessionId: string, paneId: string) => Promise<unknown>;
-  focusPane: (sessionId: string, paneId: string) => void;
+  closePaneSession: (sessionId: string) => Promise<unknown>;
+  focusPane: (sessionId: string, paneId: string) => Promise<void>;
   typeInSessionPaneViaUI: (sessionId: string, paneId: string, text: string) => boolean;
   isSessionPaneInputFocused: (sessionId: string, paneId: string) => boolean;
   scrollSessionPaneToTop: (sessionId: string, paneId: string) => boolean;
@@ -172,7 +150,7 @@ function resolvePaneId(
 }
 
 function resolveRuntimeId(session: Session, paneId: string): string {
-  const agent = session.workspace.agents.find((entry) => entry.id === paneId);
+  const agent = session.desktop.agents.find((entry) => entry.id === paneId);
   if (agent?.runtimeId) {
     return agent.runtimeId;
   }
@@ -180,19 +158,19 @@ function resolveRuntimeId(session: Session, paneId: string): string {
 }
 
 function resolvePaneOwnerSessionId(session: Session, paneId: string): string {
-  return session.workspace.agents.find((entry) => entry.id === paneId)?.sessionId || session.id;
+  return session.desktop.agents.find((entry) => entry.id === paneId)?.sessionId || session.id;
 }
 
-function resolveWorkspaceViewSessionId(session: Session, sessions: Session[], activeSessionId: string | null): string {
-  const activeSession = activeSessionId ? sessions.find((entry) => entry.id === activeSessionId) : null;
-  if (activeSession?.workspaceId && activeSession.workspaceId === session.workspaceId) {
+function resolveDesktopViewSessionId(session: Session, sessions: Session[], shownAgentId: string | null): string {
+  const activeSession = shownAgentId ? sessions.find((entry) => entry.id === shownAgentId) : null;
+  if (activeSession?.desktopId && activeSession.desktopId === session.desktopId) {
     return activeSession.id;
   }
   return session.id;
 }
 
 function paneEntries(session: Session) {
-  return session.workspace.agents.map((agent) => ({
+  return session.desktop.agents.map((agent) => ({
       paneId: agent.id,
       runtimeId: agent.runtimeId,
       sessionId: agent.sessionId,
@@ -201,7 +179,7 @@ function paneEntries(session: Session) {
     }));
 }
 
-function serializeWorkspaceModel(
+function serializeDesktopModel(
   session: Session,
   getActivePaneIdForSession: (session: Session | undefined | null) => string,
 ) {
@@ -209,25 +187,61 @@ function serializeWorkspaceModel(
     activePaneId: getActivePaneIdForSession(session),
     daemonActivePaneId: session.daemonActivePaneId,
     panes: paneEntries(session),
-    layoutTree: session.workspace.layoutTree,
-    layout: collectWorkspaceLayoutDiagnostics(session.workspace.layoutTree),
-    sessionPaneCount: session.workspace.agents.length,
+    layoutTree: session.desktop.layoutTree,
+    layout: collectDesktopLayoutDiagnostics(session.desktop.layoutTree),
+    sessionPaneCount: session.desktop.agents.length,
   };
 }
 
 function serializeSession(session: Session, getActivePaneIdForSession: (session: Session | undefined | null) => string) {
-  const workspace = serializeWorkspaceModel(session, getActivePaneIdForSession);
+  const desktop = serializeDesktopModel(session, getActivePaneIdForSession);
   return {
     id: session.id,
     label: session.label,
     state: session.state,
     cwd: session.cwd,
-    workspaceId: session.workspaceId,
+    desktopId: session.desktopId,
     agent: session.agent,
-    activePaneId: workspace.activePaneId,
-    daemonActivePaneId: workspace.daemonActivePaneId,
-    panes: workspace.panes,
-    workspace,
+    activePaneId: desktop.activePaneId,
+    daemonActivePaneId: desktop.daemonActivePaneId,
+    panes: desktop.panes,
+    desktop,
+  };
+}
+
+function serializeSelection() {
+  const leaf = currentActiveLeaf();
+  return {
+    view: useSessionStore.getState().view,
+    activeLeaf: leaf
+      ? { desktopId: leaf.desktopId, leafId: leaf.leafId, kind: leaf.kind, ...(leaf.kind === 'agent' ? { sessionId: leaf.sessionId } : {}) }
+      : null,
+  };
+}
+
+function serializeArrangement() {
+  const { profiles, selectedProfileId, currentDesktopId, previousDesktopId, desktops } = useProfilesStore.getState();
+  const surfaceOf = (desktopId: string) =>
+    typeof document === 'undefined'
+      ? null
+      : document.querySelector(`[data-session-terminal-desktop="${CSS.escape(desktopId)}"]`);
+  return {
+    profiles: profiles.map((profile) => ({ id: profile.id, name: profile.name, revision: profile.revision })),
+    selectedProfileId,
+    currentDesktopId,
+    previousDesktopId,
+    desktops: desktops.map((desktop) => {
+      const surface = surfaceOf(desktop.id);
+      return {
+        id: desktop.id,
+        slot: desktop.shortcut_slot ?? null,
+        revision: desktop.revision,
+        activePaneId: desktop.active_pane_id,
+        panes: desktop.panes.map((pane) => ({ paneId: pane.pane_id, sessionId: pane.session_id, kind: pane.kind })),
+        mounted: surface != null,
+        visible: surface?.getAttribute('data-session-visible') === '1',
+      };
+    }),
   };
 }
 
@@ -243,20 +257,7 @@ function summarizeSession(
     agent: session.agent,
     activePaneId: getActivePaneIdForSession(session),
     daemonActivePaneId: session.daemonActivePaneId,
-    sessionPaneCount: session.workspace.agents.length,
-  };
-}
-
-function rectSnapshot(element: Element | null) {
-  if (!(element instanceof HTMLElement)) {
-    return null;
-  }
-  const rect = element.getBoundingClientRect();
-  return {
-    x: Math.round(rect.x),
-    y: Math.round(rect.y),
-    width: Math.round(rect.width),
-    height: Math.round(rect.height),
+    sessionPaneCount: session.desktop.agents.length,
   };
 }
 
@@ -298,14 +299,14 @@ function elementMetrics(element: Element | null) {
   };
 }
 
-function getSessionWorkspaceRoot(workspaceId: string) {
-  const root = document.querySelector(`[data-session-terminal-workspace="${workspaceId}"]`);
+function getSessionDesktopRoot(desktopId: string) {
+  const root = document.querySelector(`[data-session-terminal-desktop="${desktopId}"]`);
   return root instanceof HTMLElement ? root : null;
 }
 
-function collectWorkspaceShellMetrics(sessionId: string) {
-  const workspaceRoot = getSessionWorkspaceRoot(sessionId);
-  const terminalWrapper = workspaceRoot?.closest('.terminal-wrapper') ?? null;
+function collectDesktopShellMetrics(sessionId: string) {
+  const desktopRoot = getSessionDesktopRoot(sessionId);
+  const terminalWrapper = desktopRoot?.closest('.terminal-wrapper') ?? null;
   const terminalMainArea = terminalWrapper?.closest('.terminal-main-area') ?? null;
   const terminalPane = terminalMainArea?.closest('.terminal-pane') ?? null;
   const viewContainer = terminalPane?.closest('.view-container') ?? null;
@@ -315,27 +316,27 @@ function collectWorkspaceShellMetrics(sessionId: string) {
     terminalPane: elementMetrics(terminalPane),
     terminalMainArea: elementMetrics(terminalMainArea),
     terminalWrapper: elementMetrics(terminalWrapper),
-    workspaceRoot: elementMetrics(workspaceRoot),
+    desktopRoot: elementMetrics(desktopRoot),
   };
 }
 
-function collectWorkspaceViewState(sessionId: string) {
-  const workspaceRoot = getSessionWorkspaceRoot(sessionId);
+function collectDesktopViewState(sessionId: string) {
+  const desktopRoot = getSessionDesktopRoot(sessionId);
   return {
-    sessionVisible: parseDataFlag(workspaceRoot?.dataset.sessionVisible),
-    activePaneId: workspaceRoot?.dataset.activePaneId || null,
-    activeLeafId: workspaceRoot?.dataset.activeLeafId || null,
-    zoomedPaneId: workspaceRoot?.dataset.zoomedPaneId || null,
-    maximizedPaneId: workspaceRoot?.dataset.maximizedPaneId || null,
+    sessionVisible: parseDataFlag(desktopRoot?.dataset.sessionVisible),
+    activePaneId: desktopRoot?.dataset.activePaneId || null,
+    activeLeafId: desktopRoot?.dataset.activeLeafId || null,
+    zoomedPaneId: desktopRoot?.dataset.zoomedPaneId || null,
+    maximizedPaneId: desktopRoot?.dataset.maximizedPaneId || null,
   };
 }
 
 function collectSplitDomMetrics(sessionId: string) {
-  const workspaceRoot = getSessionWorkspaceRoot(sessionId);
-  if (!workspaceRoot) {
+  const desktopRoot = getSessionDesktopRoot(sessionId);
+  if (!desktopRoot) {
     return [];
   }
-  return Array.from(workspaceRoot.querySelectorAll('[data-split-id]'))
+  return Array.from(desktopRoot.querySelectorAll('[data-split-id]'))
     .filter((element): element is HTMLElement => element instanceof HTMLElement)
     .map((element) => {
       const childElements = Array.from(element.children)
@@ -364,7 +365,7 @@ function collectPaneDomMetrics(paneElement: Element | null) {
   if (!(paneElement instanceof HTMLElement)) {
     return null;
   }
-  const paneBody = paneElement.querySelector('.workspace-pane-body');
+  const paneBody = paneElement.querySelector('.desktop-pane-body');
   const terminalContainer = paneElement.querySelector('.terminal-container');
   const terminalSurface = paneElement.querySelector('.ghostty-terminal');
   const canvas = paneElement.querySelector('.ghostty-terminal canvas');
@@ -378,134 +379,9 @@ function collectPaneDomMetrics(paneElement: Element | null) {
   };
 }
 
-async function captureDomScreenshotData(selector?: string) {
-  // An unresolved selector must NOT fall back to #root: that re-introduces the WebGL-canvas
-  // serialization hang while hiding the real cause (the element asked for is not mounted).
-  let target: HTMLElement;
-  if (selector) {
-    const selected = document.querySelector(selector);
-    if (!(selected instanceof HTMLElement)) {
-      throw new Error(`Screenshot selector not found in DOM: ${selector}`);
-    }
-    target = selected;
-  } else {
-    const root = document.getElementById('root') || document.body;
-    if (!(root instanceof HTMLElement)) {
-      throw new Error('Screenshot target not found');
-    }
-    target = root;
-  }
-
-  const { toPng } = await import('html-to-image');
-  const backgroundColor = getComputedStyle(document.body).backgroundColor || '#111111';
-
-  // A running CSS animation in the cloned subtree can leave html-to-image's serialized SVG
-  // <image> in a never-settled load state in WebKit, so toPng hangs until the caller times out.
-  const freeze = document.createElement('style');
-  freeze.textContent =
-    '*,*::before,*::after{animation:none!important;transition:none!important;}';
-  document.head.appendChild(freeze);
-  void document.body.offsetHeight;
-
-  const options = {
-    cacheBust: true,
-    pixelRatio: 1,
-    backgroundColor,
-    // Embedding @font-face resources fetches each font and can hang indefinitely.
-    skipFonts: true,
-    filter: isScreenshotNode,
-  };
-  let dataUrl: string;
-  try {
-    dataUrl = await toPng(target, options);
-  } catch (error) {
-    throw new Error(await describeScreenshotFailure(target, selector ?? '#root', options, error));
-  } finally {
-    freeze.remove();
-  }
-  return {
-    source: 'web',
-    bounds: rectSnapshot(target),
-    pngBase64: dataUrl.replace(/^data:image\/png;base64,/, ''),
-  };
-}
-
-function isScreenshotNode(node: HTMLElement): boolean {
-  return !(node instanceof HTMLImageElement && !node.getAttribute('src'));
-}
-
-async function describeScreenshotFailure(
-  target: HTMLElement,
-  label: string,
-  options: Parameters<typeof import('html-to-image').toSvg>[1],
-  error: unknown,
-): Promise<string> {
-  const bounds = target.getBoundingClientRect();
-  const canvases = Array.from(target.querySelectorAll('canvas'));
-  const where = `Screenshot of ${label} (${Math.round(bounds.width)}x${Math.round(bounds.height)}, ${canvases.length} canvases, visibility ${document.visibilityState})`;
-  for (const canvas of canvases) {
-    const canvasDataUrl = canvas.toDataURL();
-    if (canvasDataUrl !== 'data:,' && !(await imageLoads(canvasDataUrl))) {
-      return `${where}: the ${canvas.width}x${canvas.height} canvas image (${canvasDataUrl.length} chars) does not load`;
-    }
-  }
-  const { toSvg } = await import('html-to-image');
-  let svgDataUrl: string;
-  try {
-    svgDataUrl = await toSvg(target, options);
-  } catch (svgError) {
-    return `${where}: serializing the subtree failed: ${failureText(svgError)}; embedded images: ${describeEmbeddedImages(target)}`;
-  }
-  const xml = decodeURIComponent(svgDataUrl.slice(svgDataUrl.indexOf(',') + 1));
-  const parserError = new DOMParser()
-    .parseFromString(xml, 'image/svg+xml')
-    .querySelector('parsererror')
-    ?.textContent?.trim();
-  if (parserError) {
-    return `${where}: the serialized SVG (${xml.length} chars) does not parse: ${parserError}`;
-  }
-  return `${where}: the serialized SVG (${xml.length} chars) parses but loading it as an image failed: ${failureText(error)}`;
-}
-
-function describeEmbeddedImages(target: HTMLElement): string {
-  const images = Array.from(target.querySelectorAll('img, image')).map((element) => {
-    if (element instanceof HTMLImageElement) {
-      const state = element.complete ? `${element.naturalWidth}x${element.naturalHeight}` : 'loading';
-      const source = element.currentSrc || element.src || `(no src) ${element.outerHTML.slice(0, 160)}`;
-      return `img ${source} ${state} in ${ancestorPath(element)}`;
-    }
-    return `image ${(element as SVGImageElement).href?.baseVal || '(no href)'} in ${ancestorPath(element)}`;
-  });
-  return images.length === 0 ? 'none' : images.join(', ');
-}
-
-function ancestorPath(element: Element): string {
-  const names: string[] = [];
-  for (let node = element.parentElement; node && names.length < 5; node = node.parentElement) {
-    const className = typeof node.className === 'string' ? node.className.trim().split(/\s+/)[0] : '';
-    names.push(className ? `${node.tagName.toLowerCase()}.${className}` : node.tagName.toLowerCase());
-  }
-  return names.join(' < ');
-}
-
-function imageLoads(src: string): Promise<boolean> {
-  return new Promise((resolve) => {
-    const image = new Image();
-    image.onload = () => resolve(true);
-    image.onerror = () => resolve(false);
-    image.src = src;
-  });
-}
-
-function failureText(error: unknown): string {
-  if (error instanceof Error) return error.message;
-  if (error instanceof Event) return `${error.type} event`;
-  return String(error);
-}
-
 function collectVisualSnapshot(
   sessions: Session[],
-  activeSessionId: string | null,
+  shownAgentId: string | null,
   getActivePaneIdForSession: (session: Session | undefined | null) => string,
   getPaneText: (sessionId: string, paneId: string) => string,
   getPaneSize: (sessionId: string, paneId: string) => { cols: number; rows: number } | null,
@@ -521,7 +397,7 @@ function collectVisualSnapshot(
     ? sessions.filter((session) => options.sessionIds?.has(session.id))
     : sessions;
   return {
-    activeSessionId,
+    shownAgentId,
     activeElement: {
       tag: document.activeElement?.tagName || null,
       className: (document.activeElement as HTMLElement | null)?.className || null,
@@ -529,25 +405,25 @@ function collectVisualSnapshot(
       text: document.activeElement?.textContent?.slice(0, 120) || '',
     },
     sessions: filteredSessions.map((session) => {
-      const workspaceModel = serializeWorkspaceModel(session, getActivePaneIdForSession);
-      const activePaneId = workspaceModel.activePaneId;
-      const paneIds = workspaceModel.panes.map((pane) => pane.paneId);
+      const desktopModel = serializeDesktopModel(session, getActivePaneIdForSession);
+      const activePaneId = desktopModel.activePaneId;
+      const paneIds = desktopModel.panes.map((pane) => pane.paneId);
       const runtimeIdByPaneId = new Map(
-        workspaceModel.panes.map((pane) => [pane.paneId, pane.runtimeId] as const),
+        desktopModel.panes.map((pane) => [pane.paneId, pane.runtimeId] as const),
       );
-      const workspaceId = session.workspaceId;
-      const workspaceDom = collectWorkspaceShellMetrics(workspaceId);
-      const workspaceView = collectWorkspaceViewState(workspaceId);
-      const rootBounds = workspaceDom.workspaceRoot?.bounds;
+      const desktopId = session.desktopId;
+      const desktopDom = collectDesktopShellMetrics(desktopId);
+      const desktopView = collectDesktopViewState(desktopId);
+      const rootBounds = desktopDom.desktopRoot?.bounds;
       const paneLayoutById = new Map(
-        workspaceModel.layout.panes.map((pane) => [
+        desktopModel.layout.panes.map((pane) => [
           pane.paneId,
           {
             path: pane.path,
             depth: pane.depth,
             normalizedBounds: pane.bounds,
             projectedBounds: rootBounds
-              ? projectWorkspaceBounds(pane.bounds, rootBounds.width, rootBounds.height)
+              ? projectDesktopBounds(pane.bounds, rootBounds.width, rootBounds.height)
               : null,
           },
         ]),
@@ -560,11 +436,11 @@ function collectVisualSnapshot(
         label: session.label,
         activePaneId,
         daemonActivePaneId: session.daemonActivePaneId,
-        workspace: {
-          model: workspaceModel,
-          view: workspaceView,
-          dom: workspaceDom,
-          splits: collectSplitDomMetrics(workspaceId),
+        desktop: {
+          model: desktopModel,
+          view: desktopView,
+          dom: desktopDom,
+          splits: collectSplitDomMetrics(desktopId),
         },
         sidebarItem: sidebarItem instanceof HTMLElement
           ? {
@@ -572,9 +448,9 @@ function collectVisualSnapshot(
               bounds: rectSnapshot(sidebarItem),
             }
           : null,
-        workspaceBounds: workspaceDom.workspaceRoot?.bounds ?? null,
+        desktopBounds: desktopDom.desktopRoot?.bounds ?? null,
         panes: paneIds.map((paneId) => {
-          const ownerSessionId = workspaceModel.panes.find((pane) => pane.paneId === paneId)?.sessionId || session.id;
+          const ownerSessionId = desktopModel.panes.find((pane) => pane.paneId === paneId)?.sessionId || session.id;
           const paneElement = document.querySelector(
             `[data-pane-session-id="${ownerSessionId}"][data-pane-id="${paneId}"]`
           );
@@ -617,7 +493,7 @@ function readProvenance(scope: Element | null | undefined): string {
 
 function collectSessionUiState(
   sessions: Session[],
-  activeSessionId: string | null,
+  shownAgentId: string | null,
   sessionId: string,
   getActivePaneIdForSession: (session: Session | undefined | null) => string,
 ) {
@@ -628,7 +504,7 @@ function collectSessionUiState(
       exists: false,
       selected: false,
       sidebarItem: null,
-      workspaceBounds: null,
+      desktopBounds: null,
       agentPaneBounds: null,
       activePaneId: null,
       daemonActivePaneId: null,
@@ -640,21 +516,21 @@ function collectSessionUiState(
   const sidebarItem = document.querySelector(
     `[data-testid="sidebar-session-${session.id}"]`
   );
-  const firstAgentPaneId = session.workspace.agents[0]?.id || '';
+  const firstAgentPaneId = session.desktop.agents[0]?.id || '';
   const firstAgentPane = firstAgentPaneId
     ? document.querySelector(`[data-pane-session-id="${session.id}"][data-pane-id="${firstAgentPaneId}"]`)
     : null;
   const settlingChip = firstAgentPane?.querySelector('[data-testid="settling-indicator"]') ?? null;
   const settlingFill = firstAgentPane?.querySelector('.settling-header-track-fill') ?? null;
-  const workspaceId = session.workspaceId;
-  const workspaceDom = collectWorkspaceShellMetrics(workspaceId);
-  const workspaceView = collectWorkspaceViewState(workspaceId);
-  const workspaceModel = serializeWorkspaceModel(session, getActivePaneIdForSession);
+  const desktopId = session.desktopId;
+  const desktopDom = collectDesktopShellMetrics(desktopId);
+  const desktopView = collectDesktopViewState(desktopId);
+  const desktopModel = serializeDesktopModel(session, getActivePaneIdForSession);
 
   return {
     sessionId,
     exists: true,
-    selected: activeSessionId === session.id,
+    selected: shownAgentId === session.id,
     label: session.label,
     cwd: session.cwd,
     activePaneId: getActivePaneIdForSession(session),
@@ -667,12 +543,12 @@ function collectSessionUiState(
           pullRequest: sidebarItem.querySelector('.sidebar-session-pr')?.textContent?.trim() || '',
         }
       : null,
-    workspaceBounds: workspaceDom.workspaceRoot?.bounds ?? null,
-    workspace: {
-      model: workspaceModel,
-      view: workspaceView,
-      dom: workspaceDom,
-      splits: collectSplitDomMetrics(workspaceId),
+    desktopBounds: desktopDom.desktopRoot?.bounds ?? null,
+    desktop: {
+      model: desktopModel,
+      view: desktopView,
+      dom: desktopDom,
+      splits: collectSplitDomMetrics(desktopId),
     },
     agentPaneBounds: rectSnapshot(firstAgentPane),
     paneAutomation: readProvenance(firstAgentPane),
@@ -689,7 +565,7 @@ function collectSessionUiState(
 
 function collectRenderHealthSnapshot(
   sessions: Session[],
-  activeSessionId: string | null,
+  shownAgentId: string | null,
   getActivePaneIdForSession: (session: Session | undefined | null) => string,
   getPaneText: (sessionId: string, paneId: string) => string,
   getPaneSize: (sessionId: string, paneId: string) => { cols: number; rows: number } | null,
@@ -702,7 +578,7 @@ function collectRenderHealthSnapshot(
 ) {
   const visualSnapshot = collectVisualSnapshot(
     sessions,
-    activeSessionId,
+    shownAgentId,
     getActivePaneIdForSession,
     getPaneText,
     getPaneSize,
@@ -729,7 +605,7 @@ function collectRenderHealthSnapshot(
       sessionId: session.id,
       label: session.label,
       activePaneId: session.activePaneId,
-      selected: activeSessionId === session.id,
+      selected: shownAgentId === session.id,
       panes: (session.panes || []).map((pane) => {
         const terminal = terminalsByPaneId.get(pane.paneId) || null;
         return {
@@ -760,7 +636,7 @@ function collectRenderHealthSnapshot(
   }
 
   return {
-    activeSessionId,
+    shownAgentId,
     capturedAt: new Date().toISOString(),
     summary: {
       sessionCount: sessionHealth.length,
@@ -775,7 +651,7 @@ function collectRenderHealthSnapshot(
 function collectSessionRuntimeIds(sessions: Session[]) {
   const runtimeIds = new Set<string>();
   for (const session of sessions) {
-    for (const agent of session.workspace.agents) {
+    for (const agent of session.desktop.agents) {
       if (agent.runtimeId) {
         runtimeIds.add(agent.runtimeId);
       }
@@ -911,12 +787,12 @@ function dispatchShortcutEvent(shortcutId: ShortcutId) {
 }
 
 function findActivePaneCanvas(): HTMLCanvasElement | null {
-  const workspace = document.querySelector('[data-session-terminal-workspace][data-session-visible="1"]');
-  const activePaneId = workspace?.getAttribute('data-active-pane-id');
-  if (!workspace || !activePaneId) {
+  const desktop = document.querySelector('[data-session-terminal-desktop][data-session-visible="1"]');
+  const activePaneId = desktop?.getAttribute('data-active-pane-id');
+  if (!desktop || !activePaneId) {
     return null;
   }
-  const paneElement = workspace.querySelector(`[data-pane-id="${activePaneId}"]`);
+  const paneElement = desktop.querySelector(`[data-pane-id="${activePaneId}"]`);
   const canvas = paneElement?.querySelector('canvas');
   return canvas instanceof HTMLCanvasElement ? canvas : null;
 }
@@ -929,7 +805,7 @@ function clickPaneElement(sessionId: string, paneId: string) {
     throw new Error(`Pane element not found for ${sessionId}:${paneId}`);
   }
   // A folded pane is only its expand button; that button stops mousedown.
-  const expand = element.querySelector('.workspace-suspended-leaf');
+  const expand = element.querySelector('.desktop-suspended-leaf');
   if (element.dataset.paneSuspended === 'true' && expand instanceof HTMLElement) {
     expand.click();
     return;
@@ -1178,7 +1054,7 @@ function dragPaneSelection(
 
 function dragLeafHeader(leafId: string, dropFracX: number, dropFracY: number) {
   const leaf = document.querySelector(`[data-pane-id="${leafId}"]`);
-  const header = leaf?.querySelector('.workspace-pane-header, .workspace-dock-tile-header');
+  const header = leaf?.querySelector('.desktop-pane-header, .desktop-dock-tile-header');
   if (!(header instanceof HTMLElement)) {
     throw new Error(`Draggable leaf header not found for ${leafId}`);
   }
@@ -1222,13 +1098,13 @@ function dragLeafHeader(leafId: string, dropFracX: number, dropFracY: number) {
 }
 
 async function dragSplitDivider(
-  workspaceId: string,
+  desktopId: string,
   splitId: string,
   deltaPx: number,
   steps: number,
 ) {
-  const workspaceRoot = getSessionWorkspaceRoot(workspaceId);
-  const separator = Array.from(workspaceRoot?.querySelectorAll('[role="separator"][data-split-id]') ?? [])
+  const desktopRoot = getSessionDesktopRoot(desktopId);
+  const separator = Array.from(desktopRoot?.querySelectorAll('[role="separator"][data-split-id]') ?? [])
     .find((element): element is HTMLElement => (
       element instanceof HTMLElement && element.dataset.splitId === splitId
     ));
@@ -1284,71 +1160,12 @@ async function dragSplitDivider(
     endX,
     endY,
     steps: moveCount,
-    splits: collectSplitDomMetrics(workspaceId),
+    splits: collectSplitDomMetrics(desktopId),
   };
 }
 
 function clickElement(element: HTMLElement) {
   clickElementWithModifiers(element);
-}
-
-interface ClickModifiers {
-  meta?: boolean;
-  ctrl?: boolean;
-  shift?: boolean;
-  alt?: boolean;
-}
-
-function clickElementWithModifiers(element: HTMLElement, modifiers?: ClickModifiers) {
-  const rect = element.getBoundingClientRect();
-  const clientX = rect.x + rect.width / 2;
-  const clientY = rect.y + rect.height / 2;
-  const init: MouseEventInit = {
-    bubbles: true,
-    cancelable: true,
-    view: window,
-    clientX,
-    clientY,
-    metaKey: modifiers?.meta ?? false,
-    ctrlKey: modifiers?.ctrl ?? false,
-    shiftKey: modifiers?.shift ?? false,
-    altKey: modifiers?.alt ?? false,
-  };
-  // Pointer events first, in the order a real browser fires them: anything listening for
-  // pointerdown is otherwise invisible and the scenario reads as passing.
-  const pointerInit: PointerEventInit = { ...init, pointerId: 1, pointerType: 'mouse', isPrimary: true };
-  element.dispatchEvent(new PointerEvent('pointerdown', pointerInit));
-  element.dispatchEvent(new MouseEvent('mousedown', init));
-  element.dispatchEvent(new PointerEvent('pointerup', pointerInit));
-  element.dispatchEvent(new MouseEvent('mouseup', init));
-  element.dispatchEvent(new MouseEvent('click', init));
-}
-
-function setInputValue(element: HTMLInputElement, value: string) {
-  const setter = Object.getOwnPropertyDescriptor(
-    window.HTMLInputElement.prototype,
-    'value',
-  )?.set;
-  if (!setter) {
-    throw new Error('Unable to resolve input value setter');
-  }
-  setter.call(element, value);
-  element.dispatchEvent(new Event('input', { bubbles: true, cancelable: true }));
-}
-
-// Bypass React's value-tracker via the native prototype setter, then fire both `input`
-// and `change` so the component's onChange runs exactly as a user edit would.
-function setControlValue(
-  element: HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement,
-  value: string,
-) {
-  const setter = Object.getOwnPropertyDescriptor(Object.getPrototypeOf(element), 'value')?.set;
-  if (!setter) {
-    throw new Error('Unable to resolve control value setter');
-  }
-  setter.call(element, value);
-  element.dispatchEvent(new Event('input', { bubbles: true, cancelable: true }));
-  element.dispatchEvent(new Event('change', { bubbles: true, cancelable: true }));
 }
 
 function clickTestId(testid: string) {
@@ -1568,7 +1385,7 @@ function collectSeedDocumentState(scope: string, seedId: string) {
   if (!(root instanceof HTMLElement)) {
     return { present: false };
   }
-  const tile = root.closest('.workspace-dock-tile');
+  const tile = root.closest('.desktop-dock-tile');
   const plot = root.querySelector('.seed-document__plot');
   const body = root.querySelector('.md-reader-wrap');
   const log = root.querySelector('.seed-document__ledger');
@@ -1581,7 +1398,7 @@ function collectSeedDocumentState(scope: string, seedId: string) {
     })),
     plotBeforeBody: Boolean(plot && body && (plot.compareDocumentPosition(body) & Node.DOCUMENT_POSITION_FOLLOWING)),
     logOpen: log instanceof HTMLDetailsElement && log.open,
-    parent: tile?.querySelector('.workspace-dock-tile-seed-parent span:last-child')?.textContent?.trim() ?? '',
+    parent: tile?.querySelector('.desktop-dock-tile-seed-parent span:last-child')?.textContent?.trim() ?? '',
     artifacts: Array.from(root.querySelectorAll('.seed-document__artifacts li')).map(
       (item) => item.textContent?.trim() ?? '',
     ),
@@ -1627,9 +1444,16 @@ async function runLedgerRowVerb(row: HTMLElement, label: string) {
   if (!(more instanceof HTMLElement)) throw new Error(`row ${row.getAttribute('data-row-key')} offers no ${label}`);
   clickElement(more);
   await settleUi(1);
-  const item = Array.from(row.querySelectorAll('.ledger-menu [role="menuitem"]'))
-    .find((entry) => (entry.textContent || '').replace(/^\d/, '').trim() === label);
-  if (!(item instanceof HTMLElement)) throw new Error(`row ${row.getAttribute('data-row-key')} offers no ${label}`);
+  clickLedgerMenuItem(row, label);
+}
+
+function clickLedgerMenuItem(row: HTMLElement, label: string) {
+  const items = Array.from(row.querySelectorAll('.ledger-menu [role="menuitem"]'));
+  const labelOf = (entry: Element) => (entry.textContent || '').replace(/^\d/, '').trim();
+  const item = items.find((entry) => labelOf(entry) === label);
+  if (!(item instanceof HTMLElement)) {
+    throw new Error(`row ${row.getAttribute('data-row-key')} offers no ${label}; its menu holds ${items.map(labelOf).join(', ') || 'nothing'}`);
+  }
   clickElement(item);
 }
 
@@ -1697,7 +1521,7 @@ function collectAutomationsUiState() {
     panel.querySelectorAll('[data-testid="automation-definition-row"]'),
   );
   const definitions = definitionRows.map((row) => {
-    const id = row.getAttribute('data-definition-id') ?? '';
+    const id = Number(row.getAttribute('data-definition-id'));
     const toggle = row.querySelector(`[data-testid="automation-toggle-${id}"]`);
     return {
       id,
@@ -1741,8 +1565,7 @@ const INACTIVE_AUTOMATION_FORM_STATE: AutomationFormAutomationState = {
   loadError: '',
   values: {
     name: '',
-    id: '',
-    idCustomized: false,
+    id: 0,
     trigger: 'manual',
     scheduleCron: '',
     continuity: 'fresh',
@@ -1794,7 +1617,7 @@ function queryTokens(root: HTMLElement): string[] {
 function collectSessionsPanelUiState() {
   const root = ledgerRoot('Sessions');
   if (!root) {
-    return { open: false, scope: '', range: '', workspace: '', repository: '', rows: [], footer: '', canLoadMore: false, state: '' };
+    return { open: false, scope: '', range: '', profile: '', repository: '', rows: [], footer: '', canLoadMore: false, state: '' };
   }
   // Typed tokens apply after a debounce; the toolbar carries the filters the list is actually queried with.
   const toolbar = root.querySelector('.ledger-toolbar');
@@ -1810,7 +1633,9 @@ function collectSessionsPanelUiState() {
       label: row.querySelector('.ledger-row-title')?.textContent?.trim() || '',
       agent: row.querySelector('.ledger-meta-seg')?.textContent?.trim() || '',
       state,
-      workspace: '',
+      profile: row.getAttribute('data-profile') || '',
+      profileLabel: row.getAttribute('data-profile-label') || '',
+      note: row.querySelector('.ledger-row-note')?.textContent?.trim() || '',
       where: row.querySelector('.ledger-row-meta .is-path')?.getAttribute('title') || '',
       branch: row.querySelector('.ledger-row-meta .is-mono:not(.is-path)')?.textContent?.trim() || '',
       seed: verbs.find((verb) => verb.startsWith('Seed ·'))?.slice(7) || '',
@@ -1825,7 +1650,7 @@ function collectSessionsPanelUiState() {
     open: true,
     scope: root.querySelector('.ledger-segmented button[aria-pressed="true"]')?.textContent?.trim() || '',
     range: applied('range') || 'any',
-    workspace: applied('workspace'),
+    profile: applied('profile'),
     repository: applied('repository'),
     rows,
     footer: root.querySelector('.ledger-status-left')?.textContent?.trim() || '',
@@ -2024,7 +1849,7 @@ async function getBrowserMemorySnapshot() {
 
 async function capturePerfSnapshot(
   sessions: Session[],
-  activeSessionId: string | null,
+  shownAgentId: string | null,
   getActivePaneIdForSession: (session: Session | undefined | null) => string,
   options?: { includeMemory?: boolean; sessionIds?: Set<string> | null },
 ) {
@@ -2046,7 +1871,7 @@ async function capturePerfSnapshot(
       }
     : await getBrowserMemorySnapshot();
   const totalPaneCount = scopedSessions.reduce(
-    (sum, session) => sum + session.workspace.agents.length,
+    (sum, session) => sum + session.desktop.agents.length,
     0,
   );
   return {
@@ -2065,8 +1890,8 @@ async function capturePerfSnapshot(
     },
     sessions: {
       count: scopedSessions.length,
-      activeSessionId: scopedSessionIds.size === 0 || scopedSessionIds.has(activeSessionId || '')
-        ? activeSessionId
+      shownAgentId: scopedSessionIds.size === 0 || scopedSessionIds.has(shownAgentId || '')
+        ? shownAgentId
         : null,
       totalPaneCount,
       items: scopedSessions.map((session) => ({
@@ -2074,7 +1899,7 @@ async function capturePerfSnapshot(
         label: session.label,
         state: session.state,
         activePaneId: getActivePaneIdForSession(session),
-        sessionPaneCount: session.workspace.agents.length,
+        sessionPaneCount: session.desktop.agents.length,
       })),
     },
     browserMemory,
@@ -2142,21 +1967,21 @@ function concatByteChunks(chunks: Uint8Array[]): Uint8Array {
 
 export function useUiAutomationBridge({
   sessions,
-  activeSessionId,
+  shownAgentId,
   daemonReady = true,
   connectionError = null,
   getActivePaneIdForSession,
   createSession,
   selectSession,
-  selectWorkspace,
-  moveWorkspaceLeafToWorkspace,
+  selectDesktop,
+  moveDesktopLeaf,
   closeSession,
   reloadSession,
   setSetting,
   openDockPanel,
   openShortcutEditor,
   splitPane,
-  closePane,
+  closePaneSession,
   focusPane,
   typeInSessionPaneViaUI,
   isSessionPaneInputFocused,
@@ -2181,61 +2006,34 @@ export function useUiAutomationBridge({
   const handleAutomationRequest = useCallback(async (request: AutomationRequest) => {
     const payload = request.payload || {};
 
+    const domResult = await runDomAutomationAction(request.action, payload);
+    if (domResult !== NOT_A_DOM_ACTION) return domResult;
+
     switch (request.action) {
-      case 'ping':
-        return { pong: true };
       case 'get_state':
         return {
-          activeSessionId,
+          ...serializeSelection(),
           daemonReady,
           connectionError,
           appBuild: APP_BUILD_IDENTITY,
-          gridActive: typeof document !== 'undefined' && document.querySelector('.grid-view') != null,
           sessions: sessions.map((session) => serializeSession(session, getActivePaneIdForSession)),
+          arrangement: serializeArrangement(),
         };
       case 'dismiss_whats_new': {
-        // A fresh instance's one-time What's New modal sits above the workspace and swallows native
-        // HID clicks. Dismiss it the way a user can: a backdrop click (persists "seen").
+        // A fresh instance's What's New intro swallows native HID clicks. Dismiss it and Home's
+        // replay banner the way a user can (both persist), so scenario screens stay stable.
         const overlay = document.querySelector('.whats-new-overlay');
-        if (overlay instanceof HTMLElement) {
-          clickElement(overlay);
-          await settleUi();
-          return { dismissed: true };
-        }
-        return { dismissed: false };
+        if (overlay instanceof HTMLElement) clickElement(overlay);
+        const banner = document.querySelector('[aria-label="Dismiss the intro banner"]');
+        if (banner instanceof HTMLElement) clickElement(banner);
+        await settleUi();
+        return { dismissed: overlay instanceof HTMLElement };
       }
       case 'markdown_get_annotations_state': {
         return (
           getMarkdownAnnotationsAutomationHandle()?.getState() ??
           INACTIVE_MARKDOWN_ANNOTATIONS_STATE
         );
-      }
-      case 'grid_get_state':
-        return getGridAutomationHandle()?.getState() ?? INACTIVE_GRID_STATE;
-      case 'grid_get_tile_text': {
-        const handle = getGridAutomationHandle();
-        if (!handle) throw new Error('grid is not active');
-        const runtimeId = typeof payload.runtimeId === 'string' ? payload.runtimeId : null;
-        if (!runtimeId) {
-          throw new Error('grid_get_tile_text requires runtimeId');
-        }
-        return { runtimeId, text: handle.getTileText(runtimeId) };
-      }
-      case 'grid_zoom': {
-        const handle = getGridAutomationHandle();
-        if (!handle) throw new Error('grid is not active');
-        const runtimeId = typeof payload.runtimeId === 'string' ? payload.runtimeId : null;
-        handle.zoom(runtimeId);
-        return { requested: runtimeId, zoomedId: handle.getState().zoomedId };
-      }
-      case 'grid_send_text': {
-        const handle = getGridAutomationHandle();
-        if (!handle) throw new Error('grid is not active');
-        const text = typeof payload.text === 'string' ? payload.text : null;
-        if (text === null) throw new Error('grid_send_text requires text');
-        const sent = handle.sendText(text);
-        await settleUi();
-        return { sent, zoomedId: handle.getState().zoomedId };
       }
       case 'settings_get_state':
         return getSettingsAutomationHandle()?.getState() ?? INACTIVE_SETTINGS_STATE;
@@ -2249,49 +2047,6 @@ export function useUiAutomationBridge({
         // Re-read through the module getter: SettingsModal re-registers a fresh handle on each
         // render, so a captured handle still closes over the pre-selection section.
         return getSettingsAutomationHandle()?.getState() ?? INACTIVE_SETTINGS_STATE;
-      }
-      case 'capture_screenshot_data':
-        return captureDomScreenshotData(
-          typeof payload.selector === 'string' ? payload.selector : undefined,
-        );
-      case 'dom_click': {
-        const selector = typeof payload.selector === 'string' ? payload.selector : null;
-        if (!selector) throw new Error('dom_click requires selector');
-        const element = document.querySelector(selector);
-        if (!(element instanceof HTMLElement)) {
-          throw new Error(`dom_click selector not found in DOM: ${selector}`);
-        }
-        const modifiers = (payload.modifiers ?? {}) as ClickModifiers;
-        clickElementWithModifiers(element, modifiers);
-        await settleUi(2);
-        return { clicked: true, bounds: rectSnapshot(element) };
-      }
-      case 'dom_focus': {
-        const selector = typeof payload.selector === 'string' ? payload.selector : null;
-        if (!selector) throw new Error('dom_focus requires selector');
-        const element = document.querySelector(selector);
-        if (!(element instanceof HTMLElement)) {
-          throw new Error(`dom_focus selector not found in DOM: ${selector}`);
-        }
-        element.focus();
-        await settleUi(2);
-        if (document.activeElement !== element) {
-          throw new Error(`dom_focus target did not take focus: ${selector}`);
-        }
-        return { focused: true, tag: element.tagName };
-      }
-      case 'dom_active_element': {
-        const active = document.activeElement;
-        if (!(active instanceof HTMLElement)) return { tag: null };
-        const field = active instanceof HTMLInputElement || active instanceof HTMLTextAreaElement ? active : null;
-        return {
-          tag: active.tagName,
-          ...(typeof payload.selector === 'string' ? { matches: active.matches(payload.selector) } : {}),
-          className: active.className,
-          testId: active.getAttribute('data-testid'),
-          selectionStart: field?.selectionStart ?? null,
-          valueLength: field ? field.value.length : null,
-        };
       }
       case 'dom_terminal_key': {
         const selector = typeof payload.selector === 'string' ? payload.selector : null;
@@ -2379,204 +2134,9 @@ export function useUiAutomationBridge({
         await settleUi(2);
         return { composed: true, text };
       }
-      case 'dom_wait':
-        return waitForAutomationDom({
-          selector: typeof payload.selector === 'string' ? payload.selector : '',
-          absent: payload.absent === true,
-          textIncludes: typeof payload.textIncludes === 'string' ? payload.textIncludes : undefined,
-          focused: payload.focused === true,
-          timeoutMs: typeof payload.timeoutMs === 'number' ? payload.timeoutMs : NaN,
-        });
-      case 'dom_bounds': {
-        const selector = typeof payload.selector === 'string' ? payload.selector : null;
-        if (!selector) throw new Error('dom_bounds requires selector');
-        const element = document.querySelector(selector);
-        if (!(element instanceof HTMLElement)) {
-          throw new Error(`dom_bounds selector not found in DOM: ${selector}`);
-        }
-        return { bounds: rectSnapshot(element) };
-      }
-      case 'dom_text': {
-        const selector = typeof payload.selector === 'string' ? payload.selector : null;
-        if (!selector) throw new Error('dom_text requires selector');
-        const element = document.querySelector(selector);
-        if (!(element instanceof HTMLElement)) {
-          throw new Error(`dom_text selector not found in DOM: ${selector}`);
-        }
-        return { text: (element.textContent ?? '').replace(/\s+/g, ' ').trim() };
-      }
-      case 'dom_value': {
-        const selector = typeof payload.selector === 'string' ? payload.selector : null;
-        if (!selector) throw new Error('dom_value requires selector');
-        const element = document.querySelector(selector);
-        if (!(element instanceof HTMLInputElement || element instanceof HTMLTextAreaElement || element instanceof HTMLSelectElement)) {
-          throw new Error(`dom_value target is not a form control: ${selector}`);
-        }
-        return { value: element.value };
-      }
-      case 'dom_scroll_into_view': {
-        const selector = typeof payload.selector === 'string' ? payload.selector : null;
-        if (!selector) throw new Error('dom_scroll_into_view requires selector');
-        const element = document.querySelector(selector);
-        if (!(element instanceof HTMLElement)) {
-          throw new Error(`dom_scroll_into_view selector not found in DOM: ${selector}`);
-        }
-        element.scrollIntoView({ block: 'center', behavior: 'auto' });
-        await settleUi(2);
-        return { scrolled: true, bounds: rectSnapshot(element) };
-      }
-      case 'dom_key': {
-        const selector = typeof payload.selector === 'string' ? payload.selector : null;
-        const key = typeof payload.key === 'string' ? payload.key : null;
-        if (!selector) throw new Error('dom_key requires selector');
-        if (!key) throw new Error('dom_key requires key');
-        const element = document.querySelector(selector);
-        if (!(element instanceof HTMLElement)) {
-          throw new Error(`dom_key selector not found in DOM: ${selector}`);
-        }
-        const modifiers = (payload.modifiers ?? {}) as ClickModifiers;
-        element.focus();
-        const init: KeyboardEventInit = {
-          key,
-          bubbles: true,
-          cancelable: true,
-          metaKey: modifiers.meta ?? false,
-          ctrlKey: modifiers.ctrl ?? false,
-          shiftKey: modifiers.shift ?? false,
-          altKey: modifiers.alt ?? false,
-        };
-        const delivered = element.dispatchEvent(new KeyboardEvent('keydown', init));
-        element.dispatchEvent(new KeyboardEvent('keyup', init));
-        await settleUi(3);
-        return { key, handled: !delivered };
-      }
-      case 'dom_hover': {
-        // Both the pointer and mouse families are dispatched (handlers here come from either), and
-        // enter/leave do not bubble, so the selector must name the element that actually listens.
-        const selector = typeof payload.selector === 'string' ? payload.selector : null;
-        if (!selector) throw new Error('dom_hover requires selector');
-        const leave = payload.leave === true;
-        const element = document.querySelector(selector);
-        if (!(element instanceof HTMLElement)) {
-          throw new Error(`dom_hover selector not found in DOM: ${selector}`);
-        }
-        const rect = element.getBoundingClientRect();
-        const init: PointerEventInit = {
-          bubbles: false,
-          cancelable: true,
-          composed: true,
-          pointerId: 1,
-          pointerType: 'mouse',
-          clientX: rect.left + rect.width / 2,
-          clientY: rect.top + rect.height / 2,
-        };
-        if (leave) {
-          element.dispatchEvent(new PointerEvent('pointerleave', init));
-          element.dispatchEvent(new MouseEvent('mouseleave', init));
-          element.dispatchEvent(new PointerEvent('pointerout', { ...init, bubbles: true }));
-        } else {
-          element.dispatchEvent(new PointerEvent('pointerover', { ...init, bubbles: true }));
-          element.dispatchEvent(new PointerEvent('pointerenter', init));
-          element.dispatchEvent(new MouseEvent('mouseenter', init));
-        }
-        await settleUi(2);
-        return { hovered: !leave, bounds: rectSnapshot(element) };
-      }
-      case 'drag_dom': {
-        const selector = typeof payload.selector === 'string' ? payload.selector : null;
-        const dx = typeof payload.dx === 'number' ? payload.dx : 0;
-        const dy = typeof payload.dy === 'number' ? payload.dy : 0;
-        if (!selector) throw new Error('drag_dom requires selector');
-        const element = document.querySelector(selector);
-        if (!(element instanceof HTMLElement)) {
-          throw new Error(`drag_dom selector not found in DOM: ${selector}`);
-        }
-        const rect = element.getBoundingClientRect();
-        const from = { clientX: rect.left + rect.width / 2, clientY: rect.top + rect.height / 2 };
-        element.dispatchEvent(new MouseEvent('mousedown', {
-          bubbles: true, cancelable: true, view: window, button: 0, buttons: 1, ...from,
-        }));
-        // Two moves: a drag that arms on the first and applies on later ones would otherwise look like it worked.
-        for (const step of [0.5, 1]) {
-          window.dispatchEvent(new MouseEvent('mousemove', {
-            bubbles: true, cancelable: true, view: window, buttons: 1,
-            clientX: from.clientX + dx * step,
-            clientY: from.clientY + dy * step,
-          }));
-          await settleUi(1);
-        }
-        window.dispatchEvent(new MouseEvent('mouseup', {
-          bubbles: true, cancelable: true, view: window, button: 0,
-          clientX: from.clientX + dx,
-          clientY: from.clientY + dy,
-        }));
-        await settleUi(2);
-        return { dragged: selector, from, dx, dy, bounds: rectSnapshot(element) };
-      }
-      case 'dom_type': {
-        const selector = typeof payload.selector === 'string' ? payload.selector : null;
-        const text = typeof payload.text === 'string' ? payload.text : null;
-        if (!selector) throw new Error('dom_type requires selector');
-        if (text === null) throw new Error('dom_type requires text');
-        const element = document.querySelector(selector);
-        if (!element) {
-          throw new Error(`dom_type selector not found in DOM: ${selector}`);
-        }
-        if (element instanceof HTMLInputElement) {
-          setInputValue(element, text);
-        } else if (element instanceof HTMLTextAreaElement) {
-          setControlValue(element, text);
-        } else {
-          throw new Error(`dom_type target is not an input or textarea: ${selector}`);
-        }
-        await settleUi(2);
-        return { typed: text };
-      }
-      case 'dom_select': {
-        // Selects need their own verb: dom_type goes through the input value setter, which a <select> ignores.
-        const selector = typeof payload.selector === 'string' ? payload.selector : null;
-        const value = typeof payload.value === 'string' ? payload.value : null;
-        if (!selector) throw new Error('dom_select requires selector');
-        if (value === null) throw new Error('dom_select requires value');
-        const element = document.querySelector(selector);
-        if (!(element instanceof HTMLSelectElement)) {
-          throw new Error(`dom_select target is not a select: ${selector}`);
-        }
-        const offered = Array.from(element.options).map((option) => option.value);
-        if (!offered.includes(value)) {
-          throw new Error(`dom_select value ${value} is not offered by ${selector}; options: ${offered.join(', ')}`);
-        }
-        setControlValue(element, value);
-        await settleUi(2);
-        return { selected: value };
-      }
-      case 'get_window_bounds': {
-        if (!isTauri()) {
-          return null;
-        }
-        const appWindow = getCurrentWindow();
-        const [scaleFactor, outerPosition, outerSize, minimized] = await Promise.all([
-          appWindow.scaleFactor(),
-          appWindow.outerPosition(),
-          appWindow.outerSize(),
-          appWindow.isMinimized(),
-        ]);
-        const logicalPosition = outerPosition.toLogical(scaleFactor);
-        const logicalSize = outerSize.toLogical(scaleFactor);
-        return {
-          scaleFactor,
-          minimized,
-          logicalBounds: {
-            x: logicalPosition.x,
-            y: logicalPosition.y,
-            width: logicalSize.width,
-            height: logicalSize.height,
-          },
-        };
-      }
       case 'list_sessions':
         return {
-          activeSessionId,
+          ...serializeSelection(),
           sessions: sessions.map((session) => summarizeSession(session, getActivePaneIdForSession)),
         };
       case 'find_session': {
@@ -2646,7 +2206,7 @@ export function useUiAutomationBridge({
             id: (row.getAttribute('data-testid') || '').slice(prefix.length),
             label: row.querySelector('.session-label')?.textContent?.trim() || '',
             state: row.getAttribute('data-state') || '',
-            workspaceId: row.getAttribute('data-workspace-id') || '',
+            desktopId: row.getAttribute('data-desktop-id') || '',
             age: row.querySelector('.queue-row-age')?.textContent?.trim() || '',
             wake: row.querySelector('.queue-row-wake-at')?.textContent?.trim() || '',
             selected: row.classList.contains('selected'),
@@ -2660,10 +2220,38 @@ export function useUiAutomationBridge({
           };
         };
         const chiefRow = band?.querySelector('[data-testid^="queue-chief-"]');
-        const snoozedSection = document.querySelector('[data-testid="sidebar-snoozed"]');
-        const snoozedHeader = snoozedSection?.querySelector('[data-testid="snoozed-section-header"]');
+        const agentListToggle = band?.querySelector('[data-testid="queue-agents-toggle"]');
+        const snoozedHeader = band?.querySelector('[data-testid="queue-snoozed-header"]');
         const automationGroups = Array.from(document.querySelectorAll('[data-automation-id]'));
+        const bar = document.querySelector('[data-testid="queue-bar"]');
+        const runsChip = bar?.querySelector('[data-testid="queue-bar-runs"]');
+        const peekRows = (testId: string) => {
+          const peek = bar?.querySelector(`[data-testid="${testId}"]`);
+          return peek
+            ? Array.from(peek.querySelectorAll('.queue-bar-peek-row'))
+              .map((row) => (row.getAttribute('data-testid') || '').slice('queue-bar-peek-'.length))
+            : null;
+        };
         return {
+          bar: {
+            present: Boolean(bar),
+            waiting: Number(bar?.querySelector('[data-testid="queue-bar-pill"]')?.getAttribute('data-waiting') || 0),
+            crumbs: Array.from(bar?.querySelectorAll('.queue-bar-crumb') || []).map((crumb) => crumb.textContent || ''),
+            waitingPeek: peekRows('queue-bar-waiting-peek'),
+            runsPeek: peekRows('queue-bar-runs-peek'),
+            runs: runsChip
+              ? {
+                count: Number(runsChip.getAttribute('data-runs') || 0),
+                needing: Number(runsChip.getAttribute('data-needing') || 0),
+              }
+              : null,
+            desktops: Array.from(bar?.querySelectorAll('.queue-bar-desktop[data-desktop-id]') || []).map((chip) => ({
+              desktopId: chip.getAttribute('data-desktop-id') || '',
+              slot: (chip.getAttribute('data-testid') || '').slice('queue-bar-desktop-'.length),
+              waiting: Number(chip.getAttribute('data-waiting') || 0),
+              current: chip.classList.contains('is-current'),
+            })),
+          },
           present: Boolean(band),
           empty: Boolean(band?.querySelector('[data-testid="queue-empty"]')),
           chief: chiefRow ? readRow(chiefRow, 'queue-chief-') : null,
@@ -2671,22 +2259,24 @@ export function useUiAutomationBridge({
             .map((row) => readRow(row, 'queue-turn-')),
           settled: Array.from(band?.querySelectorAll('[data-testid^="queue-settled-"]') || [])
             .map((row) => readRow(row, 'queue-settled-')),
-          pinned: Array.from(band?.querySelectorAll('[data-testid^="queue-pinned-"]') || [])
-            .map((row) => readRow(row, 'queue-pinned-')),
           crew: Array.from(band?.querySelectorAll('.queue-row--crew[data-crew-member]') || [])
             .map((row) => ({
               member: row.getAttribute('data-crew-member') || '',
               state: row.getAttribute('data-crew-state') || '',
             })),
+          agentList: {
+            present: Boolean(agentListToggle),
+            expanded: agentListToggle?.getAttribute('aria-expanded') === 'true',
+          },
           snoozed: {
-            present: Boolean(snoozedSection),
-            header: snoozedHeader?.textContent?.trim() || '',
-            expanded: snoozedHeader?.getAttribute('aria-expanded') === 'true',
-            rows: Array.from(snoozedSection?.querySelectorAll('[data-testid^="queue-snoozed-"]') || [])
+            present: Boolean(snoozedHeader),
+            count: Number(snoozedHeader?.getAttribute('data-count') || 0),
+            rows: Array.from(band?.querySelectorAll('[data-testid^="queue-snoozed-"]') || [])
+              .filter((row) => row !== snoozedHeader)
               .map((row) => readRow(row, 'queue-snoozed-')),
           },
           automations: automationGroups.map((group) => ({
-            id: group.getAttribute('data-automation-id') || '',
+            id: Number(group.getAttribute('data-automation-id')),
             header: group.querySelector('.automation-session-header')?.textContent?.trim() || '',
             expanded: group.querySelector('.automation-session-header')?.getAttribute('aria-expanded') === 'true',
             sessionIds: Array.from(group.querySelectorAll('[data-testid^="sidebar-session-"]'))
@@ -2694,8 +2284,8 @@ export function useUiAutomationBridge({
           })),
           treeSessionIds: Array.from(document.querySelectorAll('.session-list [data-testid^="sidebar-session-"]'))
             .map((row) => (row.getAttribute('data-testid') || '').slice('sidebar-session-'.length)),
-          treeWorkspaceIds: Array.from(document.querySelectorAll('.session-list [data-testid^="sidebar-workspace-"]'))
-            .map((group) => (group.getAttribute('data-testid') || '').slice('sidebar-workspace-'.length)),
+          treeDesktopIds: Array.from(document.querySelectorAll('.session-list [data-testid^="sidebar-desktop-"]'))
+            .map((group) => (group.getAttribute('data-testid') || '').slice('sidebar-desktop-'.length)),
         };
       }
       case 'chief_of_staff_get_state':
@@ -2772,6 +2362,7 @@ export function useUiAutomationBridge({
         const sessionId = await createSession(label, cwd, providedSessionId, agent, endpointId, undefined, {
           chiefOfStaff,
         });
+        await selectionShown({ kind: 'session', sessionId });
         await settleUi();
         window.setTimeout(() => {
           fitSessionActivePane(sessionId);
@@ -2800,25 +2391,6 @@ export function useUiAutomationBridge({
         await settleUi();
         return { key, value };
       }
-      case 'set_warm_workspace_limit': {
-        const setter = (window as Window & { attnSetWarmWorkspaces?: (n: number) => number }).attnSetWarmWorkspaces;
-        if (!setter) {
-          throw new Error('attnSetWarmWorkspaces is not available');
-        }
-        const requested = payload.limit;
-        if (typeof requested !== 'number' || !Number.isFinite(requested)) {
-          throw new Error('set_warm_workspace_limit requires a numeric limit');
-        }
-        const limit = setter(requested);
-        await settleUi();
-        const virtualizedPanes = document.querySelectorAll('[data-testid^="pane-virtualized-"]').length;
-        return { limit, virtualizedPanes };
-      }
-      case 'get_warm_workspace_limit': {
-        const limit = readWarmWorkspaceLimit();
-        const virtualizedPanes = document.querySelectorAll('[data-testid^="pane-virtualized-"]').length;
-        return { limit, virtualizedPanes };
-      }
       case 'dump_terminal_geometry': {
         const snapshots = dumpTerminalGeometry();
         return { snapshots };
@@ -2844,7 +2416,7 @@ export function useUiAutomationBridge({
           throw new Error('reload_session requires sessionId');
         }
         const session = sessions.find((entry) => entry.id === sessionId);
-        const paneId = session?.workspace.agents.find((agent) => agent.sessionId === sessionId)?.id;
+        const paneId = session?.desktop.agents.find((agent) => agent.sessionId === sessionId)?.id;
         const size = paneId ? getPaneSize(sessionId, paneId) || undefined : undefined;
         await reloadSession(sessionId, size);
         await settleUi();
@@ -2856,6 +2428,7 @@ export function useUiAutomationBridge({
           throw new Error('select_session requires sessionId');
         }
         selectSession(sessionId);
+        await selectionShown({ kind: 'session', sessionId });
         await settleUi();
         return { sessionId };
       }
@@ -2871,8 +2444,8 @@ export function useUiAutomationBridge({
         await settleUi();
         return { panelId };
       }
-      case 'get_workspace': {
-        const sessionId = typeof payload.sessionId === 'string' ? payload.sessionId : activeSessionId;
+      case 'get_desktop': {
+        const sessionId = typeof payload.sessionId === 'string' ? payload.sessionId : shownAgentId;
         const session = sessions.find((entry) => entry.id === sessionId);
         if (!session) {
           throw new Error('Session not found');
@@ -2886,7 +2459,7 @@ export function useUiAutomationBridge({
         }
         return collectSessionUiState(
           sessions,
-          activeSessionId,
+          shownAgentId,
           sessionId,
           getActivePaneIdForSession,
         );
@@ -2910,21 +2483,21 @@ export function useUiAutomationBridge({
           unread: Boolean(chip.querySelector(`[data-testid="seed-chip-unread-${sessionId}"]`)),
         };
       }
-      case 'select_workspace': {
-        const workspaceId = typeof payload.workspaceId === 'string' ? payload.workspaceId : '';
-        if (!workspaceId) {
-          throw new Error('select_workspace requires workspaceId');
+      case 'select_desktop': {
+        const desktopId = typeof payload.desktopId === 'string' ? payload.desktopId : '';
+        if (!desktopId) {
+          throw new Error('select_desktop requires desktopId');
         }
-        selectWorkspace(workspaceId);
+        selectDesktop(desktopId);
         await settleUi();
-        return { workspaceId };
+        return { desktopId };
       }
-      case 'get_workspace_ui_state': {
-        const workspaceId = typeof payload.workspaceId === 'string' ? payload.workspaceId : '';
-        if (!workspaceId) {
-          throw new Error('get_workspace_ui_state requires workspaceId');
+      case 'get_desktop_ui_state': {
+        const desktopId = typeof payload.desktopId === 'string' ? payload.desktopId : '';
+        if (!desktopId) {
+          throw new Error('get_desktop_ui_state requires desktopId');
         }
-        const surface = document.querySelector(`[data-session-terminal-workspace="${workspaceId}"]`);
+        const surface = document.querySelector(`[data-session-terminal-desktop="${desktopId}"]`);
         const wrapper = surface?.closest('.terminal-wrapper') ?? null;
         const tileIds = surface
           ? Array.from(surface.querySelectorAll('[data-pane-kind="tile"]'))
@@ -2935,18 +2508,18 @@ export function useUiAutomationBridge({
           ? surface.querySelectorAll('[data-pane-kind="agent"]').length
           : 0;
         const tileTitles = surface
-          ? Array.from(surface.querySelectorAll('.workspace-dock-tile-title'))
+          ? Array.from(surface.querySelectorAll('.desktop-dock-tile-title'))
             .map((node) => node.textContent?.trim() || '')
           : [];
         const activeBody = document.activeElement;
         const tileBodyFocused = Boolean(
           surface
             && activeBody instanceof HTMLElement
-            && activeBody.classList.contains('workspace-dock-tile-body')
+            && activeBody.classList.contains('desktop-dock-tile-body')
             && surface.contains(activeBody),
         );
         return {
-          workspaceId,
+          desktopId,
           rendered: Boolean(surface),
           active: Boolean(wrapper?.classList.contains('active')),
           sessionVisible: surface?.getAttribute('data-session-visible') === '1',
@@ -2964,8 +2537,8 @@ export function useUiAutomationBridge({
         return collectSessionsPanelUiState();
       case 'sessions_set_filter': {
         const root = sessionsPanelRoot();
-        const { scope, range, workspace, repository, from, to } = payload as {
-          scope?: string; range?: string; workspace?: string; repository?: string; from?: string; to?: string;
+        const { scope, range, profile, repository, from, to } = payload as {
+          scope?: string; range?: string; profile?: string; repository?: string; from?: string; to?: string;
         };
         if (scope) {
           const button = Array.from(root.querySelectorAll('.ledger-segmented button'))
@@ -2986,9 +2559,9 @@ export function useUiAutomationBridge({
             if (from) next.push(`from:${from}`);
             if (to) next.push(`to:${to}`);
           }
-          if (workspace !== undefined) {
-            next = next.filter((token) => !/^ws:/i.test(token));
-            if (workspace) next.push(`ws:${workspace}`);
+          if (profile !== undefined) {
+            next = next.filter((token) => !/^profile:/i.test(token));
+            if (profile) next.push(`profile:${profile}`);
           }
           if (repository !== undefined) {
             next = next.filter((token) => !/^repo(?:-path)?:/i.test(token));
@@ -3008,10 +2581,14 @@ export function useUiAutomationBridge({
         return collectSessionsPanelUiState();
       }
       case 'sessions_row_action': {
-        const { sessionId, action } = payload as { sessionId: string; action: string };
+        const { sessionId, action, choice } = payload as { sessionId: string; action: string; choice?: string };
         const row = sessionsPanelRoot().querySelector(`.ledger-row[data-row-key="${CSS.escape(sessionId)}"]`);
         if (!(row instanceof HTMLElement)) throw new Error(`no row for session ${sessionId}`);
         await runLedgerRowVerb(row, action);
+        if (choice !== undefined) {
+          await settleUi(1);
+          clickLedgerMenuItem(row, choice);
+        }
         await settleUi(3);
         return collectSessionsPanelUiState();
       }
@@ -3177,7 +2754,13 @@ export function useUiAutomationBridge({
         if (!sessionId || !paneId) {
           throw new Error('close_pane requires sessionId and paneId');
         }
-        await closePane(sessionId, paneId);
+        const owner = sessions
+          .find((entry) => entry.id === sessionId)
+          ?.desktop.agents.find((pane) => pane.id === paneId)?.sessionId;
+        if (!owner) {
+          throw new Error(`Pane not found: ${paneId} is not on the desktop of session ${sessionId}`);
+        }
+        await closePaneSession(owner);
         return { sessionId, paneId };
       }
       case 'focus_pane': {
@@ -3187,9 +2770,10 @@ export function useUiAutomationBridge({
           throw new Error('Session not found');
         }
         const paneId = resolvePaneId(session, getActivePaneIdForSession, payload.paneId);
-        const viewSessionId = resolveWorkspaceViewSessionId(session, sessions, activeSessionId);
+        const viewSessionId = resolveDesktopViewSessionId(session, sessions, shownAgentId);
         selectSession(sessionId);
-        focusPane(viewSessionId, paneId);
+        await selectionShown({ kind: 'session', sessionId });
+        await focusPane(viewSessionId, paneId);
         await settleUi();
         return { sessionId, paneId, viewSessionId };
       }
@@ -3201,8 +2785,9 @@ export function useUiAutomationBridge({
         }
         const paneId = resolvePaneId(session, getActivePaneIdForSession, payload.paneId);
         const ownerSessionId = resolvePaneOwnerSessionId(session, paneId);
-        const viewSessionId = resolveWorkspaceViewSessionId(session, sessions, activeSessionId);
+        const viewSessionId = resolveDesktopViewSessionId(session, sessions, shownAgentId);
         selectSession(sessionId);
+        await selectionShown({ kind: 'session', sessionId });
         await settleUi(1);
         clickPaneElement(ownerSessionId, paneId);
         await settleUi(2);
@@ -3215,8 +2800,9 @@ export function useUiAutomationBridge({
           throw new Error('Session not found');
         }
         const paneId = resolvePaneId(session, getActivePaneIdForSession, payload.paneId);
-        const viewSessionId = resolveWorkspaceViewSessionId(session, sessions, activeSessionId);
+        const viewSessionId = resolveDesktopViewSessionId(session, sessions, shownAgentId);
         selectSession(sessionId);
+        await selectionShown({ kind: 'session', sessionId });
         await settleUi(1);
         const success = scrollSessionPaneToTop(viewSessionId, paneId);
         if (!success) {
@@ -3233,10 +2819,11 @@ export function useUiAutomationBridge({
         }
         const paneId = resolvePaneId(session, getActivePaneIdForSession, payload.paneId);
         const ownerSessionId = resolvePaneOwnerSessionId(session, paneId);
-        const viewSessionId = resolveWorkspaceViewSessionId(session, sessions, activeSessionId);
+        const viewSessionId = resolveDesktopViewSessionId(session, sessions, shownAgentId);
         const deltaY = typeof payload.deltaY === 'number' ? payload.deltaY : 0;
         const deltaMode = typeof payload.deltaMode === 'number' ? payload.deltaMode : WheelEvent.DOM_DELTA_PIXEL;
         selectSession(sessionId);
+        await selectionShown({ kind: 'session', sessionId });
         await settleUi(1);
         wheelPaneElement(ownerSessionId, paneId, deltaY, deltaMode);
         await settleUi(2);
@@ -3250,13 +2837,14 @@ export function useUiAutomationBridge({
         }
         const paneId = resolvePaneId(session, getActivePaneIdForSession, payload.paneId);
         const ownerSessionId = resolvePaneOwnerSessionId(session, paneId);
-        const viewSessionId = resolveWorkspaceViewSessionId(session, sessions, activeSessionId);
+        const viewSessionId = resolveDesktopViewSessionId(session, sessions, shownAgentId);
         const size = getPaneSize(viewSessionId, paneId);
         const cell = payload.cell as { col?: unknown; row?: unknown } | undefined;
         if (!size || typeof cell?.col !== 'number' || typeof cell?.row !== 'number') {
           throw new Error('click_pane_cell requires pane size and a numeric cell');
         }
         selectSession(sessionId);
+        await selectionShown({ kind: 'session', sessionId });
         await settleUi(1);
         clickPaneCell(ownerSessionId, paneId, size, { col: cell.col, row: cell.row });
         await settleUi(2);
@@ -3270,13 +2858,14 @@ export function useUiAutomationBridge({
         }
         const paneId = resolvePaneId(session, getActivePaneIdForSession, payload.paneId);
         const ownerSessionId = resolvePaneOwnerSessionId(session, paneId);
-        const viewSessionId = resolveWorkspaceViewSessionId(session, sessions, activeSessionId);
+        const viewSessionId = resolveDesktopViewSessionId(session, sessions, shownAgentId);
         const size = getPaneSize(viewSessionId, paneId);
         const cell = payload.cell as { col?: unknown; row?: unknown } | undefined;
         if (!size || typeof cell?.col !== 'number' || typeof cell?.row !== 'number') {
           throw new Error('hover_pane_cell requires pane size and a numeric cell');
         }
         selectSession(sessionId);
+        await selectionShown({ kind: 'session', sessionId });
         await settleUi(1);
         const hovered = hoverPaneCell(
           ownerSessionId,
@@ -3297,7 +2886,7 @@ export function useUiAutomationBridge({
         }
         const paneId = resolvePaneId(session, getActivePaneIdForSession, payload.paneId);
         const ownerSessionId = resolvePaneOwnerSessionId(session, paneId);
-        const viewSessionId = resolveWorkspaceViewSessionId(session, sessions, activeSessionId);
+        const viewSessionId = resolveDesktopViewSessionId(session, sessions, shownAgentId);
         const size = getPaneSize(viewSessionId, paneId);
         const cell = payload.cell as { col?: unknown; row?: unknown } | undefined;
         if (!size || typeof cell?.col !== 'number' || typeof cell?.row !== 'number') {
@@ -3317,17 +2906,6 @@ export function useUiAutomationBridge({
       case 'get_annotation_state': {
         return annotationSurfaceState();
       }
-      case 'arm_native_pointer_witness': {
-        const selector = typeof payload.selector === 'string' ? payload.selector : '';
-        if (!selector) throw new Error('arm_native_pointer_witness requires selector');
-        armNativePointerWitness(selector);
-        return { armed: true };
-      }
-      case 'wait_native_pointer_witness': {
-        const receipt = await waitForNativePointerWitness();
-        await settleUi();
-        return receipt;
-      }
       case 'drag_pane_selection': {
         const sessionId = typeof payload.sessionId === 'string' ? payload.sessionId : '';
         const session = sessions.find((entry) => entry.id === sessionId);
@@ -3336,7 +2914,7 @@ export function useUiAutomationBridge({
         }
         const paneId = resolvePaneId(session, getActivePaneIdForSession, payload.paneId);
         const ownerSessionId = resolvePaneOwnerSessionId(session, paneId);
-        const viewSessionId = resolveWorkspaceViewSessionId(session, sessions, activeSessionId);
+        const viewSessionId = resolveDesktopViewSessionId(session, sessions, shownAgentId);
         const size = getPaneSize(viewSessionId, paneId);
         const start = payload.start as { col?: unknown; row?: unknown } | undefined;
         const end = payload.end as { col?: unknown; row?: unknown } | undefined;
@@ -3346,6 +2924,7 @@ export function useUiAutomationBridge({
           throw new Error('drag_pane_selection requires pane size and numeric start/end cells');
         }
         selectSession(sessionId);
+        await selectionShown({ kind: 'session', sessionId });
         await settleUi(1);
         const altKey = payload.altKey === true;
         dragPaneSelection(
@@ -3371,8 +2950,9 @@ export function useUiAutomationBridge({
         }
         const dropFracX = typeof payload.dropFracX === 'number' ? payload.dropFracX : 0.5;
         const dropFracY = typeof payload.dropFracY === 'number' ? payload.dropFracY : 0.5;
-        const viewSessionId = resolveWorkspaceViewSessionId(session, sessions, activeSessionId);
+        const viewSessionId = resolveDesktopViewSessionId(session, sessions, shownAgentId);
         selectSession(sessionId);
+        await selectionShown({ kind: 'session', sessionId });
         await settleUi(2);
         const points = dragLeafHeader(leafId, dropFracX, dropFracY);
         await settleUi(2);
@@ -3390,25 +2970,39 @@ export function useUiAutomationBridge({
         if (!splitId || !Number.isFinite(deltaPx) || !Number.isFinite(steps)) {
           throw new Error('drag_split requires splitId and numeric deltaPx/steps');
         }
-        const viewSessionId = resolveWorkspaceViewSessionId(session, sessions, activeSessionId);
+        const viewSessionId = resolveDesktopViewSessionId(session, sessions, shownAgentId);
         selectSession(sessionId);
+        await selectionShown({ kind: 'session', sessionId });
         await settleUi(2);
-        const result = await dragSplitDivider(session.workspaceId, splitId, deltaPx, steps);
-        return { sessionId, viewSessionId, workspaceId: session.workspaceId, ...result };
+        const result = await dragSplitDivider(session.desktopId, splitId, deltaPx, steps);
+        return { sessionId, viewSessionId, desktopId: session.desktopId, ...result };
       }
-      case 'move_workspace_leaf': {
-        const sourceWorkspaceId = typeof payload.sourceWorkspaceId === 'string' ? payload.sourceWorkspaceId : '';
-        const targetWorkspaceId = typeof payload.targetWorkspaceId === 'string' ? payload.targetWorkspaceId : '';
+      case 'move_desktop_leaf': {
+        const sourceDesktopId = typeof payload.sourceDesktopId === 'string' ? payload.sourceDesktopId : '';
+        const targetDesktopId = typeof payload.targetDesktopId === 'string' ? payload.targetDesktopId : '';
         const leafId = typeof payload.leafId === 'string' ? payload.leafId : '';
-        if (!sourceWorkspaceId || !targetWorkspaceId || !leafId) {
-          throw new Error('move_workspace_leaf requires sourceWorkspaceId, targetWorkspaceId, and leafId');
+        if (!sourceDesktopId || !targetDesktopId || !leafId) {
+          throw new Error('move_desktop_leaf requires sourceDesktopId, targetDesktopId, and leafId');
         }
+        const desktops = useProfilesStore.getState().desktops;
+        const revisionOf = (desktopId: string) => {
+          const desktop = desktops.find((entry) => entry.id === desktopId);
+          if (!desktop) throw new Error(`move_desktop_leaf: desktop ${desktopId} is not in the selected profile`);
+          return desktop.revision;
+        };
         const edge = payload.edge === 'right' || payload.edge === 'top' || payload.edge === 'bottom'
           ? payload.edge
           : 'left';
-        const anchorId = typeof payload.anchorId === 'string' ? payload.anchorId : '';
-        const ratio = typeof payload.ratio === 'number' ? payload.ratio : undefined;
-        const result = await moveWorkspaceLeafToWorkspace(sourceWorkspaceId, targetWorkspaceId, leafId, { anchorId, edge, ratio });
+        const anchorId = typeof payload.anchorId === 'string' && payload.anchorId ? payload.anchorId : undefined;
+        const result = await moveDesktopLeaf({
+          sourceDesktopId,
+          targetDesktopId,
+          leafId,
+          anchorId,
+          edge,
+          expectedSourceRevision: revisionOf(sourceDesktopId),
+          expectedTargetRevision: revisionOf(targetDesktopId),
+        });
         await settleUi(4);
         return result;
       }
@@ -3466,7 +3060,7 @@ export function useUiAutomationBridge({
           throw new Error('type_pane_via_ui requires text');
         }
         const paneId = resolvePaneId(session, getActivePaneIdForSession, payload.paneId);
-        const viewSessionId = resolveWorkspaceViewSessionId(session, sessions, activeSessionId);
+        const viewSessionId = resolveDesktopViewSessionId(session, sessions, shownAgentId);
         const success = typeInSessionPaneViaUI(viewSessionId, paneId, text);
         if (!success) {
           throw new Error(`Failed to type into pane ${paneId} via UI input`);
@@ -3480,7 +3074,7 @@ export function useUiAutomationBridge({
           throw new Error('Session not found');
         }
         const paneId = resolvePaneId(session, getActivePaneIdForSession, payload.paneId);
-        const viewSessionId = resolveWorkspaceViewSessionId(session, sessions, activeSessionId);
+        const viewSessionId = resolveDesktopViewSessionId(session, sessions, shownAgentId);
         return {
           sessionId,
           paneId,
@@ -3496,7 +3090,7 @@ export function useUiAutomationBridge({
           throw new Error('Session not found');
         }
         const paneId = resolvePaneId(session, getActivePaneIdForSession, payload.paneId);
-        const viewSessionId = resolveWorkspaceViewSessionId(session, sessions, activeSessionId);
+        const viewSessionId = resolveDesktopViewSessionId(session, sessions, shownAgentId);
         return {
           sessionId,
           paneId,
@@ -3512,7 +3106,7 @@ export function useUiAutomationBridge({
           throw new Error('Session not found');
         }
         const paneId = resolvePaneId(session, getActivePaneIdForSession, payload.paneId);
-        const viewSessionId = resolveWorkspaceViewSessionId(session, sessions, activeSessionId);
+        const viewSessionId = resolveDesktopViewSessionId(session, sessions, shownAgentId);
         const blockState = getPaneBlockState(viewSessionId, paneId);
         // Stable response shape: available=false ("no live terminal handle") is not "no blocks".
         return {
@@ -3530,7 +3124,7 @@ export function useUiAutomationBridge({
           throw new Error('Session not found');
         }
         const paneId = resolvePaneId(session, getActivePaneIdForSession, payload.paneId);
-        const viewSessionId = resolveWorkspaceViewSessionId(session, sessions, activeSessionId);
+        const viewSessionId = resolveDesktopViewSessionId(session, sessions, shownAgentId);
         const placementState = getPanePlacementState(viewSessionId, paneId);
         return {
           sessionId,
@@ -3549,7 +3143,7 @@ export function useUiAutomationBridge({
         const paneId = resolvePaneId(session, getActivePaneIdForSession, payload.paneId);
         const snapshot = collectVisualSnapshot(
           [session],
-          activeSessionId,
+          shownAgentId,
           getActivePaneIdForSession,
           getPaneText,
           getPaneSize,
@@ -3559,12 +3153,12 @@ export function useUiAutomationBridge({
         return {
           sessionId,
           paneId,
-          inputFocused: isSessionPaneInputFocused(resolveWorkspaceViewSessionId(session, sessions, activeSessionId), paneId),
+          inputFocused: isSessionPaneInputFocused(resolveDesktopViewSessionId(session, sessions, shownAgentId), paneId),
           activePaneId: getActivePaneIdForSession(session),
           pane: snapshot.sessions[0]?.panes.find((pane) => pane.paneId === paneId) || null,
           renderHealth: collectRenderHealthSnapshot(
             [session],
-            activeSessionId,
+            shownAgentId,
             getActivePaneIdForSession,
             getPaneText,
             getPaneSize,
@@ -3725,8 +3319,8 @@ export function useUiAutomationBridge({
       case 'seed_document_get_state': {
         const scope = typeof payload.selector === 'string' && payload.selector
           ? payload.selector
-          : '.workspace-dock-tile';
-        // A workspace can hold more than one seed tile, and an older one is
+          : '.desktop-dock-tile';
+        // A desktop can hold more than one seed tile, and an older one is
         // still mounted: name the seed rather than taking the first tile.
         const seedId = typeof payload.seedId === 'string' ? payload.seedId : '';
         return collectSeedDocumentState(scope, seedId);
@@ -3787,7 +3381,7 @@ export function useUiAutomationBridge({
       case 'automations_get_state':
         return collectAutomationsUiState();
       case 'automations_toggle_enabled': {
-        const definitionId = typeof payload.definitionId === 'string' ? payload.definitionId : '';
+        const definitionId = typeof payload.definitionId === 'number' ? payload.definitionId : 0;
         if (!definitionId) {
           throw new Error('automations_toggle_enabled requires definitionId');
         }
@@ -3796,7 +3390,7 @@ export function useUiAutomationBridge({
         return collectAutomationsUiState();
       }
       case 'automations_run_now': {
-        const definitionId = typeof payload.definitionId === 'string' ? payload.definitionId : '';
+        const definitionId = typeof payload.definitionId === 'number' ? payload.definitionId : 0;
         if (!definitionId) {
           throw new Error('automations_run_now requires definitionId');
         }
@@ -3805,7 +3399,7 @@ export function useUiAutomationBridge({
         return collectAutomationsUiState();
       }
       case 'automations_select_definition': {
-        const definitionId = typeof payload.definitionId === 'string' ? payload.definitionId : '';
+        const definitionId = typeof payload.definitionId === 'number' ? payload.definitionId : 0;
         if (!definitionId) {
           throw new Error('automations_select_definition requires definitionId');
         }
@@ -3814,7 +3408,7 @@ export function useUiAutomationBridge({
         return collectAutomationsUiState();
       }
       case 'automation_form_open': {
-        const definitionId = typeof payload.definitionId === 'string' ? payload.definitionId : '';
+        const definitionId = typeof payload.definitionId === 'number' ? payload.definitionId : 0;
         clickTestId(definitionId ? `automation-edit-${definitionId}` : 'automation-new');
         await settleUi(3);
         return collectAutomationFormUiState();
@@ -3890,7 +3484,7 @@ export function useUiAutomationBridge({
       case 'capture_structured_snapshot':
         return collectVisualSnapshot(
           sessions,
-          activeSessionId,
+          shownAgentId,
           getActivePaneIdForSession,
           getPaneText,
           getPaneSize,
@@ -3906,7 +3500,7 @@ export function useUiAutomationBridge({
       case 'capture_render_health':
         return collectRenderHealthSnapshot(
           sessions,
-          activeSessionId,
+          shownAgentId,
           getActivePaneIdForSession,
           getPaneText,
           getPaneSize,
@@ -3928,7 +3522,7 @@ export function useUiAutomationBridge({
         await settleUi(settleFrames);
         return capturePerfSnapshot(
           sessions,
-          activeSessionId,
+          shownAgentId,
           getActivePaneIdForSession,
           { includeMemory, sessionIds },
         );
@@ -3937,7 +3531,7 @@ export function useUiAutomationBridge({
         clearPtyPerfSnapshot();
         return { ok: true };
       case 'benchmark_pty_transport': {
-        const sessionId = typeof payload.sessionId === 'string' ? payload.sessionId : activeSessionId;
+        const sessionId = typeof payload.sessionId === 'string' ? payload.sessionId : shownAgentId;
         const session = sessions.find((entry) => entry.id === sessionId);
         if (!session || !sessionId) {
           throw new Error('Session not found');
@@ -3956,13 +3550,15 @@ export function useUiAutomationBridge({
           ? Math.max(0, payload.interChunkDelayMs)
           : 0;
         const runtimeId =
-          session.workspace.agents.find((entry) => entry.id === paneId)?.runtimeId ||
+          session.desktop.agents.find((entry) => entry.id === paneId)?.runtimeId ||
           `bench:${paneId}`;
         const bytes = buildBenchmarkBytes(chunkBytes, benchmarkPayload);
         const base64Payload = encodeBytesToBase64(bytes);
 
         selectSession(sessionId);
-        focusPane(sessionId, paneId);
+
+        await selectionShown({ kind: 'session', sessionId });
+        await focusPane(sessionId, paneId);
         await settleUi(2);
         if (!resetSessionPaneTerminal(sessionId, paneId)) {
           throw new Error(`Pane terminal not ready for ${paneId}`);
@@ -4167,8 +3763,8 @@ export function useUiAutomationBridge({
         throw new Error(`Unknown automation action: ${request.action}`);
     }
   }, [
-    activeSessionId,
-    closePane,
+    shownAgentId,
+    closePaneSession,
     connectionError,
     createSession,
     closeSession,
@@ -4187,7 +3783,7 @@ export function useUiAutomationBridge({
     getPanePlacementState,
     getPaneVisibleContent,
     getPaneVisibleStyleSummary,
-    moveWorkspaceLeafToWorkspace,
+    moveDesktopLeaf,
     openAutomationsPanel,
     openDockPanel,
     openShortcutEditor,
@@ -4198,61 +3794,12 @@ export function useUiAutomationBridge({
     drainSessionPaneTerminal,
     scrollSessionPaneToTop,
     selectSession,
-    selectWorkspace,
+    selectDesktop,
     sendRuntimeInput,
     sessions,
     setSetting,
     splitPane,
   ]);
 
-  const handleAutomationRequestRef = useRef(handleAutomationRequest);
-  // The dispatcher dereferences this two frames after the request arrives, so only a committed
-  // render may publish here: a concurrent render React discards must not become the handler.
-  useLayoutEffect(() => {
-    handleAutomationRequestRef.current = handleAutomationRequest;
-  }, [handleAutomationRequest]);
-
-  useEffect(() => {
-    // Runtime gate injected by the Rust shell; the rule lives in
-    // app/src-tauri/src/instance.rs::automation_enabled.
-    const automationEnabled =
-      typeof window !== 'undefined' && (window as { __ATTN_AUTOMATION_ENABLED?: boolean }).__ATTN_AUTOMATION_ENABLED === true;
-    if (!isTauri() || !automationEnabled) {
-      return;
-    }
-
-    void emit(UI_AUTOMATION_READY_EVENT, { ready: true });
-    const unlistenPromise = listen<AutomationRequest>(UI_AUTOMATION_REQUEST_EVENT, async (event) => {
-      const request = event.payload;
-      // The automation server broadcasts to ALL webview windows and resolves on the first response,
-      // so exactly one listener answers; present_window_* belongs to usePresentAutomationBridge.
-      if (isPresentWindowAction(request.action)) {
-        return;
-      }
-      let response: AutomationResponse;
-      try {
-        // Settle before reading the ref: the wait spans renders, so a handler picked
-        // beforehand would answer with a settled DOM and the props of an older render.
-        await settleBeforeBridgeRequest(request.action);
-        const result = await handleAutomationRequestRef.current(request);
-        response = {
-          request_id: request.request_id,
-          ok: true,
-          result,
-        };
-      } catch (error) {
-        response = {
-          request_id: request.request_id,
-          ok: false,
-          error: error instanceof Error ? error.message : String(error),
-        };
-      }
-      await emit(UI_AUTOMATION_RESPONSE_EVENT, response);
-    });
-
-    return () => {
-      disarmNativePointerWitness();
-      void unlistenPromise.then((unlisten) => unlisten());
-    };
-  }, []);
+  useAutomationRequestListener(handleAutomationRequest);
 }

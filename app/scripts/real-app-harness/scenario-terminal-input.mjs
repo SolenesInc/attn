@@ -155,35 +155,12 @@ async function waitForExactLine(client, sessionId, paneId, expected, minimum = 1
   );
 }
 
-async function waitForGrid(client, predicate, description, timeoutMs = 10_000) {
-  const deadline = Date.now() + timeoutMs;
-  let last = null;
-  while (Date.now() < deadline) {
-    last = await client.request('grid_get_state').catch(() => null);
-    if (predicate(last)) return last;
-    await delay(150);
-  }
-  throw new Error(`Timed out waiting for ${description}. Last grid state: ${JSON.stringify(last)}`);
-}
-
-async function waitForGridText(client, runtimeId, predicate, description, timeoutMs = 15_000) {
-  const deadline = Date.now() + timeoutMs;
-  let last = '';
-  while (Date.now() < deadline) {
-    const response = await client.request('grid_get_tile_text', { runtimeId }).catch(() => null);
-    last = response?.text || '';
-    if (predicate(last)) return last;
-    await delay(150);
-  }
-  throw new Error(`Timed out waiting for ${description}. Last grid text:\n${last}`);
-}
-
 async function waitForZoom(client, sessionId, expectedPaneId, description, timeoutMs = 8_000) {
   const deadline = Date.now() + timeoutMs;
   let last = null;
   while (Date.now() < deadline) {
     const state = await client.request('get_session_ui_state', { sessionId });
-    last = state?.workspace?.view?.zoomedPaneId ?? null;
+    last = state?.desktop?.view?.zoomedPaneId ?? null;
     if (last === expectedPaneId) return;
     await delay(120);
   }
@@ -203,7 +180,7 @@ async function main() {
     prefix: 'terminal-input',
     metadata: {
       agent: 'shell',
-      focus: 'background browser keyboard, diagnostic report, shortcut, IME, Kitty, and zoomed-grid input through libghostty',
+      focus: 'background browser keyboard, diagnostic report, shortcut, IME, and Kitty input through libghostty',
     },
   });
   const client = new UiAutomationClient(options);
@@ -219,8 +196,8 @@ async function main() {
   runner.registerCleanup('quit_app', () => client.quitApp());
   runner.registerCleanup('close_session_panes', async () => {
     if (!sessionId) return;
-    const workspace = await client.request('get_workspace', { sessionId }).catch(() => null);
-    for (const current of workspace?.panes || []) {
+    const desktop = await client.request('get_desktop', { sessionId }).catch(() => null);
+    for (const current of desktop?.panes || []) {
       await client.request('close_pane', { sessionId, paneId: current.paneId }).catch(() => {});
     }
   });
@@ -352,9 +329,9 @@ async function main() {
         sessionWaitMs: 30_000,
       });
       await client.request('select_session', { sessionId });
-      const workspace = await client.request('get_workspace', { sessionId });
-      pane = workspace?.panes?.[0] ?? null;
-      runner.assert(Boolean(pane?.paneId && pane?.runtimeId), `No live shell pane: ${JSON.stringify(workspace)}`);
+      const desktop = await client.request('get_desktop', { sessionId });
+      pane = desktop?.panes?.[0] ?? null;
+      runner.assert(Boolean(pane?.paneId && pane?.runtimeId), `No live shell pane: ${JSON.stringify(desktop)}`);
       await waitForPaneVisible(client, sessionId, pane.paneId, 20_000);
       await waitForPaneAttached(client, sessionId, pane.paneId, 20_000);
       await waitForPaneShellReady(client, sessionId, pane.paneId, {
@@ -451,32 +428,22 @@ async function main() {
         }
         if (!found) throw new Error('CLI input dump did not capture the suppressed key');
 
-        await pressShortcut('ui.actionMenu');
+        await pressShortcut('ui.commandPalette');
         await client.request('dom_type', {
-          selector: '.action-menu input', text: 'diagnostic report',
+          selector: '.unified-palette-input', text: '>diagnostic report',
         });
-        const menu = await client.request('dom_text', { selector: '.action-menu' });
+        const menu = await client.request('dom_text', { selector: '.unified-palette' });
         runner.assert(menu.text.includes('Create diagnostic report'), 'Diagnostic report action is searchable');
         const reportsBefore = diagnosticReports(downloadsDir);
         fs.mkdirSync(downloadsDir, { recursive: true });
-        await pressKey(KEY.ENTER, {}, '.action-menu input');
+        await pressKey(KEY.ENTER, {}, '.unified-palette-input');
         const prompt = await client.request('dom_text', { selector: '.diagnostic-report-sheet' });
         runner.assert(prompt.text.includes('Included automatically'), 'Report explains its automatic metadata');
         runner.assert(prompt.text.includes('Optional. Output may contain private text or secrets.'), 'Report warns before including pane output');
         runner.assert(prompt.text.includes(pane.paneId) === false, 'Report does not expose internal pane ids in its consent UI');
         if (process.env.ATTN_HARNESS_RECORD === '1') await delay(1_000);
         await client.request('dom_click', { selector: '.diagnostic-report-actions .primary' });
-        const saveDeadline = Date.now() + 10_000;
-        let saved = false;
-        while (Date.now() < saveDeadline) {
-          const notice = await client.request('dom_text', { selector: '.input-diagnostics-copied' }).catch(() => null);
-          if (notice?.text === 'Diagnostic report saved') {
-            saved = true;
-            break;
-          }
-          await delay(100);
-        }
-        if (!saved) throw new Error('Diagnostic report save did not report success');
+        await client.request('dom_wait', { selector: '.toast-row', textIncludes: 'Diagnostic report saved', timeoutMs: 10_000 });
         generatedReportPath = await waitForDiagnosticReport(downloadsDir, reportsBefore);
         const serialized = fs.readFileSync(generatedReportPath, 'utf8');
         if (serialized.includes(privateText)) throw new Error('Diagnostic report exposed composition text');
@@ -544,37 +511,6 @@ async function main() {
       await client.request('set_setting', { key: 'keybindings_config', value: '' });
     });
 
-    await runner.step('zoomed_grid_input', async () => {
-      await focusPane();
-      await pressShortcut('view.toggleGrid');
-      await waitForGrid(client, (state) => state?.active === true, 'grid to open');
-      await client.request('grid_zoom', { runtimeId: pane.runtimeId });
-      await waitForGrid(client, (state) => state?.zoomedId === pane.runtimeId, 'shell tile to zoom');
-      await client.request('dom_focus', { selector: '.grid-view-stage' });
-
-      const token = `GRID_INPUT_${runner.runId}`;
-      await pasteText(`echo ${token}`, '.grid-view-stage');
-      await pressKey(KEY.ENTER, {}, '.grid-view-stage');
-      let text = await waitForGridText(
-        client,
-        pane.runtimeId,
-        (value) => exactLineCount(value, token) >= 1,
-        'text input to reach the zoomed grid tile',
-      );
-      const before = exactLineCount(text, token);
-      await pressKey(KEY.UP, {}, '.grid-view-stage');
-      await pressKey(KEY.ENTER, {}, '.grid-view-stage');
-      text = await waitForGridText(
-        client,
-        pane.runtimeId,
-        (value) => exactLineCount(value, token) >= before + 1,
-        'Up history input to reach the zoomed grid tile',
-      );
-      await pressShortcut('view.toggleGrid', '.grid-view-stage');
-      await waitForGrid(client, (state) => state?.active === false, 'grid to close');
-      runner.assert(exactLineCount(text, token) >= before + 1, 'grid history command did not rerun');
-    });
-
     const result = await runner.finishSuccess({
       sessionId,
       paneId: pane.paneId,
@@ -591,7 +527,6 @@ async function main() {
         'bracketed-unicode-paste',
         'image-paste',
         'shortcut-chord-consumption',
-        'zoomed-grid-input',
       ],
     });
     console.log('[verify] PASS — first-party terminal input matched packaged PTY bytes and state.');

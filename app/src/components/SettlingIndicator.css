@@ -15,7 +15,7 @@
   -webkit-user-select: none;
 }
 
-/* ---- Pane header chip: inline, right-aligned inside .workspace-pane-header ---- */
+/* ---- Pane header chip: inline, right-aligned inside .desktop-pane-header ---- */
 
 .settling-header {
   display: inline-flex;

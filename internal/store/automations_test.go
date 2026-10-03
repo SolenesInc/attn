@@ -12,7 +12,7 @@ func markAutomationRunDeliveredForTest(s *Store, id, resolved string, now time.T
 	return err
 }
 
-func baselineGitHubReviewAutomation(t *testing.T, s *Store, definitionID, host string, at time.Time) {
+func baselineGitHubReviewAutomation(t *testing.T, s *Store, definitionID int, host string, at time.Time) {
 	t.Helper()
 	if candidates, err := s.ReconcileAutomationReviewRequests(definitionID, host, nil, at); err != nil || len(candidates) != 0 {
 		t.Fatalf("establish review automation baseline: candidates=%#v err=%v", candidates, err)
@@ -22,7 +22,8 @@ func baselineGitHubReviewAutomation(t *testing.T, s *Store, definitionID, host s
 func TestGitHubReviewLegacyCycleOccurrenceUsesPayloadHeadWithoutReplay(t *testing.T) {
 	s := New()
 	now := time.Date(2026, 8, 19, 12, 0, 0, 0, time.UTC)
-	def, err := s.UpsertAutomationDefinition("review", "Review", `{}`, now)
+	profile, _ := s.MostRecentlyUsedProfile()
+	def, err := s.UpsertAutomationDefinition(0, "Review", `{}`, profile.ID, now)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -35,7 +36,7 @@ func TestGitHubReviewLegacyCycleOccurrenceUsesPayloadHeadWithoutReplay(t *testin
 	if _, err := s.ReconcileAutomationReviewRequests(def.ID, "github.com", []string{subject}, now); err != nil {
 		t.Fatal(err)
 	}
-	run, created, err := s.ClaimGitHubReviewAutomationRun(def.ID, subject, 1, def.Revision, `{}`, `{}`, now, AutomationRunReservation{RunID: "run-1", OccurrenceID: "occ-1", SeedID: "ticket-1", SessionID: "session-1", WorkspaceID: "workspace-1", PaneID: "pane-1"})
+	run, created, err := s.ClaimGitHubReviewAutomationRun(def.ID, subject, 1, def.Revision, `{}`, `{}`, now, AutomationRunReservation{RunID: "run-1", OccurrenceID: "occ-1", SeedID: "ticket-1", SessionID: "session-1"})
 	if err != nil || !created {
 		t.Fatalf("legacy claim created=%v err=%v", created, err)
 	}
@@ -64,8 +65,9 @@ func TestGitHubReviewLegacyCycleOccurrenceUsesPayloadHeadWithoutReplay(t *testin
 func TestSetAutomationEnabledReenableBaselinesCurrentReviewDemand(t *testing.T) {
 	s := New()
 	now := time.Date(2026, 7, 19, 12, 0, 0, 0, time.UTC)
-	const spec = `{"id":"review"}`
-	def, err := s.UpsertAutomationDefinition("review", "Review", spec, now)
+	const spec = `{"id":1}`
+	profile, _ := s.MostRecentlyUsedProfile()
+	def, err := s.UpsertAutomationDefinition(0, "Review", spec, profile.ID, now)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -74,7 +76,7 @@ func TestSetAutomationEnabledReenableBaselinesCurrentReviewDemand(t *testing.T) 
 	if _, err := s.ReconcileAutomationReviewRequests(def.ID, "github.com", []string{subject}, now); err != nil {
 		t.Fatal(err)
 	}
-	ids := AutomationRunReservation{RunID: "run-1", OccurrenceID: "occ-1", SeedID: "ticket-1", SessionID: "session-1", WorkspaceID: "workspace-1", PaneID: "pane-1"}
+	ids := AutomationRunReservation{RunID: "run-1", OccurrenceID: "occ-1", SeedID: "ticket-1", SessionID: "session-1"}
 	if _, created, err := s.ClaimGitHubReviewAutomationRun(def.ID, subject, 1, def.Revision, `{}`, `{}`, now, ids); err != nil || !created {
 		t.Fatalf("initial claim created=%v err=%v", created, err)
 	}

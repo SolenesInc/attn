@@ -13,7 +13,7 @@ import {
   waitForPaneAttached,
   waitForPaneShellReady,
   waitForPaneVisible,
-  waitForSessionWorkspace,
+  waitForSessionDesktop,
 } from './scenarioAssertions.mjs';
 import { UiAutomationClient } from './uiAutomationClient.mjs';
 import { createScenarioRunner } from './scenarioRunner.mjs';
@@ -33,16 +33,16 @@ function parseArgs(argv) {
 }
 
 async function waitForPaneCount(client, sessionId, count, description, timeoutMs = 30_000) {
-  return waitForSessionWorkspace(
+  return waitForSessionDesktop(
     client,
     sessionId,
-    (workspace) => (workspace?.panes || []).length === count && (workspace?.panes || []).every((pane) => pane.runtimeId),
+    (desktop) => (desktop?.panes || []).length === count && (desktop?.panes || []).every((pane) => pane.runtimeId),
     description,
     timeoutMs,
   );
 }
 
-async function waitForShellWorkspace(client, observer, cwd, label) {
+async function waitForShellDesktop(client, observer, cwd, label) {
   fs.mkdirSync(cwd, { recursive: true });
   const sessionId = await createSessionAndWaitForInitialPane({
     client,
@@ -53,8 +53,8 @@ async function waitForShellWorkspace(client, observer, cwd, label) {
     waitForInitialPaneVisible: false,
     sessionWaitMs: 30_000,
   });
-  const workspace = await waitForPaneCount(client, sessionId, 1, `initial pane for ${label}`);
-  const pane = workspace.panes[0];
+  const desktop = await waitForPaneCount(client, sessionId, 1, `initial pane for ${label}`);
+  const pane = desktop.panes[0];
   await client.request('select_session', { sessionId });
   await waitForPaneVisible(client, sessionId, pane.paneId, 20_000);
   await waitForPaneAttached(client, sessionId, pane.paneId, 20_000);
@@ -100,10 +100,10 @@ async function waitForPaneTextContains(client, sessionId, paneId, needle, descri
   throw new Error(`Timed out waiting for ${description}. Last pane text tail:\n${lastText.slice(-400)}`);
 }
 
-async function closeWorkspacePanes(client, sessionId) {
+async function closeDesktopPanes(client, sessionId) {
   for (let attempt = 0; attempt < 10; attempt += 1) {
-    const workspace = await client.request('get_workspace', { sessionId }).catch(() => null);
-    const pane = workspace?.panes?.[0];
+    const desktop = await client.request('get_desktop', { sessionId }).catch(() => null);
+    const pane = desktop?.panes?.[0];
     if (!pane) {
       return;
     }
@@ -116,7 +116,7 @@ async function closeExistingSessions(client, sessionRootDir) {
   const initial = await client.request('get_state');
   const harnessSessions = (initial.sessions || []).filter((session) => session.cwd?.startsWith(sessionRootDir));
   for (const session of harnessSessions) {
-    await closeWorkspacePanes(client, session.id).catch(() => {});
+    await closeDesktopPanes(client, session.id).catch(() => {});
   }
 }
 
@@ -164,7 +164,7 @@ async function main() {
   runner.registerCleanup('wait_no_sessions_under_dir', () => waitForNoSessionsUnderDir(client, runner.sessionDir).catch(() => {}));
   runner.registerCleanup('close_created_session_panes', async () => {
     for (const sessionId of [...createdSessionIds].reverse()) {
-      await closeWorkspacePanes(client, sessionId).catch(() => {});
+      await closeDesktopPanes(client, sessionId).catch(() => {});
     }
   });
 
@@ -176,7 +176,7 @@ async function main() {
     });
 
     const clean = await runner.step('clean_exit_auto_closes', async () => {
-      const session = await waitForShellWorkspace(client, observer, path.join(runner.sessionDir, 'clean'), `autoclose-clean-${runner.runId}`);
+      const session = await waitForShellDesktop(client, observer, path.join(runner.sessionDir, 'clean'), `autoclose-clean-${runner.runId}`);
       createdSessionIds.push(session.sessionId);
       await client.request('write_pane', { sessionId: session.sessionId, paneId: session.pane.paneId, text: 'exit', submit: true });
       await waitForSessionAbsentFromDaemon(observer, session.sessionId, 'clean-exit session unregistered from daemon');
@@ -186,7 +186,7 @@ async function main() {
     });
 
     const failed = await runner.step('nonzero_exit_stays_open', async () => {
-      const session = await waitForShellWorkspace(client, observer, path.join(runner.sessionDir, 'failed'), `autoclose-failed-${runner.runId}`);
+      const session = await waitForShellDesktop(client, observer, path.join(runner.sessionDir, 'failed'), `autoclose-failed-${runner.runId}`);
       createdSessionIds.push(session.sessionId);
       await client.request('write_pane', { sessionId: session.sessionId, paneId: session.pane.paneId, text: 'exit 1', submit: true });
       await waitForPaneTextContains(
@@ -224,7 +224,7 @@ async function main() {
     process.exitCode = 1;
   } finally {
     for (const sessionId of createdSessionIds.reverse()) {
-      await closeWorkspacePanes(client, sessionId).catch(() => {});
+      await closeDesktopPanes(client, sessionId).catch(() => {});
     }
     await waitForNoSessionsUnderDir(client, runner.sessionDir).catch(() => {});
     await client.quitApp().catch(() => {});

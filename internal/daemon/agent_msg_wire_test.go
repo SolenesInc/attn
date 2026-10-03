@@ -321,8 +321,8 @@ func TestMailForAMemberWhoseLaunchFailsWaitsForItsNextDay(t *testing.T) {
 
 func paneSessions(w *world) []string {
 	var sessions []string
-	for _, workspace := range w.App().Initial.Workspaces {
-		sessions = append(sessions, delegatePaneSessions(workspace)...)
+	for _, desktop := range w.App().Initial.Desktops {
+		sessions = append(sessions, delegatePaneSessions(desktop)...)
 	}
 	slices.Sort(sessions)
 	return sessions

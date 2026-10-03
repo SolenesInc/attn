@@ -6,22 +6,19 @@ test('wake forces a full paint of visible panes', async ({ page, daemon }) => {
   await page.waitForSelector('.dashboard');
 
   const sessionId = 's-wake-paint';
-  const workspaceId = 'workspace-wake-paint';
-  await page.evaluate(({ sessionId, workspaceId }) => {
+  await page.evaluate(({ sessionId }) => {
     window.__TEST_INJECT_SESSION?.({
       id: sessionId,
       label: 'Wake paint',
       state: 'working',
       cwd: '/tmp/test/wake-paint',
-      workspaceId,
     });
-  }, { sessionId, workspaceId });
+  }, { sessionId });
   await daemon.injectSession({
     id: sessionId,
     label: 'Wake paint',
     state: 'working',
     directory: '/tmp/test/wake-paint',
-    workspace_id: workspaceId,
   });
   await page.locator(`[data-testid="session-${sessionId}"]`).click();
   await expect(page.locator(`[data-pane-session-id="${sessionId}"] .terminal-container`)).toBeVisible();

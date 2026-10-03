@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"strconv"
 	"strings"
 
 	"github.com/victorarias/attn/internal/automation"
@@ -15,11 +16,11 @@ import (
 func automationDefinitionYAML(def store.AutomationDefinition) (string, error) {
 	var spec automation.DefinitionSpec
 	if err := json.Unmarshal([]byte(def.SpecJSON), &spec); err != nil {
-		return "", fmt.Errorf("parse stored definition %s: %w", def.ID, err)
+		return "", fmt.Errorf("parse stored definition %d: %w", def.ID, err)
 	}
 	rendered, err := automation.MarshalDefinitionYAML(spec)
 	if err != nil {
-		return "", fmt.Errorf("render definition %s: %w", def.ID, err)
+		return "", fmt.Errorf("render definition %d: %w", def.ID, err)
 	}
 	return string(rendered), nil
 }
@@ -58,7 +59,7 @@ func (d *Daemon) actionAutomationDefinitionGet(msg *protocol.AutomationDefinitio
 		Event:     protocol.EventAutomationDefinitionResult,
 		RequestID: msg.RequestID,
 	}
-	if msg.DefinitionID == "" {
+	if msg.DefinitionID == 0 {
 		template, err := automation.StarterTemplateYAML()
 		if err != nil {
 			result.Error = protocol.Ptr(err.Error())
@@ -137,7 +138,7 @@ func (d *Daemon) actionAutomationApply(ctx context.Context, msg *protocol.Automa
 		Event:     protocol.EventAutomationApplyResult,
 		RequestID: msg.RequestID,
 	}
-	definition, err := d.automationApplyWithGuards(ctx, msg.DefinitionYaml, msg.ExpectedID, msg.ExpectedRevision)
+	definition, err := d.automationApplyWithGuards(ctx, msg.DefinitionYaml, protocol.Deref(msg.ProfileID), msg.ExpectedID, msg.ExpectedRevision, &launchDesktopWrite{ref: msg.LaunchDesktop, name: msg.LaunchDesktopName, setting: msg.LaunchDesktopSetting})
 	if err != nil {
 		result.Error = protocol.Ptr(err.Error())
 		var refusal *automationRefusal
@@ -232,11 +233,19 @@ func (d *Daemon) actionAutomationRun(ctx context.Context, msg *protocol.Automati
 
 func (d *Daemon) buildAutomationDefinitionSummary(def store.AutomationDefinition, lastRun *store.AutomationRunWithOccurrenceKey) protocol.AutomationDefinitionSummary {
 	summary := protocol.AutomationDefinitionSummary{
+		ProfileID: def.ProfileID,
 		ID:        def.ID,
 		Name:      def.Name,
 		Enabled:   def.Enabled,
 		Revision:  def.Revision,
 		UpdatedAt: string(protocol.NewTimestamp(def.UpdatedAt)),
+	}
+	if item, err := d.store.LaunchDesktopItem("automation", strconv.Itoa(def.ID)); err == nil {
+		setting := protocolLaunchItem(item).Setting
+		summary.LaunchDesktop = &setting
+		summary.ProfileName = protocol.Ptr(item.ProfileName)
+	} else {
+		d.logf("automation launch desktop %d: %v", def.ID, err)
 	}
 	if lastRun != nil {
 		runSummary := d.automationRunSummary(*lastRun)
@@ -244,7 +253,7 @@ func (d *Daemon) buildAutomationDefinitionSummary(def store.AutomationDefinition
 	}
 	var spec automation.DefinitionSpec
 	if err := json.Unmarshal([]byte(def.SpecJSON), &spec); err != nil {
-		d.logf("automation definition summary parse %s: %v", def.ID, err)
+		d.logf("automation definition summary parse %d: %v", def.ID, err)
 		return summary
 	}
 	summary.TriggerType = spec.Trigger.Type
@@ -262,7 +271,6 @@ func (d *Daemon) automationRunSummary(run store.AutomationRunWithOccurrenceKey) 
 		State:         run.State,
 		SeedID:        protocol.Ptr(run.SeedID),
 		SessionID:     protocol.Ptr(run.SessionID),
-		PaneID:        protocol.Ptr(run.PaneID),
 		CreatedAt:     string(protocol.NewTimestamp(run.CreatedAt)),
 		UpdatedAt:     string(protocol.NewTimestamp(run.UpdatedAt)),
 		OccurrenceKey: protocol.Ptr(run.OccurrenceKey),

@@ -12,6 +12,7 @@ import (
 	agentdriver "github.com/victorarias/attn/internal/agent"
 	"github.com/victorarias/attn/internal/garden"
 	attngit "github.com/victorarias/attn/internal/git"
+	"github.com/victorarias/attn/internal/hub"
 	"github.com/victorarias/attn/internal/protocol"
 	"github.com/victorarias/attn/internal/store"
 )
@@ -21,10 +22,6 @@ const (
 	branchStateRemoteOnly = "remote_only"
 	branchStateGone       = "gone"
 	branchStateMerged     = "merged"
-
-	reopenPlaceReuse  = "reuse"
-	reopenPlaceCreate = "create"
-	reopenPlaceAdd    = "add"
 )
 
 type branchInspection struct {
@@ -46,9 +43,8 @@ type sessionReopenVerdict struct {
 	Actions        []protocol.SessionReopenAction
 	DirectoryState string
 	BranchState    string
-	WorkspaceID    string
-	WorkspacePlan  string
-	PanePlan       string
+	ProfileID      string
+	ProfileDeleted bool
 	RecreatePath   string
 	Inspection     branchInspection
 }
@@ -67,9 +63,8 @@ func (v *sessionReopenVerdict) toProtocol() *protocol.SessionReopen {
 		Reopenable:     v.Reopenable,
 		Actions:        v.Actions,
 		DirectoryState: v.DirectoryState,
-		WorkspaceID:    v.WorkspaceID,
-		WorkspacePlan:  v.WorkspacePlan,
-		PanePlan:       v.PanePlan,
+		ProfileID:      v.ProfileID,
+		ProfileDeleted: v.ProfileDeleted,
 	}
 	if out.Actions == nil {
 		out.Actions = []protocol.SessionReopenAction{}
@@ -108,65 +103,39 @@ func (d *Daemon) reopenExecutionFromLedger(entry *protocol.SessionLedgerEntry) g
 	return execution
 }
 
-func (d *Daemon) planReopenPlacement(verdict *sessionReopenVerdict) {
-	workspaceID := strings.TrimSpace(verdict.Entry.WorkspaceID)
-	if workspaceID != "" && d.store.GetWorkspace(workspaceID) != nil {
-		verdict.WorkspaceID = workspaceID
-		verdict.WorkspacePlan = reopenPlaceReuse
-	} else {
-		verdict.WorkspaceID = reopenWorkspaceID(verdict.SessionID)
-		verdict.WorkspacePlan = reopenPlaceCreate
-		if d.store.GetWorkspace(verdict.WorkspaceID) != nil {
-			verdict.WorkspacePlan = reopenPlaceReuse
-		}
+func (d *Daemon) planReopenProfile(verdict *sessionReopenVerdict) {
+	profileID, err := d.store.SessionProfileID(verdict.SessionID)
+	if err != nil {
+		d.logf("reopen: reading the profile of session %s: %v", verdict.SessionID, err)
 	}
-	verdict.PanePlan = reopenPlaceAdd
-	if d.workspaceLayoutHasSessionPane(verdict.WorkspaceID, verdict.SessionID) {
-		verdict.PanePlan = reopenPlaceReuse
+	verdict.ProfileID = profileID
+	if profileID == "" {
+		verdict.ProfileDeleted = true
+		return
 	}
-}
-
-func reopenWorkspaceID(sessionID string) string {
-	return "workspace-" + sessionID
-}
-
-func (d *Daemon) workspaceLayoutHasSessionPane(workspaceID, sessionID string) bool {
-	holder, paneID, ok := d.store.FindWorkspaceLayoutPaneBySessionID(sessionID)
-	return ok && paneID != "" && holder == workspaceID
+	profile, err := d.store.GetProfile(profileID)
+	verdict.ProfileDeleted = err != nil || profile.Deleted()
 }
 
 func decideReopenHost(verdict *sessionReopenVerdict, endpoints []protocol.EndpointInfo) bool {
 	if strings.TrimSpace(verdict.Execution.HostKind) != garden.HostRemote {
 		return true
 	}
-	name, reachable := endpointReachable(endpoints, strings.TrimSpace(verdict.Execution.EndpointID))
-	if reachable {
-		verdict.Reason = fmt.Sprintf(
-			"session %s ran on %s; its ledger row lives on that daemon, so reopen it there",
-			verdict.SessionID, name)
-		return false
-	}
-	verdict.Reason = fmt.Sprintf(
-		"session %s ran on %s, which is not reachable now; retry when it is",
-		verdict.SessionID, name)
+	name := endpointName(endpoints, strings.TrimSpace(verdict.Execution.EndpointID))
+	verdict.Reason = fmt.Sprintf("session %s ran on %s. %s", verdict.SessionID, name, hub.UnsupportedReason)
 	return false
 }
 
-func endpointReachable(endpoints []protocol.EndpointInfo, endpointID string) (string, bool) {
-	name := endpointID
-	if name == "" {
-		name = "another host"
-	}
+func endpointName(endpoints []protocol.EndpointInfo, endpointID string) string {
 	for _, endpoint := range endpoints {
-		if endpoint.ID != endpointID {
-			continue
+		if endpoint.ID == endpointID && strings.TrimSpace(endpoint.Name) != "" {
+			return strings.TrimSpace(endpoint.Name)
 		}
-		if named := strings.TrimSpace(endpoint.Name); named != "" {
-			name = named
-		}
-		return name, endpoint.Status == "connected"
 	}
-	return name, false
+	if endpointID != "" {
+		return endpointID
+	}
+	return "another host"
 }
 
 func (d *Daemon) endpointInfos() []protocol.EndpointInfo {
@@ -369,7 +338,7 @@ func reopenBranchWarning(ctx context.Context, gitView reopenGit, execution garde
 
 type sessionReopenOutcome struct {
 	SessionID       string
-	WorkspaceID     string
+	ProfileID       string
 	Directory       string
 	Action          protocol.SessionReopenAction
 	AlreadyRunning  bool
@@ -412,7 +381,7 @@ func (d *Daemon) reopenSessionProtected(
 	if verdict.Live {
 		return &sessionReopenOutcome{
 			SessionID:      sessionID,
-			WorkspaceID:    entry.WorkspaceID,
+			ProfileID:      verdict.ProfileID,
 			Directory:      entry.Directory,
 			Action:         protocol.SessionReopenActionReopen,
 			AlreadyRunning: true,
@@ -454,11 +423,15 @@ func (d *Daemon) performReopenLocked(
 	action protocol.SessionReopenAction,
 	directory string,
 ) (*sessionReopenOutcome, error) {
+	profileID := verdict.ProfileID
+	if _, err := d.liveLaunchProfile(profileID); err != nil {
+		return nil, fmt.Errorf("reopen %s: %w", verdict.SessionID, err)
+	}
 	plan := sessionReopenPlan{
-		SessionID:   verdict.SessionID,
-		Directory:   verdict.Execution.Cwd,
-		Title:       verdict.Entry.Label,
-		WorkspaceID: verdict.WorkspaceID,
+		SessionID: verdict.SessionID,
+		Directory: verdict.Execution.Cwd,
+		Title:     verdict.Entry.Label,
+		ProfileID: profileID,
 	}
 	rollback := d.newDelegationRollback()
 	created := ""
@@ -507,7 +480,7 @@ func (d *Daemon) performReopenLocked(
 	}
 	return &sessionReopenOutcome{
 		SessionID:       outcome.SessionID,
-		WorkspaceID:     outcome.WorkspaceID,
+		ProfileID:       outcome.ProfileID,
 		Directory:       plan.Directory,
 		Action:          action,
 		WorktreeCreated: created,
@@ -632,14 +605,14 @@ type sessionReopenPlan struct {
 	SessionID         string
 	Directory         string
 	Title             string
-	WorkspaceID       string
+	ProfileID         string
 	InitialPrompt     string
 	FreshConversation bool
 }
 
 type sessionRuntimeReopened struct {
 	SessionID      string
-	WorkspaceID    string
+	ProfileID      string
 	AlreadyRunning bool
 }
 
@@ -692,7 +665,7 @@ func (d *Daemon) reopenSessionRuntimeProtected(
 		}
 		rollback.abandon()
 		return &sessionRuntimeReopened{
-			SessionID: plan.SessionID, WorkspaceID: entry.WorkspaceID, AlreadyRunning: true,
+			SessionID: plan.SessionID, ProfileID: priorSession.ProfileID, AlreadyRunning: true,
 		}, nil
 	}
 	intent, ok := d.store.LaunchIntent(plan.SessionID)
@@ -714,9 +687,14 @@ func (d *Daemon) reopenSessionRuntimeProtected(
 	if strings.TrimSpace(plan.Title) == "" {
 		plan.Title = entry.Label
 	}
-	workspaceID := strings.TrimSpace(plan.WorkspaceID)
-	if workspaceID == "" {
-		workspaceID = reopenWorkspaceID(plan.SessionID)
+	profileID := strings.TrimSpace(plan.ProfileID)
+	if profileID == "" {
+		if profileID, err = d.store.SessionProfileID(plan.SessionID); err != nil {
+			return fail(err)
+		}
+	}
+	if _, err := d.liveLaunchProfile(profileID); err != nil {
+		return fail(fmt.Errorf("reopen %s: %w", plan.SessionID, err))
 	}
 
 	d.waitForSessionTeardown(plan.SessionID)
@@ -737,40 +715,13 @@ func (d *Daemon) reopenSessionRuntimeProtected(
 		rollback.onConversationForgotten(plan.SessionID, prior)
 	}
 
-	if d.store.GetWorkspace(workspaceID) == nil {
-		d.handleRegisterWorkspace(nil, &protocol.RegisterWorkspaceMessage{
-			Cmd:       protocol.CmdRegisterWorkspace,
-			ID:        workspaceID,
-			Title:     plan.Title,
-			Directory: directory,
-		})
-		if d.store.GetWorkspace(workspaceID) == nil {
-			return fail(fmt.Errorf("create reopen workspace"))
-		}
-		rollback.onWorkspaceCreated(workspaceID)
-	}
-
-	_, paneCreated, err := d.addWorkspaceSessionPane(&protocol.WorkspaceLayoutAddSessionPaneMessage{
-		Cmd:         protocol.CmdWorkspaceLayoutAddSessionPane,
-		WorkspaceID: workspaceID,
-		PaneID:      protocol.Ptr("pane-" + plan.SessionID),
-		SessionID:   plan.SessionID,
-		Title:       protocol.Ptr(plan.Title),
-	})
-	if err != nil {
-		return fail(fmt.Errorf("create reopen pane: %w", err))
-	}
-	if paneCreated {
-		rollback.onPaneCreated(plan.SessionID)
-	}
-
 	session := &protocol.Session{
 		ID: plan.SessionID, Label: plan.Title, Agent: protocol.SessionAgent(entry.Agent),
-		Directory: directory, WorkspaceID: workspaceID,
+		Directory: directory, ProfileID: profileID,
 	}
 	spawn := &protocol.SpawnSessionMessage{
 		Cmd: protocol.CmdSpawnSession, ID: session.ID, Cwd: session.Directory,
-		WorkspaceID: session.WorkspaceID, Agent: string(session.Agent), Cols: 80, Rows: 24,
+		ProfileID: session.ProfileID, Agent: string(session.Agent), Cols: 80, Rows: 24,
 		Label: protocol.Ptr(session.Label),
 	}
 	policy := internalSpawnPolicy{}
@@ -783,6 +734,7 @@ func (d *Daemon) reopenSessionRuntimeProtected(
 	if resumeID := strings.TrimSpace(d.store.GetResumeSessionID(plan.SessionID)); !plan.FreshConversation && resumeID != "" {
 		spawn.ResumeSessionID = protocol.Ptr(resumeID)
 	}
+	policy.launchPlacement = &launchPlacement{reopen: true}
 	spawnClient := newInternalWSClient()
 	d.handleSpawnSessionWithPolicyProtected(protection, spawnClient, spawn, policy)
 	if _, err := readInternalActionResult(spawnClient); err != nil {
@@ -803,15 +755,14 @@ func (d *Daemon) reopenSessionRuntimeProtected(
 		}
 	}
 	rollback.abandon()
-	d.logf("reopen: session %s is back in %s (workspace %s)", plan.SessionID, directory, workspaceID)
-	return &sessionRuntimeReopened{SessionID: plan.SessionID, WorkspaceID: workspaceID}, nil
+	d.logf("reopen: session %s is back in %s in profile %s", plan.SessionID, directory, profileID)
+	return &sessionRuntimeReopened{SessionID: plan.SessionID, ProfileID: profileID}, nil
 }
 
 func (r *delegationRollback) onSessionReopened(sessionID string, closed store.SessionCloseRecord) {
 	r.undo = append(r.undo, func(foregroundCleanupProtection) error {
 		r.d.terminateSession(sessionID, syscall.SIGTERM)
 		r.d.restoreSessionClose(sessionID, closed)
-		r.d.dissociateSessionFromWorkspace(sessionID)
 		return nil
 	})
 }
@@ -833,13 +784,6 @@ func (r *delegationRollback) onSessionRespawned(
 			r.d.store.SetLaunchIntent(prior.ID, priorIntent)
 		} else {
 			r.d.store.ClearLaunchIntent(prior.ID)
-		}
-		if r.d.workspaces != nil {
-			if prior.WorkspaceID == "" {
-				r.d.workspaces.dissociateSession(prior.ID)
-			} else {
-				r.d.workspaces.associateSession(prior.ID, prior.WorkspaceID, prior.Label)
-			}
 		}
 		r.d.publishFact(FactSessionReregistered, prior.ID, nil)
 		return nil
@@ -887,10 +831,10 @@ func (d *Daemon) handleSessionReopen(conn net.Conn, msg *protocol.SessionReopenM
 
 func sessionReopenResult(outcome *sessionReopenOutcome) *protocol.SessionReopenResult {
 	result := &protocol.SessionReopenResult{
-		SessionID:   outcome.SessionID,
-		WorkspaceID: outcome.WorkspaceID,
-		Directory:   outcome.Directory,
-		Action:      outcome.Action,
+		SessionID: outcome.SessionID,
+		ProfileID: outcome.ProfileID,
+		Directory: outcome.Directory,
+		Action:    outcome.Action,
 	}
 	if outcome.AlreadyRunning {
 		result.AlreadyRunning = protocol.Ptr(true)

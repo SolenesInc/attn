@@ -282,7 +282,7 @@ func TestAClearedOrEditedHarvestConditionMeetsTheMergeAsItStandsNow(t *testing.T
 
 func TestArmingASeedSomebodyElseHoldsTakesForce(t *testing.T) {
 	github := newHarvestGitHub(t)
-	w := newWorld(t, fakeagent.Claude)
+	w := newCrewWorld(t, fakeagent.Claude)
 	app, cli := w.App(), w.Client()
 	panes := spawnPanes(w, app, w.Path("shipper"), w.Path("holder"))
 	shipper, holder := panes[0].session, panes[1].session

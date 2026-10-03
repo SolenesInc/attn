@@ -235,46 +235,35 @@ func TestEachReopenActionPutsTheWorkBackAsOffered(t *testing.T) {
 	}
 }
 
-func TestAReopenLandsInItsOwnWorkspaceOrOneNamedAfterIt(t *testing.T) {
+func TestAReopenComesBackPlacedInItsOwnProfile(t *testing.T) {
 	w := newWorld(t, fakeagent.Codex)
 	app, cli := w.App(), w.Client()
-	shared := w.Path("shared")
-	kept, keptWorkspace, _ := w.RequestSpawn(app, fakeagent.Codex, shared)
-	w.Launched(kept.ID)
-	w.Launched(w.Spawn(app, fakeagent.Codex, shared))
-	closeSession(t, cli, kept.ID, "done for now")
-	awaitClosed(app, kept.ID)
+	profile := app.SelectedProfile()
+	kept := w.Spawn(app, fakeagent.Codex, w.Path("shared"))
+	w.Launched(kept)
+	closeSession(t, cli, kept, "done for now")
+	awaitClosed(app, kept)
 
-	lone, loneWorkspace, lonePane := w.RequestSpawn(app, fakeagent.Codex, w.Path("alone"))
+	lone, _, _ := w.RequestSpawn(app, fakeagent.Codex, w.Path("alone"))
 	w.Launched(lone.ID)
-	closePane(app, sessionPane{session: lone.ID, workspace: loneWorkspace, pane: lonePane})
+	closePane(app, sessionPane{session: lone.ID})
 	awaitClosed(app, lone.ID)
 
-	for _, c := range []struct {
-		session, workspace, workspacePlan, panePlan string
-	}{
-		{kept.ID, keptWorkspace, "reuse", "add"},
-		{lone.ID, "workspace-" + lone.ID, "create", "add"},
-	} {
-		verdict := reopenVerdict(t, cli, c.session)
-		if verdict.WorkspaceID != c.workspace || verdict.WorkspacePlan != c.workspacePlan || verdict.PanePlan != c.panePlan {
-			t.Errorf("%s would reopen in %s (%s) with pane plan %s, want %s (%s) with %s",
-				c.session, verdict.WorkspaceID, verdict.WorkspacePlan, verdict.PanePlan, c.workspace, c.workspacePlan, c.panePlan)
+	for _, session := range []string{kept, lone.ID} {
+		if verdict := reopenVerdict(t, cli, session); verdict.ProfileID != profile || verdict.ProfileDeleted {
+			t.Errorf("%s would reopen in profile %q (deleted=%v), want its own %s", session, verdict.ProfileID, verdict.ProfileDeleted, profile)
 		}
-		reopened := reopenOverTheWebSocket(app, c.session)
-		if !reopened.Success || reopened.Result == nil || reopened.Result.WorkspaceID != c.workspace {
-			t.Errorf("reopening %s = %+v, want it back in %s", c.session, reopened, c.workspace)
+		reopened := reopenOverTheWebSocket(app, session)
+		if !reopened.Success || reopened.Result == nil || reopened.Result.ProfileID != profile {
+			t.Errorf("reopening %s = %+v, want it back in profile %s", session, reopened, profile)
 		}
-		w.Launched(c.session)
+		w.Launched(session)
 	}
-	workspaces := w.App().Initial.Workspaces
-	for _, c := range []struct{ session, workspace string }{{kept.ID, keptWorkspace}, {lone.ID, "workspace-" + lone.ID}} {
-		if !slices.ContainsFunc(workspaces, func(ws protocol.Workspace) bool {
-			return ws.ID == c.workspace && ws.Layout != nil && slices.ContainsFunc(ws.Layout.Panes, func(p protocol.WorkspaceLayoutPane) bool {
-				return protocol.Deref(p.SessionID) == c.session
-			})
-		}) {
-			t.Errorf("no pane in %s holds the reopened %s", c.workspace, c.session)
+	view := viewProfile(t, w, profile)
+	for _, session := range []string{kept, lone.ID} {
+		desktop, _ := view.paneOf(t, session)
+		if desktop.ProfileID != profile {
+			t.Errorf("reopened %s placed in profile %s, want %s", session, desktop.ProfileID, profile)
 		}
 	}
 }
@@ -457,4 +446,33 @@ func reopenWorktree(t *testing.T, repo, branch string) string {
 	worktree := filepath.Join(filepath.Dir(repo), "wt-"+strings.ReplaceAll(branch, "/", "-"))
 	runGit(t, repo, "worktree", "add", "-q", "-b", branch, worktree)
 	return worktree
+}
+
+func TestADeletedProfilesSessionOffersNoReopenOrFreshStart(t *testing.T) {
+	w := newWorld(t, fakeagent.Codex)
+	app, cli := w.App(), w.Client()
+	side := createProfile(app, "Archived")
+	app = w.AppOn(side.ID)
+	session := w.Spawn(app, fakeagent.Codex, w.Path("archived"))
+	w.Launched(session)
+	closeSession(t, cli, session, "finished")
+	awaitClosed(app, session)
+	for _, current := range w.AppOn(side.ID).Initial.Profiles {
+		if current.ID == side.ID {
+			side = current
+		}
+	}
+	deleted := profileRequest(app, protocol.ProfileDeleteMessage{Cmd: protocol.CmdProfileDelete, RequestID: "archive-profile", ProfileID: side.ID, ExpectedRevision: side.Revision}, "archive-profile")
+	if !deleted.Success {
+		t.Fatalf("delete empty profile: %+v", deleted)
+	}
+	verdict := reopenVerdict(t, cli, session)
+	if verdict.Reopenable || len(verdict.Actions) != 0 || verdict.ProfileID != side.ID || !verdict.ProfileDeleted {
+		t.Fatalf("deleted profile verdict: %+v", verdict)
+	}
+	for _, action := range []string{"reopen", "start_fresh_same_place", "start_fresh_elsewhere"} {
+		if _, err := cli.SessionReopen(client.SessionReopenOptions{SessionID: session, Action: action, Directory: w.Path("fresh")}); err == nil {
+			t.Fatalf("deleted profile accepted %s", action)
+		}
+	}
 }

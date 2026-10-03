@@ -31,7 +31,7 @@ type driverLaunch struct {
 	Instructions    *struct {
 		Kind         string `json:"kind"`
 		Content      string `json:"content"`
-		WorkspaceID  string `json:"workspace_id"`
+		ProfileID    string `json:"profile_id"`
 		NotebookRoot string `json:"notebook_root"`
 	} `json:"instructions"`
 }
@@ -65,6 +65,7 @@ type driverPeer struct {
 	mu         sync.Mutex
 	nextID     int
 	pending    map[string]chan pluginWireMessage
+	holdLaunch bool
 	argv       []string
 	launches   chan driverLaunch
 	closes     chan driverClosed
@@ -136,8 +137,13 @@ func (d *driverPeer) listen() {
 			_ = json.Unmarshal(message.Params, &launch)
 			launch.Method = message.Method
 			d.mu.Lock()
-			argv := d.argv
+			argv, held := d.argv, d.holdLaunch
 			d.mu.Unlock()
+			if held {
+				d.requests <- message
+				d.launches <- launch
+				continue
+			}
 			_ = d.transmit(map[string]any{"jsonrpc": "2.0", "id": message.ID, "result": map[string]any{"argv": argv}})
 			d.launches <- launch
 		case "driver.session_closed":

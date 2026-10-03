@@ -40,12 +40,25 @@ func (d *Daemon) withdrawFromInbox(to inbox.Address, kind inbox.Kind, key string
 	d.kickInbox(to)
 	return nil
 }
+
+// chiefAddressOf is the chief inbox of the profile this session is chief of.
+func (d *Daemon) chiefAddressOf(sessionID string) (inbox.Address, bool) {
+	sessionID = strings.TrimSpace(sessionID)
+	if sessionID == "" || d.store == nil {
+		return inbox.Address{}, false
+	}
+	profileID, err := d.store.SessionProfileID(sessionID)
+	if err != nil || profileID == "" || d.chiefOfProfile(profileID) != sessionID {
+		return inbox.Address{}, false
+	}
+	return inbox.ToChief(profileID), true
+}
 func (d *Daemon) inboxAddressOf(sessionID string) inbox.Address {
 	if member := d.crewMemberBoundTo(sessionID); member != "" {
 		return inbox.ToMember(member)
 	}
-	if d.isChiefOfStaffSession(sessionID) {
-		return inbox.ToChief()
+	if chief, ok := d.chiefAddressOf(sessionID); ok {
+		return chief
 	}
 	return inbox.ToSession(sessionID)
 }
@@ -54,16 +67,16 @@ func (d *Daemon) inboxRoleAddresses(sessionID string) []inbox.Address {
 	if member := d.crewMemberBoundTo(sessionID); member != "" {
 		addresses = append(addresses, inbox.ToMember(member))
 	}
-	if d.isChiefOfStaffSession(sessionID) {
-		addresses = append(addresses, inbox.ToChief())
+	if chief, ok := d.chiefAddressOf(sessionID); ok {
+		addresses = append(addresses, chief)
 	}
 	return addresses
 }
 
 func (d *Daemon) inboxAddressesOf(sessionID string) ([]inbox.Address, error) {
 	addresses := []inbox.Address{inbox.ToSession(sessionID)}
-	if d.isChiefOfStaffSession(sessionID) {
-		addresses = append(addresses, inbox.ToChief())
+	if chief, ok := d.chiefAddressOf(sessionID); ok {
+		addresses = append(addresses, chief)
 	}
 	status, err := d.enrollmentStatus()
 	if err != nil {
@@ -94,7 +107,7 @@ func (d *Daemon) inboxAddressesOf(sessionID string) ([]inbox.Address, error) {
 			return nil, err
 		}
 		tender := seed.Tender()
-		if tender.Session == sessionID || (member != "" && strings.EqualFold(tender.Member, member)) {
+		if tender.Session == sessionID || (member != "" && strings.EqualFold(tender.Member, member) && d.crewProfileID(member) == seed.ProfileID) {
 			addresses = append(addresses, address)
 		}
 	}

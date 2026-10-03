@@ -5,20 +5,18 @@ async function injectLocalSession(
   session: { id: string; label: string; state: string; cwd?: string }
 ) {
   await page.evaluate((s) => {
-    const workspaceId = `workspace-${s.id}`;
     window.__TEST_INJECT_SESSION?.({
       id: s.id,
       label: s.label,
       state: s.state as 'working' | 'waiting_input' | 'idle',
       cwd: s.cwd || '/tmp/test',
-      workspaceId,
     });
   }, session);
 }
 
 async function createSession(
   page: import('@playwright/test').Page,
-  daemon: { injectSession: (s: { id: string; label: string; state: string; directory?: string; workspace_id?: string }) => Promise<void> },
+  daemon: { injectSession: (s: { id: string; label: string; state: string; directory?: string }) => Promise<void> },
   session: { id: string; label: string; state: string; cwd?: string }
 ) {
   const cwd = session.cwd || '/tmp/test';
@@ -30,13 +28,12 @@ async function createSession(
     label: session.label,
     state: session.state,
     directory: cwd,
-    workspace_id: `workspace-${session.id}`,
   });
 }
 
 test.describe('Session State Changes', () => {
 
-  test('state indicator colors match design spec', async ({ page, daemon }) => {
+  test('sidebar leads carry session state colors', async ({ page, daemon }) => {
     await daemon.start();
     await page.goto('/');
     await page.waitForSelector('.dashboard');
@@ -45,14 +42,25 @@ test.describe('Session State Changes', () => {
     await createSession(page, daemon, { id: 's2', label: 'Waiting', state: 'waiting_input', cwd: '/tmp/test/s2' });
     await createSession(page, daemon, { id: 's3', label: 'Idle', state: 'idle', cwd: '/tmp/test/s3' });
 
-    await expect(page.locator('[data-testid="session-s1"]')).toBeVisible();
+    await expect(page.locator('[data-testid="sidebar-session-s1"]')).toBeVisible();
 
-    const workingDot = page.locator('[data-testid="session-s1"] [data-testid="state-indicator"]');
-    const waitingDot = page.locator('[data-testid="session-s2"] [data-testid="state-indicator"]');
-    const idleDot = page.locator('[data-testid="session-s3"] [data-testid="state-indicator"]');
+    const workingLead = page.locator('[data-testid="sidebar-session-s1"] .session-lead');
+    const waitingLead = page.locator('[data-testid="sidebar-session-s2"] .session-lead');
+    const idleLead = page.locator('[data-testid="sidebar-session-s3"] .session-lead');
 
-    await expect(workingDot).toHaveCSS('background-color', 'rgb(34, 197, 94)');  // #22c55e green
-    await expect(waitingDot).toHaveCSS('background-color', 'rgb(245, 158, 11)'); // #f59e0b yellow
-    await expect(idleDot).toHaveCSS('background-color', 'rgb(107, 114, 128)');   // #6b7280 grey
+    await expect(workingLead).toHaveAttribute('data-state', 'working');
+    await expect(waitingLead).toHaveAttribute('data-state', 'waiting_input');
+    await expect(idleLead).toHaveAttribute('data-state', 'idle');
+    await expect(workingLead).toHaveCSS('color', 'rgb(34, 197, 94)');
+    await expect(workingLead.locator('.sidebar-harness-icon')).toHaveCSS('color', 'rgb(34, 197, 94)');
+    await expect(workingLead).toHaveCSS('animation-name', 'none');
+    await expect(waitingLead).toHaveCSS('color', 'rgb(245, 158, 11)');
+    await expect(idleLead).toHaveCSS('color', 'rgb(107, 114, 128)');
+
+    await page.locator('.sidebar').evaluate((sidebar) => sidebar.classList.add('sidebar--hide-harness-logos'));
+    const workingDot = workingLead.getByTestId('state-indicator');
+    await expect(workingDot).toBeVisible();
+    await expect(workingDot).toHaveCSS('animation-name', 'none');
   });
+
 });

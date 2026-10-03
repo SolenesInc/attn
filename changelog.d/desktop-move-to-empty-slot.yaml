@@ -1,0 +1,3 @@
+kind: changed
+area: app
+change: Cmd+Option+1–9 (and with Shift) to a digit that has no desktop yet creates one on that digit and moves the active pane or tile into it, instead of saying there is no desktop there.

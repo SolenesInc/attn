@@ -34,7 +34,7 @@ function parseArgs(argv) {
 
 
 function run(binary, args, env, options = {}) {
-  return execFileSync(binary, args, {
+  return execFileSync(binary, args.map(String), {
     encoding: 'utf8',
     env,
     stdio: options.stdio || ['ignore', 'pipe', 'pipe'],
@@ -254,8 +254,8 @@ async function main() {
   const seedHome = path.join(runner.sessionDir, 'codex-home');
   const seed = seedCodexRollout(seedHome);
   const probe = createCodexProbe(runner.sessionDir);
-  const definitionID = `slice4-sol-${Date.now().toString(36)}`;
-  const secondaryDefinitionID = `slice4-secondary-${Date.now().toString(36)}`;
+  let definitionID = 0;
+  let secondaryDefinitionID = 0;
   const definitionFile = path.join(runner.sessionDir, 'definition.yml');
   const secondaryDefinitionFile = path.join(runner.sessionDir, 'definition-secondary.yml');
   let mock = null;
@@ -289,12 +289,12 @@ async function main() {
     await runner.step('launch_packaged_app', () => launchFreshAppAndConnect(client, observer));
     // A YAML carrying `enabled:` is rejected outright
     // (errEnabledManagedOutsideSpec in internal/automation/automation.go).
-    const definition = (id, name, model) => `api_version: attn.dev/automations/v1alpha1\nid: ${id}\nname: ${name}\ntrigger:\n  type: github_review_requested\n  repositories:\n    mode: all_accessible\n    include: [mock.github.local/owner/repo]\nprompt: |\n  Review only the local fixture and report on this seed. Never write to GitHub.\nlaunch:\n  driver: codex\n  executable: ${JSON.stringify(probe.executable)}\n  model: ${model}\n  effort: high\nlocation:\n  type: repository_worktree\n  repository_sources:\n    default: {type: managed_cache}\n    overrides:\n      mock.github.local/owner/repo:\n        type: local_clone\n        path: ${JSON.stringify(fixture.repo)}\n`;
+    const definition = (id, name, model) => `api_version: attn.dev/automations/v1alpha1\n${id ? `id: ${id}\n` : ''}name: ${name}\ntrigger:\n  type: github_review_requested\n  repositories:\n    mode: all_accessible\n    include: [mock.github.local/owner/repo]\nprompt: |\n  Review only the local fixture and report on this seed. Never write to GitHub.\nlaunch:\n  driver: codex\n  executable: ${JSON.stringify(probe.executable)}\n  model: ${model}\n  effort: high\nlocation:\n  type: repository_worktree\n  repository_sources:\n    default: {type: managed_cache}\n    overrides:\n      mock.github.local/owner/repo:\n        type: local_clone\n        path: ${JSON.stringify(fixture.repo)}\n`;
     fs.writeFileSync(definitionFile, definition(definitionID, 'Slice 4 packaged continuity proof', 'gpt-5.6-sol'));
     fs.writeFileSync(secondaryDefinitionFile, definition(secondaryDefinitionID, 'Slice 4 secondary continuity proof', 'gpt-5.6-sol'));
     await runner.step('apply_definitions', async () => {
-      runJSON(binary, ['automation', 'apply', '--file', definitionFile], daemonEnv);
-      runJSON(binary, ['automation', 'apply', '--file', secondaryDefinitionFile], daemonEnv);
+      definitionID = runJSON(binary, ['automation', 'apply', '--file', definitionFile], daemonEnv).id;
+      secondaryDefinitionID = runJSON(binary, ['automation', 'apply', '--file', secondaryDefinitionFile], daemonEnv).id;
       await wsRequest(options.wsUrl, { cmd: 'refresh_prs' }, 'refresh_prs_result');
     });
     await runner.step('deliver_initial_review', async () => {
@@ -364,17 +364,16 @@ async function main() {
     });
     await runner.step('assert_visible_provenance', async () => {
       await client.request('select_session', { sessionId: sessionID });
-      const groupHeader = `[data-testid="sidebar-automation-header-${definitionID}"]`;
+      const openGroupHeader = `[data-testid="sidebar-automation-${definitionID}"][data-runs="1"] [data-testid="sidebar-automation-header-${definitionID}"][aria-expanded="true"]`;
       const header = await poll(
-        () => client.request('dom_text', { selector: groupHeader }).catch(() => null),
-        'the automation group header in the sidebar',
+        () => client.request('dom_text', { selector: openGroupHeader }).catch(() => null),
+        'the selected reviewer\'s automation group, open in the sidebar with one run',
       );
       runner.assert(
-        header.text.includes('Slice 4 packaged continuity proof') && header.text.includes('1 agent'),
-        'the sidebar groups the reviewer under its automation, named and counted',
+        header.text.includes('Slice 4 packaged continuity proof'),
+        'the sidebar groups the reviewer under its automation, named and counted, and opens it on selection',
         header,
       );
-      await client.request('dom_click', { selector: groupHeader });
       let lastUi = null;
       const sessionUi = await poll(async () => {
         lastUi = await client.request('get_session_ui_state', { sessionId: sessionID });
@@ -395,7 +394,7 @@ async function main() {
         { automation: sessionUi.paneAutomation },
       );
       await captureDOM(client, '.sidebar', path.join(runner.runDir, 'sidebar-provenance.png'));
-      await captureDOM(client, '.workspace-pane-header', path.join(runner.runDir, 'pane-provenance.png'));
+      await captureDOM(client, '.desktop-pane-header', path.join(runner.runDir, 'pane-provenance.png'));
 
       await client.request('automations_open_panel');
       const automationsUi = await client.request('automations_select_definition', { definitionId: definitionID });

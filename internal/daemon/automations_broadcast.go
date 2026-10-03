@@ -1,26 +1,26 @@
 package daemon
 
 import (
-	"strings"
+	"strconv"
 
 	"github.com/victorarias/attn/internal/protocol"
 )
 
-func (d *Daemon) broadcastAutomationsChanged(definitionIDs ...string) {
+func (d *Daemon) broadcastAutomationsChanged(definitionIDs ...int) {
 	if d == nil {
 		return
 	}
 	d.coalesceSnapshots(func() {
 		for _, id := range definitionIDs {
-			if strings.TrimSpace(id) == "" {
+			if id == 0 {
 				continue
 			}
-			d.publishFact(FactAutomationChanged, id, nil)
+			d.publishFact(FactAutomationChanged, strconv.Itoa(id), nil)
 		}
 	})
 }
 
-func (d *Daemon) projectAutomationsChanged(definitionIDs ...string) {
+func (d *Daemon) projectAutomationsChanged(definitionIDs ...int) {
 	if d == nil || len(definitionIDs) == 0 {
 		return
 	}

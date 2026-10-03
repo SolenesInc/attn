@@ -32,13 +32,8 @@ type Input struct {
 	IsShell bool
 
 	ChiefOfStaff bool
-
-	SessionPinned bool
-
-	WorkspacePinned bool
-	WorkspaceMuted  bool
 }
 
 func Excluded(in Input) bool {
-	return in.IsShell || in.ChiefOfStaff || in.SessionPinned || in.WorkspacePinned || in.WorkspaceMuted
+	return in.IsShell || in.ChiefOfStaff
 }

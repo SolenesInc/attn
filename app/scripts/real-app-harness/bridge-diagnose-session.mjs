@@ -3,7 +3,7 @@
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
-import { createRunContext } from './common.mjs';
+import { createRunContext, shownAgentId } from './common.mjs';
 import { assertProductionRunAllowed, defaultAppPathForInstance } from './harnessInstance.mjs';
 import { captureFrontWindowScreenshot } from './nativeWindowCapture.mjs';
 import { UiAutomationClient } from './uiAutomationClient.mjs';
@@ -92,8 +92,8 @@ async function tryCaptureNativeWindow(runDir, client) {
 
 async function resolveSession(client, options) {
   if (options.sessionId) {
-    const workspace = await client.request('get_workspace', { sessionId: options.sessionId });
-    return workspace;
+    const desktop = await client.request('get_desktop', { sessionId: options.sessionId });
+    return desktop;
   }
 
   if (options.label || options.cwd) {
@@ -108,7 +108,7 @@ async function resolveSession(client, options) {
   }
 
   const state = await client.request('get_state');
-  const activeSession = (state.sessions || []).find((session) => session.id === state.activeSessionId);
+  const activeSession = (state.sessions || []).find((session) => session.id === shownAgentId(state));
   if (!activeSession) {
     throw new Error('No active session found');
   }
@@ -120,7 +120,7 @@ function summarizeSnapshot(sessionId, uiState, structuredSnapshot, perfSnapshot,
   const terminals = (perfSnapshot.terminals || []).filter((terminal) => terminal.sessionId === sessionId);
   const renderHealth = (renderHealthSnapshot.sessions || []).find((entry) => entry.sessionId === sessionId);
   const splitModelById = new Map(
-    ((session?.workspace?.model?.layout?.splits) || []).map((split) => [split.splitId, split]),
+    ((session?.desktop?.model?.layout?.splits) || []).map((split) => [split.splitId, split]),
   );
 
   return {
@@ -129,12 +129,12 @@ function summarizeSnapshot(sessionId, uiState, structuredSnapshot, perfSnapshot,
     selected: uiState?.selected ?? null,
     activePaneId: session?.activePaneId || uiState?.activePaneId || null,
     daemonActivePaneId: session?.daemonActivePaneId || uiState?.daemonActivePaneId || null,
-    workspace: {
-      view: session?.workspace?.view || uiState?.workspace?.view || null,
-      dom: session?.workspace?.dom || uiState?.workspace?.dom || null,
-      splitCount: session?.workspace?.model?.layout?.splitCount ?? null,
-      paneCount: session?.workspace?.model?.layout?.paneCount ?? null,
-      splitWidths: (session?.workspace?.splits || []).map((split) => ({
+    desktop: {
+      view: session?.desktop?.view || uiState?.desktop?.view || null,
+      dom: session?.desktop?.dom || uiState?.desktop?.dom || null,
+      splitCount: session?.desktop?.model?.layout?.splitCount ?? null,
+      paneCount: session?.desktop?.model?.layout?.paneCount ?? null,
+      splitWidths: (session?.desktop?.splits || []).map((split) => ({
         splitId: split.splitId,
         path: split.path,
         direction: split.direction,

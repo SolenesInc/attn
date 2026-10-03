@@ -21,7 +21,10 @@
 - Turn: attention owed to an agent. Viewing the agent does not settle it.
 - Auto-settle: closes a turn after the user's response and a period of uninterrupted agent work.
 - Standing dismissal: suppresses the next auto-settle during the agent's current stretch of work.
-- Queue: agents ordered by attention owed. Pinning an agent or workspace excludes it without settling its turns.
+- Queue: agents ordered by attention owed.
+- Queue sidebar: the sidebar in queue mode. Chief and crew on top, then as many oldest turns as fit (at least three when available), a list of the remaining waiting, working and snoozed agents (Cmd+Shift+A), the automations and a strip of desktop chips.
+- Queue bar: the queue sidebar collapsed into a strip across the top of the window (Cmd+B on macOS, Ctrl+Alt+B on Linux). A waiting pill with the three oldest turns, a runs chip, and the desktop chips; hovering the pill or the chip peeks their lists.
+- Automation run: an agent an automation started. Runs stay out of the queue; the runs owing a turn form a batch the user walks with Cmd+Shift+J.
 - Snooze: settles an agent's turn and defers attention until a chosen wake time.
 - Wake: ends a snooze early; a stopped agent returns to the attention queue.
 - Satellite: a shell pane attached to an agent.
@@ -48,7 +51,23 @@
 - PR inbox: pull requests waiting on the user.
 - Provenance line: shows where a session came from and what it produced.
 
-- Focus mode: one workspace pane or tile occupies the shell until the user returns to the split.
+- Profile: the user's named grouping of agents, crew, automation definitions, Garden and the desktops that arrange them. It belongs to the daemon. Every agent, crew member, automation and seed belongs to its original profile for life. Nothing moves across profiles. Renaming keeps its identity.
+- Profile deletion: refuses while live agents, crew files, active automation definitions, tiles, open seeds pending delegations or running Garden reviews remain. Users or their agents clean up those contents first. Deletion never transfers or cascades work, on production or named instances.
+- Desktop: one arrangement of panes and tiles inside a profile. A profile always has at least one, and up to nine hold a shortcut slot. A numbered desktop's id is `<profile id>/desktop_N` and its number never changes: the user numbers contents by moving them to ⌘N, and ⌘N on a slot with no desktop creates one there. The daemon removes an unnamed desktop once it has held no pane or tile and been not current for 30 seconds; named desktops and desktops a crew member or automation starts on stay. Reopen recreates a removed numbered desktop under its id; any other launch aimed at a removed desktop lands on the current one without taking focus.
+- Desktop ref: how the CLI names a desktop of the caller's profile: its shortcut digit (1-9), its label as shown (the name, or "Desktop N" when unnamed; case-insensitive), or its id. `attn delegate --desktop` and `attn session move` take one.
+- Pane: an agent's place on a desktop. An agent has at most one pane.
+- Launch desktop: the settings field that says which desktop of its profile a crew member or automation starts on. Choosing "a new desktop called X" creates that desktop at once, empty and named (on ⌘N when the user picks an empty slot 5-9); items that pick the same desktop share it. A new crew member or automation starts on a new desktop named after it. Background launches land beside the desktop's active leaf without changing focus. A user wake shows the member, including an already-awake member. The setting lives in SQLite, separate from charters and automation files.
+- Launch review: the step of the workspace migration that asks where each crew member and automation starts. Picking an existing desktop is saved at once; new desktops, including the suggested one named after each item, are created on Finish. Until then an item starts on the current desktop.
+- Current desktop: the desktop a profile shows. Every client on that profile shares it.
+- Empty desktop launcher: the New Session picker shown inline on a current desktop with no leaves. Launches land there; New Session (Cmd+N) focuses it instead of opening the dialog, and Escape never dismisses it.
+- Active leaf (active pane on the wire): the agent pane or tile a desktop has selected. The daemon owns it and every client on the profile shares it. The app stores no current agent: the shown agent is the active leaf of the current desktop when it is an agent pane. With a tile active, agent-only actions are unavailable; opens and placements land beside that tile.
+- Show: one request that selects an agent (`desktop_show_session`) or a leaf (`desktop_show_leaf`). The daemon switches the requesting client's profile if needed, places an agent beside the active leaf if it has no pane, sets the active leaf and makes its desktop current, in one transaction with one broadcast.
+- Own answer: the arrangement the daemon sends a client for that client's own request, marked with its request id (a launch's session id), before the result and before any broadcast that includes the change. The daemon never sends a client an arrangement older than, or identical to, the one it already has.
+- Intent: a window's latest gesture that changes what is shown (a show, a desktop or profile switch, an open, a dock, a launch, a history step, or any other command that can change it, until its own answer). There is at most one, and while it is live the queue does not move the user. An arrival that shows its target confirms it: the view becomes the session, history records it and the keyboard moves there. Another client's change supersedes it; an own answer never does, so a superseded request of the same window is not read as moving on.
+- View: Home or the session surface. It is local to each app window; Home leaves the daemon's active leaf untouched.
+- Leaf history: the active leaves a window has shown, per profile, agents and tiles alike. ⌘[ and ⌘] walk it with a show; it follows a leaf the daemon moves and skips one that is gone. It lives only in that window.
+- Workspace migration: the one-time screen after the upgrade to profiles. Each old workspace arrives as an imported group already on a desktop; the user keeps it there, keeps it as an extra desktop, or merges it into another desktop before the app loads. The draft is daemon state shared by every client, and either client can finish it.
+- Focus mode: one pane or tile occupies the shell until the user returns to the split.
 
 ## Cost estimates
 
@@ -65,8 +84,8 @@ intended it for the next turn.
 
 ## Garden and crew
 
-- Garden: the home daemon's work tracker, shared across workspaces.
-- Seed: a work item with an ID, title, body and state.
+- Garden: a profile's work tracker on the home daemon. Seeds, plots, relationships and claims stay inside that profile.
+- Seed: a work item with an ID, title, body and state, belonging to its planting profile for life. Closed seeds of a deleted profile stay readable by ID, outside live Gardens, and cannot be replanted or resumed elsewhere.
 - Slug: a readable name derived from a seed's title. Slugs need not be unique.
 - Plot: a seed with child seeds. Its body holds their shared plan.
 - Packet: a reusable plot template.
@@ -81,6 +100,7 @@ intended it for the next turn.
 - Harvest condition: an instruction to harvest a seed when its PR merges. A PR closed without merging clears it instead of closing the seed.
 - Tender: the agent or person claiming a seed. A seed has one tender at a time.
 - Member claim: a tender recorded as a crew member with no session. It belongs to the permanent member and stays held while the member is asleep.
+- Named claim: an unregistered tender name passed with `--member`. The claim stays in its seed's profile; later crew registration elsewhere cannot receive its updates or prevent editing its existing claim.
 - Session claim: a tender recorded as a session. It counts as a crew member's work only while that session is the member's current day.
 - Execution: the saved conversation and working location for a seed.
 - Garden resume: reopens the seed's saved conversation in its saved directory.
@@ -99,14 +119,15 @@ intended it for the next turn.
 - Delegation preferences: saved roles and model choices for delegating work. They do not authorize delegation.
 - Session delegation role: optional role identity captured at launch. Later settings changes do not relabel the agent.
 - Delegation chain: an agent's dispatchers and delegates.
+- Dispatched session: an agent with a saved reporting seed in its dispatch record. It stays in that profile even after its work closes; moving work to another profile requires closing the agent and delegating afresh there.
 - Ticket: an archived work item from before the Garden.
 - Crew member: an agent with a permanent charter.
 - `attn`: the reserved member name the daemon uses when it moves a seed by itself. No crew home may claim it.
 - Registry: the index of crew member files.
-- Binding: a crew member's active session. Daemon-managed days use terminal liveness; bare CLI days use their wrapper PID and process start token, persisted across daemon restarts. Linux tokens include boot identity. Dead or reused wrapper PIDs release the binding on crew actions or startup recovery; recovered managed days never become external merely by registering again. Legacy registrations without a process receipt retain current-daemon liveness until unregistering; they cannot survive startup pruning.
-- Launch settings: a member's optional harness, model and effort pins. Blanks resolve through daemon and harness defaults.
+- Binding: a crew member's active session. Daemon-managed days use terminal liveness; bare CLI days remain live while registered, until their wrapper unregisters. The daemon tracks external registrations during its lifetime; recovered managed days never become external merely by registering again.
+- Launch settings: a member's harness, model, effort and launch desktop choices. Blank harness, model and effort pins resolve through daemon and harness defaults.
 - Charter token: the receipt for the exact charter bytes read. A replacement needs it and advances it, so a stale write cannot overwrite a newer one.
-- Chief of staff: the agent coordinating work across workspaces.
+- Chief of staff: the agent coordinating the work of one profile. Each profile has at most one; all chiefs share the Notebook.
 - Day: a crew member's current session.
 - Member home: the directory holding a crew member's charter and handoff.
 - Wake: starts a crew member's day.
@@ -154,3 +175,5 @@ intended it for the next turn.
 - Kept reason: why the sweep left a worktree alone.
 - Keep pin: the user's instruction to preserve a worktree.
 - Sweep log: a record of worktree removals and their reasons.
+
+- Automation ID: an automatically assigned number, unique across profiles and never reused. Each ID-less apply creates a new automation, including when repeated; edits include an existing ID and keep its original profile. A deleted automation cannot be restored by applying its old definition.

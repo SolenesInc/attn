@@ -1,4 +1,17 @@
-import { parseNotebookTileParams, type TileContentState, type TileLeaf } from '../types/workspace';
+import { createElement, type ReactNode } from 'react';
+import { GardenIcon } from '../components/GardenIcon';
+import { BrowserIcon, MarkdownIcon, NotebookIcon } from '../components/SidebarIcons';
+import { parseNotebookTileParams, type TileContentState, type TileLeaf } from '../types/desktop';
+
+export function tileKindLabel(kind: string): { word: string; icon: ReactNode } {
+  switch (kind) {
+    case 'seed': return { word: 'SEED', icon: createElement(GardenIcon) };
+    case 'markdown': return { word: 'DOC', icon: createElement(MarkdownIcon) };
+    case 'browser': return { word: 'WEB', icon: createElement(BrowserIcon) };
+    case 'notebook': return { word: 'NOTE', icon: createElement(NotebookIcon) };
+    default: return { word: 'TILE', icon: createElement(NotebookIcon) };
+  }
+}
 
 export function tilePathBasename(path: string): string {
   const trimmed = path.replace(/\/+$/, '');
@@ -41,7 +54,11 @@ function markdownTitle(markdown: string): string | null {
 export function deriveTileTitle(
   tile: TileLeaf,
   content?: TileContentState,
+  seedTitle?: (id: string) => string | undefined,
 ): string {
+  if (tile.tileKind === 'seed') {
+    return (tile.tileParams && seedTitle?.(tile.tileParams)) || tile.tileParams || 'seed';
+  }
   if (tile.tileKind === 'browser' && tile.tileParams) {
     try {
       return new URL(tile.tileParams).host || tile.tileParams;

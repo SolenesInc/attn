@@ -65,6 +65,10 @@ func (d *Daemon) handleAgentMsg(conn net.Conn, msg *protocol.AgentMsgMessage) {
 	targetRef := msg.TargetSessionID
 	var address inbox.Address
 	if seedID := strings.TrimSpace(protocol.Deref(msg.TargetSeedID)); seedID != "" {
+		if err := d.requireSeedInProfile(seedID, sender.ProfileID, false); err != nil {
+			d.replyAgentMsgError(conn, "cross_profile", err.Error())
+			return
+		}
 		if strings.TrimSpace(targetRef) != "" {
 			d.replyAgentMsgError(conn, "ambiguous_target", "a message goes to one place; name a session or a seed, not both")
 			return
@@ -176,13 +180,6 @@ func agentMessageQueuedDetail(err error) string {
 		return "queued (attn cannot see a safe prompt on the target yet; lands on its next state change)"
 	}
 	return "queued (target is not taking input right now — lands when it is running again; don't wait for a reply)"
-}
-
-func (d *Daemon) sessionOriginName(session *protocol.Session) string {
-	if workspace := d.store.GetWorkspace(session.WorkspaceID); workspace != nil && strings.TrimSpace(workspace.Title) != "" {
-		return workspace.Title
-	}
-	return sessionDisplayName(session)
 }
 
 func sessionDisplayName(session *protocol.Session) string {

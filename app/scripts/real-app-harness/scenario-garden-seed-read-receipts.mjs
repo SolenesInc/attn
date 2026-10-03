@@ -11,7 +11,7 @@ import {
   submitPrompt,
 } from './common.mjs';
 import {
-  waitForFirstWorkspacePane,
+  waitForFirstDesktopPane,
   waitForPaneShellReady,
 } from './scenarioAssertions.mjs';
 import { ensureCodexPromptReadyViaPty } from './scenarioAgents.mjs';
@@ -211,7 +211,7 @@ async function main() {
       const sessionId = await createSessionAndWaitForInitialPane({
         client, observer, cwd, label: 'seed-read-author', agent: 'shell',
       });
-      const first = await waitForFirstWorkspacePane(client, sessionId, 'author pane', 20_000);
+      const first = await waitForFirstDesktopPane(client, sessionId, 'author pane', 20_000);
       const pane = { sessionId, paneId: first.paneId };
       await waitForPaneShellReady(client, sessionId, first.paneId, {
         timeoutMs: 20_000,
@@ -248,7 +248,7 @@ async function main() {
         promptReadyFn: ensureCodexPromptReadyViaPty,
         promptReadyTimeoutMs: 90_000,
       });
-      const first = await waitForFirstWorkspacePane(client, sessionId, 'watcher pane', 20_000);
+      const first = await waitForFirstDesktopPane(client, sessionId, 'watcher pane', 20_000);
       const pane = { sessionId, paneId: first.paneId };
       await submitPrompt(client, pane.sessionId, pane.paneId, `Watch seed ${seed}`);
       await waitForAgentReads(client, pane, 0, 'SEED_WATCH_READY');

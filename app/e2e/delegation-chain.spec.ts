@@ -17,8 +17,8 @@ test.beforeEach(async ({ page }) => {
   await page.waitForFunction(() => window.__HARNESS__?.ready === true);
 });
 
-for (const [platform, shortcut] of [['MacIntel', 'Meta+k'], ['Linux x86_64', 'Control+Shift+k']]) {
-  test(`Action menu hands focus to the chain, arrows and Enter open an agent, Escape restores the terminal (${platform})`, async ({ page }) => {
+for (const [platform, shortcut] of [['MacIntel', 'Meta+Shift+k'], ['Linux x86_64', 'Control+Alt+k']]) {
+  test(`The command palette hands focus to the chain, arrows and Enter open an agent, Escape restores the terminal (${platform})`, async ({ page }) => {
     await page.addInitScript((platform) => {
       Object.defineProperty(navigator, 'platform', { value: platform, configurable: true });
       Object.defineProperty(navigator, 'userAgent', { value: platform, configurable: true });
@@ -30,11 +30,11 @@ for (const [platform, shortcut] of [['MacIntel', 'Meta+k'], ['Linux x86_64', 'Co
     await page.getByTestId('row-builder').getByRole('button').hover();
     await expect(page.getByRole('dialog', { name: 'Delegation chain' })).toBeVisible();
     await page.keyboard.press(shortcut);
-    await page.getByRole('textbox', { name: 'Search actions' }).fill('delegation chain');
+    await page.getByRole('combobox', { name: 'Commands' }).fill('>delegation chain');
     await page.keyboard.press('Enter');
     const popup = page.getByRole('dialog', { name: 'Delegation chain' });
     await expect(popup.getByRole('button', { name: /Build chain navigator/ })).toBeFocused();
-    await expect(page.getByRole('dialog', { name: 'Action menu', exact: true })).toHaveCount(0);
+    await expect(page.getByRole('dialog', { name: 'Commands', exact: true })).toHaveCount(0);
     await page.keyboard.press('ArrowUp');
     await expect(popup.getByRole('button', { name: /Coordinate role identity/ })).toBeFocused();
     await page.keyboard.press('ArrowDown');
@@ -45,7 +45,7 @@ for (const [platform, shortcut] of [['MacIntel', 'Meta+k'], ['Linux x86_64', 'Co
     await expect(popup).toHaveCount(0);
     await expect(terminal).toBeFocused();
     await page.keyboard.press(shortcut);
-    await page.getByRole('textbox', { name: 'Search actions' }).fill('delegation chain');
+    await page.getByRole('combobox', { name: 'Commands' }).fill('>delegation chain');
     await page.keyboard.press('Enter');
     await expect(popup.getByRole('button', { name: /Check keyboard flow/ })).toBeFocused();
     await page.keyboard.press('Escape');
@@ -107,12 +107,12 @@ test('Escape dismisses the focused hover card without leaking to the terminal', 
   await expect(terminal).not.toHaveAttribute('data-last-key', 'Escape');
 });
 
-test('the action menu hands focus to the chain without returning it to the terminal', async ({ page }) => {
+test('the command palette hands focus to the chain without returning it to the terminal', async ({ page }) => {
   const terminal = page.getByRole('textbox', { name: 'Terminal keyboard target' });
   await terminal.fill(Array.from({ length: 100 }, (_, index) => `Terminal line ${index}`).join('\n'));
   await scrollToTop(terminal);
-  await page.keyboard.press('Meta+k');
-  await page.getByRole('textbox', { name: 'Search actions' }).fill('delegation chain');
+  await page.keyboard.press('Meta+Shift+k');
+  await page.getByRole('combobox', { name: 'Commands' }).fill('>delegation chain');
   await terminal.evaluate((element) => element.addEventListener('focusin', () => {
     element.dataset.focusedAfterAction = 'true';
   }));
@@ -173,8 +173,8 @@ for (const entry of ['hover', 'click', 'command'] as const) {
     await scrollToTop(terminal);
     const header = page.getByTestId('agent-header').getByRole('button');
     if (entry === 'command') {
-      await page.keyboard.press('Meta+k');
-      await page.getByRole('textbox', { name: 'Search actions' }).fill('delegation chain');
+      await page.keyboard.press('Meta+Shift+k');
+      await page.getByRole('combobox', { name: 'Commands' }).fill('>delegation chain');
       await page.keyboard.press('Enter');
     } else await header[entry]();
     const popup = page.getByRole('dialog', { name: 'Delegation chain' });
@@ -241,11 +241,11 @@ test('a blocking dialog replaces the chain focus trap and Escape does not resurr
 
 test('collapsing a pinned sidebar chain dismisses it and returns focus to the terminal', async ({ page }) => {
   await page.getByTestId('row-builder').getByRole('button').click();
-  await page.keyboard.press('Meta+Shift+b');
+  await page.keyboard.press('Meta+b');
   await expect(page.getByTestId('row-builder')).toHaveCount(0);
   await expect(page.getByRole('dialog', { name: 'Delegation chain' })).toHaveCount(0);
   await expect(page.getByRole('textbox', { name: 'Terminal keyboard target' })).toBeFocused();
-  await page.keyboard.press('Meta+Shift+b');
+  await page.keyboard.press('Meta+b');
   await expect(page.getByTestId('row-builder')).toBeVisible();
   await expect(page.getByRole('dialog', { name: 'Delegation chain' })).toHaveCount(0);
 });

@@ -48,7 +48,7 @@ func TestSessionCostReadsLedgerKeysWrittenBeforePurposesExisted(t *testing.T) {
 
 func TestMigration152FilesStoredLongContextObservationsUnderTheirTier(t *testing.T) {
 	dbPath := filepath.Join(t.TempDir(), "attn.db")
-	s, err := newStoreAtVersion(dbPath, 161)
+	s, err := newStoreAtVersion(dbPath, 167)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -66,7 +66,7 @@ func TestMigration152FilesStoredLongContextObservationsUnderTheirTier(t *testing
 	if _, err := s.db.Exec("DELETE FROM schema_migrations WHERE version >= 152"); err != nil {
 		t.Fatal(err)
 	}
-	if err := migrateDBThrough(s.db, dbPath, 161); err != nil {
+	if err := migrateDBThrough(s.db, dbPath, 167); err != nil {
 		t.Fatal(err)
 	}
 
@@ -92,9 +92,9 @@ func TestMigration152FilesStoredLongContextObservationsUnderTheirTier(t *testing
 	}
 }
 
-func TestMigration158FilesGPT61SolObservationsUnderTheirTier(t *testing.T) {
+func TestMigration163FilesGPT61SolObservationsUnderTheirTier(t *testing.T) {
 	dbPath := filepath.Join(t.TempDir(), "attn.db")
-	s, err := newStoreAtVersion(dbPath, 161)
+	s, err := newStoreAtVersion(dbPath, 167)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -108,11 +108,10 @@ func TestMigration158FilesGPT61SolObservationsUnderTheirTier(t *testing.T) {
 	if _, err := s.db.Exec("UPDATE sessions SET session_cost_json = ? WHERE id = ?", legacy, "sol"); err != nil {
 		t.Fatal(err)
 	}
-
-	if _, err := s.db.Exec("DELETE FROM schema_migrations WHERE version >= 158"); err != nil {
+	if _, err := s.db.Exec("DELETE FROM schema_migrations WHERE version >= 163"); err != nil {
 		t.Fatal(err)
 	}
-	if err := migrateDBThrough(s.db, dbPath, 161); err != nil {
+	if err := migrateDBThrough(s.db, dbPath, 167); err != nil {
 		t.Fatal(err)
 	}
 

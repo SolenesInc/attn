@@ -1,5 +1,5 @@
+import { useEffect, useRef } from 'react';
 import { formatShortcut } from '../shortcuts/formatShortcut';
-import { GridLayoutControl } from './grid/GridLayoutControl';
 import { RenamePopover } from './RenamePopover';
 import { SessionActionsPopover } from './SessionActionsPopover';
 import { CrewMemberActionsPopover } from './CrewMemberActionsPopover';
@@ -7,24 +7,18 @@ import { crewDisplayName } from '../utils/crewName';
 import './Sidebar.css';
 import { useSidebarContext } from './SidebarContext';
 import { CollapseIcon, ExpandIcon, HomeIcon, PlusIcon } from './SidebarIcons';
-import { isSessionless, workspaceShortcut } from './sidebarModel';
+import { desktopShortcut, hasNoLeaves } from './sidebarModel';
+import { DesktopChip } from './SidebarDesktops';
 import { SidebarSettings } from './SidebarSettings';
 
 export function SidebarCollapsed() {
   const {
-    selectedWorkspaceId,
     instance,
     headerActions,
-    gridLayout,
-    onSelectGridLayout,
-    onSelectWorkspace,
     onNewSession,
     onGoToDashboard,
     homeActive,
     onToggleCollapse,
-    sessionWantsAttention,
-    visibleVisualOrder,
-    visualIndexOfWorkspace,
   } = useSidebarContext();
   return (
     <div className="sidebar collapsed">
@@ -47,9 +41,6 @@ export function SidebarCollapsed() {
           <HomeIcon />
         </button>
         <div className="icon-divider" />
-        {gridLayout && onSelectGridLayout && (
-          <GridLayoutControl layout={gridLayout} onSelect={onSelectGridLayout} />
-        )}
         {headerActions.map((action) => (
           <button
             key={action.id}
@@ -68,25 +59,7 @@ export function SidebarCollapsed() {
           </button>
         ))}
         <div className="icon-divider" />
-        {visibleVisualOrder.map((workspace) => (
-          <button
-            key={workspace.id}
-            className={`icon-btn session-icon ${selectedWorkspaceId === workspace.id ? 'active' : ''} ${isSessionless(workspace) ? 'sessionless' : ''}`}
-            onClick={() => onSelectWorkspace(workspace.id)}
-            title={
-              workspaceShortcut(visualIndexOfWorkspace(workspace.id))
-                ? `${workspace.title} (${workspaceShortcut(visualIndexOfWorkspace(workspace.id))})`
-                : workspace.title
-            }
-          >
-            ▸
-            {workspace.sessions.some(sessionWantsAttention) && (
-              <span
-                className={`mini-badge ${workspace.status === 'pending_approval' ? 'pending' : ''} ${workspace.status === 'unknown' ? 'unknown' : ''}`}
-              />
-            )}
-          </button>
-        ))}
+        <RailDesktops />
         <button
           className="icon-btn"
           onClick={onNewSession}
@@ -94,11 +67,64 @@ export function SidebarCollapsed() {
         >
           <PlusIcon />
         </button>
-        <div className="icon-spacer" />
         <button className="icon-btn expand-btn" onClick={onToggleCollapse} title="Expand sidebar">
           <ExpandIcon />
         </button>
       </div>
+    </div>
+  );
+}
+
+function RailDesktops() {
+  const {
+    selectedDesktopId,
+    onSelectDesktop,
+    sessionWantsAttention,
+    visibleVisualOrder,
+    visualIndexOfDesktop,
+  } = useSidebarContext();
+  const desktopListRef = useRef<HTMLDivElement>(null);
+  const desktopOrder = JSON.stringify(visibleVisualOrder.map((desktop) => desktop.id));
+  useEffect(() => {
+    const list = desktopListRef.current;
+    if (!list) return;
+    const revealCurrent = () => {
+      list.querySelector('[aria-current="true"]')?.scrollIntoView({ block: 'nearest' });
+    };
+    revealCurrent();
+    const observer = new ResizeObserver(revealCurrent);
+    observer.observe(list);
+    return () => observer.disconnect();
+  }, [selectedDesktopId, desktopOrder]);
+  return (
+    <div className="rail-desktops" ref={desktopListRef}>
+      {visibleVisualOrder.map((desktopView) => {
+        const shortcut = desktopShortcut(visualIndexOfDesktop(desktopView.id));
+        const label = shortcut ? `${desktopView.title} (${shortcut})` : desktopView.title;
+        const current = selectedDesktopId === desktopView.id;
+        return (
+          <button
+            key={desktopView.id}
+            className={`icon-btn session-icon ${current ? 'active' : ''}`}
+            onClick={() => onSelectDesktop(desktopView.id)}
+            title={label}
+            aria-label={label}
+            aria-current={current ? 'true' : undefined}
+          >
+            <DesktopChip
+              number={desktopView.desktop?.number}
+              current={current}
+              empty={hasNoLeaves(desktopView)}
+            >
+              {desktopView.sessions.some(sessionWantsAttention) && (
+                <span
+                  className={`mini-badge ${desktopView.status === 'pending_approval' ? 'pending' : ''} ${desktopView.status === 'unknown' ? 'unknown' : ''}`}
+                />
+              )}
+            </DesktopChip>
+          </button>
+        );
+      })}
     </div>
   );
 }
@@ -156,10 +182,22 @@ export function SidebarFooter() {
   );
 }
 
+export function SidebarCrewManage() {
+  const { crew, onManageCrew } = useSidebarContext();
+  if (!crew?.length || !onManageCrew) return null;
+  return (
+    <button type="button" className="sidebar-crew-manage" data-testid="manage-crew" onClick={onManageCrew}>
+      <span>Manage crew</span>
+      <span className="sidebar-crew-count">{crew.length}</span>
+    </button>
+  );
+}
+
 export function SidebarPopovers() {
   const {
+    crew,
     onRenameSession,
-    onRenameWorkspace,
+    onRenameDesktop,
     onChangeChiefOfStaff,
     onCloseSession,
     onReloadSession,
@@ -177,11 +215,12 @@ export function SidebarPopovers() {
         <RenamePopover
           key={`${renameTarget.kind}:${renameTarget.id}`}
           initialValue={renameTarget.name}
-          label={renameTarget.kind === 'workspace' ? 'Rename workspace' : 'Rename session'}
+          defaultName={renameTarget.defaultName}
+          label={renameTarget.kind === 'desktop' ? 'Rename desktop' : 'Rename session'}
           anchor={renameTarget.anchor}
           onSubmit={async (value) => {
-            if (renameTarget.kind === 'workspace') {
-              await onRenameWorkspace?.(renameTarget.id, value);
+            if (renameTarget.kind === 'desktop') {
+              await onRenameDesktop?.(renameTarget.id, value);
             } else {
               await onRenameSession?.(renameTarget.id, value);
             }
@@ -223,6 +262,7 @@ export function SidebarPopovers() {
       {crewActionsTarget && (
         <CrewMemberActionsPopover
           memberName={crewDisplayName(crewActionsTarget.member)}
+          desktopLabel={crew?.find((member) => member.id === crewActionsTarget.member)?.launch_desktop?.label}
           anchor={crewActionsTarget.anchor}
           onOpenDetails={() => {
             const target = crewActionsTarget;
@@ -240,22 +280,16 @@ export function SidebarHeader() {
   const {
     instance,
     headerActions,
-    gridLayout,
-    onSelectGridLayout,
-    showSessionless,
-    onToggleShowSessionless,
     queueModeEnabled,
     onToggleQueueMode,
     crewQueueEnabled,
     onToggleCrewQueue,
     harnessLogosEnabled,
     onToggleHarnessLogos,
-    workspaceSelectionStyle,
-    onWorkspaceSelectionStyleChange,
+    desktopSelectionStyle,
+    onDesktopSelectionStyleChange,
     onNewSession,
     onToggleCollapse,
-    displayMode,
-    setDisplayMode,
   } = useSidebarContext();
   return (
     <>
@@ -266,9 +300,6 @@ export function SidebarHeader() {
           </div>
         )}
         <div className="sidebar-tool-row">
-          {gridLayout && onSelectGridLayout && (
-            <GridLayoutControl layout={gridLayout} onSelect={onSelectGridLayout} />
-          )}
           {headerActions.map((action) => (
             <button
               key={action.id}
@@ -311,12 +342,8 @@ export function SidebarHeader() {
             onToggleCrewQueue={onToggleCrewQueue}
             harnessLogosEnabled={harnessLogosEnabled}
             onToggleHarnessLogos={onToggleHarnessLogos}
-            workspaceSelectionStyle={workspaceSelectionStyle}
-            onWorkspaceSelectionStyleChange={onWorkspaceSelectionStyleChange}
-            showSessionless={showSessionless}
-            onToggleShowSessionless={onToggleShowSessionless}
-            displayMode={displayMode}
-            setDisplayMode={setDisplayMode}
+            desktopSelectionStyle={desktopSelectionStyle}
+            onDesktopSelectionStyleChange={onDesktopSelectionStyleChange}
           />
         </div>
       </div>

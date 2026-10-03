@@ -2,7 +2,7 @@
 // Keyboard shortcuts cheatsheet. Opened with Cmd+/ (ui.showShortcuts).
 
 import { useMemo } from 'react';
-import FocusTrap from 'focus-trap-react';
+import FocusTrap from './AppFocusTrap';
 import { useEscapeStack } from '../hooks/useEscapeStack';
 import { buildCheatsheet } from '../shortcuts';
 import { KeyCombos } from './Keycap';

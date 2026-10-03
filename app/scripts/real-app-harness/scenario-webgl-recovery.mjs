@@ -16,7 +16,7 @@ import { DaemonObserver } from './daemonObserver.mjs';
 import {
   captureSessionArtifacts,
   sleep,
-  waitForFirstWorkspacePane,
+  waitForFirstDesktopPane,
   waitForPaneAttached,
   waitForPaneShellReady,
   waitForPaneText,
@@ -159,7 +159,7 @@ async function main() {
       waitForInitialPaneVisible: false,
       sessionWaitMs: 30_000,
     });
-    const pane = await waitForFirstWorkspacePane(client, sessionId, 'initial workspace pane', 20_000);
+    const pane = await waitForFirstDesktopPane(client, sessionId, 'initial desktop pane', 20_000);
     const paneId = pane.paneId;
     await waitForPaneVisible(client, sessionId, paneId, 20_000);
     await waitForPaneAttached(client, sessionId, paneId, 20_000);

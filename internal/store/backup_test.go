@@ -9,7 +9,7 @@ import (
 
 func TestMigrateDB_PreMigrationBackup(t *testing.T) {
 	dbPath := filepath.Join(t.TempDir(), "attn.db")
-	s, err := newStoreAtVersion(dbPath, 161)
+	s, err := newStoreAtVersion(dbPath, 167)
 	if err != nil {
 		t.Fatalf("NewWithDB error: %v", err)
 	}

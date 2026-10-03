@@ -13,22 +13,23 @@ import (
 func TestAScheduledAutomationFiresOncePerDueInstantWhileEnabled(t *testing.T) {
 	inBubble(t, func(t *testing.T, w *world) {
 		cli := w.Client()
+		definitions := map[string]int{}
 		schedules := map[string]string{
 			"minutely-latest": automationScheduleSpec(w, "minutely-latest", "gone", "fresh", "latest"),
 			"minutely-skip":   automationScheduleSpec(w, "minutely-skip", "gone", "fresh", "skip"),
 			"paused":          automationScheduleSpec(w, "paused", "gone", "fresh", "latest"),
 		}
 		automationUnreachableFolder(t, w, "gone", func() {
-			for _, spec := range schedules {
-				applyAutomation(t, cli, spec)
+			for name, spec := range schedules {
+				definitions[name] = applyAutomation(t, cli, spec).ID
 			}
 		})
-		setAutomationEnabled(t, cli, "paused", false)
+		setAutomationEnabled(t, cli, definitions["paused"], false)
 
 		w.advance(3*time.Minute + 30*time.Second)
 
 		for _, id := range []string{"minutely-latest", "minutely-skip"} {
-			runs := automationRuns(t, cli, id)
+			runs := automationRuns(t, cli, definitions[id])
 			keys := automationOccurrenceKeys(runs)
 			due := []string{"scheduled:2000-01-01T00:03:00Z", "scheduled:2000-01-01T00:02:00Z", "scheduled:2000-01-01T00:01:00Z"}
 			if len(keys) < 2 || keys[0] != due[0] || !slices.Contains(keys, due[1]) || automationHasDuplicate(keys) ||
@@ -43,7 +44,7 @@ func TestAScheduledAutomationFiresOncePerDueInstantWhileEnabled(t *testing.T) {
 				t.Errorf("%s's fresh runs do not each start their own seed and session: %v", id, threads)
 			}
 		}
-		if paused := automationRuns(t, cli, "paused"); len(paused) != 0 {
+		if paused := automationRuns(t, cli, definitions["paused"]); len(paused) != 0 {
 			t.Errorf("the paused automation fired %v, want nothing", automationOccurrenceKeys(paused))
 		}
 	})
@@ -78,7 +79,6 @@ func TestAfterDowntimeAScheduleCatchesUpOnlyAsItsPolicyAllows(t *testing.T) {
 			inBubble(t, func(t *testing.T, w *world) {
 				automationUnreachableFolder(t, w, "gone", func() {
 					applyAutomation(t, w.Client(), fmt.Sprintf(`api_version: attn.dev/automations/v1alpha1
-id: sweep
 name: Sweep
 trigger: {type: scheduled, schedule: {cron: %q, time_zone: UTC}, continuity: fresh, catch_up: %s}
 prompt: Sweep.
@@ -87,15 +87,15 @@ location: {type: directory, path: %q}
 `, tc.cron, tc.catchUp, w.Path("gone")))
 				})
 				w.advance(time.Minute)
-				setAutomationEnabled(t, w.Client(), "sweep", false)
+				setAutomationEnabled(t, w.Client(), 1, false)
 				w.stop()
 				w.advance(tc.downtime)
 				w.start()
 				w.advance(30 * time.Second)
-				setAutomationEnabled(t, w.Client(), "sweep", true)
+				setAutomationEnabled(t, w.Client(), 1, true)
 				w.advance(30 * time.Second)
 
-				if got := automationOccurrenceKeys(automationRuns(t, w.Client(), "sweep")); !slices.Equal(got, tc.want) {
+				if got := automationOccurrenceKeys(automationRuns(t, w.Client(), 1)); !slices.Equal(got, tc.want) {
 					t.Errorf("after %s down the schedule fired %v, want %v", tc.downtime, got, tc.want)
 				}
 			})
@@ -125,9 +125,14 @@ func automationOccurrenceKeys(runs []protocol.AutomationRunSummary) []string {
 func TestEditingAScheduledAutomationKeepsItsThreadUntilItsContractChanges(t *testing.T) {
 	inBubble(t, func(t *testing.T, w *world) {
 		cli := w.Client()
+		definitionID := 0
 		edit := func(name, catchUp, dir string) {
 			automationUnreachableFolder(t, w, dir, func() {
-				applyAutomation(t, cli, automationSingletonSpec(w, name, catchUp, dir))
+				spec := automationSingletonSpec(w, name, catchUp, dir)
+				if definitionID != 0 {
+					spec = automationEditSpec(definitionID, spec)
+				}
+				definitionID = applyAutomation(t, cli, spec).ID
 			})
 		}
 		edit("Sweep", "latest", "first")
@@ -137,7 +142,7 @@ func TestEditingAScheduledAutomationKeepsItsThreadUntilItsContractChanges(t *tes
 		edit("Sweep, renamed", "skip", "second")
 		w.advance(2 * time.Minute)
 
-		runs := automationRuns(t, cli, "sweep")
+		runs := automationRuns(t, cli, 1)
 		if got, want := automationOccurrenceKeys(runs), []string{"scheduled:2000-01-01T00:06:00Z", "scheduled:2000-01-01T00:04:00Z", "scheduled:2000-01-01T00:02:00Z"}; !slices.Equal(got, want) {
 			t.Fatalf("the automation fired %v, want %v", got, want)
 		}
@@ -151,41 +156,8 @@ func TestEditingAScheduledAutomationKeepsItsThreadUntilItsContractChanges(t *tes
 	})
 }
 
-func TestReapplyingADeletedAutomationBringsItBackOnAFreshThread(t *testing.T) {
-	inBubble(t, func(t *testing.T, w *world) {
-		cli := w.Client()
-		apply := func() protocol.AutomationDefinitionSummary {
-			var applied protocol.AutomationDefinitionSummary
-			automationUnreachableFolder(t, w, "gone", func() {
-				applied = applyAutomation(t, cli, automationSingletonSpec(w, "Sweep", "latest", "gone"))
-			})
-			return applied
-		}
-		apply()
-		w.advance(2*time.Minute + 30*time.Second)
-		before := automationRuns(t, cli, "sweep")
-		if err := cli.AutomationDelete("sweep"); err != nil {
-			t.Fatal(err)
-		}
-
-		if back := apply(); back.ID != "sweep" || !back.Enabled {
-			t.Fatalf("re-applying the deleted automation = %+v, want sweep back and enabled", back)
-		}
-		w.advance(2 * time.Minute)
-
-		runs := automationRuns(t, cli, "sweep")
-		if got, want := automationOccurrenceKeys(runs), []string{"scheduled:2000-01-01T00:04:00Z", "scheduled:2000-01-01T00:02:00Z"}; !slices.Equal(got, want) || runs[1].ID != before[0].ID {
-			t.Fatalf("the resurrected automation lists %v, want its old run %s kept and the next occurrence %v", got, before[0].ID, want)
-		}
-		if *runs[0].SeedID == *runs[1].SeedID || *runs[0].SessionID == *runs[1].SessionID {
-			t.Errorf("the first occurrence after resurrection continued the deleted automation's thread %s/%s", *runs[0].SeedID, *runs[0].SessionID)
-		}
-	})
-}
-
 func automationSingletonSpec(w *world, name, catchUp, dir string) string {
 	return fmt.Sprintf(`api_version: attn.dev/automations/v1alpha1
-id: sweep
 name: %s
 trigger: {type: scheduled, schedule: {cron: "*/2 * * * *", time_zone: UTC}, continuity: singleton, catch_up: %s}
 prompt: Sweep.

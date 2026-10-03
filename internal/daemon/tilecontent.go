@@ -12,11 +12,10 @@ import (
 	"syscall"
 	"time"
 
-	"github.com/google/uuid"
 	"github.com/victorarias/attn/internal/garden"
+	"github.com/victorarias/attn/internal/layouttree"
 	"github.com/victorarias/attn/internal/protocol"
 	"github.com/victorarias/attn/internal/store"
-	"github.com/victorarias/attn/internal/workspacelayout"
 )
 
 const markdownTileIDPrefix = "tile-markdown-"
@@ -45,70 +44,6 @@ type tileContentSig struct {
 	hasHash       bool
 	missing       bool
 	hashCheckedAt time.Time
-}
-
-type markdownTileRef struct {
-	workspaceID string
-	tileID      string
-	path        string
-}
-
-func (d *Daemon) setSelectedSession(sessionID string) {
-	sessionID = strings.TrimSpace(sessionID)
-	if sessionID == "" {
-		return
-	}
-	d.selectedSessionMu.Lock()
-	d.selectedSessionID = sessionID
-	if workspaceID, _, ok := d.store.FindWorkspaceLayoutPaneBySessionID(sessionID); ok {
-		d.selectedWorkspaceID = workspaceID
-	} else {
-		d.selectedWorkspaceID = ""
-	}
-	d.selectedSessionMu.Unlock()
-}
-
-func (d *Daemon) currentlySelectedSession() string {
-	d.selectedSessionMu.RLock()
-	defer d.selectedSessionMu.RUnlock()
-	return d.selectedSessionID
-}
-
-func (d *Daemon) setSelectedWorkspace(workspaceID string) {
-	workspaceID = strings.TrimSpace(workspaceID)
-	if workspaceID == "" {
-		return
-	}
-	d.selectedSessionMu.Lock()
-	d.selectedWorkspaceID = workspaceID
-	d.selectedSessionMu.Unlock()
-}
-
-func (d *Daemon) currentlySelectedWorkspace() string {
-	d.selectedSessionMu.RLock()
-	defer d.selectedSessionMu.RUnlock()
-	return d.selectedWorkspaceID
-}
-
-func (d *Daemon) tileFilePath(workspaceID, tileID string) (kind, path string, found bool) {
-	if d.store == nil {
-		return "", "", false
-	}
-	snapshot := d.store.GetWorkspaceLayout(workspaceID)
-	if snapshot == nil {
-		return "", "", false
-	}
-	for _, leaf := range workspacelayout.TileLeaves(snapshot.Layout) {
-		if leaf.TileID == tileID {
-			return leaf.TileKind, strings.TrimSpace(leaf.TileParams), true
-		}
-	}
-	return "", "", false
-}
-
-func (d *Daemon) tileStillPointsTo(workspaceID, tileID, kind, path string) bool {
-	currentKind, currentPath, found := d.tileFilePath(workspaceID, tileID)
-	return found && currentKind == kind && currentPath == path
 }
 
 func readMarkdownFile(path string) (string, error) {
@@ -162,249 +97,7 @@ func refreshTileContentHash(path string, sig tileContentSig, now time.Time) tile
 	return sig
 }
 
-func tileContentSubscriptionKey(workspaceID, tileID string) string {
-	return workspaceID + "\x00" + tileID
-}
-
-const (
-	maxTileContentSubscriptions = 128
-	tileContentPendingTTL       = 30 * time.Second
-)
-
-func (c *wsClient) prunePendingTileContentLocked(now time.Time) {
-	for key, createdAt := range c.tileContentPending {
-		if now.Sub(createdAt) >= tileContentPendingTTL {
-			delete(c.tileContentPending, key)
-		}
-	}
-}
-
-func (c *wsClient) subscribeTileContent(workspaceID, tileID string) bool {
-	if c == nil {
-		return false
-	}
-	key := tileContentSubscriptionKey(workspaceID, tileID)
-	c.tileContentMu.Lock()
-	defer c.tileContentMu.Unlock()
-	if c.tileContentSubscriptions == nil {
-		c.tileContentSubscriptions = make(map[string]struct{})
-	}
-	if _, ok := c.tileContentSubscriptions[key]; ok {
-		return true
-	}
-	if len(c.tileContentSubscriptions) >= maxTileContentSubscriptions {
-		return false
-	}
-	c.tileContentSubscriptions[key] = struct{}{}
-	return true
-}
-
-func (c *wsClient) notePendingTileContent(workspaceID, tileID string) bool {
-	if c == nil {
-		return false
-	}
-	key := tileContentSubscriptionKey(workspaceID, tileID)
-	c.tileContentMu.Lock()
-	defer c.tileContentMu.Unlock()
-	now := time.Now()
-	c.prunePendingTileContentLocked(now)
-	if _, ok := c.tileContentSubscriptions[key]; ok {
-		return true
-	}
-	if c.tileContentPending == nil {
-		c.tileContentPending = make(map[string]time.Time)
-	}
-	if _, ok := c.tileContentPending[key]; ok {
-		return true
-	}
-	if len(c.tileContentSubscriptions)+len(c.tileContentPending) >= maxTileContentSubscriptions {
-		return false
-	}
-	c.tileContentPending[key] = now
-	return true
-}
-
-func (c *wsClient) cancelPendingTileContent(workspaceID, tileID string) {
-	if c == nil {
-		return
-	}
-	key := tileContentSubscriptionKey(workspaceID, tileID)
-	c.tileContentMu.Lock()
-	defer c.tileContentMu.Unlock()
-	delete(c.tileContentPending, key)
-}
-
-func (c *wsClient) resolvePendingTileContent(workspaceID, tileID string) bool {
-	if c == nil {
-		return false
-	}
-	key := tileContentSubscriptionKey(workspaceID, tileID)
-	c.tileContentMu.Lock()
-	defer c.tileContentMu.Unlock()
-	c.prunePendingTileContentLocked(time.Now())
-	if _, ok := c.tileContentSubscriptions[key]; ok {
-		return true
-	}
-	if _, ok := c.tileContentPending[key]; !ok {
-		return false
-	}
-	delete(c.tileContentPending, key)
-	if len(c.tileContentSubscriptions) >= maxTileContentSubscriptions {
-		return false
-	}
-	if c.tileContentSubscriptions == nil {
-		c.tileContentSubscriptions = make(map[string]struct{})
-	}
-	c.tileContentSubscriptions[key] = struct{}{}
-	return true
-}
-
-func (c *wsClient) wantsTileContent(workspaceID, tileID string) bool {
-	if c == nil {
-		return false
-	}
-	key := tileContentSubscriptionKey(workspaceID, tileID)
-	c.tileContentMu.RLock()
-	defer c.tileContentMu.RUnlock()
-	_, ok := c.tileContentSubscriptions[key]
-	return ok
-}
-
-func (c *wsClient) pruneTileContentSubscriptions(workspaceID string, activeTileIDs map[string]struct{}) {
-	if c == nil {
-		return
-	}
-	prefix := strings.TrimSpace(workspaceID) + "\x00"
-	c.tileContentMu.Lock()
-	defer c.tileContentMu.Unlock()
-	for key := range c.tileContentSubscriptions {
-		if strings.HasPrefix(key, prefix) {
-			if _, ok := activeTileIDs[key]; !ok {
-				delete(c.tileContentSubscriptions, key)
-			}
-		}
-	}
-	for key := range c.tileContentPending {
-		if strings.HasPrefix(key, prefix) {
-			if _, ok := activeTileIDs[key]; !ok {
-				delete(c.tileContentPending, key)
-			}
-		}
-	}
-}
-
-func (c *wsClient) addTileContentWorkspaces(into map[string]struct{}) {
-	if c == nil {
-		return
-	}
-	c.tileContentMu.RLock()
-	defer c.tileContentMu.RUnlock()
-	for key := range c.tileContentSubscriptions {
-		workspaceID, _, _ := strings.Cut(key, "\x00")
-		into[workspaceID] = struct{}{}
-	}
-}
-
-func (d *Daemon) tileContentSubscribedWorkspaces() map[string]struct{} {
-	workspaces := make(map[string]struct{})
-	if d.wsHub != nil {
-		d.wsHub.ForEachClient(func(client *wsClient) { client.addTileContentWorkspaces(workspaces) })
-	}
-	return workspaces
-}
-
-func (d *Daemon) hasTileContentSubscribers(workspaceID, tileID string) bool {
-	return d.wsHub != nil && d.wsHub.AnyClientMatches(func(client *wsClient) bool {
-		return client.wantsTileContent(workspaceID, tileID)
-	})
-}
-
-func (d *Daemon) pruneTileContentSubscriptionsForLayout(workspaceID string, layout *workspacelayout.Node) {
-	if d.wsHub == nil {
-		return
-	}
-	activeTileIDs := make(map[string]struct{})
-	if layout != nil {
-		for _, leaf := range workspacelayout.TileLeaves(*layout) {
-			activeTileIDs[tileContentSubscriptionKey(workspaceID, leaf.TileID)] = struct{}{}
-		}
-	}
-	d.wsHub.ForEachClient(func(client *wsClient) {
-		client.pruneTileContentSubscriptions(workspaceID, activeTileIDs)
-	})
-}
-
-func (d *Daemon) pruneTileContentSubscriptionsForWorkspace(workspaceID string) {
-	if d.store == nil {
-		return
-	}
-	snapshot := d.store.GetWorkspaceLayout(workspaceID)
-	if snapshot == nil {
-		d.pruneTileContentSubscriptionsForLayout(workspaceID, nil)
-		return
-	}
-	d.pruneTileContentSubscriptionsForLayout(workspaceID, &snapshot.Layout)
-}
-
-func (d *Daemon) broadcastTileContent(workspaceID, tileID, kind, path, content string, readErr error) {
-	if !d.tileStillPointsTo(workspaceID, tileID, kind, path) {
-		return
-	}
-	msg := protocol.WorkspaceTileContentMessage{
-		Event:       protocol.EventWorkspaceTileContent,
-		WorkspaceID: workspaceID,
-		TileID:      tileID,
-		TileKind:    kind,
-		Path:        path,
-		Content:     content,
-	}
-	if readErr != nil {
-		msg.Error = protocol.Ptr(readErr.Error())
-	}
-	d.wsHub.SendValueToMatchingClients(msg, func(client *wsClient) bool {
-		return client.wantsTileContent(workspaceID, tileID)
-	})
-}
-
-func (d *Daemon) broadcastTileContentNow(workspaceID, tileID string) {
-	kind, path, found := d.tileFilePath(workspaceID, tileID)
-	if !found || kind != string(workspacelayout.TileKindMarkdown) {
-		return
-	}
-	content, readErr := readMarkdownFile(path)
-	d.broadcastTileContent(workspaceID, tileID, kind, path, content, readErr)
-}
-
-func (d *Daemon) handleWorkspaceTileContentGet(client *wsClient, msg *protocol.WorkspaceTileContentGetMessage) {
-	kind, path, found := d.tileFilePath(msg.WorkspaceID, msg.TileID)
-	if !found {
-		d.sendCommandError(client, protocol.CmdWorkspaceTileContentGet, fmt.Sprintf("tile not found: %s", msg.TileID))
-		return
-	}
-	if kind != string(workspacelayout.TileKindMarkdown) {
-		d.sendCommandError(client, protocol.CmdWorkspaceTileContentGet, fmt.Sprintf("unsupported tile kind: %s", kind))
-		return
-	}
-	if !client.subscribeTileContent(msg.WorkspaceID, msg.TileID) {
-		d.sendCommandError(client, protocol.CmdWorkspaceTileContentGet, "too many tile content subscriptions")
-		return
-	}
-	content, readErr := readMarkdownFile(path)
-	reply := protocol.WorkspaceTileContentMessage{
-		Event:       protocol.EventWorkspaceTileContent,
-		WorkspaceID: msg.WorkspaceID,
-		TileID:      msg.TileID,
-		TileKind:    kind,
-		Path:        path,
-		Content:     content,
-	}
-	if readErr != nil {
-		reply.Error = protocol.Ptr(readErr.Error())
-	}
-	d.sendToClient(client, reply)
-}
-
-func (d *Daemon) openMarkdownTile(path, sessionID string) (workspaceID, tileID string, err error) {
+func (d *Daemon) openMarkdownTile(path, callerSessionID string) (desktopID, tileID string, err error) {
 	path = strings.TrimSpace(path)
 	if path == "" {
 		return "", "", fmt.Errorf("path is required")
@@ -417,44 +110,26 @@ func (d *Daemon) openMarkdownTile(path, sessionID string) (workspaceID, tileID s
 		d.store.DeleteFileActivity(path)
 		return "", "", fmt.Errorf("file not found: %s", path)
 	}
-	if sessionID == "" {
-		return "", "", fmt.Errorf("no session selected; open a session in attn or pass --session")
-	}
-	workspaceID, paneID, ok := d.store.FindWorkspaceLayoutPaneBySessionID(sessionID)
-	if !ok {
-		return "", "", fmt.Errorf("no workspace found for session %s", sessionID)
-	}
-
-	d.openTileMu.Lock()
-	defer d.openTileMu.Unlock()
-
-	tileID = markdownTileIDForPath(path)
-	alreadyOpen := false
-	if snapshot := d.store.GetWorkspaceLayout(workspaceID); snapshot != nil {
-		alreadyOpen = workspacelayout.HasTile(snapshot.Layout, tileID)
-		if !alreadyOpen {
-			for _, leaf := range workspacelayout.TileLeaves(snapshot.Layout) {
-				if leaf.TileKind == string(workspacelayout.TileKindMarkdown) && leaf.TileParams == path {
-					tileID = leaf.TileID
-					alreadyOpen = true
-					break
-				}
-			}
-		}
-	}
-	if alreadyOpen {
-		if err := d.rebindTileSession(workspaceID, tileID, sessionID); err != nil {
-			return "", "", err
-		}
-	} else if err := d.dockTile(workspaceID, paneID, tileID, string(workspacelayout.TileKindMarkdown), path, sessionID, protocol.WorkspaceLayoutDockEdgeRight, nil); err != nil {
+	location, err := d.currentAgent(callerSessionID)
+	if err != nil {
 		return "", "", err
 	}
-	d.broadcastTileContentNow(workspaceID, tileID)
-	d.store.RecordFileActivity(path, store.FileActivitySourceOpened, sessionID)
-	return workspaceID, tileID, nil
+	d.openTileMu.Lock()
+	defer d.openTileMu.Unlock()
+	desktop, tileID, err := d.openAgentTile(location, agentTile{
+		tileID:    markdownTileIDForPath(path),
+		tileKind:  string(layouttree.TileKindMarkdown),
+		params:    path,
+		sessionID: location.sessionID,
+	})
+	if err != nil {
+		return "", "", err
+	}
+	d.store.RecordFileActivity(path, store.FileActivitySourceOpened, location.sessionID)
+	return desktop.ID, tileID, nil
 }
 
-func (d *Daemon) openSeedTile(seedID, placementSessionID string) (workspaceID, tileID string, err error) {
+func (d *Daemon) openSeedTile(seedID, callerSessionID string, standalone bool, selectedProfile ...string) (desktopID, tileID string, err error) {
 	if err := d.requireHome(garden.Surface); err != nil {
 		return "", "", err
 	}
@@ -462,118 +137,73 @@ func (d *Daemon) openSeedTile(seedID, placementSessionID string) (workspaceID, t
 	if err != nil {
 		return "", "", err
 	}
-	bindingSessionID := strings.TrimSpace(seed.TenderSession)
-	if bindingSessionID == "" {
-		bindingSessionID = placementSessionID
+	selected := ""
+	if len(selectedProfile) > 1 {
+		selected = selectedProfile[1]
 	}
-
-	d.openTileMu.Lock()
-	defer d.openTileMu.Unlock()
-
-	tileID = seedTileIDForID(seed.ID)
-	if placementSessionID == "" {
-		for _, candidateID := range d.store.WorkspaceLayoutIDs() {
-			if snapshot := d.store.GetWorkspaceLayout(candidateID); snapshot != nil && isStandaloneSeedReader(snapshot, tileID) {
-				layout, ok := workspacelayout.UpdateTileParams(snapshot.Layout, tileID, seed.ID)
-				if !ok {
-					return "", "", fmt.Errorf("tile not found: %s", tileID)
-				}
-				layout, ok = workspacelayout.UpdateTileSessionID(layout, tileID, bindingSessionID)
-				if !ok {
-					return "", "", fmt.Errorf("tile not found: %s", tileID)
-				}
-				snapshot.Layout = layout
-				if err := d.store.SaveWorkspaceLayout(*snapshot); err != nil {
-					return "", "", err
-				}
-				d.broadcastWorkspaceLayoutUpdated(candidateID)
-				return candidateID, tileID, nil
-			}
-		}
-
-		workspaceID = uuid.NewString()
-		d.registerWorkspace(workspaceID, seed.Title, "", false)
-		snapshot := workspacelayout.NormalizeWorkspaceLayout(workspacelayout.WorkspaceLayout{
-			WorkspaceID: workspaceID,
-			Layout: workspacelayout.Node{
-				Type:          "tile",
-				TileID:        tileID,
-				TileKind:      string(workspacelayout.TileKindSeed),
-				TileParams:    seed.ID,
-				TileSessionID: bindingSessionID,
-			},
-		})
-		if err := d.store.SaveWorkspaceLayout(snapshot); err != nil {
-			d.unregisterWorkspaceIfEmpty(workspaceID)
-			return "", "", err
-		}
-		d.broadcastWorkspaceLayoutUpdated(workspaceID)
-		return workspaceID, tileID, nil
-	}
-
-	workspaceID, paneID, ok := d.store.FindWorkspaceLayoutPaneBySessionID(placementSessionID)
-	if !ok {
-		return "", "", fmt.Errorf("no workspace found for session %s", placementSessionID)
-	}
-	if snapshot := d.store.GetWorkspaceLayout(workspaceID); snapshot != nil && workspacelayout.HasTile(snapshot.Layout, tileID) {
-		if err := d.rebindTileSession(workspaceID, tileID, bindingSessionID); err != nil {
-			return "", "", err
-		}
-	} else if err := d.dockTile(workspaceID, paneID, tileID, string(workspacelayout.TileKindSeed), seed.ID, bindingSessionID, protocol.WorkspaceLayoutDockEdgeRight, nil); err != nil {
+	profile, err := d.resolveGardenProfile(callerSessionID, firstProfile(selectedProfile), selected)
+	if err != nil {
 		return "", "", err
 	}
-	return workspaceID, tileID, nil
+	if selected != "" && profile.ID != selected {
+		owner, err := d.store.GetProfile(selected)
+		if err != nil {
+			return "", "", err
+		}
+		return "", "", fmt.Errorf("source session belongs to profile %q; app belongs to profile %q", profile.Name, owner.Name)
+	}
+	if err := d.requireSeedInProfile(seedID, profile.ID, false); err != nil {
+		return "", "", err
+	}
+	location := agentLocation{profileID: profile.ID, desktopID: profile.CurrentDesktopID}
+	if callerSessionID != "" && !standalone {
+		location, err = d.agentLocation(callerSessionID)
+		if err != nil {
+			return "", "", err
+		}
+	}
+	d.openTileMu.Lock()
+	defer d.openTileMu.Unlock()
+	desktop, tileID, err := d.openAgentTile(location, agentTile{
+		tileID:    seedTileIDForID(seed.ID),
+		tileKind:  string(layouttree.TileKindSeed),
+		params:    seed.ID,
+		sessionID: d.seedTileSession(seed.TenderSession, location),
+	})
+	if err != nil {
+		return "", "", err
+	}
+	return desktop.ID, tileID, nil
 }
 
-func (d *Daemon) rebindTileSession(workspaceID, tileID, sessionID string) error {
-	snapshot := d.store.GetWorkspaceLayout(workspaceID)
-	if snapshot == nil {
-		return fmt.Errorf("workspace not found: %s", workspaceID)
+func (d *Daemon) seedTileSession(tenderSessionID string, location agentLocation) string {
+	tenderSessionID = strings.TrimSpace(tenderSessionID)
+	if tenderSessionID == "" {
+		return location.sessionID
 	}
-	if current, ok := workspacelayout.TileSessionIDByID(snapshot.Layout, tileID); ok && current == sessionID {
-		return nil
+	if tender := d.store.Get(tenderSessionID); tender != nil && tender.ProfileID == location.profileID {
+		return tenderSessionID
 	}
-	layout, ok := workspacelayout.UpdateTileSessionID(snapshot.Layout, tileID, sessionID)
-	if !ok {
-		return fmt.Errorf("tile not found: %s", tileID)
-	}
-	snapshot.Layout = layout
-	if err := d.store.SaveWorkspaceLayout(*snapshot); err != nil {
-		return err
-	}
-	d.broadcastWorkspaceLayoutUpdated(workspaceID)
-	return nil
+	return location.sessionID
 }
 
 func (d *Daemon) handleOpenMarkdown(conn net.Conn, msg *protocol.OpenMarkdownMessage) {
-	sessionID := strings.TrimSpace(protocol.Deref(msg.SessionID))
-	if sessionID == "" {
-		sessionID = d.currentlySelectedSession()
-	}
-	workspaceID, tileID, err := d.openMarkdownTile(msg.Path, sessionID)
+	desktopID, tileID, err := d.openMarkdownTile(msg.Path, protocol.Deref(msg.SessionID))
 	if err != nil {
 		d.sendError(conn, fmt.Sprintf("open_markdown: %v", err))
 		return
 	}
-	d.logf("open_markdown: docked %s as %s into workspace %s (session %s)", strings.TrimSpace(msg.Path), tileID, workspaceID, sessionID)
+	d.logf("open_markdown: %s as %s on desktop %s", strings.TrimSpace(msg.Path), tileID, desktopID)
 	d.sendOK(conn)
 }
 
-func (d *Daemon) seedPlacementSession(msg *protocol.OpenSeedMessage) string {
-	placementSessionID := strings.TrimSpace(protocol.Deref(msg.SessionID))
-	if placementSessionID == "" && !protocol.Deref(msg.Standalone) {
-		placementSessionID = d.currentlySelectedSession()
-	}
-	return placementSessionID
-}
-
 func (d *Daemon) handleOpenSeed(conn net.Conn, msg *protocol.OpenSeedMessage) {
-	workspaceID, tileID, err := d.openSeedTile(msg.SeedID, d.seedPlacementSession(msg))
+	desktopID, tileID, err := d.openSeedTile(msg.SeedID, protocol.Deref(msg.SessionID), protocol.Deref(msg.Standalone), protocol.Deref(msg.ProfileID))
 	if err != nil {
 		d.sendError(conn, fmt.Sprintf("open_seed: %v", err))
 		return
 	}
-	d.logf("open_seed: docked %s as %s into workspace %s", strings.TrimSpace(msg.SeedID), tileID, workspaceID)
+	d.logf("open_seed: %s as %s on desktop %s", strings.TrimSpace(msg.SeedID), tileID, desktopID)
 	d.sendOK(conn)
 }
 
@@ -593,20 +223,17 @@ func (d *Daemon) handleOpenSentFiles(conn net.Conn, msg *protocol.OpenSentFilesM
 		d.sendOK(conn)
 		return
 	}
-	sessionID := strings.TrimSpace(protocol.Deref(msg.SessionID))
-	if sessionID == "" {
-		sessionID = d.currentlySelectedSession()
-	}
+	sessionID := protocol.Deref(msg.SessionID)
 	for _, path := range msg.Paths {
 		path = strings.TrimSpace(path)
 		switch strings.ToLower(filepath.Ext(path)) {
 		case ".md", ".markdown":
-			workspaceID, tileID, err := d.openMarkdownTile(path, sessionID)
+			desktopID, tileID, err := d.openMarkdownTile(path, sessionID)
 			if err != nil {
 				d.logf("open_sent_files: %s: %v", path, err)
 				continue
 			}
-			d.logf("open_sent_files: docked %s as %s into workspace %s (session %s)", path, tileID, workspaceID, sessionID)
+			d.logf("open_sent_files: %s as %s on desktop %s", path, tileID, desktopID)
 		default:
 			d.logf("open_sent_files: dropped %s (no tile can show it)", path)
 		}
@@ -623,20 +250,19 @@ func (d *Daemon) handleOpenMarkdownWS(client *wsClient, msg *protocol.OpenMarkdo
 	if requestID := strings.TrimSpace(protocol.Deref(msg.RequestID)); requestID != "" {
 		result.RequestID = protocol.Ptr(requestID)
 	}
-	sessionID := strings.TrimSpace(protocol.Deref(msg.SessionID))
-	if sessionID == "" {
-		sessionID = d.currentlySelectedSession()
-	}
-	workspaceID, tileID, err := d.openMarkdownTile(msg.Path, sessionID)
+	client.holdArrangements()
+	defer d.releaseArrangements(client)
+	desktopID, tileID, err := d.openMarkdownTile(msg.Path, protocol.Deref(msg.SessionID))
 	if err != nil {
 		result.Success = false
 		result.Error = protocol.Ptr(err.Error())
 		d.sendToClient(client, result)
 		return
 	}
-	result.WorkspaceID = protocol.Ptr(workspaceID)
+	result.DesktopID = protocol.Ptr(desktopID)
 	result.TileID = protocol.Ptr(tileID)
-	d.logf("open_markdown(ws): docked %s as %s into workspace %s (session %s)", result.Path, tileID, workspaceID, sessionID)
+	d.logf("open_markdown(ws): %s as %s on desktop %s", result.Path, tileID, desktopID)
+	d.sendArrangement(client, protocol.Deref(result.RequestID), nil)
 	d.sendToClient(client, result)
 }
 
@@ -647,16 +273,19 @@ func (d *Daemon) handleOpenSeedWS(client *wsClient, msg *protocol.OpenSeedMessag
 		SeedID:    strings.TrimSpace(msg.SeedID),
 		Success:   true,
 	}
-	workspaceID, tileID, err := d.openSeedTile(msg.SeedID, d.seedPlacementSession(msg))
+	client.holdArrangements()
+	defer d.releaseArrangements(client)
+	desktopID, tileID, err := d.openSeedTile(msg.SeedID, protocol.Deref(msg.SessionID), protocol.Deref(msg.Standalone), protocol.Deref(msg.ProfileID), client.selectedProfile())
 	if err != nil {
 		result.Success = false
 		result.Error = protocol.Ptr(err.Error())
 		d.sendToClient(client, result)
 		return
 	}
-	result.WorkspaceID = protocol.Ptr(workspaceID)
+	result.DesktopID = protocol.Ptr(desktopID)
 	result.TileID = protocol.Ptr(tileID)
-	d.logf("open_seed(ws): docked %s as %s into workspace %s", result.SeedID, tileID, workspaceID)
+	d.logf("open_seed(ws): %s as %s on desktop %s", result.SeedID, tileID, desktopID)
+	d.sendArrangement(client, protocol.Deref(msg.RequestID), nil)
 	d.sendToClient(client, result)
 }
 
@@ -667,78 +296,10 @@ func (d *Daemon) runMarkdownContentWatcher(done <-chan struct{}) {
 		select {
 		case <-done:
 			return
+		case <-d.desktopTiles.nudge:
+			d.deliverDesktopTileContent()
 		case <-ticker.C:
-			d.pollMarkdownOnce()
+			d.deliverDesktopTileContent()
 		}
 	}
-}
-
-func (d *Daemon) pollMarkdownOnce() {
-	for _, ref := range d.collectChangedMarkdownTiles() {
-		content, readErr := readMarkdownFile(ref.path)
-		d.broadcastTileContent(ref.workspaceID, ref.tileID, string(workspacelayout.TileKindMarkdown), ref.path, content, readErr)
-	}
-}
-
-func (d *Daemon) collectChangedMarkdownTiles() []markdownTileRef {
-	if d.store == nil {
-		return nil
-	}
-
-	desired := make(map[string]markdownTileRef)
-	for workspaceID := range d.tileContentSubscribedWorkspaces() {
-		snapshot := d.store.GetWorkspaceLayout(workspaceID)
-		if snapshot == nil {
-			continue
-		}
-		for _, leaf := range workspacelayout.TileLeaves(snapshot.Layout) {
-			if leaf.TileKind != string(workspacelayout.TileKindMarkdown) {
-				continue
-			}
-			if !d.hasTileContentSubscribers(workspaceID, leaf.TileID) {
-				continue
-			}
-			path := strings.TrimSpace(leaf.TileParams)
-			if path == "" {
-				continue
-			}
-			key := workspaceID + "\x00" + leaf.TileID
-			desired[key] = markdownTileRef{workspaceID: workspaceID, tileID: leaf.TileID, path: path}
-		}
-	}
-
-	d.markdownSeenMu.Lock()
-	defer d.markdownSeenMu.Unlock()
-	if d.markdownSeen == nil {
-		d.markdownSeen = make(map[string]tileContentSig)
-	}
-	for key := range d.markdownSeen {
-		if _, ok := desired[key]; !ok {
-			delete(d.markdownSeen, key)
-		}
-	}
-	var changed []markdownTileRef
-	now := time.Now()
-	for key, ref := range desired {
-		sig := statSig(ref.path)
-		prev, had := d.markdownSeen[key]
-		if !had || prev.mod != sig.mod || prev.size != sig.size || prev.missing != sig.missing {
-			d.markdownSeen[key] = refreshTileContentHash(ref.path, sig, now)
-			changed = append(changed, ref)
-			continue
-		}
-		if now.Sub(prev.hashCheckedAt) < markdownHashPollInterval {
-			continue
-		}
-		next := refreshTileContentHash(ref.path, sig, now)
-		d.markdownSeen[key] = next
-		if prev.hasHash != next.hasHash || prev.hash != next.hash {
-			changed = append(changed, ref)
-		}
-	}
-	return changed
-}
-
-func isStandaloneSeedReader(snapshot *workspacelayout.WorkspaceLayout, tileID string) bool {
-	return len(snapshot.Panes) == 0 && snapshot.Layout.Type == "tile" && snapshot.Layout.TileID == tileID
 }

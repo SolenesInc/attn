@@ -1,0 +1,3 @@
+kind: removed
+area: app
+change: Pinning an agent out of the queue and muting or pinning a workspace are gone; profiles and desktops now arrange your agents. Snooze still defers an agent, and crew members keep their own band in the queue. The `pin_session`, `pin_workspace` and `mute_workspace` commands are removed.

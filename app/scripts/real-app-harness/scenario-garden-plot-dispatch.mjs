@@ -9,8 +9,9 @@ import {
 } from './common.mjs';
 import {
   runShellCommandInPane,
-  waitForFirstWorkspacePane,
+  waitForFirstDesktopPane,
   waitForPaneShellReady,
+  waitForPaneText,
 } from './scenarioAssertions.mjs';
 import { delay } from './platform.mjs';
 import { UiAutomationClient } from './uiAutomationClient.mjs';
@@ -90,7 +91,7 @@ async function awaitDockRow(client, seedID, timeoutMs = 20_000) {
   throw new Error(`the garden panel never listed ${seedID}: ${JSON.stringify(state)}`);
 }
 
-// The tile is read by naming the seed: a workspace keeps older seed tiles
+// The tile is read by naming the seed: a desktopState keeps older seed tiles
 // mounted, and one of those answers too.
 async function awaitTile(client, seedID, ready, timeoutMs = 20_000) {
   const deadline = Date.now() + timeoutMs;
@@ -132,6 +133,7 @@ async function openPane(client, observer, runner, label) {
           { type: 'capture', from: 'prompt', pattern: 'agent inbox ([0-9a-f-]{36})', name: 'message' },
           { type: 'capture', from: 'prompt', pattern: '--session ([0-9a-f-]{36})', name: 'session' },
           { type: 'attn', args: ['agent', 'inbox', '{{message}}', '--session', '{{session}}'] },
+          { type: 'reply', text: 'INBOX_READ_DONE' },
         ],
       },
     ],
@@ -139,7 +141,7 @@ async function openPane(client, observer, runner, label) {
   const sessionId = await createSessionAndWaitForInitialPane({
     client, observer, cwd, label, agent: 'shell',
   });
-  const pane = await waitForFirstWorkspacePane(client, sessionId, `pane for ${label}`, 20_000);
+  const pane = await waitForFirstDesktopPane(client, sessionId, `pane for ${label}`, 20_000);
   await waitForPaneShellReady(client, sessionId, pane.paneId);
   return { sessionId, paneId: pane.paneId, cwd };
 }
@@ -364,10 +366,12 @@ async function main() {
       runner.assert(Boolean(messageID), 'the steer returned its mailbox id', { sent });
       await waitForMessageNotification(client, pane, messageID);
 
-      const delegatePane = await waitForFirstWorkspacePane(client, delegated, 'the delegate’s pane', 20_000);
+      const delegatePane = await waitForFirstDesktopPane(client, delegated, 'the delegate’s pane', 20_000);
       const tender = { sessionId: delegated, paneId: delegatePane.paneId };
-      const read = await runInPane(client, tender,
-        `attn agent inbox ${messageID} --session ${delegated}`, STEER);
+      await client.request('select_session', { sessionId: delegated });
+      await client.request('write_pane', { ...tender, text: `attn agent inbox ${messageID} --session ${delegated}` });
+      const { text: read } = await waitForPaneText(client, delegated, delegatePane.paneId,
+        (text) => saw(text, 'INBOX_READ_DONE'), 'the tender read its addressed inbox message');
       runner.assert(saw(read, STEER),
         'only the tender the seed id resolved to can read the steer', { read, crown, delegated });
       const shown = (await client.request('read_pane_text', tender)).text || '';
@@ -440,7 +444,7 @@ async function main() {
         'the attach is on the log as its own kind', { tile });
       fs.writeFileSync(path.join(runner.runDir, 'tile-attached.png'),
         Buffer.from((await client.request('capture_screenshot_data',
-          { selector: '.workspace-dock-tile' })).pngBase64, 'base64'));
+          { selector: '.desktop-dock-tile' })).pngBase64, 'base64'));
       await pace();
 
       await runInPane(client, pane,

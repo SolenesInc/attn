@@ -14,19 +14,19 @@ func TestAHeldRunStartsAfterARestartOnTheDefinitionAsItWasWhenItFellDue(t *testi
 	applyAutomation(t, r.cli, spec)
 	upstream := newRepo(t, "upstream")
 	unfetched := commitFile(t, upstream, "later.go", "package later\n")
-	if _, err := r.cli.AutomationRun("manual-review", "held", automationReviewInput(46, unfetched)); err == nil {
+	if _, err := r.cli.AutomationRun(2, "held", automationReviewInput(46, unfetched)); err == nil {
 		t.Fatal("a run whose head cannot be fetched started")
 	}
-	held := automationRuns(t, r.cli, "manual-review")
+	held := automationRuns(t, r.cli, 2)
 	if len(held) != 1 || held[0].State != "pending" {
 		t.Fatalf("runs = %+v, want the run held pending", held)
 	}
 
-	applyAutomation(t, r.cli, strings.Replace(spec, "Review this pull request.", "Review this pull request for security.", 1))
+	applyAutomation(t, r.cli, automationEditSpec(2, strings.Replace(spec, "Review this pull request.", "Review this pull request for security.", 1)))
 	runGit(t, r.clone, "fetch", upstream, "main")
 	r.w.restart()
 	r.app, r.cli = r.w.App(), r.w.Client()
-	r.awaitRuns("manual-review", func(runs []protocol.AutomationRunSummary) bool {
+	r.awaitRuns(2, func(runs []protocol.AutomationRunSummary) bool {
 		return automationRunState(runs, held[0].ID) == "delivered"
 	})
 

@@ -113,7 +113,7 @@ const indexTemplate = `# Notebook
 
 A durable, instance-wide markdown bundle — the journal attn writes on your behalf
 and the knowledge base the chief of staff maintains. It outlives any single
-workspace and is yours to read, edit, and sync.
+agent and is yours to read, edit, and sync.
 
 - ` + "`journal/`" + ` — dated narrative of what was done, newest entries appended per day.
 - ` + "`knowledge/`" + ` — the PARA-organized knowledge base (projects, areas, resources, archive).
@@ -151,8 +151,8 @@ or URLs), never paraphrase alone.
 `
 
 var paraIndexTemplates = map[string]string{
-	"projects":  "# Projects\n\nBounded efforts with an end. One folder per project or epic; a\nproject's `index.md` links the workspace that produced it with\n`resource: attn:workspace/<id>`.\n",
+	"projects":  "# Projects\n\nBounded efforts with an end. One folder per project or epic; a\nproject's `index.md` links the plot that tracks it with\n`resource: attn:seed/<plot-id>`.\n",
 	"areas":     "# Areas\n\nOngoing responsibilities and subsystems, with no end. Durable knowledge\npromoted out of finished projects lands here.\n",
 	"resources": "# Resources\n\nReference material worth keeping across projects and areas.\n",
-	"archive":   "# Archive\n\nFinished or inactive items. A project folder is moved here when its\nworkspace closes.\n",
+	"archive":   "# Archive\n\nFinished or inactive items. A project folder is moved here when its\nplot is harvested.\n",
 }

@@ -25,7 +25,7 @@ func automationResolvedLocationJSON(t *testing.T, mainRepo, worktree string) str
 func claimTerminalAutomationRun(t *testing.T, s *store.Store, def *store.AutomationDefinition, requestID string, observedAt time.Time, resolvedLocationJSON string) *store.AutomationRun {
 	t.Helper()
 	run, created, err := s.ClaimManualAutomationRun(def.ID, requestID, "", `{}`, def.Revision, `{}`, observedAt, store.AutomationRunReservation{
-		RunID: "run-" + requestID, OccurrenceID: "occ-" + requestID, SeedID: "ticket-" + requestID, SessionID: "session-" + requestID, WorkspaceID: "workspace-" + requestID, PaneID: "pane-" + requestID,
+		RunID: "run-" + requestID, OccurrenceID: "occ-" + requestID, SeedID: "ticket-" + requestID, SessionID: "session-" + requestID,
 	})
 	if err != nil || !created {
 		t.Fatalf("claim %s created=%v err=%v", requestID, created, err)
@@ -51,7 +51,7 @@ func TestAutomationRetentionSweepDirtyWorktreeBlocksPruning(t *testing.T) {
 	}
 
 	s := store.New()
-	d := &Daemon{gitExec: testGitExecutor(t, productionGitExecutorConfig), store: s, dataRoot: root, wsHub: newWSHub()}
+	d := homeDaemon(t, &Daemon{gitExec: testGitExecutor(t, productionGitExecutorConfig), store: s, dataRoot: root, wsHub: newWSHub()})
 	raw := fmt.Sprintf(manualAutomationYAML, t.TempDir())
 	def, err := d.automationApply(raw)
 	if err != nil {
@@ -78,7 +78,7 @@ func TestAutomationRetentionSweepCleanWorktreeRemovesEverything(t *testing.T) {
 	runGitDaemon(t, mainRepo, "worktree", "add", "-b", "automation/clean", worktree)
 
 	s := store.New()
-	d := &Daemon{gitExec: testGitExecutor(t, productionGitExecutorConfig), store: s, dataRoot: root, wsHub: newWSHub()}
+	d := homeDaemon(t, &Daemon{gitExec: testGitExecutor(t, productionGitExecutorConfig), store: s, dataRoot: root, wsHub: newWSHub()})
 	raw := fmt.Sprintf(manualAutomationYAML, t.TempDir())
 	def, err := d.automationApply(raw)
 	if err != nil {
@@ -113,7 +113,7 @@ func TestAutomationRetentionSweepLiveSessionSkipped(t *testing.T) {
 	t.Setenv("ATTN_AUTOMATION_RETENTION_KEEP", "0")
 	t.Setenv("ATTN_AUTOMATION_RETENTION_MIN_AGE", "1h")
 	s := store.New()
-	d := &Daemon{store: s, wsHub: newWSHub()}
+	d := homeDaemon(t, &Daemon{store: s, wsHub: newWSHub()})
 	raw := fmt.Sprintf(manualAutomationYAML, t.TempDir())
 	def, err := d.automationApply(raw)
 	if err != nil {
@@ -123,7 +123,7 @@ func TestAutomationRetentionSweepLiveSessionSkipped(t *testing.T) {
 	run := claimTerminalAutomationRun(t, s, def, "live-1", old, "{}")
 	s.Add(&protocol.Session{
 		ID: run.SessionID, Label: "reviewer", Agent: string(protocol.SessionAgentCodex), Directory: t.TempDir(), State: protocol.SessionStateIdle,
-		StateSince: old.Format(time.RFC3339), StateUpdatedAt: old.Format(time.RFC3339), LastSeen: old.Format(time.RFC3339), WorkspaceID: run.WorkspaceID,
+		StateSince: old.Format(time.RFC3339), StateUpdatedAt: old.Format(time.RFC3339), LastSeen: old.Format(time.RFC3339), ProfileID: run.ProfileID,
 	})
 
 	d.automationRetentionSweepPass(time.Now())

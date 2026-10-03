@@ -1,0 +1,3 @@
+kind: fixed
+area: queue
+change: The queue sidebar says "1 more agent" when exactly one agent is hidden.

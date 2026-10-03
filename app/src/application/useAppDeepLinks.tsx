@@ -1,10 +1,11 @@
 import { getCurrent, onOpenUrl } from '@tauri-apps/plugin-deep-link';
 import { useCallback, useEffect, useRef } from 'react';
+import { currentDesktopArrived } from '../store/profiles';
 import { useSessionStore } from '../store/sessions';
 import { type SessionAgent } from '../types/sessionAgent';
 interface Options {
   selectAgent: (sessionId: string) => boolean;
-  createWorkspaceSession: (
+  launchAgent: (
     label: string,
     cwd: string,
     providedSessionId?: string,
@@ -13,21 +14,18 @@ interface Options {
     yoloMode?: boolean,
     options?: { chiefOfStaff?: boolean; autoMode?: boolean },
   ) => Promise<string>;
-  selectCreatedSession: (sessionId: string) => boolean;
 }
 export function useAppDeepLinks({
   selectAgent,
-  createWorkspaceSession,
-  selectCreatedSession,
+  launchAgent,
 }: Options) {
-  const processedDeepLinks = useRef(new Set<string>());
+  const handledDeepLinks = useRef(new Set<string>());
 
   const handleDeepLinkUrl = useCallback(
     (urlStr: string) => {
-      if (processedDeepLinks.current.has(urlStr)) {
+      if (handledDeepLinks.current.has(urlStr)) {
         return;
       }
-      processedDeepLinks.current.add(urlStr);
 
       try {
         const url = new URL(urlStr);
@@ -38,9 +36,16 @@ export function useAppDeepLinks({
             const currentSessions = useSessionStore.getState().sessions;
             const existingSession = currentSessions.find((s) => s.cwd === cwd);
             if (existingSession) {
+              handledDeepLinks.current.add(urlStr);
               selectAgent(existingSession.id);
             } else {
-              void createWorkspaceSession(label, cwd).then(selectCreatedSession);
+              handledDeepLinks.current.add(urlStr);
+              void currentDesktopArrived()
+                .then(() => launchAgent(label, cwd))
+                .catch((error) => {
+                  handledDeepLinks.current.delete(urlStr);
+                  console.error('[DeepLink] spawn failed:', error);
+                });
             }
           }
         }
@@ -48,7 +53,7 @@ export function useAppDeepLinks({
         console.error('Failed to parse deep-link URL:', e);
       }
     },
-    [createWorkspaceSession, selectAgent, selectCreatedSession],
+    [launchAgent, selectAgent],
   );
 
   useEffect(() => {

@@ -29,7 +29,7 @@ func TestAnAutomationThreadRingsOnlyWhenContinuedWorkIsReadyOrWithdrawn(t *testi
 	r := newAutomationReviewWorld(t)
 	r.github.request(42, r.head, false)
 	r.refresh()
-	first := r.awaitNewRun("review", "delivered")
+	first := r.awaitNewRun(1, "delivered")
 	reviewer, seed := protocol.Deref(first.SessionID), protocol.Deref(first.SeedID)
 	r.w.Launched(reviewer)
 	if bells := automationInbox(t, r, reviewer); len(bells) != 0 {
@@ -51,7 +51,7 @@ func TestAnAutomationThreadRingsOnlyWhenContinuedWorkIsReadyOrWithdrawn(t *testi
 	}
 	watcher.Reply("Read the seed. <!-- attn:state=idle -->")
 	r.rerequest(42)
-	continued := r.awaitNewRun("review", "delivered", first)
+	continued := r.awaitNewRun(1, "delivered", first)
 	if prompt := watcher.Prompted(); !strings.Contains(prompt, inboxDoorbell) {
 		t.Fatalf("the continued work prompted its watcher with %q, want an inbox doorbell", prompt)
 	}
@@ -65,10 +65,10 @@ func TestAnAutomationThreadRingsOnlyWhenContinuedWorkIsReadyOrWithdrawn(t *testi
 	r.refresh()
 	r.github.request(42, later, false)
 	r.refresh()
-	held := r.awaitNewRun("review", "pending", first, continued)
+	held := r.awaitNewRun(1, "pending", first, continued)
 	r.github.withdraw(42)
 	r.refresh()
-	r.awaitRuns("review", func(runs []protocol.AutomationRunSummary) bool {
+	r.awaitRuns(1, func(runs []protocol.AutomationRunSummary) bool {
 		return automationRunState(runs, held.ID) == "cancelled"
 	})
 	if prompt := watcher.Prompted(); !strings.Contains(prompt, inboxDoorbell) {

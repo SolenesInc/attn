@@ -26,7 +26,7 @@ func TestKittyPlacementsReachOnlyClientsThatAskedForThem(t *testing.T) {
 }
 
 func testKittyPlacementsReachOnlyClientsThatAskedForThem(t *testing.T, w *world) {
-	session := w.Spawn(w.App(), workspaceShell, w.Path("shop"))
+	session := w.Spawn(w.App(), shellHarness, w.Path("shop"))
 	framesOnly := transportPeer(w, protocol.CapabilityBinaryPtyOutput)
 	peers := map[string]*testworld.Peer{
 		"describes and decodes frames":   transportPeer(w, protocol.CapabilityKittyImages, protocol.CapabilityBinaryPtyOutput),
@@ -75,7 +75,7 @@ func TestKittyImagesOnScreenAreServedInTheFormEachClientReads(t *testing.T) {
 
 func testKittyImagesOnScreenAreServedInTheFormEachClientReads(t *testing.T, w *world) {
 	app := w.App()
-	session := w.Spawn(app, workspaceShell, w.Path("shop"))
+	session := w.Spawn(app, shellHarness, w.Path("shop"))
 	describer := transportPeer(w, protocol.CapabilityKittyImages)
 	kittyAttach(describer, session)
 	describer.TypeLine(session, kittyShowImage)
@@ -124,7 +124,7 @@ func TestAKittyImageKeepsOneIdentityThatNoOtherSessionShares(t *testing.T) {
 		generations := map[string]int{}
 		var sessions []string
 		for _, dir := range []string{"shop", "docs"} {
-			session := w.Spawn(app, workspaceShell, w.Path(dir))
+			session := w.Spawn(app, shellHarness, w.Path(dir))
 			kittyAttach(describer, session)
 			describer.TypeLine(session, "clear; "+kittyShowImage)
 			placed := testworld.Await(describer, protocol.EventKittyPlacements, func(m protocol.KittyPlacementsMessage) bool {
@@ -156,7 +156,7 @@ func TestAKittyImageKeepsOneIdentityThatNoOtherSessionShares(t *testing.T) {
 func TestAKittyStorageLimitOfZeroTurnsImagesOff(t *testing.T) {
 	t.Setenv("ATTN_KITTY_STORAGE_LIMIT", "0")
 	w := newWorld(t)
-	session := w.Spawn(w.App(), workspaceShell, w.Path("shop"))
+	session := w.Spawn(w.App(), shellHarness, w.Path("shop"))
 	describer := transportPeer(w, protocol.CapabilityKittyImages)
 	kittyAttach(describer, session)
 
@@ -175,7 +175,7 @@ func TestAKittyStorageLimitOfZeroTurnsImagesOff(t *testing.T) {
 
 func TestResizingASessionWithoutImagesDescribesNoPlacements(t *testing.T) {
 	w := newWorld(t)
-	session := w.Spawn(w.App(), workspaceShell, w.Path("shop"))
+	session := w.Spawn(w.App(), shellHarness, w.Path("shop"))
 	describer := transportPeer(w, protocol.CapabilityKittyImages)
 	kittyAttach(describer, session)
 
@@ -191,7 +191,7 @@ func TestResizingASessionWithoutImagesDescribesNoPlacements(t *testing.T) {
 
 func TestClientsGetTheImageStreamRewrittenAndAResyncWhenItsLayoutCannotBeCarried(t *testing.T) {
 	onEachPtyBackend(t, func(t *testing.T, w *world) {
-		session := w.Spawn(w.App(), workspaceShell, w.Path("shop"))
+		session := w.Spawn(w.App(), shellHarness, w.Path("shop"))
 		describer := transportPeer(w, protocol.CapabilityKittyImages)
 		kittyAttach(describer, session)
 		tall := make([]byte, 16*128*3)

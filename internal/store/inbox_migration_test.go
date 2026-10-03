@@ -5,9 +5,9 @@ import (
 	"testing"
 )
 
-func TestMigration162PreservesInboxHistoryAndWatchAddresses(t *testing.T) {
+func TestMigration168PreservesInboxHistoryAndWatchAddresses(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "inbox-upgrade.db")
-	db, err := openDBAtVersion(path, 161)
+	db, err := openDBAtVersion(path, 167)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -62,7 +62,7 @@ func TestMigration162PreservesInboxHistoryAndWatchAddresses(t *testing.T) {
 		t.Fatalf("migrated outstanding=%q err=%v", outstanding, err)
 	}
 	var version int
-	if err := db.QueryRow("SELECT MAX(version) FROM schema_migrations").Scan(&version); err != nil || version != 162 {
+	if err := db.QueryRow("SELECT MAX(version) FROM schema_migrations").Scan(&version); err != nil || version != 168 {
 		t.Fatalf("MAX(version)=%d err=%v", version, err)
 	}
 	if _, err := db.Exec("SELECT * FROM agent_mailbox_items"); err == nil {

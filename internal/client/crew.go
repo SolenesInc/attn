@@ -18,10 +18,13 @@ func (c *Client) CrewList() (*protocol.CrewListResult, error) {
 	return resp.CrewListResult, nil
 }
 
-func (c *Client) CrewWake(member, agent string) (*protocol.CrewWakeResult, error) {
+func (c *Client) CrewWake(member, agent, sourceSessionID string) (*protocol.CrewWakeResult, error) {
 	msg := protocol.CrewWakeMessage{Cmd: protocol.CmdCrewWake, Member: member}
 	if agent != "" {
 		msg.Agent = protocol.Ptr(agent)
+	}
+	if sourceSessionID != "" {
+		msg.SourceSessionID = protocol.Ptr(sourceSessionID)
 	}
 	resp, err := c.send(msg)
 	if err != nil {
@@ -45,7 +48,11 @@ func (c *Client) CrewSleep(member string) (*protocol.CrewSleepResult, error) {
 }
 
 func (c *Client) CrewSet(member string, cwd, agent, model, effort *string, awarenessDirs []string) (*protocol.CrewSetResult, error) {
+	return c.CrewSetWithNamedDesktop(member, cwd, agent, model, effort, awarenessDirs, nil, nil)
+}
+func (c *Client) CrewSetWithNamedDesktop(member string, cwd, agent, model, effort *string, awarenessDirs []string, desktop, name *string) (*protocol.CrewSetResult, error) {
 	msg := protocol.CrewSetMessage{
+		LaunchDesktop: desktop, LaunchDesktopName: name,
 		Cmd: protocol.CmdCrewSet, Member: member, Cwd: cwd, Agent: agent, Model: model, Effort: effort, AwarenessDirs: awarenessDirs,
 	}
 	if awarenessDirs != nil && len(awarenessDirs) == 0 {

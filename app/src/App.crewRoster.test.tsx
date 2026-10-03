@@ -1,13 +1,13 @@
 import { screen } from '@testing-library/react';
 import { describe, expect, it } from 'vitest';
-import { agentWorkspace, crewMember, type DaemonCrewMember, daemonSession } from './test/daemonFixtures';
+import { soloDesktop, crewMember, type DaemonCrewMember, daemonSession } from './test/daemonFixtures';
 import { renderApp } from './test/renderApp';
 import { initialState } from './test/scriptedDaemon';
 
 const manageCrew = () => screen.queryByTestId('manage-crew');
 
 function renderWithCrew(crew: DaemonCrewMember[]) {
-  return renderApp({ initialState: { crew, sessions: [daemonSession('s1')], workspaces: [agentWorkspace('s1')] } });
+  return renderApp({ initialState: { crew, sessions: [daemonSession('s1')], desktops: [soloDesktop('s1')] } });
 }
 
 describe('App crew roster', () => {
@@ -29,7 +29,7 @@ describe('App crew roster', () => {
     const { daemon } = await renderWithCrew([crewMember('keel')]);
     expect(manageCrew()).not.toBeNull();
 
-    daemon.on('client_hello', () => initialState({ sessions: [daemonSession('s1')], workspaces: [agentWorkspace('s1')] }));
+    daemon.on('client_hello', () => initialState({ sessions: [daemonSession('s1')], desktops: [soloDesktop('s1')] }));
     await daemon.reconnect();
 
     expect(manageCrew()).toBeNull();

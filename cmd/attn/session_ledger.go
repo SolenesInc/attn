@@ -20,7 +20,7 @@ type sessionListArgs struct {
 	all        bool
 	limit      int
 	before     string
-	workspace  string
+	profile    string
 	repository string
 	since      string
 	until      string
@@ -82,7 +82,7 @@ func parseSessionListArgs(args []string) (sessionListArgs, error) {
 	all := fs.Bool("all", false, "list live and closed sessions together")
 	limit := fs.Int("limit", 0, "rows in one page (default 20)")
 	before := fs.String("before", "", "start after this session id, from a previous page's notice")
-	workspace := fs.String("workspace", "", "only sessions of this workspace id")
+	profile := fs.String("profile", "", "only sessions of this profile id, deleted profiles included")
 	repository := fs.String("repository", "", "only sessions that ran in this repository path")
 	last := fs.String("last", "", "a date preset: "+sessionListPresetNames())
 	since := fs.String("since", "", "only sessions from this date or RFC3339 instant onwards")
@@ -107,7 +107,7 @@ func parseSessionListArgs(args []string) (sessionListArgs, error) {
 		all:        *all,
 		limit:      *limit,
 		before:     strings.TrimSpace(*before),
-		workspace:  strings.TrimSpace(*workspace),
+		profile:    strings.TrimSpace(*profile),
 		repository: strings.TrimSpace(*repository),
 		reopen:     *reopen,
 		json:       *jsonOut,
@@ -145,15 +145,15 @@ func runSessionList(args []string) {
 	}
 
 	result, err := client.New("").SessionList(client.SessionListOptions{
-		Closed:      parsed.closed,
-		All:         parsed.all,
-		Limit:       parsed.limit,
-		Before:      parsed.before,
-		WorkspaceID: parsed.workspace,
-		Repository:  parsed.repository,
-		Since:       parsed.since,
-		Until:       parsed.until,
-		Reopen:      parsed.reopen,
+		Closed:     parsed.closed,
+		All:        parsed.all,
+		Limit:      parsed.limit,
+		Before:     parsed.before,
+		ProfileID:  parsed.profile,
+		Repository: parsed.repository,
+		Since:      parsed.since,
+		Until:      parsed.until,
+		Reopen:     parsed.reopen,
 	})
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "session list: %v\n", err)
@@ -209,7 +209,7 @@ func emptySessionListMessage(args sessionListArgs) string {
 	switch {
 	case args.before != "":
 		return "no sessions past that page"
-	case args.workspace != "" || args.repository != "" || args.since != "" || args.until != "":
+	case args.profile != "" || args.repository != "" || args.since != "" || args.until != "":
 		return "no sessions match those filters — drop one to widen the search"
 	case args.closed:
 		return "no closed sessions yet — closing one records it here"
@@ -315,6 +315,63 @@ func runSessionRename(args []string) {
 	fmt.Printf("%s renamed to %q\n", parsed.sessionID, parsed.name)
 }
 
+type sessionMoveArgs struct {
+	desktop, sessionID string
+	json               bool
+}
+
+func parseSessionMoveArgs(args []string, ownSessionID string) (sessionMoveArgs, error) {
+	fs := flag.NewFlagSet("session move", flag.ContinueOnError)
+	fs.SetOutput(io.Discard)
+	session := fs.String("session", "", "session to move (defaults to ATTN_SESSION_ID)")
+	jsonOut := fs.Bool("json", false, "print the result as JSON")
+	var positional []string
+	for rest := args; ; {
+		if err := fs.Parse(rest); err != nil {
+			return sessionMoveArgs{}, err
+		}
+		if fs.NArg() == 0 {
+			break
+		}
+		positional = append(positional, fs.Arg(0))
+		rest = fs.Args()[1:]
+	}
+	if len(positional) != 1 || strings.TrimSpace(positional[0]) == "" {
+		return sessionMoveArgs{}, errors.New("exactly one desktop is required: its shortcut digit (1-9), its name or its id")
+	}
+	parsed := sessionMoveArgs{desktop: strings.TrimSpace(positional[0]), sessionID: strings.TrimSpace(*session), json: *jsonOut}
+	if parsed.sessionID == "" {
+		parsed.sessionID = strings.TrimSpace(ownSessionID)
+	}
+	if parsed.sessionID == "" {
+		return sessionMoveArgs{}, errors.New("no session; run inside attn or pass --session")
+	}
+	return parsed, nil
+}
+
+func runSessionMove(args []string) {
+	own := os.Getenv("ATTN_SESSION_ID")
+	parsed, err := parseSessionMoveArgs(args, own)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "session move: %v\n", err)
+		writeSessionHelp(os.Stderr)
+		os.Exit(2)
+	}
+	result, err := client.New("").MoveSessionToDesktop(own, parsed.sessionID, parsed.desktop)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "session move: %v\n", err)
+		os.Exit(1)
+	}
+	switch {
+	case parsed.json:
+		printJSON(result)
+	case protocol.Deref(result.Unchanged):
+		fmt.Printf("%s already is on desktop %s\n", result.SessionID, result.DesktopID)
+	default:
+		fmt.Printf("%s moved to desktop %s (pane %s)\n", result.SessionID, result.DesktopID, result.PaneID)
+	}
+}
+
 func runSessionShow(args []string) {
 	target, err := parseSessionShowArgs(args)
 	if err != nil {
@@ -346,7 +403,7 @@ func fprintSessionShow(w io.Writer, result protocol.SessionShowResult) {
 	if repository := protocol.Deref(entry.Repository); repository != "" {
 		fmt.Fprintf(w, "repository %s\n", repository)
 	}
-	fmt.Fprintf(w, "workspace  %s\n", orDash(entry.WorkspaceID))
+	fmt.Fprintf(w, "profile    %s\n", sessionLedgerProfile(entry))
 	fmt.Fprintf(w, "last seen  %s\n", shortStamp(entry.LastSeen))
 	if closedAt := protocol.Deref(entry.ClosedAt); closedAt != "" {
 		fmt.Fprintf(w, "closed     %s by %s\n", shortStamp(closedAt), orDash(protocol.Deref(entry.ClosedBy)))
@@ -355,4 +412,18 @@ func fprintSessionShow(w io.Writer, result protocol.SessionShowResult) {
 		}
 	}
 	fprintSessionReopenVerdict(w, entry.ID, result.Reopen)
+}
+
+func sessionLedgerProfile(entry protocol.SessionLedgerEntry) string {
+	if entry.ProfileID == "" {
+		return "-"
+	}
+	shown := entry.ProfileID
+	if entry.ProfileName != "" {
+		shown = fmt.Sprintf("%s (%s)", entry.ProfileName, entry.ProfileID)
+	}
+	if protocol.Deref(entry.ProfileDeleted) {
+		shown += ", deleted"
+	}
+	return shown
 }

@@ -1,0 +1,69 @@
+.unified-palette {
+  position: fixed;
+  z-index: 420;
+  padding-top: min(12vh, 110px);
+  background: rgba(3, 3, 5, 0.6);
+}
+
+.unified-palette-box {
+  width: min(760px, calc(100vw - 32px));
+  max-height: min(620px, calc(100vh - 140px));
+}
+
+.unified-palette-input-row {
+  padding-left: 12px;
+}
+
+.unified-palette-input {
+  padding-left: 0;
+}
+
+.unified-palette-mode {
+  padding: 1px 5px;
+  color: var(--color-text-tertiary);
+  background: var(--color-bg-app);
+  border: 1px solid var(--color-border);
+  border-radius: 4px;
+  font: 10px/1.4 ui-monospace, 'SFMono-Regular', monospace;
+  white-space: nowrap;
+}
+
+.unified-palette-count {
+  color: var(--color-text-tertiary);
+  font: 11px/1 ui-monospace, 'SFMono-Regular', monospace;
+  white-space: nowrap;
+}
+
+.unified-palette-list {
+  padding: 4px 6px;
+}
+
+.unified-palette-option {
+  padding: 5px 10px;
+}
+
+.unified-palette-option.is-selected .unified-palette-name {
+  color: var(--color-text-primary);
+}
+
+.unified-palette-icon {
+  display: grid;
+  place-items: center;
+  width: 16px;
+  color: var(--color-text-tertiary);
+}
+
+.unified-palette-icon svg {
+  width: 15px;
+  height: 15px;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1.6;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+.unified-palette-footer b {
+  color: var(--color-text-secondary);
+  font-weight: 600;
+}

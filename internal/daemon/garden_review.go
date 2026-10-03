@@ -50,8 +50,8 @@ type gardenReviewCapture struct {
 	notes        map[string][]gardenReviewNote
 }
 
-func (d *Daemon) captureGardenReview() (gardenReviewCapture, error) {
-	read, err := d.readWholeGarden()
+func (d *Daemon) captureGardenReview(profileID ...string) (gardenReviewCapture, error) {
+	read, err := d.readGardenTo(0, profileID...)
 	if err != nil {
 		return gardenReviewCapture{}, err
 	}
@@ -66,7 +66,6 @@ func (d *Daemon) captureGardenReview() (gardenReviewCapture, error) {
 
 	observations := make([]garden.ReviewObservation, 0, len(read.seeds))
 	byID := make(map[string]garden.ReviewObservation, len(read.seeds))
-	chiefAvailable := d.chiefOfStaffSessionID() != ""
 	type pendingInspection struct {
 		seedIndex    int
 		conversation pluginResumeConversation
@@ -103,7 +102,6 @@ func (d *Daemon) captureGardenReview() (gardenReviewCapture, error) {
 			DirectoryState:    directoryState,
 			ResumeAvailable:   resumeAvailable,
 			HandoverAvailable: handoverAvailable,
-			ChiefAvailable:    chiefAvailable,
 			ReviewAgainAt:     reviewAgainAt[seed.ID],
 		}
 		observations = append(observations, observation)
@@ -166,40 +164,6 @@ func reviewLifecycleTime(seed garden.Seed, doc docstore.Document) (time.Time, bo
 		return doc.UpdatedAt, false
 	}
 	return at, true
-}
-
-func (d *Daemon) readWholeGarden() (gardenRead, error) {
-	read := gardenRead{
-		docs: make(map[string]docstore.Document), ready: make(map[string]bool),
-	}
-	after := ""
-	for {
-		page, _, err := d.runDocQuery(docstore.Query{
-			Namespace: garden.Namespace, Collection: garden.CollectionSeeds,
-			Sort:  &docstore.Sort{Field: docstore.FieldCreatedAt, Desc: true},
-			Limit: docstore.MaxLimit, After: after,
-		})
-		if err != nil {
-			return gardenRead{}, err
-		}
-		for _, doc := range page.Documents {
-			seed, decodeErr := garden.Decode(doc.Body)
-			if decodeErr != nil {
-				d.logf("garden review: seed %s has an unreadable body: %v", doc.ID, decodeErr)
-				continue
-			}
-			read.seeds = append(read.seeds, seed)
-			read.docs[seed.ID] = doc
-		}
-		if len(page.Documents) < docstore.MaxLimit {
-			break
-		}
-		after = page.Documents[len(page.Documents)-1].ID
-	}
-	for _, seed := range garden.Ready(read.seeds, d.sessionExists) {
-		read.ready[seed.ID] = true
-	}
-	return read, nil
 }
 
 func (d *Daemon) readGardenReviewNotes() (map[string][]gardenReviewNote, map[string]time.Time, error) {
@@ -270,9 +234,7 @@ func gardenReviewActions(candidate garden.ReviewCandidate) []string {
 	if candidate.HandoverAvailable {
 		actions = append(actions, "handover")
 	}
-	if candidate.ChiefAvailable {
-		actions = append(actions, "send_to_chief")
-	}
+	actions = append(actions, "send_to_chief")
 	return append(actions, "keep_growing", "park", "harvest", "wither")
 }
 
@@ -433,11 +395,11 @@ func gardenReviewEvidenceVersion(item garden.ReviewItem, candidate garden.Review
 	return hex.EncodeToString(digest[:]), nil
 }
 
-func (d *Daemon) startGardenReview() (garden.ReviewRun, []garden.ReviewItem, error) {
+func (d *Daemon) startGardenReview(profileID ...string) (garden.ReviewRun, []garden.ReviewItem, error) {
 	d.gardenReviewMu.Lock()
 	defer d.gardenReviewMu.Unlock()
 
-	if run, found, err := d.unfinishedGardenReview(); err != nil {
+	if run, found, err := d.unfinishedGardenReview(profileID...); err != nil {
 		return garden.ReviewRun{}, nil, err
 	} else if found {
 		items, itemsErr := d.readGardenReviewItems(run.ID)
@@ -450,7 +412,7 @@ func (d *Daemon) startGardenReview() (garden.ReviewRun, []garden.ReviewItem, err
 		return run, items, nil
 	}
 
-	capture, err := d.captureGardenReview()
+	capture, err := d.captureGardenReview(profileID...)
 	if err != nil {
 		return garden.ReviewRun{}, nil, err
 	}
@@ -460,7 +422,7 @@ func (d *Daemon) startGardenReview() (garden.ReviewRun, []garden.ReviewItem, err
 	}
 	now := d.gardenTime()
 	run := garden.ReviewRun{
-		ID:         "r-" + uuid.NewString(),
+		ProfileID: firstProfile(profileID), ID: "r-" + uuid.NewString(),
 		Recipe:     garden.ReviewRecipe{Agent: config.Agent, Model: config.Model, Effort: config.Effort},
 		Status:     garden.ReviewRunStatusRunning,
 		CapturedAt: formatGardenTime(now),
@@ -590,7 +552,7 @@ func (d *Daemon) gardenReviewClassifyHandler(ctx context.Context, job *jobs.Job)
 		item.EvidenceVersion != payload.EvidenceVersion {
 		return nil, nil
 	}
-	before, err := d.captureGardenReview()
+	before, err := d.captureGardenReview(run.ProfileID)
 	if err != nil {
 		return nil, err
 	}
@@ -612,7 +574,7 @@ func (d *Daemon) gardenReviewClassifyHandler(ctx context.Context, job *jobs.Job)
 	}
 
 	crashAt(crashAfterGardenAdvice)
-	capture, err := d.captureGardenReview()
+	capture, err := d.captureGardenReview(run.ProfileID)
 	if err != nil {
 		return nil, err
 	}
@@ -804,8 +766,8 @@ func (d *Daemon) failGardenReviewJob(job *jobs.Job) {
 	}
 }
 
-func (d *Daemon) unfinishedGardenReview() (garden.ReviewRun, bool, error) {
-	runs, err := d.runningGardenReviews()
+func (d *Daemon) unfinishedGardenReview(profileID ...string) (garden.ReviewRun, bool, error) {
+	runs, err := d.runningGardenReviews(profileID...)
 	if err != nil {
 		return garden.ReviewRun{}, false, err
 	}
@@ -815,13 +777,13 @@ func (d *Daemon) unfinishedGardenReview() (garden.ReviewRun, bool, error) {
 	return runs[0], true, nil
 }
 
-func (d *Daemon) runningGardenReviews() ([]garden.ReviewRun, error) {
+func (d *Daemon) runningGardenReviews(profileID ...string) ([]garden.ReviewRun, error) {
 	runs := make([]garden.ReviewRun, 0)
 	after := ""
 	for {
 		read, _, err := d.runDocQuery(docstore.Query{
 			Namespace: garden.Namespace, Collection: garden.CollectionReviewRuns,
-			Filters: []docstore.Filter{{Field: "status", Op: docstore.OpEq, Value: garden.ReviewRunStatusRunning}},
+			Filters: append(gardenProfileFilters(firstProfile(profileID)), docstore.Filter{Field: "status", Op: docstore.OpEq, Value: garden.ReviewRunStatusRunning}),
 			Sort:    &docstore.Sort{Field: docstore.FieldCreatedAt, Desc: true},
 			Limit:   docstore.MaxLimit, After: after,
 		})
@@ -896,12 +858,13 @@ func (d *Daemon) readGardenReviewItems(runID string) ([]garden.ReviewItem, error
 	return items, nil
 }
 
-func (d *Daemon) showGardenReview(runID string) (garden.ReviewRun, []garden.ReviewItem, error) {
+func (d *Daemon) showGardenReview(runID string, profileID ...string) (garden.ReviewRun, []garden.ReviewItem, error) {
 	runID = strings.TrimSpace(runID)
 	if runID == "" {
 		read, _, err := d.runDocQuery(docstore.Query{
 			Namespace: garden.Namespace, Collection: garden.CollectionReviewRuns,
-			Sort: &docstore.Sort{Field: docstore.FieldCreatedAt, Desc: true}, Limit: 1,
+			Filters: gardenProfileFilters(firstProfile(profileID)),
+			Sort:    &docstore.Sort{Field: docstore.FieldCreatedAt, Desc: true}, Limit: 1,
 		})
 		if err != nil {
 			return garden.ReviewRun{}, nil, err
@@ -925,8 +888,8 @@ func (d *Daemon) showGardenReview(runID string) (garden.ReviewRun, []garden.Revi
 	return run, d.overlayGardenReviewJobStates(items), nil
 }
 
-func (d *Daemon) gardenReviewOverview() (*garden.ReviewRun, []garden.ReviewItem, int, error) {
-	run, found, err := d.unfinishedGardenReview()
+func (d *Daemon) gardenReviewOverview(profileID ...string) (*garden.ReviewRun, []garden.ReviewItem, int, error) {
+	run, found, err := d.unfinishedGardenReview(profileID...)
 	if err != nil {
 		return nil, nil, 0, err
 	}
@@ -938,7 +901,7 @@ func (d *Daemon) gardenReviewOverview() (*garden.ReviewRun, []garden.ReviewItem,
 		items = d.overlayGardenReviewJobStates(items)
 		return &run, items, unresolvedGardenReviewItemCount(items), nil
 	}
-	capture, err := d.captureGardenReview()
+	capture, err := d.captureGardenReview(profileID...)
 	if err != nil {
 		return nil, nil, 0, err
 	}
@@ -1001,7 +964,7 @@ func (d *Daemon) validateGardenReviewAction(
 		return garden.ReviewItem{}, fmt.Errorf("%s is not available for seed %s in this review", action, seedID)
 	}
 
-	capture, err := d.captureGardenReview()
+	capture, err := d.captureGardenReview(run.ProfileID)
 	if err != nil {
 		return garden.ReviewItem{}, err
 	}
@@ -1205,7 +1168,7 @@ func (d *Daemon) retryGardenReviewItem(runID, seedID string) (garden.ReviewRun, 
 			item.SeedID, item.Status, run.ID)
 	}
 
-	capture, err := d.captureGardenReview()
+	capture, err := d.captureGardenReview(run.ProfileID)
 	if err != nil {
 		return garden.ReviewRun{}, garden.ReviewItem{}, err
 	}

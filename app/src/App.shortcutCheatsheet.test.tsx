@@ -26,7 +26,7 @@ describe('App shortcut cheatsheet', () => {
   it('lists every action with keys under its category', async () => {
     const { cheatsheet } = await openCheatsheet();
 
-    expect(within(cheatsheet).getByRole('heading', { name: 'Workspaces & Sessions' })).toBeInTheDocument();
+    expect(within(cheatsheet).getByRole('heading', { name: 'Desktops & Sessions' })).toBeInTheDocument();
     expect(within(cheatsheet).getByRole('heading', { name: 'Panes & Terminals' })).toBeInTheDocument();
     const listed = rows(cheatsheet);
     expect(listed.length).toBeGreaterThan(20);
@@ -35,16 +35,16 @@ describe('App shortcut cheatsheet', () => {
 
   it.each([
     ['macOS', 'MacIntel', {
-      'New workspace': [['⌘', 'T']],
-      'New session in this workspace': [['⌘', 'N']],
-      'Jump to workspace 1–9': [['⌘', '1–9']],
-      'Previous / next workspace': [['⌘', '↑'], ['⌘', '↓']],
+      'Desktop overview': [['⌘', 'G']],
+      'New session on this desktop': [['⌘', 'N']],
+      'Switch to desktop 1–9': [['⌘', '1–9']],
+      'Previous / next desktop (queue mode: agent in the queue)': [['⌘', '↑'], ['⌘', '↓']],
       'Back / forward through agent history': [['⌘', '['], ['⌘', ']']],
     }],
     ['Linux', 'Linux x86_64', {
-      'New workspace': [['Ctrl', 'Shift', 'T']],
-      'Jump to workspace 1–9': [['Ctrl', 'Shift', '1–9']],
-      'Action menu': [['Ctrl', 'Shift', 'K']],
+      'Desktop overview': [['Ctrl', 'Shift', 'G']],
+      'Switch to desktop 1–9': [['Ctrl', 'Shift', '1–9']],
+      'Agent palette': [['Ctrl', 'Shift', 'K']],
       'Move focus between panes': [['Ctrl', 'Shift', '←↑→↓']],
       'Back / forward through agent history': [['Ctrl', 'Shift', '{'], ['Ctrl', 'Shift', '}']],
     }],

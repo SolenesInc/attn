@@ -1,7 +1,7 @@
 import { fireEvent, screen, within } from '@testing-library/react';
 import { describe, expect, it } from 'vitest';
 import type { EventMessage } from './test/protocol';
-import { agentWorkspace, daemonSession } from './test/daemonFixtures';
+import { soloDesktop, daemonSession } from './test/daemonFixtures';
 import { gesture, renderApp } from './test/renderApp';
 
 type WorkflowRun = EventMessage<'workflow_run_updated'>['run'];
@@ -25,7 +25,7 @@ const call = (ordinal: string, status: Call['status'], over: Partial<Call> = {})
 
 async function openWorkflowRuns(listed: WorkflowRun[], hydrated: Record<string, Call[]> = {}) {
   const { daemon } = await renderApp({
-    initialState: { sessions: [daemonSession('s1'), daemonSession('s2')], workspaces: [agentWorkspace('s1'), agentWorkspace('s2')] },
+    initialState: { sessions: [daemonSession('s1'), daemonSession('s2')], desktops: [soloDesktop('s1'), soloDesktop('s2')] },
   });
   daemon.on('workflow_run_list', () => ({ event: 'workflow_action_result', action: 'list', success: true, runs: listed }));
   daemon.on('workflow_run_get', ({ run_id }) => ({

@@ -1,6 +1,6 @@
 import { act, fireEvent, screen, within } from '@testing-library/react';
 import { describe, expect, it, vi } from 'vitest';
-import { agentWorkspace, daemonSession, type DaemonSession } from './test/daemonFixtures';
+import { soloDesktop, daemonSession, type DaemonSession } from './test/daemonFixtures';
 import type { EventMessage } from './test/protocol';
 import { gesture, renderApp } from './test/renderApp';
 import type { ScriptedDaemon } from './test/scriptedDaemon';
@@ -15,7 +15,7 @@ function agent(id: string, overrides: Partial<DaemonSession> = {}): DaemonSessio
 }
 
 function renderHome(sessions: DaemonSession[], initial: Partial<InitialState> = {}) {
-  return renderApp({ initialState: { sessions, workspaces: sessions.map((session) => agentWorkspace(session.id)), ...initial } });
+  return renderApp({ initialState: { sessions, desktops: sessions.map((session) => soloDesktop(session.id)), ...initial } });
 }
 
 const group = (name: string) => screen.queryByTestId(`session-group-${name}`);
@@ -58,7 +58,7 @@ describe('App dashboard', () => {
           label: 'feed-nexus-web#101 · gpt-5.6-sol',
           automation: {
             run_id: 'run-1',
-            definition_id: 'review-sol',
+            definition_id: 1,
             definition_name: 'Requested PR review - GPT Sol medium',
             trigger_type: 'github_review_requested',
             pull_request: {
@@ -92,7 +92,7 @@ describe('App dashboard', () => {
 
     await gesture(daemon, () => fireEvent.click(within(summary).getByRole('button', { name: /planner/ })));
 
-    expect(daemon.sentOf('session_selected').pop()).toEqual({ cmd: 'session_selected', id: 'chief-1' });
+    expect(daemon.sentOf('desktop_show_session').pop()).toMatchObject({ session_id: 'chief-1' });
   });
 
   it('asks for a chief when none is set', async () => {
@@ -150,7 +150,7 @@ describe('App dashboard', () => {
     });
 
     it('keeps automation and crew sessions out of the turns unless crew joins the queue', async () => {
-      const automation = { run_id: 'run-1', definition_id: 'review-sol', definition_name: 'Review with Sol', trigger_type: 'schedule' };
+      const automation = { run_id: 'run-1', definition_id: 1, definition_name: 'Review with Sol', trigger_type: 'schedule' };
       const sessions = [
         agent('automation-owed', { state: 'waiting_input', turn_owed: true, turn_opened_at: '2026-07-29T08:00:00Z', automation }),
         agent('automation-settled', { state: 'working', automation: { ...automation, run_id: 'run-2' } }),

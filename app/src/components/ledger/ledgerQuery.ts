@@ -3,12 +3,29 @@ import type { SessionLedgerFacets } from '../../types/generated';
 import type { SessionRangeId } from '../sessionsLedger';
 import { tildePath } from './ledgerTime';
 
-// Grammar: `repo:attn ws:name 7d from:… to:… dir:… words`; `dir:` and words narrow the loaded page only.
+// Grammar: `repo:attn profile:name 7d from:… to:… dir:… words`; `dir:` and words narrow the loaded page only.
 export interface ParsedQuery {
   filters: Omit<SessionLedgerFilters, 'scope'>;
   dir: string;
   words: string[];
   unresolved: string[];
+}
+
+export interface ProfileChoice {
+  profile_id: string;
+  name: string;
+  deleted?: boolean;
+}
+
+export function profileChoices(
+  profileNames: Record<string, string>,
+  facets: SessionLedgerFacets | null,
+  chosen: ProfileChoice | null = null,
+): ProfileChoice[] {
+  const live: ProfileChoice[] = Object.entries(profileNames).map(([profile_id, name]) => ({ profile_id, name }));
+  const historical = (facets?.profiles ?? []).filter((facet) => !(facet.profile_id in profileNames));
+  const known = [...live, ...historical];
+  return chosen && !known.some((choice) => choice.profile_id === chosen.profile_id) ? [...known, chosen] : known;
 }
 
 const RANGE_WORDS: Record<string, SessionRangeId> = {
@@ -18,10 +35,10 @@ const RANGE_WORDS: Record<string, SessionRangeId> = {
 export function parseQuery(
   text: string,
   facets: SessionLedgerFacets | null,
-  workspaceLabel: (id: string) => string,
+  profiles: ProfileChoice[],
   preferredRepository = '',
 ): ParsedQuery {
-  const filters: ParsedQuery['filters'] = { range: 'any', customFrom: '', customTo: '', workspaceId: '', repository: '' };
+  const filters: ParsedQuery['filters'] = { range: 'any', customFrom: '', customTo: '', profileId: '', repository: '' };
   const words: string[] = [];
   const unresolved: string[] = [];
   let dir = '';
@@ -51,10 +68,9 @@ export function parseQuery(
         || preferred
         || (named.length === 1 ? named[0].value : '');
       if (match) filters.repository = match; else unresolved.push(token);
-    } else if (key === 'ws') {
-      const match = (facets?.workspaces ?? []).find((facet) =>
-        facet.value === value || wsToken(workspaceLabel(facet.value)) === value.toLowerCase());
-      if (match) filters.workspaceId = match.value; else unresolved.push(token);
+    } else if (key === 'profile') {
+      const match = resolveProfileToken(profiles, value);
+      if (match) filters.profileId = match; else unresolved.push(token);
     } else if (key === 'dir') {
       dir = value;
     } else {
@@ -68,11 +84,11 @@ export function parseQuery(
 
 export function formatQuery(
   filters: SessionLedgerFilters,
-  workspaceLabel: (id: string) => string,
+  profileNames: Record<string, string>,
 ): string {
   const tokens: string[] = [];
   if (filters.repository) tokens.push(`repo:${baseName(filters.repository)}`);
-  if (filters.workspaceId) tokens.push(`ws:${wsToken(workspaceLabel(filters.workspaceId))}`);
+  if (filters.profileId) tokens.push(`profile:${profileToken(filters.profileId, profileNames)}`);
   if (filters.range === 'custom') {
     if (filters.customFrom) tokens.push(`from:${filters.customFrom}`);
     if (filters.customTo) tokens.push(`to:${filters.customTo}`);
@@ -82,7 +98,34 @@ export function formatQuery(
   return tokens.join(' ');
 }
 
-function wsToken(label: string): string {
+function resolveProfileToken(profiles: ProfileChoice[], value: string): string {
+  if (profiles.some((choice) => choice.profile_id === value)) return value;
+  const namesakes = profiles.filter((choice) => nameToken(choice.name) === value.toLowerCase());
+  return onlyProfileOf(namesakes) || onlyProfileOf(namesakes.filter((choice) => !choice.deleted));
+}
+
+function onlyProfileOf(profiles: ProfileChoice[]): string {
+  return profiles.length === 1 ? profiles[0].profile_id : '';
+}
+
+function profileToken(profileId: string, profileNames: Record<string, string>): string {
+  const name = profileNames[profileId];
+  if (!name) return profileId;
+  const token = nameToken(name);
+  const shared = Object.entries(profileNames).some(([id, other]) => id !== profileId && nameToken(other) === token);
+  return shared ? profileId : token;
+}
+
+export function renameProfileTokens(text: string, before: Record<string, string>, after: Record<string, string>): string {
+  const livedBefore = profileChoices(before, null);
+  return text.split(/(\s+)/).map((part) => {
+    if (!/^profile:/i.test(part)) return part;
+    const profileId = resolveProfileToken(livedBefore, part.slice('profile:'.length));
+    return profileId && profileId in after ? `profile:${profileToken(profileId, after)}` : part;
+  }).join('');
+}
+
+function nameToken(label: string): string {
   return label.trim().replace(/\s+/g, '-').toLowerCase();
 }
 

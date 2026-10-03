@@ -6,13 +6,13 @@ import (
 	"fmt"
 	"net"
 	"os"
+	"strconv"
 	"strings"
 	"time"
 
 	"github.com/google/uuid"
 	"github.com/victorarias/attn/internal/config"
 	"github.com/victorarias/attn/internal/garden"
-	"github.com/victorarias/attn/internal/procreap"
 	"github.com/victorarias/attn/internal/protocol"
 )
 
@@ -21,8 +21,10 @@ func DefaultSocketPath() string {
 }
 
 type Client struct {
-	socketPath string
-	dial       func() (net.Conn, error)
+	gardenProfile string
+	gardenSession string
+	socketPath    string
+	dial          func() (net.Conn, error)
 }
 
 type automationResult struct {
@@ -54,8 +56,11 @@ func (c *Client) sendAutomation(msg any, out any) error {
 }
 
 func (c *Client) AutomationApply(raw string) (*protocol.AutomationApplyResultMessage, error) {
+	return c.AutomationApplyWithNamedDesktop(raw, nil, nil)
+}
+func (c *Client) AutomationApplyWithNamedDesktop(raw string, desktop, name *string) (*protocol.AutomationApplyResultMessage, error) {
 	var result protocol.AutomationApplyResultMessage
-	if err := c.sendAutomation(protocol.AutomationApplyMessage{Cmd: protocol.CmdAutomationApply, DefinitionYaml: raw}, &result); err != nil {
+	if err := c.sendAutomation(protocol.AutomationApplyMessage{Cmd: protocol.CmdAutomationApply, DefinitionYaml: raw, LaunchDesktop: desktop, LaunchDesktopName: name}, &result); err != nil {
 		return nil, err
 	}
 	return &result, nil
@@ -74,7 +79,7 @@ func (c *Client) AutomationDefinitions() (*protocol.AutomationDefinitionsResultM
 	return &result, nil
 }
 
-func (c *Client) AutomationDefinition(id string) (*protocol.AutomationDefinitionResultMessage, error) {
+func (c *Client) AutomationDefinition(id int) (*protocol.AutomationDefinitionResultMessage, error) {
 	var result protocol.AutomationDefinitionResultMessage
 	if err := c.sendAutomation(protocol.AutomationDefinitionGetMessage{Cmd: protocol.CmdAutomationDefinitionGet, DefinitionID: id}, &result); err != nil {
 		return nil, err
@@ -82,7 +87,7 @@ func (c *Client) AutomationDefinition(id string) (*protocol.AutomationDefinition
 	return &result, nil
 }
 
-func (c *Client) AutomationRun(id, requestID, input string) (*protocol.AutomationRunResultMessage, error) {
+func (c *Client) AutomationRun(id int, requestID, input string) (*protocol.AutomationRunResultMessage, error) {
 	var result protocol.AutomationRunResultMessage
 	if err := c.sendAutomation(protocol.AutomationRunMessage{Cmd: protocol.CmdAutomationRun, DefinitionID: id, RequestID: requestID, InputJson: protocol.Ptr(input)}, &result); err != nil {
 		return nil, err
@@ -90,7 +95,7 @@ func (c *Client) AutomationRun(id, requestID, input string) (*protocol.Automatio
 	return &result, nil
 }
 
-func (c *Client) AutomationRunPullRequest(id, requestID, prURL string) (*protocol.AutomationRunResultMessage, error) {
+func (c *Client) AutomationRunPullRequest(id int, requestID, prURL string) (*protocol.AutomationRunResultMessage, error) {
 	var result protocol.AutomationRunResultMessage
 	if err := c.sendAutomation(protocol.AutomationRunMessage{Cmd: protocol.CmdAutomationRun, DefinitionID: id, RequestID: requestID, PRURL: protocol.Ptr(prURL)}, &result); err != nil {
 		return nil, err
@@ -98,7 +103,7 @@ func (c *Client) AutomationRunPullRequest(id, requestID, prURL string) (*protoco
 	return &result, nil
 }
 
-func (c *Client) AutomationRuns(id string) (*protocol.AutomationRunsResultMessage, error) {
+func (c *Client) AutomationRuns(id int) (*protocol.AutomationRunsResultMessage, error) {
 	var result protocol.AutomationRunsResultMessage
 	if err := c.sendAutomation(protocol.AutomationRunsGetMessage{Cmd: protocol.CmdAutomationRunsGet, DefinitionID: id}, &result); err != nil {
 		return nil, err
@@ -106,7 +111,7 @@ func (c *Client) AutomationRuns(id string) (*protocol.AutomationRunsResultMessag
 	return &result, nil
 }
 
-func (c *Client) AutomationSetEnabled(id string, enabled bool) (*protocol.AutomationSetEnabledResultMessage, error) {
+func (c *Client) AutomationSetEnabled(id int, enabled bool) (*protocol.AutomationSetEnabledResultMessage, error) {
 	var result protocol.AutomationSetEnabledResultMessage
 	if err := c.sendAutomation(protocol.AutomationSetEnabledMessage{Cmd: protocol.CmdAutomationSetEnabled, DefinitionID: id, Enabled: enabled}, &result); err != nil {
 		return nil, err
@@ -114,12 +119,12 @@ func (c *Client) AutomationSetEnabled(id string, enabled bool) (*protocol.Automa
 	return &result, nil
 }
 
-func (c *Client) AutomationDelete(id string) error {
+func (c *Client) AutomationDelete(id int) error {
 	var result protocol.AutomationDeleteResultMessage
 	return c.sendAutomation(protocol.AutomationDeleteMessage{Cmd: protocol.CmdAutomationDelete, DefinitionID: id}, &result)
 }
 
-func (c *Client) AutomationCleanup(id string) (*protocol.AutomationCleanupResultMessage, error) {
+func (c *Client) AutomationCleanup(id int) (*protocol.AutomationCleanupResultMessage, error) {
 	var result protocol.AutomationCleanupResultMessage
 	if err := c.sendAutomation(protocol.AutomationCleanupMessage{Cmd: protocol.CmdAutomationCleanup, DefinitionID: id}, &result); err != nil {
 		return nil, err
@@ -128,8 +133,8 @@ func (c *Client) AutomationCleanup(id string) (*protocol.AutomationCleanupResult
 }
 
 type ListResult struct {
-	Sessions   []protocol.Session   `json:"sessions"`
-	Workspaces []protocol.Workspace `json:"workspaces"`
+	Sessions []protocol.Session `json:"sessions"`
+	Profiles []protocol.Profile `json:"profiles"`
 }
 
 func New(socketPath string) *Client {
@@ -153,7 +158,34 @@ func (c *Client) connect() (net.Conn, error) {
 	return conn, nil
 }
 
+func (c *Client) WithGardenProfile(profileID, sessionID string) *Client {
+	scoped := *c
+	scoped.gardenProfile, scoped.gardenSession = profileID, sessionID
+	return &scoped
+}
+
 func (c *Client) send(msg interface{}) (*protocol.Response, error) {
+	if c.gardenProfile != "" || c.gardenSession != "" {
+		raw, err := json.Marshal(msg)
+		if err != nil {
+			return nil, err
+		}
+		var fields map[string]any
+		if err := json.Unmarshal(raw, &fields); err != nil {
+			return nil, err
+		}
+		cmd, _ := fields["cmd"].(string)
+		if strings.HasPrefix(cmd, "seed_") || cmd == protocol.CmdOpenSeed || cmd == protocol.CmdDelegateStatus || cmd == protocol.CmdDelegate {
+			if fields["profile_id"] == nil || fields["profile_id"] == "" {
+				fields["profile_id"] = c.gardenProfile
+			}
+			if cmd != protocol.CmdOpenSeed && (fields["source_session_id"] == nil || fields["source_session_id"] == "") {
+				fields["source_session_id"] = c.gardenSession
+			}
+			msg = fields
+		}
+	}
+
 	conn, err := c.connect()
 	if err != nil {
 		return nil, err
@@ -194,42 +226,6 @@ func ErrorCode(err error) string {
 		return daemonErr.Code
 	}
 	return ""
-}
-
-func (c *Client) Register(id, label, dir string) error {
-	return c.RegisterWithAgent(id, label, dir, "")
-}
-
-func (c *Client) RegisterWithAgent(id, label, dir, agent string) error {
-	return c.register(id, label, dir, agent, "", nil)
-}
-
-func (c *Client) RegisterAsMember(id, label, dir, agent, member string) error {
-	token, err := procreap.StartToken(os.Getpid())
-	if err != nil {
-		return fmt.Errorf("identify external wrapper: %w", err)
-	}
-	return c.register(id, label, dir, agent, member, &protocol.ExternalProcess{Pid: os.Getpid(), StartToken: token})
-}
-
-func (c *Client) register(id, label, dir, agent, member string, process *protocol.ExternalProcess) error {
-	msg := protocol.RegisterMessage{
-		Cmd:             protocol.CmdRegister,
-		ExternalProcess: process,
-		ID:              id,
-		Label:           protocol.Ptr(label),
-		Dir:             dir,
-		WorkspaceID:     "workspace-" + id,
-	}
-	if agent != "" {
-		normalized := protocol.NormalizeSessionAgentString(agent, string(protocol.SessionAgentCodex))
-		msg.Agent = protocol.Ptr(normalized)
-	}
-	if member != "" {
-		msg.Member = protocol.Ptr(member)
-	}
-	_, err := c.send(msg)
-	return err
 }
 
 func (c *Client) Unregister(id string) error {
@@ -336,15 +332,15 @@ func (c *Client) SessionInstructions(targetSessionID, question string) (*protoco
 }
 
 type SessionListOptions struct {
-	Closed      bool
-	All         bool
-	Limit       int
-	Before      string
-	WorkspaceID string
-	Repository  string
-	Since       string
-	Until       string
-	Reopen      bool
+	Closed     bool
+	All        bool
+	Limit      int
+	Before     string
+	ProfileID  string
+	Repository string
+	Since      string
+	Until      string
+	Reopen     bool
 }
 
 func (c *Client) SessionList(opts SessionListOptions) (*protocol.SessionListResult, error) {
@@ -361,8 +357,8 @@ func (c *Client) SessionList(opts SessionListOptions) (*protocol.SessionListResu
 	if before := strings.TrimSpace(opts.Before); before != "" {
 		msg.Before = protocol.Ptr(before)
 	}
-	if workspace := strings.TrimSpace(opts.WorkspaceID); workspace != "" {
-		msg.WorkspaceID = protocol.Ptr(workspace)
+	if profileID := strings.TrimSpace(opts.ProfileID); profileID != "" {
+		msg.ProfileID = protocol.Ptr(profileID)
 	}
 	if repository := strings.TrimSpace(opts.Repository); repository != "" {
 		msg.Repository = protocol.Ptr(repository)
@@ -407,6 +403,21 @@ func (c *Client) RenameSession(sessionID, name string) error {
 		Label:     strings.TrimSpace(name),
 	})
 	return err
+}
+
+func (c *Client) MoveSessionToDesktop(callerSessionID, sessionID, desktop string) (*protocol.DesktopMoveSessionResult, error) {
+	msg := protocol.DesktopMoveSessionMessage{Cmd: protocol.CmdDesktopMoveSession, SessionID: strings.TrimSpace(sessionID), Desktop: strings.TrimSpace(desktop)}
+	if caller := strings.TrimSpace(callerSessionID); caller != "" {
+		msg.CallerSessionID = protocol.Ptr(caller)
+	}
+	resp, err := c.send(msg)
+	if err != nil {
+		return nil, err
+	}
+	if resp.DesktopMoveSessionResult == nil {
+		return nil, errors.New("daemon returned no desktop move result")
+	}
+	return resp.DesktopMoveSessionResult, nil
 }
 
 type SessionReopenOptions struct {
@@ -659,6 +670,14 @@ func (c *Client) DelegationStatus(id string) (*protocol.DelegationOperation, err
 }
 
 func (c *Client) Delegate(request protocol.DelegateMessage) (*protocol.DelegateResult, error) {
+	profileID, sessionID := c.gardenProfile, c.gardenSession
+	if request.ProfileID != nil {
+		profileID = *request.ProfileID
+	}
+	if request.SourceSessionID != nil {
+		sessionID = *request.SourceSessionID
+	}
+	c = c.WithGardenProfile(profileID, sessionID)
 	op, err := c.StartDelegation(request)
 	if err != nil {
 		return nil, err
@@ -805,13 +824,13 @@ func (c *Client) List(filter string) (*ListResult, error) {
 	if sessions == nil {
 		sessions = []protocol.Session{}
 	}
-	workspaces := resp.Workspaces
-	if workspaces == nil {
-		workspaces = []protocol.Workspace{}
+	profiles := resp.Profiles
+	if profiles == nil {
+		profiles = []protocol.Profile{}
 	}
 	return &ListResult{
-		Sessions:   sessions,
-		Workspaces: workspaces,
+		Sessions: sessions,
+		Profiles: profiles,
 	}, nil
 }
 
@@ -819,15 +838,6 @@ func (c *Client) Heartbeat(id string) error {
 	msg := protocol.HeartbeatMessage{
 		Cmd: protocol.CmdHeartbeat,
 		ID:  id,
-	}
-	_, err := c.send(msg)
-	return err
-}
-
-func (c *Client) ToggleWorkspaceMute(workspaceID string) error {
-	msg := protocol.MuteWorkspaceMessage{
-		Cmd:         protocol.CmdMuteWorkspace,
-		WorkspaceID: workspaceID,
 	}
 	_, err := c.send(msg)
 	return err
@@ -1126,4 +1136,13 @@ func socketLive(path string) bool {
 	}
 	_ = conn.Close()
 	return true
+}
+
+func (c *Client) SetAutomationLaunchDesktop(id int, desktop string, name *string) (*protocol.LaunchDesktopResultMessage, error) {
+	var result protocol.LaunchDesktopResultMessage
+	msg := protocol.LaunchDesktopSetMessage{Cmd: protocol.CmdLaunchDesktopSet, Kind: protocol.LaunchDesktopKindAutomation, ItemID: strconv.Itoa(id), DesktopRef: &desktop, DesktopName: name}
+	if err := c.sendAutomation(msg, &result); err != nil {
+		return nil, err
+	}
+	return &result, nil
 }

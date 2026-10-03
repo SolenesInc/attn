@@ -1,0 +1,3 @@
+kind: changed
+area: sidebar
+change: Tree sidebar tiles show their content kind and the host of a bound remote session.

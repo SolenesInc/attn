@@ -67,9 +67,6 @@ func TestDeletingADirtyWorktreeNeedsForceAndThenTakesItsSessionsAlong(t *testing
 	testworld.Await(app, protocol.EventSessionUnregistered, func(e protocol.WebSocketEvent) bool {
 		return e.Session != nil && e.Session.ID == session
 	})
-	testworld.Await(app, protocol.EventWorkspaceUnregistered, func(e protocol.WorkspaceUnregisteredMessage) bool {
-		return e.Workspace.ID == "workspace-"+filepath.Base(path)
-	})
 	if _, err := os.Stat(path); !os.IsNotExist(err) {
 		t.Errorf("the forced delete left the directory: %v", err)
 	}

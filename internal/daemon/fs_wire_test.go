@@ -401,7 +401,7 @@ func TestExplicitFsRootsAreOnlyForTheAuthenticatedAppAndNeverTheDataDir(t *testi
 		Cmd:              protocol.CmdClientHello,
 		ClientKind:       "not-tauri-app",
 		Version:          "protocol-" + protocol.ProtocolVersion,
-		Capabilities:     []string{protocol.CapabilityWorkspaceSessions},
+		Capabilities:     []string{},
 		ClientToken:      protocol.Ptr(config.ClientToken()),
 		BrowserHostToken: protocol.Ptr(config.BrowserHostToken()),
 	}, http.Header{"Origin": {"tauri://localhost"}})

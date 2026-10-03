@@ -1,6 +1,8 @@
+import type { PaletteState } from '../components/palette/paletteState';
 import { useCallback, useRef, useState } from 'react';
 import { type DelegationChainHandle } from '../components/DelegationChain';
 import { useDockSlotRect } from '../components/GardenFrame';
+import { useAgentList } from '../components/useAgentList';
 import { type SettingsModalHandle } from '../components/SettingsModal';
 import type { LedgerTab } from '../components/ledger/LedgerSurface';
 import { useDockPanels } from '../hooks/useDockPanels';
@@ -15,8 +17,7 @@ export function useAppPanels({ agentSurfaceCount }: Options) {
   const settingsModalRef = useRef<SettingsModalHandle>(null);
   const [shortcutsOpen, setShortcutsOpen] = useState(false);
   const [shortcutEditorOpen, setShortcutEditorOpen] = useState(false);
-  const [actionMenuOpen, setActionMenuOpen] = useState(false);
-  const actionMenuFocusOriginRef = useRef<HTMLElement | null>(null);
+  const [palette, setPalette] = useState<PaletteState | null>(null);
   const delegationChainRef = useRef<DelegationChainHandle>(null);
   const [seedPopoverRequest, setSeedPopoverRequest] = useState<{
     sessionId: string;
@@ -35,7 +36,6 @@ export function useAppPanels({ agentSurfaceCount }: Options) {
   const [notebookOpen, setNotebookOpen] = useState(false);
   const [notificationsPanelOpen, setNotificationsPanelOpen] = useState(false);
   const whatsNew = useWhatsNew();
-  const [sidebarMutedExpanded, setSidebarMutedExpanded] = useState(false);
 
   const { dockState, toggleDockPanel, openDockPanel, closeDockPanel } = useDockPanels();
 
@@ -50,6 +50,8 @@ export function useAppPanels({ agentSurfaceCount }: Options) {
     delegationChainRef.current?.dismiss('sidebar-collapse');
     setSidebarState((state) => ({ ...state, collapsed: !state.collapsed }));
   }, []);
+
+  const { agentListOpen, toggleAgentList, closeAgentList } = useAgentList();
 
   const openDockPanels = dockState.openPanels;
   const dockPanelStack = dockState.stack;
@@ -93,9 +95,8 @@ export function useAppPanels({ agentSurfaceCount }: Options) {
     setShortcutsOpen,
     shortcutEditorOpen,
     setShortcutEditorOpen,
-    actionMenuOpen,
-    setActionMenuOpen,
-    actionMenuFocusOriginRef,
+    palette,
+    setPalette,
     delegationChainRef,
     seedPopoverRequest,
     setSeedPopoverRequest,
@@ -113,14 +114,15 @@ export function useAppPanels({ agentSurfaceCount }: Options) {
     openNotificationsPanel,
     closeNotificationsPanel,
     whatsNew,
-    sidebarMutedExpanded,
-    setSidebarMutedExpanded,
     toggleDockPanel,
     openDockPanel,
     closeDockPanel,
     sidebarCollapsed,
     setSidebarCollapsed,
     toggleSidebarCollapse,
+    agentListOpen,
+    toggleAgentList,
+    closeAgentList,
     dockPanelStack,
     workflowRunPanelOpen,
     attentionPanelOpen,

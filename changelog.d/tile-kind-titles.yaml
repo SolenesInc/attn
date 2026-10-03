@@ -1,0 +1,3 @@
+kind: changed
+area: queue
+change: Tile rows in the agent palette and bar peek show their kind and use seed titles when available.

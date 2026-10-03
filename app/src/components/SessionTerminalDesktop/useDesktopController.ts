@@ -1,0 +1,1165 @@
+import type { ForwardedRef } from 'react';
+import {
+  useCallback,
+  useEffect,
+  useImperativeHandle,
+  useLayoutEffect,
+  useMemo,
+  useRef,
+  useState,
+} from 'react';
+import type { Seed } from '../../hooks/useDaemonSocket';
+import { useEscapeStack } from '../../hooks/useEscapeStack';
+import { useShortcut } from '../../shortcuts/useShortcut';
+import {
+  collectPreferredSplitIds,
+  collectSplitRatios,
+  findLeafInDirection,
+  getNormalizedPaneBounds,
+  leafSlotId,
+  type NormalizedPaneBounds,
+  type SplitDivider,
+  type TerminalLayoutNode,
+  type TerminalNavigationDirection,
+  type TerminalSplitDirection,
+} from '../../types/desktop';
+import { lockTextSelection } from '../../utils/dragLock';
+import { isSuspiciousTerminalSize } from '../../utils/terminalDebug';
+import { type GhosttyTerminalHandle } from '../GhosttyTerminal';
+import { type DesktopTileSessionOption } from './DesktopDockTile';
+import { annotationSurfaceOwnsFocus } from './annotationFocus';
+import {
+  applyDragSuspension,
+  dragRatioBounds,
+  releaseSuspendedLeaf,
+  resolveDesktopLayout,
+  type AttentionViewport,
+} from './attentionLayout';
+import { useFocusedLeaf } from './useFocusedLeaf';
+import { useGhosttyPaneRuntime } from './useGhosttyPaneRuntime';
+import { useSessionPopoverRequest } from './useSessionPopoverRequest';
+import { useDesktopLeafDrag } from './useDesktopLeafDrag';
+import { useDesktopPanes } from './useDesktopPanes';
+import type {
+  SessionTerminalDesktopHandle,
+  SessionTerminalDesktopProps,
+} from './desktopTypes';
+import { useSessionStore } from '../../store/sessions';
+
+const RESIZE_MOUSE_SUPPRESSION_MS = 1_500;
+
+const RESIZE_MOUSE_RELEASE_GUARD_MS = 150;
+
+function suppressTerminalMouseDuringResize(durationMs = RESIZE_MOUSE_SUPPRESSION_MS): void {
+  document.documentElement.dataset.attnDesktopMouseSuppressUntil = String(
+    Date.now() + durationMs,
+  );
+}
+
+const EMPTY_SUSPENDED_LEAF_IDS: ReadonlySet<string> = new Set();
+
+const EMPTY_DESKTOP_SESSIONS: NonNullable<SessionTerminalDesktopProps['desktopSessions']> =
+  [];
+
+const EMPTY_SEED_TARGET_SESSIONS: DesktopTileSessionOption[] = [];
+
+const EMPTY_GARDEN_SEEDS: Seed[] = [];
+
+function focusIsFree(desktop: HTMLElement | null): boolean {
+  const active = document.activeElement;
+  if (!active || active === document.body) return true;
+  if (desktop?.contains(active)) return !active.closest('.desktop-dock-tile-body');
+  return Boolean(active.closest('[data-session-terminal-desktop], .anno-popup, .anno-panel'));
+}
+
+const EMPTY_DELEGATION_SESSIONS: NonNullable<SessionTerminalDesktopProps['delegationSessions']> =
+  [];
+
+export function useDesktopController(
+  {
+    desktopId,
+    desktopDirectory,
+    desktopSessions = EMPTY_DESKTOP_SESSIONS,
+    delegationSessions = EMPTY_DELEGATION_SESSIONS,
+    seedTargetSessions = EMPTY_SEED_TARGET_SESSIONS,
+    gardenSeeds = EMPTY_GARDEN_SEEDS,
+    onOpenSeed,
+    onRevealSeedInGarden,
+    backToCrewTileId,
+    onBackToCrew,
+    seedPopoverRequest,
+    usagePopoverRequest,
+    annotationApi,
+    terminalState,
+    desktopSelectionStyle = 'rail',
+    activePaneId,
+    selectedSessionId,
+    fontSize,
+    resolvedTheme,
+    focusRequestToken,
+    focusClaim,
+    enabled,
+    shortcutsEnabled = true,
+    isActiveSession,
+    isSessionViewVisible = true,
+    terminalsLive = true,
+    eventRouter,
+    onSplitPane,
+    onClosePane,
+    onFocusPane,
+    onRenameSession,
+    onCancelCountdown,
+    onTerminalPointerActivity,
+    onOpenPresentation,
+    onOpenMarkdown,
+    onTerminalModelRecovered,
+    zoomActive = false,
+    onSetZoomActive,
+    onNavigateOutOfSession,
+    onResizeSplit,
+    onMoveLeaf,
+    getActiveLeafDropSnapshot,
+    onLeafDragStart,
+    onLeafDragGhostMove,
+    onLeafDragPreview,
+    onLeafDragEnd,
+    leafDragPreview,
+    onUndockTile,
+    onUpdateTile,
+    tileContents,
+    allowLocalTileTargets = true,
+    onRequestTileContent,
+  }: SessionTerminalDesktopProps,
+  ref: ForwardedRef<SessionTerminalDesktopHandle>,
+) {
+  const [paneReadyFocusRequest, setPaneReadyFocusRequest] = useState(0);
+  const [renamePane, setRenamePane] = useState<{
+    sessionId: string;
+    name: string;
+    anchor: { top: number; left: number };
+  } | null>(null);
+  const [pendingRatioOverrides, setPendingRatioOverrides] = useState<Map<string, number>>(
+    () => new Map(),
+  );
+  const [resizingSplit, setResizingSplit] = useState<{
+    splitId: string;
+    direction: TerminalSplitDirection;
+  } | null>(null);
+  const [staleBuildDismissed, setStaleBuildDismissed] = useState<ReadonlySet<string>>(
+    () => new Set(),
+  );
+  const [pinnedSeedPopover, dismissSeedPopover] = useSessionPopoverRequest(seedPopoverRequest);
+  const [pinnedUsagePopover, dismissUsagePopover] = useSessionPopoverRequest(usagePopoverRequest);
+  const [provenancePopoverOwner, setProvenancePopoverOwner] = useState<string | null>(null);
+  const [attentionViewport, setAttentionViewport] = useState<AttentionViewport>({
+    width: 0,
+    height: 0,
+  });
+  const [attentionRevision, setAttentionRevision] = useState(0);
+  const attentionFocusOrderRef = useRef<string[]>([]);
+  const suspendedLeafIdsRef = useRef<ReadonlySet<string>>(EMPTY_SUSPENDED_LEAF_IDS);
+  const tileBodyRefs = useRef(new Map<string, HTMLDivElement>());
+  const tileBodyRefCallbacks = useRef(new Map<string, (node: HTMLDivElement | null) => void>());
+  const panesContainerRef = useRef<HTMLDivElement | null>(null);
+  const draggingSplitRef = useRef<string | null>(null);
+  const activeAgentPaneIdRef = useRef('');
+  const layoutTreeRef = useRef<TerminalLayoutNode | null>(null);
+  const activeLeafIdRef = useRef('');
+  const pinnedLeafIdsRef = useRef<ReadonlySet<string>>(new Set());
+  const isActiveSessionRef = useRef(isActiveSession);
+  const sessionViewVisibleRef = useRef(isSessionViewVisible);
+
+  useLayoutEffect(() => {
+    isActiveSessionRef.current = isActiveSession;
+    sessionViewVisibleRef.current = isSessionViewVisible;
+  }, [isActiveSession, isSessionViewVisible]);
+
+  const {
+    tileLeafById,
+    agentPaneById,
+    agentPanes,
+    sessionById,
+    paneIds,
+    delegationSessionById,
+    delegatesByDispatcherId,
+    tileSessionOptions,
+  } = useDesktopPanes({ terminalState, desktopSessions, delegationSessions });
+
+  const leafIds = useMemo(() => [...paneIds, ...tileLeafById.keys()], [paneIds, tileLeafById]);
+  const activeLeafId = activePaneId && leafIds.includes(activePaneId) ? activePaneId : '';
+  const activeLeafIsTile = tileLeafById.has(activeLeafId);
+  const activeAgentPaneId = agentPaneById.has(activeLeafId) ? activeLeafId : '';
+  useLayoutEffect(() => {
+    layoutTreeRef.current = terminalState.layoutTree ?? null;
+    activeLeafIdRef.current = activeLeafId;
+    activeAgentPaneIdRef.current = activeAgentPaneId;
+  }, [terminalState.layoutTree, activeLeafId, activeAgentPaneId]);
+
+  const runtimePanes = useMemo(() => {
+    const panes = [];
+    for (const pane of agentPanes) {
+      if (pane.status && pane.status !== 'ready') continue;
+      const paneSession = sessionById.get(pane.sessionId);
+      if (!paneSession) continue;
+      panes.push({
+        paneId: pane.id,
+        runtimeId: pane.runtimeId,
+        paneKind: 'agent' as const,
+        agent: paneSession?.agent ?? 'shell',
+        sessionId: pane.sessionId,
+        testSessionId: pane.sessionId,
+        state: paneSession?.state,
+      });
+    }
+    return panes;
+  }, [agentPanes, sessionById]);
+
+  const runtime = useGhosttyPaneRuntime(
+    runtimePanes,
+    activeAgentPaneId,
+    eventRouter,
+    isActiveSessionRef,
+    terminalsLive,
+  );
+  const setTerminalHandle = runtime.setTerminalHandle;
+  const terminalRefCallbacksRef = useRef(
+    new Map<string, (handle: GhosttyTerminalHandle | null) => void>(),
+  );
+  const terminalRefForPane = useCallback(
+    (paneId: string) => {
+      const existing = terminalRefCallbacksRef.current.get(paneId);
+      if (existing) return existing;
+      const callback = (handle: GhosttyTerminalHandle | null) => {
+        setTerminalHandle(paneId, handle);
+      };
+      terminalRefCallbacksRef.current.set(paneId, callback);
+      return callback;
+    },
+    [setTerminalHandle],
+  );
+  const fitPane = runtime.fitPane;
+  const scheduleTerminalFitAfterResize = useCallback(() => {
+    window.requestAnimationFrame(() => {
+      for (const pane of runtimePanes) {
+        fitPane(pane.paneId);
+      }
+    });
+  }, [fitPane, runtimePanes]);
+  const getPaneSize = runtime.getPaneSize;
+  const setPaneSurfaceReleased = runtime.setPaneSurfaceReleased;
+  const paneOverflowsContainer = runtime.paneOverflowsContainer;
+  const splitLayoutActive = terminalState.layoutTree?.type === 'split';
+  const showPaneHeader = paneIds.length + tileLeafById.size > 1;
+  const leafIdSet = useMemo(() => new Set(leafIds), [leafIds]);
+  const attentionActiveLeafId = activeLeafId;
+  const attentionFocusOrder = useMemo(() => {
+    if (!attentionActiveLeafId) {
+      return [];
+    }
+    return [
+      attentionActiveLeafId,
+      ...attentionFocusOrderRef.current.filter((id) => id !== attentionActiveLeafId),
+    ].filter((id) => leafIdSet.has(id));
+  }, [attentionActiveLeafId, leafIdSet]);
+  useLayoutEffect(() => {
+    attentionFocusOrderRef.current = attentionFocusOrder;
+  }, [attentionFocusOrder]);
+  const selectedDesktopSessionId =
+    desktopSessions.find((session) => session.isActive)?.id ?? null;
+  const [effectivePaneId, setMaximizedLeafId] = useFocusedLeaf(
+    desktopId,
+    leafIdSet,
+    agentPaneById,
+    selectedSessionId === undefined ? selectedDesktopSessionId : selectedSessionId,
+  );
+  useLayoutEffect(() => {
+    if (focusClaim?.announce && focusClaim.desktopId === desktopId
+      && effectivePaneId && tileLeafById.has(effectivePaneId)
+      && focusClaim.leafId !== effectivePaneId) setMaximizedLeafId(null);
+  }, [desktopId, effectivePaneId, focusClaim, setMaximizedLeafId, tileLeafById]);
+  const effectiveZoomedPaneId = zoomActive && leafIdSet.has(activeLeafId) ? activeLeafId : null;
+
+  const hasLayout = terminalState.layoutTree != null;
+  const layoutPlan = useMemo(() => {
+    if (!terminalState.layoutTree) {
+      return null;
+    }
+    return resolveDesktopLayout({
+      sourceTree: terminalState.layoutTree,
+      viewport: attentionViewport,
+      activeLeafId: attentionActiveLeafId,
+      focusOrder: attentionFocusOrder.slice(1),
+      previousSuspendedLeafIds: suspendedLeafIdsRef.current,
+      pinnedLeafIds: pinnedLeafIdsRef.current,
+      holdRestores: resizingSplit !== null,
+      pendingRatioOverrides,
+      view: effectivePaneId
+        ? { mode: 'focused', leafId: effectivePaneId }
+        : effectiveZoomedPaneId
+          ? { mode: 'zoomed', leafId: effectiveZoomedPaneId }
+          : { mode: 'normal' },
+    });
+  }, [
+    attentionActiveLeafId,
+    attentionFocusOrder,
+    attentionViewport,
+    effectivePaneId,
+    effectiveZoomedPaneId,
+    pendingRatioOverrides,
+    attentionRevision,
+    resizingSplit,
+    terminalState.layoutTree,
+  ]);
+  const suspendedLeafIds = layoutPlan?.suspendedLeafIds ?? suspendedLeafIdsRef.current;
+  useLayoutEffect(() => {
+    if (layoutPlan) {
+      suspendedLeafIdsRef.current = layoutPlan.suspendedLeafIds;
+      const prunedPins = [...pinnedLeafIdsRef.current].filter((id) =>
+        layoutPlan.suspendedLeafIds.has(id),
+      );
+      if (prunedPins.length !== pinnedLeafIdsRef.current.size) {
+        pinnedLeafIdsRef.current = new Set(prunedPins);
+      }
+    }
+  }, [layoutPlan]);
+  const renderedLayoutTree = layoutPlan?.renderedTree ?? null;
+
+  useLayoutEffect(() => {
+    const container = panesContainerRef.current;
+    if (!container) {
+      return;
+    }
+    const update = (width: number, height: number) => {
+      setAttentionViewport((current) =>
+        current.width === width && current.height === height ? current : { width, height },
+      );
+    };
+    const rect = container.getBoundingClientRect();
+    update(Math.round(rect.width), Math.round(rect.height));
+    if (typeof ResizeObserver === 'undefined') {
+      return;
+    }
+    const observer = new ResizeObserver(([entry]) => {
+      update(Math.round(entry.contentRect.width), Math.round(entry.contentRect.height));
+    });
+    observer.observe(container);
+    return () => observer.disconnect();
+  }, [desktopId, effectivePaneId, hasLayout]);
+
+  const clearRatioOverride = useCallback((splitId: string, expectedRatio?: number) => {
+    setPendingRatioOverrides((prev) => {
+      const current = prev.get(splitId);
+      if (
+        current == null ||
+        (expectedRatio != null && Math.abs(current - expectedRatio) >= 0.005)
+      ) {
+        return prev;
+      }
+      const next = new Map(prev);
+      next.delete(splitId);
+      return next;
+    });
+  }, []);
+
+  // A matching preferred echo settles the optimistic value; different
+  // authority supersedes it.
+  useEffect(() => {
+    setPendingRatioOverrides((prev) => {
+      if (prev.size === 0 || !terminalState.layoutTree) {
+        return prev;
+      }
+      let changed = false;
+      const next = new Map(prev);
+      const authoritative = collectSplitRatios(terminalState.layoutTree);
+      const preferred = collectPreferredSplitIds(terminalState.layoutTree);
+      for (const splitId of prev.keys()) {
+        if (splitId === draggingSplitRef.current) {
+          continue;
+        }
+        const ratio = authoritative.get(splitId);
+        const matches = ratio != null && Math.abs(ratio - (prev.get(splitId) ?? ratio)) < 0.005;
+        if (!matches || preferred.has(splitId)) {
+          next.delete(splitId);
+          changed = true;
+        }
+      }
+      return changed ? next : prev;
+    });
+  }, [terminalState.layoutTree]);
+  const panePaths = useMemo(() => {
+    const paths = new Map<string, string>();
+    if (!renderedLayoutTree) {
+      return paths;
+    }
+    const walk = (node: TerminalLayoutNode, path: string) => {
+      if (node.type === 'split') {
+        walk(node.children[0], path + '/0');
+        walk(node.children[1], path + '/1');
+        return;
+      }
+      paths.set(leafSlotId(node), path);
+    };
+    walk(renderedLayoutTree, 'root');
+    return paths;
+  }, [renderedLayoutTree]);
+  const renderedPaneBounds = useMemo(
+    () =>
+      renderedLayoutTree
+        ? getNormalizedPaneBounds(renderedLayoutTree)
+        : new Map<string, NormalizedPaneBounds>(),
+    [renderedLayoutTree],
+  );
+  const paneGeometry = useMemo(() => {
+    const geometry = new Map<string, string>();
+    for (const [paneId, path] of panePaths) {
+      const bounds = renderedPaneBounds.get(paneId);
+      geometry.set(
+        paneId,
+        bounds ? `${path}:${bounds.left}:${bounds.top}:${bounds.right}:${bounds.bottom}` : path,
+      );
+    }
+    return geometry;
+  }, [panePaths, renderedPaneBounds]);
+  const renderedPaneIds = useMemo(() => Array.from(panePaths.keys()), [panePaths]);
+  const renderedPaneIdsKey = renderedPaneIds.join('|');
+  const suspendedLeafIdsKey = [...suspendedLeafIds].sort().join('|');
+  const prevPaneGeometryRef = useRef(paneGeometry);
+  const sessionVisibleRef = useRef(false);
+  const sessionVisible = enabled && isActiveSession && isSessionViewVisible;
+
+  useImperativeHandle(
+    ref,
+    () => ({
+      fitPane: runtime.fitPane,
+      fitActivePane: runtime.fitActivePane,
+      focusPane: runtime.focusPane,
+      focusActivePane: runtime.focusPane.bind(null, activeAgentPaneId),
+      typePaneTextViaUI: runtime.typeTextViaPaneInput,
+      isPaneInputFocused: runtime.isPaneInputFocused,
+      scrollPaneToTop: runtime.scrollPaneToTop,
+      getPaneText: runtime.getPaneText,
+      getPaneSize: runtime.getPaneSize,
+      getPaneVisibleContent: runtime.getPaneVisibleContent,
+      getPaneVisibleStyleSummary: runtime.getPaneVisibleStyleSummary,
+      getPaneBlockState: runtime.getPaneBlockState,
+      getPanePlacementState: runtime.getPanePlacementState,
+      resetPaneTerminal: runtime.resetPaneTerminal,
+      injectPaneBytes: runtime.injectPaneBytes,
+      injectPaneBase64: runtime.injectPaneBase64,
+      drainPaneTerminal: runtime.drainPaneTerminal,
+      getLeafDropSnapshot: () =>
+        panesContainerRef.current
+          ? { container: panesContainerRef.current, paneBounds: renderedPaneBounds }
+          : null,
+    }),
+    [activeAgentPaneId, renderedPaneBounds, runtime],
+  );
+
+  const focusActivePaneSurface = useCallback(() => {
+    runtime.focusPane(activeAgentPaneId, 0);
+  }, [activeAgentPaneId, runtime]);
+
+  // The scrollable body is what satisfies the shortcut dispatcher's
+  // terminal-target check, so ⌘W reaches the desktop, not session.close.
+  const focusTile = useCallback((tileId: string) => {
+    tileBodyRefs.current.get(tileId)?.focus({ preventScroll: true });
+  }, []);
+
+  const tileBodyRefFor = useCallback((tileId: string) => {
+    const existing = tileBodyRefCallbacks.current.get(tileId);
+    if (existing) return existing;
+    const callback = (node: HTMLDivElement | null) => {
+      if (node) {
+        tileBodyRefs.current.set(tileId, node);
+      } else {
+        tileBodyRefs.current.delete(tileId);
+      }
+    };
+    tileBodyRefCallbacks.current.set(tileId, callback);
+    return callback;
+  }, []);
+
+  const focusShownLeaf = useCallback((leafId: string) => {
+    if (tileLeafById.has(leafId)) {
+      focusTile(leafId);
+      return true;
+    }
+    if (!agentPaneById.has(leafId) || annotationSurfaceOwnsFocus(desktopId)) return false;
+    runtime.focusPane(leafId, 0);
+    return true;
+  }, [agentPaneById, desktopId, focusTile, runtime, tileLeafById]);
+
+  const focusShownLeafRef = useRef(focusShownLeaf);
+  useLayoutEffect(() => {
+    focusShownLeafRef.current = focusShownLeaf;
+  }, [focusShownLeaf]);
+
+  useEffect(() => {
+    if (!sessionVisible || !focusIsFree(panesContainerRef.current)) return;
+    focusShownLeafRef.current(activeLeafIdRef.current);
+  }, [focusRequestToken, paneReadyFocusRequest, sessionVisible]);
+
+  const focusClaimRef = useRef(focusClaim);
+  useLayoutEffect(() => {
+    focusClaimRef.current = focusClaim;
+  }, [focusClaim]);
+
+  const lastAnnouncedClaim = useRef(0);
+  useLayoutEffect(() => {
+    const container = panesContainerRef.current;
+    if (!container) return;
+    if (!sessionVisible) {
+      container.querySelectorAll('.desktop-pane.leaf-arrival').forEach((pane) => pane.classList.remove('leaf-arrival'));
+      return;
+    }
+    if (!focusClaim?.announce || focusClaim.desktopId !== desktopId
+      || focusClaim.leafId !== activeLeafId || lastAnnouncedClaim.current === focusClaim.id) return;
+    const pane = Array.from(container.querySelectorAll<HTMLElement>('[data-pane-id]'))
+      .find((element) => element.dataset.paneId === focusClaim.leafId);
+    if (!pane) return;
+
+    lastAnnouncedClaim.current = focusClaim.id;
+    container.querySelectorAll('.desktop-pane.leaf-arrival').forEach((arrived) => arrived.classList.remove('leaf-arrival'));
+    void pane.offsetWidth;
+    pane.classList.add('leaf-arrival');
+  }, [activeLeafId, desktopId, focusClaim, paneReadyFocusRequest, renderedPaneIdsKey, sessionVisible]);
+
+  useEffect(() => {
+    const container = panesContainerRef.current;
+    if (!container) return;
+    const onAnimationEnd = (event: AnimationEvent) => {
+      if ((event.animationName === 'leaf-arrival-pulse' || event.animationName === 'leaf-arrival-outline')
+        && event.target instanceof HTMLElement) event.target.classList.remove('leaf-arrival');
+    };
+    container.addEventListener('animationend', onAnimationEnd);
+    return () => {
+      container.removeEventListener('animationend', onAnimationEnd);
+    };
+  }, [renderedPaneIdsKey]);
+
+  useEffect(() => {
+    if (!focusClaim || !sessionVisible || focusClaim.leafId !== activeLeafId) return;
+    const active = document.activeElement;
+    const userMovedOn = active && active !== focusClaim.focusOwner && !focusIsFree(panesContainerRef.current);
+    if (!userMovedOn) focusShownLeaf(activeLeafId);
+    const focused = document.activeElement;
+    const landed = focused?.closest('[data-pane-id]')?.getAttribute('data-pane-id') === activeLeafId
+      && focused.closest('[data-desktop-id]')?.getAttribute('data-desktop-id') === focusClaim.desktopId;
+    if (userMovedOn || landed) useSessionStore.getState().focusClaimDelivered(focusClaim.id);
+  }, [activeLeafId, focusClaim, focusShownLeaf, paneReadyFocusRequest, sessionVisible]);
+
+  // A pane whose grid overflows its container is not retried by fit()'s reveal
+  // path — it stays clipped until something unrelated refits it.
+  const refitPanesNowAndIfStillWrong = useCallback(
+    (targetPaneIds: string[]) => {
+      const paneIdsToFit = Array.from(new Set(targetPaneIds));
+      if (paneIdsToFit.length === 0) {
+        return undefined;
+      }
+
+      for (const paneId of paneIdsToFit) {
+        fitPane(paneId);
+      }
+
+      const stillWrong = (paneId: string) => {
+        const size = getPaneSize(paneId);
+        return (
+          (size != null && isSuspiciousTerminalSize(size.cols, size.rows)) ||
+          paneOverflowsContainer(paneId)
+        );
+      };
+
+      const lateRefitTimeout = window.setTimeout(() => {
+        for (const paneId of paneIdsToFit) {
+          if (stillWrong(paneId)) {
+            fitPane(paneId);
+          }
+        }
+      }, 75);
+
+      // Covers layout settles the 75ms tick misses.
+      const secondLateRefitTimeout = window.setTimeout(() => {
+        for (const paneId of paneIdsToFit) {
+          if (stillWrong(paneId)) {
+            fitPane(paneId);
+          }
+        }
+      }, 400);
+
+      return () => {
+        window.clearTimeout(lateRefitTimeout);
+        window.clearTimeout(secondLateRefitTimeout);
+      };
+    },
+    [fitPane, getPaneSize, paneOverflowsContainer],
+  );
+
+  // Keyed on `isActiveSession`, not `sessionVisible` (which also goes false behind a
+  // modal), and declared before the refit effect so a revealed pane measures with its buffer.
+  useLayoutEffect(() => {
+    for (const paneId of renderedPaneIds) {
+      setPaneSurfaceReleased(paneId, !isActiveSession || suspendedLeafIds.has(paneId));
+    }
+  }, [
+    isActiveSession,
+    renderedPaneIds,
+    renderedPaneIdsKey,
+    setPaneSurfaceReleased,
+    suspendedLeafIds,
+    suspendedLeafIdsKey,
+  ]);
+
+  // A fold or restore eases pane frames over 160ms; panes measure their old
+  // size mid-transition, so the settle refit below is unconditional.
+  const suspensionAnimationTimeoutRef = useRef<number | null>(null);
+  const prevSuspendedKeyRef = useRef(suspendedLeafIdsKey);
+  useLayoutEffect(() => {
+    if (prevSuspendedKeyRef.current === suspendedLeafIdsKey) {
+      return;
+    }
+    prevSuspendedKeyRef.current = suspendedLeafIdsKey;
+    const container = panesContainerRef.current;
+    if (!container || !sessionVisible) {
+      return;
+    }
+    container.dataset.suspensionAnimating = '1';
+    if (suspensionAnimationTimeoutRef.current != null) {
+      window.clearTimeout(suspensionAnimationTimeoutRef.current);
+    }
+    const visiblePaneIds = renderedPaneIds.filter((paneId) => !suspendedLeafIds.has(paneId));
+    suspensionAnimationTimeoutRef.current = window.setTimeout(() => {
+      suspensionAnimationTimeoutRef.current = null;
+      delete container.dataset.suspensionAnimating;
+      refitPanesNowAndIfStillWrong(visiblePaneIds);
+    }, 200);
+  }, [
+    refitPanesNowAndIfStillWrong,
+    renderedPaneIds,
+    sessionVisible,
+    suspendedLeafIds,
+    suspendedLeafIdsKey,
+  ]);
+  useEffect(
+    () => () => {
+      if (suspensionAnimationTimeoutRef.current != null) {
+        window.clearTimeout(suspensionAnimationTimeoutRef.current);
+      }
+    },
+    [],
+  );
+
+  useLayoutEffect(() => {
+    if (!sessionVisible) {
+      sessionVisibleRef.current = false;
+      return;
+    }
+    if (sessionVisibleRef.current) {
+      return;
+    }
+    sessionVisibleRef.current = true;
+    return refitPanesNowAndIfStillWrong(renderedPaneIds);
+  }, [refitPanesNowAndIfStillWrong, renderedPaneIds, renderedPaneIdsKey, sessionVisible]);
+
+  useLayoutEffect(() => {
+    if (!sessionVisible) {
+      prevPaneGeometryRef.current = paneGeometry;
+      return;
+    }
+    if (resizingSplit) {
+      prevPaneGeometryRef.current = paneGeometry;
+      return;
+    }
+    const prev = prevPaneGeometryRef.current;
+    prevPaneGeometryRef.current = paneGeometry;
+    const changedPanes: string[] = [];
+    for (const [paneId, geometry] of paneGeometry) {
+      if (prev.get(paneId) !== geometry) {
+        changedPanes.push(paneId);
+      }
+    }
+    if (changedPanes.length === 0) {
+      return;
+    }
+    return refitPanesNowAndIfStillWrong(changedPanes);
+  }, [paneGeometry, refitPanesNowAndIfStillWrong, resizingSplit, sessionVisible]);
+
+  // Splitting needs an agent pane to anchor on: with a tile focused this is
+  // deliberately a no-op.
+  const handleSplit = useCallback(
+    (direction: TerminalSplitDirection) => {
+      if (activeLeafIsTile || !activeLeafId) {
+        return;
+      }
+      onSplitPane(activeLeafId, direction);
+    },
+    [activeLeafId, activeLeafIsTile, onSplitPane],
+  );
+
+  const handleClosePane = useCallback(
+    (paneId: string) => {
+      onClosePane(paneId);
+    },
+    [onClosePane],
+  );
+
+  const handleCloseFocusedLeaf = useCallback(() => {
+    if (!activeLeafId) {
+      return;
+    }
+    if (activeLeafIsTile) {
+      onUndockTile?.(activeLeafId);
+      return;
+    }
+    handleClosePane(activeLeafId);
+  }, [activeLeafId, activeLeafIsTile, handleClosePane, onUndockTile]);
+
+  const toggleMaximizeActivePane = useCallback(() => {
+    onSetZoomActive?.(false);
+    setMaximizedLeafId((current) => (current ? null : activeLeafId));
+  }, [activeLeafId, onSetZoomActive, setMaximizedLeafId]);
+
+
+  useEscapeStack(() => setMaximizedLeafId(null), effectivePaneId !== null);
+
+  const toggleZoomActivePane = useCallback(() => {
+    setMaximizedLeafId(null);
+    onSetZoomActive?.(!zoomActive);
+  }, [onSetZoomActive, zoomActive, setMaximizedLeafId]);
+
+  const focusLeaf = useCallback(
+    (leafId: string) => {
+      suspendedLeafIdsRef.current = releaseSuspendedLeaf(suspendedLeafIdsRef.current, leafId);
+      if (pinnedLeafIdsRef.current.has(leafId)) {
+        pinnedLeafIdsRef.current = new Set(
+          [...pinnedLeafIdsRef.current].filter((id) => id !== leafId),
+        );
+      }
+      setAttentionRevision((current) => current + 1);
+      onFocusPane(leafId);
+      if (tileLeafById.has(leafId)) {
+        focusTile(leafId);
+        return;
+      }
+      runtime.focusPane(leafId);
+    },
+    [focusTile, onFocusPane, runtime, tileLeafById],
+  );
+
+  const focusActivePane = useCallback(() => {
+    if (activeLeafIsTile) {
+      focusTile(activeLeafId);
+      return;
+    }
+    focusActivePaneSurface();
+  }, [activeLeafId, activeLeafIsTile, focusActivePaneSurface, focusTile]);
+
+  const focusDocument = useCallback(
+    (tileId: string) => {
+      onSetZoomActive?.(false);
+      focusLeaf(tileId);
+      setMaximizedLeafId(tileId);
+    },
+    [focusLeaf, onSetZoomActive, setMaximizedLeafId],
+  );
+
+  const handleMovePane = useCallback(
+    (direction: TerminalNavigationDirection) => {
+      if (!renderedLayoutTree) {
+        return;
+      }
+      const nextLeafId = findLeafInDirection(renderedLayoutTree, activeLeafId, direction);
+      if (nextLeafId) {
+        focusLeaf(nextLeafId);
+        return;
+      }
+      onNavigateOutOfSession(direction);
+    },
+    [activeLeafId, focusLeaf, onNavigateOutOfSession, renderedLayoutTree],
+  );
+
+  // Deciding here would read leaf state from a ref a child's ready callback can
+  // observe before the parent mirrors it, leaving Cmd+W on the wrong leaf.
+  const requestFocusForReadyPane = useCallback((paneId: string) => {
+    if (
+      !isActiveSessionRef.current ||
+      !sessionViewVisibleRef.current ||
+      activeAgentPaneIdRef.current !== paneId
+    ) {
+      return;
+    }
+    const active = document.activeElement;
+    const claimed = focusClaimRef.current?.leafId === paneId;
+    if (!claimed && active && active !== document.body) return;
+    setPaneReadyFocusRequest((token) => token + 1);
+  }, []);
+
+  const handleGhosttyTerminalReady = useCallback(
+    (paneId: string) => (terminal: GhosttyTerminalHandle) => {
+      void runtime.handleTerminalReady(paneId)(terminal);
+      requestFocusForReadyPane(paneId);
+    },
+    [requestFocusForReadyPane, runtime],
+  );
+
+  const workspaceShortcutsActive = sessionVisible && shortcutsEnabled;
+  useShortcut('terminal.open', focusActivePane, workspaceShortcutsActive);
+  useShortcut(
+    'terminal.find',
+    () => {
+      runtime.openFindInActivePane();
+    },
+    workspaceShortcutsActive,
+  );
+  useShortcut(
+    'terminal.splitVertical',
+    () => {
+      handleSplit('vertical');
+    },
+    workspaceShortcutsActive,
+  );
+  useShortcut(
+    'terminal.splitHorizontal',
+    () => {
+      handleSplit('horizontal');
+    },
+    workspaceShortcutsActive,
+  );
+  useShortcut('terminal.toggleZoom', toggleZoomActivePane, workspaceShortcutsActive);
+  useShortcut('terminal.toggleMaximize', toggleMaximizeActivePane, workspaceShortcutsActive);
+  useShortcut('terminal.close', handleCloseFocusedLeaf, workspaceShortcutsActive && splitLayoutActive);
+  useShortcut('terminal.focusLeft', () => handleMovePane('left'), workspaceShortcutsActive);
+  useShortcut('terminal.focusRight', () => handleMovePane('right'), workspaceShortcutsActive);
+  useShortcut('terminal.focusUp', () => handleMovePane('up'), workspaceShortcutsActive);
+  useShortcut('terminal.focusDown', () => handleMovePane('down'), workspaceShortcutsActive);
+
+  const paneFrameStyle = useCallback(
+    (bounds: NormalizedPaneBounds) => ({
+      left: `${bounds.left * 100}%`,
+      top: `${bounds.top * 100}%`,
+      width: `${bounds.width * 100}%`,
+      height: `${bounds.height * 100}%`,
+    }),
+    [],
+  );
+
+  const { beginLeafDrag, effectiveDraggingLeafId, effectiveDockTarget, effectiveGhostPos } =
+    useDesktopLeafDrag({
+      renderedPaneBounds,
+      getActiveLeafDropSnapshot,
+      onLeafDragStart,
+      onLeafDragGhostMove,
+      onLeafDragPreview,
+      onLeafDragEnd,
+      onMoveLeaf,
+      leafDragPreview,
+    });
+
+  const focusModeTitle = useMemo(() => {
+    if (!effectivePaneId) {
+      return '';
+    }
+    const agentPane = agentPaneById.get(effectivePaneId);
+    if (agentPane) {
+      return sessionById.get(agentPane.sessionId)?.label || agentPane.title || 'Session';
+    }
+    const tile = tileLeafById.get(effectivePaneId);
+    if (tile) {
+      const base = (tile.tileParams ?? '').split('/').filter(Boolean).pop();
+      return base || tile.tileKind || 'Tile';
+    }
+    return 'Pane';
+  }, [agentPaneById, effectivePaneId, sessionById, tileLeafById]);
+
+  const reviewDeckTiles = useMemo(
+    () =>
+      [...tileLeafById.values()].filter(
+        (tile) => tile.tileKind === 'markdown' || tile.tileKind === 'seed',
+      ),
+    [tileLeafById],
+  );
+
+  const draggingLeafLabel = useMemo(() => {
+    if (!effectiveDraggingLeafId) {
+      return '';
+    }
+    const agentPane = agentPaneById.get(effectiveDraggingLeafId);
+    if (agentPane) {
+      return sessionById.get(agentPane.sessionId)?.label || agentPane.title || 'Pane';
+    }
+    const tile = tileLeafById.get(effectiveDraggingLeafId);
+    if (tile) {
+      const base = (tile.tileParams ?? '').split('/').filter(Boolean).pop();
+      return base || tile.tileKind || 'Tile';
+    }
+    return 'Pane';
+  }, [effectiveDraggingLeafId, agentPaneById, sessionById, tileLeafById]);
+
+  const splitDividers = layoutPlan?.dividers ?? [];
+
+  const ratioRafRef = useRef<number | null>(null);
+  const pendingRatioRef = useRef<{ splitId: string; ratio: number } | null>(null);
+  const dragCleanupRef = useRef<(() => void) | null>(null);
+
+  const flushRatioOverride = useCallback(() => {
+    ratioRafRef.current = null;
+    const pending = pendingRatioRef.current;
+    if (!pending) {
+      return;
+    }
+    setPendingRatioOverrides((prev) => {
+      if (prev.get(pending.splitId) === pending.ratio) {
+        return prev;
+      }
+      const next = new Map(prev);
+      next.set(pending.splitId, pending.ratio);
+      return next;
+    });
+  }, []);
+
+  const handleDividerPointerDown = useCallback(
+    (divider: SplitDivider, event: React.PointerEvent<HTMLDivElement>) => {
+      if (event.button !== 0) {
+        return;
+      }
+      event.preventDefault();
+      event.stopPropagation();
+      const container = (event.target as HTMLElement).closest(
+        '.session-terminal-panes',
+      ) as HTMLElement | null;
+      if (!container) {
+        return;
+      }
+      const dividerElement = event.currentTarget;
+      const pointerId = event.pointerId;
+      if (typeof dividerElement.setPointerCapture === 'function') {
+        try {
+          dividerElement.setPointerCapture(pointerId);
+        } catch {}
+      }
+      const rect = container.getBoundingClientRect();
+      const { splitId, direction, left, top, right, bottom } = divider;
+      const resizeToken = `${splitId}:${pointerId}`;
+      suppressTerminalMouseDuringResize();
+      container.dataset.resizingSplitId = splitId;
+      container.dataset.resizingSplitDirection = direction;
+      container.dataset.resizingSplitToken = resizeToken;
+      document.documentElement.dataset.attnDesktopResizing = '1';
+      document.documentElement.dataset.attnDesktopResizeToken = resizeToken;
+      const spanNorm = direction === 'vertical' ? right - left : bottom - top;
+      const axisPx = direction === 'vertical' ? rect.width : rect.height;
+      const spanPx = spanNorm * axisPx;
+      const ratioBounds = layoutTreeRef.current
+        ? dragRatioBounds(layoutTreeRef.current, splitId, activeLeafIdRef.current, spanPx)
+        : { min: 0.1, max: 0.9 };
+      const splitBoxPx = {
+        width: (right - left) * rect.width,
+        height: (bottom - top) * rect.height,
+      };
+      const suspensionSnapshot = {
+        suspended: suspendedLeafIdsRef.current,
+        pinned: pinnedLeafIdsRef.current,
+      };
+      const updateDragSuspension = (ratio: number) => {
+        if (!layoutTreeRef.current) {
+          return;
+        }
+        const result = applyDragSuspension({
+          sourceTree: layoutTreeRef.current,
+          splitId,
+          ratio,
+          splitBoxPx,
+          viewport: { width: rect.width, height: rect.height },
+          suspendedLeafIds: suspendedLeafIdsRef.current,
+          pinnedLeafIds: pinnedLeafIdsRef.current,
+          protectedLeafId: activeLeafIdRef.current,
+          focusOrder: attentionFocusOrderRef.current,
+        });
+        suspendedLeafIdsRef.current = result.suspendedLeafIds;
+        pinnedLeafIdsRef.current = result.pinnedLeafIds;
+      };
+      draggingSplitRef.current = splitId;
+      setResizingSplit({ splitId, direction });
+      const releaseSelectionLock = lockTextSelection(
+        direction === 'vertical' ? 'col-resize' : 'row-resize',
+      );
+
+      const grabOffset = divider.grabRatio != null ? divider.grabRatio - divider.ratio : 0;
+      const computeRatio = (clientX: number, clientY: number): number => {
+        let ratio = 0.5;
+        if (spanNorm > 0) {
+          if (direction === 'vertical') {
+            ratio = ((clientX - rect.left) / rect.width - left) / spanNorm;
+          } else {
+            ratio = ((clientY - rect.top) / rect.height - top) / spanNorm;
+          }
+          ratio -= grabOffset;
+        }
+        return Math.min(ratioBounds.max, Math.max(ratioBounds.min, ratio));
+      };
+
+      const onMove = (ev: PointerEvent) => {
+        ev.preventDefault();
+        ev.stopPropagation();
+        suppressTerminalMouseDuringResize();
+        const nextRatio = computeRatio(ev.clientX, ev.clientY);
+        updateDragSuspension(nextRatio);
+        pendingRatioRef.current = { splitId, ratio: nextRatio };
+        if (ratioRafRef.current == null) {
+          ratioRafRef.current = window.requestAnimationFrame(flushRatioOverride);
+        }
+      };
+      const teardown = () => {
+        window.removeEventListener('pointermove', onMove, true);
+        window.removeEventListener('pointerup', onUp, true);
+        window.removeEventListener('pointercancel', onCancel, true);
+        window.removeEventListener('blur', onCancel);
+        if (
+          typeof dividerElement.hasPointerCapture === 'function' &&
+          typeof dividerElement.releasePointerCapture === 'function' &&
+          dividerElement.hasPointerCapture(pointerId)
+        ) {
+          try {
+            dividerElement.releasePointerCapture(pointerId);
+          } catch {}
+        }
+        if (ratioRafRef.current != null) {
+          window.cancelAnimationFrame(ratioRafRef.current);
+          ratioRafRef.current = null;
+        }
+        if (container.dataset.resizingSplitToken === resizeToken) {
+          delete container.dataset.resizingSplitId;
+          delete container.dataset.resizingSplitDirection;
+          delete container.dataset.resizingSplitToken;
+        }
+        if (document.documentElement.dataset.attnDesktopResizeToken === resizeToken) {
+          delete document.documentElement.dataset.attnDesktopResizing;
+          delete document.documentElement.dataset.attnDesktopResizeToken;
+        }
+        // The long during-drag window would outlive the drag and swallow normal
+        // interaction.
+        suppressTerminalMouseDuringResize(RESIZE_MOUSE_RELEASE_GUARD_MS);
+        releaseSelectionLock();
+        setResizingSplit((current) => (current?.splitId === splitId ? null : current));
+        dragCleanupRef.current = null;
+      };
+      const onCancel = () => {
+        teardown();
+        suspendedLeafIdsRef.current = suspensionSnapshot.suspended;
+        pinnedLeafIdsRef.current = suspensionSnapshot.pinned;
+        pendingRatioRef.current = null;
+        draggingSplitRef.current = null;
+        clearRatioOverride(splitId);
+        scheduleTerminalFitAfterResize();
+      };
+      const onUp = (ev: PointerEvent) => {
+        ev.preventDefault();
+        ev.stopPropagation();
+        const ratio = computeRatio(ev.clientX, ev.clientY);
+        teardown();
+        updateDragSuspension(ratio);
+        pendingRatioRef.current = { splitId, ratio };
+        flushRatioOverride();
+        draggingSplitRef.current = null;
+        scheduleTerminalFitAfterResize();
+        const resizeResult = onResizeSplit?.(splitId, ratio);
+        if (resizeResult) {
+          void resizeResult.catch(() => clearRatioOverride(splitId, ratio));
+        }
+      };
+      dragCleanupRef.current = teardown;
+      window.addEventListener('pointermove', onMove, true);
+      window.addEventListener('pointerup', onUp, true);
+      window.addEventListener('pointercancel', onCancel, true);
+      window.addEventListener('blur', onCancel);
+    },
+    [clearRatioOverride, flushRatioOverride, onResizeSplit, scheduleTerminalFitAfterResize],
+  );
+
+  useEffect(
+    () => () => {
+      dragCleanupRef.current?.();
+    },
+    [],
+  );
+
+  return {
+    desktopId,
+    desktopSelectionStyle,
+    activeAgentPaneId,
+    onRenameSession,
+    renamePane,
+    setRenamePane,
+    resizingSplit,
+    panesContainerRef,
+    paneIds,
+    agentPaneById,
+    tileLeafById,
+    activeLeafId,
+    effectivePaneId,
+    setMaximizedLeafId,
+    effectiveZoomedPaneId,
+    renderedLayoutTree,
+    renderedPaneIds,
+    sessionVisible,
+    focusDocument,
+    effectiveDraggingLeafId,
+    effectiveDockTarget,
+    effectiveGhostPos,
+    focusModeTitle,
+    reviewDeckTiles,
+    draggingLeafLabel,
+    splitDividers,
+    handleDividerPointerDown,
+    desktopDirectory,
+    desktopSessions,
+    seedTargetSessions,
+    gardenSeeds,
+    onOpenSeed,
+    onRevealSeedInGarden,
+    backToCrewTileId,
+    onBackToCrew,
+    annotationApi,
+    fontSize,
+    resolvedTheme,
+    enabled,
+    shortcutsEnabled,
+    isActiveSession,
+    isSessionViewVisible,
+    terminalsLive,
+    onCancelCountdown,
+    onTerminalPointerActivity,
+    onOpenPresentation,
+    onOpenMarkdown,
+    onTerminalModelRecovered,
+    onSetZoomActive,
+    onUndockTile,
+    onUpdateTile,
+    tileContents,
+    allowLocalTileTargets,
+    onRequestTileContent,
+    staleBuildDismissed,
+    setStaleBuildDismissed,
+    pinnedSeedPopover,
+    dismissSeedPopover,
+    pinnedUsagePopover,
+    dismissUsagePopover,
+    provenancePopoverOwner,
+    setProvenancePopoverOwner,
+    attentionViewport,
+    sessionById,
+    delegationSessionById,
+    delegatesByDispatcherId,
+    tileSessionOptions,
+    runtime,
+    terminalRefForPane,
+    showPaneHeader,
+    suspendedLeafIds,
+    panePaths,
+    renderedPaneBounds,
+    tileBodyRefFor,
+    focusLeaf,
+    handleGhosttyTerminalReady,
+    paneFrameStyle,
+    beginLeafDrag,
+  };
+}

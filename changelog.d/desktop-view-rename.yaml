@@ -1,0 +1,3 @@
+kind: internal
+area: app
+change: The app's desktop views, sidebar view models, UI automation commands and harness scenarios are named after desktops instead of the retired workspaces.

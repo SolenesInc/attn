@@ -32,6 +32,17 @@ func (d *Daemon) ensureCrewCollections() {
 }
 
 func (d *Daemon) importCrewHomes() {
+	d.registerCrewHomes()
+	d.assignCrewProfiles()
+	if d.store == nil || d.requireHome(crew.Surface) != nil {
+		return
+	}
+	if err := d.store.PrepareLaunchMigration(); err != nil {
+		d.logf("launch desktop migration: %v", err)
+	}
+}
+
+func (d *Daemon) registerCrewHomes() {
 	if d.store == nil {
 		return
 	}
@@ -75,6 +86,40 @@ func (d *Daemon) importCrewHomes() {
 	}
 }
 
+func (d *Daemon) assignCrewProfiles() {
+	if d.store == nil || d.requireHome(crew.Surface) != nil {
+		return
+	}
+	members, _, err := d.readCrewMembersRaw()
+	if err != nil {
+		if !docstore.IsUndeclaredCollection(err) {
+			d.logf("crew: reading members to give them a profile: %v", err)
+		}
+		return
+	}
+	if len(members) == 0 {
+		return
+	}
+	profile, err := d.store.MostRecentlyUsedProfile()
+	if err != nil {
+		d.logf("crew: members need a profile and none can be given: %v", err)
+		return
+	}
+	for _, member := range members {
+		if _, err := d.store.EnsureCrewProfile(member.ID, profile.ID); err != nil {
+			d.logf("crew: giving %s a profile: %v", crew.DisplayName(member.ID), err)
+		}
+	}
+}
+
+func (d *Daemon) crewProfileID(memberID string) string {
+	profileID, err := d.store.CrewProfile(memberID)
+	if err != nil {
+		d.logf("crew: reading the profile of %s: %v", crew.DisplayName(memberID), err)
+	}
+	return profileID
+}
+
 func (d *Daemon) crewCollection() (*docstore.CollectionSchema, error) {
 	if d.store == nil {
 		return nil, errors.New("no database")
@@ -90,6 +135,10 @@ func (d *Daemon) crewRestartRequestsCollection() (*docstore.CollectionSchema, er
 }
 
 func (d *Daemon) writeCrewMember(schema docstore.CollectionSchema, member crew.Member, expected int64) (int64, error) {
+	return d.writeCrewMemberWithLaunch(schema, member, expected, nil)
+}
+
+func (d *Daemon) writeCrewMemberWithLaunch(schema docstore.CollectionSchema, member crew.Member, expected int64, setting *store.LaunchDesktopSetting) (int64, error) {
 	if err := d.validateCrewMemberPaths(member); err != nil {
 		return 0, err
 	}
@@ -100,9 +149,13 @@ func (d *Daemon) writeCrewMember(schema docstore.CollectionSchema, member crew.M
 	fact := documentChangedFact(crew.Namespace, crew.CollectionMembers, member.ID, false)
 	// A member's binding decides which session its seed roles reach, so it changes under the role lock.
 	d.lockGardenRoles()
-	written, err := d.store.CommitDocumentWrite(store.DocumentWrite{
-		Schema: schema, ID: member.ID, Body: body, Expected: &expected,
-	}, fact, time.Now())
+	write := store.DocumentWrite{Schema: schema, ID: member.ID, Body: body, Expected: &expected}
+	var written store.DocumentWriteResult
+	if setting == nil {
+		written, err = d.store.CommitDocumentWrite(write, fact, time.Now())
+	} else {
+		written, err = d.store.CommitCrewSettings(write, fact, time.Now(), *setting)
+	}
 	d.unlockGardenRoles()
 	if err != nil {
 		return 0, err
@@ -235,15 +288,7 @@ func (d *Daemon) claimCrewBinding(memberName, sessionID string) (string, error) 
 
 			return member.ID, nil
 		}
-		live := d.crewBindingLive(member)
-		process, err := d.store.ExternalProcess(member.BindingSession)
-		if err == nil && process != nil {
-			live, err = d.externalSessionAlive(member.BindingSession)
-		}
-		if err != nil {
-			return "", fmt.Errorf("check %s's bound session: %w", crew.DisplayName(member.ID), err)
-		}
-		if live {
+		if d.crewBindingLive(member) {
 			return "", fmt.Errorf("%s is already awake in session %s; two agents with the same identity never run at once — wait for that day to end, or wake another member",
 				crew.DisplayName(member.ID), shortSessionID(member.BindingSession))
 		}
@@ -463,10 +508,18 @@ func (d *Daemon) sendCrewError(conn net.Conn, verb string, err error) {
 func (d *Daemon) crewMemberWire(member crew.Member, revision int64) protocol.CrewMember {
 	wire := protocol.CrewMember{
 		ID:            member.ID,
+		ProfileID:     d.crewProfileID(member.ID),
 		Revision:      int(revision),
 		CharterPath:   member.CharterPath,
 		HomeDir:       member.HomeDir,
 		ResolvedAgent: member.LaunchAgent(),
+	}
+	if item, err := d.store.LaunchDesktopItem("crew", member.ID); err == nil {
+		setting := protocolLaunchItem(item).Setting
+		wire.LaunchDesktop = &setting
+		wire.ProfileName = protocol.Ptr(item.ProfileName)
+	} else {
+		d.logf("crew launch desktop %s: %v", member.ID, err)
 	}
 	if member.CWD != "" {
 		wire.Cwd = protocol.Ptr(member.CWD)

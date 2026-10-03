@@ -16,8 +16,7 @@ func (s stubRemoteCommandResolver) EndpointIDForPath(path string) (string, bool)
 }
 
 func TestRemoteCommandsRouteToTheDaemonThatOwnsTheirTarget(t *testing.T) {
-	type route struct{ session, workspace, endpoint string }
-	seedWorkspace := protocol.Ptr("workspace-must-not-route")
+	type route struct{ session, endpoint string }
 	cases := []struct {
 		name string
 		cmd  string
@@ -28,12 +27,6 @@ func TestRemoteCommandsRouteToTheDaemonThatOwnsTheirTarget(t *testing.T) {
 			name: "unregister handled locally",
 			cmd:  protocol.CmdUnregister,
 			msg:  &protocol.UnregisterMessage{ID: "sess-unregister"},
-		},
-		{
-			name: "session_selected",
-			cmd:  protocol.CmdSessionSelected,
-			msg:  &protocol.SessionSelectedMessage{ID: "sess-selected"},
-			want: route{session: "sess-selected"},
 		},
 		{
 			name: "rename_session",
@@ -107,51 +100,6 @@ func TestRemoteCommandsRouteToTheDaemonThatOwnsTheirTarget(t *testing.T) {
 			want: route{session: "sess-anno-clear"},
 		},
 		{
-			name: "workspace_tile_content_get",
-			cmd:  protocol.CmdWorkspaceTileContentGet,
-			msg:  &protocol.WorkspaceTileContentGetMessage{WorkspaceID: "workspace-remote"},
-			want: route{workspace: "workspace-remote"},
-		},
-		{
-			name: "markdown_annotations_get on a file",
-			cmd:  protocol.CmdMarkdownAnnotationsGet,
-			msg:  &protocol.MarkdownAnnotationsGetMessage{SourceKind: annotationSourceFile, WorkspaceID: protocol.Ptr("workspace-md-get")},
-			want: route{workspace: "workspace-md-get"},
-		},
-		{
-			name: "markdown_annotations_save on a file",
-			cmd:  protocol.CmdMarkdownAnnotationsSave,
-			msg:  &protocol.MarkdownAnnotationsSaveMessage{SourceKind: annotationSourceFile, WorkspaceID: protocol.Ptr("workspace-md-save")},
-			want: route{workspace: "workspace-md-save"},
-		},
-		{
-			name: "markdown_annotations_clear on a file",
-			cmd:  protocol.CmdMarkdownAnnotationsClear,
-			msg:  &protocol.MarkdownAnnotationsClearMessage{SourceKind: annotationSourceFile, WorkspaceID: protocol.Ptr("workspace-md-clear")},
-			want: route{workspace: "workspace-md-clear"},
-		},
-		{
-			name: "markdown_annotations_get on a seed stays home",
-			cmd:  protocol.CmdMarkdownAnnotationsGet,
-			msg:  &protocol.MarkdownAnnotationsGetMessage{SourceKind: annotationSourceSeed, WorkspaceID: seedWorkspace},
-		},
-		{
-			name: "markdown_annotations_save on a seed stays home",
-			cmd:  protocol.CmdMarkdownAnnotationsSave,
-			msg:  &protocol.MarkdownAnnotationsSaveMessage{SourceKind: annotationSourceSeed, WorkspaceID: seedWorkspace},
-		},
-		{
-			name: "markdown_annotations_clear on a seed stays home",
-			cmd:  protocol.CmdMarkdownAnnotationsClear,
-			msg:  &protocol.MarkdownAnnotationsClearMessage{SourceKind: annotationSourceSeed, WorkspaceID: seedWorkspace},
-		},
-		{
-			name: "rename_workspace",
-			cmd:  protocol.CmdRenameWorkspace,
-			msg:  &protocol.RenameWorkspaceMessage{WorkspaceID: "workspace-rename"},
-			want: route{workspace: "workspace-rename"},
-		},
-		{
 			name: "get_file_diff in a remote directory",
 			cmd:  protocol.CmdGetFileDiff,
 			msg:  &protocol.GetFileDiffMessage{Directory: "/srv/repo"},
@@ -174,9 +122,8 @@ func TestRemoteCommandsRouteToTheDaemonThatOwnsTheirTarget(t *testing.T) {
 	for _, tc := range cases {
 		endpoint, _ := remoteCommandScopedEndpointID(tc.msg, resolver)
 		got := route{
-			session:   remoteCommandSessionID(tc.cmd, tc.msg),
-			workspace: remoteCommandWorkspaceID(tc.cmd, tc.msg),
-			endpoint:  endpoint,
+			session:  remoteCommandSessionID(tc.cmd, tc.msg),
+			endpoint: endpoint,
 		}
 		if got != tc.want {
 			t.Errorf("%s routes to %+v, want %+v", tc.name, got, tc.want)

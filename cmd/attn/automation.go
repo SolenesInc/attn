@@ -4,6 +4,7 @@ import (
 	"flag"
 	"fmt"
 	"os"
+	"strconv"
 
 	"github.com/google/uuid"
 	"github.com/victorarias/attn/internal/client"
@@ -11,7 +12,7 @@ import (
 )
 
 func automationUsage() {
-	fmt.Fprint(os.Stderr, "usage: attn automation <apply|validate|list|show|run|runs|enable|disable|delete|cleanup>\n")
+	fmt.Fprint(os.Stderr, "usage: attn automation <apply|set|validate|list|show|run|runs|enable|disable|delete|cleanup>\n")
 }
 
 func runAutomationCommand() {
@@ -21,9 +22,51 @@ func runAutomationCommand() {
 	}
 	c := client.New(client.DefaultSocketPath())
 	var err error
+	var definitionID int
 	switch os.Args[2] {
+	case "set", "show", "run", "runs", "enable", "disable", "delete", "cleanup":
+		if len(os.Args) < 4 {
+			automationUsage()
+			os.Exit(2)
+		}
+		definitionID, err = strconv.Atoi(os.Args[3])
+		if err != nil || definitionID <= 0 {
+			fmt.Fprintln(os.Stderr, "automation: ID must be a positive number")
+			os.Exit(2)
+		}
+	}
+	switch os.Args[2] {
+	case "set":
+		if len(os.Args) < 4 {
+			err = fmt.Errorf("usage: attn automation set <definition-id> --launch-desktop <own|desktop>")
+			break
+		}
+		fs := flag.NewFlagSet("automation set", flag.ContinueOnError)
+		desktopName := fs.String("desktop-name", "", "name for the new desktop of own or an empty slot (defaults to the automation name)")
+		desktop := fs.String("launch-desktop", "", "own, an empty slot (5–9), or a desktop digit, name or id")
+		if e := fs.Parse(os.Args[4:]); e != nil {
+			os.Exit(2)
+		}
+		if *desktop == "" || len(fs.Args()) != 0 {
+			err = fmt.Errorf("--launch-desktop is required")
+			break
+		}
+		var result *protocol.LaunchDesktopResultMessage
+		var name *string
+		fs.Visit(func(f *flag.Flag) {
+			if f.Name == "desktop-name" {
+				name = desktopName
+			}
+		})
+		result, err = c.SetAutomationLaunchDesktop(definitionID, *desktop, name)
+		if err == nil {
+			printJSON(result.Item)
+		}
+
 	case "apply":
 		fs := flag.NewFlagSet("automation apply", flag.ContinueOnError)
+		desktopName := fs.String("desktop-name", "", "name for the new desktop of own or an empty slot (defaults to the automation name)")
+		desktop := fs.String("launch-desktop", "", "own, an empty slot (5–9), or a desktop digit, name or id of the automation profile")
 		file := fs.String("file", "", "definition YAML")
 		if e := fs.Parse(os.Args[3:]); e != nil {
 			os.Exit(2)
@@ -38,7 +81,20 @@ func runAutomationCommand() {
 			break
 		}
 		var result *protocol.AutomationApplyResultMessage
-		result, err = c.AutomationApply(string(raw))
+		var desktopRef, name *string
+		fs.Visit(func(f *flag.Flag) {
+			switch f.Name {
+			case "launch-desktop":
+				desktopRef = desktop
+			case "desktop-name":
+				name = desktopName
+			}
+		})
+		if name != nil && desktopRef == nil {
+			err = fmt.Errorf("--desktop-name needs --launch-desktop own or an empty slot")
+			break
+		}
+		result, err = c.AutomationApplyWithNamedDesktop(string(raw), desktopRef, name)
 		if err == nil {
 			printJSON(result.Definition)
 		}
@@ -72,8 +128,9 @@ func runAutomationCommand() {
 			break
 		}
 		var result *protocol.AutomationDefinitionResultMessage
-		result, err = c.AutomationDefinition(os.Args[3])
+		result, err = c.AutomationDefinition(definitionID)
 		if err == nil && result.SpecYaml != nil {
+			fmt.Printf("# Profile: %s\n# Launch desktop: %s\n", protocol.Deref(result.Definition.ProfileName), launchDesktopText(result.Definition.LaunchDesktop))
 			fmt.Print(*result.SpecYaml)
 		}
 	case "run":
@@ -81,7 +138,6 @@ func runAutomationCommand() {
 			err = fmt.Errorf("usage: attn automation run <definition-id> [--input-file <file> | --pr-url <url>] [--request-id <id>]")
 			break
 		}
-		definitionID := os.Args[3]
 		fs := flag.NewFlagSet("automation run", flag.ContinueOnError)
 		inputFile := fs.String("input-file", "", "structured occurrence JSON")
 		prURL := fs.String("pr-url", "", "resolve one GitHub pull request into structured occurrence input")
@@ -124,7 +180,7 @@ func runAutomationCommand() {
 			break
 		}
 		var result *protocol.AutomationRunsResultMessage
-		result, err = c.AutomationRuns(os.Args[3])
+		result, err = c.AutomationRuns(definitionID)
 		if err == nil {
 			printJSON(result.Runs)
 		}
@@ -134,7 +190,7 @@ func runAutomationCommand() {
 			break
 		}
 		var result *protocol.AutomationSetEnabledResultMessage
-		result, err = c.AutomationSetEnabled(os.Args[3], true)
+		result, err = c.AutomationSetEnabled(definitionID, true)
 		if err == nil {
 			printJSON(result.Definition)
 		}
@@ -144,7 +200,7 @@ func runAutomationCommand() {
 			break
 		}
 		var result *protocol.AutomationSetEnabledResultMessage
-		result, err = c.AutomationSetEnabled(os.Args[3], false)
+		result, err = c.AutomationSetEnabled(definitionID, false)
 		if err == nil {
 			printJSON(result.Definition)
 		}
@@ -153,8 +209,8 @@ func runAutomationCommand() {
 			err = fmt.Errorf("usage: attn automation delete <definition-id>")
 			break
 		}
-		if err = c.AutomationDelete(os.Args[3]); err == nil {
-			printJSON(map[string]string{"deleted": os.Args[3]})
+		if err = c.AutomationDelete(definitionID); err == nil {
+			printJSON(map[string]int{"deleted": definitionID})
 		}
 	case "cleanup":
 		if len(os.Args) != 4 {
@@ -162,7 +218,7 @@ func runAutomationCommand() {
 			break
 		}
 		var result *protocol.AutomationCleanupResultMessage
-		result, err = c.AutomationCleanup(os.Args[3])
+		result, err = c.AutomationCleanup(definitionID)
 		if err == nil {
 			printJSON(map[string][]string{
 				"cleaned":     result.Cleaned,

@@ -14,10 +14,10 @@ import (
 func TestStateExplainAttributesEachHookClaimToItsSourceAndCollapsesRepeats(t *testing.T) {
 	inBubble(t, func(t *testing.T, w *world) {
 		app, cli := w.App(), w.Client()
-		if err := cli.RegisterWithAgent("s1", "s1", w.Path("s1"), string(protocol.SessionAgentClaude)); err != nil {
+		if err := w.InjectSession("s1", "s1", w.Path("s1"), protocol.SessionAgentClaude); err != nil {
 			t.Fatalf("register s1: %v", err)
 		}
-		if err := cli.RegisterWithAgent("s2", "s2", w.Path("s2"), string(protocol.SessionAgentCodex)); err != nil {
+		if err := w.InjectSession("s2", "s2", w.Path("s2"), protocol.SessionAgentCodex); err != nil {
 			t.Fatalf("register s2: %v", err)
 		}
 
@@ -70,7 +70,7 @@ func TestStateExplainAttributesEachHookClaimToItsSourceAndCollapsesRepeats(t *te
 func TestStateExplainFollowsASessionThroughItsTurnARestartAndItsClose(t *testing.T) {
 	w := newWorld(t, fakeagent.Claude)
 	app, cli := w.App(), w.Client()
-	spawned, workspaceID, paneID := w.RequestSpawn(app, fakeagent.Claude, w.Path("shop"))
+	spawned, _, _ := w.RequestSpawn(app, fakeagent.Claude, w.Path("shop"))
 	session := spawned.ID
 	run := w.Launched(session)
 	app.TypeLine(session, "rename the checkout module")
@@ -107,13 +107,8 @@ func TestStateExplainFollowsASessionThroughItsTurnARestartAndItsClose(t *testing
 		stateExplainRow{source: "startup_recovery", claim: "recoverable", outcome: "applied", cause: "startup_recovery"},
 	)
 
-	closed := testworld.Request(app, protocol.WorkspaceLayoutClosePaneMessage{
-		Cmd: protocol.CmdWorkspaceLayoutClosePane, WorkspaceID: workspaceID, PaneID: paneID,
-	}, protocol.EventWorkspaceLayoutActionResult, func(r protocol.WorkspaceLayoutActionResultMessage) bool {
-		return r.Action == protocol.CmdWorkspaceLayoutClosePane && protocol.Deref(r.PaneID) == paneID
-	})
-	if !closed.Success {
-		t.Fatalf("close the session's pane: %s", protocol.Deref(closed.Error))
+	if closed := closeFromApp(app, session); !closed.Accepted {
+		t.Fatalf("close the session: %s", protocol.Deref(closed.Error))
 	}
 	testworld.Await(app, protocol.EventSessionUnregistered, func(e protocol.WebSocketEvent) bool { return e.Session != nil && e.Session.ID == session })
 	if _, err := cli.StateExplain(session); err == nil || !strings.Contains(err.Error(), "session_not_found") {

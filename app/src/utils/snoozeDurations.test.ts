@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { SNOOZE_WAKE_HOUR, snoozeInstant, isSnoozed } from './snoozeDurations';
+import { SNOOZE_WAKE_HOUR, snoozeInstant, isSnoozed, formatWakeTimeShort } from './snoozeDurations';
 
 /** A local-time Date, so the assertions read in the same clock the code uses. */
 function at(year: number, month: number, day: number, hour: number, minute = 0): Date {
@@ -79,5 +79,15 @@ describe('isSnoozed', () => {
   it('is true for a deadline still ahead', () => {
     const now = Date.parse('2026-08-02T14:00:00Z');
     expect(isSnoozed('2026-08-02T15:00:00Z', now)).toBe(true);
+  });
+});
+
+describe('formatWakeTimeShort', () => {
+  it('keeps the row label compact across today, tomorrow and later days', () => {
+    const now = at(2026, 8, 2, 8);
+    const wake = (day: number) => formatWakeTimeShort(at(2026, 8, day, 9).toISOString(), now.getTime());
+    expect(wake(2)).toBe('9:00');
+    expect(wake(3)).toBe('tmrw 9:00');
+    expect(wake(6)).toBe('Thu 9:00');
   });
 });

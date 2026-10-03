@@ -2,6 +2,7 @@ package daemon
 
 import (
 	"fmt"
+	"net"
 	"os"
 	"path/filepath"
 	"strings"
@@ -12,6 +13,7 @@ import (
 	"github.com/victorarias/attn/internal/docstore"
 	"github.com/victorarias/attn/internal/garden"
 	"github.com/victorarias/attn/internal/logging"
+	"github.com/victorarias/attn/internal/protocol"
 )
 
 func newWakeableDaemon(t *testing.T) (*Daemon, *fakeSpawnBackend, func() string) {
@@ -128,7 +130,8 @@ func TestCrewPrime_AClaimOlderThanAPageOfTheGardenStillWakesWithItsMember(t *tes
 	}
 	planted := time.Date(2026, 8, 1, 12, 0, 0, 0, time.UTC)
 	oldest := garden.Seed{
-		ID: "s-000000", Title: "The claim nobody released", Status: garden.StatusGrowing,
+		ProfileID: defaultProfileID(t, d.store),
+		ID:        "s-000000", Title: "The claim nobody released", Status: garden.StatusGrowing,
 		StepSlug: "claim-nobody-released", TenderMember: "trellis",
 		StateChangedAt: planted.Format(time.RFC3339Nano), Edges: []garden.Edge{}, Vars: []garden.Var{},
 	}
@@ -142,7 +145,8 @@ func TestCrewPrime_AClaimOlderThanAPageOfTheGardenStillWakesWithItsMember(t *tes
 	for i := 1; i <= docstore.MaxLimit; i++ {
 		id := fmt.Sprintf("s-%06x", i)
 		seed := garden.Seed{
-			ID: id, Title: id, Status: garden.StatusPlanted, StepSlug: id,
+			ProfileID: defaultProfileID(t, d.store),
+			ID:        id, Title: id, Status: garden.StatusPlanted, StepSlug: id,
 			StateChangedAt: planted.Format(time.RFC3339Nano), Edges: []garden.Edge{}, Vars: []garden.Var{},
 		}
 		newer, err := seed.Encode()
@@ -202,4 +206,39 @@ func newCrewDaemon(t *testing.T) *Daemon {
 	d.ensureCrewCollections()
 	d.importCrewHomes()
 	return d
+}
+
+func crewList(t *testing.T, d *Daemon) []protocol.CrewMember {
+	t.Helper()
+	resp := gardenCall(t, func(c net.Conn) {
+		d.handleCrewList(c, &protocol.CrewListMessage{Cmd: protocol.CmdCrewList})
+	})
+	if !resp.Ok {
+		t.Fatalf("crew list: %v", protocol.Deref(resp.Error))
+	}
+	return resp.CrewListResult.Members
+}
+
+func TestCrewWake_RefusesAMemberOfAnotherProfile(t *testing.T) {
+	d, backend, _ := newWakeableDaemon(t)
+	work := createTestProfile(t, d.store, "Work")
+	d.store.Add(&protocol.Session{ID: "work-agent", Label: "Work agent", Agent: protocol.SessionAgentCodex, Directory: t.TempDir(), ProfileID: work.ID})
+
+	for _, msg := range []*protocol.CrewWakeMessage{
+		{Member: "trellis", ProfileID: protocol.Ptr(work.ID)},
+		{Member: "trellis", SourceSessionID: protocol.Ptr("work-agent")},
+		{Member: "trellis", SourceSessionID: protocol.Ptr("work-agent"), ProfileID: protocol.Ptr(defaultProfileID(t, d.store))},
+	} {
+		if _, err := d.crewWakeAsked(msg); err == nil || !strings.Contains(err.Error(), work.ID) {
+			t.Fatalf("wake %+v = %v, want a refusal naming profile %s", msg, err, work.ID)
+		}
+	}
+	if spawnCount(backend) != 0 {
+		t.Fatal("a refused wake spawned a session")
+	}
+
+	result, err := d.crewWakeAsked(&protocol.CrewWakeMessage{Member: "trellis", ProfileID: protocol.Ptr(defaultProfileID(t, d.store))})
+	if err != nil || result.ProfileID != defaultProfileID(t, d.store) {
+		t.Fatalf("wake from the member's own profile = %+v, %v", result, err)
+	}
 }

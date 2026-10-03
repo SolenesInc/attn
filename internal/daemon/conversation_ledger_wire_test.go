@@ -37,7 +37,7 @@ func TestConversationKeepPassNotifiesOnceForMultipleCopies(t *testing.T) {
 		run.Prompted()
 		run.Reply("source answer <!-- attn:state=waiting_input -->")
 		paths = append(paths, transcript.FindClaudeTranscript(run.ConversationID))
-		closePane(app, seedResumePane(t, w, protocol.Deref(delegated.WorkspaceID), delegated.SessionID))
+		closePane(app, sessionPane{session: delegated.SessionID})
 		testworld.AwaitTaskDone(app, "conversation_keep")
 	}
 	before := conversationRows(t, cli, false)
@@ -91,7 +91,7 @@ func TestConversationPinCopiesUnreferencedClosedSessionAndUnkeepExpires(t *testi
 	first.Prompted()
 	lifeMove(t, cli, delegated.SessionID, delegated.SeedID, "wither", "finished", "")
 	testworld.AwaitTaskDone(app, "conversation_keep")
-	closePane(app, seedResumePane(t, w, protocol.Deref(delegated.WorkspaceID), delegated.SessionID))
+	closePane(app, sessionPane{session: delegated.SessionID})
 	testworld.AwaitTaskDone(app, "conversation_keep")
 	if rows := conversationRows(t, cli, false); len(rows.Rows) != 0 {
 		t.Fatalf("unreferenced closed session was copied: %+v", rows)
@@ -118,7 +118,9 @@ func TestConversationPinCopiesUnreferencedClosedSessionAndUnkeepExpires(t *testi
 	if released.Rows[0].Kept.PinnedAt != nil || released.Rows[0].Kept.DeleteAfter == nil || protocol.Deref(released.NextDeleteAfter) != *released.Rows[0].Kept.DeleteAfter {
 		t.Fatalf("unkeep grace: %+v", released)
 	}
-	plantSeedAs(t, cli, "", "trigger next keep pass")
+	if _, err := cli.SeedNote("", delegated.SeedID, "trigger next keep pass", "", "", false, nil); err != nil {
+		t.Fatal(err)
+	}
 	testworld.AwaitTaskDone(app, "conversation_keep")
 	if rows := conversationRows(t, cli, false); rows.Count != 0 || len(rows.Rows) != 0 || rows.StoredBytes != 0 || rows.NextDeleteAfter != nil {
 		t.Fatalf("expired totals: %+v", rows)
@@ -136,7 +138,7 @@ func TestConversationPinSurvivesSeedWitherAndRestart(t *testing.T) {
 	delegated := seedResumeDelegate(t, w, fakeagent.Claude, "api")
 	first := w.Launched(delegated.SessionID)
 	first.Prompted()
-	closePane(app, seedResumePane(t, w, protocol.Deref(delegated.WorkspaceID), delegated.SessionID))
+	closePane(app, sessionPane{session: delegated.SessionID})
 	testworld.AwaitTaskDone(app, "conversation_keep")
 	pin := testworld.Request(app, protocol.KeptConversationKeepMessage{Cmd: protocol.CmdKeptConversationKeep, SessionID: delegated.SessionID, Keep: true, RequestID: protocol.Ptr("pin")}, protocol.EventKeptConversationKeepResult, func(r protocol.KeptConversationKeepResultEvent) bool { return protocol.Deref(r.RequestID) == "pin" })
 	if !pin.Success {
@@ -165,7 +167,7 @@ func TestConversationForgetRefusesOpenSeedsThenDeletesOnlyAttnsCopy(t *testing.T
 	delegated := seedResumeDelegate(t, w, fakeagent.Claude, "api")
 	first := w.Launched(delegated.SessionID)
 	first.Prompted()
-	closePane(app, seedResumePane(t, w, protocol.Deref(delegated.WorkspaceID), delegated.SessionID))
+	closePane(app, sessionPane{session: delegated.SessionID})
 	testworld.AwaitTaskDone(app, "conversation_keep")
 	path := transcript.FindClaudeTranscript(first.ConversationID)
 	original, err := os.ReadFile(path)
@@ -221,7 +223,7 @@ func TestConversationForgetRefusesOpenSeedsThenDeletesOnlyAttnsCopy(t *testing.T
 	if rows := conversationRows(t, cli, false); rows.Count != 0 || rows.PendingCount != 0 {
 		t.Fatalf("restart recreated forgotten conversation: %+v", rows)
 	}
-	resumed, workspace, _ := w.RequestSpawn(app, fakeagent.Claude, w.Path("native-resume"), func(msg *protocol.SpawnSessionMessage) { msg.ResumeSessionID = protocol.Ptr(first.ConversationID) })
+	resumed, _, _ := w.RequestSpawn(app, fakeagent.Claude, w.Path("native-resume"), func(msg *protocol.SpawnSessionMessage) { msg.ResumeSessionID = protocol.Ptr(first.ConversationID) })
 	if !resumed.Success {
 		t.Fatalf("native files should still resume after forget: %+v", resumed)
 	}
@@ -229,7 +231,7 @@ func TestConversationForgetRefusesOpenSeedsThenDeletesOnlyAttnsCopy(t *testing.T
 	if !next.Resumed || next.ConversationID != first.ConversationID {
 		t.Fatalf("native resume: %+v", next)
 	}
-	closePane(app, seedResumePane(t, w, workspace, resumed.ID))
+	closePane(app, sessionPane{session: resumed.ID})
 	testworld.AwaitTaskDone(app, "conversation_keep")
 	if rows := conversationRows(t, cli, false); len(rows.Rows) != 0 {
 		t.Fatalf("forget left pin: %+v", rows)
@@ -282,7 +284,7 @@ func TestConversationIdentifiersRefuseAmbiguityAndListTotalsCountOnlyLiveCopies(
 		app.TypeLine(delegated.SessionID, "/clear")
 		run.Prompted()
 		run.Reply("new conversation <!-- attn:state=waiting_input -->")
-		closePane(app, seedResumePane(t, w, protocol.Deref(delegated.WorkspaceID), delegated.SessionID))
+		closePane(app, sessionPane{session: delegated.SessionID})
 		testworld.AwaitTaskDone(app, "conversation_keep")
 		lifeMove(t, cli, "", delegated.SeedID, "wither", "finished", "")
 		testworld.AwaitTaskDone(app, "conversation_keep")

@@ -2,12 +2,12 @@ import { openPath } from '@tauri-apps/plugin-opener';
 import { SnoozeMenu } from '../components/SnoozeMenu';
 import { MarkdownOpener } from '../components/palette/MarkdownOpener';
 import { useDaemonApi } from '../contexts/DaemonApiContext';
-import { AppActionMenu } from './AppActionMenu';
+import { AppPalette } from './AppPalette';
 import {
   useAttentionQueueContext,
-  useWorkspaceRuntimeContext,
-  useWorkspaceTilesContext,
+  useDesktopTilesContext,
 } from './AppContexts';
+import { openThenShow } from './openThenShow';
 
 export function AppNavigationMenus() {
   const {
@@ -16,9 +16,8 @@ export function AppNavigationMenus() {
     loadOpenerRecents,
     loadOpenerIndex,
     setMarkdownOpenerOpen,
-  } = useWorkspaceTilesContext();
+  } = useDesktopTilesContext();
   const { sendBrowseDirectory, sendOpenMarkdown, sendSnoozeTurn } = useDaemonApi();
-  const { focusWorkspaceLeaf } = useWorkspaceRuntimeContext();
   const { snoozeMenu, setSnoozeMenu, restoreSnoozeFocus } = useAttentionQueueContext();
   return (
     <>
@@ -39,10 +38,7 @@ export function AppNavigationMenus() {
               });
               return;
             }
-            void sendOpenMarkdown(path, bindTo)
-              .then(({ workspaceId, tileId }) => {
-                if (workspaceId && tileId) focusWorkspaceLeaf(workspaceId, tileId);
-              })
+            void openThenShow(() => sendOpenMarkdown(path, bindTo))
               .catch((error) => {
                 console.error(
                   '[MarkdownOpener] in-app open failed, falling back to OS open:',
@@ -64,7 +60,7 @@ export function AppNavigationMenus() {
           onRestoreFocus={restoreSnoozeFocus}
         />
       )}
-      <AppActionMenu />
+      <AppPalette />
     </>
   );
 }

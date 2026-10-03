@@ -2,7 +2,7 @@
 
 Load this reference when you read or maintain the attn Notebook — the durable,
 instance-wide markdown store — especially when your session is the chief of staff.
-The Notebook outlives any single workspace.
+The Notebook outlives any single agent or profile.
 
 The Notebook is plain markdown on disk, and you maintain it by **editing the files
 directly with native tools** (Read/Write/Edit, plus `ls`/`grep` over the tree).
@@ -24,17 +24,17 @@ Then browse the relevant subtree (`ls`/`grep` under `<root>/knowledge/...` or
 ## Two Layers
 
 - **The journal** — `<root>/journal/<date>.md`, dated entries: the durable,
-  curated, cross-workspace log of what was done in attn, kept for the user's
+  curated log of what was done across attn, kept for the user's
   recall and reviews, not a raw dump. Entries carry `type: journal`.
 - **The knowledge base** — `<root>/knowledge/`, distilled, timeless notes worth
   keeping: decisions, gotchas, domain knowledge that outlived a single PR. It is
   organized **PARA-style**: `projects/` (bounded efforts, roughly one per
-  workspace/epic), `areas/` (ongoing responsibilities and subsystems),
+  plot or epic), `areas/` (ongoing responsibilities and subsystems),
   `resources/` (reference material), `archive/` (inactive items). As a project
   finishes, promote its durable knowledge up into `areas/`.
 
-When a `projects/<slug>/` folder corresponds to a workspace, stamp its `index.md`
-frontmatter with `resource: attn:workspace/<id>`. Move the folder under `archive/`
+When a `projects/<slug>/` folder corresponds to a plot in the garden, stamp its
+`index.md` frontmatter with `resource: attn:seed/<plot-id>`. Move the folder under `archive/`
 yourself when the work ends, and promote anything durable into `areas/` first,
 since archived notes drop out of the active view.
 
@@ -92,6 +92,7 @@ filesystem watcher notices your change and refreshes any open in-app browser.
 The Notebook is your home. When you are promoted to the role mid-session, attn
 points you at `<root>/index.md` — read it to orient. Read `<root>/knowledge/index.md`,
 record durable decisions in the knowledge base as you make them, and keep the
-day's journal current with your cross-workspace view. Write at a chief-of-staff
-altitude — what moved across workspaces, what you delegated and decided — not a
-per-workspace play-by-play. You remain instance-wide.
+day's journal current with your view of your profile. Write at a chief-of-staff
+altitude — what moved across your profile's agents, what you delegated and
+decided — not a per-agent play-by-play. Each profile has its own chief; the
+Notebook is the one store you all share.

@@ -16,7 +16,10 @@ import (
 
 const automationReviewWithdrawnMessage = "GitHub review request withdrawn before delivery"
 
-func (d *Daemon) automationRunPullRequest(ctx context.Context, definitionID, requestID, rawURL string) (*store.AutomationRun, error) {
+func (d *Daemon) automationRunPullRequest(ctx context.Context, definitionID int, requestID, rawURL string) (*store.AutomationRun, error) {
+	if err := d.requireHome(automation.Surface); err != nil {
+		return nil, err
+	}
 	if strings.TrimSpace(requestID) == "" {
 		return nil, errors.New("request_id is required")
 	}
@@ -32,7 +35,7 @@ func (d *Daemon) automationRunPullRequest(ctx context.Context, definitionID, req
 	def, err := d.store.GetAutomationDefinition(definitionID)
 	if err != nil || def == nil {
 		if err == nil {
-			err = fmt.Errorf("automation %q not found", definitionID)
+			err = fmt.Errorf("automation %d not found", definitionID)
 		}
 		return nil, err
 	}
@@ -41,7 +44,7 @@ func (d *Daemon) automationRunPullRequest(ctx context.Context, definitionID, req
 		return nil, err
 	}
 	if spec.Trigger.Type != "manual" {
-		return nil, fmt.Errorf("automation %q is provider-driven and cannot be run manually yet", definitionID)
+		return nil, fmt.Errorf("automation %d is provider-driven and cannot be run manually yet", definitionID)
 	}
 	if spec.Location.Type != "repository_worktree" {
 		return nil, errors.New("--pr-url requires a repository_worktree automation")
@@ -109,7 +112,7 @@ func (d *Daemon) observeGitHubReviewRequests(host string, prs []*protocol.PR, ob
 		}
 		var spec automation.DefinitionSpec
 		if err := json.Unmarshal([]byte(definition.SpecJSON), &spec); err != nil {
-			d.logf("automation GitHub observation parse %s: %v", definition.ID, err)
+			d.logf("automation GitHub observation parse %d: %v", definition.ID, err)
 			continue
 		}
 		if spec.Trigger.Type != "github_review_requested" {
@@ -137,7 +140,7 @@ func (d *Daemon) observeGitHubReviewRequests(host string, prs []*protocol.PR, ob
 		}
 		candidates, err := d.reconcileAutomationReviewRequestHeads(definition.ID, host, observations, observedAt)
 		if err != nil {
-			d.logf("automation GitHub observation reconcile %s: %v", definition.ID, err)
+			d.logf("automation GitHub observation reconcile %d: %v", definition.ID, err)
 			continue
 		}
 		if len(candidates) > 0 {
@@ -211,7 +214,7 @@ func (d *Daemon) claimReviewRequest(host string, client *github.Client, definiti
 	if err != nil {
 		return nil, fmt.Errorf("marshal effective definition: %w", err)
 	}
-	reservation, err := d.newAutomationRunReservation()
+	reservation, err := d.newAutomationRunReservation(&definition)
 	if err != nil {
 		return nil, fmt.Errorf("reserve run: %w", err)
 	}
@@ -236,7 +239,7 @@ func (d *Daemon) deliverClaimedReviewRun(run *store.AutomationRun) error {
 	return nil
 }
 
-func (d *Daemon) reconcileAutomationReviewRequests(definitionID, host string, subjects []string, observedAt time.Time) ([]store.AutomationReviewRequestCandidate, error) {
+func (d *Daemon) reconcileAutomationReviewRequests(definitionID int, host string, subjects []string, observedAt time.Time) ([]store.AutomationReviewRequestCandidate, error) {
 	observations := make([]store.AutomationReviewRequestObservation, 0, len(subjects))
 	for _, subject := range subjects {
 		observations = append(observations, store.AutomationReviewRequestObservation{SubjectKey: subject})
@@ -244,7 +247,7 @@ func (d *Daemon) reconcileAutomationReviewRequests(definitionID, host string, su
 	return d.reconcileAutomationReviewRequestHeads(definitionID, host, observations, observedAt)
 }
 
-func (d *Daemon) reconcileAutomationReviewRequestHeads(definitionID, host string, observations []store.AutomationReviewRequestObservation, observedAt time.Time) ([]store.AutomationReviewRequestCandidate, error) {
+func (d *Daemon) reconcileAutomationReviewRequestHeads(definitionID int, host string, observations []store.AutomationReviewRequestObservation, observedAt time.Time) ([]store.AutomationReviewRequestCandidate, error) {
 	d.automationMu.Lock()
 	defer d.automationMu.Unlock()
 	if err := d.settleWithdrawnAutomationRuns(definitionID, host); err != nil {
@@ -259,7 +262,7 @@ func (d *Daemon) reconcileAutomationReviewRequestHeads(definitionID, host string
 	}
 	return candidates, nil
 }
-func (d *Daemon) settleWithdrawnAutomationRuns(definitionID, host string) error {
+func (d *Daemon) settleWithdrawnAutomationRuns(definitionID int, host string) error {
 	withdrawn, err := d.store.ListWithdrawnGitHubReviewUndeliveredRuns(definitionID, host)
 	if err != nil {
 		return err

@@ -3,26 +3,27 @@ import { invoke, isTauri } from '@tauri-apps/api/core';
 import { describe, expect, it, vi } from 'vitest';
 import {
   agentPane,
-  agentWorkspace,
+  soloDesktop,
   crewMember,
   daemonEndpoint,
   daemonSession,
-  daemonWorkspace,
-  splitWorkspace,
-  workspaceWithTiles,
+  daemonDesktop,
+  splitDesktop,
+  desktopWithTiles,
   type DaemonSession,
-  type DaemonWorkspace,
+  type DaemonDesktop,
 } from './test/daemonFixtures';
 import { gesture, pressShortcut, renderApp, restartApp } from './test/renderApp';
 import type { ScriptedDaemon } from './test/scriptedDaemon';
 import { serveSettings } from './test/settings';
+import { openActionMenu } from './test/appFixtures';
 
 type SessionPullRequest = NonNullable<DaemonSession['pull_requests']>[number];
 type Automation = NonNullable<DaemonSession['automation']>;
 
 const REVIEW_RUN: Automation = {
   run_id: 'run-1',
-  definition_id: 'review-sol',
+  definition_id: 1,
   definition_name: 'Requested PR review - GPT Sol medium',
   trigger_type: 'github_review_requested',
   pull_request: {
@@ -36,13 +37,13 @@ const REVIEW_RUN: Automation = {
 
 interface Launch {
   sessions?: DaemonSession[];
-  workspaces?: DaemonWorkspace[];
+  desktops?: DaemonDesktop[];
   settings?: Record<string, string>;
   crew?: ReturnType<typeof crewMember>[];
 }
 
-async function launch({ sessions = [], workspaces = sessions.map((session) => agentWorkspace(session.id)), settings = {}, crew }: Launch) {
-  const view = await renderApp({ initialState: { sessions, workspaces, settings, ...(crew ? { crew } : {}) } });
+async function launch({ sessions = [], desktops = sessions.map((session) => soloDesktop(session.id)), settings = {}, crew }: Launch) {
+  const view = await renderApp({ initialState: { sessions, desktops, settings, ...(crew ? { crew } : {}) } });
   serveSettings(view.daemon, settings);
   return view;
 }
@@ -51,8 +52,12 @@ function row(sessionId: string) {
   return within(screen.getByTestId(`sidebar-session-${sessionId}`));
 }
 
-function workspaceGroup(workspaceId: string) {
-  return screen.getByTestId(`sidebar-workspace-${workspaceId}`);
+function desktopGroup(desktopId: string) {
+  return screen.getByTestId(`sidebar-desktop-${desktopId}`);
+}
+
+function shownPane() {
+  return document.querySelector('[data-session-visible="1"]')?.getAttribute('data-active-pane-id') ?? null;
 }
 
 async function openSidebarSettings(daemon: ScriptedDaemon) {
@@ -73,62 +78,72 @@ const HARNESSES: Array<[string, string, string]> = [
   ['plugin-row', 'custom-driver', 'Custom Driver'],
 ];
 
-function harnessWorkspace(muted = false) {
+function harnessDesktop() {
   const ids = HARNESSES.map(([id]) => id);
-  return daemonWorkspace('ws', {
+  return daemonDesktop('ws', {
     root: ids.reduce<unknown>((left, id) => (left
       ? { type: 'split', split_id: `split-${id}`, direction: 'vertical', ratio: 0.5, children: [left, { type: 'pane', pane_id: `pane-${id}` }] }
       : { type: 'pane', pane_id: `pane-${id}` }), null),
     panes: ids.map((id) => agentPane(id, 'ws')),
-  }, { title: 'attn', muted });
+  }, { name: 'attn' });
 }
 
 function harnessSessions(overrides: (id: string) => Partial<DaemonSession> = () => ({})) {
-  return HARNESSES.map(([id, agent]) => daemonSession(id, { agent, workspace_id: 'ws', state: 'idle', ...overrides(id) }));
+  return HARNESSES.map(([id, agent]) => daemonSession(id, { agent, state: 'idle', ...overrides(id) }));
 }
 
 describe('App sidebar', () => {
   describe('harness identity', () => {
-    it.each([false, true])('marks each row with its harness, in a muted workspace too (%s)', async (muted) => {
-      const { daemon } = await launch({ sessions: harnessSessions(), workspaces: [harnessWorkspace(muted)] });
-      if (muted) await gesture(daemon, () => fireEvent.click(screen.getByRole('button', { name: /Muted Workspaces \(1\)/ })));
+    it('marks each row with its harness', async () => {
+      const { daemon } = await launch({ sessions: harnessSessions(), desktops: [harnessDesktop()] });
 
       for (const [id, , name] of HARNESSES) {
-        expect(row(id).getByRole('img', { name })).toHaveAttribute('title', name);
+        expect(row(id).getByRole('img', { name: `${name} · idle` })).toHaveAttribute('title', name);
         await gesture(daemon, () => fireEvent.click(row(id).getByRole('button', { name: `Open ${id}` })));
-        expect(daemon.sentOf('session_selected').slice(-1)).toEqual([{ cmd: 'session_selected', id }]);
+        expect(shownPane()).toBe(`pane-${id}`);
       }
     });
 
-    it('keeps each harness mark in the queue and in the workspace tree, and keeps crew management in both', async () => {
+    it('keeps each harness mark in the queue and in the desktop tree, and keeps crew management in both', async () => {
       const crew = [crewMember('fern'), crewMember('sleeping')];
       const sessions = harnessSessions((id) => (id === 'pi-row' ? { crew_member: 'fern' } : {}));
-      const { daemon } = await launch({ sessions, workspaces: [harnessWorkspace()], crew, settings: { queue_mode_enabled: 'true' } });
+      const { daemon } = await launch({ sessions, desktops: [harnessDesktop()], crew, settings: { queue_mode_enabled: 'true' } });
 
-      expect(within(screen.getByTestId('queue-crew-fern')).getByRole('img', { name: 'Pi' })).toBeInTheDocument();
+      expect(within(screen.getByTestId('queue-crew-fern')).getByRole('img', { name: 'Pi · idle' })).toBeInTheDocument();
       expect(within(screen.getByTestId('queue-crew-sleeping')).queryByRole('img')).toBeNull();
-      expect(screen.getByRole('button', { name: 'Open codex-row' })).toHaveAttribute('title', 'Codex');
-      expect(screen.getByTestId('manage-crew')).toHaveTextContent('Manage crew2');
+      await gesture(daemon, () => fireEvent.click(screen.getByRole('button', { name: /more agents?/i })));
+      expect(screen.getByRole('button', { name: 'Open codex-row' })).toHaveAttribute('title', expect.stringContaining('Codex'));
+      expect(screen.getByTestId('manage-crew')).toHaveTextContent('manage');
 
-      const settings = await openSidebarSettings(daemon);
-      await gesture(daemon, () => fireEvent.click(settings.getByRole('switch', { name: 'Agent queue' })));
-      await gesture(daemon, () => fireEvent.keyDown(window, { key: 'Escape' }));
+      const search = await openActionMenu(daemon);
+      fireEvent.change(search, { target: { value: '>turn off the agent queue' } });
+      await gesture(daemon, () => fireEvent.keyDown(search, { key: 'Enter' }));
 
-      expect(row('codex-row').getByRole('img', { name: 'Codex' })).toBeInTheDocument();
+      expect(row('codex-row').getByRole('img', { name: 'Codex · idle' })).toBeInTheDocument();
       expect(screen.getByTestId('manage-crew')).toHaveTextContent('Manage crew2');
       await gesture(daemon, () => fireEvent.click(screen.getByTestId('manage-crew')));
       expect(screen.getByTestId('crew-panel')).toBeInTheDocument();
     });
 
-    it('keeps the harness as hover text when its logo is turned off', async () => {
-      const { daemon } = await launch({ sessions: harnessSessions(), workspaces: [harnessWorkspace()], settings: { queue_mode_enabled: 'true' } });
+    it('turns harness logos off from Sidebar settings', async () => {
+      const { daemon } = await launch({ sessions: harnessSessions(), desktops: [harnessDesktop()] });
 
       const settings = await openSidebarSettings(daemon);
       expect(settings.getByRole('switch', { name: /harness logos/i })).toHaveAttribute('aria-checked', 'true');
       await gesture(daemon, () => fireEvent.click(settings.getByRole('switch', { name: /harness logos/i })));
 
       expect(savedSetting(daemon, 'sidebar_harness_logos_enabled')).toEqual(['false']);
-      expect(screen.getByRole('button', { name: 'Open codex-row' })).toHaveAttribute('title', 'Codex');
+    });
+
+    it('keeps the harness as hover text in the queue when its logo is turned off', async () => {
+      const { daemon } = await launch({
+        sessions: harnessSessions(),
+        desktops: [harnessDesktop()],
+        settings: { queue_mode_enabled: 'true', sidebar_harness_logos_enabled: 'false' },
+      });
+
+      await gesture(daemon, () => fireEvent.click(screen.getByRole('button', { name: /more agents?/i })));
+      expect(screen.getByRole('button', { name: 'Open codex-row' })).toHaveAttribute('title', expect.stringContaining('Codex'));
     });
   });
 
@@ -175,7 +190,7 @@ describe('App sidebar', () => {
         initialState: {
           endpoints: [daemonEndpoint('ep-1')],
           sessions: [daemonSession('remote-1', { endpoint_id: 'ep-1' })],
-          workspaces: [agentWorkspace('remote-1')],
+          desktops: [soloDesktop('remote-1')],
         },
       });
 
@@ -197,7 +212,7 @@ describe('App sidebar', () => {
   });
 
   describe('automations', () => {
-    it('gathers an automation’s sessions, muted ones included, under one collapsed group after ordinary rows', async () => {
+    it('gathers an automation’s sessions under one collapsed group after ordinary rows', async () => {
       const second = { ...REVIEW_RUN, run_id: 'run-2' };
       const { daemon } = await launch({
         sessions: [
@@ -205,15 +220,14 @@ describe('App sidebar', () => {
           daemonSession('run-a', { label: 'feed-nexus-web', automation: REVIEW_RUN }),
           daemonSession('run-b', { label: 'review B', automation: second }),
         ],
-        workspaces: [agentWorkspace('manual'), agentWorkspace('run-a'), { ...agentWorkspace('run-b'), muted: true }],
+        desktops: [soloDesktop('manual'), soloDesktop('run-a'), soloDesktop('run-b')],
       });
-      const header = screen.getByTestId('sidebar-automation-header-review-sol');
+      const header = screen.getByTestId('sidebar-automation-header-1');
 
       expect(header).toHaveAttribute('aria-expanded', 'false');
       expect(header).toHaveTextContent('Requested PR review - GPT Sol medium');
-      expect(header).toHaveTextContent('2 agents');
+      expect(header.querySelector('.automation-session-count')).toHaveTextContent('2');
       expect(screen.queryByTestId('sidebar-session-run-a')).toBeNull();
-      expect(screen.queryByRole('button', { name: /Muted Workspaces/ })).toBeNull();
       expect(screen.getByTestId('sidebar-session-manual').compareDocumentPosition(header) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
 
       await gesture(daemon, () => fireEvent.click(header));
@@ -226,90 +240,64 @@ describe('App sidebar', () => {
     it('counts a lone automation session as one agent', async () => {
       await launch({ sessions: [daemonSession('run-a', { automation: REVIEW_RUN })] });
 
-      expect(screen.getByTestId('sidebar-automation-header-review-sol')).toHaveTextContent('1 agent');
+      expect(screen.getByTestId('sidebar-automation-header-1').querySelector('.automation-session-count')).toHaveTextContent('1');
     });
   });
 
-  describe('workspaces', () => {
-    it('numbers workspace headers in sidebar order, skipping workspaces with nothing in them', async () => {
+  describe('desktops', () => {
+    it('shows each desktop’s shortcut slot on its header, and not on its rows', async () => {
       await launch({
-        sessions: [daemonSession('a1', { workspace_id: 'a' }), daemonSession('a2', { workspace_id: 'a' }), daemonSession('b1', { workspace_id: 'b' })],
-        workspaces: [
-          daemonWorkspace('empty', { root: { type: 'pane', pane_id: 'pane-nothing' } }, { rank: '0' }),
-          splitWorkspace('a', ['a1', 'a2'], { rank: '1' }),
-          splitWorkspace('b', ['b1'], { rank: '2' }),
+        sessions: [daemonSession('a1'), daemonSession('a2'), daemonSession('b1')],
+        desktops: [
+          splitDesktop('a', ['a1', 'a2'], { order_key: '1', shortcut_slot: 1 }),
+          splitDesktop('b', ['b1'], { order_key: '2', shortcut_slot: 2 }),
         ],
       });
 
-      expect(screen.queryByTestId('sidebar-workspace-empty')).toBeNull();
-      expect(within(workspaceGroup('a')).getByText('⌘1')).toBeInTheDocument();
-      expect(within(workspaceGroup('b')).getByText('⌘2')).toBeInTheDocument();
+      expect(within(desktopGroup('a')).getByText('⌘1')).toBeInTheDocument();
+      expect(within(desktopGroup('b')).getByText('⌘2')).toBeInTheDocument();
       expect(screen.getByTestId('sidebar-session-a1')).not.toHaveTextContent('⌘1');
     });
 
-    it('reveals tile-only workspaces from Sidebar settings, without a session state, and remembers it', async () => {
-      const tileOnly = daemonWorkspace('docs', { root: { type: 'tile', tile_id: 'tile-notes', tile_kind: 'markdown', tile_params: '/repo/docs/notes.md' } }, { title: 'docs' });
-      const options = { sessions: [daemonSession('a1', { workspace_id: 'workspace-a1' })], workspaces: [agentWorkspace('a1'), tileOnly] };
-      const first = await launch(options);
-      expect(screen.queryByTestId('sidebar-workspace-docs')).toBeNull();
+    it('lists a desktop without agents and without a session state', async () => {
+      const docs = daemonDesktop('docs', { root: { type: 'tile', tile_id: 'tile-notes', tile_kind: 'markdown', tile_params: '/repo/docs/notes.md' } }, { name: 'docs' });
+      await launch({ sessions: [daemonSession('a1')], desktops: [soloDesktop('a1'), docs] });
 
-      const settings = await openSidebarSettings(first.daemon);
-      await gesture(first.daemon, () => fireEvent.click(settings.getByTestId('toggle-show-sessionless')));
-
-      expect(within(workspaceGroup('docs')).getByTestId('workspace-neutral-indicator')).toBeInTheDocument();
-      expect(workspaceGroup('docs').querySelector('.state-indicator')).toBeNull();
-      expect(within(workspaceGroup('workspace-a1')).queryByTestId('workspace-neutral-indicator')).toBeNull();
-
-      await restartApp(first, { initialState: options });
-      expect(workspaceGroup('docs')).toBeInTheDocument();
+      expect(desktopGroup('docs').querySelector('.desktop-rule')).not.toHaveClass('empty');
+      expect(desktopGroup('docs').querySelector('.desktop-tile-item')).toBeInTheDocument();
+      expect(desktopGroup('desktop-a1').querySelector('.desktop-rule')).not.toHaveClass('empty');
     });
 
-    it('mutes whole workspaces, lists them apart, and unmutes them', async () => {
-      const { daemon } = await launch({
-        sessions: [daemonSession('s1', { label: 'active' }), daemonSession('s2', { label: 'quiet', state: 'waiting_input' })],
-        workspaces: [{ ...agentWorkspace('s1'), title: 'active' }, { ...agentWorkspace('s2'), title: 'quiet', muted: true }],
-      });
-
-      expect(screen.queryByRole('button', { name: /Mute session/ })).toBeNull();
-      await gesture(daemon, () => fireEvent.click(screen.getByRole('button', { name: 'Mute workspace active' })));
-      await gesture(daemon, () => fireEvent.click(screen.getByRole('button', { name: /Muted Workspaces \(1\)/ })));
-      await gesture(daemon, () => fireEvent.click(screen.getByRole('button', { name: 'Unmute workspace quiet' })));
-
-      expect(daemon.sent.filter(({ cmd }) => cmd.includes('mute'))).toEqual([
-        expect.objectContaining({ workspace_id: 'workspace-s1' }),
-        expect.objectContaining({ workspace_id: 'workspace-s2' }),
-      ]);
-    });
-
-    it('lists a workspace’s browser tile after its session, and opens, reloads and closes it', async () => {
-      const workspace = workspaceWithTiles([{ tile_id: 'tile-browser', tile_kind: 'browser', tile_params: 'https://www.example.test' }]);
+    it('lists a desktop’s browser tile after its session, and opens, reloads and closes it', async () => {
+      const desktop = desktopWithTiles([{ tile_id: 'tile-browser', tile_kind: 'browser', tile_params: 'https://www.example.test' }], { id: 'ws' });
       vi.mocked(isTauri).mockReturnValue(true);
       vi.mocked(invoke).mockResolvedValue(undefined);
-      const { daemon } = await launch({ sessions: [daemonSession('s1', { workspace_id: 'ws' })], workspaces: [workspace] });
+      const { daemon } = await launch({ sessions: [daemonSession('s1')], desktops: [desktop] });
       const tile = screen.getByTestId('sidebar-tile-ws-tile-browser');
       expect(tile).toHaveTextContent('www.example.test');
       expect(screen.getByTestId('sidebar-session-s1').compareDocumentPosition(tile) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
 
       await gesture(daemon, () => fireEvent.click(within(tile).getByRole('button', { name: 'Open www.example.test' })));
-      expect(daemon.sentOf('workspace_selected').slice(-1)).toEqual([{ cmd: 'workspace_selected', workspace_id: 'ws' }]);
+      expect(daemon.sentOf('desktop_show_leaf').slice(-1)).toEqual([expect.objectContaining({ desktop_id: 'ws', leaf_id: 'tile-browser' })]);
 
       await gesture(daemon, () => fireEvent.click(within(tile).getByRole('button', { name: 'Reload www.example.test' })));
       expect(vi.mocked(invoke)).toHaveBeenCalledWith('browser_host_control', expect.objectContaining({ label: 'browser-ws-tile-browser', action: 'reload' }));
 
       await gesture(daemon, () => fireEvent.click(within(tile).getByRole('button', { name: 'Close www.example.test' })));
-      expect(daemon.sentOf('workspace_layout_undock_tile')).toEqual([expect.objectContaining({ workspace_id: 'ws', tile_id: 'tile-browser' })]);
+      expect(daemon.sentOf('desktop_remove_leaf')).toEqual([expect.objectContaining({ desktop_id: 'ws', leaf_id: 'tile-browser' })]);
     });
   });
 
   describe('dragging', () => {
-    async function twoWorkspaces() {
+    async function twoDesktops() {
       const view = await launch({
-        sessions: [daemonSession('s1', { workspace_id: 'source' }), daemonSession('s2', { workspace_id: 'source' }), daemonSession('t1', { workspace_id: 'target' })],
-        workspaces: [
-          splitWorkspace('source', ['s1', 's2'], { rank: '0' }),
-          splitWorkspace('target', ['t1'], { rank: '1' }),
+        sessions: [daemonSession('s1'), daemonSession('s2'), daemonSession('t1')],
+        desktops: [
+          splitDesktop('source', ['s1', 's2'], { order_key: '0' }),
+          splitDesktop('target', ['t1'], { order_key: '1' }),
         ],
       });
+      view.daemon.on('desktop_move_leaf', (command) => ({ event: 'profile_action_result', action: command.cmd, request_id: command.request_id, success: true }));
       return view;
     }
 
@@ -319,30 +307,56 @@ describe('App sidebar', () => {
       return select;
     }
 
-    it('drags a session row onto another workspace, which the source workspace refuses', async () => {
-      const { daemon } = await twoWorkspaces();
+    it('drags a session row onto another desktop, which the source desktop refuses', async () => {
+      const { daemon } = await twoDesktops();
 
       pressRow('s2');
       fireEvent.pointerMove(window, { pointerId: 1, clientX: 10, clientY: 40 });
       expect(screen.getByTestId('session-drag-ghost')).toHaveTextContent('s2');
-      fireEvent.pointerEnter(workspaceGroup('source'));
-      fireEvent.pointerUp(workspaceGroup('source'), { pointerId: 1 });
+      fireEvent.pointerEnter(desktopGroup('source'));
+      fireEvent.pointerUp(desktopGroup('source'), { pointerId: 1 });
       await daemon.idle();
-      expect(daemon.sent.filter(({ cmd }) => cmd.startsWith('workspace_layout_move'))).toEqual([]);
+      expect(daemon.sentOf('desktop_move_leaf')).toEqual([]);
 
       pressRow('s2');
       fireEvent.pointerMove(window, { pointerId: 1, clientX: 10, clientY: 40 });
-      fireEvent.pointerEnter(workspaceGroup('target'));
-      fireEvent.pointerUp(workspaceGroup('target'), { pointerId: 1 });
+      fireEvent.pointerEnter(desktopGroup('target'));
+      fireEvent.pointerUp(desktopGroup('target'), { pointerId: 1 });
       await daemon.idle();
 
-      expect(daemon.sent.filter(({ cmd }) => cmd.startsWith('workspace_layout_move'))).toEqual([
-        expect.objectContaining({ source_workspace_id: 'source', leaf_id: 'pane-s2', target_workspace_id: 'target' }),
+      expect(daemon.sentOf('desktop_move_leaf')).toEqual([
+        expect.objectContaining({ source_desktop_id: 'source', leaf_id: 'pane-s2', target_desktop_id: 'target' }),
+      ]);
+    });
+
+    it.each([
+      { source: 'remote', target: 'local' },
+      { source: 'local', target: 'remote' },
+    ])('sends one move from a $source pane to a desktop holding a $target pane', async ({ source, target }) => {
+      const { daemon } = await renderApp({ initialState: {
+        endpoints: [daemonEndpoint('ep-1')],
+        sessions: [daemonSession('remote', { endpoint_id: 'ep-1' }), daemonSession('local')],
+        desktops: [
+          splitDesktop('source', [source], { order_key: '0' }),
+          splitDesktop('target', [target], { order_key: '1' }),
+        ],
+      } });
+      daemon.on('desktop_move_leaf', (command) => ({ event: 'profile_action_result', action: command.cmd, request_id: command.request_id, success: true }));
+
+      pressRow(source);
+      fireEvent.pointerMove(window, { pointerId: 1, clientX: 10, clientY: 40 });
+      expect(desktopGroup('target')).toHaveClass('desktop-group--drag-target');
+      fireEvent.pointerEnter(desktopGroup('target'));
+      fireEvent.pointerUp(desktopGroup('target'), { pointerId: 1 });
+      await daemon.idle();
+
+      expect(daemon.sentOf('desktop_move_leaf')).toEqual([
+        expect.objectContaining({ source_desktop_id: 'source', leaf_id: `pane-${source}`, target_desktop_id: 'target' }),
       ]);
     });
 
     it('treats a press that barely moves as a click on the row', async () => {
-      const { daemon } = await twoWorkspaces();
+      const { daemon } = await twoDesktops();
 
       const select = pressRow('s2');
       fireEvent.pointerMove(window, { pointerId: 1, clientX: 11, clientY: 12 });
@@ -350,13 +364,25 @@ describe('App sidebar', () => {
       await gesture(daemon, () => fireEvent.click(select));
 
       expect(screen.queryByTestId('session-drag-ghost')).toBeNull();
-      expect(daemon.sentOf('session_selected').slice(-1)).toEqual([{ cmd: 'session_selected', id: 's2' }]);
+      expect(daemon.sentOf('desktop_move_leaf')).toEqual([]);
+      expect(shownPane()).toBe('pane-s2');
     });
   });
 
   describe('Sidebar settings', () => {
+    it('turns the agent queue on, which swaps the desktop tree for the queue sidebar', async () => {
+      const { daemon } = await launch({ sessions: [daemonSession('s1')] });
+
+      const settings = await openSidebarSettings(daemon);
+      const toggle = settings.getByRole('switch', { name: /Agent queue/i });
+      expect(toggle).toHaveAttribute('aria-checked', 'false');
+      await gesture(daemon, () => fireEvent.click(toggle));
+
+      expect(savedSetting(daemon, 'queue_mode_enabled')).toEqual(['true']);
+      expect(screen.getByTestId('queue-sidebar')).toBeInTheDocument();
+    });
+
     it.each([
-      ['Agent queue', 'queue_mode_enabled', 'false'],
       ['Crew in queue', 'queue_crew_enabled', 'false'],
     ])('shows %s as the daemon has it and saves a flip', async (name, key, initial) => {
       const { daemon } = await launch({ sessions: [daemonSession('s1')] });
@@ -380,7 +406,7 @@ describe('App sidebar', () => {
       expect(settings.getByRole('button', { name: 'dim' })).toHaveAttribute('aria-pressed', 'true');
       expect(settings.getByRole('button', { name: 'rail' })).toHaveAttribute('aria-pressed', 'false');
 
-      const second = await restartApp(first, { initialState: { ...options, workspaces: [agentWorkspace('s1')] } });
+      const second = await restartApp(first, { initialState: { ...options, desktops: [soloDesktop('s1')] } });
       const reopened = await openSidebarSettings(second.daemon);
       expect(reopened.getByRole('button', { name: 'dim' })).toHaveAttribute('aria-pressed', 'true');
     });
@@ -388,7 +414,7 @@ describe('App sidebar', () => {
     it('hands focus to the control the user clicks to dismiss it', async () => {
       const { daemon } = await launch({ sessions: [daemonSession('s1')] });
       await openSidebarSettings(daemon);
-      const other = screen.getByRole('button', { name: 'Pin workspace s1' });
+      const other = screen.getByRole('button', { name: 'Actions for s1' });
 
       other.focus();
       fireEvent.pointerDown(other);
@@ -425,6 +451,37 @@ describe('App sidebar', () => {
   });
 
   describe('header', () => {
+    it('names collapsed desktops by title and shortcut, keeps their chips and attention, and selects through the daemon', async () => {
+      const { daemon } = await launch({
+        sessions: [daemonSession('s1', { state: 'idle' }), daemonSession('s2', { state: 'waiting_input' }), daemonSession('loose', { state: 'idle' })],
+        desktops: [
+          soloDesktop('s1', { id: 'desktop-1', name: 'Sidebar refinement', shortcut_slot: 1 }),
+          soloDesktop('s2', { name: 'Queue work', shortcut_slot: 2 }),
+          daemonDesktop('empty', { root: null }, { name: 'Sketches', shortcut_slot: 3 }),
+        ],
+      });
+      await gesture(daemon, () => pressShortcut('session.toggleSidebar'));
+      const first = screen.getByRole('button', { name: 'Sidebar refinement (⌘1)' });
+      const waiting = screen.getByRole('button', { name: 'Queue work (⌘2)' });
+      const empty = screen.getByRole('button', { name: 'Sketches (⌘3)' });
+      expect(first.querySelector('.desktop-number')).toHaveTextContent('1');
+      expect(waiting.querySelector('.desktop-number')).toHaveTextContent('2');
+      expect(empty.querySelector('.desktop-number')).toHaveTextContent('3');
+      expect(first).toHaveAttribute('aria-current', 'true');
+      expect(waiting).not.toHaveAttribute('aria-current');
+      expect(empty.querySelector('.desktop-number')).toHaveClass('empty');
+      expect(waiting.querySelector('.mini-badge')).not.toBeNull();
+      expect(first.querySelector('.mini-badge')).toBeNull();
+      expect(empty.querySelector('.mini-badge')).toBeNull();
+
+      await gesture(daemon, () => fireEvent.click(waiting));
+      expect(daemon.sentOf('desktop_set_current')).toEqual([
+        { cmd: 'desktop_set_current', profile_id: 'profile-default', desktop_id: 'desktop-s2', request_id: expect.any(String) },
+      ]);
+      expect(waiting).toHaveAttribute('aria-current', 'true');
+      expect(first).not.toHaveAttribute('aria-current');
+    });
+
     it('names no instance in a default build, expanded or collapsed', async () => {
       const { daemon } = await launch({ sessions: [daemonSession('s1')] });
       expect(document.querySelector('.sidebar-header')).not.toHaveTextContent(/instance/i);
@@ -444,8 +501,11 @@ describe('App sidebar', () => {
       expect(screen.getByTestId('sidebar-home').querySelector('.sidebar-home-shortcut')).toHaveTextContent('⌘⌥Y');
     });
 
-    it('keeps a way home when the sidebar is collapsed, and a waiting workspace still shows its badge', async () => {
-      const { daemon } = await launch({ sessions: [daemonSession('s1', { state: 'idle' }), daemonSession('s2', { state: 'waiting_input' })] });
+    it('keeps a way home when the sidebar is collapsed, and a waiting desktop still shows its badge', async () => {
+      const { daemon } = await launch({
+        sessions: [daemonSession('s1', { state: 'idle' }), daemonSession('s2', { state: 'waiting_input' })],
+        desktops: [soloDesktop('s1', { name: 's1' }), soloDesktop('s2', { name: 's2' })],
+      });
       await gesture(daemon, () => pressShortcut('session.toggleSidebar'));
       const home = () => screen.getByRole('button', { name: 'Home' });
 
@@ -471,4 +531,3 @@ function pr(number: number, state: string, extra: Partial<SessionPullRequest> = 
     ...extra,
   };
 }
-

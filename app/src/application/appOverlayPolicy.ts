@@ -4,7 +4,7 @@ interface Overlays {
   settingsOpen: boolean;
   shortcutsOpen: boolean;
   shortcutEditorOpen: boolean;
-  actionMenuOpen: boolean;
+  paletteOpen: boolean;
   snoozeMenuOpen: boolean;
   sessionsOpen: boolean;
   notebookOpen: boolean;
@@ -16,6 +16,8 @@ interface Overlays {
   prLauncherOpen: boolean;
   diagnosticCaptureOpen: boolean;
   markdownOpenerOpen: boolean;
+  desktopOverviewOpen: boolean;
+  profileSwitcherOpen: boolean;
 }
 
 export function appOverlayPolicy(overlays: Overlays) {
@@ -31,10 +33,12 @@ export function appOverlayPolicy(overlays: Overlays) {
     overlays.locationPickerOpen,
     overlays.whatsNewOpen,
     overlays.shortcutEditorOpen,
-    overlays.actionMenuOpen,
+    overlays.paletteOpen,
+    overlays.desktopOverviewOpen,
+    overlays.profileSwitcherOpen,
     libraryOpen,
   ].some(Boolean);
-  const actionMenuBlocked = [
+  const paletteBlocked = [
     promptOpen,
     overlays.settingsOpen,
     overlays.shortcutsOpen,
@@ -43,12 +47,11 @@ export function appOverlayPolicy(overlays: Overlays) {
     libraryOpen,
     overlays.gardenHoldsWindow,
   ].some(Boolean);
+  const blockingOverlayOpen = navigationCaptured || paletteBlocked;
   return {
-    // Snooze holds focus without suspending the workspace; re-enabling it would
-    // steal focus from the row button when the picker closes.
-    blockingOverlayOpen: navigationCaptured || actionMenuBlocked,
-    workspaceShortcutsEnabled: !overlays.snoozeMenuOpen,
-    actionMenuBlocked: actionMenuBlocked || overlays.snoozeMenuOpen,
+    blockingOverlayOpen,
+    windowCovered: blockingOverlayOpen || overlays.markdownOpenerOpen,
+    paletteBlocked: paletteBlocked || overlays.snoozeMenuOpen,
     appShortcutsEnabled: !navigationCaptured && !overlays.markdownOpenerOpen && !overlays.snoozeMenuOpen,
   };
 }

@@ -32,7 +32,7 @@ func TestASeedRemembersWhereAndHowItsClosedOrReapedTenderRan(t *testing.T) {
 		if _, err := cli.SeedTransition(spawned.ID, seed, "tend", "", "", false, client.SeedTransitionOptions{}); err != nil {
 			t.Fatalf("%s tends %s: %v", spawned.ID, seed, err)
 		}
-		tenders[name] = &tender{repo: repo, cwd: cwd, seed: seed, pane: sessionPane{session: spawned.ID, workspace: workspace, pane: pane}, run: run}
+		tenders[name] = &tender{repo: repo, cwd: cwd, seed: seed, pane: sessionPane{session: spawned.ID, desktop: workspace, pane: pane}, run: run}
 	}
 
 	closed := tenders["closed"]

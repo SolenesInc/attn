@@ -15,7 +15,6 @@ import (
 	"github.com/victorarias/attn/internal/crew"
 	"github.com/victorarias/attn/internal/docstore"
 	"github.com/victorarias/attn/internal/garden"
-	"github.com/victorarias/attn/internal/procreap"
 	"github.com/victorarias/attn/internal/prompts"
 	"github.com/victorarias/attn/internal/protocol"
 	"github.com/victorarias/attn/internal/pty"
@@ -65,7 +64,11 @@ func (d *Daemon) crewAgentAvailable(agent string) bool {
 
 var crewWakePrompt = prompts.RenderText("crew", "wake", prompts.Values{})
 
-func crewWorkspaceID(memberID string) string { return "workspace-crew-" + memberID }
+// A wake the user did not start is announced with who asked for it.
+type crewWakeRequest struct {
+	RequestedBy string
+	UserStarted bool
+}
 
 func (d *Daemon) crewMember(name string) (crew.Member, docstore.Document, error) {
 	if err := d.requireHome(crew.Surface); err != nil {
@@ -167,7 +170,7 @@ func (d *Daemon) crewPriming(member crew.Member) (crew.Priming, error) {
 }
 
 func (d *Daemon) primeCrewGarden(priming *crew.Priming, memberID string) {
-	read, err := d.readWholeGarden()
+	read, err := d.readGardenTo(0, d.crewProfileID(memberID))
 	if err != nil {
 		d.logf("crew: reading the garden to prime %s: %v", crew.DisplayName(memberID), err)
 		return
@@ -195,8 +198,48 @@ func (d *Daemon) primeCrewGarden(priming *crew.Priming, memberID string) {
 	}
 }
 
+func (d *Daemon) crewWakeAsked(msg *protocol.CrewWakeMessage) (*protocol.CrewWakeResult, error) {
+	return d.crewWakeAskedFor(msg, false)
+}
+
+func (d *Daemon) crewWakeAskedFor(msg *protocol.CrewWakeMessage, userStarted bool) (*protocol.CrewWakeResult, error) {
+	name := strings.TrimSpace(msg.Member)
+	if err := d.refuseCrossProfileWake(name, protocol.Deref(msg.ProfileID), protocol.Deref(msg.SourceSessionID)); err != nil {
+		return nil, err
+	}
+	request := crewWakeRequest{UserStarted: userStarted, RequestedBy: d.launchRequester(protocol.Deref(msg.SourceSessionID), "attn crew wake")}
+	d.crewWakeMu.Lock()
+	defer d.crewWakeMu.Unlock()
+	return d.crewWakeDayWithChargeLocked(name, strings.TrimSpace(strings.ToLower(protocol.Deref(msg.Agent))), false, nil, request)
+}
+
+func (d *Daemon) refuseCrossProfileWake(name, askedProfileID, sourceSessionID string) error {
+	askedProfileID = strings.TrimSpace(askedProfileID)
+	if sourceSessionID = strings.TrimSpace(sourceSessionID); sourceSessionID != "" {
+		profile, err := d.callerProfile(sourceSessionID)
+		if err != nil {
+			return err
+		}
+		if askedProfileID != "" && askedProfileID != profile.ID {
+			return fmt.Errorf("wake %s: session %s belongs to profile %s, not the profile_id %s it sent", name, sourceSessionID, profile.ID, askedProfileID)
+		}
+		askedProfileID = profile.ID
+	}
+	if askedProfileID == "" {
+		return nil
+	}
+	member, _, err := d.crewMember(name)
+	if err != nil {
+		return err
+	}
+	if memberProfileID := d.crewProfileID(member.ID); memberProfileID != askedProfileID {
+		return fmt.Errorf("%s belongs to profile %s, not %s; a member wakes only in its own profile", crew.DisplayName(member.ID), memberProfileID, askedProfileID)
+	}
+	return nil
+}
+
 func (d *Daemon) handleCrewWake(conn net.Conn, msg *protocol.CrewWakeMessage) {
-	result, err := d.crewWake(strings.TrimSpace(msg.Member), strings.TrimSpace(strings.ToLower(protocol.Deref(msg.Agent))))
+	result, err := d.crewWakeAsked(msg)
 	if err != nil {
 		d.sendCrewError(conn, "wake", err)
 		return
@@ -205,7 +248,11 @@ func (d *Daemon) handleCrewWake(conn net.Conn, msg *protocol.CrewWakeMessage) {
 }
 
 func (d *Daemon) handleCrewWakeWS(client *wsClient, msg *protocol.CrewWakeMessage) {
-	result, err := d.crewWake(strings.TrimSpace(msg.Member), strings.TrimSpace(strings.ToLower(protocol.Deref(msg.Agent))))
+	result, err := d.crewWakeAskedFor(msg, true)
+	var showErr error
+	if err == nil {
+		showErr = d.showCrewWake(result, client, protocol.Deref(msg.RequestID))
+	}
 	response := protocol.CrewWakeResultMessage{
 		Event:     protocol.EventCrewWakeResult,
 		RequestID: protocol.Deref(msg.RequestID),
@@ -216,11 +263,14 @@ func (d *Daemon) handleCrewWakeWS(client *wsClient, msg *protocol.CrewWakeMessag
 	} else {
 		response.Member = protocol.Ptr(result.Member)
 		response.SessionID = protocol.Ptr(result.SessionID)
-		response.WorkspaceID = protocol.Ptr(result.WorkspaceID)
+		response.ProfileID = protocol.Ptr(result.ProfileID)
 		if result.AlreadyAwake {
 			response.AlreadyAwake = protocol.Ptr(true)
 		}
 		response.ReleasedSessionID = result.ReleasedSessionID
+		if showErr != nil {
+			response.ShowError = protocol.Ptr(showErr.Error())
+		}
 	}
 	d.sendToClient(client, response)
 }
@@ -236,9 +286,9 @@ func (d *Daemon) crewWakeWithCharge(name, agent string, autonomous bool) (*proto
 }
 
 func (d *Daemon) crewWakeWithChargeLocked(name, agent string, autonomous bool) (*protocol.CrewWakeResult, error) {
-	return d.crewWakeDayWithChargeLocked(name, agent, autonomous, nil)
+	return d.crewWakeDayWithChargeLocked(name, agent, autonomous, nil, crewWakeRequest{})
 }
-func (d *Daemon) crewWakeDayWithChargeLocked(name, agent string, autonomous bool, beforeWake func() error) (*protocol.CrewWakeResult, error) {
+func (d *Daemon) crewWakeDayWithChargeLocked(name, agent string, autonomous bool, beforeWake func() error, request crewWakeRequest) (*protocol.CrewWakeResult, error) {
 	member, _, err := d.crewMember(name)
 	if err != nil {
 		return nil, err
@@ -261,7 +311,7 @@ func (d *Daemon) crewWakeDayWithChargeLocked(name, agent string, autonomous bool
 				AlreadyAwake: true,
 			}
 			if session := d.store.Get(boundSessionID); session != nil {
-				awake.WorkspaceID = session.WorkspaceID
+				awake.ProfileID = session.ProfileID
 			}
 			return awake, nil
 		}
@@ -270,6 +320,10 @@ func (d *Daemon) crewWakeDayWithChargeLocked(name, agent string, autonomous bool
 		if err := beforeWake(); err != nil {
 			return nil, err
 		}
+	}
+	profile, err := d.liveLaunchProfile(d.crewProfileID(member.ID))
+	if err != nil {
+		return nil, fmt.Errorf("wake %s: %w", crew.DisplayName(member.ID), err)
 	}
 	if agent == "" {
 		agent = member.LaunchAgent()
@@ -292,23 +346,13 @@ func (d *Daemon) crewWakeDayWithChargeLocked(name, agent string, autonomous bool
 		return nil, err
 	}
 
-	workspaceID := crewWorkspaceID(member.ID)
-	paneCreated, err := d.addCrewDayPane(member.ID, workspaceID, directory, sessionID)
-	if err != nil {
-		d.releaseCrewBindingIfSession(sessionID)
-		return nil, err
-	}
-	if paneCreated {
-		d.broadcastWorkspaceLayoutUpdated(workspaceID)
-	}
-
 	initialPrompt := crewWakePrompt
 	spawnClient := newInternalWSClient()
-	d.handleSpawnSession(spawnClient, &protocol.SpawnSessionMessage{
+	d.handleSpawnSessionWithPolicy(spawnClient, &protocol.SpawnSessionMessage{
 		Cmd:           protocol.CmdSpawnSession,
 		ID:            sessionID,
 		Cwd:           directory,
-		WorkspaceID:   workspaceID,
+		ProfileID:     profile.ID,
 		Agent:         agent,
 		Model:         d.crewWakeModel(member, agent),
 		Effort:        d.crewWakeEffort(member, agent),
@@ -316,50 +360,28 @@ func (d *Daemon) crewWakeDayWithChargeLocked(name, agent string, autonomous bool
 		Rows:          24,
 		Label:         protocol.Ptr(crew.DisplayName(member.ID)),
 		InitialPrompt: protocol.Ptr(initialPrompt),
-	})
+	}, internalSpawnPolicy{launchPlacement: &launchPlacement{kind: "crew", itemID: member.ID}})
 	if _, err := readInternalActionResult(spawnClient); err != nil {
-		d.removeWorkspaceLayoutPaneForSession(sessionID)
 		d.releaseCrewBindingIfSession(sessionID)
 		return nil, fmt.Errorf("wake %s: %w", crew.DisplayName(member.ID), err)
 	}
+	if !request.UserStarted {
+		requester := request.RequestedBy
+		if requester == "" {
+			requester = "a garden notification"
+		}
+		d.announceBackgroundLaunch("crew", member.ID, sessionID, requester)
+	}
 	d.logf("crew: woke %s in session %s at %s", crew.DisplayName(member.ID), sessionID, directory)
 	result := &protocol.CrewWakeResult{
-		Member:      member.ID,
-		SessionID:   sessionID,
-		WorkspaceID: workspaceID,
+		Member:    member.ID,
+		SessionID: sessionID,
+		ProfileID: profile.ID,
 	}
 	if releasedSessionID != "" {
 		result.ReleasedSessionID = protocol.Ptr(releasedSessionID)
 	}
 	return result, nil
-}
-
-func (d *Daemon) addCrewDayPane(memberID, workspaceID, directory, sessionID string) (bool, error) {
-	d.workspaceOccupancyMu.Lock()
-	defer d.workspaceOccupancyMu.Unlock()
-	name := crew.DisplayName(memberID)
-	if d.store.GetWorkspace(workspaceID) == nil {
-		d.handleRegisterWorkspace(nil, &protocol.RegisterWorkspaceMessage{
-			Cmd:       protocol.CmdRegisterWorkspace,
-			ID:        workspaceID,
-			Title:     name,
-			Directory: directory,
-		})
-		if d.store.GetWorkspace(workspaceID) == nil {
-			return false, fmt.Errorf("create %s's workspace", name)
-		}
-	}
-	_, created, err := d.addWorkspaceSessionPaneLocked(&protocol.WorkspaceLayoutAddSessionPaneMessage{
-		Cmd:         protocol.CmdWorkspaceLayoutAddSessionPane,
-		WorkspaceID: workspaceID,
-		PaneID:      protocol.Ptr("pane-" + sessionID),
-		SessionID:   sessionID,
-		Title:       protocol.Ptr(name),
-	})
-	if err != nil {
-		return false, fmt.Errorf("create %s's pane: %w", name, err)
-	}
-	return created, nil
 }
 
 func (d *Daemon) crewSessionActuallyLive(sessionID string) (bool, error) {
@@ -368,13 +390,6 @@ func (d *Daemon) crewSessionActuallyLive(sessionID string) (bool, error) {
 	}
 	provider, ok := d.ptyBackend.(ptybackend.SessionInfoProvider)
 	if !ok {
-		process, err := d.store.ExternalProcess(sessionID)
-		if err != nil {
-			return false, err
-		}
-		if process != nil {
-			return procreap.MatchesProcess(process.Pid, process.StartToken)
-		}
 		return true, nil
 	}
 	info, err := provider.SessionInfo(context.Background(), sessionID)
@@ -382,15 +397,9 @@ func (d *Daemon) crewSessionActuallyLive(sessionID string) (bool, error) {
 		return info.Running, nil
 	}
 	if errors.Is(err, pty.ErrSessionNotFound) || errors.Is(err, os.ErrNotExist) {
-		process, readErr := d.store.ExternalProcess(sessionID)
-		if readErr != nil {
-			return false, readErr
-		}
-		if process != nil {
-			return procreap.MatchesProcess(process.Pid, process.StartToken)
-		}
-		_, legacy := d.externalRegistrations.Load(sessionID)
-		return legacy, nil
+		// Bare CLI wrappers own their registered days until they unregister; recovered managed days stay unmarked.
+		_, external := d.externalRegistrations.Load(sessionID)
+		return external, nil
 	}
 	return false, err
 }
@@ -503,11 +512,23 @@ func (d *Daemon) crewSet(msg *protocol.CrewSetMessage) (*protocol.CrewMember, bo
 			wire := d.crewMemberWire(member, doc.Rev)
 			return &wire, true, nil
 		}
+		setting := storeLaunchSetting(msg.LaunchDesktopSetting)
+		if msg.LaunchDesktop != nil {
+			chosen, err := d.launchDesktopFromRef(d.crewProfileID(member.ID), member.ID, *msg.LaunchDesktop, msg.LaunchDesktopName)
+			if err != nil {
+				return nil, false, err
+			}
+			setting = &chosen
+		}
 		if err := d.applyCrewSettings(&member, msg); err != nil {
 			return nil, false, err
 		}
-		revision, err := d.writeCrewMember(*schema, member, doc.Rev)
+		revision, err := d.writeCrewMemberWithLaunch(*schema, member, doc.Rev, setting)
 		if err == nil {
+			if setting != nil {
+				d.publishArrangementChanged(d.crewProfileID(member.ID))
+				d.publishMigrationChanged(d.crewProfileID(member.ID))
+			}
 			wire := d.crewMemberWire(member, revision)
 			return &wire, false, nil
 		}
@@ -654,19 +675,4 @@ func resolveCrewDir(dir string) (string, error) {
 		return "", fmt.Errorf("%s is not a directory", absolute)
 	}
 	return absolute, nil
-}
-
-func (d *Daemon) externalSessionAlive(sessionID string) (bool, error) {
-	process, err := d.store.ExternalProcess(sessionID)
-	if err != nil || process == nil {
-		return false, err
-	}
-	return procreap.MatchesProcess(process.Pid, process.StartToken)
-}
-
-func (d *Daemon) clearExternalProcess(sessionID string) {
-	d.externalRegistrations.Delete(sessionID)
-	if err := d.store.ClearExternalProcess(sessionID); err != nil {
-		d.logf("clear external wrapper identity for %s: %v", sessionID, err)
-	}
 }

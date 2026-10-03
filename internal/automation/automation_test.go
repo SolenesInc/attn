@@ -22,7 +22,7 @@ func TestDefinitionPersistsCanonicalDirectory(t *testing.T) {
 		t.Fatal(err)
 	}
 	raw := strings.ReplaceAll(`api_version: attn.dev/automations/v1alpha1
-id: canonical
+id: 1
 name: Canonical
 trigger: {type: manual}
 prompt: Inspect.
@@ -44,7 +44,7 @@ location: {type: directory, path: PATH}
 
 func TestMarshalDefinitionYAMLRoundTripsThroughParse(t *testing.T) {
 	raw := `api_version: attn.dev/automations/v1alpha1
-id: roundtrip
+id: 1
 name: Roundtrip
 trigger: {type: manual}
 prompt: Do the thing.
@@ -75,7 +75,7 @@ location: {type: directory, path: "` + t.TempDir() + `"}
 
 func TestParseDefinitionYAMLAcceptsJSONEncoding(t *testing.T) {
 	raw := `api_version: attn.dev/automations/v1alpha1
-id: json-save-path
+id: 1
 name: JSON save path
 trigger: {type: manual}
 prompt: Do the thing.
@@ -121,7 +121,7 @@ func TestStarterTemplateYAMLIsWellFormedYAML(t *testing.T) {
 func TestDefinitionHasNoApprovalAndRequiresDirectory(t *testing.T) {
 	dir := t.TempDir()
 	raw := strings.ReplaceAll(`api_version: attn.dev/automations/v1alpha1
-id: harmless
+id: 1
 name: Harmless
 trigger: {type: manual}
 prompt: Inspect the supplied context.
@@ -151,7 +151,7 @@ location: {type: directory, path: PATH}
 func TestDefinitionCanonicalizesLaunchDriver(t *testing.T) {
 	dir := t.TempDir()
 	raw := strings.ReplaceAll(`api_version: attn.dev/automations/v1alpha1
-id: canonical-driver
+id: 1
 name: Canonical driver
 trigger: {type: manual}
 prompt: Inspect.
@@ -169,7 +169,7 @@ location: {type: directory, path: PATH}
 
 func TestDefinitionRejectsUnknownFields(t *testing.T) {
 	_, _, err := ParseDefinitionYAML([]byte(`api_version: attn.dev/automations/v1alpha1
-id: bad
+id: 1
 name: Bad
 trigger: {type: manual}
 prompt: x
@@ -183,7 +183,7 @@ location: {type: directory, path: /tmp}
 
 func TestDefinitionRejectsEnabledKey(t *testing.T) {
 	_, _, err := ParseDefinitionYAML([]byte(`api_version: attn.dev/automations/v1alpha1
-id: bad
+id: 1
 name: Bad
 enabled: true
 trigger: {type: manual}
@@ -199,7 +199,7 @@ location: {type: directory, path: /tmp}
 func TestRepositoryWorktreeDefinitionCanonicalizesOverride(t *testing.T) {
 	repo := t.TempDir()
 	raw := strings.ReplaceAll(`api_version: attn.dev/automations/v1alpha1
-id: pr-review
+id: 1
 name: PR review
 trigger: {type: manual}
 prompt: Review the pull request locally.
@@ -225,7 +225,7 @@ location:
 
 func TestRepositoryWorktreeDefinitionRejectsDirectoryPath(t *testing.T) {
 	raw := `api_version: attn.dev/automations/v1alpha1
-id: pr-review
+id: 1
 name: PR review
 trigger: {type: manual}
 prompt: Review.
@@ -242,7 +242,7 @@ location:
 
 func TestGitHubReviewDefinitionCanonicalizesAndAppliesRepositoryFilter(t *testing.T) {
 	raw := `api_version: attn.dev/automations/v1alpha1
-id: requested-review
+id: 1
 name: Requested review
 trigger:
   type: github_review_requested
@@ -275,7 +275,7 @@ location:
 
 func TestGitHubReviewDefinitionRejectsPolicyAndRequiresWorktree(t *testing.T) {
 	base := `api_version: attn.dev/automations/v1alpha1
-id: requested-review
+id: 1
 name: Requested review
 trigger: {type: github_review_requested, repositories: {mode: all_accessible}}
 prompt: Review locally.
@@ -312,7 +312,7 @@ location:
 func TestScheduledDefinitionValidation(t *testing.T) {
 	dir := t.TempDir()
 	base := strings.ReplaceAll(`api_version: attn.dev/automations/v1alpha1
-id: nightly
+id: 1
 name: Nightly
 trigger:
   type: scheduled
@@ -367,7 +367,7 @@ location: {type: directory, path: PATH}
 func TestManualAndGitHubTriggersRejectSchedule(t *testing.T) {
 	dir := t.TempDir()
 	manual := strings.ReplaceAll(`api_version: attn.dev/automations/v1alpha1
-id: manual-with-schedule
+id: 1
 name: Manual
 trigger:
   type: manual
@@ -380,7 +380,7 @@ location: {type: directory, path: PATH}
 		t.Fatalf("err = %v", err)
 	}
 	github := `api_version: attn.dev/automations/v1alpha1
-id: requested-review
+id: 1
 name: Requested review
 trigger:
   type: github_review_requested
@@ -400,7 +400,7 @@ location:
 func TestCanonicalJSONOmitsScheduleForNonScheduledTriggers(t *testing.T) {
 	dir := t.TempDir()
 	manual := strings.ReplaceAll(`api_version: attn.dev/automations/v1alpha1
-id: manual-no-schedule
+id: 1
 name: Manual
 trigger: {type: manual}
 prompt: Inspect.
@@ -419,7 +419,7 @@ location: {type: directory, path: PATH}
 func TestScheduledDefinitionRoundTripsCronAndTimeZone(t *testing.T) {
 	dir := t.TempDir()
 	raw := strings.ReplaceAll(`api_version: attn.dev/automations/v1alpha1
-id: nightly
+id: 1
 name: Nightly
 trigger:
   type: scheduled
@@ -449,7 +449,7 @@ location: {type: directory, path: PATH}
 func TestManualTriggerRejectsContinuityAndCatchUp(t *testing.T) {
 	dir := t.TempDir()
 	base := strings.ReplaceAll(`api_version: attn.dev/automations/v1alpha1
-id: manual-with-catchup
+id: 1
 name: Manual
 trigger: {type: manual}
 prompt: Inspect.

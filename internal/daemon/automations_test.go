@@ -3,6 +3,7 @@ package daemon
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"os"
 	"path/filepath"
 	"strings"
@@ -38,7 +39,7 @@ func testAutomationLaunch(agent string) automation.EffectiveLaunch {
 	}
 }
 
-func baselineGitHubReviewAutomation(t *testing.T, s *store.Store, definitionID, host string, at time.Time) {
+func baselineGitHubReviewAutomation(t *testing.T, s *store.Store, definitionID int, host string, at time.Time) {
 	t.Helper()
 	if candidates, err := s.ReconcileAutomationReviewRequests(definitionID, host, nil, at); err != nil || len(candidates) != 0 {
 		t.Fatalf("establish review automation baseline: candidates=%#v err=%v", candidates, err)
@@ -73,7 +74,7 @@ func setupContinuationWorktree(t *testing.T) (*Daemon, automation.WorkRequest, s
 	d.dataRoot = filepath.Join(root, "instance")
 	enrollHomeForTest(t, d)
 	now := time.Date(2026, 7, 20, 10, 0, 0, 0, time.UTC)
-	def, err := d.store.UpsertAutomationDefinition("review", "Review", `{}`, now)
+	def, err := d.store.UpsertAutomationDefinition(0, "Review", `{}`, defaultProfileID(t, d.store), now)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -83,7 +84,7 @@ func setupContinuationWorktree(t *testing.T) (*Daemon, automation.WorkRequest, s
 		t.Fatal(err)
 	}
 	origin, _, err := d.store.ClaimGitHubReviewAutomationRun(def.ID, subject, 1, def.Revision, string(payload), `{}`, now, store.AutomationRunReservation{
-		RunID: "run-1", OccurrenceID: "occ-1", SeedID: "s-at0001", SessionID: "session-1", WorkspaceID: "workspace-1", PaneID: "pane-1",
+		RunID: "run-1", OccurrenceID: "occ-1", SeedID: "s-at0001", SessionID: "session-1",
 	})
 	if err != nil {
 		t.Fatal(err)
@@ -92,7 +93,7 @@ func setupContinuationWorktree(t *testing.T) (*Daemon, automation.WorkRequest, s
 		RunID: origin.ID, DefinitionID: def.ID, SubjectKey: subject, ContinuityKey: subject,
 		Provider: "github", Prompt: "Review", Context: payload, Location: location,
 		Launch: testAutomationLaunch("codex"), IDs: automation.DeliveryIDs{
-			SeedID: origin.SeedID, SessionID: origin.SessionID, WorkspaceID: origin.WorkspaceID, PaneID: origin.PaneID,
+			SeedID: origin.SeedID, SessionID: origin.SessionID, ProfileID: origin.ProfileID,
 		},
 	}
 	if _, _, err := d.ensureAutomationSeed(firstReq); err != nil {
@@ -140,7 +141,7 @@ func TestWithdrawnBeforeLaunchReRequestCreatesFirstWorktree(t *testing.T) {
 func TestReRequestCanStartReviewerWhenWithdrawnOriginNeverLaunched(t *testing.T) {
 	s := store.New()
 	now := time.Date(2026, 7, 19, 18, 0, 0, 0, time.UTC)
-	def, err := s.UpsertAutomationDefinition("review", "Review", `{}`, now)
+	def, err := s.UpsertAutomationDefinition(0, "Review", `{}`, defaultProfileID(t, s), now)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -152,7 +153,7 @@ func TestReRequestCanStartReviewerWhenWithdrawnOriginNeverLaunched(t *testing.T)
 		t.Fatal(err)
 	}
 	_, _, err = s.ClaimGitHubReviewAutomationRun(def.ID, subject, 1, def.Revision, payload, snapshot, now, store.AutomationRunReservation{
-		RunID: "run-1", OccurrenceID: "occ-1", SeedID: "s-seed01", SessionID: "session-1", WorkspaceID: "workspace-1", PaneID: "pane-1",
+		RunID: "run-1", OccurrenceID: "occ-1", SeedID: "s-seed01", SessionID: "session-1",
 	})
 	if err != nil {
 		t.Fatal(err)
@@ -172,7 +173,7 @@ func TestReRequestCanStartReviewerWhenWithdrawnOriginNeverLaunched(t *testing.T)
 	}
 	req := automation.WorkRequest{
 		RunID: second.ID, DefinitionID: def.ID, ContinuityKey: subject, Provider: "github", Prompt: "Review", Context: json.RawMessage(payload),
-		IDs: automation.DeliveryIDs{SeedID: second.SeedID, SessionID: second.SessionID, WorkspaceID: second.WorkspaceID, PaneID: second.PaneID},
+		IDs: automation.DeliveryIDs{SeedID: second.SeedID, SessionID: second.SessionID},
 	}
 	if err := d.validateAutomationContinuation(req); err != nil {
 		t.Fatalf("withdrawn-before-launch re-request rejected: %v", err)
@@ -199,10 +200,37 @@ func enrollHomeForTest(t *testing.T, d *Daemon) {
 }
 
 const manualAutomationYAML = `api_version: attn.dev/automations/v1alpha1
-id: manual-check
 name: Manual check
 trigger: {type: manual}
 prompt: Check locally.
 launch: {driver: codex}
 location: {type: directory, path: "%s"}
 `
+
+func TestAnOutpostRefusesToCreateOrRunAutomations(t *testing.T) {
+	const home = "d-cccccccccccccccccccccccccccccccc"
+	d := newEnrolledDaemon(t, home)
+	var fenced *enrollment.FencedError
+	if _, err := d.automationApplyWithGuards(context.Background(), "id: nightly\nname: Nightly\n", defaultProfileID(t, d.store), nil, nil, nil); !errors.As(err, &fenced) || !strings.Contains(err.Error(), home) {
+		t.Fatalf("apply on an outpost = %v, want a refusal naming the home %s", err, home)
+	}
+	if defs, err := d.store.ListAutomationDefinitions(); err != nil || len(defs) != 0 {
+		t.Fatalf("definitions after a refused apply = %v, %v; want none", defs, err)
+	}
+	def, err := d.store.UpsertAutomationDefinition(0, "Legacy", `{}`, defaultProfileID(t, d.store), time.Now())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := d.automationRun(context.Background(), def.ID, "request-1", "{}"); !errors.As(err, &fenced) {
+		t.Fatalf("run on an outpost = %v, want the home fence", err)
+	}
+	if _, err := d.automationSetEnabled(context.Background(), def.ID, true); !errors.As(err, &fenced) {
+		t.Fatalf("enable on an outpost = %v, want the home fence", err)
+	}
+	if _, err := d.automationSetEnabled(context.Background(), def.ID, false); err != nil {
+		t.Fatalf("disabling a leftover definition on an outpost: %v", err)
+	}
+	if err := d.automationDelete(context.Background(), def.ID); err != nil {
+		t.Fatalf("deleting a leftover definition on an outpost: %v", err)
+	}
+}

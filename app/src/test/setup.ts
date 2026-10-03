@@ -2,7 +2,7 @@ import '@testing-library/jest-dom/vitest';
 import { beforeEach, vi } from 'vitest';
 import type * as Zustand from 'zustand';
 import { invoke, isTauri } from '@tauri-apps/api/core';
-import { WHATS_NEW_ID, WHATS_NEW_STORAGE_KEY } from '../hooks/useWhatsNew';
+import { WHATS_NEW_BANNER_STORAGE_KEY, WHATS_NEW_ID, WHATS_NEW_STORAGE_KEY } from '../hooks/useWhatsNew';
 import { forgetAppMemory } from './appMemory';
 
 vi.mock('@tauri-apps/api/core', () => ({
@@ -136,6 +136,7 @@ beforeEach(() => {
   if (typeof window !== 'undefined') {
     window.localStorage.clear();
     window.localStorage.setItem(WHATS_NEW_STORAGE_KEY, WHATS_NEW_ID);
+    window.localStorage.setItem(WHATS_NEW_BANNER_STORAGE_KEY, WHATS_NEW_ID);
   }
   forgetAppMemory();
   vi.mocked(isTauri).mockReset();

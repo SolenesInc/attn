@@ -1,4 +1,4 @@
-attn keeps work as seeds in the garden. A seed is one unit of work: a short id like `s-7k3f9m`, a slug like `mermaid-rendered-grid` (the title's first key words), a title, a markdown body, a state. The id is for commands and for other agents; every verb prints it beside the slug. To the user, say the slug: `mermaid-rendered-grid` (`s-7k3f9m`) on first mention, then the slug alone. A person should never have to decode an id.
+attn keeps work as seeds in your profile's garden. A seed belongs to its planting profile for life. Lists, links, children, claims and delegations stay in that profile; another profile's seed is refused by name. Inside attn, your session chooses the profile. Outside attn, use `--profile <name|id>` when several profiles exist; a single profile is selected automatically. A seed is one unit of work: a short id like `s-7k3f9m`, a slug like `mermaid-rendered-grid` (the title's first key words), a title, a markdown body, a state. The id is for commands and for other agents; every verb prints it beside the slug. To the user, say the slug: `mermaid-rendered-grid` (`s-7k3f9m`) on first mention, then the slug alone. A person should never have to decode an id.
 
 Write every seed body as a work prompt for an agent starting without this conversation, including work you plan to do yourself. State the task and outcome, starting context and constraints, and how to verify completion.
 
@@ -14,7 +14,7 @@ The loop:
 
     attn seed ready                  what you can pick up now: open, not parked, not blocked, nobody holding it
                                      inside your plot when you report to one. A plot itself is never ready; only its children can be
-    attn seed ready --all            the same across the whole garden; use it to look past your plot
+    attn seed ready --all            the same across your profile's garden; use it to look past your plot
     attn seed show <id>              body, state, tender, edges, children, freshest handoff
     attn seed tend <id>              claim it; one tender at a time, a held seed refuses you by name
     attn seed note <id> -m "…"       what happened and what you learned, tending it or not; --handoff addresses the next tender
@@ -25,7 +25,7 @@ The loop:
     attn seed wither <id> [-m "…"]   abandoned, nobody will pick it up
     attn seed park <id>              put down, claim released; tend it again to resume
     attn seed replant <id>           a harvested or withered seed back to planted
-    attn seed search <words>         find seeds by keyword across the whole garden, closed ones included; the line that
+    attn seed search <words>         find seeds by keyword across your profile's garden, closed ones included; the line that
                                      matched prints under each hit. Run it before you plant
     attn seed plant "<title>" -m "…" [--part-of <plot>] [--discovered-from <seed>]    a new seed; prints the id
 
