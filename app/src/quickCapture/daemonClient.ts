@@ -2,8 +2,8 @@ import { CaptureRequestError } from '../hooks/daemonCaptureEvents';
 import type { DaemonApi } from '../contexts/DaemonApiContext';
 import {
   CaptureAttachmentDiscardMessageCmd, CaptureAttachmentGetMessageCmd, CaptureAttachmentPutMessageCmd,
-  CaptureGetMessageCmd, CaptureListMessageCmd, CaptureSendMessageCmd, CaptureUpdateMessageCmd,
-  CaptureTargetKind, CaptureUpdateKind, type CaptureRecord, type CaptureResultObject,
+  CaptureGetMessageCmd, CaptureListMessageCmd, CaptureSendMessageCmd,
+  CaptureTargetKind, type CaptureRecord, type CaptureResultObject,
 } from '../types/generated';
 import type { CaptureClient, CaptureItem } from './client';
 
@@ -16,8 +16,7 @@ function target(recipient: string) {
 }
 function item(record: CaptureRecord): CaptureItem {
   return { id: record.id, text: record.content, recipient: record.target.kind === 'chief' ? 'chief' : record.target.member_id!,
-    state: record.state, createdAt: record.created_at, images: record.attachments.map(({ id, name, media_type }) => ({ id, name, mediaType: media_type })),
-    sessionId: record.recipient_session_id, detail: record.detail };
+    createdAt: record.created_at, readAt: record.read_at, images: record.attachments.map(({ id, name, media_type }) => ({ id, name, mediaType: media_type })) };
 }
 function saved(result: CaptureResultObject) {
   if (!result.record) throw new Error('The daemon did not return a saved capture receipt. Your draft is retained.');
@@ -29,7 +28,7 @@ function encode(bytes: Uint8Array): string {
   return btoa(binary);
 }
 
-export function captureDaemonClient(daemon: Pick<DaemonApi, 'sendCaptureRequest'>, openRecipient: (sessionId: string) => Promise<void>): CaptureClient {
+export function captureDaemonClient(daemon: Pick<DaemonApi, 'sendCaptureRequest'>): CaptureClient {
   const request = daemon.sendCaptureRequest;
   const uploading = new Map<string, Promise<void>>();
   const ready = new Set<string>();
@@ -95,12 +94,6 @@ export function captureDaemonClient(daemon: Pick<DaemonApi, 'sendCaptureRequest'
         captureId: asset.capture_id, id: asset.attachment_id, name: asset.name, state: asset.state,
       })) };
     },
-    async update(captureId, action, recipient) {
-      const kind = { cancel: CaptureUpdateKind.Cancel, restore: CaptureUpdateKind.Restore,
-        retry: CaptureUpdateKind.Retry, redirect: CaptureUpdateKind.Redirect }[action];
-      return saved(await request({ cmd: CaptureUpdateMessageCmd.CaptureUpdate, capture_id: captureId,
-        action: { kind, ...(recipient && { target: target(recipient) }) } }));
-    },
     async discard(captureId, imageIds) {
       for (const attachmentId of imageIds) {
         const identity = key(captureId, attachmentId);
@@ -116,7 +109,7 @@ export function captureDaemonClient(daemon: Pick<DaemonApi, 'sendCaptureRequest'
       for (;;) {
         const result = await request({ cmd: CaptureAttachmentGetMessageCmd.CaptureAttachmentGet,
           capture_id: captureId, attachment_id: attachmentId, offset });
-        if (!result.download) throw new Error('The daemon did not return image bytes.');
+        if (!result.download) throw new Error('The daemon did not return file bytes.');
         pieces.push(Uint8Array.from(atob(result.download.data_base64), character => character.charCodeAt(0)));
         if (result.download.eof) return new Promise<string>((resolve, reject) => {
           const reader = new FileReader(); reader.onload = () => resolve(String(reader.result));
@@ -128,6 +121,5 @@ export function captureDaemonClient(daemon: Pick<DaemonApi, 'sendCaptureRequest'
     },
     setBinding: async () => { throw new Error('Shortcut preferences belong to the native host.'); },
     resizeText: async () => { throw new Error('Text size preferences belong to the main app.'); },
-    openRecipient,
   };
 }

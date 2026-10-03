@@ -7,10 +7,11 @@ import { gesture, pressShortcut, renderApp } from './test/renderApp';
 import { serveSettings } from './test/settings';
 import type { EventMessage } from './test/protocol';
 import type { ScriptedDaemon } from './test/scriptedDaemon';
-import { agentWorkspace, daemonSession } from './test/daemonFixtures';
 
 const localFetch = globalThis.fetch;
-const native = vi.hoisted(() => ({
+const native = vi.hoisted(() => {
+  (window as { __ATTN_AUTOMATION_ENABLED?: boolean }).__ATTN_AUTOMATION_ENABLED = true;
+  return ({
   listeners: new Map<string, Set<(event: { payload: unknown }) => unknown>>(),
   draft: null as unknown,
   images: new Map<string, string>(),
@@ -18,7 +19,7 @@ const native = vi.hoisted(() => ({
   active: null as string | null,
   onHide: null as (() => void) | null,
   onDrop: undefined as ((event: { payload: { type: string; paths: string[]; position: { x: number; y: number } } }) => unknown) | undefined,
-}));
+}); });
 vi.mock('@tauri-apps/api/event', () => {
   async function emitTo(_label: string, event: string, payload?: unknown) {
     for (const listener of native.listeners.get(event) ?? []) await listener({ payload });
@@ -35,7 +36,7 @@ vi.mock('@tauri-apps/api/event', () => {
 vi.mock('@tauri-apps/api/webviewWindow', () => ({
   getCurrentWebviewWindow: () => ({
     onDragDropEvent: async (callback: typeof native.onDrop) => { native.onDrop = callback; return () => { native.onDrop = undefined; }; }, isVisible: async () => true,
-    show: async () => {}, setFocus: async () => {},
+    show: async () => {}, setFocus: async () => {}, isFocused: async () => true,
   }),
 }));
 
@@ -75,9 +76,9 @@ async function captureApp(configure?: (daemon: ScriptedDaemon) => void, options:
 }
 const editor = () => screen.getByRole('textbox', { name: 'Capture message' });
 type WireRecord = NonNullable<NonNullable<EventMessage<'capture_result'>['result']>['record']>;
-function record(command: { capture_id: string; content?: string; target?: WireRecord['target'] }, state: WireRecord['state'] = 'waiting_for_chief'): WireRecord {
+function record(command: { capture_id: string; content?: string; target?: WireRecord['target'] }): WireRecord {
   return { id: command.capture_id, content: command.content ?? 'saved note', target: command.target ?? { kind: 'chief' },
-    attachments: [], created_at: '2026-10-01T12:00:00Z', state };
+    attachments: [], created_at: '2026-10-01T12:00:00Z' };
 }
 function captureTraffic(daemon: ScriptedDaemon) { return daemon.sent.filter(command => command.cmd.startsWith('capture_')); }
 
@@ -239,41 +240,188 @@ describe('Quick Capture app wire behavior', () => {
     expect(captureTraffic(daemon)).toEqual([]);
   });
 
-  it('Recent inspects without reading and reports cancellation refusing an already-read capture', async () => {
-    const { daemon } = await captureApp();
-    const captureId = crypto.randomUUID();
-    daemon.on('capture_list', () => ({ event: 'capture_result', success: true, result: { list: { items: [record({ capture_id: captureId })], draft_assets: [] } } }));
-    daemon.on('capture_update', () => ({ event: 'capture_result', success: false, error: 'Capture was already read' }));
-    await gesture(daemon, () => fireEvent.click(screen.getByRole('button', { name: 'Recent captures' })));
-    expect(screen.getByText('saved note')).toBeInTheDocument();
-    await gesture(daemon, () => fireEvent.click(screen.getByRole('button', { name: 'Cancel' })));
-    expect(screen.getByRole('alert')).toHaveTextContent('already read');
-    expect(daemon.sentOf('capture_update')).toMatchObject([{ capture_id: captureId, action: { kind: 'cancel' } }]);
-    expect(daemon.sentOf('agent_inbox')).toEqual([]);
-    expect(captureTraffic(daemon).map(command => command.cmd)).toEqual(['capture_list', 'capture_update']);
-  });
-  it('restores a cancelled Recent note before offering redirect', async () => {
-    const captureId = crypto.randomUUID();
-    let state: WireRecord['state'] = 'cancelled';
+  it.each(['paste', 'drop'] as const)('attaches a PDF by %s, stages its bytes and submits without image decoding', async mode => {
+    const pdf = '%PDF-1.4\nQuick Capture PDF fixture\n%%EOF\n';
+    const nativeInvoke = vi.mocked(invoke).getMockImplementation()!;
+    vi.mocked(invoke).mockImplementation(async (command, args) => command === 'capture_image_read'
+      ? `data:application/pdf;base64,${btoa(pdf)}` : nativeInvoke(command, args));
     const { daemon } = await captureApp(daemon => {
-      daemon.on('capture_list', () => ({ event: 'capture_result', success: true, result: { list: { items: [record({ capture_id: captureId }, state)], draft_assets: [] } } }));
-      daemon.on('capture_update', command => { state = 'waiting_for_chief'; return { event: 'capture_result', success: true, result: { record: record({ capture_id: command.capture_id }, state) } }; });
+      vi.stubGlobal('fetch', (input: RequestInfo | URL, init?: RequestInit) => {
+        if (String(input).startsWith('data:')) return localFetch(input, init);
+        throw new Error('app wire tests reach no network');
+      });
+      daemon.on('capture_list', () => ({ event: 'capture_result', success: true, result: { list: { items: [], draft_assets: [] } } }));
+      daemon.on('capture_attachment_put', command => ({ event: 'capture_result', success: true,
+        result: { upload: { next_offset: command.offset + atob(command.data_base64).length } } }));
+      daemon.on('capture_send', command => ({ event: 'capture_result', success: true, result: { record: record(command) } }));
     });
-    await gesture(daemon, () => fireEvent.click(screen.getByRole('button', { name: 'Recent captures' })));
-    expect(screen.queryByRole('combobox', { name: 'Redirect capture' })).toBeNull();
-    await gesture(daemon, () => fireEvent.click(screen.getByRole('button', { name: /^Restore$/ })));
-    expect(daemon.sentOf('capture_update')).toMatchObject([{ capture_id: captureId, action: { kind: 'restore' } }]);
-    expect(screen.getByRole('combobox', { name: 'Redirect capture' })).toBeInTheDocument();
+    await act(async () => {
+      if (mode === 'paste') fireEvent.paste(editor(), { clipboardData: { files: [new File([pdf], 'notes.pdf', { type: 'application/pdf' })] } });
+      else await native.onDrop!({ payload: { type: 'drop', paths: ['/fixture/notes.pdf'], position: { x: 100, y: 100 } } });
+    });
+    const upload = await daemon.received('capture_attachment_put');
+    await daemon.idle();
+    expect(atob(upload.data_base64)).toBe(pdf);
+    expect(upload.name).toBe('notes.pdf');
+    expect(screen.getByText('notes.pdf')).toBeInTheDocument();
+    expect(screen.queryByRole('img', { name: 'notes.pdf' })).toBeNull();
+    await gesture(daemon, () => fireEvent.keyDown(editor(), { key: 'Enter' }));
+    expect(daemon.sentOf('capture_send')).toMatchObject([{ capture_id: upload.capture_id, attachment_ids: [upload.attachment_id] }]);
   });
 
-  it('closes Capture when a read note opens its recipient session', async () => {
-    const { daemon, hidden } = await captureApp(daemon => {
-      daemon.on('capture_list', () => ({ event: 'capture_result', success: true, result: { list: { items: [{ ...record({ capture_id: crypto.randomUUID() }, 'read'), recipient_session_id: 'recipient' }], draft_assets: [] } } }));
-    }, { initialState: { sessions: [daemonSession('recipient')], workspaces: [agentWorkspace('recipient')] } });
+  it('shares the measured work budget across additions and uploads, skips removals and releases failed work', async () => {
+    const reads: string[] = [];
+    let releaseFirst!: (value: string) => void;
+    const first = new Promise<string>(resolve => { releaseFirst = resolve; });
+    const url = 'data:application/pdf;base64,JVBERi0xLjQK';
+    const nativeInvoke = vi.mocked(invoke).getMockImplementation()!;
+    vi.mocked(invoke).mockImplementation(async (command, args) => {
+      if (command !== 'capture_image_read') return nativeInvoke(command, args);
+      const path = (args as { path: string }).path;
+      reads.push(path);
+      return path === '/first.pdf' ? first : url;
+    });
+    let uploadsHeld = true;
+    const { daemon } = await captureApp(daemon => {
+      vi.stubGlobal('fetch', (input: RequestInfo | URL, init?: RequestInit) => {
+        if (String(input).startsWith('data:')) return localFetch(input, init);
+        throw new Error('app wire tests reach no network');
+      });
+      daemon.on('capture_list', () => ({ event: 'capture_result', success: true, result: { list: { items: [], draft_assets: [] } } }));
+      daemon.on('capture_attachment_put', command => uploadsHeld ? undefined : ({ event: 'capture_result', success: true,
+        result: { upload: { next_offset: command.offset + atob(command.data_base64).length } } }));
+      daemon.on('capture_send', command => ({ event: 'capture_result', success: true, result: { record: record(command) } }));
+      daemon.on('capture_attachment_discard', () => ({ event: 'capture_result', success: true, result: { discarded: true } }));
+    });
+    await act(async () => {
+      for (const listener of native.listeners.get('attn://capture/automation') ?? []) await listener({ payload: {
+        request_id: crypto.randomUUID(), action: 'capture_state', payload: { batchSize: 1 },
+      } });
+      await native.onDrop!({ payload: { type: 'drop', paths: ['/first.pdf', '/removed.pdf'], position: { x: 100, y: 100 } } });
+    });
+    expect(reads).toEqual(['/first.pdf']);
+    await gesture(daemon, () => fireEvent.click(screen.getByRole('button', { name: 'Remove removed.pdf' })));
+    await act(async () => { releaseFirst(url); });
+    const upload = await daemon.received('capture_attachment_put');
+    await act(async () => { await native.onDrop!({ payload: { type: 'drop', paths: ['/later.pdf'], position: { x: 100, y: 100 } } }); });
+    await daemon.idle();
+    expect(reads).toEqual(['/first.pdf']);
+    uploadsHeld = false;
+    await act(async () => { daemon.replyTo(upload, { event: 'capture_result', request_id: upload.request_id, success: false, error: 'Upload interrupted' }); });
+    await daemon.received('capture_attachment_put', command => command.name === 'later.pdf');
+    expect(reads).toEqual(['/first.pdf', '/later.pdf']);
+    await daemon.idle();
+    expect(screen.getByText('first.pdf')).toBeInTheDocument();
+    expect(screen.getByText('later.pdf')).toBeInTheDocument();
+    uploadsHeld = false;
+    await gesture(daemon, () => fireEvent.keyDown(editor(), { key: 'Enter' }));
+    expect(daemon.sentOf('capture_send')[0].attachment_ids).toHaveLength(2);
+    expect(daemon.sentOf('capture_attachment_put').filter(command => command.name === 'first.pdf')).toHaveLength(2);
+    expect(daemon.sentOf('capture_attachment_put').filter(command => command.name === 'removed.pdf')).toHaveLength(0);
+  });
+
+  it('retains edits and removal made while another file occupies the upload queue', async () => {
+    const nativeInvoke = vi.mocked(invoke).getMockImplementation()!;
+    vi.mocked(invoke).mockImplementation(async (command, args) => command === 'capture_image_read'
+      ? 'data:application/pdf;base64,JVBERi0xLjQK' : nativeInvoke(command, args));
+    let uploadsHeld = true;
+    const { daemon } = await captureApp(daemon => {
+      vi.stubGlobal('fetch', (input: RequestInfo | URL, init?: RequestInit) => {
+        if (String(input).startsWith('data:')) return localFetch(input, init);
+        throw new Error('app wire tests reach no network');
+      });
+      daemon.on('capture_list', () => ({ event: 'capture_result', success: true, result: { list: { items: [], draft_assets: [] } } }));
+      daemon.on('capture_attachment_put', command => uploadsHeld ? undefined : ({ event: 'capture_result', success: true,
+        result: { upload: { next_offset: command.offset + atob(command.data_base64).length } } }));
+      daemon.on('capture_attachment_discard', () => ({ event: 'capture_result', success: true, result: { discarded: true } }));
+    });
+    await act(async () => {
+      for (const listener of native.listeners.get('attn://capture/automation') ?? []) await listener({ payload: {
+        request_id: crypto.randomUUID(), action: 'capture_state', payload: { batchSize: 1 },
+      } });
+      fireEvent.change(editor(), { target: { value: 'Before upload' } });
+      await native.onDrop!({ payload: { type: 'drop', paths: ['/first.pdf', '/second.pdf'], position: { x: 100, y: 100 } } });
+    });
+    const upload = await daemon.received('capture_attachment_put', command => command.name === 'first.pdf');
+    await gesture(daemon, () => fireEvent.change(editor(), { target: { value: 'Edited while uploading' } }));
+    await gesture(daemon, () => fireEvent.click(screen.getByRole('button', { name: 'Remove first.pdf' })));
+    uploadsHeld = false;
+    await act(async () => { daemon.replyTo(upload, { event: 'capture_result', request_id: upload.request_id, success: true,
+      result: { upload: { next_offset: atob(upload.data_base64).length } } }); });
+    await daemon.received('capture_attachment_put', command => command.name === 'second.pdf');
+    await act(async () => {
+      for (const listener of native.listeners.get('attn://capture/automation') ?? []) await listener({ payload: {
+        request_id: crypto.randomUUID(), action: 'capture_state', payload: { staged: true },
+      } });
+    });
+    const retained = native.draft as CaptureDraft;
+    expect(retained.text).toBe('Edited while uploading');
+    expect(retained.images.map(file => file.name)).toEqual(['second.pdf']);
+  });
+
+  it('keeps an upload slot through daemon disconnect until the host finishes reading its bytes', async () => {
+    const reads: string[] = [];
+    const url = 'data:application/pdf;base64,JVBERi0xLjQK';
+    const nativeInvoke = vi.mocked(invoke).getMockImplementation()!;
+    vi.mocked(invoke).mockImplementation(async (command, args) => {
+      if (command !== 'capture_image_read') return nativeInvoke(command, args);
+      reads.push((args as { path: string }).path); return url;
+    });
+    let releaseFetch!: (response: Response) => void;
+    let fetchSeen!: () => void;
+    const reading = new Promise<void>(resolve => { fetchSeen = resolve; });
+    const held = new Promise<Response>(resolve => { releaseFetch = resolve; });
+    let firstFetch = true;
+    const { daemon } = await captureApp(daemon => {
+      vi.stubGlobal('fetch', (input: RequestInfo | URL, init?: RequestInit) => {
+        if (String(input).startsWith('data:')) {
+          if (firstFetch) { firstFetch = false; fetchSeen(); return held; }
+          return localFetch(input, init);
+        }
+        throw new Error('app wire tests reach no network');
+      });
+      daemon.on('capture_list', () => ({ event: 'capture_result', success: true, result: { list: { items: [], draft_assets: [] } } }));
+      daemon.on('capture_attachment_put', command => ({ event: 'capture_result', success: true,
+        result: { upload: { next_offset: command.offset + atob(command.data_base64).length } } }));
+    });
+    await act(async () => {
+      for (const listener of native.listeners.get('attn://capture/automation') ?? []) await listener({ payload: {
+        request_id: crypto.randomUUID(), action: 'capture_state', payload: { batchSize: 1 },
+      } });
+      await native.onDrop!({ payload: { type: 'drop', paths: ['/first.pdf'], position: { x: 100, y: 100 } } });
+    });
+    await reading;
+    await act(async () => daemon.disconnect());
+    await act(async () => { await native.onDrop!({ payload: { type: 'drop', paths: ['/second.pdf'], position: { x: 100, y: 100 } } }); });
+    await daemon.idle();
+    expect(reads).toEqual(['/first.pdf']);
+    await daemon.reconnect();
+    await act(async () => { releaseFetch(new Response('%PDF-1.4\n')); });
+    await daemon.received('capture_attachment_put', command => command.name === 'second.pdf');
+    await daemon.idle();
+    expect(reads).toEqual(['/first.pdf', '/second.pdf']);
+    expect(daemon.sentOf('capture_attachment_put').filter(command => command.name === 'first.pdf')).toHaveLength(1);
+  });
+
+  it('Recent shows sent/read history and files without delivery actions or inbox reads', async () => {
+    const { daemon } = await captureApp(daemon => {
+      daemon.on('capture_list', () => ({ event: 'capture_result', success: true, result: { list: { items: [
+        record({ capture_id: crypto.randomUUID(), content: 'Sent note' }),
+        { ...record({ capture_id: crypto.randomUUID(), content: 'Read note' }), read_at: '2026-10-01T12:01:00Z',
+          attachments: [{ id: crypto.randomUUID(), name: 'notes.pdf', media_type: 'application/pdf', bytes: 51 }] },
+      ], draft_assets: [] } } }));
+    });
     await gesture(daemon, () => fireEvent.click(screen.getByRole('button', { name: 'Recent captures' })));
-    await act(async () => { fireEvent.click(within(screen.getByRole('region', { name: 'Recent captures' })).getByRole('button', { name: 'Open recipient' })); await hidden; });
+    const recent = screen.getByRole('region', { name: 'Recent captures' });
+    expect(within(recent).getByText('Sent note')).toBeInTheDocument();
+    expect(within(recent).getByText('Read note')).toBeInTheDocument();
+    expect(within(recent).getByText('notes.pdf')).toBeInTheDocument();
+    expect(within(recent).getByText(/^Sent ·/)).toBeInTheDocument();
+    expect(within(recent).getByText(/^Read ·/)).toBeInTheDocument();
+    expect(within(recent).queryByRole('button', { name: /Cancel|Restore|Retry delivery|Open recipient|Follow up/ })).toBeNull();
+    expect(within(recent).queryByRole('combobox')).toBeNull();
     expect(daemon.sentOf('agent_inbox')).toEqual([]);
-    expect(vi.mocked(invoke).mock.calls.filter(([command]) => command === 'capture_hide')).toHaveLength(1);
+    expect(captureTraffic(daemon).map(command => command.cmd)).toEqual(['capture_list']);
   });
 
   it('resends retained image bytes after a failed draft discard', async () => {
