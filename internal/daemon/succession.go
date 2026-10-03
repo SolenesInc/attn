@@ -1,6 +1,7 @@
 package daemon
 
 import (
+	"context"
 	"fmt"
 	"slices"
 	"time"
@@ -15,7 +16,7 @@ import (
 )
 
 // opened opens a session in terminal t for a conversation no session holds; it takes only the terminal,
-// and from closes into the ledger whole. The caller holds from's lifecycle lock.
+// and from closes into the ledger whole unless it runs on elsewhere. The caller holds from's lifecycle lock.
 func (d *Daemon) opened(t harness.TerminalID, from *protocol.Session, observation agentConversationObservation) error {
 	launch, _ := d.store.LaunchIntent(from.ID)
 	launch.ChiefOfStaff = false
@@ -28,8 +29,8 @@ func (d *Daemon) opened(t harness.TerminalID, from *protocol.Session, observatio
 	}, observation)
 }
 
-// shows puts owner, which holds the conversation t reports and runs in no live terminal, in t: a closed
-// owner reopens in place, an open one leaves its dead panes. The caller holds both lifecycle locks.
+// shows puts owner, which holds the conversation t reports, in t: a closed owner reopens in place, an
+// open one drops its dead panes and keeps its live ones, all in t's workspace. The caller holds both lifecycle locks.
 func (d *Daemon) shows(t harness.TerminalID, from *protocol.Session, owner string, observation agentConversationObservation) error {
 	return d.succeed(t, from, store.Succession{
 		To:    owner,
@@ -37,16 +38,24 @@ func (d *Daemon) shows(t harness.TerminalID, from *protocol.Session, owner strin
 	}, observation)
 }
 
+// succeed moves t on from from to sc.To. A from that another live terminal still runs stays open there.
 func (d *Daemon) succeed(t harness.TerminalID, from *protocol.Session, sc store.Succession, observation agentConversationObservation) error {
-	d.drainTranscriptWatcher(from.ID)
-	if _, err := d.captureGardenSessionSnapshot(from); err != nil {
-		d.logf("garden: preserving execution %s before its terminal moved on: %v", from.ID, err)
+	live := d.liveTerminals(context.Background())
+	sc.KeepFrom = slices.ContainsFunc(d.terminals().Of(harness.SessionID(from.ID)), func(id harness.TerminalID) bool {
+		_, running := live[id]
+		return running && id != t
+	})
+	if !sc.KeepFrom {
+		d.drainTranscriptWatcher(from.ID)
+		if _, err := d.captureGardenSessionSnapshot(from); err != nil {
+			d.logf("garden: preserving execution %s before its terminal moved on: %v", from.ID, err)
+		}
 	}
 	sc.From = from.ID
 	sc.Conversation = store.SessionConversation{NativeID: observation.NativeID, TranscriptPath: observation.TranscriptPath}
 	var layouts []workspacelayout.WorkspaceLayout
 	err := d.commitWorkspaceLayouts(func() (_ []workspacelayout.WorkspaceLayout, err error) {
-		if layouts, err = d.successionLayouts(t, sc.To); err != nil {
+		if layouts, err = d.successionLayouts(t, sc.To, live); err != nil {
 			return nil, err
 		}
 		return layouts, d.store.CommitSuccession(sc, layouts, time.Now())
@@ -78,17 +87,19 @@ func (d *Daemon) succeed(t harness.TerminalID, from *protocol.Session, sc store.
 		}
 	}
 
-	d.recordSessionClose(from.ID, func() (bool, error) { return true, nil })
-	d.publishSessionUnregistered(from)
-	d.dissociateSessionFromWorkspace(from.ID)
+	if !sc.KeepFrom {
+		d.recordSessionClose(from.ID, func() (bool, error) { return true, nil })
+		d.publishSessionUnregistered(from)
+		d.dissociateSessionFromWorkspace(from.ID)
+	}
 	d.recomputeAndBroadcastWorkspaceForSession(sc.To)
 	d.logf("terminal %s moved on from session %s to %s for conversation %s", t, from.ID, sc.To, observation.NativeID)
 	return nil
 }
 
-// successionLayouts points t's panes at to and drops the other panes that place to, whose terminals
-// are dead. It returns every layout it changed, t's first.
-func (d *Daemon) successionLayouts(t harness.TerminalID, to string) ([]workspacelayout.WorkspaceLayout, error) {
+// successionLayouts points t's panes at to and drops the other panes that place to whose terminals
+// are not live. It returns every layout it changed, t's first.
+func (d *Daemon) successionLayouts(t harness.TerminalID, to string, live map[harness.TerminalID]struct{}) ([]workspacelayout.WorkspaceLayout, error) {
 	r := d.terminals()
 	var layouts []workspacelayout.WorkspaceLayout
 	edit := func(term harness.TerminalID, change func(*workspacelayout.WorkspaceLayout)) error {
@@ -115,6 +126,9 @@ func (d *Daemon) successionLayouts(t harness.TerminalID, to string) ([]workspace
 		return nil, err
 	}
 	for _, dead := range r.Of(harness.SessionID(to)) {
+		if _, kept := live[dead]; kept {
+			continue
+		}
 		if err := edit(dead, func(layout *workspacelayout.WorkspaceLayout) {
 			layout.Panes = slices.DeleteFunc(layout.Panes, func(p workspacelayout.Pane) bool { return p.RuntimeID == string(dead) })
 		}); err != nil {

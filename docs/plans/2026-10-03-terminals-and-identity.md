@@ -101,8 +101,8 @@ conversationIn(t, c, transcript):
   switch {
   case conv(cur) == c:   ensure the watcher path                         // startup, compact, reload, reconnect
   case conv(cur) == "":  adopt c (exclusive claim, as PR 3 built it)   // picker launch, fresh pi
-  case owner(c) live:    move c within cur           // live in another terminal or a bare-CLI wrapper
-  case owner(c) != "":   shows(t, cur, owner)        // open owner first, else the most recently closed
+  case !showable(owner): move c within cur           // live in another workspace, or only in a bare-CLI wrapper
+  case owner(c) != "":   shows(t, cur, owner)        // open owner first, else the most recently closed; a live one keeps its terminals
   default:               opened(t, cur, c)
   }
 ```
@@ -153,7 +153,7 @@ These steps run under `lifecycle(cur)`, then `terminal(t)`, plus `lifecycle(owne
    - dissociate it; the workspace keeps the successor, so it is never torn down;
    - publish in this order: `SessionRegistered(successor)` → layout updated → `SessionClosed` and `SessionUnregistered(predecessor)`.
 
-**Shows only.** A closed owner reopens in place; an open one's dead panes are dropped. Either way the owner moves to t's workspace, keeps its own name and launch intent, and gets `succeeds = cur`, so the app follows the terminal. If the owner is live in another terminal, or its bare-CLI wrapper still runs, it keeps that terminal and t's session takes the conversation over in place, as before PR 4. This is rare, with no dedicated test.
+**Shows only.** A closed owner reopens in place; an open one's dead panes are dropped. Either way the owner moves to t's workspace, keeps its own name and launch intent, and gets `succeeds = cur`, so the app follows the terminal. An owner live in another terminal of t's workspace (Codex `/agents`, or `/resume` of a session running elsewhere) keeps it and dead panes alone drop, so it runs in two terminals and t, shown most recently, is its primary. When either terminal later moves on, the session stays open in the other: the succession skips the close and every step 5 does to the predecessor. A session belongs to one workspace, so for an owner live in another workspace, or kept alive only by its bare-CLI wrapper, t's session takes the conversation over in place, as before PR 4.
 
 ### 3.6 Resolution by category (PR 2)
 
@@ -240,9 +240,9 @@ CREATE INDEX idx_sessions_succeeds ON sessions(succeeds) WHERE succeeds != '';
 
 | Harness | New conversation | Switch to an existing conversation | Launch, compact, reconnect |
 |---|---|---|---|
-| Claude, attn PTY | `/clear` and plan-mode "clear and proceed" → Opened; S2's state comes from the hooks that follow | `/resume` → Shows (reopens a closed owner in place, or takes a recoverable one's place; a live owner keeps its terminal). Unknown to attn → Opened, which imports it | No-op. `-r` picker → adopt |
+| Claude, attn PTY | `/clear` and plan-mode "clear and proceed" → Opened; S2's state comes from the hooks that follow | `/resume` → Shows (reopens a closed owner in place, takes a recoverable one's place, or shows one running in another pane of the workspace in this terminal too). Unknown to attn → Opened, which imports it | No-op. `-r` picker → adopt |
 | pi | `/new`, fork → Opened | `/resume` → Shows, or Opened if unknown | Reconnect and reload restate the same id → no-op. Fresh → adopt |
-| Codex, attn PTY | `/clear` and `/new` → Opened, on the new chat's first turn | `/resume` → Shows, as for Claude, once Codex reports the thread (at the latest, on its first prompt). A thread no session holds → Opened | No-op |
+| Codex, attn PTY | `/clear` and `/new` → Opened, on the new chat's first turn | `/resume` and `/agents` → Shows, as for Claude, once Codex reports the thread (at the latest, on its first prompt). A thread no session holds → Opened | No-op |
 | Copilot | Unchanged: launch claim plus transcript binding | | |
 | Shell | No conversation | | |
 | Bare-CLI wrapper | Unchanged: it is not a registered terminal, so today's observe applies (PR 7) | | |

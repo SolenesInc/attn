@@ -13,16 +13,18 @@ import (
 
 // Succession puts To in the terminal From showed: To takes From's place, process, driver run and
 // Conversation; everything else stays with From. A new To gets Label and Launch; an existing one keeps its own.
+// KeepFrom leaves From open, for a From that another terminal still runs.
 type Succession struct {
 	From, To     string
 	Label        string
 	Conversation SessionConversation
 	Launch       LaunchIntent
 	Close        SessionClose
+	KeepFrom     bool
 }
 
 // CommitSuccession opens sc.To, or reopens or moves it when it exists, in the workspace of layouts[0], whose
-// pane now shows it. It saves layouts and closes sc.From into the ledger in one transaction.
+// pane now shows it. It saves layouts and, unless sc.KeepFrom, closes sc.From into the ledger in one transaction.
 func (s *Store) CommitSuccession(sc Succession, layouts []workspacelayout.WorkspaceLayout, now time.Time) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -63,15 +65,20 @@ func (s *Store) CommitSuccession(sc Succession, layouts []workspacelayout.Worksp
 			return fmt.Errorf("show successor %s: %w", sc.To, err)
 		}
 	}
-	if _, err = s.closeSessionTx(tx, sc.From, sc.Close, at); err == nil {
-		_, err = tx.Exec(`UPDATE sessions SET agent_driver_plugin_name = '', agent_driver_run_id = '', agent_driver_report_seq = 0,
-			agent_driver_transcript_path = '' WHERE id = ?`, sc.From)
-	}
-	if err != nil {
-		return fmt.Errorf("succeed session %s: %w", sc.From, err)
+	if !sc.KeepFrom {
+		if _, err = s.closeSessionTx(tx, sc.From, sc.Close, at); err == nil {
+			_, err = tx.Exec(`UPDATE sessions SET agent_driver_plugin_name = '', agent_driver_run_id = '', agent_driver_report_seq = 0,
+				agent_driver_transcript_path = '' WHERE id = ?`, sc.From)
+		}
+		if err != nil {
+			return fmt.Errorf("succeed session %s: %w", sc.From, err)
+		}
 	}
 	if err := tx.Commit(); err != nil {
 		return fmt.Errorf("succeed session %s: %w", sc.From, err)
+	}
+	if sc.KeepFrom {
+		return nil
 	}
 	s.forgetSessionCost(sc.From)
 	delete(s.touchedAt, sc.From)
