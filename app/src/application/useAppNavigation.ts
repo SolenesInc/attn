@@ -16,6 +16,7 @@ import {
 } from '../utils/workspaceSelectionStyle';
 import {
   AppContentProps,
+  paneIdForSession,
   persistShowSessionlessWorkspaces,
   readShowSessionlessWorkspaces,
 } from './appSupport';
@@ -69,7 +70,10 @@ export function useAppNavigation({
   } = useAgentNavigation();
 
   const handleSelectSession = selectAgent;
-  const selectCreatedSession = selectAgent;
+  const selectCreatedSession = useCallback(
+    (sessionId: string) => selectAgentPane(sessionId, paneIdForSession(sessionId)),
+    [selectAgentPane],
+  );
 
   useEffect(() => {
     if (view === 'session' && activeSessionId) {

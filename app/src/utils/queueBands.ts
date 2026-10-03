@@ -98,7 +98,7 @@ export function compareTurnOrder(a: QueueBandSession, b: QueueBandSession): numb
   if (openedA !== openedB) {
     return openedA < openedB ? -1 : 1;
   }
-  return a.id < b.id ? -1 : 1;
+  return a.id === b.id ? 0 : a.id < b.id ? -1 : 1;
 }
 
 /** The jump-to-waiting (⌘J) target, in queue order rather than list order. `wants` is
@@ -229,7 +229,7 @@ export function compareWakeOrder(a: QueueBandSession, b: QueueBandSession): numb
   if (untilA !== untilB) {
     return untilA < untilB ? -1 : 1;
   }
-  return a.id < b.id ? -1 : 1;
+  return a.id === b.id ? 0 : a.id < b.id ? -1 : 1;
 }
 
 /** The row after `settledSessionId` in queue order, wrapping, that is still owed.
