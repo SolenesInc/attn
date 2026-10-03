@@ -1,12 +1,9 @@
 import fs from 'node:fs';
 import path from 'node:path';
-import { execFile, execFileSync, spawn } from 'node:child_process';
-import { promisify } from 'node:util';
+import { execFileSync, spawn } from 'node:child_process';
 import { LinuxDriver } from './linuxDriver.mjs';
 import { MacOSDriver } from './macosDriver.mjs';
 import { instanceCliEnv, instanceForAppPath } from './harnessInstance.mjs';
-
-const execFileAsync = promisify(execFile);
 
 // The harness uses its own bridges; a broken desktop bus blocked WebKitGTK
 // before Tauri setup for over 45 seconds.
@@ -14,13 +11,6 @@ const UNAVAILABLE_DESKTOP_BUS_ADDRESS = 'unix:path=/dev/null';
 
 function delay(ms) {
   return new Promise((resolve) => setTimeout(resolve, ms));
-}
-
-function parsePids(stdout) {
-  return String(stdout || '')
-    .split(/\s+/)
-    .map((value) => Number.parseInt(value, 10))
-    .filter((value) => Number.isInteger(value) && value > 0);
 }
 
 function spawnDetached(executablePath, env, appPath, logPath) {
@@ -143,26 +133,17 @@ const darwinPlatform = {
   },
 
   async requestQuit({ bundleId }) {
-    try {
-      await execFileAsync('osascript', ['-e', `tell application id "${bundleId}" to quit`]);
-    } catch {
-    }
+    await new MacOSDriver({ bundleId }).runInputDriver(['quit_wait']);
   },
 
-  // osascript and pgrep address the bundle, so the spawn pid adds
-  // nothing here and the manifest pid is only ever a hint for the wait loop.
-  ownedPids({ manifestPid = null }) {
-    const pid = positivePid(manifestPid);
-    return { pids: pid ? [pid] : [], staleManifest: false };
+  // Only an unexited child handle authorizes signal escalation on macOS.
+  ownedPids({ manifestPid = null, launch = null }) {
+    const pid = spawnedOwnedPid(launch);
+    return { pids: pid ? [pid] : [], staleManifest: Boolean(manifestPid && manifestPid !== pid) };
   },
 
-  async listAppPids({ appPath }) {
-    try {
-      const { stdout } = await execFileAsync('pgrep', ['-f', this.appExecutableInTree(appPath)]);
-      return parsePids(stdout);
-    } catch {
-      return [];
-    }
+  async listAppPids() {
+    return [];
   },
 };
 

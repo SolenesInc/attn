@@ -1,5 +1,14 @@
 export const scenarioCatalog = [
   {
+    id: 'quick-capture',
+    runnerId: 'QUICK-CAPTURE',
+    label: 'Quick Capture: native global shortcut, focus, images and delivery',
+    command: ['node', 'scripts/real-app-harness/scenario-quick-capture.mjs'],
+    skipOn: { linux: 'Quick Capture uses a macOS nonactivating panel' },
+    // Native verification measured 97s locally; hosted idle samples add work.
+    timeoutMs: 240_000,
+  },
+  {
     id: 'snooze-keyboard',
     runnerId: 'SNOOZE-KEYBOARD',
     label: 'Snooze from the palette: agent-centered picker, native keys, focus handover and wake',

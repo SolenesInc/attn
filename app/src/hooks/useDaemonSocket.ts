@@ -1,3 +1,5 @@
+import { handleCaptureDaemonEvent } from './daemonCaptureEvents';
+import type { CaptureAttachmentDiscardMessage, CaptureAttachmentGetMessage, CaptureAttachmentPutMessage, CaptureGetMessage, CaptureListMessage, CaptureSendMessage, CaptureUpdateMessage, CaptureResultObject } from '../types/generated';
 import { handleDelegationDaemonEvent, type DelegationSettingsState, type DelegationModelCatalog } from './daemonDelegationEvents';
 import {
   handleCrewDaemonEvent,
@@ -590,6 +592,7 @@ interface UseDaemonSocketOptions {
   onReposUpdate: (repos: RepoState[]) => void;
   onAuthorsUpdate: (authors: AuthorState[]) => void;
   onWorktreesUpdate?: (worktrees: DaemonWorktree[]) => void;
+  onCaptureChanged?: () => void;
   onSettingsUpdate?: (settings: DaemonSettings) => void;
   onSettingError?: (message: string) => void;
   onGitStatusUpdate?: (status: GitStatusUpdate) => void;
@@ -832,6 +835,7 @@ export function useDaemonSocket({
   onReposUpdate,
   onAuthorsUpdate,
   onWorktreesUpdate,
+  onCaptureChanged,
   onSettingsUpdate,
   onSettingError,
   onGitStatusUpdate,
@@ -866,6 +870,7 @@ export function useDaemonSocket({
     onReposUpdate,
     onAuthorsUpdate,
     onWorktreesUpdate,
+    onCaptureChanged,
     onSettingsUpdate,
     onSettingError,
     onGitStatusUpdate,
@@ -889,6 +894,7 @@ export function useDaemonSocket({
     onReposUpdate,
     onAuthorsUpdate,
     onWorktreesUpdate,
+    onCaptureChanged,
     onSettingsUpdate,
     onSettingError,
     onGitStatusUpdate,
@@ -2811,6 +2817,7 @@ export function useDaemonSocket({
 
           default: {
             const pending = pendingActionsRef.current;
+            if (handleCaptureDaemonEvent(data, pending, () => callbacksRef.current.onCaptureChanged?.())) break;
             if (handleSeedArtifactDaemonEvent(data, pending)) break;
             if (handleSessionLedgerDaemonEvent(data, { pending, onUpdate: emitSessionLedger })) break;
             if (handleFsDaemonEvent(data, { pending, onFsChanged: callbacksRef.current.onFsChanged })) break;
@@ -2839,10 +2846,14 @@ export function useDaemonSocket({
       }
     };
 
-    ws.onclose = () => {
+    ws.onclose = (event) => {
       wsRef.current = null;
       emitSessionLedger({ type: 'connection', connected: false });
       hasReceivedInitialStateRef.current = false;
+      setHasReceivedInitialState(false);
+      const captureFailure = event.reason || 'Disconnected. Capture acceptance is unconfirmed.';
+      rejectPendingByPredicate(key => key.startsWith('capture_'), new Error(captureFailure));
+      if (event.reason && !circuitOpenRef.current) setConnectionError(event.reason);
       canceledAttachIdsRef.current.clear();
       docSubscriptions.markDisconnected();
       useAutoModePushStore.getState().clear();
@@ -4301,6 +4312,10 @@ export function useDaemonSocket({
     await sendRequest<boolean>('set_setting', { key, value }, 'Saving the setting timed out');
   }, [sendRequest]);
 
+  const sendCaptureRequest = useCallback((command: CaptureCommand): Promise<CaptureResultObject> => {
+    return sendRequest(command.cmd, command, 'Capture request timed out. Your draft is retained.');
+  }, [sendRequest]);
+
   const sendGetSettings = useCallback(() => {
     const ws = wsRef.current;
     if (!ws || ws.readyState !== WebSocket.OPEN) return;
@@ -5376,6 +5391,7 @@ export function useDaemonSocket({
     sendCreateWorktree,
     sendDeleteWorktree,
     sendSetSetting,
+    sendCaptureRequest,
     sendSaveSetting,
     sendGetSettings,
     sendListPlugins,
@@ -5517,3 +5533,6 @@ export function useDaemonSocket({
     closePresentation,
   };
 }
+
+type CaptureWireCommand = CaptureAttachmentDiscardMessage | CaptureAttachmentGetMessage | CaptureAttachmentPutMessage | CaptureGetMessage | CaptureListMessage | CaptureSendMessage | CaptureUpdateMessage;
+export type CaptureCommand = CaptureWireCommand extends infer Command ? Command extends { cmd: string } ? Omit<Command, 'request_id'> : never : never;

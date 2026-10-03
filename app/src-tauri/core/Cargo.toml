@@ -9,7 +9,7 @@ publish = false
 name = "app_core"
 
 [dependencies]
-tauri = { version = "=2.11.2", features = ["protocol-asset", "unstable"] }
+tauri = { version = "=2.11.2", features = ["protocol-asset", "unstable", "macos-private-api"] }
 tauri-plugin-opener = "2"
 tauri-plugin-dialog = "2"
 tauri-plugin-fs = "2"
@@ -34,8 +34,10 @@ zbus = "5.9"
 
 [target.'cfg(target_os = "macos")'.dependencies]
 block2 = "0.6"
+tauri-nspanel = { git = "https://github.com/ahkohd/tauri-nspanel", rev = "6e595d776e9ac594b73e5a180155800f4da6c87d" }
+global-hotkey = { path = "../vendor/global-hotkey" }
 objc2 = "0.6"
-objc2-app-kit = { version = "0.3", default-features = false, features = ["std", "block2", "NSAlert", "NSApplication", "NSButton", "NSControl", "NSEvent", "NSGraphicsContext", "NSImage", "NSMenu", "NSResponder", "NSTextField", "NSView", "NSWindow", "NSWorkspace"] }
+objc2-app-kit = { version = "0.3", default-features = false, features = ["std", "block2", "NSAlert", "NSApplication", "NSButton", "NSControl", "NSEvent", "NSGraphicsContext", "NSImage", "NSMenu", "NSResponder", "NSRunningApplication", "libc", "NSTextField", "NSView", "NSWindow", "NSWorkspace"] }
 objc2-core-foundation = { version = "0.3", default-features = false, features = ["std"] }
 objc2-foundation = { version = "0.3", default-features = false, features = ["std", "block2", "NSData", "NSError", "NSNotification", "NSObject", "NSOperation", "NSProcessInfo", "NSString"] }
 objc2-web-kit = { version = "0.3", default-features = false, features = ["std", "block2", "objc2-core-foundation", "WKContentWorld", "WKFrameInfo", "WKPDFConfiguration", "WKScriptMessage", "WKScriptMessageHandler", "WKSnapshotConfiguration", "WKUIDelegate", "WKUserContentController", "WKUserScript", "WKWebView", "WKWebViewConfiguration"] }
