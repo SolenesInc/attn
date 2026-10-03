@@ -53,6 +53,7 @@ func (d *Daemon) opened(t harness.TerminalID, from *protocol.Session, observatio
 		return err
 	}
 
+	d.sessionInputs().handOverSubmit(from.ID, to)
 	d.associateSessionWithWorkspace(to, workspaceID)
 	terminal, _ := d.evidenceTable().snapshot(from.ID)
 	d.startEvidence(to, sessionstate.Evidence{
