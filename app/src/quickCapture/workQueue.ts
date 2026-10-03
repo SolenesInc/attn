@@ -1,9 +1,13 @@
+// Twenty distinct 5.26 MB screenshots: 2 slots ready in 2.412s; 4/8 save only 53/88ms.
+// Hosted memory/time receipt: docs/context/quick-capture.md#attachment-work-capacity.
+const CAPTURE_WORK_CAPACITY = 2;
+
 export class CaptureWorkQueue {
   private active = 0;
   private pending: (() => void)[] = [];
   private peak = 0;
   private idle: (() => void)[] = [];
-  private limit = Number.POSITIVE_INFINITY;
+  private limit = CAPTURE_WORK_CAPACITY;
   setCapacity(capacity: number) {
     if (this.active || this.pending.length) throw new Error('Capture work is still running.');
     this.limit = capacity;

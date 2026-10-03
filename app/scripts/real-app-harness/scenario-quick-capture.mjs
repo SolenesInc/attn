@@ -711,6 +711,7 @@ try {
       const accepted = await hidden();
       assert.equal(accepted.saved[0].images.length, files.length);
     }
+    for (const file of files) fs.rmSync(file);
   });
   if (process.env.CI === 'true') {
     await client.request('capture_dismiss');
