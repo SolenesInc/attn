@@ -1,7 +1,9 @@
 import type { DaemonSessionSnapshot, Session } from '../store/sessions';
 import type { DaemonWorkspace } from '../hooks/useDaemonSocket';
+import type { TerminalWorkspaceSnapshot } from '../types/workspace';
 import {
   createAgentHistory,
+  followAgentHistory,
   moveAgentHistory,
   recordAgentVisit,
   type AgentHistoryDirection,
@@ -109,6 +111,60 @@ export function selectAgent(
     focusRequest: { sessionId, paneId: pane.id },
     utilityFocusRequestToken: state.utilityFocusRequestToken + 1,
   };
+}
+
+// A successor is the session its predecessor's terminal now shows, so everything the
+// user held on the predecessor moves to it without a visit, a view change or a queue step.
+export function followSuccessions<T extends SessionNavigationState>(
+  state: T,
+  successorOf: ReadonlyMap<string, string>,
+): T {
+  if (successorOf.size === 0) return state;
+  const follow = (id: string) => successorOf.get(id) ?? id;
+  const activeSessionId = state.activeSessionId && follow(state.activeSessionId);
+  return {
+    ...state,
+    activeSessionId,
+    recentSessionIds: [...new Set(state.recentSessionIds.map(follow))].filter(
+      (id) => id !== activeSessionId,
+    ),
+    agentHistory: followAgentHistory(state.agentHistory, follow),
+    pendingSelection: state.pendingSelection && {
+      ...state.pendingSelection,
+      sessionId: follow(state.pendingSelection.sessionId),
+    },
+    focusRequest: state.focusRequest && {
+      ...state.focusRequest,
+      sessionId: follow(state.focusRequest.sessionId),
+    },
+  };
+}
+
+// A terminal now showing another session hands the old one's place over if the new one
+// succeeds it or it ended; a layout ahead of its session waits until that session arrives.
+export function terminalHandovers(
+  showed: ReadonlyMap<string, string>,
+  layouts: Record<string, TerminalWorkspaceSnapshot>,
+  sessions: readonly DaemonSessionSnapshot[],
+): { successorOf: Map<string, string>; showing: Map<string, string> } {
+  const live = new Map(sessions.map((session) => [session.id, session]));
+  const successorOf = new Map<string, string>();
+  const showing = new Map<string, string>();
+  for (const { workspace } of Object.values(layouts)) {
+    for (const { runtimeId, sessionId } of workspace.agents) {
+      const before = showed.get(runtimeId);
+      if (before && before !== sessionId) {
+        const after = live.get(sessionId);
+        if (!after) {
+          showing.set(runtimeId, before);
+          continue;
+        }
+        if (after.succeeds === before || !live.has(before)) successorOf.set(before, sessionId);
+      }
+      showing.set(runtimeId, sessionId);
+    }
+  }
+  return { successorOf, showing };
 }
 
 export function enterHome(

@@ -1885,6 +1885,7 @@ export interface SessionObject {
     state_reason?:              string;
     state_since:                string;
     state_updated_at:           string;
+    succeeds?:                  string;
     terminal_build_stale?:      boolean;
     turn_opened_at?:            string;
     turn_owed?:                 boolean;
@@ -8412,6 +8413,7 @@ export interface Session {
     state_reason?:              string;
     state_since:                string;
     state_updated_at:           string;
+    succeeds?:                  string;
     terminal_build_stale?:      boolean;
     turn_opened_at?:            string;
     turn_owed?:                 boolean;
@@ -8597,10 +8599,11 @@ export interface SessionDelegationRole {
 }
 
 export interface SessionExitedMessage {
-    event:     SessionExitedMessageEvent;
-    exit_code: number;
-    id:        string;
-    signal?:   string;
+    event:      SessionExitedMessageEvent;
+    exit_code:  number;
+    id:         string;
+    session_id: string;
+    signal?:    string;
     [property: string]: any;
 }
 
@@ -16478,6 +16481,7 @@ const typeMap: any = {
         { json: "state_reason", js: "state_reason", typ: u(undefined, "") },
         { json: "state_since", js: "state_since", typ: "" },
         { json: "state_updated_at", js: "state_updated_at", typ: "" },
+        { json: "succeeds", js: "succeeds", typ: u(undefined, "") },
         { json: "terminal_build_stale", js: "terminal_build_stale", typ: u(undefined, true) },
         { json: "turn_opened_at", js: "turn_opened_at", typ: u(undefined, "") },
         { json: "turn_owed", js: "turn_owed", typ: u(undefined, true) },
@@ -20627,6 +20631,7 @@ const typeMap: any = {
         { json: "state_reason", js: "state_reason", typ: u(undefined, "") },
         { json: "state_since", js: "state_since", typ: "" },
         { json: "state_updated_at", js: "state_updated_at", typ: "" },
+        { json: "succeeds", js: "succeeds", typ: u(undefined, "") },
         { json: "terminal_build_stale", js: "terminal_build_stale", typ: u(undefined, true) },
         { json: "turn_opened_at", js: "turn_opened_at", typ: u(undefined, "") },
         { json: "turn_owed", js: "turn_owed", typ: u(undefined, true) },
@@ -20741,6 +20746,7 @@ const typeMap: any = {
         { json: "event", js: "event", typ: r("SessionExitedMessageEvent") },
         { json: "exit_code", js: "exit_code", typ: 0 },
         { json: "id", js: "id", typ: "" },
+        { json: "session_id", js: "session_id", typ: "" },
         { json: "signal", js: "signal", typ: u(undefined, "") },
     ], "any"),
     "SessionInstructionsMessage": o([

@@ -126,13 +126,15 @@ export function useSessionLifecycle({
   );
 
   const handleRequestCloseSession = useCallback(
-    (id: string) => {
+    (id: string, runtimeId?: string) => {
       const session = sessions.find((entry) => entry.id === id);
       if (!session) {
         return;
       }
 
-      const sessionPane = session.workspace.agents.find((pane) => pane.sessionId === session.id);
+      const sessionPanes = session.workspace.agents.filter((pane) => pane.sessionId === session.id);
+      const sessionPane =
+        sessionPanes.find((pane) => pane.runtimeId === runtimeId) ?? sessionPanes[0];
       if (sessionPane) {
         void handleClosePane(session.id, sessionPane.id).catch(console.error);
         return;
@@ -149,10 +151,10 @@ export function useSessionLifecycle({
         return;
       }
       // A reload's kill can surface as a clean exit (code 0, no signal); the same id is about to respawn in place, so closing the pane here would tear the workspace down under the pending spawn.
-      if (isSessionReloading(info.id)) {
+      if (isSessionReloading(info.sessionId)) {
         return;
       }
-      handleRequestCloseSession(info.id);
+      handleRequestCloseSession(info.sessionId, info.runtimeId);
     },
     [handleRequestCloseSession],
   );

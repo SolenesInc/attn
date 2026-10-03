@@ -126,7 +126,7 @@ func (d *Daemon) handleAgentMsg(conn net.Conn, msg *protocol.AgentMsgMessage) {
 		d.sendError(conn, "internal_error")
 		return
 	}
-	receipt := d.deliverSavedInbox(address, message.ID)
+	receipt := d.deliverSavedInbox(address, message.ID, now)
 	result.MessageID = receipt.ItemID
 	result.Status = protocol.AgentMsgStatusQueued
 	if receipt.Rang {

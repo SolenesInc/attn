@@ -33,11 +33,11 @@ export function daemonSession(id: string, overrides: Partial<DaemonSession> = {}
   };
 }
 
-export function agentPane(sessionId: string, workspaceId: string): DaemonPane {
+export function agentPane(sessionId: string, workspaceId: string, runtimeId = sessionId): DaemonPane {
   return {
     pane_id: `pane-${sessionId}`,
     session_id: sessionId,
-    runtime_id: sessionId,
+    runtime_id: runtimeId,
     workspace_id: workspaceId,
     kind: 'agent',
     status: 'ready',
@@ -102,10 +102,16 @@ export function workspaceWithTiles(tiles: DaemonTile[], overrides: Partial<Daemo
 }
 
 export function agentWorkspace(sessionId: string): DaemonWorkspace {
+  return terminalWorkspace(sessionId, sessionId);
+}
+
+// A pane whose terminal has its own id. agentWorkspace's terminal reuses the session id,
+// as panes from before terminal ids do.
+export function terminalWorkspace(sessionId: string, runtimeId: string): DaemonWorkspace {
   const id = `workspace-${sessionId}`;
   return daemonWorkspace(
     id,
-    { root: { type: 'pane', pane_id: `pane-${sessionId}` }, panes: [agentPane(sessionId, id)] },
+    { root: { type: 'pane', pane_id: `pane-${sessionId}` }, panes: [agentPane(sessionId, id, runtimeId)] },
     { title: sessionId, directory: `/tmp/${sessionId}` },
   );
 }

@@ -64,6 +64,22 @@ export function reconcileAgentHistory(
   return { entries, cursor };
 }
 
+export function followAgentHistory(
+  state: AgentHistoryState,
+  follow: (sessionId: string) => string,
+): AgentHistoryState {
+  const entries: string[] = [];
+  let cursor = -1;
+  state.entries.forEach((sessionId, index) => {
+    const followed = follow(sessionId);
+    if (entries[entries.length - 1] !== followed) entries.push(followed);
+    if (index === state.cursor) cursor = entries.length - 1;
+  });
+  const unchanged = entries.length === state.entries.length
+    && entries.every((sessionId, index) => sessionId === state.entries[index]);
+  return unchanged ? state : { entries, cursor };
+}
+
 export function moveAgentHistory(
   state: AgentHistoryState,
   direction: AgentHistoryDirection,

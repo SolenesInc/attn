@@ -100,7 +100,7 @@ export interface SessionTerminalWorkspaceProps {
   onRenameSession?: (sessionId: string, label: string) => Promise<void>;
   onSelectSession?: (sessionId: string) => void;
   onCancelCountdown?: (sessionId: string) => void;
-  onTerminalPointerActivity?: (sessionId: string) => void;
+  onTerminalPointerActivity?: (runtimeId: string) => void;
   onOpenPresentation?: (presentationId: string) => void;
   // Empty sessionId lets the daemon use the selected session.
   onOpenMarkdown?: (path: string, sessionId: string) => void;

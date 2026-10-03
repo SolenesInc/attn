@@ -1,5 +1,10 @@
 import { create } from 'zustand';
-import { initialSessionNavigation, type SessionNavigationState } from '../navigation/sessionNavigation';
+import {
+  followSuccessions,
+  initialSessionNavigation,
+  terminalHandovers,
+  type SessionNavigationState,
+} from '../navigation/sessionNavigation';
 import { createSessionNavigationActions, reconcileSessionNavigation, type SessionNavigationActions } from './sessionNavigationSlice';
 import type { QueueBands, QueueBandSession } from '../utils/queueBands';
 import type { UISessionState } from '../types/sessionState';
@@ -59,6 +64,7 @@ export interface DaemonSessionSnapshot {
   pinned_at?: string;
   crew_member?: string;
   parent_session_id?: string;
+  succeeds?: string;
   id: string;
   label: string;
   agent?: string;
@@ -79,6 +85,7 @@ interface LauncherConfig {
 export interface SessionStore extends SessionNavigationState, SessionNavigationActions {
   sessions: Session[];
   navigationSessions: DaemonSessionSnapshot[];
+  terminalSessions: ReadonlyMap<string, string>;
   navigationWorkspaces: DaemonWorkspace[];
   navigationSettings: Record<string, string>;
   navigationQueue: QueueBands<QueueBandSession> | null;
@@ -176,11 +183,21 @@ function pickFallbackActive(
   return remainingSessions[0]?.id ?? null;
 }
 
+function followTerminals(
+  state: SessionStore,
+  layouts: Record<string, TerminalWorkspaceSnapshot>,
+  sessions: readonly DaemonSessionSnapshot[],
+): SessionStore {
+  const handover = terminalHandovers(state.terminalSessions, layouts, sessions);
+  return { ...followSuccessions(state, handover.successorOf), terminalSessions: handover.showing };
+}
+
 export const useSessionStore = create<SessionStore>((set, get) => ({
   sessions: [],
   ...initialSessionNavigation(),
   ...createSessionNavigationActions(set, get),
   navigationSessions: [],
+  terminalSessions: new Map(),
   navigationWorkspaces: [],
   navigationSettings: {},
   navigationQueue: null,
@@ -360,7 +377,8 @@ export const useSessionStore = create<SessionStore>((set, get) => ({
   },
 
   syncFromDaemonSessions: (daemonSessions: DaemonSessionSnapshot[]) => {
-    set((state) => {
+    set((current) => {
+      const state = followTerminals(current, current.daemonWorkspaceLayouts, daemonSessions);
       const existingByID = new Map(state.sessions.map((session) => [session.id, session]));
 
       const syncedSessions = daemonSessions.map((daemonSession) => {
@@ -461,7 +479,8 @@ export const useSessionStore = create<SessionStore>((set, get) => ({
 
     const daemonWorkspaceLayouts = Object.fromEntries(workspaceByID);
 
-    set((state) => {
+    set((current) => {
+      const state = followTerminals(current, daemonWorkspaceLayouts, current.navigationSessions);
       const sessions = state.sessions.map((session) => ({
         ...session,
         workspace: workspaceByID.get(session.workspaceId)?.workspace ?? session.workspace,

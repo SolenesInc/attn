@@ -5,7 +5,7 @@ import { invoke, isTauri } from '@tauri-apps/api/core';
 import { describe, expect, it, onTestFinished, vi } from 'vitest';
 import { LOCAL_SNAPSHOT_FORMAT } from './pty/attachPlanning';
 import { openAttachedTerminals } from './test/appFixtures';
-import { agentPane, agentWorkspace, daemonSession, daemonWorkspace, splitWorkspace, type DaemonSession } from './test/daemonFixtures';
+import { agentPane, agentWorkspace, daemonSession, daemonWorkspace, splitWorkspace, terminalWorkspace, type DaemonSession } from './test/daemonFixtures';
 import { fakeRects, sizeTerminals } from './test/layout';
 import { pressShortcut, renderApp } from './test/renderApp';
 import type { CommandMessage } from './test/protocol';
@@ -455,8 +455,10 @@ describe('App terminal runtime', () => {
     expect(screen.getByText('Failed to reload session: reload denied')).toBeInTheDocument();
   });
 
-  it('reports pointer activity over a terminal only once the daemon handshake completes', async () => {
-    const { daemon } = await renderSessions(daemonSession('s1', { state: 'idle' }));
+  it('reports pointer activity over a terminal, naming the terminal, only once the daemon handshake completes', async () => {
+    const { daemon } = await renderApp({
+      initialState: { sessions: [daemonSession('s1', { state: 'idle' })], workspaces: [terminalWorkspace('s1', 'terminal-1')] },
+    });
     open('s1');
     await daemon.idle();
     const moveOverTerminal = async () => {
@@ -472,11 +474,11 @@ describe('App terminal runtime', () => {
 
     reconnected.emit(initialState({
       sessions: [daemonSession('s1', { state: 'idle' })],
-      workspaces: [agentWorkspace('s1')],
+      workspaces: [terminalWorkspace('s1', 'terminal-1')],
     }));
     await moveOverTerminal();
     expect(reconnected.sent.filter((command) => command.cmd === 'terminal_pointer_activity')).toEqual([
-      { cmd: 'terminal_pointer_activity', id: 's1' },
+      { cmd: 'terminal_pointer_activity', id: 'terminal-1' },
     ]);
   });
 

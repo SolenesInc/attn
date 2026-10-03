@@ -8467,6 +8467,9 @@ type Session struct {
 	// StateUpdatedAt corresponds to the JSON schema field "state_updated_at".
 	StateUpdatedAt string `json:"state_updated_at"`
 
+	// Succeeds corresponds to the JSON schema field "succeeds".
+	Succeeds *string `json:"succeeds,omitempty,omitzero"`
+
 	// TerminalBuildStale corresponds to the JSON schema field "terminal_build_stale".
 	TerminalBuildStale *bool `json:"terminal_build_stale,omitempty,omitzero"`
 
@@ -8722,6 +8725,9 @@ type SessionExitedMessage struct {
 
 	// ID corresponds to the JSON schema field "id".
 	ID string `json:"id"`
+
+	// SessionID corresponds to the JSON schema field "session_id".
+	SessionID string `json:"session_id"`
 
 	// Signal corresponds to the JSON schema field "signal".
 	Signal *string `json:"signal,omitempty,omitzero"`
