@@ -85,6 +85,7 @@ interface LauncherConfig {
 export interface SessionStore extends SessionNavigationState, SessionNavigationActions {
   sessions: Session[];
   navigationSessions: DaemonSessionSnapshot[];
+  handledSuccessions: ReadonlySet<string>;
   navigationWorkspaces: DaemonWorkspace[];
   navigationSettings: Record<string, string>;
   navigationQueue: QueueBands<QueueBandSession> | null;
@@ -187,6 +188,7 @@ export const useSessionStore = create<SessionStore>((set, get) => ({
   ...initialSessionNavigation(),
   ...createSessionNavigationActions(set, get),
   navigationSessions: [],
+  handledSuccessions: new Set(),
   navigationWorkspaces: [],
   navigationSettings: {},
   navigationQueue: null,
@@ -367,10 +369,11 @@ export const useSessionStore = create<SessionStore>((set, get) => ({
 
   syncFromDaemonSessions: (daemonSessions: DaemonSessionSnapshot[]) => {
     set((current) => {
-      const state = followSuccessions(
-        current,
-        successionsIn(current.navigationSessions, daemonSessions, current.sessions),
-      );
+      const successions = successionsIn(current.handledSuccessions, daemonSessions, current.sessions);
+      const state = {
+        ...followSuccessions(current, successions.successorOf),
+        handledSuccessions: successions.handled,
+      };
       const existingByID = new Map(state.sessions.map((session) => [session.id, session]));
 
       const syncedSessions = daemonSessions.map((daemonSession) => {

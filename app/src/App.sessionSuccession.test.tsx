@@ -164,6 +164,31 @@ describe('App session succession', () => {
     expect(selectedAgent()).toBe('s1');
   });
 
+  it('leaves the user on a reopened predecessor when its closed successor is reopened too', async () => {
+    const s1 = daemonSession('s1');
+    const { daemon } = await renderApp({
+      initialState: { sessions: [s1, daemonSession('s3')], workspaces: [terminalWorkspace('s1', 'terminal-1'), agentWorkspace('s3')] },
+    });
+    await open(daemon, 's1');
+    await succeed(daemon, s1, 's2', 'terminal-1');
+    daemon.emit({ event: 'session_unregistered', session: successorOf(s1, 's2') });
+
+    const reopened = daemonSession('s1', { workspace_id: 'ws-reopened' });
+    daemon.emit({ event: 'session_registered', session: reopened });
+    daemon.emit({
+      event: 'workspace_state_changed',
+      workspace: daemonWorkspace('ws-reopened', {
+        root: { type: 'pane', pane_id: 'pane-reopened' },
+        panes: [{ ...agentPane('s1', 'ws-reopened', 'terminal-9'), pane_id: 'pane-reopened' }],
+      }),
+    });
+    await open(daemon, 's1');
+    daemon.emit({ event: 'session_registered', session: successorOf(s1, 's2') });
+    await daemon.idle();
+
+    expect(selectedAgent()).toBe('s1');
+  });
+
   it.each(TERMINALS)('does not reattach, after a reconnect, %s whose pane and session ended while the app was away', async (_, terminal) => {
     const { daemon } = await openAttachedTerminals({
       sessions: [daemonSession('s1', { state: 'idle' }), daemonSession('s3', { state: 'idle' })],

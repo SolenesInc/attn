@@ -139,22 +139,25 @@ export function followSuccessions<T extends SessionNavigationState>(
   };
 }
 
-// Session.succeeds stays set after a predecessor is reopened, so only its first
-// appearance on a session hands the predecessor over.
+// Session.succeeds stays set after either session is reopened, so a pair hands the
+// predecessor over only the first time this app sees it.
 export function successionsIn(
-  previous: readonly DaemonSessionSnapshot[],
+  handled: ReadonlySet<string>,
   next: readonly DaemonSessionSnapshot[],
   known: readonly { id: string }[],
-): Map<string, string> {
+): { successorOf: Map<string, string>; handled: ReadonlySet<string> } {
   const successorOf = new Map<string, string>();
-  const previousSucceeds = new Map(previous.map((session) => [session.id, session.succeeds]));
+  let seen = handled;
   for (const session of next) {
     const predecessor = session.succeeds;
     if (!predecessor) continue;
-    if (previousSucceeds.get(session.id) === predecessor) continue;
+    const pair = `${predecessor}>${session.id}`;
+    if (seen.has(pair)) continue;
+    if (seen === handled) seen = new Set(handled);
+    (seen as Set<string>).add(pair);
     if (known.some((entry) => entry.id === predecessor)) successorOf.set(predecessor, session.id);
   }
-  return successorOf;
+  return { successorOf, handled: seen };
 }
 
 export function enterHome(
