@@ -120,6 +120,7 @@ image; this is not a decoded-byte ceiling.
 
 The composer has no shortcut settings screen. The main app's keyboard mapping
 owns the global binding; Recent shows sent/read history and allows discarding the current draft.
+Composer acceptance receipts appear only in the note view.
 Global bindings require Command, Control or Option so ordinary typing stays local.
 
 Capture shares the main app uiScale setting. Its font shortcuts use the same

@@ -145,6 +145,15 @@ describe('Quick Capture app wire behavior', () => {
     expect(native.draft).toMatchObject({ text: '', recipient: 'chief', uncertain: false });
     expect(daemon.sentOf('capture_send')).toHaveLength(1);
     expect(captureTraffic(daemon).map(command => command.cmd)).toEqual(['capture_send']);
+    expect(screen.getByText('Saved for Chief')).toBeInTheDocument();
+    daemon.on('capture_list', () => ({ event: 'capture_result', success: true, result: { list: {
+      items: [record(request)], draft_assets: [],
+    } } }));
+    await gesture(daemon, () => fireEvent.click(screen.getByRole('button', { name: 'Recent captures' })));
+    expect(within(screen.getByRole('region', { name: 'Recent captures' })).getByText('Keep the launch note')).toBeInTheDocument();
+    expect(screen.queryByText('Saved for Chief')).not.toBeInTheDocument();
+    await gesture(daemon, () => fireEvent.click(screen.getByRole('button', { name: /Back to note/ })));
+    expect(screen.getByText('Saved for Chief')).toBeInTheDocument();
   });
 
   it('resolves a lost acknowledgment by id and never submits a duplicate', async () => {
