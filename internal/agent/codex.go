@@ -55,6 +55,7 @@ func (c *Codex) Capabilities() Capabilities {
 		HasLaunchInstructions: true,
 		HasModelPin:           true,
 		HasEffortPin:          true,
+		ConversationIsSession: true,
 	}
 }
 

@@ -101,9 +101,21 @@ func (s *Store) CloseSession(id string, closed SessionClose, now time.Time) (boo
 		return false, fmt.Errorf("close session %s: %w", id, err)
 	}
 	defer tx.Rollback()
+	closedNow, err := s.closeSessionTx(tx, id, SessionClose{By: by, Reason: closed.Reason}, at)
+	if err != nil || !closedNow {
+		return false, err
+	}
+	if err := tx.Commit(); err != nil {
+		return false, fmt.Errorf("close session %s: %w", id, err)
+	}
+	s.forgetSessionCost(id)
+	return true, nil
+}
 
+// closeSessionTx closes an open session's row and finalizes its cost; the caller forgets the cost after commit.
+func (s *Store) closeSessionTx(tx *sql.Tx, id string, closed SessionClose, at string) (bool, error) {
 	result, err := tx.Exec(`UPDATE sessions SET closed_at = ?, closed_by = ?, close_reason = ?, external_process = ''
-		WHERE id = ? AND closed_at = ''`, at, by, strings.TrimSpace(closed.Reason), id)
+		WHERE id = ? AND closed_at = ''`, at, closed.By, strings.TrimSpace(closed.Reason), id)
 	if err != nil {
 		return false, fmt.Errorf("close session %s: %w", id, err)
 	}
@@ -120,10 +132,6 @@ func (s *Store) CloseSession(id string, closed SessionClose, now time.Time) (boo
 	if err := finalizeSessionCostTx(tx, id); err != nil {
 		return false, fmt.Errorf("close session %s: %w", id, err)
 	}
-	if err := tx.Commit(); err != nil {
-		return false, fmt.Errorf("close session %s: %w", id, err)
-	}
-	s.forgetSessionCost(id)
 	return true, nil
 }
 

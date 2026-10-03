@@ -27,14 +27,13 @@ const CAPTURE_SOURCES = ['prompt'];
 const MOCK_AGENT_FLAVORS = {
   // harness_signals.go reads claude's resting title by its ✳; any other leading
   // rune is unclassified, and an unsettled heartbeat never reaches idle.
-  claude: { header: 'Claude Code mock agent', prompt: '❯ ', resting: '✳ ' },
-  codex: { header: 'OpenAI Codex mock agent', prompt: '› ', resting: '' },
+  claude: { header: 'Claude Code mock agent', prompt: '❯ ', resting: '✳ ', newConversation: '/clear' },
+  codex: { header: 'OpenAI Codex mock agent', prompt: '› ', resting: '', newConversation: '/new' },
 };
 
 export const MOCK_AGENT_AGENTS = Object.keys(MOCK_AGENT_FLAVORS);
 export const MOCK_AGENT_EXECUTABLE = executablePath;
 export const MOCK_AGENT_MODEL = 'mock-agent-1';
-export const MOCK_AGENT_NEW_CONVERSATION = '/new';
 
 export function mockAgentName(agent) {
   const name = String(agent || '').trim().toLowerCase();
@@ -609,7 +608,7 @@ async function runMockAgent() {
       prompt();
       return;
     }
-    if (agent === 'codex' && input === MOCK_AGENT_NEW_CONVERSATION) {
+    if (input === flavor.newConversation) {
       blocks.length = 0;
       startConversation('');
       notice(`started a new conversation ${conversation.id}`);

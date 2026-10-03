@@ -215,7 +215,11 @@ The plan lists `Launch`, `commit(bool)`, `ViewState`, `Up`, `Down` and `End` for
 ```sql
 ALTER TABLE sessions ADD COLUMN succeeds TEXT NOT NULL DEFAULT '';
 CREATE INDEX idx_sessions_succeeds ON sessions(succeeds) WHERE succeeds != '';
+ALTER TABLE sessions ADD COLUMN prompted_at TEXT NOT NULL DEFAULT '';
+UPDATE sessions SET prompted_at = state_updated_at;
 ```
+
+- `prompted_at` is stamped by the first UserPromptSubmit; a predecessor without it never started a turn and is removed. The attention stamp `turn_opened_at` cannot tell, since a fresh launch opens a turn when it first goes idle.
 
 - There is no terminal table, and pane rows are unchanged. A database from before the upgrade needs no rewrite, and an older daemon can still read it.
 - `sessions.agent_driver_*` stays on the session row and moves in the identity transaction.
@@ -224,7 +228,7 @@ CREATE INDEX idx_sessions_succeeds ON sessions(succeeds) WHERE succeeds != '';
 
 - `SessionExitedMessage.session_id: string`: the session the terminal showed when it exited.
 - `Session.succeeds?: string`: the session this one replaced in its terminal.
-  - The app uses it to move navigation to the successor.
+  - The app follows the terminal, not this field, to move navigation: a removed predecessor's successor names the session before it, or none.
   - The home mirror uses it to move the references it holds (PR 6).
 - No shape change elsewhere: the `id` of `attach_session`, `detach_session`, `pty_input`, `attach_result`, `pty_desync`, `pty_resized` and `runtime_respawned` is now documented as the terminal (runtime) id.
 
@@ -243,7 +247,7 @@ CREATE INDEX idx_sessions_succeeds ON sessions(succeeds) WHERE succeeds != '';
 |---|---|---|---|
 | Claude, attn PTY | `/clear` and plan-mode "clear and proceed" → Opened; S2's state comes from the hooks that follow | `/resume` → Shows (reopens a closed owner in place, or takes a recoverable one's place). Unknown to attn → Opened, which imports it | No-op. `-r` picker → adopt |
 | pi | `/new`, fork → Opened | `/resume` → Shows, or Opened if unknown | Reconnect and reload restate the same id → no-op. Fresh → adopt |
-| Codex, attn PTY | `/clear` and `/new` → Opened, on the new chat's first turn | Unchanged until step 6: `/resume` moves the conversation within the session | No-op |
+| Codex, attn PTY | `/clear` and `/new` → Opened, on the new chat's first turn | `/resume` to a thread no session holds → Opened. Until step 6, one another session holds moves within the session | No-op |
 | Copilot | Unchanged: launch claim plus transcript binding | | |
 | Shell | No conversation | | |
 | Bare-CLI wrapper | Unchanged: it is not a registered terminal, so today's observe applies (PR 7) | | |

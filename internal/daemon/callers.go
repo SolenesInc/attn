@@ -2,8 +2,8 @@ package daemon
 
 import "github.com/victorarias/attn/internal/protocol"
 
-// resolveCallers maps the id a hook or CLI process sends for itself, ATTN_SESSION_ID, from its
-// terminal to the session that terminal shows. Ids naming a target are left as sent.
+// resolveCallers maps the id a hook or CLI process sends for itself, ATTN_SESSION_ID, from its terminal
+// to the session that terminal shows. Targets, and conversation reports for the router, keep their id.
 func (d *Daemon) resolveCallers(msg any) {
 	self := func(id *string) {
 		if id != nil {
@@ -22,8 +22,6 @@ func (d *Daemon) resolveCallers(msg any) {
 	case *protocol.HookStopFailureMessage:
 		self(&m.ID)
 	case *protocol.HookCompactionMessage:
-		self(&m.ID)
-	case *protocol.SetSessionResumeIDMessage:
 		self(&m.ID)
 	case *protocol.FilesEditedMessage:
 		self(&m.ID)

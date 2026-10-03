@@ -122,6 +122,13 @@
         "recordedAt": "2026-09-11",
         "seconds": 24.0,
         "runnerClass": "github-hosted 4vcpu/16GB"
+      },
+      "clear-opens-session": {
+        "run": "not yet measured",
+        "job": "estimate",
+        "recordedAt": "2026-10-03",
+        "seconds": 15.0,
+        "note": "Estimated from session-close-ledger (9.9s) plus two mock turns and a /clear. Remeasure from the first green matrix-digest.txt."
       }
     }
   },
@@ -171,6 +178,7 @@
     "workspace-creation-shortcuts": 22.6,
     "workspace-switching": 45.7,
     "worktree-surface": 34.3,
-    "crew-management": 57.6
+    "crew-management": 57.6,
+    "clear-opens-session": 15.0
   }
 }

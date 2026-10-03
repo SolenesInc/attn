@@ -106,7 +106,7 @@ func TestTurningActivityOffClearsEveryLineAndKeepsARunningOneFromLanding(t *test
 	}
 }
 
-func TestALineAboutAClearedConversationNeverLandsOnTheNewOne(t *testing.T) {
+func TestALineAboutAClearedConversationNeverLandsOnTheSessionAfterIt(t *testing.T) {
 	w, app, cli, session, agent := watchedActivityWorld(t)
 	activityTurn(t, w, app, agent, session, "run the frontend tests", "The frontend suite is running.")
 	w.HeadlessTask().Answer("Running the frontend test suite")
@@ -114,17 +114,14 @@ func TestALineAboutAClearedConversationNeverLandsOnTheNewOne(t *testing.T) {
 
 	activityTurn(t, w, app, agent, session, "publish the notes", "Published the release notes.")
 	task := w.HeadlessTask()
-	app.TypeLine(session, "/clear")
-	if got := agent.Prompted(); got != "/clear" {
-		t.Fatalf("claude received %q", got)
-	}
-	if line := protocol.Deref(activitySession(t, cli, session).Activity); line != "" {
-		t.Errorf("after /clear the old conversation's line %q is still shown", line)
+	next := clearClaude(app, agent, session)
+	if line := protocol.Deref(activitySession(t, cli, next.ID).Activity); line != "" {
+		t.Errorf("the session /clear opened shows the old conversation's line %q", line)
 	}
 	task.Answer("Publishing the release notes")
 	awaitActivityTask(app, session, func(task protocol.Task) bool { return task.State == "done" })
-	if line := protocol.Deref(activitySession(t, cli, session).Activity); line != "" {
-		t.Errorf("a line about the cleared conversation landed on the new one: %q", line)
+	if line := protocol.Deref(activitySession(t, cli, next.ID).Activity); line != "" {
+		t.Errorf("a line about the cleared conversation landed on the session after it: %q", line)
 	}
 }
 

@@ -146,6 +146,9 @@ func cloneSession(session *protocol.Session) *protocol.Session {
 	if session.ParentSessionID != nil {
 		cloned.ParentSessionID = protocol.Ptr(protocol.Deref(session.ParentSessionID))
 	}
+	if session.Succeeds != nil {
+		cloned.Succeeds = protocol.Ptr(protocol.Deref(session.Succeeds))
+	}
 	if session.Activity != nil {
 		cloned.Activity = protocol.Ptr(protocol.Deref(session.Activity))
 	}
@@ -362,13 +365,13 @@ func (s *Store) Get(id string) *protocol.Session {
 
 	var session protocol.Session
 	var stateSince, stateUpdatedAt, lastSeen string
-	var turnOpenedAt, turnSettledAt, turnSnoozedUntil string
+	var turnOpenedAt, turnSettledAt, turnSnoozedUntil, succeeds string
 	var isWorktree int
 	var contextWindowCap int
 	var endpointID, workspaceID, branch, mainRepo, repository, pinnedAt, parentSessionID, activity, activityAt, lastModelRequestAt sql.NullString
 
 	err := s.db.QueryRow(`
-		SELECT id, label, agent, directory, endpoint_id, workspace_id, branch, is_worktree, main_repo, repository, state, state_since, state_updated_at, last_model_request_at, pinned_at, context_window_cap, parent_session_id, activity, activity_at, last_seen, turn_opened_at, turn_settled_at, turn_snoozed_until
+		SELECT id, label, agent, directory, endpoint_id, workspace_id, branch, is_worktree, main_repo, repository, state, state_since, state_updated_at, last_model_request_at, pinned_at, context_window_cap, parent_session_id, activity, activity_at, last_seen, turn_opened_at, turn_settled_at, turn_snoozed_until, succeeds
 		FROM sessions WHERE id = ? AND closed_at = ''`, id).Scan(
 		&session.ID,
 		&session.Label,
@@ -393,6 +396,7 @@ func (s *Store) Get(id string) *protocol.Session {
 		&turnOpenedAt,
 		&turnSettledAt,
 		&turnSnoozedUntil,
+		&succeeds,
 	)
 	if err != nil {
 		return nil
@@ -411,6 +415,9 @@ func (s *Store) Get(id string) *protocol.Session {
 	}
 	if parentSessionID.Valid && parentSessionID.String != "" {
 		session.ParentSessionID = protocol.Ptr(parentSessionID.String)
+	}
+	if succeeds != "" {
+		session.Succeeds = protocol.Ptr(succeeds)
 	}
 	applyActivity(&session, activity.String, activityAt.String)
 
@@ -466,22 +473,25 @@ func (s *Store) Remove(id string) {
 	}
 	delete(s.touchedAt, id)
 	s.forgetSessionCost(id)
+	if err := deleteSessionRows(s.db, id); err != nil {
+		log.Printf("[store] Remove: session %s: %v", id, err)
+	}
+}
 
-	_, err := s.db.Exec("DELETE FROM sessions WHERE id = ?", id)
-	if err != nil {
-		log.Printf("[store] Remove: failed for session %s: %v", id, err)
-	}
-	if _, err := s.db.Exec(`DELETE FROM session_pull_requests WHERE session_id=? AND NOT EXISTS(SELECT 1 FROM pull_request_watches w WHERE w.session_id=session_pull_requests.session_id AND w.pr_id=session_pull_requests.pr_id AND w.address NOT LIKE 'session:%')`, id); err != nil {
-		log.Printf("[store] Remove: failed to drop session PRs for %s: %v", id, err)
-	}
-	if _, err := s.db.Exec(`DELETE FROM pull_request_watches WHERE address=?`, "session:"+id); err != nil {
-		log.Printf("[store] Remove: failed to drop session PR watches for %s: %v", id, err)
-	}
-	for _, table := range sessionOwnedTables {
-		if _, err := s.db.Exec("DELETE FROM "+table+" WHERE session_id = ?", id); err != nil {
-			log.Printf("[store] Remove: failed to drop %s for session %s: %v", table, id, err)
+func deleteSessionRows(db execer, id string) error {
+	var failures []error
+	exec := func(what, query string, args ...any) {
+		if _, err := db.Exec(query, args...); err != nil {
+			failures = append(failures, fmt.Errorf("drop %s: %w", what, err))
 		}
 	}
+	exec("the session", "DELETE FROM sessions WHERE id = ?", id)
+	exec("session PRs", `DELETE FROM session_pull_requests WHERE session_id=? AND NOT EXISTS(SELECT 1 FROM pull_request_watches w WHERE w.session_id=session_pull_requests.session_id AND w.pr_id=session_pull_requests.pr_id AND w.address NOT LIKE 'session:%')`, id)
+	exec("session PR watches", `DELETE FROM pull_request_watches WHERE address=?`, "session:"+id)
+	for _, table := range sessionOwnedTables {
+		exec(table, "DELETE FROM "+table+" WHERE session_id = ?", id)
+	}
+	return errors.Join(failures...)
 }
 
 func (s *Store) List(stateFilter string) []*protocol.Session {
@@ -512,11 +522,11 @@ func (s *Store) List(stateFilter string) []*protocol.Session {
 
 	if stateFilter == "" {
 		rows, err = s.db.Query(`
-			SELECT id, label, agent, directory, endpoint_id, workspace_id, branch, is_worktree, main_repo, repository, state, state_since, state_updated_at, last_model_request_at, pinned_at, context_window_cap, parent_session_id, activity, activity_at, last_seen, turn_opened_at, turn_settled_at, turn_snoozed_until
+			SELECT id, label, agent, directory, endpoint_id, workspace_id, branch, is_worktree, main_repo, repository, state, state_since, state_updated_at, last_model_request_at, pinned_at, context_window_cap, parent_session_id, activity, activity_at, last_seen, turn_opened_at, turn_settled_at, turn_snoozed_until, succeeds
 			FROM sessions WHERE closed_at = '' ORDER BY label, id`)
 	} else {
 		rows, err = s.db.Query(`
-			SELECT id, label, agent, directory, endpoint_id, workspace_id, branch, is_worktree, main_repo, repository, state, state_since, state_updated_at, last_model_request_at, pinned_at, context_window_cap, parent_session_id, activity, activity_at, last_seen, turn_opened_at, turn_settled_at, turn_snoozed_until
+			SELECT id, label, agent, directory, endpoint_id, workspace_id, branch, is_worktree, main_repo, repository, state, state_since, state_updated_at, last_model_request_at, pinned_at, context_window_cap, parent_session_id, activity, activity_at, last_seen, turn_opened_at, turn_settled_at, turn_snoozed_until, succeeds
 			FROM sessions WHERE state = ? AND closed_at = '' ORDER BY label, id`, stateFilter)
 	}
 	if err != nil {
@@ -528,7 +538,7 @@ func (s *Store) List(stateFilter string) []*protocol.Session {
 	for rows.Next() {
 		var session protocol.Session
 		var stateSince, stateUpdatedAt, lastSeen string
-		var turnOpenedAt, turnSettledAt, turnSnoozedUntil string
+		var turnOpenedAt, turnSettledAt, turnSnoozedUntil, succeeds string
 		var isWorktree int
 		var contextWindowCap int
 		var endpointID, workspaceID, branch, mainRepo, repository, pinnedAt, parentSessionID, activity, activityAt, lastModelRequestAt sql.NullString
@@ -557,6 +567,7 @@ func (s *Store) List(stateFilter string) []*protocol.Session {
 			&turnOpenedAt,
 			&turnSettledAt,
 			&turnSnoozedUntil,
+			&succeeds,
 		)
 		if err != nil {
 			continue
@@ -575,6 +586,9 @@ func (s *Store) List(stateFilter string) []*protocol.Session {
 		}
 		if parentSessionID.Valid && parentSessionID.String != "" {
 			session.ParentSessionID = protocol.Ptr(parentSessionID.String)
+		}
+		if succeeds != "" {
+			session.Succeeds = protocol.Ptr(succeeds)
 		}
 		applyActivity(&session, activity.String, activityAt.String)
 
@@ -680,6 +694,9 @@ func (s *Store) MarkModelRequestStarted(id string, at time.Time) bool {
 		}
 		session.LastModelRequestAt = protocol.Ptr(stamp)
 		return true
+	}
+	if _, err := s.db.Exec("UPDATE sessions SET prompted_at = ? WHERE id = ? AND closed_at = '' AND prompted_at = ''", stamp, id); err != nil {
+		log.Printf("[store] MarkModelRequestStarted: failed to stamp session %s prompted: %v", id, err)
 	}
 	var current sql.NullString
 	if err := s.db.QueryRow("SELECT last_model_request_at FROM sessions WHERE id = ?", id).Scan(&current); err != nil {

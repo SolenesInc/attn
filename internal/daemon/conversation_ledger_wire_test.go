@@ -279,9 +279,7 @@ func TestConversationIdentifiersRefuseAmbiguityAndListTotalsCountOnlyLiveCopies(
 		delegated := seedResumeDelegate(t, w, fakeagent.Claude, name)
 		run := w.Launched(delegated.SessionID)
 		run.Prompted()
-		app.TypeLine(delegated.SessionID, "/clear")
-		run.Prompted()
-		run.Reply("new conversation <!-- attn:state=waiting_input -->")
+		run.Reply("on it <!-- attn:state=waiting_input -->")
 		closePane(app, seedResumePane(t, w, protocol.Deref(delegated.WorkspaceID), delegated.SessionID))
 		testworld.AwaitTaskDone(app, "conversation_keep")
 		lifeMove(t, cli, "", delegated.SeedID, "wither", "finished", "")
@@ -414,9 +412,8 @@ func TestConversationPendingPinCanBeUnkeptAfterClear(t *testing.T) {
 		t.Fatal(err)
 	}
 	testworld.AwaitTaskDone(app, "conversation_keep")
-	app.TypeLine(id, "/clear")
-	run.Prompted()
-	run.Reply("replacement <!-- attn:state=waiting_input -->")
+	clearClaude(app, run, id)
+	awaitClosed(app, id)
 	if err := cli.KeptConversationKeep(pinnedID, false); err != nil {
 		t.Fatalf("pending pin should remain resolvable: %v", err)
 	}

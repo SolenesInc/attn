@@ -17,7 +17,7 @@ func TestAHaltRecordedBeforeTheSessionStartedDoesNotEndItsTurn(t *testing.T) {
 		if err := os.MkdirAll(cwd, 0o755); err != nil {
 			t.Fatal(err)
 		}
-		transcript := fakeagent.WriteClaudeTranscript(t, cwd)
+		transcript := fakeagent.WriteClaudeTranscript(t, cwd, "")
 		transcript.Prompt("write an essay on checkout flows")
 		transcript.Halt()
 		w.advance(time.Hour)

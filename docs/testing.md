@@ -127,7 +127,8 @@ Agents:
 Playing the model, on a `fakeagent.Run`:
 
 - `Prompted` returns the prompt the agent received and moves `ConversationID`
-  to the agent's current conversation (`/clear` starts a new one).
+  to the agent's current conversation. Claude's `/clear` starts a new one;
+  Codex starts it on the first prompt after `/new` or `/clear`.
 - `Reply` ends the turn with text carrying the `<!-- attn:state=... -->`
   marker. `ReplyAfterStop` writes that reply only after the Stop hook.
 - `Exit` quits with an exit code.

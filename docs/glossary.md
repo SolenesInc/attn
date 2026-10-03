@@ -3,9 +3,11 @@
 ## Sessions
 
 - Session: an agent and its terminals, with history that survives restarts.
+- Terminal: a PTY runtime that a pane places, named by the id its process carries as `ATTN_SESSION_ID`. It shows one session at a time.
 - Kept conversation: attn's copy of a local conversation whose harness deletes transcripts, kept forever when pinned, or while an open seed points at its session and for 14 days after the last reference ends. Resume fills missing main and auxiliary files without replacing harness files; refreshing a copy retains auxiliary files the harness has pruned. Retention changes refresh the Garden snapshot without changing a seed's revision, so readers must refresh continuation details on each snapshot.
 - Forget (conversation): delete attn's copy now and remove its keep pin, leaving the harness's own files untouched. Open seeds must release the conversation first. A user deletion is recorded on the tombstone.
-- Agent conversation: the provider's chat history. A session can start a new conversation.
+- Agent conversation: the provider's chat history. One conversation is one session: a new conversation opens a new session in the same terminal (Claude `/clear`, Codex `/clear` and `/new`). Other harnesses still start a new conversation within the session.
+- Successor: the session a new agent conversation opened in another session's terminal. It takes only the terminal; its predecessor closes with everything attached to it. A crew restart's successor is instead the member's next day.
 - Run: one prompt and response.
 - Parked run: a finished response whose background work is still running.
 - Quiet window: time after the user's last keystroke when automated input must wait.
@@ -36,7 +38,7 @@
 - Session usage: token counts and cost for a conversation and its native subagents. Delegated agents have separate sessions and usage.
 - Recoverable session: a stopped session whose conversation can be restored.
 - Reaped session: an unrestorable session removed from attn.
-- Closed session: a session the user or an agent ended. Its history remains in the ledger.
+- Closed session: a session the user or an agent ended, or whose terminal moved on to another conversation. Its history remains in the ledger.
 - Final cost: a closed session's token totals and cost.
 - Reopen: brings a closed session back under its original identity.
 - Resume: copies a conversation into a new session.

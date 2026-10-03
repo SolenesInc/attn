@@ -16,12 +16,17 @@ type ClaudeTranscript struct {
 	writer         *claude
 }
 
-func WriteClaudeTranscript(t testing.TB, cwd string) *ClaudeTranscript {
+// WriteClaudeTranscript writes a conversation's transcript as a Claude launched with
+// --session-id or -r conversation would; an empty conversation is a new one.
+func WriteClaudeTranscript(t testing.TB, cwd, conversation string) *ClaudeTranscript {
 	t.Helper()
+	if conversation == "" {
+		conversation = uuid.NewString()
+	}
 	writer := &claude{
 		cfg:          config{ToolHome: os.Getenv("ATTN_TOOL_HOME")},
 		cwd:          cwd,
-		conversation: uuid.NewString(),
+		conversation: conversation,
 		model:        claudeDefaultModel,
 		permission:   "default",
 	}
