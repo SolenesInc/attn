@@ -26,7 +26,7 @@ func addTurnSession(t *testing.T, s *Store, id string, state protocol.SessionSta
 
 func TestMigration81BackfillsOpenTurnsFromStateSince(t *testing.T) {
 	dbPath := filepath.Join(t.TempDir(), "migration-81.db")
-	db, err := openDBAtVersion(dbPath, 161)
+	db, err := openDBAtVersion(dbPath, 167)
 	if err != nil {
 		t.Fatalf("OpenDB setup: %v", err)
 	}
@@ -48,7 +48,7 @@ func TestMigration81BackfillsOpenTurnsFromStateSince(t *testing.T) {
 		t.Fatalf("close pre-81 database: %v", err)
 	}
 
-	migrated, err := newStoreAtVersion(dbPath, 161)
+	migrated, err := newStoreAtVersion(dbPath, 167)
 	if err != nil {
 		t.Fatalf("migrate: %v", err)
 	}

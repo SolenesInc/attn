@@ -20,7 +20,7 @@ import (
 
 func TestArmingASeedParksItOnItsPullRequest(t *testing.T) {
 	github := newHarvestGitHub(t)
-	inCrewBubble(t, func(t *testing.T, w *world) {
+	inBubble(t, func(t *testing.T, w *world) {
 		cli := w.Client()
 		registerSessions(t, w, cli, "shipper")
 		url := github.open(71, "Ship the daemon")

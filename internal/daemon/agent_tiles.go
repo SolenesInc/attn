@@ -72,12 +72,8 @@ func (d *Daemon) refreshCurrentAgent() {
 		d.logf("current agent: %v", err)
 	}
 	d.currentAgentMu.Lock()
-	previous := d.currentAgentSessionID
 	d.currentAgentSessionID = location.sessionID
 	d.currentAgentMu.Unlock()
-	if previous != location.sessionID {
-		d.updateNudgeSelection(previous, location.sessionID)
-	}
 }
 
 func (d *Daemon) currentAgentSession() string {

@@ -9,7 +9,7 @@ import (
 
 func TestMigration130CarriesLegacyIntentionalCloseMark(t *testing.T) {
 	dbPath := filepath.Join(t.TempDir(), "legacy-close.db")
-	s, err := newStoreAtVersion(dbPath, 161)
+	s, err := newStoreAtVersion(dbPath, 167)
 	if err != nil {
 		t.Fatalf("open: %v", err)
 	}
@@ -24,7 +24,7 @@ func TestMigration130CarriesLegacyIntentionalCloseMark(t *testing.T) {
 		t.Fatalf("close pre-130 store: %v", err)
 	}
 
-	reopened, err := newStoreAtVersion(dbPath, 161)
+	reopened, err := newStoreAtVersion(dbPath, 167)
 	if err != nil {
 		t.Fatalf("reopen with migration 130: %v", err)
 	}

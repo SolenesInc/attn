@@ -46,21 +46,18 @@ func (d *Daemon) chiefForCaller(callerSessionID string) string {
 }
 
 func (d *Daemon) chiefForClient(client *wsClient) string {
-	if profileID := client.selectedProfile(); profileID != "" {
-		return d.chiefOfProfile(profileID)
-	}
-	return d.chiefForCaller("")
+	return d.chiefOfProfile(d.profileForClient(client))
 }
 
-func (d *Daemon) defaultProfileChief() string {
-	if d.store == nil {
-		return ""
+func (d *Daemon) profileForClient(client *wsClient) string {
+	if profileID := client.selectedProfile(); profileID != "" {
+		return profileID
 	}
-	profile, err := d.store.OldestProfile()
+	profile, err := d.callerProfile("")
 	if err != nil {
 		return ""
 	}
-	return profile.ChiefSessionID
+	return profile.ID
 }
 
 func (d *Daemon) decorateChiefOfStaff(session *protocol.Session, chiefByProfile map[string]string) {
@@ -115,15 +112,15 @@ func (d *Daemon) clearChiefOfStaffIfSession(sessionID string) {
 	}
 }
 
-func (d *Daemon) nudgeChiefOfStaff(sessionID, attemptKey, prompt string) bool {
-	if d.store == nil {
+func (d *Daemon) nudgeChiefOfStaff(profileID, attemptKey, prompt string) bool {
+	if d.store == nil || profileID == "" {
 		return false
 	}
 	itemID := "chief-inbox/" + strings.TrimSpace(attemptKey)
 	if strings.TrimSpace(attemptKey) == "" {
 		itemID = "chief-inbox/" + uuid.NewString()
 	}
-	receipt, err := d.sendToInbox(inbox.Item{ID: itemID, To: inbox.ToChief(), Kind: inbox.Notice, Source: "notebook-inbox", Text: prompt})
+	receipt, err := d.sendToInbox(inbox.Item{ID: itemID, To: inbox.ToChief(profileID), Kind: inbox.Notice, Source: "notebook-inbox", Text: prompt})
 	if err != nil {
 		d.logf("chief inbox: queue failed: %v", err)
 		return false

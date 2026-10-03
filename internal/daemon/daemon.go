@@ -17,6 +17,7 @@ import (
 	"strconv"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"syscall"
 	"time"
 
@@ -969,12 +970,6 @@ func (d *Daemon) pruneSessionsWithoutPTY(previousRunSessions map[string]struct{}
 		if _, ok := liveIDs[session.ID]; ok {
 			continue
 		}
-		if live, err := d.externalSessionAlive(session.ID); err != nil {
-			d.logf("external wrapper liveness for %s: %v", session.ID, err)
-			continue
-		} else if live {
-			continue
-		}
 		if sessionUpdatedAfter(session, recoveryStartedAt) {
 			continue
 		}
@@ -1372,12 +1367,6 @@ func (d *Daemon) reconcileSessionsWithWorkerBackendState(ctx context.Context, al
 			continue
 		}
 		if _, ok := liveIDs[session.ID]; ok {
-			continue
-		}
-		if live, err := d.externalSessionAlive(session.ID); err != nil {
-			d.logf("external wrapper liveness for %s: %v", session.ID, err)
-			continue
-		} else if live {
 			continue
 		}
 		if sessionUpdatedAfter(session, recoveryStartedAt) {
@@ -3095,8 +3084,8 @@ func (d *Daemon) sessionsForBroadcast(sessions []*protocol.Session) []protocol.S
 			if member := crewBySession[decorated.ID]; member != "" {
 				addresses = append(addresses, inbox.ToMember(member))
 			}
-			if decorated.ID == chiefOfStaffSessionID {
-				addresses = append(addresses, inbox.ToChief())
+			if chiefs[decorated.ProfileID] == decorated.ID {
+				addresses = append(addresses, inbox.ToChief(decorated.ProfileID))
 			}
 			decorated.PullRequests = d.sessionPullRequestsForBroadcast(d.sessionPullRequestRecords(decorated.ID, addresses, pullRequestsBySession, pullRequestWatchesByPR), addresses, pullRequestWatchesByPR)
 			out = append(out, *decorated)

@@ -85,7 +85,7 @@ func sortedGardenWatches(t *testing.T, s *Store) []GardenSeedWatch {
 
 func TestGardenSubscriptionMigrationRunsOnceAndPreservesExplicitWatches(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "garden.db")
-	s, err := newStoreAtVersion(path, 161)
+	s, err := newStoreAtVersion(path, 167)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -101,7 +101,7 @@ func TestGardenSubscriptionMigrationRunsOnceAndPreservesExplicitWatches(t *testi
 	if err := s.Close(); err != nil {
 		t.Fatal(err)
 	}
-	s, err = newStoreAtVersion(path, 161)
+	s, err = newStoreAtVersion(path, 167)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -119,7 +119,7 @@ func TestGardenSubscriptionMigrationRunsOnceAndPreservesExplicitWatches(t *testi
 	if err := s.Close(); err != nil {
 		t.Fatal(err)
 	}
-	s, err = newStoreAtVersion(path, 161)
+	s, err = newStoreAtVersion(path, 167)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -130,7 +130,7 @@ func TestGardenSubscriptionMigrationRunsOnceAndPreservesExplicitWatches(t *testi
 }
 
 func TestGardenSubscriptionMigrationFailureRollsBackAndRetries(t *testing.T) {
-	s := migrationFixtureStore(t, 161)
+	s := migrationFixtureStore(t, 167)
 	seedSubscriptionHistory(t, s)
 	before := sortedGardenWatches(t, s)
 
@@ -140,7 +140,7 @@ func TestGardenSubscriptionMigrationFailureRollsBackAndRetries(t *testing.T) {
   BEGIN SELECT RAISE(ABORT, 'subscription disk failure'); END;`); err != nil {
 		t.Fatal(err)
 	}
-	if err := migrateDBThrough(s.db, "", 161); err == nil || !strings.Contains(err.Error(), "subscription disk failure") {
+	if err := migrateDBThrough(s.db, "", 167); err == nil || !strings.Contains(err.Error(), "subscription disk failure") {
 		t.Fatalf("migration failure = %v", err)
 	}
 	if got := sortedGardenWatches(t, s); !reflect.DeepEqual(got, before) {
@@ -153,7 +153,7 @@ func TestGardenSubscriptionMigrationFailureRollsBackAndRetries(t *testing.T) {
 	if _, err := s.db.Exec(`DROP TRIGGER refuse_migrated_watch`); err != nil {
 		t.Fatal(err)
 	}
-	if err := migrateDBThrough(s.db, "", 161); err != nil {
+	if err := migrateDBThrough(s.db, "", 167); err != nil {
 		t.Fatal(err)
 	}
 	if got := sortedGardenWatches(t, s); len(got) != 5 {

@@ -65,7 +65,7 @@ func rev(n int64) *int64 { return &n }
 
 func seedV88DocumentStore(t *testing.T, dbPath string) {
 	t.Helper()
-	db, err := openDBAtVersion(dbPath, 161)
+	db, err := openDBAtVersion(dbPath, 167)
 	if err != nil {
 		t.Fatalf("open for seeding: %v", err)
 	}
@@ -186,7 +186,7 @@ func TestAPopulatedV88StoreIsCarriedIntoItsOwnTables(t *testing.T) {
 
 func seedPreRevisionDocuments(t *testing.T, dbPath string) {
 	t.Helper()
-	s, err := newStoreAtVersion(dbPath, 161)
+	s, err := newStoreAtVersion(dbPath, 167)
 	if err != nil {
 		t.Fatalf("open for seeding: %v", err)
 	}

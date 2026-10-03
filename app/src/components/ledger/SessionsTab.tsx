@@ -583,7 +583,7 @@ function SessionInspector({
       {isClosed(entry) && (
         <ReopenVerdict profileDeleted={!!entry.profile_deleted} verdict={verdict} note={note} nameText={nameText} onVerb={onVerb} actionsAvailable={actionsAvailable} />
       )}
-      <ConversationPinAction available={canKeepConversation} entry={entry} note={note} closed={closed} onVerb={onVerb} />
+      <ConversationPinAction available={canKeepConversation} entry={entry} note={note} closed={isClosed(entry)} onVerb={onVerb} />
       {live && (
         <div className="ledger-verdict-actions">
           <button type="button" className="ledger-verb is-primary" onClick={() => onVerb('focus')}>

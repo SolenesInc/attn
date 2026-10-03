@@ -34,7 +34,7 @@ describe('SessionsTab profiles', () => {
   it('offers no profile move even when other profiles exist', async () => {
     await openLedger(pages([page({ entries: [entry({ id: 's1' })] })]), withProfiles(threeProfiles, DEFAULT_PROFILE_ID, ['s1']));
 
-    expect(row('run s1').getAttribute('data-verbs')).toBe('Focus');
+    expect(JSON.parse(row('run s1').getAttribute('data-verbs')!)).toEqual(['Focus', 'Keep conversation']);
     expect(within(inspector()).queryByRole('button', { name: 'Move to…' })).toBeNull();
   });
 

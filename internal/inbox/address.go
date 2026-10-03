@@ -19,10 +19,10 @@ type Address struct {
 	id   string
 }
 
-func ToSession(id string) Address { return Address{sessionAddress, id} }
-func ToMember(id string) Address  { return Address{memberAddress, id} }
-func ToChief() Address            { return Address{chiefAddress, ""} }
-func ToSeed(id string) Address    { return Address{seedAddress, id} }
+func ToSession(id string) Address      { return Address{sessionAddress, id} }
+func ToMember(id string) Address       { return Address{memberAddress, id} }
+func ToChief(profileID string) Address { return Address{chiefAddress, profileID} }
+func ToSeed(id string) Address         { return Address{seedAddress, id} }
 func (a Address) SeedID() string {
 	if a.kind == seedAddress {
 		return a.id
@@ -31,6 +31,12 @@ func (a Address) SeedID() string {
 }
 func (a Address) SessionID() string {
 	if a.kind == sessionAddress {
+		return a.id
+	}
+	return ""
+}
+func (a Address) ChiefProfileID() string {
+	if a.kind == chiefAddress {
 		return a.id
 	}
 	return ""
@@ -48,16 +54,13 @@ func (a Address) String() string {
 	case memberAddress:
 		return "member:" + a.id
 	case chiefAddress:
-		return "role:chief"
+		return "chief:" + a.id
 	case seedAddress:
 		return "seed:" + a.id
 	}
 	return ""
 }
 func ParseAddress(s string) (Address, error) {
-	if s == "role:chief" {
-		return ToChief(), nil
-	}
 	prefix, id, ok := strings.Cut(s, ":")
 	if ok && id != "" {
 		switch prefix {
@@ -67,6 +70,8 @@ func ParseAddress(s string) (Address, error) {
 			return ToMember(id), nil
 		case "seed":
 			return ToSeed(id), nil
+		case "chief":
+			return ToChief(id), nil
 		}
 	}
 	return Address{}, fmt.Errorf("invalid inbox address %q", s)

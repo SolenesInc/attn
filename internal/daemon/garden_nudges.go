@@ -8,6 +8,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/victorarias/attn/internal/crew"
 	"github.com/victorarias/attn/internal/garden"
 	"github.com/victorarias/attn/internal/inbox"
 	"github.com/victorarias/attn/internal/protocol"
@@ -27,6 +28,15 @@ func (d *Daemon) seedUnblocked(seedID string) ([]garden.Seed, []protocol.Seed) {
 	}
 	unblocked := garden.Unblocks(read.seeds, seedID)
 	return unblocked, read.wire(unblocked)
+}
+
+// seedTenderMember resolves a seed's tender name to a crew member of the seed's own profile.
+func (d *Daemon) seedTenderMember(seed garden.Seed) (crew.Member, bool, error) {
+	member, found, err := d.resolveCrewMember(seed.Tender().Member)
+	if err != nil || !found || d.crewProfileID(member.ID) != seed.ProfileID {
+		return crew.Member{}, false, err
+	}
+	return member, true, nil
 }
 
 func (d *Daemon) localGardenTenderSession(seed garden.Seed) (string, error) {

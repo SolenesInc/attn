@@ -20,7 +20,7 @@ import (
 )
 
 func TestEverySeedMoveReachesTheAppAsOneGardenPush(t *testing.T) {
-	inCrewBubble(t, func(t *testing.T, w *world) {
+	inBubble(t, func(t *testing.T, w *world) {
 		app, cli := w.App(), w.Client()
 		registerSessions(t, w, cli, "gardener")
 		w.advance(0)

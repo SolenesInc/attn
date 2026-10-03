@@ -213,7 +213,7 @@ func TestMigration73RepairsAutomationInstanceMigration70Collision(t *testing.T) 
 		t.Fatalf("close seeded db: %v", err)
 	}
 
-	migrated, err := openDBAtVersion(dbPath, 161)
+	migrated, err := openDBAtVersion(dbPath, 167)
 	if err != nil {
 		t.Fatalf("OpenDB() repair migration 70 collision: %v", err)
 	}
@@ -235,7 +235,7 @@ func TestMigration73RepairsAutomationInstanceMigration70Collision(t *testing.T) 
 
 func TestMigration143AddsDelegationHandoverSnapshot(t *testing.T) {
 	dbPath := filepath.Join(t.TempDir(), "migration-143.db")
-	db, err := openDBAtVersion(dbPath, 161)
+	db, err := openDBAtVersion(dbPath, 167)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -253,7 +253,7 @@ func TestMigration143AddsDelegationHandoverSnapshot(t *testing.T) {
 	if err := db.Close(); err != nil {
 		t.Fatal(err)
 	}
-	migrated, err := openDBAtVersion(dbPath, 161)
+	migrated, err := openDBAtVersion(dbPath, 167)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -268,7 +268,7 @@ func TestMigration143AddsDelegationHandoverSnapshot(t *testing.T) {
 
 func TestMigration144AddsDelegationParentSnapshot(t *testing.T) {
 	dbPath := filepath.Join(t.TempDir(), "migration-144.db")
-	db, err := openDBAtVersion(dbPath, 161)
+	db, err := openDBAtVersion(dbPath, 167)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -284,7 +284,7 @@ func TestMigration144AddsDelegationParentSnapshot(t *testing.T) {
 	if err := db.Close(); err != nil {
 		t.Fatal(err)
 	}
-	migrated, err := openDBAtVersion(dbPath, 161)
+	migrated, err := openDBAtVersion(dbPath, 167)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -297,7 +297,7 @@ func TestMigration144AddsDelegationParentSnapshot(t *testing.T) {
 
 func TestMigration75DefaultsExistingRowsToEmptySpecYAML(t *testing.T) {
 	dbPath := filepath.Join(t.TempDir(), "migration-75.db")
-	db, err := openDBAtVersion(dbPath, 161)
+	db, err := openDBAtVersion(dbPath, 167)
 	if err != nil {
 		t.Fatalf("OpenDB() setup error = %v", err)
 	}
@@ -318,7 +318,7 @@ func TestMigration75DefaultsExistingRowsToEmptySpecYAML(t *testing.T) {
 		t.Fatalf("close seeded db: %v", err)
 	}
 
-	migrated, err := openDBAtVersion(dbPath, 161)
+	migrated, err := openDBAtVersion(dbPath, 167)
 	if err != nil {
 		t.Fatalf("OpenDB() migration 75/76 = %v", err)
 	}
@@ -344,7 +344,7 @@ func TestMigration75DefaultsExistingRowsToEmptySpecYAML(t *testing.T) {
 
 func TestMigration76ClearsAutomationStateAndDropsSpecYAML(t *testing.T) {
 	dbPath := filepath.Join(t.TempDir(), "migration-76.db")
-	db, err := openDBAtVersion(dbPath, 161)
+	db, err := openDBAtVersion(dbPath, 167)
 	if err != nil {
 		t.Fatalf("OpenDB() setup error = %v", err)
 	}
@@ -419,7 +419,7 @@ func TestMigration76ClearsAutomationStateAndDropsSpecYAML(t *testing.T) {
 		t.Fatalf("close seeded db: %v", err)
 	}
 
-	migrated, err := openDBAtVersion(dbPath, 161)
+	migrated, err := openDBAtVersion(dbPath, 167)
 	if err != nil {
 		t.Fatalf("OpenDB() migration 76 = %v", err)
 	}
@@ -460,7 +460,7 @@ func TestMigration76ClearsAutomationStateAndDropsSpecYAML(t *testing.T) {
 
 func TestMigration77ClearsRunsBindingsAndEdges(t *testing.T) {
 	dbPath := filepath.Join(t.TempDir(), "migration-77.db")
-	db, err := openDBAtVersion(dbPath, 161)
+	db, err := openDBAtVersion(dbPath, 167)
 	if err != nil {
 		t.Fatalf("OpenDB() setup error = %v", err)
 	}
@@ -584,7 +584,7 @@ func TestMigration77ClearsRunsBindingsAndEdges(t *testing.T) {
 		t.Fatalf("close seeded db: %v", err)
 	}
 
-	migrated, err := openDBAtVersion(dbPath, 161)
+	migrated, err := openDBAtVersion(dbPath, 167)
 	if err != nil {
 		t.Fatalf("OpenDB() migration 77 = %v", err)
 	}
@@ -684,7 +684,7 @@ func TestMigration131_RepairsPartialAgentDriverCursorSchemas(t *testing.T) {
 		}
 		t.Run(name, func(t *testing.T) {
 			dbPath := filepath.Join(t.TempDir(), "migration-131.db")
-			db, err := openDBAtVersion(dbPath, 161)
+			db, err := openDBAtVersion(dbPath, 167)
 			if err != nil {
 				t.Fatalf("OpenDB setup: %v", err)
 			}
@@ -719,7 +719,7 @@ func TestMigration131_RepairsPartialAgentDriverCursorSchemas(t *testing.T) {
 				t.Fatalf("close partial database: %v", err)
 			}
 
-			migrated, err := openDBAtVersion(dbPath, 161)
+			migrated, err := openDBAtVersion(dbPath, 167)
 			if err != nil {
 				t.Fatalf("OpenDB migrate: %v", err)
 			}
@@ -766,7 +766,7 @@ func TestMigration131_RepairsPartialAgentDriverCursorSchemas(t *testing.T) {
 
 func TestMigration79_ConvertsRecoverableFlagToState(t *testing.T) {
 	dbPath := filepath.Join(t.TempDir(), "migration-79.db")
-	db, err := openDBAtVersion(dbPath, 161)
+	db, err := openDBAtVersion(dbPath, 167)
 	if err != nil {
 		t.Fatalf("OpenDB setup: %v", err)
 	}
@@ -784,7 +784,7 @@ func TestMigration79_ConvertsRecoverableFlagToState(t *testing.T) {
 		t.Fatalf("close pre-79 database: %v", err)
 	}
 
-	migrated, err := openDBAtVersion(dbPath, 161)
+	migrated, err := openDBAtVersion(dbPath, 167)
 	if err != nil {
 		t.Fatalf("OpenDB migrate: %v", err)
 	}
@@ -807,7 +807,7 @@ func TestMigration79_ConvertsRecoverableFlagToState(t *testing.T) {
 	if err := migrated.Close(); err != nil {
 		t.Fatalf("close migrated database: %v", err)
 	}
-	migrated, err = openDBAtVersion(dbPath, 161)
+	migrated, err = openDBAtVersion(dbPath, 167)
 	if err != nil {
 		t.Fatalf("rerun migration 79 without column: %v", err)
 	}
@@ -820,13 +820,13 @@ func TestMigration20_IdempotentWhenHostColumnAlreadyExists(t *testing.T) {
 	tmpDir := t.TempDir()
 	dbPath := filepath.Join(tmpDir, "test.db")
 
-	db, err := openDBAtVersion(dbPath, 161)
+	db, err := openDBAtVersion(dbPath, 167)
 	if err != nil {
 		t.Fatalf("OpenDB() setup error = %v", err)
 	}
 	db.Close()
 
-	raw, err := openDBAtVersion(dbPath, 161)
+	raw, err := openDBAtVersion(dbPath, 167)
 	if err != nil {
 		t.Fatalf("OpenDB() reopen setup error = %v", err)
 	}
@@ -840,7 +840,7 @@ func TestMigration20_IdempotentWhenHostColumnAlreadyExists(t *testing.T) {
 	}
 	raw.Close()
 
-	db2, err := openDBAtVersion(dbPath, 161)
+	db2, err := openDBAtVersion(dbPath, 167)
 	if err != nil {
 		t.Fatalf("OpenDB() should handle existing prs.host in migration 20, got error = %v", err)
 	}
@@ -850,8 +850,8 @@ func TestMigration20_IdempotentWhenHostColumnAlreadyExists(t *testing.T) {
 	if err != nil {
 		t.Fatalf("GetSchemaVersion() error = %v", err)
 	}
-	if version != 161 {
-		t.Fatalf("schema version = %d, want %d", version, 161)
+	if version != 167 {
+		t.Fatalf("schema version = %d, want %d", version, 167)
 	}
 
 	var idxName string
@@ -880,13 +880,13 @@ func TestMigration21_IdempotentWhenAgentColumnAlreadyExists(t *testing.T) {
 	tmpDir := t.TempDir()
 	dbPath := filepath.Join(tmpDir, "test.db")
 
-	db, err := openDBAtVersion(dbPath, 161)
+	db, err := openDBAtVersion(dbPath, 167)
 	if err != nil {
 		t.Fatalf("OpenDB() setup error = %v", err)
 	}
 	db.Close()
 
-	raw, err := openDBAtVersion(dbPath, 161)
+	raw, err := openDBAtVersion(dbPath, 167)
 	if err != nil {
 		t.Fatalf("OpenDB() reopen setup error = %v", err)
 	}
@@ -900,7 +900,7 @@ func TestMigration21_IdempotentWhenAgentColumnAlreadyExists(t *testing.T) {
 	}
 	raw.Close()
 
-	db2, err := openDBAtVersion(dbPath, 161)
+	db2, err := openDBAtVersion(dbPath, 167)
 	if err != nil {
 		t.Fatalf("OpenDB() should handle existing sessions.agent in migration 21, got error = %v", err)
 	}
@@ -910,8 +910,8 @@ func TestMigration21_IdempotentWhenAgentColumnAlreadyExists(t *testing.T) {
 	if err != nil {
 		t.Fatalf("GetSchemaVersion() error = %v", err)
 	}
-	if version != 161 {
-		t.Fatalf("schema version = %d, want %d", version, 161)
+	if version != 167 {
+		t.Fatalf("schema version = %d, want %d", version, 167)
 	}
 
 	var count int
@@ -927,13 +927,13 @@ func TestMigration31_IdempotentWhenEndpointIDColumnAlreadyExists(t *testing.T) {
 	tmpDir := t.TempDir()
 	dbPath := filepath.Join(tmpDir, "test.db")
 
-	db, err := openDBAtVersion(dbPath, 161)
+	db, err := openDBAtVersion(dbPath, 167)
 	if err != nil {
 		t.Fatalf("OpenDB() setup error = %v", err)
 	}
 	db.Close()
 
-	raw, err := openDBAtVersion(dbPath, 161)
+	raw, err := openDBAtVersion(dbPath, 167)
 	if err != nil {
 		t.Fatalf("OpenDB() reopen setup error = %v", err)
 	}
@@ -947,7 +947,7 @@ func TestMigration31_IdempotentWhenEndpointIDColumnAlreadyExists(t *testing.T) {
 	}
 	raw.Close()
 
-	db2, err := openDBAtVersion(dbPath, 161)
+	db2, err := openDBAtVersion(dbPath, 167)
 	if err != nil {
 		t.Fatalf("OpenDB() should handle existing sessions.endpoint_id in migration 31, got error = %v", err)
 	}
@@ -957,8 +957,8 @@ func TestMigration31_IdempotentWhenEndpointIDColumnAlreadyExists(t *testing.T) {
 	if err != nil {
 		t.Fatalf("GetSchemaVersion() error = %v", err)
 	}
-	if version != 161 {
-		t.Fatalf("schema version = %d, want %d", version, 161)
+	if version != 167 {
+		t.Fatalf("schema version = %d, want %d", version, 167)
 	}
 
 	var count int
@@ -972,7 +972,7 @@ func TestMigration31_IdempotentWhenEndpointIDColumnAlreadyExists(t *testing.T) {
 
 func TestMigration134DropsTheWorkspaceContextAndKeeperState(t *testing.T) {
 	dbPath := filepath.Join(t.TempDir(), "test.db")
-	s, err := newStoreAtVersion(dbPath, 161)
+	s, err := newStoreAtVersion(dbPath, 167)
 	if err != nil {
 		t.Fatalf("NewWithDB error: %v", err)
 	}
@@ -993,7 +993,7 @@ func TestMigration134DropsTheWorkspaceContextAndKeeperState(t *testing.T) {
 		}
 	}
 
-	if err := migrateDBThrough(s.db, dbPath, 161); err != nil {
+	if err := migrateDBThrough(s.db, dbPath, 167); err != nil {
 		t.Fatalf("migrateDB error: %v", err)
 	}
 
@@ -1037,7 +1037,7 @@ func TestMigration134DropsTheWorkspaceContextAndKeeperState(t *testing.T) {
 
 func TestMigration53AddsClosedStateColumnIdempotently(t *testing.T) {
 	dbPath := filepath.Join(t.TempDir(), "test.db")
-	s, err := newStoreAtVersion(dbPath, 161)
+	s, err := newStoreAtVersion(dbPath, 167)
 	if err != nil {
 		t.Fatalf("NewWithDB error: %v", err)
 	}
@@ -1075,7 +1075,7 @@ func TestMigration53AddsClosedStateColumnIdempotently(t *testing.T) {
 	if _, err := s.db.Exec(`DELETE FROM schema_migrations WHERE version >= 53`); err != nil {
 		t.Fatalf("unrecord migration 53: %v", err)
 	}
-	if err := migrateDBThrough(s.db, dbPath, 161); err != nil {
+	if err := migrateDBThrough(s.db, dbPath, 167); err != nil {
 		t.Fatalf("re-run migrateDB after unrecording 53: %v", err)
 	}
 	if !hasClosedState() {
@@ -1098,7 +1098,7 @@ func tableExistsForTest(t *testing.T, db *sql.DB, name string) bool {
 
 func TestMigration121BackfillsTheRequestClockAndIsRewindSafe(t *testing.T) {
 	dbPath := filepath.Join(t.TempDir(), "test.db")
-	s, err := newStoreAtVersion(dbPath, 161)
+	s, err := newStoreAtVersion(dbPath, 167)
 	if err != nil {
 		t.Fatalf("NewWithDB: %v", err)
 	}
@@ -1117,10 +1117,10 @@ func TestMigration121BackfillsTheRequestClockAndIsRewindSafe(t *testing.T) {
 		t.Fatalf("rewind through migration 121: %v", err)
 	}
 
-	if err := migrateDBThrough(s.db, dbPath, 161); err != nil {
+	if err := migrateDBThrough(s.db, dbPath, 167); err != nil {
 		t.Fatalf("first migrateDB: %v", err)
 	}
-	if err := migrateDBThrough(s.db, dbPath, 161); err != nil {
+	if err := migrateDBThrough(s.db, dbPath, 167); err != nil {
 		t.Fatalf("second migrateDB: %v", err)
 	}
 	var requestAt string
@@ -1134,7 +1134,7 @@ func TestMigration121BackfillsTheRequestClockAndIsRewindSafe(t *testing.T) {
 
 func TestMigration123AddsTranscriptPathAndIsRewindSafe(t *testing.T) {
 	dbPath := filepath.Join(t.TempDir(), "test.db")
-	s, err := newStoreAtVersion(dbPath, 161)
+	s, err := newStoreAtVersion(dbPath, 167)
 	if err != nil {
 		t.Fatalf("NewWithDB: %v", err)
 	}
@@ -1150,14 +1150,14 @@ func TestMigration123AddsTranscriptPathAndIsRewindSafe(t *testing.T) {
 		t.Fatalf("rewind migration 123: %v", err)
 	}
 
-	if err := migrateDBThrough(s.db, dbPath, 161); err != nil {
+	if err := migrateDBThrough(s.db, dbPath, 167); err != nil {
 		t.Fatalf("first migrateDB: %v", err)
 	}
 
 	if _, err := s.db.Exec(`DELETE FROM schema_migrations WHERE version >= 123`); err != nil {
 		t.Fatalf("unrecord migration 123: %v", err)
 	}
-	if err := migrateDBThrough(s.db, dbPath, 161); err != nil {
+	if err := migrateDBThrough(s.db, dbPath, 167); err != nil {
 		t.Fatalf("second migrateDB: %v", err)
 	}
 
@@ -1168,7 +1168,7 @@ func TestMigration123AddsTranscriptPathAndIsRewindSafe(t *testing.T) {
 
 func TestMigration145AdoptsGardenDispatchForAutomationContinuity(t *testing.T) {
 	dbPath := filepath.Join(t.TempDir(), "test.db")
-	s, err := newStoreAtVersion(dbPath, 161)
+	s, err := newStoreAtVersion(dbPath, 167)
 	if err != nil {
 		t.Fatalf("NewWithDB: %v", err)
 	}
@@ -1210,7 +1210,7 @@ func TestMigration145AdoptsGardenDispatchForAutomationContinuity(t *testing.T) {
 		t.Fatalf("rewind migration 145: %v", err)
 	}
 
-	if err := migrateDBThrough(s.db, dbPath, 161); err != nil {
+	if err := migrateDBThrough(s.db, dbPath, 167); err != nil {
 		t.Fatalf("migrateDB: %v", err)
 	}
 	migratedRun, err := s.GetAutomationRun(run.ID)

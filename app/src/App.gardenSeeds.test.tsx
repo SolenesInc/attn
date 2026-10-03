@@ -131,13 +131,13 @@ describe('App garden seeds', () => {
     daemon.on('seed_document_get', () => undefined);
     await gesture(daemon, () => daemon.emit({ event: 'kept_conversations_changed' }));
     expect(daemon.sentOf('seed_document_get')).toHaveLength(1);
-    await gesture(daemon, () => daemon.emit({ event: 'garden_seeds_updated', seeds: [PLAN], total: 1 }));
+    await gesture(daemon, () => daemon.emit({ event: 'garden_seeds_updated', profile_id: PLAN.profile_id, seeds: [PLAN], total: 1 }));
     const older = daemon.sentOf('seed_document_get')[1];
     daemon.on('seed_document_get', () => ({ event: 'seed_document_get_result', success: true,
       document: seedDocument(PLAN, { notes: [note('n-after', { body: 'After the keep pass' })], notes_total: 1 }) }));
     await gesture(daemon, () => daemon.emit({ event: 'kept_conversations_changed' }));
     expect(daemon.sentOf('seed_document_get')).toHaveLength(2);
-    await gesture(daemon, () => daemon.emit({ event: 'garden_seeds_updated', seeds: [PLAN], total: 1 }));
+    await gesture(daemon, () => daemon.emit({ event: 'garden_seeds_updated', profile_id: PLAN.profile_id, seeds: [PLAN], total: 1 }));
     await gesture(daemon, () => daemon.replyTo(older, { event: 'seed_document_get_result', success: true,
       request_id: older.request_id,
       document: seedDocument(PLAN, { notes: [note('n-old', { body: 'Superseded detail' })], notes_total: 1 }) }));

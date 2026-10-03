@@ -63,7 +63,8 @@ func TestMigration161MovesTheChiefIntoItsProfile(t *testing.T) {
 	`); err != nil {
 		t.Fatal(err)
 	}
-	if err := migrateDB(s.db, ""); err != nil {
+	// Migration 168 rebuilds the inbox from tables it drops, so a replay stops before it.
+	if err := migrateDBThrough(s.db, "", 167); err != nil {
 		t.Fatal(err)
 	}
 	chiefs, err := s.ProfileChiefs()

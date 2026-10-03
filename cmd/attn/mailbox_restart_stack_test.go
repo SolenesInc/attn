@@ -80,7 +80,7 @@ func TestRestartDuringInboxPrimingKeepsTheDayAndOutstandingDelay(t *testing.T) {
 	writeCharter(t, s, "trellis")
 	s.Start()
 	cli := s.Client()
-	if err := cli.Register("reviewer", "reviewer", s.Path("reviewer")); err != nil {
+	if err := s.InjectSession("reviewer", "reviewer", s.Path("reviewer"), protocol.SessionAgentClaude); err != nil {
 		t.Fatal(err)
 	}
 	sent, err := cli.AgentMsg("trellis", "reviewer", "keep this through priming and restart")

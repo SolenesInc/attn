@@ -162,22 +162,3 @@ func awaitDesktop(app *testworld.Peer, desktopID string, match func(protocol.Des
 	})
 	return found
 }
-
-func lookAway(t *testing.T, w *world, app *testworld.Peer) {
-	t.Helper()
-	profile := app.SelectedProfile()
-	created := testworld.Request(app, protocol.DesktopCreateMessage{Cmd: protocol.CmdDesktopCreate, ProfileID: profile, RequestID: "look-away-create"},
-		protocol.EventProfileActionResult, func(r protocol.ProfileActionResultMessage) bool { return r.RequestID == "look-away-create" })
-	if !created.Success || len(created.Desktops) == 0 {
-		t.Fatalf("creating an empty desktop to look at: %+v", created)
-	}
-	empty := created.Desktops[len(created.Desktops)-1].ID
-	switched := testworld.Request(app, protocol.DesktopSetCurrentMessage{Cmd: protocol.CmdDesktopSetCurrent, ProfileID: profile, DesktopID: empty, RequestID: "look-away-switch"},
-		protocol.EventProfileActionResult, func(r protocol.ProfileActionResultMessage) bool { return r.RequestID == "look-away-switch" })
-	if !switched.Success {
-		t.Fatalf("switching to the empty desktop %s: %s", empty, protocol.Deref(switched.Error))
-	}
-	if w.bubbled {
-		w.advance(0)
-	}
-}

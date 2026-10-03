@@ -10,7 +10,7 @@ import (
 
 func TestAppsRetirementKeepsCoreStateAcrossUpgradeAndRestart(t *testing.T) {
 	dbPath := filepath.Join(t.TempDir(), "attn.db")
-	s, err := newStoreAtVersion(dbPath, 161)
+	s, err := newStoreAtVersion(dbPath, 167)
 	if err != nil {
 		t.Fatal(err)
 	}

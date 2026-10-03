@@ -52,7 +52,8 @@ func TestGardenProfileMigrationUsesTheConvertedDefaultIdentity(t *testing.T) {
 			if err := s.Close(); err != nil {
 				t.Fatal(err)
 			}
-			migrated, err := newSeededStore(path)
+			// Migration 168 rebuilds the inbox from tables it drops, so a replay stops before it.
+			migrated, err := newStoreAtVersion(path, 167)
 			if err != nil {
 				t.Fatal(err)
 			}

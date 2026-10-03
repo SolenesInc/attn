@@ -37,7 +37,7 @@ func TestConversationKeepPassNotifiesOnceForMultipleCopies(t *testing.T) {
 		run.Prompted()
 		run.Reply("source answer <!-- attn:state=waiting_input -->")
 		paths = append(paths, transcript.FindClaudeTranscript(run.ConversationID))
-		closePane(app, seedResumePane(t, w, protocol.Deref(delegated.WorkspaceID), delegated.SessionID))
+		closePane(app, sessionPane{session: delegated.SessionID})
 		testworld.AwaitTaskDone(app, "conversation_keep")
 	}
 	before := conversationRows(t, cli, false)

@@ -5,7 +5,7 @@ import { useEscapeStack } from '../../hooks/useEscapeStack';
 import { matchesWords } from './ledgerQuery';
 import { fullStamp } from './ledgerTime';
 import { Field, Inspector, LedgerList, QueryBar, useCopied } from './LedgerPrimitives';
-import type { ListItem, RowNote, RowVerb } from './LedgerPrimitives';
+import type { LedgerMenu, ListItem, RowNote, RowVerb } from './LedgerPrimitives';
 
 export interface ConversationsTabProps {
   listConversations: (includeDeleted: boolean) => Promise<KeptConversationListResult>;
@@ -56,7 +56,7 @@ export function ConversationsTab({
   const [result, setResult] = useState<KeptConversationListResult | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [selectedKey, setSelectedKey] = useState<string | null>(null);
-  const [menuKey, setMenuKey] = useState<string | null>(null);
+  const [menu, setMenu] = useState<LedgerMenu | null>(null);
   const [confirmForget, setConfirmForget] = useState<string | null>(null);
   const [notices, setNotices] = useState<Record<string, RowNote | undefined>>({});
   const [copied, copy] = useCopied();
@@ -83,7 +83,7 @@ export function ConversationsTab({
     const row = rows.find((candidate) => `${candidate.agent}:${candidate.resume_id}` === key);
     if (!row || notices[key]?.kind === 'busy') return;
     setSelectedKey(key);
-    setMenuKey(null);
+    setMenu(null);
     if (verb === 'cancel') { setConfirmForget(null); return; }
     if (verb === 'forget') { setConfirmForget(key); return; }
     if (verb === 'confirm-forget' && confirmForget !== key) return;
@@ -122,7 +122,7 @@ export function ConversationsTab({
     <div className="ledger-split">
       <LedgerList items={items} selectedKey={selected ? keyFor(selected) : null} onSelect={(key) => {
         setSelectedKey(key); if (key !== confirmForget) setConfirmForget(null);
-      }} onVerb={runVerb} menuKey={menuKey} onMenu={setMenuKey} onYank={copy}
+      }} onVerb={runVerb} menu={menu} onMenu={setMenu} onYank={copy}
       empty={<p className="ledger-empty">{error || (!result ? 'Reading kept conversations…' : 'No conversations match this view.')}</p>} />
       <ConversationInspector row={selected} confirming={Boolean(confirming)} note={note} onCopy={copy} onOpenSeed={onOpenSeed}
         onVerb={(verb) => { if (selected) runVerb(keyFor(selected), verb); }} />

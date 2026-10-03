@@ -24,7 +24,9 @@ func TestAGardenBellRetriesAfterACrewRosterPathFailureIsRepaired(t *testing.T) {
 		writeCrewCharter(t, w, "trellis")
 		writeCrewCharter(t, w, "alder")
 		w.restart()
+		w.App() // Initial state waits for startup recovery, which drops injected sessions.
 		cli = w.Client()
+		registerSessions(t, w, cli, "sender")
 		home := filepath.Join(w.Dir, "crew", "alder")
 		saved := home + "-saved"
 		if err := os.Rename(home, saved); err != nil {
