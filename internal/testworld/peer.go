@@ -278,7 +278,12 @@ func (p *Peer) Close() {
 
 func (p *Peer) TypeLine(sessionID, text string) {
 	p.T.Helper()
-	terminal := p.Terminal(sessionID)
+	p.TypeLineIn(p.Terminal(sessionID), text)
+}
+
+// TypeLineIn types into one terminal, for a session that several panes show.
+func (p *Peer) TypeLineIn(terminal, text string) {
+	p.T.Helper()
 	p.attach(terminal)
 	p.Send(protocol.PtyInputMessage{Cmd: protocol.CmdPtyInput, ID: terminal, Data: text + "\r"})
 }

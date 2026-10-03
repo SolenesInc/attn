@@ -1,6 +1,7 @@
 package daemon
 
 import (
+	"context"
 	"errors"
 	"net"
 	"strings"
@@ -74,8 +75,7 @@ func (d *Daemon) conversationIn(t harness.TerminalID, observation agentConversat
 	switch {
 	case owner == "":
 		err = d.opened(t, session, observation)
-	case d.ownerLive(owner):
-		// A live owner keeps its terminal, so this session takes the conversation over in place.
+	case !d.showableIn(t, owner):
 		d.observeAgentConversation(observation)
 	default:
 		err = d.shows(t, session, owner, observation)
@@ -85,11 +85,24 @@ func (d *Daemon) conversationIn(t harness.TerminalID, observation agentConversat
 	}
 }
 
-// ownerLive counts a bare-CLI wrapper's process too: it runs in the user's own terminal.
-func (d *Daemon) ownerLive(owner string) bool {
-	if d.sessionHasLiveWorker(owner) {
-		return true
+// showableIn is false for an owner running in another workspace, whose membership would leave its pane
+// there, or only in a bare-CLI wrapper; t's session then takes the conversation over in place.
+func (d *Daemon) showableIn(t harness.TerminalID, owner string) bool {
+	r := d.terminals()
+	live := d.liveTerminals(context.Background())
+	running := false
+	for _, id := range d.terminalsOf(owner) {
+		if _, ok := live[id]; ok {
+			if r.workspaceOf(id) != r.workspaceOf(t) {
+				return false
+			}
+			running = true
+		}
 	}
+	return running || !d.wrapperLive(owner)
+}
+
+func (d *Daemon) wrapperLive(owner string) bool {
 	alive, err := d.externalSessionAlive(owner)
 	if err != nil {
 		d.logf("agent conversation: treating %s as live; its wrapper process could not be checked: %v", owner, err)

@@ -10,5 +10,4 @@ change: >
   exactly the session you started with.
 notes: >
   With Codex the pane switches once Codex reports the resumed chat, at the latest
-  on its first prompt. A session still running in another pane keeps it, and the
-  conversation moves within the current session as before.
+  on its first prompt.
