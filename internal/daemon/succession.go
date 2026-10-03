@@ -14,7 +14,7 @@ import (
 )
 
 // opened opens a session in terminal t for a conversation no session holds; it takes only the terminal,
-// and from closes into the ledger whole, or is removed if it was never prompted. The caller holds from's lifecycle lock.
+// and from closes into the ledger whole. The caller holds from's lifecycle lock.
 func (d *Daemon) opened(t harness.TerminalID, from *protocol.Session, observation agentConversationObservation) error {
 	d.drainTranscriptWatcher(from.ID)
 	if _, err := d.captureGardenSessionSnapshot(from); err != nil {
@@ -32,7 +32,6 @@ func (d *Daemon) opened(t harness.TerminalID, from *protocol.Session, observatio
 		Close:        store.SessionClose{By: store.SessionClosedByUser, Reason: "cleared; its terminal moved on to " + to},
 	}
 	var workspaceID string
-	var removed bool
 	err := d.commitWorkspaceLayout(func() (workspacelayout.WorkspaceLayout, error) {
 		workspaceID = d.terminals().workspaceOf(t)
 		layout := d.store.GetWorkspaceLayout(workspaceID)
@@ -44,9 +43,7 @@ func (d *Daemon) opened(t harness.TerminalID, from *protocol.Session, observatio
 				layout.Panes[i].SessionID = to
 			}
 		}
-		var err error
-		removed, err = d.store.CommitSuccession(succession, *layout, time.Now())
-		return *layout, err
+		return *layout, d.store.CommitSuccession(succession, *layout, time.Now())
 	})
 	if err != nil {
 		d.ensureTranscriptWatcherAtPath(from.ID, d.store.GetSessionConversation(from.ID).TranscriptPath)
@@ -67,11 +64,11 @@ func (d *Daemon) opened(t harness.TerminalID, from *protocol.Session, observatio
 	d.publishFact(FactSessionRegistered, to, nil)
 	d.broadcastWorkspaceLayoutUpdated(workspaceID)
 
-	d.recordSessionClose(from.ID, func() (bool, error) { return !removed, nil })
+	d.recordSessionClose(from.ID, func() (bool, error) { return true, nil })
 	d.publishSessionUnregistered(from)
 	d.dissociateSessionFromWorkspace(from.ID)
 	d.recomputeAndBroadcastWorkspaceForSession(to)
-	d.logf("terminal %s moved on from session %s to %s for conversation %s (predecessor removed=%v)", t, from.ID, to, observation.NativeID, removed)
+	d.logf("terminal %s moved on from session %s to %s for conversation %s", t, from.ID, to, observation.NativeID)
 	return nil
 }
 

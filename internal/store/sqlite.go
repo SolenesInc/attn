@@ -1266,8 +1266,6 @@ CREATE INDEX IF NOT EXISTS idx_automode_denials_recent ON automode_denials(id DE
 	{163, "record the session a successor replaced in its terminal, and whether a session was ever prompted", `
  ALTER TABLE sessions ADD COLUMN succeeds TEXT NOT NULL DEFAULT '';
  CREATE INDEX idx_sessions_succeeds ON sessions(succeeds) WHERE succeeds != '';
- ALTER TABLE sessions ADD COLUMN prompted_at TEXT NOT NULL DEFAULT '';
- UPDATE sessions SET prompted_at = state_updated_at;
 `},
 }
 

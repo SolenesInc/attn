@@ -140,25 +140,26 @@ export function followSuccessions<T extends SessionNavigationState>(
   };
 }
 
-// A terminal now showing another session hands the old one's place over, even when `succeeds`
-// skips a removed predecessor; a layout ahead of its session waits until that session arrives.
+// A terminal now showing another session hands the old one's place over if the new one
+// succeeds it or it ended; a layout ahead of its session waits until that session arrives.
 export function terminalHandovers(
   showed: ReadonlyMap<string, string>,
   layouts: Record<string, TerminalWorkspaceSnapshot>,
   sessions: readonly DaemonSessionSnapshot[],
 ): { successorOf: Map<string, string>; showing: Map<string, string> } {
-  const live = new Set(sessions.map((session) => session.id));
+  const live = new Map(sessions.map((session) => [session.id, session]));
   const successorOf = new Map<string, string>();
   const showing = new Map<string, string>();
   for (const { workspace } of Object.values(layouts)) {
     for (const { runtimeId, sessionId } of workspace.agents) {
       const before = showed.get(runtimeId);
       if (before && before !== sessionId) {
-        if (!live.has(sessionId)) {
+        const after = live.get(sessionId);
+        if (!after) {
           showing.set(runtimeId, before);
           continue;
         }
-        successorOf.set(before, sessionId);
+        if (after.succeeds === before || !live.has(before)) successorOf.set(before, sessionId);
       }
       showing.set(runtimeId, sessionId);
     }

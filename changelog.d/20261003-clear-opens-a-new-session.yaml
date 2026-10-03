@@ -9,7 +9,6 @@ change: >
   session on the new chat's first prompt.
 notes: >
   A crew member's `/clear` ends its day, and the Chief's ends the Chief role; the
-  new session is unbound. A session that was never prompted is removed instead of
-  closed. A Codex `/resume` to a thread no attn session holds also opens a new
+  new session is unbound. A Codex `/resume` to a thread no attn session holds also opens a new
   session. Copilot and bare CLI sessions still start a new conversation within
   the session.

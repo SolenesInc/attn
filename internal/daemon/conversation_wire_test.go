@@ -225,52 +225,6 @@ func TestAClearedTerminalComesBackShowingItsNewSessionInItsNewConversation(t *te
 	testworld.AwaitSession(app, next.ID, func(s protocol.Session) bool { return s.State == protocol.SessionStateWaitingInput })
 }
 
-func TestOnlyClearedSessionsThatTookATurnStayInTheLedger(t *testing.T) {
-	w := newWorld(t, fakeagent.Claude)
-	app, cli := w.App(), w.Client()
-	launched := w.Spawn(app, fakeagent.Claude, w.Path("shop"))
-	claude := w.Launched(launched)
-	app.TypeLine(launched, "/clear")
-	claude.Prompted()
-	worked := *testworld.Await(app, protocol.EventSessionRegistered, func(e protocol.WebSocketEvent) bool {
-		return e.Session != nil && e.Session.ID != launched && protocol.Deref(e.Session.Succeeds) == ""
-	}).Session
-	app.TypeLine(worked.ID, "add a discount field")
-	claude.Prompted()
-	claude.Reply("Added. <!-- attn:state=idle -->")
-	awaitUsageTokens(app, worked.ID, claudeTokens("Added. <!-- attn:state=idle -->"))
-
-	untouched := clearClaude(app, claude, worked.ID)
-	app.TypeLine(untouched.ID, "/clear")
-	claude.Prompted()
-	last := awaitSuccessor(app, worked.ID)
-	if last.ID == untouched.ID {
-		t.Fatalf("the second /clear opened nothing; %s still shows", untouched.ID)
-	}
-	if got := ledgerIDs(ledger(t, cli, client.SessionListOptions{Closed: true})); !slices.Equal(got, []string{worked.ID}) {
-		t.Errorf("closed ledger = %v, want only %s; a session that never took a turn leaves no row", got, worked.ID)
-	}
-	if got := ledgerIDs(ledger(t, cli, client.SessionListOptions{All: true})); slices.Contains(got, launched) || slices.Contains(got, untouched.ID) {
-		t.Errorf("the ledger lists %v, want neither %s nor %s, which never took a turn", got, launched, untouched.ID)
-	}
-}
-
-func TestATurnNoPromptOpenedKeepsTheClearedSessionInTheLedger(t *testing.T) {
-	w := newWorld(t, fakeagent.Claude)
-	app, cli := w.App(), w.Client()
-	session := w.Spawn(app, fakeagent.Claude, w.Path("shop"))
-	claude := w.Launched(session)
-	proceeded := "Plan carried out. <!-- attn:state=idle -->"
-	claude.Reply(proceeded)
-	awaitUsageTokens(app, session, claudeTokens(proceeded))
-
-	clearClaude(app, claude, session)
-	awaitClosed(app, session)
-	if got := ledgerIDs(ledger(t, cli, client.SessionListOptions{Closed: true})); !slices.Equal(got, []string{session}) {
-		t.Errorf("closed ledger = %v, want %s, which worked without a prompt", got, session)
-	}
-}
-
 func TestCodexNewOpensANewSessionOnTheNewChatsFirstPrompt(t *testing.T) {
 	w := newWorld(t, fakeagent.Codex)
 	app, cli := w.App(), w.Client()

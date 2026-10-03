@@ -676,23 +676,6 @@ func (s *Store) updateStateLocked(id, state string, at time.Time) bool {
 	return err == nil && updated == 1
 }
 
-// MarkPrompted records that a session took a turn, for a turn no prompt opened: plan mode's
-// "clear and proceed" ends in Stop without a UserPromptSubmit.
-func (s *Store) MarkPrompted(id string, at time.Time) {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	if s.db == nil || strings.TrimSpace(id) == "" || at.IsZero() {
-		return
-	}
-	s.markPromptedLocked(id, string(protocol.NewTimestamp(at)))
-}
-
-func (s *Store) markPromptedLocked(id, stamp string) {
-	if _, err := s.db.Exec("UPDATE sessions SET prompted_at = ? WHERE id = ? AND closed_at = '' AND prompted_at = ''", stamp, id); err != nil {
-		log.Printf("[store] failed to stamp session %s prompted: %v", id, err)
-	}
-}
-
 func (s *Store) MarkModelRequestStarted(id string, at time.Time) bool {
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -712,7 +695,6 @@ func (s *Store) MarkModelRequestStarted(id string, at time.Time) bool {
 		session.LastModelRequestAt = protocol.Ptr(stamp)
 		return true
 	}
-	s.markPromptedLocked(id, stamp)
 	var current sql.NullString
 	if err := s.db.QueryRow("SELECT last_model_request_at FROM sessions WHERE id = ?", id).Scan(&current); err != nil {
 		return false

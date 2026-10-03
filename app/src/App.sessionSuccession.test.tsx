@@ -124,33 +124,6 @@ describe('App session succession', () => {
   });
 
   it.each([
-    ['names the session its removed predecessor succeeded', 's0'],
-    ['names no session, its removed predecessor having none', undefined],
-  ])('keeps the user, in queue mode, on a terminal when the session it moves on to %s', async (_, succeeds) => {
-    const s1 = daemonSession('s1', { state: 'waiting_input', ...OWED });
-    const s3 = daemonSession('s3', { state: 'waiting_input', ...OWED });
-    const { daemon } = await openAttachedTerminals({
-      sessions: [s3, s1],
-      workspaces: [agentWorkspace('s3'), terminalWorkspace('s1', 'terminal-1')],
-      initialState: { settings: QUEUE },
-    });
-    await open(daemon, 's1');
-    await act(() => vi.advanceTimersByTimeAsync(1000));
-    const attachments = attachesAndDetaches(daemon).length;
-
-    daemon.emit({ event: 'session_registered', session: daemonSession('s2', { workspace_id: s1.workspace_id, state: 'idle', succeeds }) });
-    daemon.emit({ event: 'workspace_layout_updated', workspace_layout: showing(s1, 's2', 'terminal-1').layout! });
-    daemon.emit({ event: 'session_unregistered', session: s1 });
-    await daemon.idle();
-    await act(() => vi.advanceTimersByTimeAsync(1000));
-
-    expect(selectedAgent()).toBe('s2');
-    expect(shownWorkspaces()).toEqual(['workspace-s1']);
-    expect(focusedPane()).toBe('pane-s1');
-    expect(attachesAndDetaches(daemon).slice(attachments)).toEqual([]);
-  });
-
-  it.each([
     ['', {}],
     [' in queue mode', QUEUE],
   ])('follows the terminal through successions that happened while the app was away%s', async (_, settings) => {

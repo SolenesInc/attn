@@ -64,6 +64,7 @@ export interface DaemonSessionSnapshot {
   pinned_at?: string;
   crew_member?: string;
   parent_session_id?: string;
+  succeeds?: string;
   id: string;
   label: string;
   agent?: string;

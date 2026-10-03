@@ -52,7 +52,6 @@ references the home holds move, in PR 6.
 3. **Producers report conversations; core decides by ownership.** Nothing changes on the harness side: no `source` and no plugin API change. Only in-order reports can change identity (§3.2). Spawn persists what it launches.
 4. **Succession clears the identity** (§3.4). The successor takes only the terminal; everything else stays with the predecessor.
    - The predecessor is closed through the normal close, with the reason "cleared; its terminal moved on to `<S2>`". Its obligations wait for it as on any close, so Reopen brings them back.
-   - It is removed instead if it never started a turn.
    - `sessions.succeeds` points at it.
    - The successor gets a new name, as any new session in that pane would.
 5. **The daemon resolves caller ids.** It tries a terminal, then an open session. A closed session's id is not followed to its successor: a message to a cleared agent is refused as for any closed session, not rerouted to an agent without its context. There is no new CLI command and no extra round trip, and hooks already resolve on the daemon side.
@@ -141,7 +140,7 @@ These steps run under `lifecycle(cur)`, then `terminal(t)`, plus `lifecycle(owne
 3. Run one transaction: `store.CommitSuccession`.
    - Insert the successor, or reopen the owner in place, with conversation c, the transcript path, and `succeeds = cur`.
    - Give the successor its own intent, move the driver run, and point t's pane rows at the successor (§3.4).
-   - Close the predecessor through the normal close, or remove it if it never started a turn. On removal, splice the chain: the successor inherits `succeeds` from the removed session, and a self-pointer is skipped.
+   - Close the predecessor through the normal close.
    - Finalize the cost.
    - Append the facts in the same transaction.
 4. Still under the terminal lock:
@@ -199,7 +198,6 @@ type Succession struct {
 	From, To, Terminal string
 	Open   *protocol.Session // the new session; nil when To is reopened or already open
 	Launch LaunchIntent      // To's copy of From's intent, with resume = the conversation
-	Remove bool              // From never started a turn
 	Close  SessionClose      // otherwise
 }
 func (s *Store) CommitSuccession(sc Succession, docs []DocumentCommit, facts []BusEvent) error
@@ -215,11 +213,7 @@ The plan lists `Launch`, `commit(bool)`, `ViewState`, `Up`, `Down` and `End` for
 ```sql
 ALTER TABLE sessions ADD COLUMN succeeds TEXT NOT NULL DEFAULT '';
 CREATE INDEX idx_sessions_succeeds ON sessions(succeeds) WHERE succeeds != '';
-ALTER TABLE sessions ADD COLUMN prompted_at TEXT NOT NULL DEFAULT '';
-UPDATE sessions SET prompted_at = state_updated_at;
 ```
-
-- `prompted_at` is stamped by the first UserPromptSubmit; a predecessor without it never started a turn and is removed. The attention stamp `turn_opened_at` cannot tell, since a fresh launch opens a turn when it first goes idle.
 
 - There is no terminal table, and pane rows are unchanged. A database from before the upgrade needs no rewrite, and an older daemon can still read it.
 - `sessions.agent_driver_*` stays on the session row and moves in the identity transaction.
@@ -228,7 +222,7 @@ UPDATE sessions SET prompted_at = state_updated_at;
 
 - `SessionExitedMessage.session_id: string`: the session the terminal showed when it exited.
 - `Session.succeeds?: string`: the session this one replaced in its terminal.
-  - The app follows the terminal, not this field, to move navigation: a removed predecessor's successor names the session before it, or none.
+  - The app uses it, with the layout, to move navigation to the successor.
   - The home mirror uses it to move the references it holds (PR 6).
 - No shape change elsewhere: the `id` of `attach_session`, `detach_session`, `pty_input`, `attach_result`, `pty_desync`, `pty_resized` and `runtime_respawned` is now documented as the terminal (runtime) id.
 
