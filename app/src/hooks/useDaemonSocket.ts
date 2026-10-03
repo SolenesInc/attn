@@ -1379,15 +1379,17 @@ export function useDaemonSocket({
             }
             const nextSessions = dedupeSessionsByID(data.sessions || []);
             sessionsRef.current = nextSessions;
+            const nextWorkspaces = data.workspaces || [];
+            workspacesRef.current = nextWorkspaces;
+            // Layouts first: a selected session that ended while away is handed to the
+            // session its terminal now shows before the sessions update drops it.
+            callbacksRef.current.onWorkspacesUpdate(nextWorkspaces);
             callbacksRef.current.onSessionsUpdate(nextSessions);
             callbacksRef.current.onSeedsUpdate?.(
               data.seeds || [],
               data.seeds_total ?? (data.seeds || []).length,
             );
             callbacksRef.current.onCrewUpdate?.(data.crew || []);
-            const nextWorkspaces = data.workspaces || [];
-            workspacesRef.current = nextWorkspaces;
-            callbacksRef.current.onWorkspacesUpdate(nextWorkspaces);
             setTileContents((prev) => pruneTileContentsForWorkspaces(prev, nextWorkspaces));
             pruneAttachedPtySessions(nextSessions, nextWorkspaces);
             const nextPRs = data.prs || [];

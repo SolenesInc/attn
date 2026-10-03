@@ -102,6 +102,47 @@ describe('App session succession', () => {
       .toEqual(['s3', terminal].sort());
   });
 
+  it('keeps the agent shown through every step of its terminal moving on', async () => {
+    const s1 = daemonSession('s1');
+    const { daemon } = await openAttachedTerminals({
+      sessions: [s1, daemonSession('s3')],
+      workspaces: [terminalWorkspace('s1', 'terminal-1'), agentWorkspace('s3')],
+    });
+    const attachments = attachesAndDetaches(daemon).length;
+    const shown = () => ({ selected: selectedAgent(), workspaces: shownWorkspaces() });
+
+    daemon.emit({ event: 'session_registered', session: successorOf(s1, 's2') });
+    expect(shown()).toEqual({ selected: 's1', workspaces: ['workspace-s1'] });
+    daemon.emit({ event: 'workspace_layout_updated', workspace_layout: showing(s1, 's2', 'terminal-1').layout! });
+    expect(shown()).toEqual({ selected: 's2', workspaces: ['workspace-s1'] });
+    daemon.emit({ event: 'session_unregistered', session: s1 });
+    expect(shown()).toEqual({ selected: 's2', workspaces: ['workspace-s1'] });
+    await daemon.idle();
+
+    expect(shown()).toEqual({ selected: 's2', workspaces: ['workspace-s1'] });
+    expect(attachesAndDetaches(daemon).slice(attachments)).toEqual([]);
+  });
+
+  it('follows the terminal through successions that happened while the app was away', async () => {
+    const s1 = daemonSession('s1');
+    const { daemon } = await renderApp({
+      initialState: { sessions: [daemonSession('s4'), s1], workspaces: [agentWorkspace('s4'), terminalWorkspace('s1', 'terminal-1')] },
+    });
+    await open(daemon, 's4');
+    await open(daemon, 's1');
+
+    const s3 = daemonSession('s3', { workspace_id: s1.workspace_id, state: 'idle', succeeds: 's2' });
+    daemon.on('client_hello', () => initialState({
+      sessions: [daemonSession('s4'), s3],
+      workspaces: [agentWorkspace('s4'), showing(s1, 's3', 'terminal-1')],
+    }));
+    await daemon.reconnect();
+    await daemon.idle();
+
+    expect(selectedAgent()).toBe('s3');
+    expect(shownWorkspaces()).toEqual(['workspace-s1']);
+  });
+
   it('puts the successor where its predecessor was in the agent history', async () => {
     const s1 = daemonSession('s1');
     const { daemon } = await renderApp({

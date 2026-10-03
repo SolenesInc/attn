@@ -1,5 +1,6 @@
 import type { DaemonSessionSnapshot, Session } from '../store/sessions';
 import type { DaemonWorkspace } from '../hooks/useDaemonSocket';
+import type { TerminalWorkspaceSnapshot } from '../types/workspace';
 import {
   createAgentHistory,
   followAgentHistory,
@@ -139,25 +140,31 @@ export function followSuccessions<T extends SessionNavigationState>(
   };
 }
 
-// Session.succeeds stays set after either session is reopened, so a pair hands the
-// predecessor over only the first time this app sees it.
-export function successionsIn(
-  handled: ReadonlySet<string>,
-  next: readonly DaemonSessionSnapshot[],
-  known: readonly { id: string }[],
-): { successorOf: Map<string, string>; handled: ReadonlySet<string> } {
+// A terminal now showing another session hands the old one's place over if the new one
+// succeeds it or it ended; a layout ahead of its session waits until that session arrives.
+export function terminalHandovers(
+  showed: ReadonlyMap<string, string>,
+  layouts: Record<string, TerminalWorkspaceSnapshot>,
+  sessions: readonly DaemonSessionSnapshot[],
+): { successorOf: Map<string, string>; showing: Map<string, string> } {
+  const live = new Map(sessions.map((session) => [session.id, session]));
   const successorOf = new Map<string, string>();
-  let seen = handled;
-  for (const session of next) {
-    const predecessor = session.succeeds;
-    if (!predecessor) continue;
-    const pair = `${predecessor}>${session.id}`;
-    if (seen.has(pair)) continue;
-    if (seen === handled) seen = new Set(handled);
-    (seen as Set<string>).add(pair);
-    if (known.some((entry) => entry.id === predecessor)) successorOf.set(predecessor, session.id);
+  const showing = new Map<string, string>();
+  for (const { workspace } of Object.values(layouts)) {
+    for (const { runtimeId, sessionId } of workspace.agents) {
+      const before = showed.get(runtimeId);
+      if (before && before !== sessionId) {
+        const after = live.get(sessionId);
+        if (!after) {
+          showing.set(runtimeId, before);
+          continue;
+        }
+        if (after.succeeds === before || !live.has(before)) successorOf.set(before, sessionId);
+      }
+      showing.set(runtimeId, sessionId);
+    }
   }
-  return { successorOf, handled: seen };
+  return { successorOf, showing };
 }
 
 export function enterHome(
