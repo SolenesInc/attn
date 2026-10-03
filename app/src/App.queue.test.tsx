@@ -76,6 +76,30 @@ describe('App queue', () => {
     expect(daemon.sentOf('session_reopen')).toEqual([]);
     await daemon.emit({ event: 'session_state_changed', session: { ...a, state: 'pending_approval' } });
     expect(screen.queryByRole('button', { name: 'Open a' })).toBeNull();
+    pressShortcut('dock.attention');
+    await daemon.idle();
+    expect(screen.queryByTestId('attention-session-a')).toBeNull();
+  });
+
+  it.each(['jump', 'handoff', 'arrival'] as const)('keeps the queue row pane during %s with rearranged duplicate views', async (action) => {
+    const a = agent('a', { turn_owed: action !== 'jump', turn_opened_at: ago(2 * HOUR) });
+    const b = agent('b', { agent: 'codex', codex_mode: 'shared', workspace_id: 'workspace-pair', turn_owed: action !== 'arrival', turn_opened_at: ago(HOUR) });
+    const source = splitWorkspace('workspace-pair', ['b', 'replica']);
+    source.layout!.panes = source.layout!.panes.map(pane => ({ ...pane, session_id: 'b', codex_resolution: 'resolved' }));
+    const root = JSON.parse(source.layout!.layout_json);
+    root.children.reverse();
+    source.layout!.layout_json = JSON.stringify(root);
+    const { daemon } = await renderApp({ initialState: { settings: QUEUE, sessions: [a, b], workspaces: [agentWorkspace('a'), source] } });
+    if (action === 'jump') {
+      pressShortcut('session.jumpToWaiting');
+      await daemon.idle();
+    } else {
+      await press(daemon, 'Open a');
+      await daemon.emit({ event: 'session_state_changed', session: { ...a, turn_owed: false } });
+      if (action === 'arrival') await daemon.emit({ event: 'session_state_changed', session: { ...b, turn_owed: true } });
+    }
+    expect(document.querySelector('[data-pane-id="pane-replica"].workspace-pane.active')).toBeInTheDocument();
+    expect(document.querySelector('[data-testid="queue-turn-b"][data-view-pane-id="pane-replica"]')).toHaveClass('selected');
   });
 
   it.each(['chief', 'crew', 'automation'] as const)('keeps duplicate %s views selectable and closes the clicked pane', async (role) => {

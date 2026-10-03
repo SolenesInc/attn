@@ -7,7 +7,8 @@ import type { useSessionWorkspaceController } from '../hooks/useSessionWorkspace
 import { useSessionStore, type TerminalWorkspaceState } from '../store/sessions';
 import { hasLeaf, workspaceSnapshotFromDaemonWorkspace } from '../types/workspace';
 import { dispatcherOf } from '../utils/delegationLinks';
-import { oldestWantedTurn } from '../utils/queueBands';
+import { headOfQueue, oldestWantedTurn } from '../utils/queueBands';
+import { filterSessionsRepresentedInWorkspaceLayouts } from '../utils/workspaceViewModels';
 import { probeUiAfterSwitch } from '../utils/uiDiagnosticsLog';
 import {
   persistWorkspaceSelectionStyle,
@@ -79,14 +80,19 @@ export function useAppNavigation({
     }
   }, [activeSessionId, sendSessionSelected, view]);
 
-  const { wantsAttention } = attentionQueue;
+  const { wantsAttention, queueModeEnabled, queueBands } = attentionQueue;
 
   const handleJumpToWaiting = useCallback(() => {
-    const waiting = oldestWantedTurn(unmutedEnrichedSessions, wantsAttention);
-    if (waiting) {
-      handleSelectSession(waiting.id);
+    if (queueModeEnabled) {
+      const waiting = headOfQueue(queueBands);
+      if (waiting?.paneId) selectAgentPane(waiting.session.id, waiting.paneId);
+      else if (waiting) handleSelectSession(waiting.session.id);
+      return;
     }
-  }, [unmutedEnrichedSessions, handleSelectSession, wantsAttention]);
+    const displayed = filterSessionsRepresentedInWorkspaceLayouts(daemonWorkspaces, unmutedEnrichedSessions);
+    const waiting = oldestWantedTurn(displayed, wantsAttention);
+    if (waiting) handleSelectSession(waiting.id);
+  }, [queueModeEnabled, queueBands, selectAgentPane, daemonWorkspaces, unmutedEnrichedSessions, handleSelectSession, wantsAttention]);
 
   const toggleGridMode = useCallback(() => {
     setView((prev) => (prev === 'grid' ? (activeSessionId ? 'session' : 'dashboard') : 'grid'));

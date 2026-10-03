@@ -241,13 +241,13 @@ export function advanceQueue(
   if (!next || state.pendingSelection) return state;
   if (state.view === 'dashboard' && state.followNextTurn) {
     const target = headOfQueue(next);
-    return target ? selectAgent(state, sessions, target.session.id) : state;
+    return target ? selectAgent(state, sessions, target.session.id, target.paneId) : state;
   }
   if (state.view !== 'session' || state.selectedSessionlessWorkspaceId || state.selectedTile)
     return state;
   const advance = advanceAfterTurnClosed(previous?.turns ?? [], next, state.activeSessionId);
   if (!advance) return state;
   return advance.to === 'session'
-    ? selectAgent(state, sessions, advance.row.session.id)
+    ? selectAgent(state, sessions, advance.row.session.id, advance.row.paneId)
     : enterHome(state, true);
 }
