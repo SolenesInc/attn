@@ -316,10 +316,12 @@ func (d *Daemon) recoverCaptureAssets() error {
 			return err
 		}
 		if size != draft.NextOffset {
-			return fmt.Errorf("recovery attachment %s expected %d bytes, found %d", draft.AttachmentID, draft.NextOffset, size)
+			d.logf("capture recovery left attachment %s staged: expected %d bytes, found %d", draft.AttachmentID, draft.NextOffset, size)
+			continue
 		}
 		if err := syncCaptureDir(filepath.Dir(final)); err != nil {
-			return err
+			d.logf("capture recovery left attachment %s staged: sync directory: %v", draft.AttachmentID, err)
+			continue
 		}
 		if err := d.store.SaveCaptureAsset(store.CaptureAsset{CaptureID: draft.CaptureID, Attachment: protocol.CaptureAttachment{ID: draft.AttachmentID, Name: draft.Name, MediaType: media, Bytes: size}, State: "ready"}); err != nil {
 			return err

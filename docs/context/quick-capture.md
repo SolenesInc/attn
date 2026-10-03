@@ -33,6 +33,8 @@ inbox item. A read receipt means an `attn agent inbox` fetch committed; it does
 not mean the agent understood or acted on the capture. Inspection never marks a
 capture read. Pass a positive page limit; the opaque next_cursor resumes after
 the last returned record, including when newer captures arrive between pages.
+A damaged draft or failed recovery sync stays staged and is logged; it never
+blocks daemon startup or becomes a saved capture. The user can discard it.
 Draft states are staged or ready. Capture and attachment IDs are caller-generated
 UUIDs. Identical retries reuse the same capture ID; conflicting payloads fail.
 Two intentional identical messages have different IDs. Ordered attachment IDs

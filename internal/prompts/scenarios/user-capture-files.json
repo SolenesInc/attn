@@ -1,6 +1,6 @@
 {
   "version": 1,
-  "id": "user-capture-images",
+  "id": "user-capture-files",
   "recipient": "session",
   "event": "user-message",
   "description": "A user sends text and a screenshot through Quick Capture.",

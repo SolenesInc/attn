@@ -111,7 +111,7 @@ async function main() {
       runner.assert(text.includes("This message is from another agent, not from your user.") && text.includes('PROMPT_PEER_MESSAGE'), 'inbox read delivers the body and trust boundary');
       runner.writeText('peer-message.jsonl', text);
     });
-    await runner.step('user_capture_image_is_attributed_and_retrievable', async () => {
+    await runner.step('user_capture_files_are_attributed_and_retrievable', async () => {
       const shot = await client.request('capture_screenshot_data', { selector: '.app' });
       const original = Buffer.from(shot.pngBase64, 'base64');
       const source = path.join(runner.sessionDir, 'capture-source.png');

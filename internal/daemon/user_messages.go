@@ -5,7 +5,6 @@ import (
 	"errors"
 	"fmt"
 	"net"
-	"os"
 	"strings"
 	"time"
 
@@ -93,42 +92,14 @@ func (d *Daemon) captureRequest(msg any, transportBytes int) (*protocol.CaptureR
 				seen[id] = true
 			}
 			d.captureAssetMu.Lock()
-			replay, err = d.store.CaptureReplay(*m)
-			if !replay && err == nil {
-				for _, id := range m.AttachmentIds {
-					a, assetErr := d.store.CaptureAsset(m.CaptureID, id)
-					if assetErr != nil {
-						err = assetErr
-						break
-					}
-					if a == nil || a.State != "ready" {
-						err = fmt.Errorf("attachment %s is not ready", id)
-						break
-					}
-					_, path := d.captureAssetPaths(m.CaptureID, id)
-					info, fileErr := os.Stat(path)
-					if fileErr != nil {
-						err = fileErr
-						break
-					}
-					if int(info.Size()) != a.Attachment.Bytes {
-						err = fmt.Errorf("attachment %s bytes=%d, found %d", id, a.Attachment.Bytes, info.Size())
-						break
-					}
-				}
-				if err == nil {
-					err = d.store.SaveCapture(*m, to, time.Now())
-				}
-			}
+			err = d.store.SaveCapture(*m, to, time.Now())
 			d.captureAssetMu.Unlock()
 			if err != nil {
 				return nil, err
 			}
-			if !replay {
-				crashAt("capture-saved")
-				d.publishFact(FactCaptureChanged, m.CaptureID, nil)
-				d.kickInboxAfterCommit(to)
-			}
+			crashAt("capture-saved")
+			d.publishFact(FactCaptureChanged, m.CaptureID, nil)
+			d.kickInboxAfterCommit(to)
 		}
 		r, err := d.store.Capture(m.CaptureID)
 		return &protocol.CaptureResult{Record: r}, err
