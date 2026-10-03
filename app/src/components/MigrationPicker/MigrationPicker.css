@@ -860,28 +860,6 @@
   white-space: nowrap;
 }
 
-.mp-group-check,
-.mp-group-todo {
-  position: absolute;
-  top: 2px;
-  left: 2px;
-  z-index: 1;
-  padding: 0 4px;
-  border-radius: 3px;
-  color: #1b100a;
-  font-size: var(--font-size-xs);
-  font-weight: 700;
-  line-height: 14px;
-}
-
-.mp-group-check {
-  background: var(--color-success);
-}
-
-.mp-group-todo {
-  background: var(--color-warning);
-}
-
 .mp-deskfoot {
   display: flex;
   align-items: center;

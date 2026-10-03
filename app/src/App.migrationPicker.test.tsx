@@ -2,7 +2,7 @@ import { fireEvent, screen, within } from '@testing-library/react';
 import { describe, expect, it } from 'vitest';
 import { importedGroup, migrationState } from './test/migration';
 import { gesture, pressShortcut, renderApp } from './test/renderApp';
-import { MigrationPhase } from './types/generated';
+import { LaunchDesktopKind, MigrationPhase } from './types/generated';
 
 function twin(id: string, desktopId: string, agent: string) {
   const group = importedGroup(id, 'exo', desktopId);
@@ -10,6 +10,27 @@ function twin(id: string, desktopId: string, agent: string) {
 }
 
 describe('App migration picker', () => {
+  it.each([LaunchDesktopKind.Crew, LaunchDesktopKind.Automation])('shows the launch step from the intro for %s placement', async (kind) => {
+    const state = migrationState({ launch_items: [{ kind, item_id: 'check', name: 'Check', profile_id: 'profile-default', profile_name: 'Default', confirmed: false, setting: {} }] });
+    const { daemon } = await renderApp({ initialState: { migration_phase: MigrationPhase.PlacementRequired },
+      script: (scripted) => scripted.on('migration_get', () => ({ event: 'migration_result', action: 'migration_get', success: true, state })),
+    });
+    await daemon.idle();
+    const steps = screen.getByRole('navigation', { name: 'Migration steps' });
+    expect(steps).toHaveTextContent("01 What’s changing›02 Confirm desktops›03 Launch desktops");
+    await gesture(daemon, () => fireEvent.click(screen.getByRole('button', { name: 'Continue →' })));
+    expect(screen.getByRole('navigation', { name: 'Migration steps' })).toHaveTextContent('03 Launch desktops');
+    expect(daemon.sentOf('migration_get')).toHaveLength(1);
+  });
+
+  it('shows two steps when no launch placement follows', async () => {
+    const { daemon } = await renderApp({ initialState: { migration_phase: MigrationPhase.PlacementRequired },
+      script: (scripted) => scripted.on('migration_get', () => ({ event: 'migration_result', action: 'migration_get', success: true, state: migrationState() })),
+    });
+    await daemon.idle();
+    expect(screen.getByRole('navigation', { name: 'Migration steps' })).not.toHaveTextContent('Launch desktops');
+  });
+
   it('counts agents and tiles separately on desktop cards', async () => {
     const agents = importedGroup('g1', 'Agents', 'd1', { agents: 2 });
     const mixed = importedGroup('g2', 'Mixed', 'd2');

@@ -58,9 +58,6 @@ export function DraftPreview({ tree, groupById, selectedId, highlightId, draggin
                 <span>{leaf.label}</span>
               </div>
             ))}
-            <span className={confirmed ? 'mp-group-check' : 'mp-group-todo'} aria-hidden="true">
-              {confirmed ? '✓' : '?'}
-            </span>
           </div>
         );
       })}

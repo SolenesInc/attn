@@ -224,6 +224,32 @@ func migrationBroadcasts(t *testing.T, client *wsClient) []protocol.MigrationSta
 	return states
 }
 
+func TestPlacementReviewIncludesTheUpcomingLaunchItems(t *testing.T) {
+	t.Setenv("ATTN_DATA_DIR", t.TempDir())
+	w := &profilesTestDaemon{t: t, dbPath: filepath.Join(t.TempDir(), "attn.db")}
+	writeLegacyDatabase(t, w.dbPath, 1, productionSchemaVersion,
+		`INSERT INTO automation_definitions (id, name, enabled, revision, spec_json, created_at, updated_at)
+		 VALUES (1, 'Local check', 0, 1, '{"api_version":"attn.dev/automations/v1alpha1","id":1,"name":"Local check","trigger":{"type":"manual","repositories":{}},"prompt":"Check locally.","launch":{"driver":"claude"},"location":{"type":"directory","path":"/fixture","repository_sources":{"default":{"type":""}}}}', 'now', 'now')`)
+	w.start()
+	a, _ := w.connect("")
+	b, _ := w.connect("")
+	assertPreview := func(state protocol.MigrationState) {
+		t.Helper()
+		if state.Phase != protocol.MigrationPhasePlacementRequired || len(state.LaunchItems) != 1 || state.LaunchItems[0].Name != "Local check" {
+			t.Fatalf("placement review lost its upcoming launch item: %+v", state)
+		}
+	}
+	state := w.mustMigrate(a, map[string]any{"cmd": protocol.CmdMigrationGet})
+	assertPreview(state)
+	kept := w.mustMigrate(a, map[string]any{"cmd": protocol.CmdMigrationKeep, "expected_revision": state.Revision, "group_ids": []string{"ws-1"}})
+	assertPreview(kept)
+	seen := migrationBroadcasts(t, b)
+	if len(seen) != 1 {
+		t.Fatalf("second client saw %d migration updates, want one", len(seen))
+	}
+	assertPreview(seen[0])
+}
+
 func TestTwoClientsShareOneMigrationDraftAndEitherMayFinish(t *testing.T) {
 	w := newMigratingTestDaemon(t, 3)
 	a, initialA := w.connect("")

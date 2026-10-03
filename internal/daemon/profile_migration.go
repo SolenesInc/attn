@@ -62,10 +62,10 @@ func protocolMigrationState(view store.ProfileMigrationView) (protocol.Migration
 		CanUndo:             view.Plan.CanUndo(),
 		SuggestionAvailable: view.Plan.SuggestionAvailable(),
 	}
+	for _, item := range view.LaunchItems {
+		state.LaunchItems = append(state.LaunchItems, protocolLaunchItem(item))
+	}
 	if view.State.Phase == profilemigration.PhaseLaunchRequired {
-		for _, item := range view.LaunchItems {
-			state.LaunchItems = append(state.LaunchItems, protocolLaunchItem(item))
-		}
 		for _, desktop := range view.LaunchDesktops {
 			wire, err := protocolDesktop(desktop)
 			if err != nil {

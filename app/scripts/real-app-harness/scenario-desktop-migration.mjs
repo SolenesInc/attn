@@ -212,6 +212,7 @@ async function main() {
         state.migration.desktops.filter((desktop) => !desktop.shortcut_slot).length === LEGACY_WORKSPACES.length - 9,
         `Expected ${LEGACY_WORKSPACES.length - 9} extra desktops: ${JSON.stringify(state.migration.desktops)}`,
       );
+      await waitForText('[aria-label="Migration steps"]', 'Launch desktops');
       await screenshot('01-intro.png');
     });
 
