@@ -59,6 +59,15 @@ function legacyWorkspacesSql(fixtureDir) {
     'CREATE TABLE workspace_layouts (workspace_id TEXT PRIMARY KEY, active_pane_id TEXT NOT NULL, layout_json TEXT NOT NULL, updated_at TEXT NOT NULL);',
     "CREATE TABLE workspace_layout_panes (workspace_id TEXT NOT NULL, pane_id TEXT NOT NULL, runtime_id TEXT NOT NULL DEFAULT '', session_id TEXT, kind TEXT NOT NULL, title TEXT NOT NULL, created_at TEXT NOT NULL, updated_at TEXT NOT NULL, status TEXT NOT NULL DEFAULT 'ready', error TEXT NOT NULL DEFAULT '', PRIMARY KEY (workspace_id, pane_id));",
     "UPDATE sessions SET profile_id = '';",
+    // A pre-profile install also predates the addressed inbox (168): mailbox items, watches keyed by session.
+    'DROP TABLE inbox_items;',
+    'DROP TABLE inbox_delivery;',
+    "CREATE TABLE agent_mailbox_items (id TEXT PRIMARY KEY, recipient_session_id TEXT NOT NULL, kind TEXT NOT NULL, source_id TEXT NOT NULL DEFAULT '', coalesce_key TEXT NOT NULL DEFAULT '', hint TEXT NOT NULL DEFAULT '', prompt TEXT NOT NULL DEFAULT '', bell_name TEXT NOT NULL DEFAULT '', created_at TEXT NOT NULL, notified_at TEXT NOT NULL DEFAULT '', read_at TEXT NOT NULL DEFAULT '');",
+    'ALTER TABLE pull_request_watches RENAME TO addressed_pull_request_watches;',
+    "CREATE TABLE pull_request_watches (session_id TEXT NOT NULL, pr_id TEXT NOT NULL, mode TEXT NOT NULL, reviewer TEXT NOT NULL DEFAULT '', created_at TEXT NOT NULL, cursor_json TEXT NOT NULL DEFAULT '{}', last_success_at TEXT NOT NULL DEFAULT '', last_error TEXT NOT NULL DEFAULT '', feedback_error TEXT NOT NULL DEFAULT '', outage_active INTEGER NOT NULL DEFAULT 0, PRIMARY KEY (session_id, pr_id));",
+    'INSERT INTO pull_request_watches SELECT session_id, pr_id, mode, reviewer, created_at, cursor_json, last_success_at, last_error, feedback_error, outage_active FROM addressed_pull_request_watches;',
+    'DROP TABLE addressed_pull_request_watches;',
+    'ALTER TABLE presentations DROP COLUMN address;',
     `DELETE FROM sessions WHERE id IN (${LEGACY_WORKSPACES.flatMap((_, offset) => agentsOf(offset + 1)).map(sql).join(', ')});`,
   ];
   LEGACY_WORKSPACES.forEach((title, offset) => {
