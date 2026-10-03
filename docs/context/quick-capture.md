@@ -138,3 +138,43 @@ apps, restart and shortcut lifecycle, with attributed idle measurements.
 For this implementation, the user waived native IME verification and left
 ordinary second-Desktop behavior for a later manual check. CI has no input-source
 or Mission Control probe; those two cases are not verified by the hosted scenario.
+
+## Attachment work capacity
+
+The composer shares two work slots between reading/decoding files and staging
+individual attachments through the main App's completion receipt. More files
+wait in arrival order. Removing a queued file prevents its read/upload; a failed
+operation releases its slot and leaves a visible error with the retained draft.
+
+The capacity receipt is hosted Mac CI [37131748373](https://github.com/SolenesInc/attn/actions/runs/37131748373),
+revision `14376b803`, on VirtualMac2,1 with macOS 15.7.9. Each capacity starts a
+fresh app process and empty draft. The workload is twenty 3168×1344 PNGs copied
+from `docs/banner.png`, individually tagged with a PNG tEXt identifier so their
+data URLs differ. Ten files contain 5,260,475 bytes and ten contain 5,260,476
+bytes, 105,209,510 bytes total. The screenshot pixels are unchanged. Per-file
+hashes and attributed process samples are in the [native artifact](https://github.com/SolenesInc/attn/actions/runs/37131748373/artifacts/11277342578).
+
+| Work slots | All previews ready | All staged | Peak WebKit RSS | Peak app + WebKit RSS |
+| --- | --- | --- | --- | --- |
+| 1 | 3.455 s | 7.515 s | 869.9 MiB | 1,083.4 MiB |
+| 2 | 2.412 s | 5.053 s | 961.7 MiB | 1,190.1 MiB |
+| 4 | 2.359 s | 4.927 s | 991.1 MiB | 1,215.5 MiB |
+| 8 | 2.324 s | 5.281 s | 921.7 MiB | 1,199.2 MiB |
+
+Two slots capture most of the improvement over one (1.043 s). Four and eight
+save only 53 and 88 ms in preview readiness while their combined sampled peaks
+are higher; eight also stages more slowly than two. This is one hosted run,
+with ordinary GC variation, rather than a general latency or memory ceiling.
+RSS is sampled every 50 ms for the app and all WebKit services attributed through
+its launchctl bootstrap domain. Sampled peaks are lower bounds on transient
+peaks. Preview timing ends after read/decode; motion completion is verified
+separately. Staged timing waits for daemon receipts and includes the final RSS
+sample.
+
+The retained-file workload is a 20-page screenshot PDF containing 142,323,707
+bytes. Native drop, save, process restart, restore and recipient CLI retrieval
+preserved SHA-256 `85175cbd833db887ce3ab269e8f4a0c7a85670902b4417d4700d5db6c2cb4943`.
+The instance's per-file data URL cache remains in place. Upload reads bounded
+base64 ranges directly, avoiding the whole-file URL fetch that failed on this
+workload. Files have no configured size or count cap; read, retention and upload
+failures remain visible and do not produce a saved receipt.
