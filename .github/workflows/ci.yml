@@ -785,6 +785,10 @@ jobs:
             ${{ runner.temp }}/attn-real-app-harness/**/*.png
             ${{ runner.temp }}/attn-real-app-harness/**/*.json
             ${{ runner.temp }}/attn-real-app-harness/**/app-launch-*.log
+            ${{ runner.temp }}/attn-real-app-harness/**/native-*.log
+            ${{ runner.temp }}/attn-real-app-harness/**/fixture.log
+            ${{ runner.temp }}/attn-real-app-harness/**/other-fixture.log
+            ${{ runner.temp }}/attn-real-app-harness/**/*idle*.txt
             ${{ runner.temp }}/attn-real-app-harness/daemon/*.log
 
       - name: Upload shard result
@@ -937,8 +941,8 @@ jobs:
           instance: ${{ env.ATTN_INSTANCE }}
           archive: ${{ steps.build-app.outputs.archive }}
 
-      - name: Run native clipboard scenario
-        run: pnpm --dir app run real-app:serial-matrix -- --scenario terminal-block-copy
+      - name: Run native clipboard and capture scenarios
+        run: pnpm --dir app run real-app:serial-matrix -- --scenario terminal-block-copy --scenario quick-capture
 
       - name: Require executed macOS coverage
         run: |
@@ -948,6 +952,7 @@ jobs:
           const { results } = JSON.parse(fs.readFileSync(`${process.env.ATTN_REAL_APP_ARTIFACTS_DIR}/last-matrix.json`, 'utf8'));
           assert.deepEqual(results.map(({ id, code, skipped = false }) => ({ id, code, skipped })), [
             { id: 'terminal-block-copy', code: 0, skipped: false },
+            { id: 'quick-capture', code: 0, skipped: false },
           ]);
           NODE
 
@@ -971,6 +976,7 @@ jobs:
           path: |
             ${{ runner.temp }}/attn-real-app-harness/**/*.txt
             ${{ runner.temp }}/attn-real-app-harness/**/*.png
+            ${{ runner.temp }}/attn-real-app-harness/**/*.mp4
             ${{ runner.temp }}/attn-real-app-harness/**/*.json
             ${{ runner.temp }}/attn-real-app-harness/**/app-launch-*.log
             ${{ runner.temp }}/attn-real-app-harness/daemon/*.log

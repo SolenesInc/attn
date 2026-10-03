@@ -52,6 +52,7 @@ const (
 	SettingAutoSettleArmSeconds          = "auto_settle_arm_seconds"
 	SettingAutoSettleCountdownSeconds    = "auto_settle_countdown_seconds"
 	SettingKeybindingsConfig             = "keybindings_config"
+	SettingCaptureShortcut               = "capture.shortcut"
 	SettingNewSessionYoloPrefix          = "new_session_yolo_"
 	SettingNewSessionDestinationPrefix   = "new_session_destination_"
 	DestinationNewWorktree               = "new_worktree"
@@ -486,6 +487,8 @@ func (d *Daemon) validateSetting(key, value string) error {
 		return validateEditorSetting(value)
 	case SettingNewSessionAgent:
 		return d.validateNewSessionAgent(value)
+	case SettingCaptureShortcut:
+		return nil
 	case SettingTheme:
 		return validateTheme(value)
 	case SettingSharedPTYHostEnabled:

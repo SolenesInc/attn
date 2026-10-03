@@ -173,6 +173,35 @@ agent (or a plain shell), pick a directory, go.
 Every binding is customizable. Press **Cmd+/** in the app for the full,
 always-current list, and "Edit shortcuts" there to remap any of them.
 
+### Quick Capture on Mac
+
+Press **Control+Option+Space** from another app to jot a note for your crew.
+Quick Capture opens over the current Space, including full-screen apps. Type,
+paste an image, or drop image files into the note. Remove an image with its
+preview's remove button. **Enter** sends; **Shift+Enter** inserts a newline.
+**Escape** or **Cmd+W** closes the window and keeps your draft.
+
+The Chief is the default recipient. **Cmd+1–4** selects the first four
+recipients, and **Cmd+K** opens the keyboard picker. A sleeping crew member
+wakes for the message. If the Chief is absent, the saved capture waits until
+a Chief is assigned. "Saved" means the daemon owns the note and image bytes.
+An unconfirmed submission keeps its draft and checks its existing identity
+before another send.
+
+Open **Recent** to inspect content, destination and delivery state. Unread
+captures can be cancelled, restored or redirected; failed delivery can be
+retried. A read capture links to its recipient session for a follow-up.
+Inspecting Recent does not mark a message as read.
+
+Use **Cmd+=**, **Cmd+-** and **Cmd+0** to resize or reset text in Quick Capture
+and the main app together. Customized font shortcuts apply in both windows.
+
+Use **Edit shortcuts** in the main app to change or disable the global
+Quick Capture shortcut. macOS system shortcuts and exclusive
+owners are reported as conflicts; shortcuts shared by another app cannot
+always be detected. Named development instances start with the shortcut
+disabled and keep separate drafts, history and preferences.
+
 ### Selecting text in agent terminals
 
 Agents like Claude Code enable terminal mouse tracking, which means a normal
