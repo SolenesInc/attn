@@ -127,6 +127,37 @@ function sidebarBadges() {
 }
 
 describe('agent navigation', () => {
+  it.each(['deep link', 'notification'] as const)('attaches a hidden shared owner for an explicit %s', async (source) => {
+    const a = agent('s1', { agent: 'codex', codex_mode: 'shared' });
+    const b = agent('s2', { agent: 'codex', codex_mode: 'shared' });
+    const workspace = agentWorkspace('s2');
+    workspace.layout!.panes[0] = { ...workspace.layout!.panes[0], codex_resolution: 'resolved' };
+    const { daemon } = await renderApp({ initialState: { sessions: [a, b], workspaces: [workspace] } });
+    daemon.on('session_reopen', () => {
+      const attached = agentWorkspace('s1');
+      attached.layout!.panes[0] = { ...attached.layout!.panes[0], codex_resolution: 'resolved' };
+      return [
+        { event: 'workspace_registered', workspace: attached },
+        { event: 'session_reopen_result', success: true, result: { session_id: a.id, workspace_id: attached.id, pane_id: 'pane-s1', action: 'reopen', directory: a.directory } },
+      ];
+    });
+    if (source === 'deep link') {
+      await gesture(daemon, () => deepLinkTo('s1'));
+    } else {
+      daemon.on('notification_list', () => ({ event: 'notification_list_result', success: true, unread_count: 1, unread_critical_count: 1, notifications: [{
+        id: 'notice', title: 'Agent needs you', body: '', cause: '', detail: '', diagnostic: '', created_at: S1_TURN_OPENED, read_at: '', impact: '', kind: 'agent', severity: 'critical', source_id: a.id, source_kind: 'session', trigger: '',
+        actions: [{ kind: 'open_session', target_id: a.id, label: 'Open agent' }],
+      }] }));
+      await daemon.emit({ event: 'notifications_updated', unread_count: 1, unread_critical_count: 1, critical_title: 'Agent needs you' });
+      await gesture(daemon, () => fireEvent.click(screen.getByRole('button', { name: /unread critical notification/ })));
+      await gesture(daemon, () => fireEvent.click(screen.getByRole('button', { name: /Agent needs you critical/ })));
+      await gesture(daemon, () => fireEvent.click(screen.getByRole('button', { name: 'Open agent' })));
+    }
+    expect(daemon.sentOf('session_reopen')).toEqual([expect.objectContaining({ session_id: a.id, action: 'reopen' })]);
+    expect(document.querySelector('[data-workspace-id="workspace-s1"][data-session-visible="1"]')).toBeInTheDocument();
+    expect(document.querySelector('[data-pane-id="pane-s1"].active')).toBeInTheDocument();
+  });
+
   it('selects a deferred session when its pane becomes available', async () => {
     const { daemon } = await renderQueue({ laidOut: ['s1'] });
 

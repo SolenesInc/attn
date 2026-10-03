@@ -30,6 +30,7 @@ interface Options {
   workspaceViews: ReturnType<typeof useAppSessions>['workspaceViews'];
   attentionQueue: ReturnType<typeof useAttentionQueue>;
   focusWorkspaceLeaf: ReturnType<typeof useSessionWorkspaceController>['focusWorkspaceLeaf'];
+  showError: (message: string) => void;
 }
 export function useAppNavigation({
   activeSessionId,
@@ -38,6 +39,7 @@ export function useAppNavigation({
   workspaceViews,
   attentionQueue,
   focusWorkspaceLeaf,
+  showError,
 }: Options) {
   const {
     view,
@@ -58,6 +60,7 @@ export function useAppNavigation({
     sendWorkspaceSelected,
     sendWorkspaceUndockTile,
     sendSetWorkspaceRank,
+    sendSessionReopen,
   } = useDaemonApi();
   const activeWorkspaceIdRef = useRef<string | null>(null);
 
@@ -69,7 +72,18 @@ export function useAppNavigation({
     forward: navigateAgentHistoryForward,
   } = useAgentNavigation();
 
-  const handleSelectSession = selectAgent;
+  const handleSelectSession = useCallback((sessionId: string) => {
+    const state = useSessionStore.getState();
+    const shared = daemonSessions.some(session => session.id === sessionId && session.codex_mode === 'shared');
+    const displayed = Object.values(state.daemonWorkspaceLayouts).some(snapshot =>
+      snapshot.workspace.agents.some(pane => pane.sessionId === sessionId));
+    if (!shared || displayed) return selectAgent(sessionId);
+    void sendSessionReopen(sessionId, 'reopen').then(result => {
+      if (result.pane_id) selectAgentPane(result.session_id, result.pane_id);
+      else selectAgent(result.session_id);
+    }).catch(error => showError(`Could not open the agent: ${String(error)}`));
+    return false;
+  }, [daemonSessions, selectAgent, selectAgentPane, sendSessionReopen, showError]);
   const selectCreatedSession = useCallback(
     (sessionId: string) => selectAgentPane(sessionId, paneIdForSession(sessionId)),
     [selectAgentPane],
@@ -326,7 +340,6 @@ export function useAppNavigation({
     setFollowNextTurn,
     utilityFocusRequestToken,
     requestTerminalFocus,
-    selectAgent,
     selectAgentPane,
     cancelPendingSelection,
     navigateAgentHistoryBack,

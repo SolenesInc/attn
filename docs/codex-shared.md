@@ -227,8 +227,9 @@ native root snapshots; it does not replay input.
 Traffic from a surviving native view also wakes that reconciliation, so ordinary
 prompts and approval answers restore attention without an unrelated app action.
 
-Hidden shared owners remain available through the ledger's explicit Open another
-view action. Sidebar navigation only focuses existing views. Native approval
+Hidden shared owners remain available through the ledger's Open action. Explicit
+deep links and notification opens also attach a view when none displays the owner.
+Sidebar navigation only focuses existing views. Native approval
 requests keep their original connection routing, so answering in either view
 resolves the same operation.
 
@@ -267,4 +268,5 @@ the workspace remains registered, so the running app clears the pane immediately
 Unresolved and disconnected panes remain visible and closable in their workspace.
 They have no displayed owner and do not create an agent row. Their runtime launch
 context remains durable for lifecycle handling; it is not projected as a sidebar
-identity. The ledger's explicit Open another view action creates an attachment.
+identity. Explicit owner navigation attaches a view; the ledger offers Open when
+none displays the owner and Open another view when one already does.

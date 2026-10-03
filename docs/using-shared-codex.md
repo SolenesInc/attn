@@ -31,6 +31,8 @@ selectable A rows.
 Open **Sessions and worktrees** (Command-Shift-L on macOS), find a live shared
 agent, and choose **Open** if it has no terminal, or **Open another view** to
 add a terminal to an agent already displayed. Both views show the same conversation.
+Deep links and notification actions that open an agent also attach a terminal
+when it has no displayed view.
 An approval visible in both views is one approval; answer it in either view.
 Names and costs belong to the agent, so an extra view doesn't add another cost
 source. Native `/rename` and Attn's rename action update the same name.

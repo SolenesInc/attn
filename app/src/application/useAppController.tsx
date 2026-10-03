@@ -168,11 +168,11 @@ export function useAppController({
     workspaceViews,
     attentionQueue,
     focusWorkspaceLeaf,
+    showError,
   });
   const {
     view,
     setView,
-    selectAgent,
     selectAgentPane,
     cancelPendingSelection,
     navigateAgentHistoryBack,
@@ -269,7 +269,7 @@ export function useAppController({
   const { seeds } = useDaemonStore();
   const agentAvailability = useMemo(() => getAgentAvailability(settings), [settings]);
 
-  useAppDeepLinks({ selectAgent, createWorkspaceSession, selectCreatedSession });
+  useAppDeepLinks({ selectAgent: handleSelectSession, createWorkspaceSession, selectCreatedSession });
 
   const onReopened = useCallback(() => setSessionsOpen(false), [setSessionsOpen]);
   const sessionLifecycle = useSessionLifecycle({
