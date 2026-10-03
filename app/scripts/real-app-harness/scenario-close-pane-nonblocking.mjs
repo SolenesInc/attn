@@ -57,8 +57,9 @@ function daemonLog(dataDir) {
   return fs.existsSync(logPath) ? fs.readFileSync(logPath, 'utf8') : '';
 }
 
-async function waitForTeardownLog(dataDir, sessionId, timeoutMs = 8_000) {
-  const needles = [`session teardown escalated for ${sessionId}:`, `session teardown failed for ${sessionId}:`];
+// The PTY worker names the terminal it escalates; the daemon names the session whose teardown failed.
+async function waitForTeardownLog(dataDir, sessionId, terminalId, timeoutMs = 8_000) {
+  const needles = [`session teardown escalated for ${terminalId}:`, `session teardown failed for ${sessionId}:`];
   const deadline = Date.now() + timeoutMs;
   while (Date.now() < deadline) {
     const line = daemonLog(dataDir).split('\n').find((entry) => needles.some((needle) => entry.includes(needle)));
@@ -173,7 +174,7 @@ async function main() {
     });
 
     const escalationLog = await runner.step('teardown_finishes_later', async () => {
-      const line = await waitForTeardownLog(dataDir, sessionId);
+      const line = await waitForTeardownLog(dataDir, sessionId, pane.runtimeId);
       runner.writeText('teardown-escalation.log', `${line}\n`);
       return line;
     });

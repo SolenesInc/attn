@@ -238,10 +238,10 @@ async function waitForDaemonReady(binary, daemonEnv) {
   }, 'instance daemon');
 }
 
-async function waitForRegisteredAgentExit(dataDir, sessionID, cwd) {
+async function waitForRegisteredAgentExit(dataDir, terminalID, cwd) {
   await poll(
-    () => (registeredAgentPid(dataDir, sessionID, cwd) === null ? true : null),
-    `registered agent for session ${sessionID} to exit`,
+    () => (registeredAgentPid(dataDir, terminalID, cwd) === null ? true : null),
+    `registered agent for terminal ${terminalID} to exit`,
     RESTART_RUN_TIMEOUT_MS,
   );
 }
@@ -253,8 +253,9 @@ async function closeDeliveredSessions(wsUrl, dataDir, cwd, sessionIDs) {
   const observer = new DaemonObserver({ wsUrl });
   await observer.connect();
   try {
+    const terminals = [...targets].map((sessionID) => observer.terminalOf(sessionID));
     const closed = await observer.unregisterMatchingSessions((session) => targets.has(session.id));
-    for (const sessionID of targets) await waitForRegisteredAgentExit(dataDir, sessionID, cwd);
+    for (const terminalID of terminals) await waitForRegisteredAgentExit(dataDir, terminalID, cwd);
     return closed;
   } finally {
     await observer.close();

@@ -961,7 +961,7 @@ async function main() {
     });
 
     await runner.step('a_dead_agent_breaks_through_its_own_snooze', async () => {
-      const pid = registeredAgentPid(dataDir, alpha.sessionId, alpha.cwd);
+      const pid = registeredAgentPid(dataDir, observer.terminalOf(alpha.sessionId), alpha.cwd);
       runner.assert(pid, `the registry names a live agent process in ${alpha.cwd}: ${pid}`);
       // SIGKILL, not a clean exit: a clean exit is auto-close's business and
       // would take the row away instead of ringing.

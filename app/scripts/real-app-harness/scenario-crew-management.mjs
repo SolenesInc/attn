@@ -570,8 +570,9 @@ try {
     await waitForDom('[data-testid="crew-panel"]', { textIncludes: 'New day started' });
     const bound = [...observer.sessionsById.values()].filter((session) => session.crew_member === awake);
     runner.assert(bound.length === 1 && bound[0].id === successor, 'exactly one live session owns the member binding', { bound, completed });
-    const launch = transcriptLaunches(awakeHome).find((entry) => entry.id === successor);
-    runner.assert(Boolean(launch), 'the registered successor wrote its launch receipt', { successor });
+    const successorTerminal = observer.terminalOf(successor);
+    const launch = transcriptLaunches(awakeHome).find((entry) => entry.id === successorTerminal);
+    runner.assert(Boolean(launch), 'the registered successor wrote its launch receipt', { successor, successorTerminal });
     const argv = launch.launch?.argv ?? [];
     runner.assert(argv.includes('--model') && argv[argv.indexOf('--model') + 1] === 'crew-claude', 'the saved model reaches the successor argv', { argv });
     runner.assert(argv.includes('--effort') && argv[argv.indexOf('--effort') + 1] === 'low', 'the reconnect-saved effort reaches the successor argv', { argv });

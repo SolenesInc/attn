@@ -62,9 +62,10 @@ function seedByID(binary, seedID, env) {
 }
 
 async function closeProbeSession(client, observer, dataDir, sessionID, cwd) {
+  const terminal = observer.terminalOf(sessionID);
   await cleanupSessionViaAppClose(client, observer, sessionID, RESTART_READY_TIMEOUT_MS);
   await poll(
-    () => (registeredAgentPid(dataDir, sessionID, cwd) === null ? true : null),
+    () => (registeredAgentPid(dataDir, terminal, cwd) === null ? true : null),
     `registered agent for session ${sessionID} to exit`,
     RESTART_READY_TIMEOUT_MS,
   );

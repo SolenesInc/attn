@@ -105,7 +105,7 @@ async function main() {
           await observer.waitFor(() => observer.getSession(sessionId), 'delegated beta visible');
           await observer.waitFor(() => observer.getSession(sessionId)?.state === 'idle', 'delegation opening turn stopped');
           const shared = await client.request('get_workspace', { sessionId });
-          const delegatedPane = shared.panes.find((pane) => pane.runtimeId === sessionId);
+          const delegatedPane = shared.panes.find((pane) => pane.sessionId === sessionId);
           runner.assert(delegatedPane, 'delegated agent has a pane');
           observer.send({
             cmd: 'workspace_layout_move_leaf_to_new_workspace',
