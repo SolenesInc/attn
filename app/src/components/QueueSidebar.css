@@ -286,6 +286,10 @@
   border-color: var(--accent);
 }
 
+.queue-sidebar .automation-runs {
+  margin-top: 16px;
+}
+
 .queue-desktop-strip {
   display: flex;
   flex-direction: column;

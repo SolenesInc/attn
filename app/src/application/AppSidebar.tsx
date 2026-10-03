@@ -3,6 +3,7 @@ import { Sidebar } from '../components/Sidebar';
 import { useDaemonApi } from '../contexts/DaemonApiContext';
 import { useDaemonStore } from '../store/daemonSessions';
 import { useProfilesStore } from '../store/profiles';
+import { useSessionStore } from '../store/sessions';
 import { BUILD_INSTANCE } from '../utils/buildInstance';
 import { areSidebarHarnessLogosEnabled } from '../utils/sidebarHarnessLogos';
 import {
@@ -50,6 +51,7 @@ export function AppSidebar() {
     [desktops],
   );
   const shownAgentId = useAgentOnScreen();
+  const focusRequest = useSessionStore((state) => state.focusRequest);
   const {
     desktopTileContents,
     sendRenameSession,
@@ -102,6 +104,7 @@ export function AppSidebar() {
       desktops={desktopViews}
       visualIndexByDesktopId={slotIndexByDesktopId}
       selectedId={shownAgentId}
+      selectionRequest={focusRequest}
       selectedDesktopId={currentDesktopId}
       selectedTile={selectedTile}
       tileContents={desktopTileContents}

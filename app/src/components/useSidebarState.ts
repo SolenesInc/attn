@@ -15,6 +15,7 @@ export function useSidebarState({
   desktops,
   visualIndexByDesktopId,
   selectedId,
+  selectionRequest = null,
   selectedDesktopId,
   selectedTile = null,
   tileContents = EMPTY_TILE_CONTENTS,
@@ -87,6 +88,9 @@ export function useSidebarState({
 
   const [agentFilter, setAgentFilter] = useState('');
   if (!agentListOpen && agentFilter) setAgentFilter('');
+  const [expandedAutomationGroups, setExpandedAutomationGroups] = useState<Set<number>>(
+    () => new Set(),
+  );
   const [renameTarget, setRenameTarget] = useState<{
     kind: 'session' | 'desktop';
     id: string;
@@ -156,6 +160,17 @@ export function useSidebarState({
   };
 
   const automationGroups = useMemo(() => automationRunGroups(desktops, Date.now()), [desktops]);
+  const [seenSelection, setSeenSelection] = useState<{
+    id: string | null;
+    request: SidebarProps['selectionRequest'];
+  }>({ id: null, request: null });
+  if (selectedId !== seenSelection.id || (selectionRequest && selectionRequest !== seenSelection.request)) {
+    setSeenSelection({ id: selectedId, request: selectionRequest ?? seenSelection.request });
+    const selectedRunGroup = automationGroups.find((group) => group.runs.some((run) => run.id === selectedId));
+    if (selectedRunGroup && !expandedAutomationGroups.has(selectedRunGroup.id)) {
+      setExpandedAutomationGroups(new Set(expandedAutomationGroups).add(selectedRunGroup.id));
+    }
+  }
   const allSessions = useMemo(() => {
     const byId = new Map<string, LocalSession>();
     for (const desktopView of desktops) {
@@ -167,6 +182,18 @@ export function useSidebarState({
   const rowDelegation = (session: LocalSession) => ({
     delegates: delegates.get(session.id) ?? [],
   });
+  const toggleAutomationGroup = (definitionId: number) => {
+    setExpandedAutomationGroups((current) => {
+      const next = new Set(current);
+      if (next.has(definitionId)) {
+        next.delete(definitionId);
+      } else {
+        next.add(definitionId);
+      }
+      return next;
+    });
+  };
+
   const visibleDesktops = desktops;
   const canAcceptLeafDrag = (desktopView: SidebarDesktop) =>
     Boolean(
@@ -277,6 +304,7 @@ export function useSidebarState({
     homeActive,
     onToggleCollapse,
     sessionWantsAttention,
+    expandedAutomationGroups,
     renameTarget,
     setRenameTarget,
     sessionActionsTarget,
@@ -290,6 +318,7 @@ export function useSidebarState({
     allSessions,
     delegates,
     rowDelegation,
+    toggleAutomationGroup,
     visibleDesktops,
     visibleVisualOrder,
     canAcceptLeafDrag,

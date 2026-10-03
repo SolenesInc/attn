@@ -11,7 +11,7 @@ import { SidebarPopovers } from './SidebarChrome';
 import { useSidebarContext } from './SidebarContext';
 import { useDesktopChipDrop } from './useDesktopChipDrop';
 import { CollapseIcon, HomeIcon, PlusIcon } from './SidebarIcons';
-import { SidebarDesktopOverview } from './SidebarDesktops';
+import { SidebarAutomationGroups, SidebarDesktopOverview } from './SidebarDesktops';
 import { useWaitingFit } from './useWaitingFit';
 
 const WALK_ROW_SELECTOR = '.queue-row-select, .sidebar-row-select';
@@ -90,6 +90,7 @@ export function QueueSidebar() {
         <HomeRow />
         <CrewBlock />
         <WaitingCard leadRef={leadRef} leadCount={leadCount} />
+        <SidebarAutomationGroups />
       </div>
       <DesktopStrip />
       <SidebarPopovers />

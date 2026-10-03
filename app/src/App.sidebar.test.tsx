@@ -241,6 +241,33 @@ describe('App sidebar', () => {
     });
   });
 
+  it('keeps grouped runs in the queue sidebar, opens the selected run group and settles a run', async () => {
+    const { daemon } = await launch({
+      settings: { queue_mode_enabled: 'true' },
+      sessions: [
+        daemonSession('manual'),
+        daemonSession('run-a', { automation: REVIEW_RUN, turn_owed: true }),
+        daemonSession('run-b', { automation: { ...REVIEW_RUN, run_id: 'run-2' }, turn_owed: true }),
+      ],
+    });
+    const header = screen.getByTestId('sidebar-automation-header-1');
+    expect(header).toHaveAttribute('aria-expanded', 'false');
+    expect(header.querySelector('.automation-session-count')).toHaveTextContent('2');
+    expect(screen.queryByTestId('sidebar-session-run-a')).toBeNull();
+    await gesture(daemon, () => pressShortcut('session.nextRun'));
+    expect(header).toHaveAttribute('aria-expanded', 'true');
+    expect(row('run-a').getByText('GPT Sol medium')).toBeInTheDocument();
+    expect(screen.queryByTestId('queue-turn-run-a')).toBeNull();
+    expect(screen.queryByTestId('queue-settled-run-a')).toBeNull();
+    await gesture(daemon, () => fireEvent.click(screen.getByTestId('session-settle-run-b')));
+    expect(daemon.sentOf('settle_turn')).toEqual([{ cmd: 'settle_turn', session_id: 'run-b' }]);
+    await gesture(daemon, () => fireEvent.click(header));
+    expect(header).toHaveAttribute('aria-expanded', 'false');
+    await gesture(daemon, () => fireEvent.click(screen.getByTestId('sidebar-runs-needing-you')));
+    expect(header).toHaveAttribute('aria-expanded', 'true');
+    expect(screen.getByTestId('sidebar-session-run-a')).toBeInTheDocument();
+  });
+
   describe('desktops', () => {
     it('shows each desktop’s shortcut slot on its header, and not on its rows', async () => {
       await launch({

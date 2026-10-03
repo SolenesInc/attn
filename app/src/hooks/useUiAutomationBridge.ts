@@ -2222,6 +2222,7 @@ export function useUiAutomationBridge({
         const chiefRow = band?.querySelector('[data-testid^="queue-chief-"]');
         const agentListToggle = band?.querySelector('[data-testid="queue-agents-toggle"]');
         const snoozedHeader = band?.querySelector('[data-testid="queue-snoozed-header"]');
+        const automationGroups = Array.from(document.querySelectorAll('[data-automation-id]'));
         const bar = document.querySelector('[data-testid="queue-bar"]');
         const runsChip = bar?.querySelector('[data-testid="queue-bar-runs"]');
         const peekRows = (testId: string) => {
@@ -2274,6 +2275,13 @@ export function useUiAutomationBridge({
               .filter((row) => row !== snoozedHeader)
               .map((row) => readRow(row, 'queue-snoozed-')),
           },
+          automations: automationGroups.map((group) => ({
+            id: Number(group.getAttribute('data-automation-id')),
+            header: group.querySelector('.automation-session-header')?.textContent?.trim() || '',
+            expanded: group.querySelector('.automation-session-header')?.getAttribute('aria-expanded') === 'true',
+            sessionIds: Array.from(group.querySelectorAll('[data-testid^="sidebar-session-"]'))
+              .map((row) => (row.getAttribute('data-testid') || '').slice('sidebar-session-'.length)),
+          })),
           treeSessionIds: Array.from(document.querySelectorAll('.session-list [data-testid^="sidebar-session-"]'))
             .map((row) => (row.getAttribute('data-testid') || '').slice('sidebar-session-'.length)),
           treeDesktopIds: Array.from(document.querySelectorAll('.session-list [data-testid^="sidebar-desktop-"]'))
