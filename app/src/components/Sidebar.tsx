@@ -1,3 +1,6 @@
+import { useRef } from 'react';
+import { useRevealSelection } from './useRevealSelection';
+import { treeSelectionKey } from './sidebarModel';
 import { formatShortcut } from '../shortcuts/formatShortcut';
 import { CriticalNotificationStrip } from './CriticalNotificationStrip';
 import { QueueBar } from './QueueBar';
@@ -26,6 +29,10 @@ export function Sidebar(props: SidebarProps) {
 }
 
 function SidebarExpanded() {
+  const context = useSidebarContext();
+  const listRef = useRef<HTMLDivElement>(null);
+  const desktopOrder = JSON.stringify(context.visibleDesktops.map((desktop) => desktop.id));
+  const { onClickCapture } = useRevealSelection(listRef, treeSelectionKey(context), desktopOrder);
   const {
     criticalNotifications,
     onOpenNotifications,
@@ -38,7 +45,7 @@ function SidebarExpanded() {
     setNewDesktopDropActive,
     reorderDrag,
     sessionDragGhost,
-  } = useSidebarContext();
+  } = context;
   return (
     <div
       className={`sidebar ${harnessLogosEnabled ? '' : 'sidebar--hide-harness-logos'}`.trim()}
@@ -66,7 +73,7 @@ function SidebarExpanded() {
         <span className="sidebar-home-shortcut">{formatShortcut('session.goToDashboard')}</span>
       </button>
 
-      <div className={`session-list ${reorderDrag ? 'session-list--reordering' : ''}`.trim()}>
+      <div ref={listRef} onClickCapture={onClickCapture} className={`session-list ${reorderDrag ? 'session-list--reordering' : ''}`.trim()}>
         <SidebarSleepingCrew />
         <SidebarDesktopOverview />
         <SidebarDesktopList />
