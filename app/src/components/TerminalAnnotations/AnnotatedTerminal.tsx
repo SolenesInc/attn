@@ -577,11 +577,7 @@ export const AnnotatedTerminal = forwardRef<GhosttyTerminalHandle, AnnotatedTerm
                 const delivered = deliveredUnchanged(stored.annotations, sending);
                 const kept = stored.annotations.filter((entry) => !delivered.has(entry.id));
                 const keptNote = sendingNote && stored.note.trim() === sendingNote ? '' : stored.note;
-                const generation = stored.generation + 1;
-                const write = kept.length > 0 || keptNote.trim()
-                  ? annotationApi.saveAnnotations(target, kept, keptNote, generation)
-                  : annotationApi.clearAnnotations(target, generation);
-                return write.then(() => undefined);
+                return annotationApi.saveAnnotations(target, kept, keptNote, stored.generation + 1);
               })
               .catch(() => {
               });
