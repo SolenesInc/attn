@@ -539,6 +539,32 @@ describe('Quick Capture app wire behavior', () => {
 
   });
 
+  it('keeps read receipts while initial and older history pages are in flight', async () => {
+    const firstId = crypto.randomUUID(), olderId = crypto.randomUUID();
+    const { daemon } = await captureApp(daemon => daemon.on('quick_capture_list', () => undefined));
+    await gesture(daemon, () => fireEvent.click(screen.getByRole('button', { name: 'Recent messages' })));
+    const initial = daemon.sentOf('quick_capture_list')[0];
+    await act(async () => {
+      daemon.emit({ event: 'quick_capture_read', profile_id: DEFAULT_PROFILE_ID, capture_id: firstId, read_at: '2026-10-01T12:02:00Z' });
+      daemon.replyTo(initial, { event: 'quick_capture_result', request_id: initial.request_id, profile_id: DEFAULT_PROFILE_ID,
+        success: true, result: { list: { items: [record({ capture_id: firstId, content: 'Newest message' })], draft_assets: [], next_cursor: firstId } } });
+    });
+    await daemon.idle();
+    const recent = screen.getByRole('region', { name: 'Recent messages' });
+    expect(within(recent).getByText(/^Read$/)).toBeInTheDocument();
+    await gesture(daemon, () => fireEvent.click(within(recent).getByRole('button', { name: 'Show older messages' })));
+    const older = daemon.sentOf('quick_capture_list')[1];
+    expect(older.cursor).toBe(firstId);
+    await act(async () => {
+      daemon.emit({ event: 'quick_capture_read', profile_id: DEFAULT_PROFILE_ID, capture_id: olderId, read_at: '2026-10-01T12:03:00Z' });
+      daemon.replyTo(older, { event: 'quick_capture_result', request_id: older.request_id, profile_id: DEFAULT_PROFILE_ID,
+        success: true, result: { list: { items: [record({ capture_id: olderId, content: 'Older message' })], draft_assets: [] } } });
+    });
+    await daemon.idle();
+    expect(within(recent).getAllByText(/^Read$/)).toHaveLength(2);
+    expect(within(recent).queryByText(/^Sent$/)).toBeNull();
+  });
+
   it('resends retained image bytes after a failed draft discard', async () => {
     const captureId = crypto.randomUUID(), imageId = crypto.randomUUID(), secondId = crypto.randomUUID();
     native.draft = { id: captureId, text: 'Keep this message', mailbox: 'chief', uncertain: false,
