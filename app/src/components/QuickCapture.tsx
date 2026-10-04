@@ -7,7 +7,7 @@ import { readImage } from '@tauri-apps/plugin-clipboard-manager';
 import { QuickCaptureAttachmentPreview, type QuickCaptureAttachment, type AttachmentOrigin, type AttachmentMotion } from './QuickCaptureAttachmentPreview';
 import './QuickCapture.css';
 import { QuickCaptureHistory } from './QuickCaptureHistory';
-import { createQuickCaptureBridge, EMPTY_HOST_STATE, type QuickCaptureClient, type QuickCaptureHostState, type QuickCaptureItem, type QuickCaptureDraft } from '../quickCapture/client';
+import { createQuickCaptureBridge, EMPTY_HOST_STATE, QUICK_CAPTURE_READ, type QuickCaptureReadReceipt, type QuickCaptureClient, type QuickCaptureHostState, type QuickCaptureItem, type QuickCaptureDraft } from '../quickCapture/client';
 import { QuickCaptureWorkQueue } from '../quickCapture/workQueue';
 import { useQuickCaptureHistory } from '../quickCapture/useQuickCaptureHistory';
 import { quickCaptureDraftCache, newQuickCaptureDraft } from '../quickCapture/draft';
@@ -62,7 +62,13 @@ function QuickCaptureForProfile({ client: suppliedClient, hostState: host, workQ
   const [mailbox, setMailbox] = useState('chief');
   const [files, setFiles] = useState<Attachment[]>([]);
   const [error, setError] = useState('');
-  const { history, nextCursor, loading: loadingRecent, error: historyError, refresh: refreshRecent } = useQuickCaptureHistory(client.current, recent, host.connected, host.readReceipt);
+  const { history, nextCursor, loading: loadingRecent, error: historyError, refresh: refreshRecent, markRead } = useQuickCaptureHistory(client.current, recent, host.connected);
+  useEffect(() => {
+    const listener = listen<QuickCaptureReadReceipt>(QUICK_CAPTURE_READ, ({ payload }) => {
+      if (payload.profileId === host.profileId) markRead(payload);
+    });
+    return () => { void listener.then(unlisten => unlisten()); };
+  }, [host.profileId]);
   const binding = host.binding ?? '';
   const [dragging, setDragging] = useState(false);
   const [picker, setPicker] = useState(false);
@@ -82,7 +88,7 @@ function QuickCaptureForProfile({ client: suppliedClient, hostState: host, workQ
   const latency = useRef<{ openedAt: number; focusedAt: number; nativeShowToFocusMs: number }[]>([]);
   const editor = useRef<HTMLTextAreaElement>(null);
   const historyView = useRef<HTMLElement>(null);
-  const noteSelection = useRef<{ start: number; end: number; direction: 'forward' | 'backward' | 'none' }>(null);
+  const messageSelection = useRef<{ start: number; end: number; direction: 'forward' | 'backward' | 'none' }>(null);
   const composing = useRef(false);
   const sending = useRef(false);
   const state = useRef({ text, mailbox, files, saved, binding, uncertain, restored });
@@ -282,10 +288,10 @@ function QuickCaptureForProfile({ client: suppliedClient, hostState: host, workQ
     else if (recent) historyView.current?.focus();
     else if (editor.current) {
       editor.current.focus();
-      if (noteSelection.current) {
-        const { start, end, direction } = noteSelection.current;
+      if (messageSelection.current) {
+        const { start, end, direction } = messageSelection.current;
         editor.current.setSelectionRange(start, end, direction);
-        noteSelection.current = null;
+        messageSelection.current = null;
       }
     }
   }, [picker, recent]);
@@ -311,7 +317,7 @@ function QuickCaptureForProfile({ client: suppliedClient, hostState: host, workQ
     {!recent && <header className="capture-top" data-tauri-drag-region>
       <span>To</span>
       <button aria-label="Recent messages" className="capture-recent-toggle" aria-pressed={recent} onClick={() => {
-        if (!recent && editor.current) noteSelection.current = { start: editor.current.selectionStart, end: editor.current.selectionEnd, direction: editor.current.selectionDirection };
+        if (!recent && editor.current) messageSelection.current = { start: editor.current.selectionStart, end: editor.current.selectionEnd, direction: editor.current.selectionDirection };
         settleEntrances(); setRecent(!recent); setPicker(false);
       }}>Recent</button>
       <button aria-label="Send to" disabled={uncertain || submitting} title="Send to · ⌘K" className="capture-mailbox" aria-haspopup="listbox" aria-expanded={picker} onClick={openPicker}>To: {label(mailbox)} <ChevronIcon /></button>

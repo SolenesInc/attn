@@ -1,5 +1,7 @@
 import { Toast } from './components/Toast';
-import { invoke } from '@tauri-apps/api/core';
+import { invoke, isTauri } from '@tauri-apps/api/core';
+import { emitTo } from '@tauri-apps/api/event';
+import { QUICK_CAPTURE_READ } from './quickCapture/client';
 import { useCallback, useEffect, useState } from 'react';
 import './App.css';
 import { useQuickCaptureHost } from './application/useQuickCaptureHost';
@@ -25,7 +27,6 @@ import { hideBootSplash } from './utils/bootSplash';
 import { bumpFsChangeSignal } from './utils/fsChangeSignals';
 
 function App() {
-  const [captureReadReceipt, setCaptureReadReceipt] = useState<{ captureId: string; readAt: string }>();
   const [settings, setSettings] = useState<Record<string, string>>({});
   const [settingError, setSettingError] = useState<string | null>(null);
   const [daemonPlugins, setDaemonPlugins] = useState<DaemonPlugin[]>([]);
@@ -93,7 +94,7 @@ function App() {
   }, []);
 
   const daemon = useDaemonSocket({
-    onQuickCaptureRead: setCaptureReadReceipt,
+    onQuickCaptureRead: receipt => { if (isTauri()) void emitTo('capture', QUICK_CAPTURE_READ, receipt); },
     onSessionsUpdate: (sessions) => {
       useSessionStore.getState().syncFromDaemonSessions(sessions);
       setDaemonSessions(sessions);
@@ -124,7 +125,7 @@ function App() {
     onWorktreesUpdate: setWorktrees,
   });
 
-  const captureHost = useQuickCaptureHost(daemon, settings, captureReadReceipt);
+  const captureHost = useQuickCaptureHost(daemon, settings);
 
   const {
     getMarkdownAnnotations,

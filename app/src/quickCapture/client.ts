@@ -3,6 +3,7 @@ import { emitTo, listen } from '@tauri-apps/api/event';
 export const QUICK_CAPTURE_STATE = 'attn://capture/state';
 export const QUICK_CAPTURE_REQUEST = 'attn://capture/request';
 export const QUICK_CAPTURE_RESULT = 'attn://capture/result';
+export const QUICK_CAPTURE_READ = 'attn://capture/read';
 export const QUICK_CAPTURE_READY = 'attn://capture/ready';
 export const QUICK_CAPTURE_FONT = 'attn:capture-font';
 export const QUICK_CAPTURE_SHORTCUT_SETTING = 'capture.shortcut';
@@ -18,12 +19,12 @@ export interface QuickCaptureItem {
 }
 export interface QuickCaptureHostState {
   profileId: string; connected: boolean; mailboxes: QuickCaptureMailbox[]; binding: string | null;
-  activeBinding: string | null; shortcutError?: string; connectionError?: string; readReceipt?: QuickCaptureReadReceipt;
+  activeBinding: string | null; shortcutError?: string; connectionError?: string;
   fontScale?: number; keybindings?: string;
 }
 export interface QuickCaptureDraftAsset { captureId: string; id: string; name: string; state: string }
 export interface QuickCaptureHistory { nextCursor?: string; items: QuickCaptureItem[]; assets: QuickCaptureDraftAsset[] }
-export interface QuickCaptureReadReceipt { captureId: string; readAt: string }
+export interface QuickCaptureReadReceipt { profileId: string; captureId: string; readAt: string }
 export interface QuickCaptureDeliveryClient {
   stage(draft: QuickCaptureDraft): Promise<void>;
   submit(submission: QuickCaptureSubmission): Promise<QuickCaptureItem>;

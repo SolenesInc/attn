@@ -501,7 +501,10 @@ describe('Quick Capture app wire behavior', () => {
     expect(daemon.sentOf('agent_inbox')).toEqual([]);
     expect(quickCaptureTraffic(daemon).map(command => command.cmd)).toEqual(['quick_capture_list']);
 
-    await act(async () => daemon.emit({ event: 'quick_capture_read', profile_id: DEFAULT_PROFILE_ID, capture_id: firstId, read_at: '2026-10-01T12:02:00Z' }));
+    await act(async () => {
+      daemon.emit({ event: 'quick_capture_read', profile_id: DEFAULT_PROFILE_ID, capture_id: firstId, read_at: '2026-10-01T12:02:00Z' });
+      daemon.emit({ event: 'quick_capture_read', profile_id: DEFAULT_PROFILE_ID, capture_id: crypto.randomUUID(), read_at: '2026-10-01T12:02:00Z' });
+    });
     await daemon.idle();
     expect(daemon.sentOf('quick_capture_list')).toHaveLength(1);
     expect(within(recent).getAllByText(/^Read$/)).toHaveLength(2);

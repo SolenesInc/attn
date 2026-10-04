@@ -1,7 +1,7 @@
 import { useEffect, useLayoutEffect, useRef, useState } from 'react';
 import type { QuickCaptureDeliveryClient, QuickCaptureItem, QuickCaptureReadReceipt } from './client';
 
-export function useQuickCaptureHistory(client: QuickCaptureDeliveryClient | undefined, open: boolean, connected: boolean, readReceipt?: QuickCaptureReadReceipt) {
+export function useQuickCaptureHistory(client: QuickCaptureDeliveryClient | undefined, open: boolean, connected: boolean) {
   const [history, setHistory] = useState<QuickCaptureItem[]>([]);
   const [nextCursor, setNextCursor] = useState<string>();
   const [loading, setLoading] = useState(false);
@@ -60,12 +60,11 @@ export function useQuickCaptureHistory(client: QuickCaptureDeliveryClient | unde
     }
     if (client && connected) void refresh();
   }, [client, open, connected]);
-  useEffect(() => {
-    if (!readReceipt) return;
-    const updated = current.current.history.map(item => item.id === readReceipt.captureId ? { ...item, readAt: readReceipt.readAt } : item);
+  function markRead(receipt: QuickCaptureReadReceipt) {
+    const updated = current.current.history.map(item => item.id === receipt.captureId ? { ...item, readAt: receipt.readAt } : item);
     current.current.history = updated;
     setHistory(updated);
-  }, [readReceipt]);
+  }
   useEffect(() => () => { generation.current++; }, []);
-  return { history, nextCursor, loading, error, refresh };
+  return { history, nextCursor, loading, error, refresh, markRead };
 }

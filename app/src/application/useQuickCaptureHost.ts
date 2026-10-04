@@ -10,12 +10,12 @@ import { isMacLikePlatform } from '../shortcuts/platform';
 import {
   QUICK_CAPTURE_READY, QUICK_CAPTURE_REQUEST, QUICK_CAPTURE_RESULT, QUICK_CAPTURE_STATE, QUICK_CAPTURE_SHORTCUT_SETTING, QUICK_CAPTURE_FONT,
   DEFAULT_QUICK_CAPTURE_SHORTCUT, EMPTY_HOST_STATE,
-  type QuickCaptureReadReceipt, type QuickCaptureHostState, type QuickCaptureRequest,
+  type QuickCaptureHostState, type QuickCaptureRequest,
 } from '../quickCapture/client';
 
 interface NativeStatus { binding: string | null; active: string | null; error?: string }
 
-export function useQuickCaptureHost(daemon: DaemonApi, settings: Record<string, string>, readReceipt?: QuickCaptureReadReceipt) {
+export function useQuickCaptureHost(daemon: DaemonApi, settings: Record<string, string>) {
   const profileId = useProfilesStore(store => store.selectedProfileId) ?? '';
   const delivery = useMemo(() => quickCaptureDaemonClient(daemon, profileId), [daemon.sendQuickCaptureRequest, profileId]);
   const supported = isMacLikePlatform() && isTauri();
@@ -31,7 +31,7 @@ export function useQuickCaptureHost(daemon: DaemonApi, settings: Record<string, 
     mailboxes: [EMPTY_HOST_STATE.mailboxes[0], ...crew.filter(member => member.profile_id === profileId).map(member => ({
       id: member.id, name: crewDisplayName(member.id), detail: member.binding_session ? 'Awake' : 'Asleep',
     }))],
-    readReceipt, connectionError: daemon.connectionError ?? undefined,
+    connectionError: daemon.connectionError ?? undefined,
     binding: native.binding, activeBinding: native.active, shortcutError: native.error,
     fontScale: Number(settings.uiScale) || 1, keybindings: settings.keybindings_config,
   };
@@ -112,6 +112,6 @@ export function useQuickCaptureHost(daemon: DaemonApi, settings: Record<string, 
   }, [settings[QUICK_CAPTURE_SHORTCUT_SETTING], nativeReady, state.connected, instance]);
   useEffect(() => {
     if (supported) void emitTo('capture', QUICK_CAPTURE_STATE, state);
-  }, [profileId, state.connected, state.connectionError, crew, native, readReceipt, state.fontScale, state.keybindings]);
+  }, [profileId, state.connected, state.connectionError, crew, native, state.fontScale, state.keybindings]);
   return { state, setBinding };
 }
