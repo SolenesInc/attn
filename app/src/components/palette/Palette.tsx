@@ -54,6 +54,7 @@ export function Palette<T>({
 }: PaletteProps<T>) {
   const [selectedKey, setSelectedKey] = useState<string | null>(initialSelectedKey);
   const inputRef = useRef<HTMLInputElement>(null);
+  const pointerPosition = useRef<{ x: number; y: number } | null>(null);
   const listRef = useRef<HTMLUListElement>(null);
   useEscapeStack(onEscape, true);
 
@@ -111,6 +112,12 @@ export function Palette<T>({
       className={`palette ${variant}`}
       role="dialog"
       aria-label={ariaLabel}
+      onMouseEnter={(event) => {
+        pointerPosition.current ??= { x: event.clientX, y: event.clientY };
+      }}
+      onMouseMove={(event) => {
+        pointerPosition.current = { x: event.clientX, y: event.clientY };
+      }}
       onMouseDown={(event) => { if (event.target === event.currentTarget) onClose(); }}
     >
       <div className={`palette-box ${variant}-box`}>
@@ -149,7 +156,10 @@ export function Palette<T>({
                   role="option"
                   aria-selected={index === activeIndex}
                   className={`palette-option ${variant}-option${index === activeIndex ? ' is-selected' : ''}`}
-                  onMouseEnter={() => selectIndex(index)}
+                  onMouseMove={(event) => {
+                    const previous = pointerPosition.current;
+                    if (previous && (previous.x !== event.clientX || previous.y !== event.clientY)) selectIndex(index);
+                  }}
                   onMouseDown={(event) => pickKeepingInputFocus(event, item)}
                 >
                   {renderItem(item, index === activeIndex)}
