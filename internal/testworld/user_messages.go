@@ -17,8 +17,7 @@ import (
 	"nhooyr.io/websocket"
 )
 
-// Capture drives the authenticated app channel and returns disconnects as errors.
-func (p *Peer) Capture(msg any) (*protocol.CaptureResult, error) {
+func (p *Peer) UserMessage(msg any) (*protocol.UserMessageResult, error) {
 	data, err := json.Marshal(msg)
 	if err != nil {
 		return nil, err
@@ -42,10 +41,10 @@ func (p *Peer) Capture(msg any) (*protocol.CaptureResult, error) {
 		p.mu.Lock()
 		for i := range p.frames {
 			frame := &p.frames[i]
-			if frame.consumed || frame.event != protocol.EventCaptureResult {
+			if frame.consumed || frame.event != protocol.EventUserMessageResult {
 				continue
 			}
-			var response protocol.CaptureResultMessage
+			var response protocol.UserMessageResultMessage
 			if err := json.Unmarshal(frame.raw, &response); err != nil {
 				p.mu.Unlock()
 				return nil, err
@@ -68,12 +67,11 @@ func (p *Peer) Capture(msg any) (*protocol.CaptureResult, error) {
 		select {
 		case <-grew:
 		case <-ctx.Done():
-			return nil, fmt.Errorf("await capture %s: %w", id, ctx.Err())
+			return nil, fmt.Errorf("await user message %s: %w", id, ctx.Err())
 		}
 	}
 }
 
-// TrustedApp represents the main Tauri webview, including its private host credential.
 func (w *World) TrustedApp(profileID ...string) *Peer {
 	w.T.Helper()
 	path := filepath.Join(w.Dir, "browser-host-token")

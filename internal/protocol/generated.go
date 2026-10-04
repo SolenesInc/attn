@@ -107,7 +107,7 @@ type AgentInboxItem struct {
 	Address string `json:"address"`
 
 	// Attachments corresponds to the JSON schema field "attachments".
-	Attachments []CaptureAttachment `json:"attachments,omitempty,omitzero"`
+	Attachments []UserMessageAttachment `json:"attachments,omitempty,omitzero"`
 
 	// Content corresponds to the JSON schema field "content".
 	Content string `json:"content"`
@@ -1802,279 +1802,6 @@ type CancelCountdownMessage struct {
 	// SessionID corresponds to the JSON schema field "session_id".
 	SessionID string `json:"session_id"`
 }
-
-type CaptureAttachment struct {
-	// Bytes corresponds to the JSON schema field "bytes".
-	Bytes int `json:"bytes"`
-
-	// ID corresponds to the JSON schema field "id".
-	ID string `json:"id"`
-
-	// MediaType corresponds to the JSON schema field "media_type".
-	MediaType string `json:"media_type"`
-
-	// Name corresponds to the JSON schema field "name".
-	Name string `json:"name"`
-}
-
-type CaptureAttachmentDiscardMessage struct {
-	// AttachmentID corresponds to the JSON schema field "attachment_id".
-	AttachmentID string `json:"attachment_id"`
-
-	// CaptureID corresponds to the JSON schema field "capture_id".
-	CaptureID string `json:"capture_id"`
-
-	// Cmd corresponds to the JSON schema field "cmd".
-	Cmd string `json:"cmd"`
-
-	// ProfileID corresponds to the JSON schema field "profile_id".
-	ProfileID *string `json:"profile_id,omitempty,omitzero"`
-
-	// RequestID corresponds to the JSON schema field "request_id".
-	RequestID *string `json:"request_id,omitempty,omitzero"`
-}
-
-type CaptureAttachmentGetMessage struct {
-	// AttachmentID corresponds to the JSON schema field "attachment_id".
-	AttachmentID string `json:"attachment_id"`
-
-	// CaptureID corresponds to the JSON schema field "capture_id".
-	CaptureID string `json:"capture_id"`
-
-	// Cmd corresponds to the JSON schema field "cmd".
-	Cmd string `json:"cmd"`
-
-	// Offset corresponds to the JSON schema field "offset".
-	Offset int `json:"offset"`
-
-	// ProfileID corresponds to the JSON schema field "profile_id".
-	ProfileID *string `json:"profile_id,omitempty,omitzero"`
-
-	// RequestID corresponds to the JSON schema field "request_id".
-	RequestID *string `json:"request_id,omitempty,omitzero"`
-
-	// SourceSessionID corresponds to the JSON schema field "source_session_id".
-	SourceSessionID *string `json:"source_session_id,omitempty,omitzero"`
-}
-
-type CaptureAttachmentGetResult struct {
-	// DataBase64 corresponds to the JSON schema field "data_base64".
-	DataBase64 string `json:"data_base64"`
-
-	// Eof corresponds to the JSON schema field "eof".
-	Eof bool `json:"eof"`
-
-	// NextOffset corresponds to the JSON schema field "next_offset".
-	NextOffset int `json:"next_offset"`
-}
-
-type CaptureAttachmentPutMessage struct {
-	// AttachmentID corresponds to the JSON schema field "attachment_id".
-	AttachmentID string `json:"attachment_id"`
-
-	// CaptureID corresponds to the JSON schema field "capture_id".
-	CaptureID string `json:"capture_id"`
-
-	// Cmd corresponds to the JSON schema field "cmd".
-	Cmd string `json:"cmd"`
-
-	// DataBase64 corresponds to the JSON schema field "data_base64".
-	DataBase64 string `json:"data_base64"`
-
-	// Final corresponds to the JSON schema field "final".
-	Final bool `json:"final"`
-
-	// Name corresponds to the JSON schema field "name".
-	Name string `json:"name"`
-
-	// Offset corresponds to the JSON schema field "offset".
-	Offset int `json:"offset"`
-
-	// ProfileID corresponds to the JSON schema field "profile_id".
-	ProfileID *string `json:"profile_id,omitempty,omitzero"`
-
-	// RequestID corresponds to the JSON schema field "request_id".
-	RequestID *string `json:"request_id,omitempty,omitzero"`
-}
-
-type CaptureAttachmentPutResult struct {
-	// Attachment corresponds to the JSON schema field "attachment".
-	Attachment *CaptureAttachment `json:"attachment,omitempty,omitzero"`
-
-	// NextOffset corresponds to the JSON schema field "next_offset".
-	NextOffset int `json:"next_offset"`
-}
-
-type CaptureChangedMessage struct {
-	// CaptureID corresponds to the JSON schema field "capture_id".
-	CaptureID string `json:"capture_id"`
-
-	// Event corresponds to the JSON schema field "event".
-	Event string `json:"event"`
-
-	// ProfileID corresponds to the JSON schema field "profile_id".
-	ProfileID string `json:"profile_id"`
-}
-
-type CaptureDraftAsset struct {
-	// AttachmentID corresponds to the JSON schema field "attachment_id".
-	AttachmentID string `json:"attachment_id"`
-
-	// CaptureID corresponds to the JSON schema field "capture_id".
-	CaptureID string `json:"capture_id"`
-
-	// Name corresponds to the JSON schema field "name".
-	Name string `json:"name"`
-
-	// NextOffset corresponds to the JSON schema field "next_offset".
-	NextOffset int `json:"next_offset"`
-
-	// State corresponds to the JSON schema field "state".
-	State CaptureDraftState `json:"state"`
-}
-
-type CaptureDraftState string
-
-const CaptureDraftStateReady CaptureDraftState = "ready"
-const CaptureDraftStateStaged CaptureDraftState = "staged"
-
-type CaptureGetMessage struct {
-	// CaptureID corresponds to the JSON schema field "capture_id".
-	CaptureID string `json:"capture_id"`
-
-	// Cmd corresponds to the JSON schema field "cmd".
-	Cmd string `json:"cmd"`
-
-	// ProfileID corresponds to the JSON schema field "profile_id".
-	ProfileID *string `json:"profile_id,omitempty,omitzero"`
-
-	// RequestID corresponds to the JSON schema field "request_id".
-	RequestID *string `json:"request_id,omitempty,omitzero"`
-}
-
-type CaptureListMessage struct {
-	// Cmd corresponds to the JSON schema field "cmd".
-	Cmd string `json:"cmd"`
-
-	// Cursor corresponds to the JSON schema field "cursor".
-	Cursor *string `json:"cursor,omitempty,omitzero"`
-
-	// Limit corresponds to the JSON schema field "limit".
-	Limit int `json:"limit"`
-
-	// ProfileID corresponds to the JSON schema field "profile_id".
-	ProfileID *string `json:"profile_id,omitempty,omitzero"`
-
-	// RequestID corresponds to the JSON schema field "request_id".
-	RequestID *string `json:"request_id,omitempty,omitzero"`
-}
-
-type CaptureListResult struct {
-	// DraftAssets corresponds to the JSON schema field "draft_assets".
-	DraftAssets []CaptureDraftAsset `json:"draft_assets"`
-
-	// Items corresponds to the JSON schema field "items".
-	Items []CaptureRecord `json:"items"`
-
-	// NextCursor corresponds to the JSON schema field "next_cursor".
-	NextCursor *string `json:"next_cursor,omitempty,omitzero"`
-}
-
-type CaptureRecord struct {
-	// Attachments corresponds to the JSON schema field "attachments".
-	Attachments []CaptureAttachment `json:"attachments"`
-
-	// Content corresponds to the JSON schema field "content".
-	Content string `json:"content"`
-
-	// CreatedAt corresponds to the JSON schema field "created_at".
-	CreatedAt string `json:"created_at"`
-
-	// ID corresponds to the JSON schema field "id".
-	ID string `json:"id"`
-
-	// ReadAt corresponds to the JSON schema field "read_at".
-	ReadAt *string `json:"read_at,omitempty,omitzero"`
-
-	// Target corresponds to the JSON schema field "target".
-	Target CaptureTarget `json:"target"`
-}
-
-type CaptureResult struct {
-	// Discarded corresponds to the JSON schema field "discarded".
-	Discarded *bool `json:"discarded,omitempty,omitzero"`
-
-	// Download corresponds to the JSON schema field "download".
-	Download *CaptureAttachmentGetResult `json:"download,omitempty,omitzero"`
-
-	// List corresponds to the JSON schema field "list".
-	List *CaptureListResult `json:"list,omitempty,omitzero"`
-
-	// Record corresponds to the JSON schema field "record".
-	Record *CaptureRecord `json:"record,omitempty,omitzero"`
-
-	// Upload corresponds to the JSON schema field "upload".
-	Upload *CaptureAttachmentPutResult `json:"upload,omitempty,omitzero"`
-}
-
-type CaptureResultMessage struct {
-	// Error corresponds to the JSON schema field "error".
-	Error *string `json:"error,omitempty,omitzero"`
-
-	// ErrorCode corresponds to the JSON schema field "error_code".
-	ErrorCode *string `json:"error_code,omitempty,omitzero"`
-
-	// Event corresponds to the JSON schema field "event".
-	Event string `json:"event"`
-
-	// ProfileID corresponds to the JSON schema field "profile_id".
-	ProfileID string `json:"profile_id"`
-
-	// RequestID corresponds to the JSON schema field "request_id".
-	RequestID string `json:"request_id"`
-
-	// Result corresponds to the JSON schema field "result".
-	Result *CaptureResult `json:"result,omitempty,omitzero"`
-
-	// Success corresponds to the JSON schema field "success".
-	Success bool `json:"success"`
-}
-
-type CaptureSendMessage struct {
-	// AttachmentIds corresponds to the JSON schema field "attachment_ids".
-	AttachmentIds []string `json:"attachment_ids"`
-
-	// CaptureID corresponds to the JSON schema field "capture_id".
-	CaptureID string `json:"capture_id"`
-
-	// Cmd corresponds to the JSON schema field "cmd".
-	Cmd string `json:"cmd"`
-
-	// Content corresponds to the JSON schema field "content".
-	Content string `json:"content"`
-
-	// ProfileID corresponds to the JSON schema field "profile_id".
-	ProfileID *string `json:"profile_id,omitempty,omitzero"`
-
-	// RequestID corresponds to the JSON schema field "request_id".
-	RequestID *string `json:"request_id,omitempty,omitzero"`
-
-	// Target corresponds to the JSON schema field "target".
-	Target CaptureTarget `json:"target"`
-}
-
-type CaptureTarget struct {
-	// Kind corresponds to the JSON schema field "kind".
-	Kind CaptureTargetKind `json:"kind"`
-
-	// MemberID corresponds to the JSON schema field "member_id".
-	MemberID *string `json:"member_id,omitempty,omitzero"`
-}
-
-type CaptureTargetKind string
-
-const CaptureTargetKindChief CaptureTargetKind = "chief"
-const CaptureTargetKindCrew CaptureTargetKind = "crew"
 
 type ChiefOfStaffResultMessage struct {
 	// ChiefOfStaff corresponds to the JSON schema field "chief_of_staff".
@@ -8145,9 +7872,6 @@ type Response struct {
 	// CallerSessionID corresponds to the JSON schema field "caller_session_id".
 	CallerSessionID *string `json:"caller_session_id,omitempty,omitzero"`
 
-	// CaptureResult corresponds to the JSON schema field "capture_result".
-	CaptureResult *CaptureResult `json:"capture_result,omitempty,omitzero"`
-
 	// CrewCharterGetResult corresponds to the JSON schema field
 	// "crew_charter_get_result".
 	CrewCharterGetResult *CrewCharterGetResult `json:"crew_charter_get_result,omitempty,omitzero"`
@@ -8357,6 +8081,9 @@ type Response struct {
 
 	// StateExplainResult corresponds to the JSON schema field "state_explain_result".
 	StateExplainResult *StateExplainResult `json:"state_explain_result,omitempty,omitzero"`
+
+	// UserMessageResult corresponds to the JSON schema field "user_message_result".
+	UserMessageResult *UserMessageResult `json:"user_message_result,omitempty,omitzero"`
 
 	// WorktreeKeepResult corresponds to the JSON schema field "worktree_keep_result".
 	WorktreeKeepResult *WorktreeKeepResult `json:"worktree_keep_result,omitempty,omitzero"`
@@ -11244,6 +10971,279 @@ type UpdateEndpointMessage struct {
 	// SshTarget corresponds to the JSON schema field "ssh_target".
 	SshTarget *string `json:"ssh_target,omitempty,omitzero"`
 }
+
+type UserMessageAttachment struct {
+	// Bytes corresponds to the JSON schema field "bytes".
+	Bytes int `json:"bytes"`
+
+	// ID corresponds to the JSON schema field "id".
+	ID string `json:"id"`
+
+	// MediaType corresponds to the JSON schema field "media_type".
+	MediaType string `json:"media_type"`
+
+	// Name corresponds to the JSON schema field "name".
+	Name string `json:"name"`
+}
+
+type UserMessageAttachmentDiscardMessage struct {
+	// AttachmentID corresponds to the JSON schema field "attachment_id".
+	AttachmentID string `json:"attachment_id"`
+
+	// Cmd corresponds to the JSON schema field "cmd".
+	Cmd string `json:"cmd"`
+
+	// MessageID corresponds to the JSON schema field "message_id".
+	MessageID string `json:"message_id"`
+
+	// ProfileID corresponds to the JSON schema field "profile_id".
+	ProfileID *string `json:"profile_id,omitempty,omitzero"`
+
+	// RequestID corresponds to the JSON schema field "request_id".
+	RequestID *string `json:"request_id,omitempty,omitzero"`
+}
+
+type UserMessageAttachmentGetMessage struct {
+	// AttachmentID corresponds to the JSON schema field "attachment_id".
+	AttachmentID string `json:"attachment_id"`
+
+	// Cmd corresponds to the JSON schema field "cmd".
+	Cmd string `json:"cmd"`
+
+	// MessageID corresponds to the JSON schema field "message_id".
+	MessageID string `json:"message_id"`
+
+	// Offset corresponds to the JSON schema field "offset".
+	Offset int `json:"offset"`
+
+	// ProfileID corresponds to the JSON schema field "profile_id".
+	ProfileID *string `json:"profile_id,omitempty,omitzero"`
+
+	// RequestID corresponds to the JSON schema field "request_id".
+	RequestID *string `json:"request_id,omitempty,omitzero"`
+
+	// SourceSessionID corresponds to the JSON schema field "source_session_id".
+	SourceSessionID *string `json:"source_session_id,omitempty,omitzero"`
+}
+
+type UserMessageAttachmentGetResult struct {
+	// DataBase64 corresponds to the JSON schema field "data_base64".
+	DataBase64 string `json:"data_base64"`
+
+	// Eof corresponds to the JSON schema field "eof".
+	Eof bool `json:"eof"`
+
+	// NextOffset corresponds to the JSON schema field "next_offset".
+	NextOffset int `json:"next_offset"`
+}
+
+type UserMessageAttachmentPutMessage struct {
+	// AttachmentID corresponds to the JSON schema field "attachment_id".
+	AttachmentID string `json:"attachment_id"`
+
+	// Cmd corresponds to the JSON schema field "cmd".
+	Cmd string `json:"cmd"`
+
+	// DataBase64 corresponds to the JSON schema field "data_base64".
+	DataBase64 string `json:"data_base64"`
+
+	// Final corresponds to the JSON schema field "final".
+	Final bool `json:"final"`
+
+	// MessageID corresponds to the JSON schema field "message_id".
+	MessageID string `json:"message_id"`
+
+	// Name corresponds to the JSON schema field "name".
+	Name string `json:"name"`
+
+	// Offset corresponds to the JSON schema field "offset".
+	Offset int `json:"offset"`
+
+	// ProfileID corresponds to the JSON schema field "profile_id".
+	ProfileID *string `json:"profile_id,omitempty,omitzero"`
+
+	// RequestID corresponds to the JSON schema field "request_id".
+	RequestID *string `json:"request_id,omitempty,omitzero"`
+}
+
+type UserMessageAttachmentPutResult struct {
+	// Attachment corresponds to the JSON schema field "attachment".
+	Attachment *UserMessageAttachment `json:"attachment,omitempty,omitzero"`
+
+	// NextOffset corresponds to the JSON schema field "next_offset".
+	NextOffset int `json:"next_offset"`
+}
+
+type UserMessageChangedMessage struct {
+	// Event corresponds to the JSON schema field "event".
+	Event string `json:"event"`
+
+	// MessageID corresponds to the JSON schema field "message_id".
+	MessageID string `json:"message_id"`
+
+	// ProfileID corresponds to the JSON schema field "profile_id".
+	ProfileID string `json:"profile_id"`
+}
+
+type UserMessageDraftAsset struct {
+	// AttachmentID corresponds to the JSON schema field "attachment_id".
+	AttachmentID string `json:"attachment_id"`
+
+	// MessageID corresponds to the JSON schema field "message_id".
+	MessageID string `json:"message_id"`
+
+	// Name corresponds to the JSON schema field "name".
+	Name string `json:"name"`
+
+	// NextOffset corresponds to the JSON schema field "next_offset".
+	NextOffset int `json:"next_offset"`
+
+	// State corresponds to the JSON schema field "state".
+	State UserMessageDraftState `json:"state"`
+}
+
+type UserMessageDraftState string
+
+const UserMessageDraftStateReady UserMessageDraftState = "ready"
+const UserMessageDraftStateStaged UserMessageDraftState = "staged"
+
+type UserMessageGetMessage struct {
+	// Cmd corresponds to the JSON schema field "cmd".
+	Cmd string `json:"cmd"`
+
+	// MessageID corresponds to the JSON schema field "message_id".
+	MessageID string `json:"message_id"`
+
+	// ProfileID corresponds to the JSON schema field "profile_id".
+	ProfileID *string `json:"profile_id,omitempty,omitzero"`
+
+	// RequestID corresponds to the JSON schema field "request_id".
+	RequestID *string `json:"request_id,omitempty,omitzero"`
+}
+
+type UserMessageListMessage struct {
+	// Cmd corresponds to the JSON schema field "cmd".
+	Cmd string `json:"cmd"`
+
+	// Cursor corresponds to the JSON schema field "cursor".
+	Cursor *string `json:"cursor,omitempty,omitzero"`
+
+	// Limit corresponds to the JSON schema field "limit".
+	Limit int `json:"limit"`
+
+	// ProfileID corresponds to the JSON schema field "profile_id".
+	ProfileID *string `json:"profile_id,omitempty,omitzero"`
+
+	// RequestID corresponds to the JSON schema field "request_id".
+	RequestID *string `json:"request_id,omitempty,omitzero"`
+}
+
+type UserMessageListResult struct {
+	// DraftAssets corresponds to the JSON schema field "draft_assets".
+	DraftAssets []UserMessageDraftAsset `json:"draft_assets"`
+
+	// Items corresponds to the JSON schema field "items".
+	Items []UserMessageRecord `json:"items"`
+
+	// NextCursor corresponds to the JSON schema field "next_cursor".
+	NextCursor *string `json:"next_cursor,omitempty,omitzero"`
+}
+
+type UserMessageRecord struct {
+	// Attachments corresponds to the JSON schema field "attachments".
+	Attachments []UserMessageAttachment `json:"attachments"`
+
+	// Content corresponds to the JSON schema field "content".
+	Content string `json:"content"`
+
+	// CreatedAt corresponds to the JSON schema field "created_at".
+	CreatedAt string `json:"created_at"`
+
+	// ID corresponds to the JSON schema field "id".
+	ID string `json:"id"`
+
+	// ReadAt corresponds to the JSON schema field "read_at".
+	ReadAt *string `json:"read_at,omitempty,omitzero"`
+
+	// Target corresponds to the JSON schema field "target".
+	Target UserMessageTarget `json:"target"`
+}
+
+type UserMessageResult struct {
+	// Discarded corresponds to the JSON schema field "discarded".
+	Discarded *bool `json:"discarded,omitempty,omitzero"`
+
+	// Download corresponds to the JSON schema field "download".
+	Download *UserMessageAttachmentGetResult `json:"download,omitempty,omitzero"`
+
+	// List corresponds to the JSON schema field "list".
+	List *UserMessageListResult `json:"list,omitempty,omitzero"`
+
+	// Record corresponds to the JSON schema field "record".
+	Record *UserMessageRecord `json:"record,omitempty,omitzero"`
+
+	// Upload corresponds to the JSON schema field "upload".
+	Upload *UserMessageAttachmentPutResult `json:"upload,omitempty,omitzero"`
+}
+
+type UserMessageResultMessage struct {
+	// Error corresponds to the JSON schema field "error".
+	Error *string `json:"error,omitempty,omitzero"`
+
+	// ErrorCode corresponds to the JSON schema field "error_code".
+	ErrorCode *string `json:"error_code,omitempty,omitzero"`
+
+	// Event corresponds to the JSON schema field "event".
+	Event string `json:"event"`
+
+	// ProfileID corresponds to the JSON schema field "profile_id".
+	ProfileID string `json:"profile_id"`
+
+	// RequestID corresponds to the JSON schema field "request_id".
+	RequestID string `json:"request_id"`
+
+	// Result corresponds to the JSON schema field "result".
+	Result *UserMessageResult `json:"result,omitempty,omitzero"`
+
+	// Success corresponds to the JSON schema field "success".
+	Success bool `json:"success"`
+}
+
+type UserMessageSendMessage struct {
+	// AttachmentIds corresponds to the JSON schema field "attachment_ids".
+	AttachmentIds []string `json:"attachment_ids"`
+
+	// Cmd corresponds to the JSON schema field "cmd".
+	Cmd string `json:"cmd"`
+
+	// Content corresponds to the JSON schema field "content".
+	Content string `json:"content"`
+
+	// MessageID corresponds to the JSON schema field "message_id".
+	MessageID string `json:"message_id"`
+
+	// ProfileID corresponds to the JSON schema field "profile_id".
+	ProfileID *string `json:"profile_id,omitempty,omitzero"`
+
+	// RequestID corresponds to the JSON schema field "request_id".
+	RequestID *string `json:"request_id,omitempty,omitzero"`
+
+	// Target corresponds to the JSON schema field "target".
+	Target UserMessageTarget `json:"target"`
+}
+
+type UserMessageTarget struct {
+	// Kind corresponds to the JSON schema field "kind".
+	Kind UserMessageTargetKind `json:"kind"`
+
+	// MemberID corresponds to the JSON schema field "member_id".
+	MemberID *string `json:"member_id,omitempty,omitzero"`
+}
+
+type UserMessageTargetKind string
+
+const UserMessageTargetKindChief UserMessageTargetKind = "chief"
+const UserMessageTargetKindCrew UserMessageTargetKind = "crew"
 
 type WakeTurnMessage struct {
 	// Cmd corresponds to the JSON schema field "cmd".

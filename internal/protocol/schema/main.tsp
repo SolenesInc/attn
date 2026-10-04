@@ -799,120 +799,118 @@ model AgentCloseResult {
   seed_ids: string[];           // the seeds the closed session tended, each of which got the note
 }
 
-enum CaptureTargetKind { chief, crew }
-model CaptureTarget {
-  kind: CaptureTargetKind;
+enum UserMessageTargetKind { chief, crew }
+model UserMessageTarget {
+  kind: UserMessageTargetKind;
   member_id?: string;
 }
-model CaptureAttachment {
+model UserMessageAttachment {
   id: string;
   name: string;
   media_type: string;
   bytes: safeint;
 }
-model CaptureRecord {
+model UserMessageRecord {
   id: string;
-  target: CaptureTarget;
+  target: UserMessageTarget;
   content: string;
   created_at: string;
-  attachments: CaptureAttachment[];
+  attachments: UserMessageAttachment[];
   read_at?: string;
 }
-enum CaptureDraftState { staged, ready }
-model CaptureDraftAsset {
-  capture_id: string;
+enum UserMessageDraftState { staged, ready }
+model UserMessageDraftAsset {
+  message_id: string;
   attachment_id: string;
   name: string;
-  state: CaptureDraftState;
+  state: UserMessageDraftState;
   next_offset: safeint;
 }
-model CaptureListResult {
-  items: CaptureRecord[];
-  draft_assets: CaptureDraftAsset[];
+model UserMessageListResult {
+  items: UserMessageRecord[];
+  draft_assets: UserMessageDraftAsset[];
   next_cursor?: string;
 }
-model CaptureSendMessage {
+model UserMessageSendMessage {
   profile_id?: string;
-  cmd: "capture_send";
+  cmd: "user_message_send";
   request_id?: string;
-  capture_id: string;
-  target: CaptureTarget;
+  message_id: string;
+  target: UserMessageTarget;
   content: string;
   attachment_ids: string[];
 }
-model CaptureGetMessage {
+model UserMessageGetMessage {
   profile_id?: string;
-  cmd: "capture_get";
+  cmd: "user_message_get";
   request_id?: string;
-  capture_id: string;
+  message_id: string;
 }
-model CaptureListMessage {
+model UserMessageListMessage {
   profile_id?: string;
-  cmd: "capture_list";
+  cmd: "user_message_list";
   request_id?: string;
   limit: safeint;
   cursor?: string;
 }
-model CaptureAttachmentPutMessage {
+model UserMessageAttachmentPutMessage {
   profile_id?: string;
-  cmd: "capture_attachment_put";
+  cmd: "user_message_attachment_put";
   request_id?: string;
-  capture_id: string;
+  message_id: string;
   attachment_id: string;
   name: string;
   offset: safeint;
   data_base64: string;
   final: boolean;
 }
-model CaptureAttachmentGetMessage {
+model UserMessageAttachmentGetMessage {
   source_session_id?: string;
   profile_id?: string;
-  cmd: "capture_attachment_get";
+  cmd: "user_message_attachment_get";
   request_id?: string;
-  capture_id: string;
+  message_id: string;
   attachment_id: string;
   offset: safeint;
 }
-model CaptureAttachmentDiscardMessage {
+model UserMessageAttachmentDiscardMessage {
   profile_id?: string;
-  cmd: "capture_attachment_discard";
+  cmd: "user_message_attachment_discard";
   request_id?: string;
-  capture_id: string;
+  message_id: string;
   attachment_id: string;
 }
-model CaptureAttachmentPutResult {
+model UserMessageAttachmentPutResult {
   next_offset: safeint;
-  attachment?: CaptureAttachment;
+  attachment?: UserMessageAttachment;
 }
-model CaptureAttachmentGetResult {
+model UserMessageAttachmentGetResult {
   data_base64: string;
   next_offset: safeint;
   eof: boolean;
 }
-model CaptureResult {
-  record?: CaptureRecord;
-  list?: CaptureListResult;
-  upload?: CaptureAttachmentPutResult;
-  download?: CaptureAttachmentGetResult;
+model UserMessageResult {
+  record?: UserMessageRecord;
+  list?: UserMessageListResult;
+  upload?: UserMessageAttachmentPutResult;
+  download?: UserMessageAttachmentGetResult;
   discarded?: boolean;
 }
-model CaptureResultMessage {
+model UserMessageResultMessage {
   profile_id: string;
-  event: "capture_result";
+  event: "user_message_result";
   request_id: string;
   success: boolean;
   error?: string;
   error_code?: string;
-  result?: CaptureResult;
+  result?: UserMessageResult;
 }
-model CaptureChangedMessage {
+model UserMessageChangedMessage {
   profile_id: string;
-  event: "capture_changed";
-  capture_id: string;
+  event: "user_message_changed";
+  message_id: string;
 }
 
-// With a message id, the recipient reads or rereads one user or peer message.
-// Without one, it reads a bounded FIFO batch from its inbox.
 model AgentInboxMessage {
   cmd: "agent_inbox";
   message_id?: string;
@@ -5898,7 +5896,7 @@ model Response {
   agent_peek_result?: AgentPeekResult;
   agent_msg_result?: AgentMsgResult;
   agent_close_result?: AgentCloseResult;
-  capture_result?: CaptureResult;
+  user_message_result?: UserMessageResult;
   agent_inbox_result?: AgentPeerMessage;
   agent_inbox_item_result?: AgentInboxItem;
   agent_inbox_batch_result?: AgentInboxBatchResult;
@@ -6433,7 +6431,7 @@ model AgentPeerMessage {
 // peer body or the daemon-authored action text for another mailbox kind.
 model AgentInboxItem {
   address: string;
-  attachments?: CaptureAttachment[];
+  attachments?: UserMessageAttachment[];
   item_id: string;
   kind: string;
   source_id?: string;

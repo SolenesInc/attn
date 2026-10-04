@@ -134,15 +134,15 @@ func wireProjections() []projection {
 
 func buildWireProjections() []projection {
 	return []projection{
-		{filter: bus.Filter{FactCaptureChanged}, apply: func(d *Daemon, ev bus.Event) {
+		{filter: bus.Filter{FactUserMessageChanged}, apply: func(d *Daemon, ev bus.Event) {
 			var scope struct {
 				ProfileID string `json:"profile_id"`
 			}
 			if err := ev.Decode(&scope); err != nil {
-				d.logf("capture projection: %v", err)
+				d.logf("user message projection: %v", err)
 				return
 			}
-			d.wsHub.SendValueToMatchingClients(protocol.CaptureChangedMessage{ProfileID: scope.ProfileID, Event: protocol.EventCaptureChanged, CaptureID: ev.Subject}, func(client *wsClient) bool { return client.selectedProfile() == scope.ProfileID })
+			d.wsHub.SendValueToMatchingClients(protocol.UserMessageChangedMessage{ProfileID: scope.ProfileID, Event: protocol.EventUserMessageChanged, MessageID: ev.Subject}, func(client *wsClient) bool { return client.selectedProfile() == scope.ProfileID })
 		}},
 		{
 			filter: bus.Filter{FactSessionStateChanged},

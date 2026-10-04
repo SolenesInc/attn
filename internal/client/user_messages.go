@@ -7,22 +7,22 @@ import (
 	"github.com/victorarias/attn/internal/protocol"
 )
 
-func (c *Client) Capture(msg any) (*protocol.CaptureResult, error) {
+func (c *Client) UserMessage(msg any) (*protocol.UserMessageResult, error) {
 	data, err := json.Marshal(msg)
 	if err != nil {
 		return nil, err
 	}
 	if len(data) > protocol.CommandFrameMaxBytes {
-		return nil, fmt.Errorf("capture transport limit=%d bytes, asked for %d bytes", protocol.CommandFrameMaxBytes, len(data))
+		return nil, fmt.Errorf("user message transport limit=%d bytes, asked for %d bytes", protocol.CommandFrameMaxBytes, len(data))
 	}
 	response, err := c.send(msg)
 	if err != nil {
 		return nil, err
 	}
-	if response.CaptureResult == nil {
-		return nil, fmt.Errorf("daemon returned no capture receipt")
+	if response.UserMessageResult == nil {
+		return nil, fmt.Errorf("daemon returned no user message receipt")
 	}
-	return response.CaptureResult, nil
+	return response.UserMessageResult, nil
 }
 
 func (c *Client) AgentInboxEntry(id, recipient string) (*protocol.AgentPeerMessage, *protocol.AgentInboxItem, error) {

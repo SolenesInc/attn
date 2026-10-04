@@ -21,31 +21,31 @@ import (
 	"github.com/victorarias/attn/internal/testworld"
 )
 
-func sendCapture(t *testing.T, cli *testworld.Peer, target protocol.CaptureTarget, body string, attachments ...string) protocol.CaptureSendMessage {
+func sendUserMessage(t *testing.T, cli *testworld.Peer, target protocol.UserMessageTarget, body string, attachments ...string) protocol.UserMessageSendMessage {
 	t.Helper()
-	msg := protocol.CaptureSendMessage{Cmd: protocol.CmdCaptureSend, CaptureID: uuid.NewString(), Target: target, Content: body, AttachmentIds: attachments}
+	msg := protocol.UserMessageSendMessage{Cmd: protocol.CmdUserMessageSend, MessageID: uuid.NewString(), Target: target, Content: body, AttachmentIds: attachments}
 	if attachments == nil {
 		msg.AttachmentIds = []string{}
 	}
-	r, err := cli.Capture(msg)
+	r, err := cli.UserMessage(msg)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if r.Record.ID != msg.CaptureID || r.Record.Content != body {
+	if r.Record.ID != msg.MessageID || r.Record.Content != body {
 		t.Fatalf("saved receipt = %+v", r)
 	}
 	return msg
 }
-func captureRecord(t *testing.T, cli *testworld.Peer, id string) *protocol.CaptureRecord {
+func userMessageRecord(t *testing.T, cli *testworld.Peer, id string) *protocol.UserMessageRecord {
 	t.Helper()
-	r, err := cli.Capture(protocol.CaptureGetMessage{Cmd: protocol.CmdCaptureGet, CaptureID: id})
+	r, err := cli.UserMessage(protocol.UserMessageGetMessage{Cmd: protocol.CmdUserMessageGet, MessageID: id})
 	if err != nil {
 		t.Fatal(err)
 	}
 	return r.Record
 }
 
-func capturePNG(t *testing.T) []byte {
+func userMessagePNG(t *testing.T) []byte {
 	t.Helper()
 	var b bytes.Buffer
 	im := image.NewNRGBA(image.Rect(0, 0, 3, 2))
@@ -55,39 +55,39 @@ func capturePNG(t *testing.T) []byte {
 	}
 	return b.Bytes()
 }
-func uploadCapture(t *testing.T, cli *testworld.Peer, capture, id string, data []byte, final bool) *protocol.CaptureAttachmentPutResult {
+func uploadUserMessage(t *testing.T, cli *testworld.Peer, userMessage, id string, data []byte, final bool) *protocol.UserMessageAttachmentPutResult {
 	t.Helper()
-	r, err := cli.Capture(protocol.CaptureAttachmentPutMessage{Cmd: protocol.CmdCaptureAttachmentPut, CaptureID: capture, AttachmentID: id, Name: "screenshot.png", DataBase64: base64.StdEncoding.EncodeToString(data), Final: final})
+	r, err := cli.UserMessage(protocol.UserMessageAttachmentPutMessage{Cmd: protocol.CmdUserMessageAttachmentPut, MessageID: userMessage, AttachmentID: id, Name: "screenshot.png", DataBase64: base64.StdEncoding.EncodeToString(data), Final: final})
 	if err != nil {
 		t.Fatal(err)
 	}
 	return r.Upload
 }
-func TestCaptureFilesRequireFinalizationPreserveBytesAndDiscardOnlyDrafts(t *testing.T) {
+func TestUserMessageFilesRequireFinalizationPreserveBytesAndDiscardOnlyDrafts(t *testing.T) {
 	w := newWorld(t)
 	app := w.TrustedApp()
-	capture, id := uuid.NewString(), uuid.NewString()
-	data := capturePNG(t)
+	userMessage, id := uuid.NewString(), uuid.NewString()
+	data := userMessagePNG(t)
 	source := w.Dir + "/source.png"
 	if err := os.WriteFile(source, data, 0600); err != nil {
 		t.Fatal(err)
 	}
-	uploadCapture(t, app, capture, id, data, false)
-	msg := protocol.CaptureSendMessage{Cmd: protocol.CmdCaptureSend, CaptureID: capture, Target: protocol.CaptureTarget{Kind: protocol.CaptureTargetKindChief}, AttachmentIds: []string{id}}
-	if _, err := app.Capture(msg); err == nil {
+	uploadUserMessage(t, app, userMessage, id, data, false)
+	msg := protocol.UserMessageSendMessage{Cmd: protocol.CmdUserMessageSend, MessageID: userMessage, Target: protocol.UserMessageTarget{Kind: protocol.UserMessageTargetKindChief}, AttachmentIds: []string{id}}
+	if _, err := app.UserMessage(msg); err == nil {
 		t.Fatal("incomplete upload accepted")
 	}
-	a := uploadCapture(t, app, capture, id, data, true)
+	a := uploadUserMessage(t, app, userMessage, id, data, true)
 	if a.Attachment.Bytes != len(data) || a.Attachment.MediaType != "image/png" {
 		t.Fatalf("metadata %+v", a)
 	}
-	if _, err := app.Capture(msg); err != nil {
+	if _, err := app.UserMessage(msg); err != nil {
 		t.Fatal(err)
 	}
 	if err := os.Remove(source); err != nil {
 		t.Fatal(err)
 	}
-	r, err := app.Capture(protocol.CaptureAttachmentGetMessage{Cmd: protocol.CmdCaptureAttachmentGet, CaptureID: capture, AttachmentID: id})
+	r, err := app.UserMessage(protocol.UserMessageAttachmentGetMessage{Cmd: protocol.CmdUserMessageAttachmentGet, MessageID: userMessage, AttachmentID: id})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -95,38 +95,38 @@ func TestCaptureFilesRequireFinalizationPreserveBytesAndDiscardOnlyDrafts(t *tes
 	if err != nil || !bytes.Equal(decoded, data) || !r.Download.Eof {
 		t.Fatalf("saved pixels changed: %v", err)
 	}
-	if _, err := app.Capture(protocol.CaptureAttachmentDiscardMessage{Cmd: protocol.CmdCaptureAttachmentDiscard, CaptureID: capture, AttachmentID: id}); err == nil {
+	if _, err := app.UserMessage(protocol.UserMessageAttachmentDiscardMessage{Cmd: protocol.CmdUserMessageAttachmentDiscard, MessageID: userMessage, AttachmentID: id}); err == nil {
 		t.Fatal("discard deleted committed asset")
 	}
 	changed := append([]byte(nil), data...)
 	changed[0] ^= 1
-	if _, err := app.Capture(protocol.CaptureAttachmentPutMessage{Cmd: protocol.CmdCaptureAttachmentPut, CaptureID: capture, AttachmentID: id, Name: "screenshot.png", DataBase64: base64.StdEncoding.EncodeToString(changed), Final: true}); err == nil {
+	if _, err := app.UserMessage(protocol.UserMessageAttachmentPutMessage{Cmd: protocol.CmdUserMessageAttachmentPut, MessageID: userMessage, AttachmentID: id, Name: "screenshot.png", DataBase64: base64.StdEncoding.EncodeToString(changed), Final: true}); err == nil {
 		t.Fatal("conflicting replay accepted")
 	}
 	draft, draftID := uuid.NewString(), uuid.NewString()
-	uploadCapture(t, app, draft, draftID, data, false)
-	if _, err := app.Capture(protocol.CaptureAttachmentDiscardMessage{Cmd: protocol.CmdCaptureAttachmentDiscard, CaptureID: draft, AttachmentID: draftID}); err != nil {
+	uploadUserMessage(t, app, draft, draftID, data, false)
+	if _, err := app.UserMessage(protocol.UserMessageAttachmentDiscardMessage{Cmd: protocol.CmdUserMessageAttachmentDiscard, MessageID: draft, AttachmentID: draftID}); err != nil {
 		t.Fatal(err)
 	}
-	list, err := app.Capture(protocol.CaptureListMessage{Cmd: protocol.CmdCaptureList, Limit: 100})
+	list, err := app.UserMessage(protocol.UserMessageListMessage{Cmd: protocol.CmdUserMessageList, Limit: 100})
 	if err != nil || len(list.List.DraftAssets) != 0 {
 		t.Fatalf("discard leaves drafts %+v %v", list, err)
 	}
-	if _, err := app.Capture(protocol.CaptureAttachmentGetMessage{Cmd: protocol.CmdCaptureAttachmentGet, CaptureID: draft, AttachmentID: draftID}); err == nil {
+	if _, err := app.UserMessage(protocol.UserMessageAttachmentGetMessage{Cmd: protocol.CmdUserMessageAttachmentGet, MessageID: draft, AttachmentID: draftID}); err == nil {
 		t.Fatal("discarded asset retrieved")
 	}
 }
 
-func TestConcurrentIdenticalFileCapturesReturnOneSavedIdentity(t *testing.T) {
+func TestConcurrentIdenticalFileUserMessagesReturnOneSavedIdentity(t *testing.T) {
 	w := newWorld(t)
 	app := w.TrustedApp()
 	id, asset := uuid.NewString(), uuid.NewString()
-	uploadCapture(t, app, id, asset, capturePNG(t), true)
-	msg := protocol.CaptureSendMessage{Cmd: protocol.CmdCaptureSend, CaptureID: id, Target: protocol.CaptureTarget{Kind: protocol.CaptureTargetKindChief}, Content: "same request", AttachmentIds: []string{asset}}
+	uploadUserMessage(t, app, id, asset, userMessagePNG(t), true)
+	msg := protocol.UserMessageSendMessage{Cmd: protocol.CmdUserMessageSend, MessageID: id, Target: protocol.UserMessageTarget{Kind: protocol.UserMessageTargetKindChief}, Content: "same request", AttachmentIds: []string{asset}}
 	start := make(chan struct{})
 	errs := make(chan error, 2)
 	for range 2 {
-		go func() { <-start; _, err := app.Capture(msg); errs <- err }()
+		go func() { <-start; _, err := app.UserMessage(msg); errs <- err }()
 	}
 	close(start)
 	for range 2 {
@@ -134,32 +134,32 @@ func TestConcurrentIdenticalFileCapturesReturnOneSavedIdentity(t *testing.T) {
 			t.Fatal(err)
 		}
 	}
-	list := captureRecord(t, app, id)
+	list := userMessageRecord(t, app, id)
 	if len(list.Attachments) != 1 {
 		t.Fatalf("duplicate assets %+v", list)
 	}
-	result, err := app.Capture(protocol.CaptureListMessage{Cmd: protocol.CmdCaptureList, Limit: 100})
+	result, err := app.UserMessage(protocol.UserMessageListMessage{Cmd: protocol.CmdUserMessageList, Limit: 100})
 	if err != nil || len(result.List.Items) != 1 {
 		t.Fatalf("duplicate messages %+v %v", result, err)
 	}
 }
-func TestAppCaptureRequestsAreCorrelatedAndEmptyOrMalformedTargetsRefused(t *testing.T) {
+func TestAppUserMessageRequestsAreCorrelatedAndEmptyOrMalformedTargetsRefused(t *testing.T) {
 	w := newWorld(t)
 	app := w.TrustedApp()
-	capture, asset := uuid.NewString(), uuid.NewString()
-	req := protocol.CaptureAttachmentPutMessage{Cmd: protocol.CmdCaptureAttachmentPut, RequestID: protocol.Ptr("upload"), CaptureID: capture, AttachmentID: asset, Name: "screenshot.png", DataBase64: base64.StdEncoding.EncodeToString(capturePNG(t)), Final: true}
-	r := testworld.Request(app, req, protocol.EventCaptureResult, func(r protocol.CaptureResultMessage) bool { return r.RequestID == "upload" })
+	userMessage, asset := uuid.NewString(), uuid.NewString()
+	req := protocol.UserMessageAttachmentPutMessage{Cmd: protocol.CmdUserMessageAttachmentPut, RequestID: protocol.Ptr("upload"), MessageID: userMessage, AttachmentID: asset, Name: "screenshot.png", DataBase64: base64.StdEncoding.EncodeToString(userMessagePNG(t)), Final: true}
+	r := testworld.Request(app, req, protocol.EventUserMessageResult, func(r protocol.UserMessageResultMessage) bool { return r.RequestID == "upload" })
 	if !r.Success || r.Result.Upload.Attachment == nil {
 		t.Fatalf("app upload %+v", r)
 	}
-	sent := testworld.Request(app, protocol.CaptureSendMessage{Cmd: protocol.CmdCaptureSend, RequestID: protocol.Ptr("save"), CaptureID: capture, Target: protocol.CaptureTarget{Kind: protocol.CaptureTargetKindChief}, AttachmentIds: []string{asset}}, protocol.EventCaptureResult, func(r protocol.CaptureResultMessage) bool { return r.RequestID == "save" })
-	if !sent.Success || sent.Result.Record.ID != capture || len(sent.Result.Record.Attachments) != 1 {
+	sent := testworld.Request(app, protocol.UserMessageSendMessage{Cmd: protocol.CmdUserMessageSend, RequestID: protocol.Ptr("save"), MessageID: userMessage, Target: protocol.UserMessageTarget{Kind: protocol.UserMessageTargetKindChief}, AttachmentIds: []string{asset}}, protocol.EventUserMessageResult, func(r protocol.UserMessageResultMessage) bool { return r.RequestID == "save" })
+	if !sent.Success || sent.Result.Record.ID != userMessage || len(sent.Result.Record.Attachments) != 1 {
 		t.Fatalf("app save %+v", sent)
 	}
-	for _, target := range []protocol.CaptureTarget{{Kind: protocol.CaptureTargetKindChief}, {Kind: protocol.CaptureTargetKindChief, MemberID: protocol.Ptr("alder")}, {Kind: protocol.CaptureTargetKindCrew}, {Kind: protocol.CaptureTargetKind("invalid")}} {
-		r := testworld.Request(app, protocol.CaptureSendMessage{Cmd: protocol.CmdCaptureSend, RequestID: protocol.Ptr("refuse"), CaptureID: uuid.NewString(), Target: target, AttachmentIds: []string{}}, protocol.EventCaptureResult, func(r protocol.CaptureResultMessage) bool { return r.RequestID == "refuse" })
+	for _, target := range []protocol.UserMessageTarget{{Kind: protocol.UserMessageTargetKindChief}, {Kind: protocol.UserMessageTargetKindChief, MemberID: protocol.Ptr("alder")}, {Kind: protocol.UserMessageTargetKindCrew}, {Kind: protocol.UserMessageTargetKind("invalid")}} {
+		r := testworld.Request(app, protocol.UserMessageSendMessage{Cmd: protocol.CmdUserMessageSend, RequestID: protocol.Ptr("refuse"), MessageID: uuid.NewString(), Target: target, AttachmentIds: []string{}}, protocol.EventUserMessageResult, func(r protocol.UserMessageResultMessage) bool { return r.RequestID == "refuse" })
 		if r.Success || protocol.Deref(r.Error) == "" {
-			t.Fatalf("invalid capture accepted %+v", r)
+			t.Fatalf("invalid userMessage accepted %+v", r)
 		}
 	}
 }
@@ -168,7 +168,7 @@ func TestUserAndPeerMessagesShareInboxWithoutChangingAuthorship(t *testing.T) {
 	cli, app := w.Client(), w.TrustedApp()
 	registerSessions(t, w, cli, "chief", "peer")
 	setChiefOfStaff(app, "chief", true)
-	sendCapture(t, app, protocol.CaptureTarget{Kind: protocol.CaptureTargetKindChief}, "user request")
+	sendUserMessage(t, app, protocol.UserMessageTarget{Kind: protocol.UserMessageTargetKindChief}, "user request")
 	sendAgentMessage(t, cli, "peer", "chief", "peer suggestion")
 	batch := readInbox(t, cli, "chief", 0)
 	if len(batch.Items) != 2 || batch.Items[0].Kind != "user_message" || batch.Items[0].SenderSessionID != nil || batch.Items[1].Kind != "peer_message" || protocol.Deref(batch.Items[1].SenderSessionID) != "peer" {
@@ -176,71 +176,71 @@ func TestUserAndPeerMessagesShareInboxWithoutChangingAuthorship(t *testing.T) {
 	}
 }
 
-func TestCaptureHistoryPagesWithoutReadingAndReportsMissingIdentity(t *testing.T) {
+func TestUserMessageHistoryPagesWithoutReadingAndReportsMissingIdentity(t *testing.T) {
 	w := newWorld(t)
 	app := w.TrustedApp()
 	var sent []string
 	for _, body := range []string{"first", "second", "third"} {
-		sent = append(sent, sendCapture(t, app, protocol.CaptureTarget{Kind: protocol.CaptureTargetKindChief}, body).CaptureID)
+		sent = append(sent, sendUserMessage(t, app, protocol.UserMessageTarget{Kind: protocol.UserMessageTargetKindChief}, body).MessageID)
 	}
-	page, err := app.Capture(protocol.CaptureListMessage{Cmd: protocol.CmdCaptureList, Limit: 2})
+	page, err := app.UserMessage(protocol.UserMessageListMessage{Cmd: protocol.CmdUserMessageList, Limit: 2})
 	if err != nil {
 		t.Fatal(err)
 	}
 	if len(page.List.Items) != 2 || page.List.Items[0].ID != sent[2] || page.List.Items[1].ID != sent[1] || page.List.NextCursor == nil {
 		t.Fatalf("first page %+v", page)
 	}
-	sendCapture(t, app, protocol.CaptureTarget{Kind: protocol.CaptureTargetKindChief}, "arrived between pages")
-	tail, err := app.Capture(protocol.CaptureListMessage{Cmd: protocol.CmdCaptureList, Limit: 2, Cursor: page.List.NextCursor})
+	sendUserMessage(t, app, protocol.UserMessageTarget{Kind: protocol.UserMessageTargetKindChief}, "arrived between pages")
+	tail, err := app.UserMessage(protocol.UserMessageListMessage{Cmd: protocol.CmdUserMessageList, Limit: 2, Cursor: page.List.NextCursor})
 	if err != nil || len(tail.List.Items) != 1 || tail.List.Items[0].ID != sent[0] || tail.List.NextCursor != nil || tail.List.Items[0].ReadAt != nil {
 		t.Fatalf("tail %+v %v", tail, err)
 	}
-	if _, err := app.Capture(protocol.CaptureListMessage{Cmd: protocol.CmdCaptureList, Limit: 0}); err == nil {
+	if _, err := app.UserMessage(protocol.UserMessageListMessage{Cmd: protocol.CmdUserMessageList, Limit: 0}); err == nil {
 		t.Fatal("zero page size accepted")
 	}
 	missing := uuid.NewString()
-	if _, err := app.Capture(protocol.CaptureGetMessage{Cmd: protocol.CmdCaptureGet, CaptureID: missing}); client.ErrorCode(err) != protocol.ErrorCodeCaptureNotFound {
+	if _, err := app.UserMessage(protocol.UserMessageGetMessage{Cmd: protocol.CmdUserMessageGet, MessageID: missing}); client.ErrorCode(err) != protocol.ErrorCodeUserMessageNotFound {
 		t.Fatalf("missing identity %v code %q", err, client.ErrorCode(err))
 	}
-	result := testworld.Request(app, protocol.CaptureGetMessage{Cmd: protocol.CmdCaptureGet, RequestID: protocol.Ptr("missing"), CaptureID: missing}, protocol.EventCaptureResult, func(r protocol.CaptureResultMessage) bool { return r.RequestID == "missing" })
-	if result.Success || protocol.Deref(result.ErrorCode) != protocol.ErrorCodeCaptureNotFound {
+	result := testworld.Request(app, protocol.UserMessageGetMessage{Cmd: protocol.CmdUserMessageGet, RequestID: protocol.Ptr("missing"), MessageID: missing}, protocol.EventUserMessageResult, func(r protocol.UserMessageResultMessage) bool { return r.RequestID == "missing" })
+	if result.Success || protocol.Deref(result.ErrorCode) != protocol.ErrorCodeUserMessageNotFound {
 		t.Fatalf("app missing %+v", result)
 	}
 }
 
-func TestCaptureAuthoringAndHistoryRefuseTheAgentSocket(t *testing.T) {
+func TestUserMessageAuthoringAndHistoryRefuseTheAgentSocket(t *testing.T) {
 	w := newWorld(t)
 	cli, app := w.Client(), w.TrustedApp()
-	capture, asset := uuid.NewString(), uuid.NewString()
-	uploadCapture(t, app, capture, asset, capturePNG(t), true)
-	send := protocol.CaptureSendMessage{Cmd: protocol.CmdCaptureSend, CaptureID: capture, Target: protocol.CaptureTarget{Kind: protocol.CaptureTargetKindChief}, Content: "User request", AttachmentIds: []string{asset}}
+	userMessage, asset := uuid.NewString(), uuid.NewString()
+	uploadUserMessage(t, app, userMessage, asset, userMessagePNG(t), true)
+	send := protocol.UserMessageSendMessage{Cmd: protocol.CmdUserMessageSend, MessageID: userMessage, Target: protocol.UserMessageTarget{Kind: protocol.UserMessageTargetKindChief}, Content: "User request", AttachmentIds: []string{asset}}
 	for _, msg := range []any{
 		send,
-		protocol.CaptureGetMessage{Cmd: protocol.CmdCaptureGet, CaptureID: capture},
-		protocol.CaptureListMessage{Cmd: protocol.CmdCaptureList, Limit: 1},
-		protocol.CaptureAttachmentPutMessage{Cmd: protocol.CmdCaptureAttachmentPut, CaptureID: capture, AttachmentID: asset},
-		protocol.CaptureAttachmentDiscardMessage{Cmd: protocol.CmdCaptureAttachmentDiscard, CaptureID: capture, AttachmentID: asset},
+		protocol.UserMessageGetMessage{Cmd: protocol.CmdUserMessageGet, MessageID: userMessage},
+		protocol.UserMessageListMessage{Cmd: protocol.CmdUserMessageList, Limit: 1},
+		protocol.UserMessageAttachmentPutMessage{Cmd: protocol.CmdUserMessageAttachmentPut, MessageID: userMessage, AttachmentID: asset},
+		protocol.UserMessageAttachmentDiscardMessage{Cmd: protocol.CmdUserMessageAttachmentDiscard, MessageID: userMessage, AttachmentID: asset},
 	} {
-		if _, err := cli.Capture(msg); err == nil || !strings.Contains(err.Error(), "app-only") {
+		if _, err := cli.UserMessage(msg); err == nil || !strings.Contains(err.Error(), "app-only") {
 			t.Fatalf("agent authoring/history %T: %v", msg, err)
 		}
 	}
-	if _, err := app.Capture(send); err != nil {
+	if _, err := app.UserMessage(send); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := cli.Capture(protocol.CaptureAttachmentGetMessage{Cmd: protocol.CmdCaptureAttachmentGet, CaptureID: capture, AttachmentID: asset}); err != nil {
+	if _, err := cli.UserMessage(protocol.UserMessageAttachmentGetMessage{Cmd: protocol.CmdUserMessageAttachmentGet, MessageID: userMessage, AttachmentID: asset}); err != nil {
 		t.Fatalf("agent retrieval refused: %v", err)
 	}
-	if r := captureRecord(t, app, capture); r.ReadAt != nil {
-		t.Fatalf("agent mutated capture: %+v", r)
+	if r := userMessageRecord(t, app, userMessage); r.ReadAt != nil {
+		t.Fatalf("agent mutated userMessage: %+v", r)
 	}
 }
 
-func TestCaptureAuthoringRequiresTheTrustedAppIdentity(t *testing.T) {
+func TestUserMessageAuthoringRequiresTheTrustedAppIdentity(t *testing.T) {
 	w := newWorld(t)
 	trusted := w.TrustedApp()
-	capture, asset := uuid.NewString(), uuid.NewString()
-	uploadCapture(t, trusted, capture, asset, capturePNG(t), true)
+	userMessage, asset := uuid.NewString(), uuid.NewString()
+	uploadUserMessage(t, trusted, userMessage, asset, userMessagePNG(t), true)
 	hostToken, err := os.ReadFile(filepath.Join(w.Dir, "browser-host-token"))
 	if err != nil {
 		t.Fatal(err)
@@ -258,66 +258,66 @@ func TestCaptureAuthoringRequiresTheTrustedAppIdentity(t *testing.T) {
 	p = w.Connect(hello, http.Header{"Origin": {"tauri://localhost"}})
 	testworld.Await[protocol.InitialStateMessage](p, protocol.EventInitialState, nil)
 	peers = append(peers, p)
-	send := protocol.CaptureSendMessage{Cmd: protocol.CmdCaptureSend, CaptureID: capture, Target: protocol.CaptureTarget{Kind: protocol.CaptureTargetKindChief}, Content: "Only the user", AttachmentIds: []string{asset}}
+	send := protocol.UserMessageSendMessage{Cmd: protocol.CmdUserMessageSend, MessageID: userMessage, Target: protocol.UserMessageTarget{Kind: protocol.UserMessageTargetKindChief}, Content: "Only the user", AttachmentIds: []string{asset}}
 	for _, peer := range peers {
 		for _, msg := range []any{send,
-			protocol.CaptureGetMessage{Cmd: protocol.CmdCaptureGet, CaptureID: capture},
-			protocol.CaptureListMessage{Cmd: protocol.CmdCaptureList, Limit: 1},
-			protocol.CaptureAttachmentPutMessage{Cmd: protocol.CmdCaptureAttachmentPut, CaptureID: capture, AttachmentID: asset},
-			protocol.CaptureAttachmentDiscardMessage{Cmd: protocol.CmdCaptureAttachmentDiscard, CaptureID: capture, AttachmentID: asset},
+			protocol.UserMessageGetMessage{Cmd: protocol.CmdUserMessageGet, MessageID: userMessage},
+			protocol.UserMessageListMessage{Cmd: protocol.CmdUserMessageList, Limit: 1},
+			protocol.UserMessageAttachmentPutMessage{Cmd: protocol.CmdUserMessageAttachmentPut, MessageID: userMessage, AttachmentID: asset},
+			protocol.UserMessageAttachmentDiscardMessage{Cmd: protocol.CmdUserMessageAttachmentDiscard, MessageID: userMessage, AttachmentID: asset},
 		} {
-			if _, err := peer.Capture(msg); client.ErrorCode(err) != protocol.ErrorCodeUnauthorizedClient || !strings.Contains(err.Error(), "authenticated attn app") {
+			if _, err := peer.UserMessage(msg); client.ErrorCode(err) != protocol.ErrorCodeUnauthorizedClient || !strings.Contains(err.Error(), "authenticated attn app") {
 				t.Fatalf("untrusted authoring %T: %v", msg, err)
 			}
 		}
-		if _, err := peer.Capture(protocol.CaptureAttachmentGetMessage{Cmd: protocol.CmdCaptureAttachmentGet, CaptureID: capture, AttachmentID: asset}); err != nil {
+		if _, err := peer.UserMessage(protocol.UserMessageAttachmentGetMessage{Cmd: protocol.CmdUserMessageAttachmentGet, MessageID: userMessage, AttachmentID: asset}); err != nil {
 			t.Fatalf("retrieval blocked: %v", err)
 		}
 	}
-	if _, err := trusted.Capture(send); err != nil {
+	if _, err := trusted.UserMessage(send); err != nil {
 		t.Fatal(err)
 	}
-	if r := captureRecord(t, trusted, capture); r.ReadAt != nil {
-		t.Fatalf("untrusted capture mutation: %+v", r)
+	if r := userMessageRecord(t, trusted, userMessage); r.ReadAt != nil {
+		t.Fatalf("untrusted userMessage mutation: %+v", r)
 	}
 }
 
-func TestUserCaptureWaitsForTheNextChief(t *testing.T) {
+func TestUserMessageWaitsForTheNextChief(t *testing.T) {
 	w := newWorld(t)
 	cli, app := w.Client(), w.TrustedApp()
-	msg := sendCapture(t, app, protocol.CaptureTarget{Kind: protocol.CaptureTargetKindChief}, "Please investigate this")
-	if r := captureRecord(t, app, msg.CaptureID); r.ReadAt != nil {
-		t.Fatalf("absent Chief capture is read: %+v", r)
+	msg := sendUserMessage(t, app, protocol.UserMessageTarget{Kind: protocol.UserMessageTargetKindChief}, "Please investigate this")
+	if r := userMessageRecord(t, app, msg.MessageID); r.ReadAt != nil {
+		t.Fatalf("absent Chief userMessage is read: %+v", r)
 	}
 	registerSessions(t, w, cli, "chief")
 	if r := setChiefOfStaff(app, "chief", true); !r.Success {
 		t.Fatal(r)
 	}
-	if r := captureRecord(t, app, msg.CaptureID); r.ReadAt != nil {
-		t.Fatal("inspection marked capture read")
+	if r := userMessageRecord(t, app, msg.MessageID); r.ReadAt != nil {
+		t.Fatal("inspection marked userMessage read")
 	}
 	items := readInbox(t, cli, "chief", 0).Items
 	if len(items) != 1 || items[0].Kind != "user_message" || items[0].Content != msg.Content || items[0].SenderSessionID != nil || items[0].Address != "chief:"+app.SelectedProfile() {
 		t.Fatalf("user attribution: %+v", items)
 	}
-	if r := captureRecord(t, app, msg.CaptureID); r.ReadAt == nil || *r.ReadAt != items[0].ReadAt {
+	if r := userMessageRecord(t, app, msg.MessageID); r.ReadAt == nil || *r.ReadAt != items[0].ReadAt {
 		t.Fatalf("history read receipt: %+v", r)
 	}
-	if replay, err := app.Capture(msg); err != nil || replay.Record.ID != msg.CaptureID || replay.Record.ReadAt == nil {
+	if replay, err := app.UserMessage(msg); err != nil || replay.Record.ID != msg.MessageID || replay.Record.ReadAt == nil {
 		t.Fatalf("lost acknowledgement replay: %+v %v", replay, err)
 	}
 	changed := msg
 	changed.Content = "conflicting reuse"
-	if _, err := app.Capture(changed); err == nil {
+	if _, err := app.UserMessage(changed); err == nil {
 		t.Fatal("conflicting identity accepted")
 	}
-	other := sendCapture(t, app, msg.Target, msg.Content)
-	if other.CaptureID == msg.CaptureID {
+	other := sendUserMessage(t, app, msg.Target, msg.Content)
+	if other.MessageID == msg.MessageID {
 		t.Fatal("intentional identical text deduplicated")
 	}
 }
 
-func TestUserCaptureDeliveryWakeIsChargedOnce(t *testing.T) {
+func TestUserMessageDeliveryWakeIsChargedOnce(t *testing.T) {
 	inBubbleWithAgents(t, func(t *testing.T, w *world) {
 		writeCrewCharter(t, w, "trellis")
 		w.restart()
@@ -325,42 +325,42 @@ func TestUserCaptureDeliveryWakeIsChargedOnce(t *testing.T) {
 		setSetting(t, app, "crew.heartbeat_enabled", "false")
 		setSetting(t, app, "crew.autosleep_enabled", "false")
 		setSetting(t, app, "crew.wake_limit", "1")
-		target := protocol.CaptureTarget{Kind: protocol.CaptureTargetKindCrew, MemberID: protocol.Ptr("trellis")}
-		first := sendCapture(t, app, target, "first user request")
+		target := protocol.UserMessageTarget{Kind: protocol.UserMessageTargetKindCrew, MemberID: protocol.Ptr("trellis")}
+		first := sendUserMessage(t, app, target, "first user request")
 		synctest.Wait()
 		dayID := protocol.Deref(crewRosterMember(t, cli, "trellis").BindingSession)
 		if dayID == "" {
-			t.Fatal("capture did not wake the member")
+			t.Fatal("userMessage did not wake the member")
 		}
-		second := sendCapture(t, app, target, "second user request")
+		second := sendUserMessage(t, app, target, "second user request")
 		day := w.bootBubbleClaude(t, dayID)
 		day.reply("Ready. <!-- attn:state=idle -->")
 		if got := day.promptsContaining(inboxDoorbell); got != 1 {
 			t.Fatalf("wake rings=%d, want one", got)
 		}
 		items := readInbox(t, cli, dayID, 0).Items
-		if len(items) != 2 || !((items[0].ItemID == first.CaptureID && items[1].ItemID == second.CaptureID) || (items[0].ItemID == second.CaptureID && items[1].ItemID == first.CaptureID)) {
-			t.Fatalf("capture inbox: %+v", items)
+		if len(items) != 2 || !((items[0].ItemID == first.MessageID && items[1].ItemID == second.MessageID) || (items[0].ItemID == second.MessageID && items[1].ItemID == first.MessageID)) {
+			t.Fatalf("userMessage inbox: %+v", items)
 		}
-		if _, err := cli.CrewHandoff(dayID, "finished the captures", false, protocol.CrewDayCloseSleep); err != nil {
+		if _, err := cli.CrewHandoff(dayID, "finished the user messages", false, protocol.CrewDayCloseSleep); err != nil {
 			t.Fatal(err)
 		}
-		third := sendCapture(t, app, target, "wait for the next manual wake")
+		third := sendUserMessage(t, app, target, "wait for the next manual wake")
 		w.advance(15 * time.Minute)
 		if binding := crewRosterMember(t, cli, "trellis").BindingSession; binding != nil {
-			t.Fatalf("capture bypassed charged wake_limit=1: %s", *binding)
+			t.Fatalf("userMessage bypassed charged wake_limit=1: %s", *binding)
 		}
-		if r := captureRecord(t, app, third.CaptureID); r.ReadAt != nil || r.Content != third.Content {
-			t.Fatalf("wake limit lost capture: %+v", r)
+		if r := userMessageRecord(t, app, third.MessageID); r.ReadAt != nil || r.Content != third.Content {
+			t.Fatalf("wake limit lost userMessage: %+v", r)
 		}
 	})
 }
 
-func TestCapturesBelongToTheirProfileAcrossInboxReadsAndRestart(t *testing.T) {
+func TestUserMessagesBelongToTheirProfileAcrossInboxReadsAndRestart(t *testing.T) {
 	inBubble(t, func(t *testing.T, w *world) {
 		a := w.TrustedApp()
 		profileA := a.SelectedProfile()
-		profileB := createProfile(w.App(), "Other captures").ID
+		profileB := createProfile(w.App(), "Other user messages").ID
 		b := w.TrustedApp(profileB)
 		cli := w.Client()
 		for _, chief := range []struct {
@@ -374,60 +374,61 @@ func TestCapturesBelongToTheirProfileAcrossInboxReadsAndRestart(t *testing.T) {
 				t.Fatal(r)
 			}
 		}
-		capture, file, draft := uuid.NewString(), uuid.NewString(), uuid.NewString()
+		userMessage, file, draft := uuid.NewString(), uuid.NewString(), uuid.NewString()
 		bytesA, bytesB := []byte("profile A file"), []byte("profile B file")
-		uploadCapture(t, a, capture, file, bytesA, true)
-		uploadCapture(t, a, draft, file, bytesA, true)
-		msg := protocol.CaptureSendMessage{Cmd: protocol.CmdCaptureSend, CaptureID: capture, Target: protocol.CaptureTarget{Kind: protocol.CaptureTargetKindChief}, Content: "A request", AttachmentIds: []string{file}}
-		if _, err := a.Capture(msg); err != nil {
+		uploadUserMessage(t, a, userMessage, file, bytesA, true)
+		uploadUserMessage(t, a, draft, file, bytesA, true)
+		msg := protocol.UserMessageSendMessage{Cmd: protocol.CmdUserMessageSend, MessageID: userMessage, Target: protocol.UserMessageTarget{Kind: protocol.UserMessageTargetKindChief}, Content: "A request", AttachmentIds: []string{file}}
+		if _, err := a.UserMessage(msg); err != nil {
 			t.Fatal(err)
 		}
-		testworld.Await[protocol.CaptureChangedMessage](a, protocol.EventCaptureChanged, func(e protocol.CaptureChangedMessage) bool { return e.CaptureID == capture && e.ProfileID == profileA })
-		if _, err := b.Capture(protocol.CaptureGetMessage{Cmd: protocol.CmdCaptureGet, CaptureID: capture}); client.ErrorCode(err) != protocol.ErrorCodeCaptureNotFound {
+		testworld.Await[protocol.UserMessageChangedMessage](a, protocol.EventUserMessageChanged, func(e protocol.UserMessageChangedMessage) bool {
+			return e.MessageID == userMessage && e.ProfileID == profileA
+		})
+		if _, err := b.UserMessage(protocol.UserMessageGetMessage{Cmd: protocol.CmdUserMessageGet, MessageID: userMessage}); client.ErrorCode(err) != protocol.ErrorCodeUserMessageNotFound {
 			t.Fatalf("other-profile get: %v", err)
 		}
-		if _, err := b.Capture(protocol.CaptureAttachmentGetMessage{Cmd: protocol.CmdCaptureAttachmentGet, CaptureID: capture, AttachmentID: file}); err == nil {
+		if _, err := b.UserMessage(protocol.UserMessageAttachmentGetMessage{Cmd: protocol.CmdUserMessageAttachmentGet, MessageID: userMessage, AttachmentID: file}); err == nil {
 			t.Fatal("other profile downloaded file")
 		}
-		if _, err := cli.WithGardenProfile(profileB, "chief-b").Capture(protocol.CaptureAttachmentGetMessage{Cmd: protocol.CmdCaptureAttachmentGet, CaptureID: capture, AttachmentID: file}); err == nil {
+		if _, err := cli.WithGardenProfile(profileB, "chief-b").UserMessage(protocol.UserMessageAttachmentGetMessage{Cmd: protocol.CmdUserMessageAttachmentGet, MessageID: userMessage, AttachmentID: file}); err == nil {
 			t.Fatal("other-profile CLI downloaded file")
 		}
-		if _, _, err := cli.AgentInboxEntry(capture, "chief-b"); err == nil {
-			t.Fatal("other Chief read A capture")
+		if _, _, err := cli.AgentInboxEntry(userMessage, "chief-b"); err == nil {
+			t.Fatal("other Chief read A userMessage")
 		}
 		if got := readInbox(t, cli, "chief-b", 0); len(got.Items) != 0 {
-			t.Fatalf("other Chief received A capture: %+v", got)
+			t.Fatalf("other Chief received A userMessage: %+v", got)
 		}
-		list, err := b.Capture(protocol.CaptureListMessage{Cmd: protocol.CmdCaptureList, Limit: 1})
+		list, err := b.UserMessage(protocol.UserMessageListMessage{Cmd: protocol.CmdUserMessageList, Limit: 1})
 		if err != nil || len(list.List.Items) != 0 || len(list.List.DraftAssets) != 0 {
 			t.Fatalf("other-profile history: %+v %v", list, err)
 		}
-		if _, err := b.Capture(protocol.CaptureListMessage{Cmd: protocol.CmdCaptureList, Limit: 1, Cursor: &capture}); err == nil {
+		if _, err := b.UserMessage(protocol.UserMessageListMessage{Cmd: protocol.CmdUserMessageList, Limit: 1, Cursor: &userMessage}); err == nil {
 			t.Fatal("other profile used A cursor")
 		}
-		if _, err := b.Capture(protocol.CaptureAttachmentDiscardMessage{Cmd: protocol.CmdCaptureAttachmentDiscard, CaptureID: draft, AttachmentID: file}); err != nil {
+		if _, err := b.UserMessage(protocol.UserMessageAttachmentDiscardMessage{Cmd: protocol.CmdUserMessageAttachmentDiscard, MessageID: draft, AttachmentID: file}); err != nil {
 			t.Fatal(err)
 		}
-		if _, err := a.Capture(protocol.CaptureAttachmentGetMessage{Cmd: protocol.CmdCaptureAttachmentGet, CaptureID: draft, AttachmentID: file}); err != nil {
+		if _, err := a.UserMessage(protocol.UserMessageAttachmentGetMessage{Cmd: protocol.CmdUserMessageAttachmentGet, MessageID: draft, AttachmentID: file}); err != nil {
 			t.Fatalf("other-profile discard deleted A file: %v", err)
 		}
 		synctest.Wait()
 		for _, event := range b.Received() {
-			if event.Event == protocol.EventCaptureChanged {
-				t.Fatalf("other profile got capture event: %+v", event)
+			if event.Event == protocol.EventUserMessageChanged {
+				t.Fatalf("other profile got userMessage event: %+v", event)
 			}
 		}
-		// Identical public identities remain independent, including inbox receipts and bytes.
-		uploadCapture(t, b, capture, file, bytesB, true)
+		uploadUserMessage(t, b, userMessage, file, bytesB, true)
 		msg.Content = "B request"
-		if _, err := b.Capture(msg); err != nil {
+		if _, err := b.UserMessage(msg); err != nil {
 			t.Fatal(err)
 		}
 		itemsB := readInbox(t, cli, "chief-b", 0).Items
 		if len(itemsB) != 1 || itemsB[0].Content != "B request" {
 			t.Fatalf("B inbox: %+v", itemsB)
 		}
-		if r := captureRecord(t, a, capture); r.ReadAt != nil {
+		if r := userMessageRecord(t, a, userMessage); r.ReadAt != nil {
 			t.Fatal("B read A receipt")
 		}
 		itemsA := readInbox(t, cli, "chief-a", 0).Items
@@ -440,7 +441,7 @@ func TestCapturesBelongToTheirProfileAcrossInboxReadsAndRestart(t *testing.T) {
 			bytes   []byte
 		}{{profileA, bytesA}, {profileB, bytesB}} {
 			app := w.TrustedApp(owner.profile)
-			r, err := app.Capture(protocol.CaptureAttachmentGetMessage{Cmd: protocol.CmdCaptureAttachmentGet, CaptureID: capture, AttachmentID: file})
+			r, err := app.UserMessage(protocol.UserMessageAttachmentGetMessage{Cmd: protocol.CmdUserMessageAttachmentGet, MessageID: userMessage, AttachmentID: file})
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -448,13 +449,13 @@ func TestCapturesBelongToTheirProfileAcrossInboxReadsAndRestart(t *testing.T) {
 			if err != nil || !bytes.Equal(got, owner.bytes) {
 				t.Fatalf("profile %s bytes=%q, %v", owner.profile, got, err)
 			}
-			if captureRecord(t, app, capture).ReadAt == nil {
+			if userMessageRecord(t, app, userMessage).ReadAt == nil {
 				t.Fatal("read receipt lost on restart")
 			}
 		}
 		b = w.TrustedApp(profileB)
-		if _, err := b.Capture(protocol.CaptureSendMessage{Cmd: protocol.CmdCaptureSend, ProfileID: &profileA, CaptureID: uuid.NewString(), Target: msg.Target, Content: "queued A request", AttachmentIds: []string{}}); err == nil {
-			t.Fatal("profile switch redirected queued capture")
+		if _, err := b.UserMessage(protocol.UserMessageSendMessage{Cmd: protocol.CmdUserMessageSend, ProfileID: &profileA, MessageID: uuid.NewString(), Target: msg.Target, Content: "queued A request", AttachmentIds: []string{}}); err == nil {
+			t.Fatal("profile switch redirected queued userMessage")
 		}
 	})
 }
