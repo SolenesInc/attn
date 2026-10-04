@@ -5,7 +5,7 @@ import "time"
 const ProtocolVersion = "350"
 
 const (
-	ErrorCodeCaptureNotFound = "capture_not_found"
+	ErrorCodeCaptureNotFound      = "capture_not_found"
 	ErrorCodeConflict             = "conflict"
 	ErrorCodeUndeclaredCollection = "undeclared_collection"
 	ErrorCodeInvalidQuery         = "invalid_query"
@@ -37,12 +37,12 @@ const (
 )
 
 const (
-	CmdCaptureAttachmentDiscard              = "capture_attachment_discard"
-	CmdCaptureAttachmentGet                  = "capture_attachment_get"
-	CmdCaptureAttachmentPut                  = "capture_attachment_put"
-	CmdCaptureList                           = "capture_list"
-	CmdCaptureGet                            = "capture_get"
-	CmdCaptureSend                           = "capture_send"
+	CmdCaptureAttachmentDiscard      = "capture_attachment_discard"
+	CmdCaptureAttachmentGet          = "capture_attachment_get"
+	CmdCaptureAttachmentPut          = "capture_attachment_put"
+	CmdCaptureList                   = "capture_list"
+	CmdCaptureGet                    = "capture_get"
+	CmdCaptureSend                   = "capture_send"
 	CmdClientHello                   = "client_hello"
 	CmdDelegate                      = "delegate"
 	CmdDelegationPreferencesGet      = "delegation_preferences_get"
@@ -338,8 +338,8 @@ const (
 const EventAutomationsChanged = "automations_changed"
 
 const (
-	EventCaptureResult = "capture_result"
-	EventCaptureChanged = "capture_changed"
+	EventCaptureResult                   = "capture_result"
+	EventCaptureChanged                  = "capture_changed"
 	EventSessionRegistered               = "session_registered"
 	EventSessionUnregistered             = "session_unregistered"
 	EventSessionCloseResult              = "session_close_result"

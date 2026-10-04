@@ -29,7 +29,12 @@ func (d *Daemon) handleAgentInbox(conn net.Conn, msg *protocol.AgentInboxMessage
 		return
 	}
 	messageID := strings.TrimSpace(protocol.Deref(msg.MessageID))
-	storedItem, found, err := d.store.InboxItem(messageID)
+	storedItem, found, err := d.store.InboxItem(store.CaptureInboxID(recipient.ProfileID, messageID))
+	if found {
+		messageID = storedItem.ID
+	} else if err == nil {
+		storedItem, found, err = d.store.InboxItem(messageID)
+	}
 	if err != nil {
 		d.replyPeerMessageError(conn, err)
 		return
@@ -40,14 +45,14 @@ func (d *Daemon) handleAgentInbox(conn net.Conn, msg *protocol.AgentInboxMessage
 			d.replyAgentMsgError(conn, "message_not_found", err.Error())
 			return
 		}
-		capture, err := d.store.Capture(item.Source)
+		capture, err := d.store.Capture(recipient.ProfileID, item.Source)
 		if err != nil {
 			d.replyPeerMessageError(conn, err)
 			return
 		}
-		result := &protocol.AgentInboxItem{Address: item.To.String(), ItemID: item.ID, Kind: string(item.Kind), SourceID: protocol.Ptr(item.Source), Content: item.Text, CreatedAt: item.CreatedAt, NotifiedAt: item.NotifiedAt, ReadAt: item.ReadAt, Attachments: capture.Attachments}
+		result := &protocol.AgentInboxItem{Address: item.To.String(), ItemID: item.Source, Kind: string(item.Kind), SourceID: protocol.Ptr(item.Source), Content: item.Text, CreatedAt: item.CreatedAt, NotifiedAt: item.NotifiedAt, ReadAt: item.ReadAt, Attachments: capture.Attachments}
 		_ = json.NewEncoder(conn).Encode(protocol.Response{Ok: true, AgentInboxItemResult: result})
-		d.publishFact(FactCaptureChanged, capture.ID, nil)
+		d.publishCaptureChanged(recipient.ProfileID, capture.ID)
 		d.kickInboxAfterCommit(item.To)
 		return
 	}
@@ -115,13 +120,14 @@ func (d *Daemon) handleAgentInboxBatch(conn net.Conn, recipientSessionID string,
 			item.Hint = protocol.Ptr(delivery.Item.Hint)
 		}
 		if delivery.Item.Kind == inbox.UserMessage {
-			record, err := d.store.Capture(delivery.Item.Source)
+			item.ItemID = delivery.Item.Source
+			record, err := d.store.Capture(d.store.Get(recipientSessionID).ProfileID, delivery.Item.Source)
 			if err != nil {
 				d.logf("inbox capture assets: %v", err)
 			} else {
 				item.Attachments = record.Attachments
 			}
-			d.publishFact(FactCaptureChanged, delivery.Item.Source, nil)
+			d.publishCaptureChanged(d.store.Get(recipientSessionID).ProfileID, delivery.Item.Source)
 		}
 		if delivery.Peer != nil {
 			item.SenderSessionID = protocol.Ptr(delivery.Peer.SenderSessionID)

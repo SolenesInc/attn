@@ -1364,14 +1364,14 @@ CREATE INDEX IF NOT EXISTS idx_automode_denials_recent ON automode_denials(id DE
 `},
 	{170, "durable user captures and file manifests", `
  CREATE TABLE user_messages (
- id TEXT PRIMARY KEY, submission TEXT NOT NULL, target_kind TEXT NOT NULL,
- target_member_id TEXT NOT NULL DEFAULT '', body TEXT NOT NULL, created_at TEXT NOT NULL
+ profile_id TEXT NOT NULL, id TEXT NOT NULL, inbox_item_id TEXT NOT NULL UNIQUE, submission TEXT NOT NULL, target_kind TEXT NOT NULL,
+ target_member_id TEXT NOT NULL DEFAULT '', body TEXT NOT NULL, created_at TEXT NOT NULL, PRIMARY KEY(profile_id,id)
  );
- CREATE INDEX user_messages_recent ON user_messages(created_at DESC,id DESC);
+ CREATE INDEX user_messages_recent ON user_messages(profile_id,created_at DESC,id DESC);
  CREATE TABLE capture_attachments (
- capture_id TEXT NOT NULL, attachment_id TEXT NOT NULL, name TEXT NOT NULL,
+ profile_id TEXT NOT NULL, capture_id TEXT NOT NULL, attachment_id TEXT NOT NULL, name TEXT NOT NULL,
  media_type TEXT NOT NULL DEFAULT '', byte_count INTEGER NOT NULL DEFAULT 0,
- state TEXT NOT NULL, position INTEGER NOT NULL DEFAULT 0, PRIMARY KEY(capture_id, attachment_id)
+ state TEXT NOT NULL, position INTEGER NOT NULL DEFAULT 0, PRIMARY KEY(profile_id, capture_id, attachment_id)
  );
  `},
 }

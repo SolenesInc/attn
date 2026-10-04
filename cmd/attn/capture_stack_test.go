@@ -181,11 +181,12 @@ func TestDamagedCaptureDraftDoesNotBlockDaemonRestart(t *testing.T) {
 	s.StartCrashingAt("capture-attachment-installed")
 	capture, id := uuid.NewString(), uuid.NewString()
 	data := []byte("%PDF-1.4\nQuick Capture recovery fixture\n%%EOF\n")
-	if _, err := s.TrustedApp().Capture(protocol.CaptureAttachmentPutMessage{Cmd: protocol.CmdCaptureAttachmentPut, CaptureID: capture, AttachmentID: id, Name: "notes.pdf", DataBase64: base64.StdEncoding.EncodeToString(data), Final: true}); err == nil {
+	crashApp := s.TrustedApp()
+	if _, err := crashApp.Capture(protocol.CaptureAttachmentPutMessage{Cmd: protocol.CmdCaptureAttachmentPut, CaptureID: capture, AttachmentID: id, Name: "notes.pdf", DataBase64: base64.StdEncoding.EncodeToString(data), Final: true}); err == nil {
 		t.Fatal("crashed upload returned success")
 	}
 	s.AwaitCrash()
-	if err := os.Truncate(filepath.Join(s.Dir, "captures", capture, id), int64(len(data)-1)); err != nil {
+	if err := os.Truncate(filepath.Join(s.Dir, "captures", crashApp.SelectedProfile(), capture, id), int64(len(data)-1)); err != nil {
 		t.Fatal(err)
 	}
 	s.Start()
