@@ -20,7 +20,7 @@ func (d *Daemon) handleAgentInbox(conn net.Conn, msg *protocol.AgentInboxMessage
 		return
 	}
 	if strings.TrimSpace(protocol.Deref(msg.MessageID)) == "" {
-		d.handleAgentInboxBatch(conn, recipient.ID, protocol.Deref(msg.Limit))
+		d.handleAgentInboxBatch(conn, recipient.ID, recipient.ProfileID, protocol.Deref(msg.Limit))
 		return
 	}
 	addresses, err := d.inboxAddressesOf(recipient.ID)
@@ -84,7 +84,7 @@ func (d *Daemon) handleAgentInbox(conn net.Conn, msg *protocol.AgentInboxMessage
 	}
 }
 
-func (d *Daemon) handleAgentInboxBatch(conn net.Conn, recipientSessionID string, limit int) {
+func (d *Daemon) handleAgentInboxBatch(conn net.Conn, recipientSessionID, profileID string, limit int) {
 	d.lockGardenRoles()
 	addresses, err := d.inboxAddressesOf(recipientSessionID)
 	for _, address := range addresses {
@@ -103,7 +103,6 @@ func (d *Daemon) handleAgentInboxBatch(conn net.Conn, recipientSessionID string,
 		d.replyAgentMsgError(conn, "internal_error", "the agent inbox could not be read")
 		return
 	}
-	profileID := d.store.Get(recipientSessionID).ProfileID
 	items := make([]protocol.AgentInboxItem, 0, len(deliveries))
 	d.noteCrewRestartMailboxRead(deliveries)
 	for _, delivery := range deliveries {
