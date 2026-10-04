@@ -310,6 +310,13 @@ html, body, #root {
   z-index: 2;
 }
 
+.app-dock {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  z-index: 3;
+}
+
 .terminal-pane {
   flex: 1;
   height: 100%;

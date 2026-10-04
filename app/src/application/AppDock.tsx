@@ -39,13 +39,14 @@ export function AppDock() {
     deleteAutomationDefinition,
   } = useDaemonApi();
   return (
-    <>
+    <div className="app-dock">
       <RightDock
         panelOrder={dockPanelStack}
         panels={[
           {
             id: 'workflowRun',
             isOpen: workflowRunPanelOpen && Boolean(contextSessionId),
+            onClose: gardenHoldsWindow ? undefined : () => closeDockPanel('workflowRun'),
             width: 'clamp(420px, 50vw, 680px)',
             tone: activeWorkflowRun ? toneForDockPanel(activeWorkflowRun.status) : 'default',
             className: 'dock-panel dock-panel--workflow-run',
@@ -59,6 +60,7 @@ export function AppDock() {
           {
             id: 'attention',
             isOpen: attentionPanelOpen,
+            onClose: gardenHoldsWindow ? undefined : () => closeDockPanel('attention'),
             width: 'clamp(360px, 48vw, 600px)',
             className: 'dock-panel dock-panel--attention attention-drawer',
             children: (
@@ -73,6 +75,7 @@ export function AppDock() {
           {
             id: 'automations',
             isOpen: automationsPanelOpen,
+            onClose: gardenHoldsWindow ? undefined : () => closeDockPanel('automations'),
             width: 'clamp(420px, 42vw, 640px)',
             className: 'dock-panel dock-panel--automations',
             children: (
@@ -99,6 +102,6 @@ export function AppDock() {
           },
         ]}
       />
-    </>
+    </div>
   );
 }

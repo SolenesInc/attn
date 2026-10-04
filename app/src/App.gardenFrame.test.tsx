@@ -24,6 +24,19 @@ const toggleFrame = (daemon: ScriptedDaemon) => gesture(daemon, () => pressShort
 const escape = (daemon: ScriptedDaemon) => gesture(daemon, () => fireEvent.keyDown(window, { key: 'Escape' }));
 
 describe('App garden frame', () => {
+  it('dismisses an expanded garden before a dock panel opened after its list', async () => {
+    const { daemon } = await openGarden(seeds);
+    await gesture(daemon, () => pressShortcut('dock.attention'));
+    await click(daemon, 'Expand the garden');
+
+    await escape(daemon);
+
+    expect(shown()).toBe('closed');
+    expect(screen.getByText('Needs Attention')).toBeVisible();
+    await escape(daemon);
+    expect(screen.queryByRole('button', { name: 'Hide PRs Drawer' })).toBeNull();
+  });
+
   it('holds the window as a modal only once expanded, and offers the board only there', async () => {
     const { daemon } = await openGarden(seeds);
     expect(shown()).toBe('dock');

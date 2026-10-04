@@ -117,8 +117,8 @@ export function AppSurface() {
                     <div className="terminal-pane">
                       <AppDesktops />
                     </div>
-                    <AppDock />
                   </div>
+                  <AppDock />
                   <AppCrewPanel />
                 </div>
               </div>
