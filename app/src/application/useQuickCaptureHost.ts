@@ -27,7 +27,7 @@ export function useQuickCaptureHost(daemon: DaemonApi, settings: Record<string, 
   const current = useRef({ daemon, settings, delivery, profileId });
   useLayoutEffect(() => { current.current = { daemon, settings, delivery, profileId }; }, [daemon, settings, delivery, profileId]);
   const state: QuickCaptureHostState = {
-    profileId, connected: !!profileId && daemon.isConnected && daemon.hasReceivedInitialState,
+    profileId, connected: !!profileId && daemon.isReady,
     recipients: [EMPTY_HOST_STATE.recipients[0], ...crew.filter(member => member.profile_id === profileId).map(member => ({
       id: member.id, name: crewDisplayName(member.id), detail: member.binding_session ? 'Awake' : 'Asleep',
     }))],
