@@ -8,7 +8,7 @@ mod mac {
         NSWindowCollectionBehavior, NSWorkspace,
     };
     use objc2_foundation::MainThreadMarker;
-    use panel::CapturePanel;
+    use panel::QuickCapturePanel;
     use std::sync::{mpsc, Mutex};
     use tauri::{Emitter, Manager};
     use tauri_nspanel::{ManagerExt as PanelManagerExt, WebviewWindowExt};
@@ -16,7 +16,7 @@ mod mac {
     mod panel {
         use tauri_nspanel::tauri_panel;
         tauri_panel! {
-            panel!(CapturePanel {
+            panel!(QuickCapturePanel {
                 config: {
                     can_become_key_window: true,
                     can_become_main_window: false,
@@ -26,7 +26,7 @@ mod mac {
         }
     }
 
-    pub struct CaptureState {
+    pub struct QuickCaptureState {
         manager: Option<GlobalHotKeyManager>,
         preference: Option<String>,
         error: Option<String>,
@@ -40,7 +40,10 @@ mod mac {
         let result = show_on_main(app);
         if let Err(error) = &result {
             crate::ui_automation::append_log(app, &format!("[QuickCapture] Open failed: {error}"));
-            app.state::<Mutex<CaptureState>>().lock().unwrap().error = Some(error.clone());
+            app.state::<Mutex<QuickCaptureState>>()
+                .lock()
+                .unwrap()
+                .error = Some(error.clone());
             let _ = app.emit("capture-error", error);
         }
         result
@@ -55,7 +58,7 @@ mod mac {
             .get_webview_window("capture")
             .ok_or("capture window missing")?;
         log_focus(app, "before open");
-        let state = app.state::<Mutex<CaptureState>>();
+        let state = app.state::<Mutex<QuickCaptureState>>();
         if !window.is_visible().unwrap_or(false) {
             state.lock().unwrap().was_hidden = NSApplication::sharedApplication(
                 MainThreadMarker::new().ok_or("Capture show requires the main thread")?,
@@ -83,7 +86,6 @@ mod mac {
             .map_err(|e| format!("Capture panel missing: {e:?}"))?;
         panel.order_front_regardless();
         panel.make_key_window();
-        // Focus the embedded WKWebView without activating the application.
         let webview: &tauri::Webview = window.as_ref();
         webview.set_focus().map_err(|e| e.to_string())
     }
@@ -94,7 +96,7 @@ mod mac {
                 .duration_since(std::time::UNIX_EPOCH)
                 .unwrap()
                 .as_millis();
-            app.state::<Mutex<CaptureState>>()
+            app.state::<Mutex<QuickCaptureState>>()
                 .lock()
                 .unwrap()
                 .diagnostics
@@ -152,11 +154,10 @@ mod mac {
             .is_some_and(|a| a.processIdentifier() == std::process::id() as i32);
         let ours = window.is_focused().unwrap_or(false) && frontmost_is_ours;
         let (origin, was_hidden) = {
-            let state = app.state::<Mutex<CaptureState>>();
+            let state = app.state::<Mutex<QuickCaptureState>>();
             let mut state = state.lock().unwrap();
             (state.origin.take(), std::mem::take(&mut state.was_hidden))
         };
-        // Hide the app before its key window so the main window cannot surface.
         let ns_app = NSApplication::sharedApplication(
             MainThreadMarker::new().ok_or("Capture hide requires the main thread")?,
         );
@@ -180,7 +181,7 @@ mod mac {
     }
 
     fn bind_on_main(app: &tauri::AppHandle, binding: Option<String>) -> Result<(), String> {
-        let state = app.state::<Mutex<CaptureState>>();
+        let state = app.state::<Mutex<QuickCaptureState>>();
         let mut state = state.lock().unwrap();
         let next = binding
             .map(|s| s.parse::<HotKey>().map_err(|e| e.to_string()))
@@ -231,10 +232,10 @@ mod mac {
         Ok(())
     }
 
-    pub fn status(app: &tauri::AppHandle) -> super::CaptureStatus {
-        let state = app.state::<Mutex<CaptureState>>();
+    pub fn status(app: &tauri::AppHandle) -> super::QuickCaptureStatus {
+        let state = app.state::<Mutex<QuickCaptureState>>();
         let state = state.lock().unwrap();
-        super::CaptureStatus {
+        super::QuickCaptureStatus {
             binding: state.preference.clone(),
             active: state.binding.map(|binding| binding.to_string()),
             error: state.error.clone(),
@@ -244,7 +245,7 @@ mod mac {
 
     pub fn cache(app: &tauri::AppHandle, binding: Option<String>) -> Result<(), String> {
         super::save_preference(&binding)?;
-        app.state::<Mutex<CaptureState>>()
+        app.state::<Mutex<QuickCaptureState>>()
             .lock()
             .unwrap()
             .preference = binding;
@@ -253,7 +254,7 @@ mod mac {
 
     pub fn shutdown(app: &tauri::AppHandle) {
         let manager = {
-            let state = app.state::<Mutex<CaptureState>>();
+            let state = app.state::<Mutex<QuickCaptureState>>();
             let mut state = state.lock().unwrap();
             state.binding = None;
             state.manager.take()
@@ -263,7 +264,7 @@ mod mac {
 
     pub fn install(app: &mut tauri::App) -> Result<(), Box<dyn std::error::Error>> {
         let cached = super::load_preference();
-        app.manage(Mutex::new(CaptureState {
+        app.manage(Mutex::new(QuickCaptureState {
             manager: Some(GlobalHotKeyManager::new()?),
             preference: cached.clone(),
             binding: None,
@@ -275,7 +276,6 @@ mod mac {
         app.handle().plugin(tauri_nspanel::init())?;
         let handle = app.handle().clone();
         GlobalHotKeyEvent::set_event_handler(Some(move |event: GlobalHotKeyEvent| {
-            // Keep the shortcut-to-focus path free of diagnostic filesystem I/O.
             record_trace(
                 &handle,
                 format!(
@@ -289,7 +289,7 @@ mod mac {
                 return;
             }
             let current = handle
-                .state::<Mutex<CaptureState>>()
+                .state::<Mutex<QuickCaptureState>>()
                 .lock()
                 .unwrap()
                 .binding
@@ -323,7 +323,7 @@ mod mac {
         .focused(false)
         .center()
         .build()?;
-        let panel = window.to_panel::<CapturePanel>()?;
+        let panel = window.to_panel::<QuickCapturePanel>()?;
         panel.add_style_mask(
             tauri_nspanel::StyleMask::empty()
                 .nonactivating_panel()
@@ -331,7 +331,6 @@ mod mac {
         )?;
         panel.set_hides_on_deactivate(false);
         let ns_window: &NSWindow = panel.as_panel();
-        // Capture stays independent of the main app's hidden state.
         ns_window.setCanHide(false);
         ns_window.setLevel(objc2_app_kit::NSModalPanelWindowLevel);
         ns_window.setCollectionBehavior(
@@ -358,7 +357,6 @@ mod mac {
                     return;
                 }
                 let app = handle.clone();
-                // Return from AppKit's drag callback before reclaiming key status.
                 tauri::async_runtime::spawn(async move {
                     let focused = app.clone();
                     let _ = app.run_on_main_thread(move || {
@@ -376,7 +374,10 @@ mod mac {
             }
         });
         if let Err(error) = bind(app.handle(), cached) {
-            app.state::<Mutex<CaptureState>>().lock().unwrap().error = Some(error);
+            app.state::<Mutex<QuickCaptureState>>()
+                .lock()
+                .unwrap()
+                .error = Some(error);
         }
         Ok(())
     }
@@ -408,7 +409,7 @@ pub fn capture_bind(app: AppHandle, binding: Option<String>) -> Result<(), Strin
 pub use mac::{install, show, shutdown};
 
 #[derive(serde::Serialize, serde::Deserialize)]
-pub struct CaptureStatus {
+pub struct QuickCaptureStatus {
     pub binding: Option<String>,
     pub active: Option<String>,
     pub error: Option<String>,
@@ -445,7 +446,7 @@ fn save_preference(binding: &Option<String>) -> Result<(), String> {
 }
 
 #[tauri::command]
-pub fn capture_status(app: AppHandle) -> Result<CaptureStatus, String> {
+pub fn capture_status(app: AppHandle) -> Result<QuickCaptureStatus, String> {
     #[cfg(target_os = "macos")]
     return Ok(mac::status(&app));
     #[cfg(not(target_os = "macos"))]
@@ -494,13 +495,13 @@ fn draft_dir(profile_id: &str) -> Result<std::path::PathBuf, String> {
             .ok_or("Capture draft needs a profile identity")?,
     )?;
     Ok(crate::instance::data_dir()?
-        .join("capture-drafts")
+        .join("user-message-drafts")
         .join(profile_id))
 }
 
 fn read_draft(profile_id: String) -> Result<Option<serde_json::Value>, String> {
     let dir = draft_dir(&profile_id)?;
-    let bytes = match std::fs::read(dir.join("capture-draft.json")) {
+    let bytes = match std::fs::read(dir.join("user-message-draft.json")) {
         Ok(bytes) => bytes,
         Err(error) if error.kind() == std::io::ErrorKind::NotFound => return Ok(None),
         Err(error) => return Err(error.to_string()),
@@ -537,7 +538,7 @@ fn write_draft(profile_id: String, draft: serde_json::Value) -> Result<(), Strin
         .map(|image| draft_image_name(image["id"].as_str().ok_or("Draft image id is missing")?))
         .collect::<Result<std::collections::HashSet<_>, String>>()?;
     write_cache(
-        &dir.join("capture-draft.json"),
+        &dir.join("user-message-draft.json"),
         &serde_json::to_vec(&draft).map_err(|error| error.to_string())?,
     )?;
     if let Ok(entries) = std::fs::read_dir(dir.join("capture-draft-images")) {
@@ -552,14 +553,16 @@ fn write_draft(profile_id: String, draft: serde_json::Value) -> Result<(), Strin
 }
 
 #[tauri::command]
-pub async fn capture_draft_read(profile_id: String) -> Result<Option<serde_json::Value>, String> {
+pub async fn user_message_draft_read(
+    profile_id: String,
+) -> Result<Option<serde_json::Value>, String> {
     tauri::async_runtime::spawn_blocking(move || read_draft(profile_id))
         .await
         .map_err(|error| error.to_string())?
 }
 
 #[tauri::command]
-pub async fn capture_draft_image_write(
+pub async fn user_message_draft_image_write(
     profile_id: String,
     id: String,
     url: String,
@@ -570,7 +573,7 @@ pub async fn capture_draft_image_write(
 }
 
 #[tauri::command]
-pub async fn capture_draft_write(
+pub async fn user_message_draft_write(
     profile_id: String,
     draft: serde_json::Value,
 ) -> Result<(), String> {
@@ -580,7 +583,7 @@ pub async fn capture_draft_write(
 }
 
 #[tauri::command]
-pub async fn capture_image_read(path: String) -> Result<String, String> {
+pub async fn user_message_image_read(path: String) -> Result<String, String> {
     tauri::async_runtime::spawn_blocking(move || {
         use base64::Engine;
         let bytes = std::fs::read(&path).map_err(|error| format!("Cannot read {path}: {error}"))?;

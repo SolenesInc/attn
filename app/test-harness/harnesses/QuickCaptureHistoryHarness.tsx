@@ -1,19 +1,19 @@
 import { useEffect, useMemo, useState } from 'react';
 import { QuickCaptureHistory } from '../../src/components/QuickCaptureHistory';
-import { captureDaemonClient } from '../../src/quickCapture/daemonClient';
-import { useCaptureHistory } from '../../src/quickCapture/useCaptureHistory';
+import { userMessageDaemonClient } from '../../src/quickCapture/daemonClient';
+import { useUserMessageHistory } from '../../src/quickCapture/useUserMessageHistory';
 import type { HarnessProps } from '../types';
 import '../../src/components/QuickCapture.css';
 
 export function QuickCaptureHistoryHarness({ onReady }: HarnessProps) {
   const [open, setOpen] = useState(true);
   const [revision, setRevision] = useState(0);
-  const client = useMemo(() => captureDaemonClient({ sendCaptureRequest: async command => {
-    const response = await fetch('/capture-history-wire', { method: 'POST', body: JSON.stringify(command) });
+  const client = useMemo(() => userMessageDaemonClient({ sendUserMessageRequest: async command => {
+    const response = await fetch('/user-message-history-wire', { method: 'POST', body: JSON.stringify(command) });
     if (!response.ok) throw new Error(await response.text());
     return response.json();
   } }, 'profile-history-fixture'), []);
-  const { history, nextCursor, loading, error, refresh } = useCaptureHistory(client, open, true, revision);
+  const { history, nextCursor, loading, error, refresh } = useUserMessageHistory(client, open, true, revision);
   useEffect(() => onReady(), [onReady]);
   return <>
     <button onClick={() => setOpen(true)}>Open Recent</button>

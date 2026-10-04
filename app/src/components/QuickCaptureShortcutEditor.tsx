@@ -1,10 +1,10 @@
 import { useEffect, useRef, useState } from 'react';
 import { useCaptureShortcut } from '../quickCapture/ShortcutContext';
-import { DEFAULT_CAPTURE_SHORTCUT } from '../quickCapture/client';
+import { DEFAULT_QUICK_CAPTURE_SHORTCUT } from '../quickCapture/client';
 import { setShortcutCaptureSuspended } from '../shortcuts/useShortcut';
 import { isMacLikePlatform } from '../shortcuts/platform';
 
-export function CaptureShortcutEditor() {
+export function QuickCaptureShortcutEditor() {
   const controller = useCaptureShortcut();
   const [recording, setRecording] = useState(false);
   const [error, setError] = useState('');
@@ -36,7 +36,7 @@ export function CaptureShortcutEditor() {
         const binding = [event.metaKey && 'Super', event.ctrlKey && 'Control', event.altKey && 'Alt', event.shiftKey && 'Shift', event.code].filter(Boolean).join('+');
         void bind(binding);
       }}>{recording ? 'Press shortcut…' : 'Change'}</button>
-      <button disabled={saving} className="shortcut-editor-btn" onClick={() => void bind(DEFAULT_CAPTURE_SHORTCUT)}>Reset</button>
+      <button disabled={saving} className="shortcut-editor-btn" onClick={() => void bind(DEFAULT_QUICK_CAPTURE_SHORTCUT)}>Reset</button>
       <button disabled={saving} className="shortcut-editor-btn" onClick={() => void bind(null)}>Turn off</button>
     </div>
     {(error || controller.state.shortcutError) && <p role="alert">{error || controller.state.shortcutError}</p>}

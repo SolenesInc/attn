@@ -183,7 +183,7 @@ preview's remove button. **Enter** sends; **Shift+Enter** inserts a newline.
 
 The Chief is the default recipient. **Cmd+1–4** selects the first four
 recipients, and **Cmd+K** opens the keyboard picker. A sleeping crew member
-wakes for the message. If the Chief is absent, the saved capture waits until
+wakes for the message. If the Chief is absent, the saved user message waits until
 a Chief is assigned. "Saved" means the daemon owns the note and file bytes.
 An unconfirmed submission keeps its draft and checks its existing identity
 before another send.

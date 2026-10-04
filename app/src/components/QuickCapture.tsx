@@ -4,29 +4,29 @@ import { emit, listen } from '@tauri-apps/api/event';
 import { getCurrentWebviewWindow } from '@tauri-apps/api/webviewWindow';
 import { hideBootSplash } from '../utils/bootSplash';
 import { readImage } from '@tauri-apps/plugin-clipboard-manager';
-import { CaptureAttachmentPreview, type CaptureAttachment, type AttachmentOrigin, type AttachmentMotion } from './CaptureAttachmentPreview';
+import { UserMessageAttachmentPreview, type UserMessageAttachment, type AttachmentOrigin, type AttachmentMotion } from './UserMessageAttachmentPreview';
 import './QuickCapture.css';
 import { QuickCaptureHistory } from './QuickCaptureHistory';
-import { createCaptureBridge, EMPTY_HOST_STATE, type CaptureClient, type CaptureHostState, type CaptureItem, type CaptureDraft } from '../quickCapture/client';
-import { CaptureWorkQueue } from '../quickCapture/workQueue';
-import { useCaptureHistory } from '../quickCapture/useCaptureHistory';
-import type { CaptureAutomationWorkQueue } from '../quickCapture/workQueueAutomation';
-import { captureDraftCache, newCaptureDraft } from '../quickCapture/draft';
+import { createQuickCaptureBridge, EMPTY_HOST_STATE, type UserMessageClient, type QuickCaptureHostState, type UserMessageItem, type UserMessageDraft } from '../quickCapture/client';
+import { QuickCaptureWorkQueue } from '../quickCapture/workQueue';
+import { useUserMessageHistory } from '../quickCapture/useUserMessageHistory';
+import type { QuickCaptureAutomationWorkQueue } from '../quickCapture/workQueueAutomation';
+import { userMessageDraftCache, newUserMessageDraft } from '../quickCapture/draft';
 import { useShortcut } from '../shortcuts/useShortcut';
 import { parseKeybindingsConfig, setShortcutOverrides } from '../shortcuts/resolver';
 
 const automationEnabled = (window as { __ATTN_AUTOMATION_ENABLED?: boolean }).__ATTN_AUTOMATION_ENABLED === true;
-type Attachment = CaptureAttachment;
-type CaptureExpectation = { frame?: boolean; visible?: boolean; settled?: boolean; imageCount?: number; attachmentCount?: number; view?: 'compose' | 'recent'; recentText?: string; selectedText?: string; composing?: boolean; recipient?: string; fontScale?: number };
+type Attachment = UserMessageAttachment;
+type QuickCaptureExpectation = { frame?: boolean; visible?: boolean; settled?: boolean; imageCount?: number; attachmentCount?: number; view?: 'compose' | 'recent'; recentText?: string; selectedText?: string; composing?: boolean; recipient?: string; fontScale?: number };
 
 
-type QuickCaptureProps = { client?: CaptureClient; hostState?: CaptureHostState; workQueue?: CaptureWorkQueue };
+type QuickCaptureProps = { client?: UserMessageClient; hostState?: QuickCaptureHostState; workQueue?: QuickCaptureWorkQueue };
 export function QuickCapture({ client: suppliedClient, hostState, workQueue }: QuickCaptureProps = {}) {
   const [host, setHost] = useState(hostState ?? EMPTY_HOST_STATE);
-  const [bridge, setBridge] = useState<ReturnType<typeof createCaptureBridge>>();
+  const [bridge, setBridge] = useState<ReturnType<typeof createQuickCaptureBridge>>();
   useEffect(() => {
     if (suppliedClient) return;
-    const connection = createCaptureBridge(setHost);
+    const connection = createQuickCaptureBridge(setHost);
     setBridge(connection);
     return () => connection.dispose();
   }, [suppliedClient]);
@@ -38,10 +38,10 @@ export function QuickCapture({ client: suppliedClient, hostState, workQueue }: Q
 
 function QuickCaptureForProfile({ client: suppliedClient, hostState: host, workQueue: suppliedQueue, refresh }: Required<Pick<QuickCaptureProps, 'client' | 'hostState'>> & Pick<QuickCaptureProps, 'workQueue'> & { refresh?: () => Promise<void> }) {
   const client = useRef(suppliedClient);
-  const [draftCache] = useState(() => captureDraftCache(host.profileId));
-  const [workQueue] = useState(() => suppliedQueue ?? new CaptureWorkQueue());
+  const [draftCache] = useState(() => userMessageDraftCache(host.profileId));
+  const [workQueue] = useState(() => suppliedQueue ?? new QuickCaptureWorkQueue());
   const cache = useRef(draftCache);
-  const [initialDraft] = useState(newCaptureDraft);
+  const [initialDraft] = useState(newUserMessageDraft);
   const identity = useRef(initialDraft);
   const [restored, setRestored] = useState(false);
   const fontScale = host.fontScale ?? 1;
@@ -56,14 +56,14 @@ function QuickCaptureForProfile({ client: suppliedClient, hostState: host, workQ
   const [resolving, setResolving] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [recent, setRecent] = useState(false);
-  const [saved, setSaved] = useState<CaptureItem[]>([]);
+  const [saved, setSaved] = useState<UserMessageItem[]>([]);
   const roster = host.recipients;
   const label = (id: string) => roster.find(item => item.id === id)?.name ?? id;
   const [text, setText] = useState('');
   const [recipient, setRecipient] = useState('chief');
   const [files, setFiles] = useState<Attachment[]>([]);
   const [error, setError] = useState('');
-  const { history, nextCursor, loading: loadingRecent, error: historyError, refresh: refreshRecent } = useCaptureHistory(client.current, recent, host.connected, host.captureRevision);
+  const { history, nextCursor, loading: loadingRecent, error: historyError, refresh: refreshRecent } = useUserMessageHistory(client.current, recent, host.connected, host.messageRevision);
   const binding = host.binding ?? '';
   const [dragging, setDragging] = useState(false);
   const [picker, setPicker] = useState(false);
@@ -143,11 +143,11 @@ function QuickCaptureForProfile({ client: suppliedClient, hostState: host, workQ
       } finally { await image.close(); }
     } }], { kind: 'paste' }, true);
   }
-  function draft(isUncertain = uncertain): CaptureDraft {
+  function draft(isUncertain = uncertain): UserMessageDraft {
     return { id: identity.current.id, text: state.current.text, recipient: state.current.recipient,
       files: state.current.files.filter(file => file.url).map(({ id, name, url }) => ({ id, name, url })), uncertain: isUncertain };
   }
-  function stageDraft(staged: CaptureDraft): Promise<void> {
+  function stageDraft(staged: UserMessageDraft): Promise<void> {
     const fresh = staged.files.filter(file => !stagedFiles.current.has(file.id));
     for (const file of fresh) {
       const pending = workQueue.run(async () => {
@@ -167,7 +167,7 @@ function QuickCaptureForProfile({ client: suppliedClient, hostState: host, workQ
     if (sending.current || !restored || files.some(file => !file.ready) || (!text.trim() && files.length === 0)) return;
     sending.current = true; setSubmitting(true); settleEntrances();
     try {
-      let accepted: CaptureItem | null = null;
+      let accepted: UserMessageItem | null = null;
       if (uncertain) {
         accepted = await client.current!.resolve(identity.current.id);
         if (!mounted.current) return;
@@ -189,9 +189,9 @@ function QuickCaptureForProfile({ client: suppliedClient, hostState: host, workQ
     } catch (error) { setError(String(error)); }
     finally { sending.current = false; setSubmitting(false); }
   }
-  async function accept(accepted: CaptureItem, hide: boolean) {
+  async function accept(accepted: UserMessageItem, hide: boolean) {
     if (!mounted.current) return;
-    const next = newCaptureDraft(); await cache.current.save(next); identity.current = next;
+    const next = newUserMessageDraft(); await cache.current.save(next); identity.current = next;
     draftGeneration.current++; ownedFiles.current.clear(); stagedFiles.current.clear();
     setSaved([accepted]);
     setText(''); setFiles([]); setRecipient('chief'); setUncertain(false); setError('');
@@ -219,7 +219,7 @@ function QuickCaptureForProfile({ client: suppliedClient, hostState: host, workQ
       if (!mounted.current) return;
       await client.current!.discard(previousId, files.map(file => file.id));
       if (!mounted.current) return;
-      const next = newCaptureDraft(); await cache.current.save(next); identity.current = next;
+      const next = newUserMessageDraft(); await cache.current.save(next); identity.current = next;
       draftGeneration.current++; ownedFiles.current.clear(); stagedFiles.current.clear(); setFiles([]); setText(''); setRecipient('chief');
     } catch (error) { stagedFiles.current.clear(); setError(String(error)); }
     finally { sending.current = false; setSubmitting(false); }
@@ -263,10 +263,9 @@ function QuickCaptureForProfile({ client: suppliedClient, hostState: host, workQ
     const drop = getCurrentWebviewWindow().onDragDropEvent(async event => {
       setDragging(event.payload.type === 'enter' || event.payload.type === 'over');
       if (event.payload.type !== 'drop') return;
-      // Wry 0.55.1's Mac host emits AppKit points despite the PhysicalPosition label.
       if (sending.current || state.current.uncertain) return;
       const origin: AttachmentOrigin = { kind: 'drop', x: event.payload.position.x, y: event.payload.position.y };
-      addAttachments(event.payload.paths.map(path => ({ name: path.split('/').pop() || 'Dropped file', load: () => invoke<string>('capture_image_read', { path })
+      addAttachments(event.payload.paths.map(path => ({ name: path.split('/').pop() || 'Dropped file', load: () => invoke<string>('user_message_image_read', { path })
       })), origin);
     });
     const inputTrace: object[] = [];
@@ -275,9 +274,9 @@ function QuickCaptureForProfile({ client: suppliedClient, hostState: host, workQ
       data: event instanceof InputEvent ? event.data : undefined, focused: document.activeElement === editor.current,
       readOnly: editor.current?.readOnly, value: editor.current?.value });
     if (automationEnabled) ['keydown', 'beforeinput', 'input'].forEach(type => document.addEventListener(type, traceInput, true));
-    const automation = automationEnabled ? listen<{ request_id: string; action: string; payload: { binding?: string; batchSize?: number; staged?: boolean } & CaptureExpectation }>('attn://capture/automation', async ({ payload }) => {
+    const automation = automationEnabled ? listen<{ request_id: string; action: string; payload: { binding?: string; batchSize?: number; staged?: boolean } & QuickCaptureExpectation }>('attn://capture/automation', async ({ payload }) => {
       if (!payload.action.startsWith('capture_')) return;
-      const measuredWork = workQueue as CaptureAutomationWorkQueue;
+      const measuredWork = workQueue as QuickCaptureAutomationWorkQueue;
       let result: unknown;
       let error: string | undefined;
       try {
@@ -288,7 +287,7 @@ function QuickCaptureForProfile({ client: suppliedClient, hostState: host, workQ
           if (payload.payload.staged) { await stageDraft(draft()); await measuredWork.whenIdle(); }
           const bounds = (element: Element | null) => { const rect = element?.getBoundingClientRect(); return rect ? { x: (rect.x + rect.width / 2) / window.innerWidth, y: (rect.y + rect.height / 2) / window.innerHeight } : null; };
           const nativeDiagnostics = await invoke<{ diagnostics?: string[] }>('capture_status');
-          result = { ingestion: ingestion.current, work: measuredWork.snapshot(), recentRows: [...document.querySelectorAll('.capture-history-item')].map(row => ({ text: row.textContent, selected: row.getAttribute('aria-current') === 'true', captureId: row.getAttribute('data-capture-id'), buttons: [...row.querySelectorAll('button')].map(button => button.textContent) })), inputTrace, nativeDiagnostics: nativeDiagnostics.diagnostics, visibility: document.visibilityState, nativeFocused: await getCurrentWebviewWindow().isFocused(), fontScale: Number(document.querySelector<HTMLElement>('.capture')?.dataset.fontScale), editorFontSize: editor.current ? getComputedStyle(editor.current).fontSize : null, view: document.querySelector('.capture-history') ? 'recent' : 'compose', flyingFiles: document.querySelectorAll('.capture-flight').length, controls: { recent: bounds(document.querySelector('[aria-label="Recent captures"]')), remove: bounds(document.querySelector('.capture-files button')), editor: bounds(editor.current), recipient: bounds(document.querySelector('[aria-label="Recipient"]')) }, ...state.current, composing: composing.current, files: state.current.files.map(({ name }) => ({ name })), motion: motion.current, reducedMotion: window.matchMedia?.('(prefers-reduced-motion: reduce)').matches ?? false, activeAnimations: document.getAnimations().filter(animation => animation.playState === 'running').length, latencyMs: latency.current, focused: document.activeElement === editor.current, visible: await getCurrentWebviewWindow().isVisible() };
+          result = { ingestion: ingestion.current, work: measuredWork.snapshot(), recentRows: [...document.querySelectorAll('.capture-history-item')].map(row => ({ text: row.textContent, selected: row.getAttribute('aria-current') === 'true', messageId: row.getAttribute('data-message-id'), buttons: [...row.querySelectorAll('button')].map(button => button.textContent) })), inputTrace, nativeDiagnostics: nativeDiagnostics.diagnostics, visibility: document.visibilityState, nativeFocused: await getCurrentWebviewWindow().isFocused(), fontScale: Number(document.querySelector<HTMLElement>('.capture')?.dataset.fontScale), editorFontSize: editor.current ? getComputedStyle(editor.current).fontSize : null, view: document.querySelector('.capture-history') ? 'recent' : 'compose', flyingFiles: document.querySelectorAll('.capture-flight').length, controls: { recent: bounds(document.querySelector('[aria-label="Recent messages"]')), remove: bounds(document.querySelector('.capture-files button')), editor: bounds(editor.current), recipient: bounds(document.querySelector('[aria-label="Recipient"]')) }, ...state.current, composing: composing.current, files: state.current.files.map(({ name }) => ({ name })), motion: motion.current, reducedMotion: window.matchMedia?.('(prefers-reduced-motion: reduce)').matches ?? false, activeAnimations: document.getAnimations().filter(animation => animation.playState === 'running').length, latencyMs: latency.current, focused: document.activeElement === editor.current, visible: await getCurrentWebviewWindow().isVisible() };
 
         } else if (payload.action === 'capture_binding') {
           await client.current!.setBinding(payload.payload.binding || null);
@@ -334,7 +333,7 @@ function QuickCaptureForProfile({ client: suppliedClient, hostState: host, workQ
   }}>
     {!recent && <header className="capture-top" data-tauri-drag-region>
       <span>To</span>
-      <button aria-label="Recent captures" className="capture-recent-toggle" aria-pressed={recent} onClick={() => {
+      <button aria-label="Recent messages" className="capture-recent-toggle" aria-pressed={recent} onClick={() => {
         if (!recent && editor.current) noteSelection.current = { start: editor.current.selectionStart, end: editor.current.selectionEnd, direction: editor.current.selectionDirection };
         settleEntrances(); setRecent(!recent); setPicker(false);
       }}>Recent</button>
@@ -344,7 +343,7 @@ function QuickCaptureForProfile({ client: suppliedClient, hostState: host, workQ
       hasDraft={!!text || files.length > 0} submitting={submitting}
       loading={loadingRecent} nextCursor={nextCursor} label={label} onRefresh={refreshRecent}
       onBack={() => setRecent(false)} onDiscard={() => void discardDraft()} /> : <>
-      <textarea autoFocus ref={editor} aria-label="Capture message" placeholder={`Message ${label(recipient)}`} value={text} readOnly={uncertain || submitting || !restored} onChange={event => { setSaved([]); setText(event.target.value); }} onCompositionStart={event => { composing.current = true; event.currentTarget.dataset.composing = "true"; }} onCompositionEnd={event => { composing.current = false; event.currentTarget.dataset.composing = "false"; }} onKeyDown={event => {
+      <textarea autoFocus ref={editor} aria-label="User message" placeholder={`Message ${label(recipient)}`} value={text} readOnly={uncertain || submitting || !restored} onChange={event => { setSaved([]); setText(event.target.value); }} onCompositionStart={event => { composing.current = true; event.currentTarget.dataset.composing = "true"; }} onCompositionEnd={event => { composing.current = false; event.currentTarget.dataset.composing = "false"; }} onKeyDown={event => {
         if (event.key === 'Enter' && !event.shiftKey && !event.nativeEvent.isComposing && !composing.current && event.keyCode !== 229) { event.preventDefault(); void send(); }
       }} onPaste={event => {
         if (uncertain || sending.current) { event.preventDefault(); return; }
@@ -352,7 +351,7 @@ function QuickCaptureForProfile({ client: suppliedClient, hostState: host, workQ
         if (files.length) { event.preventDefault(); addFiles(files); }
         else void pasteNativeImage();
       }} />
-      {files.length > 0 && <div className="capture-files">{files.map(file => <CaptureAttachmentPreview key={file.id} file={file} onSettled={onSettled} onMotion={onMotion} onRemove={removeFile} disabled={uncertain || submitting} />)}</div>}
+      {files.length > 0 && <div className="capture-files">{files.map(file => <UserMessageAttachmentPreview key={file.id} file={file} onSettled={onSettled} onMotion={onMotion} onRemove={removeFile} disabled={uncertain || submitting} />)}</div>}
     </>}
     {(host.connectionError || error || historyError || host.shortcutError) && <p role="alert" className="capture-error">{host.connectionError || error || historyError || host.shortcutError}</p>}
     {!recent && <footer className="capture-footer">
@@ -383,7 +382,7 @@ function ImagePromise(url: string): Promise<void> {
   return new Promise((resolve, reject) => { const image = new Image(); image.onload = () => resolve(); image.onerror = reject; image.src = url; });
 }
 
-function waitForCaptureView({ imageCount: count, attachmentCount, view, recentText, selectedText, settled, visible, composing, recipient, fontScale }: CaptureExpectation): Promise<void> {
+function waitForCaptureView({ imageCount: count, attachmentCount, view, recentText, selectedText, settled, visible, composing, recipient, fontScale }: QuickCaptureExpectation): Promise<void> {
   return new Promise((resolve, reject) => {
     const finish = (error?: string) => { observer.disconnect(); document.removeEventListener('load', check, true); document.removeEventListener('error', check, true); document.removeEventListener('focusin', check, true); if (error) reject(new Error(error)); else resolve(); };
     const check = () => {
