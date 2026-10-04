@@ -25,13 +25,17 @@ export function useQuickCaptureHistory(client: QuickCaptureDeliveryClient | unde
     const operation = (async () => {
       try {
         let page = await api.recent(cursor);
-        const items = [...page.items];
+        let items = [...page.items];
         while (epoch === generation.current && !cursor && oldest && !items.some(item => item.id === oldest) && page.nextCursor) {
           page = await api.recent(page.nextCursor);
           items.push(...page.items);
         }
         if (epoch !== generation.current) return;
         const previous = current.current.history;
+        items = items.map(item => {
+          const readAt = item.readAt ?? previous.find(saved => saved.id === item.id)?.readAt;
+          return readAt ? { ...item, readAt } : item;
+        });
         const updated = cursor ? [...previous, ...items.filter(item => !previous.some(saved => saved.id === item.id))] : items;
         current.current.history = updated; setHistory(updated);
         setNextCursor(page.nextCursor); setError('');
