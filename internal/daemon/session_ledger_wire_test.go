@@ -204,3 +204,29 @@ func TestAClosedSessionsLedgerRowKeepsItsUsage(t *testing.T) {
 		t.Errorf("closed ledger after a restart = %+v, want the row with its %d tokens", page.Entries, spent)
 	}
 }
+
+func TestASessionClosedRightAfterItsLastReplyIsRecordedWithThatReplysUsage(t *testing.T) {
+	w := newWorld(t, fakeagent.Claude)
+	app := w.App()
+	session := w.Spawn(app, fakeagent.Claude, w.Path("shop"))
+	run := w.Launched(session)
+	app.TypeLine(session, "price the cart")
+	run.Prompted()
+	first := "Priced. <!-- attn:state=idle -->"
+	run.Reply(first)
+	awaitUsageTokens(app, session, claudeTokens(first))
+	app.TypeLine(session, "and again")
+	run.Prompted()
+	last := "Priced again. <!-- attn:state=idle -->"
+	run.Reply(last)
+
+	closeSession(t, w.Client(), session, "priced")
+	want := claudeTokens(first) + claudeTokens(last)
+	if closed := awaitClosed(app, session); closed.Usage == nil || closed.Usage.TotalTokens != want {
+		t.Errorf("the close announced usage %+v, want %d tokens", closed.Usage, want)
+	}
+	w.restart()
+	if shown := showSession(t, w.Client(), session); shown.Usage == nil || shown.Usage.TotalTokens != want {
+		t.Errorf("session show after a restart reports usage %+v, want %d tokens", shown.Usage, want)
+	}
+}

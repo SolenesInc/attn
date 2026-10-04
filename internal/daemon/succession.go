@@ -64,13 +64,17 @@ func (d *Daemon) succeed(t harness.TerminalID, from *protocol.Session, sc store.
 	return nil
 }
 
-// drainTranscriptWatcher stops a session's watcher and waits for its last usage reconcile.
+// drainTranscriptWatcher stops a session's usage watchers and waits for their last reconcile.
 func (d *Daemon) drainTranscriptWatcher(sessionID string) {
 	d.watchersMu.Lock()
 	watcher := d.transcriptWatch[sessionID]
+	pluginWatcher := d.pluginUsageWatch[sessionID]
 	d.watchersMu.Unlock()
 	d.stopTranscriptWatcher(sessionID)
 	if watcher != nil {
 		<-watcher.doneCh
+	}
+	if pluginWatcher != nil {
+		<-pluginWatcher.doneCh
 	}
 }
