@@ -175,21 +175,20 @@ always-current list, and "Edit shortcuts" there to remap any of them.
 
 ### Quick Capture on Mac
 
-Press **Control+Option+Space** from another app to jot a note for your crew.
+Press **Control+Option+Space** from another app to send a message to your crew.
 Quick Capture opens over the current Space, including full-screen apps. Type,
-paste an image or file, or drop files into the note. Remove a file with its
+paste an image or file, or drop files into the message. Remove a file with its
 preview's remove button. **Enter** sends; **Shift+Enter** inserts a newline.
 **Escape** or **Cmd+W** closes the window and keeps your draft.
 
 The Chief is the default recipient. **Cmd+1–4** selects the first four
-recipients, and **Cmd+K** opens the keyboard picker. A sleeping crew member
-wakes for the message. If the Chief is absent, the saved user message waits until
-a Chief is assigned. "Saved" means the daemon owns the note and file bytes.
-An unconfirmed submission keeps its draft and checks its existing identity
-before another send.
+recipients, and **Cmd+K** opens the keyboard picker. A crew member who is
+asleep wakes for the message. If the Chief has no session, the message waits
+for their next session. If Quick Capture cannot confirm that a message was
+sent, it keeps your draft, and sending again never sends it twice.
 
-Open **Recent** to inspect what you sent, to whom and when. Notes are grouped
-by day, with the newest at the bottom. Use **Up/Down** to move between notes
+Open **Recent** to inspect what you sent, to whom and when. Messages are grouped
+by day, with the newest at the bottom. Use **Up/Down** to move between messages
 and **Esc** to return to your draft. Each entry shows **Sent** or **Read**. Read means the recipient retrieved the message from its
 inbox; it does not mean the recipient understood or acted on it.
 Inspecting Recent does not mark a message as read.
