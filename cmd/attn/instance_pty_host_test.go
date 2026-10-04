@@ -7,6 +7,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"syscall"
 	"testing"
@@ -235,5 +236,24 @@ func TestInstanceCleanWaitsForWorkerChildResistingTermination(t *testing.T) {
 	}
 	if procreap.ProcessAlive(info.PID) {
 		t.Fatalf("child %d survived instance cleanup", info.PID)
+	}
+}
+
+func TestInstanceCleanPreservesDataWhileADeadWorkersChildRuns(t *testing.T) {
+	r := stoppedInstance(t)
+	exited := exec.Command("true")
+	if err := exited.Run(); err != nil {
+		t.Fatal(err)
+	}
+	path := filepath.Join(r.DataDir, "workers", "d-crashed", "registry", "orphan.json")
+	if err := ptyworker.WriteRegistryAtomic(path, ptyworker.RegistryEntry{Version: 1, SessionID: "orphan", WorkerPID: exited.Process.Pid, ChildPID: os.Getpid(), SocketPath: filepath.Join(r.DataDir, "absent.sock")}); err != nil {
+		t.Fatal(err)
+	}
+	var out bytes.Buffer
+	if err := cleanInstance(&out, r); err == nil {
+		t.Fatalf("cleanup accepted a crashed worker whose child still runs: %s", out.String())
+	}
+	if _, err := os.Stat(path); err != nil {
+		t.Fatalf("cleanup destroyed the orphan's registry: %v", err)
 	}
 }
