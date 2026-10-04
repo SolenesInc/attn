@@ -682,7 +682,7 @@ func (d *Daemon) Start() error {
 		return fmt.Errorf("ensure enrollment record: %w", err)
 	}
 	if err := d.recoverUserMessageAssets(); err != nil {
-		d.logf("userMessage asset recovery incomplete: %v", err)
+		d.logf("user message asset recovery incomplete: %v", err)
 	}
 	d.ensureGardenCollections()
 	d.ensureCrewCollections()

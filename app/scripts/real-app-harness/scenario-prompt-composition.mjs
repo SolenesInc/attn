@@ -132,7 +132,7 @@ async function main() {
       runner.assert(uploadedPDF.result.upload.attachment.media_type === 'application/pdf', 'PDF finalizes without image validation');
       const recipient = launches[2];
       const completed = observer.waitForMessage(data => data.event === 'session_state_changed' &&
-        data.session?.id === recipient.id && data.session?.state === 'idle' ? data : null, 'userMessage recipient finishes inbox read');
+        data.session?.id === recipient.id && data.session?.state === 'idle' ? data : null, 'user message recipient finishes inbox read');
       const saved = await observer.requestResult({ cmd: 'user_message_send', message_id: messageId,
         target: { kind: 'chief' }, content: 'PROMPT_USER_MESSAGE', attachment_ids: [attachmentId, pdfId] }, 'user_message_result');
       runner.assert(saved.result.record.id === messageId, 'save returns the requested durable identity');
@@ -141,10 +141,10 @@ async function main() {
       runner.assert(Boolean(receipt.result.record.read_at), 'recipient inbox fetch commits a read receipt');
       const text = transcripts(recipient.cwd)[0]?.text || '';
       const spoken = transcriptTurns(text).map(turn => turn.text).join('\n');
-      runner.writeText('user-user_message.txt', spoken);
+      runner.writeText('user-message.txt', spoken);
       runner.assert(text.includes('Message from the user, sent through Quick Capture:') && text.includes('PROMPT_USER_MESSAGE'),
-        'inbox output attributes userMessage content to the user');
-      runner.assert(!text.includes('This message is from another agent'), 'user userMessage omits the peer disclaimer');
+        'inbox output attributes user message content to the user');
+      runner.assert(!text.includes('This message is from another agent'), 'user message omits the peer disclaimer');
       runner.assert(spoken.includes('File "notes.pdf" (application/pdf') && spoken.includes('Inspect the saved file with your tools.'),
         'non-image attachment carries file inspection instructions');
       runner.assert(fs.readFileSync(pdfOut).equals(pdf), 'recipient host retrieves byte-exact PDF content');

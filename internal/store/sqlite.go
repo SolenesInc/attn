@@ -1362,7 +1362,7 @@ CREATE INDEX IF NOT EXISTS idx_automode_denials_recent ON automode_denials(id DE
  ALTER TABLE sessions ADD COLUMN succeeds TEXT NOT NULL DEFAULT '';
  CREATE INDEX idx_sessions_succeeds ON sessions(succeeds) WHERE succeeds != '';
 `},
-	{170, "durable user user messages and file manifests", `
+	{170, "durable user messages and file manifests", `
  CREATE TABLE user_messages (
  profile_id TEXT NOT NULL, id TEXT NOT NULL, inbox_item_id TEXT NOT NULL UNIQUE, submission TEXT NOT NULL, target_kind TEXT NOT NULL,
  target_member_id TEXT NOT NULL DEFAULT '', body TEXT NOT NULL, created_at TEXT NOT NULL, PRIMARY KEY(profile_id,id)
