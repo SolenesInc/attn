@@ -69,13 +69,16 @@ func (d *Daemon) drainTranscriptWatcher(sessionID string) {
 	d.watchersMu.Lock()
 	watcher := d.transcriptWatch[sessionID]
 	pluginWatcher := d.pluginUsageWatch[sessionID]
+	delete(d.transcriptWatch, sessionID)
+	delete(d.pluginUsageWatch, sessionID)
 	d.watchersMu.Unlock()
-	d.stopTranscriptWatcher(sessionID)
-	if watcher != nil {
-		<-watcher.doneCh
-	}
 	if pluginWatcher != nil {
+		close(pluginWatcher.stopCh)
 		<-pluginWatcher.doneCh
+	}
+	if watcher != nil {
+		close(watcher.stopCh)
+		<-watcher.doneCh
 	}
 	d.reconcileDeferredUsage(sessionID)
 }
