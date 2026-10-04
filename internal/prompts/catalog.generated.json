@@ -164,9 +164,26 @@
                         }
                       },
                       {
-                        "kind": "text",
-                        "id": "session.quick-capture-guidance",
-                        "source": "content/session/quick-capture.md"
+                        "kind": "choose",
+                        "condition": {
+                          "field": {
+                            "name": "notebook_root",
+                            "kind": "text",
+                            "description": "Notebook directory; a nonempty value selects chief guidance.",
+                            "trim_space": true
+                          },
+                          "test": "present"
+                        },
+                        "children": [
+                          {
+                            "kind": "compose"
+                          },
+                          {
+                            "kind": "text",
+                            "id": "session.quick-capture-guidance",
+                            "source": "content/session/quick-capture.md"
+                          }
+                        ]
                       }
                     ]
                   }
@@ -4985,5 +5002,5 @@
       ]
     }
   ],
-  "definitions_hash": "47f9bb94f97dd2c1318fada19764fd3aeb8dcbc98bc103a0b11008b2468cef91"
+  "definitions_hash": "801fe67c2dfccf3270a56405d256bc0c74b07de6326428587f4d6821d50bd948"
 }

@@ -49,7 +49,7 @@ async function main() {
   const observer = new DaemonObserver({ ...options, trustedApp: true });
   const runner = createScenarioRunner(options, { scenarioId: 'PromptComposition', tier: 'local', prefix: 'prompt-composition' });
   const sessions = [];
-  const messageId = randomUUID(), attachmentId = randomUUID();
+  const captureId = randomUUID(), attachmentId = randomUUID();
   const pdfId = randomUUID();
   const imageOut = path.join(runner.sessionDir, 'recipient-quick_capture.png');
   const pdfOut = path.join(runner.sessionDir, 'recipient-quick_capture.pdf');
@@ -80,8 +80,8 @@ async function main() {
           submitHook: false,
           actions: [
             { type: 'attn', args: ['agent', 'inbox'] },
-            ...(chief ? [{ type: 'attn', args: ['agent', 'attachment', messageId, attachmentId, '--out', imageOut] }] : []),
-            ...(chief ? [{ type: 'attn', args: ['agent', 'attachment', messageId, pdfId, '--out', pdfOut] }] : []),
+            ...(chief ? [{ type: 'attn', args: ['agent', 'attachment', captureId, attachmentId, '--out', imageOut] }] : []),
+            ...(chief ? [{ type: 'attn', args: ['agent', 'attachment', captureId, pdfId, '--out', pdfOut] }] : []),
             { type: 'reply', text: chief ? 'USER_MESSAGE_READ' : 'PEER_READ', state: 'idle' },
           ],
         }] });
@@ -118,7 +118,7 @@ async function main() {
       fs.writeFileSync(source, original);
       for (let offset = 0; offset < original.length;) {
         const end = Math.min(original.length, offset + 524288);
-        const uploaded = await observer.requestResult({ cmd: 'quick_capture_attachment_put', message_id: messageId,
+        const uploaded = await observer.requestResult({ cmd: 'quick_capture_attachment_put', capture_id: captureId,
           attachment_id: attachmentId, name: 'screenshot.png', offset,
           data_base64: original.subarray(offset, end).toString('base64'), final: end === original.length }, 'quick_capture_result');
         runner.assert(uploaded.result.upload.next_offset === end, 'image offset receipt matches uploaded bytes');
@@ -126,33 +126,33 @@ async function main() {
       }
       fs.unlinkSync(source);
       const pdf = Buffer.from('%PDF-1.4\n1 0 obj\n<< /Type /Catalog >>\nendobj\n%%EOF\n');
-      const uploadedPDF = await observer.requestResult({ cmd: 'quick_capture_attachment_put', message_id: messageId,
+      const uploadedPDF = await observer.requestResult({ cmd: 'quick_capture_attachment_put', capture_id: captureId,
         attachment_id: pdfId, name: 'notes.pdf', offset: 0,
         data_base64: pdf.toString('base64'), final: true }, 'quick_capture_result');
       runner.assert(uploadedPDF.result.upload.attachment.media_type === 'application/pdf', 'PDF finalizes without image validation');
-      const recipient = launches[2];
+      const agent = launches[2];
       const completed = observer.waitForMessage(data => data.event === 'session_state_changed' &&
-        data.session?.id === recipient.id && data.session?.state === 'idle' ? data : null, 'quick capture recipient finishes inbox read');
-      const saved = await observer.requestResult({ cmd: 'quick_capture_send', message_id: messageId,
-        target: { kind: 'chief' }, content: 'PROMPT_USER_MESSAGE', attachment_ids: [attachmentId, pdfId] }, 'quick_capture_result');
-      runner.assert(saved.result.record.id === messageId, 'save returns the requested durable identity');
+        data.session?.id === agent.id && data.session?.state === 'idle' ? data : null, 'quick capture agent finishes inbox read');
+      const saved = await observer.requestResult({ cmd: 'quick_capture_send', capture_id: captureId,
+        mailbox: { kind: 'chief' }, content: 'PROMPT_QUICK_CAPTURE', attachment_ids: [attachmentId, pdfId] }, 'quick_capture_result');
+      runner.assert(saved.result.record.id === captureId, 'save returns the requested durable identity');
       await completed;
-      const receipt = await observer.requestResult({ cmd: 'quick_capture_get', message_id: messageId }, 'quick_capture_result');
-      runner.assert(Boolean(receipt.result.record.read_at), 'recipient inbox fetch commits a read receipt');
-      const text = transcripts(recipient.cwd)[0]?.text || '';
+      const receipt = await observer.requestResult({ cmd: 'quick_capture_get', capture_id: captureId }, 'quick_capture_result');
+      runner.assert(Boolean(receipt.result.record.read_at), 'agent inbox fetch commits a read receipt');
+      const text = transcripts(agent.cwd)[0]?.text || '';
       const spoken = transcriptTurns(text).map(turn => turn.text).join('\n');
       runner.writeText('quick-capture.txt', spoken);
-      runner.assert(text.includes('Message from the user, sent through Quick Capture:') && text.includes('PROMPT_USER_MESSAGE'),
+      runner.assert(text.includes('Message from the user, sent through Quick Capture:') && text.includes('PROMPT_QUICK_CAPTURE'),
         'inbox output attributes quick capture content to the user');
       runner.assert(!text.includes('This message is from another agent'), 'quick capture omits the peer disclaimer');
       runner.assert(spoken.includes('File "notes.pdf" (application/pdf') && spoken.includes('Inspect the saved file with your tools.'),
         'non-image attachment carries file inspection instructions');
-      runner.assert(fs.readFileSync(pdfOut).equals(pdf), 'recipient host retrieves byte-exact PDF content');
+      runner.assert(fs.readFileSync(pdfOut).equals(pdf), 'agent host retrieves byte-exact PDF content');
       const received = fs.readFileSync(imageOut);
-      runner.assert(received.equals(original), 'recipient host retrieves the exact image bytes after source deletion');
+      runner.assert(received.equals(original), 'agent host retrieves the exact image bytes after source deletion');
       const decoded = PNG.sync.read(received);
       runner.assert(decoded.width > 0 && decoded.height > 0 && decoded.data.length === decoded.width * decoded.height * 4,
-        'recipient image has inspectable pixels', { width: decoded.width, height: decoded.height, bytes: received.length });
+        'agent image has inspectable pixels', { width: decoded.width, height: decoded.height, bytes: received.length });
     });
     await runner.step('crew_wake_sleep_and_successor', async () => {
       cli(['crew', 'set', crewName, '--agent', 'codex', '--model', 'claude-haiku-4-5']);
