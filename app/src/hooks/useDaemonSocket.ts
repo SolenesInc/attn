@@ -1,5 +1,6 @@
 import { PROTOCOL_VERSION } from '../types/protocolVersion';
 export { PROTOCOL_VERSION } from '../types/protocolVersion';
+import { handleCommandUsageEvent } from './daemonCommandUsageEvents';
 import { handleLaunchDesktopEvent } from './daemonLaunchDesktopEvents';
 import { handleDelegationDaemonEvent, type DelegationSettingsState, type DelegationModelCatalog } from './daemonDelegationEvents';
 import {
@@ -17,6 +18,7 @@ import { invoke } from '@tauri-apps/api/core';
 import { isTauri } from '@tauri-apps/api/core';
 import { readMigrationFailureMarker, type MigrationFailure } from '../utils/migrationFailure';
 import type {
+  CommandUsage,
   Session as GeneratedSession,
   PR as GeneratedPR,
   Worktree as GeneratedWorktree,
@@ -2546,6 +2548,7 @@ export function useDaemonSocket({
             if (handleCrewDaemonEvent(data, pending)) break;
             if (handleProfileDaemonEvent(data, pending)) break;
             if (handleLaunchDesktopEvent(data, pending)) break;
+            if (handleCommandUsageEvent(data, pending)) break;
             if (handleAutoModeDaemonEvent(data, pending)) break;
             if (handleConversationDaemonEvent(data, pending, () => setKeptConversationsChangeSignal((signal) => signal + 1))) break;
             if (handleWorktreeDaemonEvent(data, pending, {
@@ -4122,6 +4125,12 @@ export function useDaemonSocket({
   const sendFsIndex = useCallback((root?: string, extensions?: string[]): Promise<FsIndexResult> =>
     sendRequest<FsIndexResult>('fs_index', { ...(root ? { root } : {}), ...(extensions && extensions.length > 0 ? { extensions } : {}) }, 'Filesystem index timed out'), [sendRequest]);
 
+  const sendGetCommandUsage = useCallback((profileId: string): Promise<CommandUsage[]> =>
+    sendRequest('get_command_usage', { profile_id: profileId }, 'Reading command history timed out'), [sendRequest]);
+
+  const sendRecordCommandUsage = useCallback((profileId: string, commandId: string): Promise<boolean> =>
+    sendRequest('record_command_usage', { profile_id: profileId, command_id: commandId }, 'Saving command history timed out'), [sendRequest]);
+
   const sendRecentFiles = useCallback((limit?: number, root?: string): Promise<RecentFile[]> => {
     const requestId = nextRequestID('recent_files');
     const key = `recent_files:${requestId}`;
@@ -4942,6 +4951,8 @@ export function useDaemonSocket({
     sendFsWatch,
     sendFsUnwatch,
     sendFsIndex,
+    sendGetCommandUsage,
+    sendRecordCommandUsage,
     sendRecentFiles,
     sendGetRecentLocations,
     sendBrowseDirectory,

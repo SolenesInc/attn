@@ -1,7 +1,9 @@
 import type { ReactNode } from 'react';
+import type { CommandUsage } from '../../types/generated';
 
 export interface PaletteCommand {
   id: string;
+  pinned?: boolean;
   title: string;
   description?: string;
   keywords?: string[];
@@ -23,11 +25,19 @@ function commandScore(command: PaletteCommand, terms: readonly string[]): number
   }, 0);
 }
 
-export function filterCommands(commands: readonly PaletteCommand[], query: string): PaletteCommand[] {
+export function filterCommands(commands: readonly PaletteCommand[], query: string, usage: readonly CommandUsage[] = []): PaletteCommand[] {
   const terms = query.toLowerCase().split(/\s+/).filter(Boolean);
+  const byId = new Map(usage.map((entry) => [entry.command_id, entry]));
   return commands
     .map((command) => ({ command, score: commandScore(command, terms) }))
     .filter(({ score }) => score > 0)
-    .sort((left, right) => right.score - left.score)
+    .sort((left, right) => {
+      const leftUsage = byId.get(left.command.id);
+      const rightUsage = byId.get(right.command.id);
+      return right.score - left.score
+        || Number(Boolean(right.command.pinned)) - Number(Boolean(left.command.pinned))
+        || (rightUsage?.score ?? 0) - (leftUsage?.score ?? 0)
+        || (rightUsage ? Date.parse(rightUsage.last_used_at) : 0) - (leftUsage ? Date.parse(leftUsage.last_used_at) : 0);
+    })
     .map(({ command }) => command);
 }

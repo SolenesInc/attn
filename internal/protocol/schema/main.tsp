@@ -1674,6 +1674,25 @@ model GetRecentLocationsMessage {
   request_id?: string;
 }
 
+model CommandUsage {
+  command_id: string;
+  score: float64;
+  last_used_at: string;
+}
+
+model GetCommandUsageMessage {
+  cmd: "get_command_usage";
+  request_id: string;
+  profile_id: string;
+}
+
+model RecordCommandUsageMessage {
+  cmd: "record_command_usage";
+  request_id: string;
+  profile_id: string;
+  command_id: string;
+}
+
 // Recently touched files, frecency-ranked (frequency weighted by recency, the
 // same model as get_recent_locations). Feeds the ⌘P markdown opener's list on
 // an empty query. Entries whose file no longer exists are pruned rather than
@@ -6930,6 +6949,22 @@ model FsUnwatchResultMessage {
   root?: string;
 }
 
+model GetCommandUsageResultMessage {
+  event: "get_command_usage_result";
+  request_id: string;
+  profile_id: string;
+  success: boolean;
+  error?: string;
+  entries: CommandUsage[];
+}
+
+model RecordCommandUsageResultMessage {
+  event: "record_command_usage_result";
+  request_id: string;
+  success: boolean;
+  error?: string;
+}
+
 // Result of recent_files. files are absolute paths, best-first by frecency.
 model RecentFilesResultMessage {
   event: "recent_files_result";
@@ -7181,6 +7216,8 @@ alias DaemonEvent =
   | FsWatchResultMessage
   | FsUnwatchResultMessage
   | FsIndexResultMessage
+  | GetCommandUsageResultMessage
+  | RecordCommandUsageResultMessage
   | RecentFilesResultMessage
   | FsChangedMessage
   | TaskListResultMessage

@@ -125,6 +125,8 @@ export class ScriptedDaemon {
     const initial = initialState(handshake || {});
     this.arrangement = new Arrangement(initial.profiles ?? [], initial.desktops ?? [], initial.selected_profile_id ?? DEFAULT_PROFILE_ID);
     serveArrangement(this, this.arrangement);
+    this.on('get_command_usage', ({ profile_id }) => ({ event: 'get_command_usage_result', profile_id, success: true, entries: [] }));
+    this.on('record_command_usage', () => ({ event: 'record_command_usage_result', success: true }));
     this.on('client_hello', () => (handshake === false ? undefined : {
       ...initialState(handshake),
       profiles: this.arrangement.profiles,

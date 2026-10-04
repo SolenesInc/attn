@@ -1317,6 +1317,10 @@ func (d *Daemon) handleClientMessage(client *wsClient, data []byte) {
 		d.handleUnregisterWS(client, msg.(*protocol.UnregisterMessage))
 	case protocol.CmdGetRecentLocations:
 		d.handleGetRecentLocationsWS(client, msg.(*protocol.GetRecentLocationsMessage))
+	case protocol.CmdGetCommandUsage:
+		d.handleGetCommandUsage(client, msg.(*protocol.GetCommandUsageMessage))
+	case protocol.CmdRecordCommandUsage:
+		d.handleRecordCommandUsage(client, msg.(*protocol.RecordCommandUsageMessage))
 	case protocol.CmdRecentFiles:
 		d.handleRecentFilesWS(client, msg.(*protocol.RecentFilesMessage))
 	case protocol.CmdBrowseDirectory:
