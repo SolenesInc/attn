@@ -467,11 +467,22 @@ pub fn capture_cache(app: AppHandle, binding: Option<String>) -> Result<(), Stri
     }
 }
 
-fn draft_image_name(id: &str) -> Result<String, String> {
-    if id.len() != 36 || !id.chars().all(|ch| ch.is_ascii_hexdigit() || ch == '-') {
-        return Err("Draft image id must be a UUID".into());
+fn is_uuid(id: &str) -> bool {
+    id.len() == 36
+        && id.bytes().enumerate().all(|(index, byte)| {
+            if matches!(index, 8 | 13 | 18 | 23) {
+                byte == b'-'
+            } else {
+                byte.is_ascii_hexdigit()
+            }
+        })
+}
+
+fn draft_file_name(id: &str) -> Result<String, String> {
+    if !is_uuid(id) {
+        return Err("Draft file id must be a UUID".into());
     }
-    Ok(format!("{id}.image"))
+    Ok(format!("{id}.file"))
 }
 
 fn write_cache(path: &std::path::Path, bytes: &[u8]) -> Result<(), String> {
@@ -489,59 +500,58 @@ fn write_cache(path: &std::path::Path, bytes: &[u8]) -> Result<(), String> {
 }
 
 fn draft_dir(profile_id: &str) -> Result<std::path::PathBuf, String> {
-    draft_image_name(
-        profile_id
-            .strip_prefix("profile-")
-            .ok_or("Capture draft needs a profile identity")?,
-    )?;
+    let id = profile_id
+        .strip_prefix("profile-")
+        .ok_or("Capture draft needs a profile identity")?;
+    if !is_uuid(id) {
+        return Err("Capture draft profile id must contain a UUID".into());
+    }
     Ok(crate::instance::data_dir()?
-        .join("user-message-drafts")
+        .join("quick-capture-drafts")
         .join(profile_id))
 }
 
 fn read_draft(profile_id: String) -> Result<Option<serde_json::Value>, String> {
     let dir = draft_dir(&profile_id)?;
-    let bytes = match std::fs::read(dir.join("user-message-draft.json")) {
+    let bytes = match std::fs::read(dir.join("quick-capture-draft.json")) {
         Ok(bytes) => bytes,
         Err(error) if error.kind() == std::io::ErrorKind::NotFound => return Ok(None),
         Err(error) => return Err(error.to_string()),
     };
     let mut draft: serde_json::Value =
         serde_json::from_slice(&bytes).map_err(|error| error.to_string())?;
-    for image in draft["images"]
+    for file in draft["files"]
         .as_array_mut()
-        .ok_or("Draft images are missing")?
+        .ok_or("Draft files are missing")?
     {
-        let id = image["id"].as_str().ok_or("Draft image id is missing")?;
-        let path = dir.join("capture-draft-images").join(draft_image_name(id)?);
-        image["url"] = std::fs::read_to_string(path)
+        let id = file["id"].as_str().ok_or("Draft file id is missing")?;
+        let path = dir.join("capture-draft-files").join(draft_file_name(id)?);
+        file["url"] = std::fs::read_to_string(path)
             .map_err(|error| error.to_string())?
             .into();
     }
     Ok(Some(draft))
 }
 
-fn write_draft_image(profile_id: String, id: String, url: String) -> Result<(), String> {
+fn write_draft_file(profile_id: String, id: String, url: String) -> Result<(), String> {
     let path = draft_dir(&profile_id)?
-        .join("capture-draft-images")
-        .join(draft_image_name(&id)?);
+        .join("capture-draft-files")
+        .join(draft_file_name(&id)?);
     write_cache(&path, url.as_bytes())
 }
 
 fn write_draft(profile_id: String, draft: serde_json::Value) -> Result<(), String> {
     let dir = draft_dir(&profile_id)?;
-    let images = draft["images"]
-        .as_array()
-        .ok_or("Draft images are missing")?;
-    let names = images
+    let files = draft["files"].as_array().ok_or("Draft files are missing")?;
+    let names = files
         .iter()
-        .map(|image| draft_image_name(image["id"].as_str().ok_or("Draft image id is missing")?))
+        .map(|file| draft_file_name(file["id"].as_str().ok_or("Draft file id is missing")?))
         .collect::<Result<std::collections::HashSet<_>, String>>()?;
     write_cache(
-        &dir.join("user-message-draft.json"),
+        &dir.join("quick-capture-draft.json"),
         &serde_json::to_vec(&draft).map_err(|error| error.to_string())?,
     )?;
-    if let Ok(entries) = std::fs::read_dir(dir.join("capture-draft-images")) {
+    if let Ok(entries) = std::fs::read_dir(dir.join("capture-draft-files")) {
         for entry in entries {
             let entry = entry.map_err(|error| error.to_string())?;
             if !names.contains(&entry.file_name().to_string_lossy().to_string()) {
@@ -553,7 +563,7 @@ fn write_draft(profile_id: String, draft: serde_json::Value) -> Result<(), Strin
 }
 
 #[tauri::command]
-pub async fn user_message_draft_read(
+pub async fn quick_capture_draft_read(
     profile_id: String,
 ) -> Result<Option<serde_json::Value>, String> {
     tauri::async_runtime::spawn_blocking(move || read_draft(profile_id))
@@ -562,18 +572,18 @@ pub async fn user_message_draft_read(
 }
 
 #[tauri::command]
-pub async fn user_message_draft_image_write(
+pub async fn quick_capture_draft_file_write(
     profile_id: String,
     id: String,
     url: String,
 ) -> Result<(), String> {
-    tauri::async_runtime::spawn_blocking(move || write_draft_image(profile_id, id, url))
+    tauri::async_runtime::spawn_blocking(move || write_draft_file(profile_id, id, url))
         .await
         .map_err(|error| error.to_string())?
 }
 
 #[tauri::command]
-pub async fn user_message_draft_write(
+pub async fn quick_capture_draft_write(
     profile_id: String,
     draft: serde_json::Value,
 ) -> Result<(), String> {
@@ -583,7 +593,7 @@ pub async fn user_message_draft_write(
 }
 
 #[tauri::command]
-pub async fn user_message_image_read(path: String) -> Result<String, String> {
+pub async fn quick_capture_file_read(path: String) -> Result<String, String> {
     tauri::async_runtime::spawn_blocking(move || {
         use base64::Engine;
         let bytes = std::fs::read(&path).map_err(|error| format!("Cannot read {path}: {error}"))?;

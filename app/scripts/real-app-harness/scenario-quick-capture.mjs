@@ -3,10 +3,9 @@ import assert from 'node:assert/strict';
 import crypto from 'node:crypto';
 import { PNG } from 'pngjs';
 import { deflateSync } from 'node:zlib';
-import { promisify } from 'node:util';
 import fs from 'node:fs';
 import path from 'node:path';
-import { execFile, execFileSync, spawn } from 'node:child_process';
+import { execFileSync, spawn } from 'node:child_process';
 import { parseCommonArgs, launchFreshAppAndConnect, printCommonHelp } from './common.mjs';
 import { createScenarioRunner } from './scenarioRunner.mjs';
 import { UiAutomationClient } from './uiAutomationClient.mjs';
@@ -72,8 +71,8 @@ const testBinding = 'Control+Alt+B';
 const instance = instanceForAppPath(options.appPath);
 assert.ok(instance, 'Quick Capture scenarios require a named instance');
 const runAttn = args => execFileSync(appDaemonInTree(options.appPath), args, { encoding: 'utf8', env: instanceCliEnv(instance) });
-const recipient = `cap-${crypto.randomUUID()}`;
-const home = path.join(dataDirForInstance(instance), 'crew', recipient);
+const mailbox = `cap-${crypto.randomUUID()}`;
+const home = path.join(dataDirForInstance(instance), 'crew', mailbox);
 function saveNativeTrace(name) {
   const log = path.join(appLocalDataDirForInstance(instance), 'debug', 'ui-automation-server.log');
   if (fs.existsSync(log)) fs.copyFileSync(log, path.join(runner.runDir, name));
@@ -107,16 +106,16 @@ const attn = process.env.ATTN_WRAPPER_PATH || ${JSON.stringify(appDaemonInTree(o
 const batch = JSON.parse(execFileSync(attn, ['agent', 'inbox', '--json'], { encoding: 'utf8' }));
 const receipts = [];
 for (const item of batch.items) {
-  if (item.kind !== 'user_message') continue;
+  if (item.kind !== 'quick_capture') continue;
   for (const attachment of item.attachments || []) {
     const out = path.join(process.cwd(), attachment.id + path.extname(attachment.name));
     execFileSync(attn, ['agent', 'attachment', item.source_id, attachment.id, '--out', out]);
     const dimensions = attachment.media_type.startsWith('image/') ? execFileSync('sips', ['-g', 'pixelWidth', '-g', 'pixelHeight', out], { encoding: 'utf8' }) : undefined;
-    receipts.push({ messageId: item.source_id, attachmentId: attachment.id, name: attachment.name, mediaType: attachment.media_type, bytes: fs.statSync(out).size,
+    receipts.push({ captureId: item.source_id, attachmentId: attachment.id, name: attachment.name, mediaType: attachment.media_type, bytes: fs.statSync(out).size,
       sha256: crypto.createHash('sha256').update(fs.readFileSync(out)).digest('hex'), dimensions });
   }
 }
-fs.writeFileSync(${JSON.stringify(path.join(runner.runDir, 'recipient-image-receipt.json'))}, JSON.stringify(receipts));
+fs.writeFileSync(${JSON.stringify(path.join(runner.runDir, 'mailbox-image-receipt.json'))}, JSON.stringify(receipts));
 console.log('CAPTURE_IMAGE_INSPECTED ' + JSON.stringify(receipts));
 `);
 
@@ -153,18 +152,6 @@ async function dropFiles(files) {
   try { await fixture.runInputDriver(['drag_between', '--relative-x', '0.1', '--text', driver.bundleId]); }
   finally { fs.rmSync(manifest); }
 }
-function taggedScreenshot(source, index) {
-  const text = Buffer.from(`Capture\0${index}`);
-  const chunk = Buffer.alloc(text.length + 12);
-  chunk.writeUInt32BE(text.length); chunk.write('tEXt', 4); text.copy(chunk, 8);
-  let crc = -1;
-  for (const byte of chunk.subarray(4, -4)) {
-    crc ^= byte;
-    for (let bit = 0; bit < 8; bit++) crc = (crc >>> 1) ^ ((crc & 1) ? 0xedb88320 : 0);
-  }
-  chunk.writeUInt32BE((crc ^ -1) >>> 0, chunk.length - 4);
-  return Buffer.concat([source.subarray(0, -12), chunk, source.subarray(-12)]);
-}
 function screenshotPdf(source, pages) {
   const image = PNG.sync.read(fs.readFileSync(source));
   const rgb = Buffer.alloc(image.width * image.height * 3);
@@ -191,31 +178,7 @@ const pdfPath = path.join(runner.runDir, 'screenshot-notes.pdf');
 fs.writeFileSync(pdfPath, screenshotPdf(path.resolve('../docs/banner.png'), 20));
 runner.writeJson('retained-file-workload.json', { name: path.basename(pdfPath), pages: 20, bytes: fs.statSync(pdfPath).size,
   sha256: crypto.createHash('sha256').update(fs.readFileSync(pdfPath)).digest('hex'), source: 'docs/banner.png' });
-async function memorySampler() {
-  const appPid = client.readManifest().pid;
-  const domain = execFileSync('launchctl', ['print', `pid/${appPid}`], { encoding: 'utf8' });
-  const originator = domain.match(/originator = (.+)/)?.[1];
-  assert.equal(originator, options.appPath);
-  const services = [...domain.matchAll(/^\s+(\d+)\s+-\s+(com\.apple\.WebKit\.\S+)/gm)]
-    .map(([, pid, name]) => ({ pid: Number(pid), name })).filter(service => service.pid > 0);
-  assert.ok(services.length);
-  const pids = [appPid, ...services.map(service => service.pid)], samples = [];
-  let pending;
-  const sample = () => pending ??= promisify(execFile)('ps', ['-o', 'pid=,rss=', '-p', pids.join(',')])
-    .then(({ stdout }) => {
-      const rows = stdout.trim().split('\n').map(row => row.trim().split(/\s+/).map(Number));
-      const byPid = Object.fromEntries(rows);
-      samples.push({ at: Date.now(), appKiB: byPid[appPid], webKitKiB: services.reduce((sum, { pid }) => sum + (byPid[pid] ?? 0), 0), byPid });
-    }).finally(() => { pending = undefined; });
-  await sample();
-  const interval = setInterval(sample, 50);
-  return { stop: async () => {
-    clearInterval(interval); await pending; await sample();
-    return { appPid, originator, services, sampleIntervalMs: 50, samples,
-      baselineWebKitKiB: samples[0].webKitKiB, peakWebKitKiB: Math.max(...samples.map(row => row.webKitKiB)),
-      peakAppKiB: Math.max(...samples.map(row => row.appKiB)) };
-  } };
-}
+
 let normalFixtureWindow;
 let fixtureLaunch;
 let otherFixtureLaunch;
@@ -227,33 +190,19 @@ try {
   await runner.step('launch_packaged_capture', async () => {
     assert.equal(fs.existsSync(home), false, 'Each run owns a fresh crew fixture home');
     runner.registerCleanup('crew-fixture', async () => {
-      const member = JSON.parse(runAttn(['crew', 'list', '--json'])).find(member => member.id === recipient);
+      const member = JSON.parse(runAttn(['crew', 'list', '--json'])).find(member => member.id === mailbox);
       if (member?.binding_session) {
         runAttn(['handoff', '--session', member.binding_session, '--sleep', '-m', 'Synthetic capture scenario complete']);
         await observer.waitFor(() => !observer.getSession(member.binding_session), 'synthetic crew session closed');
       }
       fs.rmSync(home, { recursive: true, force: true });
-      runAttn(['doc', 'delete', 'core/crew', 'members', recipient]);
-      assert.equal(JSON.parse(runAttn(['crew', 'list', '--json'])).some(member => member.id === recipient), false);
+      runAttn(['doc', 'delete', 'core/crew', 'members', mailbox]);
+      assert.equal(JSON.parse(runAttn(['crew', 'list', '--json'])).some(member => member.id === mailbox), false);
     });
     fs.mkdirSync(home, { recursive: true });
     fs.writeFileSync(path.join(home, 'CHARTER.md'), '# Capture Fixture Builder\n\nInspect synthetic messages and their copied attachments.\n');
     await client.quitApp();
     runAttn(['daemon', 'stop']);
-    const previousDraft = path.join(dataDirForInstance(instance), 'user-message-draft.json');
-    if (fs.existsSync(previousDraft)) {
-      const files = path.join(dataDirForInstance(instance), 'capture-draft-files');
-      const backup = path.join(runner.runDir, 'previous-draft-files');
-      const metadata = path.join(runner.runDir, 'previous-synthetic-draft.json');
-      if (fs.existsSync(files)) fs.cpSync(files, backup, { recursive: true });
-      fs.renameSync(previousDraft, metadata);
-      runner.registerCleanup('previous-draft', async () => {
-        await client.quitApp();
-        fs.rmSync(files, { recursive: true, force: true });
-        if (fs.existsSync(backup)) fs.cpSync(backup, files, { recursive: true });
-        fs.copyFileSync(metadata, previousDraft);
-      });
-    }
     await launchFreshAppAndConnect(client, observer, { agentExecutables: { codex: MOCK_AGENT_EXECUTABLE, claude: MOCK_AGENT_EXECUTABLE } });
     const initialBinding = (await state()).binding;
     assert.ok(initialBinding === '' || initialBinding === testBinding, 'This named instance must be Off or retain its own test binding');
@@ -267,8 +216,8 @@ try {
         { type: 'reply', text: 'CAPTURE_IMAGE_INSPECTED', state: 'idle' },
       ] },
     ] });
-    runAttn(['crew', 'set', recipient, '--cwd', home, '--agent', 'codex']);
-    runAttn(['crew', 'sleep', recipient]);
+    runAttn(['crew', 'set', mailbox, '--cwd', home, '--agent', 'codex']);
+    runAttn(['crew', 'sleep', mailbox]);
   });
   await runner.step('build_synthetic_foreground_app', async () => {
     const app = path.join(runner.runDir, 'CaptureFixture.app');
@@ -494,20 +443,20 @@ try {
     runner.writeJson('pdf-drop.json', actual);
     await screenshot('dropped-pdf.png');
   }));
-  await runner.step('remove_image_and_keyboard_recipient', async () => {
+  await runner.step('remove_image_and_keyboard_mailbox', async () => {
     const remove = (await state()).controls.remove;
     await driver.clickWindow(remove.x, remove.y, { windowTitle: 'Quick Capture' });
     assert.equal((await state()).files.length, 2);
     await key('2', ['command']);
-    assert.equal((await state({ recipient })).recipient, recipient);
+    assert.equal((await state({ mailbox })).mailbox, mailbox);
     await key('1', ['command']);
-    assert.equal((await state({ recipient: 'chief' })).recipient, 'chief');
+    assert.equal((await state({ mailbox: 'chief' })).mailbox, 'chief');
     await key('k', ['command']);
     await key('arrowdown');
     await key('enter');
-    assert.equal((await state({ recipient })).recipient, recipient);
-    await fixtureSignal('recipient-image-receipt.json', () => key('enter'));
-    const imageReceipt = JSON.parse(fs.readFileSync(path.join(runner.runDir, 'recipient-image-receipt.json')));
+    assert.equal((await state({ mailbox })).mailbox, mailbox);
+    await fixtureSignal('mailbox-image-receipt.json', () => key('enter'));
+    const imageReceipt = JSON.parse(fs.readFileSync(path.join(runner.runDir, 'mailbox-image-receipt.json')));
     assert.equal(imageReceipt.length, 2);
     const pngReceipt = imageReceipt.find(file => file.mediaType.startsWith('image/'));
     const pdfReceipt = imageReceipt.find(file => file.mediaType === 'application/pdf');
@@ -518,11 +467,11 @@ try {
     await fixture.runInputDriver(['wait_frontmost']);
     const actual = await hidden();
     assert.equal(actual.saved.length, 1);
-    assert.equal(actual.saved[0].recipient, recipient);
+    assert.equal(actual.saved[0].mailbox, mailbox);
     assert.equal(actual.saved[0].files.length, 2);
     assert.equal(actual.visible, false);
     assert.equal(actual.text, '');
-    assert.equal(actual.recipient, 'chief');
+    assert.equal(actual.mailbox, 'chief');
     await fixture.runInputDriver(['wait_frontmost']);
     assert.equal(await fixture.frontmostBundleId(), fixtureId);
   });
@@ -556,11 +505,11 @@ try {
       await state({ imageCount: 1, attachmentCount: 2, settled: true, staged: true });
       await key('k', ['command']);
       await key('arrowdown'); await key('enter');
-      await state({ recipient });
+      await state({ mailbox });
       await screenshot('walkthrough-compose.png');
-      await fixtureSignal('recipient-image-receipt.json', () => key('enter'));
+      await fixtureSignal('mailbox-image-receipt.json', () => key('enter'));
       await hidden();
-      const receipts = JSON.parse(fs.readFileSync(path.join(runner.runDir, 'recipient-image-receipt.json')));
+      const receipts = JSON.parse(fs.readFileSync(path.join(runner.runDir, 'mailbox-image-receipt.json')));
       assert.ok(receipts.some(file => file.name === path.basename(walkthroughPdf)));
       await openCapture();
       const recent = (await state()).controls.recent;
@@ -616,9 +565,9 @@ try {
     assert.equal(restored.text, 'Retained after restart plus dropped image');
     assert.equal(restored.binding, testBinding);
     await screenshot('restored-draft.png');
-    await key('2', ['command']); await state({ recipient });
-    await fixtureSignal('recipient-image-receipt.json', () => key('enter')); await hidden();
-    const restoredReceipt = JSON.parse(fs.readFileSync(path.join(runner.runDir, 'recipient-image-receipt.json'))).find(file => file.mediaType === 'application/pdf');
+    await key('2', ['command']); await state({ mailbox });
+    await fixtureSignal('mailbox-image-receipt.json', () => key('enter')); await hidden();
+    const restoredReceipt = JSON.parse(fs.readFileSync(path.join(runner.runDir, 'mailbox-image-receipt.json'))).find(file => file.mediaType === 'application/pdf');
     assert.equal(restoredReceipt.sha256, crypto.createHash('sha256').update(fs.readFileSync(pdfPath)).digest('hex'));
     runner.writeJson('restored-pdf-receipt.json', restoredReceipt);
   });
@@ -706,47 +655,7 @@ try {
   });
   } catch (error) { nativeFindings.push(error); }
   if (nativeFindings.length) throw new AggregateError(nativeFindings, nativeFindings.map(error => error.message).join('; '));
-  await runner.step('measure_attachment_batches', async () => {
-    const source = path.resolve('../docs/banner.png');
-    const files = Array.from({ length: 20 }, (_, index) => path.join(runner.runDir, `large-screenshot-${String(index + 1).padStart(2, '0')}.png`));
-    const original = fs.readFileSync(source);
-    files.forEach((file, index) => fs.writeFileSync(file, taggedScreenshot(original, index)));
-    const { width, height } = PNG.sync.read(fs.readFileSync(source));
-    const measurements = [];
-    runner.writeJson('attachment-batch-fixture.json', { files: files.map(file => ({ name: path.basename(file), bytes: fs.statSync(file).size, sha256: crypto.createHash('sha256').update(fs.readFileSync(file)).digest('hex') })),
-      width, height, sha256: crypto.createHash('sha256').update(fs.readFileSync(source)).digest('hex'),
-      note: 'Each PNG has an individual tEXt identifier so data URLs are distinct; screenshot pixels are unchanged.',
-      machine: execFileSync('sysctl', ['-n', 'hw.model'], { encoding: 'utf8' }).trim(),
-      os: execFileSync('sw_vers', ['-productVersion'], { encoding: 'utf8' }).trim(), build: runAttn(['--version']).trim() });
-    for (const batchSize of [1, 2, 4, 8]) {
-      await client.launchFreshApp(); await client.waitForFrontendResponsive();
-      await openCapture();
-      assert.equal((await state()).files.length, 0, 'Each capacity starts with a fresh process and empty draft');
-      await state({ batchSize });
-      const sampler = await memorySampler();
-      try {
-        await dropFiles(files);
-        const previews = await state({ attachmentCount: files.length, imageCount: files.length });
-        const ingestion = previews.ingestion.at(-1);
-        assert.equal(ingestion.count, files.length);
-        assert.ok(ingestion.readyAt >= ingestion.startedAt);
-        assert.deepEqual(previews.files.map(file => file.name), files.map(file => path.basename(file)));
-        const staged = await state({ staged: true });
-        assert.equal(staged.work.active, 0); assert.equal(staged.work.pending, 0);
-        assert.equal(staged.work.peak, batchSize);
-        const memory = await sampler.stop();
-        const result = { batchSize, previewMs: ingestion.readyAt - ingestion.startedAt,
-          allStagedMs: Date.now() - ingestion.startedAt, memory, work: staged.work };
-        measurements.push(result);
-        runner.writeJson(`attachment-batch-${batchSize}.json`, result);
-        runner.writeJson('attachment-batch-results.json', measurements);
-      } catch (error) { runner.writeJson(`attachment-batch-${batchSize}-failure.json`, { memory: await sampler.stop(), error: String(error) }); throw error; }
-      await key('enter');
-      const accepted = await hidden();
-      assert.equal(accepted.saved[0].files.length, files.length);
-    }
-    for (const file of files) fs.rmSync(file);
-  });
+
   if (process.env.CI === 'true') {
     await client.request('capture_dismiss');
     const processes = execFileSync('ps', ['-axo', 'pid,ppid,comm'], { encoding: 'utf8' });

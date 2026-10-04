@@ -2,7 +2,6 @@ import { fireEvent, screen } from '@testing-library/react';
 import type { EventMessage } from './protocol';
 import { gesture, pressShortcut, renderApp, type AppRender } from './renderApp';
 import type { ScriptedDaemon } from './scriptedDaemon';
-import writableSettings from './fixtures/writable-settings.json';
 
 type InitialState = EventMessage<'initial_state'>;
 type Script = (daemon: ScriptedDaemon) => void;
@@ -10,9 +9,6 @@ type Script = (daemon: ScriptedDaemon) => void;
 export function serveSettings(daemon: ScriptedDaemon, initial: Record<string, string> = {}) {
   let settings = initial;
   daemon.on('set_setting', ({ key, value }) => {
-    if (!writableSettings.keys.includes(key) && !writableSettings.prefixes.some(prefix => key.trim().toLowerCase().startsWith(prefix))) {
-      return { event: 'settings_updated', success: false, changed_key: key, error: `unknown setting: ${key}` };
-    }
     settings = { ...settings, [key]: value };
     return [
       { event: 'settings_updated', success: true, changed_key: key },

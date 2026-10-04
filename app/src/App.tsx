@@ -25,7 +25,7 @@ import { hideBootSplash } from './utils/bootSplash';
 import { bumpFsChangeSignal } from './utils/fsChangeSignals';
 
 function App() {
-  const [messageRevision, setMessageRevision] = useState(0);
+  const [captureReadReceipt, setCaptureReadReceipt] = useState<{ captureId: string; readAt: string }>();
   const [settings, setSettings] = useState<Record<string, string>>({});
   const [settingError, setSettingError] = useState<string | null>(null);
   const [daemonPlugins, setDaemonPlugins] = useState<DaemonPlugin[]>([]);
@@ -93,7 +93,7 @@ function App() {
   }, []);
 
   const daemon = useDaemonSocket({
-    onUserMessageChanged: () => setMessageRevision(revision => revision + 1),
+    onQuickCaptureRead: setCaptureReadReceipt,
     onSessionsUpdate: (sessions) => {
       useSessionStore.getState().syncFromDaemonSessions(sessions);
       setDaemonSessions(sessions);
@@ -124,7 +124,7 @@ function App() {
     onWorktreesUpdate: setWorktrees,
   });
 
-  const captureHost = useQuickCaptureHost(daemon, settings, messageRevision);
+  const captureHost = useQuickCaptureHost(daemon, settings, captureReadReceipt);
 
   const {
     getMarkdownAnnotations,
