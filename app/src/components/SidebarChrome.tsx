@@ -73,11 +73,11 @@ function RailDesktops() {
   } = useSidebarContext();
   const desktopListRef = useRef<HTMLDivElement>(null);
   const desktopOrder = JSON.stringify(visibleVisualOrder.map((desktop) => desktop.id));
-  const { onClickCapture } = useRevealSelection(
+  const { onClick } = useRevealSelection(
     desktopListRef, homeActive || !selectedDesktopId ? null : `${selectedDesktopId}/`, desktopOrder,
   );
   return (
-    <div className="rail-desktops" ref={desktopListRef} onClickCapture={onClickCapture}>
+    <div className="rail-desktops" ref={desktopListRef} onClick={onClick}>
       {visibleVisualOrder.map((desktopView) => {
         const shortcut = desktopShortcut(visualIndexOfDesktop(desktopView.id));
         const label = shortcut ? `${desktopView.title} (${shortcut})` : desktopView.title;

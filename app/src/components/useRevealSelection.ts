@@ -5,12 +5,16 @@ export function useRevealSelection(
   selectionKey: string | null,
   layoutKey: string,
 ) {
-  const clickedKey = useRef<string | null>(null);
+  const clickedKey = useRef<{ key: string; leavingHome: boolean } | null>(null);
 
   useLayoutEffect(() => {
     const clicked = clickedKey.current;
     clickedKey.current = null;
-    if (clicked && selectionKey?.startsWith(clicked)) return;
+    if (clicked && selectionKey?.startsWith(clicked.key)) return;
+    if (clicked?.leavingHome) {
+      clickedKey.current = { ...clicked, leavingHome: false };
+      return;
+    }
     revealSelection(listRef.current, false);
   }, [listRef, selectionKey]);
 
@@ -25,12 +29,14 @@ export function useRevealSelection(
   }, [listRef, layoutKey]);
 
   return {
-    onClickCapture(event: MouseEvent) {
+    onClick(event: MouseEvent) {
       clickedKey.current = null;
       if (event.detail === 0 || !(event.target instanceof Element)) return;
       const control = event.target.closest('[data-select-key]');
       const key = control?.getAttribute('data-select-key');
-      if (key && !selectionKey?.startsWith(key)) clickedKey.current = key;
+      if (key && !selectionKey?.startsWith(key)) {
+        clickedKey.current = { key, leavingHome: selectionKey === null && key.endsWith('/') };
+      }
     },
   };
 }

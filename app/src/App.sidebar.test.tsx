@@ -461,6 +461,8 @@ describe('App sidebar', () => {
       expect(first.querySelector('.desktop-number')).toHaveTextContent('1');
       expect(waiting.querySelector('.desktop-number')).toHaveTextContent('2');
       expect(empty.querySelector('.desktop-number')).toHaveTextContent('3');
+      expect(first).not.toHaveAttribute('aria-current');
+      await gesture(daemon, () => fireEvent.click(first));
       expect(first).toHaveAttribute('aria-current', 'true');
       expect(waiting).not.toHaveAttribute('aria-current');
       expect(empty.querySelector('.desktop-number')).toHaveClass('empty');
@@ -470,6 +472,7 @@ describe('App sidebar', () => {
 
       await gesture(daemon, () => fireEvent.click(waiting));
       expect(daemon.sentOf('desktop_set_current')).toEqual([
+        { cmd: 'desktop_set_current', profile_id: 'profile-default', desktop_id: 'desktop-1', request_id: expect.any(String) },
         { cmd: 'desktop_set_current', profile_id: 'profile-default', desktop_id: 'desktop-s2', request_id: expect.any(String) },
       ]);
       expect(waiting).toHaveAttribute('aria-current', 'true');

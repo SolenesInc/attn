@@ -32,7 +32,7 @@ function SidebarExpanded() {
   const context = useSidebarContext();
   const listRef = useRef<HTMLDivElement>(null);
   const desktopOrder = JSON.stringify(context.visibleDesktops.map((desktop) => desktop.id));
-  const { onClickCapture } = useRevealSelection(listRef, treeSelectionKey(context), desktopOrder);
+  const { onClick } = useRevealSelection(listRef, treeSelectionKey(context), desktopOrder);
   const {
     criticalNotifications,
     onOpenNotifications,
@@ -73,7 +73,7 @@ function SidebarExpanded() {
         <span className="sidebar-home-shortcut">{formatShortcut('session.goToDashboard')}</span>
       </button>
 
-      <div ref={listRef} onClickCapture={onClickCapture} className={`session-list ${reorderDrag ? 'session-list--reordering' : ''}`.trim()}>
+      <div ref={listRef} onClick={onClick} className={`session-list ${reorderDrag ? 'session-list--reordering' : ''}`.trim()}>
         <SidebarSleepingCrew />
         <SidebarDesktopOverview />
         <SidebarDesktopList />

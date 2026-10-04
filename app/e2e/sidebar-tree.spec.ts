@@ -110,3 +110,38 @@ test('a click on the current desktop cannot suppress a later keyboard selection'
   await page.getByRole('button', { name: 'Deliver selection' }).click();
   await expectCentered(page);
 });
+
+test('a canceled desktop drag click cannot suppress a later external selection', async ({ page }) => {
+  await page.getByRole('button', { name: 'Jump to agent', exact: true }).click();
+  await scrollAway(page);
+  const source = (await page.locator('.desktop-rule', { has: page.getByRole('button', { name: 'Open Desktop 1', exact: true }) }).boundingBox())!;
+  await page.mouse.move(source.x + 24, source.y + source.height / 2);
+  await page.mouse.down();
+  await page.mouse.move(source.x + 24, source.y + source.height + 12, { steps: 4 });
+  await expect(page.locator('.session-list--reordering')).toBeVisible();
+  await page.keyboard.press('Escape');
+  await page.mouse.move(source.x + 24, source.y + source.height / 2);
+  await page.mouse.up();
+  await expect(page.getByRole('button', { name: 'Deliver selection' })).toBeDisabled();
+  await page.locator('.session-list').evaluate((list) => { list.scrollTop = (list.scrollHeight - list.clientHeight) / 2; });
+  await page.getByRole('button', { name: 'Jump to first', exact: true }).click();
+  await expectCentered(page);
+});
+
+for (const rail of [false, true]) {
+  test(`a desktop click from Home keeps the ${rail ? 'rail' : 'tree'} still through the intermediate selection`, async ({ page }) => {
+    await page.setViewportSize({ width: 1200, height: 400 });
+    await page.goto(`/test-harness/?component=SidebarTree${rail ? '&rail' : ''}`);
+    await page.waitForFunction(() => window.__HARNESS__?.ready === true);
+    const list = page.locator(rail ? '.rail-desktops' : '.session-list');
+    await page.getByRole('button', { name: 'Jump to last', exact: true }).click();
+    await page.getByRole('button', { name: 'Home', exact: true }).click();
+    await list.evaluate((element) => { element.scrollTop = 0; });
+    const before = await list.evaluate((element) => element.scrollTop);
+    await list.getByRole('button', { name: rail ? 'Desktop 1 (⌘1)' : 'Open Desktop 1', exact: true }).click();
+    expect(await list.evaluate((element) => element.scrollTop)).toBe(before);
+    await page.getByRole('button', { name: 'Deliver selection' }).click();
+    expect(await list.evaluate((element) => element.scrollTop)).toBe(before);
+    await expect(list.locator('[aria-current="true"]')).toHaveCount(1);
+  });
+}

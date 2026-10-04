@@ -22,6 +22,7 @@ const desktops: SidebarDesktop[] = density.map((count, index) => {
 type Selection = { desktop: string; session: string | null; tile?: SelectedTile; home?: boolean };
 
 export function SidebarTreeHarness({ onReady, setTriggerRerender }: HarnessProps) {
+  const collapsed = new URLSearchParams(window.location.search).has('rail');
   const [arrangement, setArrangement] = useState(desktops);
   const [selection, setSelection] = useState<Selection>({ desktop: 'desk-1', session: 'desk-1-agent-1' });
   const [pending, setPending] = useState<Selection | null>(null);
@@ -32,12 +33,16 @@ export function SidebarTreeHarness({ onReady, setTriggerRerender }: HarnessProps
   return (
     <div className="app" style={{ height: '100vh' }}>
       <Sidebar
-        collapsed={false} surface="tree-open" selectedId={selection.session}
+        collapsed={collapsed} surface={collapsed ? "tree-collapsed" : "tree-open"} selectedId={selection.session}
         selectedDesktopId={selection.desktop} selectedTile={selection.tile} homeActive={selection.home}
         desktops={arrangement} visualIndexByDesktopId={new Map(arrangement.map((desktop, index) => [desktop.id, index]))}
         headerActions={[]}
-        onSelectDesktop={(id) => setPending(id === selection.desktop && !selection.home
-          ? selection : { desktop: id, session: arrangement.find((desktop) => desktop.id === id)?.firstSessionId ?? null })}
+        onDesktopReorder={noop}
+        onSelectDesktop={(id) => {
+          setPending(id === selection.desktop && !selection.home
+            ? selection : { desktop: id, session: arrangement.find((desktop) => desktop.id === id)?.firstSessionId ?? null });
+          if (selection.home) setSelection({ ...selection, home: false });
+        }}
         onSelectSession={(id) => setPending({ desktop: arrangement.find((desktop) => desktop.sessions.some((session) => session.id === id))!.id, session: id })}
         onSelectTile={(desktopId, tileId) => setPending({ desktop: desktopId, session: null, tile: { desktopId, tileId } })}
         onNewSession={noop} onCloseSession={noop} onReloadSession={noop} onToggleCollapse={noop}
