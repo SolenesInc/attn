@@ -1328,21 +1328,16 @@ func moveLeafBetweenDesktops(tx *sql.Tx, now string, source, target profiles.Des
 	return LeafMove{Source: source, Target: target, FinalLeafID: moved.FinalLeafID}, nil
 }
 
-// SessionDesktopMove is what MoveSessionToDesktop did: Placed for an unplaced session, no Moves when
-// every tile of the session already was on Target. TileID is the session's newest tile, now on Target.
+// SessionDesktopMove is what MoveSessionToDesktop did: Placed for an unplaced
+// session, Move.Source empty when the session's newest tile already was on the desktop.
 type SessionDesktopMove struct {
-	Target profiles.Desktop
-	TileID string
-	Moves  []SessionTileMove
-	Placed bool
+	Move       LeafMove
+	FromLeafID string
+	Placed     bool
 }
 
-type SessionTileMove struct {
-	FromDesktopID, FromTileID, ToTileID string
-}
-
-// MoveSessionToDesktop puts each of a session's tiles beside another desktop's active tile;
-// only a moved active tile, onto a desktop not on screen, becomes that desktop's active tile.
+// MoveSessionToDesktop puts a session's newest tile beside another desktop's active leaf;
+// only a moved active tile, onto a desktop not on screen, takes that leaf.
 func (s *Store) MoveSessionToDesktop(sessionID, targetDesktopID, title string) (SessionDesktopMove, error) {
 	var result SessionDesktopMove
 	err := s.profilesTx(func(tx *sql.Tx, now string) error {
@@ -1374,33 +1369,24 @@ func (s *Store) MoveSessionToDesktop(sessionID, targetDesktopID, title string) (
 			if err := writeDesktopArrangement(tx, now, &desktop); err != nil {
 				return err
 			}
-			result = SessionDesktopMove{Target: desktop, TileID: paneID, Placed: true}
+			result = SessionDesktopMove{Move: LeafMove{Target: desktop, FinalLeafID: paneID}, Placed: true}
 			return nil
 		}
-		result = SessionDesktopMove{Target: target}
-		for _, tile := range tiles {
-			if tile.desktopID == target.ID {
-				continue
-			}
-			source, err := loadDesktop(tx, tile.desktopID)
-			if err != nil {
-				return err
-			}
-			move, err := moveLeafBetweenDesktops(tx, now, source, result.Target, LeafMoveRequest{
-				LeafID: tile.tileID, AnchorID: result.Target.ActivePaneID, Direction: layouttree.DirectionVertical,
-				Activate: source.ActivePaneID == tile.tileID && target.ID != profile.CurrentDesktopID,
-			})
-			if err != nil {
-				return err
-			}
-			result.Target = move.Target
-			result.Moves = append(result.Moves, SessionTileMove{FromDesktopID: source.ID, FromTileID: tile.tileID, ToTileID: move.FinalLeafID})
+		tile := tiles[0]
+		if tile.desktopID == target.ID {
+			result = SessionDesktopMove{Move: LeafMove{Target: target, FinalLeafID: tile.tileID}}
+			return nil
 		}
-		if tiles, err = sessionTiles(tx, sessionID); err != nil {
+		source, err := loadDesktop(tx, tile.desktopID)
+		if err != nil {
 			return err
 		}
-		result.TileID = tiles[0].tileID
-		return nil
+		move, err := moveLeafBetweenDesktops(tx, now, source, target, LeafMoveRequest{
+			LeafID: tile.tileID, AnchorID: target.ActivePaneID, Direction: layouttree.DirectionVertical,
+			Activate: source.ActivePaneID == tile.tileID && target.ID != profile.CurrentDesktopID,
+		})
+		result = SessionDesktopMove{Move: move, FromLeafID: tile.tileID}
+		return err
 	})
 	return result, err
 }

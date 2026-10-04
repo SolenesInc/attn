@@ -1,3 +1,3 @@
 kind: internal
 area: desktops
-change: Several terminal tiles may show one session in the database; closing a session removes every tile that shows it, and moving it to a desktop moves them all. attn's own placements still give a session at most one tile.
+change: Several terminal tiles may show one session in the database; closing a session removes every tile that shows it, and moving it to a desktop moves its newest tile. attn's own placements still give a session at most one tile.
