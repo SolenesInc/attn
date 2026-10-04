@@ -522,7 +522,8 @@ describe('Quick Capture app wire behavior', () => {
     expect(within(recent).getAllByText(/^Read$/)).toHaveLength(2);
     daemon.on('quick_capture_list', () => undefined);
     await daemon.reconnect();
-    const refresh = daemon.sentOf('quick_capture_list').at(-1)!;
+    const refreshRequests = daemon.sentOf('quick_capture_list');
+    const refresh = refreshRequests[refreshRequests.length - 1];
     expect(daemon.sentOf('quick_capture_list')).toHaveLength(2);
     await act(async () => {
       daemon.emit({ event: 'quick_capture_read', profile_id: DEFAULT_PROFILE_ID, capture_id: firstId, read_at: '2026-10-01T12:03:00Z' });
