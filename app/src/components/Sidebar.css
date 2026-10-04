@@ -22,17 +22,6 @@
   -webkit-user-select: text;
 }
 
-.sidebar-header {
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
-  padding: 12px;
-  border-bottom: 1px solid var(--color-border);
-  background:
-    radial-gradient(circle at top left, rgba(255, 107, 53, 0.12), transparent 46%),
-    linear-gradient(180deg, rgba(255, 255, 255, 0.02), transparent);
-}
-
 .sidebar-instance-marker {
   align-self: flex-start;
   max-width: 100%;
@@ -61,107 +50,6 @@
   margin: 6px 5px 2px;
   padding-inline: 4px;
   text-align: center;
-}
-
-.sidebar-tool-row,
-.sidebar-header-row {
-  display: flex;
-  align-items: center;
-  width: 100%;
-}
-
-.sidebar-tool-row {
-  display: grid;
-  grid-template-columns: repeat(6, minmax(0, 1fr));
-  gap: 6px;
-}
-
-/* Nothing labels this row any more — the home row below names the sidebar's
-   place, so the "+" and the display popover trigger sit flush right on their own. */
-.sidebar-header-row {
-  gap: 8px;
-  justify-content: flex-end;
-}
-
-.sidebar-tool-btn,
-.new-session-btn,
-.collapse-btn,
-.sidebar-settings-btn,
-.icon-btn {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-}
-
-.sidebar-tool-btn svg,
-.new-session-btn svg,
-.collapse-btn svg,
-.sidebar-settings-btn svg,
-.icon-btn svg {
-  width: 16px;
-  height: 16px;
-}
-
-.sidebar-tool-btn {
-  position: relative;
-  width: 100%;
-  height: 30px;
-  border-radius: 8px;
-  border: 1px solid rgba(255, 255, 255, 0.06);
-  background: rgba(255, 255, 255, 0.035);
-  color: var(--color-text-secondary);
-  cursor: pointer;
-  transition: background 120ms ease, border-color 120ms ease, color 120ms ease, transform 120ms ease;
-}
-
-.sidebar-tool-btn:hover:not(:disabled) {
-  background: rgba(255, 255, 255, 0.08);
-  border-color: rgba(255, 255, 255, 0.12);
-  color: var(--color-text-primary);
-  transform: translateY(-1px);
-}
-
-.sidebar-tool-btn.active {
-  background: rgba(255, 255, 255, 0.1);
-  border-color: rgba(255, 255, 255, 0.16);
-  color: var(--color-text-primary);
-}
-
-.sidebar-tool-btn:disabled {
-  cursor: not-allowed;
-  opacity: 0.38;
-}
-
-.sidebar-tool-badge {
-  position: absolute;
-  top: -4px;
-  right: -4px;
-  min-width: 18px;
-  height: 18px;
-  padding: 0 4px;
-  border-radius: 999px;
-  background: var(--accent);
-  color: #111113;
-  font-family: 'JetBrains Mono', 'DejaVu Sans Mono', monospace;
-  font-size: 10px;
-  font-weight: 700;
-  line-height: 18px;
-  text-align: center;
-}
-
-.new-session-btn {
-  background: rgba(255, 255, 255, 0.04);
-  border: 1px solid rgba(255, 255, 255, 0.08);
-  border-radius: 8px;
-  color: var(--color-text-secondary);
-  width: 30px;
-  height: 30px;
-  cursor: pointer;
-}
-
-.new-session-btn:hover {
-  background: rgba(255, 255, 255, 0.09);
-  color: var(--color-text-primary);
 }
 
 .session-list {
@@ -910,163 +798,6 @@
   padding: 2px 8px;
 }
 
-/* Collapse button */
-.collapse-btn {
-  background: rgba(255, 255, 255, 0.035);
-  border: 1px solid rgba(255, 255, 255, 0.06);
-  border-radius: 8px;
-  color: var(--color-text-dimmed);
-  width: 100%;
-  height: 30px;
-  cursor: pointer;
-}
-
-.collapse-btn:hover {
-  background: rgba(255, 255, 255, 0.06);
-  color: var(--color-text-tertiary);
-}
-
-.sidebar-settings-btn {
-  background: rgba(255, 255, 255, 0.04);
-  border: 1px solid rgba(255, 255, 255, 0.08);
-  border-radius: 8px;
-  color: var(--color-text-secondary);
-  width: 30px;
-  height: 30px;
-  cursor: pointer;
-}
-
-.sidebar-settings-btn:hover,
-.sidebar-settings-btn.active {
-  background: rgba(255, 255, 255, 0.09);
-  color: var(--color-text-primary);
-}
-
-.sidebar-settings-anchor {
-  position: relative;
-}
-
-.sidebar-settings-popover {
-  margin: 0;
-  left: auto;
-  color: var(--color-text-primary);
-  position: absolute;
-  top: calc(100% + 8px);
-  right: 0;
-  z-index: 20;
-  width: 184px;
-  padding: 10px;
-  border: 1px solid var(--color-border);
-  border-radius: 8px;
-  background: var(--color-bg-panel);
-  box-shadow: 0 16px 36px rgba(0, 0, 0, 0.34);
-}
-
-.sidebar-display-toggle {
-  display: grid;
-  grid-template-columns: repeat(3, 1fr);
-  gap: 3px;
-  padding: 3px;
-  border: 1px solid rgba(255, 255, 255, 0.06);
-  border-radius: 7px;
-  background: rgba(255, 255, 255, 0.03);
-}
-
-.sidebar-settings-sub-label {
-  display: block;
-  margin: 8px 2px 6px;
-  color: var(--color-text-muted);
-  font-family: 'JetBrains Mono', 'DejaVu Sans Mono', monospace;
-  font-size: var(--font-size-xs);
-}
-
-.sidebar-display-toggle--selection {
-  grid-template-columns: repeat(3, 1fr);
-}
-
-.sidebar-display-toggle button {
-  border: 0;
-  border-radius: 5px;
-  background: transparent;
-  color: var(--color-text-muted);
-  cursor: pointer;
-  font-family: 'JetBrains Mono', 'DejaVu Sans Mono', monospace;
-  font-size: var(--font-size-xs);
-  line-height: 1;
-  padding: 6px 4px;
-}
-
-.sidebar-display-toggle button:hover {
-  color: var(--color-text-primary);
-}
-
-.sidebar-display-toggle button.active {
-  background: rgba(255, 255, 255, 0.1);
-  color: var(--color-text-primary);
-}
-
-.sidebar-settings-switch-row {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 8px;
-  width: 100%;
-  margin-top: 10px;
-  padding: 4px 2px;
-  border: 0;
-  background: transparent;
-  color: var(--color-text-muted);
-  cursor: pointer;
-  font-family: 'JetBrains Mono', 'DejaVu Sans Mono', monospace;
-  font-size: var(--font-size-xs);
-}
-
-/* The lead row sits above the first section label, so it carries its spacing
-   below instead of above. */
-.sidebar-settings-switch-row--lead {
-  margin-top: 0;
-}
-
-.sidebar-settings-switch-row--adjacent {
-  margin-top: 2px;
-  margin-bottom: 8px;
-}
-
-.sidebar-settings-switch-row:hover {
-  color: var(--color-text-primary);
-}
-
-.sidebar-settings-switch {
-  position: relative;
-  flex: 0 0 auto;
-  width: 26px;
-  height: 14px;
-  border-radius: 999px;
-  background: rgba(255, 255, 255, 0.14);
-  transition: background 0.15s ease;
-}
-
-.sidebar-settings-switch::after {
-  content: '';
-  position: absolute;
-  top: 2px;
-  left: 2px;
-  width: 10px;
-  height: 10px;
-  border-radius: 50%;
-  background: var(--color-text-muted);
-  transition: transform 0.15s ease, background 0.15s ease;
-}
-
-.sidebar-settings-switch.on {
-  background: var(--accent);
-}
-
-.sidebar-settings-switch.on::after {
-  transform: translateX(12px);
-  background: #fff;
-}
-
 /* Collapsed state - Icon Rail */
 .sidebar.collapsed {
   width: 44px;
@@ -1110,6 +841,8 @@
   position: relative;
 }
 
+.icon-btn svg { width: 16px; height: 16px; }
+
 .icon-btn:hover {
   background: var(--color-bg-elevated);
   color: var(--color-text-primary);
@@ -1118,15 +851,6 @@
 .icon-btn.active {
   background: var(--color-bg-elevated);
   color: var(--color-text-primary);
-}
-
-.icon-btn.sidebar-tool-btn {
-  border: 1px solid rgba(255, 255, 255, 0.06);
-  background: rgba(255, 255, 255, 0.035);
-}
-
-.icon-btn.sidebar-tool-btn.active {
-  background: rgba(255, 255, 255, 0.1);
 }
 
 .icon-divider {
@@ -1252,34 +976,7 @@
   color: var(--color-text-dimmed);
 }
 
-.sidebar-crew-manage {
-  display: flex;
-  align-items: center;
-  width: calc(100% - 12px);
-  margin: 2px 6px 0;
-  padding: 6px 10px;
-  border: 0;
-  border-radius: 6px;
-  background: transparent;
-  color: var(--color-text-muted);
-  font: inherit;
-  font-size: var(--font-size-sm);
-  text-align: left;
-  cursor: pointer;
-}
 
-.sidebar-crew-manage:hover,
-.sidebar-crew-manage:focus-visible {
-  background: rgba(255, 255, 255, 0.04);
-  color: var(--color-text-primary);
-}
-
-.sidebar-crew-count {
-  margin-left: auto;
-  color: var(--color-text-dimmed);
-  font-family: 'JetBrains Mono', 'DejaVu Sans Mono', monospace;
-  font-size: var(--font-size-xs);
-}
 
 .queue-band-header {
   display: flex;

@@ -60,9 +60,10 @@ function shownPane() {
   return document.querySelector('[data-session-visible="1"]')?.getAttribute('data-active-pane-id') ?? null;
 }
 
-async function openSidebarSettings(daemon: ScriptedDaemon) {
-  await gesture(daemon, () => fireEvent.click(screen.getByRole('button', { name: 'Sidebar settings' })));
-  return within(screen.getByRole('dialog', { name: 'Sidebar settings' }));
+async function runCommand(daemon: ScriptedDaemon, title: string) {
+  const search = await openActionMenu(daemon);
+  fireEvent.change(search, { target: { value: `>${title}` } });
+  await gesture(daemon, () => fireEvent.keyDown(search, { key: 'Enter' }));
 }
 
 function savedSetting(daemon: ScriptedDaemon, key: string) {
@@ -110,7 +111,7 @@ describe('App sidebar', () => {
       const { daemon } = await launch({ sessions, desktops: [harnessDesktop()], crew, settings: { queue_mode_enabled: 'true' } });
 
       expect(within(screen.getByTestId('queue-crew-fern')).getByRole('img', { name: 'Pi · idle' })).toBeInTheDocument();
-      expect(within(screen.getByTestId('queue-crew-sleeping')).queryByRole('img')).toBeNull();
+      expect(within(screen.getByTestId('queue-crew-sleeping')).getByRole('img', { name: 'Claude · idle' })).toBeInTheDocument();
       await gesture(daemon, () => fireEvent.click(screen.getByRole('button', { name: /more agents?/i })));
       expect(screen.getByRole('button', { name: 'Open codex-row' })).toHaveAttribute('title', expect.stringContaining('Codex'));
       expect(screen.getByTestId('manage-crew')).toHaveTextContent('manage');
@@ -120,17 +121,15 @@ describe('App sidebar', () => {
       await gesture(daemon, () => fireEvent.keyDown(search, { key: 'Enter' }));
 
       expect(row('codex-row').getByRole('img', { name: 'Codex · idle' })).toBeInTheDocument();
-      expect(screen.getByTestId('manage-crew')).toHaveTextContent('Manage crew2');
+      expect(screen.getByTestId('manage-crew')).toHaveTextContent('manage');
       await gesture(daemon, () => fireEvent.click(screen.getByTestId('manage-crew')));
       expect(screen.getByTestId('crew-panel')).toBeInTheDocument();
     });
 
-    it('turns harness logos off from Sidebar settings', async () => {
+    it('turns harness logos off from Commands', async () => {
       const { daemon } = await launch({ sessions: harnessSessions(), desktops: [harnessDesktop()] });
 
-      const settings = await openSidebarSettings(daemon);
-      expect(settings.getByRole('switch', { name: /harness logos/i })).toHaveAttribute('aria-checked', 'true');
-      await gesture(daemon, () => fireEvent.click(settings.getByRole('switch', { name: /harness logos/i })));
+      await runCommand(daemon, 'Hide harness logos in the sidebar');
 
       expect(savedSetting(daemon, 'sidebar_harness_logos_enabled')).toEqual(['false']);
     });
@@ -393,60 +392,31 @@ describe('App sidebar', () => {
     });
   });
 
-  describe('Sidebar settings', () => {
-    it('turns the agent queue on, which swaps the desktop tree for the queue sidebar', async () => {
+  describe('sidebar controls in Commands', () => {
+    it('turns the agent queue on', async () => {
       const { daemon } = await launch({ sessions: [daemonSession('s1')] });
-
-      const settings = await openSidebarSettings(daemon);
-      const toggle = settings.getByRole('switch', { name: /Agent queue/i });
-      expect(toggle).toHaveAttribute('aria-checked', 'false');
-      await gesture(daemon, () => fireEvent.click(toggle));
-
+      await runCommand(daemon, 'Turn on the agent queue');
       expect(savedSetting(daemon, 'queue_mode_enabled')).toEqual(['true']);
       expect(screen.getByTestId('queue-sidebar')).toBeInTheDocument();
     });
 
-    it.each([
-      ['Crew in queue', 'queue_crew_enabled', 'false'],
-    ])('shows %s as the daemon has it and saves a flip', async (name, key, initial) => {
+    it('puts crew in the queue', async () => {
       const { daemon } = await launch({ sessions: [daemonSession('s1')] });
-
-      const settings = await openSidebarSettings(daemon);
-      const toggle = settings.getByRole('switch', { name: new RegExp(name, 'i') });
-      expect(toggle).toHaveAttribute('aria-checked', initial);
-      await gesture(daemon, () => fireEvent.click(toggle));
-
-      expect(savedSetting(daemon, key)).toEqual([initial === 'true' ? 'false' : 'true']);
-      expect(settings.getByRole('switch', { name: new RegExp(name, 'i') })).toHaveAttribute('aria-checked', initial === 'true' ? 'false' : 'true');
+      await runCommand(daemon, 'Put the crew in the queue');
+      expect(savedSetting(daemon, 'queue_crew_enabled')).toEqual(['true']);
     });
 
-    it('switches how the selected workspace’s tiles are marked, and remembers it', async () => {
+    it('changes tile focus style and remembers it', async () => {
       const options = { sessions: [daemonSession('s1', { state: 'idle' })] };
       const first = await launch(options);
-
-      const settings = await openSidebarSettings(first.daemon);
-      expect(settings.getByRole('button', { name: 'rail' })).toHaveAttribute('aria-pressed', 'true');
-      await gesture(first.daemon, () => fireEvent.click(settings.getByRole('button', { name: 'dim' })));
-      expect(settings.getByRole('button', { name: 'dim' })).toHaveAttribute('aria-pressed', 'true');
-      expect(settings.getByRole('button', { name: 'rail' })).toHaveAttribute('aria-pressed', 'false');
-
+      await gesture(first.daemon, () => fireEvent.click(screen.getByRole('button', { name: 'Open s1' })));
+      await runCommand(first.daemon, 'Tile focus: dim');
+      expect(document.querySelector('.session-terminal-desktop')).toHaveClass('desktop-selection--dim');
       const second = await restartApp(first, { initialState: { ...options, desktops: [soloDesktop('s1')] } });
-      const reopened = await openSidebarSettings(second.daemon);
-      expect(reopened.getByRole('button', { name: 'dim' })).toHaveAttribute('aria-pressed', 'true');
-    });
-
-    it('hands focus to the control the user clicks to dismiss it', async () => {
-      const { daemon } = await launch({ sessions: [daemonSession('s1')] });
-      await openSidebarSettings(daemon);
-      const other = screen.getByRole('button', { name: 'Actions for s1' });
-
-      other.focus();
-      fireEvent.pointerDown(other);
-      fireEvent.mouseDown(other);
-      await gesture(daemon, () => fireEvent.click(other));
-
-      expect(screen.queryByRole('dialog', { name: 'Sidebar settings' })).toBeNull();
-      expect(other).toHaveFocus();
+      await gesture(second.daemon, () => fireEvent.click(screen.getByRole('button', { name: 'Open s1' })));
+      expect(document.querySelector('.session-terminal-desktop')).toHaveClass('desktop-selection--dim');
+      await runCommand(second.daemon, 'Tile focus: spotlight');
+      expect(document.querySelector('.session-terminal-desktop')).toHaveClass('desktop-selection--spotlight');
     });
   });
 

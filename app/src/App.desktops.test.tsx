@@ -1,5 +1,5 @@
 import { describe, expect, it, beforeEach, vi } from 'vitest';
-import { act, render, screen, waitFor, within } from '@testing-library/react';
+import { act, render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import App from './App';
 import { useProfilesStore } from './store/profiles';
@@ -7,7 +7,6 @@ import { useSessionStore, type Session } from './store/sessions';
 import { WHATS_NEW_ID, WHATS_NEW_STORAGE_KEY } from './hooks/useWhatsNew';
 import { ProfileCommandError } from './hooks/daemonProfileEvents';
 import { MigrationPhase, type Desktop } from './types/generated';
-import { useKeyboardShortcuts } from './hooks/useKeyboardShortcuts';
 import type { TerminalLayoutNode } from './types/desktop';
 import { agentDesktop, arrangeDesktops, fakeDesktopCommands, TEST_PROFILE_ID } from './test/desktops';
 
@@ -285,30 +284,6 @@ describe('desktop surface', () => {
         'Desktop 1=s1+s2,Desktop 2=,Desktop 3=s3',
       );
     });
-  });
-
-  it('offers Open in editor exactly when the sidebar enables it', async () => {
-    render(<App />);
-    await waitFor(() => expect(screen.getByTestId('desktop-d1').getAttribute('data-selected-session')).toBe('s1'));
-    const offersEditor = async () => {
-      act(() => vi.mocked(useKeyboardShortcuts).mock.lastCall![0].onOpenPalette('commands'));
-      const palette = await screen.findByRole('dialog');
-      const offered = within(palette).getAllByRole('option').some((option) => option.textContent?.includes('Open in editor'));
-      act(() => vi.mocked(useKeyboardShortcuts).mock.lastCall![0].onOpenPalette('commands'));
-      await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull());
-      return offered;
-    };
-
-    expect(screen.getByTestId('sidebar').getAttribute('data-editor-enabled')).toBe('true');
-    expect(await offersEditor()).toBe(true);
-
-    act(() => {
-      useSessionStore.setState((state) => ({
-        sessions: state.sessions.map((entry) => (entry.id === 's1' ? { ...entry, endpointId: 'remote-box' } : entry)),
-      }));
-    });
-    await waitFor(() => expect(screen.getByTestId('sidebar').getAttribute('data-editor-enabled')).toBe('false'));
-    expect(await offersEditor()).toBe(false);
   });
 
   it('mounts only the current desktop until the user leaves it', async () => {

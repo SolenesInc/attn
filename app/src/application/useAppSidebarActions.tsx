@@ -1,9 +1,6 @@
 import { useMemo } from 'react';
 import {
-  EditorIcon,
   NotebookIcon,
-  PRsIcon,
-  WorkflowIcon,
   type DockItem,
   type SidebarHeaderAction,
 } from '../components/Sidebar';
@@ -22,15 +19,12 @@ import {
   GardenIcon,
   NotificationsBellIcon,
   SessionsIcon,
-  WorktreesIcon,
 } from './AppIcons';
-import { useOpenInEditor } from './useOpenInEditor';
-import { useAgentOnScreen, useSessionBehindScreen } from '../hooks/useDesktopSelectionBridge';
+import { useAgentOnScreen } from '../hooks/useDesktopSelectionBridge';
 export function useAppSidebarActions() {
   const { notificationsUnread } = useAppInputs();
-  const { attentionCount, hasCriticalNotification, zoomModeBySessionId } = useAppShell();
+  const { hasCriticalNotification, zoomModeBySessionId } = useAppShell();
   const {
-    workflowRunPanelOpen,
     toggleDockPanel,
     attentionPanelOpen,
     notebookOpen,
@@ -43,42 +37,19 @@ export function useAppSidebarActions() {
     openLedger,
     gardenMode,
     toggleGardenFromIcon,
-    gardenPanelOpen,
   } = useAppPanelsContext();
   const { keybindings } = useAppAppearanceContext();
   const shownAgentId = useAgentOnScreen();
-  const contextSessionId = useSessionBehindScreen();
   const { currentDesktopId } = useNavigationContext();
-  const { openActiveSessionInEditor, activeSessionIsRemote, editorUnavailableReason } = useOpenInEditor();
 
   const sidebarHeaderActions = useMemo<SidebarHeaderAction[]>(
     () => [
       {
-        id: 'editor',
-        title: editorUnavailableReason
-          ? `Open in Editor (${editorUnavailableReason})`
-          : activeSessionIsRemote
-            ? 'Open in Zed Remote'
-            : 'Open in Editor',
-        icon: <EditorIcon />,
-        disabled: editorUnavailableReason !== null,
-        onClick: openActiveSessionInEditor,
-      },
-      {
-        id: 'workflowRun',
-        title: contextSessionId ? 'Workflow Runs' : 'Workflow Runs (No active session)',
-        icon: <WorkflowIcon />,
-        active: workflowRunPanelOpen,
-        disabled: !contextSessionId,
-        onClick: () => toggleDockPanel('workflowRun'),
-      },
-      {
-        id: 'attention',
-        title: attentionPanelOpen ? 'Hide PRs Drawer' : 'Show PRs Drawer',
-        icon: <PRsIcon />,
-        active: attentionPanelOpen,
-        badge: attentionCount > 0 ? attentionCount : undefined,
-        onClick: () => toggleDockPanel('attention'),
+        id: 'garden',
+        title: gardenMode === 'closed' ? 'Show the garden' : 'Hide the garden',
+        icon: <GardenIcon />,
+        active: gardenMode !== 'closed',
+        onClick: toggleGardenFromIcon,
       },
       {
         id: 'notebook',
@@ -88,13 +59,11 @@ export function useAppSidebarActions() {
         onClick: openNotebookBrowser,
       },
       {
-        id: 'notifications',
-        title: notificationsPanelOpen ? 'Hide Notifications' : 'Show Notifications',
-        icon: <NotificationsBellIcon />,
-        active: notificationsPanelOpen,
-        badge: notificationsUnread > 0 ? notificationsUnread : undefined,
-        toneClassName: hasCriticalNotification ? 'has-critical' : undefined,
-        onClick: toggleNotificationsPanel,
+        id: 'ledger',
+        title: `Open Ledger (${formatShortcut('sessions.open')})`,
+        icon: <SessionsIcon />,
+        active: sessionsOpen,
+        onClick: () => openLedger(ledgerTab),
       },
       {
         id: 'automations',
@@ -104,35 +73,16 @@ export function useAppSidebarActions() {
         onClick: () => toggleDockPanel('automations'),
       },
       {
-        id: 'sessions',
-        title: `Open Sessions (${formatShortcut('sessions.open')})`,
-        icon: <SessionsIcon />,
-        active: sessionsOpen && ledgerTab === 'sessions',
-        onClick: () => openLedger('sessions'),
-      },
-      {
-        id: 'worktrees',
-        title: 'Open Worktrees',
-        icon: <WorktreesIcon />,
-        active: sessionsOpen && ledgerTab === 'worktrees',
-        onClick: () => openLedger('worktrees'),
-      },
-      {
-        id: 'garden',
-        title: gardenMode === 'closed' ? 'Show the garden' : 'Hide the garden',
-        icon: <GardenIcon />,
-        active: gardenMode !== 'closed',
-        onClick: toggleGardenFromIcon,
+        id: 'notifications',
+        title: notificationsPanelOpen ? 'Hide Notifications' : 'Show Notifications',
+        icon: <NotificationsBellIcon />,
+        active: notificationsPanelOpen,
+        unread: notificationsUnread > 0,
+        toneClassName: hasCriticalNotification ? 'has-critical' : undefined,
+        onClick: toggleNotificationsPanel,
       },
     ],
     [
-      contextSessionId,
-      activeSessionIsRemote,
-      editorUnavailableReason,
-      attentionCount,
-      attentionPanelOpen,
-      openActiveSessionInEditor,
-      workflowRunPanelOpen,
       toggleDockPanel,
       notebookOpen,
       openNotebookBrowser,
@@ -145,7 +95,6 @@ export function useAppSidebarActions() {
       sessionsOpen,
       ledgerTab,
       openLedger,
-      gardenPanelOpen,
       toggleNotificationsPanel,
     ],
   );

@@ -84,7 +84,8 @@ describe('App worktrees', () => {
       },
     }));
     const operation = { id: 'op-1', kind: 'refresh_worktree', path: '/projects/attn--feat-one', started_at: AT } as const;
-    fireEvent.click(screen.getByRole('button', { name: 'Open Worktrees' }));
+    fireEvent.click(screen.getByRole('button', { name: /^Open Ledger/ }));
+    fireEvent.click(screen.getByRole('button', { name: 'Worktrees' }));
     await daemon.idle();
 
     daemon.emit({ event: 'git_operation_started', operation: { ...operation, status: 'running' } });

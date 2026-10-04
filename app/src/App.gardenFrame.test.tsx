@@ -47,10 +47,10 @@ describe('App garden frame', () => {
     await escape(daemon);
 
     expect(shown()).toBe(first === 'attention' ? 'closed' : 'dock');
-    expect(screen.getByRole('button', { name: first === 'attention' ? 'Hide PRs Drawer' : 'Show PRs Drawer' })).toBeInTheDocument();
+    expect(document.querySelector('.dock-panel--attention')?.closest('.side-panel-shell')?.classList.contains('is-open')).toBe(first === 'attention');
     await escape(daemon);
     expect(shown()).toBe('closed');
-    expect(screen.getByRole('button', { name: 'Show PRs Drawer' })).toBeInTheDocument();
+    expect(document.querySelector('.dock-panel--attention')?.closest('.side-panel-shell')).not.toHaveClass('is-open');
   });
 
   it('dismisses an expanded garden before a dock panel opened after its list', async () => {

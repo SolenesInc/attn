@@ -8,7 +8,6 @@ import type {
 import { type UISessionState } from '../types/sessionState';
 import { type TileContentState } from '../types/desktop';
 import { type QueueBands as QueueBandsModel } from '../utils/queueBands';
-import type { DesktopSelectionStyle } from '../utils/desktopSelectionStyle';
 import type { DesktopWithSessions } from '../utils/desktopViewModels';
 import { type CrewMemberView } from './QueueRows';
 
@@ -79,7 +78,6 @@ export interface SidebarProps {
   onOpenCommands?: () => void;
   onOpenAgents?: () => void;
   peeksSilenced?: boolean;
-  commandsBadge?: number;
   agentListOpen?: boolean;
   onToggleAgentList?: () => void;
   onOpenOverview?: () => void;
@@ -91,14 +89,8 @@ export interface SidebarProps {
   onRenameSession?: (sessionId: string, label: string) => Promise<void>;
   onRenameDesktop?: (desktopId: string, title: string) => Promise<void>;
   onChangeChiefOfStaff?: (sessionId: string, enabled: boolean) => void;
-  queueModeEnabled?: boolean;
-  onToggleQueueMode?: () => void;
   crewQueueEnabled?: boolean;
-  onToggleCrewQueue?: () => void;
   harnessLogosEnabled?: boolean;
-  onToggleHarnessLogos?: () => void;
-  desktopSelectionStyle?: DesktopSelectionStyle;
-  onDesktopSelectionStyleChange?: (style: DesktopSelectionStyle) => void;
   leafDrag?: { sourceDesktopId: string } | null;
   dragHoverDesktopId?: string | null;
   onDesktopDragEnter?: (desktop: SidebarDesktop) => void;
@@ -134,7 +126,7 @@ export interface SidebarHeaderAction {
   disabled?: boolean;
   active?: boolean;
   toneClassName?: string;
-  badge?: string | number;
+  unread?: boolean;
   onClick: () => void;
 }
 

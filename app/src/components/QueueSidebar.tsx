@@ -7,10 +7,10 @@ import { formatWakeTimeShort } from '../utils/snoozeDurations';
 import { CriticalNotificationStrip } from './CriticalNotificationStrip';
 import { CrewRowView, QueueRowView, type QueueBandSessionView, type RowWhere } from './QueueRows';
 import './QueueSidebar.css';
-import { SidebarPopovers } from './SidebarChrome';
+import { SidebarHeader, SidebarPopovers } from './SidebarChrome';
 import { useSidebarContext } from './SidebarContext';
 import { useDesktopChipDrop } from './useDesktopChipDrop';
-import { CollapseIcon, HomeIcon, PlusIcon } from './SidebarIcons';
+import { HomeIcon } from './SidebarIcons';
 import { SidebarAutomationGroups, SidebarDesktopOverview } from './SidebarDesktops';
 import { useWaitingFit } from './useWaitingFit';
 
@@ -78,7 +78,7 @@ export function QueueSidebar() {
       data-testid="queue-sidebar"
       onKeyDown={onKeyDown}
     >
-      <QueueSidebarHeader />
+      <SidebarHeader />
       {onOpenNotifications && (
         <CriticalNotificationStrip
           count={criticalNotifications?.count ?? 0}
@@ -94,66 +94,6 @@ export function QueueSidebar() {
       </div>
       <DesktopStrip />
       <SidebarPopovers />
-    </div>
-  );
-}
-
-function QueueSidebarHeader() {
-  const { instance, queue, profileName, onSwitchProfile, onNewSession, onOpenCommands, commandsBadge, onToggleCollapse } =
-    useSidebarContext();
-  const waiting = queue?.turns.length ?? 0;
-  return (
-    <div className="queue-sidebar-header">
-      {instance && (
-        <div className="sidebar-instance-marker" data-testid="sidebar-instance-marker">
-          instance <strong>{instance}</strong>
-        </div>
-      )}
-      <button
-        type="button"
-        className="queue-profile-pill"
-        data-testid="queue-profile-pill"
-        title={`Switch profile (${formatShortcut('profile.switch')})`}
-        onClick={onSwitchProfile}
-        disabled={!onSwitchProfile}
-      >
-        <strong>{profileName ?? 'Profile'}</strong>
-        {waiting > 0 && <span className="queue-profile-pill-waiting">{waiting}</span>}
-        <span className="queue-profile-pill-chevron" aria-hidden="true">▾</span>
-      </button>
-      <div className="queue-sidebar-tools">
-        <button
-          type="button"
-          className="queue-sidebar-tool queue-sidebar-tool--primary"
-          data-testid="queue-new-agent"
-          title={`New agent (${formatShortcut('session.new')})`}
-          aria-label="New agent"
-          onClick={onNewSession}
-        >
-          <PlusIcon />
-        </button>
-        <button
-          type="button"
-          className="queue-sidebar-tool"
-          data-testid="queue-commands"
-          title={`Commands (${formatShortcut('ui.commandPalette')})`}
-          aria-label="Commands"
-          onClick={onOpenCommands}
-          disabled={!onOpenCommands}
-        >
-          ⋯
-          {commandsBadge ? <span className="queue-sidebar-tool-badge">{commandsBadge > 9 ? '9+' : commandsBadge}</span> : null}
-        </button>
-        <button
-          type="button"
-          className="queue-sidebar-tool"
-          title={`Collapse sidebar (${formatShortcut('session.toggleSidebar')})`}
-          aria-label="Collapse sidebar"
-          onClick={onToggleCollapse}
-        >
-          <CollapseIcon />
-        </button>
-      </div>
     </div>
   );
 }
@@ -225,7 +165,7 @@ function CrewBlock() {
         <CrewRowView
           key={member}
           member={member}
-          desktopLabel={crew?.find((candidate) => candidate.id === member)?.launch_desktop?.label}
+          agent={crew?.find((candidate) => candidate.id === member)?.resolved_agent}
           row={row}
           where={row ? where(row) : undefined}
           selected={row ? selectedId === row.session.id : false}

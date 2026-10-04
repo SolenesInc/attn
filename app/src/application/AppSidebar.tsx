@@ -30,8 +30,6 @@ export function AppSidebar() {
     desktopViews,
     currentDesktopId,
     selectedTile,
-    desktopSelectionStyle,
-    handleDesktopSelectionStyleChange,
     handleSelectSession,
     handleSelectDesktop,
     handleSelectTile,
@@ -61,9 +59,9 @@ export function AppSidebar() {
   const { sidebarCollapsed, openNotificationsPanel, toggleSidebarCollapse, agentListOpen, toggleAgentList } =
     useAppPanelsContext();
   const { setProfileSwitcherOpen, setDesktopOverviewOpen } = useDesktopNavigationContext();
-  const { handleOpenPalette, attentionCount, sidebarSurface, windowCovered, agentFocused } = useAppShell();
-  const { keybindings, handleToggleSidebarHarnessLogos } = useAppAppearanceContext();
-  const { criticalNotifications, settings, notificationsUnread } = useAppInputs();
+  const { handleOpenPalette, sidebarSurface, windowCovered, agentFocused } = useAppShell();
+  const { keybindings } = useAppAppearanceContext();
+  const { criticalNotifications, settings } = useAppInputs();
   const { handleChangeChiefOfStaff } = useChiefOfStaffContext();
   const allCrew = useDaemonStore((state) => state.crew);
   const selectedProfileId = useProfilesStore((state) => state.selectedProfileId);
@@ -77,10 +75,7 @@ export function AppSidebar() {
   const { handleWakeCrewMember, handleSleepCrewMember } = useAppGardenActionsContext();
   const { handleOpenCrew } = useCrewPanelContext();
   const {
-    queueModeEnabled,
-    handleToggleQueueMode,
     crewQueueEnabled,
-    handleToggleCrewQueue,
     queueBands,
     openSnoozeMenu,
   } = useAttentionQueueContext();
@@ -132,14 +127,8 @@ export function AppSidebar() {
       onSleepCrewMember={handleSleepCrewMember}
       onManageCrew={(event) => handleOpenCrew(undefined, event.currentTarget)}
       onOpenCrewMemberDetails={handleOpenCrew}
-      queueModeEnabled={queueModeEnabled}
-      onToggleQueueMode={handleToggleQueueMode}
       crewQueueEnabled={crewQueueEnabled}
-      onToggleCrewQueue={handleToggleCrewQueue}
       harnessLogosEnabled={areSidebarHarnessLogosEnabled(settings)}
-      onToggleHarnessLogos={handleToggleSidebarHarnessLogos}
-      desktopSelectionStyle={desktopSelectionStyle}
-      onDesktopSelectionStyleChange={handleDesktopSelectionStyleChange}
       leafDrag={leafDesktopDrag ? { sourceDesktopId: leafDesktopDrag.sourceDesktopId } : null}
       dragHoverDesktopId={dragHoverDesktopId}
       onDesktopDragEnter={handleDesktopDragEnter}
@@ -157,7 +146,6 @@ export function AppSidebar() {
       onOpenCommands={() => handleOpenPalette('commands')}
       onOpenAgents={() => handleOpenPalette('agents')}
       peeksSilenced={windowCovered || agentFocused}
-      commandsBadge={notificationsUnread + attentionCount}
       agentListOpen={agentListOpen}
       onToggleAgentList={toggleAgentList}
       onOpenOverview={() => setDesktopOverviewOpen(true)}

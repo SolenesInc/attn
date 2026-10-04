@@ -3,12 +3,9 @@ import { describe, expect, it, vi } from 'vitest';
 import { gesture, pressShortcut, renderApp } from './test/renderApp';
 
 function sessionsButton() {
-  return screen.getByRole('button', { name: /^Open Sessions \(/ });
+  return screen.getByRole('button', { name: /^Open Ledger \(/ });
 }
 
-function worktreesButton() {
-  return screen.getByRole('button', { name: 'Open Worktrees' });
-}
 
 function ledger() {
   return screen.queryByRole('dialog', { name: 'Sessions, worktrees and conversations' });
@@ -42,27 +39,17 @@ describe('sessions dock button', () => {
     expect(sessionsButton()).not.toHaveClass('active');
   });
 
-  it('sits next to the worktrees button, which opens the same surface on its other list', async () => {
+  it('opens the last used list and stays active on either tab', async () => {
     await renderApp();
-
-    const buttons = screen.getAllByRole('button');
-    expect(buttons.indexOf(worktreesButton())).toBe(buttons.indexOf(sessionsButton()) + 1);
-
-    fireEvent.click(worktreesButton());
-
+    fireEvent.click(sessionsButton());
+    fireEvent.click(within(ledger()!).getByRole('button', { name: 'Worktrees' }));
     expect(shownList()).toBe('Worktrees');
-    expect(worktreesButton()).toHaveClass('active');
-    expect(sessionsButton()).not.toHaveClass('active');
-  });
-
-  it('the sessions key closes whichever list is up and opens on Sessions', async () => {
-    await renderApp();
-    fireEvent.click(worktreesButton());
-    expect(shownList()).toBe('Worktrees');
-
+    expect(sessionsButton()).toHaveClass('active');
     pressSessionsKey();
     expect(ledger()).toBeNull();
-
+    fireEvent.click(sessionsButton());
+    expect(shownList()).toBe('Worktrees');
+    pressSessionsKey();
     pressSessionsKey();
     expect(shownList()).toBe('Sessions');
   });

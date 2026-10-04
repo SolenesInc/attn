@@ -1,4 +1,4 @@
-import { act, fireEvent, screen } from '@testing-library/react';
+import { act, fireEvent, screen, within } from '@testing-library/react';
 import { describe, expect, it, vi } from 'vitest';
 import { agentPane, soloDesktop, crewMember, daemonDesktop, daemonSeed, daemonSession, dockTiles } from './test/daemonFixtures';
 import { openRow, renderGarden } from './test/garden';
@@ -99,10 +99,10 @@ describe('App garden continuation', () => {
     await gesture(daemon, () => fireEvent.keyDown(window, { key: 'Escape' }));
 
     expect(screen.queryByLabelText(/What should the new agent know\?/)).toBeNull();
-    expect(screen.getByRole('button', { name: 'Hide PRs Drawer' })).toBeInTheDocument();
+    expect(document.querySelector('.dock-panel--attention')?.closest('.side-panel-shell')).toHaveClass('is-open');
     expect(screen.getByRole('button', { name: 'Hide the garden' })).toBeInTheDocument();
     await gesture(daemon, () => fireEvent.keyDown(window, { key: 'Escape' }));
-    expect(screen.getByRole('button', { name: 'Show PRs Drawer' })).toBeInTheDocument();
+    expect(document.querySelector('.dock-panel--attention')?.closest('.side-panel-shell')).not.toHaveClass('is-open');
     expect(screen.getByRole('button', { name: 'Hide the garden' })).toBeInTheDocument();
   });
 
@@ -214,7 +214,7 @@ describe('App garden continuation', () => {
       },
     });
     await gesture(daemon, () => fireEvent.click(screen.getByTestId('manage-crew')));
-    fireEvent.click(screen.getByRole('button', { name: /Keel/ }));
+    fireEvent.click(within(screen.getByTestId('crew-panel')).getByRole('button', { name: /Keel/ }));
     fireEvent.click(screen.getByRole('button', { name: 'Seeds' }));
     fireEvent.click(screen.getByRole('button', { name: /Planted/ }));
 

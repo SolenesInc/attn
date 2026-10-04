@@ -1,0 +1,118 @@
+.sidebar-header {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 10px 8px 8px;
+  border-bottom: 1px solid var(--color-border);
+}
+
+.sidebar-header-main {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+}
+
+.sidebar-profile-pill {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex: 1;
+  min-width: 0;
+  height: 28px;
+  padding: 0 8px;
+  border: 1px solid var(--color-border);
+  border-radius: 6px;
+  background: var(--color-bg-elevated);
+  color: var(--color-text-primary);
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.sidebar-profile-pill strong {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.sidebar-profile-pill > span {
+  color: var(--color-text-dimmed);
+  font-size: 10px;
+}
+
+.sidebar-profile-pill:hover { border-color: var(--color-border-focus); }
+
+.sidebar-header-tool,
+.sidebar-panel-button {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex: none;
+  height: 28px;
+  min-width: 28px;
+  padding: 0 7px;
+  border: 1px solid var(--color-border);
+  border-radius: 6px;
+  background: none;
+  color: var(--color-text-secondary);
+  font: inherit;
+  font-size: 12px;
+  cursor: pointer;
+}
+
+.sidebar-header-tool svg,
+.sidebar-panel-button svg { width: 14px; height: 14px; }
+
+.sidebar-header-tool:hover,
+.sidebar-panel-button:hover,
+.sidebar-panel-button.active {
+  background: var(--color-bg-elevated);
+  color: var(--color-text-primary);
+}
+
+.sidebar-header-new {
+  border-color: rgba(255, 107, 53, 0.5);
+  background: rgba(255, 107, 53, 0.12);
+  color: var(--color-text-primary);
+}
+
+.sidebar-commands svg { color: var(--accent); }
+
+.sidebar-header-panels {
+  display: grid;
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+  gap: 6px;
+}
+
+.sidebar-panel-button {
+  border: 0;
+  padding: 0;
+}
+
+.sidebar-profile-pill:focus-visible,
+.sidebar-header-tool:focus-visible,
+.sidebar-panel-button:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 1px;
+}
+
+.sidebar-notification-dot {
+  position: absolute;
+  top: 4px;
+  right: 4px;
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--accent);
+  box-shadow: 0 0 0 2px var(--color-bg-panel);
+}
+
+.has-critical .sidebar-notification-dot { background: var(--color-error); }
+
+.sidebar-sleeping-crew { margin: 12px 8px 0; }
