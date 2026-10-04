@@ -83,7 +83,7 @@ async function captureApp(configure?: (daemon: ScriptedDaemon) => void, options:
 const editor = () => screen.getByRole('textbox', { name: 'Message' });
 type WireRecord = NonNullable<NonNullable<EventMessage<'quick_capture_result'>['result']>['record']>;
 function record(command: { capture_id: string; content?: string; mailbox?: WireRecord['mailbox'] }): WireRecord {
-  return { id: command.capture_id, content: command.content ?? 'saved note', mailbox: command.mailbox ?? { kind: 'chief' },
+  return { id: command.capture_id, content: command.content ?? 'saved message', mailbox: command.mailbox ?? { kind: 'chief' },
     attachments: [], created_at: '2026-10-01T12:00:00Z' };
 }
 function quickCaptureTraffic(daemon: ScriptedDaemon) { return daemon.sent.filter(command => command.cmd.startsWith('quick_capture_')); }

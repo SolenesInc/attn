@@ -353,7 +353,7 @@ try {
     await key('escape'); await state({ view: 'compose' });
     await driver.runInputDriver(['global_text', '--text', ' after Recent']);
     const priorText = before.text + ' after editor click';
-    assert.equal((await state()).text, priorText.slice(0, -1) + ' after Recent' + priorText.slice(-1), 'Recent preserves the note caret');
+    assert.equal((await state()).text, priorText.slice(0, -1) + ' after Recent' + priorText.slice(-1), 'Recent preserves the message caret');
     await key('escape'); await hidden();
     await openCapture();
     await key('a', ['command']);
@@ -386,7 +386,7 @@ try {
     assert.equal((await state({ fontScale: 1 })).editorFontSize, baseline.editorFontSize);
     await key(',', ['command']);
     const unchanged = await state();
-    assert.equal(unchanged.focused, true, 'Cmd-comma leaves the note focused');
+    assert.equal(unchanged.focused, true, 'Cmd-comma leaves the message focused');
     assert.equal(unchanged.text, baseline.text);
     runner.writeJson('shared-font-size.json', { baseline, enlarged, restored: await state() });
   });
@@ -437,7 +437,7 @@ try {
     await dropFiles([pdfPath]);
     const actual = await state({ attachmentCount: 3, imageCount: 2, settled: true, staged: true });
     assert.equal(actual.files[2].name, path.basename(pdfPath));
-    assert.equal(actual.nativeFocused, true, 'PDF drop keeps keyboard focus in the note');
+    assert.equal(actual.nativeFocused, true, 'PDF drop keeps keyboard focus in the message');
     assert.equal(actual.flyingFiles, 0);
     assert.equal(actual.activeAnimations, 0);
     runner.writeJson('pdf-drop.json', actual);
