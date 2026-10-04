@@ -3,24 +3,42 @@
 Always read [docs/glossary.md](docs/glossary.md) to understand and change attn
 internals. It is attn's domain model.
 
-attn (Attention) wraps Claude Code, Codex, Copilot, and Pi with durable sessions,
-terminals, and a keyboard-driven queue for agents waiting for the user. Harnesses
-keep their native experience and remain usable as bare CLIs; plugins add more.
-The Garden tracks work, visible delegations let users steer agents, crew members
-have permanent charters, and automations start sessions on schedules or events.
-Users can annotate terminal text and rendered markdown and send comments to a session.
-Queue mode separates busy agents from those waiting for the user and advances
-after each prompt. State classification and turn accounting serve that flow.
+attn stands for Attention: an interface friendly to both human and agent
+brains, built as a harness augmenter. What it does today, and what each part
+asks of you as a maintainer:
 
-Sessions and terminals must survive app, daemon, and machine restarts. The Tauri
-app runs on macOS and Linux; the daemon also serves remote hosts over SSH.
-`cmd/attn` and `internal/**` must build and run on Linux. The daemon owns
-application state; the app owns rendering.
-Linux CI exercises the packaged application under Xvfb.
+- Durability. App, daemon, and machine restarts bring every session and
+  terminal back.
+- Bring your own harness. attn wraps Claude Code, Codex, Copilot, and Pi as
+  they are; the user gets each harness's native experience and can use the
+  bare CLI at any time. Users can add new harnesses with plugins.
+- The queue mode sorts agents into "waiting for you" or "busy" and moves the
+  user to the next one after every prompt. State classification and turn
+  accounting exist to serve this.
+- Remote hosts. Everything the daemon does also works over SSH on a Linux
+  box, which is why `cmd/attn` and `internal/**` build on Linux.
+- The Garden is the work tracker: seeds planted, tended, harvested. It is
+  the unit agents hand off, work upon, and help them stay organized.
+- Visible orchestration. Delegations are full sessions the user can open and
+  steer, from any harness to any harness, and agents can message each other.
+- Crew members are permanent agents with charters; the Chief is one.
+- Automations start a steerable agent on a schedule or an event.
+- Annotations. The user selects text in a live terminal or in a natively
+  rendered markdown file, comments on it, and sends the batch to a session as
+  one message.
 
-attn is Victor's most loved and most used piece of software. Its small user base
-is intentional. Frictionless interaction, keyboard access, and performance matter
-throughout: it runs all day, so idle CPU use and creeping memory are defects.
+The app (the Tauri UI) is mac only for now; Linux support is being worked upon.
+The daemon runs on Linux, so daemon code stays portable.
+
+## What makes attn special?
+
+attn is Victor's most loved and most used piece of software. It is not widely
+used, by design (Victor doesn't want to carry a large user base) but the few
+people who run it matter to him. Maintain and iterate on it like something loved.
+
+The things we can never compromise on: frictionless experience, keyboard
+friendliness, and performance. They go hand in hand. And attn runs all day,
+every day: memory that creeps or CPU burned while idle is a defect.
 
 ## Note from Victor
 
